@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -336,11 +337,25 @@ class GalaxyTray:
         if electron_ready:
             try:
                 if sys.platform == "win32":
+                    # B8: 原为 Popen(["npm","start"], shell=True)。argv 列表配
+                    # shell=True 在 Windows 上语义混乱 —— Python 会把列表拼成命令串
+                    # 再交给 cmd.exe 解释，路径含空格时的引用规则由 cmd 决定，
+                    # 且平白引入一层 shell 解析。
+                    #
+                    # 之所以当初要 shell=True：npm 在 Windows 上是 npm.cmd（批处理），
+                    # CreateProcess 不能直接执行 .cmd。正确做法是显式解析出可执行文件，
+                    # 而不是把整串丢给 shell。
+                    npm = shutil.which("npm.cmd") or shutil.which("npm")
+                    if not npm:
+                        raise FileNotFoundError("未在 PATH 中找到 npm/npm.cmd")
                     subprocess.Popen(
-                        ["npm", "start"], cwd=electron_dir, shell=True, creationflags=subprocess.CREATE_NO_WINDOW
+                        [npm, "start"], cwd=electron_dir, creationflags=subprocess.CREATE_NO_WINDOW
                     )
                 else:
-                    subprocess.Popen(["npm", "start"], cwd=electron_dir)
+                    npm = shutil.which("npm")
+                    if not npm:
+                        raise FileNotFoundError("未在 PATH 中找到 npm")
+                    subprocess.Popen([npm, "start"], cwd=electron_dir)
                 logger.info("Electron GUI launched from %s", electron_dir)
                 return
             except Exception as exc:

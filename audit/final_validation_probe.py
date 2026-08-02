@@ -190,9 +190,16 @@ def run_probes(repo_root: Path) -> List[ProbeResult]:
     # PROBE SET 4: V3 wiring gap detection (CRITICAL split-brain check)
     # ===========================================================
 
-    # This is the most important probe: V3 should NOT yet be in CommandRouter
-    # (confirming the audit finding that it is a shadow authority).
-    # Once P0 fix is applied, this probe inverts.
+    # 已按本 probe 原注释的指示反转（"After P0 fix, this probe should be INVERTED"）。
+    #
+    # 历史：V3 曾是 shadow authority，本 probe 断言"这个缺口存在"，缺口在时 PASS。
+    # P0 修复落地后 CommandRouter 真的接上了 V3（core/command_router.py:2084
+    # 懒导入 get_canonical_dispatch_slots），于是这条 CRITICAL probe 开始稳定报红
+    # —— 而报红的是 **probe 自己过期了**，不是代码坏了。
+    #
+    # 这类"断言缺口存在"的检查一旦缺口被补上就会反转成噪音，长期不修会训练团队
+    # 忽略整个 probe 的输出（本仓当时的现象正是 `1 CRITICAL PROBE(S) FAILED` 常驻）。
+    # 现在改为断言**接线存在**：这才是修复后要长期守住的性质。
     v3_in_command_router = _grep_file(
         repo_root, "core/command_router.py", "get_canonical_dispatch_slots"
     ) or _grep_file(
@@ -200,13 +207,13 @@ def run_probes(repo_root: Path) -> List[ProbeResult]:
     )
 
     probe(
-        "SPLIT-01: V3 wiring gap confirmed (CommandRouter does NOT call V3)",
+        "SPLIT-01: V3 wired into CommandRouter (dispatch split-brain closed)",
         "CRITICAL",
-        not v3_in_command_router,
-        "AUDIT EVIDENCE: V3 is a shadow authority — CommandRouter does not call "
-        "get_canonical_dispatch_slots(). This probe PASSES when the gap exists "
-        "(confirming audit finding). After P0 fix, this probe should be INVERTED "
-        "to verify V3 is PRESENT in CommandRouter.",
+        v3_in_command_router,
+        "CommandRouter 必须调用 V3 canonical dispatch slot authority"
+        "（core/command_router.py 的 get_canonical_dispatch_slots 懒导入）。"
+        "此前本 probe 断言的是相反命题（缺口存在），P0 修复后未同步反转，"
+        "导致这条 CRITICAL 长期误报红。",
     )
 
     # ===========================================================
