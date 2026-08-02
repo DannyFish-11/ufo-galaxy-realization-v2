@@ -378,171 +378,6 @@ class TestExecutionSignalCompletionUnification(unittest.TestCase):
 # ===========================================================================
 
 
-class TestSessionAuthorityContractSentinels(unittest.TestCase):
-    """Tests B1–B11: Sentinel presence and content."""
-
-    def test_B1_authority_importable(self):
-        from core.session_authority_contract import SESSION_AUTHORITY_CONTRACT_AUTHORITY
-
-        self.assertIsInstance(SESSION_AUTHORITY_CONTRACT_AUTHORITY, str)
-        self.assertGreater(len(SESSION_AUTHORITY_CONTRACT_AUTHORITY), 0)
-
-    def test_B2_pr2_sentinel_importable(self):
-        from core.session_authority_contract import SESSION_AUTHORITY_CONTRACT_PR2_SENTINEL
-
-        self.assertIsInstance(SESSION_AUTHORITY_CONTRACT_PR2_SENTINEL, str)
-        self.assertIn("PR2", SESSION_AUTHORITY_CONTRACT_PR2_SENTINEL)
-
-    def test_B3_all_policy_sentinels_non_empty(self):
-        from core.session_authority_contract import (
-            ATTACHED_SESSION_REGISTRY_IS_SINGLE_SESSION_AUTHORITY_POLICY,
-            FLOW_CONTINUITY_COORDINATOR_IS_DECISION_AUTHORITY_POLICY,
-            HANDOFF_IDENTITY_MUST_CORRELATE_TO_REGISTRY_POLICY,
-            MIGRATION_MUST_USE_REGISTRY_SUPERSESSION_POLICY,
-            NO_BYPASS_CONTINUITY_DECISION_POLICY,
-            RECONNECT_MUST_PRESERVE_RUNTIME_SESSION_ID_POLICY,
-            SHARED_IDENTITY_CONTRACT_POLICY,
-            STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY,
-        )
-
-        policies = [
-            ATTACHED_SESSION_REGISTRY_IS_SINGLE_SESSION_AUTHORITY_POLICY,
-            FLOW_CONTINUITY_COORDINATOR_IS_DECISION_AUTHORITY_POLICY,
-            SHARED_IDENTITY_CONTRACT_POLICY,
-            RECONNECT_MUST_PRESERVE_RUNTIME_SESSION_ID_POLICY,
-            MIGRATION_MUST_USE_REGISTRY_SUPERSESSION_POLICY,
-            HANDOFF_IDENTITY_MUST_CORRELATE_TO_REGISTRY_POLICY,
-            STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY,
-            NO_BYPASS_CONTINUITY_DECISION_POLICY,
-        ]
-        for p in policies:
-            with self.subTest(policy=p[:30]):
-                self.assertIsInstance(p, str)
-                self.assertGreater(len(p), 0)
-
-    def test_B4_registry_policy_mentions_registry(self):
-        from core.session_authority_contract import (
-            ATTACHED_SESSION_REGISTRY_IS_SINGLE_SESSION_AUTHORITY_POLICY,
-        )
-
-        self.assertIn("registry", ATTACHED_SESSION_REGISTRY_IS_SINGLE_SESSION_AUTHORITY_POLICY.lower())
-
-    def test_B5_coordinator_policy_mentions_coordinator(self):
-        from core.session_authority_contract import (
-            FLOW_CONTINUITY_COORDINATOR_IS_DECISION_AUTHORITY_POLICY,
-        )
-
-        self.assertIn("coordinator", FLOW_CONTINUITY_COORDINATOR_IS_DECISION_AUTHORITY_POLICY.lower())
-
-    def test_B6_shared_identity_policy_mentions_runtime_session_id(self):
-        from core.session_authority_contract import SHARED_IDENTITY_CONTRACT_POLICY
-
-        self.assertIn("runtime_session_id", SHARED_IDENTITY_CONTRACT_POLICY)
-
-    def test_B7_reconnect_policy_mentions_reconnect_session(self):
-        from core.session_authority_contract import (
-            RECONNECT_MUST_PRESERVE_RUNTIME_SESSION_ID_POLICY,
-        )
-
-        self.assertIn("reconnect_session", RECONNECT_MUST_PRESERVE_RUNTIME_SESSION_ID_POLICY)
-
-    def test_B8_migration_policy_mentions_register_session(self):
-        from core.session_authority_contract import (
-            MIGRATION_MUST_USE_REGISTRY_SUPERSESSION_POLICY,
-        )
-
-        self.assertIn("register_session", MIGRATION_MUST_USE_REGISTRY_SUPERSESSION_POLICY)
-
-    def test_B9_handoff_policy_mentions_session_id(self):
-        from core.session_authority_contract import (
-            HANDOFF_IDENTITY_MUST_CORRELATE_TO_REGISTRY_POLICY,
-        )
-
-        self.assertIn("session_id", HANDOFF_IDENTITY_MUST_CORRELATE_TO_REGISTRY_POLICY)
-
-    def test_B10_stale_identity_policy_mentions_non_destructive(self):
-        from core.session_authority_contract import (
-            STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY,
-        )
-
-        self.assertIn("non-destructive", STALE_IDENTITY_REJECTION_IS_NON_DESTRUCTIVE_POLICY.lower())
-
-    def test_B11_no_bypass_policy_mentions_coordinator(self):
-        from core.session_authority_contract import NO_BYPASS_CONTINUITY_DECISION_POLICY
-
-        self.assertIn("FlowContinuityCoordinator", NO_BYPASS_CONTINUITY_DECISION_POLICY)
-
-
-class TestSessionAuthoritySnapshot(unittest.TestCase):
-    """Tests B12–B20: SessionAuthoritySnapshot dataclass and accessors."""
-
-    def test_B12_snapshot_importable(self):
-        from core.session_authority_contract import SessionAuthoritySnapshot
-
-        self.assertTrue(callable(SessionAuthoritySnapshot))
-
-    def test_B13_snapshot_to_dict_keys(self):
-        from core.session_authority_contract import SessionAuthoritySnapshot
-
-        snap = SessionAuthoritySnapshot()
-        d = snap.to_dict()
-        for key in (
-            "registry_available",
-            "coordinator_available",
-            "active_session_count",
-            "pending_continuity_count",
-            "authority_policy_count",
-        ):
-            self.assertIn(key, d)
-
-    def test_B14_get_session_authority_registry_non_none(self):
-        from core.session_authority_contract import get_session_authority_registry
-
-        result = get_session_authority_registry()
-        self.assertIsNotNone(result)
-
-    def test_B15_get_continuity_coordinator_non_none(self):
-        from core.session_authority_contract import get_continuity_coordinator
-
-        result = get_continuity_coordinator()
-        self.assertIsNotNone(result)
-
-    def test_B16_build_snapshot_returns_snapshot(self):
-        from core.session_authority_contract import (
-            SessionAuthoritySnapshot,
-            build_session_authority_snapshot,
-        )
-
-        snap = build_session_authority_snapshot()
-        self.assertIsInstance(snap, SessionAuthoritySnapshot)
-
-    def test_B17_build_snapshot_never_raises(self):
-        from core.session_authority_contract import build_session_authority_snapshot
-
-        try:
-            build_session_authority_snapshot()
-        except Exception as exc:
-            self.fail(f"build_session_authority_snapshot raised: {exc}")
-
-    def test_B18_snapshot_registry_available_true(self):
-        from core.session_authority_contract import build_session_authority_snapshot
-
-        snap = build_session_authority_snapshot()
-        self.assertTrue(snap.registry_available)
-
-    def test_B19_snapshot_coordinator_available_true(self):
-        from core.session_authority_contract import build_session_authority_snapshot
-
-        snap = build_session_authority_snapshot()
-        self.assertTrue(snap.coordinator_available)
-
-    def test_B20_snapshot_authority_policy_count_positive(self):
-        from core.session_authority_contract import build_session_authority_snapshot
-
-        snap = build_session_authority_snapshot()
-        self.assertGreater(snap.authority_policy_count, 0)
-
-
 # ===========================================================================
 # C. Session Authority — Reconnect Identity Preservation
 # ===========================================================================
@@ -933,34 +768,20 @@ class TestCrossModuleConsistency(unittest.TestCase):
 
         self.assertIn("SINGLE_CANONICAL", UNIFIED_RUNTIME_TRUTH_INGRESS_AUTHORITY)
 
-    def test_G2_session_contract_sentinel_contains_pr2(self):
-        from core.session_authority_contract import SESSION_AUTHORITY_CONTRACT_PR2_SENTINEL
-
-        self.assertIn("PR2", SESSION_AUTHORITY_CONTRACT_PR2_SENTINEL)
-
     def test_G3_mesh_role_sentinel_contains_pr2(self):
         from core.mesh.staged_mesh_role_contract import STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL
 
         self.assertIn("PR2", STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL)
 
-    def test_G4_all_three_modules_importable_simultaneously(self):
-        try:
-            import core.mesh.staged_mesh_role_contract  # noqa: F401
-            import core.session_authority_contract  # noqa: F401
-            import core.unified_runtime_truth_ingress  # noqa: F401
-        except Exception as exc:
-            self.fail(f"Import conflict between PR-2 modules: {exc}")
-
-    def test_G5_get_session_authority_and_registry_return_same_type(self):
-        from core.session_authority_contract import get_session_authority_registry
-        from core.unified_runtime_truth_ingress import get_session_authority
-
-        auth = get_session_authority()
-        reg = get_session_authority_registry()
-        self.assertIsNotNone(auth)
-        self.assertIsNotNone(reg)
-        self.assertIs(type(auth), type(reg))
-
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# 已删除 TestSessionAuthorityContractSentinels / TestSessionAuthoritySnapshot 两个类，
+# 以及 TestCrossModuleConsistency 里的 G2 / G4 / G5 —— 它们测的是
+# core/session_authority_contract.py，一个只读快照聚合器（生产面零引用，
+# 底层数据来自 attached_runtime_session_registry + flow_continuity_coordinator，
+# 同一职责的主实现是 canonical_session_truth，有 31 处活引用）。模块已删除。
+# 本文件其余部分测的是 core/unified_runtime_truth_ingress.py 与
+# staged mesh role 契约，那两条线仍在。
