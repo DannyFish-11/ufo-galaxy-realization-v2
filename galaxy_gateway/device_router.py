@@ -1951,9 +1951,17 @@ class DeviceRouter:
                     _bridge_err,
                 )
 
-            _completion_state = (
-                _truth_bridge.get("closure", {}).get("completion_state") if isinstance(_truth_bridge, dict) else None
-            )
+            # PR-V8-CLOSURE：见 galaxy_gateway/multi_subject_closure_surface.py。
+            # 与 cross_device_coordinator 是同一个缺陷的两个现场，走同一个出口。
+            _closure_view = None
+            if isinstance(_truth_bridge, dict) and _truth_bridge:
+                from galaxy_gateway.multi_subject_closure_surface import build_closure_view
+
+                _closure_view = build_closure_view(
+                    _truth_bridge,
+                    formation_member_count=len(_formation_dict.get("members") or []),
+                )
+            _completion_state = _closure_view.get("completion_state") if _closure_view else None
             _result: dict = {
                 "success": success,
                 "subtask_results": results,
@@ -1967,7 +1975,12 @@ class DeviceRouter:
                 _result["truth_convergence_bridge"] = _truth_bridge
                 _result["participant_roles"] = _truth_bridge.get("participant_roles", {})
                 _result["failure_isolation"] = _truth_bridge.get("failure_isolation", {})
-                _result["completion_state"] = _truth_bridge.get("closure", {}).get("completion_state", "unknown")
+                # PR-V8-CLOSURE：终态取闭合机的判定（上面已算好），不再回落到
+                # bridge 的字符串 —— 否则这一行会把上面的结论覆盖掉。
+                if _closure_view:
+                    _result.update(_closure_view)
+                else:
+                    _result["completion_state"] = "unknown"
             # PR-520 / GAP-517-004: attach the canonical formation descriptor
             # to the result so that callers and audit surfaces can inspect it.
             if _formation_dict:
