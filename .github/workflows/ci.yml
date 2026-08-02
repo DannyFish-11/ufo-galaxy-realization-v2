@@ -80,8 +80,17 @@ jobs:
           if not exist start.bat exit /b 1
           echo Windows 启停脚本齐备
       - name: 跨平台敏感的单测（路径 / 编码 / 原子写）
+        # --timeout-method=thread 是 Windows 的**硬性要求**，不是偏好：
+        # pytest.ini 里 timeout_method=signal 是基于实测刻意选的（signal 能打断
+        # 单条用例并让整轮跑完，thread 会杀掉整个进程、拿不到完整失败清单），
+        # 但 signal 方式依赖 SIGALRM，而 Windows 上根本没有这个信号 ——
+        # 本作业第一次在 Windows 上跑就撞到了：
+        #     AttributeError: module 'signal' has no attribute 'SIGALRM'
+        #     (pytest_timeout.py:324, INTERNALERROR, no tests ran)
+        # 所以 Windows 上只能用 thread。这也意味着：**任何 Windows 开发者在本地
+        # 直接跑 pytest 都会撞到同一个 INTERNALERROR** —— 见 pytest.ini 的说明。
         run: |
-          python -m pytest -q --timeout=120 -p no:cacheprovider `
+          python -m pytest -q --timeout=120 --timeout-method=thread -p no:cacheprovider `
             tests/test_atomic_json_permissions.py `
             tests/test_entrypoint_import_has_no_env_side_effects.py `
             tests/test_no_test_hijacks_top_level_module.py `
