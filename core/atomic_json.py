@@ -98,7 +98,19 @@ def atomic_write_json(
         # 注意副作用：目标文件已存在且权限更宽时，替换后会被收紧到 0600。对本函数
         # 服务的这批文件（配置与凭据）这是想要的方向；确有共享读需求的调用点应当
         # 自行在写入后放宽，而不是让写入函数默认放宽。
-        os.chmod(tmp_path, 0o600)
+        #
+        # 用 fchmod(fd) 而不是 chmod(tmp_path)：
+        #   1. **TOCTOU 安全**。按路径改权限要重新解析一次路径，中间存在被替换的
+        #      窗口；按 fd 改权限作用于 mkstemp 刚交给我们的那个 inode，没有窗口。
+        #   2. 顺带消掉 CodeQL 的 "Uncontrolled data used in path expression"
+        #      —— tmp_path 派生自调用方传入的 path（部分调用点来自 SECRETVAULT_FILE
+        #      等环境变量），把它从路径表达式里拿掉是对的方向，而不是加 suppress。
+        #
+        # Windows 没有 fchmod，且 os.chmod 在 Windows 上只切换只读位、**并不能**
+        # 限制其他用户访问（那是 ACL 的事）。所以这里不在 Windows 上假装设权限 ——
+        # 与之对应，tests/test_atomic_json_permissions.py 的权限断言也只在 POSIX 跑。
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(
                 payload,

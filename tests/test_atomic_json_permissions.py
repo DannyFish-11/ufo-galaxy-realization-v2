@@ -65,9 +65,7 @@ def test_no_group_or_other_bits_ever_set(tmp_path):
     atomic_write_json(target, {"token": "abc"})
 
     mode = _mode(target)
-    forbidden = (
-        stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
-    )
+    forbidden = stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH
     assert mode & forbidden == 0, f"不该有任何 group/other 权限位，实际 {oct(mode)}"
 
 

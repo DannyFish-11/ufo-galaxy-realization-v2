@@ -80,6 +80,7 @@ def _guard_top_level_module_hijack():
     yield
     _restore_project_root_import_precedence()
 
+
 # Set test environment variables
 os.environ.setdefault("GALAXY_MODE", "test")
 os.environ.setdefault("GALAXY_DEV_MODE", "1")

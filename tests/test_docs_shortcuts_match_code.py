@@ -130,7 +130,6 @@ def test_documented_shortcuts_are_all_actually_registered(registered_accelerator
                     continue
                 offenders.append(f"{doc.relative_to(PROJECT_ROOT)}:{lineno}: {accel}")
 
-    assert not offenders, (
-        "文档写了未注册的快捷键（以 electron/main.js 的 WAKE_SHORTCUTS/HIDE_SHORTCUTS 为准）:\n"
-        + "\n".join(offenders)
-    )
+    assert (
+        not offenders
+    ), "文档写了未注册的快捷键（以 electron/main.js 的 WAKE_SHORTCUTS/HIDE_SHORTCUTS 为准）:\n" + "\n".join(offenders)

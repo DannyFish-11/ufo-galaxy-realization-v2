@@ -60,9 +60,9 @@ def test_a_hijack_top_level_main_like_ci_does():
 
     import main as hijacked
 
-    assert "Node_113_AndroidVLM" in str(hijacked.__file__), (
-        "未能制造出劫持，本守卫失去意义 —— 说明 import 解析行为已变，请重写本测试"
-    )
+    assert "Node_113_AndroidVLM" in str(
+        hijacked.__file__
+    ), "未能制造出劫持，本守卫失去意义 —— 说明 import 解析行为已变，请重写本测试"
 
 
 def test_b_next_test_still_gets_repo_root_main():
@@ -74,13 +74,13 @@ def test_b_next_test_still_gets_repo_root_main():
 
     assert hasattr(main, "ENV_FILE"), f"main 仍被劫持: {main.__file__}"
     assert hasattr(main, "PROJECT_ROOT"), f"main 仍被劫持: {main.__file__}"
-    assert Path(main.__file__).resolve() == (PROJECT_ROOT / "main.py").resolve(), (
-        f"main 解析到了错误的文件: {main.__file__}"
-    )
+    assert (
+        Path(main.__file__).resolve() == (PROJECT_ROOT / "main.py").resolve()
+    ), f"main 解析到了错误的文件: {main.__file__}"
 
 
 def test_c_project_root_stays_first_on_sys_path():
     """污染者往 sys.path[0] 塞了东西后，守卫应把 PROJECT_ROOT 拉回首位。"""
-    assert sys.path[0] == str(PROJECT_ROOT), (
-        f"PROJECT_ROOT 不在 sys.path 首位，顶层 import 随时可能再被劫持: sys.path[0]={sys.path[0]!r}"
-    )
+    assert sys.path[0] == str(
+        PROJECT_ROOT
+    ), f"PROJECT_ROOT 不在 sys.path 首位，顶层 import 随时可能再被劫持: sys.path[0]={sys.path[0]!r}"

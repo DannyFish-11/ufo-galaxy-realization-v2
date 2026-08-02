@@ -29,7 +29,7 @@ import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-__all__ = ["redact_url", "redact_secret", "redact_text", "REDACTED"]
+__all__ = ["redact_url", "redact_secret", "redact_text", "secret_fingerprint", "REDACTED"]
 
 REDACTED = "***REDACTED***"
 
@@ -96,6 +96,31 @@ def redact_secret(value: Any, keep: int = 0) -> str:
     if keep <= 0 or len(text) <= max(keep, 8):
         return REDACTED
     return f"{REDACTED}{text[-keep:]}"
+
+
+def secret_fingerprint(value: Any, *, length: int = 8) -> str:
+    """返回密钥的**指纹**（SHA-256 前若干位十六进制），不含任何原始密钥material。
+
+    动机：``redact_secret(keep=N)`` 保留末 N 位是为了让运维能判断"key 换没换"，
+    但那毕竟把真实密钥的一部分写进了日志 —— CodeQL 的
+    "Clear-text logging of sensitive information" 报的就是这个，而且它是对的：
+    密钥的任何片段进日志都是泄漏，只是量的差别。
+
+    指纹解决了同一个需求而不泄漏任何 material：同一把 key 指纹恒定、
+    不同 key 指纹不同，且不可逆推。**需要区分密钥时应优先用它，而不是 keep=N。**
+
+    :param length: 取十六进制摘要的前几位。默认 8 位（32 bit）足够区分人工管理
+        规模下的几把 key；不要用它做安全判定，它只是个标签。
+    """
+    import hashlib
+
+    if value is None:
+        return "none"
+    text = str(value)
+    if not text:
+        return "empty"
+    digest = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
+    return f"sha256:{digest[:max(4, length)]}"
 
 
 def redact_text(value: Any, *, max_len: int = 512) -> str:

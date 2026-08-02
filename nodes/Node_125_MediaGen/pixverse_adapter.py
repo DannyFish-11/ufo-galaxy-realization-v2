@@ -15,10 +15,14 @@ from pathlib import Path
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 try:
-    from core.log_redaction import redact_secret as _redact_secret
+    from core.log_redaction import secret_fingerprint as _secret_fingerprint
 except ImportError:  # 节点可被单独拉起（不带仓库根 core 包）时的降级
-    def _redact_secret(value, keep: int = 0) -> str:  # type: ignore[misc]
-        return "***REDACTED***"
+    def _secret_fingerprint(value, *, length: int = 8) -> str:  # type: ignore[misc]
+        import hashlib
+
+        if not value:
+            return "empty"
+        return f"sha256:{hashlib.sha256(str(value).encode('utf-8', 'replace')).hexdigest()[:length]}"
 
 logger = logging.getLogger("PixVerseAdapter")
 
@@ -51,8 +55,13 @@ class PixVerseAdapter:
         })
         # B7: 原为 api_key[:8] —— 保留的是**前缀**，而多数厂商 key 的前缀是固定的
         # (sk- / sk-ant- / AIza …)，前 8 位既泄漏熵又区分不出同厂商的两把 key。
-        # 改用统一脱敏器并保留末 4 位，仅用于区分"换没换 key"。
-        logger.info("PixVerse Adapter initialized with API Key: %s", _redact_secret(self.api_key, keep=4))
+        #
+        # 第一版改成了保留**末** 4 位，CodeQL 随即报
+        # "Clear-text logging of sensitive information" —— 它是对的：密钥的任何
+        # 片段进日志都是泄漏，只是量的差别，末位并不比前缀更正当。
+        # 现改为记**指纹**（SHA-256 前 8 位十六进制）：同样能回答"key 换没换"，
+        # 但不含任何原始密钥 material，不可逆推。
+        logger.info("PixVerse Adapter initialized with API Key: %s", _secret_fingerprint(self.api_key))
     
     def generate_video(
         self,
