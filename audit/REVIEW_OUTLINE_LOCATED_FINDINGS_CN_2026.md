@@ -3,10 +3,21 @@
 对《UFO Galaxy V2 第一次与第二次审查问题完整合并总大纲》的 **B1–B22 / P1–P20**，
 以及《Galaxy 双仓系统现状清单》的 10 条"还没弄完"，逐条**在代码里定位**。
 
-**审查基线**
-- `ufo-galaxy-realization-v2` @ `c4a7949`
-- `ufo-galaxy-android` @ `c149d62`
-- `galaxy-wearos` @ `9fe2a12`
+**审查基线**（第三轮，已重新拉取并全量复跑）
+- `ufo-galaxy-realization-v2` @ `145b116`（较上一轮 `c4a7949` 前进 12 个 commit）
+- `ufo-galaxy-android` @ `c149d62`（未变）
+- `galaxy-wearos` @ `9fe2a12`（未变）
+
+**复跑结论：除下面这一条，全部结论在新 main 上逐项复现，无变化。**
+
+| 条目 | 变化 |
+|---|---|
+| B19「第三个未受守卫覆盖的单例」 | ✅ **已被上游 `0ba448c` 修复**，详见 B19 节 |
+| 其余全部 B / P / 三仓条目 | 无变化（复跑证据见各节） |
+
+复跑覆盖：4 个 probe、复杂度门（与 main 逐字节比对）、3 个守卫测试、
+`verify_provider_apis.py`、B14 入口副作用测试（20/20）、
+以及全部 B 级安全项与 wearos 四项的定位复核。
 
 ---
 
@@ -381,7 +392,8 @@ podman 用户拿到错误命令。
 `KnowledgeBaseSystem` 把 `knowledge_db/knowledge_entries.json` 提交进仓库。
 隔离在 `tests/conftest.py` **模块级**完成（进程单例，fixture 太晚）。
 
-**但守卫覆盖不全 —— 本轮由 CI 实证发现了第三个未被覆盖的单例**：
+**曾发现第三个未被覆盖的单例，现已被上游 `0ba448c` 修复**（记录保留，因为它同时是
+新-7「审计断言比代码老」的一个实例，且修法值得作为范式）：
 
 `test-shard (3)` 上稳定失败：
 
@@ -413,12 +425,31 @@ runtime_cross_repo_activated = eco.get("total_devices_with_snapshot", 0) > 0
 `tests/test_v2_android_execution_event_ingestion_closure.py`、
 `tests/test_pr_rt_android_runtime_state_transparency.py`。
 
-修法：给 store 加 `reset_device_state_store()` 并在 `conftest.py` autouse 重置
-（与既有两个单例处理方式一致）。
+**上游修法（`0ba448c`，比本报告第二轮早约 40 分钟落地）**：
+判据从**进程内存**改为**落盘产物** ——
+`core.android_device_state_store.get_device_ecosystem_summary()`（任何代码路径都能写）
+换成 `core.android_participant_evidence_ingress`（读 Android 侧生成的
+`android_participant_evidence.json`，带 schema 校验与时效检查，
+且只认 `ready` / `recovered` 两个状态，`degraded` / `unavailable` /
+`missing_evidence` / `malformed_evidence` 一律不算）。
+配套新增回归测试 `tests/test_completeness_review_needs_durable_evidence.py`。
 
-**另需产品/架构确认**：`test_I03` 断言的是"**缺口存在**"。既然
-`DEVICE_STATE_SNAPSHOT` 双向已闭环（第五节），`complete` 可能才是正确答案，
-`evidence_gap` 反而是**过期预期** —— 与新-7 的过期 probe 同类。
+该 commit 的说明与本报告的独立诊断完全一致，并点出根因是**违反了模块自身设计原则第 2 条**
+"Fail-conservative — never silently optimistic"：
+进程内瞬时状态不具备「证据」应有的可持久、可追溯属性。
+
+**复跑验证（本轮，新 main）**：
+
+```
+干净进程            : CompletenessLabel.evidence_gap  (snapshots = 0)
+吸收一份内存快照之后: CompletenessLabel.evidence_gap  (snapshots = 1)   ← 不再翻转
+```
+
+`test_I03` + 新回归测试：**9 passed**。三个守卫测试合并跑：**16 passed，工作区干净**。
+
+**范式价值**：这条修法可直接套用到新-7 的两个过期 probe ——
+凡是「治理/审计结论」都不该依赖进程内瞬时状态或朴素 grep，
+而应依赖可持久、可追溯、带时效校验的产物。
 
 **残留**：全量套件因沙箱缺 `numpy` 等依赖无法跑（29 个 collection error），
 全量污染面仍需完整依赖环境验证一次。
