@@ -272,9 +272,18 @@ def probe_v3_dispatch_slot() -> ProbeResult:
     evidence.append(f"All callers: {caller_files}")
 
     verdict = WiringVerdict.HOT_PATH if (cr_hits or oc_hits) else WiringVerdict.ARCH_PRESENT
+    # notes 此前是**硬编码**的 "Shadow authority layer — not called from dispatch
+    # hot path"：verdict 本身是按 grep 结果动态算的，但这句说明不是，于是 V3 真的
+    # 接上 CommandRouter 之后，probe 一边判 HOT_PATH、一边照旧打印"shadow authority"，
+    # 自相矛盾且误导读者。改为跟随 verdict。
+    notes = (
+        "已接入 CommandRouter 派发热路径（V3 slot gate）"
+        if verdict == WiringVerdict.HOT_PATH
+        else "Shadow authority layer — 模块存在但未被派发热路径调用"
+    )
     return ProbeResult("V3_DISPATCH_SLOT", "Canonical Dispatch Slot Authority (V3)", verdict,
                        evidence=evidence,
-                       notes="Shadow authority layer — not called from dispatch hot path")
+                       notes=notes)
 
 
 def probe_v4_orchestration_spine() -> ProbeResult:

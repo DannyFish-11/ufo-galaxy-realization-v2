@@ -13,6 +13,13 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from urllib.parse import urlencode
 
+try:
+    from core.log_redaction import redact_text
+except ImportError:  # 节点可被单独拉起（不带仓库根 core 包）时的降级
+    def redact_text(value, *, max_len: int = 512) -> str:  # type: ignore[misc]
+        """降级实现：拿不到统一脱敏器时，一律不回显上游响应体。"""
+        return "***REDACTED(core.log_redaction unavailable)***"
+
 logger = logging.getLogger("Node_05_Auth.OAuthProviders")
 
 # 可选依赖：优雅降级
@@ -149,7 +156,9 @@ class GoogleOAuthProvider(OAuthProvider):
             resp = await client.post(self.TOKEN_URL, data=data)
 
         if resp.status_code != 200:
-            logger.error(f"Google token 交换失败: {resp.status_code} {resp.text}")
+            # B7: 原为 `{resp.text}` —— token 端点失败时可能把请求参数(含
+            # client_secret)或已签发的 token 回显在错误体里，直接进日志即落盘。
+            logger.error("Google token 交换失败: %s %s", resp.status_code, redact_text(resp.text))
             raise OAuthError(f"Token exchange failed: {resp.status_code}")
 
         token_data = resp.json()
@@ -268,7 +277,8 @@ class GitHubOAuthProvider(OAuthProvider):
             resp = await client.post(self.TOKEN_URL, data=data, headers=headers)
 
         if resp.status_code != 200:
-            logger.error(f"GitHub token 交换失败: {resp.status_code} {resp.text}")
+            # B7: 同 Google 分支，不再原样打印上游响应体。
+            logger.error("GitHub token 交换失败: %s %s", resp.status_code, redact_text(resp.text))
             raise OAuthError(f"Token exchange failed: {resp.status_code}")
 
         token_data = resp.json()

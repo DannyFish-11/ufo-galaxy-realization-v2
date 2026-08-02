@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("Galaxy.Routes.Perception")
@@ -71,8 +71,27 @@ def _internal_error(where: str, exc: Exception) -> Dict[str, Any]:
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
-    """Create desktop perception ingest routes."""
-    router = APIRouter(prefix="/api/perception/desktop", tags=["perception"])
+    """Create desktop perception ingest routes.
+
+    B2 修复：本组路由此前**完全没有鉴权依赖**。它接收摄像头帧、麦克风与系统播放声，
+    并且 ``/analyze`` 会直接触发模型调用 —— 在 ``GALAXY_AUTH_ENABLED`` 未开（默认）
+    的桌面部署下，任何能连到网关端口的本机进程都可以：
+
+      * 投递伪造的摄像头/屏幕帧，污染主体后续决策所依据的"看到的东西"；
+      * 反复打 ``/analyze`` 把它当成免费的模型调用放大器。
+
+    现在整组挂 ``Depends(require_auth)``。注意 ``require_auth`` 自身在
+    ``GALAXY_AUTH_ENABLED`` 关闭时会直接放行 —— 也就是说这**不会**改变默认部署的
+    行为，但一旦用户开启鉴权（或 ``GALAXY_MODE=production`` 强制开启），
+    感知面就不再是个洞。这是"补上缺失的那道依赖"，不是"改变默认安全模型"。
+    """
+    from core.auth import require_auth
+
+    router = APIRouter(
+        prefix="/api/perception/desktop",
+        tags=["perception"],
+        dependencies=[Depends(require_auth)],
+    )
 
     @router.post("/frame")
     async def ingest_frame(frame: DesktopFrame):

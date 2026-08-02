@@ -82,7 +82,7 @@ Galaxy 是一个**桌面原生 AI 助手操作系统**，通过 Electron 三态�
                     │  │   mainWindow         │   │
                     │  │   (全屏透明覆盖层)    │   │
                     │  │                      │   │
-                    │  │   SILENT  ──► LIMINAL │  │   Ctrl+Space 唤醒
+                    │  │   SILENT  ──► LIMINAL │  │   Ctrl+Alt+Space 唤醒
                     │  │             ──► MANIFEST│ │   Esc 关闭
                     │  │                      │   │
                     │  │   WebSocket          │   │
@@ -552,8 +552,11 @@ Node_XX_Name/
 
 | 窗口 | 职责 | 触发 |
 |------|------|------|
-| **mainWindow** | 全屏透明覆盖层，三态显示 | Ctrl+Space 唤醒 |
+| **mainWindow** | 全屏透明覆盖层，三态显示 | `Ctrl+Alt+Space` 唤醒（备选 `Ctrl+Shift+Space` / `Ctrl+Alt+G` / `Ctrl+Shift+G`；`Ctrl+Alt+H` 隐藏） |
 | **panelWindow** | 控制面板 (维态/星元/设置) | F12 切换 |
+
+> 唤醒键以 `electron/main.js` 的 `WAKE_SHORTCUTS` / `HIDE_SHORTCUTS` 为准。
+> 此处曾写 `Ctrl+Space` —— 那个键从未被注册过，且在中文 Windows 上会被输入法截走。
 
 ### 5.2 三态实现
 

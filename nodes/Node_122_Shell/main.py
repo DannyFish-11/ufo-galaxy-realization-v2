@@ -22,6 +22,7 @@ import logging
 import subprocess
 import signal
 import shlex
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
@@ -67,6 +68,89 @@ BLOCKED_COMMANDS = [
 _DANGEROUS_SHELL_PATTERNS = [
     "&&", "||", ";", "|", "`", "$(", "${", "\n", "\r",
 ]
+
+# ---------------------------------------------------------------------------
+# 可执行文件白名单（B3）
+# ---------------------------------------------------------------------------
+#
+# 此前只有 BLOCKED_COMMANDS 黑名单，且是**子串匹配**：
+#     if blocked.lower() in command_lower
+# 于是 "rm -rf /" 拦得住，"rm  -rf /"（双空格）、"rm -fr /" 拦不住。黑名单本质是
+# 枚举坏值 —— 攻击面由"我想到了多少种写法"决定，而不是由策略决定。
+#
+# 现在改为**白名单驱动**：只有 argv[0]（shell 模式下是命令串的第一个词）落在
+# 允许集合内才放行。黑名单保留为第二道（白名单内的程序也可能被用来干坏事，
+# 例如 `python -c ...`），两者是与的关系。
+#
+# 可配置项：
+#   GALAXY_SHELL_ALLOWED_COMMANDS  逗号分隔，**追加**到默认集合
+#   GALAXY_SHELL_ALLOWLIST_MODE=off  关闭白名单，退回纯黑名单（旧行为）
+#
+# 默认集合的取舍：覆盖开发/运维常用只读与构建类工具。刻意**不含**
+# rm / mv / dd / mkfs / chmod / chown / sudo / su —— 需要这些的场景应当显式
+# 通过 GALAXY_SHELL_ALLOWED_COMMANDS 授权，而不是默认可用。
+_DEFAULT_ALLOWED_COMMANDS = frozenset({
+    # 版本控制
+    "git",
+    # 文件与文本读取
+    "ls", "cat", "head", "tail", "wc", "find", "grep", "rg", "diff", "file", "stat", "du", "df",
+    "sort", "uniq", "cut", "awk", "sed", "tr", "basename", "dirname", "realpath", "readlink",
+    # 运行时与包管理
+    "python", "python3", "pip", "pip3", "node", "npm", "npx", "yarn", "pnpm",
+    "go", "cargo", "rustc", "java", "javac", "mvn", "gradle",
+    # 构建与测试
+    "make", "cmake", "pytest", "tox", "ruff", "flake8", "mypy", "black", "isort", "eslint",
+    # 进程与系统信息（只读）
+    "ps", "top", "uname", "whoami", "id", "env", "printenv", "date", "uptime", "hostname",
+    "which", "whereis", "echo", "pwd", "true", "false",
+    # 网络诊断（只读）
+    "curl", "wget", "ping", "dig", "nslookup", "ss", "netstat",
+    # 归档（只读/解包）
+    "tar", "unzip", "gzip", "gunzip", "zip",
+    # 容器（本仓自身要用）
+    "docker", "podman", "kubectl",
+})
+
+
+def _allowlist_enabled() -> bool:
+    return os.getenv("GALAXY_SHELL_ALLOWLIST_MODE", "on").strip().lower() not in ("off", "0", "false", "no")
+
+
+def _allowed_commands() -> frozenset:
+    extra = os.getenv("GALAXY_SHELL_ALLOWED_COMMANDS", "")
+    if not extra.strip():
+        return _DEFAULT_ALLOWED_COMMANDS
+    added = {c.strip() for c in extra.split(",") if c.strip()}
+    return _DEFAULT_ALLOWED_COMMANDS | added
+
+
+def _executable_name(command: str) -> str:
+    """取出命令串里真正会被执行的程序名（去掉路径与 .exe 后缀）。
+
+    ``/usr/bin/git`` → ``git``；``C:\\Python\\python.exe`` → ``python``。
+    取 basename 是为了让 ``/bin/rm`` 不能绕过对 ``rm`` 的限制；同时也意味着
+    白名单是按**程序名**而非路径授权 —— 这是刻意的，路径级授权在跨平台下不可维护。
+    """
+    if not command or not command.strip():
+        return ""
+    try:
+        # posix=False 是刻意的：POSIX 模式会把反斜杠当转义符吃掉，
+        # ``C:\Python\python.exe`` 会被拆成 ``C:Pythonpython.exe``，
+        # 于是 Windows 风格路径永远解析不出正确的程序名。
+        # 代价是引号会被保留在 token 里，下面手动剥掉。
+        tokens = shlex.split(command, posix=False)
+        first = tokens[0] if tokens else ""
+    except ValueError:
+        # 引号不配对之类 —— 交给后续的元字符检查去拒绝，这里退回朴素切分
+        first = command.strip().split()[0]
+
+    first = first.strip().strip("'\"")
+    # 同时按 / 与 \ 切分：不能依赖 os.path.basename，它在 Linux 上不认反斜杠，
+    # 于是 ``/bin/rm`` 拦得住、``C:\Windows\System32\cmd.exe`` 拦不住。
+    name = re.split(r"[\\/]", first)[-1]
+    if name.lower().endswith(".exe"):
+        name = name[:-4]
+    return name.lower()
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
@@ -133,15 +217,38 @@ class ShellService:
     def _is_command_safe(self, command: str, shell_mode: bool = True) -> bool:
         """Check if command is safe to execute.
 
-        Blocks:
-        1. Known dangerous commands (blocklist)
-        2. Shell metacharacters that enable command chaining/injection
-           when running in shell=True mode without explicit args
+        三道检查，全部通过才放行：
+
+        1. **可执行文件白名单**（B3 新增，主防线）—— argv[0] 必须在允许集合内。
+        2. **危险命令黑名单** —— 白名单内的程序也可能被滥用，保留为第二道。
+        3. **Shell 元字符** —— shell 模式下拒绝命令串接/注入。
+
+        白名单是主防线：黑名单只能枚举已知坏值，攻击面由"想到了多少写法"决定；
+        白名单则由策略决定，未授权的程序一律进不来。
         """
         command_lower = command.lower().strip()
 
+        # 1) 白名单
+        if _allowlist_enabled():
+            exe = _executable_name(command)
+            if not exe:
+                logger.warning("Blocked empty command")
+                return False
+            if exe not in _allowed_commands():
+                logger.warning(
+                    "Blocked non-allowlisted executable %r (设 GALAXY_SHELL_ALLOWED_COMMANDS 可授权)",
+                    exe,
+                )
+                return False
+
+        # 2) 黑名单。
+        #    归一化空白后再匹配 —— 原实现是对原串做子串匹配，"rm  -rf /"（双空格）
+        #    与 "rm\t-rf /" 都能绕过 "rm -rf /" 这条规则。
+        normalized = " ".join(command_lower.split())
         for blocked in BLOCKED_COMMANDS:
-            if blocked.lower() in command_lower:
+            blocked_norm = " ".join(blocked.lower().split())
+            if blocked_norm in normalized:
+                logger.warning("Blocked dangerous command pattern %r", blocked)
                 return False
 
         # In shell mode, reject commands containing injection metacharacters

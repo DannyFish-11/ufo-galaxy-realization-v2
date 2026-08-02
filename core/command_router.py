@@ -2069,11 +2069,23 @@ class CommandRouter:
         _v3_blocked_targets: List[str] = []
         _v3_block_reason: str = ""
         _v3_slot_result = None
+        # 默认从 "compat" 改为 "strict"（fail-open → fail-closed）。
+        #
+        # 语义差别只在**权威模块自身抛异常**时体现：模块正常工作时，全部目标被拒
+        # 一律返回 V3_SLOT_BLOCKED，两种模式一致。而当 slot authority 自己挂了：
+        #   compat → 记一条 logger.debug，然后**继续派发**；
+        #   strict → 返回 V3_SLOT_BLOCKED。
+        # 也就是说旧默认下「闸门坏了 = 闸门打开」，一个本该拦住非法派发的门在它
+        # 最需要生效的时刻（自身异常）反而完全失效，且只留一条 debug 级日志。
+        #
+        # 回退方式：GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE=compat，
+        # 或在 envelope.metadata 里带 canonical_dispatch_authority_mode。
+        # 单条请求的 metadata 覆盖优先级高于环境变量，行为不变。
         _v3_authority_mode = (
             str(
                 (envelope.metadata or {}).get("canonical_dispatch_authority_mode")
                 or (envelope.metadata or {}).get("canonical_governance_mode")
-                or os.environ.get("GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE", "compat")
+                or os.environ.get("GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE", "strict")
             )
             .strip()
             .lower()
@@ -2238,7 +2250,16 @@ class CommandRouter:
                     return _v3_blocked_result
 
             except Exception as _v3_exc:
-                logger.debug("Fallback triggered: %s", _v3_exc)
+                # 曾经是 logger.debug —— 一个安全闸门整体失效却只在 debug 级留痕，
+                # 默认日志级别下等于静默。提到 error：无论后续 strict 拦还是 compat
+                # 放行，"派发合法性权威本身挂了"这件事必须在默认日志里看得见。
+                logger.error(
+                    "route_envelope [V3-slot-gate]: 派发合法性权威调用失败 task_id=%s mode=%s err=%s",
+                    envelope.task_id,
+                    _v3_authority_mode,
+                    _v3_exc,
+                    exc_info=True,
+                )
                 _v3_block_reason = f"slot_authority_unavailable:{_v3_exc}"
                 if _v3_authority_mode == "strict":
                     logger.warning(

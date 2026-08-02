@@ -846,6 +846,35 @@ class LocalBrainManager:
                 return False
 
             elif system == "Linux":
+                # B9: 此处曾无条件执行 `sh -c "curl -fsSL https://ollama.com/install.sh | sh"`
+                # —— 把本机的 root 级安装行为完全托付给远端脚本的当前内容:无摘要校验、
+                # 无版本钉住,上游被投毒或域名被劫持即等价于本机 RCE。
+                #
+                # 为什么不像 nats-server 那样改成「下载 release + SHA256 校验」:
+                # 那需要确知 Ollama 官方 release 的资产名与校验文件布局,而本环境无法
+                # 联网核实。猜一个 404 的资产名只会把"有风险但能用"换成"必然失败",
+                # 比现状更糟 —— 这正是上面 Windows 分支已经踩过并写下的教训。
+                #
+                # 故与 Windows 分支取齐:默认不再自动执行远端脚本,给出可操作提示。
+                # 确实想要旧行为的,显式设 GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT=1 opt-in。
+                if os.environ.get("GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT", "").strip().lower() not in (
+                    "1",
+                    "true",
+                    "yes",
+                ):
+                    logger.warning(
+                        "未自动安装 Ollama：该路径需执行远端脚本 "
+                        "(curl https://ollama.com/install.sh | sh)，无法校验其内容，默认不执行。\n"
+                        "  手动安装： curl -fsSL https://ollama.com/install.sh | sh\n"
+                        "  或改用包管理器/官方文档： https://ollama.com/download/linux\n"
+                        "  确认知悉风险后要恢复自动安装： 设 GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT=1"
+                    )
+                    return False
+
+                logger.warning(
+                    "GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT 已开启 —— 正在执行未经校验的远端安装脚本 "
+                    "(https://ollama.com/install.sh)。此为用户显式授权的降级路径。"
+                )
                 # async 路径里的长安装(最长 300s)必须放线程:否则首次自动装
                 # Ollama 期间整个事件循环冻结,桌面 UI/WS/语音全部假死几分钟。
                 result = await asyncio.to_thread(
