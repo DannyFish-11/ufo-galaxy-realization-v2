@@ -97,6 +97,42 @@ class TestPrediction:
         assert len(AnticipatoryContext.predict_queries("a", "b c d", limit=1)) == 1
 
 
+class TestMachineAnnotationStripping:
+    """机器注解必须在词法层被剥掉,否则四道闸会被架空。
+
+    ``core/openclawd.py`` 每轮都往用户文本后面追加 ``[Multimodal context: ...]``,
+    而且**每轮几乎一样**。对 ACI 来说这不只是噪声:共享的注解会抬高 Jaccard,
+    让两个不同的问题看起来相似 —— 也就是让**错误命中**更容易发生。而四道闸存在的
+    全部理由,就是不要把为另一个问题组装的上下文喂给模型。
+    """
+
+    _SUFFIX = "\n\n[Multimodal context: 1 image(s) [webcam], device=dev-1]"
+
+    def test_annotation_is_stripped_including_nested_brackets(self):
+        from core.anticipatory_context import strip_machine_annotations
+
+        assert strip_machine_annotations("帮我看看那份季度报告" + self._SUFFIX) == "帮我看看那份季度报告"
+
+    def test_user_typed_brackets_survive(self):
+        """只剥已知的机器注解 —— 把用户打的方括号删掉就是篡改输入。"""
+        from core.anticipatory_context import strip_machine_annotations
+
+        assert strip_machine_annotations("把 [重要] 那段标出来" + self._SUFFIX) == "把 [重要] 那段标出来"
+
+    def test_shared_annotation_does_not_make_unrelated_queries_similar(self):
+        """两句毫不相干的话,不能因为共享注解就被判成相似。"""
+        from core.anticipatory_context import _jaccard, content_tokens
+
+        a = content_tokens("帮我看看那份季度报告" + self._SUFFIX)
+        b = content_tokens("今天北京天气怎么样" + self._SUFFIX)
+        assert _jaccard(a, b) < 0.3, "共享的机器注解把两个无关问题拉近了"
+
+    def test_annotated_query_still_hits_its_own_prefetch(self, aci):
+        """反过来:同一个问题带不带注解都该命中,不能因为剥洗把真命中弄丢。"""
+        asyncio.run(_prefetch(aci, "s1", last_user_query="帮我看看那份季度报告"))
+        assert aci.take("s1", "帮我看看那份季度报告" + self._SUFFIX) is not None
+
+
 class TestHitPaths:
     def test_exact_match_hits(self, aci):
         asyncio.run(_prefetch(aci, "s1", last_user_query="帮我看看那份季度报告"))

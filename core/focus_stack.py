@@ -278,10 +278,13 @@ def topic_tokens(text: str) -> set:
     if _CJK_RUN_RE is None:
         _CJK_RUN_RE = re.compile(r"[一-鿿]+|[a-zA-Z0-9_]+")
 
-    from core.anticipatory_context import _STOPWORDS
+    from core.anticipatory_context import _STOPWORDS, strip_machine_annotations
 
+    # 先剥机器注解:每轮都被追加的 [Multimodal context: ...] 会让任何两句话共享一批
+    # 词,包含度被凭空抬高。真跑实测过——不剥的话「季度报告」和「老王的消息」会被判成
+    # 同一件事,栈深停在 1。详见 core.anticipatory_context._MACHINE_ANNOTATION_RE。
     tokens: set = set()
-    for match in _CJK_RUN_RE.finditer(text or ""):
+    for match in _CJK_RUN_RE.finditer(strip_machine_annotations(text)):
         chunk = match.group(0)
         if chunk[0].isascii():
             low = chunk.lower()
@@ -314,8 +317,15 @@ def _containment(utterance: set, focus: set) -> float:
 
 
 def _summarise(text: str, limit: int = 40) -> str:
-    """把一句发言压成一个焦点标题。截断而非摘要 —— 摘要要模型。"""
-    flat = " ".join(text.split())
+    """把一句发言压成一个焦点标题。截断而非摘要 —— 摘要要模型。
+
+    标题同样要剥机器注解:否则面板上看到的焦点会是
+    ``帮我把季度报告整理一下 [Multimodal context: device=...]``,
+    机器噪声占掉一半标题宽度,而它对人没有任何信息量。
+    """
+    from core.anticipatory_context import strip_machine_annotations
+
+    flat = strip_machine_annotations(text)
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 

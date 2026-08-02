@@ -4508,6 +4508,41 @@ class OpenClawd:
             # OpenClawd 负责解释该产物并决定后续执行/委托策略。
             kernel = self._get_kernel()
             if kernel is not None:
+                # 调用方没给上下文时,从**仓库唯一的记忆读入口**补齐。
+                #
+                # 真机实测(起真服务 + 真模型桩,打 /api/v1/chat)发现的:HTTP 路径
+                # 不传 context,``context or []`` 于是恒为空,AgentKernel 拿着空历史
+                # 去调模型 —— 桩侧记录到的 messages 只有 ``['system', 'user']``。
+                # 也就是说**主用的那条请求路径完全没有记忆**:没有长期偏好、没有会话
+                # 历史、没有任务史、没有事件链,当然也没有焦点栈。
+                #
+                # 这不是"少一个增强",而是同一个主体在两条路径上记忆完全不一致:
+                # 走 handle_chat(chat 意图)时它记得,走这里(task_execute/hybrid)时
+                # 它失忆,而用户感知不到自己刚才那句话被路由去了哪一条。
+                #
+                # 只在**调用方没给**时补:显式传了 context 的调用方(它们自己算过)
+                # 行为逐字节不变。补齐走 get_unified_context —— 与 handle_chat 同一个
+                # 入口、同一份内容,顺带让 ACI 的预取在这条路径上真正被消费。
+                # 同步函数丢线程,理由与 handle_chat 那处相同(向量召回是 CPU 密集,
+                # 直接在事件循环里跑会卡住所有并发请求)。
+                _kernel_context = context
+                if not _kernel_context and session_id:
+                    try:
+                        import asyncio as _aio_ctx
+
+                        from core.session_memory_facade import get_unified_context
+
+                        _kernel_context = await _aio_ctx.to_thread(
+                            get_unified_context,
+                            session_id=session_id,
+                            query=message,
+                            depth="auto",
+                            max_turns=10,
+                        )
+                    except Exception as _kctx_err:  # noqa: BLE001 — 取不到记忆不能让请求失败
+                        logger.debug("kernel 统一上下文补齐失败(按空上下文继续): %s", _kctx_err)
+                        _kernel_context = None
+
                 try:
                     kernel_result = await kernel.handle_message(
                         message=_kernel_message,
@@ -4515,7 +4550,7 @@ class OpenClawd:
                         control_session_id=control_session_id or "",
                         runtime_attachment_session_id=runtime_attachment_session_id or "",
                         device_id=device_id or "",
-                        context=context or [],
+                        context=_kernel_context or [],
                         multimodal_context=multimodal_context,
                     )
                     api_dict = kernel_result.to_api_dict()

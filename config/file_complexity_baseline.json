@@ -84,7 +84,7 @@
     "core/node_cognition_activation.py": 1194,
     "core/nodes/node_fabric_registry.py": 1076,
     "core/offline_replay_ordering_contract.py": 1040,
-    "core/openclawd.py": 9718,
+    "core/openclawd.py": 9753,
     "core/operational_readiness_surface.py": 2412,
     "core/operational_registration_path.py": 1379,
     "core/operational_slo_metrics.py": 1392,

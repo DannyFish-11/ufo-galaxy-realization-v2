@@ -178,14 +178,49 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+#: 会被**机器**追加到用户消息末尾的注解块。真跑发现的:``core/openclawd.py`` 在把
+#: 消息交给内核前做 ``f"{message}\n\n{fusion_summary}"``,于是每一轮用户文本后面都挂着
+#: 一段 ``[Multimodal context: device=..., 1 image(s) [webcam]]``,并且**每轮几乎一样**。
+#:
+#: 这对任何靠词法相似度做判断的东西都是毒药:两句毫不相干的话会因为共享这段注解而
+#: 显得相似。实测后果 —— 焦点栈里「季度报告」和「老王的消息」被判成同一件事,depth
+#: 停在 1(本该是 2);ACI 那边则会抬高 Jaccard,让**错误命中**更容易发生,而四道闸
+#: 存在的全部理由就是防止把错的上下文喂给模型。
+#:
+#: 只剥**已知的机器注解**,不做通用的"去掉方括号内容":用户真的会打方括号,
+#: 把它们当噪声删掉就是在篡改用户输入。需要时按证据往这里加。
+#:
+#: 注意注解体里**有嵌套方括号** —— 真实形态是
+#: ``[Multimodal context: 1 image(s) [webcam], device=dev-1]``(见
+#: ``core/perception/context_fuser.py``)。第一版写成 ``[^\]]*`` 会在 ``[webcam]``
+#: 的右括号处就收尾,留下一个孤零零的 ``]`` 挂在焦点标题末尾。所以这里显式允许
+#: 一层嵌套:要么是非括号字符,要么是一整个 ``[...]`` 子块。
+_MACHINE_ANNOTATION_RE = re.compile(
+    r"\[\s*Multimodal context:(?:[^\[\]]|\[[^\[\]]*\])*\]",
+    re.IGNORECASE,
+)
+
+
+def strip_machine_annotations(text: str) -> str:
+    """剥掉机器追加的注解块,返回用户真正说的那部分。
+
+    词法层的**所有**入口都必须先过这一道(见 :data:`_MACHINE_ANNOTATION_RE` 的说明),
+    否则相似度判断会被每轮重复的注解带偏。
+    """
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", _MACHINE_ANNOTATION_RE.sub(" ", text)).strip()
+
+
 def normalize_query(text: str) -> str:
-    """归一化问句:去首尾空白、压缩内部空白、小写。用于精确匹配。"""
-    return re.sub(r"\s+", " ", (text or "").strip()).lower()
+    """归一化问句:剥机器注解、去首尾空白、压缩内部空白、小写。用于精确匹配。"""
+    return strip_machine_annotations(text).lower()
 
 
 def content_tokens(text: str) -> set:
-    """抽实词集合。停用词与单个拉丁字符被剔除。"""
-    return {t for t in (m.group(0).lower() for m in _TOKEN_RE.finditer(text or "")) if t not in _STOPWORDS}
+    """抽实词集合。停用词与单个拉丁字符被剔除;机器注解先被剥掉。"""
+    cleaned = strip_machine_annotations(text)
+    return {t for t in (m.group(0).lower() for m in _TOKEN_RE.finditer(cleaned)) if t not in _STOPWORDS}
 
 
 def _jaccard(a: set, b: set) -> float:

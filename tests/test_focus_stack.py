@@ -218,6 +218,54 @@ class TestKnownLexicalLimits:
         assert stack.depth() == 1
 
 
+#: 真实形态,抄自 core/perception/context_fuser.py —— 注意**里面还嵌着方括号**。
+_REAL_MM_SUFFIX = "\n\n[Multimodal context: 1 image(s) [webcam], device=dev-1]"
+
+
+class TestMachineAnnotationPollution:
+    """机器追加的注解不能进词法判断 —— 真跑抓到的,而且症状是"安静地全错"。
+
+    ``core/openclawd.py`` 在把消息交给内核前做 ``f"{message}\\n\\n{fusion_summary}"``,
+    于是每一轮用户文本后面都挂着一段 ``[Multimodal context: ...]``,**每轮几乎一样**。
+    对靠词法相似度做判断的东西这是毒药:两句毫不相干的话会因为共享这段注解而显得相似。
+
+    实测:不剥的话「季度报告」和「老王的消息」被判成同一件事,栈深停在 1(本该是 2)。
+    没有报错、没有日志,只是焦点栈从此再也认不出话题切换。
+    """
+
+    def test_topic_switch_is_still_detected_with_annotations(self, stack):
+        assert stack.observe("帮我把季度报告整理一下" + _REAL_MM_SUFFIX)["action"] == "opened"
+        assert stack.observe("等一下,先看看老王刚发的那条消息" + _REAL_MM_SUFFIX)["action"] == "opened"
+        assert stack.depth() == 2, "共享的机器注解把两个不同话题黏成了一个"
+
+    def test_full_conversation_shape_survives_annotations(self, stack):
+        """带注解跑一遍完整的打断-恢复,形状必须与不带注解时逐步一致。"""
+        stack.observe("帮我把季度报告整理一下" + _REAL_MM_SUFFIX)
+        stack.observe("等一下,先看看老王刚发的那条消息" + _REAL_MM_SUFFIX)
+        assert stack.observe("继续" + _REAL_MM_SUFFIX)["action"] == "continued"
+        assert stack.observe("回到季度报告,把整理的部分接着做" + _REAL_MM_SUFFIX)["action"] == "resumed"
+        assert stack.depth() == 2
+        assert "报告" in stack.current.topic
+
+    def test_topic_title_has_no_machine_noise(self, stack):
+        """标题给人看 —— 注解占掉一半宽度而对人零信息量。
+
+        注解体里有嵌套方括号(``[webcam]``),第一版正则在那个右括号就收尾,
+        留下一个孤零零的 ``]`` 挂在标题末尾。这条把嵌套一并钉住。
+        """
+        stack.observe("帮我把季度报告整理一下" + _REAL_MM_SUFFIX)
+
+        assert stack.current.topic == "帮我把季度报告整理一下"
+        assert "]" not in stack.current.topic
+        assert "Multimodal" not in stack.current.topic
+
+    def test_user_typed_brackets_are_preserved(self, stack):
+        """只剥**已知的机器注解**,不做通用的去方括号 —— 用户真的会打方括号。"""
+        stack.observe("把 [重要] 那段标出来" + _REAL_MM_SUFFIX)
+
+        assert "[重要]" in stack.current.topic
+
+
 class TestRegistry:
     def test_sessions_are_isolated(self):
         from core.focus_stack import get_focus_stack
