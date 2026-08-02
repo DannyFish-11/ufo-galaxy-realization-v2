@@ -88,6 +88,60 @@ class TestAmbientPresenceIsContinuous:
         assert snapshot["entries"][0]["source"] == "android_duplex"
 
 
+class TestAmbientPresenceActuallyBreathes:
+    """常驻在场必须**真的**在驱动外壳,而不只是把三态字段改成 liminal。
+
+    这一组是补上来的:原先我只断言了 ``tristate is LIMINAL``,而"持续、实时、连贯"
+    靠的是 200ms 的 continuum tick 持续发射 ``continuum.state`` / ``intent.update``。
+    结果我在给 ``_start_continuum_tick`` 加 running-loop 守卫时把 ``_tick_running
+    = True`` 顺手删掉了,tick 一拍都不跑 —— 三态字段照样是 liminal、tick_task 照样
+    存在、所有既有用例照样绿,只有外壳彻底不动。**状态对 ≠ 在场活着**,所以这里
+    直接断言事件流。
+    """
+
+    @pytest.mark.asyncio
+    async def test_open_ambient_presence_drives_the_continuum_tick(self, runtime):
+        from core.state_event_bus import get_state_event_bus
+
+        bus = get_state_event_bus()
+        seen: list = []
+        tok = bus.subscribe("intent.update", lambda e: seen.append(getattr(e, "payload", e)))
+
+        handle = runtime.open_ambient_presence("voice_duplex", reason="tick test")
+        try:
+            await asyncio.sleep(0.45)  # tick 周期 200ms,至少跑两拍
+            assert seen, "常驻在场期间必须持续发射 intent.update —— 否则外壳是死的"
+            payload = seen[-1] if isinstance(seen[-1], dict) else {}
+            assert "intent_strength" in payload
+        finally:
+            runtime.close_ambient_presence(handle)
+            try:
+                bus.unsubscribe(tok)
+            except Exception:  # noqa: BLE001
+                pass
+
+    @pytest.mark.asyncio
+    async def test_closing_ambient_presence_stops_the_tick(self, runtime):
+        """关掉在场之后必须**停止**发射 —— 否则会留一个永不退出的 200ms 循环。"""
+        from core.state_event_bus import get_state_event_bus
+
+        bus = get_state_event_bus()
+        handle = runtime.open_ambient_presence("voice_duplex")
+        await asyncio.sleep(0.25)
+        runtime.close_ambient_presence(handle)
+
+        after: list = []
+        tok = bus.subscribe("intent.update", lambda e: after.append(e))
+        try:
+            await asyncio.sleep(0.45)
+            assert after == [], "在场已关闭,tick 仍在发射(泄漏了一个后台循环)"
+        finally:
+            try:
+                bus.unsubscribe(tok)
+            except Exception:  # noqa: BLE001
+                pass
+
+
 class TestCentreCanHalt:
     """A2:中心叫得停。"""
 

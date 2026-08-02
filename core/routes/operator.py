@@ -1445,6 +1445,73 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=500,
             )
 
+    # ------------------------------------------------------------------
+    # 常驻在场(ambient presence)的查看与叫停
+    # ------------------------------------------------------------------
+    #
+    # 常驻在场是与"请求相位"并列的另一种在场:实时全双工语音会话一旦建立,主体就
+    # 一直在听、一直可以随时开口,从建立到挂断自始至终"在场",不属于任何一次请求。
+    # 见 DesktopPresenceRuntime.open_ambient_presence。
+    #
+    # 为什么必须有这两个端点:统一主体里**不允许存在一条中心叫不停的常驻通路**。
+    # 运行时侧已经有 halt_ambient_presence,但在补上这里之前它**零调用方** ——
+    # 能力写完了却没有任何按钮/端点去按,和"定义了但没接"是同一回事。
+    #
+    # 为什么不走 OperatorActionKind 契约:那套要同时改 enum、可用性映射、
+    # execute_operator_action 分派与回执记录,牵连面远大于本次接线要解决的问题。
+    # 若面板日后需要把叫停纳入统一的操作审计账本,再按那条路径升格 —— 那是一次
+    # 独立的、有明确收益的改动,不该夹在这里顺手做掉。
+
+    @router.get("/api/v1/operator/presence/ambient")
+    async def operator_ambient_presence() -> JSONResponse:
+        """列出当前所有常驻在场:来源、开了多久、**是否可被中心叫停**。
+
+        ``all_haltable=false`` 意味着有一条常驻通路没有交出叫停钩子 —— 那不是
+        配置问题,是接线漏了,面板上应当显眼。
+        """
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+            return JSONResponse(
+                content={
+                    **get_desktop_presence_runtime().ambient_presence_snapshot(),
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("operator_ambient_presence endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": "ambient presence snapshot failed", "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    @router.post("/api/v1/operator/presence/ambient/halt")
+    async def operator_ambient_presence_halt(
+        handle: Optional[str] = Query(None, description="要叫停的在场句柄;省略 = 全部叫停"),
+        reason: str = Query("", description="叫停原因(仅用于观测)"),
+    ) -> JSONResponse:
+        """由中心叫停常驻在场(A2)——"主体收声"这一动作的落点。
+
+        与持有方自己收摊不同:这是中心从外面把它按停,会先执行持有方登记的叫停
+        钩子(去关那条实时 WebSocket / 停那个采集),再回收在场。
+
+        钩子失败**不阻止**回收,失败原因如实回在 ``errors`` 里 —— 中心说停就是停,
+        不能因为一个钩子抛异常就让在场赖着不走,那正是这条接线要消灭的状态。
+
+        省略 ``handle`` = 全部叫停。未知句柄不是错误(幂等),返回空 ``halted``。
+        """
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+            result = await get_desktop_presence_runtime().halt_ambient_presence(handle, reason=reason)
+            return JSONResponse(content={**result, "authority": "OPERATOR_ROUTES_V1"})
+        except Exception as exc:  # noqa: BLE001
+            logger.error("operator_ambient_presence_halt endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": "ambient presence halt failed", "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
     # ==================================================================
     # PR-4: Operator Action Governance Endpoints
     # ==================================================================

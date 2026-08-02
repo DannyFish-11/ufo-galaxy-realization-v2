@@ -44,7 +44,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ModalityCapability")
 
@@ -359,6 +359,69 @@ def negotiate(
     )
 
 
+def devices_capable_of(modality: str, *, tier: Optional[str] = None) -> List[str]:
+    """返回**能承担某个模态**的设备 ID 列表(在线优先,按 ID 稳定排序)。
+
+    这是设备维真正的用处:跨设备派发要挑一台"能看"的设备时,直接问这里,
+    而不是派出去再等超时。没有它的时候,中心只知道"后端能看",不知道"哪台能看"。
+
+    未申报能力的设备**会**被列入 —— 见模块头"未知不设卡":没人填过能力表不等于
+    设备没有硬件,把它排除掉会凭空缩小可派发范围。调用方若要区分"确认能做"与
+    "没说过做不做",看 :func:`device_modality_matrix` 里的 ``gating_active``。
+    """
+    out: List[str] = []
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        devices = get_unified_device_manager().list_devices() or []
+    except Exception as exc:  # noqa: BLE001 — 设备源不可用时返回空,调用方自行退回本机
+        logger.debug("devices_capable_of: 设备源不可用: %s", exc)
+        return []
+
+    for dev in devices:
+        try:
+            if negotiate(tier=tier, device=dev).get(modality).usable:
+                out.append(str(getattr(dev, "device_id", "") or ""))
+        except Exception as exc:  # noqa: BLE001 — 单台设备协商失败不影响其余
+            logger.debug("devices_capable_of: 设备协商失败 %s: %s", getattr(dev, "device_id", "?"), exc)
+    return sorted(d for d in out if d)
+
+
+def device_modality_matrix(*, tier: Optional[str] = None) -> Dict[str, Any]:
+    """所有已注册设备 × 全模态的协商结果。供面板与派发决策共用。"""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        devices = get_unified_device_manager().list_devices() or []
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("device_modality_matrix: 设备源不可用: %s", exc)
+        devices = []
+
+    rows: List[Dict[str, Any]] = []
+    for dev in devices:
+        try:
+            gate = DeviceModalityGate.from_device(dev)
+            rows.append(
+                {
+                    "device_id": gate.device_id,
+                    "device_name": str(getattr(dev, "device_name", "") or ""),
+                    "device_type": str(getattr(dev, "device_type", "") or ""),
+                    "online": bool(getattr(dev, "is_online", lambda: False)()),
+                    "gate": gate.to_dict(),
+                    "plan": negotiate(tier=tier, device=dev).to_dict(),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("device_modality_matrix: 设备协商失败 %s: %s", getattr(dev, "device_id", "?"), exc)
+    rows.sort(key=lambda r: r["device_id"])
+    return {
+        "tier": tier or "",
+        "device_count": len(rows),
+        "devices": rows,
+        "capable": {m: devices_capable_of(m, tier=tier) for m in (VISION_IN, AUDIO_IN, AUDIO_OUT, VIDEO_IN)},
+    }
+
+
 MODALITY_CAPABILITY_AUTHORITY: str = (
     "MODALITY_CAPABILITY_V1: core/modality_capability.py | 全模态自适配协商唯一入口. "
     "negotiate() → ModalityPlan(vision_in/audio_in/audio_out/video_in), 每模态三态 "
@@ -376,6 +439,8 @@ __all__ = [
     "ModalityPlan",
     "negotiate",
     "DeviceModalityGate",
+    "devices_capable_of",
+    "device_modality_matrix",
     "asr_bridge_available",
     "tts_bridge_available",
     "MODALITY_CAPABILITY_AUTHORITY",

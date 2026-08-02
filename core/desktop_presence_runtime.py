@@ -287,12 +287,21 @@ class RuntimeSession:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            self._tick_running = False
-            return
+            return  # 没有事件循环就不跑 tick;_tick_running 本来就是 False
         try:
             self._tick_task = asyncio.create_task(self._continuum_tick_loop())
         except Exception:
             self._tick_running = False
+            return
+        # **必须在建任务之后置位**,而且必须置位。
+        #
+        # 引入上面那道 running-loop 守卫时,这一行被顺手删掉了 —— 于是
+        # _continuum_tick_loop 的 ``while self._tick_running and ...`` 第一次判断
+        # 就是假,循环体一拍都不跑:continuum.state 与 intent.update 全都不再发射,
+        # 而 tick_task 看上去还好端端地存在着。常驻在场"驱动外壳呼吸"这件事
+        # 因此变成空壳,却没有任何报错。tests/test_task_cost_ledger.py 的
+        # test_liminal_tick_emits_intent_update 抓到了它。
+        self._tick_running = True
 
     def _stop_continuum_tick(self) -> None:
         """停止后台 continuum 状态推送循环。"""
