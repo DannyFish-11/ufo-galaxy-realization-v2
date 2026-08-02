@@ -1307,10 +1307,14 @@ class UnifiedResultIngress:
             raw = str(payload.get(key) or "").strip().lower()
             if raw in {"strict", "compat", "relaxed"}:
                 return raw
-        env_mode = str(os.environ.get("GALAXY_RESULT_INGRESS_CONTINUITY_MODE", "compat")).strip().lower()
+        # 默认 compat → strict。影响 _should_block_on_continuity_verdict()：
+        # "require_review" 裁决**只在 strict 下阻断**，compat 下等于放行 ——
+        # 也就是"需要人工复核"被默默当成了"通过"。逐条 payload 覆盖仍然优先，
+        # 需要整体回退设 GALAXY_RESULT_INGRESS_CONTINUITY_MODE=compat。
+        env_mode = str(os.environ.get("GALAXY_RESULT_INGRESS_CONTINUITY_MODE", "strict")).strip().lower()
         if env_mode in {"strict", "compat", "relaxed"}:
             return env_mode
-        return "compat"
+        return "strict"
 
     @staticmethod
     def _should_block_on_continuity_verdict(verdict: str, *, mode: str) -> bool:

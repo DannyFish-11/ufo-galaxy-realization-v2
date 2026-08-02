@@ -14,6 +14,12 @@ from pathlib import Path
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
+try:
+    from core.log_redaction import redact_secret as _redact_secret
+except ImportError:  # 节点可被单独拉起（不带仓库根 core 包）时的降级
+    def _redact_secret(value, keep: int = 0) -> str:  # type: ignore[misc]
+        return "***REDACTED***"
+
 logger = logging.getLogger("PixVerseAdapter")
 
 # PixVerse API 配置
@@ -43,7 +49,10 @@ class PixVerseAdapter:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         })
-        logger.info(f"PixVerse Adapter initialized with API Key: {self.api_key[:8]}...")
+        # B7: 原为 api_key[:8] —— 保留的是**前缀**，而多数厂商 key 的前缀是固定的
+        # (sk- / sk-ant- / AIza …)，前 8 位既泄漏熵又区分不出同厂商的两把 key。
+        # 改用统一脱敏器并保留末 4 位，仅用于区分"换没换 key"。
+        logger.info("PixVerse Adapter initialized with API Key: %s", _redact_secret(self.api_key, keep=4))
     
     def generate_video(
         self,

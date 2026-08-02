@@ -86,6 +86,19 @@ def atomic_write_json(
     # 往往不在同一个挂载点上。
     fd, tmp_path = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=".json", dir=directory)
     try:
+        # 显式设定权限（B13）。
+        #
+        # mkstemp 建出来的临时文件本就是 0600，os.replace 会把这个模式一并带到目标
+        # 文件上 —— 也就是说结果**碰巧**是安全的。但"碰巧"不是契约：
+        #   * 谁都看不出这个 0600 是从哪来的，后来人把 mkstemp 换成 NamedTemporaryFile
+        #     或 open() 就会静默变成 0644，而且没有任何测试会发现；
+        #   * 本函数的调用点里有 SECRETVAULT_FILE / AUTH_USERS_FILE 这类路径。
+        # 所以这里把它写成显式意图，并由 tests/test_atomic_json_permissions.py 锁住。
+        #
+        # 注意副作用：目标文件已存在且权限更宽时，替换后会被收紧到 0600。对本函数
+        # 服务的这批文件（配置与凭据）这是想要的方向；确有共享读需求的调用点应当
+        # 自行在写入后放宽，而不是让写入函数默认放宽。
+        os.chmod(tmp_path, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(
                 payload,

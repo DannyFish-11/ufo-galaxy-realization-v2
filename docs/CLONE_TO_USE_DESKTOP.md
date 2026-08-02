@@ -22,7 +22,7 @@ UFO Galaxy 是一个**桌面原生 AI 助手系统**。通过 Electron 三态覆
 ```
 用户桌面
     │
-    │ Ctrl+Space 唤醒
+    │ Ctrl+Alt+Space 唤醒
     ▼
 ┌─────────────────┐
 │ Electron 覆盖层 │  三态: SILENT → LIMINAL → MANIFEST
@@ -156,12 +156,27 @@ cd electron && npm start
 | 状态 | 视觉表现 | 触发 | 快捷键 |
 |------|----------|------|--------|
 | **SILENT** | 静默，边缘呼吸灯 | 系统空闲 | — |
-| **LIMINAL** | 半透明覆盖层，白色脉冲 | AI 处理中 | Ctrl+Space |
+| **LIMINAL** | 半透明覆盖层，白色脉冲 | AI 处理中 | `Ctrl+Alt+Space` |
 | **MANIFEST** | 完全显形，CRT 扫描线 | AI 返回结果 | — |
 
-- `Ctrl+Space` — 唤醒 AI
+**唤醒覆盖层**（按注册顺序尝试，任一成功即可用；macOS 上 `Ctrl` 对应 `Cmd`）：
+
+- `Ctrl+Alt+Space`
+- `Ctrl+Shift+Space`
+- `Ctrl+Alt+G`
+- `Ctrl+Shift+G`
+
+**隐藏覆盖层**：`Ctrl+Alt+H` 或 `Ctrl+Shift+H`
+
+**其他**：
+
 - `F12` — 打开/关闭控制面板
 - `Esc` — 关闭结果面板
+
+> 为什么不是 `Ctrl+Space`：本文档此前写的是 `Ctrl+Space`，但那个键**从未被真正
+> 注册过**（见 `electron/main.js` 中 `WAKE_SHORTCUTS` 上方的说明）。而且
+> `Ctrl+Space` 在中文 Windows 上会被输入法抢去切换中英文，即使注册也按不出来。
+> 实际生效的就是上面这几组。
 
 ---
 

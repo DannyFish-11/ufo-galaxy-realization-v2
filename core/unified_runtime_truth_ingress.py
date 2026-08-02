@@ -368,10 +368,14 @@ def _resolve_runtime_truth_continuity_mode(message: Dict[str, Any]) -> str:
         raw = str(message.get(key) or "").strip().lower()
         if raw in {"strict", "compat", "relaxed"}:
             return raw
-    env_mode = str(os.environ.get("GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE", "compat")).strip().lower()
+    # 默认 compat → strict（与 command_router 的 V3 门、unified_result_ingress
+    # 的结果入口取齐）。三处默认值原本都是 compat，构成同一个模式：连续性/合法性
+    # 裁决在拿不准或自身出错时**默认放行**。逐条消息的 metadata 覆盖仍然优先，
+    # 需要整体回退设 GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE=compat。
+    env_mode = str(os.environ.get("GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE", "strict")).strip().lower()
     if env_mode in {"strict", "compat", "relaxed"}:
         return env_mode
-    return "compat"
+    return "strict"
 
 
 def _resolve_execution_signal_reconciled(sub_outcome: Any) -> bool:
