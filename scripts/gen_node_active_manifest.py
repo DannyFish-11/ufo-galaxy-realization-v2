@@ -195,6 +195,7 @@ changing `startup_policy` from `"optional"` to `"active"`.
 # Data loading helpers
 # ---------------------------------------------------------------------------
 
+
 def _load_node_dependencies(project_root: Path) -> Dict[str, Any]:
     path = project_root / "node_dependencies.json"
     if not path.exists():
@@ -218,6 +219,7 @@ def _audit_node_map(audit_report: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Section generators
 # ---------------------------------------------------------------------------
+
 
 def _gen_header(audit_report: Dict[str, Any]) -> str:
     generated_at = audit_report.get("generated_at", datetime.now(timezone.utc).isoformat())
@@ -334,8 +336,7 @@ def _gen_optional_nodes_table(
         return ""
 
     optional_nodes = sorted(
-        [(name, data) for name, data in nodes_dict.items()
-         if data.get("startup_policy") == "optional"],
+        [(name, data) for name, data in nodes_dict.items() if data.get("startup_policy") == "optional"],
         key=lambda x: x[0],
     )
     if not optional_nodes:
@@ -377,8 +378,7 @@ def _gen_skip_nodes_section(
         return ""
 
     skip_nodes = sorted(
-        [(name, data) for name, data in nodes_dict.items()
-         if data.get("startup_policy") == "skip"],
+        [(name, data) for name, data in nodes_dict.items() if data.get("startup_policy") == "skip"],
         key=lambda x: x[0],
     )
     if not skip_nodes:
@@ -437,9 +437,11 @@ def _gen_duplicate_roles_section(audit_report: Dict[str, Any]) -> str:
 
 def _gen_next_steps(audit_report: Dict[str, Any], node_deps: Dict[str, Any]) -> str:
     nodes_dict = node_deps.get("nodes", {})
-    optional_count = sum(
-        1 for v in nodes_dict.values() if isinstance(v, dict) and v.get("startup_policy") == "optional"
-    ) if isinstance(nodes_dict, dict) else audit_report.get("optional_count", 0)
+    optional_count = (
+        sum(1 for v in nodes_dict.values() if isinstance(v, dict) and v.get("startup_policy") == "optional")
+        if isinstance(nodes_dict, dict)
+        else audit_report.get("optional_count", 0)
+    )
 
     repair_count = audit_report.get("repair_count", 0)
     missing_readme_nodes: List[str] = audit_report.get("missing_required_files_nodes", [])
@@ -452,7 +454,7 @@ def _gen_next_steps(audit_report: Dict[str, Any], node_deps: Dict[str, Any]) -> 
     if optional_count:
         lines.append(
             f"{item_num}. **Promote optional nodes** — Use the promotion checklist above to promote "
-            f"each `startup_policy: \"optional\"` node individually.  "
+            f'each `startup_policy: "optional"` node individually.  '
             f"All {optional_count} currently pass the technical promotion-gap checks; "
             "promotion requires per-node runtime validation and governance review."
         )
@@ -468,8 +470,7 @@ def _gen_next_steps(audit_report: Dict[str, Any], node_deps: Dict[str, Any]) -> 
             item_num += 1
         elif "MediaGen" in dup:
             lines.append(
-                f"{item_num}. **Resolve MediaGen duplicate** — Decide canonical node between "
-                "the two MediaGen nodes."
+                f"{item_num}. **Resolve MediaGen duplicate** — Decide canonical node between " "the two MediaGen nodes."
             )
             item_num += 1
 
@@ -484,9 +485,7 @@ def _gen_next_steps(audit_report: Dict[str, Any], node_deps: Dict[str, Any]) -> 
         nodes_str = ", ".join(f"`{n}`" for n in missing_readme_nodes[:5])
         if len(missing_readme_nodes) > 5:
             nodes_str += f" (+ {len(missing_readme_nodes) - 5} more)"
-        lines.append(
-            f"{item_num}. **Add missing README.md files** — {nodes_str} are missing a README."
-        )
+        lines.append(f"{item_num}. **Add missing README.md files** — {nodes_str} are missing a README.")
 
     lines += [""]
     return "\n".join(lines)
@@ -505,6 +504,7 @@ def _gen_footer() -> str:
 # ---------------------------------------------------------------------------
 # Main generator
 # ---------------------------------------------------------------------------
+
 
 def generate_manifest(project_root: Path) -> str:
     """Generate the full NODE_ACTIVE_MANIFEST.md content as a string."""
@@ -539,11 +539,11 @@ def generate_manifest(project_root: Path) -> str:
 # CLI entrypoint
 # ---------------------------------------------------------------------------
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate docs/NODE_ACTIVE_MANIFEST.md from node_dependencies.json "
-            "and docs/node_audit_report.json."
+            "Generate docs/NODE_ACTIVE_MANIFEST.md from node_dependencies.json " "and docs/node_audit_report.json."
         )
     )
     parser.add_argument(

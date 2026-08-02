@@ -8,6 +8,7 @@ UIElementNode/UIGraph)导出成 TS,供 Electron 面板消费 ui_graph 时类型�
 只覆盖 ui_element 这一组(结构清晰、被前端消费);不做通用 Pydantic→TS 转换器
 (那会引入一堆边角复杂度)。重跑本脚本即可再生成。
 """
+
 from __future__ import annotations
 
 import enum
@@ -21,7 +22,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pydantic import BaseModel
 
 import core.schemas.ui_element as ui
-
 
 _ENUMS = [ui.UISource, ui.UIActionKind]
 _MODELS = [ui.UIBounds, ui.UIElementNode, ui.UIGraph]

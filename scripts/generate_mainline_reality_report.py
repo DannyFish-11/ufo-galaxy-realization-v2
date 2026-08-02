@@ -18,7 +18,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -150,8 +149,7 @@ def build_mainline_reality_report(repo_root: Path = REPO_ROOT) -> MainlineRealit
 
 def render_text_report(report: MainlineRealityReport) -> str:
     legacy_lines = [
-        f"- {item.path}（{item.status}）→ {item.superseded_by or '无'}"
-        for item in report.active_legacy_surfaces
+        f"- {item.path}（{item.status}）→ {item.superseded_by or '无'}" for item in report.active_legacy_surfaces
     ] or ["- 当前未发现需要特别提示的遗留表层"]
 
     blocker_lines = [f"- {item}" for item in report.main_blockers] or ["- 当前无主链阻塞或遗留模糊维度"]
@@ -179,10 +177,7 @@ def render_text_report(report: MainlineRealityReport) -> str:
             f"- 架构完成度：{report.completion_pct:.1f}%",
             f"- 运行时就绪度：{report.runtime_readiness}",
             f"- 已达到 canonicalized/complete 的维度：{report.canonical_dimension_count}/{report.total_dimensions}",
-            (
-                "- 需要注意：这个百分比是“主链架构完成度”，"
-                "不是“真实全场景产品化/硬件落地完成度”。"
-            ),
+            ("- 需要注意：这个百分比是“主链架构完成度”，" "不是“真实全场景产品化/硬件落地完成度”。"),
             "",
             "4. 还没有真正收口的地方",
             *blocker_lines,
@@ -195,14 +190,8 @@ def render_text_report(report: MainlineRealityReport) -> str:
             *legacy_lines,
             "",
             "6. 结论",
-            (
-                "- 这个仓库已经不是空壳：主运行时、认知内核、投影状态面、"
-                "节点体系和跨设备链条都在。"
-            ),
-            (
-                "- 但这个百分比仍只代表主链架构完成度；"
-                + conclusion_status
-            ),
+            ("- 这个仓库已经不是空壳：主运行时、认知内核、投影状态面、" "节点体系和跨设备链条都在。"),
+            ("- 但这个百分比仍只代表主链架构完成度；" + conclusion_status),
         ]
     )
 

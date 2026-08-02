@@ -30,6 +30,7 @@ Usage
     python scripts/check_mainline_routing_enforcement.py
     python scripts/check_mainline_routing_enforcement.py --warn-only
 """
+
 from __future__ import annotations
 
 import argparse
@@ -197,9 +198,13 @@ def check_openclawd_call_site() -> None:
     _record(
         "core/openclawd.py references enforce_explicit_route_capability_gate",
         present,
-        "" if present else (
-            "The enforcement call site is missing from openclawd.py.  "
-            "The explicit-device-id capability bypass gap may be re-opened."
+        (
+            ""
+            if present
+            else (
+                "The enforcement call site is missing from openclawd.py.  "
+                "The explicit-device-id capability bypass gap may be re-opened."
+            )
         ),
     )
 
@@ -209,9 +214,13 @@ def check_openclawd_call_site() -> None:
     _record(
         "core/openclawd.py _dispatch_device forwards required_capabilities",
         forward_present,
-        "" if forward_present else (
-            "_dispatch_device does not forward required_capabilities to send_gateway_command.  "
-            "The TaskEnvelope capability gate will not be reached on explicit device routes."
+        (
+            ""
+            if forward_present
+            else (
+                "_dispatch_device does not forward required_capabilities to send_gateway_command.  "
+                "The TaskEnvelope capability gate will not be reached on explicit device routes."
+            )
         ),
     )
 
@@ -220,10 +229,9 @@ def check_openclawd_call_site() -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Verify mainline routing enforcement is present and active."
-    )
+    parser = argparse.ArgumentParser(description="Verify mainline routing enforcement is present and active.")
     parser.add_argument(
         "--warn-only",
         action="store_true",

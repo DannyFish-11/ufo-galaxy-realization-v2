@@ -11,10 +11,10 @@ UFO Galaxy - 依赖检查工具
     python3 scripts/check_dependencies.py --install-core
 """
 
-import importlib
-import sys
-import subprocess
 import argparse
+import importlib
+import subprocess
+import sys
 
 # 核心依赖：系统启动必须
 CORE_DEPS = {

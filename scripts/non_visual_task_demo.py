@@ -26,10 +26,10 @@ Expected output: all steps marked DONE with no visual/screenshot calls.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import tempfile
-import logging
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,15 +56,14 @@ mgr = TaskLifecycleManager()
 # Step executors (no-vision path)
 # ---------------------------------------------------------------------------
 
+
 async def step_filesystem(envelope: TaskEnvelope):
     """List /tmp, write a file, read it back — purely filesystem, no UI."""
     path = envelope.args.get("path", "/tmp")
     entries = os.listdir(path)
     logger.info("[filesystem] listed %d entries in %s", len(entries), path)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".galaxy_demo.txt", delete=False
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".galaxy_demo.txt", delete=False) as tmp:
         tmp.write("Galaxy non-visual task demo\n")
         tmp_path = tmp.name
 
@@ -83,8 +82,9 @@ async def step_http_client(envelope: TaskEnvelope):
         return {"skipped": True, "reason": "no_url"}
 
     try:
-        import urllib.request
         import json as _json
+        import urllib.request
+
         with urllib.request.urlopen(url, timeout=5) as resp:
             data = _json.loads(resp.read())
         logger.info("[http_client] GET %s → %d keys", url, len(data))
@@ -97,10 +97,9 @@ async def step_http_client(envelope: TaskEnvelope):
 async def step_system_cmd(envelope: TaskEnvelope):
     """Run a safe read-only system command — no UI."""
     import subprocess
+
     cmd = envelope.args.get("cmd", ["echo", "Galaxy non-visual OK"])
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=5
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
     output = result.stdout.strip()
     logger.info("[system_cmd] cmd=%s output=%r", cmd, output)
     return {"returncode": result.returncode, "output": output}
@@ -109,6 +108,7 @@ async def step_system_cmd(envelope: TaskEnvelope):
 # ---------------------------------------------------------------------------
 # Main demo
 # ---------------------------------------------------------------------------
+
 
 async def run_demo():
     print("\n" + "=" * 60)

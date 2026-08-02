@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import os
 import logging
+import os
 
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("Standardizer")
 
 # 模板与 nodes/*/fusion_entry.py 现存(已修复)生成物保持一致。
@@ -88,6 +88,7 @@ def get_node_instance():
     return FusionNode()
 """
 
+
 def standardize():
     nodes_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nodes")
     if not os.path.exists(nodes_dir):
@@ -95,7 +96,7 @@ def standardize():
     count = 0
     for item in os.listdir(nodes_dir):
         if item.startswith("Node_") and os.path.isdir(os.path.join(nodes_dir, item)):
-            node_id = "_".join(item.split('_')[:2])
+            node_id = "_".join(item.split("_")[:2])
             entry_file = os.path.join(nodes_dir, item, "fusion_entry.py")
             # 只在文件缺失、或仍是旧坏模板(import_module("main") 会加载错误模块且
             # 跨节点串缓存)时才生成;绝不覆盖已修复/手工定制过的入口文件
@@ -112,6 +113,7 @@ def standardize():
             if count % 10 == 0:
                 logger.info(f"⏳ Standardized {count} nodes...")
     logger.info(f"✨ Successfully standardized {count} nodes")
+
 
 if __name__ == "__main__":
     standardize()

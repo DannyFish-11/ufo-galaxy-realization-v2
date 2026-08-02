@@ -105,8 +105,7 @@ def install_deps(python_exe: Path) -> None:
         _err(f"未找到 {req}")
         sys.exit(1)
     subprocess.run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip"], check=False)
-    base = [str(python_exe), "-m", "pip", "install",
-            "--retries", "3", "--timeout", "60", "-r", str(req)]
+    base = [str(python_exe), "-m", "pip", "install", "--retries", "3", "--timeout", "60", "-r", str(req)]
     for idx, index_url in enumerate(PIP_INDEX_CANDIDATES):
         cmd = base + (["-i", index_url] if index_url else [])
         if index_url:

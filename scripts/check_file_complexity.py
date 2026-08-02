@@ -26,8 +26,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Thresholds
 # ---------------------------------------------------------------------------
-ERROR_THRESHOLD = 2000   # lines — new files must not exceed this
-WARN_THRESHOLD = 1000    # lines — warn but don't block
+ERROR_THRESHOLD = 2000  # lines — new files must not exceed this
+WARN_THRESHOLD = 1000  # lines — warn but don't block
 
 # ---------------------------------------------------------------------------
 # Grandfathered files (existing large files that pre-date this guardrail).
@@ -110,10 +110,7 @@ def main() -> int:
                         f"{grandfathered_limit} lines (file has grown, please refactor)"
                     )
             elif lines > ERROR_THRESHOLD:
-                errors.append(
-                    f"  {rel}: {lines} lines — exceeds ERROR_THRESHOLD of "
-                    f"{ERROR_THRESHOLD} lines"
-                )
+                errors.append(f"  {rel}: {lines} lines — exceeds ERROR_THRESHOLD of " f"{ERROR_THRESHOLD} lines")
             elif lines > WARN_THRESHOLD:
                 warnings.append(
                     f"  {rel}: {lines} lines — exceeds WARN_THRESHOLD of "

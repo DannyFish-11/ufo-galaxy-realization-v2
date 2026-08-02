@@ -121,7 +121,7 @@ class WriteViolation:
     file: str
     line: int
     col: int
-    kind: str          # "direct_field_write" | "direct_devices_access"
+    kind: str  # "direct_field_write" | "direct_devices_access"
     detail: str
     snippet: str = ""
 
@@ -182,9 +182,7 @@ class _UDMWriteVisitor(ast.NodeVisitor):
     """
 
     # 接收者变量名 / 下标键中若含以下关键词，则启发为 UnifiedDevice 上下文
-    _DEVICE_HINTS: frozenset = frozenset(
-        ["device", "dev_", "_device", "unified_device", "d."]
-    )
+    _DEVICE_HINTS: frozenset = frozenset(["device", "dev_", "_device", "unified_device", "d."])
 
     def __init__(self, source_lines: List[str]) -> None:
         self.violations: List[Tuple[int, int, str, str]] = []  # (line, col, kind, detail)
@@ -217,23 +215,27 @@ class _UDMWriteVisitor(ast.NodeVisitor):
             if isinstance(node.value, ast.Name) and node.value.id == "self":
                 return
             if attr in ILLEGAL_DIRECT_FIELDS and self._looks_like_device(node.value):
-                self.violations.append((
-                    origin_lineno,
-                    getattr(node, "col_offset", 0),
-                    "direct_field_write",
-                    f"Direct write to .{attr} bypasses SSOT UDM",
-                ))
+                self.violations.append(
+                    (
+                        origin_lineno,
+                        getattr(node, "col_offset", 0),
+                        "direct_field_write",
+                        f"Direct write to .{attr} bypasses SSOT UDM",
+                    )
+                )
         elif isinstance(node, ast.Subscript):
             # 检测 _devices[...] = ...（无论接收者名称）
             value = node.value
             if isinstance(value, ast.Attribute) and value.attr == "_devices":
                 if not (isinstance(value.value, ast.Name) and value.value.id == "self"):
-                    self.violations.append((
-                        origin_lineno,
-                        getattr(value, "col_offset", 0),
-                        "direct_devices_access",
-                        "Direct subscript write to ._devices bypasses SSOT UDM",
-                    ))
+                    self.violations.append(
+                        (
+                            origin_lineno,
+                            getattr(value, "col_offset", 0),
+                            "direct_devices_access",
+                            "Direct subscript write to ._devices bypasses SSOT UDM",
+                        )
+                    )
 
     def visit_Assign(self, node: ast.Assign) -> None:
         for target in node.targets:
@@ -418,31 +420,35 @@ class _AntiDriftVisitor(ast.NodeVisitor):
         # Check 2: Parallel single-device schema
         for hint in _SINGLE_DEVICE_SCHEMA_HINTS:
             if hint in class_name:
-                self.findings.append((
-                    node.lineno,
-                    "parallel_single_device_schema",
+                self.findings.append(
                     (
-                        f"Class '{class_name}' resembles a single-device schema "
-                        f"(hint: '{hint}').  Use or extend "
-                        f"'RegisteredRuntimeDevice' from "
-                        f"'contracts/registered_runtime_device.py' instead."
-                    ),
-                ))
+                        node.lineno,
+                        "parallel_single_device_schema",
+                        (
+                            f"Class '{class_name}' resembles a single-device schema "
+                            f"(hint: '{hint}').  Use or extend "
+                            f"'RegisteredRuntimeDevice' from "
+                            f"'contracts/registered_runtime_device.py' instead."
+                        ),
+                    )
+                )
                 break
 
         # Check 3: Parallel top-level multi-device read model
         for hint in _MULTI_DEVICE_PROJECTION_HINTS:
             if hint in class_name:
-                self.findings.append((
-                    node.lineno,
-                    "parallel_multi_device_projection",
+                self.findings.append(
                     (
-                        f"Class '{class_name}' resembles a top-level multi-device "
-                        f"read model (hint: '{hint}').  Use or extend "
-                        f"'MultiDeviceRuntimeProjection' from "
-                        f"'contracts/multi_device_runtime_projection.py' instead."
-                    ),
-                ))
+                        node.lineno,
+                        "parallel_multi_device_projection",
+                        (
+                            f"Class '{class_name}' resembles a top-level multi-device "
+                            f"read model (hint: '{hint}').  Use or extend "
+                            f"'MultiDeviceRuntimeProjection' from "
+                            f"'contracts/multi_device_runtime_projection.py' instead."
+                        ),
+                    )
+                )
                 break
 
         # Check 1: Parallel device registry fields defined inside this class
@@ -450,15 +456,17 @@ class _AntiDriftVisitor(ast.NodeVisitor):
             if isinstance(stmt, ast.AnnAssign):
                 target = stmt.target
                 if isinstance(target, ast.Name) and target.id in _PARALLEL_REGISTRY_FIELD_HINTS:
-                    self.findings.append((
-                        stmt.lineno,
-                        "parallel_device_registry",
+                    self.findings.append(
                         (
-                            f"Class '{class_name}' declares a parallel device "
-                            f"registry field '{target.id}'.  Device state must be "
-                            f"owned exclusively by 'UnifiedDeviceManager'."
-                        ),
-                    ))
+                            stmt.lineno,
+                            "parallel_device_registry",
+                            (
+                                f"Class '{class_name}' declares a parallel device "
+                                f"registry field '{target.id}'.  Device state must be "
+                                f"owned exclusively by 'UnifiedDeviceManager'."
+                            ),
+                        )
+                    )
 
         self.generic_visit(node)
 
@@ -511,12 +519,14 @@ def _check_anti_drift(
         visitor.visit(tree)
 
         for lineno, kind, detail in visitor.findings:
-            findings.append({
-                "file": rel,
-                "line": lineno,
-                "kind": kind,
-                "detail": detail,
-            })
+            findings.append(
+                {
+                    "file": rel,
+                    "line": lineno,
+                    "kind": kind,
+                    "detail": detail,
+                }
+            )
 
     return findings
 
@@ -537,34 +547,41 @@ def _check_state_version_monotonicity() -> List[Dict[str, Any]]:
 
         # 验证字段存在
         if "state_version" not in UnifiedDevice.model_fields:
-            issues.append({
-                "type": "missing_field",
-                "detail": "UnifiedDevice model is missing 'state_version' field",
-            })
+            issues.append(
+                {
+                    "type": "missing_field",
+                    "detail": "UnifiedDevice model is missing 'state_version' field",
+                }
+            )
 
         # 验证默认值 >= 0
         try:
             device = UnifiedDevice(device_id="audit-test", device_name="test")
             if (device.state_version or 0) < 0:
-                issues.append({
-                    "type": "invalid_default",
-                    "detail": f"state_version default is negative: {device.state_version}",
-                })
+                issues.append(
+                    {
+                        "type": "invalid_default",
+                        "detail": f"state_version default is negative: {device.state_version}",
+                    }
+                )
         except Exception as exc:
             issues.append({"type": "model_instantiation_error", "detail": str(exc)})
 
         # 连接到运行中的 UDM（如果可用）
         try:
             from core.unified.device_manager import UnifiedDeviceManager  # noqa: PLC0415
+
             udm = UnifiedDeviceManager()
             devices = udm.list_devices()
             for d in devices:
                 if (d.state_version or 0) < 0:
-                    issues.append({
-                        "type": "negative_state_version",
-                        "device_id": d.device_id,
-                        "state_version": d.state_version,
-                    })
+                    issues.append(
+                        {
+                            "type": "negative_state_version",
+                            "device_id": d.device_id,
+                            "state_version": d.state_version,
+                        }
+                    )
         except Exception:
             pass  # UDM 不可用时跳过运行时检查
 
@@ -709,7 +726,8 @@ def main() -> None:
         help="Write JSON report to this file path",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Verbose output",
     )

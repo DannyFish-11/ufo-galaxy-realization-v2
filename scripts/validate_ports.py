@@ -16,9 +16,9 @@ Usage:
     python scripts/validate_ports.py --json       # machine-readable JSON output
 """
 
+import argparse
 import json
 import sys
-import argparse
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -28,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_yaml(path: Path) -> dict:
     try:
@@ -49,6 +50,7 @@ def _load_compose(path: Path) -> dict:
 # ---------------------------------------------------------------------------
 # Extraction helpers
 # ---------------------------------------------------------------------------
+
 
 def extract_node_ports(ports_yaml: dict) -> Dict[str, int]:
     """Return {node_name: port} from unified_ports.yaml layers."""
@@ -86,9 +88,7 @@ def get_node_directories() -> List[str]:
     return [
         d.name
         for d in sorted(nodes_dir.iterdir())
-        if d.is_dir()
-        and d.name.startswith("Node_")
-        and (d / "main.py").exists()
+        if d.is_dir() and d.name.startswith("Node_") and (d / "main.py").exists()
     ]
 
 
@@ -98,7 +98,7 @@ def get_compose_services(compose: dict) -> Dict[str, int]:
     for svc_name, svc_cfg in (compose.get("services") or {}).items():
         if not isinstance(svc_cfg, dict):
             continue
-        for port_spec in (svc_cfg.get("ports") or []):
+        for port_spec in svc_cfg.get("ports") or []:
             spec = str(port_spec)
             # Handle "8000:8000" or "0.0.0.0:8000:8000"
             parts = spec.split(":")
@@ -114,6 +114,7 @@ def get_compose_services(compose: dict) -> Dict[str, int]:
 # Checks
 # ---------------------------------------------------------------------------
 
+
 def check_port_uniqueness(
     node_ports: Dict[str, int],
     infra_ports: Dict[str, int],
@@ -122,14 +123,11 @@ def check_port_uniqueness(
     errors: List[str] = []
     seen: Dict[int, str] = {}
 
-    all_ports = {**{f"node:{k}": v for k, v in node_ports.items()},
-                 **{f"infra:{k}": v for k, v in infra_ports.items()}}
+    all_ports = {**{f"node:{k}": v for k, v in node_ports.items()}, **{f"infra:{k}": v for k, v in infra_ports.items()}}
 
     for label, port in sorted(all_ports.items(), key=lambda x: x[1]):
         if port in seen:
-            errors.append(
-                f"PORT CONFLICT: port {port} assigned to both '{seen[port]}' and '{label}'"
-            )
+            errors.append(f"PORT CONFLICT: port {port} assigned to both '{seen[port]}' and '{label}'")
         else:
             seen[port] = label
 
@@ -145,8 +143,7 @@ def check_nodes_in_yaml(
     for node_name in node_dirs:
         if node_name not in node_ports:
             errors.append(
-                f"MISSING IN YAML: '{node_name}' exists in nodes/ but has no "
-                f"entry in config/unified_ports.yaml"
+                f"MISSING IN YAML: '{node_name}' exists in nodes/ but has no " f"entry in config/unified_ports.yaml"
             )
     return errors
 
@@ -189,21 +186,17 @@ def check_infra_vs_node_conflicts(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Validate Galaxy port registry and compose coverage."
-    )
+    parser = argparse.ArgumentParser(description="Validate Galaxy port registry and compose coverage.")
     parser.add_argument(
-        "--fix-hints", action="store_true",
-        help="Print suggested port assignments for missing entries."
+        "--fix-hints", action="store_true", help="Print suggested port assignments for missing entries."
     )
+    parser.add_argument("--json", action="store_true", help="Output results as JSON.")
     parser.add_argument(
-        "--json", action="store_true",
-        help="Output results as JSON."
-    )
-    parser.add_argument(
-        "--compose", default="deploy/compose/full.yml",
-        help="Docker Compose file to check against (default: deploy/compose/full.yml)."
+        "--compose",
+        default="deploy/compose/full.yml",
+        help="Docker Compose file to check against (default: deploy/compose/full.yml).",
     )
     args = parser.parse_args()
 
@@ -233,9 +226,7 @@ def main() -> int:
     if compose_services:
         all_errors += check_nodes_in_compose(node_ports, compose_services, args.compose)
     else:
-        all_warnings.append(
-            f"COMPOSE NOT FOUND or empty: '{compose_path}' — skipping compose coverage check"
-        )
+        all_warnings.append(f"COMPOSE NOT FOUND or empty: '{compose_path}' — skipping compose coverage check")
 
     # ── Output ─────────────────────────────────────────────────
     summary = {
