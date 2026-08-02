@@ -57,16 +57,49 @@ async def execute(param1: str) -> dict:
 
 ## 加载技能
 
-> ⚠️ **本节原先描述的 `/api/v1/skill/*` REST 端点从未真正存在。**
-> 声明它们的 `core/api_loader.py` 定义了一个模块级 `APIRouter()`，但仓库里没有
-> 任何 `include_router()` 引用它 —— 路由树里根本没有这些路径，照着这里的 `curl`
-> 命令敲只会得到 404。该模块已删除，本节随之更正。
->
-> 技能目前通过目录约定被发现（`skills/<name>/SKILL.md`），不经 REST 加载。
-> 如果后续要补 REST 面，请在 `core/routes/` 下新建路由并在 `core/api_routes.py`
-> 里 `include_router()` —— 仓库有一条守卫测试
-> （`tests/test_no_orphan_api_router_in_core.py`）会拦住"定义了路由却没挂载"
-> 这种复发。
+> ⚠️ **端点前缀是 `/api/v1/protocols/`，不是 `/api/v1/skill/`。**
+> 本节原先写的 `/api/v1/skill/*` 从未存在过 —— 声明它们的 `core/api_loader.py`
+> 是一份未挂载的重复实现（定义了 `APIRouter()`，但全仓没有任何 `include_router()`
+> 引用它），照着敲只会 404。该模块已删除；真正提供这些端点的是
+> `core/routes/protocols.py`（由 `core/api_routes.py` 挂载），两者底层调用的都是
+> 同一个 `core.skill_loader`。
+
+### 通过 API 加载
+
+```bash
+# 加载技能
+curl -X POST http://localhost:8080/api/v1/protocols/skills/load \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/path/to/my-skill"}'
+```
+
+### 列出已加载的技能
+
+```bash
+curl http://localhost:8080/api/v1/protocols/skills
+
+# 只读概览（含统计）
+curl http://localhost:8080/api/v1/system/skills
+```
+
+### 执行技能
+
+```bash
+curl -X POST http://localhost:8080/api/v1/protocols/skills/my-skill/execute \
+  -H "Content-Type: application/json" \
+  -d '{"params": {"param1": "value1"}}'
+```
+
+### 重载 / 卸载技能
+
+```bash
+curl -X POST   http://localhost:8080/api/v1/protocols/skills/my-skill/reload
+curl -X DELETE http://localhost:8080/api/v1/protocols/skills/my-skill
+```
+
+> 以上路径与参数请以 `core/routes/protocols.py` 为准 —— 仓库有一条守卫测试
+> （`tests/test_no_orphan_api_router_in_core.py`）保证 `core/` 下不再出现
+> "定义了路由却没挂载"的第二份实现。
 
 ## 示例
 
