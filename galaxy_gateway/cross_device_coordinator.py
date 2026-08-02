@@ -145,6 +145,7 @@ import unicodedata
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from galaxy_gateway.device_router import device_router
+from galaxy_gateway.multi_subject_closure_surface import attach_closure_candidate  # noqa: E402
 from galaxy_gateway.observability import get_gateway_metrics
 from core.device_types import DeviceType
 
@@ -570,16 +571,9 @@ class CrossDeviceCoordinator:
                 result["truth_convergence_bridge"] = _truth_bridge
                 result["participant_roles"] = _truth_bridge.get("participant_roles", {})
                 result["failure_isolation"] = _truth_bridge.get("failure_isolation", {})
-                # PR-V8-CLOSURE：终态由闭合机判定，不再直接摘 bridge 的字符串。
-                # closure machine 的 docstring 明令对外层 MUST 消费 ClosureCandidate；
-                # 两者会给出不同答案 —— 例如「参与者全部失联」bridge 说 'failed'，
-                # 闭合机说 'participant_lost' 且需协调，处置完全不同。
-                from galaxy_gateway.multi_subject_closure_surface import attach_closure_candidate
-
+                # PR-V8-CLOSURE：终态由闭合机判定（理由见 multi_subject_closure_surface 模块 docstring）。
                 attach_closure_candidate(
-                    result,
-                    _truth_bridge,
-                    formation_member_count=len(_formation_dict.get("members") or []),
+                    result, _truth_bridge, formation_member_count=len(_formation_dict.get("members") or [])
                 )
 
             # PR-519 / GAP-517-007: normalise result into canonical surfaces
