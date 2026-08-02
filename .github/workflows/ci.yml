@@ -89,8 +89,10 @@ jobs:
         #     (pytest_timeout.py:324, INTERNALERROR, no tests ran)
         # 所以 Windows 上只能用 thread。这也意味着：**任何 Windows 开发者在本地
         # 直接跑 pytest 都会撞到同一个 INTERNALERROR** —— 见 pytest.ini 的说明。
+        # 只覆盖 method，**不覆盖超时秒数** —— 秒数继续从 pytest.ini 继承（120s），
+        # 这样挂死保护的强度不因平台而降低，符合 test_hang_guard_is_configured 的本意。
         run: |
-          python -m pytest -q --timeout=120 --timeout-method=thread -p no:cacheprovider `
+          python -m pytest -q --timeout-method=thread -p no:cacheprovider `
             tests/test_atomic_json_permissions.py `
             tests/test_entrypoint_import_has_no_env_side_effects.py `
             tests/test_no_test_hijacks_top_level_module.py `

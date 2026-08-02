@@ -86,8 +86,29 @@ class TestWorkerStatusEndpoint:
 
 class TestWorkerToggleEndpoint:
     def test_enable_returns_immediately_with_starting_true(self, client):
-        """POST toggle 必须立即返回(不阻塞在 NATS 冷启动链路上):starting=True。"""
+        """POST toggle 必须立即返回(不阻塞在 NATS 冷启动链路上):starting=True。
+
+        本用例的前提是「NATS 不可达」。此前它**依赖环境**来满足这个前提 ——
+        注释写的是"本机没有 nats-server,预期最终失败并落地 last_error"。
+        这在 CI 分片里塌了:同分片先跑的用例起过内嵌 nats-server 且没关掉
+        (CI 日志末尾有 `Terminate orphan process: pid (3159) (nats-server)`),
+        于是 NATS 真的可达、worker 真的起来了,`wr.running is False` 报红。
+
+        触发它的是分片重排 —— 本轮新增了一个测试文件,ci_test_shard.py 按文件切分,
+        文件集合一变,哪些用例落在同一分片、以什么顺序跑就都变了。也就是说这个
+        缺陷一直在,只是此前没被排到一起。
+
+        修法是让用例**自己钉死前提**,而不是指望环境:注入一个明确报告
+        "未连接"的 bus(与下方 test_enable_with_mock_bus_starts 注入已连接
+        bus 是同一套做法)。这样它对执行顺序、对机器上有没有 nats-server 都免疫。
+        """
         from core.worker_runtime import get_worker_runtime
+
+        # 前提固化:bus 永远连不上 → start() 必然落到 nats_unavailable 分支。
+        unreachable_bus = MagicMock()
+        unreachable_bus.is_connected = MagicMock(return_value=False)
+        unreachable_bus.connect = AsyncMock()
+        get_worker_runtime()._nats = unreachable_bus
 
         t0 = time.monotonic()
         r = client.post("/api/v1/mesh/worker/toggle", json={"enable": True})
