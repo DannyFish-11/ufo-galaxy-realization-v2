@@ -381,8 +381,53 @@ podman 用户拿到错误命令。
 `KnowledgeBaseSystem` 把 `knowledge_db/knowledge_entries.json` 提交进仓库。
 隔离在 `tests/conftest.py` **模块级**完成（进程单例，fixture 太晚）。
 
+**但守卫覆盖不全 —— 本轮由 CI 实证发现了第三个未被覆盖的单例**：
+
+`test-shard (3)` 上稳定失败：
+
+```
+FAILED tests/test_final_integrated_audit_verdict.py::TestCrossCheck::test_I03_cross_repo_evidence_gap_consistent
+assert <CompletenessLabel.complete> == <CompletenessLabel.evidence_gap>
+```
+
+根因：`core/dual_repo_system_completeness_review.py:1112-1124` 用**运行时是否有设备快照**
+决定 `cross_repo_evidence` 维度：
+
+```python
+from core.android_device_state_store import get_device_ecosystem_summary as _get_eco_summary
+eco = _get_eco_summary()
+runtime_cross_repo_activated = eco.get("total_devices_with_snapshot", 0) > 0
+```
+
+而 `core.android_device_state_store` 是**进程级单例，测试间不重置**。两行复现：
+
+```
+干净进程        : CompletenessLabel.evidence_gap  (devices_with_snapshot = 0)
+吸收一份快照之后: CompletenessLabel.complete      (devices_with_snapshot = 1)
+```
+
+→ 同一 pytest 进程里任一先跑的用例调用过 `absorb_device_state_snapshot()`，
+该维度就永久翻转，`test_I03` 必挂。**单独跑必过、进 shard 才挂。**
+
+候选污染源：`tests/integration/test_android_runtime_state_snapshot_e2e.py`、
+`tests/test_v2_android_execution_event_ingestion_closure.py`、
+`tests/test_pr_rt_android_runtime_state_transparency.py`。
+
+修法：给 store 加 `reset_device_state_store()` 并在 `conftest.py` autouse 重置
+（与既有两个单例处理方式一致）。
+
+**另需产品/架构确认**：`test_I03` 断言的是"**缺口存在**"。既然
+`DEVICE_STATE_SNAPSHOT` 双向已闭环（第五节），`complete` 可能才是正确答案，
+`evidence_gap` 反而是**过期预期** —— 与新-7 的过期 probe 同类。
+
 **残留**：全量套件因沙箱缺 `numpy` 等依赖无法跑（29 个 collection error），
 全量污染面仍需完整依赖环境验证一次。
+
+### 附带发现：reviewer 静默降级
+
+跑 `build_completeness_review()` 稳定输出
+`Exception suppressed: 'TerminologyRegistry' object has no attribute 'entries'`
+—— 同模块内被吞掉的 `AttributeError`。
 
 ### B20 CI 门 — 部分修复【A】
 
