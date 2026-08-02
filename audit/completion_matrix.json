@@ -45,7 +45,7 @@
     "task_assign_dispatch_center_to_android": {
       "score_pct": 70,
       "status": "partial_closed",
-      "evidence_file": "galaxy_gateway/device_router.py + android/handlers/task_submit.py + GalaxyConnectionService.kt",
+      "evidence_file": "galaxy_gateway/device_router.py + galaxy_gateway/android/handlers/task_submit.py + GalaxyConnectionService.kt",
       "notes": "task_assign sent via DeviceRouter -> android_bridge -> WS; Android receives + routes to AgentRuntimeBridge or EdgeExecutor; dispatch decision quality depends on UDM accuracy"
     },
     "task_result_truth_chain": {
@@ -81,7 +81,7 @@
     "handoff_v2_takeover": {
       "score_pct": 55,
       "status": "partial_closed",
-      "evidence_file": "agent/DelegatedTakeoverExecutor.kt + agent/TakeoverEligibilityAssessor.kt + handlers/takeover_response.py",
+      "evidence_file": "agent/DelegatedTakeoverExecutor.kt + agent/TakeoverEligibilityAssessor.kt + galaxy_gateway/android/handlers/takeover_response.py",
       "notes": "Protocol aligned; eligibility assessment exists; actual execution depth in DelegatedTakeoverExecutor depends on local agent capabilities"
     },
     "memory_backflow": {
@@ -105,7 +105,7 @@
     "p2p_mesh_coordination": {
       "score_pct": 30,
       "status": "nominal_only",
-      "evidence_file": "handlers/mesh_topology.py + handlers/peer_exchange.py + core/mesh/body_mesh_registry.py",
+      "evidence_file": "galaxy_gateway/android/handlers/mesh_topology.py + galaxy_gateway/android/handlers/peer_exchange.py + core/mesh/body_mesh_registry.py",
       "notes": "Peer exchange messages handled, body mesh roles registered; full P2P multi-device task coordination not traced to complete closure"
     },
     "federation_multi_center": {
