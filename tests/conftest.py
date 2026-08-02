@@ -140,9 +140,37 @@ if _REAL_CAPABILITIES.is_file():
 # 把它引到本次会话的临时目录即可。
 os.environ["ANDROID_DEVICE_STATE_STORE_PATH"] = str(Path(_RUNTIME_TMP) / "android_device_state_store.json")
 
+# 运行时数据目录：15 个生产模块把**持久化状态**落在 ``$GALAXY_DATA_DIR``（缺省
+# 就是仓库里的 data/）—— 幂等集合、生命周期快照、重放审计、mesh 会话、设备令牌…
+# 它们全都是「写进去就长期留着」的语义，这正是生产要的，但在测试里意味着
+# **本次运行的结果会改变下一次运行的判定**。
+#
+# 实证（本轮定位到的真实故障）：
+#     tests/test_prd_goal_result_canonical_handling.py::
+#         TestHandleGoalExecutionResultStoreSignature::test_store_task_result_called_with_dict
+#
+# 它喂一条 task_id="store-task-1" 的终态结果，断言 store_task_result 被调用一次。
+# 第一次跑：通过，同时 UnifiedResultIngress 把幂等键
+# ``goal_execution_result:store-task-1`` 写进了 data/result_idempotency_set.json。
+# 第二次跑：handle_goal_execution_result 的重复前置检查命中该键，
+# ``_ger_prechecked_duplicate=True`` → 整段内存回流被跳过 → 捕获到 0 次调用 → 失败。
+# 实测三连跑：pass / fail / fail，且**此后永远 fail**，除非有人手动删那个文件。
+#
+# 这就是它在分片里被误读成"顺序依赖"的原因：CI 每次都是全新 clone 所以恒绿；
+# 本地同一工作树跑过一轮之后，谁红谁绿只取决于**上一轮**写了什么，与本轮的
+# 测试顺序毫无关系。和上面 ANDROID_DEVICE_STATE_STORE_PATH 那段是同一种病，
+# 只是这次的残留落在仓库的 data/ 下而不是 /tmp。
+#
+# 生产代码无需改动：这 15 个模块本来就都认 GALAXY_DATA_DIR（有几个模块的注释里
+# 把"必须认这个变量"写成了明确约定）。目录先建出来，避免只做追加写的模块
+# （replay_audit.jsonl 等）在父目录不存在时报错。
+_TMP_DATA_DIR = Path(_RUNTIME_TMP) / "data"
+_TMP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 # 以上几个都是硬设而非 setdefault：隔离不能被外部环境里一个残留的变量悄悄取消掉。
 os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
 os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")
+os.environ["GALAXY_DATA_DIR"] = str(_TMP_DATA_DIR)
 
 
 @pytest.fixture(scope="session")

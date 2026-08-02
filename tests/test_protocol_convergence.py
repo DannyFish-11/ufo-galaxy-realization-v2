@@ -43,8 +43,37 @@ def _imports_from(source: str, module_prefix: str) -> list:
     return matches
 
 
-def _source(rel_path: str) -> str:
-    return (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+# 扫一遍 core/ 全树，而不是维护一份"business-layer 文件"的手写清单。
+#
+# 原状是把 ["core/galaxy_core.py", "core/repo_coordinator.py"] 直接 parametrize
+# 进去，逐个 read_text()。这份清单有两个失效方向，本轮两个都撞上了：
+#
+#   * 清单里的文件**被删**  → 直接 FileNotFoundError。core/galaxy_core.py
+#     作为死代码删除后，本文件与 test_pr4_protocol_convergence.py 各炸 2 条，
+#     共 4 条 —— 而且报的是"文件读不到"，跟这条守卫真正要守的协议约束毫无关系。
+#   * core/ 下**新增**文件     → 清单不会自己长，新文件从此不受守卫约束。
+#     后者更糟：它不会报错，只是悄悄漏掉。
+#
+# 判据本身（"业务层不得从 v2 协议层 import"）对整个 core/ 都成立，本来就没有
+# 只挑两个文件的理由。改成全树扫描后清单无从过期，覆盖面也从 2 个文件变成 933 个。
+# 实测全树 ast.parse 一次约 3.7s，只在模块导入时算一次。
+_V2_PROTOCOL_MODULE = "enhancements.multidevice.device_protocol"
+_V2_LAYER_PREFIX = "enhancements.multidevice"
+
+
+def _core_files_importing(module_prefix: str) -> list:
+    """[(相对路径, 被 import 的模块名)]：core/ 下所有从 *module_prefix* 取符号的文件。"""
+    offenders = []
+    for path in sorted((REPO_ROOT / "core").rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            hits = _imports_from(path.read_text(encoding="utf-8", errors="ignore"), module_prefix)
+        except (OSError, SyntaxError):
+            # 读不出/语法不合法的文件不是本守卫的题目，交给别的门去管。
+            continue
+        offenders.extend((str(path.relative_to(REPO_ROOT)), m) for m in hits)
+    return offenders
 
 
 # ===========================================================================
@@ -309,27 +338,26 @@ class TestLegacyTypeAliasMapping:
 class TestCoreNoV2Imports:
     """Core business-layer files must import protocol types from aip_v3, not v2."""
 
-    @pytest.mark.parametrize(
-        "rel_path",
-        [
-            "core/galaxy_core.py",
-            "core/repo_coordinator.py",
-        ],
-    )
-    def test_no_enhancements_multidevice_import(self, rel_path: str):
-        source = _source(rel_path)
-        bad = _imports_from(source, "enhancements.multidevice.device_protocol")
-        assert bad == [], f"{rel_path} must not import from enhancements.multidevice.device_protocol; " f"found: {bad}"
+    def test_no_enhancements_multidevice_import(self):
+        bad = _core_files_importing(_V2_PROTOCOL_MODULE)
+        assert (
+            bad == []
+        ), f"以下 core/ 文件仍从 {_V2_PROTOCOL_MODULE} 取协议类型，" "应改从 galaxy_gateway.protocol.aip_v3 取：\n" + "\n".join(
+            f"  - {p} → {m}" for p, m in bad
+        )
 
-    @pytest.mark.parametrize(
-        "rel_path",
-        [
-            "core/galaxy_core.py",
-            "core/repo_coordinator.py",
-        ],
-    )
-    def test_no_v2_protocol_types_in_business_layer(self, rel_path: str):
+    def test_no_v2_protocol_types_in_business_layer(self):
         """Business layer must not pull AIPMessage/MessageType from the v2 module."""
-        source = _source(rel_path)
-        v2_imports = _imports_from(source, "enhancements.multidevice")
-        assert v2_imports == [], f"{rel_path} still imports from enhancements.multidevice: {v2_imports}"
+        bad = _core_files_importing(_V2_LAYER_PREFIX)
+        assert bad == [], "以下 core/ 文件仍依赖 v2 协议层：\n" + "\n".join(f"  - {p} → {m}" for p, m in bad)
+
+    def test_guard_actually_scans_core(self):
+        """反向：守卫必须真的在扫 core/，否则它绿得毫无意义。
+
+        上面两条现在都是"空列表"通过 —— 空列表既可能是"确实没人违规"，也可能是
+        "扫描根本没跑起来"（清单写错、目录改名、rglob 拿到 0 个文件）。这条把
+        扫描器本身钉住：用一个 core/ 下真实存在、且**确实**从某前缀 import 的
+        事实来验证判据能命中。
+        """
+        # core/ 下必然有大量文件 import typing —— 用它验证扫描器能返回非空。
+        assert _core_files_importing("typing"), "守卫失效：core/ 全树扫描没有返回任何 import，判据恒真"
