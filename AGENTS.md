@@ -94,9 +94,10 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `DELETE /api/v1/devices/{id}` - 注销设备
 
 ### MCP 管理
-- `GET /api/v1/mcp/servers` - 列出服务器
-- `POST /api/v1/mcp/load` - 加载服务器
-- `POST /api/v1/mcp/call` - 调用工具
+> ⚠️ **当前没有 MCP 的 REST 端点。** 这里原先列的 `/api/v1/mcp/*` 三条从未真正
+> 挂载过：声明它们的 `core/api_loader.py` 定义了一个 `APIRouter()`，但仓库里
+> 没有任何 `include_router()` 引用它，路由树里根本不存在这些路径。该模块已删除。
+> MCP 能力目前通过 `mcp_bridge/` 使用，不经 REST。
 
 ### WebSocket
 - `/ws/device/{device_id}` - 设备连接
@@ -135,8 +136,7 @@ cp .env.example .env
 ## 扩展指南
 
 ### 添加 MCP 服务器
-1. 在 WebUI 中加载 MCP 服务器
-2. 或通过 API: `POST /api/v1/mcp/load`
+通过 `mcp_bridge/` 配置。（此处原先写的 `POST /api/v1/mcp/load` 从未存在，见上。）
 
 ### 添加技能
 1. 创建 `skills/your_skill/SKILL.md`

@@ -57,39 +57,16 @@ async def execute(param1: str) -> dict:
 
 ## 加载技能
 
-### 通过 API 加载
-
-```bash
-# 加载单个技能
-curl -X POST http://localhost:8080/api/v1/skill/load \
-  -H "Content-Type: application/json" \
-  -d '{"path": "/path/to/my-skill"}'
-
-# 加载技能包 (多个技能)
-curl -X POST "http://localhost:8080/api/v1/skill/load-package?path=/path/to/skills"
-```
-
-### 列出已加载的技能
-
-```bash
-curl http://localhost:8080/api/v1/skill/list
-```
-
-### 执行技能
-
-```bash
-curl -X POST http://localhost:8080/api/v1/skill/my-skill/execute \
-  -H "Content-Type: application/json" \
-  -d '{"params": {"param1": "value1"}}'
-```
-
-### 卸载技能
-
-```bash
-curl -X POST http://localhost:8080/api/v1/skill/unload \
-  -H "Content-Type: application/json" \
-  -d '{"skill_id": "my-skill"}'
-```
+> ⚠️ **本节原先描述的 `/api/v1/skill/*` REST 端点从未真正存在。**
+> 声明它们的 `core/api_loader.py` 定义了一个模块级 `APIRouter()`，但仓库里没有
+> 任何 `include_router()` 引用它 —— 路由树里根本没有这些路径，照着这里的 `curl`
+> 命令敲只会得到 404。该模块已删除，本节随之更正。
+>
+> 技能目前通过目录约定被发现（`skills/<name>/SKILL.md`），不经 REST 加载。
+> 如果后续要补 REST 面，请在 `core/routes/` 下新建路由并在 `core/api_routes.py`
+> 里 `include_router()` —— 仓库有一条守卫测试
+> （`tests/test_no_orphan_api_router_in_core.py`）会拦住"定义了路由却没挂载"
+> 这种复发。
 
 ## 示例
 

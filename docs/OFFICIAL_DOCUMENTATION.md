@@ -167,7 +167,6 @@ ufo-galaxy/
 │
 ├── core/                            # 核心引擎 (~50 子系统)
 │   ├── ai_intent.py                 # AI 意图解析
-│   ├── context_compressor.py        # 上下文压缩(突破128K)
 │   ├── desktop_presence_runtime.py  # 桌面运行时
 │   ├── state_event_bus.py           # 状态事件总线
 │   ├── skill_loader.py              # Skill 加载器
@@ -875,7 +874,7 @@ asyncio.run(test())
 | 新增统一启动器 | `launch_desktop.py` |
 | 新增 Linux Agent 路由 | `galaxy_gateway/routes/linux_agent.py` |
 | 新增沙箱路由 | `galaxy_gateway/routes/sandbox.py` |
-| 新增上下文压缩 | `core/context_compressor.py` |
+| 新增上下文压缩（已由 `core/memory/` 取代，模块已删除） | ~~`core/context_compressor.py`~~ |
 | Gemma 4 E4B 默认模型 | `galaxy_gateway/enhanced_nlu_v2.py` |
 | 四级级联回退 | `galaxy_gateway/enhanced_nlu_v2.py` |
 | 持久化路径修复 | `nodes/Node_100_MemorySystem/main.py` |
