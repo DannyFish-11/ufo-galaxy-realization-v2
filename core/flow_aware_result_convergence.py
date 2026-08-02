@@ -129,6 +129,34 @@ from typing import Any, Deque, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.FlowAwareResultConvergence")
 
+# PR-V5-CONVERGE：判定单份子任务结果成败的 status 字面量。
+# 口径刻意与 galaxy_gateway/android/handlers/task_lifecycle.py 的
+# _TERMINAL_COMPLETED_STATUS_VALUES / _CANCELLED_STATUS_VALUES 对齐 ——
+# 同一个 status 字符串在下发侧和收敛侧必须被认成同一件事。
+_FAILED_STATUS_VALUES = frozenset({"failed", "failure", "error", "cancelled", "canceled", "timeout", "aborted"})
+
+
+def derive_result_success(payload: Optional[Dict[str, Any]]) -> "tuple[bool, str]":
+    """从结果 payload 派生 ``(是否成功, 归一化后的 status)``。
+
+    单一实现：收敛决策与 V5 闭合都走这里，避免"下发侧和收敛侧对同一个 status
+    字符串给出不同结论"这种漂移。
+
+    判不出来时按**成功**处理 —— 刻意的保守方向：把未知当失败，会让所有没带
+    status 的历史调用方集体降级成 partial_failure，那是拿一个更大的回归换一个
+    更严的判定。未知只是"不加剧"，不会掩盖显式的 failed。
+    """
+    if not isinstance(payload, dict):
+        return True, ""
+    status = str(payload.get("status", "")).strip().lower()
+    if status:
+        return status not in _FAILED_STATUS_VALUES, status
+    for key in ("ok", "success"):
+        if isinstance(payload.get(key), bool):
+            return bool(payload[key]), ""
+    return True, ""
+
+
 # ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
@@ -477,6 +505,13 @@ class ResultConvergenceContext:
             "final_already_absorbed": self.final_already_absorbed,
             "is_duplicate": self.is_duplicate,
             "is_reconnect_replay": self.is_reconnect_replay,
+            # PR-V5-CONVERGE：把成败结论固化进 artifact。
+            # 原先 result_payload 根本没进 evidence，导致下游（含 V5 闭合）
+            # 无从判断这一份到底成没成功——"结果到齐 = 组完成"的根因就在这里。
+            # 只存派生的布尔与归一 status，不塞整个 payload：环形缓冲要留在可控
+            # 体积内，也避免把结果内容漏进审计/操作面。
+            "result_is_success": derive_result_success(self.result_payload)[0],
+            "result_status": derive_result_success(self.result_payload)[1],
             "session_id": self.session_id,
             "device_id": self.device_id,
             "trace_id": self.trace_id,
@@ -558,6 +593,14 @@ class ResultConvergenceArtifact:
     task_id: str = ""
     partial_count_merged: int = 0
     group_complete: bool = False
+    # ── PR-V5-CONVERGE：规范终态由 V5 权威给出，不再只有一个布尔 ───────────
+    # ``group_complete`` 只能表达"到齐了没有"，表达不了"到齐了但两台失败"。
+    # V4 自己的哨兵 ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE_POLICY 明令：
+    # 任何模式不得维护私有完成契约、不得把子任务成功当作组完成。
+    # 该字段承载 core.canonical_group_completion_closure 判出的规范终态
+    # （complete / partial_failure / partial_success / degraded_success /
+    # aggregate_failure / …）。权威不可用时为 None，并在 evidence 里留痕。
+    canonical_terminal_kind: Optional[str] = None
     timestamp: float = field(default_factory=time.time)
     evidence: Dict[str, Any] = field(default_factory=dict)
 
@@ -582,6 +625,7 @@ class ResultConvergenceArtifact:
             "task_id": self.task_id,
             "partial_count_merged": self.partial_count_merged,
             "group_complete": self.group_complete,
+            "canonical_terminal_kind": self.canonical_terminal_kind,
             "timestamp": self.timestamp,
             "evidence": self.evidence,
         }
@@ -943,6 +987,85 @@ class FlowAwareConvergenceCoordinator:
         self._parallel_group_order: List[str] = []
 
     # ------------------------------------------------------------------
+    # PR-V5-CONVERGE：并行组终态委托给规范闭合权威
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _subtask_is_success(artifact: "ResultConvergenceArtifact") -> bool:
+        """读取吸收时已固化在 artifact 上的成败结论（见 ResultConvergenceContext.to_dict）。"""
+        return bool((artifact.evidence or {}).get("result_is_success", True))
+
+    def _close_group_via_canonical_authority(
+        self,
+        record: "ParallelFlowAggregationRecord",
+    ) -> Optional[Any]:
+        """把整个并行组交给 V5 ``apply_completion_closure()`` 判定规范终态。
+
+        为什么是"委托"而不是"再算一遍"
+        --------------------------------
+        ``core/unified_orchestration_spine.py`` 的
+        ``ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE_POLICY`` 写得很直白：所有高级
+        执行模式**必须**通过 ``apply_completion_closure()`` 决定终态，**不得**维护
+        私有完成契约。本方法就是这条约束在收敛层的落点 —— 本层只负责把已吸收的
+        子任务翻译成 ``DeviceResultSignal``，成败判定与终态归类全部交给权威。
+
+        返回 ``CanonicalCompletionOutcome``；权威不可用时返回 ``None``（降级），
+        由调用点在 evidence 里留痕，保持与本仓其它权威调用一致的降级语义。
+        """
+        try:
+            from core.canonical_group_completion_closure import (
+                CompletionClosureContext,
+                DeviceResultSignal,
+                SignalKind,
+                apply_completion_closure,
+            )
+            from core.unified_orchestration_spine import CompletionContract
+        except Exception as exc:  # pragma: no cover - 依赖缺失时降级
+            logger.debug("V5 completion closure unavailable (graceful degradation): %s", exc)
+            return None
+
+        signals = []
+        expected_device_ids = []
+        for idx in sorted(record.absorbed_subtasks):
+            art = record.absorbed_subtasks[idx]
+            # device_id 可能为空（本地/无设备归属的子任务）——用 subtask 序号兜底，
+            # 保证权威拿到的 expected_device_ids 与 signals 一一对应且不重名。
+            dev = art.device_id or f"subtask-{idx}"
+            expected_device_ids.append(dev)
+            signals.append(
+                DeviceResultSignal(
+                    device_id=dev,
+                    signal_kind=SignalKind.subtask_result.value,
+                    is_success=self._subtask_is_success(art),
+                    result_payload=(art.evidence or {}).get("result_payload"),
+                    received_at=art.timestamp,
+                    signal_id=art.artifact_id,
+                )
+            )
+
+        try:
+            return apply_completion_closure(
+                CompletionClosureContext(
+                    orchestration_id=record.parent_flow_id or record.group_id,
+                    execution_mode="parallel_fanout",
+                    signals=signals,
+                    expected_device_ids=expected_device_ids,
+                    started_at=record.created_at,
+                    group_id=record.group_id,
+                    trace_id=record.trace_id or None,
+                ),
+                CompletionContract(expected_result_count=int(record.expected_count or len(signals))),
+            )
+        except Exception as exc:
+            logger.warning(
+                "FlowAwareConvergenceCoordinator: V5 completion closure raised "
+                "(group_id=%s) — falling back to count-only completion: %s",
+                record.group_id,
+                exc,
+            )
+            return None
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -1162,6 +1285,25 @@ class FlowAwareConvergenceCoordinator:
                 ):
                     record.all_complete = True
                     record.completed_at = time.time()
+
+                    # ── PR-V5-CONVERGE：终态由规范闭合权威判定 ─────────────
+                    # 到这里为止只知道"结果到齐了"。到齐 ≠ 成功 —— 三台里两台
+                    # 失败也会到齐。把整组交给 V5，由它给出规范终态与成败计数。
+                    _outcome = self._close_group_via_canonical_authority(record)
+                    _terminal_kind = getattr(_outcome, "terminal_kind", None) if _outcome else None
+                    _closure_evidence: Dict[str, Any] = (
+                        {
+                            "success_count": _outcome.success_count,
+                            "failure_count": _outcome.failure_count,
+                            "blocked_count": _outcome.blocked_count,
+                            "effective_expected_count": _outcome.effective_expected_count,
+                            "canonical_terminal_kind": _outcome.terminal_kind,
+                            "closure_policy_reference": _outcome.policy_reference,
+                        }
+                        if _outcome
+                        else {"canonical_closure": "unavailable"}
+                    )
+
                     # Build aggregate artifact
                     record.aggregate_artifact = ResultConvergenceArtifact(
                         decision=ConvergenceDecisionKind.aggregate_parallel_into_parent_flow,
@@ -1171,7 +1313,8 @@ class FlowAwareConvergenceCoordinator:
                         reason=(
                             f"all {record.expected_count} parallel subtask results "
                             f"absorbed — parent_flow_aggregate emitted for "
-                            f"group_id={group_id!r}"
+                            f"group_id={group_id!r}; canonical terminal kind="
+                            f"{_terminal_kind or 'unavailable'}"
                         ),
                         flow_id=record.parent_flow_id,
                         group_id=group_id,
@@ -1179,11 +1322,13 @@ class FlowAwareConvergenceCoordinator:
                         session_id=record.session_id,
                         trace_id=record.trace_id,
                         group_complete=True,
+                        canonical_terminal_kind=_terminal_kind,
                         evidence={
                             "group_id": group_id,
                             "parent_flow_id": record.parent_flow_id,
                             "expected_count": record.expected_count,
                             "absorbed_count": record.absorbed_count,
+                            **_closure_evidence,
                         },
                     )
                     # Record aggregate artifact
