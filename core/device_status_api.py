@@ -333,26 +333,76 @@ class DeviceStatusManager:
 
         return True
 
+    #: UDM 状态里表示"这台设备当前不在线"的取值。
+    #: 只列**离线**侧:``UnifiedDeviceStatus`` 将来加新值时,默认应当保持本地
+    #: 判断而不是被一个写死的白名单悄悄判成离线。
+    _UDM_OFFLINE_STATUSES = frozenset({"offline", "error", "disconnected"})
+
+    def _apply_udm_truth(self) -> None:
+        """把 UDM(SSOT)的在线状态刷进本地缓存,在**每次读之前**调用。
+
+        这个类的写路径早就 write-through 到 UDM 了(``register_device`` /
+        ``update_device_status`` 都先写 SSOT),但**读路径从来没问过 UDM** ——
+        于是 :8766 这个面板要查的 HTTP 接口会把 UDM 明知已离线的设备继续报成
+        在线。文件头与 ``core/unified/device_manager.py:22`` 都写着本模块是
+        "compatibility layer,不得作为平行真相源",写路径遵守了,读路径没有。
+
+        做法与 ``core.device_registry.list_devices`` 保持一致(那边已经这么做了,
+        这里复用同一套路,不另起炉灶):遍历本地缓存,凡是 UDM 里有记录的,就用
+        UDM 的状态覆盖本地 ``is_online``。
+
+        判据同样是**只覆盖、不臆造**:
+
+        * UDM 里有记录 → 以 UDM 为准(在线/离线都听它的);
+        * UDM 里**查不到**这台设备 → 保持本地值。write-through 是 best-effort
+          (UDM 写失败时仍保留本地记录以维持展示),这时把它改成离线等于凭空
+          制造一条假信息;
+        * UDM 不可用 → 整体跳过,保持本地值。展示面不该因为 SSOT 抖动而全空。
+        """
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+
+            udm = get_unified_device_manager()
+        except Exception as exc:  # pragma: no cover - UDM 不可用是降级路径
+            logger.debug("device_status_api: UDM 不可用,沿用本地缓存: %s", exc)
+            return
+
+        for device_id, device in self._devices.items():
+            try:
+                udm_device = udm.get_device(device_id)
+            except Exception:  # pragma: no cover
+                continue
+            if udm_device is None:
+                continue
+            status = getattr(udm_device, "status", None)
+            status_value = str(getattr(status, "value", status)).lower()
+            device.is_online = status_value not in self._UDM_OFFLINE_STATUSES
+
     def get_device_status(self, device_id: str) -> Optional[Dict[str, Any]]:
         """获取设备状态"""
+        self._apply_udm_truth()
         if device_id in self._devices:
             return self._devices[device_id].to_dict()
         return None
 
     def get_all_devices(self) -> List[Dict[str, Any]]:
         """获取所有设备状态"""
+        self._apply_udm_truth()
         return [device.to_dict() for device in self._devices.values()]
 
     def get_devices_by_category(self, category: DeviceCategory) -> List[Dict[str, Any]]:
         """按类别获取设备"""
+        self._apply_udm_truth()
         return [device.to_dict() for device in self._devices.values() if device.category == category]
 
     def get_online_devices(self) -> List[Dict[str, Any]]:
         """获取在线设备"""
+        self._apply_udm_truth()
         return [device.to_dict() for device in self._devices.values() if device.is_online]
 
     def get_status_summary(self) -> Dict[str, Any]:
         """获取状态摘要"""
+        self._apply_udm_truth()
         total = len(self._devices)
         online = sum(1 for d in self._devices.values() if d.is_online)
         connected = sum(1 for d in self._devices.values() if d.is_connected_to_server)
