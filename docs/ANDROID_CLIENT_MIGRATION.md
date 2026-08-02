@@ -1,5 +1,8 @@
 # Galaxy Android 客户端
 
+> 本文原为仓库根下 `android_client/README.md`。该目录只有这一份说明、
+> 不含任何源码，已随之删除，文档迁到这里。Android 源码的唯一真相源仍是下面那个独立仓库。
+
 > ⚠️ **已迁移通知**：Android 客户端已迁移至独立仓库，本目录不再维护 Android 源码。
 
 ## 独立仓库（唯一真相源）
@@ -49,7 +52,7 @@ AIP v3.0（Android Integration Protocol v3.0）
 }
 ```
 
-完整协议文档见：[docs/ANDROID_PROTOCOL_ALIGNMENT.md](../docs/ANDROID_PROTOCOL_ALIGNMENT.md)
+完整协议文档见：[docs/ANDROID_PROTOCOL_ALIGNMENT.md](ANDROID_PROTOCOL_ALIGNMENT.md)
 
 ## 架构关系图
 
@@ -69,5 +72,5 @@ Node_113_AndroidVLM                ← VLM 分析节点（本仓库）
 
 ## 相关文档
 
-- [docs/ANDROID_PROTOCOL_ALIGNMENT.md](../docs/ANDROID_PROTOCOL_ALIGNMENT.md) - AIP v3.0 完整协议文档
+- [docs/ANDROID_PROTOCOL_ALIGNMENT.md](ANDROID_PROTOCOL_ALIGNMENT.md) - AIP v3.0 完整协议文档
 - [galaxy_gateway/android_bridge.py](../galaxy_gateway/android_bridge.py) - 桥接层源码

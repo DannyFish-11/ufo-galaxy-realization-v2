@@ -600,8 +600,11 @@ for _infra_path, _infra_desc in (
     ("static", "Static web assets served by the API layer."),
     ("systemd", "systemd unit files for Linux service management."),
     ("agent", "Agent configuration or runtime agent assets."),
-    ("android_client", "Android client implementation."),
-    ("cli", "Command-line interface entrypoints."),
+    # android_client/ 已移除：该目录只含一份"源码已迁至独立仓库"的说明，无任何代码。
+    #   说明迁到 docs/ANDROID_CLIENT_MIGRATION.md；Android 源码的唯一真相源是
+    #   独立仓库 DannyFish-11/ufo-galaxy-android。
+    # cli/ 已移除：全仓唯一的真实依赖是 tests/test_pr510_* 里两个专测它自身结构的
+    #   测试类，启动链路(main.py / unified_launcher.py)与打包配置都未引用。
     ("daemon", "Background daemon process assets."),
     ("external", "External integrations (AgentCPM, Microsoft UFO, channels)."),
     ("fusion", "Data fusion utilities."),
