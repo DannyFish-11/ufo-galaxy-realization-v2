@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.protocol_drift_registry import coerce_protocol_enum
 from galaxy_gateway.android.capabilities import DeviceCapability
 
 # DeviceType / DevicePlatform — imported from canonical SSOT
@@ -165,10 +166,34 @@ class AndroidDevice:
             # PR-7A: absent capability report → NONE, not optimistic default.
             caps = DeviceCapability.NONE
             caps_reported = False
+        # PR-P3-2 protocol-drift hardening:设备**没报**或报了个我们不认识的值时,
+        # 一律归 UNKNOWN 并登记,不给乐观默认、也不在解析中途抛异常。
+        #
+        # 改之前实测:
+        #   缺 platform 字段      → DevicePlatform.ANDROID   ← 没报却当成安卓
+        #   platform='wearos'     → ValueError               ← 手表仓的取值,枚举里没有
+        #
+        # 前者是凭空造事实(与本函数上面 PR-7A「没报能力 → NONE」同一条纪律,
+        # 此前没覆盖到这两个字段);后者会让注册在半路炸掉,调用方若吞掉异常,
+        # 表现就是设备静默注册不上,而且没有任何地方留下"见过一个不认识的取值"
+        # 的记录 —— 正是最难查的那种漂移。
+        device_id = data.get("device_id", str(uuid.uuid4()))
         return cls(
-            device_id=data.get("device_id", str(uuid.uuid4())),
-            device_type=DeviceType(data.get("device_type", "android_phone")),
-            platform=DevicePlatform(data.get("platform", "android")),
+            device_id=device_id,
+            device_type=coerce_protocol_enum(
+                DeviceType,
+                data.get("device_type"),
+                surface="android_registration",
+                field_name="device_type",
+                device_id=device_id,
+            ),
+            platform=coerce_protocol_enum(
+                DevicePlatform,
+                data.get("platform"),
+                surface="android_registration",
+                field_name="platform",
+                device_id=device_id,
+            ),
             name=data.get("name"),
             model=data.get("model"),
             os_version=data.get("os_version"),

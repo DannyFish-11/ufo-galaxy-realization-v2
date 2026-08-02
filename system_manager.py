@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 # PR-WIN-ENCODING: Defensive UTF-8 re-config for standalone launch on Windows.
 import sys
-if sys.platform == "win32":
+
+
+def _configure_windows_console() -> None:
+    """Windows 下把控制台切到 UTF-8;只在本文件被当作脚本运行时调用。
+
+    与 main.py / unified_launcher.py / launch_desktop.py 同一处理:以前这段是
+    无条件的模块级代码,``import system_manager`` 就会重写调用方的
+    sys.stdout/sys.stderr 并改写进程环境变量。import 不该有这种越权副作用;
+    脚本模式(``python system_manager.py``)行为不变。
+    """
+    if sys.platform != "win32":
+        return
     try:
         import io, os
         if hasattr(sys.stdout, "buffer"):
@@ -10,6 +21,10 @@ if sys.platform == "win32":
         os.environ["PYTHONIOENCODING"] = "utf-8:replace"
     except Exception:
         pass
+
+
+if __name__ == "__main__":
+    _configure_windows_console()
 """
 Galaxy 系统管理器 v2.0 (修复版)
 =================================

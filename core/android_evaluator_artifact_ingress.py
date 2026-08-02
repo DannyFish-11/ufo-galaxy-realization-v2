@@ -123,6 +123,40 @@ except ImportError:  # pragma: no cover
     _ingest_truth_message = None  # type: ignore[assignment]
     _ReconcileOutcome = None  # type: ignore[assignment,misc]
 
+
+def _resolve_truth_ingress():
+    """在**调用时**取真相入口函数,取不到返回 None。
+
+    上面那段 import 期的 try/except 保留着(``_ReconcileOutcome`` 还要用于类型),
+    但**判定这条路径能不能走,不再看那一刻的结果**。
+
+    理由:import 期锁定的可用性标志一旦为 False 就是终身的。本模块第一次被 import
+    时若 ``core.android_participant_truth_ingress`` 恰好导不进来(循环 import、上游
+    模块半初始化、测试替换过 sys.modules……),治理产物此后**永远**不会写进
+    FlowTruthAlignmentRuntime —— 而调用方看到的仍是 ``was_stored=True``,只在
+    debug 级留一行日志。这类"一次偶发把功能永久关掉"的失效,症状出现的时间和地点
+    都离根因很远。
+
+    懒解析把影响面收敛到"那一次调用"。成功路径的开销只是一次 ``sys.modules``
+    命中,可以忽略。
+    """
+    if _ingest_truth_message is not None:
+        return _ingest_truth_message
+    try:
+        from core.android_participant_truth_ingress import (  # type: ignore[import]
+            ingest_android_participant_truth_message,
+        )
+
+        return ingest_android_participant_truth_message
+    except Exception as exc:  # noqa: BLE001
+        if _logger:
+            _logger.warning(
+                "治理产物真相入口不可用,本次 ingest 不会写入 FlowTruthAlignmentRuntime: %s",
+                exc,
+            )
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Module authority sentinels
 # ---------------------------------------------------------------------------
@@ -609,7 +643,25 @@ def ingest_android_evaluator_artifact(
     canonical_update = ""
     reject_reason = ""
 
-    if _TRUTH_INGRESS_AVAILABLE and _ingest_truth_message is not None:
+    # 这里**在调用时**解析真相入口,而不是用 import 期锁定的标志。
+    #
+    # 原写法是 ``if _TRUTH_INGRESS_AVAILABLE and _ingest_truth_message is not None:``
+    # —— 两个值都在模块 import 那一刻定死。只要本模块**第一次被 import** 时
+    # ``core.android_participant_truth_ingress`` 恰好导不进来(循环 import、某个
+    # 上游模块处于半初始化状态、测试里替换过 sys.modules……),这个标志就在**整个
+    # 进程剩余生命周期里**永远是 False:治理产物照样"存储成功",但**再也不会**写进
+    # FlowTruthAlignmentRuntime,而且只在 debug 级留一行日志。
+    #
+    # 实测形态:tests/test_pr4v2_android_evaluator_artifact_governance_flow.py 的
+    # J01/J03 单独跑全过,在 CI 某个分片的排列下报红 ——
+    # "ingest_android_evaluator_artifact() must write to FlowTruthAlignmentRuntime"
+    # (assert 0 > 0),以及就绪门的 truth_ownership 维度停在 unknown。
+    # 也就是说:**治理真相是否被记录,取决于进程里此前 import 过什么** —— 这跟本轮
+    # 修过的"治理自评把内存里有人写过一笔当成证据"是同一族问题,只是方向相反。
+    #
+    # 懒解析让一次偶发的 import 失败只影响那一次调用,而不是永久废掉这条路径。
+    _truth_ingest = _resolve_truth_ingress()
+    if _truth_ingest is not None:
         truth_message: Dict[str, Any] = {
             "type": "governance_artifact",
             "truth_kind": "governance_artifact",
@@ -626,7 +678,7 @@ def ingest_android_evaluator_artifact(
             },
         }
         try:
-            truth_reconcile_outcome = _ingest_truth_message(truth_message)
+            truth_reconcile_outcome = _truth_ingest(truth_message)
             if truth_reconcile_outcome is not None:
                 canonical_update = (
                     f"evaluator_artifact_ingested:"

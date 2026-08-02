@@ -50,7 +50,16 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ENTRYPOINTS = ["main.py", "unified_launcher.py"]
+
+# 全部自家入口脚本:import 时都不得写 os.environ。
+# launch_desktop.py / system_manager.py 是同一 AST 规则全仓扫出来的另两处 ——
+# 它们不碰 .env,但 Windows 分支同样在模块级写 PYTHONIOENCODING 并重写调用方的
+# sys.stdout/sys.stderr(`import launch_desktop` 在 tests 里真实存在),
+# 是同一类越权,一并钉住。
+ENTRYPOINTS = ["main.py", "unified_launcher.py", "launch_desktop.py", "system_manager.py"]
+
+# 其中只有这两个负责加载 .env —— 「脚本模式下必须仍然加载」那条只对它们成立。
+ENV_LOADING_ENTRYPOINTS = ["main.py", "unified_launcher.py"]
 
 
 # ── 1. 结构层:模块级不得写 os.environ ──────────────────────────────────
@@ -101,7 +110,7 @@ def test_entrypoint_module_level_does_not_write_environ(entry: str) -> None:
     )
 
 
-@pytest.mark.parametrize("entry", ENTRYPOINTS)
+@pytest.mark.parametrize("entry", ENV_LOADING_ENTRYPOINTS)
 def test_entrypoint_still_loads_env_when_run_as_script(entry: str) -> None:
     """守卫的另一半:不能为了消副作用把加载**整个删掉**。
 
@@ -122,6 +131,35 @@ def test_entrypoint_still_loads_env_when_run_as_script(entry: str) -> None:
     assert any("env" in name for name in guarded_calls), (
         f'{entry} 的 `if __name__ == "__main__"` 块里找不到 .env 加载调用'
         f"(找到的调用:{guarded_calls})—— 作为脚本运行时 .env 必须仍被加载"
+    )
+
+
+def _main_guarded_calls(entry: str) -> list[str]:
+    tree = ast.parse((REPO_ROOT / entry).read_text(encoding="utf-8"))
+    calls: list[str] = []
+    for top in tree.body:
+        if not isinstance(top, ast.If):
+            continue
+        if "__name__" not in ast.dump(top.test) or "__main__" not in ast.dump(top.test):
+            continue
+        for node in ast.walk(top):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                calls.append(node.func.id)
+    return calls
+
+
+@pytest.mark.parametrize("entry", ENTRYPOINTS)
+def test_entrypoint_still_configures_console_when_run_as_script(entry: str) -> None:
+    """同理:不能为了消副作用把 Windows 控制台配置**整个删掉**。
+
+    四个入口脚本都要在 Windows 上把 stdout/stderr 切成 UTF-8,否则 CJK 日志会
+    直接抛 UnicodeEncodeError(PR-WIN-ENCODING 修的就是这个)。搬进函数之后,
+    脚本模式下必须仍然被调用。
+    """
+    calls = _main_guarded_calls(entry)
+    assert any("console" in name for name in calls), (
+        f'{entry} 的 `if __name__ == "__main__"` 块里找不到控制台配置调用'
+        f"(找到的调用:{calls})—— 作为脚本运行时 Windows 控制台必须仍被切到 UTF-8"
     )
 
 

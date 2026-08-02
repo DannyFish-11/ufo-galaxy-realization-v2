@@ -620,6 +620,22 @@ class AndroidBridge:
         """
         self._devices[device_id] = device
 
+    def has_transport_session(self, device_id: str) -> bool:
+        """这台设备当前**在本 bridge 的传输层缓存里**吗?
+
+        与 ``cache_transport_handle`` 配对的读口。语义严格限定为「传输层活性」:
+        回答的是"现在有没有一条连着的 Android WebSocket 会话",**不是**"这台设备
+        是否存在/是否在线" —— 那是 UDM 的事(见本类文档:外部代码需要权威设备
+        状态应查询 UDM)。
+
+        加这个方法是因为 ``core/runtime/source_dispatch_orchestrator.py`` 过去直接
+        写 ``_bridge._devices`` 去做这个判断。那个**判断本身是对的**(派发前确认
+        传输层可达,不可达就回退到 remote handoff,见 PR-E 策略哨兵),错的是伸手
+        进别人的私有属性:``_devices`` 一旦改名或换结构,调用方会在运行时才炸,而且
+        炸在一个与它无关的模块里。
+        """
+        return device_id in self._devices
+
     def _patch_disconnect_to_udm(self, device_id: str) -> None:
         """Mark device as DISCONNECTED in UDM without removing canonical identity."""
         self._patch_runtime_state_to_udm(

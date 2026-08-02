@@ -121,6 +121,10 @@ class TestTryAndroidBridgeDispatchDeviceAbsent:
 
         fake_bridge = MagicMock()
         fake_bridge._devices = {}  # device not present
+        # 让公开读口如实反映 _devices —— MagicMock 的属性默认恒真,
+        # 不接这一行的话 has_transport_session() 永远返回真值 Mock:
+        # 「设备不存在」分支走不到,「设备存在」那几条也会为了错误的原因通过。
+        fake_bridge.has_transport_session.side_effect = lambda did, _d=fake_bridge._devices: did in _d
 
         fake_bridge_mod = MagicMock()
         fake_bridge_mod.android_bridge = fake_bridge
@@ -154,6 +158,10 @@ class TestTryAndroidBridgeDispatchSuccess:
         android_device = MagicMock()
         device_id = "android_dev_001"
         fake_bridge._devices = {device_id: android_device}
+        # 让公开读口如实反映 _devices —— MagicMock 的属性默认恒真,
+        # 不接这一行的话 has_transport_session() 永远返回真值 Mock:
+        # 「设备不存在」分支走不到,「设备存在」那几条也会为了错误的原因通过。
+        fake_bridge.has_transport_session.side_effect = lambda did, _d=fake_bridge._devices: did in _d
         fake_bridge.assign_task = MagicMock(return_value={"success": True, "task_id": "task_001", "result": "ok"})
 
         fake_bridge_mod = MagicMock()
@@ -185,6 +193,10 @@ class TestTryAndroidBridgeDispatchSuccess:
         fake_bridge = MagicMock()
         device_id = "android_dev_002"
         fake_bridge._devices = {device_id: MagicMock()}
+        # 让公开读口如实反映 _devices —— MagicMock 的属性默认恒真,
+        # 不接这一行的话 has_transport_session() 永远返回真值 Mock:
+        # 「设备不存在」分支走不到,「设备存在」那几条也会为了错误的原因通过。
+        fake_bridge.has_transport_session.side_effect = lambda did, _d=fake_bridge._devices: did in _d
         fake_bridge.assign_task = MagicMock(return_value={"success": True})
 
         fake_bridge_mod = MagicMock()
@@ -227,6 +239,10 @@ class TestTryAndroidBridgeDispatchAsync:
         fake_bridge = MagicMock()
         device_id = "android_dev_async"
         fake_bridge._devices = {device_id: MagicMock()}
+        # 让公开读口如实反映 _devices —— MagicMock 的属性默认恒真,
+        # 不接这一行的话 has_transport_session() 永远返回真值 Mock:
+        # 「设备不存在」分支走不到,「设备存在」那几条也会为了错误的原因通过。
+        fake_bridge.has_transport_session.side_effect = lambda did, _d=fake_bridge._devices: did in _d
 
         async def _async_assign(*args, **kwargs):
             return {"success": True, "task_id": kwargs.get("task_id")}
@@ -286,6 +302,10 @@ class TestTryAndroidBridgeDispatchReturnsNone:
         fake_bridge = MagicMock()
         device_id = "dev_none"
         fake_bridge._devices = {device_id: MagicMock()}
+        # 让公开读口如实反映 _devices —— MagicMock 的属性默认恒真,
+        # 不接这一行的话 has_transport_session() 永远返回真值 Mock:
+        # 「设备不存在」分支走不到,「设备存在」那几条也会为了错误的原因通过。
+        fake_bridge.has_transport_session.side_effect = lambda did, _d=fake_bridge._devices: did in _d
         fake_bridge.assign_task = MagicMock(return_value=None)
 
         fake_bridge_mod = MagicMock()
@@ -314,6 +334,10 @@ class TestTryAndroidBridgeDispatchException:
         fake_bridge = MagicMock()
         device_id = "dev_exc"
         fake_bridge._devices = {device_id: MagicMock()}
+        # 让公开读口如实反映 _devices —— MagicMock 的属性默认恒真,
+        # 不接这一行的话 has_transport_session() 永远返回真值 Mock:
+        # 「设备不存在」分支走不到,「设备存在」那几条也会为了错误的原因通过。
+        fake_bridge.has_transport_session.side_effect = lambda did, _d=fake_bridge._devices: did in _d
         fake_bridge.assign_task = MagicMock(side_effect=RuntimeError("ws disconnected"))
 
         fake_bridge_mod = MagicMock()

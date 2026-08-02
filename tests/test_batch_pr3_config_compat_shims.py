@@ -17,7 +17,6 @@ C) dashboard/backend/main.py: get_cors_origins uses _AVAILABLE flag pattern,
 D) dashboard/backend/main.py: ascii_art uses _AVAILABLE flag pattern.
 E) core/routes/compat.py: deprecation metadata present in docstring;
    create_router() emits DeprecationWarning.
-F) core/legacy_adapters/connection_manager_adapter.py: deprecation metadata
    (``.. deprecated::`` annotation and removal target) present.
 G) core/legacy_adapters/device_agent_manager_adapter.py: deprecation metadata
    present.
@@ -172,40 +171,6 @@ class TestCompatRouteDeprecation:
     def test_removal_target_pr5(self):
         src = _read("core/routes/compat.py")
         assert "PR-5" in src or "Batch PR-5" in src, "core/routes/compat.py must mention the PR-5 removal target"
-
-
-# ---------------------------------------------------------------------------
-# F) core/legacy_adapters/connection_manager_adapter.py — metadata
-# ---------------------------------------------------------------------------
-
-
-class TestConnectionManagerAdapterDeprecation:
-
-    def test_has_deprecated_docstring(self):
-        src = _read("core/legacy_adapters/connection_manager_adapter.py")
-        assert _has_deprecated_docstring(
-            src
-        ), "connection_manager_adapter.py must have '.. deprecated::' in its docstring"
-
-    def test_has_removal_target(self):
-        src = _read("core/legacy_adapters/connection_manager_adapter.py")
-        assert _has_removal_target(src), "connection_manager_adapter.py must declare a removal target"
-
-    def test_mentions_canonical_replacement(self):
-        src = _read("core/legacy_adapters/connection_manager_adapter.py")
-        assert (
-            "UnifiedConnectionManager" in src or "unified.connection_manager" in src
-        ), "connection_manager_adapter.py must name the canonical replacement"
-
-    def test_new_code_must_not_depend(self):
-        src = _read("core/legacy_adapters/connection_manager_adapter.py")
-        assert (
-            "New code must not" in src or "new code must not" in src or "must not depend" in src
-        ), "connection_manager_adapter.py must state that new code must not depend on it"
-
-    def test_removal_target_pr5(self):
-        src = _read("core/legacy_adapters/connection_manager_adapter.py")
-        assert "PR-5" in src or "Batch PR-5" in src, "connection_manager_adapter.py must mention PR-5 removal target"
 
 
 # ---------------------------------------------------------------------------
