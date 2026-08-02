@@ -439,6 +439,11 @@ class CognitiveExecutionAuthority:
         messages = _get_attr(request.context_assembly, "messages") or []
         tool_manifest = _get_attr(request.context_assembly, "tool_manifest")
 
+        # 调用方的任务类型藏在 L3 装配的 source_request 里。此前 _dispatch 把它
+        # 写死成 "general",等于把调用方意图连同 L2 的供给决定一起丢掉。
+        _src_req = _get_attr(request.context_assembly, "source_request")
+        task_type = str(_get_attr(_src_req, "task_type") or "general") if _src_req is not None else "general"
+
         trace.append(f"context_messages: count={len(messages)}")
         if tool_manifest is not None:
             trace.append(f"tool_manifest: count={len(tool_manifest)}")
@@ -461,6 +466,7 @@ class CognitiveExecutionAuthority:
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             trace=trace,
+            task_type=task_type,
         )
 
         # ── 6. Normalize output under center-owned semantics ──────────
@@ -569,6 +575,7 @@ class CognitiveExecutionAuthority:
         temperature: float,
         max_tokens: int,
         trace: List[str],
+        task_type: str = "general",
     ) -> Any:
         """Dispatch to the provider adapter for raw execution.
 
@@ -577,24 +584,44 @@ class CognitiveExecutionAuthority:
         decision.
 
         Returns the raw ``LLMResponse`` from the provider adapter.
+
+        L2 的供给决定必须真的传下去
+        ----------------------------
+        此前这里**收下了** ``provider`` / ``model`` 两个参数却一个都不用,直接
+        裸调 ``router.chat(...)`` —— 于是 L1→L2 辛苦算出来的供给路径被整条丢掉,
+        后端自行路由;而 :meth:`execute` 又把 ``supplied_provider`` /
+        ``supplied_model`` 原样填进 :class:`CognitiveExecutionResult`。结果就是
+        **它报告了一个并没有真正生效的 provider**。运行时实测(注入记录型 router):
+
+            L2 supplied  : anthropic
+            实际传给 router: {'messages': [...], 'task_type': 'general', ...}
+                             ← provider / model 两个键根本不存在
+            结果自称      : anthropic
+
+        这和 ``core/unified/llm_router.py`` 里已经修过的那个 bug 是同一类
+        (那边是 ``preferred_provider=`` 被 ``**kwargs`` 静默吞掉)。这一处能活到
+        现在,只是因为 L4 目前没有任何生产调用方 —— 空转的代码不会自己暴露缺陷。
+        修法就是把已经算好的东西真的传下去,并且不再把 ``task_type`` 写死成
+        ``"general"``(那同样是在丢弃调用方的意图)。
         """
-        trace.append(f"dispatch: provider={provider!r} model={model!r}")
+        trace.append(f"dispatch: provider={provider!r} model={model!r} task_type={task_type!r}")
         router = self.execution_router
+        # 空串按"无偏好"处理:传空字符串给后端会被当成一个不存在的 provider 名。
+        kwargs: Dict[str, Any] = {
+            "messages": messages,
+            "task_type": task_type or "general",
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if provider:
+            kwargs["provider"] = provider
+        if model:
+            kwargs["model"] = model
+
         if tools:
-            raw = await router.chat_with_tools(
-                messages=messages,
-                tools=tools,
-                task_type="general",
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            raw = await router.chat_with_tools(tools=tools, **kwargs)
         else:
-            raw = await router.chat(
-                messages=messages,
-                task_type="general",
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            raw = await router.chat(**kwargs)
         trace.append("dispatch: raw_response_received")
         return raw
 
