@@ -20,8 +20,23 @@ audio_in/audio_out/video 原生能力),叠加"服务现实"门控(见 _native_se
 GALAXY_NATIVE_AUDIO / GALAXY_NATIVE_VIDEO(默认关,上了真正的全模态服务端再开)。
 桥可用性(ASR/TTS 是否装了)也一并纳入,缺桥则如实报 unavailable。
 
+第三维:设备
+------------
+前两维("模型声明"×"服务现实")回答的是**这套后端能不能做**,但真正决定能不能做的
+还有第三件事:**这次要在哪台设备上做**。同一个模型、同一套服务,在桌面上能看能听,
+到了手表上就只剩听 —— 手表没有摄像头。
+
+不加这一维的后果不是"少一个功能",而是**误判 + 无从归因**:协商说 vision_in=native,
+于是常驻注意力循环去要一帧图像,设备侧永远返回不了,链路在别处超时/静默失败,
+日志里看到的是"取帧超时",没有任何一处会说"这台设备根本没有摄像头"。
+
+门控原则是**未知不设卡**:设备没报能力(或报的东西完全不在模态词汇里)时,一律
+不改变协商结果 —— 能力表是各注册方自行填的,把"没写"当成"没有"会凭空关掉一堆
+本来能用的东西。只有当设备**确实在用这套词汇说话**、却缺了某一项时,才判定为
+该设备不可用,并在 ``limited_by`` 上标明是**设备**限制而不是模型或服务限制。
+
 self-contained:纯读能力 + 环境门控 + 轻量 import 探测,无重型副作用;
-negotiate() 可注入 effective_io 便于单测(不加载真实模型)。
+negotiate() 可注入 effective_io / device 便于单测(不加载真实模型、不连 UDM)。
 """
 
 from __future__ import annotations
@@ -90,6 +105,10 @@ class ModalityResolution:
     mode: str  # native | bridge | unavailable
     reason: str
     native_capable: bool = False  # 模型是否【声明】原生支持(与服务是否就绪分开)
+    #: 是谁把这个模态限制住的:``""``(没被限制) | ``"model"`` | ``"serving"`` | ``"device"``。
+    #: reason 是给人看的,这个是给代码看的 —— 否则调用方想区分"换个模型就能用"和
+    #: "换台设备才能用",只能去正则匹配那句中文。
+    limited_by: str = ""
 
     @property
     def usable(self) -> bool:
@@ -102,6 +121,7 @@ class ModalityResolution:
             "reason": self.reason,
             "native_capable": self.native_capable,
             "usable": self.usable,
+            "limited_by": self.limited_by,
         }
 
 
@@ -114,6 +134,8 @@ class ModalityPlan:
     audio_out: ModalityResolution
     video_in: ModalityResolution
     tier: str = ""
+    #: 本计划是针对哪台设备协商的。空串 = 未指定设备(本机/不区分),此时不做设备门控。
+    device_id: str = ""
 
     def get(self, modality: str) -> ModalityResolution:
         return {
@@ -126,11 +148,118 @@ class ModalityPlan:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "tier": self.tier,
+            "device_id": self.device_id,
             VISION_IN: self.vision_in.to_dict(),
             AUDIO_IN: self.audio_in.to_dict(),
             AUDIO_OUT: self.audio_out.to_dict(),
             VIDEO_IN: self.video_in.to_dict(),
         }
+
+
+# ── 设备维:硬件/权限门控 ────────────────────────────────────────────────────
+
+#: 各模态所需的设备能力(同义词都列上 —— 各注册方用词不统一,而这里判"没有"就要
+#: 关掉一个模态,宁可多认几个别名,也不能因为写法不同就误判成"这台设备没有麦克风")。
+_REQUIRED_DEVICE_CAPABILITY = {
+    VISION_IN: ("camera", "screen", "display", "screen_capture", "vision"),
+    AUDIO_IN: ("microphone", "mic", "audio_in", "audio"),
+    AUDIO_OUT: ("speaker", "audio_out", "tts", "audio"),
+    VIDEO_IN: ("camera", "video", "screen_capture"),
+}
+
+#: 模态词汇表:设备报的能力里出现过其中任何一个,才说明它"在用这套词汇说话",
+#: 才对它做门控。见模块头"未知不设卡"。
+_MODALITY_VOCABULARY = {c for caps in _REQUIRED_DEVICE_CAPABILITY.values() for c in caps}
+
+
+@dataclass(frozen=True)
+class DeviceModalityGate:
+    """一台设备对各模态的硬件/权限门控。
+
+    ``speaks_vocabulary`` 为 False 时本门**完全透明** —— 见 :meth:`allows`。
+    """
+
+    device_id: str = ""
+    capabilities: frozenset = frozenset()
+    speaks_vocabulary: bool = False
+
+    @classmethod
+    def from_device(cls, device: Any) -> "DeviceModalityGate":
+        """从 UnifiedDevice / dict / device_id 字符串构造门控。
+
+        传 device_id 字符串时会去 UDM 查;查不到就返回一个透明门(而不是把设备
+        当成"什么都没有")—— 查不到设备和设备没有摄像头是两回事。
+        """
+        if device is None:
+            return cls()
+
+        if isinstance(device, str):
+            device = _lookup_device(device)
+            if device is None:
+                return cls()
+
+        if isinstance(device, dict):
+            device_id = str(device.get("device_id") or "")
+            raw_caps = device.get("capabilities") or []
+        else:
+            device_id = str(getattr(device, "device_id", "") or "")
+            raw_caps = getattr(device, "capabilities", None) or []
+
+        caps = frozenset(str(c).strip().lower() for c in raw_caps if str(c).strip())
+        return cls(
+            device_id=device_id,
+            capabilities=caps,
+            speaks_vocabulary=bool(caps & _MODALITY_VOCABULARY),
+        )
+
+    def allows(self, modality: str) -> bool:
+        """这台设备是否具备该模态所需的硬件。
+
+        设备没报能力、或报的东西完全不在模态词汇里 → 一律放行(未知不设卡)。
+        """
+        if not self.speaks_vocabulary:
+            return True
+        required = _REQUIRED_DEVICE_CAPABILITY.get(modality, ())
+        return any(c in self.capabilities for c in required)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "device_id": self.device_id,
+            "capabilities": sorted(self.capabilities),
+            "gating_active": self.speaks_vocabulary,
+        }
+
+
+def _lookup_device(device_id: str) -> Any:
+    """按 device_id 去 UDM 查设备。查不到/UDM 不可用都返回 None。"""
+    if not device_id:
+        return None
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        for dev in get_unified_device_manager().list_devices() or []:
+            if str(getattr(dev, "device_id", "") or "") == device_id:
+                return dev
+    except Exception as exc:  # noqa: BLE001 — 设备源不可用只意味着不做门控
+        logger.debug("设备能力查询失败,按不设卡处理 device_id=%s: %s", device_id, exc)
+    return None
+
+
+def _apply_device_gate(res: ModalityResolution, gate: DeviceModalityGate) -> ModalityResolution:
+    """把设备门控叠加到模型×服务的协商结果上。
+
+    只会**收紧**,不会放宽:模型/服务判为不可用的,设备再全能也还是不可用。
+    """
+    if not res.usable or gate.allows(res.modality):
+        return res
+    required = "/".join(_REQUIRED_DEVICE_CAPABILITY.get(res.modality, ())[:2])
+    return ModalityResolution(
+        res.modality,
+        "unavailable",
+        f"后端可用({res.mode}),但设备 {gate.device_id or '(未命名)'} 未申报所需能力({required})",
+        res.native_capable,
+        limited_by="device",
+    )
 
 
 def _resolve_audio_in(effio, *, asr_ok: bool) -> ModalityResolution:
@@ -139,8 +268,10 @@ def _resolve_audio_in(effio, *, asr_ok: bool) -> ModalityResolution:
         return ModalityResolution(AUDIO_IN, "native", "模型原生听 + 全模态服务已开", True)
     if asr_ok:
         why = "模型原生听但服务未开(GALAXY_NATIVE_AUDIO)→ ASR 转写" if native else "模型不原生听 → ASR 转写"
-        return ModalityResolution(AUDIO_IN, "bridge", why, native)
-    return ModalityResolution(AUDIO_IN, "unavailable", "无原生音频服务、也未装 ASR(faster-whisper/funasr)", native)
+        return ModalityResolution(AUDIO_IN, "bridge", why, native, limited_by="serving" if native else "model")
+    return ModalityResolution(
+        AUDIO_IN, "unavailable", "无原生音频服务、也未装 ASR(faster-whisper/funasr)", native, limited_by="serving"
+    )
 
 
 def _resolve_audio_out(effio, *, tts_ok: bool) -> ModalityResolution:
@@ -149,14 +280,16 @@ def _resolve_audio_out(effio, *, tts_ok: bool) -> ModalityResolution:
         return ModalityResolution(AUDIO_OUT, "native", "模型原生说 + 全模态服务已开", True)
     if tts_ok:
         why = "模型原生说但服务未开(GALAXY_NATIVE_AUDIO)→ TTS 合成" if native else "模型不原生说 → TTS 合成"
-        return ModalityResolution(AUDIO_OUT, "bridge", why, native)
-    return ModalityResolution(AUDIO_OUT, "unavailable", "无原生语音服务、也无可用 TTS", native)
+        return ModalityResolution(AUDIO_OUT, "bridge", why, native, limited_by="serving" if native else "model")
+    return ModalityResolution(AUDIO_OUT, "unavailable", "无原生语音服务、也无可用 TTS", native, limited_by="serving")
 
 
 def _resolve_vision_in(effio) -> ModalityResolution:
     if getattr(effio, "vision", "none") == "native":
         return ModalityResolution(VISION_IN, "native", "模型原生看图(摄像头/屏幕静帧直接进上下文)", True)
-    return ModalityResolution(VISION_IN, "unavailable", "当前档位无视觉模型(换含视觉的模型即自动启用)", False)
+    return ModalityResolution(
+        VISION_IN, "unavailable", "当前档位无视觉模型(换含视觉的模型即自动启用)", False, limited_by="model"
+    )
 
 
 def _resolve_video_in(effio) -> ModalityResolution:
@@ -166,8 +299,10 @@ def _resolve_video_in(effio) -> ModalityResolution:
     if v in ("native", "frames_bridge"):
         native = v == "native"
         why = "视频服务未开(GALAXY_NATIVE_VIDEO)→ 抽静帧走视觉" if native else "模型不原生看视频 → 抽静帧走视觉"
-        return ModalityResolution(VIDEO_IN, "bridge", why, native)
-    return ModalityResolution(VIDEO_IN, "unavailable", "当前档位无视觉能力,无法从视频抽帧理解", False)
+        return ModalityResolution(VIDEO_IN, "bridge", why, native, limited_by="serving" if native else "model")
+    return ModalityResolution(
+        VIDEO_IN, "unavailable", "当前档位无视觉能力,无法从视频抽帧理解", False, limited_by="model"
+    )
 
 
 def negotiate(
@@ -176,13 +311,17 @@ def negotiate(
     tier: Optional[str] = None,
     asr_available: Optional[bool] = None,
     tts_available: Optional[bool] = None,
+    device: Any = None,
 ) -> ModalityPlan:
-    """协商当前(或指定)档位的全模态计划。
+    """协商当前(或指定)档位、(可选)指定设备上的全模态计划。
 
     Args:
         effio: 直接注入 EffectiveIO(测试用);None 则从 model_catalog 取当前/指定档位。
         tier: 指定档位 key;None 用当前已选档位。
         asr_available/tts_available: 覆盖桥可用性探测(测试用)。
+        device: 目标设备 —— ``UnifiedDevice`` / dict / ``device_id`` 字符串 / None。
+            None 表示不区分设备(本机),此时行为与加入设备维之前**完全一致**。
+            给了设备则叠加硬件门控:只收紧不放宽,且未申报能力的设备不设卡。
     """
     if effio is None:
         try:
@@ -209,12 +348,14 @@ def negotiate(
     asr_ok = asr_available if asr_available is not None else asr_bridge_available()
     tts_ok = tts_available if tts_available is not None else tts_bridge_available()
 
+    gate = DeviceModalityGate.from_device(device)
     return ModalityPlan(
-        vision_in=_resolve_vision_in(effio),
-        audio_in=_resolve_audio_in(effio, asr_ok=asr_ok),
-        audio_out=_resolve_audio_out(effio, tts_ok=tts_ok),
-        video_in=_resolve_video_in(effio),
+        vision_in=_apply_device_gate(_resolve_vision_in(effio), gate),
+        audio_in=_apply_device_gate(_resolve_audio_in(effio, asr_ok=asr_ok), gate),
+        audio_out=_apply_device_gate(_resolve_audio_out(effio, tts_ok=tts_ok), gate),
+        video_in=_apply_device_gate(_resolve_video_in(effio), gate),
         tier=tier or "",
+        device_id=gate.device_id,
     )
 
 
@@ -234,6 +375,7 @@ __all__ = [
     "ModalityResolution",
     "ModalityPlan",
     "negotiate",
+    "DeviceModalityGate",
     "asr_bridge_available",
     "tts_bridge_available",
     "MODALITY_CAPABILITY_AUTHORITY",
