@@ -117,7 +117,22 @@ except Exception as _v3_exc:
 
 `core/unified_result_ingress.py:1318-1324` 同理：`require_review` 裁决**只在 strict 下阻断**。
 
-### 新-3 WearOS 不能独立构建 — 仍存在【B】
+### 新-3 WearOS 不能独立构建 — ❌ **本条系误判，已撤回**
+
+原判断写的是「README 未说明这条硬约束」。**这是错的 —— 我当时没读 README。**
+
+`galaxy-wearos/README.md:39-71` 已经把这条约束写得相当完整：
+- `:46-52` 明确"**必须**把 `ufo-galaxy-android` 克隆为本仓库的**同级目录**"，
+  并给出目录结构图；
+- `:59-61` 给出两仓的 clone 顺序；
+- `:71` 甚至写明了缺失时的确切报错 `Project directory ... does not exist`。
+
+跨仓 `projectDir` 引用本身是 Gradle 的正常用法（composite build 的替代），
+在**已被文档充分说明**的前提下不构成缺陷。本条撤回，无需修复。
+
+保留这条记录是为了留痕：这是本轮审计中我下错的第 5 条结论。
+
+### 新-3（原编号保留）WearOS 跨仓构建耦合 — 设计风险【B】
 
 `galaxy-wearos/settings.gradle.kts:20-27`：
 
@@ -132,8 +147,13 @@ project(":shared-protocol").projectDir =
 
 `app/build.gradle.kts:125,128` 依赖这两个 project。
 
-**后果**：单独 clone `galaxy-wearos` **无法构建** —— 必须把 `ufo-galaxy-android`
-以**精确目录名**放在同级父目录。README 未说明这条硬约束。
+**后果**：单独 clone `galaxy-wearos` 无法构建，必须把 `ufo-galaxy-android`
+以精确目录名放在同级父目录。
+
+**这一点 README 已充分说明**（见上），因此不是缺陷。残留的是**设计风险**：
+两仓通过文件系统相对路径耦合，任一方目录改名即断，且 CI 无法单独构建 wearos。
+若要消除，需改用 Gradle composite build 或把 shared 模块发布为 maven artifact ——
+属于架构选择，不在本轮修复范围。
 
 ### 新-4 WearOS 在操作面完全不可见 — 仍存在【B】
 
@@ -185,7 +205,20 @@ EVENT / HANDOFF_ENVELOPE_V* / LIQUID_EVENT / PING / STATE_EVENT / TAKEOVER_RESPO
 | `dual_repo_wiring_probe.py` | "Shadow authority — not on hot path" | ❌ **过期** |
 
 **真相**（人工核实）：`core/command_router.py:2084` 确实调用
-`get_canonical_dispatch_slots()`，是**懒导入**，两个过期 probe 的朴素 grep 没匹配到。
+`get_canonical_dispatch_slots()`。
+
+⚠️ **本条的成因解释我最初写错了**，已更正：我原先写"两个过期 probe 的朴素 grep
+没匹配到懒导入"。实际读代码后发现 **grep 是匹配得上的**，两个 probe 过期的真正
+原因各不相同：
+
+* `final_validation_probe.py` SPLIT-01 —— 它断言的是**「缺口存在」**
+  （`not v3_in_command_router` 时 PASS）。probe 自己的注释就写着
+  "Once P0 fix is applied, this probe inverts"，但 P0 修好后没人去反转它。
+* `dual_repo_wiring_probe.py` —— `verdict` 是按 grep 动态算的（会算出 HOT_PATH），
+  但 `notes` 是**硬编码字符串** `"Shadow authority layer — not called from
+  dispatch hot path"`，于是一边判 HOT_PATH 一边打印 shadow，自相矛盾。
+
+两者都已在本轮修复（见文末「已修复」）。
 
 **问题**：`final_validation_probe.py` 当前输出 `1 CRITICAL PROBE(S) FAILED`，
 而该失败是 **probe 自己错了**。长期如此会训练团队忽略 probe 输出。
@@ -822,6 +855,38 @@ npm 无 lock（B10）；Compose 弱默认凭据（B5）；`curl|sh` 依赖外网
 | WearOS UI / sensing 层 | ~10.5k 行中的多数 | 只审了协议 / 网络 / 凭据 / 构建 |
 | `panel/src` 组件逻辑 | 26 文件 | 只做端点消费面提取，未审逻辑正确性 |
 | 性能 / 并发正确性 | — | 全未审 |
+
+---
+
+## 八点五、本轮已修复清单
+
+在同一分支上直接落地的修复（**不含** `main.py` / `unified_launcher.py` /
+`launch_desktop.py` / `system_manager.py` 这类启动器，也不含 `electron/`——
+按要求跳过，故 B17 / B18 / B12 / B22 / P14 本轮未动）。
+
+| 编号 | 修复内容 | 验证 |
+|---|---|---|
+| **B4** | `docker-compose.yml:44` 硬编码 Mongo 凭据 → `${MONGODB_URI:?}` | 无 `.env` 时 `docker compose config` exit=1 并指名缺失键 |
+| **B5** | 9 处弱默认全清。常驻服务用 `${VAR:?}`，profile 服务留空 —— 因为**实测确认** Compose 插值作用于整份文件、与 profile 无关，profiled 服务里的 `${VAR:?}` 同样会让默认 `up` 失败 | 默认 / `--profile full` 均 exit=0 |
+| **B9** | Linux `curl \| sh` 删除，改走与 Windows 分支同源的「钉版本 + 官方 SHA256SUMS」路径（提取为共用 helper）；顺带修掉原 Windows 分支「拿不到 SHA256SUMS 就跳过校验」的降级。Ollama 因无法核实其 release 资产布局，改为默认拒绝 + 可操作提示 + `GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT` opt-in | 编译通过；活跃代码零 `curl\|sh` |
+| **B1/B6** | 豁免表改 (路径→方法)：`/api/v1/config` 只豁免 GET；`/metrics`、`/docs`、`/openapi.json` 仅非生产豁免 | 方法感知与生产模式行为逐项验证 |
+| **B2** | `core/routes/perception.py` 整组挂 `Depends(require_auth)` | 相关切片 4099 passed |
+| **B3** | Shell 节点改**白名单驱动**（黑名单降为第二道）；黑名单匹配前归一化空白，堵掉 `rm  -rf /` 双空格绕过；`_executable_name` 使 `/bin/rm` 不能绕过 | 新增 29 项测试全通过 |
+| **B7** | 新增 `core/log_redaction.py`；修 3 处实际泄漏（2 处 OAuth 响应体、1 处 API key 前缀→改留末位） | 各形态逐项验证 |
+| **B8** | `tray_icon.py` 去掉 `shell=True`，改 `shutil.which("npm.cmd")` 显式解析 | 编译通过 |
+| **B13** | `atomic_json` 显式 `os.chmod(0o600)`——此前是"碰巧"继承 mkstemp 的模式 | 新增 6 项权限测试 |
+| **B21** | 5 处文档快捷键改为实际注册值，补上此前完全没有的隐藏键 | 新增防漂移门，双向验证（当前 3 passed；改回 `Ctrl+Space` 即 2 failed） |
+| **新-2** | 三处 `compat` 默认 → `strict`（fail-open → fail-closed）；V3 门异常日志 `debug`→`error` | continuity/dispatch 切片 6397 passed |
+| **新-5** | WearOS 明文降级不再静默：记为可查询状态 + 设置页显示告警 | ⚠️ 需真机验证（该仓单测为纯 JUnit，无 Robolectric） |
+| **新-7** | 两个过期 probe 修复 | `final_validation_probe` 现 **46 passed / 0 failed**（此前长期 1 failed）；四个 probe 对 V3 判定一致 |
+| **额外** | CI 实证的 `sys.path` 顶层模块名劫持（`import main` 解析到 `nodes/*/main.py`）：conftest 加防护 + 新增回归门 | 双向验证（守卫在时 3 passed，禁用后 2 failed） |
+
+### 本轮修复中被自己的测试抓到的真 bug
+
+写 B3 的测试时，`_executable_name` 的 Windows 路径用例失败：`shlex` 在 POSIX
+模式下把反斜杠当转义符吃掉，`C:\Python\python.exe` 解析成 `c:pythonpython`。
+`os.path.basename` 在 Linux 上同样不认反斜杠。已改用
+`shlex.split(posix=False)` + 按 `[\\/]` 同时切分。
 
 ---
 
