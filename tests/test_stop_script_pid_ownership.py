@@ -24,9 +24,7 @@ Windows 侧的对应实现是 ``stop.bat``（此前完全缺失，仓库只有 s
 这里只做静态检查，因为无法在 Linux runner 上执行 batch。
 """
 
-import os
 import shutil
-import signal
 import subprocess
 import sys
 import time
