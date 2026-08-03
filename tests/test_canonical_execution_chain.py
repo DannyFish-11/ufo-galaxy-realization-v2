@@ -258,10 +258,8 @@ class TestSidePathModuleRegistry:
 
         assert "core.remote_execution_mode_resolver" in SIDE_PATH_MODULE_REGISTRY
 
-    def test_repo_coordinator_registered(self):
-        from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
-
-        assert "core.repo_coordinator" in SIDE_PATH_MODULE_REGISTRY
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_agent_bridge_registered(self):
         from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY

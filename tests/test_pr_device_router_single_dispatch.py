@@ -354,22 +354,11 @@ class TestLegacyPathsRegistry:
         assert entry is not None
         assert entry.pr_guardrail_added == "PR-S3"
 
-    def test_repo_coordinator_dispatch_is_legacy_compatibility(self):
-        from core.orchestration_authority.legacy_paths import (
-            LEGACY_PATH_REGISTRY,
-            LegacyPathStatus,
-        )
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
-        entry = LEGACY_PATH_REGISTRY.get("core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android")
-        assert entry is not None, "RepoCoordinator.dispatch_agent_to_android must be in registry"
-        assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
-
-    def test_repo_coordinator_dispatch_guardrail_is_prs3(self):
-        from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-
-        entry = LEGACY_PATH_REGISTRY.get("core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android")
-        assert entry is not None
-        assert entry.pr_guardrail_added == "PR-S3"
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_cross_device_coordinator_still_legacy_compatibility(self):
         from core.orchestration_authority.legacy_paths import (

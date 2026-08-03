@@ -208,12 +208,8 @@ class TestAsyncIoBoundaryHardening:
         ]
         assert not deprecated_calls, "llm_manager.py reload() must not use deprecated asyncio.get_running_loop()"
 
-    def test_async_queue_uses_get_running_loop(self):
-        """``core/queueing/async_queue.py`` 的 ``submit()`` 方法应使用 ``asyncio.get_running_loop()``。"""
-        source = self._read_source("core/queueing/async_queue.py")
-        assert (
-            "asyncio.get_running_loop()" in source
-        ), "core/queueing/async_queue.py must use asyncio.get_running_loop() in submit()"
+    # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+    # 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
     def test_ingest_runtime_uses_get_running_loop(self):
         """``core/multimodal/ingest_runtime.py`` 应使用 ``asyncio.get_running_loop()``。"""

@@ -943,11 +943,8 @@ class TestHandoffEnvelopeV2AuthorityField:
 # ---------------------------------------------------------------------------
 
 
-class TestCanonicalHandoffPathModule:
-    """core/canonical_handoff_path.py provides canonical anchor for PR-3."""
-
-    def test_canonical_path_module_importable(self):
-        import core.canonical_handoff_path  # noqa: F401
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的

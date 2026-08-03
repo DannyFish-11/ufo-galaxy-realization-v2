@@ -3,9 +3,9 @@ PR-4: Protocol Convergence — guardrail tests
 =============================================
 
 Enforces:
-1. core/galaxy_core.py and core/repo_coordinator.py do NOT import AIPMessage
-   or MessageType from enhancements.multidevice.device_protocol (v2 layer).
-   They must import from galaxy_gateway.protocol.aip_v3 instead.
+1. core/ 全树中没有任何文件从 enhancements.multidevice.device_protocol（v2 层）
+   取 AIPMessage / MessageType；它们必须从 galaxy_gateway.protocol.aip_v3 取。
+   （原先是一份两元素的手写文件清单，其中一个文件被删后守卫直接炸；已改为全树扫描。）
 2. Binary AIP v2 frames are converted through the canonical compat adapter
    (galaxy_gateway.protocol.compat.aip_v2_binary_to_v3) before entering
    business logic; the business layer only ever sees AIPMessage v3 objects.
@@ -62,16 +62,14 @@ def _imports_from(source: str, module_prefix: str) -> list[str]:
     return matches
 
 
-def _core_files_importing(module_prefix: str) -> list[tuple[str, str]]:
+def _core_files_importing(module_prefix: str) -> list:
     """[(相对路径, 被 import 的模块名)]：core/ 全树里从 *module_prefix* 取符号的文件。
 
-    取代原先手写的 ``["core/galaxy_core.py", "core/repo_coordinator.py"]``。那份
-    清单在 core/galaxy_core.py 作为死代码删除后直接 FileNotFoundError（本文件与
-    tests/test_protocol_convergence.py 各炸 2 条）；反方向上它也不会随 core/ 新增
-    文件而生长，新文件从此不受约束且**不报错**。"业务层不得 import v2 协议层"
-    这条判据对整个 core/ 都成立，本来就没有只挑两个文件的理由。
+    取代原先手写的两元素文件清单。那份清单在其中一个文件作为死代码删除后直接
+    FileNotFoundError；反方向上它也不会随 core/ 新增文件而生长，新文件从此不受约束
+    且**不报错**。"业务层不得 import v2 协议层"这条判据对整个 core/ 都成立。
     """
-    offenders: list[tuple[str, str]] = []
+    offenders: list = []
     for path in sorted((REPO_ROOT / "core").rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
@@ -102,37 +100,10 @@ class TestCoreNoV2Imports:
         """反向：空列表既可能是"没人违规"，也可能是"扫描压根没跑"。钉住后者。"""
         assert _core_files_importing("typing"), "守卫失效：core/ 全树扫描没有返回任何 import，判据恒真"
 
-    # 这条**刻意**仍只针对具体文件，没有跟着上面一起推广到 core/ 全树。
-    #
-    # 它的后半段是"文件里出现 AIPMessage/AIPMessageType 就必须从
-    # galaxy_gateway.protocol.aip_v3 import"。放到全树上实测有 9 个 core 文件不满足，
-    # 而它们**都不是缺陷**：
-    #   core/schemas/aip_v3.py            —— AIPMessage 的**定义处**，自然不 import 自己
-    #   core/aip_transport.py             —— 只在 docstring/注释里提到这个名字
-    #   core/platform_closure_audit.py    —— 同上（一条待办文案里出现）
-    #   core/routes/devices.py            —— 同上（一句注释）
-    #   core/unified/connection_manager.py—— 从 galaxy_gateway.protocol 这个**包**取，
-    #                                        不是 .aip_v3 子模块，只是前缀对不上
-    # 把判据推广会造出 9 条假阳性。前一条（不得 import v2 层）是真正的全仓不变量，
-    # 所以只推广那一条；这条保持原有的具名范围。
-    @pytest.mark.parametrize("rel_path", ["core/repo_coordinator.py"])
-    def test_uses_aip_v3_for_protocol_types(self, rel_path: str):
-        """AIPMessage and MessageType must come from galaxy_gateway.protocol.aip_v3."""
-        source = _source(rel_path)
-        # The file is allowed to import AIPMessage / MessageType from aip_v3 OR
-        # to have them as None (optional import).  What's forbidden is sourcing
-        # them from the enhancements.multidevice layer.
-        v3_imports = _imports_from(source, "galaxy_gateway.protocol.aip_v3")
-        enhancements_imports = _imports_from(source, "enhancements.multidevice")
-        assert (
-            enhancements_imports == []
-        ), f"{rel_path} still imports from enhancements.multidevice: {enhancements_imports}"
-        # If the file references AIPMessage/AIPMessageType at all they should
-        # come from the v3 canonical source.
-        if "AIPMessage" in source or "AIPMessageType" in source:
-            assert v3_imports, (
-                f"{rel_path} uses AIPMessage/AIPMessageType but does not import " "from galaxy_gateway.protocol.aip_v3"
-            )
+    # 此处原有 test_uses_aip_v3_for_protocol_types：断言具名文件若提到 AIPMessage
+    # 就必须从 galaxy_gateway.protocol.aip_v3 取。它唯一的参数 core/repo_coordinator.py
+    # 已作为零引用死代码删除（公开符号在活代码里全有同名等价），用例失去对象。
+    # 上面那条「不得 import v2 层」是真正的全仓不变量，已推广到 core/ 全树扫描，覆盖仍在。
 
 
 # ---------------------------------------------------------------------------

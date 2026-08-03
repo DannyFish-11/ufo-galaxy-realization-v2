@@ -98,21 +98,8 @@ def _run(coro):
 # =============================================================================
 
 
-class TestCommandsPackageInit(unittest.TestCase):
-
-    def test_01_commands_init_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "__init__.py").exists(),
-            "core/commands/__init__.py must exist",
-        )
-
-    def test_02_commands_init_has_authority_sentinel(self):
-        content = _read("core/commands/__init__.py")
-        self.assertIn(
-            "COMMAND_ROUTING_PACKAGE_AUTHORITY",
-            content,
-            "core/commands/__init__.py must define COMMAND_ROUTING_PACKAGE_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -130,19 +117,8 @@ class TestCommandsPackageInit(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandsRouterModule(unittest.TestCase):
-
-    def test_06_commands_router_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "router.py").exists(),
-            "core/commands/router.py must exist",
-        )
-
-    def test_07_commands_router_has_authority_sentinel(self):
-        content = _read("core/commands/router.py")
-        self.assertIn(
-            "COMMAND_ROUTER_AUTHORITY", content, "core/commands/router.py must define COMMAND_ROUTER_AUTHORITY"
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -157,19 +133,8 @@ class TestCommandsRouterModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandRegistryModule(unittest.TestCase):
-
-    def test_10_registry_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "registry.py").exists(),
-            "core/commands/registry.py must exist",
-        )
-
-    def test_11_registry_has_authority_sentinel(self):
-        content = _read("core/commands/registry.py")
-        self.assertIn(
-            "COMMAND_REGISTRY_AUTHORITY", content, "core/commands/registry.py must define COMMAND_REGISTRY_AUTHORITY"
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -184,21 +149,8 @@ class TestCommandRegistryModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandDispatcherModule(unittest.TestCase):
-
-    def test_14_dispatcher_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "dispatcher.py").exists(),
-            "core/commands/dispatcher.py must exist",
-        )
-
-    def test_15_dispatcher_has_authority_sentinel(self):
-        content = _read("core/commands/dispatcher.py")
-        self.assertIn(
-            "COMMAND_DISPATCHER_AUTHORITY",
-            content,
-            "core/commands/dispatcher.py must define COMMAND_DISPATCHER_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -210,19 +162,8 @@ class TestCommandDispatcherModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandContextModule(unittest.TestCase):
-
-    def test_17_context_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "context.py").exists(),
-            "core/commands/context.py must exist",
-        )
-
-    def test_18_context_has_authority_sentinel(self):
-        content = _read("core/commands/context.py")
-        self.assertIn(
-            "COMMAND_CONTEXT_AUTHORITY", content, "core/commands/context.py must define COMMAND_CONTEXT_AUTHORITY"
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -237,21 +178,8 @@ class TestCommandContextModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandMiddlewareModule(unittest.TestCase):
-
-    def test_21_middleware_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "middleware.py").exists(),
-            "core/commands/middleware.py must exist",
-        )
-
-    def test_22_middleware_has_authority_sentinel(self):
-        content = _read("core/commands/middleware.py")
-        self.assertIn(
-            "COMMAND_MIDDLEWARE_AUTHORITY",
-            content,
-            "core/commands/middleware.py must define COMMAND_MIDDLEWARE_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -263,21 +191,8 @@ class TestCommandMiddlewareModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandValidatorsSubpackage(unittest.TestCase):
-
-    def test_24_validators_init_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "validators" / "__init__.py").exists(),
-            "core/commands/validators/__init__.py must exist",
-        )
-
-    def test_25_validators_has_authority_sentinel(self):
-        content = _read("core/commands/validators/__init__.py")
-        self.assertIn(
-            "COMMAND_VALIDATOR_AUTHORITY",
-            content,
-            "core/commands/validators/__init__.py must define COMMAND_VALIDATOR_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -295,21 +210,8 @@ class TestCommandValidatorsSubpackage(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandHandlersSubpackage(unittest.TestCase):
-
-    def test_29_handlers_init_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "handlers" / "__init__.py").exists(),
-            "core/commands/handlers/__init__.py must exist",
-        )
-
-    def test_30_handlers_has_authority_sentinel(self):
-        content = _read("core/commands/handlers/__init__.py")
-        self.assertIn(
-            "COMMAND_HANDLER_AUTHORITY",
-            content,
-            "core/commands/handlers/__init__.py must define COMMAND_HANDLER_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -350,11 +252,8 @@ class TestLLMPackageInit(unittest.TestCase):
 # =============================================================================
 
 
-class TestLLMRouterModule(unittest.TestCase):
-
-    def test_35_llm_router_has_authority_sentinel(self):
-        content = _read("core/llm/router.py")
-        self.assertIn("LLM_ROUTER_AUTHORITY", content, "core/llm/router.py must define LLM_ROUTER_AUTHORITY")
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
@@ -398,17 +297,8 @@ class TestLLMPoliciesModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestLLMFailoverModule(unittest.TestCase):
-
-    def test_41_failover_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "llm" / "failover.py").exists(),
-            "core/llm/failover.py must exist",
-        )
-
-    def test_42_failover_has_authority_sentinel(self):
-        content = _read("core/llm/failover.py")
-        self.assertIn("LLM_FAILOVER_AUTHORITY", content, "core/llm/failover.py must define LLM_FAILOVER_AUTHORITY")
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的

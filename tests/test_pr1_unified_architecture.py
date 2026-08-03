@@ -576,11 +576,8 @@ class TestImportSanity:
         for name in ("DeviceState", "TaskState", "CognitiveState", "PresenceState", "ExecutionState"):
             assert hasattr(mod, name), f"state_schema missing {name}"
 
-    def test_legacy_adapters_module(self):
-        import importlib
-
-        mod = importlib.import_module("core.legacy_adapters")
-        assert hasattr(mod, "LegacyDeviceAgentManagerAdapter")
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_state_event_bus_emit_state(self):
         import importlib
