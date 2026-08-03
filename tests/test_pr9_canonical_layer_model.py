@@ -659,8 +659,8 @@ class TestArchitectureModulesAgreeOnLayerModel:
         assert "CI" in authority or "release" in authority.lower() or "posture" in authority.lower()
 
     def test_architecture_invariants_module_exported_in_core_shim(self):
-        """core.architecture_invariants shim re-exports from tools.architecture.architecture_invariants."""
-        import core.architecture_invariants as shim
+        """tools.architecture.architecture_invariants shim re-exports from tools.architecture.architecture_invariants."""
+        import tools.architecture.architecture_invariants as shim
 
         # After the shim loads the real module, CANONICAL_AUTHORITY_LABELS must be accessible.
         assert hasattr(shim, "CANONICAL_AUTHORITY_LABELS")

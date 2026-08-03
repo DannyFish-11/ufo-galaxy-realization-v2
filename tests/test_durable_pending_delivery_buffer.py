@@ -328,27 +328,9 @@ def test_store_path_constant_is_string():
 # ---------------------------------------------------------------------------
 
 
-def test_process_restart_residual_risk_is_false():
-    """INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART must be False — durable buffer present."""
-    from core.cross_device_integration_reality import (
-        DURABLE_PENDING_DELIVERY_BUFFER_PRESENT,
-        INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
-    )
-
-    assert DURABLE_PENDING_DELIVERY_BUFFER_PRESENT is True
-    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False, (
-        "INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART must be False now that "
-        "DurablePendingDeliveryBuffer backs the pending-delivery buffer."
-    )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
-def test_dispatch_durability_verdict_is_runnable_but_conditional():
-    """DISPATCH_DURABILITY_ACROSS_RESTART must be RUNNABLE_BUT_CONDITIONAL (not MISSING)."""
-    from core.final_integrated_audit_verdict import (
-        DISPATCH_DURABILITY_ACROSS_RESTART,
-        CapabilityVerdict,
-    )
-
-    assert (
-        DISPATCH_DURABILITY_ACROSS_RESTART == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
-    ), "Pending-delivery buffer is now durable — restart durability must not be MISSING."
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。

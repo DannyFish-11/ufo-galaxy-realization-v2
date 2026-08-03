@@ -366,54 +366,8 @@ class TestStateSchema:
 # ===========================================================================
 
 
-class TestLegacyAdapters:
-    def test_package_importable(self):
-        from core.legacy_adapters import (
-            LegacyDeviceAgentManagerAdapter,
-        )
-
-        assert LegacyDeviceAgentManagerAdapter is not None
-
-    def test_device_agent_manager_adapter_get_device_delegates(self):
-        from core.legacy_adapters.device_agent_manager_adapter import (
-            LegacyDeviceAgentManagerAdapter,
-        )
-
-        adapter = LegacyDeviceAgentManagerAdapter()
-        mock_unified = MagicMock()
-        mock_device = MagicMock()
-        mock_unified.get_device.return_value = mock_device
-        adapter._unified = mock_unified
-
-        result = adapter.get_device("dev-001")
-        mock_unified.get_device.assert_called_once_with("dev-001")
-        assert result is mock_device
-
-    def test_device_agent_manager_adapter_heartbeat_delegates(self):
-        from core.legacy_adapters.device_agent_manager_adapter import (
-            LegacyDeviceAgentManagerAdapter,
-        )
-
-        adapter = LegacyDeviceAgentManagerAdapter()
-        mock_unified = MagicMock()
-        adapter._unified = mock_unified
-
-        adapter.heartbeat("dev-001")
-        mock_unified.heartbeat.assert_called_once_with("dev-001")
-
-    def test_device_agent_manager_adapter_get_all_devices_delegates(self):
-        from core.legacy_adapters.device_agent_manager_adapter import (
-            LegacyDeviceAgentManagerAdapter,
-        )
-
-        adapter = LegacyDeviceAgentManagerAdapter()
-        mock_unified = MagicMock()
-        mock_unified.list_devices.return_value = ["dev1", "dev2"]
-        adapter._unified = mock_unified
-
-        result = adapter.get_all_devices()
-        mock_unified.list_devices.assert_called_once()
-        assert result == ["dev1", "dev2"]
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ===========================================================================
@@ -622,11 +576,8 @@ class TestImportSanity:
         for name in ("DeviceState", "TaskState", "CognitiveState", "PresenceState", "ExecutionState"):
             assert hasattr(mod, name), f"state_schema missing {name}"
 
-    def test_legacy_adapters_module(self):
-        import importlib
-
-        mod = importlib.import_module("core.legacy_adapters")
-        assert hasattr(mod, "LegacyDeviceAgentManagerAdapter")
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_state_event_bus_emit_state(self):
         import importlib

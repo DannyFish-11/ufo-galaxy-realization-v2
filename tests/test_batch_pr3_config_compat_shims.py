@@ -178,33 +178,8 @@ class TestCompatRouteDeprecation:
 # ---------------------------------------------------------------------------
 
 
-class TestDeviceAgentManagerAdapterDeprecation:
-
-    def test_has_deprecated_docstring(self):
-        src = _read("core/legacy_adapters/device_agent_manager_adapter.py")
-        assert _has_deprecated_docstring(
-            src
-        ), "device_agent_manager_adapter.py must have '.. deprecated::' in its docstring"
-
-    def test_has_removal_target(self):
-        src = _read("core/legacy_adapters/device_agent_manager_adapter.py")
-        assert _has_removal_target(src), "device_agent_manager_adapter.py must declare a removal target"
-
-    def test_mentions_canonical_replacement(self):
-        src = _read("core/legacy_adapters/device_agent_manager_adapter.py")
-        assert (
-            "UnifiedDeviceManager" in src or "unified.device_manager" in src
-        ), "device_agent_manager_adapter.py must name the canonical replacement"
-
-    def test_new_code_must_not_depend(self):
-        src = _read("core/legacy_adapters/device_agent_manager_adapter.py")
-        assert (
-            "New code must not" in src or "new code must not" in src or "must not depend" in src
-        ), "device_agent_manager_adapter.py must state that new code must not depend on it"
-
-    def test_removal_target_pr5(self):
-        src = _read("core/legacy_adapters/device_agent_manager_adapter.py")
-        assert "PR-5" in src or "Batch PR-5" in src, "device_agent_manager_adapter.py must mention PR-5 removal target"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------

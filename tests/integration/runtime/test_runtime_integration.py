@@ -124,32 +124,8 @@ class TestSchemaInterop:
         assert merged["is_retryable"] is True
         json.dumps(merged)
 
-    def test_authority_metadata_plus_plan_plus_lifecycle(self):
-        """Authority metadata, plan, and lifecycle all coexist in the same result dict."""
-        from core.schemas.execution_authority import ExecutionLayerRole, build_authority_metadata
-        from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
-        from core.schemas.execution_plan import build_execution_plan
-
-        meta = build_authority_metadata(
-            ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY,
-            canonical_module="core.openclawd",
-            canonical_class="OpenClawd",
-        )
-        plan = build_execution_plan(execution_path="local", delegation_point="local")
-        lc = lifecycle_summary(ExecutionLifecycleState.RUNNING)
-
-        # Simulate how OpenClawd assembles its response metadata
-        result = {
-            "success": True,
-            "authority_role": meta.layer_role,  # already a string
-            "execution_plan_summary": plan.to_dict(),
-            **lc,
-        }
-
-        assert result["authority_role"] == "subject_decision_authority"
-        assert result["lifecycle_state"] == "running"
-        assert result["execution_plan_summary"]["execution_path"] == "local"
-        json.dumps(result)
+    # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+    # 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
     def test_failure_record_integrates_with_lifecycle_failed_state(self):
         """FAILED lifecycle state and a failure record reference the same domain."""
@@ -762,7 +738,7 @@ class TestDiagnosticsIntegration:
         ]
 
     def test_full_layer_snapshot_is_valid(self):
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
@@ -777,7 +753,7 @@ class TestDiagnosticsIntegration:
         assert report.error_count == 0
 
     def test_diagnostics_report_covers_all_checks(self):
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
@@ -790,7 +766,7 @@ class TestDiagnosticsIntegration:
 
     def test_diagnostics_with_remote_execution_mode(self):
         """Adding remote_execution_mode to the substrate layer does not break diagnostics."""
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
@@ -804,7 +780,7 @@ class TestDiagnosticsIntegration:
 
     def test_three_layer_snapshot_still_valid(self):
         """A snapshot with only three layers (no cognition) is still diagnostically sound."""
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )

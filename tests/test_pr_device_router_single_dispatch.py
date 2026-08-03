@@ -249,78 +249,8 @@ class TestAndroidBridgeGUIAdapters:
 # ---------------------------------------------------------------------------
 
 
-class TestRepoCoordinatorDelegatesToRouter:
-    """dispatch_agent_to_android delegates to DeviceRouter.route_task."""
-
-    @pytest.mark.asyncio
-    async def test_dispatch_agent_calls_route_task(self):
-        """When DeviceRouter is available, dispatch_agent_to_android uses route_task."""
-        from core.repo_coordinator import RepoCoordinator
-
-        coordinator = RepoCoordinator()
-        # Register the device in the local table
-        coordinator.android_devices["dev_rc_01"] = {
-            "device_id": "dev_rc_01",
-            "device_type": "android",
-            "status": "online",
-            "websocket_url": "ws://localhost/test",
-            "endpoint": "",
-        }
-
-        route_task_calls = []
-
-        async def _fake_route_task(command, context=None):
-            route_task_calls.append((command, context))
-            return {"success": True, "routed_via": "device_router"}
-
-        mock_router = MagicMock()
-        mock_router.route_task = _fake_route_task
-
-        with patch("galaxy_gateway.device_router.device_router", mock_router):
-            result = await coordinator.dispatch_agent_to_android("dev_rc_01", "screenshot", {"quality": 80})
-
-        assert len(route_task_calls) == 1
-        assert route_task_calls[0][1]["device_id"] == "dev_rc_01"
-        assert result["routed_via"] == "device_router"
-
-    @pytest.mark.asyncio
-    async def test_dispatch_agent_passes_device_id_in_context(self):
-        """dispatch_agent_to_android passes device_id in route_task context."""
-        from core.repo_coordinator import RepoCoordinator
-
-        coordinator = RepoCoordinator()
-        coordinator.android_devices["dev_rc_02"] = {
-            "device_id": "dev_rc_02",
-            "device_type": "android",
-            "status": "online",
-            "websocket_url": "",
-            "endpoint": "",
-        }
-
-        captured_context = {}
-
-        async def _capture_context(command, context=None):
-            captured_context.update(context or {})
-            return {"success": True}
-
-        mock_router = MagicMock()
-        mock_router.route_task = _capture_context
-
-        with patch("galaxy_gateway.device_router.device_router", mock_router):
-            await coordinator.dispatch_agent_to_android("dev_rc_02", "take_screenshot", {"resolution": "1080p"})
-
-        assert captured_context.get("device_id") == "dev_rc_02"
-        assert captured_context.get("source") == "repo_coordinator"
-
-    @pytest.mark.asyncio
-    async def test_dispatch_agent_returns_not_found_for_unregistered_device(self):
-        """Returns error dict when device not registered in coordinator."""
-        from core.repo_coordinator import RepoCoordinator
-
-        coordinator = RepoCoordinator()
-        result = await coordinator.dispatch_agent_to_android("nonexistent_device", "screenshot", {})
-        assert result["success"] is False
-        assert "not found" in result.get("error", "").lower()
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------
@@ -328,40 +258,8 @@ class TestRepoCoordinatorDelegatesToRouter:
 # ---------------------------------------------------------------------------
 
 
-class TestRepoCoordinatorFallback:
-    """dispatch_agent_to_android falls back gracefully when router raises."""
-
-    @pytest.mark.asyncio
-    async def test_fallback_on_router_exception(self):
-        """When DeviceRouter raises, falls back to direct send path."""
-        from core.repo_coordinator import RepoCoordinator
-
-        coordinator = RepoCoordinator()
-        coordinator.android_devices["dev_rc_fb"] = {
-            "device_id": "dev_rc_fb",
-            "device_type": "android",
-            "status": "online",
-            "websocket_url": "",
-            "endpoint": "http://localhost/api",
-        }
-
-        async def _raise_route_task(command, context=None):
-            raise RuntimeError("router unavailable")
-
-        mock_router = MagicMock()
-        mock_router.route_task = _raise_route_task
-
-        # Patch _send_via_http to return success
-        async def _fake_http(endpoint, message):
-            return {"success": True, "via": "http_fallback"}
-
-        coordinator._send_via_http = _fake_http  # type: ignore[method-assign]
-
-        with patch("galaxy_gateway.device_router.device_router", mock_router):
-            result = await coordinator.dispatch_agent_to_android("dev_rc_fb", "generic", {})
-
-        # Should have fallen through to HTTP fallback
-        assert result.get("via") == "http_fallback"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------
@@ -456,22 +354,11 @@ class TestLegacyPathsRegistry:
         assert entry is not None
         assert entry.pr_guardrail_added == "PR-S3"
 
-    def test_repo_coordinator_dispatch_is_legacy_compatibility(self):
-        from core.orchestration_authority.legacy_paths import (
-            LEGACY_PATH_REGISTRY,
-            LegacyPathStatus,
-        )
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
-        entry = LEGACY_PATH_REGISTRY.get("core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android")
-        assert entry is not None, "RepoCoordinator.dispatch_agent_to_android must be in registry"
-        assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
-
-    def test_repo_coordinator_dispatch_guardrail_is_prs3(self):
-        from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-
-        entry = LEGACY_PATH_REGISTRY.get("core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android")
-        assert entry is not None
-        assert entry.pr_guardrail_added == "PR-S3"
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_cross_device_coordinator_still_legacy_compatibility(self):
         from core.orchestration_authority.legacy_paths import (

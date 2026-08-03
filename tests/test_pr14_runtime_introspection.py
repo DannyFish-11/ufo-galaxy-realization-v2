@@ -753,7 +753,7 @@ class TestArchitectureStatusReport(unittest.TestCase):
     """I) ArchitectureStatusReport data contract."""
 
     def setUp(self):
-        from core.architecture_status_report import ArchitectureStatusReport
+        from tools.architecture.architecture_status_report import ArchitectureStatusReport
 
         self.cls = ArchitectureStatusReport
 
@@ -806,7 +806,7 @@ class TestBuildArchitectureStatusReport(unittest.TestCase):
     """J) build_architecture_status_report — authority chain checks."""
 
     def setUp(self):
-        from core.architecture_status_report import build_architecture_status_report
+        from tools.architecture.architecture_status_report import build_architecture_status_report
 
         self.build = build_architecture_status_report
 
@@ -874,7 +874,7 @@ class TestArchitectureStatusReportDiagnostics(unittest.TestCase):
     """K) diagnostics integration in architecture status report."""
 
     def setUp(self):
-        from core.architecture_status_report import build_architecture_status_report
+        from tools.architecture.architecture_status_report import build_architecture_status_report
 
         self.build = build_architecture_status_report
 
@@ -918,8 +918,8 @@ class TestArchitectureStatusFromSnapshot(unittest.TestCase):
     """L) architecture_status_from_snapshot."""
 
     def setUp(self):
-        from core.architecture_status_report import architecture_status_from_snapshot
         from core.runtime_introspection import RuntimeIntrospectionSnapshot
+        from tools.architecture.architecture_status_report import architecture_status_from_snapshot
 
         self.from_snapshot = architecture_status_from_snapshot
         self.snapshot_cls = RuntimeIntrospectionSnapshot

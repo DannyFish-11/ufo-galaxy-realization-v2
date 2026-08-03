@@ -126,43 +126,15 @@ class TestScenario1LocalExecution:
         # Lifecycle state is attached during build
         assert d["lifecycle_state"] == ExecutionLifecycleState.PLANNED.value
 
-    def test_authority_chain_order(self):
-        """CANONICAL_AUTHORITY_CHAIN is outer-to-inner and all roles are distinct."""
-        from core.schemas.execution_authority import (
-            CANONICAL_AUTHORITY_CHAIN,
-            ExecutionLayerRole,
-        )
+    # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+    # 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        roles = [role for role, _mod, _cls in CANONICAL_AUTHORITY_CHAIN]
-        # At minimum these four roles must appear in order
-        expected = [
-            ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
-            ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY,
-            ExecutionLayerRole.COGNITION_PLANNING_LAYER,
-            ExecutionLayerRole.EXECUTION_SUBSTRATE,
-        ]
-        indices = [roles.index(r) for r in expected]
-        assert indices == sorted(indices), "Authority chain must be outer→inner"
-        assert len(roles) == len(set(roles)), "No duplicates in authority chain"
-
-    def test_authority_metadata_for_local_shell(self):
-        from core.schemas.execution_authority import (
-            ExecutionLayerRole,
-            build_authority_metadata,
-        )
-
-        meta = build_authority_metadata(
-            ExecutionLayerRole.RUNTIME_SHELL_AUTHORITY,
-            canonical_module="core.desktop_presence_runtime",
-            canonical_class="DesktopPresenceRuntime",
-        )
-        d = meta.model_dump()
-        assert d["layer_role"] == "runtime_shell_authority"
-        assert "core.desktop_presence_runtime" in d["canonical_module"]
+    # 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+    # 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
     def test_diagnostics_pass_on_correct_local_snapshot(self):
         """A correctly assembled local-flow snapshot produces a valid diagnostics report."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = {
             "runtime_shell": {
@@ -183,7 +155,7 @@ class TestScenario1LocalExecution:
 
     def test_diagnostics_report_has_summary(self):
         """Diagnostics report carries a human-readable summary."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = {
             "runtime_shell": {
@@ -535,21 +507,9 @@ class TestScenario3RemoteAgentRuntime:
 
         assert RemoteExecutionMode.agent_runtime.value == "agent_runtime"
 
-    def test_agent_runtime_plan_authority_metadata(self):
-        """Authority metadata for subject_decision_authority is set correctly."""
-        from core.schemas.execution_authority import (
-            ExecutionLayerRole,
-            build_authority_metadata,
-        )
 
-        meta = build_authority_metadata(
-            ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY,
-            canonical_module="core.openclawd",
-            canonical_class="OpenClawd",
-        )
-        d = meta.model_dump()
-        assert d["layer_role"] == "subject_decision_authority"
-        assert "openclawd" in d["canonical_module"]
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ===========================================================================
@@ -912,7 +872,7 @@ class TestScenario6CapabilityMismatch:
         Diagnostics flag an incoherence when remote_execution_mode is present
         but the authority metadata claims a local-only role.
         """
-        from core.architecture_diagnostics import validate_remote_execution_coherence
+        from tools.architecture.architecture_diagnostics import validate_remote_execution_coherence
 
         # Snapshot with command_only mode and correct subject_decision_authority is coherent
         coherent = {
@@ -967,7 +927,7 @@ class TestScenario7DiagnosticsValidator:
     }
 
     def test_valid_snapshot_passes(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(self._VALID_SNAPSHOT)
         assert report.overall_valid, (
@@ -977,7 +937,7 @@ class TestScenario7DiagnosticsValidator:
 
     def test_empty_snapshot_produces_warnings(self):
         """An empty snapshot produces warning findings (missing layers)."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics({})
         # The diagnostics system is permissive: missing layers are warnings, not errors
@@ -985,7 +945,7 @@ class TestScenario7DiagnosticsValidator:
 
     def test_missing_runtime_shell_produces_warnings(self):
         """Removing runtime_shell from the snapshot produces at least one warning."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = dict(self._VALID_SNAPSHOT)
         snapshot.pop("runtime_shell", None)
@@ -995,7 +955,7 @@ class TestScenario7DiagnosticsValidator:
 
     def test_missing_subject_core_produces_warnings(self):
         """Removing subject_core from the snapshot produces at least one warning."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = dict(self._VALID_SNAPSHOT)
         snapshot.pop("subject_core", None)
@@ -1006,7 +966,7 @@ class TestScenario7DiagnosticsValidator:
         """Entry surface claiming a runtime authority role causes overall_valid=False."""
         import copy
 
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = copy.deepcopy(self._VALID_SNAPSHOT)
         # entry_surface layer must never claim a runtime authority role
@@ -1016,7 +976,7 @@ class TestScenario7DiagnosticsValidator:
         assert report.error_count > 0
 
     def test_validate_authority_chain_order(self):
-        from core.architecture_diagnostics import validate_authority_chain
+        from tools.architecture.architecture_diagnostics import validate_authority_chain
 
         # Correct order produces no error findings
         report = validate_authority_chain(self._VALID_SNAPSHOT)
@@ -1029,7 +989,7 @@ class TestScenario7DiagnosticsValidator:
         """
         import copy
 
-        from core.architecture_diagnostics import validate_authority_chain
+        from tools.architecture.architecture_diagnostics import validate_authority_chain
 
         snapshot = copy.deepcopy(self._VALID_SNAPSHOT)
         # runtime_shell claiming wrong role (entry_surface instead of runtime_shell_authority)
@@ -1040,14 +1000,14 @@ class TestScenario7DiagnosticsValidator:
         assert len(non_info) > 0, "Miswired roles must be detected as warning or error"
 
     def test_diagnostics_report_is_serialisable(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(self._VALID_SNAPSHOT)
         d = report.model_dump()
         json.dumps(d)
 
     def test_diagnostics_findings_have_severity_and_message(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(self._VALID_SNAPSHOT)
         for finding in report.findings:
@@ -1059,7 +1019,7 @@ class TestScenario7DiagnosticsValidator:
             assert finding.severity in ("info", "warning", "error", "critical")
 
     def test_validate_layer_boundaries_valid_flow(self):
-        from core.architecture_diagnostics import validate_layer_boundaries
+        from tools.architecture.architecture_diagnostics import validate_layer_boundaries
 
         report = validate_layer_boundaries(self._VALID_SNAPSHOT)
         errors = [f for f in report.findings if f.severity in ("error", "critical")]
@@ -1067,7 +1027,7 @@ class TestScenario7DiagnosticsValidator:
 
     def test_diagnostics_snapshot_from_layers_helper(self):
         """build_diagnostics_snapshot_from_layers assembles a snapshot from arch_layer_id-tagged result dicts."""
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )

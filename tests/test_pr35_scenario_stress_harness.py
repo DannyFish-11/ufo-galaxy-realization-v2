@@ -130,7 +130,7 @@ if _PROJECT_ROOT not in sys.path:
 
 class TestScenarioStepKind:
     def test_all_expected_values_present(self):
-        from core.scenario_harness import ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioStepKind
 
         expected = {
             "REGISTER_SOURCE",
@@ -153,7 +153,7 @@ class TestScenarioStepKind:
             assert name in actual, f"ScenarioStepKind.{name} is missing"
 
     def test_values_are_unique_strings(self):
-        from core.scenario_harness import ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioStepKind
 
         values = [m.value for m in ScenarioStepKind]
         assert len(values) == len(set(values)), "ScenarioStepKind values must be unique"
@@ -161,7 +161,7 @@ class TestScenarioStepKind:
             assert isinstance(v, str), f"ScenarioStepKind value {v!r} is not a string"
 
     def test_stable_string_values(self):
-        from core.scenario_harness import ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioStepKind
 
         assert ScenarioStepKind.REGISTER_SOURCE.value == "register_source"
         assert ScenarioStepKind.SELECT_MULTIMODAL_ROUTE.value == "select_multimodal_route"
@@ -177,7 +177,7 @@ class TestScenarioStepKind:
 
 class TestScenarioState:
     def test_construction_with_defaults(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         state = ScenarioState()
         assert state.step_index == 0
@@ -195,7 +195,7 @@ class TestScenarioState:
         assert state.assertions_failed == []
 
     def test_construction_with_explicit_fields(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         state = ScenarioState(
             step_index=3,
@@ -207,7 +207,7 @@ class TestScenarioState:
         assert state.step_kind == "select_multimodal_route"
 
     def test_to_dict_is_json_serialisable(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         state = ScenarioState(
             step_index=1,
@@ -219,7 +219,7 @@ class TestScenarioState:
         json.dumps(d)  # must not raise
 
     def test_to_dict_field_names_are_stable(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         state = ScenarioState()
         d = state.to_dict()
@@ -242,7 +242,7 @@ class TestScenarioState:
             assert key in d, f"ScenarioState.to_dict() missing key {key!r}"
 
     def test_outcome_notes_are_independent_lists(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         s1 = ScenarioState()
         s2 = ScenarioState()
@@ -257,7 +257,7 @@ class TestScenarioState:
 
 class TestScenarioStep:
     def test_construction_with_required_fields(self):
-        from core.scenario_harness import ScenarioStep, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioStep, ScenarioStepKind
 
         step = ScenarioStep(
             name="my_step",
@@ -272,7 +272,7 @@ class TestScenarioStep:
         assert step.expected_has_active_override is None
 
     def test_construction_with_all_fields(self):
-        from core.scenario_harness import ScenarioStep, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioStep, ScenarioStepKind
 
         step = ScenarioStep(
             name="route_step",
@@ -296,7 +296,7 @@ class TestScenarioStep:
 
 class TestScenarioResult:
     def test_construction_with_defaults(self):
-        from core.scenario_harness import ScenarioResult
+        from tools.architecture.scenario_harness import ScenarioResult
 
         result = ScenarioResult()
         assert result.steps == []
@@ -311,7 +311,7 @@ class TestScenarioResult:
         assert len(result.scenario_id) > 0
 
     def test_to_dict_is_json_serialisable(self):
-        from core.scenario_harness import ScenarioResult, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioResult, ScenarioState
 
         result = ScenarioResult(total_steps=2)
         result.steps.append(ScenarioState(step_index=0, step_name="a"))
@@ -319,14 +319,14 @@ class TestScenarioResult:
         json.dumps(d)  # must not raise
 
     def test_all_assertions_passed_false_when_failures(self):
-        from core.scenario_harness import ScenarioResult
+        from tools.architecture.scenario_harness import ScenarioResult
 
         result = ScenarioResult()
         result.failed_assertions.append("step[0] some_step: expected x got y")
         assert result.all_assertions_passed is False
 
     def test_to_dict_field_names_stable(self):
-        from core.scenario_harness import ScenarioResult
+        from tools.architecture.scenario_harness import ScenarioResult
 
         d = ScenarioResult().to_dict()
         for key in (
@@ -342,7 +342,7 @@ class TestScenarioResult:
             assert key in d, f"ScenarioResult.to_dict() missing key {key!r}"
 
     def test_scenario_id_is_uuid_format(self):
-        from core.scenario_harness import ScenarioResult
+        from tools.architecture.scenario_harness import ScenarioResult
 
         result = ScenarioResult()
         # Should parse as a UUID without raising
@@ -356,7 +356,7 @@ class TestScenarioResult:
 
 class TestScenarioFixture:
     def test_healthy_native_multimodal_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.healthy_native_multimodal_step()
         assert step.kind == ScenarioStepKind.SELECT_MULTIMODAL_ROUTE
@@ -366,7 +366,7 @@ class TestScenarioFixture:
         assert step.expected_degraded is False
 
     def test_text_only_fallback_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.text_only_fallback_step()
         assert step.kind == ScenarioStepKind.SELECT_MULTIMODAL_ROUTE
@@ -376,7 +376,7 @@ class TestScenarioFixture:
         assert step.expected_degraded is True
 
     def test_partial_multimodal_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.partial_multimodal_step()
         assert step.kind == ScenarioStepKind.SELECT_MULTIMODAL_ROUTE
@@ -384,62 +384,62 @@ class TestScenarioFixture:
         assert step.expected_degraded is True
 
     def test_register_audio_source(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.register_audio_source()
         assert step.kind == ScenarioStepKind.REGISTER_SOURCE
         assert step.params["modality"] == "audio"
 
     def test_register_video_source(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.register_video_source()
         assert step.kind == ScenarioStepKind.REGISTER_SOURCE
         assert step.params["modality"] == "video"
 
     def test_mark_source_unavailable_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.mark_source_unavailable_step("mic_1")
         assert step.kind == ScenarioStepKind.MARK_SOURCE_UNAVAILABLE
         assert step.params["source_id"] == "mic_1"
 
     def test_mark_source_healthy_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.mark_source_healthy_step("mic_1")
         assert step.kind == ScenarioStepKind.MARK_SOURCE_HEALTHY
         assert step.params["source_id"] == "mic_1"
 
     def test_run_recovery_cycle_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.run_recovery_cycle_step()
         assert step.kind == ScenarioStepKind.RUN_SOURCE_RECOVERY_CYCLE
 
     def test_permission_denied_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.permission_denied_step("audio")
         assert step.kind == ScenarioStepKind.PERMISSION_CHANGE
         assert step.params["permission_status"] == "denied"
 
     def test_permission_granted_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.permission_granted_step("audio")
         assert step.kind == ScenarioStepKind.PERMISSION_CHANGE
         assert step.params["permission_status"] == "granted"
 
     def test_permission_unavailable_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.permission_unavailable_step("video")
         assert step.kind == ScenarioStepKind.PERMISSION_CHANGE
         assert step.params["permission_status"] == "unavailable"
 
     def test_apply_force_text_only_override(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.apply_force_text_only_override_step()
         assert step.kind == ScenarioStepKind.APPLY_OPERATOR_OVERRIDE
@@ -447,7 +447,7 @@ class TestScenarioFixture:
         assert step.expected_has_active_override is True
 
     def test_apply_provider_lock_override(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.apply_provider_lock_override_step("claude3")
         assert step.kind == ScenarioStepKind.APPLY_OPERATOR_OVERRIDE
@@ -455,14 +455,14 @@ class TestScenarioFixture:
         assert step.expected_has_active_override is True
 
     def test_clear_operator_override_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.clear_operator_override_step()
         assert step.kind == ScenarioStepKind.CLEAR_OPERATOR_OVERRIDE
         assert step.expected_has_active_override is False
 
     def test_build_explainability_snapshot_step(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioStepKind
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioStepKind
 
         step = ScenarioFixture.build_explainability_snapshot_step()
         assert step.kind == ScenarioStepKind.BUILD_EXPLAINABILITY_SNAPSHOT
@@ -486,7 +486,7 @@ class TestScenario1MultimodalToFallback:
     """
 
     def _run_scenario(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioSimulator
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioSimulator
 
         steps = [
             ScenarioFixture.register_audio_source("mic_1"),
@@ -543,13 +543,13 @@ class TestScenario1MultimodalToFallback:
         assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
     def test_result_is_serialisable(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         ScenarioAssertions.assert_scenario_result_serialisable(result)
 
     def test_individual_state_snapshots_serialisable(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         for step_state in result.steps:
@@ -574,7 +574,12 @@ class TestScenario2SourceFailureRecovery:
     """
 
     def _run_scenario(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioSimulator, ScenarioStep, ScenarioStepKind
+        from tools.architecture.scenario_harness import (
+            ScenarioFixture,
+            ScenarioSimulator,
+            ScenarioStep,
+            ScenarioStepKind,
+        )
 
         backup_mic_step = ScenarioStep(
             name="register_backup_mic",
@@ -598,7 +603,7 @@ class TestScenario2SourceFailureRecovery:
         return ScenarioSimulator().run(steps)
 
     def test_sources_registered_in_registry(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         first_state = result.steps[0]
@@ -663,7 +668,7 @@ class TestScenario3PermissionGating:
     """
 
     def _run_scenario(self):
-        from core.scenario_harness import (
+        from tools.architecture.scenario_harness import (
             ScenarioFixture,
             ScenarioSimulator,
             ScenarioStep,
@@ -754,7 +759,7 @@ class TestScenario4OperatorOverrideDegradedState:
     """
 
     def _run_scenario(self):
-        from core.scenario_harness import ScenarioFixture, ScenarioSimulator
+        from tools.architecture.scenario_harness import ScenarioFixture, ScenarioSimulator
 
         steps = [
             ScenarioFixture.register_audio_source("mic_1"),
@@ -767,21 +772,21 @@ class TestScenario4OperatorOverrideDegradedState:
         return ScenarioSimulator().run(steps)
 
     def test_override_is_active_after_apply(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         override_state = result.steps[3]
         ScenarioAssertions.assert_has_active_operator_override(override_state)
 
     def test_provider_lock_override_is_active(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         lock_state = result.steps[4]
         ScenarioAssertions.assert_has_active_operator_override(lock_state)
 
     def test_override_cleared_after_clear(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         clear_state = result.steps[5]
@@ -833,7 +838,7 @@ class TestScenario5ExplainabilityTimelineCoherence:
     """
 
     def _run_scenario(self):
-        from core.scenario_harness import (
+        from tools.architecture.scenario_harness import (
             ScenarioFixture,
             ScenarioSimulator,
             ScenarioStep,
@@ -858,7 +863,7 @@ class TestScenario5ExplainabilityTimelineCoherence:
         return ScenarioSimulator().run(steps)
 
     def test_timeline_events_monotonically_ordered(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         last_state = result.steps[-1]
@@ -879,14 +884,14 @@ class TestScenario5ExplainabilityTimelineCoherence:
         ), f"Timeline event count is not monotone: {counts}"
 
     def test_timeline_has_route_selection_events(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         last_state = result.steps[-1]
         ScenarioAssertions.assert_timeline_has_event_kind(last_state, "route_selection", min_count=1)
 
     def test_timeline_has_fallback_transition_event(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         last_state = result.steps[-1]
@@ -924,7 +929,7 @@ class TestScenario6RegressionStability:
     """
 
     def _build_full_scenario(self):
-        from core.scenario_harness import (
+        from tools.architecture.scenario_harness import (
             ScenarioFixture,
             ScenarioSimulator,
             ScenarioStep,
@@ -965,13 +970,13 @@ class TestScenario6RegressionStability:
         return ScenarioSimulator().run(steps)
 
     def test_result_to_dict_fully_serialisable(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._build_full_scenario()
         ScenarioAssertions.assert_scenario_result_serialisable(result)
 
     def test_all_step_states_serialisable(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         result = self._build_full_scenario()
         for step_state in result.steps:
@@ -999,7 +1004,7 @@ class TestScenario6RegressionStability:
         assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
     def test_scenario_id_is_unique_per_run(self):
-        from core.scenario_harness import ScenarioResult
+        from tools.architecture.scenario_harness import ScenarioResult
 
         r1 = ScenarioResult()
         r2 = ScenarioResult()
@@ -1018,7 +1023,7 @@ class TestScenario6RegressionStability:
 
 class TestScenarioAssertions:
     def _make_text_only_state(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         state = ScenarioState()
         state.route_dict = {"route_type": "text_only", "is_native_multimodal": False}
@@ -1030,7 +1035,7 @@ class TestScenarioAssertions:
         return state
 
     def _make_native_mm_state(self):
-        from core.scenario_harness import ScenarioState
+        from tools.architecture.scenario_harness import ScenarioState
 
         state = ScenarioState()
         state.route_dict = {"route_type": "native_multimodal", "is_native_multimodal": True}
@@ -1042,33 +1047,33 @@ class TestScenarioAssertions:
         return state
 
     def test_assert_degraded_to_text_only_passes(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         state = self._make_text_only_state()
         ScenarioAssertions.assert_degraded_to_text_only(state)  # must not raise
 
     def test_assert_degraded_to_text_only_fails_for_native(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         state = self._make_native_mm_state()
         with pytest.raises(AssertionError):
             ScenarioAssertions.assert_degraded_to_text_only(state)
 
     def test_assert_route_is_native_multimodal_passes(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         state = self._make_native_mm_state()
         ScenarioAssertions.assert_route_is_native_multimodal(state)
 
     def test_assert_route_is_native_multimodal_fails_for_text_only(self):
-        from core.scenario_harness import ScenarioAssertions
+        from tools.architecture.scenario_harness import ScenarioAssertions
 
         state = self._make_text_only_state()
         with pytest.raises(AssertionError):
             ScenarioAssertions.assert_route_is_native_multimodal(state)
 
     def test_assert_timeline_ordered_passes_for_monotone(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.decision_timeline_snapshot = {
@@ -1082,7 +1087,7 @@ class TestScenarioAssertions:
         ScenarioAssertions.assert_timeline_ordered(state)
 
     def test_assert_timeline_ordered_fails_for_out_of_order(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.decision_timeline_snapshot = {
@@ -1097,7 +1102,7 @@ class TestScenarioAssertions:
             ScenarioAssertions.assert_timeline_ordered(state)
 
     def test_assert_timeline_has_event_kind_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.decision_timeline_snapshot = {
@@ -1108,7 +1113,7 @@ class TestScenarioAssertions:
         ScenarioAssertions.assert_timeline_has_event_kind(state, "route_selection", 1)
 
     def test_assert_timeline_has_event_kind_fails_when_missing(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.decision_timeline_snapshot = {
@@ -1120,14 +1125,14 @@ class TestScenarioAssertions:
             ScenarioAssertions.assert_timeline_has_event_kind(state, "route_selection", 1)
 
     def test_assert_has_active_override_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.operator_override_snapshot = {"has_active_override": True}
         ScenarioAssertions.assert_has_active_operator_override(state)
 
     def test_assert_has_active_override_fails_when_none(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.operator_override_snapshot = {"has_active_override": False}
@@ -1135,21 +1140,21 @@ class TestScenarioAssertions:
             ScenarioAssertions.assert_has_active_operator_override(state)
 
     def test_assert_no_active_override_passes_when_cleared(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.operator_override_snapshot = {"has_active_override": False}
         ScenarioAssertions.assert_no_active_operator_override(state)
 
     def test_assert_permission_is_gated_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.permission_safety_snapshot = {"is_gated": True, "safety_gating_reasons": ["permission_denied"]}
         ScenarioAssertions.assert_permission_is_gated(state)
 
     def test_assert_permission_is_gated_fails_when_not_gated(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.permission_safety_snapshot = {"is_gated": False}
@@ -1157,14 +1162,14 @@ class TestScenarioAssertions:
             ScenarioAssertions.assert_permission_is_gated(state)
 
     def test_assert_source_registry_has_source_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.source_registry_snapshot = {"sources": [{"modality": "audio", "source_id": "mic_1"}]}
         ScenarioAssertions.assert_source_registry_has_source(state, "audio")
 
     def test_assert_source_registry_has_source_fails_when_absent(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.source_registry_snapshot = {"sources": [{"modality": "audio", "source_id": "mic_1"}]}
@@ -1172,14 +1177,14 @@ class TestScenarioAssertions:
             ScenarioAssertions.assert_source_registry_has_source(state, "video")
 
     def test_assert_transition_occurred_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.degraded_operation_envelope = {"transition_occurred": True}
         ScenarioAssertions.assert_transition_occurred(state)
 
     def test_assert_transition_occurred_fails_when_false(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.degraded_operation_envelope = {"transition_occurred": False}
@@ -1187,7 +1192,7 @@ class TestScenarioAssertions:
             ScenarioAssertions.assert_transition_occurred(state)
 
     def test_assert_envelope_serialisable_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
         state.degraded_operation_envelope = {
@@ -1197,14 +1202,14 @@ class TestScenarioAssertions:
         ScenarioAssertions.assert_envelope_serialisable(state)
 
     def test_assert_state_fully_serialisable_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState(step_index=0, step_name="test", step_kind="foo")
         state.route_dict = {"route_type": "text_only"}
         ScenarioAssertions.assert_state_fully_serialisable(state)
 
     def test_assert_scenario_result_serialisable_passes(self):
-        from core.scenario_harness import ScenarioAssertions, ScenarioResult, ScenarioState
+        from tools.architecture.scenario_harness import ScenarioAssertions, ScenarioResult, ScenarioState
 
         result = ScenarioResult()
         result.steps.append(ScenarioState())

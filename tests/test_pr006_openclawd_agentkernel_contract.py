@@ -690,14 +690,6 @@ class TestAuthorityChainConsistency:
             "consistent with PR-10 architecture diagnostics."
         )
 
-    def test_execution_authority_schema_cognition_layer_references_pr006(self):
-        """ExecutionLayerRole.COGNITION_PLANNING_LAYER doc must reference PR-006."""
-        # Get the docstring for the enum member
-        import inspect
 
-        from core.schemas.execution_authority import ExecutionLayerRole
-
-        source = inspect.getsource(ExecutionLayerRole)
-        assert "PR-006" in source, (
-            "ExecutionLayerRole source must reference PR-006 in the " "COGNITION_PLANNING_LAYER documentation."
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
