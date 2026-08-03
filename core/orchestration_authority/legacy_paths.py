@@ -530,24 +530,18 @@ _register(
             "deleted by panel-surface convergence."
         ),
     ),
-    LegacyPathEntry(
-        module_path="windows_client.status_board_v2",
-        status=LegacyPathStatus.DELETED,
-        recommendation=(
-            "windows_client/status_board_v2/ has been deleted by panel-surface "
-            "convergence.  The canonical desktop surface is the React panel "
-            "(electron/renderer/panel/) inside the Tauri/Electron shell.  Its "
-            "supply side is unchanged: GET /api/v1/projection/runtime, "
-            "/runtime-truth and /desktop-status-board are all still served."
-        ),
-        pr_guardrail_added="PR-panel-surface-convergence",
-        notes=(
-            "windows_client/status_board_v2/ — DELETED terminal (ANSI) status "
-            "board.  Its topology constellation layout / renderer / inspector / "
-            "history layers have no React-panel equivalent yet — a deliberate "
-            "net capability reduction, recorded here rather than glossed over."
-        ),
-    ),
+    # 注意：这里【故意没有】windows_client.status_board_v2 的条目。
+    #
+    # 本注册表记的是"别人可能还会 import 的旧模块路径"。status_board_v2 是一个
+    # `python -m` 运行的终端工具，从来不是被 import 的 API，删除后不存在"某处
+    # 旧 import 需要被引导"的情况。它作为 UI 表层的删除记录，归属在
+    # core/ui_surface_authority.py（已注册为 DELETED + superseded_by），
+    # 完整说明见 docs/PANEL_SURFACE_CONVERGENCE.md。
+    #
+    # 曾经在这里加过一条，结果撞上 compat freeze 的棘轮（legacy_path_count
+    # 81 → 82，而 COMPAT_BUDGET_MUST_NOT_GROW_POLICY 要求该预算只降不升）。
+    # 正确的处理是撤掉这条本就不属于这里的登记，而不是把预算调到 82 ——
+    # 后者等于为了让门变绿而破坏门要守的策略。
     LegacyPathEntry(
         module_path="windows_client",
         status=LegacyPathStatus.DELETED,

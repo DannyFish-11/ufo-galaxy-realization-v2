@@ -77,7 +77,7 @@
     "core/operational_registration_path.py": 1372,
     "core/operational_slo_metrics.py": 1392,
     "core/operator_surface.py": 2169,
-    "core/orchestration_authority/legacy_paths.py": 1897,
+    "core/orchestration_authority/legacy_paths.py": 1891,
     "core/platform_closure_audit.py": 1288,
     "core/policy/alignment_surface.py": 1290,
     "core/pr3_session_continuity_authority.py": 1103,

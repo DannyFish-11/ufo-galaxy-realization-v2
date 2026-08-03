@@ -432,15 +432,23 @@ class TestTaskOrchestratorOpenClawdDecision:
         ws.is_device_connected.return_value = True
 
         orch = TaskOrchestrator(dm, mh, ws)
+        # 编排器的队列已换成 AsyncTaskQueue worker 池（`_task_pool`），它在
+        # start() 里才创建；未 start 就 submit_task 会如实抛
+        # RuntimeError("orchestrator not started")。原测试沿用改造前的
+        # `orch.task_queue` 属性，那个属性已不存在。
+        await orch.start()
+        try:
+            decision = {"intent": "chat", "model": "gpt-4o", "trace_id": "t-001"}
 
-        decision = {"intent": "chat", "model": "gpt-4o", "trace_id": "t-001"}
-
-        # submit_task immediately puts to queue; intercept the queue
-        with patch.object(orch.task_queue, "put", new=AsyncMock()):
-            task = await orch.submit_task(
-                "open wechat",
-                openclawd_decision=decision,
-            )
+            # 本测试只关心信封元数据，不关心任务真的被执行；拦住派发这一步
+            # （等价于改造前拦 task_queue.put）。
+            with patch.object(orch._task_pool, "submit", new=AsyncMock()):
+                task = await orch.submit_task(
+                    "open wechat",
+                    openclawd_decision=decision,
+                )
+        finally:
+            await orch.stop()
 
         assert task is not None
         # The envelope should carry the decision in metadata
@@ -460,9 +468,12 @@ class TestTaskOrchestratorOpenClawdDecision:
         ws = MagicMock()
 
         orch = TaskOrchestrator(dm, mh, ws)
-
-        with patch.object(orch.task_queue, "put", new=AsyncMock()):
-            task = await orch.submit_task("screenshot")
+        await orch.start()
+        try:
+            with patch.object(orch._task_pool, "submit", new=AsyncMock()):
+                task = await orch.submit_task("screenshot")
+        finally:
+            await orch.stop()
 
         assert task is not None
 
