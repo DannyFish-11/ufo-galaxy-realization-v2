@@ -72,14 +72,10 @@ KNOWN_SHIM_FILES = {
     "galaxy_gateway/routes/devices.py",  # device compat shim note
     "galaxy_gateway/protocol/compat.py",  # AIP v2→v3 compat
     # Additional known pre-existing shims/facades (grandfathered — Batch PR-5)
+    # 注：原先这里还豁免了 core/architecture_*.py、core/scenario_harness.py、
+    # core/legacy_system_decommission.py 共 8 个文件。它们已作为零可达死代码删除，
+    # 白名单条目指向不存在的文件 —— 永远匹配不上，只会让后人误以为这些 shim 还在。
     "core/legacy_purge_registry.py",  # read-only purge catalogue
-    "core/architecture_status_report.py",  # arch shim → tools/architecture/
-    "core/architecture_completion.py",  # arch shim → tools/architecture/
-    "core/architecture_invariants.py",  # arch shim → tools/architecture/
-    "core/architecture_live_status.py",  # arch shim → tools/architecture/
-    "core/architecture_diagnostics.py",  # arch shim → tools/architecture/
-    "core/architecture_truth_guards.py",  # arch shim → tools/architecture/
-    "core/scenario_harness.py",  # arch shim → tools/architecture/
     "core/unified/config_manager.py",  # compatibility facade
     "galaxy_gateway/task_decomposer.py",  # legacy; copy in galaxy_gateway/legacy/
     "galaxy_gateway/capability_registry.py",  # legacy; copy in galaxy_gateway/legacy/
@@ -87,7 +83,6 @@ KNOWN_SHIM_FILES = {
     "galaxy_gateway/handlers/message_handler.py",  # legacy chain-B dispatcher
     # PR-3 convergence — shims identified during session/continuity/authority unification
     "core/runtime_closure_audit.py",  # PR-3 runtime closure audit shim
-    "core/legacy_system_decommission.py",  # PR-3 legacy system decommission shim
     "core/llm/execution_authority.py",  # PR-3 LLM execution authority compat
     "core/schemas/ugcp/shared.py",  # PR-3 UGCP shared schema compat
     "galaxy_gateway/session_roaming.py",  # PR-3 session roaming compat

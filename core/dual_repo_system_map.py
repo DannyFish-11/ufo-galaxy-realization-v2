@@ -607,12 +607,7 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         naming_pattern="TRUTH / GUARD",
         notes="Declarative truth guard strings; no runtime enforcement.",
     ),
-    ModuleSemanticEntry(
-        "core.canonical_authoritative_path_convergence",
-        ModuleSemanticType.DECLARATIVE,
-        naming_pattern="CANONICAL / AUTHORITY / CONVERGENCE",
-        notes="Path convergence authority sentinel; declarative registration.",
-    ),
+    # core.canonical_authoritative_path_convergence 已作为零引用死代码删除，登记随之移除。
     ModuleSemanticEntry(
         "core.authority_boundary_classification",
         ModuleSemanticType.DECLARATIVE,

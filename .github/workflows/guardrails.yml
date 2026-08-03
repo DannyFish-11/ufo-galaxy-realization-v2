@@ -158,6 +158,37 @@ jobs:
           python scripts/check_file_complexity.py --strict
 
   # ---------------------------------------------------------------------------
+  # C2. 证据锚点必须指向真实存在的文件
+  #
+  # 生产代码里大量模块把「某个文件」写成字符串当论据：完成度评审的 v2_anchors、
+  # 边界轴的 code_evidence、债务冻结的豁免名单、复杂度基线的条目。这些字符串没有
+  # 任何机制保证指向的东西还在 —— 文件删掉了，评审报告照样"通过"。
+  #
+  # 这一轮清理死代码时就踩到了：删掉模块后，评审模块仍把它列为「本次已补强」的成果
+  # 锚点；复杂度基线里留着已删文件的条目（基线是放宽用的，同名文件重现会白拿高预算）。
+  # 还顺带查出三个从未存在过的测试文件名被当作测试证据写了很久。
+  #
+  # 与 repo-hygiene 里的 check_completion_matrix 同一思路，范围推广到全部生产代码。
+  # 只校验能被机器判定的「路径是否存在」；锚点选得对不对是人的判断，不在此校验。
+  # ---------------------------------------------------------------------------
+  evidence-anchors:
+    name: Evidence Anchors Resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 生产代码里的路径证据锚点必须存在
+        run: |
+          python scripts/check_evidence_anchors.py
+
+  # ---------------------------------------------------------------------------
   # C3. Wiring guardrail — 公开能力有没有调用方
   #
   # 抓的是本仓反复出现的一类缺陷:能力实现完整、单测全绿、文档详尽,但生产代码里

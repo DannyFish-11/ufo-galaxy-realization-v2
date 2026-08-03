@@ -1004,8 +1004,8 @@ class DualRepoSystemCompletenessReviewer:
             deferred_items=deferred,
             code_references=runtime_available,
             test_references=[
-                "tests/test_pr5_v2_recovery_truth_surface.py",
-                "tests/test_pr_v2_4dh_delegated_flow_decision_history.py",
+                "tests/test_recovery_truth_surface.py",
+                "tests/test_pr_v2_delegated_flow_decision_history.py",
             ],
         )
 
@@ -1397,7 +1397,7 @@ class DualRepoSystemCompletenessReviewer:
             deferred_items=deferred,
             code_references=available_gov,
             test_references=[
-                "tests/test_pr8_v2_release_governance_taxonomy.py",
+                "tests/test_pr8_release_governance_taxonomy.py",
                 "tests/test_pr17_v2_system_final_acceptance_verdict.py",
                 "tests/test_pr537_dual_repo_system_reality_audit.py",
                 "tests/test_pr_block3_governance_ci_enforcement.py",

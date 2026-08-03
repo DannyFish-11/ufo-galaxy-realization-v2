@@ -584,7 +584,7 @@ def _collect_probes() -> Dict[str, bool]:
         "core.desktop_presence_runtime", "carrier"
     )
     p["desktop_consumption_adapter"] = _module_exists("core.desktop_consumption_adapter")
-    p["canonical_layer_model"] = _module_exists("core.canonical_layer_model")
+    # 原有 canonical_layer_model 存在性检查：该模块已作为零引用死代码删除，检查恒 False，故移除。
     p["existence_surface_has_unified_carrier"] = _source_contains(
         "core.desktop_existence_surface", "UnifiedCarrierSurface"
     )
@@ -605,7 +605,8 @@ def _collect_probes() -> Dict[str, bool]:
     p["test_mesh_runtime_center"] = _module_exists("tests.test_pr03_mesh_runtime_center_closure")
 
     # --- PR-next-convergence (this PR) probes ---
-    p["next_convergence_audit"] = _module_exists("core.pr_next_convergence_closure_audit")
+    # 原有 next_convergence_audit 探针：core.pr_next_convergence_closure_audit 已作为零可达
+    # 死代码删除，该探针恒 False，且它的结果全仓无人读取，故移除。
     p["completion_ingress_has_android_context"] = _source_contains(
         "core.canonical_completion_ingress", "notify_with_android_context"
     )
@@ -1041,7 +1042,6 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
                 "core/desktop_existence_surface.py",
                 "core/desktop_presence_runtime.py",
                 "core/desktop_consumption_adapter.py",
-                "core/canonical_layer_model.py",
             ],
             [],
             weight=1.0,
@@ -1405,7 +1405,6 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             [
                 "main.py",
                 "unified_launcher.py",
-                "core/system_integration.py",
             ],
             [
                 ANDROID_ANCHOR_WS_CLIENT,
@@ -1798,24 +1797,9 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
                 "在无连接设备时退化为 connected_device_count=0 状态，不抛异常。"
             ),
         ),
-        IntegrityRepairAction(
-            action_id="IRA_CONVERGENCE_AUDIT_MODULE",
-            title_zh="新增 pr_next_convergence_closure_audit.py 提供 board reasoning API 与完整可用性审计",
-            status_zh="本次 V2 已补强",
-            why_high_value_zh=(
-                "把可用性审查（clone-to-run）、三态真实性审查、闭环治理传播审查、operator board 因果解释"
-                "统一到可机读工件中，为 operator route 提供 get_board_reasoning_for_closure() API，"
-                "不再让各 route 各自推导 Android 参与因果。"
-            ),
-            linked_issue_ids=["R5", "R1"],
-            v2_anchors=[
-                "core/pr_next_convergence_closure_audit.py",
-            ],
-            android_dependency_zh=(
-                "Android 侧无直接依赖；V2 侧直接从 android_device_state_store 和"
-                "canonical_completion_ingress 读取数据。"
-            ),
-        ),
+        # 原有 IRA_CONVERGENCE_AUDIT_MODULE 一条，把 core/pr_next_convergence_closure_audit.py
+        # 列为「本次 V2 已补强」的成果锚点。该模块已作为零可达死代码删除，留着就是拿一个不存在
+        # 的文件当证据 —— 与本模块声明的「只用当前真实代码作证据」的方法论直接冲突，故整条移除。
     ]
 
 

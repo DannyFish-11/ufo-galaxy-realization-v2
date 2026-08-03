@@ -217,14 +217,11 @@ def probe_l1_route_authority() -> ProbeResult:
 
     # Check who imports it
     route_files = grep_in_dir("core/routes", r"route_authority|LLMRouteAuthority")
-    system_hits = grep_in_file("core/system_integration.py", r"route_authority|LLMRouteAuthority")
     openclawd_hits = grep_in_file("core/openclawd.py", r"route_authority|LLMRouteAuthority")
     cmd_router_hits = grep_in_file("core/command_router.py", r"route_authority|LLMRouteAuthority")
 
     if route_files:
         evidence.append(f"L1 imported by routes layer: {route_files[0][0]} (+ {len(route_files)-1} more)")
-    if system_hits:
-        evidence.append(f"L1 imported by system_integration.py")
     if openclawd_hits:
         evidence.append(f"L1 imported by openclawd.py (HOT PATH)")
     else:

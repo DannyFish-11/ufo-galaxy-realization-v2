@@ -8,10 +8,14 @@ def activate_topology_client(config_path: str = "config/topology.json"):
     激活拓扑感知客户端，确保它能加载 102 节点拓扑。
     """
     if not os.path.exists(config_path):
-        print(f"⚠️ 拓扑配置文件未找到: {config_path}. 正在尝试从默认路径加载...")
-        # 假设 fusion 仓库中已经有了一个默认的 topology.json
-        config_path = "config/default_topology.json" 
-        
+        # 原先这里回退到 "config/default_topology.json"。仓里从来没有这个文件 ——
+        # 回退分支只能让下面的实例化以另一个「文件不存在」二次失败，还把错误信息
+        # 指向一个不存在的路径，比直接报原路径更难排查。仓内真实的拓扑配置只有
+        # config/topology.json 一份，没有可回退的第二份，所以如实报错。
+        raise FileNotFoundError(
+            f"拓扑配置文件未找到: {config_path}（仓内没有可回退的默认拓扑配置）"
+        )
+
     try:
         # 实例化 TopologyAwareConstellationClient
         client = TopologyAwareConstellationClient(

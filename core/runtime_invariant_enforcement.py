@@ -37,7 +37,7 @@ Design principles
   vocabulary, a queryable invariant registry, injectable validation hooks,
   and machine-checkable gate functions.
 - **Build on prior work** — composes with ``core.cross_repo_contract_finalization``
-  (PR-7), ``core.center_side_compat_closure`` (PR-5), and
+  (PR-7), 中心侧兼容收口（PR-5，声明模块已删除），以及
   ``core.cross_repo_consistency_gates`` (PR-12).
 - **Machine-checkable** — all sentinels, invariant IDs, and gate verdicts are
   importable constants that CI, tests, and diagnostic endpoints can assert.
@@ -1021,7 +1021,7 @@ _CROSS_REPO_ASSUMPTION_REGISTRY: List[CrossRepoAssumptionRecord] = [
         validation_mechanism=(
             "CI acceptance test: confirm that no active Android test fixture "
             "sends dispatch via the legacy TaskRouter path.  "
-            "center_side_compat_closure COMPAT-001 fence provides runtime "
+            "COMPAT-001 fence provides runtime "
             "detection; CI should assert that LEGACY_DISPATCH events are "
             "absent in test runs."
         ),

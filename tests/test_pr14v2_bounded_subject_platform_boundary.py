@@ -31,7 +31,7 @@ Locks the following invariants:
 19.  CANONICAL_CENTER axis code_evidence references center_authority_boundary.
 20.  BOUNDED_SUBJECT axis code_evidence references distributed_subject_contract_v1.
 21.  PARTICIPANT_GOVERNANCE axis code_evidence references operator_action_governance.
-22.  OBSERVABILITY_EVIDENCE axis code_evidence references cross_subject_observability_contract.
+22.  OBSERVABILITY_EVIDENCE axis code_evidence 的每个锚点都指向真实存在的模块。
 23.  OUTWARD_CONSUMPTION axis code_evidence references final_acceptance_surface_boundary.
 24.  No axis has an axis value that duplicates another axis value.
 25.  CANONICAL_CENTER policy sentinel references "canonical center".
@@ -364,6 +364,35 @@ def _axis_by(axis_type: PlatformBoundaryAxis) -> BoundaryAxisDescriptor:
     raise KeyError(axis_type)
 
 
+def _anchor_resolves(ref: str) -> bool:
+    """代码证据锚点 ``ref`` 是否指向真实存在的模块（或模块内的真实属性）。
+
+    注意别写成 ``find_spec(ref.rsplit(".", 1)[0])`` —— 那会把最后一段砍掉，
+    ``core.完全不存在的模块`` 被当成 ``core`` 去查，永远为真，守卫直接变空。
+    先按**完整点号路径**当模块查；查不到才退一步，把最后一段当模块内的符号
+    （类/函数/常量）验，两条都不成立才算锚点失效。
+    """
+    import importlib
+    import importlib.util
+
+    try:
+        if importlib.util.find_spec(ref) is not None:
+            return True
+    except (ImportError, AttributeError, ValueError):
+        # 父包不存在 / 父级不是包时 find_spec 会抛而不是返回 None，
+        # 落到下面的「符号」分支继续判。
+        pass
+
+    if "." not in ref:
+        return False
+
+    parent, _, attr = ref.rpartition(".")
+    try:
+        return hasattr(importlib.import_module(parent), attr)
+    except Exception:
+        return False
+
+
 def test_canonical_center_axis_references_center_authority_boundary() -> None:
     axis = _axis_by(PlatformBoundaryAxis.CANONICAL_CENTER)
     evidence_str = " ".join(axis.code_evidence)
@@ -382,10 +411,21 @@ def test_participant_governance_axis_references_operator_action_governance() -> 
     assert "operator_action_governance" in evidence_str
 
 
-def test_observability_axis_references_cross_subject_observability_contract() -> None:
+def test_observability_axis_evidence_anchors_are_importable() -> None:
+    """可观测轴的代码证据必须指向**真实存在**的模块。
+
+    原判据是「必须提到 cross_subject_observability_contract」。那个模块是一张手写的
+    「可观测面 + 证据契约」清单，从真实入口不可达、仅测试引用，已作为死代码删除。
+
+    换成更强的判据：逐个 ``find_spec`` 验锚点可导入。原判据只能保证「提到了某个名字」，
+    名字对应的模块被删掉了它也照样绿 —— 而「用一份手写清单充当代码证据」恰恰是被删
+    模块的问题本身。现在锚点指向真正产出可观测数据的实现，并且真的验它们存在。
+    """
     axis = _axis_by(PlatformBoundaryAxis.OBSERVABILITY_EVIDENCE)
-    evidence_str = " ".join(axis.code_evidence)
-    assert "cross_subject_observability_contract" in evidence_str
+    assert axis.code_evidence, "可观测轴必须有非空代码证据 —— 启动期 Phase 7 断言依赖这一点"
+
+    missing = [ref for ref in axis.code_evidence if not _anchor_resolves(ref)]
+    assert not missing, f"以下代码证据锚点指向不存在的模块：{missing}"
 
 
 def test_outward_consumption_axis_references_final_acceptance_surface_boundary() -> None:
