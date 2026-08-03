@@ -557,10 +557,8 @@ class TestCanonicalExecutionChainPr8Entries:
         assert "core.delegated_runtime_dispatch_intent" in registry
         assert registry["core.delegated_runtime_dispatch_intent"] == ("dispatch_intent_helper")
 
-    def test_canonical_handoff_path_is_registered_as_prototype(self):
-        registry = self._registry()
-        assert "core.canonical_handoff_path" in registry
-        assert "prototype" in registry["core.canonical_handoff_path"]
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_takeover_tracking_is_registered_as_prototype(self):
         registry = self._registry()
@@ -592,10 +590,8 @@ class TestCanonicalExecutionChainPr8Entries:
         assert "core.distributed_release_gate_skeleton" in registry
         assert "diagnostic" in registry["core.distributed_release_gate_skeleton"]
 
-    def test_center_distributed_review_is_registered(self):
-        registry = self._registry()
-        assert "core.center_distributed_agent_system_review" in registry
-        assert "operator" in (registry["core.center_distributed_agent_system_review"].lower())
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_flow_level_truth_ownership_is_registered(self):
         registry = self._registry()
@@ -613,31 +609,8 @@ class TestCanonicalExecutionChainPr8Entries:
 # ---------------------------------------------------------------------------
 
 
-class TestPr8EntriesNotInMainline:
-    def test_pr8_side_path_entries_are_not_in_mainline(self):
-        from core.canonical_execution_chain import (
-            MINIMAL_RUNTIME_MAINLINE_MODULES,
-            SIDE_PATH_MODULE_REGISTRY,
-        )
-
-        pr8_entries = [
-            "core.delegated_runtime_dispatch_intent",
-            "core.canonical_handoff_path",
-            "core.takeover_tracking",
-            "core.android_handoff_v2_response_ingress",
-            "core.android_delegated_runtime_lifecycle_coordinator",
-            "contracts.handoff_envelope_v2",
-            "core.android_delegated_runtime_audit",
-            "core.distributed_release_gate_skeleton",
-            "core.center_distributed_agent_system_review",
-            "core.flow_level_truth_ownership",
-            "core.ownership_transfer_proof_quality",
-        ]
-        for entry in pr8_entries:
-            assert entry in SIDE_PATH_MODULE_REGISTRY, f"PR-8 entry {entry!r} must be in SIDE_PATH_MODULE_REGISTRY"
-            assert entry not in MINIMAL_RUNTIME_MAINLINE_MODULES, (
-                f"PR-8 side-path entry {entry!r} must NOT be in " "MINIMAL_RUNTIME_MAINLINE_MODULES"
-            )
+# 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+# 同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------

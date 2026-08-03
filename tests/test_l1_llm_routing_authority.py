@@ -479,10 +479,8 @@ def test_42_legacy_registry_has_observability_entry():
     assert "core.routes.observability.model_route_status.direct_get_llm_router" in LEGACY_PATH_REGISTRY
 
 
-def test_43_legacy_registry_has_system_integration_entry():
-    from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-
-    assert "core.system_integration.SystemIntegration._execute_builtin.direct_get_llm_router" in LEGACY_PATH_REGISTRY
+# 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+# 同文件其余用例保持不变。
 
 
 def test_44_legacy_registry_has_openclawd_entry():

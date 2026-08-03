@@ -116,7 +116,7 @@ from typing import Any, Dict, List
 
 
 def _import_module():
-    return importlib.import_module("core.architecture_live_status")
+    return importlib.import_module("tools.architecture.architecture_live_status")
 
 
 def _reset():
@@ -789,7 +789,7 @@ class TestConstantsAndIntegration:
 
     def test_84_scorecard_summary_consistent_with_completion_scorecard(self):
         m = _import_module()
-        sc_m = importlib.import_module("core.architecture_completion")
+        sc_m = importlib.import_module("tools.architecture.architecture_completion")
         sc = sc_m.get_architecture_completion_scorecard()
         s = m.build_architecture_live_status()
         assert s.scorecard_summary["canonical_count"] == sc.canonical_count

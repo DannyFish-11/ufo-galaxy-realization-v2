@@ -765,7 +765,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     ),
     OwnershipTruthSurface(
         surface_id="architecture_diagnostics_snapshot",
-        module_path="core.architecture_diagnostics",
+        module_path="tools.architecture.architecture_diagnostics",
         surface_name=("architecture_diagnostics " "(architecture health diagnostics snapshot)"),
         truth_domain=OwnershipTruthDomainKind.diagnostics_audit_artifact,
         may_not_redefine_authority_truth=True,

@@ -81,18 +81,18 @@ if _PROJECT_ROOT not in sys.path:
 # Imports under test
 # ===========================================================================
 
-from core.architecture_completion import (
+from tools.architecture.architecture_completion import (
     CompletionDimension,
     MaturityLevel,
     get_architecture_completion_scorecard,
     reset_architecture_completion_scorecard,
 )
-from core.architecture_diagnostics import (
+from tools.architecture.architecture_diagnostics import (
     ArchitectureDiagnostics,
     DiagnosticSeverity,
     run_architecture_diagnostics,
 )
-from core.architecture_invariants import (
+from tools.architecture.architecture_invariants import (
     AUTHORITY_CHAIN,
     CANONICAL_ADDON_CONTRACT_TYPES,
     CANONICAL_AUTHORITY_LABELS,
@@ -715,7 +715,7 @@ class TestAuthorityLabelsCrossModuleConsistency:
     """10. Authority-role labels are consistent across modules."""
 
     def test_diagnostics_expected_roles_are_canonical(self):
-        from core.architecture_diagnostics import _LAYER_EXPECTED_ROLES
+        from tools.architecture.architecture_diagnostics import _LAYER_EXPECTED_ROLES
 
         for layer_key, role in _LAYER_EXPECTED_ROLES.items():
             assert role in CANONICAL_AUTHORITY_LABELS, (
@@ -724,7 +724,7 @@ class TestAuthorityLabelsCrossModuleConsistency:
             )
 
     def test_authority_chain_roles_match_diagnostics_expected(self):
-        from core.architecture_diagnostics import _LAYER_EXPECTED_ROLES
+        from tools.architecture.architecture_diagnostics import _LAYER_EXPECTED_ROLES
 
         for layer_key, role in AUTHORITY_CHAIN:
             if layer_key in _LAYER_EXPECTED_ROLES:
@@ -742,7 +742,7 @@ class TestAuthorityLabelsCrossModuleConsistency:
         assert any("command_router" in m for m in dim.evidence_modules)
 
     def test_canonical_authority_labels_matches_diagnostics_role_order(self):
-        from core.architecture_diagnostics import _LAYER_EXPECTED_ROLES
+        from tools.architecture.architecture_diagnostics import _LAYER_EXPECTED_ROLES
 
         # All roles in _LAYER_EXPECTED_ROLES must be canonical authority labels.
         for layer_key, role in _LAYER_EXPECTED_ROLES.items():

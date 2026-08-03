@@ -162,13 +162,8 @@ class TestLegacyOrchestratorPathsShim:
                 "The shim definition must appear AFTER all _register() calls."
             )
 
-    def test_shim_includes_prs4_paths(self):
-        """PR-S4 entries that were previously excluded from the shim now appear."""
-        from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
-
-        assert "galaxy_gateway.android_bridge.AndroidBridge.get_all_devices" in LEGACY_ORCHESTRATOR_PATHS
-        assert "core.repo_coordinator.RepoCoordinator.android_devices" in LEGACY_ORCHESTRATOR_PATHS
-        assert "core.routes._shared.registered_devices" in LEGACY_ORCHESTRATOR_PATHS
+    # 此处原有的用例引用了本批删除的零引用模块。模块不存在后断言失去对象，随之移除；
+    # 同文件其余用例保持不变。
 
     def test_shim_includes_prs5_paths(self):
         """PR-S5 entries appear in the shim."""

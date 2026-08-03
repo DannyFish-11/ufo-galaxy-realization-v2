@@ -190,55 +190,5 @@ class TestIntegrationsConfigEndpoints:
 # ---------------------------------------------------------------------------
 
 
-class TestPolicyLoader:
-
-    def test_get_global_permissions_defaults(self, tmp_path, monkeypatch):
-        """policy_loader 文件不存在时返回内置默认值"""
-        import core.policy_loader as pl
-
-        monkeypatch.setattr(pl, "_POLICY_FILE", str(tmp_path / "nonexistent.json"))
-        perms = pl.get_global_permissions()
-        assert isinstance(perms, dict)
-        for key in ("filesystem", "terminal", "network", "browser"):
-            assert key in perms
-
-    def test_get_agent_permissions_inherits_global(self, tmp_path, monkeypatch):
-        """agent_id 无覆盖时，get_agent_permissions 继承全局权限"""
-        import core.policy_loader as pl
-
-        policy = {
-            "global": {"filesystem": False, "terminal": False, "network": True, "browser": False},
-            "agent_overrides": {},
-        }
-        pfile = tmp_path / "permissions_policy.json"
-        pfile.write_text(json.dumps(policy))
-        monkeypatch.setattr(pl, "_POLICY_FILE", str(pfile))
-        perms = pl.get_agent_permissions("unknown_agent")
-        assert perms["network"] is True
-        assert perms["filesystem"] is False
-
-    def test_get_agent_permissions_override(self, tmp_path, monkeypatch):
-        """agent_overrides 优先于全局策略"""
-        import core.policy_loader as pl
-
-        policy = {
-            "global": {"filesystem": False, "terminal": False, "network": True, "browser": False},
-            "agent_overrides": {"agent_A": {"filesystem": True, "terminal": True}},
-        }
-        pfile = tmp_path / "permissions_policy.json"
-        pfile.write_text(json.dumps(policy))
-        monkeypatch.setattr(pl, "_POLICY_FILE", str(pfile))
-        perms = pl.get_agent_permissions("agent_A")
-        assert perms["filesystem"] is True
-        assert perms["terminal"] is True
-        assert perms["network"] is True  # 继承全局
-
-    def test_inject_policy_into_context(self, tmp_path, monkeypatch):
-        """inject_policy_into_context 应在 context['permissions'] 中写入权限"""
-        import core.policy_loader as pl
-
-        monkeypatch.setattr(pl, "_POLICY_FILE", str(tmp_path / "nope.json"))
-        ctx: dict = {"task": "do something"}
-        result = pl.inject_policy_into_context(ctx)
-        assert "permissions" in result
-        assert isinstance(result["permissions"], dict)
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
