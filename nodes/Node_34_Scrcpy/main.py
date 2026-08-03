@@ -16,11 +16,13 @@ ported to Node_33 first, and Node_34 refocused exclusively on scrcpy screen mirr
 """
 import asyncio
 import os
+import re
 import subprocess
 import shutil
 import tempfile
 import base64
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,10 +147,69 @@ async def list_devices():
             devices.append(device_info)
     return {"success": True, "devices": devices, "count": len(devices)}
 
+#: 调用方指定文件名时,截图只会落在这个目录下面。
+#:
+#: 为什么需要它:本节点 ``uvicorn.run(host="0.0.0.0")``,也就是**局域网内谁都能 POST**。
+#: 而 output_path 此前是直接拿去 ``open(output_path, "wb")`` 的 —— 那是一个通过 HTTP
+#: 暴露出去的任意文件写入原语:一个请求就能往进程可写的任何路径落一个 PNG
+#: (覆盖配置、往 autostart 目录扔东西、写满某个分区……)。
+#: CodeQL 只报了同一行上的 mktemp,没报这个。
+#:
+#: 这里不取消"自己命名"这个能力,只把它约束成"在指定目录里命名"。
+SCREENSHOT_DIR = Path(os.getenv("GALAXY_SCREENSHOT_DIR", "")) or Path.home() / ".galaxy" / "screenshots"
+
+
+#: 允许的文件名。**白名单,不是黑名单** —— 黑名单永远漏(``..``、``%2e%2e``、
+#: 反斜杠、NUL、超长名、各种 Unicode 归一化写法……),白名单只需要回答一个问题:
+#: "合法的截图文件名长什么样"。答案就是这么简单。
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _resolve_output_path(requested: Optional[str]) -> str:
+    """把调用方给的名字解析到 SCREENSHOT_DIR 之内;不合法就**拒**。
+
+    为什么是"拒"而不是"改写"
+    ------------------------
+    第一版的做法是 ``Path(requested).name`` —— 把 ``/etc/passwd`` 悄悄变成
+    ``passwd`` 再写进截图目录。逃逸确实挡住了,但那是**静默改写**:调用方以为
+    自己写到了 ``/etc/passwd``,拿到的却是别处的一个文件,而响应里没有任何提示。
+    一个安全修复不该顺手制造一个"行为与声明不符"的新问题。
+
+    改成先按白名单校验、不合法直接 400。附带的好处是这也成了 CodeQL 认得的净化 ——
+    它在第一版上报了 py/path-injection(用户数据进入路径表达式),因为
+    ``.name`` 不被识别为净化。这里不是为了让检查器闭嘴才改,是改法本身更对;
+    告警消失是结果,不是目的。
+
+    没给名字时用 ``mkstemp`` 而不是 ``mktemp``:后者只返回路径、并不创建文件,
+    "拿到路径"和"写进去"之间的窗口足以让同机的其他用户抢先放一个符号链接,
+    把**设备屏幕截图**引到别处去。mkstemp 原子地建出 0600 的文件,没有那个窗口。
+    """
+    # 0700:截图是设备屏幕的内容,同机其他用户不该能列目录、更不该能读。
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not requested:
+        fd, path = tempfile.mkstemp(suffix=".png", dir=str(SCREENSHOT_DIR))
+        os.close(fd)
+        return path
+
+    if not _SAFE_NAME.match(requested):
+        raise HTTPException(
+            status_code=400,
+            detail="output_path must be a plain file name matching [A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+        )
+
+    base = os.path.realpath(str(SCREENSHOT_DIR))
+    candidate = os.path.realpath(os.path.join(base, requested))
+    # 白名单已经排除了 ``..``,但目录里可能**已经存在**一个指向外面的符号链接 ——
+    # 那种情况下名字本身完全合法,只有解析之后才看得出来。两道都要。
+    if not candidate.startswith(base + os.sep):
+        raise HTTPException(status_code=400, detail="output_path must resolve inside the screenshot directory")
+    return candidate
+
+
 @app.post("/screenshot")
 async def screenshot(request: ScreenshotRequest):
     """截取设备屏幕"""
-    output_path = request.output_path or tempfile.mktemp(suffix=".png")
+    output_path = _resolve_output_path(request.output_path)
     cmd = [ADB_PATH]
     if request.device:
         cmd.extend(["-s", request.device])

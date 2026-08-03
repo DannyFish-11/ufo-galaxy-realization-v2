@@ -11,7 +11,7 @@
     "core/android_network_participation.py": 1203,
     "core/android_participant_truth_ingress.py": 1903,
     "core/android_runtime_dispatch_binding.py": 1246,
-    "core/api_routes.py": 1517,
+    "core/api_routes.py": 1525,
     "core/attached_runtime_reuse_binding.py": 1108,
     "core/attached_runtime_reuse_dispatch.py": 1052,
     "core/attached_runtime_session.py": 1031,

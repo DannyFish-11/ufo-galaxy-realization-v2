@@ -615,11 +615,50 @@ class UnifiedWebUI:
                 self.app.include_router(api_router)
                 logger.info("扩展 API 路由已加载（来自 core.api_routes）")
 
+                # ── 设备接入:canonical 必须**先注册** ────────────────────────
+                #
+                # 仓库自己的声明(core/api_routes.py 的
+                # CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY):
+                #   "core.api_routes 的兼容 WebSocket 接入永远不等价于生产。
+                #    canonical 的 Android/V2 设备接入是 galaxy_gateway.routes.websocket
+                #    的 /ws/device/{device_id}"
+                #
+                # 而这里此前**只**挂了 core.api_routes 的兼容面。实测(TestClient 真连真发):
+                #
+                #   现状      capability_report → {"type":"compat_ws_disabled", ...}
+                #             heartbeat         → {"type":"compat_ws_disabled", ...}
+                #   挂上之后  capability_report → capability_report_ack
+                #             heartbeat         → heartbeat_ack
+                #
+                # 也就是说桌面本地部署上**设备根本连不进来** —— 兼容面默认禁用
+                # (要 GALAXY_ALLOW_PROTECTED_CORE_COMPAT_WS 才开),而 capability_report
+                # 正是 Android/WearOS 在 onOpen 时发的设备注册事件。
+                #
+                # 顺序要紧:FastAPI 对同一路径先注册的赢。canonical 放在前面,
+                # 兼容面仍然注册(它还提供 /ws/status、/ws/desktop-presence 等),
+                # 只是 /ws/device/{device_id} 不会再被它接管。这一点也实测过 ——
+                # 反过来放(兼容面在前)修复不生效,返回的仍是 compat_ws_disabled。
+                #
+                # 这是纯复用:canonical 那条走 galaxy_gateway.android_bridge 单例
+                # (不是 app.state,所以可以挂在任何 app 上),而 android_bridge 正是
+                # 调 normalise_to_v3_dict 做 AIP v3 规范化的那条链路 —— 别名归一
+                # (heartbeat/agent_heartbeat/device_heartbeat)、v2→v3 改写、
+                # schema/version 闸,全都随之接上,一行新协议代码都不用写。
+                try:
+                    from galaxy_gateway.routes.websocket import register_websocket_routes
+
+                    register_websocket_routes(self.app)
+                    logger.info("canonical 设备接入已挂载:/ws/device/{device_id}(galaxy_gateway.routes.websocket)")
+                except Exception as _ws_err:  # noqa: BLE001 — 挂不上要看得见,但不阻断其余路由
+                    logger.error(
+                        "canonical 设备接入挂载失败,设备将无法接入:%s", _ws_err, exc_info=True
+                    )
+
                 create_websocket_routes(
                     self.app,
                     service_manager=self.service_manager
                 )
-                logger.info("WebSocket 端点已加载")
+                logger.info("WebSocket 端点已加载(兼容面:/ws/status、/ws/desktop-presence 等)")
             except ImportError as e:
                 logger.warning("API 路由模块加载失败: %s", e)
 
