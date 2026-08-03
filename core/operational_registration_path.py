@@ -31,7 +31,8 @@ It:
    fallback, degraded, and recovery paths so maintainers can reason about each
    tier clearly.
 5. Serves as a machine-checkable companion to
-   ``docs/CLONE_TO_USE_REALITY.md`` and ``core/pr993_dual_repo_reevaluation.py``.
+   ``docs/CLONE_TO_USE_REALITY.md``（``core/pr993_dual_repo_reevaluation.py``
+   原亦在此列，已作为零引用死代码删除）。
 
 Design notes
 ------------
@@ -1163,18 +1164,10 @@ def validate_registration_prerequisites() -> OnboardingValidation:
         )
     )
 
-    # ---- PR993 reevaluation (optional but recommended) ----
-    checks.append(
-        _check_module(
-            "pr993-reevaluation",
-            "core.pr993_dual_repo_reevaluation",
-            (
-                "core.pr993_dual_repo_reevaluation not found — "
-                "PR993 machine-checkable reevaluation module missing (recommended)."
-            ),
-            warn_only=True,
-        )
-    )
+    # 此处原有一条 ``core.pr993_dual_repo_reevaluation`` 的 warn-only 存在性检查。
+    # 该模块已随四个双仓审计产物一并删除 —— ``core.complete_joint_system_review``
+    # 的 REVIEW_SUPERSEDES 早已声明自己取代了它。留着这条检查只会让每次运行都报一条
+    # 「推荐模块缺失」的警告，而那个模块本就不该再存在。
 
     # ---- Aggregate ----
     failed = [c for c in checks if c.status == ValidationStatus.FAIL]

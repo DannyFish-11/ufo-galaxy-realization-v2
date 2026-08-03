@@ -244,35 +244,21 @@ class TestAuditLayerRelocation:
         init_path = os.path.join(repo_root, "core", "audit_layer", "__init__.py")
         assert os.path.exists(init_path), "core/audit_layer/__init__.py must exist"
 
-    def test_comprehensive_audit_in_audit_layer(self):
-        """``core.audit_layer.comprehensive_joint_dual_repo_audit`` 必须可导入。"""
-        m = importlib.import_module("core.audit_layer.comprehensive_joint_dual_repo_audit")
-        assert m is not None
-
     def test_fresh_audit_in_audit_layer(self):
         """``core.audit_layer.fresh_dual_repo_code_audit`` 必须可导入。"""
         m = importlib.import_module("core.audit_layer.fresh_dual_repo_code_audit")
         assert m is not None
 
-    def test_post_closure_reassessment_in_audit_layer(self):
-        """``core.audit_layer.post_closure_dual_repo_reassessment`` 必须可导入。"""
-        m = importlib.import_module("core.audit_layer.post_closure_dual_repo_reassessment")
-        assert m is not None
-
-    def test_stub_backward_compat_comprehensive(self):
-        """``core.comprehensive_joint_dual_repo_audit`` 存根必须保持向后兼容性。"""
-        m = importlib.import_module("core.comprehensive_joint_dual_repo_audit")
-        assert m is not None
-
-    def test_stub_backward_compat_post_closure(self):
-        """``core.post_closure_dual_repo_reassessment`` 存根必须保持向后兼容性。"""
-        m = importlib.import_module("core.post_closure_dual_repo_reassessment")
-        assert m is not None
-
-    def test_stub_backward_compat_pr993(self):
-        """``core.pr993_dual_repo_reevaluation`` 存根必须保持向后兼容性。"""
-        m = importlib.import_module("core.pr993_dual_repo_reevaluation")
-        assert m is not None
+    # 此处原有 5 条用例，分别断言
+    # ``comprehensive_joint_dual_repo_audit`` / ``post_closure_dual_repo_reassessment`` /
+    # ``pr993_dual_repo_reevaluation`` 的实现与向后兼容存根可导入。
+    #
+    # 这四个双仓审计产物（含 ``full_current_state_dual_repo_rereading``）已作为零引用
+    # 死代码删除 —— ``core.complete_joint_system_review`` 的 REVIEW_SUPERSEDES 早已声明
+    # 自己取代了它们。「已删除的模块仍可导入」不是要守的性质，这几条随之移除。
+    #
+    # 本类其余用例（audit_layer 包存在、fresh_dual_repo_code_audit 仍在包内）保留 ——
+    # 那两个模块没有被删。
 
 
 # ---------------------------------------------------------------------------

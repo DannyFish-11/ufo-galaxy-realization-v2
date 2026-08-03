@@ -65,11 +65,11 @@ REVIEW_METHODOLOGY = (
     "Historical PR narratives, README text, and prior audit prose are NOT "
     "treated as factual proof."
 )
-REVIEW_SUPERSEDES = [
+REVIEW_SUPERSEDES = [  # 「取代过谁」是历史事实，名单原样保留（只有字符串，无人 import）
     "core.joint_dual_repo_real_code_baseline",
-    "core.post_closure_dual_repo_reassessment",
-    "core.pr993_dual_repo_reevaluation",
-    "core.comprehensive_joint_dual_repo_audit",
+    "core.post_closure_dual_repo_reassessment",  # 已作为零引用死代码删除
+    "core.pr993_dual_repo_reevaluation",  # 已作为零引用死代码删除
+    "core.comprehensive_joint_dual_repo_audit",  # 已作为零引用死代码删除
 ]
 
 # Android repository commit audited when compiling this review.

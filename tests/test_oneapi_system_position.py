@@ -52,8 +52,8 @@ Validates:
   42. Node_01_OneAPI entry pr_guardrail_added is "PR-oneapi-system-position".
   43. dashboard.backend.main.oneapi_configured is in LEGACY_PATH_REGISTRY.
   44. dashboard oneapi_configured entry status is LEGACY_COMPATIBILITY.
-  45. core.api_manager.APIManager._validate_oneapi is in LEGACY_PATH_REGISTRY.
-  46. api_manager entry status is LEGACY_COMPATIBILITY.
+  45. core.api_manager 已删除（回归钉：不该重新出现）。
+  46. core.api_manager 的条目已从 LEGACY_PATH_REGISTRY 移除。
   47. LEGACY_PATH_REGISTRY has at least 3 PR-oneapi-system-position entries.
   48. is_legacy_path returns True for Node_01_OneAPI.main.
   49. docs/ONEAPI_SYSTEM_POSITION.md file exists.
@@ -491,27 +491,39 @@ def test_44_dashboard_oneapi_configured_status():
     assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
 
 
-def test_45_api_manager_validate_oneapi_in_registry():
+def test_45_api_manager_module_is_gone():
+    """回归钉：core.api_manager 已作为零引用死代码删除，不该重新出现。
+
+    原来这里是 test_45 / test_46 两条，断言
+    ``core.api_manager.APIManager._validate_oneapi`` 在 LEGACY_PATH_REGISTRY 里、
+    且状态为 LEGACY_COMPATIBILITY。该模块（721 行）全仓除注册表元数据字符串外
+    无任何 import —— 连它自称「保留供 API key 校验端点使用」的那个端点也不引用它。
+    模块与注册表条目一并移除后，那两条断言失去对象；改成守「不要回来」。
+    """
+    import importlib.util
+
+    assert importlib.util.find_spec("core.api_manager") is None, "core.api_manager 是零引用死代码，已删除，不应重新出现"
+
+
+def test_46_api_manager_not_in_legacy_registry():
+    """既然那条 legacy 路径不复存在，注册表里也不该再登记它。"""
     from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
 
-    assert "core.api_manager.APIManager._validate_oneapi" in LEGACY_PATH_REGISTRY
-
-
-def test_46_api_manager_entry_status():
-    from core.orchestration_authority.legacy_paths import (
-        LEGACY_PATH_REGISTRY,
-        LegacyPathStatus,
-    )
-
-    entry = LEGACY_PATH_REGISTRY["core.api_manager.APIManager._validate_oneapi"]
-    assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
+    assert "core.api_manager.APIManager._validate_oneapi" not in LEGACY_PATH_REGISTRY
 
 
 def test_47_pr_oneapi_entries_count():
+    """PR-oneapi-system-position 登记的 legacy 路径仍在注册表里。
+
+    原判据是 ``>= 3``。其中一条（``core.api_manager.APIManager._validate_oneapi``）
+    对应的模块已作为零引用死代码删除，条目随之移除，故下调为 ``>= 2``。
+    这不是放宽标准：判据本来就是「这些 legacy 路径要被登记」，而不是「数量不许变」——
+    路径真的消失时，跟着少一条才是正确结果。
+    """
     from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
 
     pr_entries = [e for e in LEGACY_PATH_REGISTRY.values() if e.pr_guardrail_added == "PR-oneapi-system-position"]
-    assert len(pr_entries) >= 3
+    assert len(pr_entries) >= 2
 
 
 def test_48_is_legacy_path_node_01_oneapi():

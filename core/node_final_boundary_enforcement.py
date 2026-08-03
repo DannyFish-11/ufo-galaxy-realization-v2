@@ -27,7 +27,7 @@ However, several surfaces remained without an explicit boundary category:
   - ``core.node_lifecycle_governor`` — node lifecycle helpers that have no
     explicit boundary label (internal-only, not exposed as a canonical surface).
   - ``core.node_factory_engine`` — node construction helper, internal-only.
-  - ``core.node_deps_helpers`` — internal-only dependency helper.
+  （``core.node_deps_helpers`` 原本也在此列，已作为零引用死代码删除。）
 
 This module closes those gaps by:
 
@@ -440,15 +440,8 @@ _SURFACE_CATALOGUE: List[NodeSurfaceBoundaryEntry] = [
             "node instantiation is an implementation detail of NodeFabricRegistry."
         ),
     ),
-    NodeSurfaceBoundaryEntry(
-        surface_id="node_deps_helpers",
-        display_name="core.node_deps_helpers",
-        category=NodeSurfaceBoundaryCategory.INTERNAL_ONLY,
-        canonical_replacement=None,
-        rationale=(
-            "Internal dependency resolution helpers for the node subsystem.  " "Not a canonical execution surface."
-        ),
-    ),
+    # core.node_deps_helpers 已作为零引用死代码删除（全仓除本登记的字符串外无任何
+    # import），其 surface 登记随之移除。
     NodeSurfaceBoundaryEntry(
         surface_id="callable_node_baseline",
         display_name="core.callable_node_baseline",
