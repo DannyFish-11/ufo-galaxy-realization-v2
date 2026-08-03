@@ -482,6 +482,20 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             if tcp_adapter:
                 await tcp_adapter.start_server()
                 tcp_adapter.register_local_service("local")
+
+                # 阶段 1 配套:TCP 入站帧接进既有 ingress 汇聚点。此前 _handle_incoming
+                # 只登记 peer 就丢弃消息 —— Android 端 TCP 直连发上来的东西进了黑洞。
+                async def _on_tcp_message(device_id: str, message: dict):
+                    from galaxy_gateway.protocol import parse_message
+
+                    if not str(message.get("type", "") or ""):
+                        return None  # 无类型帧(如探测)不进处理器
+                    response = await message_handler.handle_message(device_id or "tcp_unknown", parse_message(message))
+                    if response is None:
+                        return None
+                    return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
+
+                tcp_adapter.set_message_handler(_on_tcp_message)
         except Exception as _tcp_err:
             logger.debug("TCP P2P server start failed (non-fatal): %s", _tcp_err)
 
