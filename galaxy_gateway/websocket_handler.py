@@ -248,6 +248,14 @@ class GatewayWSManager:
                 # remove the local entry; the warning is logged by the helper.
                 udm_write_unregister(device_id)
 
+                # 阶段 0（分区可见化）：设备链路 DOWN
+                try:
+                    from core.node_communication import get_link_observer
+
+                    get_link_observer().record_device_link(device_id, False, detail="ws_disconnect")
+                except Exception:  # noqa: BLE001
+                    pass
+
                 # ── Presence backbone: unregister from UCM ──
                 try:
                     ucm = self._ucm()
@@ -550,6 +558,15 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
             metadata=metadata,
             source="gateway_ws",
         )
+
+        # 阶段 0（分区可见化）：设备链路 UP（UDM 写通即视为链路建立）
+        if udm_success:
+            try:
+                from core.node_communication import get_link_observer
+
+                get_link_observer().record_device_link(device_id, True, detail="ws_register")
+            except Exception:  # noqa: BLE001
+                pass
 
         # 注册设备（local gateway router — secondary, only when UDM succeeded）
         success = False

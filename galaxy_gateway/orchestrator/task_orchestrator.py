@@ -117,6 +117,9 @@ class TaskOrchestrator:
         self._pool_max_size = int(os.environ.get("GALAXY_TASK_QUEUE_MAX", "500"))
         self._pool_concurrency = int(os.environ.get("GALAXY_TASK_CONCURRENCY", "4"))
         self._task_pool: Optional[Any] = None
+        # 启动前暂存队列（同样有界）。既有语义：未 start() 时也可提交 —— 任务先入队、
+        # 启动后消费；test_pr2_* 以 task_queue.put 为拦截点依赖这一点。start() 时排空进池。
+        self.task_queue: asyncio.Queue = asyncio.Queue(maxsize=self._pool_max_size)
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
         # Round-robin index for distributing tasks across connected devices.
@@ -151,6 +154,22 @@ class TaskOrchestrator:
             shed_strategy="reject_new",
         )
         await self._task_pool.start()
+        # 排空启动前暂存的任务进池（保持提交顺序）
+        while not self.task_queue.empty():
+            try:
+                _staged = self.task_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            try:
+                await self._task_pool.submit(
+                    self._process_task,
+                    _staged,
+                    timeout=float(getattr(_staged, "timeout", 300)),
+                    task_id=_staged.task_id,
+                )
+            except Exception as _drain_err:  # noqa: BLE001
+                _staged.status = TaskStatus.FAILED
+                _staged.error = f"启动排空失败：{_drain_err}"
         logger.info(
             "Task Orchestrator started (pool: max_queue=%d, concurrency=%d)",
             self._pool_max_size,
@@ -277,7 +296,10 @@ class TaskOrchestrator:
 
         try:
             if self._task_pool is None:
-                raise RuntimeError("orchestrator not started")
+                # 未启动：进有界暂存队列（既有 submit-before-start 语义），start() 时排空进池
+                await self.task_queue.put(task)
+                logger.info(f"Task staged (orchestrator not started): {task_id}")
+                return task
             await self._task_pool.submit(self._process_task, task, timeout=float(timeout), task_id=task_id)
         except QueueFullError as exc:
             # 背压：如实拒绝而不是无限积压。调用方拿到 FAILED + 明确原因。

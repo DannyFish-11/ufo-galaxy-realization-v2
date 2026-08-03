@@ -13,9 +13,10 @@ Galaxy - Universal Node Communication System - 修复版
 import asyncio
 import logging
 import ssl
+import threading
 import time
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -955,3 +956,88 @@ if __name__ == "__main__":
         print(f"Response: {response}")
 
     asyncio.run(test())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 阶段 0 接入：链路态观测（分区可见化）
+# ---------------------------------------------------------------------------
+# 上面的 AODV/传输部分按产品决定暂不接（多跳路由要 ≥2 个 Python 节点才有意义）。
+# 本节把 NodeRegistry 的心跳/在线模型接成**当前拓扑（星型：设备经中心互联）下
+# 真实可算**的分区观测：
+#   * 中心平面链路（NATS）状态由 core/nats_bus.py 的 _absorb_nats_state 汇聚点喂入
+#     ——那是连接/断开/重连/意外断开四条路径的共同出口，一处覆盖全部；
+#   * 设备链路由 galaxy_gateway/websocket_handler 的注册/断开处喂入；
+#   * 消费面是 /api/v1/health（galaxy_gateway/routes/health.py），运维可直接看到
+#     「是否分区、哪些设备成了孤岛、NATS 平面是否在」。
+# 注意：原 NodeRegistry.detect_partitions() 的注释自己写明是"假设全连接"的简化
+# 半成品，不能拿来当真分区判据；本节按星型拓扑显式计算（设备孤岛 = 链路断的设备），
+# 待阶段 2 的 AODV 路由表落地后，边集可换成真实多跳连通关系。
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class LinkStateObserver:
+    """星型拓扑下的链路态/分区观测器（observe-only，不做任何路由决策）。"""
+
+    def __init__(self) -> None:
+        self._center_links: Dict[str, Dict[str, Any]] = {}
+        self._device_links: Dict[str, Dict[str, Any]] = {}
+        self._transitions: deque = deque(maxlen=64)
+        self._lock = threading.Lock()
+
+    # -- 喂入 ---------------------------------------------------------------
+
+    def record_center_link(self, name: str, up: bool, detail: str = "") -> None:
+        """中心平面链路（如 NATS）状态变化。"""
+        self._record(self._center_links, f"center:{name}", name, up, detail)
+
+    def record_device_link(self, device_id: str, up: bool, detail: str = "") -> None:
+        """设备 ↔ 中心链路状态变化。"""
+        if not device_id:
+            return
+        self._record(self._device_links, f"device:{device_id}", device_id, up, detail)
+
+    def _record(self, table: Dict[str, Dict[str, Any]], key: str, name: str, up: bool, detail: str) -> None:
+        now = time.time()
+        with self._lock:
+            prev = table.get(name, {}).get("up")
+            table[name] = {"up": up, "since": now, "detail": detail}
+            if prev is not None and prev != up:
+                self._transitions.append({"link": key, "up": up, "at": now, "detail": detail})
+                logger.warning("链路状态变化: %s → %s%s", key, "UP" if up else "DOWN", f" ({detail})" if detail else "")
+
+    # -- 消费 ---------------------------------------------------------------
+
+    def snapshot(self) -> Dict[str, Any]:
+        """当前分区状态快照（星型拓扑：孤岛 = 链路断的设备）。"""
+        with self._lock:
+            islands = sorted(d for d, s in self._device_links.items() if not s["up"])
+            connected = sorted(d for d, s in self._device_links.items() if s["up"])
+            center = {n: {"up": s["up"], "since": s["since"]} for n, s in self._center_links.items()}
+            center_degraded = any(not s["up"] for s in self._center_links.values())
+            return {
+                "partitioned": bool(islands) or center_degraded,
+                "islands": islands,
+                "connected_devices": connected,
+                "center_links": center,
+                "recent_transitions": list(self._transitions)[-10:],
+            }
+
+
+_link_observer: Optional[LinkStateObserver] = None
+_link_observer_lock = threading.Lock()
+
+
+def get_link_observer() -> LinkStateObserver:
+    """进程级单例。"""
+    global _link_observer
+    with _link_observer_lock:
+        if _link_observer is None:
+            _link_observer = LinkStateObserver()
+        return _link_observer
+
+
+def reset_link_observer() -> None:
+    """测试用：清空单例。"""
+    global _link_observer
+    with _link_observer_lock:
+        _link_observer = None

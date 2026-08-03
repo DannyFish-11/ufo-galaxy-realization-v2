@@ -85,6 +85,14 @@ async def enhanced_health_check(
             "llm_router": "available" if llm is not None else "unavailable",
         },
     }
+    # 阶段 0（分区可见化）：运维直接看到「是否分区、哪些设备成孤岛、NATS 平面是否在」。
+    try:
+        from core.node_communication import get_link_observer  # noqa: PLC0415
+
+        result["network_partition"] = get_link_observer().snapshot()
+    except Exception:  # noqa: BLE001
+        result["network_partition"] = {"error": "observer unavailable"}
+
     if llm is not None:
         try:
             status = llm.get_status()

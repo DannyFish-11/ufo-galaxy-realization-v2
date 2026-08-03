@@ -482,6 +482,20 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             if tcp_adapter:
                 await tcp_adapter.start_server()
                 tcp_adapter.register_local_service("local")
+
+                # 阶段 1 配套:TCP 入站帧接进既有 ingress 汇聚点。此前 _handle_incoming
+                # 只登记 peer 就丢弃消息 —— Android 端 TCP 直连发上来的东西进了黑洞。
+                async def _on_tcp_message(device_id: str, message: dict):
+                    from galaxy_gateway.protocol import parse_message
+
+                    if not str(message.get("type", "") or ""):
+                        return None  # 无类型帧(如探测)不进处理器
+                    response = await message_handler.handle_message(device_id or "tcp_unknown", parse_message(message))
+                    if response is None:
+                        return None
+                    return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
+
+                tcp_adapter.set_message_handler(_on_tcp_message)
         except Exception as _tcp_err:
             logger.debug("TCP P2P server start failed (non-fatal): %s", _tcp_err)
 
@@ -491,6 +505,31 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 await udp_adapter.start()
         except Exception as _udp_err:
             logger.debug("UDP listener start failed (non-fatal): %s", _udp_err)
+
+        # 阶段 2：AODV 多跳 mesh（第 10 个适配器）。peers 来自 lan_discovery 镜像
+        # 进 UDM 的 mDNS 记录；无 peers 时 is_available 恒 False，单节点部署下沉默。
+        try:
+            from core.adapters.mesh_routing_adapter import MeshRoutingAdapter
+
+            mesh_adapter = MeshRoutingAdapter(
+                node_id=os.getenv("GALAXY_MESH_NODE_ID", "gateway"),
+                local_port=int(os.getenv("GALAXY_MESH_PORT", "19422")),
+            )
+            await mesh_adapter.start_server()
+            mesh_adapter.refresh_neighbors_from_discovery()
+
+            # 终点投递 → 既有 ingress 汇聚点（message_handler.handle_message），
+            # 否则消息送到网关却没人消费 —— 中继成功但内容进了黑洞。
+            async def _on_mesh_message(aip: dict, meta: dict) -> None:
+                from galaxy_gateway.protocol import parse_message
+
+                src = str(meta.get("src", "") or "mesh_unknown")
+                await message_handler.handle_message(src, parse_message(aip))
+
+            mesh_adapter.set_message_handler(_on_mesh_message)
+            aip_transport.register_adapter(mesh_adapter)
+        except Exception as _mesh_err:
+            logger.debug("Mesh routing adapter start failed (non-fatal): %s", _mesh_err)
 
         app.state.aip_transport = aip_transport
         logger.info(
