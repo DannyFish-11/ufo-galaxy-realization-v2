@@ -82,6 +82,26 @@ def test_nats_state_absorption_feeds_observer() -> None:
     assert snap["center_links"]["nats"]["up"] is True
 
 
+def test_nats_startup_failure_also_feeds_observer(monkeypatch) -> None:
+    """真实调用 NATSBus.connect() 连一个必然失败的地址 —— 启动失败出口也必须喂观测器。
+
+    真实路径复跑发现:三条启动失败出口(内嵌起不来/auto-local 全败/显式 URL 连不上)
+    此前直接 return,「中心从一开始就不在」恰好是分区可见化漏掉的最重要场景。
+    """
+    from core.nats_bus import NATSBus
+
+    # 测试环境默认 GALAXY_NATS_ENABLED=false 会走本地降级出口 —— 这里要钉的是
+    # 真实连接失败出口,故显式启用。
+    monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
+    bus = NATSBus()
+    bus._url = "nats://127.0.0.1:1"
+    bus._auto_local = False
+    res = asyncio.run(bus.connect("nats://127.0.0.1:1"))
+    assert res.get("success") is False
+    snap = get_link_observer().snapshot()
+    assert snap["center_links"].get("nats", {}).get("up") is False, "启动失败没有进观测器 —— 中心缺席不可见"
+
+
 # ===========================================================================
 # 三、缝 2：设备 WS 断开真的把链路标 DOWN
 # ===========================================================================

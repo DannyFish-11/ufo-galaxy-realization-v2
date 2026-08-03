@@ -80,6 +80,7 @@ class MeshRoutingAdapter(TransportAdapter):
         self._seen_set: set = set()
         self._message_handler: Optional[Callable[[Dict[str, Any], Dict[str, Any]], Any]] = None
         self._last_refresh = 0.0
+        self._discovered: set = set()  # 经 UDM 发现加入的邻接(区别于显式注入,可随下线清理)
 
     # -- 邻接管理（注册表视图 = UDM，不用 NodeRegistry）---------------------
 
@@ -88,30 +89,46 @@ class MeshRoutingAdapter(TransportAdapter):
         self._neighbors[node_id] = (host, port)
 
     def refresh_neighbors_from_discovery(self) -> int:
-        """从 UDM 拉 lan_discovery 镜像进来的 ``_galaxy._tcp`` peers 作邻接。
+        """与 UDM 里 lan_discovery 镜像的 ``_galaxy._tcp`` peers 同步邻接。
 
-        全程防御：UDM 不可用/无记录时保持现有邻接不变，返回本次新增数。
+        新 peer 上线 → 加入；发现来源的 peer 下线/消失 → 移除（显式注入的邻接
+        不动）；地址变了 → 更新。全程防御：UDM 不可用时保持现状。返回本次新增数。
         """
         added = 0
         try:
             from core.unified.device_manager import get_unified_device_manager
 
-            for dev in get_unified_device_manager().get_all_devices():
+            # get_online_devices(不存在 get_all_devices —— 第一版就错在这里,
+            # AttributeError 被防御 except 吞掉,发现型邻接静默空转;真实跑通才暴露)。
+            # 在线集合同时天然完成离线过滤:下线的 peer 不在返回集里 → 被清理。
+            current: Dict[str, Tuple[str, int]] = {}
+            for dev in get_unified_device_manager().get_online_devices():
                 meta = getattr(dev, "metadata", None) or {}
                 if meta.get("protocol") != "mdns" or "_galaxy" not in str(meta.get("service_type", "")):
                     continue
                 host = getattr(dev, "ip_address", None)
                 port = getattr(dev, "port", None)
-                if host and port and dev.device_id not in self._neighbors:
-                    self.add_neighbor(dev.device_id, str(host), int(port))
+                if host and port:
+                    current[dev.device_id] = (str(host), int(port))
+            for nid, hp in current.items():
+                if nid not in self._neighbors:
+                    self.add_neighbor(nid, *hp)
+                    self._discovered.add(nid)
                     added += 1
+                elif nid in self._discovered:
+                    self._neighbors[nid] = hp
+            for nid in list(self._discovered):
+                if nid not in current:
+                    self._discovered.discard(nid)
+                    self._neighbors.pop(nid, None)
         except Exception as exc:  # noqa: BLE001
             logger.debug("mesh: 邻接刷新失败（保持现状）: %s", exc)
         self._last_refresh = time.time()
         return added
 
     def _maybe_refresh(self) -> None:
-        if not self._neighbors and time.time() - self._last_refresh > 30.0:
+        # 周期刷新而不是只在空邻接时刷 —— 否则新 peer 上线看不见、下线的清不掉。
+        if time.time() - self._last_refresh > 30.0:
             self.refresh_neighbors_from_discovery()
 
     def set_message_handler(self, handler: Callable[[Dict[str, Any], Dict[str, Any]], Any]) -> None:
@@ -125,29 +142,54 @@ class MeshRoutingAdapter(TransportAdapter):
         return self._running and bool(self._neighbors) and target != self.node_id
 
     async def send(self, message: Dict[str, Any], target: str) -> Dict[str, Any]:
-        """端到端发送：直连邻居 → 路由表 → 现场 RREQ 发现，三级都不通如实失败。"""
+        """端到端发送：直连邻居 → 路由表 → 现场 RREQ 发现，三级都不通如实失败。
+
+        直连**链路层**失败（连不上/断流）不就地放弃：按 AODV 语义回退到多跳
+        发现 —— 邻居直连断了不代表没有经第三方的路。对端如实报告的业务失败
+        （如中继无路）则原样返回，不重试。
+        """
         if not self._running:
             return {"success": False, "via": "mesh", "error": "mesh server not running"}
         self._maybe_refresh()
 
-        next_hop = target if target in self._neighbors else None
-        if next_hop is None:
-            route = await self._routing_table.get_route(target)
-            if route is None:
-                await self._discover_route(target)
-                route = await self._routing_table.get_route(target)
-            if route is not None and route.next_hop in self._neighbors:
-                next_hop = route.next_hop
+        if target in self._neighbors:
+            result = await self._send_data_frame(target, self._data_frame(message, target))
+            if result.get("success") or not self._is_link_error(result):
+                return result
+            logger.debug("mesh: 直连 %s 链路失败,回退多跳发现", target)
+
+        next_hop = await self._resolve_next_hop(target)
         if next_hop is None:
             return {"success": False, "via": "mesh", "error": f"mesh: no route to '{target}'"}
+        return await self._send_data_frame(next_hop, self._data_frame(message, target))
 
-        frame = Message(
+    def _data_frame(self, message: Dict[str, Any], target: str) -> Message:
+        return Message(
             message_type=MessageType.DATA_REQUEST,
             source_id=self.node_id,
             target_id=target,
             payload={"aip": message, "path": [self.node_id]},
         )
-        return await self._send_data_frame(next_hop, frame)
+
+    async def _resolve_next_hop(self, target: str) -> Optional[str]:
+        """路由表 → 现场发现。陈旧路由（next_hop 已不是邻居）先失效再发现，
+        而不是让它挡住发现路径。"""
+        route = await self._routing_table.get_route(target)
+        if route is not None and route.next_hop not in self._neighbors:
+            await self._routing_table.invalidate_route(target)
+            route = None
+        if route is None:
+            await self._discover_route(target)
+            route = await self._routing_table.get_route(target)
+            if route is not None and route.next_hop not in self._neighbors:
+                route = None
+        return route.next_hop if route is not None else None
+
+    @staticmethod
+    def _is_link_error(result: Dict[str, Any]) -> bool:
+        """链路层失败（本端连不上/断流）才值得回退多跳；对端如实报告的失败不算。"""
+        err = str(result.get("error", "") or "")
+        return err.startswith("mesh connect ") or err.startswith("mesh send via ")
 
     async def broadcast(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """只对直连邻居广播（多跳洪泛数据帧会放大风暴，不做）。"""
@@ -335,7 +377,11 @@ class MeshRoutingAdapter(TransportAdapter):
             # 正向路由：去 target 走 RREP 进来的那个邻居
             await self._routing_table.add_route(target, sender, hop_count)
         if p.get("originator") != self.node_id:
+            if msg.ttl <= 1:
+                logger.debug("mesh: RREP TTL 耗尽,丢弃(防病态路由状态下的无限转发)")
+                return
             fwd = Message.from_dict(msg.to_dict())
+            fwd.ttl = msg.ttl - 1
             fwd.payload = dict(p, hop_count=hop_count, sender_id=self.node_id)
             await self._forward_rrep(fwd)
 

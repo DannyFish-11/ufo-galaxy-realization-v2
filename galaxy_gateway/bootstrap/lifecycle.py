@@ -490,7 +490,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
                     if not str(message.get("type", "") or ""):
                         return None  # 无类型帧(如探测)不进处理器
-                    response = await message_handler.handle_message(device_id or "tcp_unknown", parse_message(message))
+                    try:
+                        parsed = parse_message(message)
+                    except Exception as _parse_err:  # noqa: BLE001
+                        # 畸形/未知类型帧:静默丢弃(debug 级)。任何客户端都能对
+                        # 这个端口发垃圾 —— 每条刷一次 warning 等于把日志交给对端。
+                        logger.debug("TCP 入站帧不符合 AIP v3,丢弃: %s", _parse_err)
+                        return None
+                    response = await message_handler.handle_message(device_id or "tcp_unknown", parsed)
                     if response is None:
                         return None
                     return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
