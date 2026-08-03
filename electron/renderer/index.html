@@ -109,6 +109,8 @@ body {
 
 <!-- 模块加载 -->
 <script src="webgl/context.js"></script>
+<!-- 深度运动（纯函数，无 DOM 依赖）。必须早于 app.js —— app.js 的渲染循环直接调它。 -->
+<script src="presence_motion.js"></script>
 <script src="app.js"></script>
 <script src="perception-capture.js"></script>
 

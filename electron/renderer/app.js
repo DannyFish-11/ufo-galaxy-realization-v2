@@ -20,6 +20,9 @@ class GalaxyRenderer {
     this.intent = 0.0;
     this.speaking = false;
     this.phase = 'static';
+    // 后端每拍算出的连续量（塌缩/回撤倾向、稳定度）。拿不到就是 null，
+    // presence_motion 会退回与改造前逐位一致的行为。见 core/phase_contract.py。
+    this.posture = null;
 
     // WebGL 是否可用；不可用时走 DOM 兜底渲染
     this.webglOK = false;
@@ -127,6 +130,11 @@ class GalaxyRenderer {
     if (payload.phase !== undefined) {
       this.phase = payload.phase;
     }
+    // 相位姿态：后端一直在算的连续量。它决定过渡【怎么走】——
+    // depth_factor 只说了走到哪儿。旧后端不发这个字段时保持 null。
+    if (payload.posture !== undefined) {
+      this.posture = payload.posture;
+    }
     // OpenClawd 实时状态文本（后端动态生成）
     if (payload.status_text !== undefined) {
       // 可选：用于灵动岛显示
@@ -135,42 +143,27 @@ class GalaxyRenderer {
 
   // ── Spring 物理（只平滑，不切换）+ 编排限速 ──
   //
-  // 后端相位是一步跳变（static 0.05 → liminal 0.50 → manifest 0.92），
-  // 而着色器的分阶段编排（0.25-0.40 边缘光从下往上收回 → 灵动岛 →
-  // 0.40-0.85 空间展开）假设 depth 匀速穿越。原先纯弹簧（临界阻尼、
-  // 时间常数 ≈0.14s）约 100ms 就冲过整个收回窗口——回收动画在数学上
-  // 就不可能被看见。修复：穿越编排带 [0.10, 0.90] 时对 depth 变化限速，
-  // 让每一幕按设计秩序播出；带外仍是弹簧微平滑。仍然纯渲染节奏，
-  // 不做状态机、不改后端。
+  // 物理本体已抽到 presence_motion.js —— 抽出去的唯一理由是【可测】：
+  // 它不碰 DOM/WebGL，能在 node 里逐帧跑出数来（presence_motion.test.js）。
+  // 这里只负责把渲染器的状态喂进去。
+  //
+  // 限速器为什么不删：着色器的分幕（0.25-0.40 边缘光收回 → 0.40-0.85 空间
+  // 展开）假设 depth 匀速穿越，而相位广播是事件驱动的离散跳变。纯弹簧约
+  // 100ms 就冲过整个收回窗口，回收动画在数学上就不可能被看见。改的是
+  // 速度【怎么定】——现在由后端的塌缩/回撤倾向决定，而不是一个常数。
 
   _springUpdate(dt) {
-    const target = this.depth;
-    const gap = target - this.currentDepth;
+    // 拿不到 presence_motion（脚本加载失败）时保持静止而不是崩掉整个渲染
+    // 循环：覆盖层宁可不动，也不能因为一个辅助脚本没加载就整屏消失。
+    if (typeof PresenceMotion === 'undefined') return;
 
-    // 编排带内的大跨度跳变 → 匀速穿越（intent 最多提速 ~1.8x）
-    const CHOREO_UP = 0.34;    // 上行速度（depth/秒）：0.05→0.50 约 1.3s，回收窗口约 0.45s 可见
-    const CHOREO_DOWN = 0.55;  // 下行（回到静默）稍快
-    const inBand =
-      Math.max(this.currentDepth, target) > 0.10 &&
-      Math.min(this.currentDepth, target) < 0.90;
-    if (inBand && Math.abs(gap) > 0.04) {
-      const boost = 1.0 + this.intent * 0.8;
-      const speed = (gap > 0 ? CHOREO_UP : CHOREO_DOWN) * boost;
-      const step = Math.sign(gap) * Math.min(Math.abs(gap), speed * dt);
-      this.currentDepth += step;
-      this.springV = Math.sign(gap) * speed; // 供帧率/活跃判定复用
-      this.currentDepth = Math.max(0, Math.min(1, this.currentDepth));
-      return;
-    }
-
-    // 小跨度/带外 → 原弹簧微平滑
-    const intentBoost = 1.0 + this.intent * 1.5;
-    const tension = this.currentDepth < target ? 50 * intentBoost : 70;
-    const friction = 14;
-    const force = -tension * (this.currentDepth - target);
-    this.springV += (force + -friction * this.springV) * dt;
-    this.currentDepth += this.springV * dt;
-    this.currentDepth = Math.max(0, Math.min(1, this.currentDepth));
+    const state = { depth: this.currentDepth, velocity: this.springV };
+    PresenceMotion.advance(state, this.depth, dt, {
+      intent: this.intent,
+      posture: this.posture,
+    });
+    this.currentDepth = state.depth;
+    this.springV = state.velocity;
   }
 
   // ── 渲染循环 ──

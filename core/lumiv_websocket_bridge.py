@@ -235,14 +235,30 @@ class GalaxyPresenceBridge:
         _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     def _on_intent_update(self, event: Any) -> None:
-        """意图强度持续更新 — Liminal 态下微调 depth。"""
+        """意图强度持续更新 —— 刷新意图与姿态，**不再自己算深度**。
+
+        改造前这里是 ``self._current_depth = 0.15 + intent * 0.70``。两个问题：
+
+        1. **它违反相位权威**。这条线性映射能把一个 liminal 帧的深度放到 0.15
+           （着色器的纯静默区）或 0.85（空间收回区）。面板读 phase 说"阈限"，
+           覆盖层读 depth 画的却是静默 —— 正是 phase_contract 存在要防的那种
+           自相矛盾的帧。liminal 带按契约只允许 [0.3635, 0.755]。
+        2. **它绕开了契约、还不更新 _posture**。而本回调是三个相位事件里
+           **频率最高**的那个（见 _on_any_event 的注释：intent 高频），所以
+           #1573 刚接上的连续深度会在进入 liminal 后立刻被它盖掉，广播出去的
+           ``depth_factor`` 与 ``posture.depth`` 还会互相打架。
+
+        intent 并没有因此消失：它一直是 payload 里**自己那一维**
+        （``payload.intent``），渲染端读它来决定过渡速度
+        （electron/renderer/presence_motion.js）。这里只是不再把它和深度混为
+        一谈 —— 深度归相位契约管，强度归 intent 管。
+        """
         if self._current_mode != "liminal":
             return
         p = self._payload_of(event)
-        intent = p.get("intent_strength", 0.5)
-        self._intent = intent
-        # depth 在 0.15-0.85 之间随 intent 线性映射
-        self._current_depth = 0.15 + intent * 0.70
+        self._intent = p.get("intent_strength", 0.5)
+        # 走与三个相位事件同一条路：深度由实算的连续量导出，姿态同步更新。
+        self._apply_posture("liminal")
         self._speaking = p.get("speaking", False)
         _bt = asyncio.create_task(self._broadcast_state())
         _BACKGROUND_TASKS.add(_bt)
