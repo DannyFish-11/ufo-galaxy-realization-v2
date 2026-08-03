@@ -443,6 +443,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     if opencode_routes:
         router.include_router(opencode_routes.create_router(service_manager=service_manager, config=config))
 
+    # 网关侧独有能力并入权威层;为什么这么做见 core/gateway_surface_merge.py。
+    try:
+        from core.gateway_surface_merge import merge_gateway_only_routers
+
+        merge_gateway_only_routers(router)
+    except Exception as _merge_err:  # noqa: BLE001 — 整合层缺席不阻断权威 API
+        logger.warning("网关能力并入权威层失败(可选): %s", _merge_err)
+
     # Control Plane Phase 2: audit ledger and HITL approval routes
     try:
         from core.routes import audit as audit_routes

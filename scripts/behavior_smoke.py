@@ -192,6 +192,13 @@ def check_routes_present(base: str, rep: Report) -> Dict[str, Any]:
         "/api/v1/observability/context-layer",
         "/api/v1/modality/matrix",
         "/api/v1/operator/presence/ambient",
+        # 这四条是从 galaxy_gateway.app 并进权威层的 —— 并入前它们只在另一个 app 上,
+        # 而两个 app 抢同一个端口,于是"跑哪个入口"决定了它们存不存在。
+        # 冒烟里钉住它们,是因为并入写在 try/except 里:不抛错 != 挂上了。
+        "/api/v1/agents/linux/servers",
+        "/api/v1/agents/sandbox/status",
+        "/api/v5/health",
+        "/api/v1/gateway/metrics",
     ):
         rep.check(f"路由已挂载 {path}", path in paths, f"共 {len(paths)} 条路由")
     return {"paths": paths}

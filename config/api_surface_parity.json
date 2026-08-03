@@ -1,0 +1,76 @@
+{
+  "_comment": "API 面对齐台账。记录『galaxy_gateway.app 有、而权威层(core.api_routes + core.health_check)没有』的路径,以及每一条**为什么还没并进去**。空的才是理想状态;这里非空是因为剩下的都是重复族,并进去只会让一个 app 里出现两套做法。tests/test_api_surface_parity.py 会盯住它不再变长。",
+  "_measured_at_commit": "见 git 历史;用 tests/test_api_surface_parity.py 重新测量",
+  "authoritative_count": 378,
+  "gateway_count": 59,
+  "gateway_only": [
+    {
+      "path": "/api/commands",
+      "reason": "网关的无版本前缀族;权威层用 /api/v1/*。并存会造成同一能力两个 URL。"
+    },
+    {
+      "path": "/api/devices",
+      "reason": "同上 —— A 已有 /api/devices/list|register|heartbeat 与 /api/v1/devices/*。"
+    },
+    {
+      "path": "/api/devices/connected",
+      "reason": "同上 —— A 已有 /api/devices/list|register|heartbeat 与 /api/v1/devices/*。"
+    },
+    {
+      "path": "/api/devices/{device_id}",
+      "reason": "同上 —— A 已有 /api/devices/list|register|heartbeat 与 /api/v1/devices/*。"
+    },
+    {
+      "path": "/api/tasks",
+      "reason": "同上 —— A 用 /api/v1/tasks/*。"
+    },
+    {
+      "path": "/api/tasks/{task_id}",
+      "reason": "同上 —— A 用 /api/v1/tasks/*。"
+    },
+    {
+      "path": "/api/v1/config",
+      "reason": "与 core/routes/config.py 的 /api/config 同为『取配置』,响应形状不同。合并前要先定哪个是契约。"
+    },
+    {
+      "path": "/api/v1/pairing/approve",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/pairing/claim/{request_id}",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/pairing/code",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/pairing/deny",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/pairing/enroll",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/pairing/pending",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/pairing/status/{request_id}",
+      "reason": "设备配对有两套独立实现,词汇不同:core/routes/pairing.py 用 /api/v1/pair/*(card/claim/peers/trust/check),galaxy_gateway/api/pairing.py 用 /api/v1/pairing/*(code/enroll/approve/deny/pending/status)。把两套一起挂上去 = 一个 app 里两个配对系统,已配对的设备在另一套里不可见。保留哪一套、旧数据怎么迁,是产品决定,不该由接线顺手定。"
+    },
+    {
+      "path": "/api/v1/sessions/stats",
+      "reason": "网关自带的 sessions 路由与 core/routes/sessions.py 是两套;A 已有 /api/v1/sessions/*。"
+    },
+    {
+      "path": "/api/v1/sessions/{session_id}/migrate",
+      "reason": "同上,且与 A 的 /api/v1/sessions/migrate 同能力异形(路径参数 vs 请求体)。"
+    },
+    {
+      "path": "/api/v1/webrtc/endpoint",
+      "reason": "网关侧 WebRTC 端点;权威层没有对应族,但它依赖网关内部状态,搬迁需先解耦。"
+    }
+  ]
+}
