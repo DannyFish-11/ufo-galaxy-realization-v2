@@ -1326,6 +1326,14 @@ def _absorb_nats_state(is_connected: bool, url: str = "") -> None:
     All errors are swallowed so that topology absorption never interrupts
     the NATS connection lifecycle.
     """
+    # 阶段 0（分区可见化）：同一状态同时喂给链路态观测器 —— 本函数是
+    # 连接/断开/重连/意外断开四条路径的共同出口，一处覆盖全部。
+    try:
+        from core.node_communication import get_link_observer  # noqa: PLC0415
+
+        get_link_observer().record_center_link("nats", is_connected, detail=url)
+    except Exception as _lo_exc:  # noqa: BLE001
+        logger.debug("link observer unavailable (non-fatal): %s", _lo_exc)
     try:
         host = ""
         port = 0

@@ -54,6 +54,13 @@ class TCPAdapter(TransportAdapter):
         self._server: Optional[asyncio.Server] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._running = False
+        # 入站消息处理器:async handler(device_id, message_dict) -> Optional[dict]。
+        # 返回非 None 时按同一线协议把响应帧写回连接。未设置时仅登记 peer(旧行为)。
+        self._message_handler = None
+
+    def set_message_handler(self, handler) -> None:
+        """接入入站消费方(网关侧 lifecycle 把它接到 message_handler.handle_message)。"""
+        self._message_handler = handler
 
     # -- TransportAdapter 接口 ---------------------------------------------
 
@@ -169,7 +176,17 @@ class TCPAdapter(TransportAdapter):
                     peer.connected = True
 
                 logger.debug("TCP RX from %s: %s", device_id, message.get("type", "unknown"))
-                # TODO: 分发到消息处理器
+                # 分发到入站消费方;有响应就按同一线协议写回。处理失败不断连 ——
+                # 一条坏消息不该杀掉整条链路(心跳/后续消息还要走)。
+                if self._message_handler is not None:
+                    try:
+                        response = await self._message_handler(device_id, message)
+                        if response is not None:
+                            payload = json.dumps(response, ensure_ascii=False, default=str).encode("utf-8")
+                            writer.write(len(payload).to_bytes(4, "big") + payload)
+                            await writer.drain()
+                    except Exception as handler_exc:  # noqa: BLE001
+                        logger.warning("TCP 入站消息处理失败(连接保持): %s", handler_exc)
 
             except asyncio.IncompleteReadError:
                 break
