@@ -88,12 +88,23 @@ def test_nats_startup_failure_also_feeds_observer(monkeypatch) -> None:
     真实路径复跑发现:三条启动失败出口(内嵌起不来/auto-local 全败/显式 URL 连不上)
     此前直接 return,「中心从一开始就不在」恰好是分区可见化漏掉的最重要场景。
     """
-    from core.nats_bus import NATSBus
+    import core.nats_bus as nb
 
     # 测试环境默认 GALAXY_NATS_ENABLED=false 会走本地降级出口 —— 这里要钉的是
-    # 真实连接失败出口,故显式启用。
+    # 真实连接失败出口,故显式启用。失败用注入而不是连死端口:显式 URL 的既有
+    # 策略是无限重连,真连 127.0.0.1:1 在 CI 上会转到 pytest-timeout(实际红过)。
     monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
-    bus = NATSBus()
+
+    async def _refused(*_a, **_k):
+        raise OSError("connect refused (probe)")
+
+    import types as _types
+
+    # nats 库在部分环境未安装(模块级 try import),raising=False 两种环境都成立;
+    # 未安装时 connect 内会 NameError 走同一失败出口,装了则走注入的拒绝。
+    monkeypatch.setattr(nb, "nats", _types.SimpleNamespace(connect=_refused), raising=False)
+    monkeypatch.setattr(nb, "_HAS_NATS", True, raising=False)
+    bus = nb.NATSBus()
     bus._url = "nats://127.0.0.1:1"
     bus._auto_local = False
     res = asyncio.run(bus.connect("nats://127.0.0.1:1"))
