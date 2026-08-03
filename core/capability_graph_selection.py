@@ -33,7 +33,11 @@ Governance invariants
 1.  **Read-only consumer of CapabilityAssimilationLayer.**
     This module MUST NOT write to the assimilation layer.
 2.  **No direct topology access.**
-    Transport path scoring is delegated to :mod:`core.capability_network_bridge`.
+    本模块只按**能力匹配**打分（``score_provider``），并在 ``discover_providers``
+    里用 ``require_online=True`` 过滤离线提供方；**不做传输路径打分**。
+    （此处原先写的是「Transport path scoring is delegated to
+    core.capability_network_bridge」——那个模块从未被本模块导入，也没有任何真实
+    入口能到达它，这句委托声明是假的。真要做能力+路径联合选择，需要显式接线。）
 3.  **All selection decisions are observable.**
     Every discovery / selection call is recorded in a 256-entry ring buffer.
 

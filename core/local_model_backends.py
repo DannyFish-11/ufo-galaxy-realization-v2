@@ -225,14 +225,42 @@ class LlamaCppBackend(LocalModelBackend):
             logger.error("GGUF model not found: %s", model_id)
             return False
 
+        # 加载前问 ComputeScheduler 要分配决策（层卸载/量化/目标设备）。
+        # 此前 n_gpu_layers 写死 -1（全部上 GPU）：显存不够时直接 OOM，没有降级。
+        # 调度器按实测文件大小与当前 VRAM 余量决定卸多少层；不可用时按原值降级。
+        n_gpu_layers = self._n_gpu_layers
+        _alloc = None
+        try:
+            from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+            _size_mb = max(1, int(os.path.getsize(model_path) / (1024 * 1024)))
+            _alloc = await get_compute_scheduler().schedule_model(model_id, _size_mb, preferred_backend="llama_cpp")
+            n_gpu_layers = _alloc.n_gpu_layers
+            logger.info(
+                "ComputeScheduler allocation: %s → device=%s n_gpu_layers=%s (%s)",
+                model_id,
+                _alloc.device,
+                _alloc.n_gpu_layers,
+                _alloc.reason,
+            )
+        except Exception as exc:
+            logger.debug("ComputeScheduler unavailable (fallback n_gpu_layers=%s): %s", n_gpu_layers, exc)
+
         try:
             llm = Llama(
                 model_path=model_path,
-                n_gpu_layers=self._n_gpu_layers,
+                n_gpu_layers=n_gpu_layers,
                 n_ctx=self._n_ctx,
                 verbose=False,
             )
             self._models[model_id] = llm
+            if _alloc is not None:
+                try:
+                    from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+                    get_compute_scheduler().register_loaded(_alloc)
+                except Exception:  # noqa: BLE001
+                    pass
             logger.info("LlamaCpp loaded: %s", model_id)
             return True
         except Exception as exc:

@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "从真实入口不可达的 core/ 模块存量基线。scripts/check_reachability.py 只对**新增**报警。",
+    "不可达 ≠ 该删。以下是**有意保留**的：",
+    "  core.node_communication  —— AODV 去中心化路由 / 网络分区检测 / 消息 ACK / TLS。",
+    "                              曾误删后恢复；接入（断网自组网）按产品决定暂缓，保留待接。",
+    "  core.local_agent_runtime —— 端侧执行沙盒。服务端零引用是设计使然，INV-008 主动强制。",
+    "已恢复并**接入**（不再在本清单里）：compute_scheduler（LlamaCpp 加载前咨询分配）、",
+    "udm_registration_hook（UDM 注册尾部触发解析平面）、queueing/async_queue（orchestrator",
+    "有界 worker 池 + 背压）。",
+    "判据教训：『有个名字相近的模块在做类似的事』不等于能力还在；必须比对同一层次的实现。"
+  ],
+  "unreachable": [
+    "core.admissibility_policy_convergence",
+    "core.agent_bus_fabric",
+    "core.android_result_normalizer",
+    "core.canonical_execution_chain",
+    "core.capability_network_bridge",
+    "core.cognitive.liminal_dynamics",
+    "core.cross_device_candidates",
+    "core.cross_device_responsiveness_contract",
+    "core.failure_degraded_recovery_policy",
+    "core.hybrid_execution_policy",
+    "core.legacy_dispatch_registry",
+    "core.llm.policies",
+    "core.llm.providers",
+    "core.local_agent_runtime",
+    "core.mesh_participation_summary",
+    "core.node_communication",
+    "core.orchestration.global_arbiter",
+    "core.participant_authority_interfaces",
+    "core.perception.canonical_state_adapter",
+    "core.runtime_introspection",
+    "core.schemas.execution_failure",
+    "core.truth_conflict_enforcement"
+  ]
+}

@@ -81,6 +81,7 @@ Date: 2026-03-07
 
 import asyncio
 import logging
+import os
 import time as _time
 import uuid
 from datetime import datetime
@@ -1894,9 +1895,16 @@ class DeviceRouter:
             _dispatch_devices = _participation_filtered_devices
             subtasks = self._decompose_task(task, _dispatch_devices)
 
-            # 并行执行所有子任务
+            # 有界并发（原为无上界 gather：设备多少就同时打多少，一次打满网络与本地资源）
+            _limit = int(os.environ.get("GALAXY_MULTI_DEVICE_DISPATCH_LIMIT", "8"))
+            _dispatch_sem = asyncio.Semaphore(max(1, _limit))
+
+            async def _bounded_dispatch(subtask: Dict, device: "Device") -> Dict:
+                async with _dispatch_sem:
+                    return await self.dispatch_task(subtask, device)
+
             results = await asyncio.gather(
-                *[self.dispatch_task(subtask, device) for subtask, device in zip(subtasks, _dispatch_devices)],
+                *[_bounded_dispatch(subtask, device) for subtask, device in zip(subtasks, _dispatch_devices)],
                 return_exceptions=True,
             )
 

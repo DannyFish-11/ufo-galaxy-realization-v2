@@ -189,6 +189,41 @@ jobs:
           python scripts/check_evidence_anchors.py
 
   # ---------------------------------------------------------------------------
+  # C2b. 可达性：新写的模块必须能从真实入口走到
+  #
+  # 「这个模块还有人用吗」在本仓被反复手工回答过，每次用一个临时脚本，每次以不同
+  # 方式答错。最近一次排查同一份清单先后产生**五类**误报（包 __init__ 未建模、
+  # CI 按文件路径调用、漏了 nodes/*/server.py 入口、shim 再导出、workflow 跑硬编码
+  # 测试路径），每修一类就冒出新的一类 —— 照最初那份清单删，会一次带走 8 道正在跑的
+  # CI 门和 5 个节点服务引擎。
+  #
+  # 所以把这个判断固化成工具：盲区编码进去、双向反向验证过（造一个死模块必须被抓；
+  # 同一个模块被 CI 按路径调用必须不被抓）。
+  #
+  # 判据是**可达性**不是引用计数 —— 死代码簇会互相引用，按「有没有人 import」永远
+  # 删不掉。存量 21 个记在 config/reachability_baseline.json，这道闸只看**新增**：
+  # 理由与 wiring / environment-coupling 同一条，新检查一上来就把 CI 弄红只会让人
+  # 学会无视它。
+  # ---------------------------------------------------------------------------
+  reachability:
+    name: Reachability (new unreachable core modules)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 纯 AST 静态分析，不 import 任何业务模块，无需装依赖。
+      - name: 新增模块必须能从真实入口到达
+        run: |
+          python scripts/check_reachability.py
+
+  # ---------------------------------------------------------------------------
   # C3. Wiring guardrail — 公开能力有没有调用方
   #
   # 抓的是本仓反复出现的一类缺陷:能力实现完整、单测全绿、文档详尽,但生产代码里
