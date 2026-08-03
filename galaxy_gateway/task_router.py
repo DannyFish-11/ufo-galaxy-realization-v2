@@ -280,7 +280,7 @@ class TaskRouter:
         # 创建执行计划
         plan = self.scheduler.create_execution_plan(tasks)
 
-        print(f"\n执行计划:")
+        print("\n执行计划:")
         print(f"  计划 ID: {plan.plan_id}")
         print(f"  任务总数: {len(plan.tasks)}")
         print(f"  执行层数: {len(plan.execution_order)}")

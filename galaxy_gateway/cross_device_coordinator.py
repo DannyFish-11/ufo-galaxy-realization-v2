@@ -847,7 +847,8 @@ class CrossDeviceCoordinator:
                 return {"success": False, "error": f"没有可用的{target_type}设备"}
 
             # 步骤 1: 从源设备拉取文件到中转目录
-            safe_transfer_name = f"{hashlib.sha256(file_name.encode('utf-8', errors='strict')).hexdigest()}_{os.path.basename(file_name)}"
+            _name_digest = hashlib.sha256(file_name.encode("utf-8", errors="strict")).hexdigest()
+            safe_transfer_name = f"{_name_digest}_{os.path.basename(file_name)}"
             transfer_path = os.path.join(transfer_dir, safe_transfer_name)
 
             if source_type == DeviceType.ANDROID:

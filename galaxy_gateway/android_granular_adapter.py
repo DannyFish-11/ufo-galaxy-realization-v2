@@ -226,19 +226,39 @@ class AndroidGranularAdapter:
 
     async def _handle_screenshot(self, device_id: str, params: Dict) -> Dict:
         """处理截图操作"""
-        result = await self.adb.shell("screencap -p /sdcard/screenshot.png", device_id)
+        capture = await self.adb.shell("screencap -p /sdcard/screenshot.png", device_id)
         # 使用安全的临时文件
         fd, tmp_path = tempfile.mkstemp(prefix="screenshot_", suffix=".png")
         os.close(fd)
         try:
             # 拉取截图文件
             pull_result = await self.adb.pull("/sdcard/screenshot.png", tmp_path, device_id)
+
+            # screencap / pull 的返回值此前都被丢弃，两处失败都会静默变成"成功"：
+            #   * screencap 失败时 /sdcard/screenshot.png 可能还是上一次的旧图，
+            #     照样被拉回来当作本次截图返回；
+            #   * pull 失败时原有的 except FileNotFoundError 分支**永远不会触发** ——
+            #     mkstemp 已经把文件创建出来了，open() 不会抛 FileNotFoundError，
+            #     读到的是 0 字节，于是返回 image_base64="" 且 status="success"。
+            # adb_executor 是注入的，返回值约定在这里无法静态确定，所以不去猜它的
+            # 真假值，而是直接校验最终事实：拉回来的文件必须非空。
+            if os.path.getsize(tmp_path) == 0:
+                logger.warning(
+                    "截图失败：拉回的文件为空 device_id=%s screencap=%r pull=%r",
+                    device_id,
+                    capture,
+                    pull_result,
+                )
+                return {
+                    "status": "error",
+                    "action": "screenshot",
+                    "error": "screenshot capture or pull produced an empty file",
+                }
+
             # 读取并转为base64
             with open(tmp_path, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
             return {"status": "success", "action": "screenshot", "image_base64": image_data}
-        except FileNotFoundError:
-            return {"status": "success", "action": "screenshot", "note": "screenshot saved on device"}
         finally:
             # 清理临时文件
             try:

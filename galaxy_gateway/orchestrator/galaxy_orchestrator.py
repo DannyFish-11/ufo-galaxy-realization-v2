@@ -307,7 +307,13 @@ class AIGateway:
         # 尝试LLM增强意图理解
         if self.llm_enabled and (self._llm_router or self.api_key):
             llm_result = await self._call_llm(
-                prompt=f'分析以下用户请求的意图。返回JSON格式: {{"intent_type": "query|control|analysis|creation|device_control|cross_device|chat", "entities": [{{"type": "...", "value": "..."}}], "target_device": "android|windows|ios|linux|null", "confidence": 0.0-1.0}}\n\n用户请求: {request}',
+                prompt=(
+                    "分析以下用户请求的意图。返回JSON格式: "
+                    '{"intent_type": "query|control|analysis|creation|device_control|cross_device|chat", '
+                    '"entities": [{"type": "...", "value": "..."}], '
+                    '"target_device": "android|windows|ios|linux|null", "confidence": 0.0-1.0}'
+                    f"\n\n用户请求: {request}"
+                ),
                 system_prompt="你是一个意图识别引擎。只返回JSON，不要其他文字。",
                 task_type="reasoning",
             )
@@ -422,7 +428,14 @@ class AIGateway:
             and intent_type in ("device_control", "cross_device")
         ):
             llm_result = await self._call_llm(
-                prompt=f"将以下任务分解为执行步骤。返回JSON数组: [{{\"type\": \"...\", \"priority\": N, \"target_device\": \"...\", \"action\": \"...\", \"params\": {{}}}}]\n\n任务: {intent.get('original_request', '')}\n意图类型: {intent_type}\n实体: {json.dumps(intent.get('entities', []), ensure_ascii=False)}",
+                prompt=(
+                    "将以下任务分解为执行步骤。返回JSON数组: "
+                    '[{"type": "...", "priority": N, "target_device": "...", '
+                    '"action": "...", "params": {}}]'
+                    f"\n\n任务: {intent.get('original_request', '')}"
+                    f"\n意图类型: {intent_type}"
+                    f"\n实体: {json.dumps(intent.get('entities', []), ensure_ascii=False)}"
+                ),
                 system_prompt="你是一个任务分解引擎。只返回JSON数组，不要其他文字。",
                 task_type="planning",
             )
@@ -900,10 +913,18 @@ class GalaxyOrchestrator:
                     from core.agent_team import TeamStrategy
 
                     strategy = TeamStrategy.SPECIALIZED if intent_type == "cross_device" else TeamStrategy.PARALLEL
+                    # rag_context 是上面 RAGMemory 检索出来的「历史经验 + 知识」增强
+                    # 上下文。此前它被 await 出来后**再没有任何读取** —— 向量检索和
+                    # few-shot 拼接的开销照付，增强却从未进入任何提示词，等于没检索。
+                    # AgentTeam 会把 context 序列化进 system prompt
+                    # （core/agent_team.py:457），所以挂在这里是真正能生效的位置。
+                    team_context = {"devices": self.device_manager.list_devices()}
+                    if rag_context:
+                        team_context["rag_context"] = rag_context
                     team_result = await self.gateway._team_manager.execute_team_task(
                         task=request,
                         strategy=strategy,
-                        context={"devices": self.device_manager.list_devices()},
+                        context=team_context,
                     )
                     task.status = TaskStatus.COMPLETED
                     task.completed_at = time.time()

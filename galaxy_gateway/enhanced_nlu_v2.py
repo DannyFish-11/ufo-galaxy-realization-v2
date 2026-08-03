@@ -56,6 +56,21 @@ from core.device_types import DeviceStatus, DeviceType
 
 logger = logging.getLogger(__name__)
 
+# 下面这段是发给 LLM 的提示词原文。拆成隐式拼接只为满足 120 列限制，
+# 拼接结果与原文**逐字节相同** —— 不能直接折行，那会往提示词里塞进换行符。
+_NLU_VISUAL_ANALYSIS_HINT = (
+    '如果用户指令中包含"分析屏幕"、"看一眼"、"这个图表"、"这张图片"等明显的视觉分析意图，并且目标设备是"电脑"或"平板"等可以进行截图的设备，请将意图类型设置为 `visual_anal'
+    "ysis`，动作设置为 `vlm_analyze`，目标设置为 `screenshot`，并在 `parameters` 中包含 `image_path`（一个占位符，例如 `/home/u"
+    "buntu/Downloads/temp_screenshot.png`）和 `prompt`（用户对图像的提问）。"
+)
+
+# 下面这段是发给 LLM 的提示词原文。拆成隐式拼接只为满足 120 列限制，
+# 拼接结果与原文**逐字节相同** —— 不能直接折行，那会往提示词里塞进换行符。
+_NLU_INTENT_TYPES_LINE = (
+    "意图类型包括：app_control, app_operation, file_operation, device_control, information_query, cross_dev"
+    "ice_task, media_generation, visual_analysis, system_command"
+)
+
 
 # ============================================================================
 # 数据结构定义
@@ -671,7 +686,8 @@ class EnhancedNLUEngineV2:
 
     def _understand_with_rules(self, user_input: str, context: ConversationContext) -> NLUResult:
         """使用规则进行意图识别"""
-        user_input_lower = user_input.lower()
+        # 注：此处原有一份 user_input_lower，但 _extract_devices / _extract_app /
+        # _extract_action 内部各自会再算一次小写副本，外层这份从未被使用。
         tasks = []
         clarifications = []
 
@@ -796,11 +812,14 @@ class EnhancedNLUEngineV2:
         }
 
         # 构建 Prompt
-        system_prompt = """你是 Galaxy 的自然语言理解引擎。你的任务是理解用户的指令，并将其转换为结构化的任务列表。
+        system_prompt = (
+            """你是 Galaxy 的自然语言理解引擎。你的任务是理解用户的指令，并将其转换为结构化的任务列表。
 
 **特别注意：**
-如果用户指令中包含"分析屏幕"、"看一眼"、"这个图表"、"这张图片"等明显的视觉分析意图，并且目标设备是"电脑"或"平板"等可以进行截图的设备，请将意图类型设置为 `visual_analysis`，动作设置为 `vlm_analyze`，目标设置为 `screenshot`，并在 `parameters` 中包含 `image_path`（一个占位符，例如 `/home/ubuntu/Downloads/temp_screenshot.png`）和 `prompt`（用户对图像的提问）。
-
+"""
+            + _NLU_VISUAL_ANALYSIS_HINT
+            + "\n"
+            + """
 请严格按照以下 JSON 格式输出：
 {
   "success": true/false,
@@ -822,14 +841,17 @@ class EnhancedNLUEngineV2:
   "context_used": true/false
 }
 
-意图类型包括：app_control, app_operation, file_operation, device_control, information_query, cross_device_task, media_generation, visual_analysis, system_command
-
+"""
+            + _NLU_INTENT_TYPES_LINE
+            + "\n"
+            + """
 注意：
 1. 如果用户指令不明确，设置 success=false 并在 clarifications 中提出问题
 2. 如果涉及多个设备，创建多个任务
 3. 如果任务有依赖关系，使用 depends_on 字段
 4. 置信度要准确反映理解的确定程度
 """
+        )
 
         user_prompt = f"""可用设备：
 {json.dumps(devices_info, ensure_ascii=False, indent=2)}

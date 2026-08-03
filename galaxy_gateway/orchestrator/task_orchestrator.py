@@ -297,7 +297,8 @@ class TaskOrchestrator:
             # shows that TaskOrchestrator is acting as transport, not decider.
             _oc_decision = (envelope.metadata or {}).get("openclawd_decision")
             logger.debug(
-                "TaskOrchestrator._process_task | task_id=%s trace_id=%s request='%.50s' device=%s openclawd_authority=%s",
+                "TaskOrchestrator._process_task | task_id=%s trace_id=%s request='%.50s' "
+                "device=%s openclawd_authority=%s",
                 envelope.task_id,
                 envelope.trace_id,
                 task.user_request,
@@ -868,7 +869,7 @@ class TaskOrchestrator:
             try:
                 desc = getattr(st, "description", "") or getattr(st, "name", "")
                 device_id = getattr(st, "device_id", "") or ""
-                task = await self.submit_task(
+                await self.submit_task(
                     user_request=desc,
                     target_device=device_id if device_id else None,
                 )

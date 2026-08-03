@@ -193,7 +193,11 @@ except ImportError:  # pragma: no cover
 try:
     from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _is_cross_device_enabled
 except ImportError:  # pragma: no cover
-    _is_cross_device_enabled = lambda: True  # type: ignore[assignment]
+
+    def _is_cross_device_enabled() -> bool:  # type: ignore[misc]
+        """cross_device_switch 不可用时的兜底：视为开启（与原 lambda 行为一致）。"""
+        return True
+
 
 logger = logging.getLogger(__name__)
 

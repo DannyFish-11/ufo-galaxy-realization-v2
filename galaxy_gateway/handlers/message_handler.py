@@ -450,10 +450,56 @@ class MessageHandler:
     # ------------------------------------------------------------------
 
     async def _handle_capability_report(self, device_id: str, message: AIPMessage) -> AIPMessage:
-        """处理设备能力上报"""
+        """处理设备能力上报：登记到 CapabilityBus，再回 ACK。
+
+        此前这里把 payload 里的 capabilities 读出来后**直接丢掉**（只记了一行
+        supported_actions 日志、把设备标成 online），却回 ``accepted: True``
+        声称已接受。于是设备的能力只在**注册那一刻**被记录过，注册之后再上报多
+        少次都不会进入任何可查询的地方。
+
+        这条链的下游是真实存在的：``core.capability_registry`` 的三源解析里有一
+        路就是读 CapabilityBus 里 ``device__<id>__<action>`` 形式的 DEVICE 条目
+        （``_collect_from_capability_bus``），而 ``device_satisfies_required_capabilities``
+        依赖它来判断设备是否满足所需能力。写侧不落库，读侧自然永远查不到 ——
+        表现就是"设备明明有这个能力却选不中"。
+
+        CapabilityBus 本就提供了 ``register_device_capability`` 这个专用写入口，
+        只是全仓生产代码从没调用过它。这里按它的契约登记，不新造任何机制。
+        """
         capabilities = message.payload.get("capabilities", [])
         supported_actions = message.payload.get("supported_actions", [])
-        logger.info(f"Capability report from {device_id}: actions={supported_actions}")
+        logger.info(
+            "Capability report from %s: capabilities=%s actions=%s",
+            device_id,
+            capabilities,
+            supported_actions,
+        )
+
+        # capabilities 与 supported_actions 都算设备可执行的动作，合并去重后登记。
+        declared = list(dict.fromkeys([*(capabilities or []), *(supported_actions or [])]))
+        registered = 0
+        if declared:
+            try:
+                from core.capability_bus import get_capability_bus
+
+                bus = get_capability_bus()
+                for action in declared:
+                    if not isinstance(action, str) or not action.strip():
+                        continue
+                    bus.register_device_capability(
+                        device_id=device_id,
+                        action=action.strip(),
+                        description=f"Reported by {device_id} via AIP capability_report",
+                        metadata={"source": "aip_capability_report"},
+                    )
+                    registered += 1
+            except Exception as exc:
+                # 登记失败不影响 ACK 与设备上线 —— 但必须留痕，不能像原来那样静默。
+                logger.warning(
+                    "能力上报登记 CapabilityBus 失败（device_id=%s，能力仍未落库）: %s",
+                    device_id,
+                    exc,
+                )
 
         self.device_manager.update_device_status(device_id, "online")
 
@@ -461,7 +507,11 @@ class MessageHandler:
             type=MessageType.CAPABILITY_REPORT_ACK,
             device_id=device_id,
             correlation_id=message.message_id,
-            payload={"accepted": True, "message": "Capability report accepted"},
+            payload={
+                "accepted": True,
+                "message": "Capability report accepted",
+                "registered_capabilities": registered,
+            },
         )
 
     async def _handle_diagnostics_payload(self, device_id: str, message: AIPMessage) -> AIPMessage:

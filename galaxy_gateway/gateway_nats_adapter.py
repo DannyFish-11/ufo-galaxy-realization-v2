@@ -284,13 +284,17 @@ class GatewayNATSAdapter:
             route_mode = data.get("route_mode", "direct")
             remote_execution_mode = data.get("remote_execution_mode", "")
 
+        # route_mode 与 trace_id 一样是贯穿全链路的相关性字段（WebSocket 入口会在
+        # 缺失时自动注入）。此前它在两条分支里都被取出却从未使用 —— 经 NATS 入口的
+        # 任务在日志里查不到 route_mode，链路追踪到这里就断了。至少让它进日志。
         logger.info(
-            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s " "trace_id=%s mode=%s",
+            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s " "trace_id=%s mode=%s route_mode=%s",
             task_id,
             target_device,
             task_type,
             trace_id,
             remote_execution_mode or "unset",
+            route_mode or "unset",
         )
         self._stats["dispatched"] += 1
 
