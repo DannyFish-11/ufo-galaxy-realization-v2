@@ -185,6 +185,12 @@ class UnifiedDeviceManager:
         # no duplication — just a second view of the same entity.
         self._register_device_as_worker(device)
 
+        # 设备解析管线 Stage 2：注册那一刻跑一遍 resolver → activation_policy，
+        # 把「这台设备能由哪些节点服务」记进 DeviceActivationRegistry（observe-only，
+        # 不起节点）。此前解析只在启动期触发，运行中热插的设备要等重启才被解析。
+        # best-effort：hook 失败绝不影响注册主路径。
+        self._feed_resolution_plane(device)
+
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
         从字典构建并注册 UnifiedDevice（向后兼容旧注册路径使用）。
@@ -451,6 +457,23 @@ class UnifiedDeviceManager:
     # ------------------------------------------------------------------
     # PR-DEVICE-WORKER-FUSION: Device → NATS Worker convergence
     # ------------------------------------------------------------------
+
+    def _feed_resolution_plane(self, device: "UnifiedDevice") -> None:
+        """注册时把设备喂给解析平面（udm_registration_hook，observe-only）。"""
+        try:
+            from core.udm_registration_hook import get_hook  # noqa: PLC0415
+
+            hook = get_hook()
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                logger.debug("Resolution hook skipped: no event loop for %s", device.device_id)
+                return
+            _bt = loop.create_task(hook.on_device_registered(device, source="udm_register"))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
+        except Exception as exc:
+            logger.debug("Resolution hook unavailable (non-fatal) for %s: %s", device.device_id, exc)
 
     def _register_device_as_worker(self, device: "UnifiedDevice") -> None:
         """Propagate a UDM-registered device into the NATS Worker plane.

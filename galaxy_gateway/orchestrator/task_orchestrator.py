@@ -19,6 +19,7 @@ from the canonical task via project_to_task_envelope().
 
 import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -111,7 +112,11 @@ class TaskOrchestrator:
         self.websocket_manager = websocket_manager
 
         self.tasks: Dict[str, Task] = {}
-        self.task_queue: asyncio.Queue = asyncio.Queue()
+        # 原为无界 asyncio.Queue() + 单 worker 串行。换 AsyncTaskQueue：有界队列 +
+        # 并发 worker 池；满时 reject_new 如实回「系统忙」。per-device 计数锁本就支持并发。
+        self._pool_max_size = int(os.environ.get("GALAXY_TASK_QUEUE_MAX", "500"))
+        self._pool_concurrency = int(os.environ.get("GALAXY_TASK_CONCURRENCY", "4"))
+        self._task_pool: Optional[Any] = None
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
         # Round-robin index for distributing tasks across connected devices.
@@ -138,12 +143,26 @@ class TaskOrchestrator:
     async def start(self):
         """启动编排器"""
         self._running = True
-        self._worker_task = asyncio.create_task(self._task_worker())
-        logger.info("Task Orchestrator started")
+        from core.queueing.async_queue import AsyncTaskQueue
+
+        self._task_pool = AsyncTaskQueue(
+            max_queue_size=self._pool_max_size,
+            max_concurrent=self._pool_concurrency,
+            shed_strategy="reject_new",
+        )
+        await self._task_pool.start()
+        logger.info(
+            "Task Orchestrator started (pool: max_queue=%d, concurrency=%d)",
+            self._pool_max_size,
+            self._pool_concurrency,
+        )
 
     async def stop(self):
         """停止编排器"""
         self._running = False
+        if self._task_pool is not None:
+            await self._task_pool.stop()
+            self._task_pool = None
         if self._worker_task:
             self._worker_task.cancel()
             try:
@@ -254,23 +273,26 @@ class TaskOrchestrator:
         except Exception as _env_err:
             logger.debug("TaskOrchestrator: TaskEnvelope construction skipped — %s", _env_err)
 
-        await self.task_queue.put(task)
+        from core.queueing.async_queue import QueueFullError
+
+        try:
+            if self._task_pool is None:
+                raise RuntimeError("orchestrator not started")
+            await self._task_pool.submit(self._process_task, task, timeout=float(timeout), task_id=task_id)
+        except QueueFullError as exc:
+            # 背压：如实拒绝而不是无限积压。调用方拿到 FAILED + 明确原因。
+            task.status = TaskStatus.FAILED
+            task.error = f"任务队列已满（背压生效）：{exc}"
+            logger.warning("Task rejected by backpressure: %s — %s", task_id, exc)
+            return task
 
         logger.info(f"Task submitted: {task_id} - {user_request[:50]}...")
         return task
 
     async def _task_worker(self):
-        """任务处理工作线程"""
-        while self._running:
-            try:
-                task = await asyncio.wait_for(self.task_queue.get(), timeout=1.0)
-                await self._process_task(task)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Task worker error: {e}")
+        """（已由 AsyncTaskQueue worker 池取代；保留空循环仅为兼容旧引用。）"""
+        while self._running and self._task_pool is None:
+            await asyncio.sleep(1.0)
 
     async def _process_task(self, task: Task):
         """处理单个任务（PR-2：通过 TaskEnvelope 追踪生命周期）。

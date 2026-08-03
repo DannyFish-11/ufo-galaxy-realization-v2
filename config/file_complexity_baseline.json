@@ -105,6 +105,7 @@
     "core/telemetry_freshness_contract.py": 1074,
     "core/temporal_semantics_contract.py": 1137,
     "core/ugcp_conformance_surfaces.py": 1227,
+    "core/unified/device_manager.py": 1009,
     "core/unified/llm_router.py": 1310,
     "core/unified_continuity_legality_authority.py": 1388,
     "core/unified_execution_governance.py": 3111,
@@ -126,9 +127,9 @@
     "galaxy_gateway/android/handlers/task_lifecycle.py": 1244,
     "galaxy_gateway/android_bridge.py": 2130,
     "galaxy_gateway/cross_device_coordinator.py": 1118,
-    "galaxy_gateway/device_router.py": 2131,
+    "galaxy_gateway/device_router.py": 2139,
     "galaxy_gateway/orchestrator/galaxy_orchestrator.py": 1371,
-    "galaxy_gateway/orchestrator/task_orchestrator.py": 1007,
+    "galaxy_gateway/orchestrator/task_orchestrator.py": 1029,
     "galaxy_gateway/websocket_handler.py": 1222
   }
 }
