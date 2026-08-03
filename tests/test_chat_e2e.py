@@ -277,40 +277,6 @@ class TestDashboardParseIntent:
 # ============================================================================
 
 
-class TestCallNodeErrorHandling:
-    """测试 galaxy_core.call_node() 的超时和错误处理"""
-
-    @pytest.fixture(autouse=True)
-    def _import_galaxy_core(self):
-        try:
-            from core.galaxy_core import GalaxyCore
-
-            self.GalaxyCore = GalaxyCore
-        except (ImportError, ModuleNotFoundError) as e:
-            pytest.skip(f"GalaxyCore import failed: {e}")
-
-    def test_node_not_found(self):
-        core = self.GalaxyCore()
-        result = asyncio.run(core.call_node("nonexistent_node", "test", {}))
-        assert result["success"] is False
-        assert "not found" in result["error"]
-
-    def test_timeout_handling(self):
-        """请求超时应返回错误而非挂起"""
-        try:
-            import httpx
-        except ImportError:
-            pytest.skip("httpx not installed")
-
-        with patch("httpx.AsyncClient.post", side_effect=httpx.TimeoutException("Connection timed out")):
-            core = self.GalaxyCore()
-            core.nodes["test_node"] = {"port": 9999}
-
-            result = asyncio.run(core.call_node("test_node", "test_action", {}))
-            assert result["success"] is False
-            assert "error" in result
-
-
 # ============================================================================
 # 6. 路由分离测试
 # ============================================================================
@@ -338,7 +304,6 @@ class TestRouteSeparation:
 
 
 class TestDegradation:
-    """测试无 LLM / 无 galaxy_core 时的降级行为"""
 
     def test_no_llm_returns_friendly_error(self):
         """无 LLM 配置时应返回友好提示"""
@@ -392,3 +357,9 @@ class TestSmartRecommender:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# 已删除依赖 core/galaxy_core.py 的用例 —— 该模块是建在近乎废弃的
+# core/node_protocol.py 之上的门面：它声称依赖的 NodeProtocolClient /
+# NodeProtocolServer **根本不存在**（被 try/except 包着所以 import 不报错，
+# 但 call_node_with_protocol() 拿到的是 None），生产面零 import。已删除。

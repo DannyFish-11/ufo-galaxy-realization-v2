@@ -11,8 +11,6 @@ Coverage:
   c) ``galaxy_core.GalaxyCore.register_device`` succeeds with a full payload.
 """
 
-import uuid
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -150,43 +148,7 @@ class TestAPIDeviceRegistrationValidation:
 # =============================================================================
 
 
-class TestGalaxyCoreRegisterDevice:
-    """Integration tests for GalaxyCore.register_device."""
-
-    def test_register_device_success(self):
-        """register_device with a full payload must not raise and must return
-        success=True."""
-        import asyncio
-
-        from core.galaxy_core import GalaxyCore
-
-        core = GalaxyCore()
-        device_id = f"pytest-{uuid.uuid4().hex[:8]}"
-        result = asyncio.run(
-            core.register_device(
-                device_id=device_id,
-                device_type="android",
-                name="Test Device",
-                endpoint="ws://127.0.0.1:9000",
-            )
-        )
-        assert result["success"] is True
-        assert result["device_id"] == device_id
-
-    def test_register_device_stored_in_devices(self):
-        """After registration the device should appear in core.devices."""
-        import asyncio
-
-        from core.galaxy_core import GalaxyCore
-
-        core = GalaxyCore()
-        device_id = f"pytest-{uuid.uuid4().hex[:8]}"
-        asyncio.run(
-            core.register_device(
-                device_id=device_id,
-                device_type="windows",
-                name="Win Desktop",
-            )
-        )
-        assert device_id in core.devices
-        assert core.devices[device_id]["device_type"] == "windows"
+# 已删除依赖 core/galaxy_core.py 的用例 —— 该模块是建在近乎废弃的
+# core/node_protocol.py 之上的门面：它声称依赖的 NodeProtocolClient /
+# NodeProtocolServer **根本不存在**（被 try/except 包着所以 import 不报错，
+# 但 call_node_with_protocol() 拿到的是 None），生产面零 import。已删除。
