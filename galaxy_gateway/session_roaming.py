@@ -45,11 +45,11 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("UFO-Galaxy.SessionRoaming")
 
@@ -62,18 +62,21 @@ PERSISTENCE_FILE = PERSISTENCE_DIR / "sessions.json"
 # 数据模型
 # =============================================================================
 
+
 class SessionState(Enum):
     """会话状态"""
-    ACTIVE = "active"         # 正在进行
-    MIGRATING = "migrating"   # 迁移中
-    IDLE = "idle"             # 空闲（无设备处理）
-    CLOSED = "closed"         # 已关闭
+
+    ACTIVE = "active"  # 正在进行
+    MIGRATING = "migrating"  # 迁移中
+    IDLE = "idle"  # 空闲（无设备处理）
+    CLOSED = "closed"  # 已关闭
 
 
 @dataclass
 class ConversationTurn:
     """一轮对话记录"""
-    role: str                        # "user" | "assistant"
+
+    role: str  # "user" | "assistant"
     content: str
     timestamp: float = field(default_factory=time.time)
 
@@ -88,6 +91,7 @@ class ConversationTurn:
 @dataclass
 class SessionContext:
     """会话上下文（可序列化，用于跨设备迁移）"""
+
     session_id: str
     created_at: float = field(default_factory=time.time)
     # 对话历史
@@ -121,12 +125,11 @@ class SessionContext:
 @dataclass
 class Session:
     """一个完整的会话对象"""
+
     session_id: str
-    device_id: str                    # 当前响应设备
+    device_id: str  # 当前响应设备
     state: SessionState = SessionState.ACTIVE
-    context: SessionContext = field(default_factory=lambda: SessionContext(
-        session_id="__placeholder__"
-    ))
+    context: SessionContext = field(default_factory=lambda: SessionContext(session_id="__placeholder__"))
     created_at: float = field(default_factory=time.time)
     last_active: float = field(default_factory=time.time)
 
@@ -161,13 +164,13 @@ class Session:
 # in a future release.
 # =============================================================================
 SESSION_ROAMING_LEGACY_GUARD = (
-    "SESSION_ROAMING::LEGACY_COMPATIBILITY_LAYER:: "
-    "canonical_session_management_is_core_routes_sessions"
+    "SESSION_ROAMING::LEGACY_COMPATIBILITY_LAYER:: " "canonical_session_management_is_core_routes_sessions"
 )
 
 # =============================================================================
 # 会话漫游管理器
 # =============================================================================
+
 
 class SessionRoamingManager:
     """Legacy compatibility session migration manager (PR-M).
@@ -197,9 +200,8 @@ class SessionRoamingManager:
     def __init__(self):
         try:
             from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
-            emit_legacy_guardrail(
-                "galaxy_gateway.session_roaming.SessionRoamingManager"
-            )
+
+            emit_legacy_guardrail("galaxy_gateway.session_roaming.SessionRoamingManager")
         except Exception:
             pass
         self._sessions: Dict[str, Session] = {}
@@ -241,9 +243,7 @@ class SessionRoamingManager:
         try:
             PERSISTENCE_DIR.mkdir(parents=True, exist_ok=True)
             data = {
-                "sessions": {
-                    sid: s.to_dict() for sid, s in self._sessions.items()
-                },
+                "sessions": {sid: s.to_dict() for sid, s in self._sessions.items()},
                 "device_session_map": dict(self._device_session_map),
                 "saved_at": datetime.now().isoformat(),
             }
@@ -364,10 +364,7 @@ class SessionRoamingManager:
             return False
 
         old_device_id = session.device_id
-        logger.info(
-            f"[SessionRoaming] 开始迁移: session_id={session_id} "
-            f"{old_device_id} -> {target_device_id}"
-        )
+        logger.info(f"[SessionRoaming] 开始迁移: session_id={session_id} " f"{old_device_id} -> {target_device_id}")
 
         session.state = SessionState.MIGRATING
 
@@ -382,14 +379,11 @@ class SessionRoamingManager:
             self._persist_snapshot(session_id, context_snapshot)
 
             # 步骤 3：推送到目标设备（必须成功，否则回滚）
-            push_ok = await self._push_context_to_device(
-                target_device_id, session_id, context_snapshot
-            )
+            push_ok = await self._push_context_to_device(target_device_id, session_id, context_snapshot)
             if not push_ok:
                 # 推送失败：回滚所有状态变更
                 logger.error(
-                    f"[SessionRoaming] 推送上下文失败，迁移回滚: "
-                    f"session_id={session_id} target={target_device_id}"
+                    f"[SessionRoaming] 推送上下文失败，迁移回滚: " f"session_id={session_id} target={target_device_id}"
                 )
                 session.device_id = original_device_id
                 session.state = SessionState.ACTIVE
@@ -404,10 +398,7 @@ class SessionRoamingManager:
             session.last_active = time.time()
             self._save_sessions_to_disk()
 
-            logger.info(
-                f"[SessionRoaming] 迁移成功: session_id={session_id} "
-                f"-> device={target_device_id}"
-            )
+            logger.info(f"[SessionRoaming] 迁移成功: session_id={session_id} " f"-> device={target_device_id}")
 
             # 触发回调
             if self._on_migrated:
@@ -452,15 +443,10 @@ class SessionRoamingManager:
             if device_id not in focused_devices:
                 target = focused_devices[0]
                 if target != device_id:
-                    logger.info(
-                        f"[SessionRoaming] 检测到注意力转移，自动迁移: "
-                        f"{device_id} -> {target}"
-                    )
+                    logger.info(f"[SessionRoaming] 检测到注意力转移，自动迁移: " f"{device_id} -> {target}")
                     await self.migrate_session(session_id, target)
 
-    def set_migration_callback(
-        self, callback: Callable[[str, str, str], Any]
-    ):
+    def set_migration_callback(self, callback: Callable[[str, str, str], Any]):
         """
         设置迁移完成回调
 
@@ -509,6 +495,7 @@ class SessionRoamingManager:
         """通过 device_communication.send_command 将会话上下文推送到目标设备"""
         try:
             from core.device_communication import device_comm
+
             result = await device_comm.send_command(
                 device_id,
                 "session_restore",

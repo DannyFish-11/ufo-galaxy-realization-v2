@@ -84,6 +84,7 @@ async def handle_vision_request(
         if websocket is not None:
             # PR-AIP-UNIFIED: Route through AIPTransport
             from core.aip_transport import get_aip_transport
+
             _msg = {
                 **response,
                 "_transport": "auto",
@@ -159,9 +160,9 @@ async def _process_via_runtime_shell(
         "success": bool(result.get("success", True)),
         "runtime_session_id": result.get("runtime_session_id"),
         "analysis": {
-            "response":         result.get("response", ""),
-            "execution_path":   result.get("execution_path", ""),
-            "runtime_domain":   result.get("runtime_domain", ""),
+            "response": result.get("response", ""),
+            "execution_path": result.get("execution_path", ""),
+            "runtime_domain": result.get("runtime_domain", ""),
             "multimodal_route": result.get("multimodal_route_decision", {}),
         },
         "source": "runtime_shell_multimodal",
@@ -176,15 +177,18 @@ async def _process_via_vision_pipeline(
     """Legacy fallback: call VisionPipeline directly."""
     try:
         from core.vision_pipeline import VisionPipeline
+
         pipeline = VisionPipeline()
         vision_result = await pipeline.understand(
             image_base64=image_base64,
             mode=mode,
             task_context=task_context,
         )
-        analysis = vision_result.to_dict() if hasattr(vision_result, "to_dict") else {
-            k: v for k, v in vars(vision_result).items() if not k.startswith("_")
-        }
+        analysis = (
+            vision_result.to_dict()
+            if hasattr(vision_result, "to_dict")
+            else {k: v for k, v in vars(vision_result).items() if not k.startswith("_")}
+        )
         return {
             "success": vision_result.success,
             "runtime_session_id": None,

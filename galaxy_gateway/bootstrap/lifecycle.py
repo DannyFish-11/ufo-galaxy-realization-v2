@@ -41,10 +41,10 @@ async def init_gateway_core_services(app: FastAPI):
 
     返回 (device_manager, message_handler, websocket_manager, task_orchestrator)。
     """
-    from galaxy_gateway.transport import WebSocketManager
     from galaxy_gateway.handlers import DeviceManager, MessageHandler
     from galaxy_gateway.orchestrator import TaskOrchestrator
     from galaxy_gateway.protocol import AIPMessage
+    from galaxy_gateway.transport import WebSocketManager
 
     device_manager = DeviceManager()
     message_handler = MessageHandler(device_manager)
@@ -55,8 +55,9 @@ async def init_gateway_core_services(app: FastAPI):
             # PR-AIP-UNIFIED: Send via AIPTransport
             try:
                 from core.aip_transport import get_aip_transport
+
                 await get_aip_transport().send(
-                    response.model_dump(mode="json") if hasattr(response, 'model_dump') else response,
+                    response.model_dump(mode="json") if hasattr(response, "model_dump") else response,
                     device_id,
                     transport="websocket",
                 )
@@ -97,6 +98,7 @@ async def init_gateway_core_services(app: FastAPI):
     # 同步旧的模块级 backward-compat 全局(legacy import 路径)
     try:
         import galaxy_gateway.app as _gw_app
+
         _gw_app.device_manager = device_manager
         _gw_app.message_handler = message_handler
         _gw_app.websocket_manager = websocket_manager
@@ -133,6 +135,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # ── Phase 3: OpenClawd unified intelligence entry ──
     try:
         from core.openclawd import OpenClawd
+
         app.state.openclawd_instance = OpenClawd()
         logger.info("OpenClawd initialized")
     except Exception as e:
@@ -142,6 +145,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     if app.state.openclawd_instance is not None:
         try:
             from core.openclawd_heartbeat import get_heartbeat_scheduler
+
             scheduler = get_heartbeat_scheduler(openclawd=app.state.openclawd_instance)
             if scheduler is not None:
                 await scheduler.start()
@@ -152,6 +156,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # ── Phase 6: LLM router reference ──
     try:
         from core.multi_llm_router import get_llm_router
+
         app.state.llm_router_instance = get_llm_router()
         logger.info("MultiLLMRouter reference acquired")
     except Exception as e:
@@ -160,6 +165,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # ── Phase 7: Agent Swarm Coordinator ──
     try:
         from core.swarm_coordinator import SwarmCoordinator
+
         app.state.swarm_coordinator = SwarmCoordinator()
         logger.info("Agent Swarm Coordinator initialized")
     except Exception as e:
@@ -174,6 +180,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 1. Agent Identity Memory — loads persistent self-identity
     try:
         from core.agent_identity_memory import get_identity_memory  # noqa: PLC0415
+
         _identity = get_identity_memory()
         logger.info("AgentIdentity: loaded — %s", _identity.get_identity().name)
         app.state.agent_identity = _identity
@@ -183,7 +190,9 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 2. Node Capability Loader — discovers node actions on startup
     try:
         from core.node_capability_loader import get_capability_loader  # noqa: PLC0415
+
         _loader = get_capability_loader()
+
         # Defer loading to background — don't block startup
         async def _load_capabilities_bg():
             try:
@@ -191,6 +200,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 logger.info("NodeCapability: loaded %d nodes", len(result))
             except Exception as _cl_err:
                 logger.debug("NodeCapability background load failed: %s", _cl_err, exc_info=True)  # H4 fixed
+
         _bt_cap = asyncio.create_task(_load_capabilities_bg())  # L3 fixed: use asyncio directly
         _BACKGROUND_TASKS.add(_bt_cap)
         _bt_cap.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -201,6 +211,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 3. State Sync Bus — cross-standard synchronization
     try:
         from core.state_sync_bus import install_default_sync  # noqa: PLC0415
+
         install_default_sync()
         logger.info("StateSyncBus: default sync handlers installed")
     except Exception as _ss_err:
@@ -209,6 +220,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 4. Tailscale Manager — optional VPN tunnel monitoring
     try:
         from core.tailscale_manager import TailscaleManager  # noqa: PLC0415
+
         _ts_mgr = TailscaleManager()  # singleton via __new__; no get_tailscale_manager accessor exists
         await _ts_mgr.initialize()
         if _ts_mgr.is_available():
@@ -223,6 +235,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     try:
         if os.getenv("GALAXY_MDNS", "1").strip().lower() not in ("0", "false", "no", "off"):
             from galaxy_gateway.mdns_announcer import MdnsAnnouncer  # noqa: PLC0415
+
             _mdns = MdnsAnnouncer(port=int(os.getenv("GALAXY_GATEWAY_PORT", "9000") or 9000))
             _mdns.start()
             app.state.mdns_announcer = _mdns
@@ -233,18 +246,20 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 5. Voice Wake Module — local "Galaxy" wake-word detection
     try:
         from core.voice_wake_module import get_voice_wake  # noqa: PLC0415
+
         _vw = get_voice_wake()
         if _vw.is_available():
             # Callback: trigger LIMINAL phase via handle_request.
             # DesktopPresenceRuntime has no tristate_field; phase is driven
             # exclusively through the handle_request lifecycle (SILENT→LIMINAL
-            #→MANIFEST→SILENT).  We fire a minimal wake-word request.
+            # →MANIFEST→SILENT).  We fire a minimal wake-word request.
             def _on_wake_word():
                 async def _wake_request():
                     try:
                         from core.desktop_presence_runtime import (  # noqa: PLC0415
                             get_desktop_presence_runtime,
                         )
+
                         dpr = get_desktop_presence_runtime()
                         if dpr is not None:
                             await dpr.handle_request(
@@ -254,6 +269,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                             logger.info("VoiceWake: 'Galaxy' detected → LIMINAL via handle_request")
                     except Exception as _we:
                         logger.debug("VoiceWake: handle_request failed: %s", _we)
+
                 _bt_wake = asyncio.create_task(_wake_request())  # L3 fixed: use asyncio directly
                 _BACKGROUND_TASKS.add(_bt_wake)
                 _bt_wake.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -268,6 +284,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 6. Feedback Loop — execution result tracking
     try:
         from core.feedback_loop import get_feedback_loop  # noqa: PLC0415
+
         _fb = get_feedback_loop()
         app.state.feedback_loop = _fb
         logger.info("FeedbackLoop: initialized (%d history entries)", len(_fb._history))
@@ -279,6 +296,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # ── Phase B: NATS ↔ WebSocket gateway adapter ──
     try:
         from core.nats_bus import nats_bus
+
         # GALAXY_NATS_URL 可能内嵌凭据(nats://user:pass@host:4222 是本仓库唯一的 NATS
         # 鉴权通道 —— nats.connect() 没有传独立的 user/password/token 参数),所以下面
         # 打日志时一律过 safe_endpoint,只留 host:port。
@@ -288,6 +306,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         await nats_bus.connect()
         if nats_bus.is_connected():
             from galaxy_gateway.gateway_nats_adapter import init_gateway_nats_adapter
+
             adapter = init_gateway_nats_adapter(
                 device_manager=device_manager,
                 websocket_manager=websocket_manager,
@@ -324,21 +343,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
         async def _periodic_stale_cleanup() -> None:
             """Background task: prune stale AndroidBridge transport cache entries."""
-            _cleanup_interval = float(
-                os.getenv("GALAXY_STALE_CLEANUP_INTERVAL_S", "90")
-            )
-            _cleanup_timeout = float(
-                os.getenv("GALAXY_STALE_CLEANUP_TIMEOUT_S", "120")
-            )
+            _cleanup_interval = float(os.getenv("GALAXY_STALE_CLEANUP_INTERVAL_S", "90"))
+            _cleanup_timeout = float(os.getenv("GALAXY_STALE_CLEANUP_TIMEOUT_S", "120"))
             while True:
                 await asyncio.sleep(_cleanup_interval)
                 try:
-                    await _android_bridge.cleanup_stale_devices(
-                        timeout_seconds=_cleanup_timeout
-                    )
+                    await _android_bridge.cleanup_stale_devices(timeout_seconds=_cleanup_timeout)
                     logger.debug(
-                        "Stale device cleanup pass complete "
-                        "(interval=%.0fs timeout=%.0fs)",
+                        "Stale device cleanup pass complete " "(interval=%.0fs timeout=%.0fs)",
                         _cleanup_interval,
                         _cleanup_timeout,
                     )
@@ -351,15 +363,13 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
         app.state.stale_cleanup_task = asyncio.create_task(_periodic_stale_cleanup())  # H5 fixed
         logger.info(
-            "Stale-device cleanup background task started "
-            "(interval=%ss, timeout=%ss)",
+            "Stale-device cleanup background task started " "(interval=%ss, timeout=%ss)",
             os.getenv("GALAXY_STALE_CLEANUP_INTERVAL_S", "90"),
             os.getenv("GALAXY_STALE_CLEANUP_TIMEOUT_S", "120"),
         )
     except Exception as _task_err:
         logger.warning(
-            "Stale-device cleanup background task could not be started "
-            "(non-fatal): %s",
+            "Stale-device cleanup background task could not be started " "(non-fatal): %s",
             _task_err,
             exc_info=True,  # H4 fixed
         )
@@ -370,6 +380,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     if master_brain_enabled():
         try:
             from core.master_brain import get_master_brain
+
             brain = get_master_brain()
             if brain is not None:
                 start_result = await brain.start()
@@ -377,6 +388,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                     logger.info("MasterBrain: already started (no-op)")
                 elif start_result.get("success"):
                     from core.nats_bus import nats_bus as _nb
+
                     logger.info(
                         "MasterBrain: started — NATS=%s, subscriptions registered",
                         _nb.is_connected(),
@@ -388,12 +400,11 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         except Exception as _mb_err:
             logger.warning("MasterBrain startup failed (non-fatal): %s", _mb_err, exc_info=True)  # H4 fixed
     else:
-        logger.info(
-            "MasterBrain: disabled (set GALAXY_MASTER_BRAIN_ENABLED=true to enable)"
-        )
+        logger.info("MasterBrain: disabled (set GALAXY_MASTER_BRAIN_ENABLED=true to enable)")
 
     # ── Security posture logging ──
-    from core.auth import is_auth_enabled, get_active_tokens, ensure_auth_config_validated
+    from core.auth import ensure_auth_config_validated, get_active_tokens, is_auth_enabled
+
     ensure_auth_config_validated()
     if is_auth_enabled():
         active = get_active_tokens()
@@ -408,18 +419,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 "all requests will be rejected until a token is set."
             )
     else:
-        logger.info(
-            "\U0001f513 Bearer token auth: DISABLED (set GALAXY_AUTH_ENABLED=true to enable)"
-        )
+        logger.info("\U0001f513 Bearer token auth: DISABLED (set GALAXY_AUTH_ENABLED=true to enable)")
 
     _tls_cert = os.getenv("GALAXY_TLS_CERT", "").strip()
     _tls_key = os.getenv("GALAXY_TLS_KEY", "").strip()
     if _tls_cert and _tls_key:
         logger.info("\U0001f510 TLS: ENABLED (cert=%s)", _tls_cert)
     else:
-        logger.info(
-            "\U0001f513 TLS: DISABLED (set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable)"
-        )
+        logger.info("\U0001f513 TLS: DISABLED (set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable)")
 
     # ── Phase 8: AIPTransport adapter registration ──
     # PR-AIP-UNIFIED: Register physical transport adapters.
@@ -427,13 +434,17 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # parallel to AIP Transport, not a transport adapter.
     # Migrated from nodes/: MQTT(Node_41), BLE(Node_38), Serial(Node_48)
     try:
-        from core.aip_transport import get_aip_transport
         from core.adapters import (
+            BLEAdapter,
+            CANBusAdapter,
+            DBusAdapter,
+            MQTTAdapter,
+            SerialAdapter,
+            TCPAdapter,
+            UDPAdapter,
             WebSocketAdapter,
-            MQTTAdapter, TCPAdapter, UDPAdapter,
-            BLEAdapter, SerialAdapter,
-            DBusAdapter, CANBusAdapter,
         )
+        from core.aip_transport import get_aip_transport
 
         aip_transport = get_aip_transport()
         aip_transport.register_adapter(WebSocketAdapter(websocket_manager))
@@ -441,6 +452,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         ts_adapter = None
         try:
             from core.adapters.tailscale_p2p_adapter import TailscaleP2PAdapter
+
             ts_adapter = TailscaleP2PAdapter()
             if await ts_adapter.initialize():
                 aip_transport.register_adapter(ts_adapter)
@@ -492,6 +504,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # (legacy imports: ``from galaxy_gateway.app import websocket_manager``)
     try:
         import galaxy_gateway.app as _gw_app
+
         _gw_app.device_manager = device_manager
         _gw_app.message_handler = message_handler
         _gw_app.websocket_manager = websocket_manager
@@ -516,6 +529,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # loop closes.
     try:
         from core.multimodal.ingest_runtime import stop_ingest_bus
+
         _ingest_tasks = stop_ingest_bus()
         if _ingest_tasks:
             await asyncio.wait_for(
@@ -527,7 +541,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
     # Cancel the stale-device cleanup background task first.
     # H3 fixed: await task cancellation with timeout; H5 fixed: use app.state
-    if getattr(app.state, 'stale_cleanup_task', None) is not None:
+    if getattr(app.state, "stale_cleanup_task", None) is not None:
         try:
             app.state.stale_cleanup_task.cancel()
             await asyncio.wait_for(asyncio.shield(app.state.stale_cleanup_task), timeout=5.0)
@@ -583,6 +597,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # Clear module-level backward-compat globals
     try:
         import galaxy_gateway.app as _gw_app
+
         _gw_app.device_manager = None
         _gw_app.message_handler = None
         _gw_app.websocket_manager = None

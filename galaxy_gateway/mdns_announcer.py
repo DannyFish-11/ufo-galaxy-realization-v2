@@ -32,14 +32,14 @@ def _ensure_zeroconf():
     if _Zeroconf is not None:
         return True
     try:
-        from zeroconf import Zeroconf, ServiceInfo  # type: ignore
+        from zeroconf import ServiceInfo, Zeroconf  # type: ignore
+
         _Zeroconf = Zeroconf
         _ServiceInfo = ServiceInfo
         return True
     except ImportError:
         logger.warning(
-            "zeroconf not installed — LAN auto-discovery unavailable. "
-            "Install: pip install zeroconf>=0.132.0"
+            "zeroconf not installed — LAN auto-discovery unavailable. " "Install: pip install zeroconf>=0.132.0"
         )
         return False
 
@@ -127,7 +127,9 @@ class MdnsAnnouncer:
             self._started = True
             logger.info(
                 "mDNS: broadcasting _galaxy._tcp on %s:%d (LAN IP=%s)",
-                self.SERVICE_NAME, self.port, ip,
+                self.SERVICE_NAME,
+                self.port,
+                ip,
             )
             return True
         except Exception as e:

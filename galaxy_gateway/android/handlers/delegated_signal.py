@@ -88,29 +88,25 @@ async def handle_delegated_execution_signal(
                 )
                 if outcome.extra.get("result_consumer_called"):
                     logger.debug(
-                        "delegated_execution_signal: PR-5A result consumer invoked "
-                        "device_id=%s session_id=%r",
+                        "delegated_execution_signal: PR-5A result consumer invoked " "device_id=%s session_id=%r",
                         device_id,
                         outcome.session_id,
                     )
             else:
                 logger.debug(
-                    "delegated_execution_signal coordinator outcome not handled: "
-                    "device_id=%s description=%s",
+                    "delegated_execution_signal coordinator outcome not handled: " "device_id=%s description=%s",
                     device_id,
                     outcome.description,
                 )
         except Exception as exc:  # pragma: no cover  # noqa: BLE001
             logger.debug(
-                "delegated_execution_signal coordinator call failed (non-fatal): "
-                "device_id=%s exc=%s",
+                "delegated_execution_signal coordinator call failed (non-fatal): " "device_id=%s exc=%s",
                 device_id,
                 exc,
             )
     else:  # pragma: no cover
         logger.debug(
-            "delegated_execution_signal: lifecycle coordinator unavailable "
-            "(import failed): device_id=%s",
+            "delegated_execution_signal: lifecycle coordinator unavailable " "(import failed): device_id=%s",
             device_id,
         )
 

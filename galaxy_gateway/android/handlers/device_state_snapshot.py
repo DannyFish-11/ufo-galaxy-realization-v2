@@ -113,6 +113,7 @@ async def handle_device_state_snapshot(
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
         )
+
         _dss_gate_decision = _evaluate_schema_gate(
             message_type="device_state_snapshot",
             message=message,
@@ -143,6 +144,7 @@ async def handle_device_state_snapshot(
             absorb_device_state_snapshot,
             get_device_snapshot_reconciliation,
         )
+
         snap = absorb_device_state_snapshot(device_id, payload)
         reconciliation = get_device_snapshot_reconciliation(device_id)
         reconciliation_status = str(reconciliation.get("status", "unknown"))
@@ -166,11 +168,7 @@ async def handle_device_state_snapshot(
 
             readiness_signal = (
                 AndroidParticipationTransitionSignal.readiness_satisfied
-                if (
-                    bool(snap.model_ready)
-                    and bool(snap.accessibility_ready)
-                    and bool(snap.local_loop_ready)
-                )
+                if (bool(snap.model_ready) and bool(snap.accessibility_ready) and bool(snap.local_loop_ready))
                 else AndroidParticipationTransitionSignal.readiness_lost
             )
             participation_state = refresh_participation_state_from_runtime(
@@ -187,16 +185,13 @@ async def handle_device_state_snapshot(
 
         # 统一设备生命周期状态：就绪信号更新生命周期阶段（ready 或回退到 connected）。
         try:
-            from core.device_lifecycle_state import (  # noqa: PLC0415
-                transition_device_lifecycle,
-                DeviceLifecycleTransitionEvent,
-            )
             from core.android_mode_gate_policy import evaluate_android_mode_readiness  # noqa: PLC0415
-            _all_ready = (
-                bool(snap.model_ready)
-                and bool(snap.accessibility_ready)
-                and bool(snap.local_loop_ready)
+            from core.device_lifecycle_state import (  # noqa: PLC0415
+                DeviceLifecycleTransitionEvent,
+                transition_device_lifecycle,
             )
+
+            _all_ready = bool(snap.model_ready) and bool(snap.accessibility_ready) and bool(snap.local_loop_ready)
             _mode_gate = evaluate_android_mode_readiness(device_id)
             _dispatch_gate_passed = bool(getattr(_mode_gate, "is_dispatch_eligible", False))
             _takeover_eligible = bool(getattr(_mode_gate, "is_takeover_eligible", False))
@@ -222,9 +217,9 @@ async def handle_device_state_snapshot(
             )
         except Exception as _lc_snap_exc:
             logger.debug(
-                "device_state_snapshot: device_lifecycle transition non-fatal: "
-                "device_id=%s error=%s",
-                device_id, _lc_snap_exc,
+                "device_state_snapshot: device_lifecycle transition non-fatal: " "device_id=%s error=%s",
+                device_id,
+                _lc_snap_exc,
             )
     except ImportError:
         logger.error(
@@ -235,7 +230,8 @@ async def handle_device_state_snapshot(
     except Exception as exc:
         logger.warning(
             "Failed to absorb device_state_snapshot from %s: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
         status = "error"
 
@@ -294,6 +290,7 @@ async def handle_device_execution_event(
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
         )
+
         _dee_gate_decision = _evaluate_schema_gate(
             message_type="device_execution_event",
             message=message,
@@ -317,14 +314,15 @@ async def handle_device_execution_event(
     status = "absorbed"
     try:
         from core.android_device_state_store import absorb_device_execution_event
-        from core.device_lifecycle_state import (
-            transition_device_lifecycle,
-            DeviceLifecycleTransitionEvent,
-        )
         from core.android_network_participation import (
-            refresh_participation_state_from_runtime,
             AndroidParticipationTransitionSignal,
+            refresh_participation_state_from_runtime,
         )
+        from core.device_lifecycle_state import (
+            DeviceLifecycleTransitionEvent,
+            transition_device_lifecycle,
+        )
+
         evt = absorb_device_execution_event(device_id, payload)
         _phase = _normalize_phase(getattr(evt, "phase", ""))
         if _phase in _EXECUTION_ACTIVE_PHASES:
@@ -349,8 +347,7 @@ async def handle_device_execution_event(
             )
         else:
             logger.debug(
-                "device_execution_event phase ignored for lifecycle transition: "
-                "device_id=%s phase=%r",
+                "device_execution_event phase ignored for lifecycle transition: " "device_id=%s phase=%r",
                 device_id,
                 _phase,
             )
@@ -363,15 +360,15 @@ async def handle_device_execution_event(
         )
     except ImportError:
         logger.error(
-            "device_execution_event: core.android_device_state_store not available; "
-            "event from %s discarded",
+            "device_execution_event: core.android_device_state_store not available; " "event from %s discarded",
             device_id,
         )
         status = "error"
     except Exception as exc:
         logger.warning(
             "Failed to absorb device_execution_event from %s: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
         status = "error"
 

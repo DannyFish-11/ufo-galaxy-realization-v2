@@ -85,6 +85,7 @@ async def handle_reconciliation_signal(
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
         )
+
         _rs_gate_decision = _evaluate_schema_gate(
             message_type="reconciliation_signal",
             message=message,
@@ -117,22 +118,19 @@ async def handle_reconciliation_signal(
                 )
             else:
                 logger.debug(
-                    "reconciliation_signal coordinator outcome not handled: "
-                    "device_id=%s description=%s",
+                    "reconciliation_signal coordinator outcome not handled: " "device_id=%s description=%s",
                     device_id,
                     outcome.description,
                 )
         except Exception as exc:  # pragma: no cover  # noqa: BLE001
             logger.warning(
-                "reconciliation_signal coordinator call failed (non-fatal): "
-                "device_id=%s exc=%s",
+                "reconciliation_signal coordinator call failed (non-fatal): " "device_id=%s exc=%s",
                 device_id,
                 exc,
             )
     else:  # pragma: no cover
         logger.debug(
-            "reconciliation_signal: lifecycle coordinator unavailable "
-            "(import failed): device_id=%s",
+            "reconciliation_signal: lifecycle coordinator unavailable " "(import failed): device_id=%s",
             device_id,
         )
 

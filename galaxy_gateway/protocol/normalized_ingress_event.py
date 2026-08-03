@@ -58,7 +58,6 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # IngressEventKind — canonical message kind vocabulary
 # ---------------------------------------------------------------------------
@@ -79,7 +78,7 @@ class IngressEventKind:
 
     # Device lifecycle
     DEVICE_REGISTER: str = "device_register"
-    DEVICE_HEARTBEAT: str = "heartbeat"       # wire value: MessageType.DEVICE_HEARTBEAT
+    DEVICE_HEARTBEAT: str = "heartbeat"  # wire value: MessageType.DEVICE_HEARTBEAT
     DEVICE_STATUS: str = "device_status"
     DEVICE_DISCONNECT: str = "device_unregister"
 
@@ -140,17 +139,38 @@ class IngressEventKind:
     UNKNOWN: str = "unknown"
 
     _ALL = {
-        DEVICE_REGISTER, DEVICE_HEARTBEAT, DEVICE_STATUS, DEVICE_DISCONNECT,
-        TASK_SUBMIT, TASK_RESULT, TASK_CANCEL,
-        COMMAND, COMMAND_RESULT,
-        GOAL_EXECUTION, PARALLEL_SUBTASK, PARALLEL_RESULT,
-        CAPABILITY_REPORT, AGENT_STATUS, DELEGATED_EXECUTION_SIGNAL,
-        FILE_TRANSFER, PEER_ANNOUNCE, PEER_EXCHANGE, MESH_TOPOLOGY, WAKE_EVENT,
-        GOAL_EXECUTION_RESULT, GOAL_RESULT,
-        HANDOFF_ACK, HANDOFF_RESULT, HANDOFF_FAILURE, HANDOFF_ENVELOPE_V2_RESULT,
-        DEVICE_STATE_SNAPSHOT, DEVICE_EXECUTION_EVENT,
+        DEVICE_REGISTER,
+        DEVICE_HEARTBEAT,
+        DEVICE_STATUS,
+        DEVICE_DISCONNECT,
+        TASK_SUBMIT,
+        TASK_RESULT,
+        TASK_CANCEL,
+        COMMAND,
+        COMMAND_RESULT,
+        GOAL_EXECUTION,
+        PARALLEL_SUBTASK,
+        PARALLEL_RESULT,
+        CAPABILITY_REPORT,
+        AGENT_STATUS,
+        DELEGATED_EXECUTION_SIGNAL,
+        FILE_TRANSFER,
+        PEER_ANNOUNCE,
+        PEER_EXCHANGE,
+        MESH_TOPOLOGY,
+        WAKE_EVENT,
+        GOAL_EXECUTION_RESULT,
+        GOAL_RESULT,
+        HANDOFF_ACK,
+        HANDOFF_RESULT,
+        HANDOFF_FAILURE,
+        HANDOFF_ENVELOPE_V2_RESULT,
+        DEVICE_STATE_SNAPSHOT,
+        DEVICE_EXECUTION_EVENT,
         DEVICE_PERCEPTION_EMISSION,
-        ACK, OPERATOR_ACTION_RESULT, PING,
+        ACK,
+        OPERATOR_ACTION_RESULT,
+        PING,
         UNKNOWN,
     }
 
@@ -194,8 +214,7 @@ class NormalizedIngressEvent(BaseModel):
     )
     kind: str = Field(
         description=(
-            "Canonical ingress event kind — always a known "
-            ":class:`IngressEventKind` string after normalization."
+            "Canonical ingress event kind — always a known " ":class:`IngressEventKind` string after normalization."
         ),
     )
     device_id: str = Field(
@@ -205,16 +224,12 @@ class NormalizedIngressEvent(BaseModel):
 
     # ── Tracing / routing ────────────────────────────────────────────────────
     trace_id: str = Field(
-        description=(
-            "Distributed trace identifier injected by the compat layer.  "
-            "Always non-empty."
-        ),
+        description=("Distributed trace identifier injected by the compat layer.  " "Always non-empty."),
     )
     route_mode: str = Field(
         default="cross_device",
         description=(
-            "Routing mode injected by the compat layer.  "
-            "Typical values: 'cross_device', 'local', 'broadcast'."
+            "Routing mode injected by the compat layer.  " "Typical values: 'cross_device', 'local', 'broadcast'."
         ),
     )
     runtime_session_id: Optional[str] = Field(
@@ -342,15 +357,11 @@ def from_aip_message(message: Any, *, extra_fields: Optional[Dict[str, Any]] = N
         if not isinstance(payload_raw, dict):
             payload_raw = {}
 
-        trace_id = (
-            str(getattr(message, "trace_id", "") or payload_raw.get("trace_id", "") or "")
-        )
+        trace_id = str(getattr(message, "trace_id", "") or payload_raw.get("trace_id", "") or "")
         if not trace_id:
             trace_id = f"trace_{uuid.uuid4().hex[:12]}"
 
-        route_mode = (
-            str(getattr(message, "route_mode", "") or payload_raw.get("route_mode", "") or "cross_device")
-        )
+        route_mode = str(getattr(message, "route_mode", "") or payload_raw.get("route_mode", "") or "cross_device")
 
         runtime_session_id = (
             str(getattr(message, "runtime_session_id", "") or payload_raw.get("runtime_session_id", "") or "")
@@ -375,7 +386,8 @@ def from_aip_message(message: Any, *, extra_fields: Optional[Dict[str, Any]] = N
 
         # Clean up tracing fields from payload to avoid duplication
         payload = {
-            k: v for k, v in payload_raw.items()
+            k: v
+            for k, v in payload_raw.items()
             if k not in {"trace_id", "route_mode", "runtime_session_id", "idempotency_key"}
         }
 
@@ -449,9 +461,18 @@ def from_normalized_dict(data: Dict[str, Any]) -> NormalizedIngressEvent:
 
         # Extra fields: everything not covered by the canonical schema
         _schema_keys = {
-            "type", "version", "device_id", "trace_id", "route_mode",
-            "runtime_session_id", "idempotency_key", "task_id", "message_id",
-            "correlation_id", "timestamp", "payload",
+            "type",
+            "version",
+            "device_id",
+            "trace_id",
+            "route_mode",
+            "runtime_session_id",
+            "idempotency_key",
+            "task_id",
+            "message_id",
+            "correlation_id",
+            "timestamp",
+            "payload",
         }
         extra_fields = {k: v for k, v in data.items() if k not in _schema_keys}
 

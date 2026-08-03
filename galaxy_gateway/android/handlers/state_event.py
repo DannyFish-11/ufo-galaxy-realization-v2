@@ -29,7 +29,7 @@ Message format (AIP v3):
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -37,9 +37,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def handle_state_event(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_state_event(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle STATE_EVENT from Windows — update Android device phase.
 
     This is the receiving end of PR-CROSS-DEVICE-SYNC. When Windows
@@ -112,16 +110,14 @@ def _update_device_synced_phase(
             device.synced_phase["source"] = payload.get("source", "")
 
             logger.info(
-                "CrossDeviceSync: Android device now tracking desktop phase=%s "
-                "(was=%s, source=%s)",
+                "CrossDeviceSync: Android device now tracking desktop phase=%s " "(was=%s, source=%s)",
                 phase.lower(),
                 payload.get("from_phase", ""),
                 payload.get("source", ""),
             )
         else:
             logger.debug(
-                "CrossDeviceSync: desktop device %s not in _devices, "
-                "skipping phase state update",
+                "CrossDeviceSync: desktop device %s not in _devices, " "skipping phase state update",
                 source_device_id,
             )
     except Exception as exc:

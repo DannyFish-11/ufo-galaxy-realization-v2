@@ -51,6 +51,9 @@ Structured event tags (stable, machine-queryable):
 
 from __future__ import annotations
 
+import logging
+from typing import Any, Dict, List
+
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
 # Importing this sentinel from outside the gateway package signals that the
@@ -59,8 +62,6 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 GATEWAY_SSOT_WRITE_AUTHORITY = "GATEWAY_SSOT::DEVICE_WRITE_PATH_ONLY"
 
-import logging
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +70,18 @@ logger = logging.getLogger(__name__)
 # Internal helper
 # ---------------------------------------------------------------------------
 
+
 def _get_udm():
     """Return the singleton UnifiedDeviceManager (lazy import)."""
     from core.unified.device_manager import get_unified_device_manager  # noqa: E402
+
     return get_unified_device_manager()
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def udm_write_register(
     device_id: str,
@@ -120,8 +124,7 @@ def udm_write_register(
 
     except Exception as exc:
         logger.warning(
-            "SSOT guardrail: UDM write failed for device %s — "
-            "local gateway state will NOT be updated. error=%s",
+            "SSOT guardrail: UDM write failed for device %s — " "local gateway state will NOT be updated. error=%s",
             device_id,
             exc,
             extra={"event": "ssot_udm_write_failed", "device_id": device_id},
@@ -174,8 +177,7 @@ def udm_write_upsert(
         return True
     except Exception as exc:
         logger.warning(
-            "SSOT guardrail: UDM upsert failed for device %s — "
-            "local state will NOT be updated. error=%s",
+            "SSOT guardrail: UDM upsert failed for device %s — " "local state will NOT be updated. error=%s",
             device_id,
             exc,
             extra={"event": "ssot_udm_upsert_failed", "device_id": device_id},
@@ -208,8 +210,7 @@ def udm_write_unregister(device_id: str) -> bool:
 
     except Exception as exc:
         logger.warning(
-            "SSOT guardrail: UDM unregister failed for device %s — "
-            "local state may diverge from UDM. error=%s",
+            "SSOT guardrail: UDM unregister failed for device %s — " "local state may diverge from UDM. error=%s",
             device_id,
             exc,
             extra={"event": "ssot_udm_unregister_failed", "device_id": device_id},

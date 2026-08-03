@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 try:
     from galaxy_gateway.websocket_handler import (
         GatewayWSManager,
-        parse_message_strict,
         handle_device_message,
+        parse_message_strict,
         register_device_ws,
         unregister_device_ws,
     )
@@ -112,6 +112,7 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = [
 
 # ── Canonical Android/device WebSocket handler ──
 
+
 async def _handle_android_ws(
     websocket,
     device_id: str,
@@ -128,12 +129,15 @@ async def _handle_android_ws(
     ingress accounting cannot diverge per route.
     """
     from fastapi import WebSocketDisconnect
+
     from galaxy_gateway.android_bridge import android_bridge
 
     await websocket.accept()
     logger.info(
         "device ws connected: device_id=%s ingress=%s (%s)",
-        device_id, ingress_path, ingress_classification,
+        device_id,
+        ingress_path,
+        ingress_classification,
     )
     try:
         while True:
@@ -215,6 +219,7 @@ def register_websocket_routes(app) -> None:
     @app.websocket("/ws/webrtc/{device_id}")
     async def webrtc_signaling_ws(websocket: WebSocket, device_id: str):
         from galaxy_gateway.webrtc_proxy import proxy_webrtc_signaling
+
         await proxy_webrtc_signaling(websocket, device_id)
 
     @app.websocket("/ws/android")
@@ -231,18 +236,23 @@ def register_websocket_routes(app) -> None:
 def _LEGACY_PROTOCOLS_ENABLED() -> bool:
     """legacy 协议入口(/ws/ufo3)是否显式开启——默认禁用。"""
     import os
+
     return os.environ.get("GALAXY_ENABLE_LEGACY_PROTOCOLS", "").strip().lower() in (
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     )
 
 
 def _resolve_android_ws_handler():
     """Late-bind the handler from this module so monkeypatching works."""
     import galaxy_gateway.routes.websocket as _self
+
     return _self._handle_android_ws
 
 
 # ── WebSocket endpoint factory (for FastAPI) ──
+
 
 def create_device_websocket_routes(app, service_manager=None):
     """Register WebSocket endpoints on the FastAPI app."""
@@ -256,4 +266,3 @@ def create_device_websocket_routes(app, service_manager=None):
             await manager.handle_device_connection(websocket, device_id)
         else:
             await websocket.close(code=1011, reason="GatewayWSManager not available")
-

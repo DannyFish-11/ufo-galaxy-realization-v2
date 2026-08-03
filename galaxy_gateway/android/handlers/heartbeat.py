@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def handle_heartbeat(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理心跳，未注册设备仍回 ACK 并输出警告。
 
     Heartbeat flow (PR-2):
@@ -52,9 +50,7 @@ async def handle_heartbeat(
     return MessageBuilder.heartbeat_ack(device_id)
 
 
-async def handle_device_status(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理设备状态上报（battery, cpu, memory 等）。
 
     Status update flow (PR-2):
@@ -84,7 +80,8 @@ async def handle_device_status(
 
     logger.info(
         "Device status update: device_id=%s status=%s",
-        device_id, status_payload,
+        device_id,
+        status_payload,
     )
 
     return {
@@ -97,18 +94,14 @@ async def handle_device_status(
     }
 
 
-async def handle_agent_ping(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_agent_ping(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理 agent_ping 请求，返回 heartbeat_ack"""
     device_id = message.get("device_id")
     logger.debug("Agent ping from %s", device_id)
     return MessageBuilder.heartbeat_ack(device_id)
 
 
-async def handle_agent_status(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_agent_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理 agent_status（readiness/posture 证据）.
 
     Android posture gating: if the status payload carries a
@@ -130,10 +123,7 @@ async def handle_agent_status(
         # target selection gates on actual posture rather than the default set
         # at registration time.
         if isinstance(status_payload, dict):
-            _posture_hint = (
-                status_payload.get("source_runtime_posture")
-                or status_payload.get("posture")
-            )
+            _posture_hint = status_payload.get("source_runtime_posture") or status_payload.get("posture")
             if _posture_hint:
                 try:
                     from core.attached_runtime_session_registry import (
@@ -152,8 +142,7 @@ async def handle_agent_status(
                     )
                 except Exception as _posture_exc:
                     logger.debug(
-                        "android_bridge: update_session_posture non-fatal:"
-                        " device_id=%s error=%s",
+                        "android_bridge: update_session_posture non-fatal:" " device_id=%s error=%s",
                         device_id,
                         _posture_exc,
                     )

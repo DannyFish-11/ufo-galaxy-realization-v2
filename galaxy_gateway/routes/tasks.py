@@ -22,8 +22,10 @@ from galaxy_gateway.protocol import AIPMessage, MessageType
 try:
     from core.auth import require_auth as _require_auth
 except ImportError:
+
     async def _require_auth():  # type: ignore[misc]
         return {"authenticated": True, "dev_mode": True}
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
+
 
 class TaskRequest(BaseModel):
     user_request: str
@@ -161,9 +164,7 @@ async def send_command(
 
     msg_type = _MSG_TYPE_MAP.get(request.command_type)
     if not msg_type:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown command type: {request.command_type}"
-        )
+        raise HTTPException(status_code=400, detail=f"Unknown command type: {request.command_type}")
 
     message = AIPMessage(
         type=msg_type,
@@ -173,6 +174,7 @@ async def send_command(
     # PR-28: Route through AIPTransport for smart transport selection
     try:
         from core.aip_transport import get_aip_transport
+
         result = await get_aip_transport().send(
             message,
             request.device_id,

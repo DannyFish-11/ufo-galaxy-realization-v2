@@ -18,6 +18,7 @@ This is the canonical import path for legacy task decomposition.
 The implementation is in galaxy_gateway.task_decomposer (maintained for
 backward compatibility at both paths).
 """
+
 import warnings
 
 warnings.warn(
@@ -28,6 +29,6 @@ warnings.warn(
     stacklevel=2,
 )
 
-from galaxy_gateway.task_decomposer import TaskDecomposer, IntelligentTaskPlanner  # noqa: F401, E402
+from galaxy_gateway.task_decomposer import IntelligentTaskPlanner, TaskDecomposer  # noqa: F401, E402
 
 __all__ = ["TaskDecomposer", "IntelligentTaskPlanner"]

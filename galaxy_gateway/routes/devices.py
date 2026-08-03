@@ -28,6 +28,7 @@ router = APIRouter()
 # Current device management endpoints
 # ============================================================================
 
+
 @router.get("/api/devices")
 async def get_devices(dm=Depends(get_device_manager)):
     """Return all registered devices.
@@ -40,20 +41,23 @@ async def get_devices(dm=Depends(get_device_manager)):
     out = dm.to_dict()
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         local_ids = {d.get("device_id") for d in out.get("devices", [])}
         extra = []
         for dev in get_unified_device_manager().list_devices() or []:
             if dev.device_id in local_ids:
                 continue
-            extra.append({
-                "device_id": dev.device_id,
-                "device_name": dev.device_name,
-                "device_type": str(dev.device_type),
-                "status": str(dev.status),
-                "capabilities": list(dev.capabilities or []),
-                "metadata": dict(dev.metadata or {}),
-                "source": "udm",
-            })
+            extra.append(
+                {
+                    "device_id": dev.device_id,
+                    "device_name": dev.device_name,
+                    "device_type": str(dev.device_type),
+                    "status": str(dev.status),
+                    "capabilities": list(dev.capabilities or []),
+                    "metadata": dict(dev.metadata or {}),
+                    "source": "udm",
+                }
+            )
         if extra:
             out["devices"] = list(out.get("devices", [])) + extra
             out["total_devices"] = len(out["devices"])
@@ -109,6 +113,7 @@ async def get_device(
 # Maps old /api/devices/* paths → current device-manager behaviour
 # ============================================================================
 
+
 class _LegacyRegisterRequest(BaseModel):
     device_id: str
     device_type: str = "android"
@@ -137,9 +142,7 @@ async def legacy_register_device(
     device_info = DeviceInfo(
         device_id=req.device_id,
         device_type=(
-            DeviceType(req.device_type)
-            if req.device_type in [dt.value for dt in DeviceType]
-            else DeviceType.UNKNOWN
+            DeviceType(req.device_type) if req.device_type in [dt.value for dt in DeviceType] else DeviceType.UNKNOWN
         ),
         name=req.device_name or req.device_id,
         os_version=req.os_version,

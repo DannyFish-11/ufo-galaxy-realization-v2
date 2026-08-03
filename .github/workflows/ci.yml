@@ -109,12 +109,17 @@ jobs:
           python-version: "3.11"
       - name: Install dev dependencies
         run: pip install -r requirements-dev.txt
+      # galaxy_gateway/（105 个文件、约 40,000 行）此前一直在这三道门之外 ——
+      # flake8 只看 core/，black/isort 只看 core/ 和 tests/。门外的结果是
+      # 770 条 flake8 告警长期无人发现，其中 8 条 F841（局部变量赋值后未使用）
+      # 各自对应一处真实缺陷：设备能力上报被丢弃、截图失败伪装成功、RAG 检索
+      # 结果从不使用。补门时没有加任何 per-file-ignore，全部按真实原因修掉。
       - name: Lint with flake8
-        run: flake8 core/ --max-line-length=120 --count --statistics
+        run: flake8 core/ galaxy_gateway/ --max-line-length=120 --count --statistics
       - name: Check formatting with black
-        run: black --check core/ tests/
+        run: black --check core/ tests/ galaxy_gateway/
       - name: Check import ordering
-        run: isort --check-only core/ tests/
+        run: isort --check-only core/ tests/ galaxy_gateway/
 
   v3-protocol-guard:
     runs-on: ubuntu-latest

@@ -280,9 +280,9 @@ class GatewayCapabilityRegistry:
         )
 
         try:
-            from core.unified.capability_contract import CapabilityContract, CapabilitySource
             from core.capability_runtime.capability_state import CapabilityAvailability
             from core.unified.capability_authority import CapabilityAuthority
+            from core.unified.capability_contract import CapabilityContract, CapabilitySource
 
             capability_name = self._canonical_capability_name(device_id, action)
             CapabilityAuthority.get_instance().upsert_contract(

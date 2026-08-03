@@ -265,10 +265,7 @@ def select_devices(
                 # No snapshot — no runtime truth to exclude on; admit.
                 _rt_admitted.append(_dev)
                 continue
-            _truly_unfit = (
-                _snap.pending_first_download is True
-                and not (_snap.current_fallback_tier or "")
-            )
+            _truly_unfit = _snap.pending_first_download is True and not (_snap.current_fallback_tier or "")
             if _truly_unfit:
                 logger.debug(
                     "select_devices [PR-7/runtime-state]: device %r excluded — "
@@ -281,8 +278,7 @@ def select_devices(
         if _rt_admitted:
             if len(_rt_admitted) < len(devices):
                 logger.debug(
-                    "select_devices [PR-7/runtime-state]: pre-filter reduced "
-                    "candidates %d → %d",
+                    "select_devices [PR-7/runtime-state]: pre-filter reduced " "candidates %d → %d",
                     len(devices),
                     len(_rt_admitted),
                 )
@@ -297,8 +293,7 @@ def select_devices(
             )
     except Exception as _rt_err:
         logger.debug(
-            "select_devices: runtime-state pre-filter unavailable "
-            "(graceful degradation): %s",
+            "select_devices: runtime-state pre-filter unavailable " "(graceful degradation): %s",
             _rt_err,
         )
 
@@ -309,6 +304,7 @@ def select_devices(
     # no snapshot retain a neutral score (0) and are not penalised.
     # Per ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION.
     try:
+
         def _android_readiness_score(dev: Any) -> int:
             _did = getattr(dev, "device_id", None) or ""
             if not _did:
@@ -341,9 +337,9 @@ def select_devices(
                 _score -= min(_queue_depth, 20)
             _health = getattr(_snap, "runtime_health_snapshot", None)
             if isinstance(_health, dict):
-                _health_status = str(
-                    _health.get("status") or _health.get("state") or _health.get("health") or ""
-                ).strip().lower()
+                _health_status = (
+                    str(_health.get("status") or _health.get("state") or _health.get("health") or "").strip().lower()
+                )
                 _is_degraded = bool(_health.get("is_degraded", False))
                 if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
                     _score -= 10
@@ -370,9 +366,7 @@ def select_devices(
                     _ev = _recent[0]
                     _phase = str(getattr(_ev, "phase", "") or "").strip().lower()
                     _absorbed = float(getattr(_ev, "absorbed_at", 0) or 0)
-                    if _phase in {"planning", "grounding", "execution", "replan"} and (
-                        time.time() - _absorbed
-                    ) < 60.0:
+                    if _phase in {"planning", "grounding", "execution", "replan"} and (time.time() - _absorbed) < 60.0:
                         _score -= 12
             except Exception:
                 pass
@@ -396,8 +390,7 @@ def select_devices(
             devices = _reordered
     except Exception as _wt_err:
         logger.debug(
-            "select_devices: Android runtime truth routing weight unavailable "
-            "(graceful degradation): %s",
+            "select_devices: Android runtime truth routing weight unavailable " "(graceful degradation): %s",
             _wt_err,
         )
 

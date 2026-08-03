@@ -30,14 +30,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # PR-8 sentinel — canonical handler authority for FILE_TRANSFER messages.
-FILE_TRANSFER_HANDLER_IS_CANONICAL_PR8: str = (
-    "FILE_TRANSFER_HANDLER::CANONICAL_STATEFUL_PR8"
-)
+FILE_TRANSFER_HANDLER_IS_CANONICAL_PR8: str = "FILE_TRANSFER_HANDLER::CANONICAL_STATEFUL_PR8"
 
 
-async def handle_file_transfer(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_file_transfer(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle a FILE_TRANSFER message from an Android device.
 
     This handler replaces the generic-forward placeholder.  It returns a
@@ -61,37 +57,20 @@ async def handle_file_transfer(
     payload = message.get("payload") or {}
 
     # Extract file metadata from the message.
-    file_name: str = (
-        payload.get("file_name")
-        or message.get("file_name")
-        or ""
-    )
+    file_name: str = payload.get("file_name") or message.get("file_name") or ""
     file_size: int = int(payload.get("file_size") or message.get("file_size") or 0)
     checksum: str = payload.get("checksum") or message.get("checksum") or ""
-    file_path: str = (
-        payload.get("file_path")
-        or message.get("file_path")
-        or ""
-    )
+    file_path: str = payload.get("file_path") or message.get("file_path") or ""
 
     # Cross-device transfer fields.
-    source_device: Optional[str] = (
-        payload.get("source_device") or message.get("source_device")
-    )
-    target_device: Optional[str] = (
-        payload.get("target_device") or message.get("target_device")
-    )
+    source_device: Optional[str] = payload.get("source_device") or message.get("source_device")
+    target_device: Optional[str] = payload.get("target_device") or message.get("target_device")
 
     # Generate a transfer ID for tracking.
-    transfer_id: str = (
-        payload.get("transfer_id")
-        or message.get("transfer_id")
-        or uuid.uuid4().hex[:12]
-    )
+    transfer_id: str = payload.get("transfer_id") or message.get("transfer_id") or uuid.uuid4().hex[:12]
 
     logger.info(
-        "FILE_TRANSFER from device_id=%s transfer_id=%s file_name=%r"
-        " file_size=%d source=%s target=%s",
+        "FILE_TRANSFER from device_id=%s transfer_id=%s file_name=%r" " file_size=%d source=%s target=%s",
         device_id,
         transfer_id,
         file_name,
@@ -154,8 +133,7 @@ async def _try_orchestrated_transfer(
 
         status = result.get("status", "unknown")
         logger.info(
-            "Orchestrated FILE_TRANSFER transfer_id=%s source=%s target=%s"
-            " result_status=%s",
+            "Orchestrated FILE_TRANSFER transfer_id=%s source=%s target=%s" " result_status=%s",
             transfer_id,
             source_device,
             target_device,
@@ -180,15 +158,13 @@ async def _try_orchestrated_transfer(
 
     except ImportError:
         logger.debug(
-            "DeviceOrchestrator not available; falling back to transfer ACK "
-            "for transfer_id=%s",
+            "DeviceOrchestrator not available; falling back to transfer ACK " "for transfer_id=%s",
             transfer_id,
         )
         return None
     except Exception as exc:
         logger.warning(
-            "Orchestrated FILE_TRANSFER failed (non-fatal): transfer_id=%s"
-            " error=%s",
+            "Orchestrated FILE_TRANSFER failed (non-fatal): transfer_id=%s" " error=%s",
             transfer_id,
             exc,
         )

@@ -22,68 +22,64 @@ Do **not** import ``galaxy_gateway.aip_protocol_v2`` directly — it will raise
 导出所有协议相关的类和函数。
 """
 
-from .compat import parse_message_compat, normalize_action_in_payload
-from .normalized_ingress_event import (
-    NormalizedIngressEvent,
-    IngressEventKind,
-    to_normalized_ingress_event,
-    from_aip_message as ingress_event_from_aip_message,
-    from_normalized_dict as ingress_event_from_dict,
-)
-from .ingress_classifier import (
-    IngressMessageClass,
-    classify_ingress_kind,
-    INGRESS_CLASSIFIER_AUTHORITY,
-)
 from .actions import (
-    ActionType,
     LEGACY_ACTION_MAP,
+    ActionType,
+    AppLaunchPayload,
     ClickPayload,
-    SwipePayload,
-    ScrollPayload,
-    TypePayload,
+    ClipboardPayload,
     KeyPressPayload,
     ScreenshotPayload,
-    AppLaunchPayload,
+    ScrollPayload,
     ShellPayload,
-    ClipboardPayload,
+    SwipePayload,
+    TypePayload,
+    get_payload_schema,
     normalize_action_name,
     validate_action_payload,
-    get_payload_schema,
 )
-from .aip_v3 import (
-    # 枚举类型
-    AIPDeviceType,
-    AIPDeviceType as DeviceType,  # backward compat alias
-    DevicePlatform,
-    DeviceCapability,
-    MessageType,
-    TaskStatus,
-    ResultStatus,
 
-    # 数据结构
-    Rect,
-    UIElement,
-    DeviceInfo,
+# 从 .aip_v3 转出的符号分四类：枚举类型（AIPDeviceType / DevicePlatform /
+# DeviceCapability / MessageType / TaskStatus / ResultStatus）、数据结构（Rect /
+# UIElement / DeviceInfo / Command / CommandResult / AIPMessage）、消息构造与校验
+# 工具函数（create_* / parse_message / validate_message），以及统一协议桥
+# UnifiedMessageTypes。DeviceType 是 AIPDeviceType 的向后兼容别名。
+#
+# 分类说明写在这里而不是括号内：isort 会把括号内的分节注释collapse 成一条分号连
+# 接的尾注释（"# 枚举类型; 数据结构; 工具函数; ..."），既丢失了原意，又让 isort
+# 自身不再幂等 —— 跑完 isort+black 之后 isort 仍报未排序，两道门永远无法同时绿。
+from .aip_v3 import AIPDeviceType
+from .aip_v3 import AIPDeviceType as DeviceType
+from .aip_v3 import (
+    AIPMessage,
     Command,
     CommandResult,
-    AIPMessage,
-
-    # 工具函数
-    create_register_message,
-    create_heartbeat_message,
-    create_task_message,
+    DeviceCapability,
+    DeviceInfo,
+    DevicePlatform,
+    MessageType,
+    Rect,
+    ResultStatus,
+    TaskStatus,
+    UIElement,
+    UnifiedMessageTypes,
+    create_error_message,
     create_gui_click_message,
     create_gui_input_message,
     create_gui_scroll_message,
+    create_heartbeat_message,
+    create_register_message,
     create_screenshot_message,
-    create_error_message,
+    create_task_message,
     parse_message,
     validate_message,
-
-    # Unified protocol bridge
-    UnifiedMessageTypes,
 )
+from .compat import normalize_action_in_payload, parse_message_compat
+from .ingress_classifier import INGRESS_CLASSIFIER_AUTHORITY, IngressMessageClass, classify_ingress_kind
+from .normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
+from .normalized_ingress_event import from_aip_message as ingress_event_from_aip_message
+from .normalized_ingress_event import from_normalized_dict as ingress_event_from_dict
+from .normalized_ingress_event import to_normalized_ingress_event
 
 __all__ = [
     # Legacy compat / shim

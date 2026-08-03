@@ -10,14 +10,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+# DeviceType / DevicePlatform — imported from canonical SSOT
+from core.device_types import AIPDeviceType as DeviceType  # noqa: E402
+from core.device_types import DevicePlatform
 from core.protocol_drift_registry import coerce_protocol_enum
 from galaxy_gateway.android.capabilities import DeviceCapability
-
-# DeviceType / DevicePlatform — imported from canonical SSOT
-from core.device_types import (  # noqa: E402
-    AIPDeviceType as DeviceType,
-    DevicePlatform,
-)
 
 
 @dataclass

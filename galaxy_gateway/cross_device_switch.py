@@ -57,14 +57,13 @@ WS_CLOSE_CODE_CROSS_DEVICE_DISABLED: int = 4001
 ERROR_CODE_CROSS_DEVICE_DISABLED: str = "cross_device_disabled"
 
 #: Human-readable error message.
-ERROR_MSG_CROSS_DEVICE_DISABLED: str = (
-    "Cross-device routing is disabled by server policy"
-)
+ERROR_MSG_CROSS_DEVICE_DISABLED: str = "Cross-device routing is disabled by server policy"
 
 
 # ---------------------------------------------------------------------------
 # Switch helpers
 # ---------------------------------------------------------------------------
+
 
 def is_cross_device_enabled() -> bool:
     """Return ``True`` when cross-device routing is **enabled**.
@@ -135,6 +134,7 @@ def make_disabled_response(trace_id: Optional[str] = None) -> Dict[str, Any]:
 # Exception
 # ---------------------------------------------------------------------------
 
+
 class CrossDeviceDisabledError(RuntimeError):
     """Raised by :func:`guard_cross_device` when cross-device routing is OFF.
 
@@ -144,9 +144,7 @@ class CrossDeviceDisabledError(RuntimeError):
 
     def __init__(self, trace_id: Optional[str] = None) -> None:
         self.trace_id: str = trace_id or str(uuid.uuid4())
-        super().__init__(
-            f"{ERROR_MSG_CROSS_DEVICE_DISABLED} (trace_id={self.trace_id})"
-        )
+        super().__init__(f"{ERROR_MSG_CROSS_DEVICE_DISABLED} (trace_id={self.trace_id})")
 
 
 # ---------------------------------------------------------------------------

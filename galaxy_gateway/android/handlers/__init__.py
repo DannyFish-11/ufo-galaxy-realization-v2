@@ -7,52 +7,41 @@ Each handler has the signature:
 where ``bridge`` is the AndroidBridge instance providing state and UDM helpers.
 """
 
-from galaxy_gateway.android.handlers.registration import (
-    handle_device_register,
-    handle_unregistered,
+from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
+from galaxy_gateway.android.handlers.capability_report import handle_capability_report
+from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
+from galaxy_gateway.android.handlers.evaluator_artifact_report import handle_evaluator_artifact_report
+from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
+from galaxy_gateway.android.handlers.generic import handle_generic_forward
+from galaxy_gateway.android.handlers.goal_execution import (
+    handle_goal_execution,
+    handle_goal_execution_result,
+    handle_parallel_subtask,
 )
+from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 from galaxy_gateway.android.handlers.heartbeat import (
-    handle_heartbeat,
-    handle_device_status,
     handle_agent_ping,
     handle_agent_status,
+    handle_device_status,
+    handle_heartbeat,
 )
+from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
+from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
+from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
+from galaxy_gateway.android.handlers.registration import handle_device_register, handle_unregistered
+from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 from galaxy_gateway.android.handlers.task_lifecycle import (
-    handle_task_result,
-    handle_task_end,
-    handle_task_progress,
     handle_command_result,
     handle_error,
     handle_task_cancel,
+    handle_task_end,
+    handle_task_progress,
+    handle_task_result,
     handle_task_status,
 )
-from galaxy_gateway.android.handlers.task_submit import (
-    handle_task_execute,
-    handle_task_submit,
-)
-from galaxy_gateway.android.handlers.goal_execution import (
-    handle_goal_execution,
-    handle_parallel_subtask,
-    handle_goal_execution_result,
-)
-from galaxy_gateway.android.handlers.capability_report import handle_capability_report
-from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
+from galaxy_gateway.android.handlers.task_submit import handle_task_execute, handle_task_submit
 from galaxy_gateway.android.handlers.vision import handle_vision_request
-from galaxy_gateway.android.handlers.generic import handle_generic_forward
-from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
-from galaxy_gateway.android.handlers.evaluator_artifact_report import (
-    handle_evaluator_artifact_report,
-)
-from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
-from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
-from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
-from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
-from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
-from galaxy_gateway.android.handlers.peer_exchange import (
-    handle_peer_announce,
-    handle_peer_exchange,
-)
-from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 
 __all__ = [
     "handle_device_register",

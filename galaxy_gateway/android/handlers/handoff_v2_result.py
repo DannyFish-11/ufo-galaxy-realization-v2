@@ -44,17 +44,13 @@ logger = logging.getLogger(__name__)
 # PR-02-V2: canonical ingress binding — top-level import so tests can patch() it
 # and so an import failure degrades gracefully without crashing the gateway.
 try:
-    from core.android_handoff_v2_response_ingress import (
-        ingest_android_handoff_response as _ingest_handoff_response,
-    )
+    from core.android_handoff_v2_response_ingress import ingest_android_handoff_response as _ingest_handoff_response
 except ImportError:  # pragma: no cover
     _ingest_handoff_response = None  # type: ignore[assignment]
 
 # PR-10-V2: unified Android delegated runtime audit recorder.
 try:
-    from core.android_delegated_runtime_audit import (
-        record_handoff_v2_result as _audit_handoff_v2_result,
-    )
+    from core.android_delegated_runtime_audit import record_handoff_v2_result as _audit_handoff_v2_result
 except ImportError:  # pragma: no cover
     _audit_handoff_v2_result = None  # type: ignore[assignment]
 
@@ -62,6 +58,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 # Public handler
 # ---------------------------------------------------------------------------
+
 
 async def handle_handoff_v2_result(
     bridge: "AndroidBridge",
@@ -113,6 +110,7 @@ async def handle_handoff_v2_result(
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
         )
+
         _schema_gate_decision = _evaluate_schema_gate(
             message_type=msg_type,
             message=message,
@@ -160,8 +158,7 @@ async def handle_handoff_v2_result(
             if outcome.was_correlated:
                 env = outcome.envelope
                 logger.debug(
-                    "PR-02-V2 handoff_v2 ingress: correlated kind=%s "
-                    "handoff_id=%r device=%s callback_invoked=%s",
+                    "PR-02-V2 handoff_v2 ingress: correlated kind=%s " "handoff_id=%r device=%s callback_invoked=%s",
                     env.response_kind,
                     env.handoff_id,
                     device_id,
@@ -190,21 +187,17 @@ async def handle_handoff_v2_result(
                         "canonical_closure_authority": "v2",
                     }
                     try:
-                        from galaxy_gateway.device_router import (
-                            device_router as _device_router,
-                        )
+                        from galaxy_gateway.device_router import device_router as _device_router
 
                         await _device_router.handle_task_result(_env_task_id, _completion_result)
                         logger.debug(
-                            "PR-1 P0: handoff_v2 terminal → device_router.handle_task_result "
-                            "task_id=%r kind=%s",
+                            "PR-1 P0: handoff_v2 terminal → device_router.handle_task_result " "task_id=%r kind=%s",
                             _env_task_id,
                             getattr(env, "response_kind", ""),
                         )
                     except Exception as _dr_exc:
                         logger.debug(
-                            "PR-1 P0: device_router.handle_task_result skipped "
-                            "(non-fatal): task_id=%r exc=%s",
+                            "PR-1 P0: device_router.handle_task_result skipped " "(non-fatal): task_id=%r exc=%s",
                             _env_task_id,
                             _dr_exc,
                         )
@@ -225,8 +218,7 @@ async def handle_handoff_v2_result(
                             )
                     except Exception as _registry_exc:
                         logger.debug(
-                            "handoff_v2 terminal lifecycle reconciliation skipped "
-                            "(non-fatal): task_id=%r exc=%s",
+                            "handoff_v2 terminal lifecycle reconciliation skipped " "(non-fatal): task_id=%r exc=%s",
                             _env_task_id,
                             _registry_exc,
                         )
@@ -268,8 +260,7 @@ async def handle_handoff_v2_result(
                         )
                     except Exception as _tgr_exc:
                         logger.debug(
-                            "handoff_v2 terminal task-graph reconciliation skipped "
-                            "(non-fatal): task_id=%r exc=%s",
+                            "handoff_v2 terminal task-graph reconciliation skipped " "(non-fatal): task_id=%r exc=%s",
                             _env_task_id,
                             _tgr_exc,
                         )
@@ -354,16 +345,14 @@ async def handle_handoff_v2_result(
                         logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
         except Exception as exc:  # pragma: no cover
             logger.debug(
-                "PR-02-V2 handoff_v2 ingestion failed (non-fatal): "
-                "device_id=%s type=%s exc=%s",
+                "PR-02-V2 handoff_v2 ingestion failed (non-fatal): " "device_id=%s type=%s exc=%s",
                 device_id,
                 msg_type,
                 exc,
             )
     else:  # pragma: no cover
         logger.warning(
-            "PR-02-V2 handoff_v2 ingress unavailable (import failed): "
-            "device_id=%s type=%s",
+            "PR-02-V2 handoff_v2 ingress unavailable (import failed): " "device_id=%s type=%s",
             device_id,
             msg_type,
         )
@@ -386,8 +375,7 @@ async def handle_handoff_v2_result(
             _ual_surface_dict = _surface.to_dict()
     except Exception as _ual_err:
         logger.debug(
-            "handoff_v2_result: unified_action_lifecycle_surface build skipped "
-            "(non-fatal): %s",
+            "handoff_v2_result: unified_action_lifecycle_surface build skipped " "(non-fatal): %s",
             _ual_err,
         )
 

@@ -30,12 +30,13 @@ Expected payload from Android::
         "trace_id": "<optional>",
     }
 """
+
 from __future__ import annotations
 
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -55,8 +56,9 @@ except ImportError:  # pragma: no cover
 
 # PR-AIPV3: Unified AIP v3 emission for cross-system observability.
 try:
-    from core.schemas.aip_v3 import TakeoverRequestMsg, TakeoverResponseMsg  # noqa: F401
     from core.nats_bus import get_nats_bus  # noqa: F401
+    from core.schemas.aip_v3 import TakeoverRequestMsg, TakeoverResponseMsg  # noqa: F401
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     _AIPV3_AVAILABLE = False
@@ -72,9 +74,7 @@ def _resolve_session_id(*, device_id: str, session_id: str) -> str:
     if session_id:
         return session_id
     try:
-        from core.attached_runtime_session_registry import (
-            lookup_session_by_device as _lookup,
-        )
+        from core.attached_runtime_session_registry import lookup_session_by_device as _lookup
 
         entry = _lookup(device_id)
         if entry is not None:
@@ -251,9 +251,7 @@ async def handle_takeover_request(
                 coordinator_reason,
             )
         except Exception as exc:
-            logger.debug(
-                "takeover_request: coordinator call failed (non-fatal): %s", exc
-            )
+            logger.debug("takeover_request: coordinator call failed (non-fatal): %s", exc)
             coordinator_reason = f"coordinator_error:{exc}"
 
     # Step 4: Build and return TAKEOVER_RESPONSE

@@ -34,91 +34,75 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
+
+# 设备类型 — 单一事实来源
+# 本模块不用 DeviceType / TaskStatus / ResultStatus / Rect / UIElement，但它们是向后
+# 兼容 re-export（test_e2e、test_cross_device_hardening、TestAndroidBridgeModuleReExports
+# 会按 android_bridge.X 取用），故标 F401。
+from core.device_types import AIPDeviceType as DeviceType  # noqa: F401
+from core.device_types import DevicePlatform
+
+# 子模块：能力、模型、消息构建器
+from galaxy_gateway.android.capabilities import DeviceCapability
+from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
+from galaxy_gateway.android.handlers.auth import handle_auth
+from galaxy_gateway.android.handlers.capability_report import handle_capability_report
+from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.device_state_snapshot import (
+    handle_device_execution_event,
+    handle_device_state_snapshot,
+)
+from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
+from galaxy_gateway.android.handlers.evaluator_artifact_report import handle_evaluator_artifact_report
+from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
+from galaxy_gateway.android.handlers.generic import get_generic_forward_compat_allowlist, handle_generic_forward
+from galaxy_gateway.android.handlers.goal_execution import (
+    handle_goal_execution,
+    handle_goal_execution_result,
+    handle_parallel_subtask,
+)
+from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
+from galaxy_gateway.android.handlers.heartbeat import (
+    handle_agent_ping,
+    handle_agent_status,
+    handle_device_status,
+    handle_heartbeat,
+)
+from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join, handle_mesh_leave, handle_mesh_result
+from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
+from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
+from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
+
+# 子模块：处理器
+from galaxy_gateway.android.handlers.registration import handle_device_register, handle_unregistered
+from galaxy_gateway.android.handlers.session_flow import handle_session_migrate
+from galaxy_gateway.android.handlers.state_event import handle_state_event
+from galaxy_gateway.android.handlers.takeover_request import handle_takeover_request
+from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+from galaxy_gateway.android.handlers.task_lifecycle import (
+    handle_command_result,
+    handle_error,
+    handle_task_cancel,
+    handle_task_end,
+    handle_task_progress,
+    handle_task_result,
+    handle_task_status,
+)
+from galaxy_gateway.android.handlers.task_submit import handle_task_execute, handle_task_submit
+from galaxy_gateway.android.handlers.vision import handle_vision_request
+from galaxy_gateway.android.message_builder import MessageBuilder
+from galaxy_gateway.android.models import AndroidDevice, Rect, UIElement  # noqa: F401
+from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
+from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
+
+# 协议枚举 — 单一事实来源
+from galaxy_gateway.protocol.aip_v3 import MessageType, ResultStatus, TaskStatus  # noqa: F401
 
 # =============================================================================
 # 模块导入 — 从拆分后的子模块导入（PR-3）
 # =============================================================================
 
-# 设备类型 — 单一事实来源
-from core.device_types import (  # noqa: E402
-    AIPDeviceType as DeviceType,
-    DevicePlatform,
-)
-
-# 协议枚举 — 单一事实来源
-from galaxy_gateway.protocol.aip_v3 import (  # noqa: E402
-    MessageType,
-    TaskStatus,
-    ResultStatus,
-)
-
-# 子模块：能力、模型、消息构建器
-from galaxy_gateway.android.capabilities import DeviceCapability
-from galaxy_gateway.android.models import Rect, UIElement, AndroidDevice
-from galaxy_gateway.android.message_builder import MessageBuilder
-
-# 子模块：处理器
-from galaxy_gateway.android.handlers.registration import (
-    handle_device_register,
-    handle_unregistered,
-)
-from galaxy_gateway.android.handlers.heartbeat import (
-    handle_heartbeat,
-    handle_device_status,
-    handle_agent_ping,
-    handle_agent_status,
-)
-from galaxy_gateway.android.handlers.task_lifecycle import (
-    handle_task_result,
-    handle_task_end,
-    handle_task_progress,
-    handle_command_result,
-    handle_error,
-    handle_task_cancel,
-    handle_task_status,
-)
-from galaxy_gateway.android.handlers.task_submit import (
-    handle_task_execute,
-    handle_task_submit,
-)
-from galaxy_gateway.android.handlers.goal_execution import (
-    handle_goal_execution,
-    handle_parallel_subtask,
-    handle_goal_execution_result,
-)
-from galaxy_gateway.android.handlers.auth import handle_auth
-from galaxy_gateway.android.handlers.capability_report import handle_capability_report
-from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
-from galaxy_gateway.android.handlers.vision import handle_vision_request
-from galaxy_gateway.android.handlers.generic import (
-    handle_generic_forward,
-    get_generic_forward_compat_allowlist,
-)
-from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
-from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
-from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
-from galaxy_gateway.android.handlers.takeover_request import handle_takeover_request
-from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
-from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
-from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
-from galaxy_gateway.android.handlers.mesh_lifecycle import (
-    handle_mesh_join,
-    handle_mesh_result,
-    handle_mesh_leave,
-)
-from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
-from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
-from galaxy_gateway.android.handlers.state_event import handle_state_event
-from galaxy_gateway.android.handlers.evaluator_artifact_report import (
-    handle_evaluator_artifact_report,
-)
-from galaxy_gateway.android.handlers.device_state_snapshot import (
-    handle_device_state_snapshot,
-    handle_device_execution_event,
-)
-from galaxy_gateway.android.handlers.session_flow import handle_session_migrate
-from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
 try:
     from contracts.cross_repo_schema_version_gate import (
@@ -169,7 +153,6 @@ except ImportError:  # pragma: no cover
 
 # Pending-delivery buffer — re-delivers buffered messages to devices that
 # reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
-from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
 
 # =============================================================================
 # Axis-1 + Axis-7: Cross-device mode gate — takeover is only permitted when
@@ -177,12 +160,26 @@ from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _p
 # is imported at module level so tests can patch it without reloading the
 # entire bridge.
 # =============================================================================
+# 这里原本是 `_is_cross_device_enabled = lambda: True`（E731）。把它改成 except 块
+# 里的 def 会触发另一条治理规则 —— scripts/check_debt_freeze.py 的 CHECK-3 禁止
+# 「在 except ImportError 里定义函数/类」，要求改用显式的可选依赖标志
+# （docs/migration/DEPRECATION_POLICY.md §4）。所以按该策略写：except 里只设标志，
+# 真正的函数定义放在模块级。行为与原 lambda 完全一致（开关模块不可用时视为开启）。
 try:
-    from galaxy_gateway.cross_device_switch import (
-        is_cross_device_enabled as _is_cross_device_enabled,
-    )
+    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _cross_device_switch_is_enabled
+
+    _CROSS_DEVICE_SWITCH_AVAILABLE = True
 except ImportError:  # pragma: no cover
-    _is_cross_device_enabled = lambda: True  # type: ignore[assignment]
+    _cross_device_switch_is_enabled = None
+    _CROSS_DEVICE_SWITCH_AVAILABLE = False
+
+
+def _is_cross_device_enabled() -> bool:
+    """跨设备开关是否开启；开关模块不可用时视为开启。"""
+    if not _CROSS_DEVICE_SWITCH_AVAILABLE or _cross_device_switch_is_enabled is None:
+        return True
+    return bool(_cross_device_switch_is_enabled())
+
 
 logger = logging.getLogger(__name__)
 
@@ -687,9 +684,9 @@ class AndroidBridge:
         # so that the registry reflects the transport-level disconnect.
         try:
             from core.attached_runtime_session_registry import (
-                lookup_session_by_device,
-                detach_session,
                 InvalidationReason,
+                detach_session,
+                lookup_session_by_device,
             )
 
             _entry = lookup_session_by_device(device_id)
@@ -716,9 +713,9 @@ class AndroidBridge:
         # that formation rebalance evaluation and readiness tracking are active.
         try:
             from core.multi_device_runtime_harness import (
+                DeviceHealthEvent,
                 on_device_health_changed,
                 on_participant_readiness_changed,
-                DeviceHealthEvent,
             )
 
             on_device_health_changed(
@@ -753,8 +750,8 @@ class AndroidBridge:
         # 统一设备生命周期状态：WebSocket 断开时将设备生命周期重置为 unregistered。
         try:
             from core.device_lifecycle_state import (  # noqa: PLC0415
-                transition_device_lifecycle,
                 DeviceLifecycleTransitionEvent,
+                transition_device_lifecycle,
             )
 
             transition_device_lifecycle(
@@ -792,9 +789,9 @@ class AndroidBridge:
         # that formation readiness tracking reflects the restored participant.
         try:
             from core.multi_device_runtime_harness import (
+                DeviceHealthEvent,
                 on_device_health_changed,
                 on_participant_readiness_changed,
-                DeviceHealthEvent,
             )
 
             on_device_health_changed(
@@ -926,9 +923,9 @@ class AndroidBridge:
         # --- Import the unified dispatch readiness gate (additive; non-fatal if unavailable) ---
         _readiness_gate_fn = None
         try:
-            from core.unified_dispatch_readiness_gate import (
+            from core.unified_dispatch_readiness_gate import (  # noqa: N812
                 evaluate_dispatch_readiness as _readiness_gate_fn,
-            )  # noqa: N812
+            )
         except Exception as _gate_import_err:
             logger.debug(
                 "PARALLEL_SUBTASK fan-out: unified readiness gate unavailable "
@@ -1505,8 +1502,8 @@ class AndroidBridge:
         # when the device has recorded attachment gaps from its registration attempt.
         try:
             from galaxy_gateway.android.handlers.registration import (
-                get_registration_gaps,
                 DispatchBlockedByRegistrationGapError,
+                get_registration_gaps,
             )
 
             _gaps = get_registration_gaps(device_id)
@@ -1843,7 +1840,7 @@ class AndroidBridge:
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and websocket is not None:
-                import json, time as _time
+                import time as _time
 
                 # PR-AIP-UNIFIED: Route phase sync through AIPTransport
                 from core.aip_transport import get_aip_transport
@@ -1903,9 +1900,9 @@ class AndroidBridge:
         # so that runtime_session_id is preserved and the session returns to active.
         try:
             from core.attached_runtime_session_registry import (
+                get_session_registry,
                 lookup_session_by_device,
                 reconnect_session,
-                get_session_registry,
             )
 
             # First try the active pointer; fall back to the most-recent

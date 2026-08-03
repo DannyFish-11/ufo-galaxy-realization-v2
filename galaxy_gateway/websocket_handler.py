@@ -65,6 +65,24 @@ Version: 2.0
 Date: 2026-03-07
 """
 
+import asyncio
+import json
+import logging
+import os
+import uuid
+from datetime import datetime, timezone
+from typing import Dict, FrozenSet
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+from galaxy_gateway.device_router import device_router, map_device_type_to_platform
+from galaxy_gateway.protocol.aip_v3 import MessageType
+from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
+from galaxy_gateway.protocol.ingress_classifier import classify_ingress_kind
+from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
+from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message as _ingress_event_from_aip
+from galaxy_gateway.ssot import udm_write_heartbeat, udm_write_register, udm_write_unregister
+
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
 # Importing this sentinel from outside the gateway package signals that the
@@ -108,27 +126,6 @@ OPENCLAWD_ROUTING_AUTHORITY = (
     "OpenClawd→CommandRouter→DeviceRouter→device"
 )
 
-import asyncio
-import json
-import logging
-import os
-from datetime import datetime, timezone
-from typing import Dict, FrozenSet, Set
-import uuid
-from fastapi import WebSocket, WebSocketDisconnect
-from galaxy_gateway.device_router import device_router, map_device_type_to_platform
-from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
-from galaxy_gateway.protocol.aip_v3 import MessageType
-from galaxy_gateway.protocol.normalized_ingress_event import (
-    IngressEventKind,
-    NormalizedIngressEvent,
-    from_aip_message as _ingress_event_from_aip,
-)
-from galaxy_gateway.protocol.ingress_classifier import (
-    IngressMessageClass,
-    classify_ingress_kind,
-)
-from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
 logger = logging.getLogger(__name__)
 
@@ -1115,7 +1112,8 @@ async def handle_device_perception_emission(connection_id: str, aip_msg):
 
         vision = payload.get("vision_payload") or {}
         grounding = payload.get("grounding_payload") or {}
-        local = payload.get("local_perception_payload") or {}
+        # 此前还取了 local_perception_payload 却从不使用。全仓只有那一处、无生产者也无
+        # schema，猜字段名等于静默丢数据，故先去掉；待 Android 侧定型后照上面两行接入。
 
         # 组装可读文本语义（只取有信息量的字段）
         parts = []

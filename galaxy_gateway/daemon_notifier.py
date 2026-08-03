@@ -12,11 +12,10 @@ Daemon Notifier — 守护进程状态通知
   - 系统异常 (CPU/内存/磁盘)
 """
 
-import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +97,7 @@ class DaemonNotifier:
             # map each call so we don't cache a stale connection set.
             if self._android_bridge is None:
                 from galaxy_gateway.android_bridge import android_bridge as _bridge
+
                 self._android_bridge = _bridge
 
             devices = {
@@ -115,6 +115,7 @@ class DaemonNotifier:
                     # instead of direct websocket access.
                     try:
                         from core.aip_transport import get_aip_transport
+
                         msg = {
                             "type": "daemon_notification",
                             "payload": payload,
@@ -153,6 +154,7 @@ class DaemonNotifier:
 
         try:
             import subprocess
+
             title = "Galaxy " + {"info": "ℹ️", "warning": "⚠️", "critical": "🔴"}.get(severity, "ℹ️")
             subprocess.run(
                 [

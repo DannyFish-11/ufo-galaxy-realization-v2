@@ -28,7 +28,7 @@
     "core/closed_loop_governance_consolidation.py": 1054,
     "core/command_router.py": 5521,
     "core/compat_fallback_authority_guard.py": 1299,
-    "core/complete_joint_system_review.py": 1901,
+    "core/complete_joint_system_review.py": 1885,
     "core/concurrent_mutation_conflict_contract.py": 1062,
     "core/cross_device_responsiveness_contract.py": 1006,
     "core/cross_repo_protocol_consistency.py": 1331,
@@ -121,14 +121,14 @@
     "core/voice_duplex_session.py": 1171,
     "core/webrtc_task_lifecycle.py": 1041,
     "enhancements/learning/autonomous_learning_engine.py": 1288,
-    "galaxy_gateway/android/handlers/goal_execution.py": 1771,
-    "galaxy_gateway/android/handlers/registration.py": 1671,
-    "galaxy_gateway/android/handlers/task_lifecycle.py": 1297,
-    "galaxy_gateway/android_bridge.py": 2133,
-    "galaxy_gateway/cross_device_coordinator.py": 1122,
-    "galaxy_gateway/device_router.py": 2149,
-    "galaxy_gateway/orchestrator/galaxy_orchestrator.py": 1325,
-    "galaxy_gateway/orchestrator/task_orchestrator.py": 1050,
-    "galaxy_gateway/websocket_handler.py": 1224
+    "galaxy_gateway/android/handlers/goal_execution.py": 1760,
+    "galaxy_gateway/android/handlers/registration.py": 1666,
+    "galaxy_gateway/android/handlers/task_lifecycle.py": 1244,
+    "galaxy_gateway/android_bridge.py": 2130,
+    "galaxy_gateway/cross_device_coordinator.py": 1118,
+    "galaxy_gateway/device_router.py": 2131,
+    "galaxy_gateway/orchestrator/galaxy_orchestrator.py": 1371,
+    "galaxy_gateway/orchestrator/task_orchestrator.py": 1007,
+    "galaxy_gateway/websocket_handler.py": 1222
   }
 }

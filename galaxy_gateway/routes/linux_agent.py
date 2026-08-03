@@ -42,6 +42,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
 from core.atomic_json import atomic_write_json
 
 # PR-SANDBOX-INTEGRATION: 导入沙箱安全检查
@@ -64,20 +65,23 @@ SERVERS_FILE.parent.mkdir(parents=True, exist_ok=True)
 # Pydantic 模型
 # ============================================================================
 
+
 class RegisterServerRequest(BaseModel):
     """注册远程 Linux 服务器"""
+
     name: str = Field(..., description="服务器名称（如：华为云主服务器）")
     host: str = Field(..., description="IP 地址或域名")
     port: int = Field(default=22, description="SSH 端口")
     user: str = Field(..., description="SSH 用户名")
     key_path: Optional[str] = Field(default=None, description="SSH 私钥路径（优先）")
     password: Optional[str] = Field(default=None, description="SSH 密码（备选）")
-    tags: List[str] = Field(default_factory=list, description="标签（如 [\"huaweicloud\", \"production\"]）")
+    tags: List[str] = Field(default_factory=list, description='标签（如 ["huaweicloud", "production"]）')
     description: Optional[str] = Field(default=None, description="服务器描述")
 
 
 class ExecuteCommandRequest(BaseModel):
     """远程执行命令"""
+
     command: str = Field(..., description="要执行的 shell 命令")
     timeout: float = Field(default=60.0, description="超时秒数")
     working_dir: Optional[str] = Field(default=None, description="工作目录")
@@ -86,12 +90,14 @@ class ExecuteCommandRequest(BaseModel):
 
 class ReadFileRequest(BaseModel):
     """读取远程文件"""
+
     path: str = Field(..., description="文件路径")
     max_size: int = Field(default=50000, description="最大读取字节数")
 
 
 class WriteFileRequest(BaseModel):
     """写入远程文件"""
+
     path: str = Field(..., description="文件路径")
     content: str = Field(..., description="文件内容")
     mode: str = Field(default="644", description="文件权限（如 644、755）")
@@ -100,22 +106,24 @@ class WriteFileRequest(BaseModel):
 
 class ServerInfo(BaseModel):
     """已注册服务器信息（响应中隐藏密码/密钥内容）"""
+
     server_id: str
     name: str
     host: str
     port: int
     user: str
-    auth_type: str          # "key" | "password" | "none"
+    auth_type: str  # "key" | "password" | "none"
     tags: List[str]
     description: Optional[str]
     registered_at: str
     last_used: Optional[str]
-    status: str             # "unknown" | "online" | "offline" | "error"
+    status: str  # "unknown" | "online" | "offline" | "error"
     system_info: Optional[Dict] = None
 
 
 class ExecuteResponse(BaseModel):
     """命令执行响应"""
+
     success: bool
     server_id: str
     command: str
@@ -130,6 +138,7 @@ class ExecuteResponse(BaseModel):
 # ============================================================================
 # 服务器注册表（内存 + 持久化）
 # ============================================================================
+
 
 class ServerRegistry:
     """管理已注册的远程服务器配置，内存+JSON持久化。"""
@@ -155,13 +164,14 @@ class ServerRegistry:
     def _save(self):
         """保存到 JSON 文件。"""
         try:
-            atomic_write_json(SERVERS_FILE, {'servers': self._servers}, ensure_ascii=False, indent=2)
+            atomic_write_json(SERVERS_FILE, {"servers": self._servers}, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error("Failed to save server registry: %s", e)
 
     def register(self, req: RegisterServerRequest) -> str:
         """注册新服务器，返回 server_id。"""
         import hashlib
+
         server_id = hashlib.md5(f"{req.host}:{req.port}:{req.user}".encode()).hexdigest()[:8]
         self._servers[server_id] = {
             "server_id": server_id,
@@ -214,6 +224,7 @@ _registry = ServerRegistry()
 # SSH 远程执行
 # ============================================================================
 
+
 def _trust_on_first_use_policy(owner):
     """构造一条 **TOFU** 主机密钥策略(信任首次使用)。
 
@@ -254,8 +265,7 @@ def _trust_on_first_use_policy(owner):
 class SSHExecutor:
     """基于 paramiko 的 SSH 远程执行器（复用 Node_Linux_Agent 的核心逻辑）。"""
 
-    def __init__(self, host: str, port: int, user: str,
-                 key_path: str = "", password: str = ""):
+    def __init__(self, host: str, port: int, user: str, key_path: str = "", password: str = ""):
         self.host = host
         self.port = port
         self.user = user
@@ -265,18 +275,17 @@ class SSHExecutor:
     async def execute(self, command: str, timeout: float = 60.0) -> Dict:
         """在远程服务器上执行命令。"""
         try:
-            import paramiko
+            import paramiko  # noqa: F401  # 可选依赖存在性守卫：缺失时转成友好的 HTTP 500
         except ImportError:
             raise HTTPException(500, "paramiko not installed. Run: pip install paramiko")
 
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, self._execute_sync, command, timeout
-        )
+        return await loop.run_in_executor(None, self._execute_sync, command, timeout)
 
     def _execute_sync(self, command: str, timeout: float) -> Dict:
-        import paramiko
         import time
+
+        import paramiko
 
         start = time.monotonic()
         client = self._new_ssh_client()
@@ -319,7 +328,6 @@ class SSHExecutor:
         return await loop.run_in_executor(None, self._read_file_sync, path, max_size)
 
     def _read_file_sync(self, path: str, max_size: int) -> str:
-        import paramiko
         client = self._new_ssh_client()
         try:
             self._connect(client)
@@ -334,7 +342,6 @@ class SSHExecutor:
         return await loop.run_in_executor(None, self._write_file_sync, path, content, mode)
 
     def _write_file_sync(self, path: str, content: str, mode: str) -> bool:
-        import paramiko
         client = self._new_ssh_client()
         try:
             self._connect(client)
@@ -375,7 +382,6 @@ class SSHExecutor:
         return await loop.run_in_executor(None, self._get_system_info_sync)
 
     def _get_system_info_sync(self) -> Dict:
-        import paramiko
         client = self._new_ssh_client()
         try:
             self._connect(client)
@@ -455,7 +461,6 @@ class SSHExecutor:
             logger.warning("保存主机密钥到 %s 失败: %s", cls._KNOWN_HOSTS, exc)
 
     def _connect(self, client):
-        import paramiko
         connect_kwargs = {
             "hostname": self.host,
             "port": self.port,
@@ -473,7 +478,6 @@ class SSHExecutor:
         return await loop.run_in_executor(None, self._list_dir_sync, path)
 
     def _list_dir_sync(self, path: str) -> List[str]:
-        import paramiko
         client = self._new_ssh_client()
         try:
             self._connect(client)
@@ -507,6 +511,7 @@ def _to_server_info(server: Dict) -> ServerInfo:
 # ============================================================================
 # 路由
 # ============================================================================
+
 
 @router.post("/servers", response_model=ServerInfo)
 async def register_server(req: RegisterServerRequest):
@@ -549,8 +554,7 @@ async def execute_command(server_id: str, req: ExecuteCommandRequest):
     # PR-SANDBOX-INTEGRATION: 执行前先做安全检查
     safety = check_command_safety(req.command) if check_command_safety else None
     if safety and safety.blocked:
-        logger.warning("[SANDBOX] 命令被阻止: %s | 原因: %s",
-                       req.command, safety.blocked_reason)
+        logger.warning("[SANDBOX] 命令被阻止: %s | 原因: %s", req.command, safety.blocked_reason)
         return ExecuteResponse(
             success=False,
             server_id=server_id,
@@ -563,8 +567,7 @@ async def execute_command(server_id: str, req: ExecuteCommandRequest):
         )
 
     if safety and safety.warnings:
-        logger.info("[SANDBOX] 命令警告 (%s): %s",
-                   req.command, safety.warnings)
+        logger.info("[SANDBOX] 命令警告 (%s): %s", req.command, safety.warnings)
 
     executor = SSHExecutor(
         host=server["host"],
@@ -576,10 +579,7 @@ async def execute_command(server_id: str, req: ExecuteCommandRequest):
 
     result = await executor.execute(req.command, timeout=req.timeout)
 
-    _registry.update_status(
-        server_id,
-        "online" if result["success"] else "error"
-    )
+    _registry.update_status(server_id, "online" if result["success"] else "error")
 
     return ExecuteResponse(
         success=result["success"],
@@ -601,8 +601,11 @@ async def read_remote_file(server_id: str, req: ReadFileRequest):
         raise HTTPException(404, f"Server {server_id} not found")
 
     executor = SSHExecutor(
-        host=server["host"], port=server["port"], user=server["user"],
-        key_path=server.get("key_path", ""), password=server.get("password", ""),
+        host=server["host"],
+        port=server["port"],
+        user=server["user"],
+        key_path=server.get("key_path", ""),
+        password=server.get("password", ""),
     )
     content = await executor.read_file(req.path, req.max_size)
     _registry.update_status(server_id, "online")
@@ -624,8 +627,11 @@ async def write_remote_file(server_id: str, req: WriteFileRequest):
         raise HTTPException(404, f"Server {server_id} not found")
 
     executor = SSHExecutor(
-        host=server["host"], port=server["port"], user=server["user"],
-        key_path=server.get("key_path", ""), password=server.get("password", ""),
+        host=server["host"],
+        port=server["port"],
+        user=server["user"],
+        key_path=server.get("key_path", ""),
+        password=server.get("password", ""),
     )
     ok = await executor.write_file(req.path, req.content, req.mode)
     _registry.update_status(server_id, "online" if ok else "error")
@@ -646,8 +652,11 @@ async def get_remote_info(server_id: str):
         raise HTTPException(404, f"Server {server_id} not found")
 
     executor = SSHExecutor(
-        host=server["host"], port=server["port"], user=server["user"],
-        key_path=server.get("key_path", ""), password=server.get("password", ""),
+        host=server["host"],
+        port=server["port"],
+        user=server["user"],
+        key_path=server.get("key_path", ""),
+        password=server.get("password", ""),
     )
     info = await executor.get_system_info()
     _registry.update_status(server_id, "online", info)
@@ -668,8 +677,11 @@ async def probe_server(server_id: str):
         raise HTTPException(404, f"Server {server_id} not found")
 
     executor = SSHExecutor(
-        host=server["host"], port=server["port"], user=server["user"],
-        key_path=server.get("key_path", ""), password=server.get("password", ""),
+        host=server["host"],
+        port=server["port"],
+        user=server["user"],
+        key_path=server.get("key_path", ""),
+        password=server.get("password", ""),
     )
     result = await executor.execute("echo 'pong'", timeout=5)
     online = result["success"] and "pong" in result["stdout"]

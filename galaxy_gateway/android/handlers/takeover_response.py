@@ -40,9 +40,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 try:
-    from core.attached_runtime_session_registry import (
-        lookup_session_by_device as _lookup_session_by_device,
-    )
+    from core.attached_runtime_session_registry import lookup_session_by_device as _lookup_session_by_device
 except ImportError:  # pragma: no cover
     _lookup_session_by_device = None  # type: ignore[assignment]
 
@@ -72,8 +70,7 @@ def _resolve_session_id_for_takeover_response(
             return str(entry.runtime_session_id)
     except Exception as exc:  # noqa: BLE001
         logger.debug(
-            "takeover_response: unable to resolve session_id from registry "
-            "(non-fatal) device_id=%s exc_type=%s",
+            "takeover_response: unable to resolve session_id from registry " "(non-fatal) device_id=%s exc_type=%s",
             device_id,
             type(exc).__name__,
         )
@@ -83,6 +80,7 @@ def _resolve_session_id_for_takeover_response(
 # ---------------------------------------------------------------------------
 # Public handler
 # ---------------------------------------------------------------------------
+
 
 async def handle_takeover_response(
     bridge: "AndroidBridge",
@@ -157,16 +155,14 @@ async def handle_takeover_response(
             )
         except Exception as exc:  # pragma: no cover  # noqa: BLE001
             logger.debug(
-                "takeover_response: coordinator call failed (non-fatal): "
-                "takeover_id=%r device_id=%s exc=%s",
+                "takeover_response: coordinator call failed (non-fatal): " "takeover_id=%r device_id=%s exc=%s",
                 takeover_id,
                 device_id,
                 exc,
             )
     else:  # pragma: no cover
         logger.debug(
-            "takeover_response: lifecycle coordinator unavailable "
-            "(import failed): takeover_id=%r device_id=%s",
+            "takeover_response: lifecycle coordinator unavailable " "(import failed): takeover_id=%r device_id=%s",
             takeover_id,
             device_id,
         )

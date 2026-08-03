@@ -21,11 +21,10 @@ Routes:
 """
 
 import logging
-import os
 import subprocess
 import tempfile
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field

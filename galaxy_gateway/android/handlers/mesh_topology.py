@@ -30,15 +30,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # PR-8 sentinel — canonical handler authority for MESH_TOPOLOGY messages.
-MESH_TOPOLOGY_HANDLER_IS_CANONICAL_PR8: str = (
-    "MESH_TOPOLOGY_HANDLER::CANONICAL_STATEFUL_PR8"
-)
+MESH_TOPOLOGY_HANDLER_IS_CANONICAL_PR8: str = "MESH_TOPOLOGY_HANDLER::CANONICAL_STATEFUL_PR8"
 
 
 def _get_mesh_coordinator() -> Optional[Any]:
     """Return the MeshCoordinator singleton, or ``None`` if unavailable."""
     try:
         from core.mesh_coordinator import get_mesh_coordinator
+
         return get_mesh_coordinator()
     except ImportError:
         logger.debug("MeshCoordinator not available")
@@ -48,9 +47,7 @@ def _get_mesh_coordinator() -> Optional[Any]:
         return None
 
 
-async def handle_mesh_topology(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_mesh_topology(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle a MESH_TOPOLOGY message from an Android device.
 
     Returns the full mesh topology from ``MeshCoordinator``, including:
@@ -86,8 +83,7 @@ async def handle_mesh_topology(
                 peer_count = 0
         except Exception as exc:
             logger.warning(
-                "MESH_TOPOLOGY mesh integration failed (non-fatal):"
-                " device_id=%s error=%s",
+                "MESH_TOPOLOGY mesh integration failed (non-fatal):" " device_id=%s error=%s",
                 device_id,
                 exc,
             )

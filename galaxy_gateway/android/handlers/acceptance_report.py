@@ -14,9 +14,7 @@ from core.unified_action_lifecycle_surface import (
     UnifiedActionLifecycleSurface,
     derive_visible_action,
 )
-from galaxy_gateway.android.handlers.evaluator_artifact_report import (
-    _truth_reconciled_flag,
-)
+from galaxy_gateway.android.handlers.evaluator_artifact_report import _truth_reconciled_flag
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -59,11 +57,7 @@ async def handle_device_acceptance_report(
             },
         }
     )
-    ack_type = (
-        f"{msg_type}_ack"
-        if isinstance(msg_type, str) and msg_type.strip()
-        else "device_acceptance_report_ack"
-    )
+    ack_type = f"{msg_type}_ack" if isinstance(msg_type, str) and msg_type.strip() else "device_acceptance_report_ack"
     action_surface = UnifiedActionLifecycleSurface(
         action_id=str(message.get("message_id") or ""),
         session_id=str(payload_dict.get("session_id") or message.get("session_id") or ""),

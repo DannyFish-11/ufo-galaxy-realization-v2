@@ -6,6 +6,7 @@ GET /sync/status — Real-time cross-device sync quality metrics.
 Returns per-device latency profiles, current topology, and phase sync
 history. Used by external monitoring or CLI tools.
 """
+
 from __future__ import annotations
 
 import time
@@ -13,6 +14,7 @@ from typing import Any, Dict
 
 try:
     from fastapi import APIRouter
+
     router = APIRouter()
     _FASTAPI = True
 except ImportError:
@@ -47,6 +49,7 @@ def get_sync_status() -> Dict[str, Any]:
 
 
 if _FASTAPI and router:
+
     @router.get("/sync/status")
     async def sync_status():
         return get_sync_status()

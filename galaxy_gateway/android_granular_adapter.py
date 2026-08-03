@@ -11,12 +11,14 @@ Legacy AIP v1/v2 messages **must** be normalised to v3 by
 passed to :meth:`AndroidGranularAdapter.dispatch_aip_message`.  Passing a
 pre-v3 message directly raises :class:`AIPAdapterVersionError`.
 """
-import logging
+
 import base64
+import logging
 import os
 import shlex
 import tempfile
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from .protocol.aip_v3 import AIPMessage, MessageType
 
 logger = logging.getLogger("AndroidGranularAdapter")
@@ -191,15 +193,32 @@ class AndroidGranularAdapter:
         """处理按键事件"""
         key = params.get("key", params.get("keycode", ""))
         key_map = {
-            "home": "3", "back": "4", "call": "5", "endcall": "6",
-            "volume_up": "24", "volume_down": "25", "power": "26",
-            "camera": "27", "enter": "66", "delete": "67", "backspace": "67",
-            "tab": "61", "space": "62", "menu": "82", "search": "84",
-            "recent_apps": "187", "app_switch": "187",
-            "notification": "83", "settings": "176",
-            "media_play_pause": "85", "media_stop": "86",
-            "media_next": "87", "media_previous": "88",
-            "mute": "164", "brightness_up": "221", "brightness_down": "220",
+            "home": "3",
+            "back": "4",
+            "call": "5",
+            "endcall": "6",
+            "volume_up": "24",
+            "volume_down": "25",
+            "power": "26",
+            "camera": "27",
+            "enter": "66",
+            "delete": "67",
+            "backspace": "67",
+            "tab": "61",
+            "space": "62",
+            "menu": "82",
+            "search": "84",
+            "recent_apps": "187",
+            "app_switch": "187",
+            "notification": "83",
+            "settings": "176",
+            "media_play_pause": "85",
+            "media_stop": "86",
+            "media_next": "87",
+            "media_previous": "88",
+            "mute": "164",
+            "brightness_up": "221",
+            "brightness_down": "220",
         }
         keycode = key_map.get(str(key).lower(), str(key))
         await self.adb.shell(f"input keyevent {keycode}", device_id)
@@ -207,18 +226,43 @@ class AndroidGranularAdapter:
 
     async def _handle_screenshot(self, device_id: str, params: Dict) -> Dict:
         """处理截图操作"""
-        result = await self.adb.shell("screencap -p /sdcard/screenshot.png", device_id)
+        capture = await self.adb.shell("screencap -p /sdcard/screenshot.png", device_id)
         # 使用安全的临时文件
         fd, tmp_path = tempfile.mkstemp(prefix="screenshot_", suffix=".png")
         os.close(fd)
         try:
             # 拉取截图文件
             pull_result = await self.adb.pull("/sdcard/screenshot.png", tmp_path, device_id)
+
+            # 原缺陷：pull 未能取回数据时，会返回 image_base64="" 且 status="success"，
+            # 调用方拿到一张"成功"的空图。
+            # 下面这个 except FileNotFoundError 只覆盖 adb.pull 抛异常的情形（设备上
+            # 没有那个文件）；**覆盖不到「pull 悄悄失败」**—— mkstemp 已经把临时文件
+            # 创建出来了，open() 不会抛 FileNotFoundError，读到的是 0 字节。
+            # adb_executor 是注入的，返回值约定在这里无法静态确定，所以不去猜它的
+            # 真假值，而是直接校验最终事实：拉回来的文件必须非空。空文件走与
+            # FileNotFoundError 相同的降级出口（图可能还在设备上），而不是伪装成
+            # 一张取回成功的空图。
+            if os.path.getsize(tmp_path) == 0:
+                logger.warning(
+                    "截图未能取回图像数据（拉回的文件为空）device_id=%s screencap=%r pull=%r",
+                    device_id,
+                    capture,
+                    pull_result,
+                )
+                return {
+                    "status": "success",
+                    "action": "screenshot",
+                    "note": "screenshot saved on device",
+                }
+
             # 读取并转为base64
             with open(tmp_path, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
             return {"status": "success", "action": "screenshot", "image_base64": image_data}
         except FileNotFoundError:
+            # adb.pull 本身可能抛 FileNotFoundError（设备上没有那个文件）——
+            # 这条降级分支是可达的，保留。
             return {"status": "success", "action": "screenshot", "note": "screenshot saved on device"}
         finally:
             # 清理临时文件
@@ -231,9 +275,27 @@ class AndroidGranularAdapter:
         """处理Shell命令"""
         command = params.get("command", "")
         # 安全检查 - 只允许白名单中的命令前缀
-        ALLOWED_PREFIXES = ("pm ", "am ", "dumpsys ", "input ", "getprop ", "wm ", "monkey ",
-                           "screencap", "screenrecord", "logcat", "ps", "ls", "cat ",
-                           "echo", "grep", "pgrep", "pidof", "uiautomator ", "settings ")
+        ALLOWED_PREFIXES = (
+            "pm ",
+            "am ",
+            "dumpsys ",
+            "input ",
+            "getprop ",
+            "wm ",
+            "monkey ",
+            "screencap",
+            "screenrecord",
+            "logcat",
+            "ps",
+            "ls",
+            "cat ",
+            "echo",
+            "grep",
+            "pgrep",
+            "pidof",
+            "uiautomator ",
+            "settings ",
+        )
         command_stripped = command.strip().lower()
         if not any(command_stripped.startswith(p) for p in ALLOWED_PREFIXES):
             try:
@@ -242,7 +304,22 @@ class AndroidGranularAdapter:
                 return {"status": "error", "action": "shell", "error": "Invalid command format"}
             return {"status": "error", "action": "shell", "error": f"Command not in allowlist: {cmd_first}"}
         # 额外安全检查 - 禁止危险命令模式
-        dangerous_patterns = [";", "&&", "||", "|", "$(", "`", ">", "<", "rm -rf", "dd if=/dev/zero", "mkfs", "format", "shred", "mkfs."]
+        dangerous_patterns = [
+            ";",
+            "&&",
+            "||",
+            "|",
+            "$(",
+            "`",
+            ">",
+            "<",
+            "rm -rf",
+            "dd if=/dev/zero",
+            "mkfs",
+            "format",
+            "shred",
+            "mkfs.",
+        ]
         if any(p in command for p in dangerous_patterns):
             return {"status": "error", "action": "shell", "error": "Dangerous command pattern blocked"}
         result = await self.adb.shell(command, device_id)
@@ -253,24 +330,32 @@ class AndroidGranularAdapter:
         package = params.get("package", params.get("app", ""))
         # 常见应用包名映射
         app_map = {
-            "微信": "com.tencent.mm", "wechat": "com.tencent.mm",
-            "微博": "com.sina.weibo", "weibo": "com.sina.weibo",
-            "抖音": "com.ss.android.ugc.aweme", "tiktok": "com.ss.android.ugc.aweme",
-            "支付宝": "com.eg.android.AlipayGphone", "alipay": "com.eg.android.AlipayGphone",
-            "设置": "com.android.settings", "settings": "com.android.settings",
-            "相机": "com.android.camera", "camera": "com.android.camera",
-            "浏览器": "com.android.browser", "browser": "com.android.browser",
+            "微信": "com.tencent.mm",
+            "wechat": "com.tencent.mm",
+            "微博": "com.sina.weibo",
+            "weibo": "com.sina.weibo",
+            "抖音": "com.ss.android.ugc.aweme",
+            "tiktok": "com.ss.android.ugc.aweme",
+            "支付宝": "com.eg.android.AlipayGphone",
+            "alipay": "com.eg.android.AlipayGphone",
+            "设置": "com.android.settings",
+            "settings": "com.android.settings",
+            "相机": "com.android.camera",
+            "camera": "com.android.camera",
+            "浏览器": "com.android.browser",
+            "browser": "com.android.browser",
             "chrome": "com.android.chrome",
-            "地图": "com.autonavi.minimap", "maps": "com.google.android.apps.maps",
-            "淘宝": "com.taobao.taobao", "京东": "com.jingdong.app.mall",
-            "qq": "com.tencent.mobileqq", "QQ": "com.tencent.mobileqq",
-            "bilibili": "tv.danmaku.bili", "b站": "tv.danmaku.bili",
+            "地图": "com.autonavi.minimap",
+            "maps": "com.google.android.apps.maps",
+            "淘宝": "com.taobao.taobao",
+            "京东": "com.jingdong.app.mall",
+            "qq": "com.tencent.mobileqq",
+            "QQ": "com.tencent.mobileqq",
+            "bilibili": "tv.danmaku.bili",
+            "b站": "tv.danmaku.bili",
         }
         resolved_package = app_map.get(package, package)
-        await self.adb.shell(
-            f"monkey -p {resolved_package} -c android.intent.category.LAUNCHER 1",
-            device_id
-        )
+        await self.adb.shell(f"monkey -p {resolved_package} -c android.intent.category.LAUNCHER 1", device_id)
         return {"status": "success", "action": "app_launch", "package": resolved_package}
 
     async def _handle_install_apk(self, device_id: str, params: Dict) -> Dict:

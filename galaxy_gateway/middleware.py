@@ -10,7 +10,6 @@ import logging
 import threading
 import time
 from collections import defaultdict
-from functools import wraps
 from typing import Optional, Tuple
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -82,6 +81,7 @@ _AUTH_EXEMPT_PATHS = frozenset(_AUTH_EXEMPT) | frozenset(_AUTH_EXEMPT_NON_PRODUC
 # Rate Limiter (in-memory; replaceable with Redis backend)
 # ============================================================================
 
+
 class RateLimiter:
     """Simple in-memory sliding-window rate limiter.
 
@@ -100,9 +100,7 @@ class RateLimiter:
         with self._lock:
             # Clean stale entries
             if key in self._requests:
-                self._requests[key] = [
-                    t for t in self._requests[key] if now - t < self.window
-                ]
+                self._requests[key] = [t for t in self._requests[key] if now - t < self.window]
             else:
                 self._requests[key] = []
 
@@ -120,6 +118,7 @@ auth_rate_limiter = RateLimiter(max_requests=10, window_seconds=60)
 # ============================================================================
 # Advanced Rate Limiter — dual limit by IP + target path (Round 4 HIGH fix)
 # ============================================================================
+
 
 class AdvancedRateLimiter:
     """Dual rate limiter: per-IP + per-target path.
@@ -155,9 +154,7 @@ class AdvancedRateLimiter:
 
         with self._lock:
             # IP-level limit
-            self._ip_requests[ip] = [
-                t for t in self._ip_requests[ip] if now - t < self.ip_window
-            ]
+            self._ip_requests[ip] = [t for t in self._ip_requests[ip] if now - t < self.ip_window]
             if len(self._ip_requests[ip]) >= self.ip_limit:
                 retry_after = int(self.ip_window - (now - self._ip_requests[ip][0]))
                 return False, max(retry_after, 1)
@@ -165,13 +162,10 @@ class AdvancedRateLimiter:
             # Target-level limit (stricter — e.g. auth endpoints)
             target_key = f"{ip}:{target}"
             self._target_requests[target_key] = [
-                t for t in self._target_requests[target_key]
-                if now - t < self.target_window
+                t for t in self._target_requests[target_key] if now - t < self.target_window
             ]
             if len(self._target_requests[target_key]) >= self.target_limit:
-                retry_after = int(
-                    self.target_window - (now - self._target_requests[target_key][0])
-                )
+                retry_after = int(self.target_window - (now - self._target_requests[target_key][0]))
                 return False, max(retry_after, 1)
 
             self._ip_requests[ip].append(now)
@@ -181,16 +175,11 @@ class AdvancedRateLimiter:
     def _cleanup(self, now: float) -> None:
         with self._lock:
             for ip in list(self._ip_requests.keys()):
-                self._ip_requests[ip] = [
-                    t for t in self._ip_requests[ip] if now - t < self.ip_window
-                ]
+                self._ip_requests[ip] = [t for t in self._ip_requests[ip] if now - t < self.ip_window]
                 if not self._ip_requests[ip]:
                     del self._ip_requests[ip]
             for key in list(self._target_requests.keys()):
-                self._target_requests[key] = [
-                    t for t in self._target_requests[key]
-                    if now - t < self.target_window
-                ]
+                self._target_requests[key] = [t for t in self._target_requests[key] if now - t < self.target_window]
                 if not self._target_requests[key]:
                     del self._target_requests[key]
             self._last_cleanup = now
@@ -216,8 +205,9 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        from core.auth import is_auth_enabled, get_active_tokens
         import hmac
+
+        from core.auth import get_active_tokens, is_auth_enabled
 
         if not is_auth_enabled():
             return await call_next(request)
@@ -230,8 +220,8 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if not active_tokens:
             # Auth enabled but no active tokens configured — fail safe
             logger.error(
-                "GALAXY_AUTH_ENABLED=true but no active API tokens are configured; "
-                "rejecting request to %s", request.url.path
+                "GALAXY_AUTH_ENABLED=true but no active API tokens are configured; " "rejecting request to %s",
+                request.url.path,
             )
             return JSONResponse(
                 status_code=401,
@@ -303,18 +293,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Round-4 HIGH: rate-limit all state-changing methods, not just POST
-        if (
-            request.url.path.startswith("/api/")
-            and request.method in ("POST", "PUT", "DELETE", "PATCH")
-        ):
+        if request.url.path.startswith("/api/") and request.method in ("POST", "PUT", "DELETE", "PATCH"):
             client_ip = request.client.host if request.client else "unknown"
-            allowed, retry_after = self.limiter.is_allowed(
-                client_ip, request.url.path
-            )
+            allowed, retry_after = self.limiter.is_allowed(client_ip, request.url.path)
             if not allowed:
-                logger.warning(
-                    "Rate limit exceeded for %s on %s", client_ip, request.url.path
-                )
+                logger.warning("Rate limit exceeded for %s on %s", client_ip, request.url.path)
                 return JSONResponse(
                     status_code=429,
                     content={

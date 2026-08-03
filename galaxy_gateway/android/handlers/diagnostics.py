@@ -28,7 +28,11 @@ async def handle_diagnostics_payload(
     node_name = message.get("node_name")
     logger.warning(
         "Diagnostics from %s: error_type=%s, task_id=%s, node=%s, context=%s",
-        device_id, error_type, task_id, node_name, error_context,
+        device_id,
+        error_type,
+        task_id,
+        node_name,
+        error_context,
     )
 
     return MessageBuilder.diagnostics_payload_ack(

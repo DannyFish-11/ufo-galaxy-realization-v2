@@ -25,21 +25,17 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from galaxy_gateway.routing.policy import analyze_command, ROUTING_POLICY_AUTHORITY
-from galaxy_gateway.routing.device_selection import select_devices, DEVICE_SELECTION_AUTHORITY
+from galaxy_gateway.routing.device_selection import DEVICE_SELECTION_AUTHORITY, select_devices
+from galaxy_gateway.routing.dispatch import DISPATCH_AUTHORITY, build_aip_message, dispatch_to_websocket
 from galaxy_gateway.routing.health_policy import (
+    DEVICE_HEALTH_POLICY_AUTHORITY,
     filter_eligible_devices,
     is_device_available,
     is_device_online,
-    DEVICE_HEALTH_POLICY_AUTHORITY,
 )
-from galaxy_gateway.routing.dispatch import (
-    build_aip_message,
-    dispatch_to_websocket,
-    DISPATCH_AUTHORITY,
-)
+from galaxy_gateway.routing.policy import ROUTING_POLICY_AUTHORITY, analyze_command
 
 logger = logging.getLogger(__name__)
 
