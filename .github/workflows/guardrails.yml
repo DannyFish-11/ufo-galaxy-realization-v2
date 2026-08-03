@@ -189,6 +189,38 @@ jobs:
           python scripts/check_evidence_anchors.py
 
   # ---------------------------------------------------------------------------
+  # C3. Wiring guardrail — 公开能力有没有调用方
+  #
+  # 抓的是本仓反复出现的一类缺陷:能力实现完整、单测全绿、文档详尽,但生产代码里
+  # **零个调用方**。它不报错、不变慢、不让任何测试变红 —— 它只是不生效。
+  # 已确认的一例:DesktopPresenceRuntime.halt_ambient_presence 写完后没有任何
+  # 端点去按它,直到补上 core/routes/operator.py 里的入口才真正接上。
+  #
+  # 存量 676 条记在 config/wiring_baseline.json,这道闸只看**新增**。
+  # 先按告警形态跑(不加 --strict):理由与 environment-coupling.yml 里写的同一条 ——
+  # 新引入的检查一上来就把 CI 弄红,只会让人学会无视它。等它在主干上稳定攒够几周
+  # 零新增,再考虑改成阻塞。
+  # ---------------------------------------------------------------------------
+  wiring:
+    name: Wiring Check (unwired public capabilities)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 纯 AST 静态分析,不 import 任何业务模块,所以不需要装依赖。
+      - name: Check wiring (warning mode)
+        run: |
+          python scripts/check_wiring.py
+          echo "✅ Wiring check complete (warning mode)."
+
+  # ---------------------------------------------------------------------------
   # D. Architecture debt-freeze — Batch PR-1 guardrail
   #
   # Detects patterns that represent NEW technical debt being introduced:

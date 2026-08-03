@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.url_guard import guarded_async_client
 
 try:
     import httpx
@@ -227,7 +228,7 @@ async def webhook_send(request: WebhookSendRequest):
         payload["avatar_url"] = request.avatar_url
 
     stats["api_calls"] += 1
-    async with httpx.AsyncClient() as client:
+    async with guarded_async_client() as client:
         response = await client.post(
             request.webhook_url,
             json=payload,

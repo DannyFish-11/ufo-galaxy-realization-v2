@@ -271,25 +271,42 @@ async def scroll(req: ScrollRequest):
 
 @app.post("/screenshot")
 async def screenshot():
-    """屏幕截图"""
-    if not SCROT_AVAILABLE:
-        # 回退到 xdotool + import (ImageMagick)
-        if _check_tool("import"):
-            tmp = tempfile.mktemp(suffix=".png")
-            await _run_cmd(f"import -window root {tmp}")
-        else:
-            raise HTTPException(500, "scrot or ImageMagick not installed")
-    else:
-        tmp = tempfile.mktemp(suffix=".png")
-        await _run_cmd(f"scrot {tmp}")
+    """屏幕截图
 
+    安全:临时文件放进一个 **0700 的私有目录**,而不是 ``tempfile.mktemp()``。
+
+    mktemp 只返回一个路径、并不创建文件,于是"取到路径"和"外部工具写进去"之间
+    存在一个窗口 —— 同机的其他用户可以抢先在那个路径放一个符号链接,让截图落到
+    别处去。而这里写的是**整个桌面的截图**,泄露的是屏幕上当时的一切。
+    CodeQL 的 py/insecure-temporary-file 报的就是它。
+
+    为什么用 mkdtemp 而不是 mkstemp:路径要交给外部命令(scrot / import)去写。
+    mkstemp 会**先把文件建出来**,而有些版本的 scrot 遇到已存在的文件会拒绝写。
+    私有目录里的一个尚不存在的文件名同时满足两边:目录本身 0700,别人进不来,
+    也就没有抢占的余地。
+    """
+    tmpdir = tempfile.mkdtemp(prefix="galaxy-screenshot-")
+    tmp = os.path.join(tmpdir, "screen.png")
     try:
-        with open(tmp, "rb") as f:
-            img_data = base64.b64encode(f.read()).decode("utf-8")
-        os.remove(tmp)
-        return {"success": True, "action": "screenshot", "image_base64": img_data}
-    except FileNotFoundError:
-        return {"success": False, "error": "Screenshot failed"}
+        if not SCROT_AVAILABLE:
+            # 回退到 xdotool + import (ImageMagick)
+            if _check_tool("import"):
+                await _run_cmd(f"import -window root {tmp}")
+            else:
+                raise HTTPException(500, "scrot or ImageMagick not installed")
+        else:
+            await _run_cmd(f"scrot {tmp}")
+
+        try:
+            with open(tmp, "rb") as f:
+                img_data = base64.b64encode(f.read()).decode("utf-8")
+            return {"success": True, "action": "screenshot", "image_base64": img_data}
+        except FileNotFoundError:
+            return {"success": False, "error": "Screenshot failed"}
+    finally:
+        # 原来的 os.remove 只在成功分支上;截图失败时那个文件(以及现在的目录)
+        # 会一直留着。放进 finally 才是真的每次都清。
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @app.post("/window")
