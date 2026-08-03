@@ -724,20 +724,6 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
         ),
     ),
     DiagnosticsSemanticSurface(
-        surface_id="post_closure_dual_repo_reassessment",
-        module_path="core.post_closure_dual_repo_reassessment",
-        surface_name=("post_closure_dual_repo_reassessment (post-closure dual-repo " "reassessment — retrospective)"),
-        semantic_kind=DiagnosticsSemanticKind.audit_postrun_interpretation,
-        may_not_redefine_authority_truth=True,
-        android_diagnostics_uplink=False,
-        notes=(
-            "Produces post-closure reassessment of the dual-repo state for "
-            "operator and audit visibility.  This is a retrospective "
-            "AUDIT_POSTRUN_INTERPRETATION surface; it does not create new "
-            "closure decisions."
-        ),
-    ),
-    DiagnosticsSemanticSurface(
         surface_id="audit_event_semantics",
         module_path="core.audit_event_semantics",
         surface_name=("audit_event_semantics (audit event classification and semantics — " "post-hoc)"),

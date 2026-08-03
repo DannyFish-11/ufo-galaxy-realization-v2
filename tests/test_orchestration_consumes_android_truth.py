@@ -14,7 +14,7 @@ A. Sentinel / policy strings are exported.
 B. _score_candidate() — Android snapshot drives scoring.
 C. _select_target_from_candidates() — Android truth changes winner selection.
 D. select_devices() — step 0c re-orders candidates by Android readiness.
-E. post_closure_dual_repo_reassessment reflects the P0 as closed.
+E. （已移除）post_closure_dual_repo_reassessment 的自指断言 —— 见文件内说明。
 F. Backward compatibility — absent snapshot degrades gracefully.
 """
 
@@ -861,72 +861,16 @@ class TestSelectDevicesAndroidRoutingWeight:
         assert hasattr(_m, "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION")
 
 
+# E.（原）post_closure_dual_repo_reassessment 反映 P0 已关闭
 # ---------------------------------------------------------------------------
-# E. post_closure_dual_repo_reassessment reflects P0 closed
-# ---------------------------------------------------------------------------
-
-
-class TestPostClosureReassessmentP0Closed:
-    """post_closure_dual_repo_reassessment now reflects ORCHESTRATION_CONSUMES_ANDROID_TRUTH
-    as closed (not STILL_MISSING_DECISION_PATH_CLOSURE)."""
-
-    def test_orchestration_truth_path_not_still_missing(self):
-        from core.post_closure_dual_repo_reassessment import (
-            ClosureStatus,
-            PostClosurePathId,
-            build_post_closure_reassessment,
-            reset_post_closure_reassessment,
-        )
-
-        reset_post_closure_reassessment()
-        report = build_post_closure_reassessment()
-
-        truth_path = next(
-            (p for p in report.path_statuses if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH),
-            None,
-        )
-
-        assert truth_path is not None
-        # Must NOT still be STILL_MISSING_DECISION_PATH_CLOSURE.
-        assert truth_path.updated_label != ClosureStatus.STILL_MISSING_DECISION_PATH_CLOSURE
-
-    def test_orchestration_truth_path_has_closure_pr_ref(self):
-        from core.post_closure_dual_repo_reassessment import (
-            PostClosurePathId,
-            build_post_closure_reassessment,
-            reset_post_closure_reassessment,
-        )
-
-        reset_post_closure_reassessment()
-        report = build_post_closure_reassessment()
-
-        truth_path = next(
-            (p for p in report.path_statuses if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH),
-            None,
-        )
-
-        assert truth_path is not None
-        assert len(truth_path.closure_pr_refs) > 0
-
-    def test_orchestration_truth_path_gap_description_reflects_closure(self):
-        from core.post_closure_dual_repo_reassessment import (
-            PostClosurePathId,
-            build_post_closure_reassessment,
-            reset_post_closure_reassessment,
-        )
-
-        reset_post_closure_reassessment()
-        report = build_post_closure_reassessment()
-
-        truth_path = next(
-            (p for p in report.path_statuses if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH),
-            None,
-        )
-
-        assert truth_path is not None
-        # gap_description must indicate closed state, not the old "REMAINING GAP" wording.
-        assert "REMAINING GAP" not in truth_path.gap_description
-        assert "CLOSED" in truth_path.gap_description
+# 此处原有 TestPostClosureReassessmentP0Closed（2 条用例），断言那份重评报告里
+# ORCHESTRATION_CONSUMES_ANDROID_TRUTH 不再是 STILL_MISSING_DECISION_PATH_CLOSURE。
+#
+# 那是**自指断言**：审计模块把结论硬编码在自己里，用例再断言那个硬编码值 ——
+# 验的不是系统行为，而是一段文案。该模块已作为零引用死代码删除（core.
+# complete_joint_system_review 的 REVIEW_SUPERSEDES 早已声明取代它），这两条随之移除。
+#
+# 本文件其余部分验的是真实行为（编排是否真的消费 Android 真相），全部保留。
 
 
 # ---------------------------------------------------------------------------

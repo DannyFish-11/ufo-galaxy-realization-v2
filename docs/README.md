@@ -135,7 +135,6 @@ documents are **authoritative and current** vs historical or superseded.
 | [EXECUTION_TRACE_CONTRACT.md](EXECUTION_TRACE_CONTRACT.md) | Execution trace contract |
 | [EXECUTION_OBSERVABILITY_UNIFICATION.md](EXECUTION_OBSERVABILITY_UNIFICATION.md) | Execution observability unification |
 | [EXECUTION_INTENT_PROFILE.md](EXECUTION_INTENT_PROFILE.md) | Execution intent profile |
-| [EXECUTION_ENVELOPE_CONSOLIDATION.md](EXECUTION_ENVELOPE_CONSOLIDATION.md) | Execution envelope consolidation |
 | [DECISION_DIFF_TELEMETRY.md](DECISION_DIFF_TELEMETRY.md) | Decision diff telemetry |
 | [DECISION_EXECUTION_POLICY.md](DECISION_EXECUTION_POLICY.md) | Decision execution policy |
 | [DECISION_GATE_SPEC.md](DECISION_GATE_SPEC.md) | Decision gate specification |
