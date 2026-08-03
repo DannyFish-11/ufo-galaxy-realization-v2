@@ -84,6 +84,33 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DeviceSelection.CanonicalSelector")
 
+
+def _satisfies_capabilities(
+    device_id: str,
+    declared_capabilities: List[str],
+    required_capabilities: Optional[List[str]],
+) -> bool:
+    """能力匹配统一走 :mod:`core.capability_registry`（三源并集）。
+
+    与 ``core/device_pool_manager.py`` 里的同名助手是同一个缺陷的两个现场：
+    device 上挂的那份能力表只是规范注册表的**三个来源之一**，经 capability_bus /
+    网关能力投影上报的能力不在其中，只看它会把确实具备该能力的设备剔出候选
+    （已实测复现）。判据本身是**并集**，只可能多认出设备、不会新增排除。
+
+    延迟 import 并在异常时降级为原先的单源判断 —— 与本模块其余部分一致：
+    权威不可用不该让候选选择整体失败。
+    """
+    if not required_capabilities:
+        return True
+    try:
+        from core.capability_registry import device_satisfies_required_capabilities
+
+        return device_satisfies_required_capabilities(device_id, declared_capabilities, required_capabilities)
+    except Exception as exc:  # pragma: no cover - 降级
+        logger.debug("capability registry unavailable (%s) — falling back to declared capabilities", exc)
+        return all(c in declared_capabilities for c in required_capabilities)
+
+
 __all__ = [
     "DeviceParticipationStatus",
     "CanonicalDeviceSelectionEntry",
@@ -380,7 +407,11 @@ def select_orchestration_candidates(
                 device_caps: List[str] = (
                     list(getattr(cap_profile, "capabilities", [])) if cap_profile is not None else []
                 )
-                if not all(c in device_caps for c in required_capabilities):
+                # device 上挂的这份只是规范能力注册表的三个来源之一；经 capability_bus /
+                # 网关投影上报的能力不在其中，只看它会把确实具备该能力的设备剔出候选。
+                if not _satisfies_capabilities(
+                    str(getattr(device, "device_id", "")), device_caps, required_capabilities
+                ):
                     continue
 
             entries.append(CanonicalDeviceSelectionEntry(device=device, participation=status))
