@@ -285,30 +285,30 @@ class TestLoggingDoesNotLeakIdentity:
         assert len(list(self._log_calls())) >= 8, "只抓到很少的 logger 调用,遍历没生效"
 
 
-class TestLogSubjectIsCorrelatableButNotReversible:
-    def test_same_user_always_maps_to_the_same_string(self):
-        """可对账 —— 否则排查"这个用户反复失败"时几条日志串不起来。"""
-        from nodes.Node_05_Auth.oauth_routes import _log_subject
+class TestNoHashOfIdentityIsReintroduced:
+    """不许再用"哈希一下用户标识"来假装脱敏。
 
-        user = {"id": "1234567890", "email": "a@example.com", "provider": "google"}
-        assert _log_subject(user) == _log_subject(dict(user))
+    上一版为了保留"同一个人能对上号"的能力,打的是 sha256(provider:id)[:12],
+    并在注释里写了"不可还原"。**那句话是错的**:输入是低熵的(邮箱或数字 sub),
+    实测对着 20 万条候选名单枚举,0.12 秒就反查回原值 —— 截断哈希只挡住了
+    "直接读出来",挡不住"拿名单比对"。
 
-    def test_different_users_map_to_different_strings(self):
-        from nodes.Node_05_Auth.oauth_routes import _log_subject
+    而那个相关性需求本身是推测出来的:登录成功日志里带一个人的标识,排查价值有限,
+    却换来一个真实的 PII 面和一条新的 CodeQL 告警类(对敏感数据用快速哈希)。
+    所以整个函数删掉了,而不是换成 HMAC —— 加密强度不是问题所在,
+    "日志里到底需不需要这个字段"才是。
+    """
 
-        a = _log_subject({"id": "1", "provider": "google"})
-        b = _log_subject({"id": "2", "provider": "google"})
-        assert a != b
+    def test_source_does_not_hash_user_identity(self):
+        from pathlib import Path
 
-    def test_the_email_does_not_appear_in_the_output(self):
-        """不可还原 —— 这是这个函数存在的全部理由。"""
-        from nodes.Node_05_Auth.oauth_routes import _log_subject
-
-        out = _log_subject({"id": "1234567890", "email": "someone@example.com", "provider": "google"})
-        assert "someone" not in out
-        assert "example.com" not in out
-        assert "1234567890" not in out
-        assert out.startswith("google:")
+        src = (Path(__file__).resolve().parent.parent / "nodes" / "Node_05_Auth" / "oauth_routes.py").read_text(
+            encoding="utf-8"
+        )
+        assert "hashlib" not in src, (
+            "又出现了哈希用户标识的写法。截断哈希对低熵输入不构成脱敏 —— "
+            "要么别把这个字段写进日志,要么用带部署密钥的 HMAC 并说明为什么值得。"
+        )
 
 
 class TestGitHubCodeExchange:
