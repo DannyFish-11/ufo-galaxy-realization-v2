@@ -38,10 +38,10 @@
       "count": 2,
       "status": "by-design",
       "locations": [
-        "core/adapters/udp_adapter.py:155",
-        "galaxy_gateway/p2p_connector.py:129"
+        "core/adapters/udp_adapter.py:159",
+        "galaxy_gateway/p2p_connector.py:132"
       ],
-      "reason": "带 SO_BROADCAST 的局域网发现监听与 STUN 客户端。广播包只送到绑通配地址的 socket;STUN 要让 NAT 看到真实出口映射,本地端口得对所有接口开着等回包。绑 127.0.0.1 不是修复,是把跨设备发现关掉。已做的改进是把这个**隐式常量**变成显式可配的决定:core/net_bind.discovery_bind_host() 读 GALAXY_DISCOVERY_BIND_HOST,默认仍为 0.0.0.0(改默认值会让绝大多数用户升级后设备发现悄悄失效),部署在公网机器上时可收窄到某块网卡。改完 CodeQL 仍会报 —— 它看到的还是一个可能为 0.0.0.0 的值流进 bind(),这是预期的。",
+      "reason": "带 SO_BROADCAST 的局域网发现监听与 STUN 客户端。广播包只送到绑通配地址的 socket;STUN 要让 NAT 看到真实出口映射,本地端口得对所有接口开着等回包。绑 127.0.0.1 不是修复,是把跨设备发现关掉。已做的改进是把这个**隐式常量**变成显式可配的决定:core/net_bind.discovery_bind_host() 读 GALAXY_DISCOVERY_BIND_HOST,默认仍为 0.0.0.0(改默认值会让绝大多数用户升级后设备发现悄悄失效),部署在公网机器上时可收窄到某块网卡。改完 CodeQL 仍会报,这是预期的 —— 它看到的还是一个可能为 0.0.0.0 的值流进 bind()。补充一点核过的事:告警文案里还提到该值可能是空串 ''。那是 CodeQL 把 os.getenv(名字, \"\") 的默认字面量顺着数据流带了下来,它没有精确建模函数里 `if not host: return default` 那道拦截。穷举过('' / 空格 / 制表符 / 换行 / 混合空白 / 未设置)六种取值,返回的都是 0.0.0.0,能返回空串的路径不存在;这一点由 tests/test_codeql_ledger_and_net_bind.py 的 test_blank_values_fall_back_to_default 钉着。",
       "guarded_by": ["tests/test_net_bind.py"]
     },
     {

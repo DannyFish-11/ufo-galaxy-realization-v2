@@ -16,11 +16,22 @@ CodeQL 的分析结果只进 Security 页。排查的时候只知道"还有 N �
 
 和本仓其它守卫一样,判据是"增量",不是"总数"。
 
-刻意的取舍
-----------
-* 位置比到 ``文件:行号``。行号会随无关改动漂移 —— 那时这里会报一条"新增"和一条
-  "已消失",看起来吵,但**那正是需要有人看一眼的时刻**:告警还在不在、是不是同一条。
-  只比文件名会让"同一个文件里新增了一处"完全隐形,而那才是真正要抓的东西。
+行号漂移怎么处理(这一段是被真实情况改过一次的)
+----------------------------------------------
+第一版把位置严格比到 ``文件:行号``,理由是"只比文件名会让同一个文件里新增一处
+完全隐形"。这个理由本身没错,但代价被低估了:**在这套守卫落地的同一个 PR 里,
+两条记录的行号就漂了** —— 只因为我在 bind 上面加了两行注释。一份每次改动都要
+手工对行号的台账,很快就没人维护,而那正是它要防的结局。
+
+现在按 ``(规则, 文件)`` 分组比**条数**:
+
+  * 同组内行号能对上的 → 匹配;
+  * 对不上、但该组在 SARIF 里的条数**没有超过**台账里记的条数 → 判为**位置漂移**,
+    提示更新行号,不算新增;
+  * 条数**超了** → 超出的部分是**新增**,照报不误。
+
+所以"同一个文件里多出一处"仍然抓得到(条数变了),而"整体位移"不再制造噪声。
+按条数而不是按行号判定,是这两个需求唯一能同时满足的方式。
 * 不做严重性过滤。CodeQL 在本仓的输出里 ``problem.severity`` 大量缺失(显示为 ?),
   按它过滤等于按一个不存在的字段过滤。
 * 找不到 SARIF 时**判失败**而不是跳过。一个"找不到就当通过"的守卫,在产物路径
@@ -71,6 +82,55 @@ def load_sarif(paths: List[Path]) -> Set[Tuple[str, str]]:
     return found
 
 
+def _group(pairs) -> Dict[Tuple[str, str], List[str]]:
+    """按 ``(规则, 文件)`` 归组,值是该组下的行号列表。"""
+    out: Dict[Tuple[str, str], List[str]] = {}
+    for rule, loc in pairs:
+        uri, line = loc.rsplit(":", 1)
+        out.setdefault((rule, uri), []).append(line)
+    return out
+
+
+def reconcile(recorded: Set[Tuple[str, str]], found: Set[Tuple[str, str]]):
+    """对账,返回 ``(新增, 位置漂移, 已消失)`` 三份清单。
+
+    判定按 ``(规则, 文件)`` 分组比**条数**,而不是逐条比行号 —— 理由见模块 docstring:
+    行号会随无关改动漂移,而"同一个文件里多出一处"必须仍然抓得到。条数是唯一能
+    同时满足这两点的判据。
+    """
+    rec_groups = _group(recorded)
+    found_groups = _group(found)
+
+    new: List[Tuple[str, str]] = []
+    drifted: List[Tuple[str, str, str]] = []  # (rule, file, "旧行 → 新行")
+    gone: List[Tuple[str, str]] = []
+
+    for key, found_lines in found_groups.items():
+        rule, uri = key
+        rec_lines = rec_groups.get(key, [])
+        matched = set(found_lines) & set(rec_lines)
+        unmatched_found = sorted(set(found_lines) - matched, key=int)
+        unmatched_rec = sorted(set(rec_lines) - matched, key=int)
+
+        # 能一一对上的当作漂移;多出来的才是新增。
+        for i, line in enumerate(unmatched_found):
+            if i < len(unmatched_rec):
+                drifted.append((rule, uri, f"{unmatched_rec[i]} → {line}"))
+            else:
+                new.append((rule, f"{uri}:{line}"))
+
+    for key, rec_lines in rec_groups.items():
+        rule, uri = key
+        found_lines = found_groups.get(key, [])
+        # 这一组在 SARIF 里少了几条,少的那几条算"已消失"(漂移已经在上面配对掉了)。
+        missing = len(set(rec_lines)) - len(set(found_lines))
+        if missing > 0:
+            for line in sorted(set(rec_lines) - set(found_lines), key=int)[:missing]:
+                gone.append((rule, f"{uri}:{line}"))
+
+    return sorted(new), sorted(drifted), sorted(gone)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CodeQL 结果 ↔ 处置台账对账")
     parser.add_argument("sarif", nargs="*", help="SARIF 文件路径(可多个)")
@@ -91,8 +151,7 @@ def main() -> int:
     recorded, status = load_ledger()
     found = load_sarif(paths)
 
-    unrecorded = sorted(found - recorded)
-    stale = sorted(recorded - found)
+    unrecorded, drifted, stale = reconcile(recorded, found)
 
     print(f"SARIF {len(paths)} 份 · 告警 {len(found)} 条 · 台账 {len(recorded)} 条")
     by_status: Dict[str, int] = {}
@@ -101,8 +160,14 @@ def main() -> int:
     if by_status:
         print("  已判定:" + " · ".join(f"{k} {v}" for k, v in sorted(by_status.items())))
 
+    if drifted:
+        print(f"\n📍 {len(drifted)} 条位置漂移(同一规则、同一文件,条数没变,只是行号动了):")
+        for rule, uri, move in drifted:
+            print(f"    {rule}  {uri}  {move}")
+        print("    改一下 config/codeql_findings_ledger.json 里的行号即可,不是新问题。")
+
     if stale:
-        print(f"\n📉 台账里有 {len(stale)} 条在本轮 SARIF 里已经不见了(修掉了、或规则/位置变了):")
+        print(f"\n📉 台账里有 {len(stale)} 条在本轮 SARIF 里已经不见了(修掉了、或规则变了):")
         for rule, loc in stale:
             print(f"    [{status.get((rule, loc), '?')}] {rule}  {loc}")
         print(

@@ -120,6 +120,25 @@ class TestReconciliationActuallyBites:
         assert proc.returncode == 1
         assert "999999" in proc.stdout
 
+    def test_pure_line_drift_is_not_treated_as_new(self, tmp_path):
+        """行号漂移不该判红 —— 这一条是被真实情况逼出来的。
+
+        第一版严格比 ``文件:行号``。结果在落地这套守卫的**同一个 PR 里**,两条记录
+        的行号就漂了 —— 只因为我在 bind 上面加了两行注释。一份每次改动都要手工
+        对行号的台账很快就没人维护,而那正是它要防的结局。
+
+        现在按 ``(规则, 文件)`` 比条数:条数没变就只是漂移,提示改行号即可。
+        """
+        pairs = _all_pairs(_ledger())
+        rule, loc = next((r, l) for r, l in pairs if "udp_adapter" in l)
+        uri = loc.rsplit(":", 1)[0]
+        moved = [(r, f"{uri}:99999" if (r, l) == (rule, loc) else l) for r, l in pairs]
+        sarif = _write_sarif(tmp_path / "python.sarif", moved)
+        proc = _run("--strict", str(sarif))
+        assert proc.returncode == 0, "纯行号漂移被判成新增了 —— 那台账会被噪声淹掉:\n" + proc.stdout
+        assert "位置漂移" in proc.stdout
+        assert "99999" in proc.stdout
+
     def test_a_disappeared_finding_is_surfaced_but_not_fatal(self, tmp_path):
         pairs = [p for p in _all_pairs(_ledger()) if p[0] != "py/incomplete-url-substring-sanitization"]
         sarif = _write_sarif(tmp_path / "python.sarif", pairs)
