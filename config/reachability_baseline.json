@@ -32,8 +32,8 @@
     "udm_registration_hook（UDM 注册尾部触发解析平面）、queueing/async_queue（orchestrator",
     "有界池+背压）、node_communication（阶段 0：LinkStateObserver 分区可见化，经",
     "nats_bus._absorb_nats_state / websocket_handler 注册与断开喂入，/api/v1/health 消费；",
-    "AODV 多跳与自带 NodeRegistry/LoadBalancer 部分仍休眠 —— 前者等 ≥2 Python 节点拓扑，",
-    "后者与 UDM 冲突永不启用）。",
+    "AODV 多跳已由阶段 2 的 core/adapters/mesh_routing_adapter 真实启用（RoutingTable/Message/RREQ/RREP），",
+    "自带 NodeRegistry/LoadBalancer 与 UDM 冲突，永不启用）。",
     "判据教训：『有个名字相近的模块在做类似的事』不等于能力还在；必须比对同一层次的实现。"
   ]
 }
