@@ -242,8 +242,7 @@ class SSHExecutor:
         import time
 
         start = time.monotonic()
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._new_ssh_client()
         try:
             connect_kwargs = {
                 "hostname": self.host,
@@ -257,6 +256,8 @@ class SSHExecutor:
                 connect_kwargs["password"] = self.password
 
             client.connect(**connect_kwargs)
+            # 连上了才落盘:连不上时把对方的钥匙记下来毫无意义,还会污染信任库。
+            self._persist_host_keys(client)
             stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
             stdout_b = stdout.read()
             stderr_b = stderr.read()
@@ -284,8 +285,7 @@ class SSHExecutor:
 
     def _read_file_sync(self, path: str, max_size: int) -> str:
         import paramiko
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._new_ssh_client()
         try:
             self._connect(client)
             stdin, stdout, _ = client.exec_command(f"cat '{path}' | head -c {max_size}")
@@ -300,8 +300,7 @@ class SSHExecutor:
 
     def _write_file_sync(self, path: str, content: str, mode: str) -> bool:
         import paramiko
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._new_ssh_client()
         try:
             self._connect(client)
             escaped = content.replace("'", "'\"'\"'")
@@ -342,8 +341,7 @@ class SSHExecutor:
 
     def _get_system_info_sync(self) -> Dict:
         import paramiko
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._new_ssh_client()
         try:
             self._connect(client)
             commands = {
@@ -367,6 +365,60 @@ class SSHExecutor:
         finally:
             client.close()
 
+    # ── SSH 主机密钥策略 ──────────────────────────────────────────────────
+    #
+    # 这里此前 5 处都是 `set_missing_host_key_policy(AutoAddPolicy())` ——
+    # 也就是**对任何主机密钥都照连不误**。CodeQL 的
+    # py/paramiko-missing-host-key-validation 报的就是这个,5 条全在本文件。
+    #
+    # 为什么它是真的风险:这条链路会把密码/私钥送过去,并在对端执行任意命令、
+    # 读写任意文件。AutoAdd 意味着一台冒充目标 IP 的机器可以直接拿到这些 ——
+    # 而且过程完全静默,不会有任何一行日志说"对面换人了"。
+    #
+    # 换成什么:**真正的 TOFU**(信任首次使用)。
+    #   * 首次连接:在显式开启 GALAXY_SSH_TRUST_ON_FIRST_USE 时接受并**落盘**;
+    #   * 之后每一次:对着落盘的那把校验,换了就拒。
+    # AutoAdd 与 TOFU 的差别正在这里 —— AutoAdd 是"每次都接受新钥匙",
+    # TOFU 是"只接受第一次,之后再变就是事故"。此前的写法看着像 TOFU,其实不是。
+    #
+    # 默认(不设那个环境变量)是拒绝未知主机。家用局域网首次配对会因此失败一次,
+    # 这是有意的:让"我现在要信任这台机器"成为一个人做出的、看得见的决定。
+    _KNOWN_HOSTS = Path.home() / ".galaxy" / "ssh_known_hosts"
+
+    @classmethod
+    def _new_ssh_client(cls):
+        import paramiko
+
+        client = paramiko.SSHClient()
+        # 系统 known_hosts 优先;读不到不算错(容器里常常就没有)。
+        try:
+            client.load_system_host_keys()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读取系统 known_hosts 失败(忽略): %s", exc)
+        if cls._KNOWN_HOSTS.is_file():
+            try:
+                client.load_host_keys(str(cls._KNOWN_HOSTS))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("读取 %s 失败: %s", cls._KNOWN_HOSTS, exc)
+
+        tofu = str(os.getenv("GALAXY_SSH_TRUST_ON_FIRST_USE", "")).strip().lower() in ("1", "true", "yes", "on")
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy() if tofu else paramiko.RejectPolicy())
+        return client
+
+    @classmethod
+    def _persist_host_keys(cls, client) -> None:
+        """把本次新学到的主机密钥落盘,让下一次连接变成**校验**而不是再学一遍。
+
+        不落盘的话 AutoAdd 就只是每次都接受新钥匙 —— 那和没有校验没有区别。
+        """
+        try:
+            cls._KNOWN_HOSTS.parent.mkdir(parents=True, exist_ok=True)
+            client.save_host_keys(str(cls._KNOWN_HOSTS))
+            # 主机密钥不是秘密,但这个文件决定"信任谁",别人可写就等于信任可被改。
+            os.chmod(cls._KNOWN_HOSTS, 0o600)
+        except Exception as exc:  # noqa: BLE001 —— 落盘失败不该让本次操作失败
+            logger.warning("保存主机密钥到 %s 失败: %s", cls._KNOWN_HOSTS, exc)
+
     def _connect(self, client):
         import paramiko
         connect_kwargs = {
@@ -380,6 +432,8 @@ class SSHExecutor:
         elif self.password:
             connect_kwargs["password"] = self.password
         client.connect(**connect_kwargs)
+        # 连上了才落盘:连不上时把对方的钥匙记下来毫无意义,还会污染信任库。
+        self._persist_host_keys(client)
 
     async def list_dir(self, path: str) -> List[str]:
         loop = asyncio.get_running_loop()
@@ -387,8 +441,7 @@ class SSHExecutor:
 
     def _list_dir_sync(self, path: str) -> List[str]:
         import paramiko
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._new_ssh_client()
         try:
             self._connect(client)
             stdin, stdout, _ = client.exec_command(f"ls -la '{path}' 2>/dev/null")
