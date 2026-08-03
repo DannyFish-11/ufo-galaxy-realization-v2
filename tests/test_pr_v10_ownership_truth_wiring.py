@@ -93,13 +93,23 @@ class TestAdmissionGateActuallyWorks:
     """先证明"要接的东西没坏"：准入门本身判得对。"""
 
     def test_canonicalized_ownership_is_admitted(self) -> None:
+        """合规归属必须真的进入规范环形缓冲。
+
+        判据看**内容**不看条数。第一版断言 ``after_n == before_n + 1``，在整分片跑动
+        时必挂：环形缓冲是 ``deque(maxlen=128)``，一旦被前面的用例灌满，再写入时旧记录
+        被挤出、**条数不再增长**（已实测：128 → 128）。那条断言等于要求「缓冲永不满」，
+        与它自己的容量语义直接冲突 —— 是用例写错了，不是产品的问题。
+        """
         from core.canonical_ownership_truth_bridge import record_participant_truth_with_ownership
 
-        before_n, _ = _counts()
-        record_participant_truth_with_ownership(_outcome("canonicalized"), task_id="pr_v10_ok", truth_source="result")
-        after_n, _ = _counts()
-        assert after_n == before_n + 1, "合规归属必须进入规范环形缓冲 —— 否则等于把所有记录都拦掉了"
-        assert _runtime()._records[-1].participant_ownership_boundary == "canonicalized"
+        marker = "pr_v10_admitted_marker"
+        record_participant_truth_with_ownership(_outcome("canonicalized"), task_id=marker, truth_source="result")
+
+        records = list(_runtime()._records)
+        assert records, "合规归属必须进入规范环形缓冲 —— 否则等于把所有记录都拦掉了"
+        mine = [r for r in records if getattr(r, "task_id", None) == marker]
+        assert mine, f"没找到本用例刚写入的记录（task_id={marker!r}）—— 合规归属没有被收下"
+        assert mine[-1].participant_ownership_boundary == "canonicalized"
 
     @pytest.mark.parametrize(
         "status",
@@ -109,10 +119,15 @@ class TestAdmissionGateActuallyWorks:
         """反向用例：非规范归属必须被拦，不能因为接通了就一律放行。"""
         from core.canonical_ownership_truth_bridge import record_participant_truth_with_ownership
 
-        before_n, before_b = _counts()
-        record_participant_truth_with_ownership(_outcome(status), task_id=f"pr_v10_{status}", truth_source="result")
-        after_n, after_b = _counts()
-        assert after_n == before_n, f"{status} 不得进入规范环形缓冲"
+        marker = f"pr_v10_blocked_{status}"
+        _, before_b = _counts()
+        record_participant_truth_with_ownership(_outcome(status), task_id=marker, truth_source="result")
+        _, after_b = _counts()
+
+        # 同样看内容不看条数（环形缓冲满了之后条数不变，见上一条用例的说明）。
+        assert not [
+            r for r in _runtime()._records if getattr(r, "task_id", None) == marker
+        ], f"{status} 不得进入规范环形缓冲"
         assert after_b == before_b + 1, f"{status} 必须被准入门计入拦截 —— 否则它是被静默丢弃而不是被判定"
 
 
