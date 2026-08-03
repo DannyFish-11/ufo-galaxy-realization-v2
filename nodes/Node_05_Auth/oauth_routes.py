@@ -13,6 +13,7 @@ OAuth 2.0 FastAPI 路由
 - POST /auth/oauth/logout              — 撤销 Token
 """
 
+import hashlib
 import os
 import secrets
 import logging
@@ -227,6 +228,28 @@ def _verify_google_id_token(token: str) -> Dict[str, str]:
         "picture": claims.get("picture", ""),
         "provider": "google",
     }
+
+
+def _log_subject(oauth_user: Dict[str, str]) -> str:
+    """把用户身份压成一个**可对账、但不可还原**的短标识,用于日志。
+
+    为什么不直接打邮箱
+    ------------------
+    登录日志会被采集、转发、长期留存,而邮箱是直接可用的个人标识 —— 一条
+    ``logger.info`` 就把它复制进了一条谁也说不清边界的管道。CodeQL 的
+    ``py/clear-text-logging-sensitive-data`` 报的就是这个(它把凭证下游的值
+    整体视作敏感,所以点名的是邮箱那一行)。
+
+    但日志里完全不留标识也不行 —— 排查"这个用户反复登录失败"时需要能把几条
+    日志串起来。折中是打 ``provider:sha256(provider:id)[:12]``:同一个人始终是
+    同一个串(可对账),而从串反推不回邮箱或用户 ID(不可还原)。
+
+    与本仓 ``scripts/verify_provider_apis.py`` 的规矩一致:那边是"绝不打印密钥值,
+    连长度都不打",这里是"绝不打印可直接识别到人的字段"。
+    """
+    provider = str(oauth_user.get("provider") or "?")
+    raw = f"{provider}:{oauth_user.get('id') or oauth_user.get('email') or ''}"
+    return f"{provider}:{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:12]}"
 
 
 def _generate_jwt_token(oauth_user: Dict[str, str]) -> Dict[str, Any]:
@@ -472,7 +495,11 @@ def register_oauth_routes(app: FastAPI):
             # 获取用户信息
             user_info = await oauth_provider.get_user_info(access_token)
             if not user_info.get("email"):
-                logger.warning(f"OAuth 用户未提供邮箱: {user_info}")
+                logger.warning(
+                    "OAuth 用户未提供邮箱 subject=%s 拿到的字段=%s",
+                    _log_subject({**user_info, "provider": provider}),
+                    sorted(user_info.keys()),
+                )
                 raise HTTPException(status_code=400, detail="Email not provided by OAuth provider")
 
         except HTTPException:
@@ -486,7 +513,7 @@ def register_oauth_routes(app: FastAPI):
 
         # 生成 JWT Token
         token_data = _generate_jwt_token(user_info)
-        logger.info(f"OAuth 登录成功: {user_info['email']} via {provider}")
+        logger.info("OAuth 登录成功(%s/callback): %s", provider, _log_subject({**user_info, "provider": provider}))
 
         return token_data
 
@@ -512,7 +539,7 @@ def register_oauth_routes(app: FastAPI):
         """
         oauth_user = _verify_google_id_token(body.id_token)
         token_data = _generate_jwt_token(oauth_user)
-        logger.info("OAuth 登录成功(google/id_token): %s", oauth_user["email"])
+        logger.info("OAuth 登录成功(google/id_token): %s", _log_subject(oauth_user))
         return token_data
 
     @app.post("/auth/oauth/github")
@@ -545,7 +572,7 @@ def register_oauth_routes(app: FastAPI):
             raise HTTPException(status_code=400, detail="GitHub 未提供 email(需要 user:email scope)")
 
         token_data = _generate_jwt_token(user_info)
-        logger.info("OAuth 登录成功(github/code): %s", user_info["email"])
+        logger.info("OAuth 登录成功(github/code): %s", _log_subject(user_info))
         return token_data
 
     # ---- 4. 启动设备授权 ----

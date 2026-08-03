@@ -238,6 +238,79 @@ class TestAlgorithmIsPinned:
         assert 'algorithms=["RS256"]' in src, "ID Token 校验没有锁定算法"
 
 
+class TestLoggingDoesNotLeakIdentity:
+    """登录日志不许出现可直接识别到人的字段。
+
+    CodeQL 的 ``py/clear-text-logging-sensitive-data`` 在本轮点了一条
+    ``logger.info(..., oauth_user["email"])``(high)。查下来同一类共四处,
+    其中**存量那条更严重** —— ``logger.warning(f"...: {user_info}")`` 把整个
+    用户信息字典(姓名、头像、id)打进了日志。所以四处一起改,而不是只修被点名的。
+
+    日志会被采集、转发、长期留存。一条 ``logger.info`` 就把邮箱复制进了一条
+    谁也说不清边界的管道 —— 与本仓 ``verify_provider_apis.py`` "绝不打印密钥值,
+    连长度都不打" 是同一条规矩。
+    """
+
+    def _log_calls(self):
+        import ast
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parent.parent / "nodes" / "Node_05_Auth" / "oauth_routes.py").read_text(
+            encoding="utf-8"
+        )
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"info", "warning", "error", "debug", "exception"}
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "logger"
+            ):
+                yield node, ast.unparse(node)
+
+    def test_no_log_call_passes_an_identity_field(self):
+        """用 AST 而不是正则:注释与 docstring 里提到 email 是允许的 ——
+        那些恰恰是记录"为什么不打它"的地方,禁掉等于逼人删掉理由。"""
+        leaks = []
+        for node, text in self._log_calls():
+            for bad in ("'email'", '"email"', ".email", "{user_info}", "{oauth_user}"):
+                if bad in text:
+                    leaks.append(f"line {node.lineno}: {text[:100]}")
+                    break
+        assert not leaks, "这些日志调用把可识别字段打了出去:\n  " + "\n  ".join(leaks)
+
+    def test_the_guard_actually_sees_the_log_calls(self):
+        """自证:如果 AST 遍历一条都没抓到,上面那条"没有泄漏"只是恒绿。"""
+        assert len(list(self._log_calls())) >= 8, "只抓到很少的 logger 调用,遍历没生效"
+
+
+class TestLogSubjectIsCorrelatableButNotReversible:
+    def test_same_user_always_maps_to_the_same_string(self):
+        """可对账 —— 否则排查"这个用户反复失败"时几条日志串不起来。"""
+        from nodes.Node_05_Auth.oauth_routes import _log_subject
+
+        user = {"id": "1234567890", "email": "a@example.com", "provider": "google"}
+        assert _log_subject(user) == _log_subject(dict(user))
+
+    def test_different_users_map_to_different_strings(self):
+        from nodes.Node_05_Auth.oauth_routes import _log_subject
+
+        a = _log_subject({"id": "1", "provider": "google"})
+        b = _log_subject({"id": "2", "provider": "google"})
+        assert a != b
+
+    def test_the_email_does_not_appear_in_the_output(self):
+        """不可还原 —— 这是这个函数存在的全部理由。"""
+        from nodes.Node_05_Auth.oauth_routes import _log_subject
+
+        out = _log_subject({"id": "1234567890", "email": "someone@example.com", "provider": "google"})
+        assert "someone" not in out
+        assert "example.com" not in out
+        assert "1234567890" not in out
+        assert out.startswith("google:")
+
+
 class TestGitHubCodeExchange:
     def test_missing_code_is_rejected(self, authoritative_app):
         from fastapi.testclient import TestClient
