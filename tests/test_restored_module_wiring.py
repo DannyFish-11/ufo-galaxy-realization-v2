@@ -285,9 +285,9 @@ def test_transformers_load_consumes_scheduler_allocation(monkeypatch, tmp_path) 
     backend = lmb.TransformersBackend()
     ok = asyncio.run(backend.load_model(str(model_dir)))
     assert ok, "加载失败"
-    assert captured.get("device_map") is None and captured.get("torch_dtype") == "f32", (
-        f"调度器分配 cpu 却仍按 cuda 加载:{captured}"
-    )
+    assert (
+        captured.get("device_map") is None and captured.get("torch_dtype") == "f32"
+    ), f"调度器分配 cpu 却仍按 cuda 加载:{captured}"
     assert captured.get("moved_to") == "cpu"
     assert captured.get("registered"), "加载成功后没有向调度器登记"
     assert backend._device == "cpu", "generate() 落位与加载落位不一致会张量错设备"
