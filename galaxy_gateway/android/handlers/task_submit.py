@@ -29,7 +29,9 @@ async def handle_task_execute(
     payload = message.get("payload", {})
     logger.info(
         "Task execute request from %s: task_id=%s, type=%s",
-        device_id, task_id, task_type,
+        device_id,
+        task_id,
+        task_type,
     )
 
     async with bridge._lock:
@@ -74,17 +76,21 @@ async def handle_task_submit(
 
     logger.info(
         "TASK_SUBMIT received: task_id=%s device_id=%s session_id=%s text=%r",
-        task_id, device_id, session_id, task_text[:80],
+        task_id,
+        device_id,
+        session_id,
+        task_text[:80],
     )
 
     # entry_mode 决定是否允许 Android 桥接到远程 Agent Runtime
     entry_mode = str(message.get("entry_mode", "local")).lower()
-    require_local_agent = (entry_mode == "local")
+    require_local_agent = entry_mode == "local"
 
     result: Dict[str, Any] = {"success": False, "response": "Processing failed"}
 
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         result = await runtime.handle_request(
             message=task_text,
@@ -97,7 +103,9 @@ async def handle_task_submit(
     except Exception as runtime_err:
         logger.error(
             "TASK_SUBMIT: DesktopPresenceRuntime 处理失败 | task_id=%s error=%s",
-            task_id, runtime_err, exc_info=True,
+            task_id,
+            runtime_err,
+            exc_info=True,
         )
         return MessageBuilder.error(
             device_id,
@@ -135,7 +143,9 @@ async def handle_task_submit(
 
     logger.info(
         "TASK_SUBMIT → task_assign: task_id=%s require_local_agent=%s goal=%r",
-        task_id, require_local_agent, goal[:80],
+        task_id,
+        require_local_agent,
+        goal[:80],
     )
 
     return MessageBuilder.task_assign(

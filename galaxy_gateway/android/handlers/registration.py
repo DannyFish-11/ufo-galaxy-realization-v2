@@ -133,9 +133,7 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
     first by the websocket route before buffered task messages are re-delivered.
     """
     try:
-        from galaxy_gateway.pending_delivery_buffer import (
-            pending_delivery_buffer as _pending_delivery_buffer,
-        )
+        from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
     except Exception as exc:  # pragma: no cover - non-fatal integration absence
         logger.debug(
             "handle_device_register: canonical reconnect replay unavailable " "device_id=%s error=%s",
@@ -599,7 +597,7 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
     token_valid = False
 
     try:
-        from core.auth import is_auth_enabled, get_active_tokens, verify_api_token
+        from core.auth import get_active_tokens, is_auth_enabled, verify_api_token
 
         auth_enforced = bool(is_auth_enabled())
         active_token_count = len(get_active_tokens())
@@ -971,8 +969,8 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
         try:
             from contracts.mesh_session import build_mesh_session
             from core.mesh.mesh_session_lifecycle import (
-                create_durable_session,
                 activate_durable_session,
+                create_durable_session,
             )
 
             _mesh_session = build_mesh_session(
@@ -1218,7 +1216,8 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and device.websocket is not None:
-                import json, time
+                import json
+                import time
 
                 # PR-AIP-UNIFIED: Route through AIPTransport
                 from core.aip_transport import get_aip_transport
@@ -1348,10 +1347,10 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
         # mode-gate updates will push the tier higher.
         try:
             from core.android_network_participation import (  # noqa: PLC0415
-                build_android_network_participation_state,
-                record_participation_state,
                 AndroidParticipationTransitionSignal,
+                build_android_network_participation_state,
                 list_participation_transition_history,
+                record_participation_state,
             )
 
             _reg_posture = ""
@@ -1394,8 +1393,8 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
         # 这是设备从 unregistered → registered（或更高）的权威转换点。
         try:
             from core.device_lifecycle_state import (  # noqa: PLC0415
-                transition_device_lifecycle,
                 DeviceLifecycleTransitionEvent,
+                transition_device_lifecycle,
             )
 
             _lc_is_fully_attached = len(_gaps) == 0

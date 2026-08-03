@@ -65,9 +65,7 @@ def _parse_version(version_str: str) -> tuple:
         parts = str(version_str).split(".")
         return tuple(int(p) for p in parts[:2])
     except (ValueError, AttributeError):
-        logger.warning(
-            "Could not parse AIP version string %r; treating as (0, 0)", version_str
-        )
+        logger.warning("Could not parse AIP version string %r; treating as (0, 0)", version_str)
         return (0, 0)
 
 
@@ -81,14 +79,10 @@ def enforce_aip_v3(data: dict) -> None:
     """
     raw_version = data.get("version")
     if raw_version is None:
-        raise AIPVersionError(
-            "Missing 'version' field; AIP v3.0+ is required"
-        )
+        raise AIPVersionError("Missing 'version' field; AIP v3.0+ is required")
     parsed = _parse_version(str(raw_version))
     if parsed < _MIN_REQUIRED_VERSION:
-        raise AIPVersionError(
-            f"AIP version {raw_version!r} is below the required minimum 3.0"
-        )
+        raise AIPVersionError(f"AIP version {raw_version!r} is below the required minimum 3.0")
 
 
 def inject_trace_metadata(data: dict) -> dict:
@@ -128,9 +122,8 @@ def inject_trace_metadata(data: dict) -> dict:
         _device_id_for_session = out.get("device_id")
         if _device_id_for_session:
             try:
-                from core.attached_runtime_session_registry import (
-                    lookup_session_by_device as _lsbd,
-                )
+                from core.attached_runtime_session_registry import lookup_session_by_device as _lsbd
+
                 _session_entry = _lsbd(_device_id_for_session)
                 if _session_entry is not None:
                     _resolved_session_id = _session_entry.runtime_session_id
@@ -162,6 +155,7 @@ def inject_trace_metadata(data: dict) -> dict:
 
     return out
 
+
 # ---------------------------------------------------------------------------
 # Legacy type-string → canonical MessageType mapping
 # ---------------------------------------------------------------------------
@@ -171,7 +165,7 @@ _LEGACY_TYPE_MAP: dict = {
     "register": MessageType.DEVICE_REGISTER,
     "agent_register": MessageType.DEVICE_REGISTER,
     "device_register": MessageType.DEVICE_REGISTER,
-    "registration": MessageType.DEVICE_REGISTER,       # Android AIPClient/EnhancedAIPClient send this
+    "registration": MessageType.DEVICE_REGISTER,  # Android AIPClient/EnhancedAIPClient send this
     # heartbeat aliases
     "heartbeat": MessageType.DEVICE_HEARTBEAT,
     "agent_heartbeat": MessageType.DEVICE_HEARTBEAT,
@@ -207,11 +201,11 @@ _LEGACY_TYPE_MAP: dict = {
     "broadcast": MessageType.COORD_BROADCAST,
     # v2 transport-layer aliases (used by core/device_communication.py local protocol)
     # These are normalised here so the routing layer only sees v3 type names.
-    "handshake": MessageType.DEVICE_REGISTER,      # legacy registration handshake
-    "text": MessageType.COMMAND,                   # wire-format "TEXT" (lowercased in _normalise_v1)
-    "response": MessageType.COMMAND_RESULT,        # v2 command response → v3 command_result
-    "status": MessageType.DEVICE_STATUS,           # v2 status update → v3 device_status
-    "event": MessageType.WAKE_EVENT,               # v2 generic event → v3 wake_event
+    "handshake": MessageType.DEVICE_REGISTER,  # legacy registration handshake
+    "text": MessageType.COMMAND,  # wire-format "TEXT" (lowercased in _normalise_v1)
+    "response": MessageType.COMMAND_RESULT,  # v2 command response → v3 command_result
+    "status": MessageType.DEVICE_STATUS,  # v2 status update → v3 device_status
+    "event": MessageType.WAKE_EVENT,  # v2 generic event → v3 wake_event
 }
 
 
@@ -314,9 +308,9 @@ def aip_v2_binary_to_v3(raw_bytes: bytes) -> Optional[dict]:
     """
     try:
         from enhancements.multidevice.device_protocol import (
-            AIPMessage as V2BinaryMessage,
             _V2_TO_V3_MSG_TYPE,
         )
+        from enhancements.multidevice.device_protocol import AIPMessage as V2BinaryMessage
 
         v2_msg = V2BinaryMessage.from_bytes(raw_bytes)
 
@@ -458,6 +452,7 @@ def parse_message_strict(data: Union[str, dict]) -> AIPMessage:
 # Parallel-result payload extraction helper
 # ---------------------------------------------------------------------------
 
+
 def extract_parallel_result_payload(message: AIPMessage):
     """
     Extract a :class:`~galaxy_gateway.protocol.aip_v3.ParallelResultPayload`
@@ -481,6 +476,7 @@ def extract_parallel_result_payload(message: AIPMessage):
     # Shallow copy is intentional — we only read/rename top-level keys (group_id,
     # subtask_results/device_results) and never mutate nested structures.
     import copy as _copy
+
     data: dict = _copy.deepcopy(dict(payload))
     if "group_id" not in data and message.task_id:
         data["group_id"] = message.task_id
@@ -500,6 +496,7 @@ def extract_parallel_result_payload(message: AIPMessage):
 # ---------------------------------------------------------------------------
 # Action-name normalisation shim
 # ---------------------------------------------------------------------------
+
 
 def normalize_action_in_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Resolve legacy action / command names inside a raw payload dict to their

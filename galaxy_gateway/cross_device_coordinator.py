@@ -120,12 +120,12 @@ CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED = (
 # execute_cross_device_task() so the dispatch path classification logic
 # is driven by the canonical boundary contract.
 from core.cross_device_dispatch_boundary import (  # noqa: E402
+    CROSS_DEVICE_DISPATCH_PR02_SENTINEL,
     DISPATCH_PATH_CANONICAL,
-    DISPATCH_PATH_CONTROLLED_FALLBACK,
     DISPATCH_PATH_COMPAT_FALLBACK,
+    DISPATCH_PATH_CONTROLLED_FALLBACK,
     DISPATCH_PATH_LEGACY_BYPASS,
     SUBSTRATE_CALLER_DEVICE_ROUTER,
-    CROSS_DEVICE_DISPATCH_PR02_SENTINEL,
 )
 
 CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
@@ -136,18 +136,19 @@ CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
 _SUBSTRATE_CALLER_CTX_KEY = "_galaxy_cross_device_substrate_caller"
 
 import asyncio
+import hashlib
 import logging
 import os
 import shutil
-import hashlib
 import tempfile
 import unicodedata
-from typing import Dict, List, Optional, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from core.device_types import DeviceType
 from galaxy_gateway.device_router import device_router
 from galaxy_gateway.multi_subject_closure_surface import attach_closure_candidate  # noqa: E402
 from galaxy_gateway.observability import get_gateway_metrics
-from core.device_types import DeviceType
 
 logger = logging.getLogger(__name__)
 
@@ -354,10 +355,7 @@ class CrossDeviceCoordinator:
         _legacy_path_used = None
         if _dispatch_path == DISPATCH_PATH_COMPAT_FALLBACK:
             _legacy_path_used = (
-                _compat_legacy_bypass
-                or _compat_path_used
-                or _caller
-                or "cross_device_coordinator.compat_fallback"
+                _compat_legacy_bypass or _compat_path_used or _caller or "cross_device_coordinator.compat_fallback"
             )
         elif _is_legacy_bypass:
             _legacy_path_used = "cross_device_coordinator.execute_cross_device_task"
@@ -373,9 +371,9 @@ class CrossDeviceCoordinator:
             )
             try:
                 from core.multi_device_control_integrity import (
-                    record_integrity_event,
-                    build_dispatch_authority_record,
                     DispatchPathKind,
+                    build_dispatch_authority_record,
+                    record_integrity_event,
                 )
 
                 _rec = build_dispatch_authority_record(
@@ -398,8 +396,8 @@ class CrossDeviceCoordinator:
             try:
                 from core.device_formation.formation_resolver import resolve_formation
                 from core.source_runtime_posture import (
-                    resolve_source_runtime_posture,
                     record_source_runtime_posture,
+                    resolve_source_runtime_posture,
                 )
 
                 _ctx_inner = context or {}
@@ -442,9 +440,9 @@ class CrossDeviceCoordinator:
                 # Record formation truth in integrity runtime
                 try:
                     from core.multi_device_control_integrity import (
-                        record_integrity_event,
-                        build_formation_truth_record,
                         FormationTruthConsistency,
+                        build_formation_truth_record,
+                        record_integrity_event,
                     )
 
                     _frec = build_formation_truth_record(
@@ -784,7 +782,7 @@ class CrossDeviceCoordinator:
         if not file_path:
             return ""
         # Unicode 规范化，防止 NFC/NFD 不同编码绕过验证
-        file_path = unicodedata.normalize('NFC', file_path)
+        file_path = unicodedata.normalize("NFC", file_path)
         # 提取文件名，丢弃任何路径遍历尝试
         safe_name = os.path.basename(file_path)
         if not safe_name:
@@ -968,9 +966,7 @@ class CrossDeviceCoordinator:
                     device_router.dispatch_task({"task_id": f"media_{device.device_id}", "payload": task}, device)
                 )
 
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True), timeout=30
-            )
+            results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=30)
 
             success_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
 
@@ -1020,9 +1016,7 @@ class CrossDeviceCoordinator:
                     device_router.dispatch_task({"task_id": f"notify_{device.device_id}", "payload": task}, device)
                 )
 
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True), timeout=30
-            )
+            results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=30)
 
             success_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
 

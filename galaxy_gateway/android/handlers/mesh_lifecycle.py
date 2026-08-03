@@ -42,9 +42,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # PR-13 哨兵 — 权威性标识
-MESH_LIFECYCLE_HANDLER_IS_CANONICAL_PR13: str = (
-    "MESH_LIFECYCLE_HANDLER::CANONICAL_STATEFUL_PR13"
-)
+MESH_LIFECYCLE_HANDLER_IS_CANONICAL_PR13: str = "MESH_LIFECYCLE_HANDLER::CANONICAL_STATEFUL_PR13"
 
 # ---------------------------------------------------------------------------
 # 模块级导入（以 try/except 保护，确保在依赖不可用时模块仍可导入）
@@ -53,10 +51,10 @@ MESH_LIFECYCLE_HANDLER_IS_CANONICAL_PR13: str = (
 
 try:
     from core.mesh.android_mesh_lifecycle_store import (
-        record_mesh_join,
-        record_mesh_result,
-        record_mesh_leave,
         get_android_mesh_lifecycle_store,
+        record_mesh_join,
+        record_mesh_leave,
+        record_mesh_result,
     )
 except ImportError:  # pragma: no cover
     record_mesh_join = None  # type: ignore[assignment]
@@ -73,6 +71,7 @@ def _get_lifecycle_coordinator() -> Optional[Any]:
     """返回 MeshSessionLifecycleCoordinator 单例，不可用时返回 ``None``。"""
     try:
         from core.mesh.mesh_session_lifecycle import get_lifecycle_coordinator
+
         return get_lifecycle_coordinator()
     except ImportError:
         logger.debug("MeshSessionLifecycleCoordinator 不可用（ImportError）")

@@ -14,8 +14,10 @@ from galaxy_gateway.dependencies import get_llm_router_instance
 try:
     from core.auth import require_auth as _require_auth
 except ImportError:
+
     async def _require_auth():  # type: ignore[misc]
         return {"authenticated": True, "dev_mode": True}
+
 
 logger = logging.getLogger(__name__)
 

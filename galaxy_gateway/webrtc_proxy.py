@@ -55,12 +55,13 @@ from typing import Any, Dict, List, Optional, Set
 import httpx
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
-from core.port_config import get_service_port, get_node_port
+
+from core.port_config import get_node_port, get_service_port
 from galaxy_gateway.cross_device_switch import (
-    is_cross_device_enabled,
-    WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
     ERROR_CODE_CROSS_DEVICE_DISABLED,
     ERROR_MSG_CROSS_DEVICE_DISABLED,
+    WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
+    is_cross_device_enabled,
 )
 from galaxy_gateway.observability import (
     TraceContext,
@@ -100,7 +101,7 @@ _CANDIDATE_TYPE_PRIORITY: Dict[str, int] = {
     "relay": 0,
     "srflx": 1,
     "prflx": 2,
-    "host":  3,
+    "host": 3,
 }
 
 #: Fallback priority value for candidate types not in ``_CANDIDATE_TYPE_PRIORITY``.
@@ -112,6 +113,7 @@ NODE95_CONNECT_TIMEOUT_S: int = 5
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_node95_url() -> str:
     """Return current Node_95 base URL from environment."""
@@ -290,6 +292,7 @@ def enrich_signaling_message(raw: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 async def check_node95_reachable() -> bool:
     """
     Probe Node_95 /health endpoint.
@@ -460,7 +463,10 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
     )
     logger.info(
         "webrtc_signaling_start device_id=%s trace_id=%s node95_url=%s timeout_s=%d",
-        device_id, trace_id, node95_ws_url, SIGNALING_TIMEOUT_S,
+        device_id,
+        trace_id,
+        node95_ws_url,
+        SIGNALING_TIMEOUT_S,
     )
 
     session_start = time.monotonic()
@@ -476,19 +482,24 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
             )
             logger.info(
                 "webrtc_signaling_tunnel_open device_id=%s trace_id=%s",
-                device_id, trace_id,
+                device_id,
+                trace_id,
             )
 
             # Push ICE servers to Android client immediately so it can
             # configure RTCPeerConnection before the first offer arrives.
             ice_servers = _get_ice_servers()
             if ice_servers:
-                await client_ws.send_text(json.dumps({
-                    "type": "ice_servers",
-                    "ice_servers": ice_servers,
-                    "trace_id": trace_id,
-                    "span_id": trace_ctx.span_id,
-                }))
+                await client_ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "ice_servers",
+                            "ice_servers": ice_servers,
+                            "trace_id": trace_id,
+                            "span_id": trace_ctx.span_id,
+                        }
+                    )
+                )
                 # Increment TURN usage counter when TURN servers are present
                 if any("turn:" in url for srv in ice_servers for url in (srv.get("urls") or [])):
                     metrics.inc("turn_fallback_total")
@@ -501,7 +512,9 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
                     )
                 logger.debug(
                     "webrtc_ice_servers_pushed device_id=%s trace_id=%s count=%d",
-                    device_id, trace_id, len(ice_servers),
+                    device_id,
+                    trace_id,
+                    len(ice_servers),
                 )
 
             async def _client_to_node() -> None:
@@ -513,7 +526,9 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
                 except (WebSocketDisconnect, Exception) as exc:
                     logger.debug(
                         "webrtc_client_to_node_closed device_id=%s trace_id=%s reason=%s",
-                        device_id, trace_id, exc,
+                        device_id,
+                        trace_id,
+                        exc,
                     )
 
             async def _node_to_client() -> None:
@@ -535,16 +550,16 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
                 except (WebSocketDisconnect, Exception) as exc:
                     logger.debug(
                         "webrtc_node_to_client_closed device_id=%s trace_id=%s reason=%s",
-                        device_id, trace_id, exc,
+                        device_id,
+                        trace_id,
+                        exc,
                     )
 
             tasks = [
                 asyncio.create_task(_client_to_node()),
                 asyncio.create_task(_node_to_client()),
             ]
-            _done, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED
-            )
+            _done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in pending:
                 task.cancel()
                 try:
@@ -564,7 +579,8 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
             )
             logger.info(
                 "webrtc_signaling_session_end device_id=%s trace_id=%s",
-                device_id, trace_id,
+                device_id,
+                trace_id,
             )
 
     try:
@@ -587,7 +603,9 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
         )
         logger.warning(
             "webrtc_signaling_timeout device_id=%s trace_id=%s timeout_s=%d",
-            device_id, trace_id, SIGNALING_TIMEOUT_S,
+            device_id,
+            trace_id,
+            SIGNALING_TIMEOUT_S,
         )
         try:
             await client_ws.close(
@@ -612,7 +630,9 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
         )
         logger.warning(
             "webrtc_signaling_node95_unreachable device_id=%s trace_id=%s error=%s",
-            device_id, trace_id, exc,
+            device_id,
+            trace_id,
+            exc,
         )
         try:
             await client_ws.close(code=1011, reason="Node_95 WebRTC Receiver unavailable")
@@ -633,9 +653,7 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
 _webrtc_task_sessions: Dict[str, Dict[str, Any]] = {}
 
 #: Default timeout (seconds) to wait for WebRTC data channel to become ready.
-WEBRTC_TASK_READY_TIMEOUT_S: float = float(
-    os.getenv("GALAXY_WEBRTC_TASK_READY_TIMEOUT_S", "15")
-)
+WEBRTC_TASK_READY_TIMEOUT_S: float = float(os.getenv("GALAXY_WEBRTC_TASK_READY_TIMEOUT_S", "15"))
 
 #: Polling interval (seconds) while waiting for the ingress bridge to report
 #: that frames are flowing from a specific device.
@@ -689,7 +707,9 @@ def register_webrtc_task_session(
     }
     logger.info(
         "webrtc_task_session_registered device_id=%s trace_id=%s state=%s",
-        device_id, trace_id, state,
+        device_id,
+        trace_id,
+        state,
     )
 
 
@@ -701,7 +721,9 @@ def mark_webrtc_task_session_state(device_id: str, state: str) -> None:
         sess["state"] = state
         logger.debug(
             "webrtc_task_session_state device_id=%s %s → %s",
-            device_id, old_state, state,
+            device_id,
+            old_state,
+            state,
         )
 
 
@@ -768,7 +790,8 @@ async def initiate_webrtc_for_task(
         mark_webrtc_task_session_state(device_id, "node95_unreachable")
         logger.warning(
             "webrtc_task_initiate: Node_95 unreachable device_id=%s trace_id=%s",
-            device_id, trace_id,
+            device_id,
+            trace_id,
         )
         return WebRTCTaskReadinessResult(
             success=False,
@@ -789,27 +812,25 @@ async def initiate_webrtc_for_task(
             _elapsed = (time.monotonic() - _t0) * 1000
             mark_webrtc_task_session_state(device_id, "bridge_disabled")
             logger.warning(
-                "webrtc_task_initiate: WebRTCIngressBridge disabled "
-                "device_id=%s trace_id=%s",
-                device_id, trace_id,
+                "webrtc_task_initiate: WebRTCIngressBridge disabled " "device_id=%s trace_id=%s",
+                device_id,
+                trace_id,
             )
             return WebRTCTaskReadinessResult(
                 success=False,
                 device_id=device_id,
                 trace_id=trace_id,
-                message=(
-                    "WebRTCIngressBridge is disabled "
-                    "(enable_webrtc_data_channel=false)"
-                ),
+                message=("WebRTCIngressBridge is disabled " "(enable_webrtc_data_channel=false)"),
                 latency_ms=round(_elapsed, 1),
             )
     except Exception as _bridge_exc:
         _elapsed = (time.monotonic() - _t0) * 1000
         mark_webrtc_task_session_state(device_id, f"bridge_error:{_bridge_exc}")
         logger.warning(
-            "webrtc_task_initiate: WebRTCIngressBridge unavailable "
-            "device_id=%s trace_id=%s error=%s",
-            device_id, trace_id, _bridge_exc,
+            "webrtc_task_initiate: WebRTCIngressBridge unavailable " "device_id=%s trace_id=%s error=%s",
+            device_id,
+            trace_id,
+            _bridge_exc,
         )
         return WebRTCTaskReadinessResult(
             success=False,
@@ -831,9 +852,11 @@ async def initiate_webrtc_for_task(
         pass
 
     logger.info(
-        "webrtc_task_initiate: polling for frames device_id=%s trace_id=%s "
-        "timeout_s=%.1f initial_frames=%d",
-        device_id, trace_id, timeout_s, _initial_frames,
+        "webrtc_task_initiate: polling for frames device_id=%s trace_id=%s " "timeout_s=%.1f initial_frames=%d",
+        device_id,
+        trace_id,
+        timeout_s,
+        _initial_frames,
     )
 
     while time.monotonic() < _deadline:
@@ -843,18 +866,17 @@ async def initiate_webrtc_for_task(
                 _elapsed = (time.monotonic() - _t0) * 1000
                 mark_webrtc_task_session_state(device_id, "ready")
                 logger.info(
-                    "webrtc_task_initiate: READY device_id=%s trace_id=%s "
-                    "frames=%d latency_ms=%.1f",
-                    device_id, trace_id, _current_frames, _elapsed,
+                    "webrtc_task_initiate: READY device_id=%s trace_id=%s " "frames=%d latency_ms=%.1f",
+                    device_id,
+                    trace_id,
+                    _current_frames,
+                    _elapsed,
                 )
                 return WebRTCTaskReadinessResult(
                     success=True,
                     device_id=device_id,
                     trace_id=trace_id,
-                    message=(
-                        f"WebRTC video stream ready for {device_id} "
-                        f"({_current_frames} frames ingested)"
-                    ),
+                    message=(f"WebRTC video stream ready for {device_id} " f"({_current_frames} frames ingested)"),
                     latency_ms=round(_elapsed, 1),
                 )
         except Exception:
@@ -865,9 +887,11 @@ async def initiate_webrtc_for_task(
     _elapsed = (time.monotonic() - _t0) * 1000
     mark_webrtc_task_session_state(device_id, "timeout")
     logger.warning(
-        "webrtc_task_initiate: TIMEOUT device_id=%s trace_id=%s "
-        "timeout_s=%.1f latency_ms=%.1f",
-        device_id, trace_id, timeout_s, _elapsed,
+        "webrtc_task_initiate: TIMEOUT device_id=%s trace_id=%s " "timeout_s=%.1f latency_ms=%.1f",
+        device_id,
+        trace_id,
+        timeout_s,
+        _elapsed,
     )
     return WebRTCTaskReadinessResult(
         success=False,

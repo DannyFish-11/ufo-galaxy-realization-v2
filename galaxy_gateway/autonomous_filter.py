@@ -46,10 +46,12 @@ T = TypeVar("T")
 # Config helper
 # ---------------------------------------------------------------------------
 
+
 def _prefer_autonomous() -> bool:
     """Return the ``prefer_autonomous`` config flag (default ``True``)."""
     try:
         from core.unified_config import config
+
         val = config.get("prefer_autonomous", default=True)
         if val is None:
             return True
@@ -61,6 +63,7 @@ def _prefer_autonomous() -> bool:
 # ---------------------------------------------------------------------------
 # Per-device check
 # ---------------------------------------------------------------------------
+
 
 def is_autonomous_device(
     metadata: Dict[str, Any],
@@ -104,6 +107,7 @@ def is_autonomous_device(
 # Collection-level filter with fallback
 # ---------------------------------------------------------------------------
 
+
 def filter_autonomous_devices(
     devices: Sequence[T],
     *,
@@ -140,7 +144,8 @@ def filter_autonomous_devices(
         return online
 
     autonomous: List[T] = [
-        d for d in online
+        d
+        for d in online
         if is_autonomous_device(
             get_metadata(d),
             require_cross_device=require_cross_device,

@@ -48,21 +48,20 @@ import logging  # auto: ensure module logger is defined
 logger = logging.getLogger(__name__)
 
 
-import json
-import re
-import os
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
-from enum import Enum
 import asyncio
-
+import json
+import os
+import re
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.device_types import DeviceStatus, DeviceType
 
 # ============================================================================
 # 数据结构定义
 # ============================================================================
-
-from core.device_types import DeviceType, DeviceStatus
 
 
 @dataclass

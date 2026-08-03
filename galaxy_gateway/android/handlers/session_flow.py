@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def handle_session_migrate(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_session_migrate(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle Android session migration via the canonical session migration helper."""
     del bridge, websocket
 
@@ -23,11 +21,7 @@ async def handle_session_migrate(
     correlation_id = message.get("message_id")
     payload = message.get("payload") or {}
     session_id = str(message.get("session_id") or payload.get("session_id") or "")
-    target_device_id = str(
-        message.get("target_device_id")
-        or payload.get("target_device_id")
-        or device_id
-    )
+    target_device_id = str(message.get("target_device_id") or payload.get("target_device_id") or device_id)
 
     logger.info(
         "Android session migrate requested: session_id=%s source=%s target=%s",

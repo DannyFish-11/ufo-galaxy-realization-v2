@@ -61,6 +61,7 @@ _gateway_logger = logging.getLogger("Galaxy.Gateway")
 # Sampling
 # ---------------------------------------------------------------------------
 
+
 def _get_sample_rate() -> float:
     """Read the configured trace sample rate from the environment (0.0–1.0)."""
     try:
@@ -85,6 +86,7 @@ def _should_sample(*, always: bool = False) -> bool:
 # ---------------------------------------------------------------------------
 # TraceContext
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TraceContext:
@@ -115,12 +117,7 @@ class TraceContext:
         Accepts both ``trace_id`` / ``span_id`` keys (canonical) and the
         ``x-trace-id`` / ``x-span-id`` header-style variants.
         """
-        trace_id = (
-            msg.get("trace_id")
-            or msg.get("x-trace-id")
-            or msg.get("traceId")
-            or str(uuid.uuid4())
-        )
+        trace_id = msg.get("trace_id") or msg.get("x-trace-id") or msg.get("traceId") or str(uuid.uuid4())
         span_id = str(uuid.uuid4())  # always a fresh span at the gateway
         return cls(trace_id=str(trace_id), span_id=span_id)
 
@@ -137,18 +134,20 @@ class TraceContext:
 # ---------------------------------------------------------------------------
 
 #: Events that are *always* written (bypass sampling).
-_ALWAYS_LOG_EVENTS: frozenset = frozenset({
-    "signaling_error",
-    "signaling_timeout",
-    "bridge_handoff_failed",
-    "bridge_fallback",
-    "routing_failed",
-    "turn_fallback",
-    "node95_unreachable",
-    "cross_device_blocked",
-    "trace_id_injected",
-    "span_id_injected",
-})
+_ALWAYS_LOG_EVENTS: frozenset = frozenset(
+    {
+        "signaling_error",
+        "signaling_timeout",
+        "bridge_handoff_failed",
+        "bridge_fallback",
+        "routing_failed",
+        "turn_fallback",
+        "node95_unreachable",
+        "cross_device_blocked",
+        "trace_id_injected",
+        "span_id_injected",
+    }
+)
 
 
 def emit_gateway_log(
@@ -197,18 +196,15 @@ def emit_gateway_log(
 # Metrics
 # ---------------------------------------------------------------------------
 
+
 class _LatencyHistogram:
     """Simple fixed-bucket latency histogram (thread-safe)."""
 
     # Default bucket boundaries in milliseconds
-    _DEFAULT_BUCKETS_MS: Sequence[float] = (
-        10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 30000
-    )
+    _DEFAULT_BUCKETS_MS: Sequence[float] = (10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 30000)
 
     def __init__(self, buckets_ms: Optional[Sequence[float]] = None) -> None:
-        self._buckets: List[float] = sorted(
-            buckets_ms if buckets_ms is not None else self._DEFAULT_BUCKETS_MS
-        )
+        self._buckets: List[float] = sorted(buckets_ms if buckets_ms is not None else self._DEFAULT_BUCKETS_MS)
         self._lock = threading.Lock()
         self._counts: List[int] = [0] * len(self._buckets)
         self._inf_count: int = 0
@@ -230,10 +226,7 @@ class _LatencyHistogram:
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
-            buckets = {
-                f"le_{b}ms": c
-                for b, c in zip(self._buckets, self._counts)
-            }
+            buckets = {f"le_{b}ms": c for b, c in zip(self._buckets, self._counts)}
             buckets["le_inf"] = self._inf_count
             return {
                 "count": self._total,
@@ -267,13 +260,13 @@ class _LatencyHistogram:
                 label_str = f'le="{boundary}"'
                 if labels:
                     label_str = f"{labels},{label_str}"
-                lines.append(f'{metric_name}_bucket{{{label_str}}} {cumulative}')
+                lines.append(f"{metric_name}_bucket{{{label_str}}} {cumulative}")
             # +Inf bucket
             cumulative += self._inf_count
             inf_label = 'le="+Inf"'
             if labels:
                 inf_label = f"{labels},{inf_label}"
-            lines.append(f'{metric_name}_bucket{{{inf_label}}} {cumulative}')
+            lines.append(f"{metric_name}_bucket{{{inf_label}}} {cumulative}")
             lines.append(f"{metric_name}_sum {self._sum_ms:.3f}")
             lines.append(f"{metric_name}_count {self._total}")
         return lines
@@ -387,61 +380,69 @@ class GatewayMetrics:
             lines.append(f"{name} {value}")
 
         with self._lock:
-            _counter("galaxy_gateway_signaling_total",
-                     "Total WebRTC signaling sessions started",
-                     self.signaling_total)
-            _counter("galaxy_gateway_signaling_success_total",
-                     "WebRTC signaling sessions completed successfully",
-                     self.signaling_success)
-            _counter("galaxy_gateway_signaling_failure_total",
-                     "WebRTC signaling sessions ended with error or timeout",
-                     self.signaling_failure)
-            _counter("galaxy_gateway_signaling_timeout_total",
-                     "WebRTC signaling sessions timed out",
-                     self.signaling_timeout)
-            _counter("galaxy_gateway_turn_fallback_total",
-                     "Times TURN relay was used as ICE fallback",
-                     self.turn_fallback_total)
-            _counter("galaxy_gateway_candidate_retry_total",
-                     "ICE candidate retry events",
-                     self.candidate_retry_total)
-            _counter("galaxy_gateway_bridge_handoff_total",
-                     "Agent bridge handoff attempts",
-                     self.bridge_handoff_total)
-            _counter("galaxy_gateway_bridge_handoff_success_total",
-                     "Agent bridge successful handoffs",
-                     self.bridge_handoff_success)
-            _counter("galaxy_gateway_bridge_handoff_failure_total",
-                     "Agent bridge failed handoffs",
-                     self.bridge_handoff_failure)
-            _counter("galaxy_gateway_bridge_fallback_total",
-                     "Agent bridge fallbacks to local execution",
-                     self.bridge_fallback_total)
-            _counter("galaxy_gateway_routing_total",
-                     "Task routing attempts",
-                     self.routing_total)
-            _counter("galaxy_gateway_routing_success_total",
-                     "Successful task routings",
-                     self.routing_success)
-            _counter("galaxy_gateway_routing_failure_total",
-                     "Failed task routings",
-                     self.routing_failure)
-            _counter("galaxy_legacy_dispatch_total",
-                     "Observable count of legacy dispatch path activations",
-                     self.legacy_dispatch_total)
+            _counter("galaxy_gateway_signaling_total", "Total WebRTC signaling sessions started", self.signaling_total)
+            _counter(
+                "galaxy_gateway_signaling_success_total",
+                "WebRTC signaling sessions completed successfully",
+                self.signaling_success,
+            )
+            _counter(
+                "galaxy_gateway_signaling_failure_total",
+                "WebRTC signaling sessions ended with error or timeout",
+                self.signaling_failure,
+            )
+            _counter(
+                "galaxy_gateway_signaling_timeout_total", "WebRTC signaling sessions timed out", self.signaling_timeout
+            )
+            _counter(
+                "galaxy_gateway_turn_fallback_total",
+                "Times TURN relay was used as ICE fallback",
+                self.turn_fallback_total,
+            )
+            _counter("galaxy_gateway_candidate_retry_total", "ICE candidate retry events", self.candidate_retry_total)
+            _counter("galaxy_gateway_bridge_handoff_total", "Agent bridge handoff attempts", self.bridge_handoff_total)
+            _counter(
+                "galaxy_gateway_bridge_handoff_success_total",
+                "Agent bridge successful handoffs",
+                self.bridge_handoff_success,
+            )
+            _counter(
+                "galaxy_gateway_bridge_handoff_failure_total",
+                "Agent bridge failed handoffs",
+                self.bridge_handoff_failure,
+            )
+            _counter(
+                "galaxy_gateway_bridge_fallback_total",
+                "Agent bridge fallbacks to local execution",
+                self.bridge_fallback_total,
+            )
+            _counter("galaxy_gateway_routing_total", "Task routing attempts", self.routing_total)
+            _counter("galaxy_gateway_routing_success_total", "Successful task routings", self.routing_success)
+            _counter("galaxy_gateway_routing_failure_total", "Failed task routings", self.routing_failure)
+            _counter(
+                "galaxy_legacy_dispatch_total",
+                "Observable count of legacy dispatch path activations",
+                self.legacy_dispatch_total,
+            )
 
-        lines.extend(self.signaling_latency_ms.to_prometheus_lines(
-            "galaxy_gateway_signaling_latency_ms",
-            "WebRTC signaling session latency in milliseconds",
-        ))
-        lines.extend(self.bridge_latency_ms.to_prometheus_lines(
-            "galaxy_gateway_bridge_latency_ms",
-            "Agent bridge handoff latency in milliseconds",
-        ))
-        lines.extend(self.routing_latency_ms.to_prometheus_lines(
-            "galaxy_gateway_routing_latency_ms",
-            "Task routing latency in milliseconds",
-        ))
+        lines.extend(
+            self.signaling_latency_ms.to_prometheus_lines(
+                "galaxy_gateway_signaling_latency_ms",
+                "WebRTC signaling session latency in milliseconds",
+            )
+        )
+        lines.extend(
+            self.bridge_latency_ms.to_prometheus_lines(
+                "galaxy_gateway_bridge_latency_ms",
+                "Agent bridge handoff latency in milliseconds",
+            )
+        )
+        lines.extend(
+            self.routing_latency_ms.to_prometheus_lines(
+                "galaxy_gateway_routing_latency_ms",
+                "Task routing latency in milliseconds",
+            )
+        )
 
         return "\n".join(lines) + "\n"
 

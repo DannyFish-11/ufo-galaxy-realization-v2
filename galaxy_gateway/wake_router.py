@@ -39,7 +39,7 @@ import uuid as _uuid_mod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Callable, Any
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("UFO-Galaxy.WakeRouter")
 
@@ -48,16 +48,19 @@ logger = logging.getLogger("UFO-Galaxy.WakeRouter")
 # 数据模型
 # =============================================================================
 
+
 class WakeTaskType(Enum):
     """唤醒后任务类型，用于能力匹配评分"""
-    VOICE = "voice"         # 语音任务，优先有扬声器的设备
-    VISUAL = "visual"       # 视觉任务，优先有屏幕的设备
-    GENERAL = "general"     # 通用任务，按活跃度选择
+
+    VOICE = "voice"  # 语音任务，优先有扬声器的设备
+    VISUAL = "visual"  # 视觉任务，优先有屏幕的设备
+    GENERAL = "general"  # 通用任务，按活跃度选择
 
 
 @dataclass
 class WakeEvent:
     """唤醒事件"""
+
     event_id: str
     source_device_id: str
     wake_word: str
@@ -81,6 +84,7 @@ class WakeEvent:
 @dataclass
 class RouteDecision:
     """路由决策结果"""
+
     selected_device_id: str
     score: float
     reason: str
@@ -101,6 +105,7 @@ class RouteDecision:
 # 唤醒路由器
 # =============================================================================
 
+
 class WakeRouter:
     """
     智能唤醒路由器
@@ -114,9 +119,9 @@ class WakeRouter:
     DEDUP_WINDOW_SECONDS: float = 2.0
 
     # 评分权重
-    WEIGHT_ACTIVITY: float = 0.4     # 活跃度权重
-    WEIGHT_CAPABILITY: float = 0.3   # 能力匹配权重
-    WEIGHT_ATTENTION: float = 0.3    # 注意力焦点权重
+    WEIGHT_ACTIVITY: float = 0.4  # 活跃度权重
+    WEIGHT_CAPABILITY: float = 0.3  # 能力匹配权重
+    WEIGHT_ATTENTION: float = 0.3  # 注意力焦点权重
 
     def __init__(self):
         # 已处理的唤醒事件：wake_word -> (timestamp, event_id)
@@ -244,7 +249,8 @@ class WakeRouter:
                 _canonical_scoring_used = True
                 logger.debug(
                     "[WakeRouter] canonical DeviceScoringEngine selected device=%s score=%.3f",
-                    best_device_id, best_score,
+                    best_device_id,
+                    best_score,
                 )
         except Exception as _scoring_err:
             logger.debug(
@@ -256,9 +262,7 @@ class WakeRouter:
         if best_device_id is None:
             scored = []
             for device_id, device_info in devices.items():
-                score, reason_parts = self._score_device(
-                    device_id, device_info, wake_event
-                )
+                score, reason_parts = self._score_device(device_id, device_info, wake_event)
                 scored.append((device_id, score, " | ".join(reason_parts)))
             scored.sort(key=lambda x: x[1], reverse=True)
             best_device_id, best_score, best_reason = scored[0]
@@ -274,20 +278,22 @@ class WakeRouter:
         with self._lock:
             self._route_history.append(decision)
             if len(self._route_history) > self._max_history:
-                self._route_history = self._route_history[-self._max_history:]
+                self._route_history = self._route_history[-self._max_history :]
 
         logger.info(
             "[WakeRouter] 路由决策: device=%s score=%.2f reason='%s' canonical_scoring=%s",
-            best_device_id, best_score, best_reason, _canonical_scoring_used,
+            best_device_id,
+            best_score,
+            best_reason,
+            _canonical_scoring_used,
         )
 
         # Stage 10: Register routing decision in TaskGraphRuntime so that
         # wake-initiated task paths are tracked in the canonical task graph.
         try:
-            from core.task_graph_runtime import (
-                get_task_graph_runtime as _get_tgr,
-                WorkflowContributorKind as _WCK,
-            )
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr
+
             _task_id = f"wake_{_uuid_mod.uuid4().hex[:16]}"
             _get_tgr().register_node_raw(
                 task_id=_task_id,
@@ -299,12 +305,11 @@ class WakeRouter:
             )
             logger.debug(
                 "[WakeRouter] registered wake routing in TaskGraphRuntime task_id=%s device=%s",
-                _task_id, best_device_id,
+                _task_id,
+                best_device_id,
             )
         except Exception as _tgr_err:
-            logger.debug(
-                "[WakeRouter] TaskGraphRuntime registration skipped: %s", _tgr_err
-            )
+            logger.debug("[WakeRouter] TaskGraphRuntime registration skipped: %s", _tgr_err)
 
         # 触发回调
         if self._on_decision:
@@ -496,11 +501,10 @@ class WakeRouter:
         # 从 galaxy_gateway.device_router 获取注册设备
         try:
             from galaxy_gateway.device_router import device_router
+
             for device_id, device in device_router.devices.items():
                 if device.status == "online":
-                    last_ts = (
-                        device.last_seen.timestamp() if device.last_seen else 0
-                    )
+                    last_ts = device.last_seen.timestamp() if device.last_seen else 0
                     entry = {
                         "capabilities": device.capabilities,
                         "last_heartbeat": last_ts,
@@ -517,6 +521,7 @@ class WakeRouter:
         # 从 core.device_communication 补充心跳/消息时间
         try:
             from core.device_communication import device_comm
+
             # 修复契约漂移:DeviceCommunication 存的是 self.connections(公开),
             # 不存在 _connections——原来这里 AttributeError 被下面的 except 吞掉。
             for device_id, conn in device_comm.connections.items():

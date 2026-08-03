@@ -70,12 +70,24 @@ class DeviceCapability:
             as ``NONE`` (0) so that governance decisions degrade conservatively.
             See :data:`CAPABILITY_ABSENT_GOVERNANCE_POLICY`.
         """
-        return (cls.NETWORK | cls.STORAGE | cls.COMPUTE |
-                cls.GUI_READ | cls.GUI_WRITE | cls.GUI_SCREENSHOT |
-                cls.INPUT_TOUCH | cls.INPUT_VOICE |
-                cls.SENSOR_GPS | cls.SENSOR_CAMERA | cls.SENSOR_MIC | cls.SENSOR_MOTION |
-                cls.SYSTEM_NOTIFICATION |
-                cls.COMM_BLUETOOTH | cls.COMM_NFC | cls.COMM_WIFI_DIRECT)
+        return (
+            cls.NETWORK
+            | cls.STORAGE
+            | cls.COMPUTE
+            | cls.GUI_READ
+            | cls.GUI_WRITE
+            | cls.GUI_SCREENSHOT
+            | cls.INPUT_TOUCH
+            | cls.INPUT_VOICE
+            | cls.SENSOR_GPS
+            | cls.SENSOR_CAMERA
+            | cls.SENSOR_MIC
+            | cls.SENSOR_MOTION
+            | cls.SYSTEM_NOTIFICATION
+            | cls.COMM_BLUETOOTH
+            | cls.COMM_NFC
+            | cls.COMM_WIFI_DIRECT
+        )
 
     @classmethod
     def has_capability(cls, capabilities: int, capability: int) -> bool:

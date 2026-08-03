@@ -107,6 +107,7 @@ def _get_rest_base() -> str:
     """Return the gateway's HTTP base URL (no trailing slash)."""
     try:
         from core.port_config import get_service_port
+
         default = f"http://localhost:{get_service_port('state_machine')}"
     except Exception:
         default = _DEFAULT_GATEWAY_URL
@@ -257,6 +258,7 @@ def build_client_config() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
+
 
 @router.get("/api/v1/config")
 async def client_config() -> Dict[str, Any]:

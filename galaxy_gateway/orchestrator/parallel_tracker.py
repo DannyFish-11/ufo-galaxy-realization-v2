@@ -45,13 +45,14 @@ logger = logging.getLogger(__name__)
 # Data-transfer objects
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ParallelSubtaskResult:
     """Result record for one subtask within a parallel group."""
 
     group_id: str
     subtask_index: int
-    status: str                         # success / failed / timeout
+    status: str  # success / failed / timeout
     latency_ms: int
     summary: Optional[str] = None
     errors: Optional[List[str]] = None
@@ -63,7 +64,7 @@ class ParallelGroupStatus:
     """Finalized status of a complete (or timed-out) parallel group."""
 
     group_id: str
-    status: str                          # success / partial_failed / timeout
+    status: str  # success / partial_failed / timeout
     results: List[ParallelSubtaskResult]
     started_at: float
     finished_at: float
@@ -93,10 +94,11 @@ class ParallelGroupStatus:
 # Internal group state
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _GroupState:
     group_id: str
-    expected_count: Optional[int]   # None → open-ended (auto-created groups)
+    expected_count: Optional[int]  # None → open-ended (auto-created groups)
     timeout_s: float
     started_at: float
     results: Dict[int, ParallelSubtaskResult] = field(default_factory=dict)
@@ -105,6 +107,7 @@ class _GroupState:
 # ---------------------------------------------------------------------------
 # Tracker
 # ---------------------------------------------------------------------------
+
 
 class ParallelGroupTracker:
     """Shared in-memory tracker for parallel subtask groups.
@@ -149,7 +152,9 @@ class ParallelGroupTracker:
             )
             logger.info(
                 "parallel_tracker: started group=%s expected=%d timeout=%.1fs",
-                group_id, expected_count, timeout_s,
+                group_id,
+                expected_count,
+                timeout_s,
             )
 
     async def record_result(
@@ -195,12 +200,12 @@ class ParallelGroupTracker:
             self._groups[group_id].results[subtask_index] = result
             logger.debug(
                 "parallel_tracker: recorded group=%s idx=%d status=%s",
-                group_id, subtask_index, status,
+                group_id,
+                subtask_index,
+                status,
             )
 
-    async def finalize_if_complete(
-        self, group_id: str
-    ) -> Optional[ParallelGroupStatus]:
+    async def finalize_if_complete(self, group_id: str) -> Optional[ParallelGroupStatus]:
         """Return finalized status when all expected subtasks are recorded, else None."""
         async with self._get_lock():
             state = self._groups.get(group_id)
@@ -225,15 +230,10 @@ class ParallelGroupTracker:
         """
         expired: Dict[str, ParallelGroupStatus] = {}
         async with self._get_lock():
-            overdue = [
-                gid for gid, state in self._groups.items()
-                if now_ts - state.started_at >= state.timeout_s
-            ]
+            overdue = [gid for gid, state in self._groups.items() if now_ts - state.started_at >= state.timeout_s]
             for gid in overdue:
                 state = self._groups[gid]
-                expected = state.expected_count or max(
-                    (max(state.results.keys()) + 1 if state.results else 0), 0
-                )
+                expected = state.expected_count or max((max(state.results.keys()) + 1 if state.results else 0), 0)
                 for idx in range(expected):
                     if idx not in state.results:
                         state.results[idx] = ParallelSubtaskResult(
@@ -244,7 +244,8 @@ class ParallelGroupTracker:
                         )
                         logger.warning(
                             "parallel_tracker: timeout on group=%s idx=%d",
-                            gid, idx,
+                            gid,
+                            idx,
                         )
 
                 status = self._finalize_locked(state)
@@ -253,7 +254,8 @@ class ParallelGroupTracker:
                 expired[gid] = status
                 logger.info(
                     "parallel_tracker: group=%s expired with status=%s",
-                    gid, status.status,
+                    gid,
+                    status.status,
                 )
         return expired
 
@@ -343,7 +345,9 @@ async def record_parallel_fields(payload: Dict[str, Any]) -> None:
         )
         logger.debug(
             "parallel_tracker: recorded group=%s idx=%d status=%s",
-            group_id, subtask_index, status,
+            group_id,
+            subtask_index,
+            status,
         )
     except Exception as _err:
         logger.warning("parallel_tracker: record_parallel_fields failed: %s", _err)

@@ -12,8 +12,8 @@ import uuid
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from galaxy_gateway.protocol.aip_v3 import TaskStatus
 from galaxy_gateway.android.message_builder import MessageBuilder
+from galaxy_gateway.protocol.aip_v3 import TaskStatus
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -92,10 +92,8 @@ except ImportError:
 # flow through the canonical unified ingress, NOT through direct sub-ingress
 # calls.  Import ingest_android_runtime_state_update as the single entry point.
 try:
-    from core.unified_runtime_truth_ingress import (
-        ingest_android_runtime_state_update as _ingest_via_canonical_ingress,
-        record_non_ingress_participant_truth_write as _record_bypass_attempt,
-    )
+    from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update as _ingest_via_canonical_ingress
+    from core.unified_runtime_truth_ingress import record_non_ingress_participant_truth_write as _record_bypass_attempt
 except ImportError:
     _ingest_via_canonical_ingress = None  # type: ignore[assignment]
     _record_bypass_attempt = None  # type: ignore[assignment]
@@ -112,11 +110,9 @@ except ImportError:
 # gracefully (fail-open so existing deployments are never broken by a missing
 # authority module).
 try:
-    from core.unified_continuity_legality_authority import (
-        ContinuityLegalityContext as _ContinuityLegalityContext,
-        ContinuityLegalityPath as _ContinuityLegalityPath,
-        evaluate_continuity_legality as _evaluate_continuity_legality,
-    )
+    from core.unified_continuity_legality_authority import ContinuityLegalityContext as _ContinuityLegalityContext
+    from core.unified_continuity_legality_authority import ContinuityLegalityPath as _ContinuityLegalityPath
+    from core.unified_continuity_legality_authority import evaluate_continuity_legality as _evaluate_continuity_legality
 except ImportError:
     _ContinuityLegalityContext = None  # type: ignore[assignment,misc]
     _ContinuityLegalityPath = None  # type: ignore[assignment]
@@ -163,9 +159,7 @@ _NON_TERMINAL_STATUS_VALUES = frozenset(
     }
 )
 _CANCELLED_STATUS_VALUES = frozenset({"cancelled", "canceled"})
-_TERMINAL_COMPLETED_STATUS_VALUES = frozenset(
-    {"completed", "failed", "degraded", "success", "error"}
-)
+_TERMINAL_COMPLETED_STATUS_VALUES = frozenset({"completed", "failed", "degraded", "success", "error"})
 
 
 def _signal_guard_accept(message: Dict[str, Any]) -> bool:
@@ -188,7 +182,8 @@ def _signal_guard_accept(message: Dict[str, Any]) -> bool:
     if key in _processed_signals:
         logger.debug(
             "task_lifecycle signal guard: duplicate signal suppressed key=%r type=%s",
-            key, message.get("type"),
+            key,
+            message.get("type"),
         )
         return False
     # Record as seen; evict the oldest entry first when at capacity so the
@@ -392,14 +387,11 @@ def _try_reconcile(message: Dict[str, Any]) -> None:
     if _reconcile_inbound_message is None:
         return
     payload = message.get("payload") or {}
-    has_key = (
-        bool(message.get("contract_id") or payload.get("contract_id"))
-        or bool(
-            message.get("session_id")
-            or payload.get("session_id")
-            or message.get("runtime_session_id")
-            or payload.get("runtime_session_id")
-        )
+    has_key = bool(message.get("contract_id") or payload.get("contract_id")) or bool(
+        message.get("session_id")
+        or payload.get("session_id")
+        or message.get("runtime_session_id")
+        or payload.get("runtime_session_id")
     )
     if not has_key:
         return
@@ -468,8 +460,7 @@ def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> N
         global RESULT_TRUTH_INGRESS_ERRORS  # noqa: PLW0603
         RESULT_TRUTH_INGRESS_ERRORS += 1
         logger.warning(
-            "PR-4V2 participant truth ingest failed (non-fatal, errors=%d): "
-            "truth_kind=%s task_id=%r exc=%s",
+            "PR-4V2 participant truth ingest failed (non-fatal, errors=%d): " "truth_kind=%s task_id=%r exc=%s",
             RESULT_TRUTH_INGRESS_ERRORS,
             truth_kind,
             message.get("task_id"),
@@ -508,31 +499,13 @@ def _check_result_ingress_continuity_legality(
         payload = message.get("payload") or {}
         ctx = _ContinuityLegalityContext(
             device_id=str(message.get("device_id") or ""),
-            runtime_session_id=str(
-                message.get("runtime_session_id")
-                or payload.get("runtime_session_id")
-                or ""
-            ),
+            runtime_session_id=str(message.get("runtime_session_id") or payload.get("runtime_session_id") or ""),
             runtime_attachment_session_id=str(
-                message.get("runtime_attachment_session_id")
-                or payload.get("runtime_attachment_session_id")
-                or ""
+                message.get("runtime_attachment_session_id") or payload.get("runtime_attachment_session_id") or ""
             ),
-            durable_session_id=str(
-                message.get("durable_session_id")
-                or payload.get("durable_session_id")
-                or ""
-            ),
-            contract_id=str(
-                message.get("contract_id")
-                or payload.get("contract_id")
-                or ""
-            ),
-            flow_id=str(
-                message.get("flow_id")
-                or payload.get("flow_id")
-                or ""
-            ),
+            durable_session_id=str(message.get("durable_session_id") or payload.get("durable_session_id") or ""),
+            contract_id=str(message.get("contract_id") or payload.get("contract_id") or ""),
+            flow_id=str(message.get("flow_id") or payload.get("flow_id") or ""),
         )
         report = _evaluate_continuity_legality(
             _ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
@@ -541,16 +514,13 @@ def _check_result_ingress_continuity_legality(
         return report.verdict.value, report.is_rejected
     except Exception as _ce:
         logger.debug(
-            "task_lifecycle: V1 continuity legality gate error "
-            "(non-fatal, allowing): %s",
+            "task_lifecycle: V1 continuity legality gate error " "(non-fatal, allowing): %s",
             _ce,
         )
         return "allow", False
 
 
-async def handle_task_result(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> None:
+async def handle_task_result(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> None:
     """处理任务结果，完成 Future 并触发 OpenClawd 记忆回流
 
     Durable idempotency guard
@@ -566,9 +536,7 @@ async def handle_task_result(
     result_status = message.get("status", "unknown")
     route_mode = message.get("route_mode", "cross_device")
     _payload_route_mode = (
-        message.get("payload", {}).get("route_mode")
-        if isinstance(message.get("payload"), dict)
-        else None
+        message.get("payload", {}).get("route_mode") if isinstance(message.get("payload"), dict) else None
     )
     if _payload_route_mode:
         route_mode = _payload_route_mode
@@ -576,7 +544,9 @@ async def handle_task_result(
 
     logger.info(
         "Task result received: task_id=%s device_id=%s status=%s",
-        task_id, device_id, result_status,
+        task_id,
+        device_id,
+        result_status,
     )
 
     # PR-46: Cross-repo schema/version gate enforcement.
@@ -588,6 +558,7 @@ async def handle_task_result(
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
         )
+
         _tl_msg_type = str(message.get("type") or "task_result")
         _tl_gate_decision = _evaluate_schema_gate(
             message_type=_tl_msg_type,
@@ -631,9 +602,7 @@ async def handle_task_result(
     # the result-ingress continuity gap so that stale, revoked, detached, or
     # otherwise continuity-invalid runtime/session identities cannot pollute
     # canonical truth.  Per RESULT_INGRESS_CONTINUITY_LEGALITY_POLICY.
-    _continuity_verdict, _continuity_rejected = (
-        _check_result_ingress_continuity_legality(message)
-    )
+    _continuity_verdict, _continuity_rejected = _check_result_ingress_continuity_legality(message)
     if _continuity_rejected:
         logger.warning(
             "handle_task_result: V1 continuity legality REJECTED result "
@@ -662,10 +631,10 @@ async def handle_task_result(
     if task_id:
         try:
             from core.durable_result_idempotency import check_result_idempotency
+
             if check_result_idempotency(task_id):
                 logger.info(
-                    "task_lifecycle: duplicate task result suppressed (durable store): "
-                    "task_id=%s device_id=%s",
+                    "task_lifecycle: duplicate task result suppressed (durable store): " "task_id=%s device_id=%s",
                     task_id,
                     device_id,
                 )
@@ -679,13 +648,13 @@ async def handle_task_result(
     _unified_result_ingress_ran = False
     _unified_result_ingress_outcome = None
     try:
+        from core.unified_result_ingress import AndroidIngressPayloadGrade as _AIPGrade
         from core.unified_result_ingress import (
-            AndroidIngressPayloadGrade as _AIPGrade,
             NormalizedResultEvent,
             ResultSourceChannel,
             ingest_result_async,
-            normalize_status as _normalize_status,
         )
+        from core.unified_result_ingress import normalize_status as _normalize_status
 
         payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
         _raw_replay_seq = _first_present_value(
@@ -820,25 +789,16 @@ async def handle_task_result(
         _unified_result_ingress_ran = True
         message["completion_notified"] = bool(_unified_result_ingress_outcome.completion_notified)
         message["is_fully_closed"] = bool(_unified_result_ingress_outcome.is_fully_closed)
-        message["completion_disposition"] = str(
-            _unified_result_ingress_outcome.completion_disposition or ""
-        )
+        message["completion_disposition"] = str(_unified_result_ingress_outcome.completion_disposition or "")
         message["continuity_rejected"] = bool(_unified_result_ingress_outcome.continuity_rejected)
         message["stale_epoch_rejected"] = bool(_unified_result_ingress_outcome.stale_epoch_rejected)
-        message["stale_classification"] = str(
-            _unified_result_ingress_outcome.stale_classification or ""
-        )
-        message["replay_ordering_decision"] = str(
-            _unified_result_ingress_outcome.replay_ordering_decision or ""
-        )
-        message["evidence_acceptance_verdict"] = str(
-            _unified_result_ingress_outcome.evidence_acceptance_verdict or ""
-        )
+        message["stale_classification"] = str(_unified_result_ingress_outcome.stale_classification or "")
+        message["replay_ordering_decision"] = str(_unified_result_ingress_outcome.replay_ordering_decision or "")
+        message["evidence_acceptance_verdict"] = str(_unified_result_ingress_outcome.evidence_acceptance_verdict or "")
         if _unified_result_ingress_outcome.incomplete_reason:
             message["incomplete_reason"] = _unified_result_ingress_outcome.incomplete_reason
         logger.info(
-            "handle_task_result: unified ingress outcome "
-            "task_id=%s disposition=%s fully_closed=%s source=%s",
+            "handle_task_result: unified ingress outcome " "task_id=%s disposition=%s fully_closed=%s source=%s",
             task_id,
             _unified_result_ingress_outcome.completion_disposition,
             _unified_result_ingress_outcome.is_fully_closed,
@@ -846,8 +806,7 @@ async def handle_task_result(
         )
     except Exception as _ingress_err:
         logger.warning(
-            "handle_task_result: unified ingress unavailable, falling back to legacy truth chain "
-            "task_id=%s err=%s",
+            "handle_task_result: unified ingress unavailable, falling back to legacy truth chain " "task_id=%s err=%s",
             task_id,
             _ingress_err,
         )
@@ -858,8 +817,8 @@ async def handle_task_result(
                 NormalizedResultEvent,
                 ResultSourceChannel,
                 ingest_result_async,
-                normalize_status as _normalize_status,
             )
+            from core.unified_result_ingress import normalize_status as _normalize_status
 
             _event = NormalizedResultEvent(
                 task_id=str(task_id or ""),
@@ -870,9 +829,7 @@ async def handle_task_result(
                 source_channel=ResultSourceChannel.LOCAL,
                 payload=dict(message),
                 runtime_session_id=str(message.get("session_id") or ""),
-                runtime_attachment_session_id=str(
-                    message.get("runtime_attachment_session_id") or ""
-                ),
+                runtime_attachment_session_id=str(message.get("runtime_attachment_session_id") or ""),
                 durable_session_id=str(message.get("durable_session_id") or ""),
                 session_epoch=message.get("session_epoch"),
                 is_stale=bool(message.get("is_stale", False)),
@@ -889,16 +846,10 @@ async def handle_task_result(
             _unified_result_ingress_outcome = _local_outcome
             message["completion_notified"] = bool(_local_outcome.completion_notified)
             message["is_fully_closed"] = bool(_local_outcome.is_fully_closed)
-            message["evidence_acceptance_verdict"] = str(
-                _local_outcome.evidence_acceptance_verdict or ""
-            )
+            message["evidence_acceptance_verdict"] = str(_local_outcome.evidence_acceptance_verdict or "")
             message["stale_epoch_rejected"] = bool(_local_outcome.stale_epoch_rejected)
-            message["stale_classification"] = str(
-                _local_outcome.stale_classification or ""
-            )
-            message["stale_epoch_evidence"] = dict(
-                _local_outcome.stale_epoch_evidence or {}
-            )
+            message["stale_classification"] = str(_local_outcome.stale_classification or "")
+            message["stale_epoch_evidence"] = dict(_local_outcome.stale_epoch_evidence or {})
             if _local_outcome.incomplete_reason:
                 message["incomplete_reason"] = _local_outcome.incomplete_reason
             logger.info(
@@ -925,6 +876,7 @@ async def handle_task_result(
     if task_id and not _unified_result_ingress_ran:
         try:
             from core.durable_result_idempotency import record_result_idempotency
+
             record_result_idempotency(task_id)
         except Exception as _idem_rec_exc:  # noqa: BLE001 — durable store must never block dispatch
             logger.debug(
@@ -1008,8 +960,7 @@ async def handle_task_result(
             global RESULT_DEVICE_ROUTER_ERRORS  # noqa: PLW0603
             RESULT_DEVICE_ROUTER_ERRORS += 1
             logger.warning(
-                "PR-1 P0: device_router.handle_task_result failed (non-fatal, errors=%d): "
-                "task_id=%r exc=%s",
+                "PR-1 P0: device_router.handle_task_result failed (non-fatal, errors=%d): " "task_id=%r exc=%s",
                 RESULT_DEVICE_ROUTER_ERRORS,
                 task_id,
                 _dr_exc,
@@ -1023,12 +974,7 @@ async def handle_task_result(
         )
 
     # OpenClawd 记忆回流
-    if (
-        (not _unified_result_ingress_ran)
-        and task_id
-        and device_id
-        and store_task_result is not None
-    ):
+    if (not _unified_result_ingress_ran) and task_id and device_id and store_task_result is not None:
         try:
             await store_task_result(
                 task_id=task_id,
@@ -1038,7 +984,9 @@ async def handle_task_result(
             )
             logger.debug(
                 "Memory backflow stored: task_id=%s device_id=%s route_mode=%s",
-                task_id, device_id, route_mode,
+                task_id,
+                device_id,
+                route_mode,
             )
         except Exception as bf_err:
             global RESULT_MEMORY_BACKFLOW_ERRORS  # noqa: PLW0603
@@ -1051,9 +999,7 @@ async def handle_task_result(
             )
 
 
-async def handle_task_end(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_task_end(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理任务结束通知"""
     task_id = message.get("task_id")
     device_id = message.get("device_id")
@@ -1061,7 +1007,9 @@ async def handle_task_end(
 
     logger.info(
         "Task lifecycle ended: task_id=%s device_id=%s final_status=%s",
-        task_id, device_id, final_status,
+        task_id,
+        device_id,
+        final_status,
     )
 
     # PR-13: reconcile inbound signal against host-side execution tracker
@@ -1098,8 +1046,7 @@ async def handle_task_end(
             )
         except Exception as _dr_exc:
             logger.debug(
-                "PR-1 P0: device_router.handle_task_result (task_end) skipped "
-                "(non-fatal): task_id=%r exc=%s",
+                "PR-1 P0: device_router.handle_task_result (task_end) skipped " "(non-fatal): task_id=%r exc=%s",
                 task_id,
                 _dr_exc,
             )
@@ -1115,9 +1062,7 @@ async def handle_task_end(
     }
 
 
-async def handle_task_progress(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> None:
+async def handle_task_progress(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> None:
     """处理任务进度"""
     task_id = message.get("task_id")
     progress = message.get("progress", 0)
@@ -1129,9 +1074,7 @@ async def handle_task_progress(
     _try_ingest_participant_truth(message, "status")
 
 
-async def handle_command_result(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> None:
+async def handle_command_result(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> None:
     """处理命令结果"""
     message_id = message.get("message_id")
 
@@ -1150,9 +1093,7 @@ async def handle_command_result(
     _try_reconcile(message)
 
 
-async def handle_error(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> None:
+async def handle_error(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> None:
     """处理错误消息，使用结构化日志输出"""
     device_id = message.get("device_id")
     error_code = message.get("error_code")
@@ -1162,7 +1103,11 @@ async def handle_error(
 
     logger.error(
         "Error from device: device_id=%s error_code=%s error_message=%s task_id=%s details=%s",
-        device_id, error_code, error_message, task_id, details,
+        device_id,
+        error_code,
+        error_message,
+        task_id,
+        details,
     )
 
     # PR-13: reconcile inbound error signal against host-side execution tracker
@@ -1171,9 +1116,7 @@ async def handle_error(
     _try_ingest_participant_truth(message, "failure")
 
 
-async def handle_task_cancel(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_task_cancel(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理任务取消请求，传播到 canonical runtime 并返回 task_cancel_ack。
 
     链路：Android → task_cancel → canonical task cancellation propagation
@@ -1186,7 +1129,8 @@ async def handle_task_cancel(
 
     logger.info(
         "Task cancel requested: task_id=%s device_id=%s",
-        task_id, device_id,
+        task_id,
+        device_id,
     )
 
     try:
@@ -1207,19 +1151,21 @@ async def handle_task_cancel(
             cancelled = True
             logger.info(
                 "Task cancelled successfully: task_id=%s device_id=%s",
-                task_id, device_id,
+                task_id,
+                device_id,
             )
         elif not cancelled:
             reason = "task_already_completed"
             logger.info(
                 "Task cancel: future already done: task_id=%s device_id=%s",
-                task_id, device_id,
+                task_id,
+                device_id,
             )
     elif not cancelled and reason == "task_not_found":
         logger.info(
-            "Task cancel: task not found in canonical runtime or pending_responses: "
-            "task_id=%s device_id=%s",
-            task_id, device_id,
+            "Task cancel: task not found in canonical runtime or pending_responses: " "task_id=%s device_id=%s",
+            task_id,
+            device_id,
         )
 
     # 清理设备端 current_task_id
@@ -1240,9 +1186,7 @@ async def handle_task_cancel(
     )
 
 
-async def handle_task_status(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_task_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理任务状态查询，优先返回 canonical runtime truth。
 
     链路：Android → task_status → TaskGraphRuntime / CanonicalTaskRuntime / task_queue
@@ -1254,7 +1198,8 @@ async def handle_task_status(
 
     logger.info(
         "Task status query: task_id=%s device_id=%s",
-        task_id, device_id,
+        task_id,
+        device_id,
     )
 
     status = _read_canonical_runtime_status(task_id)
@@ -1279,7 +1224,9 @@ async def handle_task_status(
 
     logger.info(
         "Task status resolved: task_id=%s device_id=%s status=%s",
-        task_id, device_id, status,
+        task_id,
+        device_id,
+        status,
     )
 
     # PR-4V2: ingest Android status truth into V2 canonical orchestration.

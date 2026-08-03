@@ -19,10 +19,10 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from galaxy_gateway.dependencies import (
-    get_websocket_manager,
-    get_nats_adapter,
     get_llm_router_instance,
+    get_nats_adapter,
     get_openclawd,
+    get_websocket_manager,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ async def nats_health(request: Request, nats=Depends(get_nats_adapter)):
     """NATS control-plane health — returns bus stats and adapter state."""
     try:
         from core.nats_bus import nats_bus
+
         bus_stats = nats_bus.get_stats()
     except Exception as exc:
         bus_stats = {"error": str(exc)}
@@ -67,9 +68,8 @@ async def nats_health(request: Request, nats=Depends(get_nats_adapter)):
         "adapter": adapter_stats,
         "message": (
             "NATS is connected and operating as the internal scheduling mainline."
-            if connected else
-            f"[ERROR] NATS is REQUIRED but not connected to {nats_url}. "
-            "Start NATS: nats-server -p 4222"
+            if connected
+            else f"[ERROR] NATS is REQUIRED but not connected to {nats_url}. " "Start NATS: nats-server -p 4222"
         ),
     }
 
@@ -105,8 +105,10 @@ async def enhanced_health_check(
 @router.get("/api/v1/gateway/metrics/json")
 async def gateway_metrics_json():
     """Return gateway pipeline metrics as a JSON snapshot (Round 7)."""
-    from galaxy_gateway.observability import get_gateway_metrics
     from starlette.responses import JSONResponse
+
+    from galaxy_gateway.observability import get_gateway_metrics
+
     return JSONResponse(get_gateway_metrics().snapshot())
 
 
@@ -115,6 +117,7 @@ async def gateway_metrics_json():
 async def gateway_metrics_prometheus():
     """Prometheus text-format exposition for gateway pipeline metrics (Round 7)."""
     from galaxy_gateway.observability import get_gateway_metrics
+
     return Response(
         content=get_gateway_metrics().prometheus_text(),
         media_type="text/plain; charset=utf-8",

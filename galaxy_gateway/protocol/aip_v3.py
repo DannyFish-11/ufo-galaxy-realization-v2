@@ -7,11 +7,12 @@ AIP v3.0 - Agent Interaction Protocol (统一版本)
 基于 Microsoft UFO AIP 协议扩展，增加跨平台支持。
 """
 
-from enum import Enum, IntEnum, Flag, auto
-from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from datetime import datetime
 import uuid
+from datetime import datetime
+from enum import Enum, Flag, IntEnum, auto
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 __all__ = [  # L1 fixed: explicit export list
     "AIPDeviceType",
@@ -46,54 +47,56 @@ __all__ = [  # L1 fixed: explicit export list
 # 设备类型定义 (统一所有平台)
 # ============================================================================
 
+
 class AIPDeviceType(str, Enum):
     """AIP v3.0 细分设备类型定义 - 覆盖所有支持的平台"""
-    
+
     # === 移动端 ===
     ANDROID_PHONE = "android_phone"
     ANDROID_TABLET = "android_tablet"
     ANDROID_TV = "android_tv"
     ANDROID_CAR = "android_car"
     ANDROID_WEAR = "android_wear"
-    
+
     IOS_PHONE = "ios_phone"
     IOS_TABLET = "ios_tablet"
     IOS_WATCH = "ios_watch"
-    
+
     # === 桌面端 ===
     WINDOWS_DESKTOP = "windows_desktop"
     WINDOWS_LAPTOP = "windows_laptop"
     WINDOWS_WSL = "windows_wsl"
-    
+
     MACOS_DESKTOP = "macos_desktop"
     MACOS_LAPTOP = "macos_laptop"
-    
+
     LINUX_DESKTOP = "linux_desktop"
     LINUX_SERVER = "linux_server"
     LINUX_RASPBERRY = "linux_raspberry"
-    
+
     # === 云端 ===
     CLOUD_HUAWEI = "cloud_huawei"
     CLOUD_ALIYUN = "cloud_aliyun"
     CLOUD_TENCENT = "cloud_tencent"
     CLOUD_AWS = "cloud_aws"
     CLOUD_AZURE = "cloud_azure"
-    
+
     # === 嵌入式/IoT ===
     EMBEDDED_ESP32 = "embedded_esp32"
     EMBEDDED_ARDUINO = "embedded_arduino"
     IOT_GENERIC = "iot_generic"
-    
+
     # === 容器/虚拟 ===
     CONTAINER_DOCKER = "container_docker"
     VIRTUAL_VM = "virtual_vm"
-    
+
     # === 通用 ===
     UNKNOWN = "unknown"
 
 
 class DevicePlatform(str, Enum):
     """设备平台大类"""
+
     ANDROID = "android"
     IOS = "ios"
     WINDOWS = "windows"
@@ -108,40 +111,41 @@ class DevicePlatform(str, Enum):
 # 设备能力定义
 # ============================================================================
 
+
 class DeviceCapability(Flag):
     """设备能力标志 - 用于能力协商"""
-    
+
     NONE = 0
-    
+
     # 基础能力
     NETWORK = auto()
     STORAGE = auto()
     COMPUTE = auto()
-    
+
     # GUI 能力
     GUI_READ = auto()
     GUI_WRITE = auto()
     GUI_SCREENSHOT = auto()
     GUI_STREAM = auto()
-    
+
     # 输入能力
     INPUT_TOUCH = auto()
     INPUT_KEYBOARD = auto()
     INPUT_MOUSE = auto()
     INPUT_VOICE = auto()
-    
+
     # 传感器
     SENSOR_GPS = auto()
     SENSOR_CAMERA = auto()
     SENSOR_MIC = auto()
     SENSOR_MOTION = auto()
-    
+
     # 系统能力
     SYSTEM_SHELL = auto()
     SYSTEM_ROOT = auto()
     SYSTEM_INSTALL = auto()
     SYSTEM_NOTIFICATION = auto()
-    
+
     # 通信能力
     COMM_BLUETOOTH = auto()
     COMM_NFC = auto()
@@ -151,6 +155,7 @@ class DeviceCapability(Flag):
 # ============================================================================
 # 消息类型定义
 # ============================================================================
+
 
 class MessageType(str, Enum):
     """消息类型 - 统一客户端和服务端 (CANONICAL — 新代码应导入此定义)"""
@@ -192,7 +197,7 @@ class MessageType(str, Enum):
     DEVICE_HEARTBEAT_ACK = "heartbeat_ack"
     DEVICE_STATUS = "device_status"
     DEVICE_CAPABILITIES = "device_capabilities"
-    
+
     # === AIP_STANDARD: 任务调度 ===
     TASK_SUBMIT = "task_submit"
     TASK_ASSIGN = "task_assign"
@@ -433,26 +438,27 @@ class MessageType(str, Enum):
     #   operator_action_request —— 设备侧发起的操作请求(对应已存在的
     #     operator_action_result;经 catch-all 优雅接收,避免请求被整条丢弃)。
     #   device_audit_report —— 设备审计上报(与 device_*_report 家族并列)。
-    RELAY = "relay"                                # ← relay_request 的客户端短别名
-    RELAY_FORWARD_ALIAS = "forward"               # ← relay_forward 的客户端短别名
-    RELAY_REPLY_ALIAS = "reply"                   # ← relay_reply 的客户端短别名
-    COORD_LOCK_ALIAS = "lock"                     # ← coord_lock 的客户端短别名
-    COORD_UNLOCK_ALIAS = "unlock"                 # ← coord_unlock 的客户端短别名
-    COORD_BROADCAST_ALIAS = "broadcast"           # ← coord_broadcast 的客户端短别名
+    RELAY = "relay"  # ← relay_request 的客户端短别名
+    RELAY_FORWARD_ALIAS = "forward"  # ← relay_forward 的客户端短别名
+    RELAY_REPLY_ALIAS = "reply"  # ← relay_reply 的客户端短别名
+    COORD_LOCK_ALIAS = "lock"  # ← coord_lock 的客户端短别名
+    COORD_UNLOCK_ALIAS = "unlock"  # ← coord_unlock 的客户端短别名
+    COORD_BROADCAST_ALIAS = "broadcast"  # ← coord_broadcast 的客户端短别名
     OPERATOR_ACTION_REQUEST = "operator_action_request"
     DEVICE_AUDIT_REPORT = "device_audit_report"
 
     # ── 融合(域6)· V2_INTERNAL:内部 NATS 总线在用、此前只存在于
     # core/schemas/aip_v3.py 的 wire 值,提升进本 SSOT——全系统只有一个
     # message-type 字符串权威(core/schemas 侧由 drift 测试钉住一致性)。
-    CAPABILITY_QUERY = "capability_query"          # NATS 能力协商(已建模,预留)
-    WEBRTC_BIND = "webrtc_bind"                    # core/webrtc_task_lifecycle 经 NATS 发布
+    CAPABILITY_QUERY = "capability_query"  # NATS 能力协商(已建模,预留)
+    WEBRTC_BIND = "webrtc_bind"  # core/webrtc_task_lifecycle 经 NATS 发布
     WEBRTC_UNBIND = "webrtc_unbind"
     WEBRTC_TRANSPORT_STATE = "webrtc_transport_state"
 
 
 class TaskStatus(str, Enum):
     """任务状态"""
+
     PENDING = "pending"
     RUNNING = "running"
     CONTINUE = "continue"
@@ -463,6 +469,7 @@ class TaskStatus(str, Enum):
 
 class ResultStatus(str, Enum):
     """执行结果状态"""
+
     SUCCESS = "success"
     FAILURE = "failure"
     SKIPPED = "skipped"
@@ -474,17 +481,19 @@ class ResultStatus(str, Enum):
 # 核心数据结构
 # ============================================================================
 
+
 class Rect(BaseModel):
     """矩形坐标"""
+
     x: int
     y: int
     width: int
     height: int
-    
+
     @property
     def center_x(self) -> int:
         return self.x + self.width // 2
-    
+
     @property
     def center_y(self) -> int:
         return self.y + self.height // 2
@@ -492,6 +501,7 @@ class Rect(BaseModel):
 
 class UIElement(BaseModel):
     """UI 元素信息"""
+
     element_id: Optional[str] = None
     class_name: Optional[str] = None
     text: Optional[str] = None
@@ -508,6 +518,7 @@ class UIElement(BaseModel):
 
 class DeviceInfo(BaseModel):
     """设备信息"""
+
     device_id: str
     device_type: AIPDeviceType = AIPDeviceType.UNKNOWN
     platform: DevicePlatform = DevicePlatform.UNKNOWN
@@ -523,6 +534,7 @@ class DeviceInfo(BaseModel):
 
 class Command(BaseModel):
     """命令定义"""
+
     command_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tool_name: str
     tool_type: str = "action"  # action, data_collection
@@ -532,6 +544,7 @@ class Command(BaseModel):
 
 class CommandResult(BaseModel):
     """命令执行结果"""
+
     command_id: str
     status: ResultStatus = ResultStatus.NONE
     result: Any = None
@@ -543,26 +556,27 @@ class CommandResult(BaseModel):
 # AIP 消息定义
 # ============================================================================
 
+
 class AIPMessage(BaseModel):
     """AIP v3.0 统一消息格式"""
-    
+
     # 协议版本
     version: str = "3.0"
-    
+
     # 消息标识
     message_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     correlation_id: Optional[str] = None  # 用于关联请求和响应
-    
+
     # 消息类型
     type: MessageType
-    
+
     # 设备信息
     device_id: str
     device_type: Optional[AIPDeviceType] = None
-    
+
     # 时间戳
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
+
     # 任务相关
     task_id: Optional[str] = None
     task_status: Optional[TaskStatus] = None
@@ -582,13 +596,13 @@ class AIPMessage(BaseModel):
     # 命令相关
     commands: List[Command] = Field(default_factory=list)
     results: List[CommandResult] = Field(default_factory=list)
-    
+
     # 通用数据载荷
     payload: Dict[str, Any] = Field(default_factory=dict)
-    
+
     # 错误信息
     error: Optional[str] = None
-    
+
     model_config = ConfigDict()
 
     @field_serializer("timestamp")
@@ -601,82 +615,47 @@ class AIPMessage(BaseModel):
 # 快捷消息构造函数
 # ============================================================================
 
-def create_register_message(
-    device_id: str,
-    device_type: AIPDeviceType,
-    device_info: DeviceInfo
-) -> AIPMessage:
+
+def create_register_message(device_id: str, device_type: AIPDeviceType, device_info: DeviceInfo) -> AIPMessage:
     """创建设备注册消息"""
     return AIPMessage(
         type=MessageType.DEVICE_REGISTER,
         device_id=device_id,
         device_type=device_type,
-        payload={"device_info": device_info.model_dump()}
+        payload={"device_info": device_info.model_dump()},
     )
 
 
 def create_heartbeat_message(device_id: str) -> AIPMessage:
     """创建心跳消息"""
-    return AIPMessage(
-        type=MessageType.DEVICE_HEARTBEAT,
-        device_id=device_id
-    )
+    return AIPMessage(type=MessageType.DEVICE_HEARTBEAT, device_id=device_id)
 
 
-def create_task_message(
-    device_id: str,
-    task_id: str,
-    commands: List[Command]
-) -> AIPMessage:
+def create_task_message(device_id: str, task_id: str, commands: List[Command]) -> AIPMessage:
     """创建任务消息"""
-    return AIPMessage(
-        type=MessageType.TASK_ASSIGN,
-        device_id=device_id,
-        task_id=task_id,
-        commands=commands
-    )
+    return AIPMessage(type=MessageType.TASK_ASSIGN, device_id=device_id, task_id=task_id, commands=commands)
 
 
-def create_gui_click_message(
-    device_id: str,
-    x: int,
-    y: int,
-    task_id: Optional[str] = None
-) -> AIPMessage:
+def create_gui_click_message(device_id: str, x: int, y: int, task_id: Optional[str] = None) -> AIPMessage:
     """创建 GUI 点击消息"""
-    return AIPMessage(
-        type=MessageType.GUI_CLICK,
-        device_id=device_id,
-        task_id=task_id,
-        payload={"x": x, "y": y}
-    )
+    return AIPMessage(type=MessageType.GUI_CLICK, device_id=device_id, task_id=task_id, payload={"x": x, "y": y})
 
 
 def create_gui_input_message(
-    device_id: str,
-    text: str,
-    element_id: Optional[str] = None,
-    task_id: Optional[str] = None
+    device_id: str, text: str, element_id: Optional[str] = None, task_id: Optional[str] = None
 ) -> AIPMessage:
     """创建 GUI 输入消息"""
     return AIPMessage(
         type=MessageType.GUI_INPUT,
         device_id=device_id,
         task_id=task_id,
-        payload={"text": text, "element_id": element_id}
+        payload={"text": text, "element_id": element_id},
     )
 
 
-def create_screenshot_message(
-    device_id: str,
-    task_id: Optional[str] = None
-) -> AIPMessage:
+def create_screenshot_message(device_id: str, task_id: Optional[str] = None) -> AIPMessage:
     """创建截图请求消息"""
-    return AIPMessage(
-        type=MessageType.GUI_SCREENSHOT,
-        device_id=device_id,
-        task_id=task_id
-    )
+    return AIPMessage(type=MessageType.GUI_SCREENSHOT, device_id=device_id, task_id=task_id)
 
 
 def create_gui_scroll_message(
@@ -705,36 +684,29 @@ def create_gui_scroll_message(
     )
 
 
-def create_error_message(
-    device_id: str,
-    error: str,
-    correlation_id: Optional[str] = None
-) -> AIPMessage:
+def create_error_message(device_id: str, error: str, correlation_id: Optional[str] = None) -> AIPMessage:
     """创建错误消息"""
-    return AIPMessage(
-        type=MessageType.ERROR,
-        device_id=device_id,
-        correlation_id=correlation_id,
-        error=error
-    )
+    return AIPMessage(type=MessageType.ERROR, device_id=device_id, correlation_id=correlation_id, error=error)
 
 
 # ============================================================================
 # Parallel-result aggregation payload (Phase-3)
 # ============================================================================
 
+
 class ParallelSubtaskItem(BaseModel):
     """单个并行子任务结果条目。"""
+
     model_config = ConfigDict(extra="allow")
 
-    group_id:      str
+    group_id: str
     subtask_index: int
-    device_id:     str
-    task_id:       Optional[str] = None
-    status:        str = "unknown"   # pending / running / success / failed / timeout
-    result:        Optional[Dict[str, Any]] = None
-    error:         Optional[str] = None
-    latency_ms:    Optional[float] = None
+    device_id: str
+    task_id: Optional[str] = None
+    status: str = "unknown"  # pending / running / success / failed / timeout
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    latency_ms: Optional[float] = None
 
 
 class ParallelResultPayload(BaseModel):
@@ -744,14 +716,15 @@ class ParallelResultPayload(BaseModel):
     用于在设备与服务端之间传递并行任务组的聚合结果，
     也作为 OpenClawd 返回给调用方的规范格式。
     """
+
     model_config = ConfigDict(extra="allow")
 
-    group_id:       str
+    group_id: str
     subtask_results: List[ParallelSubtaskItem] = Field(default_factory=list)
-    summary_status: str = "unknown"   # "success" | "partial" | "failed"
-    succeeded:      int = 0
-    failed:         int = 0
-    total:          int = 0
+    summary_status: str = "unknown"  # "success" | "partial" | "failed"
+    succeeded: int = 0
+    failed: int = 0
+    total: int = 0
 
     @classmethod
     def from_tracker_dict(cls, data: Dict[str, Any]) -> "ParallelResultPayload":
@@ -759,10 +732,7 @@ class ParallelResultPayload(BaseModel):
         从 ``ParallelGroupTracker.aggregate().to_dict()`` 转换而来的工厂方法。
         兼容 compat 层直接传入已规范化字典。
         """
-        items = [
-            ParallelSubtaskItem(**item)
-            for item in data.get("device_results", [])
-        ]
+        items = [ParallelSubtaskItem(**item) for item in data.get("device_results", [])]
         return cls(
             group_id=data.get("group_id", ""),
             subtask_results=items,
@@ -773,12 +743,11 @@ class ParallelResultPayload(BaseModel):
         )
 
 
-
-
 def parse_message(data: Union[str, dict]) -> AIPMessage:
     """解析 AIP 消息"""
     if isinstance(data, str):
         import json
+
         data = json.loads(data)
     return AIPMessage.model_validate(data)
 
@@ -810,6 +779,7 @@ def validate_message(message: AIPMessage) -> tuple:
 # ============================================================================
 # Unified Protocol Bridge - AIP v2.0 ↔ v3.0
 # ============================================================================
+
 
 class UnifiedMessageTypes:
     """

@@ -5,29 +5,26 @@
 """
 
 try:
-    from .task_orchestrator import (
-        Task,
-        TaskPriority,
-        TaskOrchestrator,
-        MultiDeviceOrchestrator
-    )
+    from .task_orchestrator import MultiDeviceOrchestrator, Task, TaskOrchestrator, TaskPriority
 except Exception:  # noqa: BLE001
     pass
 
 try:
     from .galaxy_orchestrator import (
-        GalaxyOrchestrator,
         AIGateway,
-        DeviceManager as GalaxyDeviceManager,
+    )
+    from .galaxy_orchestrator import DeviceManager as GalaxyDeviceManager
+    from .galaxy_orchestrator import (
+        GalaxyOrchestrator,
         create_orchestrator,
     )
 except Exception:  # noqa: BLE001
     pass
 
 from .parallel_tracker import (
-    ParallelSubtaskResult,
     ParallelGroupStatus,
     ParallelGroupTracker,
+    ParallelSubtaskResult,
     get_tracker,
     record_parallel_fields,
 )

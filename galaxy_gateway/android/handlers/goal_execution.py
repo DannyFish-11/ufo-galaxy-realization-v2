@@ -76,11 +76,9 @@ except ImportError:
 # Provides the unified gate evaluation for goal_execution / parallel_subtask /
 # takeover_request via a single authority policy model.
 try:
-    from core.unified_execution_governance import (
-        ExecutionType as _ExecutionType,
-        evaluate_execution_governance as _evaluate_execution_governance,
-        notify_execution_completed as _notify_execution_completed,
-    )
+    from core.unified_execution_governance import ExecutionType as _ExecutionType
+    from core.unified_execution_governance import evaluate_execution_governance as _evaluate_execution_governance
+    from core.unified_execution_governance import notify_execution_completed as _notify_execution_completed
 
     _GOVERNANCE_AVAILABLE = True
 except ImportError:
@@ -102,7 +100,11 @@ except ImportError:
 try:
     from core.android_originated_main_chain_ingress import (
         accept_android_originated_nl_into_main_chain as _accept_android_originated_nl_into_main_chain,
+    )
+    from core.android_originated_main_chain_ingress import (
         build_android_originated_governance_context as _build_android_originated_governance_context,
+    )
+    from core.android_originated_main_chain_ingress import (
         is_android_originated_main_chain_accepted as _is_android_originated_main_chain_accepted,
     )
 except ImportError:
@@ -422,8 +424,11 @@ async def handle_goal_execution(
     # 且能被 /api/v1/sessions/reconcile 认领并入用户主线的会话线;别名已认领时自动归并。
     try:
         from core.session_identity import build_canonical_session_identity
+
         session_id = build_canonical_session_identity(
-            session_id=raw_session_id, device_id=device_id, create_session=True,
+            session_id=raw_session_id,
+            device_id=device_id,
+            create_session=True,
         ).conversation_session_id
     except Exception as exc:  # noqa: BLE001 — 解析失败退回兜底,绝不阻断目标下发
         logger.debug("goal_execution canonical session resolve failed (non-fatal): %s", exc)
@@ -653,8 +658,11 @@ async def handle_parallel_subtask(
     # 且能被 /api/v1/sessions/reconcile 认领并入用户主线的会话线;别名已认领时自动归并。
     try:
         from core.session_identity import build_canonical_session_identity
+
         session_id = build_canonical_session_identity(
-            session_id=raw_session_id, device_id=device_id, create_session=True,
+            session_id=raw_session_id,
+            device_id=device_id,
+            create_session=True,
         ).conversation_session_id
     except Exception as exc:  # noqa: BLE001 — 解析失败退回兜底,绝不阻断目标下发
         logger.debug("goal_execution canonical session resolve failed (non-fatal): %s", exc)
@@ -837,8 +845,7 @@ async def handle_parallel_subtask(
             # str()-coerce: a single device whose device_type is present-but-None
             # would make None.upper() raise and abort the whole comprehension,
             # silently yielding zero Android devices for the entire fan-out.
-            if str(d.get("device_type") or "").upper() in ("ANDROID", "MOBILE", "PHONE")
-            or did.startswith("android_")
+            if str(d.get("device_type") or "").upper() in ("ANDROID", "MOBILE", "PHONE") or did.startswith("android_")
         ]
         logger.debug("PARALLEL_SUBTASK: 发现 %d 台 Android 设备", len(all_device_ids))
     except Exception as ucm_err:
@@ -859,8 +866,8 @@ async def handle_parallel_subtask(
     _spine_blocked_count = 0
     try:
         from core.unified_orchestration_spine import (
-            OrchestrationRequest,
             ExecutionMode,
+            OrchestrationRequest,
             evaluate_orchestration_request,
         )
 
@@ -1079,9 +1086,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     trace_id = payload.get("trace_id") or message.get("trace_id") or ""
     runtime_session_id = payload.get("session_id") or message.get("session_id") or ""
     runtime_attachment_session_id = (
-        payload.get("runtime_attachment_session_id")
-        or message.get("runtime_attachment_session_id")
-        or ""
+        payload.get("runtime_attachment_session_id") or message.get("runtime_attachment_session_id") or ""
     )
     durable_session_id = payload.get("durable_session_id") or message.get("durable_session_id") or ""
     _raw_session_epoch = _first_present_value(
@@ -1113,28 +1118,16 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
         or ""
     ).strip()
     replay_session_id = str(
-        payload.get("replay_session_id")
-        or message.get("replay_session_id")
-        or runtime_session_id
-        or ""
+        payload.get("replay_session_id") or message.get("replay_session_id") or runtime_session_id or ""
     ).strip()
     is_replay_delivery = bool(
-        payload.get("replay")
-        or message.get("replay")
-        or replay_seq is not None
-        or replay_item_id
+        payload.get("replay") or message.get("replay") or replay_seq is not None or replay_item_id
     )
     is_recovered_delivery = bool(
-        payload.get("recovered")
-        or payload.get("recovery")
-        or message.get("recovered")
-        or message.get("recovery")
+        payload.get("recovered") or payload.get("recovery") or message.get("recovered") or message.get("recovery")
     )
     is_resumed_delivery = bool(
-        payload.get("resumed")
-        or payload.get("resume")
-        or message.get("resumed")
-        or message.get("resume")
+        payload.get("resumed") or payload.get("resume") or message.get("resumed") or message.get("resume")
     )
 
     # Initialized to None; set inside the schema gate try block.
@@ -1266,9 +1259,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     _ger_idem_key = f"goal_execution_result:{task_id}"
     _ger_prechecked_duplicate = False
     try:
-        from core.durable_result_idempotency import (
-            check_result_idempotency as _check_ger_idem,
-        )
+        from core.durable_result_idempotency import check_result_idempotency as _check_ger_idem
 
         if _check_ger_idem(_ger_idem_key):
             _ger_prechecked_duplicate = True
@@ -1419,11 +1410,9 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     _ger_ingress_closed = False
     _ger_ingress_outcome = None  # type: ignore[assignment]
     try:
-        from core.unified_result_ingress import (
-            NormalizedResultEvent as _NREV2,
-            ResultSourceChannel as _RSCv2,
-            ingest_result_async as _ingest_ger_async,
-        )
+        from core.unified_result_ingress import NormalizedResultEvent as _NREV2
+        from core.unified_result_ingress import ResultSourceChannel as _RSCv2
+        from core.unified_result_ingress import ingest_result_async as _ingest_ger_async
 
         _ger_event = _NREV2(
             task_id=task_id,

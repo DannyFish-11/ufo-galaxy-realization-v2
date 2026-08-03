@@ -81,9 +81,7 @@ def get_generic_forward_compat_allowlist() -> Tuple[str, ...]:
     return _GENERIC_FORWARD_COMPAT_MESSAGE_TYPES
 
 
-async def handle_generic_forward(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_generic_forward(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """通用占位处理器：记录日志并返回 ACK（后续可扩展为实际转发逻辑）"""
     msg_type = message.get("type")
     device_id = message.get("device_id")
@@ -103,8 +101,7 @@ async def handle_generic_forward(
             "original_type": normalized_type,
             "error_code": "CANONICAL_INGRESS_REQUIRED",
             "error_message": (
-                f"{normalized_type} must use its dedicated canonical ingress handler, "
-                "not handle_generic_forward"
+                f"{normalized_type} must use its dedicated canonical ingress handler, " "not handle_generic_forward"
             ),
             "canonical_ingress_required": True,
             "canonical_ingress_handler": _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE[normalized_type],

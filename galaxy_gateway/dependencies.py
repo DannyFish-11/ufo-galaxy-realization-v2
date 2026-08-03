@@ -41,6 +41,7 @@ def _get_state(request: Request, attr: str, *, required: bool = True) -> Any:
 # Required services — raise 503 when unavailable
 # ---------------------------------------------------------------------------
 
+
 def get_device_manager(request: Request):
     """Return the initialized ``DeviceManager`` from app state."""
     return _get_state(request, "device_manager")
@@ -64,6 +65,7 @@ def get_task_orchestrator(request: Request):
 # ---------------------------------------------------------------------------
 # Optional services — return None when unavailable
 # ---------------------------------------------------------------------------
+
 
 def get_nats_adapter(request: Request) -> Optional[Any]:
     """Return the NATS adapter if available, else ``None``."""

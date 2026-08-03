@@ -14,21 +14,23 @@ Galaxy Fusion - Unified Node Gateway (Standardized)
 版本: 1.1.0 (标准化版)
 """
 
-import os
-import sys
-import time
+import asyncio
 import importlib
 import importlib.util
 import logging
-import asyncio
-from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Body
+import os
+import sys
+import time
+from typing import Any, Dict, Optional
+
+from fastapi import Body, FastAPI, HTTPException
 from pydantic import BaseModel
+
 from core.port_config import get_service_port
-from core.schemas.node_protocol import NodeRequest, NodeResponse, NodeHealthResponse
+from core.schemas.node_protocol import NodeHealthResponse, NodeRequest, NodeResponse
 
 # 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("UnifiedGateway")
 
 app = FastAPI(title="Galaxy Unified Node Gateway")
@@ -36,9 +38,11 @@ app = FastAPI(title="Galaxy Unified Node Gateway")
 # 节点实例缓存
 node_instances: Dict[str, Any] = {}
 
+
 class ExecuteRequest(BaseModel):
     command: str
     params: Dict[str, Any] = {}
+
 
 def _load_module_from_file(module_name: str, file_path: str):
     """使用 importlib.util 从文件路径安全加载模块。
@@ -51,7 +55,7 @@ def _load_module_from_file(module_name: str, file_path: str):
     module = importlib.util.module_from_spec(spec)
     # 验证模块文件路径在预期的安全目录内
     expected_dir = os.path.dirname(os.path.dirname(file_path))
-    module_file = getattr(spec, 'origin', file_path)
+    module_file = getattr(spec, "origin", file_path)
     if not os.path.abspath(module_file).startswith(os.path.abspath(expected_dir)):
         raise ImportError(f"Module file {module_file} is outside expected directory {expected_dir}")
     spec.loader.exec_module(module)
@@ -68,7 +72,7 @@ def load_nodes():
     # 扫描 Node_XX 格式的目录
     for item in os.listdir(nodes_dir):
         if item.startswith("Node_") and os.path.isdir(os.path.join(nodes_dir, item)):
-            node_id = "_".join(item.split('_')[:2])
+            node_id = "_".join(item.split("_")[:2])
             try:
                 # 优先加载标准化入口 fusion_entry.py
                 fusion_entry_path = os.path.join(nodes_dir, item, "fusion_entry.py")
@@ -101,23 +105,26 @@ def load_nodes():
             except Exception as e:
                 logger.error(f"❌ Failed to load node {node_id}: {e}")
 
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Starting Unified Node Gateway...")
     load_nodes()
     logger.info(f"✨ Total nodes online: {len(node_instances)}")
 
+
 @app.get("/health")
 async def global_health():
     return {"status": "healthy", "online_nodes": len(node_instances)}
+
 
 @app.post("/api/nodes/{node_id}/execute")
 async def execute_on_node(node_id: str, request: ExecuteRequest):
     if node_id not in node_instances:
         raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
-    
+
     instance = node_instances[node_id]
-    
+
     try:
         # 统一调用接口
         if hasattr(instance, "execute"):
@@ -126,28 +133,33 @@ async def execute_on_node(node_id: str, request: ExecuteRequest):
             method = instance.process
         else:
             raise HTTPException(status_code=500, detail=f"Node {node_id} has no executable method")
-            
+
         if asyncio.iscoroutinefunction(method):
             result = await method(request.command, **request.params)
         else:
             result = method(request.command, **request.params)
-            
+
         # 如果返回的是字典且包含 success 键，则直接返回
         if isinstance(result, dict) and "success" in result:
             return result
         return {"success": True, "node_id": node_id, "data": result}
-        
+
     except Exception as e:
         logger.error(f"❌ Error executing on {node_id}: {e}")
         return {"success": False, "node_id": node_id, "error": str(e)}
+
 
 # ============================================================================
 # 标准化节点调用适配层 (Phase 8.3)
 # ============================================================================
 
+
 async def call_node_standardized(
-    node_id: str, action: str, params: Optional[Dict[str, Any]] = None,
-    caller: str = "gateway", timeout: float = 30.0,
+    node_id: str,
+    action: str,
+    params: Optional[Dict[str, Any]] = None,
+    caller: str = "gateway",
+    timeout: float = 30.0,
 ) -> NodeResponse:
     """标准化节点调用 — Agent 和 Gateway 统一入口
 
@@ -290,4 +302,5 @@ async def health_standardized(node_id: str):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=get_service_port("state_machine"))

@@ -235,28 +235,11 @@ import asyncio
 import json
 import logging
 import time as _time
-from typing import Dict, List, Optional, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# PR-4: Delegate routing concerns to specialised sub-modules under
-# galaxy_gateway/routing/.  DeviceRouter remains the canonical public API;
-# internal logic is now implemented in the sub-modules and called from here.
-# ---------------------------------------------------------------------------
-from galaxy_gateway.routing.policy import analyze_command as _routing_analyze_command  # noqa: E402
-from galaxy_gateway.routing.device_selection import select_devices as _routing_select_devices  # noqa: E402
-from galaxy_gateway.routing.dispatch import (  # noqa: E402
-    build_aip_message as _routing_build_aip_message,
-    dispatch_to_websocket as _routing_dispatch_to_websocket,
-)
-from galaxy_gateway.routing.health_policy import (  # noqa: E402
-    is_device_available as _routing_is_device_available,
-    is_device_online as _routing_is_device_online,
-    filter_eligible_devices as _routing_filter_eligible_devices,
-)
 
 # Cross-device feature-flag (Round 4) — checked before any cross-device path.
 from galaxy_gateway.cross_device_switch import (  # noqa: E402
@@ -269,6 +252,19 @@ from galaxy_gateway.observability import (  # noqa: E402
     emit_gateway_log,
     get_gateway_metrics,
 )
+from galaxy_gateway.routing.device_selection import select_devices as _routing_select_devices  # noqa: E402
+from galaxy_gateway.routing.dispatch import build_aip_message as _routing_build_aip_message  # noqa: E402
+from galaxy_gateway.routing.dispatch import dispatch_to_websocket as _routing_dispatch_to_websocket
+from galaxy_gateway.routing.health_policy import filter_eligible_devices as _routing_filter_eligible_devices
+from galaxy_gateway.routing.health_policy import is_device_available as _routing_is_device_available  # noqa: E402
+from galaxy_gateway.routing.health_policy import is_device_online as _routing_is_device_online
+
+# ---------------------------------------------------------------------------
+# PR-4: Delegate routing concerns to specialised sub-modules under
+# galaxy_gateway/routing/.  DeviceRouter remains the canonical public API;
+# internal logic is now implemented in the sub-modules and called from here.
+# ---------------------------------------------------------------------------
+from galaxy_gateway.routing.policy import analyze_command as _routing_analyze_command  # noqa: E402
 
 # 延迟导入以避免循环依赖
 cross_device_coordinator = None
@@ -283,22 +279,21 @@ def get_cross_device_coordinator():
     return cross_device_coordinator
 
 
-from core.device_types import DeviceType, resolve_device_type  # noqa: E402
-
-# Module-level import so the function can be patched in tests
-from core.unified.gateway_capability_projection import (  # noqa: E402
-    purge_gateway_capabilities_for_device,
-)
-
 # ---------------------------------------------------------------------------
 # PR-02: Import dispatch boundary constants from the single authoritative
 # source of truth.  These constants replace inline string literals that were
 # previously scattered throughout route_task() and related methods.
 # ---------------------------------------------------------------------------
 from core.cross_device_dispatch_boundary import (  # noqa: E402
+    CROSS_DEVICE_DISPATCH_PR02_SENTINEL,
     DISPATCH_PATH_CANONICAL,
     DISPATCH_PATH_CONTROLLED_FALLBACK,
-    CROSS_DEVICE_DISPATCH_PR02_SENTINEL,
+)
+from core.device_types import DeviceType, resolve_device_type  # noqa: E402
+
+# Module-level import so the function can be patched in tests
+from core.unified.gateway_capability_projection import (  # noqa: E402
+    purge_gateway_capabilities_for_device,
 )
 
 CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
@@ -365,8 +360,8 @@ class Device:
         capabilities: List[str],
         metadata: Optional[Dict[str, Any]] = None,
     ):
-        from core.schemas.device import DeviceModel, DeviceCapabilityModel
         from core.device_types import DeviceStatus
+        from core.schemas.device import DeviceCapabilityModel, DeviceModel
 
         cap_models = [DeviceCapabilityModel(name=c) for c in capabilities]
         self._model = DeviceModel(
@@ -1079,8 +1074,8 @@ class DeviceRouter:
             source_device_id = ctx.get("source_device_id", "") or device_id
             try:
                 from core.source_runtime_posture import (
-                    resolve_source_runtime_posture,
                     record_source_runtime_posture,
+                    resolve_source_runtime_posture,
                 )
 
                 source_runtime_posture = resolve_source_runtime_posture(ctx.get("source_runtime_posture"))
@@ -1097,9 +1092,7 @@ class DeviceRouter:
                 else ctx.get("source_runtime_posture", "control_only") or "control_only"
             )
             try:
-                from core.source_execution_eligibility import (
-                    check_source_execution_eligibility as _check_eligibility,
-                )
+                from core.source_execution_eligibility import check_source_execution_eligibility as _check_eligibility
 
                 _eligibility = _check_eligibility(_posture_hint)
             except Exception:  # noqa: BLE001
@@ -1373,9 +1366,9 @@ class DeviceRouter:
             # records without relying on an overloaded device_id field.
             try:
                 from core.multi_device_control_integrity import (
-                    record_integrity_event,
-                    build_control_semantic_record,
                     ControlSemanticKind,
+                    build_control_semantic_record,
+                    record_integrity_event,
                 )
 
                 _primary_target_id = _target_ids[0] if _target_ids else ""
@@ -1532,8 +1525,8 @@ class DeviceRouter:
             # PR-2: convert task dict → TaskEnvelope → route_envelope
             # (replaces the legacy CommandRequest + dispatch path).
             try:
-                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
                 from core.command_router import get_command_router
+                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
                 # PR-AIP-UNIFIED: Removed circular call to cmd_router.route_envelope.
                 # DeviceRouter is the substrate layer; it should NOT call back into
@@ -1733,9 +1726,9 @@ class DeviceRouter:
             )
             try:
                 from core.multi_device_control_integrity import (
-                    record_integrity_event,
-                    build_dispatch_authority_record,
                     DispatchPathKind,
+                    build_dispatch_authority_record,
+                    record_integrity_event,
                 )
 
                 _rec = build_dispatch_authority_record(
@@ -1871,9 +1864,9 @@ class DeviceRouter:
                 # Record formation truth in integrity runtime
                 try:
                     from core.multi_device_control_integrity import (
-                        record_integrity_event,
-                        build_formation_truth_record,
                         FormationTruthConsistency,
+                        build_formation_truth_record,
+                        record_integrity_event,
                     )
 
                     _frec = build_formation_truth_record(

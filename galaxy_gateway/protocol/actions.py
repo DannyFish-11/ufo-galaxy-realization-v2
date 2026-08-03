@@ -48,10 +48,10 @@ from typing import Any, Dict, Optional, Tuple, Type, Union
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ============================================================================
 # Canonical action vocabulary
 # ============================================================================
+
 
 class ActionType(str, Enum):
     """Canonical AIP v3 action vocabulary.
@@ -66,20 +66,20 @@ class ActionType(str, Enum):
     """
 
     # --- Input actions ---
-    CLICK = "click"               # point-and-click at (x, y) or element
-    LONG_PRESS = "long_press"     # long-press at (x, y) or element
-    SWIPE = "swipe"               # swipe from (x1, y1) to (x2, y2)
-    SCROLL = "scroll"             # scroll at (x, y) in a direction / by delta
-    TYPE = "type"                 # type text via keyboard input
-    KEY_PRESS = "key_press"       # press a key by keycode or name
+    CLICK = "click"  # point-and-click at (x, y) or element
+    LONG_PRESS = "long_press"  # long-press at (x, y) or element
+    SWIPE = "swipe"  # swipe from (x1, y1) to (x2, y2)
+    SCROLL = "scroll"  # scroll at (x, y) in a direction / by delta
+    TYPE = "type"  # type text via keyboard input
+    KEY_PRESS = "key_press"  # press a key by keycode or name
 
     # --- Screen actions ---
-    SCREENSHOT = "screenshot"     # capture the current screen
+    SCREENSHOT = "screenshot"  # capture the current screen
 
     # --- App / system actions ---
-    APP_LAUNCH = "app_launch"     # open an app by package or friendly name
-    APP_STOP = "app_stop"         # force-stop an app
-    SHELL = "shell"               # run an arbitrary shell command
+    APP_LAUNCH = "app_launch"  # open an app by package or friendly name
+    APP_STOP = "app_stop"  # force-stop an app
+    SHELL = "shell"  # run an arbitrary shell command
 
     # --- Clipboard ---
     SET_CLIPBOARD = "set_clipboard"
@@ -97,7 +97,7 @@ class ActionType(str, Enum):
     VOLUME_DOWN = "volume_down"
 
     # --- UI element query ---
-    UI_QUERY = "ui_query"         # query the UI element tree
+    UI_QUERY = "ui_query"  # query the UI element tree
 
     # --- Install / packages ---
     INSTALL_APK = "install_apk"
@@ -143,6 +143,7 @@ LEGACY_ACTION_MAP: Dict[str, ActionType] = {
 # Per-action payload schemas
 # ============================================================================
 
+
 class ClickPayload(BaseModel):
     """Payload schema for :attr:`ActionType.CLICK` and
     :attr:`ActionType.LONG_PRESS`.
@@ -154,15 +155,12 @@ class ClickPayload(BaseModel):
     x: Optional[int] = None
     y: Optional[int] = None
     element_id: Optional[str] = None
-    selector: Optional[str] = None    # e.g. resource-id or XPath
+    selector: Optional[str] = None  # e.g. resource-id or XPath
 
     @model_validator(mode="after")
     def _require_target(self) -> "ClickPayload":
         if self.x is None and self.element_id is None and self.selector is None:
-            raise ValueError(
-                "click/long_press requires 'x'/'y' coordinates, "
-                "'element_id', or 'selector'"
-            )
+            raise ValueError("click/long_press requires 'x'/'y' coordinates, " "'element_id', or 'selector'")
         return self
 
 
@@ -182,7 +180,7 @@ class ScrollPayload(BaseModel):
     x: int
     y: int
     direction: str = Field(default="down")  # up / down / left / right
-    delta: int = Field(default=300, ge=0)   # pixel delta or step count
+    delta: int = Field(default=300, ge=0)  # pixel delta or step count
 
 
 class TypePayload(BaseModel):
@@ -197,7 +195,7 @@ class TypePayload(BaseModel):
 class KeyPressPayload(BaseModel):
     """Payload schema for :attr:`ActionType.KEY_PRESS`."""
 
-    keycode: Union[int, str]   # integer keycode OR named key ("ENTER", "BACK", …)
+    keycode: Union[int, str]  # integer keycode OR named key ("ENTER", "BACK", …)
 
 
 class ScreenshotPayload(BaseModel):
@@ -254,6 +252,7 @@ _ACTION_PAYLOAD_SCHEMAS: Dict[ActionType, Type[BaseModel]] = {
 # ============================================================================
 # Public helpers
 # ============================================================================
+
 
 def normalize_action_name(action: str) -> str:
     """Return the canonical :class:`ActionType` string for *action*.

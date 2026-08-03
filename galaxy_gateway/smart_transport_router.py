@@ -38,15 +38,17 @@ SmartTransportRouter - 智能传输路由（Legacy Compat — 仅保留向后兼
 作者：Manus AI
 """
 
+import asyncio
 import logging
 import os
-import asyncio
-import httpx
-from typing import Callable, List, Optional, Dict, Any, Literal
 from enum import Enum
+from typing import Any, Callable, Dict, List, Literal, Optional
+
+import httpx
 from pydantic import BaseModel
+
+from core.multimodal.multimodal_events import MultimodalEvent, TransportFallbackEvent
 from core.port_config import get_service_port
-from core.multimodal.multimodal_events import TransportFallbackEvent, MultimodalEvent
 
 logger = logging.getLogger(__name__)
 
@@ -54,39 +56,50 @@ logger = logging.getLogger(__name__)
 # 传输方式枚举
 # ============================================================================
 
+
 class TransportMethod(str, Enum):
     """传输方式"""
-    WEBRTC = "webrtc"           # 实时视频流（低延迟、高质量）
-    SCRCPY = "scrcpy"           # 高帧率屏幕镜像（需要 ADB）
-    ADB_SCREENSHOT = "adb"      # ADB 截图（低功耗、静态）
-    HTTP_SCREENSHOT = "http"    # HTTP 截图（通用、简单）
-    
+
+    WEBRTC = "webrtc"  # 实时视频流（低延迟、高质量）
+    SCRCPY = "scrcpy"  # 高帧率屏幕镜像（需要 ADB）
+    ADB_SCREENSHOT = "adb"  # ADB 截图（低功耗、静态）
+    HTTP_SCREENSHOT = "http"  # HTTP 截图（通用、简单）
+
+
 class NetworkLayer(str, Enum):
     """网络层"""
-    TAILSCALE = "tailscale"     # Tailscale VPN
-    DIRECT = "direct"           # 直连（局域网或公网）
-    
+
+    TAILSCALE = "tailscale"  # Tailscale VPN
+    DIRECT = "direct"  # 直连（局域网或公网）
+
+
 class SignalMethod(str, Enum):
     """控制信令方式"""
-    MQTT = "mqtt"               # MQTT（轻量级、低功耗）
-    WEBSOCKET = "websocket"     # WebSocket（双向、实时）
-    HTTP = "http"               # HTTP（简单、通用）
+
+    MQTT = "mqtt"  # MQTT（轻量级、低功耗）
+    WEBSOCKET = "websocket"  # WebSocket（双向、实时）
+    HTTP = "http"  # HTTP（简单、通用）
+
 
 # ============================================================================
 # 数据模型
 # ============================================================================
 
+
 class TransportRequest(BaseModel):
     """传输请求"""
-    device_id: str                                  # 设备 ID
+
+    device_id: str  # 设备 ID
     task_type: Literal["static", "dynamic", "interactive"]  # 任务类型
-    quality: Literal["low", "medium", "high"] = "medium"    # 质量要求
-    realtime: bool = False                          # 是否需要实时
-    preferred_method: Optional[TransportMethod] = None      # 首选方式
-    use_gateway: bool = False                       # 当 True 且 method=webrtc 时返回网关 WS 信令 URL
-    
+    quality: Literal["low", "medium", "high"] = "medium"  # 质量要求
+    realtime: bool = False  # 是否需要实时
+    preferred_method: Optional[TransportMethod] = None  # 首选方式
+    use_gateway: bool = False  # 当 True 且 method=webrtc 时返回网关 WS 信令 URL
+
+
 class TransportResponse(BaseModel):
     """传输响应"""
+
     success: bool
     method: TransportMethod
     network: NetworkLayer
@@ -94,9 +107,11 @@ class TransportResponse(BaseModel):
     endpoint: str
     metadata: Dict[str, Any] = {}
 
+
 # ============================================================================
 # SmartTransportRouter 核心
 # ============================================================================
+
 
 class SmartTransportRouter:
     """Legacy compatibility transport-selection helper (PR-M).
@@ -110,13 +125,12 @@ class SmartTransportRouter:
 
     智能传输路由（legacy compat — 仅保留向后兼容性）
     """
-    
+
     def __init__(self):
         try:
             from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
-            emit_legacy_guardrail(
-                "galaxy_gateway.smart_transport_router.SmartTransportRouter"
-            )
+
+            emit_legacy_guardrail("galaxy_gateway.smart_transport_router.SmartTransportRouter")
         except Exception:
             pass
         # 节点端点配置
@@ -126,7 +140,7 @@ class SmartTransportRouter:
             "adb": os.getenv("NODE_33_URL", "http://localhost:8033"),
             "mqtt": os.getenv("NODE_41_URL", "http://localhost:8041"),
         }
-        
+
         # Tailscale 配置
         # Canonical env names (GALAXY_TAILSCALE_*) — the rest of the system
         # (api/config, webrtc_proxy, system_mode, operational_enablement_audit)
@@ -142,19 +156,16 @@ class SmartTransportRouter:
 
         # 统一 Gateway WS 入口（AIP v3）
         self.gateway_url = os.getenv(
-            "GALAXY_GATEWAY_URL",
-            os.getenv("GATEWAY_URL", f"http://localhost:{get_service_port('state_machine')}")
+            "GALAXY_GATEWAY_URL", os.getenv("GATEWAY_URL", f"http://localhost:{get_service_port('state_machine')}")
         ).rstrip("/")
-        
+
         # 设备状态缓存
         self.device_status = {}
 
         # PR-7: event listeners for fallback / transport events
         self._event_listeners: List[Callable[[MultimodalEvent], None]] = []
-        
-    def add_event_listener(
-        self, listener: Callable[[MultimodalEvent], None]
-    ) -> None:
+
+    def add_event_listener(self, listener: Callable[[MultimodalEvent], None]) -> None:
         """Register a listener for transport :class:`MultimodalEvent` objects.
 
         Listeners receive :class:`TransportFallbackEvent` when WebRTC is
@@ -165,7 +176,7 @@ class SmartTransportRouter:
     async def route(self, request: TransportRequest) -> TransportResponse:
         """
         智能路由：根据请求选择最佳传输方式
-        
+
         默认路由返回 Gateway WS 端点（AIP v3）。
         仅当对应通道被明确启用（GALAXY_ENABLE_WEBRTC/SCRCPY/MQTT）时，
         才返回直连 Node 端点。
@@ -174,13 +185,11 @@ class SmartTransportRouter:
         available.  A :class:`TransportFallbackEvent` is emitted whenever
         the router degrades from WebRTC to a screenshot-based method.
         """
-        
+
         # PR-7: When WebRTC is the preferred method for real-time tasks but is
         # unavailable, determine the intended method before selection so a
         # fallback event can be emitted.
-        prefer_webrtc: bool = (
-            self.webrtc_enabled and request.task_type in ("dynamic", "interactive")
-        )
+        prefer_webrtc: bool = self.webrtc_enabled and request.task_type in ("dynamic", "interactive")
 
         method = await self._select_transport_method(request)
 
@@ -200,16 +209,16 @@ class SmartTransportRouter:
                 request.device_id,
                 method.value,
             )
-        
+
         # 2. 确定网络层
         network = await self._select_network_layer(request.device_id)
-        
+
         # 3. 确定控制信令
         signal = await self._select_signal_method(request.task_type)
-        
+
         # 4. 构建端点
         endpoint = await self._build_endpoint(method, request.device_id, network, request.use_gateway)
-        
+
         # 5. 返回响应
         return TransportResponse(
             success=True,
@@ -221,8 +230,8 @@ class SmartTransportRouter:
                 "device_id": request.device_id,
                 "task_type": request.task_type,
                 "quality": request.quality,
-                "realtime": request.realtime
-            }
+                "realtime": request.realtime,
+            },
         )
 
     def _emit_event(self, event: MultimodalEvent) -> None:
@@ -232,39 +241,40 @@ class SmartTransportRouter:
                 listener(event)
             except Exception as exc:
                 logger.debug("TransportRouter event listener error: %s", exc)
-    
+
     async def _select_transport_method(self, request: TransportRequest) -> TransportMethod:
         """选择传输方式
-        
+
         默认回退到 HTTP_SCREENSHOT（通过 Gateway）。
         仅当对应通道已启用且节点可达时才选择 WebRTC/Scrcpy。
         """
-        
+
         # 如果用户指定了首选方式，先检查该通道是否已启用
         if request.preferred_method:
-            if self._is_channel_enabled(request.preferred_method) and \
-               await self._is_method_available(request.preferred_method, request.device_id):
+            if self._is_channel_enabled(request.preferred_method) and await self._is_method_available(
+                request.preferred_method, request.device_id
+            ):
                 return request.preferred_method
-        
+
         # 根据任务类型和需求自动选择（仅当通道已启用时）
         if request.task_type == "dynamic" and request.realtime:
             if self.webrtc_enabled and await self._is_method_available(TransportMethod.WEBRTC, request.device_id):
                 return TransportMethod.WEBRTC
             if self.scrcpy_enabled and await self._is_method_available(TransportMethod.SCRCPY, request.device_id):
                 return TransportMethod.SCRCPY
-            
+
         elif request.task_type == "dynamic":
             if self.scrcpy_enabled and await self._is_method_available(TransportMethod.SCRCPY, request.device_id):
                 return TransportMethod.SCRCPY
-            
+
         elif request.task_type == "interactive":
             if self.webrtc_enabled and await self._is_method_available(TransportMethod.WEBRTC, request.device_id):
                 return TransportMethod.WEBRTC
-            
+
         elif request.task_type == "static" and request.quality == "high":
             if self.scrcpy_enabled and await self._is_method_available(TransportMethod.SCRCPY, request.device_id):
                 return TransportMethod.SCRCPY
-        
+
         # 默认：通过 Gateway 的 HTTP 截图（无需直连 Node，最通用）
         return TransportMethod.HTTP_SCREENSHOT
 
@@ -279,14 +289,14 @@ class SmartTransportRouter:
         if method == TransportMethod.HTTP_SCREENSHOT:
             return True  # HTTP 截图始终允许（通用）
         return False
-    
+
     async def _is_method_available(self, method: TransportMethod, device_id: str) -> bool:
         """检查传输方式是否可用"""
         try:
             node_url = self.nodes.get(method.value)
             if not node_url:
                 return False
-            
+
             async with httpx.AsyncClient(timeout=2.0) as client:
                 response = await client.get(f"{node_url}/health")
                 if response.status_code == 200:
@@ -294,15 +304,15 @@ class SmartTransportRouter:
                     return data.get("status") in ["healthy", "ok"]
         except Exception:
             pass
-        
+
         return False
-    
+
     async def _select_network_layer(self, device_id: str) -> NetworkLayer:
         """选择网络层"""
         if self.tailscale_enabled:
             return NetworkLayer.TAILSCALE
         return NetworkLayer.DIRECT
-    
+
     async def _select_signal_method(self, task_type: str) -> SignalMethod:
         """选择控制信令方式"""
         if task_type in ["dynamic", "interactive"]:
@@ -312,8 +322,10 @@ class SmartTransportRouter:
             # 静态任务使用 MQTT（轻量级）
             return SignalMethod.MQTT
         return SignalMethod.HTTP
-    
-    async def _build_endpoint(self, method: TransportMethod, device_id: str, network: NetworkLayer, use_gateway: bool = False) -> str:
+
+    async def _build_endpoint(
+        self, method: TransportMethod, device_id: str, network: NetworkLayer, use_gateway: bool = False
+    ) -> str:
         """构建端点
 
         WebRTC/Scrcpy 通道如未启用，始终返回 Gateway WS 端点（AIP v3）。
@@ -338,12 +350,13 @@ class SmartTransportRouter:
             return f"{node_url}/capture?device_id={device_id}"
 
         base_url = self.nodes.get(method.value, "")
-        
+
         if network == NetworkLayer.TAILSCALE and self.tailscale_domain:
             # 使用 Tailscale 域名
             base_url = base_url.replace("localhost", self.tailscale_domain)
-        
+
         return f"{base_url}/capture?device_id={device_id}"
+
 
 # ============================================================================
 # FastAPI 接口
@@ -351,26 +364,21 @@ class SmartTransportRouter:
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
 from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="SmartTransportRouter", version="1.0.0")
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
 
 router = SmartTransportRouter()
 
+
 @app.get("/health")
 async def health():
-    return {
-        "status": "healthy",
-        "service": "SmartTransportRouter",
-        "version": "1.0.0"
-    }
+    return {"status": "healthy", "service": "SmartTransportRouter", "version": "1.0.0"}
+
 
 @app.post("/route", response_model=TransportResponse)
 async def route_transport(request: TransportRequest):
@@ -380,15 +388,18 @@ async def route_transport(request: TransportRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/methods")
 async def list_methods():
     """列出所有支持的传输方式"""
     return {
         "methods": [m.value for m in TransportMethod],
         "networks": [n.value for n in NetworkLayer],
-        "signals": [s.value for s in SignalMethod]
+        "signals": [s.value for s in SignalMethod],
     }
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8096)

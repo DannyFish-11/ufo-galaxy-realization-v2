@@ -59,11 +59,7 @@ async def handle_device_acceptance_report(
             },
         }
     )
-    ack_type = (
-        f"{msg_type}_ack"
-        if isinstance(msg_type, str) and msg_type.strip()
-        else "device_acceptance_report_ack"
-    )
+    ack_type = f"{msg_type}_ack" if isinstance(msg_type, str) and msg_type.strip() else "device_acceptance_report_ack"
     action_surface = UnifiedActionLifecycleSurface(
         action_id=str(message.get("message_id") or ""),
         session_id=str(payload_dict.get("session_id") or message.get("session_id") or ""),

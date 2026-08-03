@@ -29,10 +29,10 @@ except ImportError:  # pragma: no cover - pydantic v1 fallback
     from pydantic import validator as _field_validator  # type: ignore
 
 from galaxy_gateway.cross_device_switch import (
-    is_cross_device_enabled,
-    HTTP_STATUS_CROSS_DEVICE_DISABLED,
     ERROR_CODE_CROSS_DEVICE_DISABLED,
     ERROR_MSG_CROSS_DEVICE_DISABLED,
+    HTTP_STATUS_CROSS_DEVICE_DISABLED,
+    is_cross_device_enabled,
 )
 from galaxy_gateway.webrtc_proxy import (
     check_node95_reachable,

@@ -11,12 +11,8 @@ from typing import Dict
 
 from galaxy_gateway.protocol.aip_v3 import MessageType
 
-ANDROID_RUNTIME_WS_PROFILE_AUTHORITY = (
-    "ANDROID_RUNTIME_WS_PROFILE_AUTHORITY::galaxy_gateway.android.runtime_ws_profile"
-)
-ANDROID_RUNTIME_WS_PROFILE_PR4B_SENTINEL = (
-    "ANDROID_RUNTIME_WS_PROFILE_PR4B_SENTINEL::android-aip-ws-ingress-aligned"
-)
+ANDROID_RUNTIME_WS_PROFILE_AUTHORITY = "ANDROID_RUNTIME_WS_PROFILE_AUTHORITY::galaxy_gateway.android.runtime_ws_profile"
+ANDROID_RUNTIME_WS_PROFILE_PR4B_SENTINEL = "ANDROID_RUNTIME_WS_PROFILE_PR4B_SENTINEL::android-aip-ws-ingress-aligned"
 
 ANDROID_RUNTIME_WS_SESSION_CONTINUITY_EXPECTATION = (
     "session continuity is preserved via reconnect+heartbeat on canonical WS ingress"
@@ -113,10 +109,7 @@ _MAPPINGS: Dict[str, AndroidRuntimeWSMapping] = {
         semantic_family="governance_policy_input",
         normalization_kind="device_acceptance_report",
         routing_path="android_bridge.acceptance_report_handler",
-        truth_path=(
-            "core.android_acceptance_evidence_store+"
-            "core.android_evaluator_artifact_ingress"
-        ),
+        truth_path=("core.android_acceptance_evidence_store+" "core.android_evaluator_artifact_ingress"),
         handling_level="canonical",
     ),
     MessageType.DEVICE_STRATEGY_REPORT.value: AndroidRuntimeWSMapping(

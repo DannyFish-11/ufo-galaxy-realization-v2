@@ -49,21 +49,21 @@ from typing import Any, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 # ── New sub-modules (extracted from this file) ──
 from galaxy_gateway.bootstrap.lifecycle import lifespan
 from galaxy_gateway.middleware import BearerAuthMiddleware  # re-exported for compat
+from galaxy_gateway.routes import _handle_android_ws  # re-exported: tests import from here
 from galaxy_gateway.routes import (
-    health_router,
-    devices_router,
-    tasks_router,
-    sessions_router,
     chat_router,
+    devices_router,
+    health_router,
     llm_router,
     register_websocket_routes,
-    _handle_android_ws,  # re-exported: tests import from here
+    sessions_router,
+    tasks_router,
 )
 from galaxy_gateway.routes.chat import ChatRequest  # re-exported: tests inspect this module
+from nodes.common.cors_config import get_cors_headers, get_cors_methods, get_cors_origins
 
 # Re-export ChatRequest symbols for backward-compatible source checks
 # (multimodal_context field lives in galaxy_gateway.routes.chat but tests
@@ -123,6 +123,7 @@ app.include_router(llm_router)
 # 但从未被挂载(孤儿路由)。fastapi 缺失时模块自身优雅降级(router=None)。
 try:
     from galaxy_gateway.routes.sync_status import router as _sync_status_router
+
     if _sync_status_router is not None:
         app.include_router(_sync_status_router)
         logger.info("Sync status route mounted: GET /sync/status")
@@ -138,6 +139,7 @@ register_websocket_routes(app)
 
 try:
     from core.routes.ai import create_router as _create_ai_router
+
     app.include_router(_create_ai_router(), tags=["ai-agents"])
     logger.info("AI Agent 路由已挂载 (/api/v1/agents/*, /api/v1/ai/*)")
 except Exception as _ai_err:
@@ -145,6 +147,7 @@ except Exception as _ai_err:
 
 try:
     from galaxy_gateway.routes.linux_agent import router as _linux_agent_router
+
     app.include_router(_linux_agent_router)
     logger.info("Linux Agent 路由已挂载 (/api/v1/agents/linux/*)")
 except Exception as _la_err:
@@ -152,6 +155,7 @@ except Exception as _la_err:
 
 try:
     from galaxy_gateway.routes.sandbox import router as _sandbox_router
+
     app.include_router(_sandbox_router)
     logger.info("Sandbox 路由已挂载 (/api/v1/agents/sandbox/*)")
 except Exception as _sb_err:
@@ -159,13 +163,17 @@ except Exception as _sb_err:
 
 try:
     from .gateway_service import router as _gateway_v5_router
+
     app.include_router(_gateway_v5_router, tags=["gateway-v5"])
     logger.info("Gateway v5.0 routes mounted")
 except Exception as _gw5_err:
-    logger.warning("Gateway v5.0 routes not mounted (optional): %s", _gw5_err)  # PR-LOG-LEVEL: optional component → warning not error
+    logger.warning(
+        "Gateway v5.0 routes not mounted (optional): %s", _gw5_err
+    )  # PR-LOG-LEVEL: optional component → warning not error
 
 try:
     from .api.config import router as _client_config_router
+
     app.include_router(_client_config_router)
     logger.info("Client config discovery route mounted: GET /api/v1/config")
 except Exception as _cfg_err:
@@ -173,6 +181,7 @@ except Exception as _cfg_err:
 
 try:
     from .api.pairing import router as _pairing_router
+
     app.include_router(_pairing_router)
     logger.info("Device pairing routes mounted: /api/v1/pairing/*")
 except Exception as _pair_err:
@@ -183,12 +192,14 @@ except Exception as _pair_err:
 # Main entry point
 # ============================================================================
 
+
 def main():
     """Start the Galaxy Gateway with uvicorn."""
     import uvicorn
 
     try:
         from core.port_config import get_service_port
+
         _default_gw_port = str(get_service_port("gateway"))
     except Exception:
         # 与全仓库统一口(9000)保持一致 —— 旧兜底 8765 是历史残留:port_config
@@ -204,14 +215,16 @@ def main():
     if tls_cert and tls_key:
         logger.info(
             "Starting Galaxy Gateway on %s:%s (TLS ENABLED, cert=%s)",
-            host, port, tls_cert,
+            host,
+            port,
+            tls_cert,
         )
         uvicorn.run(app, host=host, port=port, ssl_certfile=tls_cert, ssl_keyfile=tls_key)
     else:
         logger.info(
-            "Starting Galaxy Gateway on %s:%s (TLS DISABLED — "
-            "set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable HTTPS)",
-            host, port,
+            "Starting Galaxy Gateway on %s:%s (TLS DISABLED — " "set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable HTTPS)",
+            host,
+            port,
         )
         uvicorn.run(app, host=host, port=port)
 

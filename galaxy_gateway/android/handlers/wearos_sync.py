@@ -61,6 +61,7 @@ async def handle_wearos_state_sync(
     try:
         # PR-AIP-UNIFIED: Route through AIPTransport instead of direct WS
         from core.aip_transport import get_aip_transport
+
         msg = {
             **wear_msg,
             "_transport": "auto",
@@ -79,5 +80,8 @@ async def handle_wearos_state_sync(
 def is_wearos_device(device_type: str) -> bool:
     """Check if device type indicates Wear OS."""
     return device_type.lower() in {
-        "wear_os", "wearos", "watch", "galaxy_watch",
+        "wear_os",
+        "wearos",
+        "watch",
+        "galaxy_watch",
     }

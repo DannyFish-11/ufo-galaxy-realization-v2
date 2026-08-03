@@ -20,17 +20,24 @@ from the canonical task via project_to_task_envelope().
 import asyncio
 import logging
 import uuid
-from typing import Dict, List, Optional, Callable, Any
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
-from ..protocol import (
-    AIPMessage, MessageType, Command, CommandResult,
-    TaskStatus, ResultStatus, DeviceCapability,
-    create_task_message, create_gui_click_message,
-    create_gui_input_message, create_screenshot_message
-)
 from ..handlers import DeviceManager, MessageHandler
+from ..protocol import (
+    AIPMessage,
+    Command,
+    CommandResult,
+    DeviceCapability,
+    MessageType,
+    ResultStatus,
+    TaskStatus,
+    create_gui_click_message,
+    create_gui_input_message,
+    create_screenshot_message,
+    create_task_message,
+)
 from ..transport import WebSocketManager
 
 logger = logging.getLogger(__name__)
@@ -59,6 +66,7 @@ TASK_ORCHESTRATOR_AUDIT_DISPATCH_INTEGRATED: str = (
 
 class TaskPriority(Enum):
     """任务优先级"""
+
     LOW = 1
     NORMAL = 2
     HIGH = 3
@@ -67,13 +75,9 @@ class TaskPriority(Enum):
 
 class Task:
     """任务定义"""
-    
+
     def __init__(
-        self,
-        task_id: str,
-        user_request: str,
-        priority: TaskPriority = TaskPriority.NORMAL,
-        timeout: int = 300
+        self, task_id: str, user_request: str, priority: TaskPriority = TaskPriority.NORMAL, timeout: int = 300
     ):
         self.task_id = task_id
         self.user_request = user_request
@@ -112,10 +116,7 @@ class TaskOrchestrator:
     """
 
     def __init__(
-        self,
-        device_manager: DeviceManager,
-        message_handler: MessageHandler,
-        websocket_manager: WebSocketManager
+        self, device_manager: DeviceManager, message_handler: MessageHandler, websocket_manager: WebSocketManager
     ):
         self.device_manager = device_manager
         self.message_handler = message_handler
@@ -139,6 +140,7 @@ class TaskOrchestrator:
         # OpenClawd → CommandRouter → TaskEnvelope → DeviceRouter.route_task.
         try:
             from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
             emit_legacy_guardrail(
                 caller="galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator",
             )
@@ -150,7 +152,7 @@ class TaskOrchestrator:
         self._running = True
         self._worker_task = asyncio.create_task(self._task_worker())
         logger.info("Task Orchestrator started")
-    
+
     async def stop(self):
         """停止编排器"""
         self._running = False
@@ -161,7 +163,7 @@ class TaskOrchestrator:
             except asyncio.CancelledError:
                 pass
         logger.info("Task Orchestrator stopped")
-    
+
     async def submit_task(
         self,
         user_request: str,
@@ -198,8 +200,9 @@ class TaskOrchestrator:
         canonical_task_id: Optional[str] = None
         canonical_trace_id: Optional[str] = None
         try:
-            from core.task_adapter import adapt_to_canonical_task
             from core.canonical_task import TaskOrigin
+            from core.task_adapter import adapt_to_canonical_task
+
             _canonical = adapt_to_canonical_task(
                 {
                     "goal": user_request,
@@ -212,9 +215,9 @@ class TaskOrchestrator:
             canonical_task_id = _canonical.identity.task_id
             canonical_trace_id = _canonical.identity.trace_id
             logger.debug(
-                "TaskOrchestrator.submit_task: CanonicalTask front-loaded "
-                "task_id=%s trace_id=%s",
-                canonical_task_id, canonical_trace_id,
+                "TaskOrchestrator.submit_task: CanonicalTask front-loaded " "task_id=%s trace_id=%s",
+                canonical_task_id,
+                canonical_trace_id,
             )
         except Exception as _ct_err:
             logger.debug(
@@ -224,16 +227,11 @@ class TaskOrchestrator:
             )
 
         task_id = canonical_task_id or str(uuid.uuid4())
-        task = Task(
-            task_id=task_id,
-            user_request=user_request,
-            priority=priority,
-            timeout=timeout
-        )
-        
+        task = Task(task_id=task_id, user_request=user_request, priority=priority, timeout=timeout)
+
         if target_device:
             task.assigned_device = target_device
-        
+
         self.tasks[task_id] = task
 
         # PR-2 / PR-507: wrap the incoming request in a TaskEnvelope.
@@ -241,6 +239,7 @@ class TaskOrchestrator:
         # envelope from it so TaskEnvelope is a downstream projection.
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+
             _meta: Dict[str, Any] = {
                 "priority_label": priority.name if hasattr(priority, "name") else "",
             }
@@ -268,18 +267,15 @@ class TaskOrchestrator:
             logger.debug("TaskOrchestrator: TaskEnvelope construction skipped — %s", _env_err)
 
         await self.task_queue.put(task)
-        
+
         logger.info(f"Task submitted: {task_id} - {user_request[:50]}...")
         return task
-    
+
     async def _task_worker(self):
         """任务处理工作线程"""
         while self._running:
             try:
-                task = await asyncio.wait_for(
-                    self.task_queue.get(),
-                    timeout=1.0
-                )
+                task = await asyncio.wait_for(self.task_queue.get(), timeout=1.0)
                 await self._process_task(task)
             except asyncio.TimeoutError:
                 continue
@@ -287,7 +283,7 @@ class TaskOrchestrator:
                 break
             except Exception as e:
                 logger.error(f"Task worker error: {e}")
-    
+
     async def _process_task(self, task: Task):
         """处理单个任务（PR-2：通过 TaskEnvelope 追踪生命周期）。
 
@@ -316,6 +312,7 @@ class TaskOrchestrator:
             # PR-5 Cap 1: lifecycle created → running
             try:
                 from core.task_lifecycle import get_lifecycle_manager
+
                 envelope = get_lifecycle_manager().mark_running(envelope)
                 self._task_envelopes[task.task_id] = envelope
             except Exception as _e:
@@ -331,6 +328,7 @@ class TaskOrchestrator:
                 if envelope is not None:
                     try:
                         from core.task_lifecycle import get_lifecycle_manager
+
                         get_lifecycle_manager().mark_failed(envelope, error=task.error)
                     except Exception:
                         pass
@@ -350,10 +348,9 @@ class TaskOrchestrator:
             # canonical audit trail.
             try:
                 from core.audit_event_semantics import audit_task_dispatched as _aud_disp
+
                 _envelope_for_audit = self._task_envelopes.get(task.task_id)
-                _trace_id_audit = (
-                    getattr(_envelope_for_audit, "trace_id", None) or ""
-                )
+                _trace_id_audit = getattr(_envelope_for_audit, "trace_id", None) or ""
                 _aud_disp(
                     task.task_id,
                     trace_id=_trace_id_audit,
@@ -374,6 +371,7 @@ class TaskOrchestrator:
             if envelope is not None:
                 try:
                     from core.task_lifecycle import get_lifecycle_manager
+
                     _lcm = get_lifecycle_manager()
                     if task.status == TaskStatus.COMPLETED:
                         _lcm.mark_done(envelope, result_summary=f"task {task.task_id} completed")
@@ -390,6 +388,7 @@ class TaskOrchestrator:
             if envelope is not None:
                 try:
                     from core.task_lifecycle import get_lifecycle_manager
+
                     get_lifecycle_manager().mark_failed(envelope, error=str(e))
                 except Exception:
                     pass
@@ -432,8 +431,7 @@ class TaskOrchestrator:
             ]
         except Exception as exc:
             logger.warning(
-                "TaskOrchestrator: UDM online-device lookup failed (%s); "
-                "falling back to transport view only",
+                "TaskOrchestrator: UDM online-device lookup failed (%s); " "falling back to transport view only",
                 exc,
             )
             return []
@@ -480,9 +478,7 @@ class TaskOrchestrator:
             if self.websocket_manager.is_device_connected(device_id):
                 return True
         except Exception as exc:
-            logger.warning(
-                "TaskOrchestrator: transport connectivity probe failed for %r: %s", device_id, exc
-            )
+            logger.warning("TaskOrchestrator: transport connectivity probe failed for %r: %s", device_id, exc)
         return device_id in self._authoritative_online_ids()
 
     async def _select_device(self, task: Task) -> Optional[str]:
@@ -553,19 +549,13 @@ class TaskOrchestrator:
         # UDM(UnifiedDeviceType 的取值就是 "android"/"windows",与上面
         # preferred_type 的词表是同一套字面量)。
         if preferred_type:
-            typed_devices = [
-                d for d in preferred
-                if self._device_type_of(d) == preferred_type
-            ]
+            typed_devices = [d for d in preferred if self._device_type_of(d) == preferred_type]
             if typed_devices:
                 preferred = typed_devices
 
         # 2. 最少任务优先: 选择当前负载最低的设备 (async-safe)
         async with self._device_count_lock:
-            preferred_sorted = sorted(
-                preferred,
-                key=lambda d: self._device_task_counts.get(d, 0)
-            )
+            preferred_sorted = sorted(preferred, key=lambda d: self._device_task_counts.get(d, 0))
 
             # 3. 轮询 (在同等负载中轮询)
             selected = preferred_sorted[self._device_rr_index % len(preferred_sorted)]
@@ -590,7 +580,7 @@ class TaskOrchestrator:
         async with self._device_count_lock:
             self._device_task_counts.clear()
             self._device_rr_index = -1
-    
+
     async def _decompose_task(self, task: Task) -> List[Command]:
         """分解任务为命令序列。
 
@@ -601,47 +591,27 @@ class TaskOrchestrator:
         """
         commands = []
         request = task.user_request.lower()
-        
+
         # 简单的任务分解逻辑（可以扩展为 LLM 驱动）
         if "截图" in request or "screenshot" in request:
-            commands.append(Command(
-                tool_name="screenshot",
-                tool_type="data_collection",
-                parameters={}
-            ))
-        
+            commands.append(Command(tool_name="screenshot", tool_type="data_collection", parameters={}))
+
         if "点击" in request or "click" in request:
             # 解析点击目标
-            commands.append(Command(
-                tool_name="click",
-                tool_type="action",
-                parameters={"target": request}
-            ))
-        
+            commands.append(Command(tool_name="click", tool_type="action", parameters={"target": request}))
+
         if "输入" in request or "input" in request or "type" in request:
-            commands.append(Command(
-                tool_name="input_text",
-                tool_type="action",
-                parameters={"text": request}
-            ))
-        
+            commands.append(Command(tool_name="input_text", tool_type="action", parameters={"text": request}))
+
         if "滑动" in request or "swipe" in request:
-            commands.append(Command(
-                tool_name="swipe",
-                tool_type="action",
-                parameters={"direction": "down"}
-            ))
-        
+            commands.append(Command(tool_name="swipe", tool_type="action", parameters={"direction": "down"}))
+
         # 如果没有识别到具体命令，默认先截图获取屏幕信息
         if not commands:
-            commands.append(Command(
-                tool_name="get_screen_content",
-                tool_type="data_collection",
-                parameters={}
-            ))
-        
+            commands.append(Command(tool_name="get_screen_content", tool_type="data_collection", parameters={}))
+
         return commands
-    
+
     async def _send_task_to_device(self, task: Task):
         """发送任务到设备（PR-2：使用 TaskEnvelope 字段构造消息）。"""
         # PR-2: retrieve the envelope constructed at submit_task; fall back to
@@ -649,28 +619,22 @@ class TaskOrchestrator:
         envelope = self._task_envelopes.get(task.task_id)
         trace_id = envelope.trace_id if envelope is not None else task.task_id
 
-        message = create_task_message(
-            device_id=task.assigned_device,
-            task_id=task.task_id,
-            commands=task.commands
-        )
+        message = create_task_message(device_id=task.assigned_device, task_id=task.task_id, commands=task.commands)
         message.payload["user_request"] = task.user_request
         # PR-2: attach envelope trace_id for unified cross-component correlation.
         message.payload["trace_id"] = trace_id
-        
+
         # 注册任务回调
         self.message_handler.create_task(
-            task_id=task.task_id,
-            device_id=task.assigned_device,
-            task_type="user_task",
-            callback=self._on_task_result
+            task_id=task.task_id, device_id=task.assigned_device, task_type="user_task", callback=self._on_task_result
         )
-        
+
         # PR-28: Route through AIPTransport with auto transport selection.
         # AIPTransport will automatically prefer tailscale_p2p for same-tailnet
         # devices, fallback to tcp/websocket as needed.
         try:
             from core.aip_transport import get_aip_transport
+
             result = await get_aip_transport().send(
                 message,
                 task.assigned_device,
@@ -683,11 +647,11 @@ class TaskOrchestrator:
 
         if not success:
             raise Exception(f"Failed to send task to device {task.assigned_device}")
-    
+
     async def _wait_for_completion(self, task: Task):
         """等待任务完成"""
         start_time = datetime.now(timezone.utc)
-        
+
         while True:
             # 检查超时
             elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -695,7 +659,7 @@ class TaskOrchestrator:
                 task.status = TaskStatus.FAILED
                 task.error = "Task timeout"
                 return
-            
+
             # 检查任务状态
             task_info = self.message_handler.get_task(task.task_id)
             if task_info:
@@ -706,44 +670,44 @@ class TaskOrchestrator:
                 elif task_info["status"] == TaskStatus.FAILED:
                     task.status = TaskStatus.FAILED
                     return
-            
+
             await asyncio.sleep(0.5)
-    
+
     async def _on_task_result(self, task_id: str, message: AIPMessage):
         """任务结果回调"""
         if task_id in self.tasks:
             task = self.tasks[task_id]
             task.results = message.results
             logger.info(f"Task {task_id} received results")
-    
+
     def get_task(self, task_id: str) -> Optional[Task]:
         """获取任务"""
         return self.tasks.get(task_id)
-    
+
     def get_all_tasks(self) -> List[Task]:
         """获取所有任务"""
         return list(self.tasks.values())
-    
+
     def get_pending_tasks(self) -> List[Task]:
         """获取待处理任务"""
         return [t for t in self.tasks.values() if t.status == TaskStatus.PENDING]
-    
+
     def get_running_tasks(self) -> List[Task]:
         """获取运行中任务"""
         return [t for t in self.tasks.values() if t.status == TaskStatus.RUNNING]
-    
+
     async def cancel_task(self, task_id: str) -> bool:
         """取消任务"""
         if task_id not in self.tasks:
             return False
-        
+
         task = self.tasks[task_id]
         if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
             return False
-        
+
         task.status = TaskStatus.CANCELLED
         task.completed_at = datetime.now(timezone.utc)
-        
+
         # PR-28: 统一走 AIPTransport，自动选择最优传输
         if task.assigned_device:
             cancel_message = {
@@ -755,13 +719,14 @@ class TaskOrchestrator:
             }
             try:
                 from core.aip_transport import get_aip_transport
+
                 await get_aip_transport().send(
                     cancel_message,
                     task.assigned_device,
                 )
             except Exception as exc:
                 logger.warning("AIPTransport cancel send failed for %s: %s", task.assigned_device, exc)
-        
+
         logger.info(f"Task cancelled: {task_id}")
         return True
 
@@ -801,12 +766,19 @@ class TaskOrchestrator:
             ``elapsed_ms``, ``graph_id``, ``trace_id``, ``node_statuses``.
         """
         if not subtasks:
-            return {"success": True, "done": 0, "failed": 0, "skipped": 0,
-                    "elapsed_ms": 0.0, "graph_id": "", "trace_id": trace_id,
-                    "node_statuses": {}}
+            return {
+                "success": True,
+                "done": 0,
+                "failed": 0,
+                "skipped": 0,
+                "elapsed_ms": 0.0,
+                "graph_id": "",
+                "trace_id": trace_id,
+                "node_statuses": {},
+            }
 
         try:
-            from core.task_graph import compile_subtasks_to_graph, RetryPolicy
+            from core.task_graph import RetryPolicy, compile_subtasks_to_graph
         except ImportError as exc:
             logger.warning(
                 "TaskOrchestrator.submit_dag_task: core.task_graph unavailable (%s). "
@@ -837,16 +809,14 @@ class TaskOrchestrator:
             interval = _POLLING_INTERVAL_SECONDS
             while elapsed < deadline:
                 t = orchestrator_ref.tasks.get(task.task_id)
-                if t and t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED,
-                                      TaskStatus.CANCELLED):
+                if t and t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
                     break
                 await asyncio.sleep(interval)
                 elapsed += interval
             final = orchestrator_ref.tasks.get(task.task_id)
             if final and final.status == TaskStatus.FAILED:
                 raise RuntimeError(final.error or f"task {task.task_id} failed")
-            return {"task_id": task.task_id,
-                    "status": final.status.value if final else "unknown"}
+            return {"task_id": task.task_id, "status": final.status.value if final else "unknown"}
 
         try:
             graph = compile_subtasks_to_graph(
@@ -983,6 +953,7 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
         # suffix), so the dependency never matched a real id and sequential
         # ordering was silently dropped.
         import types
+
         task_ids = [f"subtask_{idx}_{_uuid_lib.uuid4().hex[:8]}" for idx in range(len(device_ids))]
         subtasks = []
         for idx, device_id in enumerate(device_ids):
@@ -996,8 +967,7 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
             subtasks.append(st)
 
         logger.info(
-            "PR-2 submit_multi_device_task: routing %d devices through TaskGraph "
-            "| mode=%s trace_id=%s",
+            "PR-2 submit_multi_device_task: routing %d devices through TaskGraph " "| mode=%s trace_id=%s",
             len(device_ids),
             coordination_mode,
             trace_id,
@@ -1006,6 +976,7 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
         # Log command envelope for observability
         try:
             from core.unified.command_envelope import CommandEnvelope, log_command_envelope
+
             env = CommandEnvelope(
                 trace_id=trace_id,
                 runtime_session_id=runtime_session_id,
@@ -1023,17 +994,14 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
             runtime_session_id=runtime_session_id,
             continue_on_failure=(coordination_mode != "sequential"),
         )
-    
+
     async def broadcast_command(self, command: Command) -> Dict[str, CommandResult]:
         """向所有设备广播命令"""
         results = {}
         connected_devices = self._connected_device_ids()
-        
+
         for device_id in connected_devices:
-            task = await self.submit_task(
-                user_request=f"Execute command: {command.tool_name}",
-                target_device=device_id
-            )
+            task = await self.submit_task(user_request=f"Execute command: {command.tool_name}", target_device=device_id)
             task.commands = [command]
             await self._send_task_to_device(task)
             # Populate the declared Dict[str, CommandResult] return.  The

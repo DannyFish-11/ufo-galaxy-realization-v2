@@ -18,11 +18,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 if TYPE_CHECKING:
     from core.unified.models import UnifiedDevice
 
-from ..protocol import (
-    DeviceInfo, DeviceType, DevicePlatform, DeviceCapability,
-    AIPMessage, MessageType
-)
-from ..ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
+from ..protocol import AIPMessage, DeviceCapability, DeviceInfo, DevicePlatform, DeviceType, MessageType
+from ..ssot import udm_write_heartbeat, udm_write_register, udm_write_unregister
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +52,11 @@ class DeviceManager:
         cap_list = [c.name for c in DeviceCapability if raw_caps & c.value]
         device_type_raw = ""
         if device_info.device_type:
-            raw = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
+            raw = (
+                device_info.device_type.value
+                if hasattr(device_info.device_type, "value")
+                else str(device_info.device_type)
+            )
             device_type_raw = raw
         device_name = getattr(device_info, "device_name", device_id)
 
@@ -104,58 +105,50 @@ class DeviceManager:
         if udm_ok and device_id in self.devices:
             self.device_status[device_id] = status
             self.device_last_seen[device_id] = datetime.now(timezone.utc)
-    
+
     def get_device(self, device_id: str) -> Optional[DeviceInfo]:
         """获取设备信息"""
         return self.devices.get(device_id)
-    
+
     def get_all_devices(self) -> List[DeviceInfo]:
         """获取所有设备"""
         return list(self.devices.values())
-    
+
     def get_devices_by_type(self, device_type: DeviceType) -> List[DeviceInfo]:
         """按类型获取设备"""
         return [d for d in self.devices.values() if d.device_type == device_type]
-    
+
     def get_devices_by_platform(self, platform: DevicePlatform) -> List[DeviceInfo]:
         """按平台获取设备"""
         return [d for d in self.devices.values() if d.platform == platform]
-    
+
     def get_devices_with_capability(self, capability: DeviceCapability) -> List[DeviceInfo]:
         """获取具有指定能力的设备"""
-        return [
-            d for d in self.devices.values() 
-            if d.capabilities & capability.value
-        ]
-    
+        return [d for d in self.devices.values() if d.capabilities & capability.value]
+
     def get_online_devices(self) -> List[DeviceInfo]:
         """获取在线设备"""
-        return [
-            d for d in self.devices.values()
-            if self.device_status.get(d.device_id) == "online"
-        ]
-    
+        return [d for d in self.devices.values() if self.device_status.get(d.device_id) == "online"]
+
     def find_best_device_for_task(
-        self, 
-        required_capabilities: DeviceCapability,
-        preferred_platform: Optional[DevicePlatform] = None
+        self, required_capabilities: DeviceCapability, preferred_platform: Optional[DevicePlatform] = None
     ) -> Optional[DeviceInfo]:
         """为任务找到最佳设备"""
         candidates = self.get_devices_with_capability(required_capabilities)
         candidates = [d for d in candidates if self.device_status.get(d.device_id) == "online"]
-        
+
         if not candidates:
             return None
-        
+
         # 优先选择指定平台
         if preferred_platform:
             platform_matches = [d for d in candidates if d.platform == preferred_platform]
             if platform_matches:
                 candidates = platform_matches
-        
+
         # 返回第一个匹配的设备（可以扩展为更复杂的选择逻辑）
         return candidates[0] if candidates else None
-    
+
     def handle_register_message(self, message: AIPMessage) -> AIPMessage:
         """处理设备注册消息
 
@@ -176,9 +169,8 @@ class DeviceManager:
         if reported_capabilities and device_type_str:
             try:
                 from core.tool_permissions import validate_device_capabilities
-                validated = validate_device_capabilities(
-                    device_type_str, reported_capabilities
-                )
+
+                validated = validate_device_capabilities(device_type_str, reported_capabilities)
                 if len(validated) != len(reported_capabilities):
                     logger.info(
                         f"设备 {message.device_id} 能力校验: "
@@ -188,33 +180,30 @@ class DeviceManager:
                 device_info_data["validated_capabilities"] = validated
             except Exception as e:
                 logger.debug(f"设备能力校验跳过: {e}")
-        
+
         # 构建 DeviceInfo
         device_info = DeviceInfo(
             device_id=message.device_id,
             device_type=message.device_type or DeviceType.UNKNOWN,
             platform=self._infer_platform(message.device_type),
-            **device_info_data
+            **device_info_data,
         )
-        
+
         self.register_device(device_info)
-        
+
         # 返回确认消息
         return AIPMessage(
             type=MessageType.DEVICE_REGISTER_ACK,
             device_id=message.device_id,
             correlation_id=message.message_id,
-            payload={
-                "status": "registered",
-                "server_time": datetime.now(timezone.utc).isoformat()
-            }
+            payload={"status": "registered", "server_time": datetime.now(timezone.utc).isoformat()},
         )
-    
+
     def _infer_platform(self, device_type: Optional[DeviceType]) -> DevicePlatform:
         """从设备类型推断平台"""
         if not device_type:
             return DevicePlatform.UNKNOWN
-        
+
         type_str = device_type.value
         if type_str.startswith("android"):
             return DevicePlatform.ANDROID
@@ -232,19 +221,19 @@ class DeviceManager:
             return DevicePlatform.EMBEDDED
         else:
             return DevicePlatform.UNKNOWN
-    
+
     def get_device_count(self) -> int:
         """获取设备总数"""
         return len(self.devices)
-    
+
     def get_online_count(self) -> int:
         """获取在线设备数"""
         return len([s for s in self.device_status.values() if s == "online"])
-    
+
     def to_dict(self) -> dict:
         """导出为字典"""
         return {
             "total_devices": self.get_device_count(),
             "online_devices": self.get_online_count(),
-            "devices": [d.model_dump() for d in self.devices.values()]
+            "devices": [d.model_dump() for d in self.devices.values()],
         }

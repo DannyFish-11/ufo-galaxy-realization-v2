@@ -151,10 +151,8 @@ async def dispatch_to_websocket(
 
     # ── Register with lifecycle registry (best-effort) ───────────────────────
     try:
-        from core.task_envelope_lifecycle_registry import (
-            get_lifecycle_registry as _get_lcr,
-            LifecycleOwner as _LCOwner,
-        )
+        from core.task_envelope_lifecycle_registry import LifecycleOwner as _LCOwner
+        from core.task_envelope_lifecycle_registry import get_lifecycle_registry as _get_lcr
 
         class _EnvProxy:
             task_id: str
@@ -190,9 +188,7 @@ async def dispatch_to_websocket(
             result.setdefault("via", "device_router")
             result.setdefault("trace_id", trace_id)
             try:
-                from core.task_envelope_lifecycle_registry import (
-                    get_lifecycle_registry as _get_lcr2,
-                )
+                from core.task_envelope_lifecycle_registry import get_lifecycle_registry as _get_lcr2
 
                 _get_lcr2().complete(task_id, result)
             except Exception:
@@ -213,9 +209,7 @@ async def dispatch_to_websocket(
             task_id,
         )
         try:
-            from core.task_envelope_lifecycle_registry import (
-                get_lifecycle_registry as _get_lcr3,
-            )
+            from core.task_envelope_lifecycle_registry import get_lifecycle_registry as _get_lcr3
 
             _get_lcr3().fail(task_id, "dispatch_to_websocket timeout")
         except Exception:

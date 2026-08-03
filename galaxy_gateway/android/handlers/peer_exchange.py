@@ -38,15 +38,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # PR-8 sentinel — canonical handler authority for peer exchange messages.
-PEER_EXCHANGE_HANDLER_IS_CANONICAL_PR8: str = (
-    "PEER_EXCHANGE_HANDLER::CANONICAL_STATEFUL_PR8"
-)
+PEER_EXCHANGE_HANDLER_IS_CANONICAL_PR8: str = "PEER_EXCHANGE_HANDLER::CANONICAL_STATEFUL_PR8"
 
 
 def _get_mesh_coordinator() -> Optional[Any]:
     """Return the MeshCoordinator singleton, or ``None`` if unavailable."""
     try:
         from core.mesh_coordinator import get_mesh_coordinator
+
         return get_mesh_coordinator()
     except ImportError:
         logger.debug("MeshCoordinator not available")
@@ -56,9 +55,7 @@ def _get_mesh_coordinator() -> Optional[Any]:
         return None
 
 
-async def handle_peer_announce(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_peer_announce(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle a PEER_ANNOUNCE message from an Android device.
 
     Registers the device as a peer in ``MeshCoordinator`` and returns the
@@ -99,8 +96,7 @@ async def handle_peer_announce(
                 your_peer = peer.to_dict()
         except Exception as exc:
             logger.warning(
-                "PEER_ANNOUNCE mesh integration failed (non-fatal):"
-                " device_id=%s error=%s",
+                "PEER_ANNOUNCE mesh integration failed (non-fatal):" " device_id=%s error=%s",
                 device_id,
                 exc,
             )
@@ -120,9 +116,7 @@ async def handle_peer_announce(
     }
 
 
-async def handle_peer_exchange(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_peer_exchange(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle a PEER_EXCHANGE message from an Android device.
 
     Returns the current peer list from ``MeshCoordinator`` so the device
@@ -144,8 +138,7 @@ async def handle_peer_exchange(
             peer_list = mesh.build_peer_exchange(exclude_device=device_id)
         except Exception as exc:
             logger.warning(
-                "PEER_EXCHANGE mesh integration failed (non-fatal):"
-                " device_id=%s error=%s",
+                "PEER_EXCHANGE mesh integration failed (non-fatal):" " device_id=%s error=%s",
                 device_id,
                 exc,
             )

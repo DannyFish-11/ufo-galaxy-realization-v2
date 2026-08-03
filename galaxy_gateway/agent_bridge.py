@@ -120,41 +120,31 @@ from galaxy_gateway.observability import (  # noqa: E402
 # PR-3 (post-533 dual-repo unification): canonicalization sentinels
 # ---------------------------------------------------------------------------
 
-CANONICAL_HANDOFF_POSTURE_PROPAGATION_ACTIVE: str = (
-    "pr3_post533_canonical_handoff_posture_propagation_active"
-)
+CANONICAL_HANDOFF_POSTURE_PROPAGATION_ACTIVE: str = "pr3_post533_canonical_handoff_posture_propagation_active"
 """Sentinel: HandoffContract.source_runtime_posture is the canonical posture
 field that propagates the source-device runtime participation posture through
 the bridge handoff pipeline.  Declared in PR-3 of the post-533 dual-repo
 runtime-host unification track (MAIN repo side)."""
 
-HANDOFF_CONTRACT_IS_POSTURE_AWARE: str = (
-    "pr3_post533_handoff_contract_is_posture_aware"
-)
+HANDOFF_CONTRACT_IS_POSTURE_AWARE: str = "pr3_post533_handoff_contract_is_posture_aware"
 """Sentinel: HandoffContract carries source_runtime_posture and includes it in
 to_dict() so the runtime POST /handoff endpoint receives the canonical posture
 value.  Paired with HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE."""
 
-HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE: str = (
-    "pr3_post533_handoff_envelope_v2_posture_adapter_active"
-)
+HANDOFF_ENVELOPE_V2_POSTURE_ADAPTER_ACTIVE: str = "pr3_post533_handoff_envelope_v2_posture_adapter_active"
 """Sentinel: from_legacy_handoff_contract() and AgentBridge.build_envelope_v2()
 now propagate source_runtime_posture from HandoffContract into HandoffEnvelopeV2
 so the canonical v2 envelope always reflects the originating posture.  This
 closes the posture-loss gap in the legacy→v2 adapter path (PR-3 main-repo side)."""
 
-NO_POSTURE_SILENT_DROP_POLICY: str = (
-    "pr3_post533_no_posture_silent_drop_policy"
-)
+NO_POSTURE_SILENT_DROP_POLICY: str = "pr3_post533_no_posture_silent_drop_policy"
 """Policy sentinel: source_runtime_posture MUST NOT be silently dropped at any
 bridge/gateway/compat boundary.  Every handoff path that receives posture must
 carry it forward — either through HandoffContract.source_runtime_posture or
 through HandoffEnvelopeV2.source_runtime_posture — without silent reset to
 the default.  Declared in PR-3 of the post-533 dual-repo unification track."""
 
-HANDOFF_CONTRACT_AUTHORITY_ROLE_ACTIVE: str = (
-    "pr3_post533_handoff_contract_authority_role_active"
-)
+HANDOFF_CONTRACT_AUTHORITY_ROLE_ACTIVE: str = "pr3_post533_handoff_contract_authority_role_active"
 """Sentinel: HandoffContract.coordination_role carries the canonical authority
 role derived from PR-538's CoordinationRole model through the bridge handoff
 pipeline.  Empty string signals "not yet derived / legacy caller"; non-empty
@@ -162,18 +152,14 @@ string must be a valid CoordinationRole value (source_controller,
 joined_runtime_participant, target_only_executor, observer_only, unresolved).
 Declared in PR-3 of the post-533 dual-repo unification track (MAIN repo side)."""
 
-NO_AUTHORITY_SILENT_DROP_POLICY: str = (
-    "pr3_post533_no_authority_silent_drop_policy"
-)
+NO_AUTHORITY_SILENT_DROP_POLICY: str = "pr3_post533_no_authority_silent_drop_policy"
 """Policy sentinel: coordination_role MUST NOT be silently dropped at any
 bridge/gateway/compat boundary.  Every handoff path that receives a non-empty
 coordination_role must carry it forward without silent reset.  Mirrors the
 NO_POSTURE_SILENT_DROP_POLICY but applies to the authority/role axis.
 Declared in PR-3 of the post-533 dual-repo unification track."""
 
-CANONICAL_HANDOFF_PATH_PR3: str = (
-    "pr3_post533_canonical_handoff_path_single_chain"
-)
+CANONICAL_HANDOFF_PATH_PR3: str = "pr3_post533_canonical_handoff_path_single_chain"
 """Sentinel: The canonical main-repo-side handoff path is the single chain:
   DeviceRouter.route_task()
       → AgentBridge.handoff(HandoffContract)
@@ -195,6 +181,7 @@ _DEDUP_CACHE_MAX_SIZE: int = 1024
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AgentBridgeConfig:
@@ -224,6 +211,7 @@ class AgentBridgeConfig:
 # ---------------------------------------------------------------------------
 # Handoff contract
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class HandoffContract:
@@ -280,6 +268,7 @@ class HandoffContract:
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
+
 
 class AgentBridgeMetrics:
     """Simple in-process counters for bridge observability.
@@ -415,9 +404,7 @@ class AgentBridge:
                 "agent_bridge_disabled trace_id=%s; staying local",
                 trace_id,
             )
-            return await self._run_local_fallback(
-                contract.task, local_fallback, trace_id, reason="bridge_disabled"
-            )
+            return await self._run_local_fallback(contract.task, local_fallback, trace_id, reason="bridge_disabled")
 
         # ── 3. Deduplication ───────────────────────────────────────────────
         if dedup_key in self._dedup_cache:
@@ -483,9 +470,7 @@ class AgentBridge:
                 exc,
                 elapsed_ms,
             )
-            result = await self._run_local_fallback(
-                contract.task, local_fallback, trace_id, reason=str(exc)
-            )
+            result = await self._run_local_fallback(contract.task, local_fallback, trace_id, reason=str(exc))
 
         # ── 5. Cache and return ────────────────────────────────────────────
         # PR-2: cache by dedup_key (task_id when envelope-sourced, trace_id otherwise).
@@ -494,6 +479,7 @@ class AgentBridge:
         # affect any existing result field; safe to drop if import fails).
         try:
             from contracts.handoff_envelope_v2 import from_legacy_handoff_contract
+
             hev2 = from_legacy_handoff_contract(contract)
             result.setdefault("handoff_envelope_v2", hev2.to_compact_summary())
         except Exception:  # noqa: BLE001
@@ -587,7 +573,8 @@ class AgentBridge:
         HandoffEnvelopeV2 | None
         """
         try:
-            from contracts.handoff_envelope_v2 import from_legacy_handoff_contract, HandoffEnvelopeV2
+            from contracts.handoff_envelope_v2 import HandoffEnvelopeV2, from_legacy_handoff_contract
+
             envelope: HandoffEnvelopeV2 = from_legacy_handoff_contract(contract)
             if source_device_id:
                 envelope = envelope.model_copy(
@@ -629,9 +616,7 @@ class AgentBridge:
                 envelope = envelope.model_copy(
                     update={
                         "source_runtime_posture": _contract_posture,
-                        "source": envelope.source.model_copy(
-                            update={"source_runtime_posture": _contract_posture}
-                        ),
+                        "source": envelope.source.model_copy(update={"source_runtime_posture": _contract_posture}),
                     }
                 )
             # PR-3: propagate coordination_role from HandoffContract into v2
@@ -671,11 +656,10 @@ class AgentBridge:
         base_url = self._config.runtime_url.rstrip("/")
         # Validate that only http/https schemes are used (SSRF prevention).
         import urllib.parse as _urlparse
+
         parsed = _urlparse.urlparse(base_url)
         if parsed.scheme not in ("http", "https"):
-            raise RuntimeError(
-                f"Refusing runtime URL with non-HTTP scheme: {parsed.scheme!r}"
-            )
+            raise RuntimeError(f"Refusing runtime URL with non-HTTP scheme: {parsed.scheme!r}")
         url = f"{base_url}/handoff"
         payload = contract.to_dict()
 
@@ -685,9 +669,7 @@ class AgentBridge:
             async with httpx.AsyncClient(timeout=self._config.timeout) as client:
                 resp = await client.post(url, json=payload)
                 if resp.status_code >= 400:
-                    raise RuntimeError(
-                        f"runtime returned HTTP {resp.status_code}"
-                    )
+                    raise RuntimeError(f"runtime returned HTTP {resp.status_code}")
                 return resp.json()
         except ImportError:
             # httpx not available — fall back to sync urllib in thread

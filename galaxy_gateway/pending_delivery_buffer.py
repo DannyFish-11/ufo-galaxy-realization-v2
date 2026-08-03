@@ -86,9 +86,7 @@ PENDING_DELIVERY_TTL_SECONDS: float = 60.0
 #: Default path for the durable snapshot file.  Override via the
 #: ``GALAXY_DATA_DIR`` environment variable or by passing ``store_path``
 #: explicitly to :class:`DurablePendingDeliveryBuffer`.
-PENDING_DELIVERY_STORE_PATH: str = os.path.join(
-    os.environ.get("GALAXY_DATA_DIR", "data"), "pending_delivery.json"
-)
+PENDING_DELIVERY_STORE_PATH: str = os.path.join(os.environ.get("GALAXY_DATA_DIR", "data"), "pending_delivery.json")
 
 
 class _BufferedMessage:
@@ -133,7 +131,7 @@ class PendingDeliveryBuffer:
         self.enqueued_total: int = 0
         self.delivered_total: int = 0
         self.evicted_total: int = 0  # dropped due to capacity
-        self.expired_total: int = 0   # dropped due to TTL
+        self.expired_total: int = 0  # dropped due to TTL
 
     # ------------------------------------------------------------------
     # Enqueue
@@ -161,8 +159,7 @@ class PendingDeliveryBuffer:
             queue.append(_BufferedMessage(message))
             self.enqueued_total += 1
             logger.debug(
-                "pending_delivery_buffer: enqueued message for device_id=%s "
-                "queue_len=%d type=%s",
+                "pending_delivery_buffer: enqueued message for device_id=%s " "queue_len=%d type=%s",
                 device_id,
                 len(queue),
                 message.get("type", "?"),
@@ -204,8 +201,7 @@ class PendingDeliveryBuffer:
                 skipped += 1
                 self.expired_total += 1
                 logger.debug(
-                    "pending_delivery_buffer: discarding expired message "
-                    "for device_id=%s age=%.1fs type=%s",
+                    "pending_delivery_buffer: discarding expired message " "for device_id=%s age=%.1fs type=%s",
                     device_id,
                     time.monotonic() - buffered.enqueued_at,
                     buffered.message.get("type", "?"),
@@ -218,8 +214,7 @@ class PendingDeliveryBuffer:
                 delivered += 1
                 self.delivered_total += 1
                 logger.info(
-                    "pending_delivery_buffer: re-delivered message to "
-                    "device_id=%s type=%s age=%.1fs",
+                    "pending_delivery_buffer: re-delivered message to " "device_id=%s type=%s age=%.1fs",
                     device_id,
                     buffered.message.get("type", "?"),
                     time.monotonic() - buffered.enqueued_at,
@@ -227,8 +222,7 @@ class PendingDeliveryBuffer:
             except Exception as exc:
                 skipped += 1
                 logger.warning(
-                    "pending_delivery_buffer: failed to re-deliver message to "
-                    "device_id=%s type=%s: %s",
+                    "pending_delivery_buffer: failed to re-deliver message to " "device_id=%s type=%s: %s",
                     device_id,
                     buffered.message.get("type", "?"),
                     exc,
@@ -236,8 +230,7 @@ class PendingDeliveryBuffer:
 
         if delivered or skipped:
             logger.info(
-                "pending_delivery_buffer: flush complete device_id=%s "
-                "delivered=%d skipped=%d",
+                "pending_delivery_buffer: flush complete device_id=%s " "delivered=%d skipped=%d",
                 device_id,
                 delivered,
                 skipped,
@@ -273,8 +266,7 @@ class PendingDeliveryBuffer:
                     self.expired_total += expired_count
                     removed += expired_count
                     logger.debug(
-                        "pending_delivery_buffer: purged %d expired messages "
-                        "for device_id=%s",
+                        "pending_delivery_buffer: purged %d expired messages " "for device_id=%s",
                         expired_count,
                         device_id,
                     )
@@ -297,8 +289,7 @@ class PendingDeliveryBuffer:
             count = len(queue)
         if count:
             logger.debug(
-                "pending_delivery_buffer: discarded %d pending messages for "
-                "deregistered device_id=%s",
+                "pending_delivery_buffer: discarded %d pending messages for " "deregistered device_id=%s",
                 count,
                 device_id,
             )
@@ -379,8 +370,7 @@ class DurablePendingDeliveryBuffer(PendingDeliveryBuffer):
             return  # First run — no snapshot yet.
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "durable_pending_delivery: failed to load snapshot from %s: %s — "
-                "starting with empty buffer",
+                "durable_pending_delivery: failed to load snapshot from %s: %s — " "starting with empty buffer",
                 self._store_path,
                 exc,
             )
@@ -389,8 +379,7 @@ class DurablePendingDeliveryBuffer(PendingDeliveryBuffer):
         queues_data = data.get("queues", {})
         if not isinstance(queues_data, dict):
             logger.warning(
-                "durable_pending_delivery: malformed snapshot at %s — "
-                "starting with empty buffer",
+                "durable_pending_delivery: malformed snapshot at %s — " "starting with empty buffer",
                 self._store_path,
             )
             return
@@ -430,8 +419,7 @@ class DurablePendingDeliveryBuffer(PendingDeliveryBuffer):
         self.expired_total += expired_count
         if loaded_count or expired_count:
             logger.info(
-                "durable_pending_delivery: restored %d message(s) from %s "
-                "(%d expired/discarded on load)",
+                "durable_pending_delivery: restored %d message(s) from %s " "(%d expired/discarded on load)",
                 loaded_count,
                 self._store_path,
                 expired_count,
@@ -486,8 +474,7 @@ class DurablePendingDeliveryBuffer(PendingDeliveryBuffer):
                 json.dump(payload, fh)
             os.replace(tmp_path, self._store_path)
             logger.debug(
-                "durable_pending_delivery: snapshot saved to %s "
-                "(%d device queue(s))",
+                "durable_pending_delivery: snapshot saved to %s " "(%d device queue(s))",
                 self._store_path,
                 len(queues_data),
             )

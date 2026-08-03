@@ -17,8 +17,10 @@ from pydantic import BaseModel
 try:
     from core.auth import require_auth as _require_auth
 except ImportError:
+
     async def _require_auth():  # type: ignore[misc]
         return {"authenticated": True, "dev_mode": True}
+
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ async def list_sessions(
 ):
     """List all sessions, optionally filtered by state."""
     try:
-        from galaxy_gateway.session_roaming import session_roaming, SessionState
+        from galaxy_gateway.session_roaming import SessionState, session_roaming
 
         filter_state = None
         if state:
@@ -58,6 +60,7 @@ async def session_stats(auth: dict = Depends(_require_auth)):
     """Return session statistics."""
     try:
         from galaxy_gateway.session_roaming import session_roaming
+
         return session_roaming.get_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

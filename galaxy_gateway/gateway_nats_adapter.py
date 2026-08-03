@@ -57,9 +57,7 @@ GATEWAY_SUBSTRATE_AUTHORITY: str = "GATEWAY::DEVICE_TRANSPORT_SUBSTRATE_V1"
 # PR-8: Network Topology Runtime integration sentinel.
 # Affirms that this module's connectivity state is absorbed into the canonical
 # NetworkTopologyRuntime via assimilate_gateway_state() / absorb_gateway_state().
-NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = (
-    "GATEWAY_NATS_ADAPTER::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
-)
+NETWORK_TOPOLOGY_RUNTIME_INTEGRATED: str = "GATEWAY_NATS_ADAPTER::NETWORK_TOPOLOGY_RUNTIME_INTEGRATED_V1"
 
 # PR-509: Capability + Network Runtime Assimilation integration sentinel.
 # Affirms that GatewayNATSAdapter.start() and .stop() now call
@@ -135,9 +133,7 @@ class GatewayNATSAdapter:
             from core.nats_bus import nats_bus
 
             if not nats_bus.is_connected():
-                logger.warning(
-                    "GatewayNATSAdapter: NATS not connected — adapter is inactive"
-                )
+                logger.warning("GatewayNATSAdapter: NATS not connected — adapter is inactive")
                 return
 
             result = await nats_bus.subscribe(
@@ -213,6 +209,7 @@ class GatewayNATSAdapter:
         if self._lifecycle_registry is None:
             try:
                 from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+
                 self._lifecycle_registry = get_lifecycle_registry()
             except Exception as _e:
                 logger.debug("GatewayNATSAdapter: lifecycle registry unavailable — %s", _e)
@@ -239,6 +236,7 @@ class GatewayNATSAdapter:
         # PR-2: delegate to canonical interop layer for envelope normalization.
         try:
             from core.message_interop import normalize_to_task_envelope as _normalize
+
             _envelope = _normalize(data, source="nats")
             task_id = _envelope.task_id
             trace_id = _envelope.trace_id
@@ -269,6 +267,7 @@ class GatewayNATSAdapter:
             # Use extract_correlation for a single source of truth on IDs.
             try:
                 from core.message_interop import extract_correlation as _extract_corr
+
                 _fb_corr = _extract_corr(data)
                 task_id = _fb_corr.task_id
                 trace_id = _fb_corr.trace_id
@@ -286,8 +285,7 @@ class GatewayNATSAdapter:
             remote_execution_mode = data.get("remote_execution_mode", "")
 
         logger.info(
-            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s "
-            "trace_id=%s mode=%s",
+            "GatewayNATSAdapter: received dispatch task_id=%s target=%s type=%s " "trace_id=%s mode=%s",
             task_id,
             target_device,
             task_type,
@@ -300,14 +298,20 @@ class GatewayNATSAdapter:
             try:
                 result = await asyncio.wait_for(
                     self._forward_to_device(
-                        task_id, target_device, task_type, payload,
+                        task_id,
+                        target_device,
+                        task_type,
+                        payload,
                         remote_execution_mode=remote_execution_mode,
                     ),
                     timeout=self._task_timeout,
                 )
                 # Publish success result back to NATS
                 await self._publish_result(
-                    task_id, result, success=True, trace_id=trace_id,
+                    task_id,
+                    result,
+                    success=True,
+                    trace_id=trace_id,
                     remote_execution_mode=remote_execution_mode,
                 )
                 self._stats["succeeded"] += 1
@@ -439,13 +443,15 @@ class GatewayNATSAdapter:
             # legacy callers of resolve_task() continue to work.
             self._pending[task_id] = fut
             try:
+                from core.task_envelope_lifecycle_registry import LifecycleOwner as _Owner
                 from core.task_envelope_lifecycle_registry import (
                     get_lifecycle_registry,
-                    LifecycleOwner as _Owner,
                 )
+
                 # Build a minimal envelope-like object for the registry.
                 class _EnvProxy:
                     pass
+
                 _ep = _EnvProxy()
                 _ep.task_id = task_id
                 _ep.trace_id = ""
@@ -509,9 +515,10 @@ class GatewayNATSAdapter:
         payload shapes.
         """
         try:
+            from datetime import datetime, timezone
+
             from core.nats_bus import nats_bus
             from core.schemas.contracts import TaskStatus, TimestampModel
-            from datetime import datetime, timezone
 
             status_val = TaskStatus.SUCCESS.value if success else TaskStatus.FAILED.value
             ts = int(datetime.now(timezone.utc).timestamp())
@@ -610,7 +617,7 @@ def init_gateway_nats_adapter(
 
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     try:
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
 
         et = getattr(EventType, event_type_name, None)
         if et is not None:
@@ -641,6 +648,7 @@ def _publish_m2_event_safe(event_type: str, device_id: str, payload: dict, **kw)
     """发布 M2 统一事件的轻量辅助函数（失败不崩溃）。"""
     try:
         from integration.event_bus import build_m2_event, publish_m2_event
+
         evt = build_m2_event(event_type, device_id, payload, **kw)
         publish_m2_event(evt)
     except Exception as _exc:
@@ -664,6 +672,7 @@ def _absorb_gateway_state(is_connected: bool) -> None:
     """
     try:
         from core.capability_network_runtime_policy import absorb_gateway_connectivity_event
+
         absorb_gateway_connectivity_event(
             gateway_id="galaxy_gateway",
             is_connected=is_connected,

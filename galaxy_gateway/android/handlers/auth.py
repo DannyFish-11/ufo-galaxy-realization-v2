@@ -47,9 +47,7 @@ def _mask(value: str, keep: int = 4) -> str:
     return f"{value[:keep]}…{value[-keep:]}"
 
 
-async def handle_auth(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_auth(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle the unified post-connect ``auth`` frame.
 
     Returns an ``auth_ok`` or ``auth_failed`` response dict that the
@@ -95,8 +93,7 @@ async def handle_auth(
         # 诚实语义:未开启认证就明说没校验,客户端据此知道自己处于
         # 开放网关模式,而不是误以为令牌被验证过。
         logger.info(
-            "[WS:AUTH] auth disabled (GALAXY_AUTH_ENABLED off) — auth_ok "
-            "with auth_enforced=false device_id=%s",
+            "[WS:AUTH] auth disabled (GALAXY_AUTH_ENABLED off) — auth_ok " "with auth_enforced=false device_id=%s",
             _mask(device_id),
         )
         _record_connection_auth(bridge, device_id, authenticated=True, enforced=False)
@@ -131,9 +128,7 @@ async def handle_auth(
     return _response(True, auth_enforced=True)
 
 
-def _record_connection_auth(
-    bridge: "AndroidBridge", device_id: str, *, authenticated: bool, enforced: bool
-) -> None:
+def _record_connection_auth(bridge: "AndroidBridge", device_id: str, *, authenticated: bool, enforced: bool) -> None:
     """Best-effort: record the auth outcome on the bridge for later gating."""
     if not device_id:
         return

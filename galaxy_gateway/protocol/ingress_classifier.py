@@ -40,9 +40,7 @@ from .normalized_ingress_event import IngressEventKind
 # PR-5 authority sentinel
 # ---------------------------------------------------------------------------
 
-INGRESS_CLASSIFIER_AUTHORITY = (
-    "INGRESS_CLASSIFIER::STABLE_SEMANTIC_CLASSES_AIP_V3_CANONICAL"
-)
+INGRESS_CLASSIFIER_AUTHORITY = "INGRESS_CLASSIFIER::STABLE_SEMANTIC_CLASSES_AIP_V3_CANONICAL"
 """Sentinel declared by the ingress classifier module.
 
 Importing and asserting the presence of this sentinel confirms that the
@@ -102,47 +100,42 @@ class IngressMessageClass:
 
 _KIND_TO_CLASS: Dict[str, str] = {
     # Presence
-    IngressEventKind.DEVICE_REGISTER:   IngressMessageClass.PRESENCE,
-    IngressEventKind.DEVICE_HEARTBEAT:  IngressMessageClass.PRESENCE,
-    IngressEventKind.DEVICE_STATUS:     IngressMessageClass.PRESENCE,
+    IngressEventKind.DEVICE_REGISTER: IngressMessageClass.PRESENCE,
+    IngressEventKind.DEVICE_HEARTBEAT: IngressMessageClass.PRESENCE,
+    IngressEventKind.DEVICE_STATUS: IngressMessageClass.PRESENCE,
     IngressEventKind.DEVICE_DISCONNECT: IngressMessageClass.PRESENCE,
-
     # Control / dispatch
-    IngressEventKind.COMMAND:           IngressMessageClass.CONTROL,
-    IngressEventKind.TASK_SUBMIT:       IngressMessageClass.CONTROL,
-    IngressEventKind.TASK_CANCEL:       IngressMessageClass.CONTROL,
-    IngressEventKind.GOAL_EXECUTION:    IngressMessageClass.CONTROL,
-    IngressEventKind.PARALLEL_SUBTASK:  IngressMessageClass.CONTROL,
-
+    IngressEventKind.COMMAND: IngressMessageClass.CONTROL,
+    IngressEventKind.TASK_SUBMIT: IngressMessageClass.CONTROL,
+    IngressEventKind.TASK_CANCEL: IngressMessageClass.CONTROL,
+    IngressEventKind.GOAL_EXECUTION: IngressMessageClass.CONTROL,
+    IngressEventKind.PARALLEL_SUBTASK: IngressMessageClass.CONTROL,
     # Execution / results
-    IngressEventKind.TASK_RESULT:       IngressMessageClass.EXECUTION,
-    IngressEventKind.COMMAND_RESULT:    IngressMessageClass.EXECUTION,
-    IngressEventKind.PARALLEL_RESULT:   IngressMessageClass.EXECUTION,
-
+    IngressEventKind.TASK_RESULT: IngressMessageClass.EXECUTION,
+    IngressEventKind.COMMAND_RESULT: IngressMessageClass.EXECUTION,
+    IngressEventKind.PARALLEL_RESULT: IngressMessageClass.EXECUTION,
     # Transport / overlay
-    IngressEventKind.WAKE_EVENT:        IngressMessageClass.TRANSPORT,
+    IngressEventKind.WAKE_EVENT: IngressMessageClass.TRANSPORT,
     IngressEventKind.CAPABILITY_REPORT: IngressMessageClass.TRANSPORT,
-    IngressEventKind.AGENT_STATUS:      IngressMessageClass.PRESENCE,
+    IngressEventKind.AGENT_STATUS: IngressMessageClass.PRESENCE,
     IngressEventKind.DELEGATED_EXECUTION_SIGNAL: IngressMessageClass.EXECUTION,
-    IngressEventKind.FILE_TRANSFER:     IngressMessageClass.CONTROL,
-    IngressEventKind.PEER_ANNOUNCE:     IngressMessageClass.TRANSPORT,
-    IngressEventKind.PEER_EXCHANGE:     IngressMessageClass.TRANSPORT,
-    IngressEventKind.MESH_TOPOLOGY:     IngressMessageClass.TRANSPORT,
-
+    IngressEventKind.FILE_TRANSFER: IngressMessageClass.CONTROL,
+    IngressEventKind.PEER_ANNOUNCE: IngressMessageClass.TRANSPORT,
+    IngressEventKind.PEER_EXCHANGE: IngressMessageClass.TRANSPORT,
+    IngressEventKind.MESH_TOPOLOGY: IngressMessageClass.TRANSPORT,
     # Android business result messages — PR-03-V2
     # goal_execution_result is the Android uplink result for goal_execution tasks.
-    IngressEventKind.GOAL_EXECUTION_RESULT:      IngressMessageClass.EXECUTION,
+    IngressEventKind.GOAL_EXECUTION_RESULT: IngressMessageClass.EXECUTION,
     # goal_result is the Android error-path alias for goal_execution_result;
     # it carries the same class of user-visible business result.
-    IngressEventKind.GOAL_RESULT:                IngressMessageClass.EXECUTION,
+    IngressEventKind.GOAL_RESULT: IngressMessageClass.EXECUTION,
     # Handoff protocol uplink result types (PR-02-V2 / PR-03-V2).
     # All three status variants plus the unified envelope result share the
     # EXECUTION class: they carry terminal Android task execution outcomes.
-    IngressEventKind.HANDOFF_ACK:                IngressMessageClass.EXECUTION,
-    IngressEventKind.HANDOFF_RESULT:             IngressMessageClass.EXECUTION,
-    IngressEventKind.HANDOFF_FAILURE:            IngressMessageClass.EXECUTION,
+    IngressEventKind.HANDOFF_ACK: IngressMessageClass.EXECUTION,
+    IngressEventKind.HANDOFF_RESULT: IngressMessageClass.EXECUTION,
+    IngressEventKind.HANDOFF_FAILURE: IngressMessageClass.EXECUTION,
     IngressEventKind.HANDOFF_ENVELOPE_V2_RESULT: IngressMessageClass.EXECUTION,
-
     # Android Runtime-State Transparency Uplink (PR-RT).
     # DEVICE_STATE_SNAPSHOT: periodic full runtime-state snapshot from Android —
     #   model readiness, llama/NCNN availability, fallback tier, queue depth, etc.
@@ -151,7 +144,6 @@ _KIND_TO_CLASS: Dict[str, str] = {
     # is the appropriate semantic class.
     IngressEventKind.DEVICE_STATE_SNAPSHOT: IngressMessageClass.TRANSPORT,
     IngressEventKind.DEVICE_EXECUTION_EVENT: IngressMessageClass.TRANSPORT,
-
     # 生产修复(真缺口):device_perception_emission 已在
     # normalized_ingress_event.IngressEventKind 与 aip_v3.MessageType 注册
     # (Android 端持续感知流上行,由 handle_device_perception_emission 消费),
@@ -159,14 +151,13 @@ _KIND_TO_CLASS: Dict[str, str] = {
     # 无法进入正确的语义通道。它承载的是连续感知/状态投影数据(非任务结果),
     # 与 DEVICE_STATE_SNAPSHOT 同型,归 TRANSPORT。
     IngressEventKind.DEVICE_PERCEPTION_EMISSION: IngressMessageClass.TRANSPORT,
-
     # 生产修复(同一缺口):ack / operator_action_result / ping 也已在
     # IngressEventKind 注册("previously dropped (UNKNOWN → error response);
     # now recognised and routed to graceful handling"),但分类表同样漏登记。
     # ack/ping 为传输层确认与保活 → TRANSPORT;operator_action_result 承载
     # 操作员动作的终态执行结果 → EXECUTION。
-    IngressEventKind.ACK:                    IngressMessageClass.TRANSPORT,
-    IngressEventKind.PING:                   IngressMessageClass.TRANSPORT,
+    IngressEventKind.ACK: IngressMessageClass.TRANSPORT,
+    IngressEventKind.PING: IngressMessageClass.TRANSPORT,
     IngressEventKind.OPERATOR_ACTION_RESULT: IngressMessageClass.EXECUTION,
 }
 

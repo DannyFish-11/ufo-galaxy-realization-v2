@@ -20,7 +20,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Callable, Any
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("UFO-Galaxy.WakeEventBus")
 
@@ -35,16 +35,18 @@ _BACKGROUND_TASKS: set = set()
 # 数据模型
 # =============================================================================
 
+
 @dataclass
 class RawWakeEvent:
     """
     从 WebSocket 或内部触发器收到的原始唤醒事件，
     尚未经过去重处理。
     """
+
     source_device_id: str
     wake_word: str
     timestamp: float = field(default_factory=time.time)
-    task_type: str = "general"       # "voice" | "visual" | "general"
+    task_type: str = "general"  # "voice" | "visual" | "general"
     confidence: float = 1.0
     extra: Dict[str, Any] = field(default_factory=dict)
 
@@ -52,6 +54,7 @@ class RawWakeEvent:
 # =============================================================================
 # 唤醒事件总线
 # =============================================================================
+
 
 class WakeEventBus:
     """
@@ -93,9 +96,7 @@ class WakeEventBus:
             with self._lock:
                 # 双重检查，防止并发创建
                 if self._executor is None:
-                    self._executor = ThreadPoolExecutor(
-                        max_workers=2, thread_name_prefix="wake_event_bus"
-                    )
+                    self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wake_event_bus")
         return self._executor
 
     def shutdown(self):
@@ -119,8 +120,7 @@ class WakeEventBus:
             now_ms = time.time() * 1000
             # 使用 list() 复制后再遍历，避免在迭代时修改字典
             expired_keys = [
-                key for key, (ts_ms, _) in list(self._dedup_buffer.items())
-                if now_ms - ts_ms > self.DEDUP_EXPIRY_MS
+                key for key, (ts_ms, _) in list(self._dedup_buffer.items()) if now_ms - ts_ms > self.DEDUP_EXPIRY_MS
             ]
             for key in expired_keys:
                 del self._dedup_buffer[key]
@@ -272,6 +272,7 @@ class WakeEventBus:
         """将 RawWakeEvent 转换为 WakeEvent"""
         try:
             from galaxy_gateway.wake_router import WakeEvent, WakeTaskType
+
             task_type_map = {
                 "voice": WakeTaskType.VOICE,
                 "visual": WakeTaskType.VISUAL,
@@ -301,7 +302,7 @@ class WakeEventBus:
         )
         self._dispatched_log.append(event_dict)
         if len(self._dispatched_log) > self.MAX_LOG_SIZE:
-            self._dispatched_log = self._dispatched_log[-self.MAX_LOG_SIZE:]
+            self._dispatched_log = self._dispatched_log[-self.MAX_LOG_SIZE :]
 
         logger.info(
             f"[WakeEventBus] 分发唤醒事件: wake_word='{getattr(wake_event, 'wake_word', '?')}' "
@@ -311,6 +312,7 @@ class WakeEventBus:
         # 转发给 WakeRouter
         try:
             from galaxy_gateway.wake_router import wake_router
+
             await wake_router.route(wake_event)
         except Exception as e:
             logger.error(f"[WakeEventBus] WakeRouter 路由失败: {e}")
@@ -335,7 +337,7 @@ class WakeEventBus:
         }
         self._event_log.append(entry)
         if len(self._event_log) > self.MAX_LOG_SIZE:
-            self._event_log = self._event_log[-self.MAX_LOG_SIZE:]
+            self._event_log = self._event_log[-self.MAX_LOG_SIZE :]
 
     # ------------------------------------------------------------------
     # 查询接口
