@@ -1,0 +1,88 @@
+name: Behavior Smoke
+
+# 真启动、真打请求、断言"内部确实动了"。
+#
+# 它补的是哪一层
+# --------------
+# 现有流水线覆盖两端:单测证明"函数对不对",部署冒烟证明"端点答不答得出 200"。
+# 中间有一整层没人看 —— **请求进来了,那条链路到底有没有干活**。
+#
+# 这一层不是理论上的空缺。本轮排查里连着找到五处缺陷,全部落在这里:
+#   * 设备维协商读了一份运行时为空的来源(272 个设备 vs 0),协商照常返回;
+#   * audio_out 门控在真实设备数据里 73 个拦截 0 个真阳性;
+#   * 焦点栈标题被机器注解污染,栈照常记,记下来的是噪声;
+#   * 三态心跳漏了一行赋值而从不推进,_tick_task 存在、字段照常显示 liminal;
+#   * 实时会话链路上下文没补齐,每轮都是无记忆的。
+# 五处**没有一处**会让任何既有断言变红,全是靠人手工真跑才发现的。
+#
+# 为什么不放进 PR 流水线
+# ----------------------
+# 它要真起应用(约 1~2 分钟)、真驱动多轮对话,还要等 ACI 的静默期 —— 单次三四分钟。
+# 而它防的是"某次改动让某条链路悄悄不生效",这类退化按天发现就够了。按天跑,
+# 加手动触发,PR 时延不受影响。
+#
+# 为什么先不设成阻塞闸
+# --------------------
+# 与 environment-coupling.yml / wiring check 同一条:本仓刚吃过 File Complexity Budget
+# 长期红到没人看的亏。新检查先以告警形态跑,攒够稳定的绿再考虑加闸。
+# 脚本本身默认就是失败即非零退出,这里显式加 --keep-going 来降级 —— 也就是说
+# 改成阻塞只需要删掉那个参数。
+#
+# 没有上游 key 会怎样
+# -------------------
+# 照常跑。脚本只断言**计数器动了**,不断言模型答得对不对:ACI 预取、焦点栈记账
+# 都发生在拿到模型回答之前,上游 401/403 走降级回答不影响这些判定。
+# 本地模型探测那一路由 scripts/ambient_service_stubs.py 起的 Ollama 桩兜住。
+
+on:
+  schedule:
+    # 每天 04:00 UTC。排在 environment-coupling(03:00)之后,两者都真跑测试,错开避免抢资源。
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "任一链路没动就让本次运行失败"
+        type: boolean
+        default: false
+
+concurrency:
+  group: behavior-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Behavior Smoke (真跑 + 断言计数器)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run behavior smoke
+        env:
+          # 显式关掉内嵌 NATS:它连不上时会去下载并拉起一个常驻服务,
+          # 在 CI 上纯属拖慢启动,而本脚本要验的链路一条都不经过总线。
+          GALAXY_NATS_ENABLED: "false"
+        run: |
+          python scripts/behavior_smoke.py \
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.strict) && '' || '--keep-going' }}
+
+      # 失败时应用日志是唯一能看出"为什么那条链路没动"的东西 ——
+      # 而失败恰恰是最需要它的时候,所以 if: always()。
+      - name: Upload app log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavior-smoke-app-log
+          path: logs/behavior_smoke_app.log
+          if-no-files-found: warn
+          retention-days: 14
