@@ -227,14 +227,10 @@ class MeshRoutingAdapter(TransportAdapter):
                 if size > MAX_MESSAGE_SIZE:
                     break
                 msg = Message.from_dict(json.loads((await reader.readexactly(size)).decode("utf-8")))
-                if msg.message_type == MessageType.DATA_REQUEST:
-                    result = await self._handle_data(msg)
-                    self._write_frame(writer, self._result_frame(msg, result))
+                resp = await self.process_frame(msg)
+                if resp is not None:
+                    self._write_frame(writer, resp)
                     await writer.drain()
-                elif msg.message_type == MessageType.RREQ:
-                    await self._handle_rreq(msg)
-                elif msg.message_type == MessageType.RREP:
-                    await self._handle_rrep(msg)
         except Exception as exc:  # noqa: BLE001
             logger.debug("mesh 连接异常: %s", exc)
         finally:
@@ -243,6 +239,27 @@ class MeshRoutingAdapter(TransportAdapter):
                 await writer.wait_closed()
             except Exception:  # noqa: BLE001
                 pass
+
+    async def process_frame(self, msg: Message) -> Optional[Message]:
+        """处理一帧 mesh 信封；DATA_REQUEST 返回应答帧，控制帧返回 None。
+
+        独立成公开方法的原因：mesh 信封不只从本适配器自己的端口进来 ——
+        邻接表(来自 UDM 的 mDNS 记录)指向的是对端**普通 tcp 协议端口**，
+        tcp_adapter 收到带 message_type 的信封帧后经 handle_envelope 桥接到这里。
+        一个端口说两种帧，对端(含 Android)只需广播一个服务、实现一个服务端。
+        """
+        if msg.message_type == MessageType.DATA_REQUEST:
+            return self._result_frame(msg, await self._handle_data(msg))
+        if msg.message_type == MessageType.RREQ:
+            await self._handle_rreq(msg)
+        elif msg.message_type == MessageType.RREP:
+            await self._handle_rrep(msg)
+        return None
+
+    async def handle_envelope(self, message_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """tcp_adapter 桥接入口：dict 进 dict 出（应答帧或 None）。"""
+        resp = await self.process_frame(Message.from_dict(message_dict))
+        return resp.to_dict() if resp is not None else None
 
     # -- 数据面：逐跳同步中继 ----------------------------------------------
 
