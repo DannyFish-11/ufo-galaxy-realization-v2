@@ -415,10 +415,19 @@ def _build_observability_evidence_axis() -> BoundaryAxisDescriptor:
             "Observability surfaces are classification and consumption layers only."
         ),
         policy_sentinel=OBSERVABILITY_BOUNDARY_IS_NOT_PARALLEL_AUTHORITY_POLICY,
-        # 原先这里列的五个符号都出自 core.cross_subject_observability_contract。
-        # 该模块是一张手写的「可观测面 + 证据契约」清单，从真实入口不可达、仅测试
-        # 引用，已作为死代码删除，故不再作为代码证据引用。
-        code_evidence=(),
+        # 原先这五个锚点全出自 core.cross_subject_observability_contract —— 一张手写的
+        # 「可观测面 + 证据契约」清单，从真实入口不可达、仅测试引用，已作为死代码删除。
+        #
+        # 改指**真正承担这一轴职责的活模块**，而不是清空：Phase 7 启动断言要求每个边界轴
+        # 都有非空的 code_evidence（"no real code evidence anchors this boundary axis"），
+        # 清空会让启动检查降级 —— 这正是本轮回归抓到的那条失败。而「用一份手写清单当证据」
+        # 恰恰是被删模块的问题所在，所以锚点指向真实产出可观测数据的实现。
+        code_evidence=(
+            "core.execution_observability.event_schema",
+            "core.execution_observability.trace_schema",
+            "core.routing_observability",
+            "galaxy_gateway.observability",
+        ),
         android_v2_consistent=True,
         no_parallel_authority=True,
         notes=(
