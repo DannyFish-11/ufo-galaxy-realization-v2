@@ -234,13 +234,17 @@ class TestSurfaceParity:
             "否则只是把一条死路由从一个 app 搬到另一个 app。"
         )
 
-    #: 已知的、**先于这次整合就存在**的重复注册。写成带理由的白名单而不是
-    #: 直接放过:新增的重复照样判红,存量不至于让这条守卫无法落地。
+    #: 已知的重复注册白名单 —— **现在是空的**。
     #:
-    #: /metrics —— core.routes.monitoring.prometheus_metrics(先注册,生效)与
-    #: core.health_check.metrics(后注册,永不命中)。两者分别来自统一启动器的
-    #: 步骤 3 与步骤 4,谁该承载 /metrics 是监控口径问题,不该由这次接线顺手定。
-    KNOWN_SHADOWED = {("/metrics", "GET")}
+    #: 曾经有一条 ("/metrics", "GET"):core/routes/monitoring.prometheus_metrics(先注册、
+    #: 生效)与 core/health_check 里的 JSON 版本(后注册、永不命中)。那条已经删掉了 ——
+    #: 不是改路径,而是删:/metrics 是给 Prometheus 抓取端的,必须是 text/plain 的
+    #: exposition 格式,而 JSON 版即使"赢"了也是错的那个赢。那份 JSON 指标没有丢,
+    #: check_deep() 里嵌着同一个 get_system_metrics(),走 /health/deep 拿得到。
+    #:
+    #: 留成空集合而不是删掉这个字段:下一条重复出现时,加进来要写理由,
+    #: 而"为什么它可以重复"这个问题本身就是这道守卫的价值。
+    KNOWN_SHADOWED: set = set()
 
     def test_merge_did_not_create_shadowed_duplicates(self):
         """并入不该把权威层已有的路径再注册一遍。
