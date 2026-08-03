@@ -444,7 +444,10 @@ def build_from_normalizer_outcome(
     Parameters
     ----------
     outcome:
-        An :class:`~core.android_result_normalizer.AndroidResultNormalizerOutcome`.
+        鸭子类型对象，只用到 ``message_type`` 等属性。
+        文档原先写的是 :class:`~core.android_result_normalizer.AndroidResultNormalizerOutcome`，
+        但 ``core.android_result_normalizer`` 从任何真实入口都不可达，而本函数
+        在自身模块之外也没有任何调用者 —— 整条链目前未接线。
     action_id:
         Optional stable action ID.
     session_id:

@@ -369,7 +369,8 @@ def main() -> int:
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / "behavior_smoke_app.log"
 
-    from ambient_service_stubs import OLLAMA_PORT, port_in_use, start as start_stubs  # noqa: PLC0415
+    from ambient_service_stubs import OLLAMA_PORT, port_in_use
+    from ambient_service_stubs import start as start_stubs  # noqa: PLC0415
 
     print("── 起环境桩 ──")
     stub_handles = start_stubs(["ollama"]) if not port_in_use(OLLAMA_PORT) else []

@@ -1,0 +1,25 @@
+{
+  "unreachable": [
+    "core.admissibility_policy_convergence",
+    "core.agent_bus_fabric",
+    "core.android_result_normalizer",
+    "core.canonical_execution_chain",
+    "core.capability_network_bridge",
+    "core.cognitive.liminal_dynamics",
+    "core.cross_device_candidates",
+    "core.cross_device_responsiveness_contract",
+    "core.failure_degraded_recovery_policy",
+    "core.hybrid_execution_policy",
+    "core.legacy_dispatch_registry",
+    "core.llm.policies",
+    "core.llm.providers",
+    "core.local_agent_runtime",
+    "core.mesh_participation_summary",
+    "core.orchestration.global_arbiter",
+    "core.participant_authority_interfaces",
+    "core.perception.canonical_state_adapter",
+    "core.runtime_introspection",
+    "core.schemas.execution_failure",
+    "core.truth_conflict_enforcement"
+  ]
+}
