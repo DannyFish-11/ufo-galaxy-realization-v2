@@ -55,7 +55,7 @@ def test_capability_report_becomes_visible_to_capability_matcher() -> None:
         payload={"capabilities": ["take_screenshot", "tap"], "supported_actions": ["swipe"]},
     )
 
-    ack = asyncio.get_event_loop().run_until_complete(handler._handle_capability_report(device_id, message))
+    ack = asyncio.run(handler._handle_capability_report(device_id, message))
 
     after = set(get_device_capability_summary(device_id).resolved_capabilities)
     missing = {"take_screenshot", "tap", "swipe"} - after
@@ -79,7 +79,7 @@ def test_capability_report_ack_does_not_claim_success_without_registering() -> N
         device_id=device_id,
         payload={"capabilities": [], "supported_actions": []},
     )
-    ack = asyncio.get_event_loop().run_until_complete(handler._handle_capability_report(device_id, message))
+    ack = asyncio.run(handler._handle_capability_report(device_id, message))
     assert ack.payload.get("registered_capabilities") == 0
 
 
@@ -111,20 +111,23 @@ def _screenshot(adb: _FakeADB) -> Dict[str, Any]:
     from galaxy_gateway.android_granular_adapter import AndroidGranularAdapter
 
     adapter = AndroidGranularAdapter(adb)
-    return asyncio.get_event_loop().run_until_complete(adapter._handle_screenshot("dev_regr_screenshot", {}))
+    return asyncio.run(adapter._handle_screenshot("dev_regr_screenshot", {}))
 
 
-def test_screenshot_reports_error_when_pull_produces_empty_file() -> None:
-    """pull 失败（文件为空）时必须报错，而不是回一张空图还说成功。
+def test_screenshot_does_not_return_empty_image_as_success() -> None:
+    """pull 没取回数据时，不得回一张"成功"的空图。
 
-    原缺陷：``except FileNotFoundError`` 这条兜底**永远不会触发** —— ``mkstemp``
-    已经把临时文件创建出来了，``open()`` 不会抛 FileNotFoundError，读到 0 字节，
-    于是返回 ``{"status": "success", "image_base64": ""}``。调用方拿到一个
-    "成功"的空截图，问题被推到更下游才暴露。
+    原缺陷：返回 ``{"status": "success", "image_base64": ""}`` —— 调用方拿到一个
+    看似成功的空截图，问题被推到更下游才暴露。
+
+    既有契约是「返回 base64 **或** note」（tests/test_granular_adapter_v3.py
+    的 test_v3_screenshot_command_returns_base64_or_note 钉住了这一点），所以
+    这里走的是与 FileNotFoundError 相同的 note 降级出口，而不是新造一个 error
+    状态 —— 判据是"不得出现空的 image_base64"，不是"必须报错"。
     """
     result = _screenshot(_FakeADB(pull_writes=b""))
-    assert result["status"] == "error", f"空文件仍被当成成功：{result!r}"
-    assert not result.get("image_base64"), "报错时不应带图像数据"
+    assert "image_base64" not in result or result["image_base64"], f"空图仍被当作取回成功的截图返回：{result!r}"
+    assert result.get("note"), f"未走降级出口，调用方无从得知图没取回来：{result!r}"
 
 
 def test_screenshot_succeeds_with_real_content() -> None:

@@ -190,13 +190,25 @@ except ImportError:  # pragma: no cover
 # is imported at module level so tests can patch it without reloading the
 # entire bridge.
 # =============================================================================
+# 这里原本是 `_is_cross_device_enabled = lambda: True`（E731）。把它改成 except 块
+# 里的 def 会触发另一条治理规则 —— scripts/check_debt_freeze.py 的 CHECK-3 禁止
+# 「在 except ImportError 里定义函数/类」，要求改用显式的可选依赖标志
+# （docs/migration/DEPRECATION_POLICY.md §4）。所以按该策略写：except 里只设标志，
+# 真正的函数定义放在模块级。行为与原 lambda 完全一致（开关模块不可用时视为开启）。
 try:
-    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _is_cross_device_enabled
-except ImportError:  # pragma: no cover
+    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _cross_device_switch_is_enabled
 
-    def _is_cross_device_enabled() -> bool:  # type: ignore[misc]
-        """cross_device_switch 不可用时的兜底：视为开启（与原 lambda 行为一致）。"""
+    _CROSS_DEVICE_SWITCH_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _cross_device_switch_is_enabled = None
+    _CROSS_DEVICE_SWITCH_AVAILABLE = False
+
+
+def _is_cross_device_enabled() -> bool:
+    """跨设备开关是否开启；开关模块不可用时视为开启。"""
+    if not _CROSS_DEVICE_SWITCH_AVAILABLE or _cross_device_switch_is_enabled is None:
         return True
+    return bool(_cross_device_switch_is_enabled())
 
 
 logger = logging.getLogger(__name__)

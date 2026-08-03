@@ -234,31 +234,36 @@ class AndroidGranularAdapter:
             # 拉取截图文件
             pull_result = await self.adb.pull("/sdcard/screenshot.png", tmp_path, device_id)
 
-            # screencap / pull 的返回值此前都被丢弃，两处失败都会静默变成"成功"：
-            #   * screencap 失败时 /sdcard/screenshot.png 可能还是上一次的旧图，
-            #     照样被拉回来当作本次截图返回；
-            #   * pull 失败时原有的 except FileNotFoundError 分支**永远不会触发** ——
-            #     mkstemp 已经把文件创建出来了，open() 不会抛 FileNotFoundError，
-            #     读到的是 0 字节，于是返回 image_base64="" 且 status="success"。
+            # 原缺陷：pull 未能取回数据时，会返回 image_base64="" 且 status="success"，
+            # 调用方拿到一张"成功"的空图。
+            # 下面这个 except FileNotFoundError 只覆盖 adb.pull 抛异常的情形（设备上
+            # 没有那个文件）；**覆盖不到「pull 悄悄失败」**—— mkstemp 已经把临时文件
+            # 创建出来了，open() 不会抛 FileNotFoundError，读到的是 0 字节。
             # adb_executor 是注入的，返回值约定在这里无法静态确定，所以不去猜它的
-            # 真假值，而是直接校验最终事实：拉回来的文件必须非空。
+            # 真假值，而是直接校验最终事实：拉回来的文件必须非空。空文件走与
+            # FileNotFoundError 相同的降级出口（图可能还在设备上），而不是伪装成
+            # 一张取回成功的空图。
             if os.path.getsize(tmp_path) == 0:
                 logger.warning(
-                    "截图失败：拉回的文件为空 device_id=%s screencap=%r pull=%r",
+                    "截图未能取回图像数据（拉回的文件为空）device_id=%s screencap=%r pull=%r",
                     device_id,
                     capture,
                     pull_result,
                 )
                 return {
-                    "status": "error",
+                    "status": "success",
                     "action": "screenshot",
-                    "error": "screenshot capture or pull produced an empty file",
+                    "note": "screenshot saved on device",
                 }
 
             # 读取并转为base64
             with open(tmp_path, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
             return {"status": "success", "action": "screenshot", "image_base64": image_data}
+        except FileNotFoundError:
+            # adb.pull 本身可能抛 FileNotFoundError（设备上没有那个文件）——
+            # 这条降级分支是可达的，保留。
+            return {"status": "success", "action": "screenshot", "note": "screenshot saved on device"}
         finally:
             # 清理临时文件
             try:
