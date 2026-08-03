@@ -52,6 +52,8 @@ MERGED_ROUTES = (
     ("/api/v1/agents/sandbox/status", "Sandbox"),
     ("/sync/status", "同步状态"),
     ("/api/v5/health", "Gateway v5"),
+    ("/api/v1/pairing/pending", "设备准入审批"),
+    ("/api/v1/config", "客户端配置发现"),
 )
 
 

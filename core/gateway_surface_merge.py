@@ -80,6 +80,22 @@ def merge_gateway_only_routers(router) -> None:
         ("galaxy_gateway.routes.sandbox", "router", "Sandbox (/api/v1/agents/sandbox/*)"),
         ("galaxy_gateway.routes.sync_status", "router", "同步状态 (/sync/status)"),
         ("galaxy_gateway.gateway_service", "router", "Gateway v5 (/api/v5/*)"),
+        # 设备准入审批(/api/v1/pairing/*)。
+        #
+        # 它**不是** core/routes/pairing.py 的重复实现 —— 两者是同一条路的两个阶段:
+        #   core    /api/v1/pair/*     PairingCodeRegistry:短码 → 配对链接的短时映射
+        #                              (card / peers / trust —— "你是谁、怎么找到我")
+        #   gateway /api/v1/pairing/*  DeviceEnrollmentCoordinator + DeviceTokenRegistry
+        #                              (enroll / approve / deny / pending —— "我批不批你进来")
+        # 一个是发现与换名片,一个是准入与发令牌。缺了后者,设备能被找到但进不来。
+        #
+        # 可搬性实测:挂在只有 core.api_routes 的 app 上,GET /api/v1/pairing/pending → 200
+        # (它走 core.device_enrollment 的模块级单例,不碰 gateway 的 app.state)。
+        ("galaxy_gateway.api.pairing", "router", "设备准入审批 (/api/v1/pairing/*)"),
+        # 客户端配置发现(/api/v1/config)。读环境变量,不依赖 app.state;实测 → 200。
+        # 与 core/routes/config.py 的 /api/config 形状不同(一个是给客户端的发现端点,
+        # 一个是面板用的完整配置读写),两边都留,不互相顶替。
+        ("galaxy_gateway.api.config", "router", "客户端配置发现 (/api/v1/config)"),
         # 下面两个**故意不并**,尽管它们确有权威层没有的路径:
         #     galaxy_gateway.routes.llm     → /api/v1/llm/stats
         #     galaxy_gateway.routes.health  → /api/v1/health、/api/v1/gateway/metrics*
