@@ -31,7 +31,12 @@ COMPAT_SURFACES_REQUIRE_CANONICAL_REPLACEMENT_POLICY = (
 )
 
 FROZEN_COMPAT_SURFACE_BUDGET = 10
-FROZEN_LEGACY_PATH_BUDGET = 82
+# 82 → 81:main 的 PR #1562(删死模块)移除了一条 legacy 路径,但没有同步收紧这个预算,
+# 于是主干上 test_default_snapshot_matches_frozen_budgets 直接红了(assert 81 == 82)。
+#
+# 往下调而不是把断言改成 <=:这个数字的意义是"冻结" —— 债只许还不许欠。
+# 删掉一条之后仍按 82 计,等于给未来偷偷留了一个名额,而那正是"冻结"要防的事。
+FROZEN_LEGACY_PATH_BUDGET = 81
 FROZEN_PRODUCTION_BASELINE_LEGACY_BUDGET = 2
 
 

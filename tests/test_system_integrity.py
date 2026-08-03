@@ -74,8 +74,14 @@ class TestPhase2DeviceSubsystem:
         assert "pyautogui.write(" not in source
 
     def test_node08_fetch_uses_httpx_client(self):
-        # Node_08_Fetch was refactored from aiohttp mock to httpx.AsyncClient.
-        # Verify the current implementation uses httpx.AsyncClient.request().
+        # Node_08_Fetch 从 aiohttp mock 改成了 httpx 异步客户端。
+        #
+        # 客户端的**构造方式**后来又变过一次:出站请求现在走
+        # nodes.common.url_guard.guarded_async_client(),它内部返回的仍是
+        # httpx.AsyncClient,只是额外挂了一个 SSRF 守卫钩子(每一跳重定向都过)。
+        # 这条用例的本意是"这个节点用的是 httpx 异步客户端",那一点没变 ——
+        # 变的只是不再直接写 httpx.AsyncClient(。断言相应放宽到"两种写法之一",
+        # 而不是继续钉死已经不该再出现的那一种。
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "nodes",
@@ -85,7 +91,9 @@ class TestPhase2DeviceSubsystem:
         with open(source_path) as f:
             content = f.read()
         assert "httpx" in content
-        assert "AsyncClient" in content or "httpx.AsyncClient" in content
+        assert (
+            "guarded_async_client" in content or "httpx.AsyncClient" in content
+        ), "Node_08_Fetch 既没走守卫工厂也没直接用 httpx.AsyncClient —— 出站客户端换成什么了?"
 
     def test_device_router_uses_asyncio_event(self):
         pytest.importorskip(
