@@ -254,11 +254,13 @@ ONEAPI_INTEGRATION_REGISTRY: Dict[OneAPIIntegrationDimension, OneAPIIntegrationE
     OneAPIIntegrationDimension.STATUS_BOARD_LOWER_ROW: OneAPIIntegrationEntry(
         dimension=OneAPIIntegrationDimension.STATUS_BOARD_LOWER_ROW,
         description=(
-            "On the right-side desktop status board, OneAPI must render as a "
-            "separate lower-layer row distinct from the top-layer "
-            "direct/native-multimodal provider cluster."
+            "On the desktop panel, OneAPI must render as a separate lower-layer "
+            "row distinct from the top-layer direct/native-multimodal provider "
+            "cluster.  (The renderer moved: this row lived in the terminal "
+            "status board until panel-surface convergence deleted it; the "
+            "constraint now applies to the React panel's models view.)"
         ),
-        canonical_module="status_board_v2",
+        canonical_module="electron/renderer/panel/src/components/ModelsTab.tsx",
         canonical_doc="docs/DESKTOP_DISPLAY_BOUNDARIES.md",
     ),
     OneAPIIntegrationDimension.CONFIG_HAS_GLOBAL_EFFECT: OneAPIIntegrationEntry(

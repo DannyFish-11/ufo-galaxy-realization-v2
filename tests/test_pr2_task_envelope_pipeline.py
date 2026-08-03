@@ -20,7 +20,7 @@ PR-2 smoke tests — 核心链路统一为 TaskEnvelope
 
 import asyncio
 import uuid
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -440,11 +440,19 @@ class TestTaskOrchestratorEnvelope:
         mock_ws.get_connected_devices = MagicMock(return_value=[])
 
         orch = TaskOrchestrator(mock_dm, mock_mh, mock_ws)
-        task = await orch.submit_task(
-            user_request="Take a screenshot of the desktop",
-            priority=TaskPriority.NORMAL,
-            target_device="device_test",
-        )
+        # 编排器的 worker 池（`_task_pool`）在 start() 里才创建；未 start 就
+        # submit_task 会如实抛 RuntimeError("orchestrator not started")。
+        await orch.start()
+        try:
+            # 本测试只验证信封被构造，不需要任务真的被执行；拦住派发这一步。
+            with patch.object(orch._task_pool, "submit", new=AsyncMock()):
+                task = await orch.submit_task(
+                    user_request="Take a screenshot of the desktop",
+                    priority=TaskPriority.NORMAL,
+                    target_device="device_test",
+                )
+        finally:
+            await orch.stop()
 
         assert task.task_id in orch._task_envelopes
         envelope = orch._task_envelopes[task.task_id]

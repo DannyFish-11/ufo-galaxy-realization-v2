@@ -3,23 +3,26 @@
 """
 tests/test_pr9_operator_console.py
 ====================================
-PR-9 — Unified Visual Operator / Ecosystem Console.
+PR-9 — Unified Visual Operator / Ecosystem Console —— 表层已删除后的续存部分。
 
-Validates:
-  1.  static/operator-console/index.html exists.
-  2.  The console HTML references all required OPERATOR_ROUTES_V1 API paths.
-  3.  The console HTML does NOT define its own data-model objects (no parallel
-      truth source).
-  4.  All operator API endpoints remain accessible and return JSON backed by
-      OPERATOR_ROUTES_V1 (data-binding integration tests).
-  5.  The unified_launcher.py registers the /operator-console route.
-  6.  No second backend aggregation route is introduced alongside the console.
+``static/operator-console/index.html`` 这份并行 Web 表层已随面板收敛删除
+（面板唯一表层 = Tauri/Electron 壳内的 React 面板）。原先 1/2/3/5 四组测试
+断言的都是那份 HTML 的内容与它在 unified_launcher 里的挂载，随表层一并移除。
+
+**没有连坐删掉的**：PR-9 真正的价值不在那份 HTML，而在它背后的约束——
+operator 表层必须绑定 ``OPERATOR_ROUTES_V1``，不得另起一套并行事实源。
+这条约束与前端是谁无关，因此保留并**加强**：
+
+  1.  九条 operator API 路径必须真实存在于 ``core.routes.operator`` 上
+      （原测试只断言"HTML 里出现过这个字符串"——那是弱断言，HTML 删了它就
+      失去意义，而且字符串出现 ≠ 路由存在）。
+  2.  所有 operator API 端点返回 OPERATOR_ROUTES_V1 背书的 JSON（数据绑定）。
+  3.  不得引入第二个后端聚合路由。
+  4.  回归钉：被删的 operator-console 表层不得重新出现。
 """
 
 from __future__ import annotations
 
-import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -33,9 +36,17 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # ---------------------------------------------------------------------------
 
 
-def _console_html() -> str:
-    p = PROJECT_ROOT / "static" / "operator-console" / "index.html"
-    return p.read_text(encoding="utf-8")
+def _operator_router_paths() -> set[str]:
+    """取 operator 路由器上真实注册的路径集合。
+
+    注意用 ``create_router()`` 的返回值直接取,而不是把它 include 进 FastAPI 再
+    遍历 ``app.routes``:新版 FastAPI 的 ``include_router`` 不再摊平路由,而是插入
+    ``_IncludedRouter`` 包装对象,其 ``.path`` 是 ``None`` —— 那样遍历会得到空集,
+    断言全部"通过"却什么都没测到。
+    """
+    from core.routes.operator import create_router
+
+    return {p for r in create_router().routes if (p := getattr(r, "path", None))}
 
 
 def _launcher_text() -> str:
@@ -64,25 +75,7 @@ def op_client(op_app):
 
 
 # ---------------------------------------------------------------------------
-# 1.  Static file presence
-# ---------------------------------------------------------------------------
-
-
-class TestStaticFilePresence:
-    def test_console_html_exists(self):
-        p = PROJECT_ROOT / "static" / "operator-console" / "index.html"
-        assert p.exists(), f"Missing: {p}"
-
-    def test_console_html_not_empty(self):
-        assert len(_console_html()) > 1000
-
-    def test_console_html_is_valid_html(self):
-        html = _console_html()
-        assert "<!doctype html>" in html.lower()
-
-
-# ---------------------------------------------------------------------------
-# 2.  API path references in the console
+# 1.  Operator API 路径必须真实存在（取代原"HTML 里提到过这个字符串"）
 # ---------------------------------------------------------------------------
 
 REQUIRED_API_PATHS = [
@@ -98,43 +91,21 @@ REQUIRED_API_PATHS = [
 ]
 
 
-class TestApiPathReferences:
+class TestOperatorSurfaceExists:
     @pytest.mark.parametrize("api_path", REQUIRED_API_PATHS)
-    def test_console_references_api_path(self, api_path):
-        html = _console_html()
-        assert api_path in html, f"Operator console HTML does not reference API path: {api_path}"
+    def test_operator_router_registers_path(self, api_path):
+        assert (
+            api_path in _operator_router_paths()
+        ), f"operator 路由器上没有 {api_path}——PR-9 要求的 operator 表层不完整"
 
-    def test_all_paths_reference_operator_routes_v1_authority(self):
-        html = _console_html()
-        assert "OPERATOR_ROUTES_V1" in html
+    def test_helper_actually_sees_routes(self):
+        """自证:确认 _operator_router_paths() 不是恒返回空集。
 
-
-# ---------------------------------------------------------------------------
-# 3.  No parallel truth model in the console
-# ---------------------------------------------------------------------------
-
-
-class TestNoParallelTruthModel:
-    def test_console_does_not_define_device_class(self):
-        html = _console_html()
-        # A real Device class definition would be 'class Device {' or 'class Device{'
-        assert "class Device {" not in html
-        assert "class Device{" not in html
-
-    def test_console_does_not_define_flow_state_store(self):
-        html = _console_html()
-        assert "FlowStateStore" not in html
-        assert "DeviceStateStore" not in html
-
-    def test_console_fetches_from_api(self):
-        html = _console_html()
-        # Must use fetch() to call real APIs
-        assert "fetch(" in html or "apiFetch(" in html
-
-    def test_console_has_no_hardcoded_mock_devices(self):
-        html = _console_html()
-        # Should not have hardcoded mock device arrays
-        assert "mock_device" not in html.lower()
+        上面那组参数化断言若因为取路由的方式不对而拿到空集,会**全部失败**而非
+        全部通过,所以它本身不会假绿。但这条把"取得到路由"这件事单独钉死,
+        以后有人改取法时能立刻看出是取法坏了,而不是九条路由同时消失了。
+        """
+        assert len(_operator_router_paths()) >= len(REQUIRED_API_PATHS)
 
 
 # ---------------------------------------------------------------------------
@@ -248,22 +219,36 @@ class TestExecutionEventsBinding:
 
 
 # ---------------------------------------------------------------------------
-# 5.  unified_launcher.py registers /operator-console
+# 5.  回归钉：被删的并行 Web 表层不得重新出现
 # ---------------------------------------------------------------------------
 
 
-class TestLauncherRoute:
-    def test_launcher_has_operator_console_route(self):
-        text = _launcher_text()
-        assert "/operator-console" in text
+class TestParallelWebSurfacesStayDeleted:
+    """面板收敛：唯一表层是 Tauri/Electron 壳内的 React 面板。
 
-    def test_launcher_references_operator_console_dir(self):
-        text = _launcher_text()
-        assert "operator-console" in text
+    这里钉的是**目录不存在 + 启动器不挂载**,而不是"启动器源码里不出现某个
+    字符串"——后者会被解释性注释误伤(本仓的注释里就写着这两个路径的来历,
+    那是应该保留的历史说明)。所以断言落在可执行的事实上:目录没了、
+    路由函数没了。
+    """
 
-    def test_launcher_uses_file_response_for_console(self):
+    def test_operator_console_dir_is_gone(self):
+        p = PROJECT_ROOT / "static" / "operator-console"
+        assert not p.exists(), f"operator-console 表层已删除,不应重新出现: {p}"
+
+    def test_api_manager_dir_is_gone(self):
+        p = PROJECT_ROOT / "static" / "api-manager"
+        assert not p.exists(), f"api-manager 表层已删除,不应重新出现: {p}"
+
+    def test_launcher_no_longer_defines_console_routes(self):
         text = _launcher_text()
-        assert "operator_console_index" in text
+        assert "async def operator_console_index_route" not in text
+        assert "async def api_manager_index" not in text
+
+    def test_launcher_no_longer_mounts_static_assets(self):
+        """/assets 静态挂载随 api-manager 一并移除。"""
+        text = _launcher_text()
+        assert "StaticFiles(directory=" not in text
 
 
 # ---------------------------------------------------------------------------

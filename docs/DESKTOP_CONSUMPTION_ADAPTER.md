@@ -266,7 +266,7 @@ The lower-level endpoints remain available for diagnostic use:
 
 ## Related Documentation
 
-- [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) — Status Board V2 overview and PR-8 integration contract
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — Status Board V2 overview and PR-8 integration contract
 - [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md) — Legacy routing demotion (PR-5)
 - [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md) — Topology projection (PR-6/7)
 - [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) — OneAPI lower-horizon position (PR-4)

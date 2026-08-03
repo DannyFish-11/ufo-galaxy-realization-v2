@@ -689,48 +689,15 @@ class TestBoundaryProhibitedFields:
 
 # ---------------------------------------------------------------------------
 # 79–84: LiminalSurface rendering
-# ---------------------------------------------------------------------------
+# 这里曾有 TestLiminalSurface —— 测终端状态板的 LiminalSurface
+# (windows_client/status_board_v2/liminal_surface.py) 是否把三部制阈限空间地图
+# 画对、且不越界渲染 provider / primary_model_id。该表层随面板收敛整包删除。
+#
+# PR-55 的核心契约没有丢：上面 TestLiminalSpaceMap / TestBuildLiminalSpaceMap /
+# TestBoundaryProhibitedFields 直接对 core/liminal_space_mapping.py 断言地图结构
+# 与"禁止出现的字段"——那是边界的定义处，渲染层只是它的一个消费者。
 
 
-class TestLiminalSurface:
-    def setup_method(self):
-        from windows_client.status_board_v2.liminal_surface import LiminalSurface
-
-        self.surface = LiminalSurface()
-        self.projection = {
-            "tri_state_phase": "liminal",
-            "runtime_domain": "local",
-            "presence_intensity": 0.6,
-            "coherence": 0.75,
-        }
-
-    def test_render_returns_non_empty_string(self):
-        result = self.surface.render(self.projection)
-        assert isinstance(result, str) and len(result) > 0
-
-    def test_render_no_provider_list_label(self):
-        result = self.surface.render(self.projection)
-        assert "provider_list" not in result
-
-    def test_render_no_primary_model_id_label(self):
-        result = self.surface.render(self.projection)
-        assert "primary_model_id" not in result
-
-    def test_render_contains_local_chain_panel(self):
-        result = self.surface.render(self.projection)
-        assert "Local" in result or "local" in result.lower()
-
-    def test_render_unavailable_non_empty(self):
-        result = self.surface._render_unavailable()
-        assert isinstance(result, str) and len(result) > 0
-
-    def test_render_unavailable_no_primary_model_id(self):
-        result = self.surface._render_unavailable()
-        assert "primary_model_id" not in result
-
-
-# ---------------------------------------------------------------------------
-# 85–89: Documentation and module guardrails
 # ---------------------------------------------------------------------------
 
 

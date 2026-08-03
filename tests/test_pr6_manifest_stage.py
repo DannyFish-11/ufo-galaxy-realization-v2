@@ -466,69 +466,10 @@ class TestEdgeCases:
 
 # ---------------------------------------------------------------------------
 # 6. ManifestSurface (Status Board V2)
-# ---------------------------------------------------------------------------
-
-
-class TestManifestSurface:
-    """Tests for the ManifestSurface read-only render adapter."""
-
-    def setup_method(self):
-        from windows_client.status_board_v2.manifest_surface import ManifestSurface
-
-        self.surface = ManifestSurface()
-
-    def test_render_returns_non_empty_string(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert isinstance(output, str)
-        assert len(output) > 0
-
-    def test_render_contains_expected_labels(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert "Manifest Stage" in output
-        assert "Focus" in output
-        assert "Primary" in output
-        assert "Weights" in output
-
-    def test_render_ready_label_when_stage_ready(self):
-        # ambient_intensity from StateSpaceMapper on manifest sample should be high
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        # Should contain the READY or HOLD indicator
-        assert "READY" in output or "HOLD" in output
-
-    def test_render_hold_label_on_silent(self):
-        output = self.surface.render(_SILENT_MINIMAL)
-        assert "HOLD" in output
-
-    def test_render_handles_none_fields_gracefully(self):
-        output = self.surface.render(_SILENT_MINIMAL)
-        assert isinstance(output, str)
-        assert len(output) > 0
-
-    def test_render_shows_primary_model(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert "gpt-4o" in output
-
-    def test_render_shows_task_summary(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert "test task" in output
-
-    def test_render_shows_execution_stage(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert "planning" in output
-
-    def test_render_shows_route_reason(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert "native preferred" in output
-
-    def test_render_shows_device(self):
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert "desktop-win" in output
-
-    def test_render_is_read_only_no_command_interface(self):
-        """Sanity check: render() returns a string, not a widget or callable."""
-        output = self.surface.render(_MANIFEST_SAMPLE)
-        assert isinstance(output, str)
-        assert callable(getattr(self.surface, "render"))
-        # No 'send', 'submit', 'execute', or 'command' methods.
-        for forbidden in ("send", "submit", "execute", "command"):
-            assert not hasattr(self.surface, forbidden), f"ManifestSurface should not expose '{forbidden}' method"
+# 这里曾有 TestManifestSurface —— 测终端状态板的 ManifestSurface
+# (windows_client/status_board_v2/manifest_surface.py) 渲染显现台。该表层随面板
+# 收敛整包删除。
+#
+# PR-6 的核心契约没有丢：上面 TestManifestStageState / TestManifestStageControllerMapping /
+# TestRetreatSoftening / TestSmoothTransition 覆盖的 desktop_projection/ 显现台
+# 状态机仍在，它才是语义的所在地。

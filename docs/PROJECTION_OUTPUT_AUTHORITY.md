@@ -5,7 +5,7 @@
 > **Scope:** Runtime-facing projection/output authority model.
 >
 > Related: [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md) ·
-> [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) ·
+> [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) ·
 > [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) ·
 > [`docs/RUNTIME_PROJECTION.md`](RUNTIME_PROJECTION.md)
 

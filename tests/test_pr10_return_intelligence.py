@@ -539,51 +539,26 @@ class TestDownstreamHelperStability:
         assert enriched["tri_state_phase"] == "silent"
         assert "return_intelligence" in enriched
 
-    def test_return_surface_render_non_empty(self):
-        from windows_client.status_board_v2.return_surface import ReturnSurface
+    def test_attach_return_summary_survives_arbitrary_consumer_keys(self):
+        """attach_return_summary 不得破坏调用方已有的字段。
 
-        surface = ReturnSurface()
-        result = surface.render(_MINIMAL_PROJECTION)
-        assert isinstance(result, str)
-        assert len(result) > 0
+        取代原先四条 ``ReturnSurface.render(...)`` 测试。那四条测的是终端状态板
+        (``windows_client/status_board_v2/return_surface.py``)怎么把 return
+        intelligence 画成文字,该表层已随面板收敛整包删除。
 
-    def test_return_surface_render_with_return_intelligence(self):
-        from core.return_intelligence import ReturnMode, ReturnSummary, attach_return_summary
-        from windows_client.status_board_v2.return_surface import ReturnSurface
+        但它们**顺带**保障的一件事必须留下:``attach_return_summary`` 面对形态
+        各异的下游 payload 时不能吞字段、不能改写既有键。渲染层没了,这条契约
+        仍然成立(现在的下游是 React 面板经 /api/v1/projection/runtime 取数),
+        所以直接对函数本身钉死,而不再借渲染层间接验证。
+        """
+        from core.return_intelligence import IDLE_RETURN_SUMMARY, attach_return_summary
 
-        summary = ReturnSummary(
-            is_returning=True,
-            return_mode=ReturnMode.STEP_DOWN,
-            return_action="step_down",
-            return_trigger="finished",
-            reason="normal completion",
-            affects_manifest=True,
-            affects_liminal=True,
-        )
-        enriched = attach_return_summary(_MANIFEST_PROJECTION, summary)
-        surface = ReturnSurface()
-        result = surface.render(enriched)
-        assert "step_down" in result
-        assert "RETURNING" in result
+        payload = {"tri_state_phase": "manifest", "devices": [{"id": "d1"}], "custom": 42}
+        enriched = attach_return_summary(payload, IDLE_RETURN_SUMMARY)
 
-    def test_return_surface_render_without_return_intelligence_key(self):
-        """Surface must render gracefully when return_intelligence key is absent."""
-        from windows_client.status_board_v2.return_surface import ReturnSurface
-
-        # _MINIMAL_PROJECTION has no return_intelligence key.
-        surface = ReturnSurface()
-        result = surface.render(_MINIMAL_PROJECTION)
-        assert isinstance(result, str)
-        assert "idle" in result or "Return Intelligence" in result
-
-    def test_return_surface_contains_expected_labels(self):
-        from windows_client.status_board_v2.return_surface import ReturnSurface
-
-        surface = ReturnSurface()
-        result = surface.render(_MINIMAL_PROJECTION)
-        assert "Return Intelligence" in result
-        assert "Mode" in result
-        assert "Trigger" in result
+        for key, value in payload.items():
+            assert enriched[key] == value, f"attach_return_summary 改写/丢掉了下游字段 {key}"
+        assert "return_intelligence" in enriched
 
 
 # ===========================================================================

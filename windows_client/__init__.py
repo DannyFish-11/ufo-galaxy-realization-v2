@@ -18,11 +18,16 @@ The current Windows-facing runtime story is:
    runtime shell** (silent / liminal / manifest).  This is the canonical
    Windows runtime surface.
 
-2. :mod:`windows_client.status_board_v2` — the **canonical read-only desktop
-   status surface**.  It consumes projection output from::
+2. ``electron/renderer/panel/`` — the **canonical desktop surface** (React
+   panel inside the Tauri, fallback Electron, shell).  It consumes projection
+   output from::
 
        GET /api/v1/projection/runtime
        contract: contracts.desktop_status_projection.DesktopStatusProjection
+
+   Note this no longer lives under ``windows_client/``: the former canonical
+   surface :mod:`windows_client.status_board_v2` (a terminal ANSI status board)
+   was deleted by panel-surface convergence.
 
 3. :mod:`windows_client.windows_aip_client` — Windows device ingress.
    All Windows command execution routes through::
@@ -43,15 +48,20 @@ Launchers and legacy UI assets have been moved to ``windows_client/_legacy/``.
 
 **Canonical outward status surface**
 -------------------------------------
-``windows_client/status_board_v2/`` is the **canonical read-only desktop
-status board**.  It consumes projection output from:
+``electron/renderer/panel/`` is the **canonical desktop surface**.  It consumes
+projection output from:
 
     GET /api/v1/projection/runtime
+    (aggregated via /api/v1/panel/unified and /api/v1/panel/feed)
+    live phase stream: WS /ws/desktop-presence
     contract: contracts.desktop_status_projection.DesktopStatusProjection
 
-All status presentation must be driven by projection.  The legacy
-``windows_client/status_board.py`` polls an ad-hoc non-projection endpoint
-(``/api/v1/continuum/state``) and is superseded by ``status_board_v2/``.
+All status presentation must be driven by projection.  Two former status
+surfaces under this package are gone: ``windows_client/status_board.py``
+(polled the ad-hoc non-projection ``/api/v1/continuum/state``) and
+``windows_client/status_board_v2/`` (projection-driven terminal board, deleted
+by panel-surface convergence).  Nothing under ``windows_client/`` renders
+status any more — only ``windows_client/autonomy/`` remains active.
 
 See ``core/ui_surface_authority.py`` for the canonical UI surface authority
 registry and ``core/orchestration_authority/legacy_paths.py`` for the

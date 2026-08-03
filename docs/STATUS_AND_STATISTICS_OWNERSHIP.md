@@ -107,7 +107,7 @@ runbooks, and architecture governance tooling.
 
 - [`docs/DESKTOP_SEMANTIC_CLOSURE.md`](DESKTOP_SEMANTIC_CLOSURE.md) — tri-state desktop semantics
 - [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) — canonical display boundary contract
-- [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) — status board design and usage guide
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — status board design and usage guide
 - [`docs/LIMINAL_SPACE_MAPPING.md`](LIMINAL_SPACE_MAPPING.md) — canonical liminal space mapping
 - [`docs/ARCHITECTURE_COMPLETION_SCORECARD.md`](ARCHITECTURE_COMPLETION_SCORECARD.md) — maturity scorecard
 - [`docs/ARCHITECTURE_STATUS_SURFACE.md`](ARCHITECTURE_STATUS_SURFACE.md) — live status surface

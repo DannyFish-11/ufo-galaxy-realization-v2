@@ -36,7 +36,7 @@ These structures must NOT contain:
 - Generic operator information blocks.
 
 Those fields belong exclusively to the right-side desktop status board
-(``windows_client/status_board_v2/``).
+(现为 ``electron/renderer/panel/`` 里的 React 面板)。
 
 See ``docs/LIMINAL_SPACE_MAPPING.md`` for the full canonical definition and
 ``docs/SANDBOX_SIMULATION_PROJECTION.md`` for sandbox/simulation semantics.
@@ -310,7 +310,7 @@ class LiminalSpaceMap:
     3. ``simulation_summary`` — sandbox / speculative execution field
 
     This structure is read-only, serialisable, and suitable for:
-    - Liminal surface rendering (``windows_client/status_board_v2/liminal_surface.py``)
+    - 阈限面渲染（原 ``windows_client/status_board_v2/liminal_surface.py``，该终端表层已随面板收敛删除；现由 React 面板承担）
     - Audit/debug endpoints
     - Projection consumer attachment
 

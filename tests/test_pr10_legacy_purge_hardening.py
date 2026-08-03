@@ -321,8 +321,10 @@ class TestLegacyMarkerFiles:
     def test_dashboard_frontend_legacy_surface_md(self):
         assert not (_ROOT / "dashboard" / "frontend").exists()
 
-    def test_status_board_v2_active_surface_md(self):
-        assert (_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md").exists()
+    def test_status_board_v2_dir_is_gone(self):
+        # 面板表层收敛:终端状态板整包删除,其 ACTIVE_SURFACE.md 标记随之退役,
+        # 与上面 dashboard 两条同款——表层退场后断言翻成"不得复活"。
+        assert not (_ROOT / "windows_client" / "status_board_v2").exists()
 
     def test_enhancements_legacy_transition_md(self):
         assert (_ROOT / "enhancements" / "LEGACY_TRANSITION.md").exists()

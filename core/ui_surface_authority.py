@@ -32,8 +32,10 @@ Authority model::
     ┌──────────────────────────────────────────────────────────┐
     │  CANONICAL OUTWARD STATUS TRUTH                          │
     │  ─────────────────────────────                           │
-    │  windows_client.status_board_v2                          │
+    │  electron.renderer.panel  (React panel in Tauri shell)   │
     │    consumes  ──►  GET /api/v1/projection/runtime         │
+    │                   /api/v1/panel/unified · /panel/feed    │
+    │                   WS /ws/desktop-presence                │
     │    contract  ──►  contracts.desktop_status_projection    │
     │                   (DesktopStatusProjection)              │
     └──────────────────────────────────────────────────────────┘
@@ -48,9 +50,13 @@ Authority model::
 
 Retired surfaces that must NOT be reintroduced as system structure or parallel state::
 
-    dashboard/                    →  DELETED  (former WebUI management panel)
-    windows_client/main.py         →  DELETED  (former host-specific shell)
-    windows_client/status_board.py →  DELETED  (former ad-hoc status board)
+    dashboard/                       →  DELETED  (former WebUI management panel)
+    windows_client/main.py            →  DELETED  (former host-specific shell)
+    windows_client/status_board.py    →  DELETED  (former ad-hoc status board)
+    windows_client/status_board_v2/   →  DELETED  (terminal status board; was
+                                          canonical until panel-surface convergence)
+    static/api-manager/               →  DELETED  (build artefacts, no source)
+    static/operator-console/          →  DELETED  (raw-JS polling console)
 
 Usage::
 
@@ -64,7 +70,7 @@ Usage::
     )
 
     assert not is_legacy_surface("dashboard.backend.main")
-    assert is_projection_driven_surface("windows_client.status_board_v2")
+    assert is_projection_driven_surface("electron.renderer.panel")
     summary = build_ui_surface_authority_summary()
 """
 
@@ -274,22 +280,50 @@ _REGISTRY._register(
     # CANONICAL — projection-driven outward status surface
     # ------------------------------------------------------------------
     UISurfaceEntry(
-        surface_path="windows_client.status_board_v2",
+        surface_path="electron.renderer.panel",
         role=UISurfaceRole.PROJECTION_DRIVEN,
         description=(
-            "Status Board V2 — the canonical read-only desktop status board. "
-            "Consumes RuntimeProjection from GET /api/v1/projection/runtime "
-            "and DesktopStatusProjection contract.  "
-            "Projection is the sole outward truth for system status."
+            "React panel inside the Tauri/Electron desktop shell — the sole "
+            "canonical outward UI surface.  Consumes RuntimeProjection via "
+            "GET /api/v1/projection/runtime (aggregated through "
+            "/api/v1/panel/unified and /api/v1/panel/feed) plus the live "
+            "/ws/desktop-presence phase stream."
         ),
         canonical_contract="contracts.desktop_status_projection.DesktopStatusProjection",
         superseded_by=None,
         pr_demoted=None,
         notes=(
-            "windows_client/status_board_v2/ is READ-ONLY.  "
-            "It never accepts chat input, sends commands, or maintains its own "
-            "parallel state model.  All authority flows from "
-            "core.routes.projection → RuntimeProjection → DesktopStatusProjection."
+            "Panel-surface convergence: the repository previously carried five "
+            "parallel UI surfaces (this one, static/api-manager, "
+            "static/operator-console, windows_client/status_board_v2, and an "
+            "inline legacy dashboard in unified_launcher).  Each read its own "
+            "aggregation layer, which is how the panel could display a phase "
+            "that no live request had produced.  The other four are deleted; "
+            "this entry is the single remaining outward surface."
+        ),
+    ),
+    # ------------------------------------------------------------------
+    # DELETED — windows_client/status_board_v2/ (terminal status board)
+    # ------------------------------------------------------------------
+    UISurfaceEntry(
+        surface_path="windows_client.status_board_v2",
+        role=UISurfaceRole.DELETED,
+        description=(
+            "Status Board V2 — deleted terminal (ANSI) status board.  Was the "
+            "canonical read-only desktop status surface before panel-surface "
+            "convergence; run manually via `python -m windows_client.status_board_v2`, "
+            "never started by the launcher."
+        ),
+        canonical_contract="contracts.desktop_status_projection.DesktopStatusProjection",
+        superseded_by="electron.renderer.panel",
+        pr_demoted=None,
+        notes=(
+            "DELETED.  Its topology constellation layout / renderer / inspector / "
+            "history layers have no equivalent in the React panel yet — this was "
+            "a deliberate net capability reduction, not a de-duplication.  The "
+            "projection endpoints it consumed (/api/v1/projection/runtime, "
+            "/runtime-truth, /desktop-status-board) are untouched and remain the "
+            "supply side for whatever renders them next."
         ),
     ),
     # ------------------------------------------------------------------
@@ -304,7 +338,7 @@ _REGISTRY._register(
             "outward status truth."
         ),
         canonical_contract=None,
-        superseded_by="windows_client.status_board_v2",
+        superseded_by="electron.renderer.panel",
         pr_demoted="PR-mainline-closure",
         notes=(
             "dashboard/ has been deleted as non-mainline noise. The "
@@ -318,7 +352,7 @@ _REGISTRY._register(
         role=UISurfaceRole.DELETED,
         description="Galaxy Dashboard package — deleted non-mainline UI surface.",
         canonical_contract=None,
-        superseded_by="windows_client.status_board_v2",
+        superseded_by="electron.renderer.panel",
         pr_demoted="PR-mainline-closure",
         notes="dashboard/ is DELETED; do not recreate it as a status authority.",
     ),
@@ -330,7 +364,7 @@ _REGISTRY._register(
         role=UISurfaceRole.DELETED,
         description=("Windows Client main entry-point — deleted host-specific legacy shell."),
         canonical_contract=None,
-        superseded_by="windows_client.status_board_v2",
+        superseded_by="electron.renderer.panel",
         pr_demoted="PR-mainline-closure",
         notes=(
             "windows_client/main.py is DELETED as non-mainline shell noise. "
@@ -343,7 +377,7 @@ _REGISTRY._register(
         role=UISurfaceRole.DELETED,
         description=("windows_client/status_board.py — deleted ad-hoc status board."),
         canonical_contract=None,
-        superseded_by="windows_client.status_board_v2",
+        superseded_by="electron.renderer.panel",
         pr_demoted="PR-mainline-closure",
         notes=(
             "status_board.py is DELETED. The canonical replacement is "
@@ -359,7 +393,7 @@ _REGISTRY._register(
             "to host windows_client.status_board_v2 and runtime adapters."
         ),
         canonical_contract=None,
-        superseded_by="windows_client.status_board_v2",
+        superseded_by="electron.renderer.panel",
         pr_demoted="PR-mainline-closure",
         notes="The root shell authority is deleted; status_board_v2 is the canonical surface.",
     ),

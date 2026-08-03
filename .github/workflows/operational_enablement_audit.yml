@@ -111,9 +111,24 @@ jobs:
           if ANDROID_SERVER_URL_RUNTIME_EDITABLE is not True:
               failures.append("ANDROID_SERVER_URL_RUNTIME_EDITABLE must be True")
 
-          # Desktop board control surface
-          if DESKTOP_BOARD_IS_CONTROL_SURFACE is not True:
-              failures.append("DESKTOP_BOARD_IS_CONTROL_SURFACE must be True")
+          # Desktop board control surface —— 面板表层收敛后翻为 False。
+          #
+          # 原判据是 True，依据是终端状态板 windows_client/status_board_v2/ 的
+          # ConfigControlSurface（可切 provider 开关、设 native_mm_policy，
+          # write-through + 热重载）。该表层已整包删除；接替的 React 面板走
+          # POST /api/config → CONFIG_SCHEMA，而那 155 个键里既没有 provider
+          # 开关键、也没有 native_mm_policy 键——这两项写能力不是换了地方，
+          # 是暂时没有了。详见 docs/PANEL_SURFACE_CONVERGENCE.md。
+          #
+          # 这道门的职责是"审计模块必须如实反映运行现实"，所以判据跟着现实翻，
+          # 而不是放宽成"随便什么值都行"：写死 False 才能在有人把写通道补回来
+          # 却忘了更新审计时再次报红。
+          if DESKTOP_BOARD_IS_CONTROL_SURFACE is not False:
+              failures.append(
+                  "DESKTOP_BOARD_IS_CONTROL_SURFACE must be False "
+                  "(panel-surface convergence deleted the only desktop write path; "
+                  "if a write path was restored, update the audit module and this gate together)"
+              )
 
           # Tri-state is real runtime mode
           if TRI_STATE_IS_REAL_RUNTIME_MODE is not True:

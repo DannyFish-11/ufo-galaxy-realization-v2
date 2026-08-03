@@ -304,7 +304,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "description": (
             "ProjectionSurfaceBridge.enrich_runtime_projection() enriches "
             "projection dicts from OperatorSurface, but the status board "
-            "surfaces (desktop_projection, status_board_v2) do not yet call "
+            "surfaces (desktop_projection, React panel) do not yet call "
             "enrich_runtime_projection() in their assembly paths. "
             "Bridge is wired but not yet consumed by all projection endpoints."
         ),
@@ -366,7 +366,7 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
     {
         "gap_id": "GAP-512-008",
         "severity": GAP_SEVERITY_RESIDUAL,
-        "layer": "desktop_projection / status_board_v2",
+        "layer": "desktop_projection / electron_renderer_panel",
         "description": (
             "Desktop projection surfaces (ContinuumState, DesktopStatusProjection) "
             "still maintain their own topology/route representations independently "
@@ -982,7 +982,7 @@ class RuntimeClosureAudit:
                 runtime_fact="operator runtime snapshot / executor health in status board",
                 layer_a="core.operator_surface.OperatorSurface",
                 layer_b=(
-                    "desktop_projection / status_board_v2 independent assembly paths "
+                    "desktop_projection / React panel independent assembly paths "
                     "that build runtime view without consuming OperatorSurface"
                 ),
                 description=(
@@ -1015,7 +1015,7 @@ class RuntimeClosureAudit:
                 layer_a="core.network_topology_runtime.NetworkTopologyRuntime",
                 layer_b=(
                     "ContinuumState / DesktopStatusProjection topology representations "
-                    "in desktop_projection / status_board_v2"
+                    "in desktop_projection / React panel"
                 ),
                 description=(
                     "Desktop projection surfaces (ContinuumState, DesktopStatusProjection) "

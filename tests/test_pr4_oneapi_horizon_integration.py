@@ -52,7 +52,7 @@ Validates:
   40. docs/ONEAPI_SYSTEM_POSITION.md mentions "supersedes".
   41. docs/ONEAPI_SYSTEM_POSITION.md mentions "oneapi_integration".
   42. docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md mentions PR-4 enforcement.
-  43. docs/STATUS_BOARD_V2.md mentions oneapi_integration.
+  43.（已移除）原钉 docs/STATUS_BOARD_V2.md，该文档随终端状态板删除。
   44. build_oneapi_status_summary NOT configured has health="skipped" by default.
   45. build_oneapi_integration_summary still works (backward compat).
   46. DesktopStatusProjection.to_dict() includes oneapi_integration key.
@@ -469,14 +469,10 @@ def test_42_right_status_board_doc_mentions_pr4_enforcement():
     assert "PR-4" in content
 
 
-def test_43_status_board_v2_doc_mentions_oneapi_integration():
-    content = _read_file("docs", "STATUS_BOARD_V2.md")
-    assert "oneapi_integration" in content
-
-
-# ===========================================================================
-# 44–50: Regression / invariant guards
-# ===========================================================================
+# 原 test 43 钉 docs/STATUS_BOARD_V2.md 提到 oneapi_integration。该文档随
+# windows_client/status_board_v2/ 一并删除（面板表层收敛）。OneAPI 在表层上的
+# 位置约束改由 core/oneapi_system_position.py 承担，并已指向 React 面板的
+# ModelsTab —— 见 tests/test_oneapi_system_position.py。
 
 
 def test_44_build_oneapi_status_summary_not_configured_defaults_to_skipped():

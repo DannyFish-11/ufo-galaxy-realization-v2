@@ -165,11 +165,9 @@ class TestRepoLayoutRegistry:
         is_active_runtime, _, _ = registry_helpers
         assert is_active_runtime(directory), f"{directory!r} should be ACTIVE_RUNTIME"
 
-    def test_status_board_v2_is_active_desktop_status(self, registry_helpers):
+    def test_react_panel_is_active_desktop_status(self, registry_helpers):
         _, is_active_status, _ = registry_helpers
-        assert is_active_status(
-            "windows_client/status_board_v2"
-        ), "'windows_client/status_board_v2' should be ACTIVE_DESKTOP_STATUS"
+        assert is_active_status("electron/renderer/panel"), "'electron/renderer/panel' should be ACTIVE_DESKTOP_STATUS"
 
     def test_dashboard_is_legacy(self, registry_helpers):
         _, _, is_legacy = registry_helpers
@@ -282,8 +280,10 @@ class TestLegacySurfaceIsolation:
     def test_dashboard_frontend_legacy_surface_marker_exists(self):
         assert not (PROJECT_ROOT / "dashboard" / "frontend").exists()
 
-    def test_status_board_v2_active_surface_marker_exists(self):
-        assert (PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md").exists()
+    def test_status_board_v2_surface_is_gone(self):
+        # 面板表层收敛：终端状态板整包删除，其 ACTIVE_SURFACE.md 标记随之消失。
+        # 与本类里 dashboard 那几条同款——表层退场后，标记文件的断言翻成"不存在"。
+        assert not (PROJECT_ROOT / "windows_client" / "status_board_v2").exists()
 
     def test_dashboard_readme_mentions_legacy_status(self):
         readme = PROJECT_ROOT / "dashboard" / "README.md"
@@ -297,10 +297,15 @@ class TestLegacySurfaceIsolation:
     def test_dashboard_legacy_surface_md_content(self):
         assert not (PROJECT_ROOT / "dashboard" / "LEGACY_SURFACE.md").exists()
 
-    def test_status_board_v2_active_surface_md_content(self):
-        marker = PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md"
-        content = marker.read_text().lower()
-        assert any(kw in content for kw in ("active", "canonical", "status_board", "status board"))
+    def test_windows_client_keeps_only_autonomy(self):
+        """状态板删除后，windows_client/ 下不应再有 status_board* 子表层。
+
+        取代原先"读 ACTIVE_SURFACE.md 内容"的那条：标记文件没了，但"windows_client
+        下不许再长出第二个状态表层"这条约束仍然成立，改钉这个。
+        """
+        wc = PROJECT_ROOT / "windows_client"
+        boards = [p.name for p in wc.iterdir() if p.is_dir() and p.name.startswith("status_board")]
+        assert boards == [], f"windows_client/ 下不应再有状态板表层: {boards}"
 
 
 # ===========================================================================

@@ -751,8 +751,10 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
             canonical_path_established=True,
             legacy_ambiguity_remains=False,
             rationale=(
-                "PR-8 established that windows_client.status_board_v2 is the sole "
-                "PROJECTION_DRIVEN surface, consuming GET /api/v1/projection/runtime. "
+                "PR-8 established a sole PROJECTION_DRIVEN surface consuming "
+                "GET /api/v1/projection/runtime; panel-surface convergence moved that "
+                "role from windows_client.status_board_v2 (deleted) to "
+                "electron.renderer.panel. "
                 "PR-22 added the DesktopStatusProjection contract. "
                 "PR-28 guards assert that projection does not reconstruct truth "
                 "independently. dashboard/ and windows_client/ are demoted."
@@ -761,7 +763,7 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
                 "core.ui_surface_authority",
                 "contracts.desktop_status_projection",
                 "tools.architecture.architecture_truth_guards",
-                "enhancements.clients.windows_client.status_board_v2",
+                "core.repo_layout_registry",
             ],
             pr_last_updated="PR-8",
         )

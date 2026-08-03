@@ -34,7 +34,7 @@ Active Windows direction
 ------------------------
 - :mod:`core.desktop_presence_runtime` — ``DesktopPresenceRuntime``
   (desktop tri-state lifecycle shell: silent / liminal / manifest)
-- :mod:`windows_client.status_board_v2` — projection-driven desktop status
+- ``electron/renderer/panel/`` — projection-driven desktop surface (React panel)
   surface (read-only, consumes ``GET /api/v1/projection/runtime``)
 - :mod:`windows_client.windows_aip_client` — Windows device ingress
   (``WindowsExecutionArbiter.route_command()``)

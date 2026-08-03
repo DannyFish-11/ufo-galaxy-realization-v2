@@ -361,20 +361,23 @@ class GalaxyTray:
             except Exception as exc:
                 logger.error("Failed to launch GUI: %s", exc)
 
-        # 3) 最终兜底:桌面壳不可用 → 浏览器打开 Web 面板(后端始终在跑)。
-        # 注:网关根路径 / 没有注册任何路由(裸打开是 404),指向真实存在的
-        # 运维台页面。
-        port = os.environ.get("GALAXY_GATEWAY_PORT", "") or os.environ.get("GALAXY_PORT", "") or "9000"
-        panel_url = f"http://localhost:{port}/operator-console"
-        try:
-            webbrowser.open(panel_url, new=1, autoraise=True)
-            self._show_notification(
-                "Galaxy",
-                "桌面壳未就绪(electron 依赖未装好),已用浏览器打开面板。\n" "修复:在 electron/ 目录执行 npm install。",
-            )
-            logger.info("Desktop shell unavailable — opened web panel %s", panel_url)
-        except Exception as exc:
-            logger.error("Failed to open web panel fallback: %s", exc)
+        # 3) 最终兜底:桌面壳起不来 —— 如实告知,不再打开浏览器。
+        #
+        # 此前这里回退到 http://localhost:<port>/operator-console。那个并行 Web
+        # 表层已随面板收敛删除,再打开只会得到 404;网关根路径 / 也没注册任何路由。
+        # 面板现在只有一份(Tauri/Electron 壳内的 React 面板),壳起不来就是没有面板,
+        # 报一个能直接照做的原因,比开一个空白页诚实。
+        self._show_notification(
+            "Galaxy",
+            "桌面壳未就绪,面板打不开。\n"
+            "Tauri:在 desktop-tauri/src-tauri 执行 cargo build --release。\n"
+            "Electron 回退:在 electron/ 执行 npm install,\n"
+            "并在 electron/renderer/panel/ 执行 npm install && npm run build。",
+        )
+        logger.error(
+            "Desktop shell unavailable and no web fallback exists "
+            "(panel surface is Tauri/Electron-only since the parallel web consoles were removed)"
+        )
 
     def _wake_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """通过 IPC 唤醒三态覆盖层（不依赖快捷键）。
@@ -400,24 +403,24 @@ class GalaxyTray:
             self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
 
     def _open_config(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """在浏览器中打开配置面板。
+        """打开配置面板 —— 即 React 面板的「设置」页。
 
-        修复:此前硬编码 16201/8080 两个端口 —— 网关从来不在那里(统一口 9000),
-        每个链接都指向无人监听的地址。按标准端口解析链取真实网关口。
+        此前它在浏览器里开 /api-manager。那是一份独立的 Web 配置表层
+        (static/api-manager,只有构建产物没有源码),与 React 面板的 SettingsTab
+        各写各的配置读写,是"面板改了设置、另一处不认"的来源。表层收敛后
+        /api-manager 已删除,配置的唯一入口就是 React 面板。
+
+        走与「Show Panel」相同的 IPC 通道:壳在跑就切出面板窗口;壳没跑则如实
+        提示,而不是打开一个 404。
         """
-        port = os.environ.get("GALAXY_GATEWAY_PORT", "") or os.environ.get("GALAXY_PORT", "") or "9000"
-        urls = [
-            f"http://localhost:{port}/api-manager",
-            f"http://127.0.0.1:{port}/api-manager",
-        ]
-        for url in urls:
-            try:
-                webbrowser.open(url, new=1, autoraise=True)
-                logger.info("Opened config panel: %s", url)
-                return
-            except Exception:
-                continue
-        logger.error("Could not open any config URL")
+        if self._post_ipc("/ipc/toggle-panel"):
+            logger.info("Config panel opened via IPC (React panel · 设置)")
+            return
+        self._show_notification(
+            "Galaxy",
+            "桌面壳未运行,配置面板打不开。\n配置现在是 React 面板的「设置」页,需要壳在跑。",
+        )
+        logger.error("Config panel unavailable: desktop shell not running")
 
     def _open_logs(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """在文件资源管理器中打开【统一日志根目录】。

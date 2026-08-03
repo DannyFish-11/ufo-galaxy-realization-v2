@@ -239,7 +239,7 @@ The surface degrades gracefully: when `return_intelligence` is absent from the p
 | `docs/MANIFEST_STAGE.md` | `retreat_tendency` already softens `stage_ready`. `return_intelligence.affects_manifest` provides a higher-level, reason-bearing complement. |
 | `docs/LIMINAL_PROJECTION_ENGINE.md` | `retreat_tendency` already softens liminal ambient. `affects_liminal` provides a structured return-reason for the same softening. |
 | `docs/RUNTIME_PROJECTION.md` | `RuntimeProjection` fields are unchanged. Return intelligence is additive under `return_intelligence`. |
-| `docs/STATUS_BOARD_V2.md` | `ReturnSurface` is a new panel; no existing surfaces are modified. |
+| `docs/PANEL_SURFACE_CONVERGENCE.md` | `ReturnSurface` is a new panel; no existing surfaces are modified. |
 
 ---
 

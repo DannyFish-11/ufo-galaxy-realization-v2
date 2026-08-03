@@ -253,25 +253,36 @@ class TestAndroidConfig:
 
 
 class TestDesktopBoard:
-    def test_board_is_control_surface(self):
-        """
-        Status board V2 includes a write-through control surface.
-        Source: windows_client/status_board_v2/config_control.py ConfigControlSurface.
-        """
-        assert DESKTOP_BOARD_IS_CONTROL_SURFACE is True
+    def test_board_is_not_a_control_surface_after_convergence(self):
+        """桌面表层当前是只读的 —— 面板收敛的一项实际代价。
 
-    def test_exactly_two_write_operations(self):
-        """
-        Only two write operations are supported (bounded set).
-        Source: windows_client/status_board_v2/config_control.py ControlOperation enum.
-        """
-        assert len(DESKTOP_BOARD_WRITE_OPERATIONS) == 2
+        原断言为 True，依据是终端状态板的 ConfigControlSurface（write-through
+        + 热重载）。该表层已随面板收敛整包删除；接替的 React 面板走
+        POST /api/config → CONFIG_SCHEMA，而 CONFIG_SCHEMA 的 155 个键里
+        既没有 provider 开关键、也没有 native_mm_policy 键。
 
-    def test_write_operations_include_provider_toggle(self):
-        assert any("toggle_provider" in op or "provider" in op.lower() for op in DESKTOP_BOARD_WRITE_OPERATIONS)
+        这条测试翻面不是"降低要求"，恰恰相反：审计模块的职责是如实记录运行
+        现实，让它继续声称 True 才是让它说谎。
+        """
+        assert DESKTOP_BOARD_IS_CONTROL_SURFACE is False
 
-    def test_write_operations_include_routing_policy(self):
-        assert any("routing" in op.lower() or "policy" in op.lower() for op in DESKTOP_BOARD_WRITE_OPERATIONS)
+    def test_no_write_operations_remain(self):
+        """原有两项写操作（toggle_provider / set_routing_policy）已无入口。"""
+        assert DESKTOP_BOARD_WRITE_OPERATIONS == []
+
+    def test_verdict_records_the_provider_routing_gap(self):
+        """判定文本必须点名这个落差，而不是含糊带过。
+
+        删掉终端状态板的直接后果是 provider 开关与 native_mm_policy 失去运行期
+        入口，ConfigService 的对应写方法失去唯一生产调用方（scripts/check_wiring.py
+        同样会报）。审计模块的职责就是记录这类事实，这里钉住它别被顺手抹平。
+        """
+        from core.operational_enablement_audit import DESKTOP_BOARD_VERDICT
+
+        assert "provider" in DESKTOP_BOARD_VERDICT.lower()
+        assert "ConfigService" in DESKTOP_BOARD_VERDICT
+        # 判定标签本身必须改掉，不能还挂着"有受限控制面"
+        assert not DESKTOP_BOARD_VERDICT.startswith("STATUS_PLUS_BOUNDED_CONTROL")
 
     def test_board_has_multiple_read_surfaces(self):
         """
@@ -287,12 +298,13 @@ class TestDesktopBoard:
         """
         assert DESKTOP_BOARD_WRITE_PERSISTENCE is True
 
-    def test_board_writes_affect_runtime(self):
+    def test_board_writes_no_longer_affect_runtime(self):
+        """没有写操作，也就谈不上写入立即影响运行期。
+
+        热重载机制本身（core/config_hot_reload.py）仍在，只是暂时没有调用它的
+        桌面写入口 —— 原调用方是已删除的 ConfigControlSurface._apply_change()。
         """
-        Board writes trigger hot-reload via HotReloadConfigManager.
-        Source: windows_client/status_board_v2/config_control.py ConfigControlSurface._apply_change().
-        """
-        assert DESKTOP_BOARD_AFFECTS_RUNTIME is True
+        assert DESKTOP_BOARD_AFFECTS_RUNTIME is False
 
     def test_board_verdict_describes_bounded_control(self):
         assert "bounded" in DESKTOP_BOARD_VERDICT.lower() or "STATUS_PLUS" in DESKTOP_BOARD_VERDICT
@@ -617,9 +629,10 @@ class TestAuditSummary:
         assert summary["android_model_provisioning_pipeline_stages"] is not None
         assert len(summary["android_model_provisioning_pipeline_stages"]) == 8
 
-    def test_desktop_board_is_control_surface_true(self):
+    def test_desktop_board_is_control_surface_false(self):
+        # 见 TestDesktopBoard.test_board_is_not_a_control_surface_after_convergence
         summary = get_audit_summary()
-        assert summary["desktop_board_is_control_surface"] is True
+        assert summary["desktop_board_is_control_surface"] is False
 
     def test_tri_state_modes_contains_three_values(self):
         summary = get_audit_summary()

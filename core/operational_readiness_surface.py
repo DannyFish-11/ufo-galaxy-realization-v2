@@ -1525,7 +1525,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     )
     ecosystem_surfaces = {
         "mobile_android_surface": "app/src/main/java/com/ufo/galaxy/service/EnhancedFloatingService.kt",
-        "desktop_surface": "windows_client/status_board_v2/projection_reader.py",
+        "desktop_surface": "electron/renderer/panel/src/hooks/usePanelData.ts",
         "central_projection_routes": [
             "/api/v1/projection/runtime-truth",
             "/api/v1/projection/desktop-status-board",

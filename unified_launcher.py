@@ -557,7 +557,7 @@ class UnifiedWebUI:
         如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
         """
         try:
-            from fastapi.responses import HTMLResponse, JSONResponse
+            from fastapi.responses import JSONResponse
             import uvicorn
 
             # === 步骤 1：以内建 FastAPI 应用为主应用（权威 API 基础） ===
@@ -674,49 +674,14 @@ class UnifiedWebUI:
             except ImportError as e:
                 logger.warning("健康检查模块加载失败: %s", e)
 
-            # === 步骤 5：静态文件挂载 (API Manager) ===
-            from fastapi.staticfiles import StaticFiles
-            from fastapi.responses import FileResponse
-
-            base_static_dir = PROJECT_ROOT / "static" / "api-manager"
-            static_dir = base_static_dir
-            if (base_static_dir / "public").exists():
-                static_dir = base_static_dir / "public"
-
-            if static_dir.exists() and (static_dir / "assets").exists():
-                self.app.mount(
-                    "/assets",
-                    StaticFiles(directory=str(static_dir / "assets")),
-                    name="assets"
-                )
-
-                @self.app.get("/api-manager", response_class=HTMLResponse)
-                async def api_manager_index():
-                    index_path = static_dir / "index.html"
-                    if index_path.exists():
-                        return FileResponse(str(index_path))
-                    return JSONResponse({"error": "index.html not found"}, status_code=404)
-
-                logger.info("API Manager 已挂载: %s", static_dir)
-            else:
-                logger.warning("API Manager 静态文件未找到: %s", static_dir)
-
-            # === 步骤 5b：Operator Console 静态挂载 ===
-            # Serves static/operator-console/index.html at /operator-console.
-            # The console is a pure visualization layer over OPERATOR_ROUTES_V1
-            # APIs — no parallel truth model is introduced here.
-            operator_console_dir = PROJECT_ROOT / "static" / "operator-console"
-            operator_console_index = operator_console_dir / "index.html"
-            if operator_console_index.exists():
-                @self.app.get("/operator-console")
-                async def operator_console_index_route():
-                    return FileResponse(str(operator_console_index))
-
-                logger.info("Operator Console 已挂载: %s", operator_console_index)
-            else:
-                logger.warning("Operator Console index.html 未找到: %s", operator_console_index)
-
-            # === 步骤 6：统一启动器专属路由（不覆盖 dashboard 的 / 路由） ===
+            # === 步骤 5：统一启动器专属路由 ===
+            # 面板表层已收敛到唯一一份：Tauri/Electron 壳内的 React 面板
+            # （electron/renderer/panel/）。此处曾挂载的两个并行 Web 表层
+            # —— /api-manager（static/api-manager，只有构建产物没有源码）与
+            # /operator-console（static/operator-console/index.html，731 行
+            # 原生 JS 轮询页）—— 连同其静态目录一并删除。多份表层各自读各自的
+            # 聚合层，是"面板显示的态和真实请求驱动的态对不上"这类问题的来源
+            # （见 electron/renderer/panel/src/App.tsx 里那段相位优先级的注释）。
             @self.app.get("/api/status")
             async def launcher_status(auth: dict = Depends(_require_auth)):
                 return JSONResponse({
@@ -806,31 +771,11 @@ class UnifiedWebUI:
             # except 分支如实显示 "API 网关 · 启动失败"。
             raise
 
-    # Minimal fallback HTML — points to the API docs.
-    # dashboard/frontend is a LEGACY UI SURFACE (PR-8) and is not the current primary surface.
-    FALLBACK_HTML = """<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Galaxy</title></head>
-<body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center">
-<h1>Galaxy</h1>
-<p>API docs: <a href="/docs" style="color:#00CED1">/docs</a></p>
-<p style="font-size:0.8em;color:#888">Current surface: desktop tri-state runtime + desktop status board</p>
-</div></body></html>"""
-
-    def _get_legacy_dashboard_html(self) -> str:
-        """读取遗留 dashboard/frontend 的 index.html（LEGACY UI SURFACE）。
-
-        dashboard/frontend 已通过 PR-8 降级为遗留表层，不再是当前主系统表层。
-        如果遗留文件不存在（属于正常情况），返回 FALLBACK_HTML。
-        """
-        dashboard_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
-        if dashboard_path.exists():
-            try:
-                return dashboard_path.read_text(encoding="utf-8")
-            except Exception as exc:
-                logger.debug("读取遗留 dashboard HTML 失败（非关键）: %s", exc)
-
-        return self.FALLBACK_HTML
+    # 这里曾有 FALLBACK_HTML 与 _get_legacy_dashboard_html()。两者都已删除：
+    # 前者只被后者引用，后者【零调用方】——它读的 dashboard/frontend/public/index.html
+    # 这个目录在仓库里根本不存在（PR-8 已把 dashboard 降级、后续清理掉），
+    # 所以它即使被调用也只会返回那段占位 HTML。面板表层收敛到 React 面板之后，
+    # 这条遗留分支连"兜底"的角色都不再有。
 
 
 # ============================================================================

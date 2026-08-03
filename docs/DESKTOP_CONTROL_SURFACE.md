@@ -73,7 +73,8 @@ surface.apply_toggle("anthropic", False) # disable anthropic
 
 CLI::
 
-    python -m windows_client.status_board_v2 --apply-toggle openai=true
+    # （已无入口）该命令随 windows_client/status_board_v2/ 删除；
+# provider 开关目前没有运行期入口，见 docs/PANEL_SURFACE_CONVERGENCE.md
 
 Delegates to: `ConfigService.set_toggle(provider, enabled)`  
 Writes to: `runtime/config.json` → `providers.<name>.enabled`
@@ -90,7 +91,7 @@ surface.apply_routing_policy("allow_fallback")
 
 CLI::
 
-    python -m windows_client.status_board_v2 --apply-routing-policy prefer
+    # （已无入口）同上：native_mm_policy 目前没有运行期入口
 
 Delegates to: `ConfigService.set_native_mm_policy(mode)`  
 Writes to: `runtime/config.json` → `routing.native_multimodal_policy`

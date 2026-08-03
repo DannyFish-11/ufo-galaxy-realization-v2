@@ -15,14 +15,14 @@ Validates:
   6.  windows_client.main is registered as LEGACY_SHELL.
   7.  windows_client.status_board is registered as LEGACY_SHELL (DEPRECATED).
   8.  windows_client package entry is registered as LEGACY_SHELL.
-  9.  windows_client.status_board_v2 is registered as PROJECTION_DRIVEN.
+  9.  electron.renderer.panel is registered as PROJECTION_DRIVEN（唯一 canonical 表层）。
  10.  is_legacy_surface() returns True for dashboard.backend.main.
  11.  is_legacy_surface() returns True for windows_client.main.
  12.  is_legacy_surface() returns True for windows_client.status_board.
  13.  is_legacy_surface() returns True for dashboard (package).
  14.  is_legacy_surface() returns True for windows_client (package).
- 15.  is_legacy_surface() returns False for windows_client.status_board_v2.
- 16.  is_projection_driven_surface() returns True for status_board_v2.
+ 15.  is_legacy_surface() 对 windows_client.status_board_v2 为 False（它是 DELETED，不是 legacy）。
+ 16.  is_projection_driven_surface() 对 React 面板为 True、对已删的 status_board_v2 为 False。
  17.  is_projection_driven_surface() returns False for dashboard.backend.main.
  18.  is_projection_driven_surface() returns False for windows_client.main.
  19.  get_ui_surface_entry() returns correct entry for each surface.
@@ -37,10 +37,10 @@ Validates:
  28.  UISurfaceAuthorityRegistry.projection_driven_surfaces() non-empty.
  29.  UISurfaceAuthorityRegistry.legacy_surfaces() non-empty.
  30.  UISurfaceAuthorityRegistry.all_entries() returns all surfaces.
- 31.  status_board_v2 entry has a canonical_contract set.
- 32.  Legacy entries have superseded_by pointing to status_board_v2.
+ 31.  canonical 表层条目带 canonical_contract。
+ 32.  Legacy 条目的 superseded_by 指向 electron.renderer.panel。
  33.  Legacy entries have pr_demoted == "PR-8".
- 34.  status_board_v2 entry has pr_demoted == None.
+ 34.  canonical 表层条目 pr_demoted == None。
  35.  UI_SURFACE_REGISTRY public dict matches registry contents.
  36.  legacy_paths.py contains dashboard.backend.main entry.
  37.  legacy_paths.py dashboard.backend.main status is LEGACY_COMPATIBILITY.
@@ -55,7 +55,7 @@ Validates:
  46.  legacy_paths.py is_legacy_path() returns True for windows_client.status_board.
  47.  legacy_paths.py classify_path_status() for dashboard is LEGACY_COMPATIBILITY.
  48.  legacy_paths.py classify_path_status() for windows_client is LEGACY_COMPATIBILITY.
- 49.  legacy_paths.py windows_client.status_board recommendation mentions status_board_v2.
+ 49.  legacy_paths.py 对 windows_client.status_board 的 recommendation 仍指出其替代者。
  50.  legacy_paths.py dashboard.backend.main recommendation mentions projection.
  51.  legacy_paths.py emit_legacy_guardrail() works for dashboard.backend.main.
  52.  legacy_paths.py emit_legacy_guardrail() works for windows_client.main.
@@ -63,10 +63,7 @@ Validates:
  54.  dashboard/__init__.py docstring contains 'LEGACY UI SURFACE'.
  55.  windows_client/__init__.py docstring contains 'HOST-SPECIFIC LEGACY SHELL'.
  56.  windows_client/status_board.py docstring contains 'LEGACY STATUS BOARD'.
- 57.  status_board_v2 ProjectionReader uses /api/v1/projection/runtime endpoint.
- 58.  status_board_v2 ProjectionReader does NOT use /api/v1/continuum/state.
- 59.  status_board_v2 __init__.py read-only guarantee is documented.
- 60.  status_board_v2 exports ProjectionReader in __all__.
+ 57-60.（已移除）原为 status_board_v2 的 ProjectionReader / __init__ 断言，随该包删除。
  61.  get_ui_surface_authority() returns the singleton registry.
  62.  UISurfaceRole.PROJECTION_DRIVEN value is "projection_driven".
  63.  UISurfaceRole.LEGACY_UI value is "legacy_ui".
@@ -74,7 +71,7 @@ Validates:
  65.  UISurfaceRole.COMPATIBILITY_ONLY value is "compatibility_only".
  66.  dashboard entry to_dict() role is "legacy_ui".
  67.  windows_client.main entry to_dict() role is "legacy_shell".
- 68.  status_board_v2 entry to_dict() role is "projection_driven".
+ 68.  canonical 表层 to_dict() role 为 "projection_driven"；status_board_v2 为 "deleted"。
  69.  UISurfaceEntry notes field is non-empty for all legacy entries.
  70.  UISurfaceEntry description field is non-empty for all entries.
  71.  projection-driven surfaces all have canonical_contract set.
@@ -123,26 +120,6 @@ def _import_legacy_paths():
         return m
     except ImportError as exc:
         pytest.skip(f"core.orchestration_authority.legacy_paths not importable: {exc}")
-
-
-def _import_projection_reader():
-    """Import windows_client.status_board_v2.projection_reader."""
-    try:
-        import windows_client.status_board_v2.projection_reader as m
-
-        return m
-    except ImportError as exc:
-        pytest.skip(f"windows_client.status_board_v2.projection_reader not importable: {exc}")
-
-
-def _import_status_board_v2_init():
-    """Import windows_client.status_board_v2 package."""
-    try:
-        import windows_client.status_board_v2 as m
-
-        return m
-    except ImportError as exc:
-        pytest.skip(f"windows_client.status_board_v2 not importable: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -232,11 +209,18 @@ class TestUISurfaceEntryDataclass:
         assert entry is not None
         assert entry.to_dict()["role"] == "deleted"
 
-    def test_68_status_board_v2_entry_to_dict_role(self):
+    def test_68_canonical_surface_entry_to_dict_role(self):
+        # 面板表层收敛后 canonical 表层是 Tauri/Electron 壳内的 React 面板；
+        # windows_client.status_board_v2 已删除并改注册为 DELETED。
         m = _import_ui_surface_authority()
-        entry = m.get_ui_surface_entry("windows_client.status_board_v2")
+        entry = m.get_ui_surface_entry("electron.renderer.panel")
         assert entry is not None
         assert entry.to_dict()["role"] == "projection_driven"
+
+        gone = m.get_ui_surface_entry("windows_client.status_board_v2")
+        assert gone is not None, "已删除的表层仍应留在册上（标记为 deleted），而不是从册上消失"
+        assert gone.to_dict()["role"] == "deleted"
+        assert gone.to_dict()["superseded_by"] == "electron.renderer.panel"
 
 
 # ---------------------------------------------------------------------------
@@ -275,11 +259,25 @@ class TestRegistrySurfaceClassification:
         assert entry is not None
         assert entry.role == m.UISurfaceRole.DELETED
 
-    def test_13_status_board_v2_is_projection_driven(self):
+    def test_13_react_panel_is_projection_driven(self):
         m = _import_ui_surface_authority()
-        entry = m.get_ui_surface_entry("windows_client.status_board_v2")
+        entry = m.get_ui_surface_entry("electron.renderer.panel")
         assert entry is not None
         assert entry.role == m.UISurfaceRole.PROJECTION_DRIVEN
+
+    def test_13b_only_one_projection_driven_surface(self):
+        """收敛的实质：册上只允许有一个 PROJECTION_DRIVEN 表层。
+
+        这条比逐个点名更强——它挡的是"以后又冒出第二个自称 canonical 的表层"，
+        而那正是这次要清理的历史问题（曾同时有五份）。
+        """
+        m = _import_ui_surface_authority()
+        driven = [
+            e.surface_path
+            for e in m.get_ui_surface_authority().all_entries()
+            if e.role == m.UISurfaceRole.PROJECTION_DRIVEN
+        ]
+        assert driven == ["electron.renderer.panel"], f"canonical 表层必须唯一，实际: {driven}"
 
 
 class TestIsLegacySurface:
@@ -309,9 +307,11 @@ class TestIsLegacySurface:
 
 
 class TestIsProjectionDrivenSurface:
-    def test_20_is_projection_driven_status_board_v2(self):
+    def test_20_is_projection_driven_react_panel(self):
         m = _import_ui_surface_authority()
-        assert m.is_projection_driven_surface("windows_client.status_board_v2") is True
+        assert m.is_projection_driven_surface("electron.renderer.panel") is True
+        # 已删除的旧 canonical 表层不得再被判为 projection-driven
+        assert m.is_projection_driven_surface("windows_client.status_board_v2") is False
 
     def test_21_is_not_projection_driven_dashboard(self):
         m = _import_ui_surface_authority()
@@ -584,11 +584,12 @@ class TestModuleDocstrings:
         path = pathlib.Path(__file__).parent.parent / "windows_client" / "status_board.py"
         assert not path.exists()
 
-    def test_56b_status_board_v2_package_remains(self):
+    def test_56b_status_board_v2_package_deleted(self):
+        # 从"必须保留"翻成"必须已删除"：终端状态板随面板表层收敛整包退场。
         import pathlib
 
-        path = pathlib.Path(__file__).parent.parent / "windows_client" / "status_board_v2" / "__init__.py"
-        assert path.exists()
+        path = pathlib.Path(__file__).parent.parent / "windows_client" / "status_board_v2"
+        assert not path.exists()
 
     def test_56c_dashboard_backend_main_deleted(self):
         import pathlib
@@ -597,44 +598,18 @@ class TestModuleDocstrings:
         assert not path.exists()
 
 
-class TestStatusBoardV2ProjectionDriven:
-    def test_57_projection_reader_prefers_board_facing_truth_endpoints(self):
-        m = _import_projection_reader()
-        assert m.DEFAULT_HTTP_PROJECTION_ENDPOINTS[0] == "/api/v1/projection/runtime-truth"
-        assert m.DEFAULT_HTTP_PROJECTION_ENDPOINTS[1] == "/api/v1/projection/desktop-status-board"
-        assert m.PROJECTION_ENDPOINT == "/api/v1/projection/runtime"
+class TestUISurfaceAuthorityAccessors:
+    # 这里曾有 test_57~60，读 windows_client.status_board_v2 的 projection_reader
+    # 与 __init__ 文档。整包已删除。
+    #
+    # 它们必须删除而不是留着：取包的两个 helper（_import_projection_reader /
+    # _import_status_board_v2_init）在 ImportError 时调 pytest.skip()，包一没
+    # 这四条就会**全部转 skip 而非失败**，变成永远绿、永远什么都不测的空转测试。
+    #
+    # 其中 test_57 钉的"消费方优先打 runtime-truth 而非 continuum/state"这条
+    # 端点优先级契约，属于**服务端**投影路由，未受影响，由
+    # tests/test_pr9_operator_console.py 与 projection 路由自身的测试覆盖。
 
-    def test_58_projection_reader_does_not_use_continuum_state(self):
-        """status_board.py uses /api/v1/continuum/state; status_board_v2 must not."""
-        m = _import_projection_reader()
-        import inspect
-
-        src = inspect.getsource(m)
-        # The reader should reference projection/runtime, not continuum/state
-        assert "/api/v1/continuum/state" not in src
-
-    def test_59_status_board_v2_init_documents_read_only(self):
-        m = _import_status_board_v2_init()
-        import inspect
-
-        src = inspect.getfile(m)
-        import pathlib
-
-        init_path = pathlib.Path(src).parent / "__init__.py"
-        text = init_path.read_text(encoding="utf-8")
-        assert "READ-ONLY" in text or "read-only" in text.lower()
-
-    def test_60_status_board_v2_exports_projection_reader(self):
-        m = _import_status_board_v2_init()
-        assert "ProjectionReader" in m.__all__
-
-
-# ---------------------------------------------------------------------------
-# 61–80: Additional invariants
-# ---------------------------------------------------------------------------
-
-
-class TestAdditionalInvariants:
     def test_61_get_ui_surface_authority_returns_registry(self):
         m = _import_ui_surface_authority()
         reg = m.get_ui_surface_authority()

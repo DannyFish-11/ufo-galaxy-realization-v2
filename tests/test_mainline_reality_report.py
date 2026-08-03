@@ -50,7 +50,9 @@ def test_report_describes_canonical_mainline_chain_and_projection_surfaces():
     ]
     assert "core.openclawd" in report.canonical_runtime_chain
     assert "GET /api/v1/projection/runtime" in report.projection_surfaces
-    assert "windows_client.status_board_v2" in report.projection_surfaces
+    # 面板表层收敛：消费端从终端状态板（已删除）换成 Tauri/Electron 壳内的 React 面板
+    assert "electron.renderer.panel" in report.projection_surfaces
+    assert "windows_client.status_board_v2" not in report.projection_surfaces
 
 
 def test_report_node_count_matches_real_node_directory_count():

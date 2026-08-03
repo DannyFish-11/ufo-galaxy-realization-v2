@@ -292,8 +292,13 @@ class TestWindowsClientEncoding:
 
         assert not Path("windows_client/main.py").exists()
 
-    def test_status_board_v2_remains_canonical(self):
-        """删除旧壳后仍保留 canonical status_board_v2 包。"""
+    def test_status_board_v2_is_gone(self):
+        """status_board_v2 已随面板表层收敛删除。
+
+        这条原本钉的是"删掉旧壳后 status_board_v2 仍在"——当时它是 Windows 侧
+        的 canonical 状态表层。现在面板收敛到唯一一份(Tauri/Electron 壳内的
+        React 面板),这个终端状态板整包移除,断言相应翻面。
+        """
         from pathlib import Path
 
-        assert Path("windows_client/status_board_v2/__init__.py").exists()
+        assert not Path("windows_client/status_board_v2").exists()
