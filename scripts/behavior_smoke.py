@@ -133,7 +133,7 @@ def _free_port(preferred: int) -> int:
 #: 在 CI 里既慢又不稳,而本脚本要验的缺陷全都在**请求处理**里,不在进程监管里。
 #: 为什么不用 galaxy_gateway.app —— 实测它只暴露 59 条路由,observability / modality /
 #: operator 都不在其中;拿它当被测对象会得到一个恒绿但什么都没测到的脚本。
-_APP_HARNESS = '''
+_APP_HARNESS = """
 import os, sys
 sys.path.insert(0, {repo!r})
 os.environ.setdefault("GALAXY_NATS_ENABLED", "false")
@@ -144,7 +144,7 @@ from core.api_routes import create_api_routes
 app = FastAPI(title="behavior-smoke")
 app.include_router(create_api_routes(service_manager=None, config=None))
 uvicorn.run(app, host="127.0.0.1", port={port}, log_level="warning")
-'''
+"""
 
 
 def boot_app(port: int, log_path: Path) -> subprocess.Popen:

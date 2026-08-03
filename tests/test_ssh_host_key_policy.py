@@ -29,6 +29,7 @@ CI 里读不到、脚本里拿不到。把摘要 tee 进作业日志之后才发
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 from pathlib import Path
@@ -81,6 +82,7 @@ def _client_ready_for_policy(ssh_env):
 class TestDefaultRejectsUnknownHosts:
     def test_default_policy_rejects(self, ssh_env):
         import paramiko
+
         client = ssh_env._new_ssh_client()
         policy = client._policy
         assert isinstance(policy, paramiko.RejectPolicy), (
@@ -91,6 +93,7 @@ class TestDefaultRejectsUnknownHosts:
 
     def test_reject_policy_actually_raises(self, ssh_env):
         import paramiko
+
         """不只是"类型对",而是它真的会拒。
 
         换个实现(比如 WarningPolicy)类型断言会红,但更重要的是行为:
@@ -104,6 +107,7 @@ class TestDefaultRejectsUnknownHosts:
     @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "NO"])
     def test_falsy_env_values_do_not_enable_tofu(self, value, monkeypatch, ssh_env):
         import paramiko
+
         monkeypatch.setenv("GALAXY_SSH_TRUST_ON_FIRST_USE", value)
         assert isinstance(ssh_env._new_ssh_client()._policy, paramiko.RejectPolicy)
 
@@ -113,11 +117,20 @@ class TestTrustOnFirstUse:
     @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
     def test_explicit_opt_in_accepts(self, value, monkeypatch, ssh_env):
         import paramiko
+
         monkeypatch.setenv("GALAXY_SSH_TRUST_ON_FIRST_USE", value)
-        assert isinstance(ssh_env._new_ssh_client()._policy, paramiko.AutoAddPolicy)
+        policy = ssh_env._new_ssh_client()._policy
+        assert isinstance(policy, paramiko.MissingHostKeyPolicy)
+        assert not isinstance(policy, paramiko.RejectPolicy)
+        # 也不该是 paramiko 自带的 AutoAddPolicy —— 那个只"接受"不"记住"。
+        assert not isinstance(policy, paramiko.AutoAddPolicy), (
+            "用回 AutoAddPolicy 就把『接受』和『落盘』重新拆成了两步,"
+            "任何一条忘了落盘的路径都会静默退化成裸 AutoAdd。"
+        )
 
     def test_learned_key_is_persisted(self, monkeypatch, ssh_env):
         import paramiko
+
         """落盘是 TOFU 与"每次都接受新钥匙"的**唯一**区别。
 
         这一条断了而上面那条没断,意味着改动只是把 AutoAdd 藏到了一个环境变量后面,
@@ -125,36 +138,39 @@ class TestTrustOnFirstUse:
         """
         monkeypatch.setenv("GALAXY_SSH_TRUST_ON_FIRST_USE", "1")
         client = _client_ready_for_policy(ssh_env)
+        assert not ssh_env._KNOWN_HOSTS.exists(), "接受之前不该有文件"
+
         client._policy.missing_host_key(client, "192.0.2.10", paramiko.RSAKey.generate(1024))
 
-        assert not ssh_env._KNOWN_HOSTS.exists(), "还没落盘前不该有文件"
-        ssh_env._persist_host_keys(client)
-        assert ssh_env._KNOWN_HOSTS.is_file(), "学到的主机密钥必须落盘,否则下次还是在重新学"
+        # 注意这里**没有**单独调 _persist_host_keys —— 落盘必须发生在接受的同一步里。
+        # 这一条比先前那版强:先前是"接受、然后我们记得去落盘",而"记得"是靠不住的。
+        assert ssh_env._KNOWN_HOSTS.is_file(), "接受主机密钥的同时必须落盘,否则下次还是在重新学"
         assert "192.0.2.10" in ssh_env._KNOWN_HOSTS.read_text(encoding="utf-8")
 
     def test_persisted_file_is_owner_only(self, monkeypatch, ssh_env):
         import paramiko
+
         monkeypatch.setenv("GALAXY_SSH_TRUST_ON_FIRST_USE", "1")
         client = _client_ready_for_policy(ssh_env)
         client._policy.missing_host_key(client, "192.0.2.11", paramiko.RSAKey.generate(1024))
-        ssh_env._persist_host_keys(client)
         mode = os.stat(ssh_env._KNOWN_HOSTS).st_mode & 0o777
         assert mode == 0o600, f"信任库权限是 {oct(mode)};别人可写就等于信任可被改"
 
     def test_persisted_key_is_loaded_back(self, monkeypatch, ssh_env):
         import paramiko
+
         """落盘之后,新建的客户端要能读回来 —— 这才构成"下一次是校验"。"""
         monkeypatch.setenv("GALAXY_SSH_TRUST_ON_FIRST_USE", "1")
         first = _client_ready_for_policy(ssh_env)
         key = paramiko.RSAKey.generate(1024)
         first._policy.missing_host_key(first, "192.0.2.12", key)
-        ssh_env._persist_host_keys(first)
 
         second = ssh_env._new_ssh_client()
         assert "192.0.2.12" in second.get_host_keys(), "重启后信任库没被读回,TOFU 等于没生效"
 
     def test_persist_failure_does_not_raise(self, monkeypatch, tmp_path, ssh_env):
         import paramiko
+
         """落盘失败不该让本次运维操作失败 —— 但也不该静默:实现里会打 warning。"""
         monkeypatch.setenv("GALAXY_SSH_TRUST_ON_FIRST_USE", "1")
         monkeypatch.setattr(ssh_env, "_KNOWN_HOSTS", tmp_path / "nope" / "x" / "known_hosts")
@@ -164,18 +180,32 @@ class TestTrustOnFirstUse:
 
 
 class TestNoStrayAutoAdd:
-    def test_source_has_exactly_one_autoadd_and_it_is_guarded(self):
-        """全文件只允许工厂里那一处 AutoAddPolicy,而且必须和 RejectPolicy 在同一行三元里。
+    def test_source_never_instantiates_autoadd_policy(self):
+        """全文件**一处** ``AutoAddPolicy()`` 调用都不该有。
 
         直接读源码而不是靠反射:新写的方法里如果又出现一句
         ``set_missing_host_key_policy(AutoAddPolicy())``,反射看不见(那条路径没被调到),
         但它已经把洞重新打开了。修之前正是 5 处这样的调用。
+
+        注释与 docstring 里提到这个名字是允许的 —— 那些恰恰是记录"为什么不用它"
+        的地方,把它们也禁掉等于逼人删掉理由。
         """
+        # 用 AST 而不是按行过滤:第一版只剥了 `#` 注释,结果被本文件自己
+        # **docstring 里那句"为什么不用 AutoAddPolicy"**判红 —— 而那句话是最该留的。
+        # 只有真正的调用节点才算数,散文里出现这个名字不算。
+        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        autoadd = [
+            f"line {node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and (
+                (isinstance(node.func, ast.Attribute) and node.func.attr == "AutoAddPolicy")
+                or (isinstance(node.func, ast.Name) and node.func.id == "AutoAddPolicy")
+            )
+        ]
+        assert not autoadd, "不该再实例化 AutoAddPolicy:" + ", ".join(autoadd)
         text = SOURCE.read_text(encoding="utf-8")
-        code_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
-        autoadd = [ln for ln in code_lines if "AutoAddPolicy()" in ln]
-        assert len(autoadd) == 1, f"AutoAddPolicy() 出现 {len(autoadd)} 次,应当只在工厂里出现一次:\n" + "\n".join(autoadd)
-        assert "RejectPolicy" in autoadd[0], "唯一那处 AutoAddPolicy 必须被 RejectPolicy 兜底(三元)"
+        assert "RejectPolicy()" in text, "默认必须是 RejectPolicy"
         assert "GALAXY_SSH_TRUST_ON_FIRST_USE" in text, "开关名不在文件里,说明守卫被改掉了"
 
     def test_every_ssh_client_goes_through_the_factory(self):
@@ -186,7 +216,9 @@ class TestNoStrayAutoAdd:
             for ln in text.splitlines()
             if re.search(r"=\s*paramiko\.SSHClient\(\)", ln) and not ln.lstrip().startswith("#")
         ]
-        assert len(direct) == 1, (
+        assert (
+            len(direct) == 1
+        ), (
             f"有 {len(direct)} 处直接 new SSHClient,只允许工厂里那一处 —— "
             "绕过工厂就绕过了主机密钥校验:\n" + "\n".join(direct)
         )

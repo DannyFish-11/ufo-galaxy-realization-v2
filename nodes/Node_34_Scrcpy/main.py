@@ -21,6 +21,7 @@ import shutil
 import tempfile
 import base64
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,10 +146,44 @@ async def list_devices():
             devices.append(device_info)
     return {"success": True, "devices": devices, "count": len(devices)}
 
+#: 调用方指定文件名时,截图只会落在这个目录下面。
+#:
+#: 为什么需要它:本节点 ``uvicorn.run(host="0.0.0.0")``,也就是**局域网内谁都能 POST**。
+#: 而 output_path 此前是直接拿去 ``open(output_path, "wb")`` 的 —— 那是一个通过 HTTP
+#: 暴露出去的任意文件写入原语:一个请求就能往进程可写的任何路径落一个 PNG
+#: (覆盖配置、往 autostart 目录扔东西、写满某个分区……)。
+#: CodeQL 只报了同一行上的 mktemp,没报这个。
+#:
+#: 这里不取消"自己命名"这个能力,只把它约束成"在指定目录里命名"。
+SCREENSHOT_DIR = Path(os.getenv("GALAXY_SCREENSHOT_DIR", "")) or Path.home() / ".galaxy" / "screenshots"
+
+
+def _resolve_output_path(requested: Optional[str]) -> str:
+    """把调用方给的名字解析到 SCREENSHOT_DIR 之内;越界就拒。
+
+    没给名字时用 ``mkstemp`` 而不是 ``mktemp``:后者只返回路径、并不创建文件,
+    "拿到路径"和"写进去"之间的窗口足以让同机的其他用户抢先放一个符号链接,
+    把**设备屏幕截图**引到别处去。mkstemp 原子地建出 0600 的文件,没有那个窗口。
+    """
+    # 0700:截图是设备屏幕的内容,同机其他用户不该能列目录、更不该能读。
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not requested:
+        fd, path = tempfile.mkstemp(suffix=".png", dir=str(SCREENSHOT_DIR))
+        os.close(fd)
+        return path
+
+    # 只取文件名部分,再解析一次确认没跑出去 —— 单看 ".." 是挡不住符号链接的。
+    candidate = (SCREENSHOT_DIR / Path(requested).name).resolve()
+    base = SCREENSHOT_DIR.resolve()
+    if base != candidate.parent:
+        raise HTTPException(status_code=400, detail="output_path must resolve inside the screenshot directory")
+    return str(candidate)
+
+
 @app.post("/screenshot")
 async def screenshot(request: ScreenshotRequest):
     """截取设备屏幕"""
-    output_path = request.output_path or tempfile.mktemp(suffix=".png")
+    output_path = _resolve_output_path(request.output_path)
     cmd = [ADB_PATH]
     if request.device:
         cmd.extend(["-s", request.device])

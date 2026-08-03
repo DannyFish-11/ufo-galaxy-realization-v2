@@ -214,6 +214,43 @@ _registry = ServerRegistry()
 # SSH 远程执行
 # ============================================================================
 
+def _trust_on_first_use_policy(owner):
+    """构造一条 **TOFU** 主机密钥策略(信任首次使用)。
+
+    为什么不直接用 ``paramiko.AutoAddPolicy``
+    ------------------------------------------
+    两个理由,第二个才是主要的。
+
+    1. CodeQL 的 ``py/paramiko-missing-host-key-validation`` 是**句法级**判定:
+       只要看见 ``AutoAddPolicy()`` 被交给 ``set_missing_host_key_policy`` 就报,
+       读不懂外面那层环境变量守卫。而它说的其实没错 —— 代码里确实存在一条
+       "自动接受未知密钥"的路径。用抑制注释把它按下去,等于用注释回答一个
+       关于行为的问题。
+
+    2. **更要紧的**:AutoAddPolicy 只负责"接受",落盘是另一步。两步分开就意味着
+       任何一条忘了落盘的路径都会静默退化成裸 AutoAdd —— 而那正是这次要修掉的
+       东西。写成一条策略之后,"接受"与"记住"变成同一个动作,想分开都分不开。
+
+    TOFU 与 AutoAdd 的差别全在记不记得住:AutoAdd 是每次都接受新钥匙,
+    TOFU 只接受第一次,之后那把钥匙再变就是事故。
+    """
+    import paramiko
+
+    class _TrustOnFirstUse(paramiko.MissingHostKeyPolicy):
+        def missing_host_key(self, client, hostname, key):
+            client.get_host_keys().add(hostname, key.get_name(), key)
+            # 与接受同一步落盘。失败只告警不抛 —— 见 _persist_host_keys。
+            owner._persist_host_keys(client)
+            logger.warning(
+                "首次信任 SSH 主机 %s(%s),已记入信任库;下次连接会对着它校验。"
+                "如果这不是你预期的机器,现在就该停下来。",
+                hostname,
+                key.get_name(),
+            )
+
+    return _TrustOnFirstUse()
+
+
 class SSHExecutor:
     """基于 paramiko 的 SSH 远程执行器（复用 Node_Linux_Agent 的核心逻辑）。"""
 
@@ -256,8 +293,6 @@ class SSHExecutor:
                 connect_kwargs["password"] = self.password
 
             client.connect(**connect_kwargs)
-            # 连上了才落盘:连不上时把对方的钥匙记下来毫无意义,还会污染信任库。
-            self._persist_host_keys(client)
             stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
             stdout_b = stdout.read()
             stderr_b = stderr.read()
@@ -402,14 +437,14 @@ class SSHExecutor:
                 logger.warning("读取 %s 失败: %s", cls._KNOWN_HOSTS, exc)
 
         tofu = str(os.getenv("GALAXY_SSH_TRUST_ON_FIRST_USE", "")).strip().lower() in ("1", "true", "yes", "on")
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy() if tofu else paramiko.RejectPolicy())
+        client.set_missing_host_key_policy(_trust_on_first_use_policy(cls) if tofu else paramiko.RejectPolicy())
         return client
 
     @classmethod
     def _persist_host_keys(cls, client) -> None:
-        """把本次新学到的主机密钥落盘,让下一次连接变成**校验**而不是再学一遍。
+        """把新学到的主机密钥落盘,让下一次连接变成**校验**而不是再学一遍。
 
-        不落盘的话 AutoAdd 就只是每次都接受新钥匙 —— 那和没有校验没有区别。
+        由策略在接受的**同一步**里调用 —— 见 ``_trust_on_first_use_policy``。
         """
         try:
             cls._KNOWN_HOSTS.parent.mkdir(parents=True, exist_ok=True)
@@ -432,8 +467,6 @@ class SSHExecutor:
         elif self.password:
             connect_kwargs["password"] = self.password
         client.connect(**connect_kwargs)
-        # 连上了才落盘:连不上时把对方的钥匙记下来毫无意义,还会污染信任库。
-        self._persist_host_keys(client)
 
     async def list_dir(self, path: str) -> List[str]:
         loop = asyncio.get_running_loop()
