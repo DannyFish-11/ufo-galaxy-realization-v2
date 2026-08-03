@@ -45,6 +45,15 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEDGER = REPO_ROOT / "config" / "api_surface_parity.json"
 
+#: 已并入权威层的路由 —— 每条都实测过**能答**(见 test_merged_routes_actually_respond)。
+#: 想再往里加,先确认它不依赖 galaxy_gateway 的 app.state。
+MERGED_ROUTES = (
+    ("/api/v1/agents/linux/servers", "Linux Agent"),
+    ("/api/v1/agents/sandbox/status", "Sandbox"),
+    ("/sync/status", "同步状态"),
+    ("/api/v5/health", "Gateway v5"),
+)
+
 
 def _surfaces():
     """真组装两个 app,取各自的 openapi 路径集合。
@@ -128,21 +137,55 @@ class TestSurfaceParity:
         )
 
     def test_the_merged_routers_actually_landed(self, surfaces):
-        """六个并进来的 router 真的在权威层上。
+        """并进来的 router 真的在权威层上。
 
-        并入是写在 try/except 里的(单个可选路由缺席不该阻断整层),
+        并入写在 try/except 里(单个可选路由缺席不该阻断整层),
         所以"没抛错"不等于"挂上了" —— 必须按路径查。
         """
         authoritative, _ = surfaces
-        for path, label in (
-            ("/api/v1/agents/linux/servers", "Linux Agent"),
-            ("/api/v1/agents/sandbox/status", "Sandbox"),
-            ("/sync/status", "同步状态"),
-            ("/api/v5/health", "Gateway v5"),
-            ("/api/v1/llm/stats", "LLM 统计"),
-            ("/api/v1/gateway/metrics", "网关指标"),
-        ):
+        for path, label in MERGED_ROUTES:
             assert path in authoritative, f"{label} 没并进权威层(缺 {path})"
+
+    def test_merged_routes_actually_respond(self):
+        """并进来的路由必须**真的能答**,不是只存在。
+
+        这一条是补上去的,因为第一版只查"路径在不在" —— 而那正是本仓一路在批的弱断言。
+        实测代价:第一版把 galaxy_gateway.routes.llm 与 .health 也并了进来,路径检查
+        全绿,起服务真打一遍才发现两条恒 503:
+
+            /api/v1/llm/stats  → 503 {"detail": "LLM Router not available"}
+            /api/v1/health     → 503 {"detail": "Service not ready"}
+
+        原因是那两个 router 的处理函数取 galaxy_gateway 那个 app 的 app.state,
+        而权威层不跑它的 lifespan。"存在但永远不生效"正是本仓一路在清的东西,
+        而一个只查存在性的对齐测试会把它记成"已解决"。
+
+        用 TestClient 直接打,不起进程 —— 要验的是依赖能不能解析,不是端口能不能连。
+        """
+        pytest.importorskip("fastapi")
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from core.api_routes import create_api_routes
+
+        os.environ.setdefault("GALAXY_NATS_ENABLED", "false")
+        app = FastAPI()
+        app.include_router(create_api_routes(service_manager=None, config=None))
+        client = TestClient(app, raise_server_exceptions=False)
+
+        dead = []
+        for path, label in MERGED_ROUTES:
+            resp = client.get(path)
+            # 503 = 依赖没解析出来(通常就是 app.state 缺席);404 = 压根没挂上。
+            # 其余码都算"活着" —— 401/422 说明路由在,只是这次请求不满足条件。
+            if resp.status_code in (404, 503):
+                dead.append(f"{label} {path} -> {resp.status_code} {resp.text[:60]}")
+        assert not dead, (
+            "这些并进来的路由存在但不生效:\n  "
+            + "\n  ".join(dead)
+            + "\n它们多半依赖 galaxy_gateway 的 app.state。搬迁前要先解耦,"
+            "否则只是把一条死路由从一个 app 搬到另一个 app。"
+        )
 
     def test_merge_did_not_create_shadowed_duplicates(self, surfaces):
         """并入不该把权威层已有的路径再注册一遍。

@@ -80,8 +80,24 @@ def merge_gateway_only_routers(router) -> None:
         ("galaxy_gateway.routes.sandbox", "router", "Sandbox (/api/v1/agents/sandbox/*)"),
         ("galaxy_gateway.routes.sync_status", "router", "同步状态 (/sync/status)"),
         ("galaxy_gateway.gateway_service", "router", "Gateway v5 (/api/v5/*)"),
-        ("galaxy_gateway.routes.llm", "router", "LLM 统计 (/api/v1/llm/*)"),
-        ("galaxy_gateway.routes.health", "router", "网关指标 (/api/v1/gateway/*)"),
+        # 下面两个**故意不并**,尽管它们确有权威层没有的路径:
+        #     galaxy_gateway.routes.llm     → /api/v1/llm/stats
+        #     galaxy_gateway.routes.health  → /api/v1/health、/api/v1/gateway/metrics*
+        #
+        # 它们的处理函数取的是 **galaxy_gateway 那个 app 的 app.state**
+        # (Depends(get_llm_router) / _get_state(request, ...)),由
+        # galaxy_gateway.bootstrap.lifecycle.lifespan 在启动时装配。权威层的 app
+        # 不跑那个 lifespan,并过来之后这些路由**存在但永远 503**。
+        #
+        # 这是实测出来的,不是推断。第一版把这两个并了进来,起服务真打一遍:
+        #     /api/v1/llm/stats  → 503 {"detail":"LLM Router not available"}
+        #     /api/v1/health     → 503 {"detail":"Service not ready"}
+        # 同一批里 linux_agent / sandbox / sync_status / v5 四个都是 200 ——
+        # 差别就在依不依赖 app.state。
+        #
+        # 为了让"只在 gateway 上"的数字好看而搬一条注定 503 的路由过来,比不搬更糟:
+        # 台账会显示"已解决",而实际是多了一条死路由。要真搬,得先让这些处理函数
+        # 不再依赖 gateway 的 app.state,那是独立的一件事。
     ):
         try:
             _mod = __import__(_mod_path, fromlist=[_attr])

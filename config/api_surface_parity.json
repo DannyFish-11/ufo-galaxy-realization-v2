@@ -1,7 +1,7 @@
 {
   "_comment": "API 面对齐台账。记录『galaxy_gateway.app 有、而权威层(core.api_routes + core.health_check)没有』的路径,以及每一条**为什么还没并进去**。空的才是理想状态;这里非空是因为剩下的都是重复族,并进去只会让一个 app 里出现两套做法。tests/test_api_surface_parity.py 会盯住它不再变长。",
   "_measured_at_commit": "见 git 历史;用 tests/test_api_surface_parity.py 重新测量",
-  "authoritative_count": 378,
+  "authoritative_count": 373,
   "gateway_count": 59,
   "gateway_only": [
     {
@@ -31,6 +31,22 @@
     {
       "path": "/api/v1/config",
       "reason": "与 core/routes/config.py 的 /api/config 同为『取配置』,响应形状不同。合并前要先定哪个是契约。"
+    },
+    {
+      "path": "/api/v1/gateway/metrics",
+      "reason": "与 /api/v1/health 同一个 router(galaxy_gateway/routes/health.py),整体依赖 app.state。"
+    },
+    {
+      "path": "/api/v1/gateway/metrics/json",
+      "reason": "与 /api/v1/health 同属 galaxy_gateway/routes/health.py,该 router 整体依赖 app.state(_get_state(request, ...)),权威层不跑 galaxy_gateway 的 lifespan,并过来会恒 503。网关自身的 Prometheus 指标本来也更适合留在网关进程里。"
+    },
+    {
+      "path": "/api/v1/health",
+      "reason": "同上(_get_state(request,...) 取 app.state)。实测并过来恒 503 {\"detail\":\"Service not ready\"}。权威层已有 /api/v1/health/quick 与 /unified,功能不缺。"
+    },
+    {
+      "path": "/api/v1/llm/stats",
+      "reason": "依赖 galaxy_gateway 的 app.state(Depends(get_llm_router)),权威层不跑它的 lifespan。实测并过来会恒 503 —— 搬迁前要先让处理函数改从 core 单例取。"
     },
     {
       "path": "/api/v1/pairing/approve",
@@ -71,6 +87,10 @@
     {
       "path": "/api/v1/webrtc/endpoint",
       "reason": "网关侧 WebRTC 端点;权威层没有对应族,但它依赖网关内部状态,搬迁需先解耦。"
+    },
+    {
+      "path": "/gateway/metrics",
+      "reason": "同 /api/v1/gateway/metrics/json,只是没有版本前缀 —— 这条本身也是历史遗留的双写法,真要保留应当只留带版本的那条。属于 health.py 那一整块,一起解耦时再定。"
     }
   ]
 }
