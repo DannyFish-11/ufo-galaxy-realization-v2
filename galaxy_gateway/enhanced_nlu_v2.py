@@ -43,21 +43,19 @@ Galaxy - 增强版 NLU 引擎 v2.0（Legacy Compat — 仅保留向后兼容性�
 版本：2.0
 """
 
-import logging  # auto: ensure module logger is defined
-
-logger = logging.getLogger(__name__)
-
-
 import asyncio
 import json
+import logging  # auto: ensure module logger is defined
 import os
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from core.device_types import DeviceStatus, DeviceType
+
+logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # 数据结构定义
@@ -501,7 +499,6 @@ class VLMClient(LLMClient):
 
     # VLMClient 不再需要 generate 方法，因为 VLM 逻辑已封装在 qwen_vl_api.py 中
     # 这里的 VLMClient 仅用于 NLU 引擎的初始化和模型名称的定义
-    pass
 
 
 # ============================================================================

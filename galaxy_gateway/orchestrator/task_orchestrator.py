@@ -22,20 +22,15 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..handlers import DeviceManager, MessageHandler
 from ..protocol import (
     AIPMessage,
     Command,
     CommandResult,
-    DeviceCapability,
-    MessageType,
     ResultStatus,
     TaskStatus,
-    create_gui_click_message,
-    create_gui_input_message,
-    create_screenshot_message,
     create_task_message,
 )
 from ..transport import WebSocketManager

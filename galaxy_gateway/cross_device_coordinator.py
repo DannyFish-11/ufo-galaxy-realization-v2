@@ -59,6 +59,20 @@ Version: 1.0
 Date: 2026-01-22
 """
 
+import asyncio
+import hashlib
+import logging
+import os
+import shutil
+import tempfile
+import unicodedata
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from core.device_types import DeviceType
+from galaxy_gateway.device_router import device_router
+from galaxy_gateway.observability import get_gateway_metrics
+
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
 # Importing this sentinel from outside the gateway package signals that the
@@ -135,20 +149,8 @@ CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
 # invocation; absence triggers a LEGACY_DISPATCH warning.
 _SUBSTRATE_CALLER_CTX_KEY = "_galaxy_cross_device_substrate_caller"
 
-import asyncio
-import hashlib
-import logging
-import os
-import shutil
-import tempfile
-import unicodedata
-from datetime import datetime
-from typing import Any, Dict, List, Optional
 
-from core.device_types import DeviceType
-from galaxy_gateway.device_router import device_router
 from galaxy_gateway.multi_subject_closure_surface import attach_closure_candidate  # noqa: E402
-from galaxy_gateway.observability import get_gateway_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +293,6 @@ class CrossDeviceCoordinator:
         list of RegisteredRuntimeDevice
         """
         from core.device_selection import (
-            assess_device_participation,
             select_cross_device_candidates,
         )
 

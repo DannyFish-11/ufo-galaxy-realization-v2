@@ -29,6 +29,6 @@ warnings.warn(
 from galaxy_gateway.capability_registry import *  # noqa: F401, F403, E402
 
 try:
-    from galaxy_gateway.capability_registry import __all__
+    pass
 except ImportError:
     pass

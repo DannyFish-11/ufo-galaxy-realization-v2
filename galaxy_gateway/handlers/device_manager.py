@@ -13,10 +13,10 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from core.unified.models import UnifiedDevice
+    pass
 
 from ..protocol import AIPMessage, DeviceCapability, DeviceInfo, DevicePlatform, DeviceType, MessageType
 from ..ssot import udm_write_heartbeat, udm_write_register, udm_write_unregister

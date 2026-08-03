@@ -52,7 +52,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # ── New sub-modules (extracted from this file) ──
 from galaxy_gateway.bootstrap.lifecycle import lifespan
 from galaxy_gateway.middleware import BearerAuthMiddleware  # re-exported for compat
-from galaxy_gateway.routes import _handle_android_ws  # re-exported: tests import from here
+from galaxy_gateway.routes import _handle_android_ws  # noqa: F401  # re-exported: tests import from here
 from galaxy_gateway.routes import (
     chat_router,
     devices_router,
@@ -62,7 +62,7 @@ from galaxy_gateway.routes import (
     sessions_router,
     tasks_router,
 )
-from galaxy_gateway.routes.chat import ChatRequest  # re-exported: tests inspect this module
+from galaxy_gateway.routes.chat import ChatRequest  # noqa: F401  # re-exported: tests inspect this module
 from nodes.common.cors_config import get_cors_headers, get_cors_methods, get_cors_origins
 
 # Re-export ChatRequest symbols for backward-compatible source checks

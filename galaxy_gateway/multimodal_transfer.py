@@ -18,14 +18,12 @@ import asyncio
 import base64
 import hashlib
 import io
-import mimetypes
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-import aiohttp
 from PIL import Image
 
 from core.port_config import get_service_port

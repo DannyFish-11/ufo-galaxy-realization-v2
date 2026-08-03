@@ -79,6 +79,15 @@ Version: 2.0 (PR-3: runtime session adapter normalisation)
 Date: 2026-03-07
 """
 
+import asyncio
+import logging
+import time as _time
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from galaxy_gateway.routing.dispatch import dispatch_to_websocket as _routing_dispatch_to_websocket
+
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
 # Importing this sentinel from outside the gateway package signals that the
@@ -231,13 +240,6 @@ DEVICE_ROUTER_HANDOFF_AUTHORITY_PROPAGATION = (
     "PR-3, post-533 dual-repo runtime host unification track."
 )
 
-import asyncio
-import json
-import logging
-import time as _time
-import uuid
-from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -254,10 +256,6 @@ from galaxy_gateway.observability import (  # noqa: E402
 )
 from galaxy_gateway.routing.device_selection import select_devices as _routing_select_devices  # noqa: E402
 from galaxy_gateway.routing.dispatch import build_aip_message as _routing_build_aip_message  # noqa: E402
-from galaxy_gateway.routing.dispatch import dispatch_to_websocket as _routing_dispatch_to_websocket
-from galaxy_gateway.routing.health_policy import filter_eligible_devices as _routing_filter_eligible_devices
-from galaxy_gateway.routing.health_policy import is_device_available as _routing_is_device_available  # noqa: E402
-from galaxy_gateway.routing.health_policy import is_device_online as _routing_is_device_online
 
 # ---------------------------------------------------------------------------
 # PR-4: Delegate routing concerns to specialised sub-modules under
@@ -1170,7 +1168,6 @@ class DeviceRouter:
                 # local cross-device coordinator.
                 try:
                     from galaxy_gateway.agent_bridge import (
-                        AgentBridge,
                         HandoffContract,
                         get_agent_bridge,
                     )
@@ -1522,19 +1519,11 @@ class DeviceRouter:
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
 
-            # PR-2: convert task dict → TaskEnvelope → route_envelope
-            # (replaces the legacy CommandRequest + dispatch path).
-            try:
-                from core.command_router import get_command_router
-                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
-
-                # PR-AIP-UNIFIED: Removed circular call to cmd_router.route_envelope.
-                # DeviceRouter is the substrate layer; it should NOT call back into
-                # CommandRouter (orchestration layer). All transport goes through
-                # AIPTransport directly. See P2 fix in v51.
-                pass
-            except Exception:
-                pass
+            # PR-AIP-UNIFIED: 这里原有一个 try 块，导入 get_command_router 和
+            # TaskEnvelope 之后直接 pass，异常还被全部吞掉 —— 是移除「DeviceRouter
+            # 回调 CommandRouter」这条环形调用之后留下的空壳，两个导入都没有任何
+            # 使用者。留着只会让人以为此处还有一条兜底路径。
+            # DeviceRouter 是基质层，不应回调编排层；传输一律走 AIPTransport。
 
             # PR-AIP-UNIFIED: Route through AIPTransport instead of direct WS.
             # Remove circular call to cmd_router.route_envelope (P2 fix).

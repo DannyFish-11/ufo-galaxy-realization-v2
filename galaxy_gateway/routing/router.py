@@ -25,7 +25,7 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from galaxy_gateway.routing.device_selection import DEVICE_SELECTION_AUTHORITY, select_devices
 from galaxy_gateway.routing.dispatch import (

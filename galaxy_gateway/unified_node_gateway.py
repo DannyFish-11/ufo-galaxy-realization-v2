@@ -19,11 +19,10 @@ import importlib
 import importlib.util
 import logging
 import os
-import sys
 import time
 from typing import Any, Dict, Optional
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from core.port_config import get_service_port

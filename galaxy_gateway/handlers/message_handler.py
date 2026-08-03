@@ -31,6 +31,9 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
+from ..protocol import AIPMessage, MessageType, TaskStatus, create_error_message
+from .device_manager import DeviceManager
+
 # Bounds for the in-memory idempotency caches / pending-task registry so a
 # long-lived gateway does not grow them without limit (they were previously
 # plain set()/dict() that only ever gained entries).
@@ -66,9 +69,6 @@ class _BoundedSeenSet:
     def __len__(self) -> int:
         return len(self._data)
 
-
-from ..protocol import AIPMessage, MessageType, ResultStatus, TaskStatus, create_error_message
-from .device_manager import DeviceManager
 
 logger = logging.getLogger(__name__)
 

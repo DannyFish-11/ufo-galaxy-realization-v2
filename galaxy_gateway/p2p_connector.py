@@ -21,9 +21,7 @@ import struct
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
-
-import aiohttp
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

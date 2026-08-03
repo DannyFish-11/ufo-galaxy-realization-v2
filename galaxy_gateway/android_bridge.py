@@ -37,7 +37,10 @@ import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 # 设备类型 — 单一事实来源
-from core.device_types import AIPDeviceType as DeviceType  # noqa: E402
+# 下面三处 re-export 供外部按 android_bridge.X 取用（tests/test_e2e.py 取 DeviceType，
+# tests/test_cross_device_hardening.py 取 TaskStatus / ResultStatus），本模块自身不用，
+# 故标 F401。原先标的是 E402（导入不在文件顶部）—— 导入已上移，那个豁免已失效。
+from core.device_types import AIPDeviceType as DeviceType  # noqa: F401
 from core.device_types import (
     DevicePlatform,
 )
@@ -106,11 +109,21 @@ from galaxy_gateway.android.handlers.task_submit import (
 )
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.message_builder import MessageBuilder
-from galaxy_gateway.android.models import AndroidDevice, Rect, UIElement
+
+# Rect / UIElement 与 AndroidDevice 一样属向后兼容 re-export：
+# tests/integration/android_bridge/test_android_bridge_modularization.py 的
+# TestAndroidBridgeModuleReExports 会逐个 import 这批公共符号。本模块自身不用
+# Rect / UIElement，故标 F401 —— 删掉它们会直接打断那条向后兼容契约。
+from galaxy_gateway.android.models import (  # noqa: F401
+    AndroidDevice,
+    Rect,
+    UIElement,
+)
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
+from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
 
 # 协议枚举 — 单一事实来源
-from galaxy_gateway.protocol.aip_v3 import (  # noqa: E402
+from galaxy_gateway.protocol.aip_v3 import (  # noqa: F401
     MessageType,
     ResultStatus,
     TaskStatus,
@@ -170,7 +183,6 @@ except ImportError:  # pragma: no cover
 
 # Pending-delivery buffer — re-delivers buffered messages to devices that
 # reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
-from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
 
 # =============================================================================
 # Axis-1 + Axis-7: Cross-device mode gate — takeover is only permitted when
@@ -1828,7 +1840,6 @@ class AndroidBridge:
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and websocket is not None:
-                import json
                 import time as _time
 
                 # PR-AIP-UNIFIED: Route phase sync through AIPTransport

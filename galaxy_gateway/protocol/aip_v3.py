@@ -9,7 +9,7 @@ AIP v3.0 - Agent Interaction Protocol (统一版本)
 
 import uuid
 from datetime import datetime
-from enum import Enum, Flag, IntEnum, auto
+from enum import Enum, Flag, auto
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer

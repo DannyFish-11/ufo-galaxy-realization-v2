@@ -19,6 +19,15 @@ Stage 10: Scoring and task-graph convergence
 Author: UFO Galaxy Team
 """
 
+import asyncio
+import logging
+import threading
+import time
+import uuid as _uuid_mod
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
+
 # Stage 10 sentinels — importable by tests and monitoring tooling.
 WAKE_ROUTER_USES_CANONICAL_SCORING: str = (
     "WAKE_ROUTER_CANONICAL_SCORING_V1: WakeRouter delegates device selection to "
@@ -31,15 +40,6 @@ WAKE_ROUTER_TASK_GRAPH_REGISTERED: str = (
     "canonical task graph."
 )
 
-import asyncio
-import logging
-import threading
-import time
-import uuid as _uuid_mod
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("UFO-Galaxy.WakeRouter")
 

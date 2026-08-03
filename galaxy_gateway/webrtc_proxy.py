@@ -49,7 +49,6 @@ import json
 import logging
 import os
 import time
-import uuid
 from typing import Any, Dict, List, Optional, Set
 
 import httpx
@@ -59,7 +58,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 from core.port_config import get_node_port, get_service_port
 from galaxy_gateway.cross_device_switch import (
     ERROR_CODE_CROSS_DEVICE_DISABLED,
-    ERROR_MSG_CROSS_DEVICE_DISABLED,
     WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
     is_cross_device_enabled,
 )

@@ -35,7 +35,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("gateway_nats_adapter")
 
@@ -518,7 +518,7 @@ class GatewayNATSAdapter:
             from datetime import datetime, timezone
 
             from core.nats_bus import nats_bus
-            from core.schemas.contracts import TaskStatus, TimestampModel
+            from core.schemas.contracts import TaskStatus
 
             status_val = TaskStatus.SUCCESS.value if success else TaskStatus.FAILED.value
             ts = int(datetime.now(timezone.utc).timestamp())

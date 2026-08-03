@@ -1216,7 +1216,6 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and device.websocket is not None:
-                import json
                 import time
 
                 # PR-AIP-UNIFIED: Route through AIPTransport

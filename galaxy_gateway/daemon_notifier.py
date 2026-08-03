@@ -12,11 +12,10 @@ Daemon Notifier — 守护进程状态通知
   - 系统异常 (CPU/内存/磁盘)
 """
 
-import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

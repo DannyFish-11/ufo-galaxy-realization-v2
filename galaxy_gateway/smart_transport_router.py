@@ -38,17 +38,19 @@ SmartTransportRouter - 智能传输路由（Legacy Compat — 仅保留向后兼
 作者：Manus AI
 """
 
-import asyncio
 import logging
 import os
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 import httpx
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from core.multimodal.multimodal_events import MultimodalEvent, TransportFallbackEvent
 from core.port_config import get_service_port
+from nodes.common.cors_config import get_cors_origins
 
 logger = logging.getLogger(__name__)
 
@@ -362,10 +364,6 @@ class SmartTransportRouter:
 # FastAPI 接口
 # ============================================================================
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-
-from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="SmartTransportRouter", version="1.0.0")
 app.add_middleware(

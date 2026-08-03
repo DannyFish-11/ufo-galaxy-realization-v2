@@ -18,14 +18,14 @@ Galaxy Gateway v5.0 - 自主学习和编程版本
 作者：Manus AI
 """
 
-import asyncio
+import atexit
 import json
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -232,7 +232,6 @@ debug_client = NodeClient(NODE_SERVICES["debug"])
 knowledge_client = NodeClient(NODE_SERVICES["knowledge"])
 
 # PR-ASYNC-CLIENT: register cleanup to prevent resource leaks on exit
-import atexit
 
 _all_clients = [memory_client, code_client, debug_client, knowledge_client]
 

@@ -307,9 +307,6 @@ def aip_v2_binary_to_v3(raw_bytes: bytes) -> Optional[dict]:
     Returns ``None`` if the bytes don't match AIP v2.0 format.
     """
     try:
-        from enhancements.multidevice.device_protocol import (
-            _V2_TO_V3_MSG_TYPE,
-        )
         from enhancements.multidevice.device_protocol import AIPMessage as V2BinaryMessage
 
         v2_msg = V2BinaryMessage.from_bytes(raw_bytes)

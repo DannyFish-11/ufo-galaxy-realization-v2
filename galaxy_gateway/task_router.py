@@ -39,7 +39,7 @@ Galaxy - 任务路由和调度模块 (Legacy Compatibility Module — PR-S6)
 import asyncio
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -578,7 +578,7 @@ class ResultAggregator:
 
 async def main():
     """测试示例"""
-    from enhanced_nlu_v2 import Device, DeviceRegistry, DeviceStatus, DeviceType, IntentType, Task
+    from enhanced_nlu_v2 import DeviceRegistry, IntentType, Task
 
     # 初始化设备注册表
     device_registry = DeviceRegistry()

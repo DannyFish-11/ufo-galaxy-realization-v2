@@ -35,7 +35,6 @@ Routes:
 import asyncio
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -238,7 +237,7 @@ class SSHExecutor:
     async def execute(self, command: str, timeout: float = 60.0) -> Dict:
         """在远程服务器上执行命令。"""
         try:
-            import paramiko
+            pass
         except ImportError:
             raise HTTPException(500, "paramiko not installed. Run: pip install paramiko")
 
@@ -380,7 +379,7 @@ class SSHExecutor:
             client.close()
 
     def _connect(self, client):
-        import paramiko
+        pass
 
         connect_kwargs = {
             "hostname": self.host,

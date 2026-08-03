@@ -51,6 +51,9 @@ Structured event tags (stable, machine-queryable):
 
 from __future__ import annotations
 
+import logging
+from typing import Any, Dict, List
+
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
 # Importing this sentinel from outside the gateway package signals that the
@@ -59,8 +62,6 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 GATEWAY_SSOT_WRITE_AUTHORITY = "GATEWAY_SSOT::DEVICE_WRITE_PATH_ONLY"
 
-import logging
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
