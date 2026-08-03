@@ -57,6 +57,34 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DevicePoolManager")
 
+
+def _satisfies_capabilities(
+    device_id: str,
+    declared_capabilities: Optional[List[str]],
+    required_capabilities: Optional[List[str]],
+) -> bool:
+    """能力匹配统一走 :mod:`core.capability_registry`（三源并集），而不是只看池内字段。
+
+    池里的 ``dev.capabilities`` 只是规范注册表的**三个来源之一**；经 capability_bus
+    或网关能力投影上报的能力不在其中。只看它会把确实具备该能力的设备判成不匹配、
+    从候选里剔除（已实测复现）。详见
+    :func:`core.capability_registry.device_satisfies_required_capabilities` 的 docstring。
+
+    延迟 import：``capability_registry`` 会去查 device_registry / capability_bus /
+    网关投影，模块级引入容易形成环。注册表不可用时降级为原先的单源判断 ——
+    保持"权威坏了不至于让派发整体失败"的既有语义。
+    """
+    if not required_capabilities:
+        return True
+    try:
+        from core.capability_registry import device_satisfies_required_capabilities
+
+        return device_satisfies_required_capabilities(device_id, declared_capabilities, required_capabilities)
+    except Exception as exc:  # pragma: no cover - 降级
+        logger.debug("capability registry unavailable (%s) — falling back to declared capabilities", exc)
+        return all(c in (declared_capabilities or []) for c in required_capabilities)
+
+
 # ---------------------------------------------------------------------------
 # PR-A04: DevicePool → CapabilityAssimilationLayer integration sentinel
 # ---------------------------------------------------------------------------
@@ -418,7 +446,9 @@ class DevicePoolManager:
                 if device_type and dev.device_type != device_type:
                     continue
                 if required_capabilities:
-                    if not all(c in dev.capabilities for c in required_capabilities):
+                    # 经规范能力注册表判定：dev.capabilities 只是三个来源之一，
+                    # 单看它会漏掉经 capability_bus / 网关投影上报的能力。
+                    if not _satisfies_capabilities(dev.device_id, dev.capabilities, required_capabilities):
                         continue
                 eligible = self._is_eligible(dev.device_id)
                 if eligible_only and not eligible:
@@ -489,7 +519,7 @@ class DevicePoolManager:
                 and self._is_eligible(dev.device_id)
                 and (canonical_candidate_ids is None or dev.device_id in canonical_candidate_ids)
                 and (not device_type or dev.device_type == device_type)
-                and (not required_capabilities or all(c in dev.capabilities for c in required_capabilities))
+                and _satisfies_capabilities(dev.device_id, dev.capabilities, required_capabilities)
             ]
 
             if not candidates:

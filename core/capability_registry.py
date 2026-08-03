@@ -486,3 +486,81 @@ def get_devices_matching_capabilities(
             matching.append(device_id)
 
     return matching
+
+
+def device_satisfies_required_capabilities(
+    device_id: str,
+    declared_capabilities: Optional[List[str]],
+    required_capabilities: Optional[List[str]],
+) -> bool:
+    """*device_id* 是否满足 *required_capabilities* —— 供调用方已持有设备对象时使用。
+
+    修的是什么
+    ----------
+    本模块的 docstring 把自己写成「device capability 与能力匹配的唯一规范位置」，
+    但三处活的选择路径都没走它，各自写了一句**只看单一来源**的判断::
+
+        core/device_pool_manager.py（两处）        all(c in dev.capabilities for c in required)
+        core/device_selection/canonical_device_selector.py   同形
+
+    而 :func:`get_device_capability_summary` 明确合并**三个来源**取并集：
+    ``device_registry`` / ``capability_bus`` / ``gateway_capability_registry``。
+    只要某项能力是经后两条通道上报、没同步进调用方手里那份列表，单源判断就会把
+    一台**确实具备该能力**的设备判成不匹配、从候选里剔除。
+
+    实测复现（同一台设备、同一项能力）::
+
+        device_registry              ['basic']
+        capability_bus               ['basic', 'screen_capture']
+        → 并集 resolved               ['basic', 'screen_capture']
+        规范匹配器 matched=True   /   单源判断 matched=False
+
+    为什么不直接改调用 :func:`device_matches_capabilities`
+    ------------------------------------------------------
+    那个函数在设备**不存在于任何来源**时返回 ``matched=False``（``summary.available``
+    为假）。而调用方手里的设备是从自己的池子/入参里来的，未必登记在 DeviceRegistry ——
+    直接替换会把这类设备**新增排除**，那是引入回归而不是修缺陷。所以这里只做**并集**：
+    调用方原来能匹配的一个都不会掉，只可能多认出来几台。
+
+    为什么先做便宜的检查
+    --------------------
+    三源解析每台设备要查三处，而这是选择热路径上的循环。先用调用方已持有的
+    *declared_capabilities* 判一次；**只有在这一步会判失败时**才去付多源解析的代价。
+    常见情况（能力本来就在手里那份列表中）零额外开销。
+
+    解析器自身出错时返回单源判断的结果 —— 与本模块其余部分的降级语义一致：
+    权威不可用不该让派发链整体失败。
+    """
+    if not required_capabilities:
+        return True
+
+    declared = set(declared_capabilities or [])
+    missing = [c for c in required_capabilities if c not in declared]
+    if not missing:
+        return True
+
+    try:
+        resolved = set(get_device_capability_summary(device_id).resolved_capabilities)
+    except Exception as exc:  # pragma: no cover - 权威不可用时降级为单源结论
+        logger.debug(
+            "device_satisfies_required_capabilities: canonical resolution unavailable "
+            "for %r (%s) — falling back to declared capabilities only",
+            device_id,
+            exc,
+        )
+        return False
+
+    still_missing = [c for c in missing if c not in resolved]
+    if still_missing:
+        return False
+
+    logger.debug(
+        "device_satisfies_required_capabilities: %r satisfies %s only via non-declared "
+        "capability sources (declared=%s resolved=%s) — single-source check would have "
+        "excluded this device",
+        device_id,
+        missing,
+        sorted(declared),
+        sorted(resolved),
+    )
+    return True
