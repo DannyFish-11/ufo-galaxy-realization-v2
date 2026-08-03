@@ -451,6 +451,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception as _merge_err:  # noqa: BLE001 — 整合层缺席不阻断权威 API
         logger.warning("网关能力并入权威层失败(可选): %s", _merge_err)
 
+    # OAuth 登录面(/auth/oauth/*)。这一族此前**任何进程都没有服务过** ——
+    # 详见 core/auth_surface_merge 的模块说明。
+    from core.auth_surface_merge import merge_auth_routes
+
+    merge_auth_routes(router)
+
     # Control Plane Phase 2: audit ledger and HITL approval routes
     try:
         from core.routes import audit as audit_routes

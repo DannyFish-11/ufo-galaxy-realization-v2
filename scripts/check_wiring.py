@@ -76,9 +76,33 @@ from typing import Dict, List, Set, Tuple
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = REPO_ROOT / "config" / "wiring_baseline.json"
 
-#: 定义侧:只在这两个目录里找"公开能力"。
-DEFINITION_DIRS = ("core", "galaxy_gateway")
+#: 定义侧:在这几个目录里找"公开能力"。
+#:
+#: nodes/ 是后加的,而**它的缺席造成过一次真实的长期缺陷**:
+#: ``nodes/Node_05_Auth/oauth_routes.py`` 里的 ``register_oauth_routes(app)``
+#: 定义了 9 条 ``/auth/oauth/*`` 路由,却从来没有被任何地方调用过 ——
+#: 那一族因此不在统一启动器的 9000 上,也不在 Node_05 自己的 8005 上,
+#: 任何进程都没有服务过它们。手表的设备码登录、Android 的 logout/refresh
+#: 全打在不存在的端点上,而这个工具**看不见**,因为定义侧当时只扫
+#: core/ 与 galaxy_gateway/。
+#:
+#: 加上 nodes/ 之后未接线从 648 涨到 859(+217)。那 217 条是存量,按本仓惯例
+#: 记进基线、闸只看增量 —— 重点不是那个数字,而是这一大块代码从此**在视野里**。
+DEFINITION_DIRS = ("core", "galaxy_gateway", "nodes")
 
+#: 已知的残余盲区:**import 但从不调用,算"已接线"**。
+#:
+#: 引用侧按名字统计,而 ``from x import y`` 会让 y 出现在引用集合里。所以一个
+#: 被 import 进来、却从没被调用的函数,这里看不出来。
+#:
+#: 试过收紧(只认真正的使用,不认 import 绑定):未接线从 859 涨到 **1391(+532)**,
+#: 而新增的那批绝大多数是 ``__init__.py`` 里的**正当再导出** —— 那是公开 API 的
+#: 组织方式,不是缺陷。为一个次要盲区换 532 条噪声,这道闸会先被噪声压垮。
+#:
+#: 记下这个数字,是为了下一个人不用再走一遍这条路;也为了说清楚本工具**抓的是
+#: "全仓零引用"**,不是"零调用"。真正造成过长期缺陷的那种(register_oauth_routes:
+#: 既没人 import 也没人调用)属于前者,抓得到。
+#:
 #: 引用侧:扫全仓,除了这些。tests/ 必须排除 —— 只有测试调用它,恰恰就是本工具要抓的。
 REFERENCE_SKIP_PARTS = {
     "__pycache__",

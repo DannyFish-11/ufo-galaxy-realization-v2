@@ -258,10 +258,18 @@ def create_health_routes(service_manager=None, config=None):
         result = await checker.check_deep()
         return JSONResponse(result)
 
-    @router.get("/metrics")
-    async def metrics():
-        """系统指标（Prometheus 兼容格式可后续扩展）"""
-        m = get_system_metrics()
-        return JSONResponse(m)
+    # 这里曾有一条 ``@router.get("/metrics")``,返回 get_system_metrics() 的 JSON。
+    #
+    # 它**从来没有生效过**:统一启动器先挂步骤 3 的权威 API 层(其中
+    # core/routes/monitoring.py 已把 /metrics 与 /health/metrics 指向同一个
+    # Prometheus 处理函数),再挂步骤 4 的健康检查层。FastAPI 里重复路径先注册的赢,
+    # 所以这一条永远命不中 —— 是一条"存在但从不生效"的死路由。
+    #
+    # 删而不是改路径:两者的语义本来就该由 monitoring 那条承担。/metrics 是给
+    # Prometheus 抓取端用的,必须是 text/plain 的 exposition 格式;这里返回 JSON,
+    # 抓取端会直接解析失败。也就是说即使它"赢"了,也是错的那个赢。
+    #
+    # 这份 JSON 指标没有丢:check_deep() 里嵌着同一个 get_system_metrics(),
+    # 走 /health/deep 拿得到。
 
     return router, checker
