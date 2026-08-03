@@ -137,8 +137,11 @@ jobs:
         # Targets: node audit, optional-node governance, repo hygiene.
         # Uses -x to stop on first failure for fast feedback.
         run: |
+          # 原先这里还列了 tests/test_pr6_node_audit.py。它是 core/node_audit.py 的专属
+          # 测试，而该模块（90 行的审计报告构建器）从真实入口不可达、仅测试引用，已作为
+          # 死代码删除，测试随之删除。工作流硬编码测试文件路径，文件消失时 pytest 直接
+          # 以 exit code 4 失败（"file or directory not found"），所以这里必须同步更新。
           python -m pytest \
-            tests/test_pr6_node_audit.py \
             tests/test_pr8_optional_governance.py \
             tests/test_repo_hygiene.py \
             -v --tb=short -x
