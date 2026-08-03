@@ -137,7 +137,6 @@ __all__ = [
     "check_canonical_legacy_markers_uniform",
     "check_projection_is_outward_truth",
     "check_addon_contract_metadata_uniform",
-    "check_canonical_layer_model_consistent",
     # Aggregate entry point
     "run_consolidation_invariants",
 ]
@@ -604,70 +603,6 @@ def check_addon_contract_metadata_uniform(
     return findings
 
 
-def check_canonical_layer_model_consistent(
-    layer_snapshots: Optional[Sequence[Dict[str, Any]]] = None,
-) -> List[InvariantFinding]:
-    """Check that the canonical layer model is internally consistent.
-
-    Delegates to :mod:`core.canonical_layer_model` to validate:
-
-    1. All five canonical layers are declared in the registry.
-    2. Each layer's hot-path and startup-only flags match the canonical model.
-    3. V4 (multi-step orchestration spine) is NOT declared as a per-request gate.
-    4. V6 (startup/release integrity) is NOT declared as a per-request gate.
-    5. L1/L2/L3 (router cognitive authority) is NOT declared as a detached
-       shadow stack.
-    6. Completion truth backbone is NOT declared as optional signaling.
-
-    Parameters
-    ----------
-    layer_snapshots:
-        Optional sequence of layer snapshot dicts to validate.  Each must
-        carry a ``layer_key`` field.  When ``None`` the check validates
-        only the registry internal consistency.
-
-    Returns
-    -------
-    List[InvariantFinding]
-        Findings translated from the underlying
-        :class:`~core.canonical_layer_model.LayerModelReport`.
-    """
-    check = "CANONICAL_LAYER_MODEL_CONSISTENT"
-    findings: List[InvariantFinding] = []
-
-    try:
-        from core.canonical_layer_model import run_layer_model_invariants
-    except ImportError as exc:
-        findings.append(
-            _err(
-                check,
-                f"core.canonical_layer_model is not importable: {exc}.  "
-                "The canonical layer model must be present for architecture "
-                "invariants to be checkable.",
-                {"import_error": str(exc)},
-            )
-        )
-        return findings
-
-    snapshots_list = list(layer_snapshots) if layer_snapshots is not None else None
-    report = run_layer_model_invariants(snapshots_list)
-
-    for lf in report.findings:
-        if lf.severity == "error":
-            findings.append(_err(check, lf.message, lf.detail))
-        elif lf.severity == "warning":
-            findings.append(_warn(check, lf.message, lf.detail))
-        else:
-            findings.append(_info(check, lf.message, lf.detail))
-
-    if not findings:
-        findings.append(
-            _info(check, "Canonical layer model is internally consistent.")
-        )
-
-    return findings
-
-
 # ---------------------------------------------------------------------------
 # Aggregate entry point
 # ---------------------------------------------------------------------------
@@ -678,18 +613,20 @@ def run_consolidation_invariants(
     surface_metadata: Optional[Sequence[Dict[str, Any]]] = None,
     projection_metadata: Optional[Dict[str, Any]] = None,
     addon_registry_snapshot: Optional[Sequence[Dict[str, Any]]] = None,
-    layer_snapshots: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> ConsolidationReport:
     """Run all cross-cutting consolidation invariant checks.
 
     This is the main entry point for obtaining a :class:`ConsolidationReport`
-    that covers all five categories of cross-cutting invariants:
+    that covers all four categories of cross-cutting invariants:
 
     1. Authority label consistency
     2. Canonical vs legacy marker uniformity
     3. Projection outward-truth compliance
     4. Addon contract metadata uniformity
-    5. Canonical layer model consistency (PR-9)
+
+    第 5 项「规范分层模型一致性（PR-9）」已随 core.canonical_layer_model 一并移除：
+    那个检查整体只是转发给该模块的 run_layer_model_invariants()，模块作为零可达死
+    代码删除后，这个检查除了恒定报一条 import 失败的 error 之外做不了任何事。
 
     Parameters
     ----------
@@ -703,10 +640,6 @@ def run_consolidation_invariants(
         Dict describing a projection surface.  Pass ``None`` to skip.
     addon_registry_snapshot:
         Sequence of addon/package registry entries.  Pass ``None`` to skip.
-    layer_snapshots:
-        Optional sequence of layer snapshot dicts for the canonical layer
-        model check.  Pass ``None`` to run only the registry self-consistency
-        check (added in PR-9).
 
     Returns
     -------
@@ -739,12 +672,6 @@ def run_consolidation_invariants(
         report.checks_run.append(check_name)
         for finding in check_addon_contract_metadata_uniform(addon_registry_snapshot):
             report.add(finding)
-
-    # PR-9: canonical layer model check — always run.
-    check_name = "CANONICAL_LAYER_MODEL_CONSISTENT"
-    report.checks_run.append(check_name)
-    for finding in check_canonical_layer_model_consistent(layer_snapshots):
-        report.add(finding)
 
     # Log summary.
     if report.overall_consistent:
