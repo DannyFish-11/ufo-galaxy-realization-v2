@@ -1487,7 +1487,8 @@ class AndroidBridge:
         Registration gap guard
         ----------------------
         Before dispatching, the registration completeness of *device_id* is
-        checked via :func:`~galaxy_gateway.android.handlers.registration.is_registration_fully_attached`.
+        checked via :func:`~galaxy_gateway.android.handlers.registration.get_registration_gaps`
+        (非空的 gap 列表即视为附着不完整)。
         If downstream registration steps (``attach_runtime_session``,
         ``attached_runtime_session_registry``, etc.) failed for this device,
         :class:`~galaxy_gateway.android.handlers.registration.DispatchBlockedByRegistrationGapError`
@@ -1682,7 +1683,20 @@ class AndroidBridge:
         if _get_lifecycle_coordinator is not None:
             try:
                 _ctx_task_id = task_context.get("task_id", "") if isinstance(task_context, dict) else ""
-                _get_lifecycle_coordinator().on_takeover_requested(
+                _coordinator = _get_lifecycle_coordinator()
+
+                # 相位机的**唯一**入口是 pre_dispatch --handoff_dispatched--> handoff_dispatched;
+                # 记录不存在时,下面 on_takeover_requested 里的 `if rec is not None:`
+                # 会把相位推进整个跳过 —— 不报错、审计照发。在此之前生产无人调用它,
+                # 上面那句 "session state transition" 从来没发生过。
+                # 详见 tests/test_android_handoff_lifecycle_wiring.py。幂等,可重复调。
+                _coordinator.on_handoff_dispatched(
+                    session_id=session_id or "",
+                    device_id=device_id,
+                    task_id=_ctx_task_id,
+                    trace_id=trace_id or "",
+                )
+                _coordinator.on_takeover_requested(
                     session_id=session_id or "",
                     takeover_id=takeover_id,
                     device_id=device_id,
