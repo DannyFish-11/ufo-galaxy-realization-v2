@@ -12,6 +12,9 @@
     "  core.local_agent_runtime —— 端侧执行沙盒。服务端零引用是**设计使然**，",
     "                              core/runtime_invariant_enforcement.py 的 INV-008 主动强制它",
     "                              不得被服务端调用。删掉会直接违反那条不变量。",
+    "  core.udm_registration_hook —— 设备解析管线第 2 级（注册时热插解析）。曾被当作死代码删除后",
+    "                              又恢复：resolver/activation_policy/launcher_adapter 都活着，但只在",
+    "                              启动期触发；删掉它等于决定『不做注册时热插解析』。",
     "判据教训：『有个名字相近的模块在做类似的事』**不等于**能力还在。",
     "必须比对同一层次的实现，而不是概念相似度。"
   ],
@@ -38,6 +41,7 @@
     "core.perception.canonical_state_adapter",
     "core.runtime_introspection",
     "core.schemas.execution_failure",
-    "core.truth_conflict_enforcement"
+    "core.truth_conflict_enforcement",
+    "core.udm_registration_hook"
   ]
 }
