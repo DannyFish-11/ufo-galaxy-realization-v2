@@ -216,5 +216,5 @@ metrics to drive their animation/geometry:
   topology core (PR-2), `TopologyRoutePlan`, `ModelWeightField`.
 - [`docs/MODEL_TOPOLOGY_BRIDGE.md`](MODEL_TOPOLOGY_BRIDGE.md) — legacy-to-V2
   bridge for provider snapshots.
-- [`docs/WINDOWS_STATUS_BOARD.md`](WINDOWS_STATUS_BOARD.md) — desktop status
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — desktop surface
   board (v1); v2 will consume `RuntimeProjection`.

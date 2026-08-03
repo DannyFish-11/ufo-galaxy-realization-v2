@@ -35,7 +35,7 @@ Layout zones::
     └── worker/            — background task worker pool
 
     ACTIVE_DESKTOP_STATUS
-    └── windows_client/status_board_v2/ — canonical read-only desktop status board
+    └── electron/renderer/panel/ — canonical desktop status surface (React panel)
                                           (projection-driven; consumes
                                            GET /api/v1/projection/runtime)
 
@@ -65,7 +65,7 @@ Authority model::
     ┌──────────────────────────────────────────────────────────────┐
     │  CANONICAL OUTWARD STATUS TRUTH                              │
     │  ─────────────────────────────                               │
-    │  windows_client/status_board_v2/   (ACTIVE_DESKTOP_STATUS)  │
+    │  electron/renderer/panel/          (ACTIVE_DESKTOP_STATUS)  │
     │    consumes  ──►  GET /api/v1/projection/runtime             │
     │    contract  ──►  contracts.desktop_status_projection        │
     └──────────────────────────────────────────────────────────────┘
@@ -150,8 +150,8 @@ class DirectoryRole(str, Enum):
 
     ``LEGACY_SHELL``
         Host-specific legacy shell; retired from the active runtime surface.
-        Active sub-directories (status_board_v2/, autonomy/) are preserved
-        under their own ACTIVE_* roles.
+        Active sub-directories (autonomy/) are preserved under their own
+        ACTIVE_* roles.
 
     ``TRANSITIONAL``
         Enhancement overlays or adapter directories that are being phased out.
@@ -481,20 +481,26 @@ _REGISTRY._register(
 
 _REGISTRY._register(
     RepoLayoutEntry(
-        path="windows_client/status_board_v2",
+        path="electron/renderer/panel",
         role=DirectoryRole.ACTIVE_DESKTOP_STATUS,
         zone=LayoutZone.DESKTOP_STATUS,
         description=(
-            "Canonical read-only desktop status board (PR-8).  "
-            "Consumes GET /api/v1/projection/runtime "
-            "(contract: contracts.desktop_status_projection.DesktopStatusProjection).  "
+            "Canonical desktop status surface — the React panel rendered inside "
+            "the Tauri (fallback: Electron) shell.  Consumes "
+            "GET /api/v1/projection/runtime via /api/v1/panel/unified and "
+            "/api/v1/panel/feed, plus the live WS /ws/desktop-presence phase "
+            "stream (contract: "
+            "contracts.desktop_status_projection.DesktopStatusProjection).  "
             "Tri-state phase surfaces: silent / liminal / manifest."
         ),
         pr_classified="PR-8-layout",
         notes=(
-            "status_board_v2/ is the ONLY canonical outward-facing status "
-            "display.  It is projection-driven (read-only derived surface).  "
-            "Do NOT extend legacy status_board.py; extend this instead."
+            "面板表层收敛：此前这个位置是 windows_client/status_board_v2/"
+            "（终端 ANSI 状态板）。仓库一度并存五份表层，各读各的聚合层——"
+            "面板显示的相位与真实请求脱节，那类问题正是这么来的。现在唯一表层是这里。"
+            "外壳由 unified_launcher.start_desktop_shell() 拉起：优先 Tauri "
+            "（desktop-tauri/），未构建则回退 Electron（electron/），"
+            "两者共用这一份前端。"
         ),
     )
 )
@@ -546,17 +552,18 @@ _REGISTRY._register(
         zone=LayoutZone.LEGACY,
         description=(
             "Host-specific legacy shell (PR-3 retired, PR-8 demoted).  "
-            "Active sub-directories preserved: status_board_v2/ and autonomy/.  "
+            "Active sub-directory preserved: autonomy/ only — status_board_v2/ "
+            "was deleted by panel-surface convergence.  "
             "Root-level modules (client.py, ui_sidebar.py, desktop_automation.py, "
             "windows_mcp_server.py, main.py, key_listener.py, "
             "windows_client_integrated.py) are hard-disabled stubs."
         ),
-        canonical_replacement="windows_client/status_board_v2",
+        canonical_replacement="electron/renderer/panel",
         pr_classified="PR-3",
         notes=(
             "windows_client/ as a whole is a HOST-SPECIFIC LEGACY SHELL.  "
-            "Only windows_client/status_board_v2/ and windows_client/autonomy/ "
-            "are active.  Hard-disabled modules raise RuntimeError on import.  "
+            "Only windows_client/autonomy/ is active.  Hard-disabled modules "
+            "raise RuntimeError on import.  "
             "See windows_client/__init__.py and core/ui_surface_authority.py."
         ),
     )

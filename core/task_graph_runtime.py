@@ -74,7 +74,7 @@ Invariants
 4.  Legacy orchestrators are explicitly NOT removed; they are demoted to
     **graph contributors** that register nodes/edges with the runtime.
 5.  The runtime maintains a 256-entry observability ring buffer that can be
-    consumed by ``status_board_v2`` and the operator console.
+    consumed by the React panel (``electron/renderer/panel/``).
 6.  retry / fallback / fanout / fanin relations form explicit graph edges —
     not scattered log entries — so that lineage is always queryable.
 
@@ -589,7 +589,7 @@ class GraphRuntimeRecord:
 class GraphRuntimeSnapshot:
     """A point-in-time snapshot of the entire task graph runtime state.
 
-    Suitable for consumption by ``status_board_v2`` and the operator console.
+    Suitable for consumption by the React panel (``electron/renderer/panel/``).
     """
 
     snapshot_id: str = field(default_factory=lambda: f"snap_{uuid.uuid4().hex[:10]}")
@@ -827,7 +827,7 @@ class TaskGraphRuntime:
         ``queued → dispatch → running → result → completed | failed``
     * Provide a projection adapter so legacy workflow/orchestration layers can
       register their nodes/edges without any code removal.
-    * Maintain a 256-entry observability ring buffer for ``status_board_v2``
+    * Maintain a 256-entry observability ring buffer for the panel surface
       and the operator console.
 
     Thread safety
@@ -1780,7 +1780,7 @@ class TaskGraphRuntime:
     def snapshot(self, *, max_records: int = 50) -> GraphRuntimeSnapshot:
         """Build a point-in-time observability snapshot.
 
-        Suitable for consumption by ``status_board_v2`` and operator consoles.
+        Suitable for consumption by the React panel (``electron/renderer/panel/``).
 
         Args:
             max_records: Maximum number of recent records to include.

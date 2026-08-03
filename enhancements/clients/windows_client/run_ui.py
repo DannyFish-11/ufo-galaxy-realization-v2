@@ -8,7 +8,7 @@
 # Active Windows direction:
 #   DesktopPresenceRuntime (core/desktop_presence_runtime.py)
 #     — desktop tri-state lifecycle runtime shell (silent/liminal/manifest)
-#   windows_client/status_board_v2/
+#   electron/renderer/panel/
 #     — canonical read-only desktop status surface, projection-driven
 #
 # Authoritative startup path:
@@ -22,7 +22,8 @@ import warnings
 warnings.warn(
     "enhancements/clients/windows_client/run_ui.py is hard-disabled.  "
     "It targeted the retired legacy chat/sidebar client.  "
-    "Active Windows direction: DesktopPresenceRuntime + status_board_v2.  "
+    "Active Windows direction: DesktopPresenceRuntime + the React panel "
+    "(electron/renderer/panel/).  "
     "Authoritative startup path: python main.py  "
     "(direct advanced invocation: python unified_launcher.py)  "
     "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
@@ -36,7 +37,7 @@ raise RuntimeError(
     "which has been retired.\n"
     "Active Windows direction:\n"
     "  core/desktop_presence_runtime.py  (DesktopPresenceRuntime tri-state shell)\n"
-    "  windows_client/status_board_v2/   (projection-driven desktop status surface)\n"
+    "  electron/renderer/panel/          (projection-driven desktop surface)\n"
     "Authoritative startup path: python main.py\n"
     "Direct advanced invocation: python unified_launcher.py\n"
     "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."

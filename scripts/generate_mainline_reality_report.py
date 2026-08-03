@@ -122,7 +122,7 @@ def build_mainline_reality_report(repo_root: Path = REPO_ROOT) -> MainlineRealit
         projection_surfaces=[
             "GET /api/v1/projection/runtime",
             "GET /api/v1/projection/runtime-truth",
-            "windows_client.status_board_v2",
+            "electron.renderer.panel",
         ],
         node_count=_count_canonical_nodes(repo_root),
         completion_pct=scorecard.overall_completion_pct,

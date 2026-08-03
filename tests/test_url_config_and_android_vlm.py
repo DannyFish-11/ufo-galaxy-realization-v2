@@ -2,11 +2,13 @@
 tests/test_url_config_and_android_vlm.py
 =========================================
 Tests for:
-1. URL configuration in config_schema, config_service, config_control
+1. URL configuration in config_schema / config_service
 2. Android inference mode configuration
-3. URLConfigSurface rendering
-4. ManagementConsole rendering
-5. StatusBoardV2App --management / --set-url / --set-api-key / --set-android-inference-mode
+3. Vision handler 经 OpenClawd 多模态管线路由
+
+原 3/4/5 三项（URLConfigSurface / ManagementConsole / StatusBoardV2App CLI）针对的是
+终端状态板 windows_client/status_board_v2/，该表层随面板收敛删除，测试一并移除；
+详见文件中段的说明。
 """
 
 from __future__ import annotations
@@ -52,14 +54,6 @@ def config_service(config_store):
     from core.config_service import ConfigService
 
     return ConfigService(store=config_store)
-
-
-@pytest.fixture()
-def control_surface(config_service):
-    """Return a ConfigControlSurface with a mock hot-reload manager (disabled)."""
-    from windows_client.status_board_v2.config_control import ConfigControlSurface
-
-    return ConfigControlSurface(service=config_service, hot_reload_manager=None)
 
 
 # ===========================================================================
@@ -203,317 +197,19 @@ class TestConfigServiceValidationWarnings:
 # ===========================================================================
 # 3. ConfigControlSurface: new operations
 # ===========================================================================
-
-
-class TestConfigControlSurfaceNetworkURL:
-    def test_apply_network_url_succeeds(self, control_surface):
-        result = control_surface.apply_network_url("gateway_url", "ws://10.0.0.1:8765")
-        assert result.succeeded is True
-        assert "network.gateway_url" in result.last_applied_key
-
-    def test_apply_network_url_empty_key_fails(self, control_surface):
-        result = control_surface.apply_network_url("", "ws://10.0.0.1:8765")
-        assert result.succeeded is False
-        assert "non-empty" in result.error.lower()
-
-    def test_apply_network_url_empty_value_fails(self, control_surface):
-        result = control_surface.apply_network_url("gateway_url", "")
-        assert result.succeeded is False
-
-    def test_apply_network_url_invalid_key_fails(self, control_surface):
-        result = control_surface.apply_network_url("bogus_url", "ws://x")
-        assert result.succeeded is False
-        assert "Unknown network URL key" in result.error
-
-
-class TestConfigControlSurfaceAPIKey:
-    def test_apply_provider_api_key_succeeds(self, control_surface):
-        result = control_surface.apply_provider_api_key("openai", "sk-test-key")
-        assert result.succeeded is True
-        # Key value must not appear in feedback
-        assert "sk-test-key" not in result.last_applied_key
-        assert "[set]" in result.last_applied_key
-
-    def test_apply_provider_api_key_empty_provider_fails(self, control_surface):
-        result = control_surface.apply_provider_api_key("", "sk-key")
-        assert result.succeeded is False
-
-    def test_apply_provider_api_key_empty_key_fails(self, control_surface):
-        result = control_surface.apply_provider_api_key("openai", "")
-        assert result.succeeded is False
-
-    def test_apply_provider_api_key_invalid_provider_fails(self, control_surface):
-        result = control_surface.apply_provider_api_key("nonexistent", "sk-key")
-        assert result.succeeded is False
-
-
-class TestConfigControlSurfaceAndroidMode:
-    def test_apply_android_inference_mode_center(self, control_surface):
-        result = control_surface.apply_android_inference_mode("center")
-        assert result.succeeded is True
-        assert "center" in result.last_applied_key
-
-    def test_apply_android_inference_mode_local(self, control_surface):
-        result = control_surface.apply_android_inference_mode("local")
-        assert result.succeeded is True
-
-    def test_apply_android_inference_mode_invalid(self, control_surface):
-        result = control_surface.apply_android_inference_mode("cloud")
-        assert result.succeeded is False
-
-    def test_apply_dispatcher_routes_to_set_android_inference_mode(self, control_surface):
-        from windows_client.status_board_v2.config_control import ControlOperation
-
-        result = control_surface.apply(
-            ControlOperation.SET_ANDROID_INFERENCE_MODE,
-            mode="center",
-        )
-        assert result.succeeded is True
-
-
-class TestConfigControlSurfaceDispatcher:
-    def test_apply_set_network_url_via_dispatcher(self, control_surface):
-        from windows_client.status_board_v2.config_control import ControlOperation
-
-        result = control_surface.apply(
-            ControlOperation.SET_NETWORK_URL,
-            url_key="nats_url",
-            url_value="nats://10.0.0.1:4222",
-        )
-        assert result.succeeded is True
-
-    def test_apply_set_provider_api_key_via_dispatcher(self, control_surface):
-        from windows_client.status_board_v2.config_control import ControlOperation
-
-        result = control_surface.apply(
-            ControlOperation.SET_PROVIDER_API_KEY,
-            provider="openai",
-            api_key="sk-test",
-        )
-        assert result.succeeded is True
-
-    def test_unknown_operation_fails(self, control_surface):
-        from windows_client.status_board_v2.config_control import ControlOperation
-
-        result = control_surface.apply("bogus_op")  # type: ignore
-        assert result.succeeded is False
-
-
+# 这里曾有五组测试，全部针对终端状态板 windows_client/status_board_v2/：
+#   ConfigControlSurface（可写控制面：provider 开关 / 路由策略）
+#   URLConfigSurface、ManagementConsole（渲染）
+#   StatusBoardV2App 的 --management 开关与 CLI 参数解析
+# 该表层已随面板收敛整包删除，这些测试一并移除。
+#
+# 注意这里删掉的**不只是渲染**：ConfigControlSurface 是一个可写控制面
+# （见 core/operational_enablement_audit.py 里"status_board_v2 不是只读状态板"
+# 那一节）。它写配置走的是 core.config_service，而上面 2/3/4 三组测试正是
+# 直接对 ConfigService 断言 URL / API key / android_inference_mode 的写入与
+# 校验——也就是说**配置写入这条链路的测试覆盖没有随表层消失**，只是不再经过
+# 一个终端 UI 去间接验证。配置的唯一入口现在是 React 面板的「设置」页。
 # ===========================================================================
-# 5. URLConfigSurface rendering
-# ===========================================================================
-
-
-class TestURLConfigSurfaceRendering:
-    def test_renders_without_crash(self, config_service):
-        from windows_client.status_board_v2.url_config_surface import URLConfigSurface
-
-        surface = URLConfigSurface()
-        with patch("core.config_service.get_config_service", return_value=config_service):
-            output = surface.render()
-        assert isinstance(output, str)
-        assert len(output) > 0
-
-    def test_shows_not_set_when_urls_absent(self, config_service):
-        from windows_client.status_board_v2.url_config_surface import URLConfigSurface
-
-        surface = URLConfigSurface()
-        with patch("core.config_service.get_config_service", return_value=config_service):
-            output = surface.render()
-        assert "NOT SET" in output
-
-    def test_shows_set_url_after_configuration(self, config_service):
-        from windows_client.status_board_v2.url_config_surface import URLConfigSurface
-
-        config_service.set_network_url("gateway_url", "ws://10.0.0.1:8765")
-        surface = URLConfigSurface()
-        with patch("core.config_service.get_config_service", return_value=config_service):
-            output = surface.render()
-        assert "ws://10.0.0.1:8765" in output
-
-    def test_lists_all_url_keys(self, config_service):
-        from windows_client.status_board_v2.url_config_surface import URLConfigSurface
-
-        surface = URLConfigSurface()
-        with patch("core.config_service.get_config_service", return_value=config_service):
-            output = surface.render()
-        assert "gateway_url" in output.lower() or "Gateway URL" in output
-        assert "nats_url" in output.lower() or "NATS" in output
-        assert "ats_url" in output.lower() or "ATS" in output
-
-
-# ===========================================================================
-# 6. ManagementConsole rendering
-# ===========================================================================
-
-
-class TestManagementConsoleRendering:
-    def test_renders_without_crash(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        output = console.render({})
-        assert isinstance(output, str)
-        assert len(output) > 0
-
-    def test_contains_device_section(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        output = console.render({})
-        assert "Device" in output or "device" in output.lower()
-
-    def test_contains_task_chain_section(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        output = console.render({})
-        assert "Task" in output
-
-    def test_contains_model_section(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        output = console.render({})
-        assert "Provider" in output or "LLM" in output
-
-    def test_contains_readiness_section(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        output = console.render({})
-        assert "Readiness" in output or "readiness" in output.lower()
-
-    def test_shows_devices_from_projection(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        projection = {
-            "devices": [
-                {
-                    "device_id": "android-001",
-                    "device_type": "android",
-                    "execution_stage": "idle",
-                    "online": True,
-                }
-            ]
-        }
-        output = console.render(projection)
-        assert "android-001" in output
-
-    def test_shows_task_chains_from_projection(self):
-        from windows_client.status_board_v2.management_console import ManagementConsole
-
-        console = ManagementConsole()
-        projection = {
-            "task_chains": [
-                {
-                    "task_id": "task-abc-123",
-                    "status": "completed",
-                    "steps": [],
-                }
-            ]
-        }
-        output = console.render(projection)
-        assert "task-abc-123" in output
-
-
-# ===========================================================================
-# 7. StatusBoardV2App — management console integration
-# ===========================================================================
-
-
-class TestStatusBoardV2AppManagementFlag:
-    def test_management_false_does_not_create_console(self):
-        from windows_client.status_board_v2.app import StatusBoardV2App
-
-        app = StatusBoardV2App(show_management=False)
-        assert app._management is None
-        assert app._url_config is None
-
-    def test_management_true_creates_console(self):
-        from windows_client.status_board_v2.app import StatusBoardV2App
-
-        app = StatusBoardV2App(show_management=True)
-        assert app._management is not None
-        assert app._url_config is not None
-
-    def test_render_once_with_management_includes_url_section(self):
-        from windows_client.status_board_v2.app import StatusBoardV2App
-
-        app = StatusBoardV2App(show_management=True)
-        output = app.render_once({})
-        # Should contain URL config section header
-        assert "Network URLs" in output or "gateway_url" in output.lower()
-
-    def test_render_once_without_management_no_url_section(self):
-        from windows_client.status_board_v2.app import StatusBoardV2App
-
-        app = StatusBoardV2App(show_management=False)
-        output = app.render_once({})
-        # URL config section should not appear when management is off
-        assert "Network URLs" not in output
-
-
-class TestStatusBoardV2AppCLIParsing:
-    def test_management_flag_is_false_by_default(self):
-        from windows_client.status_board_v2.app import _build_parser
-
-        args = _build_parser().parse_args([])
-        assert args.management is False
-
-    def test_management_flag_parses(self):
-        from windows_client.status_board_v2.app import _build_parser
-
-        args = _build_parser().parse_args(["--management"])
-        assert args.management is True
-
-    def test_set_url_arg_parses(self):
-        from windows_client.status_board_v2.app import _build_parser
-
-        args = _build_parser().parse_args(["--set-url", "gateway_url=ws://10.0.0.1:8765"])
-        assert args.set_url == "gateway_url=ws://10.0.0.1:8765"
-
-    def test_set_api_key_arg_parses(self):
-        from windows_client.status_board_v2.app import _build_parser
-
-        args = _build_parser().parse_args(["--set-api-key", "openai=sk-test"])
-        assert args.set_api_key == "openai=sk-test"
-
-    def test_set_android_inference_mode_arg_parses(self):
-        from windows_client.status_board_v2.app import _build_parser
-
-        args = _build_parser().parse_args(["--set-android-inference-mode", "center"])
-        assert args.set_android_inference_mode == "center"
-
-
-class TestApplyURLArg:
-    def test_apply_url_arg_valid(self, control_surface):
-        from windows_client.status_board_v2.app import _apply_url_arg
-
-        result = _apply_url_arg(control_surface, "gateway_url=ws://10.0.0.1:8765")
-        assert result.succeeded is True
-
-    def test_apply_url_arg_no_equals(self, control_surface):
-        from windows_client.status_board_v2.app import _apply_url_arg
-
-        result = _apply_url_arg(control_surface, "no_equals_sign")
-        assert result.succeeded is False
-        assert "KEY=URL" in result.error
-
-    def test_apply_api_key_arg_valid(self, control_surface):
-        from windows_client.status_board_v2.app import _apply_api_key_arg
-
-        result = _apply_api_key_arg(control_surface, "openai=sk-test-key")
-        assert result.succeeded is True
-
-    def test_apply_api_key_arg_no_equals(self, control_surface):
-        from windows_client.status_board_v2.app import _apply_api_key_arg
-
-        result = _apply_api_key_arg(control_surface, "openai")
-        assert result.succeeded is False
-        assert "PROVIDER=KEY" in result.error
-
 
 # ===========================================================================
 # 8. Vision handler now routes through OpenClawd multimodal pipeline

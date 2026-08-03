@@ -504,63 +504,14 @@ class TestLiminalSpaceEngine:
 
 
 # ---------------------------------------------------------------------------
-# LiminalSurface tests
+# 这里曾有 TestLiminalSurface —— 测终端状态板的 LiminalSurface 适配器
+# (windows_client/status_board_v2/liminal_surface.py) 如何把阈限投影画成文字。
+# 该表层随面板收敛整包删除，这组测试一并移除。
+#
+# 被测的**引擎**没有变:本文件上面的 TestStateSpaceMapper / TestTransitionAnimator /
+# TestLiminalSpaceEngine 覆盖的 desktop_projection/ 三个模块仍在,PR-5 的核心
+# 契约(阈限空间映射的维度与过渡语义)由它们承担,不依赖任何渲染层。
 # ---------------------------------------------------------------------------
-
-
-class TestLiminalSurface:
-    """Tests for the Status Board V2 LiminalSurface adapter."""
-
-    def setup_method(self):
-        from windows_client.status_board_v2.liminal_surface import LiminalSurface
-
-        self.surface = LiminalSurface()
-
-    def test_render_returns_string(self):
-        result = self.surface.render(_LIMINAL_SAMPLE)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_render_contains_liminal_label(self):
-        result = self.surface.render(_LIMINAL_SAMPLE)
-        assert "Liminal" in result
-
-    # PR-55:默认渲染改为三部制阈限空间地图(本地链/跨设备链/沙箱推演
-    # ——三类唯一允许的内容),Depth/Topology/Ambient 维度条退居 legacy
-    # 兜底(_render_legacy,仅当三部制映射不可用)。"默认渲染含维度条"
-    # 是三部制落地前的退役契约。
-
-    def test_render_contains_local_chain_panel(self):
-        result = self.surface.render(_LIMINAL_SAMPLE)
-        assert "Local Execution Chain" in result
-
-    def test_render_contains_speculative_panel(self):
-        result = self.surface.render(_LIMINAL_SAMPLE)
-        assert "Speculative" in result
-
-    def test_legacy_fallback_still_renders_dimension_bars(self):
-        """legacy 兜底路径保留维度条(仅在三部制映射不可用时使用)。"""
-        from desktop_projection import StateSpaceMapper
-
-        liminal = StateSpaceMapper().map(_LIMINAL_SAMPLE)
-        result = self.surface._render_legacy(liminal)
-        assert "Depth" in result
-        assert "Topology" in result
-        assert "Ambient" in result
-
-    def test_render_minimal_projection(self):
-        result = self.surface.render(_SILENT_MINIMAL)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_render_manifest_projection(self):
-        result = self.surface.render(_MANIFEST_SAMPLE)
-        assert "manifest" in result
-
-    def test_render_does_not_raise_on_empty_dict(self):
-        """An empty dict should not raise — graceful degradation."""
-        result = self.surface.render({})
-        assert isinstance(result, str)
 
 
 # ---------------------------------------------------------------------------

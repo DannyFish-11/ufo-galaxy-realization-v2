@@ -424,13 +424,13 @@ def _collect_legacy_zones() -> List[LegacyZoneEntry]:
             LegacyZoneEntry(
                 path="dashboard.backend.main",
                 status="LEGACY_UI",
-                superseded_by="windows_client.status_board_v2",
+                superseded_by="electron.renderer.panel",
                 notes="WebUI management panel — legacy; no longer defines system structure.",
             ),
             LegacyZoneEntry(
                 path="enhancements.clients.windows_client",
                 status="LEGACY_SHELL",
-                superseded_by="windows_client.status_board_v2",
+                superseded_by="electron.renderer.panel",
                 notes="Host-specific legacy shell — demoted; consume projection only.",
             ),
         ])

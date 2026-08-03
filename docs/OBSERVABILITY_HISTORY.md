@@ -456,4 +456,4 @@ The history recorder can be used at any level of the pipeline:
 - [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md) — PR-11
 - [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) — PR-10
 - [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) — PR-9
-- [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) — overall status board V2 design
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — overall status board V2 design

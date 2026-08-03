@@ -166,21 +166,32 @@ V2_RUNTIME_HOT_RELOADABLE_CONFIG: List[str] = [
 """
 Config keys that can be changed without restarting the V2 process.
 After a ConfigService write, HotReloadConfigManager propagates the change to subscribers.
-Source: windows_client/status_board_v2/config_control.py ConfigControlSurface._apply_change()
-        → core/config_service.py ConfigService.set_provider_enabled() / set_routing_policy()
+Source: core/config_service.py ConfigService.set_toggle() / set_native_mm_policy()
         → core/config_hot_reload.py HotReloadConfigManager (file watcher + subscriber notify).
+
+⚠️  这两个写方法【当前没有生产调用方】。它们唯一的生产入口是终端状态板的
+    ConfigControlSurface（windows_client/status_board_v2/config_control.py），
+    该表层已随面板收敛删除；React 面板走的是另一条路（POST /api/config →
+    CONFIG_SCHEMA → .env / secrets.env），而 CONFIG_SCHEMA 里【没有】
+    provider 开关键，也【没有】native_mm_policy 键——两条链路各写各的存储，
+    前者写 runtime/config.json，后者写环境变量文件。
+    详见下面 SECTION 3 的 DESKTOP_BOARD_IS_CONTROL_SURFACE。
 """
 
 V2_CONFIG_SETUP_PATHS: List[str] = [
     "python main.py --setup  → setup_wizard.py (interactive CLI wizard)",
     "POST /api/v1/vault/credentials  → core/routes/vault.py (API; auth-gated)",
     "edit .env or runtime/secrets.env directly  (manual)",
-    "status_board_v2 config_control surface  → provider toggle / routing policy only",
+    "React 面板「设置」页 → POST /api/config  → CONFIG_SCHEMA 覆盖的 155 个键",
 ]
 """
 All paths by which an operator can configure the V2 system.
 Sources: main.py --setup shortcut; core/routes/vault.py; core/unified_config.py;
-         windows_client/status_board_v2/config_control.py.
+         core/routes/config.py (POST /api/config，React 面板的写入口).
+
+⚠️  原先还有一条 "status_board_v2 config_control surface → provider toggle /
+    routing policy only"。该表层已删除，且这两项**不在** CONFIG_SCHEMA 里，
+    所以它们现在没有任何操作入口——不是换了个地方，是暂时没有了。
 """
 
 
@@ -299,8 +310,9 @@ Failures are logged and local config is preserved unchanged.
 # ===========================================================================
 #
 # Source files examined:
-#   windows_client/status_board_v2/__init__.py      — package doc: lists all surface layers
-#   windows_client/status_board_v2/config_control.py — ConfigControlSurface (writable control)
+#   electron/renderer/panel/src/                    — React 面板（唯一表层）
+#   core/routes/config.py                           — POST /api/config（面板的写入口）
+#   core/config_service.py                          — ConfigService（另一套写入口，见下）
 #   core/operator_surface.py                        — OperatorSurface (read-only projection)
 #   core/desktop_consumption_adapter.py             — flat view-model adapter
 #   core/desktop_presence_runtime.py               — tri-state lifecycle
@@ -309,7 +321,13 @@ Failures are logged and local config is preserved unchanged.
 
 
 class DesktopBoardCapability(str, Enum):
-    """What the status_board_v2 package is capable of."""
+    """桌面表层曾经具备的能力集合。
+
+    ⚠️  这是一份**历史 + 现状**记录，不是现状清单。TOPOLOGY_INSPECT /
+    DIAGNOSTIC_INSPECT / TASK_ROUTE_INSPECT 与两项 CONFIG_WRITE_* 来自已删除的
+    终端状态板；React 面板目前只覆盖 STATUS_READ_ONLY。保留枚举是为了让这份
+    落差有名字可指，而不是把它从记录里抹掉。
+    """
 
     STATUS_READ_ONLY = "read_only_status_projection"
     CONFIG_WRITE_PROVIDER = "config_write_provider_enable_disable"
@@ -319,25 +337,37 @@ class DesktopBoardCapability(str, Enum):
     TASK_ROUTE_INSPECT = "task_route_and_executor_inspect"
 
 
-DESKTOP_BOARD_IS_CONTROL_SURFACE: bool = True
+DESKTOP_BOARD_IS_CONTROL_SURFACE: bool = False
 """
-The status_board_v2 is NOT a read-only status panel.
-It includes ConfigControlSurface which can:
-  - Toggle provider enabled/disabled (ControlOperation.TOGGLE_PROVIDER)
-  - Set routing policy (ControlOperation.SET_ROUTING_POLICY: strict|prefer|allow_fallback)
-All writes flow through: ConfigControlSurface → ConfigService → ConfigStore → runtime/config.json
-Hot-reload is attempted after each successful write.
-Source: windows_client/status_board_v2/config_control.py
-        class ConfigControlSurface, class ControlOperation.
+桌面表层【当前】是只读的 —— 这是面板收敛的一项实际代价，如实记在这里。
+
+曾经不是：终端状态板 windows_client/status_board_v2/ 带 ConfigControlSurface，
+可以切 provider 开关、设 native_mm_policy，写入链路是
+    ConfigControlSurface → ConfigService → ConfigStore → runtime/config.json
+并在每次写成功后尝试热重载。该表层已随面板收敛整包删除。
+
+接替它的 React 面板走的是**另一条**配置链路：
+    面板「设置」页 → POST /api/config → CONFIG_SCHEMA → .env / runtime/secrets.env
+
+两条链路写的是不同的存储，且 CONFIG_SCHEMA 的 155 个键里既没有 provider 开关键、
+也没有 native_mm_policy 键。所以这两项写能力**没有换地方，是暂时没有了**。
+
+由此产生的直接后果（scripts/check_wiring.py 已如实报出）：
+``ConfigService`` 的 set_toggle / set_native_mm_policy / set_provider_api_key /
+set_network_url / set_android_inference_mode 五个写方法，在生产代码里失去了
+唯一调用方。方法本身还在、单元测试也还在，但没有任何运行期入口能触达它们。
+
+要消掉这个落差，正确做法是把这两套并行的配置写入链路合成一套（而不是给
+已删表层再造一个替身）。在那之前，这个常量必须是 False —— 写成 True 会让
+这份审计谎报一项系统并不具备的能力。
 """
 
-DESKTOP_BOARD_WRITE_OPERATIONS: List[str] = [
-    "toggle_provider: enable/disable any of the 7 recognized LLM providers",
-    "set_routing_policy: strict | prefer | allow_fallback",
-]
+DESKTOP_BOARD_WRITE_OPERATIONS: List[str] = []
 """
-The complete, bounded set of write operations the status board can perform.
-Source: windows_client/status_board_v2/config_control.py ControlOperation enum.
+桌面表层当前可执行的写操作：空。
+
+原有两项（toggle_provider、set_routing_policy）随 ConfigControlSurface 删除，
+见上面 DESKTOP_BOARD_IS_CONTROL_SURFACE 的说明。
 """
 
 DESKTOP_BOARD_READ_SURFACES: List[str] = [
@@ -354,8 +384,14 @@ DESKTOP_BOARD_READ_SURFACES: List[str] = [
     "TopologyHistory    — topology history (PR-14)",
 ]
 """
-All read-only projection surfaces in the status board.
-Source: windows_client/status_board_v2/__init__.py package docstring.
+曾经存在于终端状态板的全部只读投影面。
+
+⚠️  这份清单是**历史记录**：windows_client/status_board_v2/ 已随面板收敛删除。
+    React 面板目前覆盖其中的 Phase / Domain / Device / Metrics（对话、维态、能力、
+    模型四个 tab + PresencePanel），而 Liminal / Manifest / Return / Adapter /
+    TopologyInspector / TopologyHistory 六项**没有对应物**。
+    保留清单是为了让这个落差有据可查。
+Source: 原 windows_client/status_board_v2/__init__.py package docstring。
 """
 
 DESKTOP_BOARD_WRITE_PERSISTENCE: bool = True
@@ -366,22 +402,25 @@ which are loaded at next startup by UnifiedConfig._load_from_config_store().
 Source: core/config_store.py ConfigStore.write_config() / write_secret().
 """
 
-DESKTOP_BOARD_AFFECTS_RUNTIME: bool = True
+DESKTOP_BOARD_AFFECTS_RUNTIME: bool = False
 """
-Writes from the control surface DO affect runtime behavior immediately.
-ConfigControlSurface._apply_change() calls HotReloadConfigManager after a successful write
-so that runtime subscribers (e.g., multi_llm_router) receive the new config without restart.
-Source: windows_client/status_board_v2/config_control.py ConfigControlSurface._apply_change()
-        docstring: 'Hot-reload — after a successful write, the surface attempts to trigger
-        the existing HotReloadConfigManager to immediately propagate the change to runtime subscribers.'
+桌面表层当前没有任何写操作，因此谈不上"写入是否立即影响运行期"。
+
+曾经为 True：ConfigControlSurface._apply_change() 在写成功后调
+HotReloadConfigManager，让 multi_llm_router 等订阅方免重启拿到新配置。
+该表层已删除；热重载机制本身仍在 core/config_hot_reload.py，只是暂时没有
+调用它的桌面写入口。见 DESKTOP_BOARD_IS_CONTROL_SURFACE。
 """
 
 DESKTOP_BOARD_VERDICT: str = (
-    "STATUS_PLUS_BOUNDED_CONTROL — the status board is more than a read-only panel: "
-    "it provides a real, write-through, hot-reload-enabled control surface for the "
-    "provider and routing dimensions of the config. It is NOT a full operator console "
-    "(cannot set API keys, cannot modify system-mode env vars, cannot dispatch tasks). "
-    "For a mature operator, it fills the day-to-day config surface requirement."
+    "STATUS_READ_ONLY_WITH_ENV_CONFIG — 面板收敛后，桌面表层对 provider 与 routing "
+    "两个维度不再有写通道。原判定是 STATUS_PLUS_BOUNDED_CONTROL，依据是终端状态板的 "
+    "ConfigControlSurface（write-through + 热重载）；该表层已删除。"
+    "接替的 React 面板能写 CONFIG_SCHEMA 覆盖的 155 个键（走 POST /api/config → "
+    ".env / secrets.env），能设 API key，但 provider 开关与 native_mm_policy 不在其中。"
+    "净结果：日常配置面【部分】被满足，provider/routing 维度出现空缺，"
+    "且 ConfigService 那五个写方法失去了唯一生产调用方。"
+    "要补回来的正确做法是合并两套并行的配置写入链路，而不是给已删表层造替身。"
 )
 
 
@@ -439,14 +478,14 @@ Source: core/desktop_presence_runtime.py TriState enum docstring + handle_reques
 """
 
 TRI_STATE_UI_CONTROL_SURFACE: str = (
-    "Status board V2 PhaseSurface reads the current tri-state phase from the canonical "
-    "projection endpoint GET /api/v1/projection/runtime-truth. "
-    "The status board DISPLAYS but does NOT directly set the tri-state — the lifecycle "
-    "is driven by the runtime shell and subject core, not by operator commands."
+    "React 面板从权威投影端点读当前三态：WS /ws/desktop-presence（实时，随每次请求"
+    "更新）优先，未连接时回落 GET /api/v1/panel/feed。"
+    "面板只【显示】三态，不直接设置它——生命周期由运行时外壳与主体内核驱动，"
+    "不由操作者命令驱动。这条不变量与渲染层是谁无关，终端状态板删除后依然成立。"
 )
 """
-Source: windows_client/status_board_v2/phase_surface.py (display only)
-        and core/desktop_presence_runtime.py (authoritative driver).
+Source: electron/renderer/panel/src/hooks/usePhase.ts、App.tsx（只显示）
+        与 core/desktop_presence_runtime.py（权威驱动方）。
 """
 
 
@@ -680,13 +719,15 @@ V2_RUNBOOK: List[RunbookStep] = [
     ),
     RunbookStep(
         seq=5,
-        action="(Optional) Access status_board_v2 to toggle providers or routing policy",
+        action="(Optional) 在 React 面板「设置」页改配置（POST /api/config）",
         required=False,
         rebuild_needed=False,
         notes=(
-            "Provider toggles and routing policy can be changed at runtime via the "
-            "desktop status board without restarting. "
-            "Source: windows_client/status_board_v2/config_control.py."
+            "面板可改 CONFIG_SCHEMA 覆盖的 155 个键。"
+            "⚠️  provider 开关与 native_mm_policy 【不在】其中：这两项原先只有"
+            "终端状态板的 ConfigControlSurface 能改，该表层已删除，目前没有"
+            "运行期入口。见 DESKTOP_BOARD_IS_CONTROL_SURFACE。"
+            "Source: core/routes/config.py POST /api/config。"
         ),
     ),
 ]

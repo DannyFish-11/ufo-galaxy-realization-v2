@@ -131,62 +131,14 @@ _MINIMAL_PROJECTION: Dict[str, Any] = {
 class TestBoundaryDeclarations:
     """The module docstrings and docs must declare the display boundary."""
 
-    def test_liminal_surface_docstring_mentions_spatial_field(self) -> None:
-        """LiminalSurface module docstring must identify it as a spatial field."""
-        from windows_client.status_board_v2 import liminal_surface
-
-        doc = liminal_surface.__doc__ or ""
-        assert (
-            "spatial" in doc.lower()
-        ), "liminal_surface module docstring must identify it as a spatial execution field"
-
-    def test_liminal_surface_docstring_mentions_boundary(self) -> None:
-        """LiminalSurface module docstring must reference the display boundary."""
-        from windows_client.status_board_v2 import liminal_surface
-
-        doc = liminal_surface.__doc__ or ""
-        # The docstring must mention what is prohibited or mention the boundary doc
-        assert (
-            "DESKTOP_DISPLAY_BOUNDARIES" in doc
-            or "not a second status board" in doc.lower()
-            or "must not" in doc.lower()
-        ), "liminal_surface module docstring must reference display boundary constraints"
-
-    def test_liminal_surface_docstring_prohibits_provider_panels(self) -> None:
-        """LiminalSurface module docstring must explicitly prohibit provider/metrics panels."""
-        from windows_client.status_board_v2 import liminal_surface
-
-        doc = liminal_surface.__doc__ or ""
-        assert any(
-            kw in doc.lower() for kw in ("provider", "metrics", "dashboard", "not carry", "must not")
-        ), "liminal_surface module docstring must prohibit provider/metrics/dashboard content"
-
-    def test_manifest_surface_docstring_mentions_boundary(self) -> None:
-        """ManifestSurface module docstring must reference the display boundary."""
-        from windows_client.status_board_v2 import manifest_surface
-
-        doc = manifest_surface.__doc__ or ""
-        assert (
-            "DESKTOP_DISPLAY_BOUNDARIES" in doc
-            or "not a second status board" in doc.lower()
-            or "prohibited" in doc.lower()
-        ), "manifest_surface module docstring must reference display boundary constraints"
-
-    def test_manifest_surface_docstring_prohibits_provider_panels(self) -> None:
-        """ManifestSurface module docstring must explicitly prohibit provider/metrics panels."""
-        from windows_client.status_board_v2 import manifest_surface
-
-        doc = manifest_surface.__doc__ or ""
-        assert any(
-            kw in doc.lower() for kw in ("provider", "metrics", "dashboard", "not carry", "must not", "prohibited")
-        ), "manifest_surface module docstring must prohibit provider/metrics/dashboard content"
-
-    def test_active_surface_md_contains_boundary_section(self) -> None:
-        """ACTIVE_SURFACE.md must contain a display boundary section."""
-        md_path = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md")
-        assert md_path.exists(), "ACTIVE_SURFACE.md must exist"
-        content = md_path.read_text()
-        assert "boundary" in content.lower(), "ACTIVE_SURFACE.md must contain a display boundary section"
+    # 这里曾有 6 条：liminal_surface / manifest_surface 两个模块的 docstring 必须
+    # 声明显示边界，以及 ACTIVE_SURFACE.md 必须含边界章节。三者都属于终端状态板
+    # windows_client/status_board_v2/，随面板收敛整包删除。
+    #
+    # 边界本身没有取消：它现在由下面的 canonical doc 断言 + 第 4、5 组的**契约级**
+    # 断言承担（DesktopStatusProjection 的子契约划分、LiminalSpaceState 字段与状态板
+    # 信息字段不重叠）。契约级断言本来就比"某个模块的 docstring 里写了这句话"更强，
+    # 也不依赖任何具体渲染层。
 
     def test_canonical_boundary_doc_exists(self) -> None:
         """docs/DESKTOP_DISPLAY_BOUNDARIES.md must exist as the canonical boundary doc."""
@@ -227,13 +179,8 @@ class TestBoundaryDeclarations:
             "RuntimeProjection" in content or "DesktopStatusProjection" in content
         ), "Boundary doc must describe how projection contracts relate to the two layers"
 
-    def test_status_board_v2_doc_references_boundary_doc(self) -> None:
-        """STATUS_BOARD_V2.md must reference the canonical boundary doc."""
-        doc_path = _repo_file("docs/STATUS_BOARD_V2.md")
-        content = doc_path.read_text()
-        assert (
-            "DESKTOP_DISPLAY_BOUNDARIES" in content
-        ), "STATUS_BOARD_V2.md must reference DESKTOP_DISPLAY_BOUNDARIES.md"
+    # 原有一条钉 docs/STATUS_BOARD_V2.md 引用边界文档。该文档随终端状态板删除；
+    # 边界文档 docs/DESKTOP_DISPLAY_BOUNDARIES.md 本身仍在，由上面几条断言守着。
 
 
 # ---------------------------------------------------------------------------
@@ -260,144 +207,12 @@ _LIMINAL_FORBIDDEN_KEYWORDS = [
 ]
 
 
-class TestLiminalSurfaceRendering:
-    """LiminalSurface must render only spatial-field content."""
-
-    def _render(self, projection: Dict[str, Any]) -> str:
-        from windows_client.status_board_v2.liminal_surface import LiminalSurface
-
-        surf = LiminalSurface()
-        return surf.render(projection)
-
-    def test_render_returns_nonempty_string(self) -> None:
-        rendered = self._render(_SAMPLE_PROJECTION)
-        assert isinstance(rendered, str) and len(rendered) > 0
-
-    def test_render_contains_canonical_label_local_chain(self) -> None:
-        """Liminal surface canonical rendering must show Local Execution Chain panel."""
-        rendered = self._render(_SAMPLE_PROJECTION)
-        assert (
-            "Local Execution Chain" in rendered
-        ), "Liminal surface canonical rendering must show Local Execution Chain"
-
-    def test_render_contains_canonical_label_cross_device_chain(self) -> None:
-        """Liminal surface canonical rendering must show Cross-Device Execution Chain panel."""
-        rendered = self._render(_SAMPLE_PROJECTION)
-        assert (
-            "Cross-Device Execution Chain" in rendered
-        ), "Liminal surface canonical rendering must show Cross-Device Execution Chain"
-
-    def test_render_contains_canonical_label_sandbox(self) -> None:
-        """Liminal surface canonical rendering must show Sandbox / Speculative panel."""
-        rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Sandbox" in rendered, "Liminal surface canonical rendering must show Sandbox / Speculative panel"
-
-    def test_render_does_not_contain_provider_list_header(self) -> None:
-        """Liminal surface must not render provider-list-style headers."""
-        rendered = self._render(_SAMPLE_PROJECTION)
-        # Strip ANSI codes for plain-text matching
-        import re
-
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
-        forbidden = ["Provider List", "Provider Cards", "Model Panel", "OneAPI Status"]
-        for kw in forbidden:
-            assert kw not in plain, f"Liminal surface must not contain '{kw}' — that belongs to the status board"
-
-    def test_render_does_not_contain_dashboard_keywords(self) -> None:
-        """Liminal surface must not render dashboard-style content."""
-        rendered = self._render(_SAMPLE_PROJECTION)
-        import re
-
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
-        forbidden = ["Dashboard", "Metrics Board", "Status Panel"]
-        for kw in forbidden:
-            assert kw not in plain, f"Liminal surface must not contain '{kw}' — that belongs to the status board"
-
-    def test_render_handles_minimal_projection(self) -> None:
-        """Liminal surface must degrade gracefully with a minimal (silent) projection."""
-        rendered = self._render(_MINIMAL_PROJECTION)
-        assert isinstance(rendered, str) and len(rendered) > 0
-
-    def test_render_handles_manifest_projection(self) -> None:
-        """Liminal surface must render without errors for manifest-phase projections."""
-        rendered = self._render(_MANIFEST_PROJECTION)
-        assert isinstance(rendered, str) and len(rendered) > 0
-
-    def test_liminal_surface_class_docstring_mentions_spatial(self) -> None:
-        """LiminalSurface class docstring must mention spatial or execution field."""
-        from windows_client.status_board_v2.liminal_surface import LiminalSurface
-
-        doc = LiminalSurface.__doc__ or ""
-        assert any(
-            kw in doc.lower() for kw in ("spatial", "field", "execution")
-        ), "LiminalSurface class docstring must describe its spatial / execution-field nature"
+# LiminalSurface / ManifestSurface 的渲染测试（原第 2、3 组）已随这两个终端
+# 渲染层删除。它们断言的"阈限面只画空间场、显现面只画执行上下文，两边都不许
+# 出现 provider / metrics / dashboard 内容"这条边界，由下面第 4、5 组在契约层
+# 继续保障。
 
 
-# ---------------------------------------------------------------------------
-# 3. ManifestSurface rendering — execution context only
-# ---------------------------------------------------------------------------
-
-_MANIFEST_EXECUTION_LABELS = ["Phase", "Stage", "Focus", "Primary"]
-_MANIFEST_FORBIDDEN_KEYWORDS = [
-    "Provider List",
-    "Provider Cards",
-    "Model Panel",
-    "Dashboard",
-    "Metrics Board",
-]
-
-
-class TestManifestSurfaceRendering:
-    """ManifestSurface must render only execution-context content."""
-
-    def _render(self, projection: Dict[str, Any]) -> str:
-        from windows_client.status_board_v2.manifest_surface import ManifestSurface
-
-        surf = ManifestSurface()
-        return surf.render(projection)
-
-    def test_render_returns_nonempty_string(self) -> None:
-        rendered = self._render(_SAMPLE_PROJECTION)
-        assert isinstance(rendered, str) and len(rendered) > 0
-
-    def test_render_contains_execution_label_phase(self) -> None:
-        rendered = self._render(_SAMPLE_PROJECTION)
-        import re
-
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
-        assert "Phase" in plain, "Manifest surface must show execution phase label"
-
-    def test_render_contains_execution_label_focus(self) -> None:
-        rendered = self._render(_MANIFEST_PROJECTION)
-        import re
-
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
-        assert "Focus" in plain, "Manifest surface must show focus intensity label"
-
-    def test_render_does_not_contain_provider_list_keywords(self) -> None:
-        """ManifestSurface must not render provider-list-style content."""
-        rendered = self._render(_MANIFEST_PROJECTION)
-        import re
-
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
-        for kw in _MANIFEST_FORBIDDEN_KEYWORDS:
-            assert kw not in plain, f"Manifest surface must not contain '{kw}' — that belongs to the status board"
-
-    def test_render_handles_minimal_projection(self) -> None:
-        rendered = self._render(_MINIMAL_PROJECTION)
-        assert isinstance(rendered, str) and len(rendered) > 0
-
-    def test_manifest_surface_class_docstring_mentions_execution_context(self) -> None:
-        from windows_client.status_board_v2.manifest_surface import ManifestSurface
-
-        doc = ManifestSurface.__doc__ or ""
-        assert any(
-            kw in doc.lower() for kw in ("execution", "manifest", "field")
-        ), "ManifestSurface class docstring must describe its execution-context nature"
-
-
-# ---------------------------------------------------------------------------
-# 4. DesktopStatusProjection contract — covers right-side board content classes
 # ---------------------------------------------------------------------------
 
 
@@ -545,35 +360,9 @@ class TestSpatialFieldSeparation:
 # ---------------------------------------------------------------------------
 # 6. Right-side board surfaces do not import spatial-field modules as primary
 # ---------------------------------------------------------------------------
-
-_STATUS_BOARD_SURFACES = [
-    "windows_client/status_board_v2/topology_surface.py",
-    "windows_client/status_board_v2/metrics_surface.py",
-    "windows_client/status_board_v2/device_surface.py",
-    "windows_client/status_board_v2/phase_surface.py",
-    "windows_client/status_board_v2/domain_surface.py",
-]
-
-_SPATIAL_ONLY_IMPORTS = ["StateSpaceMapper", "LiminalSpaceEngine"]
-
-
-class TestStatusBoardSurfacesDoNotImportSpatialModules:
-    """Right-side board surfaces must not import spatial-field-only modules at module level."""
-
-    @pytest.mark.parametrize("surface_rel_path", _STATUS_BOARD_SURFACES)
-    def test_surface_does_not_import_state_space_mapper_at_module_level(self, surface_rel_path: str) -> None:
-        """Status board surface source must not import StateSpaceMapper at module level."""
-        path = _repo_file(surface_rel_path)
-        if not path.exists():
-            pytest.skip(f"{surface_rel_path} does not exist")
-        source = path.read_text()
-        # Check for top-level (non-deferred) imports of spatial modules.
-        # Deferred/local imports inside render() are acceptable as a compatibility
-        # pattern, but module-level imports would blur the boundary.
-        lines = source.splitlines()
-        top_level_import_lines = [ln for ln in lines if ln.startswith("import ") or ln.startswith("from ")]
-        for imp_line in top_level_import_lines:
-            for kw in _SPATIAL_ONLY_IMPORTS:
-                assert kw not in imp_line, (
-                    f"{surface_rel_path} must not import {kw} at module level — " f"that is a liminal-space concern"
-                )
+# 这里曾有 TestStatusBoardSurfacesDoNotImportSpatialModules —— 逐个检查状态板
+# 各 surface 源码不得在模块顶层 import StateSpaceMapper / LiminalSpaceEngine。
+#
+# 它必须删除而不是留着：那组测试对不存在的路径调用 pytest.skip()，表层删除后
+# 它会**全部转为 skip 而非失败**，变成一组永远绿、永远什么都不测的空转测试
+# —— 比没有这组测试更糟，因为它看起来还在守。

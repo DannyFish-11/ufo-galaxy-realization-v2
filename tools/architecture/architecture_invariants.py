@@ -102,7 +102,7 @@ Usage::
         authority_metadata={"role": "subject_decision_authority"},
         surface_metadata=[
             {"surface_id": "dashboard.backend.main", "role": "legacy_ui"},
-            {"surface_id": "windows_client.status_board_v2", "role": "projection_driven"},
+            {"surface_id": "electron.renderer.panel", "role": "projection_driven"},
         ],
         projection_metadata={"is_outward_truth": True, "source": "projection"},
         addon_registry_snapshot=[

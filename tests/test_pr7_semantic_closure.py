@@ -219,16 +219,10 @@ class TestLegacyResidueIsolation:
         sb_path = _repo_file("windows_client/status_board.py")
         assert not sb_path.exists(), "windows_client/status_board.py 已退役拆除,不应被重新引入"
 
-    def test_active_surface_md_references_semantic_closure_doc(self) -> None:
-        content = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md").read_text()
-        assert (
-            "DESKTOP_SEMANTIC_CLOSURE" in content
-        ), "ACTIVE_SURFACE.md must reference docs/DESKTOP_SEMANTIC_CLOSURE.md"
-
-    def test_active_surface_md_lists_all_three_states(self) -> None:
-        content = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md").read_text().lower()
-        for state in ("silent", "liminal", "manifest"):
-            assert state in content, f"ACTIVE_SURFACE.md must reference the '{state}' tri-state value"
+    # 这里曾有两条读 windows_client/status_board_v2/ACTIVE_SURFACE.md 的测试
+    # （必须引用 DESKTOP_SEMANTIC_CLOSURE.md、必须列出三态）。该文件随终端状态板
+    # 整包删除。三态语义本身由上面 TestTriStateSemanticInvariants 直接对
+    # core 侧断言，不依赖任何表层的说明文件。
 
 
 # ---------------------------------------------------------------------------
@@ -258,40 +252,15 @@ class TestStatisticsOwnership:
             "DESKTOP_DISPLAY_BOUNDARIES" in content
         ), "STATUS_AND_STATISTICS_OWNERSHIP.md must cross-reference DESKTOP_DISPLAY_BOUNDARIES.md"
 
-    def test_status_board_v2_doc_references_statistics_ownership(self) -> None:
-        content = _repo_file("docs/STATUS_BOARD_V2.md").read_text()
-        assert (
-            "STATUS_AND_STATISTICS_OWNERSHIP" in content
-        ), "STATUS_BOARD_V2.md must cross-reference STATUS_AND_STATISTICS_OWNERSHIP.md"
+    # 原有一条钉 docs/STATUS_BOARD_V2.md 交叉引用统计所有权文档。该文档随
+    # windows_client/status_board_v2/ 一并删除。上面那条（STATUS_AND_STATISTICS_
+    # OWNERSHIP.md 必须交叉引用边界文档）仍在，统计所有权的说明链没有断。
 
-    def test_liminal_surface_does_not_render_routing_stats(self) -> None:
-        """LiminalSurface render must not show routing topology keywords."""
-        import re
-
-        from windows_client.status_board_v2.liminal_surface import LiminalSurface
-
-        projection: Dict[str, Any] = {
-            "tri_state_phase": "liminal",
-            "runtime_domain": "local",
-            "presence_intensity": 0.6,
-            "coherence": 0.75,
-            "collapse_tendency": 0.3,
-            "retreat_tendency": 0.1,
-            "primary_model_id": "gpt-4o",
-            "support_model_ids": ["claude-3"],
-            "active_weights": {"gpt-4o": 0.9},
-            "route_reason": "native preferred",
-            "active_device_ids": ["desktop-win"],
-            "execution_stage": "planning",
-            "current_task_summary": "test",
-            "timestamp": 1711533600.0,
-        }
-        surf = LiminalSurface()
-        rendered = surf.render(projection)
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
-        forbidden = ["Provider List", "OneAPI Status", "Metrics Board", "Weight Bar"]
-        for kw in forbidden:
-            assert kw not in plain, f"LiminalSurface must not render routing stat keyword '{kw}'"
+    # 这里曾有 test_liminal_surface_does_not_render_routing_stats —— 断言终端
+    # 状态板的 LiminalSurface 不得把路由拓扑统计画进阈限面。渲染层已删除。
+    #
+    # "统计归属"这条所有权约束没有丢：本类其余测试断言的是统计由 core 侧的
+    # summary 拥有者产出，那才是所有权的所在地；渲染层只是它的一个消费者。
 
 
 # ---------------------------------------------------------------------------
@@ -318,11 +287,9 @@ class TestConfigurationEntrySemantics:
             "secret" in content or "api_key" in content
         ), "CONFIGURATION_ENTRY_UNIFICATION.md must address secrets / API key placement"
 
-    def test_active_surface_md_references_configuration_entry_doc(self) -> None:
-        content = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md").read_text()
-        assert (
-            "CONFIGURATION_ENTRY_UNIFICATION" in content
-        ), "ACTIVE_SURFACE.md must reference CONFIGURATION_ENTRY_UNIFICATION.md"
+    # 原 test_active_surface_md_references_configuration_entry_doc 读的
+    # ACTIVE_SURFACE.md 随终端状态板删除；配置入口统一的约束由下面这条
+    # 与 docs/CONFIGURATION_ENTRY_UNIFICATION.md 自身的存在性断言承担。
 
     def test_config_governance_doc_exists(self) -> None:
         """The pre-existing CONFIG_GOVERNANCE.md must still exist."""

@@ -39,15 +39,15 @@ Validates:
  29.  is_active_runtime_directory("contracts") returns True.
  30.  is_active_runtime_directory("galaxy_gateway") returns True.
  31.  is_active_runtime_directory("desktop_projection") returns True.
- 32.  is_active_runtime_directory("windows_client/status_board_v2") returns True.
+ 32.  is_active_runtime_directory("electron/renderer/panel") returns True.
  33.  is_active_runtime_directory("windows_client/autonomy") returns True.
  34.  is_legacy_directory("dashboard") returns True.
  35.  is_legacy_directory("windows_client") returns True.
  36.  is_legacy_directory("enhancements") returns True.
- 37.  is_active_desktop_status_directory("windows_client/status_board_v2") returns True.
+ 37.  is_active_desktop_status_directory("electron/renderer/panel") returns True.
  38.  is_active_desktop_status_directory("dashboard") returns False.
  39.  get_layout_zone("core") returns LayoutZone.CORE_RUNTIME.
- 40.  get_layout_zone("windows_client/status_board_v2") returns LayoutZone.DESKTOP_STATUS.
+ 40.  get_layout_zone("electron/renderer/panel") returns LayoutZone.DESKTOP_STATUS.
  41.  get_layout_zone("dashboard") returns LayoutZone.LEGACY.
  42.  get_layout_zone("docs") returns LayoutZone.INFRASTRUCTURE.
  43.  build_repo_layout_summary() returns a dict.
@@ -62,7 +62,7 @@ Validates:
  52.  REPO_LAYOUT_REGISTRY contains 'core' key.
  53.  REPO_LAYOUT_REGISTRY contains 'launcher' key.
  54.  REPO_LAYOUT_REGISTRY contains 'dashboard' key.
- 55.  REPO_LAYOUT_REGISTRY contains 'windows_client/status_board_v2' key.
+ 55.  REPO_LAYOUT_REGISTRY contains 'electron/renderer/panel' key.
  56.  REPO_LAYOUT_REGISTRY contains 'enhancements' key.
  57.  docs/REPO_LAYOUT.md exists.
  58.  docs/REPO_LAYOUT.md contains 'active' (case-insensitive).
@@ -330,8 +330,8 @@ class TestActiveRuntimeDirectories(unittest.TestCase):
     def test_31_desktop_projection_is_active(self):
         self.assertTrue(self._is_active("desktop_projection"))
 
-    def test_32_status_board_v2_is_active(self):
-        self.assertTrue(self._is_active("windows_client/status_board_v2"))
+    def test_32_react_panel_is_active(self):
+        self.assertTrue(self._is_active("electron/renderer/panel"))
 
     def test_33_autonomy_is_active(self):
         self.assertTrue(self._is_active("windows_client/autonomy"))
@@ -353,9 +353,9 @@ class TestLegacyDirectories(unittest.TestCase):
     def test_36_enhancements_is_legacy(self):
         self.assertTrue(self._is_legacy("enhancements"))
 
-    def test_37_status_board_v2_is_active_desktop_status(self):
+    def test_37_react_panel_is_active_desktop_status(self):
         mod = _import_registry()
-        self.assertTrue(mod.is_active_desktop_status_directory("windows_client/status_board_v2"))
+        self.assertTrue(mod.is_active_desktop_status_directory("electron/renderer/panel"))
 
     def test_38_dashboard_is_not_active_desktop_status(self):
         mod = _import_registry()
@@ -369,10 +369,10 @@ class TestGetLayoutZone(unittest.TestCase):
         mod = _import_registry()
         self.assertEqual(mod.get_layout_zone("core"), mod.LayoutZone.CORE_RUNTIME)
 
-    def test_40_status_board_v2_zone_is_desktop_status(self):
+    def test_40_react_panel_zone_is_desktop_status(self):
         mod = _import_registry()
         self.assertEqual(
-            mod.get_layout_zone("windows_client/status_board_v2"),
+            mod.get_layout_zone("electron/renderer/panel"),
             mod.LayoutZone.DESKTOP_STATUS,
         )
 
@@ -439,9 +439,9 @@ class TestSummaryAndRegistry(unittest.TestCase):
         mod = _import_registry()
         self.assertIn("dashboard", mod.REPO_LAYOUT_REGISTRY)
 
-    def test_55_registry_contains_status_board_v2(self):
+    def test_55_registry_contains_react_panel(self):
         mod = _import_registry()
-        self.assertIn("windows_client/status_board_v2", mod.REPO_LAYOUT_REGISTRY)
+        self.assertIn("electron/renderer/panel", mod.REPO_LAYOUT_REGISTRY)
 
     def test_56_registry_contains_enhancements(self):
         mod = _import_registry()
@@ -476,21 +476,24 @@ class TestRepoLayoutMd(unittest.TestCase):
         self.assertIn("DesktopPresenceRuntime", _read("docs/REPO_LAYOUT.md"))
 
 
-class TestActiveSurfaceMd(unittest.TestCase):
-    """Group H — windows_client/status_board_v2/ACTIVE_SURFACE.md marker."""
+class TestStatusBoardV2Removed(unittest.TestCase):
+    """Group H —— 终端状态板 windows_client/status_board_v2/ 已随面板收敛删除。
 
-    def test_65_active_surface_md_exists(self):
-        self.assertTrue(_exists("windows_client/status_board_v2/ACTIVE_SURFACE.md"))
+    原为 TestActiveSurfaceMd，钉的是该表层的 ACTIVE_SURFACE.md 标记文件存在、
+    内容含 ACTIVE / canonical / projection 端点。表层整包退场后，四条断言翻成
+    一条"目录不得复活"——与本文件里 dashboard 等已退役表层同款体例。
+    """
 
-    def test_66_active_surface_md_contains_active(self):
-        self.assertIn("ACTIVE", _read("windows_client/status_board_v2/ACTIVE_SURFACE.md"))
+    def test_65_status_board_v2_dir_is_gone(self):
+        self.assertFalse(_exists("windows_client/status_board_v2"))
 
-    def test_67_active_surface_md_contains_canonical(self):
-        self.assertIn("canonical", _read("windows_client/status_board_v2/ACTIVE_SURFACE.md").lower())
+    def test_65b_react_panel_dir_exists(self):
+        """收敛的另一半：唯一表层必须真的在。
 
-    def test_68_active_surface_md_references_projection_endpoint(self):
-        content = _read("windows_client/status_board_v2/ACTIVE_SURFACE.md")
-        self.assertIn("projection/runtime", content)
+        只钉"旧的没了"是不够的——那样把两个目录同时删掉也能全绿。这条钉住
+        接替者确实存在，两条合起来才描述"收敛"而不只是"删除"。
+        """
+        self.assertTrue(_exists("electron/renderer/panel"))
 
 
 class TestLegacyTransitionMd(unittest.TestCase):

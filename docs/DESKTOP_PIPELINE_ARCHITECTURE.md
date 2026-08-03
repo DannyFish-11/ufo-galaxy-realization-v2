@@ -418,7 +418,7 @@ PR-15 completes the multi-PR initiative by adding:
 
 | Document | Description |
 |----------|-------------|
-| [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) | Main Status Board V2 design and usage guide |
+| [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) | Main Status Board V2 design and usage guide |
 | [`docs/OBSERVABILITY_HISTORY.md`](OBSERVABILITY_HISTORY.md) | PR-14 observability and history layer |
 | [`docs/DIAGNOSTICS_INSPECTION_INTERACTION.md`](DIAGNOSTICS_INSPECTION_INTERACTION.md) | PR-13 diagnostics and inspection interaction layer |
 | [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md) | PR-12 topology rendering and visual semantics polish |

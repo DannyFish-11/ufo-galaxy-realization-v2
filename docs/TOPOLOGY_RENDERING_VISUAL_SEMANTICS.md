@@ -198,6 +198,6 @@ its predecessor to access raw nested payload dicts.
   PR-10 first usable adapter-driven status board UI surface
 - [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) —
   PR-9 desktop client consumption adapter and `DesktopClientViewModel`
-- [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) — Status Board V2 overview
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — Status Board V2 overview
 - [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md)
   — canonical model topology semantics for the right-side board

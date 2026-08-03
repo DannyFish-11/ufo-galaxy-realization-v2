@@ -153,7 +153,7 @@ echo        windows_client/main.py (旧 F12 侧边栏客户端) 已退役。
 echo        windows_client/client.py 已硬禁用 (会抛出 RuntimeError)。
 echo.
 echo        当前 Windows 方向:
-echo          DesktopPresenceRuntime + windows_client/status_board_v2/
+echo          DesktopPresenceRuntime + electron/renderer/panel/
 echo.
 echo        如需启动完整系统，请选择选项 [1] 或直接运行:
 echo          python unified_launcher.py

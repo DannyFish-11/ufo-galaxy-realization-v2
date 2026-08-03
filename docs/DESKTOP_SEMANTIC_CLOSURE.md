@@ -137,7 +137,7 @@ The following invariants must hold at all times:
 ## 5. Cross-References
 
 - [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) — canonical display boundary contract
-- [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) — status board design and usage guide
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — status board design and usage guide
 - [`docs/LIMINAL_SPACE_MAPPING.md`](LIMINAL_SPACE_MAPPING.md) — liminal space mapping definition
 - [`docs/STATUS_AND_STATISTICS_OWNERSHIP.md`](STATUS_AND_STATISTICS_OWNERSHIP.md) — statistics / summary ownership
 - [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) — configuration entry semantics

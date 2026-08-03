@@ -154,10 +154,10 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         status=PurgeStatus.HARD_DISABLED,
         pr="PR-3",
         rationale=(
-            "Legacy Tk chat sidebar.  The canonical desktop status surface "
-            "is windows_client/status_board_v2/ (projection-driven)."
+            "Legacy Tk chat sidebar.  The canonical desktop surface is the "
+            "React panel in electron/renderer/panel/ (projection-driven)."
         ),
-        canonical_replacement="windows_client/status_board_v2/",
+        canonical_replacement="electron/renderer/panel/",
     ),
     PurgeDecision(
         asset_path="windows_client/desktop_automation.py",
@@ -180,7 +180,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         rationale=(
             "Legacy F12-hotkey chat/sidebar client entrypoint.  "
             "Active runtime direction: DesktopPresenceRuntime + "
-            "windows_client/status_board_v2/."
+            "electron/renderer/panel/ (React panel in the Tauri/Electron shell)."
         ),
         canonical_replacement="core/desktop_presence_runtime.py",
     ),
@@ -188,8 +188,11 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         asset_path="windows_client/windows_client_integrated.py",
         status=PurgeStatus.HARD_DISABLED,
         pr="PR-3",
-        rationale="Legacy PyQt6 integrated client.  Superseded by status_board_v2.",
-        canonical_replacement="windows_client/status_board_v2/",
+        rationale=(
+            "Legacy PyQt6 integrated client.  Superseded by the React panel "
+            "(status_board_v2, its former replacement, is itself now deleted)."
+        ),
+        canonical_replacement="electron/renderer/panel/",
     ),
     PurgeDecision(
         asset_path="windows_client/key_listener.py",
@@ -247,7 +250,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "DeprecationWarning and do NOT start any UI."
         ),
         canonical_replacement=(
-            "windows_client/status_board_v2/  " "(canonical read-only desktop status board, projection-driven)"
+            "electron/renderer/panel/  " "(canonical desktop surface, projection-driven React panel)"
         ),
     ),
     PurgeDecision(

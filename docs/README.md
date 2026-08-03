@@ -105,7 +105,7 @@ documents are **authoritative and current** vs historical or superseded.
 | [V2_ANDROID_TRUTH_CONTRACT.md](V2_ANDROID_TRUTH_CONTRACT.md) | Canonical Android truth contract and fallback semantics for V2 governance |
 | [OBSERVABILITY.md](OBSERVABILITY.md) | Observability architecture |
 | [OBSERVABILITY_HISTORY.md](OBSERVABILITY_HISTORY.md) | PR-14 observability and history layer |
-| [WINDOWS_STATUS_BOARD.md](WINDOWS_STATUS_BOARD.md) | Status board v2 operator surface |
+| [PANEL_SURFACE_CONVERGENCE.md](PANEL_SURFACE_CONVERGENCE.md) | 面板表层收敛：五份并存 → 一份，删了什么、代价是什么 |
 | [MESH_SESSION_CONTRACT.md](MESH_SESSION_CONTRACT.md) | Mesh session contract |
 | [MESH_MEMBERSHIP_CONTRACT.md](MESH_MEMBERSHIP_CONTRACT.md) | Mesh membership contract |
 | [MESH_SESSION_COORDINATOR.md](MESH_SESSION_COORDINATOR.md) | Mesh session coordinator |

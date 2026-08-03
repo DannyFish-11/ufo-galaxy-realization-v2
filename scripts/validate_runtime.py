@@ -35,7 +35,9 @@ What this script checks
      core.ui_surface_authority's DELETED registration) — the terminal check
      asserts the directory does not exist and must not be recreated
    - windows_client/ (root) is classified as a legacy shell
-   - windows_client/status_board_v2/ is classified as active desktop status
+   - 面板表层收敛的终局检查：windows_client/status_board_v2/、static/api-manager/、
+     static/operator-console/ 三份并行表层都不得存在（唯一表层是
+     electron/renderer/panel/ 里的 React 面板）
 5. Critical docs exist
    - docs/ARCHITECTURE_BASELINE.md
    - docs/REPO_LAYOUT.md
@@ -207,7 +209,6 @@ def check_authority_chain() -> None:
     # Check layout registry classifies canonical dirs correctly
     try:
         from core.repo_layout_registry import (
-            is_active_desktop_status_directory,
             is_active_runtime_directory,
             is_legacy_directory,
         )
@@ -217,10 +218,9 @@ def check_authority_chain() -> None:
             ("launcher/ is active_runtime", is_active_runtime_directory("launcher")),
             ("nodes/ is active_runtime", is_active_runtime_directory("nodes")),
             ("dashboard/ is legacy", is_legacy_directory("dashboard")),
-            (
-                "windows_client/status_board_v2/ is active_desktop_status",
-                is_active_desktop_status_directory("windows_client/status_board_v2"),
-            ),
+            # 原有一条 "windows_client/status_board_v2/ is active_desktop_status"。
+            # 面板表层收敛后该终端状态板整包删除，登记也随之退场，这条门失去对象。
+            # 取而代之的是下面的终局检查：该目录不得复活。
         ]
         for name, ok in checks:
             r = _record(f"layout: {name}", ok)
@@ -316,15 +316,19 @@ def check_legacy_isolation() -> None:
     )
     _print_result(r)
 
-    # windows_client root should NOT contain an ACTIVE_SURFACE.md at root
-    # (active surface lives under status_board_v2/)
-    windows_active = PROJECT_ROOT / "windows_client" / "status_board_v2" / "ACTIVE_SURFACE.md"
-    r = _record(
-        "windows_client/status_board_v2/ACTIVE_SURFACE.md exists",
-        windows_active.exists(),
-        "Status board v2 should carry ACTIVE_SURFACE.md",
-    )
-    _print_result(r)
+    # 面板表层收敛的终局检查：曾经并存的四份表层都不得复活。
+    # 唯一表层是 Tauri/Electron 壳内的 React 面板（electron/renderer/panel/）。
+    for _rel in (
+        "windows_client/status_board_v2",
+        "static/api-manager",
+        "static/operator-console",
+    ):
+        r = _record(
+            f"{_rel}/ must not exist (panel-surface convergence)",
+            not (PROJECT_ROOT / _rel).exists(),
+            f"{_rel} 已删除，不应重新出现",
+        )
+        _print_result(r)
 
     # dashboard/README.md 检查随目录删除一并退役:目录不存在由上面的
     # 终局检查覆盖,README 无从谈起。

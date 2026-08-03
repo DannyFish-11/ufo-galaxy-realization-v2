@@ -470,10 +470,12 @@ _register(
 
 # PR-8: Formally demote legacy UI surfaces that risk implying architectural
 # authority or parallel state ownership.  The canonical outward-facing status
-# model is the projection-driven windows_client.status_board_v2 which reads
-# from GET /api/v1/projection/runtime (RuntimeProjection /
-# DesktopStatusProjection contract).  dashboard/ and windows_client/ (excluding
-# status_board_v2) are retained only as deleted audit records.
+# model is the projection-driven React panel (electron/renderer/panel/) which
+# reads from GET /api/v1/projection/runtime (RuntimeProjection /
+# DesktopStatusProjection contract).  dashboard/ and windows_client/ are
+# retained only as deleted audit records.  windows_client.status_board_v2 —
+# which held this canonical position until panel-surface convergence — is now
+# itself a deleted audit record (see its entry below).
 _register(
     LegacyPathEntry(
         module_path="dashboard.backend.main",
@@ -491,7 +493,8 @@ _register(
         module_path="dashboard",
         status=LegacyPathStatus.DELETED,
         recommendation=(
-            "dashboard/ package has been deleted. Use " "windows_client.status_board_v2 and projection routes instead."
+            "dashboard/ package has been deleted. Use the React panel "
+            "(electron/renderer/panel/) and the projection routes instead."
         ),
         pr_guardrail_added="PR-mainline-closure",
         notes="dashboard/ — DELETED non-mainline UI surface.",
@@ -501,8 +504,8 @@ _register(
         status=LegacyPathStatus.DELETED,
         recommendation=(
             "windows_client/main.py has been deleted as host-specific legacy "
-            "shell noise. Desktop status consumers must use "
-            "windows_client.status_board_v2."
+            "shell noise. Desktop status consumers must use the React panel "
+            "(electron/renderer/panel/)."
         ),
         pr_guardrail_added="PR-mainline-closure",
         notes=(
@@ -514,22 +517,49 @@ _register(
         module_path="windows_client.status_board",
         status=LegacyPathStatus.DELETED,
         recommendation=(
-            "windows_client/status_board.py has been deleted. The canonical "
-            "replacement is windows_client.status_board_v2, which consumes the "
-            "RuntimeProjection contract from GET /api/v1/projection/runtime."
+            "windows_client/status_board.py has been deleted. Its former "
+            "replacement windows_client.status_board_v2 is now deleted too; the "
+            "canonical surface is the React panel (electron/renderer/panel/), "
+            "which consumes the RuntimeProjection contract from "
+            "GET /api/v1/projection/runtime."
         ),
         pr_guardrail_added="PR-mainline-closure",
-        notes=("windows_client/status_board.py — DELETED ad-hoc status board. " "Superseded by status_board_v2/."),
+        notes=(
+            "windows_client/status_board.py — DELETED ad-hoc status board.  "
+            "Was superseded by status_board_v2/, which has itself since been "
+            "deleted by panel-surface convergence."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="windows_client.status_board_v2",
+        status=LegacyPathStatus.DELETED,
+        recommendation=(
+            "windows_client/status_board_v2/ has been deleted by panel-surface "
+            "convergence.  The canonical desktop surface is the React panel "
+            "(electron/renderer/panel/) inside the Tauri/Electron shell.  Its "
+            "supply side is unchanged: GET /api/v1/projection/runtime, "
+            "/runtime-truth and /desktop-status-board are all still served."
+        ),
+        pr_guardrail_added="PR-panel-surface-convergence",
+        notes=(
+            "windows_client/status_board_v2/ — DELETED terminal (ANSI) status "
+            "board.  Its topology constellation layout / renderer / inspector / "
+            "history layers have no React-panel equivalent yet — a deliberate "
+            "net capability reduction, recorded here rather than glossed over."
+        ),
     ),
     LegacyPathEntry(
         module_path="windows_client",
         status=LegacyPathStatus.DELETED,
         recommendation=(
             "windows_client/ root shell authority is deleted; the package remains "
-            "only to host windows_client.status_board_v2 and runtime adapters."
+            "only to host windows_client.autonomy and runtime adapters."
         ),
         pr_guardrail_added="PR-mainline-closure",
-        notes="windows_client/ root shell authority — DELETED; status_board_v2 is canonical.",
+        notes=(
+            "windows_client/ root shell authority — DELETED; the canonical "
+            "surface is the React panel (electron/renderer/panel/)."
+        ),
     ),
 )
 
@@ -545,7 +575,8 @@ _register(
         recommendation=(
             "enhancements/clients/windows_client/run_ui.py is HARD-DISABLED (PR-3).  "
             "It targeted the retired legacy chat/sidebar client.  "
-            "Active Windows direction: DesktopPresenceRuntime + status_board_v2/.  "
+            "Active Windows direction: DesktopPresenceRuntime + the React panel "
+            "(electron/renderer/panel/).  "
             "Authoritative startup path: python main.py "
             "(direct advanced invocation: python unified_launcher.py)"
         ),
@@ -561,7 +592,8 @@ _register(
         recommendation=(
             "enhancements/clients/windows_client/ is a TRANSITIONAL directory (PR-8-layout).  "
             "The run_ui launcher is hard-disabled.  "
-            "Active Windows direction: DesktopPresenceRuntime + status_board_v2/."
+            "Active Windows direction: DesktopPresenceRuntime + the React panel "
+            "(electron/renderer/panel/)."
         ),
         pr_guardrail_added="PR-8-layout",
         notes="enhancements/clients/windows_client/ — TRANSITIONAL.  See enhancements/LEGACY_TRANSITION.md.",

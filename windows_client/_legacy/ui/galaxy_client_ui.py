@@ -2721,7 +2721,7 @@ def main():
         "asset and must not be executed.\n"
         "Active Windows direction:\n"
         "  core/desktop_presence_runtime.py  (DesktopPresenceRuntime tri-state shell)\n"
-        "  windows_client/status_board_v2/   (projection-driven desktop status surface)\n"
+        "  electron/renderer/panel/          (projection-driven desktop surface)\n"
         "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
     )
 

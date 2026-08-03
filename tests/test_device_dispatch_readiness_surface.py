@@ -7,7 +7,7 @@ tests/test_device_dispatch_readiness_surface.py
 A. core.device_dispatch_readiness_surface — 单设备查询
 B. core.device_dispatch_readiness_surface — 全设备面板
 C. galaxy_gateway.android.handlers.registration — get_all_devices_with_registration_gaps
-D. windows_client.status_board_v2.device_surface — dispatch readiness blocker 渲染
+D.（已移除）终端状态板的 blocker 渲染 —— 该表层随面板收敛删除，见文中说明
 E. 端点级集成：operator route 返回正确结构
 """
 
@@ -314,131 +314,13 @@ class TestGetDispatchReadinessPanel:
 # ===========================================================================
 
 
-class TestDeviceSurfaceDispatchReadinessRendering:
-    """windows_client.status_board_v2.device_surface.DeviceSurface"""
-
-    def _surface(self):
-        from windows_client.status_board_v2.device_surface import DeviceSurface
-
-        return DeviceSurface()
-
-    def _base_projection(self) -> Dict[str, Any]:
-        return {
-            "active_device_ids": [],
-            "execution_stage": None,
-            "current_task_summary": None,
-        }
-
-    def test_render_without_dispatch_readiness_field_succeeds(self) -> None:
-        """不含 device_dispatch_readiness 字段时，渲染不应出错。"""
-        surface = self._surface()
-        out = surface.render(self._base_projection())
-        assert isinstance(out, str)
-        assert "Device & Execution Context" in out
-
-    def test_render_with_dispatch_ready_device(self) -> None:
-        """就绪设备应显示 DISPATCH_READY 状态。"""
-        surface = self._surface()
-        proj = {
-            **self._base_projection(),
-            "device_dispatch_readiness": {
-                "dispatch_ready": True,
-                "status": "dispatch_ready",
-                "reason": "",
-                "registration_gaps": [],
-                "blocking_notes": [],
-            },
-        }
-        out = surface.render(proj)
-        assert "dispatch_ready" in out
-
-    def test_render_with_registration_gap_shows_gap_name(self) -> None:
-        """有注册 gap 的设备应在渲染输出中显示具体 gap 步骤名称。"""
-        surface = self._surface()
-        proj = {
-            **self._base_projection(),
-            "device_dispatch_readiness": {
-                "dispatch_ready": False,
-                "status": "blocked_registration_gap",
-                "reason": "Device has 1 downstream registration gap(s): ['attach_runtime_session']",
-                "registration_gaps": ["attach_runtime_session"],
-                "blocking_notes": ["registration_gap_count=1"],
-            },
-        }
-        out = surface.render(proj)
-        assert "attach_runtime_session" in out
-
-    def test_render_blocked_transport_shows_reason(self) -> None:
-        """transport 断线时，渲染输出应包含 status 和 reason 信息。"""
-        surface = self._surface()
-        proj = {
-            **self._base_projection(),
-            "device_dispatch_readiness": {
-                "dispatch_ready": False,
-                "status": "blocked_transport",
-                "reason": "Device transport (WebSocket/UCM) is not alive.",
-                "registration_gaps": [],
-                "blocking_notes": ["udm_online=False"],
-            },
-        }
-        out = surface.render(proj)
-        assert "blocked_transport" in out
-
-    def test_render_blocking_notes_appear_in_output(self) -> None:
-        """blocking_notes 中的说明应出现在渲染输出中。"""
-        surface = self._surface()
-        proj = {
-            **self._base_projection(),
-            "device_dispatch_readiness": {
-                "dispatch_ready": False,
-                "status": "blocked_capability",
-                "reason": "Device missing required capabilities.",
-                "registration_gaps": [],
-                "blocking_notes": ["missing_capabilities=['screen']"],
-            },
-        }
-        out = surface.render(proj)
-        # 最多渲染 2 条 notes；第一条应出现
-        assert "missing_capabilities" in out
-
-    def test_render_does_not_expose_only_boolean(self) -> None:
-        """拦截时不能仅显示 False/True，必须暴露 status 或 reason 字符串。"""
-        surface = self._surface()
-        proj = {
-            **self._base_projection(),
-            "device_dispatch_readiness": {
-                "dispatch_ready": False,
-                "status": "blocked_stale_attachment",
-                "reason": "Runtime attachment session has become stale.",
-                "registration_gaps": [],
-                "blocking_notes": ["attachment_state=detached"],
-            },
-        }
-        out = surface.render(proj)
-        # 仅出现 False 而不含任何枚举值才是问题
-        assert "blocked_stale_attachment" in out or "stale" in out.lower()
-
-    def test_render_with_participation_tier_and_dispatch_readiness(self) -> None:
-        """同时包含 participation_tier 和 dispatch_readiness 时，两者都应渲染。"""
-        surface = self._surface()
-        proj = {
-            **self._base_projection(),
-            "participation_truth_consumption": {
-                "participation_tier": "attached",
-                "dispatch_eligible": False,
-                "fully_attached": False,
-            },
-            "device_dispatch_readiness": {
-                "dispatch_ready": False,
-                "status": "blocked_registration_gap",
-                "reason": "registration gap: attach_runtime_session",
-                "registration_gaps": ["attach_runtime_session"],
-                "blocking_notes": [],
-            },
-        }
-        out = surface.render(proj)
-        assert "Tier" in out or "attached" in out
-        assert "attach_runtime_session" in out
+# 这里曾有 TestDeviceSurfaceDispatchReadinessRendering —— 测终端状态板
+# (windows_client/status_board_v2/device_surface.py) 如何把 dispatch readiness
+# 的阻塞原因画成文字。该表层已随面板收敛整包删除,这组渲染测试随之移除。
+#
+# 它保障的"不能只暴露一个布尔、必须带上阻塞原因"这条语义没有丢:上面
+# TestGetDeviceDispatchReadiness 与 TestGetDispatchReadinessPanel 直接对数据层
+# 断言 blocking_notes / gap 名称,本来就是更靠前、更强的位置。
 
 
 # ===========================================================================

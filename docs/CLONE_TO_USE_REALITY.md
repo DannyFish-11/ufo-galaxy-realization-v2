@@ -64,7 +64,7 @@ curl -sS -X POST "http://127.0.0.1:9000/api/v1/chat" \
 Wake command:
 
 ```bash
-python -m windows_client.status_board_v2 --host 127.0.0.1 --port 9000
+# 面板随 python main.py 一起起来（Tauri/Electron 壳内的 React 面板）
 ```
 
 Truthful boundary:

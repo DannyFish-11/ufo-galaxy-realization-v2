@@ -5,7 +5,7 @@
 > the Sky-Grown Constellation Topology visual identity.  Confirmed in PR-0
 > architecture freeze as the sole canonical operator-facing surface.
 >
-> Related: [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) ·
+> Related: [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) ·
 > [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
 > [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·

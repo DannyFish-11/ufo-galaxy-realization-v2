@@ -98,7 +98,7 @@ The Windows desktop UI (`windows_client/ui/galaxy_client_ui.py`) is a
 It is **not** a chat input surface.  Input to OpenClawd is handled exclusively
 through the AIP ingress pipeline.
 
-See [WINDOWS_STATUS_BOARD.md](WINDOWS_STATUS_BOARD.md) for more details.
+See [PANEL_SURFACE_CONVERGENCE.md](PANEL_SURFACE_CONVERGENCE.md) for more details.
 
 ---
 

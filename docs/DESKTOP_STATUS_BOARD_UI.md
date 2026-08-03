@@ -238,6 +238,6 @@ deferred to a later PR.
 ## See Also
 
 - [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) — PR-9 adapter guide
-- [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) — Status Board V2 design guide
+- [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) — Status Board V2 design guide
 - [`windows_client/status_board_v2/adapter_surface.py`](../windows_client/status_board_v2/adapter_surface.py) — implementation
 - [`tests/test_pr10_desktop_status_board_ui.py`](../tests/test_pr10_desktop_status_board_ui.py) — test suite

@@ -12,7 +12,7 @@ Stack A — production projection/status stack
   - ContinuumState
   - TopologyRoutePlan
   - RuntimeProjection / DesktopStatusProjection
-  - status_board_v2 / desktop_projection surfaces
+  - React panel (electron/renderer/panel/) / desktop_projection surfaces
 
 Stack B — canonical runtime / operator stack
   - CanonicalTask / TaskGraphRuntime
@@ -31,7 +31,7 @@ Architecture role
     ┌──────────────────────────────────────────────────────────────────┐
     │  STACK A — PROJECTION STACK                                     │
     │  ContinuumState → TopologyRoutePlan → RuntimeProjection         │
-    │  DesktopStatusProjection → status_board_v2 / desktop surfaces   │
+    │  DesktopStatusProjection → React panel / desktop surfaces       │
     └──────────────────────────┬───────────────────────────────────────┘
                                │  PROJECTION-DERIVED (read-only)
                                ▼

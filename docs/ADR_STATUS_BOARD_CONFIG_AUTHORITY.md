@@ -6,7 +6,7 @@
 > authority, native-multimodal-first display principle
 >
 > Related:
-> [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) ·
+> [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) ·
 > [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) ·
 > [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
@@ -196,7 +196,7 @@ canonical visual and semantic model for the desktop status board.
 
 | Document | Relationship |
 |----------|-------------|
-| [`docs/STATUS_BOARD_V2.md`](STATUS_BOARD_V2.md) | `status_board_v2` design guide; updated in PR-0 to reflect sole surface declaration |
+| [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) | `status_board_v2` design guide; updated in PR-0 to reflect sole surface declaration |
 | [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) | Configuration entry unification contract; updated in PR-0 to add local unified config authority |
 | [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) | Dashboard retirement plan; updated in PR-0 to formalise frontend retirement and config migration direction |
 | [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) | Routing authority contract; PR-0 confirms it is unchanged |

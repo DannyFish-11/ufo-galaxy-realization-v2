@@ -759,13 +759,25 @@ class TestAuthorityLabelsCrossModuleConsistency:
 class TestProjectionOutwardTruthCrossModule:
     """11. Projection outward-truth is consistent across modules."""
 
-    def test_ui_surface_authority_status_board_is_projection_driven(self):
+    def test_ui_surface_authority_canonical_surface_is_projection_driven(self):
+        """canonical 表层是 projection-driven —— 收敛后这个位置由 React 面板承担。
+
+        原先钉的是 windows_client.status_board_v2（终端状态板）。面板表层收敛后
+        它整包删除、在册上改为 DELETED，canonical 位置移交给 Tauri/Electron 壳内
+        的 React 面板。这条测试的意图（"对外状态真相必须来自 projection，而不是
+        某个自建并行状态模型"）不变，只是承担者换了。
+        """
         from core.ui_surface_authority import (
             UISurfaceRole,
+            get_ui_surface_entry,
             is_projection_driven_surface,
         )
 
-        assert is_projection_driven_surface("windows_client.status_board_v2")
+        assert is_projection_driven_surface("electron.renderer.panel")
+        assert not is_projection_driven_surface("windows_client.status_board_v2")
+
+        gone = get_ui_surface_entry("windows_client.status_board_v2")
+        assert gone is not None and gone.role == UISurfaceRole.DELETED
 
     def test_ui_surface_authority_dashboard_is_deleted_not_legacy(self):
         from core.ui_surface_authority import is_legacy_surface

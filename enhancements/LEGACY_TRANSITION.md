@@ -23,7 +23,7 @@ The following path is **hard-disabled** (PR-3):
 The canonical Windows-facing runtime assets are:
 
 - `core/desktop_presence_runtime.py` — `DesktopPresenceRuntime` (tri-state lifecycle)
-- `windows_client/status_board_v2/` — canonical read-only desktop status surface
+- `electron/renderer/panel/` — canonical desktop surface（React 面板；此前的 `windows_client/status_board_v2/` 已随面板收敛删除）
 - `windows_client/autonomy/` — active Windows automation layer
 
 ## What this directory must NOT do
