@@ -133,3 +133,19 @@ jobs:
                   print(f"     {d['message']}")
               print("===== END CODEQL FULL FINDINGS =====")
           PY
+
+      # ── 与处置台账对账 ────────────────────────────────────────────────────
+      #
+      # 上面那一步解决的是"读得到";这一步解决的是"分得清"。
+      #
+      # 22 条存量告警各有各的结论(已缓解 / 设计使然 / 误报 / 第三方),而它们混在
+      # 一起时,新冒出来的第 23 条不会有任何人注意到 —— 存量把新增淹掉,是本仓
+      # 在别处已经踩过的同一种病。
+      #
+      # 这里刻意**不加 --strict**:与 wiring / 环境耦合两个检查一样按告警形态引入。
+      # 一上来就把 CI 弄红,只会让人学会无视它;等台账确实跟得上了,加一个参数即可。
+      - name: 对账处置台账
+        if: always()
+        run: |
+          python scripts/check_codeql_ledger.py --sarif-dir sarif-results \
+            | tee -a "$GITHUB_STEP_SUMMARY"

@@ -19,6 +19,7 @@ import struct
 from typing import Any, Dict, Optional, Tuple
 
 from core.aip_transport import TransportAdapter
+from core.net_bind import discovery_bind_host
 
 logger = logging.getLogger("Galaxy.Adapter.UDP")
 
@@ -152,7 +153,10 @@ class UDPAdapter(TransportAdapter):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._socket.bind(("0.0.0.0", self._local_port))
+        # 绑定地址走 core.net_bind:默认仍是 0.0.0.0(带 SO_BROADCAST 的发现监听
+        # 必须绑通配地址才收得到广播),但部署时可用 GALAXY_DISCOVERY_BIND_HOST
+        # 限定到某块网卡 —— 让"对哪些网络可见"成为部署的决定而不是源码里的常量。
+        self._socket.bind((discovery_bind_host(), self._local_port))
         self._socket.setblocking(False)
 
         # 启动 asyncio datagram endpoint
