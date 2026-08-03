@@ -75,20 +75,11 @@ from .aip_v3 import (
     validate_message,
 )
 from .compat import normalize_action_in_payload, parse_message_compat
-from .ingress_classifier import (
-    INGRESS_CLASSIFIER_AUTHORITY,
-    IngressMessageClass,
-    classify_ingress_kind,
-)
-from .normalized_ingress_event import (
-    IngressEventKind,
-    NormalizedIngressEvent,
-)
+from .ingress_classifier import INGRESS_CLASSIFIER_AUTHORITY, IngressMessageClass, classify_ingress_kind
+from .normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
 from .normalized_ingress_event import from_aip_message as ingress_event_from_aip_message
 from .normalized_ingress_event import from_normalized_dict as ingress_event_from_dict
-from .normalized_ingress_event import (
-    to_normalized_ingress_event,
-)
+from .normalized_ingress_event import to_normalized_ingress_event
 
 __all__ = [
     # Legacy compat / shim

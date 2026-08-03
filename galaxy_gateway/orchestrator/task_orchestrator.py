@@ -25,14 +25,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from ..handlers import DeviceManager, MessageHandler
-from ..protocol import (
-    AIPMessage,
-    Command,
-    CommandResult,
-    ResultStatus,
-    TaskStatus,
-    create_task_message,
-)
+from ..protocol import AIPMessage, Command, CommandResult, ResultStatus, TaskStatus, create_task_message
 from ..transport import WebSocketManager
 
 logger = logging.getLogger(__name__)

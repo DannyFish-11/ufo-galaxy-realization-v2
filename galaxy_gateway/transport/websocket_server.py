@@ -28,11 +28,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..protocol import AIPMessage, MessageType, create_error_message
 from ..protocol.compat import parse_message_compat
-from ..protocol.normalized_ingress_event import (
-    IngressEventKind,
-    NormalizedIngressEvent,
-    to_normalized_ingress_event,
-)
+from ..protocol.normalized_ingress_event import IngressEventKind, NormalizedIngressEvent, to_normalized_ingress_event
 
 logger = logging.getLogger(__name__)
 

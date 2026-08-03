@@ -61,11 +61,7 @@ from galaxy_gateway.cross_device_switch import (
     WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
     is_cross_device_enabled,
 )
-from galaxy_gateway.observability import (
-    TraceContext,
-    emit_gateway_log,
-    get_gateway_metrics,
-)
+from galaxy_gateway.observability import TraceContext, emit_gateway_log, get_gateway_metrics
 
 logger = logging.getLogger(__name__)
 

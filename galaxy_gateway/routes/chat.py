@@ -34,10 +34,7 @@ from galaxy_gateway.cross_device_switch import (
     HTTP_STATUS_CROSS_DEVICE_DISABLED,
     is_cross_device_enabled,
 )
-from galaxy_gateway.webrtc_proxy import (
-    check_node95_reachable,
-    get_webrtc_endpoint_info,
-)
+from galaxy_gateway.webrtc_proxy import check_node95_reachable, get_webrtc_endpoint_info
 
 try:
     from core.auth import require_auth as _require_auth

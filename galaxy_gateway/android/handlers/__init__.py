@@ -11,9 +11,7 @@ from galaxy_gateway.android.handlers.acceptance_report import handle_device_acce
 from galaxy_gateway.android.handlers.capability_report import handle_capability_report
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
-from galaxy_gateway.android.handlers.evaluator_artifact_report import (
-    handle_evaluator_artifact_report,
-)
+from galaxy_gateway.android.handlers.evaluator_artifact_report import handle_evaluator_artifact_report
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
 from galaxy_gateway.android.handlers.goal_execution import (
@@ -29,15 +27,9 @@ from galaxy_gateway.android.handlers.heartbeat import (
     handle_heartbeat,
 )
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
-from galaxy_gateway.android.handlers.peer_exchange import (
-    handle_peer_announce,
-    handle_peer_exchange,
-)
+from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
-from galaxy_gateway.android.handlers.registration import (
-    handle_device_register,
-    handle_unregistered,
-)
+from galaxy_gateway.android.handlers.registration import handle_device_register, handle_unregistered
 from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_command_result,
@@ -48,10 +40,7 @@ from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_task_result,
     handle_task_status,
 )
-from galaxy_gateway.android.handlers.task_submit import (
-    handle_task_execute,
-    handle_task_submit,
-)
+from galaxy_gateway.android.handlers.task_submit import handle_task_execute, handle_task_submit
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 
 __all__ = [

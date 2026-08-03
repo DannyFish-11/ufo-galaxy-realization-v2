@@ -14,9 +14,7 @@ from core.unified_action_lifecycle_surface import (
     UnifiedActionLifecycleSurface,
     derive_visible_action,
 )
-from galaxy_gateway.android.handlers.evaluator_artifact_report import (
-    _truth_reconciled_flag,
-)
+from galaxy_gateway.android.handlers.evaluator_artifact_report import _truth_reconciled_flag
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge

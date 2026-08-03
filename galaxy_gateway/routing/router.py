@@ -28,11 +28,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from galaxy_gateway.routing.device_selection import DEVICE_SELECTION_AUTHORITY, select_devices
-from galaxy_gateway.routing.dispatch import (
-    DISPATCH_AUTHORITY,
-    build_aip_message,
-    dispatch_to_websocket,
-)
+from galaxy_gateway.routing.dispatch import DISPATCH_AUTHORITY, build_aip_message, dispatch_to_websocket
 from galaxy_gateway.routing.health_policy import (
     DEVICE_HEALTH_POLICY_AUTHORITY,
     filter_eligible_devices,

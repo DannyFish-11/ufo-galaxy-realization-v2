@@ -78,13 +78,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
 from galaxy_gateway.protocol.aip_v3 import MessageType
 from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
-from galaxy_gateway.protocol.ingress_classifier import (
-    classify_ingress_kind,
-)
-from galaxy_gateway.protocol.normalized_ingress_event import (
-    IngressEventKind,
-    NormalizedIngressEvent,
-)
+from galaxy_gateway.protocol.ingress_classifier import classify_ingress_kind
+from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
 from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message as _ingress_event_from_aip
 from galaxy_gateway.ssot import udm_write_heartbeat, udm_write_register, udm_write_unregister
 
@@ -1117,11 +1112,8 @@ async def handle_device_perception_emission(connection_id: str, aip_msg):
 
         vision = payload.get("vision_payload") or {}
         grounding = payload.get("grounding_payload") or {}
-        # 注：此前这里还取了 local_perception_payload，但下面组装可读文本时只挖了
-        # vision / grounding 的字段，它取出来就被丢掉。全仓搜索 "local_perception_payload"
-        # 只有这一处 —— 没有生产者、也没有 schema 说明它带哪些字段，因此无法确定该挖
-        # 什么。与其凭空猜字段名（挖错等于静默丢数据），不如先去掉；等 Android 侧定义
-        # 了这个 payload 的形状，再照 vision / grounding 的样子显式接进来。
+        # 此前还取了 local_perception_payload 却从不使用。全仓只有那一处、无生产者也无
+        # schema，猜字段名等于静默丢数据，故先去掉；待 Android 侧定型后照上面两行接入。
 
         # 组装可读文本语义（只取有信息量的字段）
         parts = []

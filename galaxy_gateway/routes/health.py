@@ -18,12 +18,7 @@ from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from starlette.responses import Response
 
-from galaxy_gateway.dependencies import (
-    get_llm_router_instance,
-    get_nats_adapter,
-    get_openclawd,
-    get_websocket_manager,
-)
+from galaxy_gateway.dependencies import get_llm_router_instance, get_nats_adapter, get_openclawd, get_websocket_manager
 
 logger = logging.getLogger(__name__)
 

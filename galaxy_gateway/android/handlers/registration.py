@@ -13,10 +13,7 @@ import uuid
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from core.continuity_adjudication import (
-    build_continuity_adjudication_evidence,
-    decide_reconnect_pending_policy,
-)
+from core.continuity_adjudication import build_continuity_adjudication_evidence, decide_reconnect_pending_policy
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice
 

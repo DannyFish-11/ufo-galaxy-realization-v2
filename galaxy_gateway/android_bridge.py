@@ -37,13 +37,11 @@ import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 # 设备类型 — 单一事实来源
-# 下面三处 re-export 供外部按 android_bridge.X 取用（tests/test_e2e.py 取 DeviceType，
-# tests/test_cross_device_hardening.py 取 TaskStatus / ResultStatus），本模块自身不用，
-# 故标 F401。原先标的是 E402（导入不在文件顶部）—— 导入已上移，那个豁免已失效。
+# 本模块不用 DeviceType / TaskStatus / ResultStatus / Rect / UIElement，但它们是向后
+# 兼容 re-export（test_e2e、test_cross_device_hardening、TestAndroidBridgeModuleReExports
+# 会按 android_bridge.X 取用），故标 F401。
 from core.device_types import AIPDeviceType as DeviceType  # noqa: F401
-from core.device_types import (
-    DevicePlatform,
-)
+from core.device_types import DevicePlatform
 
 # 子模块：能力、模型、消息构建器
 from galaxy_gateway.android.capabilities import DeviceCapability
@@ -56,14 +54,9 @@ from galaxy_gateway.android.handlers.device_state_snapshot import (
     handle_device_state_snapshot,
 )
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
-from galaxy_gateway.android.handlers.evaluator_artifact_report import (
-    handle_evaluator_artifact_report,
-)
+from galaxy_gateway.android.handlers.evaluator_artifact_report import handle_evaluator_artifact_report
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
-from galaxy_gateway.android.handlers.generic import (
-    get_generic_forward_compat_allowlist,
-    handle_generic_forward,
-)
+from galaxy_gateway.android.handlers.generic import get_generic_forward_compat_allowlist, handle_generic_forward
 from galaxy_gateway.android.handlers.goal_execution import (
     handle_goal_execution,
     handle_goal_execution_result,
@@ -76,20 +69,13 @@ from galaxy_gateway.android.handlers.heartbeat import (
     handle_device_status,
     handle_heartbeat,
 )
-from galaxy_gateway.android.handlers.mesh_lifecycle import (
-    handle_mesh_join,
-    handle_mesh_leave,
-    handle_mesh_result,
-)
+from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join, handle_mesh_leave, handle_mesh_result
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
 
 # 子模块：处理器
-from galaxy_gateway.android.handlers.registration import (
-    handle_device_register,
-    handle_unregistered,
-)
+from galaxy_gateway.android.handlers.registration import handle_device_register, handle_unregistered
 from galaxy_gateway.android.handlers.session_flow import handle_session_migrate
 from galaxy_gateway.android.handlers.state_event import handle_state_event
 from galaxy_gateway.android.handlers.takeover_request import handle_takeover_request
@@ -103,31 +89,15 @@ from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_task_result,
     handle_task_status,
 )
-from galaxy_gateway.android.handlers.task_submit import (
-    handle_task_execute,
-    handle_task_submit,
-)
+from galaxy_gateway.android.handlers.task_submit import handle_task_execute, handle_task_submit
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.message_builder import MessageBuilder
-
-# Rect / UIElement 与 AndroidDevice 一样属向后兼容 re-export：
-# tests/integration/android_bridge/test_android_bridge_modularization.py 的
-# TestAndroidBridgeModuleReExports 会逐个 import 这批公共符号。本模块自身不用
-# Rect / UIElement，故标 F401 —— 删掉它们会直接打断那条向后兼容契约。
-from galaxy_gateway.android.models import (  # noqa: F401
-    AndroidDevice,
-    Rect,
-    UIElement,
-)
+from galaxy_gateway.android.models import AndroidDevice, Rect, UIElement  # noqa: F401
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
 
 # 协议枚举 — 单一事实来源
-from galaxy_gateway.protocol.aip_v3 import (  # noqa: F401
-    MessageType,
-    ResultStatus,
-    TaskStatus,
-)
+from galaxy_gateway.protocol.aip_v3 import MessageType, ResultStatus, TaskStatus  # noqa: F401
 
 # =============================================================================
 # 模块导入 — 从拆分后的子模块导入（PR-3）

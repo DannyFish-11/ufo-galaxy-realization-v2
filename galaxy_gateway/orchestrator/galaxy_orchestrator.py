@@ -913,11 +913,8 @@ class GalaxyOrchestrator:
                     from core.agent_team import TeamStrategy
 
                     strategy = TeamStrategy.SPECIALIZED if intent_type == "cross_device" else TeamStrategy.PARALLEL
-                    # rag_context 是上面 RAGMemory 检索出来的「历史经验 + 知识」增强
-                    # 上下文。此前它被 await 出来后**再没有任何读取** —— 向量检索和
-                    # few-shot 拼接的开销照付，增强却从未进入任何提示词，等于没检索。
-                    # AgentTeam 会把 context 序列化进 system prompt
-                    # （core/agent_team.py:457），所以挂在这里是真正能生效的位置。
+                    # rag_context 此前 await 出来后再无任何读取 —— 检索开销照付、增强
+                    # 从未进入提示词。AgentTeam 会把 context 序列化进 system prompt。
                     team_context = {"devices": self.device_manager.list_devices()}
                     if rag_context:
                         team_context["rag_context"] = rag_context

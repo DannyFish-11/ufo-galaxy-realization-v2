@@ -19,21 +19,14 @@ from galaxy_gateway.routing.device_selection import (
     DEVICE_SELECTION_AUTHORITY,
     select_devices,
 )
-from galaxy_gateway.routing.dispatch import (
-    DISPATCH_AUTHORITY,
-    build_aip_message,
-    dispatch_to_websocket,
-)
+from galaxy_gateway.routing.dispatch import DISPATCH_AUTHORITY, build_aip_message, dispatch_to_websocket
 from galaxy_gateway.routing.health_policy import (
     DEVICE_HEALTH_POLICY_AUTHORITY,
     filter_eligible_devices,
     is_device_available,
     is_device_online,
 )
-from galaxy_gateway.routing.policy import (
-    ROUTING_POLICY_AUTHORITY,
-    analyze_command,
-)
+from galaxy_gateway.routing.policy import ROUTING_POLICY_AUTHORITY, analyze_command
 
 __all__ = [
     # health_policy
