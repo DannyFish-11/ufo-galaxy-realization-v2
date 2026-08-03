@@ -15,6 +15,9 @@
     "  core.udm_registration_hook —— 设备解析管线第 2 级（注册时热插解析）。曾被当作死代码删除后",
     "                              又恢复：resolver/activation_policy/launcher_adapter 都活着，但只在",
     "                              启动期触发；删掉它等于决定『不做注册时热插解析』。",
+    "  core.queueing.async_queue —— 有界并发 worker 池 + 背压（reject_new/drop_oldest）。曾删除后",
+    "                              又恢复：多设备并行派发的活路径是无界 gather（device_router:1898）",
+    "                              加无界队列+单 worker（task_orchestrator:114/141），正缺此能力。",
     "判据教训：『有个名字相近的模块在做类似的事』**不等于**能力还在。",
     "必须比对同一层次的实现，而不是概念相似度。"
   ],
@@ -39,6 +42,8 @@
     "core.orchestration.global_arbiter",
     "core.participant_authority_interfaces",
     "core.perception.canonical_state_adapter",
+    "core.queueing",
+    "core.queueing.async_queue",
     "core.runtime_introspection",
     "core.schemas.execution_failure",
     "core.truth_conflict_enforcement",
