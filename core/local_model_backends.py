@@ -244,7 +244,18 @@ class LlamaCppBackend(LocalModelBackend):
                 _alloc.reason,
             )
         except Exception as exc:
-            logger.debug("ComputeScheduler unavailable (fallback n_gpu_layers=%s): %s", n_gpu_layers, exc)
+            # 这里的退化必须**响亮**：兜底值就是 self._n_gpu_layers = -1（全部层上 GPU），
+            # 而那正是引入调度器要修的那个行为——显存不够直接 OOM、没有降级。
+            # 原先记在 debug 级：调度器一旦出问题，系统会悄悄退回它被引入来修的
+            # 那个 bug，生产上只看得到一次莫名其妙的 OOM，看不到原因。
+            # 说清后果，而不是只说"unavailable"。
+            logger.warning(
+                "ComputeScheduler 不可用，已退回 n_gpu_layers=%s（%s）—— "
+                "层卸载未生效，显存不足时可能直接 OOM。原因：%s",
+                n_gpu_layers,
+                "全部层上 GPU" if n_gpu_layers == -1 else "静态配置值",
+                exc,
+            )
 
         try:
             llm = Llama(
@@ -259,8 +270,19 @@ class LlamaCppBackend(LocalModelBackend):
                     from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
 
                     get_compute_scheduler().register_loaded(_alloc)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    # 原先是 `except Exception: pass` —— 一个字都不留。
+                    # 但这一步不是可有可无的记账：register_loaded 把本次分配写进
+                    # ComputeScheduler._models，而 gpu_model_count / max_gpu_models
+                    # 这些准入判断都读它。漏记一次，调度器就以为这个模型没加载，
+                    # 后续分配会按偏多的余量下判断（过量承诺 GPU），最终触发的正是
+                    # 它要防的 OOM —— 而且现场看不到任何线索。
+                    logger.warning(
+                        "ComputeScheduler.register_loaded 失败：%s 已加载但未登记，"
+                        "调度器的显存/模型数账目会偏少，后续分配可能过量承诺。原因：%s",
+                        model_id,
+                        exc,
+                    )
             logger.info("LlamaCpp loaded: %s", model_id)
             return True
         except Exception as exc:

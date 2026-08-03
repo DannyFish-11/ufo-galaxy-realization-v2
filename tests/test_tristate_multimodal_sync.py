@@ -54,6 +54,13 @@ class TestBridgeSpeakingOwnership:
         bridge._loop = asyncio.get_running_loop()
         bridge._on_phase_silent({})
 
+        # 先取"没在说话时"的相位深度作基准。刻意不写死 MODE_DEPTH_MAP["static"]:
+        # 深度现在由 core.phase_contract 从活的 ContinuumState 导出(塌缩/回撤倾向
+        # 决定它在相位带内的位置),只有拿不到连续量时才恰好等于锚点。写死常数的
+        # 断言在"进程里碰巧有活 continuum"的场景下会假红 —— 而那正是生产的常态。
+        bridge._speaking = False
+        baseline = bridge._build_message()["payload"]["depth_factor"]
+
         bridge._speaking = True
         msg = bridge._build_message()
         assert msg["payload"]["depth_factor"] >= MODE_DEPTH_MAP["liminal"], "说话中即使相位已静默,也要维持可见在场深度"
@@ -61,7 +68,7 @@ class TestBridgeSpeakingOwnership:
 
         bridge._speaking = False
         msg = bridge._build_message()
-        assert msg["payload"]["depth_factor"] == MODE_DEPTH_MAP["static"], "说完自然落回相位深度(渲染端弹簧缓落)"
+        assert msg["payload"]["depth_factor"] == baseline, "说完自然落回相位深度(渲染端弹簧缓落)"
 
     @pytest.mark.asyncio
     async def test_manifest_depth_not_lowered_by_floor(self):
@@ -74,9 +81,24 @@ class TestBridgeSpeakingOwnership:
         bridge = GalaxyPresenceBridge.get_instance()
         bridge._loop = asyncio.get_running_loop()
         bridge._on_phase_manifest({})
+
+        # "只抬不压"是一条【关系】,直接测这个关系,而不是钉某个常数:
+        # 说话前后各取一次深度,断言说话没有把它压下去。
+        #
+        # 原断言是 depth == MODE_DEPTH_MAP["manifest"]（恒等于 0.92）。那在深度
+        # 还是查表时成立,现在深度由 core.phase_contract 从活的 ContinuumState
+        # 导出——manifest 带内会随 retreat_tendency 下移(实测 0.866)。测出来的
+        # "不等于 0.92"其实是设计如此,不是回归;而"地板压低了 manifest"才是这条
+        # 测试真正要防的事,那个性质完全没变。
+        bridge._speaking = False
+        without_floor = bridge._build_message()["payload"]["depth_factor"]
+
         bridge._speaking = True
-        msg = bridge._build_message()
-        assert msg["payload"]["depth_factor"] == MODE_DEPTH_MAP["manifest"]
+        with_floor = bridge._build_message()["payload"]["depth_factor"]
+
+        assert with_floor >= without_floor, "说话地板把 MANIFEST 的深度压低了 —— 地板只该抬,不该压"
+        assert with_floor >= MODE_DEPTH_MAP["liminal"], "说话中深度必须在可见地板之上"
+
         bridge._speaking = False
         bridge._on_phase_silent({})
 
