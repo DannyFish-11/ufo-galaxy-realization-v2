@@ -584,7 +584,7 @@ def _collect_probes() -> Dict[str, bool]:
         "core.desktop_presence_runtime", "carrier"
     )
     p["desktop_consumption_adapter"] = _module_exists("core.desktop_consumption_adapter")
-    p["canonical_layer_model"] = _module_exists("core.canonical_layer_model")
+    # 原有 canonical_layer_model 存在性检查：该模块已作为零引用死代码删除，检查恒 False，故移除。
     p["existence_surface_has_unified_carrier"] = _source_contains(
         "core.desktop_existence_surface", "UnifiedCarrierSurface"
     )
@@ -1041,7 +1041,6 @@ def _build_domains(p: Dict[str, bool]) -> List[DomainStatus]:
                 "core/desktop_existence_surface.py",
                 "core/desktop_presence_runtime.py",
                 "core/desktop_consumption_adapter.py",
-                "core/canonical_layer_model.py",
             ],
             [],
             weight=1.0,
