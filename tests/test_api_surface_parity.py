@@ -54,6 +54,9 @@ MERGED_ROUTES = (
     ("/api/v5/health", "Gateway v5"),
     ("/api/v1/pairing/pending", "设备准入审批"),
     ("/api/v1/config", "客户端配置发现"),
+    # 403 cross_device_disabled 是它自己的策略应答,不是"跑不起来" ——
+    # 对照组 llm/health 在同样的挂法下是 503 Service not ready。
+    ("/api/v1/webrtc/endpoint", "WebRTC 端点发现"),
 )
 
 
@@ -103,6 +106,48 @@ class TestLedgerIsWellFormed:
         data = json.loads(LEDGER.read_text(encoding="utf-8"))
         unclassified = [e["path"] for e in data["gateway_only"] if "未分类" in e["reason"]]
         assert not unclassified, f"这些路径还没人回答『该并进权威层还是网关独有』:{unclassified}"
+
+    def test_every_entry_names_a_core_equivalent(self):
+        """每条『不搬』都必须点名 core 侧的替代能力。
+
+        "不搬"这个结论只有在 core 侧确实有替代时才成立。不写替代的话,台账
+        表达的其实是"先放着",而放着的东西没人会回来看 —— 这份台账存在的
+        全部意义就是不让那种事发生。
+        """
+        data = json.loads(LEDGER.read_text(encoding="utf-8"))
+        missing = [e["path"] for e in data["gateway_only"] if not e.get("core_equivalent")]
+        assert not missing, (
+            f"这些条目没写 core 侧的对应能力:{missing}\n"
+            "要么补上对应路径,要么说明它确实无可替代 —— 那样它就该被搬进权威层,而不是留在台账里。"
+        )
+
+
+@pytest.mark.slow
+class TestNotPortingIsStillJustified:
+    """『这 13 条不搬』依赖一个前提:core 侧已经有替代。前提没了就该重新决定。
+
+    没有这条用例,台账里那些 core_equivalent 就只是**写下来的断言**:
+    哪天 core 把 /api/v1/tasks 改名或删掉,台账照旧写着"core 已有对应",
+    而实际上那个能力在统一启动器上已经消失了,谁也不会知道。
+    """
+
+    def test_named_core_equivalents_all_exist_on_the_authoritative_surface(self, surfaces):
+        authoritative, _gateway = surfaces
+        data = json.loads(LEDGER.read_text(encoding="utf-8"))
+        broken = []
+        checked = 0
+        for entry in data["gateway_only"]:
+            for equivalent in entry.get("core_equivalent") or []:
+                checked += 1
+                if equivalent not in authoritative:
+                    broken.append(f"{entry['path']} 声称的替代 {equivalent} 在权威面上不存在")
+        assert checked > 0, "一条 core_equivalent 都没查到 —— 这条用例又变成恒绿了"
+        assert not broken, (
+            "台账里『core 侧已有对应能力』这个前提不再成立:\n  "
+            + "\n  ".join(broken)
+            + "\n\n前提没了,『不搬』就不再是结论。要么修好 core 侧那条,"
+            "要么重新决定该不该把网关那条搬进权威层 —— 不要只是把这里的路径改掉。"
+        )
 
 
 @pytest.mark.slow
@@ -189,24 +234,57 @@ class TestSurfaceParity:
             "否则只是把一条死路由从一个 app 搬到另一个 app。"
         )
 
-    def test_merge_did_not_create_shadowed_duplicates(self, surfaces):
+    #: 已知的、**先于这次整合就存在**的重复注册。写成带理由的白名单而不是
+    #: 直接放过:新增的重复照样判红,存量不至于让这条守卫无法落地。
+    #:
+    #: /metrics —— core.routes.monitoring.prometheus_metrics(先注册,生效)与
+    #: core.health_check.metrics(后注册,永不命中)。两者分别来自统一启动器的
+    #: 步骤 3 与步骤 4,谁该承载 /metrics 是监控口径问题,不该由这次接线顺手定。
+    KNOWN_SHADOWED = {("/metrics", "GET")}
+
+    def test_merge_did_not_create_shadowed_duplicates(self):
         """并入不该把权威层已有的路径再注册一遍。
 
         FastAPI 允许重复路径,匹配时先注册的赢 —— 后来那条永远不会被命中,
         成为一条看不见的死路由。而"存在但从不生效"正是本仓一路在清的那类东西。
+
+        这条用例此前是**恒绿的**,值得记下来
+        ------------------------------------
+        它原先直接遍历 ``app.routes`` 取 ``route.path``。而新版 FastAPI 的
+        ``include_router`` 不再把子路由摊平,顶层拿到的是一串 ``_IncludedRouter``
+        包装对象,它们的 ``.path`` 全是 ``None`` —— 于是这条用例每次比较的都是
+        ``(None, None)``,永远发现不了任何重复。
+
+        代价是实打实的:为了 WebRTC 端点并入 ``galaxy_gateway.routes.chat`` 时,
+        它带的 ``POST /api/v1/chat`` 与 ``core.routes.chat`` 撞车,被原样追加,
+        成了一条死路由 —— 而这条本该拦住它的用例照样是绿的。**生产代码里
+        "跳过已存在"的那段逻辑也栽在同一件事上**(见 gateway_surface_merge)。
+
+        所以现在走 ``iter_path_methods`` 递归展开,与生产代码用同一个函数 ——
+        两边一起对或一起错,不会再出现"守卫看的是另一棵树"。
         """
         os.environ.setdefault("GALAXY_NATS_ENABLED", "false")
         from fastapi import FastAPI
 
         from core.api_routes import create_api_routes
+        from core.gateway_surface_merge import iter_path_methods
 
         app = FastAPI()
         app.include_router(create_api_routes(service_manager=None, config=None))
+
+        pairs = list(iter_path_methods(app.routes))
+        # 先自证这次真的看到了路径 —— 否则下面"没有重复"只是又一次恒绿。
+        assert len(pairs) > 100, f"只展开出 {len(pairs)} 条 (路径, 方法),递归展开没生效,这条用例又变成恒绿了"
+        assert any(p == "/api/v1/chat" for p, _ in pairs), "展开结果里连 /api/v1/chat 都没有,说明取到的不是真实路由树"
+
         seen, dupes = set(), []
-        for route in app.routes:
-            path = getattr(route, "path", None)
-            for method in getattr(route, "methods", None) or {None}:
-                if (path, method) in seen:
-                    dupes.append(f"{method} {path}")
-                seen.add((path, method))
-        assert not dupes, f"权威层里有重复注册(后者永远不会被命中):{sorted(set(dupes))}"
+        for path, method in pairs:
+            if method == "HEAD":  # FastAPI 给每条 GET 自动配的,不是重复注册
+                continue
+            if (path, method) in seen and (path, method) not in self.KNOWN_SHADOWED:
+                dupes.append(f"{method} {path}")
+            seen.add((path, method))
+        assert not dupes, (
+            f"权威层里有重复注册(后者永远不会被命中):{sorted(set(dupes))}\n"
+            "要么别并这个 router,要么让 gateway_surface_merge 跳过这条 (路径, 方法)。"
+        )
