@@ -262,9 +262,7 @@ governance policy introduced in PR-3.
 # PR-4: Agent Bus & Fabric Convergence — transport strategy sentinel.
 # CommandRouter is the transport strategy selection layer: it decides which
 # carrier/substrate (direct / gateway / NATS / relay / mesh) to use for each
-# dispatch（注：此处原写「records the decision via
-# core.agent_bus_fabric.record_fabric_event」——本文件从未导入该模块，那条记录
-# 从未发生；core.agent_bus_fabric 目前从任何真实入口都不可达），
+# dispatch（原写「via core.agent_bus_fabric.record_fabric_event」—— 本文件从未导入该模块，那条记录从未发生），
 # and enforces the canonical TaskEnvelope/ResultEnvelope contract on every path.
 COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED: str = (
     "COMMAND_ROUTER::TRANSPORT_STRATEGY_LAYER_V1: CommandRouter selects "

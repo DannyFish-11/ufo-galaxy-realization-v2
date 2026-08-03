@@ -1,4 +1,20 @@
 {
+  "_comment": [
+    "从真实入口不可达的 core/ 模块存量基线。scripts/check_reachability.py 只对**新增**报警。",
+    "不可达 ≠ 该删。以下几类是**有意保留**的，删掉等于替使用者做产品决策：",
+    "  core.compute_scheduler   —— GPU 层卸载 / 连续批处理 / 前缀缓存 / 动态量化降级。",
+    "                              曾被当作死代码删除后又恢复：活树里没有任何等价调度器，",
+    "                              删掉等于明确『不做本地算力调度』。",
+    "  core.node_communication  —— AODV 式去中心化路由 / 网络分区检测 / 消息 ACK / TLS。",
+    "                              曾被当作死代码删除后又恢复：当初的理由是『节点间通信已由",
+    "                              nats_bus / mesh_coordinator 解决』—— 那是**中心化消息代理**，",
+    "                              与『代理不可达时设备之间还能否自组网路由』不是同一件事。",
+    "  core.local_agent_runtime —— 端侧执行沙盒。服务端零引用是**设计使然**，",
+    "                              core/runtime_invariant_enforcement.py 的 INV-008 主动强制它",
+    "                              不得被服务端调用。删掉会直接违反那条不变量。",
+    "判据教训：『有个名字相近的模块在做类似的事』**不等于**能力还在。",
+    "必须比对同一层次的实现，而不是概念相似度。"
+  ],
   "unreachable": [
     "core.admissibility_policy_convergence",
     "core.agent_bus_fabric",
@@ -6,6 +22,7 @@
     "core.canonical_execution_chain",
     "core.capability_network_bridge",
     "core.cognitive.liminal_dynamics",
+    "core.compute_scheduler",
     "core.cross_device_candidates",
     "core.cross_device_responsiveness_contract",
     "core.failure_degraded_recovery_policy",
@@ -15,6 +32,7 @@
     "core.llm.providers",
     "core.local_agent_runtime",
     "core.mesh_participation_summary",
+    "core.node_communication",
     "core.orchestration.global_arbiter",
     "core.participant_authority_interfaces",
     "core.perception.canonical_state_adapter",
