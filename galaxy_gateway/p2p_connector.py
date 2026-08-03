@@ -136,7 +136,11 @@ class STUNClient:
         try:
             # 创建 UDP socket
             sock = sock_module.socket(sock_module.AF_INET, sock_module.SOCK_DGRAM)
-            sock.bind(("0.0.0.0", local_port))
+            # STUN 要让 NAT 看到真实的出口映射,本地端口得对所有接口开着等回包,
+            # 所以默认仍是通配地址;GALAXY_DISCOVERY_BIND_HOST 可在部署时收窄。
+            from core.net_bind import discovery_bind_host
+
+            sock.bind((discovery_bind_host(), local_port))
             sock.settimeout(5)
 
             # 构建 STUN Binding Request

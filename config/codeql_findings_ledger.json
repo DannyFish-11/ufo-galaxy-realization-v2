@@ -1,0 +1,83 @@
+{
+  "_comment": "CodeQL 告警处置台账。CodeQL 的结果只进 Security 页,CI 里读不到、脚本里拿不到 —— 于是『还剩几条、哪几条是已经判过的』没人答得上来,新冒出来的一条会混在存量里没人发现。这份台账把每一条的**处置结论**固定下来,scripts/check_codeql_ledger.py 拿它和当轮 SARIF 对账:出现台账里没有的位置就报出来。",
+  "_status_values": {
+    "fixed": "已改代码消除。改完就该从本台账删除(SARIF 里也不该再有)。",
+    "mitigated": "风险真实存在,已有运行时防护,但静态分析看不见那道防护,所以告警会一直在。",
+    "by-design": "该写法是功能的必要条件,改掉等于弄坏功能。",
+    "false-positive": "规则本身没错,但套在这个位置上判错了(多见于测试与渲染文本)。",
+    "vendored": "第三方代码,不由本仓维护。"
+  },
+  "_rule_of_thumb": "写 reason 时回答一句『为什么它不该被改』,而不是『它不重要』。答不上来的,就应该去改代码而不是记在这里。",
+  "_measured_at": "main cfc54eb / PR #1567 run 30784537448,python.sarif 共 22 条",
+  "total_recorded": 22,
+  "findings": [
+    {
+      "rule": "py/full-ssrf",
+      "count": 13,
+      "status": "mitigated",
+      "locations": [
+        "nodes/Node_08_Fetch/main.py:72",
+        "nodes/Node_08_Fetch/main.py:192",
+        "nodes/Node_105_UnifiedKnowledgeBase/main.py:191",
+        "nodes/Node_119_BenchmarkEval/main.py:389",
+        "nodes/Node_121_Web/main.py:175",
+        "nodes/Node_121_Web/main.py:229",
+        "nodes/Node_121_Web/main.py:326",
+        "nodes/Node_121_Web/main.py:408",
+        "nodes/Node_15_OCR/main.py:85",
+        "nodes/Node_26_Discord/main.py:232",
+        "nodes/Node_76_AlertManager/main.py:144",
+        "nodes/Node_86_SpeechProcessor/main.py:179",
+        "nodes/Node_93_VideoProcessor/main.py:200"
+      ],
+      "reason": "这些节点的**本职就是按调用方给的 URL 去抓东西**,URL 必然是用户可控的 —— 这一点不可能『修掉』,否则节点就没有功能了。真正的防护是 nodes/common/url_guard 的出站守卫:默认拒绝内网(loopback / link-local 含 169.254.169.254 / private / multicast / reserved),判定落在 DNS 解析后的**所有**地址上而不是 URL 字符串,并且挂成 httpx 的 request 钩子,**每一跳重定向都过守卫**。CodeQL 看不见它,因为那是运行时钩子而不是它认识的 sanitizer 形态 —— 污点仍然从用户输入流到 request,所以这 13 条会一直在。接线由 tests/test_node_ssrf_wiring.py 守着(每个文件还剩多少个裸客户端是记数字的),守卫行为由 tests/test_url_guard.py 的 38 条守着,其中包含一个真起 HTTP 服务发 302 的重定向用例和它的对照组。",
+      "guarded_by": ["tests/test_url_guard.py", "tests/test_node_ssrf_wiring.py"]
+    },
+    {
+      "rule": "py/bind-socket-all-network-interfaces",
+      "count": 2,
+      "status": "by-design",
+      "locations": [
+        "core/adapters/udp_adapter.py:159",
+        "galaxy_gateway/p2p_connector.py:132"
+      ],
+      "reason": "带 SO_BROADCAST 的局域网发现监听与 STUN 客户端。广播包只送到绑通配地址的 socket;STUN 要让 NAT 看到真实出口映射,本地端口得对所有接口开着等回包。绑 127.0.0.1 不是修复,是把跨设备发现关掉。已做的改进是把这个**隐式常量**变成显式可配的决定:core/net_bind.discovery_bind_host() 读 GALAXY_DISCOVERY_BIND_HOST,默认仍为 0.0.0.0(改默认值会让绝大多数用户升级后设备发现悄悄失效),部署在公网机器上时可收窄到某块网卡。改完 CodeQL 仍会报,这是预期的 —— 它看到的还是一个可能为 0.0.0.0 的值流进 bind()。补充一点核过的事:告警文案里还提到该值可能是空串 ''。那是 CodeQL 把 os.getenv(名字, \"\") 的默认字面量顺着数据流带了下来,它没有精确建模函数里 `if not host: return default` 那道拦截。穷举过('' / 空格 / 制表符 / 换行 / 混合空白 / 未设置)六种取值,返回的都是 0.0.0.0,能返回空串的路径不存在;这一点由 tests/test_codeql_ledger_and_net_bind.py 的 test_blank_values_fall_back_to_default 钉着。",
+      "guarded_by": ["tests/test_net_bind.py"]
+    },
+    {
+      "rule": "py/bind-socket-all-network-interfaces",
+      "count": 2,
+      "status": "by-design",
+      "locations": [
+        "nodes/Node_71_MultiDeviceCoordination/core/device_discovery.py:142",
+        "nodes/Node_71_MultiDeviceCoordination/core/device_discovery.py:521"
+      ],
+      "reason": "这两处是**多播**接收(紧跟着 IP_ADD_MEMBERSHIP 加组),绑的是空串即 INADDR_ANY。多播接收在 Linux 上必须绑通配地址,绑具体 IP 会收不到组播 —— 所以这里刻意**不**接 GALAXY_DISCOVERY_BIND_HOST:让一个开关同时管单播广播和多播,会出现『为了收窄前者而静默弄坏后者』的情形,那比现在更糟。真要限定多播接口,该改的是 mreq 里的 INADDR_ANY(IP_MULTICAST_IF),那是另一件事,有真实的破坏风险,不在本轮范围。"
+    },
+    {
+      "rule": "py/bind-socket-all-network-interfaces",
+      "count": 1,
+      "status": "false-positive",
+      "locations": ["tests/test_windows_launch_recovery.py:164"],
+      "reason": "这一处 bind((\"0.0.0.0\", 0)) 正是被测行为本身:它在模拟 uvicorn 那种『占着端口但不 listen』的形态,用来验 unified_launcher._probe_port_bindable 会把通配绑定占着的端口判为不可绑。改成 127.0.0.1 会让这条用例不再测它要测的东西。socket 在 with 里,存活数毫秒,且从不 listen。"
+    },
+    {
+      "rule": "py/incomplete-url-substring-sanitization",
+      "count": 3,
+      "status": "false-positive",
+      "locations": [
+        "tests/test_pr4_topology_semantics.py:249",
+        "tests/test_pr4_topology_semantics.py:293",
+        "tests/test_webrtc_gateway.py:353"
+      ],
+      "reason": "这三处不是在净化 URL,是在对**渲染出来的文本**做包含断言(TopologySurface().render(...) 的输出里有没有出现某个地址、WebRTC 端点字符串里有没有网关域名)。规则匹配的是『URL 上的子串检查』这个形状,而这里被检查的对象根本不是一个待净化的 URL。改成精确比较会把断言变脆(渲染文本本来就带边框和其它内容),没有安全收益。"
+    },
+    {
+      "rule": "py/incomplete-url-substring-sanitization",
+      "count": 1,
+      "status": "vendored",
+      "locations": ["external/microsoft_ufo/llm/openai.py:571"],
+      "reason": "external/ 下是 vendored 的第三方代码(microsoft UFO),不由本仓维护 —— 本仓的其它守卫(check_wiring 的引用扫描等)也一律跳过这个目录。真要处理应当走上游,而不是在 vendor 副本里改出一份和上游不同的代码。"
+    }
+  ]
+}

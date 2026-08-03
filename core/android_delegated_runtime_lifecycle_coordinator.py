@@ -402,6 +402,23 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     description="session_state_module_unavailable",
                 )
 
+            # 幂等:create_participant_session_record 是**无条件新建**的,重复调会把
+            # 已推进到 takeover/execution 的会话打回起点。调用方每次派发都要确保记录
+            # 存在、又无从知道这是不是第二次,所以判断放在这里而不是让各调用方自己记。
+            existing = get_participant_session(session_id) if get_participant_session is not None else None
+            if existing is not None:
+                return AndroidLifecycleCoordinatorOutcome(
+                    was_handled=True,
+                    event_type="handoff_dispatched",
+                    session_id=session_id,
+                    phase_before=existing.phase.value,
+                    phase_after=existing.phase.value,
+                    was_transitioned=False,
+                    description=(
+                        f"session already dispatched: session={session_id!r} " f"phase={existing.phase.value}"
+                    ),
+                )
+
             rec = create_participant_session_record(
                 session_id=session_id,
                 device_id=device_id,

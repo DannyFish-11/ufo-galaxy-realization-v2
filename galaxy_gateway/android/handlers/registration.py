@@ -83,6 +83,12 @@ def is_registration_fully_attached(device_id: str) -> bool:
     UDM write, DeviceRouter session sync, ``attach_runtime_session``, and
     ``attached_runtime_session_registry``.  A device with gaps is considered
     *partially registered* and may not be reliably dispatchable.
+
+    这是 ACK 里 ``registration_fully_attached`` 字段的**判据本身**。
+    本模块下面组装 ACK 与生命周期事件的地方一律调它,不要再就地写
+    ``len(_gaps) == 0`` —— 那样同一个判据会散成好几份,哪天"完全附着"的定义变了
+    (比如新增一个下游步骤),就会只改到其中几处,而差异表现为 ACK 与
+    生命周期状态互相矛盾,没有任何断言会红。
     """
     return len(_device_registration_gaps.get(device_id, [])) == 0
 
@@ -1330,7 +1336,9 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
         if _pending_lifecycle_decisions:
             ack["pending_lifecycle_decisions"] = _pending_lifecycle_decisions
         # Surface registration completeness so callers can assert the state.
-        ack["registration_fully_attached"] = len(_gaps) == 0
+        # 走 is_registration_fully_attached 而不是就地 len(_gaps) == 0:
+        # 这个判据在本模块里出现过两次、在 core 侧还有两处同形表达,散着写迟早只改到几处。
+        ack["registration_fully_attached"] = is_registration_fully_attached(device_id)
         if _gaps:
             ack["registration_gaps"] = _gaps
 
@@ -1421,7 +1429,7 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             auth_outcome=auth_outcome,
             identity_outcome=identity_outcome,
             registration_success=True,
-            registration_fully_attached=len(_gaps) == 0,
+            registration_fully_attached=is_registration_fully_attached(device_id),
             registration_gaps=_gaps,
             network_participation_tier=_network_participation_tier,
         )
