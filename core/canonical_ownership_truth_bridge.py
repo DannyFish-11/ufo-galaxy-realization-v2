@@ -549,3 +549,38 @@ def record_participant_truth_with_ownership(
         ownership_context=ownership_context,
         participant_ownership_boundary=boundary,
     )
+
+
+def bridge_participant_outcome_if_terminal(outcome: Any, *, is_terminal: bool, task_id: str, truth_kind: str) -> None:
+    """从参与者真相入口调用的**唯一**接点：终态时把归属送进规范真相链，且永不抛出。
+
+    修的是什么
+    ----------
+    ``core.android_participant_truth_ingress`` 每次入口都实打实算一份
+    ``ownership_context``，此前没有任何代码把它往下游送 —— 算完就丢。而
+    ``CanonicalSessionTruthRuntime.record()`` 那道按 ``participant_ownership_boundary``
+    判定的准入门（非 canonicalized 不进规范环形缓冲、只作非规范证据入审计存储）因此
+    **永远拿不到非空输入**，从未生效过一次。本模块正是缺的那截中间件，却全仓零引用。
+
+    为什么把判断放在这里而不是入口里
+    --------------------------------
+    ``android_participant_truth_ingress.py`` 在 ``File Complexity Budget`` 上的基线是
+    1887 行、早已超标。把终态判断 + 降级包装留在入口会把它再推高二十几行；放到本模块
+    （551 行，未超标）之后，入口只剩一处调用。这与 ``dispatch_continuity_gate`` /
+    ``multi_subject_closure_surface`` 是同一个处理方式。
+
+    *is_terminal* 由调用方传入而不是在这里重新判定 —— 入口已经算过一次
+    （``_TERMINAL_TRUTH_KINDS``），重算等于把同一份判据放两处，将来必然漂。
+
+    只在终态种类上写：规范环形缓冲有界（``deque(maxlen=…)``），逐事件写会把有价值的
+    终态记录挤掉。刻意**不**按 ``was_reconciled`` 过滤 —— 非规范归属恰恰多出现在未成功
+    对账的情形，滤掉它那道门就还是只能看到本来就合规的记录，等于仍未生效。
+
+    完整取证见 ``tests/test_pr_v10_ownership_truth_wiring.py`` 的模块 docstring。
+    """
+    if not is_terminal:
+        return
+    try:
+        record_participant_truth_with_ownership(outcome, task_id=task_id or None, truth_source=truth_kind)
+    except Exception as exc:  # pragma: no cover - 真相记录是可观测面，不得影响入口
+        _logger.debug("ownership truth bridge unavailable (non-fatal): %s", exc)

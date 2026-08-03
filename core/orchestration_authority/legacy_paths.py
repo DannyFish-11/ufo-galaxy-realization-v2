@@ -840,22 +840,10 @@ _register(
             "Canonical OneAPI state must flow through DesktopStatusProjection."
         ),
     ),
-    LegacyPathEntry(
-        module_path="core.api_manager.APIManager._validate_oneapi",
-        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
-        recommendation=(
-            "APIManager._validate_oneapi() is a LEGACY VALIDATION HELPER "
-            "(PR-oneapi-system-position).  "
-            "OneAPI availability must be determined by ProviderInventory / "
-            "TopologyRouter participation rather than ad-hoc API-manager probes.  "
-            "This helper is retained for the API key validation endpoint only."
-        ),
-        pr_guardrail_added="PR-oneapi-system-position",
-        notes=(
-            "api_manager OneAPI validation — LEGACY HELPER.  "
-            "Availability truth belongs in ProviderInventory / TopologyRouter."
-        ),
-    ),
+    # 此处原有 core.api_manager.APIManager._validate_oneapi 的 LEGACY_COMPATIBILITY
+    # 条目。该模块（721 行）已作为零引用死代码删除 —— 全仓除本注册表的元数据字符串外
+    # 无任何 import。条目原文写着「保留供 API key 校验端点使用」，实测那个端点也从不
+    # 引用它，那句话本身早已是漂移。既然这条 legacy 路径不复存在，登记也随之移除。
 )
 
 #: Contributors: when registering any node whose module path starts with one of

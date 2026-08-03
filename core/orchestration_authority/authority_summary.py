@@ -14,8 +14,9 @@ which orchestration authority path handled a given request.
 This module integrates with:
 * PR-7 ``core.execution_observability`` — attaches authority metadata to
   :class:`~core.execution_observability.event_schema.ExecutionEvent` dicts.
-* PR-8 ``core.envelope_consolidation`` — can annotate
-  :class:`~core.envelope_consolidation.EnvelopeSummary` with authority role.
+* PR-8 信封摘要 —— 可为其字典附加 authority role。
+  （``core.envelope_consolidation`` 已作为零引用死代码删除；下面那个函数仍按
+  「形如信封摘要的字典」工作，不依赖任何具体模块。）
 * :mod:`~.authority_resolver` — drives classification from module paths.
 
 Usage::
@@ -293,10 +294,10 @@ def attach_authority_to_envelope_summary(
 ) -> Dict[str, Any]:
     """Attach an authority summary to a PR-8 ``EnvelopeSummary`` dict.
 
-    Accepts the dict returned by
-    :func:`~core.envelope_consolidation.envelope_summary.summarise_envelope`
-    (or ``EnvelopeSummary.to_dict()``) and returns a **new** dict with an
-    ``"orchestration_authority"`` key.
+    接受一个形如信封摘要的字典（原 ``core.envelope_consolidation`` 的
+    ``summarise_envelope()`` / ``EnvelopeSummary.to_dict()`` 产物；该模块已作为零引用
+    死代码删除，本函数并不 import 它，按字典结构工作），返回一个**新**字典，
+    其中带有 ``"orchestration_authority"`` 键。
 
     Parameters
     ----------

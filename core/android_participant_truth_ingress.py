@@ -1200,6 +1200,22 @@ def reconcile_android_participant_truth(
     )
     # PR-10: Record the outcome for the operator review surface.
     _record_last_reconciliation_outcome(outcome)
+
+    # PR-V10-OWNERSHIP：把刚算出来的 ownership_context 送进规范真相链的准入门
+    # （此前它每次都算、算完即丢，那道门因而从未生效）。判断与降级都在桥里，见
+    # core.canonical_ownership_truth_bridge.bridge_participant_outcome_if_terminal。
+    try:
+        from core.canonical_ownership_truth_bridge import bridge_participant_outcome_if_terminal
+
+        bridge_participant_outcome_if_terminal(
+            outcome,
+            is_terminal=truth_kind_str in _TERMINAL_TRUTH_KINDS,
+            task_id=envelope.task_id or "",
+            truth_kind=truth_kind_str,
+        )
+    except Exception as _own_exc:  # pragma: no cover - 桥导不进来时降级
+        _logger.debug("ownership truth bridge unavailable (non-fatal): %s", _own_exc)
+
     return outcome
 
 
