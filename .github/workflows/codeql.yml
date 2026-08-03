@@ -68,14 +68,22 @@ jobs:
           # 又不会让每周一次的定时扫描无限堆积。
           retention-days: 90
 
-      # 把"有几条、分别是什么"直接打进作业摘要,连 artifact 都不用下载就能看见。
+      # 把"有几条、分别是什么"直接打进作业摘要**和作业日志**,连 artifact 都不用下载就能看见。
       # 这一步是纯读:不改判定、不影响 analyze 的成败,只是把已有信息呈现出来。
+      #
+      # 为什么非要同时打进日志(tee):
+      # 第一版只写 $GITHUB_STEP_SUMMARY。结果是加完 artifact + 摘要之后,告警**依然读不到** ——
+      # 摘要只能在网页上看,artifact 要有 token 才下得下来,而作业日志是唯一一个
+      # 「任何能看 CI 的人和工具都拿得到原文」的地方。实测就卡在这:artifact 有了、
+      # 摘要有了,想知道那 6 条是什么仍然只能靠人打开网页转述。
+      # 摘要保持紧凑(每条 rule 一行),日志里则打全量清单 —— 日志有的是地方。
       - name: Summarise findings
         if: always()
         run: |
-          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import json, pathlib, collections
           out = []
+          detail = []
           for path in sorted(pathlib.Path("sarif-results").glob("*.sarif")):
               try:
                   data = json.loads(path.read_text(encoding="utf-8"))
@@ -95,15 +103,33 @@ jobs:
                   first = {}
                   for r in results:
                       rid = r.get("ruleId", "?")
-                      if rid in first:
-                          continue
                       locs = r.get("locations") or []
                       phys = (locs[0].get("physicalLocation") if locs else {}) or {}
                       art = (phys.get("artifactLocation") or {}).get("uri", "?")
                       line = (phys.get("region") or {}).get("startLine", "?")
-                      first[rid] = f"{art}:{line}"
+                      where = f"{art}:{line}"
+                      first.setdefault(rid, where)
+                      # 全量清单:每条告警的规则、位置、severity 与原文消息。
+                      # 这份只进日志,不进摘要 —— 摘要要能一眼看完,日志要能照着改代码。
+                      detail.append(
+                          {
+                              "rule": rid,
+                              "at": where,
+                              "severity": (r.get("properties") or {}).get("problem.severity", "?"),
+                              "message": ((r.get("message") or {}).get("text") or "").strip(),
+                          }
+                      )
                   for rid, n in by_rule.most_common():
                       out.append(f"| `{rid}` | {n} | {first.get(rid, '?')} |")
           print("## CodeQL 结果\n")
           print("\n".join(out) if out else "_没有找到 SARIF 文件。_")
+          if detail:
+              # 这段前缀让人(和抓日志的工具)一眼定位到全量清单从哪儿开始。
+              print("\n<!-- 以下全量清单只在作业日志里可见 -->")
+              print("\n===== CODEQL FULL FINDINGS (%d) =====" % len(detail))
+              for i, d in enumerate(sorted(detail, key=lambda x: (x["rule"], x["at"])), 1):
+                  print(f"{i}. [{d['severity']}] {d['rule']}")
+                  print(f"     {d['at']}")
+                  print(f"     {d['message']}")
+              print("===== END CODEQL FULL FINDINGS =====")
           PY

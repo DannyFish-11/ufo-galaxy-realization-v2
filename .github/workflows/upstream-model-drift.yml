@@ -113,50 +113,128 @@ jobs:
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, pathlib, sys
-          p = pathlib.Path("drift.json")
-          if not p.is_file():
-              print("## 上游型号漂移\n\n_实测未产出结果。_"); sys.exit(0)
-          d = json.loads(p.read_text(encoding="utf-8"))
-          rows = (d.get("live") or {}).get("rows") or []
+          # 脚本是 `> drift.json || true` 落盘的:它自己崩了会留下一个**空文件**。
+          # 只判 is_file() 不够 —— 空/坏文件会让这一步抛 traceback,把"实测没跑成"
+          # 变成"汇总步骤挂了",归因方向直接错一位。实测踩过。
+          def _load_rows():
+              p = pathlib.Path("drift.json")
+              if not p.is_file() or p.stat().st_size == 0:
+                  return None
+              try:
+                  return (json.loads(p.read_text(encoding="utf-8")).get("live") or {}).get("rows") or []
+              except (json.JSONDecodeError, AttributeError):
+                  return None
+          rows = _load_rows()
+          if rows is None:
+              print("## 上游型号漂移\n\n_实测未产出可解析的结果(脚本崩溃或被中断)。_"); sys.exit(0)
           print("## 上游型号漂移\n")
-          print("| provider | 状态 | 上游型号数 | 上游不认的声明型号 |")
-          print("|---|---|---:|---|")
-          drifted = []
+          print("| provider | key | 状态 | 上游型号数 | 上游不认的声明型号 | 其中 realtime |")
+          print("|---|---|---|---:|---|---|")
+          drifted, drifted_rt, unverified = [], [], []
           for r in rows:
               missing = r.get("missing_upstream") or []
+              missing_rt = r.get("missing_upstream_realtime") or []
               if missing:
                   drifted.append((r.get("provider"), missing))
+              if missing_rt:
+                  drifted_rt.append((r.get("provider"), missing_rt))
+              # 有 key、却没验成 —— 这既不是"没配"也不是"没漂移",是**这家这次没验到**。
+              if r.get("configured") == "已配置" and r.get("status") != "OK":
+                  unverified.append((r.get("provider"), r.get("status"), r.get("error") or ""))
               print(
-                  f"| {r.get('provider')} | {r.get('status')} | {r.get('upstream_count', '—')} | "
-                  f"{', '.join(f'`{m}`' for m in missing) if missing else '—'} |"
+                  f"| {r.get('provider')} | {r.get('configured', '—')} | {r.get('status')} | "
+                  f"{r.get('upstream_count', '—')} | "
+                  f"{', '.join(f'`{m}`' for m in missing) if missing else '—'} | "
+                  f"{', '.join(f'`{m}`' for m in missing_rt) if missing_rt else '—'} |"
               )
           print()
-          if drifted:
+          if drifted or drifted_rt:
               print("### ⚠️ 发现漂移\n")
               for prov, missing in drifted:
-                  print(f"- **{prov}**: {', '.join(f'`{m}`' for m in missing)}")
+                  print(f"- **{prov}**(文本): {', '.join(f'`{m}`' for m in missing)}")
+              for prov, missing in drifted_rt:
+                  print(f"- **{prov}**(realtime): {', '.join(f'`{m}`' for m in missing)}")
               print("\n这些型号我们仍在 `PROVIDER_REGISTRY` 里声明,但上游已经不认了 —— "
                     "运行时会表现为 404,而且多半是在用户正要用的时候。")
           else:
-              print("_未发现漂移:声明的型号上游都还认。_")
+              print("_未发现漂移:验到的那些声明型号,上游都还认。_")
+          if unverified:
+              print("\n### ⚪ 配了 key 但这次没验到\n")
+              for prov, status, err in unverified:
+                  print(f"- **{prov}**: {status} {f'({err})' if err else ''}")
+              print(
+                  "\n这一栏必须单独看:**没验到 ≠ 没漂移**。上面那句『未发现漂移』只覆盖"
+                  "真正验成的那几家 —— 把这两件事混起来,正是让这个工作流悄悄变成空转的方式。"
+              )
           PY
 
-      # 只有真的发现漂移才失败。网络抖动/单家 401 不该让整条流水线红 ——
-      # 那会训练出"这个 job 红了不用管"的习惯,而这正是它要避免的。
+      # 判失败的两种情形:
+      #
+      # 1. 真的发现漂移(文本型号或 realtime 型号任一)。
+      #    realtime 必须一起判 —— 这个工作流开篇写的就是"带日期后缀的 realtime 型号尤其",
+      #    而第一版的判定只看 missing_upstream,把 missing_upstream_realtime 漏掉了。
+      #    也就是说它恰好不查自己最想查的那一维,而且永远绿。
+      #
+      # 2. 配了 key,却**一家都没验成**。
+      #    这一条是后加的,起因是实测:本机四家都配了 key,全部因为网络策略连不上,
+      #    脚本如实报了"连接失败",而第一版的判定只看 missing_upstream —— 连不上就没有
+      #    missing_upstream,于是整个 job 报绿。一个什么都没验到却说"未发现漂移"的检查,
+      #    比没有这个检查更糟:它让人以为查过了。
+      #
+      # 单家 401 / 个别网络抖动仍然不判失败(只要还有别家验成),那种红会训练出
+      # "这个 job 红了不用管"的习惯,而这正是它要避免的。
       - name: 漂移即失败
         if: steps.keys.outputs.any == 'true'
         run: |
           python - <<'PY'
           import json, pathlib, sys
-          p = pathlib.Path("drift.json")
-          if not p.is_file():
-              print("实测未产出结果(网络或脚本问题),不判失败。"); sys.exit(0)
-          rows = (json.loads(p.read_text(encoding="utf-8")).get("live") or {}).get("rows") or []
-          drifted = {r.get("provider"): r.get("missing_upstream") for r in rows if r.get("missing_upstream")}
+          def _load_rows():
+              p = pathlib.Path("drift.json")
+              if not p.is_file() or p.stat().st_size == 0:
+                  return None
+              try:
+                  return (json.loads(p.read_text(encoding="utf-8")).get("live") or {}).get("rows") or []
+              except (json.JSONDecodeError, AttributeError):
+                  return None
+          rows = _load_rows()
+          if rows is None:
+              print("实测未产出可解析的结果(网络或脚本问题),不判失败。"); sys.exit(0)
+
+          drifted = {
+              r.get("provider"): {
+                  "text": r.get("missing_upstream") or [],
+                  "realtime": r.get("missing_upstream_realtime") or [],
+              }
+              for r in rows
+              if (r.get("missing_upstream") or r.get("missing_upstream_realtime"))
+          }
+          configured = [r for r in rows if r.get("configured") == "已配置"]
+          verified = [r for r in configured if r.get("status") == "OK"]
+
+          failed = False
           if drifted:
               print("上游不再认账的型号:")
-              for prov, missing in drifted.items():
-                  print(f"  {prov}: {missing}")
+              for prov, kinds in drifted.items():
+                  if kinds["text"]:
+                      print(f"  {prov} (文本): {kinds['text']}")
+                  if kinds["realtime"]:
+                      print(f"  {prov} (realtime): {kinds['realtime']}")
+              failed = True
+
+          if configured and not verified:
+              print(
+                  f"\n配了 key 的 {len(configured)} 家一家都没验成 —— 这次实测什么都没查到。"
+                  "\n各家状态:"
+              )
+              for r in configured:
+                  print(f"  {r.get('provider')}: {r.get('status')} {r.get('error') or ''}")
+              print(
+                  "\n判失败的理由:报『未发现漂移』的前提是**验过**。一次都没验成还报绿,"
+                  "\n这个工作流就退化成了一个恒绿的摆设 —— 而它存在的全部意义正是不当摆设。"
+              )
+              failed = True
+
+          if failed:
               sys.exit(1)
-          print("未发现型号漂移。")
+          print(f"未发现型号漂移(实测验成 {len(verified)}/{len(configured)} 家)。")
           PY
