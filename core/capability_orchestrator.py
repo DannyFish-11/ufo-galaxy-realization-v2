@@ -767,14 +767,20 @@ capability_orchestrator = CapabilityOrchestrator.get_instance()
 # ============================================================================
 
 
-async def discover_capability(query: str, limit: int = 5) -> List[Dict]:
-    """发现能力"""
-    return await capability_orchestrator.discover(query, limit)
-
-
-async def execute_capability(capability_id: str, **params) -> Any:
-    """执行能力"""
-    return await capability_orchestrator.execute(capability_id, **params)
+# 这里曾有两个模块级薄包装:
+#     discover_capability(query, limit)   -> capability_orchestrator.discover(...)
+#     execute_capability(capability_id, …) -> capability_orchestrator.execute(...)
+#
+# 两者全仓零调用、零测试。它们包装的方法(discover / execute)本身还在,
+# 而同一族里真正被用起来的是下面的 dispatch 与 smart_execute ——
+# 也就是说这套"模块级便捷入口"只有一半被采用了。
+#
+# discover_capability 此前唯一的引用来自 core/system_integration.py,
+# 那个模块已被主干的 PR #1564 删除。
+#
+# 留着不是零成本:一个从未被调用过的入口,没有任何东西保证它的签名与
+# 底下的方法还对得上(discover 的签名改了它也不会红),而下一个人看到它
+# 会以为这是推荐用法。要用直接写 capability_orchestrator.discover(...)。
 
 
 async def smart_execute(query: str, **params) -> Any:

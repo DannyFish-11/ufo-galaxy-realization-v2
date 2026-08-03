@@ -182,12 +182,16 @@ class CapabilityRegistry:
         q = query.lower()
         return [i for i in self._items.values() if i.available and (q in i.name.lower() or q in i.description.lower())]
 
-    def find_by_system_integration_id(self, integration_id: str) -> Optional[CapabilityItem]:
-        """Return the registered item associated with a SystemIntegration ID."""
-        for item in self._items.values():
-            if str((item.metadata or {}).get("system_integration_id") or "") == str(integration_id):
-                return item
-        return None
+    # 这里曾有一个 ``find_by_system_integration_id(integration_id)`` —— 按
+    # ``metadata["system_integration_id"]`` 做**反向**查找。
+    #
+    # 它唯一的消费方是 ``core/system_integration.py``,而那个模块已被主干的
+    # PR #1564 删除。正向仍然活着(``core/unified/capability_contract.py`` 依旧
+    # 写入并读取这个 metadata 键),缺的只是"拿 ID 反查条目"这一个动作 ——
+    # 全仓零调用、零测试。
+    #
+    # 删而不是留:一个 O(n) 线性扫描的反查,真需要时五行就能写回来;留着则是一个
+    # 没有调用方、因而也没有任何东西保证它还正确的公开 API。
 
     def register(self, item: Any) -> None:
         """手动注册一个能力条目或 canonical contract。"""
