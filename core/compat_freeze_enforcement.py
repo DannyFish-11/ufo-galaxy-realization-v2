@@ -31,7 +31,11 @@ COMPAT_SURFACES_REQUIRE_CANONICAL_REPLACEMENT_POLICY = (
 )
 
 FROZEN_COMPAT_SURFACE_BUDGET = 10
-FROZEN_LEGACY_PATH_BUDGET = 82
+# 82 → 81：``core.api_manager.APIManager._validate_oneapi`` 那条 legacy 路径随模块
+# 一并删除后，注册表真实条目数少了一条。这道门的判定是**上限**（``count > budget``
+# 才算违规），所以不下调也不会红；但冻结预算的意义是「钉住当前值、只准降不准升」，
+# 留在 82 等于白送一个额度给将来新增的 legacy 路径。棘轮下调才是这道门该有的行为。
+FROZEN_LEGACY_PATH_BUDGET = 81
 FROZEN_PRODUCTION_BASELINE_LEGACY_BUDGET = 2
 
 
