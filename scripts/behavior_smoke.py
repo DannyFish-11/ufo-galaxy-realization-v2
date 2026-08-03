@@ -198,7 +198,11 @@ def check_routes_present(base: str, rep: Report) -> Dict[str, Any]:
         "/api/v1/agents/linux/servers",
         "/api/v1/agents/sandbox/status",
         "/api/v5/health",
-        "/api/v1/gateway/metrics",
+        # 注意这里**没有** /api/v1/gateway/metrics:它属于
+        # galaxy_gateway/routes/health.py,那个 router 整体依赖 gateway 的 app.state,
+        # 并进权威层会变成恒 503 的死路由,所以刻意不并(见 config/api_surface_parity.json)。
+        # 这一行曾经在,是我合并那个 router 时加的;撤回合并后忘了同步 —— 于是冒烟
+        # 红在一个"本来就不该存在"的期望上。期望本身也是会漂的东西。
     ):
         rep.check(f"路由已挂载 {path}", path in paths, f"共 {len(paths)} 条路由")
     return {"paths": paths}
