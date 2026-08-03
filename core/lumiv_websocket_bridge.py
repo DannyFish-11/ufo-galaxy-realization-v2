@@ -72,11 +72,9 @@ _WS_SEND_TIMEOUT_S: float = 2.0
 # 旧值 0.50 只展开 ~13%(阈限空间几乎不可见);0.62 展开 ~44%,且仍低于
 # 灵动岛淡出线 0.65,岛保持全亮。前端穿越编排带时由渲染层限速播出
 # 收回→灵动岛→展开的完整秩序(见 electron/renderer/app.js _springUpdate)。
-MODE_DEPTH_MAP = {
-    "static": 0.05,
-    "liminal": 0.62,
-    "manifest": 0.92,
-}
+# 锚点的唯一事实源是 core.phase_contract.PHASE_ANCHORS —— 这里只做别名，
+# 避免同一组数字在两处各写一份、改一处忘另一处。
+from core.phase_contract import PHASE_ANCHORS as MODE_DEPTH_MAP  # noqa: E402
 
 
 class GalaxyPresenceBridge:
@@ -98,6 +96,9 @@ class GalaxyPresenceBridge:
     # 当前状态
     _current_mode: str = "static"
     _current_depth: float = 0.0
+    # 最近一次相位事件解算出的姿态（相位 + 连续量）。类属性给个 None 兜底：
+    # 首帧广播可能发生在任何相位事件之前，那时按"只有锚点"处理。
+    _posture: Any = None
     _intent: float = 0.0
     _speaking: bool = False
 
@@ -170,9 +171,45 @@ class GalaxyPresenceBridge:
     # _speaking=False:响应文本一好 runtime 就回 SILENT,而 TTS 还在播,结果
     # "嘴在动、动画已灭"。相位事件只管相位。
 
+    def _apply_posture(self, token: str) -> None:
+        """按相位取一份姿态，深度由**实算的连续量**导出而非查表。
+
+        改造前这里是 ``self._current_depth = MODE_DEPTH_MAP[token]`` —— 三个
+        硬编码常数。而后端的 ContinuumState 一直在算 collapse_tendency /
+        retreat_tendency（"推向相位塌缩/回撤的概率质量"），也就是"离翻到下一档
+        还有多远"，那正是三态**边缘**的定义。这份连续量此前到这一步就被丢掉了。
+
+        现在深度在本相位的带内按倾向漂移（见 core.phase_contract）。相位本身
+        仍由事件决定 —— 连续量只描述"在这一档里的哪个位置"，绝不改变是哪一档。
+
+        取不到 ContinuumState 时 posture.source 为 ``anchor_only``，深度等于
+        原来的锚点：行为与改造前完全一致，只是如实标注了这是估计值。
+        """
+        from core.phase_contract import resolve_phase_posture
+
+        self._posture = resolve_phase_posture(token)
+        self._current_depth = self._posture.depth
+
+    def _posture_payload(self, effective_phase: str) -> Dict[str, Any]:
+        """广播用的姿态字典。
+
+        ``effective_phase`` 是 payload 里实际报出的相位（说话期 static 会被报成
+        liminal）。姿态必须跟着它走，否则会出现"相位说 liminal、姿态说 static"
+        这种自相矛盾的帧——面板同时读这两处。
+
+        没有缓存姿态（首帧早于任何相位事件）时按 effective_phase 现算一份，
+        自然会走 anchor_only 分支。
+        """
+        from core.phase_contract import resolve_phase_posture
+
+        posture = self._posture
+        if posture is None or getattr(posture, "phase", None) != effective_phase:
+            posture = resolve_phase_posture(effective_phase)
+        return posture.to_dict()
+
     def _on_phase_silent(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "static"
-        self._current_depth = MODE_DEPTH_MAP["static"]
+        self._apply_posture("static")
         self._intent = 0.0
         _bt = asyncio.create_task(self._broadcast_state())
         _BACKGROUND_TASKS.add(_bt)
@@ -181,7 +218,7 @@ class GalaxyPresenceBridge:
     def _on_phase_liminal(self, event: Any) -> None:
         p = self._payload_of(event)
         self._current_mode = "liminal"
-        self._current_depth = MODE_DEPTH_MAP["liminal"]
+        self._apply_posture("liminal")
         # intent 从 payload 中提取，如果没有则默认 0.5
         self._intent = p.get("intent_strength", 0.5)
         self._speaking = p.get("speaking", self._speaking)
@@ -191,7 +228,7 @@ class GalaxyPresenceBridge:
 
     def _on_phase_manifest(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "manifest"
-        self._current_depth = MODE_DEPTH_MAP["manifest"]
+        self._apply_posture("manifest")
         self._intent = 1.0
         _bt = asyncio.create_task(self._broadcast_state())
         _BACKGROUND_TASKS.add(_bt)
@@ -475,6 +512,15 @@ class GalaxyPresenceBridge:
                 "speaking": _speaking,
                 "mode": _phase,
                 "source": "DesktopPresenceRuntime",
+                # 相位姿态：离散相位之外，把后端【一直在算却从没送出来】的连续量
+                # 带给面板（在场强度 / 塌缩与回撤倾向 / 稳定度）。契约与生成的
+                # TS 类型见 core/phase_contract.py 与 panel/src/types/phase_contract.gen.ts。
+                #
+                # 与上面 depth_factor 的关系：depth_factor 是姿态里的 depth 经过
+                # "说话地板"修正后的最终渲染值；posture.depth 是未修正的原值。
+                # 两者刻意都给：前者是渲染直接用的，后者是判断"它现在离翻档有多近"
+                # 的依据。只给前者的话，说话期的地板会把倾向信息盖掉。
+                "posture": self._posture_payload(_phase),
                 # 自发注意力最近一拍（面板在场栏展示"在看/在听 + 决策"）。
                 "ambient": {
                     "seeing": self._ambient_seeing,

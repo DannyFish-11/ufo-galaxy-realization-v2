@@ -1,6 +1,13 @@
 /**
  * 三态类型定义
+ *
+ * 注意分工：本文件是**展示**词汇（silent/liminal/manifest），
+ * `phase_contract.gen.ts` 是后端**线上**词汇（static/...）与连续量契约。
+ * 两者由 usePhase.ts 的 _mapPhaseToken 转换。
  */
+import type { PhasePosture } from './phase_contract.gen';
+
+export type { PhasePosture };
 
 export type Phase = 'silent' | 'liminal' | 'manifest';
 
@@ -11,6 +18,16 @@ export interface WebSocketMessage {
   event_type?: string;
   phase?: Phase;
   target_phase?: string;
+  /**
+   * 相位姿态：后端一直在算、此前从没送到前端的连续量。
+   *
+   * 在场桥的 payload 里（`payload.posture`）。类型从后端生成，
+   * 见 `phase_contract.gen.ts` 与 `core/phase_contract.py`——
+   * 不要在这里手写一份，那正是这套生成机制要消灭的漂移。
+   *
+   * 可选：老版本后端不发这个字段，读的时候要判空。
+   */
+  posture?: PhasePosture;
   [key: string]: unknown;
 }
 
