@@ -574,7 +574,7 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         ),
     ),
     ModuleSemanticEntry(
-        "core.architecture_invariants",
+        "tools.architecture.architecture_invariants",
         ModuleSemanticType.SEMI_EXECUTABLE,
         naming_pattern="INVARIANT",
         notes="Contains callable invariant checkers; invoked in tests/CI only.",
@@ -596,13 +596,13 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         ),
     ),
     ModuleSemanticEntry(
-        "core.architecture_completion",
+        "tools.architecture.architecture_completion",
         ModuleSemanticType.DECLARATIVE,
         naming_pattern="AUTHORITY / SENTINEL",
         notes="Status labels and completion percentage declarations; no runtime effect.",
     ),
     ModuleSemanticEntry(
-        "core.architecture_truth_guards",
+        "tools.architecture.architecture_truth_guards",
         ModuleSemanticType.DECLARATIVE,
         naming_pattern="TRUTH / GUARD",
         notes="Declarative truth guard strings; no runtime enforcement.",

@@ -553,119 +553,12 @@ class TestMigrationIdentityContract(unittest.TestCase):
 # ===========================================================================
 
 
-class TestStagedMeshRoleContractSentinels(unittest.TestCase):
-    """Tests E1–E9: Sentinel presence and content."""
-
-    def test_E1_authority_importable(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_ROLE_CONTRACT_AUTHORITY
-
-        self.assertIsInstance(STAGED_MESH_ROLE_CONTRACT_AUTHORITY, str)
-        self.assertGreater(len(STAGED_MESH_ROLE_CONTRACT_AUTHORITY), 0)
-
-    def test_E2_pr2_sentinel_importable(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL
-
-        self.assertIsInstance(STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL, str)
-        self.assertIn("PR2", STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL)
-
-    def test_E3_main_chain_role_is_live_execution(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_MAIN_CHAIN_ROLE
-
-        self.assertEqual(STAGED_MESH_MAIN_CHAIN_ROLE, "main_chain_live_execution")
-
-    def test_E4_is_connected_to_live_engine_is_true(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_IS_CONNECTED_TO_LIVE_ENGINE
-
-        self.assertTrue(STAGED_MESH_IS_CONNECTED_TO_LIVE_ENGINE)
-
-    def test_E5_live_engine_module_references_correct_path(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_LIVE_ENGINE_MODULE
-
-        self.assertIn("live_mesh_runtime_engine", STAGED_MESH_LIVE_ENGINE_MODULE)
-
-    def test_E6_orchestrator_module_references_correct_path(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_ORCHESTRATOR_MODULE
-
-        self.assertIn("source_dispatch_orchestrator", STAGED_MESH_ORCHESTRATOR_MODULE)
-
-    def test_E7_all_policy_sentinels_non_empty(self):
-        from core.mesh.staged_mesh_role_contract import (
-            STAGED_MESH_GRACEFUL_DEGRADATION_POLICY,
-            STAGED_MESH_LIVE_CONNECTION_POLICY,
-            STAGED_MESH_RESULT_SHAPE_POLICY,
-            STAGED_MESH_ROLE_DOWNGRADE_POLICY,
-        )
-
-        for p in [
-            STAGED_MESH_LIVE_CONNECTION_POLICY,
-            STAGED_MESH_ROLE_DOWNGRADE_POLICY,
-            STAGED_MESH_RESULT_SHAPE_POLICY,
-            STAGED_MESH_GRACEFUL_DEGRADATION_POLICY,
-        ]:
-            with self.subTest(policy=p[:30]):
-                self.assertIsInstance(p, str)
-                self.assertGreater(len(p), 0)
-
-    def test_E8_live_connection_policy_mentions_run_live_mesh_session(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_LIVE_CONNECTION_POLICY
-
-        self.assertIn("run_live_mesh_session", STAGED_MESH_LIVE_CONNECTION_POLICY)
-
-    def test_E9_downgrade_policy_mentions_deferred(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_ROLE_DOWNGRADE_POLICY
-
-        self.assertIn("deferred", STAGED_MESH_ROLE_DOWNGRADE_POLICY)
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
-class TestStagedMeshRoleHelpers(unittest.TestCase):
-    """Tests E10–E17: Role helper functions."""
-
-    def test_E10_get_staged_mesh_role_returns_live_execution(self):
-        from core.mesh.staged_mesh_role_contract import get_staged_mesh_role
-
-        self.assertEqual(get_staged_mesh_role(), "main_chain_live_execution")
-
-    def test_E11_verify_returns_dict(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertIsInstance(result, dict)
-
-    def test_E12_live_engine_importable(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertTrue(result.get("live_engine_importable"), result.get("errors"))
-
-    def test_E13_run_live_mesh_session_callable(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertTrue(result.get("run_live_mesh_session_callable"), result.get("errors"))
-
-    def test_E14_coordinator_importable(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertTrue(result.get("coordinator_importable"), result.get("errors"))
-
-    def test_E15_orchestrator_importable(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertTrue(result.get("orchestrator_importable"), result.get("errors"))
-
-    def test_E16_verify_role_is_main_chain_live_execution(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertEqual(result.get("role"), "main_chain_live_execution")
-
-    def test_E17_verify_is_connected_is_true(self):
-        from core.mesh.staged_mesh_role_contract import verify_staged_mesh_live_connection
-
-        result = verify_staged_mesh_live_connection()
-        self.assertTrue(result.get("is_connected"))
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ===========================================================================
@@ -768,10 +661,9 @@ class TestCrossModuleConsistency(unittest.TestCase):
 
         self.assertIn("SINGLE_CANONICAL", UNIFIED_RUNTIME_TRUTH_INGRESS_AUTHORITY)
 
-    def test_G3_mesh_role_sentinel_contains_pr2(self):
-        from core.mesh.staged_mesh_role_contract import STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL
 
-        self.assertIn("PR2", STAGED_MESH_ROLE_CONTRACT_PR2_SENTINEL)
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 if __name__ == "__main__":

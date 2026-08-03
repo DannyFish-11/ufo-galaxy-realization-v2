@@ -640,12 +640,12 @@ class TestAuthorityBoundaries:
 
     def test_architecture_truth_guards_compatible(self):
         """architecture_truth_guards must be importable alongside production_baseline."""
-        from core.architecture_truth_guards import (
+        from core.production_baseline import get_production_baseline_registry
+        from tools.architecture.architecture_truth_guards import (
             BoundaryInvariantGuard,
             CanonicalTruthOwnershipGuard,
             run_all_architecture_guards,
         )
-        from core.production_baseline import get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         # Both modules must co-exist without import errors.

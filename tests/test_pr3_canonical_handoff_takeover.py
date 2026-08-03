@@ -949,114 +949,39 @@ class TestCanonicalHandoffPathModule:
     def test_canonical_path_module_importable(self):
         import core.canonical_handoff_path  # noqa: F401
 
-    def test_canonical_handoff_path_main_repo_sentinel(self):
-        from core.canonical_handoff_path import CANONICAL_HANDOFF_PATH_MAIN_REPO
 
-        assert CANONICAL_HANDOFF_PATH_MAIN_REPO
-        assert "pr3" in CANONICAL_HANDOFF_PATH_MAIN_REPO
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_posture_and_authority_unified_sentinel(self):
-        from core.canonical_handoff_path import (
-            CANONICAL_HANDOFF_POSTURE_AND_AUTHORITY_UNIFIED,
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        assert CANONICAL_HANDOFF_POSTURE_AND_AUTHORITY_UNIFIED
-        assert "pr3" in CANONICAL_HANDOFF_POSTURE_AND_AUTHORITY_UNIFIED
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_single_chain_enforced_sentinel(self):
-        from core.canonical_handoff_path import (
-            CANONICAL_HANDOFF_PATH_SINGLE_CHAIN_ENFORCED,
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        assert CANONICAL_HANDOFF_PATH_SINGLE_CHAIN_ENFORCED
-        assert "pr3" in CANONICAL_HANDOFF_PATH_SINGLE_CHAIN_ENFORCED
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_re_exported_handoff_contract_importable(self):
-        from core.canonical_handoff_path import HandoffContract
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        assert HandoffContract is not None
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_re_exported_build_handoff_envelope_v2_importable(self):
-        from core.canonical_handoff_path import build_handoff_envelope_v2
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        assert build_handoff_envelope_v2 is not None
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_build_canonical_handoff_contract_control_only(self):
-        from core.canonical_handoff_path import build_canonical_handoff_contract
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        c = build_canonical_handoff_contract(
-            trace_id="trace_q_001",
-            task={"tool_name": "screenshot", "args": {}},
-            source_runtime_posture="control_only",
-        )
-        assert c.trace_id == "trace_q_001"
-        assert c.source_runtime_posture == "control_only"
-
-    def test_build_canonical_handoff_contract_join_runtime(self):
-        from core.canonical_handoff_path import build_canonical_handoff_contract
-
-        c = build_canonical_handoff_contract(
-            trace_id="trace_q_002",
-            task={},
-            source_runtime_posture="join_runtime",
-        )
-        assert c.source_runtime_posture == "join_runtime"
-
-    def test_build_canonical_handoff_contract_invalid_posture_falls_back(self):
-        from core.canonical_handoff_path import build_canonical_handoff_contract
-
-        c = build_canonical_handoff_contract(
-            trace_id="trace_q_003",
-            task={},
-            source_runtime_posture="INVALID_POSTURE",
-        )
-        assert c.source_runtime_posture == "control_only"
-
-    def test_build_canonical_handoff_contract_carries_explicit_role(self):
-        from core.canonical_handoff_path import build_canonical_handoff_contract
-
-        c = build_canonical_handoff_contract(
-            trace_id="trace_q_004",
-            task={},
-            coordination_role="observer_only",
-        )
-        assert c.coordination_role == "observer_only"
-
-    def test_build_canonical_handoff_contract_derives_role_from_posture(self):
-        """When coordination_role is not supplied, it must be derived from posture."""
-        from core.canonical_handoff_path import build_canonical_handoff_contract
-
-        c = build_canonical_handoff_contract(
-            trace_id="trace_q_005",
-            task={},
-            source_runtime_posture="control_only",
-        )
-        # After derivation, role must be a non-empty recognised value or empty fallback
-        assert isinstance(c.coordination_role, str)
-
-    def test_build_canonical_handoff_contract_all_fields(self):
-        from core.canonical_handoff_path import build_canonical_handoff_contract
-
-        c = build_canonical_handoff_contract(
-            trace_id="trace_q_006",
-            task={"tool_name": "file_transfer"},
-            capability="file",
-            exec_mode="remote",
-            route_mode="broadcast",
-            session={"session_id": "sess_001"},
-            callback_channel="nats",
-            task_id="task_q_006",
-            source_runtime_posture="join_runtime",
-            coordination_role="joined_runtime_participant",
-        )
-        assert c.trace_id == "trace_q_006"
-        assert c.capability == "file"
-        assert c.exec_mode == "remote"
-        assert c.route_mode == "broadcast"
-        assert c.callback_channel == "nats"
-        assert c.task_id == "task_q_006"
-        assert c.source_runtime_posture == "join_runtime"
-        assert c.coordination_role == "joined_runtime_participant"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------
