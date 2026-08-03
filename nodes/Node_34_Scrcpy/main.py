@@ -16,6 +16,7 @@ ported to Node_33 first, and Node_34 refocused exclusively on scrcpy screen mirr
 """
 import asyncio
 import os
+import re
 import subprocess
 import shutil
 import tempfile
@@ -158,8 +159,26 @@ async def list_devices():
 SCREENSHOT_DIR = Path(os.getenv("GALAXY_SCREENSHOT_DIR", "")) or Path.home() / ".galaxy" / "screenshots"
 
 
+#: 允许的文件名。**白名单,不是黑名单** —— 黑名单永远漏(``..``、``%2e%2e``、
+#: 反斜杠、NUL、超长名、各种 Unicode 归一化写法……),白名单只需要回答一个问题:
+#: "合法的截图文件名长什么样"。答案就是这么简单。
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
 def _resolve_output_path(requested: Optional[str]) -> str:
-    """把调用方给的名字解析到 SCREENSHOT_DIR 之内;越界就拒。
+    """把调用方给的名字解析到 SCREENSHOT_DIR 之内;不合法就**拒**。
+
+    为什么是"拒"而不是"改写"
+    ------------------------
+    第一版的做法是 ``Path(requested).name`` —— 把 ``/etc/passwd`` 悄悄变成
+    ``passwd`` 再写进截图目录。逃逸确实挡住了,但那是**静默改写**:调用方以为
+    自己写到了 ``/etc/passwd``,拿到的却是别处的一个文件,而响应里没有任何提示。
+    一个安全修复不该顺手制造一个"行为与声明不符"的新问题。
+
+    改成先按白名单校验、不合法直接 400。附带的好处是这也成了 CodeQL 认得的净化 ——
+    它在第一版上报了 py/path-injection(用户数据进入路径表达式),因为
+    ``.name`` 不被识别为净化。这里不是为了让检查器闭嘴才改,是改法本身更对;
+    告警消失是结果,不是目的。
 
     没给名字时用 ``mkstemp`` 而不是 ``mktemp``:后者只返回路径、并不创建文件,
     "拿到路径"和"写进去"之间的窗口足以让同机的其他用户抢先放一个符号链接,
@@ -172,12 +191,19 @@ def _resolve_output_path(requested: Optional[str]) -> str:
         os.close(fd)
         return path
 
-    # 只取文件名部分,再解析一次确认没跑出去 —— 单看 ".." 是挡不住符号链接的。
-    candidate = (SCREENSHOT_DIR / Path(requested).name).resolve()
-    base = SCREENSHOT_DIR.resolve()
-    if base != candidate.parent:
+    if not _SAFE_NAME.match(requested):
+        raise HTTPException(
+            status_code=400,
+            detail="output_path must be a plain file name matching [A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+        )
+
+    base = os.path.realpath(str(SCREENSHOT_DIR))
+    candidate = os.path.realpath(os.path.join(base, requested))
+    # 白名单已经排除了 ``..``,但目录里可能**已经存在**一个指向外面的符号链接 ——
+    # 那种情况下名字本身完全合法,只有解析之后才看得出来。两道都要。
+    if not candidate.startswith(base + os.sep):
         raise HTTPException(status_code=400, detail="output_path must resolve inside the screenshot directory")
-    return str(candidate)
+    return candidate
 
 
 @app.post("/screenshot")

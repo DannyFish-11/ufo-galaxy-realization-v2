@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.url_guard import guarded_async_client
 
 try:
     import httpx
@@ -63,7 +64,7 @@ class BatchFetchRequest(BaseModel):
 async def _do_fetch(req: FetchRequest) -> Dict[str, Any]:
     """执行单次 HTTP 请求，返回标准化结果。"""
     timeout = req.timeout if req.timeout is not None else FETCH_TIMEOUT
-    async with httpx.AsyncClient(
+    async with guarded_async_client(
         max_redirects=FETCH_MAX_REDIRECTS,
         timeout=timeout,
         follow_redirects=req.follow_redirects,
@@ -187,7 +188,7 @@ async def ping(url: str = Query(..., description="要检查的 URL")):
 
     stats["total_requests"] += 1
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        async with guarded_async_client(timeout=10, follow_redirects=True) as client:
             response = await client.head(url)
         stats["success_count"] += 1
         return {

@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.url_guard import guarded_async_client
 
 try:
     import httpx
@@ -80,7 +81,7 @@ async def _fetch_image_base64(url: str) -> str:
             status_code=503,
             detail={"error": "httpx not installed", "success": False},
         )
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with guarded_async_client(timeout=30.0) as client:
         resp = await client.get(url)
     if resp.status_code >= 400:
         raise HTTPException(

@@ -26,6 +26,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
+from nodes.common.url_guard import guarded_async_client
 
 # CORS origins - fall back to wildcard if module unavailable
 try:
@@ -195,7 +196,7 @@ async def _extract_frames_metadata(
 
     # Fetch HTTP headers to gather duration/size hints
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with guarded_async_client(timeout=15.0) as client:
             head_resp = await client.head(video_url, follow_redirects=True)
         content_length = int(head_resp.headers.get("content-length", 0))
         content_type = head_resp.headers.get("content-type", "")

@@ -28,6 +28,7 @@ from pydantic import BaseModel
 import subprocess
 from nodes.common.cors_config import get_cors_origins
 from core.atomic_json import atomic_write_json
+from nodes.common.url_guard import guarded_async_client
 
 logger = logging.getLogger("Galaxy.Node105KB")
 
@@ -186,7 +187,7 @@ class UnifiedKnowledgeBase:
         """从 URL 添加知识"""
         # 抓取网页内容
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with guarded_async_client(timeout=30.0) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 content = response.text

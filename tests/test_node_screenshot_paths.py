@@ -53,6 +53,7 @@ def resolve(tmp_path, monkeypatch):
         "os": os,
         "Path": Path,
         "tempfile": tempfile,
+        "re": __import__("re"),
         "Optional": __import__("typing").Optional,
         "HTTPException": HTTPException,
     }
@@ -69,20 +70,48 @@ class TestPathContainment:
             "../../.bashrc",
             "sub/../../../escape.png",
             "....//....//x.png",
+            "..",
+            ".",
+            "a/b.png",
+            "shot.png\x00.txt",
+            "\\windows\\system32\\x.png",
+            ".hidden",
+            "x" * 200,
         ],
     )
-    def test_escape_attempts_stay_inside(self, resolve, requested):
-        resolve_fn, base = resolve
-        try:
-            out = Path(resolve_fn(requested))
-        except HTTPException as exc:
-            assert exc.status_code == 400
-            return
-        assert out.parent == base.resolve(), f"{requested!r} 逃到了 {out}"
+    def test_escape_attempts_are_rejected(self, resolve, requested):
+        """越界必须**拒**,不是悄悄改写。
 
-    def test_plain_name_is_accepted(self, resolve):
+        第一版是 ``Path(requested).name`` —— 把 ``/etc/passwd`` 静默变成 ``passwd``
+        再写进截图目录。逃逸是挡住了,但调用方以为自己写到了 /etc/passwd,
+        响应里却没有任何提示。一个安全修复不该顺手造出一个"行为与声明不符"的新问题。
+        """
+        resolve_fn, _ = resolve
+        with pytest.raises(HTTPException) as exc:
+            resolve_fn(requested)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.parametrize("name", ["shot.png", "before-after_2.PNG", "a", "0.png"])
+    def test_plain_names_are_accepted(self, resolve, name):
         resolve_fn, base = resolve
-        assert Path(resolve_fn("shot.png")).parent == base.resolve()
+        out = Path(resolve_fn(name))
+        assert out.parent == base.resolve()
+        assert out.name == name
+
+    def test_symlink_inside_the_dir_is_still_caught(self, resolve, tmp_path):
+        """名字合法、目录里却已经有一条指向外面的符号链接。
+
+        白名单挡不住这一种 —— 名字本身完全正常,只有解析之后才看得出来。
+        这就是为什么白名单之后还要再做一次 realpath 包含检查。
+        """
+        resolve_fn, base = resolve
+        resolve_fn("seed.png")  # 先把目录建出来
+        outside = tmp_path / "outside"
+        outside.mkdir(exist_ok=True)
+        (base / "escape.png").symlink_to(outside / "target.png")
+        with pytest.raises(HTTPException) as exc:
+            resolve_fn("escape.png")
+        assert exc.value.status_code == 400
 
     def test_directory_is_owner_only(self, resolve):
         resolve_fn, base = resolve
