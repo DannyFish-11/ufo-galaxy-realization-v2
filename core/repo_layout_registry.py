@@ -58,8 +58,7 @@ Layout zones::
     ├── scripts/           — operational scripts
     ├── deployment/        — Kubernetes / nginx / Docker assets
     ├── config/            — runtime configuration files
-    ├── data/              — persistent data directory
-    └── static/            — static web assets
+    └── data/              — persistent data directory
 
 Authority model::
 
@@ -597,7 +596,10 @@ for _infra_path, _infra_desc in (
     ("deployment", "Deployment assets — Kubernetes, nginx, Docker configurations."),
     ("config", "Runtime configuration files and Grafana dashboards."),
     ("data", "Persistent data directory."),
-    ("static", "Static web assets served by the API layer."),
+    # static/ 已移除：它下面只有两份并行 Web 面板表层 —— api-manager/(只有构建
+    #   产物没有源码)与 operator-console/(731 行原生 JS 轮询页)。面板表层收敛到
+    #   唯一一份(Tauri/Electron 壳内的 React 面板,electron/renderer/panel/)后，
+    #   两者连同 unified_launcher 里的挂载一并删除，目录随之空掉。
     ("systemd", "systemd unit files for Linux service management."),
     ("agent", "Agent configuration or runtime agent assets."),
     # android_client/ 已移除：该目录只含一份"源码已迁至独立仓库"的说明，无任何代码。

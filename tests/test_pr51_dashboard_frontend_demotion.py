@@ -42,7 +42,6 @@ Validates:
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -146,12 +145,18 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
             content,
         )
 
-    def test_11_fallback_html_references_api_docs(self):
+    def test_11_launcher_still_surfaces_api_docs(self):
+        """网关仍要把 /docs 指出来。
+
+        原意是"FALLBACK_HTML 应指向 API 文档"。FALLBACK_HTML 已随 legacy
+        dashboard 一并删除(它只被那个零调用方的方法引用),但"启动后要让人知道
+        API 文档在哪"这条意图仍然成立——现在由启动日志承担。
+        """
         content = _read("unified_launcher.py")
         self.assertIn(
             "/docs",
             content,
-            "FALLBACK_HTML should point to API docs (/docs)",
+            "启动器必须在某处指出 API 文档地址 (/docs)",
         )
 
     # ------------------------------------------------------------------
@@ -234,11 +239,25 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
             "_get_dashboard_html must be renamed to _get_legacy_dashboard_html",
         )
 
-    def test_21_get_legacy_dashboard_html_exists(self):
+    def test_21_get_legacy_dashboard_html_is_gone(self):
+        """再降一级：从"已改名的遗留方法"降为"已删除"。
+
+        PR-51 当时把 ``_get_dashboard_html`` 改名为 ``_get_legacy_dashboard_html``
+        以示降级,这条测试钉的是改名成功。现在面板表层收敛,它连同 FALLBACK_HTML
+        一起删除——理由不是"改名不够",而是它**零调用方**,且它要读的
+        ``dashboard/frontend/public/index.html`` 在仓库里根本不存在。
+        断言相应地从"必须存在"翻成"必须不存在"。
+        """
         content = _read("unified_launcher.py")
-        self.assertIn(
+        self.assertNotIn(
             "def _get_legacy_dashboard_html",
             content,
+            "遗留 dashboard 方法已删除,不应重新出现",
+        )
+        self.assertNotIn(
+            "FALLBACK_HTML = ",
+            content,
+            "FALLBACK_HTML 已随该方法删除,不应重新出现",
         )
 
     # ------------------------------------------------------------------
