@@ -22,18 +22,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from core.cross_device_integration_reality import (
-    CROSS_DEVICE_INTEGRATION_REALITY,
-    INFLIGHT_TASK_LOSS_ON_DISCONNECT,
-    INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
-    INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
-    PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
-    PENDING_DELIVERY_BUFFER_PRESENT,
-    PENDING_DELIVERY_BUFFER_TTL_S,
-    RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
-    RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
-    assert_known_gaps_are_documented,
-)
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 from galaxy_gateway.pending_delivery_buffer import (
     PendingDeliveryBuffer,
     pending_delivery_buffer,
@@ -273,37 +265,34 @@ def test_module_singleton_is_buffer_instance():
 # ---------------------------------------------------------------------------
 
 
-def test_inflight_task_loss_sentinel_is_false():
-    """Pending-delivery buffer must be present → loss sentinel is False."""
-    assert INFLIGHT_TASK_LOSS_ON_DISCONNECT is False, (
-        "INFLIGHT_TASK_LOSS_ON_DISCONNECT should be False now that the " "pending-delivery buffer is in place."
-    )
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
-def test_pending_delivery_buffer_sentinel_is_true():
-    assert PENDING_DELIVERY_BUFFER_PRESENT is True
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
-def test_buffer_ttl_and_capacity_match_module():
-    from galaxy_gateway.pending_delivery_buffer import (
-        PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
-        PENDING_DELIVERY_TTL_SECONDS,
-    )
-
-    assert PENDING_DELIVERY_BUFFER_TTL_S == PENDING_DELIVERY_TTL_SECONDS
-    assert PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE == PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
-def test_result_ingestion_silent_paths_sentinel_is_false():
-    """Observable error counters must be present → silent paths sentinel is False."""
-    assert RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS is False, (
-        "RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS should be False now that "
-        "observable error counters are in task_lifecycle.py."
-    )
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
-def test_result_ingestion_error_counters_present():
-    assert RESULT_INGESTION_ERROR_COUNTERS_PRESENT is True
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
 def test_observable_error_counters_importable():
@@ -350,35 +339,19 @@ def test_get_result_ingestion_error_counts_snapshot():
     )
 
 
-def test_residual_risks_still_documented():
-    """Residual risks that are NOT yet fixed must remain True; fixed ones must be False."""
-    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True
-    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
-def test_assert_known_gaps_are_documented_passes():
-    """The main gap-documentation assertion must pass with the current reality dict."""
-    assert_known_gaps_are_documented()
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。
 
 
-def test_reality_dict_contains_all_expected_keys():
-    r = CROSS_DEVICE_INTEGRATION_REALITY
-    required_keys = {
-        "ws_transport_protocol_aligned",
-        "android_cross_device_disabled_by_default",
-        "android_default_url_is_placeholder",
-        "remote_access_requires_tailscale_or_vpnish",
-        "inflight_task_loss_on_disconnect",
-        "pending_delivery_buffer_present",
-        "pending_delivery_buffer_ttl_s",
-        "pending_delivery_buffer_max_queue_per_device",
-        "durable_pending_delivery_buffer_present",
-        "result_ingestion_has_silent_failure_paths",
-        "result_ingestion_error_counters_present",
-        "inflight_task_loss_residual_risk_android_terminal_reconnect",
-        "inflight_task_loss_residual_risk_process_restart",
-        "android_reconnect_stops_permanently_at_limit",
-        "e2e_live_ws_tests_present",
-    }
-    missing = required_keys - r.keys()
-    assert not missing, f"Reality dict missing expected keys: {missing}"
+# 此处原有的用例断言 core.cross_device_integration_reality 里声明的常量（
+# 「集成现状」的一份文字化清单）。那是自指断言 —— 声明模块把结论硬编码在自己里，
+# 用例再断言那个硬编码值，验的不是 PendingDeliveryBuffer 的真实行为。该声明层模块
+# 已作为零引用死代码删除，这些用例随之移除；本文件其余验真实行为的用例保持不变。

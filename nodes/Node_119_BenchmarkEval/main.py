@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from core.atomic_json import atomic_write_json
+from nodes.common.url_guard import guarded_async_client
 
 try:
     from nodes.common.cors_config import get_cors_origins
@@ -375,7 +376,14 @@ async def batch_eval(req: BatchEvalRequest):
     references: List[str] = []
     task_results: List[Dict[str, Any]] = []
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # req.model_url 由调用方给,所以默认按外网对待 —— 本节点监听 0.0.0.0,
+    # 不设防就等于"帮任何人 POST 到他指定的任何地址,并把响应原样带回来",
+    # 那是一条完整的内网探测 + 数据回传通道。
+    #
+    # 但**评测本机跑着的模型服务**(http://127.0.0.1:8000/v1 之类)恰恰是这个节点
+    # 最常见的用法。所以不是禁掉它,而是要求显式开:GALAXY_ALLOW_INTERNAL_FETCH=true。
+    # 默认安全、要用得开口,而不是默认放行、要人记得去关。
+    async with guarded_async_client(timeout=30.0) as client:
         for task in req.tasks:
             try:
                 resp = await client.post(req.model_url, json={"prompt": task.prompt})

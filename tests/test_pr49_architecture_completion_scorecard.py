@@ -116,7 +116,7 @@ from typing import Any, Dict
 
 
 def _import_module():
-    return importlib.import_module("core.architecture_completion")
+    return importlib.import_module("tools.architecture.architecture_completion")
 
 
 # ===========================================================================

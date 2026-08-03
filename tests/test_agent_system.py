@@ -537,35 +537,8 @@ class TestFractalAgent:
 # ============================================================================
 
 
-class TestSystemIntegration:
-    """Tests for the system integration capability registry."""
-
-    def test_import_system_integration(self):
-        from core.system_integration import (
-            Capability,
-            CapabilityType,
-            SystemIntegration,
-        )
-
-        assert CapabilityType.DEVICE.value == "device"
-        assert CapabilityType.MCP.value == "mcp"
-        assert CapabilityType.AGENT.value == "agent"
-
-    def test_capability_to_dict(self):
-        from core.system_integration import Capability, CapabilityType
-
-        cap = Capability(
-            name="device_control",
-            source=CapabilityType.DEVICE,
-            description="Control IoT devices",
-            source_id="smart_hub_001",
-            metadata={"system_integration_id": "cap_001", "priority": 8},
-        )
-        d = cap.to_dict()
-        assert d["id"] == "cap_001"
-        assert d["type"] == "device"
-        assert d["priority"] == 8
-        assert d["enabled"] is True
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ============================================================================

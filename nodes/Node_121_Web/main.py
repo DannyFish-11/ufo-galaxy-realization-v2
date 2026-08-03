@@ -40,6 +40,7 @@ from nodes.common.cors_config import get_cors_origins
 # =============================================================================
 
 from core.port_config import get_service_port, get_node_port
+from nodes.common.url_guard import guarded_async_client
 
 NODE_ID = os.getenv("NODE_ID", "121")
 NODE_NAME = os.getenv("NODE_NAME", "WebOperations")
@@ -149,7 +150,7 @@ class WebService:
             headers.update(request.headers)
         
         try:
-            async with httpx.AsyncClient(
+            async with guarded_async_client(
                 timeout=request.timeout,
                 follow_redirects=request.follow_redirects,
                 verify=request.verify_ssl,
@@ -224,7 +225,7 @@ class WebService:
             headers.update(request.headers)
         
         try:
-            async with httpx.AsyncClient(timeout=request.timeout) as client:
+            async with guarded_async_client(timeout=request.timeout) as client:
                 response = await client.get(request.url, headers=headers)
                 response.raise_for_status()
                 
@@ -321,7 +322,7 @@ class WebService:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         try:
-            async with httpx.AsyncClient(timeout=request.timeout) as client:
+            async with guarded_async_client(timeout=request.timeout) as client:
                 async with client.stream("GET", request.url, headers=headers) as response:
                     response.raise_for_status()
                     
@@ -395,7 +396,7 @@ class WebService:
         url = urljoin(request.base_url.rstrip('/') + '/', request.endpoint.lstrip('/'))
         
         try:
-            async with httpx.AsyncClient(timeout=request.timeout) as client:
+            async with guarded_async_client(timeout=request.timeout) as client:
                 kwargs = {
                     "headers": headers,
                     "params": request.params

@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.url_guard import guarded_async_client
 
 try:
     from core.port_config import get_node_port
@@ -121,13 +122,25 @@ async def _send_slack(message: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-async def _send_webhook(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+async def _send_webhook(url: str, payload: Dict[str, Any], *, operator_configured: bool = False) -> Dict[str, Any]:
+    """POST 一条告警到 webhook。
+
+    ``operator_configured`` 决定允不允许打内网,而这取决于**这个 URL 是谁给的**:
+
+    * 来自环境变量(WEBHOOK_URL)——是部署这套系统的人自己配的,指向局域网里的
+      某个通知服务完全正常,放行;
+    * 来自请求体(``request.recipient``)——是调用方给的。本节点监听 0.0.0.0,
+      也就是说这是一条"让这台机器代替我去 POST"的通道,必须按外网对待。
+
+    整个节点统一开或统一关都是错的:前者留着 SSRF,后者会让"告警发到家里的
+    通知服务"这个正当用法失效。
+    """
     if not url:
         return {"success": False, "error": "Webhook URL not configured. Set WEBHOOK_URL environment variable."}
     if not HTTPX_AVAILABLE:
         return {"success": False, "error": "httpx not installed"}
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with guarded_async_client(timeout=10, allow_internal=operator_configured) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
         return {"success": True, "channel": "webhook", "url": url}
@@ -335,8 +348,13 @@ async def notify(request: NotifyRequest):
     elif request.channel == "slack":
         result = await _send_slack(request.message)
     elif request.channel == "webhook":
+        # 注意这两条分支的信任级别不同,见 _send_webhook 的说明。
         url = request.recipient or WEBHOOK_URL
-        result = await _send_webhook(url, {"message": request.message, "subject": request.subject})
+        result = await _send_webhook(
+            url,
+            {"message": request.message, "subject": request.subject},
+            operator_configured=not request.recipient,
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown channel: {request.channel}. Use email, slack, or webhook.")
     return result

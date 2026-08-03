@@ -122,8 +122,8 @@ def test_01_node_packaging_status_importable_from_scripts():
     from scripts.node_audit import NodePackagingStatus as NPS  # noqa: F401
 
 
-def test_02_node_packaging_status_importable_from_core():
-    from core.node_audit import NodePackagingStatus as NPS  # noqa: F401
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------
@@ -187,28 +187,20 @@ def test_14_packaging_policy_unregistered_constant():
     assert PACKAGING_POLICY_UNREGISTERED == "unregistered"
 
 
-def test_15_core_exports_packaging_policy_active():
-    from core.node_audit import PACKAGING_POLICY_ACTIVE as C
-
-    assert C == "active"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
-def test_16_core_exports_packaging_policy_optional():
-    from core.node_audit import PACKAGING_POLICY_OPTIONAL as C
-
-    assert C == "optional"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
-def test_17_core_exports_packaging_policy_skip():
-    from core.node_audit import PACKAGING_POLICY_SKIP as C
-
-    assert C == "skip"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
-def test_18_core_exports_packaging_policy_unregistered():
-    from core.node_audit import PACKAGING_POLICY_UNREGISTERED as C
-
-    assert C == "unregistered"
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # ---------------------------------------------------------------------------

@@ -31,10 +31,20 @@ COMPAT_SURFACES_REQUIRE_CANONICAL_REPLACEMENT_POLICY = (
 )
 
 FROZEN_COMPAT_SURFACE_BUDGET = 10
-# 82 → 81：``core.api_manager.APIManager._validate_oneapi`` 那条 legacy 路径随模块
-# 一并删除后，注册表真实条目数少了一条。这道门的判定是**上限**（``count > budget``
-# 才算违规），所以不下调也不会红；但冻结预算的意义是「钉住当前值、只准降不准升」，
-# 留在 82 等于白送一个额度给将来新增的 legacy 路径。棘轮下调才是这道门该有的行为。
+# 82 → 81:``core.api_manager.APIManager._validate_oneapi`` 那条 legacy 路径随模块
+# 一并删除后(main 的 PR #1562),注册表真实条目数少了一条。
+#
+# 冻结预算的意义是「钉住当前值、只准降不准升」,留在 82 等于白送一个额度给将来
+# 新增的 legacy 路径。棘轮下调才是这道门该有的行为 —— 所以是往下调,而不是把断言
+# 放宽成 <=。
+#
+# 这里有两道判定,只看其中一道会得出相反的结论(两边的注释各看到了一半,一并记下):
+#   * ``check_compat_freeze`` 的门是**上限**(``count > budget`` 才算违规)——
+#     真删掉一条之后不下调,这道门确实不会红;
+#   * 而 ``test_default_snapshot_matches_frozen_budgets`` 断的是**相等**
+#     (``count == budget``)—— 它当时就红了(assert 81 == 82)。
+# 也就是说"不下调也不会红"只对门成立,对测试不成立。棘轮要真起作用,靠的正是
+# 那条相等断言:它逼着删完之后必须同步下调,否则额度会悄悄留下来。
 FROZEN_LEGACY_PATH_BUDGET = 81
 FROZEN_PRODUCTION_BASELINE_LEGACY_BUDGET = 2
 

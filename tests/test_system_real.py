@@ -133,51 +133,8 @@ async def test_device_communication():
         return False
 
 
-async def test_system_integration():
-    """测试系统集成"""
-    print("\n【4. 测试系统集成】")
-
-    try:
-        from core.system_integration import CapabilityType, system
-
-        # 初始化
-        await system.initialize()
-
-        # 列出能力
-        caps = system.list_capabilities()
-        print(f"  已加载能力: {len(caps)} 个")
-
-        # 按类型统计
-        stats = system.get_stats()
-        print(f"  能力统计: {stats['by_type']}")
-
-        # 注册自定义能力
-        async def test_handler(**params):
-            return {"result": "ok"}
-
-        cap = system.register_capability(
-            id="test_capability",
-            name="test",
-            type=CapabilityType.BUILTIN,
-            description="测试能力",
-            handler=test_handler,
-        )
-
-        print(f"  注册能力: {cap.id}")
-
-        # 发现能力
-        found = await system.discover_capability("test")
-        if found:
-            print(f"  发现能力: {found.id}")
-
-        print("  ✅ 系统集成测试通过")
-        return True
-    except Exception as e:
-        print(f"  ❌ 系统集成测试失败: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 async def test_mcp_loader():

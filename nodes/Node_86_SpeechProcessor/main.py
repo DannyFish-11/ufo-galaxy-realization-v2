@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
+from nodes.common.url_guard import guarded_async_client
 
 try:
     from core.port_config import get_node_port
@@ -174,7 +175,7 @@ class SpeechService:
                 req_base64 = req_base64.split(",", 1)[1]
             return base64.b64decode(req_base64)
         if req_url:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with guarded_async_client(timeout=30) as client:
                 resp = await client.get(req_url)
                 resp.raise_for_status()
                 return resp.content

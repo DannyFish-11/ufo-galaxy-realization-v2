@@ -98,40 +98,18 @@ def _run(coro):
 # =============================================================================
 
 
-class TestCommandsPackageInit(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_01_commands_init_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "__init__.py").exists(),
-            "core/commands/__init__.py must exist",
-        )
 
-    def test_02_commands_init_has_authority_sentinel(self):
-        content = _read("core/commands/__init__.py")
-        self.assertIn(
-            "COMMAND_ROUTING_PACKAGE_AUTHORITY",
-            content,
-            "core/commands/__init__.py must define COMMAND_ROUTING_PACKAGE_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_03_authority_value_is_core_commands(self):
-        from core.commands import COMMAND_ROUTING_PACKAGE_AUTHORITY
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        self.assertEqual(
-            COMMAND_ROUTING_PACKAGE_AUTHORITY,
-            "core.commands",
-            "COMMAND_ROUTING_PACKAGE_AUTHORITY must equal 'core.commands'",
-        )
-
-    def test_04_commands_init_reexports_command_router(self):
-        from core.commands import CommandRouter
-
-        self.assertTrue(callable(CommandRouter), "core.commands must re-export CommandRouter")
-
-    def test_05_commands_init_reexports_get_command_router(self):
-        from core.commands import get_command_router
-
-        self.assertTrue(callable(get_command_router), "core.commands must re-export get_command_router callable")
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -139,33 +117,15 @@ class TestCommandsPackageInit(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandsRouterModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_06_commands_router_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "router.py").exists(),
-            "core/commands/router.py must exist",
-        )
 
-    def test_07_commands_router_has_authority_sentinel(self):
-        content = _read("core/commands/router.py")
-        self.assertIn(
-            "COMMAND_ROUTER_AUTHORITY", content, "core/commands/router.py must define COMMAND_ROUTER_AUTHORITY"
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_08_command_router_authority_value(self):
-        from core.commands.router import COMMAND_ROUTER_AUTHORITY
-
-        self.assertEqual(
-            COMMAND_ROUTER_AUTHORITY,
-            "core.commands.router",
-            "COMMAND_ROUTER_AUTHORITY must equal 'core.commands.router'",
-        )
-
-    def test_09_commands_router_reexports_get_command_router(self):
-        from core.commands.router import get_command_router
-
-        self.assertTrue(callable(get_command_router), "core.commands.router must re-export get_command_router")
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -173,43 +133,15 @@ class TestCommandsRouterModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandRegistryModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_10_registry_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "registry.py").exists(),
-            "core/commands/registry.py must exist",
-        )
 
-    def test_11_registry_has_authority_sentinel(self):
-        content = _read("core/commands/registry.py")
-        self.assertIn(
-            "COMMAND_REGISTRY_AUTHORITY", content, "core/commands/registry.py must define COMMAND_REGISTRY_AUTHORITY"
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_12_registry_defines_command_registry_class(self):
-        from core.commands.registry import CommandRegistry
-
-        self.assertTrue(
-            isinstance(CommandRegistry, type),
-            "core.commands.registry must define CommandRegistry class",
-        )
-
-    def test_13_registry_register_get_list_interface(self):
-        from core.commands.registry import CommandRegistry
-
-        registry = CommandRegistry(name="test")
-        called = []
-
-        @registry.register("ping")
-        async def _ping(ctx, params):
-            called.append("ping")
-            return {"pong": True}
-
-        self.assertTrue(registry.has("ping"))
-        self.assertIn("ping", registry.list_commands())
-        handler = registry.get("ping")
-        self.assertIs(handler, _ping)
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -217,29 +149,12 @@ class TestCommandRegistryModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandDispatcherModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_14_dispatcher_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "dispatcher.py").exists(),
-            "core/commands/dispatcher.py must exist",
-        )
 
-    def test_15_dispatcher_has_authority_sentinel(self):
-        content = _read("core/commands/dispatcher.py")
-        self.assertIn(
-            "COMMAND_DISPATCHER_AUTHORITY",
-            content,
-            "core/commands/dispatcher.py must define COMMAND_DISPATCHER_AUTHORITY",
-        )
-
-    def test_16_dispatcher_defines_class(self):
-        from core.commands.dispatcher import CommandDispatcher
-
-        self.assertTrue(
-            isinstance(CommandDispatcher, type),
-            "core.commands.dispatcher must define CommandDispatcher class",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -247,43 +162,15 @@ class TestCommandDispatcherModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandContextModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_17_context_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "context.py").exists(),
-            "core/commands/context.py must exist",
-        )
 
-    def test_18_context_has_authority_sentinel(self):
-        content = _read("core/commands/context.py")
-        self.assertIn(
-            "COMMAND_CONTEXT_AUTHORITY", content, "core/commands/context.py must define COMMAND_CONTEXT_AUTHORITY"
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_19_context_defines_command_context_dataclass(self):
-        from core.commands.context import CommandContext
-
-        ctx = CommandContext(source="test", command="ping")
-        self.assertEqual(ctx.source, "test")
-        self.assertEqual(ctx.command, "ping")
-        self.assertIsNotNone(ctx.trace_id)
-        self.assertIsNotNone(ctx.request_id)
-
-    def test_20_context_from_request_factory(self):
-        from core.commands import CommandRequest
-        from core.commands.context import CommandContext
-
-        req = CommandRequest(
-            source="api",
-            command="screenshot",
-            targets=["device-1"],
-            metadata={"trace_id": "trc_abc123", "user_id": "u1"},
-        )
-        ctx = CommandContext.from_request(req)
-        self.assertEqual(ctx.trace_id, "trc_abc123")
-        self.assertEqual(ctx.source, "api")
-        self.assertEqual(ctx.command, "screenshot")
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -291,31 +178,12 @@ class TestCommandContextModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandMiddlewareModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_21_middleware_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "middleware.py").exists(),
-            "core/commands/middleware.py must exist",
-        )
 
-    def test_22_middleware_has_authority_sentinel(self):
-        content = _read("core/commands/middleware.py")
-        self.assertIn(
-            "COMMAND_MIDDLEWARE_AUTHORITY",
-            content,
-            "core/commands/middleware.py must define COMMAND_MIDDLEWARE_AUTHORITY",
-        )
-
-    def test_23_middleware_defines_abc(self):
-        import abc
-
-        from core.commands.middleware import CommandMiddleware
-
-        self.assertTrue(
-            issubclass(CommandMiddleware, abc.ABC),
-            "CommandMiddleware must be an abstract base class",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -323,50 +191,18 @@ class TestCommandMiddlewareModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandValidatorsSubpackage(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_24_validators_init_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "validators" / "__init__.py").exists(),
-            "core/commands/validators/__init__.py must exist",
-        )
 
-    def test_25_validators_has_authority_sentinel(self):
-        content = _read("core/commands/validators/__init__.py")
-        self.assertIn(
-            "COMMAND_VALIDATOR_AUTHORITY",
-            content,
-            "core/commands/validators/__init__.py must define COMMAND_VALIDATOR_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_26_envelope_validator_rejects_empty_device_id(self):
-        from core.commands.validators import EnvelopeValidator, ValidationError
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-        validator = EnvelopeValidator()
-        with self.assertRaises(ValidationError):
-            validator.validate(
-                command="screenshot",
-                device_id="",  # empty — should fail
-                command_id="c1",
-                task_id="t1",
-            )
-
-    def test_27_risk_validator_rejects_high_risk_command(self):
-        from core.commands.validators import RiskClassificationValidator, ValidationError
-
-        validator = RiskClassificationValidator()
-        with self.assertRaises(ValidationError):
-            validator.validate(command="delete")
-
-    def test_28_risk_validator_allows_override(self):
-        from core.commands.validators import RiskClassificationValidator
-
-        validator = RiskClassificationValidator()
-        # Should NOT raise when allow_high_risk=True
-        validator.validate(
-            command="delete",
-            context_metadata={"allow_high_risk": True},
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -374,21 +210,8 @@ class TestCommandValidatorsSubpackage(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandHandlersSubpackage(unittest.TestCase):
-
-    def test_29_handlers_init_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "commands" / "handlers" / "__init__.py").exists(),
-            "core/commands/handlers/__init__.py must exist",
-        )
-
-    def test_30_handlers_has_authority_sentinel(self):
-        content = _read("core/commands/handlers/__init__.py")
-        self.assertIn(
-            "COMMAND_HANDLER_AUTHORITY",
-            content,
-            "core/commands/handlers/__init__.py must define COMMAND_HANDLER_AUTHORITY",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -429,20 +252,12 @@ class TestLLMPackageInit(unittest.TestCase):
 # =============================================================================
 
 
-class TestLLMRouterModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_35_llm_router_has_authority_sentinel(self):
-        content = _read("core/llm/router.py")
-        self.assertIn("LLM_ROUTER_AUTHORITY", content, "core/llm/router.py must define LLM_ROUTER_AUTHORITY")
 
-    def test_36_llm_router_authority_value(self):
-        from core.llm.router import LLM_ROUTER_AUTHORITY
-
-        self.assertEqual(
-            LLM_ROUTER_AUTHORITY,
-            "core.llm.router",
-            "LLM_ROUTER_AUTHORITY must equal 'core.llm.router'",
-        )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -482,33 +297,15 @@ class TestLLMPoliciesModule(unittest.TestCase):
 # =============================================================================
 
 
-class TestLLMFailoverModule(unittest.TestCase):
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_41_failover_module_exists(self):
-        self.assertTrue(
-            (PROJECT_ROOT / "core" / "llm" / "failover.py").exists(),
-            "core/llm/failover.py must exist",
-        )
 
-    def test_42_failover_has_authority_sentinel(self):
-        content = _read("core/llm/failover.py")
-        self.assertIn("LLM_FAILOVER_AUTHORITY", content, "core/llm/failover.py must define LLM_FAILOVER_AUTHORITY")
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
-    def test_43_failover_defines_failover_strategy(self):
-        from core.llm.failover import FailoverStrategy
-
-        self.assertTrue(
-            isinstance(FailoverStrategy, type),
-            "core.llm.failover must define FailoverStrategy class",
-        )
-
-    def test_44_failover_defines_retry_policy(self):
-        from core.llm.failover import RetryPolicy
-
-        policy = RetryPolicy(max_retries=3, base_delay_s=0.1)
-        self.assertEqual(policy.max_retries, 3)
-        delay = policy.compute_delay(0)
-        self.assertGreater(delay, 0)
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================
@@ -546,90 +343,12 @@ class TestLLMProvidersSubpackage(unittest.TestCase):
 # =============================================================================
 
 
-class TestCommandRegistryFunctional(unittest.TestCase):
-
-    def test_49_registry_register_decorator_end_to_end(self):
-        from core.commands.registry import CommandRegistry
-
-        registry = CommandRegistry(name="functional-test")
-        results = []
-
-        @registry.register("test_cmd", required_capabilities=["screen"])
-        async def _handle(ctx, params):
-            results.append(params)
-            return {"ok": True}
-
-        self.assertTrue(registry.has("test_cmd"))
-        self.assertEqual(
-            registry.get_required_capabilities("test_cmd"),
-            ["screen"],
-        )
-        handler = registry.get("test_cmd")
-        self.assertIs(handler, _handle)
-        self.assertEqual(len(registry), 1)
-        registry.unregister("test_cmd")
-        self.assertFalse(registry.has("test_cmd"))
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
-class TestFailoverStrategyFunctional(unittest.TestCase):
-
-    def test_50_failover_succeeds_on_first_candidate(self):
-        from core.llm.failover import FailoverStrategy
-
-        strategy = FailoverStrategy()
-
-        async def _call(provider, model, req):
-            return {"provider": provider, "model": model, "ok": True}
-
-        result = _run(
-            strategy.execute(
-                candidates=[("openai", "gpt-4o"), ("anthropic", "claude-sonnet")],
-                call=_call,
-                request={"messages": []},
-            )
-        )
-        self.assertEqual(result["provider"], "openai")
-
-    def test_51_failover_falls_back_to_second_candidate(self):
-        from core.llm.failover import FailoverStrategy, RetryPolicy
-
-        policy = RetryPolicy(max_retries=2, base_delay_s=0.0, jitter=False)
-        strategy = FailoverStrategy(retry_policy=policy)
-        call_log = []
-
-        async def _call(provider, model, req):
-            call_log.append(provider)
-            if provider == "openai":
-                raise RuntimeError("openai down")
-            return {"provider": provider, "ok": True}
-
-        result = _run(
-            strategy.execute(
-                candidates=[("openai", "gpt-4o"), ("anthropic", "claude-sonnet")],
-                call=_call,
-                request={},
-            )
-        )
-        self.assertEqual(result["provider"], "anthropic")
-        self.assertIn("openai", call_log)
-
-    def test_52_failover_raises_when_all_fail(self):
-        from core.llm.failover import FailoverStrategy, RetryPolicy
-
-        policy = RetryPolicy(max_retries=1, base_delay_s=0.0, jitter=False)
-        strategy = FailoverStrategy(retry_policy=policy)
-
-        async def _call(provider, model, req):
-            raise RuntimeError(f"{provider} always fails")
-
-        with self.assertRaises(RuntimeError):
-            _run(
-                strategy.execute(
-                    candidates=[("openai", "gpt-4o"), ("anthropic", "claude-sonnet")],
-                    call=_call,
-                    request={},
-                )
-            )
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 class TestPolicyBasedSelectorFunctional(unittest.TestCase):
@@ -643,26 +362,8 @@ class TestPolicyBasedSelectorFunctional(unittest.TestCase):
         self.assertIsNone(result, "PolicyBasedSelector should return None when no providers configured")
 
 
-class TestCommandContextFunctional(unittest.TestCase):
-
-    def test_54_context_with_metadata_immutable(self):
-        from core.commands.context import CommandContext
-
-        ctx = CommandContext(source="api", command="ping")
-        ctx2 = ctx.with_metadata(user_id="u1", extra="value")
-        # original unchanged
-        self.assertNotIn("user_id", ctx.metadata)
-        self.assertEqual(ctx2.metadata.get("user_id"), "u1")
-        self.assertEqual(ctx2.metadata.get("extra"), "value")
-        self.assertEqual(ctx2.trace_id, ctx.trace_id)
-
-    def test_55_context_with_device_sets_device_id(self):
-        from core.commands.context import CommandContext
-
-        ctx = CommandContext(source="api", command="screenshot")
-        ctx2 = ctx.with_device("phone-1")
-        self.assertEqual(ctx2.device_id, "phone-1")
-        self.assertIsNone(ctx.device_id)
+# 此处原有的用例引用了本批删除的零引用模块（审计报告产物 / 纯声明层 / 已被取代的
+# 平行实现）。模块不存在后这些断言失去对象，随之移除；同文件其余用例保持不变。
 
 
 # =============================================================================

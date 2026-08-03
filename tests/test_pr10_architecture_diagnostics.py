@@ -105,14 +105,14 @@ class TestDiagnosticsModels:
     """DiagnosticSeverity, DiagnosticFinding, DiagnosticsReport models."""
 
     def test_severity_values(self):
-        from core.architecture_diagnostics import DiagnosticSeverity
+        from tools.architecture.architecture_diagnostics import DiagnosticSeverity
 
         assert DiagnosticSeverity.INFO.value == "info"
         assert DiagnosticSeverity.WARNING.value == "warning"
         assert DiagnosticSeverity.ERROR.value == "error"
 
     def test_finding_construction(self):
-        from core.architecture_diagnostics import DiagnosticFinding, DiagnosticSeverity
+        from tools.architecture.architecture_diagnostics import DiagnosticFinding, DiagnosticSeverity
 
         f = DiagnosticFinding(
             code="TEST_CODE",
@@ -123,7 +123,7 @@ class TestDiagnosticsModels:
         assert f.message == "Test message"
 
     def test_finding_with_detail(self):
-        from core.architecture_diagnostics import DiagnosticFinding, DiagnosticSeverity
+        from tools.architecture.architecture_diagnostics import DiagnosticFinding, DiagnosticSeverity
 
         f = DiagnosticFinding(
             code="DETAIL_TEST",
@@ -134,7 +134,7 @@ class TestDiagnosticsModels:
         assert f.detail == {"key": "value"}
 
     def test_report_construction(self):
-        from core.architecture_diagnostics import DiagnosticsReport
+        from tools.architecture.architecture_diagnostics import DiagnosticsReport
 
         r = DiagnosticsReport(overall_valid=True)
         assert r.overall_valid is True
@@ -144,7 +144,7 @@ class TestDiagnosticsModels:
         assert r.info_count == 0
 
     def test_report_to_dict_keys(self):
-        from core.architecture_diagnostics import DiagnosticsReport
+        from tools.architecture.architecture_diagnostics import DiagnosticsReport
 
         r = DiagnosticsReport(
             overall_valid=True,
@@ -162,7 +162,7 @@ class TestDiagnosticsModels:
         assert "findings" in d
 
     def test_report_to_dict_overall_valid_false_when_errors(self):
-        from core.architecture_diagnostics import DiagnosticsReport
+        from tools.architecture.architecture_diagnostics import DiagnosticsReport
 
         r = DiagnosticsReport(overall_valid=False, error_count=1)
         d = r.to_dict()
@@ -179,7 +179,7 @@ class TestArchitectureDiagnosticsChecks:
     """Individual invariant checks on ArchitectureDiagnostics."""
 
     def test_entry_surface_not_authority_no_entry_surface(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         diag = ArchitectureDiagnostics({})
         diag.check_entry_surface_not_authority()
@@ -187,7 +187,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid  # no errors when entry_surface absent
 
     def test_entry_surface_not_authority_clean(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "entry_surface": {"surface_role": "entry_surface"},
@@ -198,7 +198,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_entry_surface_claiming_runtime_shell_is_error(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "entry_surface": {
@@ -212,7 +212,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.error_count == 1
 
     def test_entry_surface_claiming_subject_decision_authority_is_error(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "entry_surface": {
@@ -225,7 +225,7 @@ class TestArchitectureDiagnosticsChecks:
         assert not report.overall_valid
 
     def test_runtime_shell_above_subject_core_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "runtime_shell": {
@@ -243,7 +243,7 @@ class TestArchitectureDiagnosticsChecks:
     def test_runtime_shell_inverted_is_error(self):
         """If the runtime_shell claims subject_decision_authority and subject_core
         claims runtime_shell_authority, the ordering invariant fires."""
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "runtime_shell": {
@@ -261,7 +261,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.warning_count > 0 or report.error_count > 0
 
     def test_openclawd_is_subject_decision_core_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "subject_core": {
@@ -274,7 +274,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_openclawd_wrong_role_is_error(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "subject_core": {
@@ -288,7 +288,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.error_count >= 1
 
     def test_agent_kernel_is_cognition_layer_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "cognition_layer": {"authority_role": "cognition_planning_layer"},
@@ -299,7 +299,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_agent_kernel_wrong_role_is_error(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "cognition_layer": {"authority_role": "execution_substrate"},  # wrong
@@ -310,7 +310,7 @@ class TestArchitectureDiagnosticsChecks:
         assert not report.overall_valid
 
     def test_subject_core_above_cognition_layer_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "subject_core": {
@@ -324,7 +324,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_substrate_distinct_from_orchestration_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "execution_substrate": {"execution_substrate_role": "execution_substrate"},
@@ -336,7 +336,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_substrate_same_role_as_orchestration_is_error(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "execution_substrate": {"authority_role": "orchestration_layer"},
@@ -348,7 +348,7 @@ class TestArchitectureDiagnosticsChecks:
         assert not report.overall_valid
 
     def test_remote_execution_coherence_no_mode(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "execution_substrate": {"execution_substrate_role": "execution_substrate"},
@@ -359,7 +359,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid  # no errors when no remote_execution_mode
 
     def test_remote_execution_coherence_agent_runtime_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "execution_substrate": {
@@ -373,7 +373,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_remote_execution_coherence_command_only_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "execution_substrate": {
@@ -387,7 +387,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_remote_execution_coherence_invalid_mode_is_error(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "execution_substrate": {
@@ -402,7 +402,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.error_count >= 1
 
     def test_authority_chain_complete_valid(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = _valid_snapshot()
         diag = ArchitectureDiagnostics(snapshot)
@@ -411,7 +411,7 @@ class TestArchitectureDiagnosticsChecks:
         assert report.overall_valid
 
     def test_authority_chain_missing_runtime_shell_is_warning(self):
-        from core.architecture_diagnostics import ArchitectureDiagnostics
+        from tools.architecture.architecture_diagnostics import ArchitectureDiagnostics
 
         snapshot = {
             "subject_core": {"metadata": {"authority_role": "subject_decision_authority"}},
@@ -432,14 +432,14 @@ class TestValidateAuthorityChain:
     """validate_authority_chain() helper."""
 
     def test_valid_full_chain_passes(self):
-        from core.architecture_diagnostics import validate_authority_chain
+        from tools.architecture.architecture_diagnostics import validate_authority_chain
 
         report = validate_authority_chain(_valid_snapshot())
         assert report.overall_valid
 
     def test_inverted_chain_detects_violation(self):
         """Swap runtime_shell and subject_core roles to trigger ordering check."""
-        from core.architecture_diagnostics import validate_authority_chain
+        from tools.architecture.architecture_diagnostics import validate_authority_chain
 
         snapshot = {
             "runtime_shell": {
@@ -455,20 +455,20 @@ class TestValidateAuthorityChain:
         assert report.warning_count > 0 or report.error_count > 0
 
     def test_empty_snapshot_does_not_raise(self):
-        from core.architecture_diagnostics import validate_authority_chain
+        from tools.architecture.architecture_diagnostics import validate_authority_chain
 
         report = validate_authority_chain({})
         # Should complete without raising; may have warnings about missing layers
         assert isinstance(report.overall_valid, bool)
 
     def test_returns_diagnostics_report(self):
-        from core.architecture_diagnostics import DiagnosticsReport, validate_authority_chain
+        from tools.architecture.architecture_diagnostics import DiagnosticsReport, validate_authority_chain
 
         report = validate_authority_chain(_valid_snapshot())
         assert isinstance(report, DiagnosticsReport)
 
     def test_checks_run_non_empty(self):
-        from core.architecture_diagnostics import validate_authority_chain
+        from tools.architecture.architecture_diagnostics import validate_authority_chain
 
         report = validate_authority_chain(_valid_snapshot())
         assert len(report.checks_run) > 0
@@ -483,13 +483,13 @@ class TestValidateLayerBoundaries:
     """validate_layer_boundaries() helper."""
 
     def test_valid_snapshot_passes(self):
-        from core.architecture_diagnostics import validate_layer_boundaries
+        from tools.architecture.architecture_diagnostics import validate_layer_boundaries
 
         report = validate_layer_boundaries(_valid_snapshot())
         assert report.overall_valid
 
     def test_entry_surface_claiming_authority_is_violation(self):
-        from core.architecture_diagnostics import validate_layer_boundaries
+        from tools.architecture.architecture_diagnostics import validate_layer_boundaries
 
         snapshot = {
             "entry_surface": {
@@ -500,7 +500,7 @@ class TestValidateLayerBoundaries:
         assert not report.overall_valid
 
     def test_subject_core_wrong_role_is_violation(self):
-        from core.architecture_diagnostics import validate_layer_boundaries
+        from tools.architecture.architecture_diagnostics import validate_layer_boundaries
 
         snapshot = {
             "subject_core": {
@@ -511,7 +511,7 @@ class TestValidateLayerBoundaries:
         assert not report.overall_valid
 
     def test_substrate_and_orchestration_same_role_is_violation(self):
-        from core.architecture_diagnostics import validate_layer_boundaries
+        from tools.architecture.architecture_diagnostics import validate_layer_boundaries
 
         snapshot = {
             "execution_substrate": {"authority_role": "orchestration_layer"},
@@ -521,7 +521,7 @@ class TestValidateLayerBoundaries:
         assert not report.overall_valid
 
     def test_empty_snapshot_does_not_raise(self):
-        from core.architecture_diagnostics import validate_layer_boundaries
+        from tools.architecture.architecture_diagnostics import validate_layer_boundaries
 
         report = validate_layer_boundaries({})
         assert isinstance(report.overall_valid, bool)
@@ -536,13 +536,13 @@ class TestValidateRemoteExecutionCoherence:
     """validate_remote_execution_coherence() helper."""
 
     def test_no_substrate_passes(self):
-        from core.architecture_diagnostics import validate_remote_execution_coherence
+        from tools.architecture.architecture_diagnostics import validate_remote_execution_coherence
 
         report = validate_remote_execution_coherence({})
         assert report.overall_valid
 
     def test_agent_runtime_valid(self):
-        from core.architecture_diagnostics import validate_remote_execution_coherence
+        from tools.architecture.architecture_diagnostics import validate_remote_execution_coherence
 
         snapshot = {
             "execution_substrate": {
@@ -554,7 +554,7 @@ class TestValidateRemoteExecutionCoherence:
         assert report.overall_valid
 
     def test_command_only_valid(self):
-        from core.architecture_diagnostics import validate_remote_execution_coherence
+        from tools.architecture.architecture_diagnostics import validate_remote_execution_coherence
 
         snapshot = {
             "execution_substrate": {
@@ -566,7 +566,7 @@ class TestValidateRemoteExecutionCoherence:
         assert report.overall_valid
 
     def test_invalid_mode_is_error(self):
-        from core.architecture_diagnostics import validate_remote_execution_coherence
+        from tools.architecture.architecture_diagnostics import validate_remote_execution_coherence
 
         snapshot = {
             "execution_substrate": {
@@ -579,7 +579,7 @@ class TestValidateRemoteExecutionCoherence:
         assert report.error_count >= 1
 
     def test_no_mode_passes(self):
-        from core.architecture_diagnostics import validate_remote_execution_coherence
+        from tools.architecture.architecture_diagnostics import validate_remote_execution_coherence
 
         snapshot = {
             "execution_substrate": {
@@ -599,27 +599,27 @@ class TestRunArchitectureDiagnostics:
     """High-level run_architecture_diagnostics() function."""
 
     def test_valid_flow_passes_all_checks(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(_valid_snapshot())
         assert report.overall_valid
         assert report.error_count == 0
 
     def test_empty_snapshot_does_not_raise(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics({})
         assert isinstance(report.overall_valid, bool)
 
     def test_none_snapshot_does_not_raise(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(None)
         assert isinstance(report.overall_valid, bool)
 
     def test_miswired_entry_surface_detected(self):
         """Entry surface claiming runtime authority is an ERROR."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = dict(_valid_snapshot())
         snapshot["entry_surface"] = {
@@ -632,7 +632,7 @@ class TestRunArchitectureDiagnostics:
 
     def test_miswired_openclawd_detected(self):
         """subject_core with wrong role is an ERROR."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = dict(_valid_snapshot())
         snapshot["subject_core"] = {"authority_role": "orchestration_layer"}
@@ -641,7 +641,7 @@ class TestRunArchitectureDiagnostics:
 
     def test_conflated_substrate_and_orchestration_detected(self):
         """Same role for substrate and orchestration layer is an ERROR."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         snapshot = dict(_valid_snapshot())
         snapshot["execution_substrate"] = {"authority_role": "orchestration_layer"}
@@ -650,7 +650,7 @@ class TestRunArchitectureDiagnostics:
         assert not report.overall_valid
 
     def test_all_checks_run(self):
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(_valid_snapshot())
         # At least 7 checks should be registered
@@ -660,7 +660,7 @@ class TestRunArchitectureDiagnostics:
         """DiagnosticsReport.to_dict() produces a JSON-serialisable dict."""
         import json
 
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         report = run_architecture_diagnostics(_valid_snapshot())
         d = report.to_dict()
@@ -668,7 +668,7 @@ class TestRunArchitectureDiagnostics:
         json.dumps(d)
 
     def test_report_findings_list(self):
-        from core.architecture_diagnostics import DiagnosticFinding, run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import DiagnosticFinding, run_architecture_diagnostics
 
         report = run_architecture_diagnostics(_valid_snapshot())
         for f in report.findings:
@@ -684,7 +684,7 @@ class TestBuildDiagnosticsSnapshotFromLayers:
     """build_diagnostics_snapshot_from_layers() helper."""
 
     def test_builds_snapshot_from_tagged_dicts(self):
-        from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+        from tools.architecture.architecture_diagnostics import build_diagnostics_snapshot_from_layers
 
         runtime_result = {
             "arch_layer_id": "runtime_shell",
@@ -699,7 +699,7 @@ class TestBuildDiagnosticsSnapshotFromLayers:
         assert "subject_core" in snapshot
 
     def test_ignores_dicts_without_arch_layer_id(self):
-        from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+        from tools.architecture.architecture_diagnostics import build_diagnostics_snapshot_from_layers
 
         no_id = {"some_key": "some_value"}
         tagged = {"arch_layer_id": "runtime_shell", "x": 1}
@@ -708,14 +708,14 @@ class TestBuildDiagnosticsSnapshotFromLayers:
         assert len(snapshot) == 1
 
     def test_ignores_non_dict_inputs(self):
-        from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+        from tools.architecture.architecture_diagnostics import build_diagnostics_snapshot_from_layers
 
         snapshot = build_diagnostics_snapshot_from_layers(None, "string", 42)  # type: ignore[arg-type]
         assert snapshot == {}
 
     def test_mixed_valid_and_invalid_inputs(self):
         """Valid tagged dicts are retained; invalid types and untagged dicts are filtered."""
-        from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+        from tools.architecture.architecture_diagnostics import build_diagnostics_snapshot_from_layers
 
         valid1 = {"arch_layer_id": "runtime_shell", "x": 1}
         valid2 = {"arch_layer_id": "subject_core", "y": 2}
@@ -728,12 +728,12 @@ class TestBuildDiagnosticsSnapshotFromLayers:
         assert snapshot["subject_core"]["y"] == 2
 
     def test_empty_input_returns_empty_dict(self):
-        from core.architecture_diagnostics import build_diagnostics_snapshot_from_layers
+        from tools.architecture.architecture_diagnostics import build_diagnostics_snapshot_from_layers
 
         assert build_diagnostics_snapshot_from_layers() == {}
 
     def test_snapshot_can_be_passed_to_run_diagnostics(self):
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
@@ -875,7 +875,7 @@ class TestIntegrationWithRuntimeLayers:
 
     def test_arch_layer_id_enables_snapshot_building(self):
         """arch_layer_id fields allow build_diagnostics_snapshot_from_layers to work."""
-        from core.architecture_diagnostics import (
+        from tools.architecture.architecture_diagnostics import (
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
@@ -988,7 +988,7 @@ class TestBackwardCompatibility:
         """Importing architecture_diagnostics must not execute any side effects."""
         import importlib
 
-        mod = importlib.import_module("core.architecture_diagnostics")
+        mod = importlib.import_module("tools.architecture.architecture_diagnostics")
         assert hasattr(mod, "run_architecture_diagnostics")
         assert hasattr(mod, "ArchitectureDiagnostics")
         assert hasattr(mod, "DiagnosticsReport")
@@ -1000,7 +1000,7 @@ class TestBackwardCompatibility:
     def test_run_diagnostics_with_existing_pr9_response_shapes(self):
         """Passing actual PR-9-style response dicts to the diagnostics module
         should produce a valid report without modification."""
-        from core.architecture_diagnostics import run_architecture_diagnostics
+        from tools.architecture.architecture_diagnostics import run_architecture_diagnostics
 
         # Shapes as produced by existing modules (PR-9)
         snapshot = {
