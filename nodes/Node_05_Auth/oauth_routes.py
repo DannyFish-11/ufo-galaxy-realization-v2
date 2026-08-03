@@ -24,6 +24,7 @@ logger = logging.getLogger("Node_05_Auth.OAuthRoutes")
 # 可选依赖：优雅降级
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
@@ -31,6 +32,7 @@ except ImportError:
 
 try:
     import jwt
+
     HAS_JWT = True
 except ImportError:
     HAS_JWT = False
@@ -40,6 +42,7 @@ try:
     from fastapi.responses import RedirectResponse
     from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
     from pydantic import BaseModel
+
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
@@ -49,6 +52,7 @@ except ImportError:
 from nodes.Node_05_Auth.oauth_providers import (
     get_oauth_provider,
     get_available_providers,
+    GitHubOAuthProvider,
     PKCEHelper,
     OAuthError,
 )
@@ -85,6 +89,7 @@ _oauth_users: Dict[str, Dict[str, Any]] = {}
 
 # ============ Pydantic 请求模型 ============
 
+
 class DeviceStartRequest(BaseModel):
     provider: str = "google"
 
@@ -92,6 +97,29 @@ class DeviceStartRequest(BaseModel):
 class DevicePollRequest(BaseModel):
     provider: str
     device_code: str
+
+
+class GoogleIdTokenRequest(BaseModel):
+    """Android 原生 Google Sign-In 拿到的 ID Token。
+
+    与 ``/auth/oauth/callback`` 那条**不是同一种凭证**:那边收的是授权码 + PKCE
+    verifier(服务端重定向流),这里收的是客户端 SDK 直接产出的 ID Token。
+    Android 用的是原生账号选择器,它给不出授权码 —— 详见下面路由的说明。
+    """
+
+    id_token: str
+
+
+class GitHubCodeRequest(BaseModel):
+    """Android 自己走完 GitHub 授权后拿到的授权码。
+
+    ``redirect_uri`` 必须回传:GitHub 换取令牌时会校验它与授权时用的那个一致,
+    而客户端用的是自己的回调地址,与服务端 ``OAUTH_REDIRECT_URI`` 不是同一个。
+    不带上它,换取会以 redirect_uri_mismatch 失败。
+    """
+
+    code: str
+    redirect_uri: Optional[str] = None
 
 
 class OAuthRefreshRequest(BaseModel):
@@ -103,6 +131,103 @@ class OAuthLogoutRequest(BaseModel):
 
 
 # ============ 辅助函数 ============
+
+#: Google 的 JWKS 端点。**本地校验**用的公钥从这里取。
+#:
+#: 为什么不用 tokeninfo 端点:Google 自己的文档把 ``/tokeninfo`` 定位为调试用途,
+#: 生产环境要求取公钥在本地验签 —— 每次登录都往 Google 打一次同步 HTTP,既加一跳
+#: 延迟,也把登录的可用性绑在对方那个调试端点上。
+_GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
+
+#: ``iss`` 的两种合法写法,Google 两种都会签发。
+_GOOGLE_ISSUERS = frozenset({"accounts.google.com", "https://accounts.google.com"})
+
+_jwks_client = None
+
+
+def _google_jwks_client():
+    """惰性构造并复用 JWKS 客户端。
+
+    PyJWT 的 ``PyJWKClient`` 自带密钥集缓存与 ``lifespan`` 轮转(默认 300 秒),
+    正好对上 Google "公钥会定期轮转、按 Cache-Control 决定何时重取" 的要求。
+    用它而不是新引一个 ``google-auth`` 依赖:本仓有供应链哈希闸,加一个依赖要
+    连带重算 requirements.hash.txt,而 pyjwt + cryptography 已经在依赖里,
+    能力也完全够 —— 验签、aud、iss、exp 四项一个不少。
+    """
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = jwt.PyJWKClient(_GOOGLE_JWKS_URI)
+    return _jwks_client
+
+
+def _google_audiences() -> set:
+    """本后端认可的 Google 客户端 ID。
+
+    Android 原生登录用的 client id 与 Web 的通常**不是同一个**,所以这里收一个
+    逗号分隔的列表,而不是单个值 —— 只配一个的话,手机端登录会以 aud 不匹配被拒,
+    而那个错误看起来像"token 无效",很难指向配置。
+    """
+    raw = ",".join(
+        filter(
+            None,
+            (os.getenv("GOOGLE_CLIENT_ID", ""), os.getenv("GOOGLE_ANDROID_CLIENT_ID", "")),
+        )
+    )
+    return {c.strip() for c in raw.split(",") if c.strip()}
+
+
+def _verify_google_id_token(token: str) -> Dict[str, str]:
+    """本地校验 Google ID Token,返回规范化的用户信息。
+
+    四项校验缺一不可(Google 文档明列):
+      1. 签名 —— 用 JWKS 里对应 kid 的公钥,并**锁定 RS256**(不锁算法会给
+         alg=none / HS256 混淆攻击留口子);
+      2. ``aud`` —— 必须是本后端自己的客户端 ID;
+      3. ``iss`` —— accounts.google.com 或带 https 前缀那个;
+      4. ``exp`` —— 由 PyJWT 默认校验。
+
+    "客户端发来的就信"是这条链路最典型的死法:ID Token 是个任何人都能构造的
+    JSON,不验签就等于让调用方自称是谁就是谁。
+    """
+    audiences = _google_audiences()
+    if not audiences:
+        # 没配就明说,而不是放行或含糊报 401 —— 后者会让人去查 token,
+        # 而问题其实在部署配置上。
+        raise HTTPException(
+            status_code=503,
+            detail="服务端未配置 GOOGLE_CLIENT_ID / GOOGLE_ANDROID_CLIENT_ID,无法校验 ID Token",
+        )
+    try:
+        signing_key = _google_jwks_client().get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=list(audiences),
+            options={"require": ["exp", "aud", "iss", "sub"]},
+        )
+    except jwt.PyJWTError as exc:
+        logger.warning("Google ID Token 校验失败: %s", type(exc).__name__)
+        raise HTTPException(status_code=401, detail=f"ID Token 校验失败: {type(exc).__name__}")
+    except Exception as exc:  # noqa: BLE001 — 取公钥可能因网络失败
+        logger.error("取 Google 公钥失败: %s", exc)
+        raise HTTPException(status_code=503, detail="无法获取 Google 公钥,稍后重试")
+
+    # iss 单独判:PyJWT 的 issuer 参数只接受单个字符串,而 Google 两种写法都会签发。
+    if claims.get("iss") not in _GOOGLE_ISSUERS:
+        raise HTTPException(status_code=401, detail=f"ID Token 的 iss 不是 Google: {claims.get('iss')!r}")
+
+    if not claims.get("email"):
+        raise HTTPException(status_code=400, detail="ID Token 里没有 email(登录需要 email scope)")
+
+    return {
+        "id": str(claims["sub"]),
+        "email": claims["email"],
+        "name": claims.get("name") or claims.get("email", ""),
+        "picture": claims.get("picture", ""),
+        "provider": "google",
+    }
+
 
 def _generate_jwt_token(oauth_user: Dict[str, str]) -> Dict[str, Any]:
     """为 OAuth 用户生成 JWT 令牌
@@ -186,10 +311,7 @@ def _verify_oauth_token(token: str) -> Optional[Dict[str, Any]]:
 def _cleanup_expired_states():
     """清理过期的 state 记录（5分钟前创建的）"""
     now = datetime.utcnow()
-    expired = [
-        k for k, v in _state_store.items()
-        if now - v.get("created_at", now) > timedelta(minutes=5)
-    ]
+    expired = [k for k, v in _state_store.items() if now - v.get("created_at", now) > timedelta(minutes=5)]
     for k in expired:
         del _state_store[k]
 
@@ -197,9 +319,7 @@ def _cleanup_expired_states():
 def _cleanup_expired_tokens():
     """清理过期的刷新令牌"""
     now = datetime.utcnow()
-    expired = [
-        k for k, v in _oauth_refresh_tokens.items() if v.get("exp", now) < now
-    ]
+    expired = [k for k, v in _oauth_refresh_tokens.items() if v.get("exp", now) < now]
     for k in expired:
         del _oauth_refresh_tokens[k]
 
@@ -234,6 +354,7 @@ async def get_current_oauth_user(
 
 
 # ============ 路由注册函数 ============
+
 
 def register_oauth_routes(app: FastAPI):
     """注册 OAuth 路由到 FastAPI 应用
@@ -369,6 +490,64 @@ def register_oauth_routes(app: FastAPI):
 
         return token_data
 
+    # ---- 3b. 客户端已完成授权,把凭证交给后端换 JWT ----
+    #
+    # 这两条与上面的 authorize/callback 是**同一件事的两种做法**,都留着是有意的:
+    #
+    #   authorize + callback   服务端重定向流。浏览器把用户导去授权页,授权码回到
+    #                          服务端的 callback,服务端换令牌。适合 Web。
+    #   下面这两条              客户端交互流。App 用原生 SDK 完成授权,把结果交给后端。
+    #
+    # 为什么必须有后一种:Android 用的是原生 Google Sign-In(账号选择器),它产出的是
+    # **ID Token 而不是授权码** —— 拿不到授权码,就走不了 PKCE 那条 callback 流。
+    # 硬要统一成重定向流,等于把原生账号选择器换成跳浏览器,是体验倒退。
+    #
+    # 两条路径最终都汇到同一个 _generate_jwt_token(),所以"登录之后是什么"只有一份实现。
+
+    @app.post("/auth/oauth/google")
+    async def oauth_google_id_token(body: GoogleIdTokenRequest):
+        """用 Android 原生登录拿到的 ID Token 换取本系统 JWT。
+
+        校验是**本地**做的(JWKS 验签 + aud + iss + exp),不打 Google 的 tokeninfo。
+        """
+        oauth_user = _verify_google_id_token(body.id_token)
+        token_data = _generate_jwt_token(oauth_user)
+        logger.info("OAuth 登录成功(google/id_token): %s", oauth_user["email"])
+        return token_data
+
+    @app.post("/auth/oauth/github")
+    async def oauth_github_code(body: GitHubCodeRequest):
+        """用客户端自己走完授权拿到的 GitHub 授权码换取本系统 JWT。"""
+        if not body.code:
+            raise HTTPException(status_code=400, detail="缺少 code")
+        try:
+            # 用调用方给的 redirect_uri 构造 provider:GitHub 换取令牌时会校验它与
+            # 授权时用的一致,而客户端用的是它自己的回调地址,与服务端默认的那个不同。
+            # 走 get_oauth_provider() 会拿到服务端默认值,换取必然 redirect_uri_mismatch。
+            provider = GitHubOAuthProvider(redirect_uri=body.redirect_uri or None)
+            # code_verifier 传空:客户端流没有 PKCE,而 exchange_code 里对空值是
+            # "有就带上、没有就不带",不需要为此改动提供商实现。
+            token_response = await provider.exchange_code(body.code, "")
+            access_token = token_response.get("access_token")
+            if not access_token:
+                raise HTTPException(status_code=400, detail="GitHub 未返回 access_token")
+            user_info = await provider.get_user_info(access_token)
+        except HTTPException:
+            raise
+        except OAuthError as exc:
+            logger.error("GitHub 令牌交换失败: %s", exc)
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("GitHub 登录处理异常: %s", exc)
+            raise HTTPException(status_code=500, detail="GitHub 登录处理失败")
+
+        if not user_info.get("email"):
+            raise HTTPException(status_code=400, detail="GitHub 未提供 email(需要 user:email scope)")
+
+        token_data = _generate_jwt_token(user_info)
+        logger.info("OAuth 登录成功(github/code): %s", user_info["email"])
+        return token_data
+
     # ---- 4. 启动设备授权 ----
     @app.post("/auth/oauth/device/start")
     async def device_start(request_data: DeviceStartRequest):
@@ -410,9 +589,7 @@ def register_oauth_routes(app: FastAPI):
         device_code = request_data.device_code
 
         try:
-            token_data = await device_flow_manager.poll_device_token(
-                provider, device_code
-            )
+            token_data = await device_flow_manager.poll_device_token(provider, device_code)
             access_token = token_data.get("access_token")
 
             # 获取用户信息
