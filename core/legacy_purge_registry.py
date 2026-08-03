@@ -539,61 +539,18 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
 # ── PR-convergence: Enforce single authoritative path and default-off legacy ──
 
 PURGE_REGISTRY = PURGE_REGISTRY + (
-    PurgeDecision(
-        asset_path=("core/canonical_authoritative_path_convergence.py" "::CANONICAL_PATH_INVENTORY"),
-        status=PurgeStatus.WRAPPER_HARDENED,
-        pr="PR-convergence",
-        rationale=(
-            "PR-convergence establishes CANONICAL_PATH_INVENTORY as the single "
-            "machine-readable surface classifying every runtime path by its "
-            "authoritative role (canonical / compat_allowed / observation_only / "
-            "deprecated_live / fully_blocked).  "
-            "Prior PRs (PR-8 through PR-M) defined blocking machinery and legacy "
-            "registries but had no single module that proved the canonical path was "
-            "actually the default and that legacy paths were default-off.  "
-            "This entry records that the convergence inventory is now hardened and "
-            "verifiable by tests and operator tooling."
-        ),
-        canonical_replacement=(
-            "core/canonical_authoritative_path_convergence.py"
-            "  (CANONICAL_PATH_INVENTORY + enforce_canonical_selection)"
-        ),
-    ),
-    PurgeDecision(
-        asset_path=("core/canonical_authoritative_path_convergence.py" "::DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY"),
-        status=PurgeStatus.WRAPPER_HARDENED,
-        pr="PR-convergence",
-        rationale=(
-            "PR-convergence introduces DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY and "
-            "is_legacy_default_off() as the formal machine-checkable gate for "
-            "default-off legacy behavior.  "
-            "Legacy paths classified as deprecated_live or fully_blocked in "
-            "CANONICAL_PATH_INVENTORY return True from is_legacy_default_off(), "
-            "proving they are not the default runtime choice."
-        ),
-        canonical_replacement=("core/canonical_authoritative_path_convergence.py::is_legacy_default_off()"),
-    ),
-    PurgeDecision(
-        asset_path=(
-            "core/canonical_authoritative_path_convergence.py"
-            "::ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY"
-        ),
-        status=PurgeStatus.WRAPPER_HARDENED,
-        pr="PR-convergence",
-        rationale=(
-            "PR-convergence formally documents and enforces the Android compat "
-            "influence boundary: all Android-originated compat/legacy participant "
-            "signals MUST pass through "
-            "core.android_participant_truth_ingress.ingest_android_participant_truth_message "
-            "before reaching V2 canonical state.  Direct writes from Android compat "
-            "signals bypassing this gate are blocked.  "
-            "This policy was implicit before PR-convergence; it is now machine-readable "
-            "and verifiable in tests."
-        ),
-        canonical_replacement=(
-            "core/android_participant_truth_ingress.py" "::ingest_android_participant_truth_message()"
-        ),
-    ),
+    # 此处原有两条 PR-convergence 的清退登记，其 asset_path 与 canonical_replacement
+    # 都指向 core/canonical_authoritative_path_convergence.py。该模块是一张手写的
+    # 「路径权威角色」清单 + 报告构建器，从真实入口不可达、仅测试引用，已作为死代码
+    # 删除。指向一个不存在文件的「替代方案」比没有登记更误导，故一并移除。
+    # 此处原有两条 PR-convergence 的清退登记，其 asset_path 与 canonical_replacement
+    # 都指向 core/canonical_authoritative_path_convergence.py。该模块是一张手写的
+    # 「路径权威角色」清单 + 报告构建器，从真实入口不可达、仅测试引用，已作为死代码
+    # 删除。指向一个不存在文件的「替代方案」比没有登记更误导，故一并移除。
+    # 此处原有两条 PR-convergence 的清退登记，其 asset_path 与 canonical_replacement
+    # 都指向 core/canonical_authoritative_path_convergence.py。该模块是一张手写的
+    # 「路径权威角色」清单 + 报告构建器，从真实入口不可达、仅测试引用，已作为死代码
+    # 删除。指向一个不存在文件的「替代方案」比没有登记更误导，故一并移除。
     PurgeDecision(
         asset_path=("core/orchestration_authority/legacy_paths.py" "::PR-convergence entries"),
         status=PurgeStatus.WRAPPER_HARDENED,

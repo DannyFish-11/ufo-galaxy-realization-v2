@@ -40,7 +40,7 @@ that define the stable *quasi-platform state* (准平台态):
 4. **Observability / Diagnostics / Evidence Boundary** — The four-level
    visibility taxonomy (LOCAL_VISIBLE, RUNTIME_VISIBLE, OPERATOR_VISIBLE,
    PRODUCT_VISIBLE) and five evidence contract kinds are declared in
-   ``core.cross_subject_observability_contract``.  No new parallel
+   观测面契约（原 core.cross_subject_observability_contract，已作为死代码删除）。No new parallel
    observability center is introduced here.
 
 5. **Outward Consumption Boundary** — Outward-facing / product-facing /
@@ -205,7 +205,7 @@ OBSERVABILITY_BOUNDARY_IS_NOT_PARALLEL_AUTHORITY_POLICY: str = (
     "outputs from all subjects.  No visibility level constitutes a parallel "
     "observability authority or canonical truth source.  Observability "
     "surfaces are classification and consumption layers only.  "
-    "Code evidence: core.cross_subject_observability_contract."
+    "Code evidence: 观测面分类与消费层（原声明模块已删除）。"
 )
 
 OUTWARD_CONSUMPTION_BOUNDARY_IS_CONSUMPTION_ONLY_POLICY: str = (
@@ -410,17 +410,23 @@ def _build_observability_evidence_axis() -> BoundaryAxisDescriptor:
         description=(
             "The four-level visibility taxonomy (LOCAL_VISIBLE, RUNTIME_VISIBLE, "
             "OPERATOR_VISIBLE, PRODUCT_VISIBLE) and five evidence contract kinds "
-            "are declared in core.cross_subject_observability_contract.  No new "
+            "此前声明在 core.cross_subject_observability_contract（已作为死代码删除）。No new "
             "parallel observability center or diagnostics authority is introduced.  "
             "Observability surfaces are classification and consumption layers only."
         ),
         policy_sentinel=OBSERVABILITY_BOUNDARY_IS_NOT_PARALLEL_AUTHORITY_POLICY,
+        # 原先这五个锚点全出自 core.cross_subject_observability_contract —— 一张手写的
+        # 「可观测面 + 证据契约」清单，从真实入口不可达、仅测试引用，已作为死代码删除。
+        #
+        # 改指**真正承担这一轴职责的活模块**，而不是清空：Phase 7 启动断言要求每个边界轴
+        # 都有非空的 code_evidence（"no real code evidence anchors this boundary axis"），
+        # 清空会让启动检查降级 —— 这正是本轮回归抓到的那条失败。而「用一份手写清单当证据」
+        # 恰恰是被删模块的问题所在，所以锚点指向真实产出可观测数据的实现。
         code_evidence=(
-            "core.cross_subject_observability_contract.CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY",
-            "core.cross_subject_observability_contract.VisibilityLevel",
-            "core.cross_subject_observability_contract.EvidenceContractKind",
-            "core.cross_subject_observability_contract.get_canonical_evidence_uplink_path",
-            "core.cross_subject_observability_contract.NO_PARALLEL_OBSERVABILITY_CENTER_POLICY",
+            "core.execution_observability.event_schema",
+            "core.execution_observability.trace_schema",
+            "core.routing_observability",
+            "galaxy_gateway.observability",
         ),
         android_v2_consistent=True,
         no_parallel_authority=True,
