@@ -492,6 +492,31 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         except Exception as _udp_err:
             logger.debug("UDP listener start failed (non-fatal): %s", _udp_err)
 
+        # 阶段 2：AODV 多跳 mesh（第 10 个适配器）。peers 来自 lan_discovery 镜像
+        # 进 UDM 的 mDNS 记录；无 peers 时 is_available 恒 False，单节点部署下沉默。
+        try:
+            from core.adapters.mesh_routing_adapter import MeshRoutingAdapter
+
+            mesh_adapter = MeshRoutingAdapter(
+                node_id=os.getenv("GALAXY_MESH_NODE_ID", "gateway"),
+                local_port=int(os.getenv("GALAXY_MESH_PORT", "19422")),
+            )
+            await mesh_adapter.start_server()
+            mesh_adapter.refresh_neighbors_from_discovery()
+
+            # 终点投递 → 既有 ingress 汇聚点（message_handler.handle_message），
+            # 否则消息送到网关却没人消费 —— 中继成功但内容进了黑洞。
+            async def _on_mesh_message(aip: dict, meta: dict) -> None:
+                from galaxy_gateway.protocol import parse_message
+
+                src = str(meta.get("src", "") or "mesh_unknown")
+                await message_handler.handle_message(src, parse_message(aip))
+
+            mesh_adapter.set_message_handler(_on_mesh_message)
+            aip_transport.register_adapter(mesh_adapter)
+        except Exception as _mesh_err:
+            logger.debug("Mesh routing adapter start failed (non-fatal): %s", _mesh_err)
+
         app.state.aip_transport = aip_transport
         logger.info(
             "AIPTransport adapters registered: %s",

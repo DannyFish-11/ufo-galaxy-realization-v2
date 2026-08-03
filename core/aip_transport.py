@@ -137,6 +137,7 @@ class AIPTransport:
             "udp",  # UDP 报文
             "ble",  # 蓝牙 LE
             "serial",  # 串口
+            "mesh",  # AODV 多跳中继（最后兜底：单跳全不通才轮到它）
         ]
         # 链路历史:(transport, target) → 尝试/成功/EWMA 延迟。由 _send_with_fallback
         # 的真实发送结果喂入,反哺后续候选排序(表现差的链路下沉,好的上浮)。

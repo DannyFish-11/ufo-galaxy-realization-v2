@@ -146,6 +146,7 @@ _EXEMPT_NAMES: Dict[str, str] = {
     "reset_session_registry": "同上",
     "reset_recovery_readiness_runtime": "同上",
     "reset_unified_llm_router": "同上",
+    "reset_link_observer": "同上",
 }
 
 
