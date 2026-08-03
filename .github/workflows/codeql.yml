@@ -38,6 +38,72 @@ jobs:
         uses: github/codeql-action/autobuild@v3
 
       - name: Perform CodeQL Analysis
+        id: analyze
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          # 把 SARIF 同时落到磁盘,而不只是上传到 Security 页。
+          output: sarif-results
+
+      # ── 为什么要把 SARIF 留成 artifact ────────────────────────────────────
+      # 分析结果此前**只**进 Security 页。那意味着任何没有 code-scanning 读权限的人
+      # 或工具都拿不到告警原文 —— 包括 CI 里的后续步骤、外部审计脚本、以及在本仓
+      # 实际发生过的情形:排查时只知道"还有 6 条告警",却读不到是哪 6 条、在哪一行、
+      # 属于哪条 query,只能靠人打开网页转述。转述会丢信息,也无法自动化。
+      #
+      # 落成 artifact 之后,告警变成**机器可读且可离线获取**的:
+      #   gh run download <run-id> -n codeql-sarif-python
+      # 拿到的是与 Security 页同源的同一份 SARIF(analyze 动作产出的就是它),
+      # 不是另算一遍的近似物。
+      #
+      # if: always() —— 分析失败时更需要看到已产出的部分结果。
+      - name: Upload SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: sarif-results/
+          if-no-files-found: warn
+          # 保留 90 天:足以覆盖"发现问题 → 回溯是哪次引入的"这个跨度,
+          # 又不会让每周一次的定时扫描无限堆积。
+          retention-days: 90
+
+      # 把"有几条、分别是什么"直接打进作业摘要,连 artifact 都不用下载就能看见。
+      # 这一步是纯读:不改判定、不影响 analyze 的成败,只是把已有信息呈现出来。
+      - name: Summarise findings
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib, collections
+          out = []
+          for path in sorted(pathlib.Path("sarif-results").glob("*.sarif")):
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  out.append(f"- `{path.name}` 读取失败: {exc}")
+                  continue
+              for run in data.get("runs", []):
+                  results = run.get("results", []) or []
+                  by_rule = collections.Counter(r.get("ruleId", "?") for r in results)
+                  out.append(f"### `{path.name}` — {len(results)} 条")
+                  if not results:
+                      out.append("_无告警。_")
+                      continue
+                  out.append("")
+                  out.append("| rule | 条数 | 首个位置 |")
+                  out.append("|---|---:|---|")
+                  first = {}
+                  for r in results:
+                      rid = r.get("ruleId", "?")
+                      if rid in first:
+                          continue
+                      locs = r.get("locations") or []
+                      phys = (locs[0].get("physicalLocation") if locs else {}) or {}
+                      art = (phys.get("artifactLocation") or {}).get("uri", "?")
+                      line = (phys.get("region") or {}).get("startLine", "?")
+                      first[rid] = f"{art}:{line}"
+                  for rid, n in by_rule.most_common():
+                      out.append(f"| `{rid}` | {n} | {first.get(rid, '?')} |")
+          print("## CodeQL 结果\n")
+          print("\n".join(out) if out else "_没有找到 SARIF 文件。_")
+          PY

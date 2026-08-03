@@ -1,0 +1,162 @@
+name: Upstream Model Drift
+
+# 盯住"我们声明的型号,上游还认不认"。
+#
+# 要防的不是"这一次没验",是**漂移**
+# ----------------------------------
+# 服务商会改名、下线型号,带日期后缀的 realtime 型号尤其
+# (``gemini-2.5-flash-native-audio-preview-12-2025`` 这种一看就有保质期)。
+# 一次性的人工验证解决不了这个:验完的第二个月它照样会悄悄失效,而失效的表现是
+# **运行时 404** —— 注册成功、选路成功,直到真发起请求才炸,而且多半是在用户
+# 正要用语音的时候。
+#
+# 所以对症的做法是定期对着上游实测,而不是"记得去查一下"。
+#
+# 复用既有脚本,不另写一份
+# ------------------------
+# scripts/verify_provider_apis.py 早就会做这件事(拿真 key 打各家官方 /models,
+# 把 PROVIDER_REGISTRY 里声明的型号——含 realtime——与上游返回的清单逐个比对,
+# 列出"registry 里有、上游没有"的那些)。缺的从来不是工具,是**没人跑它**。
+# 这个工作流就是补上"跑"。
+#
+# 没配密钥时会怎样
+# ----------------
+# 整个上游实测步骤被跳过,只跑 --offline 的静态对齐(那部分不需要网络也不需要
+# 密钥)。也就是说:fork、以及还没配 secret 的仓库,这个工作流不会红。
+# 新加的检查一上来就把别人的 CI 弄红,只会让人学会无视它。
+#
+# 密钥怎么配:仓库 Settings → Secrets and variables → Actions,按需添加
+#   OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY …
+# 名字与 core.multi_llm_router 的 PROVIDER_REGISTRY 里 env_key 一致即可;
+# 只配一部分也行,脚本对未配置的家只报"未配置",不当作失败。
+
+on:
+  schedule:
+    # 每周一 09:00 UTC。型号变更是周级事件,天级跑纯属浪费上游配额。
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+# 同一时刻只跑一个:这个作业会真的打上游,重复跑没有额外信息,只多烧配额。
+concurrency:
+  group: upstream-model-drift
+  cancel-in-progress: false
+
+jobs:
+  static:
+    name: 静态对齐(无需密钥)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      # 这一层查的是四份清单(面板 schema / 面板输入框 / 已配置角标名单 /
+      # 路由器 registry)之间有没有漂移。不需要网络、不需要密钥,所以对所有人都跑。
+      - name: 面板 / 路由器 清单对齐
+        run: python scripts/verify_provider_apis.py --offline
+
+  live:
+    name: 上游实测(需要密钥)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 有没有任何一家配了密钥?一家都没有就整个跳过,而不是失败。
+      # 用 secrets 的**存在性**判断,不打印任何值。
+      - name: 检测是否配置了上游密钥
+        id: keys
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          any=false
+          for name in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY DEEPSEEK_API_KEY GROQ_API_KEY; do
+            if [ -n "${!name}" ]; then any=true; fi
+          done
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+          if [ "$any" = "false" ]; then
+            echo "::notice::未配置任何上游密钥,跳过实测。要启用请在仓库 Secrets 里添加至少一把 key。"
+          fi
+
+      # 脚本自己走路由器的 _get_key() 链路(Dashboard → Vault → env),
+      # 所以这里只需把 key 放进环境变量,不必另写解析。
+      - name: 上游型号实测
+        if: steps.keys.outputs.any == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python scripts/verify_provider_apis.py --json > drift.json || true
+
+      # 把结果打进作业摘要。脚本本身**绝不打印密钥值**(连长度都不打),
+      # 上游响应体也一律不输出 —— 见脚本头部的安全说明。这里只读它的结构化输出。
+      - name: 汇总漂移
+        if: steps.keys.outputs.any == 'true'
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib, sys
+          p = pathlib.Path("drift.json")
+          if not p.is_file():
+              print("## 上游型号漂移\n\n_实测未产出结果。_"); sys.exit(0)
+          d = json.loads(p.read_text(encoding="utf-8"))
+          rows = (d.get("live") or {}).get("rows") or []
+          print("## 上游型号漂移\n")
+          print("| provider | 状态 | 上游型号数 | 上游不认的声明型号 |")
+          print("|---|---|---:|---|")
+          drifted = []
+          for r in rows:
+              missing = r.get("missing_upstream") or []
+              if missing:
+                  drifted.append((r.get("provider"), missing))
+              print(
+                  f"| {r.get('provider')} | {r.get('status')} | {r.get('upstream_count', '—')} | "
+                  f"{', '.join(f'`{m}`' for m in missing) if missing else '—'} |"
+              )
+          print()
+          if drifted:
+              print("### ⚠️ 发现漂移\n")
+              for prov, missing in drifted:
+                  print(f"- **{prov}**: {', '.join(f'`{m}`' for m in missing)}")
+              print("\n这些型号我们仍在 `PROVIDER_REGISTRY` 里声明,但上游已经不认了 —— "
+                    "运行时会表现为 404,而且多半是在用户正要用的时候。")
+          else:
+              print("_未发现漂移:声明的型号上游都还认。_")
+          PY
+
+      # 只有真的发现漂移才失败。网络抖动/单家 401 不该让整条流水线红 ——
+      # 那会训练出"这个 job 红了不用管"的习惯,而这正是它要避免的。
+      - name: 漂移即失败
+        if: steps.keys.outputs.any == 'true'
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          p = pathlib.Path("drift.json")
+          if not p.is_file():
+              print("实测未产出结果(网络或脚本问题),不判失败。"); sys.exit(0)
+          rows = (json.loads(p.read_text(encoding="utf-8")).get("live") or {}).get("rows") or []
+          drifted = {r.get("provider"): r.get("missing_upstream") for r in rows if r.get("missing_upstream")}
+          if drifted:
+              print("上游不再认账的型号:")
+              for prov, missing in drifted.items():
+                  print(f"  {prov}: {missing}")
+              sys.exit(1)
+          print("未发现型号漂移。")
+          PY
