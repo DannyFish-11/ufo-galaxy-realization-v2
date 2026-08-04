@@ -84,3 +84,93 @@ def test_reload_actually_refreshes_secret_from_config_store(tmp_path, monkeypatc
     assert (
         mgr.get("deepseek_api_key", "") == "sk-real-saved-key"
     ), "reload() 之后 Dashboard 层应能读到刚保存进 runtime/secrets.env 的密钥"
+
+
+# ── reload() 必须是 reload,不是 merge ────────────────────────────────────────
+#
+# 上面两条守的是"少 load 了一步"。这一组守的是相反的一半:**多留了一步没清**。
+#
+# `UnifiedConfigManager.reload()` 原先手工调那三个 loader,而 loader 都是"往 dict
+# 里写",从不清空 —— 于是它实际是 merge:值**改了**能反映出来(后写覆盖前值),值
+# **没了**却永远不消失。面板上删掉一个配置项、或把它从 .env 里去掉,进程内那份仍旧
+# 照着旧值工作,直到重启。只影响删除、不影响修改,所以它安静且能活很久。
+#
+# `UnifiedConfig.reload()` 自己是对的(先 `_config.clear()` 再按同样顺序 load)。
+# 管理器那三步是把它抄了一遍却漏了第一步 —— 第二份实现漂移的典型形状。修法是
+# **委托给后端自己的 reload()**,不再维护第二份顺序。
+
+
+def test_reload_drops_keys_that_no_longer_exist():
+    """删掉的键必须真的消失 —— 这条直接钉住"reload 不是 merge"。"""
+    from core.unified.config_manager import UnifiedConfigManager
+
+    class _Backend:
+        def __init__(self):
+            self._config = {}
+            self.disk = {"kept": "v"}
+
+        def reload(self):
+            self._config.clear()
+            self._config.update(self.disk)
+
+    backend = _Backend()
+    mgr = object.__new__(UnifiedConfigManager)
+    mgr._backend = backend
+
+    mgr.reload()
+    assert backend._config == {"kept": "v"}
+
+    # 模拟"面板上删掉了一项 / .env 里去掉了一行":磁盘上没有了,内存里还留着。
+    backend._config["removed_from_disk"] = "stale"
+    mgr.reload()
+    assert "removed_from_disk" not in backend._config, (
+        "reload() 之后被删掉的键还在 —— 它是 merge 不是 reload," "面板删掉的配置项会继续以旧值生效直到进程重启"
+    )
+
+
+def test_reload_delegates_to_the_backend_instead_of_reimplementing_the_order():
+    """判别用例:后端有 reload() 时**必须用它**,不能再自己走那三步。
+
+    只断言"删掉的键消失了"是不够的 —— 在管理器里补一行 `_config.clear()` 也能让
+    上面那条通过,而那仍然是第二份要手工同步的加载顺序(这次漂移的正是它)。
+    这条钉住的是"顺序只有一份"。
+    """
+    from core.unified.config_manager import UnifiedConfigManager
+
+    calls: list[str] = []
+
+    class _Backend:
+        def reload(self):
+            calls.append("reload")
+
+        def _load_config(self):
+            calls.append("_load_config")
+
+        def _load_from_config_store(self):
+            calls.append("_load_from_config_store")
+
+        def _load_env(self):
+            calls.append("_load_env")
+
+    mgr = object.__new__(UnifiedConfigManager)
+    mgr._backend = _Backend()
+    mgr.reload()
+
+    assert calls == ["reload"], f"没有委托给后端的 reload(),而是又抄了一遍加载顺序: {calls}"
+
+
+def test_the_real_process_singleton_actually_drops_stale_keys():
+    """端到端:拿**进程里真正那个单例**验一遍,不是拿 fake backend。
+
+    上面两条都用替身后端。替身证明了管理器的逻辑对,但证明不了生产上那个
+    `core.unified_config.config`(它是 UnifiedConfigManager 包着 UnifiedConfig)
+    真的具备这个行为 —— 而污染就是在那个真实单例上发生的。
+    """
+    from core.unified_config import config as real_singleton
+
+    backend = real_singleton._backend
+    assert hasattr(backend, "_config"), "真实后端没有 _config 快照?本条的前提已不成立"
+
+    backend._config["GALAXY_PROBE_STALE_KEY"] = "leftover"
+    real_singleton.reload()
+    assert backend._config.get("GALAXY_PROBE_STALE_KEY") is None, "真实单例上 reload() 仍然是 merge"

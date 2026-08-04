@@ -51,6 +51,12 @@ SETTINGS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/SettingsTab.t
 #: core/perception/zzz.py 一律自动纳管,不需要任何人记得回来登记。
 #: 代价是范围可能收进一两个不读配置的模块 —— 那是零成本的(扫不出键而已),
 #: 远好过漏掉一个真读配置的模块。
+#: 2026-08-04 再补:统一启动器 ``launcher/`` + ``main.py``。
+#: 它们不是语音模块,但**语音的总开关长在那里**(``GALAXY_VOICE`` 决定语音循环起不起、
+#: ``GALAXY_WHISPER_MODEL`` 决定识别模型规格),而这份守卫的契约本来就是
+#: 「代码里读了配置键 → 面板上必须有它」,与模块姓什么无关。启动器重做落地后
+#: 它是整个系统唯一的入口,那 15 个键里既有语音总开关也有部署项,同样一个都不该
+#: 只能靠手改 .env。收进来之后又是一次"扫出来才发现"—— 与前两次同一种漏法。
 _VOICE_MODULE_PATTERNS = (
     "core/voice_*.py",
     "core/multimodal/*.py",
@@ -62,6 +68,8 @@ _VOICE_MODULE_PATTERNS = (
     "core/ambient_attention_loop.py",
     "core/computer_use_loop.py",
     "core/routes/chat.py",
+    "launcher/*.py",
+    "main.py",
 )
 
 
