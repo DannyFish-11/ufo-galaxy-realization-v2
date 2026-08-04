@@ -315,3 +315,50 @@ class TestWiredIntoTheSpeakingPaths:
         note_utterance(REPLY)  # 非流式路径刚念完一段
         assert al._ai_is_speaking() is True, "整段批处理/原生发声也必须被挡住"
         reset_echo_guard()
+
+
+class TestDuplexPathRegistersToo:
+    """第四条发声路径：双工。
+
+    ``speak_response`` 是原生 / 整段批处理 / 分句流式三条路的分叉点，登记一次就三条
+    全覆盖；``streaming_speech`` 的增量会话是另一个入口，自己登记。**双工是第四条**：
+    模型在 realtime 连接上直接出声，从头到尾不经过 ``speak_response``，所以它也必须
+    自己登记 —— 而这条路此前没有任何判据钉住它。
+
+    第 3 层② 把双工从"手动开关默认关"改成"档位具备就自动开"之后，这条路在 B 档
+    原生就绪的机器上是**默认走的**，回声也正是在这里最要命：模型持续出声的同时
+    麦克风一直开着。
+    """
+
+    def test_duplex_assistant_text_is_registered_as_spoken(self) -> None:
+        """双工下行的助手文本必须进反自激励门，否则它会把自己的话当成用户输入。"""
+        from core.voice_duplex_session import DuplexSession
+        from core.voice_echo_guard import VERDICT_SELF_ECHO, classify_asr_text, reset_echo_guard
+
+        reset_echo_guard()
+        reply = "今天上海多云转晴，气温二十六到三十一度，出门记得带把伞。"
+        DuplexSession._note_spoken(reply)
+
+        verdict, _score, _hit = classify_asr_text(reply)
+        assert verdict == VERDICT_SELF_ECHO, "双工说出口的话没有登记 —— AI 会对自己的回声作答"
+
+    def test_duplex_registration_does_not_swallow_real_user_speech(self) -> None:
+        """对照组：登记之后，用户真说的**别的**话仍须判为用户，barge-in 不受影响。"""
+        from core.voice_duplex_session import DuplexSession
+        from core.voice_echo_guard import VERDICT_SELF_ECHO, classify_asr_text, reset_echo_guard
+
+        reset_echo_guard()
+        DuplexSession._note_spoken("今天上海多云转晴，气温二十六到三十一度，出门记得带把伞。")
+
+        verdict, _score, _hit = classify_asr_text("等一下，先帮我把会议记录整理成纪要发出去")
+        assert verdict != VERDICT_SELF_ECHO, "把用户真正说的话误判成回声 —— barge-in 被杀掉了"
+
+    def test_duplex_registration_failure_never_breaks_the_session(self, monkeypatch) -> None:
+        """登记失败最多漏挡一句回声，绝不能掀翻双工会话。"""
+        from core.voice_duplex_session import DuplexSession
+
+        def _boom(_text):
+            raise RuntimeError("guard down")
+
+        monkeypatch.setattr("core.voice_echo_guard.note_utterance", _boom)
+        DuplexSession._note_spoken("随便一句话")  # 不抛即通过

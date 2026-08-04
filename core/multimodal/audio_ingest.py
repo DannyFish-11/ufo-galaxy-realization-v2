@@ -112,6 +112,12 @@ class AudioIngestPipeline:
         self._latest_state: Optional[AudioState] = None
         self._callbacks: List[Callable[[AudioState, SignalQuality], None]] = []
         self._last_update_ts: Optional[float] = None
+        # 这条管线是不是已经有人在驱动了。共享实例化之后，两个订阅方（常驻感知 bus 与
+        # 语音循环的采集服务）拿到的是**同一个对象**，各自都会 await run() —— 没有这道
+        # 闸就是在同一个麦克风上又开了两路 sd.InputStream，正是共享实例要消除的那件事。
+        # 用 threading 锁而不是 asyncio 锁：两个订阅方可能跑在不同事件循环里。
+        self._run_claimed = False
+        self._run_claim_lock = _threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -145,7 +151,29 @@ class AudioIngestPipeline:
         - sounddevice is not installed
         - microphone permission is denied
         - the device is not found
+
+        **可重入安全**：这条管线是进程级共享的，两个订阅方拿到的是同一个对象、各自都会
+        ``await run()``。只有第一个调用方真正开流；后来者不再开第二路 ``sd.InputStream``
+        （同一麦克风两个流正是共享实例要消除的那件事），而是等到流真正停下再返回 ——
+        让 ``run()`` 的语义对每个调用方都一致：**返回 = 采集已结束**。
         """
+        with self._run_claim_lock:
+            already = self._run_claimed
+            if not already:
+                self._run_claimed = True
+        if already:
+            logger.debug("共享麦克风采集已有驱动方，本次 run() 不再开流，改为等待其结束")
+            while self._run_claimed:
+                await asyncio.sleep(0.2)
+            return
+        try:
+            await self._run_capture()
+        finally:
+            with self._run_claim_lock:
+                self._run_claimed = False
+
+    async def _run_capture(self) -> None:
+        """真正开流并跑采集循环。只由 :meth:`run` 的第一个调用方进入。"""
         if not _SOUNDDEVICE_AVAILABLE:
             self._quality = SignalQuality.device_unavailable()
             logger.warning("sounddevice is not available; audio ingest disabled")
