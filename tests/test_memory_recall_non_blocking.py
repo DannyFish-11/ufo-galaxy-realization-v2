@@ -66,15 +66,69 @@ async def test_memory_scope_aenter_does_not_block_event_loop(monkeypatch):
     )
 
 
+def _is_offloaded_to_thread(src: str, callee: str) -> bool:
+    """``callee`` 是不是**作为参数**出现在某个 ``to_thread(...)`` 调用里。
+
+    按 AST 判，不按字符串形状判 —— 理由见下面 ``test_openclawd_...`` 的说明。
+    ``asyncio.to_thread(f, a, b)`` 的语义是"把 f 丢到线程里跑"，所以要找的是
+    "``callee`` 出现在 to_thread 的实参位置上"，而不是"源码里两个词都出现过"。
+    """
+    import ast
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(src))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fname = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if fname != "to_thread":
+            continue
+        for arg in node.args:
+            # to_thread(f, ...) —— f 可能是 name、self.attr、module.attr
+            name = arg.attr if isinstance(arg, ast.Attribute) else getattr(arg, "id", "")
+            if name == callee.rsplit(".", 1)[-1]:
+                return True
+            # 也接受 to_thread(lambda: f(...)) 这种包一层的写法
+            for inner in ast.walk(arg):
+                if isinstance(inner, ast.Call):
+                    iname = inner.func.attr if isinstance(inner.func, ast.Attribute) else getattr(inner.func, "id", "")
+                    if iname == callee.rsplit(".", 1)[-1]:
+                        return True
+    return False
+
+
 def test_openclawd_handle_chat_offloads_unified_context():
-    """静态核实:handle_chat 里对 get_unified_context 的调用经由 asyncio.to_thread。"""
+    """静态核实:handle_chat 里对 get_unified_context 的调用经由 asyncio.to_thread。
+
+    这一条原先是这么写的::
+
+        assert "_aio.to_thread(\\n                    get_unified_context" in src or (
+            "to_thread(" in src and "get_unified_context" in src
+        )
+
+    两个子句都有问题，合起来更糟：
+
+    * **主子句**把换行和 20 个空格的缩进编进了判据。black 换个行宽、或者这段代码
+      被挪进/挪出一层缩进，它立刻不成立 —— 本仓库刚刚才因为同一种写法吃过一次假警
+      (tests/test_device_ingress_is_canonical.py，启动器重做后缩进变了)。
+    * **兜底子句**根本不判别：``"to_thread(" in src and "get_unified_context" in src``
+      只要求这两个字符串**各自出现过**，不要求它们有任何关系。已实测反例：一段
+      "同步调用 get_unified_context、另有一处无关的 to_thread" 的源码照样通过。
+
+    合起来的后果最坏：今天主子句成立、测试是真的；哪天一次无关的重排让主子句失效，
+    兜底会**静默接住**，这条钉子从此永远绿 —— 它不会像上次那样吵着报假警提醒你，
+    而是一声不响地不再守任何东西。
+
+    改成按 AST 判"callee 是否出现在 to_thread 的实参位置上"：换行缩进怎么变都不影响，
+    而"同步调了它"这件事一定判得出来。
+    """
     import inspect
 
     import core.openclawd as mod
 
     src = inspect.getsource(mod.OpenClawd.handle_chat)
-    assert "_aio.to_thread(\n                    get_unified_context" in src or (
-        "to_thread(" in src and "get_unified_context" in src
+    assert _is_offloaded_to_thread(
+        src, "get_unified_context"
     ), "handle_chat 应通过 asyncio.to_thread 调用 get_unified_context，避免阻塞事件循环"
 
 
@@ -85,9 +139,8 @@ def test_execution_planner_execute_offloads_recall_calls():
     from core.agent.execution_planner import ExecutionPlanner
 
     src = inspect.getsource(ExecutionPlanner.execute)
-    assert "asyncio.to_thread(self._experience_strategy_adjust" in src
-    assert (
-        "to_thread(_um.recall" in src
-        or "to_thread(\n                    _um.recall" in src
-        or ("to_thread(" in src and "_um.recall" in src)
-    )
+    # 同上:按 AST 判 callee 是否真的被 offload,不再靠字符串形状 + 不判别的兜底。
+    assert _is_offloaded_to_thread(
+        src, "_experience_strategy_adjust"
+    ), "execute() 应通过 asyncio.to_thread 调用 _experience_strategy_adjust"
+    assert _is_offloaded_to_thread(src, "recall"), "execute() 应通过 asyncio.to_thread 调用 _um.recall"

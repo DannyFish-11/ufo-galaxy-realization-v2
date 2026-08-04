@@ -8,10 +8,15 @@ import time
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 这里原先有一句 sys.path.insert(0, <节点目录>)。它是「裸顶层导入」时代的遗留:
+# 把节点目录顶到 sys.path 最前面,好让 from core.X / from models.X 指到节点自己。
+# 现在包内一律用相对导入,这句不但没用,而且**有害** —— 它让节点自己的 core/ 抢在
+# 仓库根的 core/ 前面被解析,于是 models/device.py 里那句合法的
+# from core.device_types import DeviceType(单一事实来源,确实指仓库根)会拐进
+# 节点的 core/__init__.py,绕成循环导入,最终报 attempted relative import beyond top-level。
 
-from models.device import VectorClock
-from core.state_synchronizer import (
+from ..models.device import VectorClock
+from ..core.state_synchronizer import (
     StateSynchronizer, SyncConfig, StateEvent, SyncEventType,
     ConflictResolution, ConflictResolver, GossipProtocol,
     StateSnapshot
