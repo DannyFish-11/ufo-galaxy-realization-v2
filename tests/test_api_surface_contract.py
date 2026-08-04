@@ -1,0 +1,234 @@
+"""权威 API 层 ↔ 前端调用面的契约门。
+
+要解决什么
+----------
+后端有 **388 条路径 / 406 个操作**,面板只用了其中 **20 条**。剩下的对前端
+来说是**不可发现**的:要用哪个端点、参数长什么样、返回什么,只能对着后端源码抄。
+而抄错、或后端改了路径,在运行期才会暴露成一个 404。
+
+``scripts/gen_ts_types.py`` 现在从 FastAPI 的 OpenAPI 生成
+``types/api.gen.ts``(路径联合类型 + 方法表 + 102 个组件 schema)。这份文件
+存在的全部理由,是让上面那种漂移变成**编译期错误**。
+
+这个文件钉三件事:
+
+1. **生成物与后端同步** —— 改了后端却忘了重跑生成器,就红;
+2. **面板调的每个端点后端都有** —— 这是那次人工核对的固化版(当时 0 缺失);
+3. **分层清单** —— 面板在用的 / 仅机器面的,数量以断言形式记录,变化必须是
+   有意的。
+
+为什么不做成 CI 里单独的作业:组装权威 API 层实测约 2.2 秒
+(``core.api_routes.create_api_routes()``,与 ``tests/test_routes_import.py``
+建 app 的方式相同),放在 pytest 里足够快,而单开作业就得再养一套环境。
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import pathlib
+import re
+
+import pytest
+
+_ROOT = pathlib.Path(__file__).parent.parent
+_GEN = _ROOT / "electron" / "renderer" / "panel" / "src" / "types" / "api.gen.ts"
+_PANEL_SRC = _ROOT / "electron" / "renderer" / "panel" / "src"
+
+
+def _generator():
+    spec = importlib.util.spec_from_file_location("_gen_ts_types", _ROOT / "scripts" / "gen_ts_types.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.fixture(scope="module")
+def gen():
+    return _generator()
+
+
+@pytest.fixture(scope="module")
+def schema(gen):
+    return gen.load_openapi()
+
+
+@pytest.fixture(scope="module")
+def generated_ts() -> str:
+    return _GEN.read_text(encoding="utf-8")
+
+
+def _api_paths_from_ts(text: str) -> set[str]:
+    """从生成的 TS 里读回 ApiPath 联合的成员。"""
+    m = re.search(r"export type ApiPath =\n((?:\s*\|\s*\"[^\"]+\"\n)+);", text)
+    assert m, "生成的 TS 里找不到 ApiPath 联合 —— 生成器结构变了?"
+    return set(re.findall(r'"([^"]+)"', m.group(1)))
+
+
+def _norm(p: str) -> str:
+    """把路径里的参数占位符归一,便于两边比对。"""
+    return re.sub(r"\{[^}]*\}", "{}", re.sub(r"\$\{[^}]*\}", "{}", p)).rstrip("/ ")
+
+
+def _panel_calls() -> dict[str, set[str]]:
+    """面板源码里出现的 /api 与 /ws 路径 → 出现在哪些文件。
+
+    **必须跳过 ``*.gen.ts``**:生成的 ``api.gen.ts`` 把全部 388 条路径写成了
+    字符串字面量,不跳过的话它自己就会被当成"面板在调 388 个端点"——那不仅
+    让分层清单失真,更会让"面板调的端点后端都有"退化成恒真(拿生成物去对
+    生成物)。第一版就踩了这个自指陷阱,被清单那条断言当场抓出来。
+    """
+    out: dict[str, set[str]] = {}
+    for f in _PANEL_SRC.rglob("*.ts*"):
+        if f.name.endswith(".gen.ts"):
+            continue
+        text = f.read_text(encoding="utf-8")
+        for m in re.finditer(r"(/(?:api|ws)/[A-Za-z0-9/_${}.-]*)", text):
+            out.setdefault(_norm(m.group(1)), set()).add(f.name)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 1. 生成物必须与后端同步
+# ---------------------------------------------------------------------------
+
+
+class TestGeneratedFileStaysInSync:
+    def test_regenerating_produces_the_same_file(self, gen, schema, generated_ts: str) -> None:
+        """改了后端端点却忘了重跑生成器 → 这条红。
+
+        没有它,这整套生成机制就只是"生成过一次",之后照样漂。
+        """
+        assert generated_ts == gen.build_api_surface(
+            schema
+        ), "api.gen.ts 与后端 OpenAPI 不一致 —— 请重跑 python scripts/gen_ts_types.py"
+
+    def test_generated_file_is_not_empty_or_trivial(self, generated_ts: str) -> None:
+        """自证:上面那条在两边都是空文件时也会绿。"""
+        paths = _api_paths_from_ts(generated_ts)
+        assert len(paths) > 300, f"ApiPath 只有 {len(paths)} 条,权威 API 层不该这么小"
+
+
+# ---------------------------------------------------------------------------
+# 2. 生成器遇到没见过的形状必须抛,而不是吐 any
+# ---------------------------------------------------------------------------
+
+
+class TestGeneratorFailsLoudly:
+    def test_unknown_shape_raises(self, gen) -> None:
+        """悄悄降级成 ``any`` 的类型文件比没有类型更糟:看着有保护,实际没挡住。"""
+        with pytest.raises(gen.UnsupportedSchemaShape):
+            gen._openapi_ts({"type": "no_such_type"}, where="<test>")
+
+    def test_untyped_node_becomes_unknown_not_any(self, gen) -> None:
+        """OpenAPI 里"无 type"是**规范定义的任意值**,给 unknown 而非 any。
+
+        unknown 强制消费方先收窄再用;any 会静默传染到整条调用链。
+        """
+        assert gen._openapi_ts({}, where="<test>") == "unknown"
+
+    def test_no_any_in_generated_output(self, generated_ts: str) -> None:
+        assert not re.search(r"\bany\b", generated_ts), "生成的 TS 里出现了 any —— 类型保护在那里就断了"
+
+
+# ---------------------------------------------------------------------------
+# 3. 面板调的端点后端必须有（人工核对的固化版）
+# ---------------------------------------------------------------------------
+
+
+class TestPanelCallsResolve:
+    def test_every_panel_endpoint_exists_in_the_api_surface(self, generated_ts: str) -> None:
+        """面板调了一个后端没有的端点 → 这条红。
+
+        这一条固化的是一次人工核对:当时逐条对了 20 个端点,缺失 0。人工核对
+        不会自己重跑,门会。
+        """
+        backend = {_norm(p) for p in _api_paths_from_ts(generated_ts)}
+        # 参数化路径的前缀,用于匹配面板侧用模板串拼出来的调用
+        prefixes = sorted({_norm(p).split("{")[0].rstrip("/") for p in backend if "{" in p})
+
+        missing = []
+        for call, files in sorted(_panel_calls().items()):
+            if call.startswith("/ws/"):
+                continue  # WebSocket 不在 OpenAPI 文档里,由下面单独一条钉
+            if call in backend:
+                continue
+            if any(pf and call.startswith(pf) for pf in prefixes):
+                continue
+            missing.append((call, sorted(files)))
+        assert not missing, f"面板调了后端没有的端点:{missing}"
+
+    def test_panel_calls_were_actually_found(self) -> None:
+        """自证:上面那条不得因为正则失效而退化成"零调用、必绿"。"""
+        calls = _panel_calls()
+        assert len(calls) >= 15, f"只从面板源码里解析出 {len(calls)} 个端点,正则大概率坏了"
+
+    def test_scanner_does_not_read_its_own_generated_output(self) -> None:
+        """自证:扫描器必须跳过 ``*.gen.ts``。
+
+        不跳过的话,``api.gen.ts`` 里那 388 条路径字面量会被当成"面板在调它们",
+        于是"面板调的端点后端都有"变成拿生成物对生成物 —— 恒真。
+        """
+        calls = _panel_calls()
+        assert len(calls) < 100, f"扫描器解析出 {len(calls)} 个端点,数量级不对 —— 它八成把 api.gen.ts 自己也读进来了"
+
+    def test_presence_websocket_route_exists(self) -> None:
+        """面板与覆盖层都连 ``/ws/desktop-presence``,但 WS 不进 OpenAPI,单独钉。"""
+        src = (_ROOT / "core" / "routes").rglob("*.py")
+        found = any("/ws/desktop-presence" in p.read_text(encoding="utf-8") for p in src)
+        assert found, "/ws/desktop-presence 在 core/routes 下找不到 —— 面板与覆盖层都会连不上"
+
+
+# ---------------------------------------------------------------------------
+# 4. 分层清单：数量的变化必须是有意的
+# ---------------------------------------------------------------------------
+
+
+class TestSurfaceInventory:
+    """把"哪些是给人看的、哪些只是机器面"记成数字。
+
+    这不是为了锁死数字,而是让**扩大前端可见面**成为一个需要改测试的动作 ——
+    否则"顺手多调一个端点"会悄悄发生,而面板表层收敛那次的教训就是:
+    表层一旦悄悄长出来,就再也收不回去了。
+    """
+
+    def test_panel_uses_a_small_slice_of_the_backend(self, generated_ts: str) -> None:
+        backend = _api_paths_from_ts(generated_ts)
+        panel = {c for c in _panel_calls() if not c.startswith("/ws/")}
+        assert len(panel) <= 30, (
+            f"面板的调用面涨到了 {len(panel)} 个端点。这不一定是错的,但请确认是有意的:"
+            f"面板收敛那次的结论是表层要窄。确认后改这里的上限。"
+        )
+        assert len(backend) >= 300, f"后端路径只剩 {len(backend)} 条,像是 API 层没装配完整"
+
+    def test_inventory_is_reportable(self, schema: dict) -> None:
+        """清单必须是**算出来的**,不是手维护的 —— 手维护的清单必然漂。"""
+        paths = schema.get("paths", {})
+        ops = sum(1 for v in paths.values() for m in v if m in ("get", "post", "put", "delete", "patch"))
+        comps = schema.get("components", {}).get("schemas", {})
+        assert paths and ops >= len(paths), "OpenAPI 文档不完整"
+        assert isinstance(comps, dict)
+
+
+# ---------------------------------------------------------------------------
+# 5. 生成物必须真的能被前端消费
+# ---------------------------------------------------------------------------
+
+
+def test_generated_file_is_referenced_by_the_type_barrel() -> None:
+    """生成了却没人能 import 的类型文件等于没生成。
+
+    这里只要求它在 types/ 目录下且是合法模块入口;逐个调用点改用 ApiPath
+    是下一步(那会动到 20 处 fetch,是单独一件事)。
+    """
+    assert _GEN.is_file()
+    text = _GEN.read_text(encoding="utf-8")
+    assert text.startswith("// AUTO-GENERATED"), "生成物必须自带 DO NOT EDIT 头"
+    assert "export type ApiPath" in text
+    assert "export const API_METHODS" in text
+
+
+def test_generator_is_deterministic(gen, schema) -> None:
+    """同一份 schema 连生成两次必须逐字节相同,否则上面的同步门会假红。"""
+    assert gen.build_api_surface(schema) == gen.build_api_surface(schema)

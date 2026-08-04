@@ -24,15 +24,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-ENTRYPOINT_ROLE_CONTRACT_SENTINEL: str = (
-    "ENTRYPOINT_ROLE_CONTRACT_SENTINEL::PR01::single-main-entrypoint-contract-v1"
-)
+ENTRYPOINT_ROLE_CONTRACT_SENTINEL: str = "ENTRYPOINT_ROLE_CONTRACT_SENTINEL::PR01::single-main-entrypoint-contract-v1"
 
 MAIN_ENTRY_ID: str = "main.py:main"
 UNIFIED_LAUNCHER_ENTRY_ID: str = "unified_launcher.py:main"
-LEGACY_WINDOWS_RUN_UI_ENTRY_ID: str = (
-    "enhancements.clients.windows_client.run_ui:module_import"
-)
+LEGACY_WINDOWS_RUN_UI_ENTRY_ID: str = "enhancements.clients.windows_client.run_ui:module_import"
 LEGACY_DOCKER_LAUNCHER_ENTRY_ID: str = "docker-compose.yml:galaxy"
 
 
@@ -109,12 +105,26 @@ ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
         next_hop="core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request",
         non_main_reason="gateway adapter surface",
     ),
+    # 注意：下面这条的 module_path 指向的文件【已经不存在】，这是**有意**的。
+    # dashboard/backend/ 整个被删掉了（tests/test_e2e_integration_hardening.py
+    # 明确断言 dashboard/backend/main.py 必须不存在），但它在三个注册表里都保留
+    # 了记录：本表、core/ui_surface_authority.py（LEGACY_UI）、
+    # core/orchestration_authority/legacy_paths.py（LEGACY_COMPATIBILITY）。
+    # 保留的理由与那两处一致 —— 删除记录本身是资产：还在按旧路径找入口的人
+    # 需要在这里读到"它去哪了"，而不是查无此项。
+    #
+    # 但记录必须自己说清楚文件已经没了，否则任何"核对 module_path 是否存在"
+    # 的审查都会把它当成断链上报（本条注释就是被那样的一次全仓核对逼出来的）。
     "dashboard.backend.main:app": EntrypointRecord(
         entry_id="dashboard.backend.main:app",
         role=EntrypointRole.COMPAT_FALLBACK_LEGACY,
         module_path="dashboard/backend/main.py",
-        trigger_boundary="legacy dashboard surface",
-        non_main_reason="legacy compatibility surface",
+        trigger_boundary="legacy dashboard surface (module removed; record retained)",
+        non_main_reason=(
+            "legacy compatibility surface — the module itself was removed; this record is "
+            "retained deliberately so callers of the old path find the migration note "
+            "rather than a blank. See core/orchestration_authority/legacy_paths.py."
+        ),
     ),
     LEGACY_WINDOWS_RUN_UI_ENTRY_ID: EntrypointRecord(
         entry_id=LEGACY_WINDOWS_RUN_UI_ENTRY_ID,
@@ -155,9 +165,7 @@ ANDROID_V2_MAINLINE_BRIDGE_ANCHORS: Dict[str, str] = {
     "v2_startup_authority": MAIN_ENTRY_ID,
     "v2_subordinate_launcher": UNIFIED_LAUNCHER_ENTRY_ID,
     "v2_gateway_ingress": "galaxy_gateway.routes.chat:chat_endpoint",
-    "v2_mainline_runtime_shell": (
-        "core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request"
-    ),
+    "v2_mainline_runtime_shell": ("core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request"),
     "v2_mainline_subject_core": "core.openclawd:OpenClawd.process",
 }
 
@@ -173,9 +181,7 @@ def ensure_entrypoint_role(entry_id: str, expected_role: EntrypointRole) -> bool
 
 def assert_single_unique_main_entrypoint() -> bool:
     main_entries = [
-        record.entry_id
-        for record in ENTRYPOINT_ROLE_REGISTRY.values()
-        if record.role == EntrypointRole.UNIQUE_MAIN
+        record.entry_id for record in ENTRYPOINT_ROLE_REGISTRY.values() if record.role == EntrypointRole.UNIQUE_MAIN
     ]
     return main_entries == [MAIN_ENTRY_ID]
 
@@ -196,7 +202,5 @@ def build_entrypoint_role_snapshot() -> Dict[str, Any]:
 
 def list_non_main_entries() -> List[str]:
     return [
-        record.entry_id
-        for record in ENTRYPOINT_ROLE_REGISTRY.values()
-        if record.role != EntrypointRole.UNIQUE_MAIN
+        record.entry_id for record in ENTRYPOINT_ROLE_REGISTRY.values() if record.role != EntrypointRole.UNIQUE_MAIN
     ]

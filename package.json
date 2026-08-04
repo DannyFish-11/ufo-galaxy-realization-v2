@@ -17,7 +17,8 @@
     "autostart:enable": "python -m windows_service.autostart",
     "autostart:disable": "python -m windows_service.autostart --unregister",
     "model:download-default": "python -c \"import asyncio; from core.huggingface_model_manager import get_hf_model_manager; asyncio.run(get_hf_model_manager().install_recommended('llm_qwen2_7b'))\"",
-    "health": "python scripts/health_check.py",
-    "validate": "python scripts/validate_runtime.py"
+    "health": "bash scripts/health_check.sh",
+    "validate": "python scripts/validate_runtime.py",
+    "health:win": "powershell -ExecutionPolicy Bypass -File scripts/health_check.ps1"
   }
 }
