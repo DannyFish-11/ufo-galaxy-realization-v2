@@ -20,17 +20,17 @@ from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from core import (
+from ..core import (
     MultiDeviceCoordinatorEngine, CoordinatorConfig, CoordinatorState,
     FaultToleranceLayer,
     CoordinationDeviceView, CoordinationDeviceStatus,
     adapt_registered_runtime_device_dict,
 )
-from models.device import (
+from ..models.device import (
     Device, DeviceType, DeviceState, DeviceRegistry,
     Capability, ResourceConstraints,
 )
-from models.task import Task, TaskState, TaskPriority, TaskType, SchedulingStrategy
+from ..models.task import Task, TaskState, TaskPriority, TaskType, SchedulingStrategy
 
 logger = logging.getLogger(__name__)
 

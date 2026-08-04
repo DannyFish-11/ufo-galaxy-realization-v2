@@ -251,7 +251,7 @@ class TestAiBrainReadinessRejectsUnderscorePlaceholder:
     不影响真实功能,但同样的误导性质。"""
 
     def test_underscore_placeholder_not_treated_as_cloud_key_set(self):
-        from unified_launcher import ai_brain_readiness
+        from launcher.services import ai_brain_readiness
 
         status, model_installed, label = ai_brain_readiness(
             chosen_model="gemma4:e2b",
@@ -264,7 +264,7 @@ class TestAiBrainReadinessRejectsUnderscorePlaceholder:
         assert "无云端 API Key" in label
 
     def test_real_looking_key_treated_as_cloud_key_set(self):
-        from unified_launcher import ai_brain_readiness
+        from launcher.services import ai_brain_readiness
 
         status, model_installed, label = ai_brain_readiness(
             chosen_model="gemma4:e2b",

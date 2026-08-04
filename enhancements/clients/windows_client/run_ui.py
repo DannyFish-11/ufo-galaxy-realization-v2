@@ -13,7 +13,7 @@
 #
 # Authoritative startup path:
 #   python main.py
-#   (or on Windows: start.bat; direct advanced invocation: python unified_launcher.py)
+#   (or on Windows: start.bat)
 #
 # See docs/WINDOWS_EXECUTION_PIPELINE.md.
 
@@ -25,7 +25,6 @@ warnings.warn(
     "Active Windows direction: DesktopPresenceRuntime + the React panel "
     "(electron/renderer/panel/).  "
     "Authoritative startup path: python main.py  "
-    "(direct advanced invocation: python unified_launcher.py)  "
     "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
     DeprecationWarning,
     stacklevel=1,
@@ -39,6 +38,5 @@ raise RuntimeError(
     "  core/desktop_presence_runtime.py  (DesktopPresenceRuntime tri-state shell)\n"
     "  electron/renderer/panel/          (projection-driven desktop surface)\n"
     "Authoritative startup path: python main.py\n"
-    "Direct advanced invocation: python unified_launcher.py\n"
     "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
 )

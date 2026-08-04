@@ -576,32 +576,48 @@ class TestMainPyOrchestrator:
 # ===========================================================================
 
 
-class TestUnifiedLauncherSubordinate:
-    def test_unified_launcher_exists(self):
-        assert (PROJECT_ROOT / "unified_launcher.py").exists()
+class TestServiceOrchestrationSubordinate:
+    """PR-2 钉的是"服务编排是从属的，不是第二个顶层入口"。
 
-    def test_unified_launcher_docstring_marks_subordinate(self):
+    检查对象搬家了：``unified_launcher.py`` 已随启动器统一删除
+    （docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步），``GalaxyUnified`` 原样搬进
+    ``launcher/services.py``。从属性这件事**变得更强而不是更弱**：它现在连自己的
+    ``main()`` 都没有了 —— 从"有 CLI 但自称从属"变成"根本不是入口"。
+    """
+
+    def test_service_module_exists(self):
+        assert (PROJECT_ROOT / "launcher" / "services.py").exists()
+
+    def test_retired_body_is_gone(self):
+        assert not (PROJECT_ROOT / "unified_launcher.py").exists(), "unified_launcher.py 应已删除"
+
+    def test_service_module_docstring_marks_subordinate(self):
         import ast
 
-        src = (PROJECT_ROOT / "unified_launcher.py").read_text(encoding="utf-8")
-        tree = ast.parse(src)
-        doc = ast.get_docstring(tree) or ""
+        src = (PROJECT_ROOT / "launcher" / "services.py").read_text(encoding="utf-8")
+        doc = ast.get_docstring(ast.parse(src)) or ""
         doc_lower = doc.lower()
         assert any(
-            kw in doc_lower or kw in doc for kw in ("subordinate", "从属", "not a top-level", "not.*competing")
-        ), "unified_launcher.py docstring must acknowledge its subordinate role (PR-2)"
+            kw in doc_lower or kw in doc for kw in ("subordinate", "从属", "not a top-level", "编排")
+        ), "launcher/services.py docstring must acknowledge its subordinate role (PR-2)"
 
-    def test_unified_launcher_importable(self):
+    def test_service_module_importable(self):
         import importlib
 
-        mod = importlib.import_module("unified_launcher")
+        mod = importlib.import_module("launcher.services")
         assert mod is not None
+        assert hasattr(mod, "GalaxyUnified")
 
-    def test_unified_launcher_main_callable(self):
+    def test_it_has_no_cli_entry_of_its_own(self):
+        """从属 = 没有自己的 CLI。原来这条断言的是 ``main`` 可调用，现在反过来。
+
+        那个 ``main()`` 是 ``unified_launcher.py`` 的 CLI 外壳，随本体一起删了：
+        留着就等于统一完还剩两个 CLI。三个真正有效的开关已收编进 ``main.py``。
+        """
         import importlib
 
-        mod = importlib.import_module("unified_launcher")
-        assert callable(getattr(mod, "main", None))
+        mod = importlib.import_module("launcher.services")
+        assert not hasattr(mod, "main"), "launcher/services.py 不该再有自己的 CLI 入口"
 
 
 # ===========================================================================

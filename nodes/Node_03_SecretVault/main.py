@@ -52,10 +52,41 @@ else:
 #   1) 环境变量 SECRETVAULT_MASTER_KEY(生产推荐)
 #   2) 持久化的密钥文件 SECRETVAULT_KEY_FILE(默认与 vault 同目录),存在则复用
 #   3) 都没有才生成一次,并【落盘】到密钥文件(0600)供后续重启复用
-def _resolve_master_key() -> str:
+def _is_usable_fernet_key(value: Optional[str]) -> bool:
+    """这个值能不能真的构造出 Fernet。
+
+    必须**用之前**验,不能等到 ``Fernet(key)`` 抛。真机踩到过:
+    首次启动时 cryptography 还没装,走了 ``secrets.token_urlsafe(32)`` 那条降级分支,
+    把一个 **43 字符**的串持久化进了密钥文件(合法的 Fernet key 是 44 字符);
+    后来 cryptography 装上了,``Fernet(那个串)`` 直接在**模块导入**处抛
+    ValueError,整个节点从此再也导不进来 —— 而报错只说
+    "Fernet key must be 32 url-safe base64-encoded bytes",
+    完全看不出问题出在哪个来源、也看不出是安装顺序造成的。
+    """
+    if not value or not (HAS_CRYPTO and Fernet):
+        return False
+    try:
+        Fernet(value.encode())
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _resolve_master_key() -> Optional[str]:
+    """解析主密钥。**拿不到可用的就返回 None**,由调用方降级,不要在导入期崩。"""
     env_key = os.getenv("SECRETVAULT_MASTER_KEY")
     if env_key:
-        return env_key
+        if _is_usable_fernet_key(env_key):
+            return env_key
+        # 不静默换一把:运维明确指定了密钥,悄悄换掉会让之后写入的密文
+        # 在"改对环境变量之后"反而解不开。报清楚,然后降级。
+        logger.error(
+            "SECRETVAULT_MASTER_KEY 不是合法的 Fernet 主密钥(需 44 字符 base64url,"
+            "可用 python -c \"from cryptography.fernet import Fernet;"
+            "print(Fernet.generate_key().decode())\" 生成);本次以**不加密**模式运行"
+        )
+        return None
+
     vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
     key_file = os.getenv("SECRETVAULT_KEY_FILE", os.path.join(os.path.dirname(vault_file) or ".", ".secretvault.key"))
     try:
@@ -63,11 +94,30 @@ def _resolve_master_key() -> str:
             with open(key_file, "r", encoding="utf-8") as f:
                 persisted = f.read().strip()
             if persisted:
-                return persisted
+                if _is_usable_fernet_key(persisted):
+                    return persisted
+                # 同样不静默覆盖:万一那是一把**曾经合法、现在损坏**的密钥,
+                # 覆盖掉就等于把已加密的 secrets 永久锁死。报清楚 + 给出下一步。
+                logger.error(
+                    "主密钥文件 %s 里的值不是合法 Fernet 主密钥(长度 %d,合法为 44)。"
+                    "最常见的成因是**首次启动时 cryptography 未安装**,当时落盘的是"
+                    "token_urlsafe 串。确认其中没有需要保留的密文后删除该文件即可自动重建;"
+                    "本次以**不加密**模式运行",
+                    key_file,
+                    len(persisted),
+                )
+                return None
     except OSError as e:
         logger.warning(f"读取主密钥文件失败({key_file}): {e}")
-    # 生成一次并持久化
-    new_key = Fernet.generate_key().decode() if (HAS_CRYPTO and Fernet) else secrets.token_urlsafe(32)
+
+    if not (HAS_CRYPTO and Fernet):
+        # 关键:**不落盘**。以前这里会把 token_urlsafe(32) 写进密钥文件,
+        # 于是给"以后装上 cryptography"埋了一颗必炸的雷(见 _is_usable_fernet_key)。
+        # 没有加密能力就老老实实降级,不要留下一个看起来像密钥的文件。
+        logger.warning("cryptography 未安装,SecretVault 以**不加密**模式运行(不生成也不持久化主密钥)")
+        return None
+
+    new_key = Fernet.generate_key().decode()
     try:
         os.makedirs(os.path.dirname(key_file) or ".", exist_ok=True)
         # 先建 0600 空文件再写,避免密钥以宽松权限短暂落盘
@@ -99,11 +149,13 @@ else:
 class SecretVault:
     def __init__(self):
         self._master_key = MASTER_KEY.encode() if isinstance(MASTER_KEY, str) else MASTER_KEY
-        self._fernet = Fernet(self._master_key) if HAS_CRYPTO and Fernet else None
+        # MASTER_KEY 为 None = 没拿到可用主密钥(原因已在 _resolve_master_key 里报过)。
+        # 这里**不能**再直接 Fernet(...) —— 那正是以前在导入期崩掉整个节点的那一行。
+        self._fernet = Fernet(self._master_key) if (HAS_CRYPTO and Fernet and self._master_key) else None
         self._secrets: Dict[str, Any] = {}
         self._access_log: List[Dict] = []
         self._load_secrets()
-        if not HAS_CRYPTO:
+        if self._fernet is None:
             logger.warning("SecretVault 以降级模式运行（无加密支持）")
 
     def _load_secrets(self):

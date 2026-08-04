@@ -80,7 +80,7 @@ export GALAXY_MASTER_BRAIN_ENABLED=true
 ```bash
 python main.py
 # or
-python unified_launcher.py
+python main.py
 ```
 
 On startup, Galaxy will:
@@ -95,7 +95,7 @@ On startup, Galaxy will:
 
 ### Phase A — Startup & Config Hardening
 
-`unified_launcher.py` now connects the NATS bus and starts MasterBrain
+`launcher/services.py` now connects the NATS bus and starts MasterBrain
 subscriptions during the startup sequence.  If `GALAXY_NATS_URL` is not set,
 the system runs in **no-op mode** (all NATS calls are silent no-ops) so that
 existing deployments without NATS continue to work unchanged.

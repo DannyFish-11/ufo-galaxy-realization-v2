@@ -211,8 +211,15 @@ main.py                       ← 唯一入口。只做：参数解析 → 契�
 |---|---|
 | `python main.py` | 不变 |
 | `python unified_launcher.py` | `python main.py`（它本来就是从属） |
-| `python launch_desktop.py` | `python main.py --desktop-only` |
-| `python system_manager.py` | `python main.py nodes <start\|stop\|status> [name]` |
+| `python launch_desktop.py` | `python main.py` |
+| `python launch_desktop.py --check` | `python main.py --check` |
+| `python launch_desktop.py --backend` | `python main.py --backend` |
+| `python launch_desktop.py --frontend` | `python main.py --desktop-only`（`--frontend` 保留为别名） |
+| `python unified_launcher.py --status` | `python main.py --status` |
+| `python unified_launcher.py --check-only` | `python main.py --check-only` |
+| `python unified_launcher.py --docker-full` | `python main.py --docker-full` |
+| `python unified_launcher.py --minimal` / `--no-ui` / `--no-l4` / `--no-nodes` | **无对应**（从来没有真的生效过，见 §步骤 8） |
+| `python system_manager.py <cmd>` | `python main.py nodes <start\|stop\|status\|monitor\|report>` + `--group` / `--interval`（**订正**：原来写的 `[name]` 与只列三个命令都不对，见 §步骤 5） |
 | `python install.py --all` | `python main.py install --all` |
 | `python build_exe.py --onefile` | 保留原样（打包不属于运行期启动） |
 
@@ -299,11 +306,11 @@ python main.py --only nodes
 | 1 | ~~`system_manager.ConfigManager` → 删，改用 `launcher/config_manager.py`~~ → **反过来：`launcher/config_manager.py` 退役删除** | ✅ 已完成。见下方"步骤 1 的前提是错的" |
 | 2 | 环境检查合并 → `launcher/env_check.py` | ✅ 已完成。见下方"步骤 2：两份判据实测差在哪" |
 | 3 | 依赖引导合并 → `launcher/deps.py` | ✅ 共享层已建。见下方"步骤 3：四份引导，四种抗弱网强度" |
-| 4 | 桌面壳合并 → `launcher/shell.py` | 含 npm 自愈链，**最需要小心**，但收益最大 |
-| 5 | 节点生命周期 → `launcher/nodes.py`（吸收 `system_manager`） | 要同时改 `docs/CONFIGURATION_AUTHORITY.md` 的用户指引 |
+| 4 | 桌面壳合并 → `launcher/shell.py` | ✅ 已完成。自愈链做成可诊断、可审计的七级阶梯（选哪个壳仍待 Windows 真机验证 Tauri，但那不卡自愈链的搬迁） |
+| 5 | 节点生命周期 → `launcher/nodes.py` | ✅ **命令面**已建并接线，两处文档已改；实现体搬迁留到步骤 8。见 §步骤 5 |
 | 6 | ~~健康检查分工 → `launcher/health.py`~~ → **不合并，改为写清分工 + 修真 bug** | ✅ 已完成。原判断「五处重复」不成立，见 §1.3 ④ 的订正 |
-| 7 | 服务编排 → `launcher/services.py` | 最大一块，放最后 |
-| 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | 前面全绿之后 |
+| 7 | 服务编排 → `launcher/services.py` | ✅ 已完成（1954 行原样搬迁）。见 §步骤 7 |
+| 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | ✅ 已完成。四个本体已删，六个还有效的开关收编进 `main.py`，仓内所有可执行引用已改指 `main.py`。见 §步骤 8 |
 | 9 | `node_startup.py` 改自动发现（借鉴 ②） | 独立优化，可与统一并行 |
 
 ### 步骤 1 的前提是错的（订正记录）
@@ -474,6 +481,86 @@ faster-whisper 几百 MB、卡住就把首启拖死），而 `install.sh` 恰恰
   它们现在仍各自实现一份；
 - `install.sh` 的 venv 创建与 `predownload_models.py` 预下载尚未搬进 `deps.py`。
 
+### 步骤 5：命令面先行，实现体后搬
+
+**为什么拆成两步**：`system_manager.py` 676 行，且 `health_monitor.py:50` 有一条
+**真实的生产 import**（`from system_manager import SystemManager, NODES, NodeConfig`）。
+把实现体搬迁和这条 import 一起动，是两件互相独立、各自都会出错的事。
+
+这一步只保证**新命令能用、老命令的每种用法都有对应写法**，实现仍委托现有
+`SystemManager`。删除留到步骤 8 —— 到那时新命令已经在文档里挂了一阵。
+
+#### 计划里的替换命令写错了（订正）
+
+原命令面表写的是：
+
+```
+python system_manager.py  →  python main.py nodes <start|stop|status> [name]
+```
+
+对着 `system_manager.main()` 的真实 argparse 核过，两处不对：
+
+1. **少了两个命令**。真实的是 `start | stop | status | monitor | report`。
+   照计划实现会**静默丢掉** `monitor`（常驻监控循环）与 `report`（JSON 报告）
+   —— 用户敲惯的命令突然不认识，而"命令面替换完成"却已经写进文档。
+2. **参数形态错了**。真实的是 `--group`（九个节点组 + `all`）与 `--interval`，
+   不是位置参数 `[name]`。按 `[name]` 实现的话，`start --group core` 根本没有
+   对应写法。
+
+`tests/test_launcher_nodes.py` 里那两条一致性测试是**从 `system_manager.py` 的
+AST 里取真实 choices** 来比的，不是照抄我记的或计划写的 —— 它俩已经不一致过一次。
+
+#### 顺带发现并修掉的真 bug：退出码从来没到过 shell
+
+`main.py` 的 `__main__` 写的是裸 `main()`，**返回值被丢弃**，进程永远 exit 0。
+于是 `launcher/record.py` 里那张退出码表 —— `EXIT_INTERRUPTED(130)` /
+`EXIT_DEPENDENCY(3)` / `EXIT_USAGE(2)` —— 一个都到不了 shell，读起来却像是生效的。
+
+与 `core/health_check.py` 那个"静默 exit 0"是同一类：
+`python main.py && next-step` 在启动被中断或依赖缺失时照样放行。
+
+已改为 `raise SystemExit(main())`。核过下游：`start.sh:45` 与 `start.bat:28` 都以
+`python main.py` 作为**最后一条语句**，所以退出码会正确传出去；CI 里没有任何
+workflow 跑 `python main.py`，不会因此变红。
+
+### 步骤 7：服务编排（1954 行原样搬迁）
+
+`unified_launcher.py` 2440 → 513 行，只剩 CLI 外壳；`GalaxyUnified` 及其模块级
+助手全部搬进 `launcher/services.py`。
+
+**同样是物理移动**，理由与步骤 5 一致：里面密布真机故障攒出来的判据（NATS 三态
+降级、主脑选择与拉取的时序、端口可绑定探测、URL 哨兵、弱网重试……），手抄必丢。
+
+#### 移动踩到的两类问题（都不是"改坏了"，是移动本身会造成的）
+
+1. **`Path(__file__).parent` 语义变了**。原文件在仓库根，这个表达式就是仓库根；
+   搬进 `launcher/` 后指向 `launcher/` —— `sys.path` 插错、子进程 `cwd` 指错、
+   `.env` 找不到，**全都不报错**。已显式算 `PROJECT_ROOT`。
+   （注意 `Path("electron")` / `Path("logs")` 这类**相对 cwd** 的路径不受影响，
+   它们依赖进程工作目录而非模块位置。）
+
+2. **shim 漏了 re-export**。第一版只透出 12 个名字，全量回归立刻抓到
+   `_recheck_ai_brain_phase` 导致一个测试文件整体 collect 失败。改成**枚举全仓
+   所有 `from unified_launcher import X`** 逐个核对，一次补齐 —— 共 13 个，其中
+   7 个原本就是从 `launcher.bootstrap` / `core_services` / `node_startup` /
+   `service_manager` 转手的。挨个试错会漏，扫一遍不会。
+
+   `_run_check_only` 那条更隐蔽：它不是被别人 import，而是 shim **自己剩下的
+   `main()` 在调**，`flake8 --select=F821` 才看得见。这也是为什么每次搬迁都要
+   做「改动前 vs 改动后」的告警数对照，而不是只看"测试过了没"。
+
+#### 体检同步扩容
+
+`launcher/doctor.py` 的要素清单 28 → **41 条**，补上服务编排的 13 条
+（Docker 基建 / NATS 三态 / Tailscale / 本地大脑 / 主脑选择 / 语音 / 托盘 /
+进程看守 / `entrypoint.json` 写出 / 节点解析观察 / 端口探测 / 大脑就绪判据 /
+优雅停止）。
+
+顺带把"事实层不许打印"这条规则**显式化**：原来是一个会越加越长的豁免名单，
+现在是两张有判据的表 —— `FACT_LAYER_MODULES`（产事实，给别人渲染）与
+`PRESENTATION_MODULES`（产界面，给人看），并加了一条"两表不许有交集、必需模块
+不许漏归类"的检查。没有它，新加的模块会既不被查也不被豁免，分离就白做了。
+
 ### 每一步都要有的门
 
 - **入口脚本目标存在**：已建（`tests/test_entry_script_targets_exist.py`）
@@ -515,6 +602,169 @@ faster-whisper 几百 MB、卡住就把首启拖死），而 `install.sh` 恰恰
   分不清是搬坏的还是改坏的。
 
 ---
+
+## 步骤 8：删四个启动器本体
+
+### 删之前先回答一个问题：这些本体上还挂着什么
+
+`launcher/doctor.py` 的 `PRESERVED_ELEMENTS` 是 §2 那份人肉清单的可执行版
+（41 条），`python main.py doctor` 逐条查在不在。但它查的是**要素搬没搬到**，
+查不到另外两类残留，而这两类都不会让任何测试自然变红：
+
+1. **活代码里还指着被删的路径**。真实踩到了：`main.py` 的入口契约校验里硬编码着
+
+   ```python
+   launcher_path = PROJECT_ROOT / "unified_launcher.py"
+   if not launcher_path.exists(): return 1
+   ```
+
+   删掉本体之后，这一句让**每一次正常启动**都停在"子入口缺失"，而
+   `python main.py doctor` 走的是另一条分支，照样全绿。现在路径改从
+   `entrypoint_role_contract` 的 `UNIFIED_LAUNCHER_ENTRY_ID.module_path` 取，
+   并新增体检项「旧启动器已退役且无残留引用」钉住不许再退回硬编码。
+
+2. **仓库里其它地方还在拉这些文件**。全仓扫下来 10 处**可执行**引用：
+
+   | 位置 | 原来 | 现在 |
+   |---|---|---|
+   | `deploy/scripts/deploy.sh` ×2（含 systemd `ExecStart`） | `unified_launcher.py` | `main.py` |
+   | `deploy/scripts/start_unified.sh` | `unified_launcher.py` | `main.py` |
+   | `config/ufo-galaxy.service`（systemd `ExecStart`） | `unified_launcher.py` | `main.py` |
+   | `daemon/galaxy_daemon.py` + `daemon/config.json` | `["python", "unified_launcher.py"]` | `["python", "main.py"]` |
+   | `installer/start_galaxy.bat` ×3 | `python unified_launcher.py` | `python main.py` |
+   | `desktop-tauri/src-tauri/src/main.rs` | spawn `launch_desktop.py --backend …` | spawn `main.py --backend` |
+   | `scripts/validate_runtime.py` | 断言 `unified_launcher.py` 存在 | 断言 `launcher/services.py` 存在 |
+   | `audit/dual_repo_wiring_probe.py` | 探测 `unified_launcher.py` 是否存在 | 探测 `launcher/services.py` |
+   | `scripts/generate_mainline_reality_report.py` ×3 | 运行链写 `unified_launcher.py` | `launcher/services.py` |
+   | 文档命令（`README.md` / `INSTALL.md` / `AGENTS.md` / `deploy/README.md` / `docs/UNIFIED_STARTUP.md` / `docs/MAINTAINER_RUNBOOK.md` / `docs/NATS_CONTROL_PLANE.md` / `docs/LEGACY_SURFACES.md` / `docs/architecture/CANONICAL_ENTRYPOINTS.md` / `docs/guides/QUICKSTART.md` / `desktop-tauri/README.md`） | `python unified_launcher.py` / `python launch_desktop.py` / `python system_manager.py` | `python main.py …` |
+
+   两处最隐蔽：
+
+   - **守护进程**（`daemon/`）的 `restart_policy: always` 会让它拿着不存在的路径
+     **无限重启**；
+   - **Tauri 壳**那处 `stdout`/`stderr` 都被 `null` 掉了，`spawn` 失败一个字都看不到，
+     表现只是"backend did not become healthy within 90s"。
+
+   `audit/*.md` 与 `docs/reports/*` 里的引用**刻意不改**：那是有日期的历史记录，
+   改掉等于篡改当时的观测。
+
+### CLI 开关：七个里只有三个是真的
+
+`unified_launcher.py` 的 argparse 有七个 flag，逐个查过去向之后只收编三个：
+
+| flag | 去向 | 收编？ |
+|---|---|---|
+| `--status` | `GalaxyUnified.show_status()` | ✅ 全仓唯一实现 |
+| `--check-only` | `_run_check_only()`：依赖 + 配置 + core 模块 + 125 个节点 import | ✅ 全仓唯一实现 |
+| `--docker-full` | `docker compose -f deploy/compose/full.yml --profile full up -d` | ✅ 没有替代路径 |
+| `--minimal` | 只写 `SystemConfig.minimal_mode`，`start()` 不读 | ❌ 从没生效过 |
+| `--no-ui` | 只写 `SystemConfig.enable_web_ui`，`start()` 不读 | ❌ 同上 |
+| `--no-l4` | 只写 `SystemConfig.enable_l4`，`start()` 不读 | ❌ 同上 |
+| `--no-nodes` | 只写 `SystemConfig.enable_nodes`，`start()` 不读 | ❌ 同上 |
+
+后四个**刻意不收**：照搬过来只会把"我关了 UI 却还是起来了"这种假承诺一起搬家。
+`installer/start_galaxy.bat` 的「最小模式」菜单项同步改成如实说明。
+`tests/test_launcher_refactor.py` 两条测试分别钉住"三个有效的还在""四个无效的没混进来"——
+哪天真把它们接上 `start()`，后一条会红，那正是它存在的意义。
+
+`launch_desktop.py` 的三个模式按 §4 命令表全部给出等价新命令，判据一律复用已在产的那份：
+`--check` 走 `launcher.env_check`，`--desktop-only` 先用
+`launcher.gateway.gateway_is_ready()` 校验网关再拉 `GalaxyUnified.start_desktop_shell()`。
+
+`--backend` 这条牵出了 §2 里另一个不成立的说法。原文写「`flags.py` 5 个 flag 里
+**4 个对应真实在读的环境变量**（…`GALAXY_SKIP_ELECTRON`…），只有 `NATS_MODE` 已漂」。
+**`GALAXY_SKIP_ELECTRON` 也漂了** —— 它在 `flags.py` 里登记着 `status="stable"`、
+purpose 白纸黑字写着 "skip starting the Electron three-state GUI"，但全仓 grep 下来
+**零个读取点**：设了它没有任何效果。
+
+所以 `--backend` 有两条路：要么不给（像 `--minimal` 那样），要么把这个本来就该生效的
+开关真接上。选了后者 —— 闸设在 `GalaxyUnified.start_desktop_shell()`，那是全仓
+**唯一**的桌面壳入口（`start_tauri` / `start_electron` 都只从这里进），一处就够。
+这样 `--backend` 是真的、`flags.py` 的登记也不再是空头支票，而且没有为它另造一套判断。
+`tests/test_launcher_refactor.py::test_backend_flag_actually_skips_the_desktop_shell`
+钉住这一条。
+
+### 端口占用预检没有搬，因为新的更强
+
+老 `main()` 那段裸 `socket.bind()` 已被 `launcher/services.py` 的
+`_probe_port_bindable()` 取代，后者还能识别"占着端口但不 listen"的 uvicorn 半死态。
+这是**判据变强**，不是要素丢失。
+
+### 第三类残留：只在被删的 CLI 外壳里跑的校验
+
+`unified_launcher.main()` 开头有一句
+
+    if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
+
+删掉那个 CLI 外壳之后，这条 PR-01 契约校验**没有任何地方在跑**了 ——
+`entrypoint_role_contract.py` 里的登记还在，却再也没人核对，登记就退化成一份
+没人读的声明。搬到 `GalaxyUnified.start()`（真正开始编排的那一刻，与原来时机一致），
+而不是模块级 —— 模块级会让 `import launcher.services` 带上副作用，
+那正是 `tests/test_entrypoint_import_has_no_env_side_effects.py` 守的东西。
+
+顺带把那份守卫**扩大**了：原来盯四个入口脚本，现在盯 `main.py` + 整个
+`launcher/` 包（18 个模块，实测此刻全部干净）。理由是那三个被删的文件当初上榜
+正是因为"被 import 时有模块级副作用"，而它们的代码现在住进了每次启动都被 import
+的 `launcher/*.py` —— 同一类越权在那里只会更容易发生、更难归因。
+
+### 顺带接上一条从没生效的能力
+
+`core/ascii_art.py` 的 `print_powershell_hint()`（PowerShell 字体/列宽/UTF-8 建议）
+此前**只被 `unified_launcher.py` import、正文一次都没调用**，所以 Windows 用户
+从来没见过它。统一之后接在 `main.py` 打横幅**之前** —— 它讲的正是"这些不对横幅会画烂"，
+画烂之后再提示就没意义了。
+
+---
+
+---
+
+## 步骤 9（补）：把整个 CLI 真跑一遍，而不是只让 CI 绿
+
+CI 与 pytest 覆盖的是"代码是否自洽"，**覆盖不到"这条命令敲下去会怎样"**。
+把 `main.py` 的每一条命令面在真机上逐条跑通之后，挖出 8 个问题，**没有一个**
+会被现有测试或 CI 抓到。
+
+| # | 命令面 | 症状 | 根因 |
+|---|---|---|---|
+| 1 | `--status` | 每次都打一条 `Exception suppressed` | `reg.entries` 不存在（私有的是 `_entries`），`taxonomy_functional` **恒为 False** —— 报告一直在谎报"分类法不可用" |
+| 2 | `install --all` | 报"试了 3 个源都失败"，把人指向网络 | 默认源是因为**发行版装的 PyYAML 卸不掉**而失败，换源救不了；而且 `stream=True` 那条路把 stderr 整个丢掉，结构化原因永远是空的 |
+| 3 | `install --enhance` | 一个包挡住 70+ 个包 | 加了一级**精准自愈**：只对认出来的那一个包 `--ignore-installed`，重试一次 |
+| 4 | `--docker-full` | 从全新 clone 起**从来没跑起来过** | ① compose 找 `.env` 是相对**compose 文件目录**的，仓库根那份被完全忽略；② `full.yml` 里三处 `env_file: .env` 同理指向不存在的 `deploy/compose/.env`；③ 缺的变量 compose 一次只报一个 |
+| 5 | `--setup`（无 tty） | 抛 `EOFError` 栈，且**退出码 0** | 没有 tty 闸；返回值在调用点被丢弃后 `return 0`（与当初 `main()` 裸调用同一类） |
+| 6 | `nodes start --group core` | **0/7**，全部"启动超时" | 子进程 `cwd` 是节点目录、`PYTHONPATH` 没设，节点第一行 `from core...` 就 `ModuleNotFoundError`；启动器只看健康端口，把**必然的 import 失败**说成超时。修后 **7/7** |
+| 7 | `nodes status` | 节点全活着、`/health` 全 200，仍报"未运行 109" | 判据是 `config.id in self.processes` —— 本进程的子进程表，独立命令里**永远是空的**；109 次健康探测照跑，结果被丢掉 |
+| 8 | `--desktop-only` | 壳已在跑时会 `AttributeError` | `_desktop_shell` / `electron_proc` 从不在 `__init__` 里初始化，只在启动路径上才存在 |
+
+另外两处不是启动器的问题，但同样是真跑才暴露的：
+
+- **`nodes/Node_71_MultiDeviceCoordination`** 用裸 `from core.X` / `from models.X` 引用**自己包内**的模块，
+  只有把节点目录塞进 `sys.path` 才成立；按包 import 时 `core` 解析到仓库根的 `core/`，节点直接导不进来。
+  改成显式相对导入（AST 改写，只改真正落在节点内的目标）。
+- **`Node_03_SecretVault`** 在**模块导入期**直接 `Fernet(key)`。首次启动时 cryptography 没装 →
+  落盘的是 43 字符的 `token_urlsafe`；之后装上 cryptography → 永久 `ValueError`，节点再也导不进来。
+  改为用前先验、按来源报清楚、降级而不是崩，并且**没有加密能力时不再落盘**（不给后来者埋雷）。
+
+### 一条方法上的教训
+
+「镜像轮换」这件事，代码写了、测试也绿，但**从来没生效过**：`electron/.npmrc` 把
+`electron_mirror` 钉死，而 `ELECTRON_MIRROR` 环境变量压不过项目级 `.npmrc`
+（`npm config get electron_mirror` 逐个验过：env 不行、`npm_config_` 前缀不行、
+只有 `--electron_mirror=` CLI flag 行）。更糟的是那条测试**把 bug 一起钉住了** ——
+它断言最后一级是空串，理由写着"空 = 回退官方源"，而空串的真实含义是"继续用 .npmrc 的 npmmirror"。
+
+**测试只能证明代码符合你写下的预期；预期本身错了，测试会跟着一起错。**
+这类前提只有真跑能证伪。
+
+### 依赖装齐后的实测结果
+
+| 指标 | 之前 | 之后 |
+|---|---|---|
+| 节点可导入 | 113/125 | **125/125** |
+| 可选依赖 | 22/27 | **27/27** |
+| `main.py doctor` | 12 绿 · 2 降级 | **14 绿 · 0 降级** |
+| `nodes start --group core` | 0/7 | **7/7** |
+| 完整后端启动 | — | **✓ 就绪**，`/health` 与 `/api/v1/system/status` 均 200 |
+
 
 ## 附：数据来源
 

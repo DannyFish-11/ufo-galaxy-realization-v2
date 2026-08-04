@@ -89,7 +89,9 @@ def test_readme_wake_hotkey_matches_the_launcher_banner():
 
     三处任何一处对不上,用户按下去就是没反应。
     """
-    launcher = (REPO / "unified_launcher.py").read_text(encoding="utf-8")
+    # 检查对象搬家了：启动横幅随服务编排原样搬到 launcher/services.py，
+    # unified_launcher.py 只剩 CLI 外壳。
+    launcher = (REPO / "launcher" / "services.py").read_text(encoding="utf-8")
     assert "Ctrl+Alt+Space" in launcher, "前提:启动器横幅用的是 Ctrl+Alt+Space"
 
     readme = _readme()

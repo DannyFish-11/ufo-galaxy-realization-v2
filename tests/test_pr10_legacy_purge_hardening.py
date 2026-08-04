@@ -216,10 +216,17 @@ class TestStartGalaxyFullyRemoved:
     def test_canonical_entry_main_py_exists(self):
         assert (_ROOT / "main.py").exists(), "main.py (authoritative startup entry) must still exist"
 
-    def test_canonical_entry_unified_launcher_exists(self):
-        assert (
-            _ROOT / "unified_launcher.py"
-        ).exists(), "unified_launcher.py (authoritative startup entry) must still exist"
+    def test_the_retired_launcher_bodies_are_gone(self):
+        """四个启动器本体已随统一删除；``main.py`` 是唯一入口。
+
+        这条原本断言 ``unified_launcher.py`` **必须存在**（当时它与 main.py 并列
+        算"权威入口"）。启动器统一（docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步）之后
+        编排搬进 ``launcher/services.py``，本体删除 —— 要素一条没丢，逐条对照见
+        ``launcher/doctor.py`` 的 PRESERVED_ELEMENTS。
+        """
+        assert (_ROOT / "launcher" / "services.py").exists(), "服务编排实现体必须存在"
+        for name in ("unified_launcher.py", "launch_desktop.py", "system_manager.py", "install.py"):
+            assert not (_ROOT / name).exists(), f"{name} 已退役，请用 python main.py"
 
     def test_purge_registry_has_start_galaxy_entry(self):
         """start_galaxy.py::_start_desktop() must still appear in the purge registry."""

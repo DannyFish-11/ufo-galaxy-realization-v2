@@ -46,12 +46,18 @@ class TestStartupPath:
     def test_main_py_exists(self):
         assert (PROJECT_ROOT / "main.py").exists()
 
-    def test_main_py_delegates_to_unified_launcher(self):
-        content = (PROJECT_ROOT / "main.py").read_text()
-        assert "unified_launcher" in content, "main.py must reference unified_launcher.py"
+    def test_main_py_delegates_to_the_service_layer(self):
+        """main.py 必须委派给服务编排层。
 
-    def test_unified_launcher_exists(self):
-        assert (PROJECT_ROOT / "unified_launcher.py").exists()
+        原来断言的是 ``"unified_launcher" in content``。那个文件已随启动器统一
+        删除，编排本体（GalaxyUnified）搬进 launcher/services.py —— 委派关系没变,
+        只是被委派方换了个家。
+        """
+        content = (PROJECT_ROOT / "main.py").read_text()
+        assert "launcher.services" in content, "main.py must reference launcher/services.py"
+
+    def test_service_orchestration_module_exists(self):
+        assert (PROJECT_ROOT / "launcher" / "services.py").exists()
 
     def test_launcher_package_init_exists(self):
         assert (PROJECT_ROOT / "launcher" / "__init__.py").exists()
@@ -100,12 +106,17 @@ class TestStartupPath:
 
         assert callable(async_shutdown)
 
-    def test_unified_launcher_imports_launcher_package(self):
-        """unified_launcher.py must reference the launcher sub-package."""
-        content = (PROJECT_ROOT / "unified_launcher.py").read_text()
-        assert (
-            "from launcher" in content or "import launcher" in content
-        ), "unified_launcher.py must import from the launcher/ sub-package"
+    def test_service_orchestration_lives_in_the_launcher_package(self):
+        """服务编排本体就住在 launcher/ 包里 —— 比"它 import 了 launcher/"更强。
+
+        原断言是 ``unified_launcher.py`` 必须 import launcher 子包（那时它在仓库根,
+        只能靠 import 建立关系）。搬进包内之后关系变成了归属,直接钉住归属。
+        """
+        svc = PROJECT_ROOT / "launcher" / "services.py"
+        assert svc.is_file(), "launcher/services.py 必须存在"
+        assert not (PROJECT_ROOT / "unified_launcher.py").exists(), "unified_launcher.py 应已删除"
+        content = svc.read_text(encoding="utf-8")
+        assert "GalaxyUnified" in content, "服务编排本体（GalaxyUnified）必须在 launcher/services.py"
 
 
 # ===========================================================================

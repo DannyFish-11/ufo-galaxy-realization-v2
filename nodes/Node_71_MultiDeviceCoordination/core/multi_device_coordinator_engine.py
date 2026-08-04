@@ -41,30 +41,30 @@ from pathlib import Path
 import traceback
 
 # 导入模型
-from models.device import (
+from ..models.device import (
     Device, DeviceType, DeviceState, DeviceRegistry,
     Capability, ResourceConstraints, VectorClock, DiscoveryProtocol
 )
-from models.task import (
+from ..models.task import (
     Task, TaskState, TaskPriority, TaskType, TaskDependency,
     TaskResource, RetryPolicy, SubTask, TaskQueue, SchedulingStrategy
 )
 
 # 导入核心模块
-from core.device_discovery import (
+from .device_discovery import (
     DeviceDiscovery, DiscoveryConfig, DiscoveryEvent, DiscoveryEventType
 )
-from core.state_synchronizer import (
+from .state_synchronizer import (
     StateSynchronizer, SyncConfig, StateEvent, SyncEventType, ConflictResolution
 )
-from core.task_scheduler import (
+from .task_scheduler import (
     TaskScheduler, SchedulerConfig, SchedulerEvent, SchedulerEventType
 )
-from core.fault_tolerance import (
+from .fault_tolerance import (
     FaultToleranceLayer, CircuitBreakerConfig, RetryConfig, FailoverConfig,
     CircuitBreakerOpenError
 )
-from core.canonical_device_view_adapter import (
+from .canonical_device_view_adapter import (
     CoordinationDeviceView,
     CoordinationDeviceStatus,
     adapt_registered_runtime_device,

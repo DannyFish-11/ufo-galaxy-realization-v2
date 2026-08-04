@@ -1285,7 +1285,7 @@ class DualRepoSystemCompletenessReviewer:
                 )
 
                 reg = get_terminology_registry()
-                taxonomy_functional = len(reg.entries) > 0
+                taxonomy_functional = len(reg.all_entries()) > 0  # 公开 API;reg.entries 从不存在
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 

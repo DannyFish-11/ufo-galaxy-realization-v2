@@ -13,7 +13,7 @@ from enum import Enum, auto
 from datetime import datetime
 import random
 
-from models.device import Device, DeviceState, VectorClock
+from ..models.device import Device, DeviceState, VectorClock
 
 logger = logging.getLogger(__name__)
 

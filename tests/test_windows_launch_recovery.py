@@ -131,7 +131,7 @@ def test_guard_does_not_use_os_kill_as_windows_liveness_probe():
 
 
 def test_probe_port_bindable_detects_occupied_port():
-    from unified_launcher import _probe_port_bindable
+    from launcher.services import _probe_port_bindable
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))
@@ -158,7 +158,7 @@ def test_probe_port_detects_wildcard_holder_without_binding_wildcard():
     bind() 时就已成立,不 listen 则永远不可能被任何人连上)、且随 with 立即
     关闭。仅限测试进程内存活数毫秒。
     """
-    from unified_launcher import _probe_port_bindable
+    from launcher.services import _probe_port_bindable
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as wildcard:
         wildcard.bind(("0.0.0.0", 0))  # 模拟 uvicorn 的真实占用形态(见上:不 listen)
@@ -174,7 +174,7 @@ def test_probe_port_never_binds_all_interfaces():
     """
     import inspect
 
-    import unified_launcher
+    from launcher import services as unified_launcher
 
     body = inspect.getsource(unified_launcher._probe_port_bindable).split('"""')[-1]
     assert "0.0.0.0" not in body, "端口预检代码体内不应出现通配监听地址"
@@ -380,7 +380,9 @@ def test_nats_install_reuses_existing_binary_and_replaces_atomically():
 
 
 def test_ready_banner_points_at_existing_tray_entries():
-    launcher = (REPO / "unified_launcher.py").read_text(encoding="utf-8")
+    # 检查对象搬家了：服务编排(含就绪横幅)已原样搬到 launcher/services.py，
+    # unified_launcher.py 只剩 CLI 外壳。读源码的断言要跟着指向新家。
+    launcher = (REPO / "launcher" / "services.py").read_text(encoding="utf-8")
     tray = (REPO / "windows_service" / "tray_icon.py").read_text(encoding="utf-8")
 
     banner_rows = [ln for ln in launcher.splitlines() if '("日志"' in ln or '("崩溃"' in ln]

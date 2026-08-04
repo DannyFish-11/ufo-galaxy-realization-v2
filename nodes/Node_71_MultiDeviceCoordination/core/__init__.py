@@ -21,30 +21,30 @@ package directly::
 
 This package exports only types that originate within the Node_71 core modules.
 """
-from core.canonical_device_view_adapter import (
+from .canonical_device_view_adapter import (
     CoordinationDeviceView,
     CoordinationDeviceStatus,
     adapt_registered_runtime_device,
     adapt_registered_runtime_device_dict,
     refresh_coordination_view,
 )
-from core.device_discovery import (
+from .device_discovery import (
     DeviceDiscovery, DiscoveryConfig, DiscoveryEvent, DiscoveryEventType,
     BroadcastDiscovery, MDNSDiscovery, UPNPDiscovery
 )
-from core.state_synchronizer import (
+from .state_synchronizer import (
     StateSynchronizer, SyncConfig, StateEvent, SyncEventType,
     ConflictResolution, ConflictResolver, GossipProtocol
 )
-from core.task_scheduler import (
+from .task_scheduler import (
     TaskScheduler, SchedulerConfig, SchedulerEvent, SchedulerEventType,
     DeviceSelector, TaskExecutor, DependencyResolver
 )
-from core.multi_device_coordinator_engine import (
+from .multi_device_coordinator_engine import (
     MultiDeviceCoordinatorEngine, CoordinatorConfig, CoordinatorState,
     create_coordinator
 )
-from core.fault_tolerance import (
+from .fault_tolerance import (
     CircuitBreaker, CircuitBreakerConfig, CircuitBreakerOpenError, CircuitState,
     RetryManager, RetryConfig,
     FailoverManager, FailoverConfig,

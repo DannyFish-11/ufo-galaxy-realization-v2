@@ -31,8 +31,8 @@ These files were physically removed.  Non-regression CI (`scripts/check_legacy_r
 
 | Deleted file | Was | Canonical replacement |
 |---|---|---|
-| `windows_client/_legacy/START_CLIENT.bat` | Legacy F12 sidebar launcher (hard-errored on execution) | `start.bat` or `python unified_launcher.py` |
-| `windows_client/_legacy/start_galaxy_client.bat` | Legacy Gateway WebSocket client launcher (hard-errored on execution) | `python unified_launcher.py`; configure `GALAXY_GATEWAY_URL` via `.env` |
+| `windows_client/_legacy/START_CLIENT.bat` | Legacy F12 sidebar launcher (hard-errored on execution) | `start.bat` or `python main.py` |
+| `windows_client/_legacy/start_galaxy_client.bat` | Legacy Gateway WebSocket client launcher (hard-errored on execution) | `python main.py`; configure `GALAXY_GATEWAY_URL` via `.env` |
 
 ---
 
@@ -67,8 +67,8 @@ Use these as the authoritative targets when migrating away from legacy surfaces.
 ### Startup
 | Surface | Path | Notes |
 |---|---|---|
-| **Canonical startup** | `main.py` → `unified_launcher.py` | Single authoritative entry point |
-| **Windows bootstrap** | `start.bat` | Delegates to `unified_launcher.py` |
+| **Canonical startup** | `main.py` → `launcher/services.py` | Single authoritative entry point |
+| **Windows bootstrap** | `start.bat` | Delegates to `main.py` |
 
 ### API authority
 | Surface | Path | Notes |

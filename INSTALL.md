@@ -228,7 +228,7 @@ python scripts/check_dependencies.py
 ### 2. 运行系统检查
 
 ```bash
-python unified_launcher.py --check-only
+python main.py --check-only
 ```
 
 ### 3. 测试 API
@@ -398,7 +398,7 @@ python setup_wizard.py --interactive
 python main.py --help
 
 # 检查系统状态
-python unified_launcher.py --status
+python main.py --status
 
 # 运行诊断检查
 python -m core.config_preflight --mode all

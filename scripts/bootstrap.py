@@ -13,7 +13,7 @@ scripts/bootstrap.py — Galaxy 一键初始化（跨平台）
   5. 确保 config/ 目录存在
 
 NATS / Docker 基础设施 / 系统预检由 `python main.py` 在运行时处理
-（见 unified_launcher 的 Phase 3.5 Docker 与 Phase 4 消息总线），此处不重复。
+（见 launcher/services.py 的 Phase 3.5 Docker 与 Phase 4 消息总线），此处不重复。
 
 用法::
 

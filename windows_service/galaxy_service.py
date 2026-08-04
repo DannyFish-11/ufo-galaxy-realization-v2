@@ -244,7 +244,7 @@ if _HAVE_PYWIN32:
             """Launch Electron three-state GUI as a detached sibling process.
 
             对齐其余 4 条 Electron 拉起路径的防护(此前本路径是唯一一条【裸奔】
-            的:无防重锁 → 与 unified_launcher/launch_desktop 并发时双开覆盖层;
+            的:无防重锁 → 与启动器(launcher/services.py)并发时双开覆盖层;
             无端口注入 → Electron 只能猜 9000;无包完整性检查 → node_modules
             目录存在但残缺时启动必炸)。防护失败不阻断拉起(服务模式尽力而为)。
             """

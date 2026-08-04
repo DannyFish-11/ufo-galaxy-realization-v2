@@ -104,8 +104,18 @@ def test_does_not_mistake_network_failures_for_stale_dirs(output):
 
 
 def test_launcher_purges_before_reinstalling():
-    """光有 helper 不够,启动器的修复路径必须真的调它。"""
-    src = (REPO / "unified_launcher.py").read_text(encoding="utf-8")
+    """光有 helper 不够,启动器的修复路径必须真的调它。
+
+    **检查对象搬家了**：自愈链从 ``unified_launcher.start_electron()`` 的内联段
+    收敛到了 ``launcher/shell.py``（判据一条没改，改的是组织方式）。所以这里跟着
+    指向新家。
+
+    顺带把断言从"源码里出现这个名字"升级为"**运行时真的按顺序调了**"：清残留
+    必须在任何 npm install 之前，顺序一换死循环就回来。子串断言钉不住顺序 ——
+    tests/test_launcher_shell.py::test_staging_purge_happens_before_any_install
+    记录真实调用序列来钉，这里只保留"确实用了这两个 helper"这层。
+    """
+    src = (REPO / "launcher" / "shell.py").read_text(encoding="utf-8")
 
     assert "purge_npm_staging_dirs" in src, "修复安装前未清残留,ENOTEMPTY 会一直撞"
     assert "is_npm_stale_dir_error" in src, "未识别残留目录类失败,会误当网络问题换镜像"
@@ -113,8 +123,11 @@ def test_launcher_purges_before_reinstalling():
 
 def test_launcher_escalates_to_full_rebuild_when_still_blocked():
     """清了还挡路(嵌套 node_modules / 本轮又被打断)时,要能整体重建 ——
-    node_modules 完全可由 package.json 重建,删掉无损。"""
-    src = (REPO / "unified_launcher.py").read_text(encoding="utf-8")
+    node_modules 完全可由 package.json 重建,删掉无损。
+
+    同上：检查对象已搬到 ``launcher/shell.py`` 的第 5 级。
+    """
+    src = (REPO / "launcher" / "shell.py").read_text(encoding="utf-8")
 
     assert "重建 node_modules" in src
 

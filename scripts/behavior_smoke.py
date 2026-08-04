@@ -27,7 +27,7 @@
 怎么跑
 ------
 1. 起 Ollama 桩(复用 ``ambient_service_stubs.py``),让本地模型探测有东西可探;
-2. 按 ``unified_launcher.py`` 的方式组装权威 API 层(``core.api_routes``);
+2. 按 ``launcher/services.py`` 的方式组装权威 API 层(``core.api_routes``);
 3. 打真实 HTTP:同一会话连着几轮,构成"话题延续";
 4. 回头读观测端点,断言 ACI / 焦点栈 / 在场 / 设备模态**各自的计数或快照确实变了**。
 
@@ -126,10 +126,10 @@ def _free_port(preferred: int) -> int:
 # ---------------------------------------------------------------------------
 # 组装被测应用
 # ---------------------------------------------------------------------------
-#: 这份 harness 必须和 unified_launcher.py 的步骤 3 保持一致:建一个 FastAPI 应用,
+#: 这份 harness 必须和 launcher/services.py 的步骤 3 保持一致:建一个 FastAPI 应用,
 #: 把 core.api_routes.create_api_routes() 挂上去。
 #:
-#: 为什么不直接跑 unified_launcher —— 它还会拉起进程监管、心跳、节点编排等一整套,
+#: 为什么不直接跑 launcher/services.py —— 它还会拉起进程监管、心跳、节点编排等一整套,
 #: 在 CI 里既慢又不稳,而本脚本要验的缺陷全都在**请求处理**里,不在进程监管里。
 #: 为什么不用 galaxy_gateway.app —— 实测它只暴露 59 条路由,observability / modality /
 #: operator 都不在其中;拿它当被测对象会得到一个恒绿但什么都没测到的脚本。

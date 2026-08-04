@@ -15,7 +15,7 @@
 python main.py              ← canonical OS entry (delegates immediately)
         │
         ▼
-python unified_launcher.py  ← top-level system orchestrator
+python main.py              ← the only entry point
         │   (imports launcher/ sub-modules)
         ▼
 launcher/                   ← authoritative startup package (PR-5)

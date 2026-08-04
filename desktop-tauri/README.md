@@ -20,7 +20,7 @@ Tauri 只把 Electron 的主进程 `main.js` 用 Rust 重写为 `src-tauri/src/m
 
 读取的环境变量与 Electron 完全一致：`GALAXY_GATEWAY_PORT` / `PORT` / `GALAXY_IPC_PORT`
 （默认 9231）/ `GALAXY_DESKTOP_PERCEPTION` / `GALAXY_DESKTOP_PERCEPTION_INTERVAL_MS` /
-`GALAXY_ELECTRON_GPU`。unified_launcher 会把这些一并注入。
+`GALAXY_ELECTRON_GPU`。`launcher/services.py` 会把这些一并注入。
 
 ## 前置依赖
 
@@ -36,7 +36,7 @@ cd desktop-tauri/src-tauri
 # 开发跑（带控制台日志，热连前端静态资源）
 cargo run
 
-# 出 release 二进制（unified_launcher 会自动优先用它）
+# 出 release 二进制（launcher/services.py 会自动优先用它）
 cargo build --release
 #   产物：target/release/galaxy-overlay(.exe)
 
@@ -45,7 +45,7 @@ cargo tauri build
 ```
 
 构建好 `target/release/galaxy-overlay(.exe)` 后，**正常 `python main.py` 即可**——
-`unified_launcher.start_tauri()` 检测到该二进制就自动优先用 Tauri，
+`launcher.services.GalaxyUnified.start_tauri()` 检测到该二进制就自动优先用 Tauri，
 否则回退 Electron（见下「回退/共存」）。
 
 ## 回退 / 共存
