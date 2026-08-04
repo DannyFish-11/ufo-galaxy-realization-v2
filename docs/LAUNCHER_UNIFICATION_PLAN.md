@@ -299,10 +299,10 @@ python main.py --only nodes
 | 1 | ~~`system_manager.ConfigManager` → 删，改用 `launcher/config_manager.py`~~ → **反过来：`launcher/config_manager.py` 退役删除** | ✅ 已完成。见下方"步骤 1 的前提是错的" |
 | 2 | 环境检查合并 → `launcher/env_check.py` | ✅ 已完成。见下方"步骤 2：两份判据实测差在哪" |
 | 3 | 依赖引导合并 → `launcher/deps.py` | ✅ 共享层已建。见下方"步骤 3：四份引导，四种抗弱网强度" |
-| 4 | 桌面壳合并 → `launcher/shell.py` | 含 npm 自愈链，**最需要小心**，但收益最大 |
+| 4 | 桌面壳合并 → `launcher/shell.py` | ✅ 已完成。自愈链做成可诊断、可审计的七级阶梯（选哪个壳仍待 Windows 真机验证 Tauri，但那不卡自愈链的搬迁） |
 | 5 | 节点生命周期 → `launcher/nodes.py` | ✅ **命令面**已建并接线，两处文档已改；实现体搬迁留到步骤 8。见 §步骤 5 |
 | 6 | ~~健康检查分工 → `launcher/health.py`~~ → **不合并，改为写清分工 + 修真 bug** | ✅ 已完成。原判断「五处重复」不成立，见 §1.3 ④ 的订正 |
-| 7 | 服务编排 → `launcher/services.py` | 最大一块，放最后 |
+| 7 | 服务编排 → `launcher/services.py` | ✅ 已完成（1954 行原样搬迁）。见 §步骤 7 |
 | 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | 前面全绿之后 |
 | 9 | `node_startup.py` 改自动发现（借鉴 ②） | 独立优化，可与统一并行 |
 
@@ -515,6 +515,44 @@ AST 里取真实 choices** 来比的，不是照抄我记的或计划写的 —�
 已改为 `raise SystemExit(main())`。核过下游：`start.sh:45` 与 `start.bat:28` 都以
 `python main.py` 作为**最后一条语句**，所以退出码会正确传出去；CI 里没有任何
 workflow 跑 `python main.py`，不会因此变红。
+
+### 步骤 7：服务编排（1954 行原样搬迁）
+
+`unified_launcher.py` 2440 → 513 行，只剩 CLI 外壳；`GalaxyUnified` 及其模块级
+助手全部搬进 `launcher/services.py`。
+
+**同样是物理移动**，理由与步骤 5 一致：里面密布真机故障攒出来的判据（NATS 三态
+降级、主脑选择与拉取的时序、端口可绑定探测、URL 哨兵、弱网重试……），手抄必丢。
+
+#### 移动踩到的两类问题（都不是"改坏了"，是移动本身会造成的）
+
+1. **`Path(__file__).parent` 语义变了**。原文件在仓库根，这个表达式就是仓库根；
+   搬进 `launcher/` 后指向 `launcher/` —— `sys.path` 插错、子进程 `cwd` 指错、
+   `.env` 找不到，**全都不报错**。已显式算 `PROJECT_ROOT`。
+   （注意 `Path("electron")` / `Path("logs")` 这类**相对 cwd** 的路径不受影响，
+   它们依赖进程工作目录而非模块位置。）
+
+2. **shim 漏了 re-export**。第一版只透出 12 个名字，全量回归立刻抓到
+   `_recheck_ai_brain_phase` 导致一个测试文件整体 collect 失败。改成**枚举全仓
+   所有 `from unified_launcher import X`** 逐个核对，一次补齐 —— 共 13 个，其中
+   7 个原本就是从 `launcher.bootstrap` / `core_services` / `node_startup` /
+   `service_manager` 转手的。挨个试错会漏，扫一遍不会。
+
+   `_run_check_only` 那条更隐蔽：它不是被别人 import，而是 shim **自己剩下的
+   `main()` 在调**，`flake8 --select=F821` 才看得见。这也是为什么每次搬迁都要
+   做「改动前 vs 改动后」的告警数对照，而不是只看"测试过了没"。
+
+#### 体检同步扩容
+
+`launcher/doctor.py` 的要素清单 28 → **41 条**，补上服务编排的 13 条
+（Docker 基建 / NATS 三态 / Tailscale / 本地大脑 / 主脑选择 / 语音 / 托盘 /
+进程看守 / `entrypoint.json` 写出 / 节点解析观察 / 端口探测 / 大脑就绪判据 /
+优雅停止）。
+
+顺带把"事实层不许打印"这条规则**显式化**：原来是一个会越加越长的豁免名单，
+现在是两张有判据的表 —— `FACT_LAYER_MODULES`（产事实，给别人渲染）与
+`PRESENTATION_MODULES`（产界面，给人看），并加了一条"两表不许有交集、必需模块
+不许漏归类"的检查。没有它，新加的模块会既不被查也不被豁免，分离就白做了。
 
 ### 每一步都要有的门
 

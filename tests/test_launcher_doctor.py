@@ -115,15 +115,33 @@ def test_bare_print_on_fact_layer_turns_it_red(tmp_path, monkeypatch):
     assert report.failed and "env_check" in (report.failed[0].hint or "")
 
 
-def test_ui_and_nodes_are_exempt_from_the_print_rule():
-    """``ui`` 是那个咽喉本身；``nodes`` 搬来的实现体自带面向运维的彩色输出。
+def test_layers_are_two_explicit_tables_not_an_exemption_list():
+    """ "谁可以打印"必须是**两张有判据的表**，不是一个越加越长的豁免名单。
 
-    自证：豁免名单不是"把所有报错的都塞进去"，而是有理由的两个。
+    这条的前提被我自己的设计改进作废过一次：最初实现是
+    ``exempt = {"ui", "nodes"}`` —— 一个豁免集合。搬进 ``services.py`` 之后它
+    也要打印（启动横幅与就绪摘要是它的职责），如果继续往集合里加，规则迟早烂成
+    "谁都可以打印"。
+
+    现在改成 ``FACT_LAYER_MODULES``（产事实，给别人渲染）与
+    ``PRESENTATION_MODULES``（产界面，给人看），判据是**这个模块的产出是什么**，
+    而不是"它报没报错"。
     """
-    import inspect
+    assert set(doctor.FACT_LAYER_MODULES) & set(doctor.PRESENTATION_MODULES) == set(), "两表不许有交集"
+    assert "record" in doctor.FACT_LAYER_MODULES, "事实层的核心必须在表里"
+    assert "ui" in doctor.PRESENTATION_MODULES, "ui 就是那个输出咽喉"
+    assert "services" in doctor.PRESENTATION_MODULES, "services 拥有启动横幅"
 
-    src = inspect.getsource(doctor._check_no_bare_print_on_startup_path)
-    assert 'exempt = {"ui", "nodes"}' in src, "豁免名单变了，理由要跟着更新"
+
+def test_unclassified_required_module_turns_it_red(monkeypatch):
+    """新加的模块没归类 → FAILED。
+
+    没有这条，新模块会既不被查也不被豁免，悄悄地既产事实又打印，分离就白做了。
+    """
+    monkeypatch.setattr(doctor, "FACT_LAYER_MODULES", ("record",))
+    report = doctor.DoctorReport()
+    doctor._check_fact_and_presentation_are_disjoint(report)
+    assert report.failed and "没归类" in (report.failed[0].value or "")
 
 
 def test_bare_main_call_turns_it_red(tmp_path, monkeypatch):

@@ -132,7 +132,9 @@ class TestLauncherWiring:
         """
         from pathlib import Path
 
-        src = (Path(__file__).resolve().parent.parent / "unified_launcher.py").read_text(encoding="utf-8")
+        # 检查对象搬家了：UnifiedWebUI（挂路由的地方）已原样搬到
+        # launcher/services.py；unified_launcher.py 只剩 CLI 外壳。
+        src = (Path(__file__).resolve().parent.parent / "launcher" / "services.py").read_text(encoding="utf-8")
         canonical_at = src.find("register_websocket_routes(self.app)")
         compat_at = src.find("create_websocket_routes(\n                    self.app")
         assert canonical_at != -1, "启动器没有挂 canonical 设备接入"

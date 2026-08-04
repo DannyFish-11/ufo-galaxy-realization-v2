@@ -51,12 +51,14 @@ REQUIRED_MODULES = (
     "core_services",
     "deps",
     "dependency_resolver",
+    "doctor",
     "env_check",
     "health_checks",
     "node_startup",
     "nodes",
     "record",
     "service_manager",
+    "services",
     "shell",
     "shutdown",
     "ui",
@@ -98,6 +100,20 @@ PRESERVED_ELEMENTS: Dict[str, Dict[str, Any]] = {
     "节点：健康巡检": {"module": "launcher.nodes", "needs": "check_all_nodes"},
     "节点：常驻监控": {"module": "launcher.nodes", "needs": "monitor"},
     "节点：JSON 报告": {"module": "launcher.nodes", "needs": "generate_report"},
+    # ── unified_launcher 的服务编排（步骤 7 搬来）──
+    "服务：Docker 基建": {"module": "launcher.services", "needs": "ensure_docker_infra"},
+    "服务：NATS 三态": {"module": "launcher.services", "needs": "start_nats"},
+    "服务：Tailscale": {"module": "launcher.services", "needs": "start_tailscale"},
+    "服务：本地大脑": {"module": "launcher.services", "needs": "start_local_brain"},
+    "服务：主脑选择与后台拉取": {"module": "launcher.services", "needs": "select_and_start_brain"},
+    "服务：语音交互": {"module": "launcher.services", "needs": "start_voice_interaction"},
+    "服务：系统托盘": {"module": "launcher.services", "needs": "start_system_tray"},
+    "服务：进程看守（保活）": {"module": "launcher.services", "needs": "watch_processes"},
+    "服务：entrypoint.json 写出": {"module": "launcher.services", "needs": "_write_entrypoint_json"},
+    "服务：节点解析观察": {"module": "launcher.services", "needs": "_observe_node_resolutions"},
+    "服务：端口可绑定探测": {"module": "launcher.services", "needs": "_probe_port_bindable"},
+    "服务：AI 大脑就绪判据": {"module": "launcher.services", "needs": "ai_brain_readiness"},
+    "服务：优雅停止": {"module": "launcher.services", "needs": "def stop"},
     # ── 启动事实与呈现分离 ──
     "记录：结构化启动事实": {"module": "launcher.record", "needs": "StartupRecord"},
     "记录：确定性退出码": {"module": "launcher.record", "needs": "EXIT_DEPENDENCY"},
@@ -275,19 +291,30 @@ def _check_exit_code_propagates(report: DoctorReport) -> None:
         report.add("退出码传得到 shell", Status.OK)
 
 
+#: **事实层**：只产出事实，打印交给 ``launcher/ui.py`` 那个唯一咽喉。
+#: 这些模块里出现 ``print(`` 就是退化 —— 同一份判断又会散成"只剩一行彩色文本"，
+#: 那正是这次统一要消掉的老毛病。
+FACT_LAYER_MODULES = ("record", "env_check", "deps", "shell", "doctor")
+
+#: **编排/CLI 层**：面向用户的输出**就是**它们的职责，打印是对的。
+#:
+#: 这条分界必须写死成两张表，而不是"哪个报错就加进豁免名单" —— 后者会烂掉：
+#: 加着加着，规则就变成了"谁都可以打印"。判据是：
+#: 这个模块的产出是**事实**（给别人渲染）还是**界面**（给人看）。
+PRESENTATION_MODULES = ("ui", "nodes", "services")
+
+
 def _check_no_bare_print_on_startup_path(report: DoctorReport) -> None:
-    """启动路径上的模块不许绕过唯一输出咽喉直接 ``print``。
+    """事实层不许绕过唯一输出咽喉直接 ``print``。
 
-    事实层（record/env_check/deps/shell/nodes）应当只产出事实，打印交给
-    ``launcher/ui.py`` —— 否则同一份判断又会散成"只剩一行彩色文本"。
-
-    ``ui`` 与 ``nodes`` 例外：前者**就是**那个咽喉；后者搬来的实现体自带一套
-    面向运维的彩色输出（``python main.py nodes status`` 要的就是它）。
+    只查 :data:`FACT_LAYER_MODULES`；:data:`PRESENTATION_MODULES` 的打印是它们
+    的职责（``ui`` 就是那个咽喉；``nodes`` 要给 ``main.py nodes status`` 出运维
+    界面；``services`` 拥有启动横幅与就绪摘要）。
     """
-    exempt = {"ui", "nodes"}
     offenders = []
-    for path in sorted(LAUNCHER_DIR.glob("*.py")):
-        if path.stem in exempt or path.name == "__init__.py":
+    for name in FACT_LAYER_MODULES:
+        path = LAUNCHER_DIR / f"{name}.py"
+        if not path.is_file():
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         lines = [
@@ -296,11 +323,34 @@ def _check_no_bare_print_on_startup_path(report: DoctorReport) -> None:
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "print"
         ]
         if lines:
-            offenders.append(f"{path.name}:{lines}")
+            offenders.append(f"{name}.py:{lines}")
     if offenders:
         report.add("事实层不直接打印", Status.FAILED, f"{len(offenders)} 个模块", "; ".join(offenders))
     else:
-        report.add("事实层不直接打印", Status.OK)
+        report.add("事实层不直接打印", Status.OK, f"{len(FACT_LAYER_MODULES)} 个事实层模块")
+
+
+def _check_fact_and_presentation_are_disjoint(report: DoctorReport) -> None:
+    """两张表不许有交集，也不许漏掉 ``launcher/`` 里的模块没归类。
+
+    没有这条，"新加的模块算哪一层"就没人回答 —— 于是它既不被查、也不被豁免，
+    悄悄地既产事实又打印，分离就白做了。
+    """
+    both = set(FACT_LAYER_MODULES) & set(PRESENTATION_MODULES)
+    if both:
+        report.add("层次归类无歧义", Status.FAILED, f"同时在两张表：{', '.join(sorted(both))}")
+        return
+    classified = set(FACT_LAYER_MODULES) | set(PRESENTATION_MODULES)
+    # 只要求"必需模块"都归了类；bootstrap/service_manager 这类既有模块不强制。
+    unclassified = [
+        m
+        for m in REQUIRED_MODULES
+        if m in {"record", "ui", "nodes", "services", "shell", "deps", "env_check", "doctor"} and m not in classified
+    ]
+    if unclassified:
+        report.add("层次归类无歧义", Status.FAILED, f"没归类：{', '.join(unclassified)}")
+    else:
+        report.add("层次归类无歧义", Status.OK, f"事实 {len(FACT_LAYER_MODULES)} · 呈现 {len(PRESENTATION_MODULES)}")
 
 
 def _check_runtime_surfaces(report: DoctorReport) -> None:
@@ -408,6 +458,7 @@ def run_doctor(*, include_runtime: bool = True) -> DoctorReport:
     _check_single_implementation(report)
     _check_exit_code_propagates(report)
     _check_no_bare_print_on_startup_path(report)
+    _check_fact_and_presentation_are_disjoint(report)
     _check_layout_geometry(report)
     if include_runtime:
         _check_runtime_surfaces(report)
@@ -416,6 +467,8 @@ def run_doctor(*, include_runtime: bool = True) -> DoctorReport:
 
 __all__ = [
     "REQUIRED_MODULES",
+    "FACT_LAYER_MODULES",
+    "PRESENTATION_MODULES",
     "PRESERVED_ELEMENTS",
     "SINGLE_IMPLEMENTATION",
     "DoctorReport",
