@@ -9,7 +9,7 @@
   },
   "_rule_of_thumb": "写 reason 时回答一句『为什么它不该被改』,而不是『它不重要』。答不上来的,就应该去改代码而不是记在这里。",
   "_measured_at": "main cfc54eb / PR #1567 run 30784537448,python.sarif 共 22 条",
-  "total_recorded": 22,
+  "total_recorded": 25,
   "findings": [
     {
       "rule": "py/full-ssrf",
@@ -31,7 +31,10 @@
         "nodes/Node_93_VideoProcessor/main.py:200"
       ],
       "reason": "这些节点的**本职就是按调用方给的 URL 去抓东西**,URL 必然是用户可控的 —— 这一点不可能『修掉』,否则节点就没有功能了。真正的防护是 nodes/common/url_guard 的出站守卫:默认拒绝内网(loopback / link-local 含 169.254.169.254 / private / multicast / reserved),判定落在 DNS 解析后的**所有**地址上而不是 URL 字符串,并且挂成 httpx 的 request 钩子,**每一跳重定向都过守卫**。CodeQL 看不见它,因为那是运行时钩子而不是它认识的 sanitizer 形态 —— 污点仍然从用户输入流到 request,所以这 13 条会一直在。接线由 tests/test_node_ssrf_wiring.py 守着(每个文件还剩多少个裸客户端是记数字的),守卫行为由 tests/test_url_guard.py 的 38 条守着,其中包含一个真起 HTTP 服务发 302 的重定向用例和它的对照组。",
-      "guarded_by": ["tests/test_url_guard.py", "tests/test_node_ssrf_wiring.py"]
+      "guarded_by": [
+        "tests/test_url_guard.py",
+        "tests/test_node_ssrf_wiring.py"
+      ]
     },
     {
       "rule": "py/bind-socket-all-network-interfaces",
@@ -42,7 +45,9 @@
         "galaxy_gateway/p2p_connector.py:132"
       ],
       "reason": "带 SO_BROADCAST 的局域网发现监听与 STUN 客户端。广播包只送到绑通配地址的 socket;STUN 要让 NAT 看到真实出口映射,本地端口得对所有接口开着等回包。绑 127.0.0.1 不是修复,是把跨设备发现关掉。已做的改进是把这个**隐式常量**变成显式可配的决定:core/net_bind.discovery_bind_host() 读 GALAXY_DISCOVERY_BIND_HOST,默认仍为 0.0.0.0(改默认值会让绝大多数用户升级后设备发现悄悄失效),部署在公网机器上时可收窄到某块网卡。改完 CodeQL 仍会报,这是预期的 —— 它看到的还是一个可能为 0.0.0.0 的值流进 bind()。补充一点核过的事:告警文案里还提到该值可能是空串 ''。那是 CodeQL 把 os.getenv(名字, \"\") 的默认字面量顺着数据流带了下来,它没有精确建模函数里 `if not host: return default` 那道拦截。穷举过('' / 空格 / 制表符 / 换行 / 混合空白 / 未设置)六种取值,返回的都是 0.0.0.0,能返回空串的路径不存在;这一点由 tests/test_codeql_ledger_and_net_bind.py 的 test_blank_values_fall_back_to_default 钉着。",
-      "guarded_by": ["tests/test_net_bind.py"]
+      "guarded_by": [
+        "tests/test_net_bind.py"
+      ]
     },
     {
       "rule": "py/bind-socket-all-network-interfaces",
@@ -58,7 +63,9 @@
       "rule": "py/bind-socket-all-network-interfaces",
       "count": 1,
       "status": "false-positive",
-      "locations": ["tests/test_windows_launch_recovery.py:164"],
+      "locations": [
+        "tests/test_windows_launch_recovery.py:164"
+      ],
       "reason": "这一处 bind((\"0.0.0.0\", 0)) 正是被测行为本身:它在模拟 uvicorn 那种『占着端口但不 listen』的形态,用来验 unified_launcher._probe_port_bindable 会把通配绑定占着的端口判为不可绑。改成 127.0.0.1 会让这条用例不再测它要测的东西。socket 在 with 里,存活数毫秒,且从不 listen。"
     },
     {
@@ -76,8 +83,21 @@
       "rule": "py/incomplete-url-substring-sanitization",
       "count": 1,
       "status": "vendored",
-      "locations": ["external/microsoft_ufo/llm/openai.py:571"],
+      "locations": [
+        "external/microsoft_ufo/llm/openai.py:571"
+      ],
       "reason": "external/ 下是 vendored 的第三方代码(microsoft UFO),不由本仓维护 —— 本仓的其它守卫(check_wiring 的引用扫描等)也一律跳过这个目录。真要处理应当走上游,而不是在 vendor 副本里改出一份和上游不同的代码。"
+    },
+    {
+      "rule": "py/clear-text-logging-sensitive-data",
+      "count": 3,
+      "status": "false-positive",
+      "locations": [
+        "main.py:288",
+        "main.py:291",
+        "main.py:296"
+      ],
+      "reason": "三条都落在 print_item() 的输出汇（两处 print 兜底 + 一处 logger.info），流进来的值是 launcher/env_check.EnvReport.api_keys_configured —— 它是一个**条数**（_probe_api_keys() 返回的是 len(...)），全链路没有任何 key 值、也没有任何由 key 值派生的量（包括长度）。CodeQL 是按**属性名**里含 'key' 把它判成敏感数据的，判据是名字不是内容。\n\n为什么这条不该靠改代码消掉：显示『认到几个 Key』正是这条 UX 的全部意义 —— 用户拿它判断 .env 到底被读进来没有。仓库对密钥的硬约束是『只报状态/条数，永不打印 key 值或任何由它派生的东西』（同 scripts/verify_provider_apis.py 的『未配置/占位符/已配置』三态），打印条数是这条约束**允许且要求**的行为，不是它的例外。\n\n已做的收敛：python main.py --check 原本自己手写了一份 print_item 输出（同一份呈现的第二实现），已改为复用 EnvReport.to_steps() + launcher.ui，与 Phase 0 / doctor 同一条渲染路径 —— 少了一个汇，也少了一份会漂的代码。剩下的三条来自 Phase 0 与 doctor 在 launcher.ui 不可用时的 ASCII 兜底，那条路径正是『UI 都起不来了也得让用户看见结论』，不能为了消告警把值删掉。"
     }
   ]
 }

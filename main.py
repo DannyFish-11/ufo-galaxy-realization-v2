@@ -1085,17 +1085,37 @@ def _run_env_check_only() -> int:
     判据不另写：直接问 :mod:`launcher.env_check`，也就是 ``main.py`` Phase 0 与
     ``launch_desktop.phase0_environment_check`` 合并后的那一份（合并逐行对照见
     该模块的模块头九行表）。退出码沿用老语义：就绪 0，不就绪 1。
+
+    呈现也不另写：直接用 ``EnvReport.to_steps()`` + ``launcher.ui``，与 Phase 0
+    和 ``doctor`` 走**同一条**渲染路径。
+
+    第一版是在这里手写五行 ``print_item``，那是同一份呈现的第二实现（正是
+    ``launcher/doctor.py`` 的「无第二份实现」在盯的东西），而且它漏掉了
+    ``.env`` 与 Node.js 两行。顺带解决的还有一个 CodeQL 告警
+    （``py/clear-text-logging-sensitive-data`` ×3）：``print_item`` 除了打印还会
+    ``logger.info`` 一次，于是 ``report.api_keys_configured`` 流进了日志汇。
+    那个字段是**条数**（``_probe_api_keys`` 返回的是 ``len(...)``，全链路没有任何
+    key 值），但按名字判它就是敏感数据 —— 与其为一条名不副实的告警记台账，
+    不如让这条路径走本来就该走的 ``ui.step``。
     """
     from launcher import env_check as _env_check
     from launcher import record as _record
 
     report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
-    print_phase("[环境检查]")
-    print_item("Python", "ok" if report.python_ok else "error", report.python_version)
-    print_item("pip", "ok" if report.pip_ok else "error", report.pip_version or "未检出")
-    print_item("npm", "ok" if report.npm_installed else "warn", report.npm_version or "未安装")
-    print_item("API Key", "ok" if report.api_keys_configured else "warn", f"{report.api_keys_configured} 个")
-    print_item("Electron", "ok" if report.electron_deps_ok else "warn", report.electron_probe)
+    steps = report.to_steps()
+    try:
+        from launcher import ui as _ui
+
+        _ui.begin(GALAXY_VERSION)
+        print_phase("[环境检查]")
+        for step in steps:
+            _ui.step(step.name, step.status, step.value, column=step.column, hint=step.hint, **step.detail)
+        _ui.finish(_record.EXIT_OK if report.ready else 1, verbose=bool(os.environ.get("GALAXY_VERBOSE")), tui=False)
+    except Exception:  # noqa: BLE001
+        # 兜底：``launcher.ui`` 不可用时仍要出结果 —— 只出名字与状态，不出值。
+        print_phase("[环境检查]")
+        for step in steps:
+            print_item(step.name, _STEP_STATUS_TO_LEGACY.get(step.status.value, "info"))
     return _record.EXIT_OK if report.ready else 1
 
 
@@ -1321,7 +1341,8 @@ def main() -> int:
         "--docker-full",
         action="store_true",
         help=(
-            "通过 Docker Compose 启动完整节点集（130 个节点 + 基础设施），等效于: docker compose -f deploy/compose/full.yml --profile full up -d"
+            "通过 Docker Compose 启动完整节点集（130 个节点 + 基础设施），"
+            "等效于: docker compose -f deploy/compose/full.yml --profile full up -d"
         ),
     )
     args = parser.parse_args()
