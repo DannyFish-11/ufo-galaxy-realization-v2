@@ -296,7 +296,7 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
     try:
         from core.multimodal.audio_features import AudioState
         from core.multimodal.frame_gate import FrameGate
-        from core.multimodal.perception_frame import ScreenState
+        from core.multimodal.perception_frame import ScreenState, SystemAudioState
         from core.multimodal.signal_quality import SignalQuality
         from core.multimodal.video_features import VideoState
         from core.perception.desktop_perception_store import get_desktop_perception_store
@@ -309,6 +309,9 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
     # 现统一到 frame_gate：这里算一次，消费方读帧上的 change_score/change_seq。
     screen_gate = FrameGate()
     cam_gate = FrameGate()
+    # 系统播放声走同一个门控实现:它同样需要"这一段跟上一段是不是同一份"的判断,
+    # 而慢节拍消费方靠 change_seq 判断"我上次看之后换过没有"。
+    sys_audio_gate = FrameGate()
     perception_epoch = getattr(store, "epoch", None)
     while True:
         try:
@@ -320,6 +323,9 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
                 perception_epoch = _epoch
                 screen_gate.reset()
                 cam_gate.reset()
+                # 系统播放声比画面更敏感(等于用户正在听的一切内容),同样不得跨隐私边界
+                # 携带指纹 —— 否则恢复后的第一段会与被遮住之前那段做差。
+                sys_audio_gate.reset()
 
             scr = snap.get("screen_b64")
             if scr:
@@ -350,8 +356,33 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
                     ),
                     SignalQuality.ok(),
                 )
-            if snap.get("audio_b64"):
-                bus.update_audio(AudioState(), SignalQuality.ok())
+            sys_aud = snap.get("system_audio_b64")
+            if sys_aud:
+                # 系统播放声必须进常驻感知:此前它只写进 store,只有【每次请求】那条
+                # 注入路径看得到 —— 注意力循环/三相状态机/模态路由共同消费的"世界"里
+                # 完全没有"用户此刻在听什么"这一路。与麦克风严格分槽。
+                sys_change = sys_audio_gate.score(sys_aud)
+                bus.update_system_audio(
+                    SystemAudioState(
+                        audio_b64=sys_aud,
+                        mime=snap.get("system_audio_mime", "audio/webm"),
+                        change_score=sys_change,
+                        change_seq=sys_audio_gate.change_seq,
+                        has_audio=True,
+                    ),
+                    SignalQuality.ok(),
+                )
+            if snap.get("audio_b64") and not bus.has_fresh_measured_audio():
+                # 本机特征管线活着时它才是权威:此前这里无条件写一个全零 AudioState 并
+                # 标成 OK,把管线刚算出的 energy / is_speaking 周期性覆盖成"安静"。
+                # 人体场(core/continuum/human_field.py)正是拿这几项算注意力/疲劳/意图,
+                # 于是"用户正在说话"被抹成"安静且疲劳"——凭空捏造的结论。
+                # 没有管线时只能如实报"在场但未测量":features_measured=False + degraded,
+                # 让下游能把「没测」和「测出来是 0」分开,而不是当成安静。
+                bus.update_audio(
+                    AudioState(features_measured=False),
+                    SignalQuality.degraded("shell reported microphone presence; features not measured locally"),
+                )
         except Exception as exc:  # noqa: BLE001
             logger.debug("desktop perception bridge tick error: %s", exc)
         await _asyncio.sleep(period_s)

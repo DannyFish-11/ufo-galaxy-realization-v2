@@ -121,6 +121,10 @@ class CanonicalPerceptionState:
     continuous_wall_clock: Optional[float] = None
     continuous_overall_quality: Optional[float] = None
 
+    #: 连续帧里是否真的带着**本体**（摄像头/屏幕画面、系统播放声），而不只是
+    #: motion_level 之类的派生特征。原生多模态路由判据的连续侧来源。
+    continuous_has_native_payload: bool = False
+
     # Request-bound multimodal context (OpenClawd owned)
     has_request_multimodal: bool = False
 
@@ -131,6 +135,9 @@ class CanonicalPerceptionState:
     audio_summary: Optional[Dict[str, Any]] = None
     video_summary: Optional[Dict[str, Any]] = None
     screen_summary: Optional[Dict[str, Any]] = None
+    #: 系统播放声（用户在**听**什么）。与 audio_summary（用户在**说**什么）分开:
+    #: 合成一项就再也分不出"这段声音是人说的还是扬声器放的"。
+    system_audio_summary: Optional[Dict[str, Any]] = None
     sensor_summary: Optional[Dict[str, Any]] = None
     system_summary: Optional[Dict[str, Any]] = None
 
@@ -166,11 +173,13 @@ class CanonicalPerceptionState:
             "continuous_frame_id": self.continuous_frame_id,
             "continuous_wall_clock": self.continuous_wall_clock,
             "continuous_overall_quality": self.continuous_overall_quality,
+            "continuous_has_native_payload": self.continuous_has_native_payload,
             "has_request_multimodal": self.has_request_multimodal,
             "active_modalities": list(self.active_modalities),
             "audio_summary": self.audio_summary,
             "video_summary": self.video_summary,
             "screen_summary": self.screen_summary,
+            "system_audio_summary": self.system_audio_summary,
             "sensor_summary": self.sensor_summary,
             "system_summary": self.system_summary,
             "quality_summary": self.quality_summary,
@@ -255,6 +264,19 @@ def build_canonical_perception_state(
                 "speaking_ratio": getattr(audio_state, "speaking_ratio", None),
                 "is_speaking": getattr(audio_state, "is_speaking", None),
                 "noise_level": getattr(audio_state, "noise_level", None),
+                # 「没测」不得被下游读成「测出来是 0」。
+                "features_measured": getattr(audio_state, "features_measured", True),
+            }
+
+        # System-playback (loopback) from continuous perception —— 用户在【听】什么。
+        # 与麦克风分项:合成一项就再也分不出"人在说"还是"扬声器在放"。
+        system_audio_state = getattr(continuous_frame, "system_audio", None)
+        if system_audio_state is not None:
+            state.system_audio_summary = {
+                "source": "continuous",
+                "has_audio": bool(getattr(system_audio_state, "has_audio", False)),
+                "mime": getattr(system_audio_state, "mime", None),
+                "change_seq": getattr(system_audio_state, "change_seq", None),
             }
 
         # Video features from continuous perception
@@ -264,6 +286,21 @@ def build_canonical_perception_state(
                 "source": "continuous",
                 "motion_level": getattr(video_state, "motion_level", None),
                 "face_presence": getattr(video_state, "face_presence", None),
+                # 有没有画面本体 —— 原生多模态路由判据靠它,不能只看派生特征。
+                "has_image": bool(getattr(video_state, "has_image", False)),
+                "change_seq": getattr(video_state, "change_seq", None),
+            }
+
+        # Screen context from continuous perception.  此前这条整个没读:连续屏幕感知
+        # 只有请求侧 fused_screen 才进得了规范态,常驻感知看到的屏幕在这里凭空消失。
+        screen_state = getattr(continuous_frame, "screen", None)
+        if screen_state is not None:
+            state.screen_summary = {
+                "source": "continuous",
+                "has_image": bool(getattr(screen_state, "has_image", False)),
+                "mime": getattr(screen_state, "mime", None),
+                "change_seq": getattr(screen_state, "change_seq", None),
+                "meta_present": getattr(screen_state, "meta", None) is not None,
             }
 
         # System features from continuous perception
@@ -279,14 +316,26 @@ def build_canonical_perception_state(
 
         # Quality descriptors from continuous frame
         aq = getattr(continuous_frame, "audio_quality", None)
+        saq = getattr(continuous_frame, "system_audio_quality", None)
         vq = getattr(continuous_frame, "video_quality", None)
+        scq = getattr(continuous_frame, "screen_quality", None)
         sq = getattr(continuous_frame, "system_quality", None)
         state.quality_summary = {
             "overall": getattr(continuous_frame, "overall_quality", 0.0),
             "audio_flag": (getattr(getattr(aq, "flag", None), "value", None) if aq else None),
+            "system_audio_flag": (getattr(getattr(saq, "flag", None), "value", None) if saq else None),
             "video_flag": (getattr(getattr(vq, "flag", None), "value", None) if vq else None),
+            "screen_flag": (getattr(getattr(scq, "flag", None), "value", None) if scq else None),
             "system_flag": (getattr(getattr(sq, "flag", None), "value", None) if sq else None),
         }
+
+        # 原生多模态判据的【连续侧】来源:帧里真有本体(画面/回环声)才算数。
+        # 只有派生特征(motion_level 之类)不足以要求原生多模态 —— 那样判据会恒为真。
+        state.continuous_has_native_payload = bool(
+            getattr(video_state, "has_image", False)
+            or getattr(screen_state, "has_image", False)
+            or getattr(system_audio_state, "has_audio", False)
+        )
     else:
         degradation_reasons.append("continuous_perception_unavailable")
 
@@ -345,7 +394,14 @@ def build_canonical_perception_state(
         if fused_screen:
             if "screen" not in active_modalities:
                 active_modalities.append("screen")
-            state.screen_summary = fused_screen
+            if state.screen_summary is not None:
+                # 两侧都有:请求侧为主(显式上传优先),但连续侧不能就此消失 ——
+                # 覆盖掉等于让常驻屏幕感知在规范态里凭空蒸发。
+                merged = dict(fused_screen)
+                merged["continuous"] = state.screen_summary
+                state.screen_summary = merged
+            else:
+                state.screen_summary = fused_screen
             state.has_request_multimodal = True
 
         if _has_sensor:
@@ -361,7 +417,10 @@ def build_canonical_perception_state(
     # ------------------------------------------------------------------
     _has_request_images = bool(fused_context and (fused_context.get("images") or []))
     _has_request_audio = bool(fused_context and (fused_context.get("audio") or []))
-    state.requires_native_multimodal = _has_request_images or _has_request_audio
+    # 连续侧同样算数:第 0/2 层把摄像头真帧、屏幕真帧、系统播放声都接进了常驻感知,
+    # 判据若只看请求侧,等于管子通了、判据还是瞎的 —— 路由会给一个"看得见画面的场景"
+    # 挑一个不具备原生多模态能力的模型。
+    state.requires_native_multimodal = _has_request_images or _has_request_audio or state.continuous_has_native_payload
 
     # ------------------------------------------------------------------
     # Source summary
