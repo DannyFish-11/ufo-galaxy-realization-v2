@@ -258,3 +258,50 @@ def test_pipeline_can_be_driven_again_after_it_stops(_fake_sounddevice) -> None:
 
     asyncio.run(_run())
     assert len(_fake_sounddevice.opened) == 2, "停止后无法重新开流 —— 闸门锁死了"
+
+
+def test_stop_then_restart_actually_reopens_the_stream(_fake_sounddevice) -> None:
+    """停掉再起必须**真的**重新开流 —— 这是"关掉语音再打开"的日常路径。
+
+    可重入闸只有布尔标记时会静默失败：``stop()`` 只清 ``_running``，
+    ``_run_claimed`` 要等上一轮 ``run()`` 的 finally 才清；在这个窗口里重启，
+    新的 run() 看到"已被认领"就去等待，随后旧的 finally 清掉标记、新的等待结束
+    直接返回 —— **流从此再也没开，日志里一个字都没有**，用户只看到麦克风哑了。
+    """
+
+    async def _run():
+        p = acquire_shared_audio_pipeline()
+        t1 = asyncio.create_task(p.run())
+        await asyncio.sleep(0.15)
+        opened_before = len(_fake_sounddevice.opened)
+        p.stop()  # 停
+        t2 = asyncio.create_task(p.run())  # 旧的还在收尾就重启
+        await asyncio.sleep(0.5)
+        opened_after = len(_fake_sounddevice.opened)
+        p.stop()
+        await asyncio.wait({t1, t2}, timeout=3.0)
+        return opened_before, opened_after
+
+    before, after = asyncio.run(_run())
+    assert after == before + 1, f"停止后重启没有重新开流（停前 {before} 次，重启后仍 {after} 次）—— 麦克风静默失效"
+
+
+def test_restart_does_not_leave_two_streams(_fake_sounddevice) -> None:
+    """对照组：重启只能多开一路，不能变成两路并存（否则修法从一个错走到另一个错）。"""
+
+    async def _run():
+        p = acquire_shared_audio_pipeline()
+        t1 = asyncio.create_task(p.run())
+        await asyncio.sleep(0.15)
+        p.stop()
+        await asyncio.wait({t1}, timeout=3.0)  # 等旧的彻底收尾
+        t2 = asyncio.create_task(p.run())
+        await asyncio.sleep(0.15)
+        running = p._running
+        p.stop()
+        await asyncio.wait({t2}, timeout=3.0)
+        return len(_fake_sounddevice.opened), running
+
+    total, running = asyncio.run(_run())
+    assert total == 2, f"重启后开流次数异常: {total}"
+    assert running is True, "重启后流没真的活起来"

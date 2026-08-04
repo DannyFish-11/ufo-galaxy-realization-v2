@@ -315,3 +315,91 @@ def test_canonical_state_never_leaks_raw_payloads() -> None:
     blob = repr(_cps(frame))
     for payload, name in ((_CAM, "摄像头"), (_SCR, "屏幕"), (_SYS, "系统播放声")):
         assert payload not in blob, f"规范态把{name}本体带进了日志"
+
+
+# ===========================================================================
+# D、"需要原生多模态"不得殃及无关模态
+# ===========================================================================
+#
+# 把连续路径纳入 requires_native_multimodal 之后冒出来的真实副作用：
+# modality_confidence_policy 原先是**一刀切** —— 只要 requires_native 为真，
+# active_modalities 里的每一个都被抬成 REQUIRED，缺一个就 modality_required_but_absent
+# 阻断路由。于是「屏幕有画面」会让「麦克风」也变成必需，麦克风一掉线，整条原生
+# 多模态路由就不合格了。可我们要的只是一个**看得见屏幕**的模型。
+# 真正必需的只有携带本体的那几个，规范态如实记名（native_payload_modalities）。
+
+
+def _readiness(cps, snapshot=None):
+    from core.multimodal.modality_confidence_policy import build_perception_routing_readiness
+
+    return build_perception_routing_readiness(canonical_perception=cps, source_registry_snapshot=snapshot)
+
+
+def _screen_payload_frame() -> PerceptionFrame:
+    from core.multimodal.perception_frame import SystemSignals
+
+    return PerceptionFrame(
+        screen=ScreenState(image_b64=_SCR, has_image=True),
+        screen_quality=SignalQuality.ok(),
+        audio=AudioState(energy=0.1),
+        audio_quality=SignalQuality.ok(),
+        system=SystemSignals(cpu_load=0.3),
+        system_quality=SignalQuality.ok(),
+    )
+
+
+def test_canonical_state_names_which_modalities_carry_payload() -> None:
+    """规范态必须说清**是谁**带着本体，而不只是"需要原生多模态"。"""
+    cps = build_canonical_perception_state(continuous_frame=_screen_payload_frame()).to_dict()
+    assert cps["requires_native_multimodal"] is True
+    assert cps["native_payload_modalities"] == ["screen"], cps["native_payload_modalities"]
+
+
+def test_degraded_unrelated_modality_does_not_block_native_routing() -> None:
+    """屏幕有画面时，麦克风掉线不得把整条原生多模态路由判为不合格。"""
+    cps = build_canonical_perception_state(continuous_frame=_screen_payload_frame()).to_dict()
+    snapshot = {
+        "sources": [
+            {
+                "source_id": "mic-1",
+                "modality": "audio",
+                "is_available": False,
+                "degradation_severity": "critical",
+                "quality_score": 0.0,
+                "degradation_reasons": ["device_unavailable"],
+            }
+        ]
+    }
+    e = _readiness(cps, snapshot).eligibility
+    assert e.is_native_multimodal_eligible is True, f"麦克风退化阻断了路由: {e.primary_reason.value}"
+    sem = {p.modality: p.semantics.value for p in e.modality_policies}
+    assert sem["screen"] == "required", "携带本体的那一路必须是必需的"
+    assert sem["audio"] == "preferred", f"无关模态被抬成必需: {sem}"
+
+
+def test_payload_bearing_modality_degradation_still_blocks() -> None:
+    """对照组：**携带本体**的那一路退化时必须阻断，否则收窄就成了"永不阻断"。"""
+    cps = build_canonical_perception_state(continuous_frame=_screen_payload_frame()).to_dict()
+    snapshot = {
+        "sources": [
+            {
+                "source_id": "scr-1",
+                "modality": "screen",
+                "is_available": False,
+                "degradation_severity": "critical",
+                "quality_score": 0.0,
+                "degradation_reasons": ["capture_failed"],
+            }
+        ]
+    }
+    e = _readiness(cps, snapshot).eligibility
+    assert e.is_native_multimodal_eligible is False, "带着本体的那一路都挂了，却仍判为合格"
+
+
+def test_legacy_perception_dict_keeps_the_old_blanket_semantics() -> None:
+    """旧的/精简的 perception dict（没有 native_payload_modalities）语义逐字不变。"""
+    cps = build_canonical_perception_state(continuous_frame=_screen_payload_frame()).to_dict()
+    legacy = {k: v for k, v in cps.items() if k != "native_payload_modalities"}
+    e = _readiness(legacy).eligibility
+    sem = {p.modality: p.semantics.value for p in e.modality_policies}
+    assert all(v == "required" for v in sem.values()), f"旧口径被改动了: {sem}"

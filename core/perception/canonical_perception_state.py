@@ -125,6 +125,12 @@ class CanonicalPerceptionState:
     #: motion_level 之类的派生特征。原生多模态路由判据的连续侧来源。
     continuous_has_native_payload: bool = False
 
+    #: 具体是**哪几个**模态带着本体。``requires_native_multimodal`` 只说"需要原生
+    #: 多模态"，不说"需要谁"；下游若据前者把每一个活跃模态都当成必需，就会出现
+    #: 「屏幕有画面 → 麦克风也变必需 → 麦克风一掉线整条路由被判不合格」这种错判。
+    #: 真正必需的只有携带本体的那几个，这里如实给出。
+    native_payload_modalities: List[str] = field(default_factory=list)
+
     # Request-bound multimodal context (OpenClawd owned)
     has_request_multimodal: bool = False
 
@@ -174,6 +180,7 @@ class CanonicalPerceptionState:
             "continuous_wall_clock": self.continuous_wall_clock,
             "continuous_overall_quality": self.continuous_overall_quality,
             "continuous_has_native_payload": self.continuous_has_native_payload,
+            "native_payload_modalities": list(self.native_payload_modalities),
             "has_request_multimodal": self.has_request_multimodal,
             "active_modalities": list(self.active_modalities),
             "audio_summary": self.audio_summary,
@@ -331,11 +338,14 @@ def build_canonical_perception_state(
 
         # 原生多模态判据的【连续侧】来源:帧里真有本体(画面/回环声)才算数。
         # 只有派生特征(motion_level 之类)不足以要求原生多模态 —— 那样判据会恒为真。
-        state.continuous_has_native_payload = bool(
-            getattr(video_state, "has_image", False)
-            or getattr(screen_state, "has_image", False)
-            or getattr(system_audio_state, "has_audio", False)
-        )
+        # 同时如实记下**是谁**带着本体:下游据此只把这几个模态判为必需。
+        if getattr(video_state, "has_image", False):
+            state.native_payload_modalities.append("video")
+        if getattr(screen_state, "has_image", False):
+            state.native_payload_modalities.append("screen")
+        if getattr(system_audio_state, "has_audio", False):
+            state.native_payload_modalities.append("system_audio")
+        state.continuous_has_native_payload = bool(state.native_payload_modalities)
     else:
         degradation_reasons.append("continuous_perception_unavailable")
 
@@ -421,6 +431,12 @@ def build_canonical_perception_state(
     # 判据若只看请求侧,等于管子通了、判据还是瞎的 —— 路由会给一个"看得见画面的场景"
     # 挑一个不具备原生多模态能力的模型。
     state.requires_native_multimodal = _has_request_images or _has_request_audio or state.continuous_has_native_payload
+
+    # 请求侧带的本体也要记名 —— 它们进 active_modalities 用的名字是 "image" / "audio"。
+    if _has_request_images and "image" not in state.native_payload_modalities:
+        state.native_payload_modalities.append("image")
+    if _has_request_audio and "audio" not in state.native_payload_modalities:
+        state.native_payload_modalities.append("audio")
 
     # ------------------------------------------------------------------
     # Source summary

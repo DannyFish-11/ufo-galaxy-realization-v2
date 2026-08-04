@@ -118,6 +118,12 @@ class AudioIngestPipeline:
         # 用 threading 锁而不是 asyncio 锁：两个订阅方可能跑在不同事件循环里。
         self._run_claimed = False
         self._run_claim_lock = _threading.Lock()
+        # 驱动**代次**。只有布尔标记不够：stop() 只清 _running，_run_claimed 要等上一轮
+        # run() 的 finally 才清。若在这个窗口里重启（用户关掉语音再打开、换档重启语音
+        # 循环），新的 run() 会看到"已被认领"而去等待，随后旧的 finally 清掉标记、
+        # 新的等待结束就返回了 —— **流从此再也没开，日志里一个字都没有**。
+        # 代次让每一轮驱动只清自己那一代的认领，与 core/native_modal.py 的 _gen 同款。
+        self._run_session = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -158,19 +164,30 @@ class AudioIngestPipeline:
         让 ``run()`` 的语义对每个调用方都一致：**返回 = 采集已结束**。
         """
         with self._run_claim_lock:
-            already = self._run_claimed
-            if not already:
+            # 已被认领**且流还活着** → 有人在正常驱动，搭车即可。
+            # 已被认领但流已经停了 → 上一轮正在收尾，这次是"停了又起"，必须由我接手开流。
+            riding = self._run_claimed and self._running
+            if riding:
+                watched_session = self._run_session
+            else:
+                self._run_session += 1
+                my_session = self._run_session
                 self._run_claimed = True
-        if already:
+        if riding:
             logger.debug("共享麦克风采集已有驱动方，本次 run() 不再开流，改为等待其结束")
-            while self._run_claimed:
+            while True:
+                with self._run_claim_lock:
+                    if not self._run_claimed or self._run_session != watched_session:
+                        return
                 await asyncio.sleep(0.2)
-            return
         try:
             await self._run_capture()
         finally:
             with self._run_claim_lock:
-                self._run_claimed = False
+                # 只清自己那一代：若期间已被新一轮驱动接手，清掉就等于把活着的那轮
+                # 标记成"没人驱动"，下一个 run() 会再开一路流。
+                if self._run_session == my_session:
+                    self._run_claimed = False
 
     async def _run_capture(self) -> None:
         """真正开流并跑采集循环。只由 :meth:`run` 的第一个调用方进入。"""
