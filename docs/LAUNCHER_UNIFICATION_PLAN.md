@@ -82,11 +82,31 @@ vs `health_check_url`、`critical` 只有 `system_manager` 有），**不是**�
 `main.py` 的 Phase 2、`launcher/dependency_resolver.py`（依赖图解析）。
 其中 `install.py` 目前**零引用**——没有任何脚本或文档执行它。
 
-**④ 健康检查有五处**
+**④ 健康检查有五处** ← **这条我写得不准确，已订正**
 
-`launcher/health_checks.py`（启动后校验）、`health_monitor.py`（常驻循环，有
-`__main__`）、`core/health_check.py`（**路由工厂**，不是 CLI）、
-`scripts/health_check.sh` / `.ps1`（各 188 行，运维用）。
+原文把它列在"实证的重复"里。核过之后：**它们不是一件事的五份拷贝，而是四件
+不同的事**，各有各的调用方与生命周期：
+
+| 面 | 是什么 | 何时跑 |
+|---|---|---|
+| `launcher/health_checks.py` | 启动面：网关/Node_71/NATS 探针 | 启动完成后**跑一次** |
+| `health_monitor.py` | **独立的常驻 FastAPI 服务**（`/status` `/history` `/metrics`） | 一直跑 |
+| `core/health_check.py` | **路由工厂**：给 app 装 `/health/*` | 装配期 |
+| `scripts/health_check.{sh,ps1}` | 运维面：从**进程外**探端口与 HTTP | 人工/运维 |
+
+真正重复的只有"探一个 HTTP 端点"这种两三行的动作。把四类强行并成一个
+`launcher/health.py` 只会让四类调用方互相牵制 —— 所以**不合并**。
+
+**真正的问题是另一个，而且是真 bug**：`core/health_check.py` **没有 `__main__`
+守卫**，于是 `python -m core.health_check` **静默 exit 0 而什么也不做**（实测：
+无输出、无副作用、返回码 0）。静默的成功比崩溃更糟 —— 模块名明摆着在邀请人当
+CLI 用，而 `python -m core.health_check && deploy` 会无条件放行。已修：补上真跑
+一次深度检查的 `__main__`，退出码来自**结论**而非"跑完了"。
+
+修的过程里自己踩了一次判据分散：我给退出码另列了一张 `("healthy","ok","alive")`
+同义词表，而 `check_readiness()` 的正常返回值是 `"ready"` —— 不在表里，一台健康
+的机器被判成 exit 1。已收敛成 `HEALTHY_STATUS` 一个常量，`/health/ready` 路由的
+200/503 与 CLI 的 0/1 现在读同一处。
 
 **⑤ 开机自启有两套**
 
@@ -170,7 +190,6 @@ main.py                       ← 唯一入口。只做：参数解析 → 契�
    ├─ shell.py（新）           ← start_tauri / start_electron / npm 自愈 / launch_desktop
    ├─ services.py             ← core_services + NATS / Tailscale / 大脑 / 语音
    ├─ nodes.py                ← node_startup + system_manager 的节点生命周期
-   ├─ health.py               ← health_checks + health_monitor + 与 scripts/*.sh 的分工
    ├─ tray.py（新）            ← 托盘与 windows_service/daemon 的自启统一
    │                          （config_manager.py 已退役删除：配置走
    │                           core.unified.config_manager，端口走 core.port_config）
@@ -282,7 +301,7 @@ python main.py --only nodes
 | 3 | 依赖引导合并 → `launcher/deps.py` | ✅ 共享层已建。见下方"步骤 3：四份引导，四种抗弱网强度" |
 | 4 | 桌面壳合并 → `launcher/shell.py` | 含 npm 自愈链，**最需要小心**，但收益最大 |
 | 5 | 节点生命周期 → `launcher/nodes.py`（吸收 `system_manager`） | 要同时改 `docs/CONFIGURATION_AUTHORITY.md` 的用户指引 |
-| 6 | 健康检查分工 → `launcher/health.py` | 五处合并，并明确 `scripts/*.sh` 是运维面、不是启动面 |
+| 6 | ~~健康检查分工 → `launcher/health.py`~~ → **不合并，改为写清分工 + 修真 bug** | ✅ 已完成。原判断「五处重复」不成立，见 §1.3 ④ 的订正 |
 | 7 | 服务编排 → `launcher/services.py` | 最大一块，放最后 |
 | 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | 前面全绿之后 |
 | 9 | `node_startup.py` 改自动发现（借鉴 ②） | 独立优化，可与统一并行 |
