@@ -553,35 +553,26 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     all_ok = True
 
-    # 弱网加固(与 2.4 Electron/npm 同一套思路):pip 安装
-    #   ①【流式输出】不 capture,进度可见——避免"看着像卡死";
-    #   ②默认源失败后逐个回退国内镜像(清华 → 阿里云),抗单点;
-    #   ③pip 自带重试/超时放宽。
-    _PIP_INDEX_CANDIDATES: list = [
-        None,  # 默认源(尊重用户已配置的 pip.conf / 环境)
-        "https://pypi.tuna.tsinghua.edu.cn/simple",
-        "https://mirrors.aliyun.com/pypi/simple/",
-    ]
+    # 弱网加固交给 launcher.deps —— 镜像轮换/重试/流式输出只写一份。
+    #
+    # 此前这套逻辑在本文件里是内嵌的局部函数,而 install.py / install_windows.ps1
+    # 【一个镜像都没有】、install.sh 只有一个。同一件事四份实现、四种抗弱网强度,
+    # 谁也不知道别人有什么。搬进 launcher/deps.py 之后:
+    #   · 候选表只有一份(默认源 → 清华 → 阿里云),且认 GALAXY_PIP_INDEX 覆盖
+    #     (沿用 install.sh 已有的约定);
+    #   · 顺带补上 --trusted-host(install.sh 有、这边原来没有,某些企业网下
+    #     镜像证书链不受信时会卡在这一步);
+    #   · 结果是 InstallResult 而不是裸 bool,能说清"用哪个源成功的/试了几次"。
+    from launcher import deps as _deps
 
     def _run_pip_install(pkgs: list, timeout: int = 900) -> bool:
         """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。"""
-        base = [sys.executable, "-m", "pip", "install", "--retries", "3", "--timeout", "60"] + pkgs
-        for idx, index_url in enumerate(_PIP_INDEX_CANDIDATES):
-            cmd = list(base)
-            if index_url:
-                cmd += ["-i", index_url]
-                print_item(f"回退镜像源 {idx}/{len(_PIP_INDEX_CANDIDATES) - 1}", "warn", index_url)
-            try:
-                if sp.run(cmd, timeout=timeout).returncode == 0:
-                    return True
-            except sp.TimeoutExpired:
-                print_item(
-                    f"pip 安装超时({timeout}s)",
-                    "warn",
-                    "镜像候选轮换中" if idx < len(_PIP_INDEX_CANDIDATES) - 1 else "",
-                )
-            except Exception as exc:
-                print_item(f"pip 安装异常: {exc}", "warn")
+        result = _deps.pip_install(pkgs, timeout=timeout)
+        if result.ok:
+            if result.attempts > 1:
+                print_item("经镜像回退后安装成功", "warn", result.index_used or "默认源")
+            return True
+        print_item(f"pip 安装失败(试了 {result.attempts} 个源)", "warn", result.stderr_tail[:120])
         return False
 
     # 2.0 Ensure pip is available
@@ -642,45 +633,12 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     # 2.1 Python core dependencies
     print_item("检查 Python 核心依赖...", "ok")
-    core_deps_missing = []
-    core_modules = {
-        "fastapi": "fastapi",
-        "pydantic": "pydantic",
-        "httpx": "httpx",
-        "uvicorn": "uvicorn",
-        "starlette": "starlette",
-        "ollama": "ollama",
-        "nats": "nats-py",
-        "websockets": "websockets",
-        # 依赖审计补齐:被核心能力真实 import,补进自动安装(与 requirements.txt 一致)
-        "jsonschema": "jsonschema",  # 事件总线 schema 校验
-        "huggingface_hub": "huggingface-hub",  # 本地模型 HF 下载 + Ollama 回退
-        "tqdm": "tqdm",  # 模型下载进度条
-        # 语音输出(TTS)默认引擎。此前不在自动安装名单、requirements-windows.txt
-        # 也没有 → 真机全新克隆缺包,speech_output 每次合成静默失败,表现为
-        # "回复文字出来了、一句话都不说"。包本身很小(纯 HTTP 客户端)。
-        "edge_tts": "edge-tts",
-        # 分布式追踪(OpenTelemetry SDK):core/otel_tracing.py 默认无条件开
-        # (GALAXY_OTEL_ENABLED=0 才关),但只有这里真的把包装上,"默认开"才不只是
-        # 纸面上的开关——否则每次全新 clone 后 import 失败,仍会静默降级为 no-op、
-        # 启动摘要里打"otel_tracing: skipped"警告。纯 Python、无重型原生依赖,装得
-        # 快,跟 jsonschema/tqdm 一个量级,放进阻塞式核心依赖清单不会拖慢首启。
-        # (OTLP 导出器额外依赖 grpcio,较重且默认不导出——按需手动装,见下方引导,
-        # 不放进这里,呼应"语音依赖不阻塞首启"的同一条原则。)
-        "opentelemetry.sdk": "opentelemetry-sdk",
-    }
-    # 高性能事件循环(平台各取所需):Windows 默认 Proactor 循环开销大(真机:
-    # 面板首开并发把循环拖出 10s 级冻结),winloop ≈5×;Linux/macOS 用 uvloop。
-    # 装不上/探针不过都自动退回默认循环(core/fast_loop.py),零风险。
-    if os.name == "nt":
-        core_modules["winloop"] = "winloop"
-    else:
-        core_modules["uvloop"] = "uvloop"
-    for mod_name, pip_name in core_modules.items():
-        try:
-            __import__(mod_name)
-        except Exception:
-            core_deps_missing.append(pip_name)
+    # 清单搬到 launcher/deps.py:CORE_MODULES —— "这个项目启动需要什么"此前只存在
+    # 于本函数体里,三个 installer 谁也不知道它(它们各自去装 requirements*.txt,
+    # 与这份精选清单没有任何交叉校验)。平台相关的事件循环由 platform_core_modules()
+    # 追加(Windows→winloop / 其余→uvloop),判据与理由都在那边写着。
+    core_modules = _deps.platform_core_modules()
+    core_deps_missing = _deps.probe_missing(core_modules)
 
     if not core_deps_missing:
         print_item("Python 核心依赖", "ok")
@@ -809,42 +767,16 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # electron/.npmrc 双保险),多候选镜像轮换抗单点/路径失效;
         # ②npm 网络重试/超时放宽;③【流式输出】不再 capture,让 npm 进度条
         # 可见——避免"看着像卡死"的错觉;④首次失败逐镜像回退再试。
-        _npm_net_flags = [
-            "--fetch-retries=5",
-            "--fetch-retry-mintimeout=10000",
-            "--fetch-retry-maxtimeout=120000",
-            "--fetch-timeout=300000",
-        ]
-        # (electron 二进制镜像, 附加 npm registry 参数)候选,逐个尝试。
-        _attempts = [
-            ("https://npmmirror.com/mirrors/electron/", []),
-            ("https://registry.npmmirror.com/-/binary/electron/", ["--registry=https://registry.npmmirror.com"]),
-            ("", []),  # 最后回退官方源(直连 GitHub 良好的用户)
-        ]
-
-        def _run_npm_install(electron_mirror: str, extra: list) -> int:
-            env = dict(os.environ)
-            if electron_mirror:
-                env["ELECTRON_MIRROR"] = electron_mirror
-            try:
-                # 流式输出(不 capture):慢网也能看到进度,不误判卡死。
-                return sp.run(
-                    [npm_cmd, "install", *_npm_net_flags, *extra],
-                    cwd=str(ELECTRON_DIR),
-                    env=env,
-                    timeout=900,
-                ).returncode
-            except Exception as exc:  # noqa: BLE001
-                print_item(f"npm install 异常: {exc}", "warn")
-                return 1
-
-        rc = 1
-        for _i, (_mirror, _extra) in enumerate(_attempts):
-            if _i > 0:
-                print_item(f"npm install 失败,切换镜像重试({_i}/{len(_attempts) - 1})...", "warn")
-            rc = _run_npm_install(_mirror, _extra)
-            if rc == 0:
-                break
+        # 弱网加固交给 launcher.deps.npm_install:electron 二进制走国内镜像候选
+        # 轮换(避开 GitHub 卡死,与 electron/.npmrc 双保险)、npm 网络重试放宽、
+        # 【流式输出】不 capture 让进度条可见(避免"看着像卡死")、失败逐镜像回退。
+        # 这一整套此前只在本文件里有,launch_desktop 的 npm install 一条都没有。
+        _npm_result = _deps.npm_install(ELECTRON_DIR, npm_path=npm_cmd)
+        rc = 0 if _npm_result.ok else 1
+        if _npm_result.ok and _npm_result.attempts > 1:
+            print_item(
+                f"npm install 经镜像回退后成功({_npm_result.attempts} 次)", "warn", _npm_result.index_used or "官方源"
+            )
         if rc == 0:
             print_item("Electron 依赖就绪", "ok")
         else:
@@ -897,18 +829,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     # sounddevice 是"对它说话它就回应"这条主路径(VoiceLoop→麦克风采集)的关键依赖,
     # 之前这份清单漏了它 → 明明麦克风采集打不开,横幅却报"语音依赖 ✓",误导排查。
     # 注:import sounddevice 会一并加载 PortAudio 原生库,故它失败也能兜住"PortAudio 缺失"。
-    voice_deps = {
-        "sounddevice": "sounddevice",
-        "pvporcupine": "pvporcupine",
-        "webrtcvad": "webrtcvad",
-        "faster_whisper": "faster-whisper",
-    }
-    voice_missing = []
-    for mod_name, pip_name in voice_deps.items():
-        try:
-            __import__(mod_name)
-        except Exception:
-            voice_missing.append(pip_name)
+    voice_missing = _deps.probe_missing(_deps.VOICE_MODULES)
 
     if not voice_missing:
         print_item("语音依赖", "ok", "sounddevice, pvporcupine, webrtcvad, faster-whisper")

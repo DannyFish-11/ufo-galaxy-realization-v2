@@ -166,7 +166,7 @@ main.py                       ← 唯一入口。只做：参数解析 → 契�
 └─ launcher/                  ← 所有实现收敛在这里
    ├─ bootstrap.py            ← 现有 + 吸收 install.py / install.sh / ps1 的依赖引导
    ├─ env_check.py            ← ✅ 已建：main.py Phase 0 + launch_desktop phase0 合成一份判据
-   ├─ deps.py（新）            ← main.py Phase 2 + 四份依赖引导合并；三镜像重试只写一次
+   ├─ deps.py                 ← ✅ 已建：镜像轮换/重试/单一依赖清单（两层时序留在各调用方）
    ├─ shell.py（新）           ← start_tauri / start_electron / npm 自愈 / launch_desktop
    ├─ services.py             ← core_services + NATS / Tailscale / 大脑 / 语音
    ├─ nodes.py                ← node_startup + system_manager 的节点生命周期
@@ -279,7 +279,7 @@ python main.py --only nodes
 |---|---|---|
 | 1 | ~~`system_manager.ConfigManager` → 删，改用 `launcher/config_manager.py`~~ → **反过来：`launcher/config_manager.py` 退役删除** | ✅ 已完成。见下方"步骤 1 的前提是错的" |
 | 2 | 环境检查合并 → `launcher/env_check.py` | ✅ 已完成。见下方"步骤 2：两份判据实测差在哪" |
-| 3 | 依赖引导合并 → `launcher/deps.py` | 四份合一；三镜像重试逻辑只写一次 |
+| 3 | 依赖引导合并 → `launcher/deps.py` | ✅ 共享层已建。见下方"步骤 3：四份引导，四种抗弱网强度" |
 | 4 | 桌面壳合并 → `launcher/shell.py` | 含 npm 自愈链，**最需要小心**，但收益最大 |
 | 5 | 节点生命周期 → `launcher/nodes.py`（吸收 `system_manager`） | 要同时改 `docs/CONFIGURATION_AUTHORITY.md` 的用户指引 |
 | 6 | 健康检查分工 → `launcher/health.py` | 五处合并，并明确 `scripts/*.sh` 是运维面、不是启动面 |
@@ -377,6 +377,70 @@ python main.py --only nodes
 一份模块级 `ENV_FILE`，这个注入会**静默失效**、测试转而读开发者的真 `.env`。
 所以路径改为**由调用方传入**（`check_environment(env_file=..., electron_dir=...)`），
 所有权留在入口 —— 同一个文件不该在三个模块里各有一份常量。
+
+### 步骤 3：四份引导，四种抗弱网强度
+
+|  | 装什么 | 怎么抗弱网 |
+|---|---|---|
+| `main.py` Phase 2 | **探测**精选模块清单，只装缺的 | pip **三候选**轮换（默认→清华→阿里云）+ electron 镜像三候选 |
+| `install.py` | `requirements-core/-enhance/-windows.txt` 三档 | **零镜像** |
+| `install.sh` | `requirements.txt` 一把梭 | **一个**镜像（清华，`GALAXY_PIP_INDEX` 可覆盖）+ `--trusted-host` |
+| `install_windows.ps1` | 同 `install.py` 三档 | **零镜像** |
+| `launch_desktop` Phase 1 | `requirements.txt` 一把梭 | **零镜像、零重试** |
+
+`install.py` / `install.sh` / `install_windows.ps1` **全都没有调用方** ——
+README 与 INSTALL.md 直接教用户 `pip install -r requirements.txt`。按"零引用 ≠
+死重"的判据，它们是没接线的**能力**，不因此删除；但零镜像是**真缺陷**：一旦有人
+真去跑，国内网络下基本必失败，而且它不会提示"换个源试试"。
+
+#### 为什么不合成一个函数
+
+表面是"四份重复"，实际是**两类不同的工作**，合成一个会两头做坏：
+
+- **启动期自愈**（`main.py` Phase 2 / `launch_desktop` Phase 1）：每次开机都跑，
+  必须快，且位于网关 bind **之前**。在这里做全量 `pip install -r requirements.txt`
+  会让首启多等几分钟、网关一直不监听。所以它**探测**：import 得动就跳过。
+- **安装期引导**（`install*`）：从 clone 起跑一次，可以慢、可以阻塞、该装全就装全，
+  还要建 venv、预下载模型、建桌面快捷方式。
+
+`main.py` Phase 2 的注释明确写着**不在启动期现装语音依赖**（pip 慢、
+faster-whisper 几百 MB、卡住就把首启拖死），而 `install.sh` 恰恰阻塞式装它们。
+这**不是**矛盾，正是两层该分开的证据：安装期阻塞没问题，启动期不行。
+
+所以 `launcher/deps.py` 合并的是两层**真正共用**的部分，两层各自的时序策略留在
+各自调用方：
+
+- `pip_index_candidates()` — 候选表只有一份，认 `GALAXY_PIP_INDEX`（沿用
+  `install.sh` 已有的约定，不另发明开关）；
+- `pip_install()` / `npm_install()` — 镜像轮换 + 重试 + 流式输出，返回
+  `InstallResult` 而非裸 bool；
+- `CORE_MODULES` / `VOICE_MODULES` — "启动需要什么"此前只存在于 `main.py` 函数体
+  里，三个 installer 谁也不知道它；
+- `REQUIREMENT_TIERS` — 三档分层取自 `install.py`（唯一做了分层的那份）。
+
+#### 顺带修掉的两个真问题
+
+1. **`--trusted-host` 补上**：`install.sh` 有，`main.py` 没有。某些企业网下镜像
+   证书链不受信任时会卡死在这一步。合并取更强的那个。
+2. **"跳过"不再冒充"成功"**：原 `install.py` 在 requirements 文件不存在时直接
+   `return True`，于是一个打错名字的档位会被报成安装成功。现在 `InstallResult`
+   把 `skipped_reason` 单独拿出来。
+
+#### 一处**看着该改、其实不能改**的地方（记录下来免得下次又想优化）
+
+`probe_missing` 用的是真 `__import__`，不是 `importlib.util.find_spec`。
+后者更轻（不执行模块顶层代码），但**不能用**：`sounddevice` 的顶层 import 会
+一并加载 PortAudio 原生库，import 失败才能兜住"PortAudio 缺失"。换成 `find_spec`，
+一台"装了 sounddevice 但系统没 PortAudio"的机器会被判成语音依赖齐全、横幅打 ✓，
+而麦克风根本打不开 —— 那正是 `main.py` 注释里记录过、已经修过一次的误导。
+`tests/test_launcher_deps.py` 有一条 AST 测试钉住它。
+
+#### 还没做的（下一步）
+
+- `main.py install` 子命令（替代 `python install.py --all`）；
+- `install.sh` / `install_windows.ps1` 瘦成纯引导（venv + 调 `python main.py install`），
+  它们现在仍各自实现一份；
+- `install.sh` 的 venv 创建与 `predownload_models.py` 预下载尚未搬进 `deps.py`。
 
 ### 每一步都要有的门
 
