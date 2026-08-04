@@ -57,10 +57,21 @@ class TCPAdapter(TransportAdapter):
         # 入站消息处理器:async handler(device_id, message_dict) -> Optional[dict]。
         # 返回非 None 时按同一线协议把响应帧写回连接。未设置时仅登记 peer(旧行为)。
         self._message_handler = None
+        # mesh 信封处理器:async handler(message_dict) -> Optional[dict](应答帧)。
+        self._envelope_handler = None
 
     def set_message_handler(self, handler) -> None:
         """接入入站消费方(网关侧 lifecycle 把它接到 message_handler.handle_message)。"""
         self._message_handler = handler
+
+    def set_envelope_handler(self, handler) -> None:
+        """接入 mesh 信封消费方(带 message_type 的帧,lifecycle 接 mesh 适配器)。
+
+        为什么在这里分流:mesh 邻接来自 UDM 的 mDNS 记录,端口是各对端广播的
+        **本端口**(普通协议端口),不是 mesh 自己的监听端口 —— 信封帧必然打到
+        这里。没有这个桥,mesh 经发现建立的邻接发出的每一帧都会被当普通帧丢弃。
+        """
+        self._envelope_handler = handler
 
     # -- TransportAdapter 接口 ---------------------------------------------
 
@@ -166,6 +177,18 @@ class TCPAdapter(TransportAdapter):
                 # 读取消息体
                 data = await reader.readexactly(msg_len)
                 message = json.loads(data.decode("utf-8"))
+
+                # mesh 信封帧(有 message_type 无 type):桥接给 mesh,应答原路写回。
+                if self._envelope_handler is not None and "message_type" in message:
+                    try:
+                        env_resp = await self._envelope_handler(message)
+                        if env_resp is not None:
+                            payload = json.dumps(env_resp, ensure_ascii=False, default=str).encode("utf-8")
+                            writer.write(len(payload).to_bytes(4, "big") + payload)
+                            await writer.drain()
+                    except Exception as env_exc:  # noqa: BLE001
+                        logger.warning("mesh 信封帧处理失败(连接保持): %s", env_exc)
+                    continue
 
                 device_id = message.get("device_id", "")
                 if device_id:

@@ -110,6 +110,47 @@ def test_without_handler_old_behavior_is_kept() -> None:
     assert asyncio.run(_run()) is True, "无处理器时连 peer 登记都没了 —— 旧行为被破坏"
 
 
+def test_envelope_frames_bridge_to_mesh_over_plain_port() -> None:
+    """mesh 信封帧打到普通 tcp 端口必须桥接给 mesh 并把应答原路写回。
+
+    发现型 mesh 邻接(UDM mDNS 记录)指向的就是这个端口 —— 没有桥,经发现
+    建立的邻接发出的每一帧都被当普通帧丢弃,mesh 只在显式注入邻接时才通。
+    """
+    from core.adapters.mesh_routing_adapter import MeshRoutingAdapter
+    from core.node_communication import Message, MessageType
+
+    delivered: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+
+    async def _run() -> Dict[str, Any]:
+        mesh = MeshRoutingAdapter(node_id="gateway")
+        mesh._running = True  # 只作为信封处理方,不必开自己的监听
+        mesh.set_message_handler(lambda aip, meta: delivered.append((aip, meta)))
+
+        tcp = TCPAdapter(local_port=0)
+        tcp.set_envelope_handler(mesh.handle_envelope)
+        port = await _start_server(tcp)
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            frame = Message(
+                message_type=MessageType.DATA_REQUEST,
+                source_id="phone",
+                target_id="gateway",
+                payload={"aip": {"type": "heartbeat"}, "path": ["phone"]},
+            )
+            writer.write(_frame(frame.to_dict()))
+            await writer.drain()
+            ln = await asyncio.wait_for(reader.readexactly(4), timeout=5.0)
+            body = await asyncio.wait_for(reader.readexactly(int.from_bytes(ln, "big")), timeout=5.0)
+            writer.close()
+            return json.loads(body.decode("utf-8"))
+        finally:
+            await tcp.close()
+
+    resp = asyncio.run(_run())
+    assert delivered and delivered[0][0] == {"type": "heartbeat"}, "信封帧没有桥接到 mesh 投递"
+    assert resp.get("message_type") == "data_response" and resp["payload"].get("success") is True, f"应答不对:{resp}"
+
+
 def test_lifecycle_wires_tcp_ingress() -> None:
     """融入点 AST 钉：lifecycle 必须真实调用 tcp_adapter.set_message_handler(…)。"""
     import ast

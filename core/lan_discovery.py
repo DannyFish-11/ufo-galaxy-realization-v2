@@ -34,6 +34,9 @@ logger = logging.getLogger("Galaxy.LanDiscovery")
 
 _DEFAULT_SERVICE_TYPES = [
     "_galaxy._tcp.local.",
+    # 网关 tcp_adapter.register_local_service 与 Android 端广播的都是这个类型;
+    # 浏览它之后,手机等对端经既有链路(本模块→UDM→mesh 邻接刷新)自动成为可直连邻居。
+    "_galaxy-aip3._tcp.local.",
     "_matter._tcp.local.",
     "_matterc._udp.local.",
     "_hap._tcp.local.",

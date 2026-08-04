@@ -490,7 +490,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
                     if not str(message.get("type", "") or ""):
                         return None  # 无类型帧(如探测)不进处理器
-                    response = await message_handler.handle_message(device_id or "tcp_unknown", parse_message(message))
+                    try:
+                        parsed = parse_message(message)
+                    except Exception as _parse_err:  # noqa: BLE001
+                        # 畸形/未知类型帧:静默丢弃(debug 级)。任何客户端都能对
+                        # 这个端口发垃圾 —— 每条刷一次 warning 等于把日志交给对端。
+                        logger.debug("TCP 入站帧不符合 AIP v3,丢弃: %s", _parse_err)
+                        return None
+                    response = await message_handler.handle_message(device_id or "tcp_unknown", parsed)
                     if response is None:
                         return None
                     return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
@@ -528,6 +535,15 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
             mesh_adapter.set_message_handler(_on_mesh_message)
             aip_transport.register_adapter(mesh_adapter)
+
+            # 信封桥:发现型邻接(UDM 里的 mDNS 记录)指向对端普通 tcp 端口,mesh
+            # 信封帧会打到 tcp_adapter —— 没有这个桥,经发现建立的 mesh 邻接全聋。
+            try:
+                _tcp_for_mesh = aip_transport.get_adapter("tcp")
+                if _tcp_for_mesh is not None:
+                    _tcp_for_mesh.set_envelope_handler(mesh_adapter.handle_envelope)
+            except Exception as _bridge_err:
+                logger.debug("mesh envelope bridge not attached (non-fatal): %s", _bridge_err)
         except Exception as _mesh_err:
             logger.debug("Mesh routing adapter start failed (non-fatal): %s", _mesh_err)
 

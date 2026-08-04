@@ -18,8 +18,6 @@ import asyncio
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
-import pytest
-
 # ===========================================================================
 # 一、UDM 注册 → 解析平面
 # ===========================================================================
@@ -69,7 +67,7 @@ def test_orchestrator_rejects_when_queue_full(monkeypatch) -> None:
     """队列打满时提交必须被如实拒绝（FAILED + 背压原因），不是无限积压。"""
     monkeypatch.setenv("GALAXY_TASK_QUEUE_MAX", "2")
     monkeypatch.setenv("GALAXY_TASK_CONCURRENCY", "1")
-    from galaxy_gateway.orchestrator.task_orchestrator import TaskOrchestrator, TaskStatus
+    from galaxy_gateway.orchestrator.task_orchestrator import TaskOrchestrator
 
     async def _run() -> Any:
         orch = TaskOrchestrator(MagicMock(), MagicMock(), MagicMock())
@@ -141,7 +139,7 @@ def test_multi_device_dispatch_respects_concurrency_limit(monkeypatch) -> None:
     monkeypatch.setenv("GALAXY_MULTI_DEVICE_DISPATCH_LIMIT", "2")
     from galaxy_gateway.device_router import DeviceRouter
 
-    router = DeviceRouter.__new__(DeviceRouter)  # 不跑完整 __init__，只测派发段
+    DeviceRouter.__new__(DeviceRouter)  # 构造可行性钉住;派发段用行为镜像+源码钉
 
     in_flight = 0
     peak = 0
@@ -233,6 +231,66 @@ def test_llamacpp_load_consumes_scheduler_allocation(monkeypatch, tmp_path) -> N
         "（回到写死 -1 的状态：显存不够直接 OOM，没有降级）"
     )
     assert captured.get("registered"), "加载成功后没有向调度器登记（LRU/驱逐将失明）"
+
+
+def test_transformers_load_consumes_scheduler_allocation(monkeypatch, tmp_path) -> None:
+    """调度器说落 CPU,Transformers 加载就必须落 CPU(即使 CUDA 可用)。"""
+    import sys
+    import types
+
+    import core.compute_scheduler as cs
+    import core.local_model_backends as lmb
+
+    captured: Dict[str, Any] = {}
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.float16 = "f16"
+    fake_torch.float32 = "f32"
+    fake_torch.cuda = types.SimpleNamespace(is_available=lambda: True)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    class _FakeModel:
+        def to(self, device):
+            captured["moved_to"] = device
+            return self
+
+    fake_tf = types.ModuleType("transformers")
+    fake_tf.AutoTokenizer = types.SimpleNamespace(from_pretrained=lambda *a, **k: object())
+
+    def _from_pretrained(target, **kwargs):
+        captured.update(kwargs)
+        return _FakeModel()
+
+    fake_tf.AutoModelForCausalLM = types.SimpleNamespace(from_pretrained=_from_pretrained)
+    monkeypatch.setitem(sys.modules, "transformers", fake_tf)
+
+    class _FakeScheduler:
+        async def schedule_model(self, model_id, size_mb, requires_multimodal=False, preferred_backend=None):
+            from core.compute_scheduler import ModelAllocation
+
+            captured["preferred_backend"] = preferred_backend
+            return ModelAllocation(
+                model_id=model_id, backend="transformers", device="cpu", quantization="", n_gpu_layers=0, reason="test"
+            )
+
+        def register_loaded(self, alloc):
+            captured["registered"] = alloc.model_id
+
+    monkeypatch.setattr(cs, "get_compute_scheduler", lambda: _FakeScheduler())
+
+    model_dir = tmp_path / "m"
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text("{}")
+
+    backend = lmb.TransformersBackend()
+    ok = asyncio.run(backend.load_model(str(model_dir)))
+    assert ok, "加载失败"
+    assert (
+        captured.get("device_map") is None and captured.get("torch_dtype") == "f32"
+    ), f"调度器分配 cpu 却仍按 cuda 加载:{captured}"
+    assert captured.get("moved_to") == "cpu"
+    assert captured.get("registered"), "加载成功后没有向调度器登记"
+    assert backend._device == "cpu", "generate() 落位与加载落位不一致会张量错设备"
 
 
 def test_llamacpp_load_degrades_without_scheduler(monkeypatch, tmp_path) -> None:
