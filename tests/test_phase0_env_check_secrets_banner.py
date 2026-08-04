@@ -13,6 +13,18 @@
 from __future__ import annotations
 
 
+def _api_key_line(out: str) -> str:
+    """从横幅输出里取出 API Key 那一行。
+
+    比整串文案匹配更耐改:版面几何(列宽/缩进)属于 core.ascii_art 的职责,
+    在那边调整不该让这个**行为**测试变红;而这一项的结论变了必须变红。
+    """
+    for line in out.splitlines():
+        if "API Key" in line:
+            return line
+    raise AssertionError(f"横幅里没有 API Key 这一项:\n{out}")
+
+
 def _run(monkeypatch, tmp_path, env_text: str, secrets: dict):
     import core.config_store as config_store_module
     import main as main_mod
@@ -43,7 +55,12 @@ def test_secret_saved_only_in_secrets_env_is_counted(monkeypatch, tmp_path, caps
     )
     out = capsys.readouterr().out
     assert status["api_keys_configured"] == 1, f"只计了 .env 文本,漏了 runtime/secrets.env 里真实保存的密钥: {status}"
-    assert "API Key 已配置 (1个)" in out
+    # 横幅上要看得见这个数。断言取整行再看内容,不写死整串文案——
+    # 计数从**标签**里挪到了**值列**("API Key 已配置 (1个)" → "API Key    1 个"),
+    # 那正是统一版面要的:标签列放名字、值列放值,否则值的宽度会把对勾挤歪。
+    line = _api_key_line(out)
+    assert "1" in line, f"横幅没显示已配置的密钥数: {line!r}"
+    assert "✓" in line, f"有真实密钥时这一项该是正常态: {line!r}"
 
 
 def test_placeholder_only_reports_zero_configured(monkeypatch, tmp_path, capsys):
@@ -55,7 +72,9 @@ def test_placeholder_only_reports_zero_configured(monkeypatch, tmp_path, capsys)
     )
     out = capsys.readouterr().out
     assert status["api_keys_configured"] == 0, "未编辑的占位符不该被计为已配置"
-    assert "API Key 未配置" in out
+    line = _api_key_line(out)
+    assert "未配置" in line, f"横幅该明说未配置: {line!r}"
+    assert "⚠" in line, f"未配置属降级态,不该显示为正常: {line!r}"
 
 
 def test_dedupes_key_present_in_both_env_and_secrets(monkeypatch, tmp_path, capsys):

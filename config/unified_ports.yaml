@@ -18,7 +18,10 @@
 #   - config/topology.json        (api_url fields)
 #   - config/l4_config.json       (gateway.port field)
 #   - config/api_config.json      (base_url fields)
-#   - launcher/config_manager.py  (hardcoded port defaults)
+#
+# RETIRED (no longer a duplicate — physically deleted):
+#   - launcher/config_manager.py  (hardcoded port defaults; its own header
+#                                  admitted they were stale vs this file)
 # =============================================================================
 
 # 端口分配规则:

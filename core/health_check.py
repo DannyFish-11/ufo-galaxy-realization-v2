@@ -19,6 +19,14 @@ logger = logging.getLogger("Galaxy.Health")
 # 启动时间
 _start_time = time.time()
 
+#: 就绪判据的**唯一**取值。``check_readiness()`` 产出它,``/health/ready`` 路由
+#: 按它决定 200/503,``python -m core.health_check`` 按它决定退出码 0/1。
+#:
+#: 写成常量而不是让三处各写一个字面量 "ready":我在给本模块补 __main__ 时就是
+#: 另列了一张 ("healthy","ok","alive") 的同义词表,结果正常值 "ready" 不在表里,
+#: 一台健康的机器被判成 exit 1。判据分散写就会这样漂。
+HEALTHY_STATUS = "ready"
+
 
 def get_system_metrics() -> Dict[str, Any]:
     """收集系统指标
@@ -194,7 +202,7 @@ class HealthChecker:
                 overall_ready = False
 
         return {
-            "status": "ready" if overall_ready else "not_ready",
+            "status": HEALTHY_STATUS if overall_ready else "not_ready",
             "checks": checks,
             "timestamp": datetime.now().isoformat(),
         }
@@ -249,7 +257,7 @@ def create_health_routes(service_manager=None, config=None):
     async def readiness():
         """Kubernetes 就绪探针"""
         result = await checker.check_readiness()
-        status_code = 200 if result["status"] == "ready" else 503
+        status_code = 200 if result["status"] == HEALTHY_STATUS else 503
         return JSONResponse(result, status_code=status_code)
 
     @router.get("/health/deep")
@@ -273,3 +281,58 @@ def create_health_routes(service_manager=None, config=None):
     # 走 /health/deep 拿得到。
 
     return router, checker
+
+
+# ---------------------------------------------------------------------------
+# ``python -m core.health_check`` —— 让名字不再骗人
+# ---------------------------------------------------------------------------
+#
+# 这个模块此前**没有** ``__main__`` 守卫。于是 ``python -m core.health_check``
+# 会静默 **exit 0 而什么也不做** —— 实测过：无输出、无副作用、返回码 0。
+#
+# 静默的成功比崩溃更糟。它的名字（health_check）明摆着在邀请人当 CLI 用，
+# 而"跑了、绿了、什么都没查"会让人以为系统健康 —— 自动化脚本尤其：
+# ``python -m core.health_check && deploy`` 会无条件放行。
+#
+# 本模块的真实身份是**路由工厂**（``create_health_routes()`` 给 app 装配用），
+# 不是 CLI。但既然名字会招来 CLI 调用，就得让这条路径要么真的有用、要么响亮
+# 地失败，不能继续假装成功。这里选前者：用模块**自己已有的** HealthChecker
+# 跑一次一次性检查，并按结果给出**非零退出码**。
+#
+# 与另外四个健康面的分工（写在这里，因为"看着像重复"正是它们被反复合并/误删
+# 的原因）：
+#
+#   launcher/health_checks.py   启动面：启动完成后跑一次，探网关/Node_71/NATS
+#   health_monitor.py           独立的常驻 FastAPI 服务（/status /history /metrics）
+#   core/health_check.py        路由工厂（本模块）：给 app 装 /health/*
+#   scripts/health_check.{sh,ps1}  运维面：从**进程外**探端口与 HTTP
+#
+# 四件事，不是一件事的四份拷贝。真正重复的只有"探一个 HTTP 端点"这种两三行的
+# 动作，把它们强行合并成一个模块只会让四类调用方互相牵制。
+
+
+def _main() -> int:
+    """一次性健康检查。返回进程退出码。"""
+    import json
+    import sys
+
+    checker = HealthChecker()
+    try:
+        result = asyncio.run(checker.check_deep())
+    except Exception as exc:  # noqa: BLE001
+        print(f"健康检查执行失败: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    # 退出码来自结论本身,不是"跑完了就算成功"。
+    #
+    # 判据与 ``/health/ready`` 路由用的是**同一条**:该路由写的是
+    # ``status_code = 200 if result["status"] == "ready" else 503``。
+    # 这里照抄那一条,而不是另列一张"healthy/ok/alive"的同义词表 ——
+    # 我第一版就是那么写的,结果 ``check_readiness`` 返回的正常值 ``"ready"``
+    # 不在表里,一台健康的机器被判成 exit 1。两处判据分开写就会这样漂。
+    return 0 if result.get("status") == HEALTHY_STATUS else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

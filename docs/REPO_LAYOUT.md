@@ -15,7 +15,7 @@ New functionality belongs here.
 | Directory | Role | Description |
 |-----------|------|-------------|
 | `core/` | **ACTIVE_RUNTIME** | Canonical runtime authority — OpenClawd AI authority, `DesktopPresenceRuntime` tri-state lifecycle, perception pipeline, multi-LLM router, cross-device chain, all canonical singletons. |
-| `launcher/` | **ACTIVE_RUNTIME** | Authoritative startup modules (PR-5 refactor): `bootstrap`, `service_manager`, `core_services`, `node_startup`, `health_checks`, `shutdown`, `config_manager`, `dependency_resolver`. |
+| `launcher/` | **ACTIVE_RUNTIME** | Authoritative startup modules (PR-5 refactor): `bootstrap`, `service_manager`, `core_services`, `node_startup`, `health_checks`, `shutdown`, `dependency_resolver`, `record`, `ui`. （`config_manager` 已退役删除，配置走 `core.unified.config_manager`、端口走 `core.port_config`。） |
 | `nodes/` | **ACTIVE_RUNTIME** | Active node system — 130+ canonical nodes (`Node_00` through `Node_130`), classified in PR-6 and unified in PR-7. Orchestration config: `node_dependencies.json`. |
 | `contracts/` | **ACTIVE_RUNTIME** | Canonical data contracts — `DesktopStatusProjection`, `MultiDeviceRuntimeProjection`, proto definitions. |
 | `galaxy_gateway/` | **ACTIVE_RUNTIME** | Active gateway / cross-device routing substrate — AIP v3 protocol, device router, NATS adapter, WebSocket handler. |

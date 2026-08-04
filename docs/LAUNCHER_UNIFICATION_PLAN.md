@@ -16,7 +16,7 @@
 | `main.py` | 1,149 | **唯一权威入口**（`entrypoint_role_contract` 里的 `UNIQUE_MAIN`）。参数解析、Phase 0 环境检查、Phase 2 依赖确保、setup wizard 分流、开机自启注册 |
 | `unified_launcher.py` | 2,496 | 从属启动器（`SUB_ENTRY`）。服务编排、NATS / Tailscale / 本地大脑 / 语音、**双壳选择 + Electron npm 自愈**、托盘、进程看守、entrypoint.json 写出 |
 | `launch_desktop.py` | 784 | **与 main.py 并行的第二条桌面启动路径**（见 §1.3） |
-| `launcher/` 包 | 3,032 | bootstrap / config_manager / core_services / dependency_resolver / health_checks / launcher_adapter / node_startup(1,003) / service_manager / shutdown |
+| `launcher/` 包 | 3,032 | bootstrap / config_manager(已退役删除) / core_services / dependency_resolver / health_checks / launcher_adapter / node_startup(1,003) / service_manager / shutdown |
 | `system_manager.py` | 676 | 节点生命周期管理（文档明确让用户 `python system_manager.py`） |
 | `daemon/` | 917 | `galaxy_daemon.py`(656) 常驻守护 + `autostart.py`(232) 三平台开机自启 |
 | `windows_service/` | 1,834 | Windows 服务 / 托盘 / watchdog / autostart |
@@ -69,7 +69,12 @@ wait_for_gateway() / gateway_is_ready()
 | `system_manager.py` | `ConfigManager` | 3（`_get_canonical_port` / `load_nodes` / `_get_default_nodes`） |
 | `launcher/config_manager.py` | `ConfigManager` | 11（`load_from_json` / `load_from_env` / `load_all` / `get_nodes_by_group` …） |
 
-同名同职责，一个是另一个的子集。`NodeConfig` 也是两份。
+~~同名同职责，一个是另一个的子集。~~ **✅ 已结（结法与原判断相反）**：方法多的
+那个是 HARD_DEPRECATED、零生产 importer、且自认端口数据陈旧；端口走对了路的是
+`system_manager` 那份（`_get_canonical_port` → `core.port_config`）。两个
+`NodeConfig` 字段互有出入（`group: str` vs `NodeGroup` 枚举、`health_check_path`
+vs `health_check_url`、`critical` 只有 `system_manager` 有），**不是**子集/超集。
+`launcher/config_manager.py` 已按其登记的退役条件删除，详见 §"步骤 1 的前提是错的"。
 
 **③ 依赖引导有四份**
 
@@ -77,11 +82,31 @@ wait_for_gateway() / gateway_is_ready()
 `main.py` 的 Phase 2、`launcher/dependency_resolver.py`（依赖图解析）。
 其中 `install.py` 目前**零引用**——没有任何脚本或文档执行它。
 
-**④ 健康检查有五处**
+**④ 健康检查有五处** ← **这条我写得不准确，已订正**
 
-`launcher/health_checks.py`（启动后校验）、`health_monitor.py`（常驻循环，有
-`__main__`）、`core/health_check.py`（**路由工厂**，不是 CLI）、
-`scripts/health_check.sh` / `.ps1`（各 188 行，运维用）。
+原文把它列在"实证的重复"里。核过之后：**它们不是一件事的五份拷贝，而是四件
+不同的事**，各有各的调用方与生命周期：
+
+| 面 | 是什么 | 何时跑 |
+|---|---|---|
+| `launcher/health_checks.py` | 启动面：网关/Node_71/NATS 探针 | 启动完成后**跑一次** |
+| `health_monitor.py` | **独立的常驻 FastAPI 服务**（`/status` `/history` `/metrics`） | 一直跑 |
+| `core/health_check.py` | **路由工厂**：给 app 装 `/health/*` | 装配期 |
+| `scripts/health_check.{sh,ps1}` | 运维面：从**进程外**探端口与 HTTP | 人工/运维 |
+
+真正重复的只有"探一个 HTTP 端点"这种两三行的动作。把四类强行并成一个
+`launcher/health.py` 只会让四类调用方互相牵制 —— 所以**不合并**。
+
+**真正的问题是另一个，而且是真 bug**：`core/health_check.py` **没有 `__main__`
+守卫**，于是 `python -m core.health_check` **静默 exit 0 而什么也不做**（实测：
+无输出、无副作用、返回码 0）。静默的成功比崩溃更糟 —— 模块名明摆着在邀请人当
+CLI 用，而 `python -m core.health_check && deploy` 会无条件放行。已修：补上真跑
+一次深度检查的 `__main__`，退出码来自**结论**而非"跑完了"。
+
+修的过程里自己踩了一次判据分散：我给退出码另列了一张 `("healthy","ok","alive")`
+同义词表，而 `check_readiness()` 的正常返回值是 `"ready"` —— 不在表里，一台健康
+的机器被判成 exit 1。已收敛成 `HEALTHY_STATUS` 一个常量，`/health/ready` 路由的
+200/503 与 CLI 的 0/1 现在读同一处。
 
 **⑤ 开机自启有两套**
 
@@ -160,16 +185,18 @@ wait_for_gateway() / gateway_is_ready()
 main.py                       ← 唯一入口。只做：参数解析 → 契约校验 → 分流。目标 < 250 行
 └─ launcher/                  ← 所有实现收敛在这里
    ├─ bootstrap.py            ← 现有 + 吸收 install.py / install.sh / ps1 的依赖引导
-   ├─ env_check.py（新）       ← main.py Phase 0 + launch_desktop phase0 合并成一份判据
-   ├─ deps.py（新）            ← main.py Phase 2 + 四份依赖引导合并；三镜像重试只写一次
+   ├─ env_check.py            ← ✅ 已建：main.py Phase 0 + launch_desktop phase0 合成一份判据
+   ├─ deps.py                 ← ✅ 已建：镜像轮换/重试/单一依赖清单（两层时序留在各调用方）
    ├─ shell.py（新）           ← start_tauri / start_electron / npm 自愈 / launch_desktop
    ├─ services.py             ← core_services + NATS / Tailscale / 大脑 / 语音
    ├─ nodes.py                ← node_startup + system_manager 的节点生命周期
-   ├─ health.py               ← health_checks + health_monitor + 与 scripts/*.sh 的分工
    ├─ tray.py（新）            ← 托盘与 windows_service/daemon 的自启统一
-   ├─ config_manager.py       ← 唯一的 ConfigManager（删掉 system_manager 里那份）
+   │                          （config_manager.py 已退役删除：配置走
+   │                           core.unified.config_manager，端口走 core.port_config）
+   ├─ record.py               ← 现有：启动事实（StartupRecord / StepResult），零表现层
+   ├─ ui.py                   ← 现有：三个渲染器（TUI / JSON / log）+ 唯一打印咽喉
    ├─ service_manager.py      ← 现有
-   ├─ dependency_resolver.py  ← 现有
+   ├─ dependency_resolver.py  ← 现有（已解耦：按 NodeSpec 结构协议收节点表）
    ├─ launcher_adapter.py     ← 现有
    └─ shutdown.py             ← 现有
 ```
@@ -269,15 +296,183 @@ python main.py --only nodes
 
 | # | 内容 | 为什么排这里 |
 |---|---|---|
-| 1 | `system_manager.ConfigManager` → 删，改用 `launcher/config_manager.py` | 纯重复，子集并入超集，风险最低 |
-| 2 | 环境检查合并 → `launcher/env_check.py` | 两份判据合一，先做能立刻消除漂移 |
-| 3 | 依赖引导合并 → `launcher/deps.py` | 四份合一；三镜像重试逻辑只写一次 |
+| 1 | ~~`system_manager.ConfigManager` → 删，改用 `launcher/config_manager.py`~~ → **反过来：`launcher/config_manager.py` 退役删除** | ✅ 已完成。见下方"步骤 1 的前提是错的" |
+| 2 | 环境检查合并 → `launcher/env_check.py` | ✅ 已完成。见下方"步骤 2：两份判据实测差在哪" |
+| 3 | 依赖引导合并 → `launcher/deps.py` | ✅ 共享层已建。见下方"步骤 3：四份引导，四种抗弱网强度" |
 | 4 | 桌面壳合并 → `launcher/shell.py` | 含 npm 自愈链，**最需要小心**，但收益最大 |
 | 5 | 节点生命周期 → `launcher/nodes.py`（吸收 `system_manager`） | 要同时改 `docs/CONFIGURATION_AUTHORITY.md` 的用户指引 |
-| 6 | 健康检查分工 → `launcher/health.py` | 五处合并，并明确 `scripts/*.sh` 是运维面、不是启动面 |
+| 6 | ~~健康检查分工 → `launcher/health.py`~~ → **不合并，改为写清分工 + 修真 bug** | ✅ 已完成。原判断「五处重复」不成立，见 §1.3 ④ 的订正 |
 | 7 | 服务编排 → `launcher/services.py` | 最大一块，放最后 |
 | 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | 前面全绿之后 |
 | 9 | `node_startup.py` 改自动发现（借鉴 ②） | 独立优化，可与统一并行 |
+
+### 步骤 1 的前提是错的（订正记录）
+
+上表原来写的是"`system_manager.ConfigManager` 是子集，并进 `launcher/config_manager.py`
+这个超集"。**这个前提不成立**，动手前核过一遍才发现：
+
+- `launcher/config_manager.py` 是 **HARD_DEPRECATED (D2)**，import 时就发
+  `DeprecationWarning`，且**零生产 importer**；
+- 它的模块头自己写着"下面的硬编码端口默认值是 **STALE** 的，与
+  `config/unified_ports.yaml` 冲突"；
+- 真正做对了事的是 `system_manager.ConfigManager`：它的 `_get_canonical_port`
+  委派 `core.port_config`（权威源就是那份 YAML）；
+- 两个 `NodeConfig` 也不是子集/超集关系，而是字段互有出入：
+  `group: str` vs `NodeGroup` 枚举、`health_check_path` vs `health_check_url`、
+  `critical` 只有 `system_manager` 有。
+
+所以方向是反的：**删的是 `launcher/config_manager.py`**，而不是把权威并进它。
+它在 `core/compat_surface_retirement.py` 里登记的退役条件恰好已经满足，于是按
+那条条件退役。
+
+**退役时暴露的真 bug**：`launcher/dependency_resolver.py` 用的是**相对** import
+`from .config_manager import NodeConfig`。第一版核验用子串搜 `launcher.config_manager`，
+永远匹配不到它 —— 删完之后整个模块 `ModuleNotFoundError`，而核验是"绿"的。
+改成按 AST 判定（`ImportFrom.level` 还原绝对模块名）后暴露并修复。
+
+**顺带的结构改善**：拓扑排序真正需要的只有 `name` / `priority` / `dependencies`
+三个属性，它却被钉死在某个启动器的配置类上。现在改为模块自带 `NodeSpec`
+结构协议（`typing.Protocol`，运行时零 import），步骤 5 的 `nodes.py` 把节点表
+递给它时不必先适配某个历史 dataclass。
+
+**`dependency_resolver` 本身保留**：它不发 `DeprecationWarning`，也没有退役登记
+（`launcher/__init__.py` 此前声称它和 `config_manager` 一样是 HARD_DEPRECATED，
+两条都不属实，已订正）。它此前唯一的 importer 就是 `config_manager`，所以看着
+像"没人用" —— 那是引用计数，不是能力判断。
+
+**新增的门**（防同类问题复发）：
+
+- `RETIRED` 记录的 `module_path` 必须在磁盘上确实不存在（否则登记表会替一个
+  复活的模块背书）；
+- `launcher/` 下每个模块都必须真能 `import` —— 这是本轮漏检的根因：
+  `dependency_resolver` 断了整整一次提交，因为所有测试都只静态断言、
+  没有一条**执行**过它。
+
+### 步骤 2：两份判据实测差在哪
+
+`launch_desktop.phase0_environment_check` 的 docstring 自称"精简版环境检查"。
+**这个说法不准确** —— 它不是 `main.py` Phase 0 的子集，两份各有对方没有的判据，
+而且同一个问题会给出**不同答案**：
+
+| 检查项 | `main.py` Phase 0 | `launch_desktop` phase0 | 合并取谁 |
+|---|---|---|---|
+| Python 版本 | 只报版本，**无下限门** | 要求 `>= 3.10`，不满足直接 return | **launch_desktop** |
+| pip | `which("pip") or which("pip3")` | `sys.executable -m pip --version` | **launch_desktop** |
+| .env | 存在 + 文件大小 | 只看存在 | **main.py** |
+| API Key | `.env` **+ runtime/secrets.env**，按 `PLACEHOLDER_PREFIXES` 过滤 | 只读 `os.environ`，子串过滤 | **main.py** |
+| npm | `which` 出**绝对路径**再取版本 | 只 `which("npm")` | **main.py** |
+| Node.js | 查 | **不查** | **main.py** |
+| Electron | `electron_package_intact()`（识别残缺安装） | 只看 `node_modules/electron` 目录在不在 | **main.py** |
+| Ollama | 只查装没装 | 装没装 + **在不在跑** + **有哪些模型** | **launch_desktop** |
+| 就绪判据 | pip / .env / npm 任一缺失即 not ready | python && pip && npm（**.env 不算**） | **launch_desktop** |
+
+有几处不是"详略"之别，是**对错**之别：
+
+- **pip**：`which("pip")` 找到的可能是**另一个解释器**的 pip（venv 没激活、
+  或系统 pip 排在前面）。它在不在，都不代表当前解释器装得上包。
+- **API Key**：密钥经面板保存后收敛进 `runtime/secrets.env`，**不再明文留在
+  .env**。只读 `os.environ` 的那份在密钥已正确保存时会一直报"未配置"。
+  **本机实测**：旧 `launch_desktop` 判据报 `0 个`，合并后判据报 `5 个` ——
+  同一台机器、同一时刻，两份判断相反。
+- **Electron**：只看目录存在，会漏掉 `npm install` 中途断掉的**残缺安装**
+  （`electron.cmd` 存根在、`electron/cli.js` 没了），于是跳过安装直接拉起，然后崩。
+
+**合并原则是逐行取更强的那个判据**，不是取并集、也不是取交集。取谁不取谁是
+行为决定，所以每一条都有测试钉住（`tests/test_launcher_env_check.py`，25 条）。
+
+**唯一一处行为变化**：`main.py` 原本没有 Python 版本下限门，合并后有了。这是
+刻意的 —— 没有它，3.9 上的失败会推迟到某个 import 处才炸，报错完全指不到真正
+的原因。
+
+**两个老调用方都没改坏**：`to_status_dict()` 返回的键取两侧**并集**且仍可变
+（自愈成功后要回写）。少给任何一个键，对应调用点会静默走进 `.get()` 的 `None`
+分支 —— 那比报错更难查。
+
+**`launch_desktop` 也当场改成调用合并后的那份**，而不是等到步骤 8 删除它时才
+顺带消失：漂移在它还活着的时候就已经不存在了。
+
+顺带修好的一处测试隔离：`tests/test_phase0_env_check_secrets_banner.py` 通过
+`monkeypatch.setattr(main_mod, "ENV_FILE", ...)` 注入临时 `.env`。若检查器自持
+一份模块级 `ENV_FILE`，这个注入会**静默失效**、测试转而读开发者的真 `.env`。
+所以路径改为**由调用方传入**（`check_environment(env_file=..., electron_dir=...)`），
+所有权留在入口 —— 同一个文件不该在三个模块里各有一份常量。
+
+### 步骤 3：四份引导，四种抗弱网强度
+
+|  | 装什么 | 怎么抗弱网 |
+|---|---|---|
+| `main.py` Phase 2 | **探测**精选模块清单，只装缺的 | pip **三候选**轮换（默认→清华→阿里云）+ electron 镜像三候选 |
+| `install.py` | `requirements-core/-enhance/-windows.txt` 三档 | **零镜像** |
+| `install.sh` | `requirements.txt` 一把梭 | **一个**镜像（清华，`GALAXY_PIP_INDEX` 可覆盖）+ `--trusted-host` |
+| `install_windows.ps1` | 同 `install.py` 三档 | **零镜像** |
+| `launch_desktop` Phase 1 | `requirements.txt` 一把梭 | **零镜像、零重试** |
+
+`install.py` / `install.sh` / `install_windows.ps1` **全都没有调用方** ——
+README 与 INSTALL.md 直接教用户 `pip install -r requirements.txt`。按"零引用 ≠
+死重"的判据，它们是没接线的**能力**，不因此删除；但零镜像是**真缺陷**：一旦有人
+真去跑，国内网络下基本必失败，而且它不会提示"换个源试试"。
+
+#### 为什么不合成一个函数
+
+表面是"四份重复"，实际是**两类不同的工作**，合成一个会两头做坏：
+
+- **启动期自愈**（`main.py` Phase 2 / `launch_desktop` Phase 1）：每次开机都跑，
+  必须快，且位于网关 bind **之前**。在这里做全量 `pip install -r requirements.txt`
+  会让首启多等几分钟、网关一直不监听。所以它**探测**：import 得动就跳过。
+- **安装期引导**（`install*`）：从 clone 起跑一次，可以慢、可以阻塞、该装全就装全，
+  还要建 venv、预下载模型、建桌面快捷方式。
+
+`main.py` Phase 2 的注释明确写着**不在启动期现装语音依赖**（pip 慢、
+faster-whisper 几百 MB、卡住就把首启拖死），而 `install.sh` 恰恰阻塞式装它们。
+这**不是**矛盾，正是两层该分开的证据：安装期阻塞没问题，启动期不行。
+
+所以 `launcher/deps.py` 合并的是两层**真正共用**的部分，两层各自的时序策略留在
+各自调用方：
+
+- `pip_index_candidates()` — 候选表只有一份，认 `GALAXY_PIP_INDEX`（沿用
+  `install.sh` 已有的约定，不另发明开关）；
+- `pip_install()` / `npm_install()` — 镜像轮换 + 重试 + 流式输出，返回
+  `InstallResult` 而非裸 bool；
+- `CORE_MODULES` / `VOICE_MODULES` — "启动需要什么"此前只存在于 `main.py` 函数体
+  里，三个 installer 谁也不知道它；
+- `REQUIREMENT_TIERS` — 三档分层取自 `install.py`（唯一做了分层的那份）。
+
+#### 顺带修掉的两个真问题
+
+1. **`--trusted-host` 补上**：`install.sh` 有，`main.py` 没有。某些企业网下镜像
+   证书链不受信任时会卡死在这一步。合并取更强的那个。
+2. **"跳过"不再冒充"成功"**：原 `install.py` 在 requirements 文件不存在时直接
+   `return True`，于是一个打错名字的档位会被报成安装成功。现在 `InstallResult`
+   把 `skipped_reason` 单独拿出来。
+
+#### 一处**看着该改、其实不能改**的地方（记录下来免得下次又想优化）
+
+`probe_missing` 用的是真 `__import__`，不是 `importlib.util.find_spec`。
+后者更轻（不执行模块顶层代码），但**不能用**：`sounddevice` 的顶层 import 会
+一并加载 PortAudio 原生库，import 失败才能兜住"PortAudio 缺失"。换成 `find_spec`，
+一台"装了 sounddevice 但系统没 PortAudio"的机器会被判成语音依赖齐全、横幅打 ✓，
+而麦克风根本打不开 —— 那正是 `main.py` 注释里记录过、已经修过一次的误导。
+`tests/test_launcher_deps.py` 有一条 AST 测试钉住它。
+
+#### `main.py install` 子命令（已做）
+
+命令面替换 `python install.py --all` → `python main.py install --all`。
+
+子命令走**可选位置参数**而不是 argparse 的 subparsers。理由是兼容性：现有的全部
+调用形态都是纯 flag（`python main.py --host ... --port ...`，start.bat / start.sh /
+文档 / 三端说明全是这么写的）。改成 subparsers 会让"不带子命令"变成一种需要显式
+处理的特例，稍不留神就把最常用的那条路径打断。可选位置参数则是纯增量：不给就是
+原来的"启动整套系统"。实测四种既有形态（裸启动 / `--host --port` / `-v` /
+`--setup`）全部原样可解析，未知子命令按用法错误退出 2。
+
+`install.py` 本体的删除留到步骤 8（连同其余启动器一起），现在两条路通向同一份
+实现，先把漂移消掉。
+
+#### 还没做的（下一步）
+
+- `install.sh` / `install_windows.ps1` 瘦成纯引导（venv + 调 `python main.py install`），
+  它们现在仍各自实现一份；
+- `install.sh` 的 venv 创建与 `predownload_models.py` 预下载尚未搬进 `deps.py`。
 
 ### 每一步都要有的门
 

@@ -42,7 +42,7 @@ input for all Batch cleanup PRs.  Every entry carries a deprecation level
 | `dashboard/backend/main.py` | D2 | `core/routes/*` (canonical REST API) | Batch PR-5 | Legacy headless backend; marked in `dashboard/LEGACY_SURFACE.md`; forbidden inline `UnifiedChatResponse` fallback removed in PR-3 |
 | `fusion/unified_orchestrator.py` | D1 | `core/unified/entrypoint_router.py` | Batch PR-5 | Deprecated docstring |
 | `galaxy_gateway/orchestrator/task_orchestrator.py` | D1 | `galaxy_gateway/orchestrator/galaxy_orchestrator.py` | Batch PR-5 | Deprecated docstring |
-| `launcher/config_manager.py` | D2 | `core.unified.config_manager.get_unified_config_manager()` + `core.port_config.get_node_port()` | Batch PR-5 | Runtime `DeprecationWarning` added in PR-3; port data stale vs `config/unified_ports.yaml` |
+| `launcher/config_manager.py` | **RETIRED** | `core.unified.config_manager.get_unified_config_manager()` + `core.port_config.get_node_port()` | 已删除（启动器统一） | 退役条件两半都按 AST 核过：绝对 importer 为 0；唯一的**相对** importer `launcher/dependency_resolver.py` 已改用本地 `NodeSpec` 结构协议。端口消费方早已走 `core.port_config`。登记留在 `core/compat_surface_retirement.py`（status=RETIRED，有"文件必须真不在"的守卫测试） |
 
 ---
 

@@ -382,7 +382,10 @@ _REGISTRY._register(
         description=(
             "Authoritative startup modules (PR-5 refactor): bootstrap, "
             "service_manager, core_services, node_startup, health_checks, "
-            "shutdown, config_manager, dependency_resolver."
+            "shutdown, dependency_resolver, record, ui.  "
+            "config_manager was RETIRED (physically deleted) during launcher "
+            "unification; config goes through core.unified.config_manager and "
+            "ports through core.port_config."
         ),
         pr_classified="PR-8-layout",
         notes=(

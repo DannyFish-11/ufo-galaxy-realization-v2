@@ -135,7 +135,7 @@ authoritative port lookups.  Refer to `config/unified_ports.yaml` instead:
 | `config/unified_config.json` (node port fields) | Stale — use `core.port_config` |
 | `config/topology.json` (api_url fields) | Stale — use `core.port_config` |
 | `config/l4_config.json` (gateway.port field) | Stale — use `core.port_config` |
-| `launcher/config_manager.py` (hardcoded defaults) | Deprecated — see module header |
+| ~~`launcher/config_manager.py` (hardcoded defaults)~~ | **已删除** — 它自称的陈旧端口默认值正是删它的理由；见 §`launcher/config_manager.py` |
 
 ---
 
@@ -227,18 +227,34 @@ for callers that use those names directly.
 get/set/save/reload API.  Its backend (`UnifiedConfig`) merges all sources
 as described above.
 
-### `launcher/config_manager.py`
+### `launcher/config_manager.py` — **已退役删除**
 
-**Status**: **D2 (HARD_DEPRECATED)**.  Removal target: **Batch PR-5**.
+**Status**: **RETIRED**（原 D2 / HARD_DEPRECATED，移除目标 Batch PR-5）。文件已在
+启动器统一中物理删除；登记以 `status=RETIRED` 留在
+`core/compat_surface_retirement.py`，并有守卫测试要求该模块路径在磁盘上确实
+不存在 —— 退役是可执行断言，不是一句留言。
 
-- Port data is stale and conflicts with `config/unified_ports.yaml`.
-- A `DeprecationWarning` is emitted at import time (added in Batch PR-3).
-- Internally, `load_all()` overlays values from `UnifiedConfigManager`; this
-  overlay is a one-way bridge and does not make the file a config authority.
+**为什么删而不是继续留着发警告**：它的模块头自己写着"下面的硬编码端口默认值
+是 **STALE** 的，与 `config/unified_ports.yaml` 冲突"。一个自认陈旧的端口来源
+留在仓库里，只会给下一个读代码的人多一处误导。
 
-**Migrate to**:
-- `core.port_config.get_node_port()` — for port lookups
-- `core.unified.config_manager.get_unified_config_manager()` — for general config
+**退役条件如何核实**（记录在案，因为核法本身出过错）：
+
+- 绝对 importer：全仓 AST 扫描 `import launcher.config_manager` / `from
+  launcher.config_manager import ...` → **0**。
+- 相对 importer：`launcher/dependency_resolver.py` 写的是
+  `from .config_manager import NodeConfig`。**子串扫描看不见它**，第一版核验
+  因此漏过，删除后该模块直接 `ModuleNotFoundError`。改按 AST 判定
+  （`ImportFrom.level` 还原成绝对模块名）后暴露并修复：拓扑排序真正需要的只是
+  `name` / `priority` / `dependencies` 三个属性，已改为模块自带的 `NodeSpec`
+  结构协议，不再依赖任何具体配置类。
+- 端口消费方：`system_manager.ConfigManager._get_canonical_port` 早已委派
+  `core.port_config`（权威源 `config/unified_ports.yaml`）。
+
+**替代路径**：
+
+- `core.port_config.get_node_port()` — 端口查询
+- `core.unified.config_manager.get_unified_config_manager()` — 通用配置
 
 ### `config.json` (repository root)
 
