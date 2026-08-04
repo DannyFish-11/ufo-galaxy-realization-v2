@@ -645,11 +645,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 on_delta=lambda t: frames.put_nowait(("delta", t)),
                 on_reset=lambda: frames.put_nowait(("reset", None)),
             )
-            # 文字/语音锁步:开启时每句在【被念出的那一刻】才逐句上屏,文字与语音
-            # 同刻对齐——但代价是面板文字变成"一句一句蹦"、不再逐字平滑(真机反馈"一大段
-            # 蹦一段又一段")。所有者要的是"实时语音+字符一起"= 文字逐 token 平滑流、
-            # 语音按句松散跟随,正是【关闭锁步】的行为(下面 else 分支逐字 yield + 并行
-            # speaker.feed)。故默认【关】;想要严格逐句同步再设 GALAXY_TEXT_VOICE_LOCKSTEP=1。
+            # 文字/语音锁步:句子【被念出的那一刻】起,该句文字才开始上屏,文字与语音同刻。
+            #
+            # 历史上锁步默认【关】,原因是真机反馈"一大段蹦一段又一段"——那不是锁步本身
+            # 的错,而是旧实现把整句一次性砸屏。现在改为【按节奏平滑露出】(_ls_take:句子
+            # 开口即起步,字符按速率流出,积压自适应加速),于是"与语音同刻"与"逐字平滑"
+            # 两者兼得,旧的取舍不再成立。
+            #
+            # 开关三态(GALAXY_TEXT_VOICE_LOCKSTEP):
+            #   未设/auto → 本次响应走 TTS 就锁步,纯文字会话逐字直出(默认,不需要配置);
+            #   1/true/on → 强制锁步(仍需 speaker 存在,否则无处可锁自动退化为直出);
+            #   0/false/off → 强制关闭,逐字直出 + 语音松散跟随。
             reveal_q: "asyncio.Queue" = asyncio.Queue()
 
             # 边生成边念:能建则建;建成后在请求上下文里抑制收尾的整段重念。
@@ -667,12 +673,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
 
-            _lockstep = speaker is not None and os.environ.get("GALAXY_TEXT_VOICE_LOCKSTEP", "0").strip().lower() in (
-                "1",
-                "true",
-                "yes",
-                "on",
-            )
+            # 三态覆盖:显式 on/off 才覆盖,其余(含未设/auto)交给"本次是否走 TTS"自动决定。
+            # speaker 非 None 本身就是权威的"本次走增量语音"信号——它由 speech_output
+            # .begin_incremental_speech 统一判定(GALAXY_SPEAK / source / 流式开关 / 引擎可用),
+            # 此处不重复这些检查。
+            _ls_env = os.environ.get("GALAXY_TEXT_VOICE_LOCKSTEP", "").strip().lower()
+            if _ls_env in ("1", "true", "yes", "on"):
+                _ls_override = True
+            elif _ls_env in ("0", "false", "no", "off"):
+                _ls_override = False
+            else:
+                _ls_override = None  # auto
+            _lockstep = speaker is not None and (True if _ls_override is None else _ls_override)
 
             async def _run():
                 # 在【任务自身上下文】里挂 sink/抑制标记:contextvars 随 await 链
@@ -720,6 +732,47 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 _ls_stall_grace = float(os.environ.get("GALAXY_LOCKSTEP_STALL_S", "8.0") or "8.0")
             except (TypeError, ValueError):
                 _ls_stall_grace = 8.0
+
+            # ── 平滑露出:句子"开口念"之后不再整句砸屏,而是按节奏逐字流出 ──────────
+            # 旧实现每次 reveal_q 出队即整句 yield,面板上就是"一句一句蹦"(真机抱怨的来源)。
+            # 改为:出队的句子先进 _ls_pending,再由 _ls_take() 按速率取字。速率 = 基线
+            # cps 与"积压/目标排空秒数"取大 —— 平时按基线平滑吐,句子堆积时自动加速,
+            # 保证文字不落后语音;预算用小数累计,tick 间隔忽长忽短也不会忽快忽慢。
+            _ls_pending = ""  # 已开口念、尚未吐完的文字
+            _ls_budget = 0.0  # 字符预算(小数累计)
+            _ls_tick_t = None  # 上次结算时刻
+            try:
+                _ls_cps = float(os.environ.get("GALAXY_LOCKSTEP_CPS", "14.0") or "14.0")
+            except (TypeError, ValueError):
+                _ls_cps = 14.0
+            try:
+                _ls_drain_s = float(os.environ.get("GALAXY_LOCKSTEP_DRAIN_S", "0.8") or "0.8")
+            except (TypeError, ValueError):
+                _ls_drain_s = 0.8
+
+            def _ls_take() -> str:
+                """按节奏从 _ls_pending 取一段;无待吐内容时返回空串并复位计时。"""
+                nonlocal _ls_pending, _ls_budget, _ls_tick_t
+                if not _ls_pending:
+                    _ls_tick_t = None
+                    _ls_budget = 0.0
+                    return ""
+                _t = asyncio.get_running_loop().time()
+                if _ls_tick_t is None:
+                    # 刚开口:先给一个字的预算,避免"已经在念了、屏上还空着"。
+                    _ls_tick_t = _t
+                    _ls_budget = 1.0
+                _dt = max(0.0, _t - _ls_tick_t)
+                _ls_tick_t = _t
+                _rate = max(_ls_cps, len(_ls_pending) / max(0.05, _ls_drain_s))
+                _ls_budget += _rate * _dt
+                _n = int(_ls_budget)
+                if _n <= 0:
+                    return ""
+                _ls_budget -= _n
+                _out, _ls_pending = _ls_pending[:_n], _ls_pending[_n:]
+                return _out
+
             try:
                 # 消费循环:增量帧即到即转;runtime 任务完成且队列排空后出循环。
                 while True:
@@ -755,6 +808,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                                 reveal_q.get_nowait()
                             revealed_chars = 0
                             _ls_buf.clear()
+                            _ls_pending = ""
+                            _ls_budget = 0.0
+                            _ls_tick_t = None
                             _ls_first_t = None
                             _ls_last_reveal_t = None
                             _ls_fed_chars = 0
@@ -762,17 +818,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         yield _sse({"type": "reset"})
                         if speaker is not None:
                             speaker.reset()
-                    # 锁步(未降级):把"刚开口念的句子"逐句吐出(文字与语音同刻)。
+                    # 锁步(未降级):"刚开口念的句子"进待吐区,再按节奏平滑流出(与语音同刻起步)。
                     if _lockstep and not _ls_degraded:
                         while not reveal_q.empty():
-                            sent = reveal_q.get_nowait()
+                            _ls_pending += reveal_q.get_nowait()
+                        _ls_chunk = _ls_take()
+                        if _ls_chunk:
                             if not manifested:
                                 manifested = True
                                 yield _sse({"type": "phase", "phase": "manifest"})
-                            revealed_chars += len(sent)
-                            streamed_chars += len(sent)
+                            revealed_chars += len(_ls_chunk)
+                            streamed_chars += len(_ls_chunk)
                             _ls_last_reveal_t = asyncio.get_running_loop().time()
-                            yield _sse({"type": "delta", "text": sent})
+                            yield _sse({"type": "delta", "text": _ls_chunk})
                         # 有界降级:两种"TTS 没在推进"都转逐字直出,文字绝不再憋成一大段。
                         #  ① 一句都没开口念(revealed_chars==0)→ 首句宽限 _ls_grace。
                         #  ② 念了一部分后中途卡住(有未露出内容、且 _ls_stall_grace 内无新露出)。
@@ -790,6 +848,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         )
                         if not _ls_degraded and _ls_buf and (_total_fail or _mid_stall):
                             _ls_degraded = True
+                            _ls_pending = ""  # 补吐用 _ls_buf 原始全量,待吐区作废免重复
                             if revealed_chars > 0:
                                 # 已露出过一部分:先 reset 前端文字(不动语音,让其继续尾随),
                                 # 再把【原始全量】补吐,规避与已露出内容重复(露出经 strip 归一,
@@ -864,20 +923,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     while True:
                         drained = False
                         while not reveal_q.empty():
-                            sent = reveal_q.get_nowait()
+                            _ls_pending += reveal_q.get_nowait()
+                        _ls_chunk = _ls_take()
+                        if _ls_chunk:
                             if not manifested:
                                 manifested = True
                                 yield _sse({"type": "phase", "phase": "manifest"})
-                            revealed_chars += len(sent)
-                            streamed_chars += len(sent)
-                            yield _sse({"type": "delta", "text": sent})
+                            revealed_chars += len(_ls_chunk)
+                            streamed_chars += len(_ls_chunk)
+                            yield _sse({"type": "delta", "text": _ls_chunk})
                             drained = True
-                        if (ptask is None or ptask.done()) and reveal_q.empty():
+                        if (ptask is None or ptask.done()) and reveal_q.empty() and not _ls_pending:
                             break
                         if _loop.time() >= speech_grace:
                             break
                         if not drained:
                             await asyncio.sleep(0.05)
+                    # 宽限到点仍有余留 → 一次补吐:平滑是体验,不吞字是底线。
+                    if _ls_pending:
+                        if not manifested:
+                            manifested = True
+                            yield _sse({"type": "phase", "phase": "manifest"})
+                        revealed_chars += len(_ls_pending)
+                        streamed_chars += len(_ls_pending)
+                        yield _sse({"type": "delta", "text": _ls_pending})
+                        _ls_pending = ""
                     # 兜底:语音未能覆盖全文(TTS 部分/全失败)不在此逐字补 ——
                     # 下面 done 的 response=全文 会把气泡快照到权威全文,自然补齐。
                 elif _lockstep and _ls_degraded and speaker is not None:

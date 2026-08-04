@@ -2168,6 +2168,7 @@ class DesktopPresenceRuntime:
             from core.realtime_streaming_backbone import (
                 build_realtime_stream_runtime_status,
                 build_realtime_streaming_backbone_contract,
+                collect_realtime_stream_evidence,
             )
             from core.unified_config import config as _cfg
 
@@ -2181,6 +2182,9 @@ class DesktopPresenceRuntime:
             runtime_status = build_realtime_stream_runtime_status(
                 source_registry_snapshot=source_snapshot,
                 enable_webrtc_session_manager=enable_webrtc,
+                # 实测证据（本进程 token 流实况）——此前状态只由 mic/cam 注册计数
+                # 推导，真在流的 SSE 一路看不见；证据轴只叠加、不改既有语义。
+                stream_evidence=collect_realtime_stream_evidence(),
             )
             # Stamp stream_runtime_ready directly from the runtime shell — this
             # is the first-class signal that a stream manager has been

@@ -25,6 +25,14 @@ class VideoState:
     video_freshness_ms: float = float("inf")  # ms since previous frame
     timestamp: float = field(default_factory=time.monotonic)
 
+    # 画面本体(镜像 ScreenState 的同名字段):此前 VideoState 只有运动/场景等派生特征,
+    # 没有承载帧的字段,于是桌面桥只能传空壳"报个在场"——常驻感知里永远没有摄像头画面。
+    # VideoFeatureExtractor 走纯特征路径不设这些字段,取默认即可,互不影响。
+    image_b64: Optional[str] = None
+    mime: str = "image/jpeg"
+    change_score: float = 0.0
+    has_image: bool = False
+
 
 class VideoFeatureExtractor:
     """Extracts lightweight video features from consecutive BGR/grayscale frames.

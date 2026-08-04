@@ -201,11 +201,15 @@ class PerceptionFrame:
             }
 
         if self.video is not None:
+            # 与 screen 同规:不含原始 base64(避免日志爆量),只暴露存在性/变化/派生特征。
             result["video"] = {
                 "motion_level": self.video.motion_level,
                 "scene_change_rate": self.video.scene_change_rate,
                 "face_presence": self.video.face_presence,
                 "video_freshness_ms": self.video.video_freshness_ms,
+                "has_image": getattr(self.video, "has_image", False),
+                "mime": getattr(self.video, "mime", ""),
+                "change_score": getattr(self.video, "change_score", 0.0),
             }
 
         if self.screen is not None:

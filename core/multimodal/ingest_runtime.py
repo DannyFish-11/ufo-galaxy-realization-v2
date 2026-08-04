@@ -283,8 +283,10 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
     """周期把【桌面覆盖层】采集的屏幕/摄像头/麦克风帧从 DesktopPerceptionStore
     推进 MultimodalIngressBus —— 让主动持续感知 bus 真正“看到屏幕、看到摄像头、听到麦克风”。
 
-    - 屏幕：唯一进入连续感知的通路；带便宜的帧间变化分数（按 base64 长度变化估算，免解码）。
-    - 摄像头/麦克风：以“在场”特征态如实反映（具体特征仍由本地 cv2/sounddevice 管道补充）。
+    - 屏幕/摄像头：真帧进 bus（image_b64 + 便宜的帧间变化分数，按 base64 长度变化估算、免解码）。
+      摄像头此前只传空 VideoState“报个在场”，画面被丢在门外——常驻感知的世界里没有摄像头，
+      而状态机与模型路由都吃这份世界；现已与屏幕同款处理。
+    - 麦克风：以“在场”特征态如实反映（具体特征仍由本地 sounddevice 管道补充）。
     store 为空（未启用覆盖层感知）时各模态保持 missing，bus 自然降级，绝不抛错。
     """
     import asyncio as _asyncio
@@ -300,6 +302,7 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
         return
     store = get_desktop_perception_store()
     prev_screen_len: Optional[int] = None
+    prev_cam_len: Optional[int] = None
     while True:
         try:
             snap = store.snapshot_media()
@@ -321,8 +324,26 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
                     ),
                     SignalQuality.ok(),
                 )
-            if snap.get("camera_b64"):
-                bus.update_video(VideoState(), SignalQuality.ok())
+            cam = snap.get("camera_b64")
+            if cam:
+                # 与屏幕同款:真帧进 bus(此前只传空 VideoState 报"在场",画面被丢弃,
+                # 常驻感知的世界里永远没有摄像头)。变化度同样按 base64 长度差估算——
+                # 便宜、不解码,与屏幕保持一致口径。
+                cur_cam = len(cam)
+                if prev_cam_len is None:
+                    cam_change = 1.0
+                else:
+                    cam_change = min(1.0, abs(cur_cam - prev_cam_len) / max(1, prev_cam_len))
+                prev_cam_len = cur_cam
+                bus.update_video(
+                    VideoState(
+                        image_b64=cam,
+                        mime=snap.get("camera_mime", "image/jpeg"),
+                        change_score=cam_change,
+                        has_image=True,
+                    ),
+                    SignalQuality.ok(),
+                )
             if snap.get("audio_b64"):
                 bus.update_audio(AudioState(), SignalQuality.ok())
         except Exception as exc:  # noqa: BLE001
