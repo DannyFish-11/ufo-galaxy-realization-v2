@@ -4434,6 +4434,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         payload = _assemble_server_canonicalization_status()
         return JSONResponse(content=payload)
+
     # ------------------------------------------------------------------
     # GET /api/v1/projection/desktop-status-board  (PR-8)
     # ------------------------------------------------------------------
