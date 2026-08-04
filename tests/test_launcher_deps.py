@@ -306,8 +306,15 @@ def test_npm_install_rotates_electron_mirrors(monkeypatch, tmp_path):
     r = deps.npm_install(tmp_path, npm_path="/usr/bin/npm")
     assert r.ok is True
     assert r.attempts == 3
-    assert seen[0].startswith("https://npmmirror.com"), "第一候选该是国内镜像"
-    assert seen[-1] == "", "最后一候选该回退官方源"
+    # 与常量表**逐项全等**比较，不用 startswith 比 URL 前缀。
+    # 两个理由，都不是形式主义：
+    #  ① 前缀断言是弱断言 —— "https://npmmirror.com.evil.test/..." 也能通过；
+    #     CodeQL 的 py/incomplete-url-substring-sanitization 报的正是这条。
+    #  ② 它还漏测顺序：真正要钉的是"国内镜像在前、官方源兜底在最后"这个次序，
+    #     全等比较把整张候选表都钉住了。
+    assert seen == [m for m, _ in deps.ELECTRON_MIRROR_ATTEMPTS]
+    assert seen[-1] == "", "最后一候选必须回退官方源（空 ELECTRON_MIRROR）"
+    assert seen[0], "第一候选必须是显式镜像，不能一上来就走官方源"
 
 
 def test_npm_install_uses_absolute_path(monkeypatch, tmp_path):
@@ -362,3 +369,64 @@ def test_install_py_delegates_instead_of_reimplementing():
     assert "from launcher import deps" in src
     assert '"-m", "pip"' not in src, "install.py 又自己拼 pip 命令了"
     assert "subprocess" not in ast.dump(ast.parse(src)), "install.py 不该再自己起子进程装东西"
+
+
+# ---------------------------------------------------------------------------
+# 7. main.py install 子命令：命令面替换，且不打断既有调用形态
+# ---------------------------------------------------------------------------
+
+
+def test_main_install_subcommand_exists():
+    """计划里的命令面替换：``python install.py --all`` → ``python main.py install --all``。"""
+    r = subprocess.run(
+        [sys.executable, "main.py", "install", "--help"],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+        timeout=120,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "install" in r.stdout
+
+
+def test_main_keeps_existing_invocation_forms():
+    """子命令用**可选位置参数**而非 subparsers —— 现有全部调用形态必须原样可解析。
+
+    start.bat / start.sh / 文档 / 三端说明全是纯 flag 形态；改成 subparsers 会让
+    "不带子命令"变成需要特判的特例，稍不留神就打断最常用的那条路径。
+    """
+    for form in ([], ["--host", "127.0.0.1", "--port", "9000"], ["-v"], ["--setup"]):
+        r = subprocess.run(
+            [sys.executable, "main.py", *form, "--help"],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            timeout=120,
+        )
+        assert r.returncode == 0, f"{form} 不再可解析：{r.stderr}"
+
+
+def test_main_rejects_unknown_subcommand():
+    """自证：位置参数是**受限的**，不是什么都收。"""
+    r = subprocess.run(
+        [sys.executable, "main.py", "definitely-not-a-command", "--help"],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+        timeout=120,
+    )
+    assert r.returncode == 2, "未知子命令该按用法错误退出(2)"
+
+
+def test_install_command_uses_shared_deps_layer():
+    """``main.py install`` 不许自己再实现一份安装。"""
+    src = (REPO_ROOT / "main.py").read_text(encoding="utf-8")
+    fn_start = src.index("def _run_install_command")
+    fn_end = src.index("\ndef main(", fn_start)
+    body = src[fn_start:fn_end]
+    assert "_deps.install_requirements" in body, "该走共享层的分层安装"
+    # "不该自己实现安装"的可判定形式：函数体内不许自己起子进程 / 拼解释器命令。
+    # （不能搜 "pip" —— 它合法地出现在 _deps.pip_index_candidates() 和给用户看的
+    #  "pip 源候选" 文案里。）
+    assert "subprocess" not in body, "install 子命令不该自己起子进程"
+    assert "sys.executable" not in body, "install 子命令不该自己拼解释器命令行"

@@ -909,6 +909,62 @@ def _apply_model_cli_args(args) -> None:
         pass
 
 
+def _run_install_command(args) -> int:
+    """``python main.py install [--core|--enhance|--all]``。
+
+    只装依赖然后退出，不拉起系统。装什么、怎么装全部问
+    :mod:`launcher.deps` —— 与启动期自愈**共用同一份**镜像轮换与依赖清单，
+    所以不会再出现"``install.py`` 没有镜像回退、``main.py`` 有三个"那种漂移。
+    """
+    from launcher import deps as _deps
+    from launcher import record as _record
+
+    _ui_ok = True
+    try:
+        from launcher import ui as _ui
+
+        _ui.begin(GALAXY_VERSION)
+    except Exception:  # noqa: BLE001
+        _ui_ok = False
+
+    print_phase("[依赖安装]")
+    is_win = os.name == "nt"
+    want_enhance = args.all or args.enhance
+    want_windows = args.all and is_win
+    if args.core:
+        want_enhance = want_windows = False
+
+    plan: list = [("core", "核心依赖")]
+    if want_enhance:
+        plan.append(("enhance", "增强依赖"))
+    if want_windows:
+        plan.append(("windows", "Windows 依赖"))
+
+    print_item("pip 源候选", "ok", f"{len(_deps.pip_index_candidates())} 个（GALAXY_PIP_INDEX 可覆盖）")
+    all_ok = True
+    for tier, label in plan:
+        result = _deps.install_requirements(tier)
+        if result.skipped_reason:
+            print_item(label, "info", f"跳过：{result.skipped_reason}")
+        elif result.ok:
+            print_item(label, "ok", result.index_used or "默认源")
+        else:
+            print_item(label, "error", f"试了 {result.attempts} 个源都失败")
+            if result.stderr_tail:
+                print_item("  最后的报错", "warn", result.stderr_tail.strip()[:160])
+            all_ok = False
+
+    exit_code = _record.EXIT_OK if all_ok else _record.EXIT_DEPENDENCY
+    if _ui_ok:
+        try:
+            from launcher import ui as _ui
+
+            _ui.finish(exit_code, verbose=bool(os.environ.get("GALAXY_VERBOSE")), tui=False)
+        except Exception:  # noqa: BLE001
+            pass
+    return exit_code
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Galaxy V2 Unified Entry")
     # --version：CLI 该知道自己的版本。此前 GALAXY_VERSION 只印在横幅里，
@@ -939,7 +995,31 @@ def main() -> int:
         "--autostart", action="store_true", help="(Windows) 注册开机自启：开机/被 WOL 盒子唤醒后自动拉起 Galaxy + 托盘"
     )
     parser.add_argument("--autostart-remove", action="store_true", help="(Windows) 取消开机自启")
+    # 子命令走**可选位置参数**而不是 argparse 的 subparsers。
+    #
+    # 理由是兼容性：现有的全部调用形态都是纯 flag（`python main.py --host ... --port ...`，
+    # start.bat / start.sh / 文档 / 三端说明全是这么写的）。改成 subparsers 会让
+    # "不带子命令"变成一种需要显式处理的特例，稍不留神就把最常用的那条路径打断。
+    # 可选位置参数则是纯增量：不给就是原来的"启动整套系统"。
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default=None,
+        choices=["install"],
+        help="子命令。install = 只装依赖后退出（替代已无调用方的 python install.py）",
+    )
+    parser.add_argument("--all", action="store_true", help="(install) 核心 + 增强 + Windows 全装")
+    parser.add_argument("--core", action="store_true", help="(install) 只装核心")
+    parser.add_argument("--enhance", action="store_true", help="(install) 核心 + 增强")
     args = parser.parse_args()
+
+    # ── 子命令：install ────────────────────────────────────────────────
+    # 计划里的命令面替换（`python install.py --all` → `python main.py install --all`）。
+    # 实现不在这里 —— 装什么、怎么装都问 launcher.deps，与启动期自愈共用同一份
+    # 镜像轮换与依赖清单。install.py 本体的删除留到步骤 8（连同其余启动器一起），
+    # 现在两条路都通向同一份实现，先把漂移消掉。
+    if args.command == "install":
+        return _run_install_command(args)
 
     # -v 同时落到环境变量：子模块（unified_launcher 等）无需逐层透传即可读到。
     if args.verbose:

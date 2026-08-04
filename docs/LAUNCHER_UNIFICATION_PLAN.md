@@ -435,9 +435,22 @@ faster-whisper 几百 MB、卡住就把首启拖死），而 `install.sh` 恰恰
 而麦克风根本打不开 —— 那正是 `main.py` 注释里记录过、已经修过一次的误导。
 `tests/test_launcher_deps.py` 有一条 AST 测试钉住它。
 
+#### `main.py install` 子命令（已做）
+
+命令面替换 `python install.py --all` → `python main.py install --all`。
+
+子命令走**可选位置参数**而不是 argparse 的 subparsers。理由是兼容性：现有的全部
+调用形态都是纯 flag（`python main.py --host ... --port ...`，start.bat / start.sh /
+文档 / 三端说明全是这么写的）。改成 subparsers 会让"不带子命令"变成一种需要显式
+处理的特例，稍不留神就把最常用的那条路径打断。可选位置参数则是纯增量：不给就是
+原来的"启动整套系统"。实测四种既有形态（裸启动 / `--host --port` / `-v` /
+`--setup`）全部原样可解析，未知子命令按用法错误退出 2。
+
+`install.py` 本体的删除留到步骤 8（连同其余启动器一起），现在两条路通向同一份
+实现，先把漂移消掉。
+
 #### 还没做的（下一步）
 
-- `main.py install` 子命令（替代 `python install.py --all`）；
 - `install.sh` / `install_windows.ps1` 瘦成纯引导（venv + 调 `python main.py install`），
   它们现在仍各自实现一份；
 - `install.sh` 的 venv 创建与 `predownload_models.py` 预下载尚未搬进 `deps.py`。
