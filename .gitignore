@@ -137,6 +137,9 @@ runtime/task_allocation_truth.json
 # 任何人跑一次 main.py,工作区就多一个未跟踪文件 —— 与上面那句"runtime/ 里
 # 只提交 *.example.* 模板"的既定意图矛盾。实跑一次启动才发现的。
 runtime/model_state.json
+# 每次启动重写的结构化启动记录（launcher/ui.py 的渲染器 B）。
+# 它是运行时产物,不是配置 —— 入库会让每跑一次仓库就脏。
+runtime/startup.json
 data/runtime/delegated_runtime_execution_tracker.json
 learning_data.db
 audit/wiring_report_*.json

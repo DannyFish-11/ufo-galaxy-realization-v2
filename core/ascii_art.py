@@ -4,17 +4,38 @@ Galaxy ASCII 艺术字 / 统一终端输出格式
 
 单一真相来源 (single source of truth) for:
 - Galaxy 启动横幅 (GALAXY_BANNER)
-- 终端颜色 (Colors)
+- 终端颜色 (Colors) 与 24-bit 渐变 (gradient_text / gradient_rule)
+- **版面几何** (BANNER_WIDTH / CONTENT_INDENT / RULE_WIDTH / LABEL_COL / VALUE_COL)
+- 显示宽度与填充 (display_width / pad_display) —— 东亚字符算 2 格
 - 对齐的状态行 (print_status_row)
 - 章节标题 (print_section_header)
 - 横幅打印 (print_banner)
 - ANSI 支持检测 (ansi_supported)
 
 所有启动入口均应导入并使用本模块的公共接口，以保证视觉一致性。
+
+版面统一（为什么这些常量在这里）
+--------------------------------
+此前同一屏里存在**三种宽度**（横幅 60 / 章节线 60 / ``cli_render.rule`` 50）、
+**三种线条着色**（横幅 24-bit 渐变 / 章节线平 CYAN / 细线平 DIM）、以及
+**两套填充语义**（``print_status_row`` 用 ``str.ljust``、``cli_render`` 用显示宽度）。
+
+最后那条是实打实的错位：``ljust`` 按**码点**补齐，中文标签因此偏宽。实测
+``"环境检查".ljust(22)`` 的显示宽度是 **26**、``"三态覆盖层"`` 是 **27**，而
+``pad_display(..., 22)`` 恒为 22 —— 两套打印器在同一屏里各自缩进，差 2~5 列。
+
+现在几何只有一份，且**渐变是屏幕列的函数**（见 :func:`gradient_text`）：
+一条缩进 2 格的横线，其颜色是横幅在第 2..59 列的那一段，因此横线与横幅
+不只是"同款配色"，而是**同一道渐变的延续**，左右边缘都对齐。
 """
 
 import os
+import re
 import sys
+import unicodedata
+
+#: 剥 ANSI 转义序列用（算显示宽度前必须剥掉，否则颜色码会被算进列数）。
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 # ---------------------------------------------------------------------------
 # 版本 & 标语 (single source of truth)
@@ -22,6 +43,34 @@ import sys
 
 GALAXY_VERSION = "v2.3.21"
 GALAXY_TAGLINE = "L4 Autonomous Intelligence System"
+
+# ---------------------------------------------------------------------------
+# 版面几何 (canonical layout geometry) —— 全仓唯一一份
+# ---------------------------------------------------------------------------
+#
+# 一切对齐以横幅为基准。横幅占屏幕第 0..59 列（实测 12 行全部宽 60，且每个
+# 字符都是 1 显示格：框线字符 ═║╔╗╚╝ 与 █ 的 east_asian_width 均为 'A'）。
+
+#: 横幅显示宽度。所有横线、章节线的右边缘都对齐到这一列。
+BANNER_WIDTH = 60
+
+#: 内容左缩进（格）。``print_status_row`` 与 ``cli_render.phase`` 都用它。
+CONTENT_INDENT = 2
+
+#: 横线宽度 = 横幅宽度 − 缩进，使横线右边缘与横幅右边框同列。
+#: 此前 ``cli_render.RULE_WIDTH`` 是 50，比横幅短 10 列、右边缘悬空。
+RULE_WIDTH = BANNER_WIDTH - CONTENT_INDENT
+
+#: 图标列宽（格）：1 格图标 + 1 格间隔。图标统一为 1 显示格的文本符号
+#: （不用 ✅/⚠️ 这类带变体选择符、多数终端渲染成 2 格的 emoji）。
+ICON_COL = 2
+
+#: 标签列宽（格）。中英混排在此列内按**显示宽度**左对齐。
+LABEL_COL = 22
+
+#: 值列起始屏幕列 = 缩进 + 图标 + 标签 + 2 格间隔。
+#: 所有打印器的值都从这一列起，跨模块严格同列。
+VALUE_COL = CONTENT_INDENT + ICON_COL + LABEL_COL + 2
 
 # ---------------------------------------------------------------------------
 # 规范横幅 (canonical banner)
@@ -126,6 +175,14 @@ def ansi_supported() -> bool:
     Returns:
         bool: True 表示可安全使用 ANSI 颜色，False 表示应降级为纯文本。
     """
+    # NO_COLOR 约定（https://no-color.org/）：只要该变量【存在】(哪怕是空串)
+    # 就必须禁用颜色。此前 core/cli_render.py 的模块 docstring 声称"非 TTY /
+    # NO_COLOR 时自动纯文本"，但实现里从来没查过它 —— 一个说谎的注释。
+    if "NO_COLOR" in os.environ:
+        return False
+    # GALAXY_NO_COLOR：本项目自己的开关，便于在不影响其它工具的前提下关色。
+    if os.environ.get("GALAXY_NO_COLOR", "").strip().lower() in ("1", "true", "yes", "on"):
+        return False
     if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
         return False
     if os.name == "nt":
@@ -165,6 +222,28 @@ _ANCHOR_COLORS = [
 ]
 
 
+def display_width(s: str) -> int:
+    """字符串的**终端显示宽度**：先剥 ANSI，东亚宽/全角字符算 2 格，其余 1 格。
+
+    这个函数原本住在 ``core/cli_render.py``，而 ``print_status_row`` 在本模块里
+    却用 ``str.ljust`` —— 两套填充语义并存，中文标签因此错位 2~5 列。下移到
+    本模块（较低层）后 ``cli_render`` 再导出去，全仓只剩这一份实现。
+    """
+    s = _ANSI_RE.sub("", s)
+    w = 0
+    for ch in s:
+        if unicodedata.combining(ch):
+            continue
+        w += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+    return w
+
+
+def pad_display(s: str, width: int, align: str = "left") -> str:
+    """按**显示宽度**补空格到 ``width``（不截断；已超宽则原样返回）。"""
+    pad = max(0, width - display_width(s))
+    return (s + " " * pad) if align == "left" else (" " * pad + s)
+
+
 def _interp_rgb(t: float) -> tuple:
     """Interpolate RGB across _ANCHOR_COLORS for t in [0.0, 1.0].
 
@@ -190,36 +269,76 @@ def _interp_rgb(t: float) -> tuple:
     )
 
 
-def _colorize_line(line: str, banner_width: int = 60) -> str:
-    """Apply 24-bit true-color smooth gradient across every character of *line*.
+def gradient_text(text: str, *, col_offset: int = 0, scale: int = BANNER_WIDTH, bold: bool = True) -> str:
+    """把 24-bit 渐变按**屏幕列**铺到 ``text`` 上。
 
-    Each column gets its own RGB value computed by interpolating across the
-    five anchor colors, producing a seamless left-to-right gradient with zero
-    banding.
+    这是本模块的渐变核心。关键点在于 **t 是屏幕列的函数，不是字符序号的函数**：
+
+        t = (col_offset + 该字符左边缘所在列) / (scale - 1)
+
+    因此一条缩进 2 格、宽 58 的横线（``col_offset=2, scale=60``）拿到的颜色，
+    正是横幅在第 2..59 列的那一段 —— 它与横幅**不只是同款配色，而是同一道
+    渐变的延续**，左右边缘都对齐。若按字符序号算（旧实现），同一条横线会把
+    整条渐变压缩进 58 格，与横幅的第 2..59 列对不上。
+
+    列的推进用**显示宽度**而非码点数：中文标题里每个汉字占 2 列，颜色才不会
+    在中文段落上加速漂移。横幅本身全是 1 格字符（实测 12 行 code_points ==
+    display_width == 60），所以对横幅而言新旧实现**逐字节一致**。
 
     Args:
-        line:         The text to colorize.
-        banner_width: Total width used for the color calculation (default 60,
-                      matching GALAXY_BANNER). All lines of the banner share
-                      this same scale, so colors align consistently across
-                      lines of varying code-point length.
+        text:       要着色的文本。
+        col_offset: 这段文本左边缘所在的屏幕列。
+        scale:      渐变全程覆盖的总列数（默认 :data:`BANNER_WIDTH`）。
+        bold:       是否前置一次加粗（横幅用 True，保持既有观感）。
 
     Returns:
-        String with per-character ``\\x1b[1;38;2;R;G;Bm`` escape codes,
-        terminated by a reset sequence.
+        每字符带 ``\\x1b[38;2;R;G;Bm`` 的字符串，末尾复位。
     """
-    if not line:
-        return line
-    # Use a fixed scale so every banner line maps columns to the same colors,
-    # regardless of per-line code-point count differences.
-    width = banner_width if banner_width > 1 else 2
-    parts = ["\x1b[1m"]  # bold once at start
-    for col, char in enumerate(line):
-        t = col / (width - 1)
+    if not text:
+        return text
+    span = scale if scale > 1 else 2
+    parts = ["\x1b[1m"] if bold else []
+    col = col_offset
+    for char in text:
+        t = col / (span - 1)
+        if t < 0.0:
+            t = 0.0
+        elif t > 1.0:
+            t = 1.0
         r, g, b = _interp_rgb(t)
         parts.append(f"\x1b[38;2;{r};{g};{b}m{char}")
+        col += 0 if unicodedata.combining(char) else display_width(char)
     parts.append("\x1b[0m")
     return "".join(parts)
+
+
+def gradient_rule(
+    width: int = RULE_WIDTH,
+    *,
+    indent: int = CONTENT_INDENT,
+    char: str = "─",
+) -> str:
+    """生成一条**与横幅同一道渐变**的横线（含左缩进）。
+
+    此前全仓有三种线条处理：横幅是 24-bit 渐变、``print_section_header`` 是平
+    CYAN 的 ``═``×60、``cli_render.rule`` 是平 DIM 的 ``─``×50。现在统一成这一个
+    出口 —— 颜色同源、右边缘同列。
+
+    终端不支持 ANSI 时自动降级为纯字符（缩进与宽度不变，纯文本下依然对齐）。
+    """
+    body = char * width
+    if not ansi_supported():
+        return " " * indent + body
+    return " " * indent + gradient_text(body, col_offset=indent, scale=max(indent + width, 2), bold=False)
+
+
+def _colorize_line(line: str, banner_width: int = 60) -> str:
+    """横幅整行着色（向后兼容入口，内部走 :func:`gradient_text`）。
+
+    保留这个名字是因为 ``print_banner`` 与 ``windows_service/tray_icon.py`` 都在用。
+    行为与改造前一致：横幅每个字符都是 1 显示格，故按列推进 == 按码点推进。
+    """
+    return gradient_text(line, col_offset=0, scale=banner_width, bold=True)
 
 
 # ---------------------------------------------------------------------------
@@ -308,22 +427,25 @@ def print_section_header(title: str, use_color: bool = True) -> None:
         title:     章节名称。
         use_color: 若为 True（默认），使用青色加粗样式。
     """
-    sep = "═" * 60
-    if use_color:
+    sep = "═" * BANNER_WIDTH
+    colored = use_color and ansi_supported()
+    if colored:
+        line = gradient_text(sep, col_offset=0, scale=BANNER_WIDTH, bold=False)
         c = f"{Colors.BOLD}{Colors.CYAN}"
         e = Colors.ENDC
     else:
+        line = sep
         c = e = ""
-    print(f"\n{c}{sep}{e}")
-    print(f"{c}  ▶  {title}{e}")
-    print(f"{c}{sep}{e}\n")
+    print(f"\n{line}")
+    print(f"{c}{' ' * CONTENT_INDENT}▶  {title}{e}")
+    print(f"{line}\n")
 
 
 def print_status_row(
     label: str,
     value: str = "",
     status: str = "info",
-    label_width: int = 22,
+    label_width: int = LABEL_COL,
     use_color: bool = True,
 ) -> None:
     """打印对齐的状态行（图标 + 左对齐标签 + 右侧值）。
@@ -353,7 +475,10 @@ def print_status_row(
         "info": Colors.BLUE,
     }
 
-    if use_color:
+    # 必须同时满足"调用方要色"与"终端支持色"。此前只看 use_color(默认 True),
+    # 于是重定向输出、CI、以及 NO_COLOR 环境下这里照样吐 ANSI 转义码,而同屏的
+    # cli_render 已经降级成纯文本 —— 一半带色一半不带,管道里还会混进乱码。
+    if use_color and ansi_supported():
         color = color_map.get(status, Colors.BLUE)
         end = Colors.ENDC
     else:
@@ -361,11 +486,14 @@ def print_status_row(
 
     # 图标 + 【单】空格(图标现为 1 显示格),标签左对齐 —— 标签从第 4 列起,与
     # core.cli_render 的 phase()/detail() 同列,对勾/标签跨两套打印器完全对齐。
-    padded = label.ljust(label_width)
+    # 这里必须用 pad_display 而不是 str.ljust:ljust 按【码点】补齐,中文标签
+    # 会偏宽。实测 "环境检查".ljust(22) 的显示宽度是 26、"三态覆盖层" 是 27,
+    # 而 cli_render 那边恒为 22 —— 同一屏里两套打印器差 2~5 列,对勾对不齐。
+    padded = pad_display(label, label_width)
     if value:
-        print(f"  {color}{icon} {padded}{end}{value}")
+        print(f"{' ' * CONTENT_INDENT}{color}{icon} {padded}{end}  {value}")
     else:
-        print(f"  {color}{icon} {padded}{end}")
+        print(f"{' ' * CONTENT_INDENT}{color}{icon} {padded}{end}")
 
 
 # ---------------------------------------------------------------------------
