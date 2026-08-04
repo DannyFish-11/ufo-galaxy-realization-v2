@@ -940,6 +940,34 @@ def _record_module():
     return record
 
 
+def _print_heal_ladder(steps) -> None:
+    """把桌面壳自愈的七级阶梯逐级打出来。
+
+    三种状态各有各的含义，必须分开显示，否则"没跑"和"跑了没成"会混成一句
+    "未成功"——而这两件事的下一步完全不同：
+
+      ·  没跑（``applied=False``）：这一级不适用，或前面已经修好了
+      ✓  跑了且成功
+      ✗  跑了且失败  ← 卡住的位置就是最后一个它
+
+    ``detail`` 是那一级自己给的原因（"真实 npm TLS 失败"、"不是残留目录问题"…），
+    照原样带出来，不做归纳 —— 归纳就等于把排障需要的那点信息丢了。
+    """
+    if not steps:
+        return
+    print_phase("[桌面壳自愈 · 七级阶梯]")
+    for st in steps:
+        # 图标交给 print_item 按状态打（info=· / ok=✓ / error=✗ 正好是要的三态），
+        # 这里不再自己加一个，否则会出现 "·  · L0 …" 这样的双标记。
+        if not st.applied:
+            status = "info"
+        elif st.ok:
+            status = "ok"
+        else:
+            status = "error"
+        print_item(f"L{st.level} {st.name}", status, st.detail or "")
+
+
 def _stuck_level(heal) -> str:
     """自愈卡在第几级 —— 最后一个"跑了且失败"的级别。"""
     return str(next((x.level for x in reversed(heal.steps) if x.applied and not x.ok), "?"))
@@ -970,6 +998,18 @@ def _run_doctor_command(args) -> int:
             None if heal.ok else f"卡在第 {_stuck_level(heal)} 级",
             ladder=[x.to_dict() for x in heal.steps],
         )
+        # 逐级摊开给人看。
+        #
+        # 阶梯**每一级都算了结论**，但此前人只能看到一句"未成功":
+        # hint（"卡在第 N 级"）只在 launcher.ui 的总结卡里渲染，而 doctor 这条路径
+        # 调的是 _ui.finish(..., tui=False)，总结卡整个不出;ladder 明细则只进
+        # runtime/startup.json 和 --json。也就是说，"可诊断、可审计"这件事
+        # 对着终端跑 --heal 的人**完全看不到**。
+        #
+        # 非 JSON 模式下直接打出来 —— 一个只能自己看懂的阶梯没有意义。
+        _heal_ladder = list(heal.steps)
+    else:
+        _heal_ladder = []
 
     if args.json:
         print(_json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str))
@@ -984,6 +1024,7 @@ def _run_doctor_command(args) -> int:
         except Exception:  # noqa: BLE001
             for step in report.steps:
                 print_item(step.name, _STEP_STATUS_TO_LEGACY.get(step.status.value, "info"), step.value)
+        _print_heal_ladder(_heal_ladder)
 
     exit_code = _record_module().EXIT_OK if report.ok else _record_module().EXIT_DEPENDENCY
     try:
@@ -1129,6 +1170,7 @@ def _run_env_check_only() -> int:
     """
     from launcher import env_check as _env_check
     from launcher import record as _record
+    from launcher.record import Status as _Status
 
     report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
     steps = report.to_steps()
@@ -1139,6 +1181,14 @@ def _run_env_check_only() -> int:
         print_phase("[环境检查]")
         for step in steps:
             _ui.step(step.name, step.status, step.value, column=step.column, hint=step.hint, **step.detail)
+        # hint 只在 launcher.ui 的**总结卡**里渲染，而这条路径是 tui=False ——
+        # 于是"该怎么办"那句算了却没人看得到（与 doctor --heal 的阶梯同一个毛病）。
+        # 降级/失败项的 hint 在这里补打出来。
+        _hints = [(x.name, x.hint) for x in steps if x.hint and x.status is not _Status.OK]
+        if _hints:
+            print_phase("[怎么办]")
+            for _name, _hint in _hints:
+                print_item(f"  {_name}", "info", _hint)
         _ui.finish(_record.EXIT_OK if report.ready else 1, verbose=bool(os.environ.get("GALAXY_VERBOSE")), tui=False)
     except Exception:  # noqa: BLE001
         # 兜底：``launcher.ui`` 不可用时仍要出结果 —— 只出名字与状态，不出值。

@@ -455,3 +455,47 @@ def test_helper_scripts_still_reference_the_lock():
     from core.electron_launch_guard import lock_path
 
     assert lock_path().endswith(".electron.pid")
+
+
+# ---------------------------------------------------------------------------
+# 阶梯算了就要让人看见
+# ---------------------------------------------------------------------------
+
+
+def test_heal_ladder_is_rendered_with_three_distinct_states(capsys):
+    """``doctor --heal`` 必须把每一级的判定打出来，且三态可区分。
+
+    七级阶梯"可诊断、可审计"的全部价值就在这里，而此前**人一个字都看不到**：
+    hint（"卡在第 N 级"）只在 launcher.ui 的总结卡里渲染，doctor 这条路径调的是
+    ``_ui.finish(..., tui=False)``，总结卡整个不出；ladder 明细只进
+    runtime/startup.json 与 ``--json``。对着终端跑的人只看到一句"未成功"。
+
+    三态必须分开，因为下一步完全不同：
+      ·  没跑（不适用，或前面已修好）
+      ✓  跑了且成功
+      ✗  跑了且失败  ← 卡住的位置
+    """
+    import main
+    from launcher.shell import HealStep
+
+    main._print_heal_ladder(
+        [
+            HealStep(level=0, name="锁", applied=False, ok=None, detail="锁未持有"),
+            HealStep(level=1, name="首装", applied=True, ok=False, detail="真实 npm TLS 失败"),
+            HealStep(level=4, name="换镜像", applied=True, ok=True, detail="npmmirror 成功"),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "L0" in out and "L1" in out and "L4" in out, "每一级都要出现"
+    assert "真实 npm TLS 失败" in out, "失败原因要原样带出来，不做归纳"
+    assert "npmmirror 成功" in out
+    # 三种状态的图标必须互不相同，否则"没跑"和"跑了没成"会混成一句话
+    icons = {ln.strip()[0] for ln in out.splitlines() if " L" in ln and ln.strip()}
+    assert len(icons) == 3, f"三态该有三个不同图标，实际 {icons}"
+
+
+def test_heal_ladder_prints_nothing_when_there_is_no_ladder():
+    """没跑自愈时不该凭空多出一个空段落。"""
+    import main
+
+    main._print_heal_ladder([])

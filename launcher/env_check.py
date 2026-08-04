@@ -62,6 +62,7 @@ Ollama        只查装没装                                  装没装 + **在
 from __future__ import annotations
 
 import dataclasses
+import os
 import shutil
 import subprocess
 import sys
@@ -101,6 +102,11 @@ class EnvReport:
     env_size_bytes: int = 0
 
     api_keys_configured: int = 0
+
+    env_example_total: int = 0
+    env_missing_count: int = 0
+    env_missing_sample: List[str] = dataclasses.field(default_factory=list)
+    """``.env`` 相对 ``.env.example`` 缺了多少个键（只记名字，不碰值）。"""
 
     npm_installed: bool = False
     npm_version: str = ""
@@ -206,6 +212,24 @@ class EnvReport:
             None if self.env_exists else "将从 .env.example 复制（依赖阶段自动完成）",
             size_bytes=self.env_size_bytes,
         )
+        if self.env_example_total:
+            _stale_ok = self.env_missing_count == 0
+            add(
+                ".env 覆盖度",
+                Status.OK if _stale_ok else Status.DEGRADED,
+                (
+                    f"{self.env_example_total - self.env_missing_count}/{self.env_example_total} 项"
+                    if not _stale_ok
+                    else f"{self.env_example_total} 项齐全"
+                ),
+                (
+                    None
+                    if _stale_ok
+                    else f"缺 {self.env_missing_count} 项（如 {', '.join(self.env_missing_sample)}），见 .env.example"
+                ),
+                missing_count=self.env_missing_count,
+                missing_sample=list(self.env_missing_sample),
+            )
         add(
             "API Key",
             Status.OK if self.has_api_key else Status.DEGRADED,
@@ -274,6 +298,64 @@ def _probe_pip() -> Tuple[bool, str]:
     # "pip 24.0 from /usr/lib/python3/dist-packages/pip (python 3.11)" → "24.0"
     parts = (r.stdout or "").split()
     return True, parts[1] if len(parts) > 1 else ""
+
+
+def _probe_env_staleness(
+    env_file: Optional[Path] = None, example_file: Optional[Path] = None
+) -> Tuple[int, int, List[str]]:
+    """``.env`` 比 ``.env.example`` 少了哪些键。返回 (示例总数, 缺失数, 前几个名字)。
+
+    为什么值得单列一行事实
+    ----------------------
+    ``.env`` 是**一次性从 .env.example 复制**出来的，此后再没人把新增项补回去。
+    实测这台机器：``.env.example`` 185 个键，``.env`` 只有 88 个 —— 也就是说
+    后来加的 100 多个配置项**一直在跑代码里的默认值**，而没有任何地方会说一声。
+
+    症状五花八门且都不指向根因：``python main.py --docker-full`` 报
+    "TEMPORAL_DB_PASSWORD is missing"（那 5 个 compose 必填变量正是缺的一部分）、
+    某个新功能"开关设了没反应"（键名根本不在 .env 里）。
+
+    判据上的两个细节
+    ----------------
+    1. **要并上 runtime/secrets.env 与 os.environ**。密钥经设置面板保存后会收敛进
+       secrets.env（见模块头 API Key 那一条），只比 ``.env`` 会把它们全报成缺失。
+    2. **只报键名，不碰值**。键名本来就写在提交进仓库的 ``.env.example`` 里；
+       值一个字都不读、不打 —— 与 ``scripts/verify_provider_apis.py`` 同一条约束。
+    """
+
+    def _keys_of(path: Optional[Path]) -> List[str]:
+        out: List[str] = []
+        if path is None or not path.is_file():
+            return out
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return out
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            out.append(line.split("=", 1)[0].strip())
+        return out
+
+    example_path = example_file if example_file is not None else (PROJECT_ROOT / ".env.example")
+    env_path = env_file if env_file is not None else ENV_FILE
+
+    expected = _keys_of(example_path)
+    if not expected:
+        return 0, 0, []
+
+    have = {k.upper() for k in _keys_of(env_path)}
+    have |= {k.upper() for k in os.environ}
+    try:
+        from core.unified.config_store import get_config_store
+
+        have |= {k.upper() for k in get_config_store().read_secrets()}
+    except Exception:  # noqa: BLE001
+        pass
+
+    missing = [k for k in expected if k.upper() not in have]
+    return len(expected), len(missing), missing[:6]
 
 
 def _probe_api_keys(env_file: Optional[Path] = None) -> int:
@@ -399,9 +481,7 @@ def _probe_ollama() -> Tuple[bool, bool, List[str]]:
     return True, True, models
 
 
-def check_environment(
-    *, env_file: Optional[Path] = None, electron_dir: Optional[Path] = None
-) -> EnvReport:
+def check_environment(*, env_file: Optional[Path] = None, electron_dir: Optional[Path] = None) -> EnvReport:
     """跑完整套环境检查，返回事实。**不打印任何东西。**
 
     Args:
@@ -427,6 +507,8 @@ def check_environment(
 
     env_path = env_file if env_file is not None else ENV_FILE
     env_exists = env_path.exists()
+    _env_total, _env_missing, _env_sample = _probe_env_staleness(env_path)
+
     return EnvReport(
         python_version=py_version,
         python_ok=True,
@@ -436,6 +518,9 @@ def check_environment(
         env_exists=env_exists,
         env_size_bytes=env_path.stat().st_size if env_exists else 0,
         api_keys_configured=_probe_api_keys(env_path),
+        env_example_total=_env_total,
+        env_missing_count=_env_missing,
+        env_missing_sample=_env_sample,
         npm_installed=npm_ok,
         npm_version=npm_version,
         npm_path=npm_path,
