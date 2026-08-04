@@ -145,11 +145,14 @@ def probe_startup_chain() -> ProbeResult:
     else:
         evidence.append("WARNING: core/system_orchestrator.py not found")
 
-    # Check that unified_launcher.py exists
-    if source_exists("unified_launcher.py"):
-        evidence.append("unified_launcher.py: exists")
+    # Check that the service orchestration implementation exists.
+    # It used to live in unified_launcher.py at the repo root; the launcher
+    # unification (docs/LAUNCHER_UNIFICATION_PLAN.md) moved GalaxyUnified into
+    # launcher/services.py and deleted the old body.
+    if source_exists("launcher/services.py"):
+        evidence.append("launcher/services.py: exists")
     else:
-        evidence.append("WARNING: unified_launcher.py not found")
+        evidence.append("WARNING: launcher/services.py not found")
 
     # Check the non-fatal exception escape hatch: exception in pre-flight = proceed anyway
     # Detected by: "except Exception" followed by "return True" in _run_orchestrator_preflight

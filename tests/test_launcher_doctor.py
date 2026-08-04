@@ -163,6 +163,106 @@ def test_real_main_py_passes_the_exit_code_check():
     assert not report.failed, "main.py 又变回裸调用 main() 了"
 
 
+def _retired_check(tmp_path, monkeypatch, *, main_src: str, launcher_srcs: dict | None = None):
+    """在一个假仓库上跑退役检查，返回报告。"""
+    (tmp_path / "main.py").write_text(main_src, encoding="utf-8")
+    launcher_dir = tmp_path / "launcher"
+    launcher_dir.mkdir(exist_ok=True)
+    for name, src in (launcher_srcs or {}).items():
+        (launcher_dir / name).write_text(src, encoding="utf-8")
+    monkeypatch.setattr(doctor, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(doctor, "LAUNCHER_DIR", launcher_dir)
+    report = doctor.DoctorReport()
+    doctor._check_retired_launchers_are_gone(report)
+    return report
+
+
+def test_hardcoded_path_to_a_retired_launcher_turns_it_red(tmp_path, monkeypatch):
+    """``PROJECT_ROOT / "unified_launcher.py"`` → FAILED。
+
+    这不是假想的退化，是**真实踩到的**：``main.py`` 的入口契约校验里就硬编码着
+    这一句，删掉本体之后它让每一次正常启动都停在"子入口缺失"，而
+    ``python main.py doctor`` 走的是另一条分支，照样全绿。
+    """
+    report = _retired_check(
+        tmp_path,
+        monkeypatch,
+        main_src=(
+            "from pathlib import Path\n"
+            "PROJECT_ROOT = Path('.')\n"
+            "def main():\n"
+            "    p = PROJECT_ROOT / 'unified_launcher.py'\n"
+            "    return 0 if p.exists() else 1\n"
+        ),
+    )
+    assert report.failed, "路径拼接指向已删除的启动器，体检必须变红"
+    assert "unified_launcher.py" in (report.failed[0].hint or "")
+
+
+def test_import_of_a_retired_launcher_turns_it_red(tmp_path, monkeypatch):
+    """``from system_manager import ...`` → FAILED。"""
+    report = _retired_check(
+        tmp_path,
+        monkeypatch,
+        main_src="def main():\n    return 0\n",
+        launcher_srcs={"nodes.py": "from system_manager import NodeManager\n"},
+    )
+    assert report.failed
+    assert "system_manager" in (report.failed[0].hint or "")
+
+
+def test_retired_body_reappearing_turns_it_red(tmp_path, monkeypatch):
+    """本体文件又出现在仓库根 → FAILED。"""
+    (tmp_path / "install.py").write_text("# 复活了\n", encoding="utf-8")
+    report = _retired_check(tmp_path, monkeypatch, main_src="def main():\n    return 0\n")
+    assert report.failed
+    assert "install.py 仍在仓库根" in (report.failed[0].hint or "")
+
+
+def test_migration_prose_is_not_flagged(tmp_path, monkeypatch):
+    """散文提到老命令 → 仍是绿的。**这条钉的是分界，不是宽松。**
+
+    第一版按"字符串里出现文件名"判，抓到的两处都是对的：argparse 帮助文本里的
+    "替代 python system_manager.py"，和 ``equivalent_legacy_command()`` 那张
+    老→新对照表。把它们判红只会逼人删掉迁移说明 —— 而删掉之后，用户就再也不知道
+    自己那条老命令换成什么了。危险的是名字**流进文件系统/import**，不是被提到。
+    """
+    report = _retired_check(
+        tmp_path,
+        monkeypatch,
+        main_src=(
+            "'''本模块替代了 unified_launcher.py。'''\n"
+            "HELP = 'nodes = 节点生命周期（替代 python system_manager.py）'\n"
+            "def legacy(cmd):\n"
+            # ``" ".join([...])` —— 裸名字看是 join，但它是字符串拼接不是路径拼接。
+            "    return ' '.join(['python', 'system_manager.py', cmd])\n"
+        ),
+        launcher_srcs={"nodes.py": "# launch_desktop.py 的要素已搬到这里\n"},
+    )
+    assert not report.failed, f"散文不该判红：{[s.hint for s in report.failed]}"
+
+
+def test_os_path_join_to_a_retired_launcher_still_turns_it_red(tmp_path, monkeypatch):
+    """上一条放过了 ``str.join``，但 ``os.path.join`` 必须仍然判红。
+
+    没有这一条，"放过 join"就会被人当成"join 一律安全"，路径拼接的另一半写法
+    （``os.path.join(root, "unified_launcher.py")``）就成了盲区。
+    """
+    report = _retired_check(
+        tmp_path,
+        monkeypatch,
+        main_src="import os\ndef main():\n    return os.path.join('.', 'unified_launcher.py')\n",
+    )
+    assert report.failed, "os.path.join 指向已删除的启动器，必须判红"
+
+
+def test_real_repo_has_no_live_reference_to_the_retired_launchers():
+    """真仓库上的活体断言 —— 四个本体删干净，且没人还当路径/模块用。"""
+    report = doctor.DoctorReport()
+    doctor._check_retired_launchers_are_gone(report)
+    assert not report.failed, "\n".join(s.hint or "" for s in report.failed)
+
+
 def test_broken_geometry_turns_it_red(monkeypatch):
     """值列不再由常量派生 → FAILED。
 

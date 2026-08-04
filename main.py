@@ -179,8 +179,13 @@ Staged bring-up contract (PR-2)
     Phase 6 — DESKTOP_SURFACE       Desktop surface bring-up hooks
     Phase 7 — READINESS_SUMMARY     Final readiness summary
 
-``unified_launcher.py`` is a **subordinate** launcher component invoked during
-Phase 4–6.  It is NOT a competing top-level startup authority.
+``launcher/services.py`` holds the **subordinate** service orchestration
+(``GalaxyUnified``) invoked during Phase 4–6.  It is NOT a competing top-level
+startup authority — it has no CLI of its own.  It used to live in
+``unified_launcher.py`` at the repo root; the launcher unification
+(``docs/LAUNCHER_UNIFICATION_PLAN.md``) moved it into the package and deleted
+that body along with ``launch_desktop.py`` / ``system_manager.py`` /
+``install.py``.
 
 Subject lifecycle authority
 ---------------------------
@@ -194,8 +199,9 @@ Usage
     python main.py --status     # Show system status
     python main.py --help       # Show all startup options
 
-All startup options are forwarded to ``unified_launcher.py`` (subordinate
-component) after the orchestrator completes its staged pre-flight sequence.
+All startup options are forwarded to ``launcher.services.GalaxyUnified``
+(subordinate component) after the orchestrator completes its staged pre-flight
+sequence.
 """
 
 import argparse
@@ -210,6 +216,7 @@ from core.ascii_art import (
     GALAXY_TAGLINE,
     GALAXY_VERSION,
     print_banner,
+    print_powershell_hint,
     print_section_header,
 )
 
@@ -293,9 +300,11 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
 
 from entrypoint_role_contract import (
     MAIN_ENTRY_ID,
+    UNIFIED_LAUNCHER_ENTRY_ID,
     EntrypointRole,
     assert_single_unique_main_entrypoint,
     ensure_entrypoint_role,
+    get_entrypoint_record,
 )
 
 # ---------------------------------------------------------------------------
@@ -360,7 +369,7 @@ log_dir = PROJECT_ROOT / "logs"
 log_dir.mkdir(exist_ok=True)
 
 # SECURITY: Only configure logging if no handlers exist yet.
-# Multiple entry points (main.py, lumiv_daemon.py, system_manager.py)
+# Multiple entry points (main.py, lumiv_daemon.py, daemon/galaxy_daemon.py)
 # call basicConfig; repeated calls are no-ops after the first.
 if not logging.getLogger().handlers:
     handler = RotatingFileHandler(
@@ -429,7 +438,7 @@ def _run_orchestrator_preflight() -> bool:
     """Execute the staged pre-flight bring-up sequence (Phases 1–7).
 
     Returns ``True`` if the system is ready to proceed to the full async
-    bring-up via ``unified_launcher``, ``False`` on hard failure.
+    bring-up via ``launcher.services.GalaxyUnified``, ``False`` on hard failure.
 
     Logs one line per phase so startup logs reflect clear staged bring-up.
 
@@ -806,7 +815,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 print_item(f"Ollama 模型: {len(models)} 个", "ok", ", ".join(models[:3]))
             else:
                 # 这里【只报告、不下载】。模型拉取由 Phase 5「AI 大脑」统一负责
-                # (unified_launcher._phase5 → core.model_selection.background_pull),
+                # (launcher.services 的 Phase 5 → core.model_selection.background_pull),
                 # 那条路径在每个维度上都严格更优,曾经放在这里的阻塞式 ollama pull
                 # 属于纯粹重复且更差的一份:
                 #   · 拉的模型不对——这里拉 recommend() 的硬件推荐值,而 Phase 5 拉
@@ -1042,10 +1051,147 @@ def _run_install_command(args) -> int:
     return exit_code
 
 
+def _run_services_probe(*, status_only: bool) -> int:
+    """``python main.py --status`` / ``--check-only``。
+
+    两条都是 ``unified_launcher.py`` 的 CLI 收编过来的，实现本来就在
+    ``launcher/services.py``（``GalaxyUnified.show_status`` /
+    ``_run_check_only``）—— 删掉旧本体之后，那两个函数一度**没有任何入口能到达**。
+    这里只做转发，不重写判据。
+
+    ``--check-only`` 与 ``python main.py doctor`` 是两件事，别合并：
+    前者查的是**被启动的系统**（依赖、配置、core 模块、109 个节点能不能 import），
+    后者查的是**启动器自己**（要素有没有搬丢、有没有第二份实现）。
+    """
+    import asyncio as _asyncio
+
+    from launcher import record as _record
+    from launcher.services import GalaxyUnified, _run_check_only
+
+    lumiv = GalaxyUnified()
+    try:
+        if status_only:
+            lumiv.show_status()
+        else:
+            _asyncio.run(_run_check_only(lumiv))
+    except KeyboardInterrupt:
+        return _record.EXIT_INTERRUPTED
+    return _record.EXIT_OK
+
+
+def _run_env_check_only() -> int:
+    """``python main.py --check`` —— 原 ``launch_desktop.py --check``。
+
+    判据不另写：直接问 :mod:`launcher.env_check`，也就是 ``main.py`` Phase 0 与
+    ``launch_desktop.phase0_environment_check`` 合并后的那一份（合并逐行对照见
+    该模块的模块头九行表）。退出码沿用老语义：就绪 0，不就绪 1。
+    """
+    from launcher import env_check as _env_check
+    from launcher import record as _record
+
+    report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
+    print_phase("[环境检查]")
+    print_item("Python", "ok" if report.python_ok else "error", report.python_version)
+    print_item("pip", "ok" if report.pip_ok else "error", report.pip_version or "未检出")
+    print_item("npm", "ok" if report.npm_installed else "warn", report.npm_version or "未安装")
+    print_item("API Key", "ok" if report.api_keys_configured else "warn", f"{report.api_keys_configured} 个")
+    print_item("Electron", "ok" if report.electron_deps_ok else "warn", report.electron_probe)
+    return _record.EXIT_OK if report.ready else 1
+
+
+def _run_desktop_only() -> int:
+    """``python main.py --desktop-only`` —— 原 ``launch_desktop.py --frontend``。
+
+    只把桌面壳挂到**已经在跑**的网关上，不启动后端。用处是壳崩了之后单独拉回来，
+    不用把整套后端重启一遍（那会把会话、模型常驻、NATS 连接全带走）。
+
+    先校验网关真的能应答再拉壳 —— 这正是 ``launch_desktop`` 原本的判据，
+    实现复用 :func:`launcher.gateway.gateway_is_ready`（与桌面壳解析端口的是
+    同一处，各写各的会出现"等到了但连不上"）。
+    """
+    import asyncio as _asyncio
+
+    from launcher import gateway as _gw
+    from launcher import record as _record
+    from launcher.services import GalaxyUnified
+
+    print_phase("[仅启动桌面壳]")
+    if not _gw.gateway_is_ready():
+        print_item("网关未就绪", "error", _gw.gateway_health_url())
+        print_item("先启动后端", "info", "python main.py --backend")
+        return _record.EXIT_DEPENDENCY
+
+    lumiv = GalaxyUnified()
+    try:
+        ok = _asyncio.run(lumiv.start_desktop_shell())
+    except KeyboardInterrupt:
+        return _record.EXIT_INTERRUPTED
+    if not ok:
+        print_item("桌面壳启动失败", "error", "见 logs/electron.log")
+        return _record.EXIT_DEPENDENCY
+    print_item("桌面壳已启动", "ok", lumiv._desktop_shell or "electron")
+
+    proc = getattr(lumiv, "electron_proc", None)
+    if proc is not None:
+        try:
+            proc.wait()
+        except KeyboardInterrupt:
+            _gw.kill_proc(proc, "桌面壳")
+            return _record.EXIT_INTERRUPTED
+    return _record.EXIT_OK
+
+
+def _run_docker_full() -> int:
+    """``python main.py --docker-full`` —— 用 Docker Compose 拉起 130 个节点。
+
+    原样保留 ``unified_launcher.py`` 的三条判据：compose 文件必须在、
+    ``docker compose version`` 必须能跑通、退出码原样透出。缺任何一条都给
+    **可操作**的下一步（装 Docker 的链接 / 查状态与停服的命令），而不是只报一句失败。
+    """
+    from launcher import record as _record
+
+    print_phase("[Docker 全量节点启动]")
+    compose_file = PROJECT_ROOT / "deploy" / "compose" / "full.yml"
+    if not compose_file.exists():
+        print_item("deploy/compose/full.yml", "error", "文件不存在，请确认仓库完整")
+        return _record.EXIT_DEPENDENCY
+
+    try:
+        probe = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        docker_ok = probe.returncode == 0
+    except (FileNotFoundError, OSError):
+        docker_ok = False
+    if not docker_ok:
+        print_item("Docker", "error", "未安装或未运行，请先安装 Docker Desktop / Docker Engine")
+        print_item("安装文档", "info", "https://docs.docker.com/get-docker/")
+        return _record.EXIT_DEPENDENCY
+
+    cmd = ["docker", "compose", "-f", str(compose_file), "--profile", "full", "up", "-d"]
+    print_item("命令", "ok", " ".join(cmd))
+    print_item("状态", "info", "启动中，请稍候...")
+    try:
+        ret = subprocess.call(cmd)
+    except KeyboardInterrupt:
+        return _record.EXIT_INTERRUPTED
+    if ret != 0:
+        print_item("Docker Compose", "error", f"退出码 {ret}，请检查上方输出")
+        return ret
+    print_item("Docker 全量节点", "ok", "已在后台启动")
+    print_item("查看状态", "info", f"docker compose -f {compose_file} --profile full ps")
+    print_item("停止服务", "info", f"docker compose -f {compose_file} --profile full down")
+    return _record.EXIT_OK
+
+
 def main() -> int:
-    # nodes 子命令的取值表要在 argparse 建表时就拿到。launcher.nodes 只含常量,
-    # 真正会读配置的 system_manager 由它内部惰性加载 —— 所以这个 import 不会
-    # 把节点表的读取拉进"只想 --version"的路径。
+    # nodes 子命令的取值表要在 argparse 建表时就拿到。模块顶层只有常量,
+    # 真正会读 unified_config.json 的节点表由 launcher.nodes 内部惰性加载 ——
+    # 所以这个 import 不会把节点表的读取拉进"只想 --version"的路径。
     try:
         from launcher import nodes as _launcher_nodes
     except Exception:  # noqa: BLE001
@@ -1123,13 +1269,67 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="(install) 核心 + 增强 + Windows 全装")
     parser.add_argument("--core", action="store_true", help="(install) 只装核心")
     parser.add_argument("--enhance", action="store_true", help="(install) 核心 + 增强")
+
+    # ── 从 unified_launcher.py 的 CLI 收编过来的三个开关 ────────────────────
+    #
+    # 删掉那个本体时逐个核过它 argparse 里的七个 flag，只有这三个是**真的有效**的：
+    #
+    #   --status       → GalaxyUnified.show_status()   实现在 launcher/services.py
+    #   --check-only   → _run_check_only()             同上，全仓没有第二份
+    #   --docker-full  → docker compose full.yml       130 个节点，没有替代路径
+    #
+    # 另外四个（--minimal / --no-ui / --no-l4 / --no-nodes）**刻意不收**：逐行查过
+    # 它们的去向，只写进 SystemConfig 的字段，而 GalaxyUnified.start() 一个都不读
+    # （只在 bootstrap 的状态字典里露个面）。也就是说它们从来没有真的关掉过任何
+    # 东西。把它们照搬过来只会让"我关了 UI 却还是起来了"这种假承诺跟着搬家。
+    #
+    # 端口占用预检也不用搬：老 main() 那段裸 socket bind 已经被
+    # launcher/services.py 里的 _probe_port_bindable 取代，而后者还能识别
+    # "占着端口但不 listen"（uvicorn 半死态），判据更强。
+    # ── 从 launch_desktop.py 的 CLI 收编过来的三个模式 ──────────────────────
+    #
+    # README 一直在教用户这三条（`--check` / `--backend` / `--frontend`），
+    # 计划 §4 的命令对照表也写了 `python launch_desktop.py` → `python main.py
+    # --desktop-only`。删本体前必须给出**等价的新命令**，否则文档里那几行
+    # 立刻变成"照着敲就报 No such file"。
+    #
+    # 三条都只做转发，判据一律复用已在产的那份：
+    #   --check         → launcher.env_check.check_environment()（合并后的那份判据）
+    #   --backend       → GALAXY_SKIP_ELECTRON=1，走正常启动序列（仓库已有的开关）
+    #   --desktop-only  → 网关就绪校验 + GalaxyUnified.start_desktop_shell()
+    parser.add_argument("--check", action="store_true", help="只检查环境后退出（原 launch_desktop.py --check）")
+    parser.add_argument(
+        "--backend",
+        action="store_true",
+        help="只启动后端/网关，不拉桌面壳（原 launch_desktop.py --backend）",
+    )
+    parser.add_argument(
+        "--desktop-only",
+        "--frontend",
+        dest="desktop_only",
+        action="store_true",
+        help="只把桌面壳挂到【已在跑的】网关上（原 launch_desktop.py --frontend）",
+    )
+
+    parser.add_argument("--status", action="store_true", help="查看系统状态后退出")
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="仅检查依赖/配置/核心模块/节点导入，不启动服务",
+    )
+    parser.add_argument(
+        "--docker-full",
+        action="store_true",
+        help=(
+            "通过 Docker Compose 启动完整节点集（130 个节点 + 基础设施），等效于: docker compose -f deploy/compose/full.yml --profile full up -d"
+        ),
+    )
     args = parser.parse_args()
 
     # ── 子命令：install ────────────────────────────────────────────────
     # 计划里的命令面替换（`python install.py --all` → `python main.py install --all`）。
     # 实现不在这里 —— 装什么、怎么装都问 launcher.deps，与启动期自愈共用同一份
-    # 镜像轮换与依赖清单。install.py 本体的删除留到步骤 8（连同其余启动器一起），
-    # 现在两条路都通向同一份实现，先把漂移消掉。
+    # 镜像轮换与依赖清单。install.py 本体已在步骤 8 随其余三个启动器一起删除。
     if args.command == "install":
         return _run_install_command(args)
 
@@ -1152,7 +1352,22 @@ def main() -> int:
             return _record_module().EXIT_USAGE
         return _run_nodes_command(args)
 
-    # -v 同时落到环境变量：子模块（unified_launcher 等）无需逐层透传即可读到。
+    # ── --docker-full / --status / --check-only：都是"做完就退"，不进启动序列 ──
+    if args.docker_full:
+        return _run_docker_full()
+    if args.status or args.check_only:
+        return _run_services_probe(status_only=args.status)
+    if args.check:
+        return _run_env_check_only()
+    if args.desktop_only:
+        return _run_desktop_only()
+    # --backend 不是"另一条启动路径"，只是把桌面壳这一步关掉 —— 用的是仓库
+    # 本来就有的开关（launcher/flags.py 登记的 GALAXY_SKIP_ELECTRON），
+    # 不新造第二套判断。之后照常走完整启动序列。
+    if args.backend:
+        os.environ["GALAXY_SKIP_ELECTRON"] = "1"
+
+    # -v 同时落到环境变量：子模块（launcher.services 等）无需逐层透传即可读到。
     if args.verbose:
         os.environ["GALAXY_VERBOSE"] = "1"
 
@@ -1183,12 +1398,26 @@ def main() -> int:
     if not ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN):
         print_item("入口角色契约校验失败: MAIN_ENTRY_ID 必须为 UNIQUE_MAIN", "error")
         return 1
-    launcher_path = PROJECT_ROOT / "unified_launcher.py"
+    # 子入口存在性。**路径不再写死**：从入口角色契约里取 —— 这一条原本硬编码
+    # 的是 ``unified_launcher.py``，服务编排搬进 ``launcher/services.py``、旧本体
+    # 删除之后，硬编码那份会让**每一次正常启动**都停在"子入口缺失"。契约里
+    # ``UNIFIED_LAUNCHER_ENTRY_ID`` 的 ``module_path`` 是同一件事的唯一出处，
+    # 下次再搬只需要改契约一处。
+    _sub_entry = get_entrypoint_record(UNIFIED_LAUNCHER_ENTRY_ID)
+    launcher_path = PROJECT_ROOT / (_sub_entry.module_path if _sub_entry else "launcher/services.py")
     if not launcher_path.exists():
         print_item(f"子入口缺失: {launcher_path}", "error")
         return 1
 
     # ── Phase 0: Galaxy Banner ───────────────────────────
+    # PowerShell 显示建议要在横幅**之前**打：它讲的正是"字体/列宽/UTF-8 不对，
+    # 横幅会画烂"，画烂之后再提示就没意义了。非 Windows / 非 PowerShell 会话上
+    # ``print_powershell_hint()`` 自己静默返回，不必在这里加平台判断。
+    #
+    # 这条能力此前是**只被 import、从没被调用**的（``unified_launcher.py`` 的导入
+    # 清单里挂着，正文一次都没用），所以 Windows 用户从来没见过它。统一启动器
+    # 收编各家要素时把它真正接上。
+    print_powershell_hint()
     print_banner()
 
     # 仅应用 --model/--select-model 到环境；真正的主脑模型选择在 Phase 5「AI 大脑」进行
@@ -1227,7 +1456,9 @@ def main() -> int:
     print_phase("[系统启动]")
     print_item("正在启动 Galaxy 后端服务...", "ok")
 
-    from unified_launcher import GalaxyUnified
+    # 直接指向新家。unified_launcher.py 已随启动器统一删除 —— 它当初只是
+    # 服务编排的宿主文件，编排本体（GalaxyUnified）现在住在 launcher/services.py。
+    from launcher.services import GalaxyUnified
 
     lumiv = GalaxyUnified()
     lumiv._verbose = bool(args.verbose)
@@ -1260,8 +1491,30 @@ def main() -> int:
     from launcher import record as _record
 
     _exit_code = 0
+
+    # SIGTERM 也要优雅停机 —— 从被删除的 unified_launcher.main() 保下来的能力。
+    #
+    # 这里原本只有 ``except KeyboardInterrupt``，那**只覆盖 SIGINT**。
+    # ``kill <pid>``（systemd / 托盘 / 任务管理器走的都是 SIGTERM）会直接终止
+    # 进程、跳过全部清理：子进程不收、``.electron.pid`` 锁不清、NATS 不断开。
+    # 判据与 Windows 回退细节见 launcher/gateway.install_signal_handlers。
+    def _run_with_signals() -> None:
+        from launcher import gateway as _gw
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        _gw.install_signal_handlers(loop, lumiv.stop)
+        try:
+            loop.run_until_complete(_run())
+        finally:
+            _gw.remove_signal_handlers(loop)
+            try:
+                loop.close()
+            except Exception:  # noqa: BLE001
+                pass
+
     try:
-        asyncio.run(_run())
+        _run_with_signals()
     except KeyboardInterrupt:
         print()
         print_phase("[系统停止]")

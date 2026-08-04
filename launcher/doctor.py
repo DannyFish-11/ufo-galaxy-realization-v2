@@ -423,6 +423,147 @@ def _check_runtime_surfaces(report: DoctorReport) -> None:
         report.add("节点表（复用 nodes）", Status.FAILED, f"{type(exc).__name__}: {exc}")
 
 
+#: 四个已退役的启动器本体（``docs/LAUNCHER_UNIFICATION_PLAN.md`` 第 8 步删除）。
+#: 要素都已收编到 ``launcher/`` 各模块，文件本身不该再存在，**也不该再被引用**。
+RETIRED_LAUNCHERS = (
+    "unified_launcher.py",
+    "launch_desktop.py",
+    "system_manager.py",
+    "install.py",
+)
+
+
+def _iter_live_launcher_sources() -> List[Path]:
+    """启动链路上"活着的"源文件：``main.py`` + ``launcher/*.py``。"""
+    out = [PROJECT_ROOT / "main.py"]
+    out.extend(sorted(p for p in LAUNCHER_DIR.glob("*.py") if p.name != "__init__.py"))
+    return [p for p in out if p.is_file()]
+
+
+def _check_retired_launchers_are_gone(report: DoctorReport) -> None:
+    """四个旧启动器本体：文件删干净了，而且没有活代码还指着它们。
+
+    为什么"删了"不等于"清干净了"
+    ----------------------------
+    真实踩到过：``main.py`` 的入口契约校验里硬编码着
+
+        launcher_path = PROJECT_ROOT / "unified_launcher.py"
+        if not launcher_path.exists(): return 1
+
+    删掉本体之后，这一句让**每一次正常启动**都停在"子入口缺失"，而
+    ``python main.py doctor`` 走的是另一条分支，照样全绿 —— 也就是说，
+    体检不查这一条，它就查不出自己被删坏了。现在路径改从
+    ``entrypoint_role_contract`` 取，这条检查负责钉住"不许再退回硬编码"。
+
+    查的是"当路径/模块用"，不是"提到了"
+    -----------------------------------
+    这条分界是实测校准出来的。第一版按"字符串里出现文件名"判，立刻抓到两处，
+    但两处**都是对的**：
+
+    - ``main.py`` 的 argparse 帮助文本 "nodes = 节点生命周期（替代 python
+      system_manager.py）" —— 告诉用户老命令换成了什么，正是迁移期该说的话；
+    - ``launcher/nodes.py`` 的 :func:`~launcher.nodes.equivalent_legacy_command`
+      —— 它的**产出**就是老命令写法，用来让"每种老用法都有新写法"可测。
+
+    把这两处判红，只会逼人删掉迁移说明。真正危险的是名字**流进文件系统或
+    import 系统**：``PROJECT_ROOT / "unified_launcher.py"``、``Path(...)``、
+    ``open(...)``、``import_module(...)``、``subprocess`` 的 argv、``import``
+    语句。散文提一嘴不会让任何东西找不到；这几种会。
+
+    判据用 AST，不用子串
+    --------------------
+    子串扫描会读到自己的散文（这份 docstring 里就写满了那四个文件名），
+    过去在这个仓里已经栽过四次。AST 天然看不见 ``#`` 注释，而"当路径用"这件事
+    本来就只能在语法结构上判 —— 两个需求正好同一个解法。
+    """
+    stems = {name[:-3] for name in RETIRED_LAUNCHERS}
+    #: 把字符串"喂进"文件系统 / import / 子进程的调用。取最后一段名字即可
+    #: （``os.path.join`` → ``join``，``importlib.import_module`` → ``import_module``）。
+    PATHISH_CALLS = {
+        "Path",
+        "open",
+        "exists",
+        "isfile",
+        "import_module",
+        "__import__",
+        "spec_from_file_location",
+        "run",
+        "Popen",
+        "call",
+        "check_call",
+        "check_output",
+    }
+    #: ``join`` **不能**按裸名字算：``" ".join(parts)`` 是最常见的字符串拼接，
+    #: 而 ``equivalent_legacy_command()`` 正是用它拼出老命令写法的。只有
+    #: 接收者是 ``os.path`` / ``posixpath`` / ``ntpath`` 时才是路径拼接。
+    #: （这条不是想出来的，是新加的 ``test_migration_prose_is_not_flagged``
+    #: 当场把第一版判红了才发现的。）
+    JOIN_RECEIVERS = {"path", "os.path", "posixpath", "ntpath"}
+
+    def _dotted(node: ast.AST) -> str:
+        """``os.path`` / ``a.b.c`` → 点分名；不是名字链就返回空串。"""
+        parts: List[str] = []
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if not isinstance(node, ast.Name):
+            return ""
+        parts.append(node.id)
+        return ".".join(reversed(parts))
+
+    problems: List[str] = []
+
+    for name in RETIRED_LAUNCHERS:
+        if (PROJECT_ROOT / name).exists():
+            problems.append(f"{name} 仍在仓库根")
+
+    def _hits(node: ast.AST) -> List[tuple]:
+        """子树里所有"命中退役文件名"的字符串常量：[(行号, 文件名)]。"""
+        out = []
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                hit = next((n for n in RETIRED_LAUNCHERS if n in sub.value), None)
+                if hit:
+                    out.append((sub.lineno, hit))
+        return out
+
+    for path in _iter_live_launcher_sources():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        rel = path.relative_to(PROJECT_ROOT)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+                # ``PROJECT_ROOT / "unified_launcher.py"`` —— 真实踩到的那一句。
+                for side in (node.left, node.right):
+                    if isinstance(side, ast.Constant) and isinstance(side.value, str):
+                        hit = next((n for n in RETIRED_LAUNCHERS if n in side.value), None)
+                        if hit:
+                            problems.append(f"{rel}:{node.lineno} 路径拼接指向 {hit}")
+            elif isinstance(node, ast.Call):
+                func = node.func
+                fname = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                pathish = fname in PATHISH_CALLS or (
+                    fname == "join" and isinstance(func, ast.Attribute) and _dotted(func.value) in JOIN_RECEIVERS
+                )
+                if pathish:
+                    for lineno, hit in _hits(node):
+                        problems.append(f"{rel}:{lineno} {fname}(...) 指向 {hit}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".")[0] in stems:
+                        problems.append(f"{rel}:{node.lineno} import {alias.name}")
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                if node.module.split(".")[0] in stems:
+                    problems.append(f"{rel}:{node.lineno} from {node.module} import ...")
+
+    if problems:
+        report.add("旧启动器已退役且无残留引用", Status.FAILED, f"{len(problems)} 处", "; ".join(problems)[:400])
+    else:
+        report.add("旧启动器已退役且无残留引用", Status.OK, f"{len(RETIRED_LAUNCHERS)} 个本体已删")
+
+
 def _check_layout_geometry(report: DoctorReport) -> None:
     """版面几何自洽：值列由常量派生，两套打印器落在同一列。"""
     try:
@@ -459,6 +600,7 @@ def run_doctor(*, include_runtime: bool = True) -> DoctorReport:
     _check_exit_code_propagates(report)
     _check_no_bare_print_on_startup_path(report)
     _check_fact_and_presentation_are_disjoint(report)
+    _check_retired_launchers_are_gone(report)
     _check_layout_geometry(report)
     if include_runtime:
         _check_runtime_surfaces(report)
@@ -470,6 +612,7 @@ __all__ = [
     "FACT_LAYER_MODULES",
     "PRESENTATION_MODULES",
     "PRESERVED_ELEMENTS",
+    "RETIRED_LAUNCHERS",
     "SINGLE_IMPLEMENTATION",
     "DoctorReport",
     "run_doctor",

@@ -211,7 +211,14 @@ main.py                       ← 唯一入口。只做：参数解析 → 契�
 |---|---|
 | `python main.py` | 不变 |
 | `python unified_launcher.py` | `python main.py`（它本来就是从属） |
-| `python launch_desktop.py` | `python main.py --desktop-only` |
+| `python launch_desktop.py` | `python main.py` |
+| `python launch_desktop.py --check` | `python main.py --check` |
+| `python launch_desktop.py --backend` | `python main.py --backend` |
+| `python launch_desktop.py --frontend` | `python main.py --desktop-only`（`--frontend` 保留为别名） |
+| `python unified_launcher.py --status` | `python main.py --status` |
+| `python unified_launcher.py --check-only` | `python main.py --check-only` |
+| `python unified_launcher.py --docker-full` | `python main.py --docker-full` |
+| `python unified_launcher.py --minimal` / `--no-ui` / `--no-l4` / `--no-nodes` | **无对应**（从来没有真的生效过，见 §步骤 8） |
 | `python system_manager.py <cmd>` | `python main.py nodes <start\|stop\|status\|monitor\|report>` + `--group` / `--interval`（**订正**：原来写的 `[name]` 与只列三个命令都不对，见 §步骤 5） |
 | `python install.py --all` | `python main.py install --all` |
 | `python build_exe.py --onefile` | 保留原样（打包不属于运行期启动） |
@@ -303,7 +310,7 @@ python main.py --only nodes
 | 5 | 节点生命周期 → `launcher/nodes.py` | ✅ **命令面**已建并接线，两处文档已改；实现体搬迁留到步骤 8。见 §步骤 5 |
 | 6 | ~~健康检查分工 → `launcher/health.py`~~ → **不合并，改为写清分工 + 修真 bug** | ✅ 已完成。原判断「五处重复」不成立，见 §1.3 ④ 的订正 |
 | 7 | 服务编排 → `launcher/services.py` | ✅ 已完成（1954 行原样搬迁）。见 §步骤 7 |
-| 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | 前面全绿之后 |
+| 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | ✅ 已完成。四个本体已删，六个还有效的开关收编进 `main.py`，仓内所有可执行引用已改指 `main.py`。见 §步骤 8 |
 | 9 | `node_startup.py` 改自动发现（借鉴 ②） | 独立优化，可与统一并行 |
 
 ### 步骤 1 的前提是错的（订正记录）
@@ -593,6 +600,119 @@ workflow 跑 `python main.py`，不会因此变红。
   与"启动"面职责不同，只统一二者重复的 autostart。
 - **不在统一的同时改行为**。搬家就是搬家；要改的行为单独一个 PR，否则出了问题
   分不清是搬坏的还是改坏的。
+
+---
+
+## 步骤 8：删四个启动器本体
+
+### 删之前先回答一个问题：这些本体上还挂着什么
+
+`launcher/doctor.py` 的 `PRESERVED_ELEMENTS` 是 §2 那份人肉清单的可执行版
+（41 条），`python main.py doctor` 逐条查在不在。但它查的是**要素搬没搬到**，
+查不到另外两类残留，而这两类都不会让任何测试自然变红：
+
+1. **活代码里还指着被删的路径**。真实踩到了：`main.py` 的入口契约校验里硬编码着
+
+   ```python
+   launcher_path = PROJECT_ROOT / "unified_launcher.py"
+   if not launcher_path.exists(): return 1
+   ```
+
+   删掉本体之后，这一句让**每一次正常启动**都停在"子入口缺失"，而
+   `python main.py doctor` 走的是另一条分支，照样全绿。现在路径改从
+   `entrypoint_role_contract` 的 `UNIFIED_LAUNCHER_ENTRY_ID.module_path` 取，
+   并新增体检项「旧启动器已退役且无残留引用」钉住不许再退回硬编码。
+
+2. **仓库里其它地方还在拉这些文件**。全仓扫下来 10 处**可执行**引用：
+
+   | 位置 | 原来 | 现在 |
+   |---|---|---|
+   | `deploy/scripts/deploy.sh` ×2（含 systemd `ExecStart`） | `unified_launcher.py` | `main.py` |
+   | `deploy/scripts/start_unified.sh` | `unified_launcher.py` | `main.py` |
+   | `config/ufo-galaxy.service`（systemd `ExecStart`） | `unified_launcher.py` | `main.py` |
+   | `daemon/galaxy_daemon.py` + `daemon/config.json` | `["python", "unified_launcher.py"]` | `["python", "main.py"]` |
+   | `installer/start_galaxy.bat` ×3 | `python unified_launcher.py` | `python main.py` |
+   | `desktop-tauri/src-tauri/src/main.rs` | spawn `launch_desktop.py --backend …` | spawn `main.py --backend` |
+   | `scripts/validate_runtime.py` | 断言 `unified_launcher.py` 存在 | 断言 `launcher/services.py` 存在 |
+   | `audit/dual_repo_wiring_probe.py` | 探测 `unified_launcher.py` 是否存在 | 探测 `launcher/services.py` |
+   | `scripts/generate_mainline_reality_report.py` ×3 | 运行链写 `unified_launcher.py` | `launcher/services.py` |
+   | 文档命令（`README.md` / `INSTALL.md` / `AGENTS.md` / `deploy/README.md` / `docs/UNIFIED_STARTUP.md` / `docs/MAINTAINER_RUNBOOK.md` / `docs/NATS_CONTROL_PLANE.md` / `docs/LEGACY_SURFACES.md` / `docs/architecture/CANONICAL_ENTRYPOINTS.md` / `docs/guides/QUICKSTART.md` / `desktop-tauri/README.md`） | `python unified_launcher.py` / `python launch_desktop.py` / `python system_manager.py` | `python main.py …` |
+
+   两处最隐蔽：
+
+   - **守护进程**（`daemon/`）的 `restart_policy: always` 会让它拿着不存在的路径
+     **无限重启**；
+   - **Tauri 壳**那处 `stdout`/`stderr` 都被 `null` 掉了，`spawn` 失败一个字都看不到，
+     表现只是"backend did not become healthy within 90s"。
+
+   `audit/*.md` 与 `docs/reports/*` 里的引用**刻意不改**：那是有日期的历史记录，
+   改掉等于篡改当时的观测。
+
+### CLI 开关：七个里只有三个是真的
+
+`unified_launcher.py` 的 argparse 有七个 flag，逐个查过去向之后只收编三个：
+
+| flag | 去向 | 收编？ |
+|---|---|---|
+| `--status` | `GalaxyUnified.show_status()` | ✅ 全仓唯一实现 |
+| `--check-only` | `_run_check_only()`：依赖 + 配置 + core 模块 + 125 个节点 import | ✅ 全仓唯一实现 |
+| `--docker-full` | `docker compose -f deploy/compose/full.yml --profile full up -d` | ✅ 没有替代路径 |
+| `--minimal` | 只写 `SystemConfig.minimal_mode`，`start()` 不读 | ❌ 从没生效过 |
+| `--no-ui` | 只写 `SystemConfig.enable_web_ui`，`start()` 不读 | ❌ 同上 |
+| `--no-l4` | 只写 `SystemConfig.enable_l4`，`start()` 不读 | ❌ 同上 |
+| `--no-nodes` | 只写 `SystemConfig.enable_nodes`，`start()` 不读 | ❌ 同上 |
+
+后四个**刻意不收**：照搬过来只会把"我关了 UI 却还是起来了"这种假承诺一起搬家。
+`installer/start_galaxy.bat` 的「最小模式」菜单项同步改成如实说明。
+`tests/test_launcher_refactor.py` 两条测试分别钉住"三个有效的还在""四个无效的没混进来"——
+哪天真把它们接上 `start()`，后一条会红，那正是它存在的意义。
+
+`launch_desktop.py` 的三个模式按 §4 命令表全部给出等价新命令，判据一律复用已在产的那份：
+`--check` 走 `launcher.env_check`，`--desktop-only` 先用
+`launcher.gateway.gateway_is_ready()` 校验网关再拉 `GalaxyUnified.start_desktop_shell()`。
+
+`--backend` 这条牵出了 §2 里另一个不成立的说法。原文写「`flags.py` 5 个 flag 里
+**4 个对应真实在读的环境变量**（…`GALAXY_SKIP_ELECTRON`…），只有 `NATS_MODE` 已漂」。
+**`GALAXY_SKIP_ELECTRON` 也漂了** —— 它在 `flags.py` 里登记着 `status="stable"`、
+purpose 白纸黑字写着 "skip starting the Electron three-state GUI"，但全仓 grep 下来
+**零个读取点**：设了它没有任何效果。
+
+所以 `--backend` 有两条路：要么不给（像 `--minimal` 那样），要么把这个本来就该生效的
+开关真接上。选了后者 —— 闸设在 `GalaxyUnified.start_desktop_shell()`，那是全仓
+**唯一**的桌面壳入口（`start_tauri` / `start_electron` 都只从这里进），一处就够。
+这样 `--backend` 是真的、`flags.py` 的登记也不再是空头支票，而且没有为它另造一套判断。
+`tests/test_launcher_refactor.py::test_backend_flag_actually_skips_the_desktop_shell`
+钉住这一条。
+
+### 端口占用预检没有搬，因为新的更强
+
+老 `main()` 那段裸 `socket.bind()` 已被 `launcher/services.py` 的
+`_probe_port_bindable()` 取代，后者还能识别"占着端口但不 listen"的 uvicorn 半死态。
+这是**判据变强**，不是要素丢失。
+
+### 第三类残留：只在被删的 CLI 外壳里跑的校验
+
+`unified_launcher.main()` 开头有一句
+
+    if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
+
+删掉那个 CLI 外壳之后，这条 PR-01 契约校验**没有任何地方在跑**了 ——
+`entrypoint_role_contract.py` 里的登记还在，却再也没人核对，登记就退化成一份
+没人读的声明。搬到 `GalaxyUnified.start()`（真正开始编排的那一刻，与原来时机一致），
+而不是模块级 —— 模块级会让 `import launcher.services` 带上副作用，
+那正是 `tests/test_entrypoint_import_has_no_env_side_effects.py` 守的东西。
+
+顺带把那份守卫**扩大**了：原来盯四个入口脚本，现在盯 `main.py` + 整个
+`launcher/` 包（18 个模块，实测此刻全部干净）。理由是那三个被删的文件当初上榜
+正是因为"被 import 时有模块级副作用"，而它们的代码现在住进了每次启动都被 import
+的 `launcher/*.py` —— 同一类越权在那里只会更容易发生、更难归因。
+
+### 顺带接上一条从没生效的能力
+
+`core/ascii_art.py` 的 `print_powershell_hint()`（PowerShell 字体/列宽/UTF-8 建议）
+此前**只被 `unified_launcher.py` import、正文一次都没调用**，所以 Windows 用户
+从来没见过它。统一之后接在 `main.py` 打横幅**之前** —— 它讲的正是"这些不对横幅会画烂"，
+画烂之后再提示就没意义了。
 
 ---
 

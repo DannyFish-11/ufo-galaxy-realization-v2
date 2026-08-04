@@ -131,14 +131,16 @@ deploy_local() {
     pip install -q -r requirements.txt
 
     info "Starting Galaxy on port ${GALAXY_PORT:-9000}..."
-    $PYTHON_CMD unified_launcher.py --host 0.0.0.0 --port "${GALAXY_PORT:-9000}"
+    # 唯一入口 main.py。unified_launcher.py 已随启动器统一删除
+    # (docs/LAUNCHER_UNIFICATION_PLAN.md)，服务编排搬到 launcher/services.py。
+    $PYTHON_CMD main.py --host 0.0.0.0 --port "${GALAXY_PORT:-9000}"
 }
 
 # ── Health check ──
 health_check() {
     info "Health check..."
 
-    # In local (non-Docker) mode, unified_launcher is the single process serving
+    # In local (non-Docker) mode, main.py is the single process serving
     # both the Galaxy API and gateway on port 9000. Checking both "galaxy" and
     # "gateway" on the same port is intentional: they are the same endpoint.
     local services=("galaxy:9000" "gateway:9000")
@@ -221,7 +223,7 @@ WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$INSTALL_DIR/.env
 Environment=PYTHONPATH=$INSTALL_DIR
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 $INSTALL_DIR/unified_launcher.py --host 0.0.0.0 --port 9000
+ExecStart=/usr/bin/python3 $INSTALL_DIR/main.py --host 0.0.0.0 --port 9000
 ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
 RestartSec=10

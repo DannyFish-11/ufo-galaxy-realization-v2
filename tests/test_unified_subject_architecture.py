@@ -308,8 +308,14 @@ class TestAdapterSurfacesDemoted:
         src = (REPO_ROOT / "main.py").read_text()
         assert "bootstrap" in src.lower() or "Bootstrap" in src or "launcher" in src.lower()
 
-    def test_unified_launcher_doc_bootstrap_launcher(self):
-        src = (REPO_ROOT / "unified_launcher.py").read_text()
+    def test_service_orchestration_doc_bootstrap_launcher(self):
+        """检查对象搬家了：服务编排本体现在是 launcher/services.py。
+
+        原来读的是 ``unified_launcher.py`` —— 那个文件已随启动器统一删除
+        （docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步），GalaxyUnified 原样搬进了
+        launcher/services.py，断言本身一个字没改。
+        """
+        src = (REPO_ROOT / "launcher" / "services.py").read_text()
         assert "bootstrap" in src.lower() or "Bootstrap" in src or "launcher" in src.lower()
 
     def test_entrypoint_demotion_doc_exists_and_complete(self):

@@ -11,7 +11,7 @@ WorkingDirectory=/opt/galaxy
 EnvironmentFile=/opt/galaxy/.env
 Environment=PYTHONPATH=/opt/galaxy
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /opt/galaxy/unified_launcher.py --host 0.0.0.0 --port 9000
+ExecStart=/usr/bin/python3 /opt/galaxy/main.py --host 0.0.0.0 --port 9000
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10

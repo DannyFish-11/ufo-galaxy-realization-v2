@@ -6,7 +6,7 @@ Validates that:
 - launcher.service_manager provides correct lifecycle semantics
 - launcher.core_services, node_startup, health_checks, shutdown are importable
 - launcher.__init__ re-exports all public symbols
-- unified_launcher.py remains importable and exposes its public API
+- launcher/services.py exposes the public API that unified_launcher.py used to（后者已删除）
 - The authoritative startup path (main.py -> unified_launcher.py) is intact
 """
 
@@ -339,45 +339,61 @@ class TestLauncherPackageExports:
 
 
 class TestUnifiedLauncherFacade:
-    """unified_launcher.py must remain importable with its full public API intact."""
+    """服务编排的公开 API 必须完整 —— 检查对象从 unified_launcher.py 换成 launcher/services.py。
+
+    unified_launcher.py 已在启动器统一的最后一步删除；它当初只是这些 API 的宿主文件。
+    这条测试要保证的"公开面没缩水"完全没变，只是指向了新家。
+    """
 
     def test_import(self):
-        import unified_launcher  # noqa: F401
+        import launcher.services  # noqa: F401
 
-    def test_main_callable(self):
-        from unified_launcher import main
+    def test_cli_entry_is_main_py_not_a_second_main(self):
+        """CLI 只有一个 —— ``main.py``。
 
-        assert callable(main)
+        这条原本断言 ``launcher.services.main`` 可调用。那个 ``main()`` 是
+        ``unified_launcher.py`` 的 CLI 外壳，它连同本体一起删了：留着就等于
+        统一完还剩两个 CLI，正是这次要消掉的东西。
+
+        它真正有效的三个开关已经收编进 ``main.py``（``--status`` /
+        ``--check-only`` / ``--docker-full``），实现仍在 ``launcher/services.py``，
+        所以这里改成钉住"实现还在、且第二个 CLI 没有复活"。
+        """
+        import launcher.services as svc
+
+        assert hasattr(svc.GalaxyUnified, "show_status")
+        assert callable(svc._run_check_only)
+        assert not hasattr(svc, "main"), "launcher/services.py 不该再有自己的 CLI 入口"
 
     def test_galaxy_unified_class(self):
-        from unified_launcher import GalaxyUnified
+        from launcher.services import GalaxyUnified
 
         assert isinstance(GalaxyUnified, type)
 
     def test_system_state_importable(self):
-        from unified_launcher import SystemState
+        from launcher.services import SystemState
 
         assert SystemState.RUNNING.name == "RUNNING"
 
     def test_service_type_importable(self):
-        from unified_launcher import ServiceType
+        from launcher.services import ServiceType
 
         assert ServiceType.CORE.value == "core"
 
     def test_system_config_importable(self):
-        from unified_launcher import SystemConfig
+        from launcher.services import SystemConfig
 
         cfg = SystemConfig()
         assert hasattr(cfg, "web_ui_port")
 
     def test_service_manager_importable(self):
-        from unified_launcher import ServiceManager, SystemConfig
+        from launcher.services import ServiceManager, SystemConfig
 
         mgr = ServiceManager(SystemConfig())
         assert mgr is not None
 
     def test_core_service_launcher_importable(self):
-        from unified_launcher import CoreServiceLauncher, ServiceManager, SystemConfig
+        from launcher.services import CoreServiceLauncher, ServiceManager, SystemConfig
 
         cfg = SystemConfig()
         mgr = ServiceManager(cfg)
@@ -385,7 +401,7 @@ class TestUnifiedLauncherFacade:
         assert csl is not None
 
     def test_node_system_launcher_importable(self):
-        from unified_launcher import NodeSystemLauncher, ServiceManager, SystemConfig
+        from launcher.services import NodeSystemLauncher, ServiceManager, SystemConfig
 
         cfg = SystemConfig()
         mgr = ServiceManager(cfg)
@@ -393,7 +409,7 @@ class TestUnifiedLauncherFacade:
         assert nsl is not None
 
     def test_l4_launcher_importable(self):
-        from unified_launcher import L4EnhancementLauncher, ServiceManager, SystemConfig
+        from launcher.services import L4EnhancementLauncher, ServiceManager, SystemConfig
 
         cfg = SystemConfig()
         mgr = ServiceManager(cfg)
@@ -401,7 +417,7 @@ class TestUnifiedLauncherFacade:
         assert l4 is not None
 
     def test_unified_web_ui_importable(self):
-        from unified_launcher import ServiceManager, SystemConfig, UnifiedWebUI
+        from launcher.services import ServiceManager, SystemConfig, UnifiedWebUI
 
         cfg = SystemConfig()
         mgr = ServiceManager(cfg)
@@ -415,7 +431,7 @@ class TestUnifiedLauncherFacade:
 
 
 class TestAuthoritativeEntryPoint:
-    """main.py must delegate to unified_launcher.main without error."""
+    """main.py 是唯一入口 —— 启动器统一之后，它不再委派给任何"下级启动器本体"。"""
 
     def test_main_py_exists(self):
         assert (PROJECT_ROOT / "main.py").exists()
@@ -429,17 +445,100 @@ class TestAuthoritativeEntryPoint:
         spec.loader.exec_module(mod)
         assert callable(getattr(mod, "main", None))
 
-    def test_unified_launcher_py_exists(self):
-        assert (PROJECT_ROOT / "unified_launcher.py").exists()
+    def test_backend_flag_actually_skips_the_desktop_shell(self):
+        """``--backend`` 不是空承诺：``GALAXY_SKIP_ELECTRON=1`` 真的会挡住桌面壳。
+
+        ``flags.py`` 把 ``galaxy_skip_electron`` 登记为 ``status="stable"``、
+        purpose 写着 "skip starting the Electron three-state GUI" —— 但接线之前
+        **全仓零个读取点**，设了它没有任何效果。删 ``launch_desktop.py`` 时
+        ``--backend``（只起网关、不拉壳）需要一个等价新命令，正好把这个本来就该
+        生效的开关接上，而不是为它另造一套判断。
+
+        闸设在 ``start_desktop_shell()`` —— 全仓唯一的桌面壳入口，
+        ``start_tauri`` / ``start_electron`` 都只从这里进。
+        """
+        import asyncio
+
+        from launcher.services import GalaxyUnified
+
+        lumiv = GalaxyUnified()
+        called = []
+
+        async def _boom():  # pragma: no cover - 被调用即失败
+            called.append("tauri")
+            return True
+
+        lumiv.start_tauri = _boom
+        lumiv.start_electron = _boom
+
+        prev = os.environ.get("GALAXY_SKIP_ELECTRON")
+        os.environ["GALAXY_SKIP_ELECTRON"] = "1"
+        try:
+            assert asyncio.run(lumiv.start_desktop_shell()) is False
+            assert not called, "GALAXY_SKIP_ELECTRON=1 时不该碰任何一种桌面壳"
+        finally:
+            if prev is None:
+                os.environ.pop("GALAXY_SKIP_ELECTRON", None)
+            else:
+                os.environ["GALAXY_SKIP_ELECTRON"] = prev
+
+    def test_the_three_effective_flags_survived_the_deletion(self):
+        """``--status`` / ``--check-only`` / ``--docker-full`` 必须还在 main.py 上。
+
+        它们是 ``unified_launcher.py`` 的 argparse 里**唯三真的有效**的开关，
+        实现（``show_status`` / ``_run_check_only`` / compose 调用）没有第二份。
+        删本体时如果只删不搬，用户敲下去只会得到 ``unrecognized arguments``，
+        而"少了个开关"不会让任何别的测试变红 —— 所以在这里钉住。
+        """
+        import ast
+
+        tree = ast.parse((PROJECT_ROOT / "main.py").read_text(encoding="utf-8"))
+        flags = {
+            arg.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "add_argument"
+            for arg in node.args
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+        }
+        for flag in ("--status", "--check-only", "--docker-full"):
+            assert flag in flags, f"{flag} 随 unified_launcher.py 一起丢了"
+
+    def test_the_four_inert_flags_were_deliberately_not_carried_over(self):
+        """``--minimal`` / ``--no-ui`` / ``--no-l4`` / ``--no-nodes`` **不该**在 main.py 上。
+
+        它们在旧启动器里只写进 ``SystemConfig`` 的字段，而 ``GalaxyUnified.start()``
+        一个都不读 —— 也就是从来没真的关掉过任何东西。照搬过来等于把
+        "我关了 UI 却还是起来了"这种假承诺一起搬家。哪天真把它们接上了，
+        这条测试会红，那时删掉它并说明接线在哪 —— 这正是它存在的意义。
+        """
+        import ast
+
+        tree = ast.parse((PROJECT_ROOT / "main.py").read_text(encoding="utf-8"))
+        flags = {
+            arg.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "add_argument"
+            for arg in node.args
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+        }
+        for flag in ("--minimal", "--no-ui", "--no-l4", "--no-nodes"):
+            assert flag not in flags, f"{flag} 只有在真的接上 start() 之后才该出现"
+
+    def test_the_four_retired_launcher_bodies_are_gone(self):
+        """四个启动器本体已随统一删除（docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步）。
+
+        这条原本是 ``test_unified_launcher_py_exists``（断言它**存在**）。要素没有
+        丢：编排搬到 ``launcher/services.py``、节点生命周期搬到 ``launcher/nodes.py``、
+        桌面壳自愈搬到 ``launcher/shell.py``、依赖安装搬到 ``launcher/deps.py``。
+        逐条对照见 ``launcher/doctor.py`` 的 PRESERVED_ELEMENTS。
+        """
+        for name in ("unified_launcher.py", "launch_desktop.py", "system_manager.py", "install.py"):
+            assert not (PROJECT_ROOT / name).exists(), f"{name} 应已删除，改用 python main.py"
 
     def test_start_galaxy_not_present(self):
-        """start_galaxy.py has been removed — only main.py / unified_launcher.py are valid."""
-        assert not (
-            PROJECT_ROOT / "start_galaxy.py"
-        ).exists(), "start_galaxy.py must not exist; use main.py or unified_launcher.py instead"
+        """start_galaxy.py has been removed — only main.py is valid."""
+        assert not (PROJECT_ROOT / "start_galaxy.py").exists(), "start_galaxy.py must not exist; use main.py instead"
 
     def test_start_l4_not_present(self):
-        """start_l4.py has been removed — only main.py / unified_launcher.py are valid."""
-        assert not (
-            PROJECT_ROOT / "start_l4.py"
-        ).exists(), "start_l4.py must not exist; use main.py or unified_launcher.py instead"
+        """start_l4.py has been removed — only main.py is valid."""
+        assert not (PROJECT_ROOT / "start_l4.py").exists(), "start_l4.py must not exist; use main.py instead"

@@ -270,7 +270,7 @@ def _openapi_ts(node: dict, *, where: str) -> str:
 def load_openapi() -> dict:
     """组装权威 API 层并取其 OpenAPI 文档。
 
-    刻意用 ``core.api_routes.create_api_routes()`` 而不是去跑 unified_launcher:
+    刻意用 ``core.api_routes.create_api_routes()`` 而不是去跑 launcher/services.py:
     前者就是"权威 API 层"本身(``tests/test_routes_import.py`` 也这么建),
     后者会把整个系统拉起来。实测这样建一次约 2.2 秒。
     """

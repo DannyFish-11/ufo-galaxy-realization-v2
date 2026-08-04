@@ -363,12 +363,15 @@ def test_deps_module_never_prints():
     assert not prints, f"deps 不该自己打印（行号：{prints}）"
 
 
-def test_install_py_delegates_instead_of_reimplementing():
-    """``install.py`` 不许再自己写一份 pip 调用。"""
-    src = (REPO_ROOT / "install.py").read_text(encoding="utf-8")
-    assert "from launcher import deps" in src
-    assert '"-m", "pip"' not in src, "install.py 又自己拼 pip 命令了"
-    assert "subprocess" not in ast.dump(ast.parse(src)), "install.py 不该再自己起子进程装东西"
+def test_install_py_is_retired_not_resurrected():
+    """``install.py`` 已退役删除，只剩 ``python main.py install`` 一条路。
+
+    这条原本是"install.py 不许再自己写一份 pip 调用"——第 3 步先让它委派给
+    ``launcher.deps``，消掉漂移；第 8 步连本体一起删（三份安装脚本本来就零调用方，
+    README/INSTALL.md 直接教用户 ``pip install -r requirements.txt``）。
+    终态断言比"委派得对不对"更强：它根本不该回来。
+    """
+    assert not (REPO_ROOT / "install.py").exists(), "install.py 已退役，请用 python main.py install"
 
 
 # ---------------------------------------------------------------------------
@@ -422,8 +425,12 @@ def test_install_command_uses_shared_deps_layer():
     """``main.py install`` 不许自己再实现一份安装。"""
     src = (REPO_ROOT / "main.py").read_text(encoding="utf-8")
     fn_start = src.index("def _run_install_command")
-    fn_end = src.index("\ndef main(", fn_start)
-    body = src[fn_start:fn_end]
+    # 切到**下一个顶层 def**，不是切到 ``def main(``。
+    # 原来写死 ``def main(`` 的那版在 main.py 里新增了 _run_docker_full()
+    # （它合法地用 subprocess 调 docker compose）之后当场误报：那个函数正好
+    # 落在 _run_install_command 和 main() 之间，被一起切进了 body。
+    nxt = src.index("\ndef ", fn_start + 1)
+    body = src[fn_start:nxt]
     assert "_deps.install_requirements" in body, "该走共享层的分层安装"
     # "不该自己实现安装"的可判定形式：函数体内不许自己起子进程 / 拼解释器命令。
     # （不能搜 "pip" —— 它合法地出现在 _deps.pip_index_candidates() 和给用户看的

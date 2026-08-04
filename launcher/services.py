@@ -51,15 +51,17 @@ from core.credential_vault import PLACEHOLDER_PREFIXES
 #: 子进程 cwd 会指错、``.env`` 会找不到，而且**全都不报错**。
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-try:
-    from nodes.common.cors_config import get_cors_origins
-except ImportError:
-    logging.getLogger("Galaxy").warning("nodes.common.cors_config 未找到，使用默认 CORS 来源。")
-
-    def get_cors_origins():  # type: ignore[misc]
-        return ["http://localhost:3000", "http://localhost:8080"]
-
-
+#: 这里原本还有一段模块级的
+#: ``try: from nodes.common.cors_config import get_cors_origins / except ImportError:``
+#: 内联兜底函数（随 ``unified_launcher.py`` 一起搬来的）。搬迁时逐行核过：
+#: **它是死代码** —— 唯一的调用点 ``start_web_ui()`` 在函数体内又 ``from
+#: nodes.common.cors_config import get_cors_origins, get_cors_methods,
+#: get_cors_headers`` 了一次，局部名把模块级的那个完全遮蔽，兜底分支永远走不到；
+#: 而那次局部 import 本身就在一个大 ``try/except`` 里，缺依赖时的行为由它决定。
+#: 全仓也没有第二处 ``from launcher.services import get_cors_origins``。
+#: 所以删掉它既不改行为，也顺带消掉 ``scripts/check_debt_freeze.py`` CHECK-3
+#: 盯的那类"内联 ImportError 兜底定义"（见 docs/migration/DEPRECATION_POLICY.md §4）
+#: —— 不是把它加进豁免名单，是把这笔债真的还掉。
 logger = logging.getLogger("Galaxy")
 
 
@@ -1074,7 +1076,21 @@ class GalaxyUnified:
             return False
 
     async def start_desktop_shell(self) -> bool:
-        """统一桌面壳入口：优先 Tauri（轻量），未构建/失败则回退 Electron。"""
+        """统一桌面壳入口：优先 Tauri（轻量），未构建/失败则回退 Electron。
+
+        ``GALAXY_SKIP_ELECTRON=1`` 在这里生效 —— 这是全仓**唯一**的桌面壳入口
+        （``start_tauri`` / ``start_electron`` 都只从这里进），所以闸设在这一处
+        就够，不用两边各写一遍。
+
+        为什么现在才接：这个开关在 ``flags.py`` 里登记着（``status="stable"``、
+        purpose 白纸黑字写着 "skip starting the Electron three-state GUI"），但
+        **全仓零个读取点** —— 也就是设了它没有任何效果。删 ``launch_desktop.py``
+        时要给 ``--backend``（只起网关、不拉壳）一个等价新命令，正好落在它身上：
+        与其为 ``--backend`` 另造一套判断，不如把这个本来就该生效的开关接上。
+        """
+        if os.environ.get("GALAXY_SKIP_ELECTRON", "").strip() == "1":
+            logger.info("GALAXY_SKIP_ELECTRON=1，跳过桌面壳启动（无头模式）")
+            return False
         if await self.start_tauri():
             return True
         self._desktop_shell = "electron"
@@ -1443,6 +1459,26 @@ class GalaxyUnified:
 
     async def start(self):
         """启动 Galaxy 后端 — 板块式输出。"""
+        # 入口角色契约（PR-01）：服务编排是**从属**入口，不是第二个顶层入口。
+        #
+        # 这一条原本在 ``unified_launcher.main()`` 里（它自己的 CLI 外壳开头）。
+        # 第 8 步删本体时那个 main() 一起没了，契约校验就**没有任何地方在跑**了 ——
+        # entrypoint_role_contract.py 里 UNIFIED_LAUNCHER_ENTRY_ID 的登记还在，
+        # 却再也没人核对，登记就退化成了一份没人读的声明。
+        #
+        # 搬到 start() 而不是模块级：模块级会让 ``import launcher.services``
+        # 带上副作用（tests/test_entrypoint_import_has_no_env_side_effects.py
+        # 守的正是这一类）。放在真正开始编排的那一刻，时机与原来一致。
+        from entrypoint_role_contract import (
+            UNIFIED_LAUNCHER_ENTRY_ID,
+            EntrypointRole,
+            ensure_entrypoint_role,
+        )
+
+        if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
+            logger.error("入口角色契约校验失败：服务编排必须是 SUB_ENTRY，不能是第二个顶层入口。")
+            raise SystemExit(1)
+
         await self.setup()
         # 这里【不能】再 new 一个 ServiceManager。__init__ 已经建好一个,并且把
         # core_launcher / node_launcher / l4_launcher / web_ui 全部绑在【那一个】

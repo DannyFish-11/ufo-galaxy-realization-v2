@@ -89,12 +89,12 @@ if not exist ".env" (
 :: ══════════════════════════════════════════════════════════════
 :: NOTICE: installer/start_galaxy.bat — LEGACY INSTALLER SCRIPT
 :: This script previously started services individually by invoking:
-::   galaxy_main_loop_l4.py  (retired — now managed by unified_launcher.py)
+::   galaxy_main_loop_l4.py  (retired — now managed by main.py)
 ::   windows_client/main.py  (retired — legacy F12 sidebar client)
 ::   dashboard/app.py        (retired — superseded by unified web UI)
 ::
 :: All modes now delegate to the authoritative startup path:
-::   python unified_launcher.py
+::   python main.py
 :: or the top-level wrapper:
 ::   start.bat  (in the repository root)
 :: ══════════════════════════════════════════════════════════════
@@ -104,7 +104,7 @@ echo ╔════════════════════════
 echo ║                    请选择启动模式                        ║
 echo ╠══════════════════════════════════════════════════════════╣
 echo ║  [1]  完整模式  - 启动所有服务（推荐）                   ║
-echo ║  [2]  最小模式  - 仅启动核心服务                         ║
+echo ║  [2]  最小模式  - [已停用，等同完整模式，见下方说明]      ║
 echo ║  [3]  开发模式  - 启动带调试信息                         ║
 echo ║  [4]  客户端    - [已停用，见下方说明]                   ║
 echo ║  [5]  退出                                               ║
@@ -122,17 +122,20 @@ goto invalid
 :full_mode
 echo.
 echo   [>>] 完整模式                       启动中...
-echo   [>>] 权威入口: unified_launcher.py
+echo   [>>] 权威入口: main.py
 echo.
-python unified_launcher.py
+python main.py
 goto end
 
 :lite_mode
 echo.
-echo   [>>] 最小模式                       启动中...
-echo   [>>] 权威入口: unified_launcher.py --minimal
+echo   [!]  最小模式与完整模式没有区别 —— 老 --minimal 开关只写进一个
+echo        配置字段，启动序列从来不读它，所以它从没真的少启动过任何东西。
+echo        统一启动器没有把这个假承诺一起搬过来（见 docs/LAUNCHER_UNIFICATION_PLAN.md）。
 echo.
-python unified_launcher.py --minimal
+echo   [>>] 按完整模式启动                 权威入口: main.py
+echo.
+python main.py
 goto end
 
 :dev_mode
@@ -140,9 +143,9 @@ echo.
 echo   [>>] 开发模式                       启动中...
 set DEBUG=1
 set LOG_LEVEL=DEBUG
-echo   [>>] 权威入口: unified_launcher.py
+echo   [>>] 权威入口: main.py
 echo.
-python unified_launcher.py
+python main.py
 goto end
 
 :client_mode
@@ -156,7 +159,7 @@ echo        当前 Windows 方向:
 echo          DesktopPresenceRuntime + electron/renderer/panel/
 echo.
 echo        如需启动完整系统，请选择选项 [1] 或直接运行:
-echo          python unified_launcher.py
+echo          python main.py
 echo        或顶层包装器:
 echo          ..\start.bat
 echo.

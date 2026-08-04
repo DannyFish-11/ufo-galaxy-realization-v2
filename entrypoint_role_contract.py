@@ -10,7 +10,7 @@ This module codifies one authoritative entry hierarchy without creating a new
 startup framework:
 
     main.py (唯一主入口)
-      -> unified_launcher.py (子入口，承接 Phase 4-6)
+      -> launcher/services.py:GalaxyUnified (子入口，承接 Phase 4-6)
          -> DesktopPresenceRuntime.handle_request (阶段入口：runtime shell)
             -> OpenClawd.process (内部阶段入口：subject core)
                -> CommandRouter.route_envelope (内部阶段入口：cross-device substrate)
@@ -27,7 +27,9 @@ from typing import Any, Dict, List, Optional, Tuple
 ENTRYPOINT_ROLE_CONTRACT_SENTINEL: str = "ENTRYPOINT_ROLE_CONTRACT_SENTINEL::PR01::single-main-entrypoint-contract-v1"
 
 MAIN_ENTRY_ID: str = "main.py:main"
-UNIFIED_LAUNCHER_ENTRY_ID: str = "unified_launcher.py:main"
+#: 服务编排子入口。宿主文件在启动器统一时从 unified_launcher.py 换成
+#: launcher/services.py —— 角色(SUB_ENTRY)与职责没变，换的是它住在哪。
+UNIFIED_LAUNCHER_ENTRY_ID: str = "launcher/services.py:GalaxyUnified.start"
 LEGACY_WINDOWS_RUN_UI_ENTRY_ID: str = "enhancements.clients.windows_client.run_ui:module_import"
 LEGACY_DOCKER_LAUNCHER_ENTRY_ID: str = "docker-compose.yml:galaxy"
 
@@ -56,12 +58,12 @@ ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
         role=EntrypointRole.UNIQUE_MAIN,
         module_path="main.py",
         trigger_boundary="process startup entrypoint",
-        next_hop="unified_launcher.py:main",
+        next_hop="launcher/services.py:GalaxyUnified.start",
     ),
     UNIFIED_LAUNCHER_ENTRY_ID: EntrypointRecord(
         entry_id=UNIFIED_LAUNCHER_ENTRY_ID,
         role=EntrypointRole.SUB_ENTRY,
-        module_path="unified_launcher.py",
+        module_path="launcher/services.py",
         trigger_boundary="phase delegate (Phase 4-6) / direct advanced invocation",
         next_hop="core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request",
         non_main_reason="subordinate launcher component",

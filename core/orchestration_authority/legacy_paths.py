@@ -572,7 +572,7 @@ _register(
             "Active Windows direction: DesktopPresenceRuntime + the React panel "
             "(electron/renderer/panel/).  "
             "Authoritative startup path: python main.py "
-            "(direct advanced invocation: python unified_launcher.py)"
+            "(on Windows: start.bat)"
         ),
         pr_guardrail_added="PR-8-layout",
         notes=("Hard-disabled stub.  Emits DeprecationWarning on import.  " "See enhancements/LEGACY_TRANSITION.md."),
@@ -1408,11 +1408,11 @@ _register(
 #
 #   windows_client._legacy.START_CLIENT.bat
 #       Hard-disabled F12 sidebar launcher — deleted PR-8.
-#       Replacement: ``start.bat`` (Windows) or ``python unified_launcher.py``.
+#       Replacement: ``start.bat`` (Windows) or ``python main.py``.
 #
 #   windows_client._legacy.start_galaxy_client.bat
 #       Hard-disabled Gateway WebSocket client launcher — deleted PR-8.
-#       Replacement: ``python unified_launcher.py``.
+#       Replacement: ``python main.py``.
 #
 # These entries use a new ``DELETED`` status to distinguish true deletion
 # from mere deprecation, and act as an authoritative registry of PR-8
@@ -1437,7 +1437,7 @@ _register(
             "START_CLIENT.bat was fully deleted in PR-8.  "
             "Use ``start.bat`` (Windows bootstrap launcher) or "
             "``python main.py`` as the canonical startup path.  "
-            "Use ``python unified_launcher.py`` only for direct subordinate invocation.  "
+            "``python main.py`` is the only entry point.  "
             "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
         ),
         pr_guardrail_added="PR-8",
@@ -1453,7 +1453,7 @@ _register(
         recommendation=(
             "start_galaxy_client.bat was fully deleted in PR-8.  "
             "Use ``python main.py`` as the canonical startup path.  "
-            "Use ``python unified_launcher.py`` only for direct subordinate invocation.  "
+            "``python main.py`` is the only entry point.  "
             "Configure GALAXY_GATEWAY_URL via .env or environment variable.  "
             "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
         ),

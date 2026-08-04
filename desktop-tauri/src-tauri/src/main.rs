@@ -709,14 +709,19 @@ async fn start_backend(state: State<'_, AppState>) -> Result<Value, String> {
 
     let root = project_root();
     let port = base.rsplit(':').next().unwrap_or("9000").to_string();
+    // 唯一入口 main.py。原来拉的是 `launch_desktop.py --backend --skip-check
+    // --skip-model-download --no-interactive`，那个文件已随启动器统一删除
+    // (docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步)——照着老路径拉只会 spawn 失败,
+    // 而 stdout/stderr 都被 null 掉了,失败信息一个字都看不到,表现就是
+    // "backend did not become healthy within 90s"。
+    //
+    // 另外三个 flag 不需要等价物,逐条核过:
+    //   --skip-model-download  main.py 的模型拉取是 background_pull,本来就不阻塞启动
+    //   --no-interactive       选型提示已由 core/model_selection.rs 侧的
+    //                          `sys.stdin.isatty()` 闸挡住,这里既无 tty 也无 stdin
+    //   --skip-check           main.py 的 Phase 0 只做本地探测,不联网、不阻塞
     let spawn_res = std::process::Command::new(python_exec())
-        .args([
-            "launch_desktop.py",
-            "--backend",
-            "--skip-check",
-            "--skip-model-download",
-            "--no-interactive",
-        ])
+        .args(["main.py", "--backend"])
         .current_dir(&root)
         .env("GALAXY_GATEWAY_PORT", &port)
         .env("PORT", &port)

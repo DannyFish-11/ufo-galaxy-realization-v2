@@ -83,9 +83,6 @@ ENTRY_ROOTS = (
 )
 ENTRY_MODULES = (
     "main",
-    "unified_launcher",
-    "system_manager",
-    "launch_desktop",
     "galaxy_gateway.app",
     "core.openclawd",
     "core.api_routes",

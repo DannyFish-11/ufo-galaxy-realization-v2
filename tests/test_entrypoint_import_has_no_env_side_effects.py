@@ -51,15 +51,29 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# 全部自家入口脚本:import 时都不得写 os.environ。
-# launch_desktop.py / system_manager.py 是同一 AST 规则全仓扫出来的另两处 ——
-# 它们不碰 .env,但 Windows 分支同样在模块级写 PYTHONIOENCODING 并重写调用方的
-# sys.stdout/sys.stderr(`import launch_desktop` 在 tests 里真实存在),
-# 是同一类越权,一并钉住。
-ENTRYPOINTS = ["main.py", "unified_launcher.py", "launch_desktop.py", "system_manager.py"]
+# 守卫范围:唯一入口 + 整个 launcher/ 包。
+#
+# 原来这里列的是四个入口脚本(main.py / unified_launcher.py / launch_desktop.py /
+# system_manager.py)。后三个已随启动器统一删除(docs/LAUNCHER_UNIFICATION_PLAN.md
+# 第 8 步),它们的实现搬进了 ``launcher/``。
+#
+# 名单**没有跟着缩水,而是扩大了**:那三个文件当初上榜是因为"被 import 时有模块级
+# 副作用",而搬家之后它们的代码住进了 ``launcher/*.py`` —— 那些模块**每次启动都被
+# import**,同一类越权在那里只会更容易发生、更难归因。所以整个包一起纳入。
+# 实测:18 个模块此刻全部干净,这条守卫是有效的而不是空转的。
+ENTRYPOINTS = ["main.py"] + sorted(
+    f"launcher/{p.name}" for p in (REPO_ROOT / "launcher").glob("*.py") if p.name != "__init__.py"
+)
 
-# 其中只有这两个负责加载 .env —— 「脚本模式下必须仍然加载」那条只对它们成立。
-ENV_LOADING_ENTRYPOINTS = ["main.py", "unified_launcher.py"]
+# 其中只有 main.py 负责加载 .env —— 「脚本模式下必须仍然加载」那条只对它成立。
+# (``launcher/*.py`` 是被 import 的库模块,本来就不该自己去装 .env。)
+ENV_LOADING_ENTRYPOINTS = ["main.py"]
+
+# 「作为脚本跑时必须切 UTF-8 控制台」这条只对**真的是脚本**的文件成立。
+# ``launcher/*.py`` 没有也不该有 ``if __name__ == "__main__"`` 块 —— 它们是被
+# import 的库模块,给它们套这条只会逼人加一个谁都不会跑的 __main__ 块。
+# 统一之前这里是四个脚本,现在只剩 main.py 一个,这正是"唯一入口"的字面含义。
+SCRIPT_ENTRYPOINTS = ["main.py"]
 
 
 # ── 1. 结构层:模块级不得写 os.environ ──────────────────────────────────
@@ -148,13 +162,16 @@ def _main_guarded_calls(entry: str) -> list[str]:
     return calls
 
 
-@pytest.mark.parametrize("entry", ENTRYPOINTS)
+@pytest.mark.parametrize("entry", SCRIPT_ENTRYPOINTS)
 def test_entrypoint_still_configures_console_when_run_as_script(entry: str) -> None:
     """同理:不能为了消副作用把 Windows 控制台配置**整个删掉**。
 
-    四个入口脚本都要在 Windows 上把 stdout/stderr 切成 UTF-8,否则 CJK 日志会
-    直接抛 UnicodeEncodeError(PR-WIN-ENCODING 修的就是这个)。搬进函数之后,
-    脚本模式下必须仍然被调用。
+    入口脚本要在 Windows 上把 stdout/stderr 切成 UTF-8,否则 CJK 日志会直接抛
+    UnicodeEncodeError(PR-WIN-ENCODING 修的就是这个)。搬进函数之后,脚本模式下
+    必须仍然被调用。
+
+    只跑 :data:`SCRIPT_ENTRYPOINTS` 而不是 :data:`ENTRYPOINTS`:后者已扩到整个
+    ``launcher/`` 包,而那些是库模块,没有 ``__main__`` 块也不该有。
     """
     calls = _main_guarded_calls(entry)
     assert any("console" in name for name in calls), (
@@ -299,7 +316,7 @@ print(json.dumps({{"added": sorted(added), "changed": sorted(changed)}}))
 """
 
 
-@pytest.mark.parametrize("module", ["main", "unified_launcher"])
+@pytest.mark.parametrize("module", ["main"])  # unified_launcher 已删除,见 ENTRYPOINTS 上方说明
 def test_importing_entrypoint_changes_nothing_in_environ(module: str) -> None:
     """真的起一个子进程 import,比对前后 os.environ。
 

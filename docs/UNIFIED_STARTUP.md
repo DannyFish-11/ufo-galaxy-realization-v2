@@ -102,16 +102,16 @@ docker compose --profile full up -d
 
 ```bash
 # Start unified launcher (manages all nodes)
-python unified_launcher.py
+python main.py
 
 # Minimal mode (core nodes only)
-python unified_launcher.py --minimal
+python main.py                 # --minimal 已随 unified_launcher.py 退役（它从未真的生效）
 
 # Custom port
-python unified_launcher.py --port 9000
+python main.py --port 9000
 
 # Check status
-python unified_launcher.py --status
+python main.py --status
 ```
 
 ---
@@ -232,7 +232,7 @@ docker compose -f deploy/compose/full.yml --profile core --profile worker up -d
 
 ## 6. Non-Docker (Local) Startup
 
-The `unified_launcher.py` reads all port assignments from `config/unified_ports.yaml` via `core.port_config` and starts all node processes.
+`launcher/services.py` reads all port assignments from `config/unified_ports.yaml` via `core.port_config` and starts all node processes.
 
 ```
 unified_launcher.py

@@ -131,7 +131,7 @@ def test_guard_does_not_use_os_kill_as_windows_liveness_probe():
 
 
 def test_probe_port_bindable_detects_occupied_port():
-    from unified_launcher import _probe_port_bindable
+    from launcher.services import _probe_port_bindable
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))
@@ -158,7 +158,7 @@ def test_probe_port_detects_wildcard_holder_without_binding_wildcard():
     bind() 时就已成立,不 listen 则永远不可能被任何人连上)、且随 with 立即
     关闭。仅限测试进程内存活数毫秒。
     """
-    from unified_launcher import _probe_port_bindable
+    from launcher.services import _probe_port_bindable
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as wildcard:
         wildcard.bind(("0.0.0.0", 0))  # 模拟 uvicorn 的真实占用形态(见上:不 listen)
@@ -174,7 +174,7 @@ def test_probe_port_never_binds_all_interfaces():
     """
     import inspect
 
-    import unified_launcher
+    from launcher import services as unified_launcher
 
     body = inspect.getsource(unified_launcher._probe_port_bindable).split('"""')[-1]
     assert "0.0.0.0" not in body, "端口预检代码体内不应出现通配监听地址"

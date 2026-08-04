@@ -2,7 +2,7 @@
 Node_15_OCR 融合入口（已修复 sys.path 污染）
 ===================
 
-供 unified_launcher.py 和其他节点调用的统一入口。
+供启动器（launcher/services.py）和其他节点调用的统一入口。
 整合 DeepSeek OCR 2 作为主引擎。
 使用 importlib.util 绝对路径导入，避免跨节点模块污染。
 """

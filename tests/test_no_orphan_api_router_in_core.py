@@ -49,8 +49,17 @@ _MOUNT_SEARCH_DIRS = (
     "contracts",
     "integration",
     "subsystems",
+    # 启动器统一（docs/LAUNCHER_UNIFICATION_PLAN.md）之后，挂载点搬到了这里：
+    # ``launcher/services.py`` 承接了原 ``unified_launcher.py`` 的
+    # ``include_router()``，``launcher/nodes.py`` 承接了原 ``system_manager.py``。
+    # 漏掉这一条的表现很隐蔽 —— 不是报"找不到目录"，而是**误报孤儿路由**：
+    # ``core/health_check.py`` 明明被挂着，却因为挂它的文件不在搜索面里而判成
+    # 无人引用。
+    "launcher",
 )
-_MOUNT_SEARCH_FILES = ("main.py", "unified_launcher.py", "system_manager.py")
+# 仓库根上的入口文件。四个旧启动器本体（unified_launcher.py / system_manager.py /
+# launch_desktop.py / install.py）已随统一删除，只剩 main.py 一个入口。
+_MOUNT_SEARCH_FILES = ("main.py",)
 
 _ROUTER_DEF = re.compile(r"^\s*(\w+)\s*=\s*APIRouter\s*\(", re.MULTILINE)
 # 只看 import 行，避免把散文/注释里出现的模块名当成引用。

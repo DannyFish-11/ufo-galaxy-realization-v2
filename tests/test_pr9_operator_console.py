@@ -50,7 +50,7 @@ def _operator_router_paths() -> set[str]:
 
 
 def _launcher_text() -> str:
-    return (PROJECT_ROOT / "unified_launcher.py").read_text(encoding="utf-8")
+    return (PROJECT_ROOT / "launcher" / "services.py").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

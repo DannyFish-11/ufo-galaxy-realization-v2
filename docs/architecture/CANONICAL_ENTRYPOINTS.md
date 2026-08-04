@@ -21,8 +21,7 @@ so that follow-on PRs can safely retire them.
 
 | Command | File | Notes |
 |---------|------|-------|
-| `python main.py` | `main.py` | **Preferred** — delegates via subprocess to `unified_launcher.py` |
-| `python unified_launcher.py` | `unified_launcher.py` | Equivalent to `main.py`; direct launcher call |
+| `python main.py` | `main.py` | **The only entry point.** Service orchestration lives in `launcher/services.py` (`GalaxyUnified`), imported in-process — not a subprocess |
 
 ### 1.2 Deprecated / Legacy
 
@@ -41,7 +40,7 @@ so that follow-on PRs can safely retire them.
 | `deploy/scripts/start_unified.sh` | Linux/macOS | Extended start with env setup |
 | `installer/start_galaxy.bat` | Windows | Installer-bundled starter |
 
-These scripts ultimately call `python main.py` or `python unified_launcher.py`.
+These scripts ultimately call `python main.py`.
 They are tolerated; new platform launchers must follow this delegation pattern.
 
 ---
@@ -50,7 +49,7 @@ They are tolerated; new platform launchers must follow this delegation pattern.
 
 ### 2.1 Canonical REST API
 
-All routes served by the FastAPI app assembled in `unified_launcher.py`
+All routes served by the FastAPI app assembled in `launcher/services.py`
 (`UnifiedWebUI`), with route handlers in `core/routes/` sub-modules.
 
 Route aggregation authority: `core/api_routes.py` (`CANONICAL_API_ROUTES_AUTHORITY`)

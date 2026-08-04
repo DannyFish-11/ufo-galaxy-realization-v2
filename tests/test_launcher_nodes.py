@@ -55,20 +55,34 @@ class _FakeManager:
 # ---------------------------------------------------------------------------
 
 
-def _system_manager_choices() -> dict:
-    """从 ``system_manager.py`` 的 AST 里取出真实的 argparse choices。
+#: ``system_manager.py`` 被删除**之前**，从它的 argparse 里 AST 取出来的真实取值。
+#:
+#: 原来这份是每次运行时现读的（对着源码取，不照记忆抄）—— 那个文件在启动器统一
+#: 的最后一步删了，参照物没了，只能定格成常量。
+#:
+#: 定格而不是删掉这两条测试，是因为它们钉的东西仍然成立：命令面**不许缩水**。
+#: 计划文档当初写的是 ``<start|stop|status>``，照那个实现会静默丢掉 ``monitor``
+#: 与 ``report`` —— 用户敲惯的命令突然不认识。
+_LEGACY_CHOICES = {
+    "command": ["start", "stop", "status", "monitor", "report"],
+    "--group": [
+        "core",
+        "tools",
+        "physical",
+        "intelligence",
+        "monitoring",
+        "advanced",
+        "orchestration",
+        "multimodal",
+        "academic",
+        "all",
+    ],
+}
 
-    对着**源码**取，不是照着记忆或计划文档抄。它俩已经不一致过一次了。
-    """
-    tree = ast.parse((REPO_ROOT / "system_manager.py").read_text(encoding="utf-8"))
-    out = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "add_argument":
-            name = node.args[0].value if node.args and isinstance(node.args[0], ast.Constant) else None
-            for kw in node.keywords:
-                if kw.arg == "choices" and isinstance(kw.value, ast.List):
-                    out[name] = [e.value for e in kw.value.elts]
-    return out
+
+def _system_manager_choices() -> dict:
+    """老 CLI 的真实取值（已定格，见 :data:`_LEGACY_CHOICES`）。"""
+    return _LEGACY_CHOICES
 
 
 def test_commands_match_system_manager_exactly():
@@ -220,6 +234,8 @@ def test_every_legacy_usage_has_a_new_spelling():
     这不是形式主义：文档迁移要逐条对照，而手写的对照表会漂。
     """
     for command in nodes.NODE_COMMANDS:
+        # 老命令已随 system_manager.py 删除；这张对照表留作**迁移记录** ——
+        # 用户手边的旧脚本/旧文档还写着老写法，得查得到对应的新写法。
         legacy = nodes.equivalent_legacy_command(command)
         assert legacy.startswith("python system_manager.py ")
         assert _parse_ok("nodes", command), f"{legacy} 没有对应的新写法"
@@ -247,36 +263,64 @@ def test_nodes_without_a_command_is_a_usage_error():
 # ---------------------------------------------------------------------------
 
 
-def test_lifecycle_implementation_lives_here_exactly_once():
+def test_lifecycle_implementation_lives_here_exactly_once():  # noqa: D401
     """实现体在本模块，且**全仓只有这一份**。
 
     这条测试的前提变过一次，记在这里：最初 ``launcher/nodes.py`` 只是命令面，
     所以它钉的是"不许自己起进程"。后来实现体从 ``system_manager.py``
     **原样搬**了进来 —— 起子进程从此就是它的职责，原断言失效。
 
-    现在钉的是搬迁真正要保证的事：**只有一份实现**。``system_manager.py``
-    必须只剩 CLI 外壳（从这里 re-export），不许两边各有一个 ``SystemManager``
-    的类定义 —— 那正是这次统一要消掉的东西。
+    现在钉的是搬迁真正要保证的事：**只有一份实现**。``system_manager.py`` 已在
+    步骤 8 删除，所以扫描范围从"那一个文件"扩到了**全仓**。
+
+    但范围不能无脑扩到底：``nodes/`` 下的单个节点各自定义自己的 ``NodeConfig``
+    （如 ``Node_25_GoogleSearch`` 的 ``node_name`` / ``search_config``），与启动器
+    的节点表条目（``id`` / ``port`` / ``group`` / ``dependencies``）**只是同名**，
+    毫无关系。这是本轮反复遇到的同名陷阱，所以 ``nodes/`` 整体排除。
     """
     nodes_src = (REPO_ROOT / "launcher" / "nodes.py").read_text(encoding="utf-8")
-    sm_src = (REPO_ROOT / "system_manager.py").read_text(encoding="utf-8")
-
-    def class_defs(src):
-        return {n.name for n in ast.walk(ast.parse(src)) if isinstance(n, ast.ClassDef)}
-
-    here, there = class_defs(nodes_src), class_defs(sm_src)
+    here = {n.name for n in ast.walk(ast.parse(nodes_src)) if isinstance(n, ast.ClassDef)}
     assert {"SystemManager", "ConfigManager", "NodeConfig"} <= here, "实现体该在 launcher/nodes.py"
-    assert not (here & there), f"两边都定义了同名类，实现变成两份：{here & there}"
+
+    # 全仓不许有第二处定义这三个类（原来只查 system_manager.py，它删了之后
+    # 范围扩到全仓 —— 更强，因为"第二份实现"可能长在任何地方）。
+    elsewhere = []
+    for path in REPO_ROOT.rglob("*.py"):
+        # nodes/ 排除：单个节点各有自己的 NodeConfig，与启动器节点表同名不同义。
+        if any(
+            x in path.parts
+            for x in ("__pycache__", ".venv", "venv", "node_modules", ".git", "external", "nodes", "tests")
+        ):
+            continue
+        if path == REPO_ROOT / "launcher" / "nodes.py":
+            continue
+        try:
+            defs = {
+                n.name
+                for n in ast.walk(ast.parse(path.read_text(encoding="utf-8", errors="ignore")))
+                if isinstance(n, ast.ClassDef)
+            }
+        except (SyntaxError, ValueError, OSError):
+            continue
+        dup = defs & {"SystemManager", "ConfigManager", "NodeConfig"}
+        if dup:
+            elsewhere.append(f"{path.relative_to(REPO_ROOT)}: {', '.join(sorted(dup))}")
+    assert not elsewhere, f"实现变成两份：{elsewhere}"
 
 
-def test_system_manager_is_only_a_shim_now():
-    """``system_manager.py`` 只剩 CLI，且从新家 re-export。"""
-    import system_manager
-    from launcher import nodes as ln
+def test_system_manager_is_gone():
+    """``system_manager.py`` 已随启动器统一删除，且不得复活。
 
-    assert system_manager.SystemManager is ln.SystemManager
-    assert system_manager.NodeConfig is ln.NodeConfig
-    assert system_manager.NODES is ln.NODES
+    它的实现体在步骤 5 原样搬进了 ``launcher/nodes.py``（109 个节点记录比对过
+    完全一致），命令面由 ``python main.py nodes`` 承接。
+    """
+    import importlib.util
+
+    assert not (REPO_ROOT / "system_manager.py").exists(), "已删除，不得复活"
+    assert importlib.util.find_spec("launcher.nodes") is not None, "实现体必须在新家"
+    from launcher.nodes import NODES, SystemManager  # noqa: F401
+
+    assert sum(len(v) for v in NODES.values()) > 100, "节点表不能扫空"
 
 
 def test_health_monitor_points_at_the_new_home():

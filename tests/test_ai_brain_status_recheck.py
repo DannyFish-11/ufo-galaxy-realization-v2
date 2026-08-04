@@ -25,7 +25,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from unified_launcher import _recheck_ai_brain_phase
+# 检查对象搬家了：服务编排原样搬到 launcher/services.py，unified_launcher.py 已删除。
+from launcher.services import _recheck_ai_brain_phase
 
 
 def _make_brain(healthy: bool, available_models: list, ping_result: bool = None):

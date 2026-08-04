@@ -374,7 +374,7 @@ python tests/test_capability_integration.py
 python main.py nodes status
 
 # 老写法仍可用（将在启动器统一的最后一步删除）：
-#   python system_manager.py status
+#   python main.py nodes status
 ```
 
 输出包括：

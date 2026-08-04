@@ -12,7 +12,7 @@
   "auto_restart": true,
   "services": {
     "galaxy_main": {
-      "command": ["python", "unified_launcher.py"],
+      "command": ["python", "main.py"],
       "restart_policy": "always",
       "max_restarts": 10,
       "health_check_url": "http://localhost:8299/health"
