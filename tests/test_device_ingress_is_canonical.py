@@ -130,15 +130,34 @@ class TestLauncherWiring:
         读源码而不是靠运行:启动器要跑起来得拉起一整套服务,在单测里不现实。
         但顺序是纯文本事实,可以直接查 —— 而它恰恰是最容易在重构中被打乱的东西。
         """
+        import ast
         from pathlib import Path
 
         # 检查对象搬家了：UnifiedWebUI（挂路由的地方）已原样搬到
         # launcher/services.py；unified_launcher.py 只剩 CLI 外壳。
+        #
+        # 用 AST 而不是子串：这一条曾经写成 ``src.find("create_websocket_routes(\n"
+        # "                    self.app")``，把**缩进和换行位置**一起钉死了。搬家后
+        # 那一行缩进变浅、black 于是把它收成单行，断言就红了 —— 而顺序本身一点没变。
+        # 测试该钉的是"canonical 的调用排在兼容面的调用之前"，不是源码怎么排版。
+        # AST 还顺带把第 503 行 ``from core.api_routes import ... create_websocket_routes``
+        # 那个同名 import 排除在外：它是导入，不是调用。
         src = (Path(__file__).resolve().parent.parent / "launcher" / "services.py").read_text(encoding="utf-8")
-        canonical_at = src.find("register_websocket_routes(self.app)")
-        compat_at = src.find("create_websocket_routes(\n                    self.app")
-        assert canonical_at != -1, "启动器没有挂 canonical 设备接入"
-        assert compat_at != -1, "启动器没有挂兼容 WebSocket 面(/ws/status 等会消失)"
-        assert canonical_at < compat_at, (
-            "canonical 设备接入被排到了兼容面后面 —— 同一路径先注册的赢," "这会让设备重新收到 compat_ws_disabled。"
+
+        def _call_lines(func_name: str) -> list[int]:
+            tree = ast.parse(src)
+            return sorted(
+                node.lineno
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == func_name
+            )
+
+        canonical_calls = _call_lines("register_websocket_routes")
+        compat_calls = _call_lines("create_websocket_routes")
+        assert canonical_calls, "启动器没有挂 canonical 设备接入"
+        assert compat_calls, "启动器没有挂兼容 WebSocket 面(/ws/status 等会消失)"
+        assert canonical_calls[0] < compat_calls[0], (
+            f"canonical 设备接入(第 {canonical_calls[0]} 行)被排到了兼容面"
+            f"(第 {compat_calls[0]} 行)后面 —— 同一路径先注册的赢,"
+            "这会让设备重新收到 compat_ws_disabled。"
         )

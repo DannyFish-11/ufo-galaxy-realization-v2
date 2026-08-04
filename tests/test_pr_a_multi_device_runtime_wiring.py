@@ -27,13 +27,9 @@ Coverage
 from __future__ import annotations
 
 import asyncio
-import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-# Node_71 directory — used by coordinator engine tests.
-_NODE71_DIR = str(Path(__file__).resolve().parent.parent / "nodes" / "Node_71_MultiDeviceCoordination")
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -782,61 +778,22 @@ class TestAndroidBridgeReconnectWiring:
 class TestCoordinatorEngineHarnessWiring:
     """MultiDeviceCoordinatorEngine coordinator-state transitions → harness hooks."""
 
-    @staticmethod
-    def _load_n71_module(mod_name: str):
-        """Load a Node_71 core submodule via importlib to avoid core namespace conflict."""
-        import importlib.util
-        import sys
-
-        full_name = f"core.{mod_name}"
-        if full_name in sys.modules:
-            return sys.modules[full_name]
-
-        node71_core = os.path.join(_NODE71_DIR, "core")
-        # Ensure repo root (for main core/) and Node_71 dir (for models/) are on path
-        repo_root = str(Path(__file__).resolve().parent.parent)
-        if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)
-        if _NODE71_DIR not in sys.path:
-            sys.path.insert(1, _NODE71_DIR)
-
-        path = os.path.join(node71_core, f"{mod_name}.py")
-        spec = importlib.util.spec_from_file_location(full_name, path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[full_name] = module
-        try:
-            spec.loader.exec_module(module)
-            import core as _core_pkg
-
-            setattr(_core_pkg, mod_name, module)
-        except Exception:
-            sys.modules.pop(full_name, None)
-            raise
-        return module
-
-    def _ensure_n71_modules(self):
-        """Pre-load all Node_71 core submodules in dependency order."""
-        for mod in [
-            "canonical_device_view_adapter",
-            "fault_tolerance",
-            "device_discovery",
-            "state_synchronizer",
-            "task_scheduler",
-            "multi_device_coordinator_engine",
-        ]:
-            try:
-                self._load_n71_module(mod)
-            except Exception:
-                pass
+    # Node_71 是一个**真包**（nodes/、Node_71_.../、core/、models/ 每层都有 __init__.py），
+    # 所以按它真实的点分路径 import 即可，不需要 sys.path 注入，也不需要把文件按
+    # ``core.<名字>`` 这个假名字重新加载一遍。后者曾经是必要的 —— 那时节点内部写的是
+    # 裸 ``from core.X`` / ``from models.X``；现在它们已改成相对导入
+    # (``from ..models.device import ...``)，只有作为包的一部分被加载时才解析得开。
+    #
+    # 还有一层更隐蔽的理由：假名字加载会得到**第二份** ``models.device``，于是测试手里的
+    # Device 类和引擎注册表里的那个不是同一个类 —— isinstance/枚举比较会静默走偏，而
+    # 报错信息只会说"字段不对"，不会说"你有两份模型"。
 
     def test_coordinator_start_calls_on_coordinator_state_updated(self):
         """MultiDeviceCoordinatorEngine.start() must call on_coordinator_state_updated
         with overall_status='running' after successfully starting."""
         from unittest.mock import AsyncMock
 
-        self._ensure_n71_modules()
-
-        from core.multi_device_coordinator_engine import (  # type: ignore[import]
+        from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
             CoordinatorConfig,
             MultiDeviceCoordinatorEngine,
         )
@@ -875,9 +832,7 @@ class TestCoordinatorEngineHarnessWiring:
         """_heartbeat_loop() device timeout must call on_device_health_changed with heartbeat_miss."""
         from unittest.mock import AsyncMock
 
-        self._ensure_n71_modules()
-
-        from core.multi_device_coordinator_engine import (  # type: ignore[import]
+        from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
             CoordinatorConfig,
             CoordinatorState,
             MultiDeviceCoordinatorEngine,
@@ -902,12 +857,9 @@ class TestCoordinatorEngineHarnessWiring:
         engine = MultiDeviceCoordinatorEngine(config)
         engine._state = CoordinatorState.RUNNING
 
-        import sys
-
-        if _NODE71_DIR not in sys.path:
-            sys.path.insert(1, _NODE71_DIR)
-
-        from models.device import Device, DeviceState, DeviceType  # type: ignore[import]
+        # 必须走引擎自己用的那份模型（见本类顶部注释），否则塞进 _registry 的
+        # Device 与引擎心跳循环认的不是同一个类。
+        from nodes.Node_71_MultiDeviceCoordination.models.device import Device, DeviceState, DeviceType
 
         stale_device = Device(
             device_id="stale-d-01",

@@ -2,70 +2,58 @@
 Node 71 - Test Configuration
 pytest conftest 和共享 fixtures
 
-Path setup (PR-7)
------------------
-Node_71 uses two ``core`` packages:
-- top-level ``core.device_types`` (repo root) — needed by models/device.py
-- local ``core/*.py`` (Node_71 core submodules) — device_discovery, scheduler, etc.
+Path setup
+----------
+Node_71 用到两个叫 ``core`` 的东西：
 
-To resolve this conflict we:
-1. Put the repo root FIRST in sys.path so ``core`` resolves to the top-level core
-   (which has ``device_types``).
-2. Pre-register Node_71's local core submodules into ``sys.modules`` under their
-   expected dotted names (``core.device_discovery``, etc.) by loading them directly
-   from their file paths with importlib.  This makes them importable as
-   ``from core.device_discovery import ...`` within the test run without conflicting
-   with the top-level ``core`` package.
+- 仓库根的 ``core.device_types`` —— models/device.py 真的需要它；
+- 本节点自己的 ``core/*.py`` —— device_discovery、task_scheduler 等。
+
+**过去**这两者靠一个把戏共存：把节点的 core 子模块按文件路径加载，塞进
+``sys.modules["core.<名字>"]``，于是节点内部的裸 ``from core.device_discovery import ...``
+也能解析。那时节点模块写的就是裸导入，这个把戏是必需的。
+
+**现在**节点已改成相对导入（``from .device_discovery import ...``、
+``from ..models.device import ...``）—— 因为它要能被当作真包用：
+``nodes.Node_71_MultiDeviceCoordination.core.X``。裸导入在那种用法下会撞上仓库根的
+``core``，直接 ModuleNotFoundError。
+
+改成相对导入之后，上面那个把戏就**反过来坏事**了：模块被安上 ``core.<名字>`` 这个
+假名字加载，顶层包就成了 ``core``，于是 ``..models`` 越过顶层，报
+"attempted relative import beyond top-level package"。而这个异常当时被
+``except Exception: pass`` 吞掉，症状只剩下测试里一句莫名其妙的
+``No module named 'core.multi_device_coordinator_engine'``。
+
+所以这里改成：**按真实点分路径 import 一次**（不需要任何 sys.path 注入，各层
+``__init__.py`` 都在），再把同一批模块对象登记成 ``core.<名字>`` / ``models`` 别名，
+好让本目录下那五个测试文件里既有的裸 import 原样继续可用。
+
+关键是"同一批模块对象"：如果别名指向重新加载的第二份，测试拿到的 ``Device`` 类
+和引擎注册表里的就不是同一个类，isinstance 与枚举比较会静默走偏。
 
 Heavy model imports are deferred into fixture functions to keep conftest load clean.
 """
-import sys
+import importlib
 import os
-import importlib.util
+import sys
+
 import pytest
 
 # ─── Path setup ──────────────────────────────────────────────────────────────
 
 _NODE71_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_NODE71_DIR))
-_N71_CORE = os.path.join(_NODE71_DIR, "core")
 
-# Repo root FIRST → ``core`` = top-level Galaxy core (has device_types).
+# 仓库根要在 sys.path 上：节点是以 ``nodes.Node_71_MultiDeviceCoordination`` 这个
+# 真实点分路径被 import 的，而 models/device.py 还要 ``from core.device_types import``。
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-# Node_71 dir SECOND → ``models``, local imports.
-if _NODE71_DIR not in sys.path:
-    sys.path.insert(1, _NODE71_DIR)
 
-# ─── Pre-register Node_71 core submodules ────────────────────────────────────
-# Load each Node_71 core submodule from its file path and register it in
-# sys.modules as ``core.<name>`` so that internal imports like
-# ``from core.device_discovery import DiscoveryConfig`` resolve correctly,
-# even though the top-level ``core`` package is now the repo-root one.
+_N71_PKG = "nodes.Node_71_MultiDeviceCoordination"
 
-def _preload_n71_core_module(mod_name: str) -> None:
-    """Load a Node_71 core submodule and register it in sys.modules."""
-    full_name = f"core.{mod_name}"
-    if full_name in sys.modules:
-        return
-    path = os.path.join(_N71_CORE, f"{mod_name}.py")
-    if not os.path.exists(path):
-        return
-    spec = importlib.util.spec_from_file_location(full_name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[full_name] = module  # register BEFORE exec to handle circular refs
-    try:
-        spec.loader.exec_module(module)
-        # Also expose as attribute of the top-level core package
-        import core as _core_pkg
-        setattr(_core_pkg, mod_name, module)
-    except Exception as exc:
-        # Remove failed registration so future attempts can retry
-        sys.modules.pop(full_name, None)
-        raise exc
+# ─── 按真实路径 import，再登记向后兼容的别名 ─────────────────────────────────
 
-
-# Order matters: leaf modules first, dependents after.
+# 顺序无所谓了 —— import 系统自己会按依赖拉齐；列表只是为了枚举要起别名的模块。
 _N71_CORE_MODULES = [
     "canonical_device_view_adapter",
     "fault_tolerance",
@@ -75,11 +63,25 @@ _N71_CORE_MODULES = [
     "multi_device_coordinator_engine",
 ]
 
+
+def _alias_n71_module(kind: str, mod_name: str) -> None:
+    """把 ``nodes.…​.<kind>.<mod_name>`` 同一个模块对象登记成裸 ``<kind>.<mod_name>``。"""
+    module = importlib.import_module(f"{_N71_PKG}.{kind}.{mod_name}")
+    sys.modules[f"{kind}.{mod_name}"] = module
+    setattr(sys.modules[kind], mod_name, module)
+
+
+# ``models`` 整个包也要起别名：``from models.device import X`` 会先 import 父包
+# ``models``，而仓库根那个 models/ 是空的，撞上去只会给出一个没有 device 的命名空间包。
+sys.modules["models"] = importlib.import_module(f"{_N71_PKG}.models")
+for _mod in ("device", "task"):
+    _alias_n71_module("models", _mod)
+
+# ``core`` 不能整包替换 —— models/device.py 要的 ``core.device_types`` 在仓库根那个
+# core 里。所以只登记子模块别名，和过去的做法一致。
+importlib.import_module("core")
 for _mod in _N71_CORE_MODULES:
-    try:
-        _preload_n71_core_module(_mod)
-    except Exception:
-        pass  # best-effort; individual tests will fail with clear errors if needed
+    _alias_n71_module("core", _mod)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures (all imports deferred to fixture body)
