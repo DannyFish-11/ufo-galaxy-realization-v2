@@ -916,6 +916,61 @@ def _record_module():
     return record
 
 
+def _stuck_level(heal) -> str:
+    """自愈卡在第几级 —— 最后一个"跑了且失败"的级别。"""
+    return str(next((x.level for x in reversed(heal.steps) if x.applied and not x.ok), "?"))
+
+
+def _run_doctor_command(args) -> int:
+    """``python main.py doctor [--heal] [--json]``。"""
+    import json as _json
+
+    from launcher import doctor as _doctor
+
+    report = _doctor.run_doctor()
+
+    if args.heal:
+        from launcher import shell as _shell
+        from launcher.record import Status as _Status
+
+        heal = _shell.self_heal()
+        if heal.healed_at is not None:
+            _value = f"第 {heal.healed_at} 级修复"
+        else:
+            _value = "已就绪" if heal.ok else "未成功"
+        report.add(
+            "桌面壳自愈",
+            _Status.OK if heal.ok else _Status.DEGRADED,
+            _value,
+            # 失败时把【卡在第几级】直接说出来 —— 这正是七级阶梯存在的理由。
+            None if heal.ok else f"卡在第 {_stuck_level(heal)} 级",
+            ladder=[x.to_dict() for x in heal.steps],
+        )
+
+    if args.json:
+        print(_json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str))
+    else:
+        try:
+            from launcher import ui as _ui
+
+            _ui.begin(GALAXY_VERSION)
+            print_phase("[启动器体检]")
+            for step in report.steps:
+                _ui.step(step.name, step.status, step.value, column=step.column, hint=step.hint, **step.detail)
+        except Exception:  # noqa: BLE001
+            for step in report.steps:
+                print_item(step.name, _STEP_STATUS_TO_LEGACY.get(step.status.value, "info"), step.value)
+
+    exit_code = _record_module().EXIT_OK if report.ok else _record_module().EXIT_DEPENDENCY
+    try:
+        from launcher import ui as _ui
+
+        _ui.finish(exit_code, verbose=bool(os.environ.get("GALAXY_VERBOSE")), tui=False)
+    except Exception:  # noqa: BLE001
+        pass
+    return exit_code
+
+
 def _run_nodes_command(args) -> int:
     """``python main.py nodes <start|stop|status|monitor|report>``。"""
     import asyncio as _asyncio
@@ -1035,10 +1090,11 @@ def main() -> int:
         "command",
         nargs="?",
         default=None,
-        choices=["install", "nodes"],
+        choices=["install", "nodes", "doctor"],
         help=(
             "子命令。install = 只装依赖后退出（替代已无调用方的 python install.py）；"
-            "nodes = 节点生命周期（替代 python system_manager.py）"
+            "nodes = 节点生命周期（替代 python system_manager.py）；"
+            "doctor = 给启动器本身做一次完整体检"
         ),
     )
     parser.add_argument(
@@ -1062,6 +1118,8 @@ def main() -> int:
         default=_launcher_nodes.DEFAULT_INTERVAL if _launcher_nodes else 30,
         help="(nodes monitor) 监控间隔（秒）",
     )
+    parser.add_argument("--heal", action="store_true", help="(doctor) 不只诊断，顺带跑一遍桌面壳自愈")
+    parser.add_argument("--json", action="store_true", help="(doctor) 输出机器可读的 JSON")
     parser.add_argument("--all", action="store_true", help="(install) 核心 + 增强 + Windows 全装")
     parser.add_argument("--core", action="store_true", help="(install) 只装核心")
     parser.add_argument("--enhance", action="store_true", help="(install) 核心 + 增强")
@@ -1080,6 +1138,14 @@ def main() -> int:
     # 五个命令与 --group/--interval 全部照搬 system_manager.main() 的真实 argparse
     # （计划文档里写的 "<start|stop|status> [name]" 少了 monitor/report、参数形态
     #  也不对，已在 launcher/nodes.py 的模块头记录订正）。
+    # ── 子命令：doctor ────────────────────────────────────────────────
+    # 给【启动器本身】体检 —— 不是给被启动的服务。它问的是"这套统一启动器自己
+    # 还完整、自洽、没退化吗":要素有没有搬丢、launcher/ 之外有没有又长出第二份
+    # 实现、退出码传不传得到 shell、版面几何自不自洽。
+    # 这两类退化都不会让任何测试自然变红,所以做成可执行的检查。
+    if args.command == "doctor":
+        return _run_doctor_command(args)
+
     if args.command == "nodes":
         if not args.node_command:
             print_item("nodes 需要一个命令", "error", " | ".join(_launcher_nodes.NODE_COMMANDS))
