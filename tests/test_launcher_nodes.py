@@ -272,7 +272,6 @@ def test_lifecycle_implementation_lives_here_exactly_once():
 def test_system_manager_is_only_a_shim_now():
     """``system_manager.py`` 只剩 CLI，且从新家 re-export。"""
     import system_manager
-
     from launcher import nodes as ln
 
     assert system_manager.SystemManager is ln.SystemManager
