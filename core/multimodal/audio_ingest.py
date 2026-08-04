@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading as _threading
 import time
 from dataclasses import dataclass
 from typing import AsyncIterator, Callable, List, Optional
@@ -330,3 +331,79 @@ class AudioIngestPipeline:
         finally:
             self.stop()
             await task
+
+
+# ---------------------------------------------------------------------------
+# 进程级共享采集：一路物理麦克风流，多方订阅
+# ---------------------------------------------------------------------------
+# 此前 AudioIngestPipeline 被实例化两次 —— 一次在常驻感知 bus 启动里，一次在
+# AudioCaptureService 内部（语音循环用）—— 于是**同一个麦克风开了两路
+# sd.InputStream**。两路流各自跑 AEC/特征提取，CPU 翻倍；更糟的是不同后端
+# （Windows MME/WASAPI 独占）下第二路常常直接打不开，表现为"语音循环好好的，
+# 常驻感知却永远听不到声音"（或反过来），而现场只看得到一句设备打开失败。
+#
+# 收口：本模块提供进程级共享实例，采集只发生一次，两个消费方都往它上面挂回调
+# （add_callback 本就是扇出的）。引用计数保证"一方停了不把另一方的耳朵也关掉"。
+_shared_lock = _threading.Lock()
+_shared_pipeline: Optional["AudioIngestPipeline"] = None
+_shared_refs: int = 0
+
+
+def get_shared_audio_pipeline(config: Optional[AudioIngestConfig] = None) -> "AudioIngestPipeline":
+    """取进程级共享采集管线（首个调用方的配置生效）。
+
+    后续调用方若要求了**实质不同**的采样率/设备，如实记 WARNING 并沿用既有实例：
+    一个进程只有一副耳朵，静默改配置比沿用更危险（会让先接入的一方的判据错位）。
+    """
+    global _shared_pipeline  # noqa: PLW0603
+    with _shared_lock:
+        if _shared_pipeline is None:
+            _shared_pipeline = AudioIngestPipeline(config=config)
+            return _shared_pipeline
+        if config is not None:
+            cur = _shared_pipeline.config
+            if (config.sample_rate, config.device) != (cur.sample_rate, cur.device):
+                logger.warning(
+                    "共享麦克风采集已按 sr=%s device=%s 启动，本次请求的 sr=%s device=%s 被忽略"
+                    "（一个进程只有一副耳朵；如需不同参数请显式另建实例）",
+                    cur.sample_rate,
+                    cur.device,
+                    config.sample_rate,
+                    config.device,
+                )
+        return _shared_pipeline
+
+
+def acquire_shared_audio_pipeline(config: Optional[AudioIngestConfig] = None) -> "AudioIngestPipeline":
+    """取共享管线并 +1 引用（与 release_shared_audio_pipeline 配对）。"""
+    global _shared_refs  # noqa: PLW0603
+    pipeline = get_shared_audio_pipeline(config)
+    with _shared_lock:
+        _shared_refs += 1
+    return pipeline
+
+
+def release_shared_audio_pipeline() -> None:
+    """释放一次引用；降到 0 才真正停流（否则会把另一方的耳朵一起关掉）。"""
+    global _shared_refs  # noqa: PLW0603
+    with _shared_lock:
+        if _shared_refs > 0:
+            _shared_refs -= 1
+        if _shared_refs > 0 or _shared_pipeline is None:
+            return
+        pipeline = _shared_pipeline
+    pipeline.stop()
+
+
+def shared_audio_pipeline_refcount() -> int:
+    """当前共享采集的订阅方数量（可观测/诊断用）。"""
+    with _shared_lock:
+        return _shared_refs
+
+
+def reset_shared_audio_pipeline() -> None:
+    """测试专用重置入口，生产无调用方是设计如此。"""
+    global _shared_pipeline, _shared_refs  # noqa: PLW0603
+    with _shared_lock:
+        _shared_pipeline = None
+        _shared_refs = 0

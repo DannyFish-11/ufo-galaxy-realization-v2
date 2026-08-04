@@ -150,9 +150,11 @@ def start_ingest_bus(
     # ── Wire audio pipeline (optional — skip if sounddevice missing) ──────
     audio_available = False
     try:
-        from core.multimodal.audio_ingest import AudioIngestPipeline
+        from core.multimodal.audio_ingest import acquire_shared_audio_pipeline
 
-        audio_pipeline = AudioIngestPipeline()
+        # 与语音循环共用同一路物理采集（见 audio_ingest 的共享说明）：
+        # 此前两边各建一个实例 → 同一个麦克风两路 InputStream。
+        audio_pipeline = acquire_shared_audio_pipeline()
         audio_pipeline.add_callback(bus.update_audio)
         _schedule_pipeline(audio_pipeline, "audio")
         # 修复(误报"已启用"):构造 AudioIngestPipeline 成功只代表 Python 对象建好了,
@@ -403,6 +405,15 @@ def _emit_ingest_active(
     active_modalities = [
         name for name, available in (("audio", audio_available), ("video", video_available)) if available
     ]
+    # 麦克风采集的订阅方数量：麦克风是进程级共享的一路物理流，这个数字让运维
+    # 看得见"现在有几方在听同一条流"。异常值（0 但音频可用 / 远大于预期）正是
+    # 采集收口出问题的第一现场信号。
+    try:
+        from core.multimodal.audio_ingest import shared_audio_pipeline_refcount
+
+        _mic_subscribers = shared_audio_pipeline_refcount()
+    except Exception:  # noqa: BLE001
+        _mic_subscribers = -1  # 取不到就如实标 -1，不谎报 0
     try:
         from core.state_event_bus import StateEventType
         from core.state_event_bus import emit as _seb_emit
@@ -414,6 +425,7 @@ def _emit_ingest_active(
                 "audio_available": audio_available,
                 "video_available": video_available,
                 "modalities": active_modalities,
+                "mic_subscribers": _mic_subscribers,
             },
             runtime_session_id=runtime_session_id or "",
         )
