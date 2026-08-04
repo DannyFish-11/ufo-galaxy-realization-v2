@@ -247,37 +247,91 @@ def test_nodes_without_a_command_is_a_usage_error():
 # ---------------------------------------------------------------------------
 
 
-def test_nodes_module_does_not_reimplement_lifecycle():
-    """``launcher/nodes.py`` 只做转发，不自己起进程、不自己读节点表。"""
-    # 按 AST 判定：本模块的**文档**里就引用着 ``ConfigManager.load_nodes()``
-    # 作为"为什么要惰性 import"的说明。搜子串会把注释当成代码 —— 这一轮我已经
-    # 在三个不同的扫描器上踩过同一个坑了。
-    tree = ast.parse((REPO_ROOT / "launcher" / "nodes.py").read_text(encoding="utf-8"))
-    names = {
-        (n.func.id if isinstance(n.func, ast.Name) else getattr(n.func, "attr", ""))
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Call)
-    }
-    imported = {alias.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for alias in n.names}
-    assert "subprocess" not in imported, "命令面不该自己起进程"
-    assert "load_nodes" not in names, "命令面不该自己读节点表"
+def test_lifecycle_implementation_lives_here_exactly_once():
+    """实现体在本模块，且**全仓只有这一份**。
+
+    这条测试的前提变过一次，记在这里：最初 ``launcher/nodes.py`` 只是命令面，
+    所以它钉的是"不许自己起进程"。后来实现体从 ``system_manager.py``
+    **原样搬**了进来 —— 起子进程从此就是它的职责，原断言失效。
+
+    现在钉的是搬迁真正要保证的事：**只有一份实现**。``system_manager.py``
+    必须只剩 CLI 外壳（从这里 re-export），不许两边各有一个 ``SystemManager``
+    的类定义 —— 那正是这次统一要消掉的东西。
+    """
+    nodes_src = (REPO_ROOT / "launcher" / "nodes.py").read_text(encoding="utf-8")
+    sm_src = (REPO_ROOT / "system_manager.py").read_text(encoding="utf-8")
+
+    def class_defs(src):
+        return {n.name for n in ast.walk(ast.parse(src)) if isinstance(n, ast.ClassDef)}
+
+    here, there = class_defs(nodes_src), class_defs(sm_src)
+    assert {"SystemManager", "ConfigManager", "NodeConfig"} <= here, "实现体该在 launcher/nodes.py"
+    assert not (here & there), f"两边都定义了同名类，实现变成两份：{here & there}"
 
 
-def test_system_manager_import_is_lazy():
-    """``import launcher.nodes`` 不许把 system_manager 的配置读取拉进来。
+def test_system_manager_is_only_a_shim_now():
+    """``system_manager.py`` 只剩 CLI，且从新家 re-export。"""
+    import system_manager
 
-    ``system_manager`` 在模块顶层就跑 ``NODES = ConfigManager.load_nodes()``
-    —— 读配置文件。只想 ``main.py --version`` 的路径不该为一个没被调用的子命令
-    付这个代价。
+    from launcher import nodes as ln
+
+    assert system_manager.SystemManager is ln.SystemManager
+    assert system_manager.NodeConfig is ln.NodeConfig
+    assert system_manager.NODES is ln.NODES
+
+
+def test_health_monitor_points_at_the_new_home():
+    """``health_monitor.py`` 是搬迁前唯一的生产 importer，必须跟着改。
+
+    按 AST 判定：它不该再 import ``system_manager``（那是个将被删除的外壳）。
+    """
+    tree = ast.parse((REPO_ROOT / "health_monitor.py").read_text(encoding="utf-8"))
+    modules = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    assert "launcher.nodes" in modules, "health_monitor 该指向新家"
+    assert "system_manager" not in modules, "不该再经将被删除的外壳中转"
+
+
+def test_moved_paths_were_corrected():
+    """物理移动唯一会**静默改变语义**的一类地方：``Path(__file__).parent``。
+
+    实现体原本住在仓库根，那个表达式就是仓库根；搬进 ``launcher/`` 之后它指向
+    ``launcher/`` —— 配置文件会找不到、``nodes_dir`` 会指向本模块自己、节点一个
+    都扫不到，而且**不报错**，只是扫出空列表。
+
+    所以这条测试查的是真实文件系统，不是字符串。
+    """
+    from launcher.nodes import PROJECT_ROOT, ConfigManager, SystemManager
+
+    assert PROJECT_ROOT == REPO_ROOT
+    assert ConfigManager.CONFIG_FILE.is_file(), f"配置文件找不到：{ConfigManager.CONFIG_FILE}"
+    mgr = SystemManager()
+    assert mgr.project_root == REPO_ROOT
+    assert mgr.nodes_dir.is_dir(), f"节点目录找不到：{mgr.nodes_dir}"
+    assert len(mgr.nodes_config) > 100, f"节点扫空了，只有 {len(mgr.nodes_config)} 个"
+
+
+def test_version_path_does_not_load_the_node_table():
+    """``main.py --version`` 不许触发节点表加载。
+
+    这条的**前提变过**：原来钉的是"``import launcher.nodes`` 不许拉起
+    ``system_manager``"，因为后者模块级就跑 ``load_nodes()``。实现体搬过来之后，
+    模块级那次读取现在在 ``launcher.nodes`` 自己身上 —— 原断言变得无意义。
+
+    真正要保证的时序没变，只是换了个观察点：``main.py`` 只在**真的要用**
+    ``nodes`` 子命令时才 import 本模块（见 ``_run_nodes_command``），所以
+    "只想问个版本号"的路径不该为它付读配置的代价。
     """
     r = subprocess.run(
-        [sys.executable, "-c", "import sys; import launcher.nodes; print('system_manager' in sys.modules)"],
+        [sys.executable, "main.py", "--version"],
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
         timeout=120,
     )
-    assert r.stdout.strip() == "False", "launcher.nodes 不该在 import 期就拉起 system_manager"
+    assert r.returncode == 0, r.stderr
+    # 节点表加载会打印"能力管理器…"之类的初始化信息;--version 的输出该只有版本行
+    assert "Galaxy" in r.stdout
+    assert len(r.stdout.strip().splitlines()) == 1, f"--version 输出多了东西：{r.stdout!r}"
 
 
 # ---------------------------------------------------------------------------
