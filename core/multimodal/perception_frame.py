@@ -237,6 +237,9 @@ class PerceptionFrame:
                 "is_speaking": self.audio.is_speaking,
                 # 「没测」与「测出来是 0」必须能被下游分开，否则占位态会被当成安静。
                 "features_measured": getattr(self.audio, "features_measured", True),
+                # 声学层实况:听到的到底是不是干净的信号。
+                "echo_cancelled": getattr(self.audio, "echo_cancelled", False),
+                "echo_suppression_db": round(getattr(self.audio, "echo_suppression_db", 0.0), 2),
             }
 
         if self.system_audio is not None:

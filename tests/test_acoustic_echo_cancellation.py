@@ -307,3 +307,253 @@ class TestSingleton:
         assert b is not a
         assert b.config.sample_rate == 48000
         reset_echo_canceller()
+
+
+# ===========================================================================
+# 第二级：残余回声抑制（RES / NLP）
+# ===========================================================================
+#
+# 线性自适应滤波原理上只能消掉"参考信号的线性变换"。扬声器过载削波、外壳振动、
+# 功放谐波失真带来的**非线性**回声，无论滤波器怎么收敛都消不掉 —— 这一级就是
+# 为它们准备的。判据一律是**实测抑制量**，不是"代码跑到了这一行"。
+
+
+def _res_farend(nblocks: int, n: int, sr: int, seed: int = 7):
+    """有色（语音状）远端信号。每次调用**独立定种** —— 共享 RNG 会让 on/off 两次
+    比的不是同一条信号，那样测出来的增益是假的（这个坑真的踩过）。"""
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal(nblocks * n)
+    x = np.convolve(x, np.array([1.0, -0.9, 0.5, -0.2]))[: nblocks * n]
+    env = 0.5 + 0.5 * np.sin(2 * np.pi * np.arange(x.size) / (sr * 0.7))
+    return 0.35 * x * env
+
+
+def _res_room(x, nonlinear: bool):
+    """回声路径：线性冲激响应 +（可选）功放软削波 + 扬声器硬限幅。"""
+    import numpy as np
+
+    h = np.zeros(400)
+    h[5], h[40], h[120], h[300] = 0.6, -0.3, 0.15, -0.05
+    drive = np.clip(np.tanh(2.6 * x) / 2.6, -0.22, 0.22) if nonlinear else x
+    return np.convolve(drive, h)[: x.size]
+
+
+def _res_run(nonlinear: bool, res_on: bool, nblocks: int = 260, near=None):
+    import numpy as np
+
+    from core.multimodal.acoustic_echo_canceller import AcousticEchoCanceller, AECConfig
+
+    np.random.seed(1234)  # 舒适噪声用全局 RNG，固定住才可复现
+    sr, n = 16000, 256
+    aec = AcousticEchoCanceller(AECConfig(sample_rate=sr, res_enabled=res_on))
+    x = _res_farend(nblocks, n, sr)
+    mic = _res_room(x, nonlinear) + (near if near is not None else 0.0)
+    outs = []
+    for i in range(nblocks):
+        s = slice(i * n, (i + 1) * n)
+        aec.push_reference(x[s])
+        outs.append(np.asarray(aec.process(mic[s])))
+    return aec, np.concatenate(outs), mic
+
+
+def _res_erle(mic, out, lo: float = 0.5) -> float:
+    import numpy as np
+
+    i = int(len(mic) * lo)
+    return 10.0 * float(np.log10((np.dot(mic[i:], mic[i:]) + 1e-12) / (np.dot(out[i:], out[i:]) + 1e-12)))
+
+
+def test_res_buys_real_suppression_on_a_nonlinear_echo_path() -> None:
+    """非线性回声路径上，RES 必须换来**可观测**的额外抑制（这正是它存在的理由）。"""
+    a_off, o_off, mic = _res_run(True, False)
+    a_on, o_on, mic2 = _res_run(True, True)
+    import numpy as np
+
+    assert np.allclose(mic, mic2), "两次输入不一致，比较无意义"
+    gain = _res_erle(mic, o_on) - _res_erle(mic, o_off)
+    assert gain > 6.0, f"RES 在非线性路径上只多消了 {gain:.2f} dB —— 等于没做"
+
+
+def test_res_does_not_disturb_the_linear_stage() -> None:
+    """RES 是**后置**滤波：线性级的 ERLE 必须逐位不受影响。"""
+    a_off, _, _ = _res_run(True, False)
+    a_on, _, _ = _res_run(True, True)
+    assert (
+        abs(a_off.stats.erle_db - a_on.stats.erle_db) < 1e-9
+    ), f"RES 影响了线性级：{a_off.stats.erle_db} vs {a_on.stats.erle_db}"
+
+
+def test_stats_report_the_two_stages_separately() -> None:
+    """两级要分开报：合成一个数就分不出「线性级不行」和「非线性残余重」。"""
+    aec, _, _ = _res_run(True, True)
+    s = aec.snapshot()
+    assert s["res_active"] is True
+    assert s["total_erle_db"] > s["erle_db"], "总抑制没有高于线性级 —— RES 没起作用"
+    assert abs(s["res_gain_db"] - (s["total_erle_db"] - s["erle_db"])) < 0.05
+    assert s["leak_db"] > -60.0, "泄漏系数没被估计出来"
+
+
+def _broadband_near(nb: int, n: int):
+    """宽带、语音状的近端信号 —— 真实人声是宽带的。
+
+    用窄带正弦当近端会把这条判据测虚：维纳增益在"近端主导的频点"上本来就≈1，
+    窄带信号只占少数频点，于是下限设成多狠几乎都不影响结果。必须用宽带。
+    """
+    import numpy as np
+
+    seg = slice(int(nb * n * 0.6), int(nb * n * 0.85))
+    length = seg.stop - seg.start
+    r = np.random.default_rng(99)
+    sig = np.convolve(r.standard_normal(length), np.array([1.0, -0.85, 0.4]))[:length]
+    sig = 0.3 * sig / np.sqrt(np.mean(sig**2)) * 0.3
+    near = np.zeros(nb * n)
+    near[seg] = sig
+    return near, seg, sig
+
+
+def _res_run_cfg(nb: int, near, **overrides):
+    """跑一遍，允许覆盖 AEC 配置（用于对比不同双讲策略）。"""
+    import numpy as np
+
+    from core.multimodal.acoustic_echo_canceller import AcousticEchoCanceller, AECConfig
+
+    np.random.seed(1234)
+    sr, n = 16000, 256
+    cfg = AECConfig(sample_rate=sr, res_enabled=True)
+    for k, v in overrides.items():
+        setattr(cfg, k, v)
+    aec = AcousticEchoCanceller(cfg)
+    x = _res_farend(nb, n, sr)
+    mic = _res_room(x, True) + near
+    outs = []
+    for i in range(nb):
+        s = slice(i * n, (i + 1) * n)
+        aec.push_reference(x[s])
+        outs.append(np.asarray(aec.process(mic[s])))
+    return aec, np.concatenate(outs)
+
+
+def test_double_talk_uses_a_gentler_floor_than_far_end_only() -> None:
+    """双讲时的宽松下限必须**买到**可测量的近端保留 —— 否则那个分档等于没写。
+
+    判据是直接对比：同一条宽带近端信号下，「双讲放宽」必须比「双讲照样狠削」
+    留住更多近端能量。实测约 +2 dB —— 不大，但真实：近端保护的**大头**其实是
+    维纳增益本身（近端主导的频点上增益本来就≈1），这个分档是补上剩下那一块。
+    """
+    import numpy as np
+
+    nb, n = 260, 256
+    near, seg, sig = _broadband_near(nb, n)
+    # 只变**一个**变量：下限。上一版同时变了下限和过减因子，于是去掉下限分支后
+    # 仍然靠过减因子的差异通过 —— 那是条假钉，反向验证没红才发现。
+    _, o_relax = _res_run_cfg(nb, near, res_dt_floor_db=-3.0)
+    _, o_harsh = _res_run_cfg(nb, near, res_dt_floor_db=-18.0)
+    keep_relax = float(np.dot(o_relax[seg], o_relax[seg]))
+    keep_harsh = float(np.dot(o_harsh[seg], o_harsh[seg]))
+    gain_db = 10.0 * np.log10((keep_relax + 1e-12) / (keep_harsh + 1e-12))
+    assert gain_db > 0.4, f"双讲放宽只多留住 {gain_db:.2f} dB 近端 —— 这个分档没起作用"
+
+
+def test_res_costs_little_near_end_speech_during_double_talk() -> None:
+    """双讲时 RES 整体上只能少量削近端 —— 用户正说着话，狠削就是削用户。"""
+    import numpy as np
+
+    nb, n = 260, 256
+    near, seg, _ = _broadband_near(nb, n)
+    _, o_off, _ = _res_run(True, False, nb, near)
+    _, o_on, _ = _res_run(True, True, nb, near)
+    keep_off = float(np.dot(o_off[seg], o_off[seg]))
+    keep_on = float(np.dot(o_on[seg], o_on[seg]))
+    cost_db = 10.0 * np.log10((keep_on + 1e-12) / (keep_off + 1e-12))
+    assert cost_db > -4.0, f"双讲时 RES 把近端削掉了 {-cost_db:.2f} dB"
+
+
+def test_res_can_be_turned_off() -> None:
+    """对照组：关掉 RES 时它必须真的不参与（否则上面几条测的不是 RES）。"""
+    aec, _, _ = _res_run(True, False)
+    s = aec.snapshot()
+    assert s["res_active"] is False
+    assert abs(s["total_erle_db"] - s["erle_db"]) < 1e-9
+
+
+# ===========================================================================
+# reset() 必须真的复位
+# ===========================================================================
+
+
+def test_reset_actually_clears_the_frequency_domain_filter() -> None:
+    """``reset()`` 原先清的是 ``self._w``（小写）—— 旧时域 NLMS 的权重名。
+
+    换成频域之后权重叫 ``self._W``（大写），Python 区分大小写，于是那行只是凭空
+    造了个没人读的属性，**真正的滤波器一次都没被清过**：换设备/换房间之后上一处的
+    冲激响应仍留在权重里，而 ``reset()`` 看起来是调用过的。
+    """
+    import numpy as np
+
+    aec, _, _ = _res_run(True, True, 120)
+    assert float(np.abs(aec._W).sum()) > 0.0, "滤波器压根没学到东西，这条判据无意义"
+    aec.reset()
+    assert float(np.abs(aec._W).sum()) == 0.0, "reset() 没有清掉频域滤波器权重"
+    assert float(aec._leak.sum()) == 0.0, "reset() 没有清掉 RES 的泄漏系数"
+    assert aec._gain_est == 0.0 and aec._blocks == 0 and aec._delay_locked is False
+
+
+# ===========================================================================
+# 双讲检测：路径增益的上涨要封顶（防正反馈自毒化）
+# ===========================================================================
+
+
+def test_dtd_detects_double_talk_instead_of_poisoning_itself() -> None:
+    """DTD 漏判时会走 ``not double_talk`` 分支去**更新**路径增益，把近端能量算进去
+    → 门槛抬高 → 更难触发。实测这条正反馈会把 DTD 拖成永不触发。
+
+    判别区间在**安静的近端**：近端只比回声高一点点时，不封顶实测一块都检不出
+    （幅度 0.1 / 0.15 / 0.2 全是 0），封顶后是 5 / 9 / 12 块。用大嗓门近端（0.3+）
+    测这条会测虚 —— 那里封不封顶都检得出。"""
+    import numpy as np
+
+    nb, n = 200, 256
+    seg = slice(int(nb * n * 0.6), int(nb * n * 0.85))
+    t = np.arange(seg.stop - seg.start) / 16000.0
+    near = np.zeros(nb * n)
+    near[seg] = 0.15 * np.sin(2 * np.pi * 220 * t)  # 安静的近端 —— 判别区间
+    aec, _ = _res_run_cfg(nb, near)
+    assert aec.stats.blocks_double_talk > 0, "安静的近端一次都没检出双讲 —— DTD 已被自毒化"
+
+
+def test_dtd_does_not_false_alarm_without_near_end_speech() -> None:
+    """对照组：没有近端语音时不得误报双讲，否则滤波器永远不自适应。"""
+    aec, _, _ = _res_run(True, True, 200)
+    assert aec.stats.blocks_double_talk == 0, f"无近端却报了 {aec.stats.blocks_double_talk} 块双讲"
+    assert aec.stats.blocks_adapted > 100, "自适应被误判的双讲冻住了"
+
+
+def test_dtd_hangover_covers_the_whole_double_talk_stretch() -> None:
+    """滞后保持必须把「双讲」铺满整段近端语音，而不是只盖住能量峰。
+
+    真实双讲是连续的，能量判据只抓得住峰：实测一段连续近端里 50 块只有 7 块被判
+    双讲，其余 43 块照旧自适应（把近端学进权重）、照旧狠削（削用户）。所有
+    「双讲时退让」的参数因此几乎没有杠杆。判据是**覆盖块数**与**近端保留**两条一起看。
+    """
+    import numpy as np
+
+    nb, n = 260, 256
+    near, seg, _ = _broadband_near(nb, n)
+    a_hold, o_hold = _res_run_cfg(nb, near, dtd_hangover_blocks=12)
+    a_none, o_none = _res_run_cfg(nb, near, dtd_hangover_blocks=0)
+    assert (
+        a_hold.stats.blocks_double_talk > 2 * a_none.stats.blocks_double_talk
+    ), f"滞后保持没有扩大覆盖: {a_none.stats.blocks_double_talk} → {a_hold.stats.blocks_double_talk}"
+    keep_hold = float(np.dot(o_hold[seg], o_hold[seg]))
+    keep_none = float(np.dot(o_none[seg], o_none[seg]))
+    gain_db = 10.0 * np.log10((keep_hold + 1e-12) / (keep_none + 1e-12))
+    assert gain_db > 0.5, f"滞后保持没有换来近端保留（只有 {gain_db:.2f} dB）"
+
+
+def test_dtd_hangover_does_not_freeze_adaptation_without_near_end() -> None:
+    """对照组：没有近端时滞后保持不得被触发，否则滤波器永远学不动。"""
+    aec, _ = _res_run_cfg(200, 0.0)
+    assert aec.stats.blocks_double_talk == 0
+    assert aec.stats.blocks_adapted > 100, "无近端却冻住了自适应"

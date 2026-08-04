@@ -11,9 +11,9 @@
   本地端点免 key、B 档原生自动推导，"能不能建连"它已经回答得很完整；
 * ``core.modality_capability.negotiate()`` —— 当前档位的原生听/说结论。
 
-一条产品判断明写在这里而不是藏着：云端 realtime 按分钟计费，探到有 key 就自动连上去
-等于替用户花钱，所以云端一律 ``requires_opt_in=True`` —— 但仍然如实报"可用"，
-而不是假装没有。
+账单事实明写在这里而不是藏着：云端 realtime 按分钟计费，判定里带 ``metered=True``。
+它**不**阻止自动启用（产品决定是「档位具备就自动开」，本机原生与云端一视同仁），
+但计费这件事必须可见 —— 面板显示得出，自动开启时日志也说一次，不能悄悄开始花钱。
 """
 
 from __future__ import annotations
@@ -37,23 +37,25 @@ class DuplexCapability:
         供给存在（端点 + 凭据 / 本地原生服务都齐了）。
     source
         ``"native_local"``（本机全模态 server）/ ``"cloud_realtime"``（云端 realtime）/ ``""``。
-    requires_opt_in
-        供给存在，但需要用户显式打开才会用。云端 realtime 是按分钟计费的，
-        探到有 key 就自动连上去等于替用户花钱 —— 所以云端一律要显式开。
+    metered
+        这条供给是**按量计费**的（云端 realtime 按分钟计）。它不再阻止自动启用
+        —— 那是产品决定，已改为「档位具备就自动开」—— 但账单事实必须如实带出来：
+        面板要显示得出「正在用计费链路」，自动开启时也要在日志里说一次，
+        不能悄悄开始花钱。
     reason
         为什么可用 / 为什么不可用。缺了它，"开了开关却没生效"完全无从排查。
     """
 
     available: bool
     source: str = ""
-    requires_opt_in: bool = False
+    metered: bool = False
     reason: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "available": self.available,
             "source": self.source,
-            "requires_opt_in": self.requires_opt_in,
+            "metered": self.metered,
             "reason": self.reason,
         }
 
@@ -115,6 +117,6 @@ def duplex_capability() -> DuplexCapability:
     return DuplexCapability(
         True,
         source="cloud_realtime",
-        requires_opt_in=True,
-        reason=("云端 realtime 端点与密钥都在，但按分钟计费——不替用户自动花钱，" "需 GALAXY_VOICE_DUPLEX=1 显式开启"),
+        metered=True,
+        reason="云端 realtime 端点与密钥都在（按分钟计费）",
     )

@@ -212,6 +212,11 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_VOICE_ECHO_SIM', 'GALAXY_VOICE_ECHO_TAIL_S',
     'GALAXY_VOICE_ECHO_MIN_CHARS', 'GALAXY_VOICE_ECHO_MIN_BLOCK',
     'GALAXY_AEC_TAIL_MS', 'GALAXY_AEC_MU', 'GALAXY_AEC_MAX_DELAY_MS', 'GALAXY_AEC_DTD_MARGIN_DB',
+    // 残余回声抑制(第二级,治非线性回声)+ 双讲滞后保持 + 舒适噪声
+    'GALAXY_AEC_RES', 'GALAXY_AEC_RES_OVER', 'GALAXY_AEC_RES_FLOOR_DB',
+    'GALAXY_AEC_RES_DT_FLOOR_DB', 'GALAXY_AEC_DTD_HANGOVER', 'GALAXY_AEC_COMFORT_NOISE',
+    // 文字与语音同刻(三态 auto/1/0)
+    'GALAXY_TEXT_VOICE_LOCKSTEP',
     'GALAXY_REALTIME_PROVIDER', 'GALAXY_REALTIME_MODEL', 'GALAXY_REALTIME_VOICE', 'GALAXY_REALTIME_URL',
     // 本地全模态 server 的 realtime 路径。B 档原生就绪且没配云端 key 时,双工会自动指向
     // 本地 server 的这个路径试一次流式;server 路径不是默认 /v1/realtime 时在这里改。

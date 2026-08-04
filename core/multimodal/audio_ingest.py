@@ -112,6 +112,8 @@ class AudioIngestPipeline:
         self._latest_state: Optional[AudioState] = None
         self._callbacks: List[Callable[[AudioState, SignalQuality], None]] = []
         self._last_update_ts: Optional[float] = None
+        self._aec_cancelled = False  # 上一块是否真的过了回声消除(而非旁通)
+        self._aec_db = 0.0  # 上一块的总回声抑制量(dB)
         # 这条管线是不是已经有人在驱动了。共享实例化之后，两个订阅方（常驻感知 bus 与
         # 语音循环的采集服务）拿到的是**同一个对象**，各自都会 await run() —— 没有这道
         # 闸就是在同一个麦克风上又开了两路 sd.InputStream，正是共享实例要消除的那件事。
@@ -330,9 +332,19 @@ class AudioIngestPipeline:
         try:
             from core.multimodal.acoustic_echo_canceller import get_echo_canceller
 
-            return get_echo_canceller(self.config.sample_rate).process(chunk)
+            aec = get_echo_canceller(self.config.sample_rate)
+            out = aec.process(chunk)
+            # 记下这一块的实况:是真消了还是旁通了、消掉多少。写进 AudioState 之后
+            # 常驻感知的"世界"里就能分清「听到的是干净的」还是「没消过」——
+            # 而不是只有一个调试路由看得见。
+            snap = aec.snapshot()
+            self._aec_cancelled = bool(out is not chunk)
+            self._aec_db = float(snap.get("total_erle_db") or snap.get("erle_db") or 0.0)
+            return out
         except Exception as exc:  # noqa: BLE001 — 上行通路绝不能因 AEC 断掉
             logger.debug("AEC 跳过(本块原样通过): %s", exc)
+            self._aec_cancelled = False
+            self._aec_db = 0.0
             return chunk
 
     async def _process_chunk(self, chunk: np.ndarray) -> None:
@@ -341,6 +353,8 @@ class AudioIngestPipeline:
         chunk = self._cancel_echo(chunk)
         vad_state = self._vad.process_frame(chunk)
         state = extract_audio_features(chunk, vad_state, self._last_update_ts, self.config.sample_rate)
+        state.echo_cancelled = self._aec_cancelled
+        state.echo_suppression_db = self._aec_db
         self._last_update_ts = now
         self._latest_state = state
         self._quality = SignalQuality.ok(freshness_ms=(time.monotonic() - now) * 1000.0)

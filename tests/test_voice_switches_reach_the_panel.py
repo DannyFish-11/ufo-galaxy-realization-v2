@@ -260,7 +260,7 @@ class TestSchemaEntriesAreHonest:
             ("GALAXY_VOICE_BACKCHANNEL_TOLERANCE", "true"),
             ("GALAXY_SYSTEM_AUDIO_CAPTURE", "true"),
             ("GALAXY_SYSTEM_AUDIO_TO_PERCEPTION", "true"),
-            ("GALAXY_VOICE_DUPLEX", "false"),
+            ("GALAXY_VOICE_DUPLEX", "auto"),
             ("GALAXY_VOICE_DUCKING", "true"),
             ("GALAXY_VOICE_DUCK_GAIN", "0.25"),
             ("GALAXY_VOICE_HOLD_S", "90.0"),
@@ -300,7 +300,7 @@ class TestSchemaEntriesAreHonest:
         from core.multimodal.system_audio_capture_service import feed_perception_enabled
         from core.routes.config import CONFIG_SCHEMA
         from core.voice_dialog_policy import backchannel_tolerance_enabled
-        from core.voice_duplex_session import duck_gain, ducking_enabled, duplex_enabled
+        from core.voice_duplex_session import duck_gain, ducking_enabled
         from core.voice_echo_guard import enabled as echo_guard_enabled
 
         cases = [
@@ -309,9 +309,12 @@ class TestSchemaEntriesAreHonest:
             ("GALAXY_VOICE_BACKCHANNEL_TOLERANCE", backchannel_tolerance_enabled),
             ("GALAXY_SYSTEM_AUDIO_CAPTURE", capture_enabled),
             ("GALAXY_SYSTEM_AUDIO_TO_PERCEPTION", feed_perception_enabled),
-            ("GALAXY_VOICE_DUPLEX", duplex_enabled),
             ("GALAXY_VOICE_DUCKING", ducking_enabled),
         ]
+        # GALAXY_VOICE_DUPLEX 不在这里:它是**三态**(auto/1/0),不设时按当前档位的
+        # 真实供给判定 —— 根本没有一个固定的布尔默认值可比。拿一个固定值去比它，
+        # 结果只取决于跑测试那台机器上有没有 realtime key，是条会飘的判据。
+        # 三态开关由下面 test_three_state_switches_declare_auto 单独钉。
         saved = {k: os.environ.pop(k, None) for k, _ in cases}
         saved["GALAXY_VOICE_DUCK_GAIN"] = os.environ.pop("GALAXY_VOICE_DUCK_GAIN", None)
         try:
@@ -337,10 +340,26 @@ class TestSchemaEntriesAreHonest:
             "GALAXY_VOICE_BACKCHANNEL_TOLERANCE",
             "GALAXY_SYSTEM_AUDIO_CAPTURE",
             "GALAXY_SYSTEM_AUDIO_TO_PERCEPTION",
-            "GALAXY_VOICE_DUPLEX",
             "GALAXY_VOICE_DUCKING",
+            "GALAXY_AEC_RES",
+            "GALAXY_AEC_COMFORT_NOISE",
         ):
             assert CONFIG_SCHEMA[key]["type"] == "boolean", f"{key} 不会渲染成推拉开关"
+
+    def test_three_state_switches_declare_auto(self):
+        """三态开关(auto / 1 / 0)不能声明成 boolean+false —— 那是**假的默认值**。
+
+        双工与"文字语音同刻"都已改成:不设时按真实能力自动判定。若 schema 仍写
+        boolean/false，面板会显示"关"而系统实际已自动开启 —— 用户看到的与发生的
+        不是一回事，正是这一组守卫要防的事。
+        """
+        from core.routes.config import CONFIG_SCHEMA
+
+        for key in ("GALAXY_VOICE_DUPLEX", "GALAXY_TEXT_VOICE_LOCKSTEP"):
+            entry = CONFIG_SCHEMA[key]
+            assert entry["default"] == "auto", f"{key} 的默认值不是 auto —— 面板会显示假的默认"
+            assert entry["type"] != "boolean", f"{key} 是三态，渲染成推拉开关就丢了 auto 档"
+            assert "auto" in entry["description"], f"{key} 的说明没告诉用户 auto 是什么意思"
 
     def test_every_new_switch_has_a_chinese_description(self):
         """面板上显示的就是 description。留空或只有变量名的话用户看不懂这是干什么的。"""
@@ -386,7 +405,7 @@ class TestPanelCanActuallySaveThem:
             "GALAXY_VOICE_ECHO_GUARD": "false",
             "GALAXY_VOICE_BACKCHANNEL_TOLERANCE": "false",
             "GALAXY_SYSTEM_AUDIO_CAPTURE": "false",
-            "GALAXY_VOICE_DUPLEX": "true",
+            "GALAXY_VOICE_DUPLEX": "1",
             "GALAXY_VOICE_DUCKING": "false",
             "GALAXY_VOICE_DUCK_GAIN": "0.4",
         }
@@ -401,9 +420,10 @@ class TestPanelCanActuallySaveThem:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         items = body.get("config", body)
-        for key in ("GALAXY_AEC", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN"):
+        for key in ("GALAXY_AEC", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN", "GALAXY_AEC_RES"):
             assert key in items, f"/api/config/all 没返回 {key}"
-            assert items[key]["type"] in ("boolean", "number")
+            # string 也在内:三态开关(auto/1/0)本来就不是布尔,渲染成推拉开关会丢掉 auto 档。
+            assert items[key]["type"] in ("boolean", "number", "string")
             assert items[key]["description"]
 
 

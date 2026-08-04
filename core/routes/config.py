@@ -579,11 +579,58 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "把本机播放声送进感知（关掉则只用于回声消除、不进模型 · 默认开）",
     },
+    # 三态:不设=按当前档位的**真实供给**自动判定(本机原生与云端一视同仁);
+    # 1=强制开;0=强制关。写成 boolean/false 是**假的** —— 面板会显示"关"而实际
+    # 已自动开启,那正是这条守卫要防的事。
     "GALAXY_VOICE_DUPLEX": {
-        "default": "false",
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音（auto=档位具备就自动开,云端 realtime 按分钟计费 / 1=强制开 / 0=强制关 · 默认 auto）",
+    },
+    # 残余回声抑制(RES/NLP):线性对消之后的第二级,专治扬声器削波/外壳振动带来的
+    # **非线性**回声 —— 那部分线性滤波器原理上消不掉。实测非线性路径上多消约 10 dB。
+    "GALAXY_AEC_RES": {
+        "default": "true",
         "type": "boolean",
         "category": "behavior",
-        "description": "全双工语音（边说边听,需 provider 支持 realtime 语音通道 · 默认关）",
+        "description": "残余回声抑制（线性对消之后再压一层非线性残余 · 默认开）",
+    },
+    "GALAXY_AEC_RES_OVER": {
+        "default": "1.5",
+        "type": "number",
+        "category": "behavior",
+        "description": "残余抑制过减因子（越大压得越狠,代价是近端语音也多削一点 · 默认 1.5）",
+    },
+    "GALAXY_AEC_RES_FLOOR_DB": {
+        "default": "-18",
+        "type": "number",
+        "category": "behavior",
+        "description": "远端单讲时的抑制下限 dB（压到底会是一段死寂,反而难受 · 默认 -18）",
+    },
+    "GALAXY_AEC_RES_DT_FLOOR_DB": {
+        "default": "-3",
+        "type": "number",
+        "category": "behavior",
+        "description": "双讲时的抑制下限 dB（用户正在说话,必须比单讲宽松 · 默认 -3）",
+    },
+    "GALAXY_AEC_DTD_HANGOVER": {
+        "default": "12",
+        "type": "number",
+        "category": "behavior",
+        "description": "双讲检出后继续按双讲处理多少块（真实双讲连续,能量判据只抓得住峰 · 默认 12）",
+    },
+    "GALAXY_AEC_COMFORT_NOISE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "舒适噪声（把被压掉的部分填回极低底噪,消除呼吸感 · 默认开）",
+    },
+    "GALAXY_TEXT_VOICE_LOCKSTEP": {
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": "文字与语音同刻（auto=有语音时自动同刻 / 1=强制开 / 0=强制关 · 默认 auto）",
     },
     "GALAXY_VOICE_DUCKING": {
         "default": "true",

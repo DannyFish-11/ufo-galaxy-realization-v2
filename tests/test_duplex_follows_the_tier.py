@@ -16,9 +16,9 @@
 realtime 端点也推得出来」的机器上，双工照样永远不启动。和第 0 层修掉的 lockstep
 手动开关是同一个病。
 
-一条产品判断写在判据里而不是藏着：**自动档只对本机原生供给放行**。云端 realtime
-按分钟计费，探到有 key 就自动连上去等于替用户花钱，所以云端一律要显式开
-（``requires_opt_in``），但仍然如实报「可用」而不是假装没有。
+自动档对**本机原生与云端一视同仁**：档位具备该能力就自动开。云端 realtime 按分钟
+计费这件事不再阻止自动启用（产品决定），但必须**可见**：判定里带 ``metered=True``，
+自动启用时日志说一次 —— 自动可以，悄悄开始花钱不行。
 """
 
 from __future__ import annotations
@@ -72,13 +72,13 @@ def test_no_supply_is_reported_as_unavailable_with_a_reason(monkeypatch) -> None
     assert cap.reason, "不可用却说不出原因 —— '开了开关却没生效'就无从排查"
 
 
-def test_local_native_supply_is_available_and_needs_no_opt_in(monkeypatch) -> None:
-    """B 档原生就绪 + 本地 realtime 端点 → 可用，且不需要额外开关（本机不花钱）。"""
+def test_local_native_supply_is_available_and_not_metered(monkeypatch) -> None:
+    """B 档原生就绪 + 本地 realtime 端点 → 可用，且**不计费**（本机跑的）。"""
     _patch_supply(monkeypatch, _cfg("ws://localhost:32550/v1/realtime"), _Plan("native", "native"))
     cap = duplex_capability()
     assert cap.available is True
     assert cap.source == "native_local"
-    assert cap.requires_opt_in is False
+    assert cap.metered is False, "本机原生被标成了计费链路 —— 会白提示一次账单警告"
 
 
 def test_local_endpoint_without_native_tier_is_not_counted_as_capable(monkeypatch) -> None:
@@ -95,13 +95,13 @@ def test_half_native_tier_does_not_count(monkeypatch) -> None:
     assert duplex_capability().available is False
 
 
-def test_cloud_supply_is_available_but_requires_explicit_opt_in(monkeypatch) -> None:
-    """云端 realtime 端点与密钥都在 → 如实报可用，但要显式开（按分钟计费）。"""
+def test_cloud_supply_is_available_and_flagged_as_metered(monkeypatch) -> None:
+    """云端 realtime 端点与密钥都在 → 可用，且如实标注按量计费。"""
     _patch_supply(monkeypatch, _cfg("wss://api.openai.com/v1/realtime?model=gpt-realtime"))
     cap = duplex_capability()
     assert cap.available is True, "有供给却谎报没有 —— 面板会显示'不支持'"
     assert cap.source == "cloud_realtime"
-    assert cap.requires_opt_in is True
+    assert cap.metered is True, "计费事实被抹掉了 —— 面板无从显示'正在用计费链路'"
 
 
 def test_capability_probe_never_raises(monkeypatch) -> None:
@@ -133,10 +133,41 @@ def test_auto_stays_off_when_the_tier_cannot_do_it(monkeypatch) -> None:
     assert duplex_enabled() is False
 
 
-def test_auto_does_not_spend_money_on_the_user_s_behalf(monkeypatch) -> None:
-    """自动档不替用户开云端按分钟计费的链路。"""
+def test_auto_also_opens_the_cloud_path(monkeypatch) -> None:
+    """自动档对云端一视同仁：档位具备就开（产品决定）。"""
     _patch_supply(monkeypatch, _cfg("wss://api.openai.com/v1/realtime?model=gpt-realtime"))
-    assert duplex_enabled() is False, "自动档把云端 realtime 打开了 —— 那是在替用户花钱"
+    assert duplex_enabled() is True, "档位具备云端 realtime，自动档却没开"
+
+
+def test_auto_opening_a_metered_path_is_announced(monkeypatch, caplog) -> None:
+    """自动开计费链路必须**说一次** —— 自动可以，悄悄开始花钱不行。"""
+    import logging
+
+    monkeypatch.setattr(vds, "_metered_notice_said", False)
+    _patch_supply(monkeypatch, _cfg("wss://api.openai.com/v1/realtime?model=gpt-realtime"))
+    with caplog.at_level(logging.WARNING, logger="Galaxy.VoiceDuplex"):
+        assert duplex_enabled() is True
+    assert any("计费" in r.getMessage() for r in caplog.records), "自动开了计费链路却一声不吭"
+
+
+def test_metered_notice_is_said_once_not_every_call(monkeypatch, caplog) -> None:
+    """对照组：这句话只说一次，否则语音启动路径上会刷成噪音（噪音等于没说）。"""
+    import logging
+
+    monkeypatch.setattr(vds, "_metered_notice_said", False)
+    _patch_supply(monkeypatch, _cfg("wss://api.openai.com/v1/realtime?model=gpt-realtime"))
+    with caplog.at_level(logging.WARNING, logger="Galaxy.VoiceDuplex"):
+        for _ in range(5):
+            duplex_enabled()
+    said = [r for r in caplog.records if "计费" in r.getMessage()]
+    assert len(said) == 1, f"这句话说了 {len(said)} 次"
+
+
+def test_explicit_off_still_beats_metered_auto(monkeypatch) -> None:
+    """不想要计费链路的逃生口：显式关一定关得掉。"""
+    monkeypatch.setenv("GALAXY_VOICE_DUPLEX", "0")
+    _patch_supply(monkeypatch, _cfg("wss://api.openai.com/v1/realtime?model=gpt-realtime"))
+    assert duplex_enabled() is False
 
 
 def test_explicit_on_wins_over_capability(monkeypatch) -> None:

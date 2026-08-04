@@ -221,12 +221,35 @@ def is_local_endpoint(url: str) -> bool:
         return False  # 不是 IP 字面量,又不在上面的名字里 → 当作远端
 
 
+#: 「自动开启了计费链路」这句话只说一次。放模块级而不是每次调用都打：
+#: duplex_enabled() 在语音循环启动路径上会被问好几次，每次刷一条就成了噪音，
+#: 而噪音等于没说。
+_metered_notice_said = False
+
+
+def _notice_metered_once(cap: Any) -> None:
+    """自动启用按量计费链路时，如实说一次。自动可以，悄悄开始花钱不行。"""
+    global _metered_notice_said
+    if _metered_notice_said:
+        return
+    _metered_notice_said = True
+    logger.warning(
+        "双工语音已【自动】启用云端 realtime(%s)——这条链路按分钟计费。"
+        "档位具备该能力即自动启用；不需要请设 GALAXY_VOICE_DUPLEX=0。",
+        getattr(cap, "source", "cloud_realtime"),
+    )
+
+
 def duplex_enabled() -> bool:
     """双工语音是否启用 —— 三态：显式开 / 显式关 / **未设置时按档位能力自动判定**。
 
-    原先固定读 env 且默认关，于是装了能力也用不上。判据与那条产品判断（云端要显式开）
-    都在 :mod:`core.voice_duplex_capability`，这里不复述。显式开时**不再问能力**：
+    原先固定读 env 且默认关，于是装了能力也用不上。判据在
+    :mod:`core.voice_duplex_capability`，这里不复述。显式开时**不再问能力**：
     用户明说要试就去试，连不上由 ``from_env``/``connect`` 各自记原因并回落回合制。
+
+    自动档对**本机原生与云端一视同仁**。云端 realtime 按分钟计费，所以自动启用它时
+    ``_notice_metered_once`` 会在日志里说一次 —— 自动可以，悄悄开始花钱不行。
+    不想要就设 ``GALAXY_VOICE_DUPLEX=0``。
     """
     raw = (os.environ.get("GALAXY_VOICE_DUPLEX") or "").strip().lower()
     if raw in ("1", "true", "yes", "on"):
@@ -237,7 +260,9 @@ def duplex_enabled() -> bool:
     from core.voice_duplex_capability import duplex_capability
 
     cap = duplex_capability()
-    return bool(cap.available and not cap.requires_opt_in)
+    if cap.available and cap.metered:
+        _notice_metered_once(cap)
+    return bool(cap.available)
 
 
 def ducking_enabled() -> bool:
