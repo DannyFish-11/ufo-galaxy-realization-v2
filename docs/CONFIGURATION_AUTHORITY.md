@@ -288,7 +288,7 @@ Rules:
 | Validate config before startup | `core.config_preflight.run_preflight()` |
 | Start the system | `python main.py` (delegates to `unified_launcher.py`) |
 | Start via shell | `./start.sh` or `./start_unified.sh` (delegates to `unified_launcher.py`) |
-| Manage individual nodes | `python system_manager.py` |
+| Manage individual nodes | `python main.py nodes <start\|stop\|status\|monitor\|report>`（`python system_manager.py <同名命令>` 仍可用，将在启动器统一的最后一步删除） |
 
 ---
 

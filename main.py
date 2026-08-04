@@ -909,6 +909,28 @@ def _apply_model_cli_args(args) -> None:
         pass
 
 
+def _record_module():
+    """惰性取 launcher.record（退出码常量的唯一来源）。"""
+    from launcher import record
+
+    return record
+
+
+def _run_nodes_command(args) -> int:
+    """``python main.py nodes <start|stop|status|monitor|report>``。"""
+    import asyncio as _asyncio
+
+    from launcher import nodes as _nodes
+
+    try:
+        return _asyncio.run(_nodes.run_command(args.node_command, group=args.group, interval=args.interval))
+    except KeyboardInterrupt:
+        return _record_module().EXIT_INTERRUPTED
+    except ValueError as exc:
+        print_item(str(exc), "error")
+        return _record_module().EXIT_USAGE
+
+
 def _run_install_command(args) -> int:
     """``python main.py install [--core|--enhance|--all]``。
 
@@ -966,6 +988,14 @@ def _run_install_command(args) -> int:
 
 
 def main() -> int:
+    # nodes 子命令的取值表要在 argparse 建表时就拿到。launcher.nodes 只含常量,
+    # 真正会读配置的 system_manager 由它内部惰性加载 —— 所以这个 import 不会
+    # 把节点表的读取拉进"只想 --version"的路径。
+    try:
+        from launcher import nodes as _launcher_nodes
+    except Exception:  # noqa: BLE001
+        _launcher_nodes = None
+
     parser = argparse.ArgumentParser(description="Galaxy V2 Unified Entry")
     # --version：CLI 该知道自己的版本。此前 GALAXY_VERSION 只印在横幅里，
     # 脚本/排障想拿版本号只能去 grep 源码或截横幅。
@@ -1005,8 +1035,32 @@ def main() -> int:
         "command",
         nargs="?",
         default=None,
-        choices=["install"],
-        help="子命令。install = 只装依赖后退出（替代已无调用方的 python install.py）",
+        choices=["install", "nodes"],
+        help=(
+            "子命令。install = 只装依赖后退出（替代已无调用方的 python install.py）；"
+            "nodes = 节点生命周期（替代 python system_manager.py）"
+        ),
+    )
+    parser.add_argument(
+        "node_command",
+        nargs="?",
+        default=None,
+        choices=list(_launcher_nodes.NODE_COMMANDS) if _launcher_nodes else None,
+        help="(nodes) start | stop | status | monitor | report",
+    )
+    parser.add_argument(
+        "--group",
+        "-g",
+        default=_launcher_nodes.DEFAULT_GROUP if _launcher_nodes else "all",
+        choices=list(_launcher_nodes.NODE_GROUPS) if _launcher_nodes else None,
+        help="(nodes start) 节点组",
+    )
+    parser.add_argument(
+        "--interval",
+        "-i",
+        type=int,
+        default=_launcher_nodes.DEFAULT_INTERVAL if _launcher_nodes else 30,
+        help="(nodes monitor) 监控间隔（秒）",
     )
     parser.add_argument("--all", action="store_true", help="(install) 核心 + 增强 + Windows 全装")
     parser.add_argument("--core", action="store_true", help="(install) 只装核心")
@@ -1020,6 +1074,17 @@ def main() -> int:
     # 现在两条路都通向同一份实现，先把漂移消掉。
     if args.command == "install":
         return _run_install_command(args)
+
+    # ── 子命令：nodes ──────────────────────────────────────────────────
+    # 命令面替换 `python system_manager.py <cmd>` → `python main.py nodes <cmd>`。
+    # 五个命令与 --group/--interval 全部照搬 system_manager.main() 的真实 argparse
+    # （计划文档里写的 "<start|stop|status> [name]" 少了 monitor/report、参数形态
+    #  也不对，已在 launcher/nodes.py 的模块头记录订正）。
+    if args.command == "nodes":
+        if not args.node_command:
+            print_item("nodes 需要一个命令", "error", " | ".join(_launcher_nodes.NODE_COMMANDS))
+            return _record_module().EXIT_USAGE
+        return _run_nodes_command(args)
 
     # -v 同时落到环境变量：子模块（unified_launcher 等）无需逐层透传即可读到。
     if args.verbose:
@@ -1154,4 +1219,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    main()
+    # ``raise SystemExit(main())`` 而不是裸 ``main()``。
+    #
+    # 此前是裸调用,于是 main() 精心算出的退出码【全部被丢弃】,进程永远 exit 0
+    # —— EXIT_INTERRUPTED(130,用户按了 Ctrl+C)、EXIT_DEPENDENCY(3,依赖装不上)、
+    # EXIT_USAGE(2,参数用法错)一个都到不了 shell。
+    #
+    # 后果与 core/health_check.py 那个"静默 exit 0"是同一类:
+    # ``python main.py && next-step`` 在启动被中断或依赖缺失时照样放行,而
+    # launcher/record.py 里那张退出码表读起来像是生效的。
+    raise SystemExit(main())

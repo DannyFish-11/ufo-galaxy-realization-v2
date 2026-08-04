@@ -212,7 +212,7 @@ main.py                       ← 唯一入口。只做：参数解析 → 契�
 | `python main.py` | 不变 |
 | `python unified_launcher.py` | `python main.py`（它本来就是从属） |
 | `python launch_desktop.py` | `python main.py --desktop-only` |
-| `python system_manager.py` | `python main.py nodes <start\|stop\|status> [name]` |
+| `python system_manager.py <cmd>` | `python main.py nodes <start\|stop\|status\|monitor\|report>` + `--group` / `--interval`（**订正**：原来写的 `[name]` 与只列三个命令都不对，见 §步骤 5） |
 | `python install.py --all` | `python main.py install --all` |
 | `python build_exe.py --onefile` | 保留原样（打包不属于运行期启动） |
 
@@ -300,7 +300,7 @@ python main.py --only nodes
 | 2 | 环境检查合并 → `launcher/env_check.py` | ✅ 已完成。见下方"步骤 2：两份判据实测差在哪" |
 | 3 | 依赖引导合并 → `launcher/deps.py` | ✅ 共享层已建。见下方"步骤 3：四份引导，四种抗弱网强度" |
 | 4 | 桌面壳合并 → `launcher/shell.py` | 含 npm 自愈链，**最需要小心**，但收益最大 |
-| 5 | 节点生命周期 → `launcher/nodes.py`（吸收 `system_manager`） | 要同时改 `docs/CONFIGURATION_AUTHORITY.md` 的用户指引 |
+| 5 | 节点生命周期 → `launcher/nodes.py` | ✅ **命令面**已建并接线，两处文档已改；实现体搬迁留到步骤 8。见 §步骤 5 |
 | 6 | ~~健康检查分工 → `launcher/health.py`~~ → **不合并，改为写清分工 + 修真 bug** | ✅ 已完成。原判断「五处重复」不成立，见 §1.3 ④ 的订正 |
 | 7 | 服务编排 → `launcher/services.py` | 最大一块，放最后 |
 | 8 | 删 `unified_launcher.py` / `launch_desktop.py` / `system_manager.py` / `install.py` | 前面全绿之后 |
@@ -473,6 +473,48 @@ faster-whisper 几百 MB、卡住就把首启拖死），而 `install.sh` 恰恰
 - `install.sh` / `install_windows.ps1` 瘦成纯引导（venv + 调 `python main.py install`），
   它们现在仍各自实现一份；
 - `install.sh` 的 venv 创建与 `predownload_models.py` 预下载尚未搬进 `deps.py`。
+
+### 步骤 5：命令面先行，实现体后搬
+
+**为什么拆成两步**：`system_manager.py` 676 行，且 `health_monitor.py:50` 有一条
+**真实的生产 import**（`from system_manager import SystemManager, NODES, NodeConfig`）。
+把实现体搬迁和这条 import 一起动，是两件互相独立、各自都会出错的事。
+
+这一步只保证**新命令能用、老命令的每种用法都有对应写法**，实现仍委托现有
+`SystemManager`。删除留到步骤 8 —— 到那时新命令已经在文档里挂了一阵。
+
+#### 计划里的替换命令写错了（订正）
+
+原命令面表写的是：
+
+```
+python system_manager.py  →  python main.py nodes <start|stop|status> [name]
+```
+
+对着 `system_manager.main()` 的真实 argparse 核过，两处不对：
+
+1. **少了两个命令**。真实的是 `start | stop | status | monitor | report`。
+   照计划实现会**静默丢掉** `monitor`（常驻监控循环）与 `report`（JSON 报告）
+   —— 用户敲惯的命令突然不认识，而"命令面替换完成"却已经写进文档。
+2. **参数形态错了**。真实的是 `--group`（九个节点组 + `all`）与 `--interval`，
+   不是位置参数 `[name]`。按 `[name]` 实现的话，`start --group core` 根本没有
+   对应写法。
+
+`tests/test_launcher_nodes.py` 里那两条一致性测试是**从 `system_manager.py` 的
+AST 里取真实 choices** 来比的，不是照抄我记的或计划写的 —— 它俩已经不一致过一次。
+
+#### 顺带发现并修掉的真 bug：退出码从来没到过 shell
+
+`main.py` 的 `__main__` 写的是裸 `main()`，**返回值被丢弃**，进程永远 exit 0。
+于是 `launcher/record.py` 里那张退出码表 —— `EXIT_INTERRUPTED(130)` /
+`EXIT_DEPENDENCY(3)` / `EXIT_USAGE(2)` —— 一个都到不了 shell，读起来却像是生效的。
+
+与 `core/health_check.py` 那个"静默 exit 0"是同一类：
+`python main.py && next-step` 在启动被中断或依赖缺失时照样放行。
+
+已改为 `raise SystemExit(main())`。核过下游：`start.sh:45` 与 `start.bat:28` 都以
+`python main.py` 作为**最后一条语句**，所以退出码会正确传出去；CI 里没有任何
+workflow 跑 `python main.py`，不会因此变红。
 
 ### 每一步都要有的门
 
