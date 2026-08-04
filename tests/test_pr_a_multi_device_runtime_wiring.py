@@ -27,14 +27,16 @@ Coverage
 from __future__ import annotations
 
 import asyncio
-import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-# Node_71 directory — used by coordinator engine tests.
-_NODE71_DIR = str(Path(__file__).resolve().parent.parent / "nodes" / "Node_71_MultiDeviceCoordination")
 import pytest
+
+# 这里原先有一个 ``_NODE71_DIR``,专门用来把 Node_71 的目录塞进 sys.path,好让
+# ``from core.X`` / ``from models.X`` 这类**裸顶层导入**解析得到节点包内的模块。
+# Node_71 已改成规范的相对导入、并且本来就是个带 __init__.py 的正经包,协调引擎
+# 相关的用例改成按真实包路径 import(nodes.Node_71_MultiDeviceCoordination.…),
+# 于是这个常量连同 os / Path 两个 import 一起没人用了。
 
 # ---------------------------------------------------------------------------
 # 1–2: DeviceRegistry.update_status wiring
@@ -782,64 +784,39 @@ class TestAndroidBridgeReconnectWiring:
 class TestCoordinatorEngineHarnessWiring:
     """MultiDeviceCoordinatorEngine coordinator-state transitions → harness hooks."""
 
+    # 这里原先有一套 **伪造模块名** 的侧载:用 importlib 把
+    # nodes/Node_71_MultiDeviceCoordination/core/xxx.py 以 ``core.xxx`` 这个名字装进
+    # sys.modules,再顺手挂到仓库根的 core 包上,注释写的理由是"避开 core 命名冲突"。
+    #
+    # 那个冲突的根源在 Node_71 自己:它用裸 ``from core.X`` / ``from models.X`` 引用
+    # **自己包内**的模块,只有把节点目录塞进 sys.path 才成立。而它现在已经被改成规范的
+    # 相对导入(``from .device_discovery`` / ``from ..models.device``)—— 于是伪造的
+    # ``core.xxx`` 这个名字反而成了毒药:相对导入按这个假名字解析,``..models`` 直接
+    # 越过顶层包,抛 "attempted relative import beyond top-level package"。
+    #
+    # 更糟的是 ``_ensure_n71_modules`` 用 ``except Exception: pass`` 把这个真实错误吞掉,
+    # 于是失败以一句风马牛不相及的 ``ModuleNotFoundError: No module named
+    # 'core.multi_device_coordinator_engine'`` 出现在下游 —— 报的原因不是真的原因,
+    # 排查得从头再来一遍。
+    #
+    # Node_71 现在是个规规矩矩的包(nodes/、Node_71…/、core/、models/ 都有 __init__.py),
+    # 所以正确做法就是**按它真实的路径 import**,不再伪造名字、不再预加载、不再吞异常。
     @staticmethod
-    def _load_n71_module(mod_name: str):
-        """Load a Node_71 core submodule via importlib to avoid core namespace conflict."""
-        import importlib.util
-        import sys
+    def _coordinator_engine():
+        """按真实包路径取 Node_71 的协调引擎(导入失败就让它失败,不吞)。"""
+        from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
+            CoordinatorConfig,
+            MultiDeviceCoordinatorEngine,
+        )
 
-        full_name = f"core.{mod_name}"
-        if full_name in sys.modules:
-            return sys.modules[full_name]
-
-        node71_core = os.path.join(_NODE71_DIR, "core")
-        # Ensure repo root (for main core/) and Node_71 dir (for models/) are on path
-        repo_root = str(Path(__file__).resolve().parent.parent)
-        if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)
-        if _NODE71_DIR not in sys.path:
-            sys.path.insert(1, _NODE71_DIR)
-
-        path = os.path.join(node71_core, f"{mod_name}.py")
-        spec = importlib.util.spec_from_file_location(full_name, path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[full_name] = module
-        try:
-            spec.loader.exec_module(module)
-            import core as _core_pkg
-
-            setattr(_core_pkg, mod_name, module)
-        except Exception:
-            sys.modules.pop(full_name, None)
-            raise
-        return module
-
-    def _ensure_n71_modules(self):
-        """Pre-load all Node_71 core submodules in dependency order."""
-        for mod in [
-            "canonical_device_view_adapter",
-            "fault_tolerance",
-            "device_discovery",
-            "state_synchronizer",
-            "task_scheduler",
-            "multi_device_coordinator_engine",
-        ]:
-            try:
-                self._load_n71_module(mod)
-            except Exception:
-                pass
+        return CoordinatorConfig, MultiDeviceCoordinatorEngine
 
     def test_coordinator_start_calls_on_coordinator_state_updated(self):
         """MultiDeviceCoordinatorEngine.start() must call on_coordinator_state_updated
         with overall_status='running' after successfully starting."""
         from unittest.mock import AsyncMock
 
-        self._ensure_n71_modules()
-
-        from core.multi_device_coordinator_engine import (  # type: ignore[import]
-            CoordinatorConfig,
-            MultiDeviceCoordinatorEngine,
-        )
+        CoordinatorConfig, MultiDeviceCoordinatorEngine = self._coordinator_engine()
 
         coord_called = []
 
@@ -875,13 +852,11 @@ class TestCoordinatorEngineHarnessWiring:
         """_heartbeat_loop() device timeout must call on_device_health_changed with heartbeat_miss."""
         from unittest.mock import AsyncMock
 
-        self._ensure_n71_modules()
-
-        from core.multi_device_coordinator_engine import (  # type: ignore[import]
-            CoordinatorConfig,
+        from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
             CoordinatorState,
-            MultiDeviceCoordinatorEngine,
         )
+
+        CoordinatorConfig, MultiDeviceCoordinatorEngine = self._coordinator_engine()
 
         health_called = []
         readiness_called = []
@@ -902,12 +877,15 @@ class TestCoordinatorEngineHarnessWiring:
         engine = MultiDeviceCoordinatorEngine(config)
         engine._state = CoordinatorState.RUNNING
 
-        import sys
-
-        if _NODE71_DIR not in sys.path:
-            sys.path.insert(1, _NODE71_DIR)
-
-        from models.device import Device, DeviceState, DeviceType  # type: ignore[import]
+        # 同上:按真实包路径取,不再往 sys.path 里塞节点目录。
+        # 裸 ``from models.device`` 只有在 Node_71 目录被塞进 sys.path 时才解析得到,
+        # 而那样它会被当成**顶层** ``models`` 包 —— Node_71/models/__init__.py 里的
+        # ``from ..models.device import ...`` 于是越过顶层,同样炸 "beyond top-level"。
+        from nodes.Node_71_MultiDeviceCoordination.models.device import (
+            Device,
+            DeviceState,
+            DeviceType,
+        )
 
         stale_device = Device(
             device_id="stale-d-01",
