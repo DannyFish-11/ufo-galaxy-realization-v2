@@ -36,8 +36,8 @@ class TestBrainStartupOrdering:
         def fake_background_pull(tag):
             call_order.append("background_pull")
 
-        with patch("unified_launcher.GalaxyUnified.start_local_brain", new=fake_start_local_brain):
-            import unified_launcher as ul
+        with patch("launcher.services.GalaxyUnified.start_local_brain", new=fake_start_local_brain):
+            from launcher import services as ul
 
             with (
                 patch("core.model_selection.resolve_main_brain", side_effect=lambda interactive: "gemma4:e2b"),
@@ -66,8 +66,8 @@ class TestBrainStartupOrdering:
         def fake_background_pull(tag):
             call_order.append("background_pull")
 
-        with patch("unified_launcher.GalaxyUnified.start_local_brain", new=fake_start_local_brain):
-            import unified_launcher as ul
+        with patch("launcher.services.GalaxyUnified.start_local_brain", new=fake_start_local_brain):
+            from launcher import services as ul
 
             with (
                 patch("core.model_selection.resolve_main_brain", side_effect=lambda interactive: ""),

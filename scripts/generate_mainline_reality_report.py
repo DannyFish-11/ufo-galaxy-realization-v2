@@ -109,10 +109,10 @@ def build_mainline_reality_report(repo_root: Path = REPO_ROOT) -> MainlineRealit
             "主链职责覆盖启动编排、主体认知执行、API/投影、节点体系、"
             "设备路由与跨设备扩展。"
         ),
-        startup_entrypoint="main.py → unified_launcher.py",
+        startup_entrypoint="main.py → launcher/services.py",
         canonical_runtime_chain=[
             "main.py",
-            "unified_launcher.py",
+            "launcher/services.py",
             "core.desktop_presence_runtime",
             "core.openclawd",
             "core.agent.kernel",
@@ -136,7 +136,7 @@ def build_mainline_reality_report(repo_root: Path = REPO_ROOT) -> MainlineRealit
         active_legacy_surfaces=legacy_surfaces,
         key_code_evidence=[
             "main.py",
-            "unified_launcher.py",
+            "launcher/services.py",
             "core/desktop_presence_runtime.py",
             "core/openclawd.py",
             "core/agent/kernel.py",

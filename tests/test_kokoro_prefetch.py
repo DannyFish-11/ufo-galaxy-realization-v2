@@ -8,7 +8,7 @@ Kokoro 离线 TTS 模型"被动懒加载"的回归防护。
 "语音为什么还是用不了"反馈。
 
 本测试锁定两处修复:
-1. unified_launcher.py 的启动序列必须【无条件】(不依赖 start_voice_interaction()
+1. launcher/services.py 的启动序列必须【无条件】(不依赖 start_voice_interaction()
    是否成功)主动踢一次后台预取,而不是只在 speech_output 里被动触发。
 2. kick_background_fetch() 拉取失败时必须用 WARNING(而非默认控制台看不到的
    INFO)上报,且带上可操作的具体路径/文件名/镜像指引。
@@ -22,14 +22,15 @@ import pathlib
 import sys
 import types
 
-_LAUNCHER = pathlib.Path(__file__).resolve().parents[1] / "unified_launcher.py"
+# 检查对象搬家了：启动序列随服务编排原样搬到 launcher/services.py。
+_LAUNCHER = pathlib.Path(__file__).resolve().parents[1] / "launcher" / "services.py"
 
 
 def test_launcher_calls_kokoro_prefetch_unconditionally_before_voice_interaction():
     src = _LAUNCHER.read_text(encoding="utf-8")
     prefetch_idx = src.find("kick_background_fetch")
     voice_idx = src.find("await self.start_voice_interaction()")
-    assert prefetch_idx != -1, "unified_launcher.py 必须主动调用 kokoro kick_background_fetch"
+    assert prefetch_idx != -1, "launcher/services.py 必须主动调用 kokoro kick_background_fetch"
     assert voice_idx != -1, "start_voice_interaction() 调用点消失,测试基准失效"
     assert prefetch_idx < voice_idx, (
         "Kokoro 预取必须在语音交互启动之前触发,且不能依赖其结果——" "回归了'被动懒加载,3 分钟下载来不及'的 bug"

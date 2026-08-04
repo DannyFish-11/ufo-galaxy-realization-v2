@@ -305,7 +305,10 @@ class GalaxyDaemon:
             "disk_threshold": 90,  # Percent
             "services": {
                 "galaxy_main": {
-                    "command": ["python", "unified_launcher.py"],
+                    # 唯一入口 main.py：unified_launcher.py 已随启动器统一删除。
+                    # 守护进程照着老路径拉，只会每次都拿到 "can't open file"，
+                    # 然后按 restart_policy=always 无限重启。
+                    "command": ["python", "main.py"],
                     "restart_policy": "always",
                     "max_restarts": 10
                 },

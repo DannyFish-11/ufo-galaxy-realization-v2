@@ -114,7 +114,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_07_no_unified_dashboard_startup_message(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "统一 Dashboard 启动",
             content,
@@ -122,7 +122,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_08_no_control_panel_message(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "控制面板:",
             content,
@@ -130,7 +130,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_09_fallback_html_no_galaxy_dashboard(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         # Find FALLBACK_HTML assignment and check it doesn't promote Dashboard
         self.assertNotIn(
             "Galaxy Dashboard",
@@ -139,7 +139,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_10_fallback_html_no_dashboard_is_served_at(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "Dashboard is served at",
             content,
@@ -152,7 +152,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         dashboard 一并删除(它只被那个零调用方的方法引用),但"启动后要让人知道
         API 文档在哪"这条意图仍然成立——现在由启动日志承担。
         """
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertIn(
             "/docs",
             content,
@@ -164,7 +164,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_12_no_register_node_with_dashboard_method(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "_register_node_with_dashboard",
             content,
@@ -172,7 +172,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_13_register_node_with_dashboard_absent(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn("_register_node_with_dashboard", content)
 
     # ------------------------------------------------------------------
@@ -180,7 +180,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_14_no_dashboard_static_resource_warning(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "Dashboard 静态资源未找到",
             content,
@@ -196,16 +196,23 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         """start_galaxy.py has been fully removed from the repository."""
         self.assertFalse(
             (PROJECT_ROOT / "start_galaxy.py").exists(),
-            "start_galaxy.py must not exist — it has been permanently removed. "
-            "Use 'python main.py' or 'python unified_launcher.py' instead.",
+            "start_galaxy.py must not exist — it has been permanently removed. " "Use 'python main.py' instead.",
         )
 
-    def test_16_unified_launcher_is_sole_startup_entry(self):
-        """unified_launcher.py is now the sole non-main startup entry."""
+    def test_16_main_py_is_the_sole_startup_entry(self):
+        """main.py 是唯一入口；四个旧启动器本体已删除。
+
+        这条原本断言 ``unified_launcher.py`` **必须存在**（当时它是"唯一的非 main
+        启动入口"）。启动器统一（docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步）之后
+        "唯一入口"的字面含义变成了：main.py 之外一个都没有。
+        """
+        self.assertTrue((PROJECT_ROOT / "main.py").exists(), "main.py must exist")
         self.assertTrue(
-            (PROJECT_ROOT / "unified_launcher.py").exists(),
-            "unified_launcher.py must exist as the authoritative startup entry",
+            (PROJECT_ROOT / "launcher" / "services.py").exists(),
+            "服务编排实现体 launcher/services.py must exist",
         )
+        for name in ("unified_launcher.py", "launch_desktop.py", "system_manager.py", "install.py"):
+            self.assertFalse((PROJECT_ROOT / name).exists(), f"{name} 已退役，请用 python main.py")
 
     # ------------------------------------------------------------------
     # Group 6: PR-8 markers preserved (regression guard)
@@ -222,7 +229,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_19_unified_web_ui_start_docstring_no_dashboard_base_app(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         # The old docstring said: "以 dashboard.backend.main.app 为基础应用"
         self.assertNotIn(
             "以 dashboard.backend.main.app 为基础应用",
@@ -231,7 +238,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_20_no_get_dashboard_html_method(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         # Old method name must be gone
         self.assertNotIn(
             "def _get_dashboard_html",
@@ -248,7 +255,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         ``dashboard/frontend/public/index.html`` 在仓库里根本不存在。
         断言相应地从"必须存在"翻成"必须不存在"。
         """
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "def _get_legacy_dashboard_html",
             content,
@@ -265,7 +272,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_22_api_service_section_exists(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertIn(
             "API 服务",
             content,
@@ -273,7 +280,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_23_no_web_ui_qidong_phrase(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "Web UI 启动中",
             content,
@@ -285,7 +292,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_24_step1_no_dashboard_base_framing(self):
-        content = _read("unified_launcher.py")
+        content = _read("launcher/services.py")
         self.assertNotIn(
             "以 dashboard/backend/main.py 的完整 app 为基础",
             content,
@@ -338,7 +345,11 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_29_no_ui_argparse_help_not_web_ui(self):
-        content = _read("unified_launcher.py")
+        # argparse 搬家了：CLI 统一到 main.py（unified_launcher.py 已删除）。
+        # ``--no-ui`` 本身也没有收编——它只写 SystemConfig 字段、start() 从不读，
+        # 是个从未生效的开关。这条断言仍然成立且仍有意义：唯一的 CLI 上不许
+        # 再出现"Web UI"那套把 dashboard 当主表层的说法。
+        content = _read("main.py")
         # The old help was "不启动 Web UI" — it should now reference API service
         self.assertNotIn(
             "不启动 Web UI",
@@ -347,7 +358,7 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
         )
 
     def test_30_port_argparse_help_not_web_ui_port(self):
-        content = _read("unified_launcher.py")
+        content = _read("main.py")  # argparse 已统一到 main.py
         self.assertNotIn(
             '"Web UI 端口"',
             content,

@@ -32,8 +32,8 @@ from datetime import datetime
 import heapq
 import random
 
-from models.device import Device, DeviceState, DeviceRegistry
-from models.task import (
+from ..models.device import Device, DeviceState, DeviceRegistry
+from ..models.task import (
     Task, TaskState, TaskPriority, TaskType, TaskDependency,
     TaskResource, RetryPolicy, SubTask, TaskQueue,
     SchedulingStrategy
@@ -199,7 +199,7 @@ class DeviceSelector:
                 
                 # 尝试按类型查找
                 try:
-                    from models.device import DeviceType
+                    from ..models.device import DeviceType
                     device_type = DeviceType(req)
                     devices = self.registry.get_by_type(device_type)
                     for d in devices:

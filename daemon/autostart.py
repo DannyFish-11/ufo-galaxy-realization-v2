@@ -118,7 +118,7 @@ def schtasks_create_command() -> List[str]:
     """Windows 计划任务:用户登录时启动守护进程(工作目录经 cmd /c cd 保证)。"""
     inner = " ".join(_quote(c) for c in daemon_command())
     # schtasks 不支持设工作目录 → 经 cmd /c 先 cd 到仓库根,守护进程内的相对
-    # 路径(unified_launcher.py / .env 等)才解析正确。
+    # 路径(main.py / .env 等)才解析正确。
     tr = f'cmd /c "cd /d {_quote(str(REPO_ROOT))} && {inner}"'
     return [
         "schtasks", "/Create",

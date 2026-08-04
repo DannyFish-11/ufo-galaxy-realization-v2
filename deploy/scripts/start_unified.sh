@@ -327,7 +327,7 @@ main() {
             ;;
         --help|-h)
             echo "Galaxy Bootstrap Launcher Script v2.0"
-            echo "权威启动路径: ./deploy/scripts/start_unified.sh 或 python main.py / python unified_launcher.py"
+            echo "权威启动路径: ./deploy/scripts/start_unified.sh 或 python main.py"
             echo "start_galaxy.py 和 start_l4.py 是已弃用的兼容性包装器，请勿作为主入口使用。"
             echo ""
             echo "用法: $0 [选项]"
@@ -363,7 +363,7 @@ main() {
 
     # 传递所有参数给 Python
     export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
-    $PYTHON_CMD unified_launcher.py "$@"
+    $PYTHON_CMD main.py "$@"
 }
 
 # 运行主函数

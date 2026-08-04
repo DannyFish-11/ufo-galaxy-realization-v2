@@ -93,7 +93,10 @@ KNOWN_SHIM_FILES = {
 # Approved files that may contain `except ImportError` fallback definitions
 # (files where the body of the except block defines classes or functions)
 APPROVED_IMPORT_FALLBACK_FILES = {
-    "unified_launcher.py",
+    # unified_launcher.py 曾在这张表上。它随启动器统一删除，而搬进
+    # launcher/services.py 的那段内联兜底经核实是死代码（唯一调用点在函数体内
+    # 又 import 了一次，把模块级的名字完全遮蔽），已直接删掉而不是换个文件名
+    # 继续豁免 —— 这笔债是还掉的，不是搬走的。
     "core/openclawd.py",
     "core/scheduler.py",
     "core/openclawd_heartbeat.py",

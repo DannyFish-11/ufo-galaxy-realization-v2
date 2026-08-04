@@ -42,10 +42,10 @@ def test_report_tracks_authoritative_scorecard_and_live_status():
 def test_report_describes_canonical_mainline_chain_and_projection_surfaces():
     report = _build_report()
 
-    assert report.startup_entrypoint == "main.py → unified_launcher.py"
+    assert report.startup_entrypoint == "main.py → launcher/services.py"
     assert report.canonical_runtime_chain[:3] == [
         "main.py",
-        "unified_launcher.py",
+        "launcher/services.py",
         "core.desktop_presence_runtime",
     ]
     assert "core.openclawd" in report.canonical_runtime_chain
@@ -89,6 +89,6 @@ def test_cli_json_output_is_machine_readable():
     )
 
     payload = json.loads(result.stdout)
-    assert payload["startup_entrypoint"] == "main.py → unified_launcher.py"
+    assert payload["startup_entrypoint"] == "main.py → launcher/services.py"
     assert payload["completion_pct"] >= 0.0
     assert payload["runtime_readiness"] in {"ready", "partial", "blocked"}

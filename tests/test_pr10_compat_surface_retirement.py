@@ -13,7 +13,7 @@ A.  Module importable; authority and PR-10 sentinel are non-empty strings.
 B.  All four policy sentinels are non-empty strings with expected keywords.
 C.  RetirementTier enum has TIER_1, TIER_2, TIER_3, TIER_UNDECIDED members.
 D.  RetirementStatus enum has COMPAT_ONLY, LEGACY_COMPAT, TRANSITIONAL,
-    HARD_DEPRECATED, TOMBSTONE members.
+    HARD_DEPRECATED, TOMBSTONE, RETIRED members.
 E.  CompatSurfaceRisk enum has HIGH, MEDIUM, LOW members.
 F.  get_compat_surface_inventory() returns a non-empty list of
     CompatSurfaceRecord instances.
@@ -40,6 +40,9 @@ X.  No two records share the same surface_id (uniqueness).
 Y.  TIER_1 + TIER_2 count is at least equal to high-risk count
     (all high-risk surfaces have an actionable tier).
 Z.  Projection alignment sentinel importable (fastapi guard).
+AA. RETIRED records are enforced, not decorative: the module_path of every
+    RETIRED record must be absent from disk, its removal_condition must read
+    as SATISFIED, and retired_count must match the inventory.
 """
 
 from __future__ import annotations
@@ -132,6 +135,7 @@ def test_retirement_status_members() -> None:
     assert RetirementStatus.TRANSITIONAL.value == "transitional"
     assert RetirementStatus.HARD_DEPRECATED.value == "hard_deprecated"
     assert RetirementStatus.TOMBSTONE.value == "tombstone"
+    assert RetirementStatus.RETIRED.value == "retired"
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +257,8 @@ def test_classify_known_node_registry() -> None:
 
 
 def test_classify_known_tier1() -> None:
+    # 这里刻意用一条**已 RETIRED** 的面：它同时证明退役后记录仍留在登记表里、
+    # 仍可被分级查询。若哪天改成"退役即删记录"，这条会立刻变红。
     tier = classify_surface_tier("launcher.config_manager")
     assert tier == RetirementTier.TIER_1
 
@@ -420,3 +426,62 @@ def test_projection_alignment_sentinel_available() -> None:
     assert isinstance(COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10, str)
     assert "UNAVAILABLE" not in COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10
     assert "ALIGNED_PR10" in COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10
+
+
+# ---------------------------------------------------------------------------
+# AA. RETIRED records must describe a surface that is actually gone
+# ---------------------------------------------------------------------------
+
+
+def test_retired_surfaces_are_physically_absent() -> None:
+    """``RETIRED`` 是可执行断言，不是一句留言。
+
+    退役登记若只是改个字段，它和"忘了改"就无法区分：模块被人复活、或者根本
+    没删干净，登记表照样自称已退役。所以每条 ``RETIRED`` 记录都要用它自己的
+    ``module_path`` 去查一次真实文件系统——查不到才算数。
+    """
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    resurrected = []
+    for record in get_compat_surface_inventory():
+        if record.status != RetirementStatus.RETIRED:
+            continue
+        rel = pathlib.Path(*record.module_path.split("."))
+        if (repo_root / f"{rel}.py").exists() or (repo_root / rel / "__init__.py").exists():
+            resurrected.append(record.module_path)
+    assert not resurrected, f"这些面登记为 RETIRED，但文件还在：{resurrected}"
+
+
+def test_retired_records_state_condition_was_satisfied() -> None:
+    """RETIRED 记录的 ``removal_condition`` 必须写成"已核过"，而不是仍然待办。
+
+    字段名是 removal_condition（未来时），终态记录沿用它就会让读者以为还没删。
+    要求出现 SATISFIED 字样，让同一个字段在终态下读起来是"当初核的是这个"。
+    """
+    offenders = [
+        r.surface_id
+        for r in get_compat_surface_inventory()
+        if r.status == RetirementStatus.RETIRED and "SATISFIED" not in r.removal_condition
+    ]
+    assert not offenders, f"RETIRED 记录须标明退役条件已核实：{offenders}"
+
+
+def test_summary_retired_count_matches_inventory() -> None:
+    inventory = get_compat_surface_inventory()
+    s = build_retirement_roadmap_summary()
+    assert s.retired_count == sum(1 for r in inventory if r.status == RetirementStatus.RETIRED)
+    assert s.to_dict()["by_status"]["retired"] == s.retired_count
+
+
+def test_launcher_config_manager_is_recorded_as_retired() -> None:
+    """本轮退役的那一条必须留在登记表里 —— 删记录等于抹掉退役依据。
+
+    ``COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME_POLICY`` 要的正是这条正向证据。
+    """
+    record = next(
+        (r for r in get_compat_surface_inventory() if r.surface_id == "launcher_config_manager_legacy"),
+        None,
+    )
+    assert record is not None, "launcher_config_manager_legacy 记录不得删除"
+    assert record.status == RetirementStatus.RETIRED

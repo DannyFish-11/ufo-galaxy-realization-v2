@@ -138,15 +138,17 @@ def check_startup_path() -> None:
         _print_result(r)
 
         r = _record(
-            "main.py references unified_launcher as subordinate component",
-            "unified_launcher" in content,
-            "main.py must still reference unified_launcher.py as a subordinate component",
+            "main.py references launcher.services as subordinate component",
+            "launcher.services" in content,
+            "main.py must reference launcher/services.py as its subordinate component",
         )
         _print_result(r)
 
-    launcher_py = PROJECT_ROOT / "unified_launcher.py"
+    # 服务编排的宿主文件。启动器统一（docs/LAUNCHER_UNIFICATION_PLAN.md）之前是
+    # 仓库根的 unified_launcher.py，现在是 launcher/services.py，旧本体已删除。
+    launcher_py = PROJECT_ROOT / "launcher" / "services.py"
     r = _record(
-        "unified_launcher.py exists",
+        "launcher/services.py exists",
         launcher_py.exists(),
         f"expected at {launcher_py}",
     )

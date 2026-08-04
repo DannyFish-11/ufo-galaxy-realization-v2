@@ -72,7 +72,7 @@ def _extract_paths(evidence: str) -> list[str]:
 
     典型形态::
 
-        "main.py:SystemOrchestrator + unified_launcher.py"
+        "main.py:SystemOrchestrator + launcher/services.py"
         "galaxy_gateway/android/handlers/registration.py:handle_device_reconnect"
         "network/OfflineTaskQueue.kt + GalaxyWebSocketClient.kt"
 

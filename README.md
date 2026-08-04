@@ -155,7 +155,7 @@ skills/
 
 ### 方式一：一体化启动（推荐）
 ```bash
-python launch_desktop.py
+python main.py
 ```
 自动完成：环境检查 → 依赖安装 → 模型下载 → Gateway 启动 → **桌面壳启动**
 
@@ -167,10 +167,17 @@ python launch_desktop.py
 
 选项：
 ```bash
-python launch_desktop.py --check      # 只检查环境
-python launch_desktop.py --backend    # 只启动 Gateway
-python launch_desktop.py --frontend   # 只启动桌面壳（Tauri 优先，回退 Electron）
+python main.py --check          # 只检查环境
+python main.py --backend        # 只启动 Gateway（不拉桌面壳）
+python main.py --desktop-only   # 只把桌面壳挂到已在跑的 Gateway 上（Tauri 优先，回退 Electron）
+python main.py --check-only     # 依赖/配置/核心模块/节点导入全查一遍，不启动
+python main.py --status         # 查看系统状态
+python main.py doctor           # 给启动器自身做一次体检
 ```
+
+> 启动器已统一：`launch_desktop.py` / `unified_launcher.py` / `system_manager.py` /
+> `install.py` 四个本体已删除，要素全部收敛到 `main.py` + `launcher/`。
+> 老命令的对照写法见 `docs/LAUNCHER_UNIFICATION_PLAN.md` §4。
 
 #### Tauri 桌面壳构建依赖（想用轻量壳时）
 启动器会**自动构建**一次 Tauri 壳，但需要以下系统依赖（缺则自动回退 Electron，并在日志给出安装命令）：
@@ -184,7 +191,7 @@ python launch_desktop.py --frontend   # 只启动桌面壳（Tauri 优先，回�
 - **Windows**：仅需 Rust（WebView2 一般随 Edge 自带；缺则装 Evergreen WebView2 Runtime）
 - **macOS**：Rust + Xcode Command Line Tools（`xcode-select --install`）
 
-装好后跑 `python launch_desktop.py`，首次自动 `cargo build --release`（约数分钟），之后每次秒起并直接优先 Tauri。
+装好后跑 `python main.py`，首次自动 `cargo build --release`（约数分钟），之后每次秒起并直接优先 Tauri。
 不想用 Tauri：`GALAXY_TAURI_AUTOBUILD=0`（关自动构建）或 `GALAXY_DESKTOP_SHELL=electron`（强制 Electron）。
 
 ### 方式二：Docker Compose（后端服务）
@@ -260,7 +267,7 @@ cp .env.example .env
 
 ### 5. 启动
 ```bash
-python launch_desktop.py
+python main.py
 ```
 
 ---
@@ -370,7 +377,7 @@ WebSocket: `ws://localhost:9000/ws/desktop-presence`
 | 文件 | 路径 | 说明 |
 |------|------|------|
 | 主入口 | `main.py` | 系统编排器 |
-| 桌面启动器 | `launch_desktop.py` | 前后端一体启动 |
+| 启动器实现 | `launcher/` | 环境检查 / 依赖 / 桌面壳 / 服务编排 / 节点生命周期 |
 | Gateway | `galaxy_gateway/app.py` | FastAPI 应用 |
 | Electron 入口 | `electron/main.js` | 桌面主进程 |
 | 三态管理 | `electron/renderer/app.js` | SILENT/LIMINAL/MANIFEST |

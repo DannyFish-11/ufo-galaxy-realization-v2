@@ -81,7 +81,7 @@ else
     log_fail "系统不可达 (HTTP $HTTP_CODE) - 请确保服务已启动"
     echo ""
     echo "提示: 请先启动 Galaxy 服务"
-    echo "  python unified_launcher.py"
+    echo "  python main.py"
     echo ""
     exit 1
 fi

@@ -31,8 +31,8 @@ These files were physically removed.  Non-regression CI (`scripts/check_legacy_r
 
 | Deleted file | Was | Canonical replacement |
 |---|---|---|
-| `windows_client/_legacy/START_CLIENT.bat` | Legacy F12 sidebar launcher (hard-errored on execution) | `start.bat` or `python unified_launcher.py` |
-| `windows_client/_legacy/start_galaxy_client.bat` | Legacy Gateway WebSocket client launcher (hard-errored on execution) | `python unified_launcher.py`; configure `GALAXY_GATEWAY_URL` via `.env` |
+| `windows_client/_legacy/START_CLIENT.bat` | Legacy F12 sidebar launcher (hard-errored on execution) | `start.bat` or `python main.py` |
+| `windows_client/_legacy/start_galaxy_client.bat` | Legacy Gateway WebSocket client launcher (hard-errored on execution) | `python main.py`; configure `GALAXY_GATEWAY_URL` via `.env` |
 
 ---
 
@@ -67,8 +67,8 @@ Use these as the authoritative targets when migrating away from legacy surfaces.
 ### Startup
 | Surface | Path | Notes |
 |---|---|---|
-| **Canonical startup** | `main.py` → `unified_launcher.py` | Single authoritative entry point |
-| **Windows bootstrap** | `start.bat` | Delegates to `unified_launcher.py` |
+| **Canonical startup** | `main.py` → `launcher/services.py` | Single authoritative entry point |
+| **Windows bootstrap** | `start.bat` | Delegates to `main.py` |
 
 ### API authority
 | Surface | Path | Notes |
@@ -160,7 +160,7 @@ earliest retirement attention.
 | `galaxy_gateway/legacy/capability_registry.py` | HARD_DEPRECATED | No production callers remain; remove when deprecation tests are cleaned up |
 | `galaxy_gateway/legacy/task_decomposer.py` | HARD_DEPRECATED | No production callers remain; remove when deprecation tests are cleaned up |
 | `fusion/unified_orchestrator.py` | HARD_DEPRECATED | Remove when `fusion/start_fusion.py` and `fusion/demo_e2e.py` are migrated |
-| `launcher/config_manager.py` | HARD_DEPRECATED | No production callers remain; remove when deprecation tests are cleaned up |
+| `launcher/config_manager.py` | **RETIRED** | Physically deleted during launcher unification. Removal condition verified by AST (absolute importers = 0; the one relative importer, `launcher/dependency_resolver.py`, moved to a local `NodeSpec` Protocol) and port consumers already on `core.port_config`. Record retained in `core/compat_surface_retirement.py` with a guardrail asserting the file stays gone. |
 
 ### Policy sentinels (PR-10)
 

@@ -247,6 +247,29 @@ class RetirementStatus(Enum):
     Safe to delete; retained only for import-path backward compatibility.
     """
 
+    RETIRED = "retired"
+    """Surface has been physically deleted; the record survives as history.
+
+    Why the lifecycle needs a terminal state
+    ----------------------------------------
+    Before this member existed, every status described a surface that still
+    exists (``HARD_DEPRECATED`` even asserts "emits DeprecationWarning on
+    import").  So when a surface actually met its ``removal_condition`` and was
+    deleted, the only representable options were both wrong: leave a stale
+    record claiming the file still warns on import, or delete the record and
+    lose the answer to "what happened to it, and on what grounds?".
+
+    ``COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME_POLICY`` is the reason to keep the
+    record rather than erase it: a completed retirement is the evidence that the
+    footprint shrank.  ``removal_condition`` then reads as the condition that
+    **was verified**, not one still pending.
+
+    Enforced, not just declared: ``module_path`` of a ``RETIRED`` record must no
+    longer resolve to a file on disk (see the guardrail test in
+    ``tests/test_pr10_compat_surface_retirement.py``), so a resurrected module
+    cannot sit behind a record that says it is gone.
+    """
+
 
 class CompatSurfaceRisk(Enum):
     """Risk level if this surface is mistaken for a canonical layer."""
@@ -344,6 +367,9 @@ class RetirementRoadmapSummary:
     legacy_compat_count: int
     compat_only_count: int
     transitional_count: int
+    #: 已完成退役（物理删除）的面数。这是 COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME
+    #: 这条策略唯一的正向读数 —— 其余计数只描述"还剩多少"，不描述"消掉了多少"。
+    retired_count: int = 0
     policy_sentinels: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -366,6 +392,7 @@ class RetirementRoadmapSummary:
                 "transitional": self.transitional_count,
                 "hard_deprecated": self.hard_deprecated_count,
                 "tombstone": self.tombstone_count,
+                "retired": self.retired_count,
             },
             "policy_sentinels": self.policy_sentinels,
         }
@@ -610,7 +637,7 @@ _COMPAT_SURFACE_INVENTORY: List[CompatSurfaceRecord] = [
         surface_id="launcher_config_manager_legacy",
         module_path="launcher.config_manager",
         surface_name="launcher/config_manager.py (legacy config wrapper)",
-        status=RetirementStatus.HARD_DEPRECATED,
+        status=RetirementStatus.RETIRED,
         tier=RetirementTier.TIER_1,
         risk=CompatSurfaceRisk.LOW,
         canonical_replacement=(
@@ -618,14 +645,24 @@ _COMPAT_SURFACE_INVENTORY: List[CompatSurfaceRecord] = [
             "core.port_config.get_node_port() for port lookups"
         ),
         removal_condition=(
-            "Remove when no caller outside of deprecation tests imports "
-            "launcher.config_manager and port data consumers have been "
-            "confirmed migrated to core.port_config."
+            "SATISFIED — verified before deletion: no caller outside of "
+            "deprecation tests imported launcher.config_manager, and port data "
+            "consumers had migrated to core.port_config."
         ),
         notes=(
-            "Emits DeprecationWarning on import.  No production callers remain.  "
-            "Port data may be stale vs config/unified_ports.yaml.  "
-            "LOW risk: emits warning on import; clearly marked deprecated."
+            "RETIRED: launcher/config_manager.py physically deleted during the "
+            "launcher unification (all launchers folded into main.py).  "
+            "Both halves of the removal_condition were checked by AST, not by "
+            "substring: absolute importers were zero, and the one *relative* "
+            "importer (launcher/dependency_resolver.py, 'from .config_manager "
+            "import NodeConfig') was cut over to a local NodeSpec structural "
+            "Protocol — a topological sorter needs three attributes, not a "
+            "particular launcher's config class.  "
+            "Port consumers were already canonical: "
+            "system_manager.ConfigManager._get_canonical_port defers to "
+            "core.port_config.  The module's own header conceded its hardcoded "
+            "port defaults were STALE vs config/unified_ports.yaml, so keeping "
+            "it meant keeping a misleading second port source."
         ),
         pr_guardrail_added="PR-5",
     ),
@@ -723,6 +760,7 @@ def build_retirement_roadmap_summary() -> RetirementRoadmapSummary:
         legacy_compat_count=sum(1 for r in inventory if r.status == RetirementStatus.LEGACY_COMPAT),
         compat_only_count=sum(1 for r in inventory if r.status == RetirementStatus.COMPAT_ONLY),
         transitional_count=sum(1 for r in inventory if r.status == RetirementStatus.TRANSITIONAL),
+        retired_count=sum(1 for r in inventory if r.status == RetirementStatus.RETIRED),
         policy_sentinels=[
             HIGH_RISK_COMPAT_SURFACES_MUST_BE_INVENTORIED_POLICY,
             COMPAT_SURFACES_MUST_NOT_MASQUERADE_AS_CANONICAL_POLICY,

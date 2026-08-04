@@ -86,7 +86,7 @@ def test_unknown_command_surfaces_as_failed_status():
 
 def test_banner_does_not_claim_l4_loop_is_running():
     """l4_modules 是只写不读的字典;"已就绪"会让人以为自主循环在跑。"""
-    src = (REPO / "unified_launcher.py").read_text(encoding="utf-8")
+    src = (REPO / "launcher" / "services.py").read_text(encoding="utf-8")
     block = src.split("# ── L4 增强模块")[1].split("# (API 网关已在第一阶段绑定")[0]
     assert "后台增强层已就绪" not in block, "横幅仍在拿'对象构造成功'冒充'循环在跑'"
     assert "未接入主循环" in block, "横幅应如实说明 L4 未接入主循环"
@@ -94,7 +94,7 @@ def test_banner_does_not_claim_l4_loop_is_running():
 
 def test_l4_modules_dict_is_still_write_only():
     """如实性的前提事实:若哪天真接上了,这条断言会失败,提醒来改横幅。"""
-    src = (REPO / "unified_launcher.py").read_text(encoding="utf-8")
+    src = (REPO / "launcher" / "services.py").read_text(encoding="utf-8")
     lines = [ln.strip() for ln in src.splitlines() if "l4_modules" in ln]
     code = [ln for ln in lines if not ln.startswith("#")]
 

@@ -196,10 +196,39 @@ def test_load_dotenv_actually_called_in_main_py():
     assert "load_dotenv" in src or "dotenv_values" in src, "main.py 必须在最早期加载 .env(load_dotenv 或 dotenv_values)"
 
 
-def test_load_dotenv_actually_called_in_unified_launcher():
-    """静态核实:unified_launcher.py(可能被单独运行)也有防御性的 .env 加载。见上方说明。"""
-    launcher_py = Path(__file__).resolve().parent.parent / "unified_launcher.py"
-    src = launcher_py.read_text(encoding="utf-8")
-    assert (
-        "load_dotenv" in src or "dotenv_values" in src
-    ), "unified_launcher.py 也应防御性加载 .env(load_dotenv 或 dotenv_values)"
+def test_dotenv_is_loaded_before_the_service_layer_is_imported():
+    """.env 的加载必须排在 ``launcher.services`` 被 import **之前**。
+
+    这条原本是 ``test_load_dotenv_actually_called_in_unified_launcher`` ——
+    理由是"``unified_launcher.py`` 可能被单独运行,所以它也要防御性地加载一次"。
+    启动器统一之后那个前提没有了:四个本体已删,``main.py`` 是唯一入口,
+    ``launcher/services.py`` 只能被它 import,不可能被单独跑起来。
+
+    但**顺序**这件事没消失,而且它才是当初真正要保的东西:服务层在模块级就会
+    读配置,.env 如果晚一步进 os.environ,读到的就是代码默认值 —— 15 个云端
+    provider 的 Key 全部"重启后读不回来",正是本文件开头记的那个真实故障。
+    所以把断言从"两个文件各自都加载"换成"唯一入口里加载排在 import 之前"。
+    """
+    import ast
+
+    main_py = Path(__file__).resolve().parent.parent / "main.py"
+    tree = ast.parse(main_py.read_text(encoding="utf-8"))
+
+    load_lines = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and (
+            getattr(n.func, "id", "") in {"load_dotenv", "dotenv_values"}
+            or getattr(n.func, "attr", "") in {"load_dotenv", "dotenv_values"}
+        )
+    ]
+    assert load_lines, "main.py 必须在最早期加载 .env(load_dotenv 或 dotenv_values)"
+
+    svc_lines = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ImportFrom) and (n.module or "").startswith("launcher.services")
+    ]
+    assert svc_lines, "main.py 应当 import launcher.services（服务编排的新家）"
+    assert min(load_lines) < min(svc_lines), ".env 的加载必须排在 launcher.services 被 import 之前"

@@ -16,7 +16,8 @@ API Key 则降级为 warn(仍可用云端兜底)，否则 fail(彻底不可用)�
 
 from __future__ import annotations
 
-from unified_launcher import ai_brain_readiness
+# 检查对象搬家了：服务编排原样搬到 launcher/services.py，unified_launcher.py 已删除。
+from launcher.services import ai_brain_readiness
 
 
 def test_model_installed_and_service_healthy_is_ok():

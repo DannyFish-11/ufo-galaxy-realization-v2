@@ -89,7 +89,7 @@ sudo ./deploy/scripts/deploy.sh install  # Install as systemd service
 ### `start_unified.sh`
 
 Extended development bootstrap with Python environment detection, dependency
-installation, and config validation. Delegates to `unified_launcher.py`.
+installation, and config validation. Delegates to `main.py`.
 
 ```bash
 ./deploy/scripts/start_unified.sh           # Full start with env setup
@@ -104,7 +104,7 @@ For daily development, prefer `start.sh` (root) or `python main.py` directly.
 ## Canonical startup chain
 
 ```
-start.sh / start.bat  ──► python main.py ──► python unified_launcher.py ──► Galaxy runtime
+start.sh / start.bat  ──► python main.py ──► launcher/services.py (GalaxyUnified) ──► Galaxy runtime
 ```
 
 See `docs/architecture/CANONICAL_ENTRYPOINTS.md` for the full entrypoint inventory.

@@ -15,7 +15,7 @@ from enum import Enum, auto
 from datetime import datetime
 import struct
 
-from models.device import (
+from ..models.device import (
     Device,
     DeviceType,
     DeviceState,

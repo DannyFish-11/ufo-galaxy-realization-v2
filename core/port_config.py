@@ -12,8 +12,10 @@ Galaxy-Nexus — 统一端口配置读取模块  [CANONICAL PORT ACCESS LAYER]
 
 This module is the CANONICAL runtime port accessor. Other files that embed
 port numbers (config/unified_config.json, config/topology.json,
-config/l4_config.json, launcher/config_manager.py) are deprecated for port
-lookups and should eventually delegate here.
+config/l4_config.json) are deprecated for port lookups and should eventually
+delegate here.  launcher/config_manager.py — the one that hardcoded its own
+port defaults — has been RETIRED (physically deleted); it is no longer a
+duplicate to migrate away from.
 
 使用方法:
     from core.port_config import get_node_port, get_service_port, PortConfig

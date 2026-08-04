@@ -22,13 +22,13 @@ class TestGalaxyUnifiedHealthProbeOrder:
     """HTTP probes must run only after uvicorn binds (inside UnifiedWebUI.start)."""
 
     def test_galaxy_unified_start_does_not_call_startup_health_check(self):
-        from unified_launcher import GalaxyUnified
+        from launcher.services import GalaxyUnified
 
         src = inspect.getsource(GalaxyUnified.start)
         assert "run_startup_health_check" not in src
 
     def test_unified_web_ui_start_orders_startup_health_main_loop(self):
-        from unified_launcher import UnifiedWebUI
+        from launcher.services import UnifiedWebUI
 
         src = inspect.getsource(UnifiedWebUI.start)
         # 断言漂移:生产实现已弃用手工 `await server.startup()` +

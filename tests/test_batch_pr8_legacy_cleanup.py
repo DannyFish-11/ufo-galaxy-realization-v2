@@ -215,7 +215,9 @@ class TestLegacySurfacesDocExists:
 
     def test_mentions_canonical_startup(self):
         content = _read("docs/LEGACY_SURFACES.md")
-        assert "unified_launcher" in content, "LEGACY_SURFACES.md must reference the canonical startup path"
+        # 权威启动路径已收敛成 main.py 一条（unified_launcher.py 等四个本体已删除，
+        # 见 docs/LAUNCHER_UNIFICATION_PLAN.md 第 8 步）。文档要指的是那一条。
+        assert "python main.py" in content, "LEGACY_SURFACES.md must reference the canonical startup path"
 
     def test_mentions_non_regression_guardrails(self):
         content = _read("docs/LEGACY_SURFACES.md")
