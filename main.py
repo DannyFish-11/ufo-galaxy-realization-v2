@@ -76,12 +76,14 @@ def load_env_files_into_environ(root: str = "") -> None:
 #   - webrtcvad → "pkg_resources is deprecated"(setuptools 弃用,第三方未适配)
 #   - pywinauto → "Revert to STA COM threading mode"(Windows COM 线程模式提示)
 import warnings as _warnings
+
 try:
     _warnings.filterwarnings("ignore", message=r".*pkg_resources is deprecated.*")
     _warnings.filterwarnings("ignore", message=r".*Revert to STA COM threading mode.*")
     _warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"webrtcvad.*")
 except Exception:
     pass
+
 
 def configure_windows_console() -> None:
     """Windows 控制台 UTF-8 + 进程优先级。
@@ -101,6 +103,7 @@ def configure_windows_console() -> None:
     # CRITICAL: must reconfigure BOTH stdout AND stderr — logging uses stderr by default
     try:
         import io
+
         if hasattr(sys.stdout, "buffer"):
             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
         if hasattr(sys.stderr, "buffer"):
@@ -112,6 +115,7 @@ def configure_windows_console() -> None:
     # PR-D7: Set process priority (Windows only)
     try:
         import psutil
+
         p = psutil.Process()
         p.nice(psutil.HIGH_PRIORITY_CLASS)
     except Exception:
@@ -202,7 +206,12 @@ import logging
 import argparse
 from pathlib import Path
 
-from core.ascii_art import print_banner, print_section_header
+from core.ascii_art import (
+    GALAXY_TAGLINE,
+    GALAXY_VERSION,
+    print_banner,
+    print_section_header,
+)
 
 # ── Phase output helpers ──────────────────────────────────
 _PHASE_WIDTH = 60
@@ -214,8 +223,17 @@ def print_phase(title: str) -> None:
     统一走 core.cli_render（与启动后半段同一套 clig.dev 风格：细线 + 干净标题，
     而非旧的 ═══×60 大框）——让【整个克隆界面】前后一致。cli_render 不可用时兜底回旧风格。
     """
+    # 阶段切换时把「当前栏目」定下来，后续 print_item 的记录自动落到对的栏目。
+    # 这样 71 个 print_item 调用点一个都不用改，栏目归属仍然准确。
+    try:
+        from launcher import ui as _ui
+
+        _ui.set_column(_ui.column_for_title(title))
+    except Exception:  # noqa: BLE001 — 记录层不可用绝不能挡启动
+        pass
     try:
         from core import cli_render as r
+
         r.section(title)
     except Exception:
         print_section_header(title)  # 极端环境兜底
@@ -237,14 +255,21 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
         status: "ok" | "warn" | "error" | "info".
         detail: Optional detail text shown dimmed.
     """
-    _status_map = {"ok": "ok", "warn": "warn", "error": "fail", "info": "info"}
+    # 唯一咽喉：交给 launcher.ui.step —— 它同时【记一笔结构化事实】和【打这一行】。
+    #
+    # 输出逐字节不变：ui.step 内部还是走 cli_render.phase，用的是同一组几何常量
+    # (CONTENT_INDENT/ICON_COL/LABEL_COL)。变的是每一项现在都留下了痕迹，最终
+    # 落到 runtime/startup.json —— 启动失败时可以直接把那个文件发出来，而不是
+    # 截一张彩色终端的图让人猜。
+    #
+    # 用 phase()(2 格缩进,标签第 4 列)而非 detail()(6 格缩进)——让 Phase 0/1/2
+    # 的状态项与「系统启动」后的运行时项(核心服务/基础设施/... 也走 phase)以及
+    # ▶ 启动行处在【同一列】。此前 Phase 段 6 格、运行时段 2 格,对勾对不齐。
     printed = False
     try:
-        from core import cli_render as r
-        # 用 phase()(2 格缩进,标签第 4 列)而非 detail()(6 格缩进)——让 Phase 0/1/2
-        # 的状态项与「系统启动」后的运行时项(核心服务/基础设施/... 也走 phase)以及
-        # ▶ 启动行处在【同一列】。此前 Phase 段 6 格、运行时段 2 格,对勾对不齐。
-        r.phase(name, detail, _status_map.get(status, "info"))
+        from launcher import ui as _ui
+
+        _ui.step(name, status, detail)
         printed = True
     except Exception:
         printed = False
@@ -339,7 +364,9 @@ log_dir.mkdir(exist_ok=True)
 # call basicConfig; repeated calls are no-ops after the first.
 if not logging.getLogger().handlers:
     handler = RotatingFileHandler(
-        str(log_dir / "lumiv.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
+        str(log_dir / "lumiv.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
         encoding="utf-8",
     )
     _console = SafeStreamHandler()
@@ -366,6 +393,7 @@ logger = logging.getLogger("Galaxy")
 # 平时零输出、零行为影响;装不上也静默兜底,绝不影响主进程。
 try:
     from core.ollama_url_sentinel import install as _install_url_sentinel
+
     _install_url_sentinel()
 except Exception:  # noqa: BLE001
     pass
@@ -378,14 +406,13 @@ _failed_validations: list = []
 # Authority declaration — referenced by validate_runtime.py and CI guardrails
 # ---------------------------------------------------------------------------
 
-SYSTEM_ORCHESTRATOR_AUTHORITY: str = (
-    "main.py:SYSTEM_ORCHESTRATOR — canonical staged bring-up contract (PR-2)"
-)
+SYSTEM_ORCHESTRATOR_AUTHORITY: str = "main.py:SYSTEM_ORCHESTRATOR — canonical staged bring-up contract (PR-2)"
 
 
 # ---------------------------------------------------------------------------
 # Orchestrator bring-up sequence
 # ---------------------------------------------------------------------------
+
 
 def _is_strict_preflight() -> bool:
     """Return True when GALAXY_STRICT_PREFLIGHT is set to a truthy value.
@@ -417,6 +444,7 @@ def _run_orchestrator_preflight() -> bool:
     strict = _is_strict_preflight()
     try:
         from core.system_orchestrator import SystemOrchestrator
+
         orch = SystemOrchestrator(continue_on_failure=False, strict_preflight=strict)
         summary = orch.run_startup_sequence()
         logger.info("Orchestrator bring-up complete:\n%s", summary)
@@ -513,8 +541,10 @@ def phase0_env_check() -> dict:
             from core.config_store import get_config_store
 
             for key, val in get_config_store().read_secrets().items():
-                if val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and any(
-                    k in key.upper() for k in ["API_KEY", "KEY"]
+                if (
+                    val
+                    and not val.lower().startswith(PLACEHOLDER_PREFIXES)
+                    and any(k in key.upper() for k in ["API_KEY", "KEY"])
                 ):
                     seen_keys.add(key.upper())
         except Exception:
@@ -537,7 +567,9 @@ def phase0_env_check() -> dict:
     npm_ok = npm_exe is not None
     if npm_ok:
         try:
-            rc = sp.run([npm_exe, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+            rc = sp.run(
+                [npm_exe, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
+            )
             npm_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
             print_item("npm", "ok", npm_ver)
         except Exception:
@@ -551,7 +583,9 @@ def phase0_env_check() -> dict:
     node_ok = shutil.which("node") is not None
     if node_ok:
         try:
-            rc = sp.run(["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+            rc = sp.run(
+                ["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
+            )
             node_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
             print_item("Node.js", "ok", node_ver)
         except Exception:
@@ -568,6 +602,7 @@ def phase0_env_check() -> dict:
     if npm_ok:
         try:
             from core.electron_launch_guard import electron_package_intact
+
             electron_deps_ok = electron_package_intact(str(ELECTRON_DIR))
         except Exception:
             electron_deps_ok = (ELECTRON_DIR / "node_modules").exists()
@@ -620,20 +655,21 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     def _run_pip_install(pkgs: list, timeout: int = 900) -> bool:
         """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。"""
-        base = [sys.executable, "-m", "pip", "install",
-                "--retries", "3", "--timeout", "60"] + pkgs
+        base = [sys.executable, "-m", "pip", "install", "--retries", "3", "--timeout", "60"] + pkgs
         for idx, index_url in enumerate(_PIP_INDEX_CANDIDATES):
             cmd = list(base)
             if index_url:
                 cmd += ["-i", index_url]
-                print_item(f"回退镜像源 {idx}/{len(_PIP_INDEX_CANDIDATES) - 1}",
-                           "warn", index_url)
+                print_item(f"回退镜像源 {idx}/{len(_PIP_INDEX_CANDIDATES) - 1}", "warn", index_url)
             try:
                 if sp.run(cmd, timeout=timeout).returncode == 0:
                     return True
             except sp.TimeoutExpired:
-                print_item(f"pip 安装超时({timeout}s)", "warn",
-                           "镜像候选轮换中" if idx < len(_PIP_INDEX_CANDIDATES) - 1 else "")
+                print_item(
+                    f"pip 安装超时({timeout}s)",
+                    "warn",
+                    "镜像候选轮换中" if idx < len(_PIP_INDEX_CANDIDATES) - 1 else "",
+                )
             except Exception as exc:
                 print_item(f"pip 安装异常: {exc}", "warn")
         return False
@@ -646,7 +682,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 [sys.executable, "-m", "ensurepip", "--upgrade"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
             ).returncode
             if rc == 0:
                 pip_fixed = True
@@ -657,16 +697,29 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         if not pip_fixed:
             try:
                 import tempfile
+
                 get_pip_tmp = os.path.join(tempfile.gettempdir(), "get-pip.py")
-                rc = sp.run([
-                    sys.executable, "-c",
-                    f"import urllib.request; "
-                    f"urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', r'{get_pip_tmp}')",
-                ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30).returncode
+                rc = sp.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        f"import urllib.request; "
+                        f"urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', r'{get_pip_tmp}')",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=30,
+                ).returncode
                 if rc == 0:
                     rc2 = sp.run(
                         [sys.executable, get_pip_tmp],
-                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=60,
                     ).returncode
                     if rc2 == 0:
                         pip_fixed = True
@@ -690,9 +743,9 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         "nats": "nats-py",
         "websockets": "websockets",
         # 依赖审计补齐:被核心能力真实 import,补进自动安装(与 requirements.txt 一致)
-        "jsonschema": "jsonschema",          # 事件总线 schema 校验
+        "jsonschema": "jsonschema",  # 事件总线 schema 校验
         "huggingface_hub": "huggingface-hub",  # 本地模型 HF 下载 + Ollama 回退
-        "tqdm": "tqdm",                       # 模型下载进度条
+        "tqdm": "tqdm",  # 模型下载进度条
         # 语音输出(TTS)默认引擎。此前不在自动安装名单、requirements-windows.txt
         # 也没有 → 真机全新克隆缺包,speech_output 每次合成静默失败,表现为
         # "回复文字出来了、一句话都不说"。包本身很小(纯 HTTP 客户端)。
@@ -744,7 +797,9 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     if not env_status.get("npm_installed"):
         # 若用户已手动安装 Node.js（如 v24 等任意版本），直接复用
         if shutil.which("node") and shutil.which("npm"):
-            node_ver = sp.run(["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10).stdout.strip()
+            node_ver = sp.run(
+                ["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+            ).stdout.strip()
             print_item(f"检测到 Node.js {node_ver}，跳过自动安装", "ok")
             env_status["npm_installed"] = True
         else:
@@ -760,6 +815,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             else:
                 try:
                     import platform
+
                     machine = platform.machine().lower()
                     node_ver = "v20.11.0"
                     node_arch = "linux-arm64" if "arm" in machine or "aarch64" in machine else "linux-x64"
@@ -777,8 +833,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                     rc = 1
                     for _node_url in _node_urls:
                         rc = sp.run(
-                            ["curl", "-fL", "--progress-bar", "--retry", "3",
-                             "-o", str(node_tmp), _node_url],
+                            ["curl", "-fL", "--progress-bar", "--retry", "3", "-o", str(node_tmp), _node_url],
                             timeout=300,
                         ).returncode
                         if rc == 0:
@@ -788,7 +843,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                         node_dest.parent.mkdir(parents=True, exist_ok=True)
                         rc2 = sp.run(
                             ["tar", "-xf", str(node_tmp), "-C", str(node_dest.parent), "--strip-components=1"],
-                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                            capture_output=True,
+                            text=True,
+                            encoding="utf-8",
+                            errors="replace",
+                            timeout=30,
                         ).returncode
                         if rc2 == 0 or (node_dest.parent / "bin" / "node").exists():
                             bin_dir = node_dest.parent / "bin"
@@ -823,6 +882,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     if npm_cmd and not env_status.get("electron_deps_ok"):
         try:
             from core.electron_launch_guard import electron_package_intact
+
             if electron_package_intact(str(ELECTRON_DIR)):
                 env_status["electron_deps_ok"] = True
                 print_item("Electron 依赖已就绪(启动早期阶段已装好)", "ok")
@@ -848,8 +908,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # (electron 二进制镜像, 附加 npm registry 参数)候选,逐个尝试。
         _attempts = [
             ("https://npmmirror.com/mirrors/electron/", []),
-            ("https://registry.npmmirror.com/-/binary/electron/",
-             ["--registry=https://registry.npmmirror.com"]),
+            ("https://registry.npmmirror.com/-/binary/electron/", ["--registry=https://registry.npmmirror.com"]),
             ("", []),  # 最后回退官方源(直连 GitHub 良好的用户)
         ]
 
@@ -862,7 +921,8 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 return sp.run(
                     [npm_cmd, "install", *_npm_net_flags, *extra],
                     cwd=str(ELECTRON_DIR),
-                    env=env, timeout=900,
+                    env=env,
+                    timeout=900,
                 ).returncode
             except Exception as exc:  # noqa: BLE001
                 print_item(f"npm install 异常: {exc}", "warn")
@@ -879,7 +939,8 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             print_item("Electron 依赖就绪", "ok")
         else:
             print_item(
-                "npm install 仍失败", "warn",
+                "npm install 仍失败",
+                "warn",
                 "可手动: cd electron && npm install --registry=https://registry.npmmirror.com",
             )
 
@@ -892,7 +953,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         try:
             rc = sp.run(
                 ["ollama", "list"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
             )
             if rc.returncode == 0 and rc.stdout.strip():
                 models = [line.split()[0] for line in rc.stdout.strip().split("\n")[1:] if line.strip()]
@@ -942,16 +1007,18 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # faster-whisper 会拉几百 MB),且依赖网络/镜像,一旦卡住/失败就把首启拖死或拖挂。
         # 语音是【可选】的麦克风路径(缺了远程/文字路径照常可用),故改为清晰引导按需手动装。
         print_item(f"语音依赖缺失(可选,麦克风路径用): {', '.join(voice_missing)}", "warn")
-        print_item("按需手动安装(不自动装以免拖慢/挂死首启)", "warn",
-                   f"pip install {' '.join(voice_missing)}  —— 或 `python main.py setup`")
+        print_item(
+            "按需手动安装(不自动装以免拖慢/挂死首启)",
+            "warn",
+            f"pip install {' '.join(voice_missing)}  —— 或 `python main.py setup`",
+        )
 
     # pyaudio (needs system libs;同样不在首启现装)
     try:
         __import__("pyaudio")
         print_item("PyAudio", "ok")
     except Exception:
-        print_item("PyAudio 未安装(可选)", "warn",
-                   "手动: apt install portaudio19-dev && pip install pyaudio")
+        print_item("PyAudio 未安装(可选)", "warn", "手动: apt install portaudio19-dev && pip install pyaudio")
 
     # OTLP 导出器(可选;真正导出追踪数据到 Jaeger/Tempo 等后端时才需要,依赖较重
     # 的 grpcio,默认 GALAXY_OTEL_EXPORTER 未设时用不上——不在首启阻塞安装,
@@ -991,6 +1058,7 @@ def _run_setup_wizard() -> int:
 # Main entry-point
 # ---------------------------------------------------------------------------
 
+
 def _apply_model_cli_args(args) -> None:
     """把 --model / --select-model 应用到环境变量；真正的主脑选择移到 Phase 5「AI 大脑」进行
     （不在开头打断）。--select-model 清除已保存选择以触发重新选择。"""
@@ -1000,8 +1068,7 @@ def _apply_model_cli_args(args) -> None:
         if getattr(args, "select_model", False):
             # 清除已保存选择以触发重新选择。主脑现收敛在 model_catalog 的统一记录
             # (runtime/model_state.json);连旧的 .galaxy_model 一并清掉(迁移期兼容)。
-            for _p in (PROJECT_ROOT / "runtime" / "model_state.json",
-                       PROJECT_ROOT / ".galaxy_model"):
+            for _p in (PROJECT_ROOT / "runtime" / "model_state.json", PROJECT_ROOT / ".galaxy_model"):
                 try:
                     _p.unlink()
                 except Exception:
@@ -1013,22 +1080,34 @@ def _apply_model_cli_args(args) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Galaxy V2 Unified Entry")
+    # --version：CLI 该知道自己的版本。此前 GALAXY_VERSION 只印在横幅里，
+    # 脚本/排障想拿版本号只能去 grep 源码或截横幅。
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"Galaxy {GALAXY_VERSION} — {GALAXY_TAGLINE}",
+        help="打印版本号后退出",
+    )
     parser.add_argument("--setup", action="store_true", help="Run interactive setup wizard")
     # Accept --host/--port so the documented start command
     # (`python main.py --host 127.0.0.1 --port 9000`) works instead of crashing
     # with "unrecognized arguments".  Default None ⇒ keep the config default.
     parser.add_argument("--host", type=str, default=None, help="API 服务监听地址 (默认取配置)")
     parser.add_argument("--port", "-p", type=int, default=None, help="API 服务端口 (默认 9000)")
-    parser.add_argument("--model", type=str, default=None,
-                        help="指定本地主脑模型 tag（跳过交互选择，如 gemma4:12b / openbmb/minicpm-o4.5）")
-    parser.add_argument("--select-model", action="store_true",
-                        help="强制重新选择 AI 主脑模型（清除已保存选择）")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="详细模式：展开每个启动阶段的逐项明细（默认折叠成一行）")
-    parser.add_argument("--autostart", action="store_true",
-                        help="(Windows) 注册开机自启：开机/被 WOL 盒子唤醒后自动拉起 Galaxy + 托盘")
-    parser.add_argument("--autostart-remove", action="store_true",
-                        help="(Windows) 取消开机自启")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="指定本地主脑模型 tag（跳过交互选择，如 gemma4:12b / openbmb/minicpm-o4.5）",
+    )
+    parser.add_argument("--select-model", action="store_true", help="强制重新选择 AI 主脑模型（清除已保存选择）")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="详细模式：展开每个启动阶段的逐项明细（默认折叠成一行）"
+    )
+    parser.add_argument(
+        "--autostart", action="store_true", help="(Windows) 注册开机自启：开机/被 WOL 盒子唤醒后自动拉起 Galaxy + 托盘"
+    )
+    parser.add_argument("--autostart-remove", action="store_true", help="(Windows) 取消开机自启")
     args = parser.parse_args()
 
     # -v 同时落到环境变量：子模块（unified_launcher 等）无需逐层透传即可读到。
@@ -1040,6 +1119,7 @@ def main() -> int:
     if args.autostart or args.autostart_remove:
         try:
             from windows_service import autostart as _as
+
             if args.autostart_remove:
                 print_item(f"取消开机自启: {_as.unregister_all()}", "ok")
             else:
@@ -1119,6 +1199,7 @@ def main() -> int:
         # ── Galaxy WebSocket Bridge — 桌面覆盖层事件推送 ──
         try:
             from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+
             _ws_bridge = GalaxyPresenceBridge.get_instance()
             asyncio.create_task(_ws_bridge.start())
         except Exception as _exc:
@@ -1129,10 +1210,14 @@ def main() -> int:
     # 必须在 asyncio.run 之前装策略;内置子进程探针,失败自动还原默认(宁慢勿哑)。
     try:
         from core.fast_loop import install_fast_loop
+
         install_fast_loop()
     except Exception:
         pass  # 缺包/异常都走默认循环,零影响
 
+    from launcher import record as _record
+
+    _exit_code = 0
     try:
         asyncio.run(_run())
     except KeyboardInterrupt:
@@ -1141,8 +1226,20 @@ def main() -> int:
         print_item("正在优雅关闭所有服务...", "ok")
         lumiv.stop()
         print_item("所有服务已停止", "ok")
+        # 被中断不是"成功"。沿用 shell 惯例 128+SIGINT(2)=130,让自动化能区分
+        # "用户按了 Ctrl+C" 和 "正常退出" —— 此前两者都返回 0。
+        _exit_code = _record.EXIT_INTERRUPTED
 
-    return 0
+    # 封盘：定 exit_code、落 runtime/startup.json、写日志。
+    # 写失败不改变退出码（那只是排障辅助，不是启动的必要条件）。
+    try:
+        from launcher import ui as _ui
+
+        _ui.finish(_exit_code, verbose=bool(os.environ.get("GALAXY_VERBOSE")), tui=False)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return _exit_code
 
 
 if __name__ == "__main__":
