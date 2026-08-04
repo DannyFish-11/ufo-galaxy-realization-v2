@@ -370,6 +370,49 @@ class DeviceControlService:
     # 跨设备控制
     # =========================================================================
 
+    async def execute_action(self, device_id: str, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """按动作名派发到具体控制方法 —— 单设备动作的**唯一**分发入口。
+
+        为什么要有这个方法
+        ------------------
+        ``core/windows_execution_arbiter.py`` 的第 3 级(GUI)默认适配器一直在调
+        ``device_control.execute_action(...)``,而这个方法在本仓库**从未存在过**
+        (``git log -S`` 可查)。于是那条适配器每次都以 ``AttributeError`` 失败:
+        仲裁器四级里唯一被自动接上的那一级,实际上是坏的 —— 而 windows_aip_client
+        声称仲裁器是它**唯一**的执行入口。
+
+        跨设备的 ``control_device`` 也委托到这里,不再自己维护第二张 if/elif 分发表:
+        两张表并存就是"改一处漏一处",``press_key`` 已经是受害者 —— 方法实现了,
+        旧表里却没有它,于是没有任何调用路径能按到键。
+
+        不支持的动作**如实报**(``unsupported=True``),绝不假装成功:仲裁器据此
+        继续往下一级降级,谎报成功会让降级链在这里断掉。
+        """
+        act = (action or "").strip().lower()
+        p = params or {}
+
+        def _int(key: str, default: int) -> int:
+            try:
+                return int(p.get(key, default))
+            except (TypeError, ValueError):
+                return default
+
+        if act in ("click", "double_click"):
+            return await self.click(
+                device_id, _int("x", 0), _int("y", 0), _int("clicks", 2 if act == "double_click" else 1)
+            )
+        if act in ("type", "type_text", "input", "input_text"):
+            return await self.input_text(device_id, str(p.get("text", "")))
+        if act == "scroll":
+            return await self.scroll(device_id, str(p.get("direction", "down")), _int("amount", 500))
+        if act in ("press_key", "key"):
+            return await self.press_key(device_id, str(p.get("key", "")))
+        if act == "screenshot":
+            return await self.screenshot(device_id)
+        if act in ("open_app", "launch_app"):
+            return await self.open_app(device_id, str(p.get("app_name") or p.get("app") or ""))
+        return {"success": False, "error": f"Unsupported action: {action}", "unsupported": True}
+
     async def control_device(
         self, from_device_id: str, to_device_id: str, action: str, params: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -380,25 +423,15 @@ class DeviceControlService:
         - 从 Android 控制 Windows
         - 从 Windows 控制 Android
         - 从任何设备控制任何设备
+
+        动作分发委托给 ``execute_action``(唯一一张表),这里只负责解析目标设备。
         """
         # 获取目标设备
         to_device = self.get_device(to_device_id)
         if not to_device:
             return {"success": False, "error": "Target device not found"}
 
-        # 执行操作
-        if action == "click":
-            return await self.click(to_device_id, params.get("x", 0), params.get("y", 0), params.get("clicks", 1))
-        elif action == "input":
-            return await self.input_text(to_device_id, params.get("text", ""))
-        elif action == "scroll":
-            return await self.scroll(to_device_id, params.get("direction", "down"), params.get("amount", 500))
-        elif action == "screenshot":
-            return await self.screenshot(to_device_id)
-        elif action == "open_app":
-            return await self.open_app(to_device_id, params.get("app_name", ""))
-        else:
-            return {"success": False, "error": f"Unknown action: {action}"}
+        return await self.execute_action(to_device_id, action, params)
 
 
 # 全局实例
