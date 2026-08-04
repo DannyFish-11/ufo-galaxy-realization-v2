@@ -2,7 +2,8 @@
 配置热更新管理器 (Config Hot-Reload Manager)
 =============================================
 
-在现有 launcher/config_manager.py 基础上，为运行时提供：
+在配置权威层（``core.unified.config_manager`` / ``core.port_config``）之上，
+为运行时提供：
 - 配置热更新：文件变更自动重载
 - 版本控制：记录每次变更的 diff
 - Schema 验证：JSON Schema 校验配置合法性

@@ -18,14 +18,12 @@ def _configure_windows_console() -> None:
         return
     try:
         import io
+
         if hasattr(sys.stdout, "buffer"):
-            sys.stdout = io.TextIOWrapper(
-                sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
-            )
-            sys.stderr = io.TextIOWrapper(
-                sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
-            )
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
         import os
+
         os.environ["PYTHONIOENCODING"] = "utf-8:replace"
     except Exception:
         pass
@@ -109,6 +107,7 @@ _shutting_down = False
 def get_gateway_health_url() -> str:
     return f"http://{GATEWAY_HOST}:{resolve_gateway_port()}/health"
 
+
 # ───────────────────────────────────────────────────────────────────────────
 # 模型配置 — 用户可选择的本地模型
 # ───────────────────────────────────────────────────────────────────────────
@@ -135,6 +134,7 @@ _model_download_thread = None  # 后台下载线程
 # 工具函数
 # ───────────────────────────────────────────────────────────────────────────
 
+
 def setup_logging(level: int = logging.INFO):
     LOGS_DIR.mkdir(exist_ok=True)
     logging.basicConfig(
@@ -152,8 +152,11 @@ def run(cmd: list, cwd: Path = None, timeout: float = 120, capture: bool = True)
     """运行命令，返回 (returncode, stdout, stderr)。"""
     try:
         result = subprocess.run(
-            cmd, cwd=str(cwd or PROJECT_ROOT), capture_output=capture,
-            text=True, timeout=timeout,
+            cmd,
+            cwd=str(cwd or PROJECT_ROOT),
+            capture_output=capture,
+            text=True,
+            timeout=timeout,
         )
         return result.returncode, result.stdout or "", result.stderr or ""
     except subprocess.TimeoutExpired:
@@ -199,7 +202,7 @@ def select_model_auto(args) -> str:
     if config_model and config_model in AVAILABLE_MODELS:
         return config_model
     try:
-        return _ms.recommend()      # 4. 按 GPU/CPU 实际情况推荐
+        return _ms.recommend()  # 4. 按 GPU/CPU 实际情况推荐
     except Exception:
         return DEFAULT_MODEL
 
@@ -240,93 +243,31 @@ def download_model_background(model: str):
 # Phase 0: 环境检查（精简输出版）
 # ───────────────────────────────────────────────────────────────────────────
 
+
 def phase0_environment_check() -> dict:
+    """环境检查 —— 判据全部来自 :mod:`launcher.env_check`，与 ``main.py`` 同一份。
+
+    这里原本自带一套自称"精简版"的探测。"精简"这个说法不准确：它**不是**
+    ``main.py`` Phase 0 的子集，两份各有对方没有的判据，而且同一个问题会给出
+    **不同答案**（pip 问的对象不同、Electron 认不认残缺安装、API Key 读不读
+    ``runtime/secrets.env``……）。两份判据互不知情，漂了也没人发现。
+
+    合并后的那份逐行取更强的判据，本函数只负责按本文件既有的输出风格把结论
+    打出来。这样在 ``launch_desktop.py`` 被删除之前，漂移就已经不存在了 ——
+    而不是等到删除那一刻才顺带消失。
     """
-    精简版环境检查。只报告关键项，不阻塞启动。
-    模型状态在 Phase 1 单独处理。
-    """
+    from launcher import env_check as _env_check
+    from launcher.record import Status as _Status
+
     banner("Phase 0: 环境检查")
-    status = {
-        "python_ok": False,
-        "pip_ok": False,
-        "env_exists": False,
-        "has_api_key": False,
-        "ollama_installed": False,
-        "ollama_running": False,
-        "model_available": False,
-        "npm_installed": False,
-        "electron_deps_ok": False,
-        "ready": False,
-    }
+    report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
 
-    issues = []   # 收集问题，最后统一报告
-    ok_items = [] # 收集通过项
-
-    # 0.1 Python 版本
-    py_ver = sys.version_info
-    if py_ver >= (3, 10):
-        status["python_ok"] = True
-        ok_items.append(f"Python {py_ver.major}.{py_ver.minor}.{py_ver.micro}")
-    else:
-        issues.append(f"Python {py_ver.major}.{py_ver.minor}，需要 3.10+")
-        return status
-
-    # 0.2 pip
-    rc, _, _ = run([sys.executable, "-m", "pip", "--version"])
-    status["pip_ok"] = rc == 0
-    if status["pip_ok"]:
-        ok_items.append("pip")
-    else:
-        issues.append("pip 不可用")
-
-    # 0.3 .env
-    status["env_exists"] = ENV_FILE.exists()
-    if status["env_exists"]:
-        ok_items.append(".env 已配置")
-
-    # 0.4 API Key
-    api_keys = [k for k in os.environ if "API_KEY" in k and os.environ[k].strip()
-                and "your_" not in os.environ[k].lower() and "example" not in os.environ[k].lower()]
-    status["has_api_key"] = len(api_keys) > 0
-    if status["has_api_key"]:
-        ok_items.append(f"{len(api_keys)} 个 API Key")
-
-    # 0.5 Ollama
-    ollama_cmd = shutil.which("ollama")
-    status["ollama_installed"] = ollama_cmd is not None
-    if status["ollama_installed"]:
-        rc, _, _ = run(["ollama", "list"], timeout=5)
-        status["ollama_running"] = rc == 0
-        if status["ollama_running"]:
-            ok_items.append("Ollama 运行中")
-        else:
-            issues.append("Ollama 未运行 → ollama serve &")
-    else:
-        issues.append("Ollama 未安装 → https://ollama.com/download")
-
-    # 0.6 模型状态（不报告为fail，Phase 1 处理）
-    if status["ollama_running"]:
-        rc, out, _ = run(["ollama", "list"], timeout=5)
-        # 检查是否有任何可用模型
-        status["model_available"] = bool(out.strip())
-        if status["model_available"]:
-            installed = [line.split()[0] for line in out.strip().split('\n') if line.strip()]
-            ok_items.append(f"模型: {', '.join(installed[:3])}")
-
-    # 0.7 npm
-    npm_cmd = shutil.which("npm")
-    status["npm_installed"] = npm_cmd is not None
-    if status["npm_installed"]:
-        ok_items.append("npm")
-    else:
-        issues.append("npm 未安装 → https://nodejs.org")
-
-    # 0.8 Electron 依赖
-    status["electron_deps_ok"] = (ELECTRON_DIR / "node_modules" / "electron").exists()
-    if status["electron_deps_ok"]:
-        ok_items.append("Electron 依赖")
-
-    # 精简输出：一行OK + 问题列表
+    ok_items = [f"{s.name} {s.value}".strip() for s in report.to_steps() if s.status is _Status.OK]
+    issues = [
+        f"{s.name}" + (f" → {s.hint}" if s.hint else "")
+        for s in report.to_steps()
+        if s.status in (_Status.DEGRADED, _Status.FAILED)
+    ]
     if ok_items:
         ok(", ".join(ok_items))
     if issues:
@@ -334,18 +275,16 @@ def phase0_environment_check() -> dict:
         for issue in issues:
             logger.warning("     → %s", issue)
 
-    # 总结：只有核心项缺失才阻止启动
-    critical_ok = status["python_ok"] and status["pip_ok"] and status["npm_installed"]
-    can_run = critical_ok
-    if not can_run:
+    status = report.to_status_dict()
+    if not status["ready"]:
         fail("核心依赖缺失，无法启动。请修复后重试。")
-    status["ready"] = can_run
     return status
 
 
 # ───────────────────────────────────────────────────────────────────────────
 # Phase 1: 依赖确保
 # ───────────────────────────────────────────────────────────────────────────
+
 
 def phase1_ensure_dependencies(status: dict, args) -> bool:
     """自动修复能修复的依赖问题。"""
@@ -359,7 +298,9 @@ def phase1_ensure_dependencies(status: dict, args) -> bool:
         ok("Python 核心依赖已安装 ✓")
     else:
         logger.info("  → pip install -r requirements.txt ...")
-        rc, out, err = run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], timeout=300, capture=True)
+        rc, out, err = run(
+            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], timeout=300, capture=True
+        )
         if rc == 0:
             ok("Python 依赖安装完成 ✓")
         else:
@@ -377,18 +318,18 @@ def phase1_ensure_dependencies(status: dict, args) -> bool:
     if status["ollama_installed"] and not status["model_available"]:
         # 选择模型
         model = select_model_auto(args)
-        
+
         # 交互式选择（首次启动且是TTY）
-        if not _load_model_choice() and sys.stdin.isatty() and not getattr(args, 'no_interactive', False):
+        if not _load_model_choice() and sys.stdin.isatty() and not getattr(args, "no_interactive", False):
             model = select_model_interactive()
             if model:
                 _save_model_choice(model)
-        
+
         if not model or args.skip_model_download:
             logger.info("  → 跳过模型下载（可用云端 API 或稍后 ollama pull）")
         else:
             info = AVAILABLE_MODELS.get(model, {})
-            logger.info("  → %s (%s)", info.get('name', model), info.get('size', '?'))
+            logger.info("  → %s (%s)", info.get("name", model), info.get("size", "?"))
             logger.info("  → 后台下载中，启动不受影响...")
             _model_download_thread = download_model_background(model)
             # 不等待下载完成，继续启动流程
@@ -419,6 +360,7 @@ def phase1_ensure_dependencies(status: dict, args) -> bool:
 # ───────────────────────────────────────────────────────────────────────────
 # Phase 2-5: 启动流程（同之前，日志改写到文件）
 # ───────────────────────────────────────────────────────────────────────────
+
 
 def gateway_is_ready() -> bool:
     try:
@@ -453,7 +395,7 @@ def kill_proc(proc, name, timeout=5.0):
         proc.wait()
     finally:
         # 关闭日志文件句柄
-        if hasattr(proc, '_stdout_handle'):
+        if hasattr(proc, "_stdout_handle"):
             try:
                 proc._stdout_handle.close()
             except Exception:
@@ -488,8 +430,10 @@ def start_gateway_backend():
     try:
         _proc = subprocess.Popen(
             [sys.executable, str(PROJECT_ROOT / "main.py"), "--host", GATEWAY_HOST, "--port", str(gateway_port)],
-            cwd=str(PROJECT_ROOT), env=env,
-            stdout=_gateway_stdout, stderr=subprocess.STDOUT,
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            stdout=_gateway_stdout,
+            stderr=subprocess.STDOUT,
         )
         _proc._stdout_handle = _gateway_stdout
         return _proc
@@ -517,6 +461,7 @@ def start_electron_frontend() -> Optional[subprocess.Popen]:
 
     logger.info("  启动 Electron 桌面覆盖层...")
     from core.electron_launch_guard import electron_package_intact
+
     node_modules = ELECTRON_DIR / "node_modules"
     npm = shutil.which("npm")
     if not npm:
@@ -536,8 +481,10 @@ def start_electron_frontend() -> Optional[subprocess.Popen]:
         # 仍失败则给出可照抄执行的确切修复指令,而不是放任 Electron 去崩。
         if not electron_package_intact(str(ELECTRON_DIR)):
             from core.electron_launch_guard import (
-                electron_binary_fix_hint, repair_electron_binary,
+                electron_binary_fix_hint,
+                repair_electron_binary,
             )
+
             if not repair_electron_binary(str(ELECTRON_DIR)):
                 raise RuntimeError("Electron 依赖修复失败:\n" + electron_binary_fix_hint("electron"))
 
@@ -552,8 +499,9 @@ def start_electron_frontend() -> Optional[subprocess.Popen]:
     popen_kwargs = {}
     if sys.platform == "win32":
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    proc = subprocess.Popen([npx, "electron", "."], cwd=str(ELECTRON_DIR), env=env,
-                            stdout=None, stderr=None, **popen_kwargs)
+    proc = subprocess.Popen(
+        [npx, "electron", "."], cwd=str(ELECTRON_DIR), env=env, stdout=None, stderr=None, **popen_kwargs
+    )
     write_lock(proc.pid)
     return proc
 
@@ -564,6 +512,7 @@ def start_tauri_frontend() -> Optional[subprocess.Popen]:
     GALAXY_TAURI_AUTOBUILD=0 / GALAXY_DESKTOP_SHELL=electron → 返回 None，由调用方回退 Electron。
     env 与 Electron 注入完全一致（端口/锁），托盘与后端 bridge 无需改动。"""
     from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
+
     if os.environ.get("GALAXY_DESKTOP_SHELL", "").strip().lower() == "electron":
         return None
     if already_running():
@@ -580,7 +529,10 @@ def start_tauri_frontend() -> Optional[subprocess.Popen]:
     binp = next((c for c in candidates if c.exists()), None)
     if binp is None:
         optout = os.environ.get("GALAXY_TAURI_AUTOBUILD", "").strip().lower() in (
-            "0", "false", "no", "off",
+            "0",
+            "false",
+            "no",
+            "off",
         )
         if optout or shutil.which("cargo") is None:
             logger.info(
@@ -591,6 +543,7 @@ def start_tauri_frontend() -> Optional[subprocess.Popen]:
         # 构建前预检系统级依赖（Linux 的 webkit2gtk 等）——缺则给出 apt 命令、跳过、回退 Electron。
         try:
             from core.electron_launch_guard import tauri_build_prereqs_hint
+
             _hint = tauri_build_prereqs_hint()
         except Exception:
             _hint = None
@@ -628,6 +581,7 @@ def start_desktop_shell() -> Optional[subprocess.Popen]:
 # 主流程
 # ───────────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="UFO Galaxy 系统化完整启动器")
     parser.add_argument("--check", action="store_true", help="只检查环境，不启动")
@@ -636,15 +590,17 @@ def main():
     parser.add_argument("--docker", action="store_true", help="Docker 模式")
     parser.add_argument("--debug", action="store_true", help="DEBUG 日志")
     parser.add_argument("--skip-check", action="store_true", help="跳过环境检查（快速启动）")
-    parser.add_argument("--model", choices=list(AVAILABLE_MODELS.keys()),
-                        default=os.getenv("OLLAMA_MODEL", DEFAULT_MODEL),
-                        help=f"选择本地模型 (默认: {DEFAULT_MODEL})")
-    parser.add_argument("--skip-model-download", action="store_true",
-                        help="跳过模型下载（使用云端 API 或稍后手动下载）")
-    parser.add_argument("--no-interactive", action="store_true",
-                        help="非交互模式（使用默认配置，不提示选择）")
-    parser.add_argument("--list-models", action="store_true",
-                        help="列出可用的本地模型并退出")
+    parser.add_argument(
+        "--model",
+        choices=list(AVAILABLE_MODELS.keys()),
+        default=os.getenv("OLLAMA_MODEL", DEFAULT_MODEL),
+        help=f"选择本地模型 (默认: {DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--skip-model-download", action="store_true", help="跳过模型下载（使用云端 API 或稍后手动下载）"
+    )
+    parser.add_argument("--no-interactive", action="store_true", help="非交互模式（使用默认配置，不提示选择）")
+    parser.add_argument("--list-models", action="store_true", help="列出可用的本地模型并退出")
     args = parser.parse_args()
 
     # --list-models: 列出模型并退出
@@ -703,7 +659,7 @@ def main():
     print("  ╔═══════════════════════════════════════════════════════════╗")
     chosen_model = select_model_auto(args)
     model_info = AVAILABLE_MODELS.get(chosen_model, {})
-    model_display = model_info.get('name', chosen_model) if model_info else chosen_model
+    model_display = model_info.get("name", chosen_model) if model_info else chosen_model
     print("  ║      UFO Galaxy 桌面原生 AI 助手 — 系统化启动器          ║")
     print(f"  ║      本地模型: {model_display:43s} ║")
     print("  ╚═══════════════════════════════════════════════════════════╝")

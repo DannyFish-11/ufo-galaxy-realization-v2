@@ -18,37 +18,43 @@ node_startup     — NodeSystemLauncher (node discovery, health polling, registr
 health_checks    — run_startup_health_check (post-startup probe)
 shutdown         — async_shutdown (graceful NATS + subsystem teardown)
 
-Legacy sub-modules (kept for backward compatibility)
-----------------------------------------------------
-config_manager   — DEPRECATED; use core.unified.config_manager
-dependency_resolver — topology-sort helper
-"""
+dependency_resolver — 拓扑排序助手(纯算法,按 NodeSpec 结构协议收节点表)
 
-# 融合(域7):不再在包导入期加载 HARD_DEPRECATED 的 config_manager /
-# dependency_resolver(此前每次启动都触发 DeprecationWarning;全仓无生产 importer,
-# 弃用 shim 文件保留给治理合同测试,但离开启动路径)。需要时显式
-# `from launcher.config_manager import ConfigManager`。
+配置层去向
+----------
+``config_manager`` 已按其在 ``core/compat_surface_retirement.py`` 登记的退役
+条件物理删除(全仓无生产 importer + 端口消费方已迁至 ``core.port_config``)。
+需要配置权威时用 ``core.unified.config_manager``;需要端口时用
+``core.port_config``(权威源 ``config/unified_ports.yaml``)。
+
+``dependency_resolver`` **不是**弃用件:它不发 DeprecationWarning,也没有退役
+登记 —— 它是统一启动器的节点编排要用的能力。此前它唯一的 importer 是
+config_manager,所以看着像"没人用",那是引用计数而非能力判断。
+
+之所以仍不在包导入期加载它:启动路径不该为一个按需能力付 import 代价。
+需要时显式 ``from launcher.dependency_resolver import DependencyResolver``。
+"""
 
 # Bootstrap / config layer
 from .bootstrap import (
     PROJECT_ROOT,
-    SystemState,
     ServiceType,
     SystemConfig,
+    SystemState,
     _write_entrypoint,
-    print_status,
     print_section,
+    print_status,
 )
-
-# Service lifecycle
-from .service_manager import ServiceInfo, ServiceManager
 
 # Startup sub-launchers
 from .core_services import CoreServiceLauncher
-from .node_startup import NodeSystemLauncher
 
 # Post-startup health checks
 from .health_checks import run_startup_health_check
+from .node_startup import NodeSystemLauncher
+
+# Service lifecycle
+from .service_manager import ServiceInfo, ServiceManager
 
 # Graceful shutdown
 from .shutdown import async_shutdown

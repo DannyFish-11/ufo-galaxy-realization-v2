@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PR-WIN-ENCODING: Force UTF-8 on Windows to prevent UnicodeEncodeError in logs
-import sys
 import os
+import sys
 
 # ── .env 加载:必须在任何读取 os.environ 的代码之前完成 ──────────────────
 # python-dotenv 早就在 requirements 里锁了版本,但全仓库范围内从未被真正调用
@@ -198,12 +198,12 @@ All startup options are forwarded to ``unified_launcher.py`` (subordinate
 component) after the orchestrator completes its staged pre-flight sequence.
 """
 
-import os
-import asyncio
-import sys
-import subprocess
-import logging
 import argparse
+import asyncio
+import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from core.ascii_art import (
@@ -292,8 +292,8 @@ def print_item(name: str, status: str = "ok", detail: str = "") -> None:
 
 
 from entrypoint_role_contract import (
-    EntrypointRole,
     MAIN_ENTRY_ID,
+    EntrypointRole,
     assert_single_unique_main_entrypoint,
     ensure_entrypoint_role,
 )
@@ -477,148 +477,58 @@ def _run_orchestrator_preflight() -> bool:
         return True
 
 
+#: :class:`launcher.record.Status` → ``print_item`` 的老状态词汇。
+#: 只在 ``launcher.ui`` 不可用的兜底路径上用到（正常路径直接传 Status）。
+_STEP_STATUS_TO_LEGACY = {"ok": "ok", "degraded": "warn", "failed": "error", "skipped": "info"}
+
+
 def phase0_env_check() -> dict:
-    """Phase 0: Environment check — Python, .env, API Key, pip, npm.
+    """Phase 0: 环境检查 —— 判据全部来自 :mod:`launcher.env_check`。
+
+    这里原本自带一整套探测（Python / pip / .env / API Key / npm / Node /
+    Electron / Ollama），而 ``launch_desktop.py`` 另有一套自称"精简版"的
+    ``phase0_environment_check``。两份**互不知情**，同一个问题会给出不同答案：
+
+    - pip：这边用 ``which("pip")``（可能是别的解释器的 pip），那边用
+      ``sys.executable -m pip``（问的才是"我这个 Python 能不能装包"）；
+    - Electron：这边用 ``electron_package_intact``（识别残缺安装），那边只看
+      ``node_modules/electron`` 目录在不在；
+    - API Key：这边读 ``.env`` + ``runtime/secrets.env``（面板保存后密钥收敛到
+      后者），那边只读 ``os.environ`` —— 密钥存对了也一直报"未配置"；
+    - Ollama：这边只查装没装，那边还查在不在跑、有哪些模型。
+
+    合并后逐行取更强的那个判据，每一条都有测试钉住（见
+    ``tests/test_launcher_env_check.py``）。本函数现在只做两件事：**要一份事实**，
+    **把它交给唯一的输出咽喉打出来**。
 
     Returns:
-        Status dict with keys like python_version, pip_ok, env_exists,
-        api_keys_configured, npm_installed, electron_deps_ok, ollama_installed.
+        与合并前**键相同**的 status dict（键取两个老调用方的并集），
+        且仍然可变 —— ``phase2_ensure_deps`` 会在自愈成功后回写。
     """
-    import shutil
-    import subprocess as sp
+    from launcher import env_check as _env_check
 
-    status: dict[str, object] = {"ready": True}
-
-    # Python version
-    py_ver = sys.version_info
-    py_str = f"{py_ver.major}.{py_ver.minor}.{py_ver.micro}"
-    print_item(f"Python {py_str}", "ok", sys.executable)
-    status["python_version"] = py_str
-
-    # pip
-    pip_ok = shutil.which("pip") is not None or shutil.which("pip3") is not None
-    if pip_ok:
-        print_item("pip", "ok")
-    else:
-        print_item("pip 未安装", "warn")
-        status["ready"] = False
-    status["pip_ok"] = pip_ok
-
-    # .env
-    env_exists = ENV_FILE.exists()
-    if env_exists:
-        size = ENV_FILE.stat().st_size
-        print_item(".env 配置文件", "ok", f"{size // 1024 or 1}KB")
-    else:
-        print_item(".env 未找到", "warn")
-        status["ready"] = False
-    status["env_exists"] = env_exists
-
-    # API Key check
-    # 真 bug(面板 API-key 排查发现):此前只读 .env 文本计数——但密钥经面板保存后
-    # 会被收敛进 runtime/secrets.env(不再明文留在 .env,见 core/config_store.py),
-    # 于是这条横幅在密钥已正确保存的情况下依然永远报"未配置",强化"存了但没用"
-    # 的错觉。这里额外并入 secrets.env 里的真实密钥键,并用共享的占位符前缀表
-    # 过滤 .env 里尚未替换的模板值(如 your_openai_api_key_here),避免双向误判。
-    api_count = 0
-    seen_keys: set[str] = set()
-    try:
-        from core.credential_vault import PLACEHOLDER_PREFIXES
-
-        env_text = ENV_FILE.read_text() if env_exists else ""
-        for line in env_text.splitlines():
-            if "=" in line and not line.startswith("#"):
-                key, _, val = line.partition("=")
-                val = val.strip()
-                key = key.strip()
-                if (
-                    val
-                    and not val.lower().startswith(PLACEHOLDER_PREFIXES)
-                    and any(k in key.upper() for k in ["API_KEY", "KEY"])
-                ):
-                    seen_keys.add(key.upper())
+    # 路径由本文件给：ENV_FILE / ELECTRON_DIR 的所有权留在入口，
+    # 检查器不再自己持一份同名常量（也让这两个路径保持可注入）。
+    report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
+    for step in report.to_steps():
+        # 优先走 _ui.step 而不是 print_item：事实已经是 StepResult 了，再翻译成
+        # ("ok"/"warn", 文本) 又翻回来只会丢掉 hint 与 detail。
+        # 兜底与 print_item 同款（本文件其余 71 处的既有约定）：ui 不可用时也要
+        # 有一行能看的输出，环境检查的结论正是最不该在这种时候消失的东西。
         try:
-            from core.config_store import get_config_store
+            from launcher import ui as _ui
 
-            for key, val in get_config_store().read_secrets().items():
-                if (
-                    val
-                    and not val.lower().startswith(PLACEHOLDER_PREFIXES)
-                    and any(k in key.upper() for k in ["API_KEY", "KEY"])
-                ):
-                    seen_keys.add(key.upper())
-        except Exception:
-            pass
-        api_count = len(seen_keys)
-    except Exception:
-        pass
-    if api_count > 0:
-        print_item(f"API Key 已配置 ({api_count}个)", "ok")
-    else:
-        print_item("API Key 未配置", "warn", "请编辑 .env 添加你的 Key")
-    status["api_keys_configured"] = api_count
-
-    # npm
-    # 用 which 解析出的**绝对路径**去调用,不能传裸 "npm"。
-    # Windows 上 npm 实际是 `npm.cmd`,而 CreateProcess 不套用 PATHEXT ——
-    # 裸 "npm" 必抛 FileNotFoundError,被下面的 except 吞掉后打出一个
-    # 没有版本号的 "✓ npm"。真机日志里 Node.js 有版本、npm 没有,就是这个指纹。
-    npm_exe = shutil.which("npm")
-    npm_ok = npm_exe is not None
-    if npm_ok:
-        try:
-            rc = sp.run(
-                [npm_exe, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
+            _ui.step(
+                step.name,
+                step.status,
+                step.value,
+                column=step.column,
+                hint=step.hint,
+                **step.detail,
             )
-            npm_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
-            print_item("npm", "ok", npm_ver)
         except Exception:
-            print_item("npm", "ok")
-    else:
-        print_item("npm 未安装", "warn")
-        status["ready"] = False
-    status["npm_installed"] = npm_ok
-
-    # Node.js
-    node_ok = shutil.which("node") is not None
-    if node_ok:
-        try:
-            rc = sp.run(
-                ["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
-            )
-            node_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
-            print_item("Node.js", "ok", node_ver)
-        except Exception:
-            print_item("Node.js", "ok")
-    else:
-        print_item("Node.js 未安装", "warn")
-    status["node_installed"] = node_ok
-
-    # Electron deps —— 判定"完整"而非仅"node_modules 目录存在"。
-    # 只看目录存在会漏掉【残缺安装】(npm install 中断:electron.cmd 存根在、但
-    # electron/cli.js 缺失),那样会跳过安装、直接拉起 electron 然后崩。用
-    # electron_package_intact 做完整性检查:缺失或残缺都判 False,让下面的
-    # `npm install`(正常下载)照跑并把缺的补齐——这就是"正常下载 + 缺失/残缺才补"。
-    if npm_ok:
-        try:
-            from core.electron_launch_guard import electron_package_intact
-
-            electron_deps_ok = electron_package_intact(str(ELECTRON_DIR))
-        except Exception:
-            electron_deps_ok = (ELECTRON_DIR / "node_modules").exists()
-    else:
-        electron_deps_ok = False
-    status["electron_deps_ok"] = electron_deps_ok
-
-    # Ollama
-    ollama_ok = shutil.which("ollama") is not None
-    if ollama_ok:
-        print_item("Ollama 已安装", "ok")
-    else:
-        print_item("Ollama 未安装", "warn")
-    status["ollama_installed"] = ollama_ok
-
-    return status
+            print_item(step.name, _STEP_STATUS_TO_LEGACY.get(step.status.value, "info"), step.value)
+    return report.to_status_dict()
 
 
 def phase2_ensure_deps(env_status: dict) -> bool:
