@@ -9,7 +9,7 @@
     "center_runtime_startup_orchestration": {
       "score_pct": 65,
       "status": "partial_closed",
-      "evidence_file": "main.py:SystemOrchestrator + unified_launcher.py",
+      "evidence_file": "main.py:SystemOrchestrator + launcher/services.py",
       "notes": "7-phase startup exists; orchestrator + launcher work; but UDM/UCM/registry stability conditional"
     },
     "websocket_connection_layer": {
