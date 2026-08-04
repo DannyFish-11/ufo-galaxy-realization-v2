@@ -10,7 +10,7 @@
 > [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) ·
 > [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
-> [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
+> `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） ·
 > [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md) ·
 > [`windows_client/status_board_v2/ACTIVE_SURFACE.md`](../windows_client/status_board_v2/ACTIVE_SURFACE.md)
 
@@ -200,6 +200,6 @@ canonical visual and semantic model for the desktop status board.
 | [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) | Configuration entry unification contract; updated in PR-0 to add local unified config authority |
 | [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) | Dashboard retirement plan; updated in PR-0 to formalise frontend retirement and config migration direction |
 | [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) | Routing authority contract; PR-0 confirms it is unchanged |
-| [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) | Sky-Grown Constellation Topology visual grammar; PR-0 confirms it remains the governing principle |
+| `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） | Sky-Grown Constellation Topology visual grammar; PR-0 confirms it remains the governing principle |
 | [`docs/RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md`](RIGHT_STATUS_BOARD_MODEL_TOPOLOGY.md) | Right-side status board topology semantics; updated in PR-0 to confirm sole surface status |
 | [`windows_client/status_board_v2/ACTIVE_SURFACE.md`](../windows_client/status_board_v2/ACTIVE_SURFACE.md) | Surface-level marker file; updated in PR-0 to reflect sole surface and future config entry role |

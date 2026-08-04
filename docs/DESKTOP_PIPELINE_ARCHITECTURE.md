@@ -421,8 +421,8 @@ PR-15 completes the multi-PR initiative by adding:
 | [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) | Main Status Board V2 design and usage guide |
 | [`docs/OBSERVABILITY_HISTORY.md`](OBSERVABILITY_HISTORY.md) | PR-14 observability and history layer |
 | [`docs/DIAGNOSTICS_INSPECTION_INTERACTION.md`](DIAGNOSTICS_INSPECTION_INTERACTION.md) | PR-13 diagnostics and inspection interaction layer |
-| [`docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md`](TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md) | PR-12 topology rendering and visual semantics polish |
-| [`docs/TOPOLOGY_CONSTELLATION_LAYOUT.md`](TOPOLOGY_CONSTELLATION_LAYOUT.md) | PR-11 topology / constellation layout foundation |
+| `docs/TOPOLOGY_RENDERING_VISUAL_SEMANTICS.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） | PR-12 topology rendering and visual semantics polish |
+| `docs/TOPOLOGY_CONSTELLATION_LAYOUT.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） | PR-11 topology / constellation layout foundation |
 | [`docs/DESKTOP_STATUS_BOARD_UI.md`](DESKTOP_STATUS_BOARD_UI.md) | PR-10 first usable adapter-driven status board UI surface |
 | [`docs/DESKTOP_CONSUMPTION_ADAPTER.md`](DESKTOP_CONSUMPTION_ADAPTER.md) | PR-9 desktop consumption adapter |
 | [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md) | PR-5/PR-6 server-side canonicalization |

@@ -554,23 +554,34 @@ def test_48_pr5_legacy_routing_fallback_active_preserved():
 
 
 # ===========================================================================
-# 49: _minimal_desktop_topology_fallback includes projection_quality
+# 49: projection_quality 的降级语义（改为直接测契约，不再经 HTTP 端点的兜底函数）
 # ===========================================================================
 
 
-def test_49_minimal_fallback_payload_includes_projection_quality():
-    # Import the internal helper via the module
-    import importlib
+def test_49_topology_projection_quality_degrades_honestly():
+    """拿不到 canonical 路由时，projection_quality 必须如实标注为"不可信"。
 
-    routes_mod = importlib.import_module("core.routes.projection")
-    fallback_fn = getattr(routes_mod, "_minimal_desktop_topology_fallback", None)
-    assert fallback_fn is not None, "_minimal_desktop_topology_fallback not found"
-    payload = fallback_fn()
-    assert "projection_quality" in payload
+    这条原本测的是 ``core.routes.projection._minimal_desktop_topology_fallback``
+    —— ``GET /api/v1/projection/desktop-topology`` 的兜底函数。那个端点已删
+    （零生产消费方、跨仓也零；它服务的星座视图随 status_board_v2 一起没了）。
+
+    但**语义本身没变**、也仍然是活的：``DesktopTopologyProjection`` 仍由
+    ``core/projection/projection_compiler.py`` 与 ``core/projection_surface_bridge.py``
+    消费，"不可信时必须说自己不可信"这条保证正是 PR-7 要钉的东西。所以这里
+    改成直接测契约本身，而不是测那个已经没有调用方的 HTTP 兜底路径。
+    """
+    from contracts.desktop_status_projection import build_desktop_status_projection
+
+    # 空的 UCP → 没有 canonical TopologyRoutePlan 可用
+    proj = build_desktop_status_projection(unified_control_plan={})
+    topo = proj.topology_ready
+    assert topo is not None, "topology_ready 块不该整个消失"
+
+    payload = topo.to_dict()
+    assert "projection_quality" in payload, "缺 projection_quality —— 消费方无从判断数据可不可信"
     pq = payload["projection_quality"]
     assert isinstance(pq, dict)
-    assert pq.get("readiness") == "unavailable"
-    assert pq.get("authoritative") is False
+    assert pq.get("authoritative") is False, "没有 canonical 路由却自称权威 —— 这正是 PR-7 要防的"
 
 
 # ===========================================================================

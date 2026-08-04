@@ -214,12 +214,12 @@ the PR-5 canonicalization foundation.
 | `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` | `core.projection.projection_compiler` | Mirror sentinel in the projection compiler namespace |
 | `DesktopTopologyProjection` | `contracts.desktop_status_projection` | Renderer-agnostic structured block for desktop topology surfaces |
 | `topology_ready` field | `DesktopStatusProjection` | PR-6 topology-ready block attached to the top-level projection |
-| `GET /api/v1/projection/desktop-topology` | `core/routes/projection.py` | Dedicated endpoint returning the topology-ready block |
+| ~~`GET /api/v1/projection/desktop-topology`~~ | **已移除** | 曾是返回 topology-ready 块的专用端点；它服务的星座视图随 status_board_v2 一起删除后，该端点零生产消费方（跨仓亦零），故移除。**契约本身仍在**，见下 |
 
 ### Consumer guidance (post-PR-6)
 
 1. **Desktop topology surfaces** should consume the `topology_ready` block from
-   `DesktopStatusProjection` (or from `GET /api/v1/projection/desktop-topology`)
+   `DesktopStatusProjection`（原先也可经 `GET /api/v1/projection/desktop-topology` 取，该端点已移除）
    as the single canonical topology-ready projection.  Legacy/dashboard-era
    assembly is no longer necessary when this block is present.
 
@@ -249,7 +249,7 @@ the PR-5 canonicalization foundation.
 | `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
 | `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
 | `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
-| `GET /api/v1/projection/desktop-topology` | **PR-6** | Topology-ready projection block for desktop surfaces |
+| ~~`GET /api/v1/projection/desktop-topology`~~ | PR-6（**已移除**） | 见本文「端点移除记录」一节 |
 
 ---
 
@@ -320,7 +320,7 @@ degraded, partial, or unavailable.
 | `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
 | `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
 | `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
-| `GET /api/v1/projection/desktop-topology` | PR-6 / **PR-7** | Topology-ready block with readiness/quality semantics |
+| ~~`GET /api/v1/projection/desktop-topology`~~ | PR-6/PR-7（**已移除**） | readiness/quality 语义仍由契约保证，见「端点移除记录」 |
 
 ---
 
@@ -387,5 +387,34 @@ Desktop clients should:
 | `GET /api/v1/projection/runtime` | PR-3 | Live `RuntimeProjection` |
 | `GET /api/v1/projection/canonical-routing` | PR-3 | Canonical routing + provider status |
 | `GET /api/v1/projection/server-canonicalization-status` | PR-5 | Server-side canonicalization summary |
-| `GET /api/v1/projection/desktop-topology` | PR-6/7 | Topology-ready block with readiness/quality semantics |
+| ~~`GET /api/v1/projection/desktop-topology`~~ | PR-6/7（**已移除**） | 同上 |
 | `GET /api/v1/projection/desktop-status-board` | **PR-8** | **Final integrated desktop status board payload** |
+
+
+## 端点移除记录：`GET /api/v1/projection/desktop-topology`
+
+该端点已从 `core/routes/projection.py` 移除（连同它专用的
+`_assemble_desktop_topology_payload` / `_minimal_desktop_topology_fallback`）。
+
+**为什么移除**：它是为星座式桌面拓扑视图准备的投影出口，而那个视图随
+`windows_client/status_board_v2` 一起删除了（见 `docs/PANEL_SURFACE_CONVERGENCE.md`）。
+移除前逐条核实过消费方：React 面板不调它、Android / WearOS / multiagent 三仓
+也零引用，只有测试在钉它的存在。
+
+**什么没有变**：
+
+* `contracts.desktop_status_projection.DesktopTopologyProjection` 契约**仍然活着**，
+  由 `core/projection/projection_compiler.py` 与 `core/projection_surface_bridge.py` 消费；
+* `TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY` 仍是该契约的权威声明；
+* PR-7 的 readiness / quality 降级语义仍然成立，并由
+  `tests/test_pr7_desktop_constellation_consumption_hardening.py` 直接对契约钉住
+  （此前那条测试钉的是 HTTP 兜底函数，已改为直接测契约）。
+
+**一并排掉的同名陷阱**（这些都**没有**动）：
+
+| 名字里有 topology，但不是这个视图 | 实际是什么 |
+|---|---|
+| `core/network_topology_runtime.py` | 设备/网关/NATS 的活拓扑运行时；`state_sync_bus`、`unified_panel_aggregation`、`gateway_nats_adapter` 都在写它 |
+| `core/model_topology/` | 模型供给路由，与视图无关 |
+| `GET /api/v1/mesh/topology` | mesh 闭环基线的**唯一机器可读面**（`loop_baseline.canonical_closure`）；一度误删，已恢复 |
+| `core/mesh_coordinator.py` 的 `topology_ready` | peer 数 ≥ 2 的判断 |

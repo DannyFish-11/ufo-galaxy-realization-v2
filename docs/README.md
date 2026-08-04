@@ -157,7 +157,7 @@ documents are **authoritative and current** vs historical or superseded.
 | [MODEL_ROUTING_AUTHORITY.md](MODEL_ROUTING_AUTHORITY.md) | Model routing authority |
 | [MODEL_SUPPLY_TOPOLOGY.md](MODEL_SUPPLY_TOPOLOGY.md) | Model supply topology |
 | [MODEL_TOPOLOGY_BRIDGE.md](MODEL_TOPOLOGY_BRIDGE.md) | Model topology bridge |
-| [SKY_GROWN_CONSTELLATION_TOPOLOGY.md](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) | Sky-grown constellation topology |
+| `SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） | Sky-grown constellation topology |
 
 ---
 

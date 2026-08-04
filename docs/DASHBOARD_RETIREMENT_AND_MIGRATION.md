@@ -7,7 +7,7 @@
 > what migrates to the canonical desktop operator surface, and establishes the
 > high-level migration sequence.
 >
-> Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
+> Related: `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） ·
 > [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
 > [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
@@ -228,7 +228,7 @@ While Phases B–D are pending:
 | Document | Relationship |
 |---|---|
 | [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) | Defines `TopologyRouter` as the sole canonical routing authority; dashboard is explicitly not a routing-truth authority |
-| [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) | Defines the target visual grammar of the replacement topology surface |
+| `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） | Defines the target visual grammar of the replacement topology surface |
 | [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) | Canonical desktop status board; the primary migration target for operator-visible model topology and future config entry |
 | [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) | Defines OneAPI's position; migration must not regress this position |
 | [`docs/CONFIGURATION_ENTRY_UNIFICATION.md`](CONFIGURATION_ENTRY_UNIFICATION.md) | Canonical configuration entry unification contract; local unified config authority and persistence targets |
