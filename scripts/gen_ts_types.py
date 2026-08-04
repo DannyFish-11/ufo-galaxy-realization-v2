@@ -8,6 +8,13 @@
 * ``core.schemas.ui_element``  → ``types/ui_element.gen.ts``
   结构化 UI 契约(UISource/UIActionKind/UIBounds/UIElementNode/UIGraph)。
 
+* ``core.api_routes``          → ``types/api.gen.ts``
+  **整个权威 API 层**(388 条路径 / 406 个操作 / 102 个组件 schema),直接从
+  FastAPI 的 OpenAPI 出。此前这个脚本只覆盖两组手写 schema 的契约,而前端要用
+  哪个端点、参数长什么样、返回什么,全靠人对着后端源码抄 —— 面板只用了其中
+  20 条,剩下的对前端来说是**不可发现**的。现在路径本身成为一个 TS 联合类型:
+  调一个不存在的端点、或对某路径用了它不支持的方法,``tsc`` 直接报错。
+
 * ``core.phase_contract``      → ``types/phase_contract.gen.ts``
   面板侧相位姿态:离散三态 + 后端一直在算的连续量(在场强度/塌缩与回撤倾向/
   稳定度)。加这一组的起因是:那些连续量在 ContinuumState 里算了很久,却在
@@ -20,6 +27,7 @@
 from __future__ import annotations
 
 import enum
+import json
 import os
 import sys
 import typing
@@ -151,10 +159,199 @@ def _write(root: str, filename: str, content: str) -> str:
     return out
 
 
+# ---------------------------------------------------------------------------
+# OpenAPI → TS(整个权威 API 层)
+# ---------------------------------------------------------------------------
+#
+# 刻意不引 openapi-typescript 之类的 npm 工具:那会给面板加一条构建期依赖,
+# 而这个仓库正在往"依赖越少越好"走(刚删掉两条从没被 import 的依赖)。
+# 这里只处理 schema 里**实际出现**的形状,遇到没见过的形状**抛异常**而不是
+# 吐 ``any`` —— 悄悄降级成 any 的类型文件比没有类型更糟:它看着有保护,实际
+# 什么都没挡住。
+
+_HTTP_METHODS = ("get", "post", "put", "delete", "patch", "head", "options")
+
+
+class UnsupportedSchemaShape(RuntimeError):
+    """OpenAPI 里出现了生成器没见过的形状。
+
+    刻意抛异常而不是回退到 ``any``:回退会让生成的类型文件看着完整、实际
+    在那个字段上完全失去保护,而且没人会注意到。宁可让生成器当场失败。
+    """
+
+
+def _san(name: str) -> str:
+    """组件 schema 名 → 合法的 TS 标识符。"""
+    out = "".join(c if c.isalnum() else "_" for c in name)
+    return ("S_" + out) if out[:1].isdigit() else out
+
+
+def _openapi_ts(node: dict, *, where: str) -> str:
+    """OpenAPI schema 节点 → TS 类型字符串。"""
+    if not isinstance(node, dict):
+        raise UnsupportedSchemaShape(f"{where}: 期望 dict,得到 {type(node).__name__}")
+
+    ref = node.get("$ref")
+    if ref:
+        if not ref.startswith("#/components/schemas/"):
+            raise UnsupportedSchemaShape(f"{where}: 不支持的 $ref {ref!r}")
+        return _san(ref.rsplit("/", 1)[-1])
+
+    for key in ("anyOf", "oneOf"):
+        if key in node:
+            parts = [_openapi_ts(x, where=f"{where}.{key}[{i}]") for i, x in enumerate(node[key])]
+            # 去重且保持顺序,避免 "string | string"
+            seen: list = []
+            for p in parts:
+                if p not in seen:
+                    seen.append(p)
+            return " | ".join(seen) if len(seen) > 1 else seen[0]
+
+    if "allOf" in node:
+        parts = [_openapi_ts(x, where=f"{where}.allOf[{i}]") for i, x in enumerate(node["allOf"])]
+        return " & ".join(parts) if len(parts) > 1 else parts[0]
+
+    if "enum" in node:
+        vals = node["enum"]
+        lits = []
+        for v in vals:
+            if isinstance(v, str):
+                lits.append(json.dumps(v))
+            elif isinstance(v, bool):
+                lits.append("true" if v else "false")
+            elif isinstance(v, (int, float)):
+                lits.append(str(v))
+            elif v is None:
+                lits.append("null")
+            else:
+                raise UnsupportedSchemaShape(f"{where}: enum 里有不支持的字面量 {v!r}")
+        return " | ".join(lits)
+
+    t = node.get("type")
+    if t is None:
+        # 无 type、无 $ref、无组合关键字 —— OpenAPI 里这表示"任意值"。
+        # 这是**规范里明确的**语义,不是生成器放弃,所以给 unknown 而非 any:
+        # unknown 强制消费方先收窄再用,any 会静默传染。
+        return "unknown"
+    if t == "string":
+        return "string"
+    if t in ("integer", "number"):
+        return "number"
+    if t == "boolean":
+        return "boolean"
+    if t == "null":
+        return "null"
+    if t == "array":
+        items = node.get("items")
+        if items is None:
+            return "unknown[]"
+        return f"Array<{_openapi_ts(items, where=f'{where}.items')}>"
+    if t == "object":
+        props = node.get("properties")
+        if props:
+            required = set(node.get("required") or [])
+            fields = []
+            for pname in sorted(props):
+                opt = "" if pname in required else "?"
+                fields.append(f"  {json.dumps(pname)}{opt}: {_openapi_ts(props[pname], where=f'{where}.{pname}')};")
+            extra = node.get("additionalProperties")
+            if extra not in (None, False):
+                vt = "unknown" if extra is True else _openapi_ts(extra, where=f"{where}.additionalProperties")
+                fields.append(f"  [key: string]: {vt};")
+            return "{\n" + "\n".join(fields) + "\n}"
+        extra = node.get("additionalProperties")
+        if extra not in (None, False):
+            vt = "unknown" if extra is True else _openapi_ts(extra, where=f"{where}.additionalProperties")
+            return f"Record<string, {vt}>"
+        return "Record<string, unknown>"
+    raise UnsupportedSchemaShape(f"{where}: 不支持的 type {t!r}")
+
+
+def load_openapi() -> dict:
+    """组装权威 API 层并取其 OpenAPI 文档。
+
+    刻意用 ``core.api_routes.create_api_routes()`` 而不是去跑 unified_launcher:
+    前者就是"权威 API 层"本身(``tests/test_routes_import.py`` 也这么建),
+    后者会把整个系统拉起来。实测这样建一次约 2.2 秒。
+    """
+    import logging
+
+    from fastapi import FastAPI
+
+    from core.api_routes import create_api_routes
+
+    prev = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)  # 组装过程会打一堆 INFO,生成器不需要
+    try:
+        app = FastAPI(title="Galaxy V2 Authoritative API")
+        app.include_router(create_api_routes())
+        return app.openapi()
+    finally:
+        logging.disable(prev)
+
+
+def build_api_surface(schema: dict | None = None) -> str:
+    """生成 ``types/api.gen.ts``。
+
+    产出三样东西:
+
+    1. ``ApiPath`` —— 全部路径的联合类型。调不存在的端点 → tsc 报错。
+    2. ``API_METHODS`` —— 路径 → 允许的方法。对某路径用错方法 → tsc 报错。
+    3. 组件 schema 的 TS interface —— 返回体/请求体的字段级类型。
+
+    路径里的 ``{param}`` 原样保留:面板侧是用模板串拼的,保留占位符才能让
+    ``ApiPath`` 与源码里写的形态对上。
+    """
+    schema = schema if schema is not None else load_openapi()
+    paths = schema.get("paths", {})
+    comps = schema.get("components", {}).get("schemas", {})
+
+    out = [
+        "// AUTO-GENERATED by scripts/gen_ts_types.py — DO NOT EDIT BY HAND.",
+        "// 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。",
+        "// 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。",
+        "",
+        f"// 路径 {len(paths)} 条 · 组件 schema {len(comps)} 个",
+        "",
+        "/** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */",
+        "export type ApiPath =",
+    ]
+    for p in sorted(paths):
+        out.append(f"  | {json.dumps(p)}")
+    out += [
+        ";",
+        "",
+        "/** 每条路径允许的 HTTP 方法。用错方法 → 编译期报错。 */",
+        "export const API_METHODS = {",
+    ]
+    for p in sorted(paths):
+        methods = sorted(m for m in paths[p] if m in _HTTP_METHODS)
+        out.append(f"  {json.dumps(p)}: [{', '.join(json.dumps(m) for m in methods)}],")
+    out += [
+        "} as const satisfies Record<ApiPath, readonly string[]>;",
+        "",
+        "export type ApiMethod<P extends ApiPath> = (typeof API_METHODS)[P][number];",
+        "",
+    ]
+
+    if comps:
+        out.append("// ── 组件 schema ──")
+        out.append("")
+        for name in sorted(comps):
+            ts = _openapi_ts(comps[name], where=f"components.schemas.{name}")
+            if ts.startswith("{"):
+                out.append(f"export interface {_san(name)} {ts}")
+            else:
+                out.append(f"export type {_san(name)} = {ts};")
+            out.append("")
+    return "\n".join(out) + "\n"
+
+
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for _name, _content in (
         ("ui_element.gen.ts", build()),
         ("phase_contract.gen.ts", build_phase_contract()),
+        ("api.gen.ts", build_api_surface()),
     ):
         print(f"wrote {_write(root, _name, _content)}")

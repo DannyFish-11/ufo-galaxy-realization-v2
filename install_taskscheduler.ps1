@@ -37,7 +37,7 @@ if (Test-Path $OldShortcut) {
 }
 
 # 4. 创建任务计划程序任务
-$Action = New-ScheduledTaskAction -Execute $PythonExe -Argument "`"$ProjectRoot\galaxy_daemon.py`"" -WorkingDirectory $ProjectRoot
+$Action = New-ScheduledTaskAction -Execute $PythonExe -Argument "`"$ProjectRoot\daemon\galaxy_daemon.py`"" -WorkingDirectory $ProjectRoot
 
 # 触发器：开机时启动（不管用户是否登录）
 $Trigger = New-ScheduledTaskTrigger -AtStartup

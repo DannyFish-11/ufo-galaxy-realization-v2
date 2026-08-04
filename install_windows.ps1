@@ -79,7 +79,7 @@ $ShortcutPath = "$StartupDir\Galaxy.lnk"
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $PythonExe
-$Shortcut.Arguments = "`"$ProjectRoot\galaxy_daemon.py`""
+$Shortcut.Arguments = "`"$ProjectRoot\daemon\galaxy_daemon.py`""
 $Shortcut.WorkingDirectory = "$ProjectRoot"
 $Shortcut.IconLocation = "$PythonExe,0"
 $Shortcut.Description = "Galaxy AI Daemon"
@@ -94,7 +94,7 @@ Write-Host "  ✓ 安装完成" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  启动命令:" -ForegroundColor Cyan
-Write-Host "    python galaxy_daemon.py        (前台调试)"
+Write-Host "    python daemon\galaxy_daemon.py   (前台调试)"
 Write-Host "    python main.py                 (直接启动)"
 Write-Host ""
 Write-Host "  开机自启:" -ForegroundColor Cyan

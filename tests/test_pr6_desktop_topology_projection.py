@@ -518,4 +518,7 @@ def test_50_server_side_canonicalization_doc_mentions_pr6_topology():
     assert "PR-6" in content
     assert "topology" in content.lower()
     assert "TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY" in content
+    # 端点已移除（见该文档「端点移除记录」一节）；这里钉的是【移除记录仍在】,
+    # 而不是端点仍在 —— 抹掉记录等于把这段历史也删了。
     assert "desktop-topology" in content
+    assert "已移除" in content, "文档必须保留该端点的移除记录"

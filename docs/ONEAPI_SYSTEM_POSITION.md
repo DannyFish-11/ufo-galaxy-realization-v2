@@ -11,7 +11,7 @@
 > **Scope:** Defines what OneAPI is, what it is not, and how its configuration
 > and state must influence the broader Galaxy system.
 >
-> Related: [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
+> Related: `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
 > [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md) ·
 > [`docs/SERVER_SIDE_CANONICALIZATION.md`](SERVER_SIDE_CANONICALIZATION.md)
@@ -204,7 +204,7 @@ On the right-side desktop status board (`status_board_v2/`), OneAPI **must**
 appear as a **separate lower-layer row — the OneAPI Aggregator Horizon** —
 distinct from the top-layer direct/native-multimodal providers.  See
 `docs/DESKTOP_DISPLAY_BOUNDARIES.md` for the display-layer contract and
-[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md)
+`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`）
 §3 Layer 5 for the constellation topology specification.
 
 The status board **must not** intermingle OneAPI status with direct vendor

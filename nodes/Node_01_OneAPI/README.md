@@ -4,7 +4,7 @@
 > **OneAPI Aggregator Horizon** in the model supply topology.
 > See [`docs/ONEAPI_SYSTEM_POSITION.md`](../../docs/ONEAPI_SYSTEM_POSITION.md)
 > for the canonical definition and
-> [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](../../docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md)
+> `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`）
 > §3 Layer 5 for the visual grammar.
 
 LLM 统一接入网关，支持 OpenAI、Azure OpenAI、Anthropic、Google Gemini 等多个大模型提供商。

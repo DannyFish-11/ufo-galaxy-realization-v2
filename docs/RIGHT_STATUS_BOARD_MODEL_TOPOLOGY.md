@@ -6,7 +6,7 @@
 > architecture freeze as the sole canonical operator-facing surface.
 >
 > Related: [`docs/PANEL_SURFACE_CONVERGENCE.md`](PANEL_SURFACE_CONVERGENCE.md) ·
-> [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) ·
+> `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） ·
 > [`docs/DESKTOP_DISPLAY_BOUNDARIES.md`](DESKTOP_DISPLAY_BOUNDARIES.md) ·
 > [`docs/MODEL_ROUTING_AUTHORITY.md`](MODEL_ROUTING_AUTHORITY.md) ·
 > [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md) ·
@@ -67,7 +67,7 @@ A topology representation captures these relationships faithfully.
 This topology is specifically defined as a **Native-Multimodal-First
 Sky-Grown Constellation Topology** (星空一体化生长式星座拓扑树).  The visual
 identity of this topology is defined in full in
-[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md).
+`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`）.
 
 ### What the topology is NOT
 
@@ -188,7 +188,7 @@ PR-4 further hardens this constraint with the following rules:
 
 This mirrors the principle in [`docs/ONEAPI_SYSTEM_POSITION.md`](ONEAPI_SYSTEM_POSITION.md)
 and is defined in detail in
-[`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md) §3 Layer 5.
+`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`） §3 Layer 5.
 
 ---
 
@@ -243,7 +243,7 @@ Key invariants:
 ## 9. Sky-Grown Constellation Topology Visual Identity
 
 The topology defined in this document has a target visual identity established
-in [`docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md`](SKY_GROWN_CONSTELLATION_TOPOLOGY.md):
+in `docs/SKY_GROWN_CONSTELLATION_TOPOLOGY.md` （已随面板表层收敛删除，见 `docs/PANEL_SURFACE_CONVERGENCE.md`）:
 
 **Native-Multimodal-First Sky-Grown Constellation Topology**
 (星空一体化生长式星座拓扑树).
