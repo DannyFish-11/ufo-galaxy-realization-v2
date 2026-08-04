@@ -1002,105 +1002,47 @@ class GalaxyUnified:
         return ("warn", f"{rt_name} 启动异常 (rc={rc})，详情见 logs/docker.log", "")
 
     async def start_electron(self) -> bool:
-        """启动 Electron 桌面三态覆盖层。"""
+        """启动 Electron 桌面三态覆盖层。
+
+        自愈部分已收敛到 ``launcher/shell.py`` —— 本方法只剩"拉起进程"。
+
+        原来这里内联着 100 行七级自愈(锁 / 缺失 / 残缺 / 清暂存目录 / 换镜像 /
+        整体重建 / 补运行时二进制)。那段代码本身是对的,每一级都是真机故障攒
+        出来的;但它嵌在一个 async 方法里,导致两件事做不到:**不启动就诊断不
+        了**,以及**修好了是哪一级修的、没修好卡在第几级,事后说不清**。
+
+        ``launcher.shell`` 把同一套判据重排成"零副作用的 diagnose + 可逐级审计
+        的 self_heal",判据一条没改。现在这里调它,全仓只有一份自愈实现。
+        """
         import shutil
         import subprocess as sp
-        from core.electron_launch_guard import already_running, write_lock
 
-        # PR-ELECTRON-DEDUP: 与 Phase 6(system_orchestrator)/launch_desktop.py 共享
-        # 同一把 .electron.pid 锁——避免那两条路径已经成功拉起桌面壳后,这里又重复
-        # 起一个(此前 4 条启动路径里只有一条会写这把锁,其余 3 条互不知情)。
-        if already_running():
+        from core.electron_launch_guard import write_lock
+        from launcher import shell as _shell
+
+        report = _shell.self_heal()
+        if not report.ok:
+            _stuck = next((s.level for s in reversed(report.steps) if s.applied and not s.ok), "?")
+            _blocked = report.after.blocked if report.after else None
+            logger.error(
+                "Electron 桌面壳自愈未成功(卡在第 %s 级)%s",
+                _stuck, f":{_blocked}" if _blocked else "",
+            )
+            for _s in report.steps:
+                if _s.applied and not _s.ok and _s.detail:
+                    logger.error("  第 %d 级「%s」:%s", _s.level, _s.name, _s.detail[:300])
+            return False
+        if report.healed_at == 0:
             logger.info("Electron GUI already running (started by another launch path)")
             return True
+        if report.healed_at is not None:
+            logger.info("Electron 依赖已由第 %d 级自愈修复", report.healed_at)
 
         electron_dir = Path("electron")
-        if not electron_dir.exists():
-            logger.warning("electron/ directory not found")
-            return False
-        # PR-NPM-FIX: npm must be resolved BEFORE the if block so it's always available
         npm = shutil.which("npm")
-        if not npm:
-            logger.warning("npm not found in PATH")
+        if not npm:  # self_heal 已判过硬阻塞;这里只是让下面的用法有定义
             return False
-        # Ensure npm deps —— 关键修复:不能只看 node_modules 目录存不存在。
-        # 真机复现(重新克隆后):.bin/electron.cmd 存根在、但 electron/cli.js
-        # 缺失(npm install 中断的残局),旧判断"目录存在→跳过安装"会让 Electron
-        # 每次都以 "Cannot find module ...electron\cli.js" 崩掉,保活重启 8 次
-        # 全是同一个死法,期间从未尝试过真正的修复(重跑 npm install)。现在用
-        # electron_package_intact() 核实包完整性,不完整就自动修复安装。
-        from core.electron_launch_guard import electron_package_intact
-        if not (electron_dir / "node_modules").exists() or not electron_package_intact(str(electron_dir)):
-            _reason = ("首次启动：安装 Electron 桌面层依赖"
-                       if not (electron_dir / "node_modules").exists()
-                       else "检测到 Electron 依赖不完整(疑似上次 npm install 中断)，正在修复安装")
-            print_status_row(f"{_reason} (npm install，可能数分钟)…", status="success")
-            try:
-                # 修复安装前先清 npm 中断留下的暂存目录(.<包名>-<随机后缀>)。
-                # 不清的话 install 会撞 ENOTEMPTY:目标暂存名已存在且非空 ——
-                # 而"依赖不完整就重跑 install"的修复逻辑每次都撞同一个残留,
-                # 于是"检测到不完整 → 重装 → ENOTEMPTY → 仍不完整"死循环,
-                # 桌面覆盖层永远起不来。实测复现见 purge_npm_staging_dirs 文档。
-                from core.electron_launch_guard import (
-                    is_npm_stale_dir_error, purge_npm_staging_dirs,
-                )
-                _purged = purge_npm_staging_dirs(str(electron_dir / "node_modules"))
-                if _purged:
-                    logger.info("已清理 %d 个 npm 残留暂存目录后再安装", _purged)
 
-                _r = sp.run([npm, "install"], cwd=str(electron_dir),
-                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
-                if _r.returncode != 0:
-                    # 网络类失败(官方 registry TLS 被断/超时,国内网络常见)→
-                    # 自动用 npmmirror 镜像重试一次,而不是直接放弃桌面壳。
-                    _err_txt = (_r.stderr or _r.stdout or "")
-                    _network_fail = any(k in _err_txt for k in (
-                        "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
-                        "network", "socket", "TLS", "fetch failed",
-                    ))
-                    if _network_fail:
-                        logger.warning(
-                            "npm install 官方源失败(疑似网络问题),改用 npmmirror 镜像重试…")
-                        print_status_row("npm 官方源不可达，改用国内镜像重试…", status="success")
-                        _r = sp.run(
-                            [npm, "install", "--registry=https://registry.npmmirror.com"],
-                            cwd=str(electron_dir), capture_output=True, text=True,
-                            encoding="utf-8", errors="replace", timeout=600,
-                        )
-                if _r.returncode != 0 and is_npm_stale_dir_error(_r.stderr or _r.stdout or ""):
-                    # 仍被残留目录挡住(嵌套 node_modules 里也可能有,或本轮又被打断)。
-                    # 换镜像绕不过本地文件系统,唯一确定能解开的办法是整个删掉
-                    # node_modules 重建 —— 它完全可由 package.json 重建,删除无损。
-                    logger.warning("npm install 仍被残留目录挡住(ENOTEMPTY),整体重建 node_modules…")
-                    print_status_row("检测到残留目录挡路，正在重建 node_modules…", status="success")
-                    import shutil as _shutil
-                    _shutil.rmtree(str(electron_dir / "node_modules"), ignore_errors=True)
-                    _r = sp.run([npm, "install"], cwd=str(electron_dir),
-                                capture_output=True, text=True, encoding="utf-8",
-                                errors="replace", timeout=600)
-
-                if _r.returncode != 0:
-                    logger.error(
-                        "Electron npm install 失败 (rc=%s):\n%s",
-                        _r.returncode, (_r.stderr or _r.stdout or "")[-1000:],
-                    )
-                    return False
-                if not electron_package_intact(str(electron_dir)):
-                    # 根因:electron 包目录已存在("残缺后补齐"场景)时,npm install 会
-                    # 【跳过 postinstall】,不会补下 dist/electron.exe 运行时二进制——
-                    # 光重跑 npm install 永远修不好,必须单独跑包自带的 install.js。
-                    from core.electron_launch_guard import (
-                        electron_binary_fix_hint, repair_electron_binary,
-                    )
-                    if not repair_electron_binary(str(electron_dir.resolve())):
-                        logger.error(
-                            "npm install 后 electron 包仍不完整,已停止启动桌面壳。\n%s",
-                            electron_binary_fix_hint("electron"),
-                        )
-                        return False
-            except Exception as exc:
-                logger.error("Electron npm install 异常: %s", exc)
-                return False
         # Start Electron — PR-ABSOLUTE-PATH: use absolute paths on Windows
         try:
             env = os.environ.copy()
@@ -1114,14 +1056,13 @@ class GalaxyUnified:
             # 检测到 GPU 模式反复崩溃，会置 _electron_force_software=True，这里注入
             # GALAXY_ELECTRON_GPU=0 → main.js 据此禁用硬件加速 + --disable-gpu
             # + --disable-gpu-compositing（真正的纯软件渲染兜底）。
-            if getattr(self, "_electron_force_software", False):
-                env["GALAXY_ELECTRON_GPU"] = "0"
-            # 第三级降级：软件渲染也反复崩溃(无独显 Windows 上透明分层窗口本身出问题)
-            # 时置 _electron_basic_window=True → main.js 改用【不透明 basic 小窗】承载
-            # 三态覆盖层——功能保留、只丢透明特效，而不是彻底放弃桌面壳。
-            if getattr(self, "_electron_basic_window", False):
-                env["GALAXY_ELECTRON_GPU"] = "0"
-                env["GALAXY_ELECTRON_BASIC"] = "1"
+            # 三档判据统一到 launcher.shell.render_env —— 硬件加速 → 软件渲染
+            # (GALAXY_ELECTRON_GPU=0) → 不透明 basic 小窗(再加 GALAXY_ELECTRON_BASIC=1,
+            # 功能保留、只丢透明特效)。写在一处,免得两边各改一半。
+            env.update(_shell.render_env(
+                force_software=bool(getattr(self, "_electron_force_software", False)),
+                basic_window=bool(getattr(self, "_electron_basic_window", False)),
+            ))
             # Prefer the locally-installed electron binary — robust and avoids the
             # `npm electron .` bug (invalid command) that hit when npx was absent.
             # CRITICAL: use ABSOLUTE paths for both the binary and the app dir.
@@ -1232,11 +1173,14 @@ class GalaxyUnified:
             env["GALAXY_GATEWAY_PORT"] = str(self.config.web_ui_port)
             env.setdefault("PORT", str(self.config.web_ui_port))
             env.setdefault("GALAXY_IPC_PORT", "9231")
-            if getattr(self, "_electron_force_software", False):
-                env["GALAXY_ELECTRON_GPU"] = "0"
-            if getattr(self, "_electron_basic_window", False):
-                env["GALAXY_ELECTRON_GPU"] = "0"
-                env["GALAXY_ELECTRON_BASIC"] = "1"
+            # 与 start_electron 同一份降级判据(launcher.shell.render_env)。
+            # 此前两处各写一遍 —— 改一处漏一处,两个壳的降级行为就会悄悄分叉。
+            from launcher import shell as _shell
+
+            env.update(_shell.render_env(
+                force_software=bool(getattr(self, "_electron_force_software", False)),
+                basic_window=bool(getattr(self, "_electron_basic_window", False)),
+            ))
             _log_dir = Path("logs")
             _log_dir.mkdir(exist_ok=True)
             # 复用同一份 logs/electron.log（托盘「View Logs」目录下），便于一处看壳层日志。
