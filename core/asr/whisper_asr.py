@@ -129,7 +129,7 @@ class WhisperASR:
             _hf_ok = bool(pick_endpoint())
         except Exception:  # 探测模块不可用 → 保守沿用旧默认(不改变行为)
             if not os.environ.get("HF_ENDPOINT"):
-                os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
+                os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "").strip() or "https://hf-mirror.com"
 
         # 固定缓存到项目 runtime/whisper_models/，避免重复下载
         if not self.model_dir:

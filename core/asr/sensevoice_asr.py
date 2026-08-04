@@ -41,7 +41,8 @@ class SenseVoiceASR:
     ) -> None:
         # 模型 id:默认 modelscope 的 iic/SenseVoiceSmall;可用 GALAXY_SENSEVOICE_MODEL 覆盖
         # (如 HF 的 FunAudioLLM/SenseVoiceSmall)。
-        self.model_name = model or os.getenv("GALAXY_SENSEVOICE_MODEL", "iic/SenseVoiceSmall")
+        # 空串回落到默认:该键已登记进面板,清空输入框写回的是空串而非未设。
+        self.model_name = model or os.getenv("GALAXY_SENSEVOICE_MODEL", "").strip() or "iic/SenseVoiceSmall"
         self._device_override = device
         self.model = None
         self._load_failed = False
@@ -65,9 +66,17 @@ class SenseVoiceASR:
             except Exception:  # noqa: BLE001
                 device = "cpu"
 
-        # 国内镜像:HF_ENDPOINT 未设时默认 hf-mirror.com(与 whisper_asr 一致)。
-        if not os.environ.get("HF_ENDPOINT"):
-            os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
+        # 下载源:交给 core.hf_endpoint 这个**唯一权威**去探测择优并写回 HF_ENDPOINT。
+        # 此前这里自己把 GALAXY_HF_ENDPOINT 原样塞进 HF_ENDPOINT,绕过了探测 ——
+        # 镜像不通时 huggingface_hub 会对每个文件退避重试 5 次刷屏,那正是
+        # core/hf_endpoint.py 的 docstring 里写着要消灭的事(whisper_asr 已这么接)。
+        try:
+            from core.hf_endpoint import pick_endpoint
+
+            pick_endpoint()
+        except Exception:  # 探测模块不可用 → 保守沿用旧默认(不改变行为)
+            if not os.environ.get("HF_ENDPOINT"):
+                os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "").strip() or "https://hf-mirror.com"
 
         try:
             self.model = AutoModel(

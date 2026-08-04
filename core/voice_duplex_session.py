@@ -321,7 +321,20 @@ class DuplexSessionConfig:
 
     url: str
     api_key: str
-    model: str = "gpt-4o-realtime-preview"
+    #: 默认实时型号。**从 PROVIDER_REGISTRY 现取**,不写死字面量。
+    #:
+    #: 这里原先硬写着 ``"gpt-4o-realtime-preview"``,而 registry 里 OpenAI 的
+    #: ``default_realtime_model`` 早已是 ``"gpt-realtime"``,_REALTIME_FALLBACK_MODEL
+    #: 里的兜底也是 ``"gpt-realtime"`` —— 三处口径两个值。
+    #:
+    #: 它一直没出事,只因为 ``from_env()`` 每条分支都显式传 model,这个默认值在生产
+    #: 路径上从来没被取到过。但那是**碰巧**:任何人直接
+    #: ``DuplexSessionConfig(url=…, api_key=…)`` 建一个配置(测试、脚本、将来某条新
+    #: 调用路径),拿到的就是一个 registry 不认账的型号,而
+    #: ``scripts/verify_provider_apis.py`` 的漂移守卫只比对 registry,照样发现不了。
+    #:
+    #: 用 default_factory 现取而不是模块级常量:registry 是唯一权威,改那边这边自动跟。
+    model: str = field(default_factory=lambda: _registry_realtime_model("openai"))
     voice: str = "alloy"
     sample_rate: int = 16000
     instructions: str = ""

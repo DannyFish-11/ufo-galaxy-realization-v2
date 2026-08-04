@@ -40,14 +40,16 @@ class MeloTTSEngine:
         device: Optional[str] = None,
     ) -> None:
         # 语言:ZH_MIX_EN(中英混读,默认) / ZH / EN / JP / KR / ES / FR。
-        self.language = language or os.getenv("GALAXY_MELO_LANG", "ZH_MIX_EN")
+        # `.strip() or 默认`:这些键已登记进面板,清空输入框存回来是空串而非未设,
+        # get 的默认参数对空串不生效 —— language="" 会让 melo 直接抛。
+        self.language = language or os.getenv("GALAXY_MELO_LANG", "").strip() or "ZH_MIX_EN"
         # 说话人 key(留空取该语言首个音色);speed 建议 0.8~1.2(见踩坑:调太快中文糊)。
         self.speaker = speaker or os.getenv("GALAXY_MELO_SPEAKER", "")
         try:
             self.speed = float(os.getenv("GALAXY_MELO_SPEED", str(speed or 1.0)))
         except (ValueError, TypeError):
             self.speed = 1.0
-        self.device = device or os.getenv("GALAXY_MELO_DEVICE", "auto")
+        self.device = device or os.getenv("GALAXY_MELO_DEVICE", "").strip() or "auto"
         self._model = None
         self._spk_id = None
         self._load_failed = False
@@ -78,8 +80,17 @@ class MeloTTSEngine:
                     dev = "cuda" if torch.cuda.is_available() else "cpu"
                 except Exception:  # noqa: BLE001
                     dev = "cpu"
-            if not os.environ.get("HF_ENDPOINT"):
-                os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
+            # 下载源统一交给 core.hf_endpoint 探测择优(同 whisper_asr / sensevoice_asr):
+            # 直接把配置值塞进 HF_ENDPOINT 会绕过可达性探测,镜像不通就变成逐文件重试刷屏。
+            try:
+                from core.hf_endpoint import pick_endpoint
+
+                pick_endpoint()
+            except Exception:  # noqa: BLE001 — 探测模块不可用则沿用旧默认
+                if not os.environ.get("HF_ENDPOINT"):
+                    os.environ["HF_ENDPOINT"] = (
+                        os.environ.get("GALAXY_HF_ENDPOINT", "").strip() or "https://hf-mirror.com"
+                    )
             self._model = TTS(language=self.language, device=dev)
             spk = self._model.hps.data.spk2id  # {说话人名: id}
             if self.speaker and self.speaker in spk:

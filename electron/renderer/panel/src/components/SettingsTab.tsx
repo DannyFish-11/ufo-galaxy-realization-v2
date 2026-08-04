@@ -227,6 +227,28 @@ const CONFIG_KEYS: Record<string, string[]> = {
     // 密钥项。后端 classify_key() 按 _API_KEY 后缀判为 secret,会走 set_secret() 落
     // runtime/secrets.env,不明文进 .env —— 所以在这里列出来是安全的。
     'GALAXY_REALTIME_API_KEY',
+    // ── 语音/感知栈的其余配置键(2026-08-04 一次性登记齐)────────────────────
+    // 前两轮补登记都是发现一处补一处(先 21 个语音开关、再 5 个 B 档模态键),
+    // 每次都还有剩。根因是后端那道守卫的模块清单是手工维护的,没写进清单的模块
+    // 就静默不受保护。那份清单已改成按目录模式派生(core/tts/*.py、core/asr/*.py、
+    // core/perception/*.py …),派生后一次扫出 36 个,除部署标记 GALAXY_ENV 外全在这里。
+    // 桌面操作闭环
+    'GALAXY_COMPUTER_USE', 'GALAXY_CU_MAX_STEPS', 'GALAXY_CU_SETTLE_S',
+    // 连续感知
+    'GALAXY_DESKTOP_PERCEPTION_TTL', 'GALAXY_PERCEPTION_PRIVACY_DEFAULT',
+    'GALAXY_PROACTIVE_SCREEN', 'GALAXY_AMBIENT_SHARE_SESSION', 'GALAXY_VOICE_DIAG_S',
+    // 回话时序(文字与语音同刻的细调)
+    'GALAXY_CHAT_TIMEOUT_S', 'GALAXY_LOCKSTEP_CPS', 'GALAXY_LOCKSTEP_GRACE_S',
+    'GALAXY_LOCKSTEP_STALL_S', 'GALAXY_LOCKSTEP_DRAIN_S',
+    // 语音识别
+    'GALAXY_ASR_INITIAL_PROMPT', 'GALAXY_SENSEVOICE_MODEL',
+    // 语音合成:Edge / Piper / Kokoro / Melo / IndexTTS-2
+    'GALAXY_EDGE_TTS_TIMEOUT_S', 'GALAXY_PIPER_MODEL',
+    'GALAXY_KOKORO_MODEL', 'GALAXY_KOKORO_VOICE', 'GALAXY_KOKORO_LANG', 'GALAXY_KOKORO_AUTOFETCH',
+    'GALAXY_MELO_LANG', 'GALAXY_MELO_SPEAKER', 'GALAXY_MELO_SPEED', 'GALAXY_MELO_DEVICE',
+    'GALAXY_INDEXTTS_REF_AUDIO', 'GALAXY_INDEXTTS_AUTOFETCH',
+    'GALAXY_INDEXTTS_EMO_AUDIO', 'GALAXY_INDEXTTS_EMO_TEXT', 'GALAXY_INDEXTTS_USE_EMO_TEXT',
+    'GALAXY_INDEXTTS_EMO_ALPHA', 'GALAXY_INDEXTTS_FP16',
   ],
   ports: [
     'GATEWAY_PORT', 'UFO_NODE_HOST', 'NODE_92_URL', 'NODE_45_URL', 'NODE_33_URL',
@@ -260,6 +282,9 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_DATA_DIR', 'GALAXY_MARKET_STORE_DIR', 'GALAXY_FEATURE_FLAGS_PATH',
     'GALAXY_MASTER_BRAIN_STATE_PATH', 'CHROMA_PERSIST_DIR',
     'ANDROID_DEVICE_STATE_STORE_PATH', 'ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS',
+    // 语音模型放哪儿。与上面几项同属"东西存在哪",归 storage 而不是 behavior
+    // (behavior 里放的是这些引擎**怎么发音**的参数)。
+    'GALAXY_KOKORO_DIR', 'GALAXY_INDEXTTS_DIR',
   ],
   dev: [
     // 真 bug 修复:GALAXY_SYSTEM_MODE 此前在 mesh/dev 两个分类里重复出现——
@@ -274,7 +299,11 @@ const CONFIG_KEYS: Record<string, string[]> = {
   ],
   network: [
     'GALAXY_ENABLE_WEBRTC_DATA_CHANNEL', 'GALAXY_TURN_URLS', 'GALAXY_HEADSCALE_URL',
-    'GALAXY_TAILSCALE_CHECK_INTERVAL', 'CORS_ALLOWED_ORIGINS',
+    'GALAXY_TAILSCALE_CHECK_INTERVAL',
+    // 模型下载源。真正决定用哪个源的是 core/hf_endpoint.py::pick_endpoint()
+    // (探测择优后写回 HF_ENDPOINT),这里配的是它的偏好起点。
+    'GALAXY_HF_ENDPOINT',
+    'CORS_ALLOWED_ORIGINS',
     'CORS_ALLOWED_METHODS', 'CORS_ALLOWED_HEADERS',
   ],
   slo: [
