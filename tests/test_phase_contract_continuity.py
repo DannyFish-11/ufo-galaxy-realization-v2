@@ -169,6 +169,51 @@ class TestBridgeShipsThePosture:
         assert payload["depth_factor"] != PHASE_ANCHORS["liminal"], "深度仍是硬编码锚点 —— 连续量没接上"
         assert payload["posture"]["collapse_tendency"] == pytest.approx(0.85)
 
+    def test_intent_update_does_not_bypass_the_contract(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """intent 更新不得自己算深度，把契约算出来的值盖掉。
+
+        改造前 ``_on_intent_update`` 是 ``_current_depth = 0.15 + intent * 0.70``，
+        而它是三个相位回调里**频率最高**的那个。两条后果：
+
+        * 违反相位权威 —— 这条映射能让一个 liminal 帧的深度落到 0.15（着色器的
+          纯静默区）或 0.85（空间收回区）。面板读 phase 说"阈限"、覆盖层读 depth
+          画的却是静默，正是本契约要防的自相矛盾帧；
+        * 它不更新 ``_posture``，于是广播出去的 ``depth_factor`` 与
+          ``posture.depth`` 会互相打架。
+
+        intent 本身没丢：它是 payload 里自己那一维，渲染端读它定过渡速度。
+        """
+        fake = types.ModuleType("core.openclawd")
+        st = _state(collapse_tendency=0.5, retreat_tendency=0.1)
+        fake._openclawd_instance = types.SimpleNamespace(  # type: ignore[attr-defined]
+            _continuum_orchestrator=types.SimpleNamespace(_last_state=st)
+        )
+        monkeypatch.setitem(sys.modules, "core.openclawd", fake)
+
+        from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+
+        async def _run(intent: float) -> dict:
+            b = GalaxyPresenceBridge()
+            b._on_phase_liminal({"intent_strength": 0.5})
+            b._on_intent_update({"intent_strength": intent})
+            return b._build_message()["payload"]
+
+        lo = asyncio.run(_run(0.0))
+        hi = asyncio.run(_run(1.0))
+
+        # liminal 带的边界：锚点 ± 与邻档间距 × EDGE_BLEND
+        anchor = PHASE_ANCHORS["liminal"]
+        lo_bound = anchor - (anchor - PHASE_ANCHORS["static"]) * EDGE_BLEND
+        hi_bound = anchor + (PHASE_ANCHORS["manifest"] - anchor) * EDGE_BLEND
+
+        for payload, name in ((lo, "intent=0.0"), (hi, "intent=1.0")):
+            depth = payload["depth_factor"]
+            assert lo_bound <= depth <= hi_bound, f"{name} 的深度 {depth} 越出了 liminal 带 [{lo_bound}, {hi_bound}]"
+            assert depth == payload["posture"]["depth"], f"{name}: depth_factor 与 posture.depth 不一致（自相矛盾帧）"
+
+        # intent 本身仍然照发 —— 它只是不再被混进深度。
+        assert lo["intent"] == 0.0 and hi["intent"] == 1.0, "intent 维度丢了"
+
     def test_posture_phase_matches_reported_phase(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """说话期 static 会被报成 liminal，姿态必须跟着走。
 

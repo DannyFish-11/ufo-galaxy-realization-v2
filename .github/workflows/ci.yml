@@ -36,6 +36,15 @@ jobs:
       - name: Rebuild panel
         working-directory: electron/renderer/panel
         run: npm run build
+      # 覆盖层的深度运动（electron/renderer/presence_motion.js）用 node 内置
+      # 的 node:test 跑，零依赖。放在本作业里是因为这里已经装好了 node ——
+      # 单开一个作业只为跑 9 条纯函数测试不值当。
+      #
+      # 它不能只放在 pytest 里：那些分片作业没有 setup-node，靠"有 node 才跑"
+      # 的跳过守卫会变成一条永远不执行的绿线。
+      - name: 覆盖层深度运动测试
+        run: node --test electron/renderer/presence_motion.test.js
+
       - name: dist/ 必须与源码一致
         run: |
           if ! git diff --exit-code -- electron/renderer/panel/dist/; then

@@ -56,11 +56,37 @@ cargo tauri build
 
 ## 前端来源说明（避免重复造）
 
-`tauri.conf.json` 的 `frontendDist` 直接指向 `../../electron/renderer`，**不复制前端**、单一真相来源。
+**前端源码只有一份**，仍在 `../electron/renderer/`。`build.rs` 在每次 `cargo build` 前
+把**运行期需要的那部分**镜像到 `desktop-tauri/frontend/`，`frontendDist` 指向它。
+该目录是构建产物（已 gitignore、每次重建），不是第二份可编辑的源。
 
-> 注意：`cargo build` 会把 `frontendDist` 整个目录嵌进二进制。`electron/renderer/panel/`
-> 里的 `node_modules` 与 `src` **运行期用不到**（只用 `panel/dist`）。想要更精简的二进制，
-> 构建前可先删掉 `electron/renderer/panel/node_modules`（不影响运行，要改面板再 `npm i` 装回）。
+### 为什么要这一步
+
+`tauri` 会把 `frontendDist` **整个目录**嵌进二进制，而 `electron/renderer/panel/node_modules`
+有 68 MB，运行期一个字节都用不到（Electron 与 Tauri 都只加载 `panel/dist/`）。
+
+查过 `tauri-codegen-2.6.3/src/embedded_assets.rs`，资产收集是
+`WalkDir::new(&path).follow_links(true)` —— **没有任何过滤机制**：没有 `.taurignore`，
+没有 exclude 配置项。所以只能从目录内容下手。
+
+实测（同一台机器，只改 `frontendDist`）：
+
+| frontendDist | 源目录 | debug 二进制 |
+|---|---|---|
+| `../../electron/renderer` | 87.7 MB | 349.2 MB |
+| `../frontend` | 7.8 MB | **331.1 MB** |
+
+省 **18.1 MB**。注意源目录省了 79.8 MB 却只换来二进制省 18.1 MB —— tauri 对嵌入资产
+做了压缩，而 `node_modules` 全是高度可压缩的文本。**别按源目录体积推算二进制收益。**
+
+### 排除表用黑名单
+
+见 `build.rs` 的 `EXCLUDE`。刻意用黑名单而不是白名单：新加一个前端文件时，白名单会
+**默认漏掉**它，而漏掉的后果是"覆盖层只在 Tauri 构建里坏掉"—— CI 不构建 Tauri，没人
+会发现。黑名单则是新文件默认带上。失败方向要选可恢复的那个。
+
+`tests/test_tauri_frontend_staging.py` 钉住这条链不被悄悄接回去（不需要 Rust 工具链，
+因为 CI 里没有任何作业构建 Tauri）。
 
 ## 已知风险（待你机器上回归）
 

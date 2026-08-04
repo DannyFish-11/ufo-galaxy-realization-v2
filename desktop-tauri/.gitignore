@@ -2,3 +2,6 @@
 src-tauri/target/
 # Tauri 首次构建生成（schema/权限），不入库
 src-tauri/gen/
+# frontendDist 的暂存目录：build.rs 每次构建从 electron/renderer/ 重建。
+# 它是构建产物，不是第二份前端源码 —— 入库会立刻变成漂移源。
+frontend/
