@@ -443,17 +443,52 @@ class TransformersBackend(LocalModelBackend):
                 )
                 return False
 
+            # 计算调度:落位(cuda/cpu)听调度器分配,而不是盲选 cuda —— 与 LlamaCpp
+            # 同款「咨询-使用-登记-降级」模式;调度器不可用时按原默认行为加载。
+            _alloc = None
+            _target_device = self._device
+            try:
+                from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+                _size_mb = 0
+                if local_path and os.path.isfile(local_path):
+                    _size_mb = os.path.getsize(local_path) // (1024 * 1024)
+                elif local_path and os.path.isdir(local_path):
+                    _total = 0
+                    for _root, _dirs, _files in os.walk(local_path):
+                        for _f in _files:
+                            try:
+                                _total += os.path.getsize(os.path.join(_root, _f))
+                            except OSError:
+                                pass
+                    _size_mb = _total // (1024 * 1024)
+                _alloc = await get_compute_scheduler().schedule_model(
+                    model_id, _size_mb, preferred_backend="transformers"
+                )
+                if _alloc is not None and getattr(_alloc, "device", ""):
+                    _target_device = "cuda" if str(_alloc.device).startswith("cuda") else "cpu"
+            except Exception as _sched_err:  # noqa: BLE001
+                logger.debug("compute_scheduler 不可用,按默认设备加载: %s", _sched_err)
+
             tokenizer = AutoTokenizer.from_pretrained(load_target, trust_remote_code=True)
             model_obj = AutoModelForCausalLM.from_pretrained(
                 load_target,
-                torch_dtype=torch.float16 if self._device == "cuda" else torch.float32,
-                device_map="auto" if self._device == "cuda" else None,
+                torch_dtype=torch.float16 if _target_device == "cuda" else torch.float32,
+                device_map="auto" if _target_device == "cuda" else None,
                 trust_remote_code=True,
             )
-            if self._device == "cpu":
+            if _target_device == "cpu":
                 model_obj = model_obj.to("cpu")
 
+            self._device = _target_device  # generate() 的 inputs.to() 必须与落位一致
             self._pipelines[model_id] = (tokenizer, model_obj)
+            if _alloc is not None:
+                try:
+                    from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+                    get_compute_scheduler().register_loaded(_alloc)
+                except Exception:  # noqa: BLE001
+                    pass
             logger.info("Transformers loaded: %s on %s", model_id, self._device)
             return True
         except Exception as exc:

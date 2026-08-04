@@ -375,6 +375,9 @@ class NATSBus:
                 logger.info("NATSBus: using embedded NATS server at %s", safe_endpoint(target))
             else:
                 logger.error("NATSBus: embedded NATS server failed to start")
+                # 启动失败也是「中心不在」—— 必须进链路观测器,否则分区可见化
+                # 恰好漏掉最重要的一种情况:中心从一开始就没起来。
+                _absorb_nats_state(is_connected=False)
                 return {"success": False, "error": "Embedded NATS server failed to start"}
 
         try:
@@ -441,8 +444,10 @@ class NATSBus:
                     "NATSBus: could not reach nats://localhost:4222 — embedded server also failed.%s",
                     hint,
                 )
+                _absorb_nats_state(is_connected=False)
                 return {"success": False, "error": f"NATS connection failed: {exc}"}
             logger.error(f"NATSBus: connection failed — {exc}")
+            _absorb_nats_state(is_connected=False)
             return {"success": False, "error": str(exc)}
 
     async def disconnect(self) -> dict:

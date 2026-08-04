@@ -195,6 +195,98 @@ def test_wire_format_matches_tcp_adapter() -> None:
     assert decoded["payload"]["aip"] == {"k": "v"}
 
 
+def test_direct_link_failure_falls_back_to_multihop() -> None:
+    """直连邻居的**链路**断了(地址死了)不等于没路:必须按 AODV 回退多跳。
+
+    真实路径复跑发现:原实现直连失败就地放弃,A–C 直连断、A–B–C 活的场景发不出去。
+    """
+    received: List[Dict[str, Any]] = []
+
+    async def _run() -> Dict[str, Any]:
+        a, b, c = await _make_chain()
+        c.set_message_handler(lambda aip, meta: received.append(meta))
+        a.add_neighbor("node_c", "127.0.0.1", 1)  # 直连地址是死端口
+        try:
+            return await a.send({"type": "heartbeat"}, "node_c")
+        finally:
+            await _close_all(a, b, c)
+
+    result = asyncio.run(_run())
+    assert result.get("success") is True, f"直连断后没有回退多跳:{result}"
+    assert received and received[0]["path"] == ["node_a", "node_b", "node_c"]
+
+
+def test_stale_route_is_invalidated_and_rediscovered() -> None:
+    """陈旧路由(next_hop 已不是邻居)必须失效并重新发现,不能挡住发现路径。"""
+    received: List[Dict[str, Any]] = []
+
+    async def _run() -> Dict[str, Any]:
+        a, b, c = await _make_chain()
+        c.set_message_handler(lambda aip, meta: received.append(aip))
+        await a._routing_table.add_route("node_c", "ghost", 1, 999)  # 预埋陈旧路由
+        try:
+            return await a.send({"type": "heartbeat"}, "node_c")
+        finally:
+            await _close_all(a, b, c)
+
+    result = asyncio.run(_run())
+    assert result.get("success") is True and received, f"陈旧路由挡住了重新发现:{result}"
+
+
+def test_rrep_forward_respects_ttl() -> None:
+    """RREP 转发必须减 TTL 并在耗尽时丢弃 —— 病态路由状态下不得无限转发。"""
+    from core.node_communication import Message, MessageType
+
+    ad = MeshRoutingAdapter(node_id="mid")
+    ad.add_neighbor("prev", "127.0.0.1", 1)
+    forwarded: List[Any] = []
+
+    async def _spy(rrep: Any) -> None:
+        forwarded.append(rrep)
+
+    ad._forward_rrep = _spy  # type: ignore[method-assign]
+    payload = {"originator": "orig", "target": "t", "hop_count": 3, "sender_id": "prev"}
+    dead = Message(message_type=MessageType.RREP, source_id="n", target_id="orig", payload=dict(payload), ttl=1)
+    alive = Message(message_type=MessageType.RREP, source_id="n", target_id="orig", payload=dict(payload), ttl=5)
+    asyncio.run(ad._handle_rrep(dead))
+    asyncio.run(ad._handle_rrep(alive))
+    assert len(forwarded) == 1, f"TTL 防环失效:forwarded={len(forwarded)}"
+    assert forwarded[0].ttl == 4
+
+
+def test_neighbor_refresh_syncs_with_real_udm(tmp_path, monkeypatch) -> None:
+    """邻接刷新对着**真实 UDM API**:上线加入、下线清理、显式注入不动。
+
+    真实路径复跑发现:第一版调用了不存在的 get_all_devices(),AttributeError 被
+    防御 except 吞掉 —— 发现型邻接自始至终静默空转。此钉用真实 UDM 防止再犯。
+    """
+    monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+    from core.unified.device_manager import get_unified_device_manager
+
+    dm = get_unified_device_manager()
+    dm.register_device_from_dict("mdns_mesh_probe", {"device_type": "iot", "device_name": "probe"})
+    dm.upsert_device_state(
+        "mdns_mesh_probe",
+        {
+            "status": "online",
+            "ip_address": "127.0.0.9",
+            "port": 12345,
+            "metadata": {"protocol": "mdns", "service_type": "_galaxy._tcp.local."},
+        },
+        source="lan_discovery",
+    )
+    ad = MeshRoutingAdapter(node_id="x")
+    ad.add_neighbor("manual_peer", "127.0.0.8", 999)
+    added = ad.refresh_neighbors_from_discovery()
+    assert added >= 1 and "mdns_mesh_probe" in ad._neighbors, f"在线 peer 没进邻接:{list(ad._neighbors)}"
+
+    dm.upsert_device_state("mdns_mesh_probe", {"status": "offline"}, source="lan_discovery")
+    ad._last_refresh = 0.0
+    ad.refresh_neighbors_from_discovery()
+    assert "mdns_mesh_probe" not in ad._neighbors, "下线 peer 没被清理"
+    assert "manual_peer" in ad._neighbors, "显式注入的邻接被误清"
+
+
 def test_flood_dedup_is_bounded() -> None:
     """洪泛查重必须有界（长期运行不膨胀），且真的去重。"""
     ad = MeshRoutingAdapter(node_id="x")
