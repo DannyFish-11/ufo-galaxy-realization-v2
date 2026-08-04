@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 import threading
 import time
@@ -370,16 +371,67 @@ class HardwareComputeProfiler:
                 total_ram_mb=mem.total // (1024 * 1024),
             )
         except ImportError:
+            # psutil 常常不在最小化部署里。此前这条路径直接返回 available_ram_mb=0，
+            # 于是所有"按可用内存做决策"的消费方（如 MoE 专家卸载拆分）在这些机器上
+            # 一律拿到 0 → 能力等于没有。内存/核数用系统原生接口兜底探测，
+            # 取不到才归 0（那时的 0 才真的表示"测不到"）。
+            avail_mb, total_mb = self._probe_ram_without_psutil()
             return CPUProfile(
-                brand="unknown",
-                physical_cores=1,
-                logical_cores=1,
+                brand=self._get_cpu_brand(),
+                physical_cores=os.cpu_count() or 1,
+                logical_cores=os.cpu_count() or 1,
                 frequency_mhz=0.0,
                 avx_support=self._avx_support,
                 usage_percent=0.0,
-                available_ram_mb=0,
-                total_ram_mb=0,
+                available_ram_mb=avail_mb,
+                total_ram_mb=total_mb,
             )
+
+    @staticmethod
+    def _probe_ram_without_psutil() -> Tuple[int, int]:
+        """不依赖 psutil 的内存探测，返回 ``(可用 MB, 总量 MB)``；测不到给 (0, 0)。
+
+        Linux 读 ``/proc/meminfo`` 的 MemAvailable/MemTotal（内核算好的"真正可用"，
+        比 MemFree 准）；Windows 走 ``GlobalMemoryStatusEx``。
+        """
+        # Linux / WSL
+        try:
+            with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+                info = {}
+                for line in fh:
+                    parts = line.split(":", 1)
+                    if len(parts) == 2:
+                        info[parts[0].strip()] = parts[1].strip()
+            avail_kb = int((info.get("MemAvailable") or info.get("MemFree") or "0").split()[0])
+            total_kb = int((info.get("MemTotal") or "0").split()[0])
+            if total_kb > 0:
+                return avail_kb // 1024, total_kb // 1024
+        except Exception:  # noqa: BLE001
+            pass
+        # Windows
+        try:
+            import ctypes  # noqa: PLC0415
+
+            class _MemStatus(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = _MemStatus()
+            stat.dwLength = ctypes.sizeof(_MemStatus)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):  # type: ignore[attr-defined]
+                return int(stat.ullAvailPhys) // (1024 * 1024), int(stat.ullTotalPhys) // (1024 * 1024)
+        except Exception:  # noqa: BLE001
+            pass
+        return 0, 0
 
     @staticmethod
     def _get_cpu_brand() -> str:
