@@ -265,7 +265,11 @@ services:
     ports:
       - "9000:9000"
     env_file:
-      - .env
+      # 相对 **本 compose 文件所在目录** 解析,所以必须是 ../../.env ——
+      # 仓库根那一份才是项目真正的 .env(env_check 探的、设置面板写的那个)。
+      # 原来写 `.env` 指向 deploy/compose/.env,那个文件不存在也没人创建,
+      # 于是 `python main.py --docker-full` 从全新 clone 起就没跑起来过。
+      - ../../.env
     environment:
       - GALAXY_MODE=production
       - NEO4J_URI=bolt://neo4j:7687
@@ -307,7 +311,11 @@ services:
       # 时 --profile full 根本起不来(端口冲突,compose up 直接失败)。
       - "9010:9000"
     env_file:
-      - .env
+      # 相对 **本 compose 文件所在目录** 解析,所以必须是 ../../.env ——
+      # 仓库根那一份才是项目真正的 .env(env_check 探的、设置面板写的那个)。
+      # 原来写 `.env` 指向 deploy/compose/.env,那个文件不存在也没人创建,
+      # 于是 `python main.py --docker-full` 从全新 clone 起就没跑起来过。
+      - ../../.env
     environment:
       - GALAXY_NATS_URL=nats://nats:4222
       - QDRANT_URL=http://qdrant:6333
@@ -336,7 +344,11 @@ services:
       # 9000:9000 —— 与 galaxy-core/galaxy-gateway 三方抢同一宿主端口。
       - "8299:9000"  # Admin UI only — use galaxy-core:9000 for all API/client connections
     env_file:
-      - .env
+      # 相对 **本 compose 文件所在目录** 解析,所以必须是 ../../.env ——
+      # 仓库根那一份才是项目真正的 .env(env_check 探的、设置面板写的那个)。
+      # 原来写 `.env` 指向 deploy/compose/.env,那个文件不存在也没人创建,
+      # 于是 `python main.py --docker-full` 从全新 clone 起就没跑起来过。
+      - ../../.env
     environment:
       - GALAXY_MODE=production
       - REDIS_URL=redis://redis:6379

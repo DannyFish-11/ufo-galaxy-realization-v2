@@ -59,7 +59,11 @@ def test_pip_install_rotates_through_candidates(monkeypatch):
     class _R:
         def __init__(self, rc):
             self.returncode = rc
-            self.stderr = "boom"
+            # 必须是**网络类**报错：换源只在网络失败时才会继续轮换
+            # (见 test_non_network_failure_stops_rotating)。原来这里写的是
+            # "boom",在新判据下会被判成"换源救不了",一个源就停了 ——
+            # 那样这条用例就不再测它要测的东西了。
+            self.stderr = "ProxyError('Cannot connect to proxy.')"
             self.stdout = ""
 
     def _run(cmd, **kw):
@@ -79,14 +83,16 @@ def test_pip_install_reports_failure_honestly(monkeypatch):
 
     class _R:
         returncode = 1
-        stderr = "ERROR: could not find a version"
+        # 大小写按 pip 真实输出来:"Could not find a version that satisfies" ——
+        # 它在 NETWORK_FAILURE_MARKERS 里,所以仍然会把三个源都试完。
+        stderr = "ERROR: Could not find a version that satisfies the requirement nope"
         stdout = ""
 
     monkeypatch.setattr(deps.subprocess, "run", lambda *a, **k: _R())
     result = deps.pip_install(["nope"], stream=False)
     assert result.ok is False
     assert result.attempts == len(deps.pip_index_candidates())
-    assert "could not find" in result.stderr_tail
+    assert "Could not find" in result.stderr_tail
 
 
 def test_pip_install_adds_trusted_host(monkeypatch):
@@ -299,7 +305,15 @@ def test_npm_install_rotates_electron_mirrors(monkeypatch, tmp_path):
             self.returncode = rc
 
     def _run(cmd, **kw):
-        seen.append(kw.get("env", {}).get("ELECTRON_MIRROR", ""))
+        # 看 **CLI flag**，不是看环境变量。
+        #
+        # 这条断言原本读的是 env["ELECTRON_MIRROR"]，并且要求最后一项是空串
+        # （"空 = 回退官方源"）。真跑之后发现那个前提是错的：
+        # electron/.npmrc 钉着 electron_mirror=npmmirror，环境变量压不过它，
+        # 空串等于"继续用 npmmirror" —— 所谓的"回退官方源"其实是在重跑第一级。
+        # 也就是说这条测试当时把 bug 一起钉住了。改成看 flag，并要求真实 URL。
+        hit = [a for a in cmd if a.startswith("--electron_mirror=")]
+        seen.append(hit[0].split("=", 1)[1] if hit else "")
         return _R(0 if len(seen) == 3 else 1)
 
     monkeypatch.setattr(deps.subprocess, "run", _run)
@@ -313,7 +327,7 @@ def test_npm_install_rotates_electron_mirrors(monkeypatch, tmp_path):
     #  ② 它还漏测顺序：真正要钉的是"国内镜像在前、官方源兜底在最后"这个次序，
     #     全等比较把整张候选表都钉住了。
     assert seen == [m for m, _ in deps.ELECTRON_MIRROR_ATTEMPTS]
-    assert seen[-1] == "", "最后一候选必须回退官方源（空 ELECTRON_MIRROR）"
+    assert "github.com/electron/electron" in seen[-1], "最后一候选必须是官方源的真实 URL"
     assert seen[0], "第一候选必须是显式镜像，不能一上来就走官方源"
 
 
@@ -372,6 +386,151 @@ def test_install_py_is_retired_not_resurrected():
     终态断言比"委派得对不对"更强：它根本不该回来。
     """
     assert not (REPO_ROOT / "install.py").exists(), "install.py 已退役，请用 python main.py install"
+
+
+# ---------------------------------------------------------------------------
+# 6a. electron 镜像轮换必须真的换到不同的源
+# ---------------------------------------------------------------------------
+
+
+def test_electron_mirror_is_passed_as_cli_flag_not_only_env(monkeypatch, tmp_path):
+    """每一次尝试都必须带 ``--electron_mirror=<该级的 URL>``。
+
+    只设环境变量是**不生效**的：``electron/.npmrc`` 钉死了
+    ``electron_mirror=https://npmmirror.com/...``，项目级 .npmrc 压过环境变量。
+    实测 ``npm config get electron_mirror``：
+    ``ELECTRON_MIRROR=<url>`` 与 ``npm_config_electron_mirror=<url>`` 都读回
+    .npmrc 的旧值，只有 ``--electron_mirror=<url>`` 能覆盖。
+
+    也就是说改成 flag 之前，三级轮换三次都在用同一个源 —— "抗单点"从没成立过。
+    """
+    seen = []
+
+    class _R:
+        returncode = 1
+
+    monkeypatch.setattr(deps.subprocess, "run", lambda cmd, **k: (seen.append(cmd), _R())[1])
+    deps.npm_install(tmp_path, npm_path="/usr/bin/npm")
+
+    assert len(seen) == len(deps.ELECTRON_MIRROR_ATTEMPTS), "该把每个候选都试一遍"
+    flags = []
+    for cmd in seen:
+        hit = [a for a in cmd if a.startswith("--electron_mirror=")]
+        assert hit, f"这次尝试没带 --electron_mirror：{cmd}"
+        flags.append(hit[0].split("=", 1)[1])
+    assert len(set(flags)) == len(flags), f"三次用了重复的源，等于没轮换：{flags}"
+
+
+def test_last_mirror_attempt_is_the_official_source():
+    """最后一级必须是**官方源**的真实 URL，不能是空串。
+
+    空串的含义是"不设，让 npm 用默认" —— 而默认值恰恰被 .npmrc 钉成了 npmmirror，
+    于是"回退官方源"这一级实际上在重跑第一级。
+    """
+    last_mirror = deps.ELECTRON_MIRROR_ATTEMPTS[-1][0]
+    assert last_mirror, "最后一级不能是空串"
+    assert "github.com/electron/electron" in last_mirror
+    assert "npmmirror" not in last_mirror
+
+
+# ---------------------------------------------------------------------------
+# 6b. 失败分类：只有网络类失败才值得换源
+# ---------------------------------------------------------------------------
+
+
+def test_non_network_failure_stops_rotating(monkeypatch):
+    """非网络失败 → 只试一个源就停，并如实带回原因。
+
+    真跑 ``python main.py install --all`` 时踩到的：默认源上因为
+    "Cannot uninstall PyYAML（发行版装的，没有 RECORD）" 失败，换源当然还是
+    同样失败，最后报给用户的却是"试了 3 个源都失败" —— 把人指向网络，
+    而真正要做的是 --ignore-installed PyYAML。
+    """
+    seen = []
+
+    class _R:
+        returncode = 1
+        stderr = "ERROR: Cannot uninstall Foo 1.0, RECORD file not found. Hint: installed by debian."
+        stdout = ""
+
+    monkeypatch.setattr(deps.subprocess, "run", lambda cmd, **k: (seen.append(cmd), _R())[1])
+    # 关掉自愈那一级(它会再跑一次)，这里只钉"停止轮换"这一条
+    monkeypatch.setattr(deps, "distro_owned_blocker", lambda _out: None)
+    r = deps.pip_install(["x"], stream=False)
+    assert r.ok is False
+    assert r.stopped_early is True, "非网络失败不该继续换源"
+    assert r.attempts == 1, f"该只试一个源，实际 {r.attempts}"
+    assert "RECORD file not found" in r.stderr_tail, "真实原因必须带回来"
+
+
+def test_network_failure_still_rotates(monkeypatch):
+    """网络类失败仍然要把所有源试完 —— 别把加固削掉了。"""
+
+    class _R:
+        returncode = 1
+        stderr = "ProxyError('Cannot connect to proxy.')"
+        stdout = ""
+
+    monkeypatch.setattr(deps.subprocess, "run", lambda *a, **k: _R())
+    r = deps.pip_install(["x"], stream=False)
+    assert r.ok is False
+    assert r.stopped_early is False
+    assert r.attempts == len(deps.pip_index_candidates())
+
+
+def test_streaming_path_keeps_the_failure_reason(monkeypatch):
+    """``stream=True`` 也必须留下 stderr_tail。
+
+    原来这一路直接 ``err = ""``，于是安装失败时结构化原因永远是空的 ——
+    UI 只能说"试了 N 个源都失败"，一个字的原因都没有。
+    """
+
+    class _R:
+        returncode = 1
+        stderr = "ERROR: something went wrong on the index"
+        stdout = ""
+
+    monkeypatch.setattr(deps.subprocess, "run", lambda *a, **k: _R())
+    r = deps.pip_install(["x"], stream=True)
+    assert r.ok is False
+    assert "something went wrong" in r.stderr_tail, "流式路径丢了失败原因"
+
+
+def test_distro_owned_package_is_healed_by_ignore_installed(monkeypatch):
+    """被发行版包挡住 → 对**那一个包**加 --ignore-installed 重试一次并成功。
+
+    只对认出来的那个包加，不是全局加：全局加会让 pip 不再卸载任何旧版本，
+    留下半新半旧的并存安装，比装不上更难查。
+    """
+    calls = []
+
+    class _Fail:
+        returncode = 1
+        stderr = "ERROR: Cannot uninstall PyYAML 6.0.1, RECORD file not found. Hint: installed by debian."
+        stdout = ""
+
+    class _Ok:
+        returncode = 0
+        stderr = ""
+        stdout = ""
+
+    def _run(cmd, **k):
+        calls.append(cmd)
+        return _Ok() if "--ignore-installed" in cmd else _Fail()
+
+    monkeypatch.setattr(deps.subprocess, "run", _run)
+    r = deps.pip_install(["x"], stream=False)
+    assert r.ok is True, "自愈之后应当成功"
+    assert r.healed == "--ignore-installed PyYAML"
+    heal_cmd = calls[-1]
+    i = heal_cmd.index("--ignore-installed")
+    assert heal_cmd[i + 1] == "PyYAML", "只该对认出来的那个包加，不是裸加"
+
+
+def test_blocker_regex_only_matches_the_real_signature():
+    assert deps.distro_owned_blocker("Cannot uninstall PyYAML 6.0.1, RECORD file not found") == "PyYAML"
+    assert deps.distro_owned_blocker("ERROR: some unrelated failure") is None
+    assert deps.distro_owned_blocker("") is None
 
 
 # ---------------------------------------------------------------------------

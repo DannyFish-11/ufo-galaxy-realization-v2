@@ -716,6 +716,56 @@ purpose 白纸黑字写着 "skip starting the Electron three-state GUI"，但全
 
 ---
 
+---
+
+## 步骤 9（补）：把整个 CLI 真跑一遍，而不是只让 CI 绿
+
+CI 与 pytest 覆盖的是"代码是否自洽"，**覆盖不到"这条命令敲下去会怎样"**。
+把 `main.py` 的每一条命令面在真机上逐条跑通之后，挖出 8 个问题，**没有一个**
+会被现有测试或 CI 抓到。
+
+| # | 命令面 | 症状 | 根因 |
+|---|---|---|---|
+| 1 | `--status` | 每次都打一条 `Exception suppressed` | `reg.entries` 不存在（私有的是 `_entries`），`taxonomy_functional` **恒为 False** —— 报告一直在谎报"分类法不可用" |
+| 2 | `install --all` | 报"试了 3 个源都失败"，把人指向网络 | 默认源是因为**发行版装的 PyYAML 卸不掉**而失败，换源救不了；而且 `stream=True` 那条路把 stderr 整个丢掉，结构化原因永远是空的 |
+| 3 | `install --enhance` | 一个包挡住 70+ 个包 | 加了一级**精准自愈**：只对认出来的那一个包 `--ignore-installed`，重试一次 |
+| 4 | `--docker-full` | 从全新 clone 起**从来没跑起来过** | ① compose 找 `.env` 是相对**compose 文件目录**的，仓库根那份被完全忽略；② `full.yml` 里三处 `env_file: .env` 同理指向不存在的 `deploy/compose/.env`；③ 缺的变量 compose 一次只报一个 |
+| 5 | `--setup`（无 tty） | 抛 `EOFError` 栈，且**退出码 0** | 没有 tty 闸；返回值在调用点被丢弃后 `return 0`（与当初 `main()` 裸调用同一类） |
+| 6 | `nodes start --group core` | **0/7**，全部"启动超时" | 子进程 `cwd` 是节点目录、`PYTHONPATH` 没设，节点第一行 `from core...` 就 `ModuleNotFoundError`；启动器只看健康端口，把**必然的 import 失败**说成超时。修后 **7/7** |
+| 7 | `nodes status` | 节点全活着、`/health` 全 200，仍报"未运行 109" | 判据是 `config.id in self.processes` —— 本进程的子进程表，独立命令里**永远是空的**；109 次健康探测照跑，结果被丢掉 |
+| 8 | `--desktop-only` | 壳已在跑时会 `AttributeError` | `_desktop_shell` / `electron_proc` 从不在 `__init__` 里初始化，只在启动路径上才存在 |
+
+另外两处不是启动器的问题，但同样是真跑才暴露的：
+
+- **`nodes/Node_71_MultiDeviceCoordination`** 用裸 `from core.X` / `from models.X` 引用**自己包内**的模块，
+  只有把节点目录塞进 `sys.path` 才成立；按包 import 时 `core` 解析到仓库根的 `core/`，节点直接导不进来。
+  改成显式相对导入（AST 改写，只改真正落在节点内的目标）。
+- **`Node_03_SecretVault`** 在**模块导入期**直接 `Fernet(key)`。首次启动时 cryptography 没装 →
+  落盘的是 43 字符的 `token_urlsafe`；之后装上 cryptography → 永久 `ValueError`，节点再也导不进来。
+  改为用前先验、按来源报清楚、降级而不是崩，并且**没有加密能力时不再落盘**（不给后来者埋雷）。
+
+### 一条方法上的教训
+
+「镜像轮换」这件事，代码写了、测试也绿，但**从来没生效过**：`electron/.npmrc` 把
+`electron_mirror` 钉死，而 `ELECTRON_MIRROR` 环境变量压不过项目级 `.npmrc`
+（`npm config get electron_mirror` 逐个验过：env 不行、`npm_config_` 前缀不行、
+只有 `--electron_mirror=` CLI flag 行）。更糟的是那条测试**把 bug 一起钉住了** ——
+它断言最后一级是空串，理由写着"空 = 回退官方源"，而空串的真实含义是"继续用 .npmrc 的 npmmirror"。
+
+**测试只能证明代码符合你写下的预期；预期本身错了，测试会跟着一起错。**
+这类前提只有真跑能证伪。
+
+### 依赖装齐后的实测结果
+
+| 指标 | 之前 | 之后 |
+|---|---|---|
+| 节点可导入 | 113/125 | **125/125** |
+| 可选依赖 | 22/27 | **27/27** |
+| `main.py doctor` | 12 绿 · 2 降级 | **14 绿 · 0 降级** |
+| `nodes start --group core` | 0/7 | **7/7** |
+| 完整后端启动 | — | **✓ 就绪**，`/health` 与 `/api/v1/system/status` 均 200 |
+
+
 ## 附：数据来源
 
 本文所有数字来自 2026-08-04 对 `ufo-galaxy-realization-v2` 的实测：

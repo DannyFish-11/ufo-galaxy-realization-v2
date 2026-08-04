@@ -430,3 +430,69 @@ def test_start_sh_delegates_as_its_last_statement():
         if ln.strip() and not ln.strip().startswith("#")
     ]
     assert lines[-1].startswith("python main.py"), f"start.sh 最后一条应是 main.py 委托，实际：{lines[-1]!r}"
+
+
+# ---------------------------------------------------------------------------
+# 真跑 `python main.py nodes ...` 才暴露出来的两条
+# ---------------------------------------------------------------------------
+
+
+def test_node_subprocess_gets_repo_root_on_pythonpath():
+    """起节点时必须把仓库根塞进子进程的 PYTHONPATH。
+
+    真跑 ``python main.py nodes start --group core`` 实测:**0/7 成功**,
+    logs/node_*.log 里全是 ``No module named 'core'`` / ``No module named 'nodes'``。
+    原因:cwd 是节点自己的目录(节点按相对路径读自带资源,不能改),于是子进程的
+    sys.path[0] 也是那个目录,仓库根根本不在里面 —— 节点第一行 import 就退出,
+    而启动器只看健康端口,30 秒后一律报"启动超时",把**必然的 import 失败**
+    说成了超时。补上 PYTHONPATH 之后 7/7。
+
+    按 AST 钉:注释里提到 PYTHONPATH 不算数。
+    """
+    import ast
+
+    src = (REPO_ROOT / "launcher" / "nodes.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(
+        n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "start_node"
+    )
+    assigns_pythonpath = [
+        n
+        for n in ast.walk(fn)
+        if isinstance(n, ast.Subscript)
+        and isinstance(n.ctx, ast.Store)
+        and isinstance(n.slice, ast.Constant)
+        and n.slice.value == "PYTHONPATH"
+    ]
+    assert assigns_pythonpath, "start_node 必须给子进程设 PYTHONPATH，否则节点起不来"
+
+
+def test_status_trusts_the_health_probe_not_the_in_process_table():
+    """``nodes status`` 判"活没活着"只能看**探测结果**。
+
+    原来第一层判的是 ``config.id in self.processes`` —— 本进程 Popen 出来的子进程表。
+    而 ``python main.py nodes status`` 每次都是全新进程,那张表永远是空的,
+    于是全部节点一律报"未运行",哪怕它们全都活着、/health 全都 200
+    (真跑实测:core 组 7 个起好、端口 8003-8006 全 200,status 仍报"未运行 109")。
+    上面那 109 次健康探测照跑不误,结果被整个丢掉。
+    """
+    import ast
+
+    src = (REPO_ROOT / "launcher" / "nodes.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "check_all_nodes"
+    )
+    # 找 `for config, is_healthy in ...` 之后的第一个 if：它的判据必须是 is_healthy
+    loops = [n for n in ast.walk(fn) if isinstance(n, ast.For)]
+    assert loops, "check_all_nodes 应当遍历探测结果"
+    body_ifs = [n for lp in loops for n in lp.body if isinstance(n, ast.If)]
+    assert body_ifs, "遍历体里应当有分支"
+    first_test = body_ifs[0].test
+    names = {x.id for x in ast.walk(first_test) if isinstance(x, ast.Name)}
+    assert "is_healthy" in names, f"第一层判据必须是探测结果，实际用到的是 {names}"
+    assert "self" not in ast.dump(first_test) or "processes" not in ast.dump(
+        first_test
+    ), "不许再用本进程的 processes 表决定节点活没活着"

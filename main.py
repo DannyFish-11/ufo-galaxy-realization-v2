@@ -886,6 +886,21 @@ def _run_setup_wizard() -> int:
     这正是"克隆界面里没有 Docker/Podman 选择"的根因——不是选项没做,是这条路径
     压根没跑到有选项的那个函数。显式传 --interactive 走真正的交互向导。
     """
+    # 交互向导必须有终端。
+    #
+    # 真跑 `python main.py --setup < /dev/null` 踩到的：向导第一句 input() 直接
+    # 抛 EOFError，用户看到的是一段 Python 栈，既没说"这需要终端"，也没说该怎么办。
+    # 而这条路径恰恰**最容易**在无 tty 的地方被触发 —— start.bat 首启（无 .env
+    # 时自动跑 --setup）、CI、Dockerfile、管道。
+    #
+    # 仓库里 core/model_selection.py 早就用 sys.stdin.isatty() 挡过一次同类问题，
+    # 入口这边补齐同一道闸。
+    if not (sys.stdin and sys.stdin.isatty()):
+        print_item("--setup 需要交互终端", "error", "当前 stdin 不是 tty")
+        print_item("  非交互场景改用", "info", "直接编辑 .env（可从 .env.example 复制）")
+        print_item("  想看缺什么", "info", "python main.py --check")
+        return _record_module().EXIT_USAGE
+
     wizard_path = PROJECT_ROOT / "setup_wizard.py"
     if wizard_path.exists():
         sys.exit(subprocess.call([sys.executable, str(wizard_path), "--interactive"]))
@@ -1033,11 +1048,25 @@ def _run_install_command(args) -> int:
         if result.skipped_reason:
             print_item(label, "info", f"跳过：{result.skipped_reason}")
         elif result.ok:
-            print_item(label, "ok", result.index_used or "默认源")
+            # 自愈过就要说出来 —— "装上了"和"绕过一个坑才装上"不是一回事，
+            # 后者下次换台机器还会再撞上，用户有权知道动了什么。
+            if result.healed:
+                print_item(label, "ok", f"{result.index_used or '默认源'}（自愈：{result.healed}）")
+            else:
+                print_item(label, "ok", result.index_used or "默认源")
         else:
-            print_item(label, "error", f"试了 {result.attempts} 个源都失败")
+            # 两种失败要分开说，否则会把人指向完全不相干的方向。
+            #
+            # 实测踩到过：requirements-enhance 在默认源上因为
+            # "Cannot uninstall PyYAML（发行版装的，没有 RECORD）" 失败，
+            # 换源当然还是同样失败，最后只报一句"试了 3 个源都失败" ——
+            # 用户会去查网络，而真正要做的是 --ignore-installed PyYAML。
+            if result.stopped_early:
+                print_item(label, "error", "失败（与网络无关，换源救不了，已停止轮换）")
+            else:
+                print_item(label, "error", f"试了 {result.attempts} 个源都失败（像是网络问题）")
             if result.stderr_tail:
-                print_item("  最后的报错", "warn", result.stderr_tail.strip()[:160])
+                print_item("  真实原因", "warn", result.stderr_tail.strip().splitlines()[-1][:160])
             all_ok = False
 
     exit_code = _record.EXIT_OK if all_ok else _record.EXIT_DEPENDENCY
@@ -1141,6 +1170,18 @@ def _run_desktop_only() -> int:
         print_item("先启动后端", "info", "python main.py --backend")
         return _record.EXIT_DEPENDENCY
 
+    # "已经在跑"和"我拉起了一个"要分开说。
+    #
+    # start_desktop_shell() 对这两种情况都返回 True(already_running() 时直接早退),
+    # 只报一句"桌面壳已启动"会在什么都没做的时候也说成做了。
+    try:
+        from core.electron_launch_guard import already_running as _shell_running
+    except Exception:  # noqa: BLE001
+        _shell_running = lambda: False  # noqa: E731
+    if _shell_running():
+        print_item("桌面壳已在运行", "ok", "未重复拉起（.electron.pid 锁生效）")
+        return _record.EXIT_OK
+
     lumiv = GalaxyUnified()
     try:
         ok = _asyncio.run(lumiv.start_desktop_shell())
@@ -1161,12 +1202,54 @@ def _run_desktop_only() -> int:
     return _record.EXIT_OK
 
 
+def _missing_compose_vars(compose_file: Path, env_file: Path) -> list:
+    """compose 里 ``${VAR:?...}`` / ``${VAR?...}`` 这类**必填**变量里，env 文件没给的那些。
+
+    只认带 ``?`` 的那种 —— 那是 compose 语法里"没给就报错"的写法；
+    ``${VAR:-default}`` 有默认值，不算缺。
+    """
+    import re as _re
+
+    try:
+        text = compose_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    required = sorted(set(_re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):?\?", text)))
+    if not required:
+        return []
+
+    have = set(os.environ)
+    if env_file.is_file():
+        try:
+            for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name, _, value = line.partition("=")
+                if value.strip():
+                    have.add(name.strip())
+        except OSError:
+            pass
+    return [v for v in required if v not in have]
+
+
 def _run_docker_full() -> int:
     """``python main.py --docker-full`` —— 用 Docker Compose 拉起 130 个节点。
 
     原样保留 ``unified_launcher.py`` 的三条判据：compose 文件必须在、
     ``docker compose version`` 必须能跑通、退出码原样透出。缺任何一条都给
     **可操作**的下一步（装 Docker 的链接 / 查状态与停服的命令），而不是只报一句失败。
+
+    两条真跑之后才发现、必须补的
+    ----------------------------
+    1. **必须显式 ``--env-file``**。``docker compose`` 找 ``.env`` 是相对
+       **compose 文件所在目录**的，也就是 ``deploy/compose/.env`` —— 那个文件
+       根本不存在，于是仓库根那份 ``.env``（``env_check`` 探的、设置面板写的、
+       整个系统都在用的那一份）被**完全忽略**。实测：不带这个参数报
+       "TEMPORAL_DB_PASSWORD is missing"，带上就走过去了。
+    2. **缺的变量要一次报全**。compose 一次只报一个，用户得来回试五轮才知道
+       要补五个。这里先自己把 ``${VAR:?...}`` 这类**必填**变量扫出来，
+       与 env 文件求差集，一次列全，并指到 ``.env.example`` 的对应行。
     """
     from launcher import record as _record
 
@@ -1174,6 +1257,14 @@ def _run_docker_full() -> int:
     compose_file = PROJECT_ROOT / "deploy" / "compose" / "full.yml"
     if not compose_file.exists():
         print_item("deploy/compose/full.yml", "error", "文件不存在，请确认仓库完整")
+        return _record.EXIT_DEPENDENCY
+
+    env_file = PROJECT_ROOT / ".env"
+    missing = _missing_compose_vars(compose_file, env_file)
+    if missing:
+        print_item("compose 必填变量缺失", "error", f"{len(missing)} 个：{', '.join(missing)}")
+        print_item("  补到哪", "info", str(env_file))
+        print_item("  参考取值", "info", f"{PROJECT_ROOT / '.env.example'}（同名项）")
         return _record.EXIT_DEPENDENCY
 
     try:
@@ -1192,7 +1283,11 @@ def _run_docker_full() -> int:
         print_item("安装文档", "info", "https://docs.docker.com/get-docker/")
         return _record.EXIT_DEPENDENCY
 
-    cmd = ["docker", "compose", "-f", str(compose_file), "--profile", "full", "up", "-d"]
+    cmd = ["docker", "compose"]
+    if env_file.is_file():
+        # 见 docstring 第 1 条：不给这个参数，仓库根的 .env 根本不会被读到。
+        cmd += ["--env-file", str(env_file)]
+    cmd += ["-f", str(compose_file), "--profile", "full", "up", "-d"]
     print_item("命令", "ok", " ".join(cmd))
     print_item("状态", "info", "启动中，请稍候...")
     try:
@@ -1409,8 +1504,10 @@ def main() -> int:
         return 0
 
     if args.setup:
-        _run_setup_wizard()
-        return 0
+        # 返回值不能丢 —— 和当初 `__main__` 里裸调用 main() 是同一类错：
+        # 向导拒绝运行（无 tty）时若还 return 0，`python main.py --setup && next`
+        # 会在什么都没配置的情况下继续往下跑。
+        return _run_setup_wizard()
 
     # ── PR-01: entrypoint role contract enforcement ──────
     if not assert_single_unique_main_entrypoint():

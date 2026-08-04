@@ -410,6 +410,18 @@ class SystemManager:
                 env["NODE_ID"] = config.id
                 env["NODE_NAME"] = config.name
                 env["PORT"] = str(config.port)
+                # 仓库根必须进子进程的 import 路径。
+                #
+                # cwd 是节点自己的目录(节点会按相对路径读自带资源,不能改),
+                # 于是子进程的 sys.path[0] 也是那个目录 —— 仓库根根本不在里面。
+                # 结果:节点第一行 `from core.xxx import ...` / `from nodes.common...`
+                # 直接 ModuleNotFoundError 退出,而这里只看健康端口通不通,
+                # 30 秒后一律报"启动超时",把一个**必然的 import 失败**说成了超时。
+                #
+                # 真跑 `python main.py nodes start --group core` 实测:7 个核心节点
+                # 0/7 成功,logs/node_*.log 里全是 "No module named 'core'" /
+                # "No module named 'nodes'"。也就是说这条命令面从来没真正起过节点。
+                env["PYTHONPATH"] = os.pathsep.join(x for x in (str(PROJECT_ROOT), env.get("PYTHONPATH", "")) if x)
 
                 process = subprocess.Popen(
                     [sys.executable, str(main_py)],
@@ -681,14 +693,25 @@ class SystemManager:
         unhealthy_count = 0
         not_running = 0
 
+        # 判据是**探测结果**，不是"这个进程记得自己启过谁"。
+        #
+        # 原来第一层判的是 `config.id in self.processes` —— 那是本进程 Popen 出来的
+        # 子进程表。而 `python main.py nodes status` 每次都是**全新进程**，那张表
+        # 永远是空的,于是 109 个节点一律被报成"未运行",哪怕它们全都活着、
+        # /health 全都 200。上面 109 次健康探测**照跑不误**,结果却被丢掉。
+        # 真跑实测:core 组 7 个节点起好、端口 8003-8006 全 200,status 仍报"未运行 109"。
+        #
+        # self.processes 仍然有用,但只用来区分"我起的"和"别人起的",
+        # 不再用来决定"活没活着" —— 后者只有探测说了算。
         for config, is_healthy in zip(all_configs, results):
-            if config.id in self.processes:
-                if is_healthy:
-                    print(f"{GREEN}✅ Node_{config.id:>6} {config.name:<25} (:{config.port}){RESET}")
-                    healthy_count += 1
-                else:
-                    print(f"{RED}❌ Node_{config.id:>6} {config.name:<25} (:{config.port}) - Unhealthy{RESET}")
-                    unhealthy_count += 1
+            owned = config.id in self.processes
+            if is_healthy:
+                tag = "" if owned else "  (外部启动)"
+                print(f"{GREEN}✅ Node_{config.id:>6} {config.name:<25} (:{config.port}){tag}{RESET}")
+                healthy_count += 1
+            elif owned:
+                print(f"{RED}❌ Node_{config.id:>6} {config.name:<25} (:{config.port}) - Unhealthy{RESET}")
+                unhealthy_count += 1
             else:
                 print(f"{YELLOW}○ Node_{config.id:>6} {config.name:<25} (:{config.port}) - Not running{RESET}")
                 not_running += 1
@@ -727,6 +750,12 @@ class SystemManager:
                 report["summary"]["unhealthy"] += 1
             else:
                 report["summary"]["not_found"] += 1
+            # "running" 以前**从来没被 +1 过**,恒为 0 —— 一个只在 JSON 里占位、
+            # 谁读谁被误导的死字段。给它一个说得通的含义:有实体在跑
+            # (探得到 = 活着,或者是本进程起的但探不通 = 起了没起来),
+            # 与 not_found 恰好互补。
+            if is_healthy or is_running:
+                report["summary"]["running"] += 1
 
         return report
 

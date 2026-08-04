@@ -201,9 +201,48 @@ def test_run_setup_wizard_invokes_interactive_flag(monkeypatch, tmp_path):
     monkeypatch.setattr(main_mod, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(main_mod.subprocess, "call", _fake_call)
     monkeypatch.setattr(main_mod.sys, "exit", lambda code=0: (_ for _ in ()).throw(SystemExit(code)))
+    # 交互向导现在要求 stdin 是 tty（见 test_setup_wizard_refuses_without_a_tty）。
+    # 这条用例钉的是"调用参数对不对"，不是那道闸，所以显式把前提给上 ——
+    # pytest 下 stdin 不是 tty，不给就走不到 subprocess.call。
+    monkeypatch.setattr(main_mod.sys, "stdin", _TtyStdin())
 
     with pytest.raises(SystemExit):
         main_mod._run_setup_wizard()
 
     assert "cmd" in captured, "subprocess.call 应被调用"
     assert "--interactive" in captured["cmd"], f"_run_setup_wizard 必须传 --interactive，实际调用: {captured['cmd']}"
+
+
+class _TtyStdin:
+    """假装自己是终端的 stdin 替身。"""
+
+    def isatty(self):
+        return True
+
+
+def test_setup_wizard_refuses_without_a_tty(monkeypatch, tmp_path):
+    """没有终端时必须**明确拒绝**并给出替代路径，而不是抛 EOFError 栈。
+
+    真跑 ``python main.py --setup < /dev/null`` 踩到的：向导第一句 input() 直接
+    抛 EOFError，用户看到一段 Python 栈，既没说"这需要终端"也没说该怎么办。
+    而这条路径恰恰最容易在无 tty 处被触发 —— start.bat 首启（无 .env 时自动跑
+    --setup）、CI、Dockerfile、管道。
+    """
+    import main as main_mod
+
+    called = {"n": 0}
+    fake_wizard = tmp_path / "setup_wizard.py"
+    fake_wizard.write_text("# stub\n", encoding="utf-8")
+
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(main_mod.subprocess, "call", lambda *a, **k: called.__setitem__("n", called["n"] + 1))
+
+    class _NoTty:
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(main_mod.sys, "stdin", _NoTty())
+
+    rc = main_mod._run_setup_wizard()
+    assert rc != 0, "拒绝运行必须是非零退出码，否则 `--setup && next` 会在什么都没配的情况下继续"
+    assert called["n"] == 0, "不该真去拉起向导"
