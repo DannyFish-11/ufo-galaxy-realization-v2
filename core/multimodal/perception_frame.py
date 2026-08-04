@@ -69,7 +69,10 @@ class ScreenState:
 
     image_b64: Optional[str] = None  # raw JPEG base64 (NOT serialised)
     mime: str = "image/jpeg"
-    change_score: float = 0.0  # cheap 0..1 change vs previous frame
+    change_score: float = 0.0  # 0..1 change vs previous frame（采集层单一门控算出）
+    # 单调递增：每检测到一次足够大的变化 +1。慢节拍消费者靠"序号有没有变"判断
+    # "从我上次看之后变没变过"，不受采集节拍影响（change_score 会被后续帧消化回 0）。
+    change_seq: int = 0
     meta: Optional[Dict[str, Any]] = None  # structured screen context (UIA tree, etc.)
     screen_freshness_ms: float = 0.0
     has_image: bool = False
@@ -210,6 +213,7 @@ class PerceptionFrame:
                 "has_image": getattr(self.video, "has_image", False),
                 "mime": getattr(self.video, "mime", ""),
                 "change_score": getattr(self.video, "change_score", 0.0),
+                "change_seq": getattr(self.video, "change_seq", 0),
             }
 
         if self.screen is not None:
@@ -218,6 +222,7 @@ class PerceptionFrame:
                 "has_image": self.screen.has_image,
                 "mime": self.screen.mime,
                 "change_score": self.screen.change_score,
+                "change_seq": self.screen.change_seq,
                 "meta_present": self.screen.meta is not None,
                 "screen_freshness_ms": self.screen.screen_freshness_ms,
             }

@@ -31,6 +31,7 @@ class VideoState:
     image_b64: Optional[str] = None
     mime: str = "image/jpeg"
     change_score: float = 0.0
+    change_seq: int = 0
     has_image: bool = False
 
 

@@ -293,6 +293,7 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
 
     try:
         from core.multimodal.audio_features import AudioState
+        from core.multimodal.frame_gate import FrameGate
         from core.multimodal.perception_frame import ScreenState
         from core.multimodal.signal_quality import SignalQuality
         from core.multimodal.video_features import VideoState
@@ -301,24 +302,32 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
         logger.debug("desktop perception bridge deps unavailable: %s", exc)
         return
     store = get_desktop_perception_store()
-    prev_screen_len: Optional[int] = None
-    prev_cam_len: Optional[int] = None
+    # 采集层唯一门控（感知指纹）。此前这里用 base64 长度差估变化，把"同尺寸不同
+    # 内容"当成没变化；而注意力循环另有一套感知指纹门控 —— 同一份数据两套判据。
+    # 现统一到 frame_gate：这里算一次，消费方读帧上的 change_score/change_seq。
+    screen_gate = FrameGate()
+    cam_gate = FrameGate()
+    perception_epoch = getattr(store, "epoch", None)
     while True:
         try:
             snap = store.snapshot_media()
+            # 隐私世代变更（暂停→恢复）后必须丢弃暂停前的指纹：否则恢复后的第一帧
+            # 会与"被遮住之前"那帧做差，等于让变化量泄露被遮住期间发生了什么。
+            _epoch = getattr(store, "epoch", None)
+            if _epoch != perception_epoch:
+                perception_epoch = _epoch
+                screen_gate.reset()
+                cam_gate.reset()
+
             scr = snap.get("screen_b64")
             if scr:
-                cur = len(scr)
-                if prev_screen_len is None:
-                    change = 1.0
-                else:
-                    change = min(1.0, abs(cur - prev_screen_len) / max(1, prev_screen_len))
-                prev_screen_len = cur
+                change = screen_gate.score(scr)
                 bus.update_screen(
                     ScreenState(
                         image_b64=scr,
                         mime=snap.get("screen_mime", "image/jpeg"),
                         change_score=change,
+                        change_seq=screen_gate.change_seq,
                         meta=snap.get("screen_meta"),
                         has_image=True,
                     ),
@@ -327,19 +336,14 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
             cam = snap.get("camera_b64")
             if cam:
                 # 与屏幕同款:真帧进 bus(此前只传空 VideoState 报"在场",画面被丢弃,
-                # 常驻感知的世界里永远没有摄像头)。变化度同样按 base64 长度差估算——
-                # 便宜、不解码,与屏幕保持一致口径。
-                cur_cam = len(cam)
-                if prev_cam_len is None:
-                    cam_change = 1.0
-                else:
-                    cam_change = min(1.0, abs(cur_cam - prev_cam_len) / max(1, prev_cam_len))
-                prev_cam_len = cur_cam
+                # 常驻感知的世界里永远没有摄像头),变化度走同一个门控。
+                cam_change = cam_gate.score(cam)
                 bus.update_video(
                     VideoState(
                         image_b64=cam,
                         mime=snap.get("camera_mime", "image/jpeg"),
                         change_score=cam_change,
+                        change_seq=cam_gate.change_seq,
                         has_image=True,
                     ),
                     SignalQuality.ok(),

@@ -43,7 +43,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import logging
 import os
@@ -306,82 +305,19 @@ def parse_decision(text: str) -> AmbientDecision:
 
 
 # ---------------------------------------------------------------------------
-# 帧差门控（零模型开销）
+# 帧差门控（零模型开销）—— 实现已收口到采集层，这里只做兼容再导出
 # ---------------------------------------------------------------------------
-def _perceptual_signature(frame_b64: str) -> Optional[Any]:
-    """把一帧 base64 图像压成一个 16x16 灰度指纹（numpy 数组）。
+# 曾经这里是帧差判据的**第二套**实现（另一套在 ingest_runtime 的桥接里，用
+# base64 长度差）。同一份数据两套判据必然分叉，且慢节拍的消费者会漏掉快节拍
+# 采集侧已经"消化"掉的变化。现统一到 core.multimodal.frame_gate：
+# 采集侧算一次、带单调变化序号，消费者按序号判断"从我上次看之后变没变过"。
+# 下面的再导出保持既有引用（含测试）逐字不变。
+from core.multimodal.frame_gate import DEFAULT_DIFF_THRESHOLD as _SHARED_DIFF_THRESHOLD  # noqa: E402
+from core.multimodal.frame_gate import FrameGate  # noqa: E402,F401
+from core.multimodal.frame_gate import byte_similarity as _byte_similarity  # noqa: E402,F401
+from core.multimodal.frame_gate import perceptual_signature as _perceptual_signature  # noqa: E402,F401
 
-    用 PIL 解码 + 下采样;不可用时返回 None(调用方退回字节级启发式)。
-    """
-    try:
-        import io
-
-        import numpy as np
-        from PIL import Image
-
-        raw = base64.b64decode(frame_b64)
-        img = Image.open(io.BytesIO(raw)).convert("L").resize((16, 16))
-        return np.asarray(img, dtype="float32") / 255.0
-    except Exception:  # noqa: BLE001 — PIL 缺失/解码失败
-        return None
-
-
-def _byte_similarity(a: str, b: str) -> float:
-    """字节级相似度兜底（PIL 不可用时）：采样若干字节位比较。0..1，越大越像。"""
-    if not a or not b:
-        return 0.0
-    la, lb = len(a), len(b)
-    if la == 0 or lb == 0:
-        return 0.0
-    len_ratio = min(la, lb) / max(la, lb)
-    n = min(256, min(la, lb))
-    step = max(1, min(la, lb) // n)
-    same = sum(1 for i in range(0, min(la, lb), step) if a[i] == b[i])
-    total = len(range(0, min(la, lb), step))
-    byte_ratio = same / total if total else 0.0
-    return 0.5 * len_ratio + 0.5 * byte_ratio
-
-
-class FrameGate:
-    """维护上一帧指纹，判断新帧是否"变化足够大到值得惊动模型"。"""
-
-    def __init__(self, threshold: float = _DEFAULT_DIFF_THRESHOLD) -> None:
-        self.threshold = threshold
-        self._prev_sig: Optional[Any] = None
-        self._prev_b64: Optional[str] = None
-
-    def reset(self) -> None:
-        """丢弃上一帧指纹,让下一帧被当作"第一帧"。
-
-        用于跨越隐私边界(暂停→恢复)后:留着暂停前的指纹去比恢复后的新帧,
-        等于泄露"被遮住那段时间里画面变了多少"。注意这会让恢复后的第一拍
-        必然判定为"有变化"(第一帧的既定语义),这是刻意接受的代价。
-        """
-        self._prev_sig = None
-        self._prev_b64 = None
-
-    def changed(self, frame_b64: Optional[str]) -> bool:
-        if not frame_b64:
-            return False
-        sig = _perceptual_signature(frame_b64)
-        if sig is not None:
-            import numpy as np
-
-            if self._prev_sig is None:
-                self._prev_sig = sig
-                self._prev_b64 = frame_b64
-                return True  # 第一帧视为变化
-            diff = float(np.mean(np.abs(sig - self._prev_sig)))
-            self._prev_sig = sig
-            self._prev_b64 = frame_b64
-            return diff > self.threshold
-        # 字节级兜底
-        if self._prev_b64 is None:
-            self._prev_b64 = frame_b64
-            return True
-        sim = _byte_similarity(frame_b64, self._prev_b64)
-        self._prev_b64 = frame_b64
-        return sim < 0.995
+assert _SHARED_DIFF_THRESHOLD == _DEFAULT_DIFF_THRESHOLD, "帧差阈值默认值分叉：采集层与注意力循环必须同源"
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +454,9 @@ class AmbientAttentionLoop:
         # 门控盯"主帧"(屏幕优先),摄像头单独变化(如用户走进画面)根本不会触发。
         self._gate = FrameGate(_thr)
         self._cam_gate = FrameGate(_thr)
+        # 从常驻感知帧读到的变化序号（屏幕, 摄像头）。与采集侧节拍无关地判断
+        # "从我上次看之后变没变过"；(0,0) 表示还没读到过任何画面。
+        self._hub_seen_seqs: tuple = (0, 0)
         self.session_id = session_id
 
         self._task: Optional[asyncio.Task] = None
@@ -538,6 +477,34 @@ class AmbientAttentionLoop:
 
             self._store = get_desktop_perception_store()
         return self._store
+
+    def _changed_via_hub(self) -> Optional[bool]:
+        """从常驻感知帧读"自我上次查看以来画面变没变"。
+
+        Returns:
+            True/False —— bus 在跑，按单调变化序号给出判定；
+            None —— bus 未启用/无帧，调用方退回本地门控（行为与接入前一致）。
+        """
+        try:
+            from core.multimodal.ingest_runtime import get_ingest_bus
+
+            bus = get_ingest_bus()
+            if bus is None:
+                return None
+            frame = bus.build_frame()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Ambient: 读常驻感知帧失败，退回本地门控: %s", exc)
+            return None
+
+        seqs = (
+            getattr(getattr(frame, "screen", None), "change_seq", 0),
+            getattr(getattr(frame, "video", None), "change_seq", 0),
+        )
+        if seqs == (0, 0):
+            return None  # bus 在跑但还没有任何画面 —— 交给本地门控如实判断
+        changed = seqs != self._hub_seen_seqs
+        self._hub_seen_seqs = seqs
+        return changed
 
     def _get_wm(self):
         if self._wm is None:
@@ -618,14 +585,21 @@ class AmbientAttentionLoop:
         frame_source = "desktop_screen" if screen_b64 else "desktop_camera"
         audio_b64 = media.get("audio_b64")
 
-        # 门控更新必须【每拍都做】,不能被冷却提前 return 跳过——否则冷却期内
-        # _gate 的 prev_sig / 音频哈希都停在冷却开始前那一帧,冷却一结束,新帧
-        # 会跟一个 20 秒前的旧帧比对,几乎必然超阈值 → 冷却刚过就无条件触发一次
-        # 模型调用,与屏幕当前是否真的变化无关。故先更新门控,再判冷却。
-        # 屏幕、摄像头【两路各自门控】,任一路变化足够大即算"值得看一眼"。
-        screen_changed = self._gate.changed(screen_b64)
-        camera_changed = self._cam_gate.changed(camera_b64)
-        frame_changed = screen_changed or camera_changed
+        # 变化判定优先读【采集层算好的】结果：常驻感知 bus 每拍用同一个感知指纹
+        # 门控算过一次，本循环再算一遍就是同数据两套判据（结论会分叉、CPU 也白烧）。
+        # 用单调变化序号比对而不是 change_score：本循环节拍远慢于采集侧，score 早被
+        # 后续帧消化回 0，直接读会**漏掉**期间发生过的变化；序号则与节拍无关。
+        # bus 未启用（enable_multimodal_ingest=false）时退回本地门控，行为不变。
+        frame_changed = self._changed_via_hub()
+        if frame_changed is None:
+            # 门控更新必须【每拍都做】,不能被冷却提前 return 跳过——否则冷却期内
+            # _gate 的 prev_sig / 音频哈希都停在冷却开始前那一帧,冷却一结束,新帧
+            # 会跟一个 20 秒前的旧帧比对,几乎必然超阈值 → 冷却刚过就无条件触发一次
+            # 模型调用,与屏幕当前是否真的变化无关。故先更新门控,再判冷却。
+            # 屏幕、摄像头【两路各自门控】,任一路变化足够大即算"值得看一眼"。
+            screen_changed = self._gate.changed(screen_b64)
+            camera_changed = self._cam_gate.changed(camera_b64)
+            frame_changed = screen_changed or camera_changed
         audio_new = False
         if audio_b64:
             ah = hashlib.sha1(audio_b64.encode("utf-8", "ignore")).hexdigest()[:16]
