@@ -394,7 +394,7 @@ def record_local_chain_closure(
 ) -> ChainClosureRecord:
     """记录本地链路的验收闭环状态。
 
-    由本地执行路径（command_router 完成本地派发后）在调用
+    由 ``record_local_execution()``（core/local_execution_chain.py）在调用
     ``submit_local_result_to_ingress()`` 后调用，将本地链路验收结果写入注册表。
 
     Parameters
