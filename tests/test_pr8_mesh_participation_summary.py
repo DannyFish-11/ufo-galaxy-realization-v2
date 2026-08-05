@@ -164,6 +164,10 @@ class TestMeshParticipationSummaryModel:
             "primary_device_id",
             "source_device_id",
             "roles_by_device",
+            # 能力角色（perception/action/presence）与会话位置（source/primary/
+            # support）分两列。合成一列的话就再也分不出"这台设备是什么"和"它这次
+            # 干什么" —— "这台是 primary" 回答不了 "它有没有摄像头"。
+            "capability_roles_by_device",
             "merge_policy",
             "barrier_posture",
             "routing_intents",
@@ -344,6 +348,7 @@ class TestGetDeviceMeshSummary:
             "device_id",
             "found",
             "roles",
+            "capability_roles",
             "routing_intent",
             "is_primary",
             "is_source",
@@ -689,24 +694,30 @@ class TestAggregationFromFormationSummary:
 
 class TestAggregationFromBodyMeshRegistry:
     def _make_mock_registry(self) -> Any:
-        from unittest.mock import MagicMock
+        """造一个**真的** BodyMeshRegistry，不用 MagicMock。
 
-        entry1 = MagicMock()
-        entry1.device_id = "phone_001"
-        entry1.roles = ["perception", "action"]
-        entry1.session_id = "sess_01"
-        entry1.body_score = 3.0
-        entry1.metadata = {}
+        原来这里是 ``registry = MagicMock(); registry.entries = {...}`` ——
+        而 ``entries`` 这个属性在真的 ``BodyMeshRegistry`` 上**根本不存在**
+        （真实是私有的 ``_entries``，公开访问器叫 ``list_entries()``）。
 
-        entry2 = MagicMock()
-        entry2.device_id = "tablet_002"
-        entry2.roles = ["presence"]
-        entry2.session_id = "sess_01"
-        entry2.body_score = 4.5
-        entry2.metadata = {}
+        于是这几条用例一直在**照着 bug 的形状**验证：被测代码写的是
+        ``registry.entries``、替身也提供 ``registry.entries``，两边一致，测试全绿；
+        而真实运行时 ``hasattr(registry, "entries")`` 判 False，整段静默空转、
+        连一条 reason 都不记。鸭子类型替身不会告诉你真类型上没有这个属性。
 
-        registry = MagicMock()
-        registry.entries = {"phone_001": entry1, "tablet_002": entry2}
+        用真类型就不会有这个盲区：真类型没有的东西，测试也拿不到。
+        """
+        from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
+        registry = BodyMeshRegistry(auto_persist=False, auto_restore=False)
+        registry.register(
+            "phone_001",
+            roles=[DeviceRole.PERCEPTION, DeviceRole.ACTION],
+            session_id="sess_01",
+        )
+        registry.register("tablet_002", roles=[DeviceRole.PRESENCE], session_id="sess_01")
+        for entry in registry.list_entries():
+            entry.body_score = {"phone_001": 3.0, "tablet_002": 4.5}[entry.device_id]
         return registry
 
     def test_populates_device_ids(self) -> None:
@@ -742,8 +753,10 @@ class TestAggregationFromBodyMeshRegistry:
         ):
             _aggregate_from_body_mesh_registry(summary)
 
-        assert "perception" in summary.roles_by_device.get("phone_001", [])
-        assert "presence" in summary.roles_by_device.get("tablet_002", [])
+        # 能力角色进 capability_roles_by_device；roles_by_device 那一列留给会话位置。
+        assert "perception" in summary.capability_roles_by_device.get("phone_001", [])
+        assert "presence" in summary.capability_roles_by_device.get("tablet_002", [])
+        assert "perception" not in summary.roles_by_device.get("phone_001", [])
 
     def test_populates_sources(self) -> None:
         from core.mesh_participation_summary import (

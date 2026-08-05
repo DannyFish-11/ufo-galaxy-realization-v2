@@ -43,6 +43,7 @@ Design constraints
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -58,6 +59,44 @@ PANEL_ROUTES_AUTHORITY: str = (
     "/api/v1/panel/* route surface.  All handlers consume "
     "UnifiedPanelAggregationService projections — no raw subsystem internals."
 )
+
+
+def _mesh_participant_status(entry: Any) -> str:
+    """面板上一个 mesh 参与者的状态：``active`` / ``idle`` / ``disconnected``。
+
+    判据取 :attr:`core.device_readiness.DeviceReadinessSummary.ready` —— 本仓对
+    "这台设备现在能不能用"的**唯一定义**（registered ∧ online ∧ connected ∧
+    routable）。不在这里另起一套，那正是这一整轮在收的那类问题。
+
+    此前的判据是 ``"active" if entry.session_id else "idle"``。``BodyEntry.session_id``
+    是**认知会话**字段，而活的两条注册路径都不传它
+    （``galaxy_gateway/android/handlers/registration.py:1130`` 与
+    ``capability_report.py:251`` 都只传 device_id / roles / metadata）。净效果：
+    每一台真实设备在面板上永远显示 idle、点是灰的，而它其实正在 mesh 里。
+
+    三档的分法对着面板的语义：
+
+    * ``active``       —— 四维全通，现在就能接活。
+    * ``disconnected`` —— 注册过但连接/可路由那一维断了，是"掉线"不是"闲着"。
+    * ``idle``         —— 其余（含读不到就绪信息时的保守取值）。
+
+    读不到就绪层时退回旧口径而不是报错：面板是观测面，宁可显示得保守一点，
+    也不该因为一个子系统不可用就整块塌掉。
+    """
+    device_id = getattr(entry, "device_id", "") or ""
+    try:
+        from core.device_readiness import get_device_readiness
+
+        summary = get_device_readiness(device_id)
+        if getattr(summary, "ready", False):
+            return "active"
+        if getattr(summary, "registered", False) and not (
+            getattr(summary, "connected", False) and getattr(summary, "routable", False)
+        ):
+            return "disconnected"
+        return "idle"
+    except Exception:  # noqa: BLE001
+        return "active" if getattr(entry, "session_id", None) else "idle"
 
 
 # ---------------------------------------------------------------------------
@@ -330,17 +369,46 @@ async def build_panel_feed() -> dict:
         # NATS bus 本身只是消息总线,没有"参与者"/"barrier"概念,之前的 "open" 纯属
         # 编造。真实的 mesh 参与者来自 BodyMeshRegistry(设备注册进 mesh 时写入),
         # 这里改成读它的真实条目;没有条目时诚实显示空列表 + "n/a",不再编造状态。
+        # 三处此前各自出过错，都是"面板上看着有值、值却不对"那一类：
+        #
+        # 1) role 取 sorted(roles)[0] —— **按字母序**取第一个。一台
+        #    perception+action+presence 的设备在面板上只显示 action，另外两维
+        #    静默消失，而字母序本身没有任何含义。改成按 _ROLE_WEIGHTS 取权重
+        #    最高的那一维（模块里本来就定义了这个次序：action 1.5 >
+        #    presence 1.2 > perception 1.0），并另给一列 roles 带全量。
+        #
+        # 2) status 取 `"active" if entry.session_id else "idle"` —— 而**活的两条
+        #    注册路径都不传 session_id**（android/handlers/registration.py:1130、
+        #    capability_report.py:251 都只传 device_id/roles/metadata）。净效果是
+        #    每一台真实设备在面板上永远显示 idle、点是灰的，而它其实正在 mesh 里。
+        #    判据改用本仓对"这台设备现在能不能用"的**唯一定义**
+        #    core.device_readiness.DeviceReadinessSummary.ready（四维合取），
+        #    取不到时才退回旧口径。
+        mesh_session_id = ""
         participants = []
         try:
-            from core.mesh.body_mesh_registry import get_body_mesh_registry
+            from core.mesh.body_mesh_registry import _ROLE_WEIGHTS, get_body_mesh_registry
 
-            for entry in get_body_mesh_registry().list_entries():
+            _registry = get_body_mesh_registry()
+            try:
+                _mesh_session = _registry.get_mesh_session()
+                mesh_session_id = str(getattr(_mesh_session, "session_id", "") or "")
+            except Exception:  # noqa: BLE001
+                mesh_session_id = ""
+
+            for entry in _registry.list_entries():
                 roles = sorted(r.value for r in entry.roles)
+                dominant = max(
+                    entry.roles,
+                    key=lambda r: _ROLE_WEIGHTS.get(r, 1.0),
+                    default=None,
+                )
                 participants.append(
                     {
                         "nodeId": entry.device_id,
-                        "role": roles[0] if roles else "participant",
-                        "status": "active" if entry.session_id else "idle",
+                        "role": (dominant.value if dominant is not None else "participant"),
+                        "roles": roles,
+                        "status": _mesh_participant_status(entry),
                         "lastSeen": int(entry.registered_at * 1000),
                     }
                 )
@@ -348,7 +416,11 @@ async def build_panel_feed() -> dict:
             pass
 
         feed["mesh_session"] = {
-            "sessionId": "local" if noop else "nats-mesh",
+            # 3) sessionId 此前是写死的 "local"/"nats-mesh" —— 取自 NATS 总线，而
+            #    participants 取自 BodyMeshRegistry，同一个块里混了**两个不同的
+            #    mesh**。BodyMeshRegistry 的会话 ID 现在是稳定的（按成员指纹缓存，
+            #    见 _stable_mesh_session_id），有真值可用就用真值。
+            "sessionId": mesh_session_id or ("local" if noop else "nats-mesh"),
             "status": "closed" if noop else ("active" if connected else "pending"),
             "barrierStatus": "active" if participants else "n/a",
             "tickSequence": stats.get("messages_received", 0),

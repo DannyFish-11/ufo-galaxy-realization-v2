@@ -59,7 +59,10 @@ export interface PanelData {
     tickSequence: number;
     participants: Array<{
       nodeId: string;
+      /** 权重最高的那一维能力角色(action > presence > perception)。 */
       role: string;
+      /** 全量能力角色。后端此前只送 role 一个字符串,多角色设备的另外几维静默丢失。 */
+      roles?: string[];
       status: 'active' | 'idle' | 'disconnected';
       lastSeen: number;
     }>;

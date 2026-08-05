@@ -163,7 +163,7 @@ export default function MeshView({ data }: { data: PanelData }) {
               <span className={`dot tone-${STATUS_TONE[p.status] || 'info'}`} />
               <div className="row-main">
                 <div className="row-title">{p.nodeId}</div>
-                <div className="row-meta mono">{p.role}</div>
+                <div className="row-meta mono">{(p.roles && p.roles.length ? p.roles : [p.role]).join(' · ')}</div>
               </div>
               <div className="row-right mono">{p.status}</div>
             </div>
