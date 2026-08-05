@@ -928,12 +928,21 @@ class DesktopPresenceRuntime:
 
         _manifest_sink = None
         _manifest_orig_on_delta = None
-        if os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
+        # 回退开关单独存一个布尔值，而不是只用"拿没拿到 sink"来推断。
+        #
+        # 两者过去是同一件事（关掉就不取 sink，于是走 else 的旧时序），现在不是了：
+        # 非流式默认也停在 LIMINAL，`_manifest_sink is None` 不再等价于"要旧行为"。
+        # 不区分的话，``GALAXY_MANIFEST_ON_FIRST_TOKEN=0`` 这个文档写明"可整体回退
+        # 旧行为"的逃生口就会失效 —— 实测被
+        # tests/test_tristate_multimodal_sync.py::test_kill_switch_reverts_to_old_behavior
+        # 当场抓住。
+        _manifest_on_first_token = os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
             "0",
             "false",
             "no",
             "off",
-        ):
+        )
+        if _manifest_on_first_token:
             try:
                 from core.llm_stream import current_stream as _current_token_stream
 
@@ -978,7 +987,11 @@ class DesktopPresenceRuntime:
                         _orig(text)
 
                     _manifest_sink._on_delta = _hooked_on_delta
-                # 非流式此处**不再**提前进 MANIFEST。
+                elif not _manifest_on_first_token:
+                    # 回退开关关掉 → 完整回到旧时序（派发前就进 MANIFEST），
+                    # 流式与非流式都一样。这是文档承诺的逃生口，必须真的能退回去。
+                    _enter_manifest()
+                # 开关开着且非流式时，此处**不再**提前进 MANIFEST。
                 #
                 # 原来这里是 `_enter_manifest()`,注释写着"保持原时序"。代价是同一段
                 # 认知工作在流式下算 LIMINAL、在非流式下算 MANIFEST ——
@@ -1024,6 +1037,20 @@ class DesktopPresenceRuntime:
                     is_operator_request=source == "operator",
                     **kwargs,
                 )
+                # ── 收口点：派发返回 = 认知结束，往下是表达 ──
+                #
+                # 上面三条更早的信号（流式首 token、认知层显式宣告）各自更精确，但都
+                # **只覆盖部分路径**。实测发现的漏网：一次真实请求走的是
+                # core/agent/execution_planner.py 那条线，压根不经过 handle_chat 的
+                # ReAct 循环，于是显式宣告从没被调到，整个派发都停在 LIMINAL ——
+                # MANIFEST 宽度为零。认知层的出口不止一个，逐个去打提交点必然漏。
+                #
+                # 这里是**所有认知路径的必经之地**，兜住剩下的全部。往下确实是表达期：
+                # 结果装配、PR-SPEAK 朗读（本文件更下方）、跨设备同步。
+                #
+                # 与前面几条信号共用同一个幂等入口，谁先到算谁 —— 流式在首 token 时
+                # 就进了，这里不会把它再推一次。
+                _enter_manifest()
                 # PR-REALTIME-CONTINUUM: 保存 OpenClawd 的 ContinuumState
                 # 供后台 tick 循环实时推送到前端渲染层
                 rsession._continuum_state = result.get("continuum", {})

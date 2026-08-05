@@ -28,14 +28,28 @@ async def test_runtime_propagates_presence_runtime_hint_into_openclawd_main_path
 
         result = await runtime.handle_request(message="inspect desktop", source="chat")
 
+    # 这些值在"非流式不再提前进 MANIFEST"之后整体前移了一档。
+    #
+    # 改之前：advance(MANIFEST) 打在派发**之前**（原注释"保持原时序"），于是
+    # OpenClawd 被调用那一刻外壳已经是 manifest，整段认知（本机实测可达 15 秒）
+    # 都被算成"表达期"。流式路径早就不是这样了——它在第一个 token 流出才进
+    # MANIFEST，思考期停在 LIMINAL。同一段工作在两条路径上算不同的相，
+    # **审议窗口在非流式上宽度为零**，相位闸门驱动的预演在那条路上会整个失效。
+    #
+    # 改之后：派发期间停在 LIMINAL，派发返回（认知结束、往下是表达）才进 MANIFEST。
+    #
+    # 最能说明旧值不对的是 transition_reason：它原来在**派发还没开始**时就报
+    # "execution_path_confirmed_and_running"（执行路径已确认且正在运行）——
+    # 那句话当时是假的。现在报的是 request_received_or_continuous_sensing。
     hint = captured["presence_runtime_hint"]
-    assert captured["presence_mode"] == "manifest"
-    assert hint["presence_mode"] == "manifest"
-    assert hint["previous_presence_mode"] == "liminal"
+    assert captured["presence_mode"] == "liminal"
+    assert hint["presence_mode"] == "liminal"
+    assert hint["previous_presence_mode"] == "static"
     assert hint["presence_mode_changed"] is True
-    assert hint["presence_transition_reason"] == "execution_path_confirmed_and_running"
-    assert result["metadata"]["presence_mode"] == "manifest"
-    assert result["metadata"]["presence_runtime_hint"]["presence_mode"] == "manifest"
+    assert hint["presence_transition_reason"] == "request_received_or_continuous_sensing"
+    # 结果 metadata 记的是"认知被调起那一刻的外观模式"，与上面同源，因此同样是 liminal。
+    assert result["metadata"]["presence_mode"] == "liminal"
+    assert result["metadata"]["presence_runtime_hint"]["presence_mode"] == "liminal"
 
 
 def test_presence_mode_changes_route_bias_and_context_strategy_without_ingress_signals():

@@ -213,8 +213,18 @@ class TestManifestOnFirstToken:
         assert seen.index("liminal") < seen.index("manifest") < seen.index("silent")
 
     @pytest.mark.asyncio
-    async def test_non_streaming_keeps_original_timing(self, monkeypatch):
-        """非流式调用:保持旧时序——派发前就已在 MANIFEST。"""
+    async def test_non_streaming_also_stays_liminal_during_cognition(self, monkeypatch):
+        """非流式调用**也**在认知期停留 LIMINAL —— 与流式一致。
+
+        改之前这里钉的是"保持旧时序:派发前就已在 MANIFEST"。那条旧时序的代价是
+        同一段认知工作在流式下算 LIMINAL、在非流式下算 MANIFEST ——
+        **审议窗口在非流式路径上宽度为零**。而阈限态沙盘推演（core/liminal_rehearsal）
+        正跑在这段里，相位闸门（should_rehearse 里的 in_deliberation_window）在那条
+        路径上会把预演整个关掉。
+
+        现在派发期间停在 LIMINAL，派发返回（认知结束、往下是表达）才进 MANIFEST。
+        旧时序仍可用 GALAXY_MANIFEST_ON_FIRST_TOKEN=0 整体退回，见下一条。
+        """
         monkeypatch.setenv("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1")
         from core.desktop_presence_runtime import DesktopPresenceRuntime
 
@@ -235,8 +245,9 @@ class TestManifestOnFirstToken:
         finally:
             cleanup()
 
-        assert manifest_before_process["v"] is True
+        assert manifest_before_process["v"] is False, "认知期不该已经在 MANIFEST —— 审议窗口会退回零宽"
         assert result["tristate"] == "silent"
+        assert seen.index("liminal") < seen.index("manifest") < seen.index("silent"), "三段轨迹仍须完整"
 
     @pytest.mark.asyncio
     async def test_kill_switch_reverts_to_old_behavior(self, monkeypatch):

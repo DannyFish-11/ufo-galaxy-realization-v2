@@ -460,3 +460,119 @@ def test_cognition_commits_before_the_react_loop():
     assert min(commit_lines) < min(
         react_lines
     ), f"宣告在第 {min(commit_lines)} 行，晚于 ReAct 循环的第 {min(react_lines)} 行"
+
+
+def test_runtime_commits_to_manifest_at_the_dispatch_chokepoint():
+    """派发返回处必须有收口的 ``_enter_manifest()``，且排在 finally 兜底之前。
+
+    为什么必须有这个收口点
+    ----------------------
+    更早的两条信号（流式首 token、认知层在 ReAct 前显式宣告）各自更精确，但都
+    **只覆盖部分路径**。真跑一次请求实测到漏网：它走的是
+    ``core/agent/execution_planner.py`` 那条线，压根不经过 handle_chat 的 ReAct
+    循环，于是显式宣告从没被调到，整个派发停在 LIMINAL —— MANIFEST 宽度为零。
+
+    认知层的出口不止一个，逐个去打提交点必然漏。派发返回是**所有路径的必经之地**。
+    实测确认它确实开火（advance(MANIFEST) 的调用栈指到这一行），且因为幂等守卫
+    只开一次，finally 的兜底不会重复推进。
+    """
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    enter_calls = sorted(
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_enter_manifest"
+    )
+    dispatch_calls = sorted(
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_dispatch"
+    )
+    assert dispatch_calls, "找不到 _dispatch 调用"
+    after_dispatch = [ln for ln in enter_calls if ln > dispatch_calls[0]]
+    assert len(after_dispatch) >= 2, (
+        f"派发之后的 _enter_manifest() 少于 2 处（收口点 + finally 兜底），实际在 {after_dispatch}"
+        " —— 收口点若被删掉，不经过 ReAct 的认知路径会让 MANIFEST 宽度归零"
+    )
+
+
+def test_pre_dispatch_manifest_only_survives_behind_the_kill_switch():
+    """派发前的 ``_enter_manifest()`` **只允许**出现在回退开关分支里。
+
+    直线路径上的那一次正是"审议窗口在非流式路径上宽度为零"的来源，必须没有。
+    但 ``GALAXY_MANIFEST_ON_FIRST_TOKEN=0`` 这个逃生口是文档承诺过的——它要能
+    **整体**退回旧时序，所以那一支里的调用是对的，不能一刀切禁掉。
+
+    这条判据是被实测逼出来的：先把派发前的调用无条件删掉，
+    ``test_kill_switch_reverts_to_old_behavior`` 当场变红——逃生口被我弄坏了。
+    """
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    dispatch_line = min(
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_dispatch"
+    )
+
+    # 回退开关分支（`elif not _manifest_on_first_token:` / `if not ...:`）的行号区间，
+    # 以及流式钩子等嵌套函数体——这两类里的调用是合规的。
+    allowed: list = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.If):
+            test = n.test
+            if (
+                isinstance(test, ast.UnaryOp)
+                and isinstance(test.op, ast.Not)
+                and isinstance(test.operand, ast.Name)
+                and test.operand.id == "_manifest_on_first_token"
+            ):
+                allowed.append((n.lineno, max(getattr(x, "lineno", n.lineno) for x in ast.walk(n))))
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in (
+            "_hooked_on_delta",
+            "_enter_manifest",
+        ):
+            allowed.append((n.lineno, max(getattr(x, "lineno", n.lineno) for x in ast.walk(n))))
+
+    offenders = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "_enter_manifest"
+        and n.lineno < dispatch_line
+        and not any(lo <= n.lineno <= hi for lo, hi in allowed)
+    ]
+    assert not offenders, (
+        f"派发前第 {offenders} 行在回退开关分支之外直接进 MANIFEST —— "
+        "非流式的审议窗口会退回零宽，相位闸门驱动的预演在那条路径上会失效"
+    )
+
+
+def test_kill_switch_branch_exists():
+    """回退开关那一支必须还在 —— 它是文档承诺的逃生口。"""
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    found = any(
+        isinstance(n, ast.If)
+        and isinstance(n.test, ast.UnaryOp)
+        and isinstance(n.test.op, ast.Not)
+        and isinstance(n.test.operand, ast.Name)
+        and n.test.operand.id == "_manifest_on_first_token"
+        and any(
+            isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == "_enter_manifest"
+            for c in ast.walk(n)
+        )
+        for n in ast.walk(tree)
+    )
+    assert found, "GALAXY_MANIFEST_ON_FIRST_TOKEN=0 的回退分支不见了 —— 逃生口失效"
