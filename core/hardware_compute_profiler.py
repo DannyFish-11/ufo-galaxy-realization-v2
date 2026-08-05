@@ -39,6 +39,17 @@ logger = logging.getLogger("Galaxy.HardwareProfiler")
 # ---------------------------------------------------------------------------
 
 
+#: 显存余量系数：判「放得下」时要求 free_vram > 模型大小 × 本系数。
+#:
+#: 20% —— 权重之外还要给激活值与 KV cache 留地方，按权重大小算刚好放得下等于一定 OOM。
+#:
+#: **只此一处。** 此前 ``core/local_brain_manager.HardwareProfile.can_fit_model`` 另有
+#: 一套：``(vram_mb - vram_used_mb) * 0.9 >= size``，10% 余量、而且 free 是减出来的。
+#: 两套判据在一条真实的带里给相反结论 —— 24G 卡已用 18G 时，5000/5200/5400MB 的模型
+#: 那一套判「放得下」、这一套判「放不下」。
+VRAM_HEADROOM_FACTOR: float = 1.2
+
+
 class ComputeTier(str, Enum):
     """硬件计算层级，从高到低排列。
 
@@ -94,10 +105,23 @@ class GPUProfile:
             return 0.0
         return self.used_vram_mb / self.total_vram_mb
 
-    @property
     def can_fit_model(self, model_size_mb: int = 4000) -> bool:
-        """检查是否能容纳指定大小的模型（默认 4GB）"""
-        return self.free_vram_mb > model_size_mb * 1.2  # 20% 余量
+        """这块 GPU 现在放得下一个 *model_size_mb* MB 的模型吗。
+
+        余量取 :data:`VRAM_HEADROOM_FACTOR` —— 权重之外还要给激活值与 KV cache
+        留地方，按权重大小算刚好放得下等于一定 OOM。
+
+        原来这里挂着 ``@property`` 却带参数，两种错法各一半：
+
+        * ``profile.can_fit_model`` —— 属性求值，``model_size_mb`` **永远取默认的
+          4000**。问「20GB 的模型放得进 6GB 空闲显存吗」，答 ``True``。
+        * ``profile.can_fit_model(20000)`` —— 按签名那样调用，先求值成 ``bool``
+          再去调用它，``TypeError: 'bool' object is not callable``。
+
+        全仓零调用方，所以它没有造成过线上故障 —— 但第一个照签名用它的人，拿到的
+        不是错答案就是崩溃。改成真正的方法。
+        """
+        return self.free_vram_mb > model_size_mb * VRAM_HEADROOM_FACTOR
 
 
 @dataclass
