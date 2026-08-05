@@ -94,9 +94,9 @@ class NodeHeartbeatSender:
         try:
             from core.nats_bus import nats_bus
 
-            if not nats_bus.is_connected():
+            if not nats_bus.is_usable():
                 logger.debug(
-                    "NodeHeartbeatSender[%s]: NATS not connected, skipping registration",
+                    "NodeHeartbeatSender[%s]: 总线不可用,跳过注册",
                     self._worker_id,
                 )
                 return {"success": False, "reason": "nats_not_connected"}
@@ -158,7 +158,7 @@ class NodeHeartbeatSender:
             from core.nats_bus import nats_bus
             from core.schemas.contracts import WorkerShutdownModel
 
-            if nats_bus.is_connected():
+            if nats_bus.is_usable():
                 # 同上:正确方法名是 publish_legacy_worker_shutdown(WorkerShutdownModel)。
                 await nats_bus.publish_legacy_worker_shutdown(
                     WorkerShutdownModel(
@@ -182,7 +182,7 @@ class NodeHeartbeatSender:
     async def _send_heartbeat(self) -> None:
         from core.nats_bus import nats_bus
 
-        if not nats_bus.is_connected():
+        if not nats_bus.is_usable():
             return
 
         from datetime import datetime, timezone

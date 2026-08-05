@@ -30,6 +30,7 @@ Usage::
     # After UDM device registration:
     result = await adapter.on_device_registered(device)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -44,9 +45,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-LAUNCHER_ADAPTER_SENTINEL = (
-    "LAUNCHER_ADAPTER::UNIFIED_NODE_CONTRACT_LAUNCH_BRIDGE"
-)
+LAUNCHER_ADAPTER_SENTINEL = "LAUNCHER_ADAPTER::UNIFIED_NODE_CONTRACT_LAUNCH_BRIDGE"
 
 
 # ---------------------------------------------------------------------------
@@ -127,9 +126,9 @@ class LauncherAdapter:
         a core boot node, evaluates policy, and records the decision.
         Depending on mode, it may also trigger node starts.
         """
+        from core.activation_policy import ActivationPolicyEngine
         from core.device_activation_registry import get_registry as get_act_registry
         from core.device_node_resolver import DeviceNodeResolver
-        from core.activation_policy import ActivationPolicyEngine
 
         t0 = time.perf_counter()
         registry = get_act_registry()
@@ -203,8 +202,11 @@ class LauncherAdapter:
         total_ms = (time.perf_counter() - t0) * 1000
         logger.info(
             "[LauncherAdapter.start] resolved=%d started=%d skipped=%d mode=%s in %.1fms",
-            results["resolved"], results["started"], results["skipped"],
-            self.mode.value, total_ms,
+            results["resolved"],
+            results["started"],
+            results["skipped"],
+            self.mode.value,
+            total_ms,
         )
         return results
 
@@ -217,9 +219,9 @@ class LauncherAdapter:
         Returns:
             Dict with resolution result, or None if unresolved.
         """
-        from core.device_node_resolver import get_resolver
         from core.activation_policy import ActivationPolicyEngine
         from core.device_activation_registry import get_registry as get_act_registry
+        from core.device_node_resolver import get_resolver
 
         t0 = time.perf_counter()
 
@@ -292,8 +294,11 @@ class LauncherAdapter:
 
         logger.info(
             "[LauncherAdapter] device_id=%s → %s:%d | %s | mode=%s",
-            device_id, result["resolved_node"], result["node_port"],
-            result["decision"], self.mode.value,
+            device_id,
+            result["resolved_node"],
+            result["node_port"],
+            result["decision"],
+            self.mode.value,
         )
         return result
 
@@ -328,7 +333,8 @@ class LauncherAdapter:
         if self.mode == AdapterMode.OBSERVE_ONLY:
             logger.debug(
                 "[LauncherAdapter] OBSERVE_ONLY: would start %s (%s)",
-                node_name, decision.reason,
+                node_name,
+                decision.reason,
             )
             return None
 
@@ -336,7 +342,9 @@ class LauncherAdapter:
         if self.mode == AdapterMode.DRY_RUN:
             logger.info(
                 "[LauncherAdapter] DRY_RUN: would start %s | policy=%s | reason=%s",
-                node_name, decision.policy.value if decision else "?", decision.reason,
+                node_name,
+                decision.policy.value if decision else "?",
+                decision.reason,
             )
             return node_name  # Return as if started, but don't actually start
 

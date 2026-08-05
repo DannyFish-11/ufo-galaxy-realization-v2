@@ -194,9 +194,11 @@ class WorkerRuntime:
             return {"started": True, "already": True, "worker_id": self.worker_id}
         bus = self._get_bus()
         try:
+            # 第一处仍看网络连接:没连上才值得去 connect()。
+            # 第二处是闸门 —— 用 is_usable(),否则单机降级下 worker 直接不干活。
             if not bus.is_connected():
                 await bus.connect()
-            if not bus.is_connected():
+            if not bus.is_usable():
                 self._last_error = "nats_unavailable"
                 return {"started": False, "reason": "nats_unavailable"}
             # 注册 worker(best-effort)

@@ -149,7 +149,9 @@ class MasterBrain:
             logger.warning("MasterBrain: NATS connection failed, operating in local-only mode")
 
         # Subscribe to worker lifecycle events
-        nats_connected = self._nats.is_connected()
+        # 闸门用 is_usable():单机降级总线下 is_connected() 恒 False,
+        # 只看它会让主脑在单机模式下一条 worker 生命周期事件都不订。
+        nats_connected = self._nats.is_usable()
         subscriptions_ok = True
         if nats_connected:
             subscription_calls: list[tuple[str, Callable[..., Any], Callable[[dict], None]]] = [

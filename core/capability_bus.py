@@ -375,7 +375,7 @@ class CapabilityBus:
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
 
             nats = get_nats_bus()
-            if nats.is_connected():
+            if nats.is_usable():
                 # 修复 fire-and-forget:不留引用的 task 可能在完成前被 GC,发布
                 # 异常也永远无人取回(只剩 GC 期迟到的 "never retrieved" 警告)。
                 # 持引用 + 完成回调取回异常,失败如实记日志。

@@ -51,6 +51,10 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     """Create a mock NATSBus that reports as connected."""
     bus = MagicMock()
     bus.is_connected.return_value = connected
+    # is_usable() 才是"要不要走总线"的闸门(见 NATSBus.is_usable 的说明)。
+    # 这个替身不模拟本地降级总线,所以两者同值。
+    bus.is_local_mode.return_value = False
+    bus.is_usable.return_value = connected
     bus.get_stats.return_value = {
         "connected": connected,
         "noop_mode": not connected,
@@ -116,10 +120,20 @@ class TestGatewayNATSAdapter:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await adapter.start()
 
-        # 适配器走公开的 subscribe()(带 durable),不再触碰私有 _subscribe
-        mock_bus.subscribe.assert_awaited_once()
-        call_args = mock_bus.subscribe.call_args
-        assert "galaxy.tasks.dispatch.gateway" in call_args[0][0]
+        # 适配器走公开的 subscribe()(带 durable),不再触碰私有 _subscribe。
+        #
+        # 注意 MagicMock 会**自动生成任何属性** —— 正因为如此,这条用例在
+        # NATSBus 上根本没有 subscribe() 方法的那段时间里一直是绿的,而生产里
+        # 调用抛 AttributeError、被 start() 的 except 吞掉、适配器静默不工作。
+        # 替身把缺陷盖住了。现在 NATSBus 上有了真方法,并加了 test_worker_lifecycle_subjects
+        # 里那条"公开 API 必须真的存在"的断言兜底。
+        #
+        # 订两次:单数(规范)与复数(遗留)各一。网关是独立进程,灰度期间它与中心
+        # 可能不同版本,只订一个另一边发来的派发就掉进没人听的主题。
+        assert mock_bus.subscribe.await_count == 2, "应当同时订单复数两个主题"
+        subjects = [c[0][0] for c in mock_bus.subscribe.call_args_list]
+        assert "galaxy.tasks.dispatch.gateway" in subjects
+        assert "galaxy.task.dispatch.gateway" in subjects
         assert adapter._started is True
 
     @pytest.mark.asyncio
@@ -178,7 +192,8 @@ class TestGatewayNATSAdapter:
         # unified envelope payload instead of publish_task_result().
         mock_bus._publish.assert_awaited()
         call_args = mock_bus._publish.call_args[0]
-        assert "galaxy.tasks.result.t-001" in call_args[0]
+        # 任务平面已收敛到单数规范(NATSTopics.TASK_RESULT)。
+        assert "galaxy.task.result.t-001" in call_args[0]
         assert call_args[1].get("task_id") == "t-001"
         assert call_args[1].get("_nats_schema") == "TaskEnvelope"
 
@@ -1836,7 +1851,7 @@ class TestPR3NATSEnvelopeAlignment:
 
     @pytest.mark.asyncio
     async def test_publish_task_envelope_uses_correct_subject(self):
-        """publish_task_envelope() publishes to galaxy.tasks.dispatch.{target}."""
+        """publish_task_envelope() 发到 NATSTopics.task_dispatch(target)(单数规范)。"""
         from core.nats_bus import NATSBus
         from core.schemas.task_envelope import TaskEnvelope
 
@@ -1865,7 +1880,8 @@ class TestPR3NATSEnvelopeAlignment:
         result = await bus.publish_task_envelope("worker-42", env)
 
         assert result.get("success") is True
-        assert published["subject"] == "galaxy.tasks.dispatch.worker-42"
+        # 单数规范:NATSTopics.task_dispatch("worker-42")
+        assert published["subject"] == "galaxy.task.dispatch.worker-42"
         assert published["data"].get("_nats_schema") == "TaskEnvelope"
         assert published["data"].get("task_id") == "task-pub-001"
 
@@ -1963,7 +1979,8 @@ class TestPR3NATSEnvelopeAlignment:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await adapter._publish_result("task-res-001", {"value": "done"}, success=True, trace_id="tr-xyz")
 
-        assert published["subject"] == "galaxy.tasks.result.task-res-001"
+        # 单数规范:NATSTopics.task_result("task-res-001")
+        assert published["subject"] == "galaxy.task.result.task-res-001"
         d = published["data"]
         assert d.get("_nats_schema") == "TaskEnvelope"
         assert d.get("task_id") == "task-res-001"

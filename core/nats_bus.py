@@ -210,6 +210,7 @@ class NATSTopics:
     TASK_RESULT = "galaxy.task.result"
     TASK_CANCEL = "galaxy.task.cancel"
     TASK_STATUS = "galaxy.task.status"
+    TASK_DEADLETTER = "galaxy.task.deadletter"
 
     # ── Device plane ─────────────────────────────────────────────────────────
     DEVICE_REGISTER = "galaxy.device.register"
@@ -734,7 +735,7 @@ class NATSBus:
             return await self.publish_task_assign(msg)
         except Exception as exc:
             logger.debug("AIP v3 convert failed for task_dispatch, legacy fallback: %s", exc)
-            subject = f"galaxy.tasks.dispatch.{worker_id}"
+            subject = NATSTopics.task_dispatch(worker_id)
             return await self._publish(subject, task.model_dump(mode="json", exclude_none=True))
 
     async def publish_legacy_task_result(self, task_id: str, result: TaskResultModel) -> dict:
@@ -753,7 +754,7 @@ class NATSBus:
             return await self.publish_task_result(msg)
         except Exception as exc:
             logger.debug("AIP v3 convert failed for task_result, legacy fallback: %s", exc)
-            subject = f"galaxy.tasks.result.{task_id}"
+            subject = NATSTopics.task_result(task_id)
             return await self._publish(subject, result.model_dump(mode="json", exclude_none=True))
 
     async def publish_legacy_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
@@ -821,7 +822,7 @@ class NATSBus:
         ``_nats_schema`` discriminator field allows subscribers to detect and
         parse the envelope format before falling back to legacy TaskDispatch.
         """
-        subject = f"galaxy.tasks.dispatch.{target}"
+        subject = NATSTopics.task_dispatch(target)
         data = envelope.model_dump(mode="json", exclude_none=True)
         data["_nats_schema"] = "TaskEnvelope"
         return await self._publish(subject, data)
@@ -833,7 +834,7 @@ class NATSBus:
         ``status`` field (for backward-compatible consumers) and a full
         TaskEnvelope representation.
         """
-        subject = f"galaxy.tasks.result.{task_id}"
+        subject = NATSTopics.task_result(task_id)
         data = envelope.model_dump(mode="json", exclude_none=True)
         data["_nats_schema"] = "TaskEnvelope"
         return await self._publish(subject, data)
@@ -964,6 +965,24 @@ class NATSBus:
 
     # ── Subscribe methods ───────────────────────────────────────────────────
 
+    async def subscribe(self, subject: str, callback: Callable, durable: str = "") -> dict:
+        """订阅任意主题 —— 给总线之外的调用方用的公开入口。
+
+        为什么补这个方法
+        ----------------
+        ``galaxy_gateway/gateway_nats_adapter.py`` 一直在调 ``nats_bus.subscribe(...)``,
+        而 NATSBus 上**从来没有**这个方法:调用抛 AttributeError,被 ``start()`` 外面
+        那个 ``except Exception`` 吞成一行日志,``self._started`` 保持 False ——
+        网关适配器从此静默地不工作,派给 ``gateway`` 的任务一条也收不到。
+
+        实测:``await GatewayNATSAdapter().start()`` 之后 ``_started`` 恒为 False,
+        被吞掉的异常是 ``AttributeError: 'NATSBus' object has no attribute 'subscribe'``。
+
+        总线内部用 ``_subscribe``;跨模块调用方用这个。名字带下划线的私有方法不该
+        成为外部契约 —— 那正是这次能静默这么久的原因之一。
+        """
+        return await self._subscribe(subject, callback, durable=durable)
+
     async def subscribe_task_dispatches(self, worker_id: str, callback: Callable) -> dict:
         """Subscribe to task dispatches for *worker_id* —— 单复数两个前缀都收。
 
@@ -1041,9 +1060,22 @@ class NATSBus:
         )
 
     async def subscribe_task_deadletters(self, callback: Callable) -> dict:
-        """Subscribe to task dead-letter messages."""
-        subject = os.environ.get("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
-        return await self._subscribe(subject, callback, durable="brain-task-deadletter")
+        """Subscribe to task dead-letter messages —— 单复数两个主题都收。
+
+        死信是最后一道网,漏在这里等于任务失败了都没人知道。网关适配器是**独立
+        进程**,可能与本进程不同版本 —— 灰度期间两边默认值不一致,死信就会掉进
+        没人听的主题。所以两个都订,直到迁移收尾。
+        """
+        override = os.environ.get("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "")
+        if override:
+            # 显式配置过就只认它 —— 运维指定了主题,不该再自作主张多订一个。
+            return await self._subscribe(override, callback, durable="brain-task-deadletter")
+        return await self._subscribe_both(
+            "galaxy.tasks.deadletter",
+            NATSTopics.TASK_DEADLETTER,
+            callback,
+            durable="brain-task-deadletter",
+        )
 
     async def subscribe_events(self, event_type: str, callback: Callable) -> dict:
         """Subscribe to events of a specific type."""
@@ -1117,6 +1149,25 @@ class NATSBus:
     def is_local_mode(self) -> bool:
         """当前是否运行在进程内降级总线上。"""
         return bool(getattr(self, "_local_mode", False))
+
+    def is_usable(self) -> bool:
+        """总线现在**能不能用** —— 这才是"要不要发/要不要订"该问的那个问题。
+
+        与 :meth:`is_connected` 的区别
+        ------------------------------
+        ``is_connected()`` 判的是**网络**连接(``self._nc is not None and
+        self._nc.is_connected``),用于状态上报是对的。但拿它当闸门就错了:
+        进程内降级总线下它恒为 False,而那条总线是完全可用的 —— 本地降级的
+        全部意义正是"单机语义完整保留:同进程内订阅者照常收到消息"。
+
+        这个区别不是理论问题。全仓有二十多处 ``if nats.is_connected():`` 形式的
+        闸门,单机模式下它们**全部静默跳过** —— 心跳不发、任务不派、结果不回、
+        网格事件不广播,而日志里什么异常都没有,因为那不是异常,是 if 判 False。
+        单机跑起来看着一切正常,实际上整条 NATS 依赖面是黑的。
+
+        所以:**上报状态用 is_connected(),决定要不要走总线用 is_usable()。**
+        """
+        return self.is_connected() or self.is_local_mode()
 
     @staticmethod
     def _subject_matches(pattern: str, subject: str) -> bool:

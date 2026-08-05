@@ -1459,11 +1459,11 @@ CROSS-DEVICE:
                 _result["mesh_advice"] = _mesh_advice
 
             try:
-                from core.nats_bus import nats_bus
+                from core.nats_bus import NATSTopics, nats_bus
 
-                if nats_bus.is_connected():
+                if nats_bus.is_usable():
                     await nats_bus._publish(
-                        f"galaxy.tasks.result.{_mesh_task_id}",
+                        NATSTopics.task_result(_mesh_task_id),
                         {
                             "task_id": _mesh_task_id,
                             "target_device": _target,

@@ -24,6 +24,13 @@ class _FakeBus:
     def is_connected(self):
         return self._connected
 
+    def is_local_mode(self):
+        return False
+
+    def is_usable(self):
+        # 闸门语义:见 NATSBus.is_usable。这个替身不模拟本地降级总线。
+        return self._connected
+
     async def connect(self):
         self._connected = True
         return {"success": True}

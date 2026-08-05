@@ -224,7 +224,7 @@ class StateSynchronizationBus:
                 trace_id=event.trace_id,
             )
             nats = get_nats_bus()
-            if nats.is_connected():
+            if nats.is_usable():
                 _bt = asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
                 _BACKGROUND_TASKS.add(_bt)
                 _bt.add_done_callback(_BACKGROUND_TASKS.discard)

@@ -267,7 +267,7 @@ def _emit_aip_v3_mesh_events(
         )
 
         nats = get_nats_bus()
-        if not nats.is_connected():
+        if not nats.is_usable():
             return
 
         session_id = str(getattr(coordinator_state, "session_id", "") or "")
@@ -472,7 +472,7 @@ def _emit_mesh_heartbeat_leave(coordinator_state: Any, device_id: str) -> None:
             reason="heartbeat_timeout",
         )
         nats = get_nats_bus()
-        if nats.is_connected():
+        if nats.is_usable():
             _bt = asyncio.get_running_loop().create_task(nats.publish_mesh_leave(msg))
             _BACKGROUND_TASKS.add(_bt)
             _bt.add_done_callback(_BACKGROUND_TASKS.discard)

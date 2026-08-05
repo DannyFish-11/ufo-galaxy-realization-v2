@@ -364,7 +364,7 @@ class TaskGraph:
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
 
             nats = get_nats_bus()
-            if nats.is_connected():
+            if nats.is_usable():
                 _bt = asyncio.get_running_loop().create_task(nats.publish_task_assign(msg))
                 _BACKGROUND_TASKS.add(_bt)
                 _bt.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -406,7 +406,7 @@ class TaskGraph:
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
 
             nats = get_nats_bus()
-            if nats.is_connected():
+            if nats.is_usable():
                 _bt = asyncio.get_running_loop().create_task(nats.publish_task_result(msg))
                 _BACKGROUND_TASKS.add(_bt)
                 _bt.add_done_callback(_BACKGROUND_TASKS.discard)

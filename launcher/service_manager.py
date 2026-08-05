@@ -6,16 +6,16 @@ Responsibilities:
 - ServiceManager: register, start, stop, and status-report all running services
 """
 
-import os
-import sys
-import subprocess
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+import os
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from .bootstrap import PROJECT_ROOT, SystemState, ServiceType, SystemConfig
+from .bootstrap import PROJECT_ROOT, ServiceType, SystemConfig, SystemState
 
 logger = logging.getLogger("Galaxy")
 
@@ -23,6 +23,7 @@ logger = logging.getLogger("Galaxy")
 @dataclass
 class ServiceInfo:
     """服务信息"""
+
     name: str
     service_type: ServiceType
     status: str = "stopped"
@@ -123,11 +124,7 @@ class ServiceManager:
                 "type": service.service_type.value,
                 "status": service.status,
                 "port": service.port,
-                "uptime": (
-                    (datetime.now() - service.start_time).total_seconds()
-                    if service.start_time
-                    else 0
-                ),
+                "uptime": ((datetime.now() - service.start_time).total_seconds() if service.start_time else 0),
                 "error": service.error,
             }
             for name, service in self.services.items()
