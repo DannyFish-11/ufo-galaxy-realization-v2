@@ -94,7 +94,7 @@ def test_plane_boundary_contracts_make_responsibilities_explicit() -> None:
 def test_get_plane_boundary_contract_for_execution_plane() -> None:
     contract = get_plane_boundary_contract(AuthorityPlane.EXECUTION)
     assert "execution lifecycle" in contract.responsibility_summary
-    assert "canonical_execution_chain" in contract.canonical_truth_surface_ids
+    assert "command_router_orchestration" in contract.canonical_truth_surface_ids
     assert "runtime_decision_observability_projection" in contract.projection_surface_ids
     assert "dispatch_target_selection_mapping" in contract.synchronization_surface_ids
 

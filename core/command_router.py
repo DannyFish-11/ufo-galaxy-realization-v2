@@ -262,12 +262,17 @@ governance policy introduced in PR-3.
 # PR-4: Agent Bus & Fabric Convergence — transport strategy sentinel.
 # CommandRouter is the transport strategy selection layer: it decides which
 # carrier/substrate (direct / gateway / NATS / relay / mesh) to use for each
-# dispatch（原写「via core.agent_bus_fabric.record_fabric_event」—— 本文件从未导入该模块，那条记录从未发生），
-# and enforces the canonical TaskEnvelope/ResultEnvelope contract on every path.
+# dispatch, and enforces the canonical TaskEnvelope/ResultEnvelope contract on
+# every path.
+#
+# 原文写的是「via core.agent_bus_fabric.select_transport_strategy() 并记录每次
+# 派发决策供 fabric 可观测」——本文件从未导入过该模块，那套记录从未发生过。
+# core.agent_bus_fabric 已随不可达模块清理删除；载体选择的真实实现在本文件内部
+# （_dispatch_via_device_router / NATS 回落路径），可观测走既有审计账本。
 COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED: str = (
-    "COMMAND_ROUTER::TRANSPORT_STRATEGY_LAYER_V1: CommandRouter selects "
-    "transport strategy via core.agent_bus_fabric.select_transport_strategy() "
-    "and records every dispatch decision for fabric observability."
+    "COMMAND_ROUTER::TRANSPORT_STRATEGY_LAYER_V1: CommandRouter selects the "
+    "carrier/substrate for each dispatch in-module and records the decision "
+    "through the control-plane audit ledger."
 )
 
 COMMAND_ROUTER_PROBLEM_SPINE_ALIGNMENT_POLICY: str = (
@@ -280,8 +285,8 @@ COMMAND_ROUTER_PROBLEM_SPINE_ALIGNMENT_POLICY: str = (
 CANONICAL_TASK_SPINE_INTEGRATED: str = (
     "COMMAND_ROUTER::CANONICAL_TASK_SPINE_V1: CommandRouter.route_envelope() "
     "is the sole system-level dispatch spine for CanonicalTask→TaskEnvelope→"
-    "transport execution. All legacy dispatch shortcuts are registered in "
-    "core.legacy_dispatch_registry."
+    "transport execution. Legacy dispatch shortcuts are blocked by "
+    "core.compat_legacy_path_blocking_canonicalization."
 )
 
 COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED: str = (
@@ -1461,22 +1466,39 @@ class CommandRouter:
 
                 _pool_selected: Optional[str] = None
                 if _caps_for_pool is not None:
-                    # PR-CC: Try capability_graph_selection first (scoring-aware).
+                    # PR-CC: 能力+网络联合选择。
+                    #
+                    # 原来这里只调 capability_graph_selection.select_best_provider()，
+                    # 它的评分是 覆盖率×10 + kind优先级×0.5 −(离线?0.1) —— **完全不看
+                    # 网络可达性**。于是"有这个能力、但那条路不通"的节点照样会被选中，
+                    # 派过去必然失败，再走重试。而 network_topology_runtime 是活的、
+                    # 有真数据（aip_transport / state_sync_bus / NATS / gateway 都在喂）。
+                    # COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED 这条哨兵早就写着本路由器
+                    # "经 core.capability_network_bridge 做 provider+path 联合决策"，
+                    # 但该模块此前从未被导入过——声明与事实不符。这里改成真的走它。
+                    #
+                    # 失败时退回纯能力选择（老行为），并把降级写进日志：拓扑层不可用
+                    # 不该让派发直接失败，但也不能静默假装联合评分发生过。
                     _cap_graph_selected: Optional[str] = None
                     _cap_graph_fallbacks: List[str] = []
                     try:
-                        from core.capability_graph_selection import select_best_provider as _cgraph_best
                         from core.capability_graph_selection import select_fallback_providers as _cgraph_fallback
+                        from core.capability_network_bridge import joint_select as _joint_select
 
-                        _cgraph_record = _cgraph_best(required_capabilities=_caps_for_pool)
-                        if _cgraph_record is not None:
-                            _cap_graph_selected = getattr(_cgraph_record, "node_id", None)
-                            if _cap_graph_selected:
-                                logger.debug(
-                                    "PR-CC: capability_graph_selection selected %s for caps=%s",
-                                    _cap_graph_selected,
-                                    _caps_for_pool,
-                                )
+                        _joint = _joint_select(required_capabilities=_caps_for_pool)
+                        _cap_graph_selected = _joint.selected_provider_id or None
+                        if _cap_graph_selected:
+                            logger.debug(
+                                "PR-CC: capability_network_bridge 联合选中 %s"
+                                "（caps=%s path=%s joint_score=%.3f degraded=%s）",
+                                _cap_graph_selected,
+                                _caps_for_pool,
+                                _joint.path_availability.effective_path,
+                                _joint.joint_score,
+                                _joint.is_degraded,
+                            )
+                        # 重试候选仍按能力面枚举：桥只给出**一个**联合最优 + 一个兜底，
+                        # 而重试环需要一整串可换的目标。首选来自联合评分，候选串来自能力面。
                         _cgraph_fb_records = _cgraph_fallback(
                             required_capabilities=_caps_for_pool,
                             exclude_ids=[_cap_graph_selected] if _cap_graph_selected else [],
@@ -1484,11 +1506,31 @@ class CommandRouter:
                         _cap_graph_fallbacks = [
                             getattr(r, "node_id", None) for r in _cgraph_fb_records if getattr(r, "node_id", None)
                         ]
-                    except Exception as _cgraph_exc:
-                        logger.debug(
-                            "PR-CC: capability_graph_selection unavailable (fail-open): %s",
-                            _cgraph_exc,
+                    except Exception as _bridge_exc:
+                        logger.warning(
+                            "PR-CC: capability_network_bridge 不可用，联合选择降级为纯能力选择"
+                            "（不再考虑网络可达性）: %s",
+                            _bridge_exc,
                         )
+                        try:
+                            from core.capability_graph_selection import select_best_provider as _cgraph_best
+                            from core.capability_graph_selection import select_fallback_providers as _cgraph_fallback
+
+                            _cgraph_record = _cgraph_best(required_capabilities=_caps_for_pool)
+                            if _cgraph_record is not None:
+                                _cap_graph_selected = getattr(_cgraph_record, "node_id", None)
+                            _cgraph_fb_records = _cgraph_fallback(
+                                required_capabilities=_caps_for_pool,
+                                exclude_ids=[_cap_graph_selected] if _cap_graph_selected else [],
+                            )
+                            _cap_graph_fallbacks = [
+                                getattr(r, "node_id", None) for r in _cgraph_fb_records if getattr(r, "node_id", None)
+                            ]
+                        except Exception as _cgraph_exc:
+                            logger.debug(
+                                "PR-CC: capability_graph_selection 也不可用（fail-open）: %s",
+                                _cgraph_exc,
+                            )
 
                     if _cap_graph_selected:
                         _pool_selected = _cap_graph_selected
@@ -2931,7 +2973,8 @@ class CommandRouter:
 
         # PR-14: stamp additive introspection hints on substrate result.
         # PR-1: execution_path="local" normalised to match the canonical local
-        #        execution chain (core/local_execution_chain.py).
+        #        execution path（原写 core/local_execution_chain.py —— 那是个只做
+        #        审计投影、从未被真实入口调用的模块，已删；归口在 unified_result_ingress）。
         result.setdefault(
             "introspection_snapshot",
             {
@@ -3971,12 +4014,32 @@ class CommandRouter:
                 return result
 
             # ── Failure: decide whether to retry ────────────────────────
-            _retryable_codes = {
-                GatewayErrorCode.COMMAND_TIMEOUT.value,
-                GatewayErrorCode.DISCONNECT.value,
-                GatewayErrorCode.EXECUTOR_ERROR.value,
-            }
-            is_retryable = result.get("error_code") in _retryable_codes
+            # 判据来自规范失败域分类器（core.failure_domains），不再手抄一份错误码集合。
+            # 手抄的那份是 {COMMAND_TIMEOUT, DISCONNECT, EXECUTOR_ERROR}，比分类器少了
+            # DEVICE_NOT_FOUND / DEVICE_OFFLINE 两条 —— 它们被判为 remote_device_unavailable
+            # 且 is_retryable=True。这两条恰恰是**最该换一台设备重试**的情形，而这个循环
+            # 的 _pick_retry_device() 本来就是挑另一台；漏掉等于设备掉线时故障转移直接失效。
+            # 同一份分类结果早已被 stamp 到 result["failure_is_retryable"] 上（PR-13），
+            # 此前只用于观测、判据却另起炉灶 —— 这里改成同一个来源。
+            # 注：HITL_TIMEOUT / HITL_DENIED 在 HITL 闸口处就 return 了（见上方 ~3741/3764），
+            # 到不了这里，因此不需要为"人没响应别重问"再加豁免。
+            _err_code = result.get("error_code")
+            try:
+                from core.failure_domains import classify_from_error_code as _cfe_retry
+
+                is_retryable = bool(_cfe_retry(_err_code).is_retryable)
+            except Exception as _retry_cls_exc:
+                # 分类器不可用时退回旧的保守集合，并把降级说清楚（静默同名变量会掩盖判据来源）。
+                logger.warning(
+                    "重试判据降级：failure_domains 不可用，回落到保守错误码集合 | error_code=%s err=%s",
+                    _err_code,
+                    _retry_cls_exc,
+                )
+                is_retryable = _err_code in {
+                    GatewayErrorCode.COMMAND_TIMEOUT.value,
+                    GatewayErrorCode.DISCONNECT.value,
+                    GatewayErrorCode.EXECUTOR_ERROR.value,
+                }
 
             if not is_retryable or retry_candidates is None or attempt >= max_retries:
                 if attempt > 0:

@@ -1079,6 +1079,10 @@ class OpenClawd:
         self._node_id_to_key: Dict[str, str] = {}
         # PR86: 持有 Router 实例（单一来源）
         self._router = None
+        #: 路由器降级状态。None = 正常走 UnifiedLLMRouter（策略/预算/遥测都在）；
+        #: 非 None = 退到了裸 MultiLLMRouter，那些治理**不生效**，值说明原因。
+        #: 见 _get_router() 的说明：降级可以发生，但不许静默。
+        self._router_degraded: Optional[str] = None
         # PR86: 内嵌 AgentKernel（懒加载）
         self._kernel = None
         # Cancel registry — set of task_ids or group_ids that have been cancelled.
@@ -1283,20 +1287,34 @@ class OpenClawd:
                 logger.warning("Security policy initialization failed (proceeding): %s", _sec_init_err)
 
     def _get_router(self):
-        """获取 OpenClawd 持有的 LLM 路由器（UnifiedLLMRouter 统一入口）"""
+        """获取 LLM 路由器（UnifiedLLMRouter 统一入口）。
+
+        降级到裸 MultiLLMRouter 会丢掉**策略路由 / 成本预算 / SLO 阈值 / 路由遥测**
+        (provider 选择与故障转移仍在)。原先只打一条会被淹掉的 warning,于是"治理没在
+        跑"对运行期不可见。现在记进 ``self._router_degraded`` 并带进响应元数据 ——
+        降级可以发生,但不许静默。
+        """
         if self._router is None:
             try:
                 from core.unified.llm_router import get_unified_llm_router
 
                 self._router = get_unified_llm_router()
+                self._router_degraded = None
             except Exception as e:
-                logger.warning(f"UnifiedLLMRouter 加载失败，降级到 MultiLLMRouter: {e}")
+                logger.warning(
+                    "UnifiedLLMRouter 加载失败，降级到 MultiLLMRouter：%s —— "
+                    "本次进程内【策略路由 / 成本预算 / SLO 阈值 / 路由遥测全部不生效】，"
+                    "provider 选择与故障转移仍然工作",
+                    e,
+                )
                 try:
                     from core.multi_llm_router import get_llm_router
 
                     self._router = get_llm_router()
+                    self._router_degraded = f"unified_router_unavailable:{type(e).__name__}"
                 except Exception as e2:
                     logger.warning(f"LLM 路由器加载失败: {e2}")
+                    self._router_degraded = f"no_router:{type(e2).__name__}"
         # 硬件感知多模态路由器（懒加载，失败不阻塞主路由）
         if not hasattr(self, "_ha_router"):
             try:
@@ -3708,10 +3726,16 @@ class OpenClawd:
         execution_result: Dict[str, Any],
         cross_device_dispatched: bool = False,
     ) -> str:
-        """Resolve the liminal execution branch taken by this request.
+        """给这次请求**已经走完**的执行分支贴标签 —— 事后分类器，不是决策点。
 
-        This is OpenClawd's **decision core** output — it names which
-        delegation point was activated for this request:
+        原文写的是 "OpenClawd's **decision core** output"，容易读成"路径在这里决定"。
+        看入参即知不是：``execution_result`` 是执行**跑完之后**的结果，
+        ``cross_device_dispatched`` 是**已派发**才为 True。真正决定"做不做、做多狠"的是
+        ``core.continuum.decision_gate``（``value − interruption_cost − risk_cost``
+        映射到 ActionLevel，纯计算不经模型），其后还有就绪门、PolicyGate 白名单、
+        ``enable_system_actions`` 总闸。名字保留以免动调用方。
+
+        取值含义如下：
 
         - ``"local"``        — **local manifestation** delegation was taken:
                                execution confined to this Windows device via

@@ -56,7 +56,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = REPO_ROOT / "config" / "file_complexity_baseline.json"
 
 # Directories to scan
-SCAN_DIRS = ["core", "galaxy_gateway", "enhancements", "dashboard"]
+#
+# 2026-08-05 补入 launcher/ 与 nodes/。这份清单是**人手划的**,而它划到哪儿就只
+# 管到哪儿 —— 统一启动器落地之后,launcher/services.py(2236 行)、main.py(1669 行)、
+# launcher/node_startup.py(1004 行)三个文件**从来没被这道门看过**,nodes/ 下另有 4 个
+# 超千行的也一样。
+#
+# 这与面板配置守卫栽的是同一个跟头:范围是人划的,新目录长出来没人记得回来补。
+# 这次把入口层(launcher/ + main.py)与节点层(nodes/)一并纳入;超标的存量按门自己的
+# 口径记进基线(门只拦新增,不追溯存量),此后它们的增长受管。
+SCAN_DIRS = ["core", "galaxy_gateway", "enhancements", "dashboard", "launcher", "nodes"]
+
+# 单文件扫描目标(不在任何 SCAN_DIRS 下,但确实是产品代码的入口)
+SCAN_FILES = ["main.py"]
 
 # Patterns to skip
 SKIP_PARTS = {"__pycache__", ".venv", "venv", "node_modules", "build", "dist", "external"}
@@ -96,7 +108,11 @@ def scan() -> list[tuple[str, int]]:
             if any(part in py_file.parts for part in SKIP_PARTS):
                 continue
             found.append((str(py_file.relative_to(REPO_ROOT)), count_lines(py_file)))
-    return found
+    for rel in SCAN_FILES:
+        single = REPO_ROOT / rel
+        if single.is_file():
+            found.append((rel, count_lines(single)))
+    return sorted(found)
 
 
 def update_baseline() -> int:

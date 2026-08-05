@@ -411,8 +411,22 @@ class TestCSchedulingUnification:
 
         import asyncio
 
-        # Disable capability_graph_selection so DevicePoolManager fallback is reached.
+        # 让能力选择返回"没选出来"，好走到 DevicePoolManager 兜底。
+        #
+        # 桩点从 capability_graph_selection.select_best_provider 挪到了
+        # capability_network_bridge.joint_select：派发口现在先做**能力+网络联合选择**
+        # （见 core/command_router.py 的 PR-CC 段），联合选择内部走的是
+        # discover_providers/score_provider，不再经过 select_best_provider——继续钉旧桩点
+        # 就成了"钉了个不在路径上的函数"，本文件里只要有别的用例注册过 provider，
+        # 这条就会因为联合选择真的选出了东西而失败。
+        # 两个都桩上：joint_select 是正常路径，select_best_provider 是它抛异常时的降级路径。
+        _null_joint = MagicMock()
+        _null_joint.selected_provider_id = None
         with (
+            patch(
+                "core.capability_network_bridge.joint_select",
+                return_value=_null_joint,
+            ),
             patch(
                 "core.capability_graph_selection.select_best_provider",
                 return_value=None,

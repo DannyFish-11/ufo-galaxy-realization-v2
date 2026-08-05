@@ -23,7 +23,7 @@ Together they form one subject::
         └─ owns: session, tri-state lifecycle, native multimodal ingress
         └─ invokes OpenClawd inside liminal
               └─ OpenClawd: ingest → continuum → branch → manifest
-                    ├─ LOCAL EXECUTION CHAIN   (core/local_execution_chain.py)
+                    ├─ LOCAL EXECUTION CHAIN   (command_router → 本地执行)
                     │     OpenClawd → AgentKernel → CommandRouter[LOCAL] →
                     │     local executor → LocalExecutionResult → feedback
                     └─ CROSS-DEVICE EXECUTION CHAIN  (core/cross_device_execution_chain.py)
@@ -194,11 +194,9 @@ class RuntimeSession:
         self._continuum_state: Optional[Dict[str, Any]] = None
         self._tick_task: Optional[Any] = None
         self._tick_running: bool = False
-        # ── 阈限态的内容：过渡里到底在干嘛（见 core/liminal_activity.py）──
-        #
-        # manifest_hook 由 handle_request 绑成它内部的 _enter_manifest 闭包，
-        # 好让认知层能显式宣告"审议结束、开始落手"，由此驱动 LIMINAL→MANIFEST。
-        # 那条界线是认知层才知道的事实，在场运行时这一层看不见它。
+        # 阈限态的内容与相位推进钩子，见 core/liminal_activity.py。
+        # manifest_hook 由 handle_request 绑成内部的 _enter_manifest 闭包，让认知层
+        # 能宣告"审议结束、开始落手"——那条界线只有认知层知道。
         self.manifest_hook: Optional[Any] = None
         self.liminal_activity: str = "none"
         self.simulation_summary: Optional[Dict[str, Any]] = None
@@ -451,7 +449,7 @@ class DesktopPresenceRuntime:
             └─ runtime_session_id generator & propagator
             └─ invokes OpenClawd during the LIMINAL phase
                   └─ OpenClawd (subject core): ingest → continuum → branch
-                        ├─ LOCAL EXECUTION CHAIN   (core/local_execution_chain.py)
+                        ├─ LOCAL EXECUTION CHAIN   (command_router → 本地执行)
                         │     → AgentKernel → CommandRouter[LOCAL] → executor
                         └─ CROSS-DEVICE EXECUTION CHAIN  (core/cross_device_execution_chain.py)
                               → CommandRouter[REMOTE] → gateway → worker
@@ -928,14 +926,9 @@ class DesktopPresenceRuntime:
 
         _manifest_sink = None
         _manifest_orig_on_delta = None
-        # 回退开关单独存一个布尔值，而不是只用"拿没拿到 sink"来推断。
-        #
-        # 两者过去是同一件事（关掉就不取 sink，于是走 else 的旧时序），现在不是了：
-        # 非流式默认也停在 LIMINAL，`_manifest_sink is None` 不再等价于"要旧行为"。
-        # 不区分的话，``GALAXY_MANIFEST_ON_FIRST_TOKEN=0`` 这个文档写明"可整体回退
-        # 旧行为"的逃生口就会失效 —— 实测被
-        # tests/test_tristate_multimodal_sync.py::test_kill_switch_reverts_to_old_behavior
-        # 当场抓住。
+        # 回退开关单独存布尔值：过去"没拿到 sink"等价于"要旧行为"，现在不再等价
+        # （非流式默认也停 LIMINAL）。不分开会让 GALAXY_MANIFEST_ON_FIRST_TOKEN=0
+        # 这个逃生口失效——实测被 test_kill_switch_reverts_to_old_behavior 抓住。
         _manifest_on_first_token = os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
             "0",
             "false",
@@ -988,24 +981,14 @@ class DesktopPresenceRuntime:
 
                     _manifest_sink._on_delta = _hooked_on_delta
                 elif not _manifest_on_first_token:
-                    # 回退开关关掉 → 完整回到旧时序（派发前就进 MANIFEST），
-                    # 流式与非流式都一样。这是文档承诺的逃生口，必须真的能退回去。
+                    # 逃生口：开关关掉 → 完整回旧时序（派发前即 MANIFEST）。
                     _enter_manifest()
-                # 开关开着且非流式时，此处**不再**提前进 MANIFEST。
-                #
-                # 原来这里是 `_enter_manifest()`,注释写着"保持原时序"。代价是同一段
-                # 认知工作在流式下算 LIMINAL、在非流式下算 MANIFEST ——
-                # **审议窗口在非流式路径上宽度为零**。而沙盘推演就跑在这段里,于是
-                # 「相位闸门驱动预演」在非流式下会把预演整个关掉。
-                #
-                # 改由认知层显式宣告(core.liminal_activity.commit_to_manifest,
-                # 打在 openclawd 真实 ReAct 循环之前)。那条界线本来就只有认知层
-                # 知道:审议结束、真实落手开始。流式的首 token 钩子保留 —— 两者
-                # 驱动的是同一个幂等入口,谁先到算谁。
-                #
-                # 信号没送达也不会缺相位:下面 finally 里
-                # `if tristate is LIMINAL: _enter_manifest()` 是兜底,
-                # LIMINAL→MANIFEST→SILENT 的三段轨迹对下游始终完整。
+                # 开关开着且非流式时此处**不再**提前进 MANIFEST。原来这里是
+                # `_enter_manifest()`（注释"保持原时序"），代价是同一段认知工作流式下
+                # 算 LIMINAL、非流式下算 MANIFEST——**审议窗口在非流式上宽度为零**，
+                # 而沙盘推演正跑在这段里，相位闸门会把那条路径的预演整个关掉。
+                # 改由认知层显式宣告（commit_to_manifest，打在真实 ReAct 之前）：那条
+                # 界线只有认知层知道。下面 finally 的兜底保证三段轨迹始终完整。
                 rsession.manifest_hook = _enter_manifest
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
@@ -1037,19 +1020,11 @@ class DesktopPresenceRuntime:
                     is_operator_request=source == "operator",
                     **kwargs,
                 )
-                # ── 收口点：派发返回 = 认知结束，往下是表达 ──
-                #
-                # 上面三条更早的信号（流式首 token、认知层显式宣告）各自更精确，但都
-                # **只覆盖部分路径**。实测发现的漏网：一次真实请求走的是
-                # core/agent/execution_planner.py 那条线，压根不经过 handle_chat 的
-                # ReAct 循环，于是显式宣告从没被调到，整个派发都停在 LIMINAL ——
-                # MANIFEST 宽度为零。认知层的出口不止一个，逐个去打提交点必然漏。
-                #
-                # 这里是**所有认知路径的必经之地**，兜住剩下的全部。往下确实是表达期：
-                # 结果装配、PR-SPEAK 朗读（本文件更下方）、跨设备同步。
-                #
-                # 与前面几条信号共用同一个幂等入口，谁先到算谁 —— 流式在首 token 时
-                # 就进了，这里不会把它再推一次。
+                # 收口点：派发返回 = 认知结束，往下是表达（结果装配、PR-SPEAK 朗读、
+                # 跨设备同步）。更早的两条信号（流式首 token、认知层显式宣告）更精确
+                # 但只覆盖部分路径——实测一次请求走 agent/execution_planner 那条线，
+                # 不经过 ReAct 循环，宣告从没被调到，MANIFEST 宽度为零。认知层出口
+                # 不止一个，逐个打必然漏；这里是必经之地。幂等，谁先到算谁。
                 _enter_manifest()
                 # PR-REALTIME-CONTINUUM: 保存 OpenClawd 的 ContinuumState
                 # 供后台 tick 循环实时推送到前端渲染层

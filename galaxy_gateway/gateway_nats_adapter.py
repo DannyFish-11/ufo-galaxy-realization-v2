@@ -51,7 +51,8 @@ MESSAGE_INTEROP_APPLIED: str = "GATEWAY_NATS_ADAPTER_MESSAGE_INTEROP_V1"
 # it accepts canonical TaskEnvelope/ResultEnvelope contracts from the NATS
 # carrier layer and delivers them to physical/virtual devices.  It does NOT
 # define message semantics or act as an orchestration authority.
-# Layer identity (from core.agent_bus_fabric): GATEWAY::DEVICE_TRANSPORT_SUBSTRATE
+# Layer identity: GATEWAY::DEVICE_TRANSPORT_SUBSTRATE
+# （原引自 core.agent_bus_fabric —— 那是个从未被任何生产代码 import 的声明模块，已删）
 GATEWAY_SUBSTRATE_AUTHORITY: str = "GATEWAY::DEVICE_TRANSPORT_SUBSTRATE_V1"
 
 # PR-8: Network Topology Runtime integration sentinel.

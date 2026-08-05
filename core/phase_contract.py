@@ -388,8 +388,11 @@ RENDER_PHASES: Tuple[str, ...] = ("formless", "liminal", "manifest", "receding")
 #: 阈限态在面板上一直「什么都没有」，根因不是动画简陋，是**它的内容从没送出来过**。
 LIMINAL_ACTIVITIES: Tuple[str, ...] = ("none", "thinking", "rehearsing")
 
-#: ``SimulationSummary.simulation_kind`` 的取值域，与
-#: ``core.liminal_space_mapping.build_simulation_summary`` 的 ``valid_kinds`` 同源。
+#: ``SimulationSummary.simulation_kind`` 的取值域。
+#:
+#: 原与 ``core/liminal_space_mapping.py`` 的 ``build_simulation_summary`` 同源，该模块
+#: 已作为不可达模块删除（它的投影层从没有过生产调用方）。取值域保留在这里——本契约
+#: 是它唯一活着的消费面。
 SIMULATION_KINDS: Tuple[str, ...] = ("none", "speculative", "sandbox")
 
 #: 相位之间**允许**的转移，抄自 docs/PHASE_TRANSITION_TABLE.md 的 Allowed 表。
@@ -454,9 +457,9 @@ def tri_state_of(phase: str) -> str:
 class SimulationSummary:
     """阈限态沙盘推演的可渲染摘要。
 
-    形状与 ``core.liminal_space_mapping.build_simulation_summary`` 一致——那是既有
-    的投影层定义，本类刻意不另造一套，只是把它搬到渲染契约里，好让它能跨 JSON
-    边界到前端（原类型在 core 里，前端拿不到）。
+    形状沿用已删除的 ``core/liminal_space_mapping.py`` 里那份投影层定义。当初刻意
+    不另造一套；那个模块后来因"零生产调用方"被清理掉了，而这份形状留在这里——
+    本契约是它唯一活着的消费面，而且这一次它是真的接到线上的。
     """
 
     is_active: bool

@@ -261,14 +261,18 @@ def build_truth_projection_boundary_catalog() -> List[TruthProjectionBoundaryEnt
             canonical_truth_source="capability_registry",
             rationale="Registration sync maps device facts into capability catalog.",
         ),
+        # 原先这条指向 core.canonical_execution_chain —— 那是一个只有哨兵常量和阶段
+        # 枚举的**声明表**，自己都写着 "does NOT introduce new routing logic"，从任何
+        # 真实入口都不可达。它已被删除，这里改指真正持有编排权威的活模块：
+        # CommandRouter.route_envelope() 才是 ACL/HITL/生命周期/重试的实际所有者。
         TruthProjectionBoundaryEntry(
-            surface_id="canonical_execution_chain",
+            surface_id="command_router_orchestration",
             plane=AuthorityPlane.EXECUTION,
             role=BoundaryRole.CANONICAL_TRUTH,
-            module_path="core.canonical_execution_chain",
+            module_path="core.command_router.CommandRouter.route_envelope",
             lifecycle_owner=True,
             canonical_truth_source=None,
-            rationale="Declares single canonical execution authority chain.",
+            rationale="Canonical command orchestration authority: ACL, HITL gate, lifecycle, retry.",
         ),
         TruthProjectionBoundaryEntry(
             surface_id="task_envelope_lifecycle_registry",
@@ -285,7 +289,7 @@ def build_truth_projection_boundary_catalog() -> List[TruthProjectionBoundaryEnt
             role=BoundaryRole.PROJECTION_READ_MODEL,
             module_path="core.runtime_decision_observability.build_runtime_decision_explanation",
             lifecycle_owner=False,
-            canonical_truth_source="canonical_execution_chain",
+            canonical_truth_source="command_router_orchestration",
             rationale="Decision observability is explanatory projection, not authority.",
         ),
         TruthProjectionBoundaryEntry(
@@ -294,7 +298,7 @@ def build_truth_projection_boundary_catalog() -> List[TruthProjectionBoundaryEnt
             role=BoundaryRole.SYNCHRONIZATION_MAPPING,
             module_path="core.runtime.source_dispatch_orchestrator.select_dispatch_target",
             lifecycle_owner=False,
-            canonical_truth_source="canonical_execution_chain",
+            canonical_truth_source="command_router_orchestration",
             rationale="Selection combines readiness/registry/session truths without owning them.",
         ),
         # PR-4: Formation, Topology, and Truth Convergence entries

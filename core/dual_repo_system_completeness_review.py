@@ -859,7 +859,6 @@ class DualRepoSystemCompletenessReviewer:
         # are not classified as missing when their source files are present.
         runtime_modules = [
             "core.command_router",
-            "core.canonical_execution_chain",
             "core.flow_continuity_coordinator",
             "core.delegated_flow_recovery_coordinator",
             "core.recovery_durability_closure_validator",

@@ -195,7 +195,7 @@ ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY: str = (
     "device, contract, and tracker ids across ad hoc fields.  "
     "This module is the CONCRETE Android implementation of the participant-"
     "generic dispatch binding contract defined in "
-    "core.participant_authority_interfaces (PR-8).  "
+    "the participant-generic dispatch binding contract.  "
     "AndroidRuntimeBindingState implements ParticipantDispatchBindingState; "
     "AndroidRuntimeBindingSignal implements ParticipantDispatchBindingSignal."
 )

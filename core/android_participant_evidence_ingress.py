@@ -121,14 +121,14 @@ logger = logging.getLogger("Galaxy.AndroidParticipantEvidenceIngress")
 ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY: str = (
     "ANDROID_PARTICIPANT_EVIDENCE_INGRESS_V1::"
     "concrete-android-implementation-of-participant-generic-availability-"
-    "contract-defined-in-core.participant_authority_interfaces-PR-8::"
+    "participant-generic-availability-contract::"
     "AndroidParticipantStatus-implements-ParticipantAvailabilityStatus"
 )
 """Sentinel: import to assert the canonical Android participant evidence ingress
 layer is available.  Must be a non-empty string.
 
 This module is the CONCRETE Android implementation of the participant-generic
-availability/health contract defined in core.participant_authority_interfaces
+participant-generic availability/health contract
 (PR-8).  AndroidParticipantStatus maps 1-to-1 onto ParticipantAvailabilityStatus.
 """
 

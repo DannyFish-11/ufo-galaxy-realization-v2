@@ -576,3 +576,30 @@ def test_kill_switch_branch_exists():
         for n in ast.walk(tree)
     )
     assert found, "GALAXY_MANIFEST_ON_FIRST_TOKEN=0 的回退分支不见了 —— 逃生口失效"
+
+
+# ── 沙盘推演的候选数默认值 ────────────────────────────────────────────────
+
+
+def test_rehearsal_candidate_default_keeps_the_liminal_surface_alive(monkeypatch):
+    """``GALAXY_REHEARSAL_CANDIDATES`` 默认必须 > 1。
+
+    这条覆盖是从 ``tests/test_liminal_multi_candidate.py`` 搬过来的 —— 那个文件因为
+    依赖 ``core/liminal_space_mapping``（已作为不可达模块删除）被一并删掉，
+    ``n_candidates`` 的覆盖是连带损失，而它管着的东西还活着。
+
+    为什么默认不能是 1：``candidate_paths`` / ``committed_path`` 只在多候选分支里
+    产出（见 openclawd 的 ``_ncand > 1`` 判断）。默认 1 时推演摘要**从不产出**，
+    阈限态的可视内容整条链路失效 —— 那等于接了一根没有信号的线。
+    2 是"能看见权衡"的最小值：有两条候选才谈得上"在评估多个 vs 已提交哪个"。
+    """
+    from core.liminal_rehearsal import n_candidates
+
+    monkeypatch.delenv("GALAXY_REHEARSAL_CANDIDATES", raising=False)
+    assert n_candidates() == 2, "默认多候选，否则阈限态的可视内容无从产出"
+    monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "1")
+    assert n_candidates() == 1, "显式设 1 可退回单方案"
+    monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "99")
+    assert n_candidates() == 5, "上限封顶 5"
+    monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "x")
+    assert n_candidates() == 2, "非法值回落到默认值"

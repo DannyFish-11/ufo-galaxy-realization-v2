@@ -662,12 +662,10 @@ class RuntimeClosureAudit:
             "PROJECTION_SURFACE_BRIDGE_INTEGRATED",
             "core.routes.projection",
         ),
-        (
-            "PR-513",
-            "Failure/Degraded/Recovery Policy Layer",
-            "FAILURE_DEGRADED_RECOVERY_AUTHORITY",
-            "core.failure_degraded_recovery_policy",
-        ),
+        # PR-513 的 core.failure_degraded_recovery_policy 已删：它把四件事打包
+        # （TaskGraphRuntime→FAILED、审计 TASK_FAILED、ReplayFoundation 写入、降级环形缓冲），
+        # 而前三件在活路径上本来就各自在做（task_graph_runtime / swarm_coordinator /
+        # constellation_runtime / command_router），接进去只会双写。此条不再登记。
         (
             "PR-513",
             "API Task Ingress ReplayFoundation Write (GAP-512-001)",

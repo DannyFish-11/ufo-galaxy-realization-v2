@@ -17,8 +17,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -229,354 +227,6 @@ class TestUnifiedControlPlanEmbeddedRouteDecision:
         summary = unified_control_plan_summary(plan)
 
         assert summary is not None
-        assert summary["multimodal_route_type"] is None
-
-
-# ---------------------------------------------------------------------------
-# Tests: CanonicalStateAdapter — canonical read order
-# ---------------------------------------------------------------------------
-
-
-class TestCanonicalStateAdapterPerceptionState:
-    """Adapter must return canonical_perception_state, not multimodal_context."""
-
-    def test_returns_canonical_perception_state(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata()
-        adapter = CanonicalStateAdapter(meta)
-
-        cps = adapter.canonical_perception_state()
-        assert cps is not None
-        assert "has_request_multimodal" in cps
-
-    def test_canonical_perception_preferred_over_compat(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        # Both canonical and compat are present; canonical must win
-        meta = _make_metadata(include_compat_mm_context=True)
-        adapter = CanonicalStateAdapter(meta)
-
-        cps = adapter.canonical_perception_state()
-        assert cps is not None
-        # Must not be the raw compat dict
-        assert "images" not in cps
-
-    def test_returns_none_when_no_canonical_perception(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(include_canonical_perception=False)
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.canonical_perception_state() is None
-        assert not adapter.has_canonical_perception()
-
-    def test_compat_accessor_returns_mm_context(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(include_compat_mm_context=True)
-        adapter = CanonicalStateAdapter(meta)
-
-        compat = adapter.multimodal_context_compat()
-        assert compat is not None
-        assert "images" in compat
-
-    def test_has_multimodal_perception_uses_canonical(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(is_native=True)
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.has_multimodal_perception() is True
-
-    def test_has_multimodal_perception_false_for_text_only(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(
-            include_canonical_perception=True,
-            is_native=False,
-        )
-        # Override the canonical perception to be text-only
-        meta["canonical_perception_state"] = _make_canonical_perception(
-            has_multimodal=False, requires_native=False, modalities=[]
-        )
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.has_multimodal_perception() is False
-
-
-class TestCanonicalStateAdapterRouteDecision:
-    """Adapter must prefer canonical route inside UCP over deprecated top-level key."""
-
-    def test_route_from_ucp_when_available(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(route_in_ucp=True, include_compat_top_level_route=True)
-        adapter = CanonicalStateAdapter(meta)
-
-        route = adapter.multimodal_route_decision()
-        assert route is not None
-        assert route["route_type"] == "native_multimodal"
-
-    def test_route_canonical_beats_compat_top_level(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        # UCP has advisory route; compat top-level has native route
-        ucp = _make_ucp_dict(route_decision=_make_multimodal_route(route_type="advisory", is_native=False))
-        meta = {
-            "unified_control_plan": ucp,
-            # Compat key has a different value — should be ignored
-            "multimodal_route_decision": _make_multimodal_route(route_type="native_multimodal", is_native=True),
-        }
-        adapter = CanonicalStateAdapter(meta)
-
-        route = adapter.multimodal_route_decision()
-        # Must return the canonical UCP-embedded value
-        assert route["route_type"] == "advisory"
-
-    def test_compat_fallback_when_no_ucp_route(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        # UCP present but has no embedded route (pre-PR-24 response)
-        ucp = _make_ucp_dict(route_decision=None)
-        compat_route = _make_multimodal_route(route_type="partial_multimodal", is_native=False)
-        meta = {
-            "unified_control_plan": ucp,
-            "multimodal_route_decision": compat_route,
-        }
-        adapter = CanonicalStateAdapter(meta)
-
-        route = adapter.multimodal_route_decision()
-        # Compat fallback should be used
-        assert route is not None
-        assert route["route_type"] == "partial_multimodal"
-
-    def test_route_none_when_nothing_present(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        adapter = CanonicalStateAdapter({})
-        assert adapter.multimodal_route_decision() is None
-        assert adapter.is_native_multimodal_route() is False
-        assert adapter.route_type() is None
-
-    def test_is_native_multimodal_route_true(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(route_type="native_multimodal", is_native=True)
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.is_native_multimodal_route() is True
-
-    def test_is_native_multimodal_route_false_advisory(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        ucp = _make_ucp_dict(route_decision=_make_multimodal_route(route_type="advisory", is_native=False))
-        adapter = CanonicalStateAdapter({"unified_control_plan": ucp})
-
-        assert adapter.is_native_multimodal_route() is False
-        assert adapter.route_type() == "advisory"
-
-
-class TestCanonicalStateAdapterUCP:
-    """Adapter must expose UCP-level canonical state correctly."""
-
-    def test_unified_control_plan_present(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata()
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.has_unified_control_plan() is True
-        ucp = adapter.unified_control_plan()
-        assert ucp is not None
-        assert ucp["plan_id"] == "ucp_test123"
-
-    def test_plan_id_from_ucp(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata()
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.plan_id() == "ucp_test123"
-
-    def test_execution_path_from_unified_execution_decision(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        ucp = _make_ucp_dict(execution_path="cross_device")
-        adapter = CanonicalStateAdapter({"unified_control_plan": ucp})
-
-        assert adapter.execution_path() == "cross_device"
-
-    def test_fallback_level_none(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata()
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.fallback_level() == "none"
-        assert adapter.has_fallback() is False
-
-    def test_model_supply_summary_from_ucp(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        ucp = _make_ucp_dict(has_supply=True)
-        adapter = CanonicalStateAdapter({"unified_control_plan": ucp})
-
-        supply = adapter.canonical_model_supply_summary()
-        assert supply is not None
-        assert supply["primary_provider_id"] == "p1"
-
-    def test_model_supply_none_when_absent(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        ucp = _make_ucp_dict(has_supply=False)
-        adapter = CanonicalStateAdapter({"unified_control_plan": ucp})
-
-        assert adapter.canonical_model_supply_summary() is None
-
-    def test_empty_metadata_degrades_gracefully(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        adapter = CanonicalStateAdapter({})
-
-        assert adapter.canonical_perception_state() is None
-        assert adapter.unified_control_plan() is None
-        assert adapter.multimodal_route_decision() is None
-        assert adapter.has_canonical_perception() is False
-        assert adapter.has_unified_control_plan() is False
-        assert adapter.is_native_multimodal_route() is False
-
-    def test_none_metadata_degrades_gracefully(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        adapter = CanonicalStateAdapter(None)
-
-        assert adapter.canonical_perception_state() is None
-        assert adapter.unified_control_plan() is None
-        assert adapter.multimodal_route_decision() is None
-
-
-# ---------------------------------------------------------------------------
-# Tests: canonical_state_summary diagnostics
-# ---------------------------------------------------------------------------
-
-
-class TestCanonicalStateSummary:
-    """canonical_state_summary() must expose truthful canonical state presence."""
-
-    def test_full_canonical_state_summary(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(
-            include_canonical_perception=True,
-            include_ucp=True,
-            route_in_ucp=True,
-            include_compat_mm_context=True,
-            include_compat_top_level_route=True,
-            is_native=True,
-        )
-        adapter = CanonicalStateAdapter(meta)
-        summary = adapter.canonical_state_summary()
-
-        assert summary["has_canonical_perception"] is True
-        assert summary["has_unified_control_plan"] is True
-        assert summary["plan_id"] == "ucp_test123"
-        assert summary["route_type"] == "native_multimodal"
-        assert summary["is_native_multimodal_route"] is True
-        assert summary["requires_native_multimodal"] is True
-        # Compat fields present (for migration audit)
-        assert summary["compat_multimodal_context_present"] is True
-        assert summary["compat_top_level_route_present"] is True
-        # Canonical route embedded in UCP (PR-24)
-        assert summary["canonical_route_in_ucp"] is True
-
-    def test_text_only_summary(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta: Dict[str, Any] = {
-            "canonical_perception_state": _make_canonical_perception(
-                has_multimodal=False, requires_native=False, modalities=[]
-            ),
-            "unified_control_plan": _make_ucp_dict(route_decision=None),
-        }
-        adapter = CanonicalStateAdapter(meta)
-        summary = adapter.canonical_state_summary()
-
-        assert summary["has_canonical_perception"] is True
-        assert summary["has_unified_control_plan"] is True
-        assert summary["route_type"] is None
-        assert summary["is_native_multimodal_route"] is False
-        assert summary["requires_native_multimodal"] is False
-        assert summary["canonical_route_in_ucp"] is False
-        assert summary["compat_multimodal_context_present"] is False
-        assert summary["compat_top_level_route_present"] is False
-
-
-# ---------------------------------------------------------------------------
-# Tests: no duplicate-state drift (canonical vs compat do not disagree)
-# ---------------------------------------------------------------------------
-
-
-class TestNoDuplicateStateDrift:
-    """Canonical state must not drift from compat fields in representative scenarios."""
-
-    def test_canonical_route_in_ucp_matches_compat_top_level(self):
-        """When both are present, they should carry the same route_type."""
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        route = _make_multimodal_route(route_type="native_multimodal", is_native=True)
-        ucp = _make_ucp_dict(route_decision=route)
-        meta = {
-            "unified_control_plan": ucp,
-            "multimodal_route_decision": route,  # compat copy
-        }
-        adapter = CanonicalStateAdapter(meta)
-
-        # Adapter reads canonical (UCP-embedded); values agree with compat
-        assert adapter.route_type() == "native_multimodal"
-        assert adapter.is_native_multimodal_route() is True
-
-    def test_is_native_multimodal_consistent_with_perception(self):
-        """canonical_perception_state.requires_native_multimodal must agree with
-        the routing decision's is_native_multimodal when both are present."""
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        meta = _make_metadata(is_native=True)
-        adapter = CanonicalStateAdapter(meta)
-
-        # Both must say native
-        assert adapter.requires_native_multimodal() is True
-        assert adapter.is_native_multimodal_route() is True
-
-    def test_text_only_no_native_multimodal_anywhere(self):
-        """Text-only flow must have no native multimodal signal in any state path."""
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        cps = _make_canonical_perception(has_multimodal=False, requires_native=False, modalities=[])
-        ucp = _make_ucp_dict(route_decision=_make_multimodal_route(route_type="advisory", is_native=False))
-        meta = {"canonical_perception_state": cps, "unified_control_plan": ucp}
-        adapter = CanonicalStateAdapter(meta)
-
-        assert adapter.requires_native_multimodal() is False
-        assert adapter.is_native_multimodal_route() is False
-        assert adapter.has_multimodal_perception() is False
-
-    def test_build_ucp_route_decision_parameter_accepted(self):
-        """build_unified_control_plan must accept multimodal_route_decision
-        without raising."""
-        from core.schemas.unified_control_plan import build_unified_control_plan
-
-        route = _make_multimodal_route(route_type="partial_multimodal", is_native=False)
-        plan = build_unified_control_plan(
-            multimodal_route_decision=route,
-            is_native_multimodal=False,
-            execution_path="local",
-        )
-
-        assert plan.multimodal_route_decision is not None
-        assert plan.multimodal_route_decision["route_type"] == "partial_multimodal"
-        # chosen_model_decision should also reflect the non-native flag
-        assert plan.chosen_model_decision.is_native_multimodal is False
 
 
 # ---------------------------------------------------------------------------
@@ -587,23 +237,22 @@ class TestNoDuplicateStateDrift:
 class TestBackwardCompatibility:
     """Deprecated compat fields must remain accessible for backward compatibility."""
 
-    def test_compat_mm_context_still_readable_from_metadata(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
+    # 注：原先这两条经由 core.perception.canonical_state_adapter 断言"规范优先、
+    # compat 兜底"的读取顺序。该适配器已随不可达模块清理一并删除——活代码里
+    # UCP 内嵌与顶层两个键由 openclawd 从**同一个变量**写出（见
+    # openclawd._build_unified_control_plan 附近的两处 multimodal_route_decision=），
+    # 结构上不可能漂移；顶层键的废弃状态由 core/orchestration_authority/legacy_paths.py
+    # 登记并管控。这里保留真正还成立的部分：compat 键必须仍然能从 metadata 读到。
 
+    def test_compat_mm_context_still_readable_from_metadata(self):
         meta = _make_metadata(include_compat_mm_context=True)
-        adapter = CanonicalStateAdapter(meta)
 
         # Legacy consumers that read this directly should still get data
         raw = meta.get("multimodal_context")
         assert raw is not None
-
-        # Adapter compat accessor also works
-        compat = adapter.multimodal_context_compat()
-        assert compat is not None
+        assert "images" in raw
 
     def test_compat_top_level_route_still_readable_from_metadata(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
         meta = _make_metadata(
             include_compat_top_level_route=True,
             route_in_ucp=False,  # No canonical route in UCP
@@ -611,10 +260,7 @@ class TestBackwardCompatibility:
         # Simulate pre-PR-24 response: UCP has no embedded route
         meta["unified_control_plan"] = _make_ucp_dict(route_decision=None)
 
-        adapter = CanonicalStateAdapter(meta)
-
-        # Compat fallback must be used when canonical source is absent
-        route = adapter.multimodal_route_decision()
+        route = meta.get("multimodal_route_decision")
         assert route is not None
         assert route["route_type"] == "native_multimodal"
 

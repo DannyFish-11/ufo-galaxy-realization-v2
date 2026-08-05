@@ -88,7 +88,14 @@ BASELINE_PATH = REPO_ROOT / "config" / "wiring_baseline.json"
 #:
 #: 加上 nodes/ 之后未接线从 648 涨到 859(+217)。那 217 条是存量,按本仓惯例
 #: 记进基线、闸只看增量 —— 重点不是那个数字,而是这一大块代码从此**在视野里**。
-DEFINITION_DIRS = ("core", "galaxy_gateway", "nodes")
+#:
+#: 2026-08-05 再补 launcher/。上面那段记着"定义侧当时只扫 core/ 与 galaxy_gateway/"
+#: 导致 nodes/ 整块看不见 —— 同一件事又发生了一次:统一启动器落地后,launcher/ 的
+#: 18 个模块(含 2235 行的 services.py)从来没进过这道门的视野。
+#:
+#: 这已经是本仓第三次栽在「范围是人划的」上(面板配置守卫、复杂度门、这里)。
+#: 记下来:**新增顶层产品目录时,要回来看的不止一处**。
+DEFINITION_DIRS = ("core", "galaxy_gateway", "nodes", "launcher")
 
 #: 已知的残余盲区:**import 但从不调用,算"已接线"**。
 #:
@@ -210,9 +217,54 @@ def collect_definitions(files: List[Path], root: Path = REPO_ROOT) -> Tuple[Dict
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name.startswith("_"):
                     continue
+                if _is_framework_registered(node):
+                    continue
                 definitions[node.name].append(f"{rel}:{node.lineno}")
                 def_count[node.name] += 1
     return definitions, def_count
+
+
+#: 被框架按装饰器注册的方法名。带这类装饰器的函数**不该**算"未接线":
+#: 调用方是框架本身,静态分析按名字永远找不到。
+_REGISTRAR_ATTRS = frozenset(
+    {
+        "get",
+        "post",
+        "put",
+        "delete",
+        "patch",
+        "head",
+        "options",
+        "websocket",
+        "middleware",
+        "exception_handler",
+        "on_event",
+        "route",
+        "app",  # celery/click 之类的 @something.app(...)
+    }
+)
+
+
+def _is_framework_registered(node) -> bool:
+    """这个函数是不是被装饰器注册给框架了(FastAPI 路由、中间件、事件钩子…)。
+
+    为什么按**结构**判而不是按路径开白名单
+    ----------------------------------------
+    本仓原先只有 ``_EXEMPT_MODULES`` 这条路:整个 ``core/routes/`` 目录豁免,理由写着
+    "路由处理函数由装饰器注册,静态看不到调用方"。那个理由是对的,但它绑在**目录**上,
+    于是同样是路由处理器、只要不长在那个目录里就照报不误 —— ``launcher/services.py``
+    里嵌在 ``start()`` 内的 ``@self.app.get("/api/status")`` 就是这么被报成未接线的
+    (那个文件 2235 行,里面绝大多数不是路由,整个豁免掉才是真的放水)。
+
+    「被装饰器注册」是一个**结构事实**,与它长在哪个目录无关。按结构判之后:
+    路由处理器无论写在哪儿都不误报,而同目录下**非**路由的死函数照样报得出来。
+    """
+    for dec in getattr(node, "decorator_list", []):
+        target = dec.func if isinstance(dec, ast.Call) else dec
+        # 只认 `x.y(...)` / `x.y` 形式;裸名字装饰器(@staticmethod)不算注册
+        if isinstance(target, ast.Attribute) and target.attr in _REGISTRAR_ATTRS:
+            return True
+    return False
 
 
 def _self_exported_constants(tree: ast.AST) -> Set[int]:
@@ -261,7 +313,8 @@ def _self_exported_constants(tree: ast.AST) -> Set[int]:
 def collect_references(files: List[Path]) -> Set[str]:
     """全仓被引用到的名字。调用、属性访问、from-import、字符串常量都算。
 
-    例外：``__all__`` 里的字符串**不算**引用——见 :func:`_all_declaration_constants`。
+    例外：模块**自己 __all__ 里指向自己定义**的字符串不算引用——见
+    :func:`_self_exported_constants`。
     """
     referenced: Set[str] = set()
     for path in files:
