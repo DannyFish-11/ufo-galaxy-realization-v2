@@ -553,7 +553,8 @@ class RenderPosture:
 
     # ── 阈限态的内容：过渡里到底在干嘛 ──────────────────────────────────
     liminal_activity: str
-    """none / thinking / rehearsing，见 :data:`LIMINAL_ACTIVITIES`。"""
+    """阈限态里正在干嘛。取值域见 :data:`LIMINAL_ACTIVITIES` —— 刻意不在这里重抄一遍，
+    抄一遍就是第二份定义，加档时会漏改（``understanding`` 那一档就漏过一次）。"""
 
     simulation: SimulationSummary
     """沙盘推演摘要。没有推演在跑时是 :meth:`SimulationSummary.inactive`。"""
@@ -799,7 +800,13 @@ def render_contract_schema() -> Dict[str, Any]:
                 "doc": "副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位",
             },
             {"name": "next_phases", "ts": "RenderPhase[]", "doc": "副轴从当前相位合法能去的下一相"},
-            {"name": "liminal_activity", "ts": "LiminalActivity", "doc": "阈限态里正在干嘛：none/thinking/rehearsing"},
+            {
+                "name": "liminal_activity",
+                "ts": "LiminalActivity",
+                # 取值列表由常量拼出，不手抄 —— 手抄那份漏掉过 understanding，而 TS 类型
+                # 本身是从同一个常量生成的，于是【类型对、注释错】，评审时最难看出来。
+                "doc": "阈限态里正在干嘛（有序递进）：" + " → ".join(LIMINAL_ACTIVITIES),
+            },
             {"name": "simulation", "ts": "SimulationSummary", "doc": "沙盘推演摘要 —— 阈限态的可视内容"},
             {"name": "runtime_domain", "ts": "RuntimeDomain | null", "doc": "第二维：在哪儿跑；null=尚未判定"},
             {"name": "motion", "ts": "number", "doc": "抽象运动能量 [0,1]"},

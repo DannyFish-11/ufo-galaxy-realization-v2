@@ -77,7 +77,7 @@ export type Lifecycle = "silent" | "liminal" | "manifest";
 export type RenderPhase = "formless" | "liminal" | "manifest" | "receding";
 
 /** 阈限态里正在发生什么。主轴说「在过渡」，这一项说「过渡里在干嘛」。 */
-export type LiminalActivity = "none" | "thinking" | "rehearsing";
+export type LiminalActivity = "none" | "understanding" | "thinking" | "rehearsing";
 
 /** 沙盘推演的种类。 */
 export type SimulationKind = "none" | "speculative" | "sandbox";
@@ -158,7 +158,7 @@ export interface RenderPosture {
   is_returning: boolean;
   /** 副轴从当前相位合法能去的下一相 */
   next_phases: RenderPhase[];
-  /** 阈限态里正在干嘛：none/thinking/rehearsing */
+  /** 阈限态里正在干嘛（有序递进）：none → understanding → thinking → rehearsing */
   liminal_activity: LiminalActivity;
   /** 沙盘推演摘要 —— 阈限态的可视内容 */
   simulation: SimulationSummary;
