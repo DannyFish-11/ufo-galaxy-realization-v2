@@ -202,7 +202,7 @@ DESKTOP_RUNTIME_COUPLING: Dict[str, Any] = {
     "runtime_shell": "DesktopPresenceRuntime",
     "subject_core": "OpenClawd",
     "command_routing": "CommandRouter",
-    "execution_substrate": "local_execution_chain + cross_device_execution_chain",
+    "execution_substrate": "command_router + cross_device_execution_chain",
     "mode_signal_mapping": {
         "static": ["tri_state=silent", "no_active_execution", "ambient continuity only"],
         "liminal": [

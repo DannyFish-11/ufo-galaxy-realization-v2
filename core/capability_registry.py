@@ -64,7 +64,6 @@ _ROUTING_CONTEXT_MODULE_BASENAMES = frozenset(
     {
         "command_router.py",
         "formation_resolver.py",
-        "cross_device_candidates.py",
         "device_router.py",
     }
 )

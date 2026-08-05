@@ -321,11 +321,16 @@ def run_probes(repo_root: Path) -> List[ProbeResult]:
     # PROBE SET 10: Local and cross-device chain documentation
     # ===========================================================
 
+    # 原探针查的是 core/local_execution_chain.py 是否存在。那个模块只做审计投影
+    # （canonical_execution_chain 的侧路表里自己写的 "audit/projection helper"），
+    # 从任何真实入口都不可达，已删。本地执行链的真实承载者是 CommandRouter：
+    # 它完成本地派发后把结果归口到 core/unified_result_ingress.py。探针改查后者，
+    # 才是在查"这条链还在不在"，而不是在查一份从没人读的文档。
     probe(
-        "CHAIN-LOCAL: local_execution_chain.py exists",
+        "CHAIN-LOCAL: local execution result ingress exists",
         "CRITICAL",
-        _file_exists(repo_root, "core/local_execution_chain.py"),
-        "Local execution chain must be documented as a first-class chain",
+        _file_exists(repo_root, "core/unified_result_ingress.py"),
+        "Local execution results must funnel through a single canonical ingress",
     )
 
     probe(

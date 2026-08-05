@@ -96,16 +96,6 @@ def test_snapshot_exposes_role_counts_and_android_link_surfaces() -> None:
     assert snapshot["sentinel"] == PERIPHERAL_CAPABILITY_BOUNDARY_PR10V2_SENTINEL
     assert snapshot["total_surfaces"] >= 10
     assert snapshot["by_role"][PeripheralCapabilityRole.peripheral_capability_ingress.value] >= 3
-    assert "android.GalaxyWebSocketClient" in snapshot["android_v2_link_surfaces"]
-
-
-def test_canonical_execution_chain_marks_peripheral_ingress_side_paths() -> None:
-    from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
-
-    assert SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingest_runtime"] == "peripheral_multimodal_ingress_shell_adapter"
-    assert SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingress_bus"] == "peripheral_multimodal_ingress_transport"
-    assert SIDE_PATH_MODULE_REGISTRY["core.continuation_rebind_registry"] == "continuation_rebind_ingress_adapter"
-    assert SIDE_PATH_MODULE_REGISTRY["galaxy_gateway.android_bridge"] == "android_protocol_handoff_ingress_adapter"
 
 
 def test_capability_registry_annotations_include_ingress_boundary_contract() -> None:

@@ -904,9 +904,7 @@ def _build_capability_boundary() -> List[CapabilityBoundaryEntry]:
                 "are routed away.  Verified in multi-device E2E."
             ),
             tier=CapabilityTier.CONDITIONAL,
-            code_reference=(
-                "tests/integration/test_multi_device_failure_recovery_e2e.py; " "core.failure_degraded_recovery_policy"
-            ),
+            code_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
             test_reference=("tests/integration/test_multi_device_failure_recovery_e2e.py"),
             condition=(
                 "Condition: at least one non-degraded participant must be "

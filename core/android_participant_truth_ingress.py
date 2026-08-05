@@ -234,7 +234,7 @@ ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY: str = (
     "android-participant-session-runtime-truth-ingress-and-canonical-"
     "reconciliation-into-v2-orchestration-state::"
     "concrete-android-implementation-of-participant-generic-result-ingress-"
-    "contract-defined-in-core.participant_authority_interfaces-PR-8::"
+    "participant-generic-result-ingress-contract::"
     "AndroidParticipantTruthKind-implements-ParticipantResultKind"
 )
 

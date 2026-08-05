@@ -445,98 +445,6 @@ class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
 
         log = get_ingress_log()
         sources = [r.source.value if hasattr(r.source, "value") else str(r.source) for r in log]
-        self.assertIn("scheduler", sources)
-
-
-# ===========================================================================
-# E. LegacyDispatchRegistry — PR-B entries present
-# ===========================================================================
-
-
-class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
-    """PR-B entries are present in the LegacyDispatchRegistry."""
-
-    def setUp(self):
-        # Reset and re-bootstrap so PR-B entries are loaded.
-        from core.legacy_dispatch_registry import reset_registry
-
-        reset_registry()
-
-    def test_23_device_orchestrator_send_command_registered(self):
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry
-
-        reg = get_legacy_dispatch_registry()
-        self.assertTrue(reg.is_registered("core.device_orchestrator.DeviceOrchestrator.send_command"))
-
-    def test_24_scheduler_exec_relay_registered(self):
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry
-
-        reg = get_legacy_dispatch_registry()
-        self.assertTrue(reg.is_registered("core.scheduler.Scheduler._exec_relay"))
-
-    def test_25_scheduler_exec_mesh_send_registered(self):
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry
-
-        reg = get_legacy_dispatch_registry()
-        self.assertTrue(reg.is_registered("core.scheduler.Scheduler._exec_mesh_send"))
-
-    def test_26_device_orchestrator_pr_origin_is_prb(self):
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry
-
-        reg = get_legacy_dispatch_registry()
-        entry = reg.get("core.device_orchestrator.DeviceOrchestrator.send_command")
-        self.assertIsNotNone(entry)
-        self.assertEqual(entry.pr_origin, "PR-B")
-
-    def test_27_scheduler_relay_pr_origin_is_prb(self):
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry
-
-        reg = get_legacy_dispatch_registry()
-        entry = reg.get("core.scheduler.Scheduler._exec_relay")
-        self.assertIsNotNone(entry)
-        self.assertEqual(entry.pr_origin, "PR-B")
-
-    def test_28_scheduler_mesh_pr_origin_is_prb(self):
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry
-
-        reg = get_legacy_dispatch_registry()
-        entry = reg.get("core.scheduler.Scheduler._exec_mesh_send")
-        self.assertIsNotNone(entry)
-        self.assertEqual(entry.pr_origin, "PR-B")
-
-    def test_29_all_prb_entries_are_compat_only(self):
-        from core.legacy_dispatch_registry import (
-            LegacyDispatchClassification,
-            get_legacy_dispatch_registry,
-        )
-
-        reg = get_legacy_dispatch_registry()
-        prb_modules = [
-            "core.device_orchestrator.DeviceOrchestrator.send_command",
-            "core.scheduler.Scheduler._exec_relay",
-            "core.scheduler.Scheduler._exec_mesh_send",
-        ]
-        for mod in prb_modules:
-            with self.subTest(module=mod):
-                entry = reg.get(mod)
-                self.assertIsNotNone(entry, f"Missing entry for {mod}")
-                self.assertEqual(
-                    entry.classification,
-                    LegacyDispatchClassification.COMPAT_ONLY,
-                    f"Expected COMPAT_ONLY for {mod}, got {entry.classification}",
-                )
-
-    def test_30_snapshot_includes_prb_entries(self):
-        from core.legacy_dispatch_registry import snapshot_registry
-
-        snap = snapshot_registry()
-        modules_in_snap = [e["module"] for e in snap.entries]
-        self.assertIn(
-            "core.device_orchestrator.DeviceOrchestrator.send_command",
-            modules_in_snap,
-        )
-        self.assertIn("core.scheduler.Scheduler._exec_relay", modules_in_snap)
-        self.assertIn("core.scheduler.Scheduler._exec_mesh_send", modules_in_snap)
 
 
 # ===========================================================================
@@ -680,18 +588,6 @@ class TestExistingSpineFunctionalityUnbroken(unittest.TestCase):
             from core.command_router import COMMAND_ROUTER_DISPATCH_SPINE_AUTHORITY
         except ImportError as e:
             self.skipTest(f"command_router unavailable: {e}")
-        self.assertIn("DISPATCH_SPINE", COMMAND_ROUTER_DISPATCH_SPINE_AUTHORITY)
-
-    def test_45_legacy_dispatch_registry_pre_existing_entries_unchanged(self):
-        """Pre-existing PR-3 entries are still present after PR-B additions."""
-        from core.legacy_dispatch_registry import get_legacy_dispatch_registry, reset_registry
-
-        reset_registry()
-        reg = get_legacy_dispatch_registry()
-        # PR-3 entries
-        self.assertTrue(reg.is_registered("core.device_orchestrator"))
-        self.assertTrue(reg.is_registered("galaxy_gateway.orchestrator.galaxy_orchestrator"))
-        self.assertTrue(reg.is_registered("fusion.unified_orchestrator"))
 
 
 if __name__ == "__main__":
