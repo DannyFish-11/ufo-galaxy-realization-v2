@@ -44,6 +44,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from core.status_ws_envelope import build_status_frame
 from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(level=logging.INFO)
@@ -448,7 +449,9 @@ class DeviceStatusManager:
         if not self._websocket_clients:
             return
 
-        message = json.dumps({"event": event_type, "data": data, "timestamp": datetime.now().isoformat()})
+        # 规范键是 type;event 是这一侧的历史键,作为迁移垫片同值带出
+        # (见 core/status_ws_envelope.py)。
+        message = json.dumps(build_status_frame(event_type, legacy_event_key=True, data=data))
 
         disconnected = set()
         for client in self._websocket_clients:
@@ -594,11 +597,11 @@ async def websocket_status(websocket: WebSocket):
     try:
         # 发送当前状态
         await websocket.send_json(
-            {
-                "event": "initial_status",
-                "data": {"summary": status_manager.get_status_summary(), "devices": status_manager.get_all_devices()},
-                "timestamp": datetime.now().isoformat(),
-            }
+            build_status_frame(
+                "initial_status",
+                legacy_event_key=True,
+                data={"summary": status_manager.get_status_summary(), "devices": status_manager.get_all_devices()},
+            )
         )
 
         # 保持连接并处理消息
@@ -607,14 +610,12 @@ async def websocket_status(websocket: WebSocket):
             # 可以处理客户端发送的消息
             message = json.loads(data)
             if message.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
+                await websocket.send_json(build_status_frame("pong", legacy_event_key=True))
             elif message.get("type") == "get_status":
                 device_id = message.get("device_id")
                 if device_id:
                     status = status_manager.get_device_status(device_id)
-                    await websocket.send_json(
-                        {"event": "device_status", "data": status, "timestamp": datetime.now().isoformat()}
-                    )
+                    await websocket.send_json(build_status_frame("device_status", legacy_event_key=True, data=status))
 
     except WebSocketDisconnect:
         await status_manager.remove_websocket_client(websocket)
