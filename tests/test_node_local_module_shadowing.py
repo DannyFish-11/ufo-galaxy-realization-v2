@@ -33,11 +33,14 @@
 钉住"节点内的绝对导入不许指向只有节点自己才有的模块"这条硬约束，并且用 AST 判定
 （不是子串），再各配一条**行为**断言，证明两个受害节点现在真的两种入口下都活。
 
-为什么放过节点自己的 tests/
----------------------------
-``nodes/<节点>/tests/`` 下的文件只会在它自己的 conftest.py 之后被加载，而那个
-conftest 会显式把节点模块登记成 ``core.<名字>`` / ``models.<名字>`` 别名 —— 那是
-一份**有保证**的安排，不是撞运气。入口与生产代码没有这种保证，所以只管后者。
+范围：连节点自己的 tests/ 一起管
+--------------------------------
+一度想放过 ``nodes/<节点>/tests/``，理由是"那些文件只在自己的 conftest 之后加载，
+conftest 会把节点模块登记成 ``core.<名字>`` 别名，是有保证的安排"。后来那套别名
+脚手架被整个删掉了 —— 节点自测也改成了规范的相对导入，于是**豁免的前提没了**。
+
+实测放开豁免后全仓仍是 0 条违规，那就不留这个口子：测试文件退回裸导入同样会
+让人重新踩进"靠 sys.path 顺序撞运气"，没有理由只守生产代码。
 """
 
 from __future__ import annotations
@@ -67,8 +70,6 @@ def _shadowing_imports(node_dir: Path) -> List[Tuple[str, int, str]]:
     """列出该节点里"只有节点自己有、仓库根没有"的绝对导入。"""
     found: List[Tuple[str, int, str]] = []
     for py in sorted(node_dir.rglob("*.py")):
-        if "tests" in py.relative_to(node_dir).parts:
-            continue  # 见模块文档字符串:节点自测有 conftest 兜底
         try:
             tree = ast.parse(py.read_text(encoding="utf-8"))
         except (SyntaxError, UnicodeDecodeError):
