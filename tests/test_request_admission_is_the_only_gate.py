@@ -252,20 +252,6 @@ def test_admission_wraps_the_lane_not_the_other_way_round():
 # ---------------------------------------------------------------------------
 
 
-def test_runtime_session_reports_preemption():
-    """``RuntimeSession.is_preempted()`` 必须真的反映信号状态。"""
-    from core.desktop_presence_runtime import RuntimeSession
-
-    session = RuntimeSession(source="test")
-    assert session.is_preempted() is False, "没挂信号时不该报被抢占"
-
-    signal = asyncio.Event()
-    session.preemption_signal = signal
-    assert session.is_preempted() is False
-    signal.set()
-    assert session.is_preempted() is True
-
-
 def test_the_lane_wait_actually_consults_the_preemption_signal():
     """等会话车道之后必须查一次抢占。
 
@@ -273,7 +259,10 @@ def test_the_lane_wait_actually_consults_the_preemption_signal():
     请求可能还在跑 LLM，而抢占恰恰会发生在这段等待里。不查的话，槽位已经被顶走了却
     照常开工 —— 并发上限被突破一个，且没有任何可观测症状。
 
-    钉的是 ``is_preempted`` 这个**调用**，不是源码文本 —— 解释它的注释里也写着这个词。
+    钉的是**直接查本地信号**这件事。曾经写成 ``rsession.is_preempted()``，绕了一层
+    到会话对象上 —— 而调用方持有的未必是真的 RuntimeSession：测试里是 MagicMock，
+    任何方法调用都返回真值对象，于是每个请求都被判成"已被抢占"。信号本身就是真相，
+    它就在同一作用域里，不该绕。
     """
     import ast
     from pathlib import Path
@@ -294,12 +283,37 @@ def test_the_lane_wait_actually_consults_the_preemption_signal():
         )
     ]
     assert lane_blocks, "找不到会话车道块"
-    called = {
-        node.func.attr
-        for block in lane_blocks
-        for node in ast.walk(block)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-    }
-    assert "is_preempted" in called, (
-        "拿到会话车道之后没有查抢占信号 —— 槽位已被顶走却照常开工，" "并发上限被悄悄突破一个，而且没有任何可观测症状。"
+
+    checks_signal = False
+    for block in lane_blocks:
+        for node in ast.walk(block):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "is_set"
+                and getattr(node.func.value, "id", "") == "_preemption_signal"
+            ):
+                checks_signal = True
+    assert checks_signal, (
+        "拿到会话车道之后没有查 _preemption_signal.is_set() —— 槽位已被顶走却照常开工，"
+        "并发上限被悄悄突破一个，而且没有任何可观测症状。"
     )
+
+
+def test_the_check_does_not_go_through_the_session_object():
+    """判据不许绕到 ``rsession`` 上的方法。
+
+    这一条由一次真实的 CI 变红产生，别删：``rsession.is_preempted()`` 在调用方传入
+    MagicMock 时恒为真值，于是**每一个**请求都被判成已被抢占并直接返回 AR_001。
+    信号是本地的 asyncio.Event，直接查它就不存在这个面。
+    """
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(
+        (Path(__file__).resolve().parent.parent / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
+    )
+    called = {
+        node.func.attr for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+    assert "is_preempted" not in called, "抢占判据又绕回会话对象上的方法了"

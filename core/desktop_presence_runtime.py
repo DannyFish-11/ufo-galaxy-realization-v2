@@ -209,20 +209,6 @@ class RuntimeSession:
         self.manifest_hook: Optional[Any] = None
         self.liminal_activity: str = "none"
         self.simulation_summary: Optional[Dict[str, Any]] = None
-        #: 被抢占信号。由 ``core.request_admission.admit_request`` 在准入时挂上；
-        #: 置位表示这次请求已被更高优先级的请求顶掉，长循环应当在自己的等待点收手。
-        #: ``None`` 表示准入层不可用（降级放行），此时永远不会被抢占。
-        self.preemption_signal: Optional[Any] = None
-
-    def is_preempted(self) -> bool:
-        """这次请求是否已被抢占。
-
-        长循环（ReAct、流式生成）应当在每一轮查它 —— 仲裁器把槽位划走是**记账**，
-        真的停下来得靠被抢占方自己配合。不查的话抢占的净效果只是把并发上限悄悄
-        突破一个。
-        """
-        signal = self.preemption_signal
-        return bool(signal is not None and signal.is_set())
 
     # ------------------------------------------------------------------
     # State helpers
@@ -1075,7 +1061,6 @@ class DesktopPresenceRuntime:
                     origin=source,
                     metadata={"conversation_session_id": conversation_session_id},
                 ) as _preemption_signal:
-                    rsession.preemption_signal = _preemption_signal
                     async with lane_manager.acquire(
                         conversation_session_id,
                         control_session_id=control_session_id,
@@ -1088,7 +1073,11 @@ class DesktopPresenceRuntime:
                         # 而且是唯一一个「等待时长不可控」的点。开工之后再中途掐断，
                         # 对用户是不可解释的——用户发起的请求本来就 preemptable=False，
                         # 能走到这里被抢的只有 ambient 那一类。
-                        if rsession.is_preempted():
+                        # 判据直接查**本地信号**，不绕 rsession 上的方法：信号本身就是
+                        # 真相，绕一层只会多一处可能对不上的地方 —— 而且调用方持有的
+                        # 未必是真的 RuntimeSession（测试里是 MagicMock，任何方法调用
+                        # 都返回真值对象，于是每次都判成被抢占）。
+                        if _preemption_signal.is_set():
                             raise ArbiterPreemptedError(
                                 rsession.runtime_session_id,
                                 "preempted while waiting for the session execution lane",
