@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
@@ -199,6 +200,8 @@ class BodyMeshRegistry:
         self._persistence_store = persistence_store
         self._auto_persist = auto_persist
         self._restore_in_progress = False
+        #: mesh_id → (成员指纹, session_id)。见 :meth:`_stable_mesh_session_id`。
+        self._mesh_session_ids: Dict[str, tuple] = {}
         if auto_restore:
             self.restore_from_persistence()
 
@@ -503,6 +506,48 @@ class BodyMeshRegistry:
     # Mesh Session integration (PR-33)
     # ------------------------------------------------------------------
 
+    def _stable_mesh_session_id(self, mesh_id: str, device_ids: List[str]) -> str:
+        """返回 *mesh_id* 当前这一段会话的 ID —— **同一段会话每次读都是同一个**。
+
+        为什么需要这个
+        ==============
+        ``get_mesh_session()`` / ``get_mesh_session_coordinator()`` 都是**按当前
+        注册表状态即时构造**契约对象的，而 ``build_mesh_session(session_id=None)``
+        会在没人给 ID 时**当场生成一个新的**。于是同一段会话每读一次就换一个 ID：
+
+            get_mesh_session().session_id  →  msess_c91de147a9b1
+            get_mesh_session().session_id  →  msess_7647d2ca7b86   ← 什么都没变
+
+        后果不只是"难看"。``/api/v1/projection/runtime/multi-device`` 在**同一个
+        响应体**里放了两块：``mesh_sessions[0]`` 走 ``get_mesh_session()``、
+        ``coordinator_summaries[0]`` 走 ``get_mesh_session_coordinator()`` ——
+        两次独立调用、两个不同的随机串，描述的却是同一段会话。实测：
+
+            mesh_sessions[0].session_id         msess_0a0057e5878f
+            coordinator_summaries[0].session_id msess_0385128ce9ff
+
+        任何拿 session_id 去 join 这两块的消费方，join 到的是空。轮询这个端点的
+        客户端也分不出"会话换了"和"我又读了一次"。
+
+        判据
+        ====
+        会话 ID 应当在**会话本身**变化时才变。这里的"会话"由成员集合界定：成员集
+        变了就是另一段会话，没变就还是这一段。所以按成员指纹缓存，指纹变了才重铸。
+
+        不用"由成员集合直接算哈希"的原因：那样一台设备离开又回来会拿回**同一个**
+        ID，而那是时间上的另一段会话。缓存 + 指纹比对能区分这两件事。
+
+        进程重启不保留（只在内存里）——重启本来就是新的一段。
+        """
+        fingerprint = "\x00".join(sorted(device_ids))
+        with self._lock:
+            cached = self._mesh_session_ids.get(mesh_id)
+            if cached is not None and cached[0] == fingerprint:
+                return cached[1]
+            minted = f"msess_{uuid.uuid4().hex[:12]}"
+            self._mesh_session_ids[mesh_id] = (fingerprint, minted)
+            return minted
+
     def get_mesh_session(
         self,
         mesh_id: str = "default_mesh",
@@ -545,7 +590,7 @@ class BodyMeshRegistry:
             try:
                 return build_mesh_session(
                     mesh_id=mesh_id,
-                    session_id=session_id,
+                    session_id=session_id or self._stable_mesh_session_id(mesh_id, []),
                 )
             except Exception:
                 return None
@@ -582,7 +627,9 @@ class BodyMeshRegistry:
             return build_mesh_session(
                 source_device_id=source_device_id,
                 primary_device_id=primary_device_id,
-                session_id=session_id,
+                # 没人指定就取本 mesh 当前这一段会话的稳定 ID，而不是让
+                # build_mesh_session 每次现铸一个 —— 见 _stable_mesh_session_id。
+                session_id=session_id or self._stable_mesh_session_id(mesh_id, [e.device_id for e in entries]),
                 mesh_id=mesh_id,
                 participants=participants,
                 multi_device_required=len(entries) > 1,
