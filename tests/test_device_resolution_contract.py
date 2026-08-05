@@ -6,7 +6,6 @@ PR-DEVICE-RESOLUTION: Contract tests for the Unified Node Contract v1.
 Covers:
     - schemas/node_contract.py: request/response model validation
     - schemas/node_errors.py: error code consistency
-    - nodes/common/node_facade.py: action registration for all 11 facades
     - launcher/launcher_adapter.py: 4-mode feature flag behavior
 
 Run: python -m unittest tests.test_device_resolution_contract -v
