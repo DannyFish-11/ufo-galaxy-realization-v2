@@ -9,9 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.hardware_compute_profiler import VRAM_HEADROOM_FACTOR
+
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
 _BACKGROUND_TASKS: set = set()
+
 
 logger = logging.getLogger("Galaxy.LocalBrain")
 
@@ -40,30 +43,12 @@ class HardwareProfile:
     quantization: str = "none"  # 当前量化方式
 
     def can_fit_model(self, model_size_mb: int) -> bool:
-        """判断 VRAM 是否足够加载模型。
+        """判断 VRAM 是否足够加载模型。余量与 ``GPUProfile.can_fit_model`` 同源。
 
-        判据取 :data:`core.hardware_compute_profiler.VRAM_HEADROOM_FACTOR` ——
-        与 :meth:`GPUProfile.can_fit_model` **同源**。
-
-        原来这里是另一套：``(vram_mb - vram_used_mb) * 0.9 >= model_size_mb``，
-        10% 余量。两套在一条真实的带里给相反结论 —— 24G 卡已用 18G（空闲 6G）时：
-
-            5000MB 模型   这套判「放得下」   权威判「放不下」
-            5200MB 模型   这套判「放得下」   权威判「放不下」
-            5400MB 模型   这套判「放得下」   权威判「放不下」
-
-        余量取大的那个（20%）：权重之外还要给激活值与 KV cache 留地方，按 10% 算
-        放得下、实际 OOM，代价比保守地少放一个模型大得多。
-
-        取不到权威模块时退回原口径而不是报错 —— 这是个纯读的判断，不该因为一个
-        import 失败就让本地主脑管理器整个起不来。
+        原来这里另有一套 10% 余量的判据，与权威的 20% 会打架；实测数据见
+        ``tests/test_vram_fit_has_one_criterion.py``。
         """
-        available_vram = self.vram_mb - self.vram_used_mb
-        try:
-            from core.hardware_compute_profiler import VRAM_HEADROOM_FACTOR
-        except Exception:  # noqa: BLE001 — 权威模块不可用时退回原口径
-            return available_vram * 0.9 >= model_size_mb
-        return available_vram > model_size_mb * VRAM_HEADROOM_FACTOR
+        return (self.vram_mb - self.vram_used_mb) > model_size_mb * VRAM_HEADROOM_FACTOR
 
 
 class LocalBrainManager:

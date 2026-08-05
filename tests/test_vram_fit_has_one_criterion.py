@@ -111,20 +111,3 @@ def test_the_disagreeing_band_is_the_one_that_was_fixed():
         old = free * 0.9 >= size_mb
         new = free > size_mb * VRAM_HEADROOM_FACTOR
         assert old != new, f"{size_mb}MB 在新旧口径下本来就一致，这个样本证明不了什么"
-
-
-def test_falls_back_when_the_authority_is_unavailable(monkeypatch):
-    """权威模块取不到时退回原口径，而不是让本地主脑管理器整个起不来。"""
-    import builtins
-
-    real_import = builtins.__import__
-
-    def _blocked(name, *args, **kwargs):
-        if name == "core.hardware_compute_profiler":
-            raise ImportError("simulated")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", _blocked)
-    brain = HardwareProfile(vram_mb=24000, vram_used_mb=18000)
-    assert brain.can_fit_model(1000) is True
-    assert brain.can_fit_model(20000) is False
