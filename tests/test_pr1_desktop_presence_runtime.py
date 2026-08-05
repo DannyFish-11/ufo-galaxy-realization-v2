@@ -735,21 +735,69 @@ class TestCompatWebSocketAuthorityChain:
         ), "core/api_routes.py compat websocket chat must call runtime.handle_request()"
 
     def test_compat_ws_chat_does_not_call_openclawd_directly(self):
-        src = self._read_api_routes()
-        branch_start = src.find('elif msg_type == "chat":')
-        assert branch_start != -1, 'compat websocket "chat" branch not found'
-        candidates = [
-            src.find("\n                elif ", branch_start + 1),
-            src.find("\n                    except ", branch_start + 1),
-        ]
-        valid = [c for c in candidates if c > branch_start]
-        next_boundary = min(valid) if valid else -1
-        branch_body = src[branch_start:next_boundary] if next_boundary != -1 else src[branch_start:]
+        """兼容层的 "chat" 分支不得直接调 OpenClawd.process()。
+
+        判据按 **AST** 取分支体,不按源码文本切
+        ------------------------------------------
+        这条原先是这么找分支边界的::
+
+            src.find("\\n                elif ", branch_start + 1)
+            src.find("\\n                    except ", branch_start + 1)
+
+        —— 把「下一个 elif 缩进 16 格、下一个 except 缩进 20 格」编进了判据。
+        那两个数字随便哪次重构(把这段挪进/挪出一层 try、black 换个行宽)都会变,
+        变了之后 ``find`` 返回 -1 → 分支体被切成"从这里到文件结尾",
+        判据于是变成在**整个文件剩余部分**里搜 ``clawd.process(`` —— 一个几乎必然
+        命中的条件,这条守卫就永远红着(或者反过来,切多了永远绿)。
+
+        本仓已经因为同一种写法吃过一次假警(见 test_device_ingress_is_canonical.py
+        里那段说明:启动器重做改了缩进,守卫报"没挂兼容面",而兼容面好好挂着)。
+        改成按 AST 定位 ``msg_type == "chat"`` 那个分支节点,取它真正的 body 子树 ——
+        缩进、换行、包在几层 try 里都不影响。
+        """
+        import ast
+
+        tree = ast.parse(self._read_api_routes())
+
+        def _is_chat_branch(node) -> bool:
+            t = node.test
+            return (
+                isinstance(t, ast.Compare)
+                and isinstance(t.left, ast.Name)
+                and t.left.id == "msg_type"
+                and len(t.ops) == 1
+                and isinstance(t.ops[0], ast.Eq)
+                and isinstance(t.comparators[0], ast.Constant)
+                and t.comparators[0].value == "chat"
+            )
+
+        branches = [n for n in ast.walk(tree) if isinstance(n, ast.If) and _is_chat_branch(n)]
+        assert branches, 'compat websocket "chat" branch not found'
+
+        offenders = []
+        for br in branches:
+            for stmt in br.body:  # 只看该分支自己的 body，不含后续 elif/else
+                for call in ast.walk(stmt):
+                    if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute):
+                        if call.func.attr == "process":
+                            offenders.append(f"line {call.lineno}")
+        assert not offenders, (
+            'compat websocket "chat" branch must not call OpenClawd.process() directly；' f"发现直接调用: {offenders}"
+        )
+        # 同一个分支还必须带上 source="chat"（可观测标签）。同样按 AST 判：
+        # 找该分支体内任意调用的 source= 关键字实参是不是常量 "chat"。
+        has_source_chat = any(
+            isinstance(call, ast.Call)
+            and any(
+                kw.arg == "source" and isinstance(kw.value, ast.Constant) and kw.value.value == "chat"
+                for kw in call.keywords
+            )
+            for br in branches
+            for stmt in br.body
+            for call in ast.walk(stmt)
+        )
         assert (
-            "clawd.process(" not in branch_body
-        ), 'compat websocket "chat" branch must not call OpenClawd.process() directly'
-        assert (
-            'source="chat"' in branch_body or "source='chat'" in branch_body
+            has_source_chat
         ), 'compat websocket "chat" branch must keep source="chat" when calling runtime.handle_request()'
 
     def test_compat_ws_chat_context_normalization_helper(self):

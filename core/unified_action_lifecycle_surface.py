@@ -60,7 +60,8 @@ This module closes that gap by providing:
    makes the Android-side result a first-class object.
 
 6. :func:`build_from_normalizer_outcome` — build/update a surface from an
-   :class:`~core.android_result_normalizer.AndroidResultNormalizerOutcome`.
+   the canonical runtime-truth ingress outcome
+   (:class:`~core.unified_runtime_truth_ingress.RuntimeTruthIngressOutcome`).
 
 7. :func:`apply_blocker` — converge a blocker into the surface.
 

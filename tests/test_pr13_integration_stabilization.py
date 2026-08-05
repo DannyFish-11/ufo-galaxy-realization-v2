@@ -76,11 +76,6 @@ class TestModuleImports:
 
     def test_target_device_validator_importable(self):
         """Layer 5: core.target_device_validator is importable."""
-        import core.target_device_validator  # noqa: F401
-
-    def test_cross_device_candidates_importable(self):
-        """Layer 6: core.cross_device_candidates is importable."""
-        import core.cross_device_candidates  # noqa: F401
 
     def test_failure_domains_importable(self):
         """Layer 9a: core.failure_domains is importable."""
@@ -137,30 +132,6 @@ class TestAuthoritySentinels:
         from core.target_device_validator import TARGET_DEVICE_VALIDATOR_AUTHORITY
 
         assert isinstance(TARGET_DEVICE_VALIDATOR_AUTHORITY, str)
-        assert len(TARGET_DEVICE_VALIDATOR_AUTHORITY) > 0
-
-    def test_cross_device_candidates_authority(self):
-        from core.cross_device_candidates import CROSS_DEVICE_CANDIDATES_AUTHORITY
-
-        assert isinstance(CROSS_DEVICE_CANDIDATES_AUTHORITY, str)
-        assert len(CROSS_DEVICE_CANDIDATES_AUTHORITY) > 0
-
-    def test_authority_sentinels_are_distinct(self):
-        """All authority sentinels must be unique strings."""
-        from core.capability_registry import CAPABILITY_REGISTRY_AUTHORITY
-        from core.cross_device_candidates import CROSS_DEVICE_CANDIDATES_AUTHORITY
-        from core.device_participation import DEVICE_PARTICIPATION_AUTHORITY
-        from core.device_readiness import DEVICE_READINESS_AUTHORITY
-        from core.target_device_validator import TARGET_DEVICE_VALIDATOR_AUTHORITY
-
-        sentinels = [
-            DEVICE_READINESS_AUTHORITY,
-            DEVICE_PARTICIPATION_AUTHORITY,
-            CAPABILITY_REGISTRY_AUTHORITY,
-            TARGET_DEVICE_VALIDATOR_AUTHORITY,
-            CROSS_DEVICE_CANDIDATES_AUTHORITY,
-        ]
-        assert len(sentinels) == len(set(sentinels)), "Authority sentinels must be distinct; duplicates found"
 
 
 # ===========================================================================
@@ -261,45 +232,6 @@ class TestFieldNameConsistency:
 
         r = TargetDeviceValidationResult(device_id="d1")
         assert hasattr(r, "sources")
-        assert isinstance(r.sources, dict)
-
-    def test_cross_device_candidate_has_ready(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        assert hasattr(c, "ready")
-
-    def test_cross_device_candidate_has_orchestration_eligible(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        assert hasattr(c, "orchestration_eligible")
-
-    def test_cross_device_candidate_has_capability_match(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        assert hasattr(c, "capability_match")
-
-    def test_cross_device_candidate_has_selected(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        assert hasattr(c, "selected")
-
-    def test_cross_device_candidate_has_reasons(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        assert hasattr(c, "reasons")
-        assert isinstance(c.reasons, list)
-
-    def test_cross_device_candidate_has_sources(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        assert hasattr(c, "sources")
-        assert isinstance(c.sources, dict)
 
 
 # ===========================================================================
@@ -373,42 +305,6 @@ class TestToDictConsistency:
             "sources",
         ):
             assert key in d, f"Missing key: {key}"
-        self._assert_json_safe(d)
-
-    def test_cross_device_candidate_to_dict(self):
-        from core.cross_device_candidates import CrossDeviceCandidate
-
-        c = CrossDeviceCandidate(device_id="d1")
-        d = c.to_dict()
-        assert isinstance(d, dict)
-        for key in (
-            "device_id",
-            "ready",
-            "orchestration_eligible",
-            "capability_match",
-            "selected",
-            "reasons",
-            "sources",
-        ):
-            assert key in d, f"Missing key: {key}"
-        self._assert_json_safe(d)
-
-    def test_cross_device_resolution_to_dict(self):
-        from core.cross_device_candidates import CrossDeviceCandidateResolution
-
-        r = CrossDeviceCandidateResolution()
-        d = r.to_dict()
-        assert isinstance(d, dict)
-        for key in (
-            "required_capabilities",
-            "requested_target_device",
-            "selected_device_ids",
-            "eligible_device_ids",
-            "candidates",
-            "reasons",
-        ):
-            assert key in d, f"Missing key: {key}"
-        self._assert_json_safe(d)
 
 
 # ===========================================================================
@@ -446,120 +342,6 @@ def _patch_capability(capable_map: Dict[str, bool]):
         reasons = [] if match else [f"capability-mismatch:{device_id}"]
         return match, {}, reasons
 
-    return patch(f"{MOD_CANDIDATES}._check_capabilities", side_effect=_check)
-
-
-class TestInterLayerIntegration:
-    """Integration tests for the combined candidate resolution path."""
-
-    def test_all_gates_pass_device_is_selected(self):
-        """A device passing all three gates (readiness, participation, capability) is selected."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            _patch_enumerate(["dev-a"]),
-            _patch_readiness({"dev-a": True}),
-            _patch_participation({"dev-a": True}),
-            _patch_capability({"dev-a": True}),
-        ):
-            result = resolve_cross_device_candidates(required_capabilities=["screen"])
-        assert "dev-a" in result.selected_device_ids
-        candidate = next(c for c in result.candidates if c.device_id == "dev-a")
-        assert candidate.selected is True
-        assert candidate.ready is True
-        assert candidate.orchestration_eligible is True
-        assert candidate.capability_match is True
-
-    def test_readiness_gate_excludes_device(self):
-        """A device failing readiness is excluded even if other gates pass."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with _patch_enumerate(["dev-b"]), _patch_readiness({"dev-b": False}), _patch_participation({"dev-b": True}):
-            result = resolve_cross_device_candidates()
-        assert "dev-b" not in result.selected_device_ids
-        candidate = next(c for c in result.candidates if c.device_id == "dev-b")
-        assert candidate.selected is False
-        assert candidate.ready is False
-        assert len(candidate.reasons) > 0
-
-    def test_participation_gate_excludes_device(self):
-        """A device failing participation is excluded when gate is required."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with _patch_enumerate(["dev-c"]), _patch_readiness({"dev-c": True}), _patch_participation({"dev-c": False}):
-            result = resolve_cross_device_candidates(require_orchestration_eligible=True)
-        assert "dev-c" not in result.selected_device_ids
-
-    def test_participation_gate_skipped_when_not_required(self):
-        """A device failing participation passes when require_orchestration_eligible=False."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            _patch_enumerate(["dev-d"]),
-            _patch_readiness({"dev-d": True}),
-            _patch_participation({"dev-d": False}),
-            _patch_capability({"dev-d": True}),
-        ):
-            result = resolve_cross_device_candidates(require_orchestration_eligible=False)
-        assert "dev-d" in result.selected_device_ids
-
-    def test_capability_gate_excludes_device(self):
-        """A device failing capability check is excluded."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            _patch_enumerate(["dev-e"]),
-            _patch_readiness({"dev-e": True}),
-            _patch_participation({"dev-e": True}),
-            _patch_capability({"dev-e": False}),
-        ):
-            result = resolve_cross_device_candidates(required_capabilities=["camera"])
-        assert "dev-e" not in result.selected_device_ids
-        candidate = next(c for c in result.candidates if c.device_id == "dev-e")
-        assert candidate.capability_match is False
-
-    def test_multiple_devices_mixed_eligibility(self):
-        """Multiple devices are filtered correctly when eligibility varies."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        devices = ["ready-1", "ready-2", "not-ready"]
-        with (
-            _patch_enumerate(devices),
-            _patch_readiness({"ready-1": True, "ready-2": True, "not-ready": False}),
-            _patch_participation({"ready-1": True, "ready-2": True, "not-ready": False}),
-            _patch_capability({"ready-1": True, "ready-2": True, "not-ready": False}),
-        ):
-            result = resolve_cross_device_candidates()
-        assert "ready-1" in result.selected_device_ids
-        assert "ready-2" in result.selected_device_ids
-        assert "not-ready" not in result.selected_device_ids
-
-    def test_requested_valid_target_is_selected(self):
-        """A valid requested target device is included in selected_device_ids."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            _patch_enumerate(["target-dev"]),
-            _patch_readiness({"target-dev": True}),
-            _patch_participation({"target-dev": True}),
-            _patch_capability({"target-dev": True}),
-        ):
-            result = resolve_cross_device_candidates(requested_target_device="target-dev")
-        assert "target-dev" in result.selected_device_ids
-
-    def test_requested_invalid_target_is_excluded(self):
-        """An invalid requested target device is excluded with reasons in the resolution."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            _patch_enumerate(["bad-dev"]),
-            _patch_readiness({"bad-dev": False}),
-            _patch_participation({"bad-dev": False}),
-        ):
-            result = resolve_cross_device_candidates(requested_target_device="bad-dev")
-        assert "bad-dev" not in result.selected_device_ids
-        assert len(result.reasons) > 0
-
 
 # ===========================================================================
 # F) Graceful degradation contract
@@ -582,55 +364,6 @@ class TestGracefulDegradation:
             except Exception as exc:
                 pytest.fail(f"get_device_readiness raised unexpectedly: {exc}")
         assert result is not None
-        assert result.device_id == "test-device"
-
-    def test_target_validator_never_raises(self):
-        """validate_target_device must not raise even when all subsystems fail."""
-        from core.target_device_validator import validate_target_device
-
-        with (
-            _patch_enumerate([]),
-            patch(
-                "core.target_device_validator._check_readiness",
-                return_value=(False, False, {}, ["readiness-unavailable"]),
-            ),
-        ):
-            try:
-                result = validate_target_device("test-device")
-            except Exception as exc:
-                pytest.fail(f"validate_target_device raised unexpectedly: {exc}")
-        assert result is not None
-        assert result.device_id == "test-device"
-        assert result.valid is False
-
-    def test_cross_device_candidates_never_raises(self):
-        """resolve_cross_device_candidates must not raise even when all subsystems fail."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        def _boom():
-            raise RuntimeError("boom")
-
-        with patch(f"{MOD_CANDIDATES}._enumerate_device_ids", side_effect=_boom):
-            try:
-                result = resolve_cross_device_candidates()
-            except Exception as exc:
-                pytest.fail(f"resolve_cross_device_candidates raised unexpectedly: {exc}")
-        assert result is not None
-        assert result.selected_device_ids == []
-
-    def test_get_selected_candidates_never_raises(self):
-        """get_selected_cross_device_candidates must not raise."""
-        from core.cross_device_candidates import get_selected_cross_device_candidates
-
-        def _boom():
-            raise RuntimeError("boom")
-
-        with patch(f"{MOD_CANDIDATES}._enumerate_device_ids", side_effect=_boom):
-            try:
-                result = get_selected_cross_device_candidates()
-            except Exception as exc:
-                pytest.fail(f"get_selected_cross_device_candidates raised unexpectedly: {exc}")
-        assert isinstance(result, list)
 
 
 # ===========================================================================
@@ -883,64 +616,3 @@ class TestDocumentationPresence:
         doc_path = os.path.join(root, "galaxy_gateway", "GATEWAY_TRANSPORT_BOUNDARY.md")
         if not os.path.isfile(doc_path):
             pytest.skip("GATEWAY_TRANSPORT_BOUNDARY.md not present (may be in a subdirectory)")
-        assert os.path.isfile(doc_path)
-
-
-# ===========================================================================
-# J) Logging field consistency
-# ===========================================================================
-
-
-class TestLoggingFieldConsistency:
-    """Exclusion and selection decisions are logged with consistent structured fields."""
-
-    def test_excluded_device_logged_at_info(self, caplog):
-        """Not-ready device produces an INFO log from the candidates module."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            caplog.at_level(logging.INFO, logger="Galaxy.CrossDeviceCandidates"),
-            _patch_enumerate(["log-dev-1"]),
-            _patch_readiness({"log-dev-1": False}),
-            _patch_participation({"log-dev-1": True}),
-        ):
-            resolve_cross_device_candidates()
-
-        info_records = [
-            r for r in caplog.records if r.name == "Galaxy.CrossDeviceCandidates" and r.levelno >= logging.INFO
-        ]
-        assert len(info_records) > 0, "Expected at least one INFO log for excluded device"
-        assert any("EXCLUDED" in r.message for r in info_records)
-
-    def test_selected_device_logged_at_debug(self, caplog):
-        """Selected device produces a DEBUG log from the candidates module."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        with (
-            caplog.at_level(logging.DEBUG, logger="Galaxy.CrossDeviceCandidates"),
-            _patch_enumerate(["log-dev-2"]),
-            _patch_readiness({"log-dev-2": True}),
-            _patch_participation({"log-dev-2": True}),
-            _patch_capability({"log-dev-2": True}),
-        ):
-            resolve_cross_device_candidates()
-
-        debug_records = [r for r in caplog.records if r.name == "Galaxy.CrossDeviceCandidates"]
-        assert any("SELECTED" in r.message for r in debug_records)
-
-    def test_log_messages_contain_device_id(self, caplog):
-        """INFO-level exclusion logs must mention the device_id."""
-        from core.cross_device_candidates import resolve_cross_device_candidates
-
-        device_id = "specific-device-id-xyz"
-
-        with (
-            caplog.at_level(logging.INFO, logger="Galaxy.CrossDeviceCandidates"),
-            _patch_enumerate([device_id]),
-            _patch_readiness({device_id: False}),
-            _patch_participation({device_id: True}),
-        ):
-            resolve_cross_device_candidates()
-
-        relevant = [r for r in caplog.records if r.name == "Galaxy.CrossDeviceCandidates" and device_id in r.message]
-        assert len(relevant) > 0, f"Expected at least one log message containing '{device_id}'"

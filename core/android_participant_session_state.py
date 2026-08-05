@@ -138,7 +138,7 @@ ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY: str = (
     "path for phase transitions.  "
     "This module is the CONCRETE Android implementation of the participant-"
     "generic session lifecycle contract defined in "
-    "core.participant_authority_interfaces (PR-8).  "
+    "the participant-generic session lifecycle contract.  "
     "AndroidParticipantSessionPhase implements ParticipantSessionPhase; "
     "AndroidParticipantSessionSignal implements ParticipantSessionSignal."
 )

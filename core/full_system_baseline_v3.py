@@ -1828,7 +1828,7 @@ class FullSystemBaselineV3Evaluator:
                     "Is NATS / distributed multi-node execution real (beyond scaffolding)? "
                     "What is the actual message throughput / correctness proof?"
                 ),
-                signal_source="core.agent_bus_fabric or NATS runtime logs",
+                signal_source="NATS runtime logs (core.nats_bus)",
                 currently_answerable=False,
                 next_action_hint="Produce runtime proof artifact from real NATS/fabric "
                 "execution path before claiming closure.",

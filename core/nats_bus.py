@@ -31,7 +31,7 @@ published via this bus must carry the ``_nats_schema`` discriminator field
 ``publish_task_result_envelope``) so that consumers can verify the envelope
 format.
 
-Layer identity (from core.agent_bus_fabric):
+Layer identity (原引自 core.agent_bus_fabric —— 该声明模块已删，语义保留于此):
     NATS_CARRIER_LAYER = "NATS::CARRIER_FABRIC_LAYER"
 """
 

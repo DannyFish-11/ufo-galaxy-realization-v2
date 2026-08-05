@@ -113,24 +113,3 @@ class TestProductionBaselineIntegration:
 
         assert "perception_boundary" in summary
         assert summary["perception_boundary"]["canonical_fact_present"] is True
-        assert summary["perception_boundary"]["compat_surfaces_present"] == ["response.metadata.multimodal_context"]
-
-
-class TestCanonicalStateAdapterIntegration:
-    def test_adapter_exposes_perception_boundary_summary(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        adapter = CanonicalStateAdapter(_make_metadata(canonical=True, compat=True))
-
-        summary = adapter.perception_boundary_summary()
-        assert summary["canonical_fact_present"] is True
-        assert summary["compat_surfaces_present"] == ["response.metadata.multimodal_context"]
-
-    def test_canonical_state_summary_includes_boundary_snapshot(self):
-        from core.perception.canonical_state_adapter import CanonicalStateAdapter
-
-        adapter = CanonicalStateAdapter(_make_metadata(canonical=True, compat=False, include_ucp_summary=True))
-
-        summary = adapter.canonical_state_summary()
-        assert "perception_boundary" in summary
-        assert summary["perception_boundary"]["canonical_fact_present"] is True

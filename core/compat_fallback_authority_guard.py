@@ -890,9 +890,8 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
             "continuity path."
         ),
         compat_path=(
-            "Any legacy module registered in core.legacy_dispatch_registry "
-            "as FACADE_ONLY, COMPAT_ONLY, or DEPRECATED that attempts to "
-            "dispatch outside the canonical spine, including: "
+            "Any legacy module that attempts to dispatch outside the "
+            "canonical spine, including: "
             "core.device_orchestrator legacy NodeRegistry path, "
             "core.scheduler legacy ProxyRelay / MeshCoordinator fallback, "
             "galaxy_gateway.task_router legacy surface, "
@@ -909,9 +908,6 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
             "for route/dispatch/recovery paths.  "
             "LEGACY_DISPATCH_BLOCKING_FIRST_POLICY mandates that legacy "
             "dispatch paths produce block_due_to_legacy_dispatch artifacts.  "
-            "core.legacy_dispatch_registry LEGACY_DISPATCH_BLOCKING_FIRST_"
-            "ENFORCEMENT_POLICY and check_dispatch_blocked() extend "
-            "observability-only to blocking-first for registered entries.  "
             "PR-B convergence already required CommandRouter pre-attempt "
             "before legacy NodeRegistry / ProxyRelay / MeshCoordinator "
             "fallback; PR-8 adds a formal blocking artifact at that gate."
@@ -922,9 +918,7 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
             "CompatLegacyBlockingRecord with decision="
             "block_due_to_legacy_dispatch in the blocking enforcer snapshot.  "
             "build_blocking_canonicalization_snapshot() exposes "
-            "blocked_legacy_dispatch_count.  "
-            "snapshot_registry() in core.legacy_dispatch_registry provides "
-            "the full legacy dispatch catalog for cross-reference."
+            "blocked_legacy_dispatch_count."
         ),
         pr_addressed="PR-8",
     ),

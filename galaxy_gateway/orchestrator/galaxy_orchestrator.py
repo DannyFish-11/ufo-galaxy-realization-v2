@@ -59,8 +59,8 @@ GALAXY_ORCHESTRATOR_GRAPH_CONTRIBUTOR: str = "GALAXY_ORCHESTRATOR_GRAPH_CONTRIBU
 
 #: Affirms that GalaxyOrchestrator is a facade/planner helper under the
 #: PR-A canonical execution spine.  All system-level dispatch MUST go through
-#: CanonicalTask → TaskEnvelope → CommandRouter.route_envelope().
-#: This module is registered in core.legacy_dispatch_registry as FACADE_ONLY.
+#: CanonicalTask → TaskEnvelope → CommandRouter.route_envelope().  FACADE_ONLY:
+#: blocking enforced by compat_legacy_path_blocking_canonicalization.enforce_canonical_gate().
 GALAXY_ORCHESTRATOR_CANONICAL_TASK_FACADE: str = (
     "GALAXY_ORCHESTRATOR::CANONICAL_TASK_FACADE_V1: "
     "This module is a planner/facade helper only. "

@@ -228,8 +228,8 @@ class ResultSourceChannel(str, Enum):
     """Delegated execution / handoff result callback."""
 
     LOCAL = "local"
-    """本地执行链路结果 — 来自 core/local_execution_chain.py 的本地执行结果。
-    Local execution chain result from core/local_execution_chain.py record_local_execution()."""
+    """本地执行链路结果 —— 由 command_router 完成本地派发后归口到这里。
+    Local execution result, funnelled here after CommandRouter finishes local dispatch."""
 
     UNKNOWN = "unknown"
     """Unclassified source — must NOT be used for production paths."""

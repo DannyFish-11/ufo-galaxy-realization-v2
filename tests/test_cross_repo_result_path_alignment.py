@@ -279,32 +279,11 @@ class TestCanonicalGoalResultPath:
         )
 
 
-# ===========================================================================
-# E.  android_result_normalizer category table
-# ===========================================================================
-
-
-class TestAndroidResultNormalizerGoalResult:
-
-    def test_E01_goal_result_categorised_as_user_visible_business_result(self):
-        from core.android_result_normalizer import (
-            _MESSAGE_TYPE_TO_CATEGORY,
-            AndroidResultCategory,
-        )
-
-        assert "goal_result" in _MESSAGE_TYPE_TO_CATEGORY, (
-            "goal_result must be in _MESSAGE_TYPE_TO_CATEGORY — without this "
-            "the normalizer silently treats it as 'unknown' and skips normalization."
-        )
-        assert _MESSAGE_TYPE_TO_CATEGORY["goal_result"] == AndroidResultCategory.user_visible_business_result
-
-    def test_E02_goal_execution_result_category_unchanged(self):
-        from core.android_result_normalizer import (
-            _MESSAGE_TYPE_TO_CATEGORY,
-            AndroidResultCategory,
-        )
-
-        assert _MESSAGE_TYPE_TO_CATEGORY["goal_execution_result"] == AndroidResultCategory.user_visible_business_result
+# E 段原先测 core.android_result_normalizer 的消息类型分类表。该模块已删——它与活的
+# core.unified_runtime_truth_ingress.ingest_android_runtime_state_update 做同一件事
+# （分类 + 路由到同样三个 sub-ingress），而后者才在 gateway 的
+# android/handlers/{goal_execution,task_lifecycle}.py 里被真实调用。goal_result 能否被
+# 正确路由，由上面 C/D 段直接对着活 handler 表断言，比对着一张没人读的分类表更贴近真实路径。
 
 
 # ===========================================================================

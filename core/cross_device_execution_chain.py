@@ -12,7 +12,8 @@ the unified subject:
 
     DesktopPresenceRuntime (outer shell / Windows clothing)
         └─ unified subject runtime
-              ├─ LOCAL EXECUTION CHAIN      (core/local_execution_chain.py)
+              ├─ LOCAL EXECUTION CHAIN      (command_router → 本地执行，结果经
+              │                              core/unified_result_ingress.py 归口)
               └─ CROSS-DEVICE EXECUTION CHAIN  ← this module
 
 Both chains are canonical, parallel, and explicitly defined.  Neither is

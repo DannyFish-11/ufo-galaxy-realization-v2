@@ -399,7 +399,6 @@ _DISPATCH_PATH_CATALOGUE: List[DispatchChainRecord] = [
             "core.openclawd",
             "core.agent.kernel",
             "core.command_router",
-            "core.local_execution_chain",
         ],
         reconciliation_module=None,
         description=(
@@ -442,7 +441,6 @@ _DISPATCH_PATH_CATALOGUE: List[DispatchChainRecord] = [
         signal_modules=[
             "core.runtime.source_dispatch_orchestrator",
             "core.openclawd",
-            "core.local_execution_chain",
         ],
         reconciliation_module=None,
         description=(
