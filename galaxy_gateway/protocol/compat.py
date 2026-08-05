@@ -332,6 +332,30 @@ def aip_v2_binary_to_v3(raw_bytes: bytes) -> Optional[dict]:
         return None
 
 
+def canonical_message_type(raw_type: str) -> str:
+    """Return the canonical AIP v3 type name for *raw_type*.
+
+    Why this exists as a public helper
+    ----------------------------------
+    ``_LEGACY_TYPE_MAP`` is the single place in this repo that knows
+    ``heartbeat`` and ``device_heartbeat`` are the same thing.  Callers that
+    only need to *compare* two type names — rather than parse a whole
+    message — previously had no way to ask, so they hand-copied slices of the
+    vocabulary.  A hand-copied slice is a second definition: when a new alias
+    is added here, the copy silently stops matching and the symptom is
+    "some clients' messages land in the unknown-type branch".
+
+    Unknown names are returned unchanged.  That is deliberate: this function
+    answers "what is this called canonically", not "is this valid" —
+    validation belongs to :func:`parse_message`.
+
+    :param raw_type: A type name from any protocol version (v1/v2/v3).
+    :returns: The v3 canonical name, or *raw_type* itself when not an alias.
+    """
+    canonical = _LEGACY_TYPE_MAP.get(str(raw_type or ""))
+    return canonical.value if canonical is not None else str(raw_type or "")
+
+
 def parse_message_compat(data: Union[str, dict]) -> AIPMessage:
     """
     Parse an incoming message from any supported AIP protocol version.

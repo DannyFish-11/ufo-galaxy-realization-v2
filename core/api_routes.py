@@ -62,6 +62,8 @@ from dataclasses import dataclass  # noqa: E402  启动时间戳须在重导入�
 from datetime import datetime  # noqa: E402  启动时间戳须在重导入前捕获
 from typing import Any, Dict, List, Optional  # noqa: E402  启动时间戳须在重导入前捕获
 
+from core.compat_ws_vocabulary import resolve_compat_ws_branch  # noqa: E402
+
 from fastapi import (  # noqa: E402  时间戳须先于重导入
     APIRouter,
     Depends,
@@ -836,7 +838,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         try:
             while True:
                 data = await websocket.receive_json()
-                msg_type = data.get("type", "")
+                # 本面分支名与 AIP 类型名不是一套词汇,按 AIP 归一表改道(见该模块)
+                msg_type = resolve_compat_ws_branch(data.get("type", ""))
 
                 if msg_type == "heartbeat":
                     # SSOT: write heartbeat to UDM first
