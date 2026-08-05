@@ -363,6 +363,15 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
 
     chosen = save_tier(req.tier, main_brain=req.main_brain)
 
+    # 资源对齐:算目标档资源 → 驱逐不属于该档的 → 按分配加载。收口在调度器
+    # (唯一资源真相源),而不是在路由层各自为政。best-effort:失败不拦截换档。
+    try:
+        from core.compute_scheduler import get_compute_scheduler
+
+        await get_compute_scheduler().reconcile_tier(req.tier)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("档位资源对齐失败(非致命): %s", exc)
+
     # 对该档内所有【本地】模型触发后台拉取（缺失才拉，不阻塞）。
     pulled: List[str] = []
     try:

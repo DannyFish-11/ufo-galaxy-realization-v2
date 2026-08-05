@@ -177,14 +177,32 @@ class UnifiedConfigManager:
         `os.environ.update()` 巧合掩盖(任何只走 Dashboard 层、不兜底
         os.environ 的调用方都会读不到)。顺序须与 UnifiedConfig.__init__ 一致
         (config.json → runtime store → .env/环境变量,后者优先级更高)。
+
+        第二个真 bug:这里原先**只调那三个 loader,不清空**。
+        ------------------------------------------------------
+        而 loader 都是"往 dict 里写",于是 reload() 实际是 **merge 而不是 reload**:
+        值**改了**能反映出来(后写覆盖前值),值**没了**却永远不消失 —— 面板上删掉
+        一个配置项、或把它从 .env 里去掉,进程内那份仍旧照着旧值工作,直到重启。
+        只影响删除、不影响修改,所以它安静且能活很久。
+
+        ``UnifiedConfig.reload()`` 自己是对的(先 ``_config.clear()`` 再按同样顺序
+        load)。这里的三步是把它**抄了一遍却漏了第一步** —— 典型的第二份实现漂移。
+        所以现在优先**委托给后端自己的 reload()**,不再维护第二份顺序;只有后端没有
+        reload() 时才退回手工三步(那种后端也就没有 _config 可清)。
         """
         try:
-            if hasattr(self._backend, "_load_config"):
-                self._backend._load_config()
-            if hasattr(self._backend, "_load_from_config_store"):
-                self._backend._load_from_config_store()
-            if hasattr(self._backend, "_load_env"):
-                self._backend._load_env()
+            backend_reload = getattr(self._backend, "reload", None)
+            if callable(backend_reload):
+                backend_reload()
+            else:
+                # 后端没有 reload():按 UnifiedConfig.__init__ 的顺序手工加载。
+                # 这条分支下的后端(如 EnvConfigBackend)没有可清空的快照。
+                if hasattr(self._backend, "_load_config"):
+                    self._backend._load_config()
+                if hasattr(self._backend, "_load_from_config_store"):
+                    self._backend._load_from_config_store()
+                if hasattr(self._backend, "_load_env"):
+                    self._backend._load_env()
             logger.info("Config reloaded", extra={"event": "reload"})
         except Exception as exc:
             raise ConfigError(f"Failed to reload config: {exc}") from exc

@@ -24,6 +24,18 @@ class AudioState:
     noise_level: float = 0.0  # Spectral-flatness proxy (0=tonal, 1=noise)
     audio_freshness_ms: float = float("inf")  # ms since last chunk was processed
     is_speaking: bool = False
+    #: 上面那些特征是不是**真的测过**。默认 True —— 只有 extract_audio_features()
+    #: 这条路会产出已测量的状态。桌面壳只上报"麦克风在场"、本机没有跑特征管线时，
+    #: 桥接会写一个 features_measured=False 的占位态：能量 0 / 没在说话都是
+    #: 「没测」而不是「测出来是 0」。下游（人体场打分）必须据此区分，否则会把
+    #: 「不知道」当成「安静」，凭空造出"用户不在/疲劳"的结论。
+    features_measured: bool = True
+    #: 这一块麦克风信号有没有真的过了回声消除。AEC 在没有参考信号(没开回环采集)时
+    #: 会静默旁通，信号原样通过 —— 下游看到的"用户在说话"里可能混着 AI 自己的声音。
+    #: 把它带进常驻感知，是为了让"世界"里能分清「听到的是干净的」还是「没消过」。
+    echo_cancelled: bool = False
+    #: 两级(线性对消 + 残余抑制)串起来的总回声抑制量，dB。0 表示没消或没测到。
+    echo_suppression_db: float = 0.0
     timestamp: float = field(default_factory=time.monotonic)
     samples: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float32))  # Raw PCM samples
     sample_rate: int = 16000  # Sample rate of the raw samples

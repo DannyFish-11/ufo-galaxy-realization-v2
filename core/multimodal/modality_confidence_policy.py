@@ -827,9 +827,27 @@ def build_perception_routing_readiness(
     # When requires_native_multimodal=True, the perception state has already
     # determined that native MM is needed; use REQUIRED semantics so the
     # eligibility assessment correctly blocks routing if the modality is absent.
-    modality_semantics = ModalitySemantics.REQUIRED if requires_native else ModalitySemantics.PREFERRED
+    #
+    # 但"必需"只该落在**真正携带本体**的那几个模态上。原先是一刀切:只要
+    # requires_native 为真,active_modalities 里的每一个都被抬成 REQUIRED —— 于是
+    # 「屏幕有画面」会让「麦克风」也变成必需,麦克风一掉线,整条原生多模态路由就被判
+    # 成 modality_required_but_absent 而阻断。可我们要的只是一个**看得见屏幕**的模型,
+    # 麦克风在不在跟这个要求毫无关系。
+    #
+    # native_payload_modalities 由规范感知态给出(它本来就知道谁带着本体)。取不到时
+    # (旧的/精简的 perception dict)退回一刀切,保持既有语义逐字不变。
+    payload_modalities = canonical_perception.get("native_payload_modalities")
+    _payload_set = set(payload_modalities) if isinstance(payload_modalities, (list, tuple, set)) else None
+
+    def _semantics_for(modality: str) -> ModalitySemantics:
+        if not requires_native:
+            return ModalitySemantics.PREFERRED
+        if _payload_set is None:
+            return ModalitySemantics.REQUIRED  # 无本体清单 → 旧口径
+        return ModalitySemantics.REQUIRED if modality in _payload_set else ModalitySemantics.PREFERRED
 
     for mod in active_modalities:
+        modality_semantics = _semantics_for(mod)
         # Find registry records for this modality (also check "multi")
         rec_list = registry_sources_by_modality.get(mod, []) + registry_sources_by_modality.get("multi", [])
 

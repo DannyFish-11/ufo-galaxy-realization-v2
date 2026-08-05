@@ -173,6 +173,41 @@ class TestAdapterRegistry:
             get_adapter("anthropic_realtime")
 
 
+class TestTheDefaultModelComesFromTheRegistry:
+    """``DuplexSessionConfig.model`` 的默认值必须是 registry 里那个,不能是写死的字面量。
+
+    这里曾经硬写着 ``"gpt-4o-realtime-preview"``,而 ``PROVIDER_REGISTRY`` 的
+    ``default_realtime_model`` 与 ``_REALTIME_FALLBACK_MODEL`` 都已是 ``"gpt-realtime"``
+    —— 三处口径两个值。它一直没出事只因为 ``from_env()`` 每条分支都显式传 model,
+    这个默认值在生产路径上碰巧取不到;但任何直接构造 config 的调用方拿到的都是一个
+    registry 不认账的型号,而 ``scripts/verify_provider_apis.py`` 的漂移守卫只比对
+    registry,发现不了。
+    """
+
+    def test_default_matches_the_registry_not_a_frozen_literal(self):
+        from core.multi_llm_router import PROVIDER_REGISTRY
+        from core.voice_duplex_session import DuplexSessionConfig
+
+        expected = next(s["default_realtime_model"] for s in PROVIDER_REGISTRY if s.get("name") == "openai")
+        assert DuplexSessionConfig(url="ws://x", api_key="k").model == expected
+
+    def test_it_tracks_the_registry_rather_than_happening_to_agree(self, monkeypatch):
+        """判别用例:改 registry,默认值必须跟着变。
+
+        只断言"两边相等"是不够的 —— 把字面量改成 ``"gpt-realtime"`` 也能让上面那条通过,
+        而那仍然是两份要手工同步的值。这条把 registry 改掉,默认值不跟就炸。
+        """
+        import core.multi_llm_router as router
+        from core.voice_duplex_session import DuplexSessionConfig
+
+        patched = [
+            dict(s, default_realtime_model="probe-realtime-model") if s.get("name") == "openai" else s
+            for s in router.PROVIDER_REGISTRY
+        ]
+        monkeypatch.setattr(router, "PROVIDER_REGISTRY", patched)
+        assert DuplexSessionConfig(url="ws://x", api_key="k").model == "probe-realtime-model"
+
+
 # ── 2. 完整会话流程:跑在本地【真】WebSocket 服务端上 ──────────────────────
 
 

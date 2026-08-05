@@ -69,10 +69,33 @@ class ScreenState:
 
     image_b64: Optional[str] = None  # raw JPEG base64 (NOT serialised)
     mime: str = "image/jpeg"
-    change_score: float = 0.0  # cheap 0..1 change vs previous frame
+    change_score: float = 0.0  # 0..1 change vs previous frame（采集层单一门控算出）
+    # 单调递增：每检测到一次足够大的变化 +1。慢节拍消费者靠"序号有没有变"判断
+    # "从我上次看之后变没变过"，不受采集节拍影响（change_score 会被后续帧消化回 0）。
+    change_seq: int = 0
     meta: Optional[Dict[str, Any]] = None  # structured screen context (UIA tree, etc.)
     screen_freshness_ms: float = 0.0
     has_image: bool = False
+
+
+@dataclass
+class SystemAudioState:
+    """Latest system-playback (loopback) snapshot —— 用户此刻在**听**什么。
+
+    与 ``audio``（麦克风：用户在**说**什么）严格分槽。混成一槽就再也分不出
+    "这段声音是人说的还是扬声器放的" —— 那正是模型最需要区分的一件事。
+    系统播放声只能在电脑端本机采集，见 ``core/multimodal/system_audio_ingest.py``。
+
+    与 ScreenState / VideoState 同规：携带本体 base64（供原生多模态直接听），
+    但 **不进 to_dict**（避免日志爆量）；变化度由采集层同一个 FrameGate 算出。
+    """
+
+    audio_b64: Optional[str] = None  # raw clip base64 (NOT serialised)
+    mime: str = "audio/webm"
+    change_score: float = 0.0  # 0..1 change vs previous clip（采集层单一门控算出）
+    change_seq: int = 0  # 单调递增，语义同 ScreenState.change_seq
+    audio_freshness_ms: float = 0.0
+    has_audio: bool = False
 
 
 @dataclass
@@ -103,6 +126,10 @@ class PerceptionFrame:
     audio: Optional[AudioState] = None
     audio_quality: SignalQuality = field(default_factory=SignalQuality.missing)
 
+    # System-playback modality（系统播放声：用户在听什么，与麦克风分槽）
+    system_audio: Optional[SystemAudioState] = None
+    system_audio_quality: SignalQuality = field(default_factory=SignalQuality.missing)
+
     # Video modality
     video: Optional[VideoState] = None
     video_quality: SignalQuality = field(default_factory=SignalQuality.missing)
@@ -129,6 +156,8 @@ class PerceptionFrame:
         scores: List[float] = []
         if self.audio_quality.is_usable:
             scores.append(self.audio_quality.confidence)
+        if self.system_audio_quality.is_usable:
+            scores.append(self.system_audio_quality.confidence)
         if self.video_quality.is_usable:
             scores.append(self.video_quality.confidence)
         if self.screen_quality.is_usable:
@@ -143,6 +172,8 @@ class PerceptionFrame:
         mods: List[str] = []
         if self.audio_quality.is_usable:
             mods.append("audio")
+        if self.system_audio_quality.is_usable:
+            mods.append("system_audio")
         if self.video_quality.is_usable:
             mods.append("video")
         if self.screen_quality.is_usable:
@@ -169,6 +200,12 @@ class PerceptionFrame:
                 "freshness_ms": self.audio_quality.freshness_ms,
                 "confidence": self.audio_quality.confidence,
                 "message": self.audio_quality.message,
+            },
+            "system_audio_quality": {
+                "flag": self.system_audio_quality.flag.value,
+                "freshness_ms": self.system_audio_quality.freshness_ms,
+                "confidence": self.system_audio_quality.confidence,
+                "message": self.system_audio_quality.message,
             },
             "video_quality": {
                 "flag": self.video_quality.flag.value,
@@ -198,14 +235,34 @@ class PerceptionFrame:
                 "noise_level": self.audio.noise_level,
                 "audio_freshness_ms": self.audio.audio_freshness_ms,
                 "is_speaking": self.audio.is_speaking,
+                # 「没测」与「测出来是 0」必须能被下游分开，否则占位态会被当成安静。
+                "features_measured": getattr(self.audio, "features_measured", True),
+                # 声学层实况:听到的到底是不是干净的信号。
+                "echo_cancelled": getattr(self.audio, "echo_cancelled", False),
+                "echo_suppression_db": round(getattr(self.audio, "echo_suppression_db", 0.0), 2),
+            }
+
+        if self.system_audio is not None:
+            # 与屏幕/摄像头同规:不含本体 base64,只暴露存在性/变化/新鲜度。
+            result["system_audio"] = {
+                "has_audio": self.system_audio.has_audio,
+                "mime": self.system_audio.mime,
+                "change_score": self.system_audio.change_score,
+                "change_seq": self.system_audio.change_seq,
+                "audio_freshness_ms": self.system_audio.audio_freshness_ms,
             }
 
         if self.video is not None:
+            # 与 screen 同规:不含原始 base64(避免日志爆量),只暴露存在性/变化/派生特征。
             result["video"] = {
                 "motion_level": self.video.motion_level,
                 "scene_change_rate": self.video.scene_change_rate,
                 "face_presence": self.video.face_presence,
                 "video_freshness_ms": self.video.video_freshness_ms,
+                "has_image": getattr(self.video, "has_image", False),
+                "mime": getattr(self.video, "mime", ""),
+                "change_score": getattr(self.video, "change_score", 0.0),
+                "change_seq": getattr(self.video, "change_seq", 0),
             }
 
         if self.screen is not None:
@@ -214,6 +271,7 @@ class PerceptionFrame:
                 "has_image": self.screen.has_image,
                 "mime": self.screen.mime,
                 "change_score": self.screen.change_score,
+                "change_seq": self.screen.change_seq,
                 "meta_present": self.screen.meta is not None,
                 "screen_freshness_ms": self.screen.screen_freshness_ms,
             }

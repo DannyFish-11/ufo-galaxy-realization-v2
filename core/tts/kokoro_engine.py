@@ -41,11 +41,14 @@ _fetch_started = False
 
 
 def _model_dir() -> Path:
-    return Path(os.environ.get("GALAXY_KOKORO_DIR", "models/kokoro"))
+    # `or` 而非 get 的默认参数:这两把键已登记进面板,用户把输入框清空存回来就是
+    # ``GALAXY_KOKORO_DIR=``(空串,不是未设)。get 的默认值对空串不生效 —— 那样会
+    # 拿到 Path("") / 文件名 ""，模型永远找不到。与 core/hf_endpoint.py 同一写法。
+    return Path(os.environ.get("GALAXY_KOKORO_DIR", "").strip() or "models/kokoro")
 
 
 def _model_file() -> str:
-    return os.environ.get("GALAXY_KOKORO_MODEL", _MODEL_FILE_DEFAULT)
+    return os.environ.get("GALAXY_KOKORO_MODEL", "").strip() or _MODEL_FILE_DEFAULT
 
 
 def model_files_present() -> bool:
@@ -185,10 +188,9 @@ class KokoroTTSEngine(EdgeTTSEngine):
         def _run() -> str:
             kokoro = self._ensure_loaded()
             use_voice = voice or self._pick_voice(text)
-            lang = os.environ.get(
-                "GALAXY_KOKORO_LANG",
-                "cmn" if _has_cjk(text) else "en-us",
-            )
+            # 留空 = 按文本自动判定(中文 cmn / 其余 en-us)。面板上这一项的默认就是
+            # 空串,所以空必须走自动分支而不是原样传下去(lang="" 会让 kokoro 报错)。
+            lang = os.environ.get("GALAXY_KOKORO_LANG", "").strip() or ("cmn" if _has_cjk(text) else "en-us")
             samples, sample_rate = kokoro.create(text, voice=use_voice, lang=lang)
             path = output_path
             if not path:

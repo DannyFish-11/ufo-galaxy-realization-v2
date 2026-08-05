@@ -94,6 +94,10 @@ class ModelAllocation:
         reason:         Human-readable explanation for the decision
         timestamp:      When the allocation was created
         last_accessed:  Last access timestamp (for LRU eviction)
+        is_moe:         该模型是否 MoE 架构（专家 FFN 可与注意力/共享层分开落位）
+        n_cpu_moe:      专家权重留在 CPU 的层数（对齐 llama.cpp ``--n-cpu-moe`` 语义）
+                        0 = 不卸载（专家跟随 n_gpu_layers）；N>0 = 顶部 N 层专家留 CPU；
+                        -1 = 全部 MoE 层的专家留 CPU（极端省显存）
     """
 
     model_id: str
@@ -104,6 +108,12 @@ class ModelAllocation:
     reason: str
     timestamp: float = field(default_factory=time.time)
     last_accessed: float = field(default_factory=time.time)
+    # MoE 专家卸载:与 n_gpu_layers 是【正交两轴】—— n_gpu_layers 决定"哪些层的
+    # 注意力/共享部分上 GPU",n_cpu_moe 决定"其中哪些层的专家 FFN 留在内存"。
+    # 这正是 MoE 能在小显存跑大模型的机制:专家占权重的绝大头但每 token 只激活少数。
+    # 默认值保证既有分配路径逐字节不变。
+    is_moe: bool = False
+    n_cpu_moe: int = 0
 
     @property
     def is_gpu(self) -> bool:
@@ -112,6 +122,10 @@ class ModelAllocation:
     @property
     def is_offloaded(self) -> bool:
         return 0 < self.n_gpu_layers < 999
+
+    @property
+    def is_expert_offloaded(self) -> bool:
+        return self.is_moe and self.n_cpu_moe != 0
 
 
 @dataclass
@@ -141,6 +155,15 @@ class SchedulerConfig:
 
     # Maximum number of concurrently loaded GPU models
     max_gpu_models: int = 3
+
+    # ── MoE 专家卸载 ────────────────────────────────────────────────────────
+    # 专家 FFN 占整模型权重的比例。MoE 模型典型 85–95%（共享专家多的偏低）。
+    # 保守取 0.90:估高了会少卸（欠用显存，安全）；估低了才会 OOM。
+    moe_expert_fraction: float = 0.90
+    # 显存/内存的实测可用量上再打的安全系数（与 _estimate_gpu_layers 的 0.8 同源）。
+    moe_vram_safety: float = 0.8
+    # 被卸到 CPU 的专家最多占用可用内存的比例（其余留给 KV cache 与系统）。
+    moe_ram_budget: float = 0.7
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +275,8 @@ class ComputeScheduler:
         model_size_mb: int,
         requires_multimodal: bool = False,
         preferred_backend: Optional[str] = None,
+        *,
+        is_moe: bool = False,
     ) -> ModelAllocation:
         """Decide how to load a model.
 
@@ -263,12 +288,17 @@ class ComputeScheduler:
             model_size_mb:        Estimated model size in megabytes
             requires_multimodal:  If True, requires vision capability
             preferred_backend:    User-preferred backend (optional)
+            is_moe:               模型是否 MoE 架构。为真时先尝试"注意力+共享层进 GPU、
+                                  专家进内存"的拆分（判据全部来自**本机实测**硬件），
+                                  拆不动则自然落到既有量化/CPU 分支。
 
         Returns:
             ModelAllocation with the decision
         """
         async with self._lock:
-            return await self._schedule_model_locked(model_id, model_size_mb, requires_multimodal, preferred_backend)
+            return await self._schedule_model_locked(
+                model_id, model_size_mb, requires_multimodal, preferred_backend, is_moe=is_moe
+            )
 
     async def _schedule_model_locked(
         self,
@@ -276,6 +306,8 @@ class ComputeScheduler:
         model_size_mb: int,
         requires_multimodal: bool,
         preferred_backend: Optional[str],
+        *,
+        is_moe: bool = False,
     ) -> ModelAllocation:
         from core.hardware_compute_profiler import get_hardware_profiler
 
@@ -316,6 +348,36 @@ class ComputeScheduler:
         )
 
         # ── Decision branches ──
+
+        # 0. MoE 专家卸载:显存放不下整模型，但放得下"注意力+共享层"时，把专家
+        #    FFN 留在内存 —— 每 token 只激活少数专家，代价可接受，换来"带不动的
+        #    模型跑起来"。判据全部来自本机实测（free VRAM / available RAM），
+        #    不是外部传入的需求；拆不动返回 None，自然落到下面既有分支。
+        if is_moe:
+            _avail_ram = int(getattr(getattr(profile, "cpu", None), "available_ram_mb", 0) or 0)
+            _n_cpu_moe = self._split_moe(model_size_mb, free_vram, _avail_ram, cfg)
+            if _n_cpu_moe is not None:
+                alloc = ModelAllocation(
+                    model_id=model_id,
+                    backend=preferred_backend or "llama_cpp",
+                    device=device_str,
+                    quantization="none",
+                    n_gpu_layers=-1,  # 所有层的注意力/共享部分都上 GPU
+                    reason=(
+                        f"MoE 拆分:注意力+共享层进 GPU，{_n_cpu_moe}/{cfg.default_layer_count} 层专家进内存"
+                        f"(实测 free={free_vram}MB, RAM={_avail_ram}MB)"
+                    ),
+                    is_moe=True,
+                    n_cpu_moe=_n_cpu_moe,
+                )
+                self._models[model_id] = alloc
+                return alloc
+            logger.debug(
+                "MoE 拆分不可行(free=%dMB, RAM=%dMB)，回落常规分支: %s",
+                free_vram,
+                int(getattr(getattr(profile, "cpu", None), "available_ram_mb", 0) or 0),
+                model_id,
+            )
 
         # 1. VRAM sufficient -> full precision GPU
         if free_vram > model_size_mb * cfg.margin_full and vram_ratio < cfg.vram_optimal:
@@ -370,6 +432,65 @@ class ComputeScheduler:
         )
         self._models[model_id] = alloc
         return alloc
+
+    def _split_moe(
+        self,
+        model_size_mb: int,
+        free_vram_mb: int,
+        available_ram_mb: int,
+        cfg: Optional[SchedulerConfig] = None,
+    ) -> Optional[int]:
+        """按**本机实测**显存/内存算 MoE 拆分：返回专家留 CPU 的层数，拆不动返回 None。
+
+        MoE 的权重结构是"注意力/共享层小头 + 专家 FFN 大头"，而每 token 只激活
+        少数专家。因此把专家放内存、注意力留显存，就能在显存装不下整模型时仍然
+        以可接受的速度跑起来 —— 这正是"有能力的模型带不动"的解法。
+
+        三道实测判据（任何一道不过就返回 None，交给既有量化/CPU 分支）：
+        1. **共享层必须进得了显存**：连注意力都放不下，卸专家也无意义；
+        2. **剩余显存能吃多少层专家**：吃不下的层数即 ``n_cpu_moe``；
+        3. **内存兜得住被卸的专家**：否则换来的是疯狂换页，不如老实降级。
+
+        Args:
+            model_size_mb:     整模型大小（MB）
+            free_vram_mb:      实测可用显存（来自 hardware_compute_profiler）
+            available_ram_mb:  实测可用内存（同上；为 0 表示探测不到）
+            cfg:               调度配置（默认取 self.config）
+
+        Returns:
+            专家留 CPU 的层数（1..layers_total），或 None 表示拆分不可行。
+        """
+        cfg = cfg or self.config
+        layers_total = max(1, cfg.default_layer_count)
+        if model_size_mb <= 0 or free_vram_mb <= 0:
+            return None
+
+        expert_mb = model_size_mb * cfg.moe_expert_fraction
+        shared_mb = model_size_mb - expert_mb
+        usable_vram = free_vram_mb * cfg.moe_vram_safety
+
+        # 判据 1:共享层放不下 → 拆分无意义
+        if shared_mb * cfg.margin_full > usable_vram:
+            return None
+
+        # 判据 2:剩余显存能容纳的专家层数
+        expert_per_layer = expert_mb / layers_total
+        if expert_per_layer <= 0:
+            return None
+        vram_for_experts = max(0.0, usable_vram - shared_mb * cfg.margin_full)
+        gpu_expert_layers = int(vram_for_experts / expert_per_layer)
+        gpu_expert_layers = max(0, min(layers_total, gpu_expert_layers))
+        n_cpu_moe = layers_total - gpu_expert_layers
+        if n_cpu_moe <= 0:
+            # 显存足以容纳全部专家 → 不需要 MoE 拆分，走常规全量上 GPU 分支。
+            return None
+
+        # 判据 3:内存兜不住被卸的专家 → 老实降级（内存探测不到时同样不冒险）
+        cpu_expert_mb = n_cpu_moe * expert_per_layer
+        if available_ram_mb <= 0 or cpu_expert_mb > available_ram_mb * cfg.moe_ram_budget:
+            return None
+
+        return n_cpu_moe
 
     def _estimate_gpu_layers(
         self,
@@ -441,6 +562,77 @@ class ComputeScheduler:
     def get_allocation(self, model_id: str) -> Optional[ModelAllocation]:
         """Get allocation for a specific model."""
         return self._models.get(model_id)
+
+    # ── 换档：算目标档资源 → 驱逐 → 加载（唯一收口）──────────────────────────
+
+    async def reconcile_tier(self, target_tier: str) -> List[ModelAllocation]:
+        """把当前已加载模型对齐到目标档位。
+
+        换档此前散在路由层（保存档位 + 逐个后台拉取 + 刷新路由），没有任何一处
+        统一负责"目标档要多少资源、当前占着谁、该先卸谁"。资源判断的唯一权威是
+        本调度器（账本 + 实测硬件），故换档在这里收口成一个动作：
+
+        1. **算目标**：目标档的模型集合（目录 SSOT）；
+        2. **驱逐**：账本里不属于目标档的，真卸载 + 注销记账（best-effort，
+           单个失败不阻断整体）；
+        3. **加载**：目标档中本地可加载的（source=local/llama_cpp），逐个走
+           ``schedule_model``（MoE 型号自动尝试专家卸载拆分）后交后端加载。
+
+        Returns:
+            换档后的账本快照。
+        """
+        from core.model_catalog import tier_models  # noqa: PLC0415
+
+        specs = list(tier_models(target_tier))
+        target_ids = {s.tag for s in specs}
+
+        # 1+2. 驱逐不属于目标档的
+        for model_id in list(self._models.keys()):
+            if model_id in target_ids:
+                continue
+            alloc = self._models.get(model_id)
+            try:
+                backend = self._backend_for(alloc)
+                if backend is not None:
+                    await backend.unload_model(model_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("换档卸载 %s 失败(继续注销记账): %s", model_id, exc)
+            self.unregister(model_id)
+
+        # 3. 加载目标档
+        for spec in specs:
+            if spec.source not in ("local", "llama_cpp"):
+                continue
+            try:
+                backend_name = "llama_cpp" if spec.source == "llama_cpp" else "ollama"
+                await self.schedule_model(
+                    spec.tag,
+                    int(spec.size_mb()),
+                    preferred_backend=backend_name,
+                    is_moe=bool(getattr(spec, "is_moe", False)),
+                )
+                backend = self._create_backend(backend_name)
+                if backend is not None:
+                    await backend.load_model(spec.tag)  # 内部会 register_loaded（幂等）
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("换档加载 %s 失败(其余模型继续): %s", spec.tag, exc)
+
+        return self.list_allocations()
+
+    @staticmethod
+    def _create_backend(name: str):
+        try:
+            from core.local_model_backends import create_backend  # noqa: PLC0415
+
+            return create_backend(name)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("后端 %s 不可用: %s", name, exc)
+            return None
+
+    def _backend_for(self, alloc: Optional[ModelAllocation]):
+        if alloc is None:
+            return None
+        return self._create_backend(alloc.backend)
 
     # ── VRAM pressure management ──
 

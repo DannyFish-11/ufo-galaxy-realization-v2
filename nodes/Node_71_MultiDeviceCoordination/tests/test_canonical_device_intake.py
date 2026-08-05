@@ -17,12 +17,16 @@ import pytest
 
 # Ensure the Node_71 directory is on the path so local modules resolve.
 _NODE71_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _NODE71_DIR not in sys.path:
-    sys.path.insert(0, _NODE71_DIR)
+# 这里原先有一句 sys.path.insert(0, <节点目录>)。它是「裸顶层导入」时代的遗留:
+# 把节点目录顶到 sys.path 最前面,好让 from core.X / from models.X 指到节点自己。
+# 现在包内一律用相对导入,这句不但没用,而且**有害** —— 它让节点自己的 core/ 抢在
+# 仓库根的 core/ 前面被解析,于是 models/device.py 里那句合法的
+# from core.device_types import DeviceType(单一事实来源,确实指仓库根)会拐进
+# 节点的 core/__init__.py,绕成循环导入,最终报 attempted relative import beyond top-level。
 
 # Import the canonical adapter directly to avoid circular-import through
 # core/__init__.py → models.device → core.device_types → core/__init__.py.
-from core.canonical_device_view_adapter import (
+from ..core.canonical_device_view_adapter import (
     CoordinationDeviceView,
     CoordinationDeviceStatus,
     adapt_registered_runtime_device,
@@ -439,12 +443,12 @@ class TestEngineCanonicalIntake:
     @pytest.fixture
     def engine(self):
         """Create a minimal engine without network services."""
-        from core.multi_device_coordinator_engine import (
+        from ..core.multi_device_coordinator_engine import (
             MultiDeviceCoordinatorEngine, CoordinatorConfig
         )
-        from core.device_discovery import DiscoveryConfig
-        from core.state_synchronizer import SyncConfig
-        from core.task_scheduler import SchedulerConfig
+        from ..core.device_discovery import DiscoveryConfig
+        from ..core.state_synchronizer import SyncConfig
+        from ..core.task_scheduler import SchedulerConfig
 
         config = CoordinatorConfig(
             node_id="test-pr7-coordinator",
@@ -547,7 +551,7 @@ class TestEngineCanonicalIntake:
 
     def test_engine_register_device_is_coordination_local(self, engine):
         """register_device() works as before but is clearly coordination-local."""
-        from models.device import Device, DeviceType, DeviceState, Capability
+        from ..models.device import Device, DeviceType, DeviceState, Capability
         device = Device(
             device_id="legacy-dev-001",
             name="Legacy Device",
@@ -564,7 +568,7 @@ class TestEngineCanonicalIntake:
 
     def test_engine_update_device_state_is_coordination_local(self, engine):
         """update_device_state() updates coordination-local state only."""
-        from models.device import Device, DeviceType, DeviceState
+        from ..models.device import Device, DeviceType, DeviceState
         device = Device(
             device_id="state-dev",
             name="State Device",
@@ -604,7 +608,7 @@ class TestEngineCanonicalIntake:
         await engine.start()
 
         # Register devices in legacy registry for broadcast (backward compat)
-        from models.device import Device, DeviceType, DeviceState
+        from ..models.device import Device, DeviceType, DeviceState
         for did in ["bcast-a", "bcast-b"]:
             engine.register_device(Device(
                 device_id=did, name=did, device_type=DeviceType.SENSOR,

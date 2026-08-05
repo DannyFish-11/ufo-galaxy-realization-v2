@@ -54,7 +54,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional
 
 from .audio_features import AudioState
-from .perception_frame import PerceptionFrame, ScreenState, SystemSignals
+from .perception_frame import PerceptionFrame, ScreenState, SystemAudioState, SystemSignals
 from .signal_quality import QualityFlag, SignalQuality
 from .video_features import VideoState
 
@@ -85,6 +85,10 @@ class MultimodalIngressBus:
         self._audio: Optional[AudioState] = None
         self._audio_quality: SignalQuality = SignalQuality.missing("No audio source")
         self._audio_ts: Optional[float] = None
+
+        self._system_audio: Optional[SystemAudioState] = None
+        self._system_audio_quality: SignalQuality = SignalQuality.missing("No system-audio source")
+        self._system_audio_ts: Optional[float] = None
 
         self._video: Optional[VideoState] = None
         self._video_quality: SignalQuality = SignalQuality.missing("No video source")
@@ -121,6 +125,25 @@ class MultimodalIngressBus:
         self._audio = state
         self._audio_quality = quality
         self._audio_ts = time.monotonic()
+
+    def has_fresh_measured_audio(self) -> bool:
+        """当前音频槽里是不是一份**新鲜且已测量**的麦克风特征。
+
+        桥接层据此决定要不要写"在场"占位态：本机特征管线活着时，它才是权威，
+        桥接不得拿全零占位把真实的 energy / is_speaking 覆盖掉。
+        """
+        state = self._audio
+        if state is None or not getattr(state, "features_measured", True):
+            return False
+        if self._audio_ts is None:
+            return False
+        return (time.monotonic() - self._audio_ts) * 1000.0 <= self._stale_threshold_ms
+
+    def update_system_audio(self, state: SystemAudioState, quality: SignalQuality) -> None:
+        """Ingest a new SystemAudioState snapshot（系统播放声：用户在听什么）。"""
+        self._system_audio = state
+        self._system_audio_quality = quality
+        self._system_audio_ts = time.monotonic()
 
     def update_video(self, state: VideoState, quality: SignalQuality) -> None:
         """Ingest a new VideoState snapshot."""
@@ -221,6 +244,7 @@ class MultimodalIngressBus:
     def build_frame(self) -> PerceptionFrame:
         """Compose a PerceptionFrame from the current snapshots."""
         aq = self._apply_staleness(self._audio_ts, self._audio_quality)
+        saq = self._apply_staleness(self._system_audio_ts, self._system_audio_quality)
         vq = self._apply_staleness(self._video_ts, self._video_quality)
         scq = self._apply_staleness(self._screen_ts, self._screen_quality)
         sq = self._apply_staleness(self._system_ts, self._system_quality)
@@ -237,6 +261,8 @@ class MultimodalIngressBus:
             frame_id=next(self._frame_counter),
             audio=self._audio if aq.is_usable else None,
             audio_quality=aq,
+            system_audio=self._system_audio if saq.is_usable else None,
+            system_audio_quality=saq,
             video=self._video if vq.is_usable else None,
             video_quality=vq,
             screen=self._screen if scq.is_usable else None,

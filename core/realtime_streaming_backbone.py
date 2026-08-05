@@ -100,12 +100,47 @@ def build_realtime_streaming_backbone_contract() -> Dict[str, Any]:
     }
 
 
+def collect_realtime_stream_evidence() -> Dict[str, Any]:
+    """采集**本进程可证实**的实时流证据（不是声明，是实测）。
+
+    此前本模块的状态只由 source registry 的 mic/cam 计数推导，而真正在流的
+    SSE token 流它一路都看不见 —— 于是"真的有一路在流"时状态仍报
+    ``discrete_fallback``。这里补上真实证据源。
+
+    实事求是三条铁律：
+    1. **只报本进程能证实的**。网关与 core 可能分进程，跨进程的流本进程看不到，
+       就明确标 ``cross_process_visibility=False``，绝不把"本进程没有"当成"系统没有"。
+    2. **取不到就如实记 unobservable**，而不是当成 0。
+    3. 证据只做**叠加**，不覆盖既有 registry 语义（见 build_realtime_stream_runtime_status）。
+    """
+    evidence: Dict[str, Any] = {
+        "scope": "process_local",
+        "cross_process_visibility": False,
+        "observed": {},
+        "unobservable": [],
+    }
+    try:
+        from core.llm_stream import stream_registry_snapshot
+
+        evidence["observed"]["token_streams"] = stream_registry_snapshot()
+    except Exception as exc:  # noqa: BLE001
+        evidence["unobservable"].append({"source": "token_streams", "reason": str(exc)})
+    return evidence
+
+
 def build_realtime_stream_runtime_status(
     *,
     source_registry_snapshot: Optional[Mapping[str, Any]] = None,
     enable_webrtc_session_manager: bool = False,
+    stream_evidence: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Return runtime-governed stream status and degradation semantics."""
+    """Return runtime-governed stream status and degradation semantics.
+
+    ``stream_evidence``（可选，形如 :func:`collect_realtime_stream_evidence` 的返回值）
+    是**叠加**的实测证据：既有 registry 推导的 ``stream_state`` 逐字节不变，
+    额外暴露 ``observed_live_streaming`` / ``stream_observability`` 两轴，
+    让"本进程确实有 N 路在流"这件事可见，同时明示可观测边界。
+    """
     snap = dict(source_registry_snapshot or {})
     total_count = int(snap.get("total_count") or 0)
     active_count = int(snap.get("active_count") or 0)
@@ -133,8 +168,27 @@ def build_realtime_stream_runtime_status(
     }
     stream_context_available = stream_state == "active"
 
+    # ── 实测证据轴（叠加，不改上面 registry 推导出的 stream_state 语义）──────
+    _ev = dict(stream_evidence or {})
+    _observed = dict(_ev.get("observed") or {})
+    _tok = dict(_observed.get("token_streams") or {})
+    _tok_active = int(_tok.get("active") or 0)
+    _has_evidence = bool(_ev)
+    _observability = {
+        # 没给证据就如实说"没测"，而不是默认成"没有流"。
+        "evidence_collected": _has_evidence,
+        "scope": _ev.get("scope", "unknown"),
+        "cross_process_visibility": bool(_ev.get("cross_process_visibility", False)),
+        "unobservable": list(_ev.get("unobservable") or []),
+        "token_streams_active": _tok_active,
+    }
+
     return {
         "live_stream_session_exists": has_live_session,
+        # 本进程实测到的活跃流（token 流）。为 True 即"确实有流在跑"；为 False
+        # 只代表**本进程没观测到**，不代表全系统没有 —— 判读须结合 scope。
+        "observed_live_streaming": _tok_active > 0,
+        "stream_observability": _observability,
         "stream_provider_total": total_count,
         "stream_provider_active": active_count,
         "stream_provider_degraded": degraded_count,
