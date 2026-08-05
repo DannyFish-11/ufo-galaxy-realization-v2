@@ -33,6 +33,8 @@ from typing import TYPE_CHECKING, Any, Dict
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 # PR-11-V2: lifecycle coordinator — ingress, state reduction, and PR-5A result
@@ -109,6 +111,10 @@ async def handle_delegated_execution_signal(
             "delegated_execution_signal: lifecycle coordinator unavailable " "(import failed): device_id=%s",
             device_id,
         )
+
+    # 网格镜像:委派执行的进度/结果信号是"任务此刻跑到哪了"的唯一来源。不上
+    # 网格,别的节点就只能靠超时猜,做不了接管或重调度的判断。
+    mesh_mirror.mirror_delegated_signal(device_id, message)
 
     return {
         "version": "3.0",

@@ -1351,7 +1351,7 @@ class GalaxyUnified:
             embedded_hint = getattr(server, "last_error_hint", "")
         bus = get_nats_bus()
         result = await bus.connect()
-        if isinstance(result, dict) and result.get("success") and bus.is_connected():
+        if isinstance(result, dict) and result.get("success") and bus.is_usable():
             return {
                 "ok": True,
                 "url": os.environ.get("GALAXY_NATS_URL", nats_url or "nats://localhost:4222"),

@@ -140,7 +140,10 @@ async def wait_for_result_activity(task_id: str, timeout_ms: int = 60_000) -> di
         if sub_result.get("noop"):
             error = f"distributed_transport_unavailable:{error}"
         return {"success": False, "error": f"Failed to subscribe: {error}", "task_id": task_id}
-    subscription = sub_result.get("subscription")
+    # subscribe_task_results 现在同时订单/复数两个主题(见 NATSBus._subscribe_both),
+    # 交出的是两个订阅。拿 subscriptions 才退得干净;只退 subscription 会留下另一
+    # 半悬空的 durable consumer。老形状作兜底。
+    subscription = sub_result.get("subscriptions") or sub_result.get("subscription")
 
     try:
         await asyncio.wait_for(event.wait(), timeout=timeout_ms / 1000)

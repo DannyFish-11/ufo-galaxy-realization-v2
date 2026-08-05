@@ -25,6 +25,7 @@ from nodes.common.cors_config import get_cors_origins
 # Optional Redis import
 try:
     import redis.asyncio as redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -42,8 +43,7 @@ USE_MEMORY_STORE = os.getenv("USE_MEMORY_STORE", "true").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format=f"[Node {NODE_ID}] %(asctime)s - %(levelname)s - %(message)s"
+    level=getattr(logging, LOG_LEVEL), format=f"[Node {NODE_ID}] %(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -51,11 +51,13 @@ logger = logging.getLogger(__name__)
 # Models
 # =============================================================================
 
+
 class LockRequest(BaseModel):
     node_id: str = Field(..., description="ID of the requesting node")
     resource_id: str = Field(..., description="ID of the resource to lock")
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     reason: str = Field(default="", description="Reason for lock")
+
 
 class LockResponse(BaseModel):
     success: bool
@@ -63,10 +65,12 @@ class LockResponse(BaseModel):
     message: str
     expires_at: Optional[str] = None
 
+
 class ReleaseRequest(BaseModel):
     node_id: str
     resource_id: str
     token: str
+
 
 class NodeRegistration(BaseModel):
     node_id: str
@@ -75,6 +79,7 @@ class NodeRegistration(BaseModel):
     ip_address: str = ""
     capabilities: List[str] = []
 
+
 class NodeStatus(BaseModel):
     node_id: str
     node_name: str
@@ -82,73 +87,77 @@ class NodeStatus(BaseModel):
     last_heartbeat: str
     layer: str
 
+
 # =============================================================================
 # In-Memory Store
 # =============================================================================
 
+reaper = None  # 陈旧锁清理器,由 lifespan 启动;/reaper/* 端点读它
+
+
 class MemoryStore:
     """Thread-safe in-memory store for locks and state."""
-    
+
     def __init__(self):
         self.locks: Dict[str, Dict] = {}
         self.nodes: Dict[str, Dict] = {}
         self.state: Dict[str, Any] = {}
         self._lock = asyncio.Lock()
-    
+
     async def acquire_lock(self, resource_id: str, node_id: str, timeout_seconds: int) -> Optional[str]:
         """Acquire a lock on a resource."""
         async with self._lock:
             now = datetime.now()
-            
+
             # Check existing lock
             if resource_id in self.locks:
                 existing = self.locks[resource_id]
                 expires_at = datetime.fromisoformat(existing["expires_at"])
-                
+
                 if expires_at > now:
                     # Lock still valid
                     return None
-            
+
             # Create new lock
             token = str(uuid.uuid4())
             expires_at = now + timedelta(seconds=timeout_seconds)
-            
+
             self.locks[resource_id] = {
                 "token": token,
                 "node_id": node_id,
                 "expires_at": expires_at.isoformat(),
-                "acquired_at": now.isoformat()
+                "acquired_at": now.isoformat(),
             }
-            
+
             return token
-    
+
     async def release_lock(self, resource_id: str, token: str) -> bool:
         """Release a lock."""
         async with self._lock:
             if resource_id not in self.locks:
                 return False
-            
+
             if self.locks[resource_id]["token"] != token:
                 return False
-            
+
             del self.locks[resource_id]
             return True
-    
+
     async def get_locks(self) -> Dict[str, Dict]:
         """Get all active locks."""
         async with self._lock:
             now = datetime.now()
             active = {}
-            
+
             for resource_id, lock in list(self.locks.items()):
                 expires_at = datetime.fromisoformat(lock["expires_at"])
                 if expires_at > now:
                     active[resource_id] = lock
                 else:
                     del self.locks[resource_id]
-            
+
             return active
-    
+
     async def register_node(self, registration: NodeRegistration):
         """Register a node."""
         async with self._lock:
@@ -159,14 +168,14 @@ class MemoryStore:
                 "ip_address": registration.ip_address,
                 "capabilities": registration.capabilities,
                 "status": "online",
-                "last_heartbeat": datetime.now().isoformat()
+                "last_heartbeat": datetime.now().isoformat(),
             }
-    
+
     async def get_nodes(self) -> Dict[str, Dict]:
         """Get all registered nodes."""
         async with self._lock:
             return dict(self.nodes)
-    
+
     async def heartbeat(self, node_id: str) -> bool:
         """Update node heartbeat."""
         async with self._lock:
@@ -175,16 +184,17 @@ class MemoryStore:
                 self.nodes[node_id]["status"] = "online"
                 return True
             return False
-    
+
     async def set_state(self, key: str, value: Any):
         """Set a state value."""
         async with self._lock:
             self.state[key] = value
-    
+
     async def get_state(self, key: str) -> Any:
         """Get a state value."""
         async with self._lock:
             return self.state.get(key)
+
 
 # =============================================================================
 # FastAPI Application
@@ -193,16 +203,17 @@ class MemoryStore:
 store: Optional[MemoryStore] = None
 redis_client = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    global store, redis_client
-    
+    global store, redis_client, reaper
+
     logger.info(f"Starting Node {NODE_ID}: {NODE_NAME}")
-    
+
     # Initialize store
     use_memory = USE_MEMORY_STORE or not REDIS_AVAILABLE
-    
+
     if not use_memory:
         try:
             redis_client = redis.from_url(REDIS_URL, decode_responses=True)
@@ -220,22 +231,25 @@ async def lifespan(app: FastAPI):
     if use_memory:
         logger.info("Using in-memory store")
         store = MemoryStore()
-    
+
     # Register self
-    await store.register_node(NodeRegistration(
-        node_id=NODE_ID,
-        node_name=NODE_NAME,
-        layer="L0_KERNEL",
-        ip_address="10.88.0.10",
-        capabilities=["lock_management", "node_registry", "health_monitoring"]
-    ))
-    
+    await store.register_node(
+        NodeRegistration(
+            node_id=NODE_ID,
+            node_name=NODE_NAME,
+            layer="L0_KERNEL",
+            ip_address="10.88.0.10",
+            capabilities=["lock_management", "node_registry", "health_monitoring"],
+        )
+    )
+
     logger.info(f"Node {NODE_ID} ({NODE_NAME}) is ready")
 
     # ── Phase C: NATS heartbeat ──
     _hb_task = None
     try:
         from core.nats_heartbeat import start_node_heartbeat
+
         _hb_task = await start_node_heartbeat(
             worker_id=f"node-{NODE_ID}-statemachine",
             device_type="statemachine",
@@ -243,20 +257,44 @@ async def lifespan(app: FastAPI):
         )
     except Exception as _e:
         logger.debug(f"NATS heartbeat not started (non-fatal): {_e}")
-    
+
+    # ── 陈旧锁清理 ──
+    # acquire_lock 已经按 expires_at 判过期,所以**过期语义本身是对的** ——
+    # 过了 TTL 的锁不会挡住新的获取。reaper 补的是另一件事:把过期条目真正从
+    # store 里删掉。否则一个资源被锁过一次、之后再没被锁过,那条记录就永远留在
+    # self.locks 里 —— 资源 id 一多就是一条慢性内存泄漏。顺带把清理动作报给
+    # Node 65 审计。
+    #
+    # 这个 reaper 此前一直是死代码:实现完整,但唯一的集成方式写在
+    # REAPER_INTEGRATION.md 里当范例,从来没人照着接过。
+    try:
+        from stale_lock_reaper import StaleLockReaper
+
+        reaper = StaleLockReaper(store=store, scan_interval=60, max_lock_age=300)
+        await reaper.start()
+        logger.info("StaleLockReaper started (scan=60s, max_age=300s)")
+    except Exception as _e:
+        logger.debug(f"StaleLockReaper not started (non-fatal): {_e}")
+
     yield
-    
+
     logger.info(f"Shutting down Node {NODE_ID}")
+    if reaper is not None:
+        try:
+            await reaper.stop()
+        except Exception as _e:
+            logger.debug(f"StaleLockReaper stop failed (non-fatal): {_e}")
     if _hb_task and not _hb_task.done():
         _hb_task.cancel()
     if redis_client:
         await redis_client.close()
 
+
 app = FastAPI(
     title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Global State Machine - The Heart of Galaxy",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -271,6 +309,7 @@ app.add_middleware(
 # API Endpoints
 # =============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -278,8 +317,9 @@ async def health_check():
         "status": "healthy",
         "node_id": NODE_ID,
         "node_name": NODE_NAME,
-        "store_type": "redis" if redis_client else "memory"
+        "store_type": "redis" if redis_client else "memory",
     }
+
 
 @app.get("/status")
 async def node_status():
@@ -293,50 +333,67 @@ async def node_status():
         "redis_available": redis_client is not None,
         "lock_count": len(locks),
         "nodes_registered": len(nodes),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
+
 
 @app.post("/lock/acquire", response_model=LockResponse)
 async def acquire_lock(request: LockRequest):
     """Acquire a lock on a resource."""
     token = await store.acquire_lock(
-        resource_id=request.resource_id,
-        node_id=request.node_id,
-        timeout_seconds=request.timeout_seconds
+        resource_id=request.resource_id, node_id=request.node_id, timeout_seconds=request.timeout_seconds
     )
-    
+
     if token:
         expires_at = datetime.now() + timedelta(seconds=request.timeout_seconds)
         logger.info(f"Lock acquired: {request.resource_id} by {request.node_id}")
-        return LockResponse(
-            success=True,
-            token=token,
-            message="Lock acquired",
-            expires_at=expires_at.isoformat()
-        )
+        return LockResponse(success=True, token=token, message="Lock acquired", expires_at=expires_at.isoformat())
     else:
         logger.warning(f"Lock denied: {request.resource_id} for {request.node_id}")
-        return LockResponse(
-            success=False,
-            message="Resource is locked by another node"
-        )
+        return LockResponse(success=False, message="Resource is locked by another node")
+
 
 @app.post("/lock/release", response_model=LockResponse)
 async def release_lock(request: ReleaseRequest):
     """Release a lock."""
     success = await store.release_lock(request.resource_id, request.token)
-    
+
     if success:
         logger.info(f"Lock released: {request.resource_id}")
         return LockResponse(success=True, message="Lock released")
     else:
         return LockResponse(success=False, message="Invalid lock or token")
 
+
 @app.get("/locks")
 async def get_locks():
     """Get all active locks."""
     locks = await store.get_locks()
     return {"locks": locks, "count": len(locks)}
+
+
+@app.get("/reaper/stats")
+async def reaper_stats():
+    """陈旧锁清理器的运行统计(扫描次数、清理条数、上次扫描时间)。
+
+    没有这个端点,reaper 就是个只在日志里冒泡的黑盒 —— 它清了多少、还在不在跑,
+    运维看不到。
+    """
+    if reaper is None:
+        return {"running": False, "reason": "reaper_not_started"}
+    return reaper.get_stats()
+
+
+@app.post("/reaper/scan")
+async def reaper_force_scan():
+    """立刻跑一次清理,不等扫描周期。
+
+    排障用:怀疑某个资源被陈旧锁挡住时,不必等满 60 秒。
+    """
+    if reaper is None:
+        return {"success": False, "reason": "reaper_not_started"}
+    return await reaper.force_scan()
+
 
 @app.post("/node/register")
 async def register_node(registration: NodeRegistration):
@@ -345,17 +402,20 @@ async def register_node(registration: NodeRegistration):
     logger.info(f"Node registered: {registration.node_id} ({registration.node_name})")
     return {"success": True, "message": f"Node {registration.node_id} registered"}
 
+
 @app.post("/node/heartbeat/{node_id}")
 async def heartbeat(node_id: str):
     """Update node heartbeat."""
     success = await store.heartbeat(node_id)
     return {"success": success}
 
+
 @app.get("/nodes")
 async def get_nodes():
     """Get all registered nodes."""
     nodes = await store.get_nodes()
     return {"nodes": nodes, "count": len(nodes)}
+
 
 @app.get("/state/export")
 async def export_state():
@@ -368,6 +428,7 @@ async def export_state():
     async with store._lock:
         state_copy = dict(store.state)
     return {"state": state_copy, "timestamp": datetime.now().isoformat()}
+
 
 @app.post("/state/import")
 async def import_state(payload: Dict[str, Any]):
@@ -382,17 +443,20 @@ async def import_state(payload: Dict[str, Any]):
         store.state.update(state_data)
     return {"success": True, "restored_keys": len(state_data)}
 
+
 @app.get("/state/{key}")
 async def get_state(key: str):
     """Get a state value."""
     value = await store.get_state(key)
     return {"key": key, "value": value}
 
+
 @app.post("/state/{key}")
 async def set_state(key: str, value: Any):
     """Set a state value."""
     await store.set_state(key, value)
     return {"success": True}
+
 
 @app.get("/")
 async def root():
@@ -402,8 +466,9 @@ async def root():
         "node_name": NODE_NAME,
         "layer": "L0_KERNEL",
         "status": "running",
-        "role": "Global State Machine - Central nervous system of Galaxy"
+        "role": "Global State Machine - Central nervous system of Galaxy",
     }
+
 
 # =============================================================================
 # Main Entry Point
@@ -415,5 +480,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.environ.get("NODE_PORT", "8000")),
         reload=False,
-        log_level=LOG_LEVEL.lower()
+        log_level=LOG_LEVEL.lower(),
     )

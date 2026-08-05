@@ -8,13 +8,13 @@ Responsibilities:
   when checks fail.
 """
 
+import logging
 import os
 import socket
 import subprocess
 import sys
-import logging
 
-from .bootstrap import print_status, print_section
+from .bootstrap import print_section, print_status
 
 logger = logging.getLogger("Galaxy")
 
@@ -40,6 +40,7 @@ def _nats_tcp_failure_is_critical() -> bool:
         return True
     try:
         from core.nats_bus import nats_bus
+
         stats = nats_bus.get_stats()
         if stats.get("noop_mode"):
             return False
@@ -62,8 +63,8 @@ async def run_startup_health_check(web_ui_port: int) -> None:
         web_ui_port: The port on which the unified launcher's HTTP server
             is listening (used for probes 1 and 2).
     """
-    import urllib.request
     import asyncio
+    import urllib.request
 
     # The uvicorn server now runs as a background task on THIS event loop, so the
     # probes MUST NOT block the loop — otherwise the server can't answer its own
@@ -102,9 +103,7 @@ async def run_startup_health_check(web_ui_port: int) -> None:
 
     # 4) NATS port check (optional for single-machine / noop bus)
     try:
-        await asyncio.to_thread(
-            lambda: socket.create_connection((nats_host, nats_port), timeout=3).close()
-        )
+        await asyncio.to_thread(lambda: socket.create_connection((nats_host, nats_port), timeout=3).close())
         logger.debug("NATS port %d: 已监听", nats_port)
     except Exception as exc:
         if _nats_tcp_failure_is_critical():
@@ -118,11 +117,16 @@ async def run_startup_health_check(web_ui_port: int) -> None:
         result = await asyncio.to_thread(
             subprocess.run,
             [
-                "docker", "ps",
-                "--filter", "name=nats",
-                "--filter", "name=gateway",
-                "--filter", "name=node_71",
-                "--format", "{{.Names}}\t{{.Status}}",
+                "docker",
+                "ps",
+                "--filter",
+                "name=nats",
+                "--filter",
+                "name=gateway",
+                "--filter",
+                "name=node_71",
+                "--format",
+                "{{.Names}}\t{{.Status}}",
             ],
             capture_output=True,
             text=True,

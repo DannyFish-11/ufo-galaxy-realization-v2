@@ -436,30 +436,177 @@ class MCPDynamicGateway:
             logger.warning("register_external_tool '%s' failed: %s", name, exc)
             return {"success": False, "error": str(exc)}
 
-    async def execute_tool(self, tool_name: str, arguments: dict) -> dict:
-        """Execute a named tool (generated or registered) by delegating to MCPLoader.
+    async def execute_tool(self, tool_name: str, arguments: dict, *, allow_mesh: bool = True) -> dict:
+        """Execute a named tool — 先本机,本机没有再问网格。
 
         Args:
             tool_name: Tool name as registered.
             arguments: Tool input arguments.
+            allow_mesh: 本机找不到时,是否把调用发上 ``galaxy.mcp.calls`` 问网格。
+                **从 NATS 收到的调用必须传 False** —— 见下面的环路说明。
 
         Returns:
             Tool result dict.
         """
         try:
-            from core.mcp_loader import mcp_loader
-
-            # Find server that has this tool
-            for server in mcp_loader.list_servers():
-                sid = server.get("id", "")
-                tools = await mcp_loader.list_tools(sid)
-                for tool in tools:
-                    if tool.get("name") == tool_name:
-                        return await mcp_loader.call_tool(sid, tool_name, arguments)
-
-            return {"success": False, "error": f"Tool '{tool_name}' not found in any MCP server"}
+            local = await self._execute_tool_locally(tool_name, arguments)
+            if local is not None:
+                return local
         except Exception as exc:
             return {"success": False, "error": str(exc)}
+
+        if allow_mesh:
+            mesh = await self._execute_tool_on_mesh(tool_name, arguments)
+            if mesh is not None:
+                return mesh
+
+        return {"success": False, "error": f"Tool '{tool_name}' not found in any MCP server"}
+
+    async def _execute_tool_locally(self, tool_name: str, arguments: dict):
+        """跑本进程 MCPLoader 里的工具。找不到返回 ``None``(区别于"跑了但失败")。"""
+        from core.mcp_loader import mcp_loader
+
+        for server in mcp_loader.list_servers():
+            sid = server.get("id", "")
+            tools = await mcp_loader.list_tools(sid)
+            for tool in tools:
+                if tool.get("name") == tool_name:
+                    return await mcp_loader.call_tool(sid, tool_name, arguments)
+        return None
+
+    async def _execute_tool_on_mesh(self, tool_name: str, arguments: dict):
+        """本机没有这个工具时,问网格上有没有别人有。找不到/总线不可用返回 ``None``。
+
+        为什么必须防环
+        --------------
+        网格那一端也是一个 MCP 网关。如果它在处理一条**来自 NATS 的**调用时,
+        发现本机也没有这个工具、又把调用重新发上 ``galaxy.mcp.calls``,这条消息
+        就会在网关之间来回弹 —— 而且每弹一次都新占一个 request_id,谁也不会
+        收敛。所以 :meth:`_on_nats_call` 一律用 ``allow_mesh=False`` 调本方法的
+        上游,网格这条路**只从本机发起的调用进入一次**。
+
+        已知限制(如实记下,不假装没有)
+        --------------------------------
+        所有网关共用 durable ``mcp-gateway-calls``,JetStream 会在它们之间分发,
+        所以一条调用只会落到**其中一个**网关手上。要是恰好落到同样没有这个工具
+        的那个,就返回 not_found,不会再转给第三个。真要"问遍全网格",得改成每个
+        网关各带自己的 durable(广播)+ 调用方做去重,那是另一件事。
+        """
+        try:
+            if not self._nats.is_usable():
+                return None
+            from core.mcp_call_client import get_mcp_call_client
+
+            result = await get_mcp_call_client().call_tool(tool_name, arguments)
+            if result.get("success"):
+                return result.get("result")
+            logger.debug("MCPGateway: 网格上也没跑成 %s — %s", tool_name, result.get("error"))
+            return None
+        except Exception as exc:  # pragma: no cover — 网格兜底失败不该盖掉本机结论
+            logger.debug("MCPGateway: 问网格失败 %s — %s", tool_name, exc)
+            return None
+
+    # ── MCP over NATS:网关这一端 ────────────────────────────────────────────
+    #
+    # 契约在 contracts/proto/galaxy/v1/mcp.proto 与 docs/AGENTIC_OS_ARCHITECTURE.md
+    # 里写得很清楚:
+    #
+    #   galaxy.mcp.calls    Brain → MCP Gateway  (MCPCallRequest)
+    #   galaxy.mcp.results  MCP Gateway → Brain  (MCPCallResponse)
+    #
+    # 但两端从来没接上:``NATSBus.publish_mcp_call`` 有发布器**没有订阅方**,
+    # ``NATSBus.subscribe_mcp_results`` 有订阅器**没有发布方**。两条主题各自
+    # 断在半路,文档写的那个回路一次都没跑通过。
+    #
+    # 下面这两个方法把网关这一端补齐:订 calls、执行、把结果发回 results。
+    # Brain 那一端在 core/mcp_call_client.py。
+
+    async def start_nats_listener(self) -> dict:
+        """订上 ``galaxy.mcp.calls``,开始接受来自 Brain 的工具调用。
+
+        由启动序列调用。总线不可用时直接返回不成功 —— 不抛,MCP 的本地
+        (进程内 MCPLoader)通路不受影响。
+        """
+        if not self._nats.is_usable():
+            logger.debug("MCPGateway: 总线不可用,不订阅 galaxy.mcp.calls")
+            return {"success": False, "error": "nats_unavailable"}
+        try:
+            await self._nats.subscribe(
+                "galaxy.mcp.calls",
+                self._on_nats_call,
+                durable="mcp-gateway-calls",
+            )
+            logger.info("MCPGateway: 已订阅 galaxy.mcp.calls")
+            return {"success": True}
+        except Exception as exc:
+            logger.error("MCPGateway: 订阅 galaxy.mcp.calls 失败 — %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    async def _on_nats_call(self, data: dict) -> None:
+        """处理一条 MCPCallRequest,把 MCPCallResponse 发回 ``galaxy.mcp.results``。
+
+        **无论成败都要回一条**:调用方按 ``request_id`` 等在 future 上,不回就是
+        让它一直等到超时。工具不存在、参数是坏 JSON、执行抛异常 —— 全部转成
+        ``is_error=True`` 的响应发回去,而不是让请求悬着。
+        """
+        import time as _t
+
+        started = _t.monotonic()
+        request_id = str((data or {}).get("request_id") or "")
+        tool_name = str((data or {}).get("tool_name") or "")
+        try:
+            raw_args = (data or {}).get("arguments_json") or "{}"
+            try:
+                arguments = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args or {})
+            except (TypeError, ValueError) as exc:
+                await self._publish_call_response(
+                    request_id, error=f"arguments_json 不是合法 JSON: {exc}", started=started
+                )
+                return
+
+            # allow_mesh=False 是**防环**的关键:这条调用本来就是从网格上收到的,
+            # 本机没有就该老实回 not_found,绝不能再发上 galaxy.mcp.calls ——
+            # 那会让消息在网关之间来回弹且永不收敛(见 _execute_tool_on_mesh)。
+            result = await self.execute_tool(tool_name, arguments, allow_mesh=False)
+            if isinstance(result, dict) and result.get("success") is False:
+                await self._publish_call_response(
+                    request_id, error=str(result.get("error") or "tool_failed"), started=started
+                )
+            else:
+                await self._publish_call_response(request_id, result=result, started=started)
+        except Exception as exc:  # pragma: no cover — 兜底:绝不能让请求悬着
+            logger.error("MCPGateway: 处理 %s 调用失败 — %s", tool_name, exc)
+            await self._publish_call_response(request_id, error=str(exc), started=started)
+
+    async def _publish_call_response(
+        self,
+        request_id: str,
+        *,
+        result: Any = None,
+        error: str = "",
+        started: float = 0.0,
+    ) -> None:
+        import time as _t
+
+        from core.schemas.contracts import MCPCallResponseModel
+
+        duration_ms = int((_t.monotonic() - started) * 1000) if started else 0
+        resp = MCPCallResponseModel(
+            request_id=request_id,
+            is_error=bool(error),
+            result_json=json.dumps(result, default=str) if result is not None else "{}",
+            duration_ms=duration_ms,
+            completed_at=TimestampModel.now(),
+            server_id="mcp_gateway",
+        )
+        if error:
+            from core.schemas.contracts import ErrorInfoModel
+
+            resp.error = ErrorInfoModel(code="MCP_CALL_FAILED", message=error[:500])
+        try:
+            await self._nats.publish_mcp_result(resp)
+        except Exception as exc:  # pragma: no cover
+            logger.error("MCPGateway: 回发 %s 的结果失败 — %s", request_id, exc)
 
     def list_github_tools(self) -> list:
         """Return tools registered via GitHub (source == 'github')."""

@@ -62,7 +62,6 @@ import json  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import os  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import socket  # noqa: E402  哨兵权威声明置顶是本仓设计习语
-import time  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from typing import Any, Callable, Dict, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("nats_bus")
@@ -71,6 +70,8 @@ logger = logging.getLogger("nats_bus")
 from core.schemas.aip_v3 import (  # noqa: E402  哨兵权威声明置顶是本仓设计习语
     AckMsg,
     AIPMessage,
+    CancelResultMsg,
+    CapabilityQueryMsg,
     CapabilityReportMsg,
     CoordSyncMsg,
     DelegatedExecutionSignalMsg,
@@ -153,96 +154,41 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# JetStream stream definitions
+# 主题与流定义 —— 见 core/nats_subjects.py
 # ═══════════════════════════════════════════════════════════════════════════════
-
-_STREAMS = {
-    "GALAXY_TASKS": {
-        "subjects": ["galaxy.tasks.>"],
-        "max_msgs": 100_000,
-        "max_bytes": 1_073_741_824,  # 1 GB
-    },
-    "GALAXY_MCP": {
-        "subjects": ["galaxy.mcp.>"],
-        "max_msgs": 50_000,
-        "max_bytes": 536_870_912,  # 512 MB
-    },
-    "GALAXY_EVENTS": {
-        "subjects": ["galaxy.events.>", "galaxy.workers.>"],
-        "max_msgs": 200_000,
-        "max_bytes": 536_870_912,
-    },
-}
+#
+# 拆出去的是**名字**,不是行为。理由写在那个模块的开头:这一层踩过两次
+# 「同一个主题被定义了两次」(单复数分裂、网关自己拼主题),名字有独立的家之后,
+# 「这个主题在哪定义的」才是个只有一个答案的问题。
+#
+# 这里 re-export 是为了不动既有的 `from core.nats_bus import NATSTopics` 之类的
+# 导入 —— 拆分不该顺带变成一次全仓改名。
+from core.nats_subjects import (  # noqa: E402,F401  哨兵权威声明置顶是本仓设计习语
+    _STREAMS,
+    NATSTopics,
+    WorkerLifecycleSubjects,
+)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PR-2: Standardized topic namespace
-# ═══════════════════════════════════════════════════════════════════════════════
+def _envelope_payload(envelope: Any) -> Dict[str, Any]:
+    """把 envelope 归一成可发布的 dict —— pydantic 模型或已经是 dict 都收。
 
+    为什么要收 dict
+    ---------------
+    真实的生产者不一定手上有 pydantic 模型。``GatewayNATSAdapter._publish_result``
+    就是自己拼一个"legacy 字段 + TaskEnvelope 判别器"的 dict —— 它拼得完全正确,
+    却因为这两个发布器只认 ``.model_dump()``,只能绕过它们直接调**私有的**
+    ``nats_bus._publish``。结果是:主题、判别器、trace 字段这几件事在网关里
+    各拼一遍,发布器这边改了主题(比如 C7 那次任务平面收敛到单数),网关那边
+    不会跟着变 —— 两处各自为政,正是漂移的温床。
 
-class NATSTopics:
-    """Canonical NATS subject prefixes for PR-2 unified bus.
-
-    All internal publishers and subscribers MUST use these constants so that
-    the topic contract is a single source of truth.
-
-    Topic hierarchy:
-      task.*          — task lifecycle (dispatch, result, cancel, status)
-      device.*        — device events (register, heartbeat, status, presence)
-      presence.*      — presence/projection events
-      capability.*    — capability registration and resolution events
-      audit.*         — audit log entries
+    收 dict 之后网关走公开发布器,主题只有这一处定义。
     """
-
-    # ── Task plane ───────────────────────────────────────────────────────────
-    TASK_DISPATCH = "galaxy.task.dispatch"
-    TASK_RESULT = "galaxy.task.result"
-    TASK_CANCEL = "galaxy.task.cancel"
-    TASK_STATUS = "galaxy.task.status"
-
-    # ── Device plane ─────────────────────────────────────────────────────────
-    DEVICE_REGISTER = "galaxy.device.register"
-    DEVICE_HEARTBEAT = "galaxy.device.heartbeat"
-    DEVICE_STATUS = "galaxy.device.status"
-    DEVICE_PRESENCE = "galaxy.device.presence"
-
-    # ── Presence plane ───────────────────────────────────────────────────────
-    PRESENCE_STATE = "galaxy.presence.state"
-    PRESENCE_PROJECTION = "galaxy.presence.projection"
-
-    # ── Capability plane ─────────────────────────────────────────────────────
-    CAPABILITY_REGISTERED = "galaxy.capability.registered"
-    CAPABILITY_REMOVED = "galaxy.capability.removed"
-
-    # ── Audit plane ──────────────────────────────────────────────────────────
-    AUDIT_COMMAND = "galaxy.audit.command"
-    AUDIT_RESULT = "galaxy.audit.result"
-    AUDIT_VIOLATION = "galaxy.audit.violation"
-
-    @classmethod
-    def task_dispatch(cls, target: str) -> str:
-        return f"{cls.TASK_DISPATCH}.{target}"
-
-    @classmethod
-    def task_result(cls, task_id: str) -> str:
-        return f"{cls.TASK_RESULT}.{task_id}"
-
-    @classmethod
-    def device_heartbeat(cls, device_id: str) -> str:
-        return f"{cls.DEVICE_HEARTBEAT}.{device_id}"
-
-    @classmethod
-    def capability_registered(cls, source: str) -> str:
-        return f"{cls.CAPABILITY_REGISTERED}.{source}"
-
-
-class WorkerLifecycleSubjects:
-    """Canonical worker lifecycle subjects used by both publishers and consumers."""
-
-    REGISTER = "galaxy.workers.register"
-    HEARTBEAT = "galaxy.workers.heartbeat"
-    SHUTDOWN = "galaxy.workers.shutdown"
-    RESULT = "galaxy.tasks.result.*"
+    if hasattr(envelope, "model_dump"):
+        return envelope.model_dump(mode="json", exclude_none=True)
+    if isinstance(envelope, dict):
+        return dict(envelope)
+    raise TypeError(f"envelope 必须是 pydantic 模型或 dict,收到 {type(envelope).__name__}")
 
 
 class NATSBus:
@@ -392,24 +338,15 @@ class NATSBus:
             )
             self._js = self._nc.jetstream()
 
-            # Ensure JetStream streams exist
-            for name, cfg in _STREAMS.items():
-                try:
-                    await self._js.find_stream_name_by_subject(cfg["subjects"][0].replace(">", "*"))
-                except Exception:
-                    from nats.js.api import StreamConfig
-
-                    await self._js.add_stream(
-                        StreamConfig(
-                            name=name,
-                            subjects=cfg["subjects"],
-                            max_msgs=cfg["max_msgs"],
-                            max_bytes=cfg["max_bytes"],
-                            retention="limits",
-                            storage="file",
-                        )
-                    )
-                    logger.info(f"NATSBus: created stream {name}")
+            # Ensure JetStream streams exist **and cover every configured subject**.
+            #
+            # 此前这里只有"不存在就建"一条路:流一旦建起来,后来往 _STREAMS 里加的
+            # 前缀就永远进不去。新前缀在全新部署上生效、在已跑的部署上静默失效,
+            # 是最难查的一类不一致 —— 同一份代码两种行为。
+            #
+            # 往流里**加** subject 是安全操作(删才危险),所以这里只做并集,
+            # 绝不移除已有 subject:线上可能还有消费者挂在上面。
+            await self._ensure_streams()
 
             self._connected = True
             _try_emit_event("NATS_CONNECTED", {"url": target})
@@ -495,7 +432,7 @@ class NATSBus:
         NATS handles logical pub/sub for task dispatch and mesh state sync.
 
         Args:
-            subject: NATS subject (e.g. "galaxy.tasks.dispatch.worker_01")
+            subject: NATS subject (e.g. "galaxy.task.dispatch.worker_01")
             aip_message: An AIPMessage subclass instance
 
         Returns:
@@ -543,29 +480,45 @@ class NATSBus:
         """
         return await self.publish_aip_v3(NATSTopics.CAPABILITY_REGISTERED, msg)
 
+    async def publish_capability_query(self, msg: "CapabilityQueryMsg") -> dict:
+        """Publish CAPABILITY_QUERY to ``galaxy.capability.query``.
+
+        Asks the mesh which devices provide a capability.  Replies come back
+        as CAPABILITY_REPORT on ``galaxy.capability.registered``.
+        """
+        return await self.publish_aip_v3(NATSTopics.CAPABILITY_QUERY, msg)
+
     # ── Task / execution ──
 
     async def publish_task_assign(self, msg: "TaskAssignMsg") -> dict:
-        """Publish TASK_ASSIGN to ``galaxy.tasks.dispatch.{device_id}``."""
+        """Publish TASK_ASSIGN to ``galaxy.task.dispatch.{device_id}``."""
         subject = NATSTopics.task_dispatch(msg.device_id)
         return await self.publish_aip_v3(subject, msg)
 
     async def publish_task_result(self, msg: "TaskResultMsg") -> dict:
-        """Publish TASK_RESULT to ``galaxy.tasks.result.{task_id}``."""
+        """Publish TASK_RESULT to ``galaxy.task.result.{task_id}``."""
         subject = NATSTopics.task_result(msg.task_id or msg.device_id)
         return await self.publish_aip_v3(subject, msg)
 
     async def publish_task_cancel(self, msg: "TaskCancelMsg") -> dict:
-        """Publish TASK_CANCEL to ``galaxy.tasks.cancel.{task_id}``."""
-        return await self.publish_aip_v3(f"galaxy.task.cancel.{msg.task_id}", msg)
+        """Publish TASK_CANCEL to ``galaxy.task.cancel.{task_id}``."""
+        return await self.publish_aip_v3(f"{NATSTopics.TASK_CANCEL}.{msg.task_id}", msg)
+
+    async def publish_cancel_result(self, msg: "CancelResultMsg") -> dict:
+        """Publish CANCEL_RESULT to ``galaxy.task.cancel_result.{task_id}``.
+
+        The reply half of :meth:`publish_task_cancel` — tells the requester
+        whether the cancellation actually took, and how clean the teardown was.
+        """
+        return await self.publish_aip_v3(f"{NATSTopics.TASK_CANCEL_RESULT}.{msg.task_id}", msg)
 
     async def publish_goal_execution(self, msg: "GoalExecutionMsg") -> dict:
-        """Publish GOAL_EXECUTION to ``galaxy.tasks.dispatch.{device_id}``."""
+        """Publish GOAL_EXECUTION to ``galaxy.task.dispatch.{device_id}``."""
         subject = NATSTopics.task_dispatch(msg.device_id)
         return await self.publish_aip_v3(subject, msg)
 
     async def publish_goal_result(self, msg: "GoalExecutionResultMsg") -> dict:
-        """Publish GOAL_EXECUTION_RESULT to ``galaxy.tasks.result.{task_id}``."""
+        """Publish GOAL_EXECUTION_RESULT to ``galaxy.task.result.{task_id}``."""
         subject = NATSTopics.task_result(msg.task_id)
         return await self.publish_aip_v3(subject, msg)
 
@@ -673,6 +626,66 @@ class NATSBus:
     # These methods accept the old contracts.py models and automatically
     # convert them to AIP v3 before publishing. Existing callers work
     # without modification.
+    #
+    # 例外:worker 生命周期那三条(register / heartbeat / shutdown)**不转**。
+    # ────────────────────────────────────────────────────────────────────
+    # 这里其实是两个平面,不是一个平面的新旧两版:
+    #
+    #   galaxy.device.*   设备协议平面,载 AIP v3 消息类,对端是各种设备;
+    #   galaxy.workers.*  MasterBrain ↔ Edge Worker 平面,载 contracts.py 的
+    #                     WorkerHeartbeatModel / WorkerRegistrationModel …
+    #
+    # 这三条原先先转成 AIP v3、再调设备平面的 publish_device_* —— 于是消息落到
+    # galaxy.device.*,而 MasterBrain 的 subscribe_worker_* 在 galaxy.workers.*
+    # 上等,两端根本不在一个主题上。
+    #
+    # 而它们当时看起来"是好的",是因为转换**恰好抛异常**:WorkerHeartbeatModel
+    # 的 timestamp 序列化成 {seconds, nanos} 而 HeartbeatMsg.timestamp 要 int;
+    # WorkerRegistrationModel 的 capabilities 是对象列表而 DeviceRegisterMsg 要
+    # 字符串列表。异常把它们打进 except 分支,原样发去了 galaxy.workers.* ——
+    # 对的结果,错的理由。三条里唯一转换会成功的 shutdown,就是真的断的那条。
+    #
+    # 反方向同样是坏的:from_aip_to_legacy 还原出来的 timestamp 是 int,
+    # WorkerHeartbeatModel.model_validate 照样不认(见
+    # tests/test_worker_lifecycle_subjects.py 里钉住的那条)。
+    #
+    # 所以正确做法不是"把转换修好",是**别转**:worker 平面的消息发到 worker
+    # 平面,格式就是消费方认的那个。
+
+    # ── 关于本节里"全仓没有调用方"的那几个发布器 ──────────────────────────
+    #
+    # 接线守卫(scripts/check_wiring.py)会把它们记进基线。逐条查过之后,结论
+    # 不是"忘了接",各有各的理由,写在这里省得下一个人再查一遍:
+    #
+    #   publish_task_event / publish_device_event / publish_capability_event
+    #       —— 这三个是**带 trace 传播的通用入口**,由 tests/conformance/
+    #       test_nats_trace.py 钉住(subject 前缀 + _nats_schema + trace 字段),
+    #       publish_task_event 还额外承载 PR-7 的 remote_execution_mode 与
+    #       PR-12 的 lifecycle_state。它们指向的三个命名空间**已经由带类型的
+    #       AIP v3 发布器占着**(publish_device_register / publish_task_assign /
+    #       publish_capability_report …),消费方按 AIP v3 消息类解析。往这些主题
+    #       上再灌无类型 dict 不是"接线",是往消费方嘴里塞它不认识的东西。
+    #       保留:它们是契约面(远端/跨仓生产者要对齐的形状),不是待接的能力。
+    #
+    #   publish_task_envelope
+    #       —— 派发方向的 TaskEnvelope。消费侧是活的:
+    #       GatewayNATSAdapter 那条 `_nats_schema == "TaskEnvelope"` 分支。
+    #       本仓的派发方手上拿的是 TaskDispatchModel(走 publish_task_dispatch,
+    #       3 处生产调用)或本地 CommandRouter.route_envelope,没有"有 envelope
+    #       且要发去远端"的路径。这是给**别的仓/别的设备**留的入口。
+    #
+    #   publish_legacy_task_result
+    #       —— 结果方向的 legacy 半边。本仓生产代码**从不构造 TaskResultModel**:
+    #       结果要么是 AIP v3 的 TaskResultMsg(worker_runtime / swarm_coordinator /
+    #       task_graph / node_invocation 四处),要么是网关那个 envelope dict。
+    #       它与 publish_task_dispatch(legacy,有 3 处调用)是对称的一对,
+    #       MasterBrain 侧的 ACL.validate_task_result 也确实收 legacy 形状 ——
+    #       删掉就是把一对里的一半拆了。保留,理由记在这。
+    #
+    # 反例(同一节里真的断了、已修的):publish_task_result_envelope 曾经也是
+    # "零调用方",但它的生产者其实一直存在 —— 网关自己拼主题、绕过它直接调私有
+    # 的 _publish。那不是"用不上",是**接错了**,已改回走发布器。
+    # 判据是"有没有真实生产者",不是"有没有人调过"。
 
     async def publish_task_dispatch(self, worker_id: str, task: TaskDispatchModel) -> dict:
         """[Legacy] Publish TaskDispatch — auto-converts to AIP v3 TASK_ASSIGN."""
@@ -690,7 +703,7 @@ class NATSBus:
             return await self.publish_task_assign(msg)
         except Exception as exc:
             logger.debug("AIP v3 convert failed for task_dispatch, legacy fallback: %s", exc)
-            subject = f"galaxy.tasks.dispatch.{worker_id}"
+            subject = NATSTopics.task_dispatch(worker_id)
             return await self._publish(subject, task.model_dump(mode="json", exclude_none=True))
 
     async def publish_legacy_task_result(self, task_id: str, result: TaskResultModel) -> dict:
@@ -709,61 +722,39 @@ class NATSBus:
             return await self.publish_task_result(msg)
         except Exception as exc:
             logger.debug("AIP v3 convert failed for task_result, legacy fallback: %s", exc)
-            subject = f"galaxy.tasks.result.{task_id}"
+            subject = NATSTopics.task_result(task_id)
             return await self._publish(subject, result.model_dump(mode="json", exclude_none=True))
 
     async def publish_legacy_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
-        """[Legacy] Publish WorkerHeartbeat — auto-converts to AIP v3 HEARTBEAT."""
-        try:
-            data = heartbeat.model_dump(mode="json", exclude_none=True)
-            msg = HeartbeatMsg(
-                device_id=data.get("worker_id", ""),
-                status=data.get("status", "online"),
-                metadata=data.get("metadata", {}),
-                timestamp=data.get("timestamp", int(time.time() * 1000)),
-            )
-            return await self.publish_heartbeat(msg)
-        except Exception as exc:
-            logger.debug("AIP v3 convert failed for heartbeat, legacy fallback: %s", exc)
-            return await self._publish(
-                WorkerLifecycleSubjects.HEARTBEAT,
-                heartbeat.model_dump(mode="json", exclude_none=True),
-            )
+        """Publish a worker heartbeat to ``galaxy.workers.heartbeat``.
+
+        见本节开头「两个平面」的说明:worker 心跳走 worker 平面,不转 AIP v3、
+        不走设备平面的 :meth:`publish_heartbeat`。
+        """
+        return await self._publish(
+            WorkerLifecycleSubjects.HEARTBEAT,
+            heartbeat.model_dump(mode="json", exclude_none=True),
+        )
 
     async def publish_legacy_worker_registration(self, registration: WorkerRegistrationModel) -> dict:
-        """[Legacy] Publish WorkerRegistration — auto-converts to AIP v3 DEVICE_REGISTER."""
-        try:
-            data = registration.model_dump(mode="json", exclude_none=True)
-            msg = DeviceRegisterMsg(
-                device_id=data.get("worker_id", ""),
-                device_type=data.get("worker_type", "worker"),
-                capabilities=data.get("capabilities", []),
-                metadata=data.get("metadata", {}),
-                status="online",
-            )
-            return await self.publish_device_register(msg)
-        except Exception as exc:
-            logger.debug("AIP v3 convert failed for worker_registration, legacy fallback: %s", exc)
-            return await self._publish(
-                WorkerLifecycleSubjects.REGISTER,
-                registration.model_dump(mode="json", exclude_none=True),
-            )
+        """Publish a worker registration to ``galaxy.workers.register``。"""
+        return await self._publish(
+            WorkerLifecycleSubjects.REGISTER,
+            registration.model_dump(mode="json", exclude_none=True),
+        )
 
     async def publish_legacy_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
-        """[Legacy] Publish WorkerShutdown — auto-converts to AIP v3 DEVICE_UNREGISTER."""
-        try:
-            data = shutdown.model_dump(mode="json", exclude_none=True)
-            msg = DeviceUnregisterMsg(
-                device_id=data.get("worker_id", ""),
-                reason=data.get("reason", "shutdown"),
-            )
-            return await self.publish_device_unregister(msg)
-        except Exception as exc:
-            logger.debug("AIP v3 convert failed for worker_shutdown, legacy fallback: %s", exc)
-            return await self._publish(
-                WorkerLifecycleSubjects.SHUTDOWN,
-                shutdown.model_dump(mode="json", exclude_none=True),
-            )
+        """Publish a worker shutdown to ``galaxy.workers.shutdown``。
+
+        这条此前是**真的断的**:它的 AIP v3 转换是三条里唯一会成功的,于是消息被
+        发去了设备平面的 ``galaxy.device.register``,而 MasterBrain 在
+        ``galaxy.workers.shutdown`` 上等 —— 它永远等不到,只能靠心跳超时把 worker
+        判死、再把它手上的在途任务标成 ``worker_lost``。干净下线与崩溃从此不可区分。
+        """
+        return await self._publish(
+            WorkerLifecycleSubjects.SHUTDOWN,
+            shutdown.model_dump(mode="json", exclude_none=True),
+        )
 
     async def publish_event(self, event: AgentEventModel) -> dict:
         """[Legacy] Publish AgentEvent — auto-converts to AIP v3 STATE_EVENT."""
@@ -792,27 +783,48 @@ class NATSBus:
             request.model_dump(mode="json", exclude_none=True),
         )
 
+    async def publish_mcp_result(self, response: Any) -> dict:
+        """Publish an MCPCallResponse to ``galaxy.mcp.results``.
+
+        回程的那一半。修之前 ``galaxy.mcp.results`` 只有 :meth:`subscribe_mcp_results`
+        这个订阅器、**没有任何发布方** —— 与 ``galaxy.mcp.calls`` 只有发布器没有
+        订阅方正好对称,契约(contracts/proto/galaxy/v1/mcp.proto)里写的那个
+        Brain ↔ MCP Gateway 回路两头都断着,一次也没跑通过。
+        """
+        return await self._publish(
+            "galaxy.mcp.results",
+            response.model_dump(mode="json", exclude_none=True),
+        )
+
     async def publish_task_envelope(self, target: str, envelope: Any) -> dict:
-        """Publish a TaskEnvelope to ``galaxy.tasks.dispatch.{target}``.
+        """Publish a TaskEnvelope to ``galaxy.task.dispatch.{target}``.
 
         PR-3: TaskEnvelope is the primary NATS transport format.  The
         ``_nats_schema`` discriminator field allows subscribers to detect and
         parse the envelope format before falling back to legacy TaskDispatch.
+
+        主题由 :meth:`NATSTopics.task_dispatch` 唯一决定(C7 之后是单数
+        ``galaxy.task.*``);订阅侧 :meth:`subscribe_task_dispatches` 单复数都收。
         """
-        subject = f"galaxy.tasks.dispatch.{target}"
-        data = envelope.model_dump(mode="json", exclude_none=True)
+        subject = NATSTopics.task_dispatch(target)
+        data = _envelope_payload(envelope)
         data["_nats_schema"] = "TaskEnvelope"
         return await self._publish(subject, data)
 
     async def publish_task_result_envelope(self, task_id: str, envelope: Any) -> dict:
-        """Publish a TaskEnvelope-shaped result to ``galaxy.tasks.result.{task_id}``.
+        """Publish a TaskEnvelope-shaped result to ``galaxy.task.result.{task_id}``.
 
         PR-3: Publishes a unified result payload that carries both the legacy
         ``status`` field (for backward-compatible consumers) and a full
         TaskEnvelope representation.
+
+        消费侧 ``NATSExecutor._on_task_result`` 早就写好了
+        ``_nats_schema == "TaskEnvelope"`` 那条分支(从 metadata 里读
+        success/result/error),但在这个发布器有真实调用方之前,那条分支是死的 ——
+        网关虽然发的是同一个形状,却绕过发布器直接调私有 ``_publish``。
         """
-        subject = f"galaxy.tasks.result.{task_id}"
-        data = envelope.model_dump(mode="json", exclude_none=True)
+        subject = NATSTopics.task_result(task_id)
+        data = _envelope_payload(envelope)
         data["_nats_schema"] = "TaskEnvelope"
         return await self._publish(subject, data)
 
@@ -942,15 +954,40 @@ class NATSBus:
 
     # ── Subscribe methods ───────────────────────────────────────────────────
 
-    async def subscribe_task_dispatches(self, worker_id: str, callback: Callable) -> dict:
-        """Subscribe to task dispatches for a specific worker.
+    async def subscribe(self, subject: str, callback: Callable, durable: str = "") -> dict:
+        """订阅任意主题 —— 给总线之外的调用方用的公开入口。
 
-        PR-AIPV3-NATS: Received AIP v3 messages are automatically converted to
-        legacy format before passing to the callback.
+        为什么补这个方法
+        ----------------
+        ``galaxy_gateway/gateway_nats_adapter.py`` 一直在调 ``nats_bus.subscribe(...)``,
+        而 NATSBus 上**从来没有**这个方法:调用抛 AttributeError,被 ``start()`` 外面
+        那个 ``except Exception`` 吞成一行日志,``self._started`` 保持 False ——
+        网关适配器从此静默地不工作,派给 ``gateway`` 的任务一条也收不到。
+
+        实测:``await GatewayNATSAdapter().start()`` 之后 ``_started`` 恒为 False,
+        被吞掉的异常是 ``AttributeError: 'NATSBus' object has no attribute 'subscribe'``。
+
+        总线内部用 ``_subscribe``;跨模块调用方用这个。名字带下划线的私有方法不该
+        成为外部契约 —— 那正是这次能静默这么久的原因之一。
         """
-        subject = f"galaxy.tasks.dispatch.{worker_id}"
+        return await self._subscribe(subject, callback, durable=durable)
+
+    async def subscribe_task_dispatches(self, worker_id: str, callback: Callable) -> dict:
+        """Subscribe to task dispatches for *worker_id* —— 单复数两个前缀都收。
+
+        见 :data:`_STREAMS` 的说明:``NATSTopics.task_dispatch()`` 走单数,而
+        ``publish_task_dispatch`` / ``publish_task_envelope`` / 网关适配器走复数。
+        只订一个前缀就会漏掉另一半 —— 修复前这里只订复数,于是
+        ``publish_task_assign`` / ``publish_goal_execution`` 派出去的任务
+        **一条也到不了 worker**。
+        """
         wrapped = self._wrap_aip_v3_callback(callback)
-        return await self._subscribe(subject, wrapped, durable=f"worker-{worker_id}")
+        return await self._subscribe_both(
+            f"galaxy.tasks.dispatch.{worker_id}",
+            f"{NATSTopics.TASK_DISPATCH}.{worker_id}",
+            wrapped,
+            durable=f"worker-{worker_id}",
+        )
 
     async def subscribe_task_results(
         self,
@@ -964,8 +1001,9 @@ class NATSBus:
         legacy format before passing to the callback.
         """
         wrapped = self._wrap_aip_v3_callback(callback)
-        return await self._subscribe(
+        return await self._subscribe_both(
             WorkerLifecycleSubjects.RESULT,
+            f"{NATSTopics.TASK_RESULT}.*",
             wrapped,
             durable="brain-results",
             return_subscription=include_subscription,
@@ -1011,9 +1049,22 @@ class NATSBus:
         )
 
     async def subscribe_task_deadletters(self, callback: Callable) -> dict:
-        """Subscribe to task dead-letter messages."""
-        subject = os.environ.get("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
-        return await self._subscribe(subject, callback, durable="brain-task-deadletter")
+        """Subscribe to task dead-letter messages —— 单复数两个主题都收。
+
+        死信是最后一道网,漏在这里等于任务失败了都没人知道。网关适配器是**独立
+        进程**,可能与本进程不同版本 —— 灰度期间两边默认值不一致,死信就会掉进
+        没人听的主题。所以两个都订,直到迁移收尾。
+        """
+        override = os.environ.get("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "")
+        if override:
+            # 显式配置过就只认它 —— 运维指定了主题,不该再自作主张多订一个。
+            return await self._subscribe(override, callback, durable="brain-task-deadletter")
+        return await self._subscribe_both(
+            "galaxy.tasks.deadletter",
+            NATSTopics.TASK_DEADLETTER,
+            callback,
+            durable="brain-task-deadletter",
+        )
 
     async def subscribe_events(self, event_type: str, callback: Callable) -> dict:
         """Subscribe to events of a specific type."""
@@ -1087,6 +1138,25 @@ class NATSBus:
     def is_local_mode(self) -> bool:
         """当前是否运行在进程内降级总线上。"""
         return bool(getattr(self, "_local_mode", False))
+
+    def is_usable(self) -> bool:
+        """总线现在**能不能用** —— 这才是"要不要发/要不要订"该问的那个问题。
+
+        与 :meth:`is_connected` 的区别
+        ------------------------------
+        ``is_connected()`` 判的是**网络**连接(``self._nc is not None and
+        self._nc.is_connected``),用于状态上报是对的。但拿它当闸门就错了:
+        进程内降级总线下它恒为 False,而那条总线是完全可用的 —— 本地降级的
+        全部意义正是"单机语义完整保留:同进程内订阅者照常收到消息"。
+
+        这个区别不是理论问题。全仓有二十多处 ``if nats.is_connected():`` 形式的
+        闸门,单机模式下它们**全部静默跳过** —— 心跳不发、任务不派、结果不回、
+        网格事件不广播,而日志里什么异常都没有,因为那不是异常,是 if 判 False。
+        单机跑起来看着一切正常,实际上整条 NATS 依赖面是黑的。
+
+        所以:**上报状态用 is_connected(),决定要不要走总线用 is_usable()。**
+        """
+        return self.is_connected() or self.is_local_mode()
 
     @staticmethod
     def _subject_matches(pattern: str, subject: str) -> bool:
@@ -1189,6 +1259,140 @@ class NATSBus:
             logger.error(f"NATSBus: publish failed on {subject} — {exc}")
             return {"success": False, "error": str(exc)}
 
+    async def _subscribe_both(
+        self,
+        legacy_subject: str,
+        canonical_subject: str,
+        callback: Callable,
+        *,
+        durable: str = "",
+        return_subscription: bool = False,
+    ) -> dict:
+        """同时订阅遗留(复数)与规范(单数)两个主题。
+
+        为什么必须订两个
+        ----------------
+        NATS 逐 token 精确匹配,``galaxy.task.*`` 与 ``galaxy.tasks.*`` 之间没有
+        任何通配符能搭桥。而本仓这两个前缀**同时有真实发布方**:``NATSTopics``
+        常量(新规范)走单数,``command_router`` / ``scheduler`` /
+        ``gateway_nats_adapter`` / 各 legacy 发布器走复数。只订一个,另一半的
+        消息就永远收不到 —— 修复前实测任务结果 0 条到得了主脑。
+
+        durable 名必须分开
+        ------------------
+        JetStream 的 durable consumer 绑死一个 filter subject。两个订阅共用一个
+        durable 名会冲突(报错,或两边互相抢消息)。所以规范那条统一加 ``-canonical``
+        后缀,遗留那条保持原名 —— 已在跑的部署里那个 durable 不会被动到。
+
+        不会重复投递
+        ------------
+        没有任何一条发布路径同时往两个前缀发,所以同一条消息只会经其中一个到达。
+        """
+        legacy = await self._subscribe(
+            legacy_subject, callback, durable=durable, return_subscription=return_subscription
+        )
+        canonical = await self._subscribe(
+            canonical_subject,
+            callback,
+            durable=f"{durable}-canonical" if durable else "",
+            return_subscription=return_subscription,
+        )
+
+        subs = [r.get("subscription") for r in (legacy, canonical) if r.get("subscription") is not None]
+        result: Dict[str, Any] = {
+            # 两条里有一条成了就算订上了 —— 单机/降级场景下另一条失败不该让
+            # 整个订阅报失败。两条都失败才是真失败。
+            "success": bool(legacy.get("success") or canonical.get("success")),
+            "subject": legacy_subject,
+            "subjects": [legacy_subject, canonical_subject],
+            "durable": durable,
+        }
+        if not result["success"]:
+            result["error"] = legacy.get("error") or canonical.get("error") or "subscribe failed"
+        if return_subscription:
+            # ``subscription`` 保持单个对象(老调用方按这个字段拿);
+            # ``subscriptions`` 给出全部,unsubscribe() 两种都收。
+            result["subscription"] = subs[0] if subs else None
+            result["subscriptions"] = subs
+        return result
+
+    async def _ensure_streams(self) -> None:
+        """建流,并把配置里新增的 subject 补进已存在的流。
+
+        只做并集:``update_stream`` 传的是"现有 subjects ∪ 配置 subjects",
+        永不移除。已在跑的消费者可能挂在任何一个旧 subject 上。
+        """
+        from nats.js.api import StreamConfig  # noqa: PLC0415
+
+        for name, cfg in _STREAMS.items():
+            wanted = list(cfg["subjects"])
+            try:
+                info = await self._js.stream_info(name)
+            except Exception:
+                info = None
+
+            if info is None:
+                try:
+                    await self._js.add_stream(
+                        StreamConfig(
+                            name=name,
+                            subjects=wanted,
+                            max_msgs=cfg["max_msgs"],
+                            max_bytes=cfg["max_bytes"],
+                            # 按时间淘汰只对遥测类平面设(心跳/在场),审计不设。
+                            max_age=cfg.get("max_age_s"),
+                            retention="limits",
+                            storage="file",
+                        )
+                    )
+                    logger.info("NATSBus: created stream %s subjects=%s", name, wanted)
+                except Exception as exc:
+                    # 建流失败分两种,不能一概当作"不是错误":
+                    #
+                    #   并发启动:另一个进程刚好抢先建好了 —— 真不是错误。
+                    #   真失败:  比如 `insufficient storage resources available`
+                    #            (所有流的 max_bytes 之和超过服务器 store 上限,
+                    #            见 core/nats_subjects.py 的 TOTAL_STREAM_MAX_BYTES)。
+                    #            这时**这个平面上的每一条 publish 都会失败**,
+                    #            报 `no response from stream`。
+                    #
+                    # 原来两种都记 debug,于是后者在生产上完全无声:整条协议平面
+                    # 发不出去,日志里什么都看不到。这里用 stream_info 复核一次 ——
+                    # 流真在,是并发;不在,就必须响亮。
+                    try:
+                        await self._js.stream_info(name)
+                        logger.debug("NATSBus: add_stream %s 已由其它进程建好: %s", name, exc)
+                    except Exception:
+                        logger.error(
+                            "NATSBus: 建流 %s 失败,%s 上的消息一条也发不出去"
+                            "(publish 会报 no response from stream)。原因:%s",
+                            name,
+                            wanted,
+                            exc,
+                        )
+                continue
+
+            existing = list(getattr(info.config, "subjects", None) or [])
+            missing = [s for s in wanted if s not in existing]
+            if not missing:
+                continue
+            try:
+                cfg_obj = info.config
+                cfg_obj.subjects = existing + missing
+                await self._js.update_stream(cfg_obj)
+                logger.info("NATSBus: stream %s 补入 subjects=%s", name, missing)
+            except Exception as exc:
+                # 补不进去要**响亮**:这意味着那些 subject 上的消息没有持久化,
+                # 而不是"慢一点"。不抛(启动不该因此失败),但必须留下证据。
+                logger.error(
+                    "NATSBus: 无法把 %s 补进流 %s —— 这些主题上的消息将没有 "
+                    "JetStream 持久化。请手动 `nats stream edit %s`。原因:%s",
+                    missing,
+                    name,
+                    name,
+                    exc,
+                )
+
     async def _subscribe(
         self,
         subject: str,
@@ -1256,6 +1460,14 @@ class NATSBus:
         subscription from the tracked in-memory metadata after cleanup.
         """
         if subscription is None:
+            return {"success": True}
+        # ``_subscribe_both`` 会交出两个订阅(单/复数各一);调用方把整个列表传回来
+        # 时要逐个退订,否则会漏掉一半、留下悬空的 durable consumer。
+        if isinstance(subscription, (list, tuple, set)):
+            results = [await self.unsubscribe(one) for one in subscription]
+            failed = [r for r in results if not r.get("success")]
+            if failed:
+                return {"success": False, "error": failed[0].get("error", "unsubscribe failed")}
             return {"success": True}
         try:
             unsubscribe = getattr(subscription, "unsubscribe", None)

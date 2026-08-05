@@ -50,12 +50,14 @@ async def async_shutdown() -> None:
 
     try:
         from core.startup import shutdown_subsystems
+
         await shutdown_subsystems()
     except Exception as exc:
         logger.warning("子系统关闭异常: %s", exc)
 
     try:
         from core.nats_bus import nats_bus
+
         await nats_bus.disconnect()
     except Exception as exc:
         logger.warning("NATS Bus 关闭异常: %s", exc)

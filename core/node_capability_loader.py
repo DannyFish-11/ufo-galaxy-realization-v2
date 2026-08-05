@@ -363,7 +363,7 @@ class NodeCapabilityLoader:
                 actions=actions,
             )
             nats = get_nats_bus()
-            if nats.is_connected():
+            if nats.is_usable():
                 _task = asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
                 self._bg_tasks.add(_task)
                 _task.add_done_callback(self._bg_tasks.discard)

@@ -11,68 +11,28 @@ Stale Lock Reaper（过期锁清理器）是 Node 00 的增强模块，用于防
 3. **审计日志**：将清理操作记录到 Node 65
 4. **统计信息**：提供清理统计和监控接口
 
-## 集成方法
+## 集成位置
 
-### 方法 1：修改 main.py（推荐）
-
-在 `main.py` 中添加以下代码：
+已经接好了 —— 在 `main.py` 的 `lifespan()` 里，紧跟 NATS 心跳之后：
 
 ```python
-# 在文件顶部添加导入
-from stale_lock_reaper import StaleLockReaper
-
-# 修改 lifespan 函数
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    logger.info("Starting Node 00: State Machine & Lock Manager")
-    
-    # 启动 Stale Lock Reaper
-    reaper = StaleLockReaper(
-        store=store,
-        scan_interval=60,      # 每 60 秒扫描一次
-        max_lock_age=300,      # 锁最多持有 300 秒
-        audit_log_url="http://localhost:8065/log"
-    )
-    await reaper.start()
-    logger.info("Stale Lock Reaper started")
-    
-    # 添加 Reaper API 端点
-    @app.get("/reaper/stats")
-    async def get_reaper_stats():
-        """获取 Reaper 统计信息"""
-        return reaper.get_stats()
-    
-    @app.post("/reaper/scan")
-    async def force_reaper_scan():
-        """强制执行一次扫描"""
-        return await reaper.force_scan()
-    
-    yield
-    
-    # 停止 Reaper
-    await reaper.stop()
-    logger.info("Node 00 shutdown complete")
+_reaper = StaleLockReaper(store=store, scan_interval=60, max_lock_age=300)
+await _reaper.start()
+...
+yield
+...
+await _reaper.stop()
 ```
 
-### 方法 2：使用辅助函数
+本文档此前写的是"怎么集成"，而**从来没有人照着接过** —— reaper 实现完整、
+测试可跑，却是一整块死代码。现在它在 Node 00 启动时真的跑起来了。
 
-```python
-from stale_lock_reaper import integrate_reaper
+### 它补的是什么
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting Node 00: State Machine & Lock Manager")
-    
-    # 一行集成
-    reaper = integrate_reaper(app, store)
-    await reaper.start()
-    
-    yield
-    
-    await reaper.stop()
-    logger.info("Node 00 shutdown complete")
-```
+`acquire_lock()` 本来就按 `expires_at` 判过期，所以**过期语义是对的**：过了 TTL
+的锁不会挡住新的获取。reaper 补的是另一件事 —— 把过期条目真正从 `store.locks`
+里删掉。否则一个资源被锁过一次、之后再没被锁过，那条记录就永远留着，资源 id
+一多就是一条慢性内存泄漏。顺带把清理动作报给 Node 65 审计。
 
 ## 新增 API 端点
 

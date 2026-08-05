@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 # PR-8 sentinel — canonical handler authority for peer exchange messages.
@@ -101,6 +103,10 @@ async def handle_peer_announce(bridge: "AndroidBridge", websocket: Any, message:
                 exc,
             )
 
+    # 网格镜像:一台设备加入,网格里其它节点必须知道 —— 否则这台设备只对
+    # 接它的那个网关可见,别的节点算不出完整拓扑。
+    mesh_mirror.mirror_peer_announce(device_id, message, payload)
+
     return {
         "version": "3.0",
         "type": "peer_exchange",
@@ -142,6 +148,9 @@ async def handle_peer_exchange(bridge: "AndroidBridge", websocket: Any, message:
                 device_id,
                 exc,
             )
+
+    # 网格镜像:能力交换是"谁能为谁做什么"的协商,别的节点据此做调度决策。
+    mesh_mirror.mirror_peer_exchange(device_id, message)
 
     return {
         "version": "3.0",

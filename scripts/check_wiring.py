@@ -144,17 +144,19 @@ _EXEMPT_MODULES = (
 )
 
 #: 精确豁免:有明确理由的个案。写清楚理由,不写理由不许加。
+#: 逐名豁免。**先想想能不能用结构判据**(见 :func:`_is_singleton_reset`)——
+#: 逐名清单只会越来越长,而且没人敢删。
 _EXEMPT_NAMES: Dict[str, str] = {
-    "reset_worker_runtime": "测试专用重置入口,生产无调用方是设计如此",
-    "reset_unified_device_manager": "同上",
-    "reset_anticipatory_context": "同上",
-    "reset_focus_stacks": "同上",
-    "reset_echo_guard": "同上",
-    "reset_session_registry": "同上",
-    "reset_recovery_readiness_runtime": "同上",
-    "reset_unified_llm_router": "同上",
-    "reset_link_observer": "同上",
-    "reset_shared_audio_pipeline": "同上",
+    "close_app": (
+        "**故意不接线**。UFODeepIntegration.launch_app / close_app 能执行任意二进制"
+        "(subprocess.Popen([app_path]) —— 那个正则只挡 shell 元字符,而这里根本没有 "
+        "shell,Popen 就是精确执行那个路径,{'app_path': '/bin/sh'} 照样起 shell)。"
+        "本轮曾把它们暴露成 POST /app/launch 与 /app/close,CodeQL 当场判 critical:"
+        "任何人都能远程在宿主上执行任意程序。已撤回。"
+        "要接的话得先定产品策略 —— 允许启动哪些程序(白名单)、谁有权调 —— "
+        "那是产品决定,不该由改这行代码的人顺手定。在那之前它保持不可达,"
+        "而这条豁免是为了让下一个人看见理由,而不是又去接一遍。"
+    ),
 }
 
 
@@ -178,6 +180,55 @@ def _iter_reference_files() -> List[Path]:
             continue
         out.append(path)
     return out
+
+
+def _is_singleton_reset(node) -> bool:
+    """这个函数是不是「模块级单例的测试用复位入口」。
+
+    为什么按结构判而不是按名字
+    --------------------------
+    此前 ``_EXEMPT_NAMES`` 里手工列着 10 个 ``reset_*``,理由清一色是"测试专用
+    重置入口,生产无调用方是设计如此"。全仓这类函数有 130 多个 —— 逐个往清单里
+    加,清单只会越来越长,而且加进去之后没人敢删。这正是本文件开头写过的那种
+    退化方式。
+
+    更要紧的是:**按名字前缀一刀切是错的**。``reset_bucket(tool_name)``、
+    ``reset_device(device_id)``、``reset_session(session_id)`` 都以 ``reset_``
+    开头,但它们是真实的运行时操作 —— 限流桶复位、设备健康复位、会话预算复位。
+    按前缀豁免会把这三条真该有调用方的能力一起藏掉。
+
+    结构判据把两类分得很干净:
+
+        测试用复位   模块级函数 + 无必填参数 + 函数体里有 global
+        运行时操作   类的方法 / 带必填参数(操作的是某个 keyed 对象)
+
+    实测:130 多个 ``reset_*`` 里,符合这个结构的都是把模块级单例置回 None 的
+    那种;上面三条一条都不符合。
+    """
+    if not node.name.startswith("reset_"):
+        return False
+    # 有必填参数 → 它操作的是传进来的那个对象,不是模块级单例。**这一条是主判据**,
+    # reset_bucket / reset_device / reset_session 全被它挡住。
+    args = [a.arg for a in node.args.args if a.arg != "self"]
+    required = len(args) - len(node.args.defaults)
+    if required > 0 or node.args.kwonlyargs or node.args.vararg:
+        return False
+    # 复位模块级状态有两种写法,都要认:
+    #   global _x; _x = None        —— 重新绑定,需要 global 声明
+    #   _stacks.clear()             —— 原地改容器,**不需要** global
+    # 第一版只认前者,结果 core/focus_stack.py 的 reset_focus_stacks(用的是后者)
+    # 立刻被报了出来 —— 它此前一直躺在手工豁免名单里,换成结构判据才现形。
+    for n in ast.walk(node):
+        if isinstance(n, ast.Global):
+            return True
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "clear"
+            and isinstance(n.func.value, ast.Name)
+        ):
+            return True
+    return False
 
 
 def _is_exempt(rel: str, name: str) -> bool:
@@ -219,6 +270,8 @@ def collect_definitions(files: List[Path], root: Path = REPO_ROOT) -> Tuple[Dict
                     continue
                 if _is_framework_registered(node):
                     continue
+                if _is_singleton_reset(node):
+                    continue
                 definitions[node.name].append(f"{rel}:{node.lineno}")
                 def_count[node.name] += 1
     return definitions, def_count
@@ -241,6 +294,11 @@ _REGISTRAR_ATTRS = frozenset(
         "on_event",
         "route",
         "app",  # celery/click 之类的 @something.app(...)
+        # 事件发射器的通用注册式:@emitter.on("事件名")。pyee / aiortc(RTCPeerConnection)
+        # / python-socketio 都是这个写法,与 FastAPI 的 @app.get 是同一个结构事实 ——
+        # 调用方是框架,按名字静态找不到。本仓 nodes/Node_95_WebRTC_Receiver 的
+        # @pc.on("iceconnectionstatechange") 此前就被误报成未接线。
+        "on",
     }
 )
 

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, Dict, Tuple
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 GENERIC_FORWARD_TRANSPORT_ONLY_POLICY = (
@@ -128,6 +130,12 @@ async def handle_generic_forward(bridge: "AndroidBridge", websocket: Any, messag
             "allowed_compat_types": list(_GENERIC_FORWARD_COMPAT_MESSAGE_TYPES),
         }
     logger.debug("Received %s from %s: forwarding", msg_type, device_id)
+
+    # 网格镜像:兼容路径回的是一个裸 ACK,没有任何状态语义 —— 正因为如此,
+    # 网格里更需要看到它。否则一条走兼容路径的消息,在网格视角里是"发出去了
+    # 然后什么都没发生",与真的丢了分不出来。
+    mesh_mirror.mirror_generic_ack(device_id, normalized_type, message)
+
     return {
         "type": f"{msg_type}_ack" if msg_type else "ack",
         "device_id": device_id,

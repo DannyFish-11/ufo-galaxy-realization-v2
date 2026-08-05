@@ -395,3 +395,106 @@ class TestHelperFactories:
         ]
         for rec in helpers:
             json.dumps(rec.to_dict())  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# 审计记录必须镜像到 NATS 的 galaxy.audit.* 命名空间
+# ---------------------------------------------------------------------------
+
+
+class TestAuditNatsMirror:
+    """审计此前只落在**本进程**的环形缓冲里。
+
+    多节点部署时每个节点各有一份自己的环,系统级审计视图根本不存在 —— 而
+    ``core/contract_map/contract_registry.py`` 里那条契约明写着 "Also mirrored to
+    NATS galaxy.audit.* subjects",并把 ``core.nats_bus`` 列为生产者。文档宣称
+    已做,实际一条都没发过。
+    """
+
+    @pytest.mark.asyncio
+    async def test_recording_an_audit_event_reaches_the_audit_namespace(self):
+        import asyncio as _asyncio
+
+        import core.nats_bus as _nb
+        from core.audit_event_semantics import (
+            AuditEventKind,
+            AuditEventRecord,
+            get_audit_event_semantics,
+        )
+        from core.nats_bus import NATSBus
+
+        bus = NATSBus()
+        bus.enable_local_fallback("测试:进程内总线")
+        original_singleton = _nb.nats_bus
+        _nb.nats_bus = bus
+        try:
+            seen = []
+            await bus._subscribe("galaxy.audit.>", lambda d: seen.append(d))
+            sem = get_audit_event_semantics()
+            sem.record(AuditEventRecord(kind=AuditEventKind.TASK_ACCEPTED, task_id="t1", trace_id="tr1"))
+            await _asyncio.sleep(0.05)
+        finally:
+            _nb.nats_bus = original_singleton
+
+        assert seen, "审计记录没到 galaxy.audit.*"
+        assert seen[0]["trace_id"] == "tr1"
+        assert seen[0]["_nats_schema"] == "UnifiedAuditEvent"
+
+    @pytest.mark.asyncio
+    async def test_the_subject_stays_three_tokens(self):
+        """主题必须是 ``galaxy.audit.<kind>`` 三段,不能被枚举 repr 撑成四段。
+
+        ``AuditEventKind`` 是 ``(str, Enum)``,而 Python 3.11 的 ``str(枚举成员)``
+        给的是 ``"AuditEventKind.TASK_ACCEPTED"`` —— 里面带一个点。NATS 逐 token
+        切分,主题就成了四段,``galaxy.audit.*`` 这种单 token 通配符当场匹配不上
+        (实测收到 0 条)。必须取 ``.value``。
+        """
+        import asyncio as _asyncio
+
+        import core.nats_bus as _nb
+        from core.audit_event_semantics import (
+            AuditEventKind,
+            AuditEventRecord,
+            get_audit_event_semantics,
+        )
+        from core.nats_bus import NATSBus
+
+        bus = NATSBus()
+        bus.enable_local_fallback("测试")
+        original_singleton = _nb.nats_bus
+        _nb.nats_bus = bus
+        subjects = []
+        original_publish = bus._publish
+
+        async def _spy(subject, data):
+            subjects.append(subject)
+            return await original_publish(subject, data)
+
+        bus._publish = _spy
+        single_token = []
+        try:
+            await bus._subscribe("galaxy.audit.*", lambda d: single_token.append(d))
+            sem = get_audit_event_semantics()
+            sem.record(AuditEventRecord(kind=AuditEventKind.TASK_ACCEPTED, task_id="t1"))
+            await _asyncio.sleep(0.05)
+        finally:
+            _nb.nats_bus = original_singleton
+
+        assert subjects == ["galaxy.audit.task_accepted"], f"主题不对:{subjects}"
+        assert single_token, "单 token 通配符收不到 —— 主题被切成多段了"
+
+    def test_mirroring_never_breaks_the_audit_write(self):
+        """总线炸了也只能是"这次没镜像出去" —— 审计记录本身必须照样落。"""
+        from unittest.mock import patch
+
+        from core.audit_event_semantics import (
+            AuditEventKind,
+            AuditEventRecord,
+            get_audit_event_semantics,
+        )
+
+        sem = get_audit_event_semantics()
+        with patch("core.nats_bus.get_nats_bus", side_effect=RuntimeError("总线炸了")):
+            rec = sem.record(AuditEventRecord(kind=AuditEventKind.RUNTIME_EVENT, task_id="boom"))
+        assert rec.task_id == "boom"
+        assert any(r.task_id == "boom" for r in sem.get_by_task("boom"))

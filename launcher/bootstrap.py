@@ -11,15 +11,15 @@ This module has no dependency on other launcher sub-modules so that it can be
 imported first without circular-import risk.
 """
 
-import os
 import json
-import subprocess
 import logging
-from pathlib import Path
-from typing import Dict, Optional, Any
+import os
+import subprocess
 from dataclasses import dataclass
-from enum import Enum, auto
 from datetime import datetime, timezone
+from enum import Enum, auto
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Project root is two levels up from this file (launcher/ → project root)
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
@@ -30,7 +30,7 @@ logger = logging.getLogger("Galaxy")
 # Display helpers — thin wrappers over the canonical core.ascii_art API
 # ---------------------------------------------------------------------------
 
-from core.ascii_art import print_status_row, print_section_header
+from core.ascii_art import print_section_header, print_status_row
 
 
 def print_status(message: str, status: str = "info") -> None:
@@ -47,8 +47,10 @@ def print_section(title: str) -> None:
 # System-state and service-type enums
 # ---------------------------------------------------------------------------
 
+
 class SystemState(Enum):
     """系统状态"""
+
     INITIALIZING = auto()
     LOADING_CONFIG = auto()
     STARTING_CORE = auto()
@@ -63,16 +65,18 @@ class SystemState(Enum):
 
 class ServiceType(Enum):
     """服务类型"""
-    CORE = "core"   # 核心服务
-    NODE = "node"   # 节点
-    L4 = "l4"       # L4 增强
-    API = "api"     # API 服务
-    UI = "ui"       # UI 服务
+
+    CORE = "core"  # 核心服务
+    NODE = "node"  # 节点
+    L4 = "l4"  # L4 增强
+    API = "api"  # API 服务
+    UI = "ui"  # UI 服务
 
 
 # ---------------------------------------------------------------------------
 # Runtime entrypoint writer
 # ---------------------------------------------------------------------------
+
 
 def _write_entrypoint(host: str, port: int) -> None:
     """向 runtime/entrypoint.json 写入当前 API 入口，供客户端读取。
@@ -118,6 +122,7 @@ def _write_entrypoint(host: str, port: int) -> None:
 def _detect_lan_ip() -> str:
     """探测本机【局域网】IP(best-effort)。用 UDP connect 技巧，不实际发包。"""
     import socket
+
     s = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -143,6 +148,7 @@ def _detect_tailscale_ip() -> str:
     否则回退 ``tailscale ip -4``。拿不到返回空串。"""
     try:
         from core.tailscale_manager import TailscaleManager
+
         ip = TailscaleManager().get_tailscale_ip()
         if ip:
             return ip
@@ -151,9 +157,13 @@ def _detect_tailscale_ip() -> str:
     try:
         import shutil
         import subprocess
+
         if shutil.which("tailscale"):
             r = subprocess.run(
-                ["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5,
+                ["tailscale", "ip", "-4"],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if r.returncode == 0 and r.stdout.strip():
                 return r.stdout.strip().splitlines()[0].strip()
@@ -166,9 +176,11 @@ def _detect_tailscale_ip() -> str:
 # System configuration dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SystemConfig:
     """系统配置"""
+
     # API keys
     openai_api_key: str = ""
     gemini_api_key: str = ""
@@ -198,6 +210,7 @@ class SystemConfig:
         """
         try:
             from core.port_config import get_service_port
+
             self.web_ui_port = get_service_port("unified_launcher")
             self.device_api_port = get_service_port("device_api")
             self.ufo_api_port = get_service_port("ufo_api")
@@ -218,6 +231,7 @@ class SystemConfig:
 
         try:
             from core.unified.config_manager import get_unified_config_manager  # noqa: PLC0415
+
             mgr = get_unified_config_manager()
 
             def _get_key(unified_key: str, env_key: str) -> str:
@@ -240,8 +254,7 @@ class SystemConfig:
             )
         except Exception as exc:
             logger.warning(
-                "UnifiedConfigManager not available, falling back to direct .env and "
-                "environment variable read: %s",
+                "UnifiedConfigManager not available, falling back to direct .env and " "environment variable read: %s",
                 exc,
             )
             env_file = PROJECT_ROOT / ".env"
@@ -253,10 +266,7 @@ class SystemConfig:
                             key, value = line.split("=", 1)
                             os.environ[key.strip()] = value.strip()
             else:
-                logger.warning(
-                    ".env file not found. Copy .env.example to .env and configure: "
-                    "cp .env.example .env"
-                )
+                logger.warning(".env file not found. Copy .env.example to .env and configure: " "cp .env.example .env")
             instance.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
             instance.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
             instance.openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -273,6 +283,7 @@ class SystemConfig:
         """获取 Tailscale IPv4 地址"""
         try:
             import shutil
+
             tailscale_bin = shutil.which("tailscale")
             if not tailscale_bin:
                 return None
@@ -290,14 +301,16 @@ class SystemConfig:
 
     def has_llm_api(self) -> bool:
         """检查是否有可用的 LLM API"""
-        return any([
-            self.openai_api_key,
-            self.gemini_api_key,
-            self.openrouter_api_key,
-            self.xai_api_key,
-            self.deepseek_api_key,
-            self.anthropic_api_key,
-        ])
+        return any(
+            [
+                self.openai_api_key,
+                self.gemini_api_key,
+                self.openrouter_api_key,
+                self.xai_api_key,
+                self.deepseek_api_key,
+                self.anthropic_api_key,
+            ]
+        )
 
     def get_status_dict(self) -> Dict[str, Any]:
         """获取状态字典"""

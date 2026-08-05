@@ -37,22 +37,22 @@ nodes register themselves) and cross-references it with
 Sentinel: :data:`CALLABLE_BASELINE_STARTUP_INTEGRATION`
 """
 
+import asyncio
+import json
+import logging
 import os
 import sys
-import json
-import asyncio
-import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 # PR-FIX: relative imports changed to absolute imports so this module
 # can be imported standalone (e.g. by validate_runtime.py).
 # Previous: from .bootstrap import ... (failed with "attempted relative import with no known parent package")
 try:
-    from launcher.bootstrap import PROJECT_ROOT, print_status, ServiceType, SystemConfig
+    from launcher.bootstrap import PROJECT_ROOT, ServiceType, SystemConfig, print_status
     from launcher.service_manager import ServiceManager
 except ImportError:
-    from .bootstrap import PROJECT_ROOT, print_status, ServiceType, SystemConfig
+    from .bootstrap import PROJECT_ROOT, ServiceType, SystemConfig, print_status
     from .service_manager import ServiceManager
 
 logger = logging.getLogger("Galaxy")
@@ -441,12 +441,12 @@ class NodeSystemLauncher:
         classification_available = False
 
         try:
-            from core.nodes.node_fabric_registry import (  # type: ignore[import]
-                get_node_fabric_registry,
-                NodeArchitecturalClass,
-            )
             from core.callable_node_baseline import (  # type: ignore[import]
                 is_callable_by_openclawd,
+            )
+            from core.nodes.node_fabric_registry import (  # type: ignore[import]
+                NodeArchitecturalClass,
+                get_node_fabric_registry,
             )
 
             fabric = get_node_fabric_registry()
@@ -739,11 +739,11 @@ class NodeSystemLauncher:
         """
         try:
             from core.nodes.node_fabric_registry import (  # type: ignore[import]
-                get_node_fabric_registry,
+                NodeArchitecturalClass,
                 NodeInfo,
                 NodeRole,
                 NodeStatus,
-                NodeArchitecturalClass,
+                get_node_fabric_registry,
             )
 
             _status_map = {
@@ -866,8 +866,8 @@ class NodeSystemLauncher:
         """
         try:
             from core.node_discovery import get_node_discovery
-            from core.nodes.node_fabric_registry import get_node_fabric_registry
             from core.node_discovery_runtime import initialize_discovery_from_startup
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
 
             discovery = get_node_discovery()
             fabric = get_node_fabric_registry()

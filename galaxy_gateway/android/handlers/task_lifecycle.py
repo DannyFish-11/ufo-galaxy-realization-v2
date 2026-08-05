@@ -18,6 +18,8 @@ from galaxy_gateway.protocol.aip_v3 import TaskStatus
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1176,6 +1178,12 @@ async def handle_task_cancel(bridge: "AndroidBridge", websocket: Any, message: D
 
     # PR-4V2: ingest Android cancel truth into V2 canonical orchestration
     _try_ingest_participant_truth(message, "cancel")
+
+    # 网格镜像:取消是**两条**消息 —— 请求(谁要取消、为什么)和结果(到底取消
+    # 掉了没有、清理干不干净)。只发请求的话,网格看得到有人喊停,看不到停没停;
+    # 而任务可能已经跑完了(task_already_completed),那跟"成功取消"是两回事。
+    mesh_mirror.mirror_task_cancel(device_id, task_id, message)
+    mesh_mirror.mirror_cancel_result(device_id, task_id, cancelled, reason, message)
 
     return MessageBuilder.task_cancel_ack(
         device_id=device_id or "",

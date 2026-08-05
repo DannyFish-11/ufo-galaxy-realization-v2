@@ -111,7 +111,8 @@ class NodeStatus(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Facade router (used by node_facade.py)
+# Facade router。原消费方 nodes/common/node_facade.py 已删(整模块零引用,
+# 能力由 core/node_facade_local.py 的 LocalNodeFacade 提供,覆盖 129 个动作)。
 # ---------------------------------------------------------------------------
 class NodeActionRouter:
     """Routes unified ``/invoke`` actions to node-specific handlers.

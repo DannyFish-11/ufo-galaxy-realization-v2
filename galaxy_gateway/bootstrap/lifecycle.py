@@ -304,7 +304,7 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
         nats_url = os.getenv("GALAXY_NATS_URL", "nats://localhost:4222")
         await nats_bus.connect()
-        if nats_bus.is_connected():
+        if nats_bus.is_usable():
             from galaxy_gateway.gateway_nats_adapter import init_gateway_nats_adapter
 
             adapter = init_gateway_nats_adapter(

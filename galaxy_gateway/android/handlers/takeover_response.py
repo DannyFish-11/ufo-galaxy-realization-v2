@@ -37,6 +37,8 @@ from typing import TYPE_CHECKING, Any, Dict
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -166,6 +168,19 @@ async def handle_takeover_response(
             takeover_id,
             device_id,
         )
+
+    # 网格镜像:TAKEOVER_REQUEST 早就上了网格(见 takeover_request.py),应答不
+    # 上去的话网格里只看得到"有人要接管",永远看不到接管到底成没成 —— 半边的
+    # 请求/应答对是判不出控制权现在在谁手里的。
+    mesh_mirror.mirror_takeover_response(
+        device_id=device_id,
+        takeover_id=takeover_id,
+        accepted=accepted,
+        reason=reason,
+        session_id=session_id,
+        task_id=task_id,
+        trace_id=trace_id,
+    )
 
     return {
         "version": "3.0",

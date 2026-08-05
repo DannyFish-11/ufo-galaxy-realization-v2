@@ -48,6 +48,44 @@ if str(PROJECT_ROOT) not in sys.path:
 _TOP_LEVEL_NAMES_TO_PROTECT = ("main",)
 
 
+# ---------------------------------------------------------------------------
+# 被跑挂的测试留在树里的"挪走的源文件"：开跑前先修回来
+# ---------------------------------------------------------------------------
+# ``tests/test_launcher_doctor.py::test_cli_exits_nonzero_when_a_module_goes_missing``
+# 是一条对照实验:它**真的**把 ``launcher/shell.py`` 挪成 ``_shell_doctor_probe.bak``,
+# 确认体检会因此变红 —— 一个永远绿的体检比没有体检更糟。它有 try/finally 兜底。
+#
+# 但 ``finally`` 挡不住进程被**信号打死**:跑测试的 shell 超时被 SIGTERM/SIGKILL,
+# 子进程 pytest 跟着没了,``finally`` 一行都不执行,树里就留下一个
+# ``_shell_doctor_probe.bak``,而 ``launcher/shell.py`` **不见了**。
+#
+# 这不是"多一个临时文件"那么轻:实测发生过一次,随后的 ``git add -A`` 把这个状态
+# 提交了进去 —— git 记成一次 rename(``shell.py => _shell_doctor_probe.bak``),
+# 一个真实模块就这么从提交里消失了,靠仓库卫生检查才拦下来。
+#
+# 所以这里在**会话开始前**修:留下的 .bak 挪回原名。信号杀不掉的东西,只能靠
+# 下一次开跑时自愈。同一条修复对 CI 与本地一样有效。
+
+
+def _repair_files_moved_aside_by_a_killed_run() -> None:
+    """把上一次跑挂时留下的"挪走的源文件"放回原位。"""
+    moved_aside = {
+        PROJECT_ROOT / "launcher" / "_shell_doctor_probe.bak": PROJECT_ROOT / "launcher" / "shell.py",
+    }
+    for bak, original in moved_aside.items():
+        if not bak.exists():
+            continue
+        if original.exists():
+            # 两个都在:原文件已被别处恢复,.bak 是纯残留,删掉即可。
+            bak.unlink()
+            continue
+        shutil.move(str(bak), str(original))
+        print(f"conftest: 上次跑挂留下的 {bak.name} 已还原为 {original.name}")
+
+
+_repair_files_moved_aside_by_a_killed_run()
+
+
 def _restore_project_root_import_precedence() -> None:
     """把 PROJECT_ROOT 拉回 sys.path 首位，并逐出被劫持的顶层模块。"""
     root = str(PROJECT_ROOT)

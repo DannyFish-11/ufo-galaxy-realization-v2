@@ -16,6 +16,8 @@ from galaxy_gateway.android.message_builder import MessageBuilder
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 _AUTHORITY_V2 = "v2_authority"
@@ -623,6 +625,17 @@ async def handle_goal_execution(
         "GOAL_EXECUTION → task_assign: task_id=%s goal=%r",
         task_id,
         response_text[:80] if response_text else goal[:80],
+    )
+
+    # 网格镜像:目标已被受理并派给了这台设备。网格里其它节点据此知道这个目标
+    # 名花有主 —— 否则同一个目标可能被两个入口各自接一遍。
+    mesh_mirror.mirror_goal_execution(
+        device_id=device_id,
+        task_id=task_id,
+        goal=response_text if response_text else goal,
+        payload=payload,
+        session_id=session_id,
+        trace_id=trace_id,
     )
 
     return MessageBuilder.task_assign(
@@ -1756,5 +1769,17 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
                 "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution failed " "(non-fatal): %s",
                 _pr_err,
             )
+
+    # 网格镜像:目标的终态。GOAL_EXECUTION 已经上了网格,结果不上去的话,网格里
+    # 的目标永远停在"已派发",看不出跑完没有、成没成。
+    mesh_mirror.mirror_goal_result(
+        device_id=device_id,
+        task_id=task_id,
+        status=status,
+        result_text=result_text,
+        payload=payload,
+        session_id=runtime_session_id,
+        trace_id=trace_id,
+    )
 
     return None

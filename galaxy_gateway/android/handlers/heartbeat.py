@@ -16,6 +16,8 @@ from galaxy_gateway.android.message_builder import MessageBuilder
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,11 @@ async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dic
                 "Heartbeat from unregistered device: device_id=%s; ACK sent",
                 device_id,
             )
+
+    # 网格镜像:HEARTBEAT_ACK 是心跳的应答半边。设备的心跳本身已经上了网格
+    # (publish_heartbeat),应答不上去的话,网格里只看得到"设备还在喊",看不到
+    # "中心听见了" —— 判不出是设备掉线还是中心没在处理。
+    mesh_mirror.mirror_heartbeat_ack(device_id, message)
 
     return MessageBuilder.heartbeat_ack(device_id)
 

@@ -27,6 +27,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 # PR-8 sentinel — canonical handler authority for MESH_TOPOLOGY messages.
@@ -87,6 +89,10 @@ async def handle_mesh_topology(bridge: "AndroidBridge", websocket: Any, message:
                 device_id,
                 exc,
             )
+
+    # 网格镜像:这一份拓扑答复只回给发问的那台设备。镜像上网格,别的节点才能
+    # 拿同一时刻的同一份拓扑做对账 —— 拓扑分歧正是网格类故障最难查的一种。
+    mesh_mirror.mirror_mesh_topology(device_id, message, topology, peer_count)
 
     return {
         "version": "3.0",

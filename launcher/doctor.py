@@ -584,6 +584,90 @@ def _check_layout_geometry(report: DoctorReport) -> None:
         report.add("版面几何自洽", Status.FAILED, f"{type(exc).__name__}: {exc}")
 
 
+def _check_aip_protocol_is_fully_publishable(report: DoctorReport) -> None:
+    """AIP v3 的每种消息都得上得了网格。
+
+    这套协议是为各种设备铺的路,缺一种消息的发布器,就意味着那种消息可以在
+    别的链路上被构造出来、却永远上不了网格 —— 别的节点无从知道它发生过。
+    这是**静态**判据(查的是消息类与发布表的对应),所以不需要真机、不需要
+    连上 NATS 也能查,放在体检里而不是只放在 CI 里:装在用户机器上的那一份
+    同样要能自己说清楚协议全不全。
+    """
+    try:
+        from core.aip_mesh_mirror import unpublishable_message_types
+    except ImportError as exc:
+        report.add("AIP v3 协议可上网格", Status.DEGRADED, "镜像层不可用", str(exc)[:200])
+        return
+
+    missing = unpublishable_message_types()
+    if missing:
+        report.add(
+            "AIP v3 协议可上网格",
+            Status.FAILED,
+            f"{len(missing)} 种消息没有发布器",
+            "这些类型永远上不了网格:" + ", ".join(missing),
+        )
+    else:
+        report.add("AIP v3 协议可上网格", Status.OK, "全部消息类型均有发布器")
+
+
+def _check_every_plane_has_a_jetstream_stream(report: DoctorReport) -> None:
+    """每个发布平面都得有 JetStream 流兜着 —— 否则那个平面一条也发不出去。
+
+    上面那条查的是"有没有发布器",这条查的是"发出去落不落得下"。两件事,曾经
+    同时只做对了前一件:28 个 AIP v3 发布器全在、全被调用,而 ``galaxy.device.*``
+    / ``galaxy.capability.*`` / ``galaxy.presence.*`` / ``galaxy.audit.*`` 这四个
+    平面**没有任何流覆盖**,在真实 NATS 服务器上 publish 一律返回
+    ``no response from stream``。
+
+    单机跑不出来:进程内降级总线没有流的概念,谁发都投得到 —— 所以这条必须进
+    体检,装在用户机器上的那一份要能自己说清楚。同样是静态判据(主题 × 流配置),
+    不需要连上 NATS。
+    """
+    try:
+        from core.nats_subjects import _STREAMS
+    except ImportError as exc:
+        report.add("消息平面有流兜底", Status.DEGRADED, "主题配置不可用", str(exc)[:200])
+        return
+
+    patterns = [p for cfg in _STREAMS.values() for p in cfg["subjects"]]
+    planes = {
+        "任务": "galaxy.task.result.probe",
+        "设备": "galaxy.device.register",
+        "能力": "galaxy.capability.registered",
+        "在场": "galaxy.presence.state",
+        "审计": "galaxy.audit.command",
+        "MCP": "galaxy.mcp.calls",
+        "worker 生命周期": "galaxy.workers.heartbeat",
+    }
+
+    def _covered(subject: str) -> bool:
+        for pattern in patterns:
+            s_t, p_t = subject.split("."), pattern.split(".")
+            for i, p in enumerate(p_t):
+                if p == ">":
+                    if i < len(s_t):
+                        return True
+                    break
+                if i >= len(s_t) or (p != "*" and p != s_t[i]):
+                    break
+            else:
+                if len(s_t) == len(p_t):
+                    return True
+        return False
+
+    dark = [name for name, subject in planes.items() if not _covered(subject)]
+    if dark:
+        report.add(
+            "消息平面有流兜底",
+            Status.FAILED,
+            f"{len(dark)} 个平面没有流",
+            "这些平面在真实 NATS 上一条也发不出去(no response from stream):" + "、".join(dark),
+        )
+    else:
+        report.add("消息平面有流兜底", Status.OK, f"{len(planes)} 个平面均被 JetStream 流覆盖")
+
+
 def run_doctor(*, include_runtime: bool = True) -> DoctorReport:
     """跑完整体检。**不打印**（呈现交给调用方）。
 
@@ -602,6 +686,8 @@ def run_doctor(*, include_runtime: bool = True) -> DoctorReport:
     _check_fact_and_presentation_are_disjoint(report)
     _check_retired_launchers_are_gone(report)
     _check_layout_geometry(report)
+    _check_aip_protocol_is_fully_publishable(report)
+    _check_every_plane_has_a_jetstream_stream(report)
     if include_runtime:
         _check_runtime_surfaces(report)
     return report

@@ -246,7 +246,7 @@ def _emit_aip_v3_webrtc_bind(binding: "WebRTCTaskBinding") -> None:
             bind_target="task",
         )
         nats = get_nats_bus()
-        if nats.is_connected():
+        if nats.is_usable():
             _bt = asyncio.get_running_loop().create_task(nats.publish_webrtc_bind(msg))
             _BACKGROUND_TASKS.add(_bt)
             _bt.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -281,7 +281,7 @@ def _emit_aip_v3_webrtc_transport_state(
             ),
         )
         nats = get_nats_bus()
-        if nats.is_connected():
+        if nats.is_usable():
             _bt = asyncio.get_running_loop().create_task(nats.publish_webrtc_transport_state(msg))
             _BACKGROUND_TASKS.add(_bt)
             _bt.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -308,7 +308,7 @@ def _emit_aip_v3_webrtc_unbind(binding: "WebRTCTaskBinding") -> None:
             reason="task_terminal",
         )
         nats = get_nats_bus()
-        if nats.is_connected():
+        if nats.is_usable():
             _bt = asyncio.get_running_loop().create_task(nats.publish_webrtc_unbind(msg))
             _BACKGROUND_TASKS.add(_bt)
             _bt.add_done_callback(_BACKGROUND_TASKS.discard)

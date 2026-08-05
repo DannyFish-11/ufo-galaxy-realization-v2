@@ -175,57 +175,6 @@ class StaleLockReaper:
 
 
 # =============================================================================
-# 集成到 Node 00 的辅助函数
-# =============================================================================
-
-def integrate_reaper(app, store):
-    """
-    将 Stale Lock Reaper 集成到 FastAPI 应用
-    
-    使用方法：
-    在 Node 00 的 main.py 中添加：
-    
-    from stale_lock_reaper import integrate_reaper
-    
-    # 在 lifespan 函数中
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        # 现有的启动代码...
-        
-        # 启动 Reaper
-        from stale_lock_reaper import integrate_reaper
-        reaper = integrate_reaper(app, store)
-        await reaper.start()
-        
-        yield
-        
-        # 停止 Reaper
-        await reaper.stop()
-    """
-    
-    # 创建 Reaper 实例
-    reaper = StaleLockReaper(
-        store=store,
-        scan_interval=60,  # 每 60 秒扫描一次
-        max_lock_age=300,  # 锁最多持有 300 秒
-        audit_log_url="http://localhost:8065/log"
-    )
-    
-    # 添加 API 端点
-    @app.get("/reaper/stats")
-    async def get_reaper_stats():
-        """获取 Reaper 统计信息"""
-        return reaper.get_stats()
-    
-    @app.post("/reaper/scan")
-    async def force_reaper_scan():
-        """强制执行一次扫描"""
-        return await reaper.force_scan()
-    
-    return reaper
-
-
-# =============================================================================
 # 独立运行模式（用于测试）
 # =============================================================================
 

@@ -46,11 +46,17 @@ def _nats_enabled_for_control_plane_tests(monkeypatch):
 # Helpers
 # ---------------------------------------------------------------------------
 
+from core.nats_bus import NATSBus as _RealNATSBus  # noqa: E402  替身要借用真实方法
+
 
 def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     """Create a mock NATSBus that reports as connected."""
     bus = MagicMock()
     bus.is_connected.return_value = connected
+    # is_usable() 才是"要不要走总线"的闸门(见 NATSBus.is_usable 的说明)。
+    # 这个替身不模拟本地降级总线,所以两者同值。
+    bus.is_local_mode.return_value = False
+    bus.is_usable.return_value = connected
     bus.get_stats.return_value = {
         "connected": connected,
         "noop_mode": not connected,
@@ -75,6 +81,14 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_legacy_worker_registration = AsyncMock(return_value={"success": True, "seq": 4})
     bus.publish_legacy_worker_shutdown = AsyncMock(return_value={"success": True, "seq": 5})
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
+    # 网关的结果回程改走公开的 publish_task_result_envelope(不再自己拼主题、
+    # 直接调私有 _publish)。这里把**真实方法**绑到替身上,而不是再写一遍它的逻辑
+    # —— 替身里复制一份主题拼接,正是这条链路已经踩过两次的那个坑(网关自己拼一份、
+    # 总线拼一份,收敛单复数时漏掉一处)。这样下面几条断言钉的仍是生产代码算出来的
+    # 主题与判别器,只有传输被换成了 mock。
+    bus.publish_task_result_envelope = lambda task_id, envelope: _RealNATSBus.publish_task_result_envelope(
+        bus, task_id, envelope
+    )
     bus._subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe_heartbeats = AsyncMock(return_value={"success": True})
@@ -116,10 +130,20 @@ class TestGatewayNATSAdapter:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await adapter.start()
 
-        # 适配器走公开的 subscribe()(带 durable),不再触碰私有 _subscribe
-        mock_bus.subscribe.assert_awaited_once()
-        call_args = mock_bus.subscribe.call_args
-        assert "galaxy.tasks.dispatch.gateway" in call_args[0][0]
+        # 适配器走公开的 subscribe()(带 durable),不再触碰私有 _subscribe。
+        #
+        # 注意 MagicMock 会**自动生成任何属性** —— 正因为如此,这条用例在
+        # NATSBus 上根本没有 subscribe() 方法的那段时间里一直是绿的,而生产里
+        # 调用抛 AttributeError、被 start() 的 except 吞掉、适配器静默不工作。
+        # 替身把缺陷盖住了。现在 NATSBus 上有了真方法,并加了 test_worker_lifecycle_subjects
+        # 里那条"公开 API 必须真的存在"的断言兜底。
+        #
+        # 订两次:单数(规范)与复数(遗留)各一。网关是独立进程,灰度期间它与中心
+        # 可能不同版本,只订一个另一边发来的派发就掉进没人听的主题。
+        assert mock_bus.subscribe.await_count == 2, "应当同时订单复数两个主题"
+        subjects = [c[0][0] for c in mock_bus.subscribe.call_args_list]
+        assert "galaxy.tasks.dispatch.gateway" in subjects
+        assert "galaxy.task.dispatch.gateway" in subjects
         assert adapter._started is True
 
     @pytest.mark.asyncio
@@ -174,11 +198,13 @@ class TestGatewayNATSAdapter:
                 }
             )
 
-        # PR-3: _publish_result now calls nats_bus._publish() directly with a
-        # unified envelope payload instead of publish_task_result().
+        # PR-3: _publish_result 发的是 unified envelope 载荷,不是 publish_task_result()。
+        # 它现在经公开的 publish_task_result_envelope 落到传输层(替身把真实方法绑了
+        # 上去),所以这里断言的仍是最终发出去的主题与载荷。
         mock_bus._publish.assert_awaited()
         call_args = mock_bus._publish.call_args[0]
-        assert "galaxy.tasks.result.t-001" in call_args[0]
+        # 任务平面已收敛到单数规范(NATSTopics.TASK_RESULT)。
+        assert "galaxy.task.result.t-001" in call_args[0]
         assert call_args[1].get("task_id") == "t-001"
         assert call_args[1].get("_nats_schema") == "TaskEnvelope"
 
@@ -313,7 +339,11 @@ class TestNodeHeartbeatSender:
             call_count += 1
             return {"success": True}
 
-        mock_bus.publish_heartbeat = _mock_hb
+        # 钉 worker 平面那个发布器。此前这里钉的是 publish_heartbeat —— 那是**设备
+        # 平面**的 AIP v3 发布器,发到 galaxy.device.heartbeat.{id},而 MasterBrain
+        # 在 galaxy.workers.heartbeat 上等。用例因此把"心跳发去了没人听的主题"这个
+        # 缺陷一起钉住了。见 tests/test_worker_lifecycle_subjects.py。
+        mock_bus.publish_legacy_heartbeat = _mock_hb
 
         sender = NodeHeartbeatSender(worker_id="node-hb", interval_s=0.1)
         sender._running = True  # simulate started state
@@ -922,7 +952,8 @@ class TestNATSConnected:
             sent_payloads.append(hb)
             return {"success": True}
 
-        mock_bus.publish_heartbeat = _capture_hb
+        # 同上:worker 心跳走 worker 平面的 publish_legacy_heartbeat。
+        mock_bus.publish_legacy_heartbeat = _capture_hb
 
         trace = "test-trace-id-abc123"
         sender = NodeHeartbeatSender(worker_id="node-trace-test", trace_id=trace)
@@ -1831,7 +1862,7 @@ class TestPR3NATSEnvelopeAlignment:
 
     @pytest.mark.asyncio
     async def test_publish_task_envelope_uses_correct_subject(self):
-        """publish_task_envelope() publishes to galaxy.tasks.dispatch.{target}."""
+        """publish_task_envelope() 发到 NATSTopics.task_dispatch(target)(单数规范)。"""
         from core.nats_bus import NATSBus
         from core.schemas.task_envelope import TaskEnvelope
 
@@ -1860,7 +1891,8 @@ class TestPR3NATSEnvelopeAlignment:
         result = await bus.publish_task_envelope("worker-42", env)
 
         assert result.get("success") is True
-        assert published["subject"] == "galaxy.tasks.dispatch.worker-42"
+        # 单数规范:NATSTopics.task_dispatch("worker-42")
+        assert published["subject"] == "galaxy.task.dispatch.worker-42"
         assert published["data"].get("_nats_schema") == "TaskEnvelope"
         assert published["data"].get("task_id") == "task-pub-001"
 
@@ -1958,7 +1990,8 @@ class TestPR3NATSEnvelopeAlignment:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await adapter._publish_result("task-res-001", {"value": "done"}, success=True, trace_id="tr-xyz")
 
-        assert published["subject"] == "galaxy.tasks.result.task-res-001"
+        # 单数规范:NATSTopics.task_result("task-res-001")
+        assert published["subject"] == "galaxy.task.result.task-res-001"
         d = published["data"]
         assert d.get("_nats_schema") == "TaskEnvelope"
         assert d.get("task_id") == "task-res-001"

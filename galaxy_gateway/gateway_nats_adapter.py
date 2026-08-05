@@ -73,6 +73,8 @@ _TASK_TIMEOUT_S = float(os.getenv("GALAXY_GW_ADAPTER_TIMEOUT", "30"))
 _MAX_RETRIES = int(os.getenv("GALAXY_GW_ADAPTER_RETRIES", "2"))
 _DLQ_SUBJECT = os.getenv("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
 _SUBSCRIBE_SUBJECT = "galaxy.tasks.dispatch.gateway"
+#: 规范(单数)命名空间下的同一条派发主题。见 NATSTopics 的说明。
+_CANONICAL_SUBSCRIBE_SUBJECT = "galaxy.task.dispatch.gateway"
 _DURABLE_NAME = "gateway"
 
 
@@ -133,15 +135,24 @@ class GatewayNATSAdapter:
         try:
             from core.nats_bus import nats_bus
 
-            if not nats_bus.is_connected():
+            if not nats_bus.is_usable():
                 logger.warning("GatewayNATSAdapter: NATS not connected — adapter is inactive")
                 return
 
+            # 单复数两个主题都订。网关是**独立进程**,灰度期间它与中心可能不同
+            # 版本 —— 只订一个,另一边发过来的派发就掉进没人听的主题。
             result = await nats_bus.subscribe(
                 _SUBSCRIBE_SUBJECT,
                 self._handle_task_dispatch,
                 durable=_DURABLE_NAME,
             )
+            canonical = await nats_bus.subscribe(
+                _CANONICAL_SUBSCRIBE_SUBJECT,
+                self._handle_task_dispatch,
+                durable=f"{_DURABLE_NAME}-canonical",
+            )
+            if canonical.get("success") and not result.get("success"):
+                result = canonical
             if result.get("success"):
                 self._started = True
                 logger.info(
@@ -543,12 +554,15 @@ class GatewayNATSAdapter:
                 "worker_id": "gateway",
                 "status": status_val,
                 "completed_at": {"seconds": ts, "nanos": 0},
-                # ── TaskEnvelope discriminator (PR-3) ───────────────────────
-                "_nats_schema": "TaskEnvelope",
                 "trace_id": trace_id or "",
                 "metadata": result_metadata,
             }
-            await nats_bus._publish(f"galaxy.tasks.result.{task_id}", unified)
+            # 走公开发布器,不再自己拼主题、自己盖 _nats_schema。
+            # 之前这里是 `nats_bus._publish(NATSTopics.task_result(task_id), unified)`
+            # —— 绕过 publish_task_result_envelope 直接用私有方法,于是结果主题
+            # 在网关与总线里各定义一次。C7 把任务平面从 galaxy.tasks.* 收敛到
+            # galaxy.task.* 时,这类"第二处定义"就是会被漏掉的那处。
+            await nats_bus.publish_task_result_envelope(task_id, unified)
         except Exception as exc:
             logger.error("GatewayNATSAdapter: failed to publish result for %s: %s", task_id, exc)
 

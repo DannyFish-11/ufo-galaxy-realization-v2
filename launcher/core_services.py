@@ -6,11 +6,11 @@ Responsibilities:
   and Microsoft UFO integration.
 """
 
-import sys
 import logging
+import sys
 from typing import Dict
 
-from .bootstrap import print_status, ServiceType, SystemConfig
+from .bootstrap import ServiceType, SystemConfig, print_status
 from .service_manager import ServiceManager
 
 logger = logging.getLogger("Galaxy")
@@ -29,6 +29,7 @@ class CoreServiceLauncher:
 
         try:
             from core.device_agent_manager import DeviceAgentManager
+
             manager = DeviceAgentManager()
             await manager.initialize()
             logger.info("Device Agent 管理器已初始化")
@@ -49,10 +50,16 @@ class CoreServiceLauncher:
         return await self.service_manager.start_service(
             "device_status_api",
             [
-                sys.executable, "-m", "uvicorn", "core.device_status_api:app",
-                "--host", "0.0.0.0",
-                "--port", str(self.config.device_api_port),
-                "--log-level", "warning",
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "core.device_status_api:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                str(self.config.device_api_port),
+                "--log-level",
+                "warning",
             ],
         )
 
@@ -62,6 +69,7 @@ class CoreServiceLauncher:
 
         try:
             from core.microsoft_ufo_integration import GalaxyIntegrationService
+
             integration = GalaxyIntegrationService()
             result = await integration.initialize()
             result = {

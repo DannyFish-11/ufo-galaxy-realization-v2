@@ -3657,11 +3657,11 @@ class CommandRouter:
                     # ── NATS result backflow ──────────────────────────────
                     # Publish result to NATS for async subscribers
                     try:
-                        from core.nats_bus import nats_bus
+                        from core.nats_bus import NATSTopics, nats_bus
 
-                        if nats_bus.is_connected():
+                        if nats_bus.is_usable():
                             await nats_bus._publish(
-                                f"galaxy.tasks.result.{task_id}",
+                                NATSTopics.task_result(task_id),
                                 {
                                     "task_id": task_id,
                                     "device_id": device_id,
@@ -5338,8 +5338,8 @@ class NATSExecutor:
         try:
             from core.nats_bus import nats_bus
 
-            if not nats_bus.is_connected():
-                logger.debug("NATSExecutor: NATS not connected, skipping result subscription")
+            if not nats_bus.is_usable():
+                logger.debug("NATSExecutor: 总线不可用,跳过结果订阅")
                 return
 
             await nats_bus.subscribe_task_results(self._on_task_result)
@@ -5372,7 +5372,7 @@ class NATSExecutor:
         try:
             from core.nats_bus import nats_bus
 
-            if not nats_bus.is_connected():
+            if not nats_bus.is_usable():
                 return await self._use_fallback(target, command, params, reason="nats_not_connected")
 
             return await self._dispatch_via_nats(target, command, params)
