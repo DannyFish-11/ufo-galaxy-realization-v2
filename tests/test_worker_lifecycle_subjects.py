@@ -203,38 +203,198 @@ def test_the_aip_v3_round_trip_is_still_lossy_for_worker_models():
 
 
 # ---------------------------------------------------------------------------
-# 任务平面:同型缺陷已查实,修法待定
+# 任务平面:单数(新规范)与复数(遗留)两个前缀并存
 # ---------------------------------------------------------------------------
+#
+# NATS 逐 token 精确匹配,``galaxy.task.*`` 与 ``galaxy.tasks.*`` 之间没有任何
+# 通配符能搭桥。而本仓两个前缀**同时有真实发布方**:
+#
+#   单数(NATSTopics 常量,新规范)  publish_task_assign / publish_task_result /
+#                                  publish_goal_execution / publish_goal_result
+#   复数(硬编码,既有运转面)      publish_task_dispatch / publish_legacy_task_result /
+#                                  publish_task_envelope / command_router /
+#                                  scheduler / gateway_nats_adapter
+#
+# 修复前订阅侧只订复数,于是单数那四个发布器发出去的东西一条也到不了 ——
+# publish_task_result 有四个生产调用方,它们各自都以为闭环了。
 
 
 @pytest.mark.asyncio
-async def test_task_plane_publishers_and_subscribers_disagree(bus: NATSBus):
-    """记录一条**已查实但尚未修**的同型缺陷,别让它再悄悄躺着。
+async def test_canonical_singular_publishers_reach_the_brain(bus: NATSBus):
+    """新规范(单数)那一侧必须到得了。这是修复前彻底断掉的那半边。"""
+    from core.schemas.aip_v3 import TaskAssignMsg, TaskResultMsg
 
-    ``NATSTopics.TASK_DISPATCH/TASK_RESULT`` 是单数 ``galaxy.task.*``,而
-    ``subscribe_task_dispatches`` / ``subscribe_task_results`` 听的是复数
-    ``galaxy.tasks.*``,JetStream 的 ``GALAXY_TASKS`` 流覆盖的也是复数 ——
-    差一个 token,NATS 逐 token 精确匹配,两者永不相通。
+    got: Dict[str, List[Any]] = {"dispatch": [], "result": []}
+    await bus.subscribe_task_dispatches("w1", lambda d: got["dispatch"].append(d))
+    await bus.subscribe_task_results(lambda d: got["result"].append(d))
 
-    后果:``publish_task_result`` 有四个生产调用方(worker_runtime /
-    node_invocation / swarm_coordinator / task_graph),它们发出去的结果一条也
-    回不到 MasterBrain;主脑只能等心跳超时把 worker 判死,再把在途任务标成
-    ``worker_lost``。单数那些主题还落在所有 JetStream 流之外,连持久化都没有。
+    await bus.publish_task_assign(TaskAssignMsg(device_id="w1", task_id="t1", action="noop"))
+    await bus.publish_task_result(TaskResultMsg(device_id="w1", task_id="t1", status="ok"))
+    await asyncio.sleep(0.05)
 
-    **为什么先记不修**:仓库里 ``tests/conformance/test_nats_trace.py`` 的 K 节
-    有一条明确契约说单数才是新规范、复数是遗留;而实际运转面(流、两个订阅器、
-    command_router / scheduler / gateway_nats_adapter)全在复数上。往哪边收敛
-    是带部署动作的架构决定(改 JetStream 流的 subjects),不该由改这行代码的人
-    顺手定。
+    assert got["dispatch"], "单数 task_assign 没到 worker"
+    assert got["result"], "单数 task_result 没回到主脑"
 
-    本用例断言的是**现状**。方向定下、修完之后,它会红 —— 那时该做的是把它换成
-    正向的投递断言(参照上面 worker 平面那几条),而不是删掉了事。
+
+@pytest.mark.asyncio
+async def test_legacy_plural_publishers_still_reach_the_brain(bus: NATSBus):
+    """遗留(复数)那一侧不能因为加了新前缀就被挤掉 —— 它才是当前的运转面。"""
+    from core.schemas.contracts import TaskDispatchModel, TaskResultModel
+
+    got: Dict[str, List[Any]] = {"dispatch": [], "result": []}
+    await bus.subscribe_task_dispatches("w1", lambda d: got["dispatch"].append(d))
+    await bus.subscribe_task_results(lambda d: got["result"].append(d))
+
+    await bus.publish_task_dispatch("w1", TaskDispatchModel(task_id="t2", action="noop", timestamp=_TS))
+    await bus.publish_legacy_task_result("t2", TaskResultModel(task_id="t2", status="success", timestamp=_TS))
+    await asyncio.sleep(0.05)
+
+    assert got["dispatch"], "复数 task_dispatch 没到 worker"
+    assert got["result"], "复数 task_result 没回到主脑"
+
+
+@pytest.mark.asyncio
+async def test_external_publishers_on_the_raw_plural_subject_reach_the_brain(bus: NATSBus):
+    """``command_router`` / ``scheduler`` / 网关适配器是直接发裸主题的。
+
+    它们不经 NATSBus 的具名发布器(``_publish(f"galaxy.tasks.result.{id}", ...)``),
+    所以只钉具名发布器是钉不住它们的。
+    """
+    got: List[Any] = []
+    await bus.subscribe_task_results(lambda d: got.append(d))
+    await bus._publish("galaxy.tasks.result.t3", {"task_id": "t3", "status": "success"})
+    await asyncio.sleep(0.05)
+
+    assert got, "外部发布方的裸复数主题没被收到"
+
+
+@pytest.mark.asyncio
+async def test_no_message_is_delivered_twice(bus: NATSBus):
+    """并存不能变成重复投递。
+
+    没有任何一条发布路径同时往两个前缀发,所以每条消息只该到一次。真出现重复,
+    下游的幂等保护会被无谓地压上负担,结果去重也会掩盖真正的重发。
     """
     from core.schemas.aip_v3 import TaskResultMsg
 
     got: List[Any] = []
     await bus.subscribe_task_results(lambda d: got.append(d))
-    await bus.publish_task_result(TaskResultMsg(device_id="w1", task_id="t1", status="ok"))
+    await bus.publish_task_result(TaskResultMsg(device_id="w1", task_id="only-once", status="ok"))
     await asyncio.sleep(0.05)
 
-    assert got == [], "任务平面已经接通了 —— 请把本用例改写成正向的投递断言"
+    assert len(got) == 1, f"同一条消息到了 {len(got)} 次"
+
+
+@pytest.mark.asyncio
+async def test_both_prefixes_carry_distinct_durable_names(bus: NATSBus):
+    """两个订阅的 durable 名必须不同。
+
+    JetStream 的 durable consumer 绑死一个 filter subject。两个订阅共用一个
+    durable 名会冲突 —— 要么直接报错,要么两边互相抢消息(更难查)。
+    """
+    seen: List[tuple] = []
+    original = bus._subscribe
+
+    async def _spy(subject, callback, durable="", **kw):
+        seen.append((subject, durable))
+        return await original(subject, callback, durable=durable, **kw)
+
+    bus._subscribe = _spy  # type: ignore[method-assign]
+    await bus.subscribe_task_results(lambda d: None)
+
+    assert len(seen) == 2, f"应当订两个主题,实际 {len(seen)}"
+    subjects = {s for s, _ in seen}
+    durables = [d for _, d in seen]
+    assert len(subjects) == 2, "两个订阅落在同一个主题上"
+    assert len(set(durables)) == 2, f"durable 名重复:{durables}"
+
+
+def test_the_stream_covers_both_prefixes():
+    """JetStream 流必须同时覆盖两个前缀。
+
+    落在流外的主题不是"慢一点",是**没有持久化**:没有重放、没有 at-least-once。
+    任务结果恰恰是最需要这些保证的东西。
+    """
+    from core.nats_bus import _STREAMS
+
+    subjects = _STREAMS["GALAXY_TASKS"]["subjects"]
+    assert "galaxy.tasks.>" in subjects
+    assert "galaxy.task.>" in subjects
+
+
+@pytest.mark.asyncio
+async def test_an_existing_stream_gets_the_new_prefix_added():
+    """已经建好的流必须能被补上新前缀,而且旧的一个都不能丢。
+
+    修复前建流只有"不存在就建"一条路:流一旦建起来,后来往 ``_STREAMS`` 里加的
+    前缀就永远进不去 —— 新前缀在全新部署上生效、在已跑的部署上静默失效,同一份
+    代码两种行为,是最难查的一类不一致。
+
+    真 JetStream 上已验证过(老流 ``['galaxy.tasks.>']`` → 连接后
+    ``['galaxy.tasks.>', 'galaxy.task.>']``,单数发布拿到真实 seq)。这里用假的
+    js 对象把**合并逻辑**钉住,不需要 CI 上有 nats-server。
+    """
+
+    class _Cfg:
+        def __init__(self, subjects):
+            self.subjects = list(subjects)
+
+    class _Info:
+        def __init__(self, subjects):
+            self.config = _Cfg(subjects)
+
+    updated: List[Any] = []
+
+    class _FakeJS:
+        async def stream_info(self, name):
+            if name == "GALAXY_TASKS":
+                return _Info(["galaxy.tasks.>"])  # 老部署:只有复数
+            raise RuntimeError("no such stream")
+
+        async def add_stream(self, cfg):
+            updated.append(("add", list(cfg.subjects)))
+
+        async def update_stream(self, cfg):
+            updated.append(("update", list(cfg.subjects)))
+
+    bus = NATSBus()
+    bus._js = _FakeJS()
+    await bus._ensure_streams()
+
+    ups = [subs for kind, subs in updated if kind == "update"]
+    assert ups, "已存在的流没有被更新"
+    assert "galaxy.task.>" in ups[0], "新前缀没被补进去"
+    assert "galaxy.tasks.>" in ups[0], "旧前缀被弄丢了 —— 线上可能还有消费者挂在上面"
+
+
+@pytest.mark.asyncio
+async def test_a_stream_that_already_covers_everything_is_not_touched():
+    """已经齐全的流不该被无谓地 update —— 每次启动都改一遍流是噪声,也是风险。"""
+
+    class _Cfg:
+        def __init__(self, subjects):
+            self.subjects = list(subjects)
+
+    class _Info:
+        def __init__(self, subjects):
+            self.config = _Cfg(subjects)
+
+    from core.nats_bus import _STREAMS
+
+    touched: List[str] = []
+
+    class _FakeJS:
+        async def stream_info(self, name):
+            return _Info(_STREAMS[name]["subjects"])
+
+        async def add_stream(self, cfg):
+            touched.append("add")
+
+        async def update_stream(self, cfg):
+            touched.append("update")
+
+    bus = NATSBus()
+    bus._js = _FakeJS()
+    await bus._ensure_streams()
+
+    assert touched == [], f"流已经齐全却仍被改动:{touched}"

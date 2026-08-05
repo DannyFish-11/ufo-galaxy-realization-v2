@@ -66,7 +66,7 @@
     "core/multi_device_canonical_governance.py": 1386,
     "core/multi_device_control_integrity.py": 1860,
     "core/multi_llm_router.py": 3974,
-    "core/nats_bus.py": 1385,
+    "core/nats_bus.py": 1509,
     "core/network_topology_runtime.py": 1542,
     "core/node_cognition_activation.py": 1194,
     "core/node_communication.py": 1043,

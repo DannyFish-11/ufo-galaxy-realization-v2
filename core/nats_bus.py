@@ -159,7 +159,13 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
 
 _STREAMS = {
     "GALAXY_TASKS": {
-        "subjects": ["galaxy.tasks.>"],
+        # 两个前缀并存。``galaxy.task.>``(单数)是 NATSTopics 定下的新规范,
+        # ``galaxy.tasks.>``(复数)是既有运转面(command_router / scheduler /
+        # gateway_nats_adapter / 各 legacy 发布器)还在用的。NATS 逐 token 精确
+        # 匹配,``task`` 与 ``tasks`` 永不相通 —— 两者都必须在流里,否则落在流外
+        # 的那一半连持久化都没有。两个前缀不重叠,不会触发 JetStream 的
+        # "subject overlaps" 冲突。
+        "subjects": ["galaxy.tasks.>", "galaxy.task.>"],
         "max_msgs": 100_000,
         "max_bytes": 1_073_741_824,  # 1 GB
     },
@@ -398,24 +404,15 @@ class NATSBus:
             )
             self._js = self._nc.jetstream()
 
-            # Ensure JetStream streams exist
-            for name, cfg in _STREAMS.items():
-                try:
-                    await self._js.find_stream_name_by_subject(cfg["subjects"][0].replace(">", "*"))
-                except Exception:
-                    from nats.js.api import StreamConfig
-
-                    await self._js.add_stream(
-                        StreamConfig(
-                            name=name,
-                            subjects=cfg["subjects"],
-                            max_msgs=cfg["max_msgs"],
-                            max_bytes=cfg["max_bytes"],
-                            retention="limits",
-                            storage="file",
-                        )
-                    )
-                    logger.info(f"NATSBus: created stream {name}")
+            # Ensure JetStream streams exist **and cover every configured subject**.
+            #
+            # 此前这里只有"不存在就建"一条路:流一旦建起来,后来往 _STREAMS 里加的
+            # 前缀就永远进不去。新前缀在全新部署上生效、在已跑的部署上静默失效,
+            # 是最难查的一类不一致 —— 同一份代码两种行为。
+            #
+            # 往流里**加** subject 是安全操作(删才危险),所以这里只做并集,
+            # 绝不移除已有 subject:线上可能还有消费者挂在上面。
+            await self._ensure_streams()
 
             self._connected = True
             _try_emit_event("NATS_CONNECTED", {"url": target})
@@ -968,14 +965,21 @@ class NATSBus:
     # ── Subscribe methods ───────────────────────────────────────────────────
 
     async def subscribe_task_dispatches(self, worker_id: str, callback: Callable) -> dict:
-        """Subscribe to task dispatches for a specific worker.
+        """Subscribe to task dispatches for *worker_id* —— 单复数两个前缀都收。
 
-        PR-AIPV3-NATS: Received AIP v3 messages are automatically converted to
-        legacy format before passing to the callback.
+        见 :data:`_STREAMS` 的说明:``NATSTopics.task_dispatch()`` 走单数,而
+        ``publish_task_dispatch`` / ``publish_task_envelope`` / 网关适配器走复数。
+        只订一个前缀就会漏掉另一半 —— 修复前这里只订复数,于是
+        ``publish_task_assign`` / ``publish_goal_execution`` 派出去的任务
+        **一条也到不了 worker**。
         """
-        subject = f"galaxy.tasks.dispatch.{worker_id}"
         wrapped = self._wrap_aip_v3_callback(callback)
-        return await self._subscribe(subject, wrapped, durable=f"worker-{worker_id}")
+        return await self._subscribe_both(
+            f"galaxy.tasks.dispatch.{worker_id}",
+            f"{NATSTopics.TASK_DISPATCH}.{worker_id}",
+            wrapped,
+            durable=f"worker-{worker_id}",
+        )
 
     async def subscribe_task_results(
         self,
@@ -989,8 +993,9 @@ class NATSBus:
         legacy format before passing to the callback.
         """
         wrapped = self._wrap_aip_v3_callback(callback)
-        return await self._subscribe(
+        return await self._subscribe_both(
             WorkerLifecycleSubjects.RESULT,
+            f"{NATSTopics.TASK_RESULT}.*",
             wrapped,
             durable="brain-results",
             return_subscription=include_subscription,
@@ -1214,6 +1219,117 @@ class NATSBus:
             logger.error(f"NATSBus: publish failed on {subject} — {exc}")
             return {"success": False, "error": str(exc)}
 
+    async def _subscribe_both(
+        self,
+        legacy_subject: str,
+        canonical_subject: str,
+        callback: Callable,
+        *,
+        durable: str = "",
+        return_subscription: bool = False,
+    ) -> dict:
+        """同时订阅遗留(复数)与规范(单数)两个主题。
+
+        为什么必须订两个
+        ----------------
+        NATS 逐 token 精确匹配,``galaxy.task.*`` 与 ``galaxy.tasks.*`` 之间没有
+        任何通配符能搭桥。而本仓这两个前缀**同时有真实发布方**:``NATSTopics``
+        常量(新规范)走单数,``command_router`` / ``scheduler`` /
+        ``gateway_nats_adapter`` / 各 legacy 发布器走复数。只订一个,另一半的
+        消息就永远收不到 —— 修复前实测任务结果 0 条到得了主脑。
+
+        durable 名必须分开
+        ------------------
+        JetStream 的 durable consumer 绑死一个 filter subject。两个订阅共用一个
+        durable 名会冲突(报错,或两边互相抢消息)。所以规范那条统一加 ``-canonical``
+        后缀,遗留那条保持原名 —— 已在跑的部署里那个 durable 不会被动到。
+
+        不会重复投递
+        ------------
+        没有任何一条发布路径同时往两个前缀发,所以同一条消息只会经其中一个到达。
+        """
+        legacy = await self._subscribe(
+            legacy_subject, callback, durable=durable, return_subscription=return_subscription
+        )
+        canonical = await self._subscribe(
+            canonical_subject,
+            callback,
+            durable=f"{durable}-canonical" if durable else "",
+            return_subscription=return_subscription,
+        )
+
+        subs = [r.get("subscription") for r in (legacy, canonical) if r.get("subscription") is not None]
+        result: Dict[str, Any] = {
+            # 两条里有一条成了就算订上了 —— 单机/降级场景下另一条失败不该让
+            # 整个订阅报失败。两条都失败才是真失败。
+            "success": bool(legacy.get("success") or canonical.get("success")),
+            "subject": legacy_subject,
+            "subjects": [legacy_subject, canonical_subject],
+            "durable": durable,
+        }
+        if not result["success"]:
+            result["error"] = legacy.get("error") or canonical.get("error") or "subscribe failed"
+        if return_subscription:
+            # ``subscription`` 保持单个对象(老调用方按这个字段拿);
+            # ``subscriptions`` 给出全部,unsubscribe() 两种都收。
+            result["subscription"] = subs[0] if subs else None
+            result["subscriptions"] = subs
+        return result
+
+    async def _ensure_streams(self) -> None:
+        """建流,并把配置里新增的 subject 补进已存在的流。
+
+        只做并集:``update_stream`` 传的是"现有 subjects ∪ 配置 subjects",
+        永不移除。已在跑的消费者可能挂在任何一个旧 subject 上。
+        """
+        from nats.js.api import StreamConfig  # noqa: PLC0415
+
+        for name, cfg in _STREAMS.items():
+            wanted = list(cfg["subjects"])
+            try:
+                info = await self._js.stream_info(name)
+            except Exception:
+                info = None
+
+            if info is None:
+                try:
+                    await self._js.add_stream(
+                        StreamConfig(
+                            name=name,
+                            subjects=wanted,
+                            max_msgs=cfg["max_msgs"],
+                            max_bytes=cfg["max_bytes"],
+                            retention="limits",
+                            storage="file",
+                        )
+                    )
+                    logger.info("NATSBus: created stream %s subjects=%s", name, wanted)
+                except Exception as exc:
+                    # 并发启动时另一个进程可能刚建好 —— 不是错误。
+                    logger.debug("NATSBus: add_stream %s skipped: %s", name, exc)
+                continue
+
+            existing = list(getattr(info.config, "subjects", None) or [])
+            missing = [s for s in wanted if s not in existing]
+            if not missing:
+                continue
+            try:
+                cfg_obj = info.config
+                cfg_obj.subjects = existing + missing
+                await self._js.update_stream(cfg_obj)
+                logger.info("NATSBus: stream %s 补入 subjects=%s", name, missing)
+            except Exception as exc:
+                # 补不进去要**响亮**:这意味着那些 subject 上的消息没有持久化,
+                # 而不是"慢一点"。不抛(启动不该因此失败),但必须留下证据。
+                logger.error(
+                    "NATSBus: 无法把 %s 补进流 %s —— 这些主题上的消息将没有 "
+                    "JetStream 持久化。请手动 `nats stream edit %s`。原因:%s",
+                    missing,
+                    name,
+                    name,
+                    exc,
+                )
+
     async def _subscribe(
         self,
         subject: str,
@@ -1281,6 +1397,14 @@ class NATSBus:
         subscription from the tracked in-memory metadata after cleanup.
         """
         if subscription is None:
+            return {"success": True}
+        # ``_subscribe_both`` 会交出两个订阅(单/复数各一);调用方把整个列表传回来
+        # 时要逐个退订,否则会漏掉一半、留下悬空的 durable consumer。
+        if isinstance(subscription, (list, tuple, set)):
+            results = [await self.unsubscribe(one) for one in subscription]
+            failed = [r for r in results if not r.get("success")]
+            if failed:
+                return {"success": False, "error": failed[0].get("error", "unsubscribe failed")}
             return {"success": True}
         try:
             unsubscribe = getattr(subscription, "unsubscribe", None)
