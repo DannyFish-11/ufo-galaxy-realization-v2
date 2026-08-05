@@ -147,7 +147,6 @@ def test_command_router_dispatch_path_actually_calls_the_bridge():
         asyncio.run(router.route_envelope(envelope))
 
     assert calls, (
-        "route_envelope 没有调用 capability_network_bridge.joint_select —— "
-        "派发选目标又退回成只看能力、不看网络了"
+        "route_envelope 没有调用 capability_network_bridge.joint_select —— " "派发选目标又退回成只看能力、不看网络了"
     )
     assert calls[0][1].get("required_capabilities") == [_CAP], f"传给桥的能力集不对：{calls[0]}"
