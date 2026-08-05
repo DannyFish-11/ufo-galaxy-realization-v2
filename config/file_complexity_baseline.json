@@ -26,7 +26,7 @@
     "core/canonical_task.py": 1272,
     "core/capability_assimilation.py": 1170,
     "core/closed_loop_governance_consolidation.py": 1054,
-    "core/command_router.py": 5585,
+    "core/command_router.py": 5584,
     "core/compat_fallback_authority_guard.py": 1299,
     "core/complete_joint_system_review.py": 1885,
     "core/concurrent_mutation_conflict_contract.py": 1062,
