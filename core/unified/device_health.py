@@ -189,8 +189,12 @@ class DeviceHealthScorer:
     def score(self, device_id: str) -> HealthScore:
         """Compute the health score for *device_id*.
 
-        Devices with no samples receive a neutral score of 1.0 (optimistic
-        default — benefit of the doubt until data arrives).
+        Devices with no samples receive the **neutral** score from
+        :mod:`core.health_evidence_policy` — not full marks.
+
+        此前这里返回 ``1.0`` 并把它称作 "neutral"，而 1.0 是本类的**上界**：一台从没
+        测过的设备与一台实测完美的设备同分。命名上的这一步错位正是缺陷的源头 ——
+        把满分叫成中性，就没人会觉得它可疑。判据见 core/health_evidence_policy.py。
 
         Args:
             device_id:  Target device.
@@ -203,7 +207,11 @@ class DeviceHealthScorer:
             s = self._samples.get(device_id)
 
         if s is None or (not s.latencies and not s.errors):
-            return HealthScore(device_id=device_id, total_score=1.0, sample_count=0)
+            from core.health_evidence_policy import no_evidence_score
+
+            # sample_count=0 保留：分数与「有没有证据」是两件事,压成一个数下游就分不出
+            # "测过、就是中等" 和 "没测过"。
+            return HealthScore(device_id=device_id, total_score=no_evidence_score(1.0), sample_count=0)
 
         sample_count = max(len(s.latencies), len(s.errors))
 
