@@ -180,26 +180,36 @@ async def test_the_node_heartbeat_sender_uses_the_worker_plane():
     assert "await nats_bus.publish_heartbeat(hb)" not in text, "又调回设备平面的发布器了"
 
 
-def test_the_aip_v3_round_trip_is_still_lossy_for_worker_models():
-    """记录一条**尚未修**的事实,免得它以后被当成"顺手能用"。
+def test_the_aip_v3_round_trip_survives_for_worker_models():
+    """AIP v3 → legacy 往返后,主脑必须还能 model_validate。
 
-    ``from_aip_to_legacy`` 还原出来的 timestamp 是 int,而 ``WorkerHeartbeatModel``
-    要的是 ``{seconds, nanos}``。也就是说 worker 平面**不能**改走 AIP v3 —— 真发
-    了 AIP v3 上去,MasterBrain 的 model_validate 会失败,而它只打一行 debug 就吞掉。
+    这条以前断言的是**相反**的事(记录"往返有损"这个现状)。根因是形状不匹配:
+    AIP v3 的 timestamp 是毫秒整数,而 contracts.py 里 WorkerHeartbeatModel /
+    WorkerRegistrationModel 的对应字段是 ``TimestampModel``(``{seconds, nanos}``)。
+    整数塞回去 model_validate 就抛,而 ``MasterBrain._on_heartbeat`` 只打一行
+    debug 就吞掉 —— worker 在主脑眼里等同于没心跳。
 
-    这条断言的是现状而非期望。哪天适配器把往返修好了,这里会红 —— 那时该做的是
-    删掉本用例并重新评估两个平面要不要合并,而不是把断言反过来写。
+    同一个形状不匹配在**发布侧**也存在,而且是它让三条 legacy 发布器每次转换都
+    抛异常、掉进 except 分支 —— 反倒歪打正着发对了主题。所以修往返之前必须先把
+    发布侧改成不依赖那个异常(已在前一个提交完成),否则一修往返就会把发布链路
+    弄断。两件事的顺序是有依赖的。
     """
     import time
 
     from core.aip_v3_nats_adapter import from_aip_to_legacy
-    from core.schemas.aip_v3 import HeartbeatMsg
+    from core.schemas.aip_v3 import DeviceRegisterMsg, HeartbeatMsg
 
-    wire = HeartbeatMsg(device_id="w1", status="idle", timestamp=int(time.time() * 1000))
-    legacy = from_aip_to_legacy(wire.model_dump(mode="json", exclude_none=True))
+    hb_wire = HeartbeatMsg(device_id="w1", status="idle", timestamp=int(time.time() * 1000))
+    hb_legacy = from_aip_to_legacy(hb_wire.model_dump(mode="json", exclude_none=True))
+    parsed = WorkerHeartbeatModel.model_validate(hb_legacy)
+    assert parsed.worker_id == "w1"
+    assert parsed.timestamp.seconds > 0
+    # 原始毫秒仍然拿得到 —— 想要整数的消费方不受影响。
+    assert hb_legacy["timestamp_ms"] == hb_wire.timestamp
 
-    with pytest.raises(Exception):
-        WorkerHeartbeatModel.model_validate(legacy)
+    reg_wire = DeviceRegisterMsg(device_id="w1", device_type="router")
+    reg_legacy = from_aip_to_legacy(reg_wire.model_dump(mode="json", exclude_none=True))
+    WorkerRegistrationModel.model_validate(reg_legacy)
 
 
 # ---------------------------------------------------------------------------

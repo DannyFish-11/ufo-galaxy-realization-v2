@@ -255,6 +255,26 @@ def to_aip_agent_event(event: Any) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _ms_to_timestamp_model(ms: Any) -> Dict[str, int]:
+    """毫秒整数 → ``TimestampModel`` 的线上形状 ``{seconds, nanos}``。
+
+    为什么需要这一步
+    ----------------
+    AIP v3 的 ``timestamp`` 是毫秒整数;而 contracts.py 里 ``WorkerHeartbeatModel``
+    等模型的对应字段是 ``TimestampModel``(``{seconds, nanos}``)。直接把整数塞回去,
+    消费方 ``Model.model_validate(data)`` 会抛校验错 —— 而 ``MasterBrain._on_heartbeat``
+    只打一行 debug 就吞掉,于是 worker 在主脑眼里就是"心跳解析不了" ≈ 没心跳。
+
+    这条往返此前是坏的,而且**双向都坏**:发布侧因为同一个形状不匹配而每次转换都
+    抛异常、落进 except 分支(反倒歪打正着发对了主题),订阅侧则是这里。
+    """
+    try:
+        total_ms = int(ms)
+    except (TypeError, ValueError):
+        total_ms = _now_ms()
+    return {"seconds": total_ms // 1000, "nanos": (total_ms % 1000) * 1_000_000}
+
+
 def from_aip_to_legacy(aip_msg: Dict[str, Any]) -> Dict[str, Any]:
     """Convert an AIP v3 message back to a flat dict compatible with legacy consumers.
 
@@ -272,7 +292,10 @@ def from_aip_to_legacy(aip_msg: Dict[str, Any]) -> Dict[str, Any]:
                 "worker_type": aip_msg.get("device_type", "unknown"),
                 "capabilities": aip_msg.get("capabilities", []),
                 "metadata": aip_msg.get("metadata", {}),
-                "registered_at": aip_msg.get("timestamp", _now_ms()),
+                # registered_at 在 WorkerRegistrationModel 上是 TimestampModel,
+                # 塞整数会让 model_validate 直接失败。
+                "registered_at": _ms_to_timestamp_model(aip_msg.get("timestamp", _now_ms())),
+                "registered_at_ms": aip_msg.get("timestamp", _now_ms()),
                 "_aip_converted": True,
             }
         elif msg_type == AIP_HEARTBEAT:
@@ -280,7 +303,10 @@ def from_aip_to_legacy(aip_msg: Dict[str, Any]) -> Dict[str, Any]:
                 "worker_id": aip_msg.get("device_id", ""),
                 "status": aip_msg.get("status", "online"),
                 "metadata": aip_msg.get("metadata", {}),
-                "timestamp": aip_msg.get("timestamp", _now_ms()),
+                # timestamp 在 WorkerHeartbeatModel 上是 TimestampModel。
+                # 原始毫秒另存 timestamp_ms,想要整数的消费方照样拿得到。
+                "timestamp": _ms_to_timestamp_model(aip_msg.get("timestamp", _now_ms())),
+                "timestamp_ms": aip_msg.get("timestamp", _now_ms()),
                 "_aip_converted": True,
             }
         elif msg_type == AIP_TASK_ASSIGN:
