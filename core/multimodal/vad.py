@@ -182,7 +182,36 @@ class VADState:
     speaking_ratio: float = 0.0  # 近段窗口内活跃帧占比
     pause_density: float = 0.0  # 语音→静音跃迁占比
     last_speech_ts: Optional[float] = None
-    backend: str = "energy"  # 本帧实际使用的判据:"webrtc" 或 "energy"
+    backend: str = "energy"
+    """本帧实际使用的判据。
+
+    ``"webrtc+energy"`` 频谱 ∩ 自适应门限(稳态,正常情况);
+    ``"webrtc+floor"``  频谱 ∩ 绝对下限(暖机期,噪声底还没学到);
+    ``"webrtc"``        频谱独断(仅当 ``webrtc_requires_level=False``,排障用);
+    ``"energy"``        webrtcvad 不可用时的能量回退。
+    """
+
+    # ── 判决依据:默认就带出来,排障不需要先去翻开关 ──────────────────────
+    #
+    # 这几个数每帧本来就在算,此前算完即扔。于是真机上"它又一直判有人说话"时,
+    # 手里只有一个 backend 字符串 —— 知道走了哪条判据,不知道它凭什么这么判,
+    # 只能靠改环境变量重跑去复现。而这类症状恰恰高度依赖现场声学环境,
+    # 换个时间就未必复现得出来。
+    #
+    # 带出来的成本是三个 float;换来的是"一帧的快照就能说清为什么"。
+    noise_floor: Optional[float] = None
+    """当前噪声底(``noise_percentile`` 分位数)。``None`` = 样本还不够,尚未可信。"""
+
+    adaptive_threshold: Optional[float] = None
+    """本帧实际生效的自适应门限(``max(min_floor, noise_floor × speech_mult)``)。
+    与 :attr:`energy` 一比就知道电平判据为什么给出这个结论。``None`` 同上。"""
+
+    webrtc_voiced_ratio: Optional[float] = None
+    """webrtcvad 判为语音的子帧比例。``None`` = 本帧没用上 webrtcvad
+    (缺包 / 采样率不支持 / 数据太短 / 调用失败)。
+
+    它与 :attr:`adaptive_threshold` 一起,把"频谱说有声但电平不够"和"频谱就说
+    没有"这两种完全不同的情形分开 —— 只看 is_speaking 是分不出来的。"""
 
 
 class VoiceActivityDetector:
@@ -293,12 +322,25 @@ class VoiceActivityDetector:
         安静环境下它比 0.01 更低(底噪 0.0008 → 门限 0.0024),低增益麦克风的
         轻声说话照样能触发 —— 这正是当初引入自适应路径要解决的问题,不受影响。
         """
+        active, _, _ = self._energy_verdict(energy)
+        return active
+
+    def _energy_verdict(self, energy: float) -> "tuple[bool, Optional[float], Optional[float]]":
+        """能量判活,并把**判据本身**一起交出来:``(是否判活, 噪声底, 生效门限)``。
+
+        噪声底与门限每帧本来就在算,此前算完即扔。真机上"它又一直判有人说话"时,
+        手里只剩一个布尔值 —— 说不出它凭什么这么判,只能靠改环境变量重跑复现,
+        而这类症状高度依赖现场声学环境,换个时间未必复现得出来。所以默认带出来。
+
+        噪声底不可信时后两项为 ``None``(而不是塞一个假的 0.0)—— 那时判据是固定
+        阈值,报一个"噪声底"只会误导排障的人。
+        """
         if not self._has_credible_floor():
             # 还没学到噪声底 → 只能靠固定阈值兜底。
-            return energy > self.config.energy_threshold
+            return energy > self.config.energy_threshold, None, None
         noise_floor = float(np.percentile(self._energy_history, self.config.noise_percentile))
         adaptive_threshold = max(self.config.adaptive_min_floor, noise_floor * self.config.adaptive_speech_mult)
-        return energy > adaptive_threshold
+        return energy > adaptive_threshold, noise_floor, adaptive_threshold
 
     def _looks_stationary(self) -> bool:
         """当前这段持续活跃期是否像**稳态噪声**(而不是有人在持续说话)。
@@ -358,15 +400,31 @@ class VoiceActivityDetector:
         # 但正是这段活跃期喂给了"稳态噪声探测",第 25 帧一到就重播种噪声底、
         # 门限一步升到位,之后电平闸接管 —— 实测第 26 帧起即转静。
         ratio = self._webrtc_voiced_ratio(samples) if samples.size else None
-        energy_active = self._energy_is_active(energy)
+        energy_active, noise_floor, adaptive_threshold = self._energy_verdict(energy)
         if ratio is not None:
             spectral_active = ratio >= self.config.webrtc_voiced_ratio
-            if self.config.webrtc_requires_level and self._has_credible_floor():
+            if not self.config.webrtc_requires_level:
+                is_active = spectral_active
+                backend = "webrtc"
+            elif self._has_credible_floor():
                 is_active = spectral_active and energy_active
                 backend = "webrtc+energy"
             else:
-                is_active = spectral_active
-                backend = "webrtc"
+                # 暖机期(噪声底还没学到):电平闸退到**绝对下限**,而不是完全撤掉。
+                #
+                # 撤掉的代价是实测出来的:启动最初几帧 webrtcvad 会把 RMS 0.002 的
+                # 高斯噪声判成有声(ratio=1.00),而此时没有任何东西能否决它 ——
+                # 于是开机头 ~200ms 冒出一段假的"正在说话"。那就是「一启用就一直
+                # 判定有人在说话」缩短后的残留,不是另一个 bug。
+                #
+                # 为什么用 ``adaptive_min_floor`` 而不是 ``energy_threshold``:
+                # 稳态门限是 ``max(adaptive_min_floor, 噪声底 × 倍数)``,恒 ≥
+                # ``adaptive_min_floor``。所以拿它当暖机闸,**不可能否决任何稳态期
+                # 会放行的帧** —— 学到噪声底前后不会出现"先能说话、后说不了"的
+                # 反转。固定阈值 0.01 没有这个性质(安静房间门限能低到 0.0024),
+                # 拿它闸就会误杀轻声说话,那正是上面不用它的原因。
+                is_active = spectral_active and energy > self.config.adaptive_min_floor
+                backend = "webrtc+floor"
         else:
             is_active = energy_active
             backend = "energy"
@@ -434,6 +492,9 @@ class VoiceActivityDetector:
             pause_density=pause_density,
             last_speech_ts=self._last_speech_ts,
             backend=backend,
+            noise_floor=noise_floor,
+            adaptive_threshold=adaptive_threshold,
+            webrtc_voiced_ratio=ratio,
         )
 
     def reset(self) -> None:
