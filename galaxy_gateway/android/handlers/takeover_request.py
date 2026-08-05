@@ -43,9 +43,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Strong refs to fire-and-forget tasks (event loop only holds a weak ref).
-_BACKGROUND_TASKS: set = set()
-
 # Lifecycle coordinator — handles session-state reduction, tracking, and audit.
 try:
     from core.android_delegated_runtime_lifecycle_coordinator import (
@@ -55,8 +52,8 @@ except ImportError:  # pragma: no cover
     _get_lifecycle_coordinator = None  # type: ignore[assignment]
 
 # PR-AIPV3: Unified AIP v3 emission for cross-system observability.
+# 发射本身走 core.aip_mesh_mirror(后台任务、强引用、吞异常都收敛在那一层)。
 try:
-    from core.nats_bus import get_nats_bus  # noqa: F401
     from core.schemas.aip_v3 import TakeoverRequestMsg, TakeoverResponseMsg  # noqa: F401
 
     _AIPV3_AVAILABLE = True
@@ -136,7 +133,7 @@ def _emit_aip_v3_takeover_request(
     if not _AIPV3_AVAILABLE:
         return
     try:
-        import asyncio
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
 
         msg = TakeoverRequestMsg(
             device_id=target_device_id or "v2_desktop",
@@ -146,12 +143,9 @@ def _emit_aip_v3_takeover_request(
             trace_id=trace_id,
             task_context=dict(task_context) if task_context else {},
         )
-        nats = get_nats_bus()
-        if nats.is_connected():
-            _bt = asyncio.get_running_loop().create_task(nats.publish_takeover_request(msg))
-            _BACKGROUND_TASKS.add(_bt)
-            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
-        else:
+        if not mirror_to_mesh(msg):
+            # 没镜像出去(多半是单机、NATS 没连)——至少把它留在日志里,
+            # 排障时还看得见这条接管请求长什么样。
             logger.debug("AIPV3 takeover_request: %s", msg.model_dump_json(exclude_none=True))
     except Exception:
         pass

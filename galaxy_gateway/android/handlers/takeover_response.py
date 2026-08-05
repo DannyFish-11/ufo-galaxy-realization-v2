@@ -167,6 +167,19 @@ async def handle_takeover_response(
             device_id,
         )
 
+    # 网格镜像:TAKEOVER_REQUEST 早就上了网格(见 takeover_request.py),应答不
+    # 上去的话网格里只看得到"有人要接管",永远看不到接管到底成没成 —— 半边的
+    # 请求/应答对是判不出控制权现在在谁手里的。
+    _mirror_takeover_response(
+        device_id=device_id,
+        takeover_id=takeover_id,
+        accepted=accepted,
+        reason=reason,
+        session_id=session_id,
+        task_id=task_id,
+        trace_id=trace_id,
+    )
+
     return {
         "version": "3.0",
         "type": "takeover_response_ack",
@@ -176,3 +189,33 @@ async def handle_takeover_response(
         "takeover_id": takeover_id,
         "accepted": accepted,
     }
+
+
+def _mirror_takeover_response(
+    *,
+    device_id: str,
+    takeover_id: str,
+    accepted: bool,
+    reason: str,
+    session_id: str,
+    task_id: str,
+    trace_id: str,
+) -> None:
+    """把 TAKEOVER_RESPONSE 镜像到 NATS 网格面。best-effort。"""
+    try:
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
+        from core.schemas.aip_v3 import TakeoverResponseMsg  # noqa: PLC0415
+
+        mirror_to_mesh(
+            TakeoverResponseMsg(
+                device_id=str(device_id or ""),
+                request_correlation_id=str(takeover_id or ""),
+                accepted=bool(accepted),
+                rejection_reason="" if accepted else str(reason or ""),
+                session_id=str(session_id or ""),
+                task_id=str(task_id or ""),
+                trace_id=str(trace_id or ""),
+            )
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.debug("takeover_response 网格镜像跳过:%s", exc)

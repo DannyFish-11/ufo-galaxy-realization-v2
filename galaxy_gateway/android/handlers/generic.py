@@ -128,9 +128,35 @@ async def handle_generic_forward(bridge: "AndroidBridge", websocket: Any, messag
             "allowed_compat_types": list(_GENERIC_FORWARD_COMPAT_MESSAGE_TYPES),
         }
     logger.debug("Received %s from %s: forwarding", msg_type, device_id)
+
+    # 网格镜像:兼容路径回的是一个裸 ACK,没有任何状态语义 —— 正因为如此,
+    # 网格里更需要看到它。否则一条走兼容路径的消息,在网格视角里是"发出去了
+    # 然后什么都没发生",与真的丢了分不出来。
+    _mirror_generic_ack(device_id, normalized_type, message)
+
     return {
         "type": f"{msg_type}_ack" if msg_type else "ack",
         "device_id": device_id,
         "status": "received",
         "message_id": message.get("message_id"),
     }
+
+
+def _mirror_generic_ack(device_id: Any, normalized_type: str, message: Dict[str, Any]) -> None:
+    """把兼容路径的 ACK 镜像到 NATS 网格面。best-effort。"""
+    try:
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
+        from core.schemas.aip_v3 import AckMsg  # noqa: PLC0415
+
+        mirror_to_mesh(
+            AckMsg(
+                device_id=str(device_id or ""),
+                ack_for_type=normalized_type,
+                ack_for_correlation_id=str(message.get("message_id") or ""),
+                status="ok",
+                session_id=str(message.get("session_id") or ""),
+                trace_id=str(message.get("trace_id") or ""),
+            )
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.debug("generic ack 网格镜像跳过:%s", exc)

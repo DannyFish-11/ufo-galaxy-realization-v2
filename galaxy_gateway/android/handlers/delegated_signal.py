@@ -110,6 +110,10 @@ async def handle_delegated_execution_signal(
             device_id,
         )
 
+    # 网格镜像:委派执行的进度/结果信号是"任务此刻跑到哪了"的唯一来源。不上
+    # 网格,别的节点就只能靠超时猜,做不了接管或重调度的判断。
+    _mirror_delegated_signal(device_id, message)
+
     return {
         "version": "3.0",
         "type": "delegated_execution_signal_ack",
@@ -117,3 +121,29 @@ async def handle_delegated_execution_signal(
         "message_id": str(uuid.uuid4()),
         "correlation_id": message_id,
     }
+
+
+def _mirror_delegated_signal(device_id: str, message: Dict[str, Any]) -> None:
+    """把 DELEGATED_EXECUTION_SIGNAL 镜像到 NATS 网格面。best-effort。"""
+    try:
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
+        from core.schemas.aip_v3 import DelegatedExecutionSignalMsg  # noqa: PLC0415
+
+        payload = message.get("payload")
+        try:
+            progress = int(message.get("progress_pct") or (payload or {}).get("progress_pct") or 0)
+        except (TypeError, ValueError):
+            progress = 0
+        mirror_to_mesh(
+            DelegatedExecutionSignalMsg(
+                device_id=str(device_id or ""),
+                signal_kind=str(message.get("signal_kind") or message.get("kind") or ""),
+                payload=dict(payload) if isinstance(payload, dict) else {},
+                progress_pct=progress,
+                session_id=str(message.get("session_id") or ""),
+                task_id=str(message.get("task_id") or ""),
+                trace_id=str(message.get("trace_id") or ""),
+            )
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.debug("delegated_execution_signal 网格镜像跳过:%s", exc)

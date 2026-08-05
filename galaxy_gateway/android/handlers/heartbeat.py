@@ -47,7 +47,30 @@ async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dic
                 device_id,
             )
 
+    # 网格镜像:HEARTBEAT_ACK 是心跳的应答半边。设备的心跳本身已经上了网格
+    # (publish_heartbeat),应答不上去的话,网格里只看得到"设备还在喊",看不到
+    # "中心听见了" —— 判不出是设备掉线还是中心没在处理。
+    _mirror_heartbeat_ack(device_id, message)
+
     return MessageBuilder.heartbeat_ack(device_id)
+
+
+def _mirror_heartbeat_ack(device_id: Any, message: Dict[str, Any]) -> None:
+    """把 HEARTBEAT_ACK 镜像到 NATS 网格面。best-effort,不影响 ACK 本身。"""
+    try:
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
+        from core.schemas.aip_v3 import HeartbeatAckMsg  # noqa: PLC0415
+
+        mirror_to_mesh(
+            HeartbeatAckMsg(
+                device_id=str(device_id or ""),
+                trace_id=str(message.get("trace_id") or ""),
+                session_id=str(message.get("session_id") or ""),
+                server_timestamp=int(time.time() * 1000),
+            )
+        )
+    except Exception as exc:  # pragma: no cover - 镜像失败不改变 ACK 语义
+        logger.debug("heartbeat_ack 网格镜像跳过:%s", exc)
 
 
 async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:

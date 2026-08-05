@@ -71,6 +71,8 @@ logger = logging.getLogger("nats_bus")
 from core.schemas.aip_v3 import (  # noqa: E402  哨兵权威声明置顶是本仓设计习语
     AckMsg,
     AIPMessage,
+    CancelResultMsg,
+    CapabilityQueryMsg,
     CapabilityReportMsg,
     CoordSyncMsg,
     DelegatedExecutionSignalMsg,
@@ -213,6 +215,7 @@ class NATSTopics:
     # ── Capability plane ─────────────────────────────────────────────────────
     CAPABILITY_REGISTERED = "galaxy.capability.registered"
     CAPABILITY_REMOVED = "galaxy.capability.removed"
+    CAPABILITY_QUERY = "galaxy.capability.query"
 
     # ── Audit plane ──────────────────────────────────────────────────────────
     AUDIT_COMMAND = "galaxy.audit.command"
@@ -543,6 +546,14 @@ class NATSBus:
         """
         return await self.publish_aip_v3(NATSTopics.CAPABILITY_REGISTERED, msg)
 
+    async def publish_capability_query(self, msg: "CapabilityQueryMsg") -> dict:
+        """Publish CAPABILITY_QUERY to ``galaxy.capability.query``.
+
+        Asks the mesh which devices provide a capability.  Replies come back
+        as CAPABILITY_REPORT on ``galaxy.capability.registered``.
+        """
+        return await self.publish_aip_v3(NATSTopics.CAPABILITY_QUERY, msg)
+
     # ── Task / execution ──
 
     async def publish_task_assign(self, msg: "TaskAssignMsg") -> dict:
@@ -558,6 +569,14 @@ class NATSBus:
     async def publish_task_cancel(self, msg: "TaskCancelMsg") -> dict:
         """Publish TASK_CANCEL to ``galaxy.tasks.cancel.{task_id}``."""
         return await self.publish_aip_v3(f"galaxy.task.cancel.{msg.task_id}", msg)
+
+    async def publish_cancel_result(self, msg: "CancelResultMsg") -> dict:
+        """Publish CANCEL_RESULT to ``galaxy.task.cancel_result.{task_id}``.
+
+        The reply half of :meth:`publish_task_cancel` — tells the requester
+        whether the cancellation actually took, and how clean the teardown was.
+        """
+        return await self.publish_aip_v3(f"galaxy.task.cancel_result.{msg.task_id}", msg)
 
     async def publish_goal_execution(self, msg: "GoalExecutionMsg") -> dict:
         """Publish GOAL_EXECUTION to ``galaxy.tasks.dispatch.{device_id}``."""

@@ -404,5 +404,26 @@ def filter_by_required_capabilities(
             required,
             rejected_count,
         )
+        # 本机认识的设备里没有一台满足要求 —— 但本机认识的不等于网格里全部。
+        # 往网格问一句 CAPABILITY_QUERY:听得见的节点会用 CAPABILITY_REPORT 回到
+        # galaxy.capability.registered。这一轮路由不等它(硬门就是硬门,不能为了
+        # 等一个可能没有的答复把请求挂住),但下一轮就有可能选得出设备来。
+        _ask_the_mesh_for(required)
 
     return accepted
+
+
+def _ask_the_mesh_for(required_capabilities: Sequence[str]) -> None:
+    """本机选不出设备时,向网格广播一次 CAPABILITY_QUERY。best-effort。"""
+    try:
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
+        from core.schemas.aip_v3 import CapabilityQueryMsg  # noqa: PLC0415
+
+        mirror_to_mesh(
+            CapabilityQueryMsg(
+                device_id="",  # 问的是整个网格,不针对某台设备
+                query_filter=",".join(str(c) for c in required_capabilities),
+            )
+        )
+    except Exception as exc:  # pragma: no cover - 问不出去不影响本轮路由结论
+        logger.debug("CAPABILITY_QUERY 网格广播跳过:%s", exc)

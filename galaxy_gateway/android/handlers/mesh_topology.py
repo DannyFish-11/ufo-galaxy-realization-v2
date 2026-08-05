@@ -88,6 +88,10 @@ async def handle_mesh_topology(bridge: "AndroidBridge", websocket: Any, message:
                 exc,
             )
 
+    # 网格镜像:这一份拓扑答复只回给发问的那台设备。镜像上网格,别的节点才能
+    # 拿同一时刻的同一份拓扑做对账 —— 拓扑分歧正是网格类故障最难查的一种。
+    _mirror_mesh_topology(device_id, message, topology, peer_count)
+
     return {
         "version": "3.0",
         "type": "mesh_topology",
@@ -100,3 +104,24 @@ async def handle_mesh_topology(bridge: "AndroidBridge", websocket: Any, message:
         "lifecycle_state": "topology_returned",
         "correlation_id": message.get("message_id"),
     }
+
+
+def _mirror_mesh_topology(device_id: str, message: Dict[str, Any], topology: Dict, peer_count: int) -> None:
+    """把 MESH_TOPOLOGY 应答镜像到 NATS 网格面。best-effort。"""
+    try:
+        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
+        from core.schemas.aip_v3 import MeshTopologyMsg  # noqa: PLC0415
+
+        mirror_to_mesh(
+            MeshTopologyMsg(
+                device_id=str(device_id or ""),
+                mesh_id=str(message.get("mesh_id") or ""),
+                topology=dict(topology) if isinstance(topology, dict) else {},
+                peer_count=int(peer_count),
+                request_type="update",  # 这是答复,不是发问
+                session_id=str(message.get("session_id") or ""),
+                trace_id=str(message.get("trace_id") or ""),
+            )
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.debug("mesh_topology 网格镜像跳过:%s", exc)
