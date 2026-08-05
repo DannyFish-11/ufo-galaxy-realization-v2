@@ -146,7 +146,18 @@ _EXEMPT_MODULES = (
 #: 精确豁免:有明确理由的个案。写清楚理由,不写理由不许加。
 #: 逐名豁免。**先想想能不能用结构判据**(见 :func:`_is_singleton_reset`)——
 #: 逐名清单只会越来越长,而且没人敢删。
-_EXEMPT_NAMES: Dict[str, str] = {}
+_EXEMPT_NAMES: Dict[str, str] = {
+    "close_app": (
+        "**故意不接线**。UFODeepIntegration.launch_app / close_app 能执行任意二进制"
+        "(subprocess.Popen([app_path]) —— 那个正则只挡 shell 元字符,而这里根本没有 "
+        "shell,Popen 就是精确执行那个路径,{'app_path': '/bin/sh'} 照样起 shell)。"
+        "本轮曾把它们暴露成 POST /app/launch 与 /app/close,CodeQL 当场判 critical:"
+        "任何人都能远程在宿主上执行任意程序。已撤回。"
+        "要接的话得先定产品策略 —— 允许启动哪些程序(白名单)、谁有权调 —— "
+        "那是产品决定,不该由改这行代码的人顺手定。在那之前它保持不可达,"
+        "而这条豁免是为了让下一个人看见理由,而不是又去接一遍。"
+    ),
+}
 
 
 def _iter_definition_files() -> List[Path]:

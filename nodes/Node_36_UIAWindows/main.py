@@ -76,14 +76,6 @@ class WindowRequest(BaseModel):
     action: str = "focus"
 
 
-class LaunchAppRequest(BaseModel):
-    app_path: str
-
-
-class CloseAppRequest(BaseModel):
-    process_name: str
-
-
 class DragRequest(BaseModel):
     start_x: int
     start_y: int
@@ -499,38 +491,6 @@ async def api_window(request: WindowRequest):
     result = tools.window_action(request.title, request.action)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
-    return result
-
-
-@app.post("/app/launch")
-async def api_launch_app(request: LaunchAppRequest):
-    """启动应用程序。
-
-    实现在 ufo_deep_integration.UFODeepIntegration 里,带防命令注入加固
-    (不用 shell=True,路径先过 shell 元字符检查)。那份实现此前**从未被这个
-    节点暴露过** —— 代码在、加固在、测试在,就是没有任何入口能调到它,
-    于是 Node_36 一直缺"启动/关闭应用"这两个能力。
-    """
-    from ufo_deep_integration import ufo_deep
-
-    result = await ufo_deep.launch_app(request.app_path)
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "launch failed"))
-    return result
-
-
-@app.post("/app/close")
-async def api_close_app(request: CloseAppRequest):
-    """关闭应用程序(按进程名)。
-
-    同上:进程名先过白名单正则再交给 taskkill,不走 shell。
-    见 tests/test_security_fixes.py 里那条防注入用例。
-    """
-    from ufo_deep_integration import ufo_deep
-
-    result = await ufo_deep.close_app(request.process_name)
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "close failed"))
     return result
 
 
