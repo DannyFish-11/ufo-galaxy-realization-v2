@@ -165,6 +165,15 @@ class MeshParticipationSummary:
     reasons:
         List of human-readable reasons or diagnostic messages collected
         during summary assembly.
+
+        **只放稳定的原因码,不要放异常文本。** 这个字段会经 ``to_dict()`` 走出
+        进程 —— ``GET /api/v1/mesh/participation-summary`` 直接把它回给调用方。
+        六个 ``_aggregate_from_*`` 原来各写一句 ``f"xxx unavailable: {exc}"``,
+        于是任何一个子系统在半初始化状态下抛出的内部模块路径、对象名都会顺着
+        这个字段泄到端点外(CodeQL alert 1067,六条流对应六个聚合器)。
+
+        异常细节一条没少 —— 每个 except 分支都已经 ``_logger.debug/warning``
+        记了完整信息,那是运维该去看的地方。这里只留"哪个子系统没聚合上"。
     sources:
         Mapping from subsystem name → raw subsystem data (serialisable).
         Useful for debugging without re-querying subsystems.
@@ -276,7 +285,7 @@ def _aggregate_from_formation_summary(
             summary.reasons.append(f"formation: {fs.formation_reason}")
 
     except Exception as exc:  # pragma: no cover – defensive
-        summary.reasons.append(f"formation_summary unavailable: {exc}")
+        summary.reasons.append("formation_summary unavailable")
         _logger.debug("formation_summary aggregation failed: %s", exc)
 
 
@@ -318,7 +327,7 @@ def _aggregate_from_body_mesh_registry(
                 _merge_role(summary.roles_by_device, primary, "primary")
 
     except Exception as exc:
-        summary.reasons.append(f"body_mesh_registry unavailable: {exc}")
+        summary.reasons.append("body_mesh_registry unavailable")
         _logger.debug("body_mesh_registry aggregation failed: %s", exc)
 
 
@@ -374,7 +383,7 @@ def _aggregate_from_mesh_session(
                 _merge_role(summary.roles_by_device, did, str(role))
 
     except Exception as exc:
-        summary.reasons.append(f"mesh_session unavailable: {exc}")
+        summary.reasons.append("mesh_session unavailable")
         _logger.debug("mesh_session aggregation failed: %s", exc)
 
 
@@ -423,7 +432,7 @@ def _aggregate_from_mesh_membership(
             summary.sources["mesh_membership"] = source_data
 
     except Exception as exc:
-        summary.reasons.append(f"mesh_membership unavailable: {exc}")
+        summary.reasons.append("mesh_membership unavailable")
         _logger.debug("mesh_membership aggregation failed: %s", exc)
 
 
@@ -459,7 +468,7 @@ def _aggregate_from_mesh_session_coordinator(
             summary.barrier_posture = bp.value if hasattr(bp, "value") else str(bp)
 
     except Exception as exc:
-        summary.reasons.append(f"mesh_session_coordinator unavailable: {exc}")
+        summary.reasons.append("mesh_session_coordinator unavailable")
         _logger.debug("mesh_session_coordinator aggregation failed: %s", exc)
 
 
@@ -500,7 +509,7 @@ def _aggregate_from_cross_device_policy(
                     summary.routing_intents[did] = posture_str
 
     except Exception as exc:
-        summary.reasons.append(f"cross_device_policy unavailable: {exc}")
+        summary.reasons.append("cross_device_policy unavailable")
         _logger.debug("cross_device_policy aggregation failed: %s", exc)
 
 
@@ -622,7 +631,7 @@ def get_device_mesh_summary(device_id: str) -> Dict[str, Any]:
             "is_primary": False,
             "is_source": False,
             "session_id": None,
-            "reasons": [f"summary_error: {exc}"],
+            "reasons": ["summary_error"],
         }
 
 

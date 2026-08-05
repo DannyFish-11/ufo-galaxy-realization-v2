@@ -100,3 +100,30 @@ def test_failure_response_does_not_leak_exception_detail(client: TestClient, mon
 
     assert secret not in r.text, f"异常细节泄漏到响应体:{r.text}"
     assert secret in caplog.text, "异常细节也没进日志 —— 那就没法排查了"
+
+
+def test_subsystem_failure_does_not_leak_through_reasons(client: TestClient, monkeypatch):
+    """**成功**路径也不许泄 —— 这是 CodeQL alert 1067,比 1066 隐蔽一层。
+
+    1066 修的是 ``except`` 分支里 ``str(e)`` 回给调用方。1067 是另一条路:六个
+    ``_aggregate_from_*`` 各自 catch 住自己那个子系统的异常,然后把
+    ``f"xxx unavailable: {exc}"`` 塞进 ``summary.reasons``。摘要**组装成功**、
+    端点回 200,而异常文本就藏在 reasons 里一起发出去了 —— 六个聚合器,六条流。
+
+    所以这条走的是 200 而不是 500:让一个子系统抛,断言响应体里查不到异常消息,
+    但那个子系统\"没聚合上\"这件事仍然说得出来。
+    """
+    import core.mesh_participation_summary as mod
+
+    secret = "内部对象路径不该外泄"
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError(secret)
+
+    # 编队聚合器依赖的入口炸掉 —— 它会被 _aggregate_from_formation_summary catch 住。
+    monkeypatch.setattr(mod, "resolve_formation_summary", _boom)
+
+    r = client.get("/api/v1/mesh/participation-summary")
+    assert r.status_code == 200, r.text
+    assert secret not in r.text, f"子系统异常经 reasons 泄漏到响应体:{r.text}"
+    assert "formation_summary unavailable" in r.text, '该说的"没聚合上"也没说 —— 那就没诊断价值了'
