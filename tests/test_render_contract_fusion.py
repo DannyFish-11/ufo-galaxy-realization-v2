@@ -1,0 +1,261 @@
+"""tests/test_render_contract_fusion.py — 渲染契约与阈限态的融合钉子
+
+这份测试钉的不是"函数返回值对不对"，是**几条结构性事实**——它们一旦悄悄回退，
+症状会出现在完全不相干的地方（面板上一片空白、动画对不上状态），极难回溯。
+
+钉四件事：
+
+1. **返回弧可分辨**。``formless`` 与 ``receding`` 的公共三态投影都是 ``silent``，
+   如果渲染契约也把它们抹平，「刚做完正在退场」与「静息」在渲染端就是同一个数。
+   旧的一维投影正是如此（实测两者输出逐位相同）。
+
+2. **两根轴不能互相冒充**。``lifecycle``（主体生命周期，桥广播的那根）与
+   ``continuum_phase``（内部连续体姿态）是不同的轴，``TriState`` 的类文档明确
+   禁止混淆。契约必须能表达 ``lifecycle=silent`` 且 ``continuum_phase=receding``
+   这种组合——那正是"主体看着安静，其实刚做完在收尾"。
+
+3. **禁止转移不可被表达**。``manifest → liminal`` 在 PHASE_TRANSITION_TABLE 里是
+   Forbidden（"结构不能不经 receding 就解体"）。``next_phases`` 不许给出它。
+
+4. **阈限内容与阈限相位真的耦合**。预演登记必须发生在 LIMINAL 段内；不在那儿要
+   留下痕迹（warning），而不是静静地成立。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+
+import pytest
+
+from core.continuum.types import ContinuumPhase, ContinuumState, RuntimeDomain
+from core.phase_contract import (
+    FORBIDDEN_TRANSITIONS,
+    LIFECYCLE_STATES,
+    PHASE_TRANSITIONS,
+    RENDER_PHASES,
+    SimulationSummary,
+    resolve_phase_posture,
+    resolve_render_posture,
+    tri_state_of,
+)
+
+
+def _state(phase: ContinuumPhase, **kw) -> ContinuumState:
+    base = dict(presence_intensity=0.7, coherence=0.6, ambiguity=0.4, stability=0.9)
+    base.update(kw)
+    return ContinuumState(phase=phase, **base)
+
+
+# ── 1. 返回弧可分辨 ────────────────────────────────────────────────────────
+
+
+def test_legacy_projection_flattens_the_return_arc():
+    """先钉住"旧契约确实抹平了返回弧"——这是本次改造的前提，不是假设。
+
+    如果哪天这条不再成立（旧投影自己修好了），本文件其余的钉子就该重新审视。
+    """
+    old_formless = resolve_phase_posture("static", _state(ContinuumPhase.FORMLESS))
+    old_receding = resolve_phase_posture("static", _state(ContinuumPhase.RECEDING))
+    assert old_formless.to_dict() == old_receding.to_dict(), "旧的一维投影本就分不出这两相"
+
+
+def test_render_contract_distinguishes_receding_from_formless():
+    """新契约必须分得出。这是整件事的核心。"""
+    f = resolve_render_posture("silent", _state(ContinuumPhase.FORMLESS))
+    r = resolve_render_posture("silent", _state(ContinuumPhase.RECEDING))
+
+    assert f.continuum_phase == "formless" and r.continuum_phase == "receding"
+    assert r.is_returning is True and f.is_returning is False
+    # ExpressionEngine 对这两相给出的形态本就不同，契约必须原样带出来
+    assert r.form_signature == "collapsing_field", "receding 的形态是坍缩场"
+    assert f.form_signature == "none", "formless 无形态"
+    assert r.texture_hint and not f.texture_hint, "receding 有质感提示（soft_dissolve），formless 没有"
+    assert f.to_dict() != r.to_dict()
+
+
+def test_tri_state_projection_still_collapses_both():
+    """公共三态投影仍然把两相都折叠成 silent —— 它对 API 消费者是对的，
+    所以不动它。正因为它这样，渲染端才必须用 continuum_phase 而不是 tri_state。"""
+    assert tri_state_of("formless") == "silent"
+    assert tri_state_of("receding") == "silent"
+
+
+# ── 2. 两根轴各归其位 ──────────────────────────────────────────────────────
+
+
+def test_two_axes_are_independent():
+    """主轴由调用方给，副轴从 state 读，互不覆盖。
+
+    旧的 resolve_render_posture 只读 state.phase 就返回，等于用副轴冒充主轴——
+    接到桥上会给出与 payload.phase 不一致的相位帧。
+    """
+    p = resolve_render_posture("silent", _state(ContinuumPhase.RECEDING))
+    assert p.lifecycle == "silent", "主轴照实用传入值"
+    assert p.continuum_phase == "receding", "副轴照实读 state"
+    assert p.is_returning is True, "主体看着安静，其实刚做完在收尾"
+
+
+@pytest.mark.parametrize("life", LIFECYCLE_STATES)
+@pytest.mark.parametrize("phase", RENDER_PHASES)
+def test_every_axis_combination_is_expressible(life, phase):
+    """两根轴的任意组合都不该炸，也不该被悄悄改写成别的值。"""
+    p = resolve_render_posture(life, _state(ContinuumPhase(phase)))
+    assert p.lifecycle == life
+    assert p.continuum_phase == phase
+
+
+def test_unknown_lifecycle_falls_back_to_silent():
+    assert resolve_render_posture("不存在的相位", _state(ContinuumPhase.LIMINAL)).lifecycle == "silent"
+
+
+# ── 3. 转移拓扑 ────────────────────────────────────────────────────────────
+
+
+def test_next_phases_never_offers_a_forbidden_transition():
+    """契约给出的合法去向里，不许出现转移表明令禁止的那些。"""
+    for src, targets in PHASE_TRANSITIONS.items():
+        for dst in targets:
+            assert (src, dst) not in FORBIDDEN_TRANSITIONS, f"{src}→{dst} 被禁止却出现在 next_phases"
+
+
+def test_manifest_can_only_exit_through_receding():
+    """从表达期出来的动作永远是「消散」，绝不是「退回上一档」。
+
+    旧契约用 retreat_tendency 让 manifest 的深度朝 liminal 的锚点漂移，表达的正是
+    这个被禁止的转移。
+    """
+    assert PHASE_TRANSITIONS["manifest"] == ("receding",)
+    assert ("manifest", "liminal") in FORBIDDEN_TRANSITIONS
+    p = resolve_render_posture("manifest", _state(ContinuumPhase.MANIFEST, retreat_tendency=1.0))
+    assert p.next_phases == ("receding",), "即便回撤倾向拉满，出口也只有 receding"
+
+
+def test_cycle_closes():
+    """四相构成闭环：从 formless 出发，沿合法转移能回到 formless。"""
+    seen, cur = [], "formless"
+    for _ in range(len(RENDER_PHASES) + 1):
+        seen.append(cur)
+        cur = PHASE_TRANSITIONS[cur][0]  # 取主路径（liminal 的第一个是 manifest）
+        if cur == "formless":
+            break
+    assert cur == "formless", "环没闭上"
+    assert "receding" in seen, "闭环必须经过返回弧"
+
+
+# ── 4. 阈限内容与阈限相位的耦合 ────────────────────────────────────────────
+
+
+def test_second_dimension_is_carried():
+    p = resolve_render_posture("manifest", _state(ContinuumPhase.MANIFEST, runtime_domain=RuntimeDomain.CROSS_DEVICE))
+    assert p.runtime_domain == "cross_device", "第二维必须到达渲染端"
+
+
+def test_simulation_summary_rides_along():
+    sim = SimulationSummary(
+        is_active=True,
+        simulation_kind="sandbox",
+        candidate_paths=("直接调用", "先查后调"),
+        committed_path="先查后调",
+        is_committed=True,
+        step_count=4,
+        scenario_label="打开应用",
+    )
+    p = resolve_render_posture("liminal", _state(ContinuumPhase.LIMINAL), liminal_activity="rehearsing", simulation=sim)
+    d = p.to_dict()
+    assert d["liminal_activity"] == "rehearsing"
+    assert d["simulation"]["candidate_paths"] == ["直接调用", "先查后调"], "候选路径是阈限态的可视内容"
+    assert d["simulation"]["committed_path"] == "先查后调"
+
+
+def test_rehearsal_outside_liminal_leaves_a_trace(caplog):
+    """不变量：在非阈限相位登记内容要留下 warning。
+
+    不抛异常（可见性绝不拖垮请求），但必须有痕迹——否则「预演跑在阈限态里」
+    就只是靠时序巧合成立，哪天有人挪动 advance(MANIFEST) 的触发点，阈限态的
+    可视内容会静默落空。
+    """
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+
+    s = RuntimeSession(source="test")
+    s.advance(TriState.MANIFEST)
+    with caplog.at_level(logging.WARNING):
+        s.enter_liminal_activity("rehearsing")
+    assert any("阈限内容登记于非阈限相位" in r.message for r in caplog.records)
+
+
+def test_rehearsal_inside_liminal_is_silent(caplog):
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    with caplog.at_level(logging.WARNING):
+        s.enter_liminal_activity("rehearsing", {"candidate_paths": ["A", "B"]})
+    assert not [r for r in caplog.records if "阈限内容登记于非阈限相位" in r.message]
+    assert s.liminal_activity == "rehearsing"
+
+
+def test_activity_clears_on_lifecycle_transitions():
+    """回 SILENT 摘要一并清空；进 MANIFEST 只清活动、保留摘要。
+
+    保留是有意的：表达期面板仍要能显示"按哪条候选提交的"——那是结果不是活动。
+    """
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    s.enter_liminal_activity("rehearsing", {"candidate_paths": ["A"]})
+
+    s.advance(TriState.MANIFEST)
+    assert s.liminal_activity == "none"
+    assert s.simulation_summary is not None, "表达期仍要能显示按哪条提交的"
+
+    s.advance(TriState.SILENT)
+    assert s.simulation_summary is None, "回静息才真正清空"
+
+
+def test_context_isolation_across_concurrent_requests():
+    """并发请求之间阈限内容不许串台，且请求结束后登记是空操作。"""
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import bind_runtime_session, note_liminal_activity, unbind_runtime_session
+
+    async def one(tag):
+        s = RuntimeSession(source=tag)
+        s.advance(TriState.LIMINAL)
+        tok = bind_runtime_session(s)
+        try:
+            await asyncio.sleep(0)
+            note_liminal_activity("rehearsing", {"candidate_paths": [f"{tag}-A"]})
+            await asyncio.sleep(0)
+            return s.simulation_summary["candidate_paths"]
+        finally:
+            unbind_runtime_session(tok)
+
+    async def main():
+        return await asyncio.gather(*[one(f"r{i}") for i in range(3)])
+
+    got = asyncio.run(main())
+    assert got == [["r0-A"], ["r1-A"], ["r2-A"]], "并发请求的阈限内容串台了"
+    assert note_liminal_activity("rehearsing") is False, "请求外登记必须是空操作"
+
+
+# ── 降级如实标注 ──────────────────────────────────────────────────────────
+
+
+def test_degradation_is_labelled_not_faked():
+    """拿不到 continuum 时如实标注 anchor_only，但主轴仍然可信。
+
+    主轴来自在场运行时，与 continuum 是两条独立链路——continuum 没跑不代表
+    主体生命周期不知道自己在哪。
+    """
+    p = resolve_render_posture("manifest", None)
+    assert p.source == "anchor_only"
+    assert p.lifecycle == "manifest", "主轴不该被降级抹掉"
+    assert p.is_returning is False, "没有真实相位时不许凭空猜一段返回弧"
+
+
+def test_degraded_state_is_surfaced():
+    st = ContinuumState.degraded_fallback("continuum_internal_error")
+    p = resolve_render_posture("silent", st)
+    assert p.degraded is True
+    assert p.degrade_reason == "continuum_internal_error"

@@ -67,13 +67,19 @@ def test_committed_path_none_when_selected_failed():
 
 def test_n_candidates_env(monkeypatch):
     monkeypatch.delenv("GALAXY_REHEARSAL_CANDIDATES", raising=False)
-    assert n_candidates() == 1, "默认单方案(零行为变化)"
+    # 默认 2 而不是 1。改默认的理由不是"多点更好"：candidate_paths / committed_path
+    # 只在多候选分支里产出（见 openclawd 的 _ncand > 1 判断），默认 1 时
+    # simulation_summary 从不产出，阈限态的可视内容整条链路失效——那等于接了一根
+    # 没有信号的线。2 是"能看见权衡"的最小值：有两条候选才谈得上"在评估多个"。
+    assert n_candidates() == 2, "默认多候选，否则阈限态的可视内容无从产出"
+    monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "1")
+    assert n_candidates() == 1, "显式设 1 可退回单方案"
     monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "3")
     assert n_candidates() == 3
     monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "99")
     assert n_candidates() == 5, "上限封顶 5"
     monkeypatch.setenv("GALAXY_REHEARSAL_CANDIDATES", "x")
-    assert n_candidates() == 1
+    assert n_candidates() == 2, "非法值回落到默认值"
 
 
 # ── rehearse_options 端到端(假路由)────────────────────────────────────────

@@ -58,6 +58,10 @@ __all__ = [
     "FORM_SIGNATURES",
     "SPATIAL_PRESENCES",
     "RenderPosture",
+    "SimulationSummary",
+    "LIFECYCLE_STATES",
+    "LIMINAL_ACTIVITIES",
+    "SIMULATION_KINDS",
     "resolve_render_posture",
     "render_contract_schema",
     "tri_state_of",
@@ -356,9 +360,37 @@ def phase_contract_schema() -> Dict[str, Any]:
 # * **降级如实标注**，与遗留投影同一条纪律。
 
 
-#: 渲染端看到的四相。**这是真相**，不是三态投影。
-#: 与 ``core.continuum.types.ContinuumPhase`` 的取值一一对应。
+#: **主轴**：主体生命周期，取自 ``core.desktop_presence_runtime.TriState``。
+#:
+#: 这是渲染端的**首要依据**，因为它就是用户能直接感知的那条节奏：
+#:
+#:     silent   —— 主体休息；宿主原生多模态摄入仍在后台跑，无活跃认知请求
+#:     liminal  —— 主体过渡中；OpenClawd 的认知与执行分支正在这一相里进行
+#:     manifest —— 主体对外表达：出字、控设备、或展开跨设备回路
+#:
+#: 与下面的 :data:`RENDER_PHASES` 是**两根不同的轴**，``TriState`` 的类文档明确
+#: 禁止混淆（"not a UI state and not the internal continuum posture"）。桥广播的
+#: ``payload.phase`` 一直是这一根。
+LIFECYCLE_STATES: Tuple[str, ...] = ("silent", "liminal", "manifest")
+
+#: **副轴**：内部连续体姿态，取自 ``core.continuum.types.ContinuumPhase``。
+#:
+#: 它比主轴多一相 ``receding``（返回弧），提供主轴给不出的内部纹理：主轴回到
+#: ``silent`` 时，副轴能区分「刚做完正在消散」与「静息，什么都没发生过」。
 RENDER_PHASES: Tuple[str, ...] = ("formless", "liminal", "manifest", "receding")
+
+#: 阈限态里**正在发生什么**。主轴说「在过渡」，这一项说「过渡里在干嘛」。
+#:
+#:     none       —— 不在阈限态
+#:     thinking   —— 纯认知，没有走沙盘推演
+#:     rehearsing —— 正在 core.liminal_rehearsal 的影子沙盘里推演工具调用计划
+#:
+#: 阈限态在面板上一直「什么都没有」，根因不是动画简陋，是**它的内容从没送出来过**。
+LIMINAL_ACTIVITIES: Tuple[str, ...] = ("none", "thinking", "rehearsing")
+
+#: ``SimulationSummary.simulation_kind`` 的取值域，与
+#: ``core.liminal_space_mapping.build_simulation_summary`` 的 ``valid_kinds`` 同源。
+SIMULATION_KINDS: Tuple[str, ...] = ("none", "speculative", "sandbox")
 
 #: 相位之间**允许**的转移，抄自 docs/PHASE_TRANSITION_TABLE.md 的 Allowed 表。
 #:
@@ -419,34 +451,95 @@ def tri_state_of(phase: str) -> str:
 
 
 @dataclasses.dataclass(frozen=True)
-class RenderPosture:
-    """渲染端的完整姿态：四相 × 第二维 × 后端已算好的表达参数。
+class SimulationSummary:
+    """阈限态沙盘推演的可渲染摘要。
 
-    这是 ``ContinuumState`` 面向渲染的忠实投影。每个字段的出处都在
-    core/continuum/ 里，本类不做任何新的推导——只做搬运和如实标注。
+    形状与 ``core.liminal_space_mapping.build_simulation_summary`` 一致——那是既有
+    的投影层定义，本类刻意不另造一套，只是把它搬到渲染契约里，好让它能跨 JSON
+    边界到前端（原类型在 core 里，前端拿不到）。
     """
 
-    # ── 相位：四相是真相 ────────────────────────────────────────────────
-    phase: str
-    """四相之一（formless/liminal/manifest/receding）。**渲染端应当消费这个。**"""
+    is_active: bool
+    """当前是否有推演在跑。"""
 
-    tri_state: str
-    """三态公共投影。仅供必须用公共词汇的消费者；用它画图会丢掉返回弧。"""
+    simulation_kind: str
+    """none / speculative / sandbox，见 :data:`SIMULATION_KINDS`。"""
+
+    candidate_paths: Tuple[str, ...]
+    """正在评估的候选执行路径标签。这就是「阈限态在权衡什么」的可视内容。"""
+
+    committed_path: Optional[str]
+    """已提交的那条；仍在推演/全部失败时为 ``None``。"""
+
+    is_committed: bool
+    """``committed_path is not None``。单独给一位，省得前端各自判空。"""
+
+    step_count: int
+    """已完成的推演步数。"""
+
+    scenario_label: Optional[str]
+    """场景的人类可读标签（通常是用户那句话的前缀）。"""
+
+    @staticmethod
+    def inactive() -> "SimulationSummary":
+        """没有推演在跑时的空摘要。"""
+        return SimulationSummary(
+            is_active=False,
+            simulation_kind="none",
+            candidate_paths=(),
+            committed_path=None,
+            is_committed=False,
+            step_count=0,
+            scenario_label=None,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class RenderPosture:
+    """渲染端的完整姿态：主轴生命周期 × 副轴连续体姿态 × 阈限内容 × 表达参数。
+
+    **两根轴都是真的，回答不同问题**，``TriState`` 的类文档明确禁止把它们混为
+    一谈。契约同时携带，并写死主次：
+
+    * :attr:`lifecycle` 是**主轴** —— 用户能直接感知的节奏（休息／过渡／表达），
+      也是在场桥一直广播的那一根。渲染端的整体编排应当跟它走。
+    * :attr:`continuum_phase` 是**副轴** —— 内部连续体姿态，多一相 ``receding``。
+      它不决定整体编排，只提供主轴给不出的纹理：主轴回到 ``silent`` 时，靠副轴
+      才能区分「刚做完正在消散」与「静息」。
+
+    每个字段的出处都在 core/ 里，本类不做任何新的推导——只做搬运和如实标注。
+    """
+
+    # ── 主轴：主体生命周期（渲染端的首要依据）──────────────────────────
+    lifecycle: str
+    """silent / liminal / manifest，见 :data:`LIFECYCLE_STATES`。**主轴。**"""
+
+    # ── 副轴：内部连续体姿态（提供纹理，不决定整体编排）────────────────
+    continuum_phase: str
+    """formless / liminal / manifest / receding，见 :data:`RENDER_PHASES`。"""
 
     is_returning: bool
-    """是否处在返回弧上（phase == receding）。
+    """副轴是否处在返回弧上（``continuum_phase == "receding"``）。
 
-    单独提出来是因为它是渲染上最要紧的一个 bit：``formless`` 与 ``receding``
-    的 tri_state 都是 ``silent``，只有这一位能把「刚做完，正在消散」跟
-    「静息，什么都没发生」分开。
+    渲染上最要紧的一位：主轴 ``silent`` 之下，``formless`` 与 ``receding`` 是
+    截然不同的两件事，只有这一位能把「刚做完，正在消散」跟「静息，什么都没
+    发生」分开。ExpressionEngine 对这两相给出的 form_signature 分别是
+    ``none`` 与 ``collapsing_field``。
     """
 
     next_phases: Tuple[str, ...]
-    """从当前相位【合法】能去的下一相，见 :data:`PHASE_TRANSITIONS`。
+    """副轴从当前相位【合法】能去的下一相，见 :data:`PHASE_TRANSITIONS`。
 
-    渲染端可以据此提前编排：处在 manifest 时唯一出口是 receding，那么退场动作
-    就该按「消散」准备，而不是按「退回上一档」。
+    渲染端据此提前编排：处在 manifest 时唯一出口是 receding，那么退场动作就该
+    按「消散」准备，而不是按「退回上一档」——后者是转移表明令禁止的。
     """
+
+    # ── 阈限态的内容：过渡里到底在干嘛 ──────────────────────────────────
+    liminal_activity: str
+    """none / thinking / rehearsing，见 :data:`LIMINAL_ACTIVITIES`。"""
+
+    simulation: SimulationSummary
+    """沙盘推演摘要。没有推演在跑时是 :meth:`SimulationSummary.inactive`。"""
 
     # ── 第二维：在哪儿跑 ────────────────────────────────────────────────
     runtime_domain: Optional[str]
@@ -506,6 +599,8 @@ class RenderPosture:
     def to_dict(self) -> Dict[str, Any]:
         d = dataclasses.asdict(self)
         d["next_phases"] = list(self.next_phases)
+        d["simulation"] = dict(d["simulation"])
+        d["simulation"]["candidate_paths"] = list(self.simulation.candidate_paths)
         for k in (
             "motion",
             "intensity",
@@ -520,14 +615,25 @@ class RenderPosture:
         return d
 
 
-def _anchor_only_render_posture(phase: str = "formless") -> RenderPosture:
-    """拿不到 ContinuumState 时的兜底姿态——如实标注，不假装是算出来的。"""
-    token = phase if phase in RENDER_PHASES else "formless"
+def _anchor_only_render_posture(lifecycle: str = "silent") -> RenderPosture:
+    """拿不到 ContinuumState 时的兜底姿态——如实标注，不假装是算出来的。
+
+    主轴仍然可信：``lifecycle`` 来自在场运行时的 ``TriState``，它跟 continuum
+    是两条独立链路，continuum 没跑不代表主体生命周期不知道自己在哪。所以这里
+    照实带上主轴，只把副轴与连续量退回中性值。
+    """
+    life = lifecycle if lifecycle in LIFECYCLE_STATES else "silent"
+    # 副轴没有真值时，按主轴取语义上最接近的一相：主轴 silent 对应静息
+    # (formless) 而**不是** receding —— 返回弧必须由真实的 continuum 相位证实，
+    # 凭空猜一个「正在退场」会让渲染端播出一段根本没发生过的余辉。
+    phase = {"silent": "formless", "liminal": "liminal", "manifest": "manifest"}[life]
     return RenderPosture(
-        phase=token,
-        tri_state=tri_state_of(token),
-        is_returning=token == "receding",
-        next_phases=PHASE_TRANSITIONS.get(token, ()),
+        lifecycle=life,
+        continuum_phase=phase,
+        is_returning=False,
+        next_phases=PHASE_TRANSITIONS.get(phase, ()),
+        liminal_activity="none",
+        simulation=SimulationSummary.inactive(),
         runtime_domain=None,
         motion=0.0,
         intensity=0.0,
@@ -546,28 +652,46 @@ def _anchor_only_render_posture(phase: str = "formless") -> RenderPosture:
     )
 
 
-def resolve_render_posture(state: Optional[Any] = None) -> RenderPosture:
-    """把一拍 ``ContinuumState`` 投影成渲染姿态。
+def resolve_render_posture(
+    lifecycle: str = "silent",
+    state: Optional[Any] = None,
+    *,
+    liminal_activity: str = "none",
+    simulation: Optional[SimulationSummary] = None,
+) -> RenderPosture:
+    """合成渲染姿态：主轴由调用方给，副轴与表达参数从 ``ContinuumState`` 读。
 
     Args:
+        lifecycle: 主体生命周期（``TriState`` 的值）。这是**主轴**，由在场桥
+            按它订阅到的相位事件传入——那条链路是权威，本函数不去猜。
         state: ``ContinuumState``；省略时取 :func:`last_continuum_posture`。
-               拿不到（进程里还没有 continuum）时返回 anchor_only 兜底。
+            拿不到时走 :func:`_anchor_only_render_posture` 兜底。
+        liminal_activity: 阈限态里正在发生什么，见 :data:`LIMINAL_ACTIVITIES`。
+        simulation: 沙盘推演摘要；``None`` 时用空摘要。
 
-    与 :func:`resolve_phase_posture` 的关键差别：**不接受外部传入的相位 token**。
-    相位从 ``state.phase`` 读——那是四相真值。遗留函数拿桥的三值字符串当权威，
-    于是即便它手里的 ``state`` 对象带着 ``receding``，也会被外面那个 ``static``
-    覆盖掉。真相就在手里却用了投影，返回弧就是这么丢的。
+    为什么主轴要由外面传
+    --------------------
+    因为它**不在 ContinuumState 里**。``TriState`` 由 ``DesktopPresenceRuntime``
+    持有，描述主体生命周期；``ContinuumPhase`` 由 continuum 编排器持有，描述内部
+    姿态。两者是不同的轴，``TriState`` 的类文档明确写着不要混淆。之前那版
+    ``resolve_render_posture`` 只读 ``state.phase`` 就返回，等于用副轴冒充主轴——
+    接到桥上会给出与 ``payload.phase`` 不一致的相位帧。
 
-    表达参数取 ``state.expression``。若它的 ``phase_signature`` 与 ``state.phase``
-    对不上（说明这份 expression 是默认值或上一拍的残留），就用 ``ExpressionEngine``
-    按当前 state 重算一份。这不违反本模块「绝不构造」的纪律——那条纪律针对的是
-    ``core.openclawd``（很重、有副作用）；``ExpressionEngine`` 是**无状态纯函数**，
-    对同一个 state 重算得到的结果与流水线里那一份逐位相同。
+    与 :func:`resolve_phase_posture` 的差别
+    ---------------------------------------
+    遗留函数把外部传入的三态 token 当成唯一相位，于是即便它手里的 ``state``
+    带着 ``receding``，也会被外面那个 ``static`` 覆盖掉——真相就在手里却用了投影。
+    这里两根轴各归其位：主轴照实用传入值，副轴照实读 ``state.phase``。
     """
+    life = lifecycle if lifecycle in LIFECYCLE_STATES else "silent"
+    activity = liminal_activity if liminal_activity in LIMINAL_ACTIVITIES else "none"
+    sim = simulation if simulation is not None else SimulationSummary.inactive()
+
     if state is None:
         state = last_continuum_posture()
     if state is None:
-        return _anchor_only_render_posture()
+        base = _anchor_only_render_posture(life)
+        return dataclasses.replace(base, liminal_activity=activity, simulation=sim)
 
     raw_phase = getattr(getattr(state, "phase", None), "value", None) or str(getattr(state, "phase", "formless"))
     phase = raw_phase if raw_phase in RENDER_PHASES else "formless"
@@ -581,6 +705,9 @@ def resolve_render_posture(state: Optional[Any] = None) -> RenderPosture:
     expr = getattr(state, "expression", None)
     expr_phase = getattr(getattr(expr, "phase_signature", None), "value", None)
     if expr is None or expr_phase != phase:
+        # 表达参数与副轴对不上（默认值或上一拍残留）→ 用无状态引擎按当前 state
+        # 重算。这不违反本模块「绝不构造」的纪律：那条针对的是 core.openclawd
+        # （很重、有副作用）；ExpressionEngine 是纯函数，重算与流水线里那份逐位相同。
         try:
             from core.continuum.expression_engine import ExpressionEngine
 
@@ -595,10 +722,12 @@ def resolve_render_posture(state: Optional[Any] = None) -> RenderPosture:
     domain = getattr(getattr(state, "runtime_domain", None), "value", None)
 
     return RenderPosture(
-        phase=phase,
-        tri_state=tri_state_of(phase),
+        lifecycle=life,
+        continuum_phase=phase,
         is_returning=phase == "receding",
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
+        liminal_activity=activity,
+        simulation=sim,
         runtime_domain=domain if domain in RUNTIME_DOMAINS else None,
         motion=_clamp(float(getattr(expr, "motion", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
         intensity=_clamp(float(getattr(expr, "intensity", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
@@ -624,19 +753,37 @@ def render_contract_schema() -> Dict[str, Any]:
         "transitions": {k: list(v) for k, v in PHASE_TRANSITIONS.items()},
         "forbidden": [{"from": a, "to": b, "why": why} for (a, b), why in FORBIDDEN_TRANSITIONS.items()],
         "tri_state_map": dict(_TRI_STATE_MAP),
+        "lifecycle_states": list(LIFECYCLE_STATES),
+        "liminal_activities": list(LIMINAL_ACTIVITIES),
+        "simulation_kinds": list(SIMULATION_KINDS),
         "runtime_domains": list(RUNTIME_DOMAINS),
         "form_signatures": list(FORM_SIGNATURES),
         "spatial_presences": list(SPATIAL_PRESENCES),
         "sources": [PostureSource.CONTINUUM, PostureSource.ANCHOR_ONLY],
+        "simulation_fields": [
+            {"name": "is_active", "ts": "boolean", "doc": "当前是否有推演在跑"},
+            {"name": "simulation_kind", "ts": "SimulationKind", "doc": "none / speculative / sandbox"},
+            {"name": "candidate_paths", "ts": "string[]", "doc": "正在评估的候选执行路径 —— 阈限态在权衡什么"},
+            {"name": "committed_path", "ts": "string | null", "doc": "已提交的那条；仍在推演/全失败时 null"},
+            {"name": "is_committed", "ts": "boolean", "doc": "committed_path !== null"},
+            {"name": "step_count", "ts": "number", "doc": "已完成的推演步数"},
+            {"name": "scenario_label", "ts": "string | null", "doc": "场景的人类可读标签"},
+        ],
         "fields": [
-            {"name": "phase", "ts": "RenderPhase", "doc": "四相之一 —— 渲染端应当消费这个"},
-            {"name": "tri_state", "ts": "WirePhaseTri", "doc": "三态公共投影；用它画图会丢掉返回弧"},
+            {"name": "lifecycle", "ts": "Lifecycle", "doc": "【主轴】主体生命周期 —— 渲染端的整体编排跟它走"},
+            {
+                "name": "continuum_phase",
+                "ts": "RenderPhase",
+                "doc": "【副轴】内部连续体四相，提供主轴给不出的纹理",
+            },
             {
                 "name": "is_returning",
                 "ts": "boolean",
-                "doc": "是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位",
+                "doc": "副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位",
             },
-            {"name": "next_phases", "ts": "RenderPhase[]", "doc": "从当前相位合法能去的下一相"},
+            {"name": "next_phases", "ts": "RenderPhase[]", "doc": "副轴从当前相位合法能去的下一相"},
+            {"name": "liminal_activity", "ts": "LiminalActivity", "doc": "阈限态里正在干嘛：none/thinking/rehearsing"},
+            {"name": "simulation", "ts": "SimulationSummary", "doc": "沙盘推演摘要 —— 阈限态的可视内容"},
             {"name": "runtime_domain", "ts": "RuntimeDomain | null", "doc": "第二维：在哪儿跑；null=尚未判定"},
             {"name": "motion", "ts": "number", "doc": "抽象运动能量 [0,1]"},
             {"name": "intensity", "ts": "number", "doc": "整体在场强度 [0,1]"},

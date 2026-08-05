@@ -215,13 +215,51 @@ def collect_definitions(files: List[Path], root: Path = REPO_ROOT) -> Tuple[Dict
     return definitions, def_count
 
 
+def _all_declaration_constants(tree: ast.AST) -> Set[int]:
+    """``__all__`` 里那些字符串常量节点的 id()。
+
+    为什么要把它们挑出来排除
+    ------------------------
+    ``__all__`` 是**导出声明**，不是使用。可字符串常量一律算引用的话，模块只要在
+    自己的 ``__all__`` 里写上某个名字，它就永远不可能被判为"未接线"——**而写得越
+    规范的模块越会声明 __all__**，于是这个守卫恰好对最该管的代码失效。
+
+    这不是假想：``core/phase_contract.py`` 新增的 ``resolve_render_posture`` 一度
+    在全仓没有任何调用方（渲染契约写好了但没接进桥），本工具带 ``--strict`` 跑
+    仍是绿的，就是被它自己 ``__all__`` 里的那个字符串自证了。
+    """
+    marked: Set[int] = set()
+    for node in ast.walk(tree):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        elif isinstance(node, ast.AugAssign):
+            targets = [node.target]
+        else:
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "__all__" for t in targets):
+            continue
+        if node.value is None:
+            continue
+        for sub in ast.walk(node.value):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                marked.add(id(sub))
+    return marked
+
+
 def collect_references(files: List[Path]) -> Set[str]:
-    """全仓被引用到的名字。调用、属性访问、from-import、字符串常量都算。"""
+    """全仓被引用到的名字。调用、属性访问、from-import、字符串常量都算。
+
+    例外：``__all__`` 里的字符串**不算**引用——见 :func:`_all_declaration_constants`。
+    """
     referenced: Set[str] = set()
     for path in files:
         tree = _parse(path)
         if tree is None:
             continue
+        skip = _all_declaration_constants(tree)
         for node in ast.walk(tree):
             if isinstance(node, ast.Name):
                 referenced.add(node.id)
@@ -231,6 +269,8 @@ def collect_references(files: List[Path]) -> Set[str]:
                 for alias in node.names:
                     referenced.add(alias.name)
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if id(node) in skip:
+                    continue
                 referenced.add(node.value)
     return referenced
 

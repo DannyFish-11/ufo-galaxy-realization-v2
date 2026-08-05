@@ -60,8 +60,52 @@ export interface PhasePosture {
 //     把它当成「退回上一档」，那会表达出转移表明令禁止的 manifest→liminal。
 // ═══════════════════════════════════════════════════════════════════
 
-/** 四相 —— 这是真相。渲染端应当消费这个，而不是三态投影。 */
+/**
+ * 【主轴】主体生命周期（后端 TriState）——渲染端的整体编排跟这一根走。
+ *
+ * 它就是用户能直接感知的节奏：休息 / 过渡 / 对外表达。在场桥广播的
+ * `payload.phase` 一直是这一根。
+ */
+export type Lifecycle = "silent" | "liminal" | "manifest";
+
+/**
+ * 【副轴】内部连续体四相 —— 提供主轴给不出的纹理，不决定整体编排。
+ *
+ * 比主轴多一相 `receding`（返回弧）。主轴回到 `silent` 时，靠副轴才能
+ * 区分「刚做完正在消散」(receding) 与「静息」(formless)。
+ */
 export type RenderPhase = "formless" | "liminal" | "manifest" | "receding";
+
+/** 阈限态里正在发生什么。主轴说「在过渡」，这一项说「过渡里在干嘛」。 */
+export type LiminalActivity = "none" | "thinking" | "rehearsing";
+
+/** 沙盘推演的种类。 */
+export type SimulationKind = "none" | "speculative" | "sandbox";
+
+/**
+ * 阈限态沙盘推演摘要 —— **阈限态的可视内容**。
+ *
+ * 阈限态在面板上一直「什么都没有」，根因不是动画简陋，是这一层从没送出来过：
+ * 智能体在真正落手之前会先在影子沙盘里推演若干条候选路径（见后端
+ * core/liminal_rehearsal.py），`candidate_paths` 就是它正在权衡的那几条，
+ * `committed_path` 是最终提交的那条。
+ */
+export interface SimulationSummary {
+  /** 当前是否有推演在跑 */
+  is_active: boolean;
+  /** none / speculative / sandbox */
+  simulation_kind: SimulationKind;
+  /** 正在评估的候选执行路径 —— 阈限态在权衡什么 */
+  candidate_paths: string[];
+  /** 已提交的那条；仍在推演/全失败时 null */
+  committed_path: string | null;
+  /** committed_path !== null */
+  is_committed: boolean;
+  /** 已完成的推演步数 */
+  step_count: number;
+  /** 场景的人类可读标签 */
+  scenario_label: string | null;
+}
 
 /** 三态公共投影。仅供必须使用公共词汇的消费者；用它画图会丢掉返回弧。 */
 export type WirePhaseTri = "liminal" | "manifest" | "silent";
@@ -106,14 +150,18 @@ export const TRI_STATE_OF: Record<RenderPhase, WirePhaseTri> = {
 };
 
 export interface RenderPosture {
-  /** 四相之一 —— 渲染端应当消费这个 */
-  phase: RenderPhase;
-  /** 三态公共投影；用它画图会丢掉返回弧 */
-  tri_state: WirePhaseTri;
-  /** 是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位 */
+  /** 【主轴】主体生命周期 —— 渲染端的整体编排跟它走 */
+  lifecycle: Lifecycle;
+  /** 【副轴】内部连续体四相，提供主轴给不出的纹理 */
+  continuum_phase: RenderPhase;
+  /** 副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位 */
   is_returning: boolean;
-  /** 从当前相位合法能去的下一相 */
+  /** 副轴从当前相位合法能去的下一相 */
   next_phases: RenderPhase[];
+  /** 阈限态里正在干嘛：none/thinking/rehearsing */
+  liminal_activity: LiminalActivity;
+  /** 沙盘推演摘要 —— 阈限态的可视内容 */
+  simulation: SimulationSummary;
   /** 第二维：在哪儿跑；null=尚未判定 */
   runtime_domain: RuntimeDomain | null;
   /** 抽象运动能量 [0,1] */
