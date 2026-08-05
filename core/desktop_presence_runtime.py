@@ -195,6 +195,11 @@ class RuntimeSession:
         self._tick_task: Optional[Any] = None
         self._tick_running: bool = False
         # ── 阈限态的内容：过渡里到底在干嘛（见 core/liminal_activity.py）──
+        #
+        # manifest_hook 由 handle_request 绑成它内部的 _enter_manifest 闭包，
+        # 好让认知层能显式宣告"审议结束、开始落手"，由此驱动 LIMINAL→MANIFEST。
+        # 那条界线是认知层才知道的事实，在场运行时这一层看不见它。
+        self.manifest_hook: Optional[Any] = None
         self.liminal_activity: str = "none"
         self.simulation_summary: Optional[Dict[str, Any]] = None
 
@@ -973,9 +978,22 @@ class DesktopPresenceRuntime:
                         _orig(text)
 
                     _manifest_sink._on_delta = _hooked_on_delta
-                else:
-                    # 非流式:保持原时序(LIMINAL → MANIFEST → 派发)
-                    _enter_manifest()
+                # 非流式此处**不再**提前进 MANIFEST。
+                #
+                # 原来这里是 `_enter_manifest()`,注释写着"保持原时序"。代价是同一段
+                # 认知工作在流式下算 LIMINAL、在非流式下算 MANIFEST ——
+                # **审议窗口在非流式路径上宽度为零**。而沙盘推演就跑在这段里,于是
+                # 「相位闸门驱动预演」在非流式下会把预演整个关掉。
+                #
+                # 改由认知层显式宣告(core.liminal_activity.commit_to_manifest,
+                # 打在 openclawd 真实 ReAct 循环之前)。那条界线本来就只有认知层
+                # 知道:审议结束、真实落手开始。流式的首 token 钩子保留 —— 两者
+                # 驱动的是同一个幂等入口,谁先到算谁。
+                #
+                # 信号没送达也不会缺相位:下面 finally 里
+                # `if tristate is LIMINAL: _enter_manifest()` 是兜底,
+                # LIMINAL→MANIFEST→SILENT 的三段轨迹对下游始终完整。
+                rsession.manifest_hook = _enter_manifest
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
                 _stream_runtime_status = self.realtime_streaming_backbone_summary().get("runtime_status") or {}

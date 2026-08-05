@@ -58,12 +58,37 @@ def _complexity_floor() -> float:
 
 
 def should_rehearse(complexity: float, tools: Optional[List[Dict[str, Any]]]) -> bool:
-    """预演触发判定:关/强制/auto(复杂度门槛 + 有工具可调)。"""
+    """预演触发判定：**相位闸门** + 关/强制/auto（复杂度门槛 + 有工具可调）。
+
+    相位闸门为什么排在成本闸门之前
+    ------------------------------
+    ``in_deliberation_window()`` 判的是「现在做推演还成不成立」，其余几项判的是
+    「值不值得做」。前者是**语义前提**：一旦主体已经落手（MANIFEST），"在动手前
+    先在沙盘里推演一遍"这句话本身就不再有意义，再便宜也不该做。所以
+    ``GALAXY_LIMINAL_REHEARSAL=1``（强制）也**不能**越过它——强制的含义是"凡是
+    有工具就推演"，不是"连窗口关了也推演"。窗口关闭时闸门会留一条 warning，
+    不会静默。
+
+    没有在场运行时（直接调 OpenClawd、ambient 回路、测试裸跑）时闸门放行——
+    那种情形根本没有生命周期可闸，判否会把预演静默关掉。详见
+    :func:`core.liminal_activity.in_deliberation_window`。
+    """
     mode = rehearsal_mode()
     if mode in ("0", "false", "no", "off"):
         return False
     if not tools:
         return False
+
+    # 相位闸门。import 放在函数内：本模块被 openclawd 惰性 import，而
+    # liminal_activity 只依赖 contextvars/logging，放这里不引入任何加载代价。
+    try:
+        from core.liminal_activity import in_deliberation_window
+
+        if not in_deliberation_window():
+            return False
+    except Exception:  # noqa: BLE001 — 闸门本身故障时不该反过来禁掉预演
+        logger.debug("相位闸门判定失败，按放行处理", exc_info=True)
+
     if mode in ("1", "true", "yes", "on", "always"):
         return True
     return complexity >= _complexity_floor()

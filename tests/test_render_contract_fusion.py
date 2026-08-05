@@ -259,3 +259,204 @@ def test_degraded_state_is_surfaced():
     p = resolve_render_posture("silent", st)
     assert p.degraded is True
     assert p.degrade_reason == "continuum_internal_error"
+
+
+# ── 相位闸门驱动预演 ──────────────────────────────────────────────────────
+
+
+def _tools():
+    return [{"function": {"name": "probe"}}]
+
+
+def test_gate_allows_when_there_is_no_lifecycle_at_all():
+    """没有在场运行时（直接调 OpenClawd / ambient 回路 / 测试裸跑）必须放行。
+
+    这一条是整个闸门最危险的地方：判否会把预演在这些路径上**静默关掉**，
+    而症状（"复杂任务不再预演了"）根本不会指向相位闸门。闸门管的是"相位不对
+    时别推演"，不是"没有相位时别推演"。
+    """
+    from core.liminal_activity import in_deliberation_window
+    from core.liminal_rehearsal import should_rehearse
+
+    assert in_deliberation_window() is True
+    assert should_rehearse(0.9, _tools()) is True
+
+
+def test_gate_opens_in_liminal_and_closes_in_manifest(caplog):
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import bind_runtime_session, in_deliberation_window, unbind_runtime_session
+    from core.liminal_rehearsal import should_rehearse
+
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    tok = bind_runtime_session(s)
+    try:
+        assert in_deliberation_window() is True
+        assert should_rehearse(0.9, _tools()) is True
+
+        s.advance(TriState.MANIFEST)
+        with caplog.at_level(logging.WARNING):
+            assert in_deliberation_window() is False
+        assert any("审议窗口已关闭" in r.message for r in caplog.records), "窗口关闭必须留痕，不许静默"
+        assert should_rehearse(0.9, _tools()) is False
+    finally:
+        unbind_runtime_session(tok)
+
+
+def test_forced_mode_cannot_bypass_the_phase_gate(monkeypatch):
+    """GALAXY_LIMINAL_REHEARSAL=1 是成本开关，不是语义豁免。
+
+    主体已经落手之后，"在动手前先推演一遍"这句话本身就不成立，再便宜也不该做。
+    """
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import bind_runtime_session, unbind_runtime_session
+    from core.liminal_rehearsal import should_rehearse
+
+    monkeypatch.setenv("GALAXY_LIMINAL_REHEARSAL", "1")
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    s.advance(TriState.MANIFEST)
+    tok = bind_runtime_session(s)
+    try:
+        assert should_rehearse(0.1, _tools()) is False, "强制模式也不该越过相位闸门"
+    finally:
+        unbind_runtime_session(tok)
+
+
+def test_gate_does_not_change_cost_semantics(monkeypatch):
+    """闸门只加前提，不改原有的成本判据。"""
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import bind_runtime_session, unbind_runtime_session
+    from core.liminal_rehearsal import should_rehearse
+
+    monkeypatch.delenv("GALAXY_LIMINAL_REHEARSAL", raising=False)
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    tok = bind_runtime_session(s)
+    try:
+        assert should_rehearse(0.1, _tools()) is False, "复杂度不够仍然否决"
+        assert should_rehearse(0.9, []) is False, "没有工具仍然否决"
+        assert should_rehearse(0.9, _tools()) is True
+    finally:
+        unbind_runtime_session(tok)
+
+
+def test_commit_to_manifest_drives_the_phase_and_closes_the_window():
+    """认知层宣告审议结束 → 相位前进 → 窗口关闭。
+
+    这是「非流式路径也有审议窗口」的实现：此前非流式在派发**之前**就进 MANIFEST，
+    窗口宽度为零，相位闸门会把那条路径上的预演整个关掉。
+    """
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import (
+        bind_runtime_session,
+        commit_to_manifest,
+        in_deliberation_window,
+        unbind_runtime_session,
+    )
+
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    calls = []
+
+    def _enter_manifest():
+        if s.tristate is not TriState.LIMINAL:  # 与真实实现同款幂等守卫
+            return
+        s.advance(TriState.MANIFEST)
+        calls.append(1)
+
+    s.manifest_hook = _enter_manifest
+    tok = bind_runtime_session(s)
+    try:
+        assert in_deliberation_window() is True
+        assert commit_to_manifest("react_loop") is True
+        assert s.tristate is TriState.MANIFEST
+        assert in_deliberation_window() is False
+
+        commit_to_manifest("again")
+        assert len(calls) == 1, "重复宣告不该重复推进相位"
+    finally:
+        unbind_runtime_session(tok)
+
+    s.advance(TriState.SILENT)
+    assert [t[0].value for t in s.transitions] == ["liminal", "manifest", "silent"]
+
+
+def test_missing_signal_still_leaves_a_complete_trajectory():
+    """信号送不达时（没绑 hook）宣告返回 False，而 finally 兜底仍补齐三段轨迹。
+
+    下游（审计、跨设备同步）看到的相位序列在两种情况下完全一致。
+    """
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import bind_runtime_session, commit_to_manifest, unbind_runtime_session
+
+    s = RuntimeSession(source="test")
+    s.advance(TriState.LIMINAL)
+    tok = bind_runtime_session(s)
+    try:
+        assert commit_to_manifest("x") is False, "没绑 hook 时如实返回未送达"
+    finally:
+        unbind_runtime_session(tok)
+
+    if s.tristate is TriState.LIMINAL:  # handle_request 的 finally 兜底
+        s.advance(TriState.MANIFEST)
+    s.advance(TriState.SILENT)
+    assert [t[0].value for t in s.transitions] == ["liminal", "manifest", "silent"]
+
+
+def test_runtime_binds_the_manifest_hook_before_dispatch():
+    """在场运行时必须在派发【之前】把 manifest_hook 绑好。
+
+    绑晚了认知层的宣告就落空，非流式路径会退回"窗口宽度为零"。按 AST 比较
+    绑定与派发的行号，不钉源码排版。
+    """
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    bind_lines = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Attribute) and t.attr == "manifest_hook" for t in n.targets)
+    ]
+    dispatch_lines = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_dispatch"
+    ]
+    assert bind_lines, "运行时没有绑定 manifest_hook —— 认知层的宣告会落空"
+    assert dispatch_lines, "找不到 _dispatch 调用"
+    assert min(bind_lines) < min(
+        dispatch_lines
+    ), f"manifest_hook 绑在第 {min(bind_lines)} 行，晚于派发的第 {min(dispatch_lines)} 行"
+
+
+def test_cognition_commits_before_the_react_loop():
+    """认知层必须在真实 ReAct 循环【之前】宣告审议结束。
+
+    宣告晚了，工具已经开始执行而相位还停在 LIMINAL——面板会把落手期画成思考期。
+    """
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "core" / "openclawd.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    commit_lines = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_commit_manifest"
+    ]
+    react_lines = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_react_loop"
+    ]
+    assert commit_lines, "认知层没有宣告审议结束"
+    assert react_lines, "找不到 _react_loop 调用"
+    assert min(commit_lines) < min(
+        react_lines
+    ), f"宣告在第 {min(commit_lines)} 行，晚于 ReAct 循环的第 {min(react_lines)} 行"

@@ -215,27 +215,36 @@ def collect_definitions(files: List[Path], root: Path = REPO_ROOT) -> Tuple[Dict
     return definitions, def_count
 
 
-def _all_declaration_constants(tree: ast.AST) -> Set[int]:
-    """``__all__`` 里那些字符串常量节点的 id()。
+def _self_exported_constants(tree: ast.AST) -> Set[int]:
+    """本文件 ``__all__`` 里那些**指向本文件自己定义**的字符串常量节点的 id()。
 
-    为什么要把它们挑出来排除
-    ------------------------
-    ``__all__`` 是**导出声明**，不是使用。可字符串常量一律算引用的话，模块只要在
-    自己的 ``__all__`` 里写上某个名字，它就永远不可能被判为"未接线"——**而写得越
-    规范的模块越会声明 __all__**，于是这个守卫恰好对最该管的代码失效。
+    为什么只排除"自己导出自己"
+    --------------------------
+    ``__all__`` 有两种截然不同的用法，判据必须分开：
 
-    这不是假想：``core/phase_contract.py`` 新增的 ``resolve_render_posture`` 一度
-    在全仓没有任何调用方（渲染契约写好了但没接进桥），本工具带 ``--strict`` 跑
-    仍是绿的，就是被它自己 ``__all__`` 里的那个字符串自证了。
+    * **自证**：模块在自己的 ``__all__`` 里列自己定义的函数。这**不是使用** ——
+      它只是声明"这个名字是我的公开面"。可字符串常量一律算引用的话，模块只要
+      声明了 ``__all__``，它自己的公开函数就永远不可能被判为"未接线"，而**写得越
+      规范的模块越会声明 __all__**，守卫恰好对最该管的代码失效。
+
+      不是假想：``core/phase_contract.py`` 的 ``resolve_render_posture`` 一度在全仓
+      没有任何调用方（渲染契约写好了但没接进桥），本工具带 ``--strict`` 跑仍是绿
+      的，就是被它自己 ``__all__`` 里那个字符串自证了。
+
+    * **再导出**：包的 ``__init__.py`` 在 ``__all__`` 里列**别处定义**的名字（本仓
+      ``core/continuum/__init__.py`` 就是典型）。那是**真实的引用** —— 它把那个名字
+      抬进了包的公开面。排除它会把整片再导出误判成未接线。
+
+    所以判据是"同一文件内定义 + 出现在该文件 ``__all__``"才排除。第一版一刀切排除
+    了全部 ``__all__`` 字符串，被 ``tests/test_check_wiring.py`` 里那条再导出用例
+    当场抓住。
     """
+    own_defs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
     marked: Set[int] = set()
     for node in ast.walk(tree):
-        targets = []
         if isinstance(node, ast.Assign):
             targets = node.targets
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-        elif isinstance(node, ast.AugAssign):
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
             targets = [node.target]
         else:
             continue
@@ -244,7 +253,7 @@ def _all_declaration_constants(tree: ast.AST) -> Set[int]:
         if node.value is None:
             continue
         for sub in ast.walk(node.value):
-            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value in own_defs:
                 marked.add(id(sub))
     return marked
 
@@ -259,7 +268,7 @@ def collect_references(files: List[Path]) -> Set[str]:
         tree = _parse(path)
         if tree is None:
             continue
-        skip = _all_declaration_constants(tree)
+        skip = _self_exported_constants(tree)
         for node in ast.walk(tree):
             if isinstance(node, ast.Name):
                 referenced.add(node.id)

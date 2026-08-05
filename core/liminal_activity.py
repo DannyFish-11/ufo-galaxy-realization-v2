@@ -47,6 +47,8 @@ __all__ = [
     "bind_runtime_session",
     "unbind_runtime_session",
     "note_liminal_activity",
+    "in_deliberation_window",
+    "commit_to_manifest",
 ]
 
 #: 阈限态里正在发生什么。与 ``core.phase_contract.LIMINAL_ACTIVITIES`` 同源；
@@ -98,4 +100,85 @@ def note_liminal_activity(activity: str, summary: Optional[Dict[str, Any]] = Non
         return True
     except Exception:  # noqa: BLE001 — 可见性绝不该拖垮请求
         logger.debug("note_liminal_activity failed (non-fatal)", exc_info=True)
+        return False
+
+
+def in_deliberation_window() -> bool:
+    """现在是否处在**审议窗口**里——即可以做沙盘推演的那一段。
+
+    这是「相位闸门驱动预演」的判据本身。语义严格对齐 ``TriState.LIMINAL``：
+    *主体在过渡中，认知与执行分支正在这一相里进行*。推演只在这段里成立——
+    一旦主体已经落手（MANIFEST），"在动手前先推演一遍"这句话就不再有意义。
+
+    三种情形，返回值刻意不同：
+
+    * **没有在场运行时**（直接调 OpenClawd、ambient 自发注意力回路、测试裸跑）
+      → ``True``。此时根本没有生命周期可闸，判 ``False`` 会把预演在这些路径上
+      **静默关掉** —— 那是比不闸门更糟的结果。闸门管的是"相位不对时别推演"，
+      不是"没有相位时别推演"。
+    * **处在 LIMINAL** → ``True``。
+    * **处在 SILENT / MANIFEST** → ``False``，并留 warning。这是闸门真正起作用的
+      那一支：审议窗口已经关上了。
+
+    Returns:
+        当前是否允许进入沙盘推演。
+    """
+    session = _current_runtime_session.get()
+    if session is None:
+        return True  # 没有生命周期可闸 —— 见上面第一种情形
+    phase = getattr(getattr(session, "tristate", None), "value", None)
+    if phase == "liminal":
+        return True
+    logger.warning(
+        "审议窗口已关闭，跳过沙盘推演 | runtime_session_id=%s tristate=%s "
+        "—— 预演只在 LIMINAL 段内成立；若这条频繁出现，说明 advance(MANIFEST) "
+        "的触发点早于认知段，需要检查 desktop_presence_runtime 的相位时序",
+        getattr(session, "runtime_session_id", "?"),
+        phase,
+    )
+    return False
+
+
+def commit_to_manifest(reason: str = "") -> bool:
+    """宣告审议结束、开始真实落手 —— 由此驱动 LIMINAL → MANIFEST。
+
+    Args:
+        reason: 触发原因（如 ``"react_loop"``），进日志便于回溯。
+
+    Returns:
+        ``True`` 表示信号送达且相位确实前进了。
+
+    为什么相位要由认知层驱动
+    ------------------------
+    LIMINAL→MANIFEST 的那条界线是**认知层才知道**的事实：审议（意图解析、沙盘推演、
+    消息装配）结束、真实工具执行开始。在场运行时那一层看不见它。
+
+    此前流式路径靠"第一个 token 流出"这个**代理信号**近似它——那是个好信号，但
+    只有流式才有。非流式路径没有代理信号，于是保守地在派发**之前**就进了 MANIFEST，
+    结果同一段认知工作在流式下算 LIMINAL、在非流式下算 MANIFEST，**审议窗口在
+    非流式路径上宽度为零**。相位闸门在那种路径上会把预演整个关掉。
+
+    现在改成认知层显式宣告，两条路径的窗口一致。流式的首 token 钩子保留——它与
+    本信号驱动的是同一个幂等入口（``_enter_manifest`` 自带
+    ``if tristate is not LIMINAL: return`` 守卫），谁先到算谁。
+
+    信号没送达也不会坏事：``handle_request`` 的 finally 里有兜底，
+    ``LIMINAL → MANIFEST → SILENT`` 的三段轨迹对下游（审计、跨设备同步）始终完整。
+    """
+    session = _current_runtime_session.get()
+    if session is None:
+        return False
+    hook = getattr(session, "manifest_hook", None)
+    if hook is None:
+        return False
+    try:
+        hook()
+        logger.debug(
+            "审议结束，进入落手 | runtime_session_id=%s reason=%s",
+            getattr(session, "runtime_session_id", "?"),
+            reason,
+        )
+        return getattr(getattr(session, "tristate", None), "value", None) == "manifest"
+    except Exception:  # noqa: BLE001 — 相位推进失败不该拖垮请求，finally 有兜底
+        logger.debug("commit_to_manifest failed (non-fatal)", exc_info=True)
         return False
