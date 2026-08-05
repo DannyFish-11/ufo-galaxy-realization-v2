@@ -104,8 +104,17 @@ def test_speech_over_noisy_background_still_detected():
 
 
 def test_sustained_real_speech_never_permanently_stops():
-    """Bug A(自我投毒)的保护必须完好:持续说话不能中途永久熄火。"""
-    det = VoiceActivityDetector(VADConfig(min_speech_frames=1))
+    """Bug A(自我投毒)的保护必须完好:持续说话不能中途永久熄火。
+
+    显式 ``use_webrtc=False``:这条钉的是**能量路径**的性质(噪声底不能被持续语音
+    自我投毒抬高到不可企及)。而本用例的"语音"是带幅度包络的白噪声 —— 那不是语音,
+    webrtcvad 对它的判定在 0.00–1.00 之间剧烈波动(实测 40 帧里 15 帧低于 0.5 阈值,
+    单靠它只有约 62% 判活),够不着这里要求的 90%。拿它当"语音"去考频谱分类器,
+    考的不是被测的那件事。
+
+    webrtcvad 那条路径由本文件上方两条稳态噪声用例覆盖(它们走默认 use_webrtc=True)。
+    """
+    det = VoiceActivityDetector(VADConfig(use_webrtc=False, min_speech_frames=1))
     for _ in range(20):
         det.process_frame(_noise(0.0008))
     hits = [det.process_frame(_speech(0.006, i)).is_speaking for i in range(180)]
@@ -194,3 +203,75 @@ def test_unsupported_sample_rate_falls_back():
 def test_env_switch_can_disable_webrtc(monkeypatch):
     monkeypatch.setenv("GALAXY_VAD_USE_WEBRTC", "false")
     assert VADConfig.from_env().use_webrtc is False
+
+
+# ── 4. 交集判据:webrtcvad 与噪声底必须一起把关 ──────────────────────────
+#
+# 真机症状「一启用就一直判定有人在说话」的第二处根源(第一处是噪声底棘轮):
+# webrtcvad 一旦可用就**独断** is_active,下面那整套噪声底逻辑只维护数据、
+# 完全不参与判决。而 webrtcvad 是频谱分类器 —— 宽带稳态噪声(风扇/空调)在
+# GMM 眼里跟摩擦音、清音很像,它照判有声。
+#
+# 这一族此前**在 CI 上从来没跑过**:webrtcvad 在 requirements.txt 里是注释掉的,
+# CI 不装它,于是主判据那条路径永远走不到。凡是装了它的机器(开发机、真机)全线
+# 复现,CI 一直绿。
+
+
+pytestmark_needs_webrtc = pytest.mark.skipif(
+    VoiceActivityDetector(VADConfig())._webrtc is None,
+    reason="本机没有 webrtcvad —— 这一族钉的正是它可用时的行为",
+)
+
+
+@pytestmark_needs_webrtc
+def test_webrtc_alone_would_call_steady_noise_speech():
+    """先钉住"webrtcvad 单独用确实挡不住稳态噪声" —— 这是交集判据存在的前提。
+
+    如果哪天这条不再成立(webrtcvad 换了实现/参数),交集判据的理由就要重新审视,
+    而不是想当然地留着。
+    """
+    det = VoiceActivityDetector(VADConfig(webrtc_requires_level=False))
+    for _ in range(30):
+        det.process_frame(_noise(0.05))
+    ratio = _run(det, [_noise(0.05) for _ in range(60)])
+    assert ratio > 0.9, f"webrtcvad 单独用竟然挡住了稳态噪声({ratio:.0%}) —— 前提变了,请重审交集判据"
+
+
+@pytestmark_needs_webrtc
+def test_intersection_gates_steady_noise_that_webrtc_waves_through():
+    """交集判据:webrtcvad 说有声,但电平没超过噪声底 → 不判活。"""
+    det = VoiceActivityDetector(VADConfig())  # 默认 webrtc_requires_level=True
+    for _ in range(30):
+        det.process_frame(_noise(0.05))
+    ratio = _run(det, [_noise(0.05) for _ in range(60)])
+    assert ratio == 0.0, f"稳态噪声仍被判活 {ratio:.1%} —— 交集判据没生效"
+
+
+@pytestmark_needs_webrtc
+def test_intersection_does_not_gate_speech_over_noise():
+    """交集判据不许误伤:噪声之上的真实语音仍要判活。
+
+    自适应门限要求"比环境底噪高约 9.5 dB",这本来就是能量路径一直在用的判据,
+    不是交集引入的新严苛条件。
+    """
+    det = VoiceActivityDetector(VADConfig(min_speech_frames=1))
+    for _ in range(30):
+        det.process_frame(_noise(0.01))
+    frames = [(_noise(0.01) + _speech(0.08, i)).astype(np.float32) for i in range(40)]
+    ratio = _run(det, frames)
+    assert ratio > 0.8, f"噪声之上的语音被交集判据误伤,判活仅 {ratio:.1%}"
+
+
+@pytestmark_needs_webrtc
+def test_level_gate_waits_for_a_credible_floor():
+    """噪声底还没学到时,电平闸不许参与 —— 否则会误杀轻声说话。
+
+    没有噪声底时 ``_energy_is_active`` 只剩固定阈值 0.01 兜底,而按它自己的注释
+    那个数"只代表不算安静,不代表肯定是语音"。实测:拿它当电平闸,安静房间里
+    RMS 0.01 的轻声会被全部挡掉。
+    """
+    det = VoiceActivityDetector(VADConfig(min_speech_frames=1))
+    for _ in range(20):
+        det.process_frame(_noise(0.0008))  # 先有真安静,让噪声底学到低位
+    ratio = _run(det, [_speech(0.01, i) for i in range(40)])
+    assert ratio > 0.8, f"安静房间里的轻声被挡住了,判活仅 {ratio:.1%}"

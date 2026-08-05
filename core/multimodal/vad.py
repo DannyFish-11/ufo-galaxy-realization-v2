@@ -1,16 +1,37 @@
-"""语音活动检测(VAD):优先用 webrtcvad 真分类器,不可用时回退到能量法。
+"""语音活动检测(VAD):频谱判据与电平判据**取交集**,缺一不可。
 
 两条判据的分工
 --------------
 
-1. **webrtcvad(主判据,默认启用)** —— Google WebRTC 的 GMM 语音/非语音分类器。
-   它是**频谱**判据,能把"风扇、空调、电流底噪、键盘声"这类稳态噪声与人声区分开;
-   纯 RMS 能量法做不到这件事(能量只知道"响不响",不知道"像不像人声")。
-   本仓库早已把 ``webrtcvad`` 列为硬依赖并在 ``core/voice_wake_module.py`` 里用着,
-   而这条常驻多模态链路却一直是朴素 RMS —— 本模块把它接上。
+1. **webrtcvad(频谱)** —— Google WebRTC 的 GMM 语音/非语音分类器。它回答
+   "像不像人声",挡得住音调型、脉冲型的非语音。
+   ``webrtcvad`` 对运行时是**可选**依赖(在 ``requirements.txt`` 的可选块里,
+   语音唤醒用得上),但在 ``requirements-dev.txt`` 里是必装的 —— 否则这条路径
+   在 CI 上永远跑不到,见下面"为什么必须两条一起"。
 
-2. **能量 + 自适应噪声底(回退)** —— webrtcvad 缺失或采样率不受支持时启用。
-   仍保留,因为它是唯一不依赖第三方包的兜底。
+2. **能量 + 自适应噪声底(电平)** —— 回答"比当前环境底噪高出足够多吗"。
+   它不依赖任何第三方包,也是 webrtcvad 缺失/采样率不受支持时的唯一兜底。
+
+为什么必须**两条一起**,而不是"主判据 + 回退"
+---------------------------------------------
+两者过滤的是**正交**的失败模式,任何一条单独用都留着一个大洞:
+
+* webrtcvad **挡不住宽带稳态噪声**。白噪声(风扇/空调)的宽带能量在 GMM 眼里
+  跟摩擦音、清音很像,它照判"有声"。实测风扇档 RMS 0.05:webrtcvad 判活 100%。
+* 电平判据**挡不住与人声等响的非语音**,但它挡得住上面那种 —— 因为噪声底会
+  把环境学进去,门限随之升上去。
+
+改这里之前是"webrtcvad 一旦可用就独断",于是下面那整套"棘轮破解 / 稳态噪声
+重播种"(专为修真机症状「一启用就一直判定有人在说话」而写)**被完全旁路**——
+它只维护噪声底,不参与判决。而 CI 一直看不见:``webrtcvad`` 那时不在任何 CI
+安装的依赖里,主判据这条路径**从来没跑过**。
+
+交集不牺牲灵敏度:自适应门限随环境走(安静房间底噪 0.0008 → 门限 0.0024,
+轻声照样过),而且**噪声底还没学到时电平闸不参与** —— 那时能量法只剩固定阈值
+0.01 兜底,拿它去闸会误杀轻声说话。见 :meth:`VoiceActivityDetector._has_credible_floor`。
+
+``VADConfig.webrtc_requires_level=False`` 可退回旧的"独断"行为 —— 留着是为了
+真机排障时一键区分"是不是这条判据判错了",不是推荐用法。
 
 两个真机 bug 的来龙去脉(两者互为反向,必须一起看)
 ----------------------------------------------------
@@ -101,6 +122,18 @@ class VADConfig:
     """一个 100ms 块被切成 5 个 20ms 子帧;其中判为语音的比例达到该值才算活跃。
     要求过半可以滤掉"偶发一两个子帧误判"。"""
 
+    webrtc_requires_level: bool = True
+    """webrtcvad 判"有声"时,是否**还要**能量超过自适应门限才算活跃(取交集)。
+
+    默认 ``True``。设 ``False`` 会退回"webrtcvad 独断"的旧行为 —— 那正是真机上
+    「一启用就一直判定有人在说话」的来源:webrtcvad 是频谱分类器,宽带稳态噪声
+    (风扇/空调)在它眼里跟摩擦音、清音很像,它照判有声,而下面那整套噪声底逻辑
+    被完全旁路。实测风扇档白噪声 RMS 0.05:独断时判活 100%,取交集后 0%。
+
+    留这个开关不是为了让人退回旧行为,是为了在真机上能一键区分"是不是这条判据
+    判错了"——排障时把它关掉再跑一遍,症状是否复现直接给出答案。
+    ``GALAXY_VAD_WEBRTC_REQUIRES_LEVEL=0`` 可在不改代码的情况下切换。"""
+
     # ── 能量 + 自适应噪声底(回退)──────────────────────────────────
     adaptive: bool = True
     adaptive_speech_mult: float = 3.0  # 能量 > 噪声底 × 该倍数 → 判活(约 +9.5 dB)
@@ -130,6 +163,7 @@ class VADConfig:
             use_webrtc=_env_bool("GALAXY_VAD_USE_WEBRTC", cls.use_webrtc),
             webrtc_aggressiveness=int(_env_float("GALAXY_VAD_WEBRTC_AGGRESSIVENESS", cls.webrtc_aggressiveness)),
             webrtc_voiced_ratio=_env_float("GALAXY_VAD_WEBRTC_VOICED_RATIO", cls.webrtc_voiced_ratio),
+            webrtc_requires_level=_env_bool("GALAXY_VAD_WEBRTC_REQUIRES_LEVEL", cls.webrtc_requires_level),
             adaptive=_env_bool("GALAXY_VAD_ADAPTIVE", cls.adaptive),
             adaptive_speech_mult=_env_float("GALAXY_VAD_SPEECH_MULT", cls.adaptive_speech_mult),
             adaptive_min_floor=_env_float("GALAXY_VAD_MIN_FLOOR", cls.adaptive_min_floor),
@@ -237,6 +271,15 @@ class VoiceActivityDetector:
     # 能量 + 自适应噪声底(回退判据)
     # ------------------------------------------------------------------
 
+    def _has_credible_floor(self) -> bool:
+        """噪声底是否已经学到、可以当判据用。
+
+        样本不够时噪声底是空的,此时 :meth:`_energy_is_active` 只能退回固定阈值
+        0.01 —— 而那个数按它自己的注释"只代表不算安静,不代表肯定是语音",拿它
+        当电平闸会误杀轻声说话(实测:安静房间 RMS 0.01 的轻声全部被挡)。
+        """
+        return bool(self.config.adaptive) and len(self._energy_history) >= 5
+
     def _energy_is_active(self, energy: float) -> bool:
         """能量判活。
 
@@ -250,8 +293,7 @@ class VoiceActivityDetector:
         安静环境下它比 0.01 更低(底噪 0.0008 → 门限 0.0024),低增益麦克风的
         轻声说话照样能触发 —— 这正是当初引入自适应路径要解决的问题,不受影响。
         """
-        has_floor = self.config.adaptive and len(self._energy_history) >= 5
-        if not has_floor:
+        if not self._has_credible_floor():
             # 还没学到噪声底 → 只能靠固定阈值兜底。
             return energy > self.config.energy_threshold
         noise_floor = float(np.percentile(self._energy_history, self.config.noise_percentile))
@@ -284,13 +326,49 @@ class VoiceActivityDetector:
         samples = audio_chunk.astype(np.float32).flatten()
         energy = float(np.sqrt(np.mean(samples**2))) if samples.size else 0.0
 
-        # 主判据:webrtcvad(频谱,能区分人声与稳态噪声);拿不到结论则回退能量法。
+        # ── 判活:两条判据**取交集**,不是二选一 ──
+        #
+        # 它们过滤的是**正交**的失败模式,任何一条单独用都留着一个大洞:
+        #
+        #   webrtcvad(频谱)  回答"像不像人声"    —— 挡得住音调型/脉冲型非语音,
+        #                                          **挡不住宽带稳态噪声**:白噪声
+        #                                          的宽带能量在 GMM 眼里跟摩擦音、
+        #                                          清音很像,它照判"有声"。
+        #   自适应噪声底(电平) 回答"比环境底高出足够多吗" —— 挡得住稳态环境噪声
+        #                                          (不管频谱像什么),挡不住与人声
+        #                                          等响的非语音。
+        #
+        # 改这里之前是 webrtcvad **独断**:它一旦可用,下面那整套"棘轮破解 / 稳态
+        # 噪声重播种"(专为修「一启用就一直判定有人在说话」而写)就被完全旁路,
+        # 因为它只维护噪声底、不参与 is_active。实测风扇档白噪声(RMS 0.05):
+        # webrtcvad 路径判活 100%,能量回退路径判活 0%。这正是真机上那个症状。
+        #
+        # 而 CI 一直看不见:webrtcvad 在 requirements.txt 里是注释掉的,CI 从不
+        # 安装它,于是**主判据这条路从来没在 CI 上跑过**。
+        #
+        # 取交集不会牺牲灵敏度:自适应门限本身随环境走(安静房间底噪 0.0008 →
+        # 门限 0.0024,轻声说话照样过),它要求的只是"比当前环境高约 9.5 dB"——
+        # 那本来就是能量回退路径一直在用的判据,不是新增的严苛条件。
+        # 电平闸**只在噪声底可信时**参与。还没学到噪声底时,能量法只剩固定阈值
+        # 0.01 兜底,而按它自己的注释那个数"只代表不算安静,不代表肯定是语音"——
+        # 拿它闸 webrtcvad 会误杀轻声说话(实测:安静房间 RMS 0.01 的轻声全被挡)。
+        # 那种时候 webrtcvad 就是手里最好的信息,让它独断是对的。
+        #
+        # 这不会把 bug 放回来:稳态噪声从开机就在时,前 25 帧确实按 webrtcvad 判活,
+        # 但正是这段活跃期喂给了"稳态噪声探测",第 25 帧一到就重播种噪声底、
+        # 门限一步升到位,之后电平闸接管 —— 实测第 26 帧起即转静。
         ratio = self._webrtc_voiced_ratio(samples) if samples.size else None
+        energy_active = self._energy_is_active(energy)
         if ratio is not None:
-            is_active = ratio >= self.config.webrtc_voiced_ratio
-            backend = "webrtc"
+            spectral_active = ratio >= self.config.webrtc_voiced_ratio
+            if self.config.webrtc_requires_level and self._has_credible_floor():
+                is_active = spectral_active and energy_active
+                backend = "webrtc+energy"
+            else:
+                is_active = spectral_active
+                backend = "webrtc"
         else:
-            is_active = self._energy_is_active(energy)
+            is_active = energy_active
             backend = "energy"
 
         # ── 噪声底维护 ──
