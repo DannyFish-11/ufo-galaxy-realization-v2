@@ -381,12 +381,26 @@ RENDER_PHASES: Tuple[str, ...] = ("formless", "liminal", "manifest", "receding")
 
 #: 阈限态里**正在发生什么**。主轴说「在过渡」，这一项说「过渡里在干嘛」。
 #:
-#:     none       —— 不在阈限态
-#:     thinking   —— 纯认知，没有走沙盘推演
-#:     rehearsing —— 正在 core.liminal_rehearsal 的影子沙盘里推演工具调用计划
+#: 这是一条**有顺序的递进链**，不是一组平行标签——渲染端可以据此编排一段连续的
+#: 「正在成形」动画，而不是四个互不相干的状态图标::
 #:
+#:     none          —— 不在阈限态
+#:     understanding —— 刚进阈限，正在理解这句话要什么
+#:     thinking      —— 已理解，正在规划怎么做
+#:     rehearsing    —— 正在 core.liminal_rehearsal 的影子沙盘里推演候选路径
+#:
+#: 典型轨迹：``understanding → thinking → rehearsing → thinking →`` 进 manifest。
+#: 推演不触发时就是 ``understanding → thinking →`` 进 manifest，**同样不空**。
+#:
+#: ``understanding`` 为什么必须存在
+#: --------------------------------
 #: 阈限态在面板上一直「什么都没有」，根因不是动画简陋，是**它的内容从没送出来过**。
-LIMINAL_ACTIVITIES: Tuple[str, ...] = ("none", "thinking", "rehearsing")
+#: 但只补 ``rehearsing`` 只解决了一半：``should_rehearse()`` 要求**有工具可调**且
+#: **复杂度 ≥ 0.55**，于是纯对话和简单请求永远不推演，此前那两类请求的阈限态全程
+#: 是 ``none``——面板照样空白。``understanding`` 由 ``advance(LIMINAL)`` 本身驱动
+#: （见 ``RuntimeSession.advance``），**不经任何闸门**，所以「进了阈限就一定有内容」
+#: 是结构保证，不是某条分支恰好登记了。
+LIMINAL_ACTIVITIES: Tuple[str, ...] = ("none", "understanding", "thinking", "rehearsing")
 
 #: ``SimulationSummary.simulation_kind`` 的取值域，与
 #: ``core.liminal_space_mapping.build_simulation_summary`` 的 ``valid_kinds`` 同源。

@@ -136,3 +136,96 @@ def test_device_unavailable_actually_fails_over_to_another_device() -> None:
         )
         tried = _devices_tried_for(code)
         assert len(set(tried)) > 1, f"{code} 只在 {tried} 上试过，没有换设备——故障转移失效"
+
+
+# ---------------------------------------------------------------------------
+# 退避：节奏必须来自失败域策略，而不是这里再抄一条曲线
+# ---------------------------------------------------------------------------
+
+
+def _backoff_delays_for(error_code: str) -> List[float]:
+    """跑真实重试环，返回它实际**请求过**的退避时长序列。
+
+    把 ``asyncio.sleep`` 换成记录器而不是真睡：既让测试是确定的（不受机器负载影响），
+    也让它跑得完——超时域一轮就要等 3 秒。
+    """
+    from unittest.mock import patch
+
+    _reset_device_health()
+    router = CommandRouter()
+    delays: List[float] = []
+    real_sleep = asyncio.sleep
+
+    async def _fake_dispatch(device_id: str, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return {
+            "success": False,
+            "result": None,
+            "error_code": error_code,
+            "error_message": f"simulated {error_code}",
+            "device_id": device_id,
+        }
+
+    async def _recording_sleep(seconds: float, *args: Any, **kwargs: Any) -> Any:
+        delays.append(round(float(seconds), 4))
+        return await real_sleep(0)
+
+    router._dispatch_to_device = _fake_dispatch  # type: ignore[assignment]
+
+    with patch("core.command_router.asyncio.sleep", side_effect=_recording_sleep):
+        asyncio.run(
+            router._execute_command(
+                device_id="dev-A",
+                command="echo",
+                payload={},
+                command_id="cmd-backoff-probe",
+                task_id="task-backoff-probe",
+                timeout=1.0,
+                trace_id="trace-backoff-probe",
+                retry_candidates=[_Candidate("dev-A"), _Candidate("dev-B"), _Candidate("dev-C")],
+                max_retries=2,
+            )
+        )
+    return delays
+
+
+def test_retry_backoff_comes_from_the_failure_domain_policy() -> None:
+    """逐个错误码比对：实际退避序列 == 按策略算出的序列。
+
+    **不写死「DEVICE_OFFLINE 等 200 毫秒」** —— 那只是把策略表抄到测试里再对一遍，
+    策略改了测试不会跟。这里现算期望值，策略表改了这条自动跟着改。
+    """
+    from core.schemas.execution_failure import build_failure_record
+
+    ceiling = CommandRouter._RETRY_BACKOFF_CEILING_S
+    mismatches: List[str] = []
+
+    for code in GatewayErrorCode:
+        if code.value in _CODES_SHORT_CIRCUITED_BEFORE_RETRY:
+            continue
+        if not classify_from_error_code(code.value).is_retryable:
+            continue  # 不重试的错误码根本走不到退避
+
+        policy = build_failure_record(error_code=code.value).retry_policy
+        base_s = float(policy.backoff_base_ms) / 1000.0
+        expected = [
+            round(min(base_s * (float(policy.backoff_multiplier) ** attempt), ceiling), 4) for attempt in range(2)
+        ]
+        actual = _backoff_delays_for(code.value)
+        if actual != expected:
+            mismatches.append(
+                f"{code.value}: 期望 {expected}（base={policy.backoff_base_ms}ms "
+                f"×{policy.backoff_multiplier}），实际 {actual}"
+            )
+
+    assert not mismatches, "重试退避与失败域策略不一致：\n  " + "\n  ".join(mismatches)
+
+
+def test_retry_loop_actually_waits_at_all() -> None:
+    """可重试失败必须至少等过一次。
+
+    这条单独钉「有没有退避」这件事本身：上面那条比对的是数值，若整个退避被删掉，
+    期望与实际会同时变成空列表而**依然相等**——那就成了判而不别。
+    """
+    delays = _backoff_delays_for(GatewayErrorCode.COMMAND_TIMEOUT.value)
+    assert delays, "可重试失败后一次都没等 —— 退避没生效，失败即刻重打"
+    assert all(d > 0 for d in delays), f"退避时长里有 0：{delays}"

@@ -214,7 +214,17 @@ class RuntimeSession:
         会随之落空。不抛异常（可见性绝不拖垮请求），但留 warning，让这条耦合是
         **可验证的**而不是靠时序巧合。
         """
-        if activity not in ("none", "thinking", "rehearsing"):
+        # 取值域读契约，不再手抄一份：抄一份就多一个会漂的定义，而漂了之后的症状
+        # 是「面板偶尔空白」，指不回这里。见 core.phase_contract.LIMINAL_ACTIVITIES。
+        from core.liminal_activity import LIMINAL_ACTIVITIES
+
+        if activity not in LIMINAL_ACTIVITIES:
+            logger.warning(
+                "阈限活动取值不在契约内，已兜成 none | runtime_session_id=%s activity=%r 合法取值=%s",
+                self.runtime_session_id,
+                activity,
+                LIMINAL_ACTIVITIES,
+            )
             activity = "none"
         if activity != "none" and self.tristate is not TriState.LIMINAL:
             logger.warning(
@@ -227,6 +237,38 @@ class RuntimeSession:
         self.liminal_activity = activity
         if summary is not None:
             self.simulation_summary = summary
+
+    @staticmethod
+    def _build_chain_views() -> Dict[str, Any]:
+        """构造阈限空间的两个执行链视图，失败返回空 dict（tick 绝不因可见化中断）。
+
+        两条链的数据源不同，是否有内容也不同 ——
+        * 跨设备链：``galaxy_gateway/device_router.py`` 的 ``surface_cross_device_result()``
+          与 ``core/openclawd_memory_backflow.py`` 都在写，接上即有数据。
+        * 本机链：此前**零生产者**，视图恒为零态。已在 ``CommandRouter.route_envelope()``
+          出口补上记账，见那里的注释。
+
+        零态本身是有意义的信号（「还没跑过本地执行」），所以不做「空就不带」的裁剪 ——
+        那会让下游分不清「没有这条链」和「这条链还没动」。
+        """
+        views: Dict[str, Any] = {}
+        try:
+            from core.liminal_space_mapping import build_local_chain_view
+            from core.local_execution_chain import build_local_chain_snapshot
+
+            views["local_chain"] = build_local_chain_view(build_local_chain_snapshot(max_recent=1).to_dict()).to_dict()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("本机执行链视图构造跳过（非致命）: %s", exc)
+        try:
+            from core.cross_device_execution_chain import build_cross_device_chain_snapshot
+            from core.liminal_space_mapping import build_cross_device_chain_view
+
+            views["cross_device_chain"] = build_cross_device_chain_view(
+                build_cross_device_chain_snapshot(max_recent=1).to_dict()
+            ).to_dict()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("跨设备执行链视图构造跳过（非致命）: %s", exc)
+        return views
 
     def advance(self, new_state: TriState) -> None:
         """Advance the session to a new tri-state phase and record the event."""
@@ -241,6 +283,18 @@ class RuntimeSession:
             self.simulation_summary = None
         elif new_state is TriState.MANIFEST:
             self.liminal_activity = "none"
+        elif new_state is TriState.LIMINAL:
+            # 进阈限即 understanding —— **这一句是「阈限态永远有内容」的结构保证**。
+            #
+            # 此前阈限内容的全部登记点都在 openclawd 认知段的推演块**内部**，而推演
+            # 要过 should_rehearse() 的闸门：没有工具可调（纯对话）、或复杂度 < 0.55
+            # （简单请求）都不会进那个块，于是那两类请求整段阈限期 liminal_activity
+            # 恒为 "none"，面板依旧空白——「阈限态什么都没有」只被解决了一半。
+            #
+            # 放在相位推进本身而不是认知段某个分支里，是因为**这不是某条路径的事**：
+            # 只要主体进了阈限，它就一定在理解这句话要什么。后续 thinking /
+            # rehearsing 是在此基础上递进覆盖，覆盖不到也有底。
+            self.liminal_activity = "understanding"
         logger.debug(
             "Runtime tristate transition | runtime_session_id=%s source=%s %s→%s",
             self.runtime_session_id,
@@ -395,6 +449,18 @@ class RuntimeSession:
                 # 与「推演了但候选为空」混为一谈。
                 if self.simulation_summary is not None:
                     _payload["simulation"] = self.simulation_summary
+                # 执行链视图。阈限空间按 core/liminal_space_mapping.py 的定义是
+                # **执行场**，装三类内容：本机执行链、跨设备执行链、沙盘推演。此前
+                # 只有第三类上了链路，前两类（「路径走到第几步」）从没送出来过。
+                #
+                # 不随相位裁剪：推演是阈限期专属，但执行链的推进恰恰发生在 MANIFEST，
+                # 只在阈限期带就等于把最该看的那一段截掉。
+                #
+                # max_recent=1 —— 两个 view 都只读 recent[-1]（见 build_*_chain_view），
+                # 取 20 条再序列化是 200ms 一拍的白费功夫。
+                _chain_views = self._build_chain_views()
+                if _chain_views:
+                    _payload.update(_chain_views)
                 _emit(
                     "continuum.state",
                     source="desktop_presence_runtime",

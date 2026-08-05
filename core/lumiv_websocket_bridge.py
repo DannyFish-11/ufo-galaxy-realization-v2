@@ -253,7 +253,12 @@ class GalaxyPresenceBridge:
                 simulation_kind=str(raw.get("simulation_kind", "none") or "none"),
                 candidate_paths=tuple(str(p) for p in paths),
                 committed_path=committed,
-                is_committed=committed is not None,
+                # is_committed 取上游算好的那份，**不在这里重推**。
+                # 规范推导在 core.liminal_space_mapping.build_simulation_summary()
+                # （openclawd 侧已统一过它），这里再写一遍 `committed is not None`
+                # 就是同一件事两处推导，改一处便分叉。缺字段时才退回本地推导，
+                # 那是老 payload 的兼容路径。
+                is_committed=bool(raw["is_committed"]) if "is_committed" in raw else committed is not None,
                 step_count=int(raw.get("step_count", 0) or 0),
                 scenario_label=raw.get("scenario_label"),
             )
@@ -280,8 +285,11 @@ class GalaxyPresenceBridge:
             payload = getattr(event, "payload", None)
             if not isinstance(payload, dict):
                 payload = event if isinstance(event, dict) else {}
+            # 取值域读契约，不手抄：抄一份就多一个会漂的定义。
+            from core.phase_contract import LIMINAL_ACTIVITIES
+
             act = payload.get("liminal_activity")
-            if isinstance(act, str) and act in ("none", "thinking", "rehearsing"):
+            if isinstance(act, str) and act in LIMINAL_ACTIVITIES:
                 self._liminal_activity = act
             sim = payload.get("simulation")
             if isinstance(sim, dict):

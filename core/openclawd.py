@@ -774,6 +774,49 @@ def _note_liminal(activity: str, summary: Optional[Dict[str, Any]] = None) -> No
         pass
 
 
+def _build_liminal_simulation(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """把推演摘要的 kwargs 过一遍规范 builder，返回可上链路的 dict。
+
+    为什么必须过 builder 而不是直接发 kwargs
+    ----------------------------------------
+    ``core.liminal_space_mapping.build_simulation_summary()`` 是这份形状的规范定义，
+    它做两件链路上没人做的事：
+
+    1. **校验取值域** —— ``simulation_kind`` 不在 speculative/sandbox/none 里就兜成
+       ``none``。此前上游产出什么、桥就搬什么，非法值会一路漂到渲染契约。
+    2. **推导 is_committed** —— ``committed_path is not None``。此前这条推导在桥里
+       又写了一遍（``lumiv_websocket_bridge`` 构造 SimulationSummary 那处），两处
+       推导同一件事，改一处就分叉。
+
+    builder 不可用时原样返回 kwargs 并留 warning：可见化绝不拖垮认知，但降级要说出来。
+    """
+    try:
+        from core.liminal_space_mapping import build_simulation_summary
+
+        return build_simulation_summary(**kwargs).to_dict()
+    except Exception as exc:  # noqa: BLE001 — 可见化绝不拖垮认知
+        logger.warning(
+            "阈限摘要未经规范 builder（取值域校验与 is_committed 推导本次未生效）: %s",
+            exc,
+        )
+        return dict(kwargs)
+
+
+def _emit_liminal_simulation(summary: Dict[str, Any]) -> None:
+    """把推演摘要作为**瞬时事件**发出（与 tick 的「持续态」互补）。
+
+    两条通路缺一不可：事件错过就没了，但它能立刻到；tick 每 200ms 一拍、面板中途
+    连上来也能看到当前在推演什么。此前只有多候选分支发事件，单候选分支只登记 tick
+    ——事件流因此只覆盖一半。
+    """
+    try:
+        from core.liminal_rehearsal import _emit_rehearsal_event as _emit_rh
+
+        _emit_rh("simulation_summary", summary)
+    except Exception:  # noqa: BLE001 — 可见化失败不影响决策
+        pass
+
+
 def _commit_manifest(reason: str = "") -> None:
     """宣告审议结束、开始真实落手，失败静默。
 
@@ -8559,6 +8602,15 @@ class OpenClawd:
             except Exception:  # noqa: BLE001 — 瘦身失败用全量,绝不影响主流程
                 pass
 
+            # 理解阶段结束、规划阶段开始 —— 阈限递进的第二档。
+            #
+            # 这一句刻意放在**推演闸门之外**：should_rehearse() 要求有工具可调且
+            # 复杂度达标，纯对话与简单请求都进不去那个块。若只在块内登记，那两类
+            # 请求的阈限内容会停在 advance(LIMINAL) 给的 "understanding" 上不再前进。
+            # 走到这里意味着上下文已备齐、正在算复杂度并挑执行方式——那正是「在想
+            # 怎么做」，与是否推演无关。
+            _note_liminal("thinking")
+
             # PR-3: 计算复杂度向量 — 通过统一入口代理 compute_complexity_vector()，
             # 避免直接访问 _backend._compute_complexity_vector()。
             cv = None
@@ -8606,16 +8658,13 @@ class OpenClawd:
                             "rehearsal_committed": (_sel.label if (_sel and _outcome.success) else None),
                         }
                         # 喂 LIMINAL 投影:候选 vs 已提交(经既有可见化事件族上面板)。
-                        _sim_kwargs = _mc.simulation_summary_kwargs(is_active=True, scenario_label=message[:60])
-                        try:
-                            from core.liminal_rehearsal import _emit_rehearsal_event as _emit_rh
-
-                            _emit_rh("simulation_summary", _sim_kwargs)
-                        except Exception:  # noqa: BLE001 — 可见化失败不影响决策
-                            pass
+                        _sim = _build_liminal_simulation(
+                            _mc.simulation_summary_kwargs(is_active=True, scenario_label=message[:60])
+                        )
+                        _emit_liminal_simulation(_sim)
                         # 同一份摘要也挂进 RuntimeSession:事件是「瞬时」的(错过就没了),
                         # tick 是「持续」的——面板中途连上来也能立刻看到在推演哪几条。
-                        _note_liminal("rehearsing", _sim_kwargs)
+                        _note_liminal("rehearsing", _sim)
                     else:
                         _outcome = await rehearsal.rehearse(message)
                         _rehearsal_meta = {
@@ -8625,8 +8674,10 @@ class OpenClawd:
                             "rehearsal_steps": len(_outcome.trajectory),
                         }
                         # 单方案也给摘要:没有候选可比，但「推演了几步」同样是可视内容。
-                        _note_liminal(
-                            "rehearsing",
+                        # 与多候选分支走**同一个** builder + 同一个发布口——此前这里
+                        # 手搓了一份 6 字段 dict、且只登记 tick 不发事件，于是同一个
+                        # 形状在链路上有两处独立构造、事件流只覆盖一半。
+                        _sim = _build_liminal_simulation(
                             {
                                 "is_active": True,
                                 "simulation_kind": "sandbox",
@@ -8634,8 +8685,10 @@ class OpenClawd:
                                 "committed_path": None,
                                 "scenario_label": message[:60],
                                 "step_count": len(_outcome.trajectory),
-                            },
+                            }
                         )
+                        _emit_liminal_simulation(_sim)
+                        _note_liminal("rehearsing", _sim)
                     # 推演段结束 → 回到纯思考。摘要保留（那是「刚才推演了什么」的
                     # 证据，主体进 MANIFEST 后面板仍要能显示按哪条提交的）。
                     _note_liminal("thinking")
