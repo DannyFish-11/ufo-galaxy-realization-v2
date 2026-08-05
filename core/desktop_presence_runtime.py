@@ -23,7 +23,7 @@ Together they form one subject::
         └─ owns: session, tri-state lifecycle, native multimodal ingress
         └─ invokes OpenClawd inside liminal
               └─ OpenClawd: ingest → continuum → branch → manifest
-                    ├─ LOCAL EXECUTION CHAIN   (command_router → 本地执行)
+                    ├─ LOCAL EXECUTION CHAIN   (core/local_execution_chain.py)
                     │     OpenClawd → AgentKernel → CommandRouter[LOCAL] →
                     │     local executor → LocalExecutionResult → feedback
                     └─ CROSS-DEVICE EXECUTION CHAIN  (core/cross_device_execution_chain.py)
@@ -403,7 +403,7 @@ class DesktopPresenceRuntime:
             └─ runtime_session_id generator & propagator
             └─ invokes OpenClawd during the LIMINAL phase
                   └─ OpenClawd (subject core): ingest → continuum → branch
-                        ├─ LOCAL EXECUTION CHAIN   (command_router → 本地执行)
+                        ├─ LOCAL EXECUTION CHAIN   (core/local_execution_chain.py)
                         │     → AgentKernel → CommandRouter[LOCAL] → executor
                         └─ CROSS-DEVICE EXECUTION CHAIN  (core/cross_device_execution_chain.py)
                               → CommandRouter[REMOTE] → gateway → worker

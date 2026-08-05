@@ -2973,8 +2973,8 @@ class CommandRouter:
 
         # PR-14: stamp additive introspection hints on substrate result.
         # PR-1: execution_path="local" normalised to match the canonical local
-        #        execution path（原写 core/local_execution_chain.py —— 那是个只做
-        #        审计投影、从未被真实入口调用的模块，已删；归口在 unified_result_ingress）。
+        #        execution chain (core/local_execution_chain.py) —— 仅**取值对齐**：
+        #        本文件从未调用它，本地结果也不进 unified_result_ingress（该链两端未接）。
         result.setdefault(
             "introspection_snapshot",
             {
