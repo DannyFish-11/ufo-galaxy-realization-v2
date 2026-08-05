@@ -759,6 +759,34 @@ TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17: str = (
 )
 
 
+def _note_liminal(activity: str, summary: Optional[Dict[str, Any]] = None) -> None:
+    """登记「阈限态里正在干嘛」，失败静默。
+
+    薄封装的理由：认知段里有四处要登记，各写一遍 try/except 既啰嗦又容易漏掉
+    其中一处的异常兜底。真正的逻辑与不变量校验在 :mod:`core.liminal_activity`
+    与 ``RuntimeSession.enter_liminal_activity``。
+    """
+    try:
+        from core.liminal_activity import note_liminal_activity
+
+        note_liminal_activity(activity, summary)
+    except Exception:  # noqa: BLE001 — 可见性绝不阻塞认知
+        pass
+
+
+def _commit_manifest(reason: str = "") -> None:
+    """宣告审议结束、开始真实落手，失败静默。
+
+    薄封装同 :func:`_note_liminal`：真正的逻辑在 :mod:`core.liminal_activity`。
+    """
+    try:
+        from core.liminal_activity import commit_to_manifest
+
+        commit_to_manifest(reason)
+    except Exception:  # noqa: BLE001 — 相位推进失败不该拖垮认知，运行时 finally 有兜底
+        pass
+
+
 def _resolve_intent_name_for_inference(parsed_intent: object, intent_type: str) -> str:
     """Extract the best available intent/command name for capability inference.
 
@@ -8553,6 +8581,10 @@ class OpenClawd:
 
                 _cx = float(cv.weighted_score) if cv is not None else 0.5
                 if should_rehearse(_cx, tools):
+                    # 阈限相位 ↔ 阈限内容的耦合点：推演本来就跑在 LIMINAL 段里，
+                    # 此前生命周期不知道它在跑，阈限态在面板上便只是个空标签。
+                    # 登记进 RuntimeSession，由 200ms 的 continuum tick 带上线。
+                    _note_liminal("rehearsing")
                     rehearsal = LiminalRehearsal(
                         router=router,
                         real_dispatch=self._dispatch_tool_call,
@@ -8574,15 +8606,16 @@ class OpenClawd:
                             "rehearsal_committed": (_sel.label if (_sel and _outcome.success) else None),
                         }
                         # 喂 LIMINAL 投影:候选 vs 已提交(经既有可见化事件族上面板)。
+                        _sim_kwargs = _mc.simulation_summary_kwargs(is_active=True, scenario_label=message[:60])
                         try:
                             from core.liminal_rehearsal import _emit_rehearsal_event as _emit_rh
 
-                            _emit_rh(
-                                "simulation_summary",
-                                _mc.simulation_summary_kwargs(is_active=True, scenario_label=message[:60]),
-                            )
+                            _emit_rh("simulation_summary", _sim_kwargs)
                         except Exception:  # noqa: BLE001 — 可见化失败不影响决策
                             pass
+                        # 同一份摘要也挂进 RuntimeSession:事件是「瞬时」的(错过就没了),
+                        # tick 是「持续」的——面板中途连上来也能立刻看到在推演哪几条。
+                        _note_liminal("rehearsing", _sim_kwargs)
                     else:
                         _outcome = await rehearsal.rehearse(message)
                         _rehearsal_meta = {
@@ -8591,6 +8624,21 @@ class OpenClawd:
                             "rehearsal_attempts": _outcome.attempts,
                             "rehearsal_steps": len(_outcome.trajectory),
                         }
+                        # 单方案也给摘要:没有候选可比，但「推演了几步」同样是可视内容。
+                        _note_liminal(
+                            "rehearsing",
+                            {
+                                "is_active": True,
+                                "simulation_kind": "sandbox",
+                                "candidate_paths": [],
+                                "committed_path": None,
+                                "scenario_label": message[:60],
+                                "step_count": len(_outcome.trajectory),
+                            },
+                        )
+                    # 推演段结束 → 回到纯思考。摘要保留（那是「刚才推演了什么」的
+                    # 证据，主体进 MANIFEST 后面板仍要能显示按哪条提交的）。
+                    _note_liminal("thinking")
                     guidance = _outcome.guidance_text()
                     if guidance:
                         messages.append({"role": "system", "content": guidance})
@@ -8609,6 +8657,17 @@ class OpenClawd:
                         )
             except Exception as _rh_err:  # noqa: BLE001 — 预演故障降级直接执行
                 logger.debug("阈限态预演跳过(非致命): %s", _rh_err)
+
+            # ── 审议结束，开始真实落手 ──
+            #
+            # 这就是 LIMINAL → MANIFEST 的那条界线，而且**只有这一层知道它在哪**：
+            # 上面全是审议（意图解析、阈限态沙盘推演、消息装配），下面 _react_loop
+            # 才是真实工具执行与出字。在场运行时那一层看不见这个边界，此前只能靠
+            # "第一个 token 流出"这个代理信号近似它 —— 而那个信号只有流式才有。
+            #
+            # 显式宣告之后两条路径的审议窗口一致，相位闸门（should_rehearse 里的
+            # in_deliberation_window）才在非流式路径上也成立。
+            _commit_manifest("react_loop")
 
             # 使用 ReAct 循环
             result = await self._react_loop(messages, tools)

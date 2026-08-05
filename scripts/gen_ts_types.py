@@ -136,7 +136,115 @@ def build_phase_contract() -> str:
         lines.append(f"  /** {f['doc']} */")
         lines.append(f"  {f['name']}: {f['ts']};")
     lines += ["}", ""]
+    lines += _render_contract_lines()
     return "\n".join(lines)
+
+
+def _render_contract_lines() -> list:
+    """忠实契约 → TS，追加在遗留投影之后（同一个 .gen.ts）。
+
+    刻意与 ``PhasePosture`` 同文件：两者是同一件事的两个版本，放一起才能让读到
+    遗留类型的人立刻看见「还有一个更忠实的」，而不是各自散在两个文件里。
+    """
+    sch = phase_contract.render_contract_schema()
+    out = [
+        "",
+        "// ═══════════════════════════════════════════════════════════════════",
+        "// 忠实契约：按 core/continuum 的实际形状生成",
+        "//",
+        "// 上面的 PhasePosture 是一维遗留投影（三锚点串在一条 depth 轴上），保留",
+        "// 只为兼容既有覆盖层 presence_motion.js。**新代码应当消费 RenderPosture。**",
+        "//",
+        "// 差别是结构性的，不是字段多少：",
+        "//   · 四相 vs 三态 —— receding（返回弧）在遗留投影里被折叠成 silent，",
+        "//     于是「刚做完正在退场」与「静息」在渲染端不可分辨；",
+        "//   · 二维 vs 一维 —— runtime_domain（在哪儿跑）遗留投影里完全没有；",
+        "//   · retreat_tendency 的语义 —— 后端原文是「推向 receding」，遗留投影",
+        "//     把它当成「退回上一档」，那会表达出转移表明令禁止的 manifest→liminal。",
+        "// ═══════════════════════════════════════════════════════════════════",
+        "",
+        "/**",
+        " * 【主轴】主体生命周期（后端 TriState）——渲染端的整体编排跟这一根走。",
+        " *",
+        " * 它就是用户能直接感知的节奏：休息 / 过渡 / 对外表达。在场桥广播的",
+        " * `payload.phase` 一直是这一根。",
+        " */",
+        "export type Lifecycle = " + " | ".join(f'"{p}"' for p in sch["lifecycle_states"]) + ";",
+        "",
+        "/**",
+        " * 【副轴】内部连续体四相 —— 提供主轴给不出的纹理，不决定整体编排。",
+        " *",
+        " * 比主轴多一相 `receding`（返回弧）。主轴回到 `silent` 时，靠副轴才能",
+        " * 区分「刚做完正在消散」(receding) 与「静息」(formless)。",
+        " */",
+        "export type RenderPhase = " + " | ".join(f'"{p}"' for p in sch["phases"]) + ";",
+        "",
+        "/** 阈限态里正在发生什么。主轴说「在过渡」，这一项说「过渡里在干嘛」。 */",
+        "export type LiminalActivity = " + " | ".join(f'"{a}"' for a in sch["liminal_activities"]) + ";",
+        "",
+        "/** 沙盘推演的种类。 */",
+        "export type SimulationKind = " + " | ".join(f'"{k}"' for k in sch["simulation_kinds"]) + ";",
+        "",
+        "/**",
+        " * 阈限态沙盘推演摘要 —— **阈限态的可视内容**。",
+        " *",
+        " * 阈限态在面板上一直「什么都没有」，根因不是动画简陋，是这一层从没送出来过：",
+        " * 智能体在真正落手之前会先在影子沙盘里推演若干条候选路径（见后端",
+        " * core/liminal_rehearsal.py），`candidate_paths` 就是它正在权衡的那几条，",
+        " * `committed_path` 是最终提交的那条。",
+        " */",
+        "export interface SimulationSummary {",
+    ]
+    for f in sch["simulation_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
+        "/** 三态公共投影。仅供必须使用公共词汇的消费者；用它画图会丢掉返回弧。 */",
+        "export type WirePhaseTri = " + " | ".join(f'"{p}"' for p in sorted(set(sch["tri_state_map"].values()))) + ";",
+        "",
+        "/** 第二维：执行发生在哪儿。 */",
+        "export type RuntimeDomain = " + " | ".join(f'"{d}"' for d in sch["runtime_domains"]) + ";",
+        "",
+        "/** 形态提示（后端 ExpressionEngine 算出，非前端推导）。 */",
+        "export type FormSignature = " + " | ".join(f'"{s}"' for s in sch["form_signatures"]) + ";",
+        "",
+        "/** 抽象空间权重／贴近度。 */",
+        "export type SpatialPresence = " + " | ".join(f'"{s}"' for s in sch["spatial_presences"]) + ";",
+        "",
+        "/**",
+        " * 相位之间【允许】的转移，源自 docs/PHASE_TRANSITION_TABLE.md。",
+        " *",
+        " * 渲染端据此可提前编排：处在 manifest 时唯一出口是 receding，所以退场动作",
+        " * 该按「消散」准备，绝不是「退回 liminal」。",
+        " */",
+        "export const PHASE_TRANSITIONS: Record<RenderPhase, RenderPhase[]> = {",
+    ]
+    for name, nxt in sch["transitions"].items():
+        out.append(f'  "{name}": [{", ".join(chr(34) + n + chr(34) for n in nxt)}],')
+    out += [
+        "};",
+        "",
+        "/** 明令禁止的转移 + 理由。渲染端不该为它们编排动作。 */",
+        "export const FORBIDDEN_TRANSITIONS: ReadonlyArray<{from: RenderPhase; to: RenderPhase; why: string}> = [",
+    ]
+    for item in sch["forbidden"]:
+        out.append(f'  {{ from: "{item["from"]}", to: "{item["to"]}", why: "{item["why"]}" }},')
+    out += [
+        "];",
+        "",
+        "/** 四相 → 三态的公共投影表。 */",
+        "export const TRI_STATE_OF: Record<RenderPhase, WirePhaseTri> = {",
+    ]
+    for k, v in sch["tri_state_map"].items():
+        out.append(f'  "{k}": "{v}",')
+    out += ["};", "", "export interface RenderPosture {"]
+    for f in sch["fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += ["}", ""]
+    return out
 
 
 def build() -> str:

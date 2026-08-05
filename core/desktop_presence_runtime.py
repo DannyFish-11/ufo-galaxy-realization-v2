@@ -104,6 +104,8 @@ from core.desktop_presence_system import (
     DesktopPresenceStateMachine,
     build_desktop_presence_system_view,
 )
+from core.liminal_activity import bind_runtime_session as _bind_runtime_session
+from core.liminal_activity import unbind_runtime_session as _unbind_runtime_session
 from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
@@ -192,10 +194,39 @@ class RuntimeSession:
         self._continuum_state: Optional[Dict[str, Any]] = None
         self._tick_task: Optional[Any] = None
         self._tick_running: bool = False
+        # 阈限态的内容与相位推进钩子，见 core/liminal_activity.py。
+        # manifest_hook 由 handle_request 绑成内部的 _enter_manifest 闭包，让认知层
+        # 能宣告"审议结束、开始落手"——那条界线只有认知层知道。
+        self.manifest_hook: Optional[Any] = None
+        self.liminal_activity: str = "none"
+        self.simulation_summary: Optional[Dict[str, Any]] = None
 
     # ------------------------------------------------------------------
     # State helpers
     # ------------------------------------------------------------------
+
+    def enter_liminal_activity(self, activity: str, summary: Optional[Dict[str, Any]] = None) -> None:
+        """登记阈限态里正在发生什么。取值与理由见 :mod:`core.liminal_activity`。
+
+        **不变量**：只有处在 ``LIMINAL`` 时登记内容才有意义 —— 推演按设计就跑在
+        ``advance(LIMINAL)`` 与 ``_enter_manifest()`` 之间。看到别的相位说明那段
+        时序被改动过（例如有人把 manifest 触发点挪回派发前），阈限态的可视内容
+        会随之落空。不抛异常（可见性绝不拖垮请求），但留 warning，让这条耦合是
+        **可验证的**而不是靠时序巧合。
+        """
+        if activity not in ("none", "thinking", "rehearsing"):
+            activity = "none"
+        if activity != "none" and self.tristate is not TriState.LIMINAL:
+            logger.warning(
+                "阈限内容登记于非阈限相位 | runtime_session_id=%s activity=%s tristate=%s "
+                "—— 预演本应跑在 LIMINAL 段内，请检查 advance(MANIFEST) 的触发时机",
+                self.runtime_session_id,
+                activity,
+                self.tristate.value,
+            )
+        self.liminal_activity = activity
+        if summary is not None:
+            self.simulation_summary = summary
 
     def advance(self, new_state: TriState) -> None:
         """Advance the session to a new tri-state phase and record the event."""
@@ -203,6 +234,13 @@ class RuntimeSession:
         self.tristate = new_state
         ts = time.monotonic()
         self.transitions.append((new_state, ts))
+        # 回到静息：阈限内容连同摘要一起归零，下一次请求从干净状态开始。
+        # 不在 MANIFEST 清——那会让「按哪条候选提交的」在表达期就消失。
+        if new_state is TriState.SILENT:
+            self.liminal_activity = "none"
+            self.simulation_summary = None
+        elif new_state is TriState.MANIFEST:
+            self.liminal_activity = "none"
         logger.debug(
             "Runtime tristate transition | runtime_session_id=%s source=%s %s→%s",
             self.runtime_session_id,
@@ -342,17 +380,25 @@ class RuntimeSession:
                         cs = {**cs, "intent_strength": _snap.get("intent_strength", 0.0)}
                     except Exception:  # noqa: BLE001
                         pass
+                _payload = {
+                    "presence_intensity": round(intensity, 4),
+                    "coherence": round(cs.get("coherence", 0.0), 4),
+                    "phase": self.tristate.value,
+                    "collapse_tendency": round(cs.get("collapse_tendency", 0.0), 4),
+                    "retreat_tendency": round(cs.get("retreat_tendency", 0.0), 4),
+                    "runtime_session_id": self.runtime_session_id,
+                    # 阈限态的内容。复用这条已有的 200ms 通道而不另开一条：桥已经
+                    # 订阅着 continuum.state，多带两个字段的成本远小于再拉一条链路。
+                    "liminal_activity": self.liminal_activity,
+                }
+                # 摘要只在有值时带上——没推演时不发空对象，省得下游把「没推演」
+                # 与「推演了但候选为空」混为一谈。
+                if self.simulation_summary is not None:
+                    _payload["simulation"] = self.simulation_summary
                 _emit(
                     "continuum.state",
                     source="desktop_presence_runtime",
-                    payload={
-                        "presence_intensity": round(intensity, 4),
-                        "coherence": round(cs.get("coherence", 0.0), 4),
-                        "phase": self.tristate.value,
-                        "collapse_tendency": round(cs.get("collapse_tendency", 0.0), 4),
-                        "retreat_tendency": round(cs.get("retreat_tendency", 0.0), 4),
-                        "runtime_session_id": self.runtime_session_id,
-                    },
+                    payload=_payload,
                     runtime_session_id=self.runtime_session_id,
                 )
                 # 哲学对齐:面板桥一直订阅着 intent.update(阈限 0.15-0.85 呼吸
@@ -727,6 +773,10 @@ class DesktopPresenceRuntime:
                 }
         """
         rsession = self._create_session(source)
+        # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
+        # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
+        # core/liminal_activity.py。
+        _rs_token = _bind_runtime_session(rsession)
         from core.session_execution_lane import get_session_execution_lane_manager
         from core.session_identity import build_canonical_session_identity
 
@@ -876,12 +926,16 @@ class DesktopPresenceRuntime:
 
         _manifest_sink = None
         _manifest_orig_on_delta = None
-        if os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
+        # 回退开关单独存布尔值：过去"没拿到 sink"等价于"要旧行为"，现在不再等价
+        # （非流式默认也停 LIMINAL）。不分开会让 GALAXY_MANIFEST_ON_FIRST_TOKEN=0
+        # 这个逃生口失效——实测被 test_kill_switch_reverts_to_old_behavior 抓住。
+        _manifest_on_first_token = os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
             "0",
             "false",
             "no",
             "off",
-        ):
+        )
+        if _manifest_on_first_token:
             try:
                 from core.llm_stream import current_stream as _current_token_stream
 
@@ -926,9 +980,16 @@ class DesktopPresenceRuntime:
                         _orig(text)
 
                     _manifest_sink._on_delta = _hooked_on_delta
-                else:
-                    # 非流式:保持原时序(LIMINAL → MANIFEST → 派发)
+                elif not _manifest_on_first_token:
+                    # 逃生口：开关关掉 → 完整回旧时序（派发前即 MANIFEST）。
                     _enter_manifest()
+                # 开关开着且非流式时此处**不再**提前进 MANIFEST。原来这里是
+                # `_enter_manifest()`（注释"保持原时序"），代价是同一段认知工作流式下
+                # 算 LIMINAL、非流式下算 MANIFEST——**审议窗口在非流式上宽度为零**，
+                # 而沙盘推演正跑在这段里，相位闸门会把那条路径的预演整个关掉。
+                # 改由认知层显式宣告（commit_to_manifest，打在真实 ReAct 之前）：那条
+                # 界线只有认知层知道。下面 finally 的兜底保证三段轨迹始终完整。
+                rsession.manifest_hook = _enter_manifest
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
                 _stream_runtime_status = self.realtime_streaming_backbone_summary().get("runtime_status") or {}
@@ -959,6 +1020,12 @@ class DesktopPresenceRuntime:
                     is_operator_request=source == "operator",
                     **kwargs,
                 )
+                # 收口点：派发返回 = 认知结束，往下是表达（结果装配、PR-SPEAK 朗读、
+                # 跨设备同步）。更早的两条信号（流式首 token、认知层显式宣告）更精确
+                # 但只覆盖部分路径——实测一次请求走 agent/execution_planner 那条线，
+                # 不经过 ReAct 循环，宣告从没被调到，MANIFEST 宽度为零。认知层出口
+                # 不止一个，逐个打必然漏；这里是必经之地。幂等，谁先到算谁。
+                _enter_manifest()
                 # PR-REALTIME-CONTINUUM: 保存 OpenClawd 的 ContinuumState
                 # 供后台 tick 循环实时推送到前端渲染层
                 rsession._continuum_state = result.get("continuum", {})
@@ -1005,6 +1072,9 @@ class DesktopPresenceRuntime:
             )
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
+            # contextvar 复位：请求结束后链路深处再调 note_liminal_activity 就是
+            # 空操作，不会把内容登记到一个已经收尾的会话上。
+            _unbind_runtime_session(_rs_token)
 
             # 任务成本账本:结账(定格墙钟→内存环形+JSONL+一行日志),
             # 账单挂进响应供面板/调用方直读本次任务的总消耗。

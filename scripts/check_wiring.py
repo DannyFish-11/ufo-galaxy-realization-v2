@@ -267,13 +267,61 @@ def _is_framework_registered(node) -> bool:
     return False
 
 
+def _self_exported_constants(tree: ast.AST) -> Set[int]:
+    """本文件 ``__all__`` 里那些**指向本文件自己定义**的字符串常量节点的 id()。
+
+    为什么只排除"自己导出自己"
+    --------------------------
+    ``__all__`` 有两种截然不同的用法，判据必须分开：
+
+    * **自证**：模块在自己的 ``__all__`` 里列自己定义的函数。这**不是使用** ——
+      它只是声明"这个名字是我的公开面"。可字符串常量一律算引用的话，模块只要
+      声明了 ``__all__``，它自己的公开函数就永远不可能被判为"未接线"，而**写得越
+      规范的模块越会声明 __all__**，守卫恰好对最该管的代码失效。
+
+      不是假想：``core/phase_contract.py`` 的 ``resolve_render_posture`` 一度在全仓
+      没有任何调用方（渲染契约写好了但没接进桥），本工具带 ``--strict`` 跑仍是绿
+      的，就是被它自己 ``__all__`` 里那个字符串自证了。
+
+    * **再导出**：包的 ``__init__.py`` 在 ``__all__`` 里列**别处定义**的名字（本仓
+      ``core/continuum/__init__.py`` 就是典型）。那是**真实的引用** —— 它把那个名字
+      抬进了包的公开面。排除它会把整片再导出误判成未接线。
+
+    所以判据是"同一文件内定义 + 出现在该文件 ``__all__``"才排除。第一版一刀切排除
+    了全部 ``__all__`` 字符串，被 ``tests/test_check_wiring.py`` 里那条再导出用例
+    当场抓住。
+    """
+    own_defs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    marked: Set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            targets = [node.target]
+        else:
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "__all__" for t in targets):
+            continue
+        if node.value is None:
+            continue
+        for sub in ast.walk(node.value):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value in own_defs:
+                marked.add(id(sub))
+    return marked
+
+
 def collect_references(files: List[Path]) -> Set[str]:
-    """全仓被引用到的名字。调用、属性访问、from-import、字符串常量都算。"""
+    """全仓被引用到的名字。调用、属性访问、from-import、字符串常量都算。
+
+    例外：模块**自己 __all__ 里指向自己定义**的字符串不算引用——见
+    :func:`_self_exported_constants`。
+    """
     referenced: Set[str] = set()
     for path in files:
         tree = _parse(path)
         if tree is None:
             continue
+        skip = _self_exported_constants(tree)
         for node in ast.walk(tree):
             if isinstance(node, ast.Name):
                 referenced.add(node.id)
@@ -283,6 +331,8 @@ def collect_references(files: List[Path]) -> Set[str]:
                 for alias in node.names:
                     referenced.add(alias.name)
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if id(node) in skip:
+                    continue
                 referenced.add(node.value)
     return referenced
 

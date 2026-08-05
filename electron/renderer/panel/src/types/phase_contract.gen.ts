@@ -37,10 +37,159 @@ export interface PhasePosture {
   coherence: number;
   /** 推向下一档的概率质量 [0,1] */
   collapse_tendency: number;
-  /** 推向上一档回撤的概率质量 [0,1] */
+  /** 推向 receding 的概率质量 [0,1]。注意：在本【遗留】投影里它被当作「向上一档锚点漂移」，那是语义误读，见 RenderPosture 的同名字段 */
   retreat_tendency: number;
   /** 时间稳定度 [0,1]，低值表示刚发生过振荡 */
   stability: number;
   /** 深度来自实算还是锚点兜底 */
   source: PhasePostureSource;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// 忠实契约：按 core/continuum 的实际形状生成
+//
+// 上面的 PhasePosture 是一维遗留投影（三锚点串在一条 depth 轴上），保留
+// 只为兼容既有覆盖层 presence_motion.js。**新代码应当消费 RenderPosture。**
+//
+// 差别是结构性的，不是字段多少：
+//   · 四相 vs 三态 —— receding（返回弧）在遗留投影里被折叠成 silent，
+//     于是「刚做完正在退场」与「静息」在渲染端不可分辨；
+//   · 二维 vs 一维 —— runtime_domain（在哪儿跑）遗留投影里完全没有；
+//   · retreat_tendency 的语义 —— 后端原文是「推向 receding」，遗留投影
+//     把它当成「退回上一档」，那会表达出转移表明令禁止的 manifest→liminal。
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * 【主轴】主体生命周期（后端 TriState）——渲染端的整体编排跟这一根走。
+ *
+ * 它就是用户能直接感知的节奏：休息 / 过渡 / 对外表达。在场桥广播的
+ * `payload.phase` 一直是这一根。
+ */
+export type Lifecycle = "silent" | "liminal" | "manifest";
+
+/**
+ * 【副轴】内部连续体四相 —— 提供主轴给不出的纹理，不决定整体编排。
+ *
+ * 比主轴多一相 `receding`（返回弧）。主轴回到 `silent` 时，靠副轴才能
+ * 区分「刚做完正在消散」(receding) 与「静息」(formless)。
+ */
+export type RenderPhase = "formless" | "liminal" | "manifest" | "receding";
+
+/** 阈限态里正在发生什么。主轴说「在过渡」，这一项说「过渡里在干嘛」。 */
+export type LiminalActivity = "none" | "thinking" | "rehearsing";
+
+/** 沙盘推演的种类。 */
+export type SimulationKind = "none" | "speculative" | "sandbox";
+
+/**
+ * 阈限态沙盘推演摘要 —— **阈限态的可视内容**。
+ *
+ * 阈限态在面板上一直「什么都没有」，根因不是动画简陋，是这一层从没送出来过：
+ * 智能体在真正落手之前会先在影子沙盘里推演若干条候选路径（见后端
+ * core/liminal_rehearsal.py），`candidate_paths` 就是它正在权衡的那几条，
+ * `committed_path` 是最终提交的那条。
+ */
+export interface SimulationSummary {
+  /** 当前是否有推演在跑 */
+  is_active: boolean;
+  /** none / speculative / sandbox */
+  simulation_kind: SimulationKind;
+  /** 正在评估的候选执行路径 —— 阈限态在权衡什么 */
+  candidate_paths: string[];
+  /** 已提交的那条；仍在推演/全失败时 null */
+  committed_path: string | null;
+  /** committed_path !== null */
+  is_committed: boolean;
+  /** 已完成的推演步数 */
+  step_count: number;
+  /** 场景的人类可读标签 */
+  scenario_label: string | null;
+}
+
+/** 三态公共投影。仅供必须使用公共词汇的消费者；用它画图会丢掉返回弧。 */
+export type WirePhaseTri = "liminal" | "manifest" | "silent";
+
+/** 第二维：执行发生在哪儿。 */
+export type RuntimeDomain = "local" | "cross_device" | "transition";
+
+/** 形态提示（后端 ExpressionEngine 算出，非前端推导）。 */
+export type FormSignature = "none" | "diffuse_cluster" | "focused_point" | "expanding_ring" | "collapsing_field";
+
+/** 抽象空间权重／贴近度。 */
+export type SpatialPresence = "absent" | "peripheral" | "ambient" | "foreground";
+
+/**
+ * 相位之间【允许】的转移，源自 docs/PHASE_TRANSITION_TABLE.md。
+ *
+ * 渲染端据此可提前编排：处在 manifest 时唯一出口是 receding，所以退场动作
+ * 该按「消散」准备，绝不是「退回 liminal」。
+ */
+export const PHASE_TRANSITIONS: Record<RenderPhase, RenderPhase[]> = {
+  "formless": ["liminal"],
+  "liminal": ["manifest", "formless"],
+  "manifest": ["receding"],
+  "receding": ["formless"],
+};
+
+/** 明令禁止的转移 + 理由。渲染端不该为它们编排动作。 */
+export const FORBIDDEN_TRANSITIONS: ReadonlyArray<{from: RenderPhase; to: RenderPhase; why: string}> = [
+  { from: "formless", to: "manifest", why: "跳过了 liminal 闸门，没有结构成型过（allow_emergency_jump 时例外）" },
+  { from: "formless", to: "receding", why: "receding 要求先有过在场" },
+  { from: "manifest", to: "liminal", why: "结构不能不经 receding 就解体" },
+  { from: "receding", to: "manifest", why: "必须先回到 formless 才能重新进入 manifest" },
+  { from: "receding", to: "liminal", why: "必须先回到 formless 才能重新进入 liminal" },
+];
+
+/** 四相 → 三态的公共投影表。 */
+export const TRI_STATE_OF: Record<RenderPhase, WirePhaseTri> = {
+  "formless": "silent",
+  "liminal": "liminal",
+  "manifest": "manifest",
+  "receding": "silent",
+};
+
+export interface RenderPosture {
+  /** 【主轴】主体生命周期 —— 渲染端的整体编排跟它走 */
+  lifecycle: Lifecycle;
+  /** 【副轴】内部连续体四相，提供主轴给不出的纹理 */
+  continuum_phase: RenderPhase;
+  /** 副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位 */
+  is_returning: boolean;
+  /** 副轴从当前相位合法能去的下一相 */
+  next_phases: RenderPhase[];
+  /** 阈限态里正在干嘛：none/thinking/rehearsing */
+  liminal_activity: LiminalActivity;
+  /** 沙盘推演摘要 —— 阈限态的可视内容 */
+  simulation: SimulationSummary;
+  /** 第二维：在哪儿跑；null=尚未判定 */
+  runtime_domain: RuntimeDomain | null;
+  /** 抽象运动能量 [0,1] */
+  motion: number;
+  /** 整体在场强度 [0,1] */
+  intensity: number;
+  /** 形态提示；receding 对应 collapsing_field */
+  form_signature: FormSignature;
+  /** 空间权重／贴近度 */
+  spatial_presence: SpatialPresence;
+  /** 质感描述（soft_dissolve 等）；空串=无提示 */
+  texture_hint: string;
+  /** EMA 平滑的在场强度 [0,1] */
+  presence_intensity: number;
+  /** 信号成意图的程度 [0,1] */
+  coherence: number;
+  /** coherence 的反面 [0,1] */
+  ambiguity: number;
+  /** 推向塌缩（liminal→manifest）的概率质量 [0,1] */
+  collapse_tendency: number;
+  /** 推向 receding 的概率质量 [0,1]（不是退回上一档） */
+  retreat_tendency: number;
+  /** 时间稳定度 [0,1]，低值表示刚振荡过 */
+  stability: number;
+  /** 实算还是兜底 */
+  source: PhasePostureSource;
+  /** continuum 本拍是否降级 */
+  degraded: boolean;
+  /** 仅 degraded=true 时有值 */
+  degrade_reason: string | null;
 }

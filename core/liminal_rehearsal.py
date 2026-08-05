@@ -58,12 +58,37 @@ def _complexity_floor() -> float:
 
 
 def should_rehearse(complexity: float, tools: Optional[List[Dict[str, Any]]]) -> bool:
-    """预演触发判定:关/强制/auto(复杂度门槛 + 有工具可调)。"""
+    """预演触发判定：**相位闸门** + 关/强制/auto（复杂度门槛 + 有工具可调）。
+
+    相位闸门为什么排在成本闸门之前
+    ------------------------------
+    ``in_deliberation_window()`` 判的是「现在做推演还成不成立」，其余几项判的是
+    「值不值得做」。前者是**语义前提**：一旦主体已经落手（MANIFEST），"在动手前
+    先在沙盘里推演一遍"这句话本身就不再有意义，再便宜也不该做。所以
+    ``GALAXY_LIMINAL_REHEARSAL=1``（强制）也**不能**越过它——强制的含义是"凡是
+    有工具就推演"，不是"连窗口关了也推演"。窗口关闭时闸门会留一条 warning，
+    不会静默。
+
+    没有在场运行时（直接调 OpenClawd、ambient 回路、测试裸跑）时闸门放行——
+    那种情形根本没有生命周期可闸，判否会把预演静默关掉。详见
+    :func:`core.liminal_activity.in_deliberation_window`。
+    """
     mode = rehearsal_mode()
     if mode in ("0", "false", "no", "off"):
         return False
     if not tools:
         return False
+
+    # 相位闸门。import 放在函数内：本模块被 openclawd 惰性 import，而
+    # liminal_activity 只依赖 contextvars/logging，放这里不引入任何加载代价。
+    try:
+        from core.liminal_activity import in_deliberation_window
+
+        if not in_deliberation_window():
+            return False
+    except Exception:  # noqa: BLE001 — 闸门本身故障时不该反过来禁掉预演
+        logger.debug("相位闸门判定失败，按放行处理", exc_info=True)
+
     if mode in ("1", "true", "yes", "on", "always"):
         return True
     return complexity >= _complexity_floor()
@@ -193,12 +218,23 @@ class RehearsalOutcome:
 
 
 def n_candidates() -> int:
-    """多方案模拟的候选数(选择模式/做各种决策并模拟)。默认 1 = 单方案(旧行为,零变化);
-    GALAXY_REHEARSAL_CANDIDATES=N(2..5)开启"生成多策略 → 各自沙盘模拟 → 排名选优"。"""
+    """多方案模拟的候选数(选择模式/做各种决策并模拟)。
+
+    **默认 2**（此前是 1）。改默认的理由不是"多点更好"，而是 1 会让阈限态的可视
+    内容整条链路失效：``candidate_paths`` / ``committed_path`` 只在多候选分支里产出
+    （见 openclawd 的 ``_ncand > 1`` 判断），默认 1 时 ``simulation_summary`` 事件
+    **从不发出**，面板即便订阅了也永远收不到东西——那等于接了一根没有信号的线。
+
+    2 是"能看见权衡"的最小值：有两条候选才谈得上"在评估多个 vs 已提交哪个"。
+    代价是复杂任务多跑一轮沙盘模拟（模拟器/裁判走路由级联的便宜档，不占本地主脑）。
+
+    GALAXY_REHEARSAL_CANDIDATES=1 可退回单方案；2..5 按需调高。整条预演仍受
+    GALAXY_LIMINAL_REHEARSAL 与复杂度门槛把关——简单任务本来就不进这条路径。
+    """
     try:
-        return max(1, min(5, int(os.environ.get("GALAXY_REHEARSAL_CANDIDATES", "1"))))
+        return max(1, min(5, int(os.environ.get("GALAXY_REHEARSAL_CANDIDATES", "2"))))
     except (TypeError, ValueError):
-        return 1
+        return 2
 
 
 @dataclass

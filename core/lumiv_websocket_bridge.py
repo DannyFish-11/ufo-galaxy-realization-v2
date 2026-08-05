@@ -109,6 +109,12 @@ class GalaxyPresenceBridge:
     _ambient_rationale: str = ""
     _ambient_ts: float = 0.0
 
+    # 阈限态的内容：过渡里正在干嘛 + 沙盘推演摘要。
+    # 由 RuntimeSession 登记（note_liminal_activity），经 continuum.state 的 200ms
+    # tick 送到这里。此前阈限相位在面板上只有一个空标签，就是因为这两项没有链路。
+    _liminal_activity: str = "none"
+    _liminal_simulation: Optional[Dict[str, Any]] = None
+
     # 桥接已启动
     _started: bool = False
 
@@ -152,6 +158,8 @@ class GalaxyPresenceBridge:
             # 订阅自发注意力事件 → 面板在场栏实时显示"在看/在听 + 决策理由"。
             bus.subscribe("ambient.observed", self._on_ambient_observed)
             bus.subscribe("ambient.decision", self._on_ambient_decision)
+            # 阈限内容：RuntimeSession 的 200ms tick 把「正在推演什么」带上来。
+            bus.subscribe("continuum.state", self._on_continuum_state)
 
             # 推代替拉:通配订阅全部状态事件(None=wildcard)。任何影响面板数据的
             # 事件(设备/任务/技能/mesh/模型…)发生时,防抖后把【整份 panel feed】
@@ -207,10 +215,89 @@ class GalaxyPresenceBridge:
             posture = resolve_phase_posture(effective_phase)
         return posture.to_dict()
 
+    def _render_payload(self, effective_phase: str) -> Dict[str, Any]:
+        """广播用的**忠实**渲染契约（见 core.phase_contract.RenderPosture）。
+
+        与上面的 ``_posture_payload`` 并存而不是取代它：那份是一维遗留投影，既有
+        覆盖层 presence_motion.js 按它的三个锚点调过参；这份是双轴契约，新代码
+        应当消费这一份。两份同时广播的成本只是几十字节。
+
+        主轴（lifecycle）用 ``effective_phase`` —— 它就是桥一路维护的 TriState
+        语义（且已含"说话地板"修正：TTS 还在播时 static 会被报成 liminal）。
+        副轴、表达参数、连续量由 RenderPosture 自己从 ContinuumState 读。
+
+        阈限内容（在推演什么）来自 ``continuum.state`` tick 带上来的字段 ——
+        那是 RuntimeSession 登记的，见 desktop_presence_runtime.note_liminal_activity。
+        """
+        from core.phase_contract import SimulationSummary, resolve_render_posture
+
+        # 桥内部用 "static" 表示静息，契约主轴用 "silent"（TriState 的词汇）。
+        life = "silent" if effective_phase == "static" else effective_phase
+
+        # 一致性守卫：阈限活动只在阈限相位里成立。
+        #
+        # tick 每 200ms 才推一次，主体已经进 MANIFEST 而下一拍还没到时，这里会
+        # 残留上一拍的 "rehearsing"，广播出去就是 lifecycle=manifest 且
+        # activity=rehearsing 这种自相矛盾的帧——本文件已经为同类问题栽过跟头
+        # （见 _posture_payload 的注释："相位说 liminal、姿态说 static"）。
+        # 摘要不跟着清：进表达期后面板仍要能显示"按哪条候选提交的"，那是结果不是活动。
+        activity = self._liminal_activity if life == "liminal" else "none"
+
+        sim = None
+        raw = self._liminal_simulation
+        if raw:
+            paths = raw.get("candidate_paths") or []
+            committed = raw.get("committed_path")
+            sim = SimulationSummary(
+                is_active=bool(raw.get("is_active", False)),
+                simulation_kind=str(raw.get("simulation_kind", "none") or "none"),
+                candidate_paths=tuple(str(p) for p in paths),
+                committed_path=committed,
+                is_committed=committed is not None,
+                step_count=int(raw.get("step_count", 0) or 0),
+                scenario_label=raw.get("scenario_label"),
+            )
+        return resolve_render_posture(
+            life,
+            liminal_activity=activity,
+            simulation=sim,
+        ).to_dict()
+
+    def _on_continuum_state(self, event: Any) -> None:
+        """吸收 ``continuum.state`` tick 里的阈限内容。
+
+        只取 ``liminal_activity`` / ``simulation`` 两项。这条 tick 里的其它字段
+        （presence_intensity、coherence 等）刻意**不取**：它们的权威来源是
+        ContinuumState 本身，``RenderPosture`` 已经直接从那里读，从这里再抄一份
+        只会制造两个可能不一致的副本。
+
+        摘要**不因缺席而清空**：tick 在纯思考期不带 simulation 字段，若那时把
+        缓存抹掉，「刚才推演了哪几条候选」在进入表达期之前就消失了。真正的清空
+        由 RuntimeSession 回到 SILENT 时驱动（那一拍 tick 已经停了，靠下面的
+        相位回落兜底）。
+        """
+        try:
+            payload = getattr(event, "payload", None)
+            if not isinstance(payload, dict):
+                payload = event if isinstance(event, dict) else {}
+            act = payload.get("liminal_activity")
+            if isinstance(act, str) and act in ("none", "thinking", "rehearsing"):
+                self._liminal_activity = act
+            sim = payload.get("simulation")
+            if isinstance(sim, dict):
+                self._liminal_simulation = sim
+        except Exception:  # noqa: BLE001 — 可见性绝不该拖垮桥
+            logger.debug("_on_continuum_state failed (non-fatal)", exc_info=True)
+
     def _on_phase_silent(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "static"
         self._apply_posture("static")
         self._intent = 0.0
+        # 主体回到静息：阈限内容随之归零。这里是它唯一的清空点 ——
+        # continuum tick 在 SILENT 时已经停了，不会再送 liminal_activity="none" 过来，
+        # 不在这清就会把上一次请求的候选路径一直挂到下一次请求。
+        self._liminal_activity = "none"
+        self._liminal_simulation = None
         _bt = asyncio.create_task(self._broadcast_state())
         _BACKGROUND_TASKS.add(_bt)
         _bt.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -537,6 +624,12 @@ class GalaxyPresenceBridge:
                 # 两者刻意都给：前者是渲染直接用的，后者是判断"它现在离翻档有多近"
                 # 的依据。只给前者的话，说话期的地板会把倾向信息盖掉。
                 "posture": self._posture_payload(_phase),
+                # 忠实契约（core.phase_contract.RenderPosture）。与上面的 posture
+                # 并存：那份是一维遗留投影，覆盖层 presence_motion.js 按它调过参；
+                # 这份是双轴 —— 主轴 lifecycle（用户能感知的节奏）+ 副轴 continuum
+                # 四相（含 receding 返回弧），外加阈限态的可视内容（在推演哪几条
+                # 候选、提交了哪条）。新代码应当消费这一份。
+                "render": self._render_payload(_phase),
                 # 自发注意力最近一拍（面板在场栏展示"在看/在听 + 决策"）。
                 "ambient": {
                     "seeing": self._ambient_seeing,
