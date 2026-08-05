@@ -110,22 +110,6 @@ def _set_cache(key: str, result: Dict):
         "expires_at": now + timedelta(seconds=CACHE_TTL)
     }
 
-# AgentDock 工具调用
-async def call_agentdock_tool(tool_name: str, params: Dict) -> Dict:
-    """调用 AgentDock MCP 工具"""
-    try:
-        url = f"{AGENTDOCK_URL}/tools/{tool_name}"
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(url, json=params)
-            response.raise_for_status()
-        
-        return response.json()
-    
-    except Exception as e:
-        logger.error(f"AgentDock 工具调用失败: {e}")
-        raise
-
 # AgentCPM-Explore 深度搜索
 async def deep_search(task_id: str, query: str, max_turns: int, tools: List[str],
                       system_prompt: Optional[str] = None):

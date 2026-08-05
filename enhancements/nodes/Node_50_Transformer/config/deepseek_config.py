@@ -1,7 +1,6 @@
 # DeepSeek API 配置 (Node 50)
 # 密钥通过环境变量 DEEPSEEK_API_KEY 提供
 
-import json
 import os
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -10,27 +9,3 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 DEEPSEEK_MODEL_VISION = "deepseek-vl-v1.5"
 # 使用 DeepSeek-Coder 或 DeepSeek-Chat 进行逻辑推理
 DEEPSEEK_MODEL_LOGIC = "deepseek-chat"
-
-# 这是一个示例函数，演示如何使用 DeepSeek API
-def analyze_desktop_image(image_path: str, prompt: str) -> str:
-    """
-    模拟调用 DeepSeek-Vision 分析桌面截图。
-    在实际 Node 50 代码中，需要使用 requests 或 openai 库进行 API 调用。
-    """
-    print(f"[Node 50/DeepSeek] Analyzing image: {image_path} with prompt: '{prompt}'")
-
-    # 模拟 API 调用和返回结果
-    if "浏览器" in prompt:
-        return json.dumps({
-            "action": "click",
-            "target": "browser_icon",
-            "coordinates": [100, 500] # 模拟返回的坐标
-        })
-    elif "极客松" in prompt:
-        return json.dumps({
-            "action": "type",
-            "target": "search_bar",
-            "text": "极客松 Galaxy"
-        })
-
-    return json.dumps({"action": "none", "reason": "Could not identify target."})

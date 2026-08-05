@@ -13,7 +13,7 @@ Stale Lock Reaper（过期锁清理器）是 Node 00 的增强模块，用于防
 
 ## 集成方法
 
-### 方法 1：修改 main.py（推荐）
+### 修改 main.py（推荐）
 
 在 `main.py` 中添加以下代码：
 
@@ -51,25 +51,6 @@ async def lifespan(app: FastAPI):
     yield
     
     # 停止 Reaper
-    await reaper.stop()
-    logger.info("Node 00 shutdown complete")
-```
-
-### 方法 2：使用辅助函数
-
-```python
-from stale_lock_reaper import integrate_reaper
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting Node 00: State Machine & Lock Manager")
-    
-    # 一行集成
-    reaper = integrate_reaper(app, store)
-    await reaper.start()
-    
-    yield
-    
     await reaper.stop()
     logger.info("Node 00 shutdown complete")
 ```

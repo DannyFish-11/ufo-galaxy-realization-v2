@@ -121,6 +121,28 @@ class TestExemptions:
         assert cw._is_exempt("galaxy_gateway/routes/android.py", "handle_push")
         assert not cw._is_exempt("core/desktop_presence_runtime.py", "halt_ambient_presence")
 
+    def test_event_emitter_registration_is_recognised(self, tmp_path):
+        """``@emitter.on("事件名")`` 与 ``@app.get(...)`` 是同一个结构事实。
+
+        pyee / aiortc / python-socketio 都用 ``.on()`` 注册回调,调用方是框架,
+        按名字静态永远找不到。实测:``nodes/Node_95_WebRTC_Receiver/main.py`` 的
+        ``@pc.on("iceconnectionstatechange")`` 一度被报成未接线。
+        """
+        src = (
+            "def setup(pc):\n"
+            '    @pc.on("iceconnectionstatechange")\n'
+            "    async def on_ice_state():\n"
+            "        return 1\n"
+            "\n"
+            "    async def plain_helper():\n"
+            "        return 2\n"
+        )
+        defs = _write(tmp_path, "nodes/webrtc.py", src)
+        definitions, _ = cw.collect_definitions([defs], tmp_path)
+        assert "on_ice_state" not in definitions, "被 @pc.on 注册的回调不该算未接线"
+        # 同一个函数里**没**带注册装饰器的,照样要报得出来 —— 判据是结构不是位置。
+        assert "plain_helper" in definitions
+
     def test_exempt_names_all_carry_a_reason(self):
         """豁免必须写理由 —— 没理由的豁免下次没人敢删,清单只会越来越长。"""
         for name, reason in cw._EXEMPT_NAMES.items():

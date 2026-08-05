@@ -241,6 +241,11 @@ _REGISTRAR_ATTRS = frozenset(
         "on_event",
         "route",
         "app",  # celery/click 之类的 @something.app(...)
+        # 事件发射器的通用注册式:@emitter.on("事件名")。pyee / aiortc(RTCPeerConnection)
+        # / python-socketio 都是这个写法,与 FastAPI 的 @app.get 是同一个结构事实 ——
+        # 调用方是框架,按名字静态找不到。本仓 nodes/Node_95_WebRTC_Receiver 的
+        # @pc.on("iceconnectionstatechange") 此前就被误报成未接线。
+        "on",
     }
 )
 

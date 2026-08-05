@@ -18,13 +18,7 @@ The facade runs as a thin FastAPI service (or can be mounted as a router)
 that exposes the unified contract on the northbound and calls the actual
 node's localhost endpoints on the southbound.
 
-Usage (standalone service)::
-
-    from nodes.common.node_facade import create_facade_app
-    app = create_facade_app()  # mounts all 5 node facades
-    uvicorn.run(app, port=8100)
-
-Usage (integrated)::
+Usage::
 
     from nodes.common.node_facade import ADBFacade, BLEFacade
     router = APIRouter()
@@ -32,9 +26,6 @@ Usage (integrated)::
     BLEFacade(router, base_url="http://localhost:8038")
 """
 from __future__ import annotations
-
-from fastapi import FastAPI  # auto: missing import
-
 
 import asyncio
 import logging
@@ -889,21 +880,3 @@ def mount_all_facades(prefix: str = "/facade") -> APIRouter:
 
     logger.info("Mounted %d node facades under %s", len(_FACADE_CLASSES), prefix)
     return router
-
-
-def create_facade_app() -> "FastAPI":
-    """Create a standalone FastAPI app with all facades."""
-    from fastapi import FastAPI
-
-    app = FastAPI(title="Galaxy Unified Node Facade", version="1.1.0")
-    app.include_router(mount_all_facades())
-
-    @app.get("/health")
-    async def health() -> Dict[str, str]:
-        return {
-            "status": "ok",
-            "facades": [name for name, _, _ in _FACADE_CLASSES],
-            "count": len(_FACADE_CLASSES),
-        }
-
-    return app
