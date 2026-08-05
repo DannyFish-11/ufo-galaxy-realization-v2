@@ -17,8 +17,11 @@
 
 from __future__ import annotations
 
+import atexit
 import json
+import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -364,12 +367,40 @@ def test_cli_exits_nonzero_when_a_module_goes_missing():
     src = REPO_ROOT / "launcher" / "shell.py"
     bak = REPO_ROOT / "launcher" / "_shell_doctor_probe.bak"
     shutil.move(str(src), str(bak))
+
+    # try/finally 挡不住**信号**。跑测试的 shell 一超时被 SIGTERM,子进程 pytest
+    # 跟着没了,finally 一行都不执行 —— 树里留下 .bak,而 launcher/shell.py 不见了。
+    # 实测发生过一次,随后的 `git add -A` 把这个状态提交了进去(git 记成一次
+    # rename),一个真实模块就这么从提交里消失了。
+    #
+    # 三层兜底,各挡各的:
+    #   finally      —— 正常路径与断言失败
+    #   atexit       —— 解释器正常退出前(含 pytest 内部中断)
+    #   SIGTERM/INT  —— 被外部打断(超时、Ctrl-C、CI 取消)
+    # SIGKILL 谁也挡不住,由 conftest 开跑前的自愈兜住。
+    def _restore(*_args):
+        if bak.exists() and not src.exists():
+            shutil.move(str(bak), str(src))
+
+    atexit.register(_restore)
+    _prev_handlers = {}
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            _prev_handlers[_sig] = signal.signal(_sig, lambda s, f: (_restore(), os._exit(128 + s)))
+        except (ValueError, OSError):
+            pass  # 非主线程注册不了信号 —— 那就靠另外两层
+
     try:
         r = _run_doctor_cli()
         assert r.returncode == EXIT_DEPENDENCY, f"该以 {EXIT_DEPENDENCY} 退出，实际 {r.returncode}"
         assert "✗" in r.stdout or "模块齐全" in r.stdout
     finally:
-        shutil.move(str(bak), str(src))
+        _restore()
+        for _sig, _handler in _prev_handlers.items():
+            try:
+                signal.signal(_sig, _handler)
+            except (ValueError, OSError):
+                pass
     # 恢复后必须重新变绿 —— 证明上面的红是那次挪动造成的，不是别的
     assert _run_doctor_cli().returncode == EXIT_OK
 
