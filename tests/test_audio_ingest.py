@@ -14,6 +14,12 @@ from core.multimodal.audio_ingest import AudioIngestConfig, AudioIngestPipeline
 from core.multimodal.signal_quality import QualityFlag, SignalQuality
 from core.multimodal.vad import VADConfig, VADState, VoiceActivityDetector
 
+# 涉及 VAD 的用例一律显式 use_webrtc=False：它们用的信号是 np.ones()*0.5，
+# 一条**直流常量线**，不是音频。webrtcvad 会正确地判它"不是语音"，而这些用例
+# 想测的是能量路径的机制（连续帧确认、speaking_ratio 累积、reset）。
+# 同样的隐式依赖曾让它们在装了 webrtcvad 的机器上全线变红而 CI 一直绿。
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -54,14 +60,14 @@ class TestVoiceActivityDetector:
         assert state.energy < 1e-6
 
     def test_loud_signal_triggers_speech_after_min_frames(self):
-        config = VADConfig(energy_threshold=0.01, min_speech_frames=1)
+        config = VADConfig(use_webrtc=False, energy_threshold=0.01, min_speech_frames=1)
         vad = VoiceActivityDetector(config=config)
         state = vad.process_frame(_make_loud())
         assert state.is_speaking
         assert state.energy > 0.1
 
     def test_requires_consecutive_frames_for_speech(self):
-        config = VADConfig(energy_threshold=0.01, min_speech_frames=3)
+        config = VADConfig(use_webrtc=False, energy_threshold=0.01, min_speech_frames=3)
         vad = VoiceActivityDetector(config=config)
         # Only 2 frames — should not yet confirm speech
         vad.process_frame(_make_loud())
@@ -72,7 +78,7 @@ class TestVoiceActivityDetector:
         assert state.is_speaking
 
     def test_speaking_ratio_increases_with_activity(self):
-        config = VADConfig(energy_threshold=0.01, min_speech_frames=1, window_duration_ms=300)
+        config = VADConfig(use_webrtc=False, energy_threshold=0.01, min_speech_frames=1, window_duration_ms=300)
         vad = VoiceActivityDetector(config=config)
         for _ in range(10):
             vad.process_frame(_make_loud())
@@ -87,7 +93,7 @@ class TestVoiceActivityDetector:
         assert state.speaking_ratio == 0.0
 
     def test_pause_density_increases_with_alternation(self):
-        config = VADConfig(energy_threshold=0.01, min_speech_frames=1)
+        config = VADConfig(use_webrtc=False, energy_threshold=0.01, min_speech_frames=1)
         vad = VoiceActivityDetector(config=config)
         for _ in range(4):
             vad.process_frame(_make_loud())
@@ -96,7 +102,7 @@ class TestVoiceActivityDetector:
         assert state.pause_density > 0.0
 
     def test_reset_clears_state(self):
-        config = VADConfig(energy_threshold=0.01, min_speech_frames=1)
+        config = VADConfig(use_webrtc=False, energy_threshold=0.01, min_speech_frames=1)
         vad = VoiceActivityDetector(config=config)
         for _ in range(5):
             vad.process_frame(_make_loud())
@@ -225,7 +231,7 @@ class TestAudioIngestPipeline:
     @pytest.mark.asyncio
     async def test_multiple_chunks_accumulate_speaking_ratio(self):
         pipeline = AudioIngestPipeline()
-        config = VADConfig(energy_threshold=0.01, min_speech_frames=1)
+        config = VADConfig(use_webrtc=False, energy_threshold=0.01, min_speech_frames=1)
         pipeline._vad = VoiceActivityDetector(config=config)
         for _ in range(10):
             await pipeline._process_chunk(_make_loud())

@@ -15,6 +15,13 @@ import numpy as np
 
 from core.multimodal.vad import VADConfig, VoiceActivityDetector
 
+# 本文件测的是**自适应能量增益**这条判据本身（噪声底怎么学、门限怎么算），
+# 与"频谱上像不像人声"无关，所以一律显式 use_webrtc=False。
+#
+# 不显式关掉的后果是真栽过的：webrtcvad 引入后这些用例**悄悄开始依赖它不存在**——
+# CI 不装 webrtcvad（requirements.txt 里是注释掉的）所以一直绿，而任何装了它的
+# 机器（开发机、真机）上全线变红。判据要测哪一条，就把哪一条钉死。
+
 
 def _chunk(amp: float, n: int = 1600) -> np.ndarray:
     """恒定幅度块:RMS == amp(便于精确控制"能量")。
@@ -49,7 +56,7 @@ def _speech_chunk(amp: float, i: int, n: int = 1600) -> np.ndarray:
 
 def test_low_gain_speech_below_fixed_threshold_now_triggers():
     # 低增益麦克风:底噪 RMS≈0.0008,语音 RMS≈0.006(< 0.01 固定阈值 → 旧 VAD 漏判)。
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1))
     for _ in range(10):
         vad.process_frame(_chunk(0.0008))  # 建立噪声底
     state = vad.process_frame(_chunk(0.006))
@@ -58,7 +65,7 @@ def test_low_gain_speech_below_fixed_threshold_now_triggers():
 
 def test_steady_low_noise_does_not_trigger():
     # 稳定低电平底噪不应被判为说话(能量未显著高于噪声底)。
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1))
     triggered = False
     for _ in range(40):
         st = vad.process_frame(_chunk(0.0015))
@@ -67,7 +74,7 @@ def test_steady_low_noise_does_not_trigger():
 
 
 def test_pure_silence_still_not_speaking():
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1))
     for _ in range(30):
         st = vad.process_frame(np.zeros(1600, dtype=np.float32))
         assert not st.is_speaking
@@ -75,14 +82,14 @@ def test_pure_silence_still_not_speaking():
 
 def test_loud_speech_still_triggers_via_fast_path():
     # 响亮语音仍走固定阈值快路径(与既有行为一致)。
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1))
     state = vad.process_frame(_chunk(0.3))
     assert state.is_speaking
 
 
 def test_adaptive_can_be_disabled_via_config():
     # 关掉自适应 → 退回纯固定阈值:低增益语音重新漏判(证明是自适应在起作用)。
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1, adaptive=False))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1, adaptive=False))
     for _ in range(10):
         vad.process_frame(_chunk(0.0008))
     state = vad.process_frame(_chunk(0.006))
@@ -121,7 +128,7 @@ def test_sustained_speech_does_not_self_poison_noise_floor():
         (风扇/空调),恒定直流会被正确判为噪声,用它冒充语音测不出真东西。
         换成真实语音包络后实测:后 60 帧判活率 93%,Bug A 的保护完好无损。
     """
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1))
     for _ in range(20):  # 2s 静音,建立噪声底(RMS≈0.0008)
         vad.process_frame(_chunk(0.0008))
 
@@ -135,7 +142,7 @@ def test_sustained_speech_does_not_self_poison_noise_floor():
 
 def test_hangover_frames_excluded_from_noise_floor():
     """语音结束后的 hangover 帧也不应被计入噪声底(避免拖尾能量污染估计)。"""
-    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1, adaptive_hangover_frames=5))
+    vad = VoiceActivityDetector(config=VADConfig(use_webrtc=False, min_speech_frames=1, adaptive_hangover_frames=5))
     for _ in range(20):
         vad.process_frame(_chunk(0.0008))
     vad.process_frame(_chunk(0.006))  # 一帧语音,触发 hangover
