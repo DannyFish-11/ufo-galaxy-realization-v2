@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING, Any, Dict
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 # PR-11-V2: lifecycle coordinator — all ingress, state, and audit logic now
@@ -136,7 +138,7 @@ async def handle_reconciliation_signal(
 
     # 网格镜像:对账信号带的就是设备侧的运行时真相快照。这正是网格里其它节点
     # 用来消解状态分歧的输入 —— 只回给发信设备等于对账做了一半。
-    _mirror_reconciliation_signal(device_id, message)
+    mesh_mirror.mirror_reconciliation_signal(device_id, message)
 
     return {
         "version": "3.0",
@@ -150,26 +152,3 @@ async def handle_reconciliation_signal(
             else None
         ),
     }
-
-
-def _mirror_reconciliation_signal(device_id: str, message: Dict[str, Any]) -> None:
-    """把 RECONCILIATION_SIGNAL 镜像到 NATS 网格面。best-effort。"""
-    try:
-        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
-        from core.schemas.aip_v3 import ReconciliationSignalMsg  # noqa: PLC0415
-
-        payload = message.get("payload")
-        truth = message.get("source_runtime_truth") or message.get("runtime_truth")
-        mirror_to_mesh(
-            ReconciliationSignalMsg(
-                device_id=str(device_id or ""),
-                signal_kind=str(message.get("signal_kind") or message.get("kind") or ""),
-                payload=dict(payload) if isinstance(payload, dict) else {},
-                source_runtime_truth=dict(truth) if isinstance(truth, dict) else {},
-                session_id=str(message.get("session_id") or ""),
-                task_id=str(message.get("task_id") or ""),
-                trace_id=str(message.get("trace_id") or ""),
-            )
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.debug("reconciliation_signal 网格镜像跳过:%s", exc)

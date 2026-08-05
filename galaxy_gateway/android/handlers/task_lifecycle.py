@@ -18,6 +18,8 @@ from galaxy_gateway.protocol.aip_v3 import TaskStatus
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1180,8 +1182,8 @@ async def handle_task_cancel(bridge: "AndroidBridge", websocket: Any, message: D
     # 网格镜像:取消是**两条**消息 —— 请求(谁要取消、为什么)和结果(到底取消
     # 掉了没有、清理干不干净)。只发请求的话,网格看得到有人喊停,看不到停没停;
     # 而任务可能已经跑完了(task_already_completed),那跟"成功取消"是两回事。
-    _mirror_task_cancel(device_id, task_id, message)
-    _mirror_cancel_result(device_id, task_id, cancelled, reason, message)
+    mesh_mirror.mirror_task_cancel(device_id, task_id, message)
+    mesh_mirror.mirror_cancel_result(device_id, task_id, cancelled, reason, message)
 
     return MessageBuilder.task_cancel_ack(
         device_id=device_id or "",
@@ -1248,60 +1250,3 @@ async def handle_task_status(bridge: "AndroidBridge", websocket: Any, message: D
         status=status,
         correlation_id=correlation_id,
     )
-
-
-def _mirror_task_cancel(device_id: Any, task_id: Any, message: Dict[str, Any]) -> None:
-    """把 TASK_CANCEL 镜像到 NATS 网格面。best-effort。"""
-    try:
-        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
-        from core.schemas.aip_v3 import TaskCancelMsg  # noqa: PLC0415
-
-        mirror_to_mesh(
-            TaskCancelMsg(
-                device_id=str(device_id or ""),
-                task_id=str(task_id or ""),
-                force=bool(message.get("force", False)),
-                reason=str(message.get("reason") or ""),
-                session_id=str(message.get("session_id") or ""),
-                trace_id=str(message.get("trace_id") or ""),
-            )
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.debug("task_cancel 网格镜像跳过:%s", exc)
-
-
-def _mirror_cancel_result(
-    device_id: Any,
-    task_id: Any,
-    cancelled: bool,
-    reason: str,
-    message: Dict[str, Any],
-) -> None:
-    """把 CANCEL_RESULT 镜像到 NATS 网格面。best-effort。
-
-    ``cleanup_status`` 用取消链路自己给出的 reason 判定:取消成功即 ``clean``;
-    "任务已经跑完了"是 ``partial``(没什么可清理的,但也不是取消生效);其余按
-    ``failed``。这三个值下游据以区分"停住了 / 来不及了 / 停不下来"。
-    """
-    try:
-        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
-        from core.schemas.aip_v3 import CancelResultMsg  # noqa: PLC0415
-
-        if cancelled:
-            cleanup = "clean"
-        elif reason == "task_already_completed":
-            cleanup = "partial"
-        else:
-            cleanup = "failed"
-        mirror_to_mesh(
-            CancelResultMsg(
-                device_id=str(device_id or ""),
-                task_id=str(task_id or ""),
-                cancelled=bool(cancelled),
-                cleanup_status=cleanup,
-                session_id=str(message.get("session_id") or ""),
-                trace_id=str(message.get("trace_id") or ""),
-            )
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.debug("cancel_result 网格镜像跳过:%s", exc)

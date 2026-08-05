@@ -414,16 +414,15 @@ def filter_by_required_capabilities(
 
 
 def _ask_the_mesh_for(required_capabilities: Sequence[str]) -> None:
-    """本机选不出设备时,向网格广播一次 CAPABILITY_QUERY。best-effort。"""
-    try:
-        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
-        from core.schemas.aip_v3 import CapabilityQueryMsg  # noqa: PLC0415
+    """本机选不出设备时,向网格广播一次 CAPABILITY_QUERY。best-effort。
 
-        mirror_to_mesh(
-            CapabilityQueryMsg(
-                device_id="",  # 问的是整个网格,不针对某台设备
-                query_filter=",".join(str(c) for c in required_capabilities),
-            )
-        )
+    构造放在 ``galaxy_gateway.android.handlers.mesh_mirror`` —— 那里集中着全部
+    "本地事实 → AIP v3 消息"的翻译,与另外十一种消息放在一处对照,协议接没接全
+    一眼可看。
+    """
+    try:
+        from galaxy_gateway.android.handlers.mesh_mirror import mirror_capability_query  # noqa: PLC0415
+
+        mirror_capability_query(required_capabilities)
     except Exception as exc:  # pragma: no cover - 问不出去不影响本轮路由结论
         logger.debug("CAPABILITY_QUERY 网格广播跳过:%s", exc)

@@ -16,6 +16,8 @@ from galaxy_gateway.android.message_builder import MessageBuilder
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
+from galaxy_gateway.android.handlers import mesh_mirror
+
 logger = logging.getLogger(__name__)
 
 _AUTHORITY_V2 = "v2_authority"
@@ -627,7 +629,7 @@ async def handle_goal_execution(
 
     # 网格镜像:目标已被受理并派给了这台设备。网格里其它节点据此知道这个目标
     # 名花有主 —— 否则同一个目标可能被两个入口各自接一遍。
-    _mirror_goal_execution(
+    mesh_mirror.mirror_goal_execution(
         device_id=device_id,
         task_id=task_id,
         goal=response_text if response_text else goal,
@@ -1770,7 +1772,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
 
     # 网格镜像:目标的终态。GOAL_EXECUTION 已经上了网格,结果不上去的话,网格里
     # 的目标永远停在"已派发",看不出跑完没有、成没成。
-    _mirror_goal_result(
+    mesh_mirror.mirror_goal_result(
         device_id=device_id,
         task_id=task_id,
         status=status,
@@ -1781,71 +1783,3 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     )
 
     return None
-
-
-def _mirror_goal_execution(
-    *,
-    device_id: str,
-    task_id: str,
-    goal: str,
-    payload: Dict[str, Any],
-    session_id: str,
-    trace_id: str,
-) -> None:
-    """把 GOAL_EXECUTION 镜像到 NATS 网格面。best-effort。"""
-    try:
-        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
-        from core.schemas.aip_v3 import GoalExecutionMsg  # noqa: PLC0415
-
-        subtasks = payload.get("parallel_subtasks") or []
-        mirror_to_mesh(
-            GoalExecutionMsg(
-                device_id=str(device_id or ""),
-                goal=str(goal or ""),
-                params=dict(payload.get("params") or {}),
-                parallel_subtasks=[s for s in subtasks if isinstance(s, dict)],
-                source_device_id=str(payload.get("source_device_id") or device_id or ""),
-                task_id=str(task_id or ""),
-                session_id=str(session_id or ""),
-                trace_id=str(trace_id or ""),
-            )
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.debug("goal_execution 网格镜像跳过:%s", exc)
-
-
-def _mirror_goal_result(
-    *,
-    device_id: str,
-    task_id: str,
-    status: str,
-    result_text: Any,
-    payload: Dict[str, Any],
-    session_id: str,
-    trace_id: str,
-) -> None:
-    """把 GOAL_EXECUTION_RESULT 镜像到 NATS 网格面。best-effort。"""
-    try:
-        from core.aip_mesh_mirror import mirror_to_mesh  # noqa: PLC0415
-        from core.schemas.aip_v3 import GoalExecutionResultMsg  # noqa: PLC0415
-
-        try:
-            duration = int(payload.get("duration_ms") or 0)
-        except (TypeError, ValueError):
-            duration = 0
-        summary = result_text if isinstance(result_text, str) else ""
-        mirror_to_mesh(
-            GoalExecutionResultMsg(
-                device_id=str(device_id or ""),
-                status=str(status or ""),
-                result_summary=summary[:512],
-                result=result_text,
-                error=str(payload.get("error") or ""),
-                duration_ms=duration,
-                task_id=str(task_id or ""),
-                session_id=str(session_id or ""),
-                trace_id=str(trace_id or ""),
-            )
-        )
-    except Exception as exc:  # pragma: no cover
-        logger.debug("goal_execution_result 网格镜像跳过:%s", exc)
