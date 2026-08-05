@@ -66,6 +66,7 @@ logger = logging.getLogger("Galaxy.RequestAdmission")
 
 __all__ = [
     "AMBIENT_ORIGINS",
+    "mark_uninterruptible",
     "PRIORITY_AMBIENT",
     "PRIORITY_USER",
     "admission_snapshot",
@@ -187,6 +188,32 @@ async def admit_request(
         async with _signals_lock:
             _preemption_signals.pop(task_id, None)
         arbiter.release(task_id)
+
+
+def mark_uninterruptible(task_id: str) -> bool:
+    """宣告本次请求已越过最后一道等待、开始真正干活，此后不可被抢占。
+
+    为什么必须有这一步
+    ------------------
+    抢占在仲裁器那一侧只是**记账**：把受害者从 ``_running`` 划掉、让新任务顶上。它
+    不会让受害者停下来，而在本仓的真实路径上受害者往往是被**内联 await** 的（自发
+    注意力循环就是这样），从外面 cancel 等于把整条循环一起杀掉 —— 而且
+    ``CancelledError`` 继承 ``BaseException``，调用点的 ``except Exception`` 也接不住。
+
+    所以「可抢占」只能限定在**尚未开工**的那一段。实测：不做这件事时，占满之后来的
+    用户请求会"抢占成功"，而被抢的 ambient 请求照跑到底、一个 AR_001 都发不出去 ——
+    净效果就是并发悄悄超出上限一个，正是抢占本来要避免的事。
+
+    代价是诚实的：当在飞的全是已开工的任务时，新来的高优先级请求会拿到 AR_003 而不是
+    "抢占成功"。系统确实被不可中断的工作占满了，如实说比悄悄超限好。
+    """
+    try:
+        from core.orchestration.global_arbiter import get_global_arbiter
+
+        return bool(get_global_arbiter().mark_non_preemptable(task_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("标记不可抢占失败，本次请求在开工后仍可能被划走槽位: %s", exc)
+        return False
 
 
 def admission_snapshot() -> Dict[str, Any]:

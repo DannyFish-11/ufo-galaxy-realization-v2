@@ -1053,7 +1053,7 @@ class DesktopPresenceRuntime:
                 ArbiterPreemptedError,
                 ArbiterQuotaError,
             )
-            from core.request_admission import admit_request
+            from core.request_admission import admit_request, mark_uninterruptible
 
             try:
                 async with admit_request(
@@ -1082,6 +1082,11 @@ class DesktopPresenceRuntime:
                                 rsession.runtime_session_id,
                                 "preempted while waiting for the session execution lane",
                             )
+                        # 越过最后一道等待了 —— 此后不可被抢占。不做这一步的话，
+                        # 已经开工的请求仍会被仲裁器划走槽位，而它并不会因此停下来
+                        # （它是被内联 await 的，从外面 cancel 会连累整条调用链），
+                        # 净效果就是并发悄悄超出上限一个。
+                        mark_uninterruptible(rsession.runtime_session_id)
                         if _manifest_sink is not None:
                             # 首输出驱动:包装 sink 的 on_delta,第一段文本流出即进 MANIFEST。
                             # 请求结束(下面 finally)恢复原回调,绝不泄漏到请求之外。

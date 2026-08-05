@@ -317,3 +317,76 @@ def test_the_check_does_not_go_through_the_session_object():
         node.func.attr for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
     }
     assert "is_preempted" not in called, "抢占判据又绕回会话对象上的方法了"
+
+
+# ---------------------------------------------------------------------------
+# 六、可抢占窗口：只在**尚未开工**的那一段
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_marking_uninterruptible_removes_a_task_from_the_victim_pool():
+    """开工之后就不该再被选为抢占目标。
+
+    这一条由一次**真实路径复核**产生，别删：CI 与单测当时全绿，而驱动真实
+    handle_request 时发现——占满之后来的用户请求"抢占成功"了，被抢的 ambient 却
+    照跑到底、一个 AR_001 都没发出去。因为它早已越过车道那个检查点，正在 dispatch
+    里跑；仲裁器把它的槽位划走了，它并不会因此停下来。净效果就是并发悄悄超出上限
+    一个 —— 正是抢占本来要避免的事。
+
+    从外面 cancel 不是选项：受害者在真实路径上是被**内联 await** 的（自发注意力
+    循环就是这样），cancel 会连累整条循环，而且 CancelledError 继承 BaseException，
+    调用点的 except Exception 也接不住。
+    """
+    from core.request_admission import mark_uninterruptible
+
+    registry: dict = {}
+    stats = get_global_arbiter().stats()
+    limit, quota = stats["global_limit"], stats["per_origin_quota"]
+    tasks = await _fill(limit, lambda i: "ambient" if i < quota else f"origin{i // quota}", registry)
+    try:
+        # 全部宣告已开工
+        for task_id in list(registry):
+            assert mark_uninterruptible(task_id) is True
+        assert not [t for t in get_global_arbiter().list_running() if t["preemptable"]]
+
+        with pytest.raises(ArbiterNoSlotError):
+            async with admit_request("user-urgent", origin="chat"):
+                pass
+        assert not [
+            tid for tid, sig in registry.items() if sig.is_set()
+        ], "已开工的任务仍被选为抢占目标 —— 它不会停下来，上限被悄悄突破一个。"
+    finally:
+        await _drain(tasks)
+
+
+@pytest.mark.asyncio
+async def test_a_task_still_waiting_is_still_preemptable():
+    """对照组：没宣告开工的仍然可以被抢 —— 否则抢占就整个失效了。"""
+    registry: dict = {}
+    stats = get_global_arbiter().stats()
+    limit, quota = stats["global_limit"], stats["per_origin_quota"]
+    tasks = await _fill(limit, lambda i: "ambient" if i < quota else f"origin{i // quota}", registry)
+    try:
+        async with admit_request("user-urgent", origin="chat"):
+            assert [tid for tid, sig in registry.items() if sig.is_set()], "还没开工的 ambient 也抢不动了"
+    finally:
+        await _drain(tasks)
+
+
+def test_the_dispatch_path_marks_itself_uninterruptible():
+    """真实路径必须在越过车道之后宣告开工。"""
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(
+        (Path(__file__).resolve().parent.parent / "core" / "desktop_presence_runtime.py").read_text(encoding="utf-8")
+    )
+    called = {
+        (node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", ""))
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+    }
+    assert (
+        "mark_uninterruptible" in called
+    ), "越过会话车道之后没有宣告开工 —— 已经在跑的请求仍会被划走槽位却不会停下来。"
