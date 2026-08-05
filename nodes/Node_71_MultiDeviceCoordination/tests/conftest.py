@@ -2,86 +2,36 @@
 Node 71 - Test Configuration
 pytest conftest 和共享 fixtures
 
-Path setup
-----------
-Node_71 用到两个叫 ``core`` 的东西：
+为什么这里不再有 path 注入与模块预注册
+--------------------------------------
+这里原先有一整套 workaround，理由写的是"Node_71 有两个 core 包"：把仓库根和节点
+目录**都**塞进 sys.path，再用 importlib 把节点自己的 ``core/*.py`` 以 ``core.<name>``
+这个**伪造的名字**预注册进 sys.modules，好让节点内部的裸 ``from core.device_discovery``
+解析得到自己的模块而不是仓库根那个 core。
 
-- 仓库根的 ``core.device_types`` —— models/device.py 真的需要它；
-- 本节点自己的 ``core/*.py`` —— device_discovery、task_scheduler 等。
+那个"冲突"的根源是 Node_71 自己：它用裸顶层导入引用**包内**模块。这一点已经在
+上游被修好了 —— 节点的 core/ 与 models/ 全部改成了规范的相对导入
+(``from .device_discovery`` / ``from ..models.device``)。
 
-**过去**这两者靠一个把戏共存：把节点的 core 子模块按文件路径加载，塞进
-``sys.modules["core.<名字>"]``，于是节点内部的裸 ``from core.device_discovery import ...``
-也能解析。那时节点模块写的就是裸导入，这个把戏是必需的。
+改完之后，上面那套 workaround 从"补丁"变成了"毒药"：伪造的 ``core.xxx`` 名字让
+相对导入按错误的包层级解析，``..models`` 直接越过顶层包，抛
+"attempted relative import beyond top-level package"。而收尾那句
+``except Exception: pass`` 的注释写着"individual tests will fail with clear errors"
+—— 恰恰相反，它把真实原因吞掉，failure 以完全不相干的面貌出现在别处（仓库级的
+tests/test_pr_a_multi_device_runtime_wiring.py 抄了同一套写法，红出来的是一句
+``ModuleNotFoundError: No module named 'core.multi_device_coordinator_engine'``，
+那个模块名在仓库历史里从来不存在）。
 
-**现在**节点已改成相对导入（``from .device_discovery import ...``、
-``from ..models.device import ...``）—— 因为它要能被当作真包用：
-``nodes.Node_71_MultiDeviceCoordination.core.X``。裸导入在那种用法下会撞上仓库根的
-``core``，直接 ModuleNotFoundError。
-
-改成相对导入之后，上面那个把戏就**反过来坏事**了：模块被安上 ``core.<名字>`` 这个
-假名字加载，顶层包就成了 ``core``，于是 ``..models`` 越过顶层，报
-"attempted relative import beyond top-level package"。而这个异常当时被
-``except Exception: pass`` 吞掉，症状只剩下测试里一句莫名其妙的
-``No module named 'core.multi_device_coordinator_engine'``。
-
-所以这里改成：**按真实点分路径 import 一次**（不需要任何 sys.path 注入，各层
-``__init__.py`` 都在），再把同一批模块对象登记成 ``core.<名字>`` / ``models`` 别名，
-好让本目录下那五个测试文件里既有的裸 import 原样继续可用。
-
-关键是"同一批模块对象"：如果别名指向重新加载的第二份，测试拿到的 ``Device`` 类
-和引擎注册表里的就不是同一个类，isinstance 与枚举比较会静默走偏。
+Node_71 本来就是个规规矩矩的包（nodes/、Node_71…/、core/、models/、tests/ 五层
+都有 __init__.py），所以现在按**相对导入**取包内模块即可：不伪造名字、不动 sys.path、
+不吞异常。pytest 以 rootdir 为仓库根收集时，模块名就是
+``nodes.Node_71_MultiDeviceCoordination.tests.test_x``，``..core`` / ``..models``
+自然解析得到。
 
 Heavy model imports are deferred into fixture functions to keep conftest load clean.
 """
-import importlib
-import os
-import sys
 
 import pytest
-
-# ─── Path setup ──────────────────────────────────────────────────────────────
-
-_NODE71_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_REPO_ROOT = os.path.dirname(os.path.dirname(_NODE71_DIR))
-
-# 仓库根要在 sys.path 上：节点是以 ``nodes.Node_71_MultiDeviceCoordination`` 这个
-# 真实点分路径被 import 的，而 models/device.py 还要 ``from core.device_types import``。
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
-
-_N71_PKG = "nodes.Node_71_MultiDeviceCoordination"
-
-# ─── 按真实路径 import，再登记向后兼容的别名 ─────────────────────────────────
-
-# 顺序无所谓了 —— import 系统自己会按依赖拉齐；列表只是为了枚举要起别名的模块。
-_N71_CORE_MODULES = [
-    "canonical_device_view_adapter",
-    "fault_tolerance",
-    "device_discovery",
-    "state_synchronizer",
-    "task_scheduler",
-    "multi_device_coordinator_engine",
-]
-
-
-def _alias_n71_module(kind: str, mod_name: str) -> None:
-    """把 ``nodes.…​.<kind>.<mod_name>`` 同一个模块对象登记成裸 ``<kind>.<mod_name>``。"""
-    module = importlib.import_module(f"{_N71_PKG}.{kind}.{mod_name}")
-    sys.modules[f"{kind}.{mod_name}"] = module
-    setattr(sys.modules[kind], mod_name, module)
-
-
-# ``models`` 整个包也要起别名：``from models.device import X`` 会先 import 父包
-# ``models``，而仓库根那个 models/ 是空的，撞上去只会给出一个没有 device 的命名空间包。
-sys.modules["models"] = importlib.import_module(f"{_N71_PKG}.models")
-for _mod in ("device", "task"):
-    _alias_n71_module("models", _mod)
-
-# ``core`` 不能整包替换 —— models/device.py 要的 ``core.device_types`` 在仓库根那个
-# core 里。所以只登记子模块别名，和过去的做法一致。
-importlib.import_module("core")
-for _mod in _N71_CORE_MODULES:
-    _alias_n71_module("core", _mod)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures (all imports deferred to fixture body)
@@ -91,7 +41,7 @@ for _mod in _N71_CORE_MODULES:
 def _make_device(device_id, name, device_type_str, state_str="idle",
                  host="127.0.0.1", port=8080, capabilities=None,
                  location=None, resource_constraints=None):
-    from models.device import Device, DeviceType, DeviceState, Capability, ResourceConstraints
+    from ..models.device import Device, DeviceType, DeviceState, Capability, ResourceConstraints
     caps = [Capability(name=c, version="1.0") for c in (capabilities or [])]
     rc = resource_constraints or ResourceConstraints()
     return Device(
@@ -109,7 +59,7 @@ def _make_device(device_id, name, device_type_str, state_str="idle",
 
 @pytest.fixture
 def sample_device():
-    from models.device import ResourceConstraints
+    from ..models.device import ResourceConstraints
     return _make_device(
         device_id="test-device-001",
         name="Test Device",
@@ -143,7 +93,7 @@ def sample_devices():
 
 @pytest.fixture
 def device_registry(sample_devices):
-    from models.device import DeviceRegistry
+    from ..models.device import DeviceRegistry
     registry = DeviceRegistry()
     for device in sample_devices:
         registry.register(device)
@@ -152,7 +102,7 @@ def device_registry(sample_devices):
 
 @pytest.fixture
 def sample_task():
-    from models.task import Task, TaskType, TaskPriority, RetryPolicy
+    from ..models.task import Task, TaskType, TaskPriority, RetryPolicy
     return Task(
         task_id="task-001",
         name="Test Task",
@@ -168,7 +118,7 @@ def sample_task():
 
 @pytest.fixture
 def sample_tasks():
-    from models.task import Task, TaskType, TaskPriority
+    from ..models.task import Task, TaskType, TaskPriority
     tasks = []
     for i in range(5):
         tasks.append(Task(
@@ -184,10 +134,10 @@ def sample_tasks():
 
 @pytest.fixture
 def coordinator_config():
-    from core.multi_device_coordinator_engine import CoordinatorConfig
-    from core.device_discovery import DiscoveryConfig
-    from core.state_synchronizer import SyncConfig
-    from core.task_scheduler import SchedulerConfig
+    from ..core.multi_device_coordinator_engine import CoordinatorConfig
+    from ..core.device_discovery import DiscoveryConfig
+    from ..core.state_synchronizer import SyncConfig
+    from ..core.task_scheduler import SchedulerConfig
     return CoordinatorConfig(
         node_id="test-coordinator",
         node_name="TestCoordinator",
@@ -201,26 +151,26 @@ def coordinator_config():
 
 @pytest.fixture
 def engine(coordinator_config):
-    from core.multi_device_coordinator_engine import MultiDeviceCoordinatorEngine
+    from ..core.multi_device_coordinator_engine import MultiDeviceCoordinatorEngine
     return MultiDeviceCoordinatorEngine(coordinator_config)
 
 
 @pytest.fixture
 def circuit_breaker():
-    from core.fault_tolerance import CircuitBreaker, CircuitBreakerConfig
+    from ..core.fault_tolerance import CircuitBreaker, CircuitBreakerConfig
     config = CircuitBreakerConfig(failure_threshold=3, success_threshold=2, timeout=1.0, half_open_max_calls=2, window_size=10.0)
     return CircuitBreaker("test-cb", config)
 
 
 @pytest.fixture
 def retry_manager():
-    from core.fault_tolerance import RetryManager, RetryConfig
+    from ..core.fault_tolerance import RetryManager, RetryConfig
     config = RetryConfig(max_retries=3, base_delay=0.01, max_delay=0.1, exponential_backoff=True, jitter=False)
     return RetryManager(config)
 
 
 @pytest.fixture
 def failover_manager():
-    from core.fault_tolerance import FailoverManager, FailoverConfig
+    from ..core.fault_tolerance import FailoverManager, FailoverConfig
     config = FailoverConfig(max_failover_attempts=3, health_check_interval=1.0, recovery_timeout=2.0)
     return FailoverManager(config)

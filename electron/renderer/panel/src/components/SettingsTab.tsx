@@ -212,6 +212,11 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_VOICE_ECHO_SIM', 'GALAXY_VOICE_ECHO_TAIL_S',
     'GALAXY_VOICE_ECHO_MIN_CHARS', 'GALAXY_VOICE_ECHO_MIN_BLOCK',
     'GALAXY_AEC_TAIL_MS', 'GALAXY_AEC_MU', 'GALAXY_AEC_MAX_DELAY_MS', 'GALAXY_AEC_DTD_MARGIN_DB',
+    // 残余回声抑制(第二级,治非线性回声)+ 双讲滞后保持 + 舒适噪声
+    'GALAXY_AEC_RES', 'GALAXY_AEC_RES_OVER', 'GALAXY_AEC_RES_FLOOR_DB',
+    'GALAXY_AEC_RES_DT_FLOOR_DB', 'GALAXY_AEC_DTD_HANGOVER', 'GALAXY_AEC_COMFORT_NOISE',
+    // 文字与语音同刻(三态 auto/1/0)
+    'GALAXY_TEXT_VOICE_LOCKSTEP',
     'GALAXY_REALTIME_PROVIDER', 'GALAXY_REALTIME_MODEL', 'GALAXY_REALTIME_VOICE', 'GALAXY_REALTIME_URL',
     // 本地全模态 server 的 realtime 路径。B 档原生就绪且没配云端 key 时,双工会自动指向
     // 本地 server 的这个路径试一次流式;server 路径不是默认 /v1/realtime 时在这里改。
@@ -222,12 +227,39 @@ const CONFIG_KEYS: Record<string, string[]> = {
     // 密钥项。后端 classify_key() 按 _API_KEY 后缀判为 secret,会走 set_secret() 落
     // runtime/secrets.env,不明文进 .env —— 所以在这里列出来是安全的。
     'GALAXY_REALTIME_API_KEY',
+    // ── 语音/感知栈的其余配置键(2026-08-04 一次性登记齐)────────────────────
+    // 前两轮补登记都是发现一处补一处(先 21 个语音开关、再 5 个 B 档模态键),
+    // 每次都还有剩。根因是后端那道守卫的模块清单是手工维护的,没写进清单的模块
+    // 就静默不受保护。那份清单已改成按目录模式派生(core/tts/*.py、core/asr/*.py、
+    // core/perception/*.py …),派生后一次扫出 36 个,除部署标记 GALAXY_ENV 外全在这里。
+    // 桌面操作闭环
+    'GALAXY_COMPUTER_USE', 'GALAXY_CU_MAX_STEPS', 'GALAXY_CU_SETTLE_S',
+    // 连续感知
+    'GALAXY_DESKTOP_PERCEPTION_TTL', 'GALAXY_PERCEPTION_PRIVACY_DEFAULT',
+    'GALAXY_PROACTIVE_SCREEN', 'GALAXY_AMBIENT_SHARE_SESSION', 'GALAXY_VOICE_DIAG_S',
+    // 回话时序(文字与语音同刻的细调)
+    'GALAXY_CHAT_TIMEOUT_S', 'GALAXY_LOCKSTEP_CPS', 'GALAXY_LOCKSTEP_GRACE_S',
+    'GALAXY_LOCKSTEP_STALL_S', 'GALAXY_LOCKSTEP_DRAIN_S',
+    // 语音识别
+    'GALAXY_ASR_INITIAL_PROMPT', 'GALAXY_SENSEVOICE_MODEL',
+    // 语音合成:Edge / Piper / Kokoro / Melo / IndexTTS-2
+    'GALAXY_EDGE_TTS_TIMEOUT_S', 'GALAXY_PIPER_MODEL',
+    'GALAXY_KOKORO_MODEL', 'GALAXY_KOKORO_VOICE', 'GALAXY_KOKORO_LANG', 'GALAXY_KOKORO_AUTOFETCH',
+    'GALAXY_MELO_LANG', 'GALAXY_MELO_SPEAKER', 'GALAXY_MELO_SPEED', 'GALAXY_MELO_DEVICE',
+    'GALAXY_INDEXTTS_REF_AUDIO', 'GALAXY_INDEXTTS_AUTOFETCH',
+    'GALAXY_INDEXTTS_EMO_AUDIO', 'GALAXY_INDEXTTS_EMO_TEXT', 'GALAXY_INDEXTTS_USE_EMO_TEXT',
+    'GALAXY_INDEXTTS_EMO_ALPHA', 'GALAXY_INDEXTTS_FP16',
+    // 启动器侧的语音总闸与桌面外壳(launcher/services.py)。GALAXY_VOICE 决定语音
+    // 循环起不起来 —— 整条语音链路的开关都在面板上,唯独最上面那个总闸此前只能手改 .env。
+    'GALAXY_VOICE', 'GALAXY_WHISPER_MODEL', 'GALAXY_DESKTOP_SHELL',
   ],
   ports: [
     'GATEWAY_PORT', 'UFO_NODE_HOST', 'NODE_92_URL', 'NODE_45_URL', 'NODE_33_URL',
     'NODE_71_URL', 'NODE_71_HOST', 'NODE_95_URL', 'NODE_97_URL', 'NODE09_SANDBOX_URL',
     'OLLAMA_URL', 'QDRANT_URL', 'REDIS_URL', 'SECRETVAULT_URL', 'MAIN_REPO_URL',
     'MQTT_PORT',
+    // 节点起停(launcher/node_startup.py)
+    'GALAXY_API_HOST', 'GALAXY_NODE_HEALTH_RETRIES',
   ],
   auth: [
     'GALAXY_AUTH_ENABLED', 'GALAXY_API_TOKEN', 'GALAXY_API_TOKENS',
@@ -255,6 +287,9 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_DATA_DIR', 'GALAXY_MARKET_STORE_DIR', 'GALAXY_FEATURE_FLAGS_PATH',
     'GALAXY_MASTER_BRAIN_STATE_PATH', 'CHROMA_PERSIST_DIR',
     'ANDROID_DEVICE_STATE_STORE_PATH', 'ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS',
+    // 语音模型放哪儿。与上面几项同属"东西存在哪",归 storage 而不是 behavior
+    // (behavior 里放的是这些引擎**怎么发音**的参数)。
+    'GALAXY_KOKORO_DIR', 'GALAXY_INDEXTTS_DIR',
   ],
   dev: [
     // 真 bug 修复:GALAXY_SYSTEM_MODE 此前在 mesh/dev 两个分类里重复出现——
@@ -266,10 +301,22 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_PREFLIGHT_FAIL_FAST', 'GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK',
     'GALAXY_ENTRYMODE_USE_READINESS', 'CMD_MAX_CONCURRENT', 'CONCURRENCY_GLOBAL_MAX',
     'GALAXY_MAX_CONTEXT_TOKENS', 'GALAXY_MAX_MESSAGE_SIZE',
+    // 统一启动器(main.py / launcher/*.py)。多数是从旧启动器原样搬过来的键 ——
+    // 旧启动器时代就没接进面板,这次把守卫范围扩到 launcher/ 才扫出来。
+    'GALAXY_SKIP_ELECTRON', 'GALAXY_TAURI_AUTOBUILD',
+    'GALAXY_AUTO_DOCKER', 'GALAXY_CONTAINER_RUNTIME',
+    'GALAXY_AUTO_DOCKER_DAEMON_WAIT', 'GALAXY_AUTO_DOCKER_WAIT',
+    'GALAXY_VERBOSE', 'GALAXY_STRICT_PREFLIGHT',
   ],
   network: [
     'GALAXY_ENABLE_WEBRTC_DATA_CHANNEL', 'GALAXY_TURN_URLS', 'GALAXY_HEADSCALE_URL',
-    'GALAXY_TAILSCALE_CHECK_INTERVAL', 'CORS_ALLOWED_ORIGINS',
+    'GALAXY_TAILSCALE_CHECK_INTERVAL',
+    // 模型下载源。真正决定用哪个源的是 core/hf_endpoint.py::pick_endpoint()
+    // (探测择优后写回 HF_ENDPOINT),这里配的是它的偏好起点。
+    'GALAXY_HF_ENDPOINT', 'GALAXY_HF_MIRROR',
+    // 依赖下载源(launcher/deps.py)
+    'GALAXY_PIP_INDEX',
+    'CORS_ALLOWED_ORIGINS',
     'CORS_ALLOWED_METHODS', 'CORS_ALLOWED_HEADERS',
   ],
   slo: [

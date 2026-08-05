@@ -150,9 +150,11 @@ def start_ingest_bus(
     # ── Wire audio pipeline (optional — skip if sounddevice missing) ──────
     audio_available = False
     try:
-        from core.multimodal.audio_ingest import AudioIngestPipeline
+        from core.multimodal.audio_ingest import acquire_shared_audio_pipeline
 
-        audio_pipeline = AudioIngestPipeline()
+        # 与语音循环共用同一路物理采集（见 audio_ingest 的共享说明）：
+        # 此前两边各建一个实例 → 同一个麦克风两路 InputStream。
+        audio_pipeline = acquire_shared_audio_pipeline()
         audio_pipeline.add_callback(bus.update_audio)
         _schedule_pipeline(audio_pipeline, "audio")
         # 修复(误报"已启用"):构造 AudioIngestPipeline 成功只代表 Python 对象建好了,
@@ -283,15 +285,18 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
     """周期把【桌面覆盖层】采集的屏幕/摄像头/麦克风帧从 DesktopPerceptionStore
     推进 MultimodalIngressBus —— 让主动持续感知 bus 真正“看到屏幕、看到摄像头、听到麦克风”。
 
-    - 屏幕：唯一进入连续感知的通路；带便宜的帧间变化分数（按 base64 长度变化估算，免解码）。
-    - 摄像头/麦克风：以“在场”特征态如实反映（具体特征仍由本地 cv2/sounddevice 管道补充）。
+    - 屏幕/摄像头：真帧进 bus（image_b64 + 便宜的帧间变化分数，按 base64 长度变化估算、免解码）。
+      摄像头此前只传空 VideoState“报个在场”，画面被丢在门外——常驻感知的世界里没有摄像头，
+      而状态机与模型路由都吃这份世界；现已与屏幕同款处理。
+    - 麦克风：以“在场”特征态如实反映（具体特征仍由本地 sounddevice 管道补充）。
     store 为空（未启用覆盖层感知）时各模态保持 missing，bus 自然降级，绝不抛错。
     """
     import asyncio as _asyncio
 
     try:
         from core.multimodal.audio_features import AudioState
-        from core.multimodal.perception_frame import ScreenState
+        from core.multimodal.frame_gate import FrameGate
+        from core.multimodal.perception_frame import ScreenState, SystemAudioState
         from core.multimodal.signal_quality import SignalQuality
         from core.multimodal.video_features import VideoState
         from core.perception.desktop_perception_store import get_desktop_perception_store
@@ -299,32 +304,85 @@ async def _desktop_perception_bridge_loop(bus, period_s: float) -> None:
         logger.debug("desktop perception bridge deps unavailable: %s", exc)
         return
     store = get_desktop_perception_store()
-    prev_screen_len: Optional[int] = None
+    # 采集层唯一门控（感知指纹）。此前这里用 base64 长度差估变化，把"同尺寸不同
+    # 内容"当成没变化；而注意力循环另有一套感知指纹门控 —— 同一份数据两套判据。
+    # 现统一到 frame_gate：这里算一次，消费方读帧上的 change_score/change_seq。
+    screen_gate = FrameGate()
+    cam_gate = FrameGate()
+    # 系统播放声走同一个门控实现:它同样需要"这一段跟上一段是不是同一份"的判断,
+    # 而慢节拍消费方靠 change_seq 判断"我上次看之后换过没有"。
+    sys_audio_gate = FrameGate()
+    perception_epoch = getattr(store, "epoch", None)
     while True:
         try:
             snap = store.snapshot_media()
+            # 隐私世代变更（暂停→恢复）后必须丢弃暂停前的指纹：否则恢复后的第一帧
+            # 会与"被遮住之前"那帧做差，等于让变化量泄露被遮住期间发生了什么。
+            _epoch = getattr(store, "epoch", None)
+            if _epoch != perception_epoch:
+                perception_epoch = _epoch
+                screen_gate.reset()
+                cam_gate.reset()
+                # 系统播放声比画面更敏感(等于用户正在听的一切内容),同样不得跨隐私边界
+                # 携带指纹 —— 否则恢复后的第一段会与被遮住之前那段做差。
+                sys_audio_gate.reset()
+
             scr = snap.get("screen_b64")
             if scr:
-                cur = len(scr)
-                if prev_screen_len is None:
-                    change = 1.0
-                else:
-                    change = min(1.0, abs(cur - prev_screen_len) / max(1, prev_screen_len))
-                prev_screen_len = cur
+                change = screen_gate.score(scr)
                 bus.update_screen(
                     ScreenState(
                         image_b64=scr,
                         mime=snap.get("screen_mime", "image/jpeg"),
                         change_score=change,
+                        change_seq=screen_gate.change_seq,
                         meta=snap.get("screen_meta"),
                         has_image=True,
                     ),
                     SignalQuality.ok(),
                 )
-            if snap.get("camera_b64"):
-                bus.update_video(VideoState(), SignalQuality.ok())
-            if snap.get("audio_b64"):
-                bus.update_audio(AudioState(), SignalQuality.ok())
+            cam = snap.get("camera_b64")
+            if cam:
+                # 与屏幕同款:真帧进 bus(此前只传空 VideoState 报"在场",画面被丢弃,
+                # 常驻感知的世界里永远没有摄像头),变化度走同一个门控。
+                cam_change = cam_gate.score(cam)
+                bus.update_video(
+                    VideoState(
+                        image_b64=cam,
+                        mime=snap.get("camera_mime", "image/jpeg"),
+                        change_score=cam_change,
+                        change_seq=cam_gate.change_seq,
+                        has_image=True,
+                    ),
+                    SignalQuality.ok(),
+                )
+            sys_aud = snap.get("system_audio_b64")
+            if sys_aud:
+                # 系统播放声必须进常驻感知:此前它只写进 store,只有【每次请求】那条
+                # 注入路径看得到 —— 注意力循环/三相状态机/模态路由共同消费的"世界"里
+                # 完全没有"用户此刻在听什么"这一路。与麦克风严格分槽。
+                sys_change = sys_audio_gate.score(sys_aud)
+                bus.update_system_audio(
+                    SystemAudioState(
+                        audio_b64=sys_aud,
+                        mime=snap.get("system_audio_mime", "audio/webm"),
+                        change_score=sys_change,
+                        change_seq=sys_audio_gate.change_seq,
+                        has_audio=True,
+                    ),
+                    SignalQuality.ok(),
+                )
+            if snap.get("audio_b64") and not bus.has_fresh_measured_audio():
+                # 本机特征管线活着时它才是权威:此前这里无条件写一个全零 AudioState 并
+                # 标成 OK,把管线刚算出的 energy / is_speaking 周期性覆盖成"安静"。
+                # 人体场(core/continuum/human_field.py)正是拿这几项算注意力/疲劳/意图,
+                # 于是"用户正在说话"被抹成"安静且疲劳"——凭空捏造的结论。
+                # 没有管线时只能如实报"在场但未测量":features_measured=False + degraded,
+                # 让下游能把「没测」和「测出来是 0」分开,而不是当成安静。
+                bus.update_audio(
+                    AudioState(features_measured=False),
+                    SignalQuality.degraded("shell reported microphone presence; features not measured locally"),
+                )
         except Exception as exc:  # noqa: BLE001
             logger.debug("desktop perception bridge tick error: %s", exc)
         await _asyncio.sleep(period_s)
@@ -378,6 +436,15 @@ def _emit_ingest_active(
     active_modalities = [
         name for name, available in (("audio", audio_available), ("video", video_available)) if available
     ]
+    # 麦克风采集的订阅方数量：麦克风是进程级共享的一路物理流，这个数字让运维
+    # 看得见"现在有几方在听同一条流"。异常值（0 但音频可用 / 远大于预期）正是
+    # 采集收口出问题的第一现场信号。
+    try:
+        from core.multimodal.audio_ingest import shared_audio_pipeline_refcount
+
+        _mic_subscribers = shared_audio_pipeline_refcount()
+    except Exception:  # noqa: BLE001
+        _mic_subscribers = -1  # 取不到就如实标 -1，不谎报 0
     try:
         from core.state_event_bus import StateEventType
         from core.state_event_bus import emit as _seb_emit
@@ -389,6 +456,7 @@ def _emit_ingest_active(
                 "audio_available": audio_available,
                 "video_available": video_available,
                 "modalities": active_modalities,
+                "mic_subscribers": _mic_subscribers,
             },
             runtime_session_id=runtime_session_id or "",
         )

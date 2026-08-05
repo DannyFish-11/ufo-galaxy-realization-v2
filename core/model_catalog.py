@@ -83,10 +83,11 @@ class ModelSpec:
     name: str  # 人类可读名
     desc: str  # 模态/能力说明
     caps: ModelCapability
-    source: str = "local"  # local(Ollama) | container(vLLM 容器) | cloud
+    source: str = "local"  # local(Ollama) | llama_cpp(本地 GGUF 文件) | container(vLLM) | cloud
     requires_gpu: bool = False
     size_mb_val: int = 0  # 尺寸(MB)——**本目录即 SSOT**,不再反向依赖 LocalBrainManager
     is_default: bool = False  # 默认主脑(LocalBrainManager.RECOMMENDED_MODELS['default'] 派生自此)
+    is_moe: bool = False  # MoE 架构:调度器据此尝试"注意力进显存、专家进内存"的拆分
 
     def size_mb(self) -> int:
         """尺寸(MB)——本目录自己拥有(唯一真相源);未定义返回 0。"""
@@ -205,7 +206,28 @@ def get_model(tag: str) -> Optional[ModelSpec]:
     for t, spec in _MODELS.items():
         if t.split(":")[0] == root:
             return spec
+    # 临时挂载兜底(仅本进程,不进目录/快照/状态文件——见 register_ephemeral_spec)
+    if tag in _EPHEMERAL:
+        return _EPHEMERAL[tag]
     return None
+
+
+# ── 临时挂载(验证用,绝不落库)────────────────────────────────────────────────
+# 场景:验证一个新架构(如 MoE)能否被调度器正确拆分并加载,需要一个可查询的
+# ModelSpec,但**不应**污染目录 SSOT —— 档位清单、面板选项、持久化状态都不该
+# 因为一次验证而多出一个型号。故独立存放:只有 get_model 兜底可见,
+# all_models/catalog_snapshot/choice_order 一概看不到,进程退出即消失。
+_EPHEMERAL: Dict[str, ModelSpec] = {}
+
+
+def register_ephemeral_spec(spec: ModelSpec) -> None:
+    """临时登记一个型号(仅本进程可查,不进目录、不进快照、不写状态)。"""
+    _EPHEMERAL[spec.tag] = spec
+
+
+def clear_ephemeral_specs() -> None:
+    """清空临时登记(测试收尾用)。"""
+    _EPHEMERAL.clear()
 
 
 def all_tiers() -> List[Tier]:
@@ -227,14 +249,15 @@ def tier_models(key: str) -> List[ModelSpec]:
 def choice_order() -> List[str]:
     """所有本地可选主脑 tag，按档位 A→B、档内顺序展开、去重。
 
-    取代 model_selection._CHOICE_ORDER 的硬编码。只含 source=local（Ollama 能
-    直接 pull 的）；container 源(若将来再引入)不进"主脑单选"清单。
+    取代 model_selection._CHOICE_ORDER 的硬编码。含 source=local（Ollama 能直接
+    pull 的）与 source=llama_cpp（本地 GGUF 文件，由 llama.cpp 后端加载，MoE 专家
+    卸载只在这条路上可用）；container 源(若将来再引入)不进"主脑单选"清单。
     """
     seen: set = set()
     out: List[str] = []
     for key in _TIER_KEYS:
         for spec in tier_models(key):
-            if spec.source == "local" and spec.tag not in seen:
+            if spec.source in ("local", "llama_cpp") and spec.tag not in seen:
                 seen.add(spec.tag)
                 out.append(spec.tag)
     return out

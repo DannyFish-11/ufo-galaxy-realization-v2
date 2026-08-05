@@ -35,7 +35,7 @@ if TYPE_CHECKING:  # 仅类型检查:WhisperASR 实际用时在方法内懒导�
     from core.asr import WhisperASR
 
 from .audio_features import AudioState
-from .audio_ingest import AudioIngestConfig, AudioIngestPipeline
+from .audio_ingest import AudioIngestConfig, acquire_shared_audio_pipeline, release_shared_audio_pipeline
 from .multimodal_events import (
     AudioQualityDegradedEvent,
     AudioStreamErrorEvent,
@@ -85,7 +85,7 @@ class AudioCaptureConfig:
 class AudioCaptureService:
     """High-level microphone capture service with runtime event emission.
 
-    The service owns an :class:`AudioIngestPipeline` and acts as its primary
+    The service shares the process-wide :class:`AudioIngestPipeline` and acts as a
     consumer.  It forwards audio frames to registered ASR/agent callbacks and
     emits structured :class:`MultimodalEvent` objects for observability.
 
@@ -98,8 +98,11 @@ class AudioCaptureService:
 
     def __init__(self, config: Optional[AudioCaptureConfig] = None) -> None:
         self.config = config or AudioCaptureConfig()
-        self._pipeline = AudioIngestPipeline(
-            config=AudioIngestConfig(
+        # 取【进程级共享】采集管线而不是自己再开一路 —— 麦克风只有一个，
+        # 常驻感知 bus 与本服务此前各建一个实例、各开一路 sd.InputStream。
+        # 共享后采集只发生一次，双方都往同一条流上挂回调（add_callback 本就扇出）。
+        self._pipeline = acquire_shared_audio_pipeline(
+            AudioIngestConfig(
                 sample_rate=self.config.sample_rate,
                 chunk_duration_ms=self.config.chunk_duration_ms,
                 device=self.config.device,
@@ -365,8 +368,13 @@ class AudioCaptureService:
             )
 
     async def stop(self) -> None:
-        """Stop microphone capture and await the background task."""
-        self._pipeline.stop()
+        """Stop microphone capture and await the background task.
+
+        走**引用计数**释放而不是直接 stop 管线：麦克风采集是进程级共享的，
+        直接停会把另一个订阅方（常驻感知 bus）的耳朵一起关掉 —— 表现为
+        "关掉语音循环之后，常驻感知就再也听不到声音了"。降到 0 才真正停流。
+        """
+        release_shared_audio_pipeline()
         if self._diag_task is not None:
             self._diag_task.cancel()
             self._diag_task = None

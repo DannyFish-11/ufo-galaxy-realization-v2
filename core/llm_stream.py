@@ -23,9 +23,43 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import logging
-from typing import Callable, Iterator, Optional
+import threading
+from typing import Any, Callable, Dict, Iterator, Optional
 
 logger = logging.getLogger("Galaxy.LLMStream")
+
+# ── 进程级活跃流登记 ────────────────────────────────────────────────────────
+# contextvars 只在**本请求链路内**可见,外部（可观测面/流式主干状态）拿不到
+# "现在有几路真的在流"。这里补一个进程级计数:use_stream 进出即增减,异常路径
+# 由 finally 保证注销,绝不泄漏。它是"实时流真的在跑"的**唯一可证实证据**——
+# 注意仅限本进程,跨进程看不到就是看不到（见 realtime_streaming_backbone 的
+# scope 标注),绝不把"本进程没有"报成"系统没有"。
+_registry_lock = threading.Lock()
+_active_streams: set = set()
+_stream_totals: Dict[str, int] = {"started": 0, "completed": 0}
+
+
+def _register_stream(sink: "TokenStream") -> None:
+    with _registry_lock:
+        _active_streams.add(id(sink))
+        _stream_totals["started"] += 1
+
+
+def _unregister_stream(sink: "TokenStream") -> None:
+    with _registry_lock:
+        _active_streams.discard(id(sink))
+        _stream_totals["completed"] += 1
+
+
+def stream_registry_snapshot() -> Dict[str, Any]:
+    """本进程 token 流的可观测快照（scope 明示为进程内）。"""
+    with _registry_lock:
+        return {
+            "scope": "process_local",
+            "active": len(_active_streams),
+            "started_total": _stream_totals["started"],
+            "completed_total": _stream_totals["completed"],
+        }
 
 
 class TokenStream:
@@ -93,8 +127,15 @@ def current_stream() -> Optional[TokenStream]:
 def use_stream(sink: Optional[TokenStream]) -> Iterator[None]:
     """在 with 块内把 sink 挂为当前请求的令牌流(块结束自动还原)。"""
     token = _current.set(sink)
+    if sink is not None:
+        with contextlib.suppress(Exception):
+            _register_stream(sink)
     try:
         yield
     finally:
+        # 注销必须在 finally:异常/取消路径也不能把活跃计数留成幽灵。
+        if sink is not None:
+            with contextlib.suppress(Exception):
+                _unregister_stream(sink)
         with contextlib.suppress(Exception):
             _current.reset(token)

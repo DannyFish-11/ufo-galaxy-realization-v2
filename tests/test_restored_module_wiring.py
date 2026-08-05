@@ -201,7 +201,7 @@ def test_llamacpp_load_consumes_scheduler_allocation(monkeypatch, tmp_path) -> N
     monkeypatch.setitem(sys.modules, "llama_cpp", fake_mod)
 
     class _FakeScheduler:
-        async def schedule_model(self, model_id, size_mb, requires_multimodal=False, preferred_backend=None):
+        async def schedule_model(self, model_id, size_mb, requires_multimodal=False, preferred_backend=None, **kw):
             from core.compute_scheduler import ModelAllocation
 
             return ModelAllocation(
@@ -265,7 +265,7 @@ def test_transformers_load_consumes_scheduler_allocation(monkeypatch, tmp_path) 
     monkeypatch.setitem(sys.modules, "transformers", fake_tf)
 
     class _FakeScheduler:
-        async def schedule_model(self, model_id, size_mb, requires_multimodal=False, preferred_backend=None):
+        async def schedule_model(self, model_id, size_mb, requires_multimodal=False, preferred_backend=None, **kw):
             from core.compute_scheduler import ModelAllocation
 
             captured["preferred_backend"] = preferred_backend

@@ -129,35 +129,41 @@ class TestLauncherWiring:
 
         读源码而不是靠运行:启动器要跑起来得拉起一整套服务,在单测里不现实。
         但顺序是纯文本事实,可以直接查 —— 而它恰恰是最容易在重构中被打乱的东西。
+
+        为什么按 AST 查而不是 ``src.find(字符串)``
+        --------------------------------------------
+        这一条原先找的是字面量 ``"create_websocket_routes(\\n                    self.app"``
+        —— 把**调用怎么换行、缩进几格**编进了判据。启动器重做把这段代码从
+        ``unified_launcher.py`` 搬进 ``launcher/services.py``,缩进层级变了,black 顺手
+        把它收成一行,于是那个 find 返回 -1,断言炸在"启动器没有挂兼容 WebSocket 面"
+        —— 而兼容面其实好好地挂着,顺序也仍然是对的。**报的是假警**。
+
+        假警比漏报更坏一点:它没法靠改产品代码修好(代码本来就是对的),久了就会被
+        当成噪音而被人加进忽略名单,那时它连真的顺序错乱也拦不住了。
+
+        改成按 AST 找两个调用各自的行号 —— 换行、缩进、参数怎么排都不影响,而
+        "谁先注册"这个真正要守的事实一字不差地守住。
         """
         import ast
         from pathlib import Path
 
         # 检查对象搬家了：UnifiedWebUI（挂路由的地方）已原样搬到
         # launcher/services.py；unified_launcher.py 只剩 CLI 外壳。
-        #
-        # 用 AST 而不是子串：这一条曾经写成 ``src.find("create_websocket_routes(\n"
-        # "                    self.app")``，把**缩进和换行位置**一起钉死了。搬家后
-        # 那一行缩进变浅、black 于是把它收成单行，断言就红了 —— 而顺序本身一点没变。
-        # 测试该钉的是"canonical 的调用排在兼容面的调用之前"，不是源码怎么排版。
-        # AST 还顺带把第 503 行 ``from core.api_routes import ... create_websocket_routes``
-        # 那个同名 import 排除在外：它是导入，不是调用。
-        src = (Path(__file__).resolve().parent.parent / "launcher" / "services.py").read_text(encoding="utf-8")
+        src_path = Path(__file__).resolve().parent.parent / "launcher" / "services.py"
+        tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
-        def _call_lines(func_name: str) -> list[int]:
-            tree = ast.parse(src)
-            return sorted(
-                node.lineno
-                for node in ast.walk(tree)
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == func_name
-            )
+        def _first_call_line(func_name: str) -> int | None:
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == func_name:
+                    return node.lineno
+            return None
 
-        canonical_calls = _call_lines("register_websocket_routes")
-        compat_calls = _call_lines("create_websocket_routes")
-        assert canonical_calls, "启动器没有挂 canonical 设备接入"
-        assert compat_calls, "启动器没有挂兼容 WebSocket 面(/ws/status 等会消失)"
-        assert canonical_calls[0] < compat_calls[0], (
-            f"canonical 设备接入(第 {canonical_calls[0]} 行)被排到了兼容面"
-            f"(第 {compat_calls[0]} 行)后面 —— 同一路径先注册的赢,"
-            "这会让设备重新收到 compat_ws_disabled。"
+        canonical_at = _first_call_line("register_websocket_routes")
+        compat_at = _first_call_line("create_websocket_routes")
+        assert canonical_at is not None, "启动器没有挂 canonical 设备接入"
+        assert compat_at is not None, "启动器没有挂兼容 WebSocket 面(/ws/status 等会消失)"
+        assert canonical_at < compat_at, (
+            "canonical 设备接入被排到了兼容面后面 —— 同一路径先注册的赢,"
+            f"这会让设备重新收到 compat_ws_disabled。(canonical 在第 {canonical_at} 行,"
+            f"兼容面在第 {compat_at} 行)"
         )

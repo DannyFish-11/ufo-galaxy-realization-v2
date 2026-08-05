@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading as _threading
 import time
 from dataclasses import dataclass
 from typing import AsyncIterator, Callable, List, Optional
@@ -111,6 +112,20 @@ class AudioIngestPipeline:
         self._latest_state: Optional[AudioState] = None
         self._callbacks: List[Callable[[AudioState, SignalQuality], None]] = []
         self._last_update_ts: Optional[float] = None
+        self._aec_cancelled = False  # 上一块是否真的过了回声消除(而非旁通)
+        self._aec_db = 0.0  # 上一块的总回声抑制量(dB)
+        # 这条管线是不是已经有人在驱动了。共享实例化之后，两个订阅方（常驻感知 bus 与
+        # 语音循环的采集服务）拿到的是**同一个对象**，各自都会 await run() —— 没有这道
+        # 闸就是在同一个麦克风上又开了两路 sd.InputStream，正是共享实例要消除的那件事。
+        # 用 threading 锁而不是 asyncio 锁：两个订阅方可能跑在不同事件循环里。
+        self._run_claimed = False
+        self._run_claim_lock = _threading.Lock()
+        # 驱动**代次**。只有布尔标记不够：stop() 只清 _running，_run_claimed 要等上一轮
+        # run() 的 finally 才清。若在这个窗口里重启（用户关掉语音再打开、换档重启语音
+        # 循环），新的 run() 会看到"已被认领"而去等待，随后旧的 finally 清掉标记、
+        # 新的等待结束就返回了 —— **流从此再也没开，日志里一个字都没有**。
+        # 代次让每一轮驱动只清自己那一代的认领，与 core/native_modal.py 的 _gen 同款。
+        self._run_session = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,7 +159,40 @@ class AudioIngestPipeline:
         - sounddevice is not installed
         - microphone permission is denied
         - the device is not found
+
+        **可重入安全**：这条管线是进程级共享的，两个订阅方拿到的是同一个对象、各自都会
+        ``await run()``。只有第一个调用方真正开流；后来者不再开第二路 ``sd.InputStream``
+        （同一麦克风两个流正是共享实例要消除的那件事），而是等到流真正停下再返回 ——
+        让 ``run()`` 的语义对每个调用方都一致：**返回 = 采集已结束**。
         """
+        with self._run_claim_lock:
+            # 已被认领**且流还活着** → 有人在正常驱动，搭车即可。
+            # 已被认领但流已经停了 → 上一轮正在收尾，这次是"停了又起"，必须由我接手开流。
+            riding = self._run_claimed and self._running
+            if riding:
+                watched_session = self._run_session
+            else:
+                self._run_session += 1
+                my_session = self._run_session
+                self._run_claimed = True
+        if riding:
+            logger.debug("共享麦克风采集已有驱动方，本次 run() 不再开流，改为等待其结束")
+            while True:
+                with self._run_claim_lock:
+                    if not self._run_claimed or self._run_session != watched_session:
+                        return
+                await asyncio.sleep(0.2)
+        try:
+            await self._run_capture()
+        finally:
+            with self._run_claim_lock:
+                # 只清自己那一代：若期间已被新一轮驱动接手，清掉就等于把活着的那轮
+                # 标记成"没人驱动"，下一个 run() 会再开一路流。
+                if self._run_session == my_session:
+                    self._run_claimed = False
+
+    async def _run_capture(self) -> None:
+        """真正开流并跑采集循环。只由 :meth:`run` 的第一个调用方进入。"""
         if not _SOUNDDEVICE_AVAILABLE:
             self._quality = SignalQuality.device_unavailable()
             logger.warning("sounddevice is not available; audio ingest disabled")
@@ -284,9 +332,19 @@ class AudioIngestPipeline:
         try:
             from core.multimodal.acoustic_echo_canceller import get_echo_canceller
 
-            return get_echo_canceller(self.config.sample_rate).process(chunk)
+            aec = get_echo_canceller(self.config.sample_rate)
+            out = aec.process(chunk)
+            # 记下这一块的实况:是真消了还是旁通了、消掉多少。写进 AudioState 之后
+            # 常驻感知的"世界"里就能分清「听到的是干净的」还是「没消过」——
+            # 而不是只有一个调试路由看得见。
+            snap = aec.snapshot()
+            self._aec_cancelled = bool(out is not chunk)
+            self._aec_db = float(snap.get("total_erle_db") or snap.get("erle_db") or 0.0)
+            return out
         except Exception as exc:  # noqa: BLE001 — 上行通路绝不能因 AEC 断掉
             logger.debug("AEC 跳过(本块原样通过): %s", exc)
+            self._aec_cancelled = False
+            self._aec_db = 0.0
             return chunk
 
     async def _process_chunk(self, chunk: np.ndarray) -> None:
@@ -295,6 +353,8 @@ class AudioIngestPipeline:
         chunk = self._cancel_echo(chunk)
         vad_state = self._vad.process_frame(chunk)
         state = extract_audio_features(chunk, vad_state, self._last_update_ts, self.config.sample_rate)
+        state.echo_cancelled = self._aec_cancelled
+        state.echo_suppression_db = self._aec_db
         self._last_update_ts = now
         self._latest_state = state
         self._quality = SignalQuality.ok(freshness_ms=(time.monotonic() - now) * 1000.0)
@@ -330,3 +390,79 @@ class AudioIngestPipeline:
         finally:
             self.stop()
             await task
+
+
+# ---------------------------------------------------------------------------
+# 进程级共享采集：一路物理麦克风流，多方订阅
+# ---------------------------------------------------------------------------
+# 此前 AudioIngestPipeline 被实例化两次 —— 一次在常驻感知 bus 启动里，一次在
+# AudioCaptureService 内部（语音循环用）—— 于是**同一个麦克风开了两路
+# sd.InputStream**。两路流各自跑 AEC/特征提取，CPU 翻倍；更糟的是不同后端
+# （Windows MME/WASAPI 独占）下第二路常常直接打不开，表现为"语音循环好好的，
+# 常驻感知却永远听不到声音"（或反过来），而现场只看得到一句设备打开失败。
+#
+# 收口：本模块提供进程级共享实例，采集只发生一次，两个消费方都往它上面挂回调
+# （add_callback 本就是扇出的）。引用计数保证"一方停了不把另一方的耳朵也关掉"。
+_shared_lock = _threading.Lock()
+_shared_pipeline: Optional["AudioIngestPipeline"] = None
+_shared_refs: int = 0
+
+
+def get_shared_audio_pipeline(config: Optional[AudioIngestConfig] = None) -> "AudioIngestPipeline":
+    """取进程级共享采集管线（首个调用方的配置生效）。
+
+    后续调用方若要求了**实质不同**的采样率/设备，如实记 WARNING 并沿用既有实例：
+    一个进程只有一副耳朵，静默改配置比沿用更危险（会让先接入的一方的判据错位）。
+    """
+    global _shared_pipeline  # noqa: PLW0603
+    with _shared_lock:
+        if _shared_pipeline is None:
+            _shared_pipeline = AudioIngestPipeline(config=config)
+            return _shared_pipeline
+        if config is not None:
+            cur = _shared_pipeline.config
+            if (config.sample_rate, config.device) != (cur.sample_rate, cur.device):
+                logger.warning(
+                    "共享麦克风采集已按 sr=%s device=%s 启动，本次请求的 sr=%s device=%s 被忽略"
+                    "（一个进程只有一副耳朵；如需不同参数请显式另建实例）",
+                    cur.sample_rate,
+                    cur.device,
+                    config.sample_rate,
+                    config.device,
+                )
+        return _shared_pipeline
+
+
+def acquire_shared_audio_pipeline(config: Optional[AudioIngestConfig] = None) -> "AudioIngestPipeline":
+    """取共享管线并 +1 引用（与 release_shared_audio_pipeline 配对）。"""
+    global _shared_refs  # noqa: PLW0603
+    pipeline = get_shared_audio_pipeline(config)
+    with _shared_lock:
+        _shared_refs += 1
+    return pipeline
+
+
+def release_shared_audio_pipeline() -> None:
+    """释放一次引用；降到 0 才真正停流（否则会把另一方的耳朵一起关掉）。"""
+    global _shared_refs  # noqa: PLW0603
+    with _shared_lock:
+        if _shared_refs > 0:
+            _shared_refs -= 1
+        if _shared_refs > 0 or _shared_pipeline is None:
+            return
+        pipeline = _shared_pipeline
+    pipeline.stop()
+
+
+def shared_audio_pipeline_refcount() -> int:
+    """当前共享采集的订阅方数量（可观测/诊断用）。"""
+    with _shared_lock:
+        return _shared_refs
+
+
+def reset_shared_audio_pipeline() -> None:
+    """测试专用重置入口，生产无调用方是设计如此。"""
+    global _shared_pipeline, _shared_refs  # noqa: PLW0603
+    with _shared_lock:
+        _shared_pipeline = None
+        _shared_refs = 0

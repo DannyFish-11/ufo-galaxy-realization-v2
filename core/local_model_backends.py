@@ -21,6 +21,7 @@ import asyncio
 import gc
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -126,13 +127,58 @@ class OllamaBackend(LocalModelBackend):
             return resp.json()["message"]["content"]
 
     async def load_model(self, model_id: str) -> bool:
-        # Ollama loads on-demand automatically
+        # Ollama loads on-demand automatically —— 但**记账必须过调度器**。
+        # 此前 Ollama 是唯一绕开 ComputeScheduler 的后端，于是账本里看不到它占的
+        # 显存：gpu_model_count / max_gpu_models / release_if_needed 全部对 Ollama
+        # 失明，换档时也无从判断"该先卸谁"。这里补齐咨询-登记两步，让调度器成为
+        # **唯一资源真相源**。Ollama 自管层拆分，故这是记账型分配（见 reason）。
+        _alloc = None
+        try:
+            from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+            _alloc = await get_compute_scheduler().schedule_model(
+                model_id, self._estimate_size_mb(model_id), preferred_backend="ollama"
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "ComputeScheduler 不可用，%s 将不进资源账本 —— 显存计数偏少，" "后续分配可能过量承诺。原因：%s",
+                model_id,
+                exc,
+            )
         self._loaded_models[model_id] = True
+        if _alloc is not None:
+            try:
+                from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+                get_compute_scheduler().register_loaded(_alloc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ComputeScheduler.register_loaded 失败：%s 已加载但未登记。原因：%s", model_id, exc)
         return True
+
+    @staticmethod
+    def _estimate_size_mb(model_id: str) -> int:
+        """Ollama 标签没有本地文件可 stat，尺寸取自模型目录（SSOT）。"""
+        try:
+            from core.model_catalog import get_model  # noqa: PLC0415
+
+            spec = get_model(model_id)
+            if spec is not None:
+                size = int(spec.size_mb())
+                if size > 0:
+                    return size
+        except Exception:  # noqa: BLE001
+            pass
+        return 4000  # 目录里查不到时的保守默认
 
     async def unload_model(self, model_id: str):
         # Ollama keeps models in memory; we can only track our reference
         self._loaded_models.pop(model_id, None)
+        try:
+            from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+            get_compute_scheduler().unregister(model_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ComputeScheduler.unregister(%s) 失败(不影响卸载): %s", model_id, exc)
         # Attempt to free via Ollama API
         try:
             import httpx
@@ -210,6 +256,83 @@ class LlamaCppBackend(LocalModelBackend):
         )
         return response["choices"][0]["message"]["content"]
 
+    @staticmethod
+    def _moe_layers_total() -> int:
+        """层数口径必须与调度器拆分时用的同源，否则 override 的块索引会错位。"""
+        try:
+            from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+            return int(get_compute_scheduler().config.default_layer_count)
+        except Exception:  # noqa: BLE001
+            return 32
+
+    @staticmethod
+    def _looks_like_moe(model_id: str, model_path: str) -> bool:
+        """是否 MoE 架构。先问模型目录（权威），目录没有再看命名惯例兜底。
+
+        命名惯例：MoE 权重普遍以 ``A<激活参数>`` 或 ``moe`` 标注型号
+        （如 ``qwen3-30b-a3b``、``mixtral-8x7b``）。识别错的代价是可控的：
+        误判为 MoE 只会让调度器多算一次拆分，拆不动就自然回落常规分支。
+        """
+        try:
+            from core.model_catalog import get_model  # noqa: PLC0415
+
+            spec = get_model(model_id)
+            flag = getattr(spec, "is_moe", None) if spec is not None else None
+            if flag is not None:
+                return bool(flag)
+        except Exception:  # noqa: BLE001
+            pass
+        blob = f"{model_id} {os.path.basename(model_path or '')}".lower()
+        if "moe" in blob or "mixtral" in blob:
+            return True
+        return bool(re.search(r"\d+b[-_]?a\d+b", blob))  # 30b-a3b 这类"总参-激活参"命名
+
+    @staticmethod
+    def _apply_moe_offload(llama_kwargs: Dict[str, Any], n_cpu_moe: int, layers_total: int = 32) -> bool:
+        """把专家卸载层数翻译成 llama.cpp 入参。返回是否真的生效。
+
+        两条路，按可用性择一（llama-cpp-python 各版本入参不同，用签名探测而不是
+        版本号猜）：
+        1. ``n_cpu_moe=N`` —— 新版直接暴露，与 CLI ``--n-cpu-moe`` 同义；
+        2. ``override_tensor`` 正则 —— 把专家张量 ``blk.<i>.ffn_*_exps.weight``
+           钉到 CPU buffer；``n_cpu_moe=-1`` 表示全部层。
+        """
+        if not n_cpu_moe:
+            return False
+        try:
+            import inspect  # noqa: PLC0415
+
+            import llama_cpp  # noqa: PLC0415
+
+            params = inspect.signature(llama_cpp.Llama.__init__).parameters
+        except Exception:  # noqa: BLE001
+            return False
+
+        if "n_cpu_moe" in params:
+            llama_kwargs["n_cpu_moe"] = n_cpu_moe
+            return True
+        if "override_tensor" in params:
+            llama_kwargs["override_tensor"] = LlamaCppBackend._moe_cpu_override_pattern(n_cpu_moe, layers_total)
+            return True
+        return False
+
+    @staticmethod
+    def _moe_cpu_override_pattern(n_cpu_moe: int, layers_total: int) -> str:
+        """生成把专家张量钉到 CPU 的 override-tensor 匹配式。
+
+        llama.cpp 的 ``--override-tensor`` 语法是 ``<张量名正则>=<buffer 类型>``；
+        MoE 的专家张量名形如 ``blk.<i>.ffn_(gate|up|down)_exps.weight``。
+
+        ``n_cpu_moe`` 为 -1 或 ≥ 总层数时匹配全部层；否则按**顶部 N 层**逐个
+        列举块索引（顶部 = 索引最大的 N 个，与 ``--n-cpu-moe`` 的语义一致）。
+        """
+        if n_cpu_moe < 0 or n_cpu_moe >= layers_total:
+            return r"\.ffn_(gate|up|down)_exps\.weight=CPU"
+        first = max(0, layers_total - n_cpu_moe)
+        idx = "|".join(str(i) for i in range(first, layers_total))
+        return rf"blk\.({idx})\.ffn_(gate|up|down)_exps\.weight=CPU"
+
     async def load_model(self, model_id: str) -> bool:
         """Load a HF-downloaded GGUF model
 
@@ -234,7 +357,10 @@ class LlamaCppBackend(LocalModelBackend):
             from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
 
             _size_mb = max(1, int(os.path.getsize(model_path) / (1024 * 1024)))
-            _alloc = await get_compute_scheduler().schedule_model(model_id, _size_mb, preferred_backend="llama_cpp")
+            _is_moe = self._looks_like_moe(model_id, model_path)
+            _alloc = await get_compute_scheduler().schedule_model(
+                model_id, _size_mb, preferred_backend="llama_cpp", is_moe=_is_moe
+            )
             n_gpu_layers = _alloc.n_gpu_layers
             logger.info(
                 "ComputeScheduler allocation: %s → device=%s n_gpu_layers=%s (%s)",
@@ -257,13 +383,28 @@ class LlamaCppBackend(LocalModelBackend):
                 exc,
             )
 
+        llama_kwargs: Dict[str, Any] = {
+            "model_path": model_path,
+            "n_gpu_layers": n_gpu_layers,
+            "n_ctx": self._n_ctx,
+            "verbose": False,
+        }
+        if _alloc is not None and getattr(_alloc, "is_expert_offloaded", False):
+            # MoE 专家卸载:n_gpu_layers 管"注意力/共享层上不上 GPU",这里管
+            # "其中哪些层的专家 FFN 留在内存"——两轴正交,缺了这一步分配就白算。
+            # 三级降级(新版入参 → 张量正则 override → 都没有则只保留层数),任何
+            # 一级不可用都不影响加载,但必须响亮记录"专家卸载没生效"。
+            _applied = self._apply_moe_offload(llama_kwargs, _alloc.n_cpu_moe, self._moe_layers_total())
+            if not _applied:
+                logger.warning(
+                    "MoE 专家卸载未生效(llama-cpp-python 既不支持 n_cpu_moe 也不支持 "
+                    "override_tensor):%s 将按 n_gpu_layers=%s 加载,显存不足时可能 OOM。",
+                    model_id,
+                    n_gpu_layers,
+                )
+
         try:
-            llm = Llama(
-                model_path=model_path,
-                n_gpu_layers=n_gpu_layers,
-                n_ctx=self._n_ctx,
-                verbose=False,
-            )
+            llm = Llama(**llama_kwargs)
             self._models[model_id] = llm
             if _alloc is not None:
                 try:

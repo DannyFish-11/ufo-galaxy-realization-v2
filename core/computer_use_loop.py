@@ -172,9 +172,49 @@ async def _default_perceive() -> Optional[str]:
         return None
 
 
+async def _try_arbiter_first(action: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """先走 Windows 执行仲裁器的结构化降级链（System API → UIA → GUI）。
+
+    此前每一步动作都直奔 ``invoke_node(Node_36)`` 的坐标级 GUI 派发,把仲裁器整条
+    降级链跳过了 —— 「打开记事本」本来一个 Win32 调用就够,却被规划成点坐标,又慢又脆。
+
+    成功则返回结果；结构级都不行时返回 ``None``,由调用方回落既有节点派发路径 ——
+    今天能跑的东西不得因此跑不了。
+
+    第 4 级(VLM)靠**递归保护**排除,不靠这里传空 instruction:仲裁器会把空 instruction
+    替换成动作摘要(``instruction or action_summary``),所以传空拦不住它。真正的不变式是
+    ``ComputerUseLoop.run()`` 全程置位的那个标记。
+    """
+    try:
+        from core.windows_execution_arbiter import get_windows_arbiter
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("computer_use 取仲裁器失败,回落节点派发: %s", exc)
+        return None
+    try:
+        result = await get_windows_arbiter().execute(
+            action=action,
+            params=params,
+            device_id="local",
+            instruction="",  # 空 instruction：VLM 级即便没被排除也不会再起一个闭环
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("computer_use 仲裁器执行异常,回落节点派发: %s", exc)
+        return None
+    if getattr(result, "success", False):
+        return {"success": True, "error": "", "via": f"arbiter:{getattr(result.final_level, 'value', '')}"}
+    return None
+
+
 async def _default_act(action: str, params: Dict[str, Any], node_id: str) -> Dict[str, Any]:
     """经规范执行器派发一步动作到桌面操作节点。"""
     from core.node_invocation import InvocationSource, invoke_node
+
+    if node_id == _DEFAULT_NODE:
+        # 只对本机 Windows 桌面节点走仲裁器：仲裁器的降级链是 Windows 专用的，
+        # 派到别的节点（如安卓）上没有意义。
+        arbitrated = await _try_arbiter_first(action, params)
+        if arbitrated is not None:
+            return arbitrated
 
     node_action = _N36_ACTION.get(action, action)
     if node_id != _DEFAULT_NODE:
@@ -255,7 +295,31 @@ class ComputerUseLoop:
         return _parse_action_json(getattr(resp, "content", "") or "")
 
     async def run(self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False) -> Dict[str, Any]:
-        """跑完整个任务闭环,返回 {success, stop_reason, message, steps}。"""
+        """跑完整个任务闭环,返回 {success, stop_reason, message, steps}。
+
+        全程置位仲裁器的递归保护标记：本闭环运行期间，任何回到仲裁器的动作都不得
+        再降级到第 4 级(VLM)——那一级又会委托回本闭环，就是无限递归。标记由闭环
+        自己持有而不是只在「被仲裁器叫起来」时置位：从 REST 路由/工具直接进来的
+        那条路同样会发出动作，同样要防。
+        """
+        try:
+            from core.windows_execution_arbiter import _in_computer_use_loop
+
+            _guard_token = _in_computer_use_loop.set(True)
+        except Exception:  # noqa: BLE001 — 仲裁器不可用时闭环照常跑
+            _guard_token = None
+        try:
+            return await self._run_guarded(instruction, max_steps=max_steps, dry_run=dry_run)
+        finally:
+            if _guard_token is not None:
+                from core.windows_execution_arbiter import _in_computer_use_loop as _cv
+
+                _cv.reset(_guard_token)
+
+    async def _run_guarded(
+        self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """闭环本体。调用方必须是 :meth:`run`（它负责递归保护标记的置位与复位）。"""
         if not computer_use_enabled():
             return {
                 "success": False,

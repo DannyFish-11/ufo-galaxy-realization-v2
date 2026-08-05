@@ -2,8 +2,9 @@
 ==================================================
 桌面对话"文字又一大段往外蹦、没锁字符"的回归防护(有界锁步)。
 
-根因:锁步(GALAXY_TEXT_VOICE_LOCKSTEP,默认开)把"可见文字"押在"TTS 真的念出某句"上
-(chat.py 只在句子被 on_sentence_start 回调时才逐句上屏)。可 TTS 运行期常静默失败
+根因:锁步(GALAXY_TEXT_VOICE_LOCKSTEP,三态开关,默认 auto=本次走 TTS 即锁步)把
+"可见文字"押在"TTS 真的念出某句"上(chat.py 只在句子被 on_sentence_start 回调后
+才让该句文字上屏)。可 TTS 运行期常静默失败
 (edge 云端不可达/无音频设备)→ 一句都不会念 → 一字不上屏 → 整段憋到 done 帧一次性冒出。
 
 修复:有界锁步——喂给 TTS 但尚未露出的 delta 缓起来,若首 delta 起 GALAXY_LOCKSTEP_GRACE_S
@@ -208,3 +209,108 @@ def test_lockstep_stays_synced_when_tts_alive(monkeypatch):
     assert streamed == full, f"逐句露出的文字应覆盖全文; got {streamed!r} vs {full!r}"
     # 同步露出应是【多帧逐句】,而不是降级后的一大块补吐:至少 3 句 → ≥3 个 delta 帧。
     assert len(deltas) >= 3, f"应逐句多帧露出(未误降级为一次性补吐); got {len(deltas)} 帧"
+
+
+# ===========================================================================
+# 三态开关(auto)与平滑露出 —— 见 core/routes/chat.py 锁步段
+# ===========================================================================
+
+
+class _LiveSpeaker:
+    """TTS 正常:feed 到句末即回调 on_sentence_start(模拟真的开口念)。"""
+
+    def __init__(self, on_sentence_start=None, **_kw):
+        self.on_sentence_start = on_sentence_start
+        self._player_task = None
+        self.buf = ""
+        self.fed = []
+
+    def feed(self, t):
+        self.fed.append(t)
+        self.buf += t
+        while True:
+            idx = max(self.buf.find(p) for p in ("。", "，", ",", "!"))
+            if idx < 0:
+                break
+            sent, self.buf = self.buf[: idx + 1], self.buf[idx + 1 :]
+            if self.on_sentence_start:
+                self.on_sentence_start(sent)
+
+    def reset(self):
+        self.buf = ""
+
+    def finish(self):
+        if self.buf and self.on_sentence_start:
+            self.on_sentence_start(self.buf)
+            self.buf = ""
+
+
+def test_auto_mode_locksteps_when_response_uses_tts(monkeypatch):
+    """未设开关(auto)+ 本次走 TTS → 必须锁步:文字随语音露出,不是一上来就逐字直出。
+
+    判据用外部可观察结果:锁步下首个 delta 只可能在 speaker 回调之后出现,
+    因此流出的文字必须【落在已被念出的句子范围内】,而不是原始 token 序列。
+    """
+    monkeypatch.delenv("GALAXY_TEXT_VOICE_LOCKSTEP", raising=False)  # auto
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "5")  # 不让它降级
+    monkeypatch.setenv("GALAXY_LOCKSTEP_STALL_S", "30")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "20")
+
+    spoken = []
+
+    def _factory(**kw):
+        sp = _LiveSpeaker(**kw)
+        orig = sp.on_sentence_start
+
+        def _tap(t):
+            spoken.append(t)
+            if orig:
+                orig(t)
+
+        sp.on_sentence_start = _tap
+        return sp
+
+    tokens = ["你好", "呀,", "今天", "天气", "不错", "。"]
+    frames, full = _run_stream(monkeypatch, _factory, tokens)
+
+    assert spoken, "TTS 正常时应有句子被念出"
+    deltas = [f.get("text", "") for f in frames if f.get("type") == "delta"]
+    assert "".join(deltas) == full, f"锁步下全文仍须完整流出; got {deltas!r} vs {full!r}"
+    # auto 生效的判别式:非锁步时 delta 恒等于原始 token 序列(见 forced_off 用例断言),
+    # 锁步时文字来自"被念出的句子"经节奏切分,必然不等于 token 序列。
+    assert deltas != tokens, f"未设开关却走了直出路径 —— auto 未生效; got {deltas!r}"
+
+
+def test_forced_off_disables_lockstep_even_with_tts(monkeypatch):
+    """显式 off → 即使走 TTS 也不锁步:文字逐字直出(delta 数应与 token 数一致)。"""
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "off")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "20")
+
+    tokens = ["你好", "呀,", "今天", "天气", "不错", "。"]
+    frames, full = _run_stream(monkeypatch, lambda **k: _LiveSpeaker(**k), tokens)
+
+    deltas = [f.get("text", "") for f in frames if f.get("type") == "delta"]
+    assert "".join(deltas) == full
+    assert deltas == tokens, f"强制关闭时应逐 token 直出,未经锁步归一; got {deltas}"
+
+
+def test_lockstep_reveal_is_smooth_not_whole_sentence_dumps(monkeypatch):
+    """平滑露出:锁步下的 delta 不得是"整句砸屏"(真机抱怨的一句一句蹦)。
+
+    判据:被念出的句子远长于单个 delta —— 即一句话被拆成多个 delta 逐步流出。
+    """
+    monkeypatch.delenv("GALAXY_TEXT_VOICE_LOCKSTEP", raising=False)
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "5")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_STALL_S", "30")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_CPS", "8")  # 慢速,便于观察拆分
+    monkeypatch.setenv("GALAXY_LOCKSTEP_DRAIN_S", "3.0")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "20")
+
+    # 一整句长文本:锁步时它会被一次性放进待吐区,平滑露出应把它拆成多段。
+    tokens = ["这是一段很长的话用来验证平滑露出是否真的把整句拆成了多个小段流出。"]
+    frames, full = _run_stream(monkeypatch, lambda **k: _LiveSpeaker(**k), tokens)
+
+    deltas = [f.get("text", "") for f in frames if f.get("type") == "delta"]
+    assert "".join(deltas) == full, f"平滑露出不得吞字; got {deltas}"
+    assert len(deltas) >= 5, f"整句应被切成多段平滑流出,而不是一次性砸屏; got {len(deltas)} 段 {deltas}"
+    assert max(len(d) for d in deltas) < len(full) // 2, f"存在一次吐掉半句以上的砸屏段; got {deltas}"

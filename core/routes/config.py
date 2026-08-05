@@ -194,12 +194,19 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "mesh",
         "description": "局域网零配置发现(mDNS · 手机/手表免输 IP 自动发现网关)",
     },
-    "GALAXY_NATS_ENABLED": {"default": "true", "type": "boolean", "category": "mesh", "description": "Enable NATS"},
+    # 这三条的说明原先只有一句英文,面板上照原样显示,中文用户看不懂开了会发生什么。
+    # 是这一轮把守卫范围扩到 launcher/ 之后,启动器读到它们才连带扫出来的。
+    "GALAXY_NATS_ENABLED": {
+        "default": "true",
+        "type": "boolean",
+        "category": "mesh",
+        "description": "启用 NATS 消息总线（多设备协同的传输底座;单机自用可以关 · 默认开）",
+    },
     "GALAXY_NATS_URL": {
         "default": "nats://localhost:4222",
         "type": "url",
         "category": "mesh",
-        "description": "NATS URL",
+        "description": "NATS 消息总线的地址（默认本机;接到别的机器上才需要改）",
     },
     "GALAXY_NATS_EXECUTOR_TIMEOUT": {
         "default": "30",
@@ -218,7 +225,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "true",
         "type": "boolean",
         "category": "mesh",
-        "description": "Cross-Device Orchestration",
+        "description": "跨设备编排（让手机/手表/别的电脑也能承接任务;关掉则只在本机跑 · 默认开）",
     },
     "GALAXY_MASTER_BRAIN_ENABLED": {
         "default": "false",
@@ -579,11 +586,58 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "把本机播放声送进感知（关掉则只用于回声消除、不进模型 · 默认开）",
     },
+    # 三态:不设=按当前档位的**真实供给**自动判定(本机原生与云端一视同仁);
+    # 1=强制开;0=强制关。写成 boolean/false 是**假的** —— 面板会显示"关"而实际
+    # 已自动开启,那正是这条守卫要防的事。
     "GALAXY_VOICE_DUPLEX": {
-        "default": "false",
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音（auto=档位具备就自动开,云端 realtime 按分钟计费 / 1=强制开 / 0=强制关 · 默认 auto）",
+    },
+    # 残余回声抑制(RES/NLP):线性对消之后的第二级,专治扬声器削波/外壳振动带来的
+    # **非线性**回声 —— 那部分线性滤波器原理上消不掉。实测非线性路径上多消约 10 dB。
+    "GALAXY_AEC_RES": {
+        "default": "true",
         "type": "boolean",
         "category": "behavior",
-        "description": "全双工语音（边说边听,需 provider 支持 realtime 语音通道 · 默认关）",
+        "description": "残余回声抑制（线性对消之后再压一层非线性残余 · 默认开）",
+    },
+    "GALAXY_AEC_RES_OVER": {
+        "default": "1.5",
+        "type": "number",
+        "category": "behavior",
+        "description": "残余抑制过减因子（越大压得越狠,代价是近端语音也多削一点 · 默认 1.5）",
+    },
+    "GALAXY_AEC_RES_FLOOR_DB": {
+        "default": "-18",
+        "type": "number",
+        "category": "behavior",
+        "description": "远端单讲时的抑制下限 dB（压到底会是一段死寂,反而难受 · 默认 -18）",
+    },
+    "GALAXY_AEC_RES_DT_FLOOR_DB": {
+        "default": "-3",
+        "type": "number",
+        "category": "behavior",
+        "description": "双讲时的抑制下限 dB（用户正在说话,必须比单讲宽松 · 默认 -3）",
+    },
+    "GALAXY_AEC_DTD_HANGOVER": {
+        "default": "12",
+        "type": "number",
+        "category": "behavior",
+        "description": "双讲检出后继续按双讲处理多少块（真实双讲连续,能量判据只抓得住峰 · 默认 12）",
+    },
+    "GALAXY_AEC_COMFORT_NOISE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "舒适噪声（把被压掉的部分填回极低底噪,消除呼吸感 · 默认开）",
+    },
+    "GALAXY_TEXT_VOICE_LOCKSTEP": {
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": "文字与语音同刻（auto=有语音时自动同刻 / 1=强制开 / 0=强制关 · 默认 auto）",
     },
     "GALAXY_VOICE_DUCKING": {
         "default": "true",
@@ -738,12 +792,365 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "全双工语音专用 API Key(留空=退回该 provider 的通用 key,如 OPENAI_API_KEY)",
     },
+    # ── 语音/感知栈的其余配置键(2026-08-04 一次性登记齐)──────────────────────────
+    #
+    # 前两轮补登记都是**发现一处补一处**:先补了 21 个语音开关,再补了 5 个 B 档模态键。
+    # 每一次都以为补完了,每一次都还有。根因是那道守卫的模块清单是**手工维护**的
+    # (tests/test_voice_switches_reach_the_panel.py::_VOICE_MODULES),清单没写进去的
+    # 模块就静默不受保护 —— 补键治的是症状,清单本身才是病。
+    #
+    # 这一轮同时做了两件事:
+    #   1. 把那份清单改成**按目录模式派生**(core/voice_*.py、core/multimodal/*.py、
+    #      core/asr/*.py、core/tts/*.py、core/perception/*.py …),新增模块自动纳管,
+    #      这一类漏法不会再来第四次;
+    #   2. 派生后一次扫出 36 个未登记键,除 GALAXY_ENV(部署标记,已显式豁免)外
+    #      全部登记在此。
+    #
+    # 每一条的 default 都读过源码逐个核对。注意有几把键的读取点原先用的是
+    # ``os.environ.get(key, 默认值)`` —— 那个默认值**对空串不生效**,而登记进面板后
+    # 用户清空输入框存回来的正是空串。相关读取点已一并改成 ``.strip() or 默认``
+    # (kokoro/melo/indextts/sensevoice),否则"能在面板上改"会直接变成"一改就坏"。
+    #
+    # --- 桌面操作闭环(core/computer_use_loop.py)---
+    "GALAXY_COMPUTER_USE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "桌面操作闭环（让 AI 看屏幕、自己点鼠标敲键盘完成任务 · 默认开）",
+    },
+    "GALAXY_CU_MAX_STEPS": {
+        "default": "15",
+        "type": "number",
+        "category": "behavior",
+        "description": "桌面操作单次任务的步数上限（1~50,防止无限点下去 · 默认 15）",
+    },
+    "GALAXY_CU_SETTLE_S": {
+        "default": "1.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "每步操作后等界面反应的静置时长(秒,0~10 · 默认 1)",
+    },
+    # --- 连续感知(core/perception/、core/multimodal/)---
+    "GALAXY_DESKTOP_PERCEPTION_TTL": {
+        "default": "10",
+        "type": "number",
+        "category": "behavior",
+        "description": "桌面感知帧的保鲜时长(秒,超过就算过期不再当作当前画面 · 默认 10)",
+    },
+    "GALAXY_PERCEPTION_PRIVACY_DEFAULT": {
+        "default": "active",
+        "type": "select",
+        "category": "behavior",
+        "description": "启动时的感知状态（active=正常采集 / paused=启动即隐私暂停,什么都不采 · 默认 active）",
+        "options": ["active", "paused"],
+    },
+    "GALAXY_PROACTIVE_SCREEN": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "屏幕变化也触发主动开口（屏幕一直在变,开了会话多 · 默认关,只由声音/画面触发）",
+    },
+    "GALAXY_AMBIENT_SHARE_SESSION": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "主动开口续在当前对话主线上（关掉则另起一条独立会话,不打断你正在聊的 · 默认开）",
+    },
+    "GALAXY_VOICE_DIAG_S": {
+        "default": "20",
+        "type": "number",
+        "category": "behavior",
+        "description": "麦克风自检的延迟(秒,启动后多久做一次采集自检;0=关闭自检 · 默认 20)",
+    },
+    # --- 回话时序(core/routes/chat.py)---
+    "GALAXY_CHAT_TIMEOUT_S": {
+        "default": "90",
+        "type": "number",
+        "category": "behavior",
+        "description": "单轮对话的总超时(秒,超了就中止本轮 · 默认 90)",
+    },
+    "GALAXY_LOCKSTEP_CPS": {
+        "default": "14.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "文字与语音同刻时文字的吐字速度(字/秒,越大文字跑得越快 · 默认 14)",
+    },
+    "GALAXY_LOCKSTEP_GRACE_S": {
+        "default": "2.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "同刻模式等首个语音块的宽限(秒,等不到就先放文字 · 默认 2)",
+    },
+    "GALAXY_LOCKSTEP_STALL_S": {
+        "default": "8.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "同刻模式中途卡住多久判定语音掉线、文字自己往下走(秒 · 默认 8)",
+    },
+    "GALAXY_LOCKSTEP_DRAIN_S": {
+        "default": "0.8",
+        "type": "number",
+        "category": "behavior",
+        "description": "语音念完后文字收尾的排空时长(秒 · 默认 0.8)",
+    },
+    # --- 语音识别(core/asr/)---
+    "GALAXY_ASR_INITIAL_PROMPT": {
+        "default": "以下是普通话的句子。",
+        "type": "string",
+        "category": "behavior",
+        "description": "中文识别的引导语（把 Whisper 的输出偏置到简体、顺带给点上下文;留空=不加引导）",
+    },
+    "GALAXY_SENSEVOICE_MODEL": {
+        "default": "iic/SenseVoiceSmall",
+        "type": "string",
+        "category": "behavior",
+        "description": "SenseVoice 识别引擎的模型 id（留空=用默认的 modelscope 版）",
+    },
+    # --- 语音合成:Edge / Piper ---
+    "GALAXY_EDGE_TTS_TIMEOUT_S": {
+        "default": "8",
+        "type": "number",
+        "category": "behavior",
+        "description": "Edge 在线合成的超时(秒,超了就降级到本地引擎 · 默认 8)",
+    },
+    "GALAXY_PIPER_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Piper 语音模型(.onnx)的路径（留空=自动在 models/piper/ 下找）",
+    },
+    # --- 语音合成:Kokoro ---
+    "GALAXY_KOKORO_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Kokoro 模型文件名（留空=kokoro-v1.0.onnx;显存/磁盘紧张可换 int8 版）",
+    },
+    "GALAXY_KOKORO_VOICE": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Kokoro 音色（留空=按文本语种自动挑:中文 zf_/zm_,英文 af_/am_）",
+    },
+    "GALAXY_KOKORO_LANG": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Kokoro 发音语种（留空=按文本自动判定:含中文用 cmn,否则 en-us）",
+    },
+    "GALAXY_KOKORO_AUTOFETCH": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "首次使用 Kokoro 时后台自动下载模型（约 310MB · 默认开）",
+    },
+    # --- 语音合成:MeloTTS ---
+    "GALAXY_MELO_LANG": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Melo 语种（留空=ZH_MIX_EN 中英混读;可选 ZH/EN/JP/KR/ES/FR）",
+    },
+    "GALAXY_MELO_SPEAKER": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Melo 说话人（留空=取该语种的第一个音色）",
+    },
+    "GALAXY_MELO_SPEED": {
+        "default": "1.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "Melo 语速倍率（建议 0.8~1.2,调太快中文会糊 · 默认 1.0）",
+    },
+    "GALAXY_MELO_DEVICE": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "Melo 推理设备（留空=auto,有显卡走 cuda 否则 cpu;也可直接填 cuda / cpu）",
+    },
+    # --- 语音合成:IndexTTS-2(零样本音色克隆)---
+    "GALAXY_INDEXTTS_REF_AUDIO": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "IndexTTS 参考音频 wav 的路径（零样本克隆的音色来源,不填这条 IndexTTS 用不了）",
+    },
+    "GALAXY_INDEXTTS_AUTOFETCH": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "首次使用 IndexTTS 时后台自动下载模型（体积很大,默认关,要用请显式打开）",
+    },
+    "GALAXY_INDEXTTS_EMO_AUDIO": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "IndexTTS 情绪参考音频的路径（可选;用另一段音频的情绪配这段台词）",
+    },
+    "GALAXY_INDEXTTS_EMO_TEXT": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "IndexTTS 情绪文本描述（可选;如“轻声、带点笑意”,与台词内容解耦）",
+    },
+    "GALAXY_INDEXTTS_USE_EMO_TEXT": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "由台词语义自动推断情绪（上面那条填了就自动生效,这里是不填也想推断时用 · 默认关）",
+    },
+    "GALAXY_INDEXTTS_EMO_ALPHA": {
+        "default": "0.6",
+        "type": "number",
+        "category": "behavior",
+        "description": "IndexTTS 情绪强度（官方建议 0.6;调高情绪更浓、音色稳定性下降）",
+    },
+    "GALAXY_INDEXTTS_FP16": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "IndexTTS 用 fp16 推理（显存紧张的 GPU 场景打开,省显存略降质量 · 默认关）",
+    },
+    # --- 模型文件位置(与 GALAXY_DATA_DIR 等同属"东西放哪儿",归 storage)---
+    "GALAXY_KOKORO_DIR": {
+        "default": "models/kokoro",
+        "type": "string",
+        "category": "storage",
+        "description": "Kokoro 模型目录（留空=models/kokoro）",
+    },
+    "GALAXY_INDEXTTS_DIR": {
+        "default": "models/indextts2",
+        "type": "string",
+        "category": "storage",
+        "description": "IndexTTS-2 模型目录（留空=models/indextts2）",
+    },
+    # --- 模型下载源 ---
+    # 归 network:它与 GALAXY_HF_MIRROR 是同一件事的两面,而真正决定用哪个源的是
+    # core/hf_endpoint.py::pick_endpoint()(探测择优后写回 HF_ENDPOINT)。
+    "GALAXY_HF_ENDPOINT": {
+        "default": "https://hf-mirror.com",
+        "type": "url",
+        "category": "network",
+        "description": "模型下载源地址（默认国内镜像 hf-mirror.com;填自建镜像则只用它、不做失败转移）",
+    },
+    # ── 统一启动器 launcher/ + main.py(2026-08-04 补登记)──────────────────────
+    #
+    # 启动器重做落地(main.py / launcher/*.py 取代了 install.py、launch_desktop.py、
+    # unified_launcher.py、system_manager.py)之后,那一侧读的 15 个配置键同样两边都
+    # 没登记。**这不是"新代码还没来得及登记"** —— 它们大多是从旧启动器原样搬过来的,
+    # 也就是说旧启动器时代就一直没接进面板,只是这次把守卫范围扩到 launcher/ 才扫出来。
+    #
+    # 其中 GALAXY_VOICE 是**语音总开关**:它决定语音循环起不起来。整条语音链路的开关
+    # 都已在面板上,唯独最上面那个总闸只能手改 .env —— 这一条尤其不该漏。
+    #
+    # --- 语音总闸与识别规格(launcher/services.py)---
+    "GALAXY_VOICE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "启用语音（关掉则启动时完全不起语音循环,麦克风也不占用 · 默认开）",
+    },
+    "GALAXY_WHISPER_MODEL": {
+        "default": "base",
+        "type": "string",
+        "category": "behavior",
+        "description": "语音循环的 Whisper 模型规格（tiny/base/small/medium/large,越大越准越慢 · 默认 base）",
+    },
+    # --- 桌面外壳(launcher/services.py、launcher/shell.py)---
+    "GALAXY_DESKTOP_SHELL": {
+        "default": "",
+        "type": "select",
+        "category": "behavior",
+        "description": "桌面外壳（留空=自动挑选;electron=强制用 Electron 而不是 Tauri）",
+        "options": ["", "electron"],
+    },
+    "GALAXY_SKIP_ELECTRON": {
+        "default": "false",
+        "type": "boolean",
+        "category": "dev",
+        "description": "启动时跳过桌面外壳（只起后端服务,用浏览器访问面板 · 默认关）",
+    },
+    "GALAXY_TAURI_AUTOBUILD": {
+        "default": "true",
+        "type": "boolean",
+        "category": "dev",
+        "description": "Tauri 外壳缺产物时自动构建（关掉则缺了就直接跳过、不占用启动时间 · 默认开）",
+    },
+    # --- 容器运行时(launcher/services.py)---
+    "GALAXY_AUTO_DOCKER": {
+        "default": "auto",
+        "type": "string",
+        "category": "dev",
+        "description": "自动拉起容器运行时（auto=装了就用 / 1=强制 / 0=关闭 · 默认 auto）",
+    },
+    "GALAXY_CONTAINER_RUNTIME": {
+        "default": "",
+        "type": "select",
+        "category": "dev",
+        "description": "指定容器运行时（留空=两者都装时首启让你选;也可直接钉死 docker 或 podman）",
+        "options": ["", "docker", "podman"],
+    },
+    "GALAXY_AUTO_DOCKER_DAEMON_WAIT": {
+        "default": "60",
+        "type": "number",
+        "category": "dev",
+        "description": "等容器守护进程起来的超时(秒 · 默认 60)",
+    },
+    "GALAXY_AUTO_DOCKER_WAIT": {
+        "default": "90",
+        "type": "number",
+        "category": "dev",
+        "description": "等容器内服务就绪的超时(秒 · 默认 90)",
+    },
+    # --- 启动诊断(main.py、launcher/services.py)---
+    "GALAXY_VERBOSE": {
+        "default": "false",
+        "type": "boolean",
+        "category": "dev",
+        "description": "启动过程输出详细信息（每一步都展开,排查启动问题时打开 · 默认关）",
+    },
+    "GALAXY_STRICT_PREFLIGHT": {
+        "default": "false",
+        "type": "boolean",
+        "category": "dev",
+        "description": "启动前检查从严（任何一项不过就拒绝启动,而不是降级继续 · 默认关）",
+    },
+    # --- 节点起停(launcher/node_startup.py)---
+    "GALAXY_API_HOST": {
+        "default": "127.0.0.1",
+        "type": "string",
+        "category": "ports",
+        "description": "各节点回连 API 时用的主机名（默认只走本机回环;跨机部署才需要改）",
+    },
+    "GALAXY_NODE_HEALTH_RETRIES": {
+        "default": "",
+        "type": "number",
+        "category": "ports",
+        "description": "节点健康检查的重试次数（留空=按模式自动:桌面本机 5 次、其余 10 次;最低 2 次）",
+    },
+    # --- 依赖下载源(launcher/deps.py、main.py)---
+    "GALAXY_PIP_INDEX": {
+        "default": "",
+        "type": "url",
+        "category": "network",
+        "description": "pip 下载源（留空=按内置镜像轮换;填了则只用它）",
+    },
+    "GALAXY_HF_MIRROR": {
+        "default": "true",
+        "type": "boolean",
+        "category": "network",
+        "description": "模型下载走国内镜像（关掉则只认官方 huggingface.co、不再回落镜像 · 默认开）",
+    },
     # --- WebRTC & Network ---
+    # 说明原先只有 "WebRTC Data Channel" 一句英文 —— 面板上照原样显示,中文用户看不懂
+    # 这开了会发生什么。是这一轮把守卫范围改成按目录派生之后,
+    # core/multimodal/webrtc_ingress_bridge.py 进了范围才扫出来的。
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {
         "default": "false",
         "type": "boolean",
         "category": "network",
-        "description": "WebRTC Data Channel",
+        "description": "WebRTC 数据通道（浏览器/手机端把摄像头与麦克风的采集结果直接推给感知层 · 默认关）",
     },
     "GALAXY_TURN_URLS": {"default": "", "type": "string", "category": "network", "description": "TURN Server URLs"},
     "GALAXY_HEADSCALE_URL": {"default": "", "type": "url", "category": "network", "description": "Headscale URL"},

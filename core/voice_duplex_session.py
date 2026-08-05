@@ -221,9 +221,48 @@ def is_local_endpoint(url: str) -> bool:
         return False  # 不是 IP 字面量,又不在上面的名字里 → 当作远端
 
 
+#: 「自动开启了计费链路」这句话只说一次。放模块级而不是每次调用都打：
+#: duplex_enabled() 在语音循环启动路径上会被问好几次，每次刷一条就成了噪音，
+#: 而噪音等于没说。
+_metered_notice_said = False
+
+
+def _notice_metered_once(cap: Any) -> None:
+    """自动启用按量计费链路时，如实说一次。自动可以，悄悄开始花钱不行。"""
+    global _metered_notice_said
+    if _metered_notice_said:
+        return
+    _metered_notice_said = True
+    logger.warning(
+        "双工语音已【自动】启用云端 realtime(%s)——这条链路按分钟计费。"
+        "档位具备该能力即自动启用；不需要请设 GALAXY_VOICE_DUPLEX=0。",
+        getattr(cap, "source", "cloud_realtime"),
+    )
+
+
 def duplex_enabled() -> bool:
-    """双工语音是否启用。**默认关闭** —— 它需要 realtime provider 与 key。"""
-    return _flag("GALAXY_VOICE_DUPLEX", "0")
+    """双工语音是否启用 —— 三态：显式开 / 显式关 / **未设置时按档位能力自动判定**。
+
+    原先固定读 env 且默认关，于是装了能力也用不上。判据在
+    :mod:`core.voice_duplex_capability`，这里不复述。显式开时**不再问能力**：
+    用户明说要试就去试，连不上由 ``from_env``/``connect`` 各自记原因并回落回合制。
+
+    自动档对**本机原生与云端一视同仁**。云端 realtime 按分钟计费，所以自动启用它时
+    ``_notice_metered_once`` 会在日志里说一次 —— 自动可以，悄悄开始花钱不行。
+    不想要就设 ``GALAXY_VOICE_DUPLEX=0``。
+    """
+    raw = (os.environ.get("GALAXY_VOICE_DUPLEX") or "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    # 延迟导入:能力模块反过来要用本模块的 DuplexSessionConfig / is_local_endpoint。
+    from core.voice_duplex_capability import duplex_capability
+
+    cap = duplex_capability()
+    if cap.available and cap.metered:
+        _notice_metered_once(cap)
+    return bool(cap.available)
 
 
 def ducking_enabled() -> bool:
@@ -282,7 +321,20 @@ class DuplexSessionConfig:
 
     url: str
     api_key: str
-    model: str = "gpt-4o-realtime-preview"
+    #: 默认实时型号。**从 PROVIDER_REGISTRY 现取**,不写死字面量。
+    #:
+    #: 这里原先硬写着 ``"gpt-4o-realtime-preview"``,而 registry 里 OpenAI 的
+    #: ``default_realtime_model`` 早已是 ``"gpt-realtime"``,_REALTIME_FALLBACK_MODEL
+    #: 里的兜底也是 ``"gpt-realtime"`` —— 三处口径两个值。
+    #:
+    #: 它一直没出事,只因为 ``from_env()`` 每条分支都显式传 model,这个默认值在生产
+    #: 路径上从来没被取到过。但那是**碰巧**:任何人直接
+    #: ``DuplexSessionConfig(url=…, api_key=…)`` 建一个配置(测试、脚本、将来某条新
+    #: 调用路径),拿到的就是一个 registry 不认账的型号,而
+    #: ``scripts/verify_provider_apis.py`` 的漂移守卫只比对 registry,照样发现不了。
+    #:
+    #: 用 default_factory 现取而不是模块级常量:registry 是唯一权威,改那边这边自动跟。
+    model: str = field(default_factory=lambda: _registry_realtime_model("openai"))
     voice: str = "alloy"
     sample_rate: int = 16000
     instructions: str = ""
@@ -293,11 +345,14 @@ class DuplexSessionConfig:
     provider: str = "openai_realtime"
 
     @classmethod
-    def from_env(cls) -> Optional["DuplexSessionConfig"]:
+    def from_env(cls, *, probe: bool = False) -> Optional["DuplexSessionConfig"]:
         """从配置构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
 
         返回 None 而不是抛异常:双工默认关闭,缺配置是预期情形而非错误。但原因要能
         从日志里看到 —— 否则"开了开关却没生效"完全无从排查。
+
+        ``probe=True`` 把解释性日志降到 debug:能力探针拿本函数问"能不能建连",那种
+        场合下"缺 key"是在问问题而不是出故障,按 WARNING 报既吵又不准确。
 
         provider 由 ``GALAXY_REALTIME_PROVIDER`` 选,默认 ``openai_realtime``。两家的
         默认 URL、默认模型、鉴权方式都不同(Gemini 的 key 在 URL query 里,没有
@@ -323,6 +378,9 @@ class DuplexSessionConfig:
         secret,面板保存后会经 ``main.py`` 注回 ``os.environ``,没有 vault 那一层。
         """
         from core.secret_resolution import resolve_secret
+
+        _say = logger.debug if probe else logger.info
+        _warn = logger.debug if probe else logger.warning
 
         provider = (os.getenv("GALAXY_REALTIME_PROVIDER") or "openai_realtime").strip()
         # configured_url 是**用户配的那个值本身**,下面永远不会被重新赋值。
@@ -371,7 +429,7 @@ class DuplexSessionConfig:
             if derived:
                 configured_url = derived
                 url = derived
-                logger.info(
+                _say(
                     "双工语音:未配 GALAXY_REALTIME_URL 且无云端 key,但 B 档原生已就绪 —— "
                     "自动尝试本地全模态 server 的 realtime 端点(%s)。该 server 若没有这个"
                     "端点或路径不同,连接会失败并安静退回**原生回合制**(听/说仍是原生,"
@@ -398,7 +456,7 @@ class DuplexSessionConfig:
             #
             # 仍然过 safe_endpoint:只留 scheme://host:port。运行期的实际风险是用户把
             # GALAXY_REALTIME_URL 设成 ws://gateway/rt?token=… 这种形式,那是真会泄的。
-            logger.info(
+            _say(
                 "双工语音:realtime 端点是本地服务(%s),无需 API key。",
                 safe_endpoint(configured_url),
             )
@@ -410,13 +468,13 @@ class DuplexSessionConfig:
 
             sources = {n: describe_source(n) for n in ("GALAXY_REALTIME_API_KEY", missing.split(" 或 ")[-1])}
             if "placeholder" in sources.values():
-                logger.warning(
-                    "双工语音已开启,但 API key 是【未编辑的占位符模板】(%s),不是真密钥;"
+                _warn(
+                    "双工语音:API key 是【未编辑的占位符模板】(%s),不是真密钥;"
                     "本次退回回合制语音链路。请在面板「模型」tab 填入真实 key。",
                     sources,
                 )
             else:
-                logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
+                _warn("双工语音:缺少 API key(%s),本次退回回合制语音链路。", missing)
             # 这里原先还有一句「补充:本地原生听/说已就绪…」的提示。加上自动推导之后它变成了
             # 死代码:原生就绪且没有 key 时,上面已经把地址指向本地并 return,根本走不到这里。
             # 留着一句永远不会打印、却声称在帮人排查的日志,比没有更坏 —— 删掉。

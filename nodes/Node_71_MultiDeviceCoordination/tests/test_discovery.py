@@ -11,10 +11,15 @@ from unittest.mock import Mock, AsyncMock, patch
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 这里原先有一句 sys.path.insert(0, <节点目录>)。它是「裸顶层导入」时代的遗留:
+# 把节点目录顶到 sys.path 最前面,好让 from core.X / from models.X 指到节点自己。
+# 现在包内一律用相对导入,这句不但没用,而且**有害** —— 它让节点自己的 core/ 抢在
+# 仓库根的 core/ 前面被解析,于是 models/device.py 里那句合法的
+# from core.device_types import DeviceType(单一事实来源,确实指仓库根)会拐进
+# 节点的 core/__init__.py,绕成循环导入,最终报 attempted relative import beyond top-level。
 
-from models.device import Device, DeviceType, DeviceState, Capability, DiscoveryProtocol
-from core.device_discovery import (
+from ..models.device import Device, DeviceType, DeviceState, Capability, DiscoveryProtocol
+from ..core.device_discovery import (
     DeviceDiscovery,
     DiscoveryConfig,
     DiscoveryEvent,
@@ -148,11 +153,31 @@ class TestMDNSDiscovery:
 
     @pytest.mark.asyncio
     async def test_start_without_zeroconf(self, discovery):
-        """测试在没有 zeroconf 的情况下启动"""
-        # 如果没有安装 zeroconf，应该返回 False
-        with patch("core.device_discovery.MDNSDiscovery.start") as mock_start:
-            mock_start.return_value = asyncio.sleep(0)
-            # 实际测试会依赖环境
+        """没装 zeroconf 时 start() 必须返回 False,而不是抛异常。
+
+        这一条原先是**空转**的:它 patch 掉 ``core.device_discovery.MDNSDiscovery.start``
+        —— 也就是把被测方法本身换成 mock —— 然后函数体到此结束,一句断言也没有,
+        末尾还留着一句 "实际测试会依赖环境"。既没有测到真实行为,连 mock 都没被调用。
+        (顺带,那个 patch 目标 ``core.device_discovery`` 是伪造的模块名,节点改成
+        相对导入之后它连解析都解析不了,于是这条空转的用例还会**报错**。)
+
+        现在真的测:把 zeroconf 从 import 路径上摘掉,断言 start() 返回 False。
+        真实的降级契约是 ``except ImportError: return False``(device_discovery.py),
+        这条正对着它。
+        """
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _no_zeroconf(name, *args, **kwargs):
+            if name == "zeroconf" or name.startswith("zeroconf."):
+                raise ImportError("zeroconf not installed (simulated)")
+            return real_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", _no_zeroconf):
+            result = await discovery.start()
+
+        assert result is False, "没装 zeroconf 时 mDNS 发现应安静降级返回 False,而不是抛异常或谎报成功"
 
 
 class TestUPNPDiscovery:

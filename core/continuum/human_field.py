@@ -130,6 +130,11 @@ class HumanFieldInferrer:
         """
         # Extract usable sub-signals (None when modality is absent/degraded).
         audio = frame.audio if frame.audio_quality.is_usable else None
+        # 「在场但未测量」的占位态不得参与打分。它的 energy=0 / is_speaking=False 是
+        # 「没测」而不是「测出来是 0」;当成安静喂进来,会凭空造出"用户不在/疲劳/没意图"。
+        # 模态本身仍然算在场（frame.active_modalities 照常列出 audio）。
+        if audio is not None and not getattr(audio, "features_measured", True):
+            audio = None
         video = frame.video if frame.video_quality.is_usable else None
         system = frame.system if frame.system_quality.is_usable else None
 

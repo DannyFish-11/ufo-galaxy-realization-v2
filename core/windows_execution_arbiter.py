@@ -51,6 +51,7 @@ Usage
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 import uuid
@@ -283,6 +284,59 @@ def _make_default_gui_executor() -> Optional[GUIExecutor]:
         return None
 
 
+#: 「computer-use 闭环正在跑」的进程内标记（按任务隔离）。
+#:
+#: 第 4 级(VLM)委托给 ``core.computer_use_loop``,而那个闭环的每一步动作又会**回到**
+#: 本仲裁器走结构化降级链。若不设防,结构级全失败 → VLM 级 → 闭环 → 动作 → 仲裁器
+#: → 结构级全失败 → VLM 级 …… 就是无限递归。
+#:
+#: 标记由**闭环自己**在 ``run()`` 期间置位(而不是只在仲裁器委托时置位):这样无论
+#: 闭环是被仲裁器叫起来的、还是从 REST 路由/工具直接叫起来的,它跑动期间的动作
+#: 都不会再递归回 VLM 级。一个不变式,一个持有者。
+_in_computer_use_loop: "contextvars.ContextVar[bool]" = contextvars.ContextVar(
+    "galaxy_arbiter_in_computer_use_loop", default=False
+)
+
+
+def computer_use_recursion_guard_active() -> bool:
+    """当前执行上下文里 computer-use 闭环是否正在跑（仲裁器据此排除 VLM 级）。"""
+    return bool(_in_computer_use_loop.get())
+
+
+def _make_default_vlm_executor() -> Optional[VLMExecutor]:
+    """Return an async adapter over :mod:`core.computer_use_loop` or *None*.
+
+    四级降级链里,前三级都有默认适配器自动接上,唯独第 4 级没有 —— 它是唯一的空插座,
+    执行到这里只会返回 "No VLM executor configured",于是结构化三级失败就等于整个执行
+    失败。而仓库里本来就有一套完整可用的视觉桌面闭环(感知→规划→安全门→执行→再感知),
+    只是挂在另一个入口(REST 路由 / openclawd 工具)上,两边互不知道。这里把它接上,
+    是**复用**既有能力而不是新造一个。
+    """
+
+    async def _vlm_exec(device_id: str, instruction: str, screenshot_b64: Optional[str]) -> Dict[str, Any]:
+        try:
+            from core.computer_use_loop import computer_use_enabled, run_computer_use_task
+        except Exception as exc:  # noqa: BLE001
+            return {"success": False, "error": f"computer-use 闭环不可用: {exc}"}
+        if not computer_use_enabled():
+            # 如实报原因。谎称成功会让上层以为动作做过了。
+            return {"success": False, "error": "computer use 闭环已被 GALAXY_COMPUTER_USE=0 关闭"}
+        if not (instruction or "").strip():
+            return {"success": False, "error": "VLM 级需要自然语言 instruction,本次请求没有给"}
+        try:
+            out = await run_computer_use_task(instruction)
+        except Exception as exc:  # noqa: BLE001
+            return {"success": False, "error": f"computer-use 闭环异常: {exc}"}
+        return {
+            "success": bool(out.get("success")),
+            "error": "" if out.get("success") else str(out.get("message", "") or out.get("stop_reason", "")),
+            "stop_reason": out.get("stop_reason"),
+            "steps": out.get("steps", []),
+        }
+
+    return _vlm_exec
+
+
 # ---------------------------------------------------------------------------
 # Main arbiter
 # ---------------------------------------------------------------------------
@@ -339,6 +393,8 @@ class WindowsExecutionArbiter:
                 self._uia = _make_default_uia_executor()
             if self._gui is None:
                 self._gui = _make_default_gui_executor()
+            if self._vlm is None:
+                self._vlm = _make_default_vlm_executor()
 
         self._stats: Dict[str, int] = {
             "total": 0,
@@ -455,6 +511,19 @@ class WindowsExecutionArbiter:
                 WinExecLevel.VLM,
             ]
 
+        # ── 递归保护 ──────────────────────────────────────────────────────────
+        # computer-use 闭环正在跑时,这次调用就是它某一步动作打回来的。第 4 级会再
+        # 委托给同一个闭环 —— 放行就是无限递归。降级链在此处到 GUI 为止,原因写进
+        # 结果里(而不是安静砍掉一级,那样现场只会看到"莫名其妙少了一级")。
+        _recursion_guarded = False
+        if computer_use_recursion_guard_active() and WinExecLevel.VLM in levels:
+            levels = [lv for lv in levels if lv is not WinExecLevel.VLM]
+            _recursion_guarded = True
+            logger.debug(
+                "windows_arbiter | vlm_level_excluded | reason=computer_use_loop_in_progress | action=%s",
+                action_summary,
+            )
+
         # ── PR-12: Filter executor levels by policy ───────────────────────────
         if policy is not None and force_level is None:
             levels = self._filter_levels_by_policy(policy, levels, action_summary, device_id)
@@ -533,7 +602,11 @@ class WindowsExecutionArbiter:
             final_level=levels[-1] if levels else WinExecLevel.VLM,
             device_id=device_id,
             action_summary=action_summary,
-            result={"error": "All Windows execution levels failed"},
+            result={
+                "error": "All Windows execution levels failed",
+                # 少了一级要说清是被谁挡掉的,否则现场只看到"VLM 级没跑"。
+                **({"vlm_level_excluded": "computer_use_loop_in_progress"} if _recursion_guarded else {}),
+            },
             attempts=[a.to_dict() for a in attempts],
             total_latency_ms=(time.time() - start) * 1000,
         )

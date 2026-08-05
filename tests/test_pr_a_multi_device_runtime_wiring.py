@@ -32,6 +32,12 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+# 这里原先有一个 ``_NODE71_DIR``,专门用来把 Node_71 的目录塞进 sys.path,好让
+# ``from core.X`` / ``from models.X`` 这类**裸顶层导入**解析得到节点包内的模块。
+# Node_71 已改成规范的相对导入、并且本来就是个带 __init__.py 的正经包,协调引擎
+# 相关的用例改成按真实包路径 import(nodes.Node_71_MultiDeviceCoordination.…),
+# 于是这个常量连同 os / Path 两个 import 一起没人用了。
+
 # ---------------------------------------------------------------------------
 # 1–2: DeviceRegistry.update_status wiring
 # ---------------------------------------------------------------------------
@@ -778,25 +784,39 @@ class TestAndroidBridgeReconnectWiring:
 class TestCoordinatorEngineHarnessWiring:
     """MultiDeviceCoordinatorEngine coordinator-state transitions → harness hooks."""
 
-    # Node_71 是一个**真包**（nodes/、Node_71_.../、core/、models/ 每层都有 __init__.py），
-    # 所以按它真实的点分路径 import 即可，不需要 sys.path 注入，也不需要把文件按
-    # ``core.<名字>`` 这个假名字重新加载一遍。后者曾经是必要的 —— 那时节点内部写的是
-    # 裸 ``from core.X`` / ``from models.X``；现在它们已改成相对导入
-    # (``from ..models.device import ...``)，只有作为包的一部分被加载时才解析得开。
+    # 这里原先有一套 **伪造模块名** 的侧载:用 importlib 把
+    # nodes/Node_71_MultiDeviceCoordination/core/xxx.py 以 ``core.xxx`` 这个名字装进
+    # sys.modules,再顺手挂到仓库根的 core 包上,注释写的理由是"避开 core 命名冲突"。
     #
-    # 还有一层更隐蔽的理由：假名字加载会得到**第二份** ``models.device``，于是测试手里的
-    # Device 类和引擎注册表里的那个不是同一个类 —— isinstance/枚举比较会静默走偏，而
-    # 报错信息只会说"字段不对"，不会说"你有两份模型"。
+    # 那个冲突的根源在 Node_71 自己:它用裸 ``from core.X`` / ``from models.X`` 引用
+    # **自己包内**的模块,只有把节点目录塞进 sys.path 才成立。而它现在已经被改成规范的
+    # 相对导入(``from .device_discovery`` / ``from ..models.device``)—— 于是伪造的
+    # ``core.xxx`` 这个名字反而成了毒药:相对导入按这个假名字解析,``..models`` 直接
+    # 越过顶层包,抛 "attempted relative import beyond top-level package"。
+    #
+    # 更糟的是 ``_ensure_n71_modules`` 用 ``except Exception: pass`` 把这个真实错误吞掉,
+    # 于是失败以一句风马牛不相及的 ``ModuleNotFoundError: No module named
+    # 'core.multi_device_coordinator_engine'`` 出现在下游 —— 报的原因不是真的原因,
+    # 排查得从头再来一遍。
+    #
+    # Node_71 现在是个规规矩矩的包(nodes/、Node_71…/、core/、models/ 都有 __init__.py),
+    # 所以正确做法就是**按它真实的路径 import**,不再伪造名字、不再预加载、不再吞异常。
+    @staticmethod
+    def _coordinator_engine():
+        """按真实包路径取 Node_71 的协调引擎(导入失败就让它失败,不吞)。"""
+        from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
+            CoordinatorConfig,
+            MultiDeviceCoordinatorEngine,
+        )
+
+        return CoordinatorConfig, MultiDeviceCoordinatorEngine
 
     def test_coordinator_start_calls_on_coordinator_state_updated(self):
         """MultiDeviceCoordinatorEngine.start() must call on_coordinator_state_updated
         with overall_status='running' after successfully starting."""
         from unittest.mock import AsyncMock
 
-        from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
-            CoordinatorConfig,
-            MultiDeviceCoordinatorEngine,
-        )
+        CoordinatorConfig, MultiDeviceCoordinatorEngine = self._coordinator_engine()
 
         coord_called = []
 
@@ -833,10 +853,10 @@ class TestCoordinatorEngineHarnessWiring:
         from unittest.mock import AsyncMock
 
         from nodes.Node_71_MultiDeviceCoordination.core.multi_device_coordinator_engine import (
-            CoordinatorConfig,
             CoordinatorState,
-            MultiDeviceCoordinatorEngine,
         )
+
+        CoordinatorConfig, MultiDeviceCoordinatorEngine = self._coordinator_engine()
 
         health_called = []
         readiness_called = []
@@ -857,9 +877,15 @@ class TestCoordinatorEngineHarnessWiring:
         engine = MultiDeviceCoordinatorEngine(config)
         engine._state = CoordinatorState.RUNNING
 
-        # 必须走引擎自己用的那份模型（见本类顶部注释），否则塞进 _registry 的
-        # Device 与引擎心跳循环认的不是同一个类。
-        from nodes.Node_71_MultiDeviceCoordination.models.device import Device, DeviceState, DeviceType
+        # 同上:按真实包路径取,不再往 sys.path 里塞节点目录。
+        # 裸 ``from models.device`` 只有在 Node_71 目录被塞进 sys.path 时才解析得到,
+        # 而那样它会被当成**顶层** ``models`` 包 —— Node_71/models/__init__.py 里的
+        # ``from ..models.device import ...`` 于是越过顶层,同样炸 "beyond top-level"。
+        from nodes.Node_71_MultiDeviceCoordination.models.device import (
+            Device,
+            DeviceState,
+            DeviceType,
+        )
 
         stale_device = Device(
             device_id="stale-d-01",

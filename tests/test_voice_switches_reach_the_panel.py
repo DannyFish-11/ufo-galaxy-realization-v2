@@ -35,26 +35,50 @@ from fastapi.testclient import TestClient
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/SettingsTab.tsx"
 
-#: 语音栈里所有会读配置的模块。新增语音模块时加进来。
-_VOICE_MODULES = (
-    "core/voice_duplex_session.py",
-    "core/voice_dialog_policy.py",
-    "core/voice_echo_guard.py",
-    "core/multimodal/acoustic_echo_canceller.py",
-    "core/multimodal/system_audio_capture_service.py",
-    "core/multimodal/system_audio_ingest.py",
-    "core/multimodal/audio_ingest.py",
-    # 2026-07-30 补入。这份清单是**手工维护**的,而它一旦漏掉某个模块,那个模块里的
-    # 配置键就静默地不受本守卫保护 —— 正是这么漏掉了 5 个键:
-    #   GALAXY_MINICPM_SERVER_URL(B 档本地全模态 server 的地址,整条原生链路的入口)
-    #   GALAXY_NATIVE_MODAL_AUTO(切 B 档是否自动激活)
-    #   GALAXY_AMBIENT_ASR_SIZE / GALAXY_VIDEO_FPS_NATIVE / GALAXY_VIDEO_FPS_BRIDGE
-    # 它们两边都没登记,功能在跑但用户只能手改 .env —— 与本文件当初要防的那 21 个语音
-    # 开关是同一类缺口,只是换了个模块藏身。
+#: 语音/感知栈的模块范围 —— **按目录模式派生,不是手写清单**。
+#:
+#: 这里原先是一个手工维护的元组。它漏了两次:
+#:   * 第一次漏掉 native_modal.py / modality_bridge.py → 5 个键静默不受保护
+#:     (GALAXY_MINICPM_SERVER_URL / GALAXY_NATIVE_MODAL_AUTO / GALAXY_AMBIENT_ASR_SIZE /
+#:      GALAXY_VIDEO_FPS_NATIVE / GALAXY_VIDEO_FPS_BRIDGE);
+#:   * 补进那三个模块之后**仍然**漏 —— 整个 core/tts/、core/asr/、core/perception/、
+#:     core/computer_use_loop.py、core/routes/chat.py 从来就不在清单里,又是 36 个键。
+#:
+#: 两次都是"发现一处补一处"。手写清单的失效方式不是写错,而是**新模块加进来时
+#: 没人记得回来改这里** —— 补键治不了它,只有让范围自己长出来才治得了。
+#:
+#: 改成按 glob 派生后:新增 core/tts/xxx_engine.py、core/voice_yyy.py、
+#: core/perception/zzz.py 一律自动纳管,不需要任何人记得回来登记。
+#: 代价是范围可能收进一两个不读配置的模块 —— 那是零成本的(扫不出键而已),
+#: 远好过漏掉一个真读配置的模块。
+#: 2026-08-04 再补:统一启动器 ``launcher/`` + ``main.py``。
+#: 它们不是语音模块,但**语音的总开关长在那里**(``GALAXY_VOICE`` 决定语音循环起不起、
+#: ``GALAXY_WHISPER_MODEL`` 决定识别模型规格),而这份守卫的契约本来就是
+#: 「代码里读了配置键 → 面板上必须有它」,与模块姓什么无关。启动器重做落地后
+#: 它是整个系统唯一的入口,那 15 个键里既有语音总开关也有部署项,同样一个都不该
+#: 只能靠手改 .env。收进来之后又是一次"扫出来才发现"—— 与前两次同一种漏法。
+_VOICE_MODULE_PATTERNS = (
+    "core/voice_*.py",
+    "core/multimodal/*.py",
+    "core/asr/*.py",
+    "core/tts/*.py",
+    "core/modality_*.py",
+    "core/perception/*.py",
     "core/native_modal.py",
-    "core/modality_bridge.py",
-    "core/modality_capability.py",
+    "core/ambient_attention_loop.py",
+    "core/computer_use_loop.py",
+    "core/routes/chat.py",
+    "launcher/*.py",
+    "main.py",
 )
+
+
+def _voice_modules() -> list[str]:
+    """按模式展开出实际存在的模块(相对仓库根,排序稳定)。"""
+    return sorted(
+        {str(p.relative_to(REPO_ROOT)) for pat in _VOICE_MODULE_PATTERNS for p in REPO_ROOT.glob(pat) if p.is_file()}
+    )
+
 
 #: 明确豁免:**不该出现在面板上**的键,连同理由。
 #:
@@ -87,10 +111,44 @@ _CONFIG_READ_RE = re.compile(r"""(?:os\.getenv|os\.environ\.get|_flag|_num)\(\s*
 _PENDING_SECRET_ROUTING: frozenset = frozenset()
 
 
+@pytest.fixture(autouse=True)
+def _resync_unified_config_after_each_test():
+    """每条用例跑完,让 ``UnifiedConfig`` 单例与**还原后**的进程状态重新对齐。
+
+    为什么需要这一条
+    ----------------
+    本文件里有两条端到端用例会真的 ``POST /api/config``。``update_config()`` 除了
+    落盘,还会 (1) 写 ``os.environ``、(2) 调 ``UnifiedConfig.reload()`` —— 生产上
+    两件都对(面板改完不必重启就生效)。但对测试来说,那些假值就**留在了进程里**:
+
+    * ``os.environ`` 那一份由各用例的 ``monkeypatch.setenv`` 还原;
+    * ``UnifiedConfig._config`` 是 reload 时照着当时的 os.environ / ConfigStore 拍下
+      的**内存快照**,还原环境变量并不会动它。而 ``core.secret_resolution`` 的第一层
+      读的正是它 —— 于是一把测试用的假 realtime key 会一直被后面的用例解析到。
+
+    实测污染:``tests/test_voice_duplex_session.py`` 有 8 条独立跑全绿、与本文件
+    同进程跑就红("双工默认关"变成默认开、Gemini 分支的 URL 里拼进了假 key)。
+
+    为什么是 autouse 而不是写在那两条用例里
+    ------------------------------------------
+    finalizer 按**建立顺序的逆序**执行。autouse fixture 在 ``monkeypatch`` 之前建立,
+    所以它的收尾跑在 monkeypatch 撤销**之后** —— 那时 ``os.environ`` 与
+    ``config_store._singleton`` 都已还原,这一次 reload 才拍得到干净的快照。
+    写在用例体里做不到这个顺序。
+    """
+    yield
+    try:
+        from core.unified_config import config as _cfg
+
+        _cfg.reload()
+    except Exception:  # noqa: BLE001 —— 收尾失败不该把用例判红
+        pass
+
+
 def _extract_config_reads() -> dict[str, list[str]]:
     """返回 ``{配置键: [读它的模块, ...]}``。"""
     found: dict[str, list[str]] = {}
-    for rel in _VOICE_MODULES:
+    for rel in _voice_modules():
         path = REPO_ROOT / rel
         if not path.exists():
             continue
@@ -110,12 +168,63 @@ def _extract_settings_tab_keys() -> set[str]:
     return set(re.findall(r"'([A-Z][A-Z0-9_]*)'", body))
 
 
+class TestTheModuleScopeIsDerivedNotHandWritten:
+    """守住"范围自己长出来"这件事本身 —— 它才是这个文件漏过两次的真正根因。
+
+    补键只治当次的症状。范围一旦退回手写清单(或者某条模式因为目录改名而
+    静默匹配不到任何文件),下一批新模块里的配置键又会无声无息地不受保护。
+    """
+
+    def test_every_pattern_actually_matches_something(self):
+        """每条模式都必须真的命中文件。
+
+        一条命中不到文件的模式(目录改名、写错路径)不会报错,只会让守卫的
+        范围**静默缩小** —— 与手写清单漏掉一个模块是完全相同的失效方式。
+        """
+        dead = [pat for pat in _VOICE_MODULE_PATTERNS if not any(p.is_file() for p in REPO_ROOT.glob(pat))]
+        assert not dead, f"这些模式匹配不到任何文件,守卫范围已静默缩小: {dead}"
+
+    def test_the_scope_covers_the_directories_the_hand_list_missed(self):
+        """判别用例:手写清单当初漏掉的那几类目录,现在必须在范围内。
+
+        直接钉住具体模块,而不是只数一个总数 —— 总数会被别处新增的文件顶上去,
+        看起来还在涨,实际这几个目录已经掉出范围了。
+        """
+        mods = set(_voice_modules())
+        for rel in (
+            "core/tts/kokoro_engine.py",  # 整个 core/tts/ 从来不在手写清单里
+            "core/asr/whisper_asr.py",  # core/asr/ 同上
+            "core/perception/desktop_perception_store.py",  # core/perception/ 同上
+            "core/computer_use_loop.py",
+            "core/routes/chat.py",
+            "core/ambient_attention_loop.py",
+        ):
+            assert rel in mods, f"{rel} 掉出了守卫范围 —— 它里面的配置键不再受保护"
+
+    def test_a_new_module_is_picked_up_without_editing_this_file(self, tmp_path, monkeypatch):
+        """反向验证:范围**真的是派生的**。
+
+        往受管目录里放一个新模块,它必须自动出现在范围里 —— 不需要任何人回来
+        改这个文件。如果哪天有人把派生改回硬编码清单,这条会当场炸。
+        """
+        probe = REPO_ROOT / "core/tts/_scope_probe_tmp.py"
+        assert not probe.exists()
+        probe.write_text('import os\nos.getenv("GALAXY_SCOPE_PROBE_TMP", "")\n', encoding="utf-8")
+        try:
+            assert "core/tts/_scope_probe_tmp.py" in _voice_modules()
+            assert "GALAXY_SCOPE_PROBE_TMP" in _extract_config_reads()
+        finally:
+            probe.unlink()
+
+
 class TestExtractionItself:
     """先证明扫描有效 —— 扫不出东西的话,下面的断言全是空转。"""
 
     def test_finds_a_meaningful_number_of_keys(self):
         found = _extract_config_reads()
-        assert len(found) >= 20, f"只扫出 {len(found)} 个配置键,正则可能失效了: {sorted(found)}"
+        # 门槛按派生后的真实规模(77)下调一档留余量。原先是 20 —— 那是手写清单时代的
+        # 量级,范围扩大后它形同虚设:掉回只剩 21 个键也照样通过。
+        assert len(found) >= 60, f"只扫出 {len(found)} 个配置键,正则或范围可能失效了: {sorted(found)}"
 
     def test_does_not_pick_up_mentions_in_prose(self):
         """判别用例:``GALAXY_TTS_STREAMING`` 在双工模块的 docstring 里被提到,
@@ -218,6 +327,19 @@ class TestRealtimeKeyRoutesToSecretStore:
                 secrets_path=tmp_path / "secrets.env.test",
             ),
         )
+        # 关键的一步:先让 monkeypatch **接管**这个环境变量。
+        #
+        # update_config() 除了落盘还会写 os.environ(生产上就该这样 —— 面板改完不必
+        # 重启就生效)。而这个测试原先只隔离了**文件**,没有隔离 os.environ:那把假
+        # key 会一直留在进程里,后面任何走 resolve_secret("GALAXY_REALTIME_API_KEY")
+        # 的测试都会捞到它。实测污染了 tests/test_voice_duplex_session.py 的 8 条
+        # (它们独立跑全绿、和本文件同进程跑就红:"双工默认关"变成了默认开,
+        # Gemini 分支的 URL 里拼进了这个假 key)。
+        #
+        # monkeypatch.setenv 会记下变量**当前的状态**(包括"原本不存在"),teardown
+        # 时整个还原 —— 所以它也覆盖得住之后由路由代码写进去的值。
+        monkeypatch.setenv("GALAXY_REALTIME_API_KEY", "unset-by-test")
+
         app = FastAPI()
         app.include_router(config_module.router)
         client = TestClient(app)
@@ -260,7 +382,7 @@ class TestSchemaEntriesAreHonest:
             ("GALAXY_VOICE_BACKCHANNEL_TOLERANCE", "true"),
             ("GALAXY_SYSTEM_AUDIO_CAPTURE", "true"),
             ("GALAXY_SYSTEM_AUDIO_TO_PERCEPTION", "true"),
-            ("GALAXY_VOICE_DUPLEX", "false"),
+            ("GALAXY_VOICE_DUPLEX", "auto"),
             ("GALAXY_VOICE_DUCKING", "true"),
             ("GALAXY_VOICE_DUCK_GAIN", "0.25"),
             ("GALAXY_VOICE_HOLD_S", "90.0"),
@@ -300,7 +422,7 @@ class TestSchemaEntriesAreHonest:
         from core.multimodal.system_audio_capture_service import feed_perception_enabled
         from core.routes.config import CONFIG_SCHEMA
         from core.voice_dialog_policy import backchannel_tolerance_enabled
-        from core.voice_duplex_session import duck_gain, ducking_enabled, duplex_enabled
+        from core.voice_duplex_session import duck_gain, ducking_enabled
         from core.voice_echo_guard import enabled as echo_guard_enabled
 
         cases = [
@@ -309,9 +431,12 @@ class TestSchemaEntriesAreHonest:
             ("GALAXY_VOICE_BACKCHANNEL_TOLERANCE", backchannel_tolerance_enabled),
             ("GALAXY_SYSTEM_AUDIO_CAPTURE", capture_enabled),
             ("GALAXY_SYSTEM_AUDIO_TO_PERCEPTION", feed_perception_enabled),
-            ("GALAXY_VOICE_DUPLEX", duplex_enabled),
             ("GALAXY_VOICE_DUCKING", ducking_enabled),
         ]
+        # GALAXY_VOICE_DUPLEX 不在这里:它是**三态**(auto/1/0),不设时按当前档位的
+        # 真实供给判定 —— 根本没有一个固定的布尔默认值可比。拿一个固定值去比它，
+        # 结果只取决于跑测试那台机器上有没有 realtime key，是条会飘的判据。
+        # 三态开关由下面 test_three_state_switches_declare_auto 单独钉。
         saved = {k: os.environ.pop(k, None) for k, _ in cases}
         saved["GALAXY_VOICE_DUCK_GAIN"] = os.environ.pop("GALAXY_VOICE_DUCK_GAIN", None)
         try:
@@ -337,10 +462,26 @@ class TestSchemaEntriesAreHonest:
             "GALAXY_VOICE_BACKCHANNEL_TOLERANCE",
             "GALAXY_SYSTEM_AUDIO_CAPTURE",
             "GALAXY_SYSTEM_AUDIO_TO_PERCEPTION",
-            "GALAXY_VOICE_DUPLEX",
             "GALAXY_VOICE_DUCKING",
+            "GALAXY_AEC_RES",
+            "GALAXY_AEC_COMFORT_NOISE",
         ):
             assert CONFIG_SCHEMA[key]["type"] == "boolean", f"{key} 不会渲染成推拉开关"
+
+    def test_three_state_switches_declare_auto(self):
+        """三态开关(auto / 1 / 0)不能声明成 boolean+false —— 那是**假的默认值**。
+
+        双工与"文字语音同刻"都已改成:不设时按真实能力自动判定。若 schema 仍写
+        boolean/false，面板会显示"关"而系统实际已自动开启 —— 用户看到的与发生的
+        不是一回事，正是这一组守卫要防的事。
+        """
+        from core.routes.config import CONFIG_SCHEMA
+
+        for key in ("GALAXY_VOICE_DUPLEX", "GALAXY_TEXT_VOICE_LOCKSTEP"):
+            entry = CONFIG_SCHEMA[key]
+            assert entry["default"] == "auto", f"{key} 的默认值不是 auto —— 面板会显示假的默认"
+            assert entry["type"] != "boolean", f"{key} 是三态，渲染成推拉开关就丢了 auto 档"
+            assert "auto" in entry["description"], f"{key} 的说明没告诉用户 auto 是什么意思"
 
     def test_every_new_switch_has_a_chinese_description(self):
         """面板上显示的就是 description。留空或只有变量名的话用户看不懂这是干什么的。"""
@@ -386,10 +527,17 @@ class TestPanelCanActuallySaveThem:
             "GALAXY_VOICE_ECHO_GUARD": "false",
             "GALAXY_VOICE_BACKCHANNEL_TOLERANCE": "false",
             "GALAXY_SYSTEM_AUDIO_CAPTURE": "false",
-            "GALAXY_VOICE_DUPLEX": "true",
+            "GALAXY_VOICE_DUPLEX": "1",
             "GALAXY_VOICE_DUCKING": "false",
             "GALAXY_VOICE_DUCK_GAIN": "0.4",
         }
+        # 先让 monkeypatch 接管这几个环境变量,teardown 时整个还原。
+        # update_config() 会把值写进 os.environ(生产上正该如此:面板改完立刻生效),
+        # 而这里存的是一串"全部关掉"的假值 —— 不还原就会留在进程里,让后面每一条
+        # 断言"AEC 默认开 / 双工默认关"的测试都看到被这个测试改过的世界。
+        # 同 TestRealtimeKeyRoutesToSecretStore::test_saving_it_does_not_write_plaintext_env。
+        for k in payload:
+            monkeypatch.setenv(k, "unset-by-test")
         resp = client.post("/api/config", json={"config": payload})
         assert resp.status_code == 200, resp.text
         assert set(resp.json()["updated"]) == set(payload)
@@ -401,9 +549,10 @@ class TestPanelCanActuallySaveThem:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         items = body.get("config", body)
-        for key in ("GALAXY_AEC", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN"):
+        for key in ("GALAXY_AEC", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN", "GALAXY_AEC_RES"):
             assert key in items, f"/api/config/all 没返回 {key}"
-            assert items[key]["type"] in ("boolean", "number")
+            # string 也在内:三态开关(auto/1/0)本来就不是布尔,渲染成推拉开关会丢掉 auto 档。
+            assert items[key]["type"] in ("boolean", "number", "string")
             assert items[key]["description"]
 
 

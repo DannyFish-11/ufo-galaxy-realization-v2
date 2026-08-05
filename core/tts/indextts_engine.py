@@ -46,7 +46,9 @@ _fetch_started = False
 
 
 def _model_dir() -> Path:
-    return Path(os.environ.get("GALAXY_INDEXTTS_DIR", "models/indextts2"))
+    # 空串必须回落到默认值:面板把输入框清空后写回的是 ``GALAXY_INDEXTTS_DIR=``,
+    # get 的默认参数对空串不生效,会得到 Path("")。同 kokoro_engine._model_dir()。
+    return Path(os.environ.get("GALAXY_INDEXTTS_DIR", "").strip() or "models/indextts2")
 
 
 def _ref_audio() -> str:
