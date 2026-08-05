@@ -56,6 +56,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 try:
+    from core.device_readiness import DeviceReadinessSummary
     from core.runtime.source_dispatch_orchestrator import (
         DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL,
         SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY,
@@ -106,27 +107,31 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _FakeReadiness:
-    """Minimal DeviceReadinessSummary-like object for test isolation."""
+#: 就绪替身直接用**真类型**，不再手抄一份鸭子类型。
+#:
+#: 原来这里是一个 ``@dataclass class _FakeReadiness``，注释写着 "DeviceReadinessSummary-like
+#: object for test isolation"。它抄了四个维度，但真类型后来长出的 ``ready`` 属性（四维
+#: 合取的唯一定义）它没有跟上 —— 于是任何读 ``readiness.ready`` 的判据在这些用例里都
+#: 恒为假，24 条一起红，而故障现场看起来像"打分器把所有候选都拒了"。
+#:
+#: ``DeviceReadinessSummary`` 是个纯 dataclass、没有副作用，直接构造本身就是隔离的，
+#: 手抄一份替身从一开始就没有收益、只有漂移风险。
+def _FakeReadiness(device_id: str, **overrides: Any) -> "DeviceReadinessSummary":
+    """构造**真类型**，但保留本文件"默认健康"的约定。
 
-    device_id: str
-    registered: bool = True
-    online: bool = True
-    connected: bool = True
-    routable: bool = True
-    capability_ready: bool = True
-    reasons: List[str] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "device_id": self.device_id,
-            "registered": self.registered,
-            "online": self.online,
-            "connected": self.connected,
-            "routable": self.routable,
-            "capability_ready": self.capability_ready,
-        }
+    直接 alias 到真类型是不行的：真 dataclass 的默认值全是 ``False``（保守），而这些
+    用例写的是"不指定就是健康、只覆盖要测的那一维"。两种约定相反，直接换会让每个
+    候选都被拒。
+    """
+    healthy: Dict[str, Any] = {
+        "registered": True,
+        "online": True,
+        "connected": True,
+        "routable": True,
+        "capability_ready": True,
+    }
+    healthy.update(overrides)
+    return DeviceReadinessSummary(device_id=device_id, **healthy)
 
 
 @dataclass

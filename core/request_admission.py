@@ -102,6 +102,21 @@ def priority_for_origin(origin: str) -> int:
     return PRIORITY_AMBIENT if origin_is_preemptable(origin) else PRIORITY_USER
 
 
+def _admission_flag_enabled(context_key: str = "") -> bool:
+    """准入层的特性开关是否开着。
+
+    取不到开关时**放行**：开关层不可用不该让准入层跟着失效，那会把一个可观测性问题
+    变成一个可用性问题。降级留 warning，不静默。
+    """
+    try:
+        from core.unified.release_gate import get_release_gate
+
+        return bool(get_release_gate().is_enabled("global_arbiter", context_key=context_key))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("取不到 release gate，准入层按开启处理: %s", exc)
+        return True
+
+
 async def _signal_preemption(task_id: str) -> None:
     """点亮受害者的取消信号。取不到就只留 warning —— 那说明它已经跑完了。"""
     async with _signals_lock:
@@ -146,6 +161,19 @@ async def admit_request(
         from core.orchestration.global_arbiter import get_global_arbiter
     except Exception as exc:  # noqa: BLE001
         logger.warning("准入层不可用，本次请求不受全局上限约束: %s", exc)
+        yield asyncio.Event()
+        return
+
+    # 特性开关：``core/unified/release_gate.py`` 的 ``global_arbiter``。
+    #
+    # 那个模块的 usage 示例写的就是这一段（``if gate.is_enabled("global_arbiter"):
+    # arbiter.admit(...)``），但**全仓从没有人真的这么写过** —— 11 个 flag 一个生产
+    # 消费方都没有，唯一的命中就是那段示例自己。开关装了、没人问，等于关不掉。
+    #
+    # 关掉时**放行**（不是拒绝）：这是个 kill switch，它存在的意义是"准入层出了问题时
+    # 能把它摘掉"，摘掉之后系统应当回到接入之前的样子，而不是全面拒绝服务。
+    if not _admission_flag_enabled(task_id):
+        logger.info("准入层被特性开关关闭，本次请求不受全局上限约束 | task=%s", task_id)
         yield asyncio.Event()
         return
 
