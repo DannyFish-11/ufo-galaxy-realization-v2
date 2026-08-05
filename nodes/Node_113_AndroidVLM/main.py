@@ -16,13 +16,43 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+_NODE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # 添加当前目录到 Python 路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _NODE_DIR)
+
+
+def _load_vlm_engine():
+    """按**文件路径**加载本节点的 core/android_vlm_engine.py。
+
+    这里不能写 ``from core.android_vlm_engine import ...``。``python main.py``
+    起进程时它是对的（sys.path[0] 就是本目录）；但 fusion_entry.py 是以模块方式
+    加载本文件的，那个进程里仓库根的 ``core`` 包早已在 sys.modules 里 ——
+    ``core.android_vlm_engine`` 于是只会去仓库根 core/ 里找，找不到，ImportError
+    被下面的 except 接住，``HAS_VLM_ENGINE`` 静默变成 False。
+
+    症状是最难查的那一种：服务照常起来、/health 照常绿，只是 VLM 能力**不见了**，
+    没有任何一行日志说它为什么不见。实测复现过（融合进程里 HAS_VLM_ENGINE=False）。
+    按文件路径加载两种入口下都成立，且不依赖 sys.path 的先后顺序。
+    """
+    import importlib.util
+
+    path = os.path.join(_NODE_DIR, "core", "android_vlm_engine.py")
+    spec = importlib.util.spec_from_file_location("node113_android_vlm_engine", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"无法加载 {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 try:
-    from core.android_vlm_engine import AndroidVLMEngine, SUPPORTED_VLM_PROVIDERS
+    _vlm_engine = _load_vlm_engine()
+    AndroidVLMEngine = _vlm_engine.AndroidVLMEngine
+    SUPPORTED_VLM_PROVIDERS = _vlm_engine.SUPPORTED_VLM_PROVIDERS
     HAS_VLM_ENGINE = True
-except ImportError:
+except Exception as _vlm_err:  # noqa: BLE001 — 缺依赖时降级可以,但不许无声
+    print(f"[Node_113] VLM 引擎加载失败,已降级为无 VLM 模式:{_vlm_err}", file=sys.stderr)
     HAS_VLM_ENGINE = False
     AndroidVLMEngine = None
     SUPPORTED_VLM_PROVIDERS = []

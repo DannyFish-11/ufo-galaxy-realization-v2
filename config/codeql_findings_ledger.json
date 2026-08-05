@@ -9,7 +9,7 @@
   },
   "_rule_of_thumb": "写 reason 时回答一句『为什么它不该被改』,而不是『它不重要』。答不上来的,就应该去改代码而不是记在这里。",
   "_measured_at": "main cfc54eb / PR #1567 run 30784537448,python.sarif 共 22 条",
-  "total_recorded": 22,
+  "total_recorded": 20,
   "findings": [
     {
       "rule": "py/full-ssrf",
@@ -42,7 +42,7 @@
       "status": "by-design",
       "locations": [
         "core/adapters/udp_adapter.py:159",
-        "galaxy_gateway/p2p_connector.py:132"
+        "galaxy_gateway/p2p_connector.py:143"
       ],
       "reason": "带 SO_BROADCAST 的局域网发现监听与 STUN 客户端。广播包只送到绑通配地址的 socket;STUN 要让 NAT 看到真实出口映射,本地端口得对所有接口开着等回包。绑 127.0.0.1 不是修复,是把跨设备发现关掉。已做的改进是把这个**隐式常量**变成显式可配的决定:core/net_bind.discovery_bind_host() 读 GALAXY_DISCOVERY_BIND_HOST,默认仍为 0.0.0.0(改默认值会让绝大多数用户升级后设备发现悄悄失效),部署在公网机器上时可收窄到某块网卡。改完 CodeQL 仍会报,这是预期的 —— 它看到的还是一个可能为 0.0.0.0 的值流进 bind()。补充一点核过的事:告警文案里还提到该值可能是空串 ''。那是 CodeQL 把 os.getenv(名字, \"\") 的默认字面量顺着数据流带了下来,它没有精确建模函数里 `if not host: return default` 那道拦截。穷举过('' / 空格 / 制表符 / 换行 / 混合空白 / 未设置)六种取值,返回的都是 0.0.0.0,能返回空串的路径不存在;这一点由 tests/test_codeql_ledger_and_net_bind.py 的 test_blank_values_fall_back_to_default 钉着。",
       "guarded_by": [
@@ -70,14 +70,12 @@
     },
     {
       "rule": "py/incomplete-url-substring-sanitization",
-      "count": 3,
+      "count": 1,
       "status": "false-positive",
       "locations": [
-        "tests/test_pr4_topology_semantics.py:249",
-        "tests/test_pr4_topology_semantics.py:293",
         "tests/test_webrtc_gateway.py:353"
       ],
-      "reason": "这三处不是在净化 URL,是在对**渲染出来的文本**做包含断言(TopologySurface().render(...) 的输出里有没有出现某个地址、WebRTC 端点字符串里有没有网关域名)。规则匹配的是『URL 上的子串检查』这个形状,而这里被检查的对象根本不是一个待净化的 URL。改成精确比较会把断言变脆(渲染文本本来就带边框和其它内容),没有安全收益。"
+      "reason": "这一处不是在净化 URL,是在对**渲染出来的文本**做包含断言（WebRTC 端点字符串里有没有网关域名）。规则匹配的是「URL 上的子串检查」这个形状,而被检查的对象根本不是一个待净化的 URL。改成精确比较会把断言变脆（渲染文本本来就带边框和其它内容）,没有安全收益。\n\n原本还登记了 tests/test_pr4_topology_semantics.py:249 与 :293 两处,已删除 —— **那个文件本身已不在仓库里**（核实过：路径不存在），finding 自然随之消失。留着会让台账慢慢变成一份没人信的清单。"
     },
     {
       "rule": "py/incomplete-url-substring-sanitization",

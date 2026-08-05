@@ -419,3 +419,94 @@ def test_check_environment_runs_for_real():
     assert isinstance(rep.to_status_dict(), dict)
     steps = rep.to_steps()
     assert steps and all(isinstance(s.status, Status) for s in steps)
+
+
+# ---------------------------------------------------------------------------
+# .env 陈旧检测：比 .env.example 少了哪些键
+# ---------------------------------------------------------------------------
+
+
+def test_env_staleness_counts_missing_keys(tmp_path, monkeypatch):
+    """``.env`` 落后于 ``.env.example`` 时要能说出**缺几个、缺哪些**。
+
+    实测这台机器：.env.example 185 个键、.env 只有 88 个 —— 后加的 100 多个
+    配置项一直在跑代码默认值，而没有任何地方会说一声。症状五花八门且都不指向
+    根因（``--docker-full`` 报某个变量缺失、某个开关"设了没反应"）。
+    """
+    example = tmp_path / ".env.example"
+    example.write_text("A=1\nB=2\nC=3\n# 注释\nD=4\n", encoding="utf-8")
+    env = tmp_path / ".env"
+    env.write_text("A=x\nC=y\n", encoding="utf-8")
+
+    monkeypatch.delenv("B", raising=False)
+    monkeypatch.delenv("D", raising=False)
+    total, missing, sample = env_check._probe_env_staleness(env, example)
+    assert total == 4
+    assert missing == 2, f"该报缺 2 个，实际 {missing}"
+    assert set(sample) == {"B", "D"}
+
+
+def test_env_staleness_counts_secrets_env_and_os_environ(tmp_path, monkeypatch):
+    """密钥进了 runtime/secrets.env 或环境变量，就**不算缺**。
+
+    面板保存的 Key 会收敛进 secrets.env（见模块头 API Key 那一条），
+    只比 .env 会把它们全报成缺失 —— 那是纯噪音。
+    """
+    example = tmp_path / ".env.example"
+    example.write_text("A=1\nZZ_FROM_ENVIRON=2\n", encoding="utf-8")
+    env = tmp_path / ".env"
+    env.write_text("A=x\n", encoding="utf-8")
+
+    monkeypatch.setenv("ZZ_FROM_ENVIRON", "set-in-process-env")
+    _total, missing, _sample = env_check._probe_env_staleness(env, example)
+    assert missing == 0, "已在 os.environ 里的键不该算缺失"
+
+
+def test_env_staleness_never_reads_values(tmp_path, monkeypatch):
+    """只报**键名**，值一个字都不带出来。
+
+    与 scripts/verify_provider_apis.py 同一条约束：键名本来就写在提交进仓库的
+    .env.example 里，值不行。
+    """
+    example = tmp_path / ".env.example"
+    example.write_text("SECRET_TOKEN=placeholder\n", encoding="utf-8")
+    env = tmp_path / ".env"
+    env.write_text("# 空\n", encoding="utf-8")
+
+    monkeypatch.delenv("SECRET_TOKEN", raising=False)
+    _total, missing, sample = env_check._probe_env_staleness(env, example)
+    assert missing == 1
+    assert sample == ["SECRET_TOKEN"]
+    assert "placeholder" not in "".join(sample), "样本里不许出现值"
+
+
+def test_env_staleness_shows_up_as_a_step_row():
+    """这条事实要经 to_steps() 出去 —— 那样 Phase 0 / --check / doctor 三处一起有。"""
+    report = env_check.EnvReport(
+        python_version="3.11.0",
+        python_ok=True,
+        python_executable="/usr/bin/python3",
+        pip_ok=True,
+        env_example_total=10,
+        env_missing_count=4,
+        env_missing_sample=["X", "Y"],
+    )
+    names = [s.name for s in report.to_steps()]
+    assert ".env 覆盖度" in names
+    row = next(s for s in report.to_steps() if s.name == ".env 覆盖度")
+    assert row.status is Status.DEGRADED, "缺项是降级，不是失败 —— 它不阻止启动"
+    assert "6/10" in row.value
+    assert row.hint and "X" in row.hint
+
+
+def test_env_staleness_is_ok_when_nothing_missing():
+    report = env_check.EnvReport(
+        python_version="3.11.0",
+        python_ok=True,
+        python_executable="/usr/bin/python3",
+        pip_ok=True,
+        env_example_total=10,
+        env_missing_count=0,
+    )
+    row = next(s for s in report.to_steps() if s.name == ".env 覆盖度")
+    assert row.status is Status.OK

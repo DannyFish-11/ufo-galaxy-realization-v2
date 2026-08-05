@@ -766,6 +766,67 @@ CI 与 pytest 覆盖的是"代码是否自洽"，**覆盖不到"这条命令敲�
 | 完整后端启动 | — | **✓ 就绪**，`/health` 与 `/api/v1/system/status` 均 200 |
 
 
+---
+
+## 收尾：算了却没人看得见的三处
+
+统一做完、CLI 也真跑过之后，剩下的三件事有一个共同形状：
+**判断已经算出来了，但没有到达需要它的人那里。**
+
+### 1. 七级阶梯只对自己可见
+
+`launcher/shell.py` 逐级记录了 `applied` / `ok` / `detail`，`HealReport` 还专门有
+`healed_at` 与"卡在第几级"。但真跑 `python main.py doctor --heal` 时，人只看到一句
+**"未成功"** ——
+
+- hint（"卡在第 N 级"）只在 `launcher/ui.py` 的**总结卡**里渲染，
+  而 doctor 这条路径调的是 `_ui.finish(..., tui=False)`，总结卡整个不出；
+- ladder 明细只进 `runtime/startup.json` 与 `--json`。
+
+也就是说"可诊断、可审计"这件事，对着终端排障的人**完全享受不到**。现在逐级打出来，
+三态用不同图标分开 —— 这三者的下一步完全不同：
+
+```
+  · L0 复用已在运行的桌面壳  锁未持有        ← 没跑（不适用/前面已修好）
+  ✗ L1 首次安装 npm install  真实 npm TLS 失败  ← 跑了且失败（卡住的位置）
+  ✗ L2 修复式重装           同样的网络错误
+  · L3 清 npm 残留暂存目录  没有残留目录
+  ✓ L4 换镜像重试           npmmirror 成功    ← 救活它的那一级
+```
+
+`detail` 原样带出，不做归纳 —— 归纳就等于把排障需要的那点信息丢了。
+`--check` 的降级项 hint 同一个毛病，一并补上（`[怎么办]` 段）。
+
+### 2. `.env` 落后于 `.env.example`，而没有任何地方会说一声
+
+`.env` 是**一次性复制**出来的，此后新增的配置项再没人补回去。
+实测这台机器：`.env.example` **185** 个键，`.env` 只有 **88** 个 ——
+后来加的 100 多项一直在跑代码里的默认值。
+
+症状五花八门且都不指向根因：`--docker-full` 报 "TEMPORAL_DB_PASSWORD is missing"
+（那 5 个 compose 必填变量正是缺的一部分）、某个新开关"设了没反应"（键名根本不在 `.env` 里）。
+
+做成 `launcher/env_check.py` 的一行事实（`.env 覆盖度`），于是 Phase 0 / `--check` /
+`doctor` **三处一起**有了，不用各写一遍。两个判据细节：
+
+- **并上 `runtime/secrets.env` 与 `os.environ`** —— 面板保存的 Key 会收敛进 secrets.env，
+  只比 `.env` 会把它们全报成缺失，那是纯噪音；
+- **只报键名、不碰值** —— 键名本来就写在提交进仓库的 `.env.example` 里，
+  与 `scripts/verify_provider_apis.py` 同一条约束。
+
+### 3. CodeQL 台账里的两条陈账
+
+台账自己就写着"留着会让台账慢慢变成一份没人信的清单"，所以按它的规矩清：
+
+- `galaxy_gateway/p2p_connector.py:132` → **:143**。核实过：全文件唯一的 `bind(` 在 143 行，
+  132 行是个类常量 `XOR_MAPPED_ADDRESS`。理由（STUN 客户端需要通配绑定）原样成立。
+- `tests/test_pr4_topology_semantics.py:249` / `:293` **删除**。核实过：
+  **那个文件本身已不在仓库里** —— finding 消失是因为文件没了，不是规则版本变化。
+  （同一条 rule 下 `tests/test_webrtc_gateway.py:353` 仍在，保留。）
+
+两条都是**先核实源码再改台账**，不是照抄 CI 那句"SARIF 里已经不见了"。
+
+
 ## 附：数据来源
 
 本文所有数字来自 2026-08-04 对 `ufo-galaxy-realization-v2` 的实测：
