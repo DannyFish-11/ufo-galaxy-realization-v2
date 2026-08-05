@@ -228,8 +228,8 @@ class ResultSourceChannel(str, Enum):
     """Delegated execution / handoff result callback."""
 
     LOCAL = "local"
-    """本地执行链路结果 —— 由 command_router 完成本地派发后归口到这里。
-    Local execution result, funnelled here after CommandRouter finishes local dispatch."""
+    """本地执行结果 —— **同名两件事**：(1) 在用 = Android 设备本机执行经 WS 回报，由
+    task_lifecycle.py 打标；(2) 未接 = V2 主机自身执行，见 local_execution_chain。"""
 
     UNKNOWN = "unknown"
     """Unclassified source — must NOT be used for production paths."""
