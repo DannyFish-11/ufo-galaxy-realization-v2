@@ -506,7 +506,6 @@
     "projection_summary",
     "proxy_via_route",
     "prune",
-    "publish_audit_event",
     "publish_capability_event",
     "publish_device_event",
     "publish_legacy_task_result",

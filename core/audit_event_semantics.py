@@ -318,6 +318,10 @@ AUDIT_EVENT_DESCRIPTIONS: Dict[AuditEventKind, str] = {
 # ---------------------------------------------------------------------------
 
 
+#: fire-and-forget 的审计镜像任务:事件循环只持弱引用,不留强引用会被 GC 掉。
+_AUDIT_MIRROR_TASKS: set = set()
+
+
 @dataclass
 class AuditEventRecord:
     """Canonical, lightweight audit record for compliance and observability.
@@ -475,6 +479,19 @@ class AuditEventSemantics:
             # 序保留最近 _MAX_INDEXED_TASKS 个任务,老任务整键淘汰。
             while len(self._by_task) > self._MAX_INDEXED_TASKS:
                 self._by_task.pop(next(iter(self._by_task)), None)
+        # 镜像到 NATS 的 galaxy.audit.* 命名空间。
+        #
+        # 为什么必须发:审计记录此前只落在**本进程**的环形缓冲(和可选的本地持久化
+        # 存储)里。多节点部署时每个节点各有一份自己的环,系统级的审计视图根本不
+        # 存在 —— 而 core/contract_map/contract_registry.py 里那条契约明写着
+        # "Also mirrored to NATS galaxy.audit.* subjects",并把 core.nats_bus 列
+        # 为生产者。文档宣称已做,实际一条都没发过。
+        #
+        # 放在 record() 里是因为它是**唯一写入口**:环形缓冲、持久化存储都在这
+        # 一处收口,镜像跟着它走就不会漏。best-effort、fire-and-forget —— 审计
+        # 记录本身已经落好了,发不出去不该让它失败。
+        self._mirror_to_nats(record)
+
         # Write to durable store when attached
         if self._audit_store is not None:
             try:
@@ -488,6 +505,45 @@ class AuditEventSemantics:
             except Exception as _exc:  # noqa: BLE001
                 logger.debug("AuditEventSemantics: durable write skipped: %s", _exc)
         return record
+
+    @staticmethod
+    def _mirror_to_nats(record: AuditEventRecord) -> None:
+        """把审计记录发到 ``galaxy.audit.{kind}``。best-effort,绝不抛。
+
+        主题按 kind 分:``galaxy.audit.task_accepted`` / ``galaxy.audit.violation``
+        …… 这样消费方可以只订自己关心的那一类,而不必收下整条审计流再自己过滤。
+
+        取的是 ``kind.value`` 而不是 ``str(kind)``:``AuditEventKind`` 是
+        ``(str, Enum)``,而 Python 3.11 的 ``str(枚举成员)`` 给的是
+        ``"AuditEventKind.TASK_ACCEPTED"`` —— 里面**带一个点**,NATS 会把它切成
+        两个 token,主题变成四段,``galaxy.audit.*`` 这种单 token 通配符当场就
+        匹配不上了(实测收到 0 条)。
+        """
+        try:
+            import asyncio  # noqa: PLC0415
+
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+            bus = get_nats_bus()
+            if not bus.is_usable():
+                # 单机/未连接时这是常态 —— 审计已经落在本地环形缓冲里了。
+                return
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                bus.publish_audit_event(
+                    str(getattr(record.kind, "value", record.kind)),
+                    record.to_dict(),
+                    trace_id=record.trace_id,
+                    runtime_session_id=record.session_id,
+                )
+            )
+            _AUDIT_MIRROR_TASKS.add(task)
+            task.add_done_callback(_AUDIT_MIRROR_TASKS.discard)
+        except RuntimeError:
+            # 不在事件循环里(同步上下文写审计)。不值得为镜像起一个循环。
+            pass
+        except Exception as exc:  # pragma: no cover - 镜像绝不能影响审计本身
+            logger.debug("AuditEventSemantics: NATS 镜像跳过:%s", exc)
 
     def get_by_task(self, task_id: str) -> List[AuditEventRecord]:
         """Return all audit records for *task_id*."""
