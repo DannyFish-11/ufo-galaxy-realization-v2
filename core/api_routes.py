@@ -62,8 +62,6 @@ from dataclasses import dataclass  # noqa: E402  启动时间戳须在重导入�
 from datetime import datetime  # noqa: E402  启动时间戳须在重导入前捕获
 from typing import Any, Dict, List, Optional  # noqa: E402  启动时间戳须在重导入前捕获
 
-from core.compat_ws_vocabulary import resolve_compat_ws_branch  # noqa: E402
-
 from fastapi import (  # noqa: E402  时间戳须先于重导入
     APIRouter,
     Depends,
@@ -76,6 +74,7 @@ from fastapi import (  # noqa: E402  时间戳须先于重导入
 from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402  启动时间戳须在重导入前捕获
 from pydantic import BaseModel, Field  # noqa
 
+from core.compat_ws_vocabulary import resolve_compat_ws_branch  # noqa: E402
 from core.unified_response import UnifiedChatResponse  # noqa
 
 # 导入鉴权模块
