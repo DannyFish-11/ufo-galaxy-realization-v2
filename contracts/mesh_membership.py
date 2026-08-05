@@ -469,6 +469,50 @@ def _derive_hints(
     )
 
 
+#: 保存 BodyMeshRegistry 原始能力角色（perception / action / presence）的 metadata 键。
+#: 两个适配器都要用它 —— 见 :func:`preserve_body_mesh_roles`。
+BODY_MESH_ROLES_METADATA_KEY = "body_mesh_roles"
+
+
+def preserve_body_mesh_roles(metadata: Dict[str, Any], body_roles: Any) -> Dict[str, Any]:
+    """把 ``BodyEntry.roles`` 原样存进 *metadata*，就地修改并返回它。
+
+    为什么单独拎出来
+    ================
+    ``BodyEntry`` 上有**两套角色词汇**，说的是两件事：
+
+    * ``DeviceRole``（perception / action / presence）—— **能力**角色。这是活的生产
+      写入口真正写进去的那一套（``galaxy_gateway/android/handlers/registration.py``
+      与 ``capability_report.py``）。
+    * ``MeshMemberRole`` / MeshSession participant roles（primary / source / support）
+      —— **本次会话里的位置**，由 ``body_score`` 现算。
+
+    第二套不能替代第一套："这台是 primary" 回答不了 "它有没有摄像头"。所以
+    :func:`from_body_mesh_entry` 一直会把原始能力角色留在 metadata 里备查。
+
+    问题是 ``BodyMeshRegistry.get_mesh_session()`` **另外手搓了一遍** participant
+    构造，没做这一步 —— 同一个 ``BodyEntry``，走 memberships 出去能力角色还在，走
+    session 出去就没了：
+
+        /api/v1/mesh/memberships  metadata={"body_mesh_roles": ["perception","presence"]}
+        /api/v1/mesh/session      metadata={}                    ← 同一台设备
+
+    于是把这一步收成一处，两个适配器都调它，省得下一个适配器再漏一次。
+
+    ``setdefault`` 语义：调用方已经自己写过这个键就不覆盖。
+    """
+    if not body_roles:
+        return metadata
+    try:
+        metadata.setdefault(
+            BODY_MESH_ROLES_METADATA_KEY,
+            sorted(r.value if hasattr(r, "value") else str(r) for r in body_roles),
+        )
+    except Exception:  # pragma: no cover - 防御：roles 不可迭代时不该连累整条装配
+        pass
+    return metadata
+
+
 def _body_roles_to_mesh_roles(body_roles: Any) -> List[MeshMemberRole]:
     """Map BodyMeshRegistry DeviceRole values to MeshMemberRole values.
 
@@ -533,15 +577,8 @@ def from_body_mesh_entry(
         mesh_roles = _body_roles_to_mesh_roles(body_roles)
         authority = _body_authority_from_score(body_score)
 
-        # Preserve original body mesh roles in metadata for traceability
-        if body_roles:
-            try:
-                metadata.setdefault(
-                    "body_mesh_roles",
-                    sorted(r.value if hasattr(r, "value") else str(r) for r in body_roles),
-                )
-            except Exception:
-                pass
+        # 原始能力角色留在 metadata 里备查 —— 判据只此一处，见 preserve_body_mesh_roles。
+        preserve_body_mesh_roles(metadata, body_roles)
 
         effective_mesh_id = session_id or mesh_id
 
@@ -941,6 +978,9 @@ def build_mesh_membership(
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    # Metadata 键与共用小工具
+    "BODY_MESH_ROLES_METADATA_KEY",
+    "preserve_body_mesh_roles",
     # Enumerations
     "MeshMemberRole",
     "MeshAuthorityScope",

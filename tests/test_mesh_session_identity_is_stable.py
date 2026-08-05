@@ -116,3 +116,56 @@ def test_empty_mesh_is_also_stable():
     empty = BodyMeshRegistry(auto_persist=False, auto_restore=False)
     ids = [empty.get_mesh_session().session_id for _ in range(3)]
     assert len(set(ids)) == 1, f"空 mesh 的 ID 仍在漂：{ids}"
+
+
+# ---------------------------------------------------------------------------
+# 三、能力角色不许在半路掉队
+# ---------------------------------------------------------------------------
+
+
+def test_capability_roles_survive_both_adapters():
+    """``BodyEntry`` 上有两套角色词汇，说的是两件事，缺一不可：
+
+    * ``DeviceRole``（perception / action / presence）—— **能力**角色。活的生产写入口
+      （android/handlers/registration.py、capability_report.py）写进来的就是这一套。
+    * participant / membership roles（primary / source / support）—— **本次会话里的
+      位置**，由 body_score 现算。
+
+    第二套替代不了第一套："这台是 primary" 回答不了"它有没有摄像头"。
+
+    此前 memberships 那条适配器（``from_body_mesh_entry``）一直把能力角色留在
+    metadata 里，而 ``get_mesh_session()`` 里手搓的那份 participant 构造没做这一步 ——
+    同一个 BodyEntry 走两个端点出去，一个带着能力角色、一个丢了。
+    """
+    reg = BodyMeshRegistry(auto_persist=False, auto_restore=False)
+    reg.register("phone_001", roles=[DeviceRole.PERCEPTION, DeviceRole.PRESENCE])
+    reg.register("tablet_002", roles=[DeviceRole.ACTION])
+    for entry in reg.list_entries():
+        entry.body_score = {"phone_001": 1.0, "tablet_002": 3.0}[entry.device_id]
+
+    expected = {"phone_001": ["perception", "presence"], "tablet_002": ["action"]}
+
+    session_side = {
+        p["device_id"]: p["metadata"].get("body_mesh_roles") for p in reg.get_mesh_session().to_dict()["participants"]
+    }
+    assert session_side == expected, f"/api/v1/mesh/session 把能力角色丢了：{session_side}"
+
+    membership_side = {
+        m.to_dict()["member_device_id"]: m.to_dict()["metadata"].get("body_mesh_roles")
+        for m in reg.get_mesh_memberships()
+    }
+    assert membership_side == expected, f"/api/v1/mesh/memberships 把能力角色丢了：{membership_side}"
+    assert session_side == membership_side, "同一个 BodyEntry 走两条适配器出去，能力角色对不上"
+
+
+def test_session_position_and_capability_roles_are_kept_apart():
+    """两套词汇不许互相污染 —— 合成一列的话就再也分不出"是什么"和"这次干什么"。"""
+    reg = BodyMeshRegistry(auto_persist=False, auto_restore=False)
+    reg.register("phone_001", roles=[DeviceRole.PERCEPTION])
+    reg.register("tablet_002", roles=[DeviceRole.ACTION])
+    for entry in reg.list_entries():
+        entry.body_score = {"phone_001": 1.0, "tablet_002": 3.0}[entry.device_id]
+
+    for p in reg.get_mesh_session().to_dict()["participants"]:
+        assert set(p["roles"]) <= {"primary", "source", "support"}, f"会话位置那一列混进了能力角色：{p['roles']}"
+        assert "perception" not in p["roles"] and "action" not in p["roles"]

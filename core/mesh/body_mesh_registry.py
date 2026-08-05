@@ -576,6 +576,7 @@ class BodyMeshRegistry:
             package is unavailable or no entries match.
         """
         try:
+            from contracts.mesh_membership import preserve_body_mesh_roles
             from contracts.mesh_session import MeshSessionParticipant, build_mesh_session
         except ImportError:
             return None
@@ -613,13 +614,20 @@ class BodyMeshRegistry:
                 roles.append("source")
             if not roles:
                 roles = ["support"]
+            # 能力角色（perception / action / presence）必须一起带出去。
+            # roles 这一列装的是**本次会话里的位置**（primary/source/support），由
+            # body_score 现算 —— 它回答不了"这台设备有没有摄像头"。活的生产写入口
+            # （android/handlers/registration.py、capability_report.py）写进来的恰恰是
+            # 能力角色那一套。memberships 那条适配器一直保着，这条手搓的没保，于是
+            # 同一个 BodyEntry 走两个端点出去，一个带着能力角色一个丢了。
+            participant_metadata = preserve_body_mesh_roles(dict(entry.metadata or {}), entry.roles)
             participants.append(
                 MeshSessionParticipant(
                     device_id=entry.device_id,
                     roles=roles,
                     online=True,
                     health_score=min(1.0, entry.body_score / 5.0),
-                    metadata=dict(entry.metadata or {}),
+                    metadata=participant_metadata,
                 )
             )
 
