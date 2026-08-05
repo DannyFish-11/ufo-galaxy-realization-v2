@@ -32,6 +32,10 @@ class VideoState:
     mime: str = "image/jpeg"
     change_score: float = 0.0
     change_seq: int = 0
+    # 上面这个 change_score 是不是**降级值**：走了字节兜底（帧解码失败 / 依赖缺失 /
+    # 非图像负载如音频）。降级时 change_score 只有 0/1 两个取值，表示"变没变"，
+    # **不是变化幅度** —— 按幅度排序前必须看这一位。见 core/multimodal/frame_gate.py。
+    change_score_degraded: bool = False
     has_image: bool = False
 
 

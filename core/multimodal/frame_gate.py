@@ -35,19 +35,36 @@ DEFAULT_DIFF_THRESHOLD = 0.06
 def perceptual_signature(frame_b64: str) -> Optional[Any]:
     """把一帧 base64 图像压成一个 16x16 灰度指纹（numpy 数组）。
 
-    用 PIL 解码 + 下采样；不可用时返回 None（调用方退回字节级启发式）。
+    用 PIL 解码 + 下采样；不可用时返回 None（调用方退回字节级兜底）。
+    """
+    return signature_or_reason(frame_b64)[0]
+
+
+def signature_or_reason(frame_b64: str) -> "tuple[Optional[Any], str]":
+    """同 :func:`perceptual_signature`，但**一并给出退回兜底的原因**。
+
+    原来只返回 ``None``，两种成因被压成同一个信号：
+
+    * ``missing_dependency`` —— PIL/numpy 装不上。部署问题，一次性的。
+    * ``decode_failed`` —— 帧本身解不开（截断、坏帧、PIL 读不了的编码）。
+      **运行时问题，而且往往是摄像头正在产出垃圾**。
+
+    这两件事的处置完全不同，而现场只看到"变化度有点怪"。分开报出来。
     """
     try:
         import io
 
         import numpy as np
         from PIL import Image
+    except Exception:  # noqa: BLE001 — 依赖缺失
+        return None, "missing_dependency"
 
+    try:
         raw = base64.b64decode(frame_b64)
         img = Image.open(io.BytesIO(raw)).convert("L").resize((16, 16))
-        return np.asarray(img, dtype="float32") / 255.0
-    except Exception:  # noqa: BLE001 — PIL 缺失/解码失败
-        return None
+        return np.asarray(img, dtype="float32") / 255.0, ""
+    except Exception:  # noqa: BLE001 — 帧解码失败
+        return None, "decode_failed"
 
 
 def byte_similarity(a: str, b: str) -> float:
@@ -75,6 +92,13 @@ class FrameGate:
         self._prev_b64: Optional[str] = None
         self.last_score: float = 0.0
         self.change_seq: int = 0
+        #: 上一次 :meth:`score` 走的是不是**字节兜底**。走了就意味着
+        #: ``last_score`` 只是 0/1 的"变没变"，**不是变化幅度** —— 见 score() 里
+        #: 的实测表。消费方按幅度排序前必须看这一位。
+        self.degraded: bool = False
+        #: 退回兜底的原因：``""`` / ``"missing_dependency"`` / ``"decode_failed"``。
+        #: 后者往往意味着摄像头正在产出坏帧，是运行时故障而不是部署问题。
+        self.degraded_reason: str = ""
 
     def reset(self) -> None:
         """丢弃上一帧指纹，让下一帧被当作"第一帧"。
@@ -89,6 +113,8 @@ class FrameGate:
         self._prev_sig = None
         self._prev_b64 = None
         self.last_score = 0.0
+        self.degraded = False
+        self.degraded_reason = ""
 
     def score(self, frame_b64: Optional[str]) -> float:
         """本帧相对上一帧的变化度（0..1）。第一帧记 1.0（"全新"）。
@@ -97,10 +123,13 @@ class FrameGate:
         """
         if not frame_b64:
             self.last_score = 0.0
+            self.degraded = False
+            self.degraded_reason = ""
             return 0.0
 
-        sig = perceptual_signature(frame_b64)
+        sig, self.degraded_reason = signature_or_reason(frame_b64)
         if sig is not None:
+            self.degraded = False
             import numpy as np
 
             if self._prev_sig is None:
@@ -117,19 +146,45 @@ class FrameGate:
                 self.change_seq += 1
             return diff
 
-        # 字节级兜底：把相似度换算成"变化度"，与指纹路径同一量纲语义。
+        # ── 字节级兜底 ──────────────────────────────────────────────────
+        # 它**不是**指纹路径的低精度版本，是另一种量：字节差。原来这里把
+        # `1 - byte_similarity` 直接当作"变化度"发布出去（注释还写着"与指纹路径
+        # 同一量纲语义"），并用写死的 `sim < 0.995`（等价 diff > 0.005）判变化，
+        # 完全不看 self.threshold —— 于是 GALAXY_AMBIENT_DIFF_THRESHOLD 配了也不生效。
+        #
+        # 但真正的问题比"阈值没生效"更深。按真实采集管线（固定编码质量）实测：
+        #
+        #   屏幕静止（字节完全相同）        字节diff 0.0000   指纹diff 0.0000
+        #   摄像头传感器噪声，画面没变      字节diff 0.6233   指纹diff 0.0022
+        #   摄像头噪声 σ=6，画面没变        字节diff 0.8185   指纹diff 0.0020
+        #   弹出对话框（真变化 ~22%）       字节diff 0.3766   指纹diff 0.1197
+        #   换了一整屏（真变化）            字节diff 0.4215   指纹diff 0.0948
+        #
+        # 噪声（0.62/0.82）**比真实变化（0.38/0.42）分数还高**。这不是阈值调不对，
+        # 是这个量在有损压缩帧上根本不携带"变化幅度"的信息 —— 任何阈值都分不开。
+        # 而它恰恰在解码失败时被触发，也就是摄像头正在产出坏帧的时候。
+        #
+        # 所以只保留它**确实可靠**的那一位：字节完全相同 ⇒ 画面一定没变
+        # （屏幕静止那一档，实测 0.0000）。其余一律按"变了"处理 —— 宁可多惊动
+        # 模型一次，也不能悄悄丢掉一次真变化。分数给 0/1 而不是编一个幅度出来：
+        # 发布 0.82 会让任何按幅度排序的消费方把"什么都没发生"排在真事件前面。
+        #
+        # 音频走的也是这条路（perceptual_signature 是图像解码，音频必然返回 None）。
+        # 那一档反而是好的：WAV 无损，内容相同则字节相同（实测 0.0000），内容一变
+        # 就跳到 0.48。0/1 语义对音频同样成立。
         if self._prev_b64 is None:
             self._prev_b64 = frame_b64
             self.last_score = 1.0
+            self.degraded = True
             self.change_seq += 1
             return 1.0
-        sim = byte_similarity(frame_b64, self._prev_b64)
+        identical = frame_b64 == self._prev_b64
         self._prev_b64 = frame_b64
-        diff = 1.0 - sim
-        self.last_score = diff
-        if sim < 0.995:
+        self.degraded = True
+        self.last_score = 0.0 if identical else 1.0
+        if not identical:
             self.change_seq += 1
-        return diff
+        return self.last_score
 
     def changed(self, frame_b64: Optional[str]) -> bool:
         """新帧是否变化足够大（保持既有布尔语义，供既有调用方原样使用）。"""
