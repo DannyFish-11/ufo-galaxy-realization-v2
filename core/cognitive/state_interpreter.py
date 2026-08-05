@@ -256,9 +256,57 @@ class StateInterpreter:
 
         Once in manifest, the score must drop below ``passive_threshold + 0.1``
         to leave manifest.  This prevents flicker at the threshold boundary.
+
+        阈值不是定值
+        ------------
+        本类的 docstring 一直写着「uses hysteresis (via :class:`LiminalDynamics`)」，
+        但那句话**从来不成立** —— 这里只有数值滞回，全仓没有任何地方 import 过
+        ``LiminalDynamics``。它提供的两件事恰好补的就是数值滞回补不了的那一维：
+
+        * ``manifest_threshold_adjustment()`` —— 最近的转移里方向反转越多，进入
+          manifest 的门槛越高。数值滞回对「反复横跳」是没有记忆的，跳一百次和
+          跳一次判得一模一样。
+        * ``record_transition()`` —— 上面那个判据的**唯一数据来源**。不记账，
+          波动恒为 0，调整量恒为 0，等于没接。
+
+        刻意**不**接的那一半：``can_transition_to_manifest()`` 的时间驻留闸。
+        实测（三个场景跑真实滞回逻辑）：1.5s 驻留能压住振荡的两个场景，但把
+        「分数稳定高、本来就该直接进 manifest」的场景一起压住了 —— 那种请求会
+        拿到 planning/预算 0.6 而不是 direct/预算 1.0。原因是驻留闸在**转移发生的
+        那一刻**分不出「这次越界之后会掉回来」和「这次越界是对的」，二者当时长得
+        一模一样。取值域留在配置里（``cognitive_liminal_min_dwell_s``），要开得先有
+        一个能分开这两种情形的判据，而不是把两者一起卡住。
         """
         current = self._last_region
+        dynamics = self._dynamics()
 
+        # 波动越大，进 manifest 的门槛越高。取不到 dynamics 时退化为定值阈值。
+        manifest_threshold = self._manifest_threshold
+        if dynamics is not None:
+            try:
+                manifest_threshold += float(dynamics.manifest_threshold_adjustment())
+            except Exception as exc:  # noqa: BLE001 — 稳定化失败不该让区域判定失效
+                logger.warning("LiminalDynamics 阈值调整取不到，本次按定值阈值判定: %s", exc)
+
+        nxt = self._resolve_region(current, score, uncertainty, manifest_threshold)
+
+        # 记账必须发生在**每一次区域变化**上：波动是由转移历史算的，漏记一次，
+        # 后面所有的阻尼都按一份不完整的历史算。
+        if nxt is not current and dynamics is not None:
+            try:
+                dynamics.record_transition(current.value, nxt.value)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("LiminalDynamics 转移记账失败，波动统计将失真: %s", exc)
+        return nxt
+
+    def _resolve_region(
+        self,
+        current: CognitiveRegion,
+        score: float,
+        uncertainty: float,
+        manifest_threshold: float,
+    ) -> CognitiveRegion:
+        """原有的数值滞回判定，唯一变化是 manifest 阈值由调用方给（可被波动抬高）。"""
         # Uncertainty cap: even high-pressure state cannot be manifest.
         if uncertainty >= self._uncertainty_cap:
             return CognitiveRegion.LIMINAL if score > self._passive_threshold else CognitiveRegion.PASSIVE
@@ -269,7 +317,7 @@ class StateInterpreter:
             return CognitiveRegion.PASSIVE
 
         if current == CognitiveRegion.LIMINAL:
-            if score >= self._manifest_threshold:
+            if score >= manifest_threshold:
                 return CognitiveRegion.MANIFEST
             if score < self._passive_threshold:
                 return CognitiveRegion.PASSIVE
@@ -278,9 +326,24 @@ class StateInterpreter:
         # current == MANIFEST
         if score < (self._passive_threshold + 0.10):
             return CognitiveRegion.PASSIVE
-        if score < self._manifest_threshold:
+        if score < manifest_threshold:
             return CognitiveRegion.LIMINAL
         return CognitiveRegion.MANIFEST
+
+    @staticmethod
+    def _dynamics() -> Optional[Any]:
+        """取 LiminalDynamics 单例；取不到返回 ``None`` 并留 warning。
+
+        降级要**响**：静默降级的症状是「阻尼从某刻起不再生效」，而区域判定看起来
+        一切正常 —— 那种情况指不回这里。
+        """
+        try:
+            from core.cognitive.liminal_dynamics import get_liminal_dynamics
+
+            return get_liminal_dynamics()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LiminalDynamics 不可用，区域判定退化为纯数值滞回: %s", exc)
+            return None
 
     @staticmethod
     def _read_config() -> Dict[str, Any]:

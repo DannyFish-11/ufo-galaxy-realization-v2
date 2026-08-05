@@ -2295,6 +2295,19 @@ def _score_candidate(
     rejection: str = ""
 
     # --- Readiness gate (required) ---
+    #
+    # 判据是 DeviceReadinessSummary.ready（四维合取的**唯一定义**），不是这里再挑两维。
+    #
+    # 此前这里只查 registered 与 routable、**不查 online / connected**，而
+    # command_router 用的二元闸门 validate_target_device() 查的是完整的 ready。两处对
+    # 同一台设备给出不同结论，实测：
+    #     已注册可路由但离线  → 选择器给满分 100 放行，闸门判 valid=False
+    #     已注册可路由但断连  → 同上
+    # 后果不是「多选了一台」：选择器选中它，路由器随后拒掉，失败表现为「派发错误」，
+    # 排查时指不到「选了一台不合格的设备」这一步。
+    #
+    # 变严不会新增饿死风险：这条严格性下游本来就有（闸门是活的），选择器宽松只是把
+    # 拒绝推迟到一个更差的地方。
     routable = getattr(readiness, "routable", None)
     registered = getattr(readiness, "registered", None)
     if readiness is None:
@@ -2305,6 +2318,12 @@ def _score_candidate(
         return 0, rejection
     if not routable:
         rejection = "readiness:not_routable"
+        return 0, rejection
+    if not getattr(readiness, "ready", False):
+        # 走到这里说明 registered 与 routable 都通过了,缺的是 online / connected ——
+        # 把缺的那一维写进拒因,否则现场只看得到"不就绪"三个字。
+        _missing = [_dim for _dim in ("online", "connected") if not bool(getattr(readiness, _dim, False))]
+        rejection = "readiness:not_ready:" + ",".join(_missing or ["unknown"])
         return 0, rejection
 
     # --- Participation gate (required) ---
@@ -2414,9 +2433,14 @@ def _score_candidate(
     try:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
 
+        # 判据看真值,不喂常量。上面的前置闸只查了 registered 与 routable ——
+        # **不查 online / connected**,所以此处若写死 readiness_ready=True 就是虚报:
+        # 一台已注册、可路由但离线/断连的设备会告诉闸门"它通过了全部就绪闸"。
+        # policy_eligible 由上面的 participation 闸保证,这里仍取真值,避免以后
+        # 有人调整前置闸顺序时这句静默失真。
         _canonical_gate = resolve_android_execution_gate_decision(
-            policy_eligible=True,
-            readiness_ready=True,
+            policy_eligible=bool(getattr(participation, "orchestration_eligible", False)),
+            readiness_ready=bool(getattr(readiness, "ready", False)),
             execution_busy=execution_busy,
             local_inference_available=_local_ai_ready,
             fallback_tier=_fallback_tier,
@@ -2722,9 +2746,13 @@ def _select_target_from_candidates(
                 elif _is_local_ai_ready is not None:
                     _local_inference_available_for_gate = bool(_is_local_ai_ready)
 
+            # 这一处**完全没有**前置闸:readiness 与 participation 就在同一作用域
+            # (上面 120 行处刚取到),此前却给闸门喂了两个字面 True。实测该闸门在这
+            # 两维上都会 deny(readiness_not_ready / policy_ineligible),写死等于把
+            # 这两条拒绝路径在派发路径上整个关掉。
             _canonical_gate = resolve_android_execution_gate_decision(
-                policy_eligible=True,
-                readiness_ready=True,
+                policy_eligible=bool(getattr(participation, "orchestration_eligible", False)),
+                readiness_ready=bool(getattr(readiness, "ready", False)),
                 execution_busy=_execution_busy,
                 local_inference_available=_local_inference_available_for_gate,
                 fallback_tier=_fallback_tier_for_gate,
@@ -2735,6 +2763,29 @@ def _select_target_from_candidates(
         except Exception as exc:  # noqa: BLE001
             logger.debug(
                 "_select_target_from_candidates: canonical gate decision unavailable for %s: %s",
+                device_id,
+                exc,
+            )
+
+        # 合成准入判据：readiness / participation / 二元闸门三者的**唯一合成**
+        # （core.admissibility_policy_convergence）。此前这三个源在仓里被合成了两次、
+        # 各合各的——闸门那次在 target_device_validator 里，打分这次在本函数里，
+        # 实测两处对同一台设备会给出不同结论（离线设备选择器满分放行、闸门判无效）。
+        #
+        # 上面的就绪闸已经与二元闸门同源，这里再取一次合成是为了**拿到它多出来的那些
+        # 维**（capability_fit / route_preference / failure_domain / policy_score），
+        # 让拒绝理由与后续对账用的是同一份记录，而不是各自现编。
+        #
+        # 开销实测：+0.073 ms/候选（10 个候选一次派发多 0.73 ms），相对一次派发里的
+        # LLM 与网络往返可以忽略。
+        _admissibility = None
+        try:
+            from core.admissibility_policy_convergence import evaluate_policy_convergence
+
+            _admissibility = evaluate_policy_convergence(device_id)
+        except Exception as exc:  # noqa: BLE001 — 合成层不可用不该让派发停摆
+            logger.warning(
+                "_select_target_from_candidates: 准入合成不可用,本候选退回分项判据 | device=%s err=%s",
                 device_id,
                 exc,
             )
@@ -2798,6 +2849,9 @@ def _select_target_from_candidates(
                     },
                     "execution_busy": _execution_busy,
                     "canonical_execution_gate_decision": _canonical_gate_decision,
+                    # 准入合成的判据随派发记录一起落账：拒绝理由与对账读的是同一份，
+                    # 不是两边各自现编。
+                    "admissibility": (_admissibility.to_dict() if _admissibility is not None else None),
                     "canonical_execution_gate_reasons": list(_canonical_gate_reasons),
                     "execution_runtime_state": execution_runtime_by_device.get(device_id),
                     "participant_lifecycle": _lifecycle_projection,

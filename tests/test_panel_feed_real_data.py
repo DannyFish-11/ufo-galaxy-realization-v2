@@ -114,7 +114,7 @@ class TestPanelFeedMeshParticipants(unittest.IsolatedAsyncioTestCase):
 
         entry = BodyEntry(
             device_id="phone-1",
-            roles={DeviceRole.PERCEPTION},
+            roles={DeviceRole.PERCEPTION, DeviceRole.PRESENCE},
             session_id="sess-abc",
             registered_at=1700000000.0,
         )
@@ -125,18 +125,62 @@ class TestPanelFeedMeshParticipants(unittest.IsolatedAsyncioTestCase):
         participants = feed["mesh_session"]["participants"]
         self.assertEqual(len(participants), 1)
         self.assertEqual(participants[0]["nodeId"], "phone-1")
-        self.assertEqual(participants[0]["status"], "active")  # has session_id
+        # 多角色设备必须**每一维**都带出去。原来是 sorted(roles)[0]，按字母序取第一个,
+        # 一台 perception+presence 的设备在面板上只剩 perception,另一维静默消失,
+        # 而字母序本身没有任何含义。role 保留为"权重最高的那一维"(presence 1.2 >
+        # perception 1.0,次序来自 _ROLE_WEIGHTS),roles 带全量。
+        self.assertEqual(participants[0]["roles"], ["perception", "presence"])
+        self.assertEqual(participants[0]["role"], "presence")
         self.assertEqual(feed["mesh_session"]["barrierStatus"], "active")
 
-    async def test_participant_status_idle_when_no_session(self):
+    async def test_participant_status_follows_readiness_not_session_id(self):
+        """状态判据是**就绪**，不是 ``entry.session_id``。
+
+        原来这里判 ``"active" if entry.session_id else "idle"``,而 ``session_id``
+        是**认知会话**字段——活的两条注册路径都不传它
+        (galaxy_gateway/android/handlers/registration.py:1130 与
+        capability_report.py:251 都只传 device_id/roles/metadata)。净效果是每一台
+        真实设备在面板上永远显示 idle、点是灰的,而它其实正在 mesh 里。
+
+        这一条**两个方向都钉**:有 session_id 但不就绪 → 不许显示 active;
+        没有 session_id 但就绪 → 必须显示 active。只钉一个方向的话,返回常量
+        也能过。
+        """
+        from core.device_readiness import DeviceReadinessSummary
         from core.mesh.body_mesh_registry import BodyEntry, DeviceRole
 
-        entry = BodyEntry(device_id="watch-1", roles={DeviceRole.PRESENCE}, session_id=None)
-        mock_registry = MagicMock()
-        mock_registry.list_entries.return_value = [entry]
-        with patch("core.mesh.body_mesh_registry.get_body_mesh_registry", return_value=mock_registry):
+        def _feed_with(entry, ready):
+            summary = DeviceReadinessSummary(
+                device_id=entry.device_id,
+                registered=ready,
+                online=ready,
+                connected=ready,
+                routable=ready,
+            )
+            mock_registry = MagicMock()
+            mock_registry.list_entries.return_value = [entry]
+            return mock_registry, summary
+
+        # ① 有 session_id,但设备并不就绪 → idle(旧判据会错报 active)
+        entry = BodyEntry(device_id="watch-1", roles={DeviceRole.PRESENCE}, session_id="sess-abc")
+        reg, summary = _feed_with(entry, ready=False)
+        with (
+            patch("core.mesh.body_mesh_registry.get_body_mesh_registry", return_value=reg),
+            patch("core.device_readiness.get_device_readiness", return_value=summary),
+        ):
             feed = await self._get_feed()
         self.assertEqual(feed["mesh_session"]["participants"][0]["status"], "idle")
+
+        # ② 没有 session_id,但设备就绪 → active(旧判据会错报 idle——这就是活路径上
+        #    真实发生的那一种,因为注册路径从不写 session_id)
+        entry2 = BodyEntry(device_id="watch-1", roles={DeviceRole.PRESENCE}, session_id=None)
+        reg2, summary2 = _feed_with(entry2, ready=True)
+        with (
+            patch("core.mesh.body_mesh_registry.get_body_mesh_registry", return_value=reg2),
+            patch("core.device_readiness.get_device_readiness", return_value=summary2),
+        ):
+            feed2 = await self._get_feed()
+        self.assertEqual(feed2["mesh_session"]["participants"][0]["status"], "active")
 
 
 if __name__ == "__main__":

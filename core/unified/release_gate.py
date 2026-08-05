@@ -260,13 +260,22 @@ class ReleaseGate:
 
     @staticmethod
     def _bucket(flag: str, context_key: str) -> int:
-        """Return a deterministic integer 0-99 for (flag, context_key)."""
+        """Return a deterministic integer 0-99 for (flag, context_key).
+
+        用 BLAKE2s 而不是 MD5。这里要的只是「同一个 (flag, context_key) 每次落进同一个
+        桶」，任何确定性摘要都够用 —— 但 ``context_key`` 传进来的是**调用方的身份**
+        （task_id / session_id / device_id），静态分析看到的是「一个标识符流进了 MD5」，
+        判成 ``py/weak-sensitive-data-hashing``（high）。此前没人真的往这里传过东西，
+        所以那条路径不存在；准入层（``core/request_admission.py``）接上之后它就活了。
+
+        改这一行不欠任何兼容账：桶值没有被持久化、没有跨进程比对、也没有测试钉住具体
+        数值（只钉「确定性」与「不同 context 会分散」）；且现存 flag 的
+        ``rollout_percentage`` 全是 0 或 100，两条都在上面短路返回，根本走不到这里。
+
+        用 ``digest_size=8`` 而不是取默认摘要的前若干字节：要多少算多少，别算完再扔。
+        """
         raw = f"{flag}:{context_key}"
-        try:
-            # usedforsecurity=False is Python 3.9+; fall back for 3.8
-            digest = hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
-        except TypeError:
-            digest = hashlib.md5(raw.encode()).hexdigest()  # pragma: no cover
+        digest = hashlib.blake2s(raw.encode(), digest_size=8).hexdigest()
         return int(digest[:4], 16) % 100
 
     def _track(self, flag: str, allowed: bool) -> None:

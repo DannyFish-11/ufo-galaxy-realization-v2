@@ -154,6 +154,15 @@ class TriState(str, Enum):
 # ---------------------------------------------------------------------------
 
 
+#: 被准入层挡下时回给用户的话。按错误码分开：三种被挡的原因对用户是三件事，
+#: 一句"并发已满"会把「你自己发起的后台动作让了路」说成「系统满了」。
+_ADMISSION_REJECTED_MESSAGES = {
+    "AR_002": "同一来源的并发请求过多，请稍候重试。",
+    "AR_003": "系统当前并发已满，请稍候重试。",
+    "AR_001": "这次后台动作已让位给你的请求。",
+}
+
+
 class RuntimeSession:
     """Holds the lifecycle state of a single top-level request within the runtime shell.
 
@@ -1032,70 +1041,141 @@ class DesktopPresenceRuntime:
         lane_snapshot = None
         try:
             lane_manager = get_session_execution_lane_manager()
-            async with lane_manager.acquire(
-                conversation_session_id,
-                control_session_id=control_session_id,
-            ) as lane:
-                if _manifest_sink is not None:
-                    # 首输出驱动:包装 sink 的 on_delta,第一段文本流出即进 MANIFEST。
-                    # 请求结束(下面 finally)恢复原回调,绝不泄漏到请求之外。
-                    _manifest_orig_on_delta = _manifest_sink._on_delta
+            # 准入在会话车道**外面**：先判「这次请求该不该跑」（全局上限 / 按来源配额 /
+            # 抢占），再排「同一会话内的序」。反过来的话，被拒绝的请求要先排队等到自己
+            # 那条会话的锁才会被告知拒绝 —— 而拒绝恰恰是为了不排那个队。
+            #
+            # 此前请求层**没有任何全局上限**：SessionExecutionLane 只保证同一会话串行，
+            # N 个会话就是 N 条并发流水线（每条都在跑 LLM 与工具执行）。
+            # ConcurrencyManager 装了上限但全仓零调用方。见 core/request_admission.py。
+            from core.orchestration.global_arbiter import (
+                ArbiterNoSlotError,
+                ArbiterPreemptedError,
+                ArbiterQuotaError,
+            )
+            from core.request_admission import admit_request, mark_uninterruptible
 
-                    def _hooked_on_delta(text: str, _orig=_manifest_orig_on_delta) -> None:
+            try:
+                async with admit_request(
+                    rsession.runtime_session_id,
+                    origin=source,
+                    metadata={"conversation_session_id": conversation_session_id},
+                ) as _preemption_signal:
+                    async with lane_manager.acquire(
+                        conversation_session_id,
+                        control_session_id=control_session_id,
+                    ) as lane:
+                        # 抢占的**消费点**。等会话车道这一段可能很长（同会话的上一个
+                        # 请求还在跑 LLM），而抢占恰恰会发生在这段等待里：槽位已经被
+                        # 更高优先级的请求顶走了，这时候再开工等于把并发上限突破一个。
+                        #
+                        # 只在这里查一次是刻意的：这是本次请求**开工前的最后一道**，
+                        # 而且是唯一一个「等待时长不可控」的点。开工之后再中途掐断，
+                        # 对用户是不可解释的——用户发起的请求本来就 preemptable=False，
+                        # 能走到这里被抢的只有 ambient 那一类。
+                        # 判据直接查**本地信号**，不绕 rsession 上的方法：信号本身就是
+                        # 真相，绕一层只会多一处可能对不上的地方 —— 而且调用方持有的
+                        # 未必是真的 RuntimeSession（测试里是 MagicMock，任何方法调用
+                        # 都返回真值对象，于是每次都判成被抢占）。
+                        if _preemption_signal.is_set():
+                            raise ArbiterPreemptedError(
+                                rsession.runtime_session_id,
+                                "preempted while waiting for the session execution lane",
+                            )
+                        # 越过最后一道等待了 —— 此后不可被抢占。不做这一步的话，
+                        # 已经开工的请求仍会被仲裁器划走槽位，而它并不会因此停下来
+                        # （它是被内联 await 的，从外面 cancel 会连累整条调用链），
+                        # 净效果就是并发悄悄超出上限一个。
+                        mark_uninterruptible(rsession.runtime_session_id)
+                        if _manifest_sink is not None:
+                            # 首输出驱动:包装 sink 的 on_delta,第一段文本流出即进 MANIFEST。
+                            # 请求结束(下面 finally)恢复原回调,绝不泄漏到请求之外。
+                            _manifest_orig_on_delta = _manifest_sink._on_delta
+
+                            def _hooked_on_delta(text: str, _orig=_manifest_orig_on_delta) -> None:
+                                _enter_manifest()
+                                _orig(text)
+
+                            _manifest_sink._on_delta = _hooked_on_delta
+                        elif not _manifest_on_first_token:
+                            # 逃生口：开关关掉 → 完整回旧时序（派发前即 MANIFEST）。
+                            _enter_manifest()
+                        # 开关开着且非流式时此处**不再**提前进 MANIFEST。原来这里是
+                        # `_enter_manifest()`（注释"保持原时序"），代价是同一段认知工作流式下
+                        # 算 LIMINAL、非流式下算 MANIFEST——**审议窗口在非流式上宽度为零**，
+                        # 而沙盘推演正跑在这段里，相位闸门会把那条路径的预演整个关掉。
+                        # 改由认知层显式宣告（commit_to_manifest，打在真实 ReAct 之前）：那条
+                        # 界线只有认知层知道。下面 finally 的兜底保证三段轨迹始终完整。
+                        rsession.manifest_hook = _enter_manifest
+                        _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
+                        _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
+                        _stream_runtime_status = self.realtime_streaming_backbone_summary().get("runtime_status") or {}
+
+                        result = await self._dispatch(
+                            rsession=rsession,
+                            message=message,
+                            source=source,
+                            device_id=device_id,
+                            session_id=conversation_session_id,
+                            user_id=user_id,
+                            context=context,
+                            required_capabilities=required_capabilities,
+                            multimodal_context=multimodal_context,
+                            use_constellation=use_constellation,
+                            entry_mode=entry_mode,
+                            control_session_id=control_session_id,
+                            runtime_attachment_session_id=runtime_attachment_session_id,
+                            session_identity=session_identity,
+                            # PR-18: forward the cognitive execution hint so OpenClawd can
+                            # use it as an advisory signal for execution-path / delegation
+                            # biasing.  Never mandatory; OpenClawd retains final authority.
+                            cognitive_execution_hint=_cog_hint_obj,
+                            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+                            presence_mode=_presence_mode,
+                            presence_runtime_hint=_dispatch_presence_runtime_hint,
+                            stream_runtime_status=_stream_runtime_status,
+                            is_operator_request=source == "operator",
+                            **kwargs,
+                        )
+                        # 收口点：派发返回 = 认知结束，往下是表达（结果装配、PR-SPEAK 朗读、
+                        # 跨设备同步）。更早的两条信号（流式首 token、认知层显式宣告）更精确
+                        # 但只覆盖部分路径——实测一次请求走 agent/execution_planner 那条线，
+                        # 不经过 ReAct 循环，宣告从没被调到，MANIFEST 宽度为零。认知层出口
+                        # 不止一个，逐个打必然漏；这里是必经之地。幂等，谁先到算谁。
                         _enter_manifest()
-                        _orig(text)
-
-                    _manifest_sink._on_delta = _hooked_on_delta
-                elif not _manifest_on_first_token:
-                    # 逃生口：开关关掉 → 完整回旧时序（派发前即 MANIFEST）。
-                    _enter_manifest()
-                # 开关开着且非流式时此处**不再**提前进 MANIFEST。原来这里是
-                # `_enter_manifest()`（注释"保持原时序"），代价是同一段认知工作流式下
-                # 算 LIMINAL、非流式下算 MANIFEST——**审议窗口在非流式上宽度为零**，
-                # 而沙盘推演正跑在这段里，相位闸门会把那条路径的预演整个关掉。
-                # 改由认知层显式宣告（commit_to_manifest，打在真实 ReAct 之前）：那条
-                # 界线只有认知层知道。下面 finally 的兜底保证三段轨迹始终完整。
-                rsession.manifest_hook = _enter_manifest
-                _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
-                _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
-                _stream_runtime_status = self.realtime_streaming_backbone_summary().get("runtime_status") or {}
-
-                result = await self._dispatch(
-                    rsession=rsession,
-                    message=message,
-                    source=source,
-                    device_id=device_id,
-                    session_id=conversation_session_id,
-                    user_id=user_id,
-                    context=context,
-                    required_capabilities=required_capabilities,
-                    multimodal_context=multimodal_context,
-                    use_constellation=use_constellation,
-                    entry_mode=entry_mode,
-                    control_session_id=control_session_id,
-                    runtime_attachment_session_id=runtime_attachment_session_id,
-                    session_identity=session_identity,
-                    # PR-18: forward the cognitive execution hint so OpenClawd can
-                    # use it as an advisory signal for execution-path / delegation
-                    # biasing.  Never mandatory; OpenClawd retains final authority.
-                    cognitive_execution_hint=_cog_hint_obj,
-                    desktop_native_ingress_backbone=desktop_native_ingress_backbone,
-                    presence_mode=_presence_mode,
-                    presence_runtime_hint=_dispatch_presence_runtime_hint,
-                    stream_runtime_status=_stream_runtime_status,
-                    is_operator_request=source == "operator",
-                    **kwargs,
+                        # PR-REALTIME-CONTINUUM: 保存 OpenClawd 的 ContinuumState
+                        # 供后台 tick 循环实时推送到前端渲染层
+                        rsession._continuum_state = result.get("continuum", {})
+                        lane_snapshot = lane.to_dict()
+            except (ArbiterQuotaError, ArbiterNoSlotError, ArbiterPreemptedError) as _adm_err:
+                # 被准入层拒绝 —— 必须**优雅降级**。拒绝是这一层的正常输出、不是故障：
+                # 它恰恰是在保护系统不被压垮。让异常裸奔到 API 层会变成 500，那等于
+                # 把"我保护了你"报成"我坏了"。
+                #
+                # 相位收尾**不在这里做**：外层 try 的 finally 已经有完整的一套
+                # （LIMINAL→MANIFEST 补齐、advance(SILENT)、_log_request_end、
+                # 会话摘除、contextvar 解绑），而 finally 在 return 时照常执行。
+                # 在这里再 advance 一次等于让同一次请求发两遍相位事件。
+                logger.info(
+                    "请求被准入层拒绝 | code=%s source=%s trace_id=%s reason=%s",
+                    getattr(_adm_err, "code", "AR_000"),
+                    source,
+                    rsession.runtime_session_id,
+                    _adm_err,
                 )
-                # 收口点：派发返回 = 认知结束，往下是表达（结果装配、PR-SPEAK 朗读、
-                # 跨设备同步）。更早的两条信号（流式首 token、认知层显式宣告）更精确
-                # 但只覆盖部分路径——实测一次请求走 agent/execution_planner 那条线，
-                # 不经过 ReAct 循环，宣告从没被调到，MANIFEST 宽度为零。认知层出口
-                # 不止一个，逐个打必然漏；这里是必经之地。幂等，谁先到算谁。
-                _enter_manifest()
-                # PR-REALTIME-CONTINUUM: 保存 OpenClawd 的 ContinuumState
-                # 供后台 tick 循环实时推送到前端渲染层
-                rsession._continuum_state = result.get("continuum", {})
-                lane_snapshot = lane.to_dict()
+                return {
+                    "success": False,
+                    "response": _ADMISSION_REJECTED_MESSAGES.get(
+                        getattr(_adm_err, "code", ""), "系统当前并发已满，请稍候重试。"
+                    ),
+                    "admission_rejected": True,
+                    "admission_error_code": getattr(_adm_err, "code", "AR_000"),
+                    "admission_reason": str(getattr(_adm_err, "reason", "") or _adm_err),
+                    "runtime_session_id": rsession.runtime_session_id,
+                    "trace_id": rsession.runtime_session_id,
+                    "tristate": rsession.tristate.value,
+                    "entrypoint_source": source,
+                }
 
         except Exception as exc:
             logger.error(

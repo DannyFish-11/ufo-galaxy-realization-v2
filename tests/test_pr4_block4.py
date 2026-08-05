@@ -284,12 +284,21 @@ class TestDeviceHealthScorer:
         _reset_all()
 
     def test_no_data_returns_neutral(self):
+        """无数据 = **中性**，不是满分。
+
+        这条测试的名字一直是对的，断言一直是错的：它写着 "neutral" 却断言 ``1.0``,
+        而 1.0 是本类的**上界**。把满分叫成中性,就没人会觉得它可疑——而后果是实测出来的：
+        走活的 device_pool_manager 时,一台从没测过的设备(满分)会排在一台实测很差但
+        确实在工作的设备(29.83)前面被选中。判据见 core/health_evidence_policy.py。
+        """
+        from core.health_evidence_policy import no_evidence_score
         from core.unified.device_health import DeviceHealthScorer
 
         scorer = DeviceHealthScorer()
         hs = scorer.score("unknown_dev")
-        assert hs.total_score == 1.0
-        assert hs.sample_count == 0
+        assert hs.total_score == no_evidence_score(1.0)
+        assert hs.total_score < 1.0, "无数据仍然拿满分 —— 证据缺失被当成了最好"
+        assert hs.sample_count == 0, "证据位必须保留:分数分不出「测过、就是中等」与「没测过」"
 
     def test_low_latency_high_score(self):
         from core.unified.device_health import DeviceHealthScorer
@@ -366,13 +375,18 @@ class TestDeviceHealthScorer:
         assert "scores" in snap
 
     def test_reset_device(self):
+        from core.health_evidence_policy import no_evidence_score
         from core.unified.device_health import DeviceHealthScorer
 
         scorer = DeviceHealthScorer()
         scorer.update("dev_1", latency_ms=5000.0, error=True)
         scorer.reset_device("dev_1")
         hs = scorer.score("dev_1")
-        assert hs.total_score == 1.0  # optimistic default after reset
+        # 清空之后就是「没有证据」,与从没测过同一档——**不是**乐观满分。
+        # 原来的注释写着 "optimistic default"：清空一台刚刚实测很差的设备,反而让它
+        # 变成满分,等于给了一条把坏记录洗白的路径。
+        assert hs.total_score == no_evidence_score(1.0)
+        assert hs.sample_count == 0
 
     def test_singleton(self):
         from core.unified.device_health import get_device_health_scorer

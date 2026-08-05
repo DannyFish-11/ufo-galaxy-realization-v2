@@ -191,12 +191,10 @@ def _check_readiness(device_id: str) -> tuple[bool, bool, Dict[str, Any], List[s
 
         rs = get_device_readiness(device_id)
         registered = bool(getattr(rs, "registered", False))
-        ready = bool(
-            registered
-            and getattr(rs, "online", False)
-            and getattr(rs, "connected", False)
-            and getattr(rs, "routable", False)
-        )
+        # 就绪判据不在这里重打一遍 —— 它的唯一定义是
+        # DeviceReadinessSummary.ready。此前这里、device_readiness.list_ready_devices()
+        # 与 source_dispatch_orchestrator 各算各的，其中第三处读的字段根本不存在。
+        ready = bool(getattr(rs, "ready", False))
         src: Dict[str, Any] = {}
         if hasattr(rs, "to_dict"):
             src["readiness"] = rs.to_dict()

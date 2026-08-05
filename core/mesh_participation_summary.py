@@ -155,7 +155,19 @@ class MeshParticipationSummary:
     source_device_id:
         The device that originated the current request/task.
     roles_by_device:
-        Mapping from device ID → list of role strings for that device.
+        Mapping from device ID → 该设备在**本次会话里的位置**
+        （``source`` / ``primary`` / ``support`` / ``fallback`` / ``observer`` /
+        ``relay`` / ``merge_owner``）。由编队与 ``body_score`` 现算。
+    capability_roles_by_device:
+        Mapping from device ID → 该设备的**能力角色**
+        （``perception`` / ``action`` / ``presence``），来自 ``BodyMeshRegistry``。
+        这是活的生产写入口真正写进去的那一套
+        （``galaxy_gateway/android/handlers/registration.py`` 与
+        ``capability_report.py`` 按能力位图 / supported_actions 推出来）。
+
+        **与 roles_by_device 分开两列是刻意的。** 两者说的是两件事——"这台设备
+        是什么"与"它这次干什么"——合成一列之后就再也分不开："这台是 primary"
+        回答不了"它有没有摄像头"。
     merge_policy:
         Merge policy string (e.g. ``"parallel"``, ``"sequential"``).
     barrier_posture:
@@ -175,6 +187,7 @@ class MeshParticipationSummary:
     primary_device_id: Optional[str] = None
     source_device_id: Optional[str] = None
     roles_by_device: Dict[str, List[str]] = dataclasses.field(default_factory=dict)
+    capability_roles_by_device: Dict[str, List[str]] = dataclasses.field(default_factory=dict)
     merge_policy: Optional[str] = None
     barrier_posture: Optional[str] = None
     routing_intents: Dict[str, str] = dataclasses.field(default_factory=dict)
@@ -193,6 +206,7 @@ class MeshParticipationSummary:
             "primary_device_id": self.primary_device_id,
             "source_device_id": self.source_device_id,
             "roles_by_device": {k: list(v) for k, v in self.roles_by_device.items()},
+            "capability_roles_by_device": {k: list(v) for k, v in self.capability_roles_by_device.items()},
             "merge_policy": self.merge_policy,
             "barrier_posture": self.barrier_posture,
             "routing_intents": dict(self.routing_intents),
@@ -221,6 +235,7 @@ class MeshParticipationSummary:
             primary_device_id=data.get("primary_device_id"),
             source_device_id=data.get("source_device_id"),
             roles_by_device={k: list(v) for k, v in (data.get("roles_by_device") or {}).items()},
+            capability_roles_by_device={k: list(v) for k, v in (data.get("capability_roles_by_device") or {}).items()},
             merge_policy=data.get("merge_policy"),
             barrier_posture=data.get("barrier_posture"),
             routing_intents=dict(data.get("routing_intents") or {}),
@@ -286,7 +301,13 @@ def _aggregate_from_body_mesh_registry(
     """Populate *summary* from the body mesh registry."""
     try:
         registry = get_body_mesh_registry()
-        entries = list(registry.entries.values()) if hasattr(registry, "entries") else []
+        # ``registry.entries`` **不存在** —— BodyMeshRegistry 上是私有的 ``_entries``，
+        # 公开访问器叫 ``list_entries()``。写成 entries 时 hasattr 判 False，这一整段
+        # 静默返回空、连一条 reason 都不记；本模块号称的"统一角色视图"因此恰好漏掉了
+        # **活的生产写入口真正写进去的那一套**能力角色
+        # （android/handlers/registration.py 与 capability_report.py 写的是 DeviceRole）。
+        # 剩下的只有 mesh_session / mesh_membership 那两条按 body_score 现算的会话位置。
+        entries = list(registry.list_entries()) if hasattr(registry, "list_entries") else []
 
         source_data: List[Dict[str, Any]] = []
         for entry in entries:
@@ -295,9 +316,13 @@ def _aggregate_from_body_mesh_registry(
                 continue
             _merge_device_ids(summary, [did])
             roles = getattr(entry, "roles", [])
-            role_strs = [r.value if hasattr(r, "value") else str(r) for r in roles]
+            role_strs = sorted(r.value if hasattr(r, "value") else str(r) for r in roles)
+            # 能力角色（perception / action / presence）单独一列 —— **不并进
+            # roles_by_device**。那一列装的是"本次会话里的位置"（source / primary /
+            # support / fallback…），由 body_score 与编队现算。两套说的是两件事：
+            # "这台设备是什么" 与 "它这次干什么"，合成一列之后就再也分不开了。
             for role_str in role_strs:
-                _merge_role(summary.roles_by_device, did, role_str)
+                _merge_role(summary.capability_roles_by_device, did, role_str)
             source_data.append(
                 {
                     "device_id": did,
@@ -310,9 +335,14 @@ def _aggregate_from_body_mesh_registry(
         if source_data:
             summary.sources["body_mesh_registry"] = source_data
 
-        # Derive primary from registry primary_device_id method if available
-        if hasattr(registry, "primary_device_id") and not summary.primary_device_id:
-            primary = registry.primary_device_id()
+        # ``registry.primary_device_id`` 同样**不存在**（hasattr 恒 False，这一段从
+        # 未执行过）。注册表给 primary 的正经出口是 ``compute_assignment()``，判据
+        # 与 get_mesh_session()/get_mesh_memberships() 同源（都是 body_score 最高的
+        # 那一台），所以走它不会引入第四种说法。
+        if not summary.primary_device_id and hasattr(registry, "compute_assignment"):
+            assignment = registry.compute_assignment()
+            primary_entry = getattr(assignment, "primary_body", None)
+            primary = getattr(primary_entry, "device_id", None)
             if primary:
                 summary.primary_device_id = primary
                 _merge_role(summary.roles_by_device, primary, "primary")
@@ -468,9 +498,16 @@ def _aggregate_from_cross_device_policy(
 ) -> None:
     """Populate *summary* from the cross-device routing assignment."""
     try:
-        from core.cross_device_policy import build_assignment_summary
+        # ``build_assignment_summary(policy)`` 的 ``policy`` 是**必填位置参数**，
+        # 原来这里不带参数调用，每次都是
+        # ``TypeError: missing 1 required positional argument: 'policy'``，
+        # 被下面的 except 吞成一条 reason —— 这一维从来没有真的进过 summary。
+        # ``resolve_routing_summary()`` 是仓里正经的"解析当前策略并转成 summary"的
+        # 那个包装（core/cross_device_policy/routing_resolver.py:302 内部调的就是
+        # build_assignment_summary），走它才拿得到当前真实的路由态势。
+        from core.cross_device_policy.routing_resolver import resolve_routing_summary
 
-        routing_summary = build_assignment_summary()
+        routing_summary = resolve_routing_summary()
         if routing_summary is None:
             return
 
@@ -590,7 +627,8 @@ def get_device_mesh_summary(device_id: str) -> Dict[str, Any]:
         A dict with keys:
         - ``"device_id"`` — the requested device ID.
         - ``"found"`` — whether the device appears in the current summary.
-        - ``"roles"`` — list of roles for the device (empty if not found).
+        - ``"roles"`` — 会话位置（source/primary/support…），空表示未找到。
+        - ``"capability_roles"`` — 能力角色（perception/action/presence）。
         - ``"routing_intent"`` — routing intent string or ``None``.
         - ``"is_primary"`` — ``True`` if this device is the primary device.
         - ``"is_source"`` — ``True`` if this device is the source device.
@@ -606,6 +644,7 @@ def get_device_mesh_summary(device_id: str) -> Dict[str, Any]:
             "device_id": device_id,
             "found": found,
             "roles": list(summary.roles_by_device.get(device_id, [])),
+            "capability_roles": list(summary.capability_roles_by_device.get(device_id, [])),
             "routing_intent": summary.routing_intents.get(device_id),
             "is_primary": summary.primary_device_id == device_id,
             "is_source": summary.source_device_id == device_id,
@@ -618,6 +657,7 @@ def get_device_mesh_summary(device_id: str) -> Dict[str, Any]:
             "device_id": device_id,
             "found": False,
             "roles": [],
+            "capability_roles": [],
             "routing_intent": None,
             "is_primary": False,
             "is_source": False,
@@ -638,6 +678,7 @@ EMPTY_MESH_PARTICIPATION_SUMMARY = MeshParticipationSummary(
     primary_device_id=None,
     source_device_id=None,
     roles_by_device={},
+    capability_roles_by_device={},
     merge_policy=None,
     barrier_posture=None,
     routing_intents={},

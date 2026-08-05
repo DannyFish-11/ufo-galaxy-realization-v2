@@ -225,13 +225,88 @@ class DevicePoolManager:
         self._rr_cycle = itertools.cycle(ids) if ids else None
 
     def _health_score(self, device_id: str) -> float:
-        """Return health score [0, 100] for *device_id*."""
+        """Return health score [0, 100] for *device_id*.
+
+        无记录时返回**中性分**而不是满分。此前返回 100.0，后果是实测出来的：
+        一台从没测过的设备（100.0）会排在一台实测很差但确实在工作的设备（29.83）
+        前面，被 ``max(candidates, key=score)`` 选中 —— 可能已经死掉的设备优先接活。
+        判据见 core/health_evidence_policy.py。
+        """
+        from core.health_evidence_policy import no_evidence_score
+
         if self._health_registry is None:
-            return 100.0
+            return no_evidence_score(100.0)
         state = self._health_registry.get_state(device_id)
         if state is None:
-            return 100.0
+            return no_evidence_score(100.0)
         return state.health_score
+
+    #: 响应性分级 → 打分权重。近交互拿满，逐档往下让路，不可用直接归零。
+    #: 归零而不是给个小值：``unavailable`` 的定义就是"这条路现在走不通"，给它任何正权重
+    #: 都意味着在没有别的候选时它仍会被选中，而那恰恰是最该避免的一次派发。
+    _RESPONSIVENESS_WEIGHT = {
+        "near_interactive": 1.00,
+        "bounded_deferred": 0.80,
+        "eventual": 0.50,
+        "degraded": 0.25,
+        "unavailable": 0.00,
+    }
+
+    def _responsiveness_factor(self, device_id: str, health_fraction: float) -> float:
+        """按 ``core.cross_device_responsiveness_contract`` 给出的分级折算打分权重。
+
+        为什么要它
+        ----------
+        健康分把两件事压成了一个数：**分数高低**与**有没有证据**。压完之后下游分不出
+        "测过、就是中等" 和 "没测过" —— 而这两件事对"该不该把活派给它"的含义完全不同。
+
+        响应性契约的分级恰好是把它们拆开的那套判据（``evidence_available`` 是独立入参，
+        且明写 ``EVIDENCE_ABSENCE_BLOCKS_NEAR_INTERACTIVE_POLICY``：没有证据就不许算近交互）。
+        这里把分级折成一个乘数接进既有打分，而不是另起一套选择逻辑 —— 既有的健康 /
+        连接数 / Android 运行时三项都保留，契约只再压一层"证据够不够格"。
+
+        取不到契约时返回 ``1.0``：退化成接入之前的行为，绝不因为契约层不可用就让整个
+        选择停摆。降级留 warning，不静默。
+        """
+        try:
+            from core.cross_device_responsiveness_contract import responsiveness_for_participant
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("响应性契约不可用，候选打分退回接入前的口径: %s", exc)
+            return 1.0
+
+        has_evidence = self._has_health_evidence(device_id)
+        state = self._health_registry.get_state(device_id) if self._health_registry is not None else None
+        quarantined = bool(getattr(state, "quarantined", False))
+        circuit = str(getattr(getattr(state, "circuit_state", None), "value", "") or "")
+
+        # 参与者就绪档由熔断器状态给：它就是本仓对"这台设备现在能不能接活"的活判断。
+        if quarantined or circuit == "open":
+            readiness = "missing"
+        elif not has_evidence:
+            readiness = "partial"  # 在册但没有任何证据 —— 不是 ready，也不是 missing
+        elif circuit == "half_open":
+            readiness = "degraded"
+        else:
+            readiness = "ready"
+
+        try:
+            contract = responsiveness_for_participant(
+                participant_readiness=readiness,
+                health_score=max(0.0, min(1.0, float(health_fraction))),
+                evidence_available=has_evidence,
+                execution_domain="remote",
+                participant_id=device_id,
+            )
+            return self._RESPONSIVENESS_WEIGHT.get(contract.level.value, 1.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("响应性分级失败，本次按接入前口径打分 | device=%s err=%s", device_id, exc)
+            return 1.0
+
+    def _has_health_evidence(self, device_id: str) -> bool:
+        """这台设备有没有健康证据 —— 与分数是**两件事**，见 health_evidence_policy。"""
+        if self._health_registry is None:
+            return False
+        return self._health_registry.get_state(device_id) is not None
 
     #: UDM 状态里明确表示"这台设备现在收不了活"的那几个值。
     #:
@@ -584,7 +659,8 @@ class DevicePoolManager:
             h = self._health_score(dev.device_id) / 100.0
             conn_penalty = 1.0 / (dev.active_connections + 1)
             runtime_factor = _android_runtime_score(dev.device_id)
-            return h * dev.weight * conn_penalty * runtime_factor
+            resp_factor = self._responsiveness_factor(dev.device_id, h)
+            return h * dev.weight * conn_penalty * runtime_factor * resp_factor
 
         if not candidates:
             return None

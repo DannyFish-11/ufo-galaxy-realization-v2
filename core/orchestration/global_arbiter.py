@@ -309,6 +309,30 @@ class GlobalArbiter:
         logger.info("Arbiter REJECT no_slot task=%s", task_id)
         return decision
 
+    def mark_non_preemptable(self, task_id: str) -> bool:
+        """把在飞任务标记为不可抢占。返回是否找到。
+
+        为什么需要它
+        ------------
+        ``admit()`` 的抢占是**记账**：把受害者从 ``_running`` 划掉、让新任务顶上。
+        它不会、也无法让受害者停下来 —— 受害者那个协程仍在自己的调用栈里跑，而且在
+        本仓的真实路径上它往往是被**内联 await** 的（自发注意力循环就是这样），从外面
+        cancel 等于把整条循环一起杀掉。
+
+        所以「可抢占」必须限定在**尚未开工**的那一段：请求一旦真正开始干活，再把它的
+        槽位划走就只是让并发悄悄超出上限一个，没有任何实际收益。调用方在越过最后一道
+        等待、准备开工时调本方法，把自己移出可抢占集合。
+
+        实测证据：不做这件事时，占满之后来的用户请求会"抢占成功"，而被抢的那个
+        ambient 请求照跑到底、AR_001 一个都没有发出去——净效果就是上限 +1。
+        """
+        task = self._running.get(task_id)
+        if task is None:
+            return False
+        task.preemptable = False
+        logger.debug("Arbiter task=%s 进入不可抢占段", task_id)
+        return True
+
     def release(self, task_id: str) -> bool:
         """Release the slot held by *task_id*.  Returns True if found."""
         if task_id in self._running:
