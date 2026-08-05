@@ -57,18 +57,18 @@ SETTINGS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/SettingsTab.t
 #: 「代码里读了配置键 → 面板上必须有它」,与模块姓什么无关。启动器重做落地后
 #: 它是整个系统唯一的入口,那 15 个键里既有语音总开关也有部署项,同样一个都不该
 #: 只能靠手改 .env。收进来之后又是一次"扫出来才发现"—— 与前两次同一种漏法。
+#: 2026-08-05 收口:范围直接放到**整个 core/**。
+#:
+#: 上面那段"让范围自己长出来"的结论只对了一半 —— 派生确实治住了「新模块没人记得
+#: 登记」,但**派生的范围本身仍然是人划的**:划到 core/tts/、core/asr/ 就只保护到那里。
+#: 放到整个 core/ 之后一次扫出 99 个未登记键,也就是说前三轮补完(21+5+36+15)覆盖到的
+#: 仍只是这个仓库配置面的一部分。
+#:
+#: 「代码里读了配置键 → 面板上必须有它」这条契约与模块姓什么无关,那就别再按模块挑。
+#: 现在的范围 = core/ 全量 + launcher/ 全量 + main.py,即**所有会读配置的产品代码**。
 _VOICE_MODULE_PATTERNS = (
-    "core/voice_*.py",
-    "core/multimodal/*.py",
-    "core/asr/*.py",
-    "core/tts/*.py",
-    "core/modality_*.py",
-    "core/perception/*.py",
-    "core/native_modal.py",
-    "core/ambient_attention_loop.py",
-    "core/computer_use_loop.py",
-    "core/routes/chat.py",
-    "launcher/*.py",
+    "core/**/*.py",
+    "launcher/**/*.py",
     "main.py",
 )
 
@@ -88,6 +88,24 @@ _NOT_USER_SETTINGS = {
     # 测试期标记。core/native_modal.py 用它(连同 PYTEST_CURRENT_TEST)禁止 save_tier('B')
     # 的单测触发真实后台 pip 安装。由运行环境设置,不是用户在面板上调的东西。
     "GALAXY_ENV",
+    # ── 引导层:决定「配置从哪儿读」──────────────────────────────────────────
+    # 统一配置文件的路径。面板是配置的**消费者**,它的值经 .env / config.json 落盘,
+    # 而这个键决定那些文件在哪儿 —— 用面板改它 = 站在梯子上搬梯子:改完之后面板下次
+    # 读的还是旧位置(新位置里没有它),用户只会看到"改了没生效"而无从排查。
+    "GALAXY_CONFIG_PATH",
+    # 配置目录。同上,同一个"梯子"问题。
+    "GALAXY_CONFIG_DIR",
+    # ── 进程身份:由启动器按进程分配,不是一台机器一个值 ──────────────────────
+    # 节点 id。同机会同时跑多个节点,每个进程必须拿到不同的值;面板只有一份全局配置,
+    # 登上去等于把所有节点的身份钉成同一个 —— 那正是要避免的事。
+    "GALAXY_NODE_ID",
+    # worker id。同上:一台机器多个 worker 进程,身份必须逐进程不同。
+    "GALAXY_WORKER_ID",
+    # 构建期版本标记,随发布产物走。由人手填毫无意义 —— 填了只会让上报的版本号说谎。
+    "GALAXY_WORKER_VERSION",
+    # 终端能力标记(NO_COLOR 惯例的本仓库版本)。它约束的是**命令行输出**有没有颜色,
+    # 而面板是图形界面 —— 在面板上放一个"命令行要不要上色"的开关,位置就是错的。
+    "GALAXY_NO_COLOR",
 }
 
 #: 只匹配**真正的读取调用**,不匹配 docstring / 日志文案里对变量名的提及。
@@ -268,15 +286,26 @@ class TestEveryVoiceSwitchIsRegisteredBackend:
         assert not stale, f"豁免集合里有已经没人读的键,应删除: {stale}"
 
     def test_not_user_settings_stays_small_and_justified(self):
-        """豁免不是垃圾桶。数量必须小,且每一条在源码里都有紧邻的理由说明。"""
+        """豁免不是垃圾桶:数量要小,且**每一条**都得在源码里紧邻写下理由。
+
+        上限从 3 提到 8:守卫范围放到整个 core/ 之后,真正够得上"不该上面板"的键
+        从 1 个变成 7 个(引导层 2 + 进程身份 3 + 终端能力 1 + 测试标记 1)。
+        这不是放水 —— 数量随范围扩大而增长是应该的,**理由的密度不能降**。
+
+        所以判据从"块里有 # 号"改成**逐条要求紧邻注释**:原先那种写法,一条注释就能
+        糊弄过任意多个键。现在每个键往上找,跳过空行后必须先遇到 ``#``。
+        """
         from pathlib import Path as _P
 
-        assert len(_NOT_USER_SETTINGS) <= 3, "豁免项变多了 —— 先确认每一条都真的不该上面板"
+        assert len(_NOT_USER_SETTINGS) <= 8, "豁免项变多了 —— 先确认每一条都真的不该上面板"
         src = _P(__file__).read_text(encoding="utf-8")
-        block = src.split("_NOT_USER_SETTINGS = {", 1)[1].split("}", 1)[0]
+        block = src.split("_NOT_USER_SETTINGS = {", 1)[1].split("\n}", 1)[0]
+        lines = block.split("\n")
         for key in _NOT_USER_SETTINGS:
-            assert key in block, f"{key} 不在豁免声明块里?"
-        assert "#" in block, "豁免块里没有任何理由说明"
+            idx = next((i for i, ln in enumerate(lines) if f'"{key}"' in ln), None)
+            assert idx is not None, f"{key} 不在豁免声明块里?"
+            above = [ln.strip() for ln in lines[:idx][::-1] if ln.strip()]
+            assert above and above[0].startswith("#"), f"豁免 {key} 没有紧邻的理由说明 —— 豁免必须写清楚为什么"
 
 
 class TestRealtimeKeyRoutesToSecretStore:

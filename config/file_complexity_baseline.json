@@ -88,7 +88,7 @@
     "core/replay_foundation.py": 1094,
     "core/resource_pressure_capacity_contract.py": 1025,
     "core/routes/chat.py": 1050,
-    "core/routes/config.py": 1612,
+    "core/routes/config_schema_registry.py": 1932,
     "core/routes/operator.py": 2019,
     "core/routes/projection.py": 7558,
     "core/runtime/__init__.py": 1634,
