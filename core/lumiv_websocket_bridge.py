@@ -96,6 +96,9 @@ class GalaxyPresenceBridge:
     # 当前状态
     _current_mode: str = "static"
     _current_depth: float = 0.0
+    #: 上一次**镜像到网格**的相位。网格按相位去重(见 _mirror_presence_to_mesh):
+    #: 本机那两条通道要连续量做平滑动画,网格只要"翻档了"这件事。
+    _last_mirrored_phase: str = ""
     # 最近一次相位事件解算出的姿态（相位 + 连续量）。类属性给个 None 兜底：
     # 首帧广播可能发生在任何相位事件之前，那时按"只有锚点"处理。
     _posture: Any = None
@@ -546,6 +549,52 @@ class GalaxyPresenceBridge:
             self._ws_broadcast(msg),
             return_exceptions=True,
         )
+        # 第三条通道:网格。上面两条都是**本机**的(IPC 到 Electron、WS 到面板),
+        # 网格里其它节点看不到这台机器的在场相位。
+        self._mirror_presence_to_mesh(msg)
+
+    def _mirror_presence_to_mesh(self, msg: Dict[str, Any]) -> None:
+        """相位**发生变化**时,把在场状态发到 ``galaxy.presence.state``。
+
+        为什么只在变化时发,而不是每次广播都发
+        --------------------------------------
+        这条广播在阈限期由 200ms 的 continuum tick 驱动 —— **每秒 5 次**。每次都
+        往网格发,等于每个节点常态 5 Hz 灌流;节点一多,这一条就能把总线压满,而
+        网格里的消费方要的根本不是连续流,是"这个节点的在场相位变了"这件事。
+
+        本机那两条通道需要连续量(面板要平滑动画),网格不需要 —— 同一份数据,
+        两种消费节奏。所以这里按相位去重,只在真的翻档时发一条。
+
+        best-effort:发不出去不影响本机那两条通道,它们已经在上面 gather 完了。
+        """
+        try:
+            payload = msg.get("payload") or {}
+            phase = str(payload.get("phase") or "")
+            if not phase or phase == self._last_mirrored_phase:
+                return
+
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
+            bus = get_nats_bus()
+            if not bus.is_usable():
+                return
+            self._last_mirrored_phase = phase
+            task = asyncio.get_running_loop().create_task(
+                bus.publish_presence_event(
+                    "state",
+                    {
+                        "phase": phase,
+                        "speaking": bool(payload.get("speaking")),
+                        "source": payload.get("source", "DesktopPresenceRuntime"),
+                    },
+                )
+            )
+            _BACKGROUND_TASKS.add(task)
+            task.add_done_callback(_BACKGROUND_TASKS.discard)
+        except RuntimeError:
+            pass  # 不在事件循环里
+        except Exception as exc:  # pragma: no cover - 镜像绝不能影响本机广播
+            logger.debug("在场网格镜像跳过:%s", exc)
 
     @classmethod
     def _ipc_session(cls) -> Any:

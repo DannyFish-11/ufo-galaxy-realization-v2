@@ -1003,6 +1003,18 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             results["worker_runtime"] = _wk
             if _wk.get("started"):
                 logger.info("Worker 消费循环已启用 worker_id=%s", _wk.get("worker_id"))
+
+            # ③ MCP over NATS 的网关这一端。契约(contracts/proto/galaxy/v1/mcp.proto)
+            # 写的是 Brain → galaxy.mcp.calls → Gateway → galaxy.mcp.results → Brain,
+            # 但两条主题各自只有一半:calls 有发布器没订阅方,results 有订阅器没发布方。
+            # 这里补上订阅方,回路才真的闭合。跟着多设备总开关走 —— 单机不需要把工具
+            # 调用绕上总线(本地 MCPLoader 直连更快),开关关着时整段跳过。
+            from core.mcp_gateway import get_mcp_gateway
+
+            _mcp = await get_mcp_gateway().start_nats_listener()
+            results["mcp_nats_listener"] = _mcp
+            if _mcp.get("success"):
+                logger.info("MCP 网关已订阅 galaxy.mcp.calls")
         else:
             results["master_brain"] = {"status": "disabled"}
     except Exception as _mbe:  # noqa: BLE001 — 启用失败不阻断单机启动

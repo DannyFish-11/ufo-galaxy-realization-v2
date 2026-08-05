@@ -46,6 +46,8 @@ def _nats_enabled_for_control_plane_tests(monkeypatch):
 # Helpers
 # ---------------------------------------------------------------------------
 
+from core.nats_bus import NATSBus as _RealNATSBus  # noqa: E402  替身要借用真实方法
+
 
 def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     """Create a mock NATSBus that reports as connected."""
@@ -79,6 +81,14 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_legacy_worker_registration = AsyncMock(return_value={"success": True, "seq": 4})
     bus.publish_legacy_worker_shutdown = AsyncMock(return_value={"success": True, "seq": 5})
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
+    # 网关的结果回程改走公开的 publish_task_result_envelope(不再自己拼主题、
+    # 直接调私有 _publish)。这里把**真实方法**绑到替身上,而不是再写一遍它的逻辑
+    # —— 替身里复制一份主题拼接,正是这条链路已经踩过两次的那个坑(网关自己拼一份、
+    # 总线拼一份,收敛单复数时漏掉一处)。这样下面几条断言钉的仍是生产代码算出来的
+    # 主题与判别器,只有传输被换成了 mock。
+    bus.publish_task_result_envelope = lambda task_id, envelope: _RealNATSBus.publish_task_result_envelope(
+        bus, task_id, envelope
+    )
     bus._subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe_heartbeats = AsyncMock(return_value={"success": True})
@@ -188,8 +198,9 @@ class TestGatewayNATSAdapter:
                 }
             )
 
-        # PR-3: _publish_result now calls nats_bus._publish() directly with a
-        # unified envelope payload instead of publish_task_result().
+        # PR-3: _publish_result 发的是 unified envelope 载荷,不是 publish_task_result()。
+        # 它现在经公开的 publish_task_result_envelope 落到传输层(替身把真实方法绑了
+        # 上去),所以这里断言的仍是最终发出去的主题与载荷。
         mock_bus._publish.assert_awaited()
         call_args = mock_bus._publish.call_args[0]
         # 任务平面已收敛到单数规范(NATSTopics.TASK_RESULT)。

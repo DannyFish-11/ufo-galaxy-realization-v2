@@ -533,7 +533,7 @@ class GatewayNATSAdapter:
         try:
             from datetime import datetime, timezone
 
-            from core.nats_bus import NATSTopics, nats_bus
+            from core.nats_bus import nats_bus
             from core.schemas.contracts import TaskStatus
 
             status_val = TaskStatus.SUCCESS.value if success else TaskStatus.FAILED.value
@@ -554,12 +554,15 @@ class GatewayNATSAdapter:
                 "worker_id": "gateway",
                 "status": status_val,
                 "completed_at": {"seconds": ts, "nanos": 0},
-                # ── TaskEnvelope discriminator (PR-3) ───────────────────────
-                "_nats_schema": "TaskEnvelope",
                 "trace_id": trace_id or "",
                 "metadata": result_metadata,
             }
-            await nats_bus._publish(NATSTopics.task_result(task_id), unified)
+            # 走公开发布器,不再自己拼主题、自己盖 _nats_schema。
+            # 之前这里是 `nats_bus._publish(NATSTopics.task_result(task_id), unified)`
+            # —— 绕过 publish_task_result_envelope 直接用私有方法,于是结果主题
+            # 在网关与总线里各定义一次。C7 把任务平面从 galaxy.tasks.* 收敛到
+            # galaxy.task.* 时,这类"第二处定义"就是会被漏掉的那处。
+            await nats_bus.publish_task_result_envelope(task_id, unified)
         except Exception as exc:
             logger.error("GatewayNATSAdapter: failed to publish result for %s: %s", task_id, exc)
 

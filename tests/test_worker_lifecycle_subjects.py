@@ -484,3 +484,87 @@ async def test_the_gateway_adapter_starts_on_the_in_process_bus():
         assert adapter._started is True, "网关适配器在单机模式下没订上"
     finally:
         await adapter.stop()
+
+
+# ---------------------------------------------------------------------------
+# 网关的结果回程:走公开发布器,不再自己拼主题
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gateway_result_reaches_the_brain_end_to_end():
+    """网关发的结果必须真的回到主脑,且能被 TaskEnvelope 那条消费分支解析。
+
+    改之前网关是 ``nats_bus._publish(NATSTopics.task_result(task_id), unified)``
+    —— 绕过 ``publish_task_result_envelope`` 直接用私有方法,于是结果主题在网关
+    与总线里各定义一次。C7 把任务平面从 ``galaxy.tasks.*`` 收敛到
+    ``galaxy.task.*`` 时,这种"第二处定义"正是会被漏掉的那处。
+
+    这条从**订阅侧**断言,而不是断言调用了哪个方法 —— 后者钉的是实现,前者钉的
+    是投递。
+    """
+    from core.nats_bus import get_nats_bus
+    from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+
+    b = get_nats_bus()
+    b.enable_local_fallback("测试:进程内总线")
+
+    got: List[Any] = []
+    await b.subscribe_task_results(lambda d: got.append(d))
+
+    adapter = GatewayNATSAdapter()
+    await adapter._publish_result("t-gw-1", {"ok": True}, success=True, trace_id="tr-1")
+    await asyncio.sleep(0.05)
+
+    assert got, "网关发的结果没回到主脑"
+    payload = got[0]
+    # 判别器与 metadata 形状是 NATSExecutor._on_task_result 那条 TaskEnvelope
+    # 分支读的东西 —— 少一样,那条分支就退回 legacy 解析,success 恒 True。
+    assert payload["_nats_schema"] == "TaskEnvelope"
+    assert payload["metadata"]["success"] is True
+    assert payload["metadata"]["result"] == {"ok": True}
+    assert payload["task_id"] == "t-gw-1"
+    assert payload["trace_id"] == "tr-1"
+
+
+@pytest.mark.asyncio
+async def test_gateway_failure_result_carries_the_error(bus: NATSBus):
+    """失败结果的 error 要落在 metadata 里 —— 消费分支从那儿读。"""
+    from core.nats_bus import get_nats_bus
+    from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
+
+    b = get_nats_bus()
+    b.enable_local_fallback("测试:进程内总线")
+
+    got: List[Any] = []
+    await b.subscribe_task_results(lambda d: got.append(d))
+
+    adapter = GatewayNATSAdapter()
+    await adapter._publish_result("t-gw-2", {"error": "boom"}, success=False)
+    await asyncio.sleep(0.05)
+
+    assert got, "失败结果没回到主脑"
+    assert got[0]["metadata"]["success"] is False
+    assert got[0]["metadata"]["error"] == "boom"
+    assert got[0]["metadata"]["result"] is None
+
+
+@pytest.mark.asyncio
+async def test_envelope_publishers_accept_plain_dicts(bus: NATSBus):
+    """两个 envelope 发布器要收 dict —— 真实生产者不一定手上有 pydantic 模型。
+
+    网关就是自己拼 dict 的。之前发布器只认 ``.model_dump()``,它才只能绕开。
+    """
+    got: List[Any] = []
+    await bus.subscribe_task_results(lambda d: got.append(d))
+    await bus.publish_task_result_envelope("t-dict", {"task_id": "t-dict", "metadata": {"success": True}})
+    await asyncio.sleep(0.05)
+
+    assert got and got[0]["_nats_schema"] == "TaskEnvelope"
+
+
+@pytest.mark.asyncio
+async def test_envelope_publisher_rejects_unsupported_shapes(bus: NATSBus):
+    """收 dict 不等于什么都收:传个字符串必须当场炸,而不是发出去一条垃圾。"""
+    with pytest.raises(TypeError):
+        await bus.publish_task_result_envelope("t-bad", "not-an-envelope")
