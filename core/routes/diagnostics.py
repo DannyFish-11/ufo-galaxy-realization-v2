@@ -115,4 +115,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
+    @router.get("/api/v1/mesh/participation-summary")
+    async def mesh_participation_summary():
+        """网格/会话/编队参与状态的统一快照。
+
+        ``core/mesh_participation_summary.py`` 把六个子系统(设备编队、body mesh
+        注册表、mesh session、mesh membership、session coordinator、跨设备策略)
+        的状态摊平成一份可序列化的视图。它是**只读**的,不改任何编排行为。
+
+        在这个端点之前它没有任何生产消费方 —— 一个建好了却没接出去的诊断面,
+        只有测试在看。而"网格里现在到底谁在、各是什么角色"恰恰是排查多设备问题
+        时第一个要问的事。
+        """
+        try:
+            from core.mesh_participation_summary import get_current_mesh_participation_summary
+
+            summary = get_current_mesh_participation_summary()
+            payload = summary.to_dict() if hasattr(summary, "to_dict") else summary
+            return JSONResponse(payload)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     return router

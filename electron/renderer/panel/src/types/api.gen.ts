@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 388 条 · 组件 schema 102 个
+// 路径 389 条 · 组件 schema 102 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -167,6 +167,7 @@ export type ApiPath =
   | "/api/v1/mesh/android-lifecycle"
   | "/api/v1/mesh/coordinator-summary"
   | "/api/v1/mesh/memberships"
+  | "/api/v1/mesh/participation-summary"
   | "/api/v1/mesh/peer_announce"
   | "/api/v1/mesh/peer_exchange"
   | "/api/v1/mesh/peers"
@@ -559,6 +560,7 @@ export const API_METHODS = {
   "/api/v1/mesh/android-lifecycle": ["get"],
   "/api/v1/mesh/coordinator-summary": ["get"],
   "/api/v1/mesh/memberships": ["get"],
+  "/api/v1/mesh/participation-summary": ["get"],
   "/api/v1/mesh/peer_announce": ["post"],
   "/api/v1/mesh/peer_exchange": ["post"],
   "/api/v1/mesh/peers": ["get"],
