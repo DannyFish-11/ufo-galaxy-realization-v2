@@ -287,10 +287,32 @@ class DeviceReadinessSummary:
         if self.routability is None:
             self.routability = RoutabilitySummary(device_id=self.device_id)
 
+    @property
+    def ready(self) -> bool:
+        """四维全通才算就绪 —— **「就绪」的唯一定义**。
+
+        为什么要有这个属性
+        ------------------
+        本类此前**没有** ``ready``，而「就绪」这件事在仓里被算了三遍、且三遍不一样：
+
+        * ``list_ready_devices()``（本文件下面）内联算 ``registered and online and
+          connected and routable``；
+        * ``core/target_device_validator._readiness_gate()`` 把同一个表达式重打一遍；
+        * ``core/runtime/source_dispatch_orchestrator`` 直接读 ``getattr(rs, "ready",
+          False)`` —— 字段根本不存在，所以**恒为 False**：派发记录里的
+          ``ready_to_route`` 与 ``readiness_summary.verdict`` 无论设备多健康都报
+          "blocked"。那不是保守，是假的。
+
+        判据放在数据自己身上，三处才可能是同一件事。
+        """
+        return bool(self.registered and self.online and self.connected and self.routable)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "device_id": self.device_id,
             "registered": self.registered,
+            # 就绪判据随对象一起上线：下游此前只能自己再算一遍，而算法各写各的。
+            "ready": self.ready,
             "online": self.online,
             "connected": self.connected,
             "routable": self.routable,
@@ -658,7 +680,7 @@ def get_cross_device_ready_devices() -> List[DeviceReadinessSummary]:
         device_id = device.device_id
         try:
             rs = get_device_readiness(device_id)
-            if rs.registered and rs.online and rs.connected and rs.routable:
+            if rs.ready:  # 判据在 DeviceReadinessSummary.ready 一处定义,这里不重算
                 ready.append(rs)
         except Exception as exc:
             logger.warning(
@@ -678,12 +700,13 @@ def get_cross_device_ready_devices() -> List[DeviceReadinessSummary]:
 def is_device_cross_device_ready(device_id: str) -> bool:
     """Return True if *device_id* satisfies all cross-device readiness criteria.
 
-    Equivalent to checking ``get_device_readiness(device_id)`` and testing
-    ``registered and online and connected and routable``.
+    判据是 :attr:`DeviceReadinessSummary.ready` —— 这里不重算。此前本函数、
+    :func:`get_cross_device_ready_devices`、``target_device_validator`` 三处各打
+    一遍同样的四维合取，而 ``source_dispatch_orchestrator`` 读的那个字段还不存在。
     """
     try:
         rs = get_device_readiness(device_id)
-        return rs.registered and rs.online and rs.connected and rs.routable
+        return rs.ready
     except Exception as exc:
         logger.warning(
             "DeviceReadiness: is_device_cross_device_ready check failed for %s — %s",

@@ -2414,9 +2414,14 @@ def _score_candidate(
     try:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
 
+        # 判据看真值,不喂常量。上面的前置闸只查了 registered 与 routable ——
+        # **不查 online / connected**,所以此处若写死 readiness_ready=True 就是虚报:
+        # 一台已注册、可路由但离线/断连的设备会告诉闸门"它通过了全部就绪闸"。
+        # policy_eligible 由上面的 participation 闸保证,这里仍取真值,避免以后
+        # 有人调整前置闸顺序时这句静默失真。
         _canonical_gate = resolve_android_execution_gate_decision(
-            policy_eligible=True,
-            readiness_ready=True,
+            policy_eligible=bool(getattr(participation, "orchestration_eligible", False)),
+            readiness_ready=bool(getattr(readiness, "ready", False)),
             execution_busy=execution_busy,
             local_inference_available=_local_ai_ready,
             fallback_tier=_fallback_tier,
@@ -2722,9 +2727,13 @@ def _select_target_from_candidates(
                 elif _is_local_ai_ready is not None:
                     _local_inference_available_for_gate = bool(_is_local_ai_ready)
 
+            # 这一处**完全没有**前置闸:readiness 与 participation 就在同一作用域
+            # (上面 120 行处刚取到),此前却给闸门喂了两个字面 True。实测该闸门在这
+            # 两维上都会 deny(readiness_not_ready / policy_ineligible),写死等于把
+            # 这两条拒绝路径在派发路径上整个关掉。
             _canonical_gate = resolve_android_execution_gate_decision(
-                policy_eligible=True,
-                readiness_ready=True,
+                policy_eligible=bool(getattr(participation, "orchestration_eligible", False)),
+                readiness_ready=bool(getattr(readiness, "ready", False)),
                 execution_busy=_execution_busy,
                 local_inference_available=_local_inference_available_for_gate,
                 fallback_tier=_fallback_tier_for_gate,
