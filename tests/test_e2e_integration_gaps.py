@@ -437,18 +437,24 @@ class TestChatRouteOpenClawdOnly:
         assert (
             "clawd.process(" in source or "openclawd.process(" in source or "OpenClawd" in source
         ), "chat.py 应使用 OpenClawd.process()"
-        # 旧分流逻辑不应存在于 chat 路由处理函数内（外部辅助函数可以保留）
-        # 检查 create_router() 内部没有 if _is_action_intent 分流
-        router_source_start = source.find("def create_router(")
-        router_source = source[router_source_start:] if router_source_start >= 0 else source
-        # chat handler 内不应再有 _is_action_intent 分流（解析 handler 函数体）
-        chat_handler_start = router_source.find("async def chat(")
-        if chat_handler_start >= 0:
-            # 取从 handler 开始到下一个同级函数定义之间的内容
-            handler_snippet = router_source[chat_handler_start:]
-            # 截取到下一个顶层定义（async def 或 def，4-space indent）
-            next_def = handler_snippet.find("\n    async def ", 1)
-            if next_def < 0:
-                next_def = handler_snippet.find("\n    def ", 1)
-            chat_handler_src = handler_snippet[:next_def] if next_def > 0 else handler_snippet
-            assert "_is_action_intent" not in chat_handler_src, "chat handler 内不应再有 _is_action_intent 分流逻辑"
+        # 旧分流逻辑不应存在于 chat 路由处理函数内（外部辅助函数可以保留）。
+        #
+        # 按 AST 取 handler 函数体，不按源码文本切：
+        # 原先是 find("\n    async def ", 1) —— 把「下一个同级定义缩进 4 格」编进了
+        # 判据。这段代码只要被挪进/挪出一层（比如包进 create_router 内的某个 if），
+        # 缩进就不是 4 格了，find 返回 -1 → handler 体被切成"到文件结尾"，
+        # 判据从"handler 内没有分流"悄悄变成"整个文件剩余部分都没有分流"。
+        # 本仓已因同一种写法吃过一次假警（见 test_device_ingress_is_canonical.py）。
+        import ast
+
+        tree = ast.parse(source)
+        handlers = [
+            n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "chat"
+        ]
+        for handler in handlers:
+            names = {sub.id for sub in ast.walk(handler) if isinstance(sub, ast.Name)} | {
+                sub.attr for sub in ast.walk(handler) if isinstance(sub, ast.Attribute)
+            }
+            assert (
+                "_is_action_intent" not in names
+            ), f"chat handler（{handler.lineno} 行）内不应再有 _is_action_intent 分流逻辑"

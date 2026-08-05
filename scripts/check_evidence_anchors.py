@@ -51,7 +51,11 @@ from typing import Dict, List, Tuple
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # 扫描范围：生产代码。tests/ 见模块文档串里的说明，故意排除。
-SCAN_DIRS = ("core", "galaxy_gateway", "contracts", "scripts", "tools", "audit", "fusion")
+#
+# 2026-08-05 补入 launcher/：统一启动器落地后它是系统唯一入口，里面同样有指向
+# 仓内路径的字面量，却一直不在这道门的视野里（与 check_wiring、复杂度门栽的是
+# 同一个跟头 —— 范围是人手划的，新目录长出来没人记得回来补）。
+SCAN_DIRS = ("core", "galaxy_gateway", "contracts", "scripts", "tools", "audit", "fusion", "launcher")
 
 # 「看起来像仓内相对路径」的字符串。必须带已知顶层目录前缀 + 已知扩展名，
 # 否则会把 URL 片段、日志格式串之类的东西也卷进来。

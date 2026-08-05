@@ -72,7 +72,7 @@
     "core/node_communication.py": 1043,
     "core/nodes/node_fabric_registry.py": 1076,
     "core/offline_replay_ordering_contract.py": 1040,
-    "core/openclawd.py": 9753,
+    "core/openclawd.py": 9777,
     "core/operational_enablement_audit.py": 1017,
     "core/operational_readiness_surface.py": 2412,
     "core/operational_registration_path.py": 1372,
@@ -134,6 +134,13 @@
     "galaxy_gateway/device_router.py": 2139,
     "galaxy_gateway/orchestrator/galaxy_orchestrator.py": 1371,
     "galaxy_gateway/orchestrator/task_orchestrator.py": 1051,
-    "galaxy_gateway/websocket_handler.py": 1239
+    "galaxy_gateway/websocket_handler.py": 1239,
+    "launcher/node_startup.py": 1003,
+    "launcher/services.py": 2235,
+    "main.py": 1718,
+    "nodes/Node_112_SelfHealing/main.py": 1160,
+    "nodes/Node_58_ModelRouter/main.py": 1082,
+    "nodes/Node_71_MultiDeviceCoordination/core/multi_device_coordinator_engine.py": 1115,
+    "nodes/Node_80_MemorySystem/main.py": 1007
   }
 }

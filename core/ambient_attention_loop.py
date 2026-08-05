@@ -58,6 +58,9 @@ _DEFAULT_INTERVAL_S = 2.0  # 循环节拍
 _DEFAULT_COOLDOWN_S = 20.0  # 开口/委托后的冷却
 _DEFAULT_DIFF_THRESHOLD = 0.06  # 帧差阈值（0..1，归一化平均像素差）
 _AMBIENT_SESSION = "ambient"  # 工作记忆专用会话
+
+#: 模态协商层不可用时只告警一次(循环 2 秒一拍,每拍刷一条就成噪音)。
+_VISION_NEGOTIATION_WARNED = False
 _RECENT_MEMORY_N = 5  # 每次决策带上的最近记忆条数
 
 
@@ -216,12 +219,30 @@ class LLMRouterDecider:
 
     @staticmethod
     def _vision_usable() -> bool:
-        """当前模型是否看得见(经统一模态协商层)。协商不可用时保守返回 True,不回退视觉。"""
+        """当前模型是否看得见(经统一模态协商层)。
+
+        协商层不可用时**仍然返回 True**(继续附图) —— 方向是刻意的:
+        反过来(协商一挂就不发图)会在模型明明有视觉时,把这条循环悄悄变成瞎的,
+        而且没有任何迹象;多发一次图的代价小得多,``decide()`` 本来就有一条纯文本
+        重试兜底接得住后端不认图的情况。
+
+        改掉的是**静默**这一点。降级可以发生,但不许没人知道 —— 循环 2 秒一拍,
+        所以只在**第一次**说一句,不刷屏。
+        """
         try:
             from core.modality_capability import negotiate
 
             return negotiate().vision_in.usable
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            global _VISION_NEGOTIATION_WARNED
+            if not _VISION_NEGOTIATION_WARNED:
+                _VISION_NEGOTIATION_WARNED = True
+                logger.warning(
+                    "模态协商层不可用(%s):注意力循环继续按【看得见】处理并附图 —— "
+                    "若当前模型其实没有视觉,后端可能拒收,届时会走纯文本重试兜底。"
+                    "本条只说一次。",
+                    type(exc).__name__,
+                )
             return True
 
     async def decide(self, obs: AmbientObservation) -> AmbientDecision:
