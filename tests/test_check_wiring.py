@@ -143,6 +143,51 @@ class TestExemptions:
         # 同一个函数里**没**带注册装饰器的,照样要报得出来 —— 判据是结构不是位置。
         assert "plain_helper" in definitions
 
+    def test_singleton_reset_is_recognised_by_structure_not_by_name(self, tmp_path):
+        """「测试用单例复位」按**结构**豁免,不按名字前缀。
+
+        此前 ``_EXEMPT_NAMES`` 里手工列着 10 个 ``reset_*``,理由清一色是
+        "测试专用重置入口"。全仓这类函数有 130 多个 —— 逐个加,清单只会越来越长。
+
+        但按前缀一刀切是错的:``reset_bucket(tool_name)`` / ``reset_device(device_id)``
+        / ``reset_session(session_id)`` 也以 ``reset_`` 开头,却是真实的运行时操作
+        (限流桶、设备健康、会话预算)。按前缀豁免会把这三条真该有调用方的能力
+        一起藏掉。
+        """
+        src = (
+            "_singleton = None\n"
+            "_registry = {}\n"
+            "\n"
+            "def reset_singleton():\n"
+            "    global _singleton\n"
+            "    _singleton = None\n"
+            "\n"
+            "def reset_registry():\n"
+            "    _registry.clear()\n"
+            "\n"
+            "def reset_bucket(tool_name):\n"
+            "    return _registry.pop(tool_name, None)\n"
+        )
+        defs = _write(tmp_path, "core/thing.py", src)
+        definitions, _ = cw.collect_definitions([defs], tmp_path)
+
+        # 无参 + 复位模块级状态 → 豁免(两种写法都认:global 重绑定 / 原地 clear)
+        assert "reset_singleton" not in definitions
+        assert "reset_registry" not in definitions
+        # 带必填参数 → 它操作的是传进来的对象,是真实运行时操作,必须照报
+        assert "reset_bucket" in definitions
+
+    def test_a_reset_that_clears_in_place_still_counts(self, tmp_path):
+        """``_stacks.clear()`` 不需要 global —— 判据第一版只认 global,漏了它。
+
+        实测:``core/focus_stack.py`` 的 ``reset_focus_stacks`` 正是这种写法,
+        换成结构判据的当场就被报了出来(它此前一直躺在手工豁免名单里)。
+        """
+        src = "_stacks = {}\n\ndef reset_stacks():\n    _stacks.clear()\n"
+        defs = _write(tmp_path, "core/f.py", src)
+        definitions, _ = cw.collect_definitions([defs], tmp_path)
+        assert "reset_stacks" not in definitions
+
     def test_exempt_names_all_carry_a_reason(self):
         """豁免必须写理由 —— 没理由的豁免下次没人敢删,清单只会越来越长。"""
         for name, reason in cw._EXEMPT_NAMES.items():
