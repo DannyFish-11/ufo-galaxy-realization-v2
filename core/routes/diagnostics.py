@@ -34,6 +34,23 @@ logger = logging.getLogger("Galaxy.API")
 DIAGNOSTICS_ROUTES_AUTHORITY = "core.routes.diagnostics"
 
 
+def _failed(what: str) -> JSONResponse:
+    """记录异常栈到服务端日志,只回给调用方一句不带内部细节的话。
+
+    为什么不 ``return {"error": str(e)}``
+    -------------------------------------
+    CodeQL alert 1066(information exposure through an exception)报的就是这个:
+    异常消息里带着内部模块路径、对象名、栈上下文,直接回出去等于交给任何能打到
+    这个端点的人。而**诊断端点**天生就是给"能连上但不该知道内部结构"的人用的,
+    正是最不该泄的那一类。
+
+    排查需要的东西一点没少 —— ``logger.exception`` 把完整栈写进服务端日志,
+    那才是运维该去看的地方。
+    """
+    logger.exception("%s 失败", what)
+    return JSONResponse({"error": f"{what} unavailable — see server logs"}, status_code=500)
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create system diagnostics routes router."""
     router = APIRouter()
@@ -46,8 +63,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             mgr = get_concurrency_manager()
             return JSONResponse(mgr.get_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("concurrency status")
 
     @router.get("/api/v1/errors/summary")
     async def error_summary():
@@ -57,8 +74,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             tracker = get_error_tracker()
             return JSONResponse(tracker.get_summary())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("error summary")
 
     @router.get("/api/v1/discovery/status")
     async def discovery_status():
@@ -68,8 +85,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             disc = get_node_discovery()
             return JSONResponse(disc.get_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("discovery status")
 
     @router.get("/api/v1/security/audit")
     async def security_audit_logs():
@@ -79,8 +96,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             sec = get_security_manager()
             return JSONResponse(sec.audit.get_recent(50))
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("security audit logs")
 
     @router.get("/api/v1/security/stats")
     async def security_stats():
@@ -90,8 +107,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             sec = get_security_manager()
             return JSONResponse(sec.get_dashboard())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("security stats")
 
     @router.get("/api/v1/config/status")
     async def config_manager_status():
@@ -101,8 +118,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             mgr = get_config_manager()
             return JSONResponse(mgr.get_status())
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("config manager status")
 
     @router.get("/api/v1/config/versions")
     async def config_version_history():
@@ -112,8 +129,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             mgr = get_config_manager()
             return JSONResponse(mgr.versions.get_history(20))
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            return _failed("config version history")
 
     @router.get("/api/v1/mesh/participation-summary")
     async def mesh_participation_summary():
@@ -133,7 +150,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             summary = get_current_mesh_participation_summary()
             payload = summary.to_dict() if hasattr(summary, "to_dict") else summary
             return JSONResponse(payload)
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:
+            # 六个子系统里任何一个在半初始化状态下抛,都会走到这里 ——
+            # CodeQL alert 1066 报的正是这六条流。细节只进日志,见 _failed。
+            return _failed("mesh participation summary")
 
     return router

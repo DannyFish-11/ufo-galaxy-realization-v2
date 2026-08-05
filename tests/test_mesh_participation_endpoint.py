@@ -59,7 +59,7 @@ def test_the_route_is_registered_under_the_diagnostics_router():
 
 
 def test_aggregation_failure_returns_500_not_a_crash(client: TestClient, monkeypatch):
-    """底下任何一个子系统炸了,端点回 500 + 原因,而不是把整个进程带下去。
+    """底下任何一个子系统炸了,端点回 500,而不是把整个进程带下去。
 
     这个摘要要聚合六个子系统,其中任何一个在半初始化状态下都可能抛。
     """
@@ -71,4 +71,32 @@ def test_aggregation_failure_returns_500_not_a_crash(client: TestClient, monkeyp
     monkeypatch.setattr(mod, "get_current_mesh_participation_summary", _boom)
     r = client.get("/api/v1/mesh/participation-summary")
     assert r.status_code == 500
-    assert "子系统没起来" in r.json()["error"]
+    assert "unavailable" in r.json()["error"]
+
+
+def test_failure_response_does_not_leak_exception_detail(client: TestClient, monkeypatch, caplog):
+    """500 的响应体里不许出现异常细节,但日志里必须有。
+
+    这条钉的是 CodeQL alert 1066(information exposure through an exception):
+    这个端点最初就是 ``return JSONResponse({"error": str(e)})`` —— 六个子系统里
+    任何一个抛出来的栈信息(内部模块路径、对象名)都会原样回给调用方。而这是个
+    **诊断**端点,天生就是给"能连上但不该知道内部结构"的人用的。
+
+    两头一起断言:响应体里查不到那句异常消息,服务端日志里查得到。只断言前者的话,
+    "把错误吞了什么都不记"也能通过 —— 那是另一种坏。
+    """
+    import logging
+
+    import core.mesh_participation_summary as mod
+
+    secret = "内部模块路径不该外泄"
+
+    def _boom():
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(mod, "get_current_mesh_participation_summary", _boom)
+    with caplog.at_level(logging.ERROR, logger="Galaxy.API"):
+        r = client.get("/api/v1/mesh/participation-summary")
+
+    assert secret not in r.text, f"异常细节泄漏到响应体:{r.text}"
+    assert secret in caplog.text, "异常细节也没进日志 —— 那就没法排查了"
