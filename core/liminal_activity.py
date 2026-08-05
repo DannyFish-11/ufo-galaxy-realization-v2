@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.LiminalActivity")
 
@@ -51,9 +51,16 @@ __all__ = [
     "commit_to_manifest",
 ]
 
-#: 阈限态里正在发生什么。与 ``core.phase_contract.LIMINAL_ACTIVITIES`` 同源；
-#: 在这里复刻一份是为了不让本模块反向依赖渲染契约（它是被契约消费的一方）。
-LIMINAL_ACTIVITIES: Tuple[str, ...] = ("none", "thinking", "rehearsing")
+#: 阈限态里正在发生什么 —— **单点定义在 ``core.phase_contract``，这里只是再导出**。
+#:
+#: 原先两边各写一份字面量，注释写着"同源"，靠人保证。那是一处等着漂的定义：改一边
+#: 忘另一边，运行时登记的取值会被渲染契约当成非法值兜成 ``none``，而症状是"面板偶尔
+#: 空白"，根本指不到这里。
+#:
+#: 反向依赖的顾虑不成立：``phase_contract`` 只 import dataclasses/sys/typing，
+#: 与本模块同为零依赖模块，互相 import 没有加载代价，也不构成循环
+#: （契约不 import 本模块）。
+from core.phase_contract import LIMINAL_ACTIVITIES  # noqa: E402  —— 单点定义
 
 #: 当前请求的 ``RuntimeSession``。类型刻意写成 ``Any`` —— 本模块被
 #: ``desktop_presence_runtime`` 导入，标注具体类型会形成循环导入。

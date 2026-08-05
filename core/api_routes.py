@@ -74,6 +74,8 @@ from fastapi import (  # noqa: E402  时间戳须先于重导入
 from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402  启动时间戳须在重导入前捕获
 from pydantic import BaseModel, Field  # noqa
 
+from core.compat_ws_vocabulary import resolve_compat_ws_branch  # noqa: E402
+from core.status_ws_envelope import build_status_frame  # noqa: E402
 from core.unified_response import UnifiedChatResponse  # noqa
 
 # 导入鉴权模块
@@ -836,7 +838,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         try:
             while True:
                 data = await websocket.receive_json()
-                msg_type = data.get("type", "")
+                # 本面分支名与 AIP 类型名不是一套词汇,按 AIP 归一表改道(见该模块)
+                msg_type = resolve_compat_ws_branch(data.get("type", ""))
 
                 if msg_type == "heartbeat":
                     # SSOT: write heartbeat to UDM first
@@ -1404,55 +1407,36 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         await connection_manager.subscribe_status(websocket)
         try:
             await websocket.send_json(
-                {
-                    "type": "initial_status",
-                    "devices_online": len(connection_manager.online_device_ids()),
-                    "devices_registered": len(registered_devices),
-                    "timestamp": datetime.now().isoformat(),
-                }
+                build_status_frame(
+                    "initial_status",
+                    devices_online=len(connection_manager.online_device_ids()),
+                    devices_registered=len(registered_devices),
+                )
             )
 
             while True:
                 raw = await websocket.receive_text()
                 if raw == "ping":
-                    await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
+                    await websocket.send_json(build_status_frame("pong"))
                 else:
                     try:
                         msg = json.loads(raw)
                         msg_type = msg.get("type", "")
 
                         if msg_type == "subscribe_commands":
-                            await websocket.send_json(
-                                {
-                                    "type": "subscribed",
-                                    "channel": "command_results",
-                                    "timestamp": datetime.now().isoformat(),
-                                }
-                            )
+                            await websocket.send_json(build_status_frame("subscribed", channel="command_results"))
 
                         elif msg_type == "get_metrics":
                             from core.performance import PerformanceMonitor
 
                             perf = PerformanceMonitor.instance()
-                            await websocket.send_json(
-                                {
-                                    "type": "metrics",
-                                    "data": perf.get_dashboard(),
-                                    "timestamp": datetime.now().isoformat(),
-                                }
-                            )
+                            await websocket.send_json(build_status_frame("metrics", data=perf.get_dashboard()))
 
                         elif msg_type == "get_health":
                             from core.monitoring import get_monitoring_manager
 
                             mon = get_monitoring_manager()
-                            await websocket.send_json(
-                                {
-                                    "type": "health",
-                                    "data": mon.health.get_status(),
-                                    "timestamp": datetime.now().isoformat(),
-                                }
-                            )
+                            await websocket.send_json(build_status_frame("health", data=mon.health.get_status()))
 
                     except (json.JSONDecodeError, ValueError):
                         pass

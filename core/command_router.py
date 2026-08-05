@@ -2973,8 +2973,7 @@ class CommandRouter:
 
         # PR-14: stamp additive introspection hints on substrate result.
         # PR-1: execution_path="local" normalised to match the canonical local
-        #        execution chain (core/local_execution_chain.py) —— 仅**取值对齐**：
-        #        本文件从未调用它，本地结果也不进 unified_result_ingress（该链两端未接）。
+        #        execution chain (core/local_execution_chain.py)。
         result.setdefault(
             "introspection_snapshot",
             {
@@ -2990,6 +2989,75 @@ class CommandRouter:
                 "repo_mutation_truth": result.get("repo_mutation_truth"),
             },
         )
+
+        # ── 本地执行链记账 ────────────────────────────────────────────────
+        # core/local_execution_chain.py 有完整实现、下游 execution_chain_closure
+        # .record_local_chain_closure() 也在等它，但**一直没有生产者**——于是
+        # LocalChainView 恒为零态，阈限空间的「本机执行走到第几步」永远是空的。
+        #
+        # 记在 route_envelope 出口而不是别处：这里是规范派发脊柱的终点，结果已定型、
+        # execution_path 也已盖章，是本层唯一知道"这一趟本地跑完了"的地方。
+        #
+        # 只报**本层真的观测到**的步骤：路由到本地(command_router_local)、拿到结果
+        # (result_capture)；执行器是否真跑过看 tool_invocation_truth，没有证据就不报
+        # local_executor。上游的 openclawd_dispatch / agent_kernel_plan 与下游的
+        # openclawd_feedback 不在本层视野内，报了就是编。
+        try:
+            _isnap_for_chain = result.get("introspection_snapshot") or {}
+            if str(_isnap_for_chain.get("execution_path") or "") == "local":
+                from core.local_execution_chain import (
+                    LocalChainStep,
+                    build_local_execution_result,
+                    record_local_execution,
+                )
+
+                _chain_task_id = str(getattr(envelope, "task_id", "") or "")
+                # 成员名是小写的（LocalChainStep.command_router_local），不是常见的大写
+                # 常量式命名——写成大写会抛 AttributeError，被下面的 except 吞成一条 debug，
+                # 症状是「视图恒零态」，指不回这里。已由真实路径探针验证过取到值。
+                _chain_steps = [LocalChainStep.command_router_local]
+                if result.get("tool_invocation_truth"):
+                    _chain_steps.append(LocalChainStep.local_executor)
+                _chain_steps.append(LocalChainStep.result_capture)
+                record_local_execution(
+                    task_id=_chain_task_id,
+                    session_id=str(getattr(envelope, "trace_id", "") or "") or None,
+                    executor_module="core.command_router.route_envelope",
+                    steps_completed=_chain_steps,
+                    result=build_local_execution_result(
+                        result,
+                        task_id=_chain_task_id,
+                        executor_module="core.command_router.route_envelope",
+                    ),
+                    # 这条记录是**链的一段**，不是整条链。
+                    #
+                    # record_local_execution 的分类判据是
+                    # `legacy_path_used is None 且 steps == 完整六步`，而完整六步里
+                    # openclawd_dispatch / agent_kernel_plan 发生在上游 openclawd、
+                    # openclawd_feedback 发生在下游，本层一个都观测不到。于是这条记录
+                    # 会落到 legacy_executions 而不是 canonical_executions ——
+                    # **计数口径与事实不符，但不为了让计数好看去编那三步**。
+                    # 走的确实是规范脊柱（legacy_path_used=None 如实为空），差别只在
+                    # 「这一层看得见几步」。真相写进 extra，等哪天上下游也记账、能拼出
+                    # 整条链时，再回头收敛那个判据。
+                    extra={
+                        "chain_segment": "command_router.route_envelope",
+                        "segment_only": True,
+                        "unobservable_steps": [
+                            "openclawd_dispatch",
+                            "agent_kernel_plan",
+                            "openclawd_feedback",
+                        ],
+                    },
+                )
+        except Exception as _lec_exc:  # noqa: BLE001 — 记账绝不拖垮派发
+            # warning 而非 debug：这条降级的症状是「阈限空间的本机执行链视图恒为零态」，
+            # 而零态本身是合法值（还没跑过本地执行），两者在面板上看不出区别。埋在 debug
+            # 里就等于没有。开发时这里确实吞过一次真 bug（枚举成员名写成了大写）。
+            logger.warning(
+                "本地执行链记账失败，阈限空间的本机执行链视图将停在零态（非致命）: %s",
+                _lec_exc,
+            )
 
         return result
 
@@ -3615,6 +3683,46 @@ class CommandRouter:
             )
             return None
 
+    #: 退避封顶。与同文件 _execute_single_with_retry 的上限一致——策略表哪天写错一个
+    #: 数量级，派发不该因此挂死。
+    _RETRY_BACKOFF_CEILING_S: float = 5.0
+
+    async def _sleep_retry_backoff(self, error_code: Any, attempt: int) -> float:
+        """按失败域退避一次，返回实际等待的秒数（0 表示没等）。
+
+        延迟 = ``backoff_base_ms × multiplier**attempt``，封顶
+        :data:`_RETRY_BACKOFF_CEILING_S`。参数取自
+        ``core.schemas.execution_failure.build_failure_record().retry_policy``
+        ——**不在这里手写一条曲线**，那样策略表改了这里不会跟。
+
+        策略不可用时不等（即改动前的行为），并把降级写进日志：静默不等会让「退避
+        没生效」看起来和「这个域本来就不该等」一模一样。
+        """
+        try:
+            from core.schemas.execution_failure import build_failure_record
+
+            _policy = build_failure_record(error_code=error_code).retry_policy
+            _base_s = float(_policy.backoff_base_ms) / 1000.0
+            if _base_s <= 0:
+                return 0.0
+            _delay = min(_base_s * (float(_policy.backoff_multiplier) ** attempt), self._RETRY_BACKOFF_CEILING_S)
+        except Exception as _bo_exc:  # noqa: BLE001
+            logger.warning(
+                "重试退避降级：取不到失败域策略，本次不等待直接重试 | error_code=%s err=%s",
+                error_code,
+                _bo_exc,
+            )
+            return 0.0
+        if _delay > 0:
+            logger.debug(
+                "重试退避 %.3fs | error_code=%s attempt=%d",
+                _delay,
+                error_code,
+                attempt,
+            )
+            await asyncio.sleep(_delay)
+        return _delay
+
     async def _execute_command(
         self,
         device_id: str,
@@ -4099,6 +4207,20 @@ class CommandRouter:
                 )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
+
+            # ── 按失败域退避后再重试 ─────────────────────────────────────
+            # 此前这个循环**一行 sleep 都没有**：失败后立刻换下一台立刻再打。而同一个
+            # 文件里的 _execute_single_with_retry 是有退避的（2**attempt * 0.5，封顶 5s）
+            # —— 同一份代码两套重试标准，一套等一套不等。
+            #
+            # 节奏取自 core.schemas.execution_failure 的按域策略（超时 1000ms 起翻倍、
+            # 传输 500ms 起翻倍、设备不可用 200ms 起 ×1.5），而不是再手写一条曲线。
+            #
+            # **刻意不动重试次数。** 策略表的 max_attempts 换算成重试次数，在
+            # remote_device_unavailable 域下是 1，比现在的 2 少一次——照搬会把「设备
+            # 掉线时换台重试」的覆盖面砍掉一半，而那正是上一轮刚修好的东西。退避是
+            # 从 0 到有的纯增益，次数是收紧，两者风险不对称：只接前者。
+            await self._sleep_retry_backoff(_err_code, attempt)
 
             # ── PR-506: Record retry event in ReplayFoundation + AuditEventSemantics ─
             try:

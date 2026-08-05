@@ -242,12 +242,27 @@ def main() -> int:
     unreachable = compute_unreachable()
 
     if args.update_baseline:
+        # 基线文件里除了名单，还有**逐模块的定性记录**（为什么留、缺什么证据、
+        # 以及一次真实误删的教训）。原先这里整份重写，等于门提示你运行的命令会
+        # 把那份记录**静默清空** —— 名单还在、判据没了，下一轮又得从头查一遍。
+        # 所以这里只换名单，其余键（``_comment``）原样保留。
+        _existing: Dict[str, object] = {}
+        if BASELINE_PATH.exists():
+            try:
+                _loaded = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+                if isinstance(_loaded, dict):
+                    _existing = _loaded
+            except Exception:  # noqa: BLE001 — 基线损坏时按空处理，不挡住收紧
+                pass
+        _existing["unreachable"] = unreachable
         BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
         BASELINE_PATH.write_text(
-            json.dumps({"unreachable": unreachable}, indent=2, ensure_ascii=False) + "\n",
+            json.dumps(_existing, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         print(f"✅ 基线已写入 {BASELINE_PATH.relative_to(REPO_ROOT)}（{len(unreachable)} 个模块）")
+        if _existing.get("_comment"):
+            print("   （逐模块定性记录 _comment 已保留；新收紧的条目请手工挪到『已接入』段）")
         return 0
 
     if args.list:
