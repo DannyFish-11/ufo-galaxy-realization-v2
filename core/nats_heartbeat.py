@@ -199,7 +199,12 @@ class NodeHeartbeatSender:
             cpu_usage_percent=float(stats.get("cpu_usage_percent", 0.0)),
             memory_usage_percent=float(stats.get("memory_usage_percent", 0.0)),
         )
-        await nats_bus.publish_heartbeat(hb)
+        # 同上面注册/下线两处:worker 心跳走 worker 平面。
+        # publish_heartbeat 是**设备平面**的 AIP v3 发布器,发到
+        # galaxy.device.heartbeat.{id};而 MasterBrain 的 subscribe_heartbeats
+        # 在 galaxy.workers.heartbeat 上等 —— 调错这一个,worker 心跳一条也到不了
+        # 中心,worker 会被心跳超时判死、在途任务被标成 worker_lost。
+        await nats_bus.publish_legacy_heartbeat(hb)
         logger.debug("NodeHeartbeatSender[%s]: heartbeat sent (trace_id=%s)", self._worker_id, self._trace_id)
 
 

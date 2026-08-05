@@ -62,7 +62,6 @@ import json  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import os  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import socket  # noqa: E402  哨兵权威声明置顶是本仓设计习语
-import time  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from typing import Any, Callable, Dict, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("nats_bus")
@@ -197,6 +196,10 @@ class NATSTopics:
     """
 
     # ── Task plane ───────────────────────────────────────────────────────────
+    # ⚠️ 单数 ``task`` 与全仓其余部分(JetStream 流 ``galaxy.tasks.>``、两个订阅器、
+    # command_router / scheduler / gateway_nats_adapter)的复数 ``tasks`` **对不上**,
+    # 实测经这些常量发出的任务结果 0 条到得了主脑。往哪边收敛待定,见
+    # tests/test_worker_lifecycle_subjects.py 的说明与 PR 讨论。
     TASK_DISPATCH = "galaxy.task.dispatch"
     TASK_RESULT = "galaxy.task.result"
     TASK_CANCEL = "galaxy.task.cancel"
@@ -692,6 +695,31 @@ class NATSBus:
     # These methods accept the old contracts.py models and automatically
     # convert them to AIP v3 before publishing. Existing callers work
     # without modification.
+    #
+    # 例外:worker 生命周期那三条(register / heartbeat / shutdown)**不转**。
+    # ────────────────────────────────────────────────────────────────────
+    # 这里其实是两个平面,不是一个平面的新旧两版:
+    #
+    #   galaxy.device.*   设备协议平面,载 AIP v3 消息类,对端是各种设备;
+    #   galaxy.workers.*  MasterBrain ↔ Edge Worker 平面,载 contracts.py 的
+    #                     WorkerHeartbeatModel / WorkerRegistrationModel …
+    #
+    # 这三条原先先转成 AIP v3、再调设备平面的 publish_device_* —— 于是消息落到
+    # galaxy.device.*,而 MasterBrain 的 subscribe_worker_* 在 galaxy.workers.*
+    # 上等,两端根本不在一个主题上。
+    #
+    # 而它们当时看起来"是好的",是因为转换**恰好抛异常**:WorkerHeartbeatModel
+    # 的 timestamp 序列化成 {seconds, nanos} 而 HeartbeatMsg.timestamp 要 int;
+    # WorkerRegistrationModel 的 capabilities 是对象列表而 DeviceRegisterMsg 要
+    # 字符串列表。异常把它们打进 except 分支,原样发去了 galaxy.workers.* ——
+    # 对的结果,错的理由。三条里唯一转换会成功的 shutdown,就是真的断的那条。
+    #
+    # 反方向同样是坏的:from_aip_to_legacy 还原出来的 timestamp 是 int,
+    # WorkerHeartbeatModel.model_validate 照样不认(见
+    # tests/test_worker_lifecycle_subjects.py 里钉住的那条)。
+    #
+    # 所以正确做法不是"把转换修好",是**别转**:worker 平面的消息发到 worker
+    # 平面,格式就是消费方认的那个。
 
     async def publish_task_dispatch(self, worker_id: str, task: TaskDispatchModel) -> dict:
         """[Legacy] Publish TaskDispatch — auto-converts to AIP v3 TASK_ASSIGN."""
@@ -732,57 +760,35 @@ class NATSBus:
             return await self._publish(subject, result.model_dump(mode="json", exclude_none=True))
 
     async def publish_legacy_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
-        """[Legacy] Publish WorkerHeartbeat — auto-converts to AIP v3 HEARTBEAT."""
-        try:
-            data = heartbeat.model_dump(mode="json", exclude_none=True)
-            msg = HeartbeatMsg(
-                device_id=data.get("worker_id", ""),
-                status=data.get("status", "online"),
-                metadata=data.get("metadata", {}),
-                timestamp=data.get("timestamp", int(time.time() * 1000)),
-            )
-            return await self.publish_heartbeat(msg)
-        except Exception as exc:
-            logger.debug("AIP v3 convert failed for heartbeat, legacy fallback: %s", exc)
-            return await self._publish(
-                WorkerLifecycleSubjects.HEARTBEAT,
-                heartbeat.model_dump(mode="json", exclude_none=True),
-            )
+        """Publish a worker heartbeat to ``galaxy.workers.heartbeat``.
+
+        见本节开头「两个平面」的说明:worker 心跳走 worker 平面,不转 AIP v3、
+        不走设备平面的 :meth:`publish_heartbeat`。
+        """
+        return await self._publish(
+            WorkerLifecycleSubjects.HEARTBEAT,
+            heartbeat.model_dump(mode="json", exclude_none=True),
+        )
 
     async def publish_legacy_worker_registration(self, registration: WorkerRegistrationModel) -> dict:
-        """[Legacy] Publish WorkerRegistration — auto-converts to AIP v3 DEVICE_REGISTER."""
-        try:
-            data = registration.model_dump(mode="json", exclude_none=True)
-            msg = DeviceRegisterMsg(
-                device_id=data.get("worker_id", ""),
-                device_type=data.get("worker_type", "worker"),
-                capabilities=data.get("capabilities", []),
-                metadata=data.get("metadata", {}),
-                status="online",
-            )
-            return await self.publish_device_register(msg)
-        except Exception as exc:
-            logger.debug("AIP v3 convert failed for worker_registration, legacy fallback: %s", exc)
-            return await self._publish(
-                WorkerLifecycleSubjects.REGISTER,
-                registration.model_dump(mode="json", exclude_none=True),
-            )
+        """Publish a worker registration to ``galaxy.workers.register``。"""
+        return await self._publish(
+            WorkerLifecycleSubjects.REGISTER,
+            registration.model_dump(mode="json", exclude_none=True),
+        )
 
     async def publish_legacy_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
-        """[Legacy] Publish WorkerShutdown — auto-converts to AIP v3 DEVICE_UNREGISTER."""
-        try:
-            data = shutdown.model_dump(mode="json", exclude_none=True)
-            msg = DeviceUnregisterMsg(
-                device_id=data.get("worker_id", ""),
-                reason=data.get("reason", "shutdown"),
-            )
-            return await self.publish_device_unregister(msg)
-        except Exception as exc:
-            logger.debug("AIP v3 convert failed for worker_shutdown, legacy fallback: %s", exc)
-            return await self._publish(
-                WorkerLifecycleSubjects.SHUTDOWN,
-                shutdown.model_dump(mode="json", exclude_none=True),
-            )
+        """Publish a worker shutdown to ``galaxy.workers.shutdown``。
+
+        这条此前是**真的断的**:它的 AIP v3 转换是三条里唯一会成功的,于是消息被
+        发去了设备平面的 ``galaxy.device.register``,而 MasterBrain 在
+        ``galaxy.workers.shutdown`` 上等 —— 它永远等不到,只能靠心跳超时把 worker
+        判死、再把它手上的在途任务标成 ``worker_lost``。干净下线与崩溃从此不可区分。
+        """
+        return await self._publish(
+            WorkerLifecycleSubjects.SHUTDOWN,
+            shutdown.model_dump(mode="json", exclude_none=True),
+        )
 
     async def publish_event(self, event: AgentEventModel) -> dict:
         """[Legacy] Publish AgentEvent — auto-converts to AIP v3 STATE_EVENT."""

@@ -512,7 +512,6 @@
     "publish_audit_event",
     "publish_capability_event",
     "publish_device_event",
-    "publish_legacy_heartbeat",
     "publish_legacy_task_result",
     "publish_mcp_call",
     "publish_presence_event",

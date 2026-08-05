@@ -313,7 +313,11 @@ class TestNodeHeartbeatSender:
             call_count += 1
             return {"success": True}
 
-        mock_bus.publish_heartbeat = _mock_hb
+        # 钉 worker 平面那个发布器。此前这里钉的是 publish_heartbeat —— 那是**设备
+        # 平面**的 AIP v3 发布器,发到 galaxy.device.heartbeat.{id},而 MasterBrain
+        # 在 galaxy.workers.heartbeat 上等。用例因此把"心跳发去了没人听的主题"这个
+        # 缺陷一起钉住了。见 tests/test_worker_lifecycle_subjects.py。
+        mock_bus.publish_legacy_heartbeat = _mock_hb
 
         sender = NodeHeartbeatSender(worker_id="node-hb", interval_s=0.1)
         sender._running = True  # simulate started state
@@ -922,7 +926,8 @@ class TestNATSConnected:
             sent_payloads.append(hb)
             return {"success": True}
 
-        mock_bus.publish_heartbeat = _capture_hb
+        # 同上:worker 心跳走 worker 平面的 publish_legacy_heartbeat。
+        mock_bus.publish_legacy_heartbeat = _capture_hb
 
         trace = "test-trace-id-abc123"
         sender = NodeHeartbeatSender(worker_id="node-trace-test", trace_id=trace)
