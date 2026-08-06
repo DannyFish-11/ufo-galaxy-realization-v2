@@ -30,6 +30,7 @@ Usage::
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
 import time
@@ -47,14 +48,10 @@ except ImportError:
     _PORCUPINE_AVAILABLE = False
 
 try:
-    # PR-WARN-SUPPRESS: webrtcvad 内部使用已弃用的 pkg_resources，
-    # 触发 DeprecationWarning / UserWarning；在导入前临时过滤掉
-    import warnings
+    import numpy as np
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=DeprecationWarning)
-        warnings.simplefilter("ignore", category=UserWarning)
-        import webrtcvad  # type: ignore[import-untyped]
+    from core.multimodal.vad import VADConfig, VoiceActivityDetector
+
     _VAD_AVAILABLE = True
 except ImportError:
     _VAD_AVAILABLE = False
@@ -85,6 +82,7 @@ class VoiceWakeModule:
 
     WAKE_WORD = "galaxy"
     CHUNK_DURATION_MS = 30  # 30ms audio chunks
+    BUFFER_MAX_MS = 3000  # 缓冲上限；同时也是「连续有声」强制转写的门限
     SAMPLE_RATE = 16000
     FRAME_LENGTH = int(SAMPLE_RATE * CHUNK_DURATION_MS / 1000)
 
@@ -119,15 +117,40 @@ class VoiceWakeModule:
         return False
 
     def _init_vad(self) -> bool:
-        """Initialize WebRTC VAD as fallback."""
+        """初始化 VAD —— 与采集管线**同一个判据**（``core/multimodal/vad.py``）。
+
+        原来这里是 ``webrtcvad.Vad(2)`` 独断，也就是采集侧明确记录为
+        「一启用就一直判定有人在说话」成因的那条旧行为：webrtcvad 是频谱分类器，
+        宽带稳态噪声（风扇/空调）在它眼里跟摩擦音、清音很像，它照判有声。
+
+        后果在这条链上比在采集侧更硬：见 :meth:`_detect_loop`，识别唤醒词的
+        ``_process_buffer`` 只在"说话结束"那一拍被调用。VAD 恒判有声 ⇒ 那一拍
+        永远不来 ⇒ **叫它永远没反应**。实测（桩替掉 VAD，60 秒）:恒真时
+        ``_process_buffer`` 被调用 0 次，正常起落时 2 次。
+
+        改用 ``VoiceActivityDetector`` 一并解决三件事:
+        * 取"频谱有声 ∩ 能量超自适应门限"的交集，稳态噪声不再恒判有声;
+        * ``GALAXY_VAD_*`` 一套环境变量对两条链同时生效（原来这里写死 2，
+          ``VADConfig`` 的文档还写着"与 voice_wake_module 保持一致"—— 靠人对齐）;
+        * webrtcvad 缺包时能量法仍然可用，原来会直接把 VAD 整个关掉。
+
+        帧长按本模块真实投喂节奏给 30ms（``CHUNK_DURATION_MS``），不是
+        ``VADConfig`` 面向采集管线的默认 100ms —— 否则滚动窗口会被算长 3 倍多。
+        """
         if not _VAD_AVAILABLE:
             return False
         try:
-            self._vad = webrtcvad.Vad(2)  # aggressiveness 0-3
+            cfg = dataclasses.replace(VADConfig.from_env(), frame_duration_ms=self.CHUNK_DURATION_MS)
+            self._vad = VoiceActivityDetector(config=cfg, sample_rate=self.SAMPLE_RATE)
             return True
         except Exception as exc:
             logger.debug("VoiceWake: VAD init failed: %s", exc)
         return False
+
+    def _is_speech(self, data: bytes) -> bool:
+        """一帧 int16 PCM 是否有人在说话（交给统一判据）。"""
+        pcm = np.frombuffer(data, dtype="<i2").astype("float32") / 32768.0
+        return bool(self._vad.process_frame(pcm).is_speaking)
 
     def _init_audio(self) -> bool:
         """Initialize PyAudio."""
@@ -165,7 +188,9 @@ class VoiceWakeModule:
     def _detect_loop(self) -> None:
         """Main detection loop — runs in background thread."""
         audio_buffer: bytes = b""
-        buffer_max_ms = 3000  # 3 seconds max buffer
+        buffer_max_ms = self.BUFFER_MAX_MS
+        # 16-bit 单声道：每毫秒 SAMPLE_RATE/1000 个样本 × 2 字节
+        flush_bytes = self.SAMPLE_RATE * 2 * buffer_max_ms // 1000
         speech_detected = False
 
         logger.info("VoiceWake: detection loop started (wake_word='%s')", self.WAKE_WORD)
@@ -189,7 +214,7 @@ class VoiceWakeModule:
 
                 # Strategy 2: VAD + buffer + whisper keyword spotting
                 if self._vad is not None:
-                    is_speech = self._vad.is_speech(data, self.SAMPLE_RATE)
+                    is_speech = self._is_speech(data)
                     if is_speech:
                         speech_detected = True
                         audio_buffer += data
@@ -200,9 +225,23 @@ class VoiceWakeModule:
                         audio_buffer = b""
                         speech_detected = False
 
-                    # Prevent buffer overflow
-                    if len(audio_buffer) > self.SAMPLE_RATE * 2 * buffer_max_ms // 1000:
-                        audio_buffer = audio_buffer[-self.SAMPLE_RATE :]  # keep last 1s
+                    # 兜底：VAD 判据坏掉时，唤醒也不许彻底哑掉。
+                    #
+                    # 上面识别唤醒词的唯一时机是「说话结束」那一拍。只要 VAD 持续
+                    # 判有声，那一拍就永远不来 —— 缓冲被原来的截断逻辑一直滚着，
+                    # _process_buffer 一次都不会被调用（实测 60 秒 0 次，正常起落
+                    # 同样时长是 2 次）。判据本身已经换成与采集管线同源的那套，但
+                    # 一条链的可用性不该完全押在另一条链的判据不出错上：连续有声
+                    # 攒满 BUFFER_MAX_MS 就强制转写一次。真人连着说这么久也确实
+                    # 该出一次结果，所以这既是兜底也是正常路径。
+                    #
+                    # 这一支同时取代了原来的「Prevent buffer overflow」截断
+                    # （攒满就丢掉、只留最后 1 秒）：那段在这里已经不可达，而且
+                    # 它做的事恰恰是把唤醒词悄悄扔掉。
+                    if speech_detected and len(audio_buffer) >= flush_bytes:
+                        self._process_buffer(audio_buffer)
+                        audio_buffer = b""
+                        speech_detected = False
 
             except Exception as exc:
                 logger.debug("VoiceWake: detection loop error: %s", exc)
