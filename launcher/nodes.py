@@ -410,6 +410,13 @@ class SystemManager:
                 env["NODE_ID"] = config.id
                 env["NODE_NAME"] = config.name
                 env["PORT"] = str(config.port)
+                # NODE_PORT 与 PORT 都要传:两条部署路径历史上各用一个名字 ——
+                # 这里(原生启动器)传 PORT,而 deploy/compose/full.yml 与
+                # Dockerfile.node 传 NODE_PORT。于是读 NODE_PORT 的节点
+                # (Node_23_Time、Node_80_MemorySystem)在容器里对、在这里错:
+                # 它们取不到 PORT,退回代码里写死的字面量,而启动器探活敲的是
+                # config/unified_ports.yaml 的值,两者不等 → 明明活着却报"启动超时"。
+                env["NODE_PORT"] = str(config.port)
                 # 仓库根必须进子进程的 import 路径。
                 #
                 # cwd 是节点自己的目录(节点会按相对路径读自带资源,不能改),

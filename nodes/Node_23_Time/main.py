@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pytz
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.node_port import resolve_node_port
 
 app = FastAPI(title="Node 23 - Time", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -222,4 +223,4 @@ async def delete_timer(name: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("NODE_PORT", "8023")))
+    uvicorn.run(app, host="0.0.0.0", port=resolve_node_port("Node_23_Time", 8023))

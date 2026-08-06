@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.node_port import resolve_node_port
 
 app = FastAPI(title="Node 24 - Weather", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -260,4 +261,4 @@ async def get_weather_by_coords(lat: float, lon: float, units: str = "metric", l
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8024)
+    uvicorn.run(app, host="0.0.0.0", port=resolve_node_port("Node_24_Weather", 8024))
