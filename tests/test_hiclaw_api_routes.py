@@ -20,13 +20,34 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(scope="module")
 def client():
+    """带令牌的客户端。
+
+    这些用例考的是路由行为，不是鉴权。但 ``GALAXY_AUTH_ENABLED`` 的默认值已经
+    翻成开启（见 core/auth.py），vault 这类端点自带 ``Depends(require_auth)``，
+    不带令牌一律 401 —— 那样每条断言都停在鉴权上，考不到路由本身。
+
+    这里**给令牌**而不是关鉴权：关掉的话，这套用例就只能证明"鉴权关着时路由是
+    对的"，而生产形态是鉴权开着。带令牌跑，顺带也证明了这些端点在新默认下确实
+    还够得着。
+    """
+    import os
+
     from core.api_routes import create_api_routes
 
-    app = FastAPI()
-    router = create_api_routes()
-    app.include_router(router)
-    with TestClient(app) as c:
-        yield c
+    token = "test-token-for-hiclaw-routes-0123456789abcdef"
+    prev = os.environ.get("GALAXY_API_TOKEN")
+    os.environ["GALAXY_API_TOKEN"] = token
+    try:
+        app = FastAPI()
+        router = create_api_routes()
+        app.include_router(router)
+        with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as c:
+            yield c
+    finally:
+        if prev is None:
+            os.environ.pop("GALAXY_API_TOKEN", None)
+        else:
+            os.environ["GALAXY_API_TOKEN"] = prev
 
 
 # ============================================================================

@@ -7,6 +7,7 @@ mocked WebSocket; no running server is required.
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -54,6 +55,8 @@ async def test_device_register_ack(bridge, mock_ws):
         "device_type": "android_phone",
         "platform": "android",
         "model": "Pixel 7",
+        # 设备入口凭证：鉴权默认已开（core/auth.py），匿名 device_register 会被拒。
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
     }
 
     response = await bridge.handle_message(mock_ws, message)
@@ -80,6 +83,7 @@ async def test_capability_report_accepted(bridge, mock_ws):
             "version": "3.0",
             "device_id": DEVICE_ID,
             "platform": "android",
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
         },
     )
 
@@ -119,6 +123,7 @@ async def test_heartbeat_ack(bridge, mock_ws):
             "version": "3.0",
             "device_id": DEVICE_ID,
             "platform": "android",
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
         },
     )
 

@@ -7,6 +7,7 @@ require a running server.
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -51,6 +52,8 @@ class TestDeviceRegister:
     async def test_device_register_returns_ack(self):
         msg = {
             "type": MessageType.DEVICE_REGISTER.value,
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": "android-test-001",
             "platform": "android",
             "model": "Pixel 7",
@@ -67,6 +70,8 @@ class TestDeviceRegister:
     async def test_device_register_stores_device(self):
         msg = {
             "type": MessageType.DEVICE_REGISTER.value,
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": "android-test-002",
             "platform": "android",
         }
@@ -93,6 +98,8 @@ class TestHeartbeat:
         # Register first so the device is known
         reg_msg = {
             "type": MessageType.DEVICE_REGISTER.value,
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": "android-hb-001",
             "platform": "android",
         }
@@ -114,6 +121,8 @@ class TestHeartbeat:
 
         reg_msg = {
             "type": MessageType.DEVICE_REGISTER.value,
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": "android-hb-002",
             "platform": "android",
         }
@@ -194,6 +203,8 @@ class TestTaskResult:
         """task_result should be handled without raising."""
         reg_msg = {
             "type": MessageType.DEVICE_REGISTER.value,
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": "android-tr-001",
             "platform": "android",
         }
@@ -237,6 +248,8 @@ class TestTaskResult:
             _make_ws(),
             {
                 "type": MessageType.DEVICE_REGISTER.value,
+                # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+                "token": os.environ.get("GALAXY_API_TOKEN", ""),
                 "device_id": "android-tr-002",
                 "platform": "android",
             },

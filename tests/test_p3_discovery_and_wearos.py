@@ -30,6 +30,12 @@ def test_client_config_exposes_discovery():
     assert disc["mdns_service"] == "_galaxy._tcp"
     assert "mdns_enabled" in disc
     assert disc["tailscale"]["network_layer"] == "tailscale"
-    # 配对流程路径可被客户端直接使用(去硬编码)
-    assert disc["pairing"]["enroll_path"] == "/api/v1/pairing/enroll"
-    assert "{request_id}" in disc["pairing"]["claim_path"]
+    # 配对流程路径可被客户端直接使用(去硬编码)。
+    # 这里顺带钉住"发现广告的路径必须真的挂着" —— 广告一条 404 出去,
+    # 设备侧收到的是"配对功能坏了",而桌面这边一切正常,没人会去查发现接口。
+    from core.routes.pairing import create_router
+
+    mounted = {r.path for r in create_router().routes}
+    for key in ("claim_path", "card_path", "paths_path"):
+        assert disc["pairing"][key] in mounted, f"discovery 广告了未挂载的路径:{key}"
+    assert disc["pairing"]["claim_path"] == "/api/v1/pair/claim"

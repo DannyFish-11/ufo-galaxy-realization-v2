@@ -202,7 +202,7 @@ def _build_discovery() -> Dict[str, Any]:
     - mDNS 服务类型:局域网零配置发现(网关 mdns_announcer 广播 _galaxy._tcp)。
     - Tailscale:跨设备可选网络层;网关的 tailnet 地址由客户端【自己】查本机
       tailscale/MagicDNS 得到,这里【不】per-request shell 出去(避免阻塞/延迟)。
-    - 配对流程路径:新设备据此走 enroll → status → claim(去硬编码 IP/流程)。
+    - 配对流程路径:新设备据此一步换令牌(去硬编码 IP/流程)。
     """
     try:
         import zeroconf  # noqa: F401
@@ -218,10 +218,13 @@ def _build_discovery() -> Dict[str, Any]:
             "network_layer": "tailscale",  # 跨设备模式的网络底座(选填,设置里开启)
             "magicdns_hint": "客户端连接稳定 MagicDNS 名而非硬编码 IP",
         },
+        # 一步换令牌:设备拿短码 POST /api/v1/pair/claim,当场拿到能力令牌。
+        # 原来是 enroll → 轮询 status → claim 三步,中间那次等待要人在桌面上点批准 ——
+        # 手表上没人守着,那一步就是死等。短码本身已经是"人参与过"的证据,不必再点一次。
         "pairing": {
-            "enroll_path": "/api/v1/pairing/enroll",
-            "status_path": "/api/v1/pairing/status/{request_id}",
-            "claim_path": "/api/v1/pairing/claim/{request_id}",
+            "claim_path": "/api/v1/pair/claim",
+            "card_path": "/api/v1/pair/card",
+            "paths_path": "/api/v1/pair/paths",
         },
     }
 

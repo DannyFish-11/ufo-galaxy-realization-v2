@@ -121,6 +121,109 @@ const GATEWAY_HOST = '127.0.0.1';
 const GATEWAY_BASE = `http://${GATEWAY_HOST}:${GATEWAY_PORT}`;
 let ipcHttpServer = null;
 
+// ── 本机 API 令牌 ──
+// 鉴权默认已翻成开启（core/auth.py::is_auth_enabled）。面板与网关同机同盘，
+// 直接读后端首次启动自签的那个令牌即可，用户不用配任何东西。
+//
+// 路径必须与 Python 侧 core/auth.py::_local_token_path 一致：
+// ``$GALAXY_DATA_DIR/api_token.json``，未设时落到 **后端进程 cwd** 下的 data/。
+// 后端就是本进程用 cwd: PROJECT_ROOT 拉起来的（见下方 spawn），所以这里也用
+// PROJECT_ROOT —— 用 process.cwd() 会在"从别处启动 Electron"时指到另一个目录，
+// 表现成"面板全部 401 而后端明明是好的"。
+function localApiTokenPath() {
+    const base = String(process.env.GALAXY_DATA_DIR || '').trim() || path.join(PROJECT_ROOT, 'data');
+    return path.join(base, 'api_token.json');
+}
+
+let _tokenCache = { mtimeMs: -1, token: null };
+
+/**
+ * 取当前生效的本机令牌；取不到返回 null。
+ *
+ * 显式配置优先（与 Python 侧 get_active_tokens 的优先级同源），否则读自签文件。
+ *
+ * 缓存的取舍：这个函数挂在每一个请求上，所以**内容**按 mtime 缓存（重签会换
+ * mtime，缓存自然失效，不会一直发一枚旧令牌）。但"文件不存在"这个结论**不缓存**
+ * —— 后端签令牌发生在它自己启动的时候，很可能晚于这里第一次询问；记住"没有"
+ * 会让面板一直 401 到用户重启桌面。每次多一个 statSync，值这个价。
+ */
+function resolveLocalApiToken() {
+    const fromEnv = String(process.env.GALAXY_API_TOKEN || '').trim();
+    if (fromEnv) return fromEnv;
+    const envList = String(process.env.GALAXY_API_TOKENS || '').trim();
+    if (envList) {
+        const first = envList.split(',').map((s) => s.trim()).filter(Boolean)[0];
+        if (first) return first;
+    }
+
+    const file = localApiTokenPath();
+    let st = null;
+    try {
+        st = fs.statSync(file);
+    } catch (_e) {
+        // 文件还不在（后端可能还没起完）。刻意不记住这个结论。
+        _tokenCache = { mtimeMs: -1, token: null };
+        return null;
+    }
+    if (_tokenCache.token && _tokenCache.mtimeMs === st.mtimeMs) {
+        return _tokenCache.token;
+    }
+    try {
+        const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+        const token = String((data && data.token) || '').trim() || null;
+        _tokenCache = { mtimeMs: st.mtimeMs, token };
+        return token;
+    } catch (e) {
+        // 文件在但读不出 ≠ 还没签过。留痕 —— 静默当成"没有"的话，用户看到的
+        // 只是"面板空白"，查不到是令牌坏了。
+        console.warn('[Main] 本机令牌文件存在但读不出（不等于没签过）:', file, e && e.message);
+        _tokenCache = { mtimeMs: st.mtimeMs, token: null };
+        return null;
+    }
+}
+
+/**
+ * 这个 URL 是不是发往本机网关。
+ *
+ * 令牌等价于这台机器的钥匙，**只能**往本机网关带。所以这里是白名单判定，
+ * 不是黑名单：主机必须是环回地址，端口必须正好是网关端口。少一个条件，
+ * 令牌就可能跟着某个第三方请求（字体、遥测、任意 http(s) 资源）出门。
+ */
+function isLocalGatewayUrl(url) {
+    let u;
+    try {
+        u = new URL(String(url));
+    } catch (_e) {
+        return false;  // 解析不了就当成不是 —— 判不明白时不给令牌
+    }
+    if (!['http:', 'https:', 'ws:', 'wss:'].includes(u.protocol)) return false;
+    const host = u.hostname.replace(/^\[|\]$/g, '');
+    if (!['127.0.0.1', 'localhost', '::1'].includes(host)) return false;
+    return u.port === String(GATEWAY_PORT);
+}
+
+/**
+ * 给主进程自己发出的请求补上令牌。
+ *
+ * 上面那个 onBeforeSendHeaders 钩子**只管渲染进程**（session.webRequest 拦的是
+ * 页面发出的请求）。主进程里这些 `fetch(GATEWAY_BASE + ...)` 走的是 Node 的
+ * 全局 fetch，根本不经过 session —— 只装那一个钩子的话，配置读写、面板 feed、
+ * 桌面感知帧上传会在鉴权开启后全部 401，而且因为都在 try/catch 里，表现成
+ * "配置存不上、感知没画面"，看不出是鉴权。
+ */
+function withLocalAuth(url, options) {
+    const opts = { ...(options || {}) };
+    try {
+        const token = resolveLocalApiToken();
+        if (token && isLocalGatewayUrl(url)) {
+            opts.headers = { ...(opts.headers || {}), Authorization: `Bearer ${token}` };
+        }
+    } catch (e) {
+        console.warn('[Main] 注入 API 令牌失败:', e && e.message);
+    }
+    return opts;
+}
+
 // 桌面连续感知（摄像头/麦克风/屏幕）。
 // 隐私处理：首次启动弹一次「授权」对话框；授权后持久化记住，之后每次启动自动开启，
 // 省得手动设环境变量。可用 GALAXY_DESKTOP_PERCEPTION=1/0 强制覆盖（跳过询问）。
@@ -495,6 +598,29 @@ app.whenReady().then(async () => {
             headers['Content-Security-Policy'] = [app.isPackaged ? prodCsp : devCsp];
             callback({ responseHeaders: headers });
         });
+
+        // 给发往本机网关的请求统一带上 Bearer 令牌。
+        //
+        // 为什么放在这里而不是逐个 fetch 改：渲染进程里 api.ts 与多个 hooks 各自
+        // 直接 fetch（useModelCatalog / usePanelData / …），逐个加就是"改一处漏一处"
+        // ——而漏掉的那个会在鉴权开启后静默 401，表现成"面板某一块空白"。
+        // 这里是所有请求的必经之地，一处注入，漏不掉。
+        //
+        // 鉴权默认已改为开启（见 core/auth.py），面板与网关同机，直接读本机自签
+        // 令牌即可；用户显式配了 GALAXY_API_TOKEN 就以它为准。
+        session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+            try {
+                const token = resolveLocalApiToken();
+                if (token && isLocalGatewayUrl(details.url)) {
+                    details.requestHeaders['Authorization'] = `Bearer ${token}`;
+                }
+            } catch (e) {
+                // 拿不到令牌不该阻断请求 —— 让它照常发出去，由网关回 401，
+                // 面板据此提示，而不是这里静默吞掉整个请求。
+                console.warn('[Main] 注入 API 令牌失败:', e && e.message);
+            }
+            callback({ requestHeaders: details.requestHeaders });
+        });
     } catch (e) {
         console.warn('[Main] 设置 CSP 失败:', e && e.message);
     }
@@ -721,7 +847,8 @@ app.whenReady().then(async () => {
     setInterval(async () => {
         if (!panelWindow || panelWindow.isDestroyed() || !panelWindow.isVisible()) return;
         try {
-            const resp = await fetch(`${GATEWAY_BASE}/api/v1/panel/feed`);
+            const url = `${GATEWAY_BASE}/api/v1/panel/feed`;
+            const resp = await fetch(url, withLocalAuth(url, {}));
             if (!resp.ok) return;
             const data = await resp.json();
             const feed = data && data.feed;
@@ -1040,7 +1167,8 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
     try {
         if (payload.type === 'frame' && payload.image_base64) {
             if (!_isValidPerceptionBase64(payload.image_base64)) return;
-            await fetch(`${GATEWAY_BASE}/api/perception/desktop/frame`, {
+            const url = `${GATEWAY_BASE}/api/perception/desktop/frame`;
+            await fetch(url, withLocalAuth(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1048,17 +1176,18 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
                     mime: payload.mime || 'image/jpeg',
                     source: payload.source || 'desktop_camera',
                 }),
-            });
+            }));
         } else if (payload.type === 'audio' && payload.audio_base64) {
             if (!_isValidPerceptionBase64(payload.audio_base64)) return;
-            await fetch(`${GATEWAY_BASE}/api/perception/desktop/audio`, {
+            const url = `${GATEWAY_BASE}/api/perception/desktop/audio`;
+            await fetch(url, withLocalAuth(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     audio_base64: payload.audio_base64,
                     mime: payload.mime || 'audio/webm',
                 }),
-            });
+            }));
         } else {
             return;
         }
@@ -1133,7 +1262,7 @@ async function fetchWithRetry(url, options, {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), attemptTimeoutMs);
         try {
-            return await fetch(url, { ...options, signal: ctrl.signal });
+            return await fetch(url, { ...withLocalAuth(url, options), signal: ctrl.signal });
         } catch (e) {
             lastErr = e;
         } finally {

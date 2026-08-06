@@ -17,6 +17,7 @@ Validates that:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 import uuid
 from typing import Any, Dict
@@ -37,6 +38,7 @@ def _make_ws() -> MagicMock:
 
 def _make_reg_msg(device_id: str = "test_dev_01", **overrides) -> Dict[str, Any]:
     msg: Dict[str, Any] = {
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         "version": "3.0",
         "type": "device_register",
         "message_id": "msg-001",

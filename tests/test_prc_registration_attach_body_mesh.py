@@ -31,6 +31,7 @@ P  — Registration failure path does not attach runtime session.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock
@@ -90,6 +91,7 @@ def _make_registration_message(device_id: str = "test_device_01", **overrides: A
     from galaxy_gateway.android.capabilities import DeviceCapability
 
     msg: Dict[str, Any] = {
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         "version": "3.0",
         "type": "device_register",
         "message_id": "msg-001",
@@ -569,7 +571,12 @@ class TestRegistrationFailureNoSideEffects:
 
         bridge._write_registration_to_udm = _fail
 
-        msg = {"type": "device_register", "platform": "android", "device_id": "p_fail_dev"}
+        msg = {
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
+            "type": "device_register",
+            "platform": "android",
+            "device_id": "p_fail_dev",
+        }
         response = await bridge._handle_device_register(ws, msg)
 
         # Handler must return a failure ACK, not raise

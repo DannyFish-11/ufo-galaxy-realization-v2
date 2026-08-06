@@ -26,7 +26,7 @@ import logging
 import time
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -76,6 +76,17 @@ class ClaimRequest(BaseModel):
     #: 二选一:配对链接(galaxy://pair?...)或 6 位短码
     link: Optional[str] = None
     code: Optional[str] = None
+    #: **领取方**的自我描述。令牌签给它,不是签给出示名片的那一台。
+    #:
+    #: 方向必须写死在这里,否则整条链是断的:桌面出示名片、手机来领,
+    #: 而令牌若签成 ``card.device_id``(= 桌面),手机拿它去 ``/ws/device/<自己的 id>``
+    #: 注册时,设备入口那道 ``subject == device_id`` 绑定校验必然把它顶回来 ——
+    #: "配得上、连不了"。此前的用例都是在同一台机上 card→claim,两个 id 恰好相同,
+    #: 所以这个方向错误一直没被照出来。
+    device_id: str
+    name: str = ""
+    device_type: str = "unknown"
+    capabilities: Optional[List[str]] = None
     #: 接纳时赋予的信任级别,默认 ask(保守:先接进来,动作仍要人确认)
     trust: str = "ask"
     auto_accept: Optional[List[str]] = None
@@ -132,22 +143,37 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return _server_error("pair_card", exc)
 
     @router.post("/api/v1/pair/claim")
-    async def claim_peer(req: ClaimRequest):
+    async def claim_peer(req: ClaimRequest, request: Request):
         """凭链接或短码接纳一台对端。
 
         名片签名校验不通过一律拒绝 —— 这是信任链的入口,不能"内容看着对"就放行。
+
+        本端点是**鉴权豁免**的(见 galaxy_gateway/middleware.py 的豁免表):还没配对的
+        设备手里没有任何令牌,要求它先带令牌就是死锁。凭证是那个一次性短码/链接本身。
+        代价是这条路对公网开放,所以短码猜错要按来源节流 —— 见下。
         """
         try:
-            from core.agent_card import from_link, get_pairing_code_registry
+            from core.agent_card import from_link, get_pairing_attempt_throttle, get_pairing_code_registry
             from core.peer_trust import TrustLevel, coerce_trust, get_peer_trust_book
+
+            throttle = get_pairing_attempt_throttle()
+            source = (request.client.host if request.client else "") or "unknown"
 
             link = (req.link or "").strip()
             if not link:
                 code = (req.code or "").strip()
                 if not code:
                     return JSONResponse({"success": False, "error": "需要提供 link 或 code"}, status_code=400)
+                if throttle.is_blocked(source):
+                    logger.warning("配对被拒:短码猜测次数超限 —— source=%s", source)
+                    return JSONResponse(
+                        {"success": False, "error": "配对码错误次数过多,请稍后再试"},
+                        status_code=429,
+                    )
                 link = get_pairing_code_registry().resolve(code) or ""
                 if not link:
+                    fails = throttle.record_failure(source)
+                    logger.warning("配对码无效:source=%s 窗口内累计 %d 次", source, fails)
                     return JSONResponse(
                         {"success": False, "error": "配对码无效或已过期/已被使用"},
                         status_code=400,
@@ -155,18 +181,30 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             verdict = from_link(link)
             if not verdict.valid or verdict.card is None:
+                # 名片伪造也计入节流:它和猜短码是同一件事的两种入口,
+                # 只拦一边等于没拦。
+                throttle.record_failure(source)
                 logger.warning("配对被拒:名片校验失败 —— %s", verdict.reason)
                 return JSONResponse({"success": False, "error": verdict.reason}, status_code=400)
 
             card = verdict.card
+
+            # 校验通过的名片证明的是"这个人手里有一张本机签发、还没过期的邀请",
+            # **不是**"这个人就是名片上那台机器"。所以登记与签发都以领取方
+            # (req.device_id)为准,名片只用来判"该不该放它进来"。
+            subject = req.device_id.strip()
+            if not subject:
+                throttle.record_failure(source)
+                return JSONResponse({"success": False, "error": "需要提供 device_id"}, status_code=400)
+
             trust = coerce_trust(req.trust, TrustLevel.ASK)
             book = get_peer_trust_book()
             rec = book.upsert(
-                card.device_id,
-                name=card.name,
+                subject,
+                name=req.name or subject,
                 trust=trust,
                 auto_accept=req.auto_accept if req.auto_accept is not None else [],
-                capabilities=card.capabilities,
+                capabilities=req.capabilities if req.capabilities is not None else [],
                 note=req.note,
             )
 
@@ -177,18 +215,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 try:
                     from core.capability_token import issue_token
 
-                    token = issue_token(card.device_id, scopes, ttl_s=req.token_ttl_s)
+                    token = issue_token(subject, scopes, ttl_s=req.token_ttl_s)
                 except Exception as exc:  # noqa: BLE001
                     # 令牌签发失败不该让配对整体回滚(对端已登记、信任已生效),
                     # 但必须让调用方知道它没拿到令牌,否则会以为拿到了。
-                    logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", card.device_id, exc)
+                    logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", subject, exc)
 
             logger.info(
-                "配对成功:device_id=%s name=%s trust=%s scopes=%s",
-                card.device_id,
-                card.name,
+                "配对成功:device_id=%s type=%s trust=%s scopes=%s(邀请来自 %s)",
+                subject,
+                req.device_type,
                 rec.trust,
                 scopes,
+                card.device_id,
             )
             return JSONResponse(
                 {
@@ -197,11 +236,89 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "capability_token": token,
                     "token_scopes": scopes,
                     "token_issued": token is not None,
+                    # 兼容字段,永远是局域网地址。
                     "endpoints": card.endpoints,
+                    # **设备接下来要连哪里**,按可达性排序。
+                    # 少了这一条,C 做的多路可达在交接处原地丢掉:设备配上了,
+                    # 手里却只有那个出了网段就是死地址的内网 IP。
+                    "candidates": card.candidates,
+                    "gateway_device_id": card.device_id,
                 }
             )
         except Exception as exc:  # noqa: BLE001
             return _server_error("pair_claim", exc)
+
+    @router.get("/api/v1/pair/paths")
+    async def get_path_status():
+        """本机当前每条可达路径的状态 —— 面板的「路径状态盘」读它。
+
+        为什么要有这么一屏
+        ------------------
+        设备连不上时,人唯一能做的判断是"是我这边的问题,还是那台电脑的问题"。
+        没有这一屏的话,两边都只能看到"连不上",然后互相怀疑。
+
+        这里回答的是**桌面这一侧**的事实:哪几条路现在是通的,Funnel 那条如果没开
+        是被什么挡住的。设备侧的判断由 ``ConnectionPathPlanner`` 负责,两边合起来
+        才拼得出全貌。
+
+        ``funnel`` 那条要跑一次 ``tailscale serve status``,比另外两条贵 ——
+        所以这个端点是**按需**的,不进任何轮询。
+        """
+        try:
+            from core.agent_card import build_candidates, local_device_id
+            from core.electron_launch_guard import resolve_gateway_port
+            from core.tailscale_manager import TailscaleManager
+
+            port = resolve_gateway_port()
+            did = local_device_id()
+            candidates = build_candidates(did, port)
+            live_kinds = {c["kind"] for c in candidates}
+
+            mgr = TailscaleManager()
+            gate = mgr.funnel_preflight()
+
+            paths = []
+            for kind in mgr.NETWORK_PREFERENCE:
+                cand = next((c for c in candidates if c["kind"] == kind), None)
+                if cand is not None:
+                    paths.append({"kind": kind, "up": True, "url": cand["url"], "reason": "", "how_to_fix": ""})
+                    continue
+                # 不在候选里 = 这条路现在不可用。**为什么**不可用要说清楚,
+                # 否则这一屏只是把"连不上"换了个地方显示。
+                if kind == "funnel" and not gate["ok"]:
+                    paths.append(
+                        {
+                            "kind": kind,
+                            "up": False,
+                            "url": "",
+                            "reason": gate["reason"],
+                            "how_to_fix": gate["how_to_fix"],
+                        }
+                    )
+                else:
+                    paths.append(
+                        {
+                            "kind": kind,
+                            "up": False,
+                            "url": "",
+                            "reason": "tailscale_unavailable" if kind != "lan" else "unavailable",
+                            "how_to_fix": (TailscaleManager.get_install_guide() if kind != "lan" else ""),
+                        }
+                    )
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "device_id": did,
+                    "port": port,
+                    "paths": paths,
+                    # 手表带流量单独出门时唯一能用的那条。单独拎出来,因为它是
+                    # 「出门还能不能用」这个问题的唯一判据。
+                    "public_reachable": "funnel" in live_kinds,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("pair_paths", exc)
 
     @router.get("/api/v1/pair/peers")
     async def list_peers():

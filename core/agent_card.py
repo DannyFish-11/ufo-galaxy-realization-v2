@@ -71,7 +71,16 @@ class AgentCard:
     device_type: str = "unknown"
     capabilities: List[str] = field(default_factory=list)
     #: 传输端点,如 {"websocket": "ws://10.0.0.5:9000/ws/device/<id>"}
+    #: 这是**兼容字段**,永远是局域网地址。跨网可达的完整清单看 :attr:`candidates`。
     endpoints: Dict[str, str] = field(default_factory=dict)
+    #: 按可达性排序的候选路径。设备扫到名片后**依次试**,谁通用谁。
+    #:
+    #: 每项形如 ``{"kind": "lan"|"tailscale"|"funnel", "url": ..., "priority": 1}``。
+    #: 之所以要多条:``endpoints["websocket"]`` 里那个内网 IP 出了网段就是死地址,
+    #: 扫码扫得再顺也连不上。三条各自覆盖一类现场 ——
+    #: lan(同一 Wi-Fi,最快) / tailscale(装了客户端的设备跨网 P2P) /
+    #: funnel(公网,手表带流量单独出门时**唯一**能用的一条)。
+    candidates: List[Dict[str, Any]] = field(default_factory=list)
     #: 签发者标识。单属主 Mesh 下就是本机 device_id;将来多属主时放 DID。
     issuer: str = ""
     issued_at: float = 0.0
@@ -104,6 +113,7 @@ def create_agent_card(
     issuer: str = "",
     ttl_s: float = DEFAULT_CARD_TTL_S,
     now: Optional[float] = None,
+    candidates: Optional[List[Dict[str, Any]]] = None,
 ) -> AgentCard:
     """签发一张名片(未签名;签名在 to_link/to_token 时施加)。"""
     t = now if now is not None else time.time()
@@ -113,6 +123,7 @@ def create_agent_card(
         device_type=str(device_type or "unknown"),
         capabilities=[str(c) for c in (capabilities or [])],
         endpoints={str(k): str(v) for k, v in (endpoints or {}).items()},
+        candidates=[dict(c) for c in (candidates or [])],
         issuer=str(issuer or device_id),
         issued_at=t,
         expires_at=t + float(ttl_s) if ttl_s else 0.0,
@@ -166,6 +177,9 @@ def from_link(link: str, *, now: Optional[float] = None) -> CardVerdict:
             device_type=str(data.get("device_type", "unknown") or "unknown"),
             capabilities=[str(c) for c in (data.get("capabilities") or [])],
             endpoints={str(k): str(v) for k, v in (data.get("endpoints") or {}).items()},
+            # 必须一起解出来:签名覆盖了它(它在 payload 里),但如果这里不读,
+            # 设备扫完码就只剩那个内网地址 —— 等于白带。
+            candidates=[dict(c) for c in (data.get("candidates") or []) if isinstance(c, dict)],
             issuer=str(data.get("issuer", "") or ""),
             issued_at=float(data.get("issued_at", 0.0) or 0.0),
             expires_at=float(data.get("expires_at", 0.0) or 0.0),
@@ -280,6 +294,89 @@ def reset_pairing_code_registry() -> None:
         _registry = None
 
 
+# ── 短码猜测节流 ──────────────────────────────────────────────────────────
+#: 单个来源在窗口内允许猜错的次数。
+MAX_CODE_ATTEMPTS = 10
+#: 节流窗口(秒)。
+CODE_ATTEMPT_WINDOW_S = 300.0
+
+
+class PairingAttemptThrottle:
+    """按来源限制**猜错**短码的次数。
+
+    为什么需要
+    ----------
+    ``POST /api/v1/pair/claim`` 是鉴权豁免的 —— 必须如此,一台还没配对的设备
+    手里没有任何令牌,要求它先带令牌就是死锁。豁免的代价是:它对公网开放
+    (Tailscale Funnel 那条路),而短码是可枚举的。
+
+    31^6 ≈ 8.9 亿、10 分钟有效、用后即焚,盲猜的期望本来就极低;但"概率低"
+    不是把一个公网端点的爆破面敞着的理由,尤其它成功一次就等于交出一台设备。
+
+    只计**失败**
+    ------------
+    成功不计数:正常配对不该因为同一个家庭网络里连了几台设备就被自己锁住。
+    锁的是"一直猜不中"这个形状 —— 那正是爆破的形状。
+    """
+
+    def __init__(self, max_attempts: int = MAX_CODE_ATTEMPTS, window_s: float = CODE_ATTEMPT_WINDOW_S) -> None:
+        self._lock = threading.RLock()
+        self._fails: Dict[str, List[float]] = {}
+        self._max = max(1, int(max_attempts))
+        self._window = float(window_s)
+
+    def _recent_unlocked(self, source: str, now: float) -> List[float]:
+        hits = [t for t in self._fails.get(source, []) if now - t < self._window]
+        if hits:
+            self._fails[source] = hits
+        else:
+            self._fails.pop(source, None)
+        return hits
+
+    def is_blocked(self, source: str, *, now: Optional[float] = None) -> bool:
+        t = now if now is not None else time.time()
+        with self._lock:
+            return len(self._recent_unlocked(str(source), t)) >= self._max
+
+    def record_failure(self, source: str, *, now: Optional[float] = None) -> int:
+        """记一次猜错,返回窗口内的累计失败数。"""
+        t = now if now is not None else time.time()
+        key = str(source)
+        with self._lock:
+            hits = self._recent_unlocked(key, t)
+            hits.append(t)
+            self._fails[key] = hits
+            return len(hits)
+
+    def clear(self, source: Optional[str] = None) -> None:
+        with self._lock:
+            if source is None:
+                self._fails.clear()
+            else:
+                self._fails.pop(str(source), None)
+
+
+_throttle_lock = threading.Lock()
+_throttle: Optional[PairingAttemptThrottle] = None
+
+
+def get_pairing_attempt_throttle() -> PairingAttemptThrottle:
+    global _throttle
+    if _throttle is not None:
+        return _throttle
+    with _throttle_lock:
+        if _throttle is None:
+            _throttle = PairingAttemptThrottle()
+    return _throttle
+
+
+def reset_pairing_attempt_throttle() -> None:
+    """测试用。"""
+    global _throttle
+    with _throttle_lock:
+        _throttle = None
+
+
 # ── 本机名片 ──────────────────────────────────────────────────────────────
 def local_device_id() -> str:
     """本机在 Mesh 中的标识。优先环境变量,其次主机名。"""
@@ -309,16 +406,21 @@ def build_local_card(
     """
     did = local_device_id()
     eps = dict(endpoints or {})
-    if not eps:
-        try:
-            from core.electron_launch_guard import resolve_gateway_port
+    cands: List[Dict[str, Any]] = []
+    try:
+        from core.electron_launch_guard import resolve_gateway_port
 
-            port = resolve_gateway_port()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("名片端点推导:网关端口解析失败(%s),端点留空", exc)
-            port = 0
-        if port:
-            eps["websocket"] = f"ws://{_local_ip()}:{port}/ws/device/{did}"
+        port = resolve_gateway_port()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("名片端点推导:网关端口解析失败(%s),端点与候选路径留空", exc)
+        port = 0
+    if port:
+        # 候选路径**不受 endpoints 是否显式给出的影响**。
+        # 早先写成"只在 eps 为空时才算",结果任何一个显式传 endpoints 的调用方
+        # 拿到的名片候选路径都是空的 —— 多路可达这件事对它整个不存在,而且没有
+        # 任何报错,只表现成"这台设备只能在局域网里配上"。
+        cands = build_candidates(did, port)
+        eps.setdefault("websocket", f"ws://{_local_ip()}:{port}/ws/device/{did}")
     return create_agent_card(
         did,
         name=os.getenv("GALAXY_DEVICE_NAME", "").strip() or did,
@@ -327,7 +429,47 @@ def build_local_card(
         endpoints=eps,
         issuer=did,
         ttl_s=ttl_s,
+        candidates=cands,
     )
+
+
+def build_candidates(device_id: str, port: int) -> List[Dict[str, Any]]:
+    """列出本机当前**所有可达路径**,按可达性排序。
+
+    为什么必须多条:``endpoints["websocket"]`` 里那个内网 IP 出了网段就是死地址。
+    扫码解决的是"不用手填 IP/端口/路径",解决不了"能不能连通" —— 后者要靠这张表。
+
+    排序**不在这里定义** —— 读 ``TailscaleManager.NETWORK_PREFERENCE``
+    (它此前零消费方,算出了优先级却没人读)。设备端依次试连也读同一处,
+    两边就不会一个按局域网优先发、另一个按公网优先连。
+
+    Funnel 对外只能落在 443/8443/10000(Tailscale 硬限制),所以那条 URL
+    **不带 :9000**,本地端口由 ``tailscale serve`` 映射。这一点写错的话,
+    手表会拿到一个语法正确但必然连不上的地址。
+    """
+    urls: Dict[str, str] = {"lan": f"ws://{_local_ip()}:{port}/ws/device/{device_id}"}
+    order: List[str] = ["lan"]
+    try:
+        from core.tailscale_manager import TailscaleManager  # noqa: PLC0415
+
+        mgr = TailscaleManager()
+        order = list(mgr.NETWORK_PREFERENCE)
+        ts_url = mgr.get_connection_url(port)
+        if ts_url:
+            urls["tailscale"] = f"{ts_url}/ws/device/{device_id}"
+        funnel = mgr.get_funnel_url()
+        if funnel:
+            # 注意这里**不拼端口** —— Funnel 对外就是 443。
+            base = funnel.replace("https://", "wss://", 1).rstrip("/")
+            urls["funnel"] = f"{base}/ws/device/{device_id}"
+    except Exception as exc:  # noqa: BLE001 — Tailscale 不可用只是少两条路,不该让名片发不出来
+        logger.info("名片候选路径:Tailscale 相关地址不可用(仅局域网可达):%s", exc)
+
+    # priority 从 1 起连续编号,按 order 里的相对次序 —— 不是 order 的下标,
+    # 否则少一条路就会在编号上留个洞,设备端"从 1 开始逐个试"会跳过一档。
+    return [
+        {"kind": kind, "url": urls[kind], "priority": i + 1} for i, kind in enumerate(k for k in order if k in urls)
+    ]
 
 
 def _local_ip() -> str:

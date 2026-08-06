@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,6 +17,7 @@ def _make_registration_message(device_id: str = "cap_dev_01", **overrides):
     from galaxy_gateway.android.capabilities import DeviceCapability
 
     msg = {
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         "version": "3.0",
         "type": "device_register",
         "message_id": "msg-cap-001",

@@ -35,7 +35,9 @@ def bridge():
 
 @pytest.mark.asyncio
 async def test_register_ack_explicitly_distinguishes_auth_registration_and_participation(bridge, monkeypatch):
-    monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
+    # 显式关闭。默认已改为开启；本条钉的是"鉴权未启用时 register_ack 怎么区分
+    # 已鉴权/已登记/已参与"这三件事，与默认值无关。
+    monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
     monkeypatch.delenv("GALAXY_API_TOKEN", raising=False)
     monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
 

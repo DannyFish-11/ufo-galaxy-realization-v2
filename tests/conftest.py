@@ -233,6 +233,38 @@ os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
 os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")
 os.environ["GALAXY_DATA_DIR"] = str(_TMP_DATA_DIR)
 
+# ── 鉴权：整套测试跑在**生产形态**下 ──
+#
+# ``GALAXY_AUTH_ENABLED`` 的默认已翻成 true（见 core/auth.py：只要存在一条公网
+# 可达的路，"只在局域网里"这个前提就没了）。于是测试面临一个选择：
+#
+#   (a) 在 conftest 里把鉴权关掉 —— 一行搞定，所有用例照旧绿；
+#   (b) 让它开着，并配一枚固定的测试令牌，需要的用例自己带上。
+#
+# 选 (b)。选 (a) 的话，整套测试跑的就是一个**生产里不存在**的形态：任何一条
+# "某端点忘了走鉴权"的回归都不会有测试发现，因为测试里鉴权根本没启用。
+# 这正是这次改默认要消除的那类盲区，不该在测试侧原样重建一遍。
+#
+# 代价是需要访问受保护端点的用例得显式带令牌 —— 用 ``auth_headers`` fixture，
+# 或直接读 ``GALAXY_TEST_API_TOKEN``。这个代价是**对的**：它让"这个端点要鉴权"
+# 在测试里也是一件看得见的事。
+#
+# 要验证"没有任何令牌"的用例（test_no_server_tokens_fails_closed 等）自己
+# ``monkeypatch.delenv`` 覆盖即可。
+GALAXY_TEST_API_TOKEN = "galaxy-test-suite-token-0123456789abcdef"
+os.environ["GALAXY_API_TOKEN"] = GALAXY_TEST_API_TOKEN
+
+
+@pytest.fixture
+def auth_headers():
+    """访问受鉴权端点时带上的请求头。
+
+    鉴权默认已开（见上面那段说明），所以 ``TestClient(app)`` 裸调受保护端点会
+    401。用法：``TestClient(app, headers=auth_headers)``，或单次
+    ``client.get(url, headers=auth_headers)``。
+    """
+    return {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}
+
 
 @pytest.fixture(scope="session")
 def event_loop():

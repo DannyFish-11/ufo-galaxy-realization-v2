@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 389 条 · 组件 schema 102 个
+// 路径 383 条 · 组件 schema 100 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -254,16 +254,10 @@ export type ApiPath =
   | "/api/v1/pair/card"
   | "/api/v1/pair/check"
   | "/api/v1/pair/claim"
+  | "/api/v1/pair/paths"
   | "/api/v1/pair/peers"
   | "/api/v1/pair/peers/{device_id}"
   | "/api/v1/pair/trust"
-  | "/api/v1/pairing/approve"
-  | "/api/v1/pairing/claim/{request_id}"
-  | "/api/v1/pairing/code"
-  | "/api/v1/pairing/deny"
-  | "/api/v1/pairing/enroll"
-  | "/api/v1/pairing/pending"
-  | "/api/v1/pairing/status/{request_id}"
   | "/api/v1/panel/feed"
   | "/api/v1/panel/unified"
   | "/api/v1/ports"
@@ -647,16 +641,10 @@ export const API_METHODS = {
   "/api/v1/pair/card": ["get"],
   "/api/v1/pair/check": ["post"],
   "/api/v1/pair/claim": ["post"],
+  "/api/v1/pair/paths": ["get"],
   "/api/v1/pair/peers": ["get"],
   "/api/v1/pair/peers/{device_id}": ["delete", "get"],
   "/api/v1/pair/trust": ["post"],
-  "/api/v1/pairing/approve": ["post"],
-  "/api/v1/pairing/claim/{request_id}": ["post"],
-  "/api/v1/pairing/code": ["post"],
-  "/api/v1/pairing/deny": ["post"],
-  "/api/v1/pairing/enroll": ["post"],
-  "/api/v1/pairing/pending": ["get"],
-  "/api/v1/pairing/status/{request_id}": ["get"],
   "/api/v1/panel/feed": ["get"],
   "/api/v1/panel/unified": ["get"],
   "/api/v1/ports": ["get"],
@@ -871,8 +859,12 @@ export interface CheckRequest {
 
 export interface ClaimRequest {
   "auto_accept"?: Array<string> | null;
+  "capabilities"?: Array<string> | null;
   "code"?: string | null;
+  "device_id": string;
+  "device_type"?: string;
   "link"?: string | null;
+  "name"?: string;
   "note"?: string;
   "token_ttl_s"?: number;
   "trust"?: string;
@@ -929,11 +921,6 @@ export interface DebugCodeRequest {
   "code": string;
   "error"?: string | null;
   "language"?: string;
-}
-
-export interface DecisionBody {
-  "reason"?: string | null;
-  "request_id": string;
 }
 
 export interface DesktopAnalyze {
@@ -1012,14 +999,6 @@ export interface DeviceStartRequest {
 export interface DeviceStatusUpdate {
   "device_id": string;
   "status"?: Record<string, unknown>;
-}
-
-export interface EnrollBody {
-  "device_id": string;
-  "device_type"?: string | null;
-  "fingerprint"?: Record<string, unknown> | null;
-  "name"?: string | null;
-  "pairing_code"?: string | null;
 }
 
 export interface ExecuteCommandRequest {

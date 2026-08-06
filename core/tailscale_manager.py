@@ -55,6 +55,15 @@ class TailscaleManager:
         "no",
         "off",
     )
+
+    #: 是否尝试自动拉起 Funnel（把网关暴露到公网，手表带流量单独连上靠它）。
+    #: 默认开 —— 但真正能不能开由 funnel_preflight 的鉴权闸门说了算。
+    _ADVERTISE_FUNNEL = os.environ.get("GALAXY_TS_FUNNEL", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
     _instance = None
 
     def __new__(cls):
@@ -117,6 +126,143 @@ class TailscaleManager:
         except Exception as exc:  # noqa: BLE001
             logger.debug("ensure_relay_advertised 跳过（非致命）：%s", exc)
         return False
+
+    # ── Funnel：把网关暴露到**公网** ────────────────────────────────────────
+    #
+    # 与上面的 relay/普通 Tailscale 有本质区别，必须分清：
+    #   普通 Tailscale —— 只有 tailnet 内的设备能连，对方**要装客户端**；
+    #   Funnel        —— 整个公网能连，对方**不用装**。
+    # 手表（Wear OS 没有 Tailscale 客户端）能带 LTE 单独连上，靠的就是 Funnel。
+    #
+    # 正因为它把网关推到公网，开它之前必须先过鉴权闸门（见 funnel_preflight）。
+
+    #: Funnel 对外只能落在这三个端口之一（Tailscale 的硬限制），
+    #: 本地 9000 由 ``tailscale serve`` 映射过去。
+    FUNNEL_PUBLIC_PORT = 443
+
+    def funnel_preflight(self) -> Dict[str, Any]:
+        """开 Funnel 之前的**硬闸门**：不满足就不许开。
+
+        判据只有一条，但它是硬的：**网关一旦公网可达，鉴权必须是开的。**
+
+        局域网内默认不鉴权是合理的 —— 家里网段本身就是信任边界。Funnel 把这个
+        边界整个拿掉了，此时"默认放行"就等于把桌面裸奔在公网上：任何人都能连
+        ``/ws/device/<任意 id>`` 驱动你的机器。
+
+        所以这里**不是警告，是拒绝**。返回 ``{"ok": False, "reason": ...,
+        "how_to_fix": ...}``，调用方据此不开 Funnel 并把原因原样呈现给人。
+
+        判"能不能开"而不是"当前开没开"—— 后者会让一次读取失败变成放行。
+        """
+        from core.auth import get_active_tokens, is_auth_enabled  # noqa: PLC0415
+
+        if not is_auth_enabled():
+            return {
+                "ok": False,
+                "reason": "auth_disabled",
+                "detail": "鉴权被显式关闭（GALAXY_AUTH_ENABLED=false），不能把网关暴露到公网。",
+                "how_to_fix": "去掉 GALAXY_AUTH_ENABLED=false（默认即开启），或改设为 true。",
+            }
+        if not get_active_tokens():
+            return {
+                "ok": False,
+                "reason": "no_token",
+                "detail": "鉴权开着但一个可用令牌都没有 —— 此时放行等于没有鉴权。",
+                "how_to_fix": "设置 GALAXY_API_TOKEN / GALAXY_API_TOKENS，或确认 GALAXY_DATA_DIR 可写以便自签本机令牌。",
+            }
+        return {"ok": True, "reason": "", "detail": "", "how_to_fix": ""}
+
+    def get_funnel_url(self) -> Optional[str]:
+        """本机当前的 Funnel 公网地址；没开或问不出来返回 None。
+
+        问不出来与"确实没开"都返回 None，但前者会留痕 —— 这条链上"没有地址"
+        和"拿不到地址"对使用者是同一个后果（手表连不上），但对排障完全不同。
+        """
+        if not self._available or not shutil.which("tailscale"):
+            return None
+        try:
+            r = subprocess.run(
+                ["tailscale", "serve", "status", "--json"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            )
+            if r.returncode != 0:
+                return None
+            status = json.loads(r.stdout or "{}")
+            # AllowFunnel 的键形如 "box.tailnet.ts.net:443"，值为 true 才是真开着
+            for hostport, enabled in (status.get("AllowFunnel") or {}).items():
+                if enabled:
+                    return f"https://{str(hostport).split(':', 1)[0]}"
+            return None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Funnel 状态查询失败（不等于未开启）：%s", exc)
+            return None
+
+    async def ensure_funnel_enabled(self, local_port: int = 9000) -> Dict[str, Any]:
+        """尝试拉起 Funnel。**best-effort，绝不阻断启动。**
+
+        写法与 :meth:`ensure_relay_advertised` 一致：失败静默降级、只留痕。
+        但多一层 —— 先过 :meth:`funnel_preflight`，闸门不过就**根本不执行**。
+
+        首次还需要你在 Tailscale 后台给这台机 ``funnel`` 属性 + 开 HTTPS 证书；
+        没授权时 CLI 会返回一条带链接的错误，这里原样带出去让人能照着点。
+        """
+        out: Dict[str, Any] = {"enabled": False, "url": None, "reason": "", "detail": "", "how_to_fix": ""}
+        if not self._ADVERTISE_FUNNEL:
+            out["reason"] = "disabled_by_config"
+            out["detail"] = "GALAXY_TS_FUNNEL=0 已显式关闭"
+            return out
+        if not self._available or not shutil.which("tailscale"):
+            out["reason"] = "tailscale_unavailable"
+            out["detail"] = "本机没有可用的 Tailscale"
+            out["how_to_fix"] = self.get_install_guide()
+            return out
+
+        gate = self.funnel_preflight()
+        if not gate["ok"]:
+            # 这就是那个印章：闸门不过，一行命令都不执行。
+            logger.error(
+                "拒绝开启 Tailscale Funnel（%s）：%s 处置：%s",
+                gate["reason"],
+                gate["detail"],
+                gate["how_to_fix"],
+            )
+            out.update(reason=gate["reason"], detail=gate["detail"], how_to_fix=gate["how_to_fix"])
+            return out
+
+        existing = self.get_funnel_url()
+        if existing:
+            out.update(enabled=True, url=existing, reason="already_enabled")
+            return out
+
+        try:
+            r = await asyncio.to_thread(
+                subprocess.run,
+                ["tailscale", "funnel", "--bg", f"--https={self.FUNNEL_PUBLIC_PORT}", str(local_port)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+            if r.returncode == 0:
+                url = self.get_funnel_url()
+                out.update(enabled=bool(url), url=url, reason="" if url else "url_unresolved")
+                if url:
+                    logger.info("Tailscale Funnel 已开启：%s → 本地 :%d（手表可带流量单独连上）", url, local_port)
+                return out
+            msg = (r.stderr or r.stdout or "").strip()
+            out.update(reason="cli_refused", detail=msg[:400])
+            # 未授权是最常见的一种，CLI 会在文案里带上可点的链接，原样透出去
+            out["how_to_fix"] = "首次需在 Tailscale 后台给本机开启 Funnel 与 HTTPS 证书（错误信息里通常带链接）"
+            logger.warning("Funnel 未能开启（已降级，不影响启动）：%s", msg[:200])
+        except Exception as exc:  # noqa: BLE001
+            out.update(reason="exception", detail=str(exc))
+            logger.debug("ensure_funnel_enabled 跳过（非致命）：%s", exc)
+        return out
 
     def get_relay_status(self) -> Dict[str, Any]:
         """汇总中继态：本机是否宣告中继 / 各 peer 当前经哪条中继（DERP 区域 或 peer relay）。"""
@@ -297,9 +443,13 @@ class TailscaleManager:
         return self._available
 
     def get_connection_url(self, port: int = 9000) -> Optional[str]:
-        """获取Android端应连接的URL。"""
+        """获取设备端应连接的 tailnet 内 URL。
+
+        用 ``wss`` 不用 ``ws``：Funnel 强制 TLS，而 tailnet 内也没有理由明文；
+        两条路统一成 wss，设备端就不用按来源切协议。
+        """
         if self.ts_ip:
-            return f"ws://{self.ts_ip}:{port}"
+            return f"wss://{self.ts_ip}:{port}"
         return None
 
     def get_tailscale_ip(self) -> Optional[str]:
@@ -310,15 +460,40 @@ class TailscaleManager:
         """获取当前Tailscale主机名。"""
         return self.ts_hostname
 
-    def get_network_priority(self) -> List[str]:
-        """返回当前网络传输优先级列表。
+    #: 候选路径的偏好次序 —— **唯一一处**定义谁优先于谁。
+    #:
+    #: 名片里的 ``candidates``（core/agent_card.build_candidates）和设备端的依次
+    #: 试连都按这个排。写成两处的话，桌面按一种顺序发、设备按另一种顺序连，
+    #: 排障时看到的现象是"名片明明第一条是局域网，它却先去连公网"。
+    #:
+    #: 次序的依据是**时延与依赖**，不是可用性：
+    #:
+    #: 1. ``lan``       同网段直连，最快，且不依赖 Tailscale 守护进程活着；
+    #: 2. ``tailscale`` 跨网 P2P（打不通时经 DERP 中继），要求两端都在 tailnet；
+    #: 3. ``funnel``    经 Tailscale 公网入口，时延最高，但**手表带流量单独出门
+    #:    时唯一能用的一条**（Wear OS 没有 Tailscale 客户端，进不了 tailnet）。
+    NETWORK_PREFERENCE: List[str] = ["lan", "tailscale", "funnel"]
 
-        Tailscale可用时: ["tailscale", "lan", "internet"]
-        Tailscale不可用时: ["lan", "internet"]
+    def get_network_priority(self) -> List[str]:
+        """返回当前**实际可用**的路径类型，已按 :attr:`NETWORK_PREFERENCE` 排序。
+
+        与 :attr:`NETWORK_PREFERENCE` 的分工：常量说"谁优先于谁"，这个方法说
+        "此刻哪几条存在"。合在一起写会让"没探测到"和"不偏好"取同一个值 ——
+        那正是本仓反复修的那类形状。
+
+        ``funnel`` 需要跑一次 ``tailscale serve status``，比另外两条贵；调用方
+        不需要它时传 ``include_funnel=False``（见下）。
         """
+        return self.get_available_paths()
+
+    def get_available_paths(self, *, include_funnel: bool = True) -> List[str]:
+        """当前可用路径，按偏好排序。``lan`` 永远在（本机总在某个网段上）。"""
+        available = {"lan"}
         if self._available and self.ts_ip:
-            return ["tailscale", "lan", "internet"]
-        return ["lan", "internet"]
+            available.add("tailscale")
+            if include_funnel and self.get_funnel_url():
+                available.add("funnel")
+        return [kind for kind in self.NETWORK_PREFERENCE if kind in available]
 
     # ── Static helpers ──
 
@@ -376,16 +551,23 @@ class TailscaleManager:
 
         return " ".join(cmd_parts)
 
-    def get_gateway_url_for_watch(self) -> Optional[str]:
-        """Get the WebSocket URL for watches to connect via Tailscale.
+    def get_gateway_url_for_watch(self, port: int = 9000) -> Optional[str]:
+        """手表该连的地址。
 
-        Returns wss://100.64.0.1:9000 if Tailscale is active and
-        we are the gateway, else None.
+        修复：原来**写死** ``wss://100.64.0.1:9000`` —— 那是"网关在我们的分配方案里
+        通常是 100.64.0.1"这个假设，而 Tailscale 的 100.64.0.0/10 是按加入顺序分配的，
+        本机几乎不可能正好是 .1。写死等于给手表一个必然连不上的地址。
+
+        而且手表（Wear OS 没有 Tailscale 客户端）**根本进不了 tailnet**，
+        tailnet 内地址对它没意义 —— 真正能用的是 Funnel 的公网地址。故顺序是：
+        Funnel（手表唯一能用的）→ tailnet 内地址（给能装客户端的设备兜底）。
         """
         if not self._available:
             return None
-        # Gateway is typically 100.64.0.1 in our allocation scheme
-        return "wss://100.64.0.1:9000"
+        funnel = self.get_funnel_url()
+        if funnel:
+            return funnel.replace("https://", "wss://", 1)
+        return self.get_connection_url(port)
 
     def get_peer_by_hostname(self, hostname: str) -> Optional[Dict[str, Any]]:
         """Get peer info from tailscale status by hostname."""

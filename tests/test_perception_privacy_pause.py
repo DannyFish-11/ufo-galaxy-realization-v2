@@ -15,6 +15,13 @@ from __future__ import annotations
 
 import pytest
 
+# 鉴权默认已开（core/auth.py：只要存在一条公网可达的路，"只在局域网里"这个前提
+# 就没了）。下面这些端点自带 ``Depends(require_auth)``/中间件，裸 TestClient 一律
+# 401 —— 那样每条断言都停在鉴权上，考不到本来要考的东西。带上 conftest 的会话令牌。
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}
+
 
 @pytest.fixture
 def store():
@@ -349,7 +356,7 @@ class TestEndpointsAreWiredIn:
 
         app = FastAPI()
         app.include_router(create_router())
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
         store = get_desktop_perception_store()
         try:
             store.pause(reason="test")
@@ -376,7 +383,7 @@ class TestEndpointsAreWiredIn:
 
         app = FastAPI()
         app.include_router(create_router())
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
         store = get_desktop_perception_store()
         try:
             assert client.post("/api/perception/desktop/privacy/pause").json()["privacy"]["paused"] is True

@@ -14,6 +14,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# 鉴权默认已开（core/auth.py：只要存在一条公网可达的路，"只在局域网里"这个前提
+# 就没了）。下面这些端点自带 ``Depends(require_auth)``/中间件，裸 TestClient 一律
+# 401 —— 那样每条断言都停在鉴权上，考不到本来要考的东西。带上 conftest 的会话令牌。
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}
+
+
 # ===========================================================================
 # P0-1: websockets in galaxy_gateway/requirements.txt
 # ===========================================================================
@@ -115,7 +123,7 @@ class TestGatewayRouteAuth:
 
         from galaxy_gateway.app import app as gateway_app
 
-        with TestClient(gateway_app, raise_server_exceptions=False) as client:
+        with TestClient(gateway_app, raise_server_exceptions=False, headers=_AUTH_HEADERS) as client:
             resp = client.get(path)
         # Health endpoints return 2xx, not 401/403
         assert resp.status_code not in (
@@ -187,7 +195,7 @@ class TestMDCEDispatch:
         app.include_router(create_router())
         monkeypatch.setattr(get_command_router(), "route_envelope", _mock_route_envelope)
 
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(app, raise_server_exceptions=False, headers=_AUTH_HEADERS) as client:
             resp = client.post(
                 "/api/v1/command/unified",
                 json={
@@ -222,7 +230,7 @@ class TestMDCEDispatch:
         app = FastAPI()
         app.include_router(create_router())
 
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(app, raise_server_exceptions=False, headers=_AUTH_HEADERS) as client:
             client.post(
                 "/api/v1/command/unified",
                 json={

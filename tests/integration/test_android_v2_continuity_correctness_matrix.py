@@ -25,6 +25,7 @@ FI-05 stale_pending_envelope_on_reconnect
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 import uuid
 from contextlib import contextmanager
@@ -54,6 +55,11 @@ def _v3(msg_type: str, device_id: str, **extra: Any) -> Dict[str, Any]:
         "message_id": str(uuid.uuid4()),
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
+        # 设备入口凭证。``GALAXY_AUTH_ENABLED`` 的默认已翻成 true（core/auth.py），
+        # 匿名 device_register 现在会被拒 —— 那正是改默认要的效果。这里带上
+        # conftest 的会话令牌，让用例回到考"生命周期语义"而不是考鉴权。
+        # （生产里设备带的是 /api/v1/pair/claim 发的配对令牌，两条都被入口认。）
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         **extra,
     }
 

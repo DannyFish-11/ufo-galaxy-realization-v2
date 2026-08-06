@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock
@@ -73,6 +74,7 @@ def _make_registration_message(
     from galaxy_gateway.android.capabilities import DeviceCapability
 
     msg: Dict[str, Any] = {
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         "version": "3.0",
         "type": "device_register",
         "message_id": f"msg-{device_id}",

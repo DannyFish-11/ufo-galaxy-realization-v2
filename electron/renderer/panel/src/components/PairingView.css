@@ -1,0 +1,214 @@
+/* PairingView —— 出示名片 / 路径状态盘 / 已接进来的设备 */
+
+.pairing-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+  overflow-y: auto;
+  height: 100%;
+  color: rgba(235, 240, 255, 0.92);
+}
+
+.pairing-view h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(190, 210, 255, 0.85);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pv-hint,
+.pv-muted {
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(190, 205, 235, 0.6);
+  margin: 0 0 10px;
+}
+
+.pv-primary,
+.pv-actions button,
+.pv-mini {
+  background: rgba(90, 130, 255, 0.16);
+  border: 1px solid rgba(120, 160, 255, 0.32);
+  color: rgba(220, 232, 255, 0.95);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pv-primary:hover:not(:disabled),
+.pv-actions button:hover,
+.pv-mini:hover {
+  background: rgba(90, 130, 255, 0.28);
+}
+
+.pv-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pv-mini {
+  margin-left: auto;
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+/* ── 短码 ────────────────────────────────────────────────────── */
+
+.pv-code-box {
+  border: 1px solid rgba(120, 160, 255, 0.28);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: rgba(30, 44, 80, 0.35);
+}
+
+.pv-code-box.pv-expired {
+  border-color: rgba(255, 140, 120, 0.4);
+  opacity: 0.75;
+}
+
+.pv-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  color: rgba(235, 243, 255, 0.98);
+}
+
+.pv-ttl {
+  text-align: center;
+  font-size: 12px;
+  margin-top: 6px;
+  color: rgba(190, 205, 235, 0.7);
+}
+
+.pv-warn {
+  color: rgba(255, 160, 140, 0.95);
+}
+
+.pv-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.pv-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(255, 150, 130, 0.95);
+}
+
+/* ── 路径状态盘 ──────────────────────────────────────────────── */
+
+.pv-path-list,
+.pv-peer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pv-path-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pv-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 8px;
+  align-self: center;
+}
+
+.pv-path-list li.up .pv-dot {
+  background: rgba(110, 230, 170, 0.95);
+  box-shadow: 0 0 8px rgba(110, 230, 170, 0.5);
+}
+
+.pv-path-list li.down .pv-dot {
+  background: rgba(255, 140, 120, 0.7);
+}
+
+.pv-kind {
+  flex: 0 0 108px;
+  color: rgba(215, 228, 255, 0.9);
+}
+
+.pv-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: rgba(160, 200, 255, 0.8);
+  word-break: break-all;
+}
+
+.pv-why {
+  color: rgba(200, 190, 200, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pv-fix {
+  font-style: normal;
+  font-size: 11px;
+  color: rgba(180, 200, 240, 0.55);
+  white-space: pre-line;
+}
+
+.pv-verdict {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: rgba(200, 215, 245, 0.78);
+}
+
+/* ── 对端 ────────────────────────────────────────────────────── */
+
+.pv-peer-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.pv-peer-name {
+  color: rgba(225, 235, 255, 0.95);
+}
+
+.pv-peer-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: rgba(150, 175, 215, 0.6);
+  margin-left: auto;
+}
+
+.pv-trust {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(215, 228, 255, 0.85);
+}
+
+.pv-trust-trusted {
+  border-color: rgba(110, 230, 170, 0.5);
+  color: rgba(150, 240, 195, 0.95);
+}
+
+.pv-trust-blocked {
+  border-color: rgba(255, 140, 120, 0.5);
+  color: rgba(255, 165, 145, 0.95);
+}

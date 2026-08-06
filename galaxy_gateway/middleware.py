@@ -35,8 +35,13 @@ logger = logging.getLogger(__name__)
 # 「仅非生产豁免」两张表。
 #
 # 注意：这里收紧的是**中间件层**。写端点自身还应有 ``Depends(require_auth)``
-# 作为第二道（见 core/routes/perception.py），不要把中间件当唯一防线 ——
-# ``is_auth_enabled()`` 默认为 False，中间件在默认部署下整个是 no-op。
+# 作为第二道（见 core/routes/perception.py），不要把中间件当唯一防线。
+#
+# ``is_auth_enabled()`` 现在**默认为 True**（原来是 False，中间件在默认部署下
+# 整个是 no-op）。改的原因见 core/auth.py：只要存在一条公网可达的路
+# （Tailscale Funnel / 端口转发 / 隧道），"只在局域网里"这个前提就没了。
+# 也就是说这张豁免表从"基本不生效"变成了**真正的边界**——往里加一条之前，
+# 先问它公开出去会不会被人自助利用。
 
 # 只读探针：任何模式下都公开。值为允许的 HTTP 方法集合。
 _AUTH_EXEMPT: dict = {
@@ -47,6 +52,14 @@ _AUTH_EXEMPT: dict = {
     "/api/v1/health": {"GET", "HEAD"},
     # 面板角标读端点：只豁免 GET。同路径的 POST（写配置）必须过鉴权。
     "/api/v1/config": {"GET", "HEAD"},
+    # 配对接纳：**必须**豁免，否则死锁 —— 一台还没配对的设备手里没有任何令牌，
+    # 要求它先带令牌才能来换令牌，就永远进不来。凭证是那个一次性短码/链接本身
+    # （短码 10 分钟、用后即焚；链接带 HMAC 签名），不是 API 令牌。
+    #
+    # 只豁免 claim，**不豁免 /api/v1/pair/card**：card 是"出示本机名片"，每调一次
+    # 就签发一个新短码。把它也公开，等于任何人都能自助领一张进门票——那时豁免
+    # claim 就真的成了敞门。card 属于桌面主人的操作，走正常鉴权。
+    "/api/v1/pair/claim": {"POST"},
 }
 
 # 仅在非生产模式豁免；GALAXY_MODE=production 下一律要鉴权。

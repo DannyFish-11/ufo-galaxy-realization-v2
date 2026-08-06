@@ -379,7 +379,14 @@ class TestPairingFlow:
         card = client.get("/api/v1/pair/card").json()
         r = client.post(
             "/api/v1/pair/claim",
-            json={"code": card["code"], "trust": "friend", "auto_accept": ["messaging.*"]},
+            json={
+                "code": card["code"],
+                "device_id": "phone-1",
+                "name": "小米17",
+                "device_type": "android_phone",
+                "trust": "friend",
+                "auto_accept": ["messaging.*"],
+            },
         ).json()
         assert r["success"] is True
         assert r["peer"]["trust"] == "friend"
@@ -392,18 +399,20 @@ class TestPairingFlow:
         from core.capability_token import verify_token
 
         card = client.get("/api/v1/pair/card").json()
-        r = client.post("/api/v1/pair/claim", json={"link": card["link"], "trust": "trusted"}).json()
+        r = client.post(
+            "/api/v1/pair/claim", json={"link": card["link"], "device_id": "phone-2", "trust": "trusted"}
+        ).json()
         assert r["token_scopes"] == ["*"]
         assert verify_token(r["capability_token"], required_scope="admin:wipe").valid is True
 
     def test_claim_rejects_tampered_link(self, client):
         card = client.get("/api/v1/pair/card").json()
-        r = client.post("/api/v1/pair/claim", json={"link": card["link"][:-4] + "AAAA"})
+        r = client.post("/api/v1/pair/claim", json={"link": card["link"][:-4] + "AAAA", "device_id": "phone-3"})
         assert r.status_code == 400
         assert r.json()["success"] is False
 
     def test_claim_requires_link_or_code(self, client):
-        assert client.post("/api/v1/pair/claim", json={}).status_code == 400
+        assert client.post("/api/v1/pair/claim", json={"device_id": "phone-4"}).status_code == 400
 
     def test_unpaired_peer_lookup_reports_effective_trust_not_404(self, client):
         r = client.get("/api/v1/pair/peers/nobody").json()
@@ -414,7 +423,14 @@ class TestPairingFlow:
         card = client.get("/api/v1/pair/card").json()
         did = client.post(
             "/api/v1/pair/claim",
-            json={"code": card["code"], "trust": "friend", "auto_accept": ["messaging.*"]},
+            json={
+                "code": card["code"],
+                "device_id": "phone-1",
+                "name": "小米17",
+                "device_type": "android_phone",
+                "trust": "friend",
+                "auto_accept": ["messaging.*"],
+            },
         ).json()["peer"]["device_id"]
 
         assert (
@@ -444,7 +460,7 @@ class TestPairingFlow:
 
     def test_card_rejection_reason_carries_no_exception_text(self, client):
         """from_link 的 reason 会被原样回传,同样不能带异常文本。"""
-        r = client.post("/api/v1/pair/claim", json={"link": "galaxy://pair?c=@@@bad@@@&s=@@@"})
+        r = client.post("/api/v1/pair/claim", json={"link": "galaxy://pair?c=@@@bad@@@&s=@@@", "device_id": "phone-5"})
         assert r.status_code == 400
         body = r.text
         assert "Traceback" not in body and "Error:" not in body
@@ -453,7 +469,9 @@ class TestPairingFlow:
 
     def test_trust_can_be_raised_and_revoked(self, client):
         card = client.get("/api/v1/pair/card").json()
-        did = client.post("/api/v1/pair/claim", json={"code": card["code"]}).json()["peer"]["device_id"]
+        did = client.post("/api/v1/pair/claim", json={"code": card["code"], "device_id": "phone-6"}).json()["peer"][
+            "device_id"
+        ]
 
         client.post("/api/v1/pair/trust", json={"device_id": did, "trust": "blocked"})
         assert client.post("/api/v1/pair/check", json={"device_id": did}).json()["result"] == "denied"

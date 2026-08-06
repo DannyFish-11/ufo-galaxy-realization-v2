@@ -44,8 +44,24 @@ def _make_websocket() -> MagicMock:
     return ws
 
 
+def _pairing_token(device_id: str) -> str:
+    """签一枚 ``/api/v1/pair/claim`` 会发给这台设备的配对令牌。
+
+    ``GALAXY_AUTH_ENABLED`` 的默认值已翻成开启（core/auth.py），设备入口不再接受
+    匿名注册 —— 这正是那次改动要的效果。这些用例考的是 UDM 投影，不是鉴权，
+    所以**带上真凭证**跑，而不是把鉴权关掉：关掉的话它们就只能证明"不鉴权时
+    投影是对的"，而现在的生产形态是鉴权开着。
+
+    顺带,这也是 pair → connect 那条链在测试里唯一的端到端落点。
+    """
+    from core.capability_token import issue_token
+
+    return issue_token(device_id, ["device:status"])
+
+
 def _make_registration_message(device_id: str = "android_test_01", **overrides: Any) -> Dict[str, Any]:
     msg: Dict[str, Any] = {
+        "token": _pairing_token(device_id),
         "version": "3.0",
         "type": "device_register",
         "message_id": "msg-001",

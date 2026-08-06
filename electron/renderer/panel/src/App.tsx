@@ -10,6 +10,7 @@ import ConversationView from '@/components/ConversationView';
 import PresencePanel from '@/components/PresencePanel';
 import MeshView from '@/components/MeshView';
 import CapabilitiesView from '@/components/CapabilitiesView';
+import PairingView from '@/components/PairingView';
 import SettingsTab from '@/components/SettingsTab';
 import ModelsTab from '@/components/ModelsTab';
 import DiagnosticsDrawer from '@/components/DiagnosticsDrawer';
@@ -20,6 +21,7 @@ const TABS: TabDef[] = [
   { key: 'mesh', label: '维态', icon: ICONS.mesh },
   { key: 'capability', label: '能力', icon: ICONS.capability },
   { key: 'models', label: '模型', icon: ICONS.models },
+  { key: 'pairing', label: '接设备', icon: ICONS.pairing },
   { key: 'settings', label: '设置', icon: ICONS.settings },
 ];
 
@@ -146,6 +148,9 @@ function App() {
           <ModelsTab />
         </div>
         <div className="view-slot" style={{ display: activeTab === 4 ? 'flex' : 'none' }}>
+          <PairingView />
+        </div>
+        <div className="view-slot" style={{ display: activeTab === 5 ? 'flex' : 'none' }}>
           <SettingsTab />
         </div>
       </main>

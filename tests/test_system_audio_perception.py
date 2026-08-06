@@ -35,6 +35,14 @@ from core.multimodal.system_audio_ingest import (
     resolve_loopback_target,
 )
 
+# 鉴权默认已开（core/auth.py：只要存在一条公网可达的路，"只在局域网里"这个前提
+# 就没了）。下面这些端点自带 ``Depends(require_auth)``/中间件，裸 TestClient 一律
+# 401 —— 那样每条断言都停在鉴权上，考不到本来要考的东西。带上 conftest 的会话令牌。
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}
+
+
 # ── 假设备表(形状与 sounddevice 的 query_devices()/query_hostapis() 一致)──────
 
 WIN_HOSTAPIS = [
@@ -289,7 +297,7 @@ def client():
 
     app = FastAPI()
     app.include_router(create_router())
-    return TestClient(app)
+    return TestClient(app, headers=_AUTH_HEADERS)
 
 
 class TestRoutes:

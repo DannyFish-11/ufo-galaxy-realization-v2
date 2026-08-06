@@ -1,76 +1,110 @@
 {
-  "_comment": "API 面对齐台账。记录『galaxy_gateway.app 有、而权威层没有』的路径、原因,以及 core 侧的对应能力。判据是**实测**不是推断:把候选 router 挂到只有 core.api_routes 的 app 上真调一次 —— 200/401/403/422 算可搬(路由跑起来了),404/503 算不可搬。已按此搬走的:linux_agent、sandbox、sync_status、gateway v5、设备准入审批(/api/v1/pairing/*)、客户端配置发现(/api/v1/config)、WebRTC 端点发现(/api/v1/webrtc/endpoint)。",
+  "_comment": "API 面对齐台账。记录『galaxy_gateway.app 有、而权威层没有』的路径、原因,以及 core 侧的对应能力。判据是**实测**不是推断:把候选 router 挂到只有 core.api_routes 的 app 上真调一次 —— 200/401/403/422 算可搬(路由跑起来了),404/503 算不可搬。已按此搬走的:linux_agent、sandbox、sync_status、gateway v5、客户端配置发现(/api/v1/config)、WebRTC 端点发现(/api/v1/webrtc/endpoint)。 设备准入审批(/api/v1/pairing/*)那一套已整体删除——它与 /api/v1/pair/* 是同一件事的两套做法,留下了后者。",
   "_conclusion": "剩下这 13 条**不搬**,这是结论不是待办。两条理由同时成立,逐条记在 core_equivalent 与 reason 里:(1) 处理函数从 request.app.state 取 galaxy_gateway 的有状态对象(DeviceManager / MessageHandler / WebSocketManager / TaskOrchestrator,由 galaxy_gateway.bootstrap.lifecycle 装配),权威层不跑那个 lifespan,并过来实测恒 503;(2) core 侧**已经有**对应能力。要搬就得在统一启动器里再实例化一套设备注册表与任务编排器,那是在 core 的 UDM 旁边又立一个,分裂只会更重 —— 而这套系统正在做的是相反的事。",
   "_a_note_on_403": "webrtc 那条原先记的是『依赖网关内部状态,搬迁需先解耦』—— 那是推断,实测把它推翻了(挂到 core-only 的 app 上得到 403 cross_device_disabled,那是它自己的策略应答,说明路由跑起来了)。同一份台账里 llm/health 两条推断对了。只有真调过才知道是哪一条,所以判据写死为实测。",
   "_how_to_reverify": "跑 tests/test_api_surface_parity.py —— 它真组装两个 app 逐条比,并验证 core_equivalent 里写的每一条在权威面上确实存在。",
   "_measured_at_commit": "见 git 历史;用 tests/test_api_surface_parity.py 重新测量",
-  "authoritative_count": 382,
-  "gateway_count": 59,
+  "authoritative_count": 387,
+  "gateway_count": 52,
   "gateway_only": [
     {
       "path": "/api/commands",
       "reason": "网关的无版本前缀族;权威层用 /api/v1/*。并存会造成同一能力两个 URL。",
-      "core_equivalent": ["/api/v1/command", "/api/v1/command/unified"]
+      "core_equivalent": [
+        "/api/v1/command",
+        "/api/v1/command/unified"
+      ]
     },
     {
       "path": "/api/devices",
       "reason": "同上。处理函数走 app.state.device_manager(网关自己的 DeviceManager),权威层没有那个 state。",
-      "core_equivalent": ["/api/devices/list", "/api/v1/devices"]
+      "core_equivalent": [
+        "/api/devices/list",
+        "/api/v1/devices"
+      ]
     },
     {
       "path": "/api/devices/connected",
       "reason": "同上 —— 网关内存里的在线连接视图,天然属于网关进程。",
-      "core_equivalent": ["/api/v1/devices", "/api/devices/list"]
+      "core_equivalent": [
+        "/api/v1/devices",
+        "/api/devices/list"
+      ]
     },
     {
       "path": "/api/devices/{device_id}",
       "reason": "无版本前缀族的单设备视图,走 app.state.device_manager 取网关内存里的连接对象。权威层的同名能力挂在 /api/v1 下,由 core 的 UDM 支撑。",
-      "core_equivalent": ["/api/v1/devices/{device_id}"]
+      "core_equivalent": [
+        "/api/v1/devices/{device_id}"
+      ]
     },
     {
       "path": "/api/tasks",
       "reason": "走 app.state.task_orchestrator(网关自己的 TaskOrchestrator)。",
-      "core_equivalent": ["/api/v1/tasks"]
+      "core_equivalent": [
+        "/api/v1/tasks"
+      ]
     },
     {
       "path": "/api/tasks/{task_id}",
       "reason": "单任务查询,同样走 app.state.task_orchestrator。权威层用带版本的 /api/v1/tasks/{task_id},背后是 core 的任务链路而非网关内存态。",
-      "core_equivalent": ["/api/v1/tasks/{task_id}"]
+      "core_equivalent": [
+        "/api/v1/tasks/{task_id}"
+      ]
     },
     {
       "path": "/api/v1/gateway/metrics",
       "reason": "与 /api/v1/health 同一个 router(galaxy_gateway/routes/health.py),整体依赖 app.state。网关自身的 Prometheus 指标本来也更适合留在网关进程里。",
-      "core_equivalent": ["/api/v1/monitoring/metrics", "/metrics"]
+      "core_equivalent": [
+        "/api/v1/monitoring/metrics",
+        "/metrics"
+      ]
     },
     {
       "path": "/api/v1/gateway/metrics/json",
       "reason": "同上(galaxy_gateway/routes/health.py 用 _get_state(request, ...)),并过来会恒 503。",
-      "core_equivalent": ["/api/v1/monitoring/metrics"]
+      "core_equivalent": [
+        "/api/v1/monitoring/metrics"
+      ]
     },
     {
       "path": "/api/v1/health",
       "reason": "同上。实测并过来恒 503 {\"detail\":\"Service not ready\"} —— 这是本台账里『推断对了』的那一条。",
-      "core_equivalent": ["/api/v1/health/quick", "/api/v1/health/unified", "/health"]
+      "core_equivalent": [
+        "/api/v1/health/quick",
+        "/api/v1/health/unified",
+        "/health"
+      ]
     },
     {
       "path": "/api/v1/llm/stats",
       "reason": "Depends(get_llm_router) 取网关 app.state 的 LLM Router,权威层不跑它的 lifespan。实测并过来恒 503。",
-      "core_equivalent": ["/api/v1/models/routing-stats", "/api/v1/models/status"]
+      "core_equivalent": [
+        "/api/v1/models/routing-stats",
+        "/api/v1/models/status"
+      ]
     },
     {
       "path": "/api/v1/sessions/stats",
       "reason": "网关自带的 sessions 路由与 core/routes/sessions.py 是两套,统计口径也不同(网关统计的是它自己内存里的连接会话)。",
-      "core_equivalent": ["/api/v1/sessions"]
+      "core_equivalent": [
+        "/api/v1/sessions"
+      ]
     },
     {
       "path": "/api/v1/sessions/{session_id}/migrate",
       "reason": "与 core 的 /api/v1/sessions/migrate 同能力异形(路径参数 vs 请求体)。两条并存等于同一动作两种调法,客户端无从选择。",
-      "core_equivalent": ["/api/v1/sessions/migrate"]
+      "core_equivalent": [
+        "/api/v1/sessions/migrate"
+      ]
     },
     {
       "path": "/gateway/metrics",
       "reason": "同 /api/v1/gateway/metrics/json,只是没有版本前缀 —— 这条本身也是历史遗留的双写法,真要保留应当只留带版本的那条。属于 health.py 那一整块。",
-      "core_equivalent": ["/api/v1/monitoring/metrics", "/metrics"]
+      "core_equivalent": [
+        "/api/v1/monitoring/metrics",
+        "/metrics"
+      ]
     }
   ]
 }

@@ -590,6 +590,33 @@ def _extract_ingress_token(message: Dict[str, Any]) -> tuple[Optional[str], Opti
     return None, None
 
 
+#: 接纳"这台设备已配对"所需的最小作用域。与 core/routes/pairing.py 的
+#: ``_TRUST_SCOPES`` 对齐:除 ``blocked``(压根不发令牌)外每级都至少有它 ——
+#: 既不放进被拉黑的对端,也不把只读级别的正常设备挡在门外。
+_PAIRED_DEVICE_MIN_SCOPE = "device:status"
+
+
+def _verify_pairing_capability_token(token: str, device_id: str) -> bool:
+    """这枚令牌是不是 ``/api/v1/pair/claim`` 发给**本设备**的配对令牌。
+
+    单独判、不塞进 ``core.auth.verify_api_token``:配对令牌按信任级别限定作用域,
+    塞进通用校验就会被中间件当成合法 API 令牌,只读级别的手表随即能去写配置 ——
+    那是提权。这里问的是另一个问题:"这台设备配过对吗",只在设备入口成立。
+
+    绑定 ``subject == device_id``:否则一枚泄露的令牌换个 device_id 就能冒充接入。
+    """
+    try:
+        from core.capability_token import verify_token
+    except ImportError as exc:
+        # 只吞"模块不可用"。裸 except Exception 会把字段名写错这类自身缺陷
+        # 一并吞成"这不是配对令牌",配对令牌集体失效而日志里一个字都没有。
+        logger.debug("能力令牌模块不可用,跳过配对令牌校验: %s", exc)
+        return False
+
+    verdict = verify_token(token, required_scope=_PAIRED_DEVICE_MIN_SCOPE)
+    return bool(verdict.valid) and bool(device_id) and verdict.subject == device_id
+
+
 def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
     """Evaluate token/auth boundary for device ingress registration."""
     auth_enforced = False
@@ -598,6 +625,7 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
     token_source: Optional[str] = None
     token_present = False
     token_valid = False
+    paired_token = False
 
     try:
         from core.auth import get_active_tokens, is_auth_enabled, verify_api_token
@@ -606,7 +634,11 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
         active_token_count = len(get_active_tokens())
         token, token_source = _extract_ingress_token(message)
         token_present = bool(token)
-        token_valid = bool(token and verify_api_token(token))
+        # 配对令牌与环境/每设备令牌是**并列**的三条合法凭证。少了第一条,
+        # /api/v1/pair/claim 配对成功之后设备照样连不上 —— 配得上、连不了。
+        if token:
+            paired_token = _verify_pairing_capability_token(token, str(message.get("device_id") or "").strip())
+        token_valid = bool(token and (paired_token or verify_api_token(token)))
     except Exception as exc:  # pragma: no cover - defensive fallback
         return {
             "enforced": False,
@@ -641,23 +673,13 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
             state = "token_invalid_compat"
             reason = "Invalid token provided in compatibility mode"
 
-    # 设备准入绑定:每设备 token 必须【发放给本 device_id】才算"本设备已批准",否则一枚
-    # 泄露的 token 换个 device_id 就能冒充接入,击穿"别处批准 · 每设备"模型。共享/环境
-    # 管理员 token(非每设备)则按 token_valid 视为管理员放行。查询失败回退 token_valid,
-    # 不因注册表异常把所有设备锁死。
-    device_approved = token_valid
-    try:
-        from core.device_token_registry import verify_device_token
-
-        if token:
-            per_device_rec = verify_device_token(token)
-            if per_device_rec is not None:
-                msg_device_id = str(message.get("device_id") or "").strip()
-                device_approved = bool(msg_device_id) and per_device_rec.get("device_id") == msg_device_id
-            else:
-                device_approved = token_valid  # 环境/共享管理员 token(或无效→False)
-    except Exception:  # noqa: BLE001  注册表不可用不应把设备锁死
-        device_approved = token_valid
+    # 设备准入绑定:配对令牌是唯一"绑到这台设备"的凭据——它的 subject 必须等于本条
+    # 消息的 device_id。环境共享 token 不绑设备,它代表管理员,按 token_valid 放行。
+    #
+    # 令牌被抄走、换台设备呈递时:subject 对不上 → paired_token False,而它也不是
+    # 环境 token → verify_api_token 也 False,于是 token_valid 与 device_approved
+    # 一并为 False。挡住这一条不需要额外分支,binding 本身就够。
+    device_approved = paired_token or token_valid
 
     return {
         "enforced": auth_enforced,
@@ -1219,39 +1241,22 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and device.websocket is not None:
-                import time
-
                 # PR-AIP-UNIFIED: Route through AIPTransport
                 from core.aip_transport import get_aip_transport
+                from core.cross_device_sync import build_phase_state_event
 
-                _phase_msg = {
-                    "type": "state_event",
-                    "event_category": "phase",
-                    "event_action": current_phase,
-                    "device_id": "v2_desktop",
-                    "_transport": "auto",
-                    "timestamp": time.time(),
-                }
+                # 两条路径发**同一份**报文。此前 AIPTransport 那条是手写的、不带
+                # payload,而手表只读 payload.to_phase —— 于是正常路径下刚注册完的
+                # 手表收到报文却解析出空,静默丢弃;只有 AIPTransport 抛异常、走到
+                # 兜底 send_json 时手表才拿得到相位。
+                _phase_msg = build_phase_state_event(
+                    new_phase=current_phase,
+                    sync_type="cross_device_initial_sync",
+                )
                 try:
-                    await get_aip_transport().send(_phase_msg, device_id)
+                    await get_aip_transport().send(dict(_phase_msg, _transport="auto"), device_id)
                 except Exception:
-                    await device.websocket.send_json(
-                        {
-                            "type": "state_event",
-                            "event_category": "phase",
-                            "event_action": current_phase,
-                            "device_id": "v2_desktop",
-                            "timestamp": int(time.time() * 1000),
-                            "aip_version": "3.0",
-                            "payload": {
-                                "from_phase": "unknown",
-                                "to_phase": current_phase,
-                                "source": "desktop_presence_runtime",
-                                "sync_type": "cross_device_initial_sync",
-                            },
-                            "phase": current_phase,
-                        }
-                    )
+                    await device.websocket.send_json(_phase_msg)
                 logger.info(
                     "CrossDeviceSync: initial phase=%s pushed to newly registered device=%s",
                     current_phase,

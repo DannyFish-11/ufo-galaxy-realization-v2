@@ -22,10 +22,11 @@
 Gateway v5、LLM 统计、网关指标),41 → 17。并入时跳过已存在的 (路径, 方法),
 避免制造一批被遮蔽的死路由。
 
-剩下的 17 条**没有**并进去,因为它们不是漏挂,是**重复族** —— 同一件事有两套做法。
-最典型的是设备配对:两套实现、两套词汇(``/api/v1/pair/*`` vs ``/api/v1/pairing/*``),
-把两套一起挂上去只会让一个 app 里出现两个配对系统。保留哪一套是产品决定。
-每一条的具体理由记在 ``config/api_surface_parity.json``。
+剩下的**没有**并进去,因为它们不是漏挂,是**重复族** —— 同一件事有两套做法。
+最典型的是设备配对:曾经两套实现、两套词汇(``/api/v1/pair/*`` vs ``/api/v1/pairing/*``)。
+那道题后来了结了:留下 ``/api/v1/pair/*``,另一套连同它的每设备令牌注册表一起删掉。
+其余重复族同理,保留哪一套是产品决定;每一条的具体理由记在
+``config/api_surface_parity.json``。
 
 这份测试盯什么
 --------------
@@ -52,7 +53,6 @@ MERGED_ROUTES = (
     ("/api/v1/agents/sandbox/status", "Sandbox"),
     ("/sync/status", "同步状态"),
     ("/api/v5/health", "Gateway v5"),
-    ("/api/v1/pairing/pending", "设备准入审批"),
     ("/api/v1/config", "客户端配置发现"),
     # 403 cross_device_disabled 是它自己的策略应答,不是"跑不起来" ——
     # 对照组 llm/health 在同样的挂法下是 503 Service not ready。
