@@ -95,12 +95,41 @@ def test_commands_match_system_manager_exactly():
     assert list(nodes.NODE_COMMANDS) == _system_manager_choices()["command"]
 
 
-def test_groups_match_system_manager_exactly():
-    """``--group`` 的九个组 + all 必须一个不差。
+def test_groups_never_shrink_below_system_manager():
+    """老 CLI 的九个组 + ``all`` 一个都不许少 —— 但**允许多**。
 
-    计划写的是位置参数 ``[name]``，那样 ``start --group core`` 根本没有对应写法。
+    原来这条是 ``==`` 全等。它钉住的其实只有一半意图：这两条测试的存在理由写在
+    :data:`_LEGACY_CHOICES` 的注释里 —— 「命令面**不许缩水**」。全等顺带把"不许
+    增长"也钉上了，而那从来不是要守的东西。
+
+    补齐 ``config/unified_config.json`` 里失联的 21 个节点之后，配置里真实多出
+    ``development`` / ``extended`` 两个组。不把它们加进 :data:`~launcher.nodes.NODE_GROUPS`，
+    ``--group development`` 会被 argparse 直接拒掉；加了，全等这条就红。也就是说
+    全等在这里逼人二选一，而两边都不对。
+
+    现在拆成两条判据，缩水那半点没松：
+    1. 老的十个取值必须全在（本条）；
+    2. 多出来的每一个都得对应配置里真实存在的组（下一条）—— 光放开成"子集"的话，
+       打错一个组名塞进去也照样绿。
     """
-    assert list(nodes.NODE_GROUPS) == _system_manager_choices()["--group"]
+    lost = [g for g in _system_manager_choices()["--group"] if g not in nodes.NODE_GROUPS]
+    assert not lost, f"--group 丢掉了老 CLI 支持的取值：{lost}"
+
+
+def test_every_extra_group_is_a_real_group_in_the_config():
+    """比老 CLI 多出来的组，必须在 ``config/unified_config.json`` 里真有节点。
+
+    这条是上一条放开全等之后补的另一半：拦住"随手往 NODE_GROUPS 里加个字符串"。
+    ``all`` 是聚合取值，不对应任何单个组，单独放行。
+    """
+    import json
+
+    config = json.loads((REPO_ROOT / "config" / "unified_config.json").read_text(encoding="utf-8"))
+    real_groups = {v.get("group", "core") for v in config["nodes"].values()}
+
+    extra = [g for g in nodes.NODE_GROUPS if g not in _system_manager_choices()["--group"]]
+    bogus = [g for g in extra if g != "all" and g not in real_groups]
+    assert not bogus, f"这些组能用 --group 选中，配置里却没有任何节点属于它：{bogus}"
 
 
 def test_defaults_match_system_manager():
