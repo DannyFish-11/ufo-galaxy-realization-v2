@@ -26,7 +26,7 @@ import logging
 import time
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -132,22 +132,37 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return _server_error("pair_card", exc)
 
     @router.post("/api/v1/pair/claim")
-    async def claim_peer(req: ClaimRequest):
+    async def claim_peer(req: ClaimRequest, request: Request):
         """凭链接或短码接纳一台对端。
 
         名片签名校验不通过一律拒绝 —— 这是信任链的入口,不能"内容看着对"就放行。
+
+        本端点是**鉴权豁免**的(见 galaxy_gateway/middleware.py 的豁免表):还没配对的
+        设备手里没有任何令牌,要求它先带令牌就是死锁。凭证是那个一次性短码/链接本身。
+        代价是这条路对公网开放,所以短码猜错要按来源节流 —— 见下。
         """
         try:
-            from core.agent_card import from_link, get_pairing_code_registry
+            from core.agent_card import from_link, get_pairing_attempt_throttle, get_pairing_code_registry
             from core.peer_trust import TrustLevel, coerce_trust, get_peer_trust_book
+
+            throttle = get_pairing_attempt_throttle()
+            source = (request.client.host if request.client else "") or "unknown"
 
             link = (req.link or "").strip()
             if not link:
                 code = (req.code or "").strip()
                 if not code:
                     return JSONResponse({"success": False, "error": "需要提供 link 或 code"}, status_code=400)
+                if throttle.is_blocked(source):
+                    logger.warning("配对被拒:短码猜测次数超限 —— source=%s", source)
+                    return JSONResponse(
+                        {"success": False, "error": "配对码错误次数过多,请稍后再试"},
+                        status_code=429,
+                    )
                 link = get_pairing_code_registry().resolve(code) or ""
                 if not link:
+                    fails = throttle.record_failure(source)
+                    logger.warning("配对码无效:source=%s 窗口内累计 %d 次", source, fails)
                     return JSONResponse(
                         {"success": False, "error": "配对码无效或已过期/已被使用"},
                         status_code=400,
@@ -155,6 +170,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             verdict = from_link(link)
             if not verdict.valid or verdict.card is None:
+                # 名片伪造也计入节流:它和猜短码是同一件事的两种入口,
+                # 只拦一边等于没拦。
+                throttle.record_failure(source)
                 logger.warning("配对被拒:名片校验失败 —— %s", verdict.reason)
                 return JSONResponse({"success": False, "error": verdict.reason}, status_code=400)
 

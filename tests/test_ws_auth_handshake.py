@@ -52,7 +52,10 @@ def _auth_env(monkeypatch):
 
 class TestAuthDisabled:
     def test_auth_ok_with_enforced_false(self, monkeypatch):
-        monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
+        # 显式关闭。原来靠 delenv 走默认，而 GALAXY_AUTH_ENABLED 的默认已改为
+        # 开启（见 tests/test_public_exposure_requires_auth.py）。本条测的是
+        # 「关掉时的行为」，就该自己关掉，而不是指望默认恰好是关的。
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
         monkeypatch.delenv("GALAXY_MODE", raising=False)
         from galaxy_gateway.android.handlers.auth import handle_auth
 

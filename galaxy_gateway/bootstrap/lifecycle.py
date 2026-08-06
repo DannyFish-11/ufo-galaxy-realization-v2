@@ -225,6 +225,18 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         await _ts_mgr.initialize()
         if _ts_mgr.is_available():
             logger.info("Tailscale: available at %s", _ts_mgr.get_tailscale_ip())
+            # Funnel：把网关暴露到公网，手表带流量单独出门时唯一能用的那条路。
+            # 内部先过鉴权硬闸门 —— 没开鉴权就一行命令都不执行。best-effort，
+            # 拉不起来只留痕、不影响启动（与上面的 relay 宣告同一写法）。
+            # 端口取仓库既有的权威解析（env → port_config → 9000），不在这里
+            # 另写一份 —— 两处各算各的，就会出现"Funnel 映到 9000、网关其实在
+            # 别的端口"这种只在改过端口的机器上才复现的故障。
+            from core.electron_launch_guard import resolve_gateway_port
+
+            _fn = await _ts_mgr.ensure_funnel_enabled(local_port=resolve_gateway_port())
+            app.state.funnel_status = _fn
+            if not _fn.get("enabled") and _fn.get("reason") in ("auth_disabled", "no_token"):
+                logger.error("Funnel 未开启（安全闸门拦下）：%s 处置：%s", _fn.get("detail"), _fn.get("how_to_fix"))
         app.state.tailscale_manager = _ts_mgr
     except Exception as _ts_err:
         logger.debug("Tailscale init skipped (non-fatal): %s", _ts_err, exc_info=True)  # H4 fixed

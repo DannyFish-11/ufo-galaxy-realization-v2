@@ -154,22 +154,21 @@ class TestUnifiedCommandEndpoint:
 
     @pytest.fixture
     def client(self, app):
-        """创建测试客户端"""
-        return TestClient(app)
+        """创建测试客户端（带令牌）"""
+        from tests.conftest import GALAXY_TEST_API_TOKEN
+
+        return TestClient(app, headers={"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"})
 
     @pytest.fixture(autouse=True)
     def setup_env(self):
-        """设置测试环境"""
-        # 清除 Token 以使用开发模式
-        original_token = os.environ.get("GALAXY_API_TOKEN")
-        if "GALAXY_API_TOKEN" in os.environ:
-            del os.environ["GALAXY_API_TOKEN"]
+        """设置测试环境。
 
+        原来这里**删掉** GALAXY_API_TOKEN "以使用开发模式" —— 那依赖的是
+        ``GALAXY_AUTH_ENABLED`` 默认关闭。默认已翻成开启，删令牌只会让每个请求
+        401（鉴权开着却一个令牌都没有 = fail closed）。现在保留会话令牌并让
+        client 带上它：考的是命令端点的行为，鉴权按生产形态开着。
+        """
         yield
-
-        # 恢复环境变量
-        if original_token is not None:
-            os.environ["GALAXY_API_TOKEN"] = original_token
 
     def test_unified_command_sync_mode_basic(self, client):
         """测试同步模式基本功能"""

@@ -62,8 +62,8 @@ python -m core.config_preflight --mode all
 | `DEEPSEEK_API_KEY` | No | — | DeepSeek API key. |
 | `GROQ_API_KEY` | No | — | Groq API key. |
 | `OPENROUTER_API_KEY` | No | — | OpenRouter key (multi-model proxy). |
-| `GALAXY_API_TOKEN` | **Yes** | — | Bearer token for REST + WS authentication. |
-| `GALAXY_AUTH_ENABLED` | No | `false` | Set `true` to enforce bearer-token auth. |
+| `GALAXY_API_TOKEN` | No | — | Bearer token for REST + WS authentication. Optional since first start self-signs one into `$GALAXY_DATA_DIR/api_token.json` (0600); set it to pin your own. |
+| `GALAXY_AUTH_ENABLED` | No | `true` | Enforced by default; set `false` only with no public path to the gateway. |
 | `GALAXY_SECRET_BACKEND` | No | `env` | `env` \| `vault` \| `kms` (see §8). |
 | `PICKLE_SECRET_KEY` | No | — | HMAC key for pickle serialisation. |
 
@@ -112,8 +112,8 @@ GALAXY_TLS_KEY=
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GALAXY_AUTH_ENABLED` | **Yes** (prod) | `false` | Enforce token auth on all WS endpoints. |
-| `GALAXY_API_TOKEN` | **Yes** (prod) | — | Token Android clients must include as `?token=<token>`. |
+| `GALAXY_AUTH_ENABLED` | No | `true` | Enforced by default on all WS endpoints. |
+| `GALAXY_API_TOKEN` | No | — | Token clients include as `?token=<token>`. Paired devices instead use the capability token issued by `POST /api/v1/pair/claim`. |
 | `GALAXY_SIGNALING_TIMEOUT_S` | No | `30` | WebRTC signalling handshake timeout (seconds). |
 | `GALAXY_STUN_URLS` | No | Google STUN | Comma-separated STUN server URLs. |
 | `GALAXY_TURN_URLS` | No | — | Comma-separated TURN server URLs (for NAT traversal). |
@@ -134,8 +134,12 @@ GALAXY_AUTH_ENABLED=true
 #   ws://<server-ip>:9000/ws/android?token=super-secret-token-here
 ```
 
-> **Important**: Without `GALAXY_AUTH_ENABLED=true` any Android device on the
-> network can send commands to the Galaxy server.
+> **Important**: With `GALAXY_AUTH_ENABLED=false` any Android device on the
+> network can send commands to the Galaxy server.  That is why the default is
+> `true`, and why `POST /api/v1/pair/claim` is the only auth-exempt write —
+> a device being onboarded has no token yet, so the one-time pairing code is
+> its credential.  `GET /api/v1/pair/card` stays behind auth: it *issues*
+> those codes.
 
 ---
 
@@ -320,7 +324,7 @@ The table below consolidates the variables most commonly needed:
 | `GALAXY_MODE` | core | INFO | `production` |
 | `GALAXY_LOG_LEVEL` | core | INFO | `INFO` |
 | `GALAXY_API_TOKEN` | core / gateway | **CRITICAL** | — |
-| `GALAXY_AUTH_ENABLED` | core / gateway | WARNING | `false` |
+| `GALAXY_AUTH_ENABLED` | core / gateway | WARNING | `true` |
 | `GALAXY_SECRET_BACKEND` | core | INFO | `env` |
 | `OPENAI_API_KEY` | core | WARNING | — |
 | `ANTHROPIC_API_KEY` | core | WARNING | — |

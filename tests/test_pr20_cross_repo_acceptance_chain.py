@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any, Dict
@@ -17,6 +18,9 @@ def _v3(msg_type: str, device_id: str, **extra: Any) -> Dict[str, Any]:
         "message_id": str(uuid.uuid4()),
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
+        # 设备入口凭证：鉴权默认已开（core/auth.py），匿名 device_register 会被拒，
+        # 整条验收链的第一环就断了。
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         **extra,
     }
 

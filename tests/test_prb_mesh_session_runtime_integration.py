@@ -21,6 +21,7 @@ Coverage:
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import uuid
 from typing import Any, Dict, List, Optional
@@ -138,6 +139,8 @@ class TestHandleDeviceRegister:
         device_id = f"android_test_{uuid.uuid4().hex[:8]}"
         message = {
             "type": "register",
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": device_id,
             "device_type": "android_phone",
             "platform": "android",
@@ -180,6 +183,8 @@ class TestHandleDeviceRegister:
         device_id = f"android_fail_{uuid.uuid4().hex[:8]}"
         message = {
             "type": "register",
+            # 设备入口凭证：鉴权默认已开（core/auth.py），匿名注册会被拒。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "device_id": device_id,
             "device_type": "android_phone",
             "platform": "android",

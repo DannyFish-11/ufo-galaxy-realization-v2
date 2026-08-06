@@ -47,6 +47,7 @@ This module validates three acceptance criteria from the PR-4 problem statement:
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import uuid
 from typing import Any, Dict, Optional
@@ -100,6 +101,9 @@ class TestDeviceLifecycleEmits:
             "name": "Test Phone",
             "model": "Pixel 7",
             "platform": "android",
+            # 鉴权默认已开（core/auth.py），匿名 device_register 会被拒 —— 那时处理器
+            # 在鉴权那一步就返回了，attach 事件根本不会发，考不到本条要考的东西。
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
         }
 
         from galaxy_gateway.android.handlers.registration import handle_device_register

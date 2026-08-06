@@ -47,11 +47,18 @@ def _make_app() -> FastAPI:
 
 
 class TestIsAuthEnabled:
-    def test_disabled_by_default(self, monkeypatch):
+    def test_enabled_by_default(self, monkeypatch):
+        """默认已从 false 改为 **true**。
+
+        原来的默认建立在"网关只在局域网里"这个隐含前提上。一旦有任何一条公网
+        可达的路（Tailscale Funnel / 隧道 / 端口转发），前提就没了，默认关等于
+        把桌面裸奔在公网上。可达性是会变的，默认值不能建立在"当前恰好不可达"上。
+        见 tests/test_public_exposure_requires_auth.py。
+        """
         monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
         from core.auth import is_auth_enabled
 
-        assert is_auth_enabled() is False
+        assert is_auth_enabled() is True
 
     def test_enabled_with_true(self, monkeypatch):
         monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
@@ -82,7 +89,9 @@ class TestRequireAuth:
         """require_auth is a no-op when GALAXY_AUTH_ENABLED is false."""
         import asyncio
 
-        monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
+        # 显式关闭 —— 本条测的是"关掉时的行为"。原来靠 delenv 走默认，
+        # 而默认已改为开启；依赖"默认恰好是关的"本身就是非区分性断言。
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
         from core.auth import require_auth
 
         result = asyncio.new_event_loop().run_until_complete(require_auth())
@@ -141,7 +150,10 @@ class TestMiddlewareAuthDisabled:
 
     @pytest.fixture(autouse=True)
     def _disable_auth(self, monkeypatch):
-        monkeypatch.delenv("GALAXY_AUTH_ENABLED", raising=False)
+        # 显式关闭。原来靠 delenv 走默认，而 GALAXY_AUTH_ENABLED 的默认已改为
+        # 开启（见 tests/test_public_exposure_requires_auth.py）。本条测的是
+        # 「关掉时的行为」，就该自己关掉，而不是指望默认恰好是关的。
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
 
     def test_protected_endpoint_passes_without_token(self):
         app = _make_app()

@@ -27,7 +27,15 @@ def full_app():
 
 @pytest.fixture(scope="module")
 def client(full_app):
-    with TestClient(full_app) as c:
+    """带令牌的客户端。
+
+    ``GALAXY_AUTH_ENABLED`` 的默认已翻成 true（core/auth.py），这些端点自带
+    ``Depends(require_auth)``，裸 TestClient 一律 401 —— 那样每条断言都停在
+    鉴权上，考不到"路由挂没挂上"这件本来要考的事。
+    """
+    from tests.conftest import GALAXY_TEST_API_TOKEN
+
+    with TestClient(full_app, headers={"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}) as c:
         yield c
 
 

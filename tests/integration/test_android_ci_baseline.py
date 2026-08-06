@@ -41,6 +41,7 @@ No external services or running processes are required for any test here.
 """
 
 import json
+import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
@@ -60,6 +61,9 @@ def _v3(msg_type: str, device_id: str, **extra) -> Dict[str, Any]:
         "message_id": str(uuid.uuid4()),
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
+        # 设备入口凭证：鉴权默认已开（core/auth.py），匿名 device_register 会被拒。
+        # 生产里设备带的是 /api/v1/pair/claim 发的配对令牌，入口两条都认。
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         **extra,
     }
 
@@ -355,6 +359,7 @@ class TestInboundNormalisationContract:
         device_id = f"norm-{uuid.uuid4().hex[:8]}"
         raw_json = json.dumps(
             {
+                "token": os.environ.get("GALAXY_API_TOKEN", ""),
                 "version": "3.0",
                 "type": "device_register",
                 "message_id": str(uuid.uuid4()),
@@ -400,6 +405,7 @@ class TestInboundNormalisationContract:
 
         # Minimal message without optional fields
         minimal_msg = {
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "type": "device_register",
             "device_id": device_id,
             "platform": "android",

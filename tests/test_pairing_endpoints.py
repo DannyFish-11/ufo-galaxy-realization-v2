@@ -22,10 +22,15 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(de, "_coordinator", DeviceEnrollmentCoordinator(registry=reg))
 
     from galaxy_gateway.api.pairing import router
+    from tests.conftest import GALAXY_TEST_API_TOKEN
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    # 信任侧端点（/code /pending /approve /deny）本来就带 Depends(require_auth)，
+    # 只是鉴权默认关着时看不出来。默认翻成 true 之后必须带令牌 —— 这台"桌面"
+    # 就是主人自己的机器，令牌是它该有的东西。
+    # 设备侧的 /enroll 仍然不带令牌调用（见用例内），那是它本来的语义。
+    return TestClient(app, headers={"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"})
 
 
 def test_enroll_pending_approve_claim(client):

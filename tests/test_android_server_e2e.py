@@ -19,6 +19,7 @@ No running server or external services required.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 import uuid
@@ -53,6 +54,11 @@ def _v3_msg(msg_type: str, device_id: str, **extra) -> Dict[str, Any]:
         "message_id": str(uuid.uuid4()),
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
+        # 设备入口凭证。``GALAXY_AUTH_ENABLED`` 默认已翻成 true（core/auth.py），
+        # 匿名 device_register 会被拒 —— 那正是改默认要的效果。带上 conftest 的
+        # 会话令牌，让用例回到考协议/生命周期语义本身。
+        # （生产里设备带的是 /api/v1/pair/claim 发的配对令牌，入口两条都认。）
+        "token": os.environ.get("GALAXY_API_TOKEN", ""),
         **extra,
     }
 
@@ -107,6 +113,7 @@ class TestDeviceRegister:
     async def test_register_missing_device_id_returns_error(self, bridge):
         ws = _make_ws()
         msg = {
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "version": "3.0",
             "type": "device_register",
             "message_id": str(uuid.uuid4()),
@@ -193,6 +200,7 @@ class TestLegacyCompatibility:
         """AIP/2.0 messages (version='2.0') should be accepted and normalised."""
         ws = _make_ws()
         msg = {
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "version": "2.0",
             "type": "device_register",
             "device_id": "v2-device-001",
@@ -569,6 +577,7 @@ class TestPRS2WSv3Parsing:
         """AIP/2.0 messages (version='2.0') are accepted and normalised to v3."""
         ws = _make_ws()
         v2_msg = {
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "version": "2.0",
             "type": "device_register",
             "device_id": "prs2-v2-001",
@@ -626,6 +635,7 @@ class TestPRS2WSv3Parsing:
         from galaxy_gateway.protocol.compat import normalise_to_v3_dict
 
         raw = {
+            "token": os.environ.get("GALAXY_API_TOKEN", ""),
             "version": "3.0",
             "type": "device_register",
             "device_id": "prs2-v3-extra",

@@ -51,10 +51,10 @@ _no_token_warning_issued: bool = False
 
 
 def is_auth_enabled() -> bool:
-    """Return True when GALAXY_AUTH_ENABLED is explicitly enabled.
+    """Return True unless GALAXY_AUTH_ENABLED is explicitly turned off.
 
-    Defaults to False (opt-in) per the documented contract
-    (docs/DEPLOYMENT.md, core/routes/config.py, PR-20 ingress boundary).
+    Defaults to **True** (opt-out).  It used to default to False (opt-in);
+    see the inline note below for why that premise no longer holds.
     Production mode (GALAXY_MODE=production) forces authentication enabled
     regardless of settings.
     """
@@ -67,13 +67,22 @@ def is_auth_enabled() -> bool:
         # DEV_MODE no longer bypasses authentication; only enables extra debug logging
         logger.warning("GALAXY_DEV_MODE is deprecated for auth bypass. " "Use proper test tokens instead.")
 
-    env = os.environ.get("GALAXY_AUTH_ENABLED", "false").strip().lower()
-    if env in ("1", "true", "yes"):
+    # 默认 **开启**。此前默认关闭（"opt-in"），那是在"网关只在局域网里"的前提下
+    # 成立的 —— 家里网段本身就是信任边界。而一旦有任何一条公网可达的路（
+    # Tailscale Funnel / 端口转发 / 隧道），这个前提就没了，默认关等于把桌面
+    # 裸奔在公网上。可达性是会变的，默认值不能建立在"当前恰好不可达"上。
+    #
+    # 翻这个默认不会让零配置的安装起不来：没配令牌时
+    # :func:`ensure_local_token` 会在首次启动时自签一个并落盘（0600），
+    # 见 validate_auth_config()。所以零配置的体验从"不鉴权"变成
+    # "鉴权开着 + 有一个本机令牌"，而不是"起不来"。
+    env = os.environ.get("GALAXY_AUTH_ENABLED", "true").strip().lower()
+    if env in ("1", "true", "yes", ""):
         return True
-    if env in ("0", "false", "no", ""):
+    if env in ("0", "false", "no"):
         return False
-    logger.warning("Unknown GALAXY_AUTH_ENABLED value '%s', defaulting to disabled", env)
-    return False
+    logger.warning("Unknown GALAXY_AUTH_ENABLED value '%s', defaulting to enabled", env)
+    return True
 
 
 def validate_auth_config() -> None:
@@ -96,18 +105,30 @@ def validate_auth_config() -> None:
         # Production mode: DEV_MODE not allowed
         if os.environ.get("GALAXY_DEV_MODE", "").lower() in ("1", "true", "yes"):
             raise RuntimeError("GALAXY_DEV_MODE is not allowed in production mode")
-        # Production mode: auth cannot be disabled
-        auth = os.environ.get("GALAXY_AUTH_ENABLED", "true").lower()
-        if auth in ("0", "false", "no", ""):
+        # Production mode: auth cannot be disabled.
+        #
+        # 这里问的是"有人**显式**把它关了吗"。判据必须与 is_auth_enabled() 同源：
+        # 空串在那边是"没设 → 用默认 → 开着"，在这里就不能算成"关了"，否则
+        # `GALAXY_AUTH_ENABLED=` 这一行会让生产直接起不来，而鉴权其实是开的。
+        # （默认值翻成 true 之前两边都把空串当关，是一致的；翻完就分叉了。）
+        auth = os.environ.get("GALAXY_AUTH_ENABLED", "true").strip().lower()
+        if auth in ("0", "false", "no"):
             raise RuntimeError("Cannot disable authentication in production mode")
 
     # 修复:轮换清单 GALAXY_API_TOKENS 是文档支持的等价配置(get_active_tokens
     # 完整支持)。此前只查 GALAXY_API_TOKEN——按文档流程完成密钥轮换(只留
     # GALAXY_API_TOKENS)后,启动校验反而 RuntimeError 拒绝启动。
     if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN") and not os.getenv("GALAXY_API_TOKENS", "").strip():
+        # 鉴权默认已改为开启，所以这里不能再直接拒绝启动 —— 那会让每一个
+        # 零配置的现有安装升级后起不来。先给它签一个本机令牌；只有连签都签不出来
+        # （磁盘只读等）才是真的没法带着鉴权跑，那时候才拒绝。
+        if ensure_local_token():
+            return
         raise RuntimeError(
-            "GALAXY_AUTH_ENABLED=true but neither GALAXY_API_TOKEN nor GALAXY_API_TOKENS is set. "
-            "Set a secure token or disable auth with GALAXY_AUTH_ENABLED=false"
+            "鉴权已启用但没有可用令牌，且本机令牌自签失败。"
+            "请设置 GALAXY_API_TOKEN / GALAXY_API_TOKENS，"
+            "或确认 GALAXY_DATA_DIR 可写，"
+            "或显式设置 GALAXY_AUTH_ENABLED=false（仅限确无公网可达路径的场景）。"
         )
 
 
@@ -152,6 +173,71 @@ def _is_token_expired(expiry_str: str) -> bool:
         return False
 
 
+#: 本机自签令牌的落盘位置（相对 ``GALAXY_DATA_DIR``，缺省 ``./data``）。
+_LOCAL_TOKEN_FILENAME = "api_token.json"
+
+
+def _local_token_path() -> str:
+    base = os.getenv("GALAXY_DATA_DIR", "").strip() or os.path.join(os.getcwd(), "data")
+    return os.path.join(base, _LOCAL_TOKEN_FILENAME)
+
+
+def read_local_token() -> Optional[str]:
+    """读出本机自签令牌；没有就返回 None。
+
+    读不出来与"确实还没签过"**必须分得开** —— 前者要留痕（文件在但坏了/没权限，
+    静默当成"没有"会让系统悄悄再签一个、旧令牌全部失效）。
+    """
+    path = _local_token_path()
+    if not os.path.exists(path):
+        return None
+    try:
+        import json
+
+        with open(path, "r", encoding="utf-8") as fh:
+            tok = str((json.load(fh) or {}).get("token", "")).strip()
+        return tok or None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("本机令牌文件存在但读不出（不等于'还没签过'）：%s — %s", path, exc)
+        return None
+
+
+def ensure_local_token() -> Optional[str]:
+    """确保本机有一个令牌可用；返回当前生效的那个。
+
+    调用方是启动校验。语义是"零配置也要有身份"：
+
+    * 已经显式配了 ``GALAXY_API_TOKEN`` / ``GALAXY_API_TOKENS`` → 什么都不做，
+      **绝不覆盖**用户的配置；
+    * 已经自签过 → 原样返回，不重签（重签会让所有已配对设备的令牌失效）；
+    * 都没有 → 现签一个，落盘 0600（``atomic_write_json`` 自带 ``fchmod``）。
+
+    签不出来（磁盘只读等）返回 ``None`` 并留痕，由调用方决定是拒绝启动还是降级
+    —— 这里不替它做主。
+    """
+    if os.getenv("GALAXY_API_TOKEN", "").strip() or os.getenv("GALAXY_API_TOKENS", "").strip():
+        return None
+
+    existing = read_local_token()
+    if existing:
+        return existing
+
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    path = _local_token_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        from core.atomic_json import atomic_write_json
+
+        atomic_write_json(path, {"token": token, "created_at": datetime.now(timezone.utc).isoformat()})
+        logger.info("已为本机自签 API 令牌（首次启动）：%s", path)
+        return token
+    except Exception as exc:  # noqa: BLE001
+        logger.error("本机令牌自签失败（鉴权开着但没有可用令牌）：%s — %s", path, exc)
+        return None
+
+
 def get_active_tokens() -> List[str]:
     """Return the list of currently valid (non-expired, non-revoked) tokens.
 
@@ -186,6 +272,12 @@ def get_active_tokens() -> List[str]:
     multi_raw = os.getenv("GALAXY_API_TOKENS", "").strip()
     if multi_raw:
         active.extend(_parse_token_list(multi_raw))
+
+    # 本机自签令牌（首次启动生成，见 ensure_local_token）。放在最后：
+    # 显式配置的令牌永远优先，自签的只是"零配置也能有身份"的兜底。
+    local = read_local_token()
+    if local:
+        active.append(local)
 
     # Deduplicate while preserving insertion order
     seen: Set[str] = set()

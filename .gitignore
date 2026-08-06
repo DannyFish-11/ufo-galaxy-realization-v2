@@ -56,6 +56,9 @@ env/
 .galaxy_mesh_key
 # 对端信任档案(peer_trust)与配对产生的本机运行时数据
 data/peer_trust.json
+# 首次启动自签的本机 API 令牌(0600,见 core/auth.py::ensure_local_token)。
+# 它等价于这台机器的钥匙 —— 入库就是把钥匙发给所有人。绝不入库。
+data/api_token.json
 
 # Logs
 *.log
