@@ -1034,9 +1034,15 @@ class DesktopPresenceRuntime:
             "presence_mode",
             "presence_runtime_hint",
             "stream_runtime_status",
-            "is_operator_request",
         ):
             kwargs.pop(_dup_key, None)
+
+        # ``is_operator_request`` 不再一律 pop 掉 —— 它是**调用方才知道**的事。
+        # 原来剔除后用 `source == "operator"` 自己算，而 chat 永远传 "chat" ⇒ 恒为
+        # False ⇒ OpenClawd 把 OPERATOR_AUDIT_TRUTH 键全 pop 干净 ⇒ chat 那整套
+        # operator 边界对 metadata 空转，`demoted_operator_audit_fields` 不可达。
+        # 现在：显式传了以它为准，没传才退回按 source 判。
+        _explicit_operator = kwargs.pop("is_operator_request", None)
 
         lane_snapshot = None
         try:
@@ -1134,7 +1140,9 @@ class DesktopPresenceRuntime:
                             presence_mode=_presence_mode,
                             presence_runtime_hint=_dispatch_presence_runtime_hint,
                             stream_runtime_status=_stream_runtime_status,
-                            is_operator_request=source == "operator",
+                            is_operator_request=(
+                                bool(_explicit_operator) if _explicit_operator is not None else source == "operator"
+                            ),
                             **kwargs,
                         )
                         # 收口点：派发返回 = 认知结束，往下是表达（结果装配、PR-SPEAK 朗读、
@@ -2055,15 +2063,11 @@ class DesktopPresenceRuntime:
         # ── PR-25/27: Post-execution cognitive reflection ────────────────
         try:
             _result_text = result.get("response", "") or result.get("reply", "")
-            # 走收敛权威（core.flow_aware_result_convergence），不要自己拼一套。
-            #
-            # 原来这里是 `not result.get("error") and not result.get("failed")` ——
-            # **完全不看 result["success"]**。而本仓最常见的失败形状恰恰是软失败：
-            # {"success": False, "response": "抱歉，我没能打开那个应用"}，不带
-            # error/failed 键。于是 _success 算成 True，接着喂给下面的
-            # reflect_retrospective 与 predictor.record_outcome —— 自适应预测器
-            # 把一次失败当成功记进策略标定，下次更倾向于再推荐这条失败过的策略
-            # （strategy_confidence > 0.75 那个阈值就是拿这份被污染的数据算的）。
+            # 走收敛权威，不自己拼一套。原来是
+            # `not result.get("error") and not result.get("failed")` —— 完全不看
+            # result["success"]，而最常见的失败形状恰是软失败（{"success": False,
+            # "response": "抱歉…"}，不带 error/failed）。于是失败被当成功喂进下面的
+            # reflect_retrospective 与 predictor.record_outcome，把失败策略标定成好用。
             from core.flow_aware_result_convergence import derive_result_success
 
             _success, _ = derive_result_success(result)

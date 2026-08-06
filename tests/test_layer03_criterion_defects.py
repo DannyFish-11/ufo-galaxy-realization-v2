@@ -252,3 +252,116 @@ async def test_legacy_direction_amount_callers_still_work():
 
     direction, amount = await _run_scroll({})
     assert (direction, amount) == ("down", 500), "无参默认值变了"
+
+
+# ---------------------------------------------------------------------------
+# 五、operator 审计边界：chat 算出的受众必须真的送达
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_no_longer_discards_the_callers_audience():
+    """``is_operator_request`` 不许再被无条件 pop 掉。
+
+    原来 runtime 把它从 kwargs 里剔除，再用 ``source == "operator"`` 自己算 ——
+    而 chat 永远传 ``source="chat"`` ⇒ 恒为 False ⇒ OpenClawd 把所有
+    OPERATOR_AUDIT_TRUTH 键 pop 干净 ⇒ chat 那整套边界逻辑对 metadata 空转。
+    """
+    import core.desktop_presence_runtime as dpr
+
+    src = _code_only(dpr.DesktopPresenceRuntime.handle_request)
+    assert "_explicit_operator" in src, "调用方传的受众又被丢掉了"
+    # 显式值优先，没传才退回按 source 判
+    assert "source == 'operator'" in src, "source='operator' 本身仍应算运维请求"
+
+
+def test_chat_passes_the_audience_before_dispatch():
+    """必须在**派发之前**传。等结果回来再算就晚了 —— 键已经被删了。"""
+    import core.routes.chat as chat_mod
+
+    src = _code_only(chat_mod)
+    assert "is_operator_request=_is_operator_request(req)" in src, "chat 没有把受众传给 runtime"
+
+
+@pytest.mark.parametrize(
+    "context,expected",
+    [
+        ([{"response_audience": "operator"}], True),
+        ([{"response_audience": "audit"}], True),
+        ([{"operator_mode": "true"}], True),
+        ([{"response_audience": "user"}], False),
+        ([], False),
+        # context 完全不传（ChatRequest 不接受 None，模型层就造不出那个值）
+        (..., False),
+    ],
+)
+def test_audience_criterion_discriminates(context, expected):
+    """区分度：受众判据本身要真的分得开，不能一律 True 或一律 False。"""
+    from core.routes.chat import ChatRequest, _is_operator_request
+
+    req = ChatRequest(message="hi") if context is ... else ChatRequest(message="hi", context=context)
+    assert _is_operator_request(req) is expected
+
+
+# ---------------------------------------------------------------------------
+# 六、policy 护栏：接通，但默认全放行
+# ---------------------------------------------------------------------------
+
+
+def test_policy_defaults_to_no_enforcement(monkeypatch):
+    """默认行为必须与接通前逐字一致 —— 不拦任何东西。"""
+    from core.windows_execution_arbiter import _effective_policy
+
+    monkeypatch.delenv("GALAXY_EXEC_POLICY_ENFORCE", raising=False)
+    assert _effective_policy(None) is None, "默认就开始拦了 —— 这是没人要求的 fail-closed"
+
+
+def test_explicitly_passed_policy_always_wins(monkeypatch):
+    """**这就是"接通"的含义**：调用方传了 policy，它就必须生效。
+
+    原来三个真实调用点都不传，``if policy is not None`` 永远为假，整块护栏不可达。
+    """
+    from core.windows_execution_arbiter import _effective_policy
+
+    monkeypatch.delenv("GALAXY_EXEC_POLICY_ENFORCE", raising=False)
+    sentinel = object()
+    assert _effective_policy(sentinel) is sentinel, "显式传入的 policy 被忽略了"
+
+
+def test_enforcement_can_be_turned_on(monkeypatch):
+    """开关打开时按真实相位解析，能解析出东西来。"""
+    from core.windows_execution_arbiter import _effective_policy
+
+    monkeypatch.setenv("GALAXY_EXEC_POLICY_ENFORCE", "1")
+    assert _effective_policy(None) is not None, "开关打开却没解析出策略 —— 等于没接通"
+
+
+def test_a_failed_phase_read_does_not_become_a_ban(monkeypatch):
+    """读不到相位不许变成"拦下一切"。
+
+    ``get_current_phase()`` 读失败时返回 "silent"（→ observe_only），
+    **"真的静默"与"读不出来"同值**。所以解析一旦出错就必须放行，
+    不能把一次读取失败升级成封禁。
+    """
+    import core.windows_execution_arbiter as wea
+
+    monkeypatch.setenv("GALAXY_EXEC_POLICY_ENFORCE", "1")
+    monkeypatch.setattr(
+        wea,
+        "_effective_policy",
+        wea._effective_policy,  # 保持原函数，只让它内部的解析炸掉
+    )
+    import core.lumiv_websocket_bridge as bridge
+
+    def _boom() -> str:
+        raise RuntimeError("bridge unavailable")
+
+    monkeypatch.setattr(bridge, "get_current_phase", _boom)
+    assert wea._effective_policy(None) is None, "相位读取失败被升级成了封禁"
+
+
+def test_execute_actually_consults_the_resolver():
+    """护栏必须真的从 ``_effective_policy`` 取，不是继续只看形参。"""
+    from core.windows_execution_arbiter import WindowsExecutionArbiter
+
+    src = _code_only(WindowsExecutionArbiter.execute)
+    assert "_effective_policy(policy)" in src, "execute 还没走统一的策略取值口"

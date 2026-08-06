@@ -68,6 +68,42 @@ logger = logging.getLogger("Galaxy.WindowsArbiter")
 # ---------------------------------------------------------------------------
 
 
+#: 打开后，未显式传 policy 的调用按**真实三态相位**解析策略并真正拦截。
+#: 默认关闭 —— 见 :func:`_effective_policy` 里说明为什么默认必须是全放行。
+_ENFORCE_ENV = "GALAXY_EXEC_POLICY_ENFORCE"
+
+
+def _effective_policy(policy: Optional[Any]) -> Optional[Any]:
+    """决定这次执行**实际生效**的策略。
+
+    PR-12 整套护栏此前全仓零调用方（三个真实调用点都不传 policy），
+    ``if policy is not None`` 永远为假、整块判据不可达 —— 而 docstring 明写
+    ``observe_only`` 会被"立即拦下"。承诺是假的。
+
+    三档，默认必须全放行：``resolve_policy(phase=None)`` 落在 observe_only，而
+    ``get_current_phase()`` 读不到相位时同样返回 "silent" —— "真的静默"与"读不出来"
+    同值。照它解析等于把读取失败升级成封禁，那是没人要求的 fail-closed。
+
+    * 默认：不构造策略，行为与接通前逐字一致；
+    * 调用方显式传入：一律以它为准（此时护栏真的在拦，这就是"接通"）；
+    * ``GALAXY_EXEC_POLICY_ENFORCE=1``：按真实相位解析并生效。
+    """
+    if policy is not None:
+        return policy
+    import os  # noqa: PLC0415
+
+    if os.environ.get(_ENFORCE_ENV, "").strip().lower() not in ("1", "true", "yes", "on"):
+        return None
+    try:
+        from core.execution_policy import resolve_policy  # noqa: PLC0415
+        from core.lumiv_websocket_bridge import get_current_phase  # noqa: PLC0415
+
+        return resolve_policy(phase=get_current_phase())
+    except Exception as exc:  # noqa: BLE001 — 解析不出来就不拦，别把读取失败变成封禁
+        logger.warning("%s 已开启但策略解析失败，本次不拦截：%s", _ENFORCE_ENV, exc)
+        return None
+
+
 def _get_policy_enforcement():
     """Lazy-import policy enforcement helpers.  Returns None on ImportError."""
     try:
@@ -487,6 +523,9 @@ class WindowsExecutionArbiter:
         action_summary = _build_action_summary(action, params, device_id)
 
         # ── PR-12: Policy enforcement (additive, non-breaking) ────────────────
+        # 策略从这里统一取一次，后面两处判据都用它 —— 别再一个看形参、一个看别处。
+        policy = _effective_policy(policy)
+
         if policy is not None:
             policy_result = self._apply_policy_guardrails(
                 policy=policy,
@@ -685,27 +724,14 @@ class WindowsExecutionArbiter:
         # automation actions this is acceptable; callers that need tighter loop
         # coupling should use `await execute(...)` directly.
         #
-        # 这里原来是：
-        #     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        #         future = pool.submit(asyncio.run, coro)
-        #         win_result = future.result(timeout=30)
-        #     except RuntimeError:   # ← 顺带兜 asyncio.get_running_loop()
-        # 三处都不对：
-        #
-        # 1. **这个 timeout 根本不超时。** ``with`` 退出时 ``shutdown(wait=True)``
-        #    会一直阻塞到任务真正跑完，然后才把 TimeoutError 抛出去。实测
-        #    timeout=0.5s、任务 3s：0.5s 没有任何反应，3.00s 才抛。净效果是既没
-        #    提前返回，又把**已经算出来的结果丢掉**。
-        # 2. ``concurrent.futures.TimeoutError`` 不是 ``RuntimeError`` 的子类
-        #    （实测 issubclass(...) 为 False），``except RuntimeError`` 接不住，
-        #    直接外抛到 windows_client 的 except Exception 里兜成"执行失败" ——
-        #    而闭环还在真地点鼠标、敲键盘。
-        # 3. 30 秒这个数是凭空写的，与被它包住的东西无关：第 4 级委托给
-        #    ``run_computer_use_task``，其真实上界是 max_steps × (规划 60s + 静置)，
-        #    默认 15 × 61 ≈ 915 秒。判据与被判对象来源不同源。
-        #
-        # 改：超时从**真实预算**派生；不用 ``with`` 以免 shutdown 把超时吃掉；
-        # 超时按 WinExecStatus.TIMEOUT 如实返回，不再伪装成别的失败。
+        # 原来是 `with ThreadPoolExecutor(...) as pool: future.result(timeout=30)`
+        # + `except RuntimeError`，三处都不对：
+        # 1. timeout 根本不超时 —— with 退出时 shutdown(wait=True) 阻塞到任务跑完
+        #    才抛（实测 timeout=0.5s / 任务 3s → 3.00s 才抛），既没提前返回，又把
+        #    已经算出来的结果丢掉；
+        # 2. TimeoutError 不是 RuntimeError 子类，except 接不住，外抛后被
+        #    windows_client 兜成"执行失败"，而闭环还在真动键鼠；
+        # 3. 30 秒与被它包住的东西无关（第 4 级真实上界 ≈915s），判据不同源。
         import concurrent.futures
 
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="win-arbiter")
@@ -717,8 +743,7 @@ class WindowsExecutionArbiter:
             # 不等它：wait=False 才能真的提前返回。线程会自己跑完并退出。
             pool.shutdown(wait=False)
             logger.error(
-                "route_command 超出同步派发预算 %.0fs（action=%s device=%s）——"
-                "后台线程仍在跑，调用方拿到的是 timeout 而不是伪装的失败",
+                "route_command 超出同步派发预算 %.0fs（action=%s device=%s）—— 后台线程仍在跑",
                 budget_s,
                 action,
                 device_id,
@@ -998,26 +1023,18 @@ class WindowsExecutionArbiter:
 # ---------------------------------------------------------------------------
 
 
-#: 同步派发（``route_command``）等待第 4 级的余量倍数。第 4 级委托给
-#: ``run_computer_use_task``，其真实上界由 computer_use_loop 的常量决定；这里只加
-#: 一点余量给截图/派发本身，**不另立一个数**。
+#: 同步派发的余量倍数（给截图/派发本身留一点），**不另立一个数**。
 _SYNC_DISPATCH_HEADROOM = 1.2
-
-#: computer_use 不可用（未装/被关）时的同步派发上限。此时第 4 级不会真的跑起来，
-#: 前三级都是本机 API 调用，秒级返回。
+#: computer_use 不可用时的上限：此时第 4 级跑不起来，前三级都是秒级本机调用。
 _SYNC_DISPATCH_FALLBACK_S = 60.0
 
 
 def _sync_dispatch_budget_s() -> float:
     """``route_command`` 该等多久 —— 从**被等的那个东西**的预算派生。
 
-    原来这里写死 30 秒，而第 4 级（VLM）委托的 ``run_computer_use_task`` 上界是
-    ``max_steps × (规划超时 + 静置)``，默认 15 × (60 + 1) ≈ 915 秒。判据与被判
-    对象来源不同源，差了一个数量级 —— 而且那 30 秒因为 ``shutdown(wait=True)``
-    根本没起作用（见 ``route_command`` 里的说明），所以一直没人发现。
-
-    改成从 computer_use_loop 的常量算：那边调 ``GALAXY_CU_MAX_STEPS`` /
-    ``GALAXY_CU_SETTLE_S``，这边自动跟着走。
+    原来写死 30 秒，而第 4 级委托的 ``run_computer_use_task`` 上界是
+    ``max_steps × (规划超时 + 静置)`` ≈ 915 秒，差一个数量级。改成从
+    computer_use_loop 的常量算，``GALAXY_CU_*`` 一调这边自动跟着走。
     """
     try:
         from core.computer_use_loop import _max_steps, _settle_s  # noqa: PLC0415
