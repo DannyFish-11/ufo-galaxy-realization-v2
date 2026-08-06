@@ -248,6 +248,78 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:  # noqa: BLE001
             return _server_error("pair_claim", exc)
 
+    @router.get("/api/v1/pair/paths")
+    async def get_path_status():
+        """本机当前每条可达路径的状态 —— 面板的「路径状态盘」读它。
+
+        为什么要有这么一屏
+        ------------------
+        设备连不上时,人唯一能做的判断是"是我这边的问题,还是那台电脑的问题"。
+        没有这一屏的话,两边都只能看到"连不上",然后互相怀疑。
+
+        这里回答的是**桌面这一侧**的事实:哪几条路现在是通的,Funnel 那条如果没开
+        是被什么挡住的。设备侧的判断由 ``ConnectionPathPlanner`` 负责,两边合起来
+        才拼得出全貌。
+
+        ``funnel`` 那条要跑一次 ``tailscale serve status``,比另外两条贵 ——
+        所以这个端点是**按需**的,不进任何轮询。
+        """
+        try:
+            from core.agent_card import build_candidates, local_device_id
+            from core.electron_launch_guard import resolve_gateway_port
+            from core.tailscale_manager import TailscaleManager
+
+            port = resolve_gateway_port()
+            did = local_device_id()
+            candidates = build_candidates(did, port)
+            live_kinds = {c["kind"] for c in candidates}
+
+            mgr = TailscaleManager()
+            gate = mgr.funnel_preflight()
+
+            paths = []
+            for kind in mgr.NETWORK_PREFERENCE:
+                cand = next((c for c in candidates if c["kind"] == kind), None)
+                if cand is not None:
+                    paths.append({"kind": kind, "up": True, "url": cand["url"], "reason": "", "how_to_fix": ""})
+                    continue
+                # 不在候选里 = 这条路现在不可用。**为什么**不可用要说清楚,
+                # 否则这一屏只是把"连不上"换了个地方显示。
+                if kind == "funnel" and not gate["ok"]:
+                    paths.append(
+                        {
+                            "kind": kind,
+                            "up": False,
+                            "url": "",
+                            "reason": gate["reason"],
+                            "how_to_fix": gate["how_to_fix"],
+                        }
+                    )
+                else:
+                    paths.append(
+                        {
+                            "kind": kind,
+                            "up": False,
+                            "url": "",
+                            "reason": "tailscale_unavailable" if kind != "lan" else "unavailable",
+                            "how_to_fix": (TailscaleManager.get_install_guide() if kind != "lan" else ""),
+                        }
+                    )
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "device_id": did,
+                    "port": port,
+                    "paths": paths,
+                    # 手表带流量单独出门时唯一能用的那条。单独拎出来,因为它是
+                    # 「出门还能不能用」这个问题的唯一判据。
+                    "public_reachable": "funnel" in live_kinds,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("pair_paths", exc)
+
     @router.get("/api/v1/pair/peers")
     async def list_peers():
         try:
