@@ -111,7 +111,10 @@ def load_choice_record() -> Dict[str, Any]:
             "source": str(data.get("source", "unknown") or "unknown"),
             "selected_at": data.get("selected_at"),
         }
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        # 记录损坏与"从没选过运行时"同取 {} —— 后者会重新询问用户，前者其实
+        # 是选过的但记录坏了。至少让它可查，别静默把用户的选择抹掉。
+        logger.warning("容器运行时选择记录读取失败，按'未选择'处理: %s", exc)
         return {}
 
 

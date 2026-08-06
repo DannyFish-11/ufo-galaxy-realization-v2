@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import time
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger("Galaxy.RuntimeTruthGovernance")
 
 TRUTH_GRADE_DURABLE: str = "durable_truth"
 TRUTH_GRADE_RECOVERABLE: str = "recoverable_truth"
@@ -89,5 +92,8 @@ def load_json_payload(path: str) -> Dict[str, Any]:
         with open(path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
         return payload if isinstance(payload, dict) else {}
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        # 文件存在但读不动（损坏/权限/编码）与"文件不存在"上面同取 {}，
+        # 消费方分不开 —— 至少留下痕迹，否则一份坏掉的真相文件会被当成"没有"。
+        logger.warning("真相文件读取失败，按空载荷处理（非'文件不存在'）: %s — %s", path, exc)
         return {}

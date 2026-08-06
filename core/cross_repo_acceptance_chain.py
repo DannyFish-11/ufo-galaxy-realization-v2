@@ -408,7 +408,10 @@ def _resolve_mesh_session(
             return {}
         latest = sorted(sessions, key=_session_timestamp_key)[-1]
         return latest.to_dict()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        # 与上面 `if not sessions: return {}` 同值 —— 分不开"这台设备没有会话"
+        # 和"会话查询炸了"。
+        logger.warning("mesh 会话解析失败，按无会话处理: device=%s — %s", device_id, exc)
         return {}
 
 

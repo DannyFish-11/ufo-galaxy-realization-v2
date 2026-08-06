@@ -17,11 +17,14 @@ from __future__ import annotations
 import dataclasses
 import enum
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 from core.realtime_streaming_backbone import build_realtime_streaming_backbone_contract
+
+logger = logging.getLogger("Galaxy.MultimodalRuntimeProfile")
 
 MULTIMODAL_RUNTIME_PROFILE_IS_AUTHORITY = (
     "MULTIMODAL_RUNTIME_PROFILE::CONFIG_LAYERING_CLASSIFICATION_IS_AUTHORITY_PR10_V1"
@@ -106,7 +109,10 @@ def _load_root_config_defaults() -> Dict[str, Any]:
         with config_path.open(encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        # 同上：config.json 损坏与"没有 config.json"上面同取 {}。
+        # 不留痕的话，一份坏配置会让整套多模态运行档静默退回全默认值。
+        logger.warning("config.json 解析失败，多模态运行档退回默认值: %s", exc)
         return {}
 
 
