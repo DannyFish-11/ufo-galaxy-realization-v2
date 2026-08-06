@@ -218,6 +218,30 @@ class RuntimeHarnessResult:
     """Optional :class:`~core.device_formation.formation_runtime_coordinator.FormationRuntimeDecision`
     produced when a :class:`FormationRuntimeCoordinator` was involved."""
 
+    responsiveness: Optional[Any] = None
+    """Optional :class:`~core.cross_device_responsiveness_contract.ResponsivenessContract`.
+
+    「这台设备**能指望多快回应**」——就绪与否回答不了这个问题。四维全通(注册/在线/
+    连通/可路由)只说明"能派得过去",不说明"派过去多久能回话"。一个刚回来、证据还没
+    攒够的参与者,和一个满血在线的参与者,``ready`` 是同一个值,但一个只能承诺
+    ``eventual``,另一个才够 ``near_interactive``。
+
+    ``cross_device_responsiveness_contract`` 这套五级分类本来就是为这个 hook 写的
+    —— 见该模块 ``ParticipantReadinessState`` 的文档:"align with the readiness
+    signals emitted by ``on_participant_readiness_changed``"。
+
+    与 ``device_pool_manager._responsiveness_factor`` 的分工
+    -------------------------------------------------------
+    那边是**选择侧**:在候选打分时把分级折成一个乘数,回答"该把活派给谁"。
+    这边是**事件侧**:就绪状态一变就定级,回答"这台设备刚刚变成了什么档"。
+    同一个分类器,两个不同的消费时机 —— 事件侧不参与选择,只把结论摆出来给
+    ``on_participant_readiness_changed`` 的调用方(编队恢复、会话快照)看。
+
+    ``evidence_available`` 的判据在两边不同源,这是有意的:选择侧问的是健康登记表
+    里有没有这台设备的记录(``_has_health_evidence``),事件侧问的是**这一次上报
+    带没带健康分**。两者都是"有没有证据"的合法读数,但取自不同的东西 ——
+    ``core.health_evidence_policy`` 记的是这条判断本身:分数与证据是两件事。"""
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "operation": self.operation,
@@ -228,6 +252,11 @@ class RuntimeHarnessResult:
             "task_registered": self.task_registered,
             "routable_executor_ids": list(self.routable_executor_ids),
             "errors": list(self.errors),
+            "responsiveness": (
+                self.responsiveness.to_dict()
+                if self.responsiveness is not None and hasattr(self.responsiveness, "to_dict")
+                else None
+            ),
             "runtime_decision": (
                 self.runtime_decision.to_dict()
                 if self.runtime_decision is not None and hasattr(self.runtime_decision, "to_dict")
@@ -568,6 +597,15 @@ class MultiDeviceCoherenceHarness:
         rebalance_triggered = False
         snapshot_saved = False
         runtime_decision: Optional[Any] = None
+        responsiveness: Optional[Any] = None
+
+        # 先定响应性等级 —— 与编队重整无关,不该被下面任何一步的失败带走。
+        responsiveness = self._classify_responsiveness(
+            device_id=device_id,
+            new_readiness=new_readiness,
+            health_score=health_score,
+            session_id=session_id,
+        )
 
         try:
             from core.device_formation.formation_runtime_coordinator import (
@@ -656,7 +694,68 @@ class MultiDeviceCoherenceHarness:
             snapshot_saved=snapshot_saved,
             errors=errors,
             runtime_decision=runtime_decision,
+            responsiveness=responsiveness,
         )
+
+    # 本 harness 认的就绪词汇 → 响应性分类器认的词汇。
+    #
+    # 两边不是同一套词,这一点必须显式写出来而不是靠巧合:
+    #
+    #   harness(编队视角)   ready / degraded / lost / recovering
+    #   分类器(响应性视角)  ready / degraded / stale / partial / missing
+    #
+    #   lost       → missing     没了就是没了,分类器据此判 unavailable
+    #   recovering → partial     正在回来 = 部分可用,不是 degraded ——
+    #                            degraded 是"在线但打折",recovering 是"还没站稳",
+    #                            后者不该被当成前者去承诺 bounded_deferred
+    #
+    # 认不出的值一律交给分类器自己兜底(它默认 missing,fail-conservative)。
+    _READINESS_TO_PARTICIPANT_STATE = {
+        "lost": "missing",
+        "recovering": "partial",
+    }
+
+    def _classify_responsiveness(
+        self,
+        *,
+        device_id: str,
+        new_readiness: str,
+        health_score: Optional[float],
+        session_id: Optional[str],
+    ) -> Optional[Any]:
+        """给这次就绪变化定一个响应性等级。失败返回 ``None``,绝不影响编队重整。
+
+        ``evidence_available`` 取"有没有真的拿到健康分"
+        ----------------------------------------------
+        没上报健康分 = **不知道**它多健康,不是"它很健康"。这一条是有真实后果的:
+        实测 ``ready`` + 有证据 0.95 → ``near_interactive``,同样 ``ready`` 但
+        没有证据 → ``eventual``。就绪值一模一样,承诺差两级。
+
+        health_score 缺省填 0.0 只是防御性的
+        ------------------------------------
+        实测在 ``evidence_available=False`` 时,填 0.0 还是 1.0 结果**一样**
+        (都是 ``eventual``)—— "没有证据"这一条已经压过了健康分。所以这里不声称
+        它改变了什么;填 0.0 纯粹是不想在分类器将来放宽证据判据时,悄悄多出一个
+        偏乐观的默认值。
+        """
+        try:
+            from core.cross_device_responsiveness_contract import responsiveness_for_participant
+
+            raw = (new_readiness or "").lower()
+            participant_readiness = self._READINESS_TO_PARTICIPANT_STATE.get(raw, raw)
+            has_evidence = health_score is not None
+            return responsiveness_for_participant(
+                participant_readiness=participant_readiness,
+                health_score=float(health_score) if has_evidence else 0.0,
+                evidence_available=has_evidence,
+                is_stale=(raw == "lost"),
+                execution_domain="remote",
+                participant_id=device_id,
+                trace_id=session_id or "",
+            )
+        except Exception as exc:  # pragma: no cover — 定级失败不能挡住编队恢复
+            logger.debug("on_participant_readiness_changed: 响应性定级跳过 — %s", exc)
+            return None
 
     def to_canonical_projection(self):
         """返回本 harness 运行时读侧的规范投影(专项③ anti-drift 锚定)。
