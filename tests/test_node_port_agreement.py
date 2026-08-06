@@ -38,6 +38,7 @@
 
 from __future__ import annotations
 
+import ast
 import pathlib
 import re
 from typing import Dict, List, Tuple
@@ -114,6 +115,60 @@ def test_authoritative_ports_do_not_collide():
             seen.setdefault(p, []).append(n)
     dupes = {p: v for p, v in seen.items() if len(v) > 1}
     assert not dupes, f"端口冲突:{dupes}"
+
+
+def test_nodes_do_not_resolve_their_port_from_the_service_table():
+    """节点端口要查**节点**表,不能查**服务**表。
+
+    这条是被一次真实撞车逼出来的。四个节点写的是::
+
+        PORT = get_service_port("node_66") or 8066
+
+    ``node_66`` 这个键在 ``config/unified_ports.yaml`` 的 services 段里根本不存在,
+    每次都 ``KeyError`` → 被 ``except`` 接住 → 实际生效的永远是
+    ``os.getenv("PORT", "8066")``:
+
+    * 经启动器起(会传 ``PORT``)→ 碰巧对;
+    * 裸跑 ``python main.py``(没有 ``PORT``)→ 落到字面量。
+
+    Node_66 的权威端口是 8065、字面量却是 8066,而 **8066 是 Node_67_HealthMonitor
+    的权威端口** —— 裸跑时两个节点抢同一个口,后起的那个直接
+    ``[Errno 98] address already in use`` 退出。另外三个(72/73/74)字面量碰巧等于
+    权威值,属于侥幸没事。
+
+    为什么上面那条 ``test_hardcoded_node_ports_match_the_authority`` 抓不到:
+    它看的是 ``uvicorn.run(..., port=<字面量>)``,而这几个传的是变量 ``PORT``。
+    判据不同,所以单列一条。
+
+    用 AST 而不是 grep 字符串:修复时要在注释里写清楚"这里原来是
+    ``get_service_port("node_66")``",纯文本扫描会把那句**说明**也当成违规 ——
+    实际踩过。同一个坑 ``tests/test_node_local_module_shadowing.py`` 的文档里
+    也写着("查的是真的 import 语句,不是文中提到过这个名字")。
+    """
+    offenders = []
+    for name in _nodes_on_disk():
+        src = (NODES_DIR / name / "main.py").read_text(encoding="utf-8", errors="replace")
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:  # pragma: no cover - 语法坏了归别的门管
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            fname = fn.id if isinstance(fn, ast.Name) else (fn.attr if isinstance(fn, ast.Attribute) else "")
+            if fname != "get_service_port" or not node.args:
+                continue
+            arg = node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and re.fullmatch(r"node_\d+", arg.value):
+                offenders.append(f"  {name}:{node.lineno}  get_service_port({arg.value!r})")
+
+    assert not offenders, (
+        "这些节点用**服务**端口表去查自己的端口 —— 那个键不存在，每次都走兜底，"
+        "裸跑时会落到代码里的字面量而不是权威值:\n"
+        + "\n".join(offenders)
+        + "\n改用 nodes.common.node_port.resolve_node_port(<完整节点名>, <权威值>)。"
+    )
 
 
 # ── 2. 启动器侧:两套环境变量名都要传 ────────────────────────────────────────
