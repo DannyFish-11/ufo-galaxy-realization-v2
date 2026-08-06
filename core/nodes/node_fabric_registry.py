@@ -697,7 +697,10 @@ class NodeFabricRegistry:
 
         try:
             from core.agent.capability_registry import CapabilityRegistry  # noqa: PLC0415
-        except ImportError:
+        except ImportError as exc:
+            # 与"确实没有过期条目"同取 0 —— 调用方会记一笔"清理了 0 条"，
+            # 而真相是清理根本没跑起来，过期能力会一直挂着。
+            logger.warning("CapabilityRegistry 不可用，过期能力清理未执行（返回 0 非'无过期'）: %s", exc)
             return 0
 
         registry = CapabilityRegistry.get_instance()

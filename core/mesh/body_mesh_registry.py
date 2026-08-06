@@ -475,7 +475,10 @@ class BodyMeshRegistry:
         """
         try:
             from contracts.mesh_membership import from_body_mesh_entry
-        except ImportError:
+        except ImportError as exc:
+            # 依赖缺失（部署问题）与"这台设备确实不在任何 mesh 里"同取 []。
+            # mesh 面的消费方据此判参与状态，分不开就会把部署问题读成拓扑事实。
+            logger.warning("contracts.mesh_membership 不可用，mesh 成员列表按空返回: %s", exc)
             return []
 
         with self._lock:

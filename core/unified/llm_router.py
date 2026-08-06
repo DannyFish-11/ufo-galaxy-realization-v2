@@ -591,6 +591,9 @@ class UnifiedLLMRouter:
             return None, None, False
         try:
             supply_state = self._build_backend_supply_state()
+            if supply_state is None:
+                # 供给状态问不出来 —— 跳过 L2，别把"没问出来"当成"没有供给"。
+                return None, None, False
             result = l2.resolve_supply(route_decision, supply_state)
             logger.debug(
                 "L2 supply authority: satisfied=%s supplied=%s/%s fallback=%s",
@@ -606,12 +609,13 @@ class UnifiedLLMRouter:
             logger.debug("L2 supply authority error (non-fatal): %s", exc)
             return None, None, False
 
-    def _build_backend_supply_state(self) -> Dict[str, Any]:
+    def _build_backend_supply_state(self) -> Optional[Dict[str, Any]]:
         """Build a minimal supply-state dict from the backend's provider status.
 
         This feeds into :meth:`_consult_l2_supply` so that the L2 authority
         can reason about real provider availability.
         """
+        # 这里是"确实没有后端"（确定的空）；except 那里是"没问出来"（None）。
         if self._backend is None:
             return {}
         try:
@@ -638,8 +642,11 @@ class UnifiedLLMRouter:
                 "available_provider_ids": available,
                 "fallback_candidates": available,
             }
-        except Exception:
-            return {}
+        except Exception as exc:  # noqa: BLE001
+            # None = 没问出来；{} = 问过了确实没有。同值的话 L2 会把查询异常
+            # 判成"无供给"→ is_satisfied=False → 静默降级，而后端可能好端端的。
+            logger.warning("后端供给状态查询失败，本次跳过 L2 供给权威（不等于无供给）：%s", exc)
+            return None
 
     def _enrich_l3_context(
         self,

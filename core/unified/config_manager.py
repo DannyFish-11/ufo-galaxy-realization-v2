@@ -156,7 +156,10 @@ class UnifiedConfigManager:
             if hasattr(self._backend, "_config"):
                 return list(self._backend._config.keys())
             return []
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            # 与"后端没有 _config 属性"的 [] 同值 —— 遍历配置键的调用方会以为
+            # 配置是空的，而不是读取出了问题。
+            logger.warning("配置键枚举失败，返回空列表（不等于没有配置）: %s", exc)
             return []
 
     def save(self) -> None:

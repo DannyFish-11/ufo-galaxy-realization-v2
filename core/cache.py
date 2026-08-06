@@ -147,7 +147,10 @@ class RedisCache:
             return []
         try:
             return await self._redis.keys(pattern)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            # 与上面 `not self._redis` 的 [] 同值 —— 按 pattern 做批量失效的
+            # 调用方会以为"没有匹配的键"，于是一个都不清，且毫无察觉。
+            logger.warning("Redis keys(%s) 查询失败，返回空列表（不等于没有匹配）: %s", pattern, exc)
             return []
 
     async def flush(self):
