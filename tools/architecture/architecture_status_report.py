@@ -31,12 +31,7 @@ Main API
     The primary data container.
 
 :func:`build_architecture_status_report`
-    Build from a set of layer result dicts or a
-    :class:`~core.runtime_introspection.RuntimeIntrospectionSnapshot`.
-
-:func:`architecture_status_from_snapshot`
-    Convenience wrapper: build directly from a
-    :class:`~core.runtime_introspection.RuntimeIntrospectionSnapshot`.
+    Build from a set of layer result dicts.
 
 Usage::
 
@@ -62,7 +57,6 @@ logger = logging.getLogger("Galaxy.ArchitectureStatusReport")
 __all__ = [
     "ArchitectureStatusReport",
     "build_architecture_status_report",
-    "architecture_status_from_snapshot",
 ]
 
 # ---------------------------------------------------------------------------
@@ -329,64 +323,3 @@ def build_architecture_status_report(
         report.overall_valid = None
 
     return report
-
-
-def architecture_status_from_snapshot(
-    snapshot: Any,
-) -> ArchitectureStatusReport:
-    """Build an :class:`ArchitectureStatusReport` from a
-    :class:`~core.runtime_introspection.RuntimeIntrospectionSnapshot`.
-
-    Parameters
-    ----------
-    snapshot:
-        A :class:`~core.runtime_introspection.RuntimeIntrospectionSnapshot`
-        instance.
-
-    Returns
-    -------
-    ArchitectureStatusReport
-    """
-    # Extract per-layer sub-dicts from raw_metadata if available
-    raw = getattr(snapshot, "raw_metadata", {}) or {}
-
-    # Reconstruct minimal layer dicts from the snapshot fields
-    shell_result: Optional[Dict[str, Any]] = None
-    if snapshot.runtime_shell_authority:
-        shell_result = {
-            "arch_layer_id": "runtime_shell",
-            "authority_metadata": {"layer_role": snapshot.runtime_shell_authority},
-        }
-
-    core_result: Optional[Dict[str, Any]] = None
-    if snapshot.subject_decision_authority:
-        core_result = {
-            "arch_layer_id": "subject_core",
-            "metadata": {
-                "authority_role": snapshot.subject_decision_authority,
-                "kernel_cognition_role": snapshot.cognition_layer_role,
-            },
-        }
-
-    sub_result: Optional[Dict[str, Any]] = None
-    if snapshot.execution_substrate_role:
-        sub_result = {
-            "arch_layer_id": "execution_substrate",
-            "execution_substrate_role": snapshot.execution_substrate_role,
-        }
-
-    orch_meta: Optional[Dict[str, Any]] = None
-    if snapshot.orchestration_role:
-        orch_meta = {
-            "arch_layer_id": "orchestration_layer",
-            "orchestration_role": snapshot.orchestration_role,
-        }
-
-    return build_architecture_status_report(
-        runtime_shell_result=shell_result,
-        subject_core_result=core_result,
-        substrate_result=sub_result,
-        orchestration_meta=orch_meta,
-    )
-
-

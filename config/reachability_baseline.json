@@ -2,7 +2,6 @@
   "unreachable": [
     "core.hybrid_execution_policy",
     "core.local_agent_runtime",
-    "core.runtime_introspection",
     "core.truth_conflict_enforcement"
   ],
   "_comment": [
@@ -35,7 +34,6 @@
     "=========================================================================",
     "  没有证据就接，等于用生产行为换一个假设。要接先拿复现。",
     "",
-    "  core.runtime_introspection (597)",
     "      自己 docstring 就写着『不是生产遥测管线，是给调试和测试断言用的』。活路径在",
     "      5 处手搓 introspection_snapshot 扁平字典，形状够用。",
     "  core.truth_conflict_enforcement (979)",
