@@ -20,7 +20,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -80,6 +80,53 @@ def extract_infra_ports(ports_yaml: dict) -> Dict[str, int]:
     return result
 
 
+def extract_surface_aliases(ports_yaml: dict) -> Dict[str, str]:
+    """Return ``{service: the_service_it_shares_a_surface_with}``.
+
+    ``same_surface_as`` 声明的是"这两条记的是**同一个服务面**，只是部署形态不同"，
+    而不是"两个服务抢同一个端口"。目前唯一一条是 ``gateway → unified_launcher``：
+    同一份 API 网关表面，桌面单进程由 ``launcher/services.py`` 起、容器由
+    ``galaxy-gateway`` 起，任何一次部署只会有其中一条在跑。
+
+    在此之前这件事只写在中文描述里，:func:`check_port_uniqueness` 看不见，于是把它
+    判成 PORT CONFLICT —— 在 main 上长期红着，而每个来查的人都得把整条部署链重走
+    一遍才能确认它不是缺陷。
+    """
+    out: Dict[str, str] = {}
+    infra = ports_yaml.get("infrastructure", {})
+    services = infra.get("services", infra)
+    if not isinstance(services, dict):
+        return out
+    for svc_name, svc_cfg in services.items():
+        if isinstance(svc_cfg, dict) and svc_cfg.get("same_surface_as"):
+            out[svc_name] = str(svc_cfg["same_surface_as"])
+    return out
+
+
+def check_surface_aliases(
+    infra_ports: Dict[str, int],
+    aliases: Dict[str, str],
+) -> List[str]:
+    """声明了同一服务面的两条，端口**必须相等**。
+
+    这才是把声明变成判据的那一半:不加这条，``same_surface_as`` 就只是一张让人
+    闭嘴的豁免票。加上之后，将来谁把其中一个挪走而忘了另一个，立刻红 —— 比原来
+    那条"端口不许重复"更严，因为它管的是**必须一致**。
+    """
+    errors: List[str] = []
+    for svc, target in aliases.items():
+        if target not in infra_ports:
+            errors.append(f"SURFACE ALIAS: '{svc}' 声明 same_surface_as '{target}'，但后者不在基础设施端口表里")
+            continue
+        if infra_ports.get(svc) != infra_ports[target]:
+            errors.append(
+                f"SURFACE ALIAS MISMATCH: '{svc}' (port {infra_ports.get(svc)}) 声明与 "
+                f"'{target}' (port {infra_ports[target]}) 是同一个服务面，端口却不一致 —— "
+                "同一个面就该是同一个口，改一个必须同时改另一个"
+            )
+    return errors
+
+
 def get_node_directories() -> List[str]:
     """Return list of Node_XX directory names under nodes/."""
     nodes_dir = PROJECT_ROOT / "nodes"
@@ -118,14 +165,23 @@ def get_compose_services(compose: dict) -> Dict[str, int]:
 def check_port_uniqueness(
     node_ports: Dict[str, int],
     infra_ports: Dict[str, int],
+    aliases: Optional[Dict[str, str]] = None,
 ) -> List[str]:
-    """Detect duplicate port assignments."""
+    """Detect duplicate port assignments.
+
+    ``aliases``(见 :func:`extract_surface_aliases`)里声明过"同一个服务面"的那些
+    条目跳过 —— 它们端口相同是**要求**，不是冲突。它们之间是否真的一致由
+    :func:`check_surface_aliases` 单独判，所以这里跳过不会放过任何东西。
+    """
     errors: List[str] = []
     seen: Dict[int, str] = {}
+    aliased = set(aliases or {})
 
     all_ports = {**{f"node:{k}": v for k, v in node_ports.items()}, **{f"infra:{k}": v for k, v in infra_ports.items()}}
 
     for label, port in sorted(all_ports.items(), key=lambda x: x[1]):
+        if label.startswith("infra:") and label.split(":", 1)[1] in aliased:
+            continue
         if port in seen:
             errors.append(f"PORT CONFLICT: port {port} assigned to both '{seen[port]}' and '{label}'")
         else:
@@ -219,7 +275,9 @@ def main() -> int:
     all_errors: List[str] = []
     all_warnings: List[str] = []
 
-    all_errors += check_port_uniqueness(node_ports, infra_ports)
+    surface_aliases = extract_surface_aliases(ports_yaml)
+    all_errors += check_port_uniqueness(node_ports, infra_ports, surface_aliases)
+    all_errors += check_surface_aliases(infra_ports, surface_aliases)
     all_errors += check_nodes_in_yaml(node_dirs, node_ports)
     all_errors += check_infra_vs_node_conflicts(node_ports, infra_ports)
 
