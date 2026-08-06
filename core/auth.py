@@ -356,20 +356,12 @@ def verify_api_token(token: str) -> bool:
         logger.warning("Token contains non-ASCII characters, rejecting")
         return False
 
-    # 每设备 token(配对发放的专属 token)优先校验:命中即通过,可按设备单独吊销。
-    # 与下面的环境共享 token 叠加生效——共享 token 保留作管理员兜底。
-    try:
-        from core.device_token_registry import verify_device_token
-
-        if verify_device_token(token) is not None:
-            return True
-    except Exception as exc:  # noqa: BLE001  注册表不可用不应阻断环境 token 校验
-        logger.debug("每设备 token 校验跳过(非致命): %s", exc)
-
+    # 这里只认「环境共享 token」这一种凭据。配对发放的是能力令牌
+    # (core.capability_token),它带 scope 与 subject 绑定,故意不在这里放行——
+    # 一张手表的令牌不该顺带打开整个管理面。设备入口自己去校验它。
     active = get_active_tokens()
 
     if not active:
-        # 无共享 env token:仅当每设备 token 也未命中时才失败(上面已 return True)。
         logger.warning("No active API tokens configured — token validation failed")
         return False
 

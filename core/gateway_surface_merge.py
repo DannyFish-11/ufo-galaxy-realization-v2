@@ -78,10 +78,10 @@ def merge_gateway_only_routers(router) -> None:
     # 那是正当的;而"两个不同的系统抢同一个端口"不是。
     #
     # 没有一并搬进来的是**重复实现**(见 config/api_surface_parity.json):
-    # 那些不是漏挂,是同一件事有两套做法、词汇还不一样(最典型的是设备配对:
-    # core/routes/pairing.py 用 /api/v1/pair/*,galaxy_gateway/api/pairing.py
-    # 用 /api/v1/pairing/*)。把两套一起挂上去只会让一个 app 里有两个配对系统,
-    # 那是把问题翻倍而不是解决 —— 该保留哪一套是产品决定,不该由这次接线顺手定。
+    # 那些不是漏挂,是同一件事有两套做法、词汇还不一样。设备配对曾经就是这样
+    # (/api/v1/pair/* 与 /api/v1/pairing/* 并存),那道题已经了结:留下 core/routes/pairing.py
+    # 的 /api/v1/pair/*,另一套连同它的每设备 token 注册表一起删掉了。
+    # 剩下的重复项同理 —— 该保留哪一套是产品决定,不该由这次接线顺手定。
     def _merge_router(target, incoming, label: str) -> None:
         """把 ``incoming`` 并进 ``target``,但**跳过已经存在的 (路径, 方法)**。
 
@@ -117,18 +117,6 @@ def merge_gateway_only_routers(router) -> None:
         ("galaxy_gateway.routes.sandbox", "router", "Sandbox (/api/v1/agents/sandbox/*)"),
         ("galaxy_gateway.routes.sync_status", "router", "同步状态 (/sync/status)"),
         ("galaxy_gateway.gateway_service", "router", "Gateway v5 (/api/v5/*)"),
-        # 设备准入审批(/api/v1/pairing/*)。
-        #
-        # 它**不是** core/routes/pairing.py 的重复实现 —— 两者是同一条路的两个阶段:
-        #   core    /api/v1/pair/*     PairingCodeRegistry:短码 → 配对链接的短时映射
-        #                              (card / peers / trust —— "你是谁、怎么找到我")
-        #   gateway /api/v1/pairing/*  DeviceEnrollmentCoordinator + DeviceTokenRegistry
-        #                              (enroll / approve / deny / pending —— "我批不批你进来")
-        # 一个是发现与换名片,一个是准入与发令牌。缺了后者,设备能被找到但进不来。
-        #
-        # 可搬性实测:挂在只有 core.api_routes 的 app 上,GET /api/v1/pairing/pending → 200
-        # (它走 core.device_enrollment 的模块级单例,不碰 gateway 的 app.state)。
-        ("galaxy_gateway.api.pairing", "router", "设备准入审批 (/api/v1/pairing/*)"),
         # 客户端配置发现(/api/v1/config)。读环境变量,不依赖 app.state;实测 → 200。
         # 与 core/routes/config.py 的 /api/config 形状不同(一个是给客户端的发现端点,
         # 一个是面板用的完整配置读写),两边都留,不互相顶替。

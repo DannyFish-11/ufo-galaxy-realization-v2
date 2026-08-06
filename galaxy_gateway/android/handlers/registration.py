@@ -602,6 +602,7 @@ def _verify_pairing_capability_token(token: str, device_id: str) -> bool:
     单独判、不塞进 ``core.auth.verify_api_token``:配对令牌按信任级别限定作用域,
     塞进通用校验就会被中间件当成合法 API 令牌,只读级别的手表随即能去写配置 ——
     那是提权。这里问的是另一个问题:"这台设备配过对吗",只在设备入口成立。
+
     绑定 ``subject == device_id``:否则一枚泄露的令牌换个 device_id 就能冒充接入。
     """
     try:
@@ -672,26 +673,13 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
             state = "token_invalid_compat"
             reason = "Invalid token provided in compatibility mode"
 
-    # 设备准入绑定:每设备 token 必须【发放给本 device_id】才算"本设备已批准",否则一枚
-    # 泄露的 token 换个 device_id 就能冒充接入,击穿"别处批准 · 每设备"模型。共享/环境
-    # 管理员 token(非每设备)则按 token_valid 视为管理员放行。查询失败回退 token_valid,
-    # 不因注册表异常把所有设备锁死。
-    device_approved = token_valid
-    if paired_token:
-        # 配对令牌天然绑定 device_id(上面已校验 subject),就是"本设备已批准"。
-        device_approved = True
-    try:
-        from core.device_token_registry import verify_device_token
-
-        if token and not paired_token:
-            per_device_rec = verify_device_token(token)
-            if per_device_rec is not None:
-                msg_device_id = str(message.get("device_id") or "").strip()
-                device_approved = bool(msg_device_id) and per_device_rec.get("device_id") == msg_device_id
-            else:
-                device_approved = token_valid  # 环境/共享管理员 token(或无效→False)
-    except Exception:  # noqa: BLE001  注册表不可用不应把设备锁死
-        device_approved = token_valid
+    # 设备准入绑定:配对令牌是唯一"绑到这台设备"的凭据——它的 subject 必须等于本条
+    # 消息的 device_id。环境共享 token 不绑设备,它代表管理员,按 token_valid 放行。
+    #
+    # 令牌被抄走、换台设备呈递时:subject 对不上 → paired_token False,而它也不是
+    # 环境 token → verify_api_token 也 False,于是 token_valid 与 device_approved
+    # 一并为 False。挡住这一条不需要额外分支,binding 本身就够。
+    device_approved = paired_token or token_valid
 
     return {
         "enforced": auth_enforced,
