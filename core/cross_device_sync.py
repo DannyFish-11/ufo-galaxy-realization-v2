@@ -358,6 +358,48 @@ async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
     )
 
 
+async def push_current_phase_to_device(device_id: str, *, sync_type: str = "cross_device_initial_sync") -> bool:
+    """把桌面**当前**相位单独推给一台刚接进来的设备。
+
+    为什么需要它
+    ============
+    相位广播只在**发生跃迁**时才发。设备是在两次跃迁之间接进来的,所以不补这一次,
+    它手里就什么都没有 —— 而"什么都没有"在设备上会被渲染成 SILENT。桌面明明正在
+    执行,新连上的手表却显示静默,并且要等到下一次相位变化才纠正。
+
+    Android 那条注册路径早就有这一步(见 handlers/registration.py),WearOS 走的是
+    ``websocket_handler.handle_register → connection_manager``,一直漏了。此前没暴露
+    出来,是因为手表自己拿连接态凑了个相位(鉴权成功即 MANIFEST)—— 那个凑出来的值
+    与桌面无关,现在撤掉了,这一步就必须补上。
+
+    Returns:
+        ``True`` 已推送;``False`` 拿不到相位、设备不在线或发送失败(非致命)。
+    """
+    try:
+        from core.desktop_presence_runtime import get_desktop_presence_runtime  # noqa: PLC0415
+
+        dpr = get_desktop_presence_runtime()
+        current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else ""
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CrossDeviceSync: presence runtime unavailable: %s", exc)
+        return False
+
+    if not current_phase:
+        return False
+
+    msg = build_phase_state_event(new_phase=current_phase, sync_type=sync_type)
+    try:
+        from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
+
+        await connection_manager.send_to_device(device_id, msg)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CrossDeviceSync: initial phase push to %s failed: %s", device_id, exc)
+        return False
+
+    logger.info("CrossDeviceSync: initial phase=%s pushed to device=%s", current_phase, device_id)
+    return True
+
+
 async def _push_to_one_device(
     device_id: str,
     device: Any,
