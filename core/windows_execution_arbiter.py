@@ -1144,5 +1144,9 @@ def get_last_attempt_log() -> List[Dict[str, Any]]:
             return []
         latest = history[-1]
         return list(latest.get("attempts") or [])
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        # 读失败与"本进程从未调用过仲裁器"原来同取 []，消费方
+        # （orchestration_review_surface）分不开，复盘界面会显示"无降级记录"
+        # 而不是"取不到记录"。空列表照返（调用方签名不变），但至少留下痕迹。
+        logger.warning("get_last_attempt_log 读取失败，返回空列表并非'没有记录'：%s", exc)
         return []

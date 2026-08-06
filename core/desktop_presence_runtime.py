@@ -2769,8 +2769,12 @@ class DesktopPresenceRuntime:
                 "DesktopPresenceRuntime.production_baseline_summary failed (non-fatal): %s",
                 _err,
             )
+            # 兜底值本身不许撒谎：摘要都构建失败了，凭什么报告"基线处于激活状态"。
+            # 消费方看到 baseline_active=True 会当成"基线正常"，而真相是我们
+            # **不知道** —— 这两件事必须分得开。
             return {
-                "baseline_active": True,
+                "baseline_active": None,
+                "baseline_status": "unknown",
                 "error": str(_err),
             }
 
