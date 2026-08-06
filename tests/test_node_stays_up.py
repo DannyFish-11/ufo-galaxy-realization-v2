@@ -47,9 +47,22 @@ NODES_DIR = REPO_ROOT / "nodes"
 LINGER_S = 16.0
 BOOT_TIMEOUT_S = 60.0
 
-# 目前只钉这一个:它是唯一被实测抓到"跑完演示就退"的节点。加节点进来是廉价的,
-# 但每个都要真起进程,所以按需要加,不做成全量扫描(125 个节点真跑要十几分钟)。
-NODES_UNDER_TEST = ["Node_125_MediaGen"]
+# 每个都要真起进程,所以按需要加,不做成全量扫描(125 个节点真跑要十几分钟)。
+#
+# Node_125_MediaGen —— 跑完演示就退(本文件开头讲的那个)。
+# Node_25_GoogleSearch —— 入口处一句多余的 `import googlesearch` 硬检查 + exit(1)。
+#   与它自己的设计矛盾:文件顶部早有 _GOOGLESEARCH_AVAILABLE 守卫,搜索实现也明写
+#   「优先 Custom Search API,回退 googlesearch-python」—— 配了 API Key 的用户压根
+#   不需要那个库,却被入口堵死。
+# Node_33_ADB —— 宿主机没装 adb 时,start() 里的 ADBNotAvailableError 一路穿到
+#   FastAPI startup,节点直接 Exiting。而它在 registry/device_node_map.yaml 里是
+#   on_demand:android_phone,设计上就是「有安卓设备才拉起来」,没有 adb 时的正确
+#   姿态是**起来并如实说自己不可用**,而不是消失(消失之后启动器只会报"启动超时",
+#   真实原因没有任何地方说得出来)。
+#
+# 注:这两个在**装了** adb / googlesearch-python 的机器上走的是正常路径,测试照样
+# 绿 —— 它是回归守卫,不是环境探测。真正区分两条路径的是各自的 /health 字段。
+NODES_UNDER_TEST = ["Node_125_MediaGen", "Node_25_GoogleSearch", "Node_33_ADB"]
 
 
 def _port_open(port: int) -> bool:
