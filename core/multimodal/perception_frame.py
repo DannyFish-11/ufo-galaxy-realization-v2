@@ -73,6 +73,10 @@ class ScreenState:
     # 单调递增：每检测到一次足够大的变化 +1。慢节拍消费者靠"序号有没有变"判断
     # "从我上次看之后变没变过"，不受采集节拍影响（change_score 会被后续帧消化回 0）。
     change_seq: int = 0
+    # 上面这个 change_score 是不是**降级值**：走了字节兜底（帧解码失败 / 依赖缺失 /
+    # 非图像负载如音频）。降级时 change_score 只有 0/1 两个取值，表示"变没变"，
+    # **不是变化幅度** —— 按幅度排序前必须看这一位。见 core/multimodal/frame_gate.py。
+    change_score_degraded: bool = False
     meta: Optional[Dict[str, Any]] = None  # structured screen context (UIA tree, etc.)
     screen_freshness_ms: float = 0.0
     has_image: bool = False
@@ -94,6 +98,10 @@ class SystemAudioState:
     mime: str = "audio/webm"
     change_score: float = 0.0  # 0..1 change vs previous clip（采集层单一门控算出）
     change_seq: int = 0  # 单调递增，语义同 ScreenState.change_seq
+    # 上面这个 change_score 是不是**降级值**：走了字节兜底（帧解码失败 / 依赖缺失 /
+    # 非图像负载如音频）。降级时 change_score 只有 0/1 两个取值，表示"变没变"，
+    # **不是变化幅度** —— 按幅度排序前必须看这一位。见 core/multimodal/frame_gate.py。
+    change_score_degraded: bool = False
     audio_freshness_ms: float = 0.0
     has_audio: bool = False
 
@@ -249,6 +257,7 @@ class PerceptionFrame:
                 "mime": self.system_audio.mime,
                 "change_score": self.system_audio.change_score,
                 "change_seq": self.system_audio.change_seq,
+                "change_score_degraded": self.system_audio.change_score_degraded,
                 "audio_freshness_ms": self.system_audio.audio_freshness_ms,
             }
 
@@ -263,6 +272,7 @@ class PerceptionFrame:
                 "mime": getattr(self.video, "mime", ""),
                 "change_score": getattr(self.video, "change_score", 0.0),
                 "change_seq": getattr(self.video, "change_seq", 0),
+                "change_score_degraded": getattr(self.video, "change_score_degraded", False),
             }
 
         if self.screen is not None:
@@ -272,6 +282,7 @@ class PerceptionFrame:
                 "mime": self.screen.mime,
                 "change_score": self.screen.change_score,
                 "change_seq": self.screen.change_seq,
+                "change_score_degraded": self.screen.change_score_degraded,
                 "meta_present": self.screen.meta is not None,
                 "screen_freshness_ms": self.screen.screen_freshness_ms,
             }

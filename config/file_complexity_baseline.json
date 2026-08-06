@@ -57,7 +57,7 @@
     "core/full_system_baseline_v3.py": 2060,
     "core/github_installer.py": 1644,
     "core/hybrid_orchestration_continuity.py": 1283,
-    "core/local_brain_manager.py": 1102,
+    "core/local_brain_manager.py": 1107,
     "core/mainline_convergence.py": 1153,
     "core/master_brain.py": 2016,
     "core/mesh/live_mesh_runtime_engine.py": 1462,

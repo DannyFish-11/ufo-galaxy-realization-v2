@@ -9,9 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.hardware_compute_profiler import VRAM_HEADROOM_FACTOR
+
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
 _BACKGROUND_TASKS: set = set()
+
 
 logger = logging.getLogger("Galaxy.LocalBrain")
 
@@ -40,10 +43,12 @@ class HardwareProfile:
     quantization: str = "none"  # 当前量化方式
 
     def can_fit_model(self, model_size_mb: int) -> bool:
-        """判断 VRAM 是否足够加载模型"""
-        available_vram = self.vram_mb - self.vram_used_mb
-        # 预留 10% 缓冲
-        return available_vram * 0.9 >= model_size_mb
+        """判断 VRAM 是否足够加载模型。余量与 ``GPUProfile.can_fit_model`` 同源。
+
+        原来这里另有一套 10% 余量的判据，与权威的 20% 会打架；实测数据见
+        ``tests/test_vram_fit_has_one_criterion.py``。
+        """
+        return (self.vram_mb - self.vram_used_mb) > model_size_mb * VRAM_HEADROOM_FACTOR
 
 
 class LocalBrainManager:
