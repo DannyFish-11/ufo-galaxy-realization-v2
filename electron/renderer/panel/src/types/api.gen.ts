@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 389 条 · 组件 schema 102 个
+// 路径 390 条 · 组件 schema 102 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -254,6 +254,7 @@ export type ApiPath =
   | "/api/v1/pair/card"
   | "/api/v1/pair/check"
   | "/api/v1/pair/claim"
+  | "/api/v1/pair/paths"
   | "/api/v1/pair/peers"
   | "/api/v1/pair/peers/{device_id}"
   | "/api/v1/pair/trust"
@@ -647,6 +648,7 @@ export const API_METHODS = {
   "/api/v1/pair/card": ["get"],
   "/api/v1/pair/check": ["post"],
   "/api/v1/pair/claim": ["post"],
+  "/api/v1/pair/paths": ["get"],
   "/api/v1/pair/peers": ["get"],
   "/api/v1/pair/peers/{device_id}": ["delete", "get"],
   "/api/v1/pair/trust": ["post"],
@@ -871,8 +873,12 @@ export interface CheckRequest {
 
 export interface ClaimRequest {
   "auto_accept"?: Array<string> | null;
+  "capabilities"?: Array<string> | null;
   "code"?: string | null;
+  "device_id": string;
+  "device_type"?: string;
   "link"?: string | null;
+  "name"?: string;
   "note"?: string;
   "token_ttl_s"?: number;
   "trust"?: string;
