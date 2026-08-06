@@ -47,7 +47,7 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
-from typing import Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from core.activation_policy import ActivationPolicy
 
@@ -57,6 +57,9 @@ __all__ = [
     "NODE_ACTIVATION_POLICY_SENTINEL",
     "resolve_activation_policy",
     "activation_policy_coverage",
+    "set_activation_executor",
+    "get_activation_executor",
+    "ensure_node_started",
 ]
 
 NODE_ACTIVATION_POLICY_SENTINEL = "NODE_ACTIVATION_POLICY::PER_NODE_TIER_DERIVATION"
@@ -161,3 +164,85 @@ def activation_policy_coverage() -> Dict[str, Dict[str, Optional[str]]]:
         policy, source = resolve_activation_policy(d.name)
         out[d.name] = {"policy": policy.value if policy else None, "source": source}
     return out
+
+
+# ---------------------------------------------------------------------------
+# 执行器:算出"该起"之后，谁去把它起起来
+# ---------------------------------------------------------------------------
+#
+# **只有这一个插槽。** 上一版把它挂在 UDMRegistrationHook 上,那时只有"设备注册"
+# 一个触发时机;现在 LAZY 档要在"首次能力请求"时也起节点,再挂第二个插槽就又是
+# 两套并行实现 —— 那正是这一轮一直在修的毛病。收敛到这里,hook 转发过来。
+_executor: Optional[Callable[..., Any]] = None
+
+
+def set_activation_executor(executor: Optional[Callable[..., Any]]) -> None:
+    """登记"真的去把节点拉起来"的那个人。
+
+    决策在 ``core/``,执行在 ``launcher/``(它握着 ``NodeSystemLauncher``)。
+    ``core`` 是底层不该反向依赖 —— 所以由 ``launcher`` 在启动时单向注册进来。
+
+    Args:
+        executor: ``async (node_name, decision, device_type, transport) -> Any``；
+            传 ``None`` 取消登记(测试用)。
+    """
+    global _executor
+    _executor = executor
+
+
+def get_activation_executor() -> Optional[Callable[..., Any]]:
+    """当前登记的执行器；``None`` 表示只记账不执行。"""
+    return _executor
+
+
+async def ensure_node_started(node_name: str, trigger: str) -> Optional[str]:
+    """按 ``node_name`` 的档位判断这个触发时机该不该起它，该起就起。
+
+    这是 **LAZY 档唯一的落地点**。仓里定义了
+    ``ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST``,四档策略里 LAZY 的语义
+    也白纸黑字写着"首次能力请求时启动,然后保活" —— 但在此之前**全仓没有任何一处
+    发出这个触发**。103 个节点被定成 lazy,而 lazy 永远不会发生。
+
+    Args:
+        node_name: 完整节点名。
+        trigger: :class:`~core.activation_policy.ActivationPolicyEngine` 的
+            ``TRIGGER_*`` 之一。
+
+    Returns:
+        真起起来了返回节点名；不该起、没登记执行器、或起失败都返回 ``None``。
+        **任何情况下都不抛** —— 拉不起来是"这个能力暂时不可用",不该把调用方的
+        主流程也带走。
+    """
+    policy, source = resolve_activation_policy(node_name)
+    if policy is None:
+        logger.debug("%s 是 %s,不启动", node_name, source)
+        return None
+
+    if _executor is None:
+        logger.debug("没有登记激活执行器,%s 的 %s 触发只记账不执行", node_name, trigger)
+        return None
+
+    try:
+        from core.activation_policy import ActivationDecision, ActivationPolicyEngine
+
+        # 按档位判断这个触发时机成不成立。不能"有触发就起" —— on_demand 的节点
+        # 不该被一次能力请求拽起来(它要真实设备),always_on 的也不该在这里重复起。
+        should = {
+            ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST: policy.should_start_on_first_use(),
+            ActivationPolicyEngine.TRIGGER_DEVICE_REGISTERED: policy.should_start_on_device_registration(),
+            ActivationPolicyEngine.TRIGGER_BOOT: policy.should_start_with_core(),
+        }.get(trigger, False)
+        if not should:
+            logger.debug("%s 是 %s 档,%s 这个时机不该起它", node_name, policy.value, trigger)
+            return None
+
+        decision = ActivationDecision(
+            node=node_name,
+            policy=policy,
+            should_start=True,
+            reason=f"{policy.value}: {trigger}（档位来源 {source}）",
+        )
+        return await _executor(node_name=node_name, decision=decision, device_type=None, transport=None)
+    except Exception as exc:
+        logger.warning("激活 %s 失败(不影响调用方):%s", node_name, exc)
+        return None

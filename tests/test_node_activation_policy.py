@@ -196,3 +196,124 @@ def test_engine_get_core_nodes_is_no_longer_empty():
     assert core, "get_core_nodes() 又回到空表了"
     expected = {n for n, v in activation_policy_coverage().items() if v["policy"] == ActivationPolicy.ALWAYS_ON.value}
     assert set(core) == expected, f"与档位表不一致:多 {set(core) - expected};少 {expected - set(core)}"
+
+
+# ── 6. LAZY 的落地点:首次能力请求 ───────────────────────────────────────────
+#
+# 仓里定义了 TRIGGER_CAPABILITY_REQUEST，四档里 LAZY 的语义也白纸黑字写着「首次
+# 能力请求时启动，然后保活」—— 但在此之前**全仓没有任何一处发出这个触发**。
+# 103 个节点被定成 lazy，而 lazy 永远不会发生。
+
+
+@pytest.fixture()
+def executor_slot():
+    """借用执行器插槽，用完必须还回去 —— 它是模块级单例。"""
+    from core.node_activation_policy import get_activation_executor, set_activation_executor
+
+    before = get_activation_executor()
+    calls = []
+
+    async def _exec(*, node_name, decision, device_type, transport):
+        calls.append((node_name, decision.policy.value, decision.reason))
+        return node_name
+
+    set_activation_executor(_exec)
+    yield calls
+    set_activation_executor(before)
+
+
+async def test_capability_request_starts_a_lazy_node(executor_slot):
+    """这是修复前从未发生过的事:一次能力请求把 lazy 节点拉起来。"""
+    from core.activation_policy import ActivationPolicyEngine
+    from core.node_activation_policy import ensure_node_started
+
+    started = await ensure_node_started("Node_101_CodeEngine", ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST)
+
+    assert started == "Node_101_CodeEngine", "lazy 节点没有被首次能力请求拉起来"
+    assert executor_slot and executor_slot[0][1] == "lazy"
+
+
+async def test_capability_request_does_not_drag_up_an_on_demand_node(executor_slot):
+    """``on_demand`` 的节点要**真实设备**，不该被一次能力请求拽起来。
+
+    不加这条判断的话，"有触发就起"会让 Node_33_ADB 在没有任何安卓设备时被拉起来
+    —— 而它在那种情况下只能走 mock 兜底，等于凭空多一个空转进程。
+    """
+    from core.activation_policy import ActivationPolicyEngine
+    from core.node_activation_policy import ensure_node_started
+
+    started = await ensure_node_started("Node_33_ADB", ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST)
+
+    assert started is None, "on_demand 节点被能力请求拽起来了"
+    assert not executor_slot, f"不该起却调用了执行器:{executor_slot}"
+
+
+async def test_skip_nodes_are_never_started(executor_slot):
+    """``skip`` 的节点任何触发都不许起 —— 包括 Node_130。"""
+    from core.activation_policy import ActivationPolicyEngine
+    from core.node_activation_policy import ensure_node_started
+
+    for trigger in (
+        ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST,
+        ActivationPolicyEngine.TRIGGER_DEVICE_REGISTERED,
+        ActivationPolicyEngine.TRIGGER_BOOT,
+    ):
+        assert await ensure_node_started("Node_130_AutonomousCoding", trigger) is None, trigger
+    assert not executor_slot
+
+
+async def test_no_executor_means_no_crash_and_no_start():
+    """没登记执行器时安静返回 None —— 单跑 core 的场景不能因此炸掉。"""
+    from core.activation_policy import ActivationPolicyEngine
+    from core.node_activation_policy import ensure_node_started, get_activation_executor, set_activation_executor
+
+    before = get_activation_executor()
+    set_activation_executor(None)
+    try:
+        assert (
+            await ensure_node_started("Node_101_CodeEngine", ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST) is None
+        )
+    finally:
+        set_activation_executor(before)
+
+
+async def test_executor_failure_is_swallowed(executor_slot):
+    """执行器炸了不该把调用方的主流程带走 —— 拉不起来只是"能力暂时不可用"。"""
+    from core.activation_policy import ActivationPolicyEngine
+    from core.node_activation_policy import ensure_node_started, get_activation_executor, set_activation_executor
+
+    before = get_activation_executor()
+
+    async def _boom(*, node_name, decision, device_type, transport):
+        raise RuntimeError("执行器炸了")
+
+    set_activation_executor(_boom)
+    try:
+        assert (
+            await ensure_node_started("Node_101_CodeEngine", ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST) is None
+        )
+    finally:
+        set_activation_executor(before)
+
+
+async def test_call_node_actually_reaches_the_lazy_trigger(executor_slot):
+    """``NodeRegistry.call_node`` 调一个还没起来的 lazy 节点时，必须真的发出触发。
+
+    **判据是行为，不是 AST。** 先写的是"``node_registry.py`` 里存在一处
+    ``ensure_node_started`` 调用"——变异验证当场证明它是弱的：把 ``call_node``
+    里那句 ``await self._try_lazy_start(...)`` 掐掉之后，``ensure_node_started``
+    依然留在 ``_try_lazy_start`` 的函数体里，AST 照样找得到，测试照样绿，而整条
+    链其实已经断了。
+
+    这里改成真的走一遍 ``call_node``：节点不在注册表里 → 应当触发惰性启动 →
+    执行器被调到。掐断调用点就立刻红。
+    """
+    from core.node_registry import NodeRegistry
+
+    registry = NodeRegistry()
+    # Node_101_CodeEngine 是 lazy 档，且不在注册表里 —— 正是"首次能力请求"的场景。
+    await registry.call_node("Node_101_CodeEngine", "ping", {}, allow_failover=False)
+
+    assert executor_slot, "call_node 遇到未起来的 lazy 节点，却没有发出惰性启动触发"
+    assert executor_slot[0][0] == "Node_101_CodeEngine"
+    assert executor_slot[0][1] == "lazy"

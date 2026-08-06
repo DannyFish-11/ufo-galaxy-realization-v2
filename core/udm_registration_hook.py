@@ -60,7 +60,6 @@ class UDMRegistrationHook:
 
     def __init__(self) -> None:
         self._listening = False
-        self._activation_executor: Optional[Callable[..., Any]] = None
 
     # -- 执行器插槽:算出来的决定要有人去执行 ---------------------------------
 
@@ -84,11 +83,19 @@ class UDMRegistrationHook:
         也就是说：会算的那个不会做，会做的那个没人叫。整套「设备插上来就把对应
         节点拉起来」的机制，两半都写好了，中间这根线是空的。
 
+        **插槽只有一个,在 :mod:`core.node_activation_policy`。** 这里是转发。
+        起初它长在本类身上,那时只有"设备注册"一个触发时机;后来 LAZY 档要在
+        "首次能力请求"时也起节点,若各挂一个插槽就又成了两套并行实现 —— 那正是
+        这一轮一直在修的毛病。保留本方法是因为它是这条链的自然入口,调用方不必
+        知道插槽搬到哪儿去了。
+
         Args:
             executor: ``async (node_name, decision, device_type, transport) -> Any``；
                 传 ``None`` 取消登记（测试用）。
         """
-        self._activation_executor = executor
+        from core.node_activation_policy import set_activation_executor
+
+        set_activation_executor(executor)
 
     async def _execute_activation(
         self,
@@ -98,11 +105,14 @@ class UDMRegistrationHook:
         transport: Optional[str],
     ) -> Optional[str]:
         """把决定交给执行器。**失败绝不能影响设备注册本身。**"""
-        if self._activation_executor is None:
+        from core.node_activation_policy import get_activation_executor
+
+        executor = get_activation_executor()
+        if executor is None:
             logger.debug("[UDMHook] 没有登记激活执行器，%s 的 should_start 只记账不执行", node_name)
             return None
         try:
-            return await self._activation_executor(
+            return await executor(
                 node_name=node_name,
                 decision=decision,
                 device_type=device_type,
