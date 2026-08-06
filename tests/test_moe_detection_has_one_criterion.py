@@ -162,7 +162,10 @@ def test_moe_flag_actually_reaches_the_split():
     """
     from core.compute_scheduler import ComputeScheduler, SchedulerConfig
 
-    sched = ComputeScheduler.__new__(ComputeScheduler)
+    # 必须是 object.__new__：ComputeScheduler 是单例，``Cls.__new__(Cls)`` 拿到的
+    # 是**进程级单例本身**，给它挂 config 会污染整个测试会话
+    # （tests/test_no_test_hijacks_a_singleton.py 钉着这条）。
+    sched = object.__new__(ComputeScheduler)
     sched.config = SchedulerConfig()
 
     # 24G 卡剩 6G，要放 20G 的模型：整模型放不下，但注意力+共享层（10%）放得下。
