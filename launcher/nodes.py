@@ -93,6 +93,10 @@ NODE_GROUPS: Sequence[str] = (
     "orchestration",
     "multimodal",
     "academic",
+    # 补全 config/unified_config.json 后多出来的两个组。不加进这里的话，
+    # `--group development` 会被 argparse 直接拒掉("invalid choice")。
+    "development",
+    "extended",
     "all",
 )
 
@@ -630,8 +634,16 @@ class SystemManager:
                 "orchestration",
                 "multimodal",
                 "academic",
+                "development",
+                "extended",
             ]
+            # 只按 priority_order 取会**静默丢掉**表里没列到的组。此前
+            # config/unified_config.json 少了 21 个节点，补全之后多出
+            # development / extended 两个组 —— 忘了加进这张表的话，那 18 个节点
+            # `--group all` 一个都不会碰，而输出里什么都不会说。
+            # 这里先按优先级排，再把剩下的接在后面:新增组永远不会被静默漏掉。
             groups = [g for g in priority_order if g in NODES]
+            groups += [g for g in sorted(NODES) if g not in priority_order]
 
         print(f"\n{CYAN}{'='*80}{RESET}")
         print(f"{CYAN}Galaxy 系统启动{RESET}")
