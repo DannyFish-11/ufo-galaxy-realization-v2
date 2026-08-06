@@ -674,20 +674,71 @@ class WindowsExecutionArbiter:
         )
         try:
             asyncio.get_running_loop()
-            # Already inside a running event loop — cannot call run_until_complete.
-            # Dispatch to a separate thread with its own event loop via asyncio.run().
-            # Note: this approach spawns a new thread and loop, so thread-local state
-            # or resources tied to the caller's loop are NOT shared.  For most Windows
-            # automation actions this is acceptable; callers that need tighter loop
-            # coupling should use `await execute(...)` directly.
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, coro)
-                win_result = future.result(timeout=30)
         except RuntimeError:
             # No running event loop — use asyncio.run() which creates one.
-            win_result = asyncio.run(coro)
+            return asyncio.run(coro).to_dict()
+
+        # Already inside a running event loop — cannot call run_until_complete.
+        # Dispatch to a separate thread with its own event loop via asyncio.run().
+        # Note: this approach spawns a new thread and loop, so thread-local state
+        # or resources tied to the caller's loop are NOT shared.  For most Windows
+        # automation actions this is acceptable; callers that need tighter loop
+        # coupling should use `await execute(...)` directly.
+        #
+        # 这里原来是：
+        #     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        #         future = pool.submit(asyncio.run, coro)
+        #         win_result = future.result(timeout=30)
+        #     except RuntimeError:   # ← 顺带兜 asyncio.get_running_loop()
+        # 三处都不对：
+        #
+        # 1. **这个 timeout 根本不超时。** ``with`` 退出时 ``shutdown(wait=True)``
+        #    会一直阻塞到任务真正跑完，然后才把 TimeoutError 抛出去。实测
+        #    timeout=0.5s、任务 3s：0.5s 没有任何反应，3.00s 才抛。净效果是既没
+        #    提前返回，又把**已经算出来的结果丢掉**。
+        # 2. ``concurrent.futures.TimeoutError`` 不是 ``RuntimeError`` 的子类
+        #    （实测 issubclass(...) 为 False），``except RuntimeError`` 接不住，
+        #    直接外抛到 windows_client 的 except Exception 里兜成"执行失败" ——
+        #    而闭环还在真地点鼠标、敲键盘。
+        # 3. 30 秒这个数是凭空写的，与被它包住的东西无关：第 4 级委托给
+        #    ``run_computer_use_task``，其真实上界是 max_steps × (规划 60s + 静置)，
+        #    默认 15 × 61 ≈ 915 秒。判据与被判对象来源不同源。
+        #
+        # 改：超时从**真实预算**派生；不用 ``with`` 以免 shutdown 把超时吃掉；
+        # 超时按 WinExecStatus.TIMEOUT 如实返回，不再伪装成别的失败。
+        import concurrent.futures
+
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="win-arbiter")
+        future = pool.submit(asyncio.run, coro)
+        budget_s = _sync_dispatch_budget_s()
+        try:
+            win_result = future.result(timeout=budget_s)
+        except concurrent.futures.TimeoutError:
+            # 不等它：wait=False 才能真的提前返回。线程会自己跑完并退出。
+            pool.shutdown(wait=False)
+            logger.error(
+                "route_command 超出同步派发预算 %.0fs（action=%s device=%s）——"
+                "后台线程仍在跑，调用方拿到的是 timeout 而不是伪装的失败",
+                budget_s,
+                action,
+                device_id,
+            )
+            return WinExecResult(
+                request_id=str(uuid.uuid4())[:12],
+                success=False,
+                final_level=WinExecLevel.VLM,
+                device_id=device_id,
+                action_summary=_build_action_summary(action, params or {}, device_id),
+                result={
+                    "error": f"sync dispatch exceeded {budget_s:.0f}s budget",
+                    "status": WinExecStatus.TIMEOUT.value,
+                    # 说清"后台还在跑"——调用方据此知道这不是"没发生"，
+                    # 而是"发生了但我们不再等它"。
+                    "detached": True,
+                },
+            ).to_dict()
+        else:
+            pool.shutdown(wait=False)
         return win_result.to_dict()
 
     # ------------------------------------------------------------------
@@ -945,6 +996,36 @@ class WindowsExecutionArbiter:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+#: 同步派发（``route_command``）等待第 4 级的余量倍数。第 4 级委托给
+#: ``run_computer_use_task``，其真实上界由 computer_use_loop 的常量决定；这里只加
+#: 一点余量给截图/派发本身，**不另立一个数**。
+_SYNC_DISPATCH_HEADROOM = 1.2
+
+#: computer_use 不可用（未装/被关）时的同步派发上限。此时第 4 级不会真的跑起来，
+#: 前三级都是本机 API 调用，秒级返回。
+_SYNC_DISPATCH_FALLBACK_S = 60.0
+
+
+def _sync_dispatch_budget_s() -> float:
+    """``route_command`` 该等多久 —— 从**被等的那个东西**的预算派生。
+
+    原来这里写死 30 秒，而第 4 级（VLM）委托的 ``run_computer_use_task`` 上界是
+    ``max_steps × (规划超时 + 静置)``，默认 15 × (60 + 1) ≈ 915 秒。判据与被判
+    对象来源不同源，差了一个数量级 —— 而且那 30 秒因为 ``shutdown(wait=True)``
+    根本没起作用（见 ``route_command`` 里的说明），所以一直没人发现。
+
+    改成从 computer_use_loop 的常量算：那边调 ``GALAXY_CU_MAX_STEPS`` /
+    ``GALAXY_CU_SETTLE_S``，这边自动跟着走。
+    """
+    try:
+        from core.computer_use_loop import _max_steps, _settle_s  # noqa: PLC0415
+
+        per_step_s = 60.0 + _settle_s()  # 60.0 = 规划调用的 wait_for 超时
+        return _max_steps() * per_step_s * _SYNC_DISPATCH_HEADROOM
+    except Exception:  # noqa: BLE001 — computer_use 不可用时第 4 级本就跑不起来
+        return _SYNC_DISPATCH_FALLBACK_S
 
 
 def _build_action_summary(action: str, params: Dict[str, Any], device_id: str) -> str:

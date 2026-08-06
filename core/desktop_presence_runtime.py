@@ -1226,11 +1226,13 @@ class DesktopPresenceRuntime:
             # 账单挂进响应供面板/调用方直读本次任务的总消耗。
             if _bill_token is not None:
                 try:
+                    # 同上：与反思/预测器共用收敛权威的口径，别再各写一套。
+                    from core.flow_aware_result_convergence import derive_result_success as _derive_success
                     from core.task_cost_ledger import close_task_bill
 
                     _task_bill = close_task_bill(
                         _bill_token,
-                        success=bool(result.get("success", True)),
+                        success=_derive_success(result)[0],
                     )
                     if _task_bill:
                         result["task_cost"] = _task_bill
@@ -1862,12 +1864,20 @@ class DesktopPresenceRuntime:
             都会打一条 "unknown source" 警告(功能上靠兜底分支恰好走对了地方,
             参数与白名单分支完全一致)。常驻循环默认开启后,这条警告会变成
             **每次自主行动都刷一条**的噪音,且把主体自己的通道标成了外来调用者。
+
+        .. note:: ``"active_perception"`` 与 ``"ambient"`` **完全同形**,当时只补了
+            后者。``_submit_autonomous_goal`` 用这个来源走正门进来
+            (``source="active_perception"``),但它同样不在表里 ——
+            ``GALAXY_ACTIVE_PERCEPTION=1`` 一开,主动感知每产出一个自发目标就刷
+            一条 "unknown source" 警告。同样是功能上兜底恰好走对、可观测性上把
+            主体自己的通道标成外来未知调用者。
         """
         if source in (
             "chat",
             "voice",
             "openclawd",
             "ambient",
+            "active_perception",
             "android_vision",
             "vision_sampler",
             "operator",
@@ -2045,7 +2055,18 @@ class DesktopPresenceRuntime:
         # ── PR-25/27: Post-execution cognitive reflection ────────────────
         try:
             _result_text = result.get("response", "") or result.get("reply", "")
-            _success = not result.get("error") and not result.get("failed")
+            # 走收敛权威（core.flow_aware_result_convergence），不要自己拼一套。
+            #
+            # 原来这里是 `not result.get("error") and not result.get("failed")` ——
+            # **完全不看 result["success"]**。而本仓最常见的失败形状恰恰是软失败：
+            # {"success": False, "response": "抱歉，我没能打开那个应用"}，不带
+            # error/failed 键。于是 _success 算成 True，接着喂给下面的
+            # reflect_retrospective 与 predictor.record_outcome —— 自适应预测器
+            # 把一次失败当成功记进策略标定，下次更倾向于再推荐这条失败过的策略
+            # （strategy_confidence > 0.75 那个阈值就是拿这份被污染的数据算的）。
+            from core.flow_aware_result_convergence import derive_result_success
+
+            _success, _ = derive_result_success(result)
 
             # Retrospective reflection
             from core.cognitive.reflection_engine import get_reflection_engine
