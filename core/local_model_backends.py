@@ -21,7 +21,6 @@ import asyncio
 import gc
 import logging
 import os
-import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -268,25 +267,18 @@ class LlamaCppBackend(LocalModelBackend):
 
     @staticmethod
     def _looks_like_moe(model_id: str, model_path: str) -> bool:
-        """是否 MoE 架构。先问模型目录（权威），目录没有再看命名惯例兜底。
+        """是否 MoE 架构 —— 判据在 ``model_catalog.resolve_is_moe``，这里只是转发。
 
-        命名惯例：MoE 权重普遍以 ``A<激活参数>`` 或 ``moe`` 标注型号
-        （如 ``qwen3-30b-a3b``、``mixtral-8x7b``）。识别错的代价是可控的：
-        误判为 MoE 只会让调度器多算一次拆分，拆不动就自然回落常规分支。
+        原来这份判据在本模块和 ``compute_scheduler`` 各写一遍，而且目录那一级
+        因为 ``is_moe`` 是默认 False 的 ``bool``（"没填过"与"确认不是"同值），
+        命名兜底永远够不着。判据只此一处之后，这个包装保留给既有调用方。
         """
         try:
-            from core.model_catalog import get_model  # noqa: PLC0415
+            from core.model_catalog import resolve_is_moe  # noqa: PLC0415
 
-            spec = get_model(model_id)
-            flag = getattr(spec, "is_moe", None) if spec is not None else None
-            if flag is not None:
-                return bool(flag)
-        except Exception:  # noqa: BLE001
-            pass
-        blob = f"{model_id} {os.path.basename(model_path or '')}".lower()
-        if "moe" in blob or "mixtral" in blob:
-            return True
-        return bool(re.search(r"\d+b[-_]?a\d+b", blob))  # 30b-a3b 这类"总参-激活参"命名
+            return resolve_is_moe(model_id, model_path)
+        except Exception:  # noqa: BLE001 — 目录不可用时不该阻断模型加载
+            return False
 
     @staticmethod
     def _apply_moe_offload(llama_kwargs: Dict[str, Any], n_cpu_moe: int, layers_total: int = 32) -> bool:

@@ -581,6 +581,7 @@ class ComputeScheduler:
         Returns:
             换档后的账本快照。
         """
+        from core.model_catalog import resolve_is_moe as _resolve_is_moe  # noqa: PLC0415
         from core.model_catalog import tier_models  # noqa: PLC0415
 
         specs = list(tier_models(target_tier))
@@ -609,7 +610,10 @@ class ComputeScheduler:
                     spec.tag,
                     int(spec.size_mb()),
                     preferred_backend=backend_name,
-                    is_moe=bool(getattr(spec, "is_moe", False)),
+                    # 与 llama_cpp 加载路径同一判据（目录填过以目录为准，没填过看
+                    # 命名惯例）。原来这里直接读 spec.is_moe，而那是个默认 False 的
+                    # bool —— 换档加载的模型**永远**不会被认成 MoE，专家卸载静默失效。
+                    is_moe=_resolve_is_moe(spec.tag),
                 )
                 backend = self._create_backend(backend_name)
                 if backend is not None:
