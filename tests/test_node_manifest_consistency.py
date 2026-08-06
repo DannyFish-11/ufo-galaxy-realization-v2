@@ -1,7 +1,7 @@
 """tests/test_node_manifest_consistency.py
 ===========================================
 
-**五个地方各自记着"有哪些节点"，它们必须说同一件事。**
+**六个地方各自记着"有哪些节点"，它们必须说同一件事。**
 
 修复前
 ------
@@ -10,6 +10,7 @@
     磁盘 nodes/*/main.py            125
     node_dependencies.json          125   ← 唯一对的那个
     config/unified_config.json      109   ← 5 个幽灵 + 少 21 个
+    config/unified_ports.yaml       130   ← 5 个幽灵
     deploy/compose/full.yml         130   ← 5 个幽灵
     registry/device_node_map.yaml    11   ← 4 个幽灵
 
@@ -52,6 +53,7 @@ UNIFIED_CONFIG = REPO_ROOT / "config" / "unified_config.json"
 NODE_DEPS = REPO_ROOT / "node_dependencies.json"
 COMPOSE_FULL = REPO_ROOT / "deploy" / "compose" / "full.yml"
 DEVICE_MAP = REPO_ROOT / "registry" / "device_node_map.yaml"
+UNIFIED_PORTS = REPO_ROOT / "config" / "unified_ports.yaml"
 
 
 def _on_disk() -> set:
@@ -72,6 +74,14 @@ def _declared():
         out["registry/device_node_map.yaml"] = {
             m["implementation"]["node"] for m in y.get("mappings", []) if m.get("implementation", {}).get("node")
         }
+    if UNIFIED_PORTS.exists():
+        # 第**六**份清单。第一版把它漏了 —— 结果是清掉 compose 里的幽灵之后，
+        # scripts/validate_ports.py 立刻报 5 条 "MISSING IN COMPOSE"：端口表还
+        # 声称那 5 个节点存在，而 compose 里已经没有它们了。收敛清单时漏掉任何
+        # 一份，都会变成另一处的红。
+        out["config/unified_ports.yaml"] = set(
+            re.findall(r"^    (Node_\d+_\w+):", UNIFIED_PORTS.read_text(encoding="utf-8"), re.M)
+        )
     return out
 
 
@@ -192,3 +202,15 @@ def test_group_all_does_not_silently_skip_any_group():
         "--group all 静默丢掉了一个 priority_order 里没列到的组。"
         "写死的优先级表必须配一条兜底，否则每加一个新组就少启动一批节点，而且不报错。"
     )
+
+
+def test_port_registry_covers_every_node_on_disk():
+    """``config/unified_ports.yaml`` 是端口权威表，磁盘上每个节点都得在里面。
+
+    少一个的后果不是"没端口"，而是 ``core.port_config.get_node_port()`` 抛
+    ``KeyError`` —— 而节点侧 ``resolve_node_port`` 会把它当成"权威表不可用"，
+    退到环境变量或代码里的字面量。也就是说：**一个漏登记的节点会静默改用另一套
+    端口来源**，而启动器探活敲的仍是权威表算出来的口。那正是本轮修的那类错位。
+    """
+    missing = sorted(_on_disk() - _declared()["config/unified_ports.yaml"])
+    assert not missing, f"端口权威表里没有这些磁盘上的节点：{missing}"
