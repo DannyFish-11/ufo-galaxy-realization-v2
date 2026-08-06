@@ -284,7 +284,10 @@ class LauncherAdapter:
             "resolved_node": resolved.implementation.node,
             "node_port": resolved.implementation.port,
             "activation_policy": resolved.implementation.startup,
-            "decision": decision.decision if decision else "unknown",
+            # ActivationDecision 没有 .decision 字段（只有 node/policy/should_start/
+            # reason）。同样的错误在 core/udm_registration_hook.py 里也有一份 ——
+            # 取值口径统一到 device_activation_registry 的 start / skip。
+            "decision": ("start" if decision.should_start else "skip") if decision else "unknown",
             "should_start": decision.should_start if decision else False,
             "reason": decision.reason if decision else "",
             "started": act_result is not None,
@@ -315,6 +318,34 @@ class LauncherAdapter:
         self._started_nodes.clear()
 
     # -- internal action -----------------------------------------------------
+
+    async def activate(
+        self,
+        *,
+        node_name: str,
+        decision: Any,
+        device_type: Optional[str] = None,
+        transport: Optional[str] = None,
+    ) -> Optional[str]:
+        """公开入口:按当前 mode 执行一条已经算好的激活决定。
+
+        登记给 :meth:`core.udm_registration_hook.UDMRegistrationHook.set_activation_executor`
+        用 —— 决策在 ``core/``,执行在这里,由 ``launcher`` 单向注册,``core`` 不反向依赖。
+
+        在此之前 :meth:`_maybe_start_node` 只有本类内部两处调用,而那两处的入口
+        (:meth:`start` / :meth:`on_device_registered`)**本身没有任何生产调用方** ——
+        整个执行侧是死的。设备注册那条真实链路走的是 ``core`` 的 hook,而那个 hook
+        算完 ``should_start`` 就 return。
+
+        Returns:
+            起成功(或 dry_run 模拟成功)返回节点名;被 mode/allowlist 挡下或失败返回 None。
+        """
+        return await self._maybe_start_node(
+            node_name=node_name,
+            device_type=device_type,
+            transport=transport,
+            decision=decision,
+        )
 
     async def _maybe_start_node(
         self,
