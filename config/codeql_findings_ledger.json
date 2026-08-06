@@ -9,7 +9,7 @@
   },
   "_rule_of_thumb": "写 reason 时回答一句『为什么它不该被改』,而不是『它不重要』。答不上来的,就应该去改代码而不是记在这里。",
   "_measured_at": "main cfc54eb / PR #1567 run 30784537448,python.sarif 共 22 条",
-  "total_recorded": 20,
+  "total_recorded": 30,
   "findings": [
     {
       "rule": "py/full-ssrf",
@@ -85,6 +85,27 @@
         "external/microsoft_ufo/llm/openai.py:571"
       ],
       "reason": "external/ 下是 vendored 的第三方代码(microsoft UFO),不由本仓维护 —— 本仓的其它守卫(check_wiring 的引用扫描等)也一律跳过这个目录。真要处理应当走上游,而不是在 vendor 副本里改出一份和上游不同的代码。"
+    },
+    {
+      "rule": "py/clear-text-logging-sensitive-data",
+      "count": 10,
+      "status": "false-positive",
+      "locations": [
+        "galaxy_gateway/android/handlers/registration.py:1491",
+        "galaxy_gateway/android_bridge.py:380",
+        "galaxy_gateway/android_bridge.py:1230",
+        "galaxy_gateway/android_bridge.py:1243",
+        "galaxy_gateway/android_bridge.py:1269",
+        "galaxy_gateway/android_bridge.py:1292",
+        "galaxy_gateway/android_bridge.py:1304",
+        "galaxy_gateway/android_bridge.py:1312",
+        "galaxy_gateway/protocol/compat.py:144",
+        "galaxy_gateway/protocol/compat.py:437"
+      ],
+      "reason": "这 10 条是同一个原因:设备接入消息里现在带着凭证(``token``),而 CodeQL 把『字典里有一个 token 键』当成『整个字典都是敏感的』,于是从这个字典里读出来的**每一个值**都被当成凭证 —— 包括 device_id、message type、trace_id、缺失字段名。污点是在字典这一层建立的,不是在键这一层,所以只要消息带 token,这条链上任何一句打 device_id 的日志都会被点名。\n\n逐条看过打的是什么:android_bridge.py 那 7 处打的是 device_id / 消息类型 / 缺失字段名 / schema 闸门的 reason;compat.py 两处打的是 trace_id、route_mode、idempotency_key 与协议版本;registration.py:1491 是唯一打整包的一处,而它打的是``safe_payload`` —— 一个把 token/password/credential/secret/auth/api_key 摘掉之后的副本。CodeQL 看不见那道过滤(它是个字典推导,不是它认识的 sanitizer 形态),所以污点照旧流到 logger,这 10 条会一直在。\n\n为什么不该改:要让告警消失,只能不打 device_id。而 device_id 正是这条链上唯一能把一条日志和一台设备对上的东西 —— 去掉它,『哪台设备注册失败了』就再也查不出来。用一个真实的可观测性换一个静态分析的误判,不划算。\n\n『我读过代码,觉得没问题』不是判据,所以另配了行为守卫:tests/test_ingress_token_never_reaches_logs.py 真的驱动一遍接入链(正常注册 / 鉴权被拒 / 缺必填字段 / 未知类型 / 异常兜底打 payload 这五条路径),把 DEBUG 及以上所有日志记录抓下来,断言令牌一个字符都没出现。每条断言都带正向对照(比如确认 device_id 确实出现在日志里、确认真的落在 malformed 那条分支上),免得『链没跑起来所以日志是空的』也判成绿。反向验证过:把脱敏改成打原始 message、从名单里删掉 token、让 malformed 分支打整包,对应用例都会红。",
+      "guarded_by": [
+        "tests/test_ingress_token_never_reaches_logs.py"
+      ]
     }
   ]
 }
