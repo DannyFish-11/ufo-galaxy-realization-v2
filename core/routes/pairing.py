@@ -76,6 +76,17 @@ class ClaimRequest(BaseModel):
     #: 二选一:配对链接(galaxy://pair?...)或 6 位短码
     link: Optional[str] = None
     code: Optional[str] = None
+    #: **领取方**的自我描述。令牌签给它,不是签给出示名片的那一台。
+    #:
+    #: 方向必须写死在这里,否则整条链是断的:桌面出示名片、手机来领,
+    #: 而令牌若签成 ``card.device_id``(= 桌面),手机拿它去 ``/ws/device/<自己的 id>``
+    #: 注册时,设备入口那道 ``subject == device_id`` 绑定校验必然把它顶回来 ——
+    #: "配得上、连不了"。此前的用例都是在同一台机上 card→claim,两个 id 恰好相同,
+    #: 所以这个方向错误一直没被照出来。
+    device_id: str
+    name: str = ""
+    device_type: str = "unknown"
+    capabilities: Optional[List[str]] = None
     #: 接纳时赋予的信任级别,默认 ask(保守:先接进来,动作仍要人确认)
     trust: str = "ask"
     auto_accept: Optional[List[str]] = None
@@ -177,14 +188,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 return JSONResponse({"success": False, "error": verdict.reason}, status_code=400)
 
             card = verdict.card
+
+            # 校验通过的名片证明的是"这个人手里有一张本机签发、还没过期的邀请",
+            # **不是**"这个人就是名片上那台机器"。所以登记与签发都以领取方
+            # (req.device_id)为准,名片只用来判"该不该放它进来"。
+            subject = req.device_id.strip()
+            if not subject:
+                throttle.record_failure(source)
+                return JSONResponse({"success": False, "error": "需要提供 device_id"}, status_code=400)
+
             trust = coerce_trust(req.trust, TrustLevel.ASK)
             book = get_peer_trust_book()
             rec = book.upsert(
-                card.device_id,
-                name=card.name,
+                subject,
+                name=req.name or subject,
                 trust=trust,
                 auto_accept=req.auto_accept if req.auto_accept is not None else [],
-                capabilities=card.capabilities,
+                capabilities=req.capabilities if req.capabilities is not None else [],
                 note=req.note,
             )
 
@@ -195,18 +215,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 try:
                     from core.capability_token import issue_token
 
-                    token = issue_token(card.device_id, scopes, ttl_s=req.token_ttl_s)
+                    token = issue_token(subject, scopes, ttl_s=req.token_ttl_s)
                 except Exception as exc:  # noqa: BLE001
                     # 令牌签发失败不该让配对整体回滚(对端已登记、信任已生效),
                     # 但必须让调用方知道它没拿到令牌,否则会以为拿到了。
-                    logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", card.device_id, exc)
+                    logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", subject, exc)
 
             logger.info(
-                "配对成功:device_id=%s name=%s trust=%s scopes=%s",
-                card.device_id,
-                card.name,
+                "配对成功:device_id=%s type=%s trust=%s scopes=%s(邀请来自 %s)",
+                subject,
+                req.device_type,
                 rec.trust,
                 scopes,
+                card.device_id,
             )
             return JSONResponse(
                 {
@@ -215,7 +236,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "capability_token": token,
                     "token_scopes": scopes,
                     "token_issued": token is not None,
+                    # 兼容字段,永远是局域网地址。
                     "endpoints": card.endpoints,
+                    # **设备接下来要连哪里**,按可达性排序。
+                    # 少了这一条,C 做的多路可达在交接处原地丢掉:设备配上了,
+                    # 手里却只有那个出了网段就是死地址的内网 IP。
+                    "candidates": card.candidates,
+                    "gateway_device_id": card.device_id,
                 }
             )
         except Exception as exc:  # noqa: BLE001

@@ -166,7 +166,7 @@ def client():
 def test_bad_code_is_rejected_and_counted(client):
     import core.agent_card as ac
 
-    r = client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ"})
+    r = client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ", "device_id": "guesser-1"})
     assert r.status_code == 400
     assert ac.get_pairing_attempt_throttle().is_blocked("testclient") is False  # 一次还不至于
     # 但确实记了一笔 —— 否则节流永远触发不了
@@ -177,8 +177,8 @@ def test_repeated_guessing_gets_429(client):
     import core.agent_card as ac
 
     for _ in range(ac.MAX_CODE_ATTEMPTS):
-        client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ"})
-    r = client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ"})
+        client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ", "device_id": "guesser-1"})
+    r = client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ", "device_id": "guesser-1"})
     assert r.status_code == 429, "猜了这么多次还在放行 —— 节流没接上"
     assert r.json()["success"] is False
 
@@ -188,7 +188,7 @@ def test_forged_card_also_counts_toward_the_limit(client):
     import core.agent_card as ac
 
     for _ in range(3):
-        client.post("/api/v1/pair/claim", json={"link": "galaxy://pair?c=bogus&s=bogus"})
+        client.post("/api/v1/pair/claim", json={"link": "galaxy://pair?c=bogus&s=bogus", "device_id": "forger-1"})
     assert ac.get_pairing_attempt_throttle().record_failure("testclient") == 4
 
 
@@ -196,7 +196,7 @@ def test_missing_both_link_and_code_is_a_plain_400(client):
     """空请求是用法错误,不是爆破 —— 不该占用别人的配额。"""
     import core.agent_card as ac
 
-    r = client.post("/api/v1/pair/claim", json={})
+    r = client.post("/api/v1/pair/claim", json={"device_id": "someone"})
     assert r.status_code == 400
     assert ac.get_pairing_attempt_throttle().record_failure("testclient") == 1
 
@@ -205,8 +205,8 @@ def test_a_real_code_still_pairs_after_some_wrong_guesses(client):
     """节流不该把正确的那次也一起挡掉(只要还没到上限)。"""
     from core.agent_card import build_local_card, get_pairing_code_registry, to_link
 
-    client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ"})
+    client.post("/api/v1/pair/claim", json={"code": "ZZZZZZ", "device_id": "guesser-1"})
     code, _exp = get_pairing_code_registry().issue(to_link(build_local_card()))
-    r = client.post("/api/v1/pair/claim", json={"code": code})
+    r = client.post("/api/v1/pair/claim", json={"code": code, "device_id": "watch-real"})
     assert r.status_code == 200, r.text
     assert r.json()["success"] is True
