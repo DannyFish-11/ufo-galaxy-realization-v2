@@ -1241,39 +1241,22 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and device.websocket is not None:
-                import time
-
                 # PR-AIP-UNIFIED: Route through AIPTransport
                 from core.aip_transport import get_aip_transport
+                from core.cross_device_sync import build_phase_state_event
 
-                _phase_msg = {
-                    "type": "state_event",
-                    "event_category": "phase",
-                    "event_action": current_phase,
-                    "device_id": "v2_desktop",
-                    "_transport": "auto",
-                    "timestamp": time.time(),
-                }
+                # 两条路径发**同一份**报文。此前 AIPTransport 那条是手写的、不带
+                # payload,而手表只读 payload.to_phase —— 于是正常路径下刚注册完的
+                # 手表收到报文却解析出空,静默丢弃;只有 AIPTransport 抛异常、走到
+                # 兜底 send_json 时手表才拿得到相位。
+                _phase_msg = build_phase_state_event(
+                    new_phase=current_phase,
+                    sync_type="cross_device_initial_sync",
+                )
                 try:
-                    await get_aip_transport().send(_phase_msg, device_id)
+                    await get_aip_transport().send(dict(_phase_msg, _transport="auto"), device_id)
                 except Exception:
-                    await device.websocket.send_json(
-                        {
-                            "type": "state_event",
-                            "event_category": "phase",
-                            "event_action": current_phase,
-                            "device_id": "v2_desktop",
-                            "timestamp": int(time.time() * 1000),
-                            "aip_version": "3.0",
-                            "payload": {
-                                "from_phase": "unknown",
-                                "to_phase": current_phase,
-                                "source": "desktop_presence_runtime",
-                                "sync_type": "cross_device_initial_sync",
-                            },
-                            "phase": current_phase,
-                        }
-                    )
+                    await device.websocket.send_json(_phase_msg)
                 logger.info(
                     "CrossDeviceSync: initial phase=%s pushed to newly registered device=%s",
                     current_phase,

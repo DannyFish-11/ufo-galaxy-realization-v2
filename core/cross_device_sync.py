@@ -142,6 +142,65 @@ _latency_tracker = _LatencyTracker()
 # ---------------------------------------------------------------------------
 
 
+def build_phase_state_event(
+    *,
+    new_phase: str,
+    old_phase: str = "unknown",
+    source: str = "desktop_presence_runtime",
+    sync_type: str = "cross_device_broadcast",
+    session_id: str = "",
+    trace_id: str = "",
+    now_ms: Optional[int] = None,
+) -> Dict[str, Any]:
+    """三态相位报文的**唯一**构造处。
+
+    为什么必须只有一处
+    ==================
+    这条报文原来有三个发送点(初次注册推送、重连推送、相位变更广播),
+    各自手写一份字典,形状还不一样 —— 初次推送那份**连 payload 都没有**。
+    而手表侧只读 ``payload.to_phase``:于是刚配好对的手表收到报文、解析出空,
+    静默丢弃,权威相位永远到不了。桌面日志里写着"已推送",手表上什么也没发生。
+
+    手机端读的是**顶层** ``event_action``(见 GalaxyWebSocketClient 里那段注释),
+    手表端读的是 payload —— 两个消费方读同一条报文的不同位置,而生产方有三份
+    各写各的。所以这里一次把两处都填上,并让三个发送点都取用同一个构造器:
+    形状要变的时候只有一个地方会变。
+
+    ``phase`` 顶层字段是旧版手机端的读法,保留作向后兼容。
+
+    Args:
+        new_phase: 目标相位(``silent`` / ``liminal`` / ``manifest``)。
+        old_phase: 来源相位;推送当前状态时无从得知,填 ``unknown``。
+        source:    谁判定的这次相位 —— 排障时用来区分"谁说了算"。
+        sync_type: 这次推送的由头(初次同步 / 重连同步 / 变更广播)。
+        now_ms:    时间戳(毫秒);留空取当前时间。测试可注入固定值。
+    """
+    ts = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    msg: Dict[str, Any] = {
+        "type": "state_event",
+        # ── 顶层:手机端读这两个字段 ──
+        "event_category": "phase",
+        "event_action": new_phase,
+        "device_id": "v2_desktop",
+        "timestamp": ts,
+        "aip_version": "3.0",
+        # ── payload:手表端读 to_phase ──
+        "payload": {
+            "from_phase": old_phase,
+            "to_phase": new_phase,
+            "source": source,
+            "sync_type": sync_type,
+        },
+        # ── 旧版手机端的读法,保留兼容 ──
+        "phase": new_phase,
+    }
+    if session_id:
+        msg["session_id"] = session_id
+    if trace_id or session_id:
+        msg["trace_id"] = trace_id or session_id
+    return msg
+
+
 def emit_cross_device_phase_sync(
     old_phase: str,
     new_phase: str,
@@ -195,24 +254,15 @@ async def _async_push_phase_to_all_devices(
         logger.debug("CrossDeviceSync: bridge not available: %s", exc)
         return
 
-    # Build AIP v3 STATE_EVENT message
-    msg: Dict[str, Any] = {
-        "type": "state_event",
-        "event_category": "phase",
-        "event_action": new_phase,
-        "device_id": "v2_desktop",
-        "timestamp": int(time.time() * 1000),
-        "session_id": session_id,
-        "trace_id": trace_id or session_id,
-        "aip_version": "3.0",
-        "payload": {
-            "from_phase": old_phase,
-            "to_phase": new_phase,
-            "source": source,
-            "sync_type": "cross_device_broadcast",
-        },
-        "phase": new_phase,
-    }
+    # Build AIP v3 STATE_EVENT message (单一构造处,见 build_phase_state_event)
+    msg: Dict[str, Any] = build_phase_state_event(
+        new_phase=new_phase,
+        old_phase=old_phase,
+        source=source,
+        sync_type="cross_device_broadcast",
+        session_id=session_id,
+        trace_id=trace_id,
+    )
 
     # PR-WEAR-PHASE-SYNC: also push to WearOS gateway connections.
     # WearOS registers via websocket_handler.handle_register → connection_manager

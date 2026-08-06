@@ -1840,50 +1840,21 @@ class AndroidBridge:
             dpr = get_desktop_presence_runtime()
             current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and websocket is not None:
-                import time as _time
-
                 # PR-AIP-UNIFIED: Route phase sync through AIPTransport
                 from core.aip_transport import get_aip_transport
+                from core.cross_device_sync import build_phase_state_event
 
-                _phase_msg = {
-                    "type": "state_event",
-                    "event_category": "phase",
-                    "event_action": current_phase,
-                    "device_id": "v2_desktop",
-                    "timestamp": int(_time.time() * 1000),
-                    "aip_version": "3.0",
-                    "_transport": "auto",
-                    "payload": {
-                        "from_phase": "unknown",
-                        "to_phase": current_phase,
-                        "source": "desktop_presence_runtime",
-                        "sync_type": "cross_device_reconnect_sync",
-                    },
-                }
+                # 两条路径发同一份报文(单一构造处,见 build_phase_state_event)。
+                _phase_msg = build_phase_state_event(
+                    new_phase=current_phase,
+                    sync_type="cross_device_reconnect_sync",
+                )
                 try:
-                    _track_bg_task(asyncio.create_task(get_aip_transport().send(_phase_msg, device_id)))
-                except Exception:
                     _track_bg_task(
-                        asyncio.create_task(
-                            websocket.send_json(
-                                {
-                                    "type": "state_event",
-                                    "event_category": "phase",
-                                    "event_action": current_phase,
-                                    "device_id": "v2_desktop",
-                                    "timestamp": int(_time.time() * 1000),
-                                    "aip_version": "3.0",
-                                    "payload": {
-                                        "from_phase": "unknown",
-                                        "to_phase": current_phase,
-                                        "source": "desktop_presence_runtime",
-                                        "sync_type": "cross_device_reconnect_sync",
-                                    },
-                                    "phase": current_phase,
-                                }
-                            )
-                        )
+                        asyncio.create_task(get_aip_transport().send(dict(_phase_msg, _transport="auto"), device_id))
                     )
+                except Exception:
+                    _track_bg_task(asyncio.create_task(websocket.send_json(_phase_msg)))
                 logger.info(
                     "CrossDeviceSync: phase=%s pushed to reconnected device=%s",
                     current_phase,
