@@ -556,13 +556,13 @@ class DigitalTwinEngine:
         self, state_fetcher_factory: Callable[[str], Callable], mode: CouplingMode = CouplingMode.COUPLED
     ):
         """批量耦合所有孪生体"""
-        for twin in self.twins.values():
+        for twin in list(self.twins.values()):
             fetcher = state_fetcher_factory(twin.device_id)
             await twin.couple(fetcher, mode=mode)
 
     async def decouple_all(self):
         """批量解耦"""
-        for twin in self.twins.values():
+        for twin in list(self.twins.values()):
             await twin.decouple()
 
     async def simulate_scenario(self, actions: List[Dict]) -> List[SimulationResult]:

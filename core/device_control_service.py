@@ -21,6 +21,14 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+#: 一"格"滚动折算多少像素 —— computer_use 的 ``clicks`` 与本服务 ``scroll(amount)``
+#: 之间的换算，**唯一定义处**。取 100（约 3 行文本，桌面滚轮的常规刻度）。
+#: 要调滚动灵敏度就改这里，别在调用点各乘各的。
+#:
+#: 注：``x``/``y``（在哪儿滚）本层仍然丢弃 —— ``scroll()`` 与下游节点的
+#: ``/scroll`` 端点都不接坐标。需要定点滚动的场景走 Node_36 那条路径。
+_SCROLL_PIXELS_PER_CLICK = 100
+
 
 class DevicePlatform(Enum):
     """设备平台"""
@@ -404,7 +412,24 @@ class DeviceControlService:
         if act in ("type", "type_text", "input", "input_text"):
             return await self.input_text(device_id, str(p.get("text", "")))
         if act == "scroll":
-            return await self.scroll(device_id, str(p.get("direction", "down")), _int("amount", 500))
+            # 两套参数口径，必须显式翻译，不能只读自己认识的那两个键。
+            #
+            # computer_use 规划器的契约（``_PLANNER_SYSTEM``）是
+            #     {"clicks": <int, 负数向下>, "x": <int>, "y": <int>}
+            # 而本方法原来只读 ``direction``/``amount``，``clicks``/``x``/``y``
+            # 一个都不读、全取默认值。于是「向上滚 3 格」→ ``scroll("down", 500)``
+            # → **方向相反、幅度无关**，而且照报 success=True，仲裁器判 SUCCESS，
+            # computer_use 不会回落到 Node_36（那条路径认得 ``clicks``，是对的）。
+            # 下一轮截图里模型看到页面朝反方向动，很容易撞上"连续 3 次重复动作"
+            # 的死循环判定。
+            if "clicks" in p:
+                clicks = _int("clicks", 0)
+                direction = "down" if clicks < 0 else "up"
+                amount = abs(clicks) * _SCROLL_PIXELS_PER_CLICK
+            else:
+                direction = str(p.get("direction", "down"))
+                amount = _int("amount", 500)
+            return await self.scroll(device_id, direction, amount)
         if act in ("press_key", "key"):
             return await self.press_key(device_id, str(p.get("key", "")))
         if act == "screenshot":

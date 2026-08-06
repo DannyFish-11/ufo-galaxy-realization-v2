@@ -392,7 +392,7 @@ class NATSBus:
         if not self._connected:
             return {"success": True}
         try:
-            for sub in self._subscriptions:
+            for sub in list(self._subscriptions):
                 try:
                     await sub.unsubscribe()
                 except Exception as exc:

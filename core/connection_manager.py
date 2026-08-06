@@ -482,7 +482,7 @@ class ConnectionManager:
 
     async def start_all(self):
         """启动所有连接"""
-        for connection_id in self.connections:
+        for connection_id in list(self.connections):
             await self.connect(connection_id)
 
     async def stop_all(self):
@@ -496,7 +496,7 @@ class ConnectionManager:
         await self.stop_all()
 
         # 关闭所有客户端
-        for client in self.clients.values():
+        for client in list(self.clients.values()):
             await client.aclose()
 
         await self.save_state()

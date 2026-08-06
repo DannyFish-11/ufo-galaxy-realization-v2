@@ -451,6 +451,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     if req.context
                     else ""
                 ),
+                # 受众必须在**派发之前**告诉 runtime。此前不传，runtime 用
+                # `source == "operator"` 自己算，而这里永远传 source="chat" ⇒ 恒为
+                # False ⇒ OpenClawd 早把 OPERATOR_AUDIT_TRUTH 键全 pop 掉了。等到
+                # 下面第 463 行再算 is_operator_request 已经太晚：要分类的键根本
+                # 不在 metadata 里，`_apply_hidden_visible_boundary` 空转、
+                # `demoted_operator_audit_fields` 那条分支永远不可达。
+                is_operator_request=_is_operator_request(req),
             )
             metadata = result.get("metadata", {})
             if not isinstance(metadata, dict):

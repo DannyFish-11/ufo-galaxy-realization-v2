@@ -447,7 +447,7 @@ class AndroidBridge:
 
         # 2. 回退：所有在线设备（如果 fallback_broadcast 启用）
         if fallback_broadcast:
-            for did, dev in self._devices.items():
+            for did, dev in list(self._devices.items()):
                 if did in results:
                     continue  # 跳过已发送的
                 if dev.connected and dev.websocket:

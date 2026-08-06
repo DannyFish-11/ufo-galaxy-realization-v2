@@ -1034,9 +1034,15 @@ class DesktopPresenceRuntime:
             "presence_mode",
             "presence_runtime_hint",
             "stream_runtime_status",
-            "is_operator_request",
         ):
             kwargs.pop(_dup_key, None)
+
+        # ``is_operator_request`` 不再一律 pop 掉 —— 它是**调用方才知道**的事。
+        # 原来剔除后用 `source == "operator"` 自己算，而 chat 永远传 "chat" ⇒ 恒为
+        # False ⇒ OpenClawd 把 OPERATOR_AUDIT_TRUTH 键全 pop 干净 ⇒ chat 那整套
+        # operator 边界对 metadata 空转，`demoted_operator_audit_fields` 不可达。
+        # 现在：显式传了以它为准，没传才退回按 source 判。
+        _explicit_operator = kwargs.pop("is_operator_request", None)
 
         lane_snapshot = None
         try:
@@ -1134,7 +1140,9 @@ class DesktopPresenceRuntime:
                             presence_mode=_presence_mode,
                             presence_runtime_hint=_dispatch_presence_runtime_hint,
                             stream_runtime_status=_stream_runtime_status,
-                            is_operator_request=source == "operator",
+                            is_operator_request=(
+                                bool(_explicit_operator) if _explicit_operator is not None else source == "operator"
+                            ),
                             **kwargs,
                         )
                         # 收口点：派发返回 = 认知结束，往下是表达（结果装配、PR-SPEAK 朗读、
@@ -1226,11 +1234,13 @@ class DesktopPresenceRuntime:
             # 账单挂进响应供面板/调用方直读本次任务的总消耗。
             if _bill_token is not None:
                 try:
+                    # 同上：与反思/预测器共用收敛权威的口径，别再各写一套。
+                    from core.flow_aware_result_convergence import derive_result_success as _derive_success
                     from core.task_cost_ledger import close_task_bill
 
                     _task_bill = close_task_bill(
                         _bill_token,
-                        success=bool(result.get("success", True)),
+                        success=_derive_success(result)[0],
                     )
                     if _task_bill:
                         result["task_cost"] = _task_bill
@@ -1862,12 +1872,20 @@ class DesktopPresenceRuntime:
             都会打一条 "unknown source" 警告(功能上靠兜底分支恰好走对了地方,
             参数与白名单分支完全一致)。常驻循环默认开启后,这条警告会变成
             **每次自主行动都刷一条**的噪音,且把主体自己的通道标成了外来调用者。
+
+        .. note:: ``"active_perception"`` 与 ``"ambient"`` **完全同形**,当时只补了
+            后者。``_submit_autonomous_goal`` 用这个来源走正门进来
+            (``source="active_perception"``),但它同样不在表里 ——
+            ``GALAXY_ACTIVE_PERCEPTION=1`` 一开,主动感知每产出一个自发目标就刷
+            一条 "unknown source" 警告。同样是功能上兜底恰好走对、可观测性上把
+            主体自己的通道标成外来未知调用者。
         """
         if source in (
             "chat",
             "voice",
             "openclawd",
             "ambient",
+            "active_perception",
             "android_vision",
             "vision_sampler",
             "operator",
@@ -2045,7 +2063,14 @@ class DesktopPresenceRuntime:
         # ── PR-25/27: Post-execution cognitive reflection ────────────────
         try:
             _result_text = result.get("response", "") or result.get("reply", "")
-            _success = not result.get("error") and not result.get("failed")
+            # 走收敛权威，不自己拼一套。原来是
+            # `not result.get("error") and not result.get("failed")` —— 完全不看
+            # result["success"]，而最常见的失败形状恰是软失败（{"success": False,
+            # "response": "抱歉…"}，不带 error/failed）。于是失败被当成功喂进下面的
+            # reflect_retrospective 与 predictor.record_outcome，把失败策略标定成好用。
+            from core.flow_aware_result_convergence import derive_result_success
+
+            _success, _ = derive_result_success(result)
 
             # Retrospective reflection
             from core.cognitive.reflection_engine import get_reflection_engine
@@ -2744,8 +2769,12 @@ class DesktopPresenceRuntime:
                 "DesktopPresenceRuntime.production_baseline_summary failed (non-fatal): %s",
                 _err,
             )
+            # 兜底值本身不许撒谎：摘要都构建失败了，凭什么报告"基线处于激活状态"。
+            # 消费方看到 baseline_active=True 会当成"基线正常"，而真相是我们
+            # **不知道** —— 这两件事必须分得开。
             return {
-                "baseline_active": True,
+                "baseline_active": None,
+                "baseline_status": "unknown",
                 "error": str(_err),
             }
 

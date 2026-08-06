@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -87,7 +88,12 @@ class ModelSpec:
     requires_gpu: bool = False
     size_mb_val: int = 0  # 尺寸(MB)——**本目录即 SSOT**,不再反向依赖 LocalBrainManager
     is_default: bool = False  # 默认主脑(LocalBrainManager.RECOMMENDED_MODELS['default'] 派生自此)
-    is_moe: bool = False  # MoE 架构:调度器据此尝试"注意力进显存、专家进内存"的拆分
+    #: MoE 架构:调度器据此尝试"注意力进显存、专家进内存"的拆分。
+    #: **``None`` = 没人填过这一栏**，不是"确认不是 MoE" —— 两者的处置完全不同:
+    #: 前者该退回命名惯例兜底，后者该到此为止。原来这里是 ``bool = False``，
+    #: 把这两件事压成了同一个值，于是消费方 ``if flag is not None`` 这一支
+    #: 永远走不到（见 :func:`resolve_is_moe`）。填过的条目写 True/False。
+    is_moe: Optional[bool] = None
 
     def size_mb(self) -> int:
         """尺寸(MB)——本目录自己拥有(唯一真相源);未定义返回 0。"""
@@ -197,6 +203,38 @@ _TIER_KEYS = ("A", "B")
 # ---------------------------------------------------------------------------
 def all_models() -> List[ModelSpec]:
     return list(_MODELS.values())
+
+
+#: MoE 权重的命名惯例：型号里带 ``moe``/``mixtral``，或用"总参-激活参"标注
+#: （``qwen3-30b-a3b``、``mixtral-8x7b``）。
+_MOE_ACTIVATED_PARAM_RE = re.compile(r"\d+b[-_]?a\d+b")
+
+
+def resolve_is_moe(tag: str, model_path: str = "") -> bool:
+    """这个型号是不是 MoE —— **判据只此一处**。
+
+    两级，顺序不能反：
+
+    1. **目录填过就以目录为准**（``is_moe`` 不是 ``None``）。人工确认过的
+       结论优先于任何猜测，包括"确认它不是 MoE"。
+    2. 没填过才看命名惯例。识别错的代价可控：误判为 MoE 只会让调度器多算一次
+       拆分，拆不动就自然回落常规分支（见 ``ComputeScheduler._split_moe``）。
+
+    之所以要收成一处：原来 ``local_model_backends`` 和 ``compute_scheduler``
+    各判各的，而且 ``is_moe`` 是个默认 False 的 ``bool``，
+    "没人填过"和"确认不是"取同一个值 —— 于是只要目录里查得到这个 tag
+    （``get_model`` 还带 root 前缀松匹配），第 2 级就永远够不着。实测：
+    ``qwen3-30b-a3b`` 单看名字判 True，一旦进了目录就变 False，
+    MoE 专家卸载**静默失效**，现场只看到"模型带不动"。
+    """
+    spec = get_model(tag)
+    flag = getattr(spec, "is_moe", None) if spec is not None else None
+    if flag is not None:
+        return bool(flag)
+    blob = f"{tag} {os.path.basename(model_path or '')}".lower()
+    if "moe" in blob or "mixtral" in blob:
+        return True
+    return bool(_MOE_ACTIVATED_PARAM_RE.search(blob))
 
 
 def get_model(tag: str) -> Optional[ModelSpec]:

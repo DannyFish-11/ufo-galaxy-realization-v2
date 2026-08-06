@@ -1019,7 +1019,7 @@ class DeviceRegistry:
     async def _emit_event(self, event_type: str, device: Device):
         """触发事件"""
         if event_type == "registered":
-            for callback in self._on_device_registered:
+            for callback in list(self._on_device_registered):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(device)
@@ -1029,7 +1029,7 @@ class DeviceRegistry:
                     logger.error(f"事件回调失败: {e}")
 
         elif event_type == "online":
-            for callback in self._on_device_online:
+            for callback in list(self._on_device_online):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(device)
@@ -1039,7 +1039,7 @@ class DeviceRegistry:
                     logger.error(f"事件回调失败: {e}")
 
         elif event_type == "offline":
-            for callback in self._on_device_offline:
+            for callback in list(self._on_device_offline):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(device)
