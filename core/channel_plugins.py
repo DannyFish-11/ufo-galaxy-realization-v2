@@ -288,7 +288,7 @@ class ChannelPluginLoader:
     async def health_check_all(self) -> Dict[str, Any]:
         """检查所有插件健康状态"""
         results = {}
-        for pid, info in self._plugins.items():
+        for pid, info in list(self._plugins.items()):
             try:
                 results[pid] = await info.adapter.health()
             except Exception as e:

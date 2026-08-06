@@ -454,7 +454,7 @@ class DeviceStatusManager:
         message = json.dumps(build_status_frame(event_type, legacy_event_key=True, data=data))
 
         disconnected = set()
-        for client in self._websocket_clients:
+        for client in list(self._websocket_clients):
             try:
                 await client.send_text(message)
             except Exception as e:

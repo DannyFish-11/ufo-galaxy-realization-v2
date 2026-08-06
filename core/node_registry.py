@@ -516,7 +516,7 @@ class NodeRegistry:
     async def check_all_health(self) -> Dict[str, Dict[str, Any]]:
         """检查所有节点健康"""
         results = {}
-        for node_id in self.nodes:
+        for node_id in list(self.nodes):
             results[node_id] = await self.check_node_health(node_id)
         return results
 

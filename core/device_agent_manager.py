@@ -710,21 +710,21 @@ class DeviceAgentManager:
     async def get_all_status(self) -> Dict[str, Any]:
         """获取所有设备状态"""
         status = {}
-        for device_id, agent in self._agents.items():
+        for device_id, agent in list(self._agents.items()):
             status[device_id] = await agent.get_status()
         return status
 
     async def connect_all(self) -> Dict[str, bool]:
         """连接所有设备"""
         results = {}
-        for device_id, agent in self._agents.items():
+        for device_id, agent in list(self._agents.items()):
             results[device_id] = await agent.connect()
         return results
 
     async def disconnect_all(self) -> Dict[str, bool]:
         """断开所有设备"""
         results = {}
-        for device_id, agent in self._agents.items():
+        for device_id, agent in list(self._agents.items()):
             results[device_id] = await agent.disconnect()
         return results
 
@@ -771,7 +771,7 @@ class DeviceAgentManager:
         async def heartbeat_loop():
             while True:
                 await asyncio.sleep(interval)
-                for device_id, agent in self._agents.items():
+                for device_id, agent in list(self._agents.items()):
                     try:
                         status = await agent.get_status()
                         agent.device_info.touch_heartbeat()

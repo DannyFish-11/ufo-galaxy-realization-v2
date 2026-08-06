@@ -329,7 +329,7 @@ class AIPTransport:
                 results[target] = result
         else:
             # 调用每个适配器的广播
-            for ttype, adapter in self._adapters.items():
+            for ttype, adapter in list(self._adapters.items()):
                 try:
                     result = await adapter.broadcast(msg_dict)
                     results[ttype] = result
@@ -540,7 +540,7 @@ class AIPTransport:
         raise ValueError(f"Unsupported message type: {type(message)}")
 
     async def close_all(self) -> None:
-        for adapter in self._adapters.values():
+        for adapter in list(self._adapters.values()):
             try:
                 await adapter.close()
             except Exception as e:

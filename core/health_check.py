@@ -190,7 +190,7 @@ class HealthChecker:
             checks["llm_api"] = {"available": has_api}
 
         # 运行自定义检查
-        for name, check_func in self._checks.items():
+        for name, check_func in list(self._checks.items()):
             try:
                 result = await check_func() if asyncio.iscoroutinefunction(check_func) else check_func()
                 checks[name] = result

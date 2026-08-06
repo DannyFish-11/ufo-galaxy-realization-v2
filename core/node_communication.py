@@ -763,7 +763,7 @@ class UniversalCommunicator:
                 # 清理过期待确认消息并重试
                 current_time = time.time()
                 expired = []
-                for msg_id, pending in self._pending_messages.items():
+                for msg_id, pending in list(self._pending_messages.items()):
                     if pending.ack_received:
                         expired.append(msg_id)
                     elif current_time - pending.send_time > self._ack_timeout:

@@ -514,7 +514,7 @@ class MonitoringManager:
         """停止"""
         self._running = False
         await self.health.stop()
-        for task in self._tasks:
+        for task in list(self._tasks):
             task.cancel()
             try:
                 await task

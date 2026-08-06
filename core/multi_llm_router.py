@@ -3667,7 +3667,7 @@ class MultiLLMRouter:
     async def health_check(self) -> Dict[str, str]:
         """对所有提供商做健康检查"""
         results = {}
-        for name, adapter in self.adapters.items():
+        for name, adapter in list(self.adapters.items()):
             try:
                 await adapter.chat(
                     messages=[{"role": "user", "content": "ping"}],
@@ -3813,7 +3813,7 @@ class MultiLLMRouter:
         old_names = set(self.providers.keys())
 
         # 关闭所有现有 adapter 连接
-        for adapter in self.adapters.values():
+        for adapter in list(self.adapters.values()):
             try:
                 await adapter.close()
             except Exception as e:
@@ -3853,7 +3853,7 @@ class MultiLLMRouter:
         }
 
     async def close(self):
-        for adapter in self.adapters.values():
+        for adapter in list(self.adapters.values()):
             await adapter.close()
 
 

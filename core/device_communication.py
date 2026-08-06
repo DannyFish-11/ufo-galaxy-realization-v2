@@ -812,7 +812,7 @@ class DeviceCommunication:
     async def _emit_event(self, event_type: str, device_id: str, message: DeviceMessage = None):
         """触发事件"""
         if event_type == "connected":
-            for callback in self._on_device_connected:
+            for callback in list(self._on_device_connected):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(device_id)
@@ -822,7 +822,7 @@ class DeviceCommunication:
                     logger.error(f"事件回调失败: {e}")
 
         elif event_type == "disconnected":
-            for callback in self._on_device_disconnected:
+            for callback in list(self._on_device_disconnected):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(device_id)
@@ -832,7 +832,7 @@ class DeviceCommunication:
                     logger.error(f"事件回调失败: {e}")
 
         elif event_type == "message":
-            for callback in self._on_device_message:
+            for callback in list(self._on_device_message):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(device_id, message)

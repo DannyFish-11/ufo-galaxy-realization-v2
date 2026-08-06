@@ -317,7 +317,7 @@ class WakeEventBus:
             logger.error(f"[WakeEventBus] WakeRouter 路由失败: {e}")
 
         # 通知其他订阅者
-        for subscriber in self._subscribers:
+        for subscriber in list(self._subscribers):
             try:
                 result = subscriber(wake_event)
                 if asyncio.iscoroutine(result):

@@ -223,7 +223,7 @@ class RouteConnectionPool:
 
     async def broadcast_to_devices(self, message: dict):
         disconnected = []
-        for device_id, ws in self.active_devices.items():
+        for device_id, ws in list(self.active_devices.items()):
             try:
                 await ws.send_json(message)
             except Exception as e:
@@ -241,7 +241,7 @@ class RouteConnectionPool:
 
     async def broadcast_status(self, status: dict):
         disconnected = []
-        for ws in self.status_subscribers:
+        for ws in list(self.status_subscribers):
             try:
                 await ws.send_json(status)
             except Exception as e:

@@ -110,7 +110,7 @@ class UDPAdapter(TransportAdapter):
             # 也发送给所有已知 peer
             results = {"broadcast": True}
             failed: list[str] = []
-            for device_id, (host, port) in self._peers.items():
+            for device_id, (host, port) in list(self._peers.items()):
                 try:
                     await loop.run_in_executor(None, self._socket.sendto, packet, (host, port))
                     results[device_id] = True
