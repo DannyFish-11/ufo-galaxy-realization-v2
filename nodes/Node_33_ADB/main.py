@@ -88,20 +88,47 @@ class ADBController:
         self.connected_devices: List[str] = []
         self.current_device: Optional[str] = None
         self._reconnect_task: Optional[asyncio.Task] = None
+        #: 宿主机上到底有没有 adb。``start()`` 定，``/health`` 如实上报 ——
+        #: 不然"这个节点为什么不干活"只能靠翻日志猜。
+        self.adb_available: bool = False
+        self.degrade_reason: str = ""
     
     async def start(self):
-        """Start ADB server and device monitoring."""
+        """Start ADB server and device monitoring.
+
+        **宿主机没装 adb 不该让节点起不来。** 之前这里 ``_run_adb(["start-server"])``
+        抛出的 ``ADBNotAvailableError`` 一路穿到 FastAPI 的 startup，节点直接
+        ``Application startup failed. Exiting.``。
+
+        问题在于：谁都看不出它为什么没了。启动器只知道"端口没通"，报的是"启动超时"；
+        真实原因（宿主机缺一个二进制）没有任何地方说得出来。而这个节点在
+        ``registry/device_node_map.yaml`` 里本来就是 ``on_demand: android_phone``
+        —— 设计上就是"有安卓设备才拉起来"，那么没有 adb 时的正确姿态是**起来并
+        如实说自己不可用**，而不是消失。
+
+        起来之后 ``/health`` 会带上 ``adb_available: false`` 与 ``degrade_reason``；
+        真正需要 adb 的动作仍然走已有的 ``_mock_execute()`` 诚实兜底路径
+        （它会明确标 ``mock: True``），不会伪装成执行成功了。
+        """
         logger.info("Starting ADB controller...")
-        
-        # Start ADB server
-        await self._run_adb(["start-server"])
-        
-        # Initial device scan
-        await self.refresh_devices()
-        
+
+        try:
+            # Start ADB server
+            await self._run_adb(["start-server"])
+            # Initial device scan
+            await self.refresh_devices()
+        except ADBNotAvailableError as exc:
+            self.adb_available = False
+            self.degrade_reason = str(exc)
+            logger.warning("ADB 不可用，节点以降级模式启动（需要 adb 的动作会走 mock 兜底）：%s", exc)
+            return
+
+        self.adb_available = True
+        self.degrade_reason = ""
+
         # Start reconnect loop
         self._reconnect_task = asyncio.create_task(self._reconnect_loop())
-        
+
         logger.info(f"ADB controller started. Devices: {self.connected_devices}")
     
     async def stop(self):
@@ -465,6 +492,11 @@ async def health_check():
         "node_name": NODE_NAME,
         "layer": "L3_PHYSICAL",
         "connected_devices": adb_controller.connected_devices if adb_controller else [],
+        # 宿主机没装 adb 时节点仍然起得来（见 ADBController.start 的说明），
+        # 但必须在这里说清楚 —— 否则外面只看到"连接的设备是空的",分不清是
+        # "没插设备" 还是 "这台机器根本没有 adb"。
+        "adb_available": bool(adb_controller and adb_controller.adb_available),
+        "degrade_reason": (adb_controller.degrade_reason if adb_controller else "controller 未初始化"),
         "security": f"Only accessible by {ALLOWED_CALLER}"
     }
 

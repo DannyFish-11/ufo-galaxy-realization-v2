@@ -213,22 +213,29 @@ class ActivationPolicyEngine:
     def get_core_nodes(self) -> list[str]:
         """Return node names that should start with the core boot set.
 
-        Reads the device_node_map.yaml and returns all nodes with
-        ``startup: always_on`` policy.
+        这里原来只扫 ``registry/device_node_map.yaml`` 找 ``startup: always_on``
+        —— 而那张表里**一条 always_on 都没有**（它记的是设备型节点，全是
+        on_demand / lazy / shared）。于是这个方法**恒返回空表**，一直如此，
+        不报错也没人发现。
+
+        改为走 :func:`core.node_activation_policy.resolve_activation_policy`：
+        它对磁盘上全部 125 个节点定档，判定顺序是「设备表 > skip > core 组 >
+        默认 lazy」，设备表仍然优先，所以原来的语义是它的子集。
+
+        惰性 import 是为了避开循环：``node_activation_policy`` 在模块级 import
+        本模块的 :class:`ActivationPolicy`。
         """
-        from core.device_node_resolver import get_resolver
+        try:
+            from core.node_activation_policy import activation_policy_coverage
+        except Exception as exc:  # pragma: no cover - 退化路径
+            logger.warning("节点激活档位表不可用(%s)——核心启动集按空处理", exc)
+            return []
 
-        resolver = get_resolver()
-        resolver._ensure_loaded()
-
-        core_nodes: list[str] = []
-        for m in resolver._mappings:
-            impl = m.get("implementation", {})
-            startup = impl.get("startup", "")
-            if startup == ActivationPolicy.ALWAYS_ON.value:
-                core_nodes.append(impl["node"])
-
-        return core_nodes
+        return sorted(
+            name
+            for name, info in activation_policy_coverage().items()
+            if info["policy"] == ActivationPolicy.ALWAYS_ON.value
+        )
 
 
 # ---------------------------------------------------------------------------

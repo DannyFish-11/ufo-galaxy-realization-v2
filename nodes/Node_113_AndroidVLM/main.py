@@ -21,6 +21,15 @@ _NODE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 添加当前目录到 Python 路径
 sys.path.insert(0, _NODE_DIR)
 
+# 必须在上面那句之**后**:本节点自带 core/ 正规包,而启动器起节点时 cwd 就是节点
+# 目录 —— 加上这句 insert,节点目录就更牢地占着 sys.path[0],裸 `core` 会命中节点
+# 自己的包,仓库根的 core.* 全部解析不开。这里把仓库根再顶到最前面:两条都在,
+# 仓库根优先。节点目录仍然留在 path 上,下面按文件路径加载引擎那套照常工作。
+# 详见 nodes/common/import_path.py 与 tests/test_node_local_module_shadowing.py。
+from nodes.common.import_path import ensure_repo_root_precedes_node_dir  # noqa: E402
+
+ensure_repo_root_precedes_node_dir(__file__)
+
 
 def _load_vlm_engine():
     """按**文件路径**加载本节点的 core/android_vlm_engine.py。

@@ -53,6 +53,8 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 NODES_DIR = REPO_ROOT / "nodes"
 
@@ -161,6 +163,91 @@ class TestNode113VlmEngineSurvivesModuleLoading:
             "以模块方式加载 Node_113/main.py 时 VLM 引擎没挂上 —— 这正是那个"
             "静默降级:服务照常起来,能力却不见了。\n"
             f"stdout:{proc.stdout[-300:]}\nstderr:{proc.stderr[-300:]}"
+        )
+
+
+def _owns_shadowing_package(node_dir: Path) -> List[str]:
+    """该节点自己带着哪些与仓库根同名、**且真的会遮蔽**的顶层包。
+
+    只算**正规包**(有 ``__init__.py``)。没有 ``__init__.py`` 的同名目录是命名空间
+    portion —— Python 会把它记下来但**继续往后扫**,最终仍然找到仓库根那个正规包。
+    实测印证:``Node_70_AutonomousLearning/core/`` 没有 ``__init__.py``,在它的目录下
+    ``import core.rag_memory`` 照样 OK;而 ``Node_108_MetaCognition/core/`` 有,
+    同样的写法直接 ``ModuleNotFoundError: No module named 'core.llm_manager'``。
+
+    把这条区分做进判据,而不是一律报 —— 否则 Node_15_OCR 与 Node_70 会被冤枉,
+    而"冤枉"多了这条守卫就会被当成噪音关掉。
+    """
+    owned = []
+    for name in SHADOWABLE_TOP_LEVEL:
+        p = node_dir / name
+        if (p / "__init__.py").exists() and (REPO_ROOT / name / "__init__.py").exists():
+            owned.append(name)
+    return owned
+
+
+def _nodes_owning_a_core_package() -> List[str]:
+    if not NODES_DIR.is_dir():
+        return []
+    return sorted(
+        p.name for p in NODES_DIR.iterdir() if p.is_dir() and (p / "main.py").exists() and _owns_shadowing_package(p)
+    )
+
+
+class TestNodesOwningAShadowingPackageStillSeeTheRepoRoot:
+    """反方向的遮蔽:名字对了,**解析到的包**不对。
+
+    上面那个类钉的是"节点写 ``from core.X``,而 X 只有节点自己有"。这里是反过来:
+    X **只有仓库根有**,所以上面的扫描器判定它合法 —— 它确实合法。但启动器起节点时
+    ``cwd`` 是节点目录 → ``sys.path[0]`` 是节点目录 → 如果这个节点自己也带着一个
+    ``core`` 正规包,那么 ``core`` 这个名字先被它占了,``core.X`` 找不到。
+
+    两种后果都见过:
+
+    * **起不来** —— Node_71 实测,而且报错极具误导性::
+
+          ImportError: attempted relative import beyond top-level package
+
+      指的是 ``core/device_discovery.py`` 的 ``from ..models.device import`` ——
+      可那句相对导入本身完全正确,真正的毛病在上一层。
+    * **静默降级** —— Node_108 的 ``_get_llm()`` 里 ``from core.llm_manager import``
+      被 ``except Exception`` 接住,``_llm_manager`` 无声变成 False。服务照常起、
+      ``/health`` 照常绿,只是元认知没了 LLM,没有一行日志说为什么。
+
+    为什么判据是"行为"而不是"有没有调某个函数"
+    ------------------------------------------
+    一版写成"必须调用 ``ensure_repo_root_precedes_node_dir``"。那会**冤枉**
+    Node_110/111/112 —— 它们 main.py 开头早就有等效的内联 ``sys.path.insert``,
+    实测完全正常。判据钉在函数名上就成了风格检查,而风格检查一旦误报就会被关掉。
+
+    所以这里按启动器的真实方式跑一次:``cwd`` = 节点目录,``import main``,然后要求
+    ``core.port_config``(仓库根有、任何节点的 core 里都没有)仍然解析得开。修法不限。
+    """
+
+    @pytest.mark.parametrize("node_name", _nodes_owning_a_core_package())
+    def test_repo_core_is_still_reachable_after_main_imports(self, node_name: str):
+        node_dir = NODES_DIR / node_name
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import importlib\n"
+                "importlib.import_module('main')\n"
+                "importlib.import_module('core.port_config')\n"
+                "print('REPO_CORE_OK')\n",
+            ],
+            cwd=str(node_dir),
+            capture_output=True,
+            text=True,
+            timeout=110,
+            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        )
+        assert "REPO_CORE_OK" in proc.stdout, (
+            f"{node_name} 自带 core/ 正规包,在启动器的 cwd 下 `core` 被它自己占掉了 —— "
+            "仓库根的 core.port_config 解析不开。\n"
+            "在任何 core.* 导入之前调用 nodes.common.import_path."
+            "ensure_repo_root_precedes_node_dir(__file__)（或等效的 sys.path 前置）。\n"
+            f"stdout:{proc.stdout[-300:]}\nstderr:{proc.stderr[-700:]}"
         )
 
 

@@ -692,6 +692,13 @@ class GalaxyUnified:
 
             self.launcher_adapter = LauncherAdapter(self.node_launcher)
             logger.info("LauncherAdapter initialised (mode=%s)", self.launcher_adapter.mode.value)
+
+            # 按需激活的最后一根线:core 那边算出 should_start 就 return,这边能
+            # start_node() 却没人叫。只能由 launcher 单向注册进 core(core 是底层)。
+            # 来龙去脉见 tests/test_on_demand_activation_wiring.py。
+            from core.udm_registration_hook import get_hook
+
+            get_hook().set_activation_executor(self.launcher_adapter.activate)
         except Exception as e:
             logger.warning("LauncherAdapter init failed (non-fatal): %s", e)
             self.launcher_adapter = None

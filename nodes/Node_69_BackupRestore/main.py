@@ -34,6 +34,7 @@ from nodes.common.cors_config import get_cors_origins
 
 from core.port_config import get_service_port, get_node_port
 from core.atomic_json import atomic_write_json
+from nodes.common.node_port import resolve_node_port
 
 NODE_ID = os.getenv("NODE_ID", "69")
 NODE_NAME = os.getenv("NODE_NAME", "BackupRestore")
@@ -823,7 +824,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8069,
+        port=resolve_node_port("Node_69_BackupRestore", 8069),
         reload=False,
         log_level=LOG_LEVEL.lower()
     )

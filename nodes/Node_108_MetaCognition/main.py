@@ -13,7 +13,18 @@ from enum import Enum
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from nodes.common.cors_config import get_cors_origins
+
+# 本节点自带 core/ 子包,而启动器起节点时 cwd 就是节点目录 → sys.path[0] 是节点
+# 目录 → 裸 `core` 会命中节点自己的包。后果不是启动失败,是**静默降级**:
+# _get_llm() 里的 `from core.llm_manager import LLMManager` 被 except 接住,
+# _llm_manager 无声变成 False,服务照常起、/health 照常绿,只是元认知没了 LLM,
+# 没有一行日志说为什么。实测:在节点目录下 import core.llm_manager 直接
+# ModuleNotFoundError。
+from nodes.common.import_path import ensure_repo_root_precedes_node_dir
+
+ensure_repo_root_precedes_node_dir(__file__)
+
+from nodes.common.cors_config import get_cors_origins  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

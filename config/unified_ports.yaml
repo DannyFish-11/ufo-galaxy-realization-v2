@@ -357,22 +357,6 @@ layer_physical:
       dependencies: ["Node_01_OneAPI"]
       description: "Windows UI自动化"
       
-    Node_37_LinuxDBus:
-      port: 8037
-      name: "LinuxDBus"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "Linux D-Bus控制"
-      
-    Node_38_BLE:
-      port: 8038
-      name: "BLE"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "蓝牙低功耗"
-      
     Node_39_SSH:
       port: 8039
       name: "SSH"
@@ -388,22 +372,6 @@ layer_physical:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "SFTP文件传输"
-      
-    Node_41_MQTT:
-      port: 8041
-      name: "MQTT"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "MQTT消息队列"
-      
-    Node_42_CANbus:
-      port: 8042
-      name: "CANbus"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "CAN总线控制"
       
     Node_43_MAVLink:
       port: 8043
@@ -452,14 +420,6 @@ layer_physical:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "媒体生成 (物理层 — 图片/音频/视频生成)"
-      
-    Node_48_Serial:
-      port: 8049
-      name: "Serial"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "串口通信"
       
     Node_49_OctoPrint:
       port: 8048
@@ -1165,6 +1125,23 @@ infrastructure:
       port: 9000
       name: "Gateway"
       description: "API网关服务 (Galaxy Gateway) — 统一端口，WS + REST + WebRTC proxy 同端口运行"
+      # 与 unified_launcher **是同一个服务面**，不是两个抢同一个口的服务。
+      #
+      # 同一份 API 网关表面有两条部署路径，任何一次部署只会有其中一条在跑：
+      #   桌面单进程 `python main.py` → launcher/services.py:589 起的 uvicorn
+      #                                （它的报错信息里自称"API 网关端口"）
+      #   容器        → galaxy-gateway 容器 `ports: 9000:9000` 发布到宿主；
+      #                 galaxy 容器只 expose 不映射，在自己的网络命名空间里
+      # 两条路径下宿主的 9000 上都只有一个进程。
+      #
+      # 在此之前这件事**只存在于上面那两行中文描述里**，没有任何机器可读的表达 ——
+      # scripts/validate_ports.py 把"同一个端口出现两次"一律判成 PORT CONFLICT，
+      # 于是它在 main 上长期红着，而每个来查的人都得重新把这条链走一遍才能确认
+      # 它不是缺陷（我就走了一遍）。
+      #
+      # 声明它之后判据反而更强：校验器不仅不再误报，还会**要求**两者端口相等 ——
+      # 将来谁把其中一个挪走而忘了另一个，立刻红。
+      same_surface_as: unified_launcher
       
     oneapi_web:
       port: 3001

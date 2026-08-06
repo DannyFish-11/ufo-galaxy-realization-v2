@@ -215,18 +215,6 @@
       "description": "PostgreSQL数据库",
       "health_endpoint": "/health"
     },
-    "Node_120_File": {
-      "port": 8120,
-      "group": "tools",
-      "priority": 2,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "文件管理服务",
-      "health_endpoint": "/health"
-    },
     "Node_13_SQLite": {
       "port": 8013,
       "group": "tools",
@@ -239,18 +227,6 @@
       "description": "SQLite数据库",
       "health_endpoint": "/health"
     },
-    "Node_121_Web": {
-      "port": 8121,
-      "group": "tools",
-      "priority": 2,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "Web浏览器服务",
-      "health_endpoint": "/health"
-    },
     "Node_14_FFmpeg": {
       "port": 8014,
       "group": "tools",
@@ -261,18 +237,6 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "音视频处理",
-      "health_endpoint": "/health"
-    },
-    "Node_122_Shell": {
-      "port": 8122,
-      "group": "tools",
-      "priority": 2,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "Shell命令执行",
       "health_endpoint": "/health"
     },
     "Node_15_OCR": {
@@ -369,18 +333,6 @@
       "description": "Brave搜索",
       "health_endpoint": "/health"
     },
-    "Node_123_Calendar": {
-      "port": 8123,
-      "group": "tools",
-      "priority": 2,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "日历服务",
-      "health_endpoint": "/health"
-    },
     "Node_23_Time": {
       "port": 8023,
       "group": "tools",
@@ -415,6 +367,18 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "Google搜索",
+      "health_endpoint": "/health"
+    },
+    "Node_26_Discord": {
+      "port": 8023,
+      "group": "tools",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Discord 集成节点，通过 REST API v10 支持消息发送、频道管理、表情反应等",
       "health_endpoint": "/health"
     },
     "Node_27_SmartHome": {
@@ -537,30 +501,6 @@
       "description": "Windows UI自动化",
       "health_endpoint": "/health"
     },
-    "Node_37_LinuxDBus": {
-      "port": 8037,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "Linux D-Bus控制",
-      "health_endpoint": "/health"
-    },
-    "Node_38_BLE": {
-      "port": 8038,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "蓝牙低功耗",
-      "health_endpoint": "/health"
-    },
     "Node_39_SSH": {
       "port": 8039,
       "group": "physical",
@@ -583,30 +523,6 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "SFTP文件传输",
-      "health_endpoint": "/health"
-    },
-    "Node_41_MQTT": {
-      "port": 8041,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "MQTT消息队列",
-      "health_endpoint": "/health"
-    },
-    "Node_42_CANbus": {
-      "port": 8042,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "CAN总线控制",
       "health_endpoint": "/health"
     },
     "Node_43_MAVLink": {
@@ -657,18 +573,6 @@
       "description": "摄像头控制",
       "health_endpoint": "/health"
     },
-    "Node_124_LinuxDesktopAuto": {
-      "port": 8124,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "Linux桌面自动化",
-      "health_endpoint": "/health"
-    },
     "Node_47_Audio": {
       "port": 8047,
       "group": "physical",
@@ -679,30 +583,6 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "音频控制",
-      "health_endpoint": "/health"
-    },
-    "Node_125_MediaGen": {
-      "port": 8125,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "媒体生成",
-      "health_endpoint": "/health"
-    },
-    "Node_48_Serial": {
-      "port": 8204,
-      "group": "physical",
-      "priority": 3,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "串口通信",
       "health_endpoint": "/health"
     },
     "Node_49_OctoPrint": {
@@ -777,16 +657,16 @@
       "description": "符号数学计算",
       "health_endpoint": "/health"
     },
-    "Node_126_AgentSwarm": {
-      "port": 8126,
-      "group": "intelligence",
+    "Node_55_MultiModal": {
+      "port": 8055,
+      "group": "extended",
       "priority": 4,
       "dependencies": [
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
       "critical": false,
-      "description": "智能体集群",
+      "description": "Multimodal AI processing node supporting text and image embeddings via transformers",
       "health_endpoint": "/health"
     },
     "Node_56_Planning": {
@@ -837,6 +717,18 @@
       "description": "因果推理",
       "health_endpoint": "/health"
     },
+    "Node_60_ReinforcementLearning": {
+      "port": 8160,
+      "group": "academic",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Reinforcement learning training and inference service",
+      "health_endpoint": "/health"
+    },
     "Node_61_GeometricReasoning": {
       "port": 8061,
       "group": "intelligence",
@@ -859,6 +751,18 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "概率编程",
+      "health_endpoint": "/health"
+    },
+    "Node_63_FuzzyLogicEngine": {
+      "port": 8163,
+      "group": "academic",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Fuzzy logic evaluation and rule engine",
       "health_endpoint": "/health"
     },
     "Node_64_Telemetry": {
@@ -929,18 +833,6 @@
       "description": "备份恢复",
       "health_endpoint": "/health"
     },
-    "Node_127_BambuLab": {
-      "port": 8127,
-      "group": "advanced",
-      "priority": 6,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "BambuLab 3D打印",
-      "health_endpoint": "/health"
-    },
     "Node_70_AutonomousLearning": {
       "port": 8070,
       "group": "advanced",
@@ -951,18 +843,6 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "自主学习系统",
-      "health_endpoint": "/health"
-    },
-    "Node_128_MediaGen": {
-      "port": 8128,
-      "group": "advanced",
-      "priority": 6,
-      "dependencies": [
-        "Node_01_OneAPI"
-      ],
-      "optional_dependencies": [],
-      "critical": false,
-      "description": "媒体生成",
       "health_endpoint": "/health"
     },
     "Node_71_MultiDeviceCoordination": {
@@ -1011,6 +891,54 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "数字孪生",
+      "health_endpoint": "/health"
+    },
+    "Node_75_DataPipeline": {
+      "port": 8075,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Data pipeline ingestion and transformation service",
+      "health_endpoint": "/health"
+    },
+    "Node_76_AlertManager": {
+      "port": 8076,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "System alert management and notification routing",
+      "health_endpoint": "/health"
+    },
+    "Node_77_TaskScheduler": {
+      "port": 8077,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Cron-style and delayed task scheduling service",
+      "health_endpoint": "/health"
+    },
+    "Node_78_DataValidator": {
+      "port": 8078,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Data validation and schema enforcement service",
       "health_endpoint": "/health"
     },
     "Node_79_LocalLLM": {
@@ -1093,6 +1021,54 @@
       "description": "提示词库",
       "health_endpoint": "/health"
     },
+    "Node_86_SpeechProcessor": {
+      "port": 8086,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Speech recognition and synthesis processing service",
+      "health_endpoint": "/health"
+    },
+    "Node_87_ImageAnalysis": {
+      "port": 8087,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Image analysis, classification and captioning service",
+      "health_endpoint": "/health"
+    },
+    "Node_88_WorkflowEngine": {
+      "port": 8088,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Workflow definition, execution and orchestration service",
+      "health_endpoint": "/health"
+    },
+    "Node_89_APIGateway": {
+      "port": 8089,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "External API gateway and request routing service",
+      "health_endpoint": "/health"
+    },
     "Node_90_MultimodalVision": {
       "port": 8090,
       "group": "multimodal",
@@ -1129,6 +1105,30 @@
       "description": "自动控制",
       "health_endpoint": "/health"
     },
+    "Node_93_VideoProcessor": {
+      "port": 8093,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Video processing, analysis and transcoding service",
+      "health_endpoint": "/health"
+    },
+    "Node_94_AudioAnalysis": {
+      "port": 8094,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Audio analysis, feature extraction and classification",
+      "health_endpoint": "/health"
+    },
     "Node_95_WebRTC_Receiver": {
       "port": 8095,
       "group": "multimodal",
@@ -1163,6 +1163,30 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "学术搜索",
+      "health_endpoint": "/health"
+    },
+    "Node_98_MultimodalFusion": {
+      "port": 8098,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Multimodal signal fusion and cross-modal reasoning",
+      "health_endpoint": "/health"
+    },
+    "Node_99_EmbeddingService": {
+      "port": 8099,
+      "group": "extended",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Vector embedding generation and similarity search service",
       "health_endpoint": "/health"
     },
     "Node_100_MemorySystem": {
@@ -1249,6 +1273,18 @@
       "description": "GitHub工作流",
       "health_endpoint": "/health"
     },
+    "Node_107_FunctionCalling": {
+      "port": 8107,
+      "group": "development",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Structured function-calling dispatch and schema registry",
+      "health_endpoint": "/health"
+    },
     "Node_108_MetaCognition": {
       "port": 8108,
       "group": "academic",
@@ -1324,6 +1360,30 @@
       "description": "Android视觉语言模型",
       "health_endpoint": "/health"
     },
+    "Node_114_DocumentIntelligence": {
+      "port": 8114,
+      "group": "development",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Document parsing, extraction and structured output service",
+      "health_endpoint": "/health"
+    },
+    "Node_115_PluginManager": {
+      "port": 8115,
+      "group": "development",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Plugin loading, lifecycle and dependency management",
+      "health_endpoint": "/health"
+    },
     "Node_116_ExternalToolWrapper": {
       "port": 8116,
       "group": "academic",
@@ -1358,6 +1418,138 @@
       "optional_dependencies": [],
       "critical": false,
       "description": "节点工厂",
+      "health_endpoint": "/health"
+    },
+    "Node_119_BenchmarkEval": {
+      "port": 8119,
+      "group": "development",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Benchmarking, evaluation harness and performance metrics",
+      "health_endpoint": "/health"
+    },
+    "Node_120_File": {
+      "port": 8120,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "文件管理服务",
+      "health_endpoint": "/health"
+    },
+    "Node_121_Web": {
+      "port": 8121,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Web浏览器服务",
+      "health_endpoint": "/health"
+    },
+    "Node_122_Shell": {
+      "port": 8122,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Shell命令执行",
+      "health_endpoint": "/health"
+    },
+    "Node_123_Calendar": {
+      "port": 8123,
+      "group": "tools",
+      "priority": 2,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "日历服务",
+      "health_endpoint": "/health"
+    },
+    "Node_124_LinuxDesktopAuto": {
+      "port": 8124,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Linux桌面自动化",
+      "health_endpoint": "/health"
+    },
+    "Node_125_MediaGen": {
+      "port": 8125,
+      "group": "physical",
+      "priority": 3,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "媒体生成",
+      "health_endpoint": "/health"
+    },
+    "Node_126_AgentSwarm": {
+      "port": 8126,
+      "group": "intelligence",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "智能体集群",
+      "health_endpoint": "/health"
+    },
+    "Node_127_BambuLab": {
+      "port": 8127,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "BambuLab 3D打印",
+      "health_endpoint": "/health"
+    },
+    "Node_128_MediaGen": {
+      "port": 8128,
+      "group": "advanced",
+      "priority": 6,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "媒体生成",
+      "health_endpoint": "/health"
+    },
+    "Node_130_AutonomousCoding": {
+      "port": 8130,
+      "group": "development",
+      "priority": 4,
+      "dependencies": [
+        "Node_01_OneAPI"
+      ],
+      "optional_dependencies": [],
+      "critical": false,
+      "description": "Autonomous coding agent (stub — needs substantial implementation)",
       "health_endpoint": "/health"
     }
   },

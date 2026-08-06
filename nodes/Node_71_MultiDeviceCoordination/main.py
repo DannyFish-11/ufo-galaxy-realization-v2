@@ -28,7 +28,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uuid
 import httpx
-from nodes.common.cors_config import get_cors_origins
+
+# 必须在任何 core.* 导入之前:本节点自己带着一个 core/ 子包,而启动器起节点时
+# cwd 就是节点目录 → sys.path[0] 是节点目录 → 下面第 43 行的 core.device_types
+# 会命中**节点自己的** core,而不是仓库根的。实测报错是
+# "ImportError: attempted relative import beyond top-level package"，
+# 指向 core/device_discovery.py 的相对导入 —— 而那句相对导入本身是对的，
+# 真正错的是 core 这个名字被解析到了哪儿。详见 nodes/common/import_path.py。
+from nodes.common.import_path import ensure_repo_root_precedes_node_dir
+
+ensure_repo_root_precedes_node_dir(__file__)
+
+from nodes.common.cors_config import get_cors_origins  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

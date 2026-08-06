@@ -74,45 +74,6 @@ mappings:
 
   # ── Bluetooth LE ──
   - match:
-      transport: ble
-    implementation:
-      node: Node_38_BLE
-      transport: ble
-      port: 8038
-      startup: lazy
-      healthcheck: /health
-    capabilities:
-      provides: [COMM_BLUETOOTH, SENSOR_MOTION]
-      requires: []
-
-  # ── MQTT IoT ──
-  - match:
-      transport: mqtt
-    implementation:
-      node: Node_41_MQTT
-      transport: mqtt
-      port: 8041
-      startup: shared
-      healthcheck: /health
-    capabilities:
-      provides: [COMM_MQTT]
-      requires: []
-
-  # ── CAN bus (automotive/industrial) ──
-  - match:
-      transport: can
-    implementation:
-      node: Node_42_CANbus
-      transport: can
-      port: 8042
-      startup: on_demand
-      healthcheck: /health
-    capabilities:
-      provides: [COMM_CAN]
-      requires: []
-
-  # ── NFC ──
-  - match:
       transport: nfc
     implementation:
       node: Node_44_NFC
@@ -189,19 +150,6 @@ mappings:
 
   # ── Serial / UART ──
   - match:
-      transport: serial
-    implementation:
-      node: Node_48_Serial
-      transport: serial
-      port: 8049
-      startup: on_demand
-      healthcheck: /health
-    capabilities:
-      provides: [COMM_SERIAL]
-      requires: []
-
-  # ── OctoPrint (3D printer) ──
-  - match:
       device_type: iot_generic
       transport: http
     implementation:
@@ -214,3 +162,15 @@ mappings:
       provides: [GUI_READ, GUI_WRITE]
       requires: []
     note: "3D printer via OctoPrint REST API"
+
+# ── 已移除的映射（磁盘上没有实现）────────────────────────────────────────────
+# Node_38_BLE / Node_41_MQTT / Node_42_CANbus / Node_48_Serial 曾经在这里各占一条
+# 规则，但 nodes/ 下面**从来没有过这四个目录**——它们和 deploy/compose/full.yml 里
+# 那 5 个幽灵 service 是同一批：设计好了物理总线节点，实现没跟上。
+#
+# 之前留着无害（解析出来也没人拿去启动）。按需激活接通之后就变有害了：一台 BLE
+# 设备注册进来会解析到 Node_38_BLE 并**真去启动它**，而那个目录不存在——启动失败，
+# 日志里多一条谁也看不懂的告警，而设备侧只知道"没能力"。
+#
+# 移除之后，这些传输类型解析不到节点，日志明说 "no mapping for transport=ble"——
+# 那是准确的：确实没有实现。真做出来了再把规则加回来。
