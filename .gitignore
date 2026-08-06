@@ -75,6 +75,13 @@ nodes/**/*.log
 nodes/**/*.pid
 nodes/**/__pycache__/
 nodes/**/.pytest_cache/
+# 节点跑起来就会写的产物目录。实测：把 125 个节点逐个拉起来一遍,工作区就多出
+# 这两个未跟踪目录 —— Node_125_MediaGen 的演示流程往 media_output/ 写图/音/视频
+# (文件名是 UUID,每跑一次都不同),Node_97_AcademicSearch 往 data/runtime/ 写
+# 网络图状态。跟上面 *.db / *.log 是同一类东西,只是之前没人真把节点跑全过,
+# 所以没暴露出来。
+nodes/**/media_output/
+nodes/**/data/runtime/
 
 # OS
 .DS_Store

@@ -100,14 +100,38 @@ class LauncherAdapter:
 
     # -- mode detection ------------------------------------------------------
 
+    #: 默认执行模式。
+    #:
+    #: 曾经是 ``observe_only`` —— 那是分阶段上线时的第一档("先记账,别动手"),
+    #: 但**那一档再也没往前推过**:决策链算得出 should_start、台账一条条记着,
+    #: 执行侧一次都没被调用。加上执行入口那时根本没有生产调用方(见
+    #: tests/test_on_demand_activation_wiring.py),整套按需激活是死的。
+    #:
+    #: 现在改成 ``full``。前提是三件事都已经成立:
+    #:   1. 决策 → 执行的线接上了(core hook / node_registry → launcher.activate);
+    #:   2. 125 个节点全部有档位,且默认是 lazy 而不是 always_on
+    #:      (core/node_activation_policy);
+    #:   3. 触发时机按档位判定 —— on_demand 要真实设备,不会被一次能力请求拽起来。
+    #:
+    #: 也就是说"会起来的"只有:真插了对应设备的 on_demand 节点、真被调用到的
+    #: lazy 节点。**不是 130 个一起起。**
+    #:
+    #: 逃生口保留:``LAUNCHER_ADAPTER_MODE=observe_only`` 回到只记账,
+    #: ``dry_run`` 只打印,``allowlist`` 配合 ``LAUNCHER_ADAPTER_ALLOWLIST`` 白名单。
+    DEFAULT_MODE = AdapterMode.FULL
+
     @staticmethod
     def _detect_mode() -> AdapterMode:
-        raw = os.environ.get("LAUNCHER_ADAPTER_MODE", "observe_only").lower().strip()
+        raw = os.environ.get("LAUNCHER_ADAPTER_MODE", LauncherAdapter.DEFAULT_MODE.value).lower().strip()
         try:
             return AdapterMode(raw)
         except ValueError:
-            logger.warning("Invalid LAUNCHER_ADAPTER_MODE='%s', using observe_only", raw)
-            return AdapterMode.OBSERVE_ONLY
+            logger.warning(
+                "Invalid LAUNCHER_ADAPTER_MODE='%s', using %s",
+                raw,
+                LauncherAdapter.DEFAULT_MODE.value,
+            )
+            return LauncherAdapter.DEFAULT_MODE
 
     @staticmethod
     def _load_allowlist() -> Set[str]:
@@ -284,7 +308,10 @@ class LauncherAdapter:
             "resolved_node": resolved.implementation.node,
             "node_port": resolved.implementation.port,
             "activation_policy": resolved.implementation.startup,
-            "decision": decision.decision if decision else "unknown",
+            # ActivationDecision 没有 .decision 字段（只有 node/policy/should_start/
+            # reason）。同样的错误在 core/udm_registration_hook.py 里也有一份 ——
+            # 取值口径统一到 device_activation_registry 的 start / skip。
+            "decision": ("start" if decision.should_start else "skip") if decision else "unknown",
             "should_start": decision.should_start if decision else False,
             "reason": decision.reason if decision else "",
             "started": act_result is not None,
@@ -315,6 +342,34 @@ class LauncherAdapter:
         self._started_nodes.clear()
 
     # -- internal action -----------------------------------------------------
+
+    async def activate(
+        self,
+        *,
+        node_name: str,
+        decision: Any,
+        device_type: Optional[str] = None,
+        transport: Optional[str] = None,
+    ) -> Optional[str]:
+        """公开入口:按当前 mode 执行一条已经算好的激活决定。
+
+        登记给 :meth:`core.udm_registration_hook.UDMRegistrationHook.set_activation_executor`
+        用 —— 决策在 ``core/``,执行在这里,由 ``launcher`` 单向注册,``core`` 不反向依赖。
+
+        在此之前 :meth:`_maybe_start_node` 只有本类内部两处调用,而那两处的入口
+        (:meth:`start` / :meth:`on_device_registered`)**本身没有任何生产调用方** ——
+        整个执行侧是死的。设备注册那条真实链路走的是 ``core`` 的 hook,而那个 hook
+        算完 ``should_start`` 就 return。
+
+        Returns:
+            起成功(或 dry_run 模拟成功)返回节点名;被 mode/allowlist 挡下或失败返回 None。
+        """
+        return await self._maybe_start_node(
+            node_name=node_name,
+            device_type=device_type,
+            transport=transport,
+            decision=decision,
+        )
 
     async def _maybe_start_node(
         self,

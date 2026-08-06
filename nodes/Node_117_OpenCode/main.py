@@ -19,7 +19,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uuid
 import shutil
-from nodes.common.cors_config import get_cors_origins
+
+# 本节点自带 core/ 子包(core/opencode_engine.py),而启动器起节点时 cwd 就是节点
+# 目录 → sys.path[0] 是节点目录 → 裸 `core` 会命中节点自己的包。同目录下的
+# server.py 与 core/opencode_engine.py 都写着 `from core.<仓库模块>`,那些在这个
+# 顺序下全部解析不开(实测 core.atomic_json → ModuleNotFoundError)。
+from nodes.common.import_path import ensure_repo_root_precedes_node_dir
+
+ensure_repo_root_precedes_node_dir(__file__)
+
+from nodes.common.cors_config import get_cors_origins  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

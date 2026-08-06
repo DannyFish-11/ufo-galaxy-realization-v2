@@ -346,9 +346,20 @@ class NodeRegistry:
         """
         node = self.get_node(node_id)
         if not node:
-            if allow_failover:
-                return await self._failover_call(node_id, action, params, f"节点不存在: {node_id}")
-            return {"success": False, "error": f"节点不存在: {node_id}"}
+            # LAZY 档的落地点:节点还没起来 ≠ 这个能力不存在。
+            #
+            # 仓里 103 个节点被定成 lazy("首次能力请求时启动,然后保活",见
+            # core/node_activation_policy),而在此之前**全仓没有任何一处发出
+            # TRIGGER_CAPABILITY_REQUEST** —— 定了档,却永远不会触发。于是第一次
+            # 用到一个 lazy 节点时,这里直接报"节点不存在"或走故障转移,
+            # 而它其实只是还没被拉起来。
+            started = await self._try_lazy_start(node_id)
+            if started:
+                node = self.get_node(node_id)
+            if not node:
+                if allow_failover:
+                    return await self._failover_call(node_id, action, params, f"节点不存在: {node_id}")
+                return {"success": False, "error": f"节点不存在: {node_id}"}
 
         if node.metadata.status not in [NodeStatus.READY, NodeStatus.RUNNING]:
             if allow_failover:
@@ -390,6 +401,30 @@ class NodeRegistry:
             if allow_failover:
                 return await self._failover_call(node_id, action, params, str(e))
             return {"success": False, "error": str(e)}
+
+    async def _try_lazy_start(self, node_id: str) -> bool:
+        """节点不在注册表里时，按它的激活档位尝试把它拉起来。
+
+        只对 ``lazy`` 档生效 —— ``ensure_node_started`` 会按档位判断这个触发时机
+        成不成立：``on_demand`` 的节点要真实设备,不该被一次能力请求拽起来；
+        ``always_on`` 的本就该在启动时起好,这里重复起没有意义。
+
+        **不抛、不阻断。** 没登记执行器(单跑 core、或启动器处于只记账模式)时它
+        直接返回 False,调用方照原来的路径走故障转移 —— 行为与接线前完全一致。
+        """
+        try:
+            from core.activation_policy import ActivationPolicyEngine
+            from core.node_activation_policy import ensure_node_started
+
+            started = await ensure_node_started(node_id, ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST)
+        except Exception as exc:
+            logger.debug("惰性启动 %s 未成功(非致命): %s", node_id, exc)
+            return False
+
+        if started:
+            logger.info("惰性启动: %s 因一次能力请求被拉起", node_id)
+            return True
+        return False
 
     async def _failover_call(
         self, failed_node_id: str, action: str, params: Dict[str, Any], reason: str

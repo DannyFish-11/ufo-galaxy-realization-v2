@@ -33,13 +33,19 @@ import uvicorn
 # Port / CORS config (optional dependencies)
 # ---------------------------------------------------------------------------
 
-try:
-    from core.port_config import get_service_port
+# 端口必须查**节点**表，不是**服务**表。
+# 这里原来是 `get_service_port("node_74") or 8074` —— 那个键在
+# config/unified_ports.yaml 的 services 段里根本不存在，每次都 KeyError，被下面的
+# except 接住，于是实际生效的永远是 os.getenv("PORT", "8074")：
+#   * 经启动器起（会传 PORT）→ 碰巧对；
+#   * 裸跑 `python main.py`（没有 PORT）→ 落到字面量 8074。
+# Node_66 就是这么撞车的：它的权威端口是 8065，字面量却是 8066，而 8066 是
+# Node_67_HealthMonitor 的权威端口 —— 裸跑时两个节点抢同一个口，后起的那个
+# "address already in use" 直接退出。另外三个（72/73/74）字面量碰巧等于权威值，
+# 属于侥幸没事，一并改掉，不留"靠运气对"的。
+from nodes.common.node_port import resolve_node_port
 
-    PORT = get_service_port("node_74") or 8074
-except Exception as exc:
-    logger.debug("Fallback triggered: %s", exc)
-    PORT = int(os.getenv("PORT", "8074"))
+PORT = resolve_node_port("Node_74_DigitalTwin", 8074)
 
 try:
     from nodes.common.cors_config import get_cors_origins

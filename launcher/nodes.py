@@ -93,6 +93,10 @@ NODE_GROUPS: Sequence[str] = (
     "orchestration",
     "multimodal",
     "academic",
+    # 补全 config/unified_config.json 后多出来的两个组。不加进这里的话，
+    # `--group development` 会被 argparse 直接拒掉("invalid choice")。
+    "development",
+    "extended",
     "all",
 )
 
@@ -410,6 +414,13 @@ class SystemManager:
                 env["NODE_ID"] = config.id
                 env["NODE_NAME"] = config.name
                 env["PORT"] = str(config.port)
+                # NODE_PORT 与 PORT 都要传:两条部署路径历史上各用一个名字 ——
+                # 这里(原生启动器)传 PORT,而 deploy/compose/full.yml 与
+                # Dockerfile.node 传 NODE_PORT。于是读 NODE_PORT 的节点
+                # (Node_23_Time、Node_80_MemorySystem)在容器里对、在这里错:
+                # 它们取不到 PORT,退回代码里写死的字面量,而启动器探活敲的是
+                # config/unified_ports.yaml 的值,两者不等 → 明明活着却报"启动超时"。
+                env["NODE_PORT"] = str(config.port)
                 # 仓库根必须进子进程的 import 路径。
                 #
                 # cwd 是节点自己的目录(节点会按相对路径读自带资源,不能改),
@@ -623,8 +634,16 @@ class SystemManager:
                 "orchestration",
                 "multimodal",
                 "academic",
+                "development",
+                "extended",
             ]
+            # 只按 priority_order 取会**静默丢掉**表里没列到的组。此前
+            # config/unified_config.json 少了 21 个节点，补全之后多出
+            # development / extended 两个组 —— 忘了加进这张表的话，那 18 个节点
+            # `--group all` 一个都不会碰，而输出里什么都不会说。
+            # 这里先按优先级排，再把剩下的接在后面:新增组永远不会被静默漏掉。
             groups = [g for g in priority_order if g in NODES]
+            groups += [g for g in sorted(NODES) if g not in priority_order]
 
         print(f"\n{CYAN}{'='*80}{RESET}")
         print(f"{CYAN}Galaxy 系统启动{RESET}")

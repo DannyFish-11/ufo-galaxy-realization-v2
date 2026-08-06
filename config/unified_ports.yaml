@@ -357,22 +357,6 @@ layer_physical:
       dependencies: ["Node_01_OneAPI"]
       description: "Windows UI自动化"
       
-    Node_37_LinuxDBus:
-      port: 8037
-      name: "LinuxDBus"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "Linux D-Bus控制"
-      
-    Node_38_BLE:
-      port: 8038
-      name: "BLE"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "蓝牙低功耗"
-      
     Node_39_SSH:
       port: 8039
       name: "SSH"
@@ -388,22 +372,6 @@ layer_physical:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "SFTP文件传输"
-      
-    Node_41_MQTT:
-      port: 8041
-      name: "MQTT"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "MQTT消息队列"
-      
-    Node_42_CANbus:
-      port: 8042
-      name: "CANbus"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "CAN总线控制"
       
     Node_43_MAVLink:
       port: 8043
@@ -452,14 +420,6 @@ layer_physical:
       critical: false
       dependencies: ["Node_01_OneAPI"]
       description: "媒体生成 (物理层 — 图片/音频/视频生成)"
-      
-    Node_48_Serial:
-      port: 8049
-      name: "Serial"
-      group: "physical"
-      critical: false
-      dependencies: ["Node_01_OneAPI"]
-      description: "串口通信"
       
     Node_49_OctoPrint:
       port: 8048

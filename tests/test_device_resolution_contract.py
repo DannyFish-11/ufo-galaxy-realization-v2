@@ -252,12 +252,23 @@ class TestLauncherAdapterModes(unittest.TestCase):
             del os.environ["LAUNCHER_ADAPTER_MODE"]
 
     def test_invalid_env_fallback(self):
-        from launcher.launcher_adapter import AdapterMode, LauncherAdapter
+        """环境变量写错时退回**默认**模式。
+
+        原来断言的是 ``OBSERVE_ONLY`` —— 那时 observe_only 就是默认，所以这条测的
+        其实一直是"退回默认"（方法名 ``fallback`` 也是这个意思），而不是"必须退到
+        最保守的那一档"。默认改成 ``full`` 之后仍然按同一条语义断言。
+
+        为什么不能继续写死 observe_only：那样一个**拼错的环境变量**会把按需激活
+        整个静默关掉，而日志只说 "Invalid ...，using observe_only" —— 没人会把
+        "节点都不自动起了"和"我环境变量拼错了"联系起来。真要关它，写对了名字明确
+        关（``LAUNCHER_ADAPTER_MODE=observe_only``），那是显式决定。
+        """
+        from launcher.launcher_adapter import LauncherAdapter
 
         os.environ["LAUNCHER_ADAPTER_MODE"] = "garbage"
         try:
             mode = LauncherAdapter._detect_mode()
-            self.assertEqual(mode, AdapterMode.OBSERVE_ONLY)
+            self.assertEqual(mode, LauncherAdapter.DEFAULT_MODE)
         finally:
             del os.environ["LAUNCHER_ADAPTER_MODE"]
 
@@ -339,14 +350,30 @@ class TestResolutionEndToEnd(unittest.TestCase):
         self.assertEqual(result.implementation.port, 8033)
         self.assertEqual(result.implementation.startup, "on_demand")
 
-    def test_resolve_ble_transport(self):
+    def test_unimplemented_transports_resolve_to_nothing(self):
+        """BLE / MQTT / CAN / 串口现在**解析不到节点** —— 因为它们确实没有实现。
+
+        这条原来断言 ``transport="ble"`` 解析到 ``Node_38_BLE``。而
+        ``nodes/Node_38_BLE/`` **从来没有存在过** —— 它和 41_MQTT / 42_CANbus /
+        48_Serial / 37_LinuxDBus 是同一批"设计好了、实现没跟上"的物理总线节点。
+
+        以前留着那几条映射不痛不痒：解析出来也没人拿去启动。**按需激活接通之后
+        就变有害了**：一台 BLE 设备注册进来会解析到 Node_38_BLE 并真的去启动它，
+        而那个目录不存在——启动失败，日志里多一条谁也看不懂的告警，设备侧只知道
+        "没能力"。让一条本来就不成立的规则去驱动真实动作，比没有规则更糟。
+
+        所以映射被移除了。现在的行为是解析不到、日志明说
+        "no mapping for transport=ble" —— 那是**准确**的。真把节点做出来了，
+        把规则加回 registry/device_node_map.yaml，这条测试也随之改回去。
+        """
         from core.device_node_resolver import get_resolver
 
         resolver = get_resolver()
-        result = resolver.resolve(transport="ble")
-        self.assertIsNotNone(result)
-        self.assertEqual(result.implementation.node, "Node_38_BLE")
-        self.assertEqual(result.implementation.transport, "ble")
+        for transport in ("ble", "mqtt", "can", "serial"):
+            self.assertIsNone(
+                resolver.resolve(transport=transport),
+                f"{transport} 解析到了节点 —— 但它对应的节点目录并不存在",
+            )
 
     def test_resolve_camera_by_capability(self):
         from core.device_node_resolver import get_resolver
@@ -373,13 +400,24 @@ class TestResolutionEndToEnd(unittest.TestCase):
         self.assertIn("linux_desktop", types)
 
     def test_list_supported_transports(self):
+        """ "支持的传输"必须只列**真的有实现**的那些。
+
+        原来断言里面有 ble / mqtt —— 那两个对应的节点目录并不存在（见
+        ``test_unimplemented_transports_resolve_to_nothing``）。一份把没实现的东西
+        也列成"支持"的清单，比没有清单更误导：调用方据此以为能用。
+        """
         from core.device_node_resolver import get_resolver
 
         resolver = get_resolver()
         transports = resolver.list_supported_transports()
+
         self.assertIn("adb", transports)
-        self.assertIn("ble", transports)
-        self.assertIn("mqtt", transports)
+        for unimplemented in ("ble", "mqtt", "can", "serial"):
+            self.assertNotIn(
+                unimplemented,
+                transports,
+                f"{unimplemented} 被列为受支持，但它对应的节点目录并不存在",
+            )
 
 
 # ---------------------------------------------------------------------------

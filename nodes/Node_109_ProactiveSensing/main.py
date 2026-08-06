@@ -15,6 +15,15 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import threading
+
+# 本节点自带 core/ 正规包,而启动器起节点时 cwd 就是节点目录 → sys.path[0] 是节点
+# 目录 → 裸 `core` 会命中节点自己的包,仓库根的 core.* 全部解析不开。必须在任何
+# core.* 导入之前把顺序摆正。详见 nodes/common/import_path.py 与
+# tests/test_node_local_module_shadowing.py。
+from nodes.common.import_path import ensure_repo_root_precedes_node_dir
+
+ensure_repo_root_precedes_node_dir(__file__)
+
 from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(level=logging.INFO)

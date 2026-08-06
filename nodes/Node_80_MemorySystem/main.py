@@ -24,6 +24,7 @@ import json
 import sqlite3
 import hashlib
 import logging
+import time
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
@@ -43,6 +44,8 @@ except ImportError:
     redis = None
     HAS_REDIS = False
     logging.getLogger("Node_80_MemorySystem").warning("redis 未安装，短期记忆功能降级")
+
+from nodes.common.redis_list_fallback import InProcessListStore as _InProcessListStore
 
 try:
     from nodes.common.cors_config import get_cors_origins
@@ -139,25 +142,51 @@ class UserPreference(BaseModel):
 # =============================================================================
 
 class ShortTermMemory:
-    """短期记忆 - Redis"""
-    
+    """短期记忆 —— Redis 优先，连不上就退到进程内存。"""
+
     def __init__(self, redis_url: str, prefix: str, ttl: int):
         self.redis_url = redis_url
         self.prefix = prefix
         self.ttl = ttl
-        self.client: Optional[redis.Redis] = None
-    
+        self.client: Optional[Any] = None
+        #: 实际用的是哪个后端 —— "redis" | "memory"。/health 如实上报它。
+        self.backend: str = "none"
+        self.degrade_reason: str = ""
+
     async def connect(self):
-        """连接 Redis"""
+        """连上 Redis；连不上就用进程内替身。**任何情况下都不抛异常。**
+
+        原来这里是 ``if not OFFLINE_MODE: raise`` —— 于是单机上（没起 Redis 容器、
+        OFFLINE_MODE 也没设）整个节点直接
+        ``redis.exceptions.ConnectionError: Error 111 connecting to localhost:6379``
+        → ``Application startup failed. Exiting.``。
+
+        「短期记忆用不了内存版」和「整个记忆节点起不来」是两个量级的事，而长期记忆
+        （MemOS）、画像（SQLite）、向量（Chroma）本来都不依赖 Redis。为了一个可降级
+        的子能力把另外三个也带走，不划算，也和全仓约定相反。
+        """
+        if not HAS_REDIS:
+            self.client = _InProcessListStore()
+            self.backend = "memory"
+            self.degrade_reason = "redis 包未安装"
+            logger.warning("短期记忆降级到进程内存：%s", self.degrade_reason)
+            return
         try:
-            self.client = await redis.from_url(self.redis_url, decode_responses=True)
-            await self.client.ping()
+            client = await redis.from_url(self.redis_url, decode_responses=True)
+            await client.ping()
+            self.client = client
+            self.backend = "redis"
             logger.info("Connected to Redis")
         except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            if not OFFLINE_MODE:
-                raise
-    
+            self.client = _InProcessListStore()
+            self.backend = "memory"
+            self.degrade_reason = f"连不上 {self.redis_url}"
+            logger.warning(
+                "短期记忆降级到进程内存（桌面单机属正常，跨进程共享请启动 Redis）：%s",
+                e,
+            )
+
+
     async def save(self, session_id: str, content: str, metadata: Dict = None) -> str:
         """保存短期记忆"""
         if not self.client:
@@ -771,7 +800,12 @@ async def health():
     
     return {
         "status": "healthy",
-        "redis_available": memory_service.short_term.client is not None,
+        # 如实说是哪个后端。原来写的是 `client is not None` —— 降级之后 client
+        # 是进程内替身，一样非 None，于是这一栏会**谎报 Redis 可用**。跨进程共享
+        # 与重启保活是两回事，运维看这一栏就是为了区分它们。
+        "short_term_backend": memory_service.short_term.backend,
+        "short_term_degrade_reason": memory_service.short_term.degrade_reason,
+        "redis_available": memory_service.short_term.backend == "redis",
         "memos_available": memos_healthy,
         "chroma_available": True,  # 简化版总是可用
         "sqlite_available": memory_service.profile.conn is not None,

@@ -316,14 +316,28 @@ def main():
         # 确保即使在启动失败时也能记录日志
 
 if __name__ == "__main__":
-    # 检查必要的依赖
+    # 只有 fastapi/uvicorn 是硬依赖 —— 没有它们连服务都起不来。
     try:
         import fastapi
         import uvicorn
-        import googlesearch
     except ImportError as e:
-        logging.critical(f"缺少必要的依赖: {e}。请运行 'pip install fastapi uvicorn googlesearch-python' 安装。")
+        logging.critical(f"缺少必要的依赖: {e}。请运行 'pip install fastapi uvicorn' 安装。")
         exit(1)
+
+    # googlesearch-python **不是**硬依赖，之前把它也算进上面那个 try 是错的：
+    #
+    # 1. 与本模块自己的设计矛盾。文件顶部早就有 _GOOGLESEARCH_AVAILABLE 守卫，
+    #    搜索实现也明写「优先 Custom Search API，回退 googlesearch-python」——
+    #    也就是说配了 GOOGLE_API_KEY / GOOGLE_CSE_ID 的用户压根不需要这个库。
+    #    却在入口处一句 exit(1) 把这条完全可用的路径也堵死了。
+    # 2. 实测里它是 125 个节点中唯一因为缺一个 **可选** pip 包而起不来的。
+    #    起不来就什么都问不出来；起得来至少 /health 能说清楚缺的是什么。
+    if not _GOOGLESEARCH_AVAILABLE:
+        logging.warning(
+            "googlesearch-python 未安装：免 API Key 的网页搜索回退路径不可用"
+            "（配置 GOOGLE_API_KEY + GOOGLE_CSE_ID 走 Custom Search API 不受影响；"
+            "要启用回退请 pip install googlesearch-python）。"
+        )
 
     logging.info("==================================================")
     logging.info("            Galaxy - Google Search Node      ")

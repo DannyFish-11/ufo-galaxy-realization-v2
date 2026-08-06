@@ -11,8 +11,13 @@ Node_125_MediaGen: 媒体生成节点
 import asyncio
 import logging
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
+
+# RUF006: 保住 fire-and-forget 的 create_task 句柄，否则事件循环只持弱引用，
+# 任务可能在执行到一半时被 GC 掉。submit_task() 会往里加。
+_BACKGROUND_TASKS: set = set()
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, Optional, Type
@@ -144,11 +149,18 @@ class MediaGenService:
         logger.info(f"节点 {self.config.node_id} 已停止。")
 
     def health_check(self) -> Dict[str, Any]:
-        """提供健康检查接口，返回节点状态和配置信息"""
+        """提供健康检查接口，返回节点状态和配置信息
+
+        时间戳用 ``time.monotonic()`` 而不是 ``asyncio.get_running_loop().time()``：
+        后者要求**调用时正处在事件循环里**。这个方法原本只被演示流程从协程里调，
+        所以一直没事；一旦被 HTTP 端点调用（FastAPI 把同步端点丢到线程池执行，
+        那里没有 running loop）就直接 ``RuntimeError: no running event loop`` →
+        /health 返回 500。健康检查自己把自己弄挂是最不该发生的一种。
+        """
         return {
             "node_id": self.config.node_id,
             "status": self.status.value,
-            "timestamp": asyncio.get_running_loop().time()
+            "timestamp": time.monotonic(),
         }
 
     def get_status(self, task_id: Optional[str] = None) -> Dict[str, Any]:
@@ -405,36 +417,114 @@ async def main():
     await service.stop()
     logger.info("--- 演示结束 ---")
 # ---------------------------------------------------------------------------
-# HTTP 健康检查服务器
+# HTTP 服务
 # ---------------------------------------------------------------------------
-import threading as _threading
+#
+# 这里原来是这样的：健康服务跑在一个 **daemon 线程**上，主线程 asyncio.run(main())
+# 跑上面那段演示流程 —— 提交三个样例任务、等 10 秒、停服务、返回。主线程一返回，
+# daemon 线程跟着死，进程 exit=0。
+#
+# 于是这个节点的真实行为是：**起来几秒钟，打完「--- 演示结束 ---」就没了**。
+# 实测把 125 个节点逐个拉起来时它就是这么退的。启动器那边看到的是「进程起过、
+# 端口一度通、然后消失」——最难查的一类，因为它不报错。
+#
+# 顺带两处：
+#   * 端口写死 8125，不走权威表（见 nodes/common/node_port.py 的说明）。
+#   * /status 返回的是常量 {"status": "ok"}，跟真实的 MediaGenService 没有关系 ——
+#     队列里有多少任务、失败了几个，外面一律看不到。
+#
+# 现在：服务生命周期挂在 FastAPI lifespan 上，uvicorn 跑在**主线程**，进程常驻。
+# 演示流程保留但改成显式 `--demo` —— 它是有用的自检，只是不该是默认行为。
+import sys as _sys
 
-# RUF006: retain fire-and-forget create_task results so the event loop's weak
-# reference can't let them be garbage-collected mid-execution.
-_BACKGROUND_TASKS: set = set()
+from nodes.common.node_port import resolve_node_port
+
 try:
-    from fastapi import FastAPI as _FastAPI
     import uvicorn as _uvicorn
-    _health_app = _FastAPI(title="Node_125_MediaGen")
+    from contextlib import asynccontextmanager as _asynccontextmanager
+    from fastapi import FastAPI as _FastAPI, HTTPException as _HTTPException
+    from pydantic import BaseModel as _BaseModel
+
+    _service: Optional[MediaGenService] = None
+
+    @_asynccontextmanager
+    async def _lifespan(app):
+        global _service
+        _service = MediaGenService(MediaGenConfig())
+        await _service.start()
+        logger.info("Node_125_MediaGen 服务已就绪")
+        try:
+            yield
+        finally:
+            await _service.stop()
+            _service = None
+
+    _health_app = _FastAPI(title="Node_125_MediaGen", lifespan=_lifespan)
+
+    class _GenerateRequest(_BaseModel):
+        media_type: str
+        prompt: str
+        params: Optional[Dict[str, Any]] = None
 
     @_health_app.get("/health")
     def _health_endpoint():
-        return {"status": "ok", "node": "Node_125_MediaGen"}
+        """健康检查。服务没起来时如实说 —— 不要恒返回 ok。"""
+        if _service is None:
+            return {"status": "starting", "node": "Node_125_MediaGen"}
+        # 服务自身的状态放进 service 子对象，不要 ** 平铺上来 —— health_check()
+        # 里也有一个 "status"（值是中文的「运行中」），平铺会把 HTTP 级的 "ok"
+        # 顶掉，而外面按 status == "ok" 判活的消费方会因此判错。
+        return {"status": "ok", "node": "Node_125_MediaGen", "service": _service.health_check()}
 
     @_health_app.get("/status")
     def _status_endpoint():
-        return {"status": "ok", "node": "Node_125_MediaGen"}
+        """全局状态 —— 走真实的 MediaGenService，不是常量。"""
+        if _service is None:
+            raise _HTTPException(status_code=503, detail="service not started")
+        return _service.get_status()
 
-    def _start_health_server():
-        _uvicorn.run(_health_app, host="0.0.0.0", port=8125, log_level="error")
-except ImportError:
+    @_health_app.get("/status/{task_id}")
+    def _task_status_endpoint(task_id: str):
+        if _service is None:
+            raise _HTTPException(status_code=503, detail="service not started")
+        return _service.get_status(task_id)
+
+    @_health_app.post("/generate")
+    async def _generate_endpoint(req: _GenerateRequest):
+        if _service is None:
+            raise _HTTPException(status_code=503, detail="service not started")
+        try:
+            media_type = MediaType(req.media_type)
+        except ValueError:
+            raise _HTTPException(
+                status_code=400,
+                detail=f"未知的 media_type {req.media_type!r}；可用：{[m.value for m in MediaType]}",
+            )
+        try:
+            task_id = await _service.submit_task(media_type, req.prompt, req.params)
+        except RuntimeError as exc:
+            raise _HTTPException(status_code=503, detail=str(exc))
+        return {"task_id": task_id}
+
+except ImportError as _exc:  # fastapi/uvicorn 不在 —— 节点降级为「只能跑演示」
+    logger.warning("FastAPI/uvicorn 不可用，HTTP 服务不启动：%s", _exc)
     _health_app = None
-    def _start_health_server():
-        pass
+
+
 if __name__ == "__main__":
-    if _health_app is not None:
-        _threading.Thread(target=_start_health_server, daemon=True).start()
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("程序被用户中断。")
+    if "--demo" in _sys.argv:
+        # 原来的演示流程。它会跑完就退 —— 那是它该有的行为，只是不该是默认。
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            logger.info("程序被用户中断。")
+    elif _health_app is None:
+        logger.error("FastAPI/uvicorn 不可用，无法提供服务；只能用 --demo 跑演示。")
+        _sys.exit(1)
+    else:
+        _uvicorn.run(
+            _health_app,
+            host="0.0.0.0",
+            port=resolve_node_port("Node_125_MediaGen", 8125),
+            log_level="info",
+        )
