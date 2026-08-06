@@ -209,3 +209,47 @@ def test_launcher_registers_itself_as_the_executor():
         for n in ast.walk(tree)
     )
     assert found, "launcher/services.py 没有调用 set_activation_executor —— 那条线又断了"
+
+
+# ── 6. 默认真的会执行 ────────────────────────────────────────────────────────
+
+
+def test_adapter_default_mode_actually_starts_nodes():
+    """默认模式必须是**会动手**的那一档。
+
+    它曾经是 ``observe_only`` —— 分阶段上线的第一档「先记账，别动手」。问题是
+    **那一档再也没往前推过**：决策链算得出 should_start、台账一条条记着，执行侧
+    一次都没被调用。加上执行入口那时根本没有生产调用方，整套按需激活是死的。
+
+    翻成 ``full`` 的前提是三件事都已成立：决策→执行的线接上了；125 个节点全部
+    有档位且默认是 lazy 而不是 always_on；触发时机按档位判定（on_demand 要真实
+    设备，不会被一次能力请求拽起来）。所以"会起来的"只有真插了设备的 on_demand
+    节点和真被调用到的 lazy 节点 —— **不是 130 个一起起**。
+    """
+    from launcher.launcher_adapter import AdapterMode, LauncherAdapter
+
+    assert LauncherAdapter.DEFAULT_MODE is AdapterMode.FULL, "默认又回到只记账了，按需激活等于没接"
+
+
+def test_the_escape_hatch_still_works(monkeypatch):
+    """``LAUNCHER_ADAPTER_MODE`` 必须还能把它按回去 —— 出事时要有退路。"""
+    from launcher.launcher_adapter import AdapterMode, LauncherAdapter
+
+    monkeypatch.setenv("LAUNCHER_ADAPTER_MODE", "observe_only")
+    assert LauncherAdapter(node_launcher=None).mode is AdapterMode.OBSERVE_ONLY
+
+    monkeypatch.setenv("LAUNCHER_ADAPTER_MODE", "dry_run")
+    assert LauncherAdapter(node_launcher=None).mode is AdapterMode.DRY_RUN
+
+
+def test_an_invalid_mode_falls_back_to_the_default_not_to_observe_only(monkeypatch):
+    """环境变量写错时退回**默认**，而不是硬编码的 observe_only。
+
+    原来的兜底写死了 ``OBSERVE_ONLY``：默认翻成 full 之后，一个拼错的环境变量
+    会把系统静默按回"不执行" —— 而日志只说 "Invalid ...，using observe_only"，
+    没人会把"按需激活整个不生效"和"我环境变量拼错了"联系起来。
+    """
+    from launcher.launcher_adapter import LauncherAdapter
+
+    monkeypatch.setenv("LAUNCHER_ADAPTER_MODE", "这不是一个合法模式")
+    assert LauncherAdapter(node_launcher=None).mode is LauncherAdapter.DEFAULT_MODE
