@@ -119,12 +119,12 @@ class NodeActionRouter:
 
     Each node facade creates an instance and registers its actions::
 
-        router = NodeActionRouter("Node_38_BLE")
-        router.register("connect", _handle_connect)
-        router.register("disconnect", _handle_disconnect)
-        router.register("scan", _handle_scan)
-        router.register("read", _handle_read)
-        router.register("write", _handle_write)
+        router = NodeActionRouter("Node_33_ADB")
+        router.register("shell", _handle_shell)
+        router.register("screenshot", _handle_screenshot)
+        router.register("tap", _handle_tap)
+        router.register("swipe", _handle_swipe)
+        router.register("input_text", _handle_input_text)
 
     Then in the facade's ``/invoke`` handler::
 

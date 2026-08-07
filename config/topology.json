@@ -2,7 +2,7 @@
   "_DEPRECATION_NOTICE": "LEGACY (2026-03-14): api_url fields in this file contain hardcoded ports that may be stale. Canonical port source: config/unified_ports.yaml. Topology/visualization metadata (layers, coordinates, domains) remains valid here but ports should be read at runtime via core.port_config.get_node_port().",
   "version": "1.0",
   "topology_type": "three_layer_sphere",
-  "description": "Galaxy - 102 Nodes Three-Layer Sphere Topology",
+  "description": "Galaxy - 125 Nodes Three-Layer Sphere Topology",
   "generated_at": "2026-01-25",
   "layers": [
     {
@@ -16,33 +16,33 @@
       "name": "cognitive",
       "index": 1,
       "radius": 2.0,
-      "node_count": 45,
+      "node_count": 41,
       "description": "认知层 - 智能处理和分析"
     },
     {
       "name": "perception",
       "index": 2,
       "radius": 3.0,
-      "node_count": 41,
+      "node_count": 68,
       "description": "感知层 - 数据采集和感知"
     }
   ],
   "domains": [
-    "sandbox",
-    "network",
-    "search",
-    "notification",
     "storage",
-    "vision",
-    "state_management",
-    "knowledge",
     "security",
-    "media",
-    "general",
-    "nlu",
+    "network",
+    "state_management",
+    "vision",
+    "search",
+    "sandbox",
     "device_control",
+    "general",
+    "monitoring",
+    "knowledge",
+    "notification",
     "task_management",
-    "monitoring"
+    "nlu",
+    "media"
   ],
   "nodes": [
     {
@@ -51,7 +51,7 @@
       "layer": "core",
       "domain": "state_management",
       "coordinates": {
-        "theta": 0.1401,
+        "theta": 0.1266,
         "phi": 0.0,
         "radius": 1.0
       },
@@ -72,14 +72,14 @@
       "layer": "core",
       "domain": "general",
       "coordinates": {
-        "theta": 0.2431,
+        "theta": 0.2195,
         "phi": 2.4,
         "radius": 1.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8001",
+      "api_url": "http://localhost:7995",
       "neighbors": [
         "Node_07",
         "Node_11"
@@ -95,7 +95,7 @@
       "layer": "core",
       "domain": "task_management",
       "coordinates": {
-        "theta": 0.3144,
+        "theta": 0.2838,
         "phi": 4.7999,
         "radius": 1.0
       },
@@ -117,7 +117,7 @@
       "layer": "core",
       "domain": "security",
       "coordinates": {
-        "theta": 0.3726,
+        "theta": 0.3362,
         "phi": 0.9167,
         "radius": 1.0
       },
@@ -139,7 +139,7 @@
       "layer": "core",
       "domain": "task_management",
       "coordinates": {
-        "theta": 0.4232,
+        "theta": 0.3818,
         "phi": 3.3167,
         "radius": 1.0
       },
@@ -162,7 +162,7 @@
       "layer": "core",
       "domain": "security",
       "coordinates": {
-        "theta": 0.4687,
+        "theta": 0.4227,
         "phi": 5.7166,
         "radius": 1.0
       },
@@ -185,7 +185,7 @@
       "layer": "core",
       "domain": "storage",
       "coordinates": {
-        "theta": 0.5104,
+        "theta": 0.4601,
         "phi": 1.8334,
         "radius": 1.0
       },
@@ -208,7 +208,7 @@
       "layer": "core",
       "domain": "general",
       "coordinates": {
-        "theta": 0.5492,
+        "theta": 0.4949,
         "phi": 4.2334,
         "radius": 1.0
       },
@@ -231,7 +231,7 @@
       "layer": "core",
       "domain": "network",
       "coordinates": {
-        "theta": 0.5857,
+        "theta": 0.5276,
         "phi": 0.3501,
         "radius": 1.0
       },
@@ -252,14 +252,14 @@
       "layer": "core",
       "domain": "sandbox",
       "coordinates": {
-        "theta": 0.6203,
+        "theta": 0.5586,
         "phi": 2.7501,
         "radius": 1.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8009",
+      "api_url": "http://localhost:7996",
       "neighbors": [],
       "metadata": {
         "priority": "critical",
@@ -272,7 +272,7 @@
       "layer": "core",
       "domain": "notification",
       "coordinates": {
-        "theta": 0.6532,
+        "theta": 0.5881,
         "phi": 5.1501,
         "radius": 1.0
       },
@@ -292,7 +292,7 @@
       "layer": "core",
       "domain": "general",
       "coordinates": {
-        "theta": 0.6849,
+        "theta": 0.6163,
         "phi": 1.2669,
         "radius": 1.0
       },
@@ -315,7 +315,7 @@
       "layer": "core",
       "domain": "storage",
       "coordinates": {
-        "theta": 0.7153,
+        "theta": 0.6435,
         "phi": 3.6668,
         "radius": 1.0
       },
@@ -338,7 +338,7 @@
       "layer": "core",
       "domain": "storage",
       "coordinates": {
-        "theta": 0.7447,
+        "theta": 0.6697,
         "phi": 6.0668,
         "radius": 1.0
       },
@@ -361,7 +361,7 @@
       "layer": "core",
       "domain": "media",
       "coordinates": {
-        "theta": 0.7732,
+        "theta": 0.6951,
         "phi": 2.1836,
         "radius": 1.0
       },
@@ -381,7 +381,7 @@
       "layer": "core",
       "domain": "vision",
       "coordinates": {
-        "theta": 0.8009,
+        "theta": 0.7197,
         "phi": 4.5835,
         "radius": 1.0
       },
@@ -402,7 +402,7 @@
       "layer": "cognitive",
       "domain": "notification",
       "coordinates": {
-        "theta": 0.8278,
+        "theta": 0.7437,
         "phi": 0.7003,
         "radius": 2.0
       },
@@ -425,7 +425,7 @@
       "layer": "cognitive",
       "domain": "nlu",
       "coordinates": {
-        "theta": 0.8541,
+        "theta": 0.767,
         "phi": 3.1003,
         "radius": 2.0
       },
@@ -448,7 +448,7 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 0.8799,
+        "theta": 0.7898,
         "phi": 5.5002,
         "radius": 2.0
       },
@@ -459,7 +459,7 @@
       "neighbors": [
         "Node_21",
         "Node_23",
-        "Node_23",
+        "Node_24",
         "Node_00",
         "Node_01"
       ],
@@ -474,7 +474,7 @@
       "layer": "cognitive",
       "domain": "security",
       "coordinates": {
-        "theta": 0.905,
+        "theta": 0.8121,
         "phi": 1.617,
         "radius": 2.0
       },
@@ -497,7 +497,7 @@
       "layer": "cognitive",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 0.9297,
+        "theta": 0.8339,
         "phi": 4.017,
         "radius": 2.0
       },
@@ -506,6 +506,7 @@
       ],
       "api_url": "http://localhost:8020",
       "neighbors": [
+        "Node_60",
         "Node_00",
         "Node_01"
       ],
@@ -520,7 +521,7 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 0.954,
+        "theta": 0.8553,
         "phi": 0.1337,
         "radius": 2.0
       },
@@ -531,7 +532,7 @@
       "neighbors": [
         "Node_18",
         "Node_23",
-        "Node_23",
+        "Node_24",
         "Node_00",
         "Node_01"
       ],
@@ -546,7 +547,7 @@
       "layer": "cognitive",
       "domain": "search",
       "coordinates": {
-        "theta": 0.9778,
+        "theta": 0.8763,
         "phi": 2.5337,
         "radius": 2.0
       },
@@ -567,44 +568,18 @@
     },
     {
       "id": "Node_23",
-      "name": "Calendar",
+      "name": "Time",
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.0013,
+        "theta": 0.8969,
         "phi": 4.9337,
         "radius": 2.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8023",
-      "neighbors": [
-        "Node_18",
-        "Node_21",
-        "Node_24",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_23",
-      "name": "Time",
-      "layer": "cognitive",
-      "domain": "general",
-      "coordinates": {
-        "theta": 1.0244,
-        "phi": 1.0504,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8023",
+      "api_url": "http://localhost:8024",
       "neighbors": [
         "Node_18",
         "Node_21",
@@ -623,14 +598,14 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.0472,
-        "phi": 3.4504,
+        "theta": 0.9173,
+        "phi": 1.0504,
         "radius": 2.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8024",
+      "api_url": "http://localhost:8025",
       "neighbors": [
         "Node_18",
         "Node_21",
@@ -649,17 +624,69 @@
       "layer": "cognitive",
       "domain": "search",
       "coordinates": {
-        "theta": 1.0697,
-        "phi": 5.8504,
+        "theta": 0.9373,
+        "phi": 3.4504,
         "radius": 2.0
       },
       "capabilities": [
         "search",
         "information_retrieval"
       ],
-      "api_url": "http://localhost:8025",
+      "api_url": "http://localhost:8026",
       "neighbors": [
         "Node_22",
+        "Node_00",
+        "Node_01"
+      ],
+      "metadata": {
+        "priority": "high",
+        "max_load": 200
+      }
+    },
+    {
+      "id": "Node_26",
+      "name": "Discord",
+      "layer": "cognitive",
+      "domain": "general",
+      "coordinates": {
+        "theta": 0.957,
+        "phi": 5.8504,
+        "radius": 2.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8023",
+      "neighbors": [
+        "Node_18",
+        "Node_21",
+        "Node_23",
+        "Node_00",
+        "Node_01"
+      ],
+      "metadata": {
+        "priority": "high",
+        "max_load": 200
+      }
+    },
+    {
+      "id": "Node_27",
+      "name": "SmartHome",
+      "layer": "cognitive",
+      "domain": "general",
+      "coordinates": {
+        "theta": 0.9764,
+        "phi": 1.9672,
+        "radius": 2.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8027",
+      "neighbors": [
+        "Node_18",
+        "Node_21",
+        "Node_23",
         "Node_00",
         "Node_01"
       ],
@@ -674,8 +701,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.0919,
-        "phi": 1.9672,
+        "theta": 0.9956,
+        "phi": 4.3671,
         "radius": 2.0
       },
       "capabilities": [
@@ -700,8 +727,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.1139,
-        "phi": 4.3671,
+        "theta": 1.0146,
+        "phi": 0.4839,
         "radius": 2.0
       },
       "capabilities": [
@@ -726,8 +753,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.1356,
-        "phi": 0.4839,
+        "theta": 1.0333,
+        "phi": 2.8839,
         "radius": 2.0
       },
       "capabilities": [
@@ -752,8 +779,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.1571,
-        "phi": 2.8839,
+        "theta": 1.0518,
+        "phi": 5.2838,
         "radius": 2.0
       },
       "capabilities": [
@@ -778,8 +805,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.1785,
-        "phi": 5.2838,
+        "theta": 1.0701,
+        "phi": 1.4006,
         "radius": 2.0
       },
       "capabilities": [
@@ -804,8 +831,8 @@
       "layer": "cognitive",
       "domain": "device_control",
       "coordinates": {
-        "theta": 1.1996,
-        "phi": 1.4006,
+        "theta": 1.0883,
+        "phi": 3.8006,
         "radius": 2.0
       },
       "capabilities": [
@@ -830,8 +857,8 @@
       "layer": "cognitive",
       "domain": "device_control",
       "coordinates": {
-        "theta": 1.2205,
-        "phi": 3.8006,
+        "theta": 1.1063,
+        "phi": 6.2005,
         "radius": 2.0
       },
       "capabilities": [
@@ -856,8 +883,8 @@
       "layer": "cognitive",
       "domain": "device_control",
       "coordinates": {
-        "theta": 1.2413,
-        "phi": 6.2005,
+        "theta": 1.1241,
+        "phi": 2.3173,
         "radius": 2.0
       },
       "capabilities": [
@@ -882,8 +909,8 @@
       "layer": "cognitive",
       "domain": "device_control",
       "coordinates": {
-        "theta": 1.262,
-        "phi": 2.3173,
+        "theta": 1.1418,
+        "phi": 4.7173,
         "radius": 2.0
       },
       "capabilities": [
@@ -903,65 +930,13 @@
       }
     },
     {
-      "id": "Node_37",
-      "name": "LinuxDBus",
-      "layer": "cognitive",
-      "domain": "device_control",
-      "coordinates": {
-        "theta": 1.2825,
-        "phi": 4.7173,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8037",
-      "neighbors": [
-        "Node_33",
-        "Node_34",
-        "Node_35",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_38",
-      "name": "BLE",
-      "layer": "cognitive",
-      "domain": "device_control",
-      "coordinates": {
-        "theta": 1.3029,
-        "phi": 0.834,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8038",
-      "neighbors": [
-        "Node_33",
-        "Node_34",
-        "Node_35",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
       "id": "Node_39",
       "name": "SSH",
       "layer": "cognitive",
       "domain": "network",
       "coordinates": {
-        "theta": 1.3232,
-        "phi": 3.234,
+        "theta": 1.1593,
+        "phi": 0.834,
         "radius": 2.0
       },
       "capabilities": [
@@ -970,7 +945,6 @@
       "api_url": "http://localhost:8039",
       "neighbors": [
         "Node_40",
-        "Node_41",
         "Node_00",
         "Node_01"
       ],
@@ -985,8 +959,8 @@
       "layer": "cognitive",
       "domain": "network",
       "coordinates": {
-        "theta": 1.3434,
-        "phi": 5.634,
+        "theta": 1.1767,
+        "phi": 3.234,
         "radius": 2.0
       },
       "capabilities": [
@@ -995,58 +969,6 @@
       "api_url": "http://localhost:8040",
       "neighbors": [
         "Node_39",
-        "Node_41",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_41",
-      "name": "MQTT",
-      "layer": "cognitive",
-      "domain": "network",
-      "coordinates": {
-        "theta": 1.3634,
-        "phi": 1.7507,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8041",
-      "neighbors": [
-        "Node_39",
-        "Node_40",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_42",
-      "name": "CANbus",
-      "layer": "cognitive",
-      "domain": "general",
-      "coordinates": {
-        "theta": 1.3834,
-        "phi": 4.1507,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8042",
-      "neighbors": [
-        "Node_18",
-        "Node_21",
-        "Node_23",
         "Node_00",
         "Node_01"
       ],
@@ -1061,8 +983,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.4033,
-        "phi": 0.2675,
+        "theta": 1.1939,
+        "phi": 5.634,
         "radius": 2.0
       },
       "capabilities": [
@@ -1087,8 +1009,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.4232,
-        "phi": 2.6675,
+        "theta": 1.2111,
+        "phi": 1.7507,
         "radius": 2.0
       },
       "capabilities": [
@@ -1113,8 +1035,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.443,
-        "phi": 5.0674,
+        "theta": 1.2281,
+        "phi": 4.1507,
         "radius": 2.0
       },
       "capabilities": [
@@ -1139,8 +1061,8 @@
       "layer": "cognitive",
       "domain": "vision",
       "coordinates": {
-        "theta": 1.4627,
-        "phi": 1.1842,
+        "theta": 1.2451,
+        "phi": 0.2675,
         "radius": 2.0
       },
       "capabilities": [
@@ -1163,8 +1085,8 @@
       "layer": "cognitive",
       "domain": "media",
       "coordinates": {
-        "theta": 1.4824,
-        "phi": 3.5842,
+        "theta": 1.2619,
+        "phi": 2.6675,
         "radius": 2.0
       },
       "capabilities": [
@@ -1172,57 +1094,6 @@
       ],
       "api_url": "http://localhost:8047",
       "neighbors": [
-        "Node_48",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_48",
-      "name": "MediaGen",
-      "layer": "cognitive",
-      "domain": "media",
-      "coordinates": {
-        "theta": 1.5021,
-        "phi": 5.9841,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "media_processing"
-      ],
-      "api_url": "http://localhost:8048",
-      "neighbors": [
-        "Node_47",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_48",
-      "name": "Serial",
-      "layer": "cognitive",
-      "domain": "device_control",
-      "coordinates": {
-        "theta": 1.5218,
-        "phi": 2.1009,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8048",
-      "neighbors": [
-        "Node_33",
-        "Node_34",
-        "Node_35",
         "Node_00",
         "Node_01"
       ],
@@ -1237,14 +1108,14 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.5414,
-        "phi": 4.5009,
+        "theta": 1.2787,
+        "phi": 5.0674,
         "radius": 2.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8049",
+      "api_url": "http://localhost:8048",
       "neighbors": [
         "Node_18",
         "Node_21",
@@ -1263,8 +1134,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.561,
-        "phi": 0.6176,
+        "theta": 1.2953,
+        "phi": 1.1842,
         "radius": 2.0
       },
       "capabilities": [
@@ -1289,8 +1160,8 @@
       "layer": "cognitive",
       "domain": "task_management",
       "coordinates": {
-        "theta": 1.5806,
-        "phi": 3.0176,
+        "theta": 1.3119,
+        "phi": 3.5842,
         "radius": 2.0
       },
       "capabilities": [
@@ -1313,8 +1184,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.6002,
-        "phi": 5.4176,
+        "theta": 1.3284,
+        "phi": 5.9841,
         "radius": 2.0
       },
       "capabilities": [
@@ -1339,8 +1210,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.6198,
-        "phi": 1.5343,
+        "theta": 1.3449,
+        "phi": 2.1009,
         "radius": 2.0
       },
       "capabilities": [
@@ -1365,8 +1236,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.6395,
-        "phi": 3.9343,
+        "theta": 1.3613,
+        "phi": 4.5009,
         "radius": 2.0
       },
       "capabilities": [
@@ -1386,19 +1257,19 @@
       }
     },
     {
-      "id": "Node_56",
-      "name": "AgentSwarm",
+      "id": "Node_55",
+      "name": "MultiModal",
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.6591,
-        "phi": 0.0511,
+        "theta": 1.3776,
+        "phi": 0.6176,
         "radius": 2.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8056",
+      "api_url": "http://localhost:8055",
       "neighbors": [
         "Node_18",
         "Node_21",
@@ -1417,34 +1288,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.6788,
-        "phi": 2.451,
-        "radius": 2.0
-      },
-      "capabilities": [
-        "general"
-      ],
-      "api_url": "http://localhost:8056",
-      "neighbors": [
-        "Node_18",
-        "Node_21",
-        "Node_23",
-        "Node_00",
-        "Node_01"
-      ],
-      "metadata": {
-        "priority": "high",
-        "max_load": 200
-      }
-    },
-    {
-      "id": "Node_57",
-      "name": "QuantumCloud",
-      "layer": "cognitive",
-      "domain": "general",
-      "coordinates": {
-        "theta": 1.6986,
-        "phi": 4.851,
+        "theta": 1.3939,
+        "phi": 3.0176,
         "radius": 2.0
       },
       "capabilities": [
@@ -1464,20 +1309,46 @@
       }
     },
     {
+      "id": "Node_57",
+      "name": "QuantumCloud",
+      "layer": "cognitive",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.4101,
+        "phi": 5.4176,
+        "radius": 2.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8058",
+      "neighbors": [
+        "Node_18",
+        "Node_21",
+        "Node_23",
+        "Node_00",
+        "Node_01"
+      ],
+      "metadata": {
+        "priority": "high",
+        "max_load": 200
+      }
+    },
+    {
       "id": "Node_58",
       "name": "ModelRouter",
       "layer": "cognitive",
       "domain": "task_management",
       "coordinates": {
-        "theta": 1.7184,
-        "phi": 0.9678,
+        "theta": 1.4263,
+        "phi": 1.5343,
         "radius": 2.0
       },
       "capabilities": [
         "routing",
         "orchestration"
       ],
-      "api_url": "http://localhost:8058",
+      "api_url": "http://localhost:8059",
       "neighbors": [
         "Node_51",
         "Node_00",
@@ -1494,18 +1365,42 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.7382,
-        "phi": 3.3678,
+        "theta": 1.4424,
+        "phi": 3.9343,
         "radius": 2.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8059",
+      "api_url": "http://localhost:8060",
       "neighbors": [
         "Node_18",
         "Node_21",
         "Node_23",
+        "Node_00",
+        "Node_01"
+      ],
+      "metadata": {
+        "priority": "high",
+        "max_load": 200
+      }
+    },
+    {
+      "id": "Node_60",
+      "name": "ReinforcementLearning",
+      "layer": "cognitive",
+      "domain": "knowledge",
+      "coordinates": {
+        "theta": 1.4586,
+        "phi": 0.0511,
+        "radius": 2.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8160",
+      "neighbors": [
+        "Node_20",
         "Node_00",
         "Node_01"
       ],
@@ -1520,8 +1415,8 @@
       "layer": "cognitive",
       "domain": "general",
       "coordinates": {
-        "theta": 1.7582,
-        "phi": 5.7677,
+        "theta": 1.4746,
+        "phi": 2.451,
         "radius": 2.0
       },
       "capabilities": [
@@ -1546,8 +1441,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 1.7782,
-        "phi": 1.8845,
+        "theta": 1.4907,
+        "phi": 4.851,
         "radius": 3.0
       },
       "capabilities": [
@@ -1555,9 +1450,35 @@
       ],
       "api_url": "http://localhost:8062",
       "neighbors": [
-        "Node_70",
+        "Node_63",
+        "Node_71",
         "Node_74",
-        "Node_83",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_63",
+      "name": "FuzzyLogicEngine",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.5068,
+        "phi": 0.9678,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8163",
+      "neighbors": [
+        "Node_62",
+        "Node_71",
+        "Node_74",
         "Node_16",
         "Node_17"
       ],
@@ -1572,14 +1493,14 @@
       "layer": "perception",
       "domain": "monitoring",
       "coordinates": {
-        "theta": 1.7982,
-        "phi": 4.2845,
+        "theta": 1.5228,
+        "phi": 3.3678,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8064",
+      "api_url": "http://localhost:8063",
       "neighbors": [
         "Node_65",
         "Node_67",
@@ -1597,14 +1518,14 @@
       "layer": "perception",
       "domain": "monitoring",
       "coordinates": {
-        "theta": 1.8184,
-        "phi": 0.4012,
+        "theta": 1.5388,
+        "phi": 5.7677,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8065",
+      "api_url": "http://localhost:8064",
       "neighbors": [
         "Node_64",
         "Node_67",
@@ -1622,16 +1543,18 @@
       "layer": "perception",
       "domain": "state_management",
       "coordinates": {
-        "theta": 1.8387,
-        "phi": 2.8012,
+        "theta": 1.5548,
+        "phi": 1.8845,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8066",
+      "api_url": "http://localhost:8065",
       "neighbors": [
+        "Node_76",
         "Node_111",
+        "Node_115",
         "Node_16",
         "Node_17"
       ],
@@ -1646,14 +1569,14 @@
       "layer": "perception",
       "domain": "monitoring",
       "coordinates": {
-        "theta": 1.8591,
-        "phi": 5.2012,
+        "theta": 1.5708,
+        "phi": 4.2845,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8067",
+      "api_url": "http://localhost:8066",
       "neighbors": [
         "Node_64",
         "Node_65",
@@ -1671,15 +1594,15 @@
       "layer": "perception",
       "domain": "security",
       "coordinates": {
-        "theta": 1.8796,
-        "phi": 1.3179,
+        "theta": 1.5868,
+        "phi": 0.4012,
         "radius": 3.0
       },
       "capabilities": [
         "authentication",
         "security"
       ],
-      "api_url": "http://localhost:8068",
+      "api_url": "http://localhost:8067",
       "neighbors": [
         "Node_16",
         "Node_17"
@@ -1695,14 +1618,14 @@
       "layer": "perception",
       "domain": "storage",
       "coordinates": {
-        "theta": 1.9003,
-        "phi": 3.7179,
+        "theta": 1.6028,
+        "phi": 2.8012,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8069",
+      "api_url": "http://localhost:8068",
       "neighbors": [
         "Node_16",
         "Node_17"
@@ -1714,12 +1637,12 @@
     },
     {
       "id": "Node_70",
-      "name": "BambuLab",
+      "name": "AutonomousLearning",
       "layer": "perception",
-      "domain": "general",
+      "domain": "knowledge",
       "coordinates": {
-        "theta": 1.9211,
-        "phi": 6.1179,
+        "theta": 1.6188,
+        "phi": 5.2012,
         "radius": 3.0
       },
       "capabilities": [
@@ -1727,9 +1650,9 @@
       ],
       "api_url": "http://localhost:8070",
       "neighbors": [
-        "Node_62",
-        "Node_74",
-        "Node_83",
+        "Node_72",
+        "Node_73",
+        "Node_80",
         "Node_16",
         "Node_17"
       ],
@@ -1740,19 +1663,22 @@
     },
     {
       "id": "Node_71",
-      "name": "MediaGen",
+      "name": "MultiDeviceCoordination",
       "layer": "perception",
-      "domain": "media",
+      "domain": "general",
       "coordinates": {
-        "theta": 1.942,
-        "phi": 2.2346,
+        "theta": 1.6348,
+        "phi": 1.3179,
         "radius": 3.0
       },
       "capabilities": [
-        "media_processing"
+        "general"
       ],
       "api_url": "http://localhost:8071",
       "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_74",
         "Node_16",
         "Node_17"
       ],
@@ -1767,8 +1693,8 @@
       "layer": "perception",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 1.9631,
-        "phi": 4.6346,
+        "theta": 1.6509,
+        "phi": 3.7179,
         "radius": 3.0
       },
       "capabilities": [
@@ -1777,9 +1703,9 @@
       ],
       "api_url": "http://localhost:8072",
       "neighbors": [
+        "Node_70",
         "Node_73",
         "Node_80",
-        "Node_100",
         "Node_16",
         "Node_17"
       ],
@@ -1794,8 +1720,8 @@
       "layer": "perception",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 1.9845,
-        "phi": 0.7514,
+        "theta": 1.6669,
+        "phi": 6.1179,
         "radius": 3.0
       },
       "capabilities": [
@@ -1803,9 +1729,9 @@
       ],
       "api_url": "http://localhost:8073",
       "neighbors": [
+        "Node_70",
         "Node_72",
         "Node_80",
-        "Node_100",
         "Node_16",
         "Node_17"
       ],
@@ -1820,8 +1746,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.006,
-        "phi": 3.1513,
+        "theta": 1.683,
+        "phi": 2.2346,
         "radius": 3.0
       },
       "capabilities": [
@@ -1830,8 +1756,112 @@
       "api_url": "http://localhost:8074",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_83",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_75",
+      "name": "DataPipeline",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.6991,
+        "phi": 4.6346,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8075",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_76",
+      "name": "AlertManager",
+      "layer": "perception",
+      "domain": "state_management",
+      "coordinates": {
+        "theta": 1.7153,
+        "phi": 0.7514,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8076",
+      "neighbors": [
+        "Node_66",
+        "Node_111",
+        "Node_115",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_77",
+      "name": "TaskScheduler",
+      "layer": "perception",
+      "domain": "task_management",
+      "coordinates": {
+        "theta": 1.7315,
+        "phi": 3.1513,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8077",
+      "neighbors": [
+        "Node_81",
+        "Node_96",
+        "Node_110",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_78",
+      "name": "DataValidator",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.7477,
+        "phi": 5.5513,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8078",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -1846,8 +1876,8 @@
       "layer": "perception",
       "domain": "nlu",
       "coordinates": {
-        "theta": 2.0277,
-        "phi": 5.5513,
+        "theta": 1.764,
+        "phi": 1.6681,
         "radius": 3.0
       },
       "capabilities": [
@@ -1870,19 +1900,19 @@
       "layer": "perception",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 2.0497,
-        "phi": 1.6681,
+        "theta": 1.7803,
+        "phi": 4.0681,
         "radius": 3.0
       },
       "capabilities": [
         "knowledge_management",
         "memory"
       ],
-      "api_url": "http://localhost:8080",
+      "api_url": "http://localhost:8180",
       "neighbors": [
+        "Node_70",
         "Node_72",
         "Node_73",
-        "Node_100",
         "Node_16",
         "Node_17"
       ],
@@ -1897,8 +1927,8 @@
       "layer": "perception",
       "domain": "task_management",
       "coordinates": {
-        "theta": 2.0719,
-        "phi": 4.0681,
+        "theta": 1.7967,
+        "phi": 0.1848,
         "radius": 3.0
       },
       "capabilities": [
@@ -1907,6 +1937,7 @@
       ],
       "api_url": "http://localhost:8081",
       "neighbors": [
+        "Node_77",
         "Node_96",
         "Node_110",
         "Node_16",
@@ -1923,8 +1954,8 @@
       "layer": "perception",
       "domain": "network",
       "coordinates": {
-        "theta": 2.0944,
-        "phi": 0.1848,
+        "theta": 1.8132,
+        "phi": 2.5848,
         "radius": 3.0
       },
       "capabilities": [
@@ -1947,8 +1978,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.1172,
-        "phi": 2.5848,
+        "theta": 1.8297,
+        "phi": 4.9848,
         "radius": 3.0
       },
       "capabilities": [
@@ -1957,8 +1988,8 @@
       "api_url": "http://localhost:8083",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -1973,8 +2004,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.1403,
-        "phi": 4.9848,
+        "theta": 1.8463,
+        "phi": 1.1015,
         "radius": 3.0
       },
       "capabilities": [
@@ -1983,8 +2014,8 @@
       "api_url": "http://localhost:8084",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -1999,8 +2030,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.1638,
-        "phi": 1.1015,
+        "theta": 1.8629,
+        "phi": 3.5015,
         "radius": 3.0
       },
       "capabilities": [
@@ -2009,8 +2040,111 @@
       "api_url": "http://localhost:8085",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_86",
+      "name": "SpeechProcessor",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.8797,
+        "phi": 5.9015,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8086",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_87",
+      "name": "ImageAnalysis",
+      "layer": "perception",
+      "domain": "vision",
+      "coordinates": {
+        "theta": 1.8965,
+        "phi": 2.0182,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8087",
+      "neighbors": [
+        "Node_90",
+        "Node_113",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_88",
+      "name": "WorkflowEngine",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.9135,
+        "phi": 4.4182,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8088",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_89",
+      "name": "APIGateway",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 1.9305,
+        "phi": 0.535,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8089",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2025,8 +2159,8 @@
       "layer": "perception",
       "domain": "vision",
       "coordinates": {
-        "theta": 2.1876,
-        "phi": 3.5015,
+        "theta": 1.9477,
+        "phi": 2.9349,
         "radius": 3.0
       },
       "capabilities": [
@@ -2035,6 +2169,7 @@
       ],
       "api_url": "http://localhost:8090",
       "neighbors": [
+        "Node_87",
         "Node_113",
         "Node_16",
         "Node_17"
@@ -2050,8 +2185,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.2118,
-        "phi": 5.9015,
+        "theta": 1.9649,
+        "phi": 5.3349,
         "radius": 3.0
       },
       "capabilities": [
@@ -2060,8 +2195,8 @@
       "api_url": "http://localhost:8091",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2076,8 +2211,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.2365,
-        "phi": 2.0182,
+        "theta": 1.9823,
+        "phi": 1.4517,
         "radius": 3.0
       },
       "capabilities": [
@@ -2086,8 +2221,60 @@
       "api_url": "http://localhost:8092",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_93",
+      "name": "VideoProcessor",
+      "layer": "perception",
+      "domain": "media",
+      "coordinates": {
+        "theta": 1.9998,
+        "phi": 3.8516,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "media_processing"
+      ],
+      "api_url": "http://localhost:8093",
+      "neighbors": [
+        "Node_94",
+        "Node_125",
+        "Node_128",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_94",
+      "name": "AudioAnalysis",
+      "layer": "perception",
+      "domain": "media",
+      "coordinates": {
+        "theta": 2.0175,
+        "phi": 6.2516,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "media_processing"
+      ],
+      "api_url": "http://localhost:8094",
+      "neighbors": [
+        "Node_93",
+        "Node_125",
+        "Node_128",
         "Node_16",
         "Node_17"
       ],
@@ -2102,8 +2289,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.2617,
-        "phi": 4.4182,
+        "theta": 2.0353,
+        "phi": 2.3684,
         "radius": 3.0
       },
       "capabilities": [
@@ -2112,8 +2299,8 @@
       "api_url": "http://localhost:8095",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2128,8 +2315,8 @@
       "layer": "perception",
       "domain": "task_management",
       "coordinates": {
-        "theta": 2.2874,
-        "phi": 0.535,
+        "theta": 2.0533,
+        "phi": 4.7684,
         "radius": 3.0
       },
       "capabilities": [
@@ -2138,6 +2325,7 @@
       ],
       "api_url": "http://localhost:8096",
       "neighbors": [
+        "Node_77",
         "Node_81",
         "Node_110",
         "Node_16",
@@ -2154,8 +2342,8 @@
       "layer": "perception",
       "domain": "search",
       "coordinates": {
-        "theta": 2.3138,
-        "phi": 2.9349,
+        "theta": 2.0715,
+        "phi": 0.8851,
         "radius": 3.0
       },
       "capabilities": [
@@ -2173,13 +2361,65 @@
       }
     },
     {
+      "id": "Node_98",
+      "name": "MultimodalFusion",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.0898,
+        "phi": 3.2851,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8098",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_99",
+      "name": "EmbeddingService",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.1083,
+        "phi": 5.6851,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8099",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
       "id": "Node_100",
       "name": "MemorySystem",
       "layer": "perception",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 2.3407,
-        "phi": 5.3349,
+        "theta": 2.127,
+        "phi": 1.8018,
         "radius": 3.0
       },
       "capabilities": [
@@ -2188,9 +2428,9 @@
       ],
       "api_url": "http://localhost:8100",
       "neighbors": [
+        "Node_70",
         "Node_72",
         "Node_73",
-        "Node_80",
         "Node_16",
         "Node_17"
       ],
@@ -2205,8 +2445,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.3684,
-        "phi": 1.4517,
+        "theta": 2.146,
+        "phi": 4.2018,
         "radius": 3.0
       },
       "capabilities": [
@@ -2215,8 +2455,8 @@
       "api_url": "http://localhost:8101",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2231,8 +2471,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.3969,
-        "phi": 3.8516,
+        "theta": 2.1652,
+        "phi": 0.3186,
         "radius": 3.0
       },
       "capabilities": [
@@ -2241,8 +2481,8 @@
       "api_url": "http://localhost:8102",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2257,8 +2497,8 @@
       "layer": "perception",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 2.4263,
-        "phi": 6.2516,
+        "theta": 2.1846,
+        "phi": 2.7185,
         "radius": 3.0
       },
       "capabilities": [
@@ -2267,9 +2507,9 @@
       ],
       "api_url": "http://localhost:8103",
       "neighbors": [
+        "Node_70",
         "Node_72",
         "Node_73",
-        "Node_80",
         "Node_16",
         "Node_17"
       ],
@@ -2284,8 +2524,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.4567,
-        "phi": 2.3684,
+        "theta": 2.2043,
+        "phi": 5.1185,
         "radius": 3.0
       },
       "capabilities": [
@@ -2294,8 +2534,8 @@
       "api_url": "http://localhost:8104",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2310,8 +2550,8 @@
       "layer": "perception",
       "domain": "knowledge",
       "coordinates": {
-        "theta": 2.4884,
-        "phi": 4.7684,
+        "theta": 2.2243,
+        "phi": 1.2353,
         "radius": 3.0
       },
       "capabilities": [
@@ -2320,9 +2560,9 @@
       ],
       "api_url": "http://localhost:8105",
       "neighbors": [
+        "Node_70",
         "Node_72",
         "Node_73",
-        "Node_80",
         "Node_16",
         "Node_17"
       ],
@@ -2337,8 +2577,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.5213,
-        "phi": 0.8851,
+        "theta": 2.2446,
+        "phi": 3.6352,
         "radius": 3.0
       },
       "capabilities": [
@@ -2347,8 +2587,34 @@
       "api_url": "http://localhost:8106",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_107",
+      "name": "FunctionCalling",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.2653,
+        "phi": 6.0352,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8107",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2363,8 +2629,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.5559,
-        "phi": 3.2851,
+        "theta": 2.2863,
+        "phi": 2.152,
         "radius": 3.0
       },
       "capabilities": [
@@ -2373,8 +2639,8 @@
       "api_url": "http://localhost:8108",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2389,8 +2655,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.5924,
-        "phi": 5.6851,
+        "theta": 2.3077,
+        "phi": 4.5519,
         "radius": 3.0
       },
       "capabilities": [
@@ -2399,8 +2665,8 @@
       "api_url": "http://localhost:8109",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2415,16 +2681,17 @@
       "layer": "perception",
       "domain": "task_management",
       "coordinates": {
-        "theta": 2.6312,
-        "phi": 1.8018,
+        "theta": 2.3295,
+        "phi": 0.6687,
         "radius": 3.0
       },
       "capabilities": [
         "routing",
         "orchestration"
       ],
-      "api_url": "http://localhost:8110",
+      "api_url": "http://localhost:7997",
       "neighbors": [
+        "Node_77",
         "Node_81",
         "Node_96",
         "Node_16",
@@ -2441,16 +2708,18 @@
       "layer": "perception",
       "domain": "state_management",
       "coordinates": {
-        "theta": 2.6729,
-        "phi": 4.2018,
+        "theta": 2.3518,
+        "phi": 3.0687,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8111",
+      "api_url": "http://localhost:7998",
       "neighbors": [
         "Node_66",
+        "Node_76",
+        "Node_115",
         "Node_16",
         "Node_17"
       ],
@@ -2465,18 +2734,18 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.7184,
-        "phi": 0.3186,
+        "theta": 2.3746,
+        "phi": 5.4687,
         "radius": 3.0
       },
       "capabilities": [
         "general"
       ],
-      "api_url": "http://localhost:8112",
+      "api_url": "http://localhost:7999",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2491,8 +2760,8 @@
       "layer": "perception",
       "domain": "vision",
       "coordinates": {
-        "theta": 2.769,
-        "phi": 2.7185,
+        "theta": 2.3979,
+        "phi": 1.5854,
         "radius": 3.0
       },
       "capabilities": [
@@ -2500,7 +2769,60 @@
       ],
       "api_url": "http://localhost:8113",
       "neighbors": [
+        "Node_87",
         "Node_90",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_114",
+      "name": "DocumentIntelligence",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.4219,
+        "phi": 3.9854,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8114",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_115",
+      "name": "PluginManager",
+      "layer": "perception",
+      "domain": "state_management",
+      "coordinates": {
+        "theta": 2.4465,
+        "phi": 0.1022,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8115",
+      "neighbors": [
+        "Node_66",
+        "Node_76",
+        "Node_111",
         "Node_16",
         "Node_17"
       ],
@@ -2515,8 +2837,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.8272,
-        "phi": 5.1185,
+        "theta": 2.4719,
+        "phi": 2.5021,
         "radius": 3.0
       },
       "capabilities": [
@@ -2525,8 +2847,8 @@
       "api_url": "http://localhost:8116",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2541,8 +2863,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 2.8985,
-        "phi": 1.2353,
+        "theta": 2.4981,
+        "phi": 4.9021,
         "radius": 3.0
       },
       "capabilities": [
@@ -2551,8 +2873,8 @@
       "api_url": "http://localhost:8117",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
@@ -2567,8 +2889,8 @@
       "layer": "perception",
       "domain": "general",
       "coordinates": {
-        "theta": 3.0014,
-        "phi": 3.6352,
+        "theta": 2.5253,
+        "phi": 1.0189,
         "radius": 3.0
       },
       "capabilities": [
@@ -2577,8 +2899,294 @@
       "api_url": "http://localhost:8118",
       "neighbors": [
         "Node_62",
-        "Node_70",
-        "Node_74",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_119",
+      "name": "BenchmarkEval",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.5535,
+        "phi": 3.4188,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8119",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_120",
+      "name": "File",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.583,
+        "phi": 5.8188,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8120",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_121",
+      "name": "Web",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.614,
+        "phi": 1.9356,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8121",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_122",
+      "name": "Shell",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.6467,
+        "phi": 4.3355,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8122",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_123",
+      "name": "Calendar",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.6815,
+        "phi": 0.4523,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8123",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_124",
+      "name": "LinuxDesktopAuto",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.7189,
+        "phi": 2.8523,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8124",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_125",
+      "name": "MediaGen",
+      "layer": "perception",
+      "domain": "media",
+      "coordinates": {
+        "theta": 2.7598,
+        "phi": 5.2522,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "media_processing"
+      ],
+      "api_url": "http://localhost:8125",
+      "neighbors": [
+        "Node_93",
+        "Node_94",
+        "Node_128",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_126",
+      "name": "AgentSwarm",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.8053,
+        "phi": 1.369,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8126",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_127",
+      "name": "BambuLab",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 2.8578,
+        "phi": 3.769,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8127",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_128",
+      "name": "MediaGen",
+      "layer": "perception",
+      "domain": "media",
+      "coordinates": {
+        "theta": 2.9221,
+        "phi": 6.169,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "media_processing"
+      ],
+      "api_url": "http://localhost:8128",
+      "neighbors": [
+        "Node_93",
+        "Node_94",
+        "Node_125",
+        "Node_16",
+        "Node_17"
+      ],
+      "metadata": {
+        "priority": "normal",
+        "max_load": 300
+      }
+    },
+    {
+      "id": "Node_130",
+      "name": "AutonomousCoding",
+      "layer": "perception",
+      "domain": "general",
+      "coordinates": {
+        "theta": 3.015,
+        "phi": 2.2857,
+        "radius": 3.0
+      },
+      "capabilities": [
+        "general"
+      ],
+      "api_url": "http://localhost:8130",
+      "neighbors": [
+        "Node_62",
+        "Node_63",
+        "Node_71",
         "Node_16",
         "Node_17"
       ],
