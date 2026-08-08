@@ -1,44 +1,67 @@
 #!/usr/bin/env python3
-"""
-生成完整的拓扑配置文件
+"""生成完整的拓扑配置文件（三层球体拓扑）
 
-基于现有的 102 个节点，生成包含三层球体拓扑的配置文件
+节点清单**从磁盘扫描得出**，不是写死的名单。
+
+原来这里是一份手抄的 102 个名字，而它上面那行注释写的却是「从实际目录读取」——
+注释说的是对的做法，代码没照做。代价有两笔：
+
+1. 名单里有 5 个磁盘上不存在的节点（``Node_37_LinuxDBus`` / ``38_BLE`` /
+   ``41_MQTT`` / ``42_CANbus`` / ``48_Serial``）。这五个协议后来是以
+   ``core/adapters/*_adapter.py`` 的形式落在 AIP 传输层的（见
+   ``galaxy_gateway/bootstrap/lifecycle.py`` 里逐个 ``register_adapter``），
+   节点这条路线从来没走通。而 ``config/topology.json`` 会喂给
+   ``TopologyManager`` 做负载均衡路由 —— 名单里留着它们，等于让路由器把
+   请求派给一个不存在的目标。
+2. 少了 23 个磁盘上真实存在的节点，它们在拓扑里根本不出现。
+
+改成扫盘之后这两笔都不会再犯：新增节点自动进拓扑，删掉的节点自动消失。
 """
 
 import json
 import math
 from pathlib import Path
+
 from core.port_config import get_node_port
 
-# 节点列表（从实际目录读取）
-NODES = [
-    "Node_00_StateMachine", "Node_01_OneAPI", "Node_02_Tasker", "Node_03_SecretVault",
-    "Node_04_Router", "Node_05_Auth", "Node_06_Filesystem", "Node_07_Git",
-    "Node_08_Fetch", "Node_09_Sandbox", "Node_10_Slack", "Node_11_GitHub",
-    "Node_12_Postgres", "Node_13_SQLite", "Node_14_FFmpeg", "Node_15_OCR",
-    "Node_16_Email", "Node_17_EdgeTTS", "Node_18_DeepL", "Node_19_Crypto",
-    "Node_20_Qdrant", "Node_21_Notion", "Node_22_BraveSearch", "Node_123_Calendar",
-    "Node_23_Time", "Node_24_Weather", "Node_25_GoogleSearch", "Node_28_Reserved",
-    "Node_29_Reserved", "Node_30_Reserved", "Node_31_Reserved", "Node_32_Reserved",
-    "Node_33_ADB", "Node_34_Scrcpy", "Node_35_AppleScript", "Node_36_UIAWindows",
-    "Node_37_LinuxDBus", "Node_38_BLE", "Node_39_SSH", "Node_40_SFTP",
-    "Node_41_MQTT", "Node_42_CANbus", "Node_43_MAVLink", "Node_44_NFC",
-    "Node_45_DesktopAuto", "Node_46_Camera", "Node_47_Audio", "Node_125_MediaGen",
-    "Node_48_Serial", "Node_49_OctoPrint", "Node_50_Transformer", "Node_51_QuantumDispatcher",
-    "Node_52_QiskitSimulator", "Node_53_GraphLogic", "Node_54_SymbolicMath", "Node_126_AgentSwarm",
-    "Node_56_Planning", "Node_57_QuantumCloud", "Node_58_ModelRouter", "Node_59_CausalInference",
-    "Node_61_GeometricReasoning", "Node_62_ProbabilisticProgramming", "Node_64_Telemetry", "Node_65_LoggerCentral",
-    "Node_66_ConfigManager", "Node_67_HealthMonitor", "Node_68_Security", "Node_69_BackupRestore",
-    "Node_127_BambuLab", "Node_128_MediaGen", "Node_72_KnowledgeBase", "Node_73_Learning",
-    "Node_74_DigitalTwin", "Node_79_LocalLLM", "Node_80_MemorySystem", "Node_81_Orchestrator",
-    "Node_82_NetworkGuard", "Node_83_NewsAggregator", "Node_84_StockTracker", "Node_85_PromptLibrary",
-    "Node_90_MultimodalVision", "Node_91_MultimodalAgent", "Node_92_AutoControl", "Node_95_WebRTC_Receiver",
-    "Node_96_SmartTransportRouter", "Node_97_AcademicSearch", "Node_100_MemorySystem", "Node_101_CodeEngine",
-    "Node_102_DebugOptimize", "Node_103_KnowledgeGraph", "Node_104_AgentCPM", "Node_105_UnifiedKnowledgeBase",
-    "Node_106_GitHubFlow", "Node_108_MetaCognition", "Node_109_ProactiveSensing", "Node_110_SmartOrchestrator",
-    "Node_111_ContextManager", "Node_112_SelfHealing", "Node_113_AndroidVLM", "Node_116_ExternalToolWrapper",
-    "Node_117_OpenCode", "Node_118_NodeFactory"
-]
+REPO_ROOT = Path(__file__).resolve().parent.parent
+NODES_DIR = REPO_ROOT / "nodes"
+
+#: 与 ``config/topology.json`` 一起写出去 —— 原来这条是人手加在产物里的，
+#: 生成器并不知道它存在，所以重新生成一次就会把它抹掉。
+DEPRECATION_NOTICE = (
+    "LEGACY (2026-03-14): api_url fields in this file contain hardcoded ports "
+    "that may be stale. Canonical port source: config/unified_ports.yaml. "
+    "Topology/visualization metadata (layers, coordinates, domains) remains "
+    "valid here but ports should be read at runtime via "
+    "core.port_config.get_node_port()."
+)
+
+
+def discover_nodes() -> list:
+    """扫描 ``nodes/`` 下真实存在的节点目录。
+
+    判据是「有 ``main.py``」—— 与 ``core/node_activation_policy`` 和
+    ``tests/test_node_manifest_consistency.py`` 用的是同一条，避免又多出一份
+    「哪些算节点」的说法。
+
+    按编号排序而不是按目录名字典序：``generate_coordinates()`` 用下标算球面坐标，
+    顺序不稳定的话每次生成出来的坐标都不一样。
+    """
+    names = [d.name for d in NODES_DIR.iterdir() if d.is_dir() and (d / "main.py").exists()]
+
+    def _key(name: str):
+        parts = name.split("_")
+        try:
+            return (0, int(parts[1]), name)
+        except (IndexError, ValueError):
+            return (1, 0, name)
+
+    return sorted(names, key=_key)
+
+
+NODES = discover_nodes()
+
 
 # 层级分配规则（基于节点 ID 和功能）
 def assign_layer(node_name):
@@ -240,9 +263,13 @@ def generate_topology():
     
     # 生成完整配置
     config = {
+        # 这条原来是人手加在 config/topology.json 里的，生成器并不知道它存在 ——
+        # 重新生成一次就会把它抹掉。放进生成器，它才跟着产物走。
+        "_DEPRECATION_NOTICE": DEPRECATION_NOTICE,
         "version": "1.0",
         "topology_type": "three_layer_sphere",
-        "description": "Galaxy - 102 Nodes Three-Layer Sphere Topology",
+        # 节点数跟着磁盘走，不再写死 —— 原来这里印的 "102 Nodes" 已经和现实差了 23 个。
+        "description": f"Galaxy - {len(nodes)} Nodes Three-Layer Sphere Topology",
         "generated_at": "2026-01-25",
         "layers": [
             {

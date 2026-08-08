@@ -1,7 +1,7 @@
 """tests/test_node_manifest_consistency.py
 ===========================================
 
-**六个地方各自记着"有哪些节点"，它们必须说同一件事。**
+**八个地方各自记着"有哪些节点"，它们必须说同一件事。**
 
 修复前
 ------
@@ -13,9 +13,17 @@
     config/unified_ports.yaml       130   ← 5 个幽灵
     deploy/compose/full.yml         130   ← 5 个幽灵
     registry/device_node_map.yaml    11   ← 4 个幽灵
+    config/capabilities.json        116   ← 5 个幽灵 + 7 条测试垃圾
+    config/topology.json            102   ← 5 个幽灵 + 少 31 个 + 3 组 id 撞车
 
 「幽灵」= 声称有、磁盘上没有：``Node_37_LinuxDBus`` / ``38_BLE`` / ``41_MQTT`` /
-``42_CANbus`` / ``48_Serial``。五个物理总线节点，设计好了，实现从来没跟上。
+``42_CANbus`` / ``48_Serial``。
+
+这五个协议**不是"没做完"，是做到别处去了**：它们以 ``core/adapters/*_adapter.py``
+的形式落在了 AIP 传输层（``ble_adapter`` / ``mqtt_adapter`` / ``canbus_adapter`` /
+``serial_adapter`` / ``dbus_adapter``，由 ``galaxy_gateway/bootstrap/lifecycle.py``
+逐个 ``register_adapter`` 注册），``core/aip_transport.py`` 还专门给它们定了
+``_NARROWBAND`` 传输特性。节点这条路线因此从来没人走 —— 但八份清单里的记录留下了。
 
 它们为什么从"无害"变成"有害"
 ----------------------------
@@ -54,6 +62,9 @@ NODE_DEPS = REPO_ROOT / "node_dependencies.json"
 COMPOSE_FULL = REPO_ROOT / "deploy" / "compose" / "full.yml"
 DEVICE_MAP = REPO_ROOT / "registry" / "device_node_map.yaml"
 UNIFIED_PORTS = REPO_ROOT / "config" / "unified_ports.yaml"
+CAPABILITIES = REPO_ROOT / "config" / "capabilities.json"
+TOPOLOGY = REPO_ROOT / "config" / "topology.json"
+TOPOLOGY_GEN = REPO_ROOT / "fusion" / "generate_topology_config.py"
 
 
 def _on_disk() -> set:
@@ -82,6 +93,21 @@ def _declared():
         out["config/unified_ports.yaml"] = set(
             re.findall(r"^    (Node_\d+_\w+):", UNIFIED_PORTS.read_text(encoding="utf-8"), re.M)
         )
+    if CAPABILITIES.exists():
+        # 第**七**份。前六份收敛完之后它还剩 12 条对不上的：5 个幽灵总线节点，
+        # 外加 7 条**测试写进来的垃圾**（``node_x`` / ``node_meta`` / ``node_sink``
+        # / ``node_local`` / ``node_42`` / ``node_55`` / ``119``，时间戳挤在
+        # 2026-07-27 12:17–12:18 一分钟内）。
+        #
+        # 后者是 core/capability_manager.py:180 那段注释描述的老问题：
+        # ``register_capability()`` 会同步落盘，而默认路径是仓库内的绝对路径，
+        # 于是跑一次测试就改写一个 git 跟踪文件。那个洞已经用 GALAXY_CONFIG_DIR
+        # 堵上了，但**堵之前漏进来的东西还留在文件里**。
+        out["config/capabilities.json"] = {
+            c["node_id"]
+            for c in json.loads(CAPABILITIES.read_text(encoding="utf-8"))["capabilities"]
+            if c.get("node_id")
+        }
     return out
 
 
@@ -214,3 +240,87 @@ def test_port_registry_covers_every_node_on_disk():
     """
     missing = sorted(_on_disk() - _declared()["config/unified_ports.yaml"])
     assert not missing, f"端口权威表里没有这些磁盘上的节点：{missing}"
+
+
+def test_capability_registry_is_a_ledger_not_a_manifest():
+    """``config/capabilities.json`` **不要求**覆盖磁盘上全部节点。
+
+    刻意钉这条反向判据，是为了拦住"为了一致性把它也补齐"这个很自然但错误的动作：
+    这个文件是 ``register_capability()`` 在运行时落盘的**账本**（每条带
+    ``status`` 与 ``last_updated``），不是声明式清单。没注册过的节点不在里面是
+    **正常**的；要求它等于磁盘，等于要求所有节点必须先跑起来才算配置正确。
+
+    它唯一该守的是上面那条通用判据：不许声称一个磁盘上没有的节点。
+    """
+    declared = _declared()["config/capabilities.json"]
+    assert declared, "能力账本空了"
+    assert declared <= _on_disk(), "账本里有磁盘上不存在的节点 —— 应由上面的幽灵检查报出"
+
+
+# ── 5. 拓扑产物与它的生成器 ──────────────────────────────────────────────────
+
+
+def _topology_ids() -> set:
+    return {n["id"] for n in json.loads(TOPOLOGY.read_text(encoding="utf-8"))["nodes"]}
+
+
+def _disk_topology_ids() -> set:
+    """磁盘节点名折成拓扑用的短 id：``Node_33_ADB`` → ``Node_33``。"""
+    return {"_".join(n.split("_")[:2]) for n in _on_disk()}
+
+
+def test_topology_matches_disk_exactly():
+    """``config/topology.json`` 要和磁盘一一对应。
+
+    这份不是文档，是 ``fusion/topology_manager.TopologyManager`` 读进去做
+    **负载均衡路由**的表（``fusion/start_fusion.py:91`` → ``UnifiedOrchestrator``）。
+    表里留着 5 个磁盘上不存在的节点，等于让路由器可能把请求派给一个不存在的目标。
+
+    修复前：102 条里 5 个幽灵、缺 31 个真实节点。
+    """
+    if not TOPOLOGY.exists():
+        pytest.skip("config/topology.json 不存在")
+    topo, disk = _topology_ids(), _disk_topology_ids()
+    assert topo == disk, f"拓扑多出：{sorted(topo - disk)}；拓扑缺少：{sorted(disk - topo)}"
+
+
+def test_topology_ids_are_unique():
+    """一个 id 只能对应一个节点。
+
+    修复前有 3 组撞车，而且撞车的两边连 ``api_url`` 都一样::
+
+        Node_23 → Calendar / Time    都指向 8023
+        Node_48 → MediaGen / Serial  都指向 8048
+        Node_56 → AgentSwarm/Planning 都指向 8056
+
+    id 是路由的键。两个节点共用一个键，路由器按键查表时只会拿到其中一个，
+    另一个**永远选不中**，而且不报错。这条比"数目对得上"更要紧：数目相等
+    也可能是两个撞成一个、另一个补进来。
+    """
+    if not TOPOLOGY.exists():
+        pytest.skip("config/topology.json 不存在")
+    ids = [n["id"] for n in json.loads(TOPOLOGY.read_text(encoding="utf-8"))["nodes"]]
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    assert not dup, f"这些 id 被多个节点共用：{dup}"
+
+
+def test_topology_generator_derives_the_node_list_from_disk():
+    """生成器必须**扫盘**取节点，不许再写死一份名单。
+
+    原来它写死了 102 个名字，而紧挨着的那行注释写的是「从实际目录读取」——
+    注释是对的，代码没照做。上面两条测试只能证明**当前产物**是对的；只要生成器
+    还端着一份手抄名单，下一次重新生成就会把幽灵原样写回去。
+
+    判据是行为的：真的调一次 ``discover_nodes()``，要求它等于磁盘。
+    只查"源码里没有硬编码列表"是不够的 —— 换个写法（比如从别的常量拼）照样绕过。
+    """
+    if not TOPOLOGY_GEN.exists():
+        pytest.skip("fusion/generate_topology_config.py 不存在")
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_topo_gen", TOPOLOGY_GEN)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    assert set(mod.discover_nodes()) == _on_disk(), "生成器认的节点和磁盘不一致"
+    assert set(mod.NODES) == _on_disk(), "模块级 NODES 不是扫盘得来的"

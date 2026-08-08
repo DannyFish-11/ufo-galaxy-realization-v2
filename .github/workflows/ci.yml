@@ -280,6 +280,17 @@ jobs:
       - name: Run config governance unit tests
         run: |
           python -m pytest tests/test_config_preflight.py -v --tb=short
+      # 端口权威表的自洽性。这个脚本在仓里存在很久，但从来没有任何 workflow 跑过它
+      # —— 于是它在 main 上长期红着一条 PORT CONFLICT 而没人知道。既然那条已经修好
+      # （gateway 与 unified_launcher 用 same_surface_as 声明成同一个服务面），就得把
+      # 它接进闸，否则下一次错位照样只能等到运行时才发现。
+      #
+      # 它现在管三件事：节点端口不重复、compose 与端口表一一对应、声明为同一服务面的
+      # 两条端口必须相等。
+      - name: Validate port registry
+        run: |
+          python scripts/validate_ports.py
+          echo "✅ Port registry validation passed."
 
   g7-quick-smoke:
     # PR-G7: Developer Experience & Quick Validation.

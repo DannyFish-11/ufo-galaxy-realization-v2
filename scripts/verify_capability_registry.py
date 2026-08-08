@@ -12,12 +12,40 @@
 
 import asyncio
 import json
+import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 # 添加项目根目录到路径
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# ---------------------------------------------------------------------------
+# 沙箱化配置目录 —— 必须在 import core.capability_manager **之前**。
+#
+# 这个脚本会 register_capability("test_capability", node_id="test_node") 往真实
+# 注册表里写东西，而 CapabilityManager 的默认 config_dir 是**仓库内的绝对路径**
+# （基于 __file__，换 CWD 也躲不掉），register 又会同步落盘 —— 于是跑一次"验证"
+# 就改写一次 git 跟踪的 config/capabilities.json。
+#
+# 实测：脚本自己会把测试能力注销掉，所以不会留下垃圾条目，但顶层 timestamp 每跑一次
+# 就变一次，文件必然变脏。一个**验证**脚本去修改它要验证的东西，本身就是错的：
+# 验证的前提是被验证对象不被观测行为改变。
+#
+# pytest 那边已经在 conftest 里用 GALAXY_CONFIG_DIR 指到临时目录堵上了，但脚本不走
+# conftest，所以要在这里自己做同一件事：拷一份真实配置进临时目录，让所有读写都落在
+# 那份拷贝上 —— 读到的内容不变，写出去的落不到仓库里。
+# ---------------------------------------------------------------------------
+if not os.environ.get("GALAXY_CONFIG_DIR"):
+    _sandbox = Path(tempfile.mkdtemp(prefix="galaxy-verify-config-"))
+    _real_config = PROJECT_ROOT / "config"
+    for _name in ("capabilities.json", "connection_state.json", "node_dependencies.json", "unified_config.json"):
+        _src = _real_config / _name
+        if _src.exists():
+            shutil.copy2(_src, _sandbox / _name)
+    os.environ["GALAXY_CONFIG_DIR"] = str(_sandbox)
 
 from core.capability_manager import CapabilityStatus, get_capability_manager
 from core.connection_manager import ConnectionState, get_connection_manager

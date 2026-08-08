@@ -12,24 +12,31 @@ Architecture
 
     Before (device-centric):
         Node_33_ADB → manages ADB connection + provides actions
-        Node_38_BLE → manages BLE connection + provides actions
-        Node_41_MQTT → manages MQTT connection + provides actions
+        Node_45_DesktopAuto → manages desktop session + provides actions
 
     After (capability-centric):
         UDM/UCM → manages ALL device connections, heartbeats, lifecycles
         Node_33_ADB → ONLY provides [adb_shell, adb_screenshot, adb_tap]
-        Node_38_BLE → ONLY provides [ble_scan, ble_connect, ble_read, ble_write]
-        Node_41_MQTT → ONLY provides [mqtt_publish, mqtt_subscribe, mqtt_connect]
         Node_45_DesktopAuto → ONLY provides [click, type, screenshot]
-        Node_48_Serial → ONLY provides [serial_read, serial_write, serial_connect]
+        Node_49_OctoPrint → ONLY provides [print_start, print_status, print_cancel]
 
     Device → UDM (lifecycle management)
       ↓
     Needs ADB action → Node_33_ADB handler
-    Needs BLE action → Node_38_BLE handler
 
     One device can use multiple nodes.
     One node can serve multiple devices.
+
+窄带总线不在这套机制里
+----------------------
+这段说明原来拿 ``Node_38_BLE`` / ``Node_41_MQTT`` / ``Node_48_Serial`` 举例，而
+``nodes/`` 下从来没有这三个目录 —— 举的是不存在的东西。
+
+BLE / MQTT / Serial / CANbus / D-Bus 走的是**另一条路**：它们以
+``core/adapters/*_adapter.py`` 的形式实现为 AIP 传输适配器，由
+``galaxy_gateway/bootstrap/lifecycle.py`` 注册进 ``core.aip_transport``。
+也就是说它们是**传输层**，不是能力节点 —— 这个加载器管不到它们，
+``get_handler("ble_scan")`` 永远不会有东西。
 
 Usage::
     from core.node_capability_loader import get_capability_loader
@@ -75,7 +82,7 @@ class CapabilityAction:
     """A single action handler exposed by a node capability."""
 
     name: str
-    """Action name: e.g. 'adb_shell', 'ble_scan', 'mqtt_publish'."""
+    """Action name: e.g. 'adb_shell', 'click', 'print_start'."""
 
     node_id: str
     """Source node: e.g. 'Node_33_ADB'."""
@@ -128,7 +135,7 @@ class NodeCapabilityLoader:
     def discover_nodes(self) -> List[str]:
         """Discover all node directories under ``nodes/``.
 
-        Returns list of node IDs like ``['Node_33_ADB', 'Node_38_BLE', ...]``.
+        Returns list of node IDs like ``['Node_33_ADB', 'Node_45_DesktopAuto', ...]``.
         """
         nodes = []
         if not NODES_ROOT.exists():
@@ -371,157 +378,6 @@ class NodeCapabilityLoader:
                 logger.debug("AIPV3-NODE CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
-
-    # ── 5-key-node capability profiles (PR-AIPV3) ──
-
-    def get_key_node_profiles(self) -> Dict[str, Dict[str, Any]]:
-        """Return capability profiles for the 5 key device nodes.
-
-        These profiles define the actions each node should expose in its
-        ``capability_manifest()``.  Nodes that don't yet have manifests
-        can use these as reference.
-
-        Returns::
-
-            {
-                "Node_33_ADB": {
-                    "description": "Android Debug Bridge actions",
-                    "actions": ["adb_shell", "adb_screenshot", "adb_tap", ...],
-                },
-                ...
-            }
-        """
-        return {
-            "Node_33_ADB": {
-                "description": "Android Debug Bridge — device control via ADB",
-                "actions": [
-                    {
-                        "name": "adb_shell",
-                        "description": "Execute shell command on Android device",
-                        "params": {"command": "string", "timeout_ms": "int"},
-                    },
-                    {
-                        "name": "adb_screenshot",
-                        "description": "Capture device screen",
-                        "params": {"format": "string", "quality": "int"},
-                    },
-                    {"name": "adb_tap", "description": "Tap screen at coordinates", "params": {"x": "int", "y": "int"}},
-                    {
-                        "name": "adb_swipe",
-                        "description": "Swipe screen",
-                        "params": {"x1": "int", "y1": "int", "x2": "int", "y2": "int", "duration_ms": "int"},
-                    },
-                    {"name": "adb_input_text", "description": "Type text", "params": {"text": "string"}},
-                    {"name": "adb_keyevent", "description": "Send key event", "params": {"keycode": "int"}},
-                ],
-            },
-            "Node_38_BLE": {
-                "description": "Bluetooth Low Energy — scan, connect, read, write",
-                "actions": [
-                    {
-                        "name": "ble_scan",
-                        "description": "Scan for BLE devices",
-                        "params": {"duration_ms": "int", "service_uuid": "string"},
-                    },
-                    {
-                        "name": "ble_connect",
-                        "description": "Connect to BLE device",
-                        "params": {"address": "string", "auto_discover": "bool"},
-                    },
-                    {
-                        "name": "ble_disconnect",
-                        "description": "Disconnect from BLE device",
-                        "params": {"address": "string"},
-                    },
-                    {
-                        "name": "ble_read",
-                        "description": "Read GATT characteristic",
-                        "params": {"address": "string", "uuid": "string"},
-                    },
-                    {
-                        "name": "ble_write",
-                        "description": "Write GATT characteristic",
-                        "params": {"address": "string", "uuid": "string", "data": "bytes"},
-                    },
-                    {
-                        "name": "ble_notify",
-                        "description": "Subscribe to notifications",
-                        "params": {"address": "string", "uuid": "string", "enable": "bool"},
-                    },
-                ],
-            },
-            "Node_41_MQTT": {
-                "description": "MQTT — IoT device messaging",
-                "actions": [
-                    {
-                        "name": "mqtt_publish",
-                        "description": "Publish MQTT message",
-                        "params": {"topic": "string", "payload": "string", "qos": "int"},
-                    },
-                    {
-                        "name": "mqtt_subscribe",
-                        "description": "Subscribe to MQTT topic",
-                        "params": {"topic": "string", "qos": "int"},
-                    },
-                    {
-                        "name": "mqtt_unsubscribe",
-                        "description": "Unsubscribe from topic",
-                        "params": {"topic": "string"},
-                    },
-                    {
-                        "name": "mqtt_connect",
-                        "description": "Connect to MQTT broker",
-                        "params": {"host": "string", "port": "int", "client_id": "string"},
-                    },
-                    {"name": "mqtt_disconnect", "description": "Disconnect from broker", "params": {}},
-                ],
-            },
-            "Node_45_DesktopAuto": {
-                "description": "Desktop Automation — UI control",
-                "actions": [
-                    {
-                        "name": "ui_click",
-                        "description": "Click at screen coordinates",
-                        "params": {"x": "int", "y": "int"},
-                    },
-                    {"name": "ui_type", "description": "Type text", "params": {"text": "string", "interval": "float"}},
-                    {
-                        "name": "ui_screenshot",
-                        "description": "Capture desktop screenshot",
-                        "params": {"region": "tuple", "format": "string"},
-                    },
-                    {
-                        "name": "ui_find",
-                        "description": "Find image on screen",
-                        "params": {"image_path": "string", "confidence": "float"},
-                    },
-                    {"name": "ui_hotkey", "description": "Press hotkey combination", "params": {"keys": "list"}},
-                ],
-            },
-            "Node_48_Serial": {
-                "description": "Serial/UART — hardware communication",
-                "actions": [
-                    {
-                        "name": "serial_open",
-                        "description": "Open serial port",
-                        "params": {"port": "string", "baudrate": "int"},
-                    },
-                    {"name": "serial_close", "description": "Close serial port", "params": {"port": "string"}},
-                    {
-                        "name": "serial_read",
-                        "description": "Read from serial port",
-                        "params": {"port": "string", "size": "int", "timeout_ms": "int"},
-                    },
-                    {
-                        "name": "serial_write",
-                        "description": "Write to serial port",
-                        "params": {"port": "string", "data": "bytes"},
-                    },
-                    {"name": "serial_flush", "description": "Flush serial buffer", "params": {"port": "string"}},
-                    {"name": "serial_list_ports", "description": "List available serial ports", "params": {}},
-                ],
-            },
-        }
 
 
 # ---------------------------------------------------------------------------
