@@ -296,6 +296,22 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
     "budget guidance all take precedence."
 )
 
+# Sentinel confirming experience statistics are object-anchored and advisory.
+EXPERIENCE_GUIDANCE_OBJECT_ANCHORED_WIRED: str = (
+    "EXPERIENCE_GUIDANCE_OBJECT_ANCHORED_WIRED: "
+    "Strategy-success statistics are derived by "
+    "core.cognitive.experience_guidance.derive_experience_guidance(), which "
+    "aggregates typed TaskSummary fields (strategy: str, success: bool) over a "
+    "BM25-scoped population.  The superseded implementation "
+    "(_experience_strategy_adjust) serialised those same facts into prose, "
+    "recalled at most 8 blobs by vector similarity, regex-parsed the structure "
+    "back out, and then OVERWROTE the strategy that _pick_strategy() had already "
+    "produced from governed inputs.  ExperienceGuidance is now an input to "
+    "_pick_strategy() alongside breadth and memory guidance — never a post-hoc "
+    "override — and it never displaces task-type mapping, explicit keyword "
+    "matches, budget preference, or memory continuity preference."
+)
+
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
@@ -521,6 +537,8 @@ class ExecutionPlanner:
         # PR-19: derive memory planner guidance from memory bias (lowest-priority advisory)
         _memory_guidance = None
         _memory_influenced_strategy = False
+        _experience_guidance = None
+        _experience_influenced_strategy = False
         try:
             if memory_bias is not None and getattr(memory_bias, "influenced_by_memory", False):
                 from core.cognitive.memory_bias_layer import get_memory_planner_guidance as _get_mem_guidance
@@ -551,11 +569,26 @@ class ExecutionPlanner:
         if _memory_guidance is not None and _memory_guidance.influenced_by_memory:
             _memory_influenced_strategy = True
 
-        # 经验学习闭环(上层)：根据历史经验里"策略→成败"记录,若当前策略在相似任务上
-        # 反复失败、而另一策略明显更优,则自动改用更优策略。失败即沿用原策略。
-        # _experience_strategy_adjust 内部同样调用 um.recall(CPU 密集的同步向量
-        # 检索);execute() 是 async 方法,直接调用会占住共享事件循环——offload 到线程。
-        strategy = await asyncio.to_thread(self._experience_strategy_adjust, plan.message, strategy)
+        # 经验学习闭环(上层)：从历史执行记录的类型化字段派生"策略→成败"制导。
+        # 制导需要"当前策略"作对比基准,所以在首次选择之后派生;拿到制导后用同一个
+        # 纯函数重跑一次选择——_pick_strategy 是微秒级的纯逻辑,重跑一次没有代价,
+        # 且保证经验的应用规则只有一处实现,不会与 execute() 里的副本漂移。
+        # _derive_experience_guidance 内部是 BM25 排序(CPU 密集的同步调用);
+        # execute() 是 async 方法,直接调用会占住共享事件循环——offload 到线程。
+        _experience_guidance = await asyncio.to_thread(
+            self._derive_experience_guidance, plan.message, strategy, intent_task_type
+        )
+        if _experience_guidance is not None:
+            strategy = self._pick_strategy(
+                plan.message,
+                complexity,
+                task_type=intent_task_type,
+                breadth_guidance=_breadth_guidance,
+                memory_guidance=_memory_guidance,
+                experience_guidance=_experience_guidance,
+            )
+            if getattr(_experience_guidance, "influenced_by_experience", False):
+                _experience_influenced_strategy = True
 
         # 协作模式细化(Octo 六模式)：当本就要组队(specialized/parallel/swarm)时，
         # 用 collaboration_mode_policy 进一步判断是否该用 critic(做/审分离) / pipeline
@@ -582,12 +615,13 @@ class ExecutionPlanner:
 
         logger.info(
             "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s "
-            "budget_influenced=%s memory_influenced=%s",
+            "budget_influenced=%s memory_influenced=%s experience_influenced=%s",
             strategy,
             complexity,
             plan.intent.mode,
             _budget_influenced_strategy,
             _memory_influenced_strategy,
+            _experience_influenced_strategy,
         )
 
         # PR86 强制要求：从 CapabilityRegistry 拉取工具（禁止旁路）
@@ -761,6 +795,12 @@ class ExecutionPlanner:
 
             # 经验复用（WRITE）：把本次执行沉淀成一条"经验"写入统一记忆层，
             # 供未来语义召回（见上方 READ）。tags 含 "experience" 以便召回时筛选。
+            #
+            # 这条散文记录**只**服务于上方 READ 那条 prompt 上下文注入——
+            # 供 LLM 参考的建议性文本，是向量检索的正当用法。策略选择**不再**
+            # 读它：那条路径已改为读 TaskSummary 的类型化字段
+            # (见 _derive_experience_guidance / core.cognitive.experience_guidance)。
+            # 同一次执行的结构化事实由上方 record_task() 落库，勿再从本文本反解结构。
             try:
                 from core.memory import get_unified_memory
 
@@ -833,55 +873,28 @@ class ExecutionPlanner:
     # 策略选择
     # ──────────────────────────────────────────────────────────────────
 
-    def _experience_strategy_adjust(self, message: str, current: str) -> str:
-        """经验学习闭环(上层)：用历史经验里的"策略→成败"记录微调策略。
+    def _derive_experience_guidance(self, message: str, current: str, task_type: str = "") -> Optional[Any]:
+        """经验学习闭环(上层)：从历史执行记录派生"策略→成败"制导。
 
-        从统一记忆语义召回相似任务的经验,解析其中 ``策略[X] 结果[成功|失败]``,
-        统计各策略成功率;若某策略样本足够(>=3)且成功率明显高于当前策略(>+0.34),
-        则切换到它。GALAXY_EXPERIENCE_STRATEGY=0 可关闭;任何异常都沿用原策略。
+        取代原 ``_experience_strategy_adjust``——那版把结构化事实写成散文、
+        向量召回 8 段、再用正则 ``策略[X] 结果[成功|失败]`` 抠回结构，
+        算出的"成功率"分母是相似度采样而不是真实执行总数，且直接覆写策略。
+
+        现在改为读 :class:`core.task_memory.TaskSummary` 的类型化字段
+        （``strategy: str`` / ``success: bool``），作用域由 BM25 词法排序提供，
+        全程无正则、无 embedding。产出的 ``ExperienceGuidance`` 是喂给
+        ``_pick_strategy()`` 的**建议输入**，与 PR-18/PR-19 的制导同级同权。
+
+        同步 CPU 调用（BM25 排序），async 调用方需 offload —— 见 ``execute()``。
+        返回 ``None`` 表示派生不可用，调用方按无制导处理。
         """
         try:
-            import os
-            import re
+            from core.cognitive.experience_guidance import derive_experience_guidance
 
-            if os.getenv("GALAXY_EXPERIENCE_STRATEGY", "1").strip().lower() in ("0", "false", "no"):
-                return current
-            from core.memory import get_unified_memory
-
-            um = get_unified_memory()
-            if not um.enabled or not message:
-                return current
-            stats: Dict[str, List[int]] = {}  # strategy -> [success, total]
-            for h in um.recall(message, top_k=8):
-                m = re.search(r"策略\[([^\]]+)\].*?结果\[([^\]]+)\]", h.content or "")
-                if not m:
-                    continue
-                strat = m.group(1).strip()
-                s = stats.setdefault(strat, [0, 0])
-                s[1] += 1
-                if "成功" in m.group(2):
-                    s[0] += 1
-
-            def rate(st: str):
-                return stats[st][0] / stats[st][1] if st in stats and stats[st][1] >= 3 else None
-
-            cur = rate(current)
-            cands = [(st, rate(st)) for st in stats if rate(st) is not None]
-            if not cands:
-                return current
-            best_st, best_rate = max(cands, key=lambda x: x[1])
-            if best_st != current and (cur is None or best_rate > cur + 0.34):
-                logger.info(
-                    "ExecutionPlanner: 经验学习改策略 %s -> %s (历史成功率 %.2f, n=%d)",
-                    current,
-                    best_st,
-                    best_rate,
-                    stats[best_st][1],
-                )
-                return best_st
-        except Exception as exc:  # noqa: BLE001 — 经验调整失败不影响主流程
-            logger.debug("experience strategy adjust skipped: %s", exc)
-        return current
+            return derive_experience_guidance(message, current, task_type=task_type)
+        except Exception as exc:  # noqa: BLE001 — 经验制导失败不影响主流程
+            logger.debug("experience guidance derivation skipped: %s", exc)
+            return None
 
     def _pick_strategy(
         self,
@@ -890,6 +903,7 @@ class ExecutionPlanner:
         task_type: str = "",
         breadth_guidance: Optional[Any] = None,
         memory_guidance: Optional[Any] = None,
+        experience_guidance: Optional[Any] = None,
     ) -> str:
         """选择执行策略：fractal / swarm / specialized / single。
 
@@ -914,6 +928,16 @@ class ExecutionPlanner:
           - novelty posture:     no influence on strategy selection.
           Memory guidance is only applied after PR-18 budget guidance; it never
           overrides task-type mapping, keyword matches, or budget narrowing.
+
+        Experience guidance influence (advisory, lowest priority — tied with PR-19):
+          Exact per-strategy success statistics over a BM25-scoped population of
+          historical tasks (see core.cognitive.experience_guidance).  Applied
+          ONLY when the strategy was reached implicitly — i.e. by complexity
+          threshold or by the default fallback.  It never displaces a strategy
+          that an *explicit* signal produced: task-type mapping, a keyword match,
+          budget strategy preference, or memory continuity preference.  This
+          keeps memory-derived statistics subordinate, per
+          MEMORY_BIAS_LAYER::POLICY_4.
 
         约束（硬编码）:
           - Swarm 并发上限: 20
@@ -969,7 +993,7 @@ class ExecutionPlanner:
         fractal_threshold = 0.75 + total_adj
         specialized_threshold = 0.65 + total_adj
 
-        if complexity >= fractal_threshold or any(
+        _fractal_kw = any(
             k in m
             for k in [
                 "fractal",
@@ -979,9 +1003,8 @@ class ExecutionPlanner:
                 "多层",
                 "深度拆解",
             ]
-        ):
-            return "fractal"
-        if complexity >= specialized_threshold or any(
+        )
+        _specialized_kw = any(
             k in m
             for k in [
                 "team",
@@ -991,17 +1014,51 @@ class ExecutionPlanner:
                 "分工",
                 "异构",
             ]
-        ):
-            return "specialized"
-        # PR-18: if budget is narrow (passive), prefer single even if near threshold
-        if _strategy_pref == "single":
+        )
+
+        # Decide the strategy AND record whether an *explicit* signal produced it.
+        # The outcomes below are identical to the previous cascade
+        # (`complexity >= threshold or keyword` → strategy); the split exists only
+        # so experience guidance can tell "the keyword said so" apart from
+        # "the complexity score happened to land here".
+        if complexity >= fractal_threshold:
+            # Threshold reached — but if a fractal keyword *also* points here, the
+            # choice is explicitly requested, not merely inferred from a score.
+            base, explicit = "fractal", _fractal_kw
+        elif _fractal_kw:
+            base, explicit = "fractal", True
+        elif complexity >= specialized_threshold:
+            base, explicit = "specialized", _specialized_kw
+        elif _specialized_kw:
+            base, explicit = "specialized", True
+        elif _strategy_pref == "single":
+            # PR-18: if budget is narrow (passive), prefer single even if near threshold
             logger.debug("PR-18 _pick_strategy: passive posture — returning 'single' per budget guidance")
-            return "single"
-        # PR-19: if memory posture is continuity-seeking, prefer single for coherence
-        if _mem_prefer_single:
+            base, explicit = "single", True
+        elif _mem_prefer_single:
+            # PR-19: if memory posture is continuity-seeking, prefer single for coherence
             logger.debug("PR-19 _pick_strategy: continuity posture — returning 'single' per memory guidance")
-            return "single"
-        return "single"
+            base, explicit = "single", True
+        else:
+            base, explicit = "single", False
+
+        # Experience guidance — lowest priority, and only over an implicit choice.
+        if (
+            not explicit
+            and experience_guidance is not None
+            and getattr(experience_guidance, "influenced_by_experience", False)
+        ):
+            candidate = getattr(experience_guidance, "candidate_strategy", "") or ""
+            if candidate and candidate != base:
+                logger.info(
+                    "_pick_strategy: experience guidance %s → %s (%s)",
+                    base,
+                    candidate,
+                    getattr(experience_guidance, "diagnostic_note", ""),
+                )
+                return candidate
+
+        return base
 
     # ──────────────────────────────────────────────────────────────────
     # 调度分发

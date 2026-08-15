@@ -100,6 +100,34 @@ REGISTERED_FLAGS = {
         status="stable",
     ),
 
+    # --- Experience Guidance (object-anchored strategy statistics) ---
+    "experience_guidance": FeatureFlag(
+        name="experience_guidance",
+        env_var="GALAXY_EXPERIENCE_GUIDANCE",
+        default="on",
+        owner="@DannyFish-11",
+        purpose=(
+            "Controls whether ExecutionPlanner consults object-anchored "
+            "strategy-success statistics (core.cognitive.experience_guidance) "
+            "when picking an execution strategy"
+        ),
+        rollout_plan=(
+            "on (default — the superseded prose/regex path was also active by "
+            "default, so defaulting to shadow would silently disable a live "
+            "feature) → shadow (compute + log only, for A/B comparison against "
+            "the old behaviour) → off (kill switch). The legacy kill switch "
+            "GALAXY_EXPERIENCE_STRATEGY=0 continues to force off."
+        ),
+        cleanup_condition=(
+            "When PatternMiner and ExperienceGuidance are consolidated onto one "
+            "shared strategy-statistics authority (see "
+            "EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY), or after 2 releases "
+            "with no use of shadow/off"
+        ),
+        since="v2.3.22",
+        status="beta",
+    ),
+
     # --- WebRTC ---
     "webrtc_task_lifecycle": FeatureFlag(
         name="webrtc_task_lifecycle",

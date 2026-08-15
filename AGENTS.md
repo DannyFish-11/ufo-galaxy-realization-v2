@@ -51,6 +51,23 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### Agent 系统
 - `core/agent_factory.py` - Agent 工厂
 - `core/system_integration.py` - 系统集成层
+- `core/agent/execution_planner.py` - 执行规划器（策略选择的唯一决策点）
+
+### 策略选择的三层建议输入（都是 advisory，硬门禁永远优先）
+`ExecutionPlanner._pick_strategy()` 按优先级消费三份制导，任何一份都**不能**
+覆盖 task_type 映射、显式关键词、或更高优先级的制导：
+- `core/cognitive/cognitive_activation_budget.py` - PR-18 认知预算 → 广度制导
+- `core/cognitive/memory_bias_layer.py` - PR-19 记忆偏置（POLICY_4：优先级最低）
+- `core/cognitive/experience_guidance.py` - 执行经验制导（对象锚定）
+
+> **经验制导为什么是对象锚定的：** 它读 `TaskSummary` 的类型化字段
+> （`strategy: str` / `success: bool`），作用域由 BM25 词法排序提供，
+> 全程无正则、无 embedding。被它取代的旧实现把这些结构化事实写成散文、
+> 向量召回 8 段、再用正则抠回结构——算出的"成功率"分母是相似度采样而非
+> 真实执行总数，且直接覆写已选定的策略。
+> **决策路径不得从检索到的文本里反解结构。**
+> 与 `pattern_miner` 的策略模式挖掘存在职责重叠，边界见
+> `EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY` 哨兵。
 
 ### API 层
 - `core/api_routes.py` - REST API 和 WebSocket 路由
