@@ -182,6 +182,58 @@ class TestNewFlagshipModels:
         assert per_task["fast_response"] == "glm-5.1-flash"
 
 
+class TestGrok46Upgrade:
+    """2026-08-15 联网核实四家旗舰(DeepSeek V4 Pro / GLM-5.3 / Grok 4.6 / GPT-5.6
+    三档)后的结论:只有 Grok 4.6 是真的要升的。
+
+    其余三个核对结果:
+
+    * ``deepseek-v4-pro``:型号 id 本身仍正确(上游快照 deepseek-v4-pro-0813),
+      不用改;第三方计费站显示价格明显上调,但 cost_in/cost_out 是驱动
+      cost_budget 路由判断的字段,没有一手定价页确认具体数字之前不动它 ——
+      详见 registry 里那条注释。
+    * GPT-5.6 Sol/Terra/Luna(``gpt-5.6`` / ``-terra`` / ``-luna``):三档 id 已经
+      是对的,2026-07-30 降过一轮价,id 不受影响。
+    * GLM-5.3:**没有加**。查到它 2026-08-14 发布,但只经 GLM Coding Plan /
+      编码 CLI 放出,标准 open.bigmodel.cn 端点(本 provider 实际调用的那个)上
+      的公开 model id 与独立计费仍在安全评审后才放 —— 见下面
+      ``test_glm53_deliberately_not_added``。
+    """
+
+    def test_grok_4_6_is_declared_and_default(self):
+        assert "grok-4.6" in _REGISTRY["xai"]["models"]
+        assert _REGISTRY["xai"]["default_model"] == "grok-4.6"
+
+    def test_grok_4_5_stays_as_a_fallback_not_a_ghost(self):
+        """4.5 没有被 4.6 取代下线(不是 opus-4.8 那种"已作废,不该残留"的情况)——
+        xAI 自己的文档里两个 id 目前都还在服务,所以保留在 models 里作为该家自己
+        的旧档回退,而不是从 registry 里清掉。"""
+        assert "grok-4.5" in _REGISTRY["xai"]["models"]
+
+    @pytest.mark.parametrize(
+        "task",
+        ["reasoning", "fast_response", "coding", "creative", "analysis", "planning", "agent_control", "general"],
+    )
+    def test_xai_task_map_upgraded_to_grok_4_6(self, task):
+        """同上面 anthropic/moonshot/zhipu/qwen 那条判据:新型号不只是"加进清单",
+        原先指向旧旗舰的任务槽位要真的升上去。"""
+        per_task = {getattr(tt, "value", tt): m for tt, m in PROVIDER_MODEL_MAP["xai"].items()}
+        assert per_task[task] == "grok-4.6"
+
+    def test_glm53_deliberately_not_added(self):
+        """钉住"现在不加"这个决定本身,不只是钉当前状态。
+
+        没有这条,下一个人(或下一轮"顺手更新模型列表")看到 zhipu 只有到 5.2,
+        很容易复刻本仓一贯的"按命名惯例推新档"手法(kimi-k2.6→k3、
+        qwen3.7→3.8 那种)直接加一个 "glm-5.3" —— 但这次的情况不一样:上一轮
+        那些是**推断,标注了未核验**;这一轮是**查到了并确认它现在还没有**。
+        两者都不该写死进 models,但原因不同,值得分开钉,免得将来有人把
+        "还没查"和"查过没有"混成一回事。
+        """
+        assert "glm-5.3" not in _REGISTRY["zhipu"]["models"]
+        assert "glm-5.3" != _REGISTRY["zhipu"]["default_model"]
+
+
 class TestConfigExampleStaysInSync:
     """``runtime/config.example.json`` 里的型号也要跟着升,否则新装机的人拿到的是旧型号。"""
 
