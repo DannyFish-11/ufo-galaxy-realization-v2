@@ -880,6 +880,41 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": ("切到 B 档时自动激活原生后端(后台补装客户端依赖 + 探测 server)。" "关掉则只能手动激活"),
     },
+    # ── 本地 OpenAI 兼容推理服务(core/multi_llm_router._register_local_openai)──
+    # 双模型本地主脑的另一半:感知位跑在核显上时,用 llama.cpp server 的 SYCL/Vulkan
+    # 后端或 OpenVINO Model Server 起一个 OpenAI 兼容端点,填地址即可接入 ——
+    # 路由层的 OpenAIAdapter 讲的就是这套协议,不需要新后端。
+    "GALAXY_LOCAL_OPENAI_URL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "本地 OpenAI 兼容推理服务地址(llama.cpp server 的 SYCL/Vulkan 后端 或 OpenVINO Model Server)。"
+            "留空=不启用;可不带 scheme 与 /v1(127.0.0.1:8000 也认)"
+        ),
+    },
+    "GALAXY_LOCAL_OPENAI_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": ("指定用该服务托管的哪个模型。留空=用它 /v1/models 自报的第一个;填错会告警并回落自报值"),
+    },
+    "GALAXY_LOCAL_OPENAI_SERVES": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "声明这台服务伺候的是目录里哪个型号(如 openbmb/minicpm-o4.5)。"
+            "服务按自己那套命名报模型 id(OpenVINO 的 MiniCPM-o-4_5-int4-ov 之类)、"
+            "与目录 tag 对不上时填它;留空=按名字匹配"
+        ),
+    },
+    "GALAXY_LOCAL_OPENAI_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "该本地服务若开了鉴权就填它的 key;自托管通常留空",
+    },
     "GALAXY_AMBIENT_ASR_SIZE": {
         "default": "base",
         "type": "string",

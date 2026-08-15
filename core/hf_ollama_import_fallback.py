@@ -74,10 +74,38 @@ HF_GGUF_CANDIDATES: Dict[str, List[str]] = {
         "vikhyatk/moondream2",
         "bartowski/Qwen2-VL-2B-Instruct-GGUF",
     ],
+    # 双模型档的推理位。与上面同一套写法:先乐观试新名字,再落到训练数据里
+    # 高置信度真实存在的同架构 MoE(Qwen3-30B-A3B 官方/社区 GGUF)。存不存在
+    # 一律由 find_gguf_file() 运行时用 HfApi 核实,猜错的自动跳过。
+    "qwen3.6:35b-a3b": [
+        "Qwen/Qwen3.6-35B-A3B-GGUF",
+        "unsloth/Qwen3.6-35B-A3B-GGUF",
+        "Qwen/Qwen3-30B-A3B-GGUF",
+        "unsloth/Qwen3-30B-A3B-GGUF",
+        "bartowski/Qwen_Qwen3-30B-A3B-GGUF",
+    ],
 }
 
 # CPU/轻量机器的默认下载体积预算（MB）；超过的候选文件直接跳过，避免下载几十 GB。
 DEFAULT_SIZE_BUDGET_MB = 6000
+
+
+def _size_budget_for(tag: str) -> int:
+    """这个 tag 该给多大的下载预算(MB)。
+
+    固定 6000 是给"轻量视觉主脑"定的,对大权重型号会**静默**把每个候选都判成
+    超预算跳过 —— 现场看到的是"HF 回退试了一圈全没成",而真正的原因是预算,
+    不是 repo 不存在。目录里登记过权重大小的型号就按它自己的大小放行
+    (再留 10% 余量给量化档位差异);没登记的维持原默认。
+    """
+    try:
+        from core.model_catalog import get_model  # noqa: PLC0415
+
+        spec = get_model(tag)
+        weight_mb = spec.size_mb() if spec is not None else 0
+    except Exception:  # noqa: BLE001
+        weight_mb = 0
+    return max(DEFAULT_SIZE_BUDGET_MB, int(weight_mb * 1.1)) if weight_mb else DEFAULT_SIZE_BUDGET_MB
 
 
 def _default_list_repo_files(repo_id: str) -> List[str]:
@@ -146,7 +174,8 @@ def download_and_import_to_ollama(
     *,
     local_model_name: Optional[str] = None,
     candidates: Optional[List[str]] = None,
-    size_budget_mb: int = DEFAULT_SIZE_BUDGET_MB,
+    # 0 = 按 tag 自己的权重大小推(见 _size_budget_for);显式传值一律尊重。
+    size_budget_mb: int = 0,
     find_gguf_file_fn: Callable[..., Optional[str]] = find_gguf_file,
     hf_hub_download_fn: Optional[Callable[..., str]] = None,
     ollama_create_fn: Optional[Callable[[str, str], bool]] = None,
@@ -167,6 +196,8 @@ def download_and_import_to_ollama(
     cand_list = candidates if candidates is not None else HF_GGUF_CANDIDATES.get(tag, [])
     if not cand_list:
         return None
+
+    size_budget_mb = size_budget_mb or _size_budget_for(tag)
 
     local_name = local_model_name or ("galaxy-" + tag.replace("/", "-").replace(":", "-") + "-hf")
 

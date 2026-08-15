@@ -153,6 +153,38 @@ def test_on_tier_changed_B_gated_off_during_tests(monkeypatch):
     assert nm.is_native_active() is False
 
 
+# ── 判据:看档位构成,不看档位字母 ────────────────────────────────────────────
+
+
+def test_tier_wants_native_reads_the_tier_composition_not_the_letter():
+    """含 MiniCPM-o 的档都要原生 —— 复合档(C)也算。
+
+    原来这里写死 ``key == "B"``。B 档确实只有它一个模型,所以当时不错;但一旦
+    出现**含 MiniCPM-o 的复合档**,写死字母那一支会走 deactivate(),
+    于是能力表(``tier_effective_io("C")`` 判 audio_out=native)说"说=原生"、
+    后端却被注销 —— 协商层照着能力表去用一条已经关掉的通路。判据分家的形状。
+    """
+    from core import model_catalog as mc
+
+    assert nm.tier_wants_native("B") is True
+    assert nm.tier_wants_native("C") is True, "复合档里的感知位就是 MiniCPM-o,却被判成不需要原生"
+    assert nm.tier_wants_native("A") is False
+    assert nm.tier_wants_native("Z") is False
+    # 与能力表同口径:说"说=原生"的档,必须也判"需要原生后端"。
+    for key in ("A", "B", "C"):
+        speaks_native = mc.tier_effective_io(key).audio_out == "native"
+        assert nm.tier_wants_native(key) == speaks_native, f"{key} 档:能力表与后端激活判据分家了"
+
+
+def test_composite_tier_does_not_deactivate_the_native_backend(monkeypatch):
+    """切到 C 档不许把已激活的原生后端注销掉。"""
+    _reset(monkeypatch)
+    nm.activate(_FakeBackend(), background=False)
+    assert nm.is_native_active() is True
+    nm.on_tier_changed("C")
+    assert nm.is_native_active() is True, "切 C 档把原生听/说关掉了 —— 感知位的耳朵嘴巴就哑了"
+
+
 def test_auto_activation_disabled_by_env(monkeypatch):
     monkeypatch.setenv("GALAXY_NATIVE_MODAL_AUTO", "0")
     assert nm._auto_activation_allowed() is False

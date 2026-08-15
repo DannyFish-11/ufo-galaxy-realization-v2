@@ -391,11 +391,16 @@ def test_ephemeral_spec_never_pollutes_catalog() -> None:
 
 
 def test_catalog_tiers_and_models_unchanged() -> None:
-    """目录 SSOT 不变式：仍是 A/B 两档、4 个型号。"""
+    """目录 SSOT 不变式：A/B 单模型档 + C 双模型复合档。
+
+    这条钉的是**档位构成**不许悄悄变，不是"永远只有两档"。加 C 档是显式动作
+    （见 tests/test_brain_roster_slots.py）；档位无声增减才是要拦的。
+    """
     from core.model_catalog import all_models, all_tiers
 
-    assert [t.key for t in all_tiers()] == ["A", "B"]
-    assert len(all_models()) == 4
+    assert [t.key for t in all_tiers()] == ["A", "B", "C"]
+    assert {t.key: t.kind for t in all_tiers()} == {"A": "single", "B": "single", "C": "composite"}
+    assert len(all_models()) == 5
 
 
 def test_llama_cpp_source_is_admitted_to_choices() -> None:

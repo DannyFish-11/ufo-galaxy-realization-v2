@@ -112,10 +112,31 @@ def _catalog_placeholder(status: str = "unknown") -> Dict[str, Dict[str, Any]]:
     out: Dict[str, Dict[str, Any]] = {}
     for tag in choice_order():
         spec = get_model(tag)
-        if spec is None or spec.source != "local":
+        if spec is None or spec.source not in ("local", "llama_cpp"):
             continue
         out[tag] = {"status": status, "ollama_reachable": False, "matched": ""}
     return out
+
+
+def _gguf_status(tag: str) -> Dict[str, Any]:
+    """source=llama_cpp 的型号:装没装看**本地 GGUF 文件在不在**,与 Ollama 无关。
+
+    不报它就等于:用户选了带 llama_cpp 推理位的档,面板上那一位**根本不显示**,
+    而缺文件只会在真正加载时写一行 error 日志。选完看不出没装,这是静默失败。
+    """
+    try:
+        from core.local_model_backends import LlamaCppBackend  # noqa: PLC0415
+
+        path = LlamaCppBackend()._resolve_model_path(tag)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("GGUF 路径解析不可用(%s): %s", tag, exc)
+        path = None
+    return {
+        "status": "installed" if path else "absent",
+        # 这一位不经 Ollama,故恒 False —— 不是"Ollama 挂了",是压根不走它。
+        "ollama_reachable": False,
+        "matched": path or "",
+    }
 
 
 async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
@@ -145,7 +166,12 @@ async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
         to_verify: List[tuple] = []
         for tag in choice_order():
             spec = get_model(tag)
-            if spec is None or spec.source != "local":
+            if spec is None:
+                continue
+            if spec.source == "llama_cpp":
+                out[tag] = _gguf_status(tag)
+                continue
+            if spec.source != "local":
                 continue
             root = tag.split(":")[0]
             matched = next(

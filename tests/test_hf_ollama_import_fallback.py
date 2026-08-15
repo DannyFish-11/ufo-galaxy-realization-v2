@@ -161,3 +161,35 @@ def test_all_choice_order_tags_have_candidates():
     for tag in _choice_order():
         assert tag in HF_GGUF_CANDIDATES, f"{tag} 缺少 HF 回退候选列表"
         assert len(HF_GGUF_CANDIDATES[tag]) >= 2, f"{tag} 候选太少,建议至少两个兜底"
+
+
+def test_size_budget_follows_the_model_weight_not_a_fixed_ceiling():
+    """大权重型号不该被固定的 6 GB 预算静默挡掉。
+
+    固定 6000 是给"轻量视觉主脑"定的。35B 的 INT4 权重 18 GB，按固定预算每个
+    候选文件都会被判超预算跳过 —— 而现场看到的是"HF 回退试了一圈全没成"，
+    根因(预算)完全不显形，看起来像 repo 全都不存在。
+    """
+    from core.hf_ollama_import_fallback import DEFAULT_SIZE_BUDGET_MB, _size_budget_for
+
+    assert _size_budget_for("gemma4:e2b") == DEFAULT_SIZE_BUDGET_MB, "小模型的预算不该被抬高"
+    big = _size_budget_for("qwen3.6:35b-a3b")
+    assert big > DEFAULT_SIZE_BUDGET_MB
+    assert big >= 18000, f"18 GB 权重却只给了 {big} MB 预算 —— 每个候选都会被判超预算"
+    # 目录外的型号维持原默认，不因为查不到就放开预算。
+    assert _size_budget_for("nobody/knows-this") == DEFAULT_SIZE_BUDGET_MB
+
+
+def test_download_derives_the_budget_from_the_tag(monkeypatch):
+    """把预算真的传下去 —— 只在 _size_budget_for 里算对没用。"""
+    import core.hf_ollama_import_fallback as m
+
+    seen = {}
+    monkeypatch.setattr(m.shutil, "which", lambda _n: "/usr/bin/ollama")
+
+    def _probe(repo_id, *, size_budget_mb=0, **_kw):
+        seen["budget"] = size_budget_mb
+        return None  # 不继续走下载
+
+    m.download_and_import_to_ollama("qwen3.6:35b-a3b", find_gguf_file_fn=_probe)
+    assert seen["budget"] >= 18000, f"传下去的预算是 {seen.get('budget')} —— 没跟着型号走"

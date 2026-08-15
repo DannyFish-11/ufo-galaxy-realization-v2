@@ -31,8 +31,9 @@ def _clean_env(tmp_path, monkeypatch):
 
 
 class TestCatalogStructure:
-    def test_two_tiers_ab(self):
-        assert [t.key for t in mc.all_tiers()] == ["A", "B"]
+    def test_tiers_are_ab_single_plus_c_composite(self):
+        assert [t.key for t in mc.all_tiers()] == ["A", "B", "C"]
+        assert [t.kind for t in mc.all_tiers()] == ["single", "single", "composite"]
 
     def test_tier_A_is_gemma_single(self):
         t = mc.get_tier("A")
@@ -92,7 +93,13 @@ class TestUnifiedNoHardcode:
 
     def test_choice_order_is_local_tags_only(self):
         # choice_order 只含本地(Ollama 可拉)模型；无容器模型
-        assert mc.choice_order() == ["gemma4:e2b", "gemma4:e4b", "gemma4:12b", "openbmb/minicpm-o4.5"]
+        assert mc.choice_order() == [
+            "gemma4:e2b",
+            "gemma4:e4b",
+            "gemma4:12b",
+            "openbmb/minicpm-o4.5",
+            "qwen3.6:35b-a3b",
+        ]
 
 
 class TestTierPersistence:
@@ -153,10 +160,12 @@ class TestModelsAPI:
         from core.routes.models import get_catalog
 
         snap = asyncio.run(get_catalog())
-        assert snap["current_tier"] in ("A", "B")
-        assert len(snap["tiers"]) == 2
+        assert snap["current_tier"] in ("A", "B", "C")
+        assert len(snap["tiers"]) == 3
         for t in snap["tiers"]:
             assert "effective_io" in t and "models" in t
+            # 槽位要真的出到线上 —— 面板据此显示"哪一位是感知位、落在哪块卡"。
+            assert "slots" in t and len(t["slots"]) == len(t["models"])
 
     def test_status_endpoint_shape(self):
         from core.routes.models import get_status

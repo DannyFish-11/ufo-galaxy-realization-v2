@@ -277,6 +277,7 @@ class ComputeScheduler:
         preferred_backend: Optional[str] = None,
         *,
         is_moe: bool = False,
+        runtime_mb: Optional[int] = None,
     ) -> ModelAllocation:
         """Decide how to load a model.
 
@@ -285,19 +286,31 @@ class ComputeScheduler:
 
         Parameters:
             model_id:             Model identifier (e.g. "llama3-8b")
-            model_size_mb:        Estimated model size in megabytes
+            model_size_mb:        **整模型权重**大小(MB)。MoE 拆分要按它去分
+                                  「共享层 / 专家」两摊,所以这一栏必须是权重总量。
             requires_multimodal:  If True, requires vision capability
             preferred_backend:    User-preferred backend (optional)
             is_moe:               模型是否 MoE 架构。为真时先尝试"注意力+共享层进 GPU、
                                   专家进内存"的拆分（判据全部来自**本机实测**硬件），
                                   拆不动则自然落到既有量化/CPU 分支。
+            runtime_mb:           跑起来**实际要驻留在显存里**的量(MB)。与权重不是
+                                  一回事:全模态模型还要驮编码器/解码器(MiniCPM-o
+                                  权重 6 G、驻留 11 G)。``None`` = 取 model_size_mb,
+                                  即历史行为,既有调用点逐字节不变。
+                                  MoE 拆分那一支**不看它** —— 那一支自己按权重算出
+                                  驻留量,再拿一个已经算过的驻留量去算等于套娃。
 
         Returns:
             ModelAllocation with the decision
         """
         async with self._lock:
             return await self._schedule_model_locked(
-                model_id, model_size_mb, requires_multimodal, preferred_backend, is_moe=is_moe
+                model_id,
+                model_size_mb,
+                requires_multimodal,
+                preferred_backend,
+                is_moe=is_moe,
+                runtime_mb=runtime_mb,
             )
 
     async def _schedule_model_locked(
@@ -308,6 +321,7 @@ class ComputeScheduler:
         preferred_backend: Optional[str],
         *,
         is_moe: bool = False,
+        runtime_mb: Optional[int] = None,
     ) -> ModelAllocation:
         from core.hardware_compute_profiler import get_hardware_profiler
 
@@ -379,8 +393,13 @@ class ComputeScheduler:
                 model_id,
             )
 
+        # 以下常规分支问的是"要在显存里放多少",而不是"权重有多大"。两者对全模态
+        # 模型差着编码器与语音解码器那一截;没量过的型号 resident_mb 就等于权重,
+        # 于是既有调用点逐字节维持原判。
+        resident_mb = int(runtime_mb or 0) or model_size_mb
+
         # 1. VRAM sufficient -> full precision GPU
-        if free_vram > model_size_mb * cfg.margin_full and vram_ratio < cfg.vram_optimal:
+        if free_vram > resident_mb * cfg.margin_full and vram_ratio < cfg.vram_optimal:
             alloc = ModelAllocation(
                 model_id=model_id,
                 backend=preferred_backend or "llama_cpp",
@@ -393,7 +412,7 @@ class ComputeScheduler:
             return alloc
 
         # 2. VRAM moderate -> Q8 quantized GPU
-        q8_size = int(model_size_mb * cfg.q8_factor)
+        q8_size = int(resident_mb * cfg.q8_factor)
         if free_vram > q8_size * cfg.margin_quantized and vram_ratio < cfg.vram_warning:
             alloc = ModelAllocation(
                 model_id=model_id,
@@ -407,9 +426,9 @@ class ComputeScheduler:
             return alloc
 
         # 3. VRAM tight -> Q4 quantized + partial layer offloading
-        q4_size = int(model_size_mb * cfg.q4_factor)
+        q4_size = int(resident_mb * cfg.q4_factor)
         if free_vram > q4_size * cfg.margin_hybrid:
-            n_layers = self._estimate_gpu_layers(model_size_mb, free_vram, cfg)
+            n_layers = self._estimate_gpu_layers(resident_mb, free_vram, cfg)
             alloc = ModelAllocation(
                 model_id=model_id,
                 backend=preferred_backend or "llama_cpp",
@@ -614,6 +633,9 @@ class ComputeScheduler:
                     # 命名惯例）。原来这里直接读 spec.is_moe，而那是个默认 False 的
                     # bool —— 换档加载的模型**永远**不会被认成 MoE，专家卸载静默失效。
                     is_moe=_resolve_is_moe(spec.tag),
+                    # 权重与驻留量分开给:全模态模型驻留远大于权重(MiniCPM-o 6G→11G),
+                    # 只给权重会在 8G 卡上判"放得下",然后加载到一半 OOM。
+                    runtime_mb=int(spec.runtime_mb()),
                 )
                 backend = self._create_backend(backend_name)
                 if backend is not None:
@@ -669,6 +691,20 @@ class ComputeScheduler:
     async def _release_oldest_locked(self) -> bool:
         """Release the least-recently-used GPU model.
 
+        档位里标了常驻的槽位排在淘汰序列的**最后**,不是被排除:
+
+        * 双模型档下,感知位与推理位都在 GPU 上。按"最久没用"选,被踢的必然是
+          感知位 —— 它常年空转等事件发生,``last_accessed`` 天然最旧;而推理位
+          刚干完活、时间戳最新。于是显存一紧张,先死的正是那个**再也醒不来**的:
+          唤醒它的信号只有它自己看得见/听得见,踢掉之后三态永远卡在 silent。
+        * 但"排除"会把单模型档的安全阀一并焊死 —— 那时全场只有一个模型且它常驻,
+          真的显存告急就无路可走了。故这里只**降序**:有非常驻的就先踢非常驻的,
+          全场都常驻才回落去踢最旧的那个。单模型档因此逐字节维持原行为。
+
+        钉住名单向 ``core.model_catalog`` 要,不在这里另判一套 —— 这一栏若做成
+        ``ModelAllocation`` 上的字段,就多出一个"六个构造点都得记得填"的地方,
+        漏填一处就是静默不钉住。
+
         Must be called with _lock held.
         """
         # Find GPU models, sorted by last_accessed (oldest first)
@@ -679,9 +715,15 @@ class ComputeScheduler:
             self._clear_gpu_cache()
             return False
 
-        # Sort by last_accessed ascending (oldest first)
-        gpu_models.sort(key=lambda x: x[1].last_accessed)
+        pinned = self._resident_model_ids()
+        # 非常驻优先(排前),同组内再按 last_accessed 升序。
+        gpu_models.sort(key=lambda x: (x[0] in pinned, x[1].last_accessed))
         oldest_id, oldest = gpu_models[0]
+        if oldest_id in pinned:
+            logger.warning(
+                "全部 GPU 模型都是常驻位,仍需让出显存 —— 回落淘汰最旧的 '%s'",
+                oldest_id,
+            )
 
         logger.info(
             "Releasing model '%s' (last used %.0fs ago, %s on %s)",
@@ -698,6 +740,19 @@ class ComputeScheduler:
         self._clear_gpu_cache()
 
         return True
+
+    def _resident_model_ids(self) -> set:
+        """已加载模型里哪些是当前档的常驻位 —— 名单向目录要,不在本模块另判。
+
+        目录不可用时返回空集:退化成原来的纯 LRU,不因为查不到就拒绝淘汰。
+        """
+        try:
+            from core.model_catalog import is_resident  # noqa: PLC0415
+
+            return {mid for mid in self._models if is_resident(mid)}
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("常驻位名单不可用(回落纯 LRU): %s", exc)
+            return set()
 
     @staticmethod
     def _clear_gpu_cache() -> None:

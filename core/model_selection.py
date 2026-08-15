@@ -86,11 +86,29 @@ def is_ollama_version_too_old(
 
 
 def _brain_sizes() -> Dict[str, int]:
-    """模型尺寸(MB)派生自 core.model_catalog（唯一真相源），失败时空表。"""
+    """模型**权重**大小(MB)派生自 core.model_catalog（唯一真相源），失败时空表。
+
+    这是给人看的下载量。判"装不装得下"不能用它，见 :func:`_brain_runtime`。
+    """
     try:
         from core.model_catalog import all_models
 
         return {s.tag: s.size_mb() for s in all_models()}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _brain_runtime() -> Dict[str, int]:
+    """模型**运行时驻留**(MB)——推荐时判"装不装得下"只问这一份。
+
+    与权重差得远:MiniCPM-o 4.5 权重 6 GB、跑起来 11 GB。原来 :func:`recommend`
+    拿权重去比 ``max_model_size_mb``,于是 8 GB 卡上首次启动就会推荐一个
+    **加载到一半必 OOM** 的模型,而且用户看到的是"模型带不动",不是"推荐错了"。
+    """
+    try:
+        from core.model_catalog import all_models
+
+        return {s.tag: s.runtime_mb() for s in all_models()}
     except Exception:  # noqa: BLE001
         return {}
 
@@ -161,11 +179,11 @@ def recommend(max_model_size_mb: Optional[int] = None, has_gpu: Optional[bool] =
     # 纯 CPU：无论内存多大，都给轻量模型（大模型 CPU 推理体验极差）。
     if not has_gpu:
         return "gemma4:e2b"
-    sizes = _brain_sizes()
+    runtime = _brain_runtime()
     if not max_model_size_mb:
         return "openbmb/minicpm-o4.5"
     for tag in _choice_order():
-        need = sizes.get(tag)
+        need = runtime.get(tag)
         if need and need <= max_model_size_mb:
             return tag
     return _SMALLEST_FALLBACK
