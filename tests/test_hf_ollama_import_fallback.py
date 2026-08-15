@@ -164,11 +164,9 @@ def test_all_choice_order_tags_have_candidates():
 
 
 def test_size_budget_follows_the_model_weight_not_a_fixed_ceiling():
-    """大权重型号不该被固定的 6 GB 预算静默挡掉。
+    """大权重型号不该被固定的 6 GB 预算按住。
 
-    固定 6000 是给"轻量视觉主脑"定的。35B 的 INT4 权重 18 GB，按固定预算每个
-    候选文件都会被判超预算跳过 —— 而现场看到的是"HF 回退试了一圈全没成"，
-    根因(预算)完全不显形，看起来像 repo 全都不存在。
+    注意失效模式**不是**下载失败 —— 见下一条测试的实测。
     """
     from core.hf_ollama_import_fallback import DEFAULT_SIZE_BUDGET_MB, _size_budget_for
 
@@ -193,3 +191,36 @@ def test_download_derives_the_budget_from_the_tag(monkeypatch):
 
     m.download_and_import_to_ollama("qwen3.6:35b-a3b", find_gguf_file_fn=_probe)
     assert seen["budget"] >= 18000, f"传下去的预算是 {seen.get('budget')} —— 没跟着型号走"
+
+
+def test_a_fixed_budget_silently_drops_to_the_worst_quantisation():
+    """固定预算的真实后果：**静默降到最小的量化档**，不是下载失败。
+
+    这条是照着真实调用跑出来的结果写的。构造一个真实形状的 MoE GGUF repo
+    (同一模型三个量化档)，两种预算下 find_gguf_file 的选择：
+
+    .. code-block:: text
+
+        预算 6000  -> Q2_K.gguf     ← 全部超预算，走"选最小的"分支
+        预算 19800 -> Q4_K_M.gguf   ← Q4 在预算内，prefer_quant 生效
+
+    "全部超预算"那条分支**绕过了 prefer_quant**。于是下载成功、导入成功、
+    什么都不报错，用户拿到的却是一个被过度量化、质量明显更差的模型 ——
+    比直接失败难查得多。
+    """
+    from core.hf_ollama_import_fallback import _size_budget_for, find_gguf_file
+
+    gb = 1024**3
+    files = ["Qwen3-30B-A3B-Q2_K.gguf", "Qwen3-30B-A3B-Q4_K_M.gguf", "Qwen3-30B-A3B-Q8_0.gguf"]
+    sizes = {files[0]: 11 * gb, files[1]: 18 * gb, files[2]: 32 * gb}
+
+    def pick(budget):
+        return find_gguf_file(
+            "x/y",
+            size_budget_mb=budget,
+            list_repo_files=lambda _r: files,
+            get_file_sizes=lambda _r, _f: sizes,
+        )
+
+    assert pick(6000) == "Qwen3-30B-A3B-Q2_K.gguf", "固定预算下的旧行为变了，这条测试的前提没了"
+    assert pick(_size_budget_for("qwen3.6:35b-a3b")) == "Qwen3-30B-A3B-Q4_K_M.gguf"

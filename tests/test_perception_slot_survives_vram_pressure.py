@@ -133,3 +133,62 @@ class TestDegradation:
         assert scheduler._resident_model_ids() == set()
         assert asyncio.run(scheduler._release_oldest_locked()) is True
         assert PERCEPTION not in scheduler._models  # 纯 LRU 的结果
+
+
+class TestLedgerFollowsReality:
+    """真实路径实测发现的：加载失败的模型不许留在账本里。
+
+    实跑 ``reconcile_tier("C")``（本机没装 llama_cpp）看到的：
+
+    .. code-block:: text
+
+        WARNING 换档加载 qwen3.6:35b-a3b 失败(其余模型继续): No module named 'llama_cpp'
+        换档后账本: ['openbmb/minicpm-o4.5', 'qwen3.6:35b-a3b']   ← 它明明没加载上
+
+    ``schedule_model`` 先记账、再交给后端真加载；后端抛了，异常被吞掉，账本条目
+    却留着。而账本正是淘汰、常驻判定、状态盘共同的依据 —— 双模型档下这个形状
+    尤其难查：推理位其实没起来，可从系统内部看"两个模型都在跑"是成立的。
+    """
+
+    def test_a_failed_load_is_rolled_back(self, scheduler, composite_tier, monkeypatch):
+        import core.compute_scheduler as cs
+
+        class _Backend:
+            async def load_model(self, _mid):
+                raise RuntimeError("后端起不来")
+
+            async def unload_model(self, _mid):
+                return True
+
+        monkeypatch.setattr(cs.ComputeScheduler, "_create_backend", staticmethod(lambda _n: _Backend()))
+        asyncio.run(scheduler.reconcile_tier("C"))
+        assert scheduler._models == {}, f"加载全失败,账本却还留着 {list(scheduler._models)}"
+
+    def test_a_backend_returning_false_also_rolls_back(self, scheduler, composite_tier, monkeypatch):
+        """后端不抛异常、只是返回 False（GGUF 文件找不到走的就是这条）也算失败。"""
+        import core.compute_scheduler as cs
+
+        class _Backend:
+            async def load_model(self, _mid):
+                return False
+
+            async def unload_model(self, _mid):
+                return True
+
+        monkeypatch.setattr(cs.ComputeScheduler, "_create_backend", staticmethod(lambda _n: _Backend()))
+        asyncio.run(scheduler.reconcile_tier("C"))
+        assert scheduler._models == {}, "后端返回 False 被当成了成功"
+
+    def test_a_successful_load_stays_in_the_ledger(self, scheduler, composite_tier, monkeypatch):
+        import core.compute_scheduler as cs
+
+        class _Backend:
+            async def load_model(self, _mid):
+                return True
+
+            async def unload_model(self, _mid):
+                return True
+
+        monkeypatch.setattr(cs.ComputeScheduler, "_create_backend", staticmethod(lambda _n: _Backend()))
+        asyncio.run(scheduler.reconcile_tier("C"))
+        assert set(scheduler._models) == {PERCEPTION, REASONING}

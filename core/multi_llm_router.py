@@ -740,10 +740,14 @@ class OpenAIAdapter(BaseProviderAdapter):
     async def chat(
         self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
     ) -> LLMResponse:
-        headers = {
-            "Authorization": f"Bearer {self.config.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        # 无鉴权的自托管服务(llama.cpp server / OpenVINO Model Server 默认不开
+        # 鉴权)把 api_key 留空。此时**不能**照发 "Bearer " —— httpx 会在发出前就
+        # 抛 LocalProtocolError: Illegal header value b'Bearer '。真实调用实测:
+        # 一个 api_key="" 的 OpenAI 兼容 provider 每一次请求都在这一步直接炸,
+        # 连不上服务器,报错还长得像网络问题。留空就干脆不带这个头。
+        if (self.config.api_key or "").strip():
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
         body: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -1868,7 +1872,10 @@ class MultiLLMRouter:
 
         cfg = ProviderConfig(
             name="local_openai",
-            api_key=os.environ.get("GALAXY_LOCAL_OPENAI_KEY", "").strip() or "not-needed",
+            # 留空即"这台服务不开鉴权" —— 适配器据此不带 Authorization 头。
+            # 早先这里塞过一个 "not-needed" 占位符,那是在绕开适配器的空值缺陷,
+            # 而不是在描述事实;缺陷已在 OpenAIAdapter 里修掉,这里如实留空。
+            api_key=os.environ.get("GALAXY_LOCAL_OPENAI_KEY", "").strip(),
             base_url=base,
             models=served,
             default_model=default_model,
@@ -2787,7 +2794,27 @@ class MultiLLMRouter:
             # 槽位指定的模型没有任何本地 provider 托管 —— 多半是那一位还没装/没起。
             # 这里**不**静默改派给另一个本地模型:那正是"选了两个模型却全落到一个
             # 上"的形状。交回原路径,由它按可用性决定。
-            logger.debug("槽位 %s 指向 %s,但没有本地 provider 托管它", slot_role, tag)
+            #
+            # 但"交回原路径"本身必须**响亮**。真实路径实测:C 档下推理位没起时,
+            # 这里返回 None,下游按可用性 fit-based 又把活派给了感知位 —— 结果和
+            # 静默改派一模一样,而唯一的痕迹是一行 debug。用户看到的是"两个模型
+            # 都配好了、系统也在跑",实际那一位从没上过岗。
+            #
+            # 每个 (槽位, tag) 只喊一次:这条路径每次路由都会走到,喊满屏等于没喊。
+            warned = getattr(self, "_warned_unhosted_slots", None)
+            if warned is None:
+                warned = set()
+                self._warned_unhosted_slots = warned
+            if (slot_role, tag) not in warned:
+                warned.add((slot_role, tag))
+                logger.warning(
+                    "本地[%s]槽位配的是 %s,但没有任何本地 provider 托管它 —— 这一位没上岗。"
+                    "本次按可用性回落(很可能落到另一个本地模型上,失去两位分工的意义)。"
+                    "检查:该模型是否已装/服务是否已起;若服务按自己那套命名报模型 id,"
+                    "用 GALAXY_LOCAL_OPENAI_SERVES 声明它伺候的是哪个目录型号。",
+                    slot_role,
+                    tag,
+                )
             return None
         provider, model_id = hosted
         return RoutingDecision(

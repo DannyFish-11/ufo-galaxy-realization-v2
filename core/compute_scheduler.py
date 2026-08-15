@@ -638,10 +638,21 @@ class ComputeScheduler:
                     runtime_mb=int(spec.runtime_mb()),
                 )
                 backend = self._create_backend(backend_name)
-                if backend is not None:
-                    await backend.load_model(spec.tag)  # 内部会 register_loaded（幂等）
+                if backend is None:
+                    raise RuntimeError(f"后端 {backend_name} 不可用")
+                if not await backend.load_model(spec.tag):  # 内部会 register_loaded（幂等）
+                    raise RuntimeError("后端返回加载失败")
             except Exception as exc:  # noqa: BLE001
-                logger.warning("换档加载 %s 失败(其余模型继续): %s", spec.tag, exc)
+                # 记账必须跟着现实走。``schedule_model`` 已经把这一位写进账本了,
+                # 加载失败却不撤,账本就会声称它在岗 —— 而账本正是淘汰、常驻判定、
+                # 状态盘的依据。双模型档下的形状尤其难查:推理位其实没起来,
+                # 账本却说它在,于是"两个模型都在跑"这件事从系统内部看是成立的。
+                self.unregister(spec.tag)
+                logger.warning(
+                    "换档加载 %s 失败,已从账本撤销(其余模型继续): %s",
+                    spec.tag,
+                    exc,
+                )
 
         return self.list_allocations()
 

@@ -217,3 +217,53 @@ class TestFallbacksDoNotSilentlyMisroute:
         )
         router.adapters["local_openai"] = _Adapter()
         assert router._provider_serving(REASONING) is None, "声明的是感知位,却把推理位也认领了"
+
+
+class TestAnUnstaffedSlotIsLoud:
+    """真实路径实测发现的：交回原路径这件事本身必须响亮。
+
+    实跑 C 档、只起了感知位那台服务时看到的：
+
+    .. code-block:: text
+
+        executor -> local_openai:MiniCPM-o-4_5-int4-ov
+                    角色[executor] 轻角色(无本地→fit) → fit-based: ...
+
+    ``_local_by_slot`` 尽职地返回了 None（没有静默改派），可下游按可用性
+    fit-based 又把活派给了**感知位** —— 最终结果和静默改派一模一样，而唯一的
+    痕迹是一行 debug。用户看到的是"两个模型都配好了、系统也在跑"，实际推理位
+    从没上过岗。所以这里必须 WARNING，且要说清怎么查。
+    """
+
+    def test_unhosted_slot_warns_with_actionable_text(self, router, monkeypatch, caplog):
+        monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
+        router.providers["ollama"] = _local_cfg("ollama", [PERCEPTION], PERCEPTION)
+        router.adapters["ollama"] = _Adapter()  # 只有感知位在线
+
+        with caplog.at_level("WARNING"):
+            assert router._local_by_slot(SLOT_REASONING, role="executor", task=TaskType.GENERAL) is None
+
+        msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert msgs, "推理位没上岗却一声不吭 —— 只有 debug 等于没说"
+        text = "\n".join(msgs)
+        assert REASONING in text, "没说清是哪一位没上岗"
+        assert "GALAXY_LOCAL_OPENAI_SERVES" in text, "没给出可操作的排查方向"
+
+    def test_it_warns_once_per_slot_not_every_route(self, router, monkeypatch, caplog):
+        """这条路径每次路由都会走到 —— 喊满屏等于没喊。"""
+        monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
+        router.providers["ollama"] = _local_cfg("ollama", [PERCEPTION], PERCEPTION)
+        router.adapters["ollama"] = _Adapter()
+
+        with caplog.at_level("WARNING"):
+            for _ in range(5):
+                router._local_by_slot(SLOT_REASONING, role="executor", task=TaskType.GENERAL)
+
+        warns = [r for r in caplog.records if r.levelname == "WARNING" and REASONING in r.getMessage()]
+        assert len(warns) == 1, f"同一个槽位喊了 {len(warns)} 次"
+
+    def test_a_staffed_slot_says_nothing(self, two_local_models, monkeypatch, caplog):
+        monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
+        with caplog.at_level("WARNING"):
+            assert two_local_models._local_by_slot(SLOT_REASONING, role="executor", task=TaskType.GENERAL) is not None
+        assert [r for r in caplog.records if r.levelname == "WARNING"] == []

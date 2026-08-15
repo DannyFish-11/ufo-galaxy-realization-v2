@@ -182,3 +182,75 @@ class TestItCountsAsLocal:
 
         src = inspect.getsource(MultiLLMRouter._discover_providers)
         assert "_register_local_openai()" in src, "注册函数没有调用方 —— 配了地址也不会生效"
+
+
+class TestNoAuthServersWork:
+    """真实调用实测发现的：``api_key`` 为空时不能照发 ``Bearer ``。
+
+    自托管的 llama.cpp server / OpenVINO Model Server 默认**不开鉴权**，
+    对应的 provider 就该把 ``api_key`` 留空。而 ``OpenAIAdapter`` 原来无条件拼
+    ``f"Bearer {api_key}"``，于是 httpx 在**发出请求之前**就抛：
+
+    .. code-block:: text
+
+        httpx.LocalProtocolError: Illegal header value b'Bearer '
+
+    每一次请求都在这一步直接炸，连不上服务器，而报错长得像网络问题。
+    """
+
+    @staticmethod
+    def _headers_sent(api_key: str) -> dict:
+        """真的走一遍 ``OpenAIAdapter.chat``，把它发出的请求头抓下来。
+
+        读源码断言"有没有那一行"是判而不别的 —— 换个写法就失效，而且它证明不了
+        真实发出的头长什么样。这里拦在 ``_post_with_retry``，拿到的就是实际值。
+        """
+        import asyncio
+
+        from core.multi_llm_router import OpenAIAdapter, ProviderConfig
+
+        cfg = ProviderConfig(
+            name="local_openai", api_key=api_key, base_url="http://x/v1", models=["m"], default_model="m"
+        )
+        ad = OpenAIAdapter(cfg)
+        seen = {}
+
+        class _R:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}], "usage": {}}
+
+        async def _fake(url, headers=None, body=None, **kw):
+            seen.update(headers or {})
+            return _R()
+
+        ad._post_with_retry = _fake
+        asyncio.run(ad.chat(messages=[{"role": "user", "content": "hi"}], model="m"))
+        return seen
+
+    def test_empty_key_omits_the_authorization_header(self):
+        headers = self._headers_sent("")
+        assert "Authorization" not in headers, f"空 key 仍然发了 {headers.get('Authorization')!r} —— httpx 会直接拒发"
+        assert headers.get("Content-Type") == "application/json"
+
+    def test_whitespace_only_key_counts_as_empty(self):
+        assert "Authorization" not in self._headers_sent("   ")
+
+    def test_a_real_key_is_still_sent(self):
+        assert self._headers_sent("sk-abc").get("Authorization") == "Bearer sk-abc"
+
+    def test_registration_leaves_the_key_empty_when_unset(self, router, monkeypatch):
+        """不许再塞 "not-needed" 之类的占位符 —— 那是在绕开缺陷，不是在描述事实。"""
+        monkeypatch.setenv("GALAXY_LOCAL_OPENAI_URL", "127.0.0.1:8000")
+        monkeypatch.setattr(MultiLLMRouter, "_probe_openai_compatible", staticmethod(lambda _b: ["m"]))
+        router._register_local_openai()
+        assert router.providers["local_openai"].api_key == ""
+
+    def test_a_configured_key_is_still_sent(self, router, monkeypatch):
+        monkeypatch.setenv("GALAXY_LOCAL_OPENAI_URL", "127.0.0.1:8000")
+        monkeypatch.setenv("GALAXY_LOCAL_OPENAI_KEY", "sk-local-abc")
+        monkeypatch.setattr(MultiLLMRouter, "_probe_openai_compatible", staticmethod(lambda _b: ["m"]))
+        router._register_local_openai()
+        assert router.providers["local_openai"].api_key == "sk-local-abc"
