@@ -324,9 +324,7 @@ def _neutral(
     )
 
 
-def _scoped_records(
-    memory: Any, message: str, task_type: str, min_samples: int
-) -> Tuple[List[Any], str]:
+def _scoped_records(memory: Any, message: str, task_type: str, min_samples: int) -> Tuple[List[Any], str]:
     """Collect the population to aggregate over, plus a label for how it was scoped.
 
     Primary scope is BM25 lexical similarity to *message* — deterministic, and
@@ -491,13 +489,9 @@ def derive_experience_guidance(
 
         stats = _aggregate(records)
         if not stats:
-            return _neutral(
-                mode, "no records carry a strategy field", current_strategy, scope_size=len(records)
-            )
+            return _neutral(mode, "no records carry a strategy field", current_strategy, scope_size=len(records))
 
-        candidate, reason = _select_candidate(
-            stats, current_strategy, min_samples, margin, cold_start_floor
-        )
+        candidate, reason = _select_candidate(stats, current_strategy, min_samples, margin, cold_start_floor)
 
         current_stat = stats.get(current_strategy, StrategyStat(strategy=current_strategy))
         ordered_stats = sorted(stats.values(), key=lambda s: (-s.rate, -s.total, s.strategy))

@@ -228,6 +228,12 @@ AUTO_AGENT_TRIGGER_KEYWORDS: tuple = (
 )
 
 
+# _pick_strategy() 的策略关键词。提成具名常量而非内联字面量:它们参与"这次选择是
+# 显式还是隐式"的判定(见 _pick_strategy),内联时无法一眼看出判定依据是哪一组词。
+_FRACTAL_KEYWORDS: tuple = ("fractal", "分型", "递归", "分形", "多层", "深度拆解")
+_SPECIALIZED_KEYWORDS: tuple = ("team", "团队", "并行", "多个", "分工", "异构")
+
+
 def _estimate_complexity(message: str) -> float:
     """粗略估算任务复杂度 0~1。"""
     m = message.lower()
@@ -297,19 +303,17 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
 )
 
 # Sentinel confirming experience statistics are object-anchored and advisory.
+# Full rationale (and the defects of the superseded prose/regex path) lives in
+# core.cognitive.experience_guidance — do not restate it here.
 EXPERIENCE_GUIDANCE_OBJECT_ANCHORED_WIRED: str = (
     "EXPERIENCE_GUIDANCE_OBJECT_ANCHORED_WIRED: "
-    "Strategy-success statistics are derived by "
+    "Strategy-success statistics come from "
     "core.cognitive.experience_guidance.derive_experience_guidance(), which "
-    "aggregates typed TaskSummary fields (strategy: str, success: bool) over a "
-    "BM25-scoped population.  The superseded implementation "
-    "(_experience_strategy_adjust) serialised those same facts into prose, "
-    "recalled at most 8 blobs by vector similarity, regex-parsed the structure "
-    "back out, and then OVERWROTE the strategy that _pick_strategy() had already "
-    "produced from governed inputs.  ExperienceGuidance is now an input to "
-    "_pick_strategy() alongside breadth and memory guidance — never a post-hoc "
-    "override — and it never displaces task-type mapping, explicit keyword "
-    "matches, budget preference, or memory continuity preference."
+    "aggregates typed TaskSummary fields over a BM25-scoped population. "
+    "ExperienceGuidance is an input to _pick_strategy() alongside breadth and "
+    "memory guidance — never a post-hoc override — and it never displaces "
+    "task-type mapping, explicit keyword matches, budget preference, or memory "
+    "continuity preference."
 )
 
 
@@ -569,12 +573,9 @@ class ExecutionPlanner:
         if _memory_guidance is not None and _memory_guidance.influenced_by_memory:
             _memory_influenced_strategy = True
 
-        # 经验学习闭环(上层)：从历史执行记录的类型化字段派生"策略→成败"制导。
-        # 制导需要"当前策略"作对比基准,所以在首次选择之后派生;拿到制导后用同一个
-        # 纯函数重跑一次选择——_pick_strategy 是微秒级的纯逻辑,重跑一次没有代价,
-        # 且保证经验的应用规则只有一处实现,不会与 execute() 里的副本漂移。
-        # _derive_experience_guidance 内部是 BM25 排序(CPU 密集的同步调用);
-        # execute() 是 async 方法,直接调用会占住共享事件循环——offload 到线程。
+        # 经验制导需要"当前策略"作对比基准,故在首次选择之后派生,再用同一个纯函数
+        # 重跑一次选择——_pick_strategy 是微秒级纯逻辑,重跑无代价,且保证应用规则只有
+        # 一处实现。派生内部是 BM25(同步 CPU),async 里必须 offload,否则占住事件循环。
         _experience_guidance = await asyncio.to_thread(
             self._derive_experience_guidance, plan.message, strategy, intent_task_type
         )
@@ -795,12 +796,9 @@ class ExecutionPlanner:
 
             # 经验复用（WRITE）：把本次执行沉淀成一条"经验"写入统一记忆层，
             # 供未来语义召回（见上方 READ）。tags 含 "experience" 以便召回时筛选。
-            #
-            # 这条散文记录**只**服务于上方 READ 那条 prompt 上下文注入——
-            # 供 LLM 参考的建议性文本，是向量检索的正当用法。策略选择**不再**
-            # 读它：那条路径已改为读 TaskSummary 的类型化字段
-            # (见 _derive_experience_guidance / core.cognitive.experience_guidance)。
-            # 同一次执行的结构化事实由上方 record_task() 落库，勿再从本文本反解结构。
+            # 这条散文**只**服务于上方 READ 的 prompt 上下文注入(供 LLM 参考的建议性
+            # 文本,向量检索的正当用法)。策略选择不再读它,改读 TaskSummary 的类型化字段;
+            # 结构化事实由上方 record_task() 落库,勿再从本文本反解结构。
             try:
                 from core.memory import get_unified_memory
 
@@ -874,16 +872,12 @@ class ExecutionPlanner:
     # ──────────────────────────────────────────────────────────────────
 
     def _derive_experience_guidance(self, message: str, current: str, task_type: str = "") -> Optional[Any]:
-        """经验学习闭环(上层)：从历史执行记录派生"策略→成败"制导。
+        """从历史执行记录派生"策略→成败"制导（取代 ``_experience_strategy_adjust``）。
 
-        取代原 ``_experience_strategy_adjust``——那版把结构化事实写成散文、
-        向量召回 8 段、再用正则 ``策略[X] 结果[成功|失败]`` 抠回结构，
-        算出的"成功率"分母是相似度采样而不是真实执行总数，且直接覆写策略。
-
-        现在改为读 :class:`core.task_memory.TaskSummary` 的类型化字段
-        （``strategy: str`` / ``success: bool``），作用域由 BM25 词法排序提供，
-        全程无正则、无 embedding。产出的 ``ExperienceGuidance`` 是喂给
-        ``_pick_strategy()`` 的**建议输入**，与 PR-18/PR-19 的制导同级同权。
+        读 :class:`core.task_memory.TaskSummary` 的类型化字段，作用域由 BM25 提供，
+        无正则、无 embedding；产出的制导是 ``_pick_strategy()`` 的建议输入，
+        与 PR-18/PR-19 同级。理由与旧实现的缺陷见
+        :mod:`core.cognitive.experience_guidance`。
 
         同步 CPU 调用（BM25 排序），async 调用方需 offload —— 见 ``execute()``。
         返回 ``None`` 表示派生不可用，调用方按无制导处理。
@@ -930,14 +924,11 @@ class ExecutionPlanner:
           overrides task-type mapping, keyword matches, or budget narrowing.
 
         Experience guidance influence (advisory, lowest priority — tied with PR-19):
-          Exact per-strategy success statistics over a BM25-scoped population of
-          historical tasks (see core.cognitive.experience_guidance).  Applied
-          ONLY when the strategy was reached implicitly — i.e. by complexity
-          threshold or by the default fallback.  It never displaces a strategy
-          that an *explicit* signal produced: task-type mapping, a keyword match,
-          budget strategy preference, or memory continuity preference.  This
-          keeps memory-derived statistics subordinate, per
-          MEMORY_BIAS_LAYER::POLICY_4.
+          Applied ONLY when the strategy was reached *implicitly* (complexity
+          threshold or default fallback); it never displaces one an explicit
+          signal produced — task-type mapping, keyword match, budget preference,
+          memory continuity.  Keeps memory-derived statistics subordinate per
+          MEMORY_BIAS_LAYER::POLICY_4.  See core.cognitive.experience_guidance.
 
         约束（硬编码）:
           - Swarm 并发上限: 20
@@ -993,37 +984,15 @@ class ExecutionPlanner:
         fractal_threshold = 0.75 + total_adj
         specialized_threshold = 0.65 + total_adj
 
-        _fractal_kw = any(
-            k in m
-            for k in [
-                "fractal",
-                "分型",
-                "递归",
-                "分形",
-                "多层",
-                "深度拆解",
-            ]
-        )
-        _specialized_kw = any(
-            k in m
-            for k in [
-                "team",
-                "团队",
-                "并行",
-                "多个",
-                "分工",
-                "异构",
-            ]
-        )
+        _fractal_kw = any(k in m for k in _FRACTAL_KEYWORDS)
+        _specialized_kw = any(k in m for k in _SPECIALIZED_KEYWORDS)
 
         # Decide the strategy AND record whether an *explicit* signal produced it.
-        # The outcomes below are identical to the previous cascade
-        # (`complexity >= threshold or keyword` → strategy); the split exists only
-        # so experience guidance can tell "the keyword said so" apart from
-        # "the complexity score happened to land here".
+        # Outcomes are identical to the previous cascade (`complexity >= threshold
+        # or keyword` → strategy); the split exists only so experience guidance can
+        # tell "a keyword said so" apart from "the score happened to land here".
         if complexity >= fractal_threshold:
-            # Threshold reached — but if a fractal keyword *also* points here, the
-            # choice is explicitly requested, not merely inferred from a score.
+            # A keyword pointing the same way makes it explicit, not merely inferred.
             base, explicit = "fractal", _fractal_kw
         elif _fractal_kw:
             base, explicit = "fractal", True

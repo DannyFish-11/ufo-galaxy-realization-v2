@@ -92,7 +92,6 @@ from core.cognitive.experience_guidance import (
 )
 from core.task_memory import TaskSummary
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -392,9 +391,7 @@ class TestGroupDDerivation:
     def test_d12_ties_are_order_independent(self):
         records = [rec("aaa", True)] * 6 + [rec("zzz", True)] * 6 + [rec("single", False)] * 6
         forward = derive_experience_guidance("部署服务", "single", memory=FakeTaskMemory(records))
-        reverse = derive_experience_guidance(
-            "部署服务", "single", memory=FakeTaskMemory(list(reversed(records)))
-        )
+        reverse = derive_experience_guidance("部署服务", "single", memory=FakeTaskMemory(list(reversed(records))))
         assert forward.candidate_strategy == reverse.candidate_strategy
 
     def test_d13_denominator_is_the_real_population(self):
@@ -468,18 +465,14 @@ class TestGroupEPickStrategy:
         _pick_strategy decides without guidance, it must decide identically when
         handed a guidance that declares no influence.
         """
-        inert = ExperienceGuidance(
-            candidate_strategy="swarm", influenced_by_experience=False, mode=MODE_ON
-        )
+        inert = ExperienceGuidance(candidate_strategy="swarm", influenced_by_experience=False, mode=MODE_ON)
         assert planner._pick_strategy(message, complexity) == planner._pick_strategy(
             message, complexity, experience_guidance=inert
         )
 
     def test_e02_redirects_implicit_choice(self, planner):
         # 0.50 reaches "single" implicitly (no keyword, no mapping).
-        result = planner._pick_strategy(
-            "do task", 0.50, experience_guidance=_guidance("specialized")
-        )
+        result = planner._pick_strategy("do task", 0.50, experience_guidance=_guidance("specialized"))
         assert result == "specialized"
 
     def test_e03_never_overrides_task_type_mapping(self, planner):
@@ -490,15 +483,11 @@ class TestGroupEPickStrategy:
 
     def test_e04_never_overrides_explicit_keyword(self, planner):
         # "递归" is an explicit fractal keyword at low complexity.
-        result = planner._pick_strategy(
-            "递归深度拆解任务", 0.30, experience_guidance=_guidance("single")
-        )
+        result = planner._pick_strategy("递归深度拆解任务", 0.30, experience_guidance=_guidance("single"))
         assert result == "fractal"
 
     def test_e04b_never_overrides_swarm_keyword(self, planner):
-        result = planner._pick_strategy(
-            "批量处理大量任务", 0.30, experience_guidance=_guidance("single")
-        )
+        result = planner._pick_strategy("批量处理大量任务", 0.30, experience_guidance=_guidance("single"))
         assert result == "swarm"
 
     def test_e04c_keyword_wins_even_when_threshold_also_fires(self, planner):
@@ -509,15 +498,11 @@ class TestGroupEPickStrategy:
         that *also* carried an explicit fractal keyword could be redirected away
         from fractal by statistics — exactly what POLICY_3 forbids.
         """
-        result = planner._pick_strategy(
-            "递归深度拆解任务", 0.90, experience_guidance=_guidance("single")
-        )
+        result = planner._pick_strategy("递归深度拆解任务", 0.90, experience_guidance=_guidance("single"))
         assert result == "fractal"
 
     def test_e04d_specialized_keyword_wins_when_threshold_also_fires(self, planner):
-        result = planner._pick_strategy(
-            "团队分工处理", 0.70, experience_guidance=_guidance("single")
-        )
+        result = planner._pick_strategy("团队分工处理", 0.70, experience_guidance=_guidance("single"))
         assert result == "specialized"
 
     def test_e05_never_overrides_budget_preference(self, planner):
@@ -539,9 +524,7 @@ class TestGroupEPickStrategy:
         assert result == "single"
 
     def test_e07_uninfluenced_guidance_is_ignored(self, planner):
-        result = planner._pick_strategy(
-            "do task", 0.50, experience_guidance=_guidance("swarm", influenced=False)
-        )
+        result = planner._pick_strategy("do task", 0.50, experience_guidance=_guidance("swarm", influenced=False))
         assert result == "single"
 
     def test_e08_candidate_equal_to_base_is_noop(self, planner):
