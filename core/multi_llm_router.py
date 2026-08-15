@@ -384,8 +384,11 @@ def _provider_quality_tier(name: str) -> int:
 # 提供商 → 推荐模型 (2026-05-29 全面更新)
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
-        # GPT-5.6 家族(2026-07-09 GA):gpt-5.6 = 旗舰 Sol 的别名(1.05M ctx/128K out);
-        # terra=日常均衡($2.5/$15);luna=快而省($1/$6)。
+        # GPT-5.6 家族(2026-07-09 GA,2026-08-15 联网复核型号 id 仍正确):
+        # gpt-5.6 = 旗舰 Sol 的别名(1.05M ctx/128K out);terra=日常均衡;
+        # luna=快而省。价位在 2026-07-30 降过一轮(terra -20%、luna -80%,
+        # sol 未变)——型号 id 不受影响,这里不复述具体数字,理由同 deepseek
+        # 那条注释:没有一手定价页确认前不改会影响路由的 cost_in/cost_out。
         TaskType.REASONING: "gpt-5.6",
         TaskType.FAST_RESPONSE: "gpt-5.6-luna",
         TaskType.CODING: "gpt-5.6",
@@ -433,14 +436,19 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "Llama-4-Scout-17B-16E-Instruct-FP8",
     },
     "xai": {
-        TaskType.REASONING: "grok-4.5",
-        TaskType.FAST_RESPONSE: "grok-4.5",
-        TaskType.CODING: "grok-4.5",
-        TaskType.CREATIVE: "grok-4.5",
-        TaskType.ANALYSIS: "grok-4.5",
-        TaskType.PLANNING: "grok-4.5",
-        TaskType.AGENT_CONTROL: "grok-4.5",
-        TaskType.GENERAL: "grok-4.5",
+        # Grok 4.6(联网核实 2026-08-12 发布,多源交叉确认):同 4.5 的 V9 基座/1.5T
+        # 参数,靠后训练(SFT+RL)提升而非放大规模;500K 上下文,$2/M 输入 $6/M 输出。
+        # Artificial Analysis Intelligence Index 与 GPT-5.6 Sol 打平,是当前智能
+        # 前沿里最便宜的一档 —— 升为默认档,4.5 仍是有效型号,保留在 registry 里
+        # 作为该家自己的旧档回退(不是"已下线,不该出现"那种要清掉的幽灵)。
+        TaskType.REASONING: "grok-4.6",
+        TaskType.FAST_RESPONSE: "grok-4.6",
+        TaskType.CODING: "grok-4.6",
+        TaskType.CREATIVE: "grok-4.6",
+        TaskType.ANALYSIS: "grok-4.6",
+        TaskType.PLANNING: "grok-4.6",
+        TaskType.AGENT_CONTROL: "grok-4.6",
+        TaskType.GENERAL: "grok-4.6",
     },
     "mistral": {
         TaskType.REASONING: "mistral-large-3",
@@ -1521,13 +1529,16 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
+        # Grok 4.6 —— 联网核实,2026-08-12 发布,xAI 官方 API / OpenRouter / Cursor /
+        # Vercel / Cloudflare 同步上线,base_url/协议与 4.5 一致(同一 provider,
+        # 只是新模型 id),不是猜的命名惯例延伸。
         "name": "xai",
         "env_key": "XAI_API_KEY",
         "base_url": "https://api.x.ai/v1",
-        "models": ["grok-4.5", "grok-4.3"],
-        "default_model": "grok-4.5",
-        "cost_in": 0.005,
-        "cost_out": 0.015,
+        "models": ["grok-4.6", "grok-4.5", "grok-4.3"],
+        "default_model": "grok-4.6",
+        "cost_in": 0.002,
+        "cost_out": 0.006,
         "extra": {"multimodal": True},
     },
     {
@@ -1573,6 +1584,15 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
+        # deepseek-v4-pro 型号 id 本身核对过仍然正确(2026-08-15 联网核实,当前上游
+        # 快照 deepseek-v4-pro-0813)。但多个第三方计费站点显示价格明显上调过
+        # (缓存未命中输入/输出都涨到原来的十几倍),而这里 cost_in/cost_out 是
+        # cost_budget SLO 用来做路由判断的字段——没有拿到官方一手定价页确认具体
+        # 数字前,宁可不动这两个值,也不要把聚合站估算塞进一个会影响路由行为的
+        # 字段。要拿准确数字,配好 DEEPSEEK_API_KEY 跑一次
+        # verify_provider_apis.py --only deepseek(它走的是路由器自己的请求链路,
+        # 不是这里去猜)。即便按查到的高估计,换算下来仍远低于本仓各任务类型的
+        # cost_budget 阈值,不会现在就影响路由结果。
         "name": "deepseek",
         "env_key": "DEEPSEEK_API_KEY",
         "base_url": "https://api.deepseek.com/v1",
@@ -1593,6 +1613,13 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
+        # 查过 GLM-5.3(2026-08-15 联网核实,发布于 2026-08-14):**刻意不加进 models**。
+        # 它目前只通过 GLM Coding Plan / 编码 CLI 发布,权重还差两周才放出,标准
+        # open.bigmodel.cn 端点(本 provider 实际调用的那个)上的公开 model id 与
+        # 独立计费"仍在安全评审后才放出"——不是本仓命名惯例推出来的猜测,是查到
+        # 它现在**还没有**。这种时候加进去,后果和本轮修的那 8 处"清单声称有、
+        # 实际没有"是同一类:选路成功,直到真发请求才 404。等它经标准 API 开放,
+        # 用 verify_provider_apis.py --only zhipu 核验后再升,不要提前抄。
         "name": "zhipu",
         "env_key": "ZHIPU_API_KEY",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
