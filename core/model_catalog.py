@@ -239,19 +239,40 @@ SLOT_BOTH = "both"  # 单模型档:一个模型两只手都干
 
 @dataclass(frozen=True)
 class BrainSlot:
-    """档内一个模型槽位:它是谁、干哪只手的活、落在哪块加速器、许不许被踢。"""
+    """档内一个模型槽位:它干哪只手的活、**有哪些型号可选**、落在哪、许不许被踢。
+
+    槽位持有的是**候选表**而不是单个型号 —— 这就是"可插拔"的落点:换型号是在
+    同一个槽位里换一个候选,角色、落位、常驻策略、以及上层怎么问它,全都不变。
+    """
 
     role: str  # SLOT_PERCEPTION | SLOT_REASONING | SLOT_BOTH
-    tag: str
+    #: 本位可选的型号,**第一个是默认**。单元素即"这一位没得挑"。
+    candidates: List[str] = field(default_factory=list)
     #: 落位提示:"auto" 交给调度器按硬件判;"cuda"/"intel_igpu" 是显式指定。
     #: 双模型同时跑时靠它把两个模型分到两块加速器上,避免互相抢同一块的显存。
     placement: str = "auto"
-    #: 常驻:不许被显存压力下的 LRU 淘汰踢掉。
+    #: 常驻:显存告急时最后才考虑淘汰它。
     #:
-    #: 感知位必须常驻,理由不是"它重要",是**它被踢了就再也醒不来**:三态里
-    #: silent→liminal 这一跳由它触发,而唤醒它的信号又只能由它自己看到/听到。
-    #: 推理位没有这个问题 —— 它由 OpenClawd 显式唤起,踢掉了下次再加载即可。
+    #: **常驻的是推理位,不是感知位** —— 判据是"重载代价",不是"谁更重要":
+    #:
+    #: * 推理位 35B-A3B:18 GB 权重走 mmap,还要重算专家卸载拆分(``_split_moe``),
+    #:   重载一次几十秒起。踢掉它等于把最贵的那步重做一遍。
+    #: * 感知位:最小的 Gemma 4 E2B 只有 1.8 GB,而且
+    #:   ``core/ambient_attention_loop.py`` 的心跳每 tick 都会再要它一次
+    #:   (Ollama 的 /api/chat 按需加载)。踢掉它的代价只是下一拍重载。
+    #:
+    #: 早先这一栏是反的,理由写的是"感知位被踢了就再也醒不来"。那句话说重了:
+    #: 常驻心跳就是把它拉回来的人,它并不需要靠钉住来保命。
     resident: bool = False
+
+    @property
+    def tag(self) -> str:
+        """本位的默认型号(候选表第一个)。没选过时用它。"""
+        return self.candidates[0] if self.candidates else ""
+
+    def accepts(self, tag: str) -> bool:
+        """这个型号能不能插进本位。"""
+        return bool(tag) and tag in self.candidates
 
 
 @dataclass(frozen=True)
@@ -260,18 +281,30 @@ class Tier:
     label: str
     desc: str
     kind: str  # "single" | "composite"
-    #: 档内槽位——**档位构成的唯一定义处**。``model_tags`` 由它派生。
-    #: single 档内可在多个候选里选一个作主脑(如 A 档 Gemma 三选一);
-    #: composite 档全部同时运行,各据一个槽位。
+    #: 档内槽位——**档位构成的唯一定义处**。
+    #: single 档只有一个 ``both`` 位(候选里选一个当主脑);
+    #: composite 档每个角色一位,各自可在自己的候选里换。
     slots: List[BrainSlot] = field(default_factory=list)
 
     @property
     def model_tags(self) -> List[str]:
-        """档内模型 tag(派生自 slots,顺序保持)。"""
-        return [s.tag for s in self.slots]
+        """档内**全部候选** tag(派生自 slots,顺序保持、去重)。
+
+        注意这是"可选清单",不是"正在跑的清单" —— 后者见
+        :func:`active_tags`。能力聚合、换档加载、常驻判定一律要用后者,
+        否则 C 档会把没选中的候选也算进能力里(比如选了 Gemma 却报"说=原生")。
+        """
+        seen: set = set()
+        out: List[str] = []
+        for s in self.slots:
+            for t in s.candidates:
+                if t not in seen:
+                    seen.add(t)
+                    out.append(t)
+        return out
 
     def slot_for(self, role: str) -> Optional[BrainSlot]:
-        """取某个角色的槽位;单模型档一律返回那个唯一的槽位。
+        """取某个角色的槽位;单模型档一律返回那个唯一的 ``both`` 位。
 
         「只选一个模型时两个角色指向同一个」这条就落在这里 —— 于是上层
         (路由/协商)可以一律按角色问,不必分「配了几个模型」两套写法。
@@ -284,19 +317,30 @@ class Tier:
                 return s
         return None
 
-    def resident_tags(self) -> List[str]:
-        """本档中不许被淘汰的模型 tag。
 
-        single 档会把**全部候选**都列进来 —— 读作"这几个里哪个当了主脑,哪个就
-        常驻",因为单模型档同时只会加载其中一个。调度器只对**已加载**的模型
-        做淘汰,故这份宽列表不会误钉住没加载的候选。
-        """
-        return [s.tag for s in self.slots if s.resident]
+def _single(*candidates: str, placement: str = "auto") -> BrainSlot:
+    """单模型档的那一位:一个模型两只手都干,候选里选一个。"""
+    return BrainSlot(SLOT_BOTH, list(candidates), placement=placement, resident=True)
 
 
-def _single(tag: str, *, placement: str = "auto") -> BrainSlot:
-    """单模型档的槽位:一个模型两只手都干,且它就是全部,自然常驻。"""
-    return BrainSlot(SLOT_BOTH, tag, placement=placement, resident=True)
+#: C 档感知位的候选。**这就是"上面那位随便换"的清单**。
+#: 换谁都跟推理位一块儿跑,上层不用改一行 —— ``effective_io`` 按 ``any(...)``
+#: 聚合能力,选了 Gemma 就自动判"说=tts_bridge"(桥接回来),选了 MiniCPM-o
+#: 就自动判"说=native"(桥退场)。差别只在核显/内存那一侧吃多少:
+#: e2b 1.8G / e4b 3G / 12b 8G / MiniCPM-o 11G —— 独显那 7.3G 一动不动。
+_PERCEPTION_CANDIDATES: List[str] = [
+    "openbmb/minicpm-o4.5",  # 默认:唯一能原生"说"的
+    "gemma4:12b",
+    "gemma4:e4b",
+    "gemma4:e2b",
+]
+
+#: C 档推理位的候选。目前只有一个;要加备选就往这里添,机制与感知位同一套。
+#: 加的时候注意:不同型号的专家卸载拆分结果不一样,换完必须重走 ``_split_moe``,
+#: 不能沿用上一位的分配 —— ``reconcile_tier`` 已经是每位单独算,天然满足。
+_REASONING_CANDIDATES: List[str] = [
+    "qwen3.6:35b-a3b",
+]
 
 
 _TIERS: Dict[str, Tier] = {
@@ -305,7 +349,7 @@ _TIERS: Dict[str, Tier] = {
         "A 档 · 轻量本地",
         "Gemma 4 系：看 + 听(原生)，说走 TTS 桥；无独显也能跑",
         "single",
-        [_single("gemma4:e2b"), _single("gemma4:e4b"), _single("gemma4:12b")],
+        [_single("gemma4:e2b", "gemma4:e4b", "gemma4:12b")],
     ),
     "B": Tier(
         "B",
@@ -317,12 +361,14 @@ _TIERS: Dict[str, Tier] = {
     "C": Tier(
         "C",
         "C 档 · 双模型本地主脑",
-        "感知位 MiniCPM-o 4.5(核显) + 推理位 Qwen3.6-35B-A3B(独显)，两块加速器分开吃",
+        "推理位 Qwen3.6-35B-A3B 常驻独显；感知位四选一(Gemma 4 系 / MiniCPM-o)走核显，可随时换",
         "composite",
         [
             # 感知位落核显:与推理位的独显互不抢显存,这正是双模型能同时在岗的前提。
-            BrainSlot(SLOT_PERCEPTION, "openbmb/minicpm-o4.5", placement="intel_igpu", resident=True),
-            BrainSlot(SLOT_REASONING, "qwen3.6:35b-a3b", placement="cuda", resident=False),
+            # 可换 —— 重载便宜,且常驻心跳每拍都会再要它一次。
+            BrainSlot(SLOT_PERCEPTION, _PERCEPTION_CANDIDATES, placement="intel_igpu", resident=False),
+            # 推理位常驻:18 GB 权重 + 专家卸载拆分,重载一次几十秒起。
+            BrainSlot(SLOT_REASONING, _REASONING_CANDIDATES, placement="cuda", resident=True),
         ],
     ),
 }
@@ -429,30 +475,68 @@ def slot_for_role(role: str, tier_key: str = "") -> Optional[BrainSlot]:
 
 
 def model_for_role(role: str, tier_key: str = "") -> str:
-    """当前档里担任 *role* 的模型 tag;查不到返回 ""。
+    """当前档里担任 *role* 的模型 tag —— **"现在是谁在这一位上"的唯一答案**。
 
-    single 档特殊:它的槽位是**候选**(A 档 Gemma 三选一),真正在跑的是用户选定的
-    那一个。所以这里以 :func:`main_brain` 为准 —— 否则 A 档永远答成候选里的第一个
-    (e2b),而用户可能选的是 12b,于是"按角色问"得到的答案和实际加载的模型不是同
-    一个。只有 main_brain 落在本档之外(或没设)时才退回槽位。
+    槽位持有的是候选表,这里回答的是**选中的那一个**:
+
+    * ``both`` 位(单模型档)看 :func:`main_brain`;
+    * ``reasoning`` 位同样看 :func:`main_brain` —— 它就是"文本主脑"那个派生量;
+    * ``perception`` 位看 :func:`perception_brain`(独立记一栏,见 ``_STATE_FILE``)。
+
+    选中的那个若不在本位候选里(改过目录、或状态是旧版留下的),退回候选表第一个。
     """
     key = tier_key or load_tier()
     tier = get_tier(key)
     if not tier:
         return ""
-    if tier.kind == "single":
-        current = main_brain()
-        spec = get_model(current) if current else None
-        if spec is not None and spec.tag in tier.model_tags:
-            return spec.tag
     slot = tier.slot_for(role)
-    return slot.tag if slot else ""
+    if slot is None:
+        return ""
+    chosen = perception_brain() if slot.role == SLOT_PERCEPTION else main_brain()
+    if chosen:
+        spec = get_model(chosen)
+        real = spec.tag if spec is not None else chosen
+        if slot.accepts(real):
+            return real
+    return slot.tag
+
+
+def active_tags(tier_key: str = "") -> List[str]:
+    """本档**正在跑的**型号(每位一个),而不是全部候选。
+
+    能力聚合、换档加载、常驻判定一律要用这一份。用 ``model_tags``(全部候选)会出
+    这种错:C 档感知位明明选了 Gemma(不会原生说话),却因为候选表里还挂着
+    MiniCPM-o 而被聚合成"说=原生",于是协商层不挂 TTS 桥 —— 结果是哑的。
+    """
+    key = tier_key or load_tier()
+    tier = get_tier(key)
+    if not tier:
+        return []
+    out: List[str] = []
+    for slot in tier.slots:
+        tag = model_for_role(slot.role, key)
+        if tag and tag not in out:
+            out.append(tag)
+    return out
 
 
 def resident_tags(tier_key: str = "") -> List[str]:
-    """当前(或指定)档里**不许被淘汰**的模型 tag —— 调度器的钉住名单只问这一处。"""
-    tier = get_tier(tier_key or load_tier())
-    return tier.resident_tags() if tier else []
+    """当前(或指定)档里**不许被淘汰**的模型 tag —— 调度器的钉住名单只问这一处。
+
+    返回的是常驻位上**选中的**那个,不是它的全部候选 —— 没加载的候选谈不上淘汰。
+    """
+    key = tier_key or load_tier()
+    tier = get_tier(key)
+    if not tier:
+        return []
+    out: List[str] = []
+    for slot in tier.slots:
+        if not slot.resident:
+            continue
+        tag = model_for_role(slot.role, key)
+        if tag and tag not in out:
+            out.append(tag)
+    return out
 
 
 def is_resident(tag: str, tier_key: str = "") -> bool:
@@ -533,7 +617,13 @@ def effective_io(model_tags: List[str]) -> EffectiveIO:
 
 
 def tier_effective_io(key: str) -> EffectiveIO:
-    return effective_io([s.tag for s in tier_models(key)])
+    """本档**正在跑的**那几个模型合起来的有效 IO。
+
+    用 :func:`active_tags` 而不是全部候选 —— C 档感知位选了 Gemma(不会原生说话)
+    时,若把候选表里的 MiniCPM-o 也算进来,会得出"说=原生"、于是不挂 TTS 桥,
+    结果是哑的。这正是"能力表与实际在跑的东西分家"的形状。
+    """
+    return effective_io(active_tags(key))
 
 
 def active_effective_io() -> EffectiveIO:
@@ -555,6 +645,9 @@ def _read_state() -> Dict[str, str]:
                 return {
                     "tier": str(data.get("tier", "")).strip().upper(),
                     "main_brain": str(data.get("main_brain", "")).strip(),
+                    # 旧记录没有这一栏 → 空,消费方自然退回槽位默认。不需要迁移动作,
+                    # 因为在加这一栏之前感知位与主脑本来就是同一个模型。
+                    "perception_brain": str(data.get("perception_brain", "")).strip(),
                 }
     except Exception:  # noqa: BLE001
         pass
@@ -571,12 +664,21 @@ def _read_state() -> Dict[str, str]:
             brain = _LEGACY_MODEL_FILE.read_text(encoding="utf-8").strip()
     except Exception:  # noqa: BLE001
         pass
-    return {"tier": tier, "main_brain": brain}
+    return {"tier": tier, "main_brain": brain, "perception_brain": ""}
 
 
-def _write_state(tier: str, main_brain: str) -> None:
-    """写【一条】统一记录,并派生导出运行时 env(GALAXY_MODEL_TIER / OLLAMA_MODEL)。"""
-    rec = {"tier": (tier or "").strip().upper(), "main_brain": (main_brain or "").strip()}
+def _write_state(tier: str, main_brain: str, perception_brain: Optional[str] = None) -> None:
+    """写【一条】统一记录,并派生导出运行时 env。
+
+    ``perception_brain`` 为 ``None`` 表示"这次不动它" —— 保留记录里的现值。
+    换主脑不该顺手把感知位的选择抹掉,那是两个独立的位。
+    """
+    keep = _read_state().get("perception_brain", "") if perception_brain is None else perception_brain
+    rec = {
+        "tier": (tier or "").strip().upper(),
+        "main_brain": (main_brain or "").strip(),
+        "perception_brain": (keep or "").strip(),
+    }
     try:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(_STATE_FILE, rec, indent=None, ensure_ascii=False)
@@ -586,6 +688,8 @@ def _write_state(tier: str, main_brain: str) -> None:
         os.environ["GALAXY_MODEL_TIER"] = rec["tier"]
     if rec["main_brain"]:
         os.environ["OLLAMA_MODEL"] = rec["main_brain"]  # 运行时主脑:派生导出
+    if rec["perception_brain"]:
+        os.environ["GALAXY_PERCEPTION_MODEL"] = rec["perception_brain"]
 
 
 def load_tier() -> str:
@@ -605,6 +709,49 @@ def main_brain() -> str:
     if env:
         return env
     return _read_state().get("main_brain", "")
+
+
+def perception_brain() -> str:
+    """当前**感知位**选中的 tag：GALAXY_PERCEPTION_MODEL 环境变量 > 统一记录 > ""。
+
+    与 :func:`main_brain` 是两个独立的位:主脑那一栏代表"文本主脑"(推理位/单模型
+    档的那一个),感知位是另一栏。合成一栏的话,C 档下换感知位就会把推理位一起改掉。
+    """
+    env = os.environ.get("GALAXY_PERCEPTION_MODEL", "").strip()
+    if env:
+        return env
+    return _read_state().get("perception_brain", "")
+
+
+def save_perception_brain(tag: str, *, tier_key: str = "") -> str:
+    """把感知位换成 *tag*(必须是本档感知位的候选之一),返回最终生效的 tag。
+
+    **这就是"上面那位随便换"的入口。** 不在候选里一律拒绝并保持原样 ——
+    静默改成别的等于"换了个我没选的模型",而用户看不出来。
+    """
+    key = (tier_key or load_tier()).strip().upper()
+    slot = slot_for_role(SLOT_PERCEPTION, key)
+    if slot is None:
+        return ""
+    spec = get_model(tag) if tag else None
+    real = spec.tag if spec is not None else (tag or "")
+    if not slot.accepts(real):
+        logger.warning(
+            "感知位不接受 %r —— 本位候选只有 %s;保持现选 %s 不变",
+            tag,
+            ", ".join(slot.candidates),
+            model_for_role(SLOT_PERCEPTION, key),
+        )
+        return model_for_role(SLOT_PERCEPTION, key)
+    _write_state(key, main_brain(), real)
+    # 换感知位可能改变"能不能原生说话" → 原生后端要跟着开/关。
+    try:
+        from core.native_modal import on_tier_changed
+
+        on_tier_changed(key)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("换感知位的原生后端联动跳过(不影响换人): %s", exc)
+    return real
 
 
 def save_main_brain(tag: str) -> None:
@@ -642,7 +789,14 @@ def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
         chosen = local_in_tier[0]
     else:
         chosen = _read_state().get("main_brain", "")
-    _write_state(key, chosen)
+    # 感知位:换档时若现选不属于新档的候选,落回新档默认。不这么做的话,从 C 档
+    # (感知位可能选了 Gemma)切到 B 档,那个选择会**留在记录里**,下次切回 C 档
+    # 时冒出来 —— 用户不记得自己选过。
+    perception = _read_state().get("perception_brain", "")
+    pslot = tier.slot_for(SLOT_PERCEPTION)
+    if pslot is None or not pslot.accepts(perception):
+        perception = pslot.tag if pslot is not None else ""
+    _write_state(key, chosen, perception)
     # 档位联动:切 B 档 → 激活 MiniCPM-o 官方 server 原生听/说(依赖后台自动装、
     # server 探测就绪才注册);切 A 档 → 注销回落桥。best-effort,绝不拖垮切档。
     try:
@@ -677,8 +831,18 @@ def catalog_snapshot() -> Dict[str, object]:
                 "kind": t.kind,
                 "models": [m.to_dict() for m in tier_models(t.key)],
                 "slots": [
-                    {"role": s.role, "tag": s.tag, "placement": s.placement, "resident": s.resident} for s in t.slots
+                    {
+                        "role": s.role,
+                        "candidates": list(s.candidates),
+                        # 面板据此高亮"这一位现在是谁",以及这一位换不换得动。
+                        "selected": model_for_role(s.role, t.key),
+                        "swappable": len(s.candidates) > 1,
+                        "placement": s.placement,
+                        "resident": s.resident,
+                    }
+                    for s in t.slots
                 ],
+                "active_tags": active_tags(t.key),
                 "effective_io": tier_effective_io(t.key).to_dict(),
             }
             for t in all_tiers()

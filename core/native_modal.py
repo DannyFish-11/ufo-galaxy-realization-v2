@@ -294,19 +294,23 @@ SERVED_MODEL_TAG: str = "openbmb/minicpm-o4.5"
 def tier_wants_native(key: str) -> bool:
     """这一档需不需要原生听/说后端 —— 判据只此一处。
 
-    原来写死 ``key == "B"``。B 档确实只有 MiniCPM-o 一个模型,所以当时没错;
-    但档位字母和"档里有没有这个模型"是两回事,一旦出现**含 MiniCPM-o 的复合档**
-    (C 档:感知位就是它),写死字母的那一支会走 ``deactivate()`` ——
-    于是能力表(``tier_effective_io("C")``)说"说=原生"、后端却被注销,
-    协商层照着能力表去用一条已经关掉的通路。判据分家的典型形状。
+    判据经过两次收窄,每次都是同一个错法的不同伪装:
+
+    1. 最早写死 ``key == "B"``。档位字母和"档里有没有这个模型"是两回事,
+       一出现含 MiniCPM-o 的复合档,写死字母的那一支就会去 ``deactivate()``。
+    2. 改成看整档构成(``SERVED_MODEL_TAG in tier.model_tags``)。感知位做成
+       **可换**之后这条又宽了:候选表里挂着 MiniCPM-o,但用户可能选的是 Gemma ——
+       那时不该激活原生后端,却会激活。
+
+    现在看的是**这一位上真正选中的那个**。与 ``tier_effective_io`` 同源:
+    那边也是按 :func:`~core.model_catalog.active_tags` 算的,两者永远同口径。
     """
     try:
-        from core.model_catalog import get_tier  # noqa: PLC0415
+        from core.model_catalog import SLOT_PERCEPTION, model_for_role  # noqa: PLC0415
 
-        tier = get_tier(key)
-        return bool(tier and SERVED_MODEL_TAG in tier.model_tags)
+        return model_for_role(SLOT_PERCEPTION, key) == SERVED_MODEL_TAG
     except Exception as exc:  # noqa: BLE001
-        logger.debug("档位构成不可读(%s),按不需要原生处理: %s", key, exc)
+        logger.debug("感知位选择不可读(%s),按不需要原生处理: %s", key, exc)
         return False
 
 

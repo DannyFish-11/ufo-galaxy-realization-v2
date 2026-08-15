@@ -164,8 +164,14 @@ class TestModelsAPI:
         assert len(snap["tiers"]) == 3
         for t in snap["tiers"]:
             assert "effective_io" in t and "models" in t
-            # 槽位要真的出到线上 —— 面板据此显示"哪一位是感知位、落在哪块卡"。
-            assert "slots" in t and len(t["slots"]) == len(t["models"])
+            # 槽位要真的出到线上 —— 面板据此显示"哪一位、现在是谁、还能换成谁"。
+            assert "slots" in t and t["slots"]
+            assert "active_tags" in t
+            flat = [c for s in t["slots"] for c in s["candidates"]]
+            assert sorted(set(flat)) == sorted({m["tag"] for m in t["models"]}), "候选表与档内模型清单对不上"
+            for s in t["slots"]:
+                assert s["selected"] in s["candidates"], "选中的那个不在自己的候选里"
+                assert s["swappable"] is (len(s["candidates"]) > 1)
 
     def test_status_endpoint_shape(self):
         from core.routes.models import get_status

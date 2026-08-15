@@ -20,7 +20,9 @@
 1. 槽位是档位构成的**唯一定义处**，``model_tags`` 由它派生（不许两处各存一份）；
 2. 单模型档的槽位角色是 ``both`` —— 于是"问感知位是谁"和"问推理位是谁"得到
    同一个答案，**跑一个还是两个，上层代码一模一样**；
-3. 复合档里感知位标为常驻。理由不是"它重要"，是**它被踢了就再也醒不来**。
+3. **可插拔**：槽位持有候选表，换型号就是在同一位里换一个候选 —— 角色、落位、
+   常驻策略、上层怎么问它，全都不变。常驻的是**推理位**（重载最贵那位），
+   感知位随时可换（见 tests/test_reasoning_slot_stays_resident.py 的判据说明）。
 """
 
 from __future__ import annotations
@@ -33,12 +35,15 @@ class TestSlotsAreTheSingleDefinition:
     def test_model_tags_is_derived_from_slots(self):
         """两处各存一份必然漂：改了槽位忘了改 tags，档位就自相矛盾。"""
         for tier in mc.all_tiers():
-            assert tier.model_tags == [s.tag for s in tier.slots]
+            flat = [t for s in tier.slots for t in s.candidates]
+            assert tier.model_tags == list(dict.fromkeys(flat))
 
-    def test_every_slot_tag_exists_in_the_catalog(self):
+    def test_every_candidate_exists_in_the_catalog(self):
         for tier in mc.all_tiers():
             for slot in tier.slots:
-                assert mc.get_model(slot.tag) is not None, f"{tier.key} 档的槽位 {slot.tag} 在目录里查不到"
+                assert slot.candidates, f"{tier.key} 档的 {slot.role} 位没有任何候选"
+                for tag in slot.candidates:
+                    assert mc.get_model(tag) is not None, f"{tier.key} 档 {slot.role} 位的候选 {tag} 在目录里查不到"
 
     def test_slot_roles_are_from_the_known_set(self):
         known = {SLOT_PERCEPTION, SLOT_REASONING, SLOT_BOTH}
@@ -88,18 +93,18 @@ class TestPlacementKeepsTheTwoModelsOffEachOthersMemory:
 
 
 class TestResidency:
-    def test_perception_slot_is_marked_resident_and_reasoning_is_not(self):
+    def test_reasoning_slot_is_resident_and_perception_is_swappable(self):
+        """判据是重载代价：35B 重载几十秒起，感知位最小的只有 1.8 GB 且心跳会再要它。"""
         tier = mc.get_tier("C")
-        assert tier.slot_for(SLOT_PERCEPTION).resident is True
-        assert (
-            tier.slot_for(SLOT_REASONING).resident is False
-        ), "推理位钉住就没有让位的余地了 —— 它由 OpenClawd 显式唤起，踢了能再加载"
+        assert tier.slot_for(SLOT_REASONING).resident is True, "推理位不常驻 —— 每次显存一紧就重做最贵的那步"
+        assert tier.slot_for(SLOT_PERCEPTION).resident is False, "感知位钉住就换不动了，与可插拔冲突"
 
     def test_resident_tags_and_is_resident_agree(self, monkeypatch):
         monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
-        assert mc.resident_tags() == ["openbmb/minicpm-o4.5"]
-        assert mc.is_resident("openbmb/minicpm-o4.5") is True
-        assert mc.is_resident("qwen3.6:35b-a3b") is False
+        monkeypatch.delenv("GALAXY_PERCEPTION_MODEL", raising=False)
+        assert mc.resident_tags() == ["qwen3.6:35b-a3b"]
+        assert mc.is_resident("qwen3.6:35b-a3b") is True
+        assert mc.is_resident("openbmb/minicpm-o4.5") is False
 
     def test_unknown_tag_is_not_resident(self, monkeypatch):
         monkeypatch.setenv("GALAXY_MODEL_TIER", "C")

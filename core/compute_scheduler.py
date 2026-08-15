@@ -600,10 +600,13 @@ class ComputeScheduler:
         Returns:
             换档后的账本快照。
         """
+        from core.model_catalog import active_tags as _active_tags  # noqa: PLC0415
+        from core.model_catalog import get_model as _get_model  # noqa: PLC0415
         from core.model_catalog import resolve_is_moe as _resolve_is_moe  # noqa: PLC0415
-        from core.model_catalog import tier_models  # noqa: PLC0415
 
-        specs = list(tier_models(target_tier))
+        # 只加载**这一档正在跑的**那几个(每位一个),不是全部候选 —— 候选表里
+        # 那些没选中的型号本来就不该被拉起来占显存。
+        specs = [m for m in (_get_model(t) for t in _active_tags(target_tier)) if m is not None]
         target_ids = {s.tag for s in specs}
 
         # 1+2. 驱逐不属于目标档的

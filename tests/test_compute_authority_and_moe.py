@@ -447,11 +447,18 @@ def test_reconcile_tier_evicts_then_loads(monkeypatch) -> None:
     assert "stale-model" in calls["unloaded"], "非目标档模型没被卸载"
     assert sched.get_allocation("stale-model") is None, "卸载后没销账"
     assert calls["loaded"], "目标档模型没有被加载"
-    from core.model_catalog import tier_models
 
-    expected = {s.tag for s in tier_models("A") if s.source in ("local", "llama_cpp")}
-    assert set(calls["loaded"]) == expected, f"加载集合与目标档不一致: {calls['loaded']} vs {expected}"
-    assert {a.model_id for a in allocs} <= expected | {s.tag for s in tier_models("A")}
+    # 只加载**这一档正在跑的**那几个(每位一个),不是全部候选。
+    #
+    # 原来这里加载的是 tier_models()(全部候选) —— A 档是单模型档,却会把三个
+    # Gemma 一起拉起来占显存,而同时只有一个当主脑。槽位改成候选制之后这条自然
+    # 修掉了:换档只加载 active_tags()。
+    from core.model_catalog import active_tags
+
+    expected = set(active_tags("A"))
+    assert len(expected) == 1, "A 档是单模型档,正在跑的应当只有一个"
+    assert set(calls["loaded"]) == expected, f"加载集合与正在跑的不一致: {calls['loaded']} vs {expected}"
+    assert len(calls["loaded"]) == 1, f"单模型档却加载了 {len(calls['loaded'])} 个 —— 白占显存"
 
 
 def test_reconcile_tier_survives_backend_failures(monkeypatch) -> None:

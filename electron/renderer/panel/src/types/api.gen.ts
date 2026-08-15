@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 383 条 · 组件 schema 100 个
+// 路径 384 条 · 组件 schema 101 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -184,6 +184,7 @@ export type ApiPath =
   | "/api/v1/models/catalog"
   | "/api/v1/models/latency-probe"
   | "/api/v1/models/routing-stats"
+  | "/api/v1/models/slot"
   | "/api/v1/models/status"
   | "/api/v1/models/sync"
   | "/api/v1/models/tier"
@@ -571,6 +572,7 @@ export const API_METHODS = {
   "/api/v1/models/catalog": ["get"],
   "/api/v1/models/latency-probe": ["post"],
   "/api/v1/models/routing-stats": ["get"],
+  "/api/v1/models/slot": ["post"],
   "/api/v1/models/status": ["get"],
   "/api/v1/models/sync": ["post"],
   "/api/v1/models/tier": ["post"],
@@ -1310,6 +1312,11 @@ export interface SkillLoadRequest {
   "config"?: Record<string, unknown>;
   "name"?: string;
   "path"?: string;
+}
+
+export interface SlotSelectRequest {
+  "model": string;
+  "role": string;
 }
 
 export interface SwarmCreateRequest {

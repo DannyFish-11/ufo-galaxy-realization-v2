@@ -880,6 +880,15 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": ("切到 B 档时自动激活原生后端(后台补装客户端依赖 + 探测 server)。" "关掉则只能手动激活"),
     },
+    "GALAXY_PERCEPTION_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "双模型档里**感知位**(看/听/说那一位)选哪个型号。留空=用该档候选表第一个。"
+            "与 OLLAMA_MODEL(文本主脑/推理位)是两个独立的位,换一个不影响另一个"
+        ),
+    },
     # ── 本地 OpenAI 兼容推理服务(core/multi_llm_router._register_local_openai)──
     # 双模型本地主脑的另一半:感知位跑在核显上时,用 llama.cpp server 的 SYCL/Vulkan
     # 后端或 OpenVINO Model Server 起一个 OpenAI 兼容端点,填地址即可接入 ——

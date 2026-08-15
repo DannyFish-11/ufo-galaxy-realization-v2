@@ -2827,6 +2827,13 @@ class MultiLLMRouter:
             # 静默改派一模一样,而唯一的痕迹是一行 debug。用户看到的是"两个模型
             # 都配好了、系统也在跑",实际那一位从没上过岗。
             #
+            # 一个本地 provider 都没注册 = 这就是**纯云端方案**,不是漏配。
+            # 实测:纯云端安装(档位还是默认的 A)每次派活都会喊一句"本地槽位没上岗",
+            # 而路由结果完全正确 —— 那是误报,而且会把真正的漏配淹掉。
+            if not any(c.source_type in ("local", "hf_local") for c in self.providers.values()):
+                logger.debug("本地一个 provider 都没有(纯云端方案),槽位解析跳过")
+                return None
+
             # 每个 (槽位, tag) 只喊一次:这条路径每次路由都会走到,喊满屏等于没喊。
             warned = getattr(self, "_warned_unhosted_slots", None)
             if warned is None:
