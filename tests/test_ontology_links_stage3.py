@@ -298,22 +298,48 @@ class TestGroupDContract:
 
 
 class TestGroupEAdditiveOnly:
-    def test_e01_no_existing_code_depends_on_this_package(self):
-        """Stage 3's safety premise: deleting core/ontology/ changes no behaviour.
+    #: Modules allowed to depend on core.ontology.
+    #:
+    #: This started out as "nobody depends on it" — the layer was built
+    #: deliberately unreachable so it could be deleted with zero risk. The
+    #: repository's own reachability gate (scripts/check_reachability.py)
+    #: overruled that: "新写的模块没有任何真实入口能走到它 —— 它不报错、不变慢、
+    #: 不让测试变红，只是永远不生效。" The gate is right, and a relation layer
+    #: nothing can walk has no value. So the guarantee changed from "unreachable"
+    #: to "reachable through exactly one declared consumer", which is still small
+    #: enough to reason about — and this list is what keeps it that way.
+    ALLOWED_CONSUMERS = ("core/canonical_task_store.py",)
 
-        The value here is expressiveness, so the risk must be zero. If some module
-        starts importing it, that is a deliberate decision that should update this
-        test — not something that happens quietly.
-        """
+    def test_e01_only_declared_consumers_depend_on_this_package(self):
         proc = subprocess.run(
-            ["grep", "-rn", "--include=*.py", "-e", "core.ontology", "-e", "core/ontology", "core", "galaxy_gateway"],
+            ["grep", "-rln", "--include=*.py", "-e", "core.ontology", "-e", "core/ontology", "core", "galaxy_gateway"],
             capture_output=True,
             text=True,
         )
-        offenders = [
-            line for line in proc.stdout.splitlines() if line.strip() and not line.startswith("core/ontology/")
+        importers = [
+            line
+            for line in proc.stdout.splitlines()
+            if line.strip() and not line.startswith("core/ontology/") and line not in self.ALLOWED_CONSUMERS
         ]
-        assert offenders == [], "core.ontology must stay dependency-free:\n" + "\n".join(offenders)
+        assert importers == [], (
+            "core.ontology gained an undeclared consumer; widening its blast radius "
+            "should be a deliberate decision that updates ALLOWED_CONSUMERS:\n" + "\n".join(importers)
+        )
+
+    def test_e01b_the_declared_consumer_actually_uses_it(self):
+        """The flip side: a declared consumer that does not really use it is fake wiring.
+
+        The reachability gate exists precisely to catch modules that are imported
+        but never exercised, so satisfying it with a decorative import would be
+        answering the letter and missing the point.
+        """
+        import inspect
+
+        from core.canonical_task_store import CanonicalTaskStore
+
+        src = inspect.getsource(CanonicalTaskStore.related)
+        assert "get_link_registry" in src
+        assert "resolve" in src
 
     def test_e02_no_mutation_entry_points(self):
         """POLICY_2 says read-only; assert the surface actually is."""

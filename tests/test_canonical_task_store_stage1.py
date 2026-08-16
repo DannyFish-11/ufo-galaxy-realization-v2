@@ -243,6 +243,36 @@ class TestGroupDDurability:
         s2 = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=50)
         assert s2.get(t.identity.task_id) is not None
 
+    def test_d10_compaction_lands_under_the_target_and_does_not_retrigger(self, tmp_path, monkeypatch):
+        """Compaction must be bounded by bytes, not by record count.
+
+        Regression: an earlier draft kept "the newest N records". If those N were
+        themselves oversized, the file stayed over the ceiling after compacting, so
+        the next append compacted again — and every append after that, each a full
+        file rewrite. Measured at the time: a 1500-write loop failed to finish in
+        two minutes. A byte target guarantees the result is at most half the
+        ceiling, putting the next compaction far away.
+        """
+        import time as _time
+
+        import core.canonical_task_store as mod
+
+        monkeypatch.setattr(mod, "_MAX_FILE_BYTES", 60_000)
+        monkeypatch.setattr(mod, "_COMPACT_CHECK_EVERY", 1)  # check every write
+        s = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=1000)
+        path = os.path.join(str(tmp_path), "canonical_tasks.jsonl")
+
+        started = _time.monotonic()
+        for i in range(400):
+            s.upsert(_task(goal=f"t{i}", targets=["dev-a", "dev-b"]))
+        elapsed = _time.monotonic() - started
+
+        size = os.path.getsize(path)
+        assert size <= mod._MAX_FILE_BYTES, f"file still over ceiling after compaction: {size}"
+        # The real symptom of the bug was wall-clock, not size.
+        assert elapsed < 20, f"writes degraded to per-append full rewrites ({elapsed:.1f}s for 400)"
+        assert CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=1000)._records
+
     def test_d08_file_compacts_when_oversized(self, tmp_path, monkeypatch):
         """An append-only file on a write path needs a ceiling, not just a hope.
 
@@ -251,20 +281,28 @@ class TestGroupDDurability:
         """
         import core.canonical_task_store as mod
 
-        monkeypatch.setattr(mod, "_MAX_FILE_BYTES", 2000)
-        monkeypatch.setattr(mod, "_COMPACT_KEEP", 10)
-        s = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=100)
-        for i in range(60):
+        monkeypatch.setattr(mod, "_MAX_FILE_BYTES", 20_000)
+        monkeypatch.setattr(mod, "_COMPACT_CHECK_EVERY", 4)
+        s = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=200)
+        for i in range(150):
             s.upsert(_task(goal=f"t{i}"))
         path = os.path.join(str(tmp_path), "canonical_tasks.jsonl")
-        assert sum(1 for _ in open(path, encoding="utf-8")) <= 10 + 5, "file should have been compacted"
+        # The ceiling is *soft* by design: the size check is throttled to once per
+        # _COMPACT_CHECK_EVERY appends, so the file may overshoot by up to that many
+        # records between checks. What must hold is that it stays bounded — not that
+        # it never exceeds the number by a byte.
+        slack = mod._COMPACT_CHECK_EVERY * mod._MAX_PAYLOAD_CHARS
+        assert os.path.getsize(path) <= mod._MAX_FILE_BYTES + slack
+        # Without compaction 150 records would be far larger than the ceiling.
+        assert os.path.getsize(path) < 150 * 1200, "file does not look compacted at all"
         # Compaction must preserve readability, not just shrink the file.
-        assert CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=100)._records
+        assert CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=200)._records
 
     def test_d09_compaction_keeps_latest_state_per_task(self, tmp_path, monkeypatch):
         import core.canonical_task_store as mod
 
-        monkeypatch.setattr(mod, "_MAX_FILE_BYTES", 1500)
+        monkeypatch.setattr(mod, "_MAX_FILE_BYTES", 4000)
+        monkeypatch.setattr(mod, "_COMPACT_CHECK_EVERY", 2)
         s = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=100)
         t = _task(goal="反复推进")
         for _ in range(30):
@@ -342,6 +380,72 @@ class TestGroupEQuery:
         got = populated.query(session_id="A", success=True, limit=50)
         assert all(r.session_id == "A" and r.success is True for r in got)
         assert len(got) == 3
+
+
+# ---------------------------------------------------------------------------
+# Group H — Relation walking (joins Stage 1 storage to Stage 3 Link Types)
+# ---------------------------------------------------------------------------
+
+
+class TestGroupHRelations:
+    @pytest.fixture
+    def linked(self, tmp_path):
+        s = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=50)
+        parent = _task(goal="父", session_id="sess-7")
+        child = build_canonical_task(goal="子", parent_task_id=parent.identity.task_id, register=False)
+        parent.graph.children = [child.identity.task_id]
+        parent.graph.dependencies = ["dep-1", "dep-2"]
+        parent.routing.selected_targets = ["dev-a", "dev-b"]
+        s.upsert(parent)
+        s.upsert(child)
+        return s, parent, child
+
+    def test_h01_walks_task_to_task(self, linked):
+        s, parent, child = linked
+        assert s.related(parent.identity.task_id, "task_depends_on") == ["dep-1", "dep-2"]
+        assert s.related(parent.identity.task_id, "task_has_child") == [child.identity.task_id]
+        assert s.related(child.identity.task_id, "task_has_parent") == [parent.identity.task_id]
+
+    def test_h02_walks_task_to_device(self, linked):
+        s, parent, _ = linked
+        assert s.related(parent.identity.task_id, "task_targets_device") == ["dev-a", "dev-b"]
+
+    def test_h03_relations_survive_restart(self, linked, tmp_path):
+        """The point of Stages 1+3 together: the object layer answers after a restart.
+
+        This is exactly the question the 256-entry ring buffer could not answer,
+        and the reason decisions used to fall back to similarity search.
+        """
+        _, parent, _ = linked
+        fresh = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=50)
+        assert fresh.related(parent.identity.task_id, "task_targets_device") == ["dev-a", "dev-b"]
+
+    def test_h04_unknown_task_is_empty_not_an_error(self, linked):
+        s, _, _ = linked
+        assert s.related("no-such-task", "task_depends_on") == []
+
+    def test_h05_undeclared_link_raises(self, linked):
+        s, parent, _ = linked
+        with pytest.raises(KeyError):
+            s.related(parent.identity.task_id, "task_eats_pizza")
+
+    def test_h06_truncated_payload_resolves_empty(self, tmp_path, monkeypatch):
+        """A record whose detail was dropped must resolve to [], not explode."""
+        import core.canonical_task_store as mod
+
+        monkeypatch.setattr(mod, "_MAX_PAYLOAD_CHARS", 200)
+        s = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=50)
+        t = _task(goal="巨大")
+        t.execution.args = {"blob": "x" * 5000}
+        s.upsert(t)
+        fresh = CanonicalTaskStore(data_dir=str(tmp_path), hot_limit=50)
+        assert fresh.related(t.identity.task_id, "task_depends_on") == []
+
+    def test_h07_relations_blind_in_shadow_mode(self, linked, monkeypatch):
+        """related() reads through get(), so shadow gating applies to it too."""
+        s, parent, _ = linked
+        monkeypatch.setenv("GALAXY_CANONICAL_TASK_STORE", MODE_SHADOW)
+        assert s.related(parent.identity.task_id, "task_depends_on") == []
 
 
 # ---------------------------------------------------------------------------

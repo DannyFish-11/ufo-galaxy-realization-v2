@@ -157,8 +157,32 @@ lifecycle advance*, so the file grows several times faster than task count.
 Compaction rewrites it keeping only the latest line per task_id, which is exactly
 what ``_load_recent`` would have reduced it to anyway."""
 
-_COMPACT_KEEP = 5000
-"""Tasks retained (newest-first) when compacting.  Bounds the rewritten file."""
+_COMPACT_TARGET_RATIO = 0.5
+"""Compaction retains newest records until this fraction of _MAX_FILE_BYTES.
+
+Compaction is bounded by **bytes, not by record count**, and that distinction is
+load-bearing.  Keeping "the newest N records" cannot guarantee the result fits
+under the ceiling: if those N records are themselves oversized, the file is still
+over the limit after compacting, so the *next* append compacts again — and every
+append after that.  Measured: with a count-based rule the store degraded to a full
+file rewrite per write (O(n²)) and a 1500-write loop failed to finish in two
+minutes.  A byte target guarantees the rewritten file is at most half the ceiling,
+which puts the next compaction a long way off.
+"""
+
+_COMPACT_MAX_KEEP = 20000
+"""Absolute cap on retained records, independent of the byte target."""
+
+_COMPACT_CHECK_EVERY = 32
+"""Only stat the file every N appends.
+
+Even with a byte target, checking on every single write costs a syscall per write
+for no benefit — the file cannot cross the ceiling in one append.
+
+Consequence worth stating plainly: this makes ``_MAX_FILE_BYTES`` a **soft**
+ceiling.  Between two checks the file may overshoot by up to N records, so the
+real bound is ``_MAX_FILE_BYTES + N * _MAX_PAYLOAD_CHARS``.  That is the intended
+trade — a hard ceiling would cost a stat syscall on every single write."""
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +282,29 @@ class PersistedTaskRecord:
         }
 
 
+class _PayloadView:
+    """Attribute-style view over a stored ``CanonicalTask.to_dict()`` payload.
+
+    Link resolvers are written against the live object shape
+    (``task.graph.dependencies``), and a stored record holds the same shape as
+    nested dicts.  Rather than duplicate every resolver for the dict form — two
+    copies that would drift — this adapts the dict to the attribute access the
+    resolvers already use.  Missing keys yield another empty view, so a partial
+    or truncated payload resolves to ``[]`` instead of raising.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: Any) -> None:
+        self._data = data if isinstance(data, dict) else {}
+
+    def __getattr__(self, name: str) -> Any:
+        value = self._data.get(name)
+        if isinstance(value, dict):
+            return _PayloadView(value)
+        return value
+
+
 # ---------------------------------------------------------------------------
 # Store
 # ---------------------------------------------------------------------------
@@ -291,6 +338,7 @@ class CanonicalTaskStore:
         self._lock = threading.Lock()
         self._records: List[PersistedTaskRecord] = []
         self._index: Dict[str, PersistedTaskRecord] = {}
+        self._appends_since_check = 0
         self._stats = {"upserts": 0, "queries": 0, "load_errors": 0}
         self._load_recent()
 
@@ -416,6 +464,33 @@ class CanonicalTaskStore:
         hot.sort(key=lambda r: r.updated_at, reverse=True)
         return hot[: max(0, int(limit))]
 
+    def related(self, task_id: str, link_name: str) -> List[str]:
+        """Walk a declared relation out of a stored task.
+
+        This is where the Link Type layer (:mod:`core.ontology.links`) becomes
+        usable: the store holds the durable objects, the link registry declares
+        how relations are walked, and this method joins them.  ``"task_depends_on"``,
+        ``"task_targets_device"``, ``"task_has_child"`` … are resolved from the
+        stored projection's own fields — no inference, no similarity.
+
+        Raises ``KeyError`` for an undeclared link (asking for a relation that does
+        not exist is a programming error).  Returns ``[]`` when the task is not
+        stored, or when the store is not in ``on`` mode.
+        """
+        record = self.get(task_id)
+        if record is None:
+            return []
+        try:
+            from core.ontology.links import get_link_registry
+
+            registry = get_link_registry()
+        except Exception as exc:  # noqa: BLE001 — the relation layer is optional
+            logger.debug("link registry unavailable: %s", exc)
+            return []
+        # Resolvers read the live CanonicalTask shape, so walk the stored payload
+        # through a lightweight view exposing the same attribute path.
+        return registry.resolve(_PayloadView(record.payload), link_name)
+
     def stats(self) -> Dict[str, Any]:
         with self._lock:
             return {
@@ -444,11 +519,17 @@ class CanonicalTaskStore:
             logger.debug("CanonicalTaskStore append failed: %s", exc)
 
     def _maybe_compact(self) -> None:
-        """Rewrite the file keeping only the newest line per task, if oversized.
+        """Rewrite the file to the newest line per task, under a byte target.
 
-        Cheap check first: ``os.path.getsize`` on every append is a stat call, not
-        a read.  The rewrite itself only runs when the ceiling is crossed.
+        Two guards keep this from becoming the hot path:
+        - the size check runs once every ``_COMPACT_CHECK_EVERY`` appends;
+        - retention is bounded by bytes, so a compaction always lands well under
+          the ceiling and cannot immediately re-trigger.
         """
+        self._appends_since_check += 1
+        if self._appends_since_check < _COMPACT_CHECK_EVERY:
+            return
+        self._appends_since_check = 0
         try:
             if os.path.getsize(self._file) <= _MAX_FILE_BYTES:
                 return
@@ -459,13 +540,32 @@ class CanonicalTaskStore:
             for rec in self._iter_file_records():
                 if rec.task_id:
                     latest[rec.task_id] = rec  # later line wins
-            keep = sorted(latest.values(), key=lambda r: r.updated_at)[-_COMPACT_KEEP:]
+
+            target_bytes = int(_MAX_FILE_BYTES * _COMPACT_TARGET_RATIO)
+            newest_first = sorted(latest.values(), key=lambda r: r.updated_at, reverse=True)
+
+            kept_lines: List[str] = []
+            total = 0
+            for rec in newest_first:
+                line = json.dumps(rec.to_dict(), ensure_ascii=False, separators=(",", ":"))
+                # +1 for the newline. Stop on the first record that would cross the
+                # target rather than after it, so the target is a ceiling not a floor.
+                if total + len(line) + 1 > target_bytes or len(kept_lines) >= _COMPACT_MAX_KEEP:
+                    break
+                kept_lines.append(line)
+                total += len(line) + 1
+
             tmp_path = f"{self._file}.compact"
             with open(tmp_path, "w", encoding="utf-8") as fh:
-                for rec in keep:
-                    fh.write(json.dumps(rec.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n")
+                for line in reversed(kept_lines):  # restore oldest-first order
+                    fh.write(line + "\n")
             os.replace(tmp_path, self._file)
-            logger.info("CanonicalTaskStore compacted to %d task projections", len(keep))
+            logger.info(
+                "CanonicalTaskStore compacted to %d projections (%d bytes, target %d)",
+                len(kept_lines),
+                total,
+                target_bytes,
+            )
         except Exception as exc:  # noqa: BLE001 — compaction failure must not break writes
             logger.debug("CanonicalTaskStore compaction skipped: %s", exc)
 
