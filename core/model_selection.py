@@ -331,6 +331,53 @@ def print_runtime_gaps(tier_key: str, *, prefix: str = "  ") -> List[Dict[str, s
     return gaps
 
 
+def print_context_budget(tier_key: str, *, prefix: str = "  ") -> List[Dict[str, int]]:
+    """把这一档每一位的**上下文预算**打到终端上，返回 ``[{tag, n_ctx, demand}]``。
+
+    为什么这条要单独报、且**不能**并进 :func:`~core.runtime_readiness.slot_runtime_gaps`
+    =========================================================================
+    ``tier_is_runnable`` 就是 ``not slot_runtime_gaps(...)``。把"上下文装不下"塞进
+    缺口表，这一档就会被判成**跑不起来**，进而触发降档 —— 可上下文被截断和跑不起来
+    完全是两回事:模型照样跑，只是记不住那么多。拿前者去触发后者，等于用一次质量
+    下降换掉一整个档。
+
+    要报的是什么
+    ============
+    本仓库按自己配的预算(``GALAXY_TOOLS_MAX`` 个工具定义 + ``GALAXY_TOOL_PRUNE_KEEP_ROUNDS``
+    轮各 ``GALAXY_TOOL_RESULT_MAX_CHARS`` 字符的工具结果 + 系统提示)一次能装配到
+    上万 token，而没填过 ``max_ctx_val`` 的型号按 4096 装 —— **超出部分在 llama.cpp
+    那层静默截断**，用户看到的是"它怎么记不住前面说的"。这条就是把这件事说出来。
+    """
+    from core import cli_render as r
+
+    try:
+        from core.compute_scheduler import get_compute_scheduler
+        from core.context_trim import assembled_token_demand
+        from core.model_catalog import active_tags
+
+        sched = get_compute_scheduler()
+        demand = int(assembled_token_demand())
+        rows = [
+            {"tag": t, "n_ctx": int(sched.context_budget_for(t)[0]), "demand": demand} for t in active_tags(tier_key)
+        ]
+    except Exception as exc:  # noqa: BLE001 — 报不出来就安静退场，与 print_runtime_gaps 同
+        logger.debug("上下文预算不可评估: %s", exc)
+        return []
+
+    squeezed = [row for row in rows if row["n_ctx"] < row["demand"]]
+    if not squeezed:
+        return rows
+    print()
+    r.phase("上下文", f"{tier_key} 档有 {len(squeezed)} 位装不下本仓库的装配量 —— 超出部分会被静默截断", "warn")
+    for row in squeezed:
+        print(
+            f"{prefix}  {row['tag']}: 上下文 {row['n_ctx']} token < 装配上界 {row['demand']} token"
+            f"(差 {row['demand'] - row['n_ctx']})"
+        )
+    print(f"{prefix}  这个型号的真实上下文上限若大于 {rows[0]['n_ctx']}，给它填 max_ctx_val 即可放开。")
+    return rows
+
+
 def apply_effective_tier(*, prefix: str = "  ") -> str:
     """把"这台机器现在跑得起来的档"落到**本进程运行时**上。
 
@@ -466,6 +513,7 @@ def interactive_select() -> str:
         # 换档当场就把"这一位跑不起来"说出来 —— 不说的话用户要到加载失败才知道，
         # 而加载失败是被捕获、只写日志的(见 compute_scheduler.reconcile_tier)。
         print_runtime_gaps(tier_key)
+        print_context_budget(tier_key)
         return brain
 
     if not (sys.stdin and sys.stdin.isatty()):
@@ -671,19 +719,25 @@ def resolve_main_brain(interactive: bool = True) -> str:
         # 记录该保持原样(见 apply_effective_tier)。
         if not degraded:
             save_choice(env_model)
-        print_runtime_gaps(_current_tier())
+        _tier = _current_tier()
+        print_runtime_gaps(_tier)
+        print_context_budget(_tier)
         return env_model
     saved = load_choice()
     if saved:
         os.environ["OLLAMA_MODEL"] = saved
-        print_runtime_gaps(_current_tier())
+        _tier = _current_tier()
+        print_runtime_gaps(_tier)
+        print_context_budget(_tier)
         return saved
     # 交互路自己在选定当场就报过了(见 interactive_select._commit)，这里不重复。
     chosen = interactive_select() if interactive else recommend()
     if chosen:
         save_choice(chosen)
     if chosen and not interactive:
-        print_runtime_gaps(_current_tier())
+        _tier = _current_tier()
+        print_runtime_gaps(_tier)
+        print_context_budget(_tier)
     return chosen
 
 

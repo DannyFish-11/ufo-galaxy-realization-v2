@@ -144,10 +144,22 @@ class TestTheRecommenderKnowsEveryTier:
         C 档推理位要 ``llama-cpp-python`` **且**要它做得到专家卸载。缺任何一条还推 C，
         就是把失败推迟到加载时 —— 而加载失败是被捕获、只写日志的，用户看到的会是
         "模型带不动"，不是"你还缺个依赖"。
+
+        落到 **D** 而不是 B：D 档推理位是稠密 9B，不欠专家卸载那张票。缺卸载能力时
+        用户仍然拿得到双模型形态，而不是一路跌回单模型 —— 这正是把两个推理位拆成
+        两个档（而不是同一槽位的两个候选）换来的：推荐器只能推档，推不了"档+候选"。
         """
         monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: key != "C")
         need = mc.tier_runtime_footprint_mb("C")
-        assert ms.recommend_tier(True, need + 100000) == "B"
+        assert ms.recommend_tier(True, need + 100000) == "D"
+
+    def test_the_heavier_dual_tier_wins_when_the_machine_can_actually_run_it(self, monkeypatch):
+        """反向：卸载能力齐备时，推的是 C（更强的那位），不是门槛更低的 D。
+
+        这一条钉的是 ``_TIER_KEYS`` 的顺序语义。把它改成字母序，C 就永远推不出去了。
+        """
+        monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
+        assert ms.recommend_tier(True, ms.tier_admission_need_mb("C")) == "C"
 
     def test_a_small_gpu_is_not_pushed_into_the_dual_tier(self, monkeypatch):
         monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)

@@ -58,7 +58,9 @@ class TestTheEffectiveTierFallsBack:
 
     def test_an_unrunnable_tier_falls_to_the_highest_runnable_one(self, monkeypatch):
         _only_c_is_broken(monkeypatch)
-        assert rr.effective_tier("C") == "B"
+        # 落到 D 而不是 B：D 档推理位是稠密 9B，不欠专家卸载那张票，所以它才是
+        # "跑得起来的最高档"。降到 B 会白白丢掉双模型形态。
+        assert rr.effective_tier("C") == "D"
 
     def test_a_runnable_tier_is_left_alone(self, monkeypatch):
         monkeypatch.setattr(rr, "tier_is_runnable", lambda key: True)
@@ -92,7 +94,8 @@ class TestTheEffectiveTierFallsBack:
         if moe_offload_supported():
             pytest.skip("本机支持专家卸载，C 档本来就跑得起来")
         assert not rr.tier_is_runnable("C")
-        assert rr.effective_tier("C") == "B"
+        assert rr.tier_is_runnable("D"), "D 档不该受专家卸载缺失影响"
+        assert rr.effective_tier("C") == "D"
 
 
 class TestDegradingDoesNotRewriteTheRecord:
@@ -106,9 +109,9 @@ class TestDegradingDoesNotRewriteTheRecord:
             monkeypatch.delenv(key, raising=False)  # 模拟新进程：只剩磁盘记录
 
         _only_c_is_broken(monkeypatch)
-        assert ms.apply_effective_tier() == "B"
+        assert ms.apply_effective_tier() == "D"
 
-        assert mc.load_tier() == "B", "运行时没降下来"
+        assert mc.load_tier() == "D", "运行时没降下来"
         after = json.loads(mc._STATE_FILE.read_text(encoding="utf-8"))
         assert after == before, "降级把用户存的选择改写了"
 
@@ -122,9 +125,9 @@ class TestDegradingDoesNotRewriteTheRecord:
         _only_c_is_broken(monkeypatch)
         ms.apply_effective_tier()
 
-        assert mc.main_brain() == mc.default_main_brain_for_tier("B")
+        assert mc.main_brain() == mc.default_main_brain_for_tier("D")
         assert mc.main_brain() != "qwen3.6:35b-a3b"
-        assert mc.active_tags() == [mc.default_main_brain_for_tier("B")]
+        assert mc.default_main_brain_for_tier("D") in mc.active_tags()
 
     def test_a_custom_model_outside_the_catalog_is_never_touched(self, isolated, monkeypatch):
         """目录外的自定义模型是用户显式填的 —— 与 save_tier "显式一律尊重"同一立场。"""
@@ -136,7 +139,7 @@ class TestDegradingDoesNotRewriteTheRecord:
         _only_c_is_broken(monkeypatch)
         ms.apply_effective_tier()
 
-        assert mc.load_tier() == "B", "档位该降的还是要降"
+        assert mc.load_tier() == "D", "档位该降的还是要降"
         assert mc.main_brain() == "my-own/finetune:v3", "把用户自己填的模型改掉了"
 
     def test_no_degrade_reports_nothing_happened(self, isolated, monkeypatch):
@@ -159,7 +162,7 @@ class TestDegradingDoesNotRewriteTheRecord:
         _only_c_is_broken(monkeypatch)
         returned = ms.resolve_main_brain(interactive=False)
 
-        assert returned == mc.default_main_brain_for_tier("B")
+        assert returned == mc.default_main_brain_for_tier("D")
         assert json.loads(mc._STATE_FILE.read_text(encoding="utf-8")) == before
 
     def test_an_undegraded_boot_still_persists_as_before(self, isolated, monkeypatch):
@@ -229,6 +232,27 @@ class TestTheFootprintIsReportedAsARange:
     def test_a_non_moe_tier_has_no_spread(self):
         lo, hi = mc.tier_runtime_footprint_range_mb("B")
         assert lo == hi
+
+    def test_the_dense_dual_tier_owes_no_iou(self):
+        """D 档存在的全部理由：它的显存账**不欠**专家卸载那张票。
+
+        差为 0 = 这一档的预算里没有"假设某件事成立"的部分。C 档差 10700 MB，
+        那正是它在多数机器上判不可跑的原因。这两个数放在一起，D 档为什么该排在
+        C 档之前（门槛更低）就是自明的。
+        """
+        assert mc.tier_runtime_footprint_range_mb("D") == mc.tier_runtime_footprint_range_mb("D")[:1] * 2
+        c_lo, c_hi = mc.tier_runtime_footprint_range_mb("C")
+        assert c_hi > c_lo, "C 档的卸载假设消失了？那 D 档就没有存在理由了"
+
+    def test_the_dense_reasoning_slot_is_declared_not_moe(self):
+        """必须是显式 ``False``，不是 ``None``（没人填过）。
+
+        ``None`` 会让 ``resolve_is_moe`` 退回命名惯例兜底去猜；而调度器一旦把它当
+        MoE，就会对一个稠密模型尝试专家卸载拆分 —— 拆出来的分配是没有意义的。
+        """
+        spec = mc.exact_model("qwythos-9b-v2")
+        assert spec.is_moe is False
+        assert spec.runtime_mb() >= spec.size_mb(), "稠密模型的驻留量不该小于权重（那是卸载才有的事）"
 
     def test_the_single_value_is_the_optimistic_head(self):
         for key in mc.tier_keys():

@@ -398,9 +398,14 @@ def test_catalog_tiers_and_models_unchanged() -> None:
     """
     from core.model_catalog import all_models, all_tiers
 
-    assert [t.key for t in all_tiers()] == ["A", "B", "C"]
-    assert {t.key: t.kind for t in all_tiers()} == {"A": "single", "B": "single", "C": "composite"}
-    assert len(all_models()) == 5
+    assert [t.key for t in all_tiers()] == ["A", "B", "D", "C"]
+    assert {t.key: t.kind for t in all_tiers()} == {
+        "A": "single",
+        "B": "single",
+        "D": "composite",
+        "C": "composite",
+    }
+    assert len(all_models()) == 6
 
 
 def test_llama_cpp_source_is_admitted_to_choices() -> None:

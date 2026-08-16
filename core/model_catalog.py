@@ -72,6 +72,18 @@ _LEGACY_TIER_FILE = PROJECT_ROOT / ".galaxy_tier"
 _LEGACY_MODEL_FILE = PROJECT_ROOT / ".galaxy_model"
 
 
+#: 没填过 ``max_ctx_val`` 的型号按多长算 —— 就是 ``LlamaCppBackend`` 原来写死的那个值。
+#:
+#: 定成"沿用旧常数"而不是定成一个更大的数，是为了让这一栏成为**纯加法**:没人填过的
+#: 型号，上下文行为与加这一栏之前逐字节一致。要放开哪个型号，就去给它填 ``max_ctx_val``,
+#: 而不是把这个默认值调大 —— 调大它等于替所有没量过的型号做主张。
+DEFAULT_MAX_CTX = 4096
+
+#: 上下文预算的下限。再挤也不能低于这个数,否则模型连系统提示 + 工具表都装不下,
+#: 表现是"它怎么什么都记不住",而不是"显存不够"。
+MIN_CTX = 2048
+
+
 # ---------------------------------------------------------------------------
 # 能力与模型规格
 # ---------------------------------------------------------------------------
@@ -124,6 +136,32 @@ class ModelSpec:
     #:
     #: ``0`` = 没人量过 → :meth:`runtime_mb` 退回权重大小(即历史行为,不臆造数字)。
     runtime_mb_val: int = 0
+    #: 这个型号**最长能吃多少 token 上下文**。
+    #:
+    #: 原来这个数根本无处可写:加载器里写死 ``self._n_ctx = 4096``,一个常数,
+    #: 既不知道模型能吃多长(Qwythos-9B 能吃 1M),也不知道显存够不够。于是
+    #: **能力被写死的常数封顶**,而且封在哪儿没有任何一处说得出来。
+    #:
+    #: ``0`` = 没人填过 → :meth:`max_ctx` 退回 :data:`DEFAULT_MAX_CTX`(即原来那个
+    #: 4096)。**没填过的型号行为一个字不变** —— 这一栏是加法,不是改法。
+    max_ctx_val: int = 0
+    #: 每 1K 上下文的 KV cache 要多少加速器内存(MB)。上下文预算的分母。
+    #:
+    #: 单列一栏而不是按层数/头数现算,理由与 ``runtime_mb_val`` 同:那几个结构参数
+    #: 目录里一个都没有,现算等于在调用点上编。这一栏是**显式声明的假设**,
+    #: 量过就填、没量过就是 0,而 0 会让上下文预算退回"只认模型上限、不敢按显存放大"。
+    #:
+    #: 注意 Qwythos 这类混合架构(3:1 线性注意力 + 全注意力)的 KV 增长远小于同尺寸
+    #: 纯注意力模型 —— 更不该用一条通用公式套。
+    kv_mb_per_1k_val: int = 0
+
+    def max_ctx(self) -> int:
+        """最长能吃多少 token；没填过退回 :data:`DEFAULT_MAX_CTX`。"""
+        return int(self.max_ctx_val or 0) or DEFAULT_MAX_CTX
+
+    def kv_mb_per_1k(self) -> int:
+        """每 1K 上下文的 KV cache(MB)；``0`` = 没量过，调用方不得据此放大上下文。"""
+        return int(self.kv_mb_per_1k_val or 0)
 
     def size_mb(self) -> int:
         """权重大小(MB)——下载量 / 磁盘占用 / mmap 量。未定义返回 0。"""
@@ -205,6 +243,32 @@ _MODELS: Dict[str, ModelSpec] = {
         size_mb_val=18000,
         runtime_mb_val=7300,
         is_moe=True,
+    ),
+    "qwythos-9b-v2": ModelSpec(
+        "qwythos-9b-v2",
+        "Qwythos · 9B v2",
+        "稠密推理位:长上下文 · 工具编排(不需专家卸载,显存门槛低)",
+        ModelCapability(vision=False, audio_in=False, audio_out=False, tools=True),
+        source="llama_cpp",
+        requires_gpu=True,
+        # Q4_K_M 量化下的权重体积。**这个数是按 Q4_K_M 记的**,换量化必须跟着改:
+        # Q8_0 约 9.5 GB、bf16 原始权重约 18 GB,拿这一栏去做准入,量化对不上就是
+        # 一次"判成放得下、加载到一半 OOM"。
+        size_mb_val=5600,
+        # 权重 + KV + 运行时开销,按 DEFAULT_MAX_CTX 那档上下文估。
+        runtime_mb_val=7000,
+        # **明确不是 MoE**(而不是 None"没人填过")。它是 3:1 的线性注意力(SSM)+
+        # 全注意力混合架构,稠密 —— 没有专家可卸,``--n-cpu-moe`` 对它没有意义。
+        # 这一条正是它与 35B-A3B 的关键差别:35B 的显存账建立在专家卸载生效之上,
+        # 而这一位不欠这张空头支票,装了标准 llama-cpp-python 就能跑。
+        is_moe=False,
+        # 它能吃 1M(YaRN rope-scaling)。填真实上限,能不能开到这么长由
+        # ComputeScheduler.context_budget_for 按显存和实际装配量决定,不在这里封顶。
+        max_ctx_val=1048576,
+        # **没量过**。混合架构的 KV 增长远小于同尺寸纯注意力模型,套通用公式会
+        # 高估一大截;而高估的后果是白白把上下文压小。量一次填进来即可,
+        # 在此之前上下文预算不会拿显存去放大它(见 ModelSpec.kv_mb_per_1k)。
+        kv_mb_per_1k_val=0,
     ),
 }
 
@@ -375,11 +439,24 @@ _PERCEPTION_CANDIDATES: List[str] = [
     "gemma4:e2b",
 ]
 
-#: C 档推理位的候选。目前只有一个;要加备选就往这里添,机制与感知位同一套。
-#: 加的时候注意:不同型号的专家卸载拆分结果不一样,换完必须重走 ``_split_moe``,
+#: C 档推理位的候选（MoE·要专家卸载）。
+#:
+#: 为什么两个推理位是**两个档**而不是同一个槽位的两个候选:档才是推荐器
+#: (:func:`~core.model_selection.recommend_tier`)和可跑性探针
+#: (:func:`~core.runtime_readiness.tier_is_runnable`)工作的单位 —— 它们只能回答
+#: "这个档跑不跑得起来",没法回答"这个档配这个候选跑不跑得起来"。而这两位的硬件
+#: 门槛差着一整个级别:35B 的显存账建立在专家卸载之上,9B 稠密不欠这张票。
+#: 塞进同一个槽位,推荐器就永远说不出"这台机器能跑 9B 那版、跑不了 35B 那版"。
+#:
+#: 加候选时注意:不同型号的专家卸载拆分结果不一样,换完必须重走 ``_split_moe``,
 #: 不能沿用上一位的分配 —— ``reconcile_tier`` 已经是每位单独算,天然满足。
 _REASONING_CANDIDATES: List[str] = [
     "qwen3.6:35b-a3b",
+]
+
+#: D 档推理位的候选（稠密·不需要专家卸载）。
+_REASONING_CANDIDATES_DENSE: List[str] = [
+    "qwythos-9b-v2",
 ]
 
 
@@ -400,8 +477,8 @@ _TIERS: Dict[str, Tier] = {
     ),
     "C": Tier(
         "C",
-        "C 档 · 双模型本地主脑",
-        "推理位 Qwen3.6-35B-A3B 常驻独显；感知位四选一(Gemma 4 系 / MiniCPM-o)走核显，可随时换",
+        "C 档 · 双模型 · 35B 推理位",
+        "推理位 Qwen3.6-35B-A3B(MoE，要专家卸载)常驻独显；感知位四选一(Gemma 4 系 / MiniCPM-o)走核显，可随时换",
         "composite",
         [
             # 感知位落核显:与推理位的独显互不抢显存,这正是双模型能同时在岗的前提。
@@ -411,11 +488,39 @@ _TIERS: Dict[str, Tier] = {
             BrainSlot(SLOT_REASONING, _REASONING_CANDIDATES, placement="cuda", resident=True),
         ],
     ),
+    "D": Tier(
+        "D",
+        "D 档 · 双模型 · 9B 推理位",
+        "推理位 Qwythos-9B v2(稠密，不需专家卸载)常驻独显；感知位与 C 档同一份四选一，可随时换",
+        "composite",
+        [
+            BrainSlot(SLOT_PERCEPTION, _PERCEPTION_CANDIDATES, placement="intel_igpu", resident=False),
+            BrainSlot(SLOT_REASONING, _REASONING_CANDIDATES_DENSE, placement="cuda", resident=True),
+        ],
+    ),
 }
 
+#: 全部档位键，**由低到高**——低/高指的是**硬件门槛**，不是字母序，也不是模型强弱。
+#:
+#: 这个顺序是有语义的:``recommend_tier`` 从高往低找第一个"带余量装得下且跑得起来"
+#: 的档,``effective_tier`` 跑不起来时只往**下**降。所以排在哪里 = 这个档的门槛多高。
+#:
+#: D 档排在 C 档**之前**(即门槛更低),因为:
+#:
+#: * D 的推理位是稠密 9B,装了标准 ``llama-cpp-python`` 就能跑;
+#: * C 的推理位是 35B-A3B,显存账整个建立在**专家卸载生效**上,而 PyPI 上的
+#:   ``llama-cpp-python`` 至今不透出 ``n_cpu_moe``——多数机器上 C 档直接判不可跑。
+#:
+#: 于是行为是:有卸载能力的机器推 C(更强的那位);没有的机器 C 判不可跑、自动落到 D,
+#: 仍然拿得到双模型形态,而不是一路跌回 B 档单模型。这正是 ``effective_tier``
+#: 那条降级路径想要的形状。
+#:
+#: **面板上会看到 A、B、D、C 这个顺序**——字母不连续是刻意的,改成字母序就会让
+#: 推荐器优先推 D、C 档永远推不出去。要调整优先级请改这里的顺序,不要改字母。
+_TIER_KEYS = ("A", "B", "D", "C")
+
+#: 默认仍是 A 档单模型 —— 加 C/D 档不改变任何既有安装的行为。
 _DEFAULT_TIER = "A"
-#: 默认仍是 A 档单模型 —— 加了 C 档不改变任何既有安装的行为。
-_TIER_KEYS = ("A", "B", "C")
 
 
 # ---------------------------------------------------------------------------

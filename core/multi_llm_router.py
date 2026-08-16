@@ -1210,13 +1210,25 @@ class OllamaAdapter(BaseProviderAdapter):
         _options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
         # num_ctx 显式设置:系统提示+工具定义+记忆+历史很容易超过模型默认上下文
         # (常为 4096),一旦溢出 Ollama 滑窗截断 → 前缀 KV 缓存每轮全废 → 每轮
-        # ReAct 全量重预填,CPU 机上就是"越聊越慢"。默认 8192;设 0/空 则不传
-        # (回到模型默认)。
+        # ReAct 全量重预填,CPU 机上就是"越聊越慢"。设 0/空 则不传(回到模型默认)。
+        #
+        # 默认值**不再是写死的 8192**。那个数是拍的:本仓库按自己配的预算
+        # (GALAXY_TOOLS_MAX 个工具定义 + GALAXY_TOOL_PRUNE_KEEP_ROUNDS 轮工具结果
+        # + 系统提示)一次能装配到一万一千多 token —— 8192 同样不够,只是比 llama.cpp
+        # 那条路的 4096 好一点。两条加载路径各拍一个数、都没算过实际装配量,正是
+        # "同一判据两处各写各的"。现在两边都问 ComputeScheduler.context_budget_for。
         try:
-            _num_ctx = int(os.environ.get("GALAXY_OLLAMA_NUM_CTX", "8192"))
+            _env_num_ctx = os.environ.get("GALAXY_OLLAMA_NUM_CTX", "").strip()
+            if _env_num_ctx:
+                _num_ctx = int(_env_num_ctx)  # 显式指定一律尊重(含 0 = 不传)
+            else:
+                from core.compute_scheduler import get_compute_scheduler
+
+                _num_ctx, _ctx_why = get_compute_scheduler().context_budget_for(model)
+                logger.debug("Ollama 上下文预算: %s → num_ctx=%s(%s)", model, _num_ctx, _ctx_why)
             if _num_ctx > 0:
                 _options["num_ctx"] = _num_ctx
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, Exception):  # noqa: BLE001 — 算不出来退回原来的保守默认
             _options["num_ctx"] = 8192
         body = {
             "model": model,

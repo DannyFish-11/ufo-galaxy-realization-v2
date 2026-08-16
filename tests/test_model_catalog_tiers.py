@@ -31,9 +31,14 @@ def _clean_env(tmp_path, monkeypatch):
 
 
 class TestCatalogStructure:
-    def test_tiers_are_ab_single_plus_c_composite(self):
-        assert [t.key for t in mc.all_tiers()] == ["A", "B", "C"]
-        assert [t.kind for t in mc.all_tiers()] == ["single", "single", "composite"]
+    def test_tiers_are_ab_single_plus_cd_composite(self):
+        """顺序是**按硬件门槛**由低到高，不是字母序 —— D 排在 C 之前是刻意的。
+
+        D 档推理位是稠密 9B(不需专家卸载)，门槛低于 C 档的 35B-A3B。改成字母序
+        会让推荐器优先推 D、C 档永远推不出去，见 model_catalog._TIER_KEYS。
+        """
+        assert [t.key for t in mc.all_tiers()] == ["A", "B", "D", "C"]
+        assert [t.kind for t in mc.all_tiers()] == ["single", "single", "composite", "composite"]
 
     def test_tier_A_is_gemma_single(self):
         t = mc.get_tier("A")
@@ -98,6 +103,7 @@ class TestUnifiedNoHardcode:
             "gemma4:e4b",
             "gemma4:12b",
             "openbmb/minicpm-o4.5",
+            "qwythos-9b-v2",
             "qwen3.6:35b-a3b",
         ]
 
@@ -160,8 +166,8 @@ class TestModelsAPI:
         from core.routes.models import get_catalog
 
         snap = asyncio.run(get_catalog())
-        assert snap["current_tier"] in ("A", "B", "C")
-        assert len(snap["tiers"]) == 3
+        assert snap["current_tier"] in ("A", "B", "D", "C")
+        assert len(snap["tiers"]) == 4
         for t in snap["tiers"]:
             assert "effective_io" in t and "models" in t
             # 槽位要真的出到线上 —— 面板据此显示"哪一位、现在是谁、还能换成谁"。

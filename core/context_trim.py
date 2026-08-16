@@ -35,6 +35,55 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+#: 字符 → token 的换算分母。**刻意取小**(即高估 token 数)。
+#:
+#: 混合中英文本大致 2.5–3.5 字符/token(中文更接近 1.5,英文更接近 4)。这里取保守的
+#: 一端:估多了只是把上下文开大一点,估少了是**装不下却以为装得下**,而装不下的后果
+#: 是在 llama.cpp 那层**静默截断**——用户看到的是"它怎么忘了前面说的",不是报错。
+_CHARS_PER_TOKEN = 2.5
+
+#: 一条工具定义(名字 + 描述 + JSON Schema)大约折多少 token。
+#:
+#: 没有按真实工具表现算,是因为工具表是运行时才装配的、每次不一样;而这个数要在
+#: **加载模型之前**就得出来(``n_ctx`` 是加载参数,定了就不能改)。所以这里要的是
+#: "这个仓库最多会装多少",不是"这一轮实际装了多少"。
+_TOKENS_PER_TOOL_DEF = 180
+
+#: 系统提示 + 人格 + 会话历史 + 留给模型回复的余量,合计按多少 token 预留。
+#: 与上面两条一样:是**这个仓库的装配规模**,不是某一轮的实测值。
+_TOKENS_BASELINE = 2048
+
+
+def assembled_token_demand() -> int:
+    """按**本仓库自己配的那几个预算**推出:一次请求最多会装配多少 token。
+
+    为什么要有这个函数
+    ==================
+    ``n_ctx`` 原来写死 4096,而这个仓库实际会装配多少,从来没有一处算过。两头是断的:
+
+    * 这里按**字符数**和**工具条数**裁(``GALAXY_TOOL_RESULT_MAX_CHARS`` /
+      ``GALAXY_TOOLS_MAX``),完全不知道模型的 token 窗口有多大;
+    * ``LlamaCppBackend`` 按 **token** 分配 4096,完全不知道上面装了多少。
+
+    两个数没有任何一处核对。装配量超了就在 llama.cpp 那层被悄悄截断 —— 表现是
+    "它记不住前面说的",而不是任何一条错误。**这个函数就是把"需要多长"这一端
+    变成一个说得出来的数**,好让分配那一端能拿它去比。
+
+    判据全部取自本模块已有的那几个 env 预算,不新造配置项 —— 改 ``GALAXY_TOOLS_MAX``
+    之类的时候,这里跟着变,不需要谁记得同步。
+
+    Returns:
+        这次装配的 token 上界(保守估计,宁可估多)。
+    """
+    tools = max(0, _env_int("GALAXY_TOOLS_MAX", 24))
+    result_chars = max(0, _env_int("GALAXY_TOOL_RESULT_MAX_CHARS", 4000))
+    keep_rounds = max(0, _env_int("GALAXY_TOOL_PRUNE_KEEP_ROUNDS", 3))
+
+    tool_defs = tools * _TOKENS_PER_TOOL_DEF
+    tool_results = int(result_chars * keep_rounds / _CHARS_PER_TOKEN)
+    return int(tool_defs + tool_results + _TOKENS_BASELINE)
+
+
 def _core_markers() -> tuple:
     """热核工具名标记(每轮几乎必用的元能力)。可用 GALAXY_TOOLS_CORE 覆盖
     (逗号分隔的名字子串);留空则用内置默认。"""
