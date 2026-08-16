@@ -80,6 +80,67 @@ bash stop.sh           # Linux/macOS
 
 ---
 
+## 🧠 选主脑档位（首次启动会问你）
+
+第一次 `python main.py` 时，终端会按**实际探测到的硬件**推荐一档并列出全部档位：
+
+| 档 | 组成 | 看 / 听 / 说 | 硬件门槛 |
+|----|------|-------------|---------|
+| **A** | Gemma 4 系（单模型，档内按显存再挑一个） | 原生 / 原生 / TTS 桥 | 无独显也能跑 |
+| **B** | MiniCPM-o 4.5（单模型，全模态） | 全原生 | 约 11 GB 显存（**跑起来**的量，不是 6 GB 的权重量） |
+| **C** | **双模型**：推理位 Qwen3.6-35B-A3B 常驻独显 + 感知位（Gemma 4 系 / MiniCPM-o 四选一，可随时换）走核显 | 全原生 | 见下 |
+
+三点值得先知道：
+
+- **档位和云端 API 不是二选一。** 本地两位、云端 API 三者同时存在、同时可用；
+  只要其中任意一个在，系统都跑得下来。云端 API 是给特定任务专门用的，不是"兜底"。
+- **感知位可以随时换人**，推理位相对常驻 —— 换感知位（换到 Gemma 4 还是 MiniCPM-o）
+  不会动独显上那一位。面板「模型」tab 或 `POST /api/v1/models/slot` 都能换。
+- **跑过 `install.sh` 也照样会问。** 生成的 `.env` 里 `OLLAMA_MODEL` 刻意留空；
+  一旦它有值，选档界面就会被跳过（`resolve_main_brain` 的第一条判据就是它）。
+
+### C 档：把推理位真正架起来
+
+推理位登记的驻留量是 7.3 GB，而权重有 18 GB —— 这个差额**完全来自专家卸载**
+（MoE 每 token 只激活约 3B，把专家 FFN 留在内存、注意力留显存）。而 PyPI 上的
+`llama-cpp-python`（实测至 0.3.34）既不透出 `n_cpu_moe` 也不透出 `override_tensor`，
+**进程内这条路做不到这次卸载**。所以推理位走 llama.cpp 的 server：
+
+```bash
+# 体检：算出 --n-cpu-moe 的层数、检查权重和二进制在不在，并给出完整命令
+python scripts/setup_reasoning_slot.py
+
+# 顺带把权重下下来（约 18 GB）、把三个环境变量写进 .env
+python scripts/setup_reasoning_slot.py --download --write-env
+
+# 直接把 llama-server 拉起来（前台运行）
+python scripts/setup_reasoning_slot.py --start
+```
+
+`llama-server` 二进制需要**你自己装**（脚本不会替你下载并执行二进制）：
+
+```bash
+git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
+cmake -B build -DGGML_CUDA=ON && cmake --build build -j --target llama-server
+```
+
+装在非标准位置就用 `GALAXY_LLAMA_SERVER_BIN=/绝对/路径` 指过来。接进路由的三个键：
+
+```bash
+GALAXY_LOCAL_OPENAI_URL=http://127.0.0.1:18080/v1
+GALAXY_LOCAL_OPENAI_MODEL=qwen3.6:35b-a3b
+GALAXY_LOCAL_OPENAI_SERVES=qwen3.6:35b-a3b   # 声明这个 server 伺候的是哪一位
+```
+
+若你的 server 按自己那套命名报模型 id（不是目录里的 tag），把 `_SERVES` 设成目录
+tag 即可 —— 路由靠它把请求投准槽位。
+
+> **少跑一个模型会明说。** 某一位的加载后端没装、或者装了也做不到目录声称的落位时，
+> 每次启动的终端上都会打出具体是哪一位、缺什么、怎么装；面板的 `/api/v1/models/tier`
+> 与 `/slot` 响应里也带同一份 `runtime_gaps`。不会出现"以为两个都在跑、其实只有一个"。
+
+---
+
 ## 🔧 详细配置步骤
 
 ### 方案 A：交互式配置向导（推荐新手）

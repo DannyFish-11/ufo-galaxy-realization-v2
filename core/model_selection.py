@@ -219,25 +219,94 @@ def save_choice(tag: str) -> None:
         os.environ["OLLAMA_MODEL"] = tag
 
 
+def _tier_runtime_need_mb(tier_key: str) -> int:
+    """这一档**同时在岗**的几位加起来要多少加速器内存 —— 判据取自目录唯一那处。"""
+    try:
+        from core.model_catalog import tier_runtime_footprint_mb
+
+        return int(tier_runtime_footprint_mb(tier_key) or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None) -> str:
-    """按硬件推荐档位：无独显→A；有显卡且够跑全模态单模型(MiniCPM-o 约 6GB)→B。"""
+    """按硬件推荐档位：无独显→A；装得下且**跑得起来**的最高档优先。
+
+    两条判据缺一不可，此前只有前一条：
+
+    1. **装得下** —— 按 :func:`core.model_catalog.runtime_footprint_mb` 算这一档
+       同时在岗的几位的驻留量(不是权重量，见 :func:`_brain_runtime` 的说明)；
+    2. **跑得起来** —— 按 :func:`core.runtime_readiness.tier_is_runnable` 问这台机器
+       现在的运行时做不做得到。C 档推理位要 ``llama-cpp-python`` **且**要它支持专家
+       卸载；缺任何一条，推 C 档就等于把失败推迟到加载时——用户看到的会是"模型带
+       不动"，而不是"你还缺个依赖"。
+
+    C 档此前**根本不在候选里**(这个函数只认识 A/B)，于是新装机器无论显卡多大都只会
+    被推到 B 档，双模型档只能靠用户自己在列表里翻到。
+
+    第 1 条是**有意偏保守**的：复合档的几位可能落在不同加速器上(C 档感知位走核显、
+    推理位走独显)，这里却拿总和去比单个 ``max_model_size_mb``。宁可少推一档，也不
+    推一个开机就 OOM 的档 —— 想要的人在列表里仍然选得到，只是不默认推。
+    """
     if has_gpu is None or max_mb is None:
         _mb, _gpu, _ = get_compute_summary()
         max_mb = _mb if max_mb is None else max_mb
         has_gpu = _gpu if has_gpu is None else has_gpu
     if not has_gpu:
         return "A"
-    # B 档 MiniCPM-o 4.5 约 6GB。
-    if max_mb and max_mb >= 6000:
-        return "B"
+    try:
+        from core.model_catalog import tier_keys
+        from core.runtime_readiness import tier_is_runnable
+    except Exception:  # noqa: BLE001 — 目录/就绪度不可用时退回原来的两档判断
+        return "B" if (max_mb and max_mb >= 6000) else "A"
+    # 从高到低找第一个"装得下且跑得起来"的档；A 档是无条件保底(纯 CPU 也能跑)。
+    for key in reversed([k for k in tier_keys() if k != "A"]):
+        need = _tier_runtime_need_mb(key)
+        if not need or not max_mb or max_mb < need:
+            continue
+        if tier_is_runnable(key):
+            return key
     return "A"
 
 
-def interactive_select() -> str:
-    """AB 两档选择（克隆界面 / 启动时）。返回最终生效的主脑 tag（"" = 跳过）。
+def print_runtime_gaps(tier_key: str, *, prefix: str = "  ") -> List[Dict[str, str]]:
+    """把这一档的运行时缺口打到终端上，返回缺口列表（无缺口 → 空表、什么都不打）。
 
-    A 档 Gemma 系（单选，档内按硬件再挑一个）· B 档 MiniCPM-o 全模态（单）。
-    选定后经 model_catalog.save_tier 持久化档位并联动 OLLAMA_MODEL。
+    为什么要在**选档当场**打
+    ========================
+    缺口本来只在两个 HTTP 端点的响应里回。可克隆完第一次启动时用户还没进面板：
+    选了 C 档 → 推理位加载抛 ``No module named 'llama_cpp'`` → 被捕获、撤账、写一行
+    DEBUG 日志 → 终端上**一个字都没有**。用户以为双模型跑起来了，实际只有感知位在岗。
+
+    判据不在这里，在 :mod:`core.runtime_readiness`——终端和面板读的是同一份。
+    """
+    from core import cli_render as r
+
+    # 探测**调用时**也会抛，不只是 import 时。只裹 import 的话，一次探测异常会
+    # 直接把启动打挂 —— 而这一层的职责只是"报缺口"，报不出来就该安静退场。
+    try:
+        from core.runtime_readiness import format_gaps, slot_runtime_gaps
+
+        gaps = slot_runtime_gaps(tier_key)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("运行时就绪度不可评估: %s", exc)
+        return []
+    if not gaps:
+        return []
+    print()
+    r.phase("依赖", f"{tier_key} 档有 {len(gaps)} 位跑不起来 —— 这一位不会上岗", "warn")
+    for line in format_gaps(gaps):
+        print(f"{prefix}  {line}")
+    return gaps
+
+
+def interactive_select() -> str:
+    """档位选择（克隆界面 / 启动时）。返回最终生效的主脑 tag（"" = 跳过）。
+
+    档位清单、每档的模型与能力全部来自 ``model_catalog``——这里不写死有几档。
+    single 档档内按硬件再挑一个；composite 档整档一起跑，主脑由目录定（见
+    ``_resolve_brain``）。选定后经 ``model_catalog.save_tier`` 持久化档位并联动
+    ``OLLAMA_MODEL``，随即把该档的**运行时缺口**打到终端上。
     非交互终端返回推荐档位的主脑，不阻塞。
     """
     from core import cli_render as r
@@ -248,33 +317,65 @@ def interactive_select() -> str:
     rec_tier = recommend_tier(has_gpu, max_mb)
     tiers = mc.all_tiers()
 
-    def _resolve_brain(tier_key: str) -> str:
-        """档内定主脑：single 档按硬件在档内挑；composite 取档内第一个本地对话模型。"""
+    def _resolve_brain(tier_key: str) -> Optional[str]:
+        """档内定主脑：single 档按硬件在档内挑；composite **交给目录定**（返回 None）。
+
+        为什么 composite 一定要返回 None
+        ================================
+        这里原来写的是 ``return local[0].tag``——"取档内第一个本地模型"。C 档的
+        ``source=local`` 只有感知位(MiniCPM-o / Gemma；推理位是 ``source=llama_cpp``)，
+        于是这条规则算出**感知位**，再作为显式 ``main_brain`` 传给 ``save_tier``。
+        而 ``save_tier`` 对显式指定是一律尊重的，它自己那条正确规则（复合档主脑 =
+        **推理位**）就整个被盖掉：
+
+        .. code-block:: text
+
+            interactive_select._resolve_brain('C') → openbmb/minicpm-o4.5   ← 感知位
+            save_tier('C') 自己算出来的主脑        → qwen3.6:35b-a3b        ← 推理位
+
+        结果是 ``OLLAMA_MODEL`` 指向感知位，所有走它的文本请求全落到感知位上——正是
+        ``save_tier`` 里那段注释已经修好过一次的 bug，在第二个决策点原样重现。判据
+        必须只有一处：复合档的主脑归 ``model_catalog`` 管，这里不发表意见。
+        """
+        tier = mc.get_tier(tier_key)
+        if tier is not None and tier.kind != "single":
+            return None
         specs = mc.tier_models(tier_key)
         local = [s for s in specs if s.source == "local"]
         if not local:
-            return ""
-        tier = mc.get_tier(tier_key)
-        if tier and tier.kind == "single":
-            # 档内按硬件推荐：挑装得下的最强一个
-            rec = recommend(max_mb, has_gpu)
-            for s in local:
-                if s.tag == rec:
-                    return s.tag
-            return local[0].tag
-        return local[0].tag  # composite：对话主脑取第一个本地模型（如 MiniCPM-o）
+            return None
+        # 档内按硬件推荐：挑装得下的最强一个
+        rec = recommend(max_mb, has_gpu)
+        for s in local:
+            if s.tag == rec:
+                return s.tag
+        return local[0].tag
+
+    def _commit(tier_key: str) -> str:
+        """持久化档位并返回**真正落盘的**主脑 tag。
+
+        返回 ``save_tier`` 的返回值而不是 ``_resolve_brain`` 的入参——两者在复合档
+        上本来就不该相同(见上)，返回入参等于让调用方拿到一个和记录不一致的 tag。
+        """
+        brain = mc.save_tier(tier_key, main_brain=_resolve_brain(tier_key))
+        # 换档当场就把"这一位跑不起来"说出来 —— 不说的话用户要到加载失败才知道，
+        # 而加载失败是被捕获、只写日志的(见 compute_scheduler.reconcile_tier)。
+        print_runtime_gaps(tier_key)
+        return brain
 
     if not (sys.stdin and sys.stdin.isatty()):
         # 非交互：用推荐档，持久化并返回主脑
-        brain = _resolve_brain(rec_tier)
-        mc.save_tier(rec_tier, main_brain=brain)
-        return brain
+        return _commit(rec_tier)
 
     def _c(t, color):
         return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
 
     print()
-    print("  " + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN) + _c("  (AB 两档 · 本地原生多模态)", Colors.DIM))
+    print(
+        "  "
+        + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN)
+        + _c(f"  ({len(tiers)} 档 · 本地原生多模态)", Colors.DIM)
+    )
     r.rule()
     r.phase("硬件", hw, "info")
     r.phase("推荐", f"{rec_tier} 档  ←（按你的实际硬件）", "ok")
@@ -299,22 +400,16 @@ def interactive_select() -> str:
         try:
             choice = input(f"  请选择档位 [1-{len(tiers)} / 回车 / s]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
-            brain = _resolve_brain(rec_tier)
-            mc.save_tier(rec_tier, main_brain=brain)
-            return brain
+            return _commit(rec_tier)
         if choice == "":
-            brain = _resolve_brain(rec_tier)
-            mc.save_tier(rec_tier, main_brain=brain)
-            return brain
+            return _commit(rec_tier)
         if choice == "s":
             return ""
         if choice.isdigit():
             idx = int(choice) - 1
             if 0 <= idx < len(keys):
                 key = keys[idx]
-                brain = _resolve_brain(key)
-                mc.save_tier(key, main_brain=brain)
-                return brain
+                return _commit(key)
         print("  " + _c("⚠ 无效输入，请重新选择（或直接回车用推荐档）。", Colors.YELLOW))
 
 
@@ -452,19 +547,39 @@ def background_pull(tag: str) -> None:
 
 
 def resolve_main_brain(interactive: bool = True) -> str:
-    """解析并持久化最终主脑：环境 OLLAMA_MODEL > 已保存 > 交互选择 > 硬件推荐。"""
+    """解析并持久化最终主脑：环境 OLLAMA_MODEL > 已保存 > 交互选择 > 硬件推荐。
+
+    前两条路(env / 已保存)**跳过选档界面**，也就是第一次装完之后的每一次启动都走
+    这里。缺口报告因此不能只挂在选档那一刻：选过一次 C 档之后，往后每次开机推理位
+    照样加载失败、照样只写一行 DEBUG 日志、终端上照样一个字都没有。这里补上，让
+    "少跑一个模型"这件事在**每次**启动时都说得出来。
+    """
     env_model = os.environ.get("OLLAMA_MODEL", "").strip()
     if env_model:
         save_choice(env_model)
+        print_runtime_gaps(_current_tier())
         return env_model
     saved = load_choice()
     if saved:
         os.environ["OLLAMA_MODEL"] = saved
+        print_runtime_gaps(_current_tier())
         return saved
+    # 交互路自己在选定当场就报过了(见 interactive_select._commit)，这里不重复。
     chosen = interactive_select() if interactive else recommend()
     if chosen:
         save_choice(chosen)
+    if chosen and not interactive:
+        print_runtime_gaps(_current_tier())
     return chosen
+
+
+def _current_tier() -> str:
+    try:
+        from core.model_catalog import load_tier
+
+        return load_tier()
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 # ── 向后兼容：main.py / launch_desktop 仍以 MODELS[tag]["name"] 取展示名 ──

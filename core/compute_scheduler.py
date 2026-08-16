@@ -38,7 +38,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.ComputeScheduler")
 
@@ -368,8 +368,8 @@ class ComputeScheduler:
         #    模型跑起来"。判据全部来自本机实测（free VRAM / available RAM），
         #    不是外部传入的需求；拆不动返回 None，自然落到下面既有分支。
         if is_moe:
-            _avail_ram = int(getattr(getattr(profile, "cpu", None), "available_ram_mb", 0) or 0)
-            _n_cpu_moe = self._split_moe(model_size_mb, free_vram, _avail_ram, cfg)
+            _free_vram, _avail_ram = self.read_moe_inputs(profile)
+            _n_cpu_moe = self.moe_split_from_profile(model_size_mb, profile, cfg)
             if _n_cpu_moe is not None:
                 alloc = ModelAllocation(
                     model_id=model_id,
@@ -451,6 +451,49 @@ class ComputeScheduler:
         )
         self._models[model_id] = alloc
         return alloc
+
+    def moe_split_from_profile(
+        self,
+        model_size_mb: int,
+        profile=None,
+        cfg: Optional[SchedulerConfig] = None,
+    ) -> Optional[int]:
+        """从硬件画像里读出显存/内存，算出 ``--n-cpu-moe`` 的 N；拆不动返回 None。
+
+        **"从画像的哪两个字段读"这条判据只在这里。** :meth:`_split_moe` 只管算，
+        不管去哪儿取数 —— 取数写在调用点上就会各取各的，而这两个字段的位置都不直观：
+
+        * 可用显存在 ``profile.gpus[i].free_vram_mb``，且要取 free 最大的那块卡
+          （不是 ``total_vram_mb``，也不是第 0 块）；
+        * 可用内存在 ``profile.cpu.available_ram_mb`` —— **挂在 cpu 上，不在画像顶层**。
+
+        实测过取错的后果：从顶层读 ``available_ram_mb`` 恒得 0（这个字段在顶层压根
+        不存在），于是 :meth:`_split_moe` 的判据 3 恒不通过，**任何机器都返回 None**——
+        表现是"专家卸载在这台机器上拆不动"，而不是"我读错了字段"。
+        """
+        free_vram, avail_ram = self.read_moe_inputs(profile)
+        if free_vram <= 0:
+            return None
+        return self._split_moe(model_size_mb, free_vram, avail_ram, cfg)
+
+    @staticmethod
+    def read_moe_inputs(profile=None) -> Tuple[int, int]:
+        """从硬件画像里取 ``(可用显存 MB, 可用内存 MB)``。
+
+        单独一个方法是因为**取到的这两个数还要出现在分配理由里**：调用点若为了写日志
+        自己再读一次，就又是两处判据了 —— 事实上这里正出过一次，理由串里引用了一个
+        已经不存在的局部变量，flake8 的 F821 才拦住（MoE 分支一走就 ``NameError``）。
+        """
+        if profile is None:
+            from core.hardware_compute_profiler import get_compute_profile_sync
+
+            profile = get_compute_profile_sync()
+        gpus = getattr(profile, "gpus", None) or []
+        if not gpus:
+            return 0, 0
+        free_vram = int(getattr(max(gpus, key=lambda g: getattr(g, "free_vram_mb", 0)), "free_vram_mb", 0) or 0)
+        avail_ram = int(getattr(getattr(profile, "cpu", None), "available_ram_mb", 0) or 0)
+        return free_vram, avail_ram
 
     def _split_moe(
         self,

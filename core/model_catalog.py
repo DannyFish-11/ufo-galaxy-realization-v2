@@ -544,6 +544,30 @@ def active_tags(tier_key: str = "") -> List[str]:
     return out
 
 
+def tier_keys() -> List[str]:
+    """全部档位键，由低到高。"""
+    return list(_TIER_KEYS)
+
+
+def tier_runtime_footprint_mb(tier_key: str = "") -> int:
+    """这一档**同时在岗**的几位加起来占多少加速器内存(MB)。
+
+    推荐档位、以及"这台机器够不够"的判断只问这一处。三点容易写错的：
+
+    - 按 :func:`active_tags` 算，不是 ``model_tags`` —— 候选表里没被选中的那几个
+      根本不会加载，把它们计进来会把 C 档的门槛虚高一大截；
+    - 按 :meth:`ModelSpec.runtime_mb` 算，不是 ``size_mb`` —— 权重和驻留量差得远
+      (MiniCPM-o 4.5 权重 6 GB、跑起来 11 GB)；
+    - **求和**，因为复合档的几位是同时在岗的，不是二选一。
+    """
+    total = 0
+    for tag in active_tags(tier_key):
+        spec = get_model(tag)
+        if spec is not None:
+            total += spec.runtime_mb()
+    return total
+
+
 def resident_tags(tier_key: str = "") -> List[str]:
     """当前(或指定)档里**不许被淘汰**的模型 tag —— 调度器的钉住名单只问这一处。
 

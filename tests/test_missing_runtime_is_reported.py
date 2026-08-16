@@ -28,7 +28,8 @@ from __future__ import annotations
 import pytest
 
 import core.model_catalog as mc
-import core.routes.models as m
+import core.routes.models as routes_models
+import core.runtime_readiness as m
 
 
 class TestTheCriterionIsSingleSourced:
@@ -60,7 +61,7 @@ class TestTheCriterionIsSingleSourced:
 
 class TestGapsAreReported:
     def test_a_missing_backend_becomes_an_actionable_gap(self, monkeypatch):
-        monkeypatch.setattr(m, "_BACKEND_PIP", {"llama_cpp": "llama-cpp-python"})
+        monkeypatch.setattr(m, "BACKEND_PIP", {"llama_cpp": "llama-cpp-python"})
         monkeypatch.setattr(
             "core.local_model_backends.list_available_backends",
             lambda: ["ollama"],  # llama_cpp 没装
@@ -118,7 +119,7 @@ class TestTheEndpointsActuallyCarryIt:
     def test_the_response_includes_runtime_gaps(self, fn_name):
         import inspect
 
-        src = inspect.getsource(getattr(m, fn_name))
+        src = inspect.getsource(getattr(routes_models, fn_name))
         assert "slot_runtime_gaps(" in src, f"{fn_name} 没把运行时缺口带进响应 —— 又只剩日志了"
         assert "runtime_gaps" in src
 
@@ -193,3 +194,34 @@ class TestAnUnachievablePlacementIsAlsoAGap:
         monkeypatch.setattr("core.local_model_backends.moe_offload_supported", lambda: False)
         for key in ("A", "B"):
             assert [g for g in m.slot_runtime_gaps(key) if g["kind"] == "moe_offload_unavailable"] == []
+
+
+class TestTheCriterionHasOneHome:
+    """判据搬到 :mod:`core.runtime_readiness` 之后，两个消费方必须读的是同一份。
+
+    搬家的理由：这段判据原来长在 ``core/routes/models.py`` 里，只服务那两个 HTTP
+    端点。可"缺依赖"最该说的时机是**用户还没进面板的时候**——克隆完、选完档、启动时。
+    而启动路径不该 import 一个 FastAPI 路由模块，于是判据留在路由里就只能被抄一份，
+    再在某个后端上分家。
+    """
+
+    def test_the_route_module_re_exports_rather_than_reimplements(self):
+        import core.routes.models as rm
+        import core.runtime_readiness as rr
+
+        assert rm.slot_runtime_gaps is rr.slot_runtime_gaps, "路由自己又实现了一份"
+
+    def test_the_startup_path_does_not_import_a_route_module(self):
+        """选档/启动路径读缺口时**不许**走 core.routes.* —— 那会把 FastAPI 拖进启动期。"""
+        import inspect
+
+        import core.model_selection as ms
+
+        src = inspect.getsource(ms.print_runtime_gaps)
+        assert "core.runtime_readiness" in src
+        assert "core.routes" not in src
+
+    def test_a_runnable_tier_check_exists_for_the_recommender(self):
+        import core.runtime_readiness as rr
+
+        assert rr.tier_is_runnable("A") is True
