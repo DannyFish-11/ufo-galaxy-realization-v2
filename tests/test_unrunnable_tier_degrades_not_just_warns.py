@@ -85,12 +85,25 @@ class TestTheEffectiveTierFallsBack:
         assert rr.effective_tier("C") == "C"
 
     def test_this_machine_reproduces_it_for_real(self):
-        """本机装着 llama-cpp-python，但它不透出 n_cpu_moe —— 真实的 C 档跑不起来。
+        """真机复现：装了 llama-cpp-python、但它不透出 n_cpu_moe 时，C 跑不起来而 D 能跑。
 
-        装了卸载能力的机器上这条不适用，跳过而不是假装。
+        **两个前提都要显式检查，缺一条就跳过。** 这条钉的是"C 和 D 的差别只在专家
+        卸载"，而要看得出这个差别，得先有一台**装了 llama_cpp、只是缺卸载能力**的
+        机器：
+
+        * 装了卸载能力 → C 本来就跑得起来，没差别可看；
+        * **根本没装 llama_cpp** → C 和 D 的推理位都判 backend_missing，两个都跑不
+          起来，同样没差别可看。
+
+        第二条是这条测试最初漏掉的：它只查了 ``moe_offload_supported()``，把"本机装
+        了 llama_cpp"当成了不言自明的前提。开发机上装了、CI 上没装，于是本地绿、
+        CI 红 —— 断言写的是"D 不该受卸载缺失影响"，CI 上 D 挂掉的真实原因却是
+        整个后端没装，跟卸载一点关系没有。**测试把自己那台机器的环境当成了普遍前提。**
         """
-        from core.local_model_backends import moe_offload_supported
+        from core.local_model_backends import list_available_backends, moe_offload_supported
 
+        if "llama_cpp" not in list_available_backends():
+            pytest.skip("本机没装 llama-cpp-python —— 两个推理位都跑不起来，这条区分不出 C 与 D")
         if moe_offload_supported():
             pytest.skip("本机支持专家卸载，C 档本来就跑得起来")
         assert not rr.tier_is_runnable("C")
