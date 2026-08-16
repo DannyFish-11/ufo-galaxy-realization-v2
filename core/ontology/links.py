@@ -152,7 +152,15 @@ class LinkType:
 
 
 def _str_list(value: Any) -> List[str]:
-    """Normalise a field into a list of non-empty identifier strings."""
+    """Normalise a field into a list of non-empty identifier strings.
+
+    A non-iterable value means the relation field is not the shape its LinkType
+    declares.  Resolution still yields ``[]`` — the resolver contract is a list —
+    but it says so out loud: an empty result that silently means "couldn't read
+    it" is indistinguishable from "there genuinely are no targets", and that
+    conflation is the exact failure mode this whole object-anchoring effort
+    exists to remove.
+    """
     if value is None:
         return []
     if isinstance(value, str):
@@ -160,6 +168,12 @@ def _str_list(value: Any) -> List[str]:
     try:
         return [str(v) for v in value if str(v).strip()]
     except TypeError:
+        logger.warning(
+            "link field is not iterable (type=%s, value=%.80r); resolving to [] — "
+            "the declared LinkType and the object's actual shape disagree",
+            type(value).__name__,
+            value,
+        )
         return []
 
 
