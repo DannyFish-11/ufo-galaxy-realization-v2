@@ -153,6 +153,12 @@ class ExecutionResult(BaseModel):
     # PR-8v2: specialists-as-tools boundary metadata (advisory, non-authoritative)
     specialist_boundary: Optional[Dict[str, Any]] = None
     """Specialist layer boundary contract carried as execution metadata."""
+    experience_guidance: Optional[Dict[str, Any]] = None
+    """Whether past-task statistics moved this run's strategy, and on what evidence.
+
+    Advisory metadata, same shape of contract as ``specialist_boundary``.  Without
+    it, "why was this strategy chosen" is only answerable by reading logs — the
+    exact kind of undiagnosable outcome the experience layer exists to remove."""
     # C阶段 5C: 执行链路可视化细化 — latency / token / cost（均为可选，保持向后兼容）
     total_latency_ms: Optional[float] = None
     """整条执行链路总延迟（毫秒），等同于 duration_ms，额外暴露便于 UI 消费"""
@@ -761,6 +767,18 @@ class ExecutionPlanner:
                     _strategy_for_boundary,
                     device_id=plan.device_id,
                 )
+            # 经验制导的可观测性:这一次到底有没有被历史统计影响、依据是什么。
+            # 不落到结果上,"策略为什么是这个"就只能靠翻日志猜——而"结论不可追到
+            # 依据"正是本层要消除的那类缺陷,在自己身上留着说不过去。
+            try:
+                from core.cognitive.experience_guidance import build_experience_guidance_diagnostics
+
+                result.experience_guidance = build_experience_guidance_diagnostics(
+                    _experience_guidance,
+                    applied=_experience_influenced_strategy,
+                )
+            except Exception as _exp_diag_err:  # noqa: BLE001 — 诊断绝不影响执行
+                logger.debug("experience guidance diagnostics skipped: %s", _exp_diag_err)
             # 在结果中记录工具来源
             if result.task_result is None:
                 result.task_result = {}

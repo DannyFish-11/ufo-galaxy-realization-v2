@@ -305,12 +305,16 @@ class LinkTypeRegistry:
         return [self._links[n] for n in self.names()]
 
     def for_source(self, source_type: str) -> List[LinkType]:
-        """Every relation walkable *from* objects of *source_type*."""
-        return [link for link in self.all() if link.source_type == source_type]
+        """Every relation walkable *from* objects of *source_type*.
 
-    def for_target(self, target_type: str) -> List[LinkType]:
-        """Every relation that arrives *at* objects of *target_type*."""
-        return [link for link in self.all() if link.target_type == target_type]
+        Only the outbound direction is indexed.  A symmetric ``for_target()``
+        was written first and then removed: nothing walks *into* an object yet
+        (:meth:`~core.canonical_task_store.CanonicalTaskStore.related` walks out
+        of a stored task), and a public method with no caller is exactly the
+        unused surface this layer is supposed to be reducing.  Add it back
+        together with the consumer that needs it, not ahead of one.
+        """
+        return [link for link in self.all() if link.source_type == source_type]
 
     # ── Resolution ────────────────────────────────────────────────────────
 

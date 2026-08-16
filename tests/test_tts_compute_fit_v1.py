@@ -50,6 +50,9 @@ Group E — Wiring
   E01. speech_output 在选择时做预检。
   E02. 预检只告警不改选(不出现赋值给 choice)。
   E03. flag 已登记。
+  E04. 回退链真的被过滤了 —— 没人调用的过滤器等于没有过滤器。
+  E05. 默认值不冒充显式选择(POLICY_2 保护的是用户说出口的那个)。
+  E06. 每条链都以 sapi 收尾 —— 过滤器不可能让系统失声。
 """
 
 from __future__ import annotations
@@ -256,15 +259,47 @@ class TestGroupEWiring:
         import core.speech_output as mod
 
         src = inspect.getsource(mod._get_engine)
-        # The pre-flight region runs from where compute_fit is imported to where
-        # the engine chains begin. Slice on the *last* mention so the import line
-        # itself does not truncate the region being inspected.
+        # The pre-flight region runs from where compute_fit is first imported to
+        # where the chain filter begins — the filter is allowed to drop unfit
+        # engines from the *fallback* part, the pre-flight is not allowed to
+        # touch the choice at all. Slicing between them keeps the two apart.
         start = src.index("from core.tts.compute_fit import")
-        end = src.index("if choice ==", start)
+        end = src.index("filter_fallback_chain", start)
         preflight = src[start:end]
         assert "logger.warning" in preflight, "an unfit engine must produce a visible diagnostic"
         assert "choice =" not in preflight, "pre-check must never reassign the engine choice"
         assert "_engine =" not in preflight, "pre-check must never select an engine"
+
+    def test_e04_fallback_chain_is_actually_filtered(self):
+        """The chain filter must run on the real selection path, not just exist.
+
+        A filter nothing calls is the same defect as no filter: the user still
+        waits out a synthesis on an engine this machine cannot run.
+        """
+        import core.speech_output as mod
+
+        src = inspect.getsource(mod._get_engine)
+        assert "filter_fallback_chain" in src
+        assert "_FALLBACK_CHAINS" in src, "回退链必须是那张表,否则过滤器无处下手"
+
+    def test_e05_default_engine_is_not_treated_as_an_explicit_choice(self):
+        """POLICY_2 protects what the user *said*, not the value they never set.
+
+        Passing the default ``edge`` as ``explicit_choice`` would make the
+        default immune to filtering — a protection nobody asked for.
+        """
+        import core.speech_output as mod
+
+        src = inspect.getsource(mod._get_engine)
+        assert 'os.getenv("GALAXY_TTS_ENGINE", "").strip()' in src
+
+    def test_e06_every_chain_ends_in_a_guaranteed_voice(self):
+        """Every chain must end at sapi — the filter must not be able to mute us."""
+        import core.speech_output as mod
+
+        for choice, chain in mod._FALLBACK_CHAINS.items():
+            assert chain[-1] == "sapi", f"{choice} 链没有以 sapi 收尾 —— 可能整段静默"
+            assert chain[0] == choice or choice == "auto", f"{choice} 链的首选不是它自己"
 
     def test_e03_flag_registered(self):
         from flags import get_flag

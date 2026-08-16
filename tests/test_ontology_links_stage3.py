@@ -28,7 +28,7 @@ Group B — Declarations
   B02. Declared inverses are mutual and mirror their endpoint types.
   B03. Task relations cover every TaskGraphRelations field.
   B04. Device/capability/group/tag relations are declared.
-  B05. for_source / for_target index correctly.
+  B05. for_source indexes correctly; there is no unused inbound accessor.
   B06. to_dict() is JSON-safe.
   B07. Every declaration carries a description pointing at where it lives.
 
@@ -153,12 +153,19 @@ class TestGroupBDeclarations:
             "tag_marks_device",
         } <= names
 
-    def test_b05_indexes_by_endpoint(self, registry):
+    def test_b05_indexes_by_source_endpoint(self, registry):
+        """Outbound indexing only — there is deliberately no ``for_target()``.
+
+        An inbound index with no caller would be unused public surface, which is
+        the thing this layer exists to reduce.  The mirrored endpoints are still
+        checked, via ``validate()`` (B07) rather than via an unused accessor.
+        """
         from_task = {link.name for link in registry.for_source("CanonicalTask")}
         assert "task_depends_on" in from_task
         assert "capability_of_device" not in from_task
-        to_device = {link.name for link in registry.for_target("Device")}
-        assert {"task_targets_device", "capability_of_device"} <= to_device
+        assert not hasattr(registry, "for_target"), "重新引入了没有调用方的反向索引"
+        arriving_at_device = {link.name for link in registry.all() if link.target_type == "Device"}
+        assert {"task_targets_device", "capability_of_device"} <= arriving_at_device
 
     def test_b06_to_dict_json_safe(self, registry):
         payload = registry.to_dict()

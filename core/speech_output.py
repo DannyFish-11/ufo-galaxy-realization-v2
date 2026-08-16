@@ -20,7 +20,7 @@ import contextvars
 import logging
 import os
 import time
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -113,6 +113,27 @@ def _max_chars() -> int:
 _failed_engine_types: set = set()
 
 
+# 每个选择对应的回退链。**这是数据,不是六串 or**:写成表以后,算力预检才能对
+# 同一条链做一次过滤(见 core/tts/compute_fit.py 的 filter_fallback_chain),
+# 而不是在六个分支里各写一遍、各漏一遍。
+#
+# 每条链都以 kokoro→sapi 收尾:无论装了什么、网络如何,最后总能出声,
+# 且优先高音质离线(kokoro)而非机器人音(sapi)。
+_FALLBACK_CHAINS: Dict[str, Tuple[str, ...]] = {
+    # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才排在首位,不进任何
+    # 默认链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会显著加重延迟。
+    # 不可用/运行期失败仍落回默认链,绝不整段静默。
+    "indextts": ("indextts", "edge", "melo", "piper", "kokoro", "sapi"),
+    "melo": ("melo", "piper", "edge", "kokoro", "sapi"),
+    "piper": ("piper", "melo", "edge", "kokoro", "sapi"),
+    "kokoro": ("kokoro", "sapi"),
+    "sapi": ("sapi",),
+    "auto": ("edge", "kokoro", "melo", "piper", "sapi"),
+    # edge(默认)——运行期失败仍可经 demote 落到离线链。
+    "edge": ("edge", "kokoro", "melo", "piper", "sapi"),
+}
+
+
 def _get_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
@@ -122,6 +143,9 @@ def _get_engine() -> Optional[Any]:
     # sapi(Windows 自带·零依赖) | auto。每条链以 kokoro→sapi 收尾:
     # 无论装了什么、网络如何,最后总能出声,且优先高音质离线而非机器人音。
     choice = os.getenv("GALAXY_TTS_ENGINE", "edge").strip().lower()
+    # "用户说出口的选择"与"没设时的默认值"是两回事:只有前者才享有 POLICY_2 的
+    # 保护(不适配也照样尝试)。把默认的 edge 当成显式选择,等于让默认值也免疫过滤。
+    _explicit = choice if os.getenv("GALAXY_TTS_ENGINE", "").strip() else ""
 
     def _try_piper():
         if "PiperTTSEngine" in _failed_engine_types:
@@ -221,23 +245,34 @@ def _get_engine() -> Optional[Any]:
     except Exception as exc:  # noqa: BLE001 — 预检失败绝不影响出声
         logger.debug("TTS 算力预检跳过: %s", exc)
 
-    if choice == "indextts":
-        # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才启用,不进
-        # 任何默认回退链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会
-        # 显著加重延迟。不可用/运行期失败仍落回默认链,绝不整段静默。
-        _engine = _try_indextts() or _try_edge() or _try_melo() or _try_piper() or _try_kokoro() or _try_sapi()
-    elif choice == "melo":
-        _engine = _try_melo() or _try_piper() or _try_edge() or _try_kokoro() or _try_sapi()
-    elif choice == "piper":
-        _engine = _try_piper() or _try_melo() or _try_edge() or _try_kokoro() or _try_sapi()
-    elif choice == "kokoro":
-        _engine = _try_kokoro() or _try_sapi()
-    elif choice == "sapi":
-        _engine = _try_sapi()
-    elif choice == "auto":
-        _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
-    else:  # edge(默认)——运行期失败仍可经 demote 落到离线链;离线首选 kokoro(默认装机·神经音)
-        _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
+    _factories = {
+        "indextts": _try_indextts,
+        "edge": _try_edge,
+        "melo": _try_melo,
+        "piper": _try_piper,
+        "kokoro": _try_kokoro,
+        "sapi": _try_sapi,
+    }
+    _base_chain = list(_FALLBACK_CHAINS.get(choice, _FALLBACK_CHAINS["edge"]))
+
+    # 跑不动的引擎从**回退**部分剔除:等到合成那一刻才发现跑不动,代价是用户已经
+    # 等了十几秒。显式选择永远保留(POLICY_2)——推断信号不该顶掉用户说出口的选择。
+    # filter_fallback_chain 保证不返回空链:过滤器绝不能成为系统失声的原因。
+    try:
+        from core.tts.compute_fit import filter_fallback_chain
+
+        _chain = filter_fallback_chain(_base_chain, explicit_choice=_explicit)
+    except Exception as exc:  # noqa: BLE001 — 过滤不可用就走原链,绝不因此不出声
+        logger.debug("TTS 回退链过滤跳过: %s", exc)
+        _chain = _base_chain
+
+    for _name in _chain:
+        _factory = _factories.get(_name)
+        if _factory is None:
+            continue
+        _engine = _factory()
+        if _engine is not None:
+            break
 
     if _engine is None:
         logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")

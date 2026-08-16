@@ -1,7 +1,7 @@
 {
   "_comment": "File-size baseline for scripts/check_file_complexity.py. 每个条目 = 该文件被允许的最大行数(即记录时的实际行数)。超过就在 --strict 下失败。用 --update-baseline 重新生成;重新生成的 diff 会明确显示哪些文件涨了,请在评审时确认那是有意的。",
   "files": {
-    "core/agent/execution_planner.py": 1415,
+    "core/agent/execution_planner.py": 1433,
     "core/agent_factory.py": 1616,
     "core/agent_team.py": 1450,
     "core/android_delegated_runtime_lifecycle_coordinator.py": 1158,
@@ -57,7 +57,7 @@
     "core/full_system_baseline_v3.py": 2060,
     "core/github_installer.py": 1644,
     "core/hybrid_orchestration_continuity.py": 1283,
-    "core/local_brain_manager.py": 1126,
+    "core/local_brain_manager.py": 1138,
     "core/local_model_backends.py": 1001,
     "core/mainline_convergence.py": 1153,
     "core/master_brain.py": 2016,
