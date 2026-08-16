@@ -6,13 +6,16 @@
 听/说,得把它跑在**支持音频 I/O 的官方 server** 上,并把那条通路接进系统的
 统一模态协商层(core.modality_capability)。本模块就是这个后端 + 档位联动:
 
-  切到 B 档 → activate():
+  切到【含 MiniCPM-o 的档】(B 单模型档 / C 双模型档的感知位)→ activate():
     1. 确保 MiniCPM-o 官方 server 所需依赖装齐(缺就后台自动装,不阻塞切档);
     2. 探测/等待 server 可达;
     3. 注册【原生说】(speech_output.register_native_speech_backend)
        与【原生听】(供 modality_bridge 转写桥优先用 server 而非 Whisper);
     4. 打开 GALAXY_NATIVE_AUDIO 门控 → 协商层对 B 档判定"听/说=原生"。
-  切回 A 档 → deactivate():注销后端、关门控 → 协商层判定"听=ASR桥、说=TTS桥"。
+  切到【不含它的档】(如 A 档)→ deactivate():注销后端、关门控 → 协商层判定
+  "听=ASR桥、说=TTS桥"。判据是 tier_wants_native() 看档位构成,**不是档位字母**——
+  写死字母的话,含 MiniCPM-o 的复合档会被判成"不需要原生",而能力表那边照旧说
+  "说=原生",两份判据当场分家。
 
 **靠谱保证**:依赖没装齐 / server 不可达 / 任何一步失败 → 一律【如实回落到桥】
 (A 档那套 Whisper+TTS),绝不假装原生、绝不哑火、绝不阻断切档。全部网络/安装/
@@ -283,10 +286,38 @@ def _auto_activation_allowed() -> bool:
     return True
 
 
-def on_tier_changed(key: str, *, background: bool = True) -> None:
-    """由 model_catalog.save_tier 调用:B 档激活原生后端、其它档注销。best-effort。"""
+#: 本后端伺候的就是这一个型号(MiniCPM-o 官方 server)。判"该不该激活"看的是
+#: **当前档里有没有它**,不是档位字母。
+SERVED_MODEL_TAG: str = "openbmb/minicpm-o4.5"
+
+
+def tier_wants_native(key: str) -> bool:
+    """这一档需不需要原生听/说后端 —— 判据只此一处。
+
+    判据经过两次收窄,每次都是同一个错法的不同伪装:
+
+    1. 最早写死 ``key == "B"``。档位字母和"档里有没有这个模型"是两回事,
+       一出现含 MiniCPM-o 的复合档,写死字母的那一支就会去 ``deactivate()``。
+    2. 改成看整档构成(``SERVED_MODEL_TAG in tier.model_tags``)。感知位做成
+       **可换**之后这条又宽了:候选表里挂着 MiniCPM-o,但用户可能选的是 Gemma ——
+       那时不该激活原生后端,却会激活。
+
+    现在看的是**这一位上真正选中的那个**。与 ``tier_effective_io`` 同源:
+    那边也是按 :func:`~core.model_catalog.active_tags` 算的,两者永远同口径。
+    """
     try:
-        if (key or "").strip().upper() == "B":
+        from core.model_catalog import SLOT_PERCEPTION, model_for_role  # noqa: PLC0415
+
+        return model_for_role(SLOT_PERCEPTION, key) == SERVED_MODEL_TAG
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("感知位选择不可读(%s),按不需要原生处理: %s", key, exc)
+        return False
+
+
+def on_tier_changed(key: str, *, background: bool = True) -> None:
+    """由 model_catalog.save_tier 调用:档里含 MiniCPM-o 则激活原生后端,否则注销。"""
+    try:
+        if tier_wants_native(key):
             if _auto_activation_allowed():
                 activate(background=background)
         else:
@@ -296,13 +327,17 @@ def on_tier_changed(key: str, *, background: bool = True) -> None:
 
 
 NATIVE_MODAL_AUTHORITY: str = (
-    "NATIVE_MODAL_V1: core/native_modal.py | B 档 MiniCPM-o 官方 server 原生听/说后端 + "
-    "档位联动. 切 B→activate(依赖自动装+server 探测+注册听/说+开 GALAXY_NATIVE_AUDIO); "
-    "切 A→deactivate. 任何一步失败一律如实回落桥(Whisper/TTS),绝不假装原生."
+    "NATIVE_MODAL_V1: core/native_modal.py | MiniCPM-o 官方 server 原生听/说后端 + "
+    "档位联动. 切到【含 MiniCPM-o 的档】(B 单模型档 / C 双模型档的感知位)→activate"
+    "(依赖自动装+server 探测+注册听/说+开 GALAXY_NATIVE_AUDIO); 切到不含它的档→deactivate. "
+    "判据是 tier_wants_native() 看档位构成,不是档位字母. "
+    "任何一步失败一律如实回落桥(Whisper/TTS),绝不假装原生."
 )
 
 __all__ = [
     "MiniCPMNativeBackend",
+    "SERVED_MODEL_TAG",
+    "tier_wants_native",
     "MINICPM_CLIENT_PACKAGES",
     "activate",
     "deactivate",

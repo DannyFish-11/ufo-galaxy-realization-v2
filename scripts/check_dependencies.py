@@ -57,6 +57,10 @@ OPTIONAL_DEPS = {
     "psutil": "psutil",
     "apscheduler": "APScheduler",
     "python_multipart": "python-multipart",
+    # GGUF 本地推理后端。C 档(双模型)的推理位就走它 —— 缺了那一位不会上岗,
+    # 所以它得在这份清单里露面,而不是只躺在 requirements.txt 的存档注释里。
+    # 仍然是可选:GB 级、要编译、平台特定(见 requirements.txt 可选依赖存档段)。
+    "llama_cpp": "llama-cpp-python",
 }
 
 

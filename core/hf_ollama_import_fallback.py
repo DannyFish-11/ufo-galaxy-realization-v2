@@ -74,10 +74,49 @@ HF_GGUF_CANDIDATES: Dict[str, List[str]] = {
         "vikhyatk/moondream2",
         "bartowski/Qwen2-VL-2B-Instruct-GGUF",
     ],
+    # 双模型档的推理位。与上面同一套写法:先乐观试新名字,再落到训练数据里
+    # 高置信度真实存在的同架构 MoE(Qwen3-30B-A3B 官方/社区 GGUF)。存不存在
+    # 一律由 find_gguf_file() 运行时用 HfApi 核实,猜错的自动跳过。
+    "qwen3.6:35b-a3b": [
+        "Qwen/Qwen3.6-35B-A3B-GGUF",
+        "unsloth/Qwen3.6-35B-A3B-GGUF",
+        "Qwen/Qwen3-30B-A3B-GGUF",
+        "unsloth/Qwen3-30B-A3B-GGUF",
+        "bartowski/Qwen_Qwen3-30B-A3B-GGUF",
+    ],
 }
 
 # CPU/轻量机器的默认下载体积预算（MB）；超过的候选文件直接跳过，避免下载几十 GB。
 DEFAULT_SIZE_BUDGET_MB = 6000
+
+
+def _size_budget_for(tag: str) -> int:
+    """这个 tag 该给多大的下载预算(MB)。
+
+    固定 6000 是给"轻量视觉主脑"定的。对大权重型号,它的后果**不是**下载失败——
+    实测(真实调用 :func:`find_gguf_file`,注入一个多量化档的 repo 清单):
+
+    .. code-block:: text
+
+        repo 里有 Q2_K(11G) / Q4_K_M(18G) / Q8_0(32G)
+        预算 6000  -> 选中 Q2_K.gguf      ← 全部超预算,走"选最小的"分支
+        预算 19800 -> 选中 Q4_K_M.gguf    ← Q4 在预算内,prefer_quant 生效
+
+    也就是说它会**静默降到最小的量化档**,而且那条分支绕过了 ``prefer_quant``。
+    下载成功、导入成功、什么都不报错 —— 用户拿到的只是一个被过度量化、质量
+    明显更差的模型,而他配的是另一个。比直接失败更难查。
+
+    目录里登记过权重大小的型号就按它自己的大小放行(再留 10% 余量给量化档位
+    差异);没登记的维持原默认。
+    """
+    try:
+        from core.model_catalog import get_model  # noqa: PLC0415
+
+        spec = get_model(tag)
+        weight_mb = spec.size_mb() if spec is not None else 0
+    except Exception:  # noqa: BLE001
+        weight_mb = 0
+    return max(DEFAULT_SIZE_BUDGET_MB, int(weight_mb * 1.1)) if weight_mb else DEFAULT_SIZE_BUDGET_MB
 
 
 def _default_list_repo_files(repo_id: str) -> List[str]:
@@ -146,7 +185,8 @@ def download_and_import_to_ollama(
     *,
     local_model_name: Optional[str] = None,
     candidates: Optional[List[str]] = None,
-    size_budget_mb: int = DEFAULT_SIZE_BUDGET_MB,
+    # 0 = 按 tag 自己的权重大小推(见 _size_budget_for);显式传值一律尊重。
+    size_budget_mb: int = 0,
     find_gguf_file_fn: Callable[..., Optional[str]] = find_gguf_file,
     hf_hub_download_fn: Optional[Callable[..., str]] = None,
     ollama_create_fn: Optional[Callable[[str, str], bool]] = None,
@@ -167,6 +207,8 @@ def download_and_import_to_ollama(
     cand_list = candidates if candidates is not None else HF_GGUF_CANDIDATES.get(tag, [])
     if not cand_list:
         return None
+
+    size_budget_mb = size_budget_mb or _size_budget_for(tag)
 
     local_name = local_model_name or ("galaxy-" + tag.replace("/", "-").replace(":", "-") + "-hf")
 
@@ -202,11 +244,7 @@ def download_and_import_to_ollama(
                 continue
 
             print(f"  ▶  Ollama 无 {tag}，尝试从 HuggingFace 回退下载:{repo_id} / {gguf_filename} …")
-            local_dir = os.path.join(
-                str(Path.home() / ".galaxy" / "hf_gguf_cache"),
-                repo_id.replace("/", "__"),
-            )
-            gguf_path = hf_hub_download_fn(repo_id, gguf_filename, local_dir)
+            gguf_path = hf_hub_download_fn(repo_id, gguf_filename, gguf_cache_dir(repo_id))
 
             print(f"  ▶  下载完成，正在导入 Ollama:ollama create {local_name} …")
             if ollama_create_fn(local_name, gguf_path):
@@ -248,3 +286,67 @@ def _ollama_create(name: str, gguf_path: str) -> bool:
             os.unlink(modelfile_path)
         except Exception:
             pass
+
+
+def gguf_cache_dir(repo_id: str) -> str:
+    """某个 repo 的 GGUF 落盘目录 —— 下载路径**只此一处**，别处不许再拼。
+
+    ``download_and_import_to_ollama`` 和 :func:`download_gguf` 必须落到同一棵树，
+    否则同一个权重会被下两遍(18 GB 一份)，而且清理脚本只认得其中一棵。
+    """
+    return os.path.join(str(Path.home() / ".galaxy" / "hf_gguf_cache"), repo_id.replace("/", "__"))
+
+
+def download_gguf(
+    tag: str,
+    *,
+    candidates: Optional[List[str]] = None,
+    size_budget_mb: int = 0,
+    find_gguf_file_fn: Callable[..., Optional[str]] = find_gguf_file,
+    hf_hub_download_fn: Optional[Callable[..., str]] = None,
+) -> Optional[str]:
+    """只把 GGUF **下到本地**，返回文件路径；不导入 Ollama、不需要 ollama 命令。
+
+    为什么要和 :func:`download_and_import_to_ollama` 分开
+    ====================================================
+    那一个的终点是 ``ollama create``，因此开头就 ``if not shutil.which("ollama"):
+    return None``。可 C 档推理位根本不走 Ollama —— 它要么被 llama-cpp-python 直接
+    加载，要么喂给 ``llama-server``，两条路要的都只是**一个 GGUF 文件路径**。用那个
+    函数的话，一台没装 Ollama 的机器会在第一行就静默返回 None，而它其实完全下得动。
+
+    候选表、体积预算、量化档偏好三条判据全部复用同一处（``HF_GGUF_CANDIDATES`` /
+    :func:`_size_budget_for` / :func:`find_gguf_file`），不另起一套。
+    """
+    cand_list = candidates if candidates is not None else HF_GGUF_CANDIDATES.get(tag, [])
+    if not cand_list:
+        return None
+    size_budget_mb = size_budget_mb or _size_budget_for(tag)
+
+    if hf_hub_download_fn is None:
+
+        def hf_hub_download_fn(repo_id: str, filename: str, local_dir: str) -> str:  # type: ignore[no-redef]
+            from huggingface_hub import hf_hub_download
+
+            return hf_hub_download(
+                repo_id=repo_id, filename=filename, local_dir=local_dir, local_dir_use_symlinks=False
+            )
+
+    tried: List[str] = []
+    for repo_id in cand_list:
+        try:
+            gguf_filename = find_gguf_file_fn(repo_id, size_budget_mb=size_budget_mb)
+            if not gguf_filename:
+                print(f"     · HuggingFace 候选 {repo_id}:未找到匹配的 .gguf 文件，跳过")
+                tried.append(repo_id)
+                continue
+            print(f"  ▶  下载 {tag} 权重:{repo_id} / {gguf_filename}(预算 {size_budget_mb} MB)…")
+            path = hf_hub_download_fn(repo_id, gguf_filename, gguf_cache_dir(repo_id))
+            print(f"  ✓ 已落盘:{path}")
+            return path
+        except Exception as exc:  # noqa: BLE001
+            print(f"     · HuggingFace 候选 {repo_id}:失败({exc})，换下一个候选")
+            tried.append(repo_id)
+            continue
+    if tried:
+        print(f"     全部 {len(tried)} 个 HuggingFace 候选均未成功:{', '.join(tried)}")
+    return None

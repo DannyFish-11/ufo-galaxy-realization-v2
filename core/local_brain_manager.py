@@ -108,6 +108,23 @@ class LocalBrainManager:
         "vicuna:7b": 4500,
     }
 
+    # 运行时驻留(MB)——**只在与权重不一样时登记**。目录内的型号由下方收口段从
+    # core.model_catalog 回填(目录是 SSOT);这里给的是目录外通用模型的兜底位。
+    # 空表即"这些型号驻留量约等于权重",与历史行为一致。
+    MODEL_RUNTIME_MB: Dict[str, int] = {}
+
+    @classmethod
+    def model_runtime_mb(cls, tag: str) -> int:
+        """这个型号跑起来占多少显存(MB)——**显存相关判断只问这一处**。
+
+        全模态模型的驻留量比权重大得多(编码器 + 语音解码器),MoE 走专家卸载后
+        又比权重小得多。任何一处拿 ``MODEL_SIZE_ESTIMATE_MB``(权重)去判显存,
+        都会在这两类模型上判错,而且错法相反。
+
+        没登记驻留量的型号退回权重值 —— 保守,但不臆造。
+        """
+        return int(cls.MODEL_RUNTIME_MB.get(tag) or cls.MODEL_SIZE_ESTIMATE_MB.get(tag) or 0)
+
     @staticmethod
     def _normalize_ollama_url(raw: str) -> str:
         """确保 URL 非空且带 http(s):// 协议头。
@@ -680,7 +697,7 @@ class LocalBrainManager:
             # fallback：找最小的非多模态模型
             non_mm = [m for m in self.available_models if not any(x in m.lower() for x in ["minicpm", "multimodal"])]
             if non_mm:
-                return min(non_mm, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf")))
+                return min(non_mm, key=lambda m: self.model_runtime_mb(m) or float("inf"))
             # 只有多模态模型时，fallback 到默认推荐
             return self.RECOMMENDED_MODELS["default"]
 
@@ -707,16 +724,16 @@ class LocalBrainManager:
         return self._largest_available_model()
 
     def _smallest_available_model(self) -> str:
-        """返回已安装的最小模型（VRAM 占用最小）"""
+        """返回已安装的最小模型（VRAM 占用最小 —— 按**驻留量**,不是权重）"""
         if not self.available_models:
             return self.brain_model
-        return min(self.available_models, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, float("inf")))
+        return min(self.available_models, key=lambda m: self.model_runtime_mb(m) or float("inf"))
 
     def _largest_available_model(self) -> str:
         """返回已安装的最大模型（VRAM 占用最大，能力最强）"""
         if not self.available_models:
             return self.brain_model
-        return max(self.available_models, key=lambda m: self.MODEL_SIZE_ESTIMATE_MB.get(m, 0))
+        return max(self.available_models, key=lambda m: self.model_runtime_mb(m))
 
     # ───────── 内部方法 ─────────
 
@@ -1102,6 +1119,8 @@ try:  # noqa: SIM105
     for _spec in _mc.all_models():
         if _spec.size_mb():
             LocalBrainManager.MODEL_SIZE_ESTIMATE_MB[_spec.tag] = _spec.size_mb()
+        if _spec.runtime_mb():
+            LocalBrainManager.MODEL_RUNTIME_MB[_spec.tag] = _spec.runtime_mb()
     LocalBrainManager.RECOMMENDED_MODELS["default"] = _mc.default_model()
 except Exception:  # noqa: BLE001 — 目录不可用时保留本表原值
     pass

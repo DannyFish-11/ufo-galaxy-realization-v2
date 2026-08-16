@@ -161,3 +161,66 @@ def test_all_choice_order_tags_have_candidates():
     for tag in _choice_order():
         assert tag in HF_GGUF_CANDIDATES, f"{tag} 缺少 HF 回退候选列表"
         assert len(HF_GGUF_CANDIDATES[tag]) >= 2, f"{tag} 候选太少,建议至少两个兜底"
+
+
+def test_size_budget_follows_the_model_weight_not_a_fixed_ceiling():
+    """大权重型号不该被固定的 6 GB 预算按住。
+
+    注意失效模式**不是**下载失败 —— 见下一条测试的实测。
+    """
+    from core.hf_ollama_import_fallback import DEFAULT_SIZE_BUDGET_MB, _size_budget_for
+
+    assert _size_budget_for("gemma4:e2b") == DEFAULT_SIZE_BUDGET_MB, "小模型的预算不该被抬高"
+    big = _size_budget_for("qwen3.6:35b-a3b")
+    assert big > DEFAULT_SIZE_BUDGET_MB
+    assert big >= 18000, f"18 GB 权重却只给了 {big} MB 预算 —— 每个候选都会被判超预算"
+    # 目录外的型号维持原默认，不因为查不到就放开预算。
+    assert _size_budget_for("nobody/knows-this") == DEFAULT_SIZE_BUDGET_MB
+
+
+def test_download_derives_the_budget_from_the_tag(monkeypatch):
+    """把预算真的传下去 —— 只在 _size_budget_for 里算对没用。"""
+    import core.hf_ollama_import_fallback as m
+
+    seen = {}
+    monkeypatch.setattr(m.shutil, "which", lambda _n: "/usr/bin/ollama")
+
+    def _probe(repo_id, *, size_budget_mb=0, **_kw):
+        seen["budget"] = size_budget_mb
+        return None  # 不继续走下载
+
+    m.download_and_import_to_ollama("qwen3.6:35b-a3b", find_gguf_file_fn=_probe)
+    assert seen["budget"] >= 18000, f"传下去的预算是 {seen.get('budget')} —— 没跟着型号走"
+
+
+def test_a_fixed_budget_silently_drops_to_the_worst_quantisation():
+    """固定预算的真实后果：**静默降到最小的量化档**，不是下载失败。
+
+    这条是照着真实调用跑出来的结果写的。构造一个真实形状的 MoE GGUF repo
+    (同一模型三个量化档)，两种预算下 find_gguf_file 的选择：
+
+    .. code-block:: text
+
+        预算 6000  -> Q2_K.gguf     ← 全部超预算，走"选最小的"分支
+        预算 19800 -> Q4_K_M.gguf   ← Q4 在预算内，prefer_quant 生效
+
+    "全部超预算"那条分支**绕过了 prefer_quant**。于是下载成功、导入成功、
+    什么都不报错，用户拿到的却是一个被过度量化、质量明显更差的模型 ——
+    比直接失败难查得多。
+    """
+    from core.hf_ollama_import_fallback import _size_budget_for, find_gguf_file
+
+    gb = 1024**3
+    files = ["Qwen3-30B-A3B-Q2_K.gguf", "Qwen3-30B-A3B-Q4_K_M.gguf", "Qwen3-30B-A3B-Q8_0.gguf"]
+    sizes = {files[0]: 11 * gb, files[1]: 18 * gb, files[2]: 32 * gb}
+
+    def pick(budget):
+        return find_gguf_file(
+            "x/y",
+            size_budget_mb=budget,
+            list_repo_files=lambda _r: files,
+            get_file_sizes=lambda _r, _f: sizes,
+        )
+
+    assert pick(6000) == "Qwen3-30B-A3B-Q2_K.gguf", "固定预算下的旧行为变了，这条测试的前提没了"
+    assert pick(_size_budget_for("qwen3.6:35b-a3b")) == "Qwen3-30B-A3B-Q4_K_M.gguf"

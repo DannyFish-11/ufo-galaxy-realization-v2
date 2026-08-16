@@ -54,9 +54,14 @@ def test_local_brain_manager_derives_from_catalog():
 def test_save_tier_writes_single_record_and_derives_env(monkeypatch):
     chosen = mc.save_tier("B", main_brain="openbmb/minicpm-o4.5")
     assert chosen == "openbmb/minicpm-o4.5"
-    # 一条记录
+    # 一条记录 —— 钉的是"**一个**存点装下全部选择",不是"恰好两个键"。
+    # 感知位做成可换之后记录里多了 perception_brain 一栏,那仍然是同一条记录;
+    # 真正要拦的是它重新分裂成 .galaxy_tier / .galaxy_model 那种多存点(见文末)。
     rec = json.loads(mc._STATE_FILE.read_text(encoding="utf-8"))
-    assert rec == {"tier": "B", "main_brain": "openbmb/minicpm-o4.5"}
+    assert rec["tier"] == "B"
+    assert rec["main_brain"] == "openbmb/minicpm-o4.5"
+    assert set(rec) <= {"tier", "main_brain", "perception_brain"}, f"记录里冒出了没登记的键: {set(rec)}"
+    assert len(list(mc._STATE_FILE.parent.glob("model_state*.json"))) == 1, "状态又分裂成多个文件了"
     # 派生 env
     import os
 

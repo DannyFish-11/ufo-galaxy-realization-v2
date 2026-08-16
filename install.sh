@@ -201,8 +201,25 @@ NATS_ENABLED=true
 # ── AI Models ──
 OLLAMA_ENABLED=${OLLAMA_URL:+true}${OLLAMA_URL:-false}
 OLLAMA_URL=${OLLAMA_URL}
-OLLAMA_MODEL=gemma4:4b
+# 刻意留空 —— 首次启动会按实际硬件推荐档位、让你选（A 轻量 / B 全模态 / C 双模型），
+# 选完由 core/model_catalog.py 写回这个键。
+#
+# 这里原本写死 `OLLAMA_MODEL=gemma4:4b`，有两个后果：
+#   1. main.py 会把 .env 里的**非空**值灌进 os.environ，而 resolve_main_brain() 的
+#      第一条判据就是 OLLAMA_MODEL —— 一旦有值就直接返回，**选档界面永远不出现**。
+#      跑过 install.sh 的机器因此再也选不到 B/C 档。
+#   2. gemma4:4b 不在模型目录里(目录是 e2b/e4b/12b)，靠前缀匹配才没报错。
+OLLAMA_MODEL=
 OLLAMA_PRIORITY=1
+
+# ── C 档双模型（可选）──
+# 推理位 Qwen3.6-35B-A3B 常驻独显 + 感知位（Gemma 4 系 / MiniCPM-o，可随时换）走核显。
+# 推理位靠**专家卸载**才只占 7.3 GB，而 PyPI 上的 llama-cpp-python 目前不透出该开关，
+# 所以它走 llama.cpp 的 server：先跑 `python scripts/setup_reasoning_slot.py`，
+# 它会体检、算出 --n-cpu-moe 的层数、并把下面三个键填好。
+# GALAXY_LOCAL_OPENAI_URL=http://127.0.0.1:18080/v1
+# GALAXY_LOCAL_OPENAI_MODEL=qwen3.6:35b-a3b
+# GALAXY_LOCAL_OPENAI_SERVES=qwen3.6:35b-a3b
 
 # API fallback (if Ollama unavailable)
 OPENAI_API_KEY=

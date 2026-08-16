@@ -112,10 +112,128 @@ def _catalog_placeholder(status: str = "unknown") -> Dict[str, Dict[str, Any]]:
     out: Dict[str, Dict[str, Any]] = {}
     for tag in choice_order():
         spec = get_model(tag)
-        if spec is None or spec.source != "local":
+        if spec is None or spec.source not in ("local", "llama_cpp"):
             continue
         out[tag] = {"status": status, "ollama_reachable": False, "matched": ""}
     return out
+
+
+# 运行时就绪度(哪一位的加载后端没装 / 装了也做不到声称的落位)判据**不在这里**：
+# 属主是 core.runtime_readiness。原因是启动路径(选档、launcher)也要问同一个问题，
+# 而那条路不该 import 一个 FastAPI 路由模块 —— 判据留在路由里就只能被抄一份。
+from core.runtime_readiness import slot_runtime_gaps  # noqa: E402  分区就地导入
+
+#: GGUF 落盘探测的缓存 {tag: (ts, result)}。文件不会每 3 秒长出来一个。
+_GGUF_CACHE: Dict[str, tuple] = {}
+_GGUF_TTL = 60.0
+#: 单次落盘探测的上限。超了报 unknown,**不许拖着整个 /status**。
+_GGUF_PROBE_BUDGET = 2.0
+
+
+#: 落盘扫描的硬上限。两条都要有:时间用于慢盘,条目数用于大目录。
+_GGUF_SCAN_DEADLINE_S = 1.0
+_GGUF_SCAN_MAX_ENTRIES = 20000
+
+
+def _models_dir() -> str:
+    """本地 GGUF 的存放根目录。单独一函数是为了可注入(测试要造一棵大树)。"""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
+
+
+def _find_local_gguf(tag: str) -> str:
+    """在 ``models/`` 下找这个 tag 的 GGUF —— **自带上限,绝不无界**。
+
+    刻意**不**走 ``LlamaCppBackend._resolve_model_path``:那条路是给"真要加载了"
+    用的,可以慢、可以取道 HuggingFace 管理器(它自己会扫缓存目录甚至触网)。
+    状态盘问的只是"盘上有没有这个文件",承担不起那种开销 —— 加载路径与状态
+    路径的时间预算根本不是一个量级,共用一个实现就等于让最慢的那个说了算。
+    """
+    import os as _os  # noqa: PLC0415
+
+    if _os.path.exists(tag):  # 直接给的就是路径
+        return tag
+    root_dir = _models_dir()
+    if not _os.path.isdir(root_dir):
+        return ""
+    key = tag.replace("/", "--")
+    stem = tag.split(":")[0].split("/")[-1]
+    deadline = _time.monotonic() + _GGUF_SCAN_DEADLINE_S
+    seen = 0
+    for cur, _dirs, files in _os.walk(root_dir):
+        for f in files:
+            seen += 1
+            if seen > _GGUF_SCAN_MAX_ENTRIES or _time.monotonic() > deadline:
+                logger.debug("GGUF 扫描触顶(%s):看了 %d 个条目就收手", tag, seen)
+                return ""
+            if not f.lower().endswith(".gguf"):
+                continue
+            if key in cur or stem.lower() in f.lower() or tag in f:
+                return _os.path.join(cur, f)
+    return ""
+
+
+def _gguf_status_blocking(tag: str) -> Dict[str, Any]:
+    """真正去磁盘上找 GGUF —— 阻塞,但**自身有界**,而且只许在线程里跑。"""
+    try:
+        path = _find_local_gguf(tag)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("GGUF 路径解析不可用(%s): %s", tag, exc)
+        path = None
+    return {
+        "status": "installed" if path else "absent",
+        # 这一位不经 Ollama,故恒 False —— 不是"Ollama 挂了",是压根不走它。
+        "ollama_reachable": False,
+        "matched": path or "",
+    }
+
+
+async def _gguf_status(tag: str) -> Dict[str, Any]:
+    """source=llama_cpp 的型号:装没装看**本地 GGUF 文件在不在**,与 Ollama 无关。
+
+    不报它就等于:用户选了带 llama_cpp 推理位的档,面板上那一位**根本不显示**,
+    而缺文件只会在真正加载时写一行 error 日志。选完看不出没装,这是静默失败。
+
+    为什么必须放线程 + 自带预算
+    ==========================
+    这一步是**阻塞** I/O:``_resolve_model_path`` 会 ``os.walk`` 整个 ``models/``,
+    还会取道 ``huggingface_model_manager``(它自己可能扫缓存目录甚至触网)。
+
+    而它的调用方 ``_probe_installed_async`` 外面包着
+    ``asyncio.wait_for(timeout=_PROBE_BUDGET)`` —— 那个预算**拦不住阻塞的同步
+    调用**:``wait_for`` 只能在 await 点取消,同步代码跑起来就没人管得住。
+
+    实测代价:CI 上 ``test-shard (4)`` 卡满 30 分钟被超时取消(本地复现不出来,
+    本机 ``models/`` 是空的、HF 管理器又不可用,两条慢路径都没走到)。契约写着
+    "有预算"、实现却能无限期阻塞,这是最难查的一类 —— 门是绿的,作业是黄的。
+
+    两层都要,缺一不可
+    ==================
+    1. **扫描自身有界**(:func:`_find_local_gguf`:时间 + 条目数双上限)。
+       只靠 ``to_thread`` 是不够的 —— 线程**取消不了**,而
+       ``asyncio.run()`` 收尾时要等默认执行器里的线程结束。实测:把落盘那步
+       换成 ``sleep(30)``、外面套 ``wait_for(0.3)``,整体仍然要 30 秒。
+       ``wait_for`` 只让**这次 await** 提前返回,拦不住那个线程继续跑,
+       更拦不住有人在后面等它。这正是 pytest 里"作业挂住"的机制。
+    2. **调用侧再包一层**(``to_thread`` + ``wait_for``):即便扫描哪天又变慢了,
+       单个请求也不会被它拖住。
+
+    结果按 TTL 缓存;超时报 ``unknown`` 而不是拖着整个 ``/status``。
+    """
+    now = _time.monotonic()
+    hit = _GGUF_CACHE.get(tag)
+    if hit is not None and (now - hit[0]) < _GGUF_TTL:
+        return dict(hit[1])
+    try:
+        out = await _asyncio.wait_for(
+            _asyncio.to_thread(_gguf_status_blocking, tag),
+            timeout=_GGUF_PROBE_BUDGET,
+        )
+    except Exception as exc:  # noqa: BLE001 — 含 TimeoutError
+        logger.debug("GGUF 落盘探测超预算/失败(%s): %s", tag, exc)
+        # 不写缓存:下次再试。也不谎称 absent —— 没探到就是没探到。
+        return {"status": "unknown", "ollama_reachable": False, "matched": ""}
+    _GGUF_CACHE[tag] = (now, out)
+    return dict(out)
 
 
 async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
@@ -145,7 +263,12 @@ async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
         to_verify: List[tuple] = []
         for tag in choice_order():
             spec = get_model(tag)
-            if spec is None or spec.source != "local":
+            if spec is None:
+                continue
+            if spec.source == "llama_cpp":
+                out[tag] = await _gguf_status(tag)
+                continue
+            if spec.source != "local":
                 continue
             root = tag.split(":")[0]
             matched = next(
@@ -392,11 +515,92 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
 
+    # 缺依赖必须随响应回去 —— 只写日志等于没说(见 slot_runtime_gaps 的说明)。
+    gaps = slot_runtime_gaps(req.tier)
+    for g in gaps:
+        logger.warning("换到 %s 档: %s", req.tier, g["detail"])
     return {
         "success": True,
         "tier": req.tier,
         "main_brain": chosen,
         "pulling": pulled,
+        "runtime_gaps": gaps,
+    }
+
+
+class SlotSelectRequest(BaseModel):
+    role: str  # "perception" —— 目前只有这一位可换
+    model: str
+
+
+@router.post("/slot")
+async def select_slot(req: SlotSelectRequest) -> Dict[str, Any]:
+    """给某一位换个模型 —— **"上面那位随便换"的入口**。
+
+    只换这一位:另一位(推理位)不动、不重载。换完做三件收尾:
+    重新对齐档位资源(把旧的那位卸掉、新的加载上)、后台拉取(没装的话)、
+    热刷新路由(让新模型立刻生效,不用重启)。
+    """
+    from core.model_catalog import (
+        SLOT_PERCEPTION,
+        active_tags,
+        load_tier,
+        save_perception_brain,
+        slot_for_role,
+        tier_effective_io,
+    )
+
+    role = (req.role or "").strip().lower()
+    if role != SLOT_PERCEPTION:
+        # 推理位现在只有一个候选;真要开放时,这里放开即可,机制是同一套。
+        return {"success": False, "error": f"该位不可换: {req.role!r}(目前只有 perception 位可换)"}
+
+    tier_key = load_tier()
+    slot = slot_for_role(SLOT_PERCEPTION, tier_key)
+    if slot is None:
+        return {"success": False, "error": f"{tier_key} 档没有感知位"}
+    if not slot.accepts(req.model):
+        return {
+            "success": False,
+            "error": f"{req.model!r} 不在感知位候选里",
+            "candidates": list(slot.candidates),
+        }
+
+    chosen = save_perception_brain(req.model, tier_key=tier_key)
+
+    try:
+        from core.compute_scheduler import get_compute_scheduler
+
+        await get_compute_scheduler().reconcile_tier(tier_key)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("换感知位后资源对齐失败(非致命): %s", exc)
+
+    try:
+        from core.model_catalog import get_model
+        from core.model_selection import background_pull
+
+        spec = get_model(chosen)
+        if spec is not None and spec.source == "local":
+            background_pull(chosen)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("换感知位后台拉取触发失败(非致命): %s", exc)
+
+    try:
+        from core.multi_llm_router import refresh_llm_router
+
+        await refresh_llm_router()
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "success": True,
+        "role": SLOT_PERCEPTION,
+        "selected": chosen,
+        "runtime_gaps": slot_runtime_gaps(tier_key),
+        "candidates": list(slot.candidates),
+        "active_tags": active_tags(tier_key),
+        # 换人会改变"能不能原生说话",面板要据此更新提示。
+        "effective_io": tier_effective_io(tier_key).to_dict(),
     }
 
 
