@@ -84,6 +84,19 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 > 走对象层；若只是进 prompt 供 LLM 参考，走检索。**该换的是决策路径，不是检索能力**
 > ——`Node_105`、`academic_retrieval` 面对的本来就是非结构化文本，向量检索是对的工具。
 
+### 语音
+- `core/speech_output.py` - "说"的权威：引擎链选择 + 失败降级。公开入口
+  `speak_response()`（说）与 `synthesize_to_file()`（只合成不播放，供 HTTP 接口）
+- `core/modality_bridge.py` - **"听"的收口**：`transcribe_b64()`。B 档原生后端在线时
+  让全模态模型自己听，否则回落 Whisper/SenseVoice。**不要绕开它直连 ASR**——
+  该模块文档记录过绕开的真实后果（语音循环直连 Whisper，"原生听"从未生效且无报错）
+- `core/tts/compute_fit.py` - 引擎与本机算力的**事前**匹配预检。只告知不改选；
+  显式选择永远被尝试。注意：本仓引擎绝大多数是 CPU 设计，真正吃算力的只有 indextts
+- `core/tts/watermark.py` - 克隆音色的 AudioSeal 不可听水印（默认 `cloned_only`）。
+  `GALAXY_TTS_WATERMARK_STRICT=1` 时打不上水印即丢弃音频
+- `core/routes/openai_audio.py` - OpenAI 兼容端点 `/v1/audio/{speech,transcriptions,capabilities}`。
+  说走 speech_output、听走 modality_bridge，**不另起一套引擎选择**
+
 ### API 层
 - `core/api_routes.py` - REST API 和 WebSocket 路由
 - `dashboard/backend/main.py` - WebUI 后端

@@ -158,6 +158,84 @@ REGISTERED_FLAGS = {
         status="experimental",
     ),
 
+    # --- TTS compute-fit pre-check ---
+    "tts_compute_aware_routing": FeatureFlag(
+        name="tts_compute_aware_routing",
+        env_var="GALAXY_TTS_ROUTING",
+        default="compute_aware",
+        owner="@DannyFish-11",
+        purpose=(
+            "Assess whether the selected TTS engine can actually run on this "
+            "machine at selection time (core.tts.compute_fit), instead of the "
+            "user discovering it at synthesis time — indextts documents itself as "
+            "'纯 CPU 合成一句要数秒到数十秒'"
+        ),
+        rollout_plan=(
+            "compute_aware (default — adds a diagnostic and skips engines measured "
+            "as unfit in *fallback* chains only; an explicitly requested engine is "
+            "always still attempted) → static (pre-existing behaviour: chain "
+            "decided purely by GALAXY_TTS_ENGINE, no assessment). Safe as a default "
+            "because an unavailable probe reports every engine as fitting."
+        ),
+        cleanup_condition=(
+            "When every bundled TTS engine is CPU-viable (making the assessment "
+            "vacuous), or when engine selection moves behind a capability "
+            "negotiation that already accounts for local compute"
+        ),
+        since="v2.3.22",
+        status="beta",
+    ),
+
+    # --- TTS watermarking ---
+    "tts_watermark": FeatureFlag(
+        name="tts_watermark",
+        env_var="GALAXY_TTS_WATERMARK",
+        default="cloned_only",
+        owner="@DannyFish-11",
+        purpose=(
+            "Embed an inaudible AudioSeal watermark in synthesised audio. This "
+            "system can clone an arbitrary voice (indextts zero-shot) and drive "
+            "Android devices; emitting entirely unmarked cloned audio is a real "
+            "risk surface, not only a compliance question"
+        ),
+        rollout_plan=(
+            "cloned_only (default — mark voices produced by a cloning engine; "
+            "running a neural watermarker over every system prompt is cost without "
+            "benefit) → always (mark every synthesis) → off. audioseal/torch are "
+            "optional: when absent, synthesis still works and the miss is logged "
+            "as a warning rather than passing silently."
+        ),
+        cleanup_condition=(
+            "When watermarking is unconditional across every engine and format, "
+            "making the mode selector redundant"
+        ),
+        since="v2.3.22",
+        status="experimental",
+    ),
+
+    "tts_watermark_strict": FeatureFlag(
+        name="tts_watermark_strict",
+        env_var="GALAXY_TTS_WATERMARK_STRICT",
+        default="0",
+        owner="@DannyFish-11",
+        purpose=(
+            "When set, a cloned voice that could not be watermarked fails the "
+            "synthesis and the audio is discarded, rather than being emitted "
+            "unmarked"
+        ),
+        rollout_plan=(
+            "0 (default — a mute voice assistant is worse than unmarked audio; the "
+            "miss is still logged) → 1 for deployments that need the hard "
+            "guarantee that no unmarked cloned audio ever leaves the process"
+        ),
+        cleanup_condition=(
+            "When the watermark backend ships as a hard dependency, so failing to "
+            "mark cloned audio is a bug rather than a configuration state"
+        ),
+        since="v2.3.22",
+        status="experimental",
+    ),
+
     # --- WebRTC ---
     "webrtc_task_lifecycle": FeatureFlag(
         name="webrtc_task_lifecycle",

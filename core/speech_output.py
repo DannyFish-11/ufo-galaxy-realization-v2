@@ -202,6 +202,25 @@ def _get_engine() -> Optional[Any]:
             logger.info("IndexTTS 不可用: %s", exc)
             return None
 
+    # 算力预检:合不合得上本机,选择时就讲出来,而不是让用户等到合成那一刻才发现
+    # (indextts 自己的文档写着"纯 CPU 合成一句要数秒到数十秒")。**只告知,不改选**
+    # ——显式选择高于推断信号,详见 core/tts/compute_fit.py 的 POLICY_2。
+    try:
+        from core.tts.compute_fit import assess_engine_fit, get_tts_routing_mode
+
+        if get_tts_routing_mode() != "static":
+            _fit = assess_engine_fit(choice)
+            if not _fit.fits:
+                logger.warning(
+                    "TTS 引擎 %s 在本机算力下预计跑不动:%s。仍按你的显式选择尝试;"
+                    "若想要低延迟,可改用 %s(GALAXY_TTS_ENGINE=<名字>)",
+                    choice,
+                    _fit.reason,
+                    " / ".join(_fit.suggested_alternatives) or "kokoro",
+                )
+    except Exception as exc:  # noqa: BLE001 — 预检失败绝不影响出声
+        logger.debug("TTS 算力预检跳过: %s", exc)
+
     if choice == "indextts":
         # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才启用,不进
         # 任何默认回退链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会
@@ -289,6 +308,73 @@ def demote_current_engine(reason: str = "", failed_engine: Any = None) -> Option
     _engine = None
     _engine_failed = False
     return _get_engine()
+
+
+async def synthesize_to_file(
+    text: str,
+    *,
+    voice: Optional[str] = None,
+    output_path: Optional[str] = None,
+) -> Optional[str]:
+    """文字 → 音频文件路径。**只合成、不播放。**
+
+    存在的理由:本模块其余部分全是围绕"说"(合成即播放)设计的,而 HTTP 接口要的是
+    拿到字节、不要出声。与其让路由层自己去够 ``_get_engine()`` 这个私有函数、再各自
+    抄一遍失败降级,不如在这里给一个公开入口——**引擎选择与降级的权威留在本模块**。
+
+    复用 ``_speak_via_tts_engine`` 同一套降级语义:合成运行期失败 → demote 换引擎 →
+    重试一次。失败返回 ``None``(不抛),调用方按"合成不可用"处理。
+    """
+    engine = _get_engine()
+    if engine is None:
+        return None
+    used = engine
+    try:
+        path = await engine.synthesize(text, output_path=output_path, voice=voice)
+    except Exception as exc:  # noqa: BLE001 — 运行期失败换引擎重试一次
+        new_engine = demote_current_engine(str(exc), failed_engine=engine)
+        if new_engine is None:
+            logger.warning("TTS 合成失败且无可降级引擎: %s", exc)
+            return None
+        try:
+            path = await new_engine.synthesize(text, output_path=output_path, voice=voice)
+            used = new_engine
+        except Exception as exc2:  # noqa: BLE001
+            logger.warning("TTS 合成失败(降级后仍失败): %s", exc2)
+            return None
+
+    if path:
+        _apply_watermark_if_required(path, type(used).__name__)
+    return path
+
+
+def _apply_watermark_if_required(path: str, engine_name: str) -> None:
+    """给克隆音色的合成音频嵌入不可听水印(默认 cloned_only)。
+
+    严格档(``GALAXY_TTS_WATERMARK_STRICT=1``)下,克隆音色打不上水印即删掉产物并
+    抛出——**宁可没有声音,也不输出无标记的克隆音频**。默认档不抛:对一个语音助手
+    来说哑掉比没水印更糟,但"想打没打上"一定会被记成 warning,不静默。
+    """
+    try:
+        from core.tts.watermark import apply_watermark, strict_mode_enabled
+
+        result = apply_watermark(path, engine_name=engine_name)
+        if result.failed_despite_wanting and strict_mode_enabled():
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            raise RuntimeError(f"严格水印档:克隆音色未能加水印,已丢弃该音频({result.skipped_reason})")
+    except RuntimeError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — 水印链路本身的问题不影响出声
+        logger.debug("水印处理跳过: %s", exc)
+
+
+def current_engine_name() -> str:
+    """当前生效的 TTS 引擎类名;未初始化/不可用时返回空串。供接口如实上报。"""
+    eng = _get_engine()
+    return type(eng).__name__ if eng is not None else ""
 
 
 def _dispatch_speech(coro: Any) -> None:
