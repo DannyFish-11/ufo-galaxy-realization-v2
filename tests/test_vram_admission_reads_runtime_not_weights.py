@@ -121,3 +121,28 @@ def test_recommend_would_have_returned_the_oversized_model_under_the_old_criteri
     budget = (lo + hi) // 2  # 6000 < 8500 < 11000
     assert lo <= budget, "按权重判:这个预算下会被放行"
     assert hi > budget, "按驻留判:同一个预算下必须被拦"
+
+
+def test_footprint_does_not_inherit_a_sibling_size_from_the_family_fallback():
+    """目录查不到就答 0，**绝不**退回同家族的另一个型号。
+
+    ``get_model()`` 有一条同家族兜底：查不到 ``gemma4:31b`` 就返回家族里的第一条
+    ``gemma4:e2b``。那条兜底对"这个家族由哪个后端加载"是对的，对显存是错的 ——
+    一个 31B 型号会被答成 1800 MB，于是放不下的模型被判成放得下，加载到一半必 OOM。
+    猜错的数字比没有数字更危险。
+    """
+    assert mc.get_model("gemma4:31b") is not None, "前提变了：同家族兜底已被移除，本条判据要重写"
+    assert mc.runtime_footprint_mb("gemma4:31b") == 0, "驻留量走了同家族兜底 —— 会把 31B 判成 2B"
+    assert mc.runtime_footprint_mb("openbmb/minicpm-o4.5") == 11000, "精确命中的那条不该受影响"
+
+
+def test_manager_defers_to_the_catalog_but_keeps_its_own_table():
+    """同一个型号的驻留量不许在两处各写一份 —— 迟早只改一处。
+
+    目录有的以目录为准；目录没有的(只在兜底表里的通用型号)仍由本类作答。
+    """
+    assert LBM.model_runtime_mb("openbmb/minicpm-o4.5") == mc.runtime_footprint_mb("openbmb/minicpm-o4.5")
+    assert mc.runtime_footprint_mb("qwen2:7b") == 0, "前提变了：这个型号进目录了"
+    assert LBM.model_runtime_mb("qwen2:7b") == LBM.MODEL_SIZE_ESTIMATE_MB["qwen2:7b"]
+    # 家族兜底不许经由 manager 这条路重新渗回准入判据。
+    assert LBM.model_runtime_mb("gemma4:31b") == LBM.MODEL_SIZE_ESTIMATE_MB["gemma4:31b"]

@@ -122,8 +122,20 @@ class LocalBrainManager:
         都会在这两类模型上判错,而且错法相反。
 
         没登记驻留量的型号退回权重值 —— 保守,但不臆造。
+
+        目录(``core.model_catalog``)登记过的型号以目录为准:同一个型号的驻留量
+        在两处各写一份,迟早会只改一处。目录查不到的(qwen2/llama3/… 这类只在
+        下面兜底表里的)返回 0,于是自然落到本类的表——这正是
+        :func:`~core.model_catalog.runtime_footprint_mb` 文档里说的那个分工。
         """
-        return int(cls.MODEL_RUNTIME_MB.get(tag) or cls.MODEL_SIZE_ESTIMATE_MB.get(tag) or 0)
+        try:
+            from core.model_catalog import runtime_footprint_mb  # noqa: PLC0415
+
+            catalogued = int(runtime_footprint_mb(tag) or 0)
+        except Exception as exc:  # noqa: BLE001 — 目录不可用就走本地表,不能因此判不出数
+            logger.debug("模型目录不可读(%s),驻留量退回本地表: %s", tag, exc)
+            catalogued = 0
+        return int(catalogued or cls.MODEL_RUNTIME_MB.get(tag) or cls.MODEL_SIZE_ESTIMATE_MB.get(tag) or 0)
 
     @staticmethod
     def _normalize_ollama_url(raw: str) -> str:

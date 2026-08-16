@@ -100,6 +100,142 @@ REGISTERED_FLAGS = {
         status="stable",
     ),
 
+    # --- Experience Guidance (object-anchored strategy statistics) ---
+    "experience_guidance": FeatureFlag(
+        name="experience_guidance",
+        env_var="GALAXY_EXPERIENCE_GUIDANCE",
+        default="on",
+        owner="@DannyFish-11",
+        purpose=(
+            "Controls whether ExecutionPlanner consults object-anchored "
+            "strategy-success statistics (core.cognitive.experience_guidance) "
+            "when picking an execution strategy"
+        ),
+        rollout_plan=(
+            "on (default — the superseded prose/regex path was also active by "
+            "default, so defaulting to shadow would silently disable a live "
+            "feature) → shadow (compute + log only, for A/B comparison against "
+            "the old behaviour) → off (kill switch). The legacy kill switch "
+            "GALAXY_EXPERIENCE_STRATEGY=0 continues to force off."
+        ),
+        cleanup_condition=(
+            "When PatternMiner and ExperienceGuidance are consolidated onto one "
+            "shared strategy-statistics authority (see "
+            "EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY), or after 2 releases "
+            "with no use of shadow/off"
+        ),
+        since="v2.3.22",
+        status="beta",
+    ),
+
+    # --- Canonical Task Store (durable object layer) ---
+    "canonical_task_store": FeatureFlag(
+        name="canonical_task_store",
+        env_var="GALAXY_CANONICAL_TASK_STORE",
+        default="shadow",
+        owner="@DannyFish-11",
+        purpose=(
+            "Durable, queryable projection of CanonicalTask objects "
+            "(core.canonical_task_store) — the object layer's answer to "
+            "'what happened with this task before', which the 256-entry "
+            "in-process ring buffer cannot survive a restart to give"
+        ),
+        rollout_plan=(
+            "shadow (default — writes accumulate and can be measured, but get()/ "
+            "query() return empty so nothing can depend on it) → on (reads "
+            "enabled for consumers) → off (kill switch, reverts to ring-buffer-"
+            "only behaviour). Default is shadow rather than off so the layer is "
+            "live and measurable instead of shipping as dead code; it is not on "
+            "because no consumer should acquire a dependency before write "
+            "latency and disk growth have been observed in a real deployment."
+        ),
+        cleanup_condition=(
+            "When 'on' has run for 2 releases with acceptable p99 write latency "
+            "and bounded disk growth, and at least one decision path reads from "
+            "it — at which point shadow/off become redundant"
+        ),
+        since="v2.3.22",
+        status="experimental",
+    ),
+
+    # --- TTS compute-fit pre-check ---
+    "tts_compute_aware_routing": FeatureFlag(
+        name="tts_compute_aware_routing",
+        env_var="GALAXY_TTS_ROUTING",
+        default="compute_aware",
+        owner="@DannyFish-11",
+        purpose=(
+            "Assess whether the selected TTS engine can actually run on this "
+            "machine at selection time (core.tts.compute_fit), instead of the "
+            "user discovering it at synthesis time — indextts documents itself as "
+            "'纯 CPU 合成一句要数秒到数十秒'"
+        ),
+        rollout_plan=(
+            "compute_aware (default — adds a diagnostic and skips engines measured "
+            "as unfit in *fallback* chains only; an explicitly requested engine is "
+            "always still attempted) → static (pre-existing behaviour: chain "
+            "decided purely by GALAXY_TTS_ENGINE, no assessment). Safe as a default "
+            "because an unavailable probe reports every engine as fitting."
+        ),
+        cleanup_condition=(
+            "When every bundled TTS engine is CPU-viable (making the assessment "
+            "vacuous), or when engine selection moves behind a capability "
+            "negotiation that already accounts for local compute"
+        ),
+        since="v2.3.22",
+        status="beta",
+    ),
+
+    # --- TTS watermarking ---
+    "tts_watermark": FeatureFlag(
+        name="tts_watermark",
+        env_var="GALAXY_TTS_WATERMARK",
+        default="cloned_only",
+        owner="@DannyFish-11",
+        purpose=(
+            "Embed an inaudible AudioSeal watermark in synthesised audio. This "
+            "system can clone an arbitrary voice (indextts zero-shot) and drive "
+            "Android devices; emitting entirely unmarked cloned audio is a real "
+            "risk surface, not only a compliance question"
+        ),
+        rollout_plan=(
+            "cloned_only (default — mark voices produced by a cloning engine; "
+            "running a neural watermarker over every system prompt is cost without "
+            "benefit) → always (mark every synthesis) → off. audioseal/torch are "
+            "optional: when absent, synthesis still works and the miss is logged "
+            "as a warning rather than passing silently."
+        ),
+        cleanup_condition=(
+            "When watermarking is unconditional across every engine and format, "
+            "making the mode selector redundant"
+        ),
+        since="v2.3.22",
+        status="experimental",
+    ),
+
+    "tts_watermark_strict": FeatureFlag(
+        name="tts_watermark_strict",
+        env_var="GALAXY_TTS_WATERMARK_STRICT",
+        default="0",
+        owner="@DannyFish-11",
+        purpose=(
+            "When set, a cloned voice that could not be watermarked fails the "
+            "synthesis and the audio is discarded, rather than being emitted "
+            "unmarked"
+        ),
+        rollout_plan=(
+            "0 (default — a mute voice assistant is worse than unmarked audio; the "
+            "miss is still logged) → 1 for deployments that need the hard "
+            "guarantee that no unmarked cloned audio ever leaves the process"
+        ),
+        cleanup_condition=(
+            "When the watermark backend ships as a hard dependency, so failing to "
+            "mark cloned audio is a bug rather than a configuration state"
+        ),
+        since="v2.3.22",
+        status="experimental",
+    ),
+
     # --- WebRTC ---
     "webrtc_task_lifecycle": FeatureFlag(
         name="webrtc_task_lifecycle",

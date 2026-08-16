@@ -153,6 +153,12 @@ class ExecutionResult(BaseModel):
     # PR-8v2: specialists-as-tools boundary metadata (advisory, non-authoritative)
     specialist_boundary: Optional[Dict[str, Any]] = None
     """Specialist layer boundary contract carried as execution metadata."""
+    experience_guidance: Optional[Dict[str, Any]] = None
+    """Whether past-task statistics moved this run's strategy, and on what evidence.
+
+    Advisory metadata, same shape of contract as ``specialist_boundary``.  Without
+    it, "why was this strategy chosen" is only answerable by reading logs — the
+    exact kind of undiagnosable outcome the experience layer exists to remove."""
     # C阶段 5C: 执行链路可视化细化 — latency / token / cost（均为可选，保持向后兼容）
     total_latency_ms: Optional[float] = None
     """整条执行链路总延迟（毫秒），等同于 duration_ms，额外暴露便于 UI 消费"""
@@ -228,6 +234,12 @@ AUTO_AGENT_TRIGGER_KEYWORDS: tuple = (
 )
 
 
+# _pick_strategy() 的策略关键词。提成具名常量而非内联字面量:它们参与"这次选择是
+# 显式还是隐式"的判定(见 _pick_strategy),内联时无法一眼看出判定依据是哪一组词。
+_FRACTAL_KEYWORDS: tuple = ("fractal", "分型", "递归", "分形", "多层", "深度拆解")
+_SPECIALIZED_KEYWORDS: tuple = ("team", "团队", "并行", "多个", "分工", "异构")
+
+
 def _estimate_complexity(message: str) -> float:
     """粗略估算任务复杂度 0~1。"""
     m = message.lower()
@@ -294,6 +306,20 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
     "continuity/retrieval/novelty posture.  Memory bias is the lowest-priority "
     "advisory influence; hard gates, task-type mapping, and explicit cognitive "
     "budget guidance all take precedence."
+)
+
+# Sentinel confirming experience statistics are object-anchored and advisory.
+# Full rationale (and the defects of the superseded prose/regex path) lives in
+# core.cognitive.experience_guidance — do not restate it here.
+EXPERIENCE_GUIDANCE_OBJECT_ANCHORED_WIRED: str = (
+    "EXPERIENCE_GUIDANCE_OBJECT_ANCHORED_WIRED: "
+    "Strategy-success statistics come from "
+    "core.cognitive.experience_guidance.derive_experience_guidance(), which "
+    "aggregates typed TaskSummary fields over a BM25-scoped population. "
+    "ExperienceGuidance is an input to _pick_strategy() alongside breadth and "
+    "memory guidance — never a post-hoc override — and it never displaces "
+    "task-type mapping, explicit keyword matches, budget preference, or memory "
+    "continuity preference."
 )
 
 
@@ -521,6 +547,8 @@ class ExecutionPlanner:
         # PR-19: derive memory planner guidance from memory bias (lowest-priority advisory)
         _memory_guidance = None
         _memory_influenced_strategy = False
+        _experience_guidance = None
+        _experience_influenced_strategy = False
         try:
             if memory_bias is not None and getattr(memory_bias, "influenced_by_memory", False):
                 from core.cognitive.memory_bias_layer import get_memory_planner_guidance as _get_mem_guidance
@@ -551,11 +579,23 @@ class ExecutionPlanner:
         if _memory_guidance is not None and _memory_guidance.influenced_by_memory:
             _memory_influenced_strategy = True
 
-        # 经验学习闭环(上层)：根据历史经验里"策略→成败"记录,若当前策略在相似任务上
-        # 反复失败、而另一策略明显更优,则自动改用更优策略。失败即沿用原策略。
-        # _experience_strategy_adjust 内部同样调用 um.recall(CPU 密集的同步向量
-        # 检索);execute() 是 async 方法,直接调用会占住共享事件循环——offload 到线程。
-        strategy = await asyncio.to_thread(self._experience_strategy_adjust, plan.message, strategy)
+        # 经验制导需要"当前策略"作对比基准,故在首次选择之后派生,再用同一个纯函数
+        # 重跑一次选择——_pick_strategy 是微秒级纯逻辑,重跑无代价,且保证应用规则只有
+        # 一处实现。派生内部是 BM25(同步 CPU),async 里必须 offload,否则占住事件循环。
+        _experience_guidance = await asyncio.to_thread(
+            self._derive_experience_guidance, plan.message, strategy, intent_task_type
+        )
+        if _experience_guidance is not None:
+            strategy = self._pick_strategy(
+                plan.message,
+                complexity,
+                task_type=intent_task_type,
+                breadth_guidance=_breadth_guidance,
+                memory_guidance=_memory_guidance,
+                experience_guidance=_experience_guidance,
+            )
+            if getattr(_experience_guidance, "influenced_by_experience", False):
+                _experience_influenced_strategy = True
 
         # 协作模式细化(Octo 六模式)：当本就要组队(specialized/parallel/swarm)时，
         # 用 collaboration_mode_policy 进一步判断是否该用 critic(做/审分离) / pipeline
@@ -582,12 +622,13 @@ class ExecutionPlanner:
 
         logger.info(
             "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s "
-            "budget_influenced=%s memory_influenced=%s",
+            "budget_influenced=%s memory_influenced=%s experience_influenced=%s",
             strategy,
             complexity,
             plan.intent.mode,
             _budget_influenced_strategy,
             _memory_influenced_strategy,
+            _experience_influenced_strategy,
         )
 
         # PR86 强制要求：从 CapabilityRegistry 拉取工具（禁止旁路）
@@ -726,6 +767,18 @@ class ExecutionPlanner:
                     _strategy_for_boundary,
                     device_id=plan.device_id,
                 )
+            # 经验制导的可观测性:这一次到底有没有被历史统计影响、依据是什么。
+            # 不落到结果上,"策略为什么是这个"就只能靠翻日志猜——而"结论不可追到
+            # 依据"正是本层要消除的那类缺陷,在自己身上留着说不过去。
+            try:
+                from core.cognitive.experience_guidance import build_experience_guidance_diagnostics
+
+                result.experience_guidance = build_experience_guidance_diagnostics(
+                    _experience_guidance,
+                    applied=_experience_influenced_strategy,
+                )
+            except Exception as _exp_diag_err:  # noqa: BLE001 — 诊断绝不影响执行
+                logger.debug("experience guidance diagnostics skipped: %s", _exp_diag_err)
             # 在结果中记录工具来源
             if result.task_result is None:
                 result.task_result = {}
@@ -761,6 +814,9 @@ class ExecutionPlanner:
 
             # 经验复用（WRITE）：把本次执行沉淀成一条"经验"写入统一记忆层，
             # 供未来语义召回（见上方 READ）。tags 含 "experience" 以便召回时筛选。
+            # 这条散文**只**服务于上方 READ 的 prompt 上下文注入(供 LLM 参考的建议性
+            # 文本,向量检索的正当用法)。策略选择不再读它,改读 TaskSummary 的类型化字段;
+            # 结构化事实由上方 record_task() 落库,勿再从本文本反解结构。
             try:
                 from core.memory import get_unified_memory
 
@@ -833,55 +889,24 @@ class ExecutionPlanner:
     # 策略选择
     # ──────────────────────────────────────────────────────────────────
 
-    def _experience_strategy_adjust(self, message: str, current: str) -> str:
-        """经验学习闭环(上层)：用历史经验里的"策略→成败"记录微调策略。
+    def _derive_experience_guidance(self, message: str, current: str, task_type: str = "") -> Optional[Any]:
+        """从历史执行记录派生"策略→成败"制导（取代 ``_experience_strategy_adjust``）。
 
-        从统一记忆语义召回相似任务的经验,解析其中 ``策略[X] 结果[成功|失败]``,
-        统计各策略成功率;若某策略样本足够(>=3)且成功率明显高于当前策略(>+0.34),
-        则切换到它。GALAXY_EXPERIENCE_STRATEGY=0 可关闭;任何异常都沿用原策略。
+        读 :class:`core.task_memory.TaskSummary` 的类型化字段，作用域由 BM25 提供，
+        无正则、无 embedding；产出的制导是 ``_pick_strategy()`` 的建议输入，
+        与 PR-18/PR-19 同级。理由与旧实现的缺陷见
+        :mod:`core.cognitive.experience_guidance`。
+
+        同步 CPU 调用（BM25 排序），async 调用方需 offload —— 见 ``execute()``。
+        返回 ``None`` 表示派生不可用，调用方按无制导处理。
         """
         try:
-            import os
-            import re
+            from core.cognitive.experience_guidance import derive_experience_guidance
 
-            if os.getenv("GALAXY_EXPERIENCE_STRATEGY", "1").strip().lower() in ("0", "false", "no"):
-                return current
-            from core.memory import get_unified_memory
-
-            um = get_unified_memory()
-            if not um.enabled or not message:
-                return current
-            stats: Dict[str, List[int]] = {}  # strategy -> [success, total]
-            for h in um.recall(message, top_k=8):
-                m = re.search(r"策略\[([^\]]+)\].*?结果\[([^\]]+)\]", h.content or "")
-                if not m:
-                    continue
-                strat = m.group(1).strip()
-                s = stats.setdefault(strat, [0, 0])
-                s[1] += 1
-                if "成功" in m.group(2):
-                    s[0] += 1
-
-            def rate(st: str):
-                return stats[st][0] / stats[st][1] if st in stats and stats[st][1] >= 3 else None
-
-            cur = rate(current)
-            cands = [(st, rate(st)) for st in stats if rate(st) is not None]
-            if not cands:
-                return current
-            best_st, best_rate = max(cands, key=lambda x: x[1])
-            if best_st != current and (cur is None or best_rate > cur + 0.34):
-                logger.info(
-                    "ExecutionPlanner: 经验学习改策略 %s -> %s (历史成功率 %.2f, n=%d)",
-                    current,
-                    best_st,
-                    best_rate,
-                    stats[best_st][1],
-                )
-                return best_st
-        except Exception as exc:  # noqa: BLE001 — 经验调整失败不影响主流程
-            logger.debug("experience strategy adjust skipped: %s", exc)
-        return current
+            return derive_experience_guidance(message, current, task_type=task_type)
+        except Exception as exc:  # noqa: BLE001 — 经验制导失败不影响主流程
+            logger.debug("experience guidance derivation skipped: %s", exc)
+            return None
 
     def _pick_strategy(
         self,
@@ -890,6 +915,7 @@ class ExecutionPlanner:
         task_type: str = "",
         breadth_guidance: Optional[Any] = None,
         memory_guidance: Optional[Any] = None,
+        experience_guidance: Optional[Any] = None,
     ) -> str:
         """选择执行策略：fractal / swarm / specialized / single。
 
@@ -914,6 +940,13 @@ class ExecutionPlanner:
           - novelty posture:     no influence on strategy selection.
           Memory guidance is only applied after PR-18 budget guidance; it never
           overrides task-type mapping, keyword matches, or budget narrowing.
+
+        Experience guidance influence (advisory, lowest priority — tied with PR-19):
+          Applied ONLY when the strategy was reached *implicitly* (complexity
+          threshold or default fallback); it never displaces one an explicit
+          signal produced — task-type mapping, keyword match, budget preference,
+          memory continuity.  Keeps memory-derived statistics subordinate per
+          MEMORY_BIAS_LAYER::POLICY_4.  See core.cognitive.experience_guidance.
 
         约束（硬编码）:
           - Swarm 并发上限: 20
@@ -969,39 +1002,50 @@ class ExecutionPlanner:
         fractal_threshold = 0.75 + total_adj
         specialized_threshold = 0.65 + total_adj
 
-        if complexity >= fractal_threshold or any(
-            k in m
-            for k in [
-                "fractal",
-                "分型",
-                "递归",
-                "分形",
-                "多层",
-                "深度拆解",
-            ]
-        ):
-            return "fractal"
-        if complexity >= specialized_threshold or any(
-            k in m
-            for k in [
-                "team",
-                "团队",
-                "并行",
-                "多个",
-                "分工",
-                "异构",
-            ]
-        ):
-            return "specialized"
-        # PR-18: if budget is narrow (passive), prefer single even if near threshold
-        if _strategy_pref == "single":
+        _fractal_kw = any(k in m for k in _FRACTAL_KEYWORDS)
+        _specialized_kw = any(k in m for k in _SPECIALIZED_KEYWORDS)
+
+        # Decide the strategy AND record whether an *explicit* signal produced it.
+        # Outcomes are identical to the previous cascade (`complexity >= threshold
+        # or keyword` → strategy); the split exists only so experience guidance can
+        # tell "a keyword said so" apart from "the score happened to land here".
+        if complexity >= fractal_threshold:
+            # A keyword pointing the same way makes it explicit, not merely inferred.
+            base, explicit = "fractal", _fractal_kw
+        elif _fractal_kw:
+            base, explicit = "fractal", True
+        elif complexity >= specialized_threshold:
+            base, explicit = "specialized", _specialized_kw
+        elif _specialized_kw:
+            base, explicit = "specialized", True
+        elif _strategy_pref == "single":
+            # PR-18: if budget is narrow (passive), prefer single even if near threshold
             logger.debug("PR-18 _pick_strategy: passive posture — returning 'single' per budget guidance")
-            return "single"
-        # PR-19: if memory posture is continuity-seeking, prefer single for coherence
-        if _mem_prefer_single:
+            base, explicit = "single", True
+        elif _mem_prefer_single:
+            # PR-19: if memory posture is continuity-seeking, prefer single for coherence
             logger.debug("PR-19 _pick_strategy: continuity posture — returning 'single' per memory guidance")
-            return "single"
-        return "single"
+            base, explicit = "single", True
+        else:
+            base, explicit = "single", False
+
+        # Experience guidance — lowest priority, and only over an implicit choice.
+        if (
+            not explicit
+            and experience_guidance is not None
+            and getattr(experience_guidance, "influenced_by_experience", False)
+        ):
+            candidate = getattr(experience_guidance, "candidate_strategy", "") or ""
+            if candidate and candidate != base:
+                logger.info(
+                    "_pick_strategy: experience guidance %s → %s (%s)",
+                    base,
+                    candidate,
+                    getattr(experience_guidance, "diagnostic_note", ""),
+                )
+                return candidate
+
+        return base
 
     # ──────────────────────────────────────────────────────────────────
     # 调度分发

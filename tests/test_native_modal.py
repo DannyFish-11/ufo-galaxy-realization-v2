@@ -77,6 +77,9 @@ class _FakeBackend:
 def _reset(monkeypatch):
     nm.deactivate()
     monkeypatch.delenv("GALAXY_NATIVE_AUDIO", raising=False)
+    # 感知位的选择由生产代码导出到环境变量(core/model_catalog.py),会跨用例残留。
+    # 本文件的判据都以"档里选中的是谁"为前提,所以先清干净,需要哪个再各自设。
+    monkeypatch.delenv("GALAXY_PERCEPTION_MODEL", raising=False)
     so._native_speech_backend = None
 
 
@@ -156,16 +159,21 @@ def test_on_tier_changed_B_gated_off_during_tests(monkeypatch):
 # ── 判据:看档位构成,不看档位字母 ────────────────────────────────────────────
 
 
-def test_tier_wants_native_reads_the_tier_composition_not_the_letter():
+def test_tier_wants_native_reads_the_tier_composition_not_the_letter(monkeypatch):
     """含 MiniCPM-o 的档都要原生 —— 复合档(C)也算。
 
     原来这里写死 ``key == "B"``。B 档确实只有它一个模型,所以当时不错;但一旦
     出现**含 MiniCPM-o 的复合档**,写死字母那一支会走 deactivate(),
     于是能力表(``tier_effective_io("C")`` 判 audio_out=native)说"说=原生"、
     后端却被注销 —— 协商层照着能力表去用一条已经关掉的通路。判据分家的形状。
+
+    感知位**选中的是谁**必须安排出来再断言:选择会被生产代码导出到
+    ``GALAXY_PERCEPTION_MODEL``(见 ``core/model_catalog.py``),同进程里只要先跑过
+    任何一条走模型选择的用例,这里读到的就不再是默认值 —— 判据会随执行顺序变红。
     """
     from core import model_catalog as mc
 
+    monkeypatch.setenv("GALAXY_PERCEPTION_MODEL", nm.SERVED_MODEL_TAG)
     assert nm.tier_wants_native("B") is True
     assert nm.tier_wants_native("C") is True, "复合档里的感知位就是 MiniCPM-o,却被判成不需要原生"
     assert nm.tier_wants_native("A") is False
@@ -176,9 +184,21 @@ def test_tier_wants_native_reads_the_tier_composition_not_the_letter():
         assert nm.tier_wants_native(key) == speaks_native, f"{key} 档:能力表与后端激活判据分家了"
 
 
+def test_tier_wants_native_follows_the_swapped_perception_model(monkeypatch):
+    """感知位换成别的型号后,C 档就不该再要原生后端。
+
+    上一条钉的是"档里有它就要",这一条钉的是判据的另一半:看的是**这一位上真正
+    选中的那个**,不是候选表里挂没挂着。两条各钉一个方向,``auto`` 落到哪边就不
+    再由"谁先跑过什么"决定。
+    """
+    monkeypatch.setenv("GALAXY_PERCEPTION_MODEL", "gemma4:12b")
+    assert nm.tier_wants_native("C") is False, "感知位已经换成 Gemma,却仍判要原生后端"
+
+
 def test_composite_tier_does_not_deactivate_the_native_backend(monkeypatch):
     """切到 C 档不许把已激活的原生后端注销掉。"""
     _reset(monkeypatch)
+    monkeypatch.setenv("GALAXY_PERCEPTION_MODEL", nm.SERVED_MODEL_TAG)
     nm.activate(_FakeBackend(), background=False)
     assert nm.is_native_active() is True
     nm.on_tier_changed("C")

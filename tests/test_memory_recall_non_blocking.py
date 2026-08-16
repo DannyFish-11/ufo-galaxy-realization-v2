@@ -14,8 +14,12 @@ query 编码成向量(``SentenceTransformer.encode()``，CPU 密集、同步)。
   2. ``core/session_memory_facade.py`` ``MemoryScope.__aenter__()``(async)
      里的 ``recall(...)``。
   3. ``core/agent/execution_planner.py`` ``async def execute()`` 里的
-     ``_um.recall(...)`` 与 ``self._experience_strategy_adjust(...)``
-     (后者内部也调用 ``um.recall``)。
+     ``_um.recall(...)`` 与 ``self._derive_experience_guidance(...)``。
+
+     后者原名 ``_experience_strategy_adjust``，内部也调用 ``um.recall``;
+     现已改为读 TaskSummary 的类型化字段并用 BM25 排序作用域
+     (见 ``core.cognitive.experience_guidance``)。BM25 比向量编码轻，
+     但仍是同步 CPU 调用，**offload 要求不变**——本测试照旧防护它。
 在协程里直接调用同步阻塞代码不会自动让出控制权——会冻结整条共享事件循环，
 期间任何其它并发协程(包括完全无关的路由)都被卡住，直到编码完成。
 
@@ -133,7 +137,7 @@ def test_openclawd_handle_chat_offloads_unified_context():
 
 
 def test_execution_planner_execute_offloads_recall_calls():
-    """静态核实:execute() 里对 recall/_experience_strategy_adjust 的调用经由 asyncio.to_thread。"""
+    """静态核实:execute() 里对 recall/_derive_experience_guidance 的调用经由 asyncio.to_thread。"""
     import inspect
 
     from core.agent.execution_planner import ExecutionPlanner
@@ -141,6 +145,6 @@ def test_execution_planner_execute_offloads_recall_calls():
     src = inspect.getsource(ExecutionPlanner.execute)
     # 同上:按 AST 判 callee 是否真的被 offload,不再靠字符串形状 + 不判别的兜底。
     assert _is_offloaded_to_thread(
-        src, "_experience_strategy_adjust"
-    ), "execute() 应通过 asyncio.to_thread 调用 _experience_strategy_adjust"
+        src, "_derive_experience_guidance"
+    ), "execute() 应通过 asyncio.to_thread 调用 _derive_experience_guidance"
     assert _is_offloaded_to_thread(src, "recall"), "execute() 应通过 asyncio.to_thread 调用 _um.recall"

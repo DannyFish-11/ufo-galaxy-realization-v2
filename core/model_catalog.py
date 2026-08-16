@@ -234,12 +234,18 @@ def backend_for_tag(tag: str) -> str:
 
 
 def runtime_footprint_mb(tag: str) -> int:
-    """这个型号跑起来占多少加速器内存(MB)——**准入判据的唯一入口**。
+    """这个型号跑起来占多少加速器内存(MB);目录里没有这一条就返回 0。
 
     目录外的型号(qwen2/llama3/… 这类只登记在 ``LocalBrainManager`` 兜底表里的)
     返回 0,由调用方自行退回它那张表。
+
+    **这里必须精确查表,不能走** :func:`get_model` **的同家族兜底。** 那条兜底
+    对"这个家族由哪个后端加载"是对的(见 :func:`backend_for_tag`),对显存却是错的:
+    ``get_model("gemma4:31b")`` 查不到就退回同家族的第一条 ``gemma4:e2b``,于是
+    一个 31B 型号会被答成 1800 MB —— 拿这个数去做准入,等于把放不下的模型判成
+    放得下,加载到一半必 OOM。**猜错的数字比没有数字更危险**,所以查不到就说查不到。
     """
-    spec = get_model(tag)
+    spec = _MODELS.get(tag) or _EPHEMERAL.get(tag)
     return spec.runtime_mb() if spec is not None else 0
 
 

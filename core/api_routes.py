@@ -392,6 +392,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(governance_routes.create_router(), dependencies=_auth_deps)
     if resilience_routes is not None:
         router.include_router(resilience_routes.create_router(), dependencies=_auth_deps)
+    # OpenAI 兼容音频端点(/v1/audio/*):仓库已有 /v1/chat/completions,音频那两个一直缺,
+    # 于是 6 个 TTS + 2 个 ASR 引擎只能被内部调用。需鉴权——它能驱动本机合成与识别。
+    try:
+        from core.routes import openai_audio as _openai_audio_routes
+
+        router.include_router(_openai_audio_routes.create_router(), dependencies=_auth_deps)
+    except Exception as _e:  # noqa: BLE001 — 音频依赖缺失时不应拖垮整个 API 层
+        logger.warning("OpenAI 兼容音频路由加载失败（可选）: %s", _e)
 
     # Exempt routes: no auth required (health, docs, observability, device registration)
     # 修复路由遮蔽:devices 路由含 catch-all GET /api/v1/devices/{device_id}

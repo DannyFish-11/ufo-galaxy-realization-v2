@@ -791,6 +791,7 @@ class CanonicalTaskRuntime:
         )
         self._ring.append(rec)
         self._upsert_allocation_truth(task)
+        self._project_to_store(task)
         logger.debug(
             "CanonicalTaskRuntime.register | task_id=%s lifecycle=%s origin=%s",
             task.task_id,
@@ -921,6 +922,22 @@ class CanonicalTaskRuntime:
                 allocation_history=history[-64:],
             )
         self._persist_allocation_truth()
+
+    def _project_to_store(self, task: "CanonicalTask") -> None:
+        """Mirror *task* into the durable object store; see core.canonical_task_store.
+
+        The ring above holds 256 entries and dies with the process; the store is the
+        durable projection that outlives it. It does not replace the ring. Fully
+        best-effort — registration is on the ingress path and must never fail because
+        a projection could not be written. Default store mode is ``shadow`` (writes
+        only), so wiring this in cannot change existing behaviour.
+        """
+        try:
+            from core.canonical_task_store import get_canonical_task_store
+
+            get_canonical_task_store().upsert(task)
+        except Exception as exc:  # noqa: BLE001 — projection is never load-bearing
+            logger.debug("CanonicalTaskRuntime store projection skipped: %s", exc)
 
     def _persist_allocation_truth(self) -> None:
         try:

@@ -20,7 +20,7 @@ import contextvars
 import logging
 import os
 import time
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -113,6 +113,27 @@ def _max_chars() -> int:
 _failed_engine_types: set = set()
 
 
+# 每个选择对应的回退链。**这是数据,不是六串 or**:写成表以后,算力预检才能对
+# 同一条链做一次过滤(见 core/tts/compute_fit.py 的 filter_fallback_chain),
+# 而不是在六个分支里各写一遍、各漏一遍。
+#
+# 每条链都以 kokoro→sapi 收尾:无论装了什么、网络如何,最后总能出声,
+# 且优先高音质离线(kokoro)而非机器人音(sapi)。
+_FALLBACK_CHAINS: Dict[str, Tuple[str, ...]] = {
+    # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才排在首位,不进任何
+    # 默认链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会显著加重延迟。
+    # 不可用/运行期失败仍落回默认链,绝不整段静默。
+    "indextts": ("indextts", "edge", "melo", "piper", "kokoro", "sapi"),
+    "melo": ("melo", "piper", "edge", "kokoro", "sapi"),
+    "piper": ("piper", "melo", "edge", "kokoro", "sapi"),
+    "kokoro": ("kokoro", "sapi"),
+    "sapi": ("sapi",),
+    "auto": ("edge", "kokoro", "melo", "piper", "sapi"),
+    # edge(默认)——运行期失败仍可经 demote 落到离线链。
+    "edge": ("edge", "kokoro", "melo", "piper", "sapi"),
+}
+
+
 def _get_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
@@ -122,6 +143,9 @@ def _get_engine() -> Optional[Any]:
     # sapi(Windows 自带·零依赖) | auto。每条链以 kokoro→sapi 收尾:
     # 无论装了什么、网络如何,最后总能出声,且优先高音质离线而非机器人音。
     choice = os.getenv("GALAXY_TTS_ENGINE", "edge").strip().lower()
+    # "用户说出口的选择"与"没设时的默认值"是两回事:只有前者才享有 POLICY_2 的
+    # 保护(不适配也照样尝试)。把默认的 edge 当成显式选择,等于让默认值也免疫过滤。
+    _explicit = choice if os.getenv("GALAXY_TTS_ENGINE", "").strip() else ""
 
     def _try_piper():
         if "PiperTTSEngine" in _failed_engine_types:
@@ -202,23 +226,53 @@ def _get_engine() -> Optional[Any]:
             logger.info("IndexTTS 不可用: %s", exc)
             return None
 
-    if choice == "indextts":
-        # 质量档(零样本克隆+情绪,自回归大模型):仅显式选择才启用,不进
-        # 任何默认回退链——CPU 合成一句数秒到数十秒,拿它当日常对话嗓音会
-        # 显著加重延迟。不可用/运行期失败仍落回默认链,绝不整段静默。
-        _engine = _try_indextts() or _try_edge() or _try_melo() or _try_piper() or _try_kokoro() or _try_sapi()
-    elif choice == "melo":
-        _engine = _try_melo() or _try_piper() or _try_edge() or _try_kokoro() or _try_sapi()
-    elif choice == "piper":
-        _engine = _try_piper() or _try_melo() or _try_edge() or _try_kokoro() or _try_sapi()
-    elif choice == "kokoro":
-        _engine = _try_kokoro() or _try_sapi()
-    elif choice == "sapi":
-        _engine = _try_sapi()
-    elif choice == "auto":
-        _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
-    else:  # edge(默认)——运行期失败仍可经 demote 落到离线链;离线首选 kokoro(默认装机·神经音)
-        _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
+    # 算力预检:合不合得上本机,选择时就讲出来,而不是让用户等到合成那一刻才发现
+    # (indextts 自己的文档写着"纯 CPU 合成一句要数秒到数十秒")。**只告知,不改选**
+    # ——显式选择高于推断信号,详见 core/tts/compute_fit.py 的 POLICY_2。
+    try:
+        from core.tts.compute_fit import assess_engine_fit, get_tts_routing_mode
+
+        if get_tts_routing_mode() != "static":
+            _fit = assess_engine_fit(choice)
+            if not _fit.fits:
+                logger.warning(
+                    "TTS 引擎 %s 在本机算力下预计跑不动:%s。仍按你的显式选择尝试;"
+                    "若想要低延迟,可改用 %s(GALAXY_TTS_ENGINE=<名字>)",
+                    choice,
+                    _fit.reason,
+                    " / ".join(_fit.suggested_alternatives) or "kokoro",
+                )
+    except Exception as exc:  # noqa: BLE001 — 预检失败绝不影响出声
+        logger.debug("TTS 算力预检跳过: %s", exc)
+
+    _factories = {
+        "indextts": _try_indextts,
+        "edge": _try_edge,
+        "melo": _try_melo,
+        "piper": _try_piper,
+        "kokoro": _try_kokoro,
+        "sapi": _try_sapi,
+    }
+    _base_chain = list(_FALLBACK_CHAINS.get(choice, _FALLBACK_CHAINS["edge"]))
+
+    # 跑不动的引擎从**回退**部分剔除:等到合成那一刻才发现跑不动,代价是用户已经
+    # 等了十几秒。显式选择永远保留(POLICY_2)——推断信号不该顶掉用户说出口的选择。
+    # filter_fallback_chain 保证不返回空链:过滤器绝不能成为系统失声的原因。
+    try:
+        from core.tts.compute_fit import filter_fallback_chain
+
+        _chain = filter_fallback_chain(_base_chain, explicit_choice=_explicit)
+    except Exception as exc:  # noqa: BLE001 — 过滤不可用就走原链,绝不因此不出声
+        logger.debug("TTS 回退链过滤跳过: %s", exc)
+        _chain = _base_chain
+
+    for _name in _chain:
+        _factory = _factories.get(_name)
+        if _factory is None:
+            continue
+        _engine = _factory()
+        if _engine is not None:
+            break
 
     if _engine is None:
         logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")
@@ -289,6 +343,73 @@ def demote_current_engine(reason: str = "", failed_engine: Any = None) -> Option
     _engine = None
     _engine_failed = False
     return _get_engine()
+
+
+async def synthesize_to_file(
+    text: str,
+    *,
+    voice: Optional[str] = None,
+    output_path: Optional[str] = None,
+) -> Optional[str]:
+    """文字 → 音频文件路径。**只合成、不播放。**
+
+    存在的理由:本模块其余部分全是围绕"说"(合成即播放)设计的,而 HTTP 接口要的是
+    拿到字节、不要出声。与其让路由层自己去够 ``_get_engine()`` 这个私有函数、再各自
+    抄一遍失败降级,不如在这里给一个公开入口——**引擎选择与降级的权威留在本模块**。
+
+    复用 ``_speak_via_tts_engine`` 同一套降级语义:合成运行期失败 → demote 换引擎 →
+    重试一次。失败返回 ``None``(不抛),调用方按"合成不可用"处理。
+    """
+    engine = _get_engine()
+    if engine is None:
+        return None
+    used = engine
+    try:
+        path = await engine.synthesize(text, output_path=output_path, voice=voice)
+    except Exception as exc:  # noqa: BLE001 — 运行期失败换引擎重试一次
+        new_engine = demote_current_engine(str(exc), failed_engine=engine)
+        if new_engine is None:
+            logger.warning("TTS 合成失败且无可降级引擎: %s", exc)
+            return None
+        try:
+            path = await new_engine.synthesize(text, output_path=output_path, voice=voice)
+            used = new_engine
+        except Exception as exc2:  # noqa: BLE001
+            logger.warning("TTS 合成失败(降级后仍失败): %s", exc2)
+            return None
+
+    if path:
+        _apply_watermark_if_required(path, type(used).__name__)
+    return path
+
+
+def _apply_watermark_if_required(path: str, engine_name: str) -> None:
+    """给克隆音色的合成音频嵌入不可听水印(默认 cloned_only)。
+
+    严格档(``GALAXY_TTS_WATERMARK_STRICT=1``)下,克隆音色打不上水印即删掉产物并
+    抛出——**宁可没有声音,也不输出无标记的克隆音频**。默认档不抛:对一个语音助手
+    来说哑掉比没水印更糟,但"想打没打上"一定会被记成 warning,不静默。
+    """
+    try:
+        from core.tts.watermark import apply_watermark, strict_mode_enabled
+
+        result = apply_watermark(path, engine_name=engine_name)
+        if result.failed_despite_wanting and strict_mode_enabled():
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            raise RuntimeError(f"严格水印档:克隆音色未能加水印,已丢弃该音频({result.skipped_reason})")
+    except RuntimeError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — 水印链路本身的问题不影响出声
+        logger.debug("水印处理跳过: %s", exc)
+
+
+def current_engine_name() -> str:
+    """当前生效的 TTS 引擎类名;未初始化/不可用时返回空串。供接口如实上报。"""
+    eng = _get_engine()
+    return type(eng).__name__ if eng is not None else ""
 
 
 def _dispatch_speech(coro: Any) -> None:

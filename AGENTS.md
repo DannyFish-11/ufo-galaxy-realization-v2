@@ -51,6 +51,51 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### Agent 系统
 - `core/agent_factory.py` - Agent 工厂
 - `core/system_integration.py` - 系统集成层
+- `core/agent/execution_planner.py` - 执行规划器（策略选择的唯一决策点）
+
+### 策略选择的三层建议输入（都是 advisory，硬门禁永远优先）
+`ExecutionPlanner._pick_strategy()` 按优先级消费三份制导，任何一份都**不能**
+覆盖 task_type 映射、显式关键词、或更高优先级的制导：
+- `core/cognitive/cognitive_activation_budget.py` - PR-18 认知预算 → 广度制导
+- `core/cognitive/memory_bias_layer.py` - PR-19 记忆偏置（POLICY_4：优先级最低）
+- `core/cognitive/experience_guidance.py` - 执行经验制导（对象锚定）
+
+> **经验制导为什么是对象锚定的：** 它读 `TaskSummary` 的类型化字段
+> （`strategy: str` / `success: bool`），作用域由 BM25 词法排序提供，
+> 全程无正则、无 embedding。被它取代的旧实现把这些结构化事实写成散文、
+> 向量召回 8 段、再用正则抠回结构——算出的"成功率"分母是相似度采样而非
+> 真实执行总数，且直接覆写已选定的策略。
+> **决策路径不得从检索到的文本里反解结构。**
+> 与 `pattern_miner` 的策略模式挖掘存在职责重叠，边界见
+> `EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY` 哨兵。
+
+### 对象层（决策该去哪儿拿事实）
+- `core/canonical_task.py` - CanonicalTask 任务本体 + 进程内运行时（权威）
+- `core/canonical_task_store.py` - 任务对象的**持久可查询投影**。ring buffer 只有
+  256 条且随进程消失，答不了"这个任务/设备之前怎么了"；本存储按类型化字段
+  确定性查询（`GALAXY_CANONICAL_TASK_STORE`，默认 `shadow` 只写不读）
+- `core/semantic_anchoring.py` - **判据 + 可执行守卫**：会改变控制流的读取必须走
+  对象层确定性查询；只进 prompt 的读取继续走检索。守卫能扫出"先 `recall` 再
+  `re.search` 抠结构"这个缺陷签名
+- `core/ontology/links.py` - 显式关系层（Link Types）。把散在各 registry 的隐式
+  关联提为可列举、可遍历的声明；纯只读投影，不存储、不改写、可整包删除
+
+> **判据一句话：** 读取的结果若会改变控制流（选策略/选设备/判权限/决定是否执行），
+> 走对象层；若只是进 prompt 供 LLM 参考，走检索。**该换的是决策路径，不是检索能力**
+> ——`Node_105`、`academic_retrieval` 面对的本来就是非结构化文本，向量检索是对的工具。
+
+### 语音
+- `core/speech_output.py` - "说"的权威：引擎链选择 + 失败降级。公开入口
+  `speak_response()`（说）与 `synthesize_to_file()`（只合成不播放，供 HTTP 接口）
+- `core/modality_bridge.py` - **"听"的收口**：`transcribe_b64()`。B 档原生后端在线时
+  让全模态模型自己听，否则回落 Whisper/SenseVoice。**不要绕开它直连 ASR**——
+  该模块文档记录过绕开的真实后果（语音循环直连 Whisper，"原生听"从未生效且无报错）
+- `core/tts/compute_fit.py` - 引擎与本机算力的**事前**匹配预检。只告知不改选；
+  显式选择永远被尝试。注意：本仓引擎绝大多数是 CPU 设计，真正吃算力的只有 indextts
+- `core/tts/watermark.py` - 克隆音色的 AudioSeal 不可听水印（默认 `cloned_only`）。
+  `GALAXY_TTS_WATERMARK_STRICT=1` 时打不上水印即丢弃音频
+- `core/routes/openai_audio.py` - OpenAI 兼容端点 `/v1/audio/{speech,transcriptions,capabilities}`。
+  说走 speech_output、听走 modality_bridge，**不另起一套引擎选择**
 
 ### API 层
 - `core/api_routes.py` - REST API 和 WebSocket 路由

@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 384 条 · 组件 schema 101 个
+// 路径 387 条 · 组件 schema 103 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -390,6 +390,9 @@ export type ApiPath =
   | "/health/nats"
   | "/metrics"
   | "/sync/status"
+  | "/v1/audio/capabilities"
+  | "/v1/audio/speech"
+  | "/v1/audio/transcriptions"
 ;
 
 /** 每条路径允许的 HTTP 方法。用错方法 → 编译期报错。 */
@@ -778,6 +781,9 @@ export const API_METHODS = {
   "/health/nats": ["get"],
   "/metrics": ["get"],
   "/sync/status": ["get"],
+  "/v1/audio/capabilities": ["get"],
+  "/v1/audio/speech": ["post"],
+  "/v1/audio/transcriptions": ["post"],
 } as const satisfies Record<ApiPath, readonly string[]>;
 
 export type ApiMethod<P extends ApiPath> = (typeof API_METHODS)[P][number];
@@ -831,6 +837,13 @@ export interface AutonomousRequest {
   "context"?: Record<string, unknown>;
   "instruction": string;
   "model_alias"?: string | null;
+}
+
+export interface Body_create_transcription_v1_audio_transcriptions_post {
+  "file": string;
+  "language"?: string;
+  "model"?: string;
+  "response_format"?: string;
 }
 
 export interface BudgetRecordRequest {
@@ -1317,6 +1330,14 @@ export interface SkillLoadRequest {
 export interface SlotSelectRequest {
   "model": string;
   "role": string;
+}
+
+export interface SpeechRequest {
+  "input": string;
+  "model"?: string;
+  "response_format"?: string;
+  "speed"?: number;
+  "voice"?: string;
 }
 
 export interface SwarmCreateRequest {
