@@ -129,7 +129,7 @@
     "enhancements/learning/autonomous_learning_engine.py": 1288,
     "galaxy_gateway/android/handlers/goal_execution.py": 1785,
     "galaxy_gateway/android/handlers/registration.py": 1671,
-    "galaxy_gateway/android/handlers/task_lifecycle.py": 1252,
+    "galaxy_gateway/android/handlers/task_lifecycle.py": 1283,
     "galaxy_gateway/android_bridge.py": 2101,
     "galaxy_gateway/cross_device_coordinator.py": 1118,
     "galaxy_gateway/device_router.py": 2139,

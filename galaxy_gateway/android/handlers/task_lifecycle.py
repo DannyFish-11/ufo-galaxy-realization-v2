@@ -272,6 +272,37 @@ def _read_canonical_runtime_status(task_id: Optional[str]) -> Optional[str]:
     except Exception as exc:
         logger.debug("task_lifecycle: task_queue status lookup skipped: %s", exc)
 
+    # 最后一跳:持久对象层。前面每一处都是**进程内**的——CanonicalTaskRuntime 是
+    # 256 条 ring buffer,task_queue 随进程走。任务被挤掉、或网关重启之后,设备来问
+    # "我派的那个任务怎么样了",上面全部答不出,于是返回 None = "不知道"。
+    #
+    # 这正是 Stage 1 那个持久投影存在的理由,也是它到今天为止**唯一没有兑现**的部分:
+    # 数据一直在写,没有人读。这里按 task_id 精确查一次(不是相似度排序,符合
+    # SEMANTIC_ANCHORING::POLICY_1),把"重启后还答得出来"真正接通。
+    #
+    # 灰度未开(默认 shadow)时 store.get() 恒返回 None,本跳等价于不存在 ——
+    # 默认档位下行为与改造前逐字节相同。
+    try:
+        from core.canonical_task_store import get_canonical_task_store
+
+        store = get_canonical_task_store()
+        record = store.get(task_id)
+        if record is not None:
+            mapped = _map_runtime_status_to_task_status(record.lifecycle)
+            if mapped:
+                logger.info(
+                    "task_lifecycle: %s 已不在进程内运行时,由持久对象层作答 lifecycle=%s",
+                    task_id,
+                    record.lifecycle,
+                )
+                return mapped
+        # 走到这里 = 这个问题最终答的是"不知道"。记一笔:灰度还没开时,
+        # 这正是"开了能多答上来多少"的实测依据(store.stats()["answerable_on_miss"]),
+        # 免得把翻不翻 flag 变成一次拍脑袋。它只计数,不回传任何可用于控制流的东西。
+        store.note_live_lookup_miss(task_id)
+    except Exception as exc:
+        logger.debug("task_lifecycle: canonical task store lookup skipped: %s", exc)
+
     return None
 
 
