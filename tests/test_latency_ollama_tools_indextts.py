@@ -303,9 +303,18 @@ class TestContextTrim:
         assert slim_tools(tools, "随便问问", max_tools=24) is tools
 
     def test_slim_over_threshold_prefers_relevant_and_core(self, monkeypatch):
+        """非粘滞(云端)档:按与本次请求的相关性挑 top-K。
+
+        必须显式钉住档位。``auto`` 是看 ``OLLAMA_MODEL`` 有没有值决定粘滞与否,
+        而选中本地主脑时**生产代码本身**就会把它写进 os.environ
+        (core/model_selection.py、core/model_catalog.py)。于是同进程里只要先跑过
+        任何一条走模型选择的用例,这里就悄悄换成了粘滞档——按静态优先级挑、与
+        query 无关,这条判据必红。单跑绿、全量红说的就是这件事。
+        """
         from core.context_trim import slim_tools
 
         monkeypatch.setenv("GALAXY_TOOLS_SLIM", "auto")
+        monkeypatch.setenv("GALAXY_TOOLS_STICKY", "off")
         tools = self._mk_tools(30)
         tools.append(
             {"type": "function", "function": {"name": "node__fs__截图屏幕", "description": "截取当前屏幕画面"}}
@@ -316,6 +325,30 @@ class TestContextTrim:
         assert len(out) == 5
         assert "node__fs__截图屏幕" in names  # 相关工具入选
         assert "memory__recall" in names  # 核心工具永不裁
+
+    def test_slim_sticky_ignores_the_query_on_purpose(self, monkeypatch):
+        """粘滞(本地主脑)档:子集与 query 无关 —— 这是取舍,不是缺陷。
+
+        上一条钉的是相关性,这一条钉的是"为什么另一档不看相关性":按 query 挑会让
+        每回合工具子集不同 → 提示词前缀不同 → Ollama KV 前缀缓存每回合失效 →
+        CPU 上每回合重预填十几秒。两档各测一次,``auto`` 落到哪一档就不再是
+        谁先跑过什么决定的了。
+        """
+        from core.context_trim import slim_tools
+
+        monkeypatch.setenv("GALAXY_TOOLS_SLIM", "auto")
+        monkeypatch.setenv("GALAXY_TOOLS_STICKY", "on")
+        tools = self._mk_tools(30)
+        tools.append(
+            {"type": "function", "function": {"name": "node__fs__截图屏幕", "description": "截取当前屏幕画面"}}
+        )
+        tools.append({"type": "function", "function": {"name": "memory__recall", "description": "记忆召回"}})
+        asked = slim_tools(tools, "帮我截图屏幕看看", max_tools=5)
+        unrelated = slim_tools(tools, "今天天气怎么样", max_tools=5)
+        assert [t["function"]["name"] for t in asked] == [
+            t["function"]["name"] for t in unrelated
+        ], "粘滞档的工具子集随 query 变了 —— 前缀缓存每回合失效,粘滞就白做了"
+        assert "memory__recall" in [t["function"]["name"] for t in asked], "核心工具在哪一档都不该被裁"
 
     def test_slim_off_switch(self, monkeypatch):
         from core.context_trim import slim_tools

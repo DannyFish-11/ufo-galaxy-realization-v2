@@ -106,9 +106,28 @@ class TestGuardModuleIsSelfContained:
         import importlib
         import sys
 
+        # 重新 import 会造出**新的**模块实例。别的测试文件在导入期就绑定了旧实例
+        # 里的函数,而函数查全局是按 __globals__(旧模块字典)查的 —— 不还原的话,
+        # 之后任何 monkeypatch.setattr("nodes.common.url_guard.…") 都打在新实例上,
+        # 对那些函数一律不生效。test_url_guard 的两条判据"单跑绿、全量红"就是这么来的:
+        # 一条以为换掉了 resolved_addresses(实际走了真 DNS),另一条以为换掉了
+        # assert_url_allowed(实际守卫一次都没被记录到)。
+        # 还原要还两处:sys.modules 那一条,**以及父包上的属性**。
+        # ``monkeypatch.setattr("nodes.common.url_guard.x", …)`` 与
+        # ``import nodes.common.url_guard as m`` 走的都是 getattr(nodes.common,
+        # "url_guard") —— 只还原 sys.modules 的话,父包属性仍指着新实例,补丁全部
+        # 打空。少还这一处与完全不还原的结果一模一样。
+        original = sys.modules.get("nodes.common.url_guard")
+        parent = sys.modules.get("nodes.common")
         sys.modules.pop("nodes.common.url_guard", None)
-        mod = importlib.import_module("nodes.common.url_guard")
-        assert hasattr(mod, "assert_url_allowed")
+        try:
+            mod = importlib.import_module("nodes.common.url_guard")
+            assert hasattr(mod, "assert_url_allowed")
+        finally:
+            if original is not None:
+                sys.modules["nodes.common.url_guard"] = original
+                if parent is not None:
+                    parent.url_guard = original
         # httpx 只在 guarded_async_client 内部惰性 import
         src = (REPO_ROOT / "nodes/common/url_guard.py").read_text(encoding="utf-8")
         top_level = [ln for ln in src.splitlines() if ln.startswith("import httpx") or ln.startswith("from httpx")]

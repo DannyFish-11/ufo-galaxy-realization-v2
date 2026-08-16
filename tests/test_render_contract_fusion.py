@@ -242,12 +242,19 @@ def test_context_isolation_across_concurrent_requests():
 # ── 降级如实标注 ──────────────────────────────────────────────────────────
 
 
-def test_degradation_is_labelled_not_faked():
+def test_degradation_is_labelled_not_faked(monkeypatch):
     """拿不到 continuum 时如实标注 anchor_only，但主轴仍然可信。
 
     主轴来自在场运行时，与 continuum 是两条独立链路——continuum 没跑不代表
     主体生命周期不知道自己在哪。
+
+    「拿不到 continuum」这个前提必须**安排出来**，不能假设它默认成立：
+    ``last_continuum_posture()`` 读的是进程级 OpenClawd 单例里的最近一拍，
+    只要同一进程里任何一条先跑的用例建过那个单例，这里就拿得到 state，
+    于是 source 变成 continuum，这条判据在全量里红、单跑绿。
+    把前提写出来，判据才与执行顺序无关。
     """
+    monkeypatch.setattr("core.phase_contract.last_continuum_posture", lambda: None)
     p = resolve_render_posture("manifest", None)
     assert p.source == "anchor_only"
     assert p.lifecycle == "manifest", "主轴不该被降级抹掉"
