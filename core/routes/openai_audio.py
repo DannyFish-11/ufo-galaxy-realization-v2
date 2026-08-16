@@ -175,7 +175,10 @@ async def create_transcription(
     try:
         raw = await file.read()
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"读取上传文件失败: {exc}") from exc
+        # 细节只进服务端日志:异常文本可能带路径/内部结构,不该回给外部调用方
+        # (CodeQL: Information exposure through an exception)。
+        logger.warning("读取上传音频失败: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="读取上传文件失败") from exc
     if not raw:
         raise HTTPException(status_code=400, detail="上传的音频为空")
 
@@ -205,6 +208,12 @@ async def audio_capabilities() -> Dict[str, Any]:
     """本机音频能力自述:装了哪些引擎、当前会用哪个、算力是否跟得上。
 
     有这个端点的理由和 V1 是同一个:与其让调用方试出来,不如让它问得到。
+
+    探测失败时回给调用方的是**异常类型**而非异常文本(``ModuleNotFoundError`` 之类),
+    完整细节只进服务端日志——异常文本可能带路径与内部结构,不该经由 HTTP 外泄
+    (CodeQL: Information exposure through an exception)。类型本身已经足够说明
+    "缺依赖"还是"运行期出错",所以**"探测失败了"这个可诊断信号并没有因此丢掉**,
+    丢掉它才会让这个端点退回成黑盒。
     """
     out: Dict[str, Any] = {"tts": {}, "asr": {}}
     try:
@@ -213,20 +222,23 @@ async def audio_capabilities() -> Dict[str, Any]:
         out["tts"]["active_engine"] = current_engine_name()
         out["tts"]["degraded_reason"] = get_tts_degraded_reason()
     except Exception as exc:  # noqa: BLE001
-        out["tts"]["error"] = str(exc)
+        logger.warning("TTS 能力探测失败", exc_info=True)
+        out["tts"]["error"] = type(exc).__name__
     try:
         from core.tts.compute_fit import ENGINE_COMPUTE_NEEDS, assess_engine_fit
 
         out["tts"]["engines"] = {name: assess_engine_fit(name).to_dict() for name in sorted(ENGINE_COMPUTE_NEEDS)}
     except Exception as exc:  # noqa: BLE001
-        out["tts"]["fit_error"] = str(exc)
+        logger.warning("TTS 算力适配探测失败", exc_info=True)
+        out["tts"]["fit_error"] = type(exc).__name__
     try:
         from core.modality_bridge import _get_asr
 
         asr = _get_asr()
         out["asr"]["active_engine"] = type(asr).__name__ if asr is not None else ""
     except Exception as exc:  # noqa: BLE001
-        out["asr"]["error"] = str(exc)
+        logger.warning("ASR 能力探测失败", exc_info=True)
+        out["asr"]["error"] = type(exc).__name__
     out["endpoints"] = ["/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/capabilities"]
     return out
 
