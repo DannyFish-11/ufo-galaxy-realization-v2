@@ -126,7 +126,15 @@ def test_none_is_the_default_and_means_unfilled():
 
     f = {x.name: x for x in fields(ModelSpec)}["is_moe"]
     assert f.default is None, f"is_moe 默认值又变回 {f.default!r} —— '没填过'与'确认不是'会再次同值"
-    assert all(s.is_moe is None for s in mc.all_models()), "现有目录条目都没填过，应保持 None"
+    # 「没填过」的条目必须留在 None —— 一旦有人给它们补上 False，命名兜底那一支
+    # 又会对整个目录失效，正是本文件开头那个缺陷的复发形状。
+    unfilled = {"gemma4:e2b", "gemma4:e4b", "gemma4:12b", "openbmb/minicpm-o4.5"}
+    for spec in mc.all_models():
+        if spec.tag in unfilled:
+            assert spec.is_moe is None, f"{spec.tag} 被填上了 {spec.is_moe!r} —— 没量过就别替它下结论"
+    # 而填过的条目必须被当成结论,不再看名字。
+    assert mc.get_model("qwen3.6:35b-a3b").is_moe is True
+    assert resolve_is_moe("qwen3.6:35b-a3b") is True
 
 
 # ---------------------------------------------------------------------------

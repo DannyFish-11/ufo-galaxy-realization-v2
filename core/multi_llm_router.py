@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import httpx
 
 from core.credential_vault import PLACEHOLDER_PREFIXES
+from core.model_catalog import SLOT_REASONING
 from core.model_openness import treat_as_open_source as _treat_as_open_source
 
 logger = logging.getLogger("Galaxy.LLMRouter")
@@ -267,6 +268,7 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
 OPEN_SOURCE_PROVIDERS: set = {
     "ollama",  # 本地原生多模态主脑（Gemma4 / MiniCPM-o）
     "hf_local",  # 本地 HuggingFace 模型
+    "local_openai",  # 本地 OpenAI 兼容服务(llama.cpp SYCL/Vulkan、OpenVINO Model Server)
     "agnes",  # Agnes AI（全模态免费 API，开放/免费档友好）
     "deepseek",  # DeepSeek（开源权重）
     "qwen",  # 通义千问（开源权重）
@@ -365,6 +367,7 @@ PROVIDER_QUALITY_TIER: Dict[str, int] = {
     # tier 1 —— 本地轻量（无 GPU 笔电主脑）
     "ollama": 1,
     "hf_local": 1,
+    "local_openai": 1,
 }
 
 
@@ -745,10 +748,14 @@ class OpenAIAdapter(BaseProviderAdapter):
     async def chat(
         self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
     ) -> LLMResponse:
-        headers = {
-            "Authorization": f"Bearer {self.config.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        # 无鉴权的自托管服务(llama.cpp server / OpenVINO Model Server 默认不开
+        # 鉴权)把 api_key 留空。此时**不能**照发 "Bearer " —— httpx 会在发出前就
+        # 抛 LocalProtocolError: Illegal header value b'Bearer '。真实调用实测:
+        # 一个 api_key="" 的 OpenAI 兼容 provider 每一次请求都在这一步直接炸,
+        # 连不上服务器,报错还长得像网络问题。留空就干脆不带这个头。
+        if (self.config.api_key or "").strip():
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
         body: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -1829,6 +1836,91 @@ class MultiLLMRouter:
         except Exception:
             return False
 
+    @staticmethod
+    def _probe_openai_compatible(base_url: str) -> List[str]:
+        """探 OpenAI 兼容服务是否在监听,并把它**实际托管**的模型 id 拿回来。
+
+        探不到就返回空表 → 调用方不注册这个 provider。理由与 hf_local 那处同源:
+        注册一个没人监听的端点，偏好列表命中它时拿到的是连接失败，而不是继续往
+        下一个 provider 退 —— 静默变成"模型探测失败"，看不出根因是端点根本没起。
+
+        顺带解决"模型 id 得手填"的问题:llama.cpp server 与 OpenVINO Model Server
+        都实现了 ``GET /v1/models``,直接问它托管的是什么,比让用户抄一遍准。
+        """
+        try:
+            import httpx
+
+            r = httpx.get(f"{base_url}/models", timeout=2.0)
+            if r.status_code != 200:
+                return []
+            data = r.json().get("data", [])
+            return [str(m.get("id", "")).strip() for m in data if str(m.get("id", "")).strip()]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("本地 OpenAI 兼容服务探测失败(%s): %s", base_url, exc)
+            return []
+
+    def _register_local_openai(self) -> None:
+        """注册「本地 OpenAI 兼容服务」——Intel 核显那一侧就走这条路接进来。
+
+        为什么不写新后端:``VLLMBackend`` 名字叫 vllm,实质是**通用 OpenAI 兼容
+        客户端**(只往 ``{base_url}/v1/chat/completions`` 发)。llama.cpp server 的
+        SYCL / Vulkan 后端、OpenVINO Model Server 都讲同一套协议,起一个服务、
+        把地址填进来即可,``BACKEND_REGISTRY`` 一个字不用加。
+
+        (原打算走 IPEX-LLM,查下来那条路是死的:``intel/ipex-llm`` README 第一行
+        是 THIS PROJECT IS ARCHIVED,并注明"已被识别为存在已知安全问题";社区 fork
+        的验证模型列表停在 Qwen2.5 / MiniCPM-o-2.6,认不了新架构。)
+        """
+        raw = os.environ.get("GALAXY_LOCAL_OPENAI_URL", "").strip()
+        if not raw:
+            return
+        base = raw.rstrip("/")
+        if not base.startswith(("http://", "https://")):
+            base = f"http://{base}"
+        if not base.endswith("/v1"):
+            base = f"{base}/v1"
+
+        served = self._probe_openai_compatible(base)
+        if not served:
+            logger.info("本地 OpenAI 兼容服务(%s)未响应 /models —— 不注册,偏好列表自然跳过它", base)
+            return
+
+        # 显式指定优先(用户可能在一个服务上托管多个模型);否则用它自报的第一个。
+        want = os.environ.get("GALAXY_LOCAL_OPENAI_MODEL", "").strip()
+        default_model = want if want in served else served[0]
+        if want and want != default_model:
+            logger.warning(
+                "GALAXY_LOCAL_OPENAI_MODEL=%r 不在服务 %s 托管的模型里(%s),改用 %r",
+                want,
+                base,
+                ", ".join(served),
+                default_model,
+            )
+
+        cfg = ProviderConfig(
+            name="local_openai",
+            # 留空即"这台服务不开鉴权" —— 适配器据此不带 Authorization 头。
+            # 早先这里塞过一个 "not-needed" 占位符,那是在绕开适配器的空值缺陷,
+            # 而不是在描述事实;缺陷已在 OpenAIAdapter 里修掉,这里如实留空。
+            api_key=os.environ.get("GALAXY_LOCAL_OPENAI_KEY", "").strip(),
+            base_url=base,
+            models=served,
+            default_model=default_model,
+            supports_tools=True,
+            supports_json_mode=False,
+            multimodal=True,
+            env_key="GALAXY_LOCAL_OPENAI_URL",
+            source_type="local",
+            # 核显/量化档:比独显满血弱,但仍是本地,不该被当成远端。
+            hardware_tier="gpu_quantized",
+            supports_vision=True,
+            supports_audio=True,
+            quantization="q4",
+        )
+        self.providers["local_openai"] = cfg
+        self.adapters["local_openai"] = OpenAIAdapter(cfg)
+        logger.info("本地 OpenAI 兼容服务已注册: %s (%d 个模型, 默认 %s)", base, len(served), default_model)
+
     def _register_from_registry(self) -> None:
         """L1:从 PROVIDER_REGISTRY 循环注册标准 OpenAI/Anthropic 兼容提供商。
 
@@ -1879,6 +1971,10 @@ class MultiLLMRouter:
 
         # L1:标准 OpenAI/Anthropic 兼容提供商全部从 PROVIDER_REGISTRY 循环派生
         self._register_from_registry()
+
+        # 本地 OpenAI 兼容服务(Intel 核显侧的 llama.cpp SYCL/Vulkan 或 OpenVINO
+        # Model Server)。没配 GALAXY_LOCAL_OPENAI_URL 时整段是空转,不影响任何现状。
+        self._register_local_openai()
 
         # Ollama (local) — PR-HA: upgraded to first-class multimodal-capable local provider
         ollama_url = self._normalize_base_url(self._get_key("ollama"))
@@ -2661,6 +2757,106 @@ class MultiLLMRouter:
             ),
         )
 
+    # ───────── 本地槽位解析（一个模型还是两个，上层写法一样） ─────────
+
+    def _provider_serving(self, tag: str) -> Optional[Tuple[str, str]]:
+        """哪个**本地** provider 托管着这个目录 tag,以及**该向它报哪个模型 id**。
+
+        返回 ``(provider_name, model_id)``;没人托管返回 None。
+
+        两个 id 常常不是一回事:目录里叫 ``openbmb/minicpm-o4.5``,而 OpenVINO
+        Model Server 或 llama.cpp server 会按自己那套命名报(如
+        ``MiniCPM-o-4_5-int4-ov``)。按目录 tag 去调它只会 404。所以匹配三级:
+
+        1. 名字对得上(精确 / Ollama 的根名松匹配,与 ``_discover_providers`` 里
+           主脑归并同一套口径);
+        2. 用户**显式声明**了这台服务伺候的是哪个目录型号
+           (``GALAXY_LOCAL_OPENAI_SERVES``)—— 只有起服务的人知道自己装的是什么,
+           这里不猜;
+        3. 都不满足 → None,交回原路径。
+
+        按 ``source_type`` 找,不写死 provider 名单 —— Intel 侧那台 OpenAI 兼容
+        服务(``local_openai``)是配出来的,写死名单它就永远进不来。
+        """
+        declared = os.environ.get("GALAXY_LOCAL_OPENAI_SERVES", "").strip()
+        root = tag.split(":")[0]
+        for name, cfg in self.providers.items():
+            if cfg.source_type not in ("local", "hf_local"):
+                continue
+            if self.adapters.get(name) is None or not cfg.is_available():
+                continue
+            if tag == cfg.default_model or tag in cfg.models:
+                return (name, tag)
+            matched = next((m for m in cfg.models if m == tag or m.split(":")[0] == root), None)
+            if matched:
+                return (name, matched)
+            if name == "local_openai" and declared and declared == tag and cfg.default_model:
+                # 声明过:目录 tag 归本档,实际调用报服务自己那套 id。
+                return (name, cfg.default_model)
+        return None
+
+    def _local_by_slot(self, slot_role: str, *, role: str, task: TaskType) -> Optional[RoutingDecision]:
+        """按主脑名册的**槽位**取本地模型;取不到返回 None 交回原路径。
+
+        为什么非要有这一步:原来本地这一支是 ``for local in ("ollama","hf_local")``
+        取第一个可用的 provider,再由 ``select_model_by_complexity`` 对本地**一律
+        早退回 default_model**。也就是说本地侧根本没有"哪个模型"这个概念 ——
+        配了两个本地模型(感知位 + 推理位)时,两个角色会解析到同一个 default_model,
+        ``ROLE_BRAIN_HINTS`` 里的角色区分在本地这边落不了地。
+
+        云端那半边一个字不动:重角色(critic/reviewer/reasoner/coordinator/planner/
+        analyst)是 ``prefer_local: False`` 的**常驻归属**,压根走不到这里。
+        """
+        try:
+            from core.model_catalog import model_for_role  # noqa: PLC0415
+
+            tag = model_for_role(slot_role)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("槽位解析不可用(回落原本地路径): %s", exc)
+            return None
+        if not tag:
+            return None
+        hosted = self._provider_serving(tag)
+        if hosted is None:
+            # 槽位指定的模型没有任何本地 provider 托管 —— 多半是那一位还没装/没起。
+            # 这里**不**静默改派给另一个本地模型:那正是"选了两个模型却全落到一个
+            # 上"的形状。交回原路径,由它按可用性决定。
+            #
+            # 但"交回原路径"本身必须**响亮**。真实路径实测:C 档下推理位没起时,
+            # 这里返回 None,下游按可用性 fit-based 又把活派给了感知位 —— 结果和
+            # 静默改派一模一样,而唯一的痕迹是一行 debug。用户看到的是"两个模型
+            # 都配好了、系统也在跑",实际那一位从没上过岗。
+            #
+            # 一个本地 provider 都没注册 = 这就是**纯云端方案**,不是漏配。
+            # 实测:纯云端安装(档位还是默认的 A)每次派活都会喊一句"本地槽位没上岗",
+            # 而路由结果完全正确 —— 那是误报,而且会把真正的漏配淹掉。
+            if not any(c.source_type in ("local", "hf_local") for c in self.providers.values()):
+                logger.debug("本地一个 provider 都没有(纯云端方案),槽位解析跳过")
+                return None
+
+            # 每个 (槽位, tag) 只喊一次:这条路径每次路由都会走到,喊满屏等于没喊。
+            warned = getattr(self, "_warned_unhosted_slots", None)
+            if warned is None:
+                warned = set()
+                self._warned_unhosted_slots = warned
+            if (slot_role, tag) not in warned:
+                warned.add((slot_role, tag))
+                logger.warning(
+                    "本地[%s]槽位配的是 %s,但没有任何本地 provider 托管它 —— 这一位没上岗。"
+                    "本次按可用性回落(很可能落到另一个本地模型上,失去两位分工的意义)。"
+                    "检查:该模型是否已装/服务是否已起;若服务按自己那套命名报模型 id,"
+                    "用 GALAXY_LOCAL_OPENAI_SERVES 声明它伺候的是哪个目录型号。",
+                    slot_role,
+                    tag,
+                )
+            return None
+        provider, model_id = hosted
+        return RoutingDecision(
+            provider=provider,
+            model=model_id,
+            reason=f"角色[{role}] 轻角色→本地[{slot_role}]槽位: {provider}:{model_id} task={task.value}",
+        )
+
     # ───────── 角色 → 脑 绑定（大小模型配合） ─────────
 
     def select_brain_for_role(
@@ -2698,6 +2894,11 @@ class MultiLLMRouter:
             )
 
         if hint["prefer_local"]:
+            # 先按**槽位**要人:agent 角色干的是文本/工具的活 → 推理位。
+            # 单模型档时推理位就是那个唯一的模型,解析结果与下面的旧路径一致。
+            slotted = self._local_by_slot(SLOT_REASONING, role=role, task=eff_task)
+            if slotted is not None:
+                return slotted
             for local in ("ollama", "hf_local"):
                 if _avail(local):
                     model = self.select_model_by_complexity(local, eff_task, eff_complexity)

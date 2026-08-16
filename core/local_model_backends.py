@@ -900,6 +900,38 @@ def create_backend(name: str, **kwargs) -> LocalModelBackend:
     return backend_cls(**kwargs)
 
 
+def moe_offload_supported() -> bool:
+    """**装着的这个** llama-cpp-python 能不能做专家卸载 —— 判据只此一处。
+
+    为什么这件事必须能被问到
+    ========================
+    MoE 专家卸载是"18 GB 权重的 35B 塞进 8 GB 显存"的**全部前提**:专家留内存、
+    只有激活的 3 B 上卡,显存驻留从 18 GB 降到约 7.3 GB。目录里给推理位登记的
+    ``runtime_mb_val=7300`` 就是按这个前提写的。
+
+    可实测(llama-cpp-python 0.3.34,PyPI 最新):``Llama.__init__`` **既没有**
+    ``n_cpu_moe`` **也没有** ``override_tensor``。底层 ``llama_model_params``
+    结构体里确实有 ``tensor_buft_overrides``,但高层封装不暴露它。
+
+    于是 :meth:`LlamaCppBackend._apply_moe_offload` 走到最后一档、如实告警 ——
+    但那是**加载时**才喊,而准入早在之前就按 7.3 GB 放行了。判据说装得下、这条
+    路做不到,中间隔着一次加载。所以要在**选档时**就能问出来。
+
+    llama.cpp 的 **server** 二进制(``llama-server --n-cpu-moe N``)是支持的。
+    所以缺的不是能力，是这条 in-process 的接法 —— 换成 server + 经
+    ``GALAXY_LOCAL_OPENAI_URL`` 接入即可(见 ``core/multi_llm_router``)。
+    """
+    try:
+        import inspect  # noqa: PLC0415
+
+        import llama_cpp  # noqa: PLC0415
+
+        params = inspect.signature(llama_cpp.Llama.__init__).parameters
+    except Exception:  # noqa: BLE001 — 没装就是不支持
+        return False
+    return "n_cpu_moe" in params or "override_tensor" in params
+
+
 def list_available_backends() -> List[str]:
     """List all backends whose dependencies are installed"""
     available = []

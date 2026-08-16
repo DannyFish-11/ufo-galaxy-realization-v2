@@ -199,7 +199,11 @@ tqdm>=4.65.0              # 模型下载/长任务进度条(此前仅在 require
 # ----------------------------------------------------------------------------
 # torch                        # ASR(sensevoice)/CLAP/本地推理,~2GB+
 # vllm                         # 自托管高吞吐推理后端
-# llama-cpp-python             # GGUF 本地推理后端
+# llama-cpp-python             # GGUF 本地推理后端。
+#                              # 【C 档(双模型)的推理位走它】—— 缺了那一位不上岗,
+#                              # 换档/换人接口会在响应里如实回 runtime_gaps,
+#                              # 不是静默少跑一个模型。仍不设为硬依赖:要编译、
+#                              # 平台特定,且 A/B 单模型档完全用不到。
 # intel-extension-for-pytorch  # Intel XPU 加速(hardware_compute_profiler)
 # faster-whisper 已上移为默认依赖(语音闭环必需);此处不再注释保留
 # funasr                       # SenseVoice ASR(GALAXY_ASR_ENGINE=sensevoice 时的备选)
