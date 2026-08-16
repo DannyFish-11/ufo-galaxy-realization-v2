@@ -53,6 +53,8 @@ __all__ = [
     "SNAPSHOT_RIDES_AN_EXISTING_UPLINK_POLICY",
     "ANDROID_CLASS_ROLE_MAP",
     "SNAPSHOT_PAYLOAD_KEY",
+    "SNAPSHOT_WIRE_FIELDS",
+    "SNAPSHOT_ELEMENT_WIRE_FIELDS",
     "project_android_snapshot",
     "absorb_snapshot_payload",
     "latest_graph_for",
@@ -89,6 +91,33 @@ SNAPSHOT_RIDES_AN_EXISTING_UPLINK_POLICY: str = (
 
 SNAPSHOT_PAYLOAD_KEY: str = "ui_snapshot_payload"
 """Android 端在 emission payload 上挂快照用的字段名(两端唯一约定处)。"""
+
+SNAPSHOT_WIRE_FIELDS: Tuple[str, ...] = ("packageName", "screenWidth", "screenHeight", "elements")
+"""快照顶层的线材字段名。"""
+
+SNAPSHOT_ELEMENT_WIRE_FIELDS: Tuple[str, ...] = (
+    "index",
+    "text",
+    "contentDescription",
+    "className",
+    "clickable",
+    "left",
+    "top",
+    "right",
+    "bottom",
+)
+"""单个元素的线材字段名。
+
+**为什么要把它写成常量而不是只靠一条跨仓测试。**
+最初这条对齐是用一个直接读 Kotlin 源文件的测试守的。它在本机能跑，在 CI 上
+**永远 skip**——两个仓的 CI 都只检出自己，谁也看不见对方。也就是说那条测试
+提供的保护是零，而它看起来像有保护，这比没有更糟。
+
+改成：字段名写在这里，两边各自验证自己那一半——
+  * V2 侧断言投影器确实按这些名字取值（本仓 CI 强制执行，不会 skip）；
+  * Android 侧 ``UiSnapshotUplinkTest`` 断言 DTO 确实发这些名字（android 仓 CI 强制执行）。
+两条独立的测试指向同一份写下来的约定，任何一边改名都会在**自己那边**红。
+跨仓源码比对仍然保留，但只作为本机可用时的额外一层，不再是唯一依靠。"""
 
 ANDROID_CLASS_ROLE_MAP: Dict[str, str] = {
     "button": "button",

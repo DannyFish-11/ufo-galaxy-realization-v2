@@ -50,7 +50,9 @@ Group E — 接线
   E04. 但仍不派发（POLICY_1 未被本阶段削弱）。
 
 Group F — 跨仓契约
-  F01. Kotlin 线材的字段名与本侧投影器逐字对齐。
+  F01. 投影器确实按约定的线材字段名取值（本仓 CI 强制，不会 skip）。
+  F02. 顶层与元素字段清单本身不为空、无重复。
+  F03. Kotlin 源码比对——**仅在本机有 android 仓时**作为额外一层。
 
 Group G — 可观测
   G01. /api/v1/ui/perception 说得出谁说了算、设备有没有在上报。
@@ -67,7 +69,9 @@ import pytest
 
 from core.android_ui_snapshot import (
     ANDROID_CLASS_ROLE_MAP,
+    SNAPSHOT_ELEMENT_WIRE_FIELDS,
     SNAPSHOT_PAYLOAD_KEY,
+    SNAPSHOT_WIRE_FIELDS,
     absorb_snapshot_payload,
     latest_graph_for,
     project_android_snapshot,
@@ -288,30 +292,65 @@ class TestGroupEWiring:
 
 
 class TestGroupFCrossRepoContract:
-    """字段名两边对不上时,表现是服务端静默收到一棵空树 —— 最难查的那种。"""
+    """字段名两边对不上时,表现是服务端静默收到一棵空树 —— 最难查的那种。
 
-    def test_f01_kotlin_wire_fields_match_this_projector(self):
+    **这组测试的形状本身是一次修正。** 最初它只有一条:直接读 android 仓的 Kotlin
+    源文件做比对。那条在本机能跑,在 CI 上**永远 skip** —— 两个仓的 CI 都只检出
+    自己,谁也看不见对方。提供零保护、看起来却像有保护,比没有更糟。
+
+    现在改成两边各自验证自己那一半,指向同一份写下来的字段清单:本仓断言投影器
+    确实按这些名字取值(强制执行),android 仓的 UiSnapshotUplinkTest 断言 DTO
+    确实发这些名字(那边强制执行)。源码比对降为本机可用时的额外一层。
+    """
+
+    def test_f01_projector_reads_exactly_the_agreed_field_names(self):
+        """逐个字段做"改名即失效"的实测:换掉名字,那个信息就必须真的丢掉。"""
+        base = _snapshot(_element(text="发送", desc="描述", cls="android.widget.Button"))
+
+        graph, _ = project_android_snapshot(base, device_id="d1")
+        node = graph.find_by_label("发送")
+        assert node is not None and node.bounds is not None
+
+        # 顶层:改名后那条信息必须真的丢掉,而不是被别的键兜住
+        renamed = dict(base)
+        renamed["zzzPackage"] = renamed.pop("packageName")
+        assert project_android_snapshot(renamed, device_id="d1")[0].app == "", "packageName 改名后仍被读到?"
+        no_elements = {k: v for k, v in _snapshot().items() if k != "elements"}
+        assert project_android_snapshot(no_elements, device_id="d1")[0].root is None
+
+        # 元素级:坐标四项任缺其一,锚点必须消失而不是被兜底成 0
+        for field in ("left", "top", "right", "bottom"):
+            raw = _element()
+            raw.pop(field)
+            g, _ = project_android_snapshot(_snapshot(raw), device_id="d1")
+            hit = g.find_by_label("发送")
+            assert hit is not None
+            assert hit.bounds is None or hit.bounds.area() > 0, f"{field} 缺失时造出了无效锚点"
+
+        # clickable / className / text 各自的信息通道
+        raw = _element(clickable=True)
+        raw["clickable"] = False
+        assert project_android_snapshot(_snapshot(raw), device_id="d1")[0].find_by_label("发送").clickable is False
+        raw = _element(text="", desc="仅描述")
+        assert project_android_snapshot(_snapshot(raw), device_id="d1")[0].find_by_label("仅描述") is not None
+
+    def test_f02_the_agreed_field_lists_are_sane(self):
+        for fields in (SNAPSHOT_WIRE_FIELDS, SNAPSHOT_ELEMENT_WIRE_FIELDS):
+            assert fields, "字段清单为空 —— 这条契约就没有内容了"
+            assert len(set(fields)) == len(fields), f"字段清单里有重复: {fields}"
+        assert "elements" in SNAPSHOT_WIRE_FIELDS
+
+    def test_f03_kotlin_source_matches_when_available(self):
+        """额外一层:本机有 android 仓时顺带比对源码。CI 上不可用,故不作为唯一依靠。"""
         kotlin = pathlib.Path("/home/user/ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt")
         if not kotlin.is_file():
-            pytest.skip("android 仓不在本机,跳过跨仓字段对齐检查")
+            pytest.skip("android 仓不在本机 —— 对齐由两边各自的 F01/UiSnapshotUplinkTest 保证")
         text = kotlin.read_text(encoding="utf-8", errors="replace")
         block = re.search(r"data class DeviceUiSnapshotPayload\((.*?)\n\}", text, re.S)
         assert block, "Kotlin 侧的线材载荷不见了 —— 这根线断了"
         body = block.group(1)
-        for field in ("packageName", "screenWidth", "screenHeight", "elements"):
+        for field in (*SNAPSHOT_WIRE_FIELDS, *SNAPSHOT_ELEMENT_WIRE_FIELDS):
             assert field in body, f"Kotlin 载荷缺字段 {field}"
-        for field in (
-            "index",
-            "text",
-            "contentDescription",
-            "className",
-            "clickable",
-            "left",
-            "top",
-            "right",
-            "bottom",
-        ):
-            assert field in body, f"Kotlin 元素缺字段 {field}"
         assert SNAPSHOT_PAYLOAD_KEY in text, "Kotlin 侧没有把载荷挂到上行字段上"
 
 
