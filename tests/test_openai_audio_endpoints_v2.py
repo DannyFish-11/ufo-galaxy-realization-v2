@@ -60,7 +60,7 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from core.routes import openai_audio
@@ -331,25 +331,25 @@ class TestGroupFCapabilities:
         # 可诊断性仍在:类型说得出是缺依赖还是运行期出错。
         assert r.json()["tts"]["error"] == "RuntimeError"
 
-    def test_f05_upload_failure_does_not_leak_exception_text(self, client, monkeypatch):
-        """同一条原则用在 transcriptions 的读取失败上。"""
+    @pytest.mark.asyncio
+    async def test_f05_upload_failure_does_not_leak_exception_text(self):
+        """同一条原则用在 transcriptions 的读取失败上。
+
+        直接 ``await`` 被测协程,而不是 ``asyncio.get_event_loop().run_until_complete()``
+        ——后者在 Python 3.11 起,只要当前线程没有运行中的事件循环就抛
+        "There is no current event loop"。本地碰巧有残留 loop 所以过了,CI 的干净
+        状态下必炸;pytest.ini 已是 ``asyncio_mode = auto``,async 测试直接就能跑。
+        """
 
         class _Boom:
+            content_type = "audio/wav"
+
             async def read(self):
                 raise RuntimeError("/internal/tmp/spool/secret-xyz")
 
-            content_type = "audio/wav"
-
         import core.routes.openai_audio as mod
 
-        async def _call():
-            return await mod.create_transcription(file=_Boom())
-
-        import asyncio
-
-        from fastapi import HTTPException
-
         with pytest.raises(HTTPException) as ei:
-            asyncio.get_event_loop().run_until_complete(_call())
+            await mod.create_transcription(file=_Boom())
         assert "secret-xyz" not in str(ei.value.detail)
         assert ei.value.status_code == 400
