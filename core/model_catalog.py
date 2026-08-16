@@ -57,7 +57,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
 
@@ -245,8 +245,18 @@ def runtime_footprint_mb(tag: str) -> int:
     一个 31B 型号会被答成 1800 MB —— 拿这个数去做准入,等于把放不下的模型判成
     放得下,加载到一半必 OOM。**猜错的数字比没有数字更危险**,所以查不到就说查不到。
     """
-    spec = _MODELS.get(tag) or _EPHEMERAL.get(tag)
+    spec = exact_model(tag)
     return spec.runtime_mb() if spec is not None else 0
+
+
+def exact_model(tag: str) -> Optional[ModelSpec]:
+    """**精确**查目录,查不到返回 None —— 显存口径一律走这里,不走 :func:`get_model`。
+
+    与 :func:`get_model` 的差别只有一条:那个查不到会退回**同家族的第一条**。
+    家族兜底对"由哪个后端加载"是对的(同家族同后端),对显存是错的(同家族的
+    2B 和 31B 差一个数量级)。凡是拿去和显存比大小的数,都必须从这里取。
+    """
+    return _MODELS.get(tag) or _EPHEMERAL.get(tag)
 
 
 def default_model() -> str:
@@ -555,23 +565,51 @@ def tier_keys() -> List[str]:
     return list(_TIER_KEYS)
 
 
-def tier_runtime_footprint_mb(tier_key: str = "") -> int:
-    """这一档**同时在岗**的几位加起来占多少加速器内存(MB)。
+def tier_runtime_footprint_range_mb(tier_key: str = "") -> Tuple[int, int]:
+    """这一档同时在岗的几位加起来占多少加速器内存 —— **(乐观, 悲观) 一对数**。
 
-    推荐档位、以及"这台机器够不够"的判断只问这一处。三点容易写错的：
+    为什么是一对而不是一个
+    ======================
+    目录里的 ``runtime_mb`` 不是量出来的,是**假设某件事成立**算出来的:
+    ``qwen3.6:35b-a3b`` 权重 18 GB、记着驻留 7.3 GB,差的 10.7 GB 全靠专家卸载
+    生效。把它报成一个数,读的人没法知道这个数底下压着一个假设;报成一对,
+    ``悲观 - 乐观`` 这个差值本身就是"这一档有多少预算是张空头支票"的度量。
+
+    - **乐观** = Σ ``runtime_mb`` —— 该成立的都成立时的驻留量;
+    - **悲观** = Σ ``max(runtime_mb, size_mb)`` —— 卸载之类的假设全不成立、
+      按整权重要显存时的驻留量。非 MoE 两者相等(驻留本就大于权重)。
+
+    三点容易写错的：
 
     - 按 :func:`active_tags` 算，不是 ``model_tags`` —— 候选表里没被选中的那几个
       根本不会加载，把它们计进来会把 C 档的门槛虚高一大截；
     - 按 :meth:`ModelSpec.runtime_mb` 算，不是 ``size_mb`` —— 权重和驻留量差得远
       (MiniCPM-o 4.5 权重 6 GB、跑起来 11 GB)；
     - **求和**，因为复合档的几位是同时在岗的，不是二选一。
+
+    档里有任何一位查不到精确的目录条目 → 返回 ``(0, 0)``,即"这一档判不了"。
+    不能跳过查不到的那位接着求和 —— 那样得到的是一个**偏小**的门槛,准入会把
+    装不下的档放行。判不了要显式地判不了,见 :func:`exact_model`。
     """
-    total = 0
+    lo = 0
+    hi = 0
     for tag in active_tags(tier_key):
-        spec = get_model(tag)
-        if spec is not None:
-            total += spec.runtime_mb()
-    return total
+        spec = exact_model(tag)
+        if spec is None:
+            return (0, 0)
+        resident = spec.runtime_mb()
+        lo += resident
+        hi += max(resident, spec.size_mb())
+    return (lo, hi)
+
+
+def tier_runtime_footprint_mb(tier_key: str = "") -> int:
+    """这一档同时在岗的几位加起来占多少加速器内存(MB) —— 取**乐观**那一头。
+
+    判据全在 :func:`tier_runtime_footprint_range_mb`,这里只是取值方便。要拿这个
+    数去做准入的，请连**悲观**那一头一起看：单看这一个数会以为门槛是确定的。
+    """
+    return tier_runtime_footprint_range_mb(tier_key)[0]
 
 
 def resident_tags(tier_key: str = "") -> List[str]:
@@ -815,6 +853,36 @@ def save_main_brain(tag: str) -> None:
     _write_state(load_tier(), tag)
 
 
+def default_main_brain_for_tier(tier_key: str = "") -> str:
+    """没有显式指定时,这一档的**文本主脑**(``OLLAMA_MODEL`` 这个派生量)默认是谁。
+
+    这条规则原来只长在 :func:`save_tier` 里,于是运行时降档那条路只能自己再写一遍
+    "复合档取哪一位" —— 而这正是上一轮出过事的地方:两处各写一遍,错的那处赢了,
+    C 档的 ``OLLAMA_MODEL`` 指到了感知位。规则只留这一处,两边都问它。
+
+    - **复合档** → 推理位。复合档没有"选一个"这回事,整档一起跑,但这个派生量只能
+      指一个,它代表的是"文本主脑"。按"档内第一个 source=local"取会指到感知位
+      (C 档感知位是 local、推理位是 llama_cpp),所有文本请求就都落到感知位上;
+    - **其余** → 档内第一个 ``source=local``;
+    - 档不存在、或档内没有本地模型 → ``""``,由调用方决定退回什么。
+    """
+    key = (tier_key or load_tier()).strip().upper()
+    tier = _TIERS.get(key)
+    if tier is None:
+        return ""
+    if tier.kind == "composite":
+        reasoning = tier.slot_for(SLOT_REASONING)
+        # 空 tag 要**继续往下找**，不能返回空串:那样调用方会误以为"这一档没有主脑"，
+        # 而它其实只是没配推理位。与重构前 `if main_brain: … elif local_in_tier: …`
+        # 的落法一致。
+        if reasoning and reasoning.tag:
+            return reasoning.tag
+    for spec in tier_models(key):
+        if spec.source == "local":
+            return spec.tag
+    return ""
+
+
 def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
     """持久化档位 + 主脑到【同一条】记录,返回最终生效的主脑 tag。
 
@@ -826,23 +894,12 @@ def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
     if key not in _TIERS:
         key = _DEFAULT_TIER
     tier = _TIERS[key]
-    local_in_tier = [s.tag for s in tier_models(key) if s.source == "local"]
-    if tier.kind == "composite" and not main_brain:
-        # 复合档没有"选一个"这回事,整档一起跑。但 OLLAMA_MODEL 这个派生量只能
-        # 指一个 —— 它代表"文本主脑",即推理位。若按 local_in_tier 取第一个,
-        # C 档会指到感知位(MiniCPM 是 source=local、推理位是 llama_cpp),于是
-        # 所有走 OLLAMA_MODEL 的文本请求都落到感知位上。
-        reasoning = tier.slot_for(SLOT_REASONING)
-        if reasoning:
-            main_brain = reasoning.tag
     if main_brain:
         # 显式指定 → 一律尊重(此前"不在档内候选就替换成档内第一个"会把用户刚选定的
         # 自定义模型静默改回 gemma4:e2b —— 真实的静默数据丢失路径)。
         chosen = main_brain
-    elif local_in_tier:
-        chosen = local_in_tier[0]
     else:
-        chosen = _read_state().get("main_brain", "")
+        chosen = default_main_brain_for_tier(key) or _read_state().get("main_brain", "")
     # 感知位:换档时若现选不属于新档的候选,落回新档默认。不这么做的话,从 C 档
     # (感知位可能选了 Gemma)切到 B 档,那个选择会**留在记录里**,下次切回 C 档
     # 时冒出来 —— 用户不记得自己选过。

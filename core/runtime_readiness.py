@@ -131,6 +131,54 @@ def tier_is_runnable(tier_key: str) -> bool:
     return not slot_runtime_gaps(tier_key)
 
 
+def effective_tier(tier_key: str = "") -> str:
+    """这台机器**现在**实际跑得起来的档：想要的那个跑得起来就是它，否则往下降。
+
+    为什么光"喊"不够
+    ================
+    :func:`tier_is_runnable` 和 ``print_runtime_gaps`` 已经能在选档当场和每次启动
+    时把缺口打到终端上。但**打完之后什么都没变**：存着 C 档的机器照样去加载 C 档，
+    推理位照样抛 ``No module named 'llama_cpp'``，照样被
+    ``reconcile_tier`` 捕获、撤账、写一行日志。用户看到的仍然是"少了一个模型"，
+    只是这回上面还多了一行他看不懂的告警。
+
+    探针有、降级路径没有，比两样都没有更糟：它给人"已经防住了"的错觉。
+
+    降级只影响**运行时**，不回写记录
+    ================================
+    用户存的还是 C —— 那是他的意图，机器现在的状态是暂时的(装上缺的依赖、
+    换回支持卸载的 ``llama-cpp-python``，重启就该自动回到 C)。把降档写回记录等于
+    拿一次环境故障永久改掉用户的选择，而且他不会知道自己被改了。
+
+    Args:
+        tier_key: 想要的档；空则取当前存的(:func:`~core.model_catalog.load_tier`)。
+
+    Returns:
+        实际跑得起来的档位键。想要的那个本来就跑得起来 → 原样返回。全都跑不起来
+        → 最低那一档(纯 CPU 保底，见 :func:`~core.model_catalog.tier_keys`)。
+    """
+    want = (tier_key or "").strip().upper()
+    try:
+        from core.model_catalog import load_tier, tier_keys  # noqa: PLC0415
+
+        want = want or load_tier().strip().upper()
+        keys = tier_keys()  # 由低到高
+        if want not in keys:
+            return want
+        if tier_is_runnable(want):
+            return want
+        # 只往**下**找：降级是为了能跑起来，不是替用户改主意往上升。
+        for key in reversed(keys[: keys.index(want)]):
+            if tier_is_runnable(key):
+                return key
+        return keys[0]
+    except Exception as exc:  # noqa: BLE001
+        # 评估不了就**不降** —— 与 slot_runtime_gaps 同一个方向:判不了不代表跑不了，
+        # 拿一次探测异常去改用户的档，比不改危险得多。
+        logger.debug("有效档位不可评估(保持原档): %s", exc)
+        return want
+
+
 def format_gaps(gaps: List[Dict[str, Any]]) -> List[str]:
     """把缺口渲染成可直接打给用户看的几行(终端/日志共用一份措辞)。"""
     return [f"[{g.get('kind', '?')}] {g.get('tag', '?')}: {g.get('detail', '')}" for g in gaps]

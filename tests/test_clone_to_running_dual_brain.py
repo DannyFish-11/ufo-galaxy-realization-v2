@@ -101,8 +101,42 @@ class TestTheRecommenderKnowsEveryTier:
 
     def test_a_big_gpu_with_a_capable_runtime_gets_the_dual_tier(self, monkeypatch):
         monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
+        # 门槛是**带余量**的驻留量，不是驻留量本身（见 ms._TIER_ADMISSION_HEADROOM）。
+        # 这一条原来写的是 `need + 1000`，即"刚好装得下就该推" —— 那正是下面
+        # test_a_hair_of_headroom_is_not_enough 要否掉的语义。
+        assert ms.recommend_tier(True, ms.tier_admission_need_mb("C")) == "C"
+
+    def test_a_hair_of_headroom_is_not_enough(self, monkeypatch):
+        """刚好等于驻留量 = 一点余量都不留，这种机器不该被**推荐**到 C 档。
+
+        目录里的 ``runtime_mb`` 是个常数，实际占用随上下文长度、KV cache、显存碎片
+        浮动。卡在临界点上推荐一个档，等于把"不 OOM"押在这个常数的精度上。
+
+        只管**推荐**：用户自己在列表里选 C，一个档都不拦（下一条钉住这点）。
+        """
+        monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
         need = mc.tier_runtime_footprint_mb("C")
-        assert ms.recommend_tier(True, need + 1000) == "C"
+        assert ms.tier_admission_need_mb("C") > need, "余量没起作用"
+        assert ms.recommend_tier(True, need) == "B"
+
+    def test_the_headroom_only_gates_the_recommendation_never_the_choice(self, tmp_path, monkeypatch):
+        """余量拦的是"默认推给你"，不是"你不能选"。"""
+        monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+        monkeypatch.delenv("GALAXY_MODEL_TIER", raising=False)
+        monkeypatch.setattr(mc, "_STATE_FILE", tmp_path / "model_state.json")
+        assert mc.save_tier("C") == "qwen3.6:35b-a3b"
+        assert mc.load_tier() == "C"
+
+    def test_a_tier_whose_footprint_cannot_be_judged_is_never_recommended(self, monkeypatch):
+        """驻留量算不出来(档里有型号查不到精确目录条目) → 0。
+
+        0 是"判不了"，不是"不要钱"。放行等于拿一个**偏小**的门槛做准入，
+        必然把装不下的档推出去 —— 与 exact_model 拒绝家族兜底是同一条理由。
+        """
+        monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
+        real = mc.tier_runtime_footprint_range_mb
+        monkeypatch.setattr(mc, "tier_runtime_footprint_range_mb", lambda k="": (0, 0) if k == "C" else real(k))
+        assert ms.recommend_tier(True, 999999) != "C"
 
     def test_it_never_recommends_a_tier_this_machine_cannot_run(self, monkeypatch):
         """装得下 ≠ 跑得起来。
