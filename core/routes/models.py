@@ -118,6 +118,107 @@ def _catalog_placeholder(status: str = "unknown") -> Dict[str, Dict[str, Any]]:
     return out
 
 
+#: 后端名 → 装它的 pip 包名。只列本仓真会用到的本地后端。
+_BACKEND_PIP: Dict[str, str] = {
+    "llama_cpp": "llama-cpp-python",
+    "transformers": "transformers",
+    "vllm": "vllm",
+}
+
+
+def slot_runtime_gaps(tier_key: str = "") -> List[Dict[str, Any]]:
+    """这一档里，哪几位的**加载运行时**没装 —— 每位一条，装齐则空表。
+
+    为什么必须报出来
+    ================
+    ``list_available_backends()`` 早就在答"哪个后端的依赖装了",可换档/换人那条
+    路从来没问过它。于是:选了带 llama_cpp 推理位的档 → 换档时那一位加载抛
+    ``No module named 'llama_cpp'`` → 被 ``reconcile_tier`` 捕获、撤账、写一行
+    WARNING 到日志里 → **面板上什么都看不到**。用户以为两个模型都跑起来了,
+    实际只有一位在岗。
+
+    ``llama-cpp-python`` 是**刻意**归档的可选依赖(GB 级、要编译、平台特定,
+    见 requirements.txt 的可选依赖存档段),不该改成硬依赖 —— 但"可选"的前提是
+    缺了要**说**,而不是默默少跑一个模型。
+    """
+    try:
+        from core.local_model_backends import (  # noqa: PLC0415
+            list_available_backends,
+            moe_offload_supported,
+        )
+        from core.model_catalog import (  # noqa: PLC0415
+            active_tags,
+            backend_for_tag,
+            get_model,
+            load_tier,
+            resolve_is_moe,
+        )
+
+        key = tier_key or load_tier()
+        # 探测函数本身也可能在**调用时**抛(不只是 import 时)。只裹 import 的话,
+        # 一次探测异常会把 /status、/tier 整个打挂 —— 而这一层的职责只是"报缺口",
+        # 报不出来就该安静退场,没有理由拖垮它服务的那个接口。
+        ready = set(list_available_backends())
+        return _collect_gaps(key, ready, moe_offload_supported, active_tags, backend_for_tag, get_model, resolve_is_moe)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("运行时就绪度不可评估: %s", exc)
+        return []
+
+
+def _collect_gaps(key, ready, moe_offload_supported, active_tags, backend_for_tag, get_model, resolve_is_moe):
+    """逐位比对"要哪个后端 / 装了没 / 做不做得到声称的落位"。"""
+    gaps: List[Dict[str, Any]] = []
+    for tag in active_tags(key):
+        backend = backend_for_tag(tag)
+        spec = get_model(tag)
+        if backend not in ready:
+            gaps.append(
+                {
+                    "kind": "backend_missing",
+                    "tag": tag,
+                    "backend": backend,
+                    "pip": _BACKEND_PIP.get(backend, backend),
+                    "detail": (
+                        f"加载 {tag} 要用 {backend} 后端,但它的依赖没装 —— 这一位不会上岗。"
+                        f"装法: pip install {_BACKEND_PIP.get(backend, backend)}"
+                    ),
+                    "source": getattr(spec, "source", ""),
+                }
+            )
+            continue
+        # 后端装了,还要看它**做不做得到目录声称的那种落位**。
+        #
+        # MoE 的 runtime_mb 是按"专家卸载生效"写的(35B:18 GB 权重 → 7.3 GB 驻留)。
+        # 卸载做不到时那个数就是空头支票 —— 准入按 7.3 GB 放行,加载时按 18 GB 要
+        # 显存,8 GB 卡上必炸。而告警只在加载时才喊,中间隔着一整次加载。
+        if (
+            backend == "llama_cpp"
+            and spec is not None
+            and resolve_is_moe(tag)
+            and spec.runtime_mb() < spec.size_mb()
+            and not moe_offload_supported()
+        ):
+            gaps.append(
+                {
+                    "kind": "moe_offload_unavailable",
+                    "tag": tag,
+                    "backend": backend,
+                    "pip": "",
+                    "detail": (
+                        f"{tag} 的显存账({spec.runtime_mb()} MB)是按**专家卸载生效**算的,"
+                        f"但装着的 llama-cpp-python 既不支持 n_cpu_moe 也不支持 override_tensor —— "
+                        f"这一位会按整权重 {spec.size_mb()} MB 要显存,小显存上必然装不下。"
+                        f"解法:改用 llama.cpp server(llama-server --n-cpu-moe N),"
+                        f"再用 GALAXY_LOCAL_OPENAI_URL 接进来。"
+                    ),
+                    "source": getattr(spec, "source", ""),
+                    "declared_runtime_mb": spec.runtime_mb(),
+                    "actual_runtime_mb": spec.size_mb(),
+                }
+            )
+    return gaps
+
+
 #: GGUF 落盘探测的缓存 {tag: (ts, result)}。文件不会每 3 秒长出来一个。
 _GGUF_CACHE: Dict[str, tuple] = {}
 _GGUF_TTL = 60.0
@@ -510,11 +611,16 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
 
+    # 缺依赖必须随响应回去 —— 只写日志等于没说(见 slot_runtime_gaps 的说明)。
+    gaps = slot_runtime_gaps(req.tier)
+    for g in gaps:
+        logger.warning("换到 %s 档: %s", req.tier, g["detail"])
     return {
         "success": True,
         "tier": req.tier,
         "main_brain": chosen,
         "pulling": pulled,
+        "runtime_gaps": gaps,
     }
 
 
@@ -586,6 +692,7 @@ async def select_slot(req: SlotSelectRequest) -> Dict[str, Any]:
         "success": True,
         "role": SLOT_PERCEPTION,
         "selected": chosen,
+        "runtime_gaps": slot_runtime_gaps(tier_key),
         "candidates": list(slot.candidates),
         "active_tags": active_tags(tier_key),
         # 换人会改变"能不能原生说话",面板要据此更新提示。

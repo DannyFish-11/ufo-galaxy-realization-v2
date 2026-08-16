@@ -601,6 +601,7 @@ class ComputeScheduler:
             换档后的账本快照。
         """
         from core.model_catalog import active_tags as _active_tags  # noqa: PLC0415
+        from core.model_catalog import backend_for_source as _backend_for_source  # noqa: PLC0415
         from core.model_catalog import get_model as _get_model  # noqa: PLC0415
         from core.model_catalog import resolve_is_moe as _resolve_is_moe  # noqa: PLC0415
 
@@ -627,7 +628,7 @@ class ComputeScheduler:
             if spec.source not in ("local", "llama_cpp"):
                 continue
             try:
-                backend_name = "llama_cpp" if spec.source == "llama_cpp" else "ollama"
+                backend_name = _backend_for_source(spec.source)
                 await self.schedule_model(
                     spec.tag,
                     int(spec.size_mb()),

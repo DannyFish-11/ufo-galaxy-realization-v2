@@ -209,6 +209,30 @@ _MODELS: Dict[str, ModelSpec] = {
 }
 
 
+#: ``source`` → 加载它要用哪个后端。**判据只此一处**。
+#:
+#: 原来这条散在 ``compute_scheduler.reconcile_tier`` 的调用点上
+#: (``"llama_cpp" if spec.source == "llama_cpp" else "ollama"``)。只有一个调用点
+#: 时看不出问题;可一旦别处也要问"这个型号归谁加载"(比如状态盘要报"加载它的
+#: 运行时装没装"),就会各写各的,然后在某个 source 上分家。
+BACKEND_BY_SOURCE: Dict[str, str] = {
+    "local": "ollama",
+    "llama_cpp": "llama_cpp",
+    "container": "vllm",
+}
+
+
+def backend_for_source(source: str) -> str:
+    """这个 source 的模型由哪个后端加载;不认识的一律按 ollama。"""
+    return BACKEND_BY_SOURCE.get((source or "").strip(), "ollama")
+
+
+def backend_for_tag(tag: str) -> str:
+    """这个 tag 由哪个后端加载(查不到目录时按 ollama)。"""
+    spec = get_model(tag)
+    return backend_for_source(spec.source if spec is not None else "")
+
+
 def runtime_footprint_mb(tag: str) -> int:
     """这个型号跑起来占多少加速器内存(MB)——**准入判据的唯一入口**。
 
