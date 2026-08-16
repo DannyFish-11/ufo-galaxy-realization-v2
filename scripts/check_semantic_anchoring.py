@@ -33,6 +33,12 @@
 而不是全仓：全仓扫描会被无关的正则用法淹没成噪音，然后被关掉——那比一道窄而常开
 的闸更糟。
 
+但**手写清单会腐烂**：新加一个决策模块，没人往清单里加，闸就悄悄不再覆盖它——
+这与本闸要防的缺陷是同一个形状（"改个格式串，学习静默停止"）。所以本脚本还做
+第二道检查：把**真正做检索调用的模块**推导出来，要求每一个要么在扫描范围内、
+要么在 ``RETRIEVAL_MODULE_EXEMPTIONS`` 里写明豁免理由。新模块一开始检索就会红，
+直到有人对它做出判断。
+
 用法
 ====
     python scripts/check_semantic_anchoring.py            # 有违规则非零退出
@@ -57,8 +63,11 @@ from core.semantic_anchoring import (  # noqa: E402 — path bootstrap must prec
     DECISION_PATHS_MUST_USE_OBJECT_LAYER_POLICY,
     RETRIEVAL_CAPABILITY_IS_NOT_THE_DEFECT_POLICY,
     RETRIEVAL_IS_ADVISORY_ONLY_POLICY,
+    RETRIEVAL_MODULE_EXEMPTIONS,
     build_audit_report,
+    modules_performing_retrieval,
     scan_decision_paths,
+    unclassified_retrieval_modules,
 )
 
 
@@ -75,6 +84,11 @@ def _print_doctrine() -> None:
     print("=" * 72)
     for name in DECISION_PATH_MODULES:
         print(f"  {name}")
+    print("\n检索模块归类（豁免 = 结果不改变控制流）")
+    print("=" * 72)
+    for name, reason in sorted(RETRIEVAL_MODULE_EXEMPTIONS.items()):
+        print(f"  {name}")
+        print(f"    → {reason}")
     print("\n已审计的检索调用点")
     print("=" * 72)
     for site in AUDITED_RETRIEVAL_CALL_SITES:
@@ -97,8 +111,24 @@ def main(argv: list[str] | None = None) -> int:
         print()
 
     violations = scan_decision_paths()
+    unclassified = unclassified_retrieval_modules()
+
+    if unclassified:
+        print(f"\n❌ {len(unclassified)} 个模块做了检索调用，却既不在扫描范围内、也没写豁免理由：\n")
+        for name, calls in sorted(unclassified.items()):
+            print(f"  {name}  →  {', '.join(calls)}")
+        print("\n  它的结果会改变控制流吗？")
+        print("    会 → 加进 DECISION_PATH_MODULES，让扫描器管它。")
+        print("    不会 → 加进 RETRIEVAL_MODULE_EXEMPTIONS，并写清为什么不会。")
+        print("  两者都不做，就等于这道闸从今天起不覆盖它，而且没人会发现。")
+        return 1
+
     if not violations:
-        print(f"\n✅ 决策路径干净：{len(DECISION_PATH_MODULES)} 个模块，未发现从检索文本反解结构的用法。")
+        total = len(modules_performing_retrieval())
+        print(
+            f"\n✅ 决策路径干净：{len(DECISION_PATH_MODULES)} 个模块未发现从检索文本反解结构的用法；"
+            f"{total} 个做检索的模块已全部归类。"
+        )
         return 0
 
     print(f"\n❌ 发现 {len(violations)} 处决策路径从检索到的散文里反解结构：\n")

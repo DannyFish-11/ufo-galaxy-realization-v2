@@ -405,8 +405,25 @@ def find_unwired(definitions, referenced, def_count) -> List[Tuple[str, str]]:
         rel = locations[0].split(":")[0]
         if _is_exempt(rel, name):
             continue
-        # ast.Name/Attribute 不会匹配 FunctionDef.name,所以 referenced 里出现该名字
-        # 就意味着**真的有别处用到**,定义处自身不会自证。
+        # 这里的"被引用"是**全仓非测试代码里出现过这个名字**,不是"外部可达"。
+        #
+        # 原注释写的是"定义处自身不会自证",那句话是错的:``self.foo(...)`` 写在
+        # foo 自己的模块里,也是一个 ast.Attribute,照样算引用。于是一个只被同模块
+        # 内部调用、外面没有任何人用的公开能力,能靠自引用躲过这道闸
+        # (实例:core/ontology/links.py 的 for_source,唯一引用来自同文件的
+        # resolve_all)。**这是本闸已知的漏检,不是它的设计意图。**
+        #
+        # 为什么没有顺手修:量过了。
+        #   仅靠模块内自引用而算作"已接线"的:888 个
+        #   其中连模块内可达性都通不过的:      243 个
+        # 而这 243 条里占多数的是**误报**——装饰器返回的内层函数(error_framework
+        # 的 async_wrapper)、以及节点按字符串名分发的 action handler(分发表就在
+        # 同一个文件里,Node_83 的 add_feed 之类)。把它们报出来,这道闸就会变成
+        # 没人看的噪音,然后被关掉——而本文件顶部的设计说明恰恰写着,那比一道窄而
+        # 常开的闸更糟。
+        #
+        # 真要修,需要的是函数级可达性 + 一个能理解字符串分发的模型,不是在这里
+        # 多加一个条件。在那之前,这条漏检是**写明的**,不是假装不存在的。
         if name in referenced:
             continue
         out.append((name, locations[0]))

@@ -255,3 +255,37 @@ class TestAgainstTheRealRepo:
         """只有测试调用它,恰恰就是本工具要抓的情形 —— tests/ 绝不能算作"接上了"。"""
         assert "tests" in cw.REFERENCE_SKIP_PARTS
         assert not any("tests" in p.parts for p in cw._iter_reference_files())
+
+
+class TestKnownBlindSpotIsDocumentedNotHidden:
+    """这道闸有一个已知漏检:只被同模块内部调用的公开能力算"已接线"。
+
+    钉住它有两个理由。一是防止有人再把那句错的断言写回去("定义处自身不会自证"
+    ——``self.foo()`` 就在同一个文件里,照样算引用)。二是让漏检**留在代码里被看见**:
+    量过之后没修,是因为修了会产生 243 条以误报为主的告警(装饰器内层函数、节点按
+    字符串名分发的 handler),那会让这道闸被关掉。写明的漏检和假装没有的漏检,
+    是两回事。
+    """
+
+    def test_self_reference_currently_counts_as_wired(self):
+        """这就是漏检本身 —— 它成立,所以下面那条注释必须在。"""
+        src = "class R:\n    def helper(self):\n        return 1\n    def other(self):\n        return self.helper()\n"
+        import ast
+
+        tree = ast.parse(src)
+        referenced = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute):
+                referenced.add(node.attr)
+        assert "helper" in referenced, "同模块内的 self.helper() 确实被算作引用"
+
+    def test_the_blind_spot_is_written_down_where_the_decision_is_made(self):
+        """漏检必须记在做判断的那一行旁边,不是记在某个人的记忆里。"""
+        import inspect
+
+        import scripts.check_wiring as cw
+
+        src = inspect.getsource(cw.find_unwired)
+        assert "漏检" in src, "已知漏检没有写在 find_unwired 里"
+        assert "888" in src and "243" in src, "没有留下量化依据,下一个人只能重新测一遍"
+        assert "自证" not in src.replace("定义处自身不会自证", ""), "那句错的断言不该再出现"

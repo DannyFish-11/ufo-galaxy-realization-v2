@@ -570,3 +570,109 @@ class TestGroupFRegressionGuards:
         assert flag.default == "on"
         assert flag.cleanup_condition
         assert flag.rollout_plan
+
+
+# ---------------------------------------------------------------------------
+# Group K — the thresholds must become answerable, not merely arguable
+# ---------------------------------------------------------------------------
+
+
+class TestGroupKThresholdEvidence:
+    """DEFAULT_MIN_SAMPLES / MARGIN / COLD_START_FLOOR 是拍出来的,不是量出来的。
+
+    它们控制的是"这一层多久开一次口",所以调它们的人第一件需要的东西就是那个
+    比率,以及没开口时的原因分布。这组判据钉的是**这个数拿得到**——拿不到的话,
+    这三个常数就永远只能靠争论,不能靠证据。
+    """
+
+    def _reset(self):
+        from core.cognitive.experience_guidance import get_experience_guidance_stats
+
+        get_experience_guidance_stats(reset=True)
+
+    def test_k01_every_derivation_is_counted(self, monkeypatch):
+        from core.cognitive.experience_guidance import (
+            derive_experience_guidance,
+            get_experience_guidance_stats,
+        )
+
+        self._reset()
+        for _ in range(4):
+            derive_experience_guidance("装个应用", "single", task_type="app")
+        assert get_experience_guidance_stats()["derivations"] == 4
+
+    def test_k02_declines_are_attributed_to_a_reason(self):
+        from core.cognitive.experience_guidance import (
+            derive_experience_guidance,
+            get_experience_guidance_stats,
+        )
+
+        self._reset()
+        derive_experience_guidance("", "single")
+        reasons = get_experience_guidance_stats()["declined_by_reason"]
+        assert reasons, "没开口却说不出为什么 —— 那就还是不可诊断"
+        assert sum(reasons.values()) == 1
+
+    def test_k03_disabled_mode_is_still_counted(self, monkeypatch):
+        """关掉也要计数:否则"它从没开过口"与"它压根没被调用"分不开。"""
+        from core.cognitive.experience_guidance import (
+            derive_experience_guidance,
+            get_experience_guidance_stats,
+        )
+
+        monkeypatch.setenv("GALAXY_EXPERIENCE_GUIDANCE", "off")
+        self._reset()
+        derive_experience_guidance("装个应用", "single")
+        stats = get_experience_guidance_stats()
+        assert stats["derivations"] == 1
+        assert stats["influenced"] == 0
+
+    def test_k04_stats_report_the_thresholds_they_describe(self):
+        from core.cognitive.experience_guidance import (
+            DEFAULT_COLD_START_FLOOR,
+            DEFAULT_MARGIN,
+            DEFAULT_MIN_SAMPLES,
+            get_experience_guidance_stats,
+        )
+
+        th = get_experience_guidance_stats()["thresholds"]
+        assert th["min_samples"] == DEFAULT_MIN_SAMPLES
+        assert th["margin"] == DEFAULT_MARGIN
+        assert th["cold_start_floor"] == DEFAULT_COLD_START_FLOOR
+
+    def test_k05_reset_starts_a_new_window(self):
+        """要能量"最近这一段",不是只能量"自进程启动以来"。"""
+        from core.cognitive.experience_guidance import (
+            derive_experience_guidance,
+            get_experience_guidance_stats,
+        )
+
+        self._reset()
+        derive_experience_guidance("装个应用", "single")
+        assert get_experience_guidance_stats(reset=True)["derivations"] == 1
+        assert get_experience_guidance_stats()["derivations"] == 0
+
+    def test_k05b_scope_sample_is_bounded(self):
+        """长期进程里的计数器不许无界增长。"""
+        from core.cognitive import experience_guidance as mod
+
+        self._reset()
+        for _ in range(mod._SCOPE_SAMPLE_CAP + 50):
+            mod._note_outcome(mod.ExperienceGuidance(scope_size=1))
+        assert len(mod._STATS["scope_sizes"]) == mod._SCOPE_SAMPLE_CAP
+
+    def test_k06_instrumentation_cannot_break_planning(self, monkeypatch):
+        """统计失败绝不能让策略选择挂掉。"""
+        from core.cognitive import experience_guidance as mod
+
+        class Hostile:
+            influenced_by_experience = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
+
+        mod._note_outcome(Hostile())  # 不抛即通过
+
+    def test_k07_json_safe(self):
+        import json
+
+        from core.cognitive.experience_guidance import get_experience_guidance_stats
+
+        json.dumps(get_experience_guidance_stats())

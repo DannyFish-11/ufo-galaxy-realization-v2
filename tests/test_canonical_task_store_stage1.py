@@ -513,3 +513,101 @@ class TestGroupGWiring:
         task = _task(goal="即使存储爆炸也要注册成功")
         assert runtime.register(task) is task
         assert runtime.get_by_task_id(task.identity.task_id) is task
+
+
+# ---------------------------------------------------------------------------
+# Group J — the durable layer finally has a consumer
+# ---------------------------------------------------------------------------
+
+
+class TestGroupJFirstRealConsumer:
+    """存了一堆数据却没有任何人读,是这一层到今天为止真正的缺口。
+
+    消费者选在 Android 问"我派的那个任务怎么样了":之前的每一跳都是**进程内**的
+    (CanonicalTaskRuntime 是 256 条 ring buffer、task_queue 随进程走),任务被挤掉
+    或网关重启之后,设备拿到的是"不知道"。持久投影正是为这件事建的。
+    """
+
+    def _reset(self, tmp_path, monkeypatch, mode):
+        import core.canonical_task_store as mod
+
+        monkeypatch.setenv("GALAXY_CANONICAL_TASK_STORE", mode)
+        monkeypatch.setattr(mod, "_STORE", None, raising=False)
+        store = mod.CanonicalTaskStore(data_dir=str(tmp_path))
+        monkeypatch.setattr(mod, "get_canonical_task_store", lambda: store)
+        return store
+
+    def _record(self, store, lifecycle):
+        """存一个真实的 CanonicalTask,返回它的 task_id。
+
+        刻意不手搓 PersistedTaskRecord:那样测的是我自己造的假数据,
+        而这条链路真正要证明的是"注册路径写进去的那个,查得回来"。
+        """
+        from core.canonical_task import TaskLifecycle
+
+        task = _task(goal="被挤掉的任务", lifecycle=getattr(TaskLifecycle, lifecycle.upper()))
+        store.upsert(task)
+        return task.task_id
+
+    def test_j01_answers_after_the_in_process_runtimes_have_forgotten(self, tmp_path, monkeypatch):
+        from galaxy_gateway.android.handlers import task_lifecycle as tl
+
+        store = self._reset(tmp_path, monkeypatch, "on")
+        task_id = self._record(store, "completed")
+        assert tl._read_canonical_runtime_status(task_id) == "completed"
+
+    def test_j02_shadow_mode_still_answers_unknown(self, tmp_path, monkeypatch):
+        """默认档位下行为必须与改造前完全一致 —— shadow 的全部意义就在这里。"""
+        from galaxy_gateway.android.handlers import task_lifecycle as tl
+
+        store = self._reset(tmp_path, monkeypatch, "shadow")
+        task_id = self._record(store, "completed")
+        assert tl._read_canonical_runtime_status(task_id) is None
+
+    def test_j03_shadow_mode_measures_what_turning_it_on_would_buy(self, tmp_path, monkeypatch):
+        """翻不翻 flag 应该有实测依据,而不是拍脑袋。"""
+        from galaxy_gateway.android.handlers import task_lifecycle as tl
+
+        store = self._reset(tmp_path, monkeypatch, "shadow")
+        task_id = self._record(store, "completed")
+
+        tl._read_canonical_runtime_status(task_id)
+        tl._read_canonical_runtime_status("t-never-seen")
+
+        st = store.stats()
+        assert st["live_lookup_misses"] == 2
+        assert st["answerable_on_miss"] == 1, "只有存过的那一个才算'开了能多答上来'"
+
+    def test_j04_the_probe_cannot_leak_state_into_behaviour(self):
+        """shadow 的保证是它持有的东西碰不到行为,所以探针不许有返回值。"""
+        import inspect
+
+        from core.canonical_task_store import CanonicalTaskStore
+
+        sig = inspect.signature(CanonicalTaskStore.note_live_lookup_miss)
+        assert sig.return_annotation is None or sig.return_annotation == "None"
+        src = inspect.getsource(CanonicalTaskStore.note_live_lookup_miss)
+        returns = [ln.strip() for ln in src.splitlines() if ln.strip().startswith("return")]
+        assert returns == ["return"], f"探针把状态回传出去了: {returns}"
+
+    def test_j05_lookup_is_exact_not_ranked(self, tmp_path, monkeypatch):
+        """POLICY_1:决策/作答用的查询必须是确定性的,不是相似度排序。"""
+        import inspect
+
+        from galaxy_gateway.android.handlers import task_lifecycle as tl
+
+        src = inspect.getsource(tl._read_canonical_runtime_status)
+        assert ".get(task_id)" in src
+        for ranked in ("recall", "retrieve_similar", "search_hybrid"):
+            assert ranked not in src, f"任务状态查询里出现了排序检索: {ranked}"
+
+    def test_j06_store_failure_never_breaks_the_answer(self, tmp_path, monkeypatch):
+        """对象层不可用只该让这一跳失效,不该让整条状态查询炸掉。"""
+        import core.canonical_task_store as mod
+        from galaxy_gateway.android.handlers import task_lifecycle as tl
+
+        def boom():
+            raise RuntimeError("store down")
+
+        monkeypatch.setattr(mod, "get_canonical_task_store", boom)
+        assert tl._read_canonical_runtime_status("whatever") is None

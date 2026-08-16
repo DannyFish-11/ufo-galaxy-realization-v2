@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -70,6 +71,7 @@ __all__ = [
     # Derivation
     "derive_experience_guidance",
     "build_experience_guidance_diagnostics",
+    "get_experience_guidance_stats",
     # Tunables
     "DEFAULT_MIN_SAMPLES",
     "DEFAULT_MARGIN",
@@ -303,6 +305,75 @@ class ExperienceGuidance:
 # ---------------------------------------------------------------------------
 
 
+_STATS_LOCK = threading.Lock()
+_STATS: Dict[str, Any] = {
+    "derivations": 0,
+    "influenced": 0,
+    "declined_by_reason": {},
+    "scope_sizes": [],
+}
+_SCOPE_SAMPLE_CAP = 500
+"""Bounded: this is a long-lived process counter, not an unbounded log."""
+
+
+def _note_outcome(guidance: "ExperienceGuidance") -> None:
+    """Accumulate the evidence needed to judge the thresholds.
+
+    ``DEFAULT_MIN_SAMPLES`` / ``DEFAULT_MARGIN`` / ``DEFAULT_COLD_START_FLOOR``
+    were chosen by judgement, not by data — nothing so far says they are right.
+    What they control is *how often this layer speaks at all*, so the first thing
+    anyone tuning them needs is that rate, plus why it stayed quiet when it did.
+    Reading it out of logs is possible; having it as a number is what makes the
+    question answerable instead of merely arguable.
+    """
+    try:
+        with _STATS_LOCK:
+            _STATS["derivations"] += 1
+            if getattr(guidance, "influenced_by_experience", False):
+                _STATS["influenced"] += 1
+            else:
+                note = (getattr(guidance, "diagnostic_note", "") or "unspecified").split(";")[0].strip()
+                _STATS["declined_by_reason"][note] = _STATS["declined_by_reason"].get(note, 0) + 1
+            sizes = _STATS["scope_sizes"]
+            if len(sizes) < _SCOPE_SAMPLE_CAP:
+                sizes.append(int(getattr(guidance, "scope_size", 0) or 0))
+    except Exception as exc:  # noqa: BLE001 — instrumentation must never break planning
+        logger.debug("experience guidance stats skipped: %s", exc)
+
+
+def get_experience_guidance_stats(*, reset: bool = False) -> Dict[str, Any]:
+    """How often this layer actually spoke, and why it stayed quiet otherwise.
+
+    ``reset=True`` returns the current window and starts a new one — that is how
+    you measure "the last hour" rather than "since this process booted".  It is a
+    parameter rather than a separate ``reset_...()`` function on purpose: a public
+    reset with no production caller would be exactly the unused surface the wiring
+    guard exists to catch, and it caught it here.
+    """
+    with _STATS_LOCK:
+        sizes = list(_STATS["scope_sizes"])
+        derivations = _STATS["derivations"]
+        influenced = _STATS["influenced"]
+        declined = dict(_STATS["declined_by_reason"])
+        if reset:
+            _STATS["derivations"] = 0
+            _STATS["influenced"] = 0
+            _STATS["declined_by_reason"] = {}
+            _STATS["scope_sizes"] = []
+    return {
+        "derivations": derivations,
+        "influenced": influenced,
+        "influence_rate": round(influenced / derivations, 4) if derivations else 0.0,
+        "declined_by_reason": declined,
+        "median_scope_size": sorted(sizes)[len(sizes) // 2] if sizes else 0,
+        "thresholds": {
+            "min_samples": DEFAULT_MIN_SAMPLES,
+            "margin": DEFAULT_MARGIN,
+            "cold_start_floor": DEFAULT_COLD_START_FLOOR,
+        },
+    }
+
+
 def _neutral(
     mode: str,
     note: str,
@@ -315,13 +386,15 @@ def _neutral(
     history at all" apart from "there was history, but none of it was usable" —
     a scope of 0 in the latter case would send a debugger down the wrong path.
     """
-    return ExperienceGuidance(
+    guidance = ExperienceGuidance(
         current_strategy=current_strategy,
         influenced_by_experience=False,
         scope_size=scope_size,
         mode=mode,
         diagnostic_note=note,
     )
+    _note_outcome(guidance)
+    return guidance
 
 
 def _scoped_records(memory: Any, message: str, task_type: str, min_samples: int) -> Tuple[List[Any], str]:
@@ -529,6 +602,7 @@ def derive_experience_guidance(
                     reason,
                 )
 
+        _note_outcome(guidance)
         return guidance
 
     except Exception as exc:  # noqa: BLE001 — statistics must never break execution

@@ -42,6 +42,14 @@ Group C — Guard validated against real history
        _experience_strategy_adjust — the known, real defect.
   C02. The same file after Stage 0 is clean.
 
+Group E — Scope cannot silently decay
+  E01. Every module that retrieves is either in scope or exempted with a reason.
+  E02. Exemption reasons are substantive, not placeholders.
+  E03. A module cannot be both in scope and exempted.
+  E04. Detection sees a retrieval name passed as a callable, not only called.
+  E05. Introducing an unclassified retriever is actually caught.
+  E06. Exempted modules all still exist.
+
 Group D — Live repository state
   D01. All decision-path modules currently scan clean.
   D02. build_audit_report() reports clean and is JSON-safe.
@@ -232,3 +240,72 @@ class TestGroupDLiveState:
         assert report["clean"] is True
         assert report["violations"] == []
         assert report["scanned_modules"]
+
+
+# ---------------------------------------------------------------------------
+# Group E — the scan scope must not be able to rot
+# ---------------------------------------------------------------------------
+
+
+class TestGroupEScopeCannotDecay:
+    """A hand-written scope list is exactly the kind of thing that stops covering
+    new code without anyone noticing — the same defect shape this guard exists to
+    prevent. These tests make the omission loud instead of silent."""
+
+    def test_e01_every_retrieving_module_is_classified(self):
+        from core.semantic_anchoring import unclassified_retrieval_modules
+
+        unclassified = unclassified_retrieval_modules()
+        assert unclassified == {}, "这些模块做了检索调用但没人判断过它的结果会不会改变控制流:\n" + "\n".join(
+            f"  {m} → {', '.join(c)}" for m, c in sorted(unclassified.items())
+        )
+
+    def test_e02_exemption_reasons_are_substantive(self):
+        from core.semantic_anchoring import RETRIEVAL_MODULE_EXEMPTIONS
+
+        assert RETRIEVAL_MODULE_EXEMPTIONS, "豁免表空了 —— 那这条判据就没有被真正使用"
+        for module, reason in RETRIEVAL_MODULE_EXEMPTIONS.items():
+            assert len(reason) > 40, f"{module} 的豁免理由太短,像占位符而不是判断"
+            assert not reason.lower().startswith(("todo", "n/a", "wip")), f"{module} 的豁免是个占位符"
+
+    def test_e03_in_scope_and_exempt_are_mutually_exclusive(self):
+        from core.semantic_anchoring import DECISION_PATH_MODULES, RETRIEVAL_MODULE_EXEMPTIONS
+
+        overlap = set(DECISION_PATH_MODULES) & set(RETRIEVAL_MODULE_EXEMPTIONS)
+        assert not overlap, f"既在扫描范围内又被豁免,判断自相矛盾: {sorted(overlap)}"
+
+    def test_e04_detects_retrieval_passed_as_a_callable(self):
+        """``to_thread(_um.recall, …)`` 是检索,只看 Call 节点会漏掉它。
+
+        这不是假想:``core.agent.execution_planner`` 就是这么写的。
+        """
+        import ast
+
+        from core.semantic_anchoring import _retrieval_names_referenced
+
+        tree = ast.parse("import asyncio\nasync def f(m):\n    return await asyncio.to_thread(m.recall, 'q')\n")
+        assert "recall" in _retrieval_names_referenced(tree)
+
+    def test_e05_an_unclassified_retriever_would_be_caught(self, tmp_path, monkeypatch):
+        """判据得真能抓到新增的未归类检索模块,否则它只是一句好听的话。"""
+        from core.semantic_anchoring import unclassified_retrieval_modules
+
+        pkg = tmp_path / "core"
+        pkg.mkdir()
+        (pkg / "brand_new_decider.py").write_text(
+            "def decide(mem):\n    hits = mem.recall('q')\n    return bool(hits)\n", encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        found = unclassified_retrieval_modules("core")
+        assert "core.brand_new_decider" in found
+        assert found["core.brand_new_decider"] == ["recall"]
+
+    def test_e06_exempted_modules_still_exist(self):
+        """豁免一个已经不存在的模块 = 名单在腐烂,只是腐烂得看不见。"""
+        import pathlib
+
+        from core.semantic_anchoring import RETRIEVAL_MODULE_EXEMPTIONS
+
+        for module in RETRIEVAL_MODULE_EXEMPTIONS:
+            path = pathlib.Path(module.replace(".", "/") + ".py")
+            assert path.exists(), f"{module} 已被豁免,但这个文件不存在了"

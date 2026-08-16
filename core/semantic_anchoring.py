@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import pathlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -67,6 +68,9 @@ __all__ = [
     "RETRIEVAL_CALL_NAMES",
     "STRUCTURE_EXTRACTION_CALLS",
     "DECISION_PATH_MODULES",
+    "RETRIEVAL_MODULE_EXEMPTIONS",
+    "modules_performing_retrieval",
+    "unclassified_retrieval_modules",
     "AUDITED_RETRIEVAL_CALL_SITES",
     "AnchoringViolation",
     "scan_source_for_prose_derived_structure",
@@ -150,7 +154,52 @@ DECISION_PATH_MODULES: Tuple[str, ...] = (
 
 Deliberately a short, explicit list rather than "everything": a guard that scans
 the whole repository would drown in false positives from unrelated regex use and
-would be switched off, which is worse than a narrow guard that stays on."""
+would be switched off, which is worse than a narrow guard that stays on.
+
+**A hand-written list decays.** Nothing stopped a newly added decision module
+from simply never being added here — and a guard that silently stops covering
+new code is the same shape of defect this module exists to prevent ("change the
+format string and learning stops, without an error").  So the list is no longer
+trusted on its own: :func:`unclassified_retrieval_modules` derives the set of
+modules that actually perform retrieval and requires each one to appear either
+here or in :data:`RETRIEVAL_MODULE_EXEMPTIONS` with a stated reason.  A new
+module that starts retrieving fails the guard until someone decides which it is."""
+
+RETRIEVAL_MODULE_EXEMPTIONS: Dict[str, str] = {
+    "core.academic_retrieval": (
+        "Knowledge base over genuinely unstructured text — POLICY_3 names this as "
+        "the correct use of vector search. Results are returned as text, never "
+        "parsed back into a decision."
+    ),
+    "core.rag_memory": (
+        "The retrieval implementation itself. It ranks text; it does not consume " "ranked text to decide anything."
+    ),
+    "core.memory.unified": (
+        "The retrieval facade every consumer calls. Being the provider of recall() "
+        "is not the same as believing its output."
+    ),
+    "core.task_memory": (
+        "Provides retrieve_similar() (BM25). The object-layer aggregation in "
+        "experience_guidance reads its typed fields, not its ranked text."
+    ),
+    "core.session_memory_facade": (
+        "Audited: recalled text is appended as a system message for the LLM to "
+        "weigh — advisory, never re-parsed into control flow."
+    ),
+    "core.openclawd": (
+        "Audited twice: the memory__recall tool returns text to the LLM, and the "
+        "tool-exposure gate decides visibility without reading retrieved content."
+    ),
+    "core.eval.memory_eval": (
+        "Evaluation harness, not a runtime path. It measures retrieval quality, "
+        "which necessarily means calling retrieval."
+    ),
+}
+"""Modules that retrieve but whose results cannot change control flow.
+
+Every entry is a claim someone has to defend at review time, which is the point:
+the alternative is a module quietly retrieving on a decision path because nobody
+was forced to look at it."""
 
 AUDITED_RETRIEVAL_CALL_SITES: Tuple[Dict[str, str], ...] = (
     {
@@ -309,6 +358,51 @@ def scan_decision_paths(modules: Optional[Tuple[str, ...]] = None) -> List[Ancho
     for name in modules or DECISION_PATH_MODULES:
         out.extend(scan_module_for_prose_derived_structure(name))
     return out
+
+
+def _retrieval_names_referenced(tree: ast.AST) -> List[str]:
+    """Retrieval entry points this module reaches for, by any syntactic route.
+
+    Counts attribute access and bare names, not just calls: passing ``recall``
+    to ``asyncio.to_thread`` is still retrieval, and a call-only scan misses it
+    (``core.agent.execution_planner`` does exactly that).  Names *defined* here
+    are excluded — defining ``recall`` makes a module the provider, and the
+    provider is judged by :data:`RETRIEVAL_MODULE_EXEMPTIONS`, not by this scan.
+    """
+    found: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in RETRIEVAL_CALL_NAMES:
+            found.add(node.attr)
+        elif isinstance(node, ast.Name) and node.id in RETRIEVAL_CALL_NAMES:
+            found.add(node.id)
+    return sorted(found)
+
+
+def modules_performing_retrieval(root: str = "core") -> Dict[str, List[str]]:
+    """Every module under *root* that reaches a retrieval entry point."""
+    out: Dict[str, List[str]] = {}
+    for path in sorted(pathlib.Path(root).rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
+            # Unreadable is not clean: say so rather than shrink the scanned set
+            # silently, which would make the guard weaker without telling anyone.
+            logger.warning("semantic anchoring: could not scan %s (%s)", path, exc)
+            continue
+        names = _retrieval_names_referenced(tree)
+        if names:
+            out[str(path.with_suffix("")).replace("/", ".")] = names
+    return out
+
+
+def unclassified_retrieval_modules(root: str = "core") -> Dict[str, List[str]]:
+    """Retrieving modules that are neither in scope nor exempted.
+
+    Non-empty means someone added retrieval somewhere nobody has judged yet.
+    That is the state this function exists to make impossible to reach quietly.
+    """
+    known = set(DECISION_PATH_MODULES) | set(RETRIEVAL_MODULE_EXEMPTIONS)
+    return {mod: names for mod, names in modules_performing_retrieval(root).items() if mod not in known}
 
 
 def build_audit_report() -> Dict[str, Any]:

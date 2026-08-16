@@ -339,7 +339,13 @@ class CanonicalTaskStore:
         self._records: List[PersistedTaskRecord] = []
         self._index: Dict[str, PersistedTaskRecord] = {}
         self._appends_since_check = 0
-        self._stats = {"upserts": 0, "queries": 0, "load_errors": 0}
+        self._stats = {
+            "upserts": 0,
+            "queries": 0,
+            "load_errors": 0,
+            "live_lookup_misses": 0,
+            "answerable_on_miss": 0,
+        }
         self._load_recent()
 
     # ── Write ─────────────────────────────────────────────────────────────
@@ -490,6 +496,32 @@ class CanonicalTaskStore:
         # Resolvers read the live CanonicalTask shape, so walk the stored payload
         # through a lightweight view exposing the same attribute path.
         return registry.resolve(_PayloadView(record.payload), link_name)
+
+    def note_live_lookup_miss(self, task_id: str) -> None:
+        """Record that every in-process runtime failed to answer about *task_id*.
+
+        This is the number needed to decide whether flipping the flag from
+        ``shadow`` to ``on`` is worth anything: ``answerable_on_miss`` counts the
+        times the durable projection **could** have answered a question that was
+        actually returned as "unknown".  Without it, turning the store on is a
+        guess about how often eviction and restarts really cost an answer.
+
+        Deliberately returns ``None``.  A bool here would be a fact about stored
+        state escaping into a caller that is running in shadow mode, and shadow
+        mode's whole guarantee is that nothing it holds can reach behavior.  The
+        count goes to :meth:`stats`; the caller learns nothing.
+        """
+        tid = str(task_id or "").strip()
+        if not tid:
+            return
+        with self._lock:
+            self._stats["live_lookup_misses"] += 1
+            present = tid in self._index
+        if not present:
+            present = bool(self._scan_cold(lambda r: r.task_id == tid, limit=1))
+        if present:
+            with self._lock:
+                self._stats["answerable_on_miss"] += 1
 
     def stats(self) -> Dict[str, Any]:
         with self._lock:
