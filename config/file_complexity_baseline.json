@@ -23,7 +23,7 @@
     "core/canonical_dispatch_slot_authority.py": 1324,
     "core/canonical_group_completion_closure.py": 1025,
     "core/canonical_session_truth.py": 1349,
-    "core/canonical_task.py": 1272,
+    "core/canonical_task.py": 1289,
     "core/capability_assimilation.py": 1170,
     "core/closed_loop_governance_consolidation.py": 1054,
     "core/command_router.py": 5706,

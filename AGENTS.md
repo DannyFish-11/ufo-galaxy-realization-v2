@@ -69,6 +69,21 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 > 与 `pattern_miner` 的策略模式挖掘存在职责重叠，边界见
 > `EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY` 哨兵。
 
+### 对象层（决策该去哪儿拿事实）
+- `core/canonical_task.py` - CanonicalTask 任务本体 + 进程内运行时（权威）
+- `core/canonical_task_store.py` - 任务对象的**持久可查询投影**。ring buffer 只有
+  256 条且随进程消失，答不了"这个任务/设备之前怎么了"；本存储按类型化字段
+  确定性查询（`GALAXY_CANONICAL_TASK_STORE`，默认 `shadow` 只写不读）
+- `core/semantic_anchoring.py` - **判据 + 可执行守卫**：会改变控制流的读取必须走
+  对象层确定性查询；只进 prompt 的读取继续走检索。守卫能扫出"先 `recall` 再
+  `re.search` 抠结构"这个缺陷签名
+- `core/ontology/links.py` - 显式关系层（Link Types）。把散在各 registry 的隐式
+  关联提为可列举、可遍历的声明；纯只读投影，不存储、不改写、可整包删除
+
+> **判据一句话：** 读取的结果若会改变控制流（选策略/选设备/判权限/决定是否执行），
+> 走对象层；若只是进 prompt 供 LLM 参考，走检索。**该换的是决策路径，不是检索能力**
+> ——`Node_105`、`academic_retrieval` 面对的本来就是非结构化文本，向量检索是对的工具。
+
 ### API 层
 - `core/api_routes.py` - REST API 和 WebSocket 路由
 - `dashboard/backend/main.py` - WebUI 后端

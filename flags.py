@@ -128,6 +128,36 @@ REGISTERED_FLAGS = {
         status="beta",
     ),
 
+    # --- Canonical Task Store (durable object layer) ---
+    "canonical_task_store": FeatureFlag(
+        name="canonical_task_store",
+        env_var="GALAXY_CANONICAL_TASK_STORE",
+        default="shadow",
+        owner="@DannyFish-11",
+        purpose=(
+            "Durable, queryable projection of CanonicalTask objects "
+            "(core.canonical_task_store) — the object layer's answer to "
+            "'what happened with this task before', which the 256-entry "
+            "in-process ring buffer cannot survive a restart to give"
+        ),
+        rollout_plan=(
+            "shadow (default — writes accumulate and can be measured, but get()/ "
+            "query() return empty so nothing can depend on it) → on (reads "
+            "enabled for consumers) → off (kill switch, reverts to ring-buffer-"
+            "only behaviour). Default is shadow rather than off so the layer is "
+            "live and measurable instead of shipping as dead code; it is not on "
+            "because no consumer should acquire a dependency before write "
+            "latency and disk growth have been observed in a real deployment."
+        ),
+        cleanup_condition=(
+            "When 'on' has run for 2 releases with acceptable p99 write latency "
+            "and bounded disk growth, and at least one decision path reads from "
+            "it — at which point shadow/off become redundant"
+        ),
+        since="v2.3.22",
+        status="experimental",
+    ),
+
     # --- WebRTC ---
     "webrtc_task_lifecycle": FeatureFlag(
         name="webrtc_task_lifecycle",
