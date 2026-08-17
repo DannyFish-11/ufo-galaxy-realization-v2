@@ -2,33 +2,36 @@
 # -*- coding: utf-8 -*-
 """tests/test_long_session_compacts_not_forgets.py
 
-钉住：**长会话要压，不能只是丢。**
+钉住：**长会话要压，不能只是丢；而且压完要能翻回来。**
 
-修的是什么
-==========
 ``core.context_trim`` 做的三件事全是**机械丢弃**：工具结果截断、老轮次换存根、工具表
 瘦身。短任务里没问题；长会话里就是"断片" —— 聊到第 40 轮时，第 5 轮定下的约束已经
 是 ``…[已修剪]``，模型再也问不回来。而系统这边**一条错误都没有**：丢弃是设计如此的。
 
-缺的是中间那一层：丢之前先压成摘要。做法取自 2026 年这一批 Agent 的共识：
+上一版补了中间那一层（压缩），但压的方式是**永久删除**：摘要一生成，原文就没了。
+这一版把它改成**无损**——原文整段归档、段号可寻址、随时按号取回（见
+``tests/test_acm_context_management.py``）。本文件钉的是压缩这一层本身的性质：
 
-* **锚定式增量摘要**：全程只维护一条摘要，新的一段**并进**它，而不是拿全部历史重新
-  生成。重新生成每次都在重新解释旧内容，越压越漂；
-* **按窗口占用比例触发**，不是固定条数 —— 窗口现在是按机器算的，同一套代码在 24 GB
-  卡上十几万 token、9 GB 卡上两千，写死条数在两头都不对；
-* **先落库再压缩**：压缩不可逆，持久层没拿到之前不许压。
+* 什么时候压（按窗口占用比例，不是固定条数）；
+* 压什么、不压什么（系统头与最近几轮绝不动）；
+* 不确定时宁可不压（三条防线）；
+* 重启后目录要贴得回来。
 """
 
 from __future__ import annotations
 
+import pathlib
+import tempfile
+
 import pytest
 
+import core.context_archive as ca
 import core.context_compaction as cc
 
 
 @pytest.fixture(autouse=True)
-def isolated_anchor(tmp_path, monkeypatch):
-    monkeypatch.setattr(cc, "_ANCHOR_FILE", tmp_path / "context_anchors.json")
+def isolated_archive(tmp_path, monkeypatch):
+    monkeypatch.setattr(ca, "_ROOT", tmp_path / "context_archive")
 
 
 def _long_session(rounds: int = 14, size: int = 40):
@@ -40,10 +43,10 @@ def _long_session(rounds: int = 14, size: int = 40):
 
 
 def _summarizer(seen=None):
-    def _s(prior, fresh):
+    def _s(fresh):
         if seen is not None:
-            seen.append((prior, fresh))
-        return (prior + " | " if prior else "") + f"[并入 {fresh.count(chr(10)) + 1} 条]"
+            seen.append(fresh)
+        return f"- 覆盖 {fresh.count(chr(10)) + 1} 条\n- 本段要点若干"
 
     return _s
 
@@ -64,25 +67,41 @@ class TestItFiresOnUtilizationNotOnCount:
         assert not cc.should_compact(_long_session(), 0)
 
 
-class TestTheSummaryIsAnchoredNotRegenerated:
-    """锚定的前提是能认出上一条摘要，否则压几次就有几条互相矛盾的过去。"""
+class TestOneSegmentPerCompactionEachSummarizedOnce:
+    """上一版把所有摘要并成一条；这一版每段一条、各带段号。
 
-    def test_there_is_never_more_than_one_summary(self):
+    合并原本是为了防"反复重新摘导致越压越漂"。但每段只从**原文**摘一次，根本不会
+    漂 —— 那是上一版自己造出来的问题。而合并的代价是**段号没了**，没有段号就无从
+    取回，"无损"也就无从谈起。
+    """
+
+    def test_each_compaction_adds_its_own_addressable_segment(self):
         msgs = _long_session()
         cc.compact_messages(msgs, _summarizer(), session_id="s")
         msgs += [{"role": "user", "content": "新的一轮。" * 200} for _ in range(12)]
         cc.compact_messages(msgs, _summarizer(), session_id="s")
-        anchors = [m for m in msgs if cc.ANCHOR_MARKER in str(m.get("content", ""))]
-        assert len(anchors) == 1, f"摘要变成了 {len(anchors)} 条 —— 那不是锚定，是每次新插一条"
+        assert cc.visible_segment_ids(msgs) == [1, 2], "两次压缩没有变成两个可寻址的段"
 
-    def test_the_second_pass_merges_into_the_first(self):
+    def test_the_summarizer_only_ever_sees_original_text(self):
+        """它拿到的必须是原文，不能是上一条摘要 —— 摘要的摘要就是漂移的来源。"""
         seen = []
         msgs = _long_session()
         cc.compact_messages(msgs, _summarizer(seen), session_id="s")
         msgs += [{"role": "user", "content": "新的一轮。" * 200} for _ in range(12)]
         cc.compact_messages(msgs, _summarizer(seen), session_id="s")
-        assert seen[0][0] == "", "第一次压缩不该有已有摘要"
-        assert seen[1][0], "第二次压缩没拿到上一条摘要 —— 那是重新生成，不是并入"
+        assert len(seen) == 2
+        for fresh in seen:
+            assert cc.ANCHOR_MARKER not in fresh, "把上一段的目录又喂给摘要器了 —— 那是摘要的摘要"
+
+    def test_old_segment_markers_are_folded_not_multiplied(self):
+        """段目录会随会话线性涨，不封顶的话压缩省下的空间会被目录自己吃回去。"""
+        msgs = _long_session()
+        for _ in range(cc.MAX_VISIBLE_SEGMENTS + 3):
+            cc.compact_messages(msgs, _summarizer(), session_id="s")
+            msgs += [{"role": "user", "content": "又一轮。" * 200} for _ in range(12)]
+        markers = [m for m in msgs if cc._is_segment_marker(m)]
+        assert len(markers) <= cc.MAX_VISIBLE_SEGMENTS + 1, f"目录堆到了 {len(markers)} 条"
+        assert any("折叠" in str(m.get("content", "")) for m in markers), "折叠了却没说，模型会以为更早的段不存在了"
 
 
 class TestWhatMustSurviveDoesSurvive:
@@ -115,11 +134,31 @@ class TestItRefusesRatherThanLoses:
         """先落库再压缩：持久层没拿到这一段之前压，等于拿用户说过的话去赌摘要写得够全。"""
         msgs = _long_session()
         before = len(msgs)
-        assert cc.compact_messages(msgs, _summarizer(), persisted_ok=False) == 0
+        assert cc.compact_messages(msgs, _summarizer(), session_id="s", persisted_ok=False) == 0
         assert len(msgs) == before, "拒绝压缩却把消息改了"
 
+    def test_it_refuses_without_a_session_id(self):
+        """没有会话 id 就无处归档，而**归档不了的压缩就是不可逆删除**。
+
+        上一版这里是"仍然压，只是重启后不连续"——那时压缩本来就是有损的，所以说得
+        过去。现在整套语义建立在"原文还在"之上，压一段没处归档的历史等于对模型撒谎：
+        它会以为自己随时能查回来。
+        """
+        msgs = _long_session()
+        before = list(msgs)
+        assert cc.compact_messages(msgs, _summarizer(), session_id="") == 0
+        assert msgs == before
+
+    def test_it_refuses_when_the_archive_cannot_be_written(self, monkeypatch):
+        """归档失败还照压，窗口里那条目录就指向一个**不存在的段**。"""
+        monkeypatch.setattr(ca, "archive_segment", lambda *a, **k: None)
+        msgs = _long_session()
+        before = list(msgs)
+        assert cc.compact_messages(msgs, _summarizer(), session_id="s") == 0
+        assert msgs == before
+
     def test_a_failing_summarizer_loses_nothing(self):
-        def boom(prior, fresh):
+        def boom(fresh):
             raise RuntimeError("模型挂了")
 
         msgs = _long_session()
@@ -130,61 +169,53 @@ class TestItRefusesRatherThanLoses:
     def test_an_empty_summary_loses_nothing(self):
         msgs = _long_session()
         before = list(msgs)
-        assert cc.compact_messages(msgs, lambda p, f: "   ", session_id="s") == 0
+        assert cc.compact_messages(msgs, lambda fresh: "   ", session_id="s") == 0
         assert msgs == before
 
 
 class TestContinuityAcrossRestarts:
     """进程重启后同一个会话不该突然失忆。"""
 
-    def test_the_anchor_is_persisted_and_retrievable(self):
+    def test_the_segments_are_persisted_and_retrievable(self):
         msgs = _long_session()
         cc.compact_messages(msgs, _summarizer(), session_id="sess-42")
-        assert cc.load_anchor("sess-42"), "摘要没存下来 —— 重启后这个会话就断了"
+        assert ca.list_segments("sess-42") == [1], "段没存下来 —— 重启后这个会话就断了"
 
     def test_sessions_do_not_bleed_into_each_other(self):
         cc.compact_messages(_long_session(), _summarizer(), session_id="a")
-        assert cc.load_anchor("a")
-        assert cc.load_anchor("b") == "", "串会话了"
+        assert ca.list_segments("a")
+        assert ca.list_segments("b") == [], "串会话了"
 
-    def test_no_session_id_still_compacts_but_does_not_persist(self):
-        """没有会话 id 时仍然要压（本次有效），只是重启后不连续。"""
-        msgs = _long_session()
-        assert cc.compact_messages(msgs, _summarizer(), session_id="") > 0
-
-    def test_the_anchor_is_actually_read_back(self):
+    def test_the_directory_is_actually_read_back(self):
         """**写侧有、读侧没有**，是这一条要防的东西。
 
-        原来只调了 ``save_anchor``：摘要在磁盘上安安静静地攒着，而重启后的会话该
-        失忆照样失忆 —— 而且不会有任何一条错误。存了从不读，比不存更糟：它给人
-        "连续性已经做了"的错觉。
+        上一版只调了写侧：摘要在磁盘上安安静静地攒着，而重启后的会话该失忆照样
+        失忆 —— 而且不会有任何一条错误。存了从不读，比不存更糟：它给人"连续性已经
+        做了"的错觉。
         """
         old = _long_session()
         cc.compact_messages(old, _summarizer(), session_id="sess-restart")
 
         fresh = [{"role": "system", "content": "你是 Galaxy 助手。"}, {"role": "user", "content": "我们刚才聊到哪了？"}]
-        assert cc.restore_anchor(fresh, "sess-restart") is True
-        assert any(cc.ANCHOR_MARKER in str(m.get("content", "")) for m in fresh), "重启后没把上次的摘要贴回来"
+        assert cc.restore_segments(fresh, "sess-restart") == 1
+        assert cc.visible_segment_ids(fresh) == [1], "重启后没把段目录贴回来"
         assert fresh[0]["role"] == "system" and "Galaxy 助手" in fresh[0]["content"], "贴到系统提示前面去了"
 
     def test_it_does_not_paste_a_second_version_of_the_past(self):
-        """历史本身还在的时候贴摘要，等于让模型看到同一段过去的两个版本。
-
-        摘要是历史的**有损副本**。宁可少贴一次（退回失忆），也不要多贴一次。
-        """
+        """历史本身还在的时候贴目录，等于让模型看到同一段过去的两个版本。"""
         msgs = _long_session()
         cc.compact_messages(msgs, _summarizer(), session_id="sess-live")
         before = list(msgs)
-        assert cc.restore_anchor(msgs, "sess-live") is False, "已经有摘要锚了还往里贴"
+        assert cc.restore_segments(msgs, "sess-live") == 0, "已经有段目录了还往里贴"
         assert msgs == before
 
-        long_no_anchor = _long_session()
-        assert cc.restore_anchor(long_no_anchor, "sess-live") is False, "历史还在（消息很长），不该再贴一份有损副本"
+        long_no_marker = _long_session()
+        assert cc.restore_segments(long_no_marker, "sess-live") == 0, "历史还在（消息很长），不该再贴一份有损副本"
 
     def test_nothing_stored_means_nothing_pasted(self):
         fresh = [{"role": "system", "content": "你是 Galaxy 助手。"}]
-        assert cc.restore_anchor(fresh, "从没压过的会话") is False
-        assert cc.restore_anchor(fresh, "") is False
+        assert cc.restore_segments(fresh, "从没压过的会话") == 0
+        assert cc.restore_segments(fresh, "") == 0
         assert len(fresh) == 1
 
     def test_the_live_loop_restores_before_it_measures_or_compacts(self):
@@ -195,8 +226,8 @@ class TestContinuityAcrossRestarts:
         src = inspect.getsource(oc.OpenClawd._compact_context_if_needed)
         # 钉**调用**而不是钉名字：只钉名字的话，把调用换成 pass、import 行留着，
         # 这条断言照样绿 —— 反向验证时就是这么发现它没用的。
-        assert "restore_anchor(messages" in src, "取回摘要这一步没人调 —— 跨重启连续性只做了写侧"
-        assert src.index("restore_anchor(messages") < src.index("should_compact(")
+        assert "restore_segments(messages" in src, "取回段目录这一步没人调 —— 跨重启连续性只做了写侧"
+        assert src.index("restore_segments(messages") < src.index("should_compact(")
 
 
 class TestItIsWiredIntoTheLiveLoop:
@@ -222,3 +253,35 @@ class TestItIsWiredIntoTheLiveLoop:
         src = inspect.getsource(oc.OpenClawd._compact_context_if_needed)
         assert "context_budget_for" in src
         assert "4096" not in src, "又把窗口大小写死了"
+
+
+class TestTheArchiveIsNotACache:
+    """这里存的是唯一的原文，不是缓存 —— 没有任何自动清理路径。"""
+
+    def test_deletion_only_happens_when_someone_asks_for_it(self):
+        cc.compact_messages(_long_session(), _summarizer(), session_id="keep-me")
+        cc.compact_messages(_long_session(), _summarizer(), session_id="drop-me")
+        assert ca.list_segments("keep-me") and ca.list_segments("drop-me")
+        assert ca.drop_session("drop-me") == 1
+        assert ca.list_segments("drop-me") == []
+        assert ca.list_segments("keep-me"), "只该删被点名的那个会话"
+
+    def test_clearing_a_conversation_must_clear_the_archive_too(self):
+        """否则"清除"就是一句假话：用户点了清除，他说过的每一句仍在磁盘上。
+
+        钉的是**那条路真的调了这个函数** —— 新加一处存用户原话的地方却不接进已有的
+        清除路径，等于在用户背后留了一份他以为已经删掉的副本。
+        """
+        import inspect
+
+        import core.routes.ai as ai_routes
+
+        src = inspect.getsource(ai_routes)
+        assert "drop_session(session_id)" in src, "清除对话没有清掉上下文归档"
+
+    def test_a_session_id_can_never_escape_the_archive_root(self):
+        """会话 id 来自调用方，直接拼路径就是一条目录穿越。"""
+        root = pathlib.Path(tempfile.mkdtemp())
+        ca._ROOT = root
+        cc.compact_messages(_long_session(), _summarizer(), session_id="../../etc/evil")
+        assert all(p.resolve().is_relative_to(root.resolve()) for p in root.rglob("*")), "写到归档根目录外面去了"

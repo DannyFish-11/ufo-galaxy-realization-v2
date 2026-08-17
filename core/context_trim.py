@@ -28,7 +28,10 @@ from typing import Any, Dict, List
 logger = logging.getLogger("Galaxy.ContextTrim")
 
 # 始终保留的核心工具(与具体任务无关的"元能力")
-_CORE_TOOL_MARKERS = ("memory__", "ask_human__")
+#
+# ``context__`` 在列是有讲究的:``slim_tools`` 在**工具表过大**时才裁,而工具表过大
+# 恰恰是最需要上下文管理的时刻。把它裁掉等于"窗口越紧,模型越没法自救"——方向反了。
+_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -73,6 +76,18 @@ _TOKENS_REPLY_HEADROOM_DEFAULT = 4096
 #: 现在分开:政策留常数,事实去量(:func:`core.context_compaction.observe_system_head`
 #: 每轮记一次,:mod:`core.context_measurements` 存),这里只作第一次启动时的兜底。
 _TOKENS_SYSTEM_HEAD_FALLBACK = 2048
+
+
+def reply_headroom_tokens() -> int:
+    """给模型回复留多少 token —— **取值只此一处**。
+
+    抽成函数是因为它有两个消费方:装配下限(:func:`assembled_token_demand`)与油表
+    (``openclawd._fuel_gauge_suffix`` → ``context_compaction.fuel_gauge``)。两处必须
+    是**同一个数**:油表报的"当前占用"如果不含这一项,模型会在"看起来还剩一点"的
+    时候撞上截断 —— 而下限那边早就把它算进去了。在两个调用点上各写一遍
+    ``_env_int(...)`` 迟早会漂。
+    """
+    return max(0, _env_int("GALAXY_MAX_TOKENS_ANSWER", _TOKENS_REPLY_HEADROOM_DEFAULT))
 
 
 def _system_head_tokens() -> int:
@@ -201,8 +216,7 @@ def assembled_token_demand(tag: str = "") -> int:
 
     # 基线拆成两半:**事实**(系统头有多长 —— 量得到)+ **政策**(给回复留多少 ——
     # 量不到,是产品决定)。捆成一个 2048 的时候,可量的那一半也永远量不到。
-    reply_headroom = max(0, _env_int("GALAXY_MAX_TOKENS_ANSWER", _TOKENS_REPLY_HEADROOM_DEFAULT))
-    return int(tool_defs + tool_results + _system_head_tokens() + reply_headroom)
+    return int(tool_defs + tool_results + _system_head_tokens() + reply_headroom_tokens())
 
 
 def _tool_table_size() -> int:

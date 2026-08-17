@@ -25,6 +25,7 @@ import json
 import pytest
 
 import core.compute_scheduler as cs
+import core.context_archive as ca
 import core.context_compaction as cc
 import core.context_measurements as cm
 import core.context_trim as ct
@@ -35,7 +36,7 @@ import core.model_catalog as mc
 @pytest.fixture
 def isolated_measurements(tmp_path, monkeypatch):
     monkeypatch.setattr(cm, "_FILE", tmp_path / "context_measurements.json")
-    monkeypatch.setattr(cc, "_ANCHOR_FILE", tmp_path / "context_anchors.json")
+    monkeypatch.setattr(ca, "_ROOT", tmp_path / "context_archive")
     monkeypatch.delenv("GALAXY_IGNORE_CONTEXT_MEASUREMENTS", raising=False)
     monkeypatch.delenv("GALAXY_MAX_TOKENS_ANSWER", raising=False)
     return tmp_path
@@ -98,8 +99,8 @@ class TestItMeasuresTheHeadNotTheWholeAssembly:
         whole = cc.estimate_tokens(msgs)
         assert 0 < head_only < whole / 10, f"量到了 {head_only}，而整段是 {whole} —— 这不是系统头，是把历史也算进去了"
 
-    def test_the_anchor_summary_does_not_count_as_head(self, isolated_measurements):
-        """摘要是压缩自己的产物。把它算进"这套部署的系统头有多长"就成了自己量自己。"""
+    def test_the_segment_directory_does_not_count_as_head(self, isolated_measurements):
+        """段目录是压缩自己的产物。把它算进"这套部署的系统头有多长"就成了自己量自己。"""
         msgs = _session()
         plain = cc.observe_system_head(msgs)
         msgs.insert(1, {"role": "system", "content": f"{cc.ANCHOR_MARKER}\n" + "摘" * 4000})
@@ -111,7 +112,7 @@ class TestItMeasuresTheHeadNotTheWholeAssembly:
         cc.observe_system_head(msgs)
         first = ct.assembled_token_demand()
         for _ in range(5):
-            cc.compact_messages(msgs, lambda prior, fresh: (prior or "") + "|摘要", session_id="s")
+            cc.compact_messages(msgs, lambda fresh: "- 本段要点", session_id="s")
             cc.observe_system_head(msgs)
             msgs += [{"role": "user", "content": "又一轮" * 300} for _ in range(10)]
         assert ct.assembled_token_demand() >= first, "压了几轮之后装配下限反而变小了 —— 这就是那个会塌掉的闭环"

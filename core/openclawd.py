@@ -637,6 +637,67 @@ _MEMORY_BUILTIN_TOOLS: List[Dict] = [
     },
 ]
 
+# 上下文自主管理工具(ACM: Agentic Context Management)。
+#
+# 补的是一个结构性空缺:上下文压缩此前**全部由系统按占用比例触发**,模型对自己的
+# 上下文有多满、什么时候被压、压掉了什么,一无所知。它只会在某一轮突然发现"前面
+# 那段没了"——而且不会有任何一条错误,因为丢弃是设计如此的。
+#
+# 两个工具把这件事交回给模型:它知道自己接下来要干什么,能在**语义边界**上压
+# (一个子任务做完了),而不是在某个百分比上压(可能正压在推理中间)。配套的油表
+# ([当前上下文 token: N / 窗口 M],见 context_compaction.fuel_gauge)让它看得见自己
+# 有多满——没有那个数,"何时该压"对模型就是不可判定的。
+#
+# **系统的七成自动触发一条都没撤**:那是地板。ACM 靠后训练让模型学会节奏,这个
+# 仓库跑的是现成权重、没有那条训练链路,而一个只在模型开口时才压缩的系统会被一个
+# 从不开口的模型撑爆。
+#
+# 仅在 B/C/D 档暴露(见 context_compaction.model_manages_own_context):ACM 自己的
+# 消融里 4B 模型做完同样训练也只有 3.4%,轨迹短到工具没有用武之地——给 A 档挂上去
+# 唯一确定的效果是工具表变长、装配下限抬高、窗口反而更紧。
+_CONTEXT_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "context__manage",
+            "description": (
+                "把当前对话中较早的一段归档成笔记，腾出上下文空间。当你看到工具结果末尾的"
+                "[当前上下文 token: N / 窗口 M] 显示占用偏高，或者你刚做完一个子任务、"
+                "接下来要转向别的事情时调用。归档是**无损**的：原文完整保存，你会拿到一个"
+                "段号，之后任何时候都可以用 context__query_memory 按段号把原文细节查回来。"
+                "不要等到快满了才调——那时压缩这一步自己都可能装不下。"
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "context__query_memory",
+            "description": (
+                "从已归档的某一段里查回原文细节。当你看到 [会话归档·目录] 里某一段可能"
+                "包含你现在需要的信息（某个约束的确切措辞、某个数字、某次工具返回的具体"
+                "内容）时使用。查的是**原文**不是摘要，所以细节是完整的。可以多次调用："
+                "换段号、换查询词都行。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "segment_id": {
+                        "type": "integer",
+                        "description": "要查的段号，见上下文里的 [会话归档·目录] 第 N 段",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "要在这一段里找什么；具体名词/关键词效果最好",
+                    },
+                },
+                "required": ["segment_id", "query"],
+            },
+        },
+    },
+]
+
 # PR-HITL: agent-callable "ask the human" tool.  Lets the LLM decide, during its
 # own reasoning, to ask a human a question and block for the answer via the real
 # decision loop (request_human_decision → device notification → human_input).
@@ -7169,6 +7230,17 @@ class OpenClawd:
         except Exception as _mem_exc:  # noqa: BLE001
             logger.debug("memory__recall 工具收集跳过: %s", _mem_exc)
 
+        # ── 上下文自主管理(ACM):仅 B/C/D 档暴露 ──────────────────────────
+        # A 档是 2B/4B 级,ACM 自己的消融证明那个尺度学不会"何时记笔记"——挂上去
+        # 只会让工具表变长、装配下限抬高,是纯成本。判据在 model_manages_own_context。
+        try:
+            from core.context_compaction import model_manages_own_context
+
+            if model_manages_own_context():
+                tools.extend(_CONTEXT_BUILTIN_TOOLS)
+        except Exception as _ctx_exc:  # noqa: BLE001
+            logger.debug("context__ 工具收集跳过: %s", _ctx_exc)
+
         return tools
 
     async def _dispatch_tool_call(self, tool_name: str, arguments: dict) -> dict:
@@ -7197,6 +7269,7 @@ class OpenClawd:
             "resource__",
             "ask_human__",
             "computer_use__",
+            "context__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
 
@@ -7422,6 +7495,10 @@ class OpenClawd:
                 # GitHub addon tools: github__install, github__uninstall, github__list
                 action = tool_name[8:]  # strip "github__"
                 return await self._dispatch_github_tool(action, arguments)
+
+            elif tool_name.startswith("context__"):
+                # 上下文自主管理(ACM): context__manage / context__query_memory
+                return await self._execute_context_tool(tool_name[len("context__") :], arguments)
 
             elif tool_name.startswith("memory__"):
                 # 记忆召回工具(JIT 检索): memory__recall
@@ -8164,31 +8241,33 @@ class OpenClawd:
     # ========================================================================
 
     def _compact_context_if_needed(self, messages: List[Dict]) -> int:
-        """会话长到占满窗口七成时，把远处的历史并进一条锚定摘要。返回压掉几条。
+        """会话长到占满窗口七成时，把远处的历史**归档**成一段，窗口里换成一条目录。
 
-        与上一步的机械修剪是两件事：修剪**丢**字节，这一步**压**信息。长会话里只丢
-        不压的后果是"断片" —— 第 5 轮定下的约束，第 40 轮时已经是 ``…[已修剪]``，
-        而系统这边一条错误都没有。
+        这一步是**地板，不是全部**。模型自己也能压（``context__manage``，见
+        :data:`_CONTEXT_BUILTIN_TOOLS`），而且模型压得更好——它知道自己接下来要干
+        什么，能在语义边界上压，而不是在某个百分比上压。但自动这一档必须留着：
+        ACM 靠后训练让模型学会节奏，这个仓库跑的是现成权重、没有那条训练链路，
+        **一个只在模型开口时才压缩的系统，会被一个从不开口的模型撑爆。**
 
         判据不在这里
         ============
-        * 窗口有多大 → :meth:`ComputeScheduler.context_budget_for`（按机器算，同一套
-          代码在 24 GB 卡上十几万 token、9 GB 卡上两千，写死条数在两头都不对）；
-        * 什么时候压、怎么并 → :mod:`core.context_compaction`；
+        * 窗口有多大 → :meth:`ComputeScheduler.context_budget_for`；
+        * 什么时候压、怎么归档 → :mod:`core.context_compaction` / :mod:`core.context_archive`；
         * 摘要怎么生成 → 走本实例现成的路由，**不新起一条推理路径**。
 
         全程 best-effort：压不动就不压。宁可占着窗口，也不能因为压缩失败而丢内容。
         """
         try:
             from core.compute_scheduler import get_compute_scheduler
-            from core.context_compaction import compact_messages, observe_system_head, restore_anchor, should_compact
+            from core.context_compaction import compact_messages, observe_system_head, restore_segments, should_compact
             from core.model_catalog import main_brain
 
-            session_id = str(getattr(self, "_current_session_id", "") or "")
+            session_id = self._context_session_id()
 
-            # 重启后先把上次的摘要贴回来 —— 上一轮存了却从来没读过，"跨重启连续性"
-            # 只做了写侧。restore_anchor 自己判断该不该贴（历史还在就不贴）。
-            restore_anchor(messages, session_id)
+            # 重启后先把已归档各段的**目录**贴回来 —— 原文一直在归档里，模型随时
+            # 可以按段号取回。restore_segments 自己判断该不该贴（历史还在就不贴，
+            # 免得让模型看到同一段过去的两个版本）。
+            restore_segments(messages, session_id)
 
             # 顺手量一下系统头有多长 —— 它是决定 n_ctx 那条式子里最后一个拍出来的
             # 数(context_trim._TOKENS_SYSTEM_HEAD_FALLBACK)。放在 should_compact **之前**：
@@ -8212,23 +8291,176 @@ class OpenClawd:
             logger.debug("上下文压缩跳过(不影响本轮): %s", exc)
             return 0
 
-    def _summarize_for_compaction(self, prior: str, fresh: str) -> str:
-        """把新的一段并进已有摘要 —— **锚定式**，不是拿全部历史重新生成一遍。
+    def _fuel_gauge_suffix(self, messages: List[Dict]) -> str:
+        """工具结果尾部要追加的**油表**；算不出来就返回空串（宁可不报，也不报错的数）。
 
-        重新生成的问题是每次都在重新解释一遍旧内容，越压越漂；并进去的那条是累积的。
-        提示词里因此明确要求"保留既有内容，只补充新的"。
+        为什么每条工具结果都报
+        ======================
+        取自 ACM 的 ``[CURRENT CONTEXT TOKEN: N]``：模型对自己的上下文有多满**本来
+        是看不见的**。看不见就没法判断"该不该整理"，于是要么从不整理（撑爆之后被
+        llama.cpp 静默截断，表现是"它怎么忘了前面说的"），要么一上来就整理（白丢
+        细节）。挂在工具结果尾部是因为那正是上下文增长最快的地方。
+
+        这个数对**不调 context__ 工具的档位也有用**：A 档看不到那两个工具，但看得到
+        油表，至少知道该收敛回答长度了。
+
+        每轮一次 ``context_budget_for`` 有成本，所以窗口值按本轮缓存 —— 它在一次
+        ReAct 循环里不会变（``n_ctx`` 是加载期参数）。
         """
+        try:
+            from core.context_compaction import fuel_gauge
+            from core.context_trim import reply_headroom_tokens
+
+            n_ctx = getattr(self, "_react_n_ctx", 0)
+            if not n_ctx:
+                from core.compute_scheduler import get_compute_scheduler
+                from core.model_catalog import main_brain
+
+                n_ctx, _why = get_compute_scheduler().context_budget_for(main_brain())
+                self._react_n_ctx = n_ctx
+            gauge = fuel_gauge(messages, int(n_ctx), reply_headroom_tokens())
+            return f"\n{gauge}" if gauge else ""
+        except Exception as exc:  # noqa: BLE001 — 报不出来就不报，绝不影响工具结果本身
+            logger.debug("上下文油表跳过: %s", exc)
+            return ""
+
+    def _context_session_id(self) -> str:
+        """归档挂在哪个会话下 —— 空会话 id 时退回一个**进程内稳定**的替身。
+
+        为什么不能直接放空:``compact_messages`` 在没有会话 id 时会拒绝压缩(归档不了
+        的压缩就是不可逆删除)。而有些调用路径本来就没有会话 id ——那些会话如果因此
+        永远不压缩，长跑下去会被 llama.cpp 静默截断，等于用一个更坏的失败换掉了
+        另一个。
+
+        退回的替身在**本进程内稳定**：这一次运行里归档、取回都对得上；进程重启后
+        对不上（那个会话本来也就没有跨重启的身份）。这是"这一次有效"与"永远失效"
+        之间的取舍，不是假装它有身份。
+        """
+        import os as _os  # noqa: PLC0415 — 模块顶层没有 os，本仓库一律就近惰性导入
+
+        real = str(getattr(self, "_current_session_id", "") or "").strip()
+        return real or f"anon-{_os.getpid()}-{id(self):x}"
+
+    def _summarize_for_compaction(self, fresh: str) -> str:
+        """把这一段原文摘成一条**目录** —— 不是"替代历史"，是"帮模型判断该翻哪一段"。
+
+        与上一版的两点不同：
+
+        1. **签名从 ``(prior, fresh)`` 变成 ``(fresh)``**。上一版每次都把已有摘要一起
+           交给模型去"并"，是为了防反复重摘导致的漂移；现在每段只从**原文**摘一次，
+           压根不会漂 —— 那个漂移是上一版自己造出来的问题。
+        2. **要点式，不是散文**。散文读着顺，但回答不了"我要找的东西在不在这一段里"，
+           而那正是这条摘要唯一的职责（原文在归档里，细节从那儿取）。
+        """
+        from core.context_compaction import SUMMARY_FORMAT_HINT
+
         instruction = (
-            "你在维护一份会话的累积摘要。下面给出【已有摘要】和【新增对话】。\n"
-            "请输出更新后的摘要，要求：\n"
-            "1. **保留已有摘要里的全部结论、约束、用户偏好** —— 它们是之前压缩过的，原文已经没了；\n"
-            "2. 把【新增对话】里新出现的事实、决定、待办并进去；\n"
-            "3. 只输出摘要正文，不要解释你做了什么。\n\n"
-            f"【已有摘要】\n{prior or '(这是第一次压缩，尚无摘要)'}\n\n【新增对话】\n{fresh}"
+            "下面是一段即将被归档的对话原文。请为它写一条**目录式摘要**：\n"
+            f"{SUMMARY_FORMAT_HINT}\n"
+            "原文会完整保存，之后可以按段号查回细节 —— 所以你不需要把细节写进摘要，"
+            "只需要让人一眼看出『这一段里有什么』。只输出摘要正文。\n\n"
+            f"【待归档原文】\n{fresh}"
         )
         router = self._get_router()
         result = router.chat(instruction) if hasattr(router, "chat") else ""
         return str(result or "")
+
+    async def _execute_context_tool(self, action: str, arguments: dict) -> dict:
+        """上下文自主管理工具执行器：``context__manage`` / ``context__query_memory``。
+
+        为什么要通过 ``self._react_messages`` 拿消息列表
+        ================================================
+        ``_dispatch_tool_call(name, arguments)`` 的签名里没有消息列表，而这两个工具
+        操作的**就是**那个列表。两条路可选：
+
+        * 在 ReAct 循环里就地处理（``messages`` 现成在作用域里）——但那会绕开
+          规范派发路径上的全部闸门：参数校验、频率限制、单工具超时、结构化记录；
+        * 走正常派发，把列表挂在实例上一个短命属性里。
+
+        取后者。绕过闸门省下的那点直接性，换来的是这两个工具成为**唯一不受约束**
+        的一族 —— 而它们恰恰是会改写模型上下文的一族。
+        """
+        messages = getattr(self, "_react_messages", None)
+        if messages is None:
+            return {"success": False, "error": "当前不在 ReAct 循环中，上下文工具不可用"}
+
+        if action == "manage":
+            return self._context_tool_manage(messages)
+        if action == "query_memory":
+            return self._context_tool_query(arguments)
+        return {"success": False, "error": f"未知 context 工具: context__{action}"}
+
+    def _context_tool_manage(self, messages: List[Dict]) -> dict:
+        """模型主动要求归档 —— 不看七成阈值，它说压就压。
+
+        阈值是给**系统**用的地板；模型自己开口时不该再被阈值拦住 —— 它开口的理由
+        往往正是阈值看不见的那种（一个子任务刚做完，接下来要转向别的事）。
+        """
+        from core.context_compaction import compact_messages, visible_segment_ids
+
+        before = len(messages)
+        archived = compact_messages(
+            messages,
+            self._summarize_for_compaction,
+            session_id=self._context_session_id(),
+            persisted_ok=True,
+        )
+        if archived <= 0:
+            return {
+                "success": True,
+                "result": ("本次没有可归档的内容（较早的对话不足，或摘要生成失败）。" "上下文原样保留，你可以继续。"),
+            }
+        seg_ids = visible_segment_ids(messages)
+        return {
+            "success": True,
+            "result": (
+                f"已把 {archived} 条较早的消息归档为第 {seg_ids[-1] if seg_ids else '?'} 段，"
+                f"上下文从 {before} 条降到 {len(messages)} 条。"
+                f"原文完整保留：随时可以用 context__query_memory 按段号查回细节。"
+            ),
+        }
+
+    def _context_tool_query(self, arguments: dict) -> dict:
+        """按段号把归档原文调回来，并按 query 提取相关部分。
+
+        提取而不是整段贴回：整段贴回等于把刚压掉的东西原样塞回窗口，压缩就白做了。
+        提取要花一次模型调用 —— 那是这条路的真实代价，也是它值得的地方：拿回来的是
+        **原文里的细节**，不是摘要里的转述。
+        """
+        from core.context_archive import load_segment, render_segment_text
+
+        try:
+            seg_id = int(arguments.get("segment_id"))
+        except (TypeError, ValueError):
+            return {"success": False, "error": "segment_id 必须是段号（整数），见上下文里的 [会话归档·目录] 第 N 段"}
+        query = str(arguments.get("query") or "").strip()
+        if not query:
+            return {"success": False, "error": "query 不能为空：要在这一段里找什么？"}
+
+        segment = load_segment(self._context_session_id(), seg_id)
+        if segment is None:
+            return {"success": False, "error": f"第 {seg_id} 段不存在。可用的段号见上下文里的 [会话归档·目录]。"}
+
+        original = render_segment_text(segment)
+        if not original.strip():
+            return {"success": False, "error": f"第 {seg_id} 段的归档是空的"}
+
+        instruction = (
+            f"下面是一段归档的对话**原文**。请只回答：其中与「{query}」相关的内容是什么。\n"
+            "要求：\n"
+            "1. 逐条列出，**保留原文里的确切措辞、数字、名称** —— 提问的人要的就是这些细节；\n"
+            "2. 找不到就直接说没有，不要推测、不要用摘要式的转述补白；\n"
+            "3. 只输出这些条目本身。\n\n"
+            f"【第 {seg_id} 段原文】\n{original}"
+        )
+        try:
+            router = self._get_router()
+            extracted = str(router.chat(instruction) if hasattr(router, "chat") else "")
+        except Exception as exc:  # noqa: BLE001
+            return {"success": False, "error": f"第 {seg_id} 段取回失败（提取调用出错）：{exc}"}
+        if not extracted.strip():
+            return {"success": True, "result": f"第 {seg_id} 段里没有与「{query}」相关的内容。"}
+        return {"success": True, "result": f"[第 {seg_id} 段原文中与「{query}」相关的部分]\n{extracted.strip()}"}
 
     async def _react_loop(
         self,
@@ -8323,6 +8555,13 @@ class OpenClawd:
                 # 变短而不是变没。触发点按**窗口占用比例**，窗口大小问调度器
                 # (同一套代码在 24 GB 卡上能开十几万 token，在 9 GB 卡上只有两千)。
                 self._compact_context_if_needed(messages)
+
+                # 让 context__ 那两个工具够得着这一轮的消息列表。挂在实例上而不是
+                # 就地处理，是为了让它们仍然走规范派发路径(参数校验/限频/超时/记录)
+                # ——见 _execute_context_tool 的说明。循环退出时在 finally 里摘掉:
+                # 留着的话，下一次**不在循环里**的工具调用会拿到一份陈旧的列表，
+                # 对它做压缩就是在改一个没人在读的东西，而工具照样回"已归档"。
+                self._react_messages = messages
 
                 # PR-3: Use chat_with_tools() which is defined on both UnifiedLLMRouter
                 # and MultiLLMRouter, ensuring the unified policy layer is applied
@@ -8513,7 +8752,7 @@ class OpenClawd:
                         {
                             "role": "tool",
                             "tool_call_id": tc_id,
-                            "content": _clipped,
+                            "content": _clipped + self._fuel_gauge_suffix(messages),
                         }
                     )
 
@@ -8533,6 +8772,13 @@ class OpenClawd:
             await _asyncio.wait_for(_inner_loop(), timeout=timeout)
         except _asyncio.TimeoutError:
             logger.warning(f"ReAct 循环总超时 ({timeout}s)，返回已有内容")
+        finally:
+            # 循环一结束就摘掉那份消息列表句柄。留着的后果不是内存,是**语义**:
+            # 下一次不在循环里的 context__ 调用会拿到一份陈旧的列表,对它做压缩等于
+            # 在改一个没人在读的东西——而工具照样回一句"已归档",模型据此以为
+            # 上下文腾出来了。超时路径也要摘,所以放在 finally。
+            self._react_messages = None
+            self._react_n_ctx = 0
 
         final_text = last_response.content if last_response else ""
         timed_out = last_response is None  # 如果整个循环超时还没拿到 response

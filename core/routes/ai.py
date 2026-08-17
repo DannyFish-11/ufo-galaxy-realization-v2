@@ -116,9 +116,28 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.delete("/api/v1/ai/conversation/{session_id}")
     async def clear_conversation(session_id: str):
-        """清除对话记忆"""
+        """清除对话记忆 —— **包括上下文归档里的原文**。
+
+        上下文压缩层（``core.context_compaction``）会把被压掉的对话**整段原文**落盘到
+        ``runtime/context_archive/``，好让模型之后还能按段号查回细节。那是一处存用户
+        原话的地方，所以它必须跟着这条路一起清 —— 否则用户点了"清除"，而他说过的每
+        一句仍然完整躺在磁盘上，**"清除"就成了一句假话**。
+        """
         await conversation_memory.clear_session(session_id)
-        return JSONResponse({"success": True, "message": f"Session {session_id} cleared"})
+        dropped = 0
+        try:
+            from core.context_archive import drop_session
+
+            dropped = drop_session(session_id)
+        except Exception as exc:  # noqa: BLE001 — 清不掉要说出来，但不该让这条路整个失败
+            logger.warning("会话 %s 的上下文归档清除失败（原文可能仍在磁盘上）: %s", session_id, exc)
+        return JSONResponse(
+            {
+                "success": True,
+                "message": f"Session {session_id} cleared",
+                "context_segments_dropped": dropped,
+            }
+        )
 
     # ─────── Agent 增强端点 ─────────
 
