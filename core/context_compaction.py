@@ -158,6 +158,82 @@ def _split_for_compaction(
     return head, body[:-KEEP_RECENT_MESSAGES], body[-KEEP_RECENT_MESSAGES:]
 
 
+def restore_anchor(messages: List[Dict[str, Any]], session_id: str) -> bool:
+    """进程重启后，把这个会话上次留下的摘要**贴回**上下文。贴了返回 ``True``。
+
+    为什么必须有这一步
+    ==================
+    上一轮做了 :func:`save_anchor`，也做了 :func:`load_anchor`，还写了"摘要跨重启
+    持久化，进程重启后同一个会话不会突然失忆" —— **但没有任何一处生产代码调用
+    load_anchor**。写进去了，从来没读出来过。摘要文件在磁盘上安安静静地攒着，而
+    重启后的会话该失忆照样失忆。
+
+    这是"接了等于没接"的一个标准样本：写侧有、读侧没有，两个方向都有函数、都有
+    测试，链条中间断着 —— 而且不会有任何一条错误。
+
+    什么时候贴、什么时候不贴
+    ========================
+    只在**真的失忆了**的时候贴：消息列表已经有摘要锚 → 不贴(这一轮压过了)；
+    消息列表还很长 → 不贴(历史本来就在，摘要是它的**有损副本**，两份都在等于让
+    模型看到同一段过去的两个版本)。只有"存着摘要、而手上的消息短得像刚开始"这一种
+    情况才是重启失忆，才该贴。
+
+    宁可少贴一次(退回原来的行为:失忆)，也不要多贴一次(制造一段自相矛盾的过去)。
+    """
+    if not session_id or _find_anchor(messages) is not None:
+        return False
+    # 长度门槛与压缩的保留窗口同一个数：多过这些条，历史本身还在，不需要副本。
+    if len(messages) > KEEP_RECENT_MESSAGES + 1:
+        return False
+    summary = load_anchor(session_id)
+    if not summary:
+        return False
+
+    anchor_msg = {"role": "system", "content": f"{ANCHOR_MARKER}\n{summary}"}
+    insert_at = 0
+    while (
+        insert_at < len(messages)
+        and isinstance(messages[insert_at], dict)
+        and messages[insert_at].get("role") == "system"
+    ):
+        insert_at += 1
+    messages.insert(insert_at, anchor_msg)
+    logger.info("会话 %s 重启后取回了上次的摘要（%d 字）—— 不是从零开始", session_id, len(summary))
+    return True
+
+
+def observe_system_head(messages: List[Dict[str, Any]]) -> int:
+    """顺手量一下这次装配的**系统头**有多长并记下来；返回量到的 token 数。
+
+    为什么是在这里量
+    ================
+    ``context_trim`` 的基线里"系统提示 + 人格 + 工具契约"那一段，原来和"给回复留多少"
+    捆在一个拍出来的 2048 里 —— 它是决定 ``n_ctx`` 的那条式子里最后一个没有依据的数。
+    系统头的真长度**只有在装配之后才知道**(它取决于装了哪些技能、人格是什么状态)，
+    而 ``n_ctx`` 要在**加载模型时**就定下来。两个时刻错开了，所以只能这一轮量、
+    下一轮用 —— 与 KV 单价那条完全同构。
+
+    量的是**不含摘要锚**的那一段：摘要是压缩自己的产物，把它算进"这套部署的系统头
+    有多长"就成了自己量自己(见 ``context_measurements`` 模块文档那条硬规矩)。
+
+    全程 best-effort：量不到、记不下都不影响本轮。
+    """
+    try:
+        head, _to_compact, _recent = _split_for_compaction(messages)
+        real_head = [m for m in head if ANCHOR_MARKER not in str(m.get("content") or "")]
+        if not real_head:
+            return 0
+        tokens = estimate_tokens(real_head)
+        if tokens > 0:
+            from core.context_measurements import record_system_head_tokens  # noqa: PLC0415
+
+            record_system_head_tokens(tokens)
+        return tokens
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("系统头长度实测跳过(不影响本轮): %s", exc)
+        return 0
+
+
 def compact_messages(
     messages: List[Dict[str, Any]],
     summarize: Callable[[str, str], str],

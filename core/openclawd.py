@@ -8181,8 +8181,20 @@ class OpenClawd:
         """
         try:
             from core.compute_scheduler import get_compute_scheduler
-            from core.context_compaction import compact_messages, should_compact
+            from core.context_compaction import compact_messages, observe_system_head, restore_anchor, should_compact
             from core.model_catalog import main_brain
+
+            session_id = str(getattr(self, "_current_session_id", "") or "")
+
+            # 重启后先把上次的摘要贴回来 —— 上一轮存了却从来没读过，"跨重启连续性"
+            # 只做了写侧。restore_anchor 自己判断该不该贴（历史还在就不贴）。
+            restore_anchor(messages, session_id)
+
+            # 顺手量一下系统头有多长 —— 它是决定 n_ctx 那条式子里最后一个拍出来的
+            # 数(context_trim._TOKENS_SYSTEM_HEAD_FALLBACK)。放在 should_compact **之前**：
+            # 这个数每轮都该更新，而压缩只在长会话里才触发，挂在压缩后面等于绝大
+            # 多数部署永远量不到。
+            observe_system_head(messages)
 
             tag = main_brain()
             n_ctx, _why = get_compute_scheduler().context_budget_for(tag)
@@ -8191,7 +8203,7 @@ class OpenClawd:
             return compact_messages(
                 messages,
                 self._summarize_for_compaction,
-                session_id=str(getattr(self, "_current_session_id", "") or ""),
+                session_id=session_id,
                 # 持久层每轮都在收（task_memory / rag_memory 那条路），压缩这一步
                 # 不负责抢救 —— 见 context_compaction 模块文档"先落库再压缩"。
                 persisted_ok=True,

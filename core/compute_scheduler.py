@@ -510,7 +510,7 @@ class ComputeScheduler:
         3. **这次实际要装多少** —— :func:`core.context_trim.assembled_token_demand`。
 
         第 3 条尤其要命:按本仓库自己配的预算(24 个工具定义 + 3 轮各 4000 字符的
-        工具结果 + 系统提示)算出来是 **11168 token**,而分配的是 4096。**超出的部分
+        工具结果 + 系统头 + 回复留白)算出来是 **15264 token**,而分配的是 4096。**超出的部分
         在 llama.cpp 那层被静默截断** —— 用户看到的是"它怎么记不住前面说的",不是
         任何一条报错。装配端按字符裁、分配端按 token 分配,两个数从来没有一处核对过。
 
@@ -542,17 +542,32 @@ class ComputeScheduler:
         try:
             from core.context_trim import assembled_token_demand  # noqa: PLC0415
 
-            demand = int(assembled_token_demand())
-        except Exception as exc:  # noqa: BLE001 — 需求算不出来就按模型上限,不猜
-            logger.debug("装配量不可评估(按模型上限): %s", exc)
-            demand = model_cap
+            # 带上 tag：它让装配量这一步用得上**只读词表**的真 tokenizer。
+            # 不带就只能按字符折算 —— 而这一刻正是最需要真值的时候(还没有任何
+            # 模型加载，``tokenize_with_loaded_model`` 必然拿不到)。
+            demand = int(assembled_token_demand(tag))
+        except Exception as exc:  # noqa: BLE001
+            # 原来这里退回 ``model_cap``,而那是**最危险**的一个选择,不是保守的:
+            # ``demand`` 是**下限**,把它顶到模型上限等于"什么都不知道,所以按最大开"。
+            # Qwythos 的上限是 1M —— 一次装配量评估失败,就会让 llama.cpp 在加载时
+            # 去分配一个一百万 token 的 KV cache,而这条退化只记在 debug 级。
+            # 拿"装不全"换"加载不了",方向和本方法上面那段注释说的完全一样是反的。
+            #
+            # 判不了就退到最小下限,让显存那一道去决定往上开多大;并且**响亮地说**:
+            # 这台机器的上下文没有按实际需求定,是个该修的状态,不是一个正常分支。
+            logger.warning(
+                "装配量不可评估，上下文下限退回 %s —— 这台机器的上下文没有按实际需求定（%s）",
+                MIN_CTX,
+                exc,
+            )
+            demand = MIN_CTX
 
         # ── 需求是**下限**，不是上限 ────────────────────────────────────────
         #
         # 这里原来写的是 ``min(demand, model_cap)`` —— 把装配量当成了天花板。那是
         # 反的:``n_ctx`` 是**加载期参数**，定了这一次就改不了，于是"显存再富余、模型
         # 能吃 1M，也永远用不超过一个静态预测值"。而那个预测值里，会话历史那一项
-        # 只是一个拍出来的常数(见 context_trim._TOKENS_BASELINE)，长会话里恰恰是它
+        # 只是一个拍出来的常数(见 context_trim._TOKENS_SYSTEM_HEAD_FALLBACK)，长会话里恰恰是它
         # 在涨 —— 拿它封顶，等于让唯一真正会变的东西说了不算。
         #
         # 正确的形状：**装配量是必须装得下的下限，显存决定能在下限之上开多大。**

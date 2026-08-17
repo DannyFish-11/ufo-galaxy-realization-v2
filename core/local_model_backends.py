@@ -252,6 +252,132 @@ def tokenize_with_loaded_model(text: str) -> int:
     return 0
 
 
+#: 只读词表的 llama.cpp 实例 —— 每个型号一个，``False`` 表示"这个型号试过，开不出来"。
+#:
+#: 负缓存和正缓存一样要紧:没有它,一个开不出词表的型号会在**每一次**数 token 时
+#: 重试一遍(而且是要读文件的那种重试)。
+_VOCAB_ONLY: Dict[str, Any] = {}
+
+
+def _vocab_only_tokenizer(tag: str) -> Any:
+    """给这个型号开一个**只读词表**的实例(不占显存、不读权重)；开不出来返回 ``None``。
+
+    为什么值得单开一条路
+    ====================
+    :func:`tokenize_with_loaded_model` 有一条硬约束:只用**已经加载的**模型,绝不为了
+    数 token 去加载一个 —— 那要几十秒、要显存。但这条约束带来一个鸡生蛋:决定
+    ``n_ctx`` 恰恰发生在**加载之前**,所以那一刻永远没有已加载的模型可问,只能按
+    ``_CHARS_PER_TOKEN`` 折算。于是"用真 tokenizer"这件事在最需要它的那一刻不生效。
+
+    ``vocab_only=True`` 正好破这个局:llama.cpp 支持只读 GGUF 里的词表段,**不分配
+    显存、不读权重张量**,开销是毫秒级的。拿它数出来的 token 数是真值,而代价与
+    "为了数 token 加载一个模型"完全不是一回事。
+
+    开不出来(没装 llama_cpp / 权重还没下载 / 这个构建不支持)就返回 ``None``,
+    调用方退回字符折算 —— 与本模块其余各处同一个立场:**拿不到就说拿不到**。
+    """
+    if not tag:
+        return None
+    if tag in _VOCAB_ONLY:
+        cached = _VOCAB_ONLY[tag]
+        return None if cached is False else cached
+
+    path = resolve_gguf_path(tag)
+    if not path:
+        _VOCAB_ONLY[tag] = False
+        return None
+    try:
+        from llama_cpp import Llama  # noqa: PLC0415
+
+        llm = Llama(model_path=path, vocab_only=True, verbose=False)
+    except Exception as exc:  # noqa: BLE001 — 开不出来就按没有,不影响任何主流程
+        logger.debug("只读词表实例开不出来(退回字符折算) tag=%s: %s", tag, exc)
+        _VOCAB_ONLY[tag] = False
+        return None
+    _VOCAB_ONLY[tag] = llm
+    logger.info("已为 %s 开只读词表实例 —— 加载模型之前也能数真 token 了", tag)
+    return llm
+
+
+def tokenize_with_vocab_only(text: str, tag: str) -> int:
+    """用**只读词表**的实例数这段文本折多少 token；数不了返回 0。
+
+    ``tokenize_with_loaded_model`` 的补位:那一条只在模型已加载时有效(对话进行中),
+    这一条在**加载之前**也有效(定 ``n_ctx`` 的那一刻)。两条都拿不到才折算。
+    """
+    if not text or not tag:
+        return 0
+    llm = _vocab_only_tokenizer(tag)
+    if llm is None:
+        return 0
+    try:
+        toks = llm.tokenize(text.encode("utf-8"))
+        return len(toks) if toks else 0
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("只读词表数 token 失败(退回字符折算): %s", exc)
+        return 0
+
+
+def resolve_gguf_path(model_id: str) -> Optional[str]:
+    """这个型号的 GGUF 权重文件在本机的哪儿；找不到返回 ``None``。
+
+    四条路依次试：直给的路径 → HF 下载登记表 → ``models/`` 下按目录名匹配 →
+    ``models/`` 下按文件名匹配。
+
+    **为什么是模块级函数而不是后端的方法**：这条规则有两个调用方，而其中一个
+    根本不该实例化后端 —— :func:`core.model_catalog.effective_weight_mb` 要在
+    **准入判断**那一刻问"这份权重到底多大"，那时候什么都还没加载。
+    """
+    if not model_id:
+        return None
+
+    # 1. Direct local path
+    if os.path.exists(model_id):
+        return model_id
+
+    # 2. Look up from HF Model Manager registry
+    try:
+        from core.huggingface_model_manager import get_hf_model_manager  # noqa: PLC0415
+
+        mgr = get_hf_model_manager()
+        entry = mgr.registry.get(model_id)
+        if entry and entry.is_gguf and os.path.exists(entry.local_path):
+            return entry.local_path
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("HF 登记表不可用(继续按目录找): %s", exc)
+
+    # 3./4. Search in models/ directory
+    models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+    if not os.path.isdir(models_dir):
+        return None
+    for root, _dirs, files in os.walk(models_dir):
+        for f in files:
+            if f.endswith(".gguf") and model_id.replace("/", "--") in root:
+                return os.path.join(root, f)
+    for root, _dirs, files in os.walk(models_dir):
+        for f in files:
+            if f.endswith(".gguf") and (model_id in f or f == model_id):
+                return os.path.join(root, f)
+
+    return None
+
+
+def on_disk_weight_mb(model_id: str) -> int:
+    """这份权重在**磁盘上**实际多大(MB)；文件不在本机返回 0。
+
+    这是把目录里 ``size_mb_val`` 那条"按 Q4_K_M 记"的假设变成可核对事实的地方 ——
+    不需要联网、不需要加载，权重文件本身就是真值。
+    """
+    path = resolve_gguf_path(model_id)
+    if not path:
+        return 0
+    try:
+        return max(1, int(os.path.getsize(path) / (1024 * 1024)))
+    except OSError as exc:
+        logger.debug("权重体积读取失败(按未下载处理): %s", exc)
+        return 0
+
+
 def _read_free_vram_mb() -> int:
     """当前可用显存(MB)；读不到返回 0。取数复用调度器那一处，不自己再读画像。"""
     try:
@@ -528,37 +654,14 @@ class LlamaCppBackend(LocalModelBackend):
             return False
 
     def _resolve_model_path(self, model_id: str) -> Optional[str]:
-        """Resolve model path from various sources"""
-        # 1. Direct local path
-        if os.path.exists(model_id):
-            return model_id
+        """Resolve model path from various sources
 
-        # 2. Look up from HF Model Manager registry
-        try:
-            from core.huggingface_model_manager import get_hf_model_manager
-
-            mgr = get_hf_model_manager()
-            entry = mgr.registry.get(model_id)
-            if entry and entry.is_gguf and os.path.exists(entry.local_path):
-                return entry.local_path
-        except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
-
-        # 3. Search in models/ directory
-        models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
-        if os.path.isdir(models_dir):
-            for root, dirs, files in os.walk(models_dir):
-                for f in files:
-                    if f.endswith(".gguf") and model_id.replace("/", "--") in root:
-                        return os.path.join(root, f)
-
-        # 4. Check if model_id is a file name in models/
-        for root, dirs, files in os.walk(models_dir):
-            for f in files:
-                if f.endswith(".gguf") and (model_id in f or f == model_id):
-                    return os.path.join(root, f)
-
-        return None
+        判据在模块级的 :func:`resolve_gguf_path` —— 这里只是转发。抽出去是因为
+        **不加载模型也要问这个问题**:目录里那一栏权重体积压着"按 Q4_K_M 记"的
+        假设，而权重文件就在磁盘上，``stat`` 一下就是真值。要在准入那一刻问，
+        就不能只有实例方法拿得到这条规则(见 ``model_catalog.effective_weight_mb``)。
+        """
+        return resolve_gguf_path(model_id)
 
     async def unload_model(self, model_id: str):
         if model_id in self._models:

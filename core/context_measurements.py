@@ -27,6 +27,20 @@ KV 头数、头维度、KV 量化类型，还取决于具体的 llama.cpp 构建
 这与 ``runtime_mb_val`` 的立场一致，只是更进一步：那一栏是"量过一次、写进源码"，
 这里是"每台机器自己量、自己存"。机器换了、量化换了、llama.cpp 换了，这个数跟着变，
 而源码不用动。
+
+**能记什么、不能记什么** —— 一条硬规矩
+======================================
+本模块只记**不受 ``n_ctx`` 反向约束**的量。KV 单价符合(它是模型结构 × 构建方式
+的属性，与这次开多长无关)；**"这次实际装配了多少 token"不符合，绝不能记**。
+
+理由是一个会自己收敛到最小值的闭环：KV 单价未知时 ``n_ctx`` 就等于装配需求
+(见 ``context_budget_for`` 的提前返回)，而压缩层会把实际占用压到窗口的七成 ——
+于是"实测装配量"必然小于上一次的需求。把它当成下一次的需求记回去，每重启一次
+窗口缩三成，几次之后塌到 ``MIN_CTX``，**而全程没有任何一条错误**。
+
+所以记的是**系统头**：人格 + 工具契约那一段。它既不被压缩层碰(见
+``_split_for_compaction``)、也不被 ``context_trim`` 裁，长度只取决于这套部署
+自己配了什么 —— 是个真事实，不是一个被窗口压出来的影子。
 """
 
 from __future__ import annotations
@@ -53,6 +67,18 @@ _MIN_CREDIBLE_KV_MB_PER_1K = 1
 
 #: 高于这个值同样不信 —— 那多半是量的时候有别的东西在抢显存。
 _MAX_CREDIBLE_KV_MB_PER_1K = 4096
+
+#: 系统头的实测值存在这个键下。
+#:
+#: **不挂在型号下面**,因为它根本不是型号的属性:同一套人格、同一份工具契约,换个
+#: 型号装配出来还是那么长。挂到型号下面会让"换个模型试试"把这个数清零重来。
+_SYSTEM_HEAD_KEY = "__system_head__"
+
+#: 系统头低于这个 token 数不信 —— 多半是取到了一个还没装配完的空壳。
+_MIN_CREDIBLE_SYSTEM_HEAD_TOKENS = 16
+
+#: 高于这个不信 —— 系统提示长到六万 token 是配置出了别的问题,不该被当成基线记下来。
+_MAX_CREDIBLE_SYSTEM_HEAD_TOKENS = 65536
 
 
 def _read() -> Dict[str, Dict[str, float]]:
@@ -128,6 +154,67 @@ def effective_kv_mb_per_1k(tag: str) -> int:
         return spec.kv_mb_per_1k() if spec is not None else 0
     except Exception:  # noqa: BLE001
         return 0
+
+
+def system_head_tokens() -> int:
+    """这套部署的**系统头**实测折多少 token；没量过返回 0。
+
+    "系统头"= 人格 + 工具契约那一段(``role=system`` 的开头几条，不含摘要锚)。
+    它是 ``context_trim.assembled_token_demand`` 那条基线里唯一**可以被量到**的一半 ——
+    另一半是"给模型回复留多少",那是政策不是事实,不在这里。
+
+    返回 0 的语义同本模块其余各处：**"没量过"，不是"不要钱"**。
+    """
+    if os.environ.get("GALAXY_IGNORE_CONTEXT_MEASUREMENTS", "").strip().lower() in ("1", "true", "yes", "on"):
+        return 0
+    rec = _read().get(_SYSTEM_HEAD_KEY) or {}
+    raw = rec.get("tokens")
+    try:
+        return int(raw or 0)
+    except (TypeError, ValueError):
+        # 与 kv_mb_per_1k 同一条理由：这里的 0 表示"记录坏了"，正常路径的 0 表示
+        # "没量过"，两者长得一样就会让一个坏文件永远伪装成"还没量过"。
+        logger.warning("系统头 token 记录损坏(值=%r)，按未量过处理；删掉 %s 重新跑一轮即可重量", raw, _FILE)
+        return 0
+
+
+def record_system_head_tokens(tokens: int) -> Optional[int]:
+    """记下一次实测的系统头长度；返回最终生效的值(没记返回 ``None``)。
+
+    取**历史最大值**，不是最近一次
+    ==============================
+    方向性后果不对称，与 ``context_trim._CHARS_PER_TOKEN`` 刻意取小是同一条理由：
+    估少了是**静默截断**(用户看到"它怎么忘了前面说的"，而不是任何一条错误)，
+    估多了只是把上下文开大一点。系统头本身也确实是单调的 —— 装了新技能、加了
+    人格段就变长，很少缩回去。
+
+    不可信的一律不记(见 ``_MIN/_MAX_CREDIBLE_SYSTEM_HEAD_TOKENS``)。
+    """
+    try:
+        val = int(tokens or 0)
+    except (TypeError, ValueError):
+        return None
+    if not (_MIN_CREDIBLE_SYSTEM_HEAD_TOKENS <= val <= _MAX_CREDIBLE_SYSTEM_HEAD_TOKENS):
+        logger.debug("系统头 %s token 不在可信区间，不记", val)
+        return None
+
+    data = _read()
+    prev = 0
+    try:
+        prev = int((data.get(_SYSTEM_HEAD_KEY) or {}).get("tokens") or 0)
+    except (TypeError, ValueError):
+        prev = 0
+    if val <= prev:
+        return prev
+
+    data[_SYSTEM_HEAD_KEY] = {"tokens": val, "previous": prev}
+    try:
+        _FILE.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(_FILE, data, indent=2, ensure_ascii=False)
+        logger.info("记下系统头长度：%s token（此前 %s）—— 上下文下限不再按常数估这一段", val, prev or "未量过")
+    except Exception as exc:  # noqa: BLE001 — 记不下来不影响本轮
+        logger.debug("系统头实测值写入失败(不影响本轮): %s", exc)
+    return val
 
 
 def measured_source(tag: str) -> str:

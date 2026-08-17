@@ -52,17 +52,47 @@ _CHARS_PER_TOKEN = 2.5
 #: 序列化一遍数字符就是真值,不需要猜"一条大概多少"。拿不到时才退回这里。
 _TOKENS_PER_TOOL_DEF_FALLBACK = 180
 
-#: 系统提示 + 人格 + 留给模型回复的余量。
+#: 留给模型**回复**的余量。
 #:
-#: **这里刻意不含会话历史。** 历史是唯一无界、且每轮都在长的一项,把它折进一个常数
-#: 是这个公式最弱的地方 —— 而更要命的是,这个函数的结果曾被当成 ``n_ctx`` 的**上限**,
-#: 于是"唯一真正会变的东西"反而说了不算。现在它只当**下限**(见
-#: ``ComputeScheduler.context_budget_for``):历史往上涨的空间由显存决定,由
-#: 压缩层(:mod:`core.context_compaction`)负责在涨到头之前把它收敛掉。
-_TOKENS_BASELINE = 2048
+#: 这一半是**政策,不是事实** —— 没有哪次测量能告诉你"该给答案留多长",那是产品
+#: 决定。所以它就该是一个常数,而且该单列出来,别和可以量到的那一半混在一个数里。
+#:
+#: 但它也**不必是新拍的**:``GALAXY_MAX_TOKENS_ANSWER`` 已经在管同一件事(见
+#: ``openclawd._react_loop`` 的输出预算) —— 那一处限制模型最多吐多少 token,这一处
+#: 为同一件事在窗口里留位置。所以读那个配置,这里只作它的默认值;用户把回复上限
+#: 调大时,窗口跟着留位置,不需要谁记得同步。
+_TOKENS_REPLY_HEADROOM_DEFAULT = 4096
+
+#: **兜底**:系统提示 + 人格 + 工具契约那一段折多少 token —— 只在从没量到过时才用。
+#:
+#: 这个数原来和上面那个回复余量捆在一个 ``_TOKENS_BASELINE = 2048`` 里,而那 2048
+#: 是**这条式子里最后一个没有依据的数**。问题不在于它偏大还是偏小,在于它把两件
+#: 性质完全不同的东西压成了一个:一半是可以量到的事实(系统头就在那儿,数一下就行),
+#: 一半是拍不掉的政策(给回复留多少)。捆在一起的后果是**可量的那一半也永远量不到**。
+#:
+#: 现在分开:政策留常数,事实去量(:func:`core.context_compaction.observe_system_head`
+#: 每轮记一次,:mod:`core.context_measurements` 存),这里只作第一次启动时的兜底。
+_TOKENS_SYSTEM_HEAD_FALLBACK = 2048
 
 
-def _real_tool_table_tokens() -> int:
+def _system_head_tokens() -> int:
+    """系统头折多少 token：**实测优先**，没量过退回兜底常数。
+
+    与 ``kv_mb_per_1k`` 完全同构 —— 目录/常数是声明的假设，实测是这台机器上的事实。
+    第一次启动必然走兜底(那时还没有任何一轮跑过)，之后走真值。
+    """
+    try:
+        from core.context_measurements import system_head_tokens  # noqa: PLC0415
+
+        measured = system_head_tokens()
+        if measured > 0:
+            return measured
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("系统头实测值不可用(按兜底常数): %s", exc)
+    return _TOKENS_SYSTEM_HEAD_FALLBACK
+
+
+def _real_tool_table_tokens(tag: str = "") -> int:
     """按**真实工具表**算它折多少 token；拿不到返回 0。
 
     比 ``条数 × 180`` 强在两点:数的是真名字、真描述、真 JSON Schema;而且工具表
@@ -83,28 +113,45 @@ def _real_tool_table_tokens() -> int:
     try:
         import json as _json  # noqa: PLC0415
 
-        chars = len(_json.dumps(tools, ensure_ascii=False))
+        serialized = _json.dumps(tools, ensure_ascii=False)
     except Exception as exc:  # noqa: BLE001
         logger.debug("工具表序列化失败(退回按条数估算): %s", exc)
         return 0
-    return count_tokens(chars_or_text=chars)
+    # 把**整段文本**交给 count_tokens,不是它的字符数:工具表这一段是真实存在的
+    # 文本,交字符数等于主动放弃真 tokenizer 那两条路,只剩折算 —— 而这一段恰恰是
+    # 装配量里最大的一块,折算偏差在这儿最贵。
+    return count_tokens(serialized, tag)
 
 
-def count_tokens(chars_or_text) -> int:
+def count_tokens(chars_or_text, tag: str = "") -> int:
     """把字符数(或一段文本)折成 token 数 —— 换算只此一处。
 
-    有真 tokenizer 就用真的(已加载的 llama.cpp 模型自带一个);没有就按
-    ``_CHARS_PER_TOKEN`` 折算。**分成两条路而不是只留估算**,是因为估算的方向性
-    后果不对称:估少了是静默截断,估多了只是多开一点上下文。
+    三条路，依次试
+    ==============
+    1. **已加载的模型**自带的 tokenizer(对话进行中时手上就有);
+    2. **只读词表**的实例(``vocab_only=True``,不占显存、毫秒级) —— 这一条专为
+       "决定 ``n_ctx`` 的那一刻还没有任何模型加载"准备:没有它，最需要真值的那次
+       调用恰恰只能折算;要 *tag* 就是为了知道该开谁的词表;
+    3. 都没有才按 ``_CHARS_PER_TOKEN`` 折算。
+
+    **分成三条路而不是只留估算**,是因为估算的方向性后果不对称:估少了是静默截断,
+    估多了只是多开一点上下文。
     """
     if isinstance(chars_or_text, str):
         text, chars = chars_or_text, len(chars_or_text)
         try:
-            from core.local_model_backends import tokenize_with_loaded_model  # noqa: PLC0415
+            from core.local_model_backends import (  # noqa: PLC0415
+                tokenize_with_loaded_model,
+                tokenize_with_vocab_only,
+            )
 
             real = tokenize_with_loaded_model(text)
             if real > 0:
                 return real
+            if tag:
+                real = tokenize_with_vocab_only(text, tag)
+                if real > 0:
+                    return real
         except Exception as exc:  # noqa: BLE001
             logger.debug("真 tokenizer 不可用(按字符折算): %s", exc)
     else:
@@ -112,7 +159,7 @@ def count_tokens(chars_or_text) -> int:
     return int(chars / _CHARS_PER_TOKEN)
 
 
-def assembled_token_demand() -> int:
+def assembled_token_demand(tag: str = "") -> int:
     """按**本仓库自己配的那几个预算**推出:一次请求最多会装配多少 token。
 
     为什么要有这个函数
@@ -130,6 +177,10 @@ def assembled_token_demand() -> int:
     判据全部取自本模块已有的那几个 env 预算,不新造配置项 —— 改 ``GALAXY_TOOLS_MAX``
     之类的时候,这里跟着变,不需要谁记得同步。
 
+    Args:
+        tag: 要给哪个型号算。**只影响用不用得上真 tokenizer**(见 :func:`count_tokens`
+            第 2 条路),不影响任何一项预算 —— 传空只是少一层精度,不会改口径。
+
     Returns:
         这次装配的 token 上界(保守估计,宁可估多)。
     """
@@ -139,7 +190,7 @@ def assembled_token_demand() -> int:
 
     # 工具定义:先数真表,数不到才按条数估。真表可能比 GALAXY_TOOLS_MAX 多,
     # 但装配时会被 slim_tools 裁到那个上限,所以取两者的小者才是真实装配量。
-    real_tool_tokens = _real_tool_table_tokens()
+    real_tool_tokens = _real_tool_table_tokens(tag)
     if real_tool_tokens > 0:
         per_tool = max(1, real_tool_tokens // max(1, _tool_table_size()))
         tool_defs = min(real_tool_tokens, tools * per_tool)
@@ -147,7 +198,11 @@ def assembled_token_demand() -> int:
         tool_defs = tools * _TOKENS_PER_TOOL_DEF_FALLBACK
 
     tool_results = count_tokens(chars_or_text=result_chars * keep_rounds)
-    return int(tool_defs + tool_results + _TOKENS_BASELINE)
+
+    # 基线拆成两半:**事实**(系统头有多长 —— 量得到)+ **政策**(给回复留多少 ——
+    # 量不到,是产品决定)。捆成一个 2048 的时候,可量的那一半也永远量不到。
+    reply_headroom = max(0, _env_int("GALAXY_MAX_TOKENS_ANSWER", _TOKENS_REPLY_HEADROOM_DEFAULT))
+    return int(tool_defs + tool_results + _system_head_tokens() + reply_headroom)
 
 
 def _tool_table_size() -> int:

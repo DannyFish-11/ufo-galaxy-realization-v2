@@ -53,6 +53,7 @@ def slot_runtime_gaps(tier_key: str = "") -> List[Dict[str, Any]]:
         from core.model_catalog import (  # noqa: PLC0415
             active_tags,
             backend_for_tag,
+            effective_weight_mb,
             get_model,
             load_tier,
             resolve_is_moe,
@@ -63,13 +64,24 @@ def slot_runtime_gaps(tier_key: str = "") -> List[Dict[str, Any]]:
         # 一次探测异常会把 /status、/tier 整个打挂 —— 而这一层的职责只是"报缺口"，
         # 报不出来就该安静退场，没有理由拖垮它服务的那个接口。
         ready = set(list_available_backends())
-        return _collect_gaps(key, ready, moe_offload_supported, active_tags, backend_for_tag, get_model, resolve_is_moe)
+        return _collect_gaps(
+            key,
+            ready,
+            moe_offload_supported,
+            active_tags,
+            backend_for_tag,
+            get_model,
+            resolve_is_moe,
+            effective_weight_mb,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.debug("运行时就绪度不可评估: %s", exc)
         return []
 
 
-def _collect_gaps(key, ready, moe_offload_supported, active_tags, backend_for_tag, get_model, resolve_is_moe):
+def _collect_gaps(
+    key, ready, moe_offload_supported, active_tags, backend_for_tag, get_model, resolve_is_moe, effective_weight_mb
+):
     """逐位比对"要哪个后端 / 装了没 / 做不做得到声称的落位"。"""
     gaps: List[Dict[str, Any]] = []
     for tag in active_tags(key):
@@ -95,11 +107,16 @@ def _collect_gaps(key, ready, moe_offload_supported, active_tags, backend_for_ta
         # MoE 的 runtime_mb 是按"专家卸载生效"写的(35B:18 GB 权重 → 7.3 GB 驻留)。
         # 卸载做不到时那个数就是空头支票 —— 准入按 7.3 GB 放行,加载时按 18 GB 要
         # 显存,8 GB 卡上必炸。而告警只在加载时才喊,中间隔着一整次加载。
+        # 整权重按 effective_weight_mb 取,不是 spec.size_mb():这句话说的是"卸载
+        # 不生效时它会按整权重要多少显存",而权重文件已经在磁盘上时,目录那条
+        # "按 Q4_K_M 记"的声明就不该再压过实际的文件。用户换成 Q8_0 时,这条
+        # 缺口报的数会跟着变,而不是继续报一个量化对不上的旧数。
+        weight_mb = effective_weight_mb(tag) if spec is not None else 0
         if (
             backend == "llama_cpp"
             and spec is not None
             and resolve_is_moe(tag)
-            and spec.runtime_mb() < spec.size_mb()
+            and spec.runtime_mb() < weight_mb
             and not moe_offload_supported()
         ):
             gaps.append(
@@ -111,13 +128,13 @@ def _collect_gaps(key, ready, moe_offload_supported, active_tags, backend_for_ta
                     "detail": (
                         f"{tag} 的显存账({spec.runtime_mb()} MB)是按**专家卸载生效**算的,"
                         f"但装着的 llama-cpp-python 既不支持 n_cpu_moe 也不支持 override_tensor —— "
-                        f"这一位会按整权重 {spec.size_mb()} MB 要显存,小显存上必然装不下。"
+                        f"这一位会按整权重 {weight_mb} MB 要显存,小显存上必然装不下。"
                         f"解法:改用 llama.cpp server(llama-server --n-cpu-moe N),"
                         f"再用 GALAXY_LOCAL_OPENAI_URL 接进来。"
                     ),
                     "source": getattr(spec, "source", ""),
                     "declared_runtime_mb": spec.runtime_mb(),
-                    "actual_runtime_mb": spec.size_mb(),
+                    "actual_runtime_mb": weight_mb,
                 }
             )
     return gaps

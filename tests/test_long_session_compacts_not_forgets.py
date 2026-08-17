@@ -152,6 +152,50 @@ class TestContinuityAcrossRestarts:
         msgs = _long_session()
         assert cc.compact_messages(msgs, _summarizer(), session_id="") > 0
 
+    def test_the_anchor_is_actually_read_back(self):
+        """**写侧有、读侧没有**，是这一条要防的东西。
+
+        原来只调了 ``save_anchor``：摘要在磁盘上安安静静地攒着，而重启后的会话该
+        失忆照样失忆 —— 而且不会有任何一条错误。存了从不读，比不存更糟：它给人
+        "连续性已经做了"的错觉。
+        """
+        old = _long_session()
+        cc.compact_messages(old, _summarizer(), session_id="sess-restart")
+
+        fresh = [{"role": "system", "content": "你是 Galaxy 助手。"}, {"role": "user", "content": "我们刚才聊到哪了？"}]
+        assert cc.restore_anchor(fresh, "sess-restart") is True
+        assert any(cc.ANCHOR_MARKER in str(m.get("content", "")) for m in fresh), "重启后没把上次的摘要贴回来"
+        assert fresh[0]["role"] == "system" and "Galaxy 助手" in fresh[0]["content"], "贴到系统提示前面去了"
+
+    def test_it_does_not_paste_a_second_version_of_the_past(self):
+        """历史本身还在的时候贴摘要，等于让模型看到同一段过去的两个版本。
+
+        摘要是历史的**有损副本**。宁可少贴一次（退回失忆），也不要多贴一次。
+        """
+        msgs = _long_session()
+        cc.compact_messages(msgs, _summarizer(), session_id="sess-live")
+        before = list(msgs)
+        assert cc.restore_anchor(msgs, "sess-live") is False, "已经有摘要锚了还往里贴"
+        assert msgs == before
+
+        long_no_anchor = _long_session()
+        assert cc.restore_anchor(long_no_anchor, "sess-live") is False, "历史还在（消息很长），不该再贴一份有损副本"
+
+    def test_nothing_stored_means_nothing_pasted(self):
+        fresh = [{"role": "system", "content": "你是 Galaxy 助手。"}]
+        assert cc.restore_anchor(fresh, "从没压过的会话") is False
+        assert cc.restore_anchor(fresh, "") is False
+        assert len(fresh) == 1
+
+    def test_the_live_loop_restores_before_it_measures_or_compacts(self):
+        import inspect
+
+        import core.openclawd as oc
+
+        src = inspect.getsource(oc.OpenClawd._compact_context_if_needed)
+        assert "restore_anchor" in src, "取回摘要这一步没人调 —— 跨重启连续性只做了写侧"
+        assert src.index("restore_anchor") < src.index("should_compact")
+
 
 class TestItIsWiredIntoTheLiveLoop:
     """判据接上了但没人调，等于没接。"""

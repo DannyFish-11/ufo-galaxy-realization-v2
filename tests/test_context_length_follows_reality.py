@@ -90,7 +90,7 @@ class TestTheSchedulerOwnsTheDecision:
         断言写死 2048 而**不是**写 ``>= mc.MIN_CTX`` —— 后者是自指的：把 MIN_CTX
         调成 1，那种写法照样绿。下限的值本身就是要钉的东西。
         """
-        monkeypatch.setattr(ct, "assembled_token_demand", lambda: 1)
+        monkeypatch.setattr(ct, "assembled_token_demand", lambda tag="": 1)
         n_ctx, _why = cs.get_compute_scheduler().context_budget_for("qwythos-9b-v2")
         assert mc.MIN_CTX == 2048, "下限被改了 —— 这是个判据，不是可随手调的旋钮"
         assert n_ctx == 2048
