@@ -60,6 +60,34 @@ def store():
     s.ttl_sec = prev_ttl
 
 
+#: ``DesktopPerceptionStore.status()`` 的槽位名（与契约的模态名不同：麦克风那槽叫 audio）。
+_SLOTS = ("screen", "camera", "audio", "system_audio")
+
+
+def _status(*, paused: bool = False, **slots) -> dict:
+    """合成一份 ``status()``。
+
+    **为什么用合成而不是真单例**：``*_received`` 是进程级累计，且 ``pause()`` 也不清它。
+    同一次 pytest 里别的用例（``test_camera_reaches_continuous_perception`` 等）会往
+    同一个单例推帧，于是"这条通路从没来过东西"这类断言会随**测试顺序**而变 ——
+    那正是这份契约要消灭的那种不确定性，不该由它自己的测试引入。
+
+    形状与真库的一致性由 :meth:`TestGroupFVocabulary.test_f05_synthetic_status_matches_the_real_shape`
+    钉住：真库改字段名，那里会红，而不是让这些用例静默地全部测在空气上。
+
+    Args:
+        paused: 隐私急停。
+        **slots: 每槽给 ``"live"`` / ``"idle"`` / 省略（= 从没来过）。
+    """
+    out: dict = {"ttl_sec": 10.0, "privacy": {"paused": paused}}
+    for slot in _SLOTS:
+        mode = slots.get(slot)
+        out[f"{slot}_received"] = 0 if mode is None else 3
+        out[f"{slot}_fresh"] = mode == "live"
+        out[f"{slot}_age_sec"] = None if mode is None else (0.4 if mode == "live" else 99.0)
+    return out
+
+
 def _states(view: PerceptionView) -> dict:
     return {m.modality: m.state for m in view.modalities}
 
@@ -70,82 +98,71 @@ def _states(view: PerceptionView) -> dict:
 
 
 class TestGroupAFiveStates:
-    """每一档都由一个真实场景产生。布尔做不到的正是这一组。"""
+    """每一档都由一个真实场景产生。布尔做不到的正是这一组。
 
-    def test_a01_never_pushed_is_unavailable(self, store) -> None:
-        v = resolve_perception_view(store.status())
-        assert _states(v)["camera"] == "unavailable"
+    这一组走**合成 status**（见 :func:`_status`）：判定本身是纯函数，用真单例只会
+    引入测试顺序依赖 —— ``*_received`` 是进程级累计，别的用例往同一个单例推过帧，
+    "从没来过东西"就不再成立。形状与真库的一致性由 F 组守着。
+    """
 
-    def test_a02_fresh_signal_is_live(self, store) -> None:
-        store.update_frame("Zm9v", source="screen")
-        v = resolve_perception_view(store.status())
+    def test_a01_never_pushed_is_unavailable(self) -> None:
+        assert _states(resolve_perception_view(_status(screen="live")))["camera"] == "unavailable"
+
+    def test_a02_fresh_signal_is_live(self) -> None:
+        v = resolve_perception_view(_status(screen="live"))
         assert _states(v)["screen"] == "live"
         assert v.is_sensing is True
 
-    def test_a03_stale_signal_is_idle_not_unavailable(self, store) -> None:
+    def test_a03_stale_signal_is_idle_not_unavailable(self) -> None:
         """**这一条是整组的要点。**
 
         「通路通、只是这一拍静了」与「根本没有这条通路」是两件事，而布尔会把它们
         压成同一个 false。渲染上前者该柔和呼吸（它在），后者该不亮（它不在）。
         """
-        store.update_frame("Zm9v", source="screen")
-        store.ttl_sec = 0.001
-        time.sleep(0.01)
-        v = resolve_perception_view(store.status())
+        v = resolve_perception_view(_status(screen="idle"))
         assert _states(v)["screen"] == "idle"
         assert _states(v)["camera"] == "unavailable"
         assert v.is_sensing is False
 
-    def test_a04_privacy_pause_is_paused_not_unavailable(self, store) -> None:
-        store.update_frame("Zm9v", source="screen")
-        store.pause("user")
-        v = resolve_perception_view(store.status())
+    def test_a04_privacy_pause_is_paused_not_unavailable(self) -> None:
+        v = resolve_perception_view(_status(screen="live", paused=True))
         assert _states(v)["screen"] == "paused"
         assert v.privacy_paused is True
         assert v.is_sensing is False
 
-    def test_a05_pause_does_not_invent_an_eye_that_never_existed(self, store) -> None:
+    def test_a05_pause_does_not_invent_an_eye_that_never_existed(self) -> None:
         """暂停对一条根本不存在的通路没有意义 —— 报 paused 会让渲染端画出一只
         「闭着的眼睛」，而那里从来就没有眼睛。"""
-        store.update_frame("Zm9v", source="screen")
-        store.pause("user")
-        assert _states(resolve_perception_view(store.status()))["camera"] == "unavailable"
+        v = resolve_perception_view(_status(screen="live", paused=True))
+        assert _states(v)["camera"] == "unavailable"
 
-    def test_a06_resume_after_wipe_lands_on_idle(self, store) -> None:
-        """暂停会清空缓存但**不清** ``*_received`` 计数器，所以恢复后是 idle
-        （通路通、暂时没数据）而不是退回 unavailable。"""
-        store.update_frame("Zm9v", source="screen")
-        store.pause("user")
-        store.resume("user")
-        assert _states(resolve_perception_view(store.status()))["screen"] == "idle"
+    def test_a06_a_channel_that_ran_before_stays_idle_not_unavailable(self) -> None:
+        """暂停会清空缓存但**不清** ``*_received``，所以恢复后是 idle（通路通、
+        暂时没数据）而不是退回 unavailable。这一条钉的就是那个语义差。"""
+        assert _states(resolve_perception_view(_status(screen="idle")))["screen"] == "idle"
 
-    def test_a07_all_five_states_are_reachable(self, store) -> None:
+    def test_a07_all_five_states_are_reachable(self) -> None:
         """取值域里没有一档是摆设。"""
-        seen = set()
-        seen.add(_states(resolve_perception_view(store.status()))["camera"])  # unavailable
-        store.update_frame("Zm9v", source="screen")
-        store.update_audio("YmFy")
-        seen.add(_states(resolve_perception_view(store.status()))["screen"])  # live
-        seen.add(_states(resolve_perception_view(store.status(), speaking=True))["microphone"])  # suppressed
-        store.ttl_sec = 0.001
-        time.sleep(0.01)
-        seen.add(_states(resolve_perception_view(store.status()))["screen"])  # idle
-        store.pause("user")
-        seen.add(_states(resolve_perception_view(store.status()))["screen"])  # paused
+        seen = {
+            _states(resolve_perception_view(_status()))["camera"],
+            _states(resolve_perception_view(_status(screen="live")))["screen"],
+            _states(resolve_perception_view(_status(screen="idle")))["screen"],
+            _states(resolve_perception_view(_status(audio="live"), speaking=True))["microphone"],
+            _states(resolve_perception_view(_status(screen="live", paused=True)))["screen"],
+        }
         assert seen == set(MODALITY_STATES)
 
-    def test_a08_modalities_are_always_four_in_order(self, store) -> None:
+    def test_a08_modalities_are_always_four_in_order(self) -> None:
         """恒定四条 —— 渲染端不该遍历一个长度会变的数组。"""
-        v = resolve_perception_view(store.status())
+        v = resolve_perception_view(_status())
         assert tuple(m.modality for m in v.modalities) == PERCEPTION_MODALITIES
 
-    def test_a09_age_none_differs_from_age_zero(self, store) -> None:
-        """``None``（从没有过信号）与 ``0.0``（刚刚还有）是两件事。"""
-        v = resolve_perception_view(store.status())
-        assert next(m for m in v.modalities if m.modality == "camera").signal_age_s is None
-        store.update_frame("Zm9v", source="screen")
-        age = next(m for m in resolve_perception_view(store.status()).modalities if m.modality == "screen").signal_age_s
-        assert age is not None and age >= 0.0
+    def test_a09_age_none_differs_from_age_zero(self) -> None:
+        """``None``（从没有过信号）与一个数（有过）是两件事。"""
+        v = resolve_perception_view(_status(screen="live"))
+        by = {m.modality: m.signal_age_s for m in v.modalities}
+        assert by["camera"] is None
+        assert by["screen"] is not None and by["screen"] >= 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -161,29 +178,25 @@ class TestGroupBAntiSelfExcitation:
     而不是留成渲染端要记的规矩。规矩会被忘记，状态不会。
     """
 
-    def test_b01_microphone_is_suppressed_while_speaking(self, store) -> None:
-        store.update_audio("YmFy")
-        assert _states(resolve_perception_view(store.status()))["microphone"] == "live"
-        assert _states(resolve_perception_view(store.status(), speaking=True))["microphone"] == "suppressed"
+    def test_b01_microphone_is_suppressed_while_speaking(self) -> None:
+        st = _status(audio="live")
+        assert _states(resolve_perception_view(st))["microphone"] == "live"
+        assert _states(resolve_perception_view(st, speaking=True))["microphone"] == "suppressed"
 
-    def test_b02_suppression_touches_only_the_microphone(self, store) -> None:
+    def test_b02_suppression_touches_only_the_microphone(self) -> None:
         """TTS 不影响屏幕，也不影响系统声 —— 系统声回答的是「用户此刻在听什么」。"""
-        store.update_frame("Zm9v", source="screen")
-        store.update_system_audio("c3lz")
-        st = _states(resolve_perception_view(store.status(), speaking=True))
-        assert st["screen"] == "live"
-        assert st["system_audio"] == "live"
+        got = _states(resolve_perception_view(_status(screen="live", system_audio="live"), speaking=True))
+        assert got["screen"] == "live"
+        assert got["system_audio"] == "live"
 
-    def test_b03_suppressed_is_not_the_same_as_absent(self, store) -> None:
+    def test_b03_suppressed_is_not_the_same_as_absent(self) -> None:
         """「被屏蔽」该短暂闭合，「没有」该不亮 —— 两种画法。"""
-        store.update_audio("YmFy")
-        assert _states(resolve_perception_view(store.status(), speaking=True))["microphone"] != "unavailable"
+        assert _states(resolve_perception_view(_status(audio="live"), speaking=True))["microphone"] != "unavailable"
 
-    def test_b04_pause_outranks_suppression(self, store) -> None:
+    def test_b04_pause_outranks_suppression(self) -> None:
         """用户按停了，就不该再表现成「只是暂时闭嘴」。"""
-        store.update_audio("YmFy")
-        store.pause("user")
-        assert _states(resolve_perception_view(store.status(), speaking=True))["microphone"] == "paused"
+        got = _states(resolve_perception_view(_status(audio="live", paused=True), speaking=True))
+        assert got["microphone"] == "paused"
 
 
 # ---------------------------------------------------------------------------
@@ -316,11 +329,20 @@ class TestGroupEBridgeWire:
         store.update_frame("Zm9v", source="screen")
         json.dumps(self._bridge()._render_payload("static"))
 
-    def test_e06_anchor_only_fallback_still_carries_perception(self, store) -> None:
+    def test_e06_anchor_only_fallback_still_carries_perception(self, store, monkeypatch) -> None:
         """兜底姿态最常出现的场合恰恰是主轴 silent —— 也就是第一态。
-        在那里把感知抹成空，等于在最需要它的时候永远是空的。"""
+        在那里把感知抹成空，等于在最需要它的时候永远是空的。
+
+        必须显式把 continuum 拿掉来逼出兜底分支：``source`` 取决于这个进程里有没有
+        活的 ``ContinuumState``，那是**全局状态**。直接断言它会随测试顺序而变 ——
+        本条最初就是这么写的，本机单跑绿、CI 全量跑红（别的用例已经把 OpenClawd
+        建起来了，于是这里拿到 ``continuum``）。
+        """
+        import core.phase_contract as pc
+
         store.update_frame("Zm9v", source="screen")
-        p = resolve_render_posture("silent")
+        monkeypatch.setattr(pc, "last_continuum_posture", lambda: None)
+        p = pc.resolve_render_posture("silent")
         assert p.source == "anchor_only"
         assert p.perception.is_sensing is True
 
@@ -361,3 +383,17 @@ class TestGroupFVocabulary:
 
     def test_f04_unavailable_factory_rejects_a_bogus_modality(self) -> None:
         assert ModalityView.unavailable("wormhole").modality in PERCEPTION_MODALITIES
+
+    def test_f05_synthetic_status_matches_the_real_shape(self) -> None:
+        """A/B 两组走合成 status —— 这一条保证那份合成不会与真库悄悄分叉。
+
+        没有它，真库改一个字段名，那两组会**照样全绿**，因为它们测的是一份
+        自说自话的字典。那比没有测试更糟。
+        """
+        from core.perception.desktop_perception_store import get_desktop_perception_store
+
+        real = set(get_desktop_perception_store().status())
+        fake = set(_status(screen="live"))
+        missing = {k for k in real if k.endswith(("_received", "_fresh", "_age_sec"))} - fake
+        assert not missing, f"合成 status 少了真库有的键：{sorted(missing)}"
+        assert "privacy" in fake and "privacy" in real
