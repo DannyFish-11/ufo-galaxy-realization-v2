@@ -119,6 +119,100 @@ export type FormSignature = "none" | "diffuse_cluster" | "focused_point" | "expa
 /** 抽象空间权重／贴近度。 */
 export type SpatialPresence = "absent" | "peripheral" | "ambient" | "foreground";
 
+/** 执行链的种类。决定 ExecutionChainView.last_target 指的是任务还是设备。 */
+export type ChainKind = "local" | "cross_device";
+
+/** 表达期用什么手法动手。none = 尚未决策。 */
+export type HybridExecutionMode = "none" | "sequential_degrade" | "parallel_race" | "staged_hybrid" | "local_preferred" | "remote_preferred";
+
+/** 世界模型视图的来源。unwired = 这条链路还没建，不是「零个实体」。 */
+export type WorldModelSource = "unwired" | "live";
+
+/**
+ * 主轴上最近一次转移的**性质** —— 退场编排该看这一位。
+ *
+ * 覆盖层此前唯一的依据是一个标量深度，深度从 manifest 走回 silent 时，画面上
+ * 放的就是进场动画倒着播。这个类型把「刚才发生的是哪一种转移」变成显式事实。
+ *
+ * `handoff` 与 `dissolving` **都是合法出口**：前者是「这一轮结果已提交、还有
+ * 后续」（在场层 core/desktop_presence_system.py 的 MANIFEST→LIMINAL 策略），
+ * 后者是「做完就散」。它们在不同的轴上，不是同一件事的两种说法 —— 所以渲染端
+ * 按实际收到的这一位编排，不必也不该预先选定一条退场路线。
+ */
+export type TransitionKind = "none" | "emerging" | "committing" | "handoff" | "dissolving";
+
+/**
+ * 阈限空间三类内容里的**执行链**那两类。
+ *
+ * core/liminal_space_mapping.py 把阈限空间定义为「运行时的空间执行场」，装三类
+ * 内容：本机执行链、跨设备执行链、沙盘推演。`is_active === false` 表示**这条链
+ * 还没跑过**，不是「没有这条链」—— 零态本身是有意义的信号。
+ */
+export interface ExecutionChainView {
+  /** local / cross_device —— 决定 last_target 的含义 */
+  kind: ChainKind;
+  /** 这条链是否跑过；false=还没跑过，不是「没有这条链」 */
+  is_active: boolean;
+  /** 本会话内这条链上的总执行次数 */
+  total_executions: number;
+  /** 其中走完整规范链的次数 */
+  canonical_executions: number;
+  /** 其中走遗留／非规范路径的次数 */
+  legacy_executions: number;
+  /** 规范链的步骤名（有序）—— 空间里该画几段 */
+  chain_order: string[];
+  /** 最近一次到达的步骤名 */
+  last_step: string | null;
+  /** local→task_id，cross_device→device_id */
+  last_target: string | null;
+}
+
+/**
+ * 表达期用什么手法在动手（直接调 API / 操作界面 / 看截图推理 / 混合）。
+ *
+ * 后端 core/hybrid_execution_policy.py 早就把它显式化了，但那个决策此前在
+ * core/ 之外零消费方 —— 系统知道自己正在并行赛跑还是分阶段混合，却从没对外
+ * 说过一个字。`is_decided === false` 与「决定了但没给理由」可区分。
+ */
+export interface HybridExecutionView {
+  /** 本轮是否真的做过模式选择 */
+  is_decided: boolean;
+  /** 用什么手法动手；none=尚未决策 */
+  mode: HybridExecutionMode;
+  /** 选它的理由（后端策略引擎原文） */
+  reason: string;
+  /** [0,1]：1=精确命中规则，0.5=启发式，0=兜底 */
+  confidence: number;
+}
+
+/**
+ * 世界模型在阈限空间里的位置 —— **目前是留出的位置，`is_wired` 恒为 false**。
+ *
+ * enhancements/reasoning/world_model.py 是存在的，但没有通向渲染层的投影通路。
+ * 这里显式区分 `unwired`（链路还没建）与 `live`（建好了，数就是这个），于是前端
+ * 一次写对：链路接上时只有后端的构造函数需要改，前端判断不用动。
+ */
+export interface WorldModelView {
+  /** 世界模型是否已接到渲染链路；当前恒 false */
+  is_wired: boolean;
+  /** unwired=链路还没建，live=数就是这个 */
+  source: WorldModelSource;
+  /** 已知实体数；unwired 时的 0 是「不知道」 */
+  entity_count: number;
+  /** 出现过的实体种类 */
+  entity_kinds: string[];
+}
+
+/** (上一档, 当前档) → 转移性质。缺失的组合按 `none` 处理。 */
+export const TRANSITION_KIND_OF: ReadonlyArray<{from: Lifecycle; to: Lifecycle; kind: TransitionKind}> = [
+  { from: "silent", to: "liminal", kind: "emerging" },
+  { from: "silent", to: "manifest", kind: "committing" },
+  { from: "liminal", to: "manifest", kind: "committing" },
+  { from: "manifest", to: "liminal", kind: "handoff" },
+  { from: "manifest", to: "silent", kind: "dissolving" },
+  { from: "liminal", to: "silent", kind: "dissolving" },
+];
+
 /**
  * 相位之间【允许】的转移，源自 docs/PHASE_TRANSITION_TABLE.md。
  *
@@ -152,6 +246,10 @@ export const TRI_STATE_OF: Record<RenderPhase, WirePhaseTri> = {
 export interface RenderPosture {
   /** 【主轴】主体生命周期 —— 渲染端的整体编排跟它走 */
   lifecycle: Lifecycle;
+  /** 主轴的上一档（相位事件自带 from_phase）；null=还没发生过转移 */
+  previous_lifecycle: Lifecycle | null;
+  /** 刚才那次转移的性质 —— 退场编排看这一位，别从深度差里猜 */
+  transition_kind: TransitionKind;
   /** 【副轴】内部连续体四相，提供主轴给不出的纹理 */
   continuum_phase: RenderPhase;
   /** 副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位 */
@@ -160,8 +258,16 @@ export interface RenderPosture {
   next_phases: RenderPhase[];
   /** 阈限态里正在干嘛（有序递进）：none → understanding → thinking → rehearsing */
   liminal_activity: LiminalActivity;
-  /** 沙盘推演摘要 —— 阈限态的可视内容 */
+  /** 沙盘推演摘要 —— 阈限态的可视内容之三 */
   simulation: SimulationSummary;
+  /** 本机执行链 —— 阈限态的可视内容之一 */
+  local_chain: ExecutionChainView;
+  /** 跨设备执行链 —— 阈限态的可视内容之二 */
+  cross_device_chain: ExecutionChainView;
+  /** 世界模型 —— 留出的位置，当前恒 unwired */
+  world_model: WorldModelView;
+  /** 表达期用什么手法动手（GUI／API／混合） */
+  hybrid_execution: HybridExecutionView;
   /** 第二维：在哪儿跑；null=尚未判定 */
   runtime_domain: RuntimeDomain | null;
   /** 抽象运动能量 [0,1] */

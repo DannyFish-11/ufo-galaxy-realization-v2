@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getBackendUrl } from '@/lib/api';
+import { apiUrl, getBackendUrl } from '@/lib/api';
 import type { PanelData } from '@/hooks/usePanelData';
 
 const STATUS_TONE: Record<string, string> = {
@@ -36,7 +36,7 @@ export default function MeshView({ data }: { data: PanelData }) {
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       let out: any;
       try {
-        const res = await fetch(`${base}/api/v1/mesh/worker/toggle`, {
+        const res = await fetch(apiUrl(base, '/api/v1/mesh/worker/toggle'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enable: !natsWorker.running }),

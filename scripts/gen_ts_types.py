@@ -213,6 +213,81 @@ def _render_contract_lines() -> list:
         "/** 抽象空间权重／贴近度。 */",
         "export type SpatialPresence = " + " | ".join(f'"{s}"' for s in sch["spatial_presences"]) + ";",
         "",
+        "/** 执行链的种类。决定 ExecutionChainView.last_target 指的是任务还是设备。 */",
+        "export type ChainKind = " + " | ".join(f'"{k}"' for k in sch["chain_kinds"]) + ";",
+        "",
+        "/** 表达期用什么手法动手。none = 尚未决策。 */",
+        "export type HybridExecutionMode = " + " | ".join(f'"{m}"' for m in sch["hybrid_execution_modes"]) + ";",
+        "",
+        "/** 世界模型视图的来源。unwired = 这条链路还没建，不是「零个实体」。 */",
+        "export type WorldModelSource = " + " | ".join(f'"{s}"' for s in sch["world_model_sources"]) + ";",
+        "",
+        "/**",
+        " * 主轴上最近一次转移的**性质** —— 退场编排该看这一位。",
+        " *",
+        " * 覆盖层此前唯一的依据是一个标量深度，深度从 manifest 走回 silent 时，画面上",
+        " * 放的就是进场动画倒着播。这个类型把「刚才发生的是哪一种转移」变成显式事实。",
+        " *",
+        " * `handoff` 与 `dissolving` **都是合法出口**：前者是「这一轮结果已提交、还有",
+        " * 后续」（在场层 core/desktop_presence_system.py 的 MANIFEST→LIMINAL 策略），",
+        " * 后者是「做完就散」。它们在不同的轴上，不是同一件事的两种说法 —— 所以渲染端",
+        " * 按实际收到的这一位编排，不必也不该预先选定一条退场路线。",
+        " */",
+        "export type TransitionKind = " + " | ".join(f'"{k}"' for k in sch["transition_kinds"]) + ";",
+        "",
+        "/**",
+        " * 阈限空间三类内容里的**执行链**那两类。",
+        " *",
+        " * core/liminal_space_mapping.py 把阈限空间定义为「运行时的空间执行场」，装三类",
+        " * 内容：本机执行链、跨设备执行链、沙盘推演。`is_active === false` 表示**这条链",
+        " * 还没跑过**，不是「没有这条链」—— 零态本身是有意义的信号。",
+        " */",
+        "export interface ExecutionChainView {",
+    ]
+    for f in sch["chain_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
+        "/**",
+        " * 表达期用什么手法在动手（直接调 API / 操作界面 / 看截图推理 / 混合）。",
+        " *",
+        " * 后端 core/hybrid_execution_policy.py 早就把它显式化了，但那个决策此前在",
+        " * core/ 之外零消费方 —— 系统知道自己正在并行赛跑还是分阶段混合，却从没对外",
+        " * 说过一个字。`is_decided === false` 与「决定了但没给理由」可区分。",
+        " */",
+        "export interface HybridExecutionView {",
+    ]
+    for f in sch["hybrid_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
+        "/**",
+        " * 世界模型在阈限空间里的位置 —— **目前是留出的位置，`is_wired` 恒为 false**。",
+        " *",
+        " * enhancements/reasoning/world_model.py 是存在的，但没有通向渲染层的投影通路。",
+        " * 这里显式区分 `unwired`（链路还没建）与 `live`（建好了，数就是这个），于是前端",
+        " * 一次写对：链路接上时只有后端的构造函数需要改，前端判断不用动。",
+        " */",
+        "export interface WorldModelView {",
+    ]
+    for f in sch["world_model_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
+        "/** (上一档, 当前档) → 转移性质。缺失的组合按 `none` 处理。 */",
+        "export const TRANSITION_KIND_OF: " "ReadonlyArray<{from: Lifecycle; to: Lifecycle; kind: TransitionKind}> = [",
+    ]
+    for item in sch["transition_kind_of"]:
+        out.append(f'  {{ from: "{item["from"]}", to: "{item["to"]}", kind: "{item["kind"]}" }},')
+    out += [
+        "];",
+        "",
         "/**",
         " * 相位之间【允许】的转移，源自 docs/PHASE_TRANSITION_TABLE.md。",
         " *",

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
 import { useModelCatalog, type CatalogModel, type StatusEntry } from '@/hooks/useModelCatalog';
-import { getBackendUrl, fetchWithTimeout, withTimeout } from '@/lib/api';
+import { apiUrl, getBackendUrl, fetchWithTimeout, withTimeout } from '@/lib/api';
 import './ModelsTab.css';
 
 /**
@@ -95,7 +95,7 @@ async function fetchConfig(): Promise<FrontendConfig> {
   // 会解析成 file:///api/config、100% 失败(SettingsTab 同类 bug 早已改为
   // getBackendUrl,这里当时漏改)。
   const base = await getBackendUrl();
-  const r = await fetchWithTimeout(`${base}/api/config`, {}, 15000);
+  const r = await fetchWithTimeout(apiUrl(base, '/api/config'), {}, 15000);
   if (!r.ok) throw new Error(`/api/config ${r.status}`);
   return r.json();
 }
@@ -138,7 +138,7 @@ async function saveConfig(changed: Record<string, string>): Promise<{ success: b
   // fetchWithTimeout(...20000) 保持不变——没有 main.js 的重试层,后端未起来时
   // fetch() 会直接 ECONNREFUSED(近乎瞬时),20s 绰绰有余,与本 bug 无关。
   const base = await getBackendUrl();
-  const r = await fetchWithTimeout(`${base}/api/config`, {
+  const r = await fetchWithTimeout(apiUrl(base, '/api/config'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config: changed }),
@@ -324,7 +324,7 @@ function LatencyProbe() {
     setResult(null);
     try {
       const base = await getBackendUrl();
-      const r = await fetch(`${base}/api/v1/models/latency-probe`, { method: 'POST' });
+      const r = await fetch(apiUrl(base, '/api/v1/models/latency-probe'), { method: 'POST' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setResult(await r.json());
     } catch (e) {
@@ -472,7 +472,7 @@ export default function ModelsTab() {
     const results: string[] = [];
     for (const k of keys) {
       try {
-        const r = await fetchWithTimeout(`${base}/api/v1/models/verify-provider`, {
+        const r = await fetchWithTimeout(apiUrl(base, '/api/v1/models/verify-provider'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ env_key: k }),

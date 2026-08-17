@@ -61,8 +61,28 @@ class TestPostureReachesTheRenderer:
         """姿态没被读进来的话，倾向就还是只影响目的地、不影响过程。"""
         assert "payload.posture" in app_js, "app.js 没有从 payload 里读 posture"
 
-    def test_posture_is_passed_into_motion(self, app_js: str) -> None:
-        assert "posture: this.posture" in app_js, "posture 读进来了却没传给运动函数"
+    def test_app_js_reads_the_faithful_contract_too(self, app_js: str) -> None:
+        """双轴忠实契约必须也被读进来。
+
+        在场桥每一帧同时广播 ``payload.posture``（一维遗留投影）与
+        ``payload.render``（RenderPosture 双轴契约），其源码注释写着
+        「新代码应当消费这一份」。覆盖层此前只读前者，于是副轴四相、
+        ``is_returning``、``transition_kind``、两条执行链在渲染端根本不存在 ——
+        退场只能把进场动画倒放。
+        """
+        assert "payload.render" in app_js, "app.js 没有从 payload 里读 render —— 退场语汇无从谈起"
+
+    def test_motion_prefers_the_faithful_contract(self, app_js: str) -> None:
+        """运动学优先读 render，读不到才退回 posture。
+
+        两份姿态的 collapse_tendency / retreat_tendency / stability 由同一份
+        ContinuumState 导出、逐位相同，所以这是纯换源：观感不变，但覆盖层从此
+        不再依赖那份一维遗留投影。保留 ``|| this.posture`` 是降级路径 ——
+        老后端不发 render 时行为与改造前一致。
+        """
+        assert "posture: this.render || this.posture" in app_js, (
+            "运动函数拿到的不是「优先忠实契约、缺席时退回遗留投影」的那一份 —— " "要么姿态没传进去，要么优先级反了"
+        )
 
 
 class TestNodeSuiteIsActuallyRunSomewhere:

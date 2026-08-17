@@ -3,7 +3,7 @@ import type { Phase } from '@/types/phase';
 import { PHASE_ZH } from '@/types/phase';
 import type { PanelData } from '@/hooks/usePanelData';
 import type { ConversationTurn } from '@/hooks/useConversation';
-import { getBackendUrl } from '@/lib/api';
+import { apiUrl, getBackendUrl } from '@/lib/api';
 
 interface PresencePanelProps {
   phase: Phase;
@@ -32,7 +32,7 @@ function usePerception(): PerceptionStatus {
     const poll = async () => {
       try {
         const base = await getBackendUrl();
-        const resp = await fetch(`${base}/api/perception/desktop/status`);
+        const resp = await fetch(apiUrl(base, '/api/perception/desktop/status'));
         if (resp.ok && alive) {
           const d = await resp.json();
           // 修复:后端 /api/perception/desktop/status 返回 {success, store: {...}}——

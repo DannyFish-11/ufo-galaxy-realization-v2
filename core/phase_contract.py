@@ -59,6 +59,15 @@ __all__ = [
     "SPATIAL_PRESENCES",
     "RenderPosture",
     "SimulationSummary",
+    "ExecutionChainView",
+    "HybridExecutionView",
+    "WorldModelView",
+    "CHAIN_KINDS",
+    "HYBRID_EXECUTION_MODES",
+    "WORLD_MODEL_SOURCES",
+    "TRANSITION_KINDS",
+    "TRANSITION_KIND_OF",
+    "transition_kind_of",
     "LIFECYCLE_STATES",
     "LIMINAL_ACTIVITIES",
     "SIMULATION_KINDS",
@@ -445,6 +454,84 @@ FORM_SIGNATURES: Tuple[str, ...] = (
 #: ``ExpressionState.spatial_presence`` 的取值域——抽象空间权重／贴近度。
 SPATIAL_PRESENCES: Tuple[str, ...] = ("absent", "peripheral", "ambient", "foreground")
 
+#: 执行链的种类。阈限空间装三类内容，其中两类是执行链，见 :class:`ExecutionChainView`。
+CHAIN_KINDS: Tuple[str, ...] = ("local", "cross_device")
+
+#: ``HybridExecutionView.mode`` 的取值域，与 ``core.hybrid_execution_policy.HybridExecutionMode``
+#: 同源，外加一个 ``none`` 表示尚未决策。
+#:
+#: 不 import 那个模块来拼这份列表：实测导入它 ~72ms，而本模块被每一次相位事件调用
+#: （自身导入 ~6ms）。``tests/test_render_chain_contract.py`` 里有一条把两边逐字对齐，
+#: 那边可以慢慢 import。
+HYBRID_EXECUTION_MODES: Tuple[str, ...] = (
+    "none",
+    "sequential_degrade",
+    "parallel_race",
+    "staged_hybrid",
+    "local_preferred",
+    "remote_preferred",
+)
+
+#: ``WorldModelView.source`` 的取值域。见该类的文档说明为什么要显式区分这两者。
+WORLD_MODEL_SOURCES: Tuple[str, ...] = ("unwired", "live")
+
+#: 主轴上最近一次转移的**性质**。渲染端据此选退场／进场的编排，而不是从深度差里猜。
+#:
+#: 为什么要有这一项
+#: ----------------
+#: 覆盖层此前唯一能依据的是一个标量深度。深度从 0.92 走回 0.05 时，画面上放的就是
+#: 进场动画倒着播 —— 因为「正在返回」这件事根本没有独立的表示。这份取值域把它变成
+#: 一个显式的事实，退场于是可以有自己的语汇。
+#:
+#: ``handoff`` 与 ``dissolving`` 都是**合法**出口
+#: ----------------------------------------------
+#: 后端有两套三态描述，一度看起来在打架：
+#:
+#: * continuum 副轴（四相）的 :data:`FORBIDDEN_TRANSITIONS` 说 ``manifest → liminal``
+#:   禁止 —— 那说的是**内部连续体的相位图**，结构不能不经 receding 就解体。
+#: * 在场层 ``core/desktop_presence_system.py`` 的转移策略里有一条
+#:   ``MANIFEST → LIMINAL``，触发条件是 ``execution_completed_or_result_committed``
+#:   —— 那说的是**主体生命周期**：这一轮结果已提交，还有后续。
+#:
+#: 两者是**不同的轴**上的两件事，不是同一件事的两种说法。所以这里不去选一台状态机，
+#: 而是照实带上刚才发生的是哪一种转移，让渲染端按实际情况编排：做完就散（dissolving）
+#: 与做完接着下一轮（handoff）本就该长得不一样。
+TRANSITION_KINDS: Tuple[str, ...] = (
+    "none",
+    "emerging",
+    "committing",
+    "handoff",
+    "dissolving",
+)
+
+#: (上一档主轴, 当前主轴) → 转移性质。缺失的组合按 ``none`` 处理。
+TRANSITION_KIND_OF: Dict[Tuple[str, str], str] = {
+    ("silent", "liminal"): "emerging",
+    ("silent", "manifest"): "committing",
+    ("liminal", "manifest"): "committing",
+    ("manifest", "liminal"): "handoff",
+    ("manifest", "silent"): "dissolving",
+    ("liminal", "silent"): "dissolving",
+}
+
+
+def transition_kind_of(previous: Optional[str], current: str) -> str:
+    """(上一档, 当前档) → 转移性质。
+
+    Args:
+        previous: 上一档主轴。``None``（本进程还没发生过转移）或与 ``current``
+            相同（同档内的重复广播）时返回 ``none``。
+        current: 当前主轴。
+
+    ``silent → manifest`` 归入 ``committing`` 而不是单开一档：它只在
+    ``allow_emergency_jump`` 的紧急路径上出现，渲染上仍然是「落手」，
+    只是没有过渡段可编排。
+    """
+    if not previous or previous == current:
+        return "none"
+    return TRANSITION_KIND_OF.get((previous, current), "none")
+
+
 #: 四相 → 三态的公共投影。与 ``continuum_to_tri_state`` 同表，在这里复刻一份是为了
 #: **不必导入 core.continuum.types**（实测 ~690ms，而本模块在每次相位事件里都被调）。
 _TRI_STATE_MAP: Dict[str, str] = {
@@ -512,6 +599,170 @@ class SimulationSummary:
 
 
 @dataclasses.dataclass(frozen=True)
+class ExecutionChainView:
+    """阈限空间三类内容里的**执行链**那两类，收成同一个渲染面形状。
+
+    ``core/liminal_space_mapping.py`` 开篇把阈限空间定义为「运行时的空间执行场」，
+    恰好装三类内容：本机执行链、跨设备执行链、沙盘推演。第三类早就上了线
+    （:class:`SimulationSummary`），前两类此前只到 ``continuum.state`` 事件为止 ——
+    ``RuntimeSession._build_chain_views()`` 每 200ms 都在产，而在场桥的
+    ``_on_continuum_state`` 只取 ``liminal_activity`` / ``simulation`` 两项，
+    这两条链就在那一步被丢掉了。本类是它们的上线形状。
+
+    为什么两条链共用一个形状
+    ------------------------
+    源侧是两个类（``LocalChainView`` / ``CrossDeviceChainView``），字段逐一对应，
+    唯一的差别是「最近这次的对象是谁」：本机是 ``last_task_id``，跨设备是
+    ``last_device_id``。渲染端画的是同一件事——一条链走到第几步——所以这里收成
+    :attr:`last_target` 加一个 :attr:`kind` 说明它指的是什么。
+
+    ``tests/test_render_chain_contract.py`` 把这个映射逐字段钉住：源侧任何一个
+    字段改名，都会在那里红，而不是在这里静默变成零。
+    """
+
+    kind: str
+    """local / cross_device，见 :data:`CHAIN_KINDS`。决定 :attr:`last_target` 的含义。"""
+
+    is_active: bool
+    """这条链是否跑过至少一次。**零态是有意义的信号**（「还没跑过」），不是「没有这条链」。"""
+
+    total_executions: int
+    """本会话内这条链上的总执行次数。"""
+
+    canonical_executions: int
+    """其中走完整规范链的次数。"""
+
+    legacy_executions: int
+    """其中走遗留／非规范路径的次数。渲染端可据此提示「这次绕开了主链」。"""
+
+    chain_order: Tuple[str, ...]
+    """规范链的步骤名，按顺序。这就是「空间里该画几段」的依据。"""
+
+    last_step: Optional[str]
+    """最近一次到达的步骤名；没跑过时 ``None``。"""
+
+    last_target: Optional[str]
+    """最近一次的对象：``kind == "local"`` 时是 task_id，``cross_device`` 时是 device_id。"""
+
+    @staticmethod
+    def empty(kind: str) -> "ExecutionChainView":
+        """零态视图 —— 「这条链存在但还没动」。
+
+        刻意不返回 ``None``：下游必须能把「还没跑过」与「拿不到这条链」分开，
+        前者是常态、后者是故障。
+        """
+        return ExecutionChainView(
+            kind=kind if kind in CHAIN_KINDS else "local",
+            is_active=False,
+            total_executions=0,
+            canonical_executions=0,
+            legacy_executions=0,
+            chain_order=(),
+            last_step=None,
+            last_target=None,
+        )
+
+    @staticmethod
+    def from_view_dict(kind: str, raw: Optional[Dict[str, Any]]) -> "ExecutionChainView":
+        """从 ``LocalChainView.to_dict()`` / ``CrossDeviceChainView.to_dict()`` 收形。
+
+        ``raw`` 为空（该拍没带这条链）时返回 :meth:`empty` —— 见上面为什么不给 ``None``。
+        """
+        k = kind if kind in CHAIN_KINDS else "local"
+        if not isinstance(raw, dict) or not raw:
+            return ExecutionChainView.empty(k)
+
+        def _int(name: str) -> int:
+            try:
+                return int(raw.get(name, 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        # 源侧字段名按链种类分叉，这是两个源类唯一的形状差异。
+        target_field = "last_task_id" if k == "local" else "last_device_id"
+        target = raw.get(target_field)
+        order = raw.get("canonical_chain_order") or []
+        last_step = raw.get("last_step")
+        return ExecutionChainView(
+            kind=k,
+            is_active=bool(raw.get("is_active", False)),
+            total_executions=_int("total_executions"),
+            canonical_executions=_int("canonical_executions"),
+            legacy_executions=_int("legacy_executions"),
+            chain_order=tuple(str(s) for s in order),
+            last_step=str(last_step) if last_step else None,
+            last_target=str(target) if target else None,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class HybridExecutionView:
+    """表达期**用什么手法**在动手。
+
+    ``core/hybrid_execution_policy.py`` 早就把这件事显式化了：不再是一条隐式的
+    A2A → GUI → VLM 降级链，而是有名字的几种模式加一句选它的理由。但那个决策在
+    ``core/`` 之外**零消费方** —— 系统知道自己正在并行赛跑还是分阶段混合，却从没
+    对外说过一个字。这是它第一个上线的消费面。
+
+    没有决策时不是「空对象」而是 :meth:`undecided`：``mode="none"`` 且
+    ``is_decided=False``，与「决定了但没给理由」可区分。
+    """
+
+    is_decided: bool
+    """本轮是否真的做过模式选择。``False`` 时 :attr:`mode` 恒为 ``none``。"""
+
+    mode: str
+    """见 :data:`HYBRID_EXECUTION_MODES`。``none`` = 尚未决策。"""
+
+    reason: str
+    """选它的理由（后端策略引擎给的原文）。未决策时为空串。"""
+
+    confidence: float
+    """[0,1]。1.0=精确命中规则，0.5=启发式，0.0=兜底默认。"""
+
+    @staticmethod
+    def undecided() -> "HybridExecutionView":
+        """尚未做出模式选择时的视图。"""
+        return HybridExecutionView(is_decided=False, mode="none", reason="", confidence=0.0)
+
+
+@dataclasses.dataclass(frozen=True)
+class WorldModelView:
+    """世界模型在阈限空间里的位置 —— **目前是占位，但刻意可区分**。
+
+    ``enhancements/reasoning/world_model.py`` 是存在的，维护着实体（device / node /
+    service / user / task / goal）及其状态。但它只在 ``core/startup.py`` 与
+    ``galaxy_main_loop_l4_enhanced.py`` 里被实例化，**没有任何通向渲染层的投影通路**。
+
+    为什么现在就把位置留出来，而不是等接上了再加字段
+    ------------------------------------------------
+    因为「留一个空档」和「这一格恒为 null」是两件事。恒 null 的字段在前端只能被
+    当成「后端没给」，等真接上时前端还得改判断；而 :attr:`source` 明确区分
+    ``unwired``（这条链路还没建）与 ``live``（建好了，数就是这个），前端一次写对，
+    Layer 3 落地时**只有构造函数需要改**。
+
+    这也是仓库既有的纪律：空返回必须可区分（见 ``tests/test_empty_return_is_distinguishable.py``）。
+    """
+
+    is_wired: bool
+    """世界模型是否已经接到渲染链路上。当前恒为 ``False``。"""
+
+    source: str
+    """``unwired`` / ``live``，见 :data:`WORLD_MODEL_SOURCES`。"""
+
+    entity_count: int
+    """已知实体数。``is_wired=False`` 时恒 0 —— 那是「不知道」，不是「零个」。"""
+
+    entity_kinds: Tuple[str, ...]
+    """出现过的实体种类。``is_wired=False`` 时为空元组。"""
+
+    @staticmethod
+    def unwired() -> "WorldModelView":
+        """世界模型尚未接入渲染链路时的视图 —— 如实标注，不假装是零。"""
+        return WorldModelView(is_wired=False, source="unwired", entity_count=0, entity_kinds=())
+
+
+@dataclasses.dataclass(frozen=True)
 class RenderPosture:
     """渲染端的完整姿态：主轴生命周期 × 副轴连续体姿态 × 阈限内容 × 表达参数。
 
@@ -530,6 +781,22 @@ class RenderPosture:
     # ── 主轴：主体生命周期（渲染端的首要依据）──────────────────────────
     lifecycle: str
     """silent / liminal / manifest，见 :data:`LIFECYCLE_STATES`。**主轴。**"""
+
+    previous_lifecycle: Optional[str]
+    """主轴的上一档；``None`` = 本进程还没发生过转移。
+
+    这是从在场桥订阅到的相位事件里**照实带上来**的（事件 payload 自带
+    ``from_phase``，此前一直被丢掉），不是推导出来的。有了它，
+    :attr:`transition_kind` 才能说清楚刚才发生的是哪一种转移。
+    """
+
+    transition_kind: str
+    """刚才那次主轴转移的性质，见 :data:`TRANSITION_KINDS`。
+
+    渲染端的退场编排应当看这一位，而不是看深度往哪边走 —— 深度倒着走只能
+    把进场动画倒放，而 ``handoff``（做完接着下一轮）与 ``dissolving``（做完就散）
+    本就该是两段不同的动作。
+    """
 
     # ── 副轴：内部连续体姿态（提供纹理，不决定整体编排）────────────────
     continuum_phase: str
@@ -558,6 +825,20 @@ class RenderPosture:
 
     simulation: SimulationSummary
     """沙盘推演摘要。没有推演在跑时是 :meth:`SimulationSummary.inactive`。"""
+
+    local_chain: ExecutionChainView
+    """本机执行链视图。阈限空间三类内容之一，见 :class:`ExecutionChainView`。"""
+
+    cross_device_chain: ExecutionChainView
+    """跨设备执行链视图。阈限空间三类内容之二。"""
+
+    world_model: WorldModelView
+    """世界模型视图 —— **留出的位置，当前恒为 unwired**。见 :class:`WorldModelView`。"""
+
+    # ── 表达期：用什么手法在动手 ────────────────────────────────────────
+
+    hybrid_execution: HybridExecutionView
+    """混合执行模式决策。未决策时是 :meth:`HybridExecutionView.undecided`。"""
 
     # ── 第二维：在哪儿跑 ────────────────────────────────────────────────
     runtime_domain: Optional[str]
@@ -619,6 +900,18 @@ class RenderPosture:
         d["next_phases"] = list(self.next_phases)
         d["simulation"] = dict(d["simulation"])
         d["simulation"]["candidate_paths"] = list(self.simulation.candidate_paths)
+        # 嵌套视图里的元组要转 list —— asdict 会保留元组，json 虽然也能编码它，
+        # 但下游拿到的类型会随序列化器而变。这里统一成 list。
+        for key, order in (
+            ("local_chain", self.local_chain.chain_order),
+            ("cross_device_chain", self.cross_device_chain.chain_order),
+        ):
+            d[key] = dict(d[key])
+            d[key]["chain_order"] = list(order)
+        d["world_model"] = dict(d["world_model"])
+        d["world_model"]["entity_kinds"] = list(self.world_model.entity_kinds)
+        d["hybrid_execution"] = dict(d["hybrid_execution"])
+        d["hybrid_execution"]["confidence"] = round(float(self.hybrid_execution.confidence), 4)
         for k in (
             "motion",
             "intensity",
@@ -633,25 +926,38 @@ class RenderPosture:
         return d
 
 
-def _anchor_only_render_posture(lifecycle: str = "silent") -> RenderPosture:
+def _anchor_only_render_posture(
+    lifecycle: str = "silent",
+    previous_lifecycle: Optional[str] = None,
+) -> RenderPosture:
     """拿不到 ContinuumState 时的兜底姿态——如实标注，不假装是算出来的。
 
     主轴仍然可信：``lifecycle`` 来自在场运行时的 ``TriState``，它跟 continuum
     是两条独立链路，continuum 没跑不代表主体生命周期不知道自己在哪。所以这里
     照实带上主轴，只把副轴与连续量退回中性值。
+
+    转移性质同理：``previous_lifecycle`` 也来自相位事件而非 continuum，
+    continuum 没跑不影响「刚才从哪一档来的」这个事实，照实带上。
     """
     life = lifecycle if lifecycle in LIFECYCLE_STATES else "silent"
+    prev = previous_lifecycle if previous_lifecycle in LIFECYCLE_STATES else None
     # 副轴没有真值时，按主轴取语义上最接近的一相：主轴 silent 对应静息
     # (formless) 而**不是** receding —— 返回弧必须由真实的 continuum 相位证实，
     # 凭空猜一个「正在退场」会让渲染端播出一段根本没发生过的余辉。
     phase = {"silent": "formless", "liminal": "liminal", "manifest": "manifest"}[life]
     return RenderPosture(
         lifecycle=life,
+        previous_lifecycle=prev,
+        transition_kind=transition_kind_of(prev, life),
         continuum_phase=phase,
         is_returning=False,
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
         liminal_activity="none",
         simulation=SimulationSummary.inactive(),
+        local_chain=ExecutionChainView.empty("local"),
+        cross_device_chain=ExecutionChainView.empty("cross_device"),
+        world_model=WorldModelView.unwired(),
+        hybrid_execution=HybridExecutionView.undecided(),
         runtime_domain=None,
         motion=0.0,
         intensity=0.0,
@@ -674,8 +980,12 @@ def resolve_render_posture(
     lifecycle: str = "silent",
     state: Optional[Any] = None,
     *,
+    previous_lifecycle: Optional[str] = None,
     liminal_activity: str = "none",
     simulation: Optional[SimulationSummary] = None,
+    local_chain: Optional[ExecutionChainView] = None,
+    cross_device_chain: Optional[ExecutionChainView] = None,
+    hybrid_execution: Optional[HybridExecutionView] = None,
 ) -> RenderPosture:
     """合成渲染姿态：主轴由调用方给，副轴与表达参数从 ``ContinuumState`` 读。
 
@@ -684,8 +994,21 @@ def resolve_render_posture(
             按它订阅到的相位事件传入——那条链路是权威，本函数不去猜。
         state: ``ContinuumState``；省略时取 :func:`last_continuum_posture`。
             拿不到时走 :func:`_anchor_only_render_posture` 兜底。
+        previous_lifecycle: 主轴的上一档，同样来自相位事件（其 payload 自带
+            ``from_phase``）。据此算出 :attr:`RenderPosture.transition_kind`。
         liminal_activity: 阈限态里正在发生什么，见 :data:`LIMINAL_ACTIVITIES`。
         simulation: 沙盘推演摘要；``None`` 时用空摘要。
+        local_chain: 本机执行链视图；``None`` 时用零态（「还没跑过」）。
+        cross_device_chain: 跨设备执行链视图；``None`` 时用零态。
+        hybrid_execution: 混合执行模式决策；``None`` 时用「尚未决策」。
+
+    三个视图为什么由外面传
+    ----------------------
+    和主轴同一个理由：它们**不在 ContinuumState 里**。执行链由
+    ``RuntimeSession._build_chain_views()`` 在 200ms tick 上产、经
+    ``continuum.state`` 事件到在场桥；混合执行决策由
+    ``core.hybrid_execution_policy`` 产。本模块的纪律是「绝不构造」——
+    在这里去调那些构造函数，等于在每一次相位事件里把它们全跑一遍。
 
     为什么主轴要由外面传
     --------------------
@@ -702,14 +1025,25 @@ def resolve_render_posture(
     这里两根轴各归其位：主轴照实用传入值，副轴照实读 ``state.phase``。
     """
     life = lifecycle if lifecycle in LIFECYCLE_STATES else "silent"
+    prev = previous_lifecycle if previous_lifecycle in LIFECYCLE_STATES else None
     activity = liminal_activity if liminal_activity in LIMINAL_ACTIVITIES else "none"
     sim = simulation if simulation is not None else SimulationSummary.inactive()
+    local = local_chain if local_chain is not None else ExecutionChainView.empty("local")
+    cross = cross_device_chain if cross_device_chain is not None else ExecutionChainView.empty("cross_device")
+    hybrid = hybrid_execution if hybrid_execution is not None else HybridExecutionView.undecided()
 
     if state is None:
         state = last_continuum_posture()
     if state is None:
-        base = _anchor_only_render_posture(life)
-        return dataclasses.replace(base, liminal_activity=activity, simulation=sim)
+        base = _anchor_only_render_posture(life, prev)
+        return dataclasses.replace(
+            base,
+            liminal_activity=activity,
+            simulation=sim,
+            local_chain=local,
+            cross_device_chain=cross,
+            hybrid_execution=hybrid,
+        )
 
     raw_phase = getattr(getattr(state, "phase", None), "value", None) or str(getattr(state, "phase", "formless"))
     phase = raw_phase if raw_phase in RENDER_PHASES else "formless"
@@ -741,11 +1075,17 @@ def resolve_render_posture(
 
     return RenderPosture(
         lifecycle=life,
+        previous_lifecycle=prev,
+        transition_kind=transition_kind_of(prev, life),
         continuum_phase=phase,
         is_returning=phase == "receding",
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
         liminal_activity=activity,
         simulation=sim,
+        local_chain=local,
+        cross_device_chain=cross,
+        world_model=WorldModelView.unwired(),
+        hybrid_execution=hybrid,
         runtime_domain=domain if domain in RUNTIME_DOMAINS else None,
         motion=_clamp(float(getattr(expr, "motion", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
         intensity=_clamp(float(getattr(expr, "intensity", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
@@ -777,7 +1117,34 @@ def render_contract_schema() -> Dict[str, Any]:
         "runtime_domains": list(RUNTIME_DOMAINS),
         "form_signatures": list(FORM_SIGNATURES),
         "spatial_presences": list(SPATIAL_PRESENCES),
+        "chain_kinds": list(CHAIN_KINDS),
+        "hybrid_execution_modes": list(HYBRID_EXECUTION_MODES),
+        "world_model_sources": list(WORLD_MODEL_SOURCES),
+        "transition_kinds": list(TRANSITION_KINDS),
+        "transition_kind_of": [{"from": a, "to": b, "kind": k} for (a, b), k in TRANSITION_KIND_OF.items()],
         "sources": [PostureSource.CONTINUUM, PostureSource.ANCHOR_ONLY],
+        "chain_fields": [
+            {"name": "kind", "ts": "ChainKind", "doc": "local / cross_device —— 决定 last_target 的含义"},
+            {"name": "is_active", "ts": "boolean", "doc": "这条链是否跑过；false=还没跑过，不是「没有这条链」"},
+            {"name": "total_executions", "ts": "number", "doc": "本会话内这条链上的总执行次数"},
+            {"name": "canonical_executions", "ts": "number", "doc": "其中走完整规范链的次数"},
+            {"name": "legacy_executions", "ts": "number", "doc": "其中走遗留／非规范路径的次数"},
+            {"name": "chain_order", "ts": "string[]", "doc": "规范链的步骤名（有序）—— 空间里该画几段"},
+            {"name": "last_step", "ts": "string | null", "doc": "最近一次到达的步骤名"},
+            {"name": "last_target", "ts": "string | null", "doc": "local→task_id，cross_device→device_id"},
+        ],
+        "hybrid_fields": [
+            {"name": "is_decided", "ts": "boolean", "doc": "本轮是否真的做过模式选择"},
+            {"name": "mode", "ts": "HybridExecutionMode", "doc": "用什么手法动手；none=尚未决策"},
+            {"name": "reason", "ts": "string", "doc": "选它的理由（后端策略引擎原文）"},
+            {"name": "confidence", "ts": "number", "doc": "[0,1]：1=精确命中规则，0.5=启发式，0=兜底"},
+        ],
+        "world_model_fields": [
+            {"name": "is_wired", "ts": "boolean", "doc": "世界模型是否已接到渲染链路；当前恒 false"},
+            {"name": "source", "ts": "WorldModelSource", "doc": "unwired=链路还没建，live=数就是这个"},
+            {"name": "entity_count", "ts": "number", "doc": "已知实体数；unwired 时的 0 是「不知道」"},
+            {"name": "entity_kinds", "ts": "string[]", "doc": "出现过的实体种类"},
+        ],
         "simulation_fields": [
             {"name": "is_active", "ts": "boolean", "doc": "当前是否有推演在跑"},
             {"name": "simulation_kind", "ts": "SimulationKind", "doc": "none / speculative / sandbox"},
@@ -789,6 +1156,16 @@ def render_contract_schema() -> Dict[str, Any]:
         ],
         "fields": [
             {"name": "lifecycle", "ts": "Lifecycle", "doc": "【主轴】主体生命周期 —— 渲染端的整体编排跟它走"},
+            {
+                "name": "previous_lifecycle",
+                "ts": "Lifecycle | null",
+                "doc": "主轴的上一档（相位事件自带 from_phase）；null=还没发生过转移",
+            },
+            {
+                "name": "transition_kind",
+                "ts": "TransitionKind",
+                "doc": "刚才那次转移的性质 —— 退场编排看这一位，别从深度差里猜",
+            },
             {
                 "name": "continuum_phase",
                 "ts": "RenderPhase",
@@ -807,7 +1184,19 @@ def render_contract_schema() -> Dict[str, Any]:
                 # 本身是从同一个常量生成的，于是【类型对、注释错】，评审时最难看出来。
                 "doc": "阈限态里正在干嘛（有序递进）：" + " → ".join(LIMINAL_ACTIVITIES),
             },
-            {"name": "simulation", "ts": "SimulationSummary", "doc": "沙盘推演摘要 —— 阈限态的可视内容"},
+            {"name": "simulation", "ts": "SimulationSummary", "doc": "沙盘推演摘要 —— 阈限态的可视内容之三"},
+            {"name": "local_chain", "ts": "ExecutionChainView", "doc": "本机执行链 —— 阈限态的可视内容之一"},
+            {
+                "name": "cross_device_chain",
+                "ts": "ExecutionChainView",
+                "doc": "跨设备执行链 —— 阈限态的可视内容之二",
+            },
+            {"name": "world_model", "ts": "WorldModelView", "doc": "世界模型 —— 留出的位置，当前恒 unwired"},
+            {
+                "name": "hybrid_execution",
+                "ts": "HybridExecutionView",
+                "doc": "表达期用什么手法动手（GUI／API／混合）",
+            },
             {"name": "runtime_domain", "ts": "RuntimeDomain | null", "doc": "第二维：在哪儿跑；null=尚未判定"},
             {"name": "motion", "ts": "number", "doc": "抽象运动能量 [0,1]"},
             {"name": "intensity", "ts": "number", "doc": "整体在场强度 [0,1]"},
