@@ -132,6 +132,36 @@ class TestRetrievalGoesToTheOriginal:
     def test_a_missing_segment_is_an_error_not_an_empty_answer(self):
         assert ca.load_segment("s", 999) is None
 
+    def test_the_extraction_call_is_fed_the_original_not_the_summary(self):
+        """**这条是整层的支点。**
+
+        取回时把摘要喂给提取模型，整套东西就退回成"有损压缩"了 —— 而且退得毫无声息：
+        它照样返回一段看起来合理的文字，只是那段文字里的细节是摘要转述的，不是原话。
+        反向验证时把 ``render_segment_text`` 换成读 ``summary``，本文件原来一条都不红。
+        """
+        import asyncio
+
+        msgs = _session_with_tool_calls()
+        needle = "不得超过 21 毫秒"
+        cc.compact_messages(msgs, _summarizer, session_id="s")
+
+        seen = {}
+
+        class _Router:
+            def chat(self, prompt):
+                seen["prompt"] = prompt
+                return "原话是「不得超过 21 毫秒」"
+
+        agent = oc.OpenClawd.__new__(oc.OpenClawd)
+        agent._react_messages = msgs
+        agent._current_session_id = "s"
+        agent._get_router = lambda: _Router()
+
+        out = asyncio.run(agent._execute_context_tool("query_memory", {"segment_id": 1, "query": "21 毫秒"}))
+        assert out["success"], out
+        assert needle in seen["prompt"], "提取调用拿到的不是原文 —— 那就是拿摘要在冒充原话"
+        assert "本段讨论了若干约束" not in seen["prompt"], "喂进去的是摘要"
+
 
 # ────────────────────── ③ 油表 ──────────────────────
 

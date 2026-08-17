@@ -146,8 +146,20 @@ class TestItRefusesRatherThanLoses:
         """
         msgs = _long_session()
         before = list(msgs)
-        assert cc.compact_messages(msgs, _summarizer(), session_id="") == 0
+        import logging as _logging
+
+        seen = []
+        h = _logging.Handler()
+        h.emit = lambda r: seen.append(r.getMessage())
+        _logging.getLogger("Galaxy.ContextCompaction").addHandler(h)
+        try:
+            assert cc.compact_messages(msgs, _summarizer(), session_id="") == 0
+        finally:
+            _logging.getLogger("Galaxy.ContextCompaction").removeHandler(h)
         assert msgs == before
+        # 归档层本身也会挡住空会话 id（防线是两层的），所以只断言"没压"是不够的 ——
+        # 那样把明说的那一层拆掉，测试照样绿，而现场只剩一次**静默**的不压缩。
+        assert any("无处归档" in m for m in seen), "拒绝了却没说为什么 —— 排查时看到的会是「它怎么不压」"
 
     def test_it_refuses_when_the_archive_cannot_be_written(self, monkeypatch):
         """归档失败还照压，窗口里那条目录就指向一个**不存在的段**。"""
@@ -279,9 +291,20 @@ class TestTheArchiveIsNotACache:
         src = inspect.getsource(ai_routes)
         assert "drop_session(session_id)" in src, "清除对话没有清掉上下文归档"
 
-    def test_a_session_id_can_never_escape_the_archive_root(self):
-        """会话 id 来自调用方，直接拼路径就是一条目录穿越。"""
-        root = pathlib.Path(tempfile.mkdtemp())
-        ca._ROOT = root
-        cc.compact_messages(_long_session(), _summarizer(), session_id="../../etc/evil")
-        assert all(p.resolve().is_relative_to(root.resolve()) for p in root.rglob("*")), "写到归档根目录外面去了"
+    def test_a_session_id_can_never_escape_the_archive_root(self, tmp_path, monkeypatch):
+        """会话 id 来自调用方，直接拼路径就是一条目录穿越。
+
+        这条第一版是**空跑的**：它只在归档根**里面** ``rglob`` 找证据，而穿越写出去的
+        文件在根**外面** —— 走不到，于是断言对着一个空集合恒真。反向验证时把
+        ``_safe()`` 整个拆掉，它照样绿。
+
+        证据要到**穿越会落地的那个位置**去找。
+        """
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        root = tmp_path / "nest" / "archive"
+        monkeypatch.setattr(ca, "_ROOT", root)
+
+        cc.compact_messages(_long_session(), _summarizer(), session_id="../../outside/evil")
+        assert list(outside.iterdir()) == [], f"写到归档根目录外面去了：{list(outside.iterdir())}"
+        assert ca.list_segments("../../outside/evil"), "穿越被挡住了，但这一段也该正常归档（只是名字被消毒）"
