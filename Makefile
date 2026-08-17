@@ -154,7 +154,7 @@ preflight:
 	@echo "→ [2/4] guardrails 门（**参数与 CI 逐字一致**）..."
 	$(PYTHON) scripts/check_file_complexity.py --strict
 	$(PYTHON) scripts/check_completion_matrix.py --strict
-	$(PYTHON) scripts/check_wiring.py
+	$(PYTHON) scripts/check_wiring.py --strict
 	$(PYTHON) scripts/check_reachability.py
 	$(PYTHON) scripts/check_import_boundaries.py
 	$(PYTHON) scripts/check_evidence_anchors.py
