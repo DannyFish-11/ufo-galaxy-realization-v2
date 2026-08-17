@@ -38,6 +38,8 @@ import { useCallback, useState } from 'react';
 import type {
   ExecutionChainView,
   HybridExecutionView,
+  PerceptionModality,
+  PerceptionView,
   RenderPosture,
   WorldModelView,
 } from '@/types/phase_contract.gen';
@@ -78,6 +80,7 @@ export const RENDER_POSTURE_FIELDS = [
   'local_chain',
   'cross_device_chain',
   'world_model',
+  'perception',
   'hybrid_execution',
   'runtime_domain',
   'motion',
@@ -127,6 +130,32 @@ export function _emptyChain(kind: 'local' | 'cross_device'): ExecutionChainView 
     last_target: null,
   };
 }
+
+/**
+ * 后端 `PerceptionView.unwired()` 的等价空态 —— 这个进程里没有感知库。
+ *
+ * 四条模态**恒定存在**（缺席的以 `unavailable` 出现），所以这里也必须给满四条：
+ * 渲染端要能把「这一侧不亮」画出来，而不是遍历一个长度会变的数组。
+ */
+const PERCEPTION_MODALITY_ORDER: PerceptionModality[] = [
+  'screen',
+  'camera',
+  'microphone',
+  'system_audio',
+];
+
+export const UNWIRED_PERCEPTION: PerceptionView = {
+  source: 'unwired',
+  is_sensing: false,
+  privacy_paused: false,
+  modalities: PERCEPTION_MODALITY_ORDER.map((modality) => ({
+    modality,
+    state: 'unavailable' as const,
+    signal_age_s: null,
+  })),
+  ambient_action: 'none',
+  ambient_rationale: '',
+};
 
 /** 后端 `WorldModelView.unwired()` 的等价空态 —— 世界模型这条链路还没建。 */
 export const UNWIRED_WORLD_MODEL: WorldModelView = {
@@ -198,6 +227,12 @@ export function _extractRenderPosture(
   normalised.local_chain = _chainOr(rec.local_chain, 'local');
   normalised.cross_device_chain = _chainOr(rec.cross_device_chain, 'cross_device');
   normalised.world_model = _objOr(rec.world_model, UNWIRED_WORLD_MODEL);
+  // 感知这一格额外校验 modalities 是不是数组：它是第一态唯一的视觉依据，
+  // 拿到一个非数组会让下游 .map 直接炸掉整个覆盖层。
+  const percept = _objOr<PerceptionView>(rec.perception, UNWIRED_PERCEPTION);
+  normalised.perception = Array.isArray(percept.modalities)
+    ? percept
+    : { ...percept, modalities: UNWIRED_PERCEPTION.modalities };
   normalised.hybrid_execution = _objOr(rec.hybrid_execution, UNDECIDED_HYBRID_EXECUTION);
 
   return { posture: normalised as unknown as RenderPosture, missing: _missingFields(rec) };

@@ -62,9 +62,17 @@ __all__ = [
     "ExecutionChainView",
     "HybridExecutionView",
     "WorldModelView",
+    "PerceptionView",
+    "ModalityView",
     "CHAIN_KINDS",
     "HYBRID_EXECUTION_MODES",
     "WORLD_MODEL_SOURCES",
+    "VIEW_SOURCES",
+    "PERCEPTION_MODALITIES",
+    "MODALITY_STATES",
+    "AMBIENT_ACTIONS",
+    "resolve_perception_view",
+    "last_perception_status",
     "TRANSITION_KINDS",
     "TRANSITION_KIND_OF",
     "transition_kind_of",
@@ -472,8 +480,51 @@ HYBRID_EXECUTION_MODES: Tuple[str, ...] = (
     "remote_preferred",
 )
 
-#: ``WorldModelView.source`` 的取值域。见该类的文档说明为什么要显式区分这两者。
-WORLD_MODEL_SOURCES: Tuple[str, ...] = ("unwired", "live")
+#: 「这一维接没接上」的取值域 —— 契约里凡是**留了位置但可能还没接线**的视图都用它。
+#:
+#: ``unwired`` 与「接上了但当前是零」是两件事：前者说"这条链路还没建"，后者说
+#: "建好了，数就是这个"。混成一个 ``null`` 或一个 ``0``，前端只能当成"后端没给"，
+#: 等真接上时判断还得再改一遍。
+VIEW_SOURCES: Tuple[str, ...] = ("unwired", "live")
+
+#: ``WorldModelView.source`` 的取值域。与 :data:`VIEW_SOURCES` **是同一份定义**
+#: （别名而非副本 —— 抄一份就多一个会漂的取值域）。保留这个名字是因为它已经在
+#: 生成的 TS 类型里，且该类的文档说明了为什么要显式区分这两者。
+WORLD_MODEL_SOURCES: Tuple[str, ...] = VIEW_SOURCES
+
+#: 感知模态。四条**恒定存在**，缺席的那条以 ``unavailable`` 出现而不是从列表里消失 ——
+#: 渲染端要能把"这一侧不亮"画出来，而不是遍历一个长度会变的数组。
+#:
+#: 名字与 ``DesktopPerceptionStore`` 的槽位对应：screen / camera / system_audio 同名，
+#: ``microphone`` 对应那边的 ``audio`` 槽（那边叫 audio 是历史，语义上就是麦克风 ——
+#: 与 system_audio「用户此刻在听什么」分槽，两者刻意不混流）。
+PERCEPTION_MODALITIES: Tuple[str, ...] = ("screen", "camera", "microphone", "system_audio")
+
+#: 单个模态的状态。**刻意不是布尔** —— 布尔会把三件不同的事压成一件，而那正是
+#: 深度轴犯过的错（20 个字段压成一个标量，于是退场只能把进场倒放）。
+#:
+#: 五档各自有明确且不同的渲染含义::
+#:
+#:     unavailable  这条通路从没来过东西（没硬件／没授权／前端没在推）→ 这一侧不亮
+#:     paused       用户按了隐私暂停 → 明确地"闭着"，不是"没有"
+#:     suppressed   在，但这一拍被刻意屏蔽 → 短暂闭合，不是熄灭
+#:     idle         通路通、有过信号，但这一拍静了 → 柔和呼吸（它在，只是没动静）
+#:     live         这一拍有新鲜信号 → 有反应
+#:
+#: ``suppressed`` 存在的理由
+#: -------------------------
+#: 反自激励：AI 朗读时麦克风采到的是它自己的声音，自发注意力循环**刻意忽略**那段
+#: 音频（不然它会把自己说的话转写成用户输入喂回下一拍，无限自言自语）。
+#: 这一档把"说话时不能显示在听"从**渲染端要记的规矩**变成**后端给的状态** ——
+#: 规矩会被忘记，状态不会。
+MODALITY_STATES: Tuple[str, ...] = ("unavailable", "paused", "suppressed", "idle", "live")
+
+#: 自发注意力上一拍的决策。与 ``core.ambient_attention_loop.AmbientAction`` 同源，
+#: 外加一个 ``none`` 表示"还没决策过"。
+#:
+#: 不 import 那个模块来拼这份列表：它会拉起整条注意力链路。
+#: ``tests/test_render_perception_contract.py`` 里有一条把两边逐字对齐。
+AMBIENT_ACTIONS: Tuple[str, ...] = ("none", "speak", "silent", "delegate")
 
 #: 主轴上最近一次转移的**性质**。渲染端据此选退场／进场的编排，而不是从深度差里猜。
 #:
@@ -791,6 +842,98 @@ class WorldModelView:
 
 
 @dataclasses.dataclass(frozen=True)
+class ModalityView:
+    """一个感知模态的当前状态。
+
+    渲染端画第一态时，「左边亮还是右边亮、亮多少、是闭着还是根本没有」全靠这一层。
+    """
+
+    modality: str
+    """screen / camera / microphone / system_audio，见 :data:`PERCEPTION_MODALITIES`。"""
+
+    state: str
+    """五档之一，见 :data:`MODALITY_STATES`。**不是布尔**，理由写在那里。"""
+
+    signal_age_s: Optional[float]
+    """距上一次有信号过了多久（秒）。从没有过信号时为 ``None``。
+
+    ``None`` 与 ``0.0`` 是两件事：前者是"这条通路从没来过东西"，后者是"刚刚还有"。
+    渲染端可以用它做衰减 —— 刚静下来与静了很久，观感不该一样。
+    """
+
+    @staticmethod
+    def unavailable(modality: str) -> "ModalityView":
+        """这条通路从没来过东西。"""
+        return ModalityView(
+            modality=modality if modality in PERCEPTION_MODALITIES else "screen",
+            state="unavailable",
+            signal_age_s=None,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class PerceptionView:
+    """**第一态的主体** —— 原生多模态摄入此刻的样子。
+
+    为什么这一层必须在契约里
+    ------------------------
+    第一态的定义本身就是感知。``TriStatePhase.SILENT`` 的原文是
+    "The system is always alive in silent; it is receiving inputs (audio,
+    visual, touch, text) from its native modalities and building ambient
+    context"。而在这一层之前，``RenderPosture`` 里**一个感知字段都没有** ——
+    感知状态走的是另一条平行的、无类型的分支 ``payload.ambient``：面板手写类型读了它，
+    覆盖层一次都没读过。也就是说，第一态的视觉主体在渲染端没有数据来源。
+
+    为什么不走 200ms tick
+    ---------------------
+    因为那条 tick **在 SILENT 里是停的**（``_on_advance_tick`` 在 SILENT 时
+    ``_stop_continuum_tick``）。执行链与推演摘要走它没问题——那两样只在阈限/表达期
+    有意义；感知恰恰相反，它最需要在场的那一相正是 tick 不跑的那一相。
+    所以这一层走**只读拉取**：在场桥每次广播时现取一次，纪律与
+    :func:`last_continuum_posture` 相同 —— 绝不构造，只看已经存在的实例。
+    实测取一次 ``status()`` 约 1.5 µs。
+    """
+
+    source: str
+    """``unwired`` / ``live``，见 :data:`VIEW_SOURCES`。
+
+    ``unwired`` 表示这个进程里根本没有感知库（例如纯后端进程、或桌面壳还没推过帧）——
+    与「库在、但四条模态都静着」是两回事，后者是 ``live`` 且四条都 ``idle``。
+    """
+
+    is_sensing: bool
+    """任一模态处在 ``live``。便利位，由 :attr:`modalities` 推出，不另立事实。"""
+
+    privacy_paused: bool
+    """隐私急停是否生效。与逐模态的 ``paused`` 一致，但单独给一位：
+
+    渲染上"用户按停了"是一个**整体**姿态（该有一个明确的、全局的表达），
+    而不是"恰好四条都闭着"。
+    """
+
+    modalities: Tuple[ModalityView, ...]
+    """恒定四条，顺序与 :data:`PERCEPTION_MODALITIES` 一致。见那里为什么不做成变长。"""
+
+    ambient_action: str
+    """自发注意力上一拍的决策，见 :data:`AMBIENT_ACTIONS`。``none`` = 还没决策过。"""
+
+    ambient_rationale: str
+    """上一拍为什么这么决定（后端原文，已截断）。空串 = 没有理由可说。"""
+
+    @staticmethod
+    def unwired() -> "PerceptionView":
+        """这个进程里没有感知库 —— 如实标注，不假装四条都静着。"""
+        return PerceptionView(
+            source="unwired",
+            is_sensing=False,
+            privacy_paused=False,
+            modalities=tuple(ModalityView.unavailable(m) for m in PERCEPTION_MODALITIES),
+            ambient_action="none",
+            ambient_rationale="",
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class RenderPosture:
     """渲染端的完整姿态：主轴生命周期 × 副轴连续体姿态 × 阈限内容 × 表达参数。
 
@@ -862,6 +1005,15 @@ class RenderPosture:
 
     world_model: WorldModelView
     """世界模型视图 —— **留出的位置，当前恒为 unwired**。见 :class:`WorldModelView`。"""
+
+    # ── 第一态的主体：它此刻在感知什么 ──────────────────────────────────
+
+    perception: PerceptionView
+    """原生多模态摄入此刻的样子。见 :class:`PerceptionView` 为什么它必须在契约里。
+
+    **不随相位裁剪**，而且恰恰是主轴 ``silent`` 时最要紧 —— 第一态的定义本身就是
+    "在场但不表达"，没有这一层它就退化成"睡着"。
+    """
 
     # ── 表达期：用什么手法在动手 ────────────────────────────────────────
 
@@ -938,6 +1090,11 @@ class RenderPosture:
             d[key]["chain_order"] = list(order)
         d["world_model"] = dict(d["world_model"])
         d["world_model"]["entity_kinds"] = list(self.world_model.entity_kinds)
+        d["perception"] = dict(d["perception"])
+        d["perception"]["modalities"] = [dict(m) for m in d["perception"]["modalities"]]
+        for m in d["perception"]["modalities"]:
+            if m["signal_age_s"] is not None:
+                m["signal_age_s"] = round(float(m["signal_age_s"]), 2)
         d["hybrid_execution"] = dict(d["hybrid_execution"])
         d["hybrid_execution"]["confidence"] = round(float(self.hybrid_execution.confidence), 4)
         for k in (
@@ -954,9 +1111,119 @@ class RenderPosture:
         return d
 
 
+#: ``DesktopPerceptionStore.status()`` 的槽位名 → 契约里的模态名。
+#:
+#: 只有 microphone 需要改名：那边的槽叫 ``audio`` 是历史，语义上就是麦克风。
+#: 写成一张显式的表而不是在取值处随手拼字符串 —— 拼字符串的话，哪天那边加一个槽，
+#: 这里会静默地少一条模态而不是报错。
+_STORE_SLOT_OF: Dict[str, str] = {
+    "screen": "screen",
+    "camera": "camera",
+    "microphone": "audio",
+    "system_audio": "system_audio",
+}
+
+
+def last_perception_status() -> Optional[Dict[str, Any]]:
+    """取桌面感知库最近一次的 ``status()``，拿不到返回 ``None``。
+
+    **绝不构造任何东西**，与 :func:`last_continuum_posture` 同一条纪律：
+    ``get_desktop_perception_store()`` 会**创建**单例，在在场桥的每一拍里调它是错的
+    （而且那个模块导入约 71ms，本模块自身约 6ms 且被每次相位事件调用）。
+    所以这里用 ``sys.modules.get`` 只看**已经被导入过**的模块与**已经存在**的实例。
+
+    返回 ``None`` 的两种情况都表示"这个进程里没有感知库"：模块没被导入过、
+    或单例还没建。两者对渲染是同一件事 —— :meth:`PerceptionView.unwired`。
+    """
+    mod = sys.modules.get("core.perception.desktop_perception_store")
+    if mod is None:
+        return None
+    cls = getattr(mod, "DesktopPerceptionStore", None)
+    inst = getattr(cls, "_instance", None) if cls is not None else None
+    if inst is None:
+        return None
+    try:
+        status = inst.status()
+    except Exception:  # noqa: BLE001 — 可见性绝不该拖垮广播
+        return None
+    return status if isinstance(status, dict) else None
+
+
+def _modality_view(modality: str, status: Dict[str, Any], *, paused: bool, speaking: bool) -> ModalityView:
+    """一个槽的 status 字段 → 一档状态。
+
+    判定顺序是有讲究的：
+
+    1. **从没来过东西 → unavailable**。放在最前面：隐私暂停对一条根本不存在的通路
+       没有意义，报 ``paused`` 会让渲染端画出一个"闭着的眼睛"，而那里从来就没有眼睛。
+    2. **隐私暂停 → paused**。暂停会清空缓存但**不清** ``*_received`` 计数器，
+       所以曾经活过的模态在暂停期仍然认得出来。
+    3. **麦克风 + 正在朗读 → suppressed**。反自激励，见 :data:`MODALITY_STATES`。
+       只作用于麦克风：系统声与屏幕不受 TTS 影响。
+    4. 新鲜 → ``live``，否则 ``idle``。
+    """
+    slot = _STORE_SLOT_OF[modality]
+    received = status.get(f"{slot}_received") or 0
+    age = status.get(f"{slot}_age_sec")
+    try:
+        age_f = float(age) if age is not None else None
+    except (TypeError, ValueError):
+        age_f = None
+
+    if not received:
+        return ModalityView.unavailable(modality)
+    if paused:
+        return ModalityView(modality=modality, state="paused", signal_age_s=age_f)
+    if modality == "microphone" and speaking:
+        return ModalityView(modality=modality, state="suppressed", signal_age_s=age_f)
+    fresh = bool(status.get(f"{slot}_fresh"))
+    return ModalityView(modality=modality, state="live" if fresh else "idle", signal_age_s=age_f)
+
+
+def resolve_perception_view(
+    status: Optional[Dict[str, Any]] = None,
+    *,
+    speaking: bool = False,
+    ambient_action: str = "none",
+    ambient_rationale: str = "",
+) -> PerceptionView:
+    """合成第一态的感知视图。
+
+    Args:
+        status: ``DesktopPerceptionStore.status()`` 的产物；省略时取
+            :func:`last_perception_status`。拿不到时返回
+            :meth:`PerceptionView.unwired`。
+        speaking: TTS 是否正在播。**由调用方给** —— 它的权威属主是
+            ``core.speech_output.set_ai_speaking``，不是感知库。
+        ambient_action: 自发注意力上一拍的决策，见 :data:`AMBIENT_ACTIONS`。
+        ambient_rationale: 那一拍的理由原文。
+
+    ``is_sensing`` 在这里推导一次并写进契约，而不是留给渲染端各自 ``some(live)``：
+    多一个消费方就多一份可能不一致的推导，这是本仓反复吃过的亏。
+    """
+    if status is None:
+        status = last_perception_status()
+    if not isinstance(status, dict) or not status:
+        return PerceptionView.unwired()
+
+    privacy = status.get("privacy")
+    paused = bool(privacy.get("paused")) if isinstance(privacy, dict) else False
+    views = tuple(_modality_view(m, status, paused=paused, speaking=bool(speaking)) for m in PERCEPTION_MODALITIES)
+    action = ambient_action if ambient_action in AMBIENT_ACTIONS else "none"
+    return PerceptionView(
+        source="live",
+        is_sensing=any(v.state == "live" for v in views),
+        privacy_paused=paused,
+        modalities=views,
+        ambient_action=action,
+        ambient_rationale=str(ambient_rationale or "")[:200],
+    )
+
+
 def _anchor_only_render_posture(
     lifecycle: str = "silent",
     previous_lifecycle: Optional[str] = None,
+    perception_view: Optional[PerceptionView] = None,
 ) -> RenderPosture:
     """拿不到 ContinuumState 时的兜底姿态——如实标注，不假装是算出来的。
 
@@ -966,9 +1233,15 @@ def _anchor_only_render_posture(
 
     转移性质同理：``previous_lifecycle`` 也来自相位事件而非 continuum，
     continuum 没跑不影响「刚才从哪一档来的」这个事实，照实带上。
+
+    **感知也同理，而且这一条最要紧**：感知走的是完全独立的只读拉取，continuum
+    没跑跟"它此刻在不在看/在不在听"毫无关系。而兜底姿态最常出现的场合恰恰是
+    主轴 silent —— 也就是第一态。若在这里把感知抹成空，第一态在最需要它的时候
+    永远是空的，而那正是这一层要修的问题本身。
     """
     life = lifecycle if lifecycle in LIFECYCLE_STATES else "silent"
     prev = previous_lifecycle if previous_lifecycle in LIFECYCLE_STATES else None
+    perception_view = perception_view if perception_view is not None else PerceptionView.unwired()
     # 副轴没有真值时，按主轴取语义上最接近的一相：主轴 silent 对应静息
     # (formless) 而**不是** receding —— 返回弧必须由真实的 continuum 相位证实，
     # 凭空猜一个「正在退场」会让渲染端播出一段根本没发生过的余辉。
@@ -985,6 +1258,7 @@ def _anchor_only_render_posture(
         local_chain=ExecutionChainView.empty("local"),
         cross_device_chain=ExecutionChainView.empty("cross_device"),
         world_model=WorldModelView.unwired(),
+        perception=perception_view,
         hybrid_execution=HybridExecutionView.undecided(),
         runtime_domain=None,
         motion=0.0,
@@ -1014,6 +1288,7 @@ def resolve_render_posture(
     local_chain: Optional[ExecutionChainView] = None,
     cross_device_chain: Optional[ExecutionChainView] = None,
     hybrid_execution: Optional[HybridExecutionView] = None,
+    perception: Optional[PerceptionView] = None,
 ) -> RenderPosture:
     """合成渲染姿态：主轴由调用方给，副轴与表达参数从 ``ContinuumState`` 读。
 
@@ -1029,6 +1304,8 @@ def resolve_render_posture(
         local_chain: 本机执行链视图；``None`` 时用零态（「还没跑过」）。
         cross_device_chain: 跨设备执行链视图；``None`` 时用零态。
         hybrid_execution: 混合执行模式决策；``None`` 时用「尚未决策」。
+        perception: 第一态的感知视图；``None`` 时现取一次
+            （:func:`resolve_perception_view` 自己会走只读拉取）。
 
     三个视图为什么由外面传
     ----------------------
@@ -1059,11 +1336,13 @@ def resolve_render_posture(
     local = local_chain if local_chain is not None else ExecutionChainView.empty("local")
     cross = cross_device_chain if cross_device_chain is not None else ExecutionChainView.empty("cross_device")
     hybrid = hybrid_execution if hybrid_execution is not None else HybridExecutionView.undecided()
+    # 感知不给就现取 —— 它有自己的只读通道，不依赖任何调用方喂。
+    percept = perception if perception is not None else resolve_perception_view()
 
     if state is None:
         state = last_continuum_posture()
     if state is None:
-        base = _anchor_only_render_posture(life, prev)
+        base = _anchor_only_render_posture(life, prev, percept)
         return dataclasses.replace(
             base,
             liminal_activity=activity,
@@ -1071,6 +1350,7 @@ def resolve_render_posture(
             local_chain=local,
             cross_device_chain=cross,
             hybrid_execution=hybrid,
+            perception=percept,
         )
 
     raw_phase = getattr(getattr(state, "phase", None), "value", None) or str(getattr(state, "phase", "formless"))
@@ -1113,6 +1393,7 @@ def resolve_render_posture(
         local_chain=local,
         cross_device_chain=cross,
         world_model=WorldModelView.unwired(),
+        perception=percept,
         hybrid_execution=hybrid,
         runtime_domain=domain if domain in RUNTIME_DOMAINS else None,
         motion=_clamp(float(getattr(expr, "motion", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
@@ -1148,6 +1429,9 @@ def render_contract_schema() -> Dict[str, Any]:
         "chain_kinds": list(CHAIN_KINDS),
         "hybrid_execution_modes": list(HYBRID_EXECUTION_MODES),
         "world_model_sources": list(WORLD_MODEL_SOURCES),
+        "perception_modalities": list(PERCEPTION_MODALITIES),
+        "modality_states": list(MODALITY_STATES),
+        "ambient_actions": list(AMBIENT_ACTIONS),
         "transition_kinds": list(TRANSITION_KINDS),
         "transition_kind_of": [{"from": a, "to": b, "kind": k} for (a, b), k in TRANSITION_KIND_OF.items()],
         "sources": [PostureSource.CONTINUUM, PostureSource.ANCHOR_ONLY],
@@ -1166,6 +1450,23 @@ def render_contract_schema() -> Dict[str, Any]:
             {"name": "mode", "ts": "HybridExecutionMode", "doc": "用什么手法动手；none=尚未决策"},
             {"name": "reason", "ts": "string", "doc": "选它的理由（后端策略引擎原文）"},
             {"name": "confidence", "ts": "number", "doc": "[0,1]：1=精确命中规则，0.5=启发式，0=兜底"},
+        ],
+        "modality_fields": [
+            {"name": "modality", "ts": "PerceptionModality", "doc": "screen / camera / microphone / system_audio"},
+            {"name": "state", "ts": "ModalityState", "doc": "五档之一 —— 刻意不是布尔，理由见该类型的注释"},
+            {
+                "name": "signal_age_s",
+                "ts": "number | null",
+                "doc": "距上次有信号多久（秒）；null=从没有过信号（与 0 是两件事）",
+            },
+        ],
+        "perception_fields": [
+            {"name": "source", "ts": "ViewSource", "doc": "unwired=进程里没有感知库，live=有"},
+            {"name": "is_sensing", "ts": "boolean", "doc": "任一模态 live。便利位，由 modalities 推出"},
+            {"name": "privacy_paused", "ts": "boolean", "doc": "隐私急停是否生效 —— 整体姿态，不是四条恰好都闭着"},
+            {"name": "modalities", "ts": "ModalityView[]", "doc": "恒定四条，缺席的以 unavailable 出现"},
+            {"name": "ambient_action", "ts": "AmbientAction", "doc": "自发注意力上一拍的决策；none=还没决策过"},
+            {"name": "ambient_rationale", "ts": "string", "doc": "那一拍为什么这么决定（后端原文，已截断）"},
         ],
         "world_model_fields": [
             {"name": "is_wired", "ts": "boolean", "doc": "世界模型是否已接到渲染链路；当前恒 false"},
@@ -1220,6 +1521,11 @@ def render_contract_schema() -> Dict[str, Any]:
                 "doc": "跨设备执行链 —— 阈限态的可视内容之二",
             },
             {"name": "world_model", "ts": "WorldModelView", "doc": "世界模型 —— 留出的位置，当前恒 unwired"},
+            {
+                "name": "perception",
+                "ts": "PerceptionView",
+                "doc": "**第一态的主体** —— 原生多模态摄入此刻的样子；不随相位裁剪",
+            },
             {
                 "name": "hybrid_execution",
                 "ts": "HybridExecutionView",

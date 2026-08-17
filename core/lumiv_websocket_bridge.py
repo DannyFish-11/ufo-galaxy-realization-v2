@@ -270,6 +270,7 @@ class GalaxyPresenceBridge:
             ExecutionChainView,
             HybridExecutionView,
             SimulationSummary,
+            resolve_perception_view,
             resolve_render_posture,
         )
 
@@ -311,10 +312,24 @@ class GalaxyPresenceBridge:
         local = ExecutionChainView.from_view_dict("local", self._local_chain)
         cross = ExecutionChainView.from_view_dict("cross_device", self._cross_device_chain)
 
+        # 第一态的主体。**不走 tick** —— 那条 200ms tick 在 SILENT 里是停的
+        # （见 desktop_presence_runtime._on_advance_tick），而感知最需要在场的那一相
+        # 正是它不跑的那一相。所以这里现取一次只读快照（实测 ~1.5 µs）。
+        #
+        # speaking 由桥自己持有（属主是 core.speech_output.set_ai_speaking），
+        # 传进去让契约把「朗读期的麦克风」判成 suppressed —— 那是反自激励，
+        # 后端本来就在这么做，这一步只是让渲染端也看得见，而不是留给它记规矩。
+        percept = resolve_perception_view(
+            speaking=bool(self._speaking),
+            ambient_action=self._ambient_action or "none",
+            ambient_rationale=self._ambient_rationale,
+        )
+
         prev = self._previous_lifecycle
         posture = resolve_render_posture(
             life,
             previous_lifecycle=prev,
+            perception=percept,
             liminal_activity=activity,
             simulation=sim,
             local_chain=local,

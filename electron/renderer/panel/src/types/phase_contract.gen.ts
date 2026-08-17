@@ -125,8 +125,70 @@ export type ChainKind = "local" | "cross_device";
 /** 表达期用什么手法动手。none = 尚未决策。 */
 export type HybridExecutionMode = "none" | "sequential_degrade" | "parallel_race" | "staged_hybrid" | "local_preferred" | "remote_preferred";
 
-/** 世界模型视图的来源。unwired = 这条链路还没建，不是「零个实体」。 */
-export type WorldModelSource = "unwired" | "live";
+/** 「这一维接没接上」。unwired = 这条链路还没建，不是「零个」。 */
+export type ViewSource = "unwired" | "live";
+
+/** 世界模型视图的来源。与 ViewSource 同一份取值域（后端是别名，不是副本）。 */
+export type WorldModelSource = ViewSource;
+
+/** 感知模态。四条恒定存在，缺席的那条以 unavailable 出现而不是从数组里消失。 */
+export type PerceptionModality = "screen" | "camera" | "microphone" | "system_audio";
+
+/**
+ * 单个模态的状态。**刻意不是布尔** —— 布尔会把三件不同的事压成一件，
+ * 而那正是深度轴犯过的错（20 个字段压成一个标量，退场只能把进场倒放）。
+ *
+ *   unavailable  这条通路从没来过东西（没硬件／没授权／前端没在推）→ 这一侧不亮
+ *   paused       用户按了隐私暂停 → 明确地「闭着」，不是「没有」
+ *   suppressed   在，但这一拍被刻意屏蔽 → 短暂闭合，不是熄灭
+ *   idle         通路通、有过信号，但这一拍静了 → 柔和呼吸
+ *   live         这一拍有新鲜信号 → 有反应
+ *
+ * `suppressed` 是反自激励：AI 朗读时麦克风采到的是它自己的声音，自发注意力
+ * 循环刻意忽略那段音频。这一档把「说话时不能显示在听」从**渲染端要记的规矩**
+ * 变成**后端给的状态** —— 规矩会被忘记，状态不会。
+ */
+export type ModalityState = "unavailable" | "paused" | "suppressed" | "idle" | "live";
+
+/** 自发注意力上一拍的决策。none = 还没决策过。 */
+export type AmbientAction = "none" | "speak" | "silent" | "delegate";
+
+/** 一个感知模态的当前状态。第一态「哪侧亮、亮多少、是闭着还是没有」全靠这一层。 */
+export interface ModalityView {
+  /** screen / camera / microphone / system_audio */
+  modality: PerceptionModality;
+  /** 五档之一 —— 刻意不是布尔，理由见该类型的注释 */
+  state: ModalityState;
+  /** 距上次有信号多久（秒）；null=从没有过信号（与 0 是两件事） */
+  signal_age_s: number | null;
+}
+
+/**
+ * **第一态的主体** —— 原生多模态摄入此刻的样子。
+ *
+ * 第一态的定义本身就是感知：后端 TriStatePhase.SILENT 的原文是「the system is
+ * always alive in silent; it is receiving inputs (audio, visual, touch, text) from
+ * its native modalities」。而在这一层之前，RenderPosture 里**一个感知字段都没有** ——
+ * 感知状态走的是另一条平行的、无类型的分支 `payload.ambient`：面板手写类型读了它，
+ * 覆盖层一次都没读过。也就是说第一态的视觉主体在渲染端没有数据来源。
+ *
+ * 它**不随相位裁剪**，而且恰恰是主轴 silent 时最要紧 —— 第一态是「在场但不表达」，
+ * 没有这一层它就退化成「睡着」。
+ */
+export interface PerceptionView {
+  /** unwired=进程里没有感知库，live=有 */
+  source: ViewSource;
+  /** 任一模态 live。便利位，由 modalities 推出 */
+  is_sensing: boolean;
+  /** 隐私急停是否生效 —— 整体姿态，不是四条恰好都闭着 */
+  privacy_paused: boolean;
+  /** 恒定四条，缺席的以 unavailable 出现 */
+  modalities: ModalityView[];
+  /** 自发注意力上一拍的决策；none=还没决策过 */
+  ambient_action: AmbientAction;
+  /** 那一拍为什么这么决定（后端原文，已截断） */
+  ambient_rationale: string;
+}
 
 /**
  * 主轴上最近一次转移的**性质** —— 退场编排该看这一位。
@@ -266,6 +328,8 @@ export interface RenderPosture {
   cross_device_chain: ExecutionChainView;
   /** 世界模型 —— 留出的位置，当前恒 unwired */
   world_model: WorldModelView;
+  /** **第一态的主体** —— 原生多模态摄入此刻的样子；不随相位裁剪 */
+  perception: PerceptionView;
   /** 表达期用什么手法动手（GUI／API／混合） */
   hybrid_execution: HybridExecutionView;
   /** 第二维：在哪儿跑；null=尚未判定 */
