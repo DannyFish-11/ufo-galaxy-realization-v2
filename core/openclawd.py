@@ -662,7 +662,8 @@ _CONTEXT_BUILTIN_TOOLS: List[Dict] = [
             "name": "context__manage",
             "description": (
                 "把当前对话中较早的一段归档成笔记，腾出上下文空间。当你看到工具结果末尾的"
-                "[当前上下文 token: N / 窗口 M] 显示占用偏高，或者你刚做完一个子任务、"
+                "[当前上下文 token: N / 窗口 M] 占用偏高、或者那里提示**只够再跑几轮**，"
+                "又或者你刚做完一个子任务、"
                 "接下来要转向别的事情时调用。归档是**无损**的：原文完整保存，你会拿到一个"
                 "段号，之后任何时候都可以用 context__query_memory 按段号把原文细节查回来。"
                 "不要等到快满了才调——那时压缩这一步自己都可能装不下。"
@@ -8277,7 +8278,9 @@ class OpenClawd:
 
             tag = main_brain()
             n_ctx, _why = get_compute_scheduler().context_budget_for(tag)
-            if not should_compact(messages, n_ctx):
+            # 把观测序列一起交过去 —— 速率触发器靠它。不给就只剩水位那一条，
+            # 而水位漏掉的正是"单轮一步跨过去"那种形态。
+            if not should_compact(messages, n_ctx, getattr(self, "_react_token_marks", None)):
                 return 0
             return compact_messages(
                 messages,
@@ -8308,7 +8311,7 @@ class OpenClawd:
         ReAct 循环里不会变（``n_ctx`` 是加载期参数）。
         """
         try:
-            from core.context_compaction import fuel_gauge
+            from core.context_compaction import estimate_tokens, fuel_gauge
             from core.context_trim import reply_headroom_tokens
 
             n_ctx = getattr(self, "_react_n_ctx", 0)
@@ -8318,7 +8321,16 @@ class OpenClawd:
 
                 n_ctx, _why = get_compute_scheduler().context_budget_for(main_brain())
                 self._react_n_ctx = n_ctx
-            gauge = fuel_gauge(messages, int(n_ctx), reply_headroom_tokens())
+
+            # 每条工具结果之后记一次占用 —— 这就是烧率的观测点。记在这里而不是每轮
+            # 一次：单轮里可能连调好几个工具，而"一个工具返回 30 KB 日志"正是水位
+            # 触发器漏掉的那种形态，按工具记才抓得住。
+            from core.context_runway import record_mark
+
+            marks = record_mark(getattr(self, "_react_token_marks", None) or [], estimate_tokens(messages))
+            self._react_token_marks = marks
+
+            gauge = fuel_gauge(messages, int(n_ctx), reply_headroom_tokens(), marks)
             return f"\n{gauge}" if gauge else ""
         except Exception as exc:  # noqa: BLE001 — 报不出来就不报，绝不影响工具结果本身
             logger.debug("上下文油表跳过: %s", exc)
@@ -8779,6 +8791,10 @@ class OpenClawd:
             # 上下文腾出来了。超时路径也要摘,所以放在 finally。
             self._react_messages = None
             self._react_n_ctx = 0
+            # 观测也要清:烧率是**这一次任务**的速率。留到下一次会话，开局第一轮就
+            # 拿着上一个任务的烧率去判跑道 —— 而那两个任务可能一个在读大文件、
+            # 一个在纯推理，差一个数量级。
+            self._react_token_marks = []
 
         final_text = last_response.content if last_response else ""
         timed_out = last_response is None  # 如果整个循环超时还没拿到 response

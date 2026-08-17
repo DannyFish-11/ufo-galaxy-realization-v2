@@ -134,11 +134,55 @@ def context_utilization(messages: List[Dict[str, Any]], n_ctx: int) -> float:
     return used / float(n_ctx) if used > 0 else 0.0
 
 
-def should_compact(messages: List[Dict[str, Any]], n_ctx: int) -> bool:
-    """该压了吗。窗口算不出来时**一律不压** —— 判不了不动手。"""
+def should_compact(messages: List[Dict[str, Any]], n_ctx: int, marks: Optional[List[int]] = None) -> bool:
+    """该压了吗。窗口算不出来时**一律不压** —— 判不了不动手。
+
+    两个触发器，盯的是**不同的失败形态**
+    ====================================
+    * **水位**（占用 ≥ 七成）——多轮小增量慢慢涨上去；
+    * **跑道**（照这个烧法只够再跑一两轮）——单轮大增量一步跨过去。
+
+    只有水位是不够的，而且不是把阈值调低能补的::
+
+        第 9 轮：58%   ← 水位触发器不响
+        第 10 轮：一个工具返回 30 KB 日志
+        第 10 轮末：118%  ← 已经被静默截断
+
+    水位在 58% 和 118% 之间**没有采样点**，它从来没有机会响。把阈值从 0.7 调到 0.5
+    只是把同一个洞往前挪：遇到更大的单次增量照样跨过去。
+
+    Args:
+        marks: 历次占用观测。给了才有跑道判据；不给就只看水位（**不是**假装跑道很长）。
+    """
     if n_ctx <= 0 or len(messages) <= KEEP_RECENT_MESSAGES + 1:
         return False
-    return context_utilization(messages, n_ctx) >= COMPACT_AT_UTILIZATION
+    if context_utilization(messages, n_ctx) >= COMPACT_AT_UTILIZATION:
+        return True
+    return _runway_is_short(messages, n_ctx, marks)
+
+
+def _runway_is_short(messages: List[Dict[str, Any]], n_ctx: int, marks: Optional[List[int]]) -> bool:
+    """速率触发器：判不了一律 ``False``（判不了不动手）。"""
+    if not marks:
+        return False
+    try:
+        from core.context_runway import project  # noqa: PLC0415
+        from core.context_trim import reply_headroom_tokens  # noqa: PLC0415
+
+        used = estimate_tokens(messages) + reply_headroom_tokens()
+        runway = project(used, n_ctx, marks)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("跑道不可评估(退回只看水位): %s", exc)
+        return False
+    if runway.is_short:
+        logger.info(
+            "跑道只剩约 %d 轮（每轮约 %d token，余 %d）—— 提前压缩，不等水位到七成",
+            runway.rounds_left,
+            runway.burn_per_round,
+            runway.tokens_left,
+        )
+        return True
+    return False
 
 
 def model_manages_own_context(tier_key: str = "") -> bool:
@@ -452,7 +496,9 @@ def _trim_visible_markers(head: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return kept
 
 
-def fuel_gauge(messages: List[Dict[str, Any]], n_ctx: int, reply_headroom: int = 0) -> str:
+def fuel_gauge(
+    messages: List[Dict[str, Any]], n_ctx: int, reply_headroom: int = 0, marks: Optional[List[int]] = None
+) -> str:
     """给模型看的**油表**：这次装配占了多少、窗口有多大。窗口未知返回空串。
 
     为什么要报给模型
@@ -473,7 +519,18 @@ def fuel_gauge(messages: List[Dict[str, Any]], n_ctx: int, reply_headroom: int =
         return ""
     used = estimate_tokens(messages) + max(0, int(reply_headroom or 0))
     pct = int(used * 100 / n_ctx)
+
+    # 跑道：水位说"现在多满"，跑道说"照这个烧法还剩多远"。后者才是模型真正需要的
+    # 那个量 —— 58% 听着还宽裕，但如果每轮烧掉窗口的三成，那就是"下一轮就溢出"。
+    runway_text = ""
+    try:
+        from core.context_runway import project  # noqa: PLC0415
+
+        runway_text = project(used, n_ctx, marks).render()
+    except Exception as exc:  # noqa: BLE001 — 报不出跑道就只报水位，绝不报假数
+        logger.debug("跑道渲染跳过: %s", exc)
+
     hint = ""
     if pct >= int(COMPACT_AT_UTILIZATION * 100):
         hint = "（已过压缩阈值：该整理上下文了）"
-    return f"[当前上下文 token: {used} / 窗口 {n_ctx}（{pct}%）{hint}]"
+    return f"[当前上下文 token: {used} / 窗口 {n_ctx}（{pct}%）{hint}{runway_text}]"

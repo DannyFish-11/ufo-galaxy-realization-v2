@@ -38,9 +38,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -56,20 +56,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 #: **不是缓存**:这里存的是被压掉那段对话的唯一原文，删了就真没了。
 _ROOT = PROJECT_ROOT / "runtime" / "context_archive"
 
-#: 会话 id 里允许出现的字符 —— 其余一律换成 ``_``。
+#: 目录名的长度（十六进制字符数）。
 #:
-#: 这不是洁癖:会话 id 来自调用方，直接拿去拼路径就是一条目录穿越
-#: (``../../etc``)。归档写的是文件、读的也是文件，两头都要过这一关。
-#:
-#: **但白名单本身不够。** 这一条第一版就是只有白名单，而白名单里放行了 ``.`` ——
-#: 于是 ``../../etc/evil`` 因为斜杠被替换而失效(变成 ``.._.._etc_evil``)，
-#: **裸的 ``..`` 却原样穿过**:``_ROOT / ".."`` 就是归档根的父目录，也就是
-#: ``runtime/``。那意味着 ``drop_session("..")`` 会 ``rmtree`` 掉整个 ``runtime/``
-#: (模型状态、实测记录、全部会话归档)，而 ``drop_session(".")`` 会删掉所有人的归档。
-#:
-#: 教训是:**消毒之后必须再验一次落点**，不能靠"我把危险字符都替换掉了"这种推理 ——
-#: 那种推理漏掉的恰恰是不含危险字符的那几个(``.`` / ``..``)。落点检查见 :func:`_dir`。
-_SAFE = re.compile(r"[^0-9A-Za-z_.-]")
+#: 40 个十六进制字符 = 160 bit，会话数量再多也撞不上。
+_DIR_NAME_LEN = 40
 
 #: ``query_memory`` 单次最多把多少字符的原文喂给提取调用。
 #:
@@ -79,35 +69,45 @@ _SAFE = re.compile(r"[^0-9A-Za-z_.-]")
 MAX_QUERY_CHARS = 24000
 
 
-def _safe(session_id: str) -> str:
-    return _SAFE.sub("_", session_id.strip())[:120]
+def _dir_name(session_id: str) -> str:
+    """会话 id → 目录名。**用摘要，不用会话 id 本身。**
+
+    走过的两版弯路，都值得留在这儿
+    ==============================
+    **第一版：字符白名单**（``[^0-9A-Za-z_.-]`` → ``_``）。它挡住了
+    ``../../etc/evil``（斜杠被替换），却**放行了裸的 ``..``** —— 白名单里有 ``.``。
+    而 ``_ROOT / ".."`` 就是归档根的父目录 ``runtime/``：一次
+    ``drop_session("..")`` 会 ``rmtree`` 掉模型状态、实测记录和所有人的归档。
+
+    **第二版：白名单 + 落点检查**（确认落在归档根正下方）。安全上是对的，但还留着
+    第二个洞：**替换是多对一的**。``a/b`` 和 ``a_b`` 消毒后是同一个目录名 —— 两个不同
+    的会话共用一份归档，一个会话能读到另一个会话的原文。那不是穿越，是**串号**，
+    而且更隐蔽：没有任何异常，只是有时候查回来的段落属于别人。
+
+    **这一版：根本不让会话 id 进入路径。** 目录名是 ``sha256(会话 id)`` 的前 40 位
+    十六进制 —— 它在结构上就不可能包含 ``/``、``.`` 或任何其它东西，也不会把两个不同
+    的会话映射到一起。两个洞一起没了，而且不依赖"我把危险的都想到了"这种推理。
+
+    代价是目录名不再可读。所以每个段文件里都带上 ``session_id`` 原文（见
+    :func:`archive_segment`）—— 人要查"这个目录是谁的"，打开任意一个段文件就知道。
+    """
+    return hashlib.sha256(session_id.strip().encode("utf-8")).hexdigest()[:_DIR_NAME_LEN]
 
 
 def _dir(session_id: str) -> Optional[Path]:
-    """这个会话的归档目录；**任何落不到归档根正下方的一律返回 ``None``**。
+    """这个会话的归档目录；会话 id 为空则返回 ``None``。
 
-    两道，缺一不可:
+    路径里**没有任何一个字符来自调用方** —— 目录名整个是摘要的十六进制输出
+    （见 :func:`_dir_name`）。所以这里不需要再做穿越检查：不是"检查过了所以安全"，
+    是**结构上就构造不出**一个带 ``/`` 或 ``..`` 的目录名。
 
-    1. 字符白名单(:data:`_SAFE`)——挡掉斜杠、空字节之类；
-    2. **落点检查** —— 消毒之后再确认它确实是 ``_ROOT`` 的**直接子目录**。
-
-    第二道不是冗余。白名单放行了 ``.``，所以 ``..`` 能原样穿过第一道，而
-    ``_ROOT / ".."`` 就是归档根的父目录。只靠第一道的推理("危险字符都换掉了")
-    漏掉的正是这几个**不含危险字符**的输入。
-
-    用"父目录必须恰好是 ``_ROOT``"而不是 ``is_relative_to``:后者对 ``_ROOT`` 自身
-    也成立，而 ``drop_session(".")`` 落在 ``_ROOT`` 上就会删掉所有人的归档。
+    空会话 id 仍然拒绝：它不是不安全，是**没有意义** —— 所有匿名调用会挤进同一个
+    目录，互相看得见对方的原文。上层（``compact_messages``）因此在空 id 时直接
+    拒绝压缩。
     """
-    sid = _safe(session_id)
-    if not sid or sid.strip(".") == "":
+    if not session_id or not session_id.strip():
         return None
-    candidate = _ROOT / sid
-    try:
-        if candidate.resolve().parent != _ROOT.resolve():
-            return None
-    except OSError:  # 路径解析不了(权限/循环链接)就当它不合法
-        return None
-    return candidate
+    return _ROOT / _dir_name(session_id)
 
 
 def _entry_of(m: Dict[str, Any]) -> Dict[str, Any]:
@@ -159,6 +159,8 @@ def archive_segment(session_id: str, messages: List[Dict[str, Any]], summary: st
     seg_id = next_segment_id(session_id)
     payload = {
         "segment_id": seg_id,
+        # 目录名是摘要，不可读。原文放这儿，人要查"这个目录是谁的"打开任意段即可。
+        "session_id": session_id,
         "summary": str(summary or ""),
         "message_count": len(messages),
         "entries": [_entry_of(m) for m in messages if isinstance(m, dict)],

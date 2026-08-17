@@ -291,48 +291,50 @@ class TestTheArchiveIsNotACache:
         src = inspect.getsource(ai_routes)
         assert "drop_session(session_id)" in src, "清除对话没有清掉上下文归档"
 
-    def test_a_session_id_can_never_escape_the_archive_root(self, tmp_path, monkeypatch):
+    def test_no_session_id_can_reach_outside_the_archive_root(self, tmp_path, monkeypatch):
         """会话 id 来自调用方，直接拼路径就是一条目录穿越。
 
-        这条第一版是**空跑的**：它只在归档根**里面** ``rglob`` 找证据，而穿越写出去的
-        文件在根**外面** —— 走不到，于是断言对着一个空集合恒真。反向验证时把
-        ``_safe()`` 整个拆掉，它照样绿。
+        这一条走过两版弯路，都钉在这儿：
 
-        证据要到**穿越会落地的那个位置**去找。
+        1. 第一版**测的是被挡住的那种**（``../../etc/evil`` —— 斜杠会被替换掉，本来
+           就走不出去），而真正穿得过去的是**裸的 ``..``**（一个危险字符都不含）。
+           ``drop_session("..")`` 会 ``rmtree`` 掉归档根的父目录，也就是 ``runtime/``；
+        2. 第一版的断言还**看错了地方** —— 只在归档根**里面** ``rglob`` 找证据，而穿越
+           写出去的文件在根**外面**，走不到，于是对着空集合恒真。
+
+        现在目录名整个是摘要，路径里没有一个字符来自调用方。所以这一条钉的是那个
+        更强的性质：**无论喂什么进去，落点都在根里面**。
         """
         outside = tmp_path / "outside"
         outside.mkdir()
         root = tmp_path / "nest" / "archive"
         monkeypatch.setattr(ca, "_ROOT", root)
 
-        cc.compact_messages(_long_session(), _summarizer(), session_id="../../outside/evil")
+        for evil in ("..", ".", "...", "../../outside/evil", "\x00etc", "a" * 500):
+            d = ca._dir(evil)
+            assert d is not None and d.resolve().parent == root.resolve(), f"{evil!r} 落到了 {d}"
+            cc.compact_messages(_long_session(), _summarizer(), session_id=evil)
+
         assert list(outside.iterdir()) == [], f"写到归档根目录外面去了：{list(outside.iterdir())}"
-        assert ca.list_segments("../../outside/evil"), "穿越被挡住了，但这一段也该正常归档（只是名字被消毒）"
+        assert (tmp_path / "nest").is_dir() and root.is_dir()
 
-    def test_the_dangerous_ids_are_the_ones_without_dangerous_characters(self, tmp_path, monkeypatch):
-        """CodeQL 报出来的那一条 —— 而我自己那条穿越测试**测的是被挡住的那种**。
+    def test_two_different_sessions_never_share_a_directory(self, tmp_path, monkeypatch):
+        """**串号比穿越更隐蔽。**
 
-        ``../../etc/evil`` 里的斜杠会被字符白名单换成 ``_``，所以它根本走不出去；
-        真正穿得过去的是**裸的 ``..``** —— 它一个危险字符都不含，白名单原样放行，
-        而 ``_ROOT / ".."`` 就是归档根的**父目录**：
-
-        * ``drop_session("..")``  → ``rmtree`` 掉整个 ``runtime/``（模型状态、实测
-          记录、所有人的归档）；
-        * ``drop_session(".")``   → 删掉所有会话的归档。
-
-        所以这一条钉的是**落点**，不是字符。
+        第二版用的是字符替换（``/`` → ``_``），而替换是**多对一**的：``a/b`` 和
+        ``a_b`` 消毒后是同一个目录名 —— 两个不同的会话共用一份归档，一个会话能读到
+        另一个会话的原文。没有任何异常，只是有时候查回来的段落属于别人。
         """
-        root = tmp_path / "nest" / "archive"
-        root.mkdir(parents=True)
-        sibling = tmp_path / "nest" / "must_survive"
-        sibling.mkdir()
-        monkeypatch.setattr(ca, "_ROOT", root)
+        monkeypatch.setattr(ca, "_ROOT", tmp_path / "archive")
+        pairs = [("a/b", "a_b"), ("u:1", "u_1"), ("x y", "x_y"), ("..", "._.")]
+        for left, right in pairs:
+            assert ca._dir(left) != ca._dir(right), f"{left!r} 与 {right!r} 落到了同一个目录"
 
-        for evil in ("..", ".", "...", "  ..  ", ""):
-            assert ca._dir(evil) is None, f"{evil!r} 落到了归档根外面/根自身：{ca._dir(evil)}"
-            assert ca.list_segments(evil) == []
-            assert ca.drop_session(evil) == 0, f"{evil!r} 触发了删除"
-            assert ca.archive_segment(evil, [{"role": "user", "content": "x"}], "s") is None
+        cc.compact_messages(_long_session(), _summarizer(), session_id="a/b")
+        assert ca.list_segments("a/b") == [1]
+        assert ca.list_segments("a_b") == [], "另一个会话看得见它的归档"
 
-        assert sibling.is_dir(), "归档根的兄弟目录被删了"
-        assert root.is_dir(), "归档根自己被删了"
+    def test_a_hashed_directory_still_says_whose_it_is(self):
+        """目录名不可读了，就必须有别的地方能查 —— 否则运维只能对着一堆十六进制发呆。"""
+        cc.compact_messages(_long_session(), _summarizer(), session_id="sess-可读性")
+        assert ca.load_segment("sess-可读性", 1)["session_id"] == "sess-可读性"

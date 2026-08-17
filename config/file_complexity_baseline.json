@@ -75,7 +75,7 @@
     "core/node_communication.py": 1043,
     "core/nodes/node_fabric_registry.py": 1079,
     "core/offline_replay_ordering_contract.py": 1040,
-    "core/openclawd.py": 10209,
+    "core/openclawd.py": 10225,
     "core/operational_enablement_audit.py": 1017,
     "core/operational_readiness_surface.py": 2412,
     "core/operational_registration_path.py": 1372,
