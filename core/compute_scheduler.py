@@ -526,6 +526,7 @@ class ComputeScheduler:
             ``(n_ctx, 理由)``。理由是给终端/日志看的一句话 —— 这个数是怎么来的、
             被谁卡住的,必须说得出来,否则又是一个"底下压着假设"的数字。
         """
+        from core.context_measurements import effective_kv_mb_per_1k, measured_source  # noqa: PLC0415
         from core.model_catalog import DEFAULT_MAX_CTX, MIN_CTX, exact_model  # noqa: PLC0415
 
         cfg = cfg or self.config
@@ -546,30 +547,54 @@ class ComputeScheduler:
             logger.debug("装配量不可评估(按模型上限): %s", exc)
             demand = model_cap
 
-        want = max(MIN_CTX, min(demand, model_cap))
-        reason = f"本仓库装配上界 {demand} token"
+        # ── 需求是**下限**，不是上限 ────────────────────────────────────────
+        #
+        # 这里原来写的是 ``min(demand, model_cap)`` —— 把装配量当成了天花板。那是
+        # 反的:``n_ctx`` 是**加载期参数**，定了这一次就改不了，于是"显存再富余、模型
+        # 能吃 1M，也永远用不超过一个静态预测值"。而那个预测值里，会话历史那一项
+        # 只是一个拍出来的常数(见 context_trim._TOKENS_BASELINE)，长会话里恰恰是它
+        # 在涨 —— 拿它封顶，等于让唯一真正会变的东西说了不算。
+        #
+        # 正确的形状：**装配量是必须装得下的下限，显存决定能在下限之上开多大。**
+        floor = max(MIN_CTX, min(demand, model_cap))
+        reason = f"装配下限 {demand} token"
         if demand > model_cap:
-            # 说出来。这是真实的能力缺口:装的比模型吃得下的多,超出部分必被截断,
-            # 而截断在 llama.cpp 那层是无声的。给这个型号填 max_ctx_val 才是解法。
-            reason = f"装配上界 {demand} token **超过**该型号上限 {model_cap}，超出部分会被截断"
+            # 真实的能力缺口:装的比模型吃得下的多,超出部分必被截断,而截断在
+            # llama.cpp 那层是无声的。给这个型号填 max_ctx_val 才是解法。
+            reason = f"装配下限 {demand} token **超过**该型号上限 {model_cap}，超出部分会被截断"
 
-        # 显存这一道只在**量过 KV 单价**时才收 —— 没量过就不敢拿显存去缩它,
-        # 那等于用一个编出来的分母去砍真实需求(见 ModelSpec.kv_mb_per_1k)。
-        kv_per_1k = spec.kv_mb_per_1k() if spec is not None else 0
-        if kv_per_1k > 0:
-            free_vram, _avail_ram = self.read_moe_inputs(profile)
-            resident = spec.runtime_mb() if spec is not None else 0
-            kv_budget_mb = free_vram * cfg.moe_vram_safety - resident
-            if kv_budget_mb > 0:
-                vram_cap = int(kv_budget_mb / kv_per_1k * 1024)
-                if vram_cap < want:
-                    return max(MIN_CTX, vram_cap), (
-                        f"显存只够 {vram_cap} token 的 KV cache" f"(可用 {free_vram} MB − 驻留 {resident} MB)，{reason}"
-                    )
-            else:
-                return MIN_CTX, f"权重驻留 {resident} MB 已吃满可用显存 {free_vram} MB，上下文压到下限"
+        # 显存这一道只在**知道 KV 单价**时才收 —— 不知道就既不敢往上开、也不敢往下砍,
+        # 那等于用一个编出来的分母去动真实需求。实测优先于目录声明，见
+        # :mod:`core.context_measurements`。
+        kv_per_1k = effective_kv_mb_per_1k(tag)
+        if kv_per_1k <= 0:
+            return floor, f"{reason}（KV 单价未知，不敢按显存放开；加载一次即可量到）"
 
-        return want, reason
+        free_vram, _avail_ram = self.read_moe_inputs(profile)
+        resident = spec.runtime_mb() if spec is not None else 0
+        kv_budget_mb = free_vram * cfg.moe_vram_safety - resident
+        src = measured_source(tag)
+        if kv_budget_mb <= 0:
+            return MIN_CTX, f"权重驻留 {resident} MB 已吃满可用显存 {free_vram} MB，上下文压到下限"
+
+        affordable = int(kv_budget_mb / kv_per_1k * 1024)
+        n_ctx = max(MIN_CTX, min(model_cap, max(floor, affordable)))
+        if affordable < floor:
+            # 显存连下限都撑不住。**显存是物理硬上限，下限不能盖过它** ——
+            # llama.cpp 会在加载时把整个 KV cache 一次分配掉，硬开到下限的结果是
+            # **模型根本加载不起来**；而按显存开、让裁剪层去截断，至少还能跑。
+            # 拿"装不全"换"加载不了"，是拿质量问题换可用性问题，方向反了。
+            return max(MIN_CTX, affordable), (
+                f"显存只够 {affordable} token 的 KV cache"
+                f"（可用 {free_vram} MB − 驻留 {resident} MB，单价 {kv_per_1k} MB/1K·{src}），"
+                f"低于{reason} —— 上下文会被裁剪层截断，但至少加载得起来"
+            )
+        if n_ctx >= model_cap:
+            return n_ctx, f"开到该型号上限 {model_cap}（显存够，单价 {kv_per_1k} MB/1K·{src}）"
+        return n_ctx, (
+            f"显存可支撑 {affordable} token（可用 {free_vram} MB − 驻留 {resident} MB，"
+            f"单价 {kv_per_1k} MB/1K·{src}），{reason}"
+        )
 
     def _split_moe(
         self,

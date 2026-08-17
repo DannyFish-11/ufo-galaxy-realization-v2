@@ -20,9 +20,12 @@ CPU 本地模型的延迟大头是 prompt 预填(prefill)。本模块提供三�
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any, Dict, List
+
+logger = logging.getLogger("Galaxy.ContextTrim")
 
 # 始终保留的核心工具(与具体任务无关的"元能力")
 _CORE_TOOL_MARKERS = ("memory__", "ask_human__")
@@ -42,16 +45,71 @@ def _env_int(name: str, default: int) -> int:
 #: 是在 llama.cpp 那层**静默截断**——用户看到的是"它怎么忘了前面说的",不是报错。
 _CHARS_PER_TOKEN = 2.5
 
-#: 一条工具定义(名字 + 描述 + JSON Schema)大约折多少 token。
+#: **兜底**:一条工具定义折多少 token —— 只在真工具表拿不到时才用。
 #:
-#: 没有按真实工具表现算,是因为工具表是运行时才装配的、每次不一样;而这个数要在
-#: **加载模型之前**就得出来(``n_ctx`` 是加载参数,定了就不能改)。所以这里要的是
-#: "这个仓库最多会装多少",不是"这一轮实际装了多少"。
-_TOKENS_PER_TOOL_DEF = 180
+#: 这个数原来是主判据,而它纯粹是拍的。工具表其实是**可以枚举的**(见
+#: :func:`_real_tool_table_tokens`):技能加载器和能力注册表在加载模型之前就装配好了,
+#: 序列化一遍数字符就是真值,不需要猜"一条大概多少"。拿不到时才退回这里。
+_TOKENS_PER_TOOL_DEF_FALLBACK = 180
 
-#: 系统提示 + 人格 + 会话历史 + 留给模型回复的余量,合计按多少 token 预留。
-#: 与上面两条一样:是**这个仓库的装配规模**,不是某一轮的实测值。
+#: 系统提示 + 人格 + 留给模型回复的余量。
+#:
+#: **这里刻意不含会话历史。** 历史是唯一无界、且每轮都在长的一项,把它折进一个常数
+#: 是这个公式最弱的地方 —— 而更要命的是,这个函数的结果曾被当成 ``n_ctx`` 的**上限**,
+#: 于是"唯一真正会变的东西"反而说了不算。现在它只当**下限**(见
+#: ``ComputeScheduler.context_budget_for``):历史往上涨的空间由显存决定,由
+#: 压缩层(:mod:`core.context_compaction`)负责在涨到头之前把它收敛掉。
 _TOKENS_BASELINE = 2048
+
+
+def _real_tool_table_tokens() -> int:
+    """按**真实工具表**算它折多少 token；拿不到返回 0。
+
+    比 ``条数 × 180`` 强在两点:数的是真名字、真描述、真 JSON Schema;而且工具表
+    变了它自己会变,不需要谁记得回来调那个 180。
+
+    枚举点用技能加载器的 MCP 工具视图 —— 它在**加载模型之前**就装配好了,所以
+    这个数在决定 ``n_ctx`` 的那一刻确实拿得到,不存在"运行时才知道"的问题。
+    """
+    try:
+        from core.skill_loader import skill_loader  # noqa: PLC0415
+
+        tools = skill_loader.list_as_mcp_tools()
+    except Exception as exc:  # noqa: BLE001 — 拿不到就退回兜底估算，不是错误
+        logger.debug("真实工具表不可枚举(退回按条数估算): %s", exc)
+        return 0
+    if not tools:
+        return 0
+    try:
+        import json as _json  # noqa: PLC0415
+
+        chars = len(_json.dumps(tools, ensure_ascii=False))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("工具表序列化失败(退回按条数估算): %s", exc)
+        return 0
+    return count_tokens(chars_or_text=chars)
+
+
+def count_tokens(chars_or_text) -> int:
+    """把字符数(或一段文本)折成 token 数 —— 换算只此一处。
+
+    有真 tokenizer 就用真的(已加载的 llama.cpp 模型自带一个);没有就按
+    ``_CHARS_PER_TOKEN`` 折算。**分成两条路而不是只留估算**,是因为估算的方向性
+    后果不对称:估少了是静默截断,估多了只是多开一点上下文。
+    """
+    if isinstance(chars_or_text, str):
+        text, chars = chars_or_text, len(chars_or_text)
+        try:
+            from core.local_model_backends import tokenize_with_loaded_model  # noqa: PLC0415
+
+            real = tokenize_with_loaded_model(text)
+            if real > 0:
+                return real
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("真 tokenizer 不可用(按字符折算): %s", exc)
+    else:
+        chars = int(chars_or_text or 0)
+    return int(chars / _CHARS_PER_TOKEN)
 
 
 def assembled_token_demand() -> int:
@@ -79,9 +137,27 @@ def assembled_token_demand() -> int:
     result_chars = max(0, _env_int("GALAXY_TOOL_RESULT_MAX_CHARS", 4000))
     keep_rounds = max(0, _env_int("GALAXY_TOOL_PRUNE_KEEP_ROUNDS", 3))
 
-    tool_defs = tools * _TOKENS_PER_TOOL_DEF
-    tool_results = int(result_chars * keep_rounds / _CHARS_PER_TOKEN)
+    # 工具定义:先数真表,数不到才按条数估。真表可能比 GALAXY_TOOLS_MAX 多,
+    # 但装配时会被 slim_tools 裁到那个上限,所以取两者的小者才是真实装配量。
+    real_tool_tokens = _real_tool_table_tokens()
+    if real_tool_tokens > 0:
+        per_tool = max(1, real_tool_tokens // max(1, _tool_table_size()))
+        tool_defs = min(real_tool_tokens, tools * per_tool)
+    else:
+        tool_defs = tools * _TOKENS_PER_TOOL_DEF_FALLBACK
+
+    tool_results = count_tokens(chars_or_text=result_chars * keep_rounds)
     return int(tool_defs + tool_results + _TOKENS_BASELINE)
+
+
+def _tool_table_size() -> int:
+    """真实工具表有几条；拿不到返回 0。"""
+    try:
+        from core.skill_loader import skill_loader  # noqa: PLC0415
+
+        return len(skill_loader.list_as_mcp_tools() or [])
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def _core_markers() -> tuple:

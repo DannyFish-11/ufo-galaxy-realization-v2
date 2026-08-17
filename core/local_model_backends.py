@@ -219,6 +219,79 @@ class OllamaBackend(LocalModelBackend):
 # ---------------------------------------------------------------------------
 
 
+#: 已加载的 llama.cpp 实例 —— **只为数 token 用**，不是模型生命周期的权威。
+#:
+#: 生命周期归各后端自己的 ``_models``；这里存一份引用，是为了让
+#: :func:`core.context_trim.count_tokens` 能问到一个真 tokenizer，而不必为了数
+#: token 去现开一个模型。加载时登记、卸载时摘掉，两处都在 LlamaCppBackend 里。
+_LOADED_TOKENIZERS: Dict[str, Any] = {}
+
+
+def tokenize_with_loaded_model(text: str) -> int:
+    """用**已经加载的** llama.cpp 模型数这段文本折多少 token；数不了返回 0。
+
+    为什么只用已加载的、不去现开一个
+    ================================
+    这是给 :func:`core.context_trim.count_tokens` 用的:它要把"字符 → token"这个
+    换算从一个拍出来的常数(2.5)升级成真值。但**为了数 token 去加载一个模型是
+    本末倒置** —— 那要几秒到几十秒、要显存,而调用方只是想知道一个预算。
+
+    所以规矩是:手上现成有就用,没有就让调用方按常数折算。这也意味着**第一次启动
+    时用的是估算,之后用的是真值** —— 而这正好是对的,因为第一次启动时还没有模型
+    可问,而那时的估算只用来定一个下限。
+    """
+    if not text:
+        return 0
+    for llm in list(_LOADED_TOKENIZERS.values()):
+        try:
+            toks = llm.tokenize(text.encode("utf-8"))
+            if toks:
+                return len(toks)
+        except Exception:  # noqa: BLE001 — 换下一个，别为数 token 打挂调用方
+            continue
+    return 0
+
+
+def _read_free_vram_mb() -> int:
+    """当前可用显存(MB)；读不到返回 0。取数复用调度器那一处，不自己再读画像。"""
+    try:
+        from core.compute_scheduler import ComputeScheduler  # noqa: PLC0415
+
+        free_vram, _ram = ComputeScheduler.read_moe_inputs()
+        return int(free_vram or 0)
+    except Exception as exc:  # noqa: BLE001 — 量不到就是量不到，不影响加载
+        logger.debug("可用显存读取失败(跳过 KV 实测): %s", exc)
+        return 0
+
+
+def _record_kv_measurement(model_id: str, *, n_ctx: int, vram_before_mb: int) -> None:
+    """按"加载前后可用显存之差 − 权重驻留"算出这次 KV cache 的实际开销并记下。
+
+    这是 ``kv_mb_per_1k`` 唯一能被**量到**的地方 —— 那个数取决于层数、KV 头数、
+    头维度、KV 量化类型和具体的 llama.cpp 构建，没有谁能凭空写对。而模型只在
+    这里被加载一次，加载前后各读一次显存就能算出来。
+
+    全程 best-effort：量不到、算出来不可信、写不进去，都**不影响本次加载** ——
+    这一层的职责是"顺手量一下"，不是"必须量到"。
+    """
+    if vram_before_mb <= 0 or n_ctx <= 0:
+        return
+    try:
+        from core.context_measurements import record_kv_cost  # noqa: PLC0415
+        from core.model_catalog import exact_model  # noqa: PLC0415
+
+        after = _read_free_vram_mb()
+        if after <= 0:
+            return
+        spec = exact_model(model_id)
+        weights_mb = spec.runtime_mb() if spec is not None else 0
+        # 差值里除了 KV 还有权重本身；减掉目录记的驻留量，剩下的算 KV。
+        kv_mb = float(vram_before_mb - after - weights_mb)
+        record_kv_cost(model_id, n_ctx=n_ctx, kv_mb=kv_mb)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("KV 开销实测跳过(不影响加载): %s", exc)
+
+
 class LlamaCppBackend(LocalModelBackend):
     """llama-cpp-python backend -- direct GGUF loading
 
@@ -420,9 +493,16 @@ class LlamaCppBackend(LocalModelBackend):
                     n_gpu_layers,
                 )
 
+        # 加载**前**的可用显存 —— 与加载后的差值减去权重驻留，就是这次 n_ctx 的
+        # KV cache 实际吃掉多少。这是把 kv_mb_per_1k 从"没人能凭空写出的常数"变成
+        # 一次真实测量的唯一机会：模型只在这里被加载一次。
+        _vram_before = _read_free_vram_mb()
+
         try:
             llm = Llama(**llama_kwargs)
             self._models[model_id] = llm
+            _LOADED_TOKENIZERS[model_id] = llm
+            _record_kv_measurement(model_id, n_ctx=n_ctx, vram_before_mb=_vram_before)
             if _alloc is not None:
                 try:
                     from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
@@ -483,6 +563,7 @@ class LlamaCppBackend(LocalModelBackend):
     async def unload_model(self, model_id: str):
         if model_id in self._models:
             del self._models[model_id]
+            _LOADED_TOKENIZERS.pop(model_id, None)
             gc.collect()
             try:
                 import torch

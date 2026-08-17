@@ -200,6 +200,8 @@ _MODELS: Dict[str, ModelSpec] = {
         source="local",
         requires_gpu=False,
         size_mb_val=1800,
+        # Gemma 4 官方模型卡:E2B/E4B 上下文 128K。
+        max_ctx_val=131072,
     ),
     "gemma4:e4b": ModelSpec(
         "gemma4:e4b",
@@ -209,15 +211,18 @@ _MODELS: Dict[str, ModelSpec] = {
         source="local",
         requires_gpu=False,
         size_mb_val=3000,
+        max_ctx_val=131072,
     ),
     "gemma4:12b": ModelSpec(
         "gemma4:12b",
         "Gemma 4 · 12B",
-        "看 · 听(原生) · 工具 · 128K",
+        "看 · 听(原生) · 工具 · 256K",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
         source="local",
         requires_gpu=True,
         size_mb_val=8000,
+        # 12B 起是 256K(E2B/E4B 才是 128K)—— desc 里那句"128K"是旧的，一并改掉。
+        max_ctx_val=262144,
         is_default=True,
     ),
     "openbmb/minicpm-o4.5": ModelSpec(
@@ -230,6 +235,9 @@ _MODELS: Dict[str, ModelSpec] = {
         size_mb_val=6000,
         # 权重 6 GB,但视觉/音频编码器与语音解码器都要一起驻留 → 实测约 11 GB。
         runtime_mb_val=11000,
+        # 40960 —— 全模态模型里算短的,而且**比本仓库的装配上界还接近**。
+        # 它是这一批里唯一真正可能被上下文卡住的型号,不是"没人填过"的 4096。
+        max_ctx_val=40960,
     ),
     "qwen3.6:35b-a3b": ModelSpec(
         "qwen3.6:35b-a3b",
@@ -243,6 +251,9 @@ _MODELS: Dict[str, ModelSpec] = {
         size_mb_val=18000,
         runtime_mb_val=7300,
         is_moe=True,
+        # 原生 262144;YaRN 可外推到 ~1M,但外推档要显式开且质量有代价,
+        # 这里记**原生**上限 —— 目录填的是"不加特技就能吃多长"。
+        max_ctx_val=262144,
     ),
     "qwythos-9b-v2": ModelSpec(
         "qwythos-9b-v2",

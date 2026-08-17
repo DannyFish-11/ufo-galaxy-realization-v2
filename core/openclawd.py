@@ -8163,6 +8163,61 @@ class OpenClawd:
     # ReAct 工具调用循环
     # ========================================================================
 
+    def _compact_context_if_needed(self, messages: List[Dict]) -> int:
+        """会话长到占满窗口七成时，把远处的历史并进一条锚定摘要。返回压掉几条。
+
+        与上一步的机械修剪是两件事：修剪**丢**字节，这一步**压**信息。长会话里只丢
+        不压的后果是"断片" —— 第 5 轮定下的约束，第 40 轮时已经是 ``…[已修剪]``，
+        而系统这边一条错误都没有。
+
+        判据不在这里
+        ============
+        * 窗口有多大 → :meth:`ComputeScheduler.context_budget_for`（按机器算，同一套
+          代码在 24 GB 卡上十几万 token、9 GB 卡上两千，写死条数在两头都不对）；
+        * 什么时候压、怎么并 → :mod:`core.context_compaction`；
+        * 摘要怎么生成 → 走本实例现成的路由，**不新起一条推理路径**。
+
+        全程 best-effort：压不动就不压。宁可占着窗口，也不能因为压缩失败而丢内容。
+        """
+        try:
+            from core.compute_scheduler import get_compute_scheduler
+            from core.context_compaction import compact_messages, should_compact
+            from core.model_catalog import main_brain
+
+            tag = main_brain()
+            n_ctx, _why = get_compute_scheduler().context_budget_for(tag)
+            if not should_compact(messages, n_ctx):
+                return 0
+            return compact_messages(
+                messages,
+                self._summarize_for_compaction,
+                session_id=str(getattr(self, "_current_session_id", "") or ""),
+                # 持久层每轮都在收（task_memory / rag_memory 那条路），压缩这一步
+                # 不负责抢救 —— 见 context_compaction 模块文档"先落库再压缩"。
+                persisted_ok=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — 压缩失败绝不影响主流程
+            logger.debug("上下文压缩跳过(不影响本轮): %s", exc)
+            return 0
+
+    def _summarize_for_compaction(self, prior: str, fresh: str) -> str:
+        """把新的一段并进已有摘要 —— **锚定式**，不是拿全部历史重新生成一遍。
+
+        重新生成的问题是每次都在重新解释一遍旧内容，越压越漂；并进去的那条是累积的。
+        提示词里因此明确要求"保留既有内容，只补充新的"。
+        """
+        instruction = (
+            "你在维护一份会话的累积摘要。下面给出【已有摘要】和【新增对话】。\n"
+            "请输出更新后的摘要，要求：\n"
+            "1. **保留已有摘要里的全部结论、约束、用户偏好** —— 它们是之前压缩过的，原文已经没了；\n"
+            "2. 把【新增对话】里新出现的事实、决定、待办并进去；\n"
+            "3. 只输出摘要正文，不要解释你做了什么。\n\n"
+            f"【已有摘要】\n{prior or '(这是第一次压缩，尚无摘要)'}\n\n【新增对话】\n{fresh}"
+        )
+        router = self._get_router()
+        result = router.chat(instruction) if hasattr(router, "chat") else ""
+        return str(result or "")
+
     async def _react_loop(
         self,
         messages: List[Dict],
@@ -8249,6 +8304,13 @@ class OpenClawd:
                         logger.debug("ReAct 上下文修剪: %d 条早期工具结果换存根", _n_pruned)
                 except Exception:  # noqa: BLE001 — 修剪失败绝不影响主流程
                     pass
+
+                # 修剪只是**丢**；长会话还要**压**。上面那一步把老工具结果换成存根,
+                # 省了字节但信息真没了 —— 第 5 轮定下的约束聊到第 40 轮时已经是
+                # "…[已修剪]"。压缩层负责在丢之前把它并进一条锚定摘要，让远处的历史
+                # 变短而不是变没。触发点按**窗口占用比例**，窗口大小问调度器
+                # (同一套代码在 24 GB 卡上能开十几万 token，在 9 GB 卡上只有两千)。
+                self._compact_context_if_needed(messages)
 
                 # PR-3: Use chat_with_tools() which is defined on both UnifiedLLMRouter
                 # and MultiLLMRouter, ensuring the unified policy layer is applied
