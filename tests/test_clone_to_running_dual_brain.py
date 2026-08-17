@@ -101,8 +101,42 @@ class TestTheRecommenderKnowsEveryTier:
 
     def test_a_big_gpu_with_a_capable_runtime_gets_the_dual_tier(self, monkeypatch):
         monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
+        # 门槛是**带余量**的驻留量，不是驻留量本身（见 ms._TIER_ADMISSION_HEADROOM）。
+        # 这一条原来写的是 `need + 1000`，即"刚好装得下就该推" —— 那正是下面
+        # test_a_hair_of_headroom_is_not_enough 要否掉的语义。
+        assert ms.recommend_tier(True, ms.tier_admission_need_mb("C")) == "C"
+
+    def test_a_hair_of_headroom_is_not_enough(self, monkeypatch):
+        """刚好等于驻留量 = 一点余量都不留，这种机器不该被**推荐**到 C 档。
+
+        目录里的 ``runtime_mb`` 是个常数，实际占用随上下文长度、KV cache、显存碎片
+        浮动。卡在临界点上推荐一个档，等于把"不 OOM"押在这个常数的精度上。
+
+        只管**推荐**：用户自己在列表里选 C，一个档都不拦（下一条钉住这点）。
+        """
+        monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
         need = mc.tier_runtime_footprint_mb("C")
-        assert ms.recommend_tier(True, need + 1000) == "C"
+        assert ms.tier_admission_need_mb("C") > need, "余量没起作用"
+        assert ms.recommend_tier(True, need) == "B"
+
+    def test_the_headroom_only_gates_the_recommendation_never_the_choice(self, tmp_path, monkeypatch):
+        """余量拦的是"默认推给你"，不是"你不能选"。"""
+        monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+        monkeypatch.delenv("GALAXY_MODEL_TIER", raising=False)
+        monkeypatch.setattr(mc, "_STATE_FILE", tmp_path / "model_state.json")
+        assert mc.save_tier("C") == "qwen3.6:35b-a3b"
+        assert mc.load_tier() == "C"
+
+    def test_a_tier_whose_footprint_cannot_be_judged_is_never_recommended(self, monkeypatch):
+        """驻留量算不出来(档里有型号查不到精确目录条目) → 0。
+
+        0 是"判不了"，不是"不要钱"。放行等于拿一个**偏小**的门槛做准入，
+        必然把装不下的档推出去 —— 与 exact_model 拒绝家族兜底是同一条理由。
+        """
+        monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
+        real = mc.tier_runtime_footprint_range_mb
+        monkeypatch.setattr(mc, "tier_runtime_footprint_range_mb", lambda k="": (0, 0) if k == "C" else real(k))
+        assert ms.recommend_tier(True, 999999) != "C"
 
     def test_it_never_recommends_a_tier_this_machine_cannot_run(self, monkeypatch):
         """装得下 ≠ 跑得起来。
@@ -110,10 +144,22 @@ class TestTheRecommenderKnowsEveryTier:
         C 档推理位要 ``llama-cpp-python`` **且**要它做得到专家卸载。缺任何一条还推 C，
         就是把失败推迟到加载时 —— 而加载失败是被捕获、只写日志的，用户看到的会是
         "模型带不动"，不是"你还缺个依赖"。
+
+        落到 **D** 而不是 B：D 档推理位是稠密 9B，不欠专家卸载那张票。缺卸载能力时
+        用户仍然拿得到双模型形态，而不是一路跌回单模型 —— 这正是把两个推理位拆成
+        两个档（而不是同一槽位的两个候选）换来的：推荐器只能推档，推不了"档+候选"。
         """
         monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: key != "C")
         need = mc.tier_runtime_footprint_mb("C")
-        assert ms.recommend_tier(True, need + 100000) == "B"
+        assert ms.recommend_tier(True, need + 100000) == "D"
+
+    def test_the_heavier_dual_tier_wins_when_the_machine_can_actually_run_it(self, monkeypatch):
+        """反向：卸载能力齐备时，推的是 C（更强的那位），不是门槛更低的 D。
+
+        这一条钉的是 ``_TIER_KEYS`` 的顺序语义。把它改成字母序，C 就永远推不出去了。
+        """
+        monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)
+        assert ms.recommend_tier(True, ms.tier_admission_need_mb("C")) == "C"
 
     def test_a_small_gpu_is_not_pushed_into_the_dual_tier(self, monkeypatch):
         monkeypatch.setattr("core.runtime_readiness.tier_is_runnable", lambda key: True)

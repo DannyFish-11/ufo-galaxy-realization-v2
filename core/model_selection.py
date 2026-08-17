@@ -219,6 +219,22 @@ def save_choice(tag: str) -> None:
         os.environ["OLLAMA_MODEL"] = tag
 
 
+#: 推荐档位要留的余量比例。
+#:
+#: 目录里的 ``runtime_mb`` 是一个**常数**，实际占用随上下文长度、KV cache、显存
+#: 碎片浮动。把推荐卡在"刚好装得下"上，等于把"不 OOM"这件事押在这个常数的精度上。
+#:
+#: 为什么不用"悲观值"当门槛：C 档乐观 18.3 GB / 悲观 29 GB，那 10.7 GB 的差全部
+#: 来自专家卸载这一个假设 —— 而**那个假设是被单独验过的**
+#: (:func:`core.runtime_readiness.tier_is_runnable` 会问 ``moe_offload_supported``，
+#: 支持不了这一档根本进不到这里)。拿悲观值当门槛就是把同一个风险收两遍税，
+#: 结果是 24 GB 的卡永远推不到 C 档。这里的余量只覆盖**验不掉的那部分**：估算漂移。
+#:
+#: 只作用于**推荐**。用户自己在列表里选，一个档都不拦 —— 与本模块一贯的
+#: "想要的人仍然选得到，只是不默认推"一致。
+_TIER_ADMISSION_HEADROOM = 0.12
+
+
 def _tier_runtime_need_mb(tier_key: str) -> int:
     """这一档**同时在岗**的几位加起来要多少加速器内存 —— 判据取自目录唯一那处。"""
     try:
@@ -227,6 +243,15 @@ def _tier_runtime_need_mb(tier_key: str) -> int:
         return int(tier_runtime_footprint_mb(tier_key) or 0)
     except Exception:  # noqa: BLE001
         return 0
+
+
+def tier_admission_need_mb(tier_key: str) -> int:
+    """推荐这一档**至少**要多少加速器内存 —— 驻留量 + 余量，判不了返回 0。
+
+    与 :func:`_tier_runtime_need_mb` 的差别就是那道余量，见 ``_TIER_ADMISSION_HEADROOM``。
+    """
+    need = _tier_runtime_need_mb(tier_key)
+    return int(need * (1 + _TIER_ADMISSION_HEADROOM)) if need else 0
 
 
 def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None) -> str:
@@ -247,6 +272,10 @@ def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None)
     第 1 条是**有意偏保守**的：复合档的几位可能落在不同加速器上(C 档感知位走核显、
     推理位走独显)，这里却拿总和去比单个 ``max_model_size_mb``。宁可少推一档，也不
     推一个开机就 OOM 的档 —— 想要的人在列表里仍然选得到，只是不默认推。
+
+    同样出于这条，"装得下"要求的是**带余量**装得下(:func:`tier_admission_need_mb`)，
+    不是刚好装得下：目录里的驻留量是个常数，实际占用是浮动的，卡在临界点上推荐一个
+    档，等于把"不 OOM"押在这个常数的精度上。
     """
     if has_gpu is None or max_mb is None:
         _mb, _gpu, _ = get_compute_summary()
@@ -259,9 +288,11 @@ def recommend_tier(has_gpu: Optional[bool] = None, max_mb: Optional[int] = None)
         from core.runtime_readiness import tier_is_runnable
     except Exception:  # noqa: BLE001 — 目录/就绪度不可用时退回原来的两档判断
         return "B" if (max_mb and max_mb >= 6000) else "A"
-    # 从高到低找第一个"装得下且跑得起来"的档；A 档是无条件保底(纯 CPU 也能跑)。
+    # 从高到低找第一个"带余量装得下、且跑得起来"的档；A 档是无条件保底(纯 CPU 也能跑)。
     for key in reversed([k for k in tier_keys() if k != "A"]):
-        need = _tier_runtime_need_mb(key)
+        need = tier_admission_need_mb(key)
+        # need==0 是"这一档判不了"(档内有型号查不到精确的目录条目)，不是"不要钱"。
+        # 跳过而不是放行 —— 判不了就不推，见 tier_runtime_footprint_range_mb。
         if not need or not max_mb or max_mb < need:
             continue
         if tier_is_runnable(key):
@@ -298,6 +329,127 @@ def print_runtime_gaps(tier_key: str, *, prefix: str = "  ") -> List[Dict[str, s
     for line in format_gaps(gaps):
         print(f"{prefix}  {line}")
     return gaps
+
+
+def print_context_budget(tier_key: str, *, prefix: str = "  ") -> List[Dict[str, int]]:
+    """把这一档每一位的**上下文预算**打到终端上，返回 ``[{tag, n_ctx, demand}]``。
+
+    为什么这条要单独报、且**不能**并进 :func:`~core.runtime_readiness.slot_runtime_gaps`
+    =========================================================================
+    ``tier_is_runnable`` 就是 ``not slot_runtime_gaps(...)``。把"上下文装不下"塞进
+    缺口表，这一档就会被判成**跑不起来**，进而触发降档 —— 可上下文被截断和跑不起来
+    完全是两回事:模型照样跑，只是记不住那么多。拿前者去触发后者，等于用一次质量
+    下降换掉一整个档。
+
+    要报的是什么
+    ============
+    本仓库按自己配的预算(``GALAXY_TOOLS_MAX`` 个工具定义 + ``GALAXY_TOOL_PRUNE_KEEP_ROUNDS``
+    轮各 ``GALAXY_TOOL_RESULT_MAX_CHARS`` 字符的工具结果 + 系统提示)一次能装配到
+    上万 token，而没填过 ``max_ctx_val`` 的型号按 4096 装 —— **超出部分在 llama.cpp
+    那层静默截断**，用户看到的是"它怎么记不住前面说的"。这条就是把这件事说出来。
+    """
+    from core import cli_render as r
+
+    try:
+        from core.compute_scheduler import get_compute_scheduler
+        from core.context_trim import assembled_token_demand
+        from core.model_catalog import active_tags
+
+        sched = get_compute_scheduler()
+        demand = int(assembled_token_demand())
+        rows = [
+            {"tag": t, "n_ctx": int(sched.context_budget_for(t)[0]), "demand": demand} for t in active_tags(tier_key)
+        ]
+    except Exception as exc:  # noqa: BLE001 — 报不出来就安静退场，与 print_runtime_gaps 同
+        logger.debug("上下文预算不可评估: %s", exc)
+        return []
+
+    squeezed = [row for row in rows if row["n_ctx"] < row["demand"]]
+    if not squeezed:
+        return rows
+    print()
+    r.phase("上下文", f"{tier_key} 档有 {len(squeezed)} 位装不下本仓库的装配量 —— 超出部分会被静默截断", "warn")
+    for row in squeezed:
+        print(
+            f"{prefix}  {row['tag']}: 上下文 {row['n_ctx']} token < 装配上界 {row['demand']} token"
+            f"(差 {row['demand'] - row['n_ctx']})"
+        )
+    print(f"{prefix}  这个型号的真实上下文上限若大于 {rows[0]['n_ctx']}，给它填 max_ctx_val 即可放开。")
+    return rows
+
+
+def apply_effective_tier(*, prefix: str = "  ") -> str:
+    """把"这台机器现在跑得起来的档"落到**本进程运行时**上。
+
+    :func:`print_runtime_gaps` 补上了"缺口说得出来"，这里补的是缺口**说完之后要怎么办**。
+    在这之前两者是断的：存着 C 档的机器每次开机都打一行告警，然后照样去加载 C 档、
+    照样在推理位上抛 ``No module named 'llama_cpp'``、照样被 ``reconcile_tier``
+    捕获成一行日志。探针有、降级没有 —— 用户拿到的是一个看得见的告警加一个看不见的失败。
+
+    降级怎么落
+    ==========
+    只设进程内的 ``GALAXY_MODEL_TIER``，**不回写记录**。``load_tier()`` 的取值顺序
+    是"环境变量 > 记录 > 默认"，所以设上之后整条链(``active_tags`` / ``model_for_role``
+    / 常驻钉住 / 能力聚合)自动跟着降，而磁盘上存的仍然是用户选的那一档 —— 装回缺的
+    依赖、重启，就自动回到原档，不需要用户再去选一次。
+
+    ``OLLAMA_MODEL`` 要跟着改
+    =========================
+    它是"文本主脑"的派生量。降档后若不管它，C 档的推理位 tag 会留在环境里，
+    走它的文本请求全落到一个这一档根本不加载的模型上 —— 正是上一轮修过的那类
+    错位。改的判据问 :func:`~core.model_catalog.default_main_brain_for_tier`(唯一那处)，
+    且**只改目录内的 tag**：用户自己填的目录外自定义模型一律不动，与
+    :func:`~core.model_catalog.save_tier` "显式指定一律尊重"同一个立场。
+
+    Returns:
+        降到的那一档；**没降(或判不了)一律返回 ""**。调用方据此知道本次启动的
+        ``GALAXY_MODEL_TIER`` / ``OLLAMA_MODEL`` 是不是降级派生出来的 —— 派生值
+        不能回写记录，见 :func:`resolve_main_brain`。
+    """
+    from core import cli_render as r
+
+    try:
+        from core.model_catalog import (
+            default_main_brain_for_tier,
+            exact_model,
+            load_tier,
+            main_brain,
+            tier_models,
+            tier_runtime_footprint_range_mb,
+        )
+        from core.runtime_readiness import effective_tier, format_gaps, slot_runtime_gaps
+
+        want = load_tier()
+        eff = effective_tier(want)
+    except Exception as exc:  # noqa: BLE001 — 判不了就不降，理由见 effective_tier
+        logger.debug("有效档位不可评估(保持原档): %s", exc)
+        return ""
+    if not eff or eff == want:
+        return ""
+
+    os.environ["GALAXY_MODEL_TIER"] = eff
+    try:
+        current = main_brain()
+        # 只动"目录里认识、但不属于生效档"的那种；目录外的自定义模型不碰。
+        if current and exact_model(current) is not None and current not in {s.tag for s in tier_models(eff)}:
+            derived = default_main_brain_for_tier(eff)
+            if derived:
+                os.environ["OLLAMA_MODEL"] = derived
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("降档后主脑重派生跳过(档位已降): %s", exc)
+
+    print()
+    r.phase("档位", f"{want} 档在这台机器上跑不起来 —— 本次按 {eff} 档启动", "warn")
+    try:
+        for line in format_gaps(slot_runtime_gaps(want)):
+            print(f"{prefix}  {line}")
+        lo, hi = tier_runtime_footprint_range_mb(want)
+        if hi > lo:
+            print(f"{prefix}  ({want} 档的 {lo} MB 驻留量是按专家卸载生效算的；不生效时要 {hi} MB)")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("降档原因渲染跳过: %s", exc)
+    print(f"{prefix}  你选的仍然是 {want} 档，记录没有被改写：补齐上面缺的东西再启动，会自动回到 {want} 档。")
+    return eff
 
 
 def interactive_select() -> str:
@@ -361,6 +513,7 @@ def interactive_select() -> str:
         # 换档当场就把"这一位跑不起来"说出来 —— 不说的话用户要到加载失败才知道，
         # 而加载失败是被捕获、只写日志的(见 compute_scheduler.reconcile_tier)。
         print_runtime_gaps(tier_key)
+        print_context_budget(tier_key)
         return brain
 
     if not (sys.stdin and sys.stdin.isatty()):
@@ -553,23 +706,38 @@ def resolve_main_brain(interactive: bool = True) -> str:
     这里。缺口报告因此不能只挂在选档那一刻：选过一次 C 档之后，往后每次开机推理位
     照样加载失败、照样只写一行 DEBUG 日志、终端上照样一个字都没有。这里补上，让
     "少跑一个模型"这件事在**每次**启动时都说得出来。
+
+    降档要在这几条路**之前**做(:func:`apply_effective_tier`)：它可能改写
+    ``OLLAMA_MODEL``，而下面第一条路读的就是 ``OLLAMA_MODEL``。放在后面等于让这次
+    启动先按跑不起来的那一档把主脑定下来，降档就只剩一句空话。
     """
+    degraded = apply_effective_tier()
     env_model = os.environ.get("OLLAMA_MODEL", "").strip()
     if env_model:
-        save_choice(env_model)
-        print_runtime_gaps(_current_tier())
+        # 降级过就不回写：这一次的 OLLAMA_MODEL 可能是降档**派生**出来的，写回去
+        # 等于拿一次环境故障把用户存的选择永久改掉。降级本就只影响本进程，
+        # 记录该保持原样(见 apply_effective_tier)。
+        if not degraded:
+            save_choice(env_model)
+        _tier = _current_tier()
+        print_runtime_gaps(_tier)
+        print_context_budget(_tier)
         return env_model
     saved = load_choice()
     if saved:
         os.environ["OLLAMA_MODEL"] = saved
-        print_runtime_gaps(_current_tier())
+        _tier = _current_tier()
+        print_runtime_gaps(_tier)
+        print_context_budget(_tier)
         return saved
     # 交互路自己在选定当场就报过了(见 interactive_select._commit)，这里不重复。
     chosen = interactive_select() if interactive else recommend()
     if chosen:
         save_choice(chosen)
     if chosen and not interactive:
-        print_runtime_gaps(_current_tier())
+        _tier = _current_tier()
+        print_runtime_gaps(_tier)
+        print_context_budget(_tier)
     return chosen
 
 

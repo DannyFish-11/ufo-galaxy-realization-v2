@@ -153,6 +153,12 @@ class TestRegisterLoadedFailureIsLoud:
             def register_loaded(self, _alloc):
                 return None
 
+            def context_budget_for(self, _tag, profile=None, cfg=None):
+                # 桩调度器也得答得出上下文预算 —— 加载器现在会问它。答不出来
+                # 会走"退回兜底 + WARNING"那条路，这条用例就恰好被自己触发的
+                # 告警判红（而它要证的是"一切正常时不该有 WARNING"）。
+                return 8192, "桩"
+
         monkeypatch.setattr("core.compute_scheduler.get_compute_scheduler", lambda: _Sched())
 
         with caplog.at_level(logging.WARNING):

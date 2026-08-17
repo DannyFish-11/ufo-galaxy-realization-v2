@@ -84,6 +84,18 @@ HF_GGUF_CANDIDATES: Dict[str, List[str]] = {
         "unsloth/Qwen3-30B-A3B-GGUF",
         "bartowski/Qwen_Qwen3-30B-A3B-GGUF",
     ],
+    # D 档推理位。官方 GGUF 优先(用户选定 v2 —— 它的发布说明明确修了 looping);
+    # 再落到同一模型的初版,最后是它的底座 Qwen3.5-9B 系。与上面同一套写法:
+    # 存不存在一律由 find_gguf_file() 运行时用 HfApi 核实,猜错的自动跳过。
+    #
+    # 注意 Ollama 上那个 richardyoung/qwythos-9b-abliterated 是**去审查改版**,
+    # 与官方权重不是一个东西,故意不列进来 —— 回退不该悄悄把用户换成另一个模型。
+    "qwythos-9b-v2": [
+        "empero-ai/Qwythos-9B-v2-GGUF",
+        "empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF",
+        "Qwen/Qwen3.5-9B-GGUF",
+        "bartowski/Qwen_Qwen3.5-9B-GGUF",
+    ],
 }
 
 # CPU/轻量机器的默认下载体积预算（MB）；超过的候选文件直接跳过，避免下载几十 GB。

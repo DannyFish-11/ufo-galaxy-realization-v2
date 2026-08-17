@@ -1383,10 +1383,18 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "HuggingFace 模型拉不到时回落 Ollama（默认开）",
     },
     "GALAXY_OLLAMA_NUM_CTX": {
-        "default": "8192",
+        "default": "",
         "type": "number",
         "category": "behavior",
-        "description": "Ollama 上下文窗口大小(token · 默认 8192；调大更能记住长对话，也更吃显存)",
+        "description": (
+            "Ollama 上下文窗口大小(token · 留空=按实际装配量与显存自动定；" "填了则一律尊重，0=用模型默认)"
+        ),
+    },
+    "GALAXY_LLAMA_CTX": {
+        "default": "",
+        "type": "number",
+        "category": "behavior",
+        "description": ("llama.cpp 上下文窗口大小(token · 留空=按实际装配量与显存自动定；" "填了则一律尊重)"),
     },
     "GALAXY_OLLAMA_KEEP_ALIVE": {
         "default": "-1",

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -494,6 +495,81 @@ class ComputeScheduler:
         free_vram = int(getattr(max(gpus, key=lambda g: getattr(g, "free_vram_mb", 0)), "free_vram_mb", 0) or 0)
         avail_ram = int(getattr(getattr(profile, "cpu", None), "available_ram_mb", 0) or 0)
         return free_vram, avail_ram
+
+    def context_budget_for(self, tag: str, profile=None, cfg: Optional[SchedulerConfig] = None) -> Tuple[int, str]:
+        """这个型号在**这台机器**上，上下文该开多长 —— 返回 ``(n_ctx, 理由)``。
+
+        为什么这条判据必须在调度器里
+        ============================
+        ``n_ctx`` 原来是 ``LlamaCppBackend`` 里写死的 ``4096``。一个常数,同时冒充了
+        三件本该分别去问的事,而三个知道答案的人一个都没被问过:
+
+        1. **模型能吃多长** —— 目录(``ModelSpec.max_ctx``)。Qwythos-9B 能吃 1M,
+           被这个常数封在 4096;
+        2. **显存还能给 KV cache 多少** —— 本调度器(实测硬件,资源判断的唯一权威);
+        3. **这次实际要装多少** —— :func:`core.context_trim.assembled_token_demand`。
+
+        第 3 条尤其要命:按本仓库自己配的预算(24 个工具定义 + 3 轮各 4000 字符的
+        工具结果 + 系统提示)算出来是 **11168 token**,而分配的是 4096。**超出的部分
+        在 llama.cpp 那层被静默截断** —— 用户看到的是"它怎么记不住前面说的",不是
+        任何一条报错。装配端按字符裁、分配端按 token 分配,两个数从来没有一处核对过。
+
+        取数复用 :meth:`read_moe_inputs`,不自己再读一遍画像 —— 那正是上一轮出过
+        ``NameError`` 的地方(理由串里引用了一个已不存在的局部变量)。
+
+        Args:
+            tag:     型号 tag(要能在目录里精确查到,查不到按默认上限处理)。
+            profile: 硬件画像;``None`` 则现取。
+            cfg:     调度配置(默认取 ``self.config``)。
+
+        Returns:
+            ``(n_ctx, 理由)``。理由是给终端/日志看的一句话 —— 这个数是怎么来的、
+            被谁卡住的,必须说得出来,否则又是一个"底下压着假设"的数字。
+        """
+        from core.model_catalog import DEFAULT_MAX_CTX, MIN_CTX, exact_model  # noqa: PLC0415
+
+        cfg = cfg or self.config
+
+        # 显式指定一律尊重 —— 与目录里"显式指定的主脑一律尊重"同一个立场。
+        env_ctx = os.environ.get("GALAXY_LLAMA_CTX", "").strip()
+        if env_ctx.isdigit() and int(env_ctx) > 0:
+            return int(env_ctx), f"GALAXY_LLAMA_CTX 显式指定 {env_ctx}"
+
+        spec = exact_model(tag)
+        model_cap = spec.max_ctx() if spec is not None else DEFAULT_MAX_CTX
+
+        try:
+            from core.context_trim import assembled_token_demand  # noqa: PLC0415
+
+            demand = int(assembled_token_demand())
+        except Exception as exc:  # noqa: BLE001 — 需求算不出来就按模型上限,不猜
+            logger.debug("装配量不可评估(按模型上限): %s", exc)
+            demand = model_cap
+
+        want = max(MIN_CTX, min(demand, model_cap))
+        reason = f"本仓库装配上界 {demand} token"
+        if demand > model_cap:
+            # 说出来。这是真实的能力缺口:装的比模型吃得下的多,超出部分必被截断,
+            # 而截断在 llama.cpp 那层是无声的。给这个型号填 max_ctx_val 才是解法。
+            reason = f"装配上界 {demand} token **超过**该型号上限 {model_cap}，超出部分会被截断"
+
+        # 显存这一道只在**量过 KV 单价**时才收 —— 没量过就不敢拿显存去缩它,
+        # 那等于用一个编出来的分母去砍真实需求(见 ModelSpec.kv_mb_per_1k)。
+        kv_per_1k = spec.kv_mb_per_1k() if spec is not None else 0
+        if kv_per_1k > 0:
+            free_vram, _avail_ram = self.read_moe_inputs(profile)
+            resident = spec.runtime_mb() if spec is not None else 0
+            kv_budget_mb = free_vram * cfg.moe_vram_safety - resident
+            if kv_budget_mb > 0:
+                vram_cap = int(kv_budget_mb / kv_per_1k * 1024)
+                if vram_cap < want:
+                    return max(MIN_CTX, vram_cap), (
+                        f"显存只够 {vram_cap} token 的 KV cache" f"(可用 {free_vram} MB − 驻留 {resident} MB)，{reason}"
+                    )
+            else:
+                return MIN_CTX, f"权重驻留 {resident} MB 已吃满可用显存 {free_vram} MB，上下文压到下限"
+
+        return want, reason
 
     def _split_moe(
         self,

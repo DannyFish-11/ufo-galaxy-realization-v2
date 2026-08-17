@@ -232,6 +232,15 @@ class LlamaCppBackend(LocalModelBackend):
     def __init__(self):
         self._models: Dict[str, Any] = {}  # model_id -> Llama instance
         self._n_gpu_layers = -1  # auto (all layers on GPU)
+        #: 上下文长度的**兜底**值,不是判据。判据在
+        #: :meth:`core.compute_scheduler.ComputeScheduler.context_budget_for` ——
+        #: 它同时问目录(这个型号能吃多长)、调度器(显存还剩多少)和 context_trim
+        #: (本仓库一次最多装多少)。
+        #:
+        #: 这里原来是**唯一**的取值处,一个写死的 4096。而本仓库按自己配的预算
+        #: (24 个工具 + 3 轮各 4000 字符工具结果 + 系统提示)一次能装配到 11168
+        #: token —— 超出的 7000 多 token 在 llama.cpp 那层**静默截断**,表现是
+        #: "它记不住前面说的",不是任何一条报错。
         self._n_ctx = 4096
 
     async def generate(
@@ -375,10 +384,26 @@ class LlamaCppBackend(LocalModelBackend):
                 exc,
             )
 
+        # 上下文长度问调度器（它同时看目录上限、实测显存、本仓库的实际装配量）。
+        # 与 n_gpu_layers 同一个立场：**判据在调度器，这里只负责用**；调度器不可用
+        # 时退回 self._n_ctx 并**响亮**记录，而不是默默按 4096 装。
+        n_ctx = self._n_ctx
+        try:
+            from core.compute_scheduler import get_compute_scheduler
+
+            n_ctx, _ctx_reason = get_compute_scheduler().context_budget_for(model_id)
+            logger.info("上下文预算: %s → n_ctx=%s（%s）", model_id, n_ctx, _ctx_reason)
+        except Exception as _ctx_err:  # noqa: BLE001
+            logger.warning(
+                "上下文预算不可评估，退回兜底 n_ctx=%s —— 这台机器上下文没有按实际调整（%s）",
+                n_ctx,
+                _ctx_err,
+            )
+
         llama_kwargs: Dict[str, Any] = {
             "model_path": model_path,
             "n_gpu_layers": n_gpu_layers,
-            "n_ctx": self._n_ctx,
+            "n_ctx": n_ctx,
             "verbose": False,
         }
         if _alloc is not None and getattr(_alloc, "is_expert_offloaded", False):
