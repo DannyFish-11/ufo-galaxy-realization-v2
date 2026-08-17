@@ -60,6 +60,15 @@ _ROOT = PROJECT_ROOT / "runtime" / "context_archive"
 #:
 #: 这不是洁癖:会话 id 来自调用方，直接拿去拼路径就是一条目录穿越
 #: (``../../etc``)。归档写的是文件、读的也是文件，两头都要过这一关。
+#:
+#: **但白名单本身不够。** 这一条第一版就是只有白名单，而白名单里放行了 ``.`` ——
+#: 于是 ``../../etc/evil`` 因为斜杠被替换而失效(变成 ``.._.._etc_evil``)，
+#: **裸的 ``..`` 却原样穿过**:``_ROOT / ".."`` 就是归档根的父目录，也就是
+#: ``runtime/``。那意味着 ``drop_session("..")`` 会 ``rmtree`` 掉整个 ``runtime/``
+#: (模型状态、实测记录、全部会话归档)，而 ``drop_session(".")`` 会删掉所有人的归档。
+#:
+#: 教训是:**消毒之后必须再验一次落点**，不能靠"我把危险字符都替换掉了"这种推理 ——
+#: 那种推理漏掉的恰恰是不含危险字符的那几个(``.`` / ``..``)。落点检查见 :func:`_dir`。
 _SAFE = re.compile(r"[^0-9A-Za-z_.-]")
 
 #: ``query_memory`` 单次最多把多少字符的原文喂给提取调用。
@@ -75,8 +84,30 @@ def _safe(session_id: str) -> str:
 
 
 def _dir(session_id: str) -> Optional[Path]:
+    """这个会话的归档目录；**任何落不到归档根正下方的一律返回 ``None``**。
+
+    两道，缺一不可:
+
+    1. 字符白名单(:data:`_SAFE`)——挡掉斜杠、空字节之类；
+    2. **落点检查** —— 消毒之后再确认它确实是 ``_ROOT`` 的**直接子目录**。
+
+    第二道不是冗余。白名单放行了 ``.``，所以 ``..`` 能原样穿过第一道，而
+    ``_ROOT / ".."`` 就是归档根的父目录。只靠第一道的推理("危险字符都换掉了")
+    漏掉的正是这几个**不含危险字符**的输入。
+
+    用"父目录必须恰好是 ``_ROOT``"而不是 ``is_relative_to``:后者对 ``_ROOT`` 自身
+    也成立，而 ``drop_session(".")`` 落在 ``_ROOT`` 上就会删掉所有人的归档。
+    """
     sid = _safe(session_id)
-    return (_ROOT / sid) if sid else None
+    if not sid or sid.strip(".") == "":
+        return None
+    candidate = _ROOT / sid
+    try:
+        if candidate.resolve().parent != _ROOT.resolve():
+            return None
+    except OSError:  # 路径解析不了(权限/循环链接)就当它不合法
+        return None
+    return candidate
 
 
 def _entry_of(m: Dict[str, Any]) -> Dict[str, Any]:

@@ -308,3 +308,31 @@ class TestTheArchiveIsNotACache:
         cc.compact_messages(_long_session(), _summarizer(), session_id="../../outside/evil")
         assert list(outside.iterdir()) == [], f"写到归档根目录外面去了：{list(outside.iterdir())}"
         assert ca.list_segments("../../outside/evil"), "穿越被挡住了，但这一段也该正常归档（只是名字被消毒）"
+
+    def test_the_dangerous_ids_are_the_ones_without_dangerous_characters(self, tmp_path, monkeypatch):
+        """CodeQL 报出来的那一条 —— 而我自己那条穿越测试**测的是被挡住的那种**。
+
+        ``../../etc/evil`` 里的斜杠会被字符白名单换成 ``_``，所以它根本走不出去；
+        真正穿得过去的是**裸的 ``..``** —— 它一个危险字符都不含，白名单原样放行，
+        而 ``_ROOT / ".."`` 就是归档根的**父目录**：
+
+        * ``drop_session("..")``  → ``rmtree`` 掉整个 ``runtime/``（模型状态、实测
+          记录、所有人的归档）；
+        * ``drop_session(".")``   → 删掉所有会话的归档。
+
+        所以这一条钉的是**落点**，不是字符。
+        """
+        root = tmp_path / "nest" / "archive"
+        root.mkdir(parents=True)
+        sibling = tmp_path / "nest" / "must_survive"
+        sibling.mkdir()
+        monkeypatch.setattr(ca, "_ROOT", root)
+
+        for evil in ("..", ".", "...", "  ..  ", ""):
+            assert ca._dir(evil) is None, f"{evil!r} 落到了归档根外面/根自身：{ca._dir(evil)}"
+            assert ca.list_segments(evil) == []
+            assert ca.drop_session(evil) == 0, f"{evil!r} 触发了删除"
+            assert ca.archive_segment(evil, [{"role": "user", "content": "x"}], "s") is None
+
+        assert sibling.is_dir(), "归档根的兄弟目录被删了"
+        assert root.is_dir(), "归档根自己被删了"
