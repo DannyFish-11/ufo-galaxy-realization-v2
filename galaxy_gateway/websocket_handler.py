@@ -1143,6 +1143,18 @@ async def handle_device_perception_emission(connection_id: str, aip_msg):
         # 此前还取了 local_perception_payload 却从不使用。全仓只有那一处、无生产者也无
         # schema，猜字段名等于静默丢数据，故先去掉；待 Android 侧定型后照上面两行接入。
 
+        # 结构化界面快照(Stage C)：设备带了才收，字段默认不存在 → 与改造前逐字节相同。
+        # 收下它只是为了让服务端**看得见**手机屏幕；Android 的 grounding 归属仍在设备本地
+        # (core/perception_grounding.py POLICY_1)，绝不用它去覆盖设备端已经做出的裁决。
+        _ui_snapshot = payload.get("ui_snapshot_payload")
+        if _ui_snapshot:
+            try:
+                from core.android_ui_snapshot import absorb_snapshot_payload
+
+                absorb_snapshot_payload(_ui_snapshot, device_id=device_id)
+            except Exception as _snap_err:  # noqa: BLE001 — 上行不因一个可选载荷而中断
+                logger.debug("a11y 快照吸收跳过: %s", _snap_err)
+
         # 组装可读文本语义（只取有信息量的字段）
         parts = []
         kind = _g(payload, "emission_kind")
