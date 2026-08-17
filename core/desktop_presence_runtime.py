@@ -209,6 +209,9 @@ class RuntimeSession:
         self.manifest_hook: Optional[Any] = None
         self.liminal_activity: str = "none"
         self.simulation_summary: Optional[Dict[str, Any]] = None
+        # 表达期的内容：这一轮用什么手法动手（``HybridExecutionDecision.to_dict()``）。
+        # 由 core.liminal_activity.note_hybrid_execution 登记，同样经 200ms tick 上行。
+        self.hybrid_execution: Optional[Dict[str, Any]] = None
 
     # ------------------------------------------------------------------
     # State helpers
@@ -246,6 +249,15 @@ class RuntimeSession:
         self.liminal_activity = activity
         if summary is not None:
             self.simulation_summary = summary
+
+    def enter_hybrid_execution(self, decision: Dict[str, Any]) -> None:
+        """登记本轮的混合执行模式决策。
+
+        与 :meth:`enter_liminal_activity` 不同，这里**不校验相位**：模式是在真正
+        落手之前选的，那一瞬相位可能还是 LIMINAL、也可能已进 MANIFEST（流式与
+        非流式的 ``commit_to_manifest`` 时机不同）。加一条会误报的 warning 比不加更糟。
+        """
+        self.hybrid_execution = decision
 
     @staticmethod
     def _build_chain_views() -> Dict[str, Any]:
@@ -290,6 +302,10 @@ class RuntimeSession:
         if new_state is TriState.SILENT:
             self.liminal_activity = "none"
             self.simulation_summary = None
+            # 执行手法同属「这一次请求」的内容，与摘要同期归零：下一轮换了目标应用，
+            # 上一轮选的模式对它没有意义。它与会话级累计的执行链视图不同 ——
+            # 那两条不清（见在场桥 _on_phase_silent 的注释）。
+            self.hybrid_execution = None
         elif new_state is TriState.MANIFEST:
             self.liminal_activity = "none"
         elif new_state is TriState.LIMINAL:
@@ -470,6 +486,10 @@ class RuntimeSession:
                 _chain_views = self._build_chain_views()
                 if _chain_views:
                     _payload.update(_chain_views)
+                # 表达期用什么手法。与摘要同样「有值才带」：没带 ≠ 带了个空的，
+                # 下游据此区分「这一拍没说」与「本轮还没选」。
+                if self.hybrid_execution is not None:
+                    _payload["hybrid_execution"] = self.hybrid_execution
                 _emit(
                     "continuum.state",
                     source="desktop_presence_runtime",

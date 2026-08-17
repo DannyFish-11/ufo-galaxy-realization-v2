@@ -413,6 +413,51 @@ class HybridExecutionArbiter:
         # registry so it participates in restart-aware lifecycle tracking.
         # The record survives process restart; live transport handles do not.
         # ------------------------------------------------------------------
+        # 用什么手法动手 —— 由策略引擎决定，不再写死。
+        #
+        # ``core/hybrid_execution_policy.py`` 存在的全部意义就是把这件事从隐式的
+        # 「永远走 A2A→GUI→VLM」变成显式的、带理由的选择。但它此前**零生产调用方**：
+        # 这里的 mode 是一个字面量 ``"sequential_degrade"``，策略引擎从没被调用过，
+        # 于是系统既没在选，也就无从说自己选了什么。
+        #
+        # 上下文全部来自本方法已经有的东西，不新增任何探测：目标应用/动作/设备来自
+        # 入参，三级可用性来自能力注册表算出的优先序列（那也正是下面 ``levels``
+        # 的来源），``force_mode`` 由调用方的 ``force_level`` 直接映射。
+        # 调用方点名了级别（``force_level``）时**不做也不报告**模式选择：那条路径
+        # ``levels = [force_level]``，只跑这一级、根本不降级，而现有取值域里没有一个
+        # 能如实描述它 —— ``local_preferred`` 的定义是"优先本地、失败再退远端 VLM"，
+        # 拿它来标注一个不降级的执行就是写一条假的。宁可如实说"本轮没有发生模式选择"。
+        _hybrid_decision: Optional[Dict[str, Any]] = None
+        _mode = "sequential_degrade"
+        if not force_level:
+            try:
+                from core.hybrid_execution_policy import evaluate_hybrid_execution_mode
+
+                _level_values = {getattr(lv, "value", str(lv)) for lv in self.registry.get_preferred_levels(app_id)}
+                _decision = evaluate_hybrid_execution_mode(
+                    {
+                        "app_id": app_id,
+                        "action": action,
+                        "device_id": device_id,
+                        "has_a2a": "a2a" in _level_values,
+                        "has_gui": "gui" in _level_values,
+                        "has_vlm": "vlm" in _level_values,
+                    }
+                )
+                _hybrid_decision = _decision.to_dict()
+                _mode = _hybrid_decision["mode"]
+            except Exception as _pol_exc:  # noqa: BLE001 — 选型失败不该拖垮执行
+                logger.debug("hybrid_executor | policy_evaluate_skipped | %s", _pol_exc)
+
+        # 送给渲染层：第三态"它现在在用什么手法"此前没有任何数据来源。
+        # 不在请求里（直接调执行器、测试裸跑）时是空操作。
+        try:
+            from core.liminal_activity import note_hybrid_execution
+
+            note_hybrid_execution(_hybrid_decision)
+        except Exception as _note_exc:  # noqa: BLE001
+            logger.debug("hybrid_executor | hybrid_decision_note_skipped | %s", _note_exc)
+
         continuity_record = None
         try:
             from core.hybrid_orchestration_continuity import (
@@ -424,7 +469,7 @@ class HybridExecutionArbiter:
                 continuity_record = _registry.create_and_register(
                     session_id=session_id,
                     task_id=task_id,
-                    mode="sequential_degrade",
+                    mode=_mode,
                 )
                 _registry.transition(
                     continuity_record.execution_id,

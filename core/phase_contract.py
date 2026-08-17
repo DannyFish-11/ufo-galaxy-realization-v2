@@ -725,6 +725,34 @@ class HybridExecutionView:
         """尚未做出模式选择时的视图。"""
         return HybridExecutionView(is_decided=False, mode="none", reason="", confidence=0.0)
 
+    @staticmethod
+    def from_decision_dict(raw: Optional[Dict[str, Any]]) -> "HybridExecutionView":
+        """从 ``HybridExecutionDecision.to_dict()`` 收形。
+
+        ``raw`` 为空（本轮还没做过选择）时返回 :meth:`undecided`。
+        ``context_snapshot`` **刻意不带上线**：那是给审计用的完整上下文，
+        里面有 app_id / device_id 这些渲染层不需要、也不该顺手暴露的东西。
+        渲染要的只是「选了哪种、为什么、有多确定」。
+
+        模式取值域不在这里放宽：不认识的 mode 一律退回 ``none`` 并标记未决策 ——
+        前端的类型里根本没有那个字面量，放进去只会让它在 switch 里掉到 default。
+        """
+        if not isinstance(raw, dict) or not raw:
+            return HybridExecutionView.undecided()
+        mode = str(raw.get("mode", "") or "")
+        if mode not in HYBRID_EXECUTION_MODES or mode == "none":
+            return HybridExecutionView.undecided()
+        try:
+            confidence = _clamp(float(raw.get("confidence", 0.0) or 0.0), 0.0, 1.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        return HybridExecutionView(
+            is_decided=True,
+            mode=mode,
+            reason=str(raw.get("reason", "") or ""),
+            confidence=confidence,
+        )
+
 
 @dataclasses.dataclass(frozen=True)
 class WorldModelView:

@@ -174,6 +174,36 @@ class TestGroupBEmptyIsDistinguishable:
         live_but_empty = WorldModelView(is_wired=True, source="live", entity_count=0, entity_kinds=())
         assert wm != live_but_empty
 
+    def test_b04b_hybrid_from_decision_dict_round_trips(self) -> None:
+        v = HybridExecutionView.from_decision_dict(
+            {"mode": "parallel_race", "reason": "低延迟且两级都在", "confidence": 0.9}
+        )
+        assert (v.is_decided, v.mode, v.confidence) == (True, "parallel_race", 0.9)
+
+    def test_b04c_unknown_mode_is_refused_not_passed_through(self) -> None:
+        """前端的类型里没有那个字面量，放进去只会在 switch 里掉到 default。"""
+        for bad in ({"mode": "teleport"}, {"mode": "none"}, {"mode": ""}, {}, None):
+            v = HybridExecutionView.from_decision_dict(bad)  # type: ignore[arg-type]
+            assert (v.is_decided, v.mode) == (False, "none"), bad
+
+    def test_b04d_audit_snapshot_never_reaches_the_wire(self) -> None:
+        """``context_snapshot`` 是给审计的完整上下文，里面有 app_id / device_id。
+
+        渲染要的只是「选了哪种、为什么、有多确定」；顺手带上等于把目标应用和
+        设备标识暴露给渲染层。
+        """
+        import dataclasses
+
+        v = HybridExecutionView.from_decision_dict(
+            {
+                "mode": "staged_hybrid",
+                "reason": "r",
+                "confidence": 1.0,
+                "context_snapshot": {"app_id": "wechat", "device_id": "phone-1"},
+            }
+        )
+        assert "context_snapshot" not in {f.name for f in dataclasses.fields(v)}
+
     def test_b05_hybrid_undecided_is_not_a_decision(self) -> None:
         h = HybridExecutionView.undecided()
         assert h.is_decided is False
@@ -349,6 +379,36 @@ class TestGroupDBridgeWire:
         b._on_continuum_state({"liminal_activity": "thinking"})
         assert b._render_payload("liminal")["local_chain"]["total_executions"] == 9
 
+    def test_d08a_hybrid_decision_reaches_the_wire(self) -> None:
+        b = self._bridge()
+        b._on_continuum_state(
+            {
+                "hybrid_execution": {
+                    "mode": "staged_hybrid",
+                    "reason": "两个明确阶段",
+                    "confidence": 0.95,
+                    "context_snapshot": {"app_id": "wechat"},
+                }
+            }
+        )
+        d = b._render_payload("manifest")["hybrid_execution"]
+        assert d["is_decided"] is True
+        assert d["mode"] == "staged_hybrid"
+        assert "context_snapshot" not in d
+
+    async def test_d08b_hybrid_decision_clears_on_return_to_silent(self) -> None:
+        """换一轮请求就换了目标应用，上一轮选的手法对它没有意义。"""
+
+        async def _noop() -> None:
+            return None
+
+        b = self._bridge()
+        b._broadcast_state = _noop  # type: ignore[method-assign]
+        b._on_continuum_state({"hybrid_execution": {"mode": "parallel_race", "confidence": 0.9}})
+        assert b._render_payload("manifest")["hybrid_execution"]["is_decided"] is True
+        b._on_phase_silent({})
+        assert b._render_payload("static")["hybrid_execution"]["is_decided"] is False
+
     def test_d08_world_model_slot_is_on_the_wire_and_honest(self) -> None:
         d = self._bridge()._render_payload("liminal")
         assert d["world_model"] == {
@@ -366,6 +426,137 @@ class TestGroupDBridgeWire:
             {"local_chain": {"total_executions": 1, "canonical_chain_order": ["a"], "is_active": True}}
         )
         json.dumps(b._render_payload("manifest"))  # 元组没转 list 的话这里会炸
+
+
+# ---------------------------------------------------------------------------
+# F. 执行手法真的在被选
+# ---------------------------------------------------------------------------
+
+
+class TestGroupFHybridProducer:
+    """``core/hybrid_execution_policy.py`` 此前**零生产调用方**。
+
+    它的模块文档写着自己「被 HybridExecutionArbiter 消费」，而执行器里那一行是
+    字面量 ``mode="sequential_degrade"`` —— 策略引擎从没被调用过。于是系统既没在
+    选，也就无从说自己选了什么，第三态"用什么手法"没有任何数据来源。
+
+    本组钉的是：现在真的在选，而且选出来的东西真的到了渲染契约。
+    """
+
+    @staticmethod
+    def _session():
+        from core.desktop_presence_runtime import RuntimeSession, TriState
+
+        s = RuntimeSession("test")
+        s.advance(TriState.LIMINAL)
+        s.advance(TriState.MANIFEST)
+        return s
+
+    def test_f01_mode_is_no_longer_a_literal_in_the_executor(self) -> None:
+        import inspect
+
+        from core.hybrid_executor import HybridExecutionArbiter
+
+        src = inspect.getsource(HybridExecutionArbiter.execute)
+        assert 'mode="sequential_degrade"' not in src, "执行器又把模式写死了 —— 策略引擎再次变成摆设"
+        assert "evaluate_hybrid_execution_mode" in src, "执行器没有调用策略引擎"
+
+    async def test_f02_default_path_records_a_real_decision(self) -> None:
+        from core.hybrid_executor import get_hybrid_arbiter
+        from core.liminal_activity import bind_runtime_session, unbind_runtime_session
+
+        s = self._session()
+        tok = bind_runtime_session(s)
+        try:
+            try:
+                await get_hybrid_arbiter().execute(
+                    device_id="linux-1", app_id="unregistered-app", action="noop", windows_arbiter=False
+                )
+            except Exception:  # noqa: BLE001 — 执行本身失败与否不影响选型是否发生
+                pass
+        finally:
+            unbind_runtime_session(tok)
+
+        assert s.hybrid_execution is not None, "执行走完了却没有登记任何选型"
+        v = HybridExecutionView.from_decision_dict(s.hybrid_execution)
+        assert v.is_decided is True
+        assert v.mode == "sequential_degrade"
+        assert v.reason, "选了却说不出为什么 —— 那和写死没有区别"
+
+    async def test_f03_pinned_level_reports_no_decision_rather_than_a_false_one(self) -> None:
+        """调用方点名级别时，如实说"本轮没有发生模式选择"。
+
+        那条路径是 ``levels = [force_level]`` —— 只跑这一级、根本不降级。现有取值域
+        里没有一个能如实描述它：``local_preferred`` 的定义是"优先本地、失败再退远端
+        VLM"，拿它标注一个不降级的执行就是写一条假的。宁可 undecided。
+        """
+        from core.hybrid_executor import ExecutionLevel, get_hybrid_arbiter
+        from core.liminal_activity import bind_runtime_session, unbind_runtime_session
+
+        s = self._session()
+        tok = bind_runtime_session(s)
+        try:
+            try:
+                await get_hybrid_arbiter().execute(
+                    device_id="linux-1",
+                    app_id="unregistered-app",
+                    action="noop",
+                    force_level=ExecutionLevel.GUI,
+                    windows_arbiter=False,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            unbind_runtime_session(tok)
+
+        assert s.hybrid_execution is None, "点名级别时不该编一个模式出来"
+        assert HybridExecutionView.from_decision_dict(s.hybrid_execution).is_decided is False
+
+    def test_f03b_local_preferred_still_means_it_falls_back(self) -> None:
+        """钉住上面那条判断所依赖的语义：``local_preferred`` 是**会**降级的。
+
+        哪天这个模式的定义改成"只走本地、不降级"，上面拒绝用它标注 force_level
+        的理由就不成立了 —— 那时该回来重新想，而不是让两处悄悄背离。
+        """
+        from core.hybrid_execution_policy import HybridExecutionMode
+
+        assert HybridExecutionMode.local_preferred.is_degrade_chain is True
+
+    async def test_f04_noting_outside_a_request_is_a_no_op_not_an_error(self) -> None:
+        """直接调执行器、测试裸跑时没有生命周期可挂 —— 不该因此报错。"""
+        from core.hybrid_executor import get_hybrid_arbiter
+
+        try:
+            await get_hybrid_arbiter().execute(
+                device_id="linux-1", app_id="unregistered-app", action="noop", windows_arbiter=False
+            )
+        except Exception:  # noqa: BLE001 — 执行失败允许，登记不该抛
+            pass
+
+    def test_f05_note_returns_false_when_unbound(self) -> None:
+        from core.liminal_activity import note_hybrid_execution
+
+        assert note_hybrid_execution({"mode": "parallel_race"}) is False
+        assert note_hybrid_execution(None) is False
+
+    def test_f06_session_clears_the_decision_on_return_to_silent(self) -> None:
+        from core.desktop_presence_runtime import TriState
+
+        s = self._session()
+        s.enter_hybrid_execution({"mode": "parallel_race"})
+        assert s.hybrid_execution is not None
+        s.advance(TriState.SILENT)
+        assert s.hybrid_execution is None
+
+    def test_f07_tick_payload_carries_it_only_when_present(self) -> None:
+        """有值才带 —— 没带 ≠ 带了个空的。下游据此区分「这一拍没说」与「还没选」。"""
+        import inspect
+
+        from core.desktop_presence_runtime import RuntimeSession
+
+        src = inspect.getsource(RuntimeSession._continuum_tick_loop)
+        assert "if self.hybrid_execution is not None:" in src
+        assert '_payload["hybrid_execution"] = self.hybrid_execution' in src
 
 
 # ---------------------------------------------------------------------------

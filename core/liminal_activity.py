@@ -47,6 +47,7 @@ __all__ = [
     "bind_runtime_session",
     "unbind_runtime_session",
     "note_liminal_activity",
+    "note_hybrid_execution",
     "in_deliberation_window",
     "commit_to_manifest",
 ]
@@ -107,6 +108,42 @@ def note_liminal_activity(activity: str, summary: Optional[Dict[str, Any]] = Non
         return True
     except Exception:  # noqa: BLE001 — 可见性绝不该拖垮请求
         logger.debug("note_liminal_activity failed (non-fatal)", exc_info=True)
+        return False
+
+
+def note_hybrid_execution(decision: Optional[Dict[str, Any]]) -> bool:
+    """登记「这一轮用什么手法动手」。
+
+    与 :func:`note_liminal_activity` 共用同一条 contextvar 与同一条 200ms tick ——
+    放在本模块而不是另开一个，理由和 :func:`commit_to_manifest` 一样：本模块管的是
+    「相位与相位里的内容之间那根线」，表达期的内容同样属于它，名字里的 liminal 是
+    历史，不是边界。
+
+    Args:
+        decision: ``HybridExecutionDecision.to_dict()`` 的产物。``None`` 表示
+            不更新 —— 与「决策成了但内容为空」可区分。
+
+    Returns:
+        ``True`` 登记成功；``False`` 表示当前不在一次 ``handle_request`` 里
+        （直接调执行器、或测试里裸跑），此时没有生命周期可挂。
+
+    为什么不在这里校验相位
+    ----------------------
+    :func:`in_deliberation_window` 那种校验对预演成立（推演只在 LIMINAL 里有意义），
+    对执行手法**不成立**：模式是在真正落手之前选的，而落手前的那一瞬相位可能还是
+    LIMINAL、也可能已经进了 MANIFEST，取决于调用方是流式还是非流式。加一条会误报的
+    warning，比不加更糟。
+    """
+    if decision is None:
+        return False
+    session = _current_runtime_session.get()
+    if session is None:
+        return False
+    try:
+        session.enter_hybrid_execution(decision)
+        return True
+    except Exception:  # noqa: BLE001 — 可见性绝不该拖垮请求
+        logger.debug("note_hybrid_execution failed (non-fatal)", exc_info=True)
         return False
 
 

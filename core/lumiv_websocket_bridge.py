@@ -125,6 +125,11 @@ class GalaxyPresenceBridge:
     _local_chain: Optional[Dict[str, Any]] = None
     _cross_device_chain: Optional[Dict[str, Any]] = None
 
+    # 表达期的内容：这一轮用什么手法动手（HybridExecutionDecision.to_dict()）。
+    # 由 HybridExecutionArbiter.execute() 经策略引擎选出、note_hybrid_execution 登记，
+    # 走同一条 200ms tick 上来。
+    _hybrid_execution: Optional[Dict[str, Any]] = None
+
     # 主轴上一次**报出去**的档位。用于算 RenderPosture.transition_kind。
     #
     # 记的是「报出去的」而不是「事件里的原始相位」，因为这两者会不一致：说话地板
@@ -314,9 +319,7 @@ class GalaxyPresenceBridge:
             simulation=sim,
             local_chain=local,
             cross_device_chain=cross,
-            # 混合执行决策目前没有生产者把它送到这条链路上 —— 契约里给了位置，
-            # undecided() 与「决定了但没给理由」可区分，接上时只改这一行。
-            hybrid_execution=HybridExecutionView.undecided(),
+            hybrid_execution=HybridExecutionView.from_decision_dict(self._hybrid_execution),
         )
         self._previous_lifecycle = life
         return posture.to_dict()
@@ -363,6 +366,9 @@ class GalaxyPresenceBridge:
             cross = payload.get("cross_device_chain")
             if isinstance(cross, dict):
                 self._cross_device_chain = cross
+            hybrid = payload.get("hybrid_execution")
+            if isinstance(hybrid, dict):
+                self._hybrid_execution = hybrid
         except Exception:  # noqa: BLE001 — 可见性绝不该拖垮桥
             logger.debug("_on_continuum_state failed (non-fatal)", exc_info=True)
 
@@ -375,6 +381,8 @@ class GalaxyPresenceBridge:
         # 不在这清就会把上一次请求的候选路径一直挂到下一次请求。
         self._liminal_activity = "none"
         self._liminal_simulation = None
+        # 执行手法与推演摘要同期归零：下一轮换了目标应用，上一轮选的模式对它没有意义。
+        self._hybrid_execution = None
         # 两条执行链**刻意不清**。推演摘要是「这一次请求推演了什么」，随请求结束；
         # 执行链是会话级累计（总次数 / 规范次数 / 最近走到第几步），清掉会让静息期
         # 显示成「一次都没跑过」，而 tick 在 SILENT 已停、不会再送新值来纠正它。
