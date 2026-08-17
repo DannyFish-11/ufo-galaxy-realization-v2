@@ -200,6 +200,8 @@ _MODELS: Dict[str, ModelSpec] = {
         source="local",
         requires_gpu=False,
         size_mb_val=1800,
+        # Gemma 4 官方模型卡:E2B/E4B 上下文 128K。
+        max_ctx_val=131072,
     ),
     "gemma4:e4b": ModelSpec(
         "gemma4:e4b",
@@ -209,15 +211,18 @@ _MODELS: Dict[str, ModelSpec] = {
         source="local",
         requires_gpu=False,
         size_mb_val=3000,
+        max_ctx_val=131072,
     ),
     "gemma4:12b": ModelSpec(
         "gemma4:12b",
         "Gemma 4 · 12B",
-        "看 · 听(原生) · 工具 · 128K",
+        "看 · 听(原生) · 工具 · 256K",
         ModelCapability(vision=True, audio_in=True, audio_out=False, tools=True),
         source="local",
         requires_gpu=True,
         size_mb_val=8000,
+        # 12B 起是 256K(E2B/E4B 才是 128K)—— desc 里那句"128K"是旧的，一并改掉。
+        max_ctx_val=262144,
         is_default=True,
     ),
     "openbmb/minicpm-o4.5": ModelSpec(
@@ -230,6 +235,9 @@ _MODELS: Dict[str, ModelSpec] = {
         size_mb_val=6000,
         # 权重 6 GB,但视觉/音频编码器与语音解码器都要一起驻留 → 实测约 11 GB。
         runtime_mb_val=11000,
+        # 40960 —— 全模态模型里算短的,而且**比本仓库的装配上界还接近**。
+        # 它是这一批里唯一真正可能被上下文卡住的型号,不是"没人填过"的 4096。
+        max_ctx_val=40960,
     ),
     "qwen3.6:35b-a3b": ModelSpec(
         "qwen3.6:35b-a3b",
@@ -243,6 +251,9 @@ _MODELS: Dict[str, ModelSpec] = {
         size_mb_val=18000,
         runtime_mb_val=7300,
         is_moe=True,
+        # 原生 262144;YaRN 可外推到 ~1M,但外推档要显式开且质量有代价,
+        # 这里记**原生**上限 —— 目录填的是"不加特技就能吃多长"。
+        max_ctx_val=262144,
     ),
     "qwythos-9b-v2": ModelSpec(
         "qwythos-9b-v2",
@@ -670,6 +681,65 @@ def tier_keys() -> List[str]:
     return list(_TIER_KEYS)
 
 
+#: 目录声明与磁盘实际差多少才算"对不上"。
+#:
+#: GGUF 的头部元数据、对齐填充之类会带来百分之几的出入,那不值得报;而换一档量化
+#: 是**几十个百分点**(Q4_K_M → Q8_0 差七成上下)。15% 落在这两者之间,报出来的
+#: 一定是后者。
+_WEIGHT_DIVERGENCE_TOLERANCE = 0.15
+
+#: 已经就哪些 tag 报过量化对不上 —— 这条判据在准入路径上，每次刷新都会走一遍，
+#: 不去重就会把日志刷满，而刷满的日志和没有日志是一回事。
+_warned_weight_divergence: set = set()
+
+
+def effective_weight_mb(tag: str) -> int:
+    """这份权重到底多大(MB) —— **磁盘上的真文件优先，目录声明其次**。
+
+    为什么目录那一栏靠不住
+    ======================
+    ``size_mb_val`` 记的是**某一档量化下**的体积,而目录里没有地方写"哪一档"——
+    只有注释里一句"按 Q4_K_M 记"。用户换成 Q8_0(约 +70%)或直接用 bf16 原始权重
+    (约 3 倍),目录一个字都不会变。于是准入判"放得下"、加载到一半 OOM,而报错在
+    加载**途中**不在准入处 —— 现场看到的是"模型带不动",看不出是量化对不上。
+
+    而这件事**根本不需要猜**:权重文件就在磁盘上,``stat`` 一下就是真值,不需要
+    联网、不需要加载。目录那一栏只在"还没下载"时才该说话 —— 那正好是它唯一
+    有用的场景(该不该下这一档)。
+
+    与 :mod:`core.context_measurements` 同一个立场:**声明的假设 vs 实际的事实,
+    事实优先**;差得远时**说出来**,而不是默默换掉 —— 差值本身就是"你换过量化"
+    这条信息。
+    """
+    spec = exact_model(tag)
+    declared = spec.size_mb() if spec is not None else 0
+    try:
+        from core.local_model_backends import on_disk_weight_mb  # noqa: PLC0415
+
+        real = on_disk_weight_mb(tag)
+    except Exception as exc:  # noqa: BLE001 — 查不到就按目录声明，不是错误
+        logger.debug("磁盘权重体积不可查(按目录声明): %s", exc)
+        return declared
+
+    if real <= 0:
+        return declared
+    if (
+        declared > 0
+        and abs(real - declared) > declared * _WEIGHT_DIVERGENCE_TOLERANCE
+        and tag not in _warned_weight_divergence
+    ):
+        _warned_weight_divergence.add(tag)
+        logger.warning(
+            "%s 的权重实际 %s MB，目录记的是 %s MB —— 多半是换了量化档。"
+            "准入按实际的 %s MB 算；目录那一栏(size_mb_val)该跟着改，否则下一个读它的人还会被误导。",
+            tag,
+            real,
+            declared,
+            real,
+        )
+    return real
+
+
 def tier_runtime_footprint_range_mb(tier_key: str = "") -> Tuple[int, int]:
     """这一档同时在岗的几位加起来占多少加速器内存 —— **(乐观, 悲观) 一对数**。
 
@@ -704,7 +774,10 @@ def tier_runtime_footprint_range_mb(tier_key: str = "") -> Tuple[int, int]:
             return (0, 0)
         resident = spec.runtime_mb()
         lo += resident
-        hi += max(resident, spec.size_mb())
+        # 悲观那一头问 effective_weight_mb 而不是 spec.size_mb():权重文件已经在
+        # 磁盘上时,它比目录里那条"按 Q4_K_M 记"的声明更可信 —— 而这一头正是
+        # "假设全不成立、按整权重要显存"的估计,拿一个量化对不上的数去估没有意义。
+        hi += max(resident, effective_weight_mb(spec.tag))
     return (lo, hi)
 
 

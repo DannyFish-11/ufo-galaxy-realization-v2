@@ -219,6 +219,205 @@ class OllamaBackend(LocalModelBackend):
 # ---------------------------------------------------------------------------
 
 
+#: 已加载的 llama.cpp 实例 —— **只为数 token 用**，不是模型生命周期的权威。
+#:
+#: 生命周期归各后端自己的 ``_models``；这里存一份引用，是为了让
+#: :func:`core.context_trim.count_tokens` 能问到一个真 tokenizer，而不必为了数
+#: token 去现开一个模型。加载时登记、卸载时摘掉，两处都在 LlamaCppBackend 里。
+_LOADED_TOKENIZERS: Dict[str, Any] = {}
+
+
+def tokenize_with_loaded_model(text: str) -> int:
+    """用**已经加载的** llama.cpp 模型数这段文本折多少 token；数不了返回 0。
+
+    为什么只用已加载的、不去现开一个
+    ================================
+    这是给 :func:`core.context_trim.count_tokens` 用的:它要把"字符 → token"这个
+    换算从一个拍出来的常数(2.5)升级成真值。但**为了数 token 去加载一个模型是
+    本末倒置** —— 那要几秒到几十秒、要显存,而调用方只是想知道一个预算。
+
+    所以规矩是:手上现成有就用,没有就让调用方按常数折算。这也意味着**第一次启动
+    时用的是估算,之后用的是真值** —— 而这正好是对的,因为第一次启动时还没有模型
+    可问,而那时的估算只用来定一个下限。
+    """
+    if not text:
+        return 0
+    for llm in list(_LOADED_TOKENIZERS.values()):
+        try:
+            toks = llm.tokenize(text.encode("utf-8"))
+            if toks:
+                return len(toks)
+        except Exception:  # noqa: BLE001 — 换下一个，别为数 token 打挂调用方
+            continue
+    return 0
+
+
+#: 只读词表的 llama.cpp 实例 —— 每个型号一个，``False`` 表示"这个型号试过，开不出来"。
+#:
+#: 负缓存和正缓存一样要紧:没有它,一个开不出词表的型号会在**每一次**数 token 时
+#: 重试一遍(而且是要读文件的那种重试)。
+_VOCAB_ONLY: Dict[str, Any] = {}
+
+
+def _vocab_only_tokenizer(tag: str) -> Any:
+    """给这个型号开一个**只读词表**的实例(不占显存、不读权重)；开不出来返回 ``None``。
+
+    为什么值得单开一条路
+    ====================
+    :func:`tokenize_with_loaded_model` 有一条硬约束:只用**已经加载的**模型,绝不为了
+    数 token 去加载一个 —— 那要几十秒、要显存。但这条约束带来一个鸡生蛋:决定
+    ``n_ctx`` 恰恰发生在**加载之前**,所以那一刻永远没有已加载的模型可问,只能按
+    ``_CHARS_PER_TOKEN`` 折算。于是"用真 tokenizer"这件事在最需要它的那一刻不生效。
+
+    ``vocab_only=True`` 正好破这个局:llama.cpp 支持只读 GGUF 里的词表段,**不分配
+    显存、不读权重张量**,开销是毫秒级的。拿它数出来的 token 数是真值,而代价与
+    "为了数 token 加载一个模型"完全不是一回事。
+
+    开不出来(没装 llama_cpp / 权重还没下载 / 这个构建不支持)就返回 ``None``,
+    调用方退回字符折算 —— 与本模块其余各处同一个立场:**拿不到就说拿不到**。
+    """
+    if not tag:
+        return None
+    if tag in _VOCAB_ONLY:
+        cached = _VOCAB_ONLY[tag]
+        return None if cached is False else cached
+
+    path = resolve_gguf_path(tag)
+    if not path:
+        _VOCAB_ONLY[tag] = False
+        return None
+    try:
+        from llama_cpp import Llama  # noqa: PLC0415
+
+        llm = Llama(model_path=path, vocab_only=True, verbose=False)
+    except Exception as exc:  # noqa: BLE001 — 开不出来就按没有,不影响任何主流程
+        logger.debug("只读词表实例开不出来(退回字符折算) tag=%s: %s", tag, exc)
+        _VOCAB_ONLY[tag] = False
+        return None
+    _VOCAB_ONLY[tag] = llm
+    logger.info("已为 %s 开只读词表实例 —— 加载模型之前也能数真 token 了", tag)
+    return llm
+
+
+def tokenize_with_vocab_only(text: str, tag: str) -> int:
+    """用**只读词表**的实例数这段文本折多少 token；数不了返回 0。
+
+    ``tokenize_with_loaded_model`` 的补位:那一条只在模型已加载时有效(对话进行中),
+    这一条在**加载之前**也有效(定 ``n_ctx`` 的那一刻)。两条都拿不到才折算。
+    """
+    if not text or not tag:
+        return 0
+    llm = _vocab_only_tokenizer(tag)
+    if llm is None:
+        return 0
+    try:
+        toks = llm.tokenize(text.encode("utf-8"))
+        return len(toks) if toks else 0
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("只读词表数 token 失败(退回字符折算): %s", exc)
+        return 0
+
+
+def resolve_gguf_path(model_id: str) -> Optional[str]:
+    """这个型号的 GGUF 权重文件在本机的哪儿；找不到返回 ``None``。
+
+    四条路依次试：直给的路径 → HF 下载登记表 → ``models/`` 下按目录名匹配 →
+    ``models/`` 下按文件名匹配。
+
+    **为什么是模块级函数而不是后端的方法**：这条规则有两个调用方，而其中一个
+    根本不该实例化后端 —— :func:`core.model_catalog.effective_weight_mb` 要在
+    **准入判断**那一刻问"这份权重到底多大"，那时候什么都还没加载。
+    """
+    if not model_id:
+        return None
+
+    # 1. Direct local path
+    if os.path.exists(model_id):
+        return model_id
+
+    # 2. Look up from HF Model Manager registry
+    try:
+        from core.huggingface_model_manager import get_hf_model_manager  # noqa: PLC0415
+
+        mgr = get_hf_model_manager()
+        entry = mgr.registry.get(model_id)
+        if entry and entry.is_gguf and os.path.exists(entry.local_path):
+            return entry.local_path
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("HF 登记表不可用(继续按目录找): %s", exc)
+
+    # 3./4. Search in models/ directory
+    models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+    if not os.path.isdir(models_dir):
+        return None
+    for root, _dirs, files in os.walk(models_dir):
+        for f in files:
+            if f.endswith(".gguf") and model_id.replace("/", "--") in root:
+                return os.path.join(root, f)
+    for root, _dirs, files in os.walk(models_dir):
+        for f in files:
+            if f.endswith(".gguf") and (model_id in f or f == model_id):
+                return os.path.join(root, f)
+
+    return None
+
+
+def on_disk_weight_mb(model_id: str) -> int:
+    """这份权重在**磁盘上**实际多大(MB)；文件不在本机返回 0。
+
+    这是把目录里 ``size_mb_val`` 那条"按 Q4_K_M 记"的假设变成可核对事实的地方 ——
+    不需要联网、不需要加载，权重文件本身就是真值。
+    """
+    path = resolve_gguf_path(model_id)
+    if not path:
+        return 0
+    try:
+        return max(1, int(os.path.getsize(path) / (1024 * 1024)))
+    except OSError as exc:
+        logger.debug("权重体积读取失败(按未下载处理): %s", exc)
+        return 0
+
+
+def _read_free_vram_mb() -> int:
+    """当前可用显存(MB)；读不到返回 0。取数复用调度器那一处，不自己再读画像。"""
+    try:
+        from core.compute_scheduler import ComputeScheduler  # noqa: PLC0415
+
+        free_vram, _ram = ComputeScheduler.read_moe_inputs()
+        return int(free_vram or 0)
+    except Exception as exc:  # noqa: BLE001 — 量不到就是量不到，不影响加载
+        logger.debug("可用显存读取失败(跳过 KV 实测): %s", exc)
+        return 0
+
+
+def _record_kv_measurement(model_id: str, *, n_ctx: int, vram_before_mb: int) -> None:
+    """按"加载前后可用显存之差 − 权重驻留"算出这次 KV cache 的实际开销并记下。
+
+    这是 ``kv_mb_per_1k`` 唯一能被**量到**的地方 —— 那个数取决于层数、KV 头数、
+    头维度、KV 量化类型和具体的 llama.cpp 构建，没有谁能凭空写对。而模型只在
+    这里被加载一次，加载前后各读一次显存就能算出来。
+
+    全程 best-effort：量不到、算出来不可信、写不进去，都**不影响本次加载** ——
+    这一层的职责是"顺手量一下"，不是"必须量到"。
+    """
+    if vram_before_mb <= 0 or n_ctx <= 0:
+        return
+    try:
+        from core.context_measurements import record_kv_cost  # noqa: PLC0415
+        from core.model_catalog import exact_model  # noqa: PLC0415
+
+        after = _read_free_vram_mb()
+        if after <= 0:
+            return
+        spec = exact_model(model_id)
+        weights_mb = spec.runtime_mb() if spec is not None else 0
+        # 差值里除了 KV 还有权重本身；减掉目录记的驻留量，剩下的算 KV。
+        kv_mb = float(vram_before_mb - after - weights_mb)
+        record_kv_cost(model_id, n_ctx=n_ctx, kv_mb=kv_mb)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("KV 开销实测跳过(不影响加载): %s", exc)
+
+
 class LlamaCppBackend(LocalModelBackend):
     """llama-cpp-python backend -- direct GGUF loading
 
@@ -420,9 +619,16 @@ class LlamaCppBackend(LocalModelBackend):
                     n_gpu_layers,
                 )
 
+        # 加载**前**的可用显存 —— 与加载后的差值减去权重驻留，就是这次 n_ctx 的
+        # KV cache 实际吃掉多少。这是把 kv_mb_per_1k 从"没人能凭空写出的常数"变成
+        # 一次真实测量的唯一机会：模型只在这里被加载一次。
+        _vram_before = _read_free_vram_mb()
+
         try:
             llm = Llama(**llama_kwargs)
             self._models[model_id] = llm
+            _LOADED_TOKENIZERS[model_id] = llm
+            _record_kv_measurement(model_id, n_ctx=n_ctx, vram_before_mb=_vram_before)
             if _alloc is not None:
                 try:
                     from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
@@ -448,41 +654,19 @@ class LlamaCppBackend(LocalModelBackend):
             return False
 
     def _resolve_model_path(self, model_id: str) -> Optional[str]:
-        """Resolve model path from various sources"""
-        # 1. Direct local path
-        if os.path.exists(model_id):
-            return model_id
+        """Resolve model path from various sources
 
-        # 2. Look up from HF Model Manager registry
-        try:
-            from core.huggingface_model_manager import get_hf_model_manager
-
-            mgr = get_hf_model_manager()
-            entry = mgr.registry.get(model_id)
-            if entry and entry.is_gguf and os.path.exists(entry.local_path):
-                return entry.local_path
-        except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
-
-        # 3. Search in models/ directory
-        models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
-        if os.path.isdir(models_dir):
-            for root, dirs, files in os.walk(models_dir):
-                for f in files:
-                    if f.endswith(".gguf") and model_id.replace("/", "--") in root:
-                        return os.path.join(root, f)
-
-        # 4. Check if model_id is a file name in models/
-        for root, dirs, files in os.walk(models_dir):
-            for f in files:
-                if f.endswith(".gguf") and (model_id in f or f == model_id):
-                    return os.path.join(root, f)
-
-        return None
+        判据在模块级的 :func:`resolve_gguf_path` —— 这里只是转发。抽出去是因为
+        **不加载模型也要问这个问题**:目录里那一栏权重体积压着"按 Q4_K_M 记"的
+        假设，而权重文件就在磁盘上，``stat`` 一下就是真值。要在准入那一刻问，
+        就不能只有实例方法拿得到这条规则(见 ``model_catalog.effective_weight_mb``)。
+        """
+        return resolve_gguf_path(model_id)
 
     async def unload_model(self, model_id: str):
         if model_id in self._models:
             del self._models[model_id]
+            _LOADED_TOKENIZERS.pop(model_id, None)
             gc.collect()
             try:
                 import torch

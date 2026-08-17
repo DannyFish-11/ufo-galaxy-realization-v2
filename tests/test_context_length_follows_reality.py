@@ -68,10 +68,20 @@ class TestTheSchedulerOwnsTheDecision:
         assert n_ctx > 4096, "能吃 1M 的型号仍被按 4096 装"
         assert n_ctx >= ct.assembled_token_demand()
 
-    def test_a_model_that_cannot_is_capped_at_its_own_limit(self):
-        """没填过 max_ctx_val 的型号按 DEFAULT_MAX_CTX 封顶 —— 行为与加这一栏之前一致。"""
-        n_ctx, why = cs.get_compute_scheduler().context_budget_for("gemma4:e2b")
-        assert n_ctx == mc.DEFAULT_MAX_CTX
+    def test_a_model_is_capped_at_its_own_limit(self, monkeypatch):
+        """上限比装配量还小的型号要被自己的上限封顶，并且**说出来**。
+
+        目录里现在每个型号都填了真实上限，且都大于装配量(那正是填它们的收益 ——
+        那条截断告警不再每次开机必响)。所以这条改用一个合成型号来验**机制**：
+        机制还在，只是现实里暂时没有型号触发它。
+        """
+        tiny = mc.ModelSpec(
+            "tiny-ctx", "上限很小的型号", "", mc.ModelCapability(tools=True), source="llama_cpp", max_ctx_val=4096
+        )
+        real = mc.exact_model
+        monkeypatch.setattr(mc, "exact_model", lambda t: tiny if t == "tiny-ctx" else real(t))
+        n_ctx, why = cs.get_compute_scheduler().context_budget_for("tiny-ctx")
+        assert n_ctx == 4096
         assert "超过" in why, "被自己的上限卡住了，却没在理由里说出来"
 
     def test_it_never_goes_below_the_floor(self, monkeypatch):
@@ -80,7 +90,7 @@ class TestTheSchedulerOwnsTheDecision:
         断言写死 2048 而**不是**写 ``>= mc.MIN_CTX`` —— 后者是自指的：把 MIN_CTX
         调成 1，那种写法照样绿。下限的值本身就是要钉的东西。
         """
-        monkeypatch.setattr(ct, "assembled_token_demand", lambda: 1)
+        monkeypatch.setattr(ct, "assembled_token_demand", lambda tag="": 1)
         n_ctx, _why = cs.get_compute_scheduler().context_budget_for("qwythos-9b-v2")
         assert mc.MIN_CTX == 2048, "下限被改了 —— 这是个判据，不是可随手调的旋钮"
         assert n_ctx == 2048
@@ -114,7 +124,10 @@ class TestVramOnlyNarrowsWhenTheCostIsKnown:
         spec = mc.exact_model("qwythos-9b-v2")
         assert spec.kv_mb_per_1k() == 0, "这条前提变了，本测试要重写"
         n_ctx, why = cs.get_compute_scheduler().context_budget_for("qwythos-9b-v2")
-        assert "显存" not in why and n_ctx == ct.assembled_token_demand()
+        # 断言的是**语义**(没被显存动过 = 恰好等于装配量)，不是理由串里有没有"显存"
+        # 这两个字 —— 那种写法太脆:理由现在会主动说明"KV 单价未知，不敢按显存放开"。
+        assert n_ctx == ct.assembled_token_demand()
+        assert "未知" in why
 
     def test_a_measured_model_is_narrowed_when_vram_is_tight(self, monkeypatch):
         """量过单价、且显存不够时，上下文要被压下来 —— 而且要说是被显存压的。"""
@@ -201,10 +214,26 @@ class TestBothLoadPathsAskTheSameAuthority:
 class TestTheGapIsSaidOutLoud:
     """装不下要说出来；但**不能**说成"跑不起来"。"""
 
-    def test_a_squeezed_model_is_reported_at_startup(self, capsys):
-        rows = ms.print_context_budget("B")  # B 档在岗的是没填 max_ctx 的 MiniCPM-o
+    def test_nothing_is_squeezed_now_that_the_real_limits_are_filled_in(self, capsys):
+        """填上真实上限之后，**不该再有型号被挤** —— 那条告警不再每次开机必响。
+
+        永远响的告警是噪音，而噪音会训练人忽略这个通道。这一条钉的就是"它安静了"。
+        """
+        rows = ms.print_context_budget("B")
         out = capsys.readouterr().out
-        assert rows and rows[0]["n_ctx"] < rows[0]["demand"]
+        assert rows and all(r["n_ctx"] >= r["demand"] for r in rows)
+        assert "截断" not in out, "还有型号装不下 —— 去把它的 max_ctx_val 填上"
+
+    def test_a_squeezed_model_would_still_be_reported(self, monkeypatch, capsys):
+        """反向：机制还在。上限真的不够时仍要打出来，并指出该填哪一栏。"""
+        real = mc.exact_model
+        tiny = mc.ModelSpec(
+            "tiny-ctx", "上限很小的型号", "", mc.ModelCapability(tools=True), source="llama_cpp", max_ctx_val=4096
+        )
+        monkeypatch.setattr(mc, "exact_model", lambda t: tiny if t == "tiny-ctx" else real(t))
+        monkeypatch.setattr(mc, "active_tags", lambda k="": ["tiny-ctx"])
+        ms.print_context_budget("B")
+        out = capsys.readouterr().out
         assert "截断" in out and "max_ctx_val" in out
 
     def test_a_roomy_model_prints_nothing(self, capsys):

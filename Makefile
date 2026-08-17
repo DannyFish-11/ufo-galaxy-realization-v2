@@ -8,6 +8,7 @@
 #   test:fast      — pytest smoke suite (-m "not slow"), fast CI gate
 #   contract       — protobuf stub generation + proto lint
 #   quick-verify   — run the 10-min local minimal-stack smoke script
+#   preflight      — run the blocking CI gates locally (mirrors ci.yml + guardrails.yml)
 #   governance     — run all CI governance checks locally (mirrors node-governance.yml)
 #   audit-regen    — regenerate docs/node_audit_report.json + docs/NODE_SYSTEM_AUDIT.md
 #   manifest-regen — regenerate docs/NODE_ACTIVE_MANIFEST.md from canonical sources
@@ -23,6 +24,7 @@
 #   make test:fast
 #   make contract
 #   make quick-verify
+#   make preflight
 #   make governance
 #   make audit-regen
 #   make manifest-regen
@@ -65,6 +67,7 @@ help:
 	@echo "  test:fast      Fast smoke tests (not slow)"
 	@echo "  contract       Generate protobuf stubs + proto lint"
 	@echo "  quick-verify   10-min local minimal-stack smoke"
+	@echo "  preflight      Run the blocking CI gates locally (推送前跑这个)"
 	@echo "  governance     Run all CI governance checks locally"
 	@echo "  ─────────────────────────────────────────────────────"
 	@echo "  audit-regen    Regenerate audit report + NODE_SYSTEM_AUDIT.md"
@@ -122,6 +125,49 @@ quick-verify:
 install-dev:
 	$(PIP) install -r requirements.txt -r requirements-dev.txt
 	@echo "✓ Dev dependencies installed."
+
+# ── Preflight (mirrors the blocking gates in ci.yml + guardrails.yml) ─────
+#
+# 为什么要有这个目标
+# ------------------
+# `make governance` 早就证明了这个模式管用 —— 它的注释写着 "mirrors the
+# node-governance CI workflow"，并且**照抄了 CI 的参数**（`--strict`）。
+# 缺的只是 ci.yml / guardrails.yml 那两组门的对应物。
+#
+# 缺的代价是实测出来的：一次改动连着三条 CI 红，三条全部是"本地跑法和 CI 不一样"：
+#
+#   1. `check_file_complexity.py` 不加 `--strict` 返回 0 —— 本地看着过了，CI 用
+#      `--strict`，三个文件越过基线；
+#   2. `check_completion_matrix.py` 同样漏了 `--strict`；
+#   3. 改了 panel/src 没重建 dist/ —— 这个门本地**根本没跑过**。
+#
+# 所以这里的规矩是：**参数必须与 CI 逐字一致**。少一个 `--strict`，这个目标就
+# 退化成"看着像跑过了"，比不跑更糟。改 CI 的时候请同步改这里。
+#
+# 不含四分片全量（那要十几分钟，见 `make test:fast` / scripts/ci_test_shard.py）。
+.PHONY: preflight
+preflight:
+	@echo "→ [1/4] 格式与静态检查（范围与 ci.yml 的 lint 作业一致）..."
+	$(PYTHON) -m flake8 core/ galaxy_gateway/ --max-line-length=120 --count --statistics
+	$(PYTHON) -m black --check core/ tests/ galaxy_gateway/
+	$(PYTHON) -m isort --check-only core/ tests/ galaxy_gateway/
+	@echo "→ [2/4] guardrails 门（**参数与 CI 逐字一致**）..."
+	$(PYTHON) scripts/check_file_complexity.py --strict
+	$(PYTHON) scripts/check_completion_matrix.py --strict
+	$(PYTHON) scripts/check_wiring.py --strict
+	$(PYTHON) scripts/check_reachability.py
+	$(PYTHON) scripts/check_import_boundaries.py
+	$(PYTHON) scripts/check_evidence_anchors.py
+	$(PYTHON) scripts/check_debt_freeze.py
+	$(PYTHON) scripts/check_legacy_regression.py --warn-only
+	$(PYTHON) scripts/check_mainline_routing_enforcement.py
+	$(PYTHON) scripts/check_repo_hygiene.py
+	$(PYTHON) scripts/validate_ports.py
+	@echo "→ [3/4] 面板构建产物与源码一致（panel-dist-consistency）..."
+	@bash scripts/check_panel_dist.sh
+	@echo "→ [4/4] 本次改动涉及的测试文件..."
+	@echo "   （跳过：全量请跑 scripts/ci_test_shard.py --shard N --of 4）"
+	@echo "✓ preflight 全过 —— 与 CI 的阻塞门同口径。"
 
 # ── Governance (mirrors the node-governance CI workflow) ──────────────────
 .PHONY: governance

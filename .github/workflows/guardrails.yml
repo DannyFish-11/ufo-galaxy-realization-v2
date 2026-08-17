@@ -250,10 +250,21 @@ jobs:
           python-version: "3.11"
 
       # 纯 AST 静态分析,不 import 任何业务模块,所以不需要装依赖。
-      - name: Check wiring (warning mode)
+      #
+      # **为什么带 --strict**:这一步原来不带,于是它只"报告"、从不判失败 ——
+      # 而这道闸的全部意义就是拦住新增的"实现了但没有任何调用方"的能力。
+      # 实际后果已经出过一次:上一个 PR 引入了 load_anchor(会话摘要跨重启取回),
+      # 写侧接了、读侧没接,这道闸**如实报了出来**,但 CI 照样全绿,于是那个功能
+      # 带着断掉的一半合了进去 —— 摘要存进磁盘、从来没读出来过,而且不报任何错。
+      #
+      # 一道只报告不拦截的闸,和它自己要防的那种"接了等于没接"是同一个毛病。
+      #
+      # --strict 只对**基线之外的新名字**判失败(见 config/wiring_baseline.json 的
+      # 说明):存量 763 条一条都不会让 CI 变红,这不是把历史债一次性变成阻塞。
+      - name: Check wiring (strict — new unwired capabilities fail the build)
         run: |
-          python scripts/check_wiring.py
-          echo "✅ Wiring check complete (warning mode)."
+          python scripts/check_wiring.py --strict
+          echo "✅ Wiring check complete (strict mode: no NEW unwired capabilities)."
 
   # ---------------------------------------------------------------------------
   # D. Architecture debt-freeze — Batch PR-1 guardrail

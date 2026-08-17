@@ -1390,6 +1390,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
             "Ollama 上下文窗口大小(token · 留空=按实际装配量与显存自动定；" "填了则一律尊重，0=用模型默认)"
         ),
     },
+    "GALAXY_IGNORE_CONTEXT_MEASUREMENTS": {
+        "default": "",
+        "type": "boolean",
+        "category": "behavior",
+        "description": ("忽略本机实测的 KV 单价(排障用 · 打开后上下文只按目录声明算，" "不再按实测放开)"),
+    },
     "GALAXY_LLAMA_CTX": {
         "default": "",
         "type": "number",
