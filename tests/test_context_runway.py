@@ -61,14 +61,22 @@ class TestTheBurnRateIsMeasured:
         """
         assert cr.burn_per_round([0, 100, 200, 5000, 5100]) == 4800
 
-    def test_a_compaction_dip_is_never_counted_as_burn(self):
+    def test_a_compaction_dip_never_drags_the_burn_rate_down(self):
         """**这条是最要紧的。**
 
-        压缩让占用大幅回落。把那个负差值算进烧率，烧率会被拉到接近 0，跑道变成
-        "还能跑很远"，于是**压完一次就再也不压了** —— 一个会自己失效的闭环。
+        压缩让占用大幅回落。如果那个负差值能把烧率拉低，烧率就会掉到接近 0、跑道
+        变成"还能跑很远"，于是**压完一次就再也不压了** —— 一个会自己失效的闭环。
+
+        挡住它的是 ``max``（负数压不过正数），**不是**那一层显式过滤 —— 反向验证时
+        把过滤拆掉，一条测试都不红。所以这里钉的是那个真正承重的性质：**回落前后，
+        烧率不变**。
         """
-        marks = [1000, 2000, 3000, 400, 1400]  # 第 4 个是压缩后的回落
-        assert cr.burn_per_round(marks) == 1000, "把压缩造成的回落算进烧率了"
+        before_dip = cr.burn_per_round([1000, 2000, 3000])
+        after_dip = cr.burn_per_round([1000, 2000, 3000, 400, 1400])  # 第 4 个是压缩后的回落
+        assert after_dip == before_dip == 1000, f"压缩回落把烧率从 {before_dip} 拉到了 {after_dip}"
+
+        # 极端一点：回落之后只走了一小步，烧率也不该塌
+        assert cr.burn_per_round([1000, 9000, 300, 400]) == 8000
 
     def test_it_forgets_old_rounds(self):
         """任务节奏会变（前半程读文件、后半程纯推理，差一个数量级）。"""
