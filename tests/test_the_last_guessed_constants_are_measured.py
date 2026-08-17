@@ -129,8 +129,9 @@ class TestItMeasuresTheHeadNotTheWholeAssembly:
         import core.openclawd as oc
 
         src = inspect.getsource(oc.OpenClawd._compact_context_if_needed)
-        assert "observe_system_head" in src, "系统头没人量"
-        assert src.index("observe_system_head") < src.index("should_compact")
+        # 同上：钉调用，不钉名字。import 行里也有这个名字。
+        assert "observe_system_head(messages)" in src, "系统头没人量"
+        assert src.index("observe_system_head(messages)") < src.index("should_compact(")
 
 
 # ─────────────────── ② 权重体积：磁盘上的真文件压过量化假设 ───────────────────
@@ -223,12 +224,30 @@ class TestARealTokenizerIsReachableBeforeTheModelLoads:
         src = inspect.getsource(cs.ComputeScheduler.context_budget_for)
         assert "assembled_token_demand(tag)" in src
 
-    def test_it_never_loads_weights_just_to_count(self):
-        """只读词表才是可接受的代价；读权重张量不是。"""
-        import inspect
+    def test_it_never_loads_weights_just_to_count(self, tmp_path, monkeypatch):
+        """只读词表才是可接受的代价；读权重张量不是。
 
-        src = inspect.getsource(lmb._vocab_only_tokenizer)
-        assert "vocab_only=True" in src
+        这条原来是 ``assert "vocab_only=True" in inspect.getsource(...)`` —— 而那个
+        字串在**函数自己的文档字符串里也有**，于是把真参数删掉之后它照样绿。
+        反向验证时抓到的：拿源码里有没有某个词做断言，钉住的是**文档**不是行为。
+        """
+        seen = {}
+
+        class _Spy:
+            def __init__(self, **kw):
+                seen.update(kw)
+
+            def tokenize(self, b):
+                return [1, 2, 3]
+
+        weights = tmp_path / "m.gguf"
+        weights.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(lmb, "resolve_gguf_path", lambda t: str(weights))
+        monkeypatch.setattr(lmb, "_VOCAB_ONLY", {})
+        monkeypatch.setitem(__import__("sys").modules, "llama_cpp", type("M", (), {"Llama": _Spy}))
+
+        assert lmb.tokenize_with_vocab_only("文本", "any-tag") == 3
+        assert seen.get("vocab_only") is True, f"开实例时没要求只读词表：{seen}"
 
 
 class TestAnUnevaluableDemandFallsBackDownNotUp:

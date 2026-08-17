@@ -193,8 +193,10 @@ class TestContinuityAcrossRestarts:
         import core.openclawd as oc
 
         src = inspect.getsource(oc.OpenClawd._compact_context_if_needed)
-        assert "restore_anchor" in src, "取回摘要这一步没人调 —— 跨重启连续性只做了写侧"
-        assert src.index("restore_anchor") < src.index("should_compact")
+        # 钉**调用**而不是钉名字：只钉名字的话，把调用换成 pass、import 行留着，
+        # 这条断言照样绿 —— 反向验证时就是这么发现它没用的。
+        assert "restore_anchor(messages" in src, "取回摘要这一步没人调 —— 跨重启连续性只做了写侧"
+        assert src.index("restore_anchor(messages") < src.index("should_compact(")
 
 
 class TestItIsWiredIntoTheLiveLoop:
