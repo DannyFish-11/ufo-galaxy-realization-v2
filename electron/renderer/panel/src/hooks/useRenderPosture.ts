@@ -35,7 +35,14 @@
  */
 import { useCallback, useState } from 'react';
 
-import type { RenderPosture } from '@/types/phase_contract.gen';
+import type {
+  ExecutionChainView,
+  HybridExecutionView,
+  PerceptionModality,
+  PerceptionView,
+  RenderPosture,
+  WorldModelView,
+} from '@/types/phase_contract.gen';
 import type { WebSocketMessage } from '@/types/phase';
 
 interface UseRenderPostureReturn {
@@ -63,11 +70,18 @@ interface UseRenderPostureReturn {
  */
 export const RENDER_POSTURE_FIELDS = [
   'lifecycle',
+  'previous_lifecycle',
+  'transition_kind',
   'continuum_phase',
   'is_returning',
   'next_phases',
   'liminal_activity',
   'simulation',
+  'local_chain',
+  'cross_device_chain',
+  'world_model',
+  'perception',
+  'hybrid_execution',
   'runtime_domain',
   'motion',
   'intensity',
@@ -96,6 +110,78 @@ export const RENDER_POSTURE_UNIT_FIELDS = [
   'retreat_tendency',
   'stability',
 ] as const;
+
+/**
+ * 后端 `ExecutionChainView.empty()` 的等价空态 —— 「这条链存在但还没跑过」。
+ *
+ * 与后端那份逐字段对应（`core/phase_contract.py`）。这里要有一份，是因为帧里
+ * 缺了这条链时下游仍需一个**语义正确**的对象：`is_active === false` 说的是
+ * 「还没跑过」，读到 `undefined` 说的是「不知道」，两者对渲染是两回事。
+ */
+export function _emptyChain(kind: 'local' | 'cross_device'): ExecutionChainView {
+  return {
+    kind,
+    is_active: false,
+    total_executions: 0,
+    canonical_executions: 0,
+    legacy_executions: 0,
+    chain_order: [],
+    last_step: null,
+    last_target: null,
+  };
+}
+
+/**
+ * 后端 `PerceptionView.unwired()` 的等价空态 —— 这个进程里没有感知库。
+ *
+ * 四条模态**恒定存在**（缺席的以 `unavailable` 出现），所以这里也必须给满四条：
+ * 渲染端要能把「这一侧不亮」画出来，而不是遍历一个长度会变的数组。
+ */
+const PERCEPTION_MODALITY_ORDER: PerceptionModality[] = [
+  'screen',
+  'camera',
+  'microphone',
+  'system_audio',
+];
+
+export const UNWIRED_PERCEPTION: PerceptionView = {
+  source: 'unwired',
+  is_sensing: false,
+  privacy_paused: false,
+  modalities: PERCEPTION_MODALITY_ORDER.map((modality) => ({
+    modality,
+    state: 'unavailable' as const,
+    signal_age_s: null,
+  })),
+  ambient_action: 'none',
+  ambient_rationale: '',
+};
+
+/** 后端 `WorldModelView.unwired()` 的等价空态 —— 世界模型这条链路还没建。 */
+export const UNWIRED_WORLD_MODEL: WorldModelView = {
+  is_wired: false,
+  source: 'unwired',
+  entity_count: 0,
+  entity_kinds: [],
+};
+
+/** 后端 `HybridExecutionView.undecided()` 的等价空态 —— 本轮还没选执行手法。 */
+export const UNDECIDED_HYBRID_EXECUTION: HybridExecutionView = {
+  is_decided: false,
+  mode: 'none',
+  reason: '',
+  confidence: 0,
+};
+
+/** 帧里这一格不是对象时换成给定空态。 */
+function _objOr<T>(raw: unknown, fallback: T): T {
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as T) : fallback;
+}
+
+/** 帧里这条链不是对象时换成对应种类的零态。 */
+function _chainOr(raw: unknown, kind: 'local' | 'cross_device'): ExecutionChainView {
+  return _objOr<ExecutionChainView>(raw, _emptyChain(kind));
+}
 
 /** 把 [0,1] 的连续量夹紧；后端理论上已经保证，但契约跨进程，别人发什么都可能。 */
 export function _clamp01(v: unknown): number {
@@ -135,6 +221,19 @@ export function _extractRenderPosture(
   normalised.next_phases = Array.isArray(rec.next_phases) ? rec.next_phases : [];
   normalised.is_returning = Boolean(rec.is_returning);
   normalised.degraded = Boolean(rec.degraded);
+  // 嵌套视图同样只做「形状可用」的兜底，不补内容：不是对象就换成后端契约里
+  // 那份**语义明确的空态**，而不是 `{}` —— `{}` 会让下游读到 undefined，
+  // 分不清「这条链还没跑过」和「这一帧没带这条链」。
+  normalised.local_chain = _chainOr(rec.local_chain, 'local');
+  normalised.cross_device_chain = _chainOr(rec.cross_device_chain, 'cross_device');
+  normalised.world_model = _objOr(rec.world_model, UNWIRED_WORLD_MODEL);
+  // 感知这一格额外校验 modalities 是不是数组：它是第一态唯一的视觉依据，
+  // 拿到一个非数组会让下游 .map 直接炸掉整个覆盖层。
+  const percept = _objOr<PerceptionView>(rec.perception, UNWIRED_PERCEPTION);
+  normalised.perception = Array.isArray(percept.modalities)
+    ? percept
+    : { ...percept, modalities: UNWIRED_PERCEPTION.modalities };
+  normalised.hybrid_execution = _objOr(rec.hybrid_execution, UNDECIDED_HYBRID_EXECUTION);
 
   return { posture: normalised as unknown as RenderPosture, missing: _missingFields(rec) };
 }

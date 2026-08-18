@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
-import { getBackendUrl } from '@/lib/api';
+import { apiUrl, getBackendUrl } from '@/lib/api';
 import './SettingsTab.css';
 
 // ── IPC API Interfaces ──────────────────────────────────────────────
@@ -74,7 +74,7 @@ const DEFAULT_BACKEND_BASE = 'http://localhost:9000';
 async function fetchSettings(): Promise<Record<string, ConfigItem>> {
   if (window.galaxyAPI?.getSettings) return window.galaxyAPI.getSettings();
   const base = await getBackendUrl();
-  const r = await fetch(`${base}/api/config/all`);
+  const r = await fetch(apiUrl(base, '/api/config/all'));
   if (!r.ok) throw new Error(`/api/config/all ${r.status}`);
   return r.json();
 }
@@ -111,7 +111,7 @@ async function fetchRoster(): Promise<NodeRoster | null> {
     // getBackendUrl() 是 async(返回 Promise)——之前直接插进模板字符串,URL 会变成
     // "http://[object Promise]/..." 导致请求必失败,节点名单永远卡在"加载中…"。
     const base = await getBackendUrl();
-    const r = await fetch(`${base}/api/v1/nodes/roster`);
+    const r = await fetch(apiUrl(base, '/api/v1/nodes/roster'));
     if (!r.ok) return null;
     return await r.json();
   } catch {
@@ -132,7 +132,7 @@ export interface ConnectorInfo {
 async function fetchConnectors(): Promise<ConnectorInfo[] | null> {
   try {
     const base = await getBackendUrl();
-    const r = await fetch(`${base}/api/v1/connectors`);
+    const r = await fetch(apiUrl(base, '/api/v1/connectors'));
     if (!r.ok) return null;
     const j = await r.json();
     return j.connectors ?? [];
@@ -656,7 +656,8 @@ export default function SettingsTab() {
   const connectService = useCallback(async (svc: string) => {
     const base = await getBackendUrl();
     const popup = window.open(
-      `${base}/api/v1/connectors/${svc}/authorize`, '_blank', 'width=560,height=720',
+      apiUrl(base, '/api/v1/connectors/{service}/authorize', { service: svc }),
+      '_blank', 'width=560,height=720',
     );
     // 授权页(用户在弹窗里登录、同意授权)耗时因人而异——之前固定 4 秒后刷新
     // 一次,手慢一点(读同意页/输密码)就赶不上,状态卡在"未连接"直到用户自己
@@ -687,7 +688,7 @@ export default function SettingsTab() {
   const disconnectService = useCallback(async (svc: string) => {
     try {
       const base = await getBackendUrl();
-      const r = await fetch(`${base}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
+      const r = await fetch(apiUrl(base, '/api/v1/connectors/{service}/disconnect', { service: svc }), { method: 'POST' });
       const body = await r.json().catch(() => ({}));
       if (!r.ok || body?.ok === false) {
         showToast(`${svc} 断开失败：${body?.error || `HTTP ${r.status}`}`);
@@ -702,7 +703,7 @@ export default function SettingsTab() {
   const saveConnCreds = useCallback(async (svc: string) => {
     try {
       const base = await getBackendUrl();
-      const r = await fetch(`${base}/api/v1/connectors/${svc}/credentials`, {
+      const r = await fetch(apiUrl(base, '/api/v1/connectors/{service}/credentials', { service: svc }), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_id: cid.trim(), client_secret: csecret.trim() }),
       });
@@ -790,7 +791,7 @@ export default function SettingsTab() {
             // 真 bug 修复:此前是裸 fetch('/api/config', ...)——相对路径解析到
             // 页面自身 origin 而非后端网关,浏览器预览模式下保存必然失败。
             const base = await getBackendUrl();
-            const r = await fetch(`${base}/api/config`, {
+            const r = await fetch(apiUrl(base, '/api/config'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ config: snapshot }),
@@ -841,7 +842,7 @@ export default function SettingsTab() {
     setProbeResults((prev) => ({ ...prev, [key]: { loading: true } }));
     try {
       const base = await getBackendUrl();
-      const r = await fetch(`${base}/api/config/probe`, {
+      const r = await fetch(apiUrl(base, '/api/config/probe'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keys: [key] }),
@@ -1029,7 +1030,7 @@ export default function SettingsTab() {
     try {
       const base = await getBackendUrl();
       await fetch(
-        `${base}/api/v1/nodes/${n.num}/${running ? 'stop' : 'start'}?mode=${nodeMode}`,
+        `${apiUrl(base, running ? '/api/v1/nodes/{node}/stop' : '/api/v1/nodes/{node}/start', { node: n.num })}?mode=${nodeMode}`,
         { method: 'POST' });
       const via = nodeMode === 'container' ? '(容器)' : '';
       showToast(`${running ? '停止' : '启动'}${via} #${n.num} ${n.name}…`);

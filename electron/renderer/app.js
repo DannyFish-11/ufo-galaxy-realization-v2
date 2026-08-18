@@ -22,7 +22,15 @@ class GalaxyRenderer {
     this.phase = 'static';
     // 后端每拍算出的连续量（塌缩/回撤倾向、稳定度）。拿不到就是 null，
     // presence_motion 会退回与改造前逐位一致的行为。见 core/phase_contract.py。
+    //
+    // posture 是**一维遗留投影**（PhasePosture，8 个字段），render 是**双轴忠实
+    // 契约**（RenderPosture）。后端每一帧两份都发，其源码注释写着「新代码应当
+    // 消费这一份（render）」。这里两份都收：运动学优先读 render（两者的三个连续量
+    // 由同一份 ContinuumState 导出，实测逐位相同，所以切源不改变任何观感），
+    // 而 render 里那些 posture 根本没有的东西 —— 副轴四相、is_returning、
+    // transition_kind、form_signature、两条执行链 —— 是重做动画时唯一的依据。
     this.posture = null;
+    this.render = null;
 
     // WebGL 是否可用；不可用时走 DOM 兜底渲染
     this.webglOK = false;
@@ -135,6 +143,11 @@ class GalaxyRenderer {
     if (payload.posture !== undefined) {
       this.posture = payload.posture;
     }
+    // 双轴忠实契约。老后端不发这个字段时保持 null，运动学自动退回读 posture，
+    // 行为与改造前逐位一致 —— 覆盖层绝不因为契约缺席而停摆。
+    if (payload.render !== undefined) {
+      this.render = payload.render;
+    }
     // OpenClawd 实时状态文本（后端动态生成）
     if (payload.status_text !== undefined) {
       // 可选：用于灵动岛显示
@@ -160,7 +173,10 @@ class GalaxyRenderer {
     const state = { depth: this.currentDepth, velocity: this.springV };
     PresenceMotion.advance(state, this.depth, dt, {
       intent: this.intent,
-      posture: this.posture,
+      // 优先忠实契约。运动学只用 collapse_tendency / retreat_tendency / stability
+      // 三项，两份姿态的这三项由同一份 ContinuumState 导出、实测逐位相同，所以
+      // 这一步是纯粹的换源：观感不变，但覆盖层从此不再依赖那份一维遗留投影。
+      posture: this.render || this.posture,
     });
     this.currentDepth = state.depth;
     this.springV = state.velocity;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getBackendUrl } from '@/lib/api';
+import { apiUrl, getBackendUrl } from '@/lib/api';
 
 /**
  * useModelCatalog — 档位模型目录 + 实时状态（去硬编码，单一真相源）
@@ -64,14 +64,14 @@ const STATUS_POLL_MS = 4000;
 
 async function fetchCatalog(): Promise<Catalog> {
   const base = await getBackendUrl();
-  const r = await fetch(`${base}/api/v1/models/catalog`);
+  const r = await fetch(apiUrl(base, '/api/v1/models/catalog'));
   if (!r.ok) throw new Error(`catalog ${r.status}`);
   return r.json();
 }
 
 async function fetchStatus(): Promise<Record<string, StatusEntry>> {
   const base = await getBackendUrl();
-  const r = await fetch(`${base}/api/v1/models/status`);
+  const r = await fetch(apiUrl(base, '/api/v1/models/status'));
   if (!r.ok) throw new Error(`status ${r.status}`);
   const j = await r.json();
   return j.models ?? {};
@@ -121,7 +121,7 @@ export function useModelCatalog() {
   // 选档：POST /tier → 立刻本地乐观更新 current_tier + 立即刷一次状态。
   const selectTier = useCallback(async (tier: string, mainBrain?: string) => {
     const base = await getBackendUrl();
-    const r = await fetch(`${base}/api/v1/models/tier`, {
+    const r = await fetch(apiUrl(base, '/api/v1/models/tier'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tier, main_brain: mainBrain ?? null }),

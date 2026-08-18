@@ -118,6 +118,31 @@ class GalaxyPresenceBridge:
     _liminal_activity: str = "none"
     _liminal_simulation: Optional[Dict[str, Any]] = None
 
+    # 阈限空间的另外两类内容：本机执行链 / 跨设备执行链。
+    # 与上面两项同一条 200ms tick 上来（RuntimeSession._build_chain_views 一直在产），
+    # 此前 _on_continuum_state 只取 liminal_activity / simulation，这两条就在那一步
+    # 被丢掉了 —— 数据一直有，只是没上线。
+    _local_chain: Optional[Dict[str, Any]] = None
+    _cross_device_chain: Optional[Dict[str, Any]] = None
+
+    # 表达期的内容：这一轮用什么手法动手（HybridExecutionDecision.to_dict()）。
+    # 由 HybridExecutionArbiter.execute() 经策略引擎选出、note_hybrid_execution 登记，
+    # 走同一条 200ms tick 上来。
+    _hybrid_execution: Optional[Dict[str, Any]] = None
+
+    # 主轴上一次**报出去**的档位。用于算 RenderPosture.transition_kind。
+    #
+    # 记的是「报出去的」而不是「事件里的原始相位」，因为这两者会不一致：说话地板
+    # 会把 static 报成 liminal（见 _broadcast_state）。若这里记原始相位、那边报
+    # 修正后的值，就会产生本文件已经栽过两次的那种自相矛盾帧
+    # （见 _posture_payload 与 _render_payload 的注释）。记报出去的那一份，
+    # 转移语汇与渲染端看到的相位始终在同一套词汇里。
+    #
+    # 于是 TTS 还在播时的 manifest → liminal 会被记成 handoff —— 这不是误标：
+    # 本文件的既有注释写着「说话即阈限在场」，那一段确实是执行完成后交接到阈限态
+    # 表达，随后才 dissolving 回静息。
+    _previous_lifecycle: Optional[str] = None
+
     # 桥接已启动
     _started: bool = False
 
@@ -235,8 +260,19 @@ class GalaxyPresenceBridge:
 
         阈限内容（在推演什么）来自 ``continuum.state`` tick 带上来的字段 ——
         那是 RuntimeSession 登记的，见 desktop_presence_runtime.note_liminal_activity。
+
+        本方法**有一处状态写入**：算完转移性质后把 :attr:`_previous_lifecycle` 推进
+        到本拍的主轴。放在这里而不是相位回调里，是因为这里才是「报出去的那一档」
+        最终定型的地方（说话地板在此之前已经生效）。同档位的重复广播会算出
+        ``transition_kind="none"``，不会把上一次真实转移误报成反复发生。
         """
-        from core.phase_contract import SimulationSummary, resolve_render_posture
+        from core.phase_contract import (
+            ExecutionChainView,
+            HybridExecutionView,
+            SimulationSummary,
+            resolve_perception_view,
+            resolve_render_posture,
+        )
 
         # 桥内部用 "static" 表示静息，契约主轴用 "silent"（TriState 的词汇）。
         life = "silent" if effective_phase == "static" else effective_phase
@@ -269,19 +305,54 @@ class GalaxyPresenceBridge:
                 step_count=int(raw.get("step_count", 0) or 0),
                 scenario_label=raw.get("scenario_label"),
             )
-        return resolve_render_posture(
+
+        # 执行链**不随相位裁剪**：推演是阈限期专属，但链条的推进恰恰发生在
+        # MANIFEST。只在阈限期带就等于把最该看的那一段截掉。上游 tick 出于同一
+        # 理由也没裁（见 _continuum_tick_loop 的注释）。
+        local = ExecutionChainView.from_view_dict("local", self._local_chain)
+        cross = ExecutionChainView.from_view_dict("cross_device", self._cross_device_chain)
+
+        # 第一态的主体。**不走 tick** —— 那条 200ms tick 在 SILENT 里是停的
+        # （见 desktop_presence_runtime._on_advance_tick），而感知最需要在场的那一相
+        # 正是它不跑的那一相。所以这里现取一次只读快照（实测 ~1.5 µs）。
+        #
+        # speaking 由桥自己持有（属主是 core.speech_output.set_ai_speaking），
+        # 传进去让契约把「朗读期的麦克风」判成 suppressed —— 那是反自激励，
+        # 后端本来就在这么做，这一步只是让渲染端也看得见，而不是留给它记规矩。
+        percept = resolve_perception_view(
+            speaking=bool(self._speaking),
+            ambient_action=self._ambient_action or "none",
+            ambient_rationale=self._ambient_rationale,
+        )
+
+        prev = self._previous_lifecycle
+        posture = resolve_render_posture(
             life,
+            previous_lifecycle=prev,
+            perception=percept,
             liminal_activity=activity,
             simulation=sim,
-        ).to_dict()
+            local_chain=local,
+            cross_device_chain=cross,
+            hybrid_execution=HybridExecutionView.from_decision_dict(self._hybrid_execution),
+        )
+        self._previous_lifecycle = life
+        return posture.to_dict()
 
     def _on_continuum_state(self, event: Any) -> None:
         """吸收 ``continuum.state`` tick 里的阈限内容。
 
-        只取 ``liminal_activity`` / ``simulation`` 两项。这条 tick 里的其它字段
-        （presence_intensity、coherence 等）刻意**不取**：它们的权威来源是
-        ContinuumState 本身，``RenderPosture`` 已经直接从那里读，从这里再抄一份
-        只会制造两个可能不一致的副本。
+        取四项：``liminal_activity`` / ``simulation`` / ``local_chain`` /
+        ``cross_device_chain`` —— 也就是阈限空间按
+        ``core/liminal_space_mapping.py`` 的定义所装的**全部三类内容**
+        （两条执行链 + 沙盘推演）加上「过渡里在干嘛」。
+
+        这条 tick 里的其它字段（presence_intensity、coherence 等）刻意**不取**：
+        它们的权威来源是 ContinuumState 本身，``RenderPosture`` 已经直接从那里读，
+        从这里再抄一份只会制造两个可能不一致的副本。
+
+        两条执行链此前也在这条 tick 上（``RuntimeSession._build_chain_views()``
+        每拍都在产），但这个回调只挑了两项，于是它们到此为止、从没上过线。
 
         摘要**不因缺席而清空**：tick 在纯思考期不带 simulation 字段，若那时把
         缓存抹掉，「刚才推演了哪几条候选」在进入表达期之前就消失了。真正的清空
@@ -301,6 +372,18 @@ class GalaxyPresenceBridge:
             sim = payload.get("simulation")
             if isinstance(sim, dict):
                 self._liminal_simulation = sim
+            # 执行链与摘要同样「不因缺席而清空」：零态本身是有意义的信号
+            # （「这条链还没跑过」），而缺席只表示这一拍没带上来。真正的清空
+            # 在 _on_phase_silent。
+            local = payload.get("local_chain")
+            if isinstance(local, dict):
+                self._local_chain = local
+            cross = payload.get("cross_device_chain")
+            if isinstance(cross, dict):
+                self._cross_device_chain = cross
+            hybrid = payload.get("hybrid_execution")
+            if isinstance(hybrid, dict):
+                self._hybrid_execution = hybrid
         except Exception:  # noqa: BLE001 — 可见性绝不该拖垮桥
             logger.debug("_on_continuum_state failed (non-fatal)", exc_info=True)
 
@@ -313,6 +396,11 @@ class GalaxyPresenceBridge:
         # 不在这清就会把上一次请求的候选路径一直挂到下一次请求。
         self._liminal_activity = "none"
         self._liminal_simulation = None
+        # 执行手法与推演摘要同期归零：下一轮换了目标应用，上一轮选的模式对它没有意义。
+        self._hybrid_execution = None
+        # 两条执行链**刻意不清**。推演摘要是「这一次请求推演了什么」，随请求结束；
+        # 执行链是会话级累计（总次数 / 规范次数 / 最近走到第几步），清掉会让静息期
+        # 显示成「一次都没跑过」，而 tick 在 SILENT 已停、不会再送新值来纠正它。
         _bt = asyncio.create_task(self._broadcast_state())
         _BACKGROUND_TASKS.add(_bt)
         _bt.add_done_callback(_BACKGROUND_TASKS.discard)
