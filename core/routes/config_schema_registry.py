@@ -1390,6 +1390,18 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
             "Ollama 上下文窗口大小(token · 留空=按实际装配量与显存自动定；" "填了则一律尊重，0=用模型默认)"
         ),
     },
+    "GALAXY_CONTEXT_ARCHIVE_MAX_MB": {
+        "default": "",
+        "type": "number",
+        "category": "behavior",
+        "description": ("上下文归档总量上限(MB · 留空=2048；0=不设上限、永不自动删)"),
+    },
+    "GALAXY_CONTEXT_ARCHIVE_MIN_DAYS": {
+        "default": "",
+        "type": "number",
+        "category": "behavior",
+        "description": ("上下文归档最少保留天数(留空=30 · 这么新的会话一律不删，" "哪怕已超总量上限——那时只告警不删)"),
+    },
     "GALAXY_IGNORE_CONTEXT_MEASUREMENTS": {
         "default": "",
         "type": "boolean",

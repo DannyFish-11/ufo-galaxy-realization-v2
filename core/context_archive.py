@@ -41,7 +41,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -176,6 +178,12 @@ def archive_segment(session_id: str, messages: List[Dict[str, Any]], summary: st
         )
         return None
     logger.info("已归档第 %s 段：%d 条原文（会话 %s）", seg_id, len(messages), session_id)
+    # 顺手看一眼总量。放在**写成功之后**，而且把本会话排除在外:回收是为了给后续的
+    # 归档腾地方，不该反手把刚写进去的这一段吃掉。
+    try:
+        enforce_retention(active_session_id=session_id)
+    except Exception as exc:  # noqa: BLE001 — 回收失败不影响这次归档
+        logger.debug("归档保留策略执行跳过: %s", exc)
     return seg_id
 
 
@@ -247,3 +255,130 @@ def drop_session(session_id: str) -> int:
         return 0
     logger.info("已清除会话 %s 的全部归档：%d 段原文", session_id, count)
     return count
+
+
+# ─────────────────────────── 保留策略 ───────────────────────────
+#
+# 这是这一层唯一会**自动删除用户原话**的地方，所以整段的立场是：宁可占着磁盘，
+# 也不要删掉一句还可能有用的话。
+
+#: 归档总量上限（MB）。``0`` = 不设上限，永不自动删。
+_MAX_MB_KEY = "GALAXY_CONTEXT_ARCHIVE_MAX_MB"
+_MAX_MB_DEFAULT = 2048
+
+#: **最少保留天数** —— 这么新的会话一律不删，哪怕总量已经超了上限。
+#:
+#: 这一条**压过上限**，不是和上限并列的第二个条件。理由：上限是为了不把磁盘撑爆，
+#: 而"撑爆磁盘"和"删掉用户上周说过的话"这两件坏事**不是一个量级**。所以超了上限
+#: 而又没有够旧的会话可删时，正确的动作是**大声告警、一个都不删**，把决定权交回给人。
+#: ``0`` = 不设保留期（任何会话只要够旧就可以被上限规则删掉）。
+_MIN_DAYS_KEY = "GALAXY_CONTEXT_ARCHIVE_MIN_DAYS"
+_MIN_DAYS_DEFAULT = 30
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.environ.get(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("%s=%r 不是整数，按默认值 %s 处理", key, raw, default)
+        return default
+
+
+def _session_dirs() -> List[Path]:
+    if not _ROOT.is_dir():
+        return []
+    return [d for d in _ROOT.iterdir() if d.is_dir()]
+
+
+def _dir_bytes(d: Path) -> int:
+    total = 0
+    for p in d.rglob("*"):
+        try:
+            if p.is_file():
+                total += p.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def archive_total_bytes() -> int:
+    """归档目录当前一共占多少字节。"""
+    return sum(_dir_bytes(d) for d in _session_dirs())
+
+
+def enforce_retention(active_session_id: str = "") -> List[str]:
+    """按保留策略清掉最旧的**整个**会话，返回被删掉的目录名。
+
+    四条不变量，每一条都有它要防的那种坏法
+    ======================================
+    1. **只删整个会话，绝不删半个。** 删掉某个会话的一部分段，剩下的目录里段号就有洞：
+       模型看着目录里的 ``[归档段 3]`` 去查，查到"不存在"——而它以为自己还有后路。
+       整个会话一起走，至少失忆是彻底的、可解释的。
+    2. **绝不删正在写的那个会话。** 否则一边归档一边被回收，段号会错乱。
+    3. **保留期内的绝不删，哪怕总量超了上限。** 超了而又没有够旧的可删 → **告警，
+       一个都不删**。上限是为了不撑爆磁盘，而"撑爆磁盘"和"删掉用户上周说过的话"
+       不是一个量级的坏事 —— 这种时候该做的是把决定权交回给人，不是替他删。
+    4. **删了要说出来。** 删除是不可逆的，一条 ``info`` 都不留等于偷偷做掉。
+
+    上限设 0 = 关掉自动删除（磁盘由人自己管）。
+    """
+    max_mb = _env_int(_MAX_MB_KEY, _MAX_MB_DEFAULT)
+    if max_mb <= 0:
+        return []
+    budget = max_mb * 1024 * 1024
+    total = archive_total_bytes()
+    if total <= budget:
+        return []
+
+    min_days = _env_int(_MIN_DAYS_KEY, _MIN_DAYS_DEFAULT)
+    protected_after = time.time() - min_days * 86400
+    active_dir = _dir(active_session_id) if active_session_id else None
+
+    candidates = []
+    for d in _session_dirs():
+        if active_dir is not None and d.resolve() == active_dir.resolve():
+            continue
+        try:
+            mtime = d.stat().st_mtime
+        except OSError:
+            continue
+        if min_days > 0 and mtime > protected_after:
+            continue  # 还在保留期内 —— 这一条压过上限
+        candidates.append((mtime, d))
+
+    if not candidates:
+        logger.warning(
+            "上下文归档已达 %.0f MB（上限 %s MB），但没有超过 %s 天保留期的会话可清 —— "
+            "**一个都没删**。要么调大 %s，要么手动清掉不再需要的会话（清除对话会连归档一起清）。",
+            total / 1024 / 1024,
+            max_mb,
+            min_days,
+            _MAX_MB_KEY,
+        )
+        return []
+
+    dropped: List[str] = []
+    for _mtime, d in sorted(candidates):
+        if total <= budget:
+            break
+        freed = _dir_bytes(d)
+        try:
+            shutil.rmtree(d)
+        except OSError as exc:
+            logger.warning("归档会话 %s 清理失败: %s", d.name, exc)
+            continue
+        total -= freed
+        dropped.append(d.name)
+        logger.info("归档超额，已清掉最旧的会话 %s（释放 %.1f MB）", d.name, freed / 1024 / 1024)
+
+    if total > budget:
+        logger.warning(
+            "清完所有过期会话后仍有 %.0f MB（上限 %s MB）—— 剩下的都在 %s 天保留期内，不动。",
+            total / 1024 / 1024,
+            max_mb,
+            min_days,
+        )
+    return dropped
