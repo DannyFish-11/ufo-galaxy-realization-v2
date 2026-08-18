@@ -322,19 +322,46 @@ def reorder_open_source_first(provider_order: List[str]) -> List[str]:
 #   - 审核/推理/协调类角色 → 开源大模型 API 优先（更强、攻坚/把关）
 # 返回值由 select_brain_for_role() 解析为具体 (provider, model)。
 ROLE_BRAIN_HINTS: Dict[str, Dict[str, Any]] = {
-    # 重角色：需要强推理 / 质量把关 → 倾向云端开源大模型
-    "critic": {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
-    "reviewer": {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
-    "reasoner": {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
-    "coordinator": {"prefer_local": False, "task_type": TaskType.PLANNING, "min_complexity": 0.6},
-    "planner": {"prefer_local": False, "task_type": TaskType.PLANNING, "min_complexity": 0.6},
-    "analyst": {"prefer_local": False, "task_type": TaskType.ANALYSIS, "min_complexity": 0.6},
-    # 轻角色：执行/产出/感知 → 倾向本地小模型
+    # 把关角色：审核 / 推理 / 协调 → **常驻云端**，而不是"本地不够用才降级"。
+    #
+    # ``prefer_remote`` 为什么必须显式写出来
+    # --------------------------------------
+    # 这一类的价值在于**换一个脑子看**，不只是"找个强的看"。原来它只写了
+    # ``prefer_local: False``，实现上等于"走质量优先"，而质量优先在平局时会因为
+    # 本地零成本 + 开源加分而选本地 —— 本地能力档还写死成 1 时这个洞看不出来，
+    # 一旦按实际装的东西算(35B → 3 档)，critic/reviewer 立刻全落回本地，
+    # 于是**同一个脑子既做又审**，「本地做、云端审」当场作废。实测见
+    # tests/test_role_routing_prefers_capability.py 的 C 组。
+    #
+    # 它是偏好不是硬性要求：一个云端 provider 都没配时照样回落本地(纯本地方案
+    # 必须能跑)。只是有云端时不让本地把审核也抢走。
+    "critic": {"prefer_local": False, "prefer_remote": True, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "reviewer": {"prefer_local": False, "prefer_remote": True, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "reasoner": {"prefer_local": False, "prefer_remote": True, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "coordinator": {
+        "prefer_local": False,
+        "prefer_remote": True,
+        "task_type": TaskType.PLANNING,
+        "min_complexity": 0.6,
+    },
+    "planner": {"prefer_local": False, "prefer_remote": True, "task_type": TaskType.PLANNING, "min_complexity": 0.6},
+    "analyst": {"prefer_local": False, "prefer_remote": True, "task_type": TaskType.ANALYSIS, "min_complexity": 0.6},
+    # 派活角色：动作分发/取数 → 本地【硬】优先(设计意图:本地做、云端审,
+    # 不让云端强模型抢走 executor)。这一类干的是"把事做掉"，不是"做得多好"。
     "executor": {"prefer_local": True, "task_type": TaskType.FAST_RESPONSE, "min_complexity": 0.0},
     "worker": {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0},
     "researcher": {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0},
-    "coder": {"prefer_local": True, "task_type": TaskType.CODING, "min_complexity": 0.3},
-    "writer": {"prefer_local": True, "task_type": TaskType.CREATIVE, "min_complexity": 0.0},
+    # 产出角色：写代码 / 写东西 → **按能力选，不按位置选**。
+    #
+    # 这两个原来在上面那一类里(prefer_local=True，硬优先本地)。那是错的分类：
+    # 产出质量直接是交付物本身，"就近"不是它该优化的东西。本地放着 35B 就该本地
+    # 出，放着 e2b 就该云端出 —— 判据是**谁更强**，不是谁更近。
+    #
+    # 光改这一行还不够：本地的能力档此前写死成 1(见 PROVIDER_QUALITY_TIER 上方的
+    # 说明)，于是走质量优先必然输给任何云端，"优先强模型"在本地放着 35B 时也只会
+    # 派到云端去。两处一起改，这条分类才真的成立。
+    "coder": {"prefer_local": False, "task_type": TaskType.CODING, "min_complexity": 0.5},
+    "writer": {"prefer_local": False, "task_type": TaskType.CREATIVE, "min_complexity": 0.4},
 }
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -364,15 +391,50 @@ PROVIDER_QUALITY_TIER: Dict[str, int] = {
     "oneapi": 2,
     "agnes": 2,
     "openrouter": 2,
-    # tier 1 —— 本地轻量（无 GPU 笔电主脑）
-    "ollama": 1,
-    "hf_local": 1,
-    "local_openai": 1,
 }
 
+#: 本地 provider 的能力档**不写死** —— 见 :func:`_provider_quality_tier`。
+#:
+#: 这里原来有三行 ``"ollama": 1, "hf_local": 1, "local_openai": 1``，注释是
+#: "本地轻量(无 GPU 笔电主脑)"。那是装 Gemma-e2b 时代的假设：C 档推理位是
+#: 35B-A3B、D 档是 9B 稠密，一律判 1 档的后果是**一旦走质量优先路径，本地必输
+#: 给任何云端**，无论机器上实际装的是什么。
+#:
+#: 现在按**推理位上真正选中的那个型号**算(core.model_catalog.local_reasoning_quality_tier)。
+LOCAL_SOURCE_TYPES: Tuple[str, ...] = ("local", "hf_local")
 
-def _provider_quality_tier(name: str) -> int:
-    """读提供商能力档；支持 env 覆盖 GALAXY_QUALITY_TIER_<PROVIDER>=N。"""
+
+#: 名字带这些词根的 provider 按本地处置(用于**没有** ProviderConfig 可查的调用点)。
+#:
+#: 正路是看 ``ProviderConfig.source_type``(见 :data:`LOCAL_SOURCE_TYPES`) ——
+#: 那是配出来的、不写死名单。这份词根表只是 :func:`_provider_quality_tier`
+#: 这种"只拿到一个名字"的场合的兜底，命中不了也只是退回表里的静态档，不会出错。
+_LOCAL_NAME_HINTS: Tuple[str, ...] = ("ollama", "hf_local", "local_openai")
+
+
+def is_local_provider(name: str, cfg: Optional["ProviderConfig"] = None) -> bool:
+    """这个 provider 算不算"本地"。
+
+    有 ``cfg`` 就看 ``source_type``(唯一权威，且是配出来的)；只有名字时退回词根匹配。
+    """
+    if cfg is not None:
+        return cfg.source_type in LOCAL_SOURCE_TYPES
+    return name in _LOCAL_NAME_HINTS
+
+
+def _provider_quality_tier(name: str, cfg: Optional["ProviderConfig"] = None) -> int:
+    """读提供商能力档；支持 env 覆盖 GALAXY_QUALITY_TIER_<PROVIDER>=N。
+
+    **本地这一侧按实际装的东西算**，不再是写死的 1。取值来自
+    :func:`core.model_catalog.local_reasoning_quality_tier` —— 它看的是当前档位
+    **推理位上真正选中的那个型号**：35B-A3B 判 3、9B/12B 判 2、e2b/e4b 判 1。
+
+    于是"写代码/写东西优先用强模型"这句话在本地放着 35B 时才真的成立 ——
+    此前无论装什么，本地在质量优先路径上都固定输给云端。
+
+    env 覆盖仍然最优先：显式写了 ``GALAXY_QUALITY_TIER_OLLAMA=3`` 就照它办，
+    人比推断更权威。
+    """
     import os as _os
 
     ov = _os.environ.get(f"GALAXY_QUALITY_TIER_{name.upper()}")
@@ -381,6 +443,13 @@ def _provider_quality_tier(name: str) -> int:
             return int(ov)
         except ValueError:
             pass
+    if is_local_provider(name, cfg):
+        try:
+            from core.model_catalog import local_reasoning_quality_tier  # noqa: PLC0415
+
+            return local_reasoning_quality_tier()
+        except Exception as exc:  # noqa: BLE001 —— 取不到档位不能让路由崩
+            logger.debug("本地能力档解析失败，按静态表处理: %s", exc)
     return PROVIDER_QUALITY_TIER.get(name, 2)
 
 
@@ -2656,6 +2725,7 @@ class MultiLLMRouter:
         has_multimodal: bool = False,
         needs_timely: bool = False,
         prefer_local: bool = False,
+        only_providers: Optional[List[str]] = None,
     ) -> RoutingDecision:
         """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
 
@@ -2677,6 +2747,12 @@ class MultiLLMRouter:
         candidates = [
             name for name, cfg in self.providers.items() if cfg.is_available() and self.adapters.get(name) is not None
         ]
+        # 把候选面收窄到调用方指定的那一批（把关角色用它只在云端里选）。
+        # 收窄到空时**不**悄悄放开 —— 交回 provider="none"，由调用方决定怎么回落；
+        # 在这里自作主张放开，等于把"只在云端选"变成一句没有效力的话。
+        if only_providers is not None:
+            allow = set(only_providers)
+            candidates = [n for n in candidates if n in allow]
         # ── 模态硬过滤 ──
         if has_multimodal:
             mm = [n for n in candidates if getattr(self.providers[n], "multimodal", False)]
@@ -2714,7 +2790,7 @@ class MultiLLMRouter:
 
         def _score(name: str) -> float:
             cfg = self.providers[name]
-            quality = _provider_quality_tier(name)  # 1..3(冷启动先验)
+            quality = _provider_quality_tier(name, cfg)  # 1..3(冷启动先验)
             # 任务相关度：在该任务偏好表里 = 更贴合
             task_fit = 1.0 if name in task_pref else 0.6
             # 主：质量 × (0.5+复杂度) —— 越难越看重质量
@@ -2755,6 +2831,27 @@ class MultiLLMRouter:
 
         best = max(candidates, key=_score)
         model = self.select_model_by_complexity(best, task_type, complexity_score)
+        # 选中的是本地 provider 时，型号要按**推理位**解析，而不是拿它的 default_model。
+        #
+        # ``select_model_by_complexity`` 对本地 provider 一律早退回 default_model
+        # （刻意的：本地通常只装了所选那一个 tag，按复杂度换挡会 404 到没装的 tag）。
+        # 但双模型档下"那一个 tag"是感知位 —— 于是走这条路的角色会被派给那个负责
+        # 看/听的模型，而真正该干文本活的推理位一次都轮不到。
+        #
+        # 这正是 tests/test_local_routing_resolves_by_slot.py 当初要修的缺陷。
+        # 那次只修了硬优先本地那一条分支；产出角色改成按能力选之后，它们走的是
+        # **这一条**，同一个洞在这里重新出现。两条路都得按槽位解析才算修干净。
+        if is_local_provider(best, self.providers.get(best)):
+            slotted = self._local_by_slot(SLOT_REASONING, role="fit", task=task_type)
+            if slotted is not None:
+                # **整个决策**换成槽位那一份，不只是换型号：两个槽位可能落在不同的
+                # 本地 provider 上（感知位在 ollama、推理位在那台 OpenAI 兼容服务），
+                # 只改型号会得到 "provider=ollama, model=推理位型号" 这种发不出去的组合。
+                return RoutingDecision(
+                    provider=slotted.provider,
+                    model=slotted.model,
+                    reason=f"fit-based 选中本地 → 按推理位解析: {slotted.provider}:{slotted.model}",
+                )
         if best == "hf_local" and (not model or model not in self.providers[best].models):
             model = self.providers[best].default_model or (
                 self.providers[best].models[0] if self.providers[best].models else model
@@ -2842,7 +2939,7 @@ class MultiLLMRouter:
             # 一个本地 provider 都没注册 = 这就是**纯云端方案**,不是漏配。
             # 实测:纯云端安装(档位还是默认的 A)每次派活都会喊一句"本地槽位没上岗",
             # 而路由结果完全正确 —— 那是误报,而且会把真正的漏配淹掉。
-            if not any(c.source_type in ("local", "hf_local") for c in self.providers.values()):
+            if not any(is_local_provider(n, c) for n, c in self.providers.items()):
                 logger.debug("本地一个 provider 都没有(纯云端方案),槽位解析跳过")
                 return None
 
@@ -2924,9 +3021,26 @@ class MultiLLMRouter:
                         reason=f"角色[{role}] 轻角色(本地小模型优先): {local}:{model} task={eff_task.value}",
                     )
 
+        # 把关角色：先在**云端**里按质量选 —— 换一个脑子看，才是审核的意义。
+        # 一个云端 provider 都没有时自然落空，继续往下走通用质量优先(纯本地方案照跑)。
+        if hint.get("prefer_remote", False):
+            remote_only = [n for n, c in self.providers.items() if not is_local_provider(n, c)]
+            if remote_only:
+                decision = self.select_brain_for_task(
+                    eff_task, complexity_score=eff_complexity, only_providers=remote_only
+                )
+                if decision.provider != "none":
+                    decision.reason = f"角色[{role}] 把关角色(常驻云端) → {decision.reason}"
+                    return decision
+
         decision = self.select_brain_for_task(eff_task, complexity_score=eff_complexity)
         if decision.provider != "none":
-            role_kind = "轻角色(无本地→fit)" if hint["prefer_local"] else "重角色(质量优先)"
+            if hint["prefer_local"]:
+                role_kind = "派活角色(无本地→fit)"
+            elif hint.get("prefer_remote", False):
+                role_kind = "把关角色(无云端→回落本地)"
+            else:
+                role_kind = "产出角色(按能力选)"
             decision.reason = f"角色[{role}] {role_kind} → {decision.reason}"
             return decision
 
@@ -3241,7 +3355,7 @@ class MultiLLMRouter:
                 if name in self.adapters
                 and cfg.is_available()
                 and (not require_multimodal or cfg.multimodal)
-                and _provider_quality_tier(name) >= floor
+                and _provider_quality_tier(name, cfg) >= floor
             ]
 
         avail = _pool(min_tier)

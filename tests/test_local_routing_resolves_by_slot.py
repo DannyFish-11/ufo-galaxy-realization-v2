@@ -53,6 +53,18 @@ def _local_cfg(name: str, models, default) -> ProviderConfig:
     )
 
 
+def _cloud_cfg(name: str, models) -> ProviderConfig:
+    """一家云端 provider —— 只为把"有云端可选"这个条件摆出来，不会真的被调。"""
+    return ProviderConfig(
+        name=name,
+        api_key="k",
+        base_url="https://example.invalid/v1",
+        models=list(models),
+        default_model=models[0],
+        source_type="api",
+    )
+
+
 class _Adapter:
     """占位适配器 —— 路由只检查它不是 None，不会真的调它。"""
 
@@ -97,11 +109,32 @@ class TestTwoModelsAreToldApart:
         assert reasoning.model == REASONING
         assert perception.provider != reasoning.provider, "两个槽位落到了同一个 provider —— 没分开"
 
-    def test_light_agent_roles_land_on_the_reasoning_slot(self, two_local_models, monkeypatch):
-        """agent 角色干的是文本/工具的活 → 推理位，不该被派给常驻感知位。"""
+    def test_dispatch_roles_land_on_the_reasoning_slot(self, two_local_models, monkeypatch):
+        """派活角色干的是文本/工具的活 → 推理位，不该被派给常驻感知位。
+
+        ``coder`` / ``writer`` **不在这个名单里了**：它们已改成产出角色（按能力选，
+        不按位置选），不再"硬优先本地"。它们落到本地时仍然该落在推理位上 ——
+        那由下面 :meth:`test_output_roles_also_land_on_the_reasoning_slot` 单独钉。
+        """
         monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
-        for role in ("executor", "worker", "researcher", "coder", "writer"):
-            assert ROLE_BRAIN_HINTS[role]["prefer_local"] is True, "前提变了：这条测试假设它们是轻角色"
+        for role in ("executor", "worker", "researcher"):
+            assert ROLE_BRAIN_HINTS[role]["prefer_local"] is True, "前提变了：这条测试假设它们硬优先本地"
+            decision = two_local_models.select_brain_for_role(role)
+            assert decision.model == REASONING, f"角色 {role} 被派给了 {decision.model}"
+
+    def test_output_roles_also_land_on_the_reasoning_slot(self, two_local_models, monkeypatch):
+        """产出角色落到本地时，同样该落在推理位上。
+
+        它们走的是另一条路（质量优先，而非硬优先本地），但"两个本地槽位分得开"
+        这件事对它们一样成立 —— 一个只有本地 provider 的桌面上，写代码不该被派给
+        那个负责看/听的感知位。
+
+        这条与上面那条覆盖的是**不同的代码路径**，不是重复：上面走
+        ``_local_by_slot`` 的硬优先分支，这条走质量优先回落。
+        """
+        monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
+        for role in ("coder", "writer"):
+            assert ROLE_BRAIN_HINTS[role]["prefer_local"] is False, "前提变了：它们该是产出角色"
             decision = two_local_models.select_brain_for_role(role)
             assert decision.model == REASONING, f"角色 {role} 被派给了 {decision.model}"
 
@@ -153,13 +186,32 @@ class TestCloudSideIsUntouched:
         for role in ("critic", "reviewer", "reasoner", "coordinator", "planner", "analyst"):
             assert ROLE_BRAIN_HINTS[role]["prefer_local"] is False, f"{role} 的云端归属被改动了"
 
-    def test_heavy_role_never_reaches_the_slot_resolver(self, two_local_models, monkeypatch):
+    def test_heavy_role_never_reaches_the_slot_resolver_when_cloud_exists(self, two_local_models, monkeypatch):
+        """有云端时，把关角色不该被引到本地槽位上去。
+
+        原来这条不带云端 provider 就断言"永远不会调到槽位解析"。那个前提已经变了：
+        把关角色现在是 ``prefer_remote``（常驻云端），而一个云端都没配时**会**回落
+        本地 —— 纯本地方案必须能跑。回落之后落在推理位而不是感知位，是对的，
+        不是"云端那一侧被动了"。所以这条改成在**它真正描述的那个条件下**断言。
+        """
         monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
+        two_local_models.providers["anthropic"] = _cloud_cfg("anthropic", ["claude-sonnet-5"])
+        two_local_models.adapters["anthropic"] = _Adapter()
         called = []
         orig = two_local_models._local_by_slot
         two_local_models._local_by_slot = lambda *a, **k: called.append(a) or orig(*a, **k)
-        two_local_models.select_brain_for_role("critic")
+        decision = two_local_models.select_brain_for_role("critic")
         assert called == [], "重角色走进了本地槽位解析 —— 云端把关那一侧被动了"
+        assert decision.provider == "anthropic", "把关角色没落到云端"
+
+    def test_heavy_role_falls_back_to_the_reasoning_slot_when_local_only(self, two_local_models, monkeypatch):
+        """纯本地方案：把关角色回落本地时，同样落在推理位而不是感知位。
+
+        回落本身是对的（一个云端都没配也必须能跑）；落错槽位就不对了 ——
+        那是这个文件从头到尾在防的那个缺陷。
+        """
+        monkeypatch.setenv("GALAXY_MODEL_TIER", "C")
+        assert two_local_models.select_brain_for_role("critic").model == REASONING
 
 
 class TestFallbacksDoNotSilentlyMisroute:
