@@ -270,3 +270,100 @@ class TestGeneratedTypesStayInSync:
         described = {f["name"] for f in phase_contract_schema()["fields"]}
         actual = {f.name for f in dataclasses.fields(PhasePosture)}
         assert described == actual, f"schema 与 dataclass 字段不一致：只在一边的有 {described ^ actual}"
+
+
+class TestTheLegacyProjectionStaysSplitOut:
+    """一维遗留投影已拆到 ``core.phase_posture_legacy``，本组防它悄悄合回去。
+
+    为什么要拆：``core/phase_contract.py`` 曾经同时装着这一套（8 字段、depth 标量）
+    与双轴忠实契约（28 字段），涨到 1550 行、警戒线 1000。两套放一起，读它的人很容易
+    照着那 8 个字段写新代码 —— 而它们正是被判定错了的那 8 个（档数少一相、维数少一维、
+    ``retreat_tendency`` 语义反了，详见被拆出模块的文档）。
+
+    为什么还要再导出：拆分的目的是让**读这个文件的人**只看见该消费的那一份，
+    不是去制造一次调用方大迁移。既有 ``from core.phase_contract import PhasePosture``
+    照常可用，行为零变化 —— 拆分当时的判据就是「重跑生成器，三个 .gen.ts 逐字节相同」。
+    """
+
+    def test_legacy_lives_in_its_own_module(self) -> None:
+        import core.phase_posture_legacy as legacy
+
+        for name in (
+            "PhasePosture",
+            "PostureSource",
+            "PHASE_ANCHORS",
+            "PHASE_ORDER",
+            "EDGE_BLEND",
+            "resolve_phase_posture",
+            "phase_contract_schema",
+        ):
+            assert hasattr(legacy, name), f"遗留模块少了 {name}"
+
+    def test_phase_contract_re_exports_them_unchanged(self) -> None:
+        """再导出必须是**同一个对象**，不是各写一份。"""
+        import core.phase_contract as pc
+        import core.phase_posture_legacy as legacy
+
+        for name in (
+            "PhasePosture",
+            "PostureSource",
+            "PHASE_ANCHORS",
+            "PHASE_ORDER",
+            "EDGE_BLEND",
+            "resolve_phase_posture",
+            "phase_contract_schema",
+        ):
+            assert getattr(pc, name) is getattr(legacy, name), f"{name} 在两处成了两个对象 —— 会漂"
+
+    def test_phase_contract_no_longer_defines_the_legacy_shapes(self) -> None:
+        """定义搬走了才算拆干净 —— 只是多加一个模块、原处照旧定义，等于没拆。"""
+        import pathlib
+
+        src = pathlib.Path("core/phase_contract.py").read_text(encoding="utf-8")
+        assert "class PhasePosture" not in src, "遗留 dataclass 又回到 phase_contract 里了"
+        assert "class PostureSource" not in src
+        assert "def resolve_phase_posture" not in src
+        assert "def phase_contract_schema" not in src
+
+    def test_the_shared_readout_has_exactly_one_definition(self) -> None:
+        """``last_continuum_posture`` 两套契约都用。它必须只有一份 ——
+
+        留在任何一边，另一边就得反向依赖，拆开时必然循环导入；各写一份则会漂。
+        """
+        import core.continuum_readout as readout
+        import core.phase_contract as pc
+        import core.phase_posture_legacy as legacy
+
+        assert pc.last_continuum_posture is readout.last_continuum_posture
+        assert legacy.last_continuum_posture is readout.last_continuum_posture
+
+    def test_no_import_cycle_between_the_three(self) -> None:
+        """依赖必须是单向的：phase_contract → phase_posture_legacy → continuum_readout。
+
+        只看**真正的 import 语句**，不扫全文 —— 两个被拆出的模块的文档都正当地
+        提到了 ``core.phase_contract``（在解释为什么这么拆），扫全文会把说明当成依赖。
+        """
+        import pathlib
+        import re
+
+        def _imports(path: str) -> set:
+            src = pathlib.Path(path).read_text(encoding="utf-8")
+            return set(re.findall(r"^\s*(?:from|import)\s+(core\.[\w.]+)", src, re.MULTILINE))
+
+        assert not _imports("core/continuum_readout.py"), "取数口应当零 core 内部依赖"
+        legacy_deps = _imports("core/phase_posture_legacy.py")
+        assert legacy_deps == {"core.continuum_readout"}, f"遗留模块的依赖变了：{legacy_deps}"
+
+    def test_the_readout_still_never_constructs(self) -> None:
+        """搬家不能把「绝不构造」这条纪律搬丢了 —— 它是这个取数口存在的前提。
+
+        ``core.openclawd.get_openclawd()`` 会**创建** OpenClawd 实例，而调用方是
+        在场桥的每一拍。所以只能用 ``sys.modules.get`` 看已经导入过的模块。
+        """
+        import pathlib
+        import re
+
+        src = pathlib.Path("core/continuum_readout.py").read_text(encoding="utf-8")
+        code = re.sub(r'"""(?:.|\n)*?"""', "", src)  # 去掉文档，只看代码
+        assert 'sys.modules.get("core.openclawd")' in code
+        assert "get_openclawd(" not in code, "取数口开始构造 OpenClawd 了 —— 每一拍都会建一次"
