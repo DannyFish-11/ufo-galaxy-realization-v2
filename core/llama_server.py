@@ -233,15 +233,33 @@ def build_server_args(
     argv: List[str] = [exe, "-m", model_path, "--host", host, "--port", str(int(port))]
     notes: List[str] = []
 
-    # 空的能力清单是**问不到**,不是"这个构建什么都不支持"。两者对用户是两回事:
-    # 前者去装个二进制,后者去换个构建。逐条报"这个构建不认识 X" 会把前者说成后者,
-    # 于是人对着一个根本没装的东西研究它为什么不支持某个旗标。
+    # 空的能力清单是**问不到**,不是"这个构建什么都不支持"。这个区别决定了怎么处置:
+    #
+    # * 问得到、而清单里没有 → 有证据说它不认识 → **不拼**,并说清后果。拼上去要么
+    #   起不来、要么被吞掉,而被吞掉正是这一整个模块要终结的失败方式。
+    # * 问不到(二进制还没装 / --help 读不出来) → **没有任何证据**说它不认识 →
+    #   照原样拼上。
+    #
+    # 第二条不是偷懒,是两个使用场景决定的:
+    #
+    # 1. 我们自己起服务时,二进制一定在,所以一定问得到 —— 走第一条。
+    # 2. ``scripts/setup_reasoning_slot.py`` 把命令**打印给人**、让人待会儿自己跑
+    #    (很可能就是装完二进制之后)。这时把 ``--n-cpu-moe`` 悄悄摘掉,人拿到的
+    #    是一条**看起来对、实际不做专家卸载**的命令 —— 那正是本模块要修的那个洞,
+    #    只不过换到了纸面上。
+    #
+    # 最坏情况是这个构建真不认识它,于是服务起不来 —— **响亮的失败**,可接受;
+    # 悄悄不生效不可接受。
     unprobed = not flags
     if unprobed:
         notes.append(
-            "问不到 llama-server 的能力清单(二进制不在,或 --help 读不出来)—— "
-            "下面这条命令只含通用旗标,专家卸载与草稿位都没拼进去"
+            "没能核实这个构建的能力清单(二进制不在,或 --help 读不出来)—— "
+            "旗标照原样拼上。若这个构建确实不认识它,服务会**起不来**(而不是悄悄不生效)"
         )
+
+    def _supports(flag: str) -> bool:
+        """问不到清单时一律当"支持"—— 见上面那段:没有证据不等于有反证。"""
+        return unprobed or flag in flags
 
     def _note(msg: str) -> None:
         """能力清单问得到时才逐条解释;问不到时上面那一条已经说清了。"""
@@ -251,7 +269,7 @@ def build_server_args(
     if alias:
         # 让服务对外报的模型名就是目录里的 tag,路由那边不必再靠
         # GALAXY_LOCAL_OPENAI_SERVES 声明"这个服务伺候的是哪个型号"。
-        if "--alias" in flags:
+        if _supports("--alias"):
             argv += ["--alias", alias]
         else:
             _note("这个构建不认识 --alias,服务报的模型名将是权重文件名而非目录 tag")
@@ -264,7 +282,7 @@ def build_server_args(
     # ── 专家卸载 ──
     moe_applied = False
     if n_cpu_moe:
-        if MOE_FLAG in flags:
+        if _supports(MOE_FLAG):
             argv += [MOE_FLAG, str(int(n_cpu_moe))]
             moe_applied = True
         else:
@@ -276,16 +294,16 @@ def build_server_args(
     # ── 草稿位 ──
     draft_applied = False
     if draft_spec_type:
-        if SPEC_TYPE_FLAG not in flags:
+        if not _supports(SPEC_TYPE_FLAG):
             _note(f"这个构建不认识 {SPEC_TYPE_FLAG} —— 草稿位没挂上")
-        elif draft_model_path and DRAFT_MODEL_FLAG not in flags:
+        elif draft_model_path and not _supports(DRAFT_MODEL_FLAG):
             _note(f"这个构建不认识 {DRAFT_MODEL_FLAG} —— 外挂式草稿位没挂上")
         else:
             argv += [SPEC_TYPE_FLAG, draft_spec_type]
             if draft_model_path:
                 argv += [DRAFT_MODEL_FLAG, draft_model_path]
             if draft_n_max and int(draft_n_max) > 0:
-                if SPEC_N_MAX_FLAG in flags:
+                if _supports(SPEC_N_MAX_FLAG):
                     argv += [SPEC_N_MAX_FLAG, str(int(draft_n_max))]
                 else:
                     # 块大小传不进去是**实质性**的:上游默认 15 在公开实测里是净亏,

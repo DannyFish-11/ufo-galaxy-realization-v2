@@ -203,10 +203,16 @@ def test_c02_an_old_build_drops_them_and_says_so():
     assert any("OOM" in n for n in plan.notes), "得说清后果,不是只说不支持"
 
 
-def test_c03_unprobed_is_not_the_same_as_unsupported():
-    """空清单是**问不到**(二进制不在),不是"这个构建什么都不支持"。
+def test_c03_unprobed_still_carries_the_flags():
+    """空清单是**问不到**,不是"这个构建不支持"。没有证据 ≠ 有反证。
 
-    逐条报"这个构建不认识 X",会让人对着一个根本没装的东西研究它为什么不支持某旗标。
+    这一条是 CI 撞出来才想清楚的。改成委托之后,``setup_reasoning_slot.py`` 打印给人
+    的那条命令,在没装二进制的机器上**把 --n-cpu-moe 摘掉了** —— 人拿到一条看起来对、
+    实际不做专家卸载的命令(而那人很可能正要去装二进制、然后跑这条命令)。那正是这
+    整个模块要修的洞,只不过换到了纸面上。
+
+    最坏情况是这个构建真不认识它、服务起不来 —— **响亮的失败**,可接受;
+    悄悄不生效不可接受。
     """
     plan = ls.build_server_args(
         model_path="/m/q.gguf",
@@ -216,8 +222,20 @@ def test_c03_unprobed_is_not_the_same_as_unsupported():
         supported_flags=frozenset(),
         binary="x",
     )
+    argv = " ".join(plan.argv)
+    assert "--n-cpu-moe 24" in argv
+    assert "--spec-type draft-mtp" in argv
+    assert plan.moe_offload_applied is True
     assert len(plan.notes) == 1
-    assert "问不到" in plan.notes[0]
+    assert "没能核实" in plan.notes[0]
+    assert "起不来" in plan.notes[0], "得说清最坏情况是响亮失败,不是悄悄不生效"
+
+
+def test_c03b_probed_and_absent_really_drops_it():
+    """反向钉:问得到、清单里确实没有 → 有证据了,就不能再拼。"""
+    plan = ls.build_server_args(model_path="/m/q.gguf", port=1, n_cpu_moe=24, supported_flags=OLD, binary="x")
+    assert "--n-cpu-moe" not in " ".join(plan.argv)
+    assert plan.moe_offload_applied is False
 
 
 def test_c04_no_moe_no_flag():
