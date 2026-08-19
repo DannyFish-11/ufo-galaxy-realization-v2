@@ -229,6 +229,7 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_PERCEPTION_MODEL',
     // 本地 OpenAI 兼容推理服务(双模型本地主脑里跑在核显那一位)。llama.cpp server 的
     // SYCL/Vulkan 后端 或 OpenVINO Model Server 都讲这套协议,填地址即接入。
+    'GALAXY_LLAMA_SERVER_BIN',
     'GALAXY_LOCAL_OPENAI_URL', 'GALAXY_LOCAL_OPENAI_MODEL', 'GALAXY_LOCAL_OPENAI_SERVES',
     'GALAXY_LOCAL_OPENAI_KEY',
     // 密钥项。后端 classify_key() 按 _API_KEY 后缀判为 secret,会走 set_secret() 落

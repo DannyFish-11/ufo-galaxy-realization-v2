@@ -330,9 +330,67 @@ def backend_for_source(source: str) -> str:
 
 
 def backend_for_tag(tag: str) -> str:
-    """这个 tag 由哪个后端加载(查不到目录时按 ollama)。"""
+    """这个 tag **实际**由哪个后端加载(查不到目录时按 ollama)。
+
+    静态部分是 ``source`` 映射。之上有一条**动态修正**:``llama_cpp`` 这条进程内的
+    路做不到某些型号需要的东西时,改判 ``llama_server``。
+
+    为什么修正要在这里,而不是在加载处
+    ==================================
+    因为问这句话的不止加载处。``core.runtime_readiness`` 拿它去判"这一档跑不跑得
+    起来" —— 如果它得到的是 ``llama_cpp``,而真正会去干活的是 ``llama_server``,
+    那么状态盘检查的就是错的那个后端:llama-server 装好了它仍然报"跑不起来",
+    或者反过来,llama-cpp-python 装着就报"没问题"而实际那条路做不到卸载。
+
+    修正只在**确实做不到**时发生 —— 见 :func:`in_process_cannot_serve`。
+    """
     spec = get_model(tag)
-    return backend_for_source(spec.source if spec is not None else "")
+    static = backend_for_source(spec.source if spec is not None else "")
+    if static != "llama_cpp":
+        return static
+    return "llama_server" if in_process_cannot_serve(tag) else "llama_cpp"
+
+
+def in_process_cannot_serve(tag: str) -> bool:
+    """进程内那条路**做不到**这个型号需要的东西吗。
+
+    两件事只要有一件成立就算做不到,而且都只在 CLI/server 旗标上存在:
+
+    1. **专家卸载**(``--n-cpu-moe``)—— 只有当这个型号的显存账确实建立在卸载上
+       (MoE 且 ``runtime_mb < 整权重``)时才算需要。不需要的型号不该被拖去起服务。
+    2. **草稿位**(``--spec-type``)—— 目录声明了机制且真机实测为正时才算需要。
+
+    判定要"另一条路做得到"才回 True:两条都做不到时改判 ``llama_server`` 毫无意义,
+    只会把一个"装不下"的问题伪装成"后端没装"。
+    """
+    spec = exact_model(tag)
+    if spec is None or spec.source != "llama_cpp":
+        return False
+    try:
+        from core.llama_server import server_draft_supported, server_moe_offload_supported  # noqa: PLC0415
+        from core.local_model_backends import binding_moe_offload_supported  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001 — 问不出来就别改判
+        logger.debug("后端能力问不出来,保持进程内: %s", exc)
+        return False
+
+    # 每一次探测都各自兜住:它们要起子进程 / 读文件,任何一个抛出来都会顺着
+    # backend_for_tag 传到 runtime_readiness 与调度器 —— 把一次能力探测的小毛病
+    # 变成状态盘整个崩掉。问不出来的正确处置是**保持现状**(继续走进程内),
+    # 而不是让调用方去处理一个它管不了的异常。
+    try:
+        if resolve_is_moe(tag) and spec.runtime_mb() < effective_weight_mb(tag):
+            if not binding_moe_offload_supported() and server_moe_offload_supported():
+                return True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("专家卸载能力问不出来,保持进程内: %s", exc)
+    try:
+        from core.speculative_draft import is_enabled  # noqa: PLC0415
+
+        if is_enabled(tag) and server_draft_supported():
+            return True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("草稿位判据不可用,不据此改判后端: %s", exc)
+    return False
 
 
 def runtime_footprint_mb(tag: str) -> int:

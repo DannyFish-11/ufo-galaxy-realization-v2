@@ -108,7 +108,7 @@ def _draft_section(as_json: bool, *, label: str = "", save: bool = False, sweep:
         measure_endpoint,
         verdict_from_labels,
     )
-    from core.local_model_backends import moe_offload_supported
+    from core.local_model_backends import moe_offload_path, moe_offload_supported
     from core.model_catalog import active_tags, load_tier
     from core.speculative_draft import (
         draft_spec_of,
@@ -127,6 +127,7 @@ def _draft_section(as_json: bool, *, label: str = "", save: bool = False, sweep:
         "binding": binding,
         "binding_params": list(found),
         "moe_offload_supported": moe_offload_supported(),
+        "moe_offload_path": moe_offload_path(),
         "models": [],
     }
 
@@ -187,8 +188,10 @@ def _draft_section(as_json: bool, *, label: str = "", save: bool = False, sweep:
     print(f"  llama-cpp-python 透出草稿位参数: {binding}" + (f"  {list(found)}" if found else ""))
     if binding != "supported":
         print("    ↑ 这不是「慢」，是【接不上】。与 --n-cpu-moe 是同一个洞：")
-        print(f"      （参考：同一个绑定的专家卸载支持 = {moe_offload_supported()}）")
-        print("      补救办法相同 —— 把推理位改成起 llama-server，经 GALAXY_LOCAL_OPENAI_URL 接入。")
+        print(f"      （参考：专家卸载当前走哪条路 = {moe_offload_path()}）")
+        print("      补救办法相同 —— 装一个 llama.cpp 的 llama-server（或用 GALAXY_LLAMA_SERVER_BIN")
+        print("      指到你自己编的那份）。装上之后不需要再配什么：后端选择会自动改走它，")
+        print("      服务由本进程起、地址自动导出。")
     if not payload["models"]:
         print(f"  {tier} 档在岗的型号里，没有一个填过草稿位声明（都是 unknown = 没人查过）。")
         return payload

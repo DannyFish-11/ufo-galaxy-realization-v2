@@ -114,17 +114,17 @@ def _default_runner(tag: str, n_max: int) -> Tuple[int, float]:
       一段永远跑不到的代码,和照着记忆填显存数字是同一件事。
 
     真正可用的那条路是 llama.cpp 的 **server** 二进制(``llama-server``)——
-    与专家卸载的补救办法是同一条(见 ``moe_offload_supported`` 的文档:
-    换成 server + 经 ``GALAXY_LOCAL_OPENAI_URL`` 接入)。那条路用
+    与专家卸载的补救办法是同一条。装上它之后**不需要再配什么**:
+    ``core.model_catalog.backend_for_tag`` 会把这一位改判成 ``llama_server``,
+    ``core.llama_server`` 负责起服务、拼旗标、导出地址。那条路的性能用
     :func:`measure_endpoint` 量,见它的文档。
     """
     support, _found = llama_binding_draft_support()
     raise RuntimeError(
         f"llama-cpp-python 不透出草稿位参数(结论={support})。"
         "--spec-type / -md 是 llama.cpp CLI/server 的旗标,进程内绑定接不上 —— "
-        "与 --n-cpu-moe 是同一个洞(见 local_model_backends.moe_offload_supported)。"
-        "补救办法也相同:把推理位改成起 llama-server,经 GALAXY_LOCAL_OPENAI_URL 接入,"
-        "再用 measure_endpoint 两趟对比。"
+        "与 --n-cpu-moe 是同一个洞(见 local_model_backends.binding_moe_offload_supported)。"
+        "补救办法也相同:装上 llama-server(后端会自动改走它),再用 measure_endpoint 两趟对比。"
     )
 
 
