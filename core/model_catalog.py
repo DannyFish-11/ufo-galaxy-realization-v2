@@ -1137,3 +1137,67 @@ def catalog_snapshot() -> Dict[str, object]:
             for t in all_tiers()
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# 本地这一侧的"能力档" —— 按实际装的东西算，不写死
+# ---------------------------------------------------------------------------
+#: 推理位规模(权重 MB) → 能力档。阈值**按本目录里真实存在的型号定**，不是凭空取整：
+#:
+#:     ≥ 15000   qwen3.6:35b-a3b(18 GB) —— 35B MoE，与前沿云端同档
+#:     ≥  5000   qwythos-9b-v2(5.6 GB) / gemma4:12b(8 GB) —— 强
+#:     <  5000   gemma4:e2b(1.8 GB) / e4b(3 GB) —— 轻量
+#:
+#: 为什么用**推理位**而不是"这个 provider 装了什么"
+#: ------------------------------------------------
+#: 质量档要回答的是"把一件需要脑子的活派给它靠不靠谱"。感知位管的是听/说通路
+#: （见 :data:`SLOT_PERCEPTION`），它的规模跟这件事无关 —— MiniCPM-o 权重 6 GB
+#: 里有一大半是视觉/音频编码器，拿它当推理能力的度量会高估。
+#:
+#: 为什么用权重而不是运行时显存
+#: ----------------------------
+#: ``runtime_mb`` 两个方向都会偏离能力：全模态模型因为驮着编码器而**大于**权重，
+#: MoE 走专家卸载后又**小于**权重（35B-A3B 权重 18 GB、显存只 7.3 GB）。
+#: 拿它排能力会把最强的那个排到最低。权重是这几个量里与"模型多大"最接近的一个。
+_LOCAL_TIER_BY_REASONING_SIZE_MB: Tuple[Tuple[int, int], ...] = (
+    (15000, 3),
+    (5000, 2),
+    (0, 1),
+)
+
+
+def local_reasoning_quality_tier(tier_key: str = "") -> int:
+    """本地这一侧当前的能力档(1/2/3) —— **由推理位上真正选中的型号决定**。
+
+    这一栏原来是写死的::
+
+        # tier 1 —— 本地轻量（无 GPU 笔电主脑）
+        "ollama": 1, "hf_local": 1, "local_openai": 1,
+
+    那是装 Gemma-e2b 时代的假设。C 档推理位是 35B-A3B、D 档是 9B 稠密，一律判成
+    "轻量"的后果是：**一旦走质量优先路径，本地必输给任何云端**，无论机器上装的是什么。
+    于是"写代码/写东西优先用强模型"这句话，在本地放着 35B 时也只会把活派到云端去。
+
+    Returns:
+        1(轻量) / 2(强) / 3(前沿)。取不到档位或型号时返回 1 —— 不知道就别高估，
+        高估会把活派给一个可能带不动的本地模型。
+    """
+    try:
+        key = (tier_key or load_tier()).strip().upper()
+        tier = get_tier(key)
+        if tier is None:
+            return 1
+        # 单模型档没有独立推理位，那一个模型两只手都干 —— 它就是推理位。
+        role = SLOT_REASONING if tier.slot_for(SLOT_REASONING) is not None else SLOT_BOTH
+        tag = model_for_role(role, key)
+        spec = get_model(tag) if tag else None
+        if spec is None:
+            return 1
+        size = int(spec.size_mb_val or 0)
+        for floor, level in _LOCAL_TIER_BY_REASONING_SIZE_MB:
+            if size >= floor:
+                return level
+        return 1
+    except Exception as exc:  # noqa: BLE001 —— 路由取不到档位绝不能崩，保守回落
+        logger.debug("local_reasoning_quality_tier 解析失败，按轻量处理: %s", exc)
+        return 1
