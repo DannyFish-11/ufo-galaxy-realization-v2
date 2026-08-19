@@ -1358,6 +1358,16 @@ def render_contract_schema() -> Dict[str, Any]:
                 "ts": "boolean",
                 "doc": "角色意图没被满足：派活落到云端，或把关回落本地 —— 该画得不一样",
             },
+            {
+                "name": "draft_active",
+                "ts": "boolean",
+                "doc": "本地这一轮开没开投机解码的草稿位；只在 locus=local 时有意义",
+            },
+            {
+                "name": "draft_speedup",
+                "ts": "number",
+                "doc": "这台机器实测的倍数；0=没测过，<1=测过且更慢（那时 draft_active 为 false）",
+            },
         ],
         "world_model_fields": [
             {"name": "is_wired", "ts": "boolean", "doc": "世界模型是否已接到渲染链路；当前恒 false"},

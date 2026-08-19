@@ -60,6 +60,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
+from core.speculative_draft import DraftSpec
 
 logger = logging.getLogger("Galaxy.ModelCatalog")
 
@@ -154,6 +155,15 @@ class ModelSpec:
     #: 注意 Qwythos 这类混合架构(3:1 线性注意力 + 全注意力)的 KV 增长远小于同尺寸
     #: 纯注意力模型 —— 更不该用一条通用公式套。
     kv_mb_per_1k_val: int = 0
+    #: 这个型号有没有**草稿模型**可挂(投机解码)。见 :class:`core.speculative_draft.DraftSpec`。
+    #:
+    #: 与 ``source`` 正交:同一套机制只接得上一种后端(DFlash 接 llama.cpp、MTP 接
+    #: Ollama),但"有没有草稿"是型号自己的属性,不是后端的。
+    #:
+    #: 默认 ``unknown`` 而不是 ``none``,与 ``is_moe`` 用 ``Optional[bool]`` 同一条:
+    #: "没人查过"该去问,"确认没有"到此为止。**这一栏只回答存不存在,不回答值不值得**
+    #: —— 后者只有真机 A/B 有资格回答,而且默认是没测过 → 不开。
+    draft: DraftSpec = field(default_factory=DraftSpec.unknown)
 
     def max_ctx(self) -> int:
         """最长能吃多少 token；没填过退回 :data:`DEFAULT_MAX_CTX`。"""
@@ -185,6 +195,7 @@ class ModelSpec:
             "size_mb": self.size_mb(),
             "runtime_mb": self.runtime_mb(),
             "caps": self.caps.to_dict(),
+            "draft": self.draft.to_dict(),
         }
 
 
@@ -280,6 +291,22 @@ _MODELS: Dict[str, ModelSpec] = {
         # 高估一大截;而高估的后果是白白把上下文压小。量一次填进来即可,
         # 在此之前上下文预算不会拿显存去放大它(见 ModelSpec.kv_mb_per_1k)。
         kv_mb_per_1k_val=0,
+        # 草稿位:**自带 MTP 头**,不外挂 DFlash 检查点。
+        #
+        # 上游的 DFlash 检查点表里没有这一位(那张表是 Qwen / Gemma 4 / MiniMax /
+        # Kimi / GPT-OSS / Llama-3.1 / GLM 这几家),而这个型号的 GGUF 据称把 MTP 头
+        # 保留了下来,走 llama.cpp 的 ``--spec-type draft-mtp``。
+        #
+        # 对 D 档这是**更好的形状**:不用下第二份权重,显存账上没有"多一个模型"
+        # 这一项(多出来的只是多验几个 token 的激活,跟着上下文预算走)。
+        #
+        # **"据称"这两个字是认真的**:这一栏只声明"可能挂得上",真有没有那个头、
+        # 开了是快是慢,一律由 ``scripts/probe_models.py --draft`` 在真机上问。
+        # 公开实测里同一件事既有 +2.69× 也有净 −44.6%,方向取决于机器不取决于代码。
+        draft=DraftSpec(
+            mechanism="mtp_self",
+            note="GGUF 据称保留 MTP 头(--spec-type draft-mtp);是否真有、开了值不值得,由真机 A/B 判定",
+        ),
     ),
 }
 
@@ -766,6 +793,8 @@ def tier_runtime_footprint_range_mb(tier_key: str = "") -> Tuple[int, int]:
     不能跳过查不到的那位接着求和 —— 那样得到的是一个**偏小**的门槛,准入会把
     装不下的档放行。判不了要显式地判不了,见 :func:`exact_model`。
     """
+    from core.speculative_draft import draft_footprint_mb  # noqa: PLC0415
+
     lo = 0
     hi = 0
     for tag in active_tags(tier_key):
@@ -773,11 +802,18 @@ def tier_runtime_footprint_range_mb(tier_key: str = "") -> Tuple[int, int]:
         if spec is None:
             return (0, 0)
         resident = spec.runtime_mb()
+        # 草稿位开着就是**多一份权重在卡上**,不算它就是又一次"判成放得下、
+        # 加载到一半 OOM"。-1 表示判不了(开着但没人量过占多少)—— 那必须整档
+        # 判不了,不能当 0 吸收:吸收掉得到的是一个偏小的门槛,而偏小的门槛会放行。
+        draft_mb, _why = draft_footprint_mb(tag)
+        if draft_mb < 0:
+            return (0, 0)
+        resident += draft_mb
         lo += resident
         # 悲观那一头问 effective_weight_mb 而不是 spec.size_mb():权重文件已经在
         # 磁盘上时,它比目录里那条"按 Q4_K_M 记"的声明更可信 —— 而这一头正是
         # "假设全不成立、按整权重要显存"的估计,拿一个量化对不上的数去估没有意义。
-        hi += max(resident, effective_weight_mb(spec.tag))
+        hi += max(resident, effective_weight_mb(spec.tag) + draft_mb)
     return (lo, hi)
 
 
