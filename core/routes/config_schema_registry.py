@@ -719,6 +719,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 三态:不设=按当前档位的**真实供给**自动判定(本机原生与云端一视同仁);
     # 1=强制开;0=强制关。写成 boolean/false 是**假的** —— 面板会显示"关"而实际
     # 已自动开启,那正是这条守卫要防的事。
+    # 三态:不设=按目录声明 + 真机实测自动判定;0=强制关。**没有"强制开"这一档** ——
+    # 开不开取决于这台机器实测出来是快是慢(公开数据里同一件事既有 +2.69x 也有
+    # 净 -44.6%),给一个"强制开"等于允许用户把自己调慢一半还不知道为什么。
+    # 要开就去跑 scripts/probe_models.py --draft,让实测说话。
+    "GALAXY_SPECULATIVE_DRAFT": {
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": "投机解码草稿位（auto=实测更快才开 / 0=强制关 · 默认 auto；开不开由 scripts/probe_models.py --draft 的真机 A/B 决定）",
+    },
     "GALAXY_VOICE_DUPLEX": {
         "default": "auto",
         "type": "string",

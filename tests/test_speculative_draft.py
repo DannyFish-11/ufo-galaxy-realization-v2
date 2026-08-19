@@ -33,7 +33,7 @@ from core.speculative_draft import DraftMeasurement, DraftSpec
 def _isolated_state(tmp_path, monkeypatch):
     """实测记录是**真文件**。隔到 tmp_path —— 仓库已经因为共享状态文件栽过一次:
     一个临时脚本把档位落成 C,两条毫不相干的测试一起变红。"""
-    monkeypatch.setenv("GALAXY_DRAFT_STATE_FILE", str(tmp_path / "speculative_draft.json"))
+    monkeypatch.setattr(sd, "_STATE_FILE", tmp_path / "speculative_draft.json")
     monkeypatch.delenv("GALAXY_SPECULATIVE_DRAFT", raising=False)
     rp.reset_pathway_cache()
     tl.reset()
@@ -192,8 +192,30 @@ def test_c06_n_max_is_recorded_because_the_default_is_the_wrong_answer():
 def test_c07_corrupt_state_file_degrades_to_untested(tmp_path, monkeypatch):
     bad = tmp_path / "bad.json"
     bad.write_text("{ not json", encoding="utf-8")
-    monkeypatch.setenv("GALAXY_DRAFT_STATE_FILE", str(bad))
+    monkeypatch.setattr(sd, "_STATE_FILE", bad)
     assert sd.load_measurement("t").verdict == "untested"
+
+
+def test_c09_state_path_is_not_an_env_knob():
+    """运行时状态文件放哪不该出现在配置面上 —— 与 model_catalog 同一条约定。
+
+    第一版给了个 ``GALAXY_DRAFT_STATE_FILE``,CI 当场拦下:凡被代码读取的
+    ``GALAXY_*`` 都得登记进 CONFIG_SCHEMA 与面板,而"往哪写文件"既是
+    "站在梯子上搬梯子",也不该让配置接口指定任意写入路径。
+    """
+    src = (sd.PROJECT_ROOT / "core" / "speculative_draft.py").read_text(encoding="utf-8")
+    reads = [ln for ln in src.splitlines() if "os.environ.get(" in ln or "os.getenv(" in ln]
+    assert all("GALAXY_SPECULATIVE_DRAFT" in ln for ln in reads), reads
+
+
+def test_c10_the_kill_switch_is_registered_everywhere():
+    """开关登记不全 = 功能没接到面板上:后端缺 → /api/config/all 不返回它;
+    前端缺 → 设置页上没有它的位置;而 POST /api/config 还会把它当 unknown_keys 拒掉。"""
+    from core.routes.config import CONFIG_SCHEMA
+
+    assert "GALAXY_SPECULATIVE_DRAFT" in CONFIG_SCHEMA
+    panel = (sd.PROJECT_ROOT / "electron/renderer/panel/src/components/SettingsTab.tsx").read_text(encoding="utf-8")
+    assert "'GALAXY_SPECULATIVE_DRAFT'" in panel
 
 
 def test_c08_labelled_runs_live_under_a_reserved_key():

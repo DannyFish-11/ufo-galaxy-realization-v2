@@ -56,6 +56,9 @@ from typing import Any, Dict, Tuple
 
 logger = logging.getLogger("Galaxy.SpeculativeDraft")
 
+#: 仓库根 —— 与 ``core/model_catalog.py`` 取法一致(本文件在 ``core/`` 下)。
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 # ── 声明维 ──────────────────────────────────────────────────────────────────
 
 #: 草稿位走哪套机制。``unknown`` = 没人查过(默认);``none`` = 查过,确认没有。
@@ -289,14 +292,24 @@ class DraftMeasurement:
 # 不同(换机器要重测,换档位不用),写在一起会互相牵连 —— 而那个文件已经因为
 # 全会话共享踩过一次坑(一个临时脚本把它落成 C,两条无关测试一起变红)。
 
-_STATE_FILE = Path(os.environ.get("GALAXY_DRAFT_STATE_FILE", "runtime/speculative_draft.json"))
+#
+# 路径**不做 env 覆盖**,与 ``model_catalog._STATE_FILE`` 同一条约定。
+#
+# 第一版给了个 ``GALAXY_DRAFT_STATE_FILE`` 纯粹为了测试隔离,CI 当场拦下:凡是被代码
+# 读取的 ``GALAXY_*`` 都得登记进 ``CONFIG_SCHEMA`` 与面板的 ``CONFIG_KEYS``,否则
+# ``POST /api/config`` 会把它当 unknown_keys 拒掉 —— 而"运行时状态文件放哪"根本不该
+# 出现在面板上(与已豁免的 ``GALAXY_CONFIG_PATH`` 是同一个"站在梯子上搬梯子"的问题,
+# 何况让配置接口指定任意写入路径本身也不是好主意)。
+#
+# 测试要隔离就直接改这个模块级常量 —— 隔壁 ``model_catalog`` 从来就是这么做的。
+_STATE_FILE = PROJECT_ROOT / "runtime" / "speculative_draft.json"
 
 _lock = threading.Lock()
 
 
 def state_file() -> Path:
-    """实测结果落在哪。``GALAXY_DRAFT_STATE_FILE`` 可覆盖(测试用 tmp_path)。"""
-    return Path(os.environ.get("GALAXY_DRAFT_STATE_FILE", "") or _STATE_FILE)
+    """实测结果落在哪。测试要隔离就 monkeypatch 本模块的 ``_STATE_FILE``。"""
+    return _STATE_FILE
 
 
 def _read_all() -> Dict[str, Any]:
