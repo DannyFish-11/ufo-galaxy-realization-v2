@@ -64,6 +64,9 @@ __all__ = [
     "WorldModelView",
     "PerceptionView",
     "ModalityView",
+    "ModalityPathwayView",
+    "PathwayLane",
+    "ThinkingLocusView",
     "CHAIN_KINDS",
     "HYBRID_EXECUTION_MODES",
     "WORLD_MODEL_SOURCES",
@@ -73,6 +76,14 @@ __all__ = [
     "AMBIENT_ACTIONS",
     "resolve_perception_view",
     "last_perception_status",
+    "resolve_pathway_view",
+    "resolve_thinking_locus_view",
+    "PATHWAY_MODALITIES",
+    "PATHWAY_MODES",
+    "PATHWAY_LIMITS",
+    "TIER_KINDS",
+    "THINKING_LOCI",
+    "ROUTE_TYPES",
     "TRANSITION_KINDS",
     "TRANSITION_KIND_OF",
     "transition_kind_of",
@@ -115,6 +126,23 @@ from core.phase_posture_legacy import (  # noqa: E402  —— 再导出，见上
     PostureSource,
     phase_contract_schema,
     resolve_phase_posture,
+)
+
+# 通路位与推理归属位：定义与只读取数都在 core.render_pathway（那两位有自己的
+# 缓存与"绝不构造"通道，塞进本文件只会让它继续变胖）。这里只再导出，让渲染端
+# 仍然只需要认 core.phase_contract 一个门。
+from core.render_pathway import (  # noqa: E402  —— 再导出
+    PATHWAY_LIMITS,
+    PATHWAY_MODALITIES,
+    PATHWAY_MODES,
+    ROUTE_TYPES,
+    THINKING_LOCI,
+    TIER_KINDS,
+    ModalityPathwayView,
+    PathwayLane,
+    ThinkingLocusView,
+    resolve_pathway_view,
+    resolve_thinking_locus_view,
 )
 
 # ===========================================================================
@@ -806,6 +834,23 @@ class RenderPosture:
     hybrid_execution: HybridExecutionView
     """混合执行模式决策。未决策时是 :meth:`HybridExecutionView.undecided`。"""
 
+    # ── 通路与归属：怎么进来的、在哪儿想 ────────────────────────────────
+
+    pathway: ModalityPathwayView
+    """四条模态通路此刻走原生还是走桥。见 :class:`ModalityPathwayView`。
+
+    与 :attr:`perception` 是两件事，缺一不可：``perception`` 说"这一侧有没有信号"，
+    ``pathway`` 说"这条信号是**怎么**进去的"。第一态两侧的氛围光要画的是后者 ——
+    原生一条通路、接了桥两段，本来就不该长一个样。
+    """
+
+    thinking_locus: ThinkingLocusView
+    """这一轮的推理落在本地还是云端。见 :class:`ThinkingLocusView`。
+
+    未路由过时是 :meth:`ThinkingLocusView.undecided` —— ``locus`` 报 ``unknown``
+    而不是 ``local``，把没发生过的事画成"本地在想"是三态里最不该乱画的那一段。
+    """
+
     # ── 第二维：在哪儿跑 ────────────────────────────────────────────────
     runtime_domain: Optional[str]
     """local / cross_device / transition；``None`` = 尚未判定。"""
@@ -883,6 +928,10 @@ class RenderPosture:
                 m["signal_age_s"] = round(float(m["signal_age_s"]), 2)
         d["hybrid_execution"] = dict(d["hybrid_execution"])
         d["hybrid_execution"]["confidence"] = round(float(self.hybrid_execution.confidence), 4)
+        # 通路与归属各自有 to_dict（带派生位 native_count / is_decided），
+        # asdict 只会照搬字段而漏掉它们 —— 所以整格换成各自那一份。
+        d["pathway"] = self.pathway.to_dict()
+        d["thinking_locus"] = self.thinking_locus.to_dict()
         for k in (
             "motion",
             "intensity",
@@ -1046,6 +1095,11 @@ def _anchor_only_render_posture(
         world_model=WorldModelView.unwired(),
         perception=perception_view,
         hybrid_execution=HybridExecutionView.undecided(),
+        # 通路与归属和感知同理：它们各有独立的只读通道，continuum 没跑不代表
+        # "此刻走哪条通路 / 这一轮谁在想"不知道。兜底最常出现的场合正是第一态，
+        # 在这里抹成空等于把这一层要修的问题原样搬进兜底路径。
+        pathway=resolve_pathway_view(),
+        thinking_locus=resolve_thinking_locus_view(),
         runtime_domain=None,
         motion=0.0,
         intensity=0.0,
@@ -1124,6 +1178,11 @@ def resolve_render_posture(
     hybrid = hybrid_execution if hybrid_execution is not None else HybridExecutionView.undecided()
     # 感知不给就现取 —— 它有自己的只读通道，不依赖任何调用方喂。
     percept = perception if perception is not None else resolve_perception_view()
+    # 通路与归属同理，而且**没有**对应的入参：它们不来自任何调用方，只来自
+    # 协商层与路由回执。给一个入参反而会诱导调用方喂一份自己算的，那就又多了
+    # 一份会漂移的定义。
+    pathway_view = resolve_pathway_view()
+    locus_view = resolve_thinking_locus_view()
 
     if state is None:
         state = last_continuum_posture()
@@ -1137,6 +1196,8 @@ def resolve_render_posture(
             cross_device_chain=cross,
             hybrid_execution=hybrid,
             perception=percept,
+            pathway=pathway_view,
+            thinking_locus=locus_view,
         )
 
     raw_phase = getattr(getattr(state, "phase", None), "value", None) or str(getattr(state, "phase", "formless"))
@@ -1181,6 +1242,8 @@ def resolve_render_posture(
         world_model=WorldModelView.unwired(),
         perception=percept,
         hybrid_execution=hybrid,
+        pathway=pathway_view,
+        thinking_locus=locus_view,
         runtime_domain=domain if domain in RUNTIME_DOMAINS else None,
         motion=_clamp(float(getattr(expr, "motion", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
         intensity=_clamp(float(getattr(expr, "intensity", 0.0) or 0.0), 0.0, 1.0) if expr is not None else 0.0,
@@ -1219,6 +1282,13 @@ def render_contract_schema() -> Dict[str, Any]:
         "modality_states": list(MODALITY_STATES),
         "ambient_actions": list(AMBIENT_ACTIONS),
         "transition_kinds": list(TRANSITION_KINDS),
+        "pathway_modalities": list(PATHWAY_MODALITIES),
+        "pathway_modes": list(PATHWAY_MODES),
+        # 空串是合法取值（没被限制），生成端要把它保留成联合类型的一支。
+        "pathway_limits": list(PATHWAY_LIMITS),
+        "tier_kinds": list(TIER_KINDS),
+        "thinking_loci": list(THINKING_LOCI),
+        "route_types": list(ROUTE_TYPES),
         "transition_kind_of": [{"from": a, "to": b, "kind": k} for (a, b), k in TRANSITION_KIND_OF.items()],
         "sources": [PostureSource.CONTINUUM, PostureSource.ANCHOR_ONLY],
         "chain_fields": [
@@ -1253,6 +1323,41 @@ def render_contract_schema() -> Dict[str, Any]:
             {"name": "modalities", "ts": "ModalityView[]", "doc": "恒定四条，缺席的以 unavailable 出现"},
             {"name": "ambient_action", "ts": "AmbientAction", "doc": "自发注意力上一拍的决策；none=还没决策过"},
             {"name": "ambient_rationale", "ts": "string", "doc": "那一拍为什么这么决定（后端原文，已截断）"},
+        ],
+        "pathway_lane_fields": [
+            {"name": "modality", "ts": "PathwayModality", "doc": "vision_in / audio_in / audio_out / video_in"},
+            {
+                "name": "mode",
+                "ts": "PathwayMode",
+                "doc": "native=一条通路直达；bridge=中间还有一段转换；unavailable=不通",
+            },
+            {
+                "name": "limited_by",
+                "ts": "PathwayLimit",
+                "doc": "谁把它限制住的：model=换模型 / serving=开环境变量 / device=换设备 / provider=换一家；空串=没被限制",
+            },
+        ],
+        "pathway_fields": [
+            {"name": "locus", "ts": "string", "doc": "这份结论照着谁算的：local 或某家 provider 名；空串=没协商过"},
+            {"name": "tier_kind", "ts": "TierKind", "doc": "本地档位形态；unknown=取不到档位表（不猜）"},
+            {"name": "is_wired", "ts": "boolean", "doc": "false=这个进程里没有协商层，四条全是占位空态"},
+            {"name": "lanes", "ts": "PathwayLane[]", "doc": "恒定四条，不通的以 unavailable 出现"},
+            {"name": "native_count", "ts": "number", "doc": "走原生的条数（由 lanes 推出的便利位）"},
+            {"name": "bridged_count", "ts": "number", "doc": "接了桥的条数（同上）"},
+        ],
+        "thinking_locus_fields": [
+            {"name": "is_decided", "ts": "boolean", "doc": "本进程是否路由过角色；false 时下面几位都是空的"},
+            {"name": "locus", "ts": "ThinkingLocus", "doc": "local / cloud；unknown=还没想过，**不是**本地"},
+            {"name": "provider", "ts": "string", "doc": "选中的提供商名；未决策时空串"},
+            {"name": "model", "ts": "string", "doc": "选中的型号"},
+            {"name": "role", "ts": "string", "doc": "这次路由是为哪个协作角色做的"},
+            {"name": "route_type", "ts": "RouteType", "doc": "dispatch=派活 / produce=产出 / gatekeep=把关"},
+            {"name": "reason", "ts": "string", "doc": "路由理由（后端原文，已截断）"},
+            {
+                "name": "is_fallback",
+                "ts": "boolean",
+                "doc": "角色意图没被满足：派活落到云端，或把关回落本地 —— 该画得不一样",
+            },
         ],
         "world_model_fields": [
             {"name": "is_wired", "ts": "boolean", "doc": "世界模型是否已接到渲染链路；当前恒 false"},
@@ -1316,6 +1421,16 @@ def render_contract_schema() -> Dict[str, Any]:
                 "name": "hybrid_execution",
                 "ts": "HybridExecutionView",
                 "doc": "表达期用什么手法动手（GUI／API／混合）",
+            },
+            {
+                "name": "pathway",
+                "ts": "ModalityPathwayView",
+                "doc": "四条模态通路走原生还是走桥 —— perception 说有没有信号，这一位说它怎么进去的",
+            },
+            {
+                "name": "thinking_locus",
+                "ts": "ThinkingLocusView",
+                "doc": "这一轮在哪儿想（本地／云端）；unknown=还没想过，不是本地",
             },
             {"name": "runtime_domain", "ts": "RuntimeDomain | null", "doc": "第二维：在哪儿跑；null=尚未判定"},
             {"name": "motion", "ts": "number", "doc": "抽象运动能量 [0,1]"},

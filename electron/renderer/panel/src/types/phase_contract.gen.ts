@@ -265,6 +265,105 @@ export interface WorldModelView {
   entity_kinds: string[];
 }
 
+/** 一条模态通路的名字。与后端协商层的四个模态一一对应。 */
+export type PathwayModality = "vision_in" | "audio_in" | "audio_out" | "video_in";
+
+/**
+ * 这条通路是怎么走的。
+ *
+ *   native       模型自己吃这个模态 → 一条通路直达
+ *   bridge       中间还有一段转换（听→ASR 转写、说→TTS 合成、视频→抽静帧）
+ *   unavailable  不通，且没有桥可替
+ *
+ * `native` 与 `bridge` 都是「能用」，但**不是同一件事**：桥意味着多一段延迟、
+ * 多一次信息损失（转写丢掉语气、抽帧丢掉连续性）。渲染上它们本就不该长一个样。
+ */
+export type PathwayMode = "native" | "bridge" | "unavailable";
+
+/**
+ * 谁把这条通路限制住的 —— 空串表示没被限制。
+ *
+ * 分成四类是因为**对用户是四件不同的事**：`serving` 开个环境变量就行，`model`
+ * 要换本地模型，`provider` 要换一家云端，`device` 得换台机器。合成一个「不可用」
+ * 的话，面板只能提示「不支持」，而用户无从知道该动哪里。
+ */
+export type PathwayLimit = "" | "model" | "serving" | "device" | "provider";
+
+/** 本地档位形态：单模型 / 双位分工。unknown = 取不到档位表（不猜）。 */
+export type TierKind = "unknown" | "single" | "composite";
+
+/** 一条模态通路此刻的走法。 */
+export interface PathwayLane {
+  /** vision_in / audio_in / audio_out / video_in */
+  modality: PathwayModality;
+  /** native=一条通路直达；bridge=中间还有一段转换；unavailable=不通 */
+  mode: PathwayMode;
+  /** 谁把它限制住的：model=换模型 / serving=开环境变量 / device=换设备 / provider=换一家；空串=没被限制 */
+  limited_by: PathwayLimit;
+}
+
+/**
+ * 四条模态通路此刻走原生还是走桥。
+ *
+ * 与 `PerceptionView` 是两件事，缺一不可：那一位说「这一侧有没有信号」，这一位
+ * 说「这条信号是**怎么**进去的」。第一态两侧的氛围光画的是后者。
+ *
+ * `lanes` **恒定四条**，不通的以 `unavailable` 出现 —— 渲染端要能把「这一侧不亮」
+ * 画出来，而不是遍历一个长度会变的数组。
+ *
+ * `locus` 是这份结论照着谁算的。它不是装饰：本地档位没有视觉模型、而这一轮交给
+ * 一家能看的云端时，视觉是**可用**的 —— 通路取决于这一轮由谁来想。
+ */
+export interface ModalityPathwayView {
+  /** 这份结论照着谁算的：local 或某家 provider 名；空串=没协商过 */
+  locus: string;
+  /** 本地档位形态；unknown=取不到档位表（不猜） */
+  tier_kind: TierKind;
+  /** false=这个进程里没有协商层，四条全是占位空态 */
+  is_wired: boolean;
+  /** 恒定四条，不通的以 unavailable 出现 */
+  lanes: PathwayLane[];
+  /** 走原生的条数（由 lanes 推出的便利位） */
+  native_count: number;
+  /** 接了桥的条数（同上） */
+  bridged_count: number;
+}
+
+/** 想这件事发生在哪一侧。`unknown` = 本进程还没路由过任何角色。 */
+export type ThinkingLocus = "unknown" | "local" | "cloud";
+
+/** 这次路由属于哪一类角色意图（派活 / 产出 / 把关）。 */
+export type RouteType = "unknown" | "dispatch" | "produce" | "gatekeep";
+
+/**
+ * 这一轮的推理落在本地还是云端。
+ *
+ * manifest 那一段，本地推理与云端推理是完全不同的两件事：一个在这台机器上耗电、
+ * 延迟由显存决定，一个在网络另一头、延迟由链路决定。此前契约里没有任何一位能把
+ * 它们分开。
+ *
+ * `locus` 默认 `unknown` 而**不是** `local`：把没发生过的事画成「本地在想」，
+ * 是三态里最不该乱画的那一段。`is_decided === false` 时下面几位都是空的。
+ */
+export interface ThinkingLocusView {
+  /** 本进程是否路由过角色；false 时下面几位都是空的 */
+  is_decided: boolean;
+  /** local / cloud；unknown=还没想过，**不是**本地 */
+  locus: ThinkingLocus;
+  /** 选中的提供商名；未决策时空串 */
+  provider: string;
+  /** 选中的型号 */
+  model: string;
+  /** 这次路由是为哪个协作角色做的 */
+  role: string;
+  /** dispatch=派活 / produce=产出 / gatekeep=把关 */
+  route_type: RouteType;
+  /** 路由理由（后端原文，已截断） */
+  reason: string;
+  /** 角色意图没被满足：派活落到云端，或把关回落本地 —— 该画得不一样 */
+  is_fallback: boolean;
+}
+
 /** (上一档, 当前档) → 转移性质。缺失的组合按 `none` 处理。 */
 export const TRANSITION_KIND_OF: ReadonlyArray<{from: Lifecycle; to: Lifecycle; kind: TransitionKind}> = [
   { from: "silent", to: "liminal", kind: "emerging" },
@@ -332,6 +431,10 @@ export interface RenderPosture {
   perception: PerceptionView;
   /** 表达期用什么手法动手（GUI／API／混合） */
   hybrid_execution: HybridExecutionView;
+  /** 四条模态通路走原生还是走桥 —— perception 说有没有信号，这一位说它怎么进去的 */
+  pathway: ModalityPathwayView;
+  /** 这一轮在哪儿想（本地／云端）；unknown=还没想过，不是本地 */
+  thinking_locus: ThinkingLocusView;
   /** 第二维：在哪儿跑；null=尚未判定 */
   runtime_domain: RuntimeDomain | null;
   /** 抽象运动能量 [0,1] */

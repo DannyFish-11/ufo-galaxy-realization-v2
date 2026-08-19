@@ -334,6 +334,86 @@ def _render_contract_lines() -> list:
     out += [
         "}",
         "",
+        "/** 一条模态通路的名字。与后端协商层的四个模态一一对应。 */",
+        "export type PathwayModality = " + " | ".join(f'"{m}"' for m in sch["pathway_modalities"]) + ";",
+        "",
+        "/**",
+        " * 这条通路是怎么走的。",
+        " *",
+        " *   native       模型自己吃这个模态 → 一条通路直达",
+        " *   bridge       中间还有一段转换（听→ASR 转写、说→TTS 合成、视频→抽静帧）",
+        " *   unavailable  不通，且没有桥可替",
+        " *",
+        " * `native` 与 `bridge` 都是「能用」，但**不是同一件事**：桥意味着多一段延迟、",
+        " * 多一次信息损失（转写丢掉语气、抽帧丢掉连续性）。渲染上它们本就不该长一个样。",
+        " */",
+        "export type PathwayMode = " + " | ".join(f'"{m}"' for m in sch["pathway_modes"]) + ";",
+        "",
+        "/**",
+        " * 谁把这条通路限制住的 —— 空串表示没被限制。",
+        " *",
+        " * 分成四类是因为**对用户是四件不同的事**：`serving` 开个环境变量就行，`model`",
+        " * 要换本地模型，`provider` 要换一家云端，`device` 得换台机器。合成一个「不可用」",
+        " * 的话，面板只能提示「不支持」，而用户无从知道该动哪里。",
+        " */",
+        "export type PathwayLimit = " + " | ".join(f'"{lim}"' for lim in sch["pathway_limits"]) + ";",
+        "",
+        "/** 本地档位形态：单模型 / 双位分工。unknown = 取不到档位表（不猜）。 */",
+        "export type TierKind = " + " | ".join(f'"{k}"' for k in sch["tier_kinds"]) + ";",
+        "",
+        "/** 一条模态通路此刻的走法。 */",
+        "export interface PathwayLane {",
+    ]
+    for f in sch["pathway_lane_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
+        "/**",
+        " * 四条模态通路此刻走原生还是走桥。",
+        " *",
+        " * 与 `PerceptionView` 是两件事，缺一不可：那一位说「这一侧有没有信号」，这一位",
+        " * 说「这条信号是**怎么**进去的」。第一态两侧的氛围光画的是后者。",
+        " *",
+        " * `lanes` **恒定四条**，不通的以 `unavailable` 出现 —— 渲染端要能把「这一侧不亮」",
+        " * 画出来，而不是遍历一个长度会变的数组。",
+        " *",
+        " * `locus` 是这份结论照着谁算的。它不是装饰：本地档位没有视觉模型、而这一轮交给",
+        " * 一家能看的云端时，视觉是**可用**的 —— 通路取决于这一轮由谁来想。",
+        " */",
+        "export interface ModalityPathwayView {",
+    ]
+    for f in sch["pathway_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
+        "/** 想这件事发生在哪一侧。`unknown` = 本进程还没路由过任何角色。 */",
+        "export type ThinkingLocus = " + " | ".join(f'"{t}"' for t in sch["thinking_loci"]) + ";",
+        "",
+        "/** 这次路由属于哪一类角色意图（派活 / 产出 / 把关）。 */",
+        "export type RouteType = " + " | ".join(f'"{t}"' for t in sch["route_types"]) + ";",
+        "",
+        "/**",
+        " * 这一轮的推理落在本地还是云端。",
+        " *",
+        " * manifest 那一段，本地推理与云端推理是完全不同的两件事：一个在这台机器上耗电、",
+        " * 延迟由显存决定，一个在网络另一头、延迟由链路决定。此前契约里没有任何一位能把",
+        " * 它们分开。",
+        " *",
+        " * `locus` 默认 `unknown` 而**不是** `local`：把没发生过的事画成「本地在想」，",
+        " * 是三态里最不该乱画的那一段。`is_decided === false` 时下面几位都是空的。",
+        " */",
+        "export interface ThinkingLocusView {",
+    ]
+    for f in sch["thinking_locus_fields"]:
+        out.append(f"  /** {f['doc']} */")
+        out.append(f"  {f['name']}: {f['ts']};")
+    out += [
+        "}",
+        "",
         "/** (上一档, 当前档) → 转移性质。缺失的组合按 `none` 处理。 */",
         "export const TRANSITION_KIND_OF: " "ReadonlyArray<{from: Lifecycle; to: Lifecycle; kind: TransitionKind}> = [",
     ]

@@ -38,9 +38,12 @@ import { useCallback, useState } from 'react';
 import type {
   ExecutionChainView,
   HybridExecutionView,
+  ModalityPathwayView,
+  PathwayModality,
   PerceptionModality,
   PerceptionView,
   RenderPosture,
+  ThinkingLocusView,
   WorldModelView,
 } from '@/types/phase_contract.gen';
 import type { WebSocketMessage } from '@/types/phase';
@@ -82,6 +85,8 @@ export const RENDER_POSTURE_FIELDS = [
   'world_model',
   'perception',
   'hybrid_execution',
+  'pathway',
+  'thinking_locus',
   'runtime_domain',
   'motion',
   'intensity',
@@ -165,6 +170,44 @@ export const UNWIRED_WORLD_MODEL: WorldModelView = {
   entity_kinds: [],
 };
 
+/**
+ * 后端 `ModalityPathwayView.unwired()` 的等价空态 —— 这个进程里没有协商层。
+ *
+ * 四条通路**恒定存在**（不通的以 `unavailable` 出现），理由与 `PerceptionView`
+ * 的四条模态相同：渲染端要能把「这一侧不通」画出来，而不是遍历一个长度会变的数组。
+ */
+const PATHWAY_MODALITY_ORDER: PathwayModality[] = ['vision_in', 'audio_in', 'audio_out', 'video_in'];
+
+export const UNWIRED_PATHWAY: ModalityPathwayView = {
+  locus: '',
+  tier_kind: 'unknown',
+  is_wired: false,
+  lanes: PATHWAY_MODALITY_ORDER.map((modality) => ({
+    modality,
+    mode: 'unavailable' as const,
+    limited_by: '' as const,
+  })),
+  native_count: 0,
+  bridged_count: 0,
+};
+
+/**
+ * 后端 `ThinkingLocusView.undecided()` 的等价空态 —— 本进程还没路由过任何角色。
+ *
+ * `locus` 是 `'unknown'` 而**不是** `'local'`：把没发生过的事当成本地，渲染端会在
+ * 一个还没开始想的时刻画出「本地在想」。
+ */
+export const UNDECIDED_THINKING_LOCUS: ThinkingLocusView = {
+  is_decided: false,
+  locus: 'unknown',
+  provider: '',
+  model: '',
+  role: '',
+  route_type: 'unknown',
+  reason: '',
+  is_fallback: false,
+};
+
 /** 后端 `HybridExecutionView.undecided()` 的等价空态 —— 本轮还没选执行手法。 */
 export const UNDECIDED_HYBRID_EXECUTION: HybridExecutionView = {
   is_decided: false,
@@ -234,6 +277,13 @@ export function _extractRenderPosture(
     ? percept
     : { ...percept, modalities: UNWIRED_PERCEPTION.modalities };
   normalised.hybrid_execution = _objOr(rec.hybrid_execution, UNDECIDED_HYBRID_EXECUTION);
+  // 通路这一格与感知同样要校验数组：lanes 是第一态氛围光的形状依据，
+  // 拿到一个非数组会让下游 .map 直接炸掉整个覆盖层。
+  const pathway = _objOr<ModalityPathwayView>(rec.pathway, UNWIRED_PATHWAY);
+  normalised.pathway = Array.isArray(pathway.lanes)
+    ? pathway
+    : { ...pathway, lanes: UNWIRED_PATHWAY.lanes };
+  normalised.thinking_locus = _objOr(rec.thinking_locus, UNDECIDED_THINKING_LOCUS);
 
   return { posture: normalised as unknown as RenderPosture, missing: _missingFields(rec) };
 }

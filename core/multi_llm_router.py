@@ -2974,6 +2974,63 @@ class MultiLLMRouter:
         complexity_score: float = 0.5,
         task_type: Optional[TaskType] = None,
     ) -> RoutingDecision:
+        """为一个协作角色选择脑，并把结论**记成只读回执**。
+
+        本方法是 :meth:`_select_brain_for_role_impl` 的唯一入口，除了记账不改变
+        任何行为。拆成两层而不是在实现里逐个 return 前面加一行，是因为实现里有
+        五个返回点（槽位命中／本地直选／云端把关／通用质量优先／退回 route()），
+        逐点记账等于把"这一轮谁在想"这件事复制五份 —— 以后加一条分支必然漏记，
+        而漏记的表现是渲染端画着上一轮的 locus，看上去完全正常。
+
+        回执的用处见 :mod:`core.thinking_locus`：渲染契约的 ``thinking_locus``
+        与模态协商的第四维 ``negotiate(locus=...)`` 都读它。
+        """
+        hint = ROLE_BRAIN_HINTS.get(role, {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0})
+        decision = self._select_brain_for_role_impl(role, complexity_score, task_type)
+        try:
+            self._record_thinking_locus(role, hint, decision)
+        except Exception as exc:  # noqa: BLE001 — 记账绝不该影响路由本身
+            logger.debug("路由回执记录失败 role=%s: %s", role, exc)
+        return decision
+
+    def _record_thinking_locus(self, role: str, hint: Dict[str, Any], decision: RoutingDecision) -> None:
+        """把角色意图与实际落点的关系当场算出来，记进回执。
+
+        ``route_type`` 与 ``is_fallback`` 在这里算而不是在回执模块里算：只有这里
+        同时握着**角色意图**（hint）和**实际落点**（decision）。回执模块拿到的只有
+        结论，要还原意图就只能去解析 reason 那句中文，改一次措辞就会静默失效。
+        """
+        from core.thinking_locus import record  # noqa: PLC0415
+
+        prefer_local = bool(hint.get("prefer_local", False))
+        prefer_remote = bool(hint.get("prefer_remote", False))
+        if prefer_local:
+            route_type = "dispatch"
+        elif prefer_remote:
+            route_type = "gatekeep"
+        else:
+            route_type = "produce"
+
+        cfg = self.providers.get(decision.provider)
+        local = is_local_provider(decision.provider, cfg) if cfg is not None else False
+        # 产出角色没有位置偏好（"按能力选，不按位置选"），所以它落在哪边都不是回落。
+        is_fallback = (prefer_local and not local) or (prefer_remote and local)
+        record(
+            provider=decision.provider,
+            model=decision.model,
+            role=role,
+            is_local=local,
+            route_type=route_type,
+            reason=decision.reason,
+            is_fallback=is_fallback,
+        )
+
+    def _select_brain_for_role_impl(
+        self,
+        role: str,
+        complexity_score: float = 0.5,
+        task_type: Optional[TaskType] = None,
+    ) -> RoutingDecision:
         """为一个协作角色选择"最便宜够用"的脑（provider + model）。
 
         实现"大小模型配合"的执行层：
