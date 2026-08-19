@@ -30,6 +30,9 @@
 ========================
 * 推理位是谁、要多大 → ``core.model_catalog``
 * 专家卸载在不在 → ``core.local_model_backends.moe_offload_supported``
+  （**进程内**那一条单独问 ``binding_moe_offload_supported``；哪条路生效问
+  ``moe_offload_path``）
+* llama-server 在哪、这个构建支持哪些旗标、命令行怎么拼 → ``core.llama_server``
 * ``--n-cpu-moe N`` 的 N → ``core.compute_scheduler.ComputeScheduler._split_moe``
   （和真正加载时用的是同一条计算，不是另算一遍）
 * 权重从哪个 repo 下、下哪个量化档 → ``core.hf_ollama_import_fallback``
@@ -86,16 +89,14 @@ def reasoning_slot() -> Tuple[str, int, int]:
 def find_llama_server() -> str:
     """llama-server 可执行文件路径；找不到返回 ""。
 
-    先看 ``GALAXY_LLAMA_SERVER_BIN``（用户自己编的、装在非标准位置的），再看 PATH。
+    **判据在 ``core.llama_server``,本文件只调用。** 原来这里自己找一遍(env → PATH
+    三个候选名),后来运行时那一侧也要找,于是同一条规则有了两份 —— 而这正是本仓库
+    最不容许的那种重复:两份会在"认不认 ``server`` 这个名字"上分叉,表现是脚本说
+    找到了、运行时说没有。
     """
-    explicit = os.environ.get("GALAXY_LLAMA_SERVER_BIN", "").strip()
-    if explicit and os.path.isfile(explicit) and os.access(explicit, os.X_OK):
-        return explicit
-    for name in ("llama-server", "llama_server", "server"):
-        found = shutil.which(name)
-        if found:
-            return found
-    return ""
+    from core.llama_server import llama_server_binary
+
+    return llama_server_binary() or ""
 
 
 def compute_n_cpu_moe(weight_mb: int) -> Optional[int]:
@@ -120,11 +121,35 @@ def compute_n_cpu_moe(weight_mb: int) -> Optional[int]:
 
 
 def build_command(binary: str, gguf_path: str, n_cpu_moe: Optional[int], port: int) -> List[str]:
-    """拼出可直接执行的 llama-server 命令行。"""
-    cmd = [binary, "-m", gguf_path, "--host", "127.0.0.1", "--port", str(port), "-ngl", "999"]
-    if n_cpu_moe:
-        cmd += ["--n-cpu-moe", str(n_cpu_moe)]
-    return cmd
+    """拼出可直接执行的 llama-server 命令行。
+
+    **组装在 ``core.llama_server.build_server_args``,本文件只调用。** 与
+    :func:`find_llama_server` 同一条理由;而且那一份还多做两件这里做不到的事:
+
+    * 先看这个构建的 ``--help`` 里到底有没有那个旗标 —— 拼一条它不认识的旗标,
+      要么服务起不来,要么被吞掉,而"被吞掉"正是专家卸载那个洞活了很久的方式;
+    * 顺带把**草稿位**(``--spec-type``)一起拼上 —— 推理位声明了机制且真机实测
+      为正时才拼,见 ``core.speculative_draft``。
+    """
+    from core.llama_server import build_server_args
+    from core.speculative_draft import draft_spec_of, is_enabled, load_measurement
+
+    tag, _w, _r = reasoning_slot()
+    spec = draft_spec_of(tag)
+    enabled = bool(tag) and is_enabled(tag)
+    plan = build_server_args(
+        model_path=gguf_path,
+        port=port,
+        alias=tag,
+        n_gpu_layers=999,
+        n_cpu_moe=int(n_cpu_moe or 0),
+        draft_spec_type=spec.spec_type if enabled else "",
+        draft_n_max=load_measurement(tag).n_max if enabled else 0,
+        binary=binary,
+    )
+    for note in plan.notes:
+        _log("WARN", note)
+    return list(plan.argv)
 
 
 def env_block(tag: str, port: int) -> Dict[str, str]:
@@ -175,14 +200,22 @@ def main() -> int:
 
     # 1. 进程内到底行不行？行的话根本不需要这个脚本。
     try:
-        from core.local_model_backends import moe_offload_supported
+        from core.local_model_backends import binding_moe_offload_supported
 
-        in_process_ok = moe_offload_supported()
+        in_process_ok = binding_moe_offload_supported()
     except Exception:  # noqa: BLE001
         in_process_ok = False
     if in_process_ok:
         _log("OK", "装着的 llama-cpp-python 支持专家卸载 —— 推理位可直接进程内加载，无需 llama-server")
         _log("INFO", "接着往下走只是为了另起一个 server；一般用不到，直接启动主程序即可")
+    # 哪条路在扛这件事 —— 合成一个布尔的话，排障的人不知道该去装库还是去装二进制。
+    try:
+        from core.local_model_backends import moe_offload_path
+
+        _PATH_ZH = {"binding": "进程内（llama-cpp-python）", "server": "llama-server 子进程", "none": "两条都不行"}
+        _log("INFO", f"专家卸载当前走: {_PATH_ZH.get(moe_offload_path(), moe_offload_path())}")
+    except Exception as exc:  # noqa: BLE001
+        _log("WARN", f"专家卸载路径问不出来: {exc}")
 
     # 2. 权重
     from core.hf_ollama_import_fallback import download_gguf

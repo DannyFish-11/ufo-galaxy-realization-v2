@@ -127,10 +127,12 @@ def _collect_gaps(
                     "pip": "",
                     "detail": (
                         f"{tag} 的显存账({spec.runtime_mb()} MB)是按**专家卸载生效**算的,"
-                        f"但装着的 llama-cpp-python 既不支持 n_cpu_moe 也不支持 override_tensor —— "
+                        f"但这台机器上**两条路都做不到**:装着的 llama-cpp-python 既不支持 "
+                        f"n_cpu_moe 也不支持 override_tensor,而 llama-server 也没找到 —— "
                         f"这一位会按整权重 {weight_mb} MB 要显存,小显存上必然装不下。"
-                        f"解法:改用 llama.cpp server(llama-server --n-cpu-moe N),"
-                        f"再用 GALAXY_LOCAL_OPENAI_URL 接进来。"
+                        f"解法:装一个 llama.cpp 的 llama-server(或用 GALAXY_LLAMA_SERVER_BIN "
+                        f"指到你自己编的那份)。装上之后**不需要再配什么** —— 后端选择会自动改走它,"
+                        f"服务由本进程起、地址自动导出。"
                     ),
                     "source": getattr(spec, "source", ""),
                     "declared_runtime_mb": spec.runtime_mb(),

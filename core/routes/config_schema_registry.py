@@ -719,6 +719,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 三态:不设=按当前档位的**真实供给**自动判定(本机原生与云端一视同仁);
     # 1=强制开;0=强制关。写成 boolean/false 是**假的** —— 面板会显示"关"而实际
     # 已自动开启,那正是这条守卫要防的事。
+    # 三态:不设=按目录声明 + 真机实测自动判定;0=强制关。**没有"强制开"这一档** ——
+    # 开不开取决于这台机器实测出来是快是慢(公开数据里同一件事既有 +2.69x 也有
+    # 净 -44.6%),给一个"强制开"等于允许用户把自己调慢一半还不知道为什么。
+    # 要开就去跑 scripts/probe_models.py --draft,让实测说话。
+    "GALAXY_SPECULATIVE_DRAFT": {
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": "投机解码草稿位（auto=实测更快才开 / 0=强制关 · 默认 auto；开不开由 scripts/probe_models.py --draft 的真机 A/B 决定）",
+    },
     "GALAXY_VOICE_DUPLEX": {
         "default": "auto",
         "type": "string",
@@ -893,6 +903,19 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 双模型本地主脑的另一半:感知位跑在核显上时,用 llama.cpp server 的 SYCL/Vulkan
     # 后端或 OpenVINO Model Server 起一个 OpenAI 兼容端点,填地址即可接入 ——
     # 路由层的 OpenAIAdapter 讲的就是这套协议,不需要新后端。
+    # 这一位与下面三个 GALAXY_LOCAL_OPENAI_* 是一组:它说"二进制在哪",那三个说
+    # "起来之后怎么接进来"。由我们自己起服务时,后三个会被 core.llama_server 自动
+    # 导出,人只需要填这一个。
+    "GALAXY_LLAMA_SERVER_BIN": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "llama-server 可执行文件路径。留空=在 PATH 上找(llama-server / llama_server / server)。"
+            "C 档的专家卸载(--n-cpu-moe)与 D 档的草稿位(--spec-type)只在这个二进制上有,"
+            "llama-cpp-python 的进程内绑定不透出它们"
+        ),
+    },
     "GALAXY_LOCAL_OPENAI_URL": {
         "default": "",
         "type": "string",

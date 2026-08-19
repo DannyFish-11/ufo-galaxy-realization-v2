@@ -362,6 +362,10 @@ export interface ThinkingLocusView {
   reason: string;
   /** 角色意图没被满足：派活落到云端，或把关回落本地 —— 该画得不一样 */
   is_fallback: boolean;
+  /** 本地这一轮开没开投机解码的草稿位；只在 locus=local 时有意义 */
+  draft_active: boolean;
+  /** 这台机器实测的倍数；0=没测过，<1=测过且更慢（那时 draft_active 为 false） */
+  draft_speedup: number;
 }
 
 /** (上一档, 当前档) → 转移性质。缺失的组合按 `none` 处理。 */

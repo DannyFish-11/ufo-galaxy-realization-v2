@@ -206,6 +206,10 @@ export const UNDECIDED_THINKING_LOCUS: ThinkingLocusView = {
   route_type: 'unknown',
   reason: '',
   is_fallback: false,
+  // 没路由过就谈不上「有没有被加速」。0 是「没测过」，不是「测过、是 1 倍」——
+  // 后端那边把这两件事分得很开（<1 表示测过且更慢，那时 draft_active 为 false）。
+  draft_active: false,
+  draft_speedup: 0,
 };
 
 /** 后端 `HybridExecutionView.undecided()` 的等价空态 —— 本轮还没选执行手法。 */

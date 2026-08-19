@@ -174,16 +174,34 @@ class TestAnUnachievablePlacementIsAlsoAGap:
         assert "llama-server" in g["detail"], "没给出可行的替代接法"
 
     def test_the_capability_probe_reads_the_installed_library(self):
-        """判据必须问**装着的那个库**，不是版本号、不是猜。"""
+        """判据必须问**装着的那个东西**，不是版本号、不是猜。
+
+        专家卸载现在有两条路，各问各的，两条都必须是"去问"而不是"按约定"：
+
+        * 进程内 → 读 ``llama_cpp.Llama.__init__`` 的签名；
+        * llama-server → 读那个二进制的 ``--help``。
+
+        这条测试原来只钉进程内那一份（当时也只有那一份）。加了第二条路之后，
+        ``moe_offload_supported`` 变成两者的或，它自己的函数体里不再出现
+        ``import llama_cpp`` —— 所以钉的位置跟着挪到 ``binding_moe_offload_supported``，
+        并把 server 那一份一起钉上。**要求没有放松，覆盖面扩大了。**
+        """
         import inspect
 
-        from core.local_model_backends import moe_offload_supported
+        from core.llama_server import server_supported_flags
+        from core.local_model_backends import binding_moe_offload_supported, moe_offload_supported
 
-        src = inspect.getsource(moe_offload_supported)
-        body = src.split('"""')[-1]
+        body = inspect.getsource(binding_moe_offload_supported).split('"""')[-1]
         assert "import llama_cpp" in body
         assert "signature" in body, "按签名探测,不按版本号猜 —— 各版本入参不同"
         assert "n_cpu_moe" in body and "override_tensor" in body
+
+        server_body = inspect.getsource(server_supported_flags).split('"""')[-1]
+        assert "--help" in server_body or "_run_help" in server_body, "server 那条也要去问,不能按约定"
+
+        # 顶层判据必须是两条路的**或** —— 少了任何一条,装好了的那条路会被判成不存在。
+        top = inspect.getsource(moe_offload_supported).split('"""')[-1]
+        assert "binding_moe_offload_supported" in top and "_server_moe_offload_supported" in top
 
     def test_a_non_moe_model_is_never_flagged(self, monkeypatch):
         """只对"声称靠卸载省显存"的型号报 —— 别的型号跟这条无关。"""

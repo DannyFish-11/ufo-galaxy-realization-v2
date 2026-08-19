@@ -1080,9 +1080,153 @@ class HFHubBackend(LocalModelBackend):
 # Backend Factory
 # ---------------------------------------------------------------------------
 
+
+class LlamaServerBackend(LocalModelBackend):
+    """推理位走**我们自己起的** ``llama-server``,经 OpenAI 兼容口说话。
+
+    为什么要有它
+    ============
+    ``LlamaCppBackend`` 那条进程内的路做不了两件事,而这两件恰恰是 C/D 推理位的
+    立身之本 —— 专家卸载(``--n-cpu-moe``,C 档 18 GB 权重塞进 8 GB 显存的全部
+    前提)与草稿位(``--spec-type``)。它们只存在于 CLI/server 旗标上,
+    ``llama-cpp-python`` 不透出(见 :func:`binding_moe_offload_supported`)。
+
+    此前的现场是:调度器认真算出 ``n_cpu_moe``,加载器发现绑定不支持,打一条
+    warning,**然后照常加载** —— 而准入早就按"专家卸载生效"的 7.3 GB 放行了。
+    判据说装得下、这条路做不到,中间隔着一次加载,现场看到的是一次没头没脑的 OOM。
+
+    重活都不在这里
+    ==============
+    二进制在哪、这个构建支持哪些旗标、命令行怎么拼、进程怎么起怎么收 —— 全在
+    ``core.llama_server``(那一份同时被 ``scripts/setup_reasoning_slot.py`` 用,
+    所以只能有一份)。本类只是把它适配成 ``LocalModelBackend``。
+    """
+
+    name = "llama_server"
+    supports_streaming = True
+
+    def __init__(self):
+        self._proc: Any = None
+        self._model_id: str = ""
+
+    async def generate(self, messages, model, temperature=0.7, max_tokens=2048, **kwargs) -> str:
+        import httpx  # noqa: PLC0415
+
+        if self._proc is None or not self._proc.is_running:
+            if not await self.load_model(model):
+                raise RuntimeError(f"llama-server 起不来: {getattr(self._proc, 'error', '未知原因')}")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self._proc.base_url}/chat/completions",
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                },
+                timeout=180.0,
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+
+    async def load_model(self, model_id: str) -> bool:
+        """起服务。分配、上下文预算、草稿位一律问既有判据,本方法不自己算。"""
+        from core.llama_server import LlamaServerProcess  # noqa: PLC0415
+
+        if self._proc is not None and self._proc.is_running:
+            if self._model_id == model_id:
+                return True
+            self._proc.stop()
+
+        model_path = resolve_gguf_path(model_id)
+        if not model_path:
+            logger.warning("llama_server: %s 的 GGUF 不在本机", model_id)
+            return False
+
+        n_gpu_layers, n_cpu_moe, n_ctx = await self._plan_for(model_id)
+        spec_type, draft_n_max = _draft_flags_for(model_id)
+
+        proc = LlamaServerProcess(model_id=model_id)
+        ok = proc.start(
+            model_path=model_path,
+            alias=model_id,
+            n_gpu_layers=n_gpu_layers,
+            n_ctx=n_ctx,
+            n_cpu_moe=n_cpu_moe,
+            draft_spec_type=spec_type,
+            draft_n_max=draft_n_max,
+        )
+        self._proc = proc
+        self._model_id = model_id if ok else ""
+        return ok
+
+    @staticmethod
+    async def _plan_for(model_id: str) -> tuple:
+        """(n_gpu_layers, n_cpu_moe, n_ctx) —— 全部问调度器,与进程内那条路同源。
+
+        同源是硬要求:命令行上给的 N 和调度器心里那个 N 必须是同一个数,否则显存账
+        两处对不上,而对不上的表现是加载途中 OOM,不是任何一处报错。
+        """
+        n_gpu_layers, n_cpu_moe, n_ctx = -1, 0, 0
+        try:
+            from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+            from core.model_catalog import exact_model, resolve_is_moe  # noqa: PLC0415
+
+            spec = exact_model(model_id)
+            size_mb = spec.runtime_mb() if spec is not None else 0
+            alloc = await get_compute_scheduler().schedule_model(
+                model_id, size_mb, preferred_backend="llama_cpp", is_moe=bool(resolve_is_moe(model_id))
+            )
+            n_gpu_layers = alloc.n_gpu_layers
+            n_cpu_moe = int(getattr(alloc, "n_cpu_moe", 0) or 0)
+        except Exception as exc:  # noqa: BLE001 — 与进程内那条路同一立场:响亮退化
+            logger.warning(
+                "调度器不可用,llama-server 将按全部层上 GPU、不做专家卸载起 —— "
+                "C 档那笔 7.3 GB 的显存账不成立,显存不足时会 OOM。原因: %s",
+                exc,
+            )
+        try:
+            from core.compute_scheduler import get_compute_scheduler  # noqa: PLC0415
+
+            n_ctx, _why = get_compute_scheduler().context_budget_for(model_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("上下文预算不可评估,交给 llama-server 的构建默认值: %s", exc)
+        return n_gpu_layers, n_cpu_moe, n_ctx
+
+    async def unload_model(self, model_id: str):
+        if self._proc is not None:
+            self._proc.stop()
+            self._proc = None
+            self._model_id = ""
+
+    async def health_check(self) -> bool:
+        return self._proc is not None and self._proc.is_running
+
+    def list_models(self) -> List[str]:
+        return [self._model_id] if self._model_id else []
+
+
+def _draft_flags_for(model_id: str) -> tuple:
+    """(spec_type, n_max) —— 只有目录声明了机制**且真机实测为正**时才非空。
+
+    默认关是有意的,理由在 ``core.speculative_draft``:公开实测里同一件事既有
+    +2.69× 也有净 −44.6%,方向取决于机器。没测过就开,期望值是负的。
+    """
+    try:
+        from core.speculative_draft import draft_spec_of, is_enabled, load_measurement  # noqa: PLC0415
+
+        if not is_enabled(model_id):
+            return "", 0
+        return draft_spec_of(model_id).spec_type, int(load_measurement(model_id).n_max or 0)
+    except Exception as exc:  # noqa: BLE001 — 问不出来就是不开
+        logger.debug("草稿位判据不可用,按不开处理: %s", exc)
+        return "", 0
+
+
 BACKEND_REGISTRY: Dict[str, type] = {
     "ollama": OllamaBackend,
     "llama_cpp": LlamaCppBackend,
+    "llama_server": LlamaServerBackend,
     "transformers": TransformersBackend,
     "vllm": VLLMBackend,
     "hf_hub": HFHubBackend,
@@ -1110,7 +1254,50 @@ def create_backend(name: str, **kwargs) -> LocalModelBackend:
 
 
 def moe_offload_supported() -> bool:
-    """**装着的这个** llama-cpp-python 能不能做专家卸载 —— 判据只此一处。
+    """这台机器上**有没有一条路**能做专家卸载 —— 选档判据只此一处。
+
+    它回答的是调用方真正在问的那个问题:C 档跑不跑得起来。答案有两条路:
+
+    * **进程内**(:func:`binding_moe_offload_supported`)—— 装着的 llama-cpp-python
+      透不透出 ``n_cpu_moe`` / ``override_tensor``;
+    * **llama-server**(``core.llama_server.server_moe_offload_supported``)——
+      那个二进制的 ``--help`` 里有没有 ``--n-cpu-moe``。
+
+    两条路里有一条成立就算行得通。**哪一条**由 :func:`moe_offload_path` 回答 ——
+    合成一个布尔会让排障的人不知道该去装库还是去装二进制。
+
+    本函数原来只问第一条。于是 llama-server 装好、``scripts/setup_reasoning_slot.py``
+    把服务架起来之后,选档界面**仍然**报"这一位跑不起来" —— 判据落后于现实。
+    """
+    return binding_moe_offload_supported() or _server_moe_offload_supported()
+
+
+def _server_moe_offload_supported() -> bool:
+    """llama-server 那条路行不行。二进制不在/问不出来一律 False(不假装)。"""
+    try:
+        from core.llama_server import server_moe_offload_supported  # noqa: PLC0415
+
+        return bool(server_moe_offload_supported())
+    except Exception as exc:  # noqa: BLE001 — 问不出来就是不行
+        logger.debug("llama-server 能力问不出来,按不支持处理: %s", exc)
+        return False
+
+
+def moe_offload_path() -> str:
+    """专家卸载**走哪条路**:``"binding"`` / ``"server"`` / ``"none"``。
+
+    进程内优先:它不用额外起一个进程。两条都不行时是 ``none`` —— 那时 C 档的
+    7.3 GB 显存账不成立,准入必须知道。
+    """
+    if binding_moe_offload_supported():
+        return "binding"
+    if _server_moe_offload_supported():
+        return "server"
+    return "none"
+
+
+def binding_moe_offload_supported() -> bool:
+    """**装着的这个** llama-cpp-python 能不能做专家卸载。
 
     为什么这件事必须能被问到
     ========================
@@ -1142,7 +1329,13 @@ def moe_offload_supported() -> bool:
 
 
 def list_available_backends() -> List[str]:
-    """List all backends whose dependencies are installed"""
+    """哪些后端**在这台机器上真的能用**。
+
+    ``llama_server`` 的判据与其余几个不同,而这个差别是本质的:别的后端问的是
+    "pip 装没装",它问的是"**二进制在不在**"。按 import 判它会永远判不出来,
+    于是那条路明明可用却从不出现在可用列表里 —— 而 ``runtime_readiness`` 正是
+    拿这个列表去判"这一档跑不跑得起来"的。
+    """
     available = []
     for name, cls in BACKEND_REGISTRY.items():
         try:
@@ -1150,6 +1343,11 @@ def list_available_backends() -> List[str]:
                 import httpx  # noqa: F401
             elif name == "llama_cpp":
                 from llama_cpp import Llama  # noqa: F401
+            elif name == "llama_server":
+                from core.llama_server import llama_server_binary  # noqa: PLC0415
+
+                if not llama_server_binary():
+                    continue
             elif name == "transformers":
                 from transformers import AutoModelForCausalLM  # noqa: F401
             elif name == "vllm":

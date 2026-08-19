@@ -146,6 +146,16 @@ class ThinkingLocusView:
     reason: str = ""
     #: 角色意图没被满足(派活落到云端 / 把关回落本地)。见 ``ThinkingLocusRecord``。
     is_fallback: bool = False
+    #: 本地这一轮有没有开**投机解码的草稿位**。见 :mod:`core.speculative_draft`。
+    #:
+    #: 只在 ``locus == "local"`` 时有意义 —— 云端怎么解码不归这边管,也看不见。
+    #: 它是 HUD 态势层唯一需要的那一位:"本地正在被加速"跟"本地在硬扛"画出来
+    #: 该不一样,而这件事从 provider/model 上完全看不出来。
+    draft_active: bool = False
+    #: 这台机器上实测的倍数(``0`` = 没测过)。**小于 1 表示更慢** —— 那种情况
+    #: ``draft_active`` 本来就是 False,但数字仍然带着,因为"测过、结论是别开"
+    #: 与"没测过"在面板上该分得开。
+    draft_speedup: float = 0.0
 
     @classmethod
     def undecided(cls) -> "ThinkingLocusView":
@@ -161,6 +171,8 @@ class ThinkingLocusView:
             "route_type": self.route_type,
             "reason": self.reason,
             "is_fallback": self.is_fallback,
+            "draft_active": self.draft_active,
+            "draft_speedup": round(float(self.draft_speedup), 3),
         }
 
 
@@ -180,6 +192,33 @@ def last_thinking_record() -> Optional[Any]:
         return None
 
 
+def _draft_readout(locus: str, model: str) -> Tuple[bool, float]:
+    """本地这一轮开没开草稿位、实测多少倍。取不到一律 ``(False, 0.0)``。
+
+    与本模块其余部分同一条纪律:``sys.modules.get`` 只看**已经导入过**的模块,
+    绝不为了填这一位去 import 一串东西。而且它读的是一个 JSON 文件 ——
+    在场桥是 5Hz,所以走 :data:`PATHWAY_TTL_S` 那套缓存,不是每帧去敲盘。
+
+    云端归属直接返回零值:云端怎么解码这边既管不着也看不见,报一个"没开"会被
+    读成"云端没被加速",那是无中生有。
+    """
+    if locus != "local" or not model:
+        return False, 0.0
+    mod = sys.modules.get("core.speculative_draft")
+    if mod is None:
+        return False, 0.0
+    hit = _draft_cached(model)
+    if hit is not None:
+        return hit
+    try:
+        active = bool(mod.is_enabled(model))
+        speedup = float(getattr(mod.load_measurement(model), "speedup", 0.0) or 0.0)
+    except Exception:  # noqa: BLE001 — 可见性绝不该拖垮广播
+        return False, 0.0
+    _draft_store(model, (active, speedup))
+    return active, speedup
+
+
 def resolve_thinking_locus_view() -> ThinkingLocusView:
     """路由回执 → 契约视图。没有回执时是 :meth:`ThinkingLocusView.undecided`。"""
     rec = last_thinking_record()
@@ -191,6 +230,8 @@ def resolve_thinking_locus_view() -> ThinkingLocusView:
     route_type = getattr(rec, "route_type", "unknown")
     if route_type not in ROUTE_TYPES:
         route_type = "unknown"
+    model = str(getattr(rec, "model", "") or "")
+    draft_active, draft_speedup = _draft_readout(locus, model)
     return ThinkingLocusView(
         is_decided=locus in ("local", "cloud"),
         locus=locus,
@@ -201,6 +242,8 @@ def resolve_thinking_locus_view() -> ThinkingLocusView:
         # 理由是后端原文，可能很长；截断而不是丢弃 —— 丢了就没法在面板上排障。
         reason=str(getattr(rec, "reason", "") or "")[:_REASON_MAX],
         is_fallback=bool(getattr(rec, "is_fallback", False)),
+        draft_active=draft_active,
+        draft_speedup=draft_speedup,
     )
 
 
@@ -219,6 +262,10 @@ def _tier_kind() -> str:
 
 _cache_lock = threading.Lock()
 _cache: Dict[str, Tuple[float, ModalityPathwayView]] = {}
+#: 草稿位读数的缓存 —— 它读的是一个 JSON 文件,同样不能每帧敲盘。与通路缓存
+#: 分开放而不是塞同一个字典:两者的键空间不同(一个是 locus、一个是型号 tag),
+#: 混在一起会在某个型号恰好叫 "local" 的那天出事。
+_draft_cache: Dict[str, Tuple[float, Tuple[bool, float]]] = {}
 
 
 def _cached(key: str) -> Optional[ModalityPathwayView]:
@@ -235,10 +282,25 @@ def _store(key: str, view: ModalityPathwayView) -> None:
         _cache[key] = (time.monotonic(), view)
 
 
+def _draft_cached(model: str) -> Optional[Tuple[bool, float]]:
+    with _cache_lock:
+        hit = _draft_cache.get(model)
+    if hit is None:
+        return None
+    at, val = hit
+    return val if (time.monotonic() - at) < PATHWAY_TTL_S else None
+
+
+def _draft_store(model: str, val: Tuple[bool, float]) -> None:
+    with _cache_lock:
+        _draft_cache[model] = (time.monotonic(), val)
+
+
 def reset_pathway_cache() -> None:
-    """丢掉通路缓存。给测试用 —— 不清的话上一条用例的结论会漏到下一条。"""
+    """丢掉通路与草稿位缓存。给测试用 —— 不清的话上一条用例的结论会漏到下一条。"""
     with _cache_lock:
         _cache.clear()
+        _draft_cache.clear()
 
 
 def resolve_pathway_view(*, locus: Optional[str] = None) -> ModalityPathwayView:
