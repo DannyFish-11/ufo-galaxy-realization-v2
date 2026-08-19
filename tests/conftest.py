@@ -343,3 +343,44 @@ def _reset_voice_echo_guard():
     except ImportError:
         pass
     yield
+
+
+# ---------------------------------------------------------------------------
+# 硬件感知多模态路由(HA 层)—— 注入路由器的用例必须显式关掉它
+# ---------------------------------------------------------------------------
+#
+# ``OpenClawd._select_multimodal_route`` 在问 MultiLLMRouter **之前**先问
+# ``HardwareAwareMultimodalRouter``:本机(Ollama / HF VLM)只要有可用模型,它就直接
+# 返回本地路由决策,**整个绕过**用例注入的那个 _FakeRouter。
+#
+# 于是这类用例的绿是靠"本机恰好没有本地模型"换来的 —— 而本项目的安装文档本身就要求
+# 装 Ollama。按文档配好环境的开发者一跑测试就看到一片与自己改动无关的红,失败信息
+# 完全不提"因为你装了 Ollama"(实测两种表现:route_type 从 native_multimodal 变成
+# partial_multimodal;以及注入的路由器**一次都没被调到**,断言 calls[0] 直接
+# IndexError)。CI 恒绿(runner 干净),只砸本机开发者。
+#
+# **这个坑已经踩到第二次了**,所以判据搬到这里、只留一份:
+#
+#   1. ``tests/test_pr52_desktop_native_ingress_backbone.py`` —— 第一次,当时在那个
+#      文件里就地写了个 ``_disable_ha_router``;
+#   2. ``tests/test_pr1304_presence_mode_runtime_driver.py`` —— 第二次,由
+#      ``scripts/detect_environment_coupled_tests.py`` 的每日环境耦合扫描逮出来。
+#
+# 留两份的话,下一次有人改 HA 层的透明写法,必然只改到其中一份。
+@pytest.fixture
+def disable_ha_router():
+    """返回一个 ``(oc) -> None`` 的函数,把 HA 层调成透明。
+
+    ``route_hint_sync`` 返回 ``None`` 即 fallthrough 到被注入的路由器 —— 让那个
+    _FakeRouter 真正成为本用例里的路由权威。这些用例断言的本来就是"给定路由决策后
+    如何分级",不是"本机有没有本地模型"。
+
+    做成 fixture 返回函数而不是 autouse:关掉 HA 层是**这一类**用例的前提,不是全仓
+    前提。真正要测 HA 层的用例必须能拿到真的那一个。
+    """
+    from types import SimpleNamespace
+
+    def _disable(oc) -> None:
+        oc._ha_router = SimpleNamespace(route_hint_sync=lambda **_kw: None)
+
+    return _disable

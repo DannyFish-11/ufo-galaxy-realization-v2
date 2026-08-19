@@ -52,7 +52,17 @@ async def test_runtime_propagates_presence_runtime_hint_into_openclawd_main_path
     assert result["metadata"]["presence_runtime_hint"]["presence_mode"] == "liminal"
 
 
-def test_presence_mode_changes_route_bias_and_context_strategy_without_ingress_signals():
+def test_presence_mode_changes_route_bias_and_context_strategy_without_ingress_signals(disable_ha_router):
+    """在场模式如何改路由偏置与上下文策略 —— 与"本机有没有本地模型"无关。
+
+    ``disable_ha_router`` 不是可有可无的:``_select_multimodal_route`` 会**先**问
+    ``HardwareAwareMultimodalRouter``,本机有 Ollama 就直接返回本地决策、**整个绕过**
+    下面注入的 ``_FakeRouter``。表现是 ``router.calls`` 一条都没有,断言 ``calls[0]``
+    直接 IndexError —— 而失败信息完全不提"因为你装了 Ollama"。
+
+    这条是每日环境耦合扫描(``scripts/detect_environment_coupled_tests.py``)逮出来的:
+    干净环境过、起了 Ollama 桩就红。理由与判据都在 ``tests/conftest.py``。
+    """
     from core.openclawd import OpenClawd
 
     class _FakeRouter:
@@ -72,6 +82,7 @@ def test_presence_mode_changes_route_bias_and_context_strategy_without_ingress_s
     oc = OpenClawd.__new__(OpenClawd)
     router = _FakeRouter()
     oc._get_router = MagicMock(return_value=router)
+    disable_ha_router(oc)
     fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
 
     with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
