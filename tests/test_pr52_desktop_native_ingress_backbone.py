@@ -26,25 +26,12 @@ VALID_1X1_PNG_BASE64 = (
 )
 
 
-# ---------------------------------------------------------------------------
-# 为什么每个用例都要显式关掉 HA 路由
-# ---------------------------------------------------------------------------
-# 这些用例用 _FakeRouter 控制路由结果,然后断言 route_type。但
-# ``OpenClawd._select_multimodal_route`` 在问 MultiLLMRouter **之前**先问
-# ``HardwareAwareMultimodalRouter``:本机(Ollama / HF VLM)只要有可用模型,它就
-# 直接返回本地路由决策,**整个绕过** _FakeRouter(见 core/openclawd.py 中
-# "硬件感知多模态优先路由(HA 层)" 那段)。
+# 为什么每个用例都要显式关掉 HA 路由:见 ``tests/conftest.py`` 的 ``disable_ha_router``。
 #
-# 后果:用例的绿是靠"本机恰好没有本地模型"换来的。而这个项目的安装文档本身就要求
-# 装 Ollama —— 也就是说任何按文档配好环境的开发者跑测试,都会看到这 4 条与自己
-# 改动毫无关系的红(实测:route_type 从 native_multimodal 变成 partial_multimodal),
-# 而失败信息完全不会提到"因为你装了 Ollama"。
-#
-# 显式把 _ha_router 关掉,让 _FakeRouter 真正成为本用例里的路由权威 —— 用例断言
-# 的本来就是"给定路由决策后如何分级",不是"本机有没有本地模型"。
-def _disable_ha_router(oc) -> None:
-    """让 HA 层透明:route_hint_sync 返回 None 即 fallthrough 到被注入的路由器。"""
-    oc._ha_router = SimpleNamespace(route_hint_sync=lambda **_kw: None)
+# 原来这里就地写了一份 ``_disable_ha_router``。同一个坑在
+# ``tests/test_pr1304_presence_mode_runtime_driver.py`` 上又踩了一次(由每日环境耦合
+# 扫描逮出来),所以判据搬去 conftest 只留一份 —— 留两份的话,下一次有人改 HA 层的
+# 透明写法,必然只改到其中一份。
 
 
 def test_backbone_contract_sentinel_and_authority_present():
@@ -305,7 +292,7 @@ def test_canonical_continuous_ingress_is_consumed_in_canonical_perception_state(
     assert "continuous_stream" in perception.get("active_modalities", [])
 
 
-def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
+def test_openclawd_route_consumes_presence_mode_and_ingress_signals(disable_ha_router):
     from core.openclawd import OpenClawd
 
     class _FakeRouter:
@@ -322,7 +309,7 @@ def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
     oc = OpenClawd.__new__(OpenClawd)
     router = _FakeRouter()
     oc._get_router = MagicMock(return_value=router)
-    _disable_ha_router(oc)
+    disable_ha_router(oc)
     fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
     with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
         result = oc._select_multimodal_route(
@@ -346,7 +333,7 @@ def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
     assert result["context_strategy_hint"]["foreground_context_priority"] == "high"
 
 
-def test_route_guidance_uses_canonical_continuous_ingress_runtime_family():
+def test_route_guidance_uses_canonical_continuous_ingress_runtime_family(disable_ha_router):
     from core.openclawd import OpenClawd
 
     baseline = OpenClawd._derive_desktop_native_ingress_route_guidance(
@@ -371,7 +358,7 @@ def test_route_guidance_uses_canonical_continuous_ingress_runtime_family():
     assert guided["context_strategy_hint"]["continuous_stream_assisted"] is True
 
 
-def test_android_device_continuous_family_promoted_to_cognition_routing():
+def test_android_device_continuous_family_promoted_to_cognition_routing(disable_ha_router):
     from core.openclawd import OpenClawd
 
     class _FakeRouter:
@@ -380,7 +367,7 @@ def test_android_device_continuous_family_promoted_to_cognition_routing():
 
     oc = OpenClawd.__new__(OpenClawd)
     oc._get_router = MagicMock(return_value=_FakeRouter())
-    _disable_ha_router(oc)
+    disable_ha_router(oc)
     fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
     with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
         routed = oc._select_multimodal_route(
@@ -400,7 +387,7 @@ def test_android_device_continuous_family_promoted_to_cognition_routing():
     assert routed["route_bias"] == "android_perception_ingress_aware"
 
 
-def test_openclawd_route_differs_when_stream_and_screen_backbone_present():
+def test_openclawd_route_differs_when_stream_and_screen_backbone_present(disable_ha_router):
     from core.openclawd import OpenClawd
 
     class _FakeRouter:
@@ -420,7 +407,7 @@ def test_openclawd_route_differs_when_stream_and_screen_backbone_present():
     oc = OpenClawd.__new__(OpenClawd)
     router = _FakeRouter()
     oc._get_router = MagicMock(return_value=router)
-    _disable_ha_router(oc)
+    disable_ha_router(oc)
     fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
     with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
         baseline = oc._select_multimodal_route(
@@ -456,7 +443,7 @@ def test_openclawd_route_differs_when_stream_and_screen_backbone_present():
     assert router.calls[-1]["active_modalities"] == ["screen", "stream"]
 
 
-def test_openclawd_route_differs_with_android_perception_ingress_signal():
+def test_openclawd_route_differs_with_android_perception_ingress_signal(disable_ha_router):
     from core.openclawd import OpenClawd
 
     class _FakeRouter:
@@ -476,7 +463,7 @@ def test_openclawd_route_differs_with_android_perception_ingress_signal():
     oc = OpenClawd.__new__(OpenClawd)
     router = _FakeRouter()
     oc._get_router = MagicMock(return_value=router)
-    _disable_ha_router(oc)
+    disable_ha_router(oc)
     fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
     with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
         baseline = oc._select_multimodal_route(

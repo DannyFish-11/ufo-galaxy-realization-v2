@@ -155,10 +155,30 @@ class TestAllProvidersDown:
     """验证所有 Provider 失败返回标准响应而非 RuntimeError"""
 
     def test_returns_response_not_exception(self):
-        """所有 provider 调用失败后返回 LLMResponse 而非抛异常"""
+        """所有 provider 调用失败后返回 LLMResponse 而非抛异常。
+
+        前提由本用例**自己钉死**,不靠"这台机器恰好没装什么"
+        ----------------------------------------------------
+        ``MultiLLMRouter()`` 在构造时自动发现提供商:本机起着 Ollama(而本项目的
+        安装文档本身就要求装它),就会发现一个,于是 ``provider`` 是 ``"ollama"``
+        而不是 ``"none"``,断言当场翻 —— 而失败信息只说 ``'ollama' == 'none'``,
+        完全不提"因为你装了 Ollama"。
+
+        这条是每日环境耦合扫描(``scripts/detect_environment_coupled_tests.py``)
+        逮出来的:干净环境过、起了 Ollama 桩就红。CI 恒绿(runner 干净),只砸本机
+        开发者。
+
+        用例名字就叫"所有 provider 都下线",那就**把它们真的清空**,而不是指望
+        机器上恰好一个都没有。这不是放松断言 —— 恰恰相反,断言从此在任何机器上
+        都成立,而且测的正是它名字说的那件事。
+        """
         from core.multi_llm_router import MultiLLMRouter
 
         router = MultiLLMRouter()
+        # "所有 provider 都下线" = 一个可用提供商都没有。适配器一并清掉:留着的话
+        # 路由虽然选不出 provider,后面的兜底路径仍可能摸到一个还活着的适配器。
+        router.providers.clear()
+        router.adapters.clear()
 
         async def run():
             # 没有配置任何 provider 时调用 chat
