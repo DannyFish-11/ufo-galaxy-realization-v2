@@ -118,6 +118,9 @@ _ENV_MAPPING: Dict[str, str] = {
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
     "zhipu": "ZHIPU_API_KEY",
+    # 独立于上面的 zhipu(通用聊天端点)—— GLM 编码套餐专属,详见
+    # multi_llm_router.PROVIDER_REGISTRY 里 zhipu_coding 条目的注释。
+    "zhipu_coding": "ZHIPU_CODING_API_KEY",
     "minimax": "MINIMAX_API_KEY",
     "step": "STEP_API_KEY",
     "mimo": "MIMO_API_KEY",
