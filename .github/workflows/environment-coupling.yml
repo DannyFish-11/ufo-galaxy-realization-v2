@@ -2,17 +2,34 @@ name: Environment Coupling Detector
 
 # 找出"结论取决于机器上恰好有什么"的测试。
 #
-# 为什么单开一个工作流,而不是塞进 ci.yml
-# --------------------------------------
-# 它要把同一批用例**跑两遍**(干净 / 带环境桩),成本是常规分片的两倍。放进 PR 流水线
-# 会让每个 PR 都多等一倍时间,去换一类**变化极慢**的缺陷 —— 这类耦合是随新测试写进来的,
-# 不是每次改代码都会新增。所以按天跑,加手动触发,PR 时延不受影响。
+# 两种跑法,成本与覆盖面各取一头
+# ------------------------------
+# 全量扫描要把同一批用例**跑两遍**(干净 / 带环境桩),成本是常规分片的两倍。把它整个
+# 塞进 PR 流水线,等于让每个 PR 都多等一倍时间,去换一类**变化极慢**的缺陷。
 #
-# 为什么不设成阻塞闸
-# ------------------
-# 本仓刚吃过教训:File Complexity Budget 是 --strict 阻塞的,红了几十轮之后没人再看,
-# 那道闸等于不存在。新引入的检查先以告警形态跑,等基线确实干净、团队认可它的信号质量,
-# 再考虑加 --strict。工具本身支持,改一个参数即可。
+# 所以拆成两个:
+#
+#   PR 上(pr-scan)   只扫**这个 PR 动过的那几个测试文件**(--paths)。耦合是随新测试
+#                     写进来的,所以在它被写进来的那一刻拦最划算 —— 秒级,不是分钟级。
+#   每天(detect)      全量四片。补上 PR 那一刀够不到的那半边:改 core 也可能让一条
+#                     老测试开始依赖环境(比如新加一条"先问硬件路由"的分支),而那种
+#                     PR 里一个测试文件都没动。
+#
+# 为什么现在可以设成阻塞闸
+# ------------------------
+# 原来这里写着不阻塞,理由是:本仓吃过 File Complexity Budget 的亏 —— 它是 --strict
+# 阻塞的,红了几十轮之后没人再看,那道闸等于不存在。所以新检查先以告警形态跑,
+# **等基线确实干净**、团队认可它的信号质量,再考虑加 --strict。
+#
+# 那个前提现在满足了。四片逐一跑过,曾经有发现的两条已修(见下)、其余两片本来就干净:
+#
+#   shard 1  ✅ 无耦合
+#   shard 2  ✅ 无耦合(修前:test_pr1304_presence_mode_runtime_driver)
+#   shard 3  ✅ 无耦合
+#   shard 4  ✅ 无耦合(修前:test_e2e_integration_hardening::TestAllProvidersDown)
+#
+# 基线是干净的,所以红就是**真的红**,不会变成又一道没人看的闸。这不是推翻上面那条
+# 顾虑,恰恰是按它自己定的条件放行。
 #
 # 已确认它能抓到的真实事故(两起都曾经 CI 恒绿、只砸本机开发者):
 #   * tests/test_mesh_worker_panel_toggle.py —— 依赖"本机没有 nats-server",
@@ -21,19 +38,67 @@ name: Environment Coupling Detector
 #     可这个项目的安装文档**要求**装 Ollama。
 
 on:
+  pull_request:
   schedule:
     # 每天 03:00 UTC。挑在主流水线的低谷,两遍全量跑不抢资源。
     - cron: "0 3 * * *"
   workflow_dispatch:
-    inputs:
-      strict:
-        description: "发现耦合就让本次运行失败"
-        type: boolean
-        default: false
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # PR:只扫这个 PR 动过的测试文件
+  # ---------------------------------------------------------------------------
+  pr-scan:
+    name: Environment Coupling (changed tests)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # 只跑几个文件的两遍,常态是秒级;给足余量应付一次改了很多测试的大 PR。
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      # fetch-depth: 0 是必须的 —— 默认只拉一个 commit,算不出与 base 的差集,
+      # 结果会是"没有改动的测试文件",于是这道闸恒绿。那比没有更糟。
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: 算出这个 PR 动过哪些测试文件
+        id: changed
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          # 只要**还存在**的 .py:删掉的测试文件传给 pytest 会直接报"file not found",
+          # 把一次正常的删除变成红。
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only --diff-filter=d "$BASE...HEAD" -- 'tests/**.py' | tr '\n' ' ')
+          echo "files=${CHANGED}" >> "$GITHUB_OUTPUT"
+          if [ -z "${CHANGED}" ]; then
+            echo "这个 PR 没动测试文件 —— 跳过(全量那一刀每天跑)。"
+          else
+            echo "要扫: ${CHANGED}"
+          fi
+
+      # --strict:发现耦合就红。基线是干净的(见文件头),所以红就是真的红。
+      - name: Detect environment-coupled tests (changed only)
+        if: steps.changed.outputs.files != ''
+        run: |
+          python scripts/detect_environment_coupled_tests.py --strict \
+            --paths ${{ steps.changed.outputs.files }}
+
+  # ---------------------------------------------------------------------------
+  # 每天:全量四片
+  # ---------------------------------------------------------------------------
   detect:
     name: Environment Coupling (shard ${{ matrix.shard }}/4)
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # 单片要跑两遍,给常规分片(25 分钟)的两倍再加余量。
     timeout-minutes: 55
@@ -57,17 +122,21 @@ jobs:
 
       # 分片沿用 scripts/ci_test_shard.py —— 与主流水线同一套切法(CRC 稳定分配),
       # 这样"第 N 片"在两个工作流里指的是同一批文件,对照日志时不会错位。
+      # --strict 恒开:原来只在手动触发且勾了开关时才严格,于是每天那一遍**从不**因为
+      # 发现耦合而失败 —— 报告写得再清楚,退出码是 0,没人会去翻。基线既然干净,就让它
+      # 真的能红。
       - name: Detect environment-coupled tests
         run: |
-          python scripts/detect_environment_coupled_tests.py \
-            --shard ${{ matrix.shard }} --of 4 \
-            ${{ (github.event_name == 'workflow_dispatch' && inputs.strict) && '--strict' || '' }}
+          python scripts/detect_environment_coupled_tests.py --strict \
+            --shard ${{ matrix.shard }} --of 4
 
+  # 只汇总每天那一遍。PR 上 detect 是 skipped,而 skipped != success —— 不排除的话
+  # 每个 PR 都会挂一条"发现环境耦合"的假警报,而真正的判定在 pr-scan 的作业状态上。
   summary:
     name: Environment Coupling Summary
     runs-on: ubuntu-latest
     needs: detect
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     timeout-minutes: 5
     permissions:
       contents: read
