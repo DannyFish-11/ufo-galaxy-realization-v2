@@ -181,6 +181,10 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
     "zhipu": "ZHIPU_API_KEY",
+    # 故意不是 ZHIPU_API_KEY:见 PROVIDER_REGISTRY 里 zhipu_coding 条目的注释 ——
+    # 用独立的 env 名,才能保证"配了 zhipu 聊天 key"和"选择接编码套餐"是两件事,
+    # 不会互相牵连。
+    "zhipu_coding": "ZHIPU_CODING_API_KEY",
     "minimax": "MINIMAX_API_KEY",
     "step": "STEP_API_KEY",
     "mimo": "MIMO_API_KEY",
@@ -1618,15 +1622,24 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
     },
     {
         # Grok 4.6 —— 联网核实,2026-08-12 发布,xAI 官方 API / OpenRouter / Cursor /
-        # Vercel / Cloudflare 同步上线,base_url/协议与 4.5 一致(同一 provider,
-        # 只是新模型 id),不是猜的命名惯例延伸。
+        # Vercel / Cloudflare 同步上线(2026-08-19 又上了 Amazon Bedrock,分发渠道
+        # 增加,不影响这条走的是官方直连),base_url/协议与 4.5 一致(同一
+        # provider,只是新模型 id),不是猜的命名惯例延伸。
+        #
+        # cost_in/cost_out(2026-08-20 复核补全):定价按 prompt 长度分两档,不是
+        # 单一价——200K token 以下 $2/$6(每 1M,输入/输出;缓存输入更低,
+        # $0.5/M),超过 200K 翻倍到 $4/$12。Grok 4.6 本身有 500K 上下文,真实
+        # 请求越过 200K 那条线是会发生的情形,不是理论上的边界。跟上面 deepseek
+        # 那条同样的理由:cost_budget 判的是"会不会超预算",单一静态字段没法表示
+        # 分档定价,算贵了顶多提前降级、算便宜了才会让真实花费超预算却没触发
+        # 保护——两种错法不对等,故意按**高档(超 200K)**登记。
         "name": "xai",
         "env_key": "XAI_API_KEY",
         "base_url": "https://api.x.ai/v1",
         "models": ["grok-4.6", "grok-4.5", "grok-4.3"],
         "default_model": "grok-4.6",
-        "cost_in": 0.002,
-        "cost_out": 0.006,
+        "cost_in": 0.004,
+        "cost_out": 0.012,
         "extra": {"multimodal": True},
     },
     {
@@ -1672,22 +1685,29 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
-        # deepseek-v4-pro 型号 id 本身核对过仍然正确(2026-08-15 联网核实,当前上游
-        # 快照 deepseek-v4-pro-0813)。但多个第三方计费站点显示价格明显上调过
-        # (缓存未命中输入/输出都涨到原来的十几倍),而这里 cost_in/cost_out 是
-        # cost_budget SLO 用来做路由判断的字段——没有拿到官方一手定价页确认具体
-        # 数字前,宁可不动这两个值,也不要把聚合站估算塞进一个会影响路由行为的
-        # 字段。要拿准确数字,配好 DEEPSEEK_API_KEY 跑一次
-        # verify_provider_apis.py --only deepseek(它走的是路由器自己的请求链路,
-        # 不是这里去猜)。即便按查到的高估计,换算下来仍远低于本仓各任务类型的
-        # cost_budget 阈值,不会现在就影响路由结果。
+        # deepseek-v4-pro 型号 id 本身仍正确。cost_in/cost_out 这次真的更新了——
+        # 2026-08-20 联网复核:上一版(2026-08-15)判"只有聚合站信号、没有一手
+        # 确认,不动"是对的,这次不一样,是**真事**:DeepSeek 2026-08-16 16:00 UTC
+        # 生效一轮分时段涨价,TechTimes / Yahoo Finance / Fortune / Engadget /
+        # Quartz / InfoWorld / Forbes 等八家独立信源交叉确认同一组数字(不是
+        # 单一聚合站估算)——
+        #
+        #   输出(缓存未命中):  $0.87/M flat  → 非高峰 $1.98/M · 高峰 $3.96/M
+        #   输入(缓存未命中):  $0.435/M flat → 非高峰 $0.66/M · 高峰 $1.32/M
+        #   缓存命中另有约 98% 折扣(未拿到缓存命中的确切数字,不编)
+        #
+        # cost_in/cost_out 是驱动 cost_budget SLO 判断的**单一静态值**,没法表示
+        # 分时段定价;这里按**高峰价**(更贵的那档)登记——SLO 判断的是"会不会
+        # 超预算触发降级",算贵了顶多提前降级,算便宜了才会让真实花费超预算却
+        # 没触发保护,两种错法不对等,故意往贵了算。要拿分时段各档的精确数字,
+        # 配好 DEEPSEEK_API_KEY 跑 verify_provider_apis.py --only deepseek。
         "name": "deepseek",
         "env_key": "DEEPSEEK_API_KEY",
         "base_url": "https://api.deepseek.com/v1",
         "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
         "default_model": "deepseek-v4-pro",
-        "cost_in": 0.000025,
-        "cost_out": 0.00006,
+        "cost_in": 0.00132,
+        "cost_out": 0.00396,
     },
     {
         "name": "qwen",
@@ -1701,13 +1721,16 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
-        # 查过 GLM-5.3(2026-08-15 联网核实,发布于 2026-08-14):**刻意不加进 models**。
-        # 它目前只通过 GLM Coding Plan / 编码 CLI 发布,权重还差两周才放出,标准
-        # open.bigmodel.cn 端点(本 provider 实际调用的那个)上的公开 model id 与
-        # 独立计费"仍在安全评审后才放出"——不是本仓命名惯例推出来的猜测,是查到
-        # 它现在**还没有**。这种时候加进去,后果和本轮修的那 8 处"清单声称有、
-        # 实际没有"是同一类:选路成功,直到真发请求才 404。等它经标准 API 开放,
-        # 用 verify_provider_apis.py --only zhipu 核验后再升,不要提前抄。
+        # 2026-08-15 二次联网核实(第一次判"还没有"之后,所有者指出它已经上线,
+        # 复查证实**两件事都对**——只是不在同一个端点上):
+        #
+        # GLM-5.3 确实已经能用 API 调,但服务它的是**编码套餐专属端点**
+        # ``open.bigmodel.cn/api/coding/paas/v4``,不是这个 provider 条目一直在用
+        # 的通用端点 ``open.bigmodel.cn/api/paas/v4``。官方通用端点的定价表截至
+        # 复查时仍然只到 glm-5.2。把 glm-5.3 直接塞进**这条**的 models 里,后果和
+        # 第一次判断要防的是同一件事:选路成功,请求打到 base_url 对不上的端点,
+        # 一样 404——只是原因从"型号还没发布"变成了"型号在另一个 base_url 上"。
+        # glm-5.3 的正确落点是下面新增的 zhipu_coding 条目,不是这条。
         "name": "zhipu",
         "env_key": "ZHIPU_API_KEY",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -1716,6 +1739,58 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "cost_in": 0.001,
         "cost_out": 0.001,
         "extra": {"multimodal": True},
+    },
+    {
+        # GLM 编码套餐(GLM Coding Plan,2026-08-15 联网核实)——**独立条目**,
+        # 不是给上面 zhipu 顺手加个型号那么简单,三处结构性差异决定了它必须分开:
+        #
+        # 1. base_url 不同:编码套餐专属端点 /api/coding/paas/v4,不是通用端点
+        #    /api/paas/v4。同一个 API Key 打错端点一样 404——这正是把它错放进
+        #    zhipu.models 会踩的坑。
+        # 2. 计费方式不同:这不是这份 registry 里其它条目那种按 token 计价——它是
+        #    订阅制月费(Lite $18 / Pro $80 / Max $168,年付打七折左右,按官方站点
+        #    截至复查时的定价页)。cost_in/cost_out 折算不出有意义的"每千 token"
+        #    数字,所以下面两个值不是真定价,是**故意设高的哨兵**(远高于本 registry
+        #    任何真实按 token 计价的条目)——ProviderConfig 的字段类型是 float,
+        #    传 None 会在 _cost_ordered_ladder() 的 sort/求和里直接 TypeError
+        #    (写这条时先踩了一遍这个坑,再改掉的)。哨兵值确保:就算它意外进了某个
+        #    按成本排序的候选池,也绝不会因为"看起来最便宜"被排到前面。
+        # 3. 使用范围不同:官方文档把它限定在"编码 agent 工作流"(仓库问答/代码
+        #    生成/调试/修复/自动化开发),不是通用聊天端点。
+        #
+        # env_key 是独立的 ZHIPU_CODING_API_KEY,不沿用 ZHIPU_API_KEY——原因不是
+        # 两把 key 在官方那边不能共用(官方文档说编码套餐同样用 BigModel 控制台
+        # 生成的 key),而是本仓的 provider 注册逻辑(_register_from_registry)按
+        # env_key 是否有值决定要不要激活这个 provider,并把它自动放进
+        # _cost_ordered_ladder() 那样按成本排序的候选池——**不看这个 provider 是否
+        # 出现在 PROVIDER_MODEL_MAP 或 config/llm_routing_policy.yaml 的任务路由
+        # 优先级里**(第一版以为不接那两处就够,核对注册/候选池代码才发现不够,
+        # 已改)。如果沿用 ZHIPU_API_KEY,任何配了普通 zhipu 聊天 key 的人都会被
+        # 静默激活这个 provider——多数人没有编码套餐订阅,会白打一堆 403/404;
+        # 少数真有订阅的人,也可能在没打算用编码配额的场景里被自动选中而悄悄烧掉
+        # 配额。独立 env 名把"要不要接编码套餐"变成一次显式动作:同一串 key 值
+        # 大可以填两遍,但填不填 ZHIPU_CODING_API_KEY 这件事必须是用户自己决定的。
+        #
+        # 残留限制(如实记录,没有假装解决了):真设了 ZHIPU_CODING_API_KEY 之后,
+        # _cost_ordered_ladder() 仍然会把它当成任意任务类型的候选之一——那个方法
+        # 按"已注册+有 key"筛选候选池,不看 provider 是不是该任务类型"该用的那家"。
+        # 999.0 的哨兵价保证它排到候选梯队最后一档、绝不会被优先选中(已用
+        # deepseek 同时配置的场景验证:候选梯队按成本升序是
+        # [deepseek, zhipu_coding],不是反过来)——但极端情况下(所有真实
+        # provider 都不可用,只有 zhipu_coding 配了 key)它仍可能被当成兜底调用去
+        # 处理一次编码套餐 ToS 没打算覆盖的任务类型。把它限定到"只接编码类任务"
+        # 需要改 _cost_ordered_ladder 本身按任务类型过滤候选池,那是比这次范围大
+        # 得多的改动,没有一并做。
+        "name": "zhipu_coding",
+        "env_key": "ZHIPU_CODING_API_KEY",
+        "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+        "models": ["glm-5.3"],
+        "default_model": "glm-5.3",
+        "cost_in": 999.0,
+        "cost_out": 999.0,
+        "extra": {
+            "multimodal": True
+        },  # billing=订阅制/scope=编码 agent 限定,见上面注释；ProviderConfig 没有对应字段,不能塞进 extra
     },
     {
         # 官方 OpenAI 兼容端点(联网核实 platform.minimax.io 官方文档):base 是

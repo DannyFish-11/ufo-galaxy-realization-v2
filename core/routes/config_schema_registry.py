@@ -69,6 +69,14 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "阿里云百炼的 API Key（QWEN_API_KEY 的别名）",
     },
     "ZHIPU_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "智谱 GLM 的 API Key"},
+    "ZHIPU_CODING_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "llm",
+        "description": "智谱 GLM 编码套餐(Coding Plan)专属 Key —— 与上面的 ZHIPU_API_KEY 是两码事:"
+        "订阅制月费,限定编码 agent 场景,端点也不同(/api/coding/paas/v4)。"
+        "配这把 key 不代表也配了普通 ZHIPU_API_KEY,反之亦然。",
+    },
     "GROQ_API_KEY": {
         "default": "",
         "type": "string",
