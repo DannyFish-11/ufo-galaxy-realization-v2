@@ -14,6 +14,18 @@ import pytest
 from core import weights_admission as wa
 
 
+def _lists_host(entries, host: str) -> bool:
+    """主机名是不是这个集合里的**一个完整成员**。
+
+    为什么不直接写 ``host in entries``
+    ----------------------------------
+    CodeQL 的 "Incomplete URL substring sanitization" 会把 ``"a.com" in X`` 一律
+    当成对 URL 做子串净化来报 —— 它分不清"元组成员判断"和"字符串包含"。而这里要的
+    本来就是**精确相等**,写明白它既让告警消失,也让读的人不用猜。
+    """
+    return any(entry == host for entry in entries)
+
+
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     """每条用例自己钉死前提,不靠"这台机器恰好没设什么"。
@@ -88,20 +100,20 @@ def test_b03_host_not_on_the_list_is_denied(monkeypatch, tmp_path):
     d = _model_dir(tmp_path)
     decision = wa.evaluate("some/model", local_path=str(d))
     assert decision.verdict == "denied"
-    assert "evil.example.com" in decision.reason
+    assert decision.host == "evil.example.com"
 
 
 def test_b04_empty_allowlist_does_not_mean_allow_all(monkeypatch):
     """留空 = 用默认表。**不是**"没配就放开" —— 那是这类白名单最常见的失效方式。"""
     monkeypatch.setenv("GALAXY_WEIGHTS_HOSTS", "")
     assert wa.allowed_hosts() == wa.DEFAULT_WEIGHT_HOSTS
-    assert "evil.example.com" not in wa.allowed_hosts()
+    assert not _lists_host(wa.allowed_hosts(), "evil.example.com")
 
 
 def test_b05_mirror_is_on_the_default_list_on_purpose():
     """国内镜像在列是刻意的(否则国内下不动),但这**不代表它可信** ——
     正因为它是第三方,自带代码那一维才必须默认拒。"""
-    assert "hf-mirror.com" in wa.DEFAULT_WEIGHT_HOSTS
+    assert _lists_host(wa.DEFAULT_WEIGHT_HOSTS, "hf-mirror.com")
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -13,6 +13,18 @@ import pytest
 from core import egress_guard as eg
 
 
+def _lists_host(entries, host: str) -> bool:
+    """主机名是不是这个集合里的**一个完整成员**。
+
+    为什么不直接写 ``host in entries``
+    ----------------------------------
+    CodeQL 的 "Incomplete URL substring sanitization" 会把 ``"a.com" in X`` 一律
+    当成对 URL 做子串净化来报 —— 它分不清"元组成员判断"和"字符串包含"。而这里要的
+    本来就是**精确相等**,写明白它既让告警消失,也让读的人不用猜。
+    """
+    return any(entry == host for entry in entries)
+
+
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     """每条用例自己钉死前提,并且不让账本跨用例串味。"""
@@ -106,18 +118,18 @@ def test_b02_a_url_without_a_host_is_refused_under_enforce(monkeypatch):
 def test_c01_provider_hosts_are_derived_from_the_existing_registry():
     """自己另攒一份 provider 地址表的话,加一家云厂商就会漏一处。"""
     entries = eg.allowlist()
-    assert "api.openai.com" in entries
+    assert _lists_host(entries, "api.openai.com")
 
 
 def test_c02_weight_hosts_are_on_the_list_too():
-    assert "huggingface.co" in eg.allowlist()
+    assert _lists_host(eg.allowlist(), "huggingface.co")
 
 
 def test_c03_user_entries_are_appended(monkeypatch):
     monkeypatch.setenv("GALAXY_EGRESS_ALLOW", "my.internal.tool, other.example.com")
     entries = eg.allowlist()
-    assert "my.internal.tool" in entries
-    assert "other.example.com" in entries
+    assert _lists_host(entries, "my.internal.tool")
+    assert _lists_host(entries, "other.example.com")
 
 
 def test_c04_provider_call_passes_under_enforce(monkeypatch):

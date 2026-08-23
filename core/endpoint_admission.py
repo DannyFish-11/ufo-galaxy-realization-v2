@@ -41,6 +41,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlparse
 
 logger = logging.getLogger("Galaxy.EndpointAdmission")
 
@@ -57,7 +58,8 @@ class EndpointAdmission:
     provider: str = ""
     #: 注册表里写死的地址;查不到为空串。
     canonical: str = ""
-    #: 实际会用的地址。
+    #: 实际会用的地址,**已脱敏**(只到 ``scheme://host[:port]``)—— 这个字段会进
+    #: HTTP 响应,而覆盖值来自凭证库且可能带 userinfo。见 :func:`redact_url`。
     effective: str = ""
     #: 覆盖是从哪儿来的:``env`` / ``panel`` / 空串(没被覆盖)。
     source: str = ""
@@ -78,6 +80,44 @@ class EndpointAdmission:
             "reason": self.reason,
             "is_canonical": self.is_canonical,
         }
+
+
+def redact_url(url: str) -> str:
+    """只保留 ``scheme://host[:port]``,给**任何要把这个地址显示出去**的地方用。
+
+    为什么必须有这一道
+    ------------------
+    覆盖值来自 ``MultiLLMRouter._get_key(base_key)`` —— 那是**凭证库的访问器**,
+    与 API key 同一个存储。而 base_url 本身也可以带 userinfo::
+
+        https://user:token@relay.example.com/v1
+
+    整串此前既进日志,又经 ``reason`` / ``effective`` 进了
+    ``GET /api/v1/security/connection-provenance`` 的**响应体**。CodeQL 报的是
+    前者(clear-text logging),而后者更重:那是给外部看的。
+
+    脱敏之后诊断价值一点没少 —— 要判断的是"它指向哪台主机",而 host 就够了;
+    userinfo、path、query 对这个判断没有贡献,只有泄露风险。
+
+    与 ``core.execution_isolation.blocked_reason`` 同款处置:**日志与响应共用同一个
+    函数**,而不是一边打全串、另一边自己再截一遍 —— 后者迟早会漂移,而漂移的方向
+    总是"某一条路径上把全串漏出去了"。
+    """
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = urlparse(raw if "://" in raw else f"//{raw}")
+        host = (parsed.hostname or "").strip()
+        if not host:
+            return "(地址里没有主机名)"
+        scheme = f"{parsed.scheme}://" if parsed.scheme else ""
+        port = f":{parsed.port}" if parsed.port else ""
+        return f"{scheme}{host}{port}"
+    except ValueError as exc:  # noqa: BLE001
+        logger.debug("地址解析不了: %s", exc)
+        # 与空串区分:空串是"没有地址",这是"有地址但读不出来"。
+        return "(地址解析不了)"
 
 
 def override_allowed() -> bool:
@@ -118,11 +158,15 @@ def evaluate(provider: str, effective: str, *, source: str = "") -> EndpointAdmi
     canonical = canonical_base_url(provider)
     effective_clean = (effective or "").strip()
 
+    # 比较用**全串**(尾斜杠之外的任何差异都算被改过),但存进判定对象、进而进
+    # HTTP 响应的一律脱敏 —— 覆盖值来自凭证库且可能带 userinfo,见 redact_url。
+    shown = redact_url(effective_clean)
+
     if not canonical:
         return EndpointAdmission(
             verdict="unknown",
             provider=provider,
-            effective=effective_clean,
+            effective=shown,
             source=source,
             reason=f"{provider} 不在 PROVIDER_REGISTRY 里,说不出它的登记地址",
         )
@@ -132,7 +176,7 @@ def evaluate(provider: str, effective: str, *, source: str = "") -> EndpointAdmi
             verdict="canonical",
             provider=provider,
             canonical=canonical,
-            effective=effective_clean,
+            effective=shown,
             reason="连的是登记地址",
         )
 
@@ -140,11 +184,9 @@ def evaluate(provider: str, effective: str, *, source: str = "") -> EndpointAdmi
         verdict="overridden",
         provider=provider,
         canonical=canonical,
-        effective=effective_clean,
+        effective=shown,
         source=source,
-        reason=(
-            f"{provider} 的地址被覆盖为 {effective_clean}(登记地址是 {canonical})——" "密钥与对话全文都会发往这个地址"
-        ),
+        reason=(f"{provider} 的地址被覆盖为 {shown}(登记地址是 {canonical})——" "密钥与对话全文都会发往这个地址"),
     )
 
 
@@ -158,20 +200,21 @@ def resolve_base_url(provider: str, canonical: str, override: str, *, source: st
     if not override_clean:
         return canonical
 
+    # 日志里只出脱敏后的地址,见 redact_url:覆盖值来自凭证库,且可能带 userinfo。
     if not override_allowed():
         logger.warning(
             "provider %s 的地址覆盖被拒(GALAXY_ALLOW_ENDPOINT_OVERRIDE=0):" "忽略 %s,回落到登记地址 %s",
             provider,
-            override_clean,
-            canonical,
+            redact_url(override_clean),
+            redact_url(canonical),
         )
         return canonical
 
     logger.info(
         "provider %s 的地址已被覆盖为 %s(登记地址 %s,来源 %s)——" "密钥与对话全文都会发往这个地址",
         provider,
-        override_clean,
-        canonical,
+        redact_url(override_clean),
+        redact_url(canonical),
         source or "未标注",
     )
     return override_clean

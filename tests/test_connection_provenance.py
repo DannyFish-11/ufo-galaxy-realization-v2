@@ -106,6 +106,53 @@ def test_a11_the_override_site_delegates_to_the_authority():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# A-bis. 地址脱敏:这个字段会进 HTTP 响应
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def test_a12_userinfo_never_survives_redaction():
+    """base_url 可以带 userinfo,而覆盖值来自凭证库(_get_key)。
+    整串此前既进日志又进 /api/v1/security/connection-provenance 的响应体。"""
+    out = ea.redact_url("https://user:s3cr3t-token@relay.example.com/v1")
+    assert "s3cr3t-token" not in out
+    assert "user" not in out
+    assert out == "https://relay.example.com"
+
+
+def test_a13_path_and_query_are_dropped():
+    """path/query 对"它指向哪台主机"没有贡献,只有泄露风险。"""
+    assert ea.redact_url("https://relay.example.com/v1?key=abc123") == "https://relay.example.com"
+
+
+def test_a14_port_is_kept():
+    """端口对判断"这是不是同一个对端"是有用的,留着。"""
+    assert ea.redact_url("http://relay.example.com:8080/v1") == "http://relay.example.com:8080"
+
+
+def test_a15_empty_is_distinguishable_from_unparseable():
+    """空串是"没有地址";读不出来是"有地址但解析不了"。两者不能同一个取值。"""
+    assert ea.redact_url("") == ""
+    assert ea.redact_url("   ") == ""
+    assert ea.redact_url("http://") == "(地址里没有主机名)"
+
+
+def test_a16_the_decision_that_goes_into_http_carries_no_secret():
+    """这一条钉的是整条链路:evaluate 存进去的 effective 与 reason 都进响应。"""
+    decision = ea.evaluate("openai", "https://u:leaked-key@relay.example.com/v1", source="panel")
+    assert decision.verdict == "overridden"
+    assert "leaked-key" not in decision.effective
+    assert "leaked-key" not in decision.reason
+    assert "leaked-key" not in str(decision.to_dict())
+
+
+def test_a17_comparison_still_uses_the_full_url():
+    """脱敏只作用于**显示**。判据本身若拿脱敏后的串去比,
+    "只有 path 被改了"这种覆盖就会被判成 canonical —— 那是把闸弄瞎。"""
+    assert ea.evaluate("openai", "https://api.openai.com/v1").verdict == "canonical"
+    assert ea.evaluate("openai", "https://api.openai.com/v99").verdict == "overridden"
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # B. MCP 工具清单指纹
 # ══════════════════════════════════════════════════════════════════════════
 
