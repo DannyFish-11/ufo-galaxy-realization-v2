@@ -191,6 +191,14 @@ def probe(base_url: str, *, use_cache: bool = True) -> Optional[ServedEngineFact
         if facts.usable_ctx() <= 0:
             # 应答了但没有任何可用的容量信息 —— 当作没问到，别让一个空壳事实
             # 去压过静态推算。
+            #
+            # **这一层在当前实现下是冗余的**：唯一的生产调用方
+            # ``ComputeScheduler.context_budget_for`` 自己也判了 ``usable_ctx() > 0``，
+            # 所以没有任何输入能把"这里返回空壳"与"这里返回 None"区分开 —— 反向
+            # 验证时把它拆掉，一条测试都不红。留着是因为它把**契约**写死在产出端：
+            # 「本函数返回的 facts，usable_ctx() 必然为正」。一旦有第二个调用方（比如
+            # 状态盘想显示引擎实报容量）忘了判，它就从冗余变成承重的。
+            # 与 ``context_runway.burn_per_round`` 里那层非正增量过滤同一个性质。
             logger.debug("%s 应答了 /v1/stats 但没有可信的上下文容量，按问不到处理", root)
             facts = None
 

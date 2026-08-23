@@ -29,7 +29,7 @@
     "core/command_router.py": 5706,
     "core/compat_fallback_authority_guard.py": 1293,
     "core/complete_joint_system_review.py": 1885,
-    "core/compute_scheduler.py": 1046,
+    "core/compute_scheduler.py": 1067,
     "core/concurrent_mutation_conflict_contract.py": 1062,
     "core/cross_device_responsiveness_contract.py": 1006,
     "core/cross_repo_protocol_consistency.py": 1331,
