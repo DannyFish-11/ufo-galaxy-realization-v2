@@ -118,12 +118,41 @@ class ServedEngineFacts:
         return f"引擎 {self.base_url} 实报 KV 装得下 {self.kv_tokens}（未报模型上限）"
 
 
-def _credible_ctx(value: Any) -> int:
+def _credible_ctx(value: Any, what: str = "", where: str = "") -> int:
+    """把一个上报值收成"可信的 token 数"；不可信一律返回 ``0``。
+
+    **两条不可信的路径必须分开说。** 返回值都是 0（调用方的决策确实一样:退回静态
+    推算），但它们背后是**两个不同的问题**:
+
+    * 转不成整数 —— 协议对不上。要么引擎改了字段的类型/名字,要么我们读错了字段。
+      这条不说出来,下一次 FreeToken 改一版字段名,现场看到的只是"上下文怎么又按
+      静态推算了",没有任何线索指向协议;
+    * 转得成但离谱 —— 引擎报了脏数据(或者把字节数当成了 token 数)。这条正是本模块
+      文档里说的"一个不可信的实测值比没有实测值更危险",因为它会理直气壮地压过声明。
+
+    两条都打 warning 带上下文 —— 与 ``tests/test_empty_return_is_distinguishable``
+    钉的那条同一个立场:空值可以取同一个,但**失败不许不留痕迹**。
+    """
+    tail = f"（{where} 的 {what}）" if (where or what) else ""
     try:
         n = int(value)
     except (TypeError, ValueError):
+        logger.warning(
+            "引擎上报的%s不是一个整数（拿到 %r）—— 多半是协议对不上：字段改名、类型变了，"
+            "或者我们读错了字段。本次退回静态推算。",
+            tail or "上下文容量",
+            value,
+        )
         return 0
     if n < _MIN_CREDIBLE_CTX or n > _MAX_CREDIBLE_CTX:
+        logger.warning(
+            "引擎上报的%s是 %s，落在可信区间 [%s, %s] 之外，按没报处理 —— "
+            "一个不可信的「实测值」会压过目录声明，比没有实测值更危险。",
+            tail or "上下文容量",
+            n,
+            _MIN_CREDIBLE_CTX,
+            _MAX_CREDIBLE_CTX,
+        )
         return 0
     return n
 
@@ -181,8 +210,8 @@ def probe(base_url: str, *, use_cache: bool = True) -> Optional[ServedEngineFact
         moe = model.get("moe")
         facts = ServedEngineFacts(
             model_id=str(model.get("id") or ""),
-            model_ctx=_credible_ctx(model.get("ctx")),
-            kv_tokens=_credible_ctx(kv_tokens),
+            model_ctx=_credible_ctx(model.get("ctx"), "模型上限 model.ctx", root),
+            kv_tokens=_credible_ctx(kv_tokens, "KV 容量 total_pages×page_size", root),
             vram_mb=max(0, vram_mb),
             is_moe=bool(moe) if isinstance(moe, bool) else None,
             attn=str(model.get("attn") or ""),

@@ -218,6 +218,24 @@ class TestItDegradesQuietly:
         n, why = _budget()
         assert n > 0 and "引擎" not in why
 
+    def test_the_two_unreliable_paths_each_leave_a_trace(self, caplog):
+        """返回值都是 0，但背后是**两个不同的问题**，都得说出来。
+
+        * 转不成整数 → 协议对不上（字段改名/类型变了/我们读错了字段）。不说出来，
+          下次 FreeToken 改一版字段名，现场只看到"怎么又按静态推算了"；
+        * 转得成但离谱 → 引擎报了脏数据。
+
+        与 ``tests/test_empty_return_is_distinguishable`` 钉的那条同一个立场：空值
+        可以取同一个，但**失败不许不留痕迹**。
+        """
+        with caplog.at_level("WARNING"):
+            SEF._credible_ctx("不是数", "model.ctx", "http://x")
+        assert "协议" in caplog.text, "字段类型不对却没留下任何线索"
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            SEF._credible_ctx(SEF._MAX_CREDIBLE_CTX + 1, "model.ctx", "http://x")
+        assert "可信区间" in caplog.text, "报了个离谱的值却静默吞掉"
+
     def test_an_absurd_number_is_rejected(self):
         """不可信的"实测值"比没有更危险 —— 它会理直气壮地压过声明。"""
         assert SEF._credible_ctx(0) == 0
