@@ -189,20 +189,36 @@ class TestGrok46Upgrade:
     其余三个核对结果:
 
     * ``deepseek-v4-pro``:型号 id 本身仍正确(上游快照 deepseek-v4-pro-0813),
-      不用改;第三方计费站显示价格明显上调,但 cost_in/cost_out 是驱动
-      cost_budget 路由判断的字段,没有一手定价页确认具体数字之前不动它 ——
+      不用改;当时第三方计费站显示价格明显上调,但没有一手确认,故意没动
+      cost_in/cost_out。**2026-08-20 复核时补上了**——这次是八家独立媒体交叉
+      确认的真实分时段涨价(2026-08-16 生效),不再是"信号,未确认"那档,
       详见 registry 里那条注释。
     * GPT-5.6 Sol/Terra/Luna(``gpt-5.6`` / ``-terra`` / ``-luna``):三档 id 已经
-      是对的,2026-07-30 降过一轮价,id 不受影响。
-    * GLM-5.3:**没有加**。查到它 2026-08-14 发布,但只经 GLM Coding Plan /
-      编码 CLI 放出,标准 open.bigmodel.cn 端点(本 provider 实际调用的那个)上
-      的公开 model id 与独立计费仍在安全评审后才放 —— 见下面
-      ``test_glm53_deliberately_not_added``。
+      是对的,2026-07-30 降过一轮价,id 不受影响,cost_in/cost_out 未动。
+    * GLM-5.3:第一次核实判"还没有",所有者指出它已经上线后二次核实,证实
+      **两次都没错**——它确实已经能用 API 调,但服务它的是 GLM 编码套餐
+      (Coding Plan)专属端点(``/api/coding/paas/v4``),不是 ``zhipu`` 条目
+      一直在用的通用端点(``/api/paas/v4``)。所以没有把它塞进 ``zhipu.models``
+      (那样会把型号错配到打不通的 base_url,404 的原因从"型号不存在"变成
+      "型号在另一个端点"而已),而是新增了独立的 ``zhipu_coding`` 条目 ——
+      见 ``TestZhipuCodingPlan``。
     """
 
     def test_grok_4_6_is_declared_and_default(self):
         assert "grok-4.6" in _REGISTRY["xai"]["models"]
         assert _REGISTRY["xai"]["default_model"] == "grok-4.6"
+
+    def test_grok_4_6_cost_registered_at_the_above_200k_tier(self):
+        """定价分两档(200K token 以下 $2/$6,以上 $4/$12),单一静态字段登记
+        高档——cost_budget 判的是"会不会超预算",算贵了顶多提前降级,算便宜了
+        才会让真实花费超预算却没触发保护,故意往贵了算。"""
+        assert _REGISTRY["xai"]["cost_in"] == 0.004
+        assert _REGISTRY["xai"]["cost_out"] == 0.012
+
+    def test_deepseek_cost_registered_at_peak_hours_rate(self):
+        """2026-08-16 生效的分时段涨价,同样按更贵的高峰价登记,理由同上一条。"""
+        assert _REGISTRY["deepseek"]["cost_in"] == 0.00132
+        assert _REGISTRY["deepseek"]["cost_out"] == 0.00396
 
     def test_grok_4_5_stays_as_a_fallback_not_a_ghost(self):
         """4.5 没有被 4.6 取代下线(不是 opus-4.8 那种"已作废,不该残留"的情况)——
@@ -220,18 +236,83 @@ class TestGrok46Upgrade:
         per_task = {getattr(tt, "value", tt): m for tt, m in PROVIDER_MODEL_MAP["xai"].items()}
         assert per_task[task] == "grok-4.6"
 
-    def test_glm53_deliberately_not_added(self):
-        """钉住"现在不加"这个决定本身,不只是钉当前状态。
+    def test_glm53_not_on_the_general_chat_endpoint(self):
+        """glm-5.3 不许出现在 ``zhipu``(通用聊天端点)的 models 里。
 
-        没有这条,下一个人(或下一轮"顺手更新模型列表")看到 zhipu 只有到 5.2,
-        很容易复刻本仓一贯的"按命名惯例推新档"手法(kimi-k2.6→k3、
-        qwen3.7→3.8 那种)直接加一个 "glm-5.3" —— 但这次的情况不一样:上一轮
-        那些是**推断,标注了未核验**;这一轮是**查到了并确认它现在还没有**。
-        两者都不该写死进 models,但原因不同,值得分开钉,免得将来有人把
-        "还没查"和"查过没有"混成一回事。
+        它是真实存在的型号,但那个端点截至复查时的官方定价表仍然只到 5.2。
+        塞进这条会造成 base_url 打不通(通用端点没有这个型号),而不是"型号
+        不存在"——两种 404 后果一样,但本条测试专门盯前一种,防止有人看见
+        "glm-5.3 已经在 registry 别处出现了"就顺手也塞进这条。
         """
         assert "glm-5.3" not in _REGISTRY["zhipu"]["models"]
         assert "glm-5.3" != _REGISTRY["zhipu"]["default_model"]
+
+
+class TestZhipuCodingPlan:
+    """GLM 编码套餐(GLM Coding Plan)—— glm-5.3 真正的落点,与 ``zhipu`` 是
+    结构性不同的两个 provider,详见 ``PROVIDER_REGISTRY`` 里 zhipu_coding
+    条目的注释。这里钉的是写这条时踩过的两个真 bug,防止回归:
+
+    1. 第一版 ``cost_in``/``cost_out`` 写的是 ``None``(订阅制没法折算成
+       每千 token 单价,当时觉得"留空"最诚实)——但 ``ProviderConfig`` 的字段
+       类型是 ``float``,``None`` 会在 ``_cost_ordered_ladder()`` 的排序/求和
+       里直接 ``TypeError``。这类错误只有真跑一遍选路逻辑才会暴露,光看
+       registry 声明看不出来。
+    2. 第一版 ``env_key`` 写的是复用 ``ZHIPU_API_KEY``——语义上说得通(官方
+       文档说两边 key 都从同一个 BigModel 控制台生成),但会导致任何配了
+       普通 zhipu 聊天 key 的人被静默激活这个订阅制/限定用途的 provider。
+       改成独立的 ``ZHIPU_CODING_API_KEY`` 之后,用一把假 key 实测验证过:
+       只设 ZHIPU_API_KEY → zhipu 注册、zhipu_coding 不注册;只设
+       ZHIPU_CODING_API_KEY → 反过来。这条判据钉的是那次实测的结论,不是
+       又去跑一遍完整的 provider 发现流程(那条路径会尝试真连 ollama,不
+       适合放进单元测试)。
+    """
+
+    def test_declared_with_correct_endpoint_and_model(self):
+        spec = _REGISTRY["zhipu_coding"]
+        assert spec["base_url"] == "https://open.bigmodel.cn/api/coding/paas/v4"
+        assert spec["models"] == ["glm-5.3"]
+        assert spec["default_model"] == "glm-5.3"
+
+    def test_cost_fields_are_real_floats_not_none(self):
+        """回归 bug 1:两个字段必须是能参与算术/排序的 float,不能是 None。
+
+        不只测 zhipu_coding 这一条——顺手把这条判据升成对整份 registry 的
+        通用约束:同样的错法(留 None 表示"没法定价")换个 provider 名字
+        还会再犯一次。
+        """
+        for spec in PROVIDER_REGISTRY:
+            assert isinstance(spec["cost_in"], float), f"{spec['name']}.cost_in 不是 float: {spec['cost_in']!r}"
+            assert isinstance(spec["cost_out"], float), f"{spec['name']}.cost_out 不是 float: {spec['cost_out']!r}"
+
+    def test_cost_sentinel_is_never_the_cheapest(self):
+        """哨兵价必须高到不会被任何真实按 token 计价的条目比下去,否则
+        "绝不会被优先选中"这句注释就是空话。"""
+        real_costs = [
+            spec["cost_out"]
+            for spec in PROVIDER_REGISTRY
+            if spec["name"] != "zhipu_coding" and spec.get("extra", {}).get("billing") != "subscription"
+        ]
+        assert _REGISTRY["zhipu_coding"]["cost_out"] > max(real_costs)
+
+    def test_env_key_is_isolated_from_the_general_zhipu_key(self):
+        """回归 bug 2:必须是独立的 env 名,不能复用 ZHIPU_API_KEY。"""
+        assert _REGISTRY["zhipu_coding"]["env_key"] == "ZHIPU_CODING_API_KEY"
+        assert _REGISTRY["zhipu_coding"]["env_key"] != _REGISTRY["zhipu"]["env_key"]
+
+    def test_env_key_map_agrees_with_the_registry(self):
+        """``_PROVIDER_ENV_KEY_MAP`` 与 registry 自己声明的 env_key 必须是同一个
+        名字——两处分别维护,任何一处改了忘了同步另一处,_get_key() 的解析
+        链路(Dashboard/Vault 之后那层)就会去查一个错误的 env 变量名。"""
+        from core.multi_llm_router import _PROVIDER_ENV_KEY_MAP
+
+        assert _PROVIDER_ENV_KEY_MAP["zhipu_coding"] == _REGISTRY["zhipu_coding"]["env_key"]
+
+    def test_not_wired_into_per_task_model_map(self):
+        """不出现在 PROVIDER_MODEL_MAP 里——这只是"没有为它单独配任务槽位"
+        这件事本身的真实性判据,不是"因此绝对不会被自动选中"的完整证明
+        (那一半在 registry 注释里如实记录了残留限制,没有在这里假装钉住)。"""
+        assert "zhipu_coding" not in PROVIDER_MODEL_MAP
 
 
 class TestConfigExampleStaysInSync:
