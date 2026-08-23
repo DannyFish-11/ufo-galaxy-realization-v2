@@ -2080,6 +2080,77 @@ class MultiLLMRouter:
         for lane in _LOCAL_OPENAI_LANES:
             self._register_one_local_openai(lane)
 
+    @staticmethod
+    def _lane_caps(lane: Dict[str, Any], served_id: str, declared: str) -> Tuple[bool, bool, bool]:
+        """这台服务**能不能看/听** —— 目录里查得到就照目录，查不到才用泳道默认值。
+
+        返回 ``(multimodal, vision, audio)``。
+
+        为什么不能写死
+        ==============
+        泳道只知道"这台服务大概跑在哪块加速器上",不知道"它装的是哪个模型"。而
+        能看能听是**模型**的属性:同一条泳道上,MiniCPM-o 4.5 能看能听、
+        qwen3.6:35b-a3b 一个都不能。
+
+        写死的后果不是小事:``core/llama_server.py`` 起的是带 ``--n-cpu-moe`` 的
+        **推理位**服务、导出的正是 ``GALAXY_LOCAL_OPENAI_URL``,而那条泳道此前
+        硬编码 ``multimodal=True`` —— 于是一台 35B-A3B 纯文本服务在路由眼里声称
+        能看能听。``route_multimodal_first`` 与 ``_pool`` 两处都拿 ``multimodal``
+        做候选过滤,带图的请求因此可以被投到它身上,现场表现是"图发过去了,回的
+        却像没看见"。
+
+        而这件事**根本不需要猜**:服务伺候的是哪个型号是知道的 —— 要么用户用
+        ``{前缀}_SERVES`` 声明过,要么它自报的 id 本身就是目录里的 tag。查一次目录
+        就有真的 caps。与 ``effective_weight_mb``、``context_measurements`` 同一个
+        立场:**声明的假设 vs 登记过的事实,事实优先**。
+
+        查不到就退回泳道默认值 —— 那是"不知道装的是什么"时的保守假设,不是事实,
+        所以只在最后一步用。
+        """
+        default = (bool(lane["multimodal"]), bool(lane["supports_vision"]), bool(lane["supports_audio"]))
+        try:
+            from core.model_catalog import exact_model, get_model  # noqa: PLC0415
+        except Exception as exc:  # noqa: BLE001 — 目录问不出来就用泳道默认值
+            logger.debug("目录不可用,泳道能力按默认值: %s", exc)
+            return default
+
+        for tag in (declared, served_id):
+            if not tag:
+                continue
+            spec = exact_model(tag) or get_model(tag)
+            if spec is None:
+                continue
+            caps = spec.caps
+            vision = bool(getattr(caps, "vision", False))
+            audio = bool(getattr(caps, "audio_in", False) or getattr(caps, "audio_out", False))
+            logger.info(
+                "泳道 %s 的能力按目录条目 %s 定:看=%s 听/说=%s(泳道默认值是 %s)",
+                lane["provider"],
+                spec.tag,
+                vision,
+                audio,
+                default,
+            )
+            return (vision or audio, vision, audio)
+
+        # 认不出装的是什么 —— 退回泳道默认值，但**说出来**。
+        #
+        # 这一步是保留现状(默认值就是此前写死的那几个)，不是"确认它能看"。而
+        # 默认值往"能看"那边偏是危险的一侧:声称有、实际没有 → 图发过去、回的却
+        # 像没看见;声称没有、实际有 → 落到另一个 provider，答案照样出得来。
+        # 所以这里不静默 —— 真实生产者(core/llama_server.py、
+        # scripts/setup_reasoning_slot.py)都会写 SERVES，走到这一步说明是手工配的。
+        if default[0]:
+            logger.warning(
+                "泳道 %s 认不出服务托管的 %r 是目录里哪个型号，暂按泳道默认值当作"
+                "**能看能听**处理 —— 若它其实是纯文本模型，带图的请求会被投到它身上。"
+                "用 %s_SERVES 声明它伺候的是哪个目录 tag 即可消除这次猜测。",
+                lane["provider"],
+                served_id or declared,
+                lane["env_prefix"],
+            )
+        return default
+
     def _register_one_local_openai(self, lane: Dict[str, Any]) -> None:
         """注册一条泳道;地址没配、或服务不应答 ``/v1/models`` 就不注册。"""
         prefix = lane["env_prefix"]
@@ -2115,6 +2186,8 @@ class MultiLLMRouter:
                 default_model,
             )
 
+        caps = self._lane_caps(lane, default_model, os.environ.get(f"{prefix}_SERVES", "").strip())
+
         cfg = ProviderConfig(
             name=provider,
             # 留空即"这台服务不开鉴权" —— 适配器据此不带 Authorization 头。
@@ -2126,14 +2199,14 @@ class MultiLLMRouter:
             default_model=default_model,
             supports_tools=True,
             supports_json_mode=False,
-            multimodal=bool(lane["multimodal"]),
+            multimodal=caps[0],
             env_key=f"{prefix}_URL",
             source_type="local",
             # 硬件档/模态/量化都由泳道给 —— 核显那台和独显那台不是同一种东西,
             # 见 _LOCAL_OPENAI_LANES 的说明。
             hardware_tier=lane["hardware_tier"],
-            supports_vision=bool(lane["supports_vision"]),
-            supports_audio=bool(lane["supports_audio"]),
+            supports_vision=caps[1],
+            supports_audio=caps[2],
             quantization=lane["quantization"],
         )
         self.providers[provider] = cfg
@@ -3107,8 +3180,8 @@ class MultiLLMRouter:
                     "本地[%s]槽位配的是 %s,但没有任何本地 provider 托管它 —— 这一位没上岗。"
                     "本次按可用性回落(很可能落到另一个本地模型上,失去两位分工的意义)。"
                     "检查:该模型是否已装/服务是否已起;若服务按自己那套命名报模型 id,"
-                    "用 {GALAXY_LOCAL_OPENAI|GALAXY_REASONING_OPENAI}_SERVES(按泳道各一个)"
-                    "声明它伺候的是哪个目录型号。",
+                    "用 GALAXY_LOCAL_OPENAI_SERVES(核显那台)或 GALAXY_REASONING_OPENAI_SERVES"
+                    "(独显那台)声明它伺候的是哪个目录型号 —— 两条泳道各有各的。",
                     slot_role,
                     tag,
                 )

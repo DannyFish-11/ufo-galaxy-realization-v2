@@ -196,6 +196,77 @@ class TestBothAtOnceIsTheRealShape:
         assert "好" in json.dumps(res, ensure_ascii=False, default=str)
 
 
+class TestCapabilitiesComeFromTheCatalogNotTheLane:
+    """**这组是最要紧的。**
+
+    此前那几栏是写死的 ``multimodal/vision/audio = True``。而
+    ``core/llama_server.py:452`` 起的是带 ``--n-cpu-moe`` 的**推理位**服务、导出的
+    正是 ``GALAXY_LOCAL_OPENAI_URL`` —— 于是一台 35B-A3B 纯文本服务在路由眼里
+    声称能看能听。这不是纸上问题:``route_multimodal_first``(:3418)与 ``_pool``
+    (:3568)两处都拿 ``multimodal`` 做候选过滤,带图的请求因此可以被投到它身上,
+    现场表现是"图发过去了,回的却像没看见"。
+
+    钉的形状很讲究:**光断言"取出来是 True/True"证明不了任何事** —— 写死的实现
+    也是 True/True。真正承重的性质是"**同一条泳道、换一个 served 模型,答案就跟着
+    变**",而泳道默认值一个字没动。写死的实现过不了第二条。
+    """
+
+    @pytest.mark.parametrize(
+        "served,want_vision,want_audio",
+        [
+            ("openbmb/minicpm-o4.5", True, True),  # 全模态:看/听/说全原生
+            ("qwen3.6:35b-a3b", False, False),  # 纯文本推理位
+            ("agents-a1:35b-a3b", False, False),  # 同上
+            ("gemma4:12b", True, True),  # 看 + 听(原生),不原生说
+        ],
+    )
+    def test_the_same_lane_answers_differently_per_served_model(self, served, want_vision, want_audio):
+        lane = next(x for x in R._LOCAL_OPENAI_LANES if x["provider"] == "local_openai")
+        assert lane["supports_vision"] is True and lane["supports_audio"] is True, "前提:这条泳道的默认值是能看能听"
+        mm, vision, audio = R.MultiLLMRouter._lane_caps(lane, served, "")
+        assert (vision, audio) == (want_vision, want_audio), f"{served} 的能力没有按目录取"
+        assert mm is (want_vision or want_audio)
+
+    def test_the_reasoning_lane_answers_the_same_way(self):
+        """两条泳道对同一个型号必须给同一个答案 —— 能不能看是**模型**的属性。"""
+        for served in ("openbmb/minicpm-o4.5", "qwen3.6:35b-a3b"):
+            a = R.MultiLLMRouter._lane_caps(
+                next(x for x in R._LOCAL_OPENAI_LANES if x["provider"] == "local_openai"), served, ""
+            )
+            b = R.MultiLLMRouter._lane_caps(
+                next(x for x in R._LOCAL_OPENAI_LANES if x["provider"] == "reasoning_openai"), served, ""
+            )
+            assert a == b, f"{served} 在两条泳道上被判成了不同的能力 —— 那说明还在看泳道而不是看模型"
+
+    def test_a_declaration_wins_when_the_served_id_is_not_a_catalog_tag(self):
+        """服务按自己那套命名报 id(OpenVINO 的 MiniCPM-o-4_5-int4-ov 之类)时靠声明。"""
+        lane = next(x for x in R._LOCAL_OPENAI_LANES if x["provider"] == "reasoning_openai")
+        assert R.MultiLLMRouter._lane_caps(lane, "MiniCPM-o-4_5-int4-ov", "openbmb/minicpm-o4.5") == (True, True, True)
+        assert R.MultiLLMRouter._lane_caps(lane, "Qwen3.6-35B-A3B", "qwen3.6:35b-a3b") == (False, False, False)
+
+    def test_an_unidentifiable_model_falls_back_but_says_so(self, caplog):
+        """认不出就退回泳道默认值 —— 但**不许静默**。
+
+        默认值往"能看"那边偏是危险的一侧:声称有、实际没有 → 图发过去、回的却像
+        没看见;声称没有、实际有 → 落到另一个 provider,答案照样出得来。
+        """
+        lane = next(x for x in R._LOCAL_OPENAI_LANES if x["provider"] == "local_openai")
+        with caplog.at_level("WARNING"):
+            got = R.MultiLLMRouter._lane_caps(lane, "某台服务自己起的名字", "")
+        assert got == (True, True, True), "兜底应保留此前行为"
+        assert "SERVES" in caplog.text, "猜了却没说 —— 用户没有任何线索去消除这次猜测"
+
+    def test_the_registered_provider_carries_the_catalog_answer(self, reasoning, monkeypatch):
+        """走完整注册路径,不是只调 helper —— 接上了才算数。"""
+        addr, _ = reasoning
+        monkeypatch.setenv("GALAXY_REASONING_OPENAI_URL", addr)
+        monkeypatch.setenv("GALAXY_REASONING_OPENAI_SERVES", "openbmb/minicpm-o4.5")
+        cfg = R.MultiLLMRouter().providers["reasoning_openai"]
+        assert (
+            cfg.supports_vision and cfg.supports_audio and cfg.multimodal
+        ), "泳道默认值是纯文本,但声明说它伺候的是全模态型号 —— 目录该压过泳道"
+
+
 class TestTheServesDeclarationIsPerLane:
     """两台服务伺候的是不同的位，共用一个声明就等于说"这两台装的是同一个型号"。"""
 

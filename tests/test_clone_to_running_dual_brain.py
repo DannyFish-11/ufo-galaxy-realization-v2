@@ -360,8 +360,19 @@ class TestTheSetupScriptIsSourcedFromTheCatalog:
 
         keys = set(srs.env_block("some:tag", 18080))
         src = inspect.getsource(router)
+        # 路由真会读的键 = 源码里的字面量 ∪ 每条泳道按前缀拼出来的那几个。
+        #
+        # **不能只按子串找**：注册路径改成按泳道循环之后，键名是
+        # ``f"{prefix}_URL"`` 拼出来的，字面量在源码里根本不出现 —— 那时这条
+        # 断言会把一个行为完全正确的路由判成"根本不读"。拼名字这件事目录化之后，
+        # 守卫也要跟着按同一份数据算，而不是继续盯字符串。
+        readable = {
+            f"{lane['env_prefix']}_{suffix}"
+            for lane in router._LOCAL_OPENAI_LANES
+            for suffix in ("URL", "MODEL", "SERVES", "KEY")
+        }
         for k in keys:
-            assert k in src, f"{k} 路由根本不读 —— 用户照着配了也不会生效"
+            assert k in src or k in readable, f"{k} 路由根本不读 —— 用户照着配了也不会生效"
 
     def test_it_does_not_download_and_execute_a_binary(self):
         """本仓明令不做 ``curl | sh`` 式远程脚本执行；下载并执行预编译二进制是同一类事。"""
