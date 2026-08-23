@@ -911,6 +911,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 双模型本地主脑的另一半:感知位跑在核显上时,用 llama.cpp server 的 SYCL/Vulkan
     # 后端或 OpenVINO Model Server 起一个 OpenAI 兼容端点,填地址即可接入 ——
     # 路由层的 OpenAIAdapter 讲的就是这套协议,不需要新后端。
+    # 模型自己写出来的代码跑在多硬的边界里。判据见 core/execution_isolation.py。
+    #
+    # 刻意**没有** "强制容器" 之外的第四档:auto 已经是"有容器就用容器",
+    # 而 container 的含义是"宁可不跑,也不在裸机上跑"。
+    "GALAXY_EXECUTION_ISOLATION": {
+        "default": "auto",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "智能体自写代码的执行边界(auto=有 Docker/Podman 就跑进容器,否则退回内置轻量沙箱 / "
+            "container=没有容器边界就拒绝执行 / builtin=强制内置)。"
+            "内置档是同一内核、同一用户,只挡得住手滑,挡不住一次不走运的代码生成"
+        ),
+    },
     # 这一位与下面三个 GALAXY_LOCAL_OPENAI_* 是一组:它说"二进制在哪",那三个说
     # "起来之后怎么接进来"。由我们自己起服务时,后三个会被 core.llama_server 自动
     # 导出,人只需要填这一个。

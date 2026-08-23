@@ -156,6 +156,20 @@ class ExecutionResult:
     error: str = ""
     execution_time_ms: float = 0
     safety_check_passed: bool = True
+    #: 这一次**实际**跑在哪一层边界里。见 :mod:`core.execution_isolation`。
+    #:
+    #: 在这一位之前,结果里根本说不出这件事 —— 调用方无从判断代码是跑在容器里
+    #: 还是跑在用户自己的内核上。而这两者对"我该不该信这个结果、该不该担心"
+    #: 是完全不同的两回事。默认值刻意是"内置且已降级":拿不到判据时,
+    #: **不能让人以为自己有边界**。
+    isolation: Dict[str, Any] = field(
+        default_factory=lambda: {
+            "tier": "builtin",
+            "is_isolated": False,
+            "degraded": True,
+            "reason": "未判定",
+        }
+    )
 
     def to_dict(self) -> Dict:
         return {
@@ -165,6 +179,7 @@ class ExecutionResult:
             "stdout": self.stdout,
             "stderr": self.stderr,
             "return_value": self.return_value,
+            "isolation": dict(self.isolation),
             "error": self.error,
             "execution_time_ms": self.execution_time_ms,
             "safety_check_passed": self.safety_check_passed,
@@ -176,13 +191,38 @@ class ExecutionResult:
 # ============================================================================
 
 
+def _degraded_from(decision, why: str):
+    """把一个容器档决策改写成"本来该在容器里、实际落回了内置"。
+
+    单独一个函数而不是就地构造:降级是**结论的一部分**,它的形状必须只有一处定义,
+    否则迟早有一条路径漏掉 ``degraded=True``,而那正是"以为自己有边界"的来源。
+    """
+    from core.execution_isolation import IsolationDecision
+
+    return IsolationDecision(
+        tier="builtin",
+        endpoint="",
+        degraded=True,
+        reason=f"{why}(原判定: {decision.reason})"[:300],
+        runtime=decision.runtime,
+    )
+
+
 class SafeExecutor:
     """
     安全代码执行器
 
     执行策略:
-    1. 优先委托 Node_09_Sandbox (功能更完整)
-    2. 降级到内置 Python 沙箱
+    1. 优先委托 Node_09_Sandbox(**容器边界**:非 root、独立命名空间)
+    2. 降级到内置 Python 沙箱(**同一内核、同一用户**)
+
+    走哪一层由 :func:`core.execution_isolation.resolve_isolation` 判,不在这里判 ——
+    那里同时管容器运行时探测、沙箱探活、后台拉起与降级归因。
+
+    在这之前这里读的是 ``NODE09_SANDBOX_URL``,而它**默认空串**:于是
+    ``if self._node09_url:`` 恒假,容器那条路从来没被走到过,模型生成的代码一直
+    跑在用户自己的内核上 —— 而仓库里 Node_09 的 Dockerfile、
+    ``container_start_node``、``container_runtime`` 三样都齐着。
     """
 
     ALLOWED_LANGUAGES = {"python", "javascript", "bash"}
@@ -261,10 +301,43 @@ class SafeExecutor:
             self._record(result, code)
             return result
 
-        # 4. 尝试 Node_09
-        if self._node09_url:
+        # 4. 判这次跑在哪一层边界里(判据在 core.execution_isolation,不在这里)
+        from core.execution_isolation import IsolationUnavailable, resolve_isolation
+
+        try:
+            decision = resolve_isolation()
+        except IsolationUnavailable as exc:
+            # GALAXY_EXECUTION_ISOLATION=container 的**全部含义**就是"宁可不跑,
+            # 也不在裸机上跑"。这里显式拒绝,不降级 —— 降级会把那个设置变成一句
+            # 没有效力的话。
+            #
+            # 异常文本**只进日志**:这个结果会经 HTTP 返回,把 str(exc) 塞进去就是
+            # "异常信息经响应外泄"(本仓已有同一条处置:core/routes/modality.py)。
+            # 给调用方的是一句固定的、可执行的话 —— 具体是缺 Docker 还是容器没起,
+            # 去问那个只读端点,那边不经异常也答得出来。
+            logger.warning("执行被拒绝(隔离要求未满足): %s", exc)
+            self._stats["blocked"] += 1
+            _WHY = (
+                "执行被拒绝:GALAXY_EXECUTION_ISOLATION=container 要求容器边界,当前拿不到。"
+                "详情见 GET /api/v1/security/execution-isolation"
+            )
+            result = ExecutionResult(
+                language=language,
+                success=False,
+                error=_WHY,
+                safety_check_passed=True,
+                isolation={"tier": "none", "is_isolated": False, "degraded": True, "reason": _WHY},
+            )
+            self._record(result, code)
+            return result
+
+        # 5. 容器档:委托 Node_09
+        if decision.tier == "container" and decision.endpoint:
             try:
-                result = await self._execute_via_node09(code, language, timeout, memory_limit_mb, stdin)
+                result = await self._execute_via_node09(
+                    code, language, timeout, memory_limit_mb, stdin, endpoint=decision.endpoint
+                )
+                result.isolation = decision.to_dict()
                 result.execution_time_ms = (time.time() - start) * 1000
                 if result.success:
                     self._stats["success"] += 1
@@ -273,10 +346,14 @@ class SafeExecutor:
                 self._record(result, code)
                 return result
             except Exception as e:
-                logger.warning(f"Node_09 unavailable: {e}, falling back to builtin")
+                # 这条回落是必要的(不能让用户的任务因为沙箱抽风直接失败),但**必须
+                # 留痕**:调用方若不知道这次是在裸机上跑的,就会以为自己有边界。
+                logger.warning("沙箱容器不可用(%s) —— 回落内置轻量沙箱,本次执行没有容器边界", e)
+                decision = _degraded_from(decision, f"沙箱容器调用失败: {str(e)[:160]}")
 
-        # 5. 内置执行
+        # 6. 内置执行(同一内核、同一用户)
         result = await self._execute_builtin(code, language, timeout, memory_limit_mb, stdin)
+        result.isolation = decision.to_dict()
         result.execution_time_ms = (time.time() - start) * 1000
         if result.success:
             self._stats["success"] += 1
@@ -286,14 +363,15 @@ class SafeExecutor:
         return result
 
     async def _execute_via_node09(
-        self, code: str, language: str, timeout: int, memory_mb: int, stdin: str
+        self, code: str, language: str, timeout: int, memory_mb: int, stdin: str, *, endpoint: str = ""
     ) -> ExecutionResult:
-        """委托 Node_09_Sandbox 执行"""
+        """委托 Node_09_Sandbox 执行。``endpoint`` 由隔离判据给出。"""
         import httpx
 
+        base = endpoint or self._node09_url
         async with httpx.AsyncClient(timeout=timeout + 5) as client:
             resp = await client.post(
-                f"{self._node09_url}/execute",
+                f"{base}/execute",
                 json={
                     "code": code,
                     "language": language,

@@ -88,6 +88,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             return _failed("discovery status")
 
+    @router.get("/api/v1/security/execution-isolation")
+    async def execution_isolation_status():
+        """智能体自写代码**当前跑在多硬的边界里**。
+
+        放在 security 一族下是有意的:这不是性能指标,是"模型生成的代码此刻有没有
+        真边界"。``is_isolated=false`` 意味着它跑在同一个内核、同一个用户下 ——
+        那是需要被看见的事实,而在这个端点之前,整个系统里没有任何一处说得出它。
+
+        只读:不触发容器拉起(见 ``isolation_report``)。
+        """
+        try:
+            from core.execution_isolation import isolation_report
+
+            return JSONResponse(isolation_report())
+        except Exception:
+            return _failed("execution isolation status")
+
     @router.get("/api/v1/security/audit")
     async def security_audit_logs():
         """安全审计日志（最近 50 条）"""
