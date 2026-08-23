@@ -55,7 +55,13 @@ _DEFAULT_RISK_RULES: List[Dict[str, Any]] = [
     # pattern（子串匹配，小写）→ risk_level, score
     {"pattern": "delete", "level": ToolRiskLevel.DANGEROUS, "score": 0.8},
     {"pattern": "remove", "level": ToolRiskLevel.DANGEROUS, "score": 0.75},
-    {"pattern": "format", "level": ToolRiskLevel.CRITICAL, "score": 0.95},
+    # "format" 这条原先是裸子串匹配,而它是 CRITICAL(0.95 = 直接拦)——
+    # 一个叫 format_document / format_code 的正常工具会被当成"格式化磁盘"拦掉。
+    # 这道闸此前从未在生产路径上启用过,所以这个误伤一直没暴露;要把它真正打开,
+    # 就得先让这条规则只匹配它本来想说的那件事。
+    {"pattern": "format_disk", "level": ToolRiskLevel.CRITICAL, "score": 0.95},
+    {"pattern": "format_drive", "level": ToolRiskLevel.CRITICAL, "score": 0.95},
+    {"pattern": "mkfs", "level": ToolRiskLevel.CRITICAL, "score": 0.95},
     {"pattern": "system_cmd", "level": ToolRiskLevel.CRITICAL, "score": 0.95},
     {"pattern": "exec", "level": ToolRiskLevel.CRITICAL, "score": 0.90},
     {"pattern": "write", "level": ToolRiskLevel.MODERATE, "score": 0.5},
@@ -335,3 +341,35 @@ async def guarded_mcp_call(
         tool_name=tool_name,
         config=config,
     )
+
+
+# ============================================================================
+# 生产路径上的默认姿态
+# ============================================================================
+#
+# 这道闸写好之后**从未在生产路径上生效过**:mcp_loader.call_tool 只在调用方传进
+# guardian_config 且 enabled=True 时才走它,而全仓没有任何一处传过这个参数 ——
+# 参数声明和它自己的文档字符串是仅有的两处引用。
+#
+# 也就是说:风险评分、拦截、审计,三样都在,三样都没接。这与 NODE09_SANDBOX_URL
+# 默认空串是同一个形状:能力在、路没接、判据不说实话。
+
+
+def guardian_enabled() -> bool:
+    """生产路径上默不默认守护。默认**开**。
+
+    取值拼错按开处理 —— 按关处理会让一个笔误静默把这道闸关掉。
+    """
+    import os  # noqa: PLC0415
+
+    raw = (os.environ.get("GALAXY_TOOL_GUARDIAN", "on") or "on").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def default_config() -> GuardedCallConfig:
+    """生产路径没有显式传配置时用的那一份。**默认姿态的唯一定义处**。
+
+    不给 rollback_fn:通用回滚在这一层是编不出来的(不知道这个工具做了什么、
+    怎么撤销)。留空比塞一个假的回滚强 —— 后者会让调用方以为失败可撤。
+    """
+    return GuardedCallConfig(enabled=guardian_enabled())

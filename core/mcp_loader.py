@@ -618,11 +618,28 @@ class MCPLoader:
         await asyncio.to_thread(_blocking_write)
 
     async def _refresh_tools(self, server_id: str):
-        """刷新工具列表"""
+        """刷新工具列表。
+
+        工具描述与入参 schema 都是**直接进模型上下文**的文本,而它们由服务器给、
+        服务器随时能改。此前这里是整表直接替换,没有任何复验 —— 那正是 rug-pull
+        的形状(先干净上线、被信任之后再推一次更新把描述换掉)。判据见
+        core/mcp_tool_pins.py。
+        """
         response = await self._send_request(server_id, "tools/list", {})
         if response and response.result:
             server = self.servers[server_id]
-            server.tools = [MCPTool.from_dict(t) for t in response.result.get("tools", [])]
+            incoming = [MCPTool.from_dict(t) for t in response.result.get("tools", [])]
+
+            from core.mcp_tool_pins import check as check_tool_pins  # noqa: PLC0415
+
+            verdict = check_tool_pins(server_id, incoming)
+            if not verdict.accepted:
+                # 拒绝新清单:宁可这台服务器暂时没有工具可用,也不把一份被改过的
+                # 描述送进上下文。确认无误后由人重新钉住(mcp_tool_pins.approve)。
+                logger.error("MCP 工具清单被拒: %s", verdict.reason)
+                return
+
+            server.tools = incoming
 
     async def _refresh_resources(self, server_id: str):
         """刷新资源列表"""
@@ -681,7 +698,18 @@ class MCPLoader:
                 "capability_checked": True,
             }
 
-        # C阶段 2C: 守护包装（enabled=False 时直通）
+        # 守护包装。此前这里只在**调用方显式传进 guardian_config** 时才生效,
+        # 而全仓没有任何一处传过 —— 风险评分、拦截、审计三样都在,三样都没接。
+        # 现在没传就用 core.tool_guardian.default_config()(默认开,
+        # GALAXY_TOOL_GUARDIAN=off 可关),让这道闸真正落在生产路径上。
+        if _GUARDIAN_AVAILABLE and guardian_config is None:
+            try:
+                from core.tool_guardian import default_config  # noqa: PLC0415
+
+                guardian_config = default_config()
+            except Exception as _guard_exc:  # noqa: BLE001 — 取不到默认配置就照旧直通
+                logger.debug("守护默认配置取不到,本次直通: %s", _guard_exc)
+
         if _GUARDIAN_AVAILABLE and guardian_config is not None and getattr(guardian_config, "enabled", False):
             try:
                 return await call_with_guardian(

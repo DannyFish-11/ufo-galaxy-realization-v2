@@ -105,6 +105,60 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             return _failed("execution isolation status")
 
+    @router.get("/api/v1/security/connection-provenance")
+    async def connection_provenance_status():
+        """两条"对端还是我登记过的那个吗"的复验,合在一处报。
+
+        - provider 地址:改掉 base_url,密钥与对话全文会照常发往新地址,
+          而一切看起来都正常工作;
+        - MCP 工具清单:描述与入参 schema 直接进模型上下文,服务器随时能改。
+
+        ``trust_on_first_use`` 那一位要单独看:TOFU 的钉子只挡"后来被改了",
+        挡不住"一开始就是坏的"。混进总数里报会让人高估这道闸。
+
+        只读:不触发任何连接。
+        """
+        try:
+            from core.endpoint_admission import endpoint_report
+            from core.mcp_tool_pins import pins_report
+
+            return JSONResponse({"endpoints": endpoint_report(), "mcp_tools": pins_report()})
+        except Exception:
+            return _failed("connection provenance status")
+
+    @router.get("/api/v1/security/egress")
+    async def egress_status():
+        """这次运行往外连了哪儿,以及这道闸**有没有实际拦截效力**。
+
+        ``enforcing`` 那一位是整份报告里最要紧的:``mode=audit``(默认)下它是
+        ``false``——audit 只记账不拦。不给这一位,``mode`` 字段会被读成"已防护"。
+
+        只读:不改任何出站行为。
+        """
+        try:
+            from core.egress_guard import egress_report
+
+            return JSONResponse(egress_report())
+        except Exception:
+            return _failed("egress status")
+
+    @router.get("/api/v1/security/weights-admission")
+    async def weights_admission_status():
+        """权重从哪来、允不允许执行它自带的代码。
+
+        与 execution-isolation 并列放在 security 一族下,是因为它们是**同一个问题的
+        两半**:那边管"模型写的代码跑在多硬的边界里",这边管"模型自己带的代码allow
+        不允许跑" —— 而后者根本不走 SafeExecutor,容器边界对它无效。
+
+        只读:不触发任何下载或加载。
+        """
+        try:
+            from core.weights_admission import weights_report
+
+            return JSONResponse(weights_report())
+        except Exception:
+            return _failed("weights admission status")
+
     @router.get("/api/v1/security/audit")
     async def security_audit_logs():
         """安全审计日志（最近 50 条）"""

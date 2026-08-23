@@ -230,6 +230,13 @@ const CONFIG_KEYS: Record<string, string[]> = {
     // 本地 OpenAI 兼容推理服务(双模型本地主脑里跑在核显那一位)。llama.cpp server 的
     // SYCL/Vulkan 后端 或 OpenVINO Model Server 都讲这套协议,填地址即接入。
     'GALAXY_EXECUTION_ISOLATION',
+    // 权重准入。trust_remote_code=True 会执行模型仓库自带的 .py,而这条路不走
+    // SafeExecutor —— 容器边界对它无效。默认全部收紧,按模型白名单放行。
+    'GALAXY_TRUST_REMOTE_CODE', 'GALAXY_WEIGHTS_HOSTS', 'GALAXY_WEIGHTS_ALLOW_PICKLE',
+    // 出口闸。容器隔离挡不住出站——数据外泄走的是这条路。默认 audit 只记账不拦。
+    'GALAXY_EGRESS_MODE', 'GALAXY_EGRESS_ALLOW', 'GALAXY_EGRESS_ALLOW_PRIVATE',
+    // provider 地址复验 + MCP 工具清单复验(挡 rug-pull)+ 工具调用守护。
+    'GALAXY_ALLOW_ENDPOINT_OVERRIDE', 'GALAXY_MCP_PIN_MODE', 'GALAXY_TOOL_GUARDIAN',
     'GALAXY_LLAMA_SERVER_BIN',
     'GALAXY_LOCAL_OPENAI_URL', 'GALAXY_LOCAL_OPENAI_MODEL', 'GALAXY_LOCAL_OPENAI_SERVES',
     'GALAXY_LOCAL_OPENAI_KEY',
