@@ -536,6 +536,27 @@ class ComputeScheduler:
         if env_ctx.isdigit() and int(env_ctx) > 0:
             return int(env_ctx), f"GALAXY_LLAMA_CTX 显式指定 {env_ctx}"
 
+        # ── 由外部引擎伺候时:**问它,别算它** ───────────────────────────────
+        #
+        # 下面整套推算的前提是"权重是我们加载的、KV cache 是我们分配的"。模型由一台
+        # OpenAI 兼容引擎伺候时(FreeToken 的 ft serve、vLLM、llama.cpp server),这个
+        # 前提整个不成立 —— 我们算出来的不再是"我要开多长",而是**对别人已经开了
+        # 多长的一次猜测**。猜高了:早被引擎静默截断;猜低了:白白提前压缩。而这个数
+        # 同时是压缩阈值(OpenClawd._react_n_ctx 取自同一处),猜错的代价是双份的。
+        #
+        # 排在 GALAXY_LLAMA_CTX **之后**:显式指定一律尊重,与本方法开头那条同一个
+        # 立场。排在静态推算**之前**:量到的压过算出来的,与 effective_weight_mb、
+        # context_measurements 同一条。
+        try:
+            from core.served_engine_facts import facts_for_tag  # noqa: PLC0415
+
+            served = facts_for_tag(tag)
+        except Exception as exc:  # noqa: BLE001 — 探活出问题就走老路径,不能拖崩装配
+            logger.debug("引擎实报容量问不到,退回静态推算: %s", exc)
+            served = None
+        if served is not None and served.usable_ctx() > 0:
+            return max(MIN_CTX, served.usable_ctx()), served.why()
+
         spec = exact_model(tag)
         model_cap = spec.max_ctx() if spec is not None else DEFAULT_MAX_CTX
 
