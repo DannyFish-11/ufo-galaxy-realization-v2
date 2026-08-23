@@ -110,6 +110,24 @@ class IsolationUnavailable(RuntimeError):
     """要求 ``container`` 档但这台机器给不出来 —— 显式拒绝执行,不静默降级。"""
 
 
+def blocked_reason(runtime: str, *, started: bool) -> str:
+    """给不出容器边界时那句**人写的**话。
+
+    单独一个函数,是为了让"给客户端看的文案"与"异常对象"彻底分家:
+    ``isolation_report`` 要把这句话放进 HTTP 响应,而 CodeQL 对
+    「异常信息流到响应里」是会报的(``core/routes/modality.py`` 里已经有同一条
+    处置的先例:异常详情只进服务端日志,不回传给客户端)。
+
+    所以两边**各自调用本函数**得到同一句话,而不是一边 ``str(exc)`` 另一边重写一遍 ——
+    前者会把异常文本送出去,后者会让两处措辞漂移。
+    """
+    if not runtime:
+        return "GALAXY_EXECUTION_ISOLATION=container 要求容器边界,但这台机器没装 Docker/Podman"
+    if started:
+        return f"GALAXY_EXECUTION_ISOLATION=container 要求容器边界,沙箱当前不可达(已在后台用 {runtime} 拉起,稍后重试)"
+    return f"GALAXY_EXECUTION_ISOLATION=container 要求容器边界,沙箱容器没起着(装了 {runtime})"
+
+
 def isolation_mode() -> str:
     """用户意愿;取值非法时按 ``auto``(不因为拼错就把隔离关掉)。"""
     raw = os.environ.get("GALAXY_EXECUTION_ISOLATION", "auto").strip().lower()
@@ -251,13 +269,7 @@ def resolve_isolation(*, client: Any = None, allow_start: bool = True) -> Isolat
         _kick_off_container(runtime)
 
     if mode == "container":
-        if not runtime:
-            detail = "(这台机器没装 Docker/Podman)"
-        elif started:
-            detail = f"(已在后台用 {runtime} 拉起,稍后重试)"
-        else:
-            detail = f"(装了 {runtime},但沙箱容器没起着)"
-        raise IsolationUnavailable("GALAXY_EXECUTION_ISOLATION=container 要求容器边界,但沙箱当前不可达" + detail)
+        raise IsolationUnavailable(blocked_reason(runtime, started=started))
 
     if not runtime:
         why = "这台机器没装 Docker/Podman —— 代码将跑在同一个内核、同一个用户下"
@@ -273,19 +285,32 @@ def isolation_report(*, client: Any = None) -> Dict[str, Any]:
 
     **不触发后台拉起** —— 体检是只读观测,不该顺手改变运行时状态。
     """
+    runtime = container_runtime_name()
+    blocked = False
     try:
         decision = resolve_isolation(client=client, allow_start=False)
-        err = ""
     except IsolationUnavailable as exc:
-        decision = IsolationDecision(tier="builtin", degraded=True, reason=str(exc))
-        err = str(exc)
+        # **异常文本不进响应。** 这份报告是一个 HTTP 端点的返回值,把 str(exc) 放进去
+        # 就是"异常信息经响应外泄"(CodeQL 会报,而本仓已有同一条处置的先例:
+        # core/routes/modality.py —— 异常详情只进服务端日志)。
+        #
+        # 客户端拿到的是 blocked_reason() 那句人写的话 —— 与异常里那句**同源**
+        # (两边都调它),所以既不外泄也不会措辞漂移。
+        logger.warning("执行隔离要求未满足: %s", exc)
+        blocked = True
+        # allow_start=False 那条路上永远没拉起过,所以 started 恒 False。
+        decision = IsolationDecision(
+            tier="builtin", degraded=True, reason=blocked_reason(runtime, started=False), runtime=runtime
+        )
     return {
         "mode": isolation_mode(),
         "decision": decision.to_dict(),
-        "container_runtime": container_runtime_name(),
+        "container_runtime": runtime,
         "node09_port": _node09_port(),
         "explicit_endpoint": _explicit_endpoint(),
-        "error": err,
+        #: 这一位替代了原来那个装着异常文本的 error 字段。它是**布尔**:
+        #: "要不要拦"是调用方需要的判断,异常的具体措辞不是。
+        "blocked": blocked,
     }
 
 
@@ -307,6 +332,7 @@ __all__ = [
     "IsolationDecision",
     "IsolationUnavailable",
     "isolation_mode",
+    "blocked_reason",
     "container_runtime_name",
     "resolve_isolation",
     "isolation_report",

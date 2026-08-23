@@ -197,6 +197,33 @@ def test_c02_read_only_report_never_starts_anything(monkeypatch):
     assert calls == []
 
 
+def test_c06_report_never_carries_exception_text(monkeypatch):
+    """报告是 HTTP 端点的返回值,``str(exc)`` 放进去就是异常信息经响应外泄。
+
+    客户端拿到的那句话与异常里那句**同源**(两边都调 ``blocked_reason``),
+    所以既不外泄也不会措辞漂移。
+    """
+    monkeypatch.setenv("GALAXY_EXECUTION_ISOLATION", "container")
+
+    def _raise(**_kw):
+        raise IsolationUnavailable("SECRET-INTERNAL-DETAIL")
+
+    monkeypatch.setattr(ei, "resolve_isolation", _raise)
+    monkeypatch.setattr(ei, "container_runtime_name", lambda: "docker")
+    rep = ei.isolation_report(client=_Http())
+    assert rep["blocked"] is True
+    assert "SECRET-INTERNAL-DETAIL" not in str(rep)
+    assert "error" not in rep, "装异常文本的那个字段已经换成布尔 blocked"
+
+
+def test_c07_the_two_sides_say_the_same_thing():
+    """一边 str(exc) 一边重写一遍,措辞迟早漂移 —— 所以两边都调 blocked_reason。"""
+    assert ei.blocked_reason("", started=False) == ei.blocked_reason("", started=False)
+    assert "没装" in ei.blocked_reason("", started=False)
+    assert "已在后台" in ei.blocked_reason("docker", started=True)
+    assert "没起着" in ei.blocked_reason("docker", started=False)
+
+
 def test_c03_the_report_does_not_claim_a_start_it_did_not_do(monkeypatch):
     """第一版这里说了假话:allow_start=False 的那条路上照样写"已在后台拉起"。
 
@@ -299,8 +326,27 @@ def test_d04_container_mode_blocks_execution_end_to_end(monkeypatch):
     monkeypatch.setattr(ei, "container_runtime_name", lambda: "")
     r = _run()
     assert r.success is False
-    assert "隔离要求未满足" in r.error
+    assert "执行被拒绝" in r.error
     assert r.isolation["is_isolated"] is False
+
+
+def test_d07_no_exception_text_reaches_the_caller(monkeypatch):
+    """异常文本只进日志 —— 这个结果会经 HTTP 返回。
+
+    CodeQL 在 PR #1616 上报了同一条(``core/routes/diagnostics.py``:
+    "Information exposure through an exception"),而本仓早有既定处置:
+    ``core/routes/modality.py`` 写着"异常详情只进服务端日志,不回传给客户端"。
+    """
+    monkeypatch.setenv("GALAXY_EXECUTION_ISOLATION", "container")
+
+    def _raise(**_kw):
+        raise IsolationUnavailable("SECRET-INTERNAL-DETAIL-/etc/shadow")
+
+    monkeypatch.setattr(ei, "resolve_isolation", _raise)
+    r = _run()
+    assert "SECRET-INTERNAL-DETAIL" not in r.error
+    assert "SECRET-INTERNAL-DETAIL" not in r.isolation["reason"]
+    assert "execution-isolation" in r.error, "得给一条能自己查下去的路"
 
 
 def test_d05_isolation_survives_to_dict():

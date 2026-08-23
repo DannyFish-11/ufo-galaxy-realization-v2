@@ -310,13 +310,23 @@ class SafeExecutor:
             # GALAXY_EXECUTION_ISOLATION=container 的**全部含义**就是"宁可不跑,
             # 也不在裸机上跑"。这里显式拒绝,不降级 —— 降级会把那个设置变成一句
             # 没有效力的话。
+            #
+            # 异常文本**只进日志**:这个结果会经 HTTP 返回,把 str(exc) 塞进去就是
+            # "异常信息经响应外泄"(本仓已有同一条处置:core/routes/modality.py)。
+            # 给调用方的是一句固定的、可执行的话 —— 具体是缺 Docker 还是容器没起,
+            # 去问那个只读端点,那边不经异常也答得出来。
+            logger.warning("执行被拒绝(隔离要求未满足): %s", exc)
             self._stats["blocked"] += 1
+            _WHY = (
+                "执行被拒绝:GALAXY_EXECUTION_ISOLATION=container 要求容器边界,当前拿不到。"
+                "详情见 GET /api/v1/security/execution-isolation"
+            )
             result = ExecutionResult(
                 language=language,
                 success=False,
-                error=f"执行被拒绝(隔离要求未满足): {exc}",
+                error=_WHY,
                 safety_check_passed=True,
-                isolation={"tier": "none", "is_isolated": False, "degraded": True, "reason": str(exc)},
+                isolation={"tier": "none", "is_isolated": False, "degraded": True, "reason": _WHY},
             )
             self._record(result, code)
             return result
