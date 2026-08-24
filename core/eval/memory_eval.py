@@ -69,7 +69,9 @@ def run_memory_eval(backends: str = "", cases: List[MemoryEvalCase] = None) -> M
     um = UnifiedMemory([VectorBackendProvider()])
 
     for c in cases:
-        um.remember(c.memory, tags=["memeval"], metadata={"id": c.mem_id})
+        # origin 显式给 operator:这是仓内作者写死的评测夹具,不是外来内容。
+        # 不给的话会被盖上归属前缀,而这个 eval 是拿内容本身做匹配的。
+        um.remember(c.memory, tags=["memeval"], metadata={"id": c.mem_id}, origin="operator")
 
     hit1 = hit3 = 0
     rr_sum = 0.0

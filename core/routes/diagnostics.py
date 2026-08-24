@@ -105,6 +105,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             return _failed("execution isolation status")
 
+    @router.get("/api/v1/security/context-provenance")
+    async def context_provenance_status():
+        """最近一次进模型的上下文,是由谁写的那些段构成的。
+
+        模型没有指令通道与数据通道之分 —— 系统提示、用户的话、抓回来的网页、
+        MCP 工具描述,对它来说是同一条 token 流。这个端点回答的是:**这一轮里
+        有没有不可信内容进过上下文**,以及工具闸因此收到了多紧。
+
+        ``floor`` 是**下界**:一次工具调用被哪一段诱发无法归因,所以按上下文里
+        出现过的最低信任来源算。``recorded=false`` 表示还没装配过 —— 那按
+        unknown(最低)处理,不是按可信处理。
+
+        只读:不触发任何装配。响应里**不含正文**,只有来源与长度。
+        """
+        try:
+            from core.context_provenance import provenance_report
+
+            return JSONResponse(provenance_report())
+        except Exception:
+            return _failed("context provenance status")
+
     @router.get("/api/v1/security/connection-provenance")
     async def connection_provenance_status():
         """两条"对端还是我登记过的那个吗"的复验,合在一处报。

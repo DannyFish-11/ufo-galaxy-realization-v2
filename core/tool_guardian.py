@@ -371,5 +371,25 @@ def default_config() -> GuardedCallConfig:
 
     不给 rollback_fn:通用回滚在这一层是编不出来的(不知道这个工具做了什么、
     怎么撤销)。留空比塞一个假的回滚强 —— 后者会让调用方以为失败可撤。
+
+    拦截阈值**按来源取**,不是常数
+    ------------------------------
+    权限是**来源的函数,不是位置的函数**。用户当面说"删掉这个目录",和一个网页
+    正文里出现同一句话,在模型看来没有区别 —— 那个区别必须由系统给出。
+
+    所以这一轮上下文里出现过外部内容(网页/工具返回/MCP 工具描述/记忆)时,
+    阈值从 0.95 降到 0.7:CRITICAL 之外,DANGEROUS 一档(delete / remove)
+    也会被拦下。判据见 core/context_provenance.block_score_for。
+
+    取不到 provenance 时按**最坏**处理(unknown 属于不可信),而不是按可信 ——
+    一条忘了记录来源的新装配路径不该自动拿到宽阈值。
     """
-    return GuardedCallConfig(enabled=guardian_enabled())
+    threshold = _DEFAULT_BLOCK_SCORE
+    try:
+        from core.context_provenance import block_score_for  # noqa: PLC0415
+
+        threshold = block_score_for(default=_DEFAULT_BLOCK_SCORE)
+    except Exception as exc:  # noqa: BLE001 — 判据取不到就用默认阈值,不让工具调用炸掉
+        logger.debug("按来源取阈值失败,退回默认 %.2f: %s", _DEFAULT_BLOCK_SCORE, exc)
+
+    return GuardedCallConfig(enabled=guardian_enabled(), block_score=threshold)

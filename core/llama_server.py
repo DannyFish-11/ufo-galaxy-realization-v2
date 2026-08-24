@@ -96,6 +96,46 @@ def llama_server_binary() -> Optional[str]:
         found = shutil.which(name)
         if found:
             return found
+    return _search_common_install_dirs()
+
+
+#: PATH 之外还去哪儿找。
+#:
+#: 为什么必须有这一段:llama.cpp **最常见的装法是从源码编译**,而产物落在
+#: ``build/bin/`` —— 那个目录不在 PATH 上。只查 PATH 的话,用户明明装好了,
+#: 系统仍然报"没装",然后去查一个根本不存在的问题。
+#:
+#: 这些是**位置猜测**,不是判据:找到了才算数,找不到不代表没装(所以文案里
+#: 仍然给 GALAXY_LLAMA_SERVER_BIN 这条显式路)。
+_COMMON_INSTALL_DIRS: Tuple[str, ...] = (
+    "~/llama.cpp/build/bin",
+    "~/llama.cpp/build",
+    "~/src/llama.cpp/build/bin",
+    "./build/bin",
+    "./llama.cpp/build/bin",
+    "~/.local/bin",
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/opt/llama.cpp/bin",
+)
+
+
+def _search_common_install_dirs() -> Optional[str]:
+    """在几个常见安装位置里找。找不到返回 ``None``。"""
+    for raw_dir in _COMMON_INSTALL_DIRS:
+        base = os.path.expanduser(raw_dir)
+        for name in SERVER_BINARY_NAMES:
+            for candidate in (os.path.join(base, name), os.path.join(base, f"{name}.exe")):
+                try:
+                    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                        # **返回绝对路径**:候选表里有 "./build/bin" 这样的相对项,
+                        # 而这个路径会被传给子进程、也会被存进状态 —— 换个工作目录
+                        # 之后相对路径就指不到东西了,表现为"刚才还能用,现在说没装"。
+                        resolved = os.path.abspath(candidate)
+                        logger.info("在 PATH 之外找到 llama-server: %s", resolved)
+                        return resolved
+                except OSError:  # noqa: PERF203 — 权限/坏链接,换下一个
+                    continue
     return None
 
 

@@ -114,9 +114,40 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from core.context_provenance import ContextSegment, ProvenanceView
+from core.context_provenance import record as record_provenance
+
+
+def _recall_origin() -> str:
+    """最近一次记忆检索取回来的东西里,最低的那个来源。
+
+    局部函数而不是模块级 import:``memory_provenance`` 反过来要用
+    ``context_provenance``,模块级会把 import 图绕成环。
+    """
+    try:
+        from core.memory_provenance import last_recall_origin  # noqa: PLC0415
+
+        return last_recall_origin()
+    except Exception as exc:  # noqa: BLE001 — 取不到就用默认档,不让装配断掉
+        logger.debug("检索来源回执读不到: %s", exc)
+        return ""
+
+
+#: 对话历史里一条 turn 的 role → 来源。**历史不是一个来源**:用户说的、模型
+#: 自己说的、工具返回的混在同一条列表里,整条记成一个来源会把工具返回值洗成
+#: "用户说的"。认不出的 role 落到 unknown(最低),不落到 user。
+_HISTORY_ORIGINS: Dict[str, str] = {
+    "user": "user",
+    "assistant": "model",
+    "system": "operator",
+    "tool": "tool_result",
+    "function": "tool_result",
+}
 
 logger = logging.getLogger("Galaxy.LLM.ContextAuthority")
 
@@ -283,6 +314,9 @@ class CognitiveContextAssembly:
 
     messages: List[Dict[str, Any]] = field(default_factory=list)
     tool_manifest: Optional[List[Dict[str, Any]]] = None
+    #: 这一份上下文由谁写的那些段构成。见 core/context_provenance.py。
+    #: 默认是**没记录过**的空视图,它的 floor 是 unknown —— 拿不到就按最坏算。
+    provenance: ProvenanceView = field(default_factory=ProvenanceView)
     assembly_trace: List[str] = field(default_factory=list)
     authority: str = LLM_CONTEXT_AUTHORITY
     is_canonical: bool = True
@@ -407,6 +441,14 @@ class CognitiveContextAuthority:
         """
         trace: List[str] = []
         messages: List[Dict[str, Any]] = []
+        # 每一段进上下文的内容是谁写的。判据见 core/context_provenance.py。
+        # 刻意**贴着对应的 trace.append 写** —— 分开写迟早有一处只改了一边,
+        # 而漂移的方向总是"某段外部内容被记成了可信来源"。
+        segments: List[ContextSegment] = []
+
+        def _seg(origin: str, label: str, text: Any) -> None:
+            body = text if isinstance(text, str) else str(text)
+            segments.append(ContextSegment(origin=origin, label=label, chars=len(body)))
 
         # ── 1. System message ─────────────────────────────────────────
         system_parts: List[str] = []
@@ -425,6 +467,7 @@ class CognitiveContextAuthority:
         prefix = (request.system_prefix or _DEFAULT_SYSTEM_PREFIX).strip()
         system_parts.append(prefix)
         trace.append(f"system_prefix: {'custom' if request.system_prefix else 'default'}")
+        _seg("operator", "system_prefix", prefix)
 
         # 1b. Soul policy (task_execute / hybrid paths only)
         # Note: Section labels are intentionally in Chinese to match the
@@ -432,6 +475,7 @@ class CognitiveContextAuthority:
         if request.soul_policy:
             system_parts.append(f"\nSOUL 约束：\n{request.soul_policy.strip()}")
             trace.append("soul_policy: injected")
+            _seg("operator", "soul_policy", request.soul_policy)
         else:
             trace.append("soul_policy: absent")
 
@@ -439,6 +483,7 @@ class CognitiveContextAuthority:
         if request.agents_policy:
             system_parts.append(f"\nAgents 策略：\n{request.agents_policy.strip()}")
             trace.append("agents_policy: injected")
+            _seg("operator", "agents_policy", request.agents_policy)
         else:
             trace.append("agents_policy: absent")
 
@@ -446,6 +491,7 @@ class CognitiveContextAuthority:
         if request.user_policy:
             system_parts.append(f"\n用户偏好：\n{request.user_policy.strip()}")
             trace.append("user_policy: injected")
+            _seg("operator", "user_policy", request.user_policy)
         else:
             trace.append("user_policy: absent")
 
@@ -455,6 +501,7 @@ class CognitiveContextAuthority:
                 if constraint and constraint.strip():
                     system_parts.append(f"\n{constraint.strip()}")
             trace.append(f"policy_constraints: {len(request.policy_constraints)} injected")
+            _seg("operator", "policy_constraints", "".join(request.policy_constraints))
         else:
             trace.append("policy_constraints: absent")
 
@@ -462,6 +509,15 @@ class CognitiveContextAuthority:
         if request.memory_context:
             system_parts.append(f"\n记忆上下文：\n{request.memory_context.strip()}")
             trace.append("memory_context: injected")
+            # 记忆段**按检索回来的真实来源记**,不是一律记成 memory。
+            # 一条当初从网页写进去的记忆,被取回来时仍然是 external —— 把它
+            # 记成 memory 就等于让污染在检索这一步被洗白,而那正是记忆投毒
+            # (OWASP ASI06)要的效果。判据见 core.memory_provenance。
+            #
+            # 空串 = 这一轮没检索过 —— 那说明不了任何事,按 memory 记(它本来
+            # 就在不可信一侧),不按可信记。
+            _recalled = _recall_origin()
+            _seg(_recalled or "memory", "memory_context", request.memory_context)
         else:
             trace.append("memory_context: absent")
 
@@ -469,6 +525,7 @@ class CognitiveContextAuthority:
         if request.continuity_context:
             system_parts.append(f"\n连续性上下文：\n{request.continuity_context.strip()}")
             trace.append("continuity_context: injected")
+            _seg("memory", "continuity_context", request.continuity_context)
         else:
             trace.append("continuity_context: absent")
 
@@ -480,6 +537,7 @@ class CognitiveContextAuthority:
             if meta_parts:
                 system_parts.append(f"\n执行上下文：{', '.join(meta_parts)}")
                 trace.append(f"execution_metadata: {len(meta_parts)} entries injected")
+                _seg("operator", "execution_metadata", ", ".join(meta_parts))
         else:
             trace.append("execution_metadata: absent")
 
@@ -492,6 +550,12 @@ class CognitiveContextAuthority:
         if history and request.max_history_turns > 0:
             bounded = history[-request.max_history_turns :]
             messages.extend(bounded)
+            # 历史**不是一个来源**:用户说的、模型自己说的、工具返回的混在一条
+            # 列表里。整条记成一个来源会把工具返回值洗成"用户说的"。
+            for turn in bounded:
+                role = str(turn.get("role", "")) if isinstance(turn, dict) else ""
+                content = turn.get("content", "") if isinstance(turn, dict) else turn
+                _seg(_HISTORY_ORIGINS.get(role, "unknown"), f"history:{role or '?'}", content)
             trace.append(
                 f"conversation_history: {len(bounded)}/{len(history)} turns included"
                 f" (max={request.max_history_turns})"
@@ -505,6 +569,7 @@ class CognitiveContextAuthority:
         if request.user_message is not None:
             messages.append({"role": "user", "content": request.user_message})
             trace.append("user_message: appended")
+            _seg("user", "user_message", request.user_message)
         else:
             trace.append("user_message: absent")
 
@@ -512,6 +577,9 @@ class CognitiveContextAuthority:
         tool_manifest = request.tool_manifest or None
         if tool_manifest is not None:
             trace.append(f"tool_manifest: {len(tool_manifest)} tools")
+            # 工具描述与入参 schema 由 MCP 服务器给,是仓外文本,而且**直接进
+            # 上下文** —— 这正是 core/mcp_tool_pins.py 钉指纹要挡的那一面。
+            _seg("external", "tool_manifest", json.dumps(tool_manifest, ensure_ascii=False, default=str))
         else:
             trace.append("tool_manifest: absent")
 
@@ -524,9 +592,13 @@ class CognitiveContextAuthority:
             trace,
         )
 
+        provenance = record_provenance(segments)
+        trace.append(f"provenance: floor={provenance.floor} segments={len(segments)}")
+
         return CognitiveContextAssembly(
             messages=messages,
             tool_manifest=tool_manifest,
+            provenance=provenance,
             assembly_trace=trace,
             authority=LLM_CONTEXT_AUTHORITY,
             is_canonical=True,

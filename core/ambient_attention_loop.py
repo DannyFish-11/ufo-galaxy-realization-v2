@@ -843,11 +843,16 @@ class AmbientAttentionLoop:
             um = self._get_um()
             if um is not None and getattr(um, "enabled", False):
                 try:
+                    # origin 显式给 external:这条摘要是**屏幕/麦克风看到的世界**,
+                    # 不是用户对我们说的话。而且环境回路不在对话轮次里跑,不能靠
+                    # core.context_provenance 的全局回执 —— 那样会捡到上一轮聊天
+                    # 的来源,把一条感知记忆标成用户说的。
                     um.remember(
                         summary,
                         modality="text",
                         tags=["ambient", decision.action.value],
                         metadata={"source": "ambient_attention_loop"},
+                        origin="external",
                     )
                     # 可选：把 salient 帧本身也存进跨模态记忆（默认关，档位 A 省资源）
                     if obs.frame_b64 and _bool_env("GALAXY_AMBIENT_MEMORY_MEDIA", False):
