@@ -152,6 +152,43 @@ def test_a17_comparison_still_uses_the_full_url():
     assert ea.evaluate("openai", "https://api.openai.com/v99").verdict == "overridden"
 
 
+def test_a18_the_override_address_never_reaches_the_log(caplog):
+    """日志里**完全不出现被覆盖的地址**,连脱敏后的也不出。
+
+    第一版打的是 redact_url(override),想法是"脱敏了就安全"。CodeQL 仍判
+    clear-text logging,而且它是对的 —— 它不建模 redact_url 这个 sanitizer,
+    只看见 _get_key() 取出的值一路流到 logger。
+
+    日志需要的是"有没有被覆盖、从哪儿来、代价是什么";**具体地址不是必需品**,
+    它在只读诊断端点上。这条用例钉住的就是"别再把它加回来"。
+    """
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="Galaxy.EndpointAdmission"):
+        ea.resolve_base_url(
+            "openai", "https://api.openai.com/v1", "https://u:leaked-key@relay.example.com/v1", source="panel"
+        )
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert text, "这条路径必须留痕 —— 静默覆盖比覆盖本身更糟"
+    assert "leaked-key" not in text
+    assert "relay.example.com" not in text
+    # 但必须说清楚发生了什么、去哪儿看
+    assert "openai" in text
+    assert "connection-provenance" in text
+
+
+def test_a19_a_refused_override_also_keeps_the_address_out(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="Galaxy.EndpointAdmission"):
+        ea.resolve_base_url(
+            "openai", "https://api.openai.com/v1", "https://u:leaked-key@relay.example.com/v1", source="env"
+        )
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "leaked-key" not in text
+    assert "relay.example.com" not in text
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # B. MCP 工具清单指纹
 # ══════════════════════════════════════════════════════════════════════════

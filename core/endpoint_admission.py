@@ -92,16 +92,18 @@ def redact_url(url: str) -> str:
 
         https://user:token@relay.example.com/v1
 
-    整串此前既进日志,又经 ``reason`` / ``effective`` 进了
-    ``GET /api/v1/security/connection-provenance`` 的**响应体**。CodeQL 报的是
-    前者(clear-text logging),而后者更重:那是给外部看的。
+    整串此前经 ``reason`` / ``effective`` 进了
+    ``GET /api/v1/security/connection-provenance`` 的**响应体** —— 那是给外部看的,
+    比日志更重。
 
     脱敏之后诊断价值一点没少 —— 要判断的是"它指向哪台主机",而 host 就够了;
     userinfo、path、query 对这个判断没有贡献,只有泄露风险。
 
-    与 ``core.execution_isolation.blocked_reason`` 同款处置:**日志与响应共用同一个
-    函数**,而不是一边打全串、另一边自己再截一遍 —— 后者迟早会漂移,而漂移的方向
-    总是"某一条路径上把全串漏出去了"。
+    **它不用在日志上。** ``resolve_base_url`` 那两条 logger 里连脱敏后的地址都不打:
+    CodeQL 不建模这个函数,只看见凭证库取出的值流到 logger,照判 clear-text
+    logging —— 而那条路上"具体地址"本来就不是必需品(见该函数里的说明)。
+    这里刻意不写成"日志与响应共用同一个净化函数":那听起来对称,实际会把一个
+    **本可以彻底去掉的泄露面**留在日志里。
     """
     raw = (url or "").strip()
     if not raw:
@@ -200,22 +202,36 @@ def resolve_base_url(provider: str, canonical: str, override: str, *, source: st
     if not override_clean:
         return canonical
 
-    # 日志里只出脱敏后的地址,见 redact_url:覆盖值来自凭证库,且可能带 userinfo。
+    # 日志里**完全不出现被覆盖的地址**,连脱敏后的也不出。
+    #
+    # 第一版这里打的是 redact_url(override_clean),想法是"脱敏之后就安全了"。
+    # CodeQL 仍然判 clear-text logging(alert 1101/1102),而且**它是对的**:
+    # 它不建模 redact_url 这个 sanitizer,只看见 _get_key() 取出的值一路流到
+    # logger。这类"分析器不认识我们的净化函数"在本仓有先例(见
+    # config/codeql_findings_ledger.json 里 py/bind-socket-all-network-interfaces
+    # 那条),但那条的前提是**改不掉** —— 绑 0.0.0.0 是功能本身。
+    #
+    # 这里改得掉:日志需要的是"有没有被覆盖、从哪儿来的、代价是什么",
+    # 而**具体地址不是日志的必需品** —— 它在只读诊断端点上,而那条路是
+    # 从环境变量推的、不碰凭证库。所以这里不记台账消音,直接把那一维去掉。
+    #
+    # canonical 来自 PROVIDER_REGISTRY(写死在代码里,不是密钥),照打无妨。
+    _where = "GET /api/v1/security/connection-provenance"
     if not override_allowed():
         logger.warning(
-            "provider %s 的地址覆盖被拒(GALAXY_ALLOW_ENDPOINT_OVERRIDE=0):" "忽略 %s,回落到登记地址 %s",
+            "provider %s 的地址覆盖被拒(GALAXY_ALLOW_ENDPOINT_OVERRIDE=0)," "回落到登记地址 %s;被忽略的那个地址见 %s",
             provider,
-            redact_url(override_clean),
-            redact_url(canonical),
+            canonical,
+            _where,
         )
         return canonical
 
     logger.info(
-        "provider %s 的地址已被覆盖为 %s(登记地址 %s,来源 %s)——" "密钥与对话全文都会发往这个地址",
+        "provider %s 的地址已被覆盖(来源 %s,登记地址 %s)——" "密钥与对话全文都会发往被覆盖的那个地址;它是哪台主机见 %s",
         provider,
-        redact_url(override_clean),
-        redact_url(canonical),
         source or "未标注",
+        canonical,
+        _where,
     )
     return override_clean
 
