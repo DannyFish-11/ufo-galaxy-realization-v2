@@ -27,8 +27,36 @@
 
 from __future__ import annotations
 
+import pytest
+
 import core.model_catalog as mc
 from core.model_catalog import SLOT_BOTH, SLOT_PERCEPTION, SLOT_REASONING
+
+
+@pytest.fixture(autouse=True)
+def _clean_env(tmp_path, monkeypatch):
+    """隔离统一状态记录与环境 —— 与 tests/test_model_catalog_tiers.py 同一个范式。
+
+    **本文件此前一个 fixture 都没有**，于是两件事同时成立：
+
+    * 它读的是仓库里那份真的 ``runtime/model_state.json`` —— 别的进程（或人）
+      在里面留下的选择会直接改变本文件的结论；
+    * 它自己还 ``save_tier("C")`` **往那份真文件里写**，把选择留给后面所有人。
+
+    以前看不出来：推理位候选表只有一个元素，``model_for_role`` 读到什么状态都
+    回落到同一个 tag，于是"没隔离"与"隔离了"没有可观测差别。C 档推理位变成
+    二选一之后，这个洞立刻变成"上一个进程选过 Agents-A1 → 本文件红"——实测就是
+    这么红的。
+
+    ``_STATE_FILE`` 在 ``runtime/`` 下，而 ``GALAXY_DATA_DIR`` 管的是 ``data/`` ——
+    设那个环境变量**不隔离这份状态**，必须像这里一样直接改指针。
+    """
+    monkeypatch.setattr(mc, "_STATE_FILE", tmp_path / "runtime" / "model_state.json")
+    monkeypatch.setattr(mc, "_LEGACY_TIER_FILE", tmp_path / ".galaxy_tier")
+    monkeypatch.setattr(mc, "_LEGACY_MODEL_FILE", tmp_path / ".galaxy_model")
+    for k in ("GALAXY_MODEL_TIER", "GALAXY_NATIVE_AUDIO", "OLLAMA_MODEL", "GALAXY_PERCEPTION_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    yield
 
 
 class TestSlotsAreTheSingleDefinition:

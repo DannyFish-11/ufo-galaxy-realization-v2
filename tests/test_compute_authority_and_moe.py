@@ -405,7 +405,20 @@ def test_catalog_tiers_and_models_unchanged() -> None:
         "D": "composite",
         "C": "composite",
     }
-    assert len(all_models()) == 6
+    # 钉**具体是哪几个**，不是钉个数：光比个数，删掉一个再加一个照样过 ——
+    # 而"悄悄换掉一个型号"正是这条守卫要拦的那类改动。
+    assert {m.tag for m in all_models()} == {
+        "gemma4:e2b",
+        "gemma4:e4b",
+        "gemma4:12b",
+        "openbmb/minicpm-o4.5",
+        "qwen3.6:35b-a3b",
+        # C 档推理位的第二候选。加它是**显式动作**(见
+        # tests/test_c_tier_has_a_second_reasoning_candidate.py)，与加 C 档同一性质：
+        # 档位构成没动(仍是 A/B 单模型 + D/C 复合)，动的是 C 档推理位的候选表。
+        "agents-a1:35b-a3b",
+        "qwythos-9b-v2",
+    }
 
 
 def test_llama_cpp_source_is_admitted_to_choices() -> None:

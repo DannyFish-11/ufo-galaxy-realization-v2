@@ -84,6 +84,19 @@ HF_GGUF_CANDIDATES: Dict[str, List[str]] = {
         "unsloth/Qwen3-30B-A3B-GGUF",
         "bartowski/Qwen_Qwen3-30B-A3B-GGUF",
     ],
+    # C 档推理位的第二候选(智能体专精)。官方 GGUF 优先 —— InternScience 自己发了
+    # Q4_K_M 与 Q8_0 两档;再落到它的底座 Qwen3.5-35B-A3B(同架构,拿得到就能跑)。
+    #
+    # **社区量化里有带 vision projector 的版本,故意不列。** 那会让这一位悄悄多出
+    # 视觉能力,而 C 档的看/听是感知位的活 —— 推理位多一份视觉塔只是白占显存,
+    # 更要紧的是能力聚合会因此把"看"算到推理位头上。与 qwythos 那条不列
+    # abliterated 改版同一个理由:回退不该悄悄把用户换成另一个东西。
+    "agents-a1:35b-a3b": [
+        "InternScience/Agents-A1-Q4_K_M-GGUF",
+        "InternScience/Agents-A1-Q8_0-GGUF",
+        "Qwen/Qwen3.5-35B-A3B-GGUF",
+        "unsloth/Qwen3.5-35B-A3B-GGUF",
+    ],
     # D 档推理位。官方 GGUF 优先(用户选定 v2 —— 它的发布说明明确修了 looping);
     # 再落到同一模型的初版,最后是它的底座 Qwen3.5-9B 系。与上面同一套写法:
     # 存不存在一律由 find_gguf_file() 运行时用 HfApi 核实,猜错的自动跳过。
