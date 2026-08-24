@@ -74,9 +74,7 @@ class FakeUM:
         # 替身漏掉它的话,调用方传 origin 会 TypeError,而这里的调用点外面包着
         # 一层 `except Exception: logger.debug(...)` —— 于是记忆一条都写不进去,
         # **而且悄无声息**。这个替身必须跟着真接口走。
-        self.remembered.append(
-            {"content": content, "modality": modality, "tags": tags, "origin": origin}
-        )
+        self.remembered.append({"content": content, "modality": modality, "tags": tags, "origin": origin})
 
     def remember_media(self, data_b64, *, modality, mime="", tags=None, metadata=None, caption=""):
         self.media.append({"modality": modality, "caption": caption})
