@@ -69,8 +69,14 @@ class FakeUM:
         self.remembered: List[Dict[str, Any]] = []
         self.media: List[Dict[str, Any]] = []
 
-    def remember(self, content, *, modality="text", tags=None, metadata=None):
-        self.remembered.append({"content": content, "modality": modality, "tags": tags})
+    def remember(self, content, *, modality="text", tags=None, metadata=None, origin=None):
+        # origin 是 UnifiedMemory.remember 的参数(见 core/memory_provenance.py)。
+        # 替身漏掉它的话,调用方传 origin 会 TypeError,而这里的调用点外面包着
+        # 一层 `except Exception: logger.debug(...)` —— 于是记忆一条都写不进去,
+        # **而且悄无声息**。这个替身必须跟着真接口走。
+        self.remembered.append(
+            {"content": content, "modality": modality, "tags": tags, "origin": origin}
+        )
 
     def remember_media(self, data_b64, *, modality, mime="", tags=None, metadata=None, caption=""):
         self.media.append({"modality": modality, "caption": caption})
@@ -280,6 +286,10 @@ class TestTickRouting:
         assert wm.adds and wm.adds[0]["role"] == "ambient"
         # salient → 终身记忆写
         assert um.remembered and "ambient" in (um.remembered[0]["tags"] or [])
+        # 感知摘要是**屏幕/麦克风看到的世界**,不是用户对我们说的话。
+        # 而且环境回路不在对话轮次里跑,不能靠 context_provenance 的全局回执 ——
+        # 那样会捡到上一轮聊天的来源,把一条感知记忆标成用户说的。
+        assert um.remembered[0]["origin"] == "external"
         # 事件发布 observed + decision
         types = [e["type"] for e in bus.events]
         assert "ambient.observed" in types and "ambient.decision" in types

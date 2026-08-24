@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 393 条 · 组件 schema 103 个
+// 路径 394 条 · 组件 schema 103 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -316,6 +316,7 @@ export type ApiPath =
   | "/api/v1/runtime/takeover"
   | "/api/v1/security/audit"
   | "/api/v1/security/connection-provenance"
+  | "/api/v1/security/context-provenance"
   | "/api/v1/security/egress"
   | "/api/v1/security/execution-isolation"
   | "/api/v1/security/policy"
@@ -713,6 +714,7 @@ export const API_METHODS = {
   "/api/v1/runtime/takeover": ["post"],
   "/api/v1/security/audit": ["get"],
   "/api/v1/security/connection-provenance": ["get"],
+  "/api/v1/security/context-provenance": ["get"],
   "/api/v1/security/egress": ["get"],
   "/api/v1/security/execution-isolation": ["get"],
   "/api/v1/security/policy": ["get", "put"],

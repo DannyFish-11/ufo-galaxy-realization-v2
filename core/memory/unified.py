@@ -32,6 +32,22 @@ class UnifiedMemory:
         return [p.backend_name for p in self.providers]
 
     def remember(self, content: str, **kwargs) -> None:
+        """写进记忆。**所有后端的收口点**,所以来源在这里盖。
+
+        为什么盖在这一层而不是各 provider 里:各后端对 metadata 的处置不同,
+        逐个去改必然漏掉一个,而漏的表现是"某个后端里的记忆没有来源" ——
+        那正好是检索时最需要来源的那一条。判据见 core/memory_provenance.py。
+        """
+        from core.memory_provenance import stamp  # noqa: PLC0415
+
+        # origin 是本层的参数,**不透传给 provider** —— 各 provider 的签名里没有
+        # 它,漏 pop 会让每一次写入都 TypeError。
+        origin = kwargs.pop("origin", None)
+        try:
+            content, kwargs["metadata"] = stamp(content, origin=origin, metadata=kwargs.get("metadata"))
+        except Exception as exc:  # noqa: BLE001 — 盖不上章也要让记忆写进去
+            logger.warning("记忆来源盖章失败,这条将没有来源标记: %s", exc)
+
         for p in self.providers:
             try:
                 p.remember(content, **kwargs)
@@ -82,7 +98,19 @@ class UnifiedMemory:
             if key and (key not in seen or h.score > seen[key].score):
                 seen[key] = h
         merged = sorted(seen.values(), key=lambda h: h.score, reverse=True)
-        return merged[:top_k]
+        result = merged[:top_k]
+
+        # 只在写入时盖章是不够的:记忆重新进上下文的那一刻若来源掉了,它就以
+        # "智能体自己的知识"的身份出现 —— 污染被洗白。这里把这批结果的**最低**
+        # 来源记进回执,让上下文装配那一段按真实来源算,而不是一律记成 memory。
+        try:
+            from core.memory_provenance import record_recall  # noqa: PLC0415
+
+            record_recall(result)
+        except Exception as exc:  # noqa: BLE001 — 记不上也要把结果还回去
+            logger.debug("检索来源回执写入失败: %s", exc)
+
+        return result
 
 
 # ── 单例工厂 ────────────────────────────────────────────────────────────────
