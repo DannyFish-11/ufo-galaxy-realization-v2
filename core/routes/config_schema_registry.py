@@ -969,6 +969,46 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "该本地服务若开了鉴权就填它的 key;自托管通常留空",
     },
+    # ── 推理位那条泳道(core/multi_llm_router._LOCAL_OPENAI_LANES 第二条)────────
+    # 与上面四个 GALAXY_LOCAL_OPENAI_* 一一对应,只是伺候的是另一只手:那四个是
+    # **感知位/核显侧**,这四个是**推理位/独显侧**。C/D 档本来就是双模型、两块
+    # 加速器、两台服务 —— 只留一组的后果是二选一:接了核显那台,独显那台就没有
+    # 地方填地址。
+    #
+    # 独显侧的候选引擎:FreeToken 的 `ft serve`(MoE 专用,自带专家 LRU 缓存与
+    # CPU-GPU 带宽自适应)、vLLM、llama.cpp server 的 CUDA 后端 —— 都讲同一套
+    # OpenAI 兼容协议,填地址即可,不需要新后端。
+    "GALAXY_REASONING_OPENAI_URL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "推理位那台 OpenAI 兼容服务的地址(FreeToken ft serve 默认 127.0.0.1:1919 / vLLM / "
+            "llama.cpp server CUDA)。留空=不启用;可不带 scheme 与 /v1"
+        ),
+    },
+    "GALAXY_REASONING_OPENAI_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": ("指定用该服务托管的哪个模型。留空=用它 /v1/models 自报的第一个;填错会告警并回落自报值"),
+    },
+    "GALAXY_REASONING_OPENAI_SERVES": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "声明这台服务伺候的是目录里哪个推理位型号(qwen3.6:35b-a3b 或 agents-a1:35b-a3b)。"
+            "服务按自己那套命名报模型 id(FreeToken 默认取 --model 路径的 basename)、与目录 tag "
+            "对不上时填它;留空=按名字匹配。**与感知位那条各有各的** —— 共用一个就等于说两台装的是同一个型号"
+        ),
+    },
+    "GALAXY_REASONING_OPENAI_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "该服务若开了鉴权就填它的 key;自托管通常留空",
+    },
     "GALAXY_AMBIENT_ASR_SIZE": {
         "default": "base",
         "type": "string",

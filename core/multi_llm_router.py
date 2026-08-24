@@ -1889,6 +1889,52 @@ MODEL_SELECTION_AUTHORITY_INTEGRATED: str = (
 CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED: str = MODEL_SELECTION_AUTHORITY_INTEGRATED
 
 
+# ── 本地 OpenAI 兼容服务的「泳道」──────────────────────────────────────────────
+#: 本地可以同时有**不止一台** OpenAI 兼容服务，而且它们伺候的不是同一只手。
+#:
+#: 原来这里只认一台（``GALAXY_LOCAL_OPENAI_URL`` → provider ``local_openai``），
+#: 那是按"核显上跑感知位"这一个场景写的。可 C/D 档本来就是双模型：感知位在核显、
+#: 推理位在独显，**两块加速器、两台服务、两套协议端点**。只留一个槽位的后果是
+#: 二选一 —— 接了核显那台，独显那台就没有地方填地址；反过来也一样。
+#:
+#: 每条泳道的差别不只是地址，还有**它自己的事实**：
+#:
+#: * 感知位那台要看要听（``supports_vision/audio``），推理位那台是纯文本 ——
+#:   两个推理位候选（``qwen3.6:35b-a3b`` / ``agents-a1:35b-a3b``）的 caps 里
+#:   ``vision`` 与 ``audio`` 都是 False。给推理位标上"能看"，能力聚合会把"看"
+#:   算到它头上，于是协商层不挂视觉通道 —— 现场表现是"它说自己能看，可什么都
+#:   看不见"。
+#: * 硬件档不同：核显是 ``gpu_quantized``（比独显满血弱但仍是本地），独显那台
+#:   是 ``gpu_full``。这一栏进 ``local_reasoning_quality_tier`` 那条路，判错了
+#:   会让"写代码优先用强模型"把活派错地方。
+#: * 量化档不同：核显侧惯例是 q4；FreeToken 这类引擎发的是 FP8/NVFP4/BF16 或它
+#:   自己的 FTW 格式，**没有一个是 q4**。所以推理位这条如实填 ``"none"``
+#:   （``ProviderConfig.quantization`` 自己的"没声明"值），不编一个。
+_LOCAL_OPENAI_LANES: List[Dict[str, Any]] = [
+    {
+        "provider": "local_openai",
+        "env_prefix": "GALAXY_LOCAL_OPENAI",
+        "hardware_tier": "gpu_quantized",
+        "multimodal": True,
+        "supports_vision": True,
+        "supports_audio": True,
+        "quantization": "q4",
+        "what": "感知位/核显侧(llama.cpp SYCL·Vulkan 或 OpenVINO Model Server)",
+    },
+    {
+        "provider": "reasoning_openai",
+        "env_prefix": "GALAXY_REASONING_OPENAI",
+        "hardware_tier": "gpu_full",
+        # 推理位是纯文本 —— 与目录里两个推理位候选的 caps 一致，见上面的说明。
+        "multimodal": False,
+        "supports_vision": False,
+        "supports_audio": False,
+        "quantization": "none",
+        "what": "推理位/独显侧(FreeToken 的 ft serve、vLLM、llama.cpp server CUDA)",
+    },
+]
+
+
 class MultiLLMRouter:
     """
     多 LLM 智能路由器
@@ -2016,18 +2062,100 @@ class MultiLLMRouter:
             return []
 
     def _register_local_openai(self) -> None:
-        """注册「本地 OpenAI 兼容服务」——Intel 核显那一侧就走这条路接进来。
+        """把本地那几台 OpenAI 兼容服务注册进来 —— 每条泳道一台。
 
         为什么不写新后端:``VLLMBackend`` 名字叫 vllm,实质是**通用 OpenAI 兼容
         客户端**(只往 ``{base_url}/v1/chat/completions`` 发)。llama.cpp server 的
-        SYCL / Vulkan 后端、OpenVINO Model Server 都讲同一套协议,起一个服务、
-        把地址填进来即可,``BACKEND_REGISTRY`` 一个字不用加。
+        SYCL / Vulkan 后端、OpenVINO Model Server、FreeToken 的 ``ft serve``
+        都讲同一套协议,起一个服务、把地址填进来即可,``BACKEND_REGISTRY``
+        一个字不用加。
 
         (原打算走 IPEX-LLM,查下来那条路是死的:``intel/ipex-llm`` README 第一行
         是 THIS PROJECT IS ARCHIVED,并注明"已被识别为存在已知安全问题";社区 fork
         的验证模型列表停在 Qwen2.5 / MiniCPM-o-2.6,认不了新架构。)
+
+        泳道见 :data:`_LOCAL_OPENAI_LANES`。**没配地址的泳道整段空转**,所以只填
+        了 ``GALAXY_LOCAL_OPENAI_URL`` 时行为与加泳道之前逐字节一致。
         """
-        raw = os.environ.get("GALAXY_LOCAL_OPENAI_URL", "").strip()
+        for lane in _LOCAL_OPENAI_LANES:
+            self._register_one_local_openai(lane)
+
+    @staticmethod
+    def _lane_caps(lane: Dict[str, Any], served_id: str, declared: str) -> Tuple[bool, bool, bool]:
+        """这台服务**能不能看/听** —— 目录里查得到就照目录，查不到才用泳道默认值。
+
+        返回 ``(multimodal, vision, audio)``。
+
+        为什么不能写死
+        ==============
+        泳道只知道"这台服务大概跑在哪块加速器上",不知道"它装的是哪个模型"。而
+        能看能听是**模型**的属性:同一条泳道上,MiniCPM-o 4.5 能看能听、
+        qwen3.6:35b-a3b 一个都不能。
+
+        写死的后果不是小事:``core/llama_server.py`` 起的是带 ``--n-cpu-moe`` 的
+        **推理位**服务、导出的正是 ``GALAXY_LOCAL_OPENAI_URL``,而那条泳道此前
+        硬编码 ``multimodal=True`` —— 于是一台 35B-A3B 纯文本服务在路由眼里声称
+        能看能听。``route_multimodal_first`` 与 ``_pool`` 两处都拿 ``multimodal``
+        做候选过滤,带图的请求因此可以被投到它身上,现场表现是"图发过去了,回的
+        却像没看见"。
+
+        而这件事**根本不需要猜**:服务伺候的是哪个型号是知道的 —— 要么用户用
+        ``{前缀}_SERVES`` 声明过,要么它自报的 id 本身就是目录里的 tag。查一次目录
+        就有真的 caps。与 ``effective_weight_mb``、``context_measurements`` 同一个
+        立场:**声明的假设 vs 登记过的事实,事实优先**。
+
+        查不到就退回泳道默认值 —— 那是"不知道装的是什么"时的保守假设,不是事实,
+        所以只在最后一步用。
+        """
+        default = (bool(lane["multimodal"]), bool(lane["supports_vision"]), bool(lane["supports_audio"]))
+        try:
+            from core.model_catalog import exact_model, get_model  # noqa: PLC0415
+        except Exception as exc:  # noqa: BLE001 — 目录问不出来就用泳道默认值
+            logger.debug("目录不可用,泳道能力按默认值: %s", exc)
+            return default
+
+        for tag in (declared, served_id):
+            if not tag:
+                continue
+            spec = exact_model(tag) or get_model(tag)
+            if spec is None:
+                continue
+            caps = spec.caps
+            vision = bool(getattr(caps, "vision", False))
+            audio = bool(getattr(caps, "audio_in", False) or getattr(caps, "audio_out", False))
+            logger.info(
+                "泳道 %s 的能力按目录条目 %s 定:看=%s 听/说=%s(泳道默认值是 %s)",
+                lane["provider"],
+                spec.tag,
+                vision,
+                audio,
+                default,
+            )
+            return (vision or audio, vision, audio)
+
+        # 认不出装的是什么 —— 退回泳道默认值，但**说出来**。
+        #
+        # 这一步是保留现状(默认值就是此前写死的那几个)，不是"确认它能看"。而
+        # 默认值往"能看"那边偏是危险的一侧:声称有、实际没有 → 图发过去、回的却
+        # 像没看见;声称没有、实际有 → 落到另一个 provider，答案照样出得来。
+        # 所以这里不静默 —— 真实生产者(core/llama_server.py、
+        # scripts/setup_reasoning_slot.py)都会写 SERVES，走到这一步说明是手工配的。
+        if default[0]:
+            logger.warning(
+                "泳道 %s 认不出服务托管的 %r 是目录里哪个型号，暂按泳道默认值当作"
+                "**能看能听**处理 —— 若它其实是纯文本模型，带图的请求会被投到它身上。"
+                "用 %s_SERVES 声明它伺候的是哪个目录 tag 即可消除这次猜测。",
+                lane["provider"],
+                served_id or declared,
+                lane["env_prefix"],
+            )
+        return default
+
+    def _register_one_local_openai(self, lane: Dict[str, Any]) -> None:
+        """注册一条泳道;地址没配、或服务不应答 ``/v1/models`` 就不注册。"""
+        prefix = lane["env_prefix"]
+        provider = lane["provider"]
+        raw = os.environ.get(f"{prefix}_URL", "").strip()
         if not raw:
             return
         base = raw.rstrip("/")
@@ -2038,44 +2166,59 @@ class MultiLLMRouter:
 
         served = self._probe_openai_compatible(base)
         if not served:
-            logger.info("本地 OpenAI 兼容服务(%s)未响应 /models —— 不注册,偏好列表自然跳过它", base)
+            logger.info(
+                "本地 OpenAI 兼容服务(%s · %s)未响应 /models —— 不注册,偏好列表自然跳过它",
+                base,
+                lane["what"],
+            )
             return
 
         # 显式指定优先(用户可能在一个服务上托管多个模型);否则用它自报的第一个。
-        want = os.environ.get("GALAXY_LOCAL_OPENAI_MODEL", "").strip()
+        want = os.environ.get(f"{prefix}_MODEL", "").strip()
         default_model = want if want in served else served[0]
         if want and want != default_model:
             logger.warning(
-                "GALAXY_LOCAL_OPENAI_MODEL=%r 不在服务 %s 托管的模型里(%s),改用 %r",
+                "%s_MODEL=%r 不在服务 %s 托管的模型里(%s),改用 %r",
+                prefix,
                 want,
                 base,
                 ", ".join(served),
                 default_model,
             )
 
+        caps = self._lane_caps(lane, default_model, os.environ.get(f"{prefix}_SERVES", "").strip())
+
         cfg = ProviderConfig(
-            name="local_openai",
+            name=provider,
             # 留空即"这台服务不开鉴权" —— 适配器据此不带 Authorization 头。
             # 早先这里塞过一个 "not-needed" 占位符,那是在绕开适配器的空值缺陷,
             # 而不是在描述事实;缺陷已在 OpenAIAdapter 里修掉,这里如实留空。
-            api_key=os.environ.get("GALAXY_LOCAL_OPENAI_KEY", "").strip(),
+            api_key=os.environ.get(f"{prefix}_KEY", "").strip(),
             base_url=base,
             models=served,
             default_model=default_model,
             supports_tools=True,
             supports_json_mode=False,
-            multimodal=True,
-            env_key="GALAXY_LOCAL_OPENAI_URL",
+            multimodal=caps[0],
+            env_key=f"{prefix}_URL",
             source_type="local",
-            # 核显/量化档:比独显满血弱,但仍是本地,不该被当成远端。
-            hardware_tier="gpu_quantized",
-            supports_vision=True,
-            supports_audio=True,
-            quantization="q4",
+            # 硬件档/模态/量化都由泳道给 —— 核显那台和独显那台不是同一种东西,
+            # 见 _LOCAL_OPENAI_LANES 的说明。
+            hardware_tier=lane["hardware_tier"],
+            supports_vision=caps[1],
+            supports_audio=caps[2],
+            quantization=lane["quantization"],
         )
-        self.providers["local_openai"] = cfg
-        self.adapters["local_openai"] = OpenAIAdapter(cfg)
-        logger.info("本地 OpenAI 兼容服务已注册: %s (%d 个模型, 默认 %s)", base, len(served), default_model)
+        self.providers[provider] = cfg
+        self.adapters[provider] = OpenAIAdapter(cfg)
+        logger.info(
+            "本地 OpenAI 兼容服务已注册: %s = %s (%d 个模型, 默认 %s) · %s",
+            provider,
+            base,
+            len(served),
+            default_model,
+            lane["what"],
+        )
 
     def _register_from_registry(self) -> None:
         """L1:从 PROVIDER_REGISTRY 循环注册标准 OpenAI/Anthropic 兼容提供商。
@@ -2961,9 +3104,16 @@ class MultiLLMRouter:
 
         按 ``source_type`` 找,不写死 provider 名单 —— Intel 侧那台 OpenAI 兼容
         服务(``local_openai``)是配出来的,写死名单它就永远进不来。
+
+        第 2 条的声明也是**按泳道各有一个**(``{前缀}_SERVES``):两台服务伺候的是
+        不同的位,共用一个声明就等于说"这两台装的是同一个型号"。此前这里写死了
+        ``name == "local_openai"``——就在上面那句"不写死名单"的下一行,而当时只有
+        一条泳道,写死与不写死没有可观测差别。
         """
-        declared = os.environ.get("GALAXY_LOCAL_OPENAI_SERVES", "").strip()
         root = tag.split(":")[0]
+        declared_by_provider = {
+            lane["provider"]: os.environ.get(f"{lane['env_prefix']}_SERVES", "").strip() for lane in _LOCAL_OPENAI_LANES
+        }
         for name, cfg in self.providers.items():
             if cfg.source_type not in ("local", "hf_local"):
                 continue
@@ -2974,7 +3124,8 @@ class MultiLLMRouter:
             matched = next((m for m in cfg.models if m == tag or m.split(":")[0] == root), None)
             if matched:
                 return (name, matched)
-            if name == "local_openai" and declared and declared == tag and cfg.default_model:
+            declared = declared_by_provider.get(name, "")
+            if declared and declared == tag and cfg.default_model:
                 # 声明过:目录 tag 归本档,实际调用报服务自己那套 id。
                 return (name, cfg.default_model)
         return None
@@ -3029,7 +3180,8 @@ class MultiLLMRouter:
                     "本地[%s]槽位配的是 %s,但没有任何本地 provider 托管它 —— 这一位没上岗。"
                     "本次按可用性回落(很可能落到另一个本地模型上,失去两位分工的意义)。"
                     "检查:该模型是否已装/服务是否已起;若服务按自己那套命名报模型 id,"
-                    "用 GALAXY_LOCAL_OPENAI_SERVES 声明它伺候的是哪个目录型号。",
+                    "用 GALAXY_LOCAL_OPENAI_SERVES(核显那台)或 GALAXY_REASONING_OPENAI_SERVES"
+                    "(独显那台)声明它伺候的是哪个目录型号 —— 两条泳道各有各的。",
                     slot_role,
                     tag,
                 )

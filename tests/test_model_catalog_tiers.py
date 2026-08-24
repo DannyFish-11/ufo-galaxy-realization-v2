@@ -105,6 +105,8 @@ class TestUnifiedNoHardcode:
             "openbmb/minicpm-o4.5",
             "qwythos-9b-v2",
             "qwen3.6:35b-a3b",
+            # C 档推理位的第二候选 —— 面板要选得到它，所以它必须在这张表里。
+            "agents-a1:35b-a3b",
         ]
 
 
