@@ -754,6 +754,14 @@ class BaseProviderAdapter:
         Uses exponential backoff: RETRY_BASE_DELAY * 2^attempt seconds between retries.
         Falls through to raise on non-retryable errors immediately.
         """
+        # 出口闸:这是所有云端 provider POST 的收口点,所以判据放在这里就覆盖了
+        # 全部厂商 —— 在每个适配器里各写一遍必然漏掉一家,而漏的表现是"某家突然
+        # 连不上",没人会想到是这道闸。判据见 core/egress_guard.py。
+        # audit 档(默认)只记账不拦,enforce 档才会抛 EgressBlocked。
+        from core.egress_guard import check_egress  # noqa: PLC0415
+
+        check_egress(url, purpose=f"llm:{self.config.name}")
+
         client = await self._get_client()
         last_exc: Optional[Exception] = None
         for attempt in range(self.MAX_RETRIES + 1):
@@ -2245,11 +2253,17 @@ class MultiLLMRouter:
             base_env = spec.get("base_env")
             if base_key or base_env:
                 override = self._get_key(base_key) if base_key else ""
+                _source = "panel" if override else ""
                 if not override and base_env:
                     override = os.environ.get(base_env, "")
-                override = (override or "").strip()
-                if override:
-                    base = override
+                    _source = "env" if override else _source
+                # 覆盖生效与否收口在一处:改掉这个地址,api_key 与每一次对话的全文
+                # 都会照常发往新地址,而一切看起来都正常工作。判据见
+                # core/endpoint_admission.py(默认仍放行——中转是主流用法——
+                # 但会留痕并出现在诊断面上;真正的拦截由 egress_guard 承担)。
+                from core.endpoint_admission import resolve_base_url  # noqa: PLC0415
+
+                base = resolve_base_url(name, base, override or "", source=_source)
             cfg = ProviderConfig(
                 name=name,
                 api_key=key,

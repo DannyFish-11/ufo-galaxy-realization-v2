@@ -768,6 +768,10 @@ class TransformersBackend(LocalModelBackend):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        # except 子句要引用 WeightsRejected,所以必须在 try 之前拿到 —— 放在 try 里
+        # 的话,一旦 import 本身失败,except 子句自己会 NameError。
+        from core.weights_admission import WeightsRejected, ensure_admitted  # noqa: PLC0415
+
         try:
             # Resolve path: local path or HF Hub
             local_path = self._resolve_model_path(model_id)
@@ -812,12 +816,21 @@ class TransformersBackend(LocalModelBackend):
             except Exception as _sched_err:  # noqa: BLE001
                 logger.debug("compute_scheduler 不可用,按默认设备加载: %s", _sched_err)
 
-            tokenizer = AutoTokenizer.from_pretrained(load_target, trust_remote_code=True)
+            # 权重准入:trust_remote_code=True 的含义是**仓库里的 .py 会被直接执行**,
+            # 而下载源默认是第三方镜像且下载路径上没有哈希校验。这条路不走
+            # SafeExecutor,所以 core.execution_isolation 的容器边界对它无效 ——
+            # 判据只此一处,见 core/weights_admission.py。默认拒绝、按模型白名单放行。
+            _admission = ensure_admitted(model_id, local_path=local_path)
+            _trust_remote_code = _admission.remote_code
+            if not _trust_remote_code:
+                logger.info("自带代码不执行(%s): %s", model_id, _admission.reason)
+
+            tokenizer = AutoTokenizer.from_pretrained(load_target, trust_remote_code=_trust_remote_code)
             model_obj = AutoModelForCausalLM.from_pretrained(
                 load_target,
                 torch_dtype=torch.float16 if _target_device == "cuda" else torch.float32,
                 device_map="auto" if _target_device == "cuda" else None,
-                trust_remote_code=True,
+                trust_remote_code=_trust_remote_code,
             )
             if _target_device == "cpu":
                 model_obj = model_obj.to("cpu")
@@ -833,6 +846,11 @@ class TransformersBackend(LocalModelBackend):
                     pass
             logger.info("Transformers loaded: %s on %s", model_id, self._device)
             return True
+        except WeightsRejected as rejected:
+            # 与下面那条**必须分开**:这不是"加载失败",是"按判据拒绝加载"。
+            # 混进通用失败里,运维只会看到一次偶发报错,然后去把它"修掉"。
+            logger.error("权重准入拒绝加载 %s: %s", model_id, rejected)
+            return False
         except Exception as exc:
             logger.error("Failed to load transformers %s: %s", model_id, exc)
             return False

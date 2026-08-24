@@ -928,6 +928,110 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 这一位与下面三个 GALAXY_LOCAL_OPENAI_* 是一组:它说"二进制在哪",那三个说
     # "起来之后怎么接进来"。由我们自己起服务时,后三个会被 core.llama_server 自动
     # 导出,人只需要填这一个。
+    # ── provider 地址与 MCP 工具清单的复验 ────────────────────────────────
+    # 改掉一个 base_url,api_key 与每一次对话的全文都会照常发往新地址,而一切看起来
+    # 都正常工作。默认仍放行(中转是主流用法),但会留痕并出现在诊断面上;真正的
+    # 拦截由 egress_guard 承担。判据见 core/endpoint_admission.py。
+    "GALAXY_ALLOW_ENDPOINT_OVERRIDE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": (
+            "允不允许用环境变量/面板短键覆盖 provider 的 base_url。默认允许(中转/relay 要用)。"
+            "关掉后覆盖失效并回落到注册表里的登记地址,且会留痕——不静默忽略"
+        ),
+    },
+    # MCP 工具描述与入参 schema 是**直接进模型上下文**的文本,而服务器随时能改。
+    # 先干净上线、被信任之后再推更新把描述换掉,就是 rug-pull。
+    # 默认 enforce 配 TOFU 是能用的:第一次照记不拦,只有"变了"才拦。
+    "GALAXY_MCP_PIN_MODE": {
+        "default": "enforce",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "MCP 工具清单复验档位(enforce=变了就拒用,默认 / warn=只记不拦 / off=不生效)。"
+            "第一次见到的服务器按 TOFU 记下——挡得住后来被改,挡不住一开始就是坏的"
+        ),
+    },
+    "GALAXY_TOOL_GUARDIAN": {
+        "default": "on",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "工具调用守护(风险评分 + 超阈值拦截 + 审计)。默认开。"
+            "此前这道闸写好了却从未在生产路径上生效过——没有任何调用方传过它的配置"
+        ),
+    },
+    # ── 出口闸(core/egress_guard.py)───────────────────────────────────────
+    # 在这三个开关之前,整个系统说不出"这次执行往外发了什么、发去了哪儿"。
+    # 提示注入最严重的后果通常不是删文件,而是把数据编进一个 URL 顺手发出去 ——
+    # 容器隔离挡不住出站,这是那道边界的另一半。
+    #
+    # 默认 audit 是**刻意的让步**:合法出站远不止 provider 调用(MCP、抓网页、
+    # 装依赖都在出站),带着一份没整理过的白名单直接 enforce 会把能用的全打死。
+    # 但 audit 档**不提供保护**,只提供可见性 —— 报告里如实这么写。
+    "GALAXY_EGRESS_MODE": {
+        "default": "audit",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "出站管控档位(audit=只记账不拦,默认 / enforce=白名单外一律拒 / off=完全不生效)。"
+            "audit 档不提供保护,只提供可见性——别把它当成已防护"
+        ),
+    },
+    "GALAXY_EGRESS_ALLOW": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "出站白名单追加项(逗号分隔的主机名,支持 *.example.com)。"
+            "各家 provider 的地址与权重下载主机会自动从既有注册表推导,不用在这里重列"
+        ),
+    },
+    "GALAXY_EGRESS_ALLOW_PRIVATE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": (
+            "允不允许连内网地址。默认允许——跨设备编队/mesh 走的就是内网,关掉会把多设备打死。"
+            "内网出站一样进账本:发给同一局域网的另一台机器同样是一条外泄路径"
+        ),
+    },
+    # ── 权重准入(core/weights_admission.py)────────────────────────────────
+    # trust_remote_code=True 的含义是**模型仓库自带的 .py 会被直接执行**,而下载源
+    # 默认是第三方镜像且没有哈希校验。这条路不走 SafeExecutor,容器边界对它无效。
+    #
+    # 默认全部收紧:一个模型都不许执行自带代码。**刻意不做成一个总开关** ——
+    # 一刀切会让依赖它的模型全部加载不了,那样的闸最终会被整个关掉。
+    "GALAXY_TRUST_REMOTE_CODE": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "允许执行仓库自带 .py 的模型白名单(逗号分隔的 repo id)。留空=一个都不许。"
+            "填 '*' 会放开全部——那等于把这道闸关掉,报告里会如实标出来。"
+            "登记后建议再钉指纹,否则上游改了会执行的代码不会被发现"
+        ),
+    },
+    "GALAXY_WEIGHTS_HOSTS": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "允许下载权重的主机白名单(逗号分隔)。留空=用默认表"
+            "(huggingface.co / hf-mirror.com / modelscope.cn)。留空**不等于**允许所有"
+        ),
+    },
+    "GALAXY_WEIGHTS_ALLOW_PICKLE": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": (
+            "允不允许加载 pickle 格式权重(.bin/.pt/.pth/.ckpt)。默认否——"
+            "pickle 反序列化即执行代码,是历次模型投毒事件的载体;"
+            "safetensors/gguf 不受影响,它们反序列化不执行代码"
+        ),
+    },
     "GALAXY_LLAMA_SERVER_BIN": {
         "default": "",
         "type": "string",
