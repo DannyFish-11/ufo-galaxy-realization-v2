@@ -27,10 +27,14 @@ const OPEN_CLOUD: Provider[] = [
   { key: 'DEEPSEEK_API_KEY', name: 'DeepSeek', latin: 'deepseek', note: 'V4 / R1 · 推理 · 代码' },
   { key: 'DEEPSEEK_OCR2_API_KEY', name: 'DeepSeek OCR', latin: 'deepseek-ocr2', note: '文档/图像识别' },
   { key: 'QWEN_API_KEY', name: '通义千问', latin: 'Qwen', note: 'Qwen-Max · 通用' },
-  { key: 'ZHIPU_API_KEY', name: '智谱 GLM', latin: 'GLM', note: 'GLM · 多模态' },
+  {
+    key: 'ZHIPU_API_KEY', name: '智谱 GLM', latin: 'GLM',
+    note: 'GLM-5.3 / 5.3-Flash · 原生多模态 · 1M 上下文',
+    extraKey: 'ZHIPU_API_BASE', extraLabel: '自定义 API 地址（可选，海外填 https://api.z.ai/api/paas/v4）',
+  },
   {
     key: 'ZHIPU_CODING_API_KEY', name: '智谱 GLM 编码套餐', latin: 'GLM Coding Plan',
-    note: 'GLM-5.3 · 订阅制 · 仅编码场景，与上面的 GLM Key 是两把不同的 Key',
+    note: 'GLM-5.3 / 5.3-Flash · 订阅制 · 仅编码场景，与上面的 GLM Key 是两把不同的 Key',
   },
   { key: 'GROQ_API_KEY', name: 'Groq', latin: 'groq', note: 'Llama 等 · 极速' },
   { key: 'MINIMAX_API_KEY', name: 'MiniMax', latin: 'minimax', note: '长文 · 创意' },

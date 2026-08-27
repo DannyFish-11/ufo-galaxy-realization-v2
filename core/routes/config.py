@@ -67,6 +67,7 @@ _NON_SECRET_MODEL_KEYS = [
     "LOCAL_VLLM_URL",
     "VLLM_URL",
     "OPENAI_API_BASE",
+    "ZHIPU_API_BASE",
 ]
 
 

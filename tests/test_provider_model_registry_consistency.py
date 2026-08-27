@@ -138,9 +138,13 @@ class TestNewFlagshipModels:
     def test_new_model_is_declared(self, provider, model):
         assert model in _REGISTRY[provider]["models"], f"{provider} 的 models 里没有 {model}"
 
+    # zhipu 那一格**故意从这条参数化里拿掉了**:它的默认已经在 2026-08-27 上抬到
+    # glm-5.3(通用端点上线之后),不再属于"本轮那四个旗舰"这段历史。在这里就地把
+    # 值改成 glm-5.3 会让这个类的 docstring 变成假话 —— 它记的是那一轮的结论。
+    # 现在的判据在 TestGlm53OnTheGeneralEndpoint 里。
     @pytest.mark.parametrize(
         "provider,model",
-        [("moonshot", "kimi-k3"), ("zhipu", "glm-5.2"), ("qwen", "qwen3.8-max")],
+        [("moonshot", "kimi-k3"), ("qwen", "qwen3.8-max")],
     )
     def test_new_flagship_became_the_default(self, provider, model):
         assert _REGISTRY[provider]["default_model"] == model
@@ -160,7 +164,8 @@ class TestNewFlagshipModels:
             ("anthropic", "planning", "claude-opus-5"),
             ("moonshot", "general", "kimi-k3"),
             ("moonshot", "coding", "kimi-k3"),
-            ("zhipu", "reasoning", "glm-5.2"),
+            # zhipu 的槽位已上抬到 glm-5.3,理由同上 —— 判据搬去
+            # TestGlm53OnTheGeneralEndpoint。
             ("qwen", "reasoning", "qwen3.8-max"),
             ("qwen", "coding", "qwen3.8-coder"),
         ],
@@ -176,10 +181,37 @@ class TestNewFlagshipModels:
         assert "claude-opus-4-8-20250529" not in _REGISTRY["anthropic"]["models"]
         assert "claude-opus-4-8-20250529" not in PROVIDER_MODEL_MAP["anthropic"].values()
 
-    def test_zhipu_flash_tier_untouched(self):
-        """没有见过 glm-5.2-flash,就不臆造一个 —— fast_response 保持 5.1-flash。"""
+    def test_zhipu_flash_tier_was_upgraded_to_a_model_that_exists(self):
+        """原判据是"没有见过 glm-5.2-flash,就不臆造一个",因此 fast_response 一直
+        钉在 glm-5.1-flash 上。
+
+        那条规矩没有变,变的是事实:2026-08-26 GLM-5.3-Flash 真的上线了(MIT 开源,
+        原生多模态,通用端点)。规矩说的是"别造一个不存在的",不是"永远别升" ——
+        所以这里跟着升,并且判据的形状换成"它必须真的在 models 里",这才是那条规矩
+        真正要挡的东西:路由指向一个 registry 没登记过的型号。
+        """
         per_task = {getattr(tt, "value", tt): m for tt, m in PROVIDER_MODEL_MAP["zhipu"].items()}
-        assert per_task["fast_response"] == "glm-5.1-flash"
+        assert per_task["fast_response"] == "glm-5.3-flash"
+        assert per_task["fast_response"] in _REGISTRY["zhipu"]["models"]
+
+    def test_no_task_slot_points_at_an_unregistered_model(self):
+        """把上一条升成对整张表的通用约束。
+
+        这正是本文件里 minimax 那条注释记下来的真 bug 的形状:任务表写了
+        ``minimax-m2.7``(小写),registry 里根本没有这个拼写 —— 选路成功、请求 404。
+        单看任意一侧都看不出来,只有对着两边才看得出。
+
+        ``ollama`` / ``hf_local`` 不入 registry(本地探测,型号是运行期发现的),
+        对它们无从判起,跳过而不是假装判过。
+        """
+        for provider, task_map in PROVIDER_MODEL_MAP.items():
+            spec = _REGISTRY.get(provider)
+            if not spec:
+                continue
+            declared = set(spec.get("models") or [])
+            for task, model in task_map.items():
+                name = getattr(task, "value", task)
+                assert model in declared, f"{provider}.{name} 指向未登记型号 {model!r}"
 
 
 class TestGrok46Upgrade:
@@ -202,6 +234,11 @@ class TestGrok46Upgrade:
       (那样会把型号错配到打不通的 base_url,404 的原因从"型号不存在"变成
       "型号在另一个端点"而已),而是新增了独立的 ``zhipu_coding`` 条目 ——
       见 ``TestZhipuCodingPlan``。
+
+      **这一条已经过期(2026-08-27 三次核实)**:2026-08-19 GLM-5.3 通用 API 上线,
+      就在 ``/api/paas/v4`` 上。上面那段保留原文不改,是因为它记的是当时的事实与
+      当时据此做的决定;现在的状态见 ``test_glm53_general_endpoint_finding_has_expired``
+      与 ``TestGlm53OnTheGeneralEndpoint``。
     """
 
     def test_grok_4_6_is_declared_and_default(self):
@@ -236,16 +273,21 @@ class TestGrok46Upgrade:
         per_task = {getattr(tt, "value", tt): m for tt, m in PROVIDER_MODEL_MAP["xai"].items()}
         assert per_task[task] == "grok-4.6"
 
-    def test_glm53_not_on_the_general_chat_endpoint(self):
-        """glm-5.3 不许出现在 ``zhipu``(通用聊天端点)的 models 里。
+    def test_glm53_general_endpoint_finding_has_expired(self):
+        """这条原本钉的是它的**反面**:"glm-5.3 不许出现在 zhipu 的 models 里"。
 
-        它是真实存在的型号,但那个端点截至复查时的官方定价表仍然只到 5.2。
-        塞进这条会造成 base_url 打不通(通用端点没有这个型号),而不是"型号
-        不存在"——两种 404 后果一样,但本条测试专门盯前一种,防止有人看见
-        "glm-5.3 已经在 registry 别处出现了"就顺手也塞进这条。
+        原判据不是写错了 —— 2026-08-15 复查时它是对的:通用端点的定价表只到 5.2,
+        塞进去会打到一个没有这个型号的 base_url。2026-08-19 GLM-5.3 通用 API 上线,
+        那条前提就没了。
+
+        判据没有被删掉,而是**翻过来**:留着它,是因为"曾经挡过、后来放行"这件事本身
+        要有一处说得清楚,不能让下一个人以为这里从来就是敞开的。判据的正确性判据仍在
+        base_url —— 通用端点条目必须用通用端点地址。
         """
-        assert "glm-5.3" not in _REGISTRY["zhipu"]["models"]
-        assert "glm-5.3" != _REGISTRY["zhipu"]["default_model"]
+        spec = _REGISTRY["zhipu"]
+        assert "glm-5.3" in spec["models"]
+        assert spec["base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+        assert "/coding/" not in spec["base_url"], "通用端点条目不能指向编码套餐端点"
 
 
 class TestZhipuCodingPlan:
@@ -271,7 +313,10 @@ class TestZhipuCodingPlan:
     def test_declared_with_correct_endpoint_and_model(self):
         spec = _REGISTRY["zhipu_coding"]
         assert spec["base_url"] == "https://open.bigmodel.cn/api/coding/paas/v4"
-        assert spec["models"] == ["glm-5.3"]
+        # 2026-08-27:套餐里 glm-5.3-flash 同样可用,跟着补上。这两个型号**同时**
+        # 出现在 zhipu 条目里不是重复登记,是同一款模型的两条售卖路径(按 token
+        # 计价的通用端点 / 订阅制的编码端点),base_url 与计费方式都不同。
+        assert spec["models"] == ["glm-5.3", "glm-5.3-flash"]
         assert spec["default_model"] == "glm-5.3"
 
     def test_cost_fields_are_real_floats_not_none(self):
@@ -325,11 +370,11 @@ class TestConfigExampleStaysInSync:
     def test_is_valid_json(self):
         json.loads(self._text())
 
-    @pytest.mark.parametrize("stale", ["claude-opus-4-8-20250529", "qwen3.7-max", 'glm-5.1"'])
+    @pytest.mark.parametrize("stale", ["claude-opus-4-8-20250529", "qwen3.7-max", 'glm-5.1"', 'glm-5.2"'])
     def test_no_stale_model_left(self, stale):
         assert stale not in self._text(), f"config.example.json 里还残留旧型号 {stale}"
 
-    @pytest.mark.parametrize("fresh", ["claude-opus-5", "qwen3.8-max", "glm-5.2"])
+    @pytest.mark.parametrize("fresh", ["claude-opus-5", "qwen3.8-max", "glm-5.3"])
     def test_new_model_present(self, fresh):
         assert fresh in self._text()
 

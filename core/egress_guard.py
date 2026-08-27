@@ -34,9 +34,15 @@
 
 白名单是**推导**出来的,不是另攒一份
 ------------------------------------
-默认白名单来自仓库里已有的唯一处:``PROVIDER_REGISTRY`` 里各家的 ``base_url``、
+默认白名单来自仓库里已有的唯一处:``PROVIDER_REGISTRY`` 里各家的 ``base_url``
+与 ``alt_base_urls``(同一家官方自己的其它同构端点,如智谱的国内/海外双域名)、
 ``core.weights_admission`` 的权重主机表。这样 ``enforce`` 才是**可用**的 ——
 一开始就覆盖了这个程序自己会发起的合法流量,而不是要人从零列。
+
+**运行期被覆盖成的地址不进白名单。** ``base_env``/``base_key`` 能把一家的
+``base_url`` 换掉,但白名单只认仓库里写死的官方地址 —— 否则谁能设那个环境变量,
+谁就能给自己的主机盖章放行,而那正是 ``core.endpoint_admission`` 要防的路径。
+真要走中转,得由人显式写进 ``GALAXY_EGRESS_ALLOW``:那一步的显式性就是这道闸的价值。
 
 自己另攒一份 provider 地址表的话,加一家云厂商就会漏一处,而漏的表现是"某家突然
 连不上",没人会想到是这道闸。
@@ -148,9 +154,18 @@ def _provider_hosts() -> Tuple[str, ...]:
         from core.multi_llm_router import PROVIDER_REGISTRY  # noqa: PLC0415
 
         for spec in PROVIDER_REGISTRY:
-            host = host_of(str(spec.get("base_url", "")))
-            if host:
-                hosts.append(host)
+            # base_url 是这家的默认地址;alt_base_urls 是同一家**官方自己的**其它
+            # 同构端点(如智谱的国内/海外双域名)。两者都算"这家的主机" —— 少了
+            # 后者,用户按 registry 注释把 base_env 指到官方海外端点,enforce 档
+            # 会把一次完全正当的调用拦死。
+            #
+            # 这里刻意**不**读运行期的 base_url 覆盖值:那等于谁能设环境变量谁就能
+            # 给自己的主机放行,而覆盖恰恰是 core.endpoint_admission 要防的那条
+            # 窃取路径。白名单只认仓库里写死的官方地址。
+            for raw in [spec.get("base_url", ""), *(spec.get("alt_base_urls") or [])]:
+                host = host_of(str(raw))
+                if host:
+                    hosts.append(host)
     except Exception as exc:  # noqa: BLE001 — 推不出来就是这一段为空,不是"允许所有"
         logger.debug("provider 主机表推导失败: %s", exc)
     return tuple(sorted(set(hosts)))

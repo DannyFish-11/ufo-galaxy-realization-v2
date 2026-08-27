@@ -118,6 +118,10 @@ _ENV_MAPPING: Dict[str, str] = {
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
     "zhipu": "ZHIPU_API_KEY",
+    # base_url 覆盖(海外走 Z.ai:https://api.z.ai/api/paas/v4)。与
+    # multi_llm_router._PROVIDER_ENV_KEY_MAP 的 "zhipu_base" 必须同名同值 ——
+    # 这两处是同一份事实分散在两个文件里的历史包袱,改一处必须改另一处。
+    "zhipu_base": "ZHIPU_API_BASE",
     # 独立于上面的 zhipu(通用聊天端点)—— GLM 编码套餐专属,详见
     # multi_llm_router.PROVIDER_REGISTRY 里 zhipu_coding 条目的注释。
     "zhipu_coding": "ZHIPU_CODING_API_KEY",

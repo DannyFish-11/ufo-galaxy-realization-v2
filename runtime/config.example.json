@@ -31,7 +31,7 @@
     },
     "zhipu": {
       "enabled": false,
-      "model": "glm-5.2"
+      "model": "glm-5.3"
     },
     "minimax": {
       "enabled": false,
