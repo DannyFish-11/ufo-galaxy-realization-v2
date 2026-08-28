@@ -475,6 +475,30 @@ class ContinuumOrchestrator:
         # elsewhere in the pipeline.
         continuum_state = continuum_state.model_copy(update={"wallclock_timestamp": time.time()})
 
+        # ── 第二公共维度:这一拍在哪儿跑 ────────────────────────────────────
+        # 在这一句之前,``runtime_domain`` 运行期**从来没有被赋过值** —— 默认 None,
+        # TemporalEngine 里出现 0 次,而下游(执行策略的 domain upgrade、模型拓扑
+        # 权重、投影、面板、RenderPosture)全都在读它。读到的一直是"尚未判定",
+        # 各处再各自兜底成别的东西。
+        #
+        # 判定收在这里而不是散在各个 stage:作用域是**整拍的属性**,不是某个 stage
+        # 的产物,而且它要在所有 stage 都跑完、相位定下来之后才算得准。
+        # 判不出来时保持 None —— 见 runtime_domain_resolver 模块头"为什么不能兜底成 local"。
+        try:
+            from core.continuum.runtime_domain_resolver import resolve_runtime_domain  # noqa: PLC0415
+
+            _domain_verdict = resolve_runtime_domain(continuum_state.phase)
+            if _domain_verdict.domain is not None:
+                continuum_state = continuum_state.model_copy(update={"runtime_domain": _domain_verdict.domain})
+            if debug:
+                logger.debug(
+                    "Continuum runtime_domain | trace=%s verdict=%s",
+                    trace_id,
+                    _domain_verdict.to_dict(),
+                )
+        except Exception as exc:  # noqa: BLE001 — 判不出来就留 None,不能让它打断一拍
+            logger.debug("runtime_domain 判定失败,保持未判定: %s", exc)
+
         # Update rolling history.
         self._history.append(unified_state)
         if len(self._history) > _HISTORY_WINDOW:

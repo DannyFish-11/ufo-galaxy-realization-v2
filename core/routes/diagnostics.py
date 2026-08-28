@@ -126,6 +126,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             return _failed("context provenance status")
 
+    @router.get("/api/v1/runtime/domain")
+    async def runtime_domain_status():
+        """这一拍在哪儿跑 —— 连续体的第二公共维度,以及它凭什么这么判。
+
+        为什么这一位需要一个自己的端点
+        ------------------------------
+        整套"按作用域分权威"(本地的事本地说了算,跨设备的事中心说了算)都站在
+        这一位上。而这一位有一个必须被看见的取值:``domain = null``,意思是
+        **判不出来** —— 它和 ``local`` 不是一回事,绝不能被读成一回事。
+
+        判不出来的时刻,恰恰是连接刚抖动、编队刚建立、注册表还没同步的时刻,
+        也就是最需要中心仲裁的时刻。如果那时候被静默当成"本地",权威就会在
+        最不该的时候被交给本地。所以这个端点把 ``null`` 显式报出来。
+
+        ``remote_sessions`` 同理:``null`` = 注册表问不到,与"问到了,是 0 台"
+        必须分得开 —— 后者判得出作用域(就是本地),前者判不出。
+
+        只读:不触发任何连接、不改变任何状态。
+        """
+        try:
+            from core.continuum.runtime_domain_resolver import domain_report
+
+            return JSONResponse(domain_report())
+        except Exception:
+            return _failed("runtime domain status")
+
     @router.get("/api/v1/security/connection-provenance")
     async def connection_provenance_status():
         """两条"对端还是我登记过的那个吗"的复验,合在一处报。
