@@ -71,6 +71,42 @@ def _norm(p: str) -> str:
     return re.sub(r"\{[^}]*\}", "{}", re.sub(r"\$\{[^}]*\}", "{}", p)).rstrip("/ ")
 
 
+#: 一处 ``/api/...`` 前面紧挨着的那串"URL 字符",用来判断它是不是别人家地址的一部分。
+#: 到最近的引号/反引号/空白/括号/逗号/等号为止 —— 那些都是字符串字面量的边界。
+_URL_TOKEN_BOUNDARY = re.compile(r"[\s\"'`(),=]")
+
+#: 本机。指向这些主机的绝对 URL 仍然是"面板在调本后端",不能跳过。
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "[::1]")
+
+
+def _is_third_party_url_path(text: str, start: int) -> bool:
+    """``text[start:]`` 处的这条路径,是不是**别人家绝对地址**里的一段。
+
+    为什么需要这一判
+    ----------------
+    面板里会出现第三方地址的字面量(智谱海外端点
+    ``https://api.z.ai/api/paas/v4`` 就在一个输入框的提示文案里)。朴素的
+    ``/api/...`` 正则会从中切出 ``/api/paas/v4``,然后这个模块判定"面板调了一个
+    后端没有的端点"——**一条完全正确的提示文案把门弄红了**。
+
+    但不能因此把所有绝对 URL 一律跳掉:面板确实用
+    ``http://localhost:9000/api/...`` 这种写法直连过本后端(浏览器预览兜底)。
+    一律跳等于把这道门在那条路径上悄悄关掉,而那正是这道门最该看住的地方。
+
+    所以判据是**主机是谁**:模板串拼出来的(含 ``${``)与本机地址仍然算本后端调用,
+    只有写死的外部主机才跳过。
+    """
+    head = text[:start]
+    boundary = _URL_TOKEN_BOUNDARY.search(head[::-1])
+    token = head[len(head) - boundary.start() :] if boundary else head
+    if "://" not in token:
+        return False
+    host = token.rsplit("://", 1)[1]
+    if "${" in host:  # 运行期拼出来的地址,判不出主机 —— 按本后端算,宁可多查
+        return False
+    return not any(host.startswith(local) for local in _LOCAL_HOSTS)
+
+
 def _panel_calls() -> dict[str, set[str]]:
     """面板源码里出现的 /api 与 /ws 路径 → 出现在哪些文件。
 
@@ -78,6 +114,8 @@ def _panel_calls() -> dict[str, set[str]]:
     字符串字面量,不跳过的话它自己就会被当成"面板在调 388 个端点"——那不仅
     让分层清单失真,更会让"面板调的端点后端都有"退化成恒真(拿生成物去对
     生成物)。第一版就踩了这个自指陷阱,被清单那条断言当场抓出来。
+
+    也跳过**第三方绝对地址里的路径** —— 见 :func:`_is_third_party_url_path`。
     """
     out: dict[str, set[str]] = {}
     for f in _PANEL_SRC.rglob("*.ts*"):
@@ -85,6 +123,8 @@ def _panel_calls() -> dict[str, set[str]]:
             continue
         text = f.read_text(encoding="utf-8")
         for m in re.finditer(r"(/(?:api|ws)/[A-Za-z0-9/_${}.-]*)", text):
+            if _is_third_party_url_path(text, m.start()):
+                continue
             out.setdefault(_norm(m.group(1)), set()).add(f.name)
     return out
 
@@ -158,6 +198,45 @@ class TestPanelCallsResolve:
                 continue
             missing.append((call, sorted(files)))
         assert not missing, f"面板调了后端没有的端点:{missing}"
+
+    # ── 扫描器自身的判据 ───────────────────────────────────────────────
+    #
+    # 上面那条门的强弱**完全取决于 _panel_calls() 数得准不准**:数多了(把别人家
+    # 地址里的 /api/... 当成本后端调用)会把一条正确的提示文案变成红灯;数少了
+    # (为了消掉那种误报,把所有绝对 URL 一律跳过)会让这道门在"面板直连本后端"
+    # 那条路径上**悄悄失效** —— 而那正是它最该看住的地方。
+    #
+    # 两个方向各钉一条。真实触发过前者:智谱海外端点
+    # https://api.z.ai/api/paas/v4 出现在一个输入框的提示文案里。
+
+    @pytest.mark.parametrize(
+        "snippet",
+        [
+            "extraLabel: '海外填 https://api.z.ai/api/paas/v4'",
+            'const doc = "https://example.com/api/v9/guide";',
+        ],
+    )
+    def test_a_third_party_address_is_not_counted_as_a_backend_call(self, snippet: str) -> None:
+        idx = snippet.index("/api/")
+        assert _is_third_party_url_path(snippet, idx) is True
+
+    @pytest.mark.parametrize(
+        "snippet",
+        [
+            "await fetch('/api/config')",
+            "fetch('http://localhost:9000/api/config')",
+            "fetch(`${base}/api/config`)",
+            "fetch(`http://${host}:${port}/api/config`)",
+        ],
+    )
+    def test_a_call_to_our_own_backend_is_still_counted(self, snippet: str) -> None:
+        """模板串拼出来的地址判不出主机 —— 按本后端算,宁可多查一个也不少查。"""
+        idx = snippet.index("/api/")
+        assert _is_third_party_url_path(snippet, idx) is False
+
+    def test_the_inventory_is_not_empty(self):
+        """自证:上面两条在扫描器什么都数不出来时也会绿。"""
+        assert len(_panel_calls()) > 10
 
     def test_panel_calls_were_actually_found(self) -> None:
         """自证:上面那条不得因为正则失效而退化成"零调用、必绿"。"""
