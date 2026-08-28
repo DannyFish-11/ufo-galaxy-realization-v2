@@ -181,6 +181,10 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "QWEN_API_KEY",
     "zhipu": "ZHIPU_API_KEY",
+    # 通用端点的 base_url 覆盖。海外访问走 Z.ai 的同构端点
+    # https://api.z.ai/api/paas/v4 —— 型号/协议/鉴权与国内一致,只有域名不同,
+    # 所以沿用 openai_base 那条先例(短键覆盖 base_url),不另开 provider 条目。
+    "zhipu_base": "ZHIPU_API_BASE",
     # 故意不是 ZHIPU_API_KEY:见 PROVIDER_REGISTRY 里 zhipu_coding 条目的注释 ——
     # 用独立的 env 名,才能保证"配了 zhipu 聊天 key"和"选择接编码套餐"是两件事,
     # 不会互相牵连。
@@ -556,13 +560,17 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.AGENT_CONTROL: "qwen3.8-max",
     },
     "zhipu": {
-        TaskType.REASONING: "glm-5.2",
-        TaskType.GENERAL: "glm-5.2",
-        TaskType.ANALYSIS: "glm-5.2",
-        TaskType.CODING: "glm-5.2",
-        TaskType.FAST_RESPONSE: "glm-5.1-flash",
-        TaskType.CREATIVE: "glm-5.2",
-        TaskType.PLANNING: "glm-5.2",
+        # 2026-08-27 版本上抬:重档 glm-5.2 → glm-5.3,快档 glm-5.1-flash →
+        # glm-5.3-flash。**只换型号,不重排这张表的形状** —— "哪一档该用哪一款"
+        # 是另一个判断(例如 5.3-flash 在多数榜上接近 5.3 而价格约为其 1/10,
+        # 值不值得让它接管重档),那需要实测,没有在这次顺手做掉。
+        TaskType.REASONING: "glm-5.3",
+        TaskType.GENERAL: "glm-5.3",
+        TaskType.ANALYSIS: "glm-5.3",
+        TaskType.CODING: "glm-5.3",
+        TaskType.FAST_RESPONSE: "glm-5.3-flash",
+        TaskType.CREATIVE: "glm-5.3",
+        TaskType.PLANNING: "glm-5.3",
     },
     "minimax": {
         # 对齐 PROVIDER_REGISTRY['minimax'].models(大小写敏感的官方 id):
@@ -1578,6 +1586,13 @@ ADAPTER_MAP = {
 #   protocol   "openai"(默认) | "anthropic" —— 决定用哪个适配器
 #   alt_env    备用环境变量名列表(如 qwen 的 DASHSCOPE_API_KEY、google 的 GEMINI_API_KEY)
 #   base_env / base_key  用环境变量 / Dashboard 短键覆盖 base_url(openai 的 OPENAI_API_BASE)
+#   alt_base_urls  这家**官方自己的**其它同构端点(如智谱国内 open.bigmodel.cn /
+#              海外 api.z.ai)。它不参与选路 —— 请求永远发往 base_url 或被显式
+#              覆盖后的地址。它唯一的作用是让 core.egress_guard 的白名单推导也
+#              认这些主机:否则用户按注释把 base_env 指到官方海外端点,enforce 档
+#              会把一次完全正当的调用拦死。**只写官方地址**,中转/relay 不属于
+#              这里 —— 那些要用户自己进 GALAXY_EGRESS_ALLOW,那一步的显式性正是
+#              这道闸的价值所在。
 #   extra      透传给 ProviderConfig 的其它非默认字段(multimodal / supports_tools /
 #              supports_vision / max_tokens 等)
 PROVIDER_REGISTRY: List[Dict[str, Any]] = [
@@ -1729,21 +1744,60 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
-        # 2026-08-15 二次联网核实(第一次判"还没有"之后,所有者指出它已经上线,
-        # 复查证实**两件事都对**——只是不在同一个端点上):
+        # 2026-08-27 三次联网核实 —— **上一轮(2026-08-15)的结论已经过期了**,
+        # 先把它原样记下来,免得后来人以为这里一直是这么写的:
         #
-        # GLM-5.3 确实已经能用 API 调,但服务它的是**编码套餐专属端点**
-        # ``open.bigmodel.cn/api/coding/paas/v4``,不是这个 provider 条目一直在用
-        # 的通用端点 ``open.bigmodel.cn/api/paas/v4``。官方通用端点的定价表截至
-        # 复查时仍然只到 glm-5.2。把 glm-5.3 直接塞进**这条**的 models 里,后果和
-        # 第一次判断要防的是同一件事:选路成功,请求打到 base_url 对不上的端点,
-        # 一样 404——只是原因从"型号还没发布"变成了"型号在另一个 base_url 上"。
-        # glm-5.3 的正确落点是下面新增的 zhipu_coding 条目,不是这条。
+        #   那次查到的是"GLM-5.3 确实能调,但服务它的是编码套餐专属端点
+        #   /api/coding/paas/v4,通用端点的定价表还只到 glm-5.2",据此把 glm-5.3
+        #   挡在这条之外,另开了下面的 zhipu_coding。当时那个判断是对的。
+        #
+        # 之后发生了两件事:
+        #   · 2026-08-19  GLM-5.3 通用 API 上线,就在这条一直在用的
+        #     ``open.bigmodel.cn/api/paas/v4`` 上,按 token 计价(官方口径:与
+        #     GLM-5.2 同价)。
+        #   · 2026-08-26  GLM-5.3-Flash 上线,并以 MIT 开源(zai-org/GLM-5.3-Flash,
+        #     safetensors)。GLM-5 系列首个原生多模态:320B 总参 / 18B 激活,
+        #     1M 上下文,文/图/视频,同样在通用端点上。
+        #
+        # 所以"把 glm-5.3 挡在这条外面"的前提没有了。继续挡,就变成按一条已经不
+        # 成立的旧结论把型号关在门外 —— 那和当初要防的 404 是同一类错误(判据与
+        # 事实对不上),只是方向反过来:上次是会打到错的端点,这次是明明能调却调不到。
+        #
+        # zhipu_coding **不废**:订阅制计费 + 专属 base_url 这两点没变,它仍然是
+        # 另一件事,见下面那条自己的注释。
+        #
+        # 核实来源(留着是为了下次复查有起点,不是为了好看):
+        #   https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash
+        #   https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3
+        #
+        # 有一处**故意没有跟着改**:cost_in/cost_out 是 provider 级的单一数字,而
+        # glm-5.3 与 glm-5.3-flash 差了大约一个数量级(flash 约为 5.3 的 1/10)。
+        # 这份 registry 没有"按型号计价"的字段,硬填一个折中值等于臆造一个谁都对
+        # 不上的数。保持原值不动,并在这里写明:它现在只对重档那一档近似成立,
+        # 选到 flash 时真实成本比这个数低得多。
+        #
+        # 迁移注意(现在不用改,但别踩):GLM-5.3 系列强制思考,不再接受
+        # ``thinking.type=disabled``,传了请求直接失败。本仓的 OpenAI 兼容适配器
+        # 从不发这个字段(只发 model/messages/temperature/max_tokens/tools/
+        # response_format),走的是默认的 enabled,所以这次不需要动适配器 ——
+        # 这一段是写给以后想加"关掉思考"开关的人看的。
         "name": "zhipu",
         "env_key": "ZHIPU_API_KEY",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "models": ["glm-5.2", "glm-5.1", "glm-5.1-flash", "glm-4-plus"],
-        "default_model": "glm-5.2",
+        # 海外访问用 Z.ai 的同构端点 ``https://api.z.ai/api/paas/v4``:型号名、
+        # OpenAI 兼容协议、Bearer 鉴权全都一样,**只有域名不同**。所以不另开一条
+        # provider(那会多出一份要同步的型号表),而是沿用 openai 那条先例,用
+        # base_env/base_key 覆盖 base_url。覆盖之后 core.endpoint_admission 会把
+        # 这家判成 ``overridden`` 并写进诊断面 —— 这正是要的效果:换地址这件事
+        # 必须留痕,不能悄悄发生。
+        "base_env": "ZHIPU_API_BASE",
+        "base_key": "zhipu_base",
+        # 出站白名单要认得这个主机,否则"按上面注释把地址指到官方海外端点"这件事
+        # 在 enforce 档下会被自己的闸打死。注意它**不**让 endpoint_admission 把
+        # 覆盖判成 canonical —— 换地址就是换了,那件事必须照样留痕。
+        "alt_base_urls": ["https://api.z.ai/api/paas/v4"],
+        "models": ["glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5.1-flash", "glm-4-plus"],
+        "default_model": "glm-5.3",
         "cost_in": 0.001,
         "cost_out": 0.001,
         "extra": {"multimodal": True},
@@ -1792,7 +1846,11 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "name": "zhipu_coding",
         "env_key": "ZHIPU_CODING_API_KEY",
         "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-        "models": ["glm-5.3"],
+        # 套餐里能用的型号跟着官方走:glm-5.3 与 glm-5.3-flash 都在。
+        # 注意这两个型号**同时**出现在上面的 zhipu 条目里 —— 那不是重复登记,
+        # 是同一款模型的两条售卖路径(按 token 计价的通用端点 / 订阅制的编码端点),
+        # base_url 与计费方式都不同,谁也替代不了谁。
+        "models": ["glm-5.3", "glm-5.3-flash"],
         "default_model": "glm-5.3",
         "cost_in": 999.0,
         "cost_out": 999.0,

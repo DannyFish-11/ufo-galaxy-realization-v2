@@ -118,6 +118,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "llm",
         "description": "DeepSeek OCR 的 API Key（图片转文字）",
     },
+    "ZHIPU_API_BASE": {
+        "default": "",
+        "type": "url",
+        "category": "llm",
+        "description": "智谱 GLM 的 Base URL 覆盖（留空=国内 open.bigmodel.cn；海外填 https://api.z.ai/api/paas/v4）",
+    },
     "OPENAI_API_BASE": {
         "default": "",
         "type": "url",
