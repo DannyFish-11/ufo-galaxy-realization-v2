@@ -108,6 +108,39 @@ async def migrate_session_via_canonical_manager(
         session.metadata.setdefault("migration_context", {})
         session.metadata["migration_context"].update(dict(context_override))
 
+    # ── 两阶段提交:先把上下文送到,送到了才改状态 ──────────────────────────
+    #
+    # 改前这里是先改状态再推送,而且**推送的返回值被丢掉了**
+    # (``send_to_device`` 返回 bool,原来只是 ``await`` 了一下)。后果是:目标设备
+    # 根本没收到会话,这个函数照样返回 ``success: True``,而中心侧的
+    # ``active_device`` 已经指向目标设备并落盘 —— 用户还在源设备上说话,系统认为
+    # 会话在另一台机器上。两边都不对,而且没有任何一处会报错。
+    #
+    # ``galaxy_gateway/session_roaming.py`` 那条路一直是两阶段提交(推送失败回滚),
+    # 这里把同一个形状补上 —— 两条迁移路径在"失败了算不算迁移"这件事上必须一致,
+    # 否则走哪条路决定了会不会丢会话。
+    history = sm.get_full_history(session_id)
+    push_ok = await cm.send_to_device(
+        target_device,
+        {
+            "type": "session_sync",
+            "session_id": session_id,
+            "history": history,
+            "context": getattr(session, "metadata", {}),
+            "migrated_from": effective_source,
+        },
+    )
+    if not push_ok:
+        logger.error(
+            "migrate_session_via_canonical_manager: 上下文推送到 %s 失败,迁移未发生",
+            target_device,
+        )
+        return {
+            "success": False,
+            "status_code": 502,
+            "error": (f"Context push to '{target_device}' failed; session '{session_id}' was not migrated"),
+        }
+
     if target_device not in session.devices:
         session.devices.append(target_device)
     session.active_device = target_device
@@ -118,7 +151,9 @@ async def migrate_session_via_canonical_manager(
     except Exception as exc:
         logger.warning("migrate_session_via_canonical_manager: persist_state failed: %s", exc)
 
-    history = sm.get_full_history(session_id)
+    # 通知源设备:它已经不是 active 了。这一条送不到不算迁移失败 ——
+    # 会话本体已经在目标设备上了,源设备收不到通知只是它自己不知道,
+    # 与"目标设备没拿到会话"是两种严重程度。
     if effective_source:
         await cm.send_to_device(
             effective_source,
@@ -128,16 +163,6 @@ async def migrate_session_via_canonical_manager(
                 "target_device": target_device,
             },
         )
-    await cm.send_to_device(
-        target_device,
-        {
-            "type": "session_sync",
-            "session_id": session_id,
-            "history": history,
-            "context": getattr(session, "metadata", {}),
-            "migrated_from": effective_source,
-        },
-    )
 
     try:
         from core.control_plane._globals import get_audit_ledger
