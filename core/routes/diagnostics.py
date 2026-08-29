@@ -335,4 +335,36 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # CodeQL alert 1066 报的正是这六条流。细节只进日志,见 _failed。
             return _failed("mesh participation summary")
 
+    @router.get("/api/v1/runtime/phase-ledger")
+    async def runtime_phase_ledger(hours: int = 72):
+        """三态转移的耐久账 —— 最近 ``hours`` 小时(默认 72,即三天)。
+
+        为什么需要这个端点:三态此前**一处都不落盘**。``DecisionTimeline`` 是
+        进程内的 list,``RenderPosture`` 每拍现算,``_execution_lifecycle_history``
+        是模块级 dict —— 全都活不过一次重启。于是"这三天它是静着还是在表达"
+        这件事根本问不出来。
+
+        读的时候要拿 ``status.empty_means`` 一起看:**读到空不等于这段什么都没
+        发生**。账本不在、或这段落在进程不在的时间里,同样是空。两者要靠记录上
+        的 ``epoch`` 分开 —— 相邻两条 epoch 不同,中间那段就是不可知,不是安静。
+        """
+        try:
+            import time as _time
+
+            from core.phase_transition_ledger import ledger_status, read_window
+
+            span = max(1, min(int(hours), 24 * 90)) * 3600.0
+            now = _time.time()
+            records = read_window(now - span, now + 1.0)
+            return JSONResponse(
+                {
+                    "status": ledger_status(),
+                    "window_hours": span / 3600.0,
+                    "record_count": len(records),
+                    "records": records,
+                }
+            )
+        except Exception:
+            return _failed("phase transition ledger")
+
     return router

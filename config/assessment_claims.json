@@ -299,6 +299,33 @@
           "expected": true
         }
       ]
+    },
+    {
+      "id": "phase-history-now-durable",
+      "source": "记忆卡片原料排查(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "三态转移已经落耐久账:record_transition 挂在 RuntimeSession.advance —— 全仓唯一的三态转移点。此前三态一处都不落盘(DecisionTimeline 是进程内 list,RenderPosture 每拍现算),所以「这三天它是什么样子」根本问不出来。",
+      "supersedes": "",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "record_transition",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "ledger_status",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "read_window",
+          "scope": "core",
+          "expected": true
+        }
+      ]
     }
   ]
 }
