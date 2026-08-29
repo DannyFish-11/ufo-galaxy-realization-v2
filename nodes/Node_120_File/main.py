@@ -43,6 +43,7 @@ from nodes.common.cors_config import get_cors_origins
 # =============================================================================
 
 from core.port_config import get_service_port, get_node_port
+from core.fs_walk import iter_tree_files
 
 NODE_ID = os.getenv("NODE_ID", "120")
 NODE_NAME = os.getenv("NODE_NAME", "FileOperations")
@@ -400,10 +401,14 @@ class FileService:
         try:
             results = []
             
-            if request.recursive:
-                iterator = root.rglob(request.pattern)
-            else:
-                iterator = root.glob(request.pattern)
+            # 用户那边的目录随时在变。裸 rglob 撞上并发删除会抛 FileNotFoundError,
+            # 而上面几行"根路径不存在"抛的是同一个异常类型 —— 用户根本分不清是自己
+            # 路径写错了,还是扫到一半撞上了并发改动。这里让扫描活下来。
+            # include_dirs=True 保持与原 rglob/glob 等价：本节点的搜索结果里
+            # 目录也是合法条目（get_file_info 会报 is_dir）。
+            iterator = iter_tree_files(
+                root, request.pattern, recursive=request.recursive, include_dirs=True
+            )
             
             for item in iterator:
                 if len(results) >= request.max_results:

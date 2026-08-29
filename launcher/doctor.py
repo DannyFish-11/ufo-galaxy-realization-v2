@@ -40,6 +40,7 @@ import importlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.fs_walk import iter_tree_files
 from launcher.record import Column, Status, StepResult
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -237,8 +238,11 @@ def _check_single_implementation(report: DoctorReport) -> None:
     skip_dirs = {"__pycache__", ".venv", "venv", "node_modules", ".git", "external", "launcher", "tests"}
     for owner, symbols in SINGLE_IMPLEMENTATION.items():
         owner_file = PROJECT_ROOT / Path(*owner.split(".")).with_suffix(".py")
-        for path in PROJECT_ROOT.rglob("*.py"):
-            if path == owner_file or any(p in skip_dirs for p in path.parts):
+        # 用 iter_tree_files 而不是 rglob:并发跑的另一个进程在仓库里建删目录时,
+        # rglob 的迭代器会把 FileNotFoundError 直接抛出来(已复现),而下面那个
+        # try/except 只包得住循环体、包不住迭代器。见 core/fs_walk 的说明。
+        for path in iter_tree_files(PROJECT_ROOT, "*.py", skip_dirs=skip_dirs):
+            if path == owner_file:
                 continue
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
