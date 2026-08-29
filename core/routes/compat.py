@@ -84,6 +84,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     )
     router = APIRouter()
 
+    def _legacy(surface: str, payload: dict, *, client_hint: str = "") -> JSONResponse:
+        """旧别名的统一出口:记一次用量,并带上弃用头。
+
+        每条别名各写一遍记账必然漏掉一条,而漏掉的那条会显示成"没人用" ——
+        然后被据此退役掉。所以收在这一处。
+
+        只发 ``Deprecation`` 不发 ``Sunset``:退役日期还没定,而那个日期正是这份
+        用量数据要支撑的东西(见 core/compat_usage.py 模块头)。
+        """
+        try:
+            from core.compat_usage import deprecation_headers, record_use
+
+            record_use(surface, client_hint=client_hint)
+            headers = deprecation_headers(surface)
+        except Exception:  # noqa: BLE001 — 记账/加头失败不该让这次调用失败
+            headers = {}
+        return JSONResponse(payload, headers=headers)
+
     @router.post("/api/devices/register")
     async def legacy_register_device(req: _LegacyRegisterRequest):
         """
@@ -173,14 +191,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as _bc_err:
             logger.debug("Legacy 设备注册广播事件失败: %s", _bc_err)
 
-        return JSONResponse(
+        return _legacy(
+            "/api/devices/register",
             {
                 "success": True,
                 "device_id": req.device_id,
                 "message": "设备注册成功",
                 "server_version": "2.0.0",
                 "available_nodes": list(node_status_cache.keys())[:20],
-            }
+            },
+            # 注册是唯一带客户端版本的那条 —— "还在用的是谁"比"还有多少次"更能
+            # 支撑退役决定(知道是哪个 app 版本,才知道该先推谁升级)。
+            client_hint=f"{req.device_type}/{req.app_version}".strip("/"),
         )
 
     @router.get("/api/devices/list")
@@ -197,7 +219,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "online": connection_manager.is_online(did),
                 }
             )
-        return JSONResponse({"devices": devices, "total": len(devices)})
+        return _legacy("/api/devices/list", {"devices": devices, "total": len(devices)})
 
     @router.post("/api/devices/heartbeat")
     async def legacy_device_heartbeat(req: _LegacyHeartbeatRequest):
@@ -232,7 +254,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 }
             )
 
-        return JSONResponse({"success": True, "device_id": req.device_id})
+        return _legacy("/api/devices/heartbeat", {"success": True, "device_id": req.device_id})
 
     @router.post("/api/devices/unregister")
     async def legacy_unregister_device(req: _LegacyUnregisterRequest):
@@ -257,6 +279,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if req.device_id in registered_devices:
             registered_devices[req.device_id]["status"] = "offline"  # COMPAT_MIRROR_WRITE
             registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
-        return JSONResponse({"success": True, "device_id": req.device_id})
+        return _legacy("/api/devices/unregister", {"success": True, "device_id": req.device_id})
 
     return router

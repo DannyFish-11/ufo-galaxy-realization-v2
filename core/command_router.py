@@ -1919,6 +1919,44 @@ class CommandRouter:
                     "latency_ms": round(_wrtc_elapsed, 1),
                 }
 
+            # ── 把会话绑到这个任务上 ────────────────────────────────────
+            #
+            # 在这一句之前,core/webrtc_task_lifecycle.py 那 1041 行(绑定记录、
+            # 传输状态→生命周期动作、终态拆除)**在生产代码里一个调用点都没有**:
+            #   bind_webrtc_session_to_task        生产调用点 0
+            #   teardown_binding_on_task_terminal  生产调用点 0
+            #
+            # 于是 WebRTCSessionManager._notify_transport_state 每次都在第一步返回
+            # ——它先 get_webrtc_task_binding(task_id),拿到 None,打一条
+            # "no binding found; transport state will not be propagated" 就结束。
+            # 整条链路断在"绑定从来没被建立过"这一步,而且它自己把这件事写进了日志。
+            #
+            # 绑定收在这里而不是 webrtc_proxy 里:proxy 只知道设备,不知道任务;
+            # 而绑定的两端恰恰是 task_id 与 device_id,只有这一层同时握着两者。
+            #
+            # webrtc_session_id 取 device_id:webrtc_proxy 的会话表
+            # (_webrtc_task_sessions)本来就是按设备键的,设备就是这个系统里
+            # WebRTC 会话的身份。另编一个 UUID 会造出一个跟任何东西都对不上的 id。
+            if _webrtc_task_trigger_result is not None and _webrtc_task_trigger_result.get("ready"):
+                try:
+                    from core.webrtc_task_lifecycle import bind_webrtc_session_to_task  # noqa: PLC0415
+
+                    bind_webrtc_session_to_task(
+                        task_id=str(envelope.task_id or ""),
+                        webrtc_session_id=str(_wrtc_device or ""),
+                        device_id=str(_wrtc_device or ""),
+                        metadata={"trace_id": envelope.trace_id or "", "bound_by": "command_router"},
+                    )
+                except Exception as _bind_exc:  # noqa: BLE001 — 绑不上不该拦住已经就绪的任务
+                    logger.warning(
+                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                        "WebRTC 会话绑定失败 task_id=%s device=%s error=%s "
+                        "—— 传输状态变化将无法推进任务生命周期",
+                        envelope.task_id,
+                        _wrtc_device,
+                        _bind_exc,
+                    )
+
             # Stamp webrtc_task_trigger result into envelope metadata so
             # downstream components can see what happened.
             if _webrtc_task_trigger_result is not None:
@@ -3237,6 +3275,34 @@ class CommandRouter:
             # rather than independently re-selecting from its local session cache.
             if envelope.target:
                 context["device_id"] = envelope.target
+
+            # ── 选路策略在决策层算,底座不再自己算一遍(SCHED-003)──────────
+            #
+            # DeviceRouter 侧的**接收端**早就建好了:它读
+            # ctx["_command_router_pre_analyzed"] 与 ctx["_pre_analysis"],命中就
+            # 跳过自己的 _analyze_command()。哨兵
+            # DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL 把这个契约写得
+            # 很清楚。
+            #
+            # **但在这一句之前,没有任何一处生产代码盖过那两个标** —— 全仓搜下来
+            # 只命中 device_router.py 自己(注释 + 读取端)。也就是说那条 passthrough
+            # 从来没被触发过,底座每次都还是自己做策略分析。又一次"接收端建好了、
+            # 发送端没接"。
+            #
+            # 分析用的是**同一个函数**(galaxy_gateway.routing.policy.analyze_command,
+            # 也正是 DeviceRouter._analyze_command 委托的那个),不是在这里另写一份
+            # —— 另写一份的表现是两层各自演进,然后同一条命令在两边被判成不同的
+            # task_type,而两边都不认为自己错了。
+            try:
+                from galaxy_gateway.routing.policy import analyze_command as _analyze  # noqa: PLC0415
+
+                context["_pre_analysis"] = _analyze(envelope.tool_name, context)
+                context["_command_router_pre_analyzed"] = True
+            except Exception as _pa_exc:  # noqa: BLE001 — 算不出来就让底座自己算,行为与改前一致
+                logger.debug(
+                    "_route_cross_device_envelope: 预分析跳过,底座将自行分析: %s",
+                    _pa_exc,
+                )
 
             raw = await _dr.route_task(envelope.tool_name, context=context)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000

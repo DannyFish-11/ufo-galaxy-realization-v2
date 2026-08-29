@@ -549,9 +549,19 @@ class TestSessionMigration:
         from core.routes import sessions as sessions_mod
 
         app = FastAPI()
+        mock_conn = MagicMock()
         with (
             patch.object(sessions_mod, "get_session_manager", return_value=sm),
-            patch("core.routes._shared.connection_manager") as mock_conn,
+            # 补丁必须打在**用到它的那个模块**上:``core/routes/sessions.py`` 在
+            # 模块加载时就 ``from core.routes._shared import connection_manager``,
+            # 补 ``_shared`` 那个名字不会重绑已经导入过来的引用 —— 补丁落空,跑的
+            # 是真的 connection_manager。
+            #
+            # 这条测试此前一直绿,不是因为它验证到了什么:真 connection_manager 的
+            # ``send_to_device`` 返回 False(没有这台设备),而迁移函数当时**把返回值
+            # 丢掉了**,所以照样 200。两个错误互相抵消,看起来是通的。
+            # 迁移改成两阶段提交(推送失败即失败)之后,这层假象才露出来。
+            patch.object(sessions_mod, "connection_manager", mock_conn),
         ):
             mock_conn.send_to_device = AsyncMock(return_value=True)
             mock_conn.broadcast_status = AsyncMock()

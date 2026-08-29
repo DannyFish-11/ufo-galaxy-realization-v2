@@ -92,6 +92,35 @@ async def migrate_session_via_canonical_manager(
             "error": f"Session '{session_id}' not found",
         }
 
+    # ── 迁移语义按作用域选,不按"调了哪个文件"选 ──────────────────────────
+    #
+    # 本仓有两套迁移语义,实测差异见 tests/test_session_migration_consistency.py:
+    #   · 漫游 —— 会话跟着人走,同一时刻只在一台设备上(源设备移出 devices);
+    #   · 共享 —— 一个会话同时挂在几台设备上,当前活跃的是某一台(源设备保留)。
+    #
+    # 在此之前,用哪一种**取决于调用方调了哪条路径**,而不是取决于场景 —— 那意味着
+    # 同一次迁移走 REST 和走网关会得到不同的产品行为,而两边都不认为自己错了。
+    #
+    # 现在由 core.scope_authority 按作用域判:local → 漫游,cross_device → 共享,
+    # transition/判不出来 → 不迁(见该模块头)。判据只有那一处,这里不重列规则。
+    _authority = None
+    try:
+        from core.scope_authority import current_scope, require_migration  # noqa: PLC0415
+
+        # require_migration 而不是"取判定再自己看一眼":它在不许迁的档位**抛异常**。
+        # 迁移是有副作用的动作,返回值会被忽略,异常不会 —— 漏判一次的后果是会话
+        # 跑到不该去的地方。
+        _authority = require_migration(session_id, current_scope())
+    except ImportError:  # pragma: no cover — 判据模块缺失时不改变既有行为
+        logger.debug("scope_authority 不可用,迁移沿用既有(共享)语义")
+    except Exception as exc:  # ScopeAuthorityRefused 及其它判定失败
+        logger.warning("迁移被作用域判据拒绝: session=%s %s", session_id, exc)
+        return {
+            "success": False,
+            "status_code": 409,
+            "error": str(exc),
+        }
+
     active_device = getattr(session, "active_device", "") or ""
     effective_source = source_device or active_device
     if effective_source and effective_source not in session.devices:
@@ -108,27 +137,19 @@ async def migrate_session_via_canonical_manager(
         session.metadata.setdefault("migration_context", {})
         session.metadata["migration_context"].update(dict(context_override))
 
-    if target_device not in session.devices:
-        session.devices.append(target_device)
-    session.active_device = target_device
-    session.updated_at = time.time()
-
-    try:
-        sm._persist_state()
-    except Exception as exc:
-        logger.warning("migrate_session_via_canonical_manager: persist_state failed: %s", exc)
-
+    # ── 两阶段提交:先把上下文送到,送到了才改状态 ──────────────────────────
+    #
+    # 改前这里是先改状态再推送,而且**推送的返回值被丢掉了**
+    # (``send_to_device`` 返回 bool,原来只是 ``await`` 了一下)。后果是:目标设备
+    # 根本没收到会话,这个函数照样返回 ``success: True``,而中心侧的
+    # ``active_device`` 已经指向目标设备并落盘 —— 用户还在源设备上说话,系统认为
+    # 会话在另一台机器上。两边都不对,而且没有任何一处会报错。
+    #
+    # ``galaxy_gateway/session_roaming.py`` 那条路一直是两阶段提交(推送失败回滚),
+    # 这里把同一个形状补上 —— 两条迁移路径在"失败了算不算迁移"这件事上必须一致,
+    # 否则走哪条路决定了会不会丢会话。
     history = sm.get_full_history(session_id)
-    if effective_source:
-        await cm.send_to_device(
-            effective_source,
-            {
-                "type": "session_migrated",
-                "session_id": session_id,
-                "target_device": target_device,
-            },
-        )
-    await cm.send_to_device(
+    push_ok = await cm.send_to_device(
         target_device,
         {
             "type": "session_sync",
@@ -138,6 +159,45 @@ async def migrate_session_via_canonical_manager(
             "migrated_from": effective_source,
         },
     )
+    if not push_ok:
+        logger.error(
+            "migrate_session_via_canonical_manager: 上下文推送到 %s 失败,迁移未发生",
+            target_device,
+        )
+        return {
+            "success": False,
+            "status_code": 502,
+            "error": (f"Context push to '{target_device}' failed; session '{session_id}' was not migrated"),
+        }
+
+    if target_device not in session.devices:
+        session.devices.append(target_device)
+    session.active_device = target_device
+    session.updated_at = time.time()
+
+    # 漫游语义下源设备要**移出**会话 —— 这正是漫游与共享的那处行为差异。
+    # 共享语义下源设备保留(它仍是这个会话的成员,只是不再是 active)。
+    if _authority is not None and _authority.migration == "roaming" and effective_source:
+        if effective_source in session.devices and effective_source != target_device:
+            session.devices.remove(effective_source)
+
+    try:
+        sm._persist_state()
+    except Exception as exc:
+        logger.warning("migrate_session_via_canonical_manager: persist_state failed: %s", exc)
+
+    # 通知源设备:它已经不是 active 了。这一条送不到不算迁移失败 ——
+    # 会话本体已经在目标设备上了,源设备收不到通知只是它自己不知道,
+    # 与"目标设备没拿到会话"是两种严重程度。
+    if effective_source:
+        await cm.send_to_device(
+            effective_source,
+            {
+                "type": "session_migrated",
+                "session_id": session_id,
+                "target_device": target_device,
+            },
+        )
 
     try:
         from core.control_plane._globals import get_audit_ledger
@@ -170,6 +230,8 @@ async def migrate_session_via_canonical_manager(
         "active_device": session.active_device,
         "message": f"Session successfully migrated to {target_device}",
         "history_count": len(history),
+        # 用了哪种语义、凭什么 —— 进响应,让"为什么源设备还在/不在了"说得出来。
+        "scope_authority": (_authority.to_dict() if _authority is not None else None),
     }
 
 

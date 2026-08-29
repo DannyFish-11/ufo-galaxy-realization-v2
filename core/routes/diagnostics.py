@@ -126,6 +126,94 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             return _failed("context provenance status")
 
+    @router.get("/api/v1/runtime/domain")
+    async def runtime_domain_status():
+        """这一拍在哪儿跑 —— 连续体的第二公共维度,以及它凭什么这么判。
+
+        为什么这一位需要一个自己的端点
+        ------------------------------
+        整套"按作用域分权威"(本地的事本地说了算,跨设备的事中心说了算)都站在
+        这一位上。而这一位有一个必须被看见的取值:``domain = null``,意思是
+        **判不出来** —— 它和 ``local`` 不是一回事,绝不能被读成一回事。
+
+        判不出来的时刻,恰恰是连接刚抖动、编队刚建立、注册表还没同步的时刻,
+        也就是最需要中心仲裁的时刻。如果那时候被静默当成"本地",权威就会在
+        最不该的时候被交给本地。所以这个端点把 ``null`` 显式报出来。
+
+        ``remote_sessions`` 同理:``null`` = 注册表问不到,与"问到了,是 0 台"
+        必须分得开 —— 后者判得出作用域(就是本地),前者判不出。
+
+        只读:不触发任何连接、不改变任何状态。
+        """
+        try:
+            from core.continuum.runtime_domain_resolver import domain_report
+
+            return JSONResponse(domain_report())
+        except Exception:
+            return _failed("runtime domain status")
+
+    @router.get("/api/v1/runtime/scope-authority")
+    async def scope_authority_status():
+        """这个作用域下谁说了算,以及权威易过几次手。
+
+        与上一个端点的分工
+        ------------------
+        ``/api/v1/runtime/domain`` 回答**在哪儿跑**(事实);这一个回答**谁说了算**
+        (据此得出的归属)。分开是因为两者会不一致地失效:作用域判得出但权威规则改错了,
+        与作用域根本判不出来,是两种不同的故障,合成一个端点就分不出是哪一种。
+
+        三个必须被看见的取值
+        --------------------
+        * ``authority = "undecidable"`` —— 说不出来谁说了算,**不是**"默认本地"。
+          这一档下本地写入一律不收。
+        * ``migration_degraded = true`` —— 迁移语义是**降级来的**(判不出来时退到
+          非破坏性的共享语义),不是判出来的。降级必须留痕,否则它看起来和判出来一样。
+        * ``handovers`` —— 权威易手记录。一个会话从 local 变成 cross_device 的那一刻
+          权威换了人;不记下来,事后就没有任何一处能回答"那次冲突发生时谁说了算"。
+
+        只读:不触发任何连接、不改变任何状态。
+        """
+        try:
+            from core.scope_authority import authority_report, recent_handovers
+
+            payload = authority_report()
+            payload["handovers"] = recent_handovers()
+            return JSONResponse(payload)
+        except Exception:
+            return _failed("scope authority status")
+
+    @router.get("/api/v1/compat/usage")
+    async def compat_usage_status():
+        """那些旧面,到底还有没有人在用。
+
+        为什么需要这个端点
+        ------------------
+        "旧 REST 别名与兼容 WS 入口什么时候退役"(路线图 Q6,挡着 C5/C6)一直定不了,
+        不是缺决心,是**缺数据** —— 此前这些面只有一行 ``logger.info``,日志会滚,
+        没有任何一处能回答"上周有多少次调用、是谁在调"。
+
+        最容易读错的一格:``calls = 0``
+        ------------------------------
+        计数在进程内,重启归零。所以 0 的射程只有 ``uptime_seconds`` 这么长,
+        **不等于"没人用"**。据此提前退役会打死还在用的客户端 —— 而这正是
+        C5/C6 那两项要防的事。响应里的 ``zero_means`` 把这句话原样写着。
+
+        要回答"过去两周多少次",抓 Prometheus 的
+        ``galaxy_compat_surface_calls_total``(带 surface/kind 标签,跨重启由外部
+        时序库留存)。这个端点是便于当场看一眼的视图,不是那份权威数据。
+
+        ``sunset_at = null`` 是**故意的**:退役日期还没定,而它正是这份数据要支撑
+        的东西。先编一个日期发到 ``Sunset`` 头上再回头验证,顺序是反的。
+
+        只读:不触发任何连接、不改变任何状态。
+        """
+        try:
+            from core.compat_usage import usage_report
+
+            return JSONResponse(usage_report())
+        except Exception:
+            return _failed("compat usage status")
+
     @router.get("/api/v1/security/connection-provenance")
     async def connection_provenance_status():
         """两条"对端还是我登记过的那个吗"的复验,合在一处报。
@@ -246,5 +334,37 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # 六个子系统里任何一个在半初始化状态下抛,都会走到这里 ——
             # CodeQL alert 1066 报的正是这六条流。细节只进日志,见 _failed。
             return _failed("mesh participation summary")
+
+    @router.get("/api/v1/runtime/phase-ledger")
+    async def runtime_phase_ledger(hours: int = 72):
+        """三态转移的耐久账 —— 最近 ``hours`` 小时(默认 72,即三天)。
+
+        为什么需要这个端点:三态此前**一处都不落盘**。``DecisionTimeline`` 是
+        进程内的 list,``RenderPosture`` 每拍现算,``_execution_lifecycle_history``
+        是模块级 dict —— 全都活不过一次重启。于是"这三天它是静着还是在表达"
+        这件事根本问不出来。
+
+        读的时候要拿 ``status.empty_means`` 一起看:**读到空不等于这段什么都没
+        发生**。账本不在、或这段落在进程不在的时间里,同样是空。两者要靠记录上
+        的 ``epoch`` 分开 —— 相邻两条 epoch 不同,中间那段就是不可知,不是安静。
+        """
+        try:
+            import time as _time
+
+            from core.phase_transition_ledger import ledger_status, read_window
+
+            span = max(1, min(int(hours), 24 * 90)) * 3600.0
+            now = _time.time()
+            records = read_window(now - span, now + 1.0)
+            return JSONResponse(
+                {
+                    "status": ledger_status(),
+                    "window_hours": span / 3600.0,
+                    "record_count": len(records),
+                    "records": records,
+                }
+            )
+        except Exception:
+            return _failed("phase transition ledger")
 
     return router

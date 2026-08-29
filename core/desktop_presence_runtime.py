@@ -327,6 +327,25 @@ class RuntimeSession:
             old_state.value,
             new_state.value,
         )
+        # 落耐久账 —— 与下面那次事件总线广播是**互补**的两件事:
+        # 总线是给此刻在线的订阅者看的,广播完就没了;这一笔是给三天之后的人看的。
+        # 三态此前一处都不落盘(DecisionTimeline 是进程内 list、RenderPosture 每拍现算),
+        # 于是「这三天它是什么样子」根本问不出来。见 core/phase_transition_ledger.py。
+        #
+        # 它自己吞掉一切异常并计数,不会把相位推进搞挂。
+        try:
+            from core.phase_transition_ledger import record_transition as _record_phase_transition
+
+            _record_phase_transition(
+                old_state.value,
+                new_state.value,
+                source=self.source,
+                runtime_session_id=self.runtime_session_id,
+                trace_id=self.trace_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — 导入失败也不能影响主干
+            logger.debug("相位转移落账跳过(非致命): %s", exc)
+
         # PR-8: emit phase transition on the unified state event bus.
         # M8 fixed: add 3-attempt retry loop with small backoff for event emission
         _emission_err = None

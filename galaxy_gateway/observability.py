@@ -443,6 +443,15 @@ class GatewayMetrics:
             )
         )
 
+        # 兼容旧面的用量。跨重启留存靠的是这份被抓取的时序数据,不是进程内计数
+        # —— 见 core/compat_usage.py 模块头那条限制。
+        try:
+            from core.compat_usage import prometheus_lines as _compat_lines
+
+            lines.extend(_compat_lines())
+        except Exception:  # noqa: BLE001 — 取不到就不吐这几行,不影响其它指标
+            pass
+
         return "\n".join(lines) + "\n"
 
 

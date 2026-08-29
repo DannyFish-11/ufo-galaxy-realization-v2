@@ -136,12 +136,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "llm",
         "description": "Perplexity Sonar 的 API Key（PERPLEXITY_API_KEY 的别名）",
     },
-    "VLLM_URL": {
-        "default": "",
-        "type": "url",
-        "category": "llm",
-        "description": "vLLM 推理服务地址（LOCAL_VLLM_URL 的别名）",
-    },
     "LOCAL_VLLM_URL": {
         "default": "",
         "type": "url",
