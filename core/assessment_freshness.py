@@ -256,10 +256,6 @@ def verify_claim(claim: Dict[str, Any]) -> ClaimResult:
     )
 
 
-def verify_all() -> List[ClaimResult]:
-    return [verify_claim(c) for c in load_claims()]
-
-
 def freshness_report() -> Dict[str, Any]:
     """给诊断面。"""
     claims = load_claims()

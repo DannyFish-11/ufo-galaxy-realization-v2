@@ -162,7 +162,7 @@ def test_c05_the_shipped_claims_are_all_fresh_right_now():
     历史上的失真记在每条的 supersedes 里(那是给人看的、要人去改文档的),
     不是靠让这道门长期红着来表达。
     """
-    stale = [r.claim_id for r in af.verify_all() if r.verdict == "stale"]
+    stale = [r["claim_id"] for r in af.freshness_report()["results"] if r["verdict"] == "stale"]
     assert not stale, f"这些结论所依据的事实已经变了,需要重新推导: {stale}"
 
 

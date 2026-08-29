@@ -3276,6 +3276,34 @@ class CommandRouter:
             if envelope.target:
                 context["device_id"] = envelope.target
 
+            # ── 选路策略在决策层算,底座不再自己算一遍(SCHED-003)──────────
+            #
+            # DeviceRouter 侧的**接收端**早就建好了:它读
+            # ctx["_command_router_pre_analyzed"] 与 ctx["_pre_analysis"],命中就
+            # 跳过自己的 _analyze_command()。哨兵
+            # DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL 把这个契约写得
+            # 很清楚。
+            #
+            # **但在这一句之前,没有任何一处生产代码盖过那两个标** —— 全仓搜下来
+            # 只命中 device_router.py 自己(注释 + 读取端)。也就是说那条 passthrough
+            # 从来没被触发过,底座每次都还是自己做策略分析。又一次"接收端建好了、
+            # 发送端没接"。
+            #
+            # 分析用的是**同一个函数**(galaxy_gateway.routing.policy.analyze_command,
+            # 也正是 DeviceRouter._analyze_command 委托的那个),不是在这里另写一份
+            # —— 另写一份的表现是两层各自演进,然后同一条命令在两边被判成不同的
+            # task_type,而两边都不认为自己错了。
+            try:
+                from galaxy_gateway.routing.policy import analyze_command as _analyze  # noqa: PLC0415
+
+                context["_pre_analysis"] = _analyze(envelope.tool_name, context)
+                context["_command_router_pre_analyzed"] = True
+            except Exception as _pa_exc:  # noqa: BLE001 — 算不出来就让底座自己算,行为与改前一致
+                logger.debug(
+                    "_route_cross_device_envelope: 预分析跳过,底座将自行分析: %s",
+                    _pa_exc,
+                )
+
             raw = await _dr.route_task(envelope.tool_name, context=context)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             return {

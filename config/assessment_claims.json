@@ -27,7 +27,12 @@
       "statement": "task_cancel 已有规范处理器(handle_task_cancel @ galaxy_gateway/android/handlers/task_lifecycle.py)",
       "supersedes": "该文档仍把 D1 列为『Immediate (P0)』唯一项,措辞是 correctness failure affecting users today —— 已过期,需要人去改那份文档",
       "predicates": [
-        {"kind": "symbol_exists", "target": "handle_task_cancel", "scope": "galaxy_gateway", "expected": true}
+        {
+          "kind": "symbol_exists",
+          "target": "handle_task_cancel",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
       ]
     },
     {
@@ -37,7 +42,12 @@
       "statement": "task_status 已有规范处理器",
       "supersedes": "该文档仍把 D2 列为 P1 待办 —— 已过期",
       "predicates": [
-        {"kind": "symbol_exists", "target": "handle_task_status", "scope": "galaxy_gateway", "expected": true}
+        {
+          "kind": "symbol_exists",
+          "target": "handle_task_status",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
       ]
     },
     {
@@ -47,7 +57,12 @@
       "statement": "选路真的会问能力图:query_routable_executors 在 core/ 里有生产调用方(command_router 与 device_pool_manager)",
       "supersedes": "该清单仍列 GAP-512-004 为 MEDIUM/开着,而 scheduling_truth_harness 明写 closes GAP-512-004 —— 已过期",
       "predicates": [
-        {"kind": "has_production_caller", "target": "query_routable_executors", "scope": "core", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "query_routable_executors",
+          "scope": "core",
+          "expected": true
+        }
       ]
     },
     {
@@ -57,7 +72,12 @@
       "statement": "LEGACY_DISPATCH 走指标这件事已经做了:galaxy_legacy_dispatch_total 在网关的 Prometheus 输出里",
       "supersedes": "该文档仍把 Q7『指标还是只记日志』列为待决定的设计问题 —— 决定已经在代码里了",
       "predicates": [
-        {"kind": "has_production_caller", "target": "galaxy_legacy_dispatch_total", "scope": "galaxy_gateway", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "galaxy_legacy_dispatch_total",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
       ]
     },
     {
@@ -67,7 +87,12 @@
       "statement": "Android 注册上报的能力真的进了同化层(registration.py 调 assimilate_device)",
       "supersedes": "该文档写的是 not confirmed forwarded —— 已确认,是接上的",
       "predicates": [
-        {"kind": "has_production_caller", "target": "assimilate_device", "scope": "galaxy_gateway", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "assimilate_device",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
       ]
     },
     {
@@ -77,9 +102,24 @@
       "statement": "WebRTC 任务绑定与终态拆除都有生产调用方 —— 绑定挂 CommandRouter,拆除挂 CanonicalTask.advance_lifecycle",
       "supersedes": "",
       "predicates": [
-        {"kind": "has_production_caller", "target": "bind_webrtc_session_to_task", "scope": "core", "expected": true},
-        {"kind": "has_production_caller", "target": "teardown_binding_on_task_terminal", "scope": "core", "expected": true},
-        {"kind": "symbol_exists", "target": "TERMINAL_TASK_LIFECYCLES", "scope": "core", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "bind_webrtc_session_to_task",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "teardown_binding_on_task_terminal",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "TERMINAL_TASK_LIFECYCLES",
+          "scope": "core",
+          "expected": true
+        }
       ]
     },
     {
@@ -89,7 +129,12 @@
       "statement": "WebRTC 能力登记仍是 EXPERIMENTAL —— 接通调用点不等于『已验证可用』,改成 operational 需要真机证据",
       "supersedes": "",
       "predicates": [
-        {"kind": "symbol_exists", "target": "WEBRTC_IS_EXPERIMENTAL_STATUS", "scope": "core", "expected": true}
+        {
+          "kind": "symbol_exists",
+          "target": "WEBRTC_IS_EXPERIMENTAL_STATUS",
+          "scope": "core",
+          "expected": true
+        }
       ]
     },
     {
@@ -99,8 +144,18 @@
       "statement": "作用域权威判据接在两个真决策点上:迁移入口调 require_migration,连续体每拍由 resolve_runtime_domain 盖章",
       "supersedes": "",
       "predicates": [
-        {"kind": "has_production_caller", "target": "require_migration", "scope": "core", "expected": true},
-        {"kind": "has_production_caller", "target": "resolve_runtime_domain", "scope": "core", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "require_migration",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "resolve_runtime_domain",
+          "scope": "core",
+          "expected": true
+        }
       ]
     },
     {
@@ -110,18 +165,33 @@
       "statement": "旧面用量真的在记:WS 汇合点与 REST 别名出口都调 record_use;弃用头由 deprecation_headers 统一发",
       "supersedes": "",
       "predicates": [
-        {"kind": "has_production_caller", "target": "record_use", "scope": "galaxy_gateway", "expected": true},
-        {"kind": "has_production_caller", "target": "deprecation_headers", "scope": "core", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "record_use",
+          "scope": "galaxy_gateway",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "deprecation_headers",
+          "scope": "core",
+          "expected": true
+        }
       ]
     },
     {
       "id": "A2-device-router-policy-residue-open",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (A2/C1)",
       "recorded_on": "2026-08-29",
-      "statement": "DeviceRouter 的策略残留**仍在**:_analyze_command 与 _select_devices 还有调用方(逻辑已抽到 _routing_* 但调用点没退役)",
-      "supersedes": "这一条与路线图一致 —— 它是少数几条还成立的。放进来是为了让它在真被退役的那天自己响。",
+      "statement": "DeviceRouter 的 _analyze_command 仍有调用方 —— 但那是**兜底路径**:CommandRouter 现在会盖 _command_router_pre_analyzed/_pre_analysis,命中时底座跳过自己的分析。兜底保留是有意的(不供预分析的旧调用方照旧能跑)",
+      "supersedes": "路线图 A2/C1 描述的是「策略逻辑还在底座里」。逻辑已抽到 routing.policy,passthrough 也已接通;剩下的兜底路径是有意保留的向后兼容,不是残留。",
       "predicates": [
-        {"kind": "has_production_caller", "target": "_analyze_command", "scope": "galaxy_gateway", "expected": true}
+        {
+          "kind": "has_production_caller",
+          "target": "_analyze_command",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
       ]
     },
     {
@@ -131,7 +201,12 @@
       "statement": "galaxy_gateway/task_router.py 仍在盘上,但已在 orchestration_authority/legacy_paths.py 登记为 LEGACY COMPAT 治理面 —— 不是疏忽,删不删是产品决定",
       "supersedes": "路线图 C4 写的是『确认已从盘上移除』,而它没被移除。两边都对,只是路线图没写它已经被治理起来了。",
       "predicates": [
-        {"kind": "path_exists", "target": "galaxy_gateway/task_router.py", "scope": "", "expected": true}
+        {
+          "kind": "path_exists",
+          "target": "galaxy_gateway/task_router.py",
+          "scope": "",
+          "expected": true
+        }
       ]
     },
     {
@@ -141,8 +216,39 @@
       "statement": "最终受理裁决面已经存在(core/system_final_acceptance_verdict.py 等),CI 里 Governance Verdict Gate 是 blocking",
       "supersedes": "矩阵把该域记为 15% missing,依据是 2026-04-29 的 code-path tracing。四个月过去,那个分数从没重推过 —— 需要人重新推导,这道门不替他算。",
       "predicates": [
-        {"kind": "path_exists", "target": "core/system_final_acceptance_verdict.py", "scope": "", "expected": true},
-        {"kind": "path_exists", "target": "core/result_truth_acceptance_gate.py", "scope": "", "expected": true}
+        {
+          "kind": "path_exists",
+          "target": "core/system_final_acceptance_verdict.py",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "core/result_truth_acceptance_gate.py",
+          "scope": "",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "SCHED-003-passthrough-wired",
+      "source": "本次 A2 接线(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "选路策略分析在决策层算并盖进 context;DeviceRouter 侧的接收端因此第一次真的被触发",
+      "supersedes": "",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "_command_router_pre_analyzed",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "_pre_analysis",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
       ]
     }
   ]
