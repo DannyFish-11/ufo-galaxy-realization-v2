@@ -140,6 +140,37 @@ async def handle_reconciliation_signal(
     # 用来消解状态分歧的输入 —— 只回给发信设备等于对账做了一半。
     mesh_mirror.mirror_reconciliation_signal(device_id, message)
 
+    # ── 谁说了算:把判定回给设备 ────────────────────────────────────────────
+    #
+    # 对账信号是设备侧**显式推上来的状态**。它该不该被当成真值,取决于此刻的作用域
+    # (见 core/scope_authority.py 模块头):
+    #   · local        —— 中心不在场,设备自己说了算 → 收
+    #   · cross_device —— 真值链与受理裁决都在中心侧 → 不收,设备该发 delta 由中心裁决
+    #   · 判不出来      —— 说不出归属,一律不收
+    #
+    # 这里**只回判定,不改协处理器的既有行为**,而且这一点必须说清楚:V2 侧现在做到的
+    # 是"把权威归属如实告诉设备",让 Android 有依据切到 delta 模式;真正的
+    # "中心裁决 + 设备发 delta" 还需要 ufo-galaxy-android 那一侧改协议,不是这个仓
+    # 单独能闭环的(路线图 D6 自己也写了 Cross-repo coordination required)。
+    #
+    # 老客户端会忽略这个未知字段,所以是向后兼容的。
+    _authority_evidence = None
+    try:
+        from core.scope_authority import current_authority  # noqa: PLC0415
+
+        _sa = current_authority(str(message.get("session_id") or device_id))
+        _authority_evidence = _sa.to_dict()
+        if not _sa.accepts_local_writes:
+            logger.info(
+                "reconciliation_signal: 设备 %s 推上来的状态**不作为真值** "
+                "(scope=%s authority=%s) —— 该走 delta 由中心裁决",
+                device_id,
+                _sa.scope,
+                _sa.authority,
+            )
+    except Exception as _sa_err:  # noqa: BLE001 — 判不出来就不带这个证据,不影响 ACK
+        logger.debug("reconciliation_signal: 作用域权威判定跳过: %s", _sa_err)
+
     return {
         "version": "3.0",
         "type": "reconciliation_signal_ack",
@@ -151,4 +182,7 @@ async def handle_reconciliation_signal(
             if _rs_gate_decision is not None and _rs_gate_decision.action != "accept"
             else None
         ),
+        # 此刻谁说了算。accepts_local_writes=false 时,设备应当把本地状态改成
+        # delta 上报而不是当作权威快照 —— 见上面注释里那条残留限制。
+        "scope_authority": _authority_evidence,
     }

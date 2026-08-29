@@ -152,6 +152,36 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             return _failed("runtime domain status")
 
+    @router.get("/api/v1/runtime/scope-authority")
+    async def scope_authority_status():
+        """这个作用域下谁说了算,以及权威易过几次手。
+
+        与上一个端点的分工
+        ------------------
+        ``/api/v1/runtime/domain`` 回答**在哪儿跑**(事实);这一个回答**谁说了算**
+        (据此得出的归属)。分开是因为两者会不一致地失效:作用域判得出但权威规则改错了,
+        与作用域根本判不出来,是两种不同的故障,合成一个端点就分不出是哪一种。
+
+        三个必须被看见的取值
+        --------------------
+        * ``authority = "undecidable"`` —— 说不出来谁说了算,**不是**"默认本地"。
+          这一档下本地写入一律不收。
+        * ``migration_degraded = true`` —— 迁移语义是**降级来的**(判不出来时退到
+          非破坏性的共享语义),不是判出来的。降级必须留痕,否则它看起来和判出来一样。
+        * ``handovers`` —— 权威易手记录。一个会话从 local 变成 cross_device 的那一刻
+          权威换了人;不记下来,事后就没有任何一处能回答"那次冲突发生时谁说了算"。
+
+        只读:不触发任何连接、不改变任何状态。
+        """
+        try:
+            from core.scope_authority import authority_report, recent_handovers
+
+            payload = authority_report()
+            payload["handovers"] = recent_handovers()
+            return JSONResponse(payload)
+        except Exception:
+            return _failed("scope authority status")
+
     @router.get("/api/v1/security/connection-provenance")
     async def connection_provenance_status():
         """两条"对端还是我登记过的那个吗"的复验,合在一处报。

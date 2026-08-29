@@ -92,6 +92,35 @@ async def migrate_session_via_canonical_manager(
             "error": f"Session '{session_id}' not found",
         }
 
+    # ── 迁移语义按作用域选,不按"调了哪个文件"选 ──────────────────────────
+    #
+    # 本仓有两套迁移语义,实测差异见 tests/test_session_migration_consistency.py:
+    #   · 漫游 —— 会话跟着人走,同一时刻只在一台设备上(源设备移出 devices);
+    #   · 共享 —— 一个会话同时挂在几台设备上,当前活跃的是某一台(源设备保留)。
+    #
+    # 在此之前,用哪一种**取决于调用方调了哪条路径**,而不是取决于场景 —— 那意味着
+    # 同一次迁移走 REST 和走网关会得到不同的产品行为,而两边都不认为自己错了。
+    #
+    # 现在由 core.scope_authority 按作用域判:local → 漫游,cross_device → 共享,
+    # transition/判不出来 → 不迁(见该模块头)。判据只有那一处,这里不重列规则。
+    _authority = None
+    try:
+        from core.scope_authority import current_scope, require_migration  # noqa: PLC0415
+
+        # require_migration 而不是"取判定再自己看一眼":它在不许迁的档位**抛异常**。
+        # 迁移是有副作用的动作,返回值会被忽略,异常不会 —— 漏判一次的后果是会话
+        # 跑到不该去的地方。
+        _authority = require_migration(session_id, current_scope())
+    except ImportError:  # pragma: no cover — 判据模块缺失时不改变既有行为
+        logger.debug("scope_authority 不可用,迁移沿用既有(共享)语义")
+    except Exception as exc:  # ScopeAuthorityRefused 及其它判定失败
+        logger.warning("迁移被作用域判据拒绝: session=%s %s", session_id, exc)
+        return {
+            "success": False,
+            "status_code": 409,
+            "error": str(exc),
+        }
+
     active_device = getattr(session, "active_device", "") or ""
     effective_source = source_device or active_device
     if effective_source and effective_source not in session.devices:
@@ -146,6 +175,12 @@ async def migrate_session_via_canonical_manager(
     session.active_device = target_device
     session.updated_at = time.time()
 
+    # 漫游语义下源设备要**移出**会话 —— 这正是漫游与共享的那处行为差异。
+    # 共享语义下源设备保留(它仍是这个会话的成员,只是不再是 active)。
+    if _authority is not None and _authority.migration == "roaming" and effective_source:
+        if effective_source in session.devices and effective_source != target_device:
+            session.devices.remove(effective_source)
+
     try:
         sm._persist_state()
     except Exception as exc:
@@ -195,6 +230,8 @@ async def migrate_session_via_canonical_manager(
         "active_device": session.active_device,
         "message": f"Session successfully migrated to {target_device}",
         "history_count": len(history),
+        # 用了哪种语义、凭什么 —— 进响应,让"为什么源设备还在/不在了"说得出来。
+        "scope_authority": (_authority.to_dict() if _authority is not None else None),
     }
 
 
