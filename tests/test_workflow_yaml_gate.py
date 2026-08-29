@@ -114,8 +114,7 @@ def test_gate_reports_the_bug_with_a_line_number(tmp_path, monkeypatch):
             "既没有 steps: 也没有 uses:",
         ),
         (
-            "name: X\non: push\njobs:\n  a:\n    runs-on: u\n    needs: [ghost]\n"
-            "    steps:\n      - run: echo\n",
+            "name: X\non: push\njobs:\n  a:\n    runs-on: u\n    needs: [ghost]\n" "    steps:\n      - run: echo\n",
             "不存在的 job",
         ),
         (
@@ -183,11 +182,7 @@ def test_the_original_file_no_longer_has_two_env_blocks():
     """具体钉住事故现场那一份 —— 防止将来又被加回去一个 env:。"""
     path = REPO_ROOT / ".github" / "workflows" / "dual_repo_reality_audit.yml"
     doc = yaml.load(path.read_text(encoding="utf-8"), Loader=mod.StrictLoader)
-    step = [
-        s
-        for s in doc["jobs"]["check-audit"]["steps"]
-        if "Validate audit correctness" in str(s.get("name", ""))
-    ]
+    step = [s for s in doc["jobs"]["check-audit"]["steps"] if "Validate audit correctness" in str(s.get("name", ""))]
     assert len(step) == 1
     env = step[0]["env"]
     # 合并之后这四个都得在 —— 只留一个 env 但把 PYTHONPATH 丢了,是另一种修坏。
