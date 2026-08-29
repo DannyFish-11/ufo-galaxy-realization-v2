@@ -250,6 +250,33 @@
           "expected": true
         }
       ]
+    },
+    {
+      "id": "session-migration-has-no-canonical-home",
+      "source": "core/orchestration_authority/legacy_paths.py(session_roaming 条目)",
+      "recorded_on": "2026-08-29",
+      "statement": "会话迁移没有规范面。session_roaming 已登记为 LEGACY_COMPATIBILITY,声明的规范替代是 core.canonical_session_axis + core.attached_runtime_session —— 但那两处都**不提供迁移能力**:前者是分类学(会话族/标识符角色/快照),后者是挂载生命周期(attach/detach),两个模块里 def migrate_* 命中为 0。全仓真正的迁移实现只有三处,一处也不在规范面上。",
+      "supersedes": "legacy_paths 的 recommendation 读起来像「去用规范面就行了」,而规范面没有这个能力。所以这条退役路径当前走不通 —— 要么先把规范的迁移面建出来,要么如实改那段 recommendation。在那之前不该做「两个 store 合并」:合出来的东西仍然不是规范面,只是第三个。",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "core/canonical_session_axis.py",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "migrate_session_via_canonical_manager",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "session_roaming",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
+      ]
     }
   ]
 }

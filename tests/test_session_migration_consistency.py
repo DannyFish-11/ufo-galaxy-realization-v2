@@ -266,3 +266,74 @@ def test_c04_both_devices_are_told_on_success(device):
     cm = _FakeConnectionManager()
     _migrate(session=session, cm=cm, source="dev-a")
     assert cm.types_for(device), f"{device} 一条消息都没收到"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# D. 会话迁移**没有规范面** —— 所以"合并两个 store"不是现在该做的事
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TestMigrationHasNoCanonicalHome:
+    """``session_roaming`` 已在 ``core/orchestration_authority/legacy_paths.py`` 里
+    登记为 LEGACY_COMPATIBILITY,声明的规范替代是
+    ``core.canonical_session_axis`` + ``core.attached_runtime_session``。
+
+    问题是**那两处都不提供迁移能力**:
+
+    * ``canonical_session_axis`` 是**分类学** —— 会话族、标识符角色、快照。
+      它回答"这个 id 是什么身份",不回答"把会话搬到那台设备上"。
+    * ``attached_runtime_session`` 是**挂载生命周期** —— attach/detach 状态机。
+
+    两个模块里 ``def migrate_*`` 命中为 0。全仓真正的迁移实现只有三处
+    (REST 的 canonical manager、session_roaming、以及网关路由那层委托),
+    **一处也不在规范面上**。
+
+    所以那条退役路径当前走不通,而 recommendation 读起来像"去用规范面就行了"。
+    这一组把这件事钉成判据 —— 它比"合并两个 store"更要紧:在没有目标形态的情况下
+    合并,合出来的东西仍然不是规范面,只是第三个。
+    """
+
+    def test_d01_the_legacy_registration_names_a_replacement(self):
+        from core.orchestration_authority import legacy_paths
+
+        src = legacy_paths.__file__
+        body = open(src, encoding="utf-8").read()
+        assert "session_roaming" in body
+        assert "canonical_session_axis" in body
+
+    def test_d02_the_named_replacement_does_not_migrate(self):
+        """规范替代里没有迁移能力 —— 这是整条退役路径走不通的原因。
+
+        这条会在有人真的把迁移建到规范面上的那天变红,那正是它该响的时候。
+        """
+        import inspect
+
+        from core import attached_runtime_session, canonical_session_axis
+
+        for mod in (canonical_session_axis, attached_runtime_session):
+            names = [n for n in dir(mod) if n.startswith("migrate")]
+            assert not names, f"{mod.__name__} 现在有迁移能力了 —— 退役路径可以往前走了,请更新这条判据"
+            assert "def migrate_" not in inspect.getsource(mod)
+
+    def test_d03_the_only_migration_implementations_are_the_two_known_ones(self):
+        """全仓的迁移实现就这两个真实现(第三处是网关路由层的委托)。
+
+        多出第三个真实现时这条会红 —— 那意味着又有人在别处开了一条迁移路,
+        而这正是 Q3 当初要防的。
+        """
+        import subprocess
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        out = subprocess.run(
+            ["grep", "-rn", "--include=*.py", "-E", r"^\s*(async )?def migrate_session", "core", "galaxy_gateway"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout
+        files = {line.split(":")[0] for line in out.splitlines() if line.strip()}
+        assert files == {
+            "core/routes/sessions.py",
+            "galaxy_gateway/session_roaming.py",
+            "galaxy_gateway/routes/sessions.py",
+        }, f"迁移实现的分布变了: {sorted(files)}"
