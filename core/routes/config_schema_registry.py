@@ -1591,6 +1591,14 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": ("上下文归档最少保留天数(留空=30 · 这么新的会话一律不删，" "哪怕已超总量上限——那时只告警不删)"),
     },
+    "GALAXY_PHASE_LEDGER_DAYS": {
+        "default": "",
+        "type": "number",
+        "category": "behavior",
+        "description": (
+            "三态转移账保留天数(留空=90 · 记忆卡片按 3 天一张，90 天约 30 张；" "更早的窗口本身已经是摘要了)"
+        ),
+    },
     "GALAXY_IGNORE_CONTEXT_MEASUREMENTS": {
         "default": "",
         "type": "boolean",
