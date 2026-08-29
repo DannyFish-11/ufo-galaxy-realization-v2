@@ -1,0 +1,149 @@
+{
+  "_what": "对仓库自身状态的结论,以及每条结论所依据的、可机械复验的谓词。",
+  "_why": [
+    "2026-08-28 全仓评估发现:仓库对自己的判断过期了四个月,而且每一处都带着一道绿灯。",
+    "completion_matrix(2026-04-29)的分数从没重推过 —— 它的证据路径校验一直绿,因为那道门查的是文件在不在。",
+    "FOLLOWUP_IMPLEMENTATION_ROADMAP 把 task_cancel 列为唯一 P0,而它早就实现了。",
+    "runtime_closure_audit 的 _KNOWN_RESIDUAL_GAPS 仍列 GAP-512-004 为开着,而 harness 明写已关闭。",
+    "路线图那七个『阻塞中的设计问题』里有四个已经不成立。",
+    "同一个缺陷四处独立复现:判据以判据的形式被钉住之后,比没有它更难被质疑。"
+  ],
+  "_how_to_use": [
+    "这份清单由人写、由人改。scripts/check_assessment_freshness.py 只负责复验,不负责推导。",
+    "一条结论报 stale,意思是『它所依据的事实变了,必须重新推导』—— 不是说结论一定错。",
+    "推导完之后:改这里的 expected,改 recorded_on,并且**去改 source 指的那份文档**。",
+    "只改这里不改文档,等于把过期挪了个地方 —— 那正是这套东西要防的。"
+  ],
+  "_predicate_kinds": {
+    "symbol_exists": "符号定义出来了没有(def/class/模块级赋值)",
+    "has_production_caller": "生产代码里有没有人用它(排除 tests/、定义行本身、纯 re-export 聚合模块)",
+    "path_exists": "文件/目录在不在"
+  },
+  "claims": [
+    {
+      "id": "D1-task-cancel-implemented",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md",
+      "recorded_on": "2026-08-29",
+      "statement": "task_cancel 已有规范处理器(handle_task_cancel @ galaxy_gateway/android/handlers/task_lifecycle.py)",
+      "supersedes": "该文档仍把 D1 列为『Immediate (P0)』唯一项,措辞是 correctness failure affecting users today —— 已过期,需要人去改那份文档",
+      "predicates": [
+        {"kind": "symbol_exists", "target": "handle_task_cancel", "scope": "galaxy_gateway", "expected": true}
+      ]
+    },
+    {
+      "id": "D2-task-status-implemented",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md",
+      "recorded_on": "2026-08-29",
+      "statement": "task_status 已有规范处理器",
+      "supersedes": "该文档仍把 D2 列为 P1 待办 —— 已过期",
+      "predicates": [
+        {"kind": "symbol_exists", "target": "handle_task_status", "scope": "galaxy_gateway", "expected": true}
+      ]
+    },
+    {
+      "id": "GAP-512-004-capability-graph-consulted",
+      "source": "core/runtime_closure_audit.py::_KNOWN_RESIDUAL_GAPS",
+      "recorded_on": "2026-08-29",
+      "statement": "选路真的会问能力图:query_routable_executors 在 core/ 里有生产调用方(command_router 与 device_pool_manager)",
+      "supersedes": "该清单仍列 GAP-512-004 为 MEDIUM/开着,而 scheduling_truth_harness 明写 closes GAP-512-004 —— 已过期",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "query_routable_executors", "scope": "core", "expected": true}
+      ]
+    },
+    {
+      "id": "Q7-legacy-dispatch-metric-exists",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (Q7)",
+      "recorded_on": "2026-08-29",
+      "statement": "LEGACY_DISPATCH 走指标这件事已经做了:galaxy_legacy_dispatch_total 在网关的 Prometheus 输出里",
+      "supersedes": "该文档仍把 Q7『指标还是只记日志』列为待决定的设计问题 —— 决定已经在代码里了",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "galaxy_legacy_dispatch_total", "scope": "galaxy_gateway", "expected": true}
+      ]
+    },
+    {
+      "id": "D4-android-capabilities-assimilated",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (D4)",
+      "recorded_on": "2026-08-29",
+      "statement": "Android 注册上报的能力真的进了同化层(registration.py 调 assimilate_device)",
+      "supersedes": "该文档写的是 not confirmed forwarded —— 已确认,是接上的",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "assimilate_device", "scope": "galaxy_gateway", "expected": true}
+      ]
+    },
+    {
+      "id": "webrtc-binding-wired",
+      "source": "本次 Q5 A 档接线(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "WebRTC 任务绑定与终态拆除都有生产调用方 —— 绑定挂 CommandRouter,拆除挂 CanonicalTask.advance_lifecycle",
+      "supersedes": "",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "bind_webrtc_session_to_task", "scope": "core", "expected": true},
+        {"kind": "has_production_caller", "target": "teardown_binding_on_task_terminal", "scope": "core", "expected": true},
+        {"kind": "symbol_exists", "target": "TERMINAL_TASK_LIFECYCLES", "scope": "core", "expected": true}
+      ]
+    },
+    {
+      "id": "webrtc-still-experimental",
+      "source": "core/canonical_capability_status.py",
+      "recorded_on": "2026-08-29",
+      "statement": "WebRTC 能力登记仍是 EXPERIMENTAL —— 接通调用点不等于『已验证可用』,改成 operational 需要真机证据",
+      "supersedes": "",
+      "predicates": [
+        {"kind": "symbol_exists", "target": "WEBRTC_IS_EXPERIMENTAL_STATUS", "scope": "core", "expected": true}
+      ]
+    },
+    {
+      "id": "scope-authority-wired",
+      "source": "本次 Q3/Q4 按作用域分权威(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "作用域权威判据接在两个真决策点上:迁移入口调 require_migration,连续体每拍由 resolve_runtime_domain 盖章",
+      "supersedes": "",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "require_migration", "scope": "core", "expected": true},
+        {"kind": "has_production_caller", "target": "resolve_runtime_domain", "scope": "core", "expected": true}
+      ]
+    },
+    {
+      "id": "compat-usage-accounted",
+      "source": "本次 Q6 用量记账(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "旧面用量真的在记:WS 汇合点与 REST 别名出口都调 record_use;弃用头由 deprecation_headers 统一发",
+      "supersedes": "",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "record_use", "scope": "galaxy_gateway", "expected": true},
+        {"kind": "has_production_caller", "target": "deprecation_headers", "scope": "core", "expected": true}
+      ]
+    },
+    {
+      "id": "A2-device-router-policy-residue-open",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (A2/C1)",
+      "recorded_on": "2026-08-29",
+      "statement": "DeviceRouter 的策略残留**仍在**:_analyze_command 与 _select_devices 还有调用方(逻辑已抽到 _routing_* 但调用点没退役)",
+      "supersedes": "这一条与路线图一致 —— 它是少数几条还成立的。放进来是为了让它在真被退役的那天自己响。",
+      "predicates": [
+        {"kind": "has_production_caller", "target": "_analyze_command", "scope": "galaxy_gateway", "expected": true}
+      ]
+    },
+    {
+      "id": "C4-task-router-still-on-disk",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (C4)",
+      "recorded_on": "2026-08-29",
+      "statement": "galaxy_gateway/task_router.py 仍在盘上,但已在 orchestration_authority/legacy_paths.py 登记为 LEGACY COMPAT 治理面 —— 不是疏忽,删不删是产品决定",
+      "supersedes": "路线图 C4 写的是『确认已从盘上移除』,而它没被移除。两边都对,只是路线图没写它已经被治理起来了。",
+      "predicates": [
+        {"kind": "path_exists", "target": "galaxy_gateway/task_router.py", "scope": "", "expected": true}
+      ]
+    },
+    {
+      "id": "acceptance-verdict-surface-exists",
+      "source": "audit/completion_matrix.json::acceptance_verdict (15%, 2026-04-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "最终受理裁决面已经存在(core/system_final_acceptance_verdict.py 等),CI 里 Governance Verdict Gate 是 blocking",
+      "supersedes": "矩阵把该域记为 15% missing,依据是 2026-04-29 的 code-path tracing。四个月过去,那个分数从没重推过 —— 需要人重新推导,这道门不替他算。",
+      "predicates": [
+        {"kind": "path_exists", "target": "core/system_final_acceptance_verdict.py", "scope": "", "expected": true},
+        {"kind": "path_exists", "target": "core/result_truth_acceptance_gate.py", "scope": "", "expected": true}
+      ]
+    }
+  ]
+}
