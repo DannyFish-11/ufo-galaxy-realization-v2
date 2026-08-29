@@ -10,6 +10,7 @@ name: Engineering Guardrails (PR-8)
 #   file-complexity        — flag files that exceed line-count budgets
 #   debt-freeze            — architecture debt detection (Batch PR-1)
 #   legacy-regression-guard — block reintroduction of deleted legacy paths (PR-8)
+#   workflow-yaml          — 工作流文件里 Actions 会拒收而 PyYAML 会放行的写法
 # =============================================================================
 
 on:
@@ -366,3 +367,45 @@ jobs:
         run: |
           python scripts/check_mainline_routing_enforcement.py
           echo "✅ Mainline routing enforcement guard passed."
+
+  # ---------------------------------------------------------------------------
+  # I. 工作流自身 —— Actions 会拒收、而 PyYAML 会放行的那几类写法
+  #
+  # 起因(2026-08-29):dual_repo_reality_audit.yml 同一步里有两个 env:,
+  # 一个在 run: 前、一个在 run: 后。PyYAML 的 safe_load 对重复键是「后者覆盖
+  # 前者」,不报错 —— 所以本地怎么验都是绿的;而 Actions 的解析器**拒收整个
+  # 文件**,那个工作流从 2026-07-31 起每次推送都 startup_failure:0 个 job、
+  # 0 秒、连 name 都读不出来(UI 里显示成文件路径)。整整一个月,一道 blocking
+  # 的门挂在那儿一次没执行过,连 android-protected-reality-audit 那条跨仓证据
+  # 通道也从没被触发。
+  #
+  # 它在每条分支上都红,于是这一条红失去了信号意义 —— 谁看都觉得"它一直这样"。
+  # 这就是本仓一直在防的那个缺陷长在了 CI 上:看起来接上了,其实没有。
+  #
+  # 这道门**不是** Actions 的完整 schema 校验器,也做不成一个;它绿不等于工作流
+  # 一定能起来。脚本会把没覆盖的部分打印出来,别把它读成"全都验过了"。
+  # ---------------------------------------------------------------------------
+  workflow-yaml:
+    name: Workflow YAML (duplicate keys & structure)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyYAML
+        run: pip install PyYAML
+
+      - name: 工作流文件必须是 Actions 也能接受的那种合法
+        run: |
+          python scripts/check_workflow_yaml.py
+
+      - name: 这道门自己得拦得住(用当初没拦住的那个 bug 验它)
+        run: |
+          pip install pytest
+          python -m pytest tests/test_workflow_yaml_gate.py -q

@@ -202,7 +202,12 @@ jobs:
           pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
 
       - name: Validate audit correctness and fail-conservative policy
+        # 这一步只能有**一个** env: —— 曾经有两个(前后各一),PyYAML 的 safe_load
+        # 对重复键是「后者覆盖前者」,所以本地怎么验都是绿的;而 Actions 的解析器
+        # 直接拒收整个文件,于是这个工作流从 2026-07-31 起每次推送都 startup_failure,
+        # 一个 job 都没起过。见 scripts/check_workflow_yaml.py。
         env:
+          PYTHONPATH: ${{ github.workspace }}
           DUAL_RUNTIME_CROSS_REPO_PROTECTED_VERIFICATION: ${{ github.event_name == 'repository_dispatch' && '1' || '0' }}
           DISPATCH_EVIDENCE_JSON: ${{ github.event.client_payload.evidence_json }}
           MANUAL_EVIDENCE_JSON: ${{ inputs.evidence_json }}
@@ -381,5 +386,3 @@ jobs:
                   sys.exit(1)
 
           EOF
-        env:
-          PYTHONPATH: ${{ github.workspace }}

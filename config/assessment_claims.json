@@ -6,7 +6,8 @@
     "FOLLOWUP_IMPLEMENTATION_ROADMAP 把 task_cancel 列为唯一 P0,而它早就实现了。",
     "runtime_closure_audit 的 _KNOWN_RESIDUAL_GAPS 仍列 GAP-512-004 为开着,而 harness 明写已关闭。",
     "路线图那七个『阻塞中的设计问题』里有四个已经不成立。",
-    "同一个缺陷四处独立复现:判据以判据的形式被钉住之后,比没有它更难被质疑。"
+    "同一个缺陷四处独立复现:判据以判据的形式被钉住之后,比没有它更难被质疑。",
+    "2026-08-29 又添一处,而且长在 CI 上:dual_repo_reality_audit.yml 有重复的 env: 键,从 2026-07-31 起每次推送都 startup_failure(0 job/0 秒),一道 blocking 的门一个月没跑过 —— 它在每条分支上都红,于是那条红不再是信号。"
   ],
   "_how_to_use": [
     "这份清单由人写、由人改。scripts/check_assessment_freshness.py 只负责复验,不负责推导。",
@@ -274,6 +275,27 @@
           "kind": "has_production_caller",
           "target": "session_roaming",
           "scope": "galaxy_gateway",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "workflow-yaml-gate-wired",
+      "source": "本次修 dual_repo_reality_audit 的 startup_failure(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "工作流文件的重复键这一类已经有门在查(scripts/check_workflow_yaml.py,接在 Engineering Guardrails 里),并且那道门自己被当初没拦住的 bug 验过。",
+      "supersedes": "",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "scripts/check_workflow_yaml.py",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "tests/test_workflow_yaml_gate.py",
+          "scope": "",
           "expected": true
         }
       ]
