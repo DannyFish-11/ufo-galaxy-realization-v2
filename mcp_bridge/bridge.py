@@ -15,6 +15,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.mcp_protocol import (
+    STATELESS_PROTOCOL_VERSION,
+    attach_protocol_meta,
+    handshake_params,
+    is_method_not_found,
+    negotiated_version,
+)
+
 logger = logging.getLogger("Galaxy.MCPBridge")
 
 
@@ -40,6 +48,8 @@ class MCPBridgeProcess:
         self._pending: Dict[int, asyncio.Future] = {}
         self._reader_task: Optional[asyncio.Task] = None
         self._initialized = False
+        #: 本连接实际生效的协议版本(握手协商回来的,或无握手版本)。
+        self.protocol_version = ""
 
     async def start(self) -> bool:
         """启动子进程并完成 MCP initialize 握手"""
@@ -61,18 +71,31 @@ class MCPBridgeProcess:
         # 启动读取循环
         self._reader_task = asyncio.create_task(self._read_loop())
 
-        # 发送 initialize
+        # 发送 initialize。协议版本/客户端身份统一取自 core.mcp_protocol —— 此前这里
+        # 硬写的是 2024-11-05(最初那一版),与 core/mcp_loader 的 2025-11-25 对不上。
         try:
             resp = await asyncio.wait_for(
-                self._send_request("initialize", {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "galaxy", "version": "2.0"},
-                }),
+                self._send_request("initialize", handshake_params()),
                 timeout=self.spec.startup_timeout,
             )
+            # 2026-07-28 删掉了 initialize(SEP-2575):新版服务端回 -32601。那不是
+            # 失败 —— 每个请求的 _meta 已经带了版本/身份/能力,直接可以干活。
+            if is_method_not_found(resp):
+                self._initialized = True
+                self.protocol_version = STATELESS_PROTOCOL_VERSION
+                logger.info(
+                    f"MCP bridge '{self.spec.server_id}' 没有 initialize —— "
+                    f"按 {STATELESS_PROTOCOL_VERSION} 的无握手形态继续"
+                )
+                return True
             if resp and not resp.get("error"):
                 self._initialized = True
+                # 读回服务端**实际选定**的版本(此前从来没读过)。
+                self.protocol_version, warning = negotiated_version(
+                    resp.get("result"), server_id=self.spec.server_id
+                )
+                if warning:
+                    logger.warning(warning)
                 logger.info(f"MCP bridge '{self.spec.server_id}' initialized successfully")
                 return True
             else:
@@ -123,7 +146,9 @@ class MCPBridgeProcess:
             "jsonrpc": "2.0",
             "id": req_id,
             "method": method,
-            "params": params,
+            # 2026-07-28 要求每个请求自带协议版本/客户端身份/能力(握手没了)。
+            # 老服务端会忽略整个 _meta,所以这一句对新旧都安全。
+            "params": attach_protocol_meta(params),
         }
 
         fut: asyncio.Future = asyncio.get_running_loop().create_future()

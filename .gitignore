@@ -140,16 +140,22 @@ chroma/
 # Local unified configuration authority (PR-3)
 # Real operator config and secrets must not be committed.
 # Commit only the *.example.* templates in runtime/.
-runtime/config.json
-runtime/secrets.env
-runtime/task_allocation_truth.json
-# 主脑选择等本机持久化状态（unified_launcher 启动时写)。漏了这条的后果是:
-# 任何人跑一次 main.py,工作区就多一个未跟踪文件 —— 与上面那句"runtime/ 里
-# 只提交 *.example.* 模板"的既定意图矛盾。实跑一次启动才发现的。
-runtime/model_state.json
-# 每次启动重写的结构化启动记录（launcher/ui.py 的渲染器 B）。
-# 它是运行时产物,不是配置 —— 入库会让每跑一次仓库就脏。
-runtime/startup.json
+#
+# 这里原先是**逐个文件枚举**(config.json / secrets.env /
+# task_allocation_truth.json / model_state.json / startup.json),而且旁边留着
+# 一条注释记录它已经漏过一次:"漏了这条的后果是,任何人跑一次 main.py 工作区就
+# 多一个未跟踪文件 —— 与'只提交 *.example.* 模板'的既定意图矛盾。实跑一次启动
+# 才发现的。"
+#
+# 它又漏了第五个:core/mcp_tool_pins.py 写的 runtime/mcp_tool_pins.json。那个
+# 文件尤其不能入库 —— 它是**工具指纹的 TOFU 信任存储**,提交上去等于拿某台机器
+# 上跑过什么给信任库播种。(这次就是差点被自动化提示提交进来才发现的。)
+#
+# 所以不再往下加行,改成**一条规则**:runtime/ 下默认全忽略,只放行明确要入库的
+# 模板与占位。下一个运行时产物出现时不必再改这里。
+runtime/*
+!runtime/.gitkeep
+!runtime/*.example.*
 data/runtime/delegated_runtime_execution_tracker.json
 learning_data.db
 audit/wiring_report_*.json

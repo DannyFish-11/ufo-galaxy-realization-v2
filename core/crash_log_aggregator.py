@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 from typing import Iterator, NamedTuple
 
+from core.fs_walk import walk_tree_files
 from core.log_paths import crash_dir, crash_latest_path, log_root
 
 __all__ = [
@@ -231,9 +232,8 @@ def scan_source(path: Path, root: Path | None = None) -> list[CrashBlock]:
 def _iter_source_logs(root: Path) -> Iterator[Path]:
     """遍历日志根下所有 ``*.log``,跳过崩溃专区自身(避免自我递归聚合)。"""
     crashes = crash_dir().resolve()
-    for path in sorted(root.rglob("*.log")):
-        if not path.is_file():
-            continue
+    # 日志目录一直在被写入与轮转,遍历途中子目录消失是常态而不是异常。
+    for path in walk_tree_files(root, "*.log"):
         if crashes in path.resolve().parents or path.resolve().parent == crashes:
             continue
         yield path
