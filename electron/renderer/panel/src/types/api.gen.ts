@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 396 条 · 组件 schema 103 个
+// 路径 397 条 · 组件 schema 103 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -82,6 +82,7 @@ export type ApiPath =
   | "/api/v1/command/unified/{request_id}/status"
   | "/api/v1/command/{request_id}"
   | "/api/v1/command/{request_id}/status"
+  | "/api/v1/compat/usage"
   | "/api/v1/computer-use/status"
   | "/api/v1/computer-use/task"
   | "/api/v1/concurrency/status"
@@ -482,6 +483,7 @@ export const API_METHODS = {
   "/api/v1/command/unified/{request_id}/status": ["get"],
   "/api/v1/command/{request_id}": ["delete", "get"],
   "/api/v1/command/{request_id}/status": ["get"],
+  "/api/v1/compat/usage": ["get"],
   "/api/v1/computer-use/status": ["get"],
   "/api/v1/computer-use/task": ["post"],
   "/api/v1/concurrency/status": ["get"],

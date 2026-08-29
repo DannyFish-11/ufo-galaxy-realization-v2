@@ -589,6 +589,34 @@ class CanonicalTask:
             self.task_id,
             new_state.value,
         )
+
+        # ── 终态到了就拆掉 WebRTC 会话绑定 ──────────────────────────────
+        #
+        # 挂在这里而不是各个"任务做完了"的调用点上:advance_lifecycle 是任务生命周期
+        # **唯一的**转移处,挂在这里就不可能漏掉某一条路径。散到调用点上必然漏一条,
+        # 而漏掉的那条的表现是:任务早就结束了,一个 WebRTC 会话还绑着它。
+        #
+        # 终态集合读 webrtc_task_lifecycle.TERMINAL_TASK_LIFECYCLES,不在这里重列
+        # ——注意 DEGRADED 不在其中:传输降级但仍可用时任务转 DEGRADED 继续跑,
+        # 这时候拆会话正好是错的。
+        #
+        # 幂等:teardown_binding_on_task_terminal 对"没有绑定"是安全空操作,所以
+        # 绝大多数任务(没用 WebRTC 的)走到这里什么都不会发生。
+        try:
+            from core.webrtc_task_lifecycle import (  # noqa: PLC0415
+                TERMINAL_TASK_LIFECYCLES,
+                teardown_binding_on_task_terminal,
+            )
+
+            if new_state.value in TERMINAL_TASK_LIFECYCLES:
+                teardown_binding_on_task_terminal(self.task_id, new_state.value)
+        except Exception as _wrtc_exc:  # noqa: BLE001 — 拆不掉不该影响任务状态推进
+            logger.debug(
+                "advance_lifecycle: WebRTC 绑定拆除跳过 task_id=%s: %s",
+                self.task_id,
+                _wrtc_exc,
+            )
+
         return self
 
     # ── Projection ────────────────────────────────────────────────────────

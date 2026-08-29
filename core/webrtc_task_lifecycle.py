@@ -117,6 +117,7 @@ __all__ = [
     "WEBRTC_TASK_LIFECYCLE_AUTHORITY",
     "WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY",
     "TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY",
+    "TERMINAL_TASK_LIFECYCLES",
     "TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY",
     "DEGRADED_TRANSPORT_YIELDS_DEGRADED_TASK_POLICY",
     "FAILED_TRANSPORT_YIELDS_FAILED_TASK_POLICY",
@@ -170,6 +171,15 @@ TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY: str = (
     "lifecycle action.  No other code path may advance task lifecycle in "
     "response to transport state changes."
 )
+
+#: 会触发会话拆除的任务终态。**唯一一份** —— 此前它是某个函数体里的一个局部集合,
+#: 而策略哨兵 TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY 又用散文重复写了一遍。
+#: 调用方(CanonicalTask.advance_lifecycle)要判"这是不是终态",必须读这一份,
+#: 不能自己再列一遍 —— 两份清单加一档时必漏改一处。
+#:
+#: 注意 ``degraded`` **不在**其中:按本模块的降级续跑约定,传输降级但仍可用时任务
+#: 转 DEGRADED 继续,会话不该被拆掉。
+TERMINAL_TASK_LIFECYCLES: frozenset = frozenset({"completed", "failed", "cancelled"})
 
 TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY: str = (
     "POLICY::TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN: when a task reaches "
@@ -791,15 +801,13 @@ def classify_transport_lifecycle_action(
     | unknown               | any                 | no_change                 |
     +-----------------------+---------------------+---------------------------+
     """
-    _TERMINAL_LIFECYCLES = {"completed", "failed", "cancelled"}
-
     # Normalise transport state
     if isinstance(transport_state, str):
         transport_state = WebRTCTransportState.from_string(transport_state)
 
     # Normalise task lifecycle
     task_lc = task_lifecycle.lower() if isinstance(task_lifecycle, str) else str(task_lifecycle)
-    is_terminal = task_lc in _TERMINAL_LIFECYCLES
+    is_terminal = task_lc in TERMINAL_TASK_LIFECYCLES
 
     if transport_state == WebRTCTransportState.unknown:
         return WebRTCTaskLifecycleAction.no_change

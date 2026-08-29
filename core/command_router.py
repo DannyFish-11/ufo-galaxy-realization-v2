@@ -1919,6 +1919,44 @@ class CommandRouter:
                     "latency_ms": round(_wrtc_elapsed, 1),
                 }
 
+            # ── 把会话绑到这个任务上 ────────────────────────────────────
+            #
+            # 在这一句之前,core/webrtc_task_lifecycle.py 那 1041 行(绑定记录、
+            # 传输状态→生命周期动作、终态拆除)**在生产代码里一个调用点都没有**:
+            #   bind_webrtc_session_to_task        生产调用点 0
+            #   teardown_binding_on_task_terminal  生产调用点 0
+            #
+            # 于是 WebRTCSessionManager._notify_transport_state 每次都在第一步返回
+            # ——它先 get_webrtc_task_binding(task_id),拿到 None,打一条
+            # "no binding found; transport state will not be propagated" 就结束。
+            # 整条链路断在"绑定从来没被建立过"这一步,而且它自己把这件事写进了日志。
+            #
+            # 绑定收在这里而不是 webrtc_proxy 里:proxy 只知道设备,不知道任务;
+            # 而绑定的两端恰恰是 task_id 与 device_id,只有这一层同时握着两者。
+            #
+            # webrtc_session_id 取 device_id:webrtc_proxy 的会话表
+            # (_webrtc_task_sessions)本来就是按设备键的,设备就是这个系统里
+            # WebRTC 会话的身份。另编一个 UUID 会造出一个跟任何东西都对不上的 id。
+            if _webrtc_task_trigger_result is not None and _webrtc_task_trigger_result.get("ready"):
+                try:
+                    from core.webrtc_task_lifecycle import bind_webrtc_session_to_task  # noqa: PLC0415
+
+                    bind_webrtc_session_to_task(
+                        task_id=str(envelope.task_id or ""),
+                        webrtc_session_id=str(_wrtc_device or ""),
+                        device_id=str(_wrtc_device or ""),
+                        metadata={"trace_id": envelope.trace_id or "", "bound_by": "command_router"},
+                    )
+                except Exception as _bind_exc:  # noqa: BLE001 — 绑不上不该拦住已经就绪的任务
+                    logger.warning(
+                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
+                        "WebRTC 会话绑定失败 task_id=%s device=%s error=%s "
+                        "—— 传输状态变化将无法推进任务生命周期",
+                        envelope.task_id,
+                        _wrtc_device,
+                        _bind_exc,
+                    )
+
             # Stamp webrtc_task_trigger result into envelope metadata so
             # downstream components can see what happened.
             if _webrtc_task_trigger_result is not None:

@@ -139,6 +139,20 @@ async def _handle_android_ws(
         ingress_path,
         ingress_classification,
     )
+
+    # 兼容入口用量记账 —— 记在这个**汇合点**上,不在每条路由里各写一遍。
+    # 上面那段 docstring 已经写明所有入口(规范的与兼容的)都收敛到这个处理器,
+    # "so message handling and ingress accounting cannot diverge per route";
+    # 用量记账同理:分散到各路由里必然漏掉一条,而漏掉的那条正好会显示成"没人用"。
+    #
+    # 这是 Q6(旧协议退役日期)的输入 —— 那个决定一直定不了,不是缺决心,是缺数据。
+    if ingress_classification == "compat":
+        try:
+            from core.compat_usage import record_use  # noqa: PLC0415
+
+            record_use(ingress_path, client_hint=str(device_id or "")[:40])
+        except Exception:  # noqa: BLE001 — 记账失败不该打断一条连接
+            pass
     try:
         while True:
             message = await websocket.receive_json()
