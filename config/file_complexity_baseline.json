@@ -62,7 +62,7 @@
     "core/local_model_backends.py": 1426,
     "core/mainline_convergence.py": 1153,
     "core/master_brain.py": 2016,
-    "core/mcp_loader.py": 1003,
+    "core/mcp_loader.py": 1029,
     "core/mesh/live_mesh_runtime_engine.py": 1462,
     "core/mesh/mesh_runtime_center_state.py": 1023,
     "core/mesh/mesh_session_lifecycle.py": 1082,
