@@ -240,6 +240,12 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_LLAMA_SERVER_BIN',
     'GALAXY_LOCAL_OPENAI_URL', 'GALAXY_LOCAL_OPENAI_MODEL', 'GALAXY_LOCAL_OPENAI_SERVES',
     'GALAXY_LOCAL_OPENAI_KEY',
+    // 推理位/独显那条泳道。本地可以同时有**两台** OpenAI 兼容服务(感知位在核显、
+    // 推理位在独显),multi_llm_router._LOCAL_OPENAI_LANES 早就按 env_prefix 认这
+    // 四个键了 —— 缺的只是面板上没有地方填。结果是:感知位那台能在界面里配,
+    // 推理位那台只能改 .env,而双模型档本来就是要两台一起用。
+    'GALAXY_REASONING_OPENAI_URL', 'GALAXY_REASONING_OPENAI_MODEL',
+    'GALAXY_REASONING_OPENAI_SERVES', 'GALAXY_REASONING_OPENAI_KEY',
     // 密钥项。后端 classify_key() 按 _API_KEY 后缀判为 secret,会走 set_secret() 落
     // runtime/secrets.env,不明文进 .env —— 所以在这里列出来是安全的。
     'GALAXY_REALTIME_API_KEY',

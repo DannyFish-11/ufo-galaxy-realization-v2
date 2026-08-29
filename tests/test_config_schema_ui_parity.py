@@ -150,3 +150,110 @@ class TestPostConfigEndToEnd:
         client = self._client(tmp_path, monkeypatch)
         resp = client.post("/api/config", json={"config": {"TOTALLY_MADE_UP_KEY_XYZ": "x"}})
         assert resp.status_code == 400
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 反方向:CONFIG_SCHEMA → 面板
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestEverySchemaKeyIsReachableOrDeclaredAnAlias:
+    """上面那一层查的是 **面板 → CONFIG_SCHEMA**(面板引用的键必须登记过)。
+    这一层查**反方向**,而缺的一直是这个方向。
+
+    没有它会发生什么(实际发生过)
+    ----------------------------
+    2026-08-29 盘点时,331 个配置项里有 8 个既不在面板上、也没被说明为什么不在。
+    逐条查完是三种完全不同的东西:
+
+    * **3 个是真别名**(``GEMINI_API_KEY`` / ``DASHSCOPE_API_KEY`` /
+      ``SONAR_API_KEY``)—— 它们在 ``PROVIDER_REGISTRY`` 的 ``alt_env`` 里声明过,
+      规范键已经在面板上。给别名再开一个输入框,等于同一个设置有两个框,
+      填哪个都对但看起来像两件事。**不在面板上是对的。**
+    * **4 个是真缺口**(``GALAXY_REASONING_OPENAI_*``)—— 推理位/独显那条泳道,
+      ``multi_llm_router._LOCAL_OPENAI_LANES`` 早就按 env_prefix 认它们了,
+      只是面板上没有地方填。感知位那台能在界面里配、推理位那台只能改 .env,
+      而双模型档本来就是两台一起用。**已补。**
+    * **1 个是死键**(``VLLM_URL``)—— 登记着、在明文回显白名单里、描述说是
+      ``LOCAL_VLLM_URL`` 的别名,但**代码里零读取**。设了等于没设,而界面上
+      看起来是可配的。这比"配不了"更糟:它谎称自己有用。**已删。**
+
+    这三种混在一起时,盘点结果只是"8 个配不了",看不出哪个该补、哪个该删、
+    哪个本来就该缺。这条判据把它们分开。
+
+    别名从哪儿来
+    ------------
+    ``PROVIDER_REGISTRY[*].alt_env`` —— **不在这里另攒一份别名表**。另攒一份的
+    表现是:registry 里加一个别名,这道门当场红,然后有人把它加进本地清单里
+    "修好",于是两份清单开始各自漂移。
+    """
+
+    @staticmethod
+    def _alias_keys() -> set[str]:
+        from core.multi_llm_router import PROVIDER_REGISTRY
+
+        return {alias for spec in PROVIDER_REGISTRY for alias in (spec.get("alt_env") or [])}
+
+    @staticmethod
+    def _panel_keys() -> set[str]:
+        from core.routes.config_schema_registry import CONFIG_SCHEMA
+
+        panel_src = "\n".join(
+            p.read_text(encoding="utf-8") for p in (REPO_ROOT / "electron/renderer/panel/src").rglob("*.ts*")
+        )
+        return {k for k in CONFIG_SCHEMA if re.search(r"['\"]" + re.escape(k) + r"['\"]", panel_src)}
+
+    def test_no_schema_key_is_silently_unreachable(self):
+        from core.routes.config_schema_registry import CONFIG_SCHEMA
+
+        unaccounted = sorted(set(CONFIG_SCHEMA) - self._panel_keys() - self._alias_keys())
+        assert not unaccounted, (
+            "这些配置项既不在面板上、也不是 PROVIDER_REGISTRY 声明的别名 —— "
+            "用户改不了它们,而 CONFIG_SCHEMA 让它们看起来是可配的。"
+            "该补面板就补,该删就删(零读取的死键),是别名就在 alt_env 里声明:"
+            f"{unaccounted}"
+        )
+
+    def test_the_declared_aliases_are_actually_read(self):
+        """别名之所以可以不上面板,前提是**它真的被读**。
+
+        一个既不上面板、又没人读的键,挂着 alt_env 的名义就成了合法的死键 ——
+        那正好绕过了上面那条判据。
+        """
+        import subprocess
+
+        for alias in sorted(self._alias_keys()):
+            hits = subprocess.run(
+                ["grep", "-rl", alias, "--include=*.py", "core/", "galaxy_gateway/"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            assert hits, f"{alias} 声明为别名但代码里没有任何一处提到它"
+
+    def test_the_reasoning_lane_is_configurable_from_the_panel(self):
+        """回归:推理位那条泳道曾经只能改 .env。
+
+        钉住四个键而不是"至少一个" —— 少一个 SERVES,槽位解析就说不出这台服务
+        伺候的是目录里哪个型号。
+        """
+        panel = self._panel_keys()
+        for key in (
+            "GALAXY_REASONING_OPENAI_URL",
+            "GALAXY_REASONING_OPENAI_MODEL",
+            "GALAXY_REASONING_OPENAI_SERVES",
+            "GALAXY_REASONING_OPENAI_KEY",
+        ):
+            assert key in panel, f"{key} 不在面板上 —— 推理位那台服务又只能改 .env 了"
+
+    def test_the_dead_key_stays_dead(self):
+        """回归:``VLLM_URL`` 零读取,已从 CONFIG_SCHEMA 删除。
+
+        ``LOCAL_VLLM_URL`` 是真的那个,留着。这条挡的是"看着像少了个别名,顺手补回去"。
+        """
+        from core.routes.config import _NON_SECRET_MODEL_KEYS
+        from core.routes.config_schema_registry import CONFIG_SCHEMA
+
+        assert "VLLM_URL" not in CONFIG_SCHEMA
+        assert "VLLM_URL" not in _NON_SECRET_MODEL_KEYS
+        assert "LOCAL_VLLM_URL" in CONFIG_SCHEMA
