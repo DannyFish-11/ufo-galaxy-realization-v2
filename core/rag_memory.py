@@ -55,7 +55,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.RAGMemory")
 
@@ -120,6 +120,10 @@ class KnowledgeChunk:
         relevance_score — 与查询的相关性评分（0.0–1.0）
         tags           — 语义标签（用于过滤和检索增强）
         metadata       — 来源后端的扩展元数据
+
+    ``chunk_id`` 是**回读把手**：它必须一路活到渲染进 prompt 的那段文字里
+    （见 :meth:`RAGMemory.format_rag_context`），否则模型看到一段被截断的知识
+    却没有任何办法把剩下的取回来 —— 那正是这个字段存在的理由。
     """
 
     chunk_id: str = ""
@@ -400,16 +404,168 @@ class RAGMemory:
 
         return chunks[:top_k]
 
+    #: 单条知识渲染进 prompt 的字符预算。超出部分不会消失，只是不在这一屏里
+    #: —— 用 :meth:`read_knowledge`（工具名 ``knowledge__read``）按 chunk_id 取回。
+    RAG_CONTEXT_PREVIEW_CHARS = 500
+
+    #: ``read_knowledge`` 单次返回的字符上限。回读的意义是把够不着的内容取回来，
+    #: 不是把整篇塞进上下文 —— 所以它自己也分页，并如实报还剩多少。
+    READ_KNOWLEDGE_PAGE_CHARS = 4000
+
+    def read_knowledge(
+        self,
+        chunk_id: str,
+        offset: int = 0,
+        limit: int = 0,
+    ) -> Dict[str, Any]:
+        """按 ``chunk_id`` 把知识条目的**原文**取回来（检索的逆向路径）。
+
+        为什么需要它
+        ------------
+        检索给的是**候选**：一段按相似度排出来的文本 + 一个分数。而
+        :mod:`core.semantic_anchoring` 定的规矩是——会改变控制流的读取不能从
+        检索到的散文里反解结构。可当模型确实需要看这条知识的**全文**时，此前
+        它唯一能做的是换个说法再检索一次，然后祈祷这次命中的片段包含所需内容。
+
+        本方法给的是另一条路：**从候选回到证据**。``chunk_id`` 是把手，
+        它在 :meth:`format_rag_context` 渲染出的每一段里都在。
+
+        查询顺序与 :meth:`query_knowledge` 一致
+        ----------------------------------------
+        1. ``Node_105_UnifiedKnowledgeBase`` —— 主后端，按 id 直查（``knowledge_entries``
+           就是 ``Dict[str, KnowledgeEntry]``，全文原样留着）；
+        2. 本地经验日志 —— 保底后端。``ingest_knowledge`` 无论 Node_105 成没成功
+           都会往这里同步写一份（``final_output`` 即全文），所以主后端不在时仍能回读。
+
+        两处都找不到时**明说找不到**，不返回空串冒充"这条是空的"——那会让模型
+        以为自己读到了全部。
+
+        Args:
+            chunk_id: 检索结果里的条目 ID（``KnowledgeChunk.chunk_id``）。
+            offset:   从原文的第几个字符开始读；负数按 0 处理。
+            limit:    本次最多读多少字符；``<=0`` 时用 [READ_KNOWLEDGE_PAGE_CHARS]。
+
+        Returns:
+            ``{"success": bool, "chunk_id", "content", "offset", "returned_chars",
+            "total_chars", "remaining_chars", "has_more", "source", "source_type",
+            "backend"}``；失败时带 ``"error"``。
+        """
+        if not chunk_id:
+            return {"success": False, "error": "read_knowledge requires a non-empty chunk_id"}
+
+        offset = max(0, int(offset or 0))
+        limit = int(limit or 0)
+        if limit <= 0:
+            limit = self.READ_KNOWLEDGE_PAGE_CHARS
+
+        full_text = ""
+        source = ""
+        source_type = ""
+        backend = ""
+
+        # ── 1. Node_105 —— 主后端，按 id 直查 ────────────────────────────
+        try:
+            from nodes.Node_105_UnifiedKnowledgeBase.main import kb as node105_kb
+
+            entry = getattr(node105_kb, "knowledge_entries", {}).get(chunk_id)
+            if entry is not None:
+                full_text = getattr(entry, "content", "") or ""
+                source = getattr(entry, "source", "") or "Node_105"
+                source_type = getattr(entry, "source_type", "") or "node"
+                backend = "Node_105"
+        except Exception as exc:  # noqa: BLE001 — 主后端不可用不该让回读整体失败
+            logger.debug(f"read_knowledge: Node_105 lookup failed: {exc}")
+
+        # ── 2. 本地经验日志 —— 保底后端 ──────────────────────────────────
+        if not full_text:
+            for exp in reversed(self._experiences):
+                if getattr(exp, "experience_id", "") != chunk_id:
+                    continue
+                full_text = getattr(exp, "final_output", "") or ""
+                source = getattr(exp, "agent_name", "") or "experience"
+                source_type = "experience"
+                backend = "experience_log"
+                break
+
+        if not full_text:
+            return {
+                "success": False,
+                "chunk_id": chunk_id,
+                "error": (
+                    f"知识条目 '{chunk_id}' 在 Node_105 与本地经验日志中都没有找到。"
+                    "它可能来自一个不支持按 id 回读的后端，或者已被清理。"
+                ),
+            }
+
+        total = len(full_text)
+        if offset >= total:
+            window = ""
+        else:
+            window = full_text[offset : offset + limit]
+        consumed = offset + len(window)
+        remaining = max(0, total - consumed)
+
+        return {
+            "success": True,
+            "chunk_id": chunk_id,
+            "content": window,
+            "offset": offset,
+            "returned_chars": len(window),
+            "total_chars": total,
+            "remaining_chars": remaining,
+            "has_more": remaining > 0,
+            "next_offset": consumed if remaining > 0 else None,
+            "source": source,
+            "source_type": source_type,
+            "backend": backend,
+        }
+
     def format_rag_context(self, chunks: List[KnowledgeChunk]) -> str:
-        """将知识片段格式化为 RAG Context"""
+        """将知识片段格式化为 RAG Context。
+
+        **截断必须留下把手** —— 这里修的是一个真实缺陷：此前这段代码是
+        ``chunk.content[:500]``，于是超过 500 字符的知识被**静默切掉**：
+
+        * 没有任何标记，模型察觉不到自己看的是残篇；
+        * ``chunk_id`` 没有渲染出来，就算有回读工具也没有把手；
+        * 而且根本没有回读工具 —— 剩下的部分在存储里好好的，模型够不着。
+
+        这与本仓会话侧的保证正好相反：会话历史压缩后可以用
+        ``context__query_memory`` 按段号把原文查回来（压缩是可逆的）。
+        知识侧却是不可逆的截断。同一个系统里，两条链对"截断"给的承诺不一致。
+
+        所以这里三件事一起做：**标出被截**、**给出把手**、**说明怎么取回**。
+        剩余字符数也一并给出 —— 模型据此判断值不值得再花一次调用。
+        """
         if not chunks:
             return ""
 
+        limit = self.RAG_CONTEXT_PREVIEW_CHARS
         sections = []
         for i, chunk in enumerate(chunks):
-            sections.append(
-                f"[{i+1}] (source: {chunk.source}, score: {chunk.relevance_score:.2f})\n" f"{chunk.content[:500]}"
-            )
+            body = chunk.content or ""
+            header = f"[{i+1}] (source: {chunk.source}, score: {chunk.relevance_score:.2f}"
+            if chunk.chunk_id:
+                header += f", id: {chunk.chunk_id}"
+            header += ")"
+
+            if len(body) > limit:
+                remaining = len(body) - limit
+                body_text = body[:limit]
+                if chunk.chunk_id:
+                    tail = (
+                        f"\n… [已截断，还有 {remaining} 字符。"
+                        f'用 knowledge__read(chunk_id="{chunk.chunk_id}") 取回全文]'
+                    )
+                else:
+                    # 没有 id 就取不回来 —— 这一点必须说出来，而不是让模型
+                    # 以为自己看到的是全部。
+                    tail = f"\n… [已截断，还有 {remaining} 字符；该来源未提供可回读的 id]"
+                body_text += tail
+            else:
+                body_text = body
+
+            sections.append(f"{header}\n{body_text}")
 
         return "\n\nRELEVANT KNOWLEDGE:\n" + "\n\n".join(sections) + "\n"
 
