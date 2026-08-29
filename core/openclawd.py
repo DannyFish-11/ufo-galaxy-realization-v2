@@ -429,6 +429,11 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
             "description": (
                 "通过受控执行路径应用已计划的补丁，推进 PatchProposal 到 APPLY 阶段。"
                 "安全门控：仅处于 PLAN_PATCH 阶段的提案才允许应用，防止未经规划的直接代码变更。"
+                "\n注意本工具只推进阶段并记录授权与变更事实，真正的文件改动由你用别的工具完成。"
+                "因此当补丁已改完、验证也已经跑过（结果你已经知道了），可以把 "
+                "engineer__apply / engineer__validate / engineer__record 三个调用**放在同一轮里**"
+                "一次发出——它们会按顺序执行，阶段门照常逐个校验，省下两次往返。"
+                "但如果验证还没跑，就不要提前发 engineer__validate：那等于在不知道结果时先把结论写下来。"
             ),
             "parameters": {
                 "type": "object",
@@ -447,8 +452,10 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
         "function": {
             "name": "engineer__validate",
             "description": (
-                "对已应用的补丁运行验证检查，推进 PatchProposal 到 VALIDATE 阶段。"
-                "记录验证结果（通过/失败）和验证说明。"
+                "记录验证结果（通过/失败）和验证说明，推进 PatchProposal 到 VALIDATE 阶段。"
+                "\n本工具**不替你跑验证**——它只登记你已经得到的结果。验证本身用别的工具跑"
+                "（跑测试、跑检查），拿到结果之后再调本工具如实登记。"
+                "已经拿到结果时，本调用可与 engineer__apply / engineer__record 放在同一轮里一次发出。"
             ),
             "parameters": {
                 "type": "object",
@@ -478,6 +485,7 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
                 "将修复结果记录到统一知识库（Knowledge Core），推进 PatchProposal 到 RECORD_OUTCOME 阶段。"
                 "使用 RAGMemory.ingest_knowledge 写入，source_type='engineering'，"
                 "与其他知识共享同一 RAG 检索流水线，不创建独立的修复专用知识孤岛。"
+                "\n本调用不含任何判断，可与 engineer__apply / engineer__validate 放在同一轮里一次发出。"
             ),
             "parameters": {
                 "type": "object",
@@ -632,6 +640,38 @@ _MEMORY_BUILTIN_TOOLS: List[Dict] = [
                     },
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "knowledge__read",
+            "description": (
+                "按 id 把某条知识的**原文**取回来。检索(memory__recall / academic__recall "
+                "以及自动注入的 RELEVANT KNOWLEDGE)给的是候选:一段按相似度排出来的文本 + "
+                "一个分数,而且超长时只渲染前一段。看到 [已截断,还有 N 字符] 时,用那段文字"
+                "里给出的 id 调用本工具把剩下的读回来 —— 不要靠换个说法再检索一次去碰运气,"
+                "那既不保证命中同一条,也读不到这一条的其余部分。"
+                "内容很长时本工具也分页:按返回的 next_offset 继续读。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chunk_id": {
+                        "type": "string",
+                        "description": "检索结果里给出的条目 id(渲染为 'id: xxx')",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "从原文第几个字符开始读,默认 0;续读时填上一次返回的 next_offset",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "本次最多读多少字符,默认 4000",
+                    },
+                },
+                "required": ["chunk_id"],
             },
         },
     },
@@ -7265,6 +7305,7 @@ class OpenClawd:
         # 即死(inline 处理器永远轮不到),memory 是新加入的同族。
         _INLINE_ONLY_PREFIXES = (
             "memory__",
+            "knowledge__",
             "academic__",
             "engineer__",
             "resource__",
@@ -7506,6 +7547,11 @@ class OpenClawd:
                 action = tool_name[len("memory__") :]
                 return await self._dispatch_memory_tool(action, arguments)
 
+            elif tool_name.startswith("knowledge__"):
+                # 知识回读(检索的逆向路径): knowledge__read
+                action = tool_name[len("knowledge__") :]
+                return await self._dispatch_knowledge_tool(action, arguments)
+
             elif tool_name.startswith("academic__"):
                 # Academic system resource tools: academic__search, academic__ingest, academic__recall
                 action = tool_name[10:]  # strip "academic__"
@@ -7652,6 +7698,51 @@ class OpenClawd:
     # ========================================================================
     # Academic System Resource Tools — academic__search / __ingest / __recall
     # ========================================================================
+
+    async def _dispatch_knowledge_tool(self, action: str, arguments: dict) -> dict:
+        """知识回读工具执行器: ``knowledge__read``。
+
+        这是检索的**逆向路径**。检索(``memory__recall`` / ``academic__recall`` /
+        自动注入的 RELEVANT KNOWLEDGE)返回的是按相似度排序的候选,而且超长的条目
+        在渲染进 prompt 时只保留前一段。此前那一段是**静默截断**的:没有标记、
+        没有把手、也没有任何办法把剩下的取回来——模型能做的只有换个说法再检索一次,
+        既不保证命中同一条,也读不到这一条的其余部分。
+
+        本工具按 ``chunk_id`` 直接把原文取回来,并分页(``next_offset`` 续读),
+        与会话侧 ``context__query_memory`` 按段号回读原文是同一个保证,只是另一条轴。
+
+        ``read_knowledge`` 是同步实现(命中的是内存字典或本地日志),走 ``to_thread``
+        不阻塞事件循环。
+        """
+        if action != "read":
+            return {
+                "success": False,
+                "error": f"Unknown knowledge action: '{action}'. Valid actions: read.",
+            }
+
+        chunk_id = str(arguments.get("chunk_id") or "").strip()
+        if not chunk_id:
+            return {"success": False, "error": "knowledge__read requires 'chunk_id' argument"}
+
+        try:
+            offset = int(arguments.get("offset") or 0)
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = int(arguments.get("limit") or 0)
+        except (TypeError, ValueError):
+            limit = 0
+
+        try:
+            import asyncio
+
+            from core.rag_memory import get_rag_memory
+
+            rag = get_rag_memory()
+            return await asyncio.to_thread(rag.read_knowledge, chunk_id, offset, limit)
+        except Exception as exc:  # noqa: BLE001 — 回读失败不该打断对话
+            logger.warning("knowledge__read 回读失败: %s", exc)
+            return {"success": False, "chunk_id": chunk_id, "error": str(exc)}
 
     async def _dispatch_memory_tool(self, action: str, arguments: dict) -> dict:
         """记忆召回工具执行器: memory__recall。
