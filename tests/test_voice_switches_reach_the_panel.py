@@ -176,14 +176,36 @@ def _extract_config_reads() -> dict[str, list[str]]:
 
 
 def _extract_settings_tab_keys() -> set[str]:
-    """从 SettingsTab.tsx 的 CONFIG_KEYS 字典字面量里取出所有 key。"""
+    """从 SettingsTab.tsx 的 KEY_ORDER_HINT 里取出所有 key。
+
+    这份清单**不再是分组的定义**(2026-08-30 起分组由 /api/config/all 返回的
+    category 现算),只是同类内的顺序提示。但它仍然值得查一遍:里面写错一个键名,
+    那个键就会掉到字母序末尾而不报错。
+    """
     src = SETTINGS_TAB.read_text(encoding="utf-8")
-    start = src.index("const CONFIG_KEYS")
+    start = src.index("const KEY_ORDER_HINT")
     end = src.index("\n};", start)
     block = src[start:end]
     # 去掉注释行:注释里会提到 CONFIG_SCHEMA 等大写标识符,不是配置键。
     body = "\n".join(ln for ln in block.split("\n") if not ln.strip().startswith("//"))
     return set(re.findall(r"'([A-Z][A-Z0-9_]*)'", body))
+
+
+def _extract_decorated_categories() -> set[str]:
+    """CATEGORIES 里有显示装饰(标签/图标)的分类。"""
+    src = SETTINGS_TAB.read_text(encoding="utf-8")
+    start = src.index("const CATEGORIES")
+    end = src.index("\n];", start)
+    return set(re.findall(r"key:\s*'([a-z_]+)'", src[start:end]))
+
+
+def _extract_delegated_categories() -> set[str]:
+    """显式声明「由别的 tab 拥有」的分类。"""
+    src = SETTINGS_TAB.read_text(encoding="utf-8")
+    start = src.index("const DELEGATED_CATEGORIES")
+    end = src.index("]);", start)
+    body = "\n".join(ln for ln in src[start:end].split("\n") if not ln.strip().startswith("//"))
+    return set(re.findall(r"'([a-z_]+)'", body))
 
 
 class TestTheModuleScopeIsDerivedNotHandWritten:
@@ -386,18 +408,69 @@ class TestRealtimeKeyRoutesToSecretStore:
 
 
 class TestEveryVoiceSwitchIsRegisteredFrontend:
-    def test_every_config_read_is_listed_in_the_panel(self):
+    """用户改得了它吗 —— 这条保证在 2026-08-30 换了实现,但**没有变弱**。
+
+    从前:成员关系写在 SettingsTab.tsx 的 CONFIG_KEYS 里,一个键没列进去就在设置页上
+    完全看不见。于是这条测试查的是"列没列"。
+
+    现在:分组由 /api/config/all 返回的 category 现算,列不列只影响排序。所以"可达"
+    这件事改由另一个前提保证 —— **这个键的 category 得有归宿**:要么在 CATEGORIES 里
+    有显示装饰,要么被显式委派给别的 tab。
+
+    新判据比旧的严:旧的只查键在不在清单里,查不出"某个 category 根本没人管"这种情况
+    (那会让整整一类设置项一起消失,而不是漏一个)。
+    """
+
+    def test_every_config_read_has_a_home_in_the_ui(self):
+        from core.routes.config import CONFIG_SCHEMA
+
         found = _extract_config_reads()
-        panel_keys = _extract_settings_tab_keys()
-        missing = {
-            key: mods
-            for key, mods in found.items()
-            if key not in panel_keys and key not in _PENDING_SECRET_ROUTING and key not in _NOT_USER_SETTINGS
-        }
-        assert not missing, (
-            "以下配置键在代码里被读取,但 SettingsTab.tsx 的 CONFIG_KEYS 里没列 —— "
-            f"面板设置页上没有它们的位置,用户只能手改 .env: {missing}"
+        decorated = _extract_decorated_categories()
+        delegated = _extract_delegated_categories()
+        homed = decorated | delegated
+
+        homeless = {}
+        for key, mods in found.items():
+            if key in _PENDING_SECRET_ROUTING or key in _NOT_USER_SETTINGS:
+                continue
+            meta = CONFIG_SCHEMA.get(key)
+            if meta is None:
+                continue  # 由同文件的 test_every_config_read_is_in_config_schema 管
+            cat = meta.get("category", "")
+            if cat not in homed:
+                homeless[key] = (cat, mods)
+        assert not homeless, (
+            "以下配置键的 category 在设置页上没有归宿(既没在 CATEGORIES 里装饰,"
+            f"也没显式委派给别的 tab)—— 它们在界面上不会出现: {homeless}"
         )
+
+    def test_delegated_categories_are_actually_owned_by_that_tab(self):
+        """委派不能是一句空话。
+
+        声明「llm 这一类归 ModelsTab」之后,那些键必须真的在 ModelsTab.tsx 里出现。
+        否则「委派」就成了「藏起来」的好听说法 —— 而这正是本仓最常见的那种失效:
+        看起来有人管,其实没有。
+        """
+        from core.routes.config import CONFIG_SCHEMA
+
+        delegated = _extract_delegated_categories()
+        assert delegated, "一个委派都没有的话,这条测试就成了空转"
+
+        models_tab = SETTINGS_TAB.parent / "ModelsTab.tsx"
+        owner_src = models_tab.read_text(encoding="utf-8") if models_tab.exists() else ""
+        orphans = []
+        for key, meta in CONFIG_SCHEMA.items():
+            if meta.get("category") not in delegated:
+                continue
+            if key in _PENDING_SECRET_ROUTING or key in _NOT_USER_SETTINGS:
+                continue
+            if re.search(r"['\"]" + re.escape(key) + r"['\"]", owner_src):
+                continue
+            # 别名键(描述里写明是另一个键的别名)不必各自出现
+            if "别名" in str(meta.get("description", "")):
+                continue
+            orphans.append(key)
+        assert not orphans, f"这些键声称委派给了 ModelsTab,但那边找不到它们: {orphans}"
 
 
 class TestSchemaEntriesAreHonest:

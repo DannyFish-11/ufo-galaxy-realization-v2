@@ -31,7 +31,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -49,9 +48,9 @@ def _extract_models_tab_keys() -> set[str]:
 
 
 def _extract_settings_tab_keys() -> set[str]:
-    """从 SettingsTab.tsx 的 CONFIG_KEYS 字典字面量里提取所有 key 字符串。"""
+    """从 SettingsTab.tsx 的 KEY_ORDER_HINT 里提取所有 key 字符串(顺序提示,不再是分组定义)。"""
     src = SETTINGS_TAB.read_text(encoding="utf-8")
-    start = src.index("const CONFIG_KEYS")
+    start = src.index("const KEY_ORDER_HINT")
     end = src.index("\n};", start)
     block = src[start:end]
     return set(_SETTINGS_KEY_RE.findall(block))
@@ -87,7 +86,7 @@ class TestSettingsTabKeysExistInConfigSchema:
         ui_keys = _extract_settings_tab_keys()
         assert ui_keys, "未能从 SettingsTab.tsx 解析出任何 key —— 正则可能需要更新"
         missing = sorted(k for k in ui_keys if k not in CONFIG_SCHEMA)
-        assert not missing, f"SettingsTab.tsx 的 CONFIG_KEYS 引用了以下 key,但 CONFIG_SCHEMA 里没有: {missing}"
+        assert not missing, f"SettingsTab.tsx 的 KEY_ORDER_HINT 引用了以下 key,但 CONFIG_SCHEMA 里没有: {missing}"
 
 
 class TestPostConfigEndToEnd:
@@ -195,18 +194,51 @@ class TestEverySchemaKeyIsReachableOrDeclaredAnAlias:
         return {alias for spec in PROVIDER_REGISTRY for alias in (spec.get("alt_env") or [])}
 
     @staticmethod
-    def _panel_keys() -> set[str]:
+    def _reachable_keys() -> set[str]:
+        """用户在界面上够得着的键。
+
+        **这个定义在 2026-08-30 变过。** 从前是"键名在面板源码里出现过" —— 那时
+        SettingsTab 用一份手工的 CONFIG_KEYS 决定谁出现,所以"出现在源码里"确实
+        等价于"够得着"。
+
+        现在分组由 /api/config/all 返回的 category 现算,一个键完全可以够得着却
+        不出现在任何 .tsx 里。继续按旧定义查的话,哪天有人精简那份顺序提示,这条
+        判据就会为一批**其实够得着**的键报红 —— 一条会误报的判据,三周内一定会被
+        关掉或者被随手加白名单绕过。
+
+        新定义:
+          · category 在 CATEGORIES 里有装饰   → 现算时会分到设置页上,够得着;
+          · 键名直接出现在面板源码里 → 够得着。这一条覆盖被委派出去的分类
+            (llm 那批在 ModelsTab 里逐条列着),以及被组件直接引用的键
+            (如 ModelsTab 的 extraKey)—— 它们不走分类那条路。
+
+        「委派是不是一句空话」由 test_voice_switches_reach_the_panel.py 那边单独查
+        (声称委派给 ModelsTab 的键,必须真的在 ModelsTab 里找得到)。
+        """
         from core.routes.config_schema_registry import CONFIG_SCHEMA
 
-        panel_src = "\n".join(
-            p.read_text(encoding="utf-8") for p in (REPO_ROOT / "electron/renderer/panel/src").rglob("*.ts*")
-        )
-        return {k for k in CONFIG_SCHEMA if re.search(r"['\"]" + re.escape(k) + r"['\"]", panel_src)}
+        src_dir = REPO_ROOT / "electron/renderer/panel/src"
+        panel_src = "\n".join(p.read_text(encoding="utf-8") for p in src_dir.rglob("*.ts*"))
+        settings_src = (src_dir / "components" / "SettingsTab.tsx").read_text(encoding="utf-8")
+
+        def _block(start_marker: str, end_marker: str) -> str:
+            i = settings_src.index(start_marker)
+            return settings_src[i : settings_src.index(end_marker, i)]
+
+        decorated = set(re.findall(r"key:\s*'([a-z_]+)'", _block("const CATEGORIES", "\n];")))
+
+        out: set[str] = set()
+        for k, meta in CONFIG_SCHEMA.items():
+            if meta.get("category") in decorated:
+                out.add(k)
+            elif re.search(r"['\"]" + re.escape(k) + r"['\"]", panel_src):
+                out.add(k)
+        return out
 
     def test_no_schema_key_is_silently_unreachable(self):
         from core.routes.config_schema_registry import CONFIG_SCHEMA
 
-        unaccounted = sorted(set(CONFIG_SCHEMA) - self._panel_keys() - self._alias_keys())
+        unaccounted = sorted(set(CONFIG_SCHEMA) - self._reachable_keys() - self._alias_keys())
         assert not unaccounted, (
             "这些配置项既不在面板上、也不是 PROVIDER_REGISTRY 声明的别名 —— "
             "用户改不了它们,而 CONFIG_SCHEMA 让它们看起来是可配的。"
@@ -237,7 +269,7 @@ class TestEverySchemaKeyIsReachableOrDeclaredAnAlias:
         钉住四个键而不是"至少一个" —— 少一个 SERVES,槽位解析就说不出这台服务
         伺候的是目录里哪个型号。
         """
-        panel = self._panel_keys()
+        panel = self._reachable_keys()
         for key in (
             "GALAXY_REASONING_OPENAI_URL",
             "GALAXY_REASONING_OPENAI_MODEL",

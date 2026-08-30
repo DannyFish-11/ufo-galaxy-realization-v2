@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useConfigCache } from '@/hooks/useConfigCache';
 import { apiUrl, getBackendUrl } from '@/lib/api';
 import './SettingsTab.css';
@@ -169,9 +169,9 @@ interface CategoryDef {
 // 真 bug 修复:每个分类的项数此前在这里手写死数字(count),跟下方 CONFIG_KEYS
 // 实际数组长度早就对不上(behavior 写 6、实际 12;auth 写 12、实际 11;
 // mesh 写 13、实际 15——因为 GALAXY_SYSTEM_MODE 曾重复登记在 mesh/dev 两处)。
-// 内容区角标(见 renderCategoryItems 用 CONFIG_KEYS[activeCategory]?.length)
+// 内容区角标(见 renderCategoryItems 用 configKeys[activeCategory]?.length)
 // 早就是从数组现算的,唯独这里的导航栏 title 提示还是手写死数字,会显示错误的
-// 项数。彻底删掉这个字段,改在渲染处统一从 CONFIG_KEYS[cat.key].length 现算，
+// 项数。彻底删掉这个字段,改在渲染处统一从 configKeys[cat.key].length 现算，
 // 不再有第二份需要手动同步的数字。
 const CATEGORIES: CategoryDef[] = [
   { key: 'behavior', label: '行为 · 在场', icon: '✨' },
@@ -189,10 +189,22 @@ const CATEGORIES: CategoryDef[] = [
 //
 // 标题里原先写着「(105 items)」,而实际是 99 项 —— 又一个手写死的数字漂掉了。
 // 上面 CATEGORIES 那段注释已经为同类问题下过结论(每个分类的项数改为渲染时从
-// CONFIG_KEYS[cat.key].length 现算,不再留第二份要手工同步的数字),这里照同一个
+// configKeys[cat.key].length 现算,不再留第二份要手工同步的数字),这里照同一个
 // 结论办:直接不写数字。要数就数数组。
 
-const CONFIG_KEYS: Record<string, string[]> = {
+// ⚠️ 这**不再是**分组的定义,只是**顺序提示**。
+//
+// 改这一版之前它是权威:一个键没列在这里就在设置页上**完全看不见**,而后端
+// CONFIG_SCHEMA 里明明有它。也就是说同一个事实(这个键属于哪一类)在两处各存
+// 一份 —— 后端的 category 字段,和这份手工清单。它们今天恰好一致,但没有任何
+// 一道门在守这件事;漂了之后的表现是"某个设置项凭空消失",而不会报任何错。
+//
+// 现在成员关系一律从 /api/config/all 返回的 category 现算(见 useMemo 里的
+// groupByCategory)。这份清单只决定**同一类里谁排前面**:列到的按这里的顺序,
+// 没列到的按字母序跟在后面。
+//
+// 于是最坏情况从「新键看不见」变成「新键排在最后」—— 后者是可以接受的,前者不是。
+const KEY_ORDER_HINT: Record<string, string[]> = {
   behavior: [
     'GALAXY_AUTONOMY',
     'GALAXY_SPEAK', 'GALAXY_TTS_ENGINE', 'GALAXY_ASR_ENGINE', 'GALAXY_VOICE_EAGERNESS',
@@ -409,6 +421,33 @@ const CONFIG_KEYS: Record<string, string[]> = {
   ],
 };
 
+// 这些分类不在设置页出现 —— 由别的 tab 拥有。**显式列出**而不是"碰巧没列",
+// 因为"某一类没出现"和"某一类被别人管着"是两件事,后者要写下来才查得到。
+const DELEGATED_CATEGORIES = new Set<string>([
+  'llm', // 模型 API key 归 ModelsTab:那边是**供应商目录**(中文名/用途标注/配套 base URL),
+         // 拍平成设置页的 key-value 行会把这些信息全毁掉。
+]);
+
+/** 按后端返回的 category 现算分组;同类内按 KEY_ORDER_HINT 排序,未列到的按字母序跟在后面。 */
+function groupByCategory(config: Record<string, ConfigItem>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  Object.keys(config).forEach((k) => {
+    const c = config[k]?.category || 'other';
+    if (DELEGATED_CATEGORIES.has(c)) return;
+    (out[c] = out[c] || []).push(k);
+  });
+  Object.keys(out).forEach((c) => {
+    const hint = KEY_ORDER_HINT[c] || [];
+    const rank = new Map(hint.map((k, i) => [k, i]));
+    out[c].sort((a, b) => {
+      const ra = rank.has(a) ? (rank.get(a) as number) : Number.MAX_SAFE_INTEGER;
+      const rb = rank.has(b) ? (rank.get(b) as number) : Number.MAX_SAFE_INTEGER;
+      return ra !== rb ? ra - rb : a.localeCompare(b);
+    });
+  });
+  return out;
+}
+
 // ── Helper: derive label from key ───────────────────────────────────
 
 function formatLabel(key: string): string {
@@ -533,6 +572,8 @@ export default function SettingsTab() {
   const [changed, setChanged] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('behavior');
+  // 分组现算,不再读手工清单。config 未加载时是空对象 → 导航为空,而不是显示一堆空分类。
+  const configKeys = useMemo(() => groupByCategory(config), [config]);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -996,7 +1037,7 @@ export default function SettingsTab() {
   // ── Render settings items for active category ────────────────────
 
   const renderCategoryItems = () => {
-    const keys = CONFIG_KEYS[activeCategory] || [];
+    const keys = configKeys[activeCategory] || [];
     const items: JSX.Element[] = [];
 
     keys.forEach((key) => {
@@ -1294,7 +1335,7 @@ export default function SettingsTab() {
             key={cat.key}
             className={`settings-nav-item ${activeCategory === cat.key ? 'active' : ''}`}
             onClick={() => setActiveCategory(cat.key)}
-            title={`${cat.label} (${CONFIG_KEYS[cat.key]?.length ?? 0} items)`}
+            title={`${cat.label} (${configKeys[cat.key]?.length ?? 0} items)`}
           >
             <span className="settings-nav-icon">{cat.icon}</span>
             <span className="settings-nav-label">{cat.label}</span>
@@ -1313,7 +1354,7 @@ export default function SettingsTab() {
             key={cat.key}
             className={`settings-nav-item settings-nav-sub ${activeCategory === cat.key ? 'active' : ''}`}
             onClick={() => setActiveCategory(cat.key)}
-            title={`${cat.label} (${CONFIG_KEYS[cat.key]?.length ?? 0} items)`}
+            title={`${cat.label} (${configKeys[cat.key]?.length ?? 0} items)`}
           >
             <span className="settings-nav-icon">{cat.icon}</span>
             <span className="settings-nav-label">{cat.label}</span>
@@ -1339,7 +1380,7 @@ export default function SettingsTab() {
           <h2 className="settings-group-title">
             {activeLabel}
             <span className="settings-count">
-              {CONFIG_KEYS[activeCategory]?.length ?? 0} 项
+              {configKeys[activeCategory]?.length ?? 0} 项
             </span>
             {loading && <span className="settings-sync-dot" title="正在后台同步…" />}
           </h2>
