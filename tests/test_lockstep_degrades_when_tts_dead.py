@@ -314,3 +314,223 @@ def test_lockstep_reveal_is_smooth_not_whole_sentence_dumps(monkeypatch):
     assert "".join(deltas) == full, f"平滑露出不得吞字; got {deltas}"
     assert len(deltas) >= 5, f"整句应被切成多段平滑流出,而不是一次性砸屏; got {len(deltas)} 段 {deltas}"
     assert max(len(d) for d in deltas) < len(full) // 2, f"存在一次吐掉半句以上的砸屏段; got {deltas}"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# lockstep 帧 —— 把「声音与文字脱钩」这件事变成前端看得见的
+#
+# 上面那两条钉的是**行为**:降级之后文字得逐字流出。但降级这件事本身此前
+# **对前端是隐形的** —— SSE 只有 phase/delta/reset/meta/done/error 六种帧,
+# 没有一帧说"锁步没了"。于是用户看到的是节奏突然变了,不知道为什么,也不知道
+# 此刻声音和文字已经不同步。
+#
+# 本仓的规矩是降级必须留痕。下面这组钉的就是那道痕。
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def _lockstep_frames(frames):
+    return [f for f in frames if f.get("type") == "lockstep"]
+
+
+class _LiveSpeakerForFrames:
+    """凑满一句就"开口念" —— 与上面 _LiveSpeaker 同构,独立一份免相互牵动。"""
+
+    def __init__(self, on_sentence_start):
+        self._cb = on_sentence_start
+        self._buf = ""
+        self.chunks_spoken = 0
+        self._player_task = None
+
+    def feed(self, t):
+        self._buf += t
+        while True:
+            hit = -1
+            for ch in "。!?！?;;\n":
+                i = self._buf.find(ch)
+                if i >= 0 and (hit < 0 or i < hit):
+                    hit = i
+            if hit < 0:
+                break
+            sent, self._buf = self._buf[: hit + 1], self._buf[hit + 1 :]
+            self.chunks_spoken += 1
+            if self._cb:
+                self._cb(sent)
+
+    def reset(self):
+        self._buf = ""
+
+    def finish(self):
+        if self._buf.strip() and self._cb:
+            self.chunks_spoken += 1
+            self._cb(self._buf)
+        self._buf = ""
+
+
+def test_engaged_frame_comes_before_any_text(monkeypatch):
+    """锁步生效时必须开场就说 —— 面板那条「正在说」指示灯据此点亮。
+
+    它必须早于第一个 delta:晚于文字的话,第一句上屏时前端还不知道该不该点灯,
+    只能靠"文字来得快不快"去猜,而那恰恰是猜不准的。
+    """
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "1")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "5.0")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+
+    frames, _ = _run_stream(
+        monkeypatch,
+        lambda on_sentence_start=None, **k: _LiveSpeakerForFrames(on_sentence_start),
+        ["你好", "呀。", "今天", "不错", "。"],
+    )
+    ls = _lockstep_frames(frames)
+    assert ls, "锁步生效却一帧都没发 —— 前端无从知道该不该点灯"
+    assert ls[0]["state"] == "engaged"
+
+    types = [f.get("type") for f in frames]
+    assert "delta" in types, f"应该有文字流出; got {types}"
+    assert types.index("lockstep") < types.index("delta"), f"状态帧必须早于第一个 delta; got {types}"
+
+
+def test_degraded_frame_precedes_the_catchup_burst(monkeypatch):
+    """TTS 死 → 必须先报 degraded,**再**补吐那一大段。
+
+    顺序是这条测试的全部意义:反过来的话,前端会把紧跟着涌来的一大段补吐
+    当成正常的逐句露出,于是"声音已经跟不上了"这个事实被那一段文字盖过去。
+    """
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "1")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "0.15")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+
+    class _DeadSpeaker:
+        def __init__(self):
+            self.chunks_spoken = 0
+            self._player_task = None
+
+        def feed(self, t):
+            pass
+
+        def reset(self):
+            pass
+
+        def finish(self):
+            pass
+
+    frames, full = _run_stream(monkeypatch, lambda **k: _DeadSpeaker(), ["你好", "呀,", "今天", "天气", "不错", "。"])
+
+    ls = _lockstep_frames(frames)
+    states = [f["state"] for f in ls]
+    assert states[0] == "engaged", f"开场应报 engaged; got {states}"
+    assert "degraded" in states, f"TTS 死了却没报降级 —— 那道痕没留下; got {states}"
+
+    deg = next(f for f in ls if f["state"] == "degraded")
+    assert deg.get("reason") == "no_first_sentence"
+
+    seq = [f.get("type") for f in frames]
+    deg_i = [i for i, f in enumerate(frames) if f.get("type") == "lockstep" and f.get("state") == "degraded"][0]
+    first_delta_i = seq.index("delta")
+    assert deg_i < first_delta_i, f"降级帧必须早于补吐的那一段文字; got {seq}"
+
+
+def test_degraded_reason_distinguishes_midstall_from_no_first_sentence(monkeypatch):
+    """两种降级原因要分开 —— 「一句都没念出来」和「念了一半卡住」要人做的事不同。"""
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "1")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "5.0")  # 首句宽限设大 → 只能走中途卡住
+    monkeypatch.setenv("GALAXY_LOCKSTEP_STALL_S", "0.15")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+
+    class _StallAfterFirst:
+        """念完第一句就再也不开口。"""
+
+        def __init__(self, on_sentence_start):
+            self._cb = on_sentence_start
+            self._buf = ""
+            self.chunks_spoken = 0
+            self._player_task = None
+
+        def feed(self, t):
+            self._buf += t
+            if self.chunks_spoken == 0 and "。" in self._buf:
+                i = self._buf.index("。")
+                sent, self._buf = self._buf[: i + 1], self._buf[i + 1 :]
+                self.chunks_spoken = 1
+                if self._cb:
+                    self._cb(sent)
+
+        def reset(self):
+            self._buf = ""
+
+        def finish(self):
+            pass
+
+    frames, _ = _run_stream(
+        monkeypatch,
+        lambda on_sentence_start=None, **k: _StallAfterFirst(on_sentence_start),
+        # 尾巴要够长:中途卡住的判据是「喂进去但没露出的 > 8 字」,
+        # 尾巴刚好 8 字的话严格大于不成立,降级永不触发(第一版就栽在这)。
+        ["第一句。", "第二句", "较长", "内容", "还有", "第三句", "结尾。"],
+    )
+    deg = [f for f in _lockstep_frames(frames) if f["state"] == "degraded"]
+    assert deg, "中途卡住却没报降级"
+    assert deg[0].get("reason") == "mid_stall", f"应报 mid_stall 而不是 {deg[0].get('reason')!r}"
+
+
+def test_off_when_there_is_no_tts_at_all(monkeypatch):
+    """纯文字轮次要明确报 off,而不是什么都不发。
+
+    三态而不是两态的理由就在这:「本轮没有同步这回事」与「曾经同步、现在掉了」
+    是两件事。只发 engaged/degraded 的话,前端分不出「还没收到帧」和「不适用」。
+    """
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+    monkeypatch.delenv("GALAXY_TEXT_VOICE_LOCKSTEP", raising=False)
+
+    frames, _ = _run_stream(monkeypatch, lambda **k: None, ["纯", "文字", "。"])
+    ls = _lockstep_frames(frames)
+    assert ls and ls[0]["state"] == "off", f"没有 TTS 时应报 off; got {[f.get('state') for f in ls]}"
+    assert ls[0].get("reason") == "no_speaker"
+
+
+def test_off_when_lockstep_is_switched_off_by_config(monkeypatch):
+    """有 TTS 但人把锁步关了 —— 与「根本没有 TTS」分成两个原因,排查时不用猜。"""
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "0")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+
+    frames, _ = _run_stream(
+        monkeypatch,
+        lambda on_sentence_start=None, **k: _LiveSpeakerForFrames(on_sentence_start),
+        ["关掉了", "锁步", "。"],
+    )
+    ls = _lockstep_frames(frames)
+    assert ls and ls[0]["state"] == "off"
+    assert ls[0].get("reason") == "disabled_by_config"
+
+
+def test_every_emitted_value_is_in_the_declared_vocabulary(monkeypatch):
+    """发出去的 state/reason 必须都在常量表里。
+
+    这一条防的是手写字符串漂:哪天有人在 chat.py 里直接写个 "stalled",
+    前端那边的联合类型不认识,而它不会报任何错 —— 只是那条指示灯从此不动了。
+    """
+    import core.routes.chat as chat_mod
+
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "1")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "0.15")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+
+    class _DeadSpeaker:
+        def __init__(self):
+            self.chunks_spoken = 0
+            self._player_task = None
+
+        def feed(self, t):
+            pass
+
+        def reset(self):
+            pass
+
+        def finish(self):
+            pass
+
+    frames, _ = _run_stream(monkeypatch, lambda **k: _DeadSpeaker(), ["会", "降级", "。"])
+    for f in _lockstep_frames(frames):
+        assert f["state"] in chat_mod.LOCKSTEP_STATES, f"未登记的 state: {f['state']!r}"
+        if "reason" in f:
+            assert f["reason"] in chat_mod.LOCKSTEP_REASONS, f"未登记的 reason: {f['reason']!r}"

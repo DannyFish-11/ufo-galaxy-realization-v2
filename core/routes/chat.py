@@ -82,6 +82,33 @@ from core.unified_response import UnifiedChatResponse
 
 logger = logging.getLogger("Galaxy.API")
 
+# ── 文字/语音锁步的对外词汇表 ────────────────────────────────────────────────
+#
+# 为什么要有这一帧:锁步本身早就实现了(句子被 TTS 真的念出来,那句文字才上屏),
+# 连 TTS 静默失败时的有界降级也做了。但**降级对前端是隐形的** —— SSE 此前只有
+# phase/delta/reset/meta/done/error 六种帧,没有一帧说"锁步没了"。
+#
+# 后果是:降级之后文字从「逐句跟着嘴」变成「逐字直出」,声音和文字已经脱钩,
+# 而用户只会觉得节奏突然变了,不知道为什么、也不知道现在两者已经不同步。
+# 本仓的规矩是**降级必须留痕**,这一帧就是那道痕。
+#
+# 三态而不是两态:没有 TTS 的纯文字轮次根本不存在"同步"这回事,它与"曾经同步、
+# 现在掉了"是两件事。只发 engaged/degraded 的话,前端分不出「还没收到帧」和
+# 「本轮不适用」—— 那正是本仓反复强调的「未知与不适用必须可区分」。
+LOCKSTEP_STATES: tuple = (
+    "engaged",  # 锁步生效中:文字跟着嘴走
+    "off",  # 本轮不锁步:没有"同步"这回事(纯文字,或被显式关掉)
+    "degraded",  # 曾经锁步,TTS 没在推进,已转逐字直出 —— 声音与文字已脱钩
+)
+
+#: 为什么是这个状态。前端不必读它,但排查时不用靠猜。
+LOCKSTEP_REASONS: tuple = (
+    "no_speaker",  # off: 本轮没走 TTS(纯文字会话/引擎不可用)
+    "disabled_by_config",  # off: GALAXY_TEXT_VOICE_LOCKSTEP 显式关掉
+    "no_first_sentence",  # degraded: 首句宽限内一句都没念出来
+    "mid_stall",  # degraded: 念了一部分之后中途卡住
+)
+
 FOREGROUND_BLOCKED_PREFIX = "当前操作受阻："
 FOREGROUND_CONFIRMATION_EXPLANATION = "该操作需要你的确认后才能继续执行。"
 FOREGROUND_STATUS_DONE = "操作已完成"
@@ -609,6 +636,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     #   data: {"type":"delta", "text":"片段"}            # repeated,真增量
     #   data: {"type":"reset"}                           # 作废已流出内容(可能出现)
     #   data: {"type":"meta",  "session_id","model","runtime_session_id"}
+    #   data: {"type":"lockstep","state","reason"}  ← 见下方 LOCKSTEP_STATES
     #   data: {"type":"done",  "response","intent","success","suggestions",
     #          "visible_action_surface","session_id","model"}   # response 为权威全文
     #   data: {"type":"error", "error":"..."}
@@ -692,6 +720,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             else:
                 _ls_override = None  # auto
             _lockstep = speaker is not None and (True if _ls_override is None else _ls_override)
+
+            # 开场就把锁步状态告诉前端 —— 面板上「正在说」那条指示灯据此点亮或不点亮。
+            # 不发这一帧的话,前端只能靠"文字来得快不快"去猜,而那恰恰是猜不准的。
+            if _lockstep:
+                yield _sse({"type": "lockstep", "state": "engaged"})
+            else:
+                yield _sse(
+                    {
+                        "type": "lockstep",
+                        "state": "off",
+                        "reason": ("disabled_by_config" if speaker is not None else "no_speaker"),
+                    }
+                )
 
             async def _run():
                 # 在【任务自身上下文】里挂 sink/抑制标记:contextvars 随 await 链
@@ -855,6 +896,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         )
                         if not _ls_degraded and _ls_buf and (_total_fail or _mid_stall):
                             _ls_degraded = True
+                            # 先报降级,再补吐:顺序要紧 —— 前端得先知道"声音已经跟不上了",
+                            # 否则紧接着涌来的那一大段补吐会被当成正常的逐句露出。
+                            yield _sse(
+                                {
+                                    "type": "lockstep",
+                                    "state": "degraded",
+                                    "reason": ("no_first_sentence" if _total_fail else "mid_stall"),
+                                }
+                            )
                             _ls_pending = ""  # 补吐用 _ls_buf 原始全量,待吐区作废免重复
                             if revealed_chars > 0:
                                 # 已露出过一部分:先 reset 前端文字(不动语音,让其继续尾随),
