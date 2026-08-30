@@ -326,6 +326,33 @@
           "expected": true
         }
       ]
+    },
+    {
+      "id": "memory-thread-wired",
+      "source": "本次记忆连续性接线(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "对话不再每次自成一根:SessionManager 的四个 Session 构造点全部经 _apply_thread 调 resolve_thread,新对话挂到该 owner 已有的 root_id 上。判据只有一份(core/memory_thread.py),四处共用。",
+      "supersedes": "此前 fork_session() 的唯一生产调用方是 core/agentic/workflow.py 的并行分支 —— 血缘机制建好了,但从没人用它表达「这次接着上次」。对话那一层因此是一堆按会话切开的岛,而记忆的其余五层都是连续的。",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "resolve_thread",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "sessions_in_thread",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "MEMORY_THREAD_AUTHORITY",
+          "scope": "core",
+          "expected": true
+        }
+      ]
     }
   ]
 }

@@ -637,4 +637,44 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             timings = []
         return JSONResponse(content={"success": True, "count": len(timings), "timings": timings})
 
+    @router.get("/api/v1/memory/thread")
+    async def memory_thread(session_id: str = ""):
+        """一条会话属于哪套记忆,以及那条线上有哪些会话。
+
+        在 core/memory_thread.py 那条判据接上之前,这个端点没有意义:每开一次
+        新对话就自成一根,「线」上永远只有一条会话。
+        """
+        try:
+            from core.memory_thread import BASIS_MEANS, MEMORY_THREAD_AUTHORITY
+            from core.session_manager import get_session_manager
+
+            sm = get_session_manager()
+            root = sm.thread_root_of(session_id) if session_id else ""
+            sessions = sm.sessions_in_thread(root) if root else []
+            return JSONResponse(
+                {
+                    "authority": MEMORY_THREAD_AUTHORITY,
+                    "session_id": session_id,
+                    # 查不到返回空串而不是它自己 —— 「不知道」与「它自成一根」
+                    # 是两回事,混掉的话面板会把查错的 id 画成一条新线。
+                    "thread_root": root,
+                    "session_count": len(sessions),
+                    "sessions": [
+                        {
+                            "id": s.id,
+                            "created_at": s.created_at,
+                            "updated_at": s.updated_at,
+                            "parent_id": s.parent_id,
+                            "basis": (s.metadata or {}).get("memory_thread_basis", "unrecorded"),
+                            "message_count": len(s.history or []),
+                        }
+                        for s in sessions
+                    ],
+                    "basis_means": BASIS_MEANS,
+                }
+            )
+        except Exception:
+            logger.exception("记忆线查询失败")
+            return JSONResponse({"error": "memory thread unavailable"}, status_code=503)
+
     return router

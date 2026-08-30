@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 398 条 · 组件 schema 103 个
+// 路径 399 条 · 组件 schema 103 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -164,6 +164,7 @@ export type ApiPath =
   | "/api/v1/memory/stats"
   | "/api/v1/memory/store"
   | "/api/v1/memory/tasks"
+  | "/api/v1/memory/thread"
   | "/api/v1/memory/unified/status"
   | "/api/v1/mesh/android-lifecycle"
   | "/api/v1/mesh/coordinator-summary"
@@ -566,6 +567,7 @@ export const API_METHODS = {
   "/api/v1/memory/stats": ["get"],
   "/api/v1/memory/store": ["post"],
   "/api/v1/memory/tasks": ["get"],
+  "/api/v1/memory/thread": ["get"],
   "/api/v1/memory/unified/status": ["get"],
   "/api/v1/mesh/android-lifecycle": ["get"],
   "/api/v1/mesh/coordinator-summary": ["get"],
