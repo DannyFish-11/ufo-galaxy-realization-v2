@@ -273,15 +273,24 @@ class SessionManager:
         改造之前这四处都不设 root_id,于是 ``__post_init__`` 让每条会话自成一根 ——
         「每开一次新对话就是一套全新的记忆」正是从这儿来的。
         """
-        prev_id = self._user_active_session.get(owner, "")
-        prev = self._sessions.get(prev_id) if prev_id else None
+        # 这三处一律用 getattr 取,不直接点属性 —— 本类存在**绕过 __init__ 的构造
+        # 路径**(测试里的 SessionManager.__new__(SessionManager) 就是,生产里的
+        # 反序列化同理)。那些调用点只会设它们当时知道的字段;新加一个实例属性就
+        # 直接点它,等于把每一个既有的 __new__ 构造点都变成地雷,而且报的是
+        # AttributeError,看起来像那些调用点的错,其实是这次加属性的人的错。
+        active = getattr(self, "_user_active_session", None) or {}
+        sessions = getattr(self, "_sessions", None) or {}
+        remembered = getattr(self, "_user_thread_root", None) or {}
+
+        prev_id = active.get(owner, "")
+        prev = sessions.get(prev_id) if prev_id else None
         if prev is not None and prev.id == session.id:
             prev = None  # 自己不能当自己的上一条
         decision = resolve_thread(
             owner,
             prev,
             new_root=new_root,
-            remembered_root=self._user_thread_root.get(owner, ""),
+            remembered_root=remembered.get(owner, ""),
         )
         if decision.root_id:
             session.root_id = decision.root_id
@@ -293,6 +302,8 @@ class SessionManager:
         # 现编的,每个会话一个、永远不会被第二条会话复用 —— 给它记一条根,这张表
         # 就会随匿名会话数无界增长,而且记下的每一条都永远用不上。
         if session.root_id and is_identifying_owner(owner):
+            if getattr(self, "_user_thread_root", None) is None:
+                self._user_thread_root = {}
             self._user_thread_root[owner] = session.root_id
         # 留痕:这条线是怎么连起来的、或者为什么没连上。事后可查,不用靠猜。
         session.metadata.update(decision.to_metadata())
@@ -940,7 +951,7 @@ class SessionManager:
             data = {
                 "sessions": {sid: s.to_dict() for sid, s in self._sessions.items()},
                 "user_active_session": self._user_active_session,
-                "user_thread_root": self._user_thread_root,
+                "user_thread_root": getattr(self, "_user_thread_root", None) or {},
                 "session_aliases": self._session_aliases,
             }
             atomic_write_json(_SESSION_FILE, data, ensure_ascii=False, indent=2)

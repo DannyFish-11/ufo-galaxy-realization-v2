@@ -304,3 +304,37 @@ def test_thread_root_table_does_not_grow_for_anonymous_sessions(sm):
     # 认得出人的照记不误
     _run(sm.create_session("judy", "dev1"))
     assert "judy" in sm._user_thread_root
+
+
+def test_apply_thread_survives_a_manager_built_without_init():
+    """绕过 ``__init__`` 造出来的 SessionManager 也必须能用。
+
+    本类存在这样的构造路径:``tests/test_cp_phase4.py`` 里的
+    ``SessionManager.__new__(SessionManager)`` 只手工设它当时知道的几个字段。
+
+    这条是回归防护,不是洁癖:加 ``_user_thread_root`` 那一版直接
+    ``self._user_thread_root.get(...)``,于是四个构造点全部对这个新属性产生硬依赖,
+    CI 上 test_cp_phase4 的四条会话迁移用例当场 AttributeError。报错看起来像那些
+    调用点的错,其实是**加属性的人**的错 —— 既有调用点不可能知道要设一个还不存在
+    的字段。
+
+    所以 _apply_thread 一律 getattr 取状态。下一次再加实例属性时,这条会替他挡住。
+    """
+    bare = SessionManager.__new__(SessionManager)
+    bare._sessions = {}
+    bare._user_active_session = {}
+    bare._persist_state = lambda: None  # type: ignore[assignment]
+    # 刻意**不设** _user_thread_root —— 模拟"加属性之前写的那些构造点"
+
+    s = Session(id="s_bare", user_id="kate")
+    bare._apply_thread(s, "kate")
+    assert s.root_id == "s_bare"
+    assert s.metadata["memory_thread_basis"] == "no_prior"
+
+    # 而且它会把表懒建出来,接着第二条就能接上
+    s2 = Session(id="s_bare_2", user_id="kate")
+    bare._sessions[s.id] = s
+    bare._user_active_session["kate"] = s.id
+    bare._apply_thread(s2, "kate")
+    assert s2.root_id == s.root_id
+    assert s2.metadata["memory_thread_basis"] == "continued"
