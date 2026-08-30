@@ -39,6 +39,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.mcp_protocol import (
+    STATELESS_PROTOCOL_VERSION,
+    attach_protocol_meta,
+    handshake_params,
+    is_method_not_found,
+    negotiated_version,
+)
+
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
 _BACKGROUND_TASKS: set = set()
@@ -189,6 +197,11 @@ class MCPServerInstance:
 
     status: MCPServerStatus = MCPServerStatus.STOPPED
     process: Optional[subprocess.Popen] = None
+
+    #: 本连接**实际生效**的协议版本 —— 老服务端由 initialize 协商回来,
+    #: 新服务端(2026-07-28 起无握手)直接就是那一版。此前根本没有这个字段:
+    #: 服务端降级了也没地方记。
+    protocol_version: str = ""
     error: Optional[str] = None
 
     # 服务器能力
@@ -532,6 +545,10 @@ class MCPLoader:
             params=params or {},
         )
 
+        # 2026-07-28 要求每个请求自带协议版本/客户端身份/能力(握手没了)。
+        # 老服务端会忽略整个 _meta —— 所以这一句对新旧都安全,不必先知道对面是哪版。
+        request.params = attach_protocol_meta(request.params)
+
         def _blocking_roundtrip() -> str:
             # 阻塞式 stdin.write/flush + stdout.readline 必须在线程中执行，
             # 否则会冻结整个 asyncio 事件循环（readline 可能无限阻塞）。
@@ -553,50 +570,59 @@ class MCPLoader:
     async def _initialize(self, server_id: str) -> bool:
         """初始化 MCP 连接"""
         # 发送 initialize 请求
-        response = await self._send_request(
-            server_id,
-            "initialize",
-            {
-                "protocolVersion": "2025-11-25",
-                "capabilities": {
-                    "roots": {"listChanged": True},
-                },
-                "clientInfo": {
-                    "name": "Galaxy",
-                    "version": "2.0.0",
-                },
-            },
-        )
+        response = await self._send_request(server_id, "initialize", handshake_params())
+
+        # 2026-07-28 把 initialize 整个删了(SEP-2575)。新版服务端对它回 -32601,
+        # 那**不是失败**,是"对面无握手"的信号 —— 每个请求的 _meta 已经把版本/
+        # 身份/能力带过去了,直接进入干活阶段即可。
+        if response is not None and is_method_not_found({"error": response.error}):
+            logger.info(
+                "MCP 服务端 %s 没有 initialize —— 按 %s 的无握手形态继续",
+                server_id,
+                STATELESS_PROTOCOL_VERSION,
+            )
+            self.servers[server_id].protocol_version = STATELESS_PROTOCOL_VERSION
+            await self._after_connect(server_id)
+            return True
 
         if response and response.result:
             server = self.servers[server_id]
             server.server_info = response.result.get("serverInfo", {})
             server.capabilities = response.result.get("capabilities", {})
 
+            # 读回服务端**实际选定**的版本。此前这个字段从来没被读过:服务端
+            # 降级了客户端也不知道,继续按自己那版假设走。
+            server.protocol_version, warning = negotiated_version(response.result, server_id=server_id)
+            if warning:
+                logger.warning(warning)
+
             # 发送 initialized 通知
             await self._send_notification(server_id, "notifications/initialized")
 
-            # 获取工具列表
-            await self._refresh_tools(server_id)
-
-            # 获取资源列表
-            await self._refresh_resources(server_id)
-
-            # 获取提示列表
-            await self._refresh_prompts(server_id)
-
-            # 加载完成后自动注入能力总线
-            self._inject_server_to_registry(server_id)
-
-            # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
-            try:
-                asyncio.ensure_future(self._refresh_capability_registry(server_id, "load"))
-            except Exception as exc:
-                logger.warning("Capability registry refresh failed on load: %s", exc)
-
+            await self._after_connect(server_id)
             return True
 
         return False
+
+    async def _after_connect(self, server_id: str) -> None:
+        """连上之后要做的事 —— 与**有没有握手无关**。
+
+        单独抽出来,是因为 2026-07-28 的服务端根本不走上面那条握手分支,
+        但这些照样要做;写两遍就会漂。
+        """
+        # 获取工具 / 资源 / 提示列表
+        await self._refresh_tools(server_id)
+        await self._refresh_resources(server_id)
+        await self._refresh_prompts(server_id)
+
+        # 加载完成后自动注入能力总线
+        self._inject_server_to_registry(server_id)
+
+        # 最佳努力刷新 CapabilityRegistry 并广播事件（fire-and-forget）
+        try:
+            asyncio.ensure_future(self._refresh_capability_registry(server_id, "load"))
+        except Exception as exc:
+            logger.warning("Capability registry refresh failed on load: %s", exc)
 
     async def _send_notification(self, server_id: str, method: str, params: Dict = None):
         """发送 MCP 通知"""

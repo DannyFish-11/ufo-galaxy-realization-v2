@@ -40,6 +40,7 @@ from pathlib import Path
 # 允许从项目根直接运行
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from core.fs_walk import walk_tree_files  # noqa: E402
 from core.log_paths import crash_dir, legacy_log_roots, log_root  # noqa: E402
 
 #: 轮转备份文件名模式,如 lumiv.log.1 / app.log.12
@@ -74,8 +75,10 @@ def plan_cleanup(days: int) -> tuple[list[tuple[Path, str]], list[tuple[Path, Pa
     today_start = time.time() - 86400
 
     deletions: list[tuple[Path, str]] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or not _is_log_file(path) or _in_crash_area(path):
+    # 本函数的调用方会照着结果删文件,而日志目录同时还在被写入/轮转 —— 用
+    # walk_tree_files:遍历途中目录消失只跳过,不会把整轮扫描炸掉。
+    for path in walk_tree_files(root, "*"):
+        if not _is_log_file(path) or _in_crash_area(path):
             continue
         try:
             st = path.stat()
