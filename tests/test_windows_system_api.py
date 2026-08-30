@@ -531,14 +531,51 @@ class TestHotkeyPumpCannotBusySpin:
         finally:
             wa._WIN32_AVAILABLE, wa._user32 = saved_avail, saved_u32
 
+    @staticmethod
+    def _idle_ratio(seconds: float) -> float:
+        """同样长度、**不起泵**的一段窗口里,本进程烧了多少 CPU。"""
+        import time as _time
+
+        cpu0, wall0 = _time.process_time(), _time.time()
+        _time.sleep(seconds)
+        return (_time.process_time() - cpu0) / (_time.time() - wall0)
+
     def test_pump_does_not_burn_a_core_when_the_api_always_returns_truthy(self):
         """恒真的 PeekMessageW 不能把泵变成满核空转。
 
-        阈值取 25%:修复前实测 ~100%,修复后实测 ~4%。留出的余量足够吸收
-        CI 机器的抖动,又远低于"烧掉一个核"。
+        这条断言的口径有个前提,不满足时它测不出东西
+        ------------------------------------------------
+        ``time.process_time()`` 是**整个进程所有线程**的 CPU,不是泵那条线程的。
+        单独跑这个文件时进程里没别人,量到的约等于泵自己;可它在 CI 上跑在 9724 条
+        用例的分片末尾,前面留下的后台线程(NATSBus.publish_presence_event、
+        DecayController._async_decay_sequence、未关闭的 aiohttp session…)也在烧,
+        全被算在泵头上 —— 实测本地单跑 ~4%,CI 上两次量到 57% 与 67%,而泵没变过。
+
+        减本底也救不了它。实测过:机器已经跑满时再加一条空转线程,进程 CPU 不会变多
+        (只是从别人那儿抢),于是**真的空转量出来的增量是 +0%**。也就是说这个口径
+        在饱和的进程里根本分不出「泵在转」和「别人在转」——
+        放宽阈值会更糟:那样两边都测不出。
+
+        所以:本底高到这个测量没有意义时,如实报「量不出」,而不是假装通过或假装失败。
+        空转这件事本身有另一条口径干净的判据在守 —— 见下面的
+        ``test_pump_rate_is_bounded``:调用次数只属于这个 mock,不受别的线程影响。
+        同一次模拟里,空转 14506 次 / 正常 1024 次,那条阈值 5000 切得很开。
+
+        下面仍然减了一次本底,那只是本底已经低到 25% 以内、这个口径还站得住时的
+        一点小修正;门能不能咬住人,靠的是上面那道「量不准就说量不准」,不是这次相减。
         """
+        base = self._idle_ratio(1.0)
+        if base > 0.25:
+            pytest.skip(
+                f"本进程已有 {base:.0%} 的后台 CPU 占用(别的用例留下的线程),"
+                "进程级 CPU 这个口径在这里量不出泵自己烧了多少 —— "
+                "空转由 test_pump_rate_is_bounded 的调用次数口径守着。"
+            )
         ratio, calls = self._run_pump_for(1.0)
-        assert ratio < 0.25, f"消息泵在空转:CPU 占用 {ratio:.0%}(调用 {calls} 次)"
+        excess = ratio - base
+        assert excess < 0.25, (
+            f"消息泵在空转:泵带来的 CPU 增量 {excess:.0%}" f"(总占用 {ratio:.0%},本底 {base:.0%},调用 {calls} 次)"
+        )
 
     def test_pump_rate_is_bounded(self):
         """每轮取数有上限、且无条件让出 —— 于是速率有硬上限。
