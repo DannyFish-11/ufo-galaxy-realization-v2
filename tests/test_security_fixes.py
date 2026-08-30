@@ -160,6 +160,53 @@ class TestPathTraversalPrevention(unittest.TestCase):
             with self.assertRaises(ValueError):
                 svc._resolve_path("../../etc/shadow")
 
+    def test_node_120_returns_the_value_it_validated(self):
+        """``_resolve_path`` 必须返回**它校验过的那个值**。
+
+        此前它校验 ``p.resolve()`` 却返回未解析的 ``p`` —— 检查一个值、用另一个值。
+        包含性判定本身没错,但把没摊平的那个交出去,等于让下游 19 个调用点各自再
+        解析一次;任何一处解析方式不同,校验就白做了。
+        """
+        try:
+            from nodes.Node_120_File.main import FileService
+        except ImportError:
+            self.skipTest("Node_120 dependencies not available")
+        import os
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as workspace:
+            root = Path(workspace).resolve()
+            (root / "sub").mkdir()
+            (root / "sub" / "a.txt").write_text("a", encoding="utf-8")
+            svc = FileService(workspace_root=workspace)
+
+            got = svc._resolve_path("sub/../sub/a.txt")
+            self.assertNotIn("..", got.parts, "返回的路径必须已规范化")
+            self.assertEqual(got, got.resolve(), "返回值必须等于它自己的 resolve()")
+            self.assertEqual(got, root / "sub" / "a.txt")
+
+    def test_node_120_rejects_a_symlink_that_escapes(self):
+        """工作区**内**的符号链接指向工作区外 —— 必须挡住。
+
+        这条是穿越防护真正的硬骨头:路径字符串看起来完全在工作区里。
+        """
+        try:
+            from nodes.Node_120_File.main import FileService
+        except ImportError:
+            self.skipTest("Node_120 dependencies not available")
+        import os
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as outside:
+            (Path(outside) / "secret.txt").write_text("SECRET", encoding="utf-8")
+            os.symlink(outside, Path(workspace) / "escape")
+            svc = FileService(workspace_root=workspace)
+
+            with self.assertRaises(ValueError):
+                svc._resolve_path("escape/secret.txt")
+
 
 # =============================================================================
 # exec() 沙箱

@@ -176,18 +176,44 @@ class FileService:
         logger.info(f"FileService initialized with workspace: {self.workspace_root}")
     
     def _resolve_path(self, path: str) -> Path:
-        """Resolve and validate path within workspace."""
-        p = Path(path)
-        if not p.is_absolute():
-            p = self.workspace_root / p
-        
-        # Security: ensure path is within workspace
+        """Resolve and validate path within workspace.
+
+        Returns the **resolved** path — the same value that was validated.
+
+        此前这里校验的是 ``p.resolve()``,返回的却是未解析的 ``p``:检查一个值、
+        用另一个值。包含性判定本身是对的(``resolve()`` 会把 ``..`` 与符号链接
+        都摊平),但把没摊平的那个交出去,等于让下游 19 个调用点各自再解析一次 ——
+        下游任何一处解析方式不同,校验就白做了。
+
+        改成"校验哪个就返回哪个"。规范化后的绝对路径也让各接口回给用户的 path
+        字段口径一致。
+
+        .. note::
+           **仍未堵上的一处**:``realpath`` 与下游真正 ``open()`` 之间存在
+           TOCTOU 窗口 —— 两者之间被换掉符号链接仍可逃逸。彻底堵它要走
+           ``openat`` + ``O_NOFOLLOW`` 一类的文件描述符方案,不在本函数能解决的
+           范围内。这里如实记下来,不假装它不存在。
+        """
+        # 规范化 → 判定 → 返回同一个值,三步都在这里,下游拿到的就是被判定过的那个。
+        #
+        # 用 os.path.realpath + os.path.commonpath 而不是 Path.resolve +
+        # Path.relative_to:两者安全语义等价(都把 .. 与符号链接摊平后比较祖先),
+        # 但前者是 CodeQL 的 py/path-injection 认得的净化形态。换写法之前这里
+        # 报过 13 条污点路径 —— 而被报的恰恰是**做净化的那一行**。
+        root = os.path.realpath(self.workspace_root)
+        # 注意 os.path.join 的语义:path 是绝对路径时它直接取 path。
+        # 这正是我们要的 —— 允许绝对路径,但它同样要过下面这道包含性判定。
+        candidate = os.path.realpath(os.path.join(root, path))
+
         try:
-            p.resolve().relative_to(self.workspace_root.resolve())
+            inside = os.path.commonpath([root, candidate]) == root
         except ValueError:
+            # Windows 上跨盘符时 commonpath 会抛 —— 跨盘符本来就在工作区外。
+            inside = False
+        if not inside:
             raise ValueError(f"Path '{path}' is outside the workspace. Access denied.")
-        
-        return p
+
+        return Path(candidate)
     
     async def read_file(self, request: ReadRequest) -> Dict[str, Any]:
         """Read file content."""
