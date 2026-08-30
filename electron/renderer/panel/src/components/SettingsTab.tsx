@@ -173,16 +173,24 @@ interface CategoryDef {
 // 早就是从数组现算的,唯独这里的导航栏 title 提示还是手写死数字,会显示错误的
 // 项数。彻底删掉这个字段,改在渲染处统一从 configKeys[cat.key].length 现算，
 // 不再有第二份需要手动同步的数字。
+// 分类按「人想干什么」分,不按「代码住在哪」分。
+//
+// 从前是后者:behavior / ports / auth / mesh / storage / circuit / dev / network / slo。
+// 那是工程子系统的名字,于是 behavior 一类塞了 161 个键(占全部的 48%,里面 76 个
+// 不同词根)—— TTS 引擎参数和熔断阈值躺在同一个抽屉里。人找设置时想的是「我要让它
+// 别说话」,不是「这属于 behavior 还是 dev」。
+//
+// 这里只放**显示装饰**(标签/图标/收不收进高级)。成员关系由后端 category 现算,
+// 见 groupByCategory —— 所以调整归属改后端,不用动这里。
 const CATEGORIES: CategoryDef[] = [
-  { key: 'behavior', label: '行为 · 在场', icon: '✨' },
-  { key: 'ports', label: '端口与节点', icon: '🔌' },
-  { key: 'auth', label: '鉴权', icon: '🔒' },
-  { key: 'mesh', label: '组网 · 多设备', icon: '🕸️' },
-  { key: 'storage', label: '存储', icon: '💾' },
-  { key: 'circuit', label: '限流熔断', icon: '⚡', advanced: true },
-  { key: 'dev', label: '开发者', icon: '🛠️', advanced: true },
-  { key: 'network', label: '网络', icon: '🌐', advanced: true },
-  { key: 'slo', label: '服务水平', icon: '📊', advanced: true },
+  { key: 'voice', label: '说话与听', icon: '🔊' },
+  { key: 'perception', label: '感知', icon: '👁️' },
+  { key: 'agent', label: '思考与执行', icon: '🧠' },
+  { key: 'memory', label: '记忆', icon: '🗂️' },
+  { key: 'devices', label: '设备与跨设备', icon: '🕸️' },
+  { key: 'security', label: '安全与权限', icon: '🔒' },
+  { key: 'network', label: '网络与端口', icon: '🌐' },
+  { key: 'advanced', label: '进阶与调优', icon: '🛠️', advanced: true },
 ];
 
 // ── Config Key Registry ─────────────────────────────────────────────
@@ -571,7 +579,7 @@ export default function SettingsTab() {
   const [config, setConfig] = useState<Record<string, ConfigItem>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<string>('behavior');
+  const [activeCategory, setActiveCategory] = useState<string>('voice');
   // 分组现算,不再读手工清单。config 未加载时是空对象 → 导航为空,而不是显示一堆空分类。
   const configKeys = useMemo(() => groupByCategory(config), [config]);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
@@ -1344,7 +1352,7 @@ export default function SettingsTab() {
         <button
           className="settings-nav-item settings-nav-advanced-toggle"
           onClick={() => setShowAdvanced((v) => !v)}
-          title="高级 / 开发者设置(限流、网络、SLO 等)"
+          title="进阶与调优(熔断、并发、启动、路径、遥测)"
         >
           <span className="settings-nav-icon">{showAdvanced ? '▾' : '▸'}</span>
           <span className="settings-nav-label">高级 · 开发者</span>
@@ -1384,9 +1392,12 @@ export default function SettingsTab() {
             </span>
             {loading && <span className="settings-sync-dot" title="正在后台同步…" />}
           </h2>
-          {activeCategory === 'ports' && renderRuntimeManager()}
-          {activeCategory === 'ports' && renderConnectors()}
-          {activeCategory === 'ports' && renderNodeRoster()}
+          {/* 这三块原本挂在 'ports' 分类上。重分类之后 'ports' 不存在了 —— 不改的话
+              它们不会报错,只是**永远不显示**,而那是最难被发现的一种坏法。
+              按各自的性质重新落位:容器运行时是调优,连接器与节点花名册是设备的事。 */}
+          {activeCategory === 'advanced' && renderRuntimeManager()}
+          {activeCategory === 'devices' && renderConnectors()}
+          {activeCategory === 'devices' && renderNodeRoster()}
           <div className="settings-list">{renderCategoryItems()}</div>
         </div>
 
