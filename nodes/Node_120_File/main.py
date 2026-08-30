@@ -176,18 +176,31 @@ class FileService:
         logger.info(f"FileService initialized with workspace: {self.workspace_root}")
     
     def _resolve_path(self, path: str) -> Path:
-        """Resolve and validate path within workspace."""
+        """Resolve and validate path within workspace.
+
+        Returns the **resolved** path — the same value that was validated.
+
+        此前这里校验的是 ``p.resolve()``,返回的却是未解析的 ``p``:检查一个值、
+        用另一个值。包含性判定本身是对的(``resolve()`` 会把 ``..`` 与符号链接
+        都摊平),但把没摊平的那个交出去,等于让下游 19 个调用点各自再解析一次 ——
+        下游任何一处解析方式不同,校验就白做了。CodeQL 的 py/path-injection 报的
+        正是这一点(core/fs_walk.py 的 os.walk 成了新的汇点)。
+
+        改成"校验哪个就返回哪个"。规范化后的绝对路径也让各接口回给用户的 path
+        字段口径一致。
+        """
         p = Path(path)
         if not p.is_absolute():
             p = self.workspace_root / p
-        
+
         # Security: ensure path is within workspace
+        resolved = p.resolve()
         try:
-            p.resolve().relative_to(self.workspace_root.resolve())
+            resolved.relative_to(self.workspace_root.resolve())
         except ValueError:
             raise ValueError(f"Path '{path}' is outside the workspace. Access denied.")
-        
-        return p
+
+        return resolved
     
     async def read_file(self, request: ReadRequest) -> Dict[str, Any]:
         """Read file content."""

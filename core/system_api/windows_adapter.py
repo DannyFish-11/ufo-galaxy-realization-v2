@@ -58,6 +58,11 @@ logger = logging.getLogger(__name__)
 _SW_RESTORE = 9
 _SW_SHOW = 5
 _WM_HOTKEY = 0x0312
+
+#: 一轮消息泵最多取多少条,然后无条件让出 CPU。
+#: 存在的理由是让这个循环**结构上不可能空转** —— 见 _HotkeyPump.run 的说明。
+#: 64 是常见的消息泵批量,足够让正常热键零感知延迟。
+_MAX_MESSAGES_PER_PASS = 64
 _WM_USER = 0x0400
 
 # Shell_NotifyIcon message codes
@@ -185,8 +190,22 @@ class _HotkeyPump(threading.Thread):
             return
         msg = ctypes.wintypes.MSG()
         while not self._stop_event.is_set():
-            result = u32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)  # PM_REMOVE
-            if result:
+            # 一轮最多取 _MAX_MESSAGES_PER_PASS 条,然后**无条件**让出 CPU。
+            #
+            # 原来写的是 if/else:取到消息就立刻进下一轮,只有"没消息"才 sleep。
+            # 那等于假设 PeekMessageW 迟早会返回假 —— 一旦它不返回假,这个循环
+            # 就再也碰不到那个 sleep。实测确实会:测试里 _user32 是 MagicMock,
+            # PeekMessageW 返回的 MagicMock **恒为真**,于是 2 秒内调了 66590 次、
+            # 吃满一整个核;而本线程是 daemon,测试结束它还在转,把同一分片后面
+            # 所有用例拖慢,CI 上表现为 runner 被回收(exit 143)。
+            #
+            # 真实 Windows 上同样成立:消息洪泛时这个循环没有让出点。
+            # 所以修法不是"给 mock 打补丁",而是让这个泵**结构上不可能空转**。
+            handled = 0
+            while handled < _MAX_MESSAGES_PER_PASS and not self._stop_event.is_set():
+                if not u32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):  # PM_REMOVE
+                    break
+                handled += 1
                 if msg.message == _WM_HOTKEY:
                     hid = int(msg.wParam)
                     with self._lock:
@@ -196,8 +215,13 @@ class _HotkeyPump(threading.Thread):
                             cb()
                         except Exception as exc:  # pragma: no cover
                             logger.debug("Hotkey callback %d raised: %s", hid, exc)
-            else:
-                self._stop_event.wait(timeout=0.05)
+            # **无条件**让出,不看这一轮取到了几条。
+            #
+            # 试过"取满就只睡 1ms"那种分档,实测没用:mock 恒真等于一个永远取不完
+            # 的队列,任何"忙时快取"策略在它面前都还是烧 CPU(实测仍占 29%)。
+            # 单一节奏才给得出硬上限:每 50ms 最多 64 条 ≈ 1280 条/秒 —— 热键是
+            # 人手按出来的,一秒几次顶天,这个上限绰绰有余。
+            self._stop_event.wait(timeout=0.05)
 
 
 # ---------------------------------------------------------------------------

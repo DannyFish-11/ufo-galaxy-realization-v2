@@ -470,3 +470,81 @@ class TestDataClasses:
         t = TrayHandle()
         assert t.active is False
         assert t.tooltip == ""
+
+
+# ---------------------------------------------------------------------------
+# 热键消息泵:结构上不许空转
+# ---------------------------------------------------------------------------
+
+
+class TestHotkeyPumpCannotBusySpin:
+    """守一个实测出来的缺陷,不是假想。
+
+    ``_HotkeyPump.run`` 原来写成 if/else:取到消息就立刻进下一轮,只有"没消息"
+    才 sleep。那等于假设 ``PeekMessageW`` 迟早会返回假 —— 一旦它不返回假,循环
+    再也碰不到那个 sleep。
+
+    测试里 ``_user32`` 是 ``MagicMock``,``PeekMessageW`` 返回的 MagicMock **恒为真**,
+    于是实测 **2 秒内调用 66590 次、吃满一整个核**;而本线程是 daemon,测试结束
+    它还在转,把同一分片后面所有用例拖慢 —— CI 上表现为 runner 被回收(exit 143)。
+
+    真实 Windows 上同样成立:消息洪泛时这个循环没有让出点。所以修的是泵本身,
+    不是给 mock 打补丁。
+    """
+
+    @staticmethod
+    def _run_pump_for(seconds: float):
+        """在 mock 的 user32 下跑泵,返回 (CPU 占用率, PeekMessageW 调用次数)。"""
+        import ctypes as _ctypes
+        import threading as _threading
+        import time as _time
+        from unittest.mock import MagicMock
+
+        from core.system_api import windows_adapter as wa
+
+        saved_avail, saved_u32 = wa._WIN32_AVAILABLE, wa._user32
+        try:
+            wa._WIN32_AVAILABLE = True
+            wa._user32 = MagicMock()
+            if not hasattr(_ctypes, "wintypes"):  # 非 Windows 主机
+
+                class _MSG:
+                    def __init__(self):
+                        self.message = 0
+                        self.wParam = 0
+
+                class _WT:
+                    MSG = _MSG
+
+                _ctypes.wintypes = _WT  # type: ignore[attr-defined]
+
+            pump = wa._HotkeyPump()
+            cpu0, wall0 = _time.process_time(), _time.time()
+            pump.start()
+            _time.sleep(seconds)
+            cpu = _time.process_time() - cpu0
+            wall = _time.time() - wall0
+            pump.stop()
+            pump.join(timeout=5)
+            assert not pump.is_alive(), "stop() 之后泵必须真的停下来"
+            return cpu / wall, wa._user32.PeekMessageW.call_count
+        finally:
+            wa._WIN32_AVAILABLE, wa._user32 = saved_avail, saved_u32
+
+    def test_pump_does_not_burn_a_core_when_the_api_always_returns_truthy(self):
+        """恒真的 PeekMessageW 不能把泵变成满核空转。
+
+        阈值取 25%:修复前实测 ~100%,修复后实测 ~4%。留出的余量足够吸收
+        CI 机器的抖动,又远低于"烧掉一个核"。
+        """
+        ratio, calls = self._run_pump_for(1.0)
+        assert ratio < 0.25, f"消息泵在空转:CPU 占用 {ratio:.0%}(调用 {calls} 次)"
+
+    def test_pump_rate_is_bounded(self):
+        """每轮取数有上限、且无条件让出 —— 于是速率有硬上限。
+
+        64 条 / 50ms ≈ 1280 次/秒。放宽到 5000 次/秒仍能抓住"没有让出点"
+        那一档(修复前 1 秒 3 万次以上)。
+        """
+        _, calls = self._run_pump_for(1.0)
+        assert calls < 5000, f"1 秒内调了 {calls} 次 —— 泵没有让出点"
