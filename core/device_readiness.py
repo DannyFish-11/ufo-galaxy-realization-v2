@@ -99,6 +99,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.DeviceReadiness")
 
 __all__ = [
@@ -354,7 +356,7 @@ def _get_ucm():
 def _get_gateway_ws_manager():
     """Return the gateway GatewayWSManager, or None on failure."""
     try:
-        from galaxy_gateway.app import websocket_manager  # type: ignore
+        websocket_manager = upper_ports.resolve("gateway.app.websocket_manager")
 
         return websocket_manager
     except Exception:  # pragma: no cover
@@ -364,7 +366,7 @@ def _get_gateway_ws_manager():
 def _get_device_router():
     """Return the gateway DeviceRouter, or None on failure."""
     try:
-        from galaxy_gateway.device_router import DeviceRouter  # type: ignore
+        DeviceRouter = upper_ports.resolve("gateway.device_router.DeviceRouter")
 
         return DeviceRouter()
     except Exception:  # pragma: no cover

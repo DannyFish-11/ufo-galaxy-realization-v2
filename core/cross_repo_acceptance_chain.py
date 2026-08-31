@@ -7,6 +7,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
+from core import upper_ports
+
 logger = logging.getLogger(__name__)
 
 CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY = (
@@ -165,7 +167,7 @@ def _build_registration_stage(device_id: Optional[str]) -> Dict[str, Any]:
             logger.debug("Fallback triggered: %s", exc)
             lifecycle_stage = "unregistered"
         try:
-            from galaxy_gateway.android.handlers.registration import get_registration_gaps
+            get_registration_gaps = upper_ports.resolve("gateway.android.handlers.registration.get_registration_gaps")
 
             gaps = list(get_registration_gaps(str(device_id)) or [])
         except Exception as exc:

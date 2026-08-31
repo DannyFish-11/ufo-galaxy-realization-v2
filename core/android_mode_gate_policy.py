@@ -81,6 +81,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.AndroidModeGatePolicy")
 
 # ---------------------------------------------------------------------------
@@ -568,7 +570,7 @@ def _read_explicit_gate_bool(config: Dict[str, Any], *keys: str) -> Optional[boo
 def _check_v2_cross_device_switch() -> GateEvalResult:
     """Check whether the V2-side cross-device switch is ON."""
     try:
-        from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+        is_cross_device_enabled = upper_ports.resolve("gateway.cross_device_switch.is_cross_device_enabled")
 
         enabled = is_cross_device_enabled()
         return GateEvalResult(

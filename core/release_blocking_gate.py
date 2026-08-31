@@ -74,6 +74,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Tuple
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.ReleaseBlockingGate")
 
 # ---------------------------------------------------------------------------
@@ -384,7 +386,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
 
     # AIP v3 version string
     try:
-        from galaxy_gateway.android.message_builder import MessageBuilder
+        MessageBuilder = upper_ports.resolve("gateway.android.message_builder.MessageBuilder")
 
         ack = MessageBuilder.device_register_ack("smoke", True, "ok")
         version = ack.get("version")
@@ -395,7 +397,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
 
     # Handler coverage
     try:
-        from galaxy_gateway.android_bridge import AndroidBridge
+        AndroidBridge = upper_ports.resolve("gateway.android_bridge.AndroidBridge")
 
         bridge = AndroidBridge()
         registered = {mt.value for mt in bridge._message_handlers}
@@ -410,7 +412,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
     try:
         import uuid as _uuid
 
-        from galaxy_gateway.routing.dispatch import build_aip_message
+        build_aip_message = upper_ports.resolve("gateway.routing.dispatch.build_aip_message")
 
         msg = build_aip_message(
             device_id="smoke",

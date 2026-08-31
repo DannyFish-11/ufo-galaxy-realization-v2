@@ -65,6 +65,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Sequence
 
+from core import upper_ports
+
 __all__ = [
     # Sentinels
     "CAPABILITY_ROUTING_GATE_IS_AUTHORITY",
@@ -421,7 +423,7 @@ def _ask_the_mesh_for(required_capabilities: Sequence[str]) -> None:
     一眼可看。
     """
     try:
-        from galaxy_gateway.android.handlers.mesh_mirror import mirror_capability_query  # noqa: PLC0415
+        mirror_capability_query = upper_ports.resolve("gateway.android.handlers.mesh_mirror.mirror_capability_query")
 
         mirror_capability_query(required_capabilities)
     except Exception as exc:  # pragma: no cover - 问不出去不影响本轮路由结论

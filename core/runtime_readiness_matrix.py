@@ -83,6 +83,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Dict, List, Optional, Tuple
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.RuntimeReadinessMatrix")
 
 __all__ = [
@@ -418,7 +420,7 @@ def _eval_protocol_regression_surface() -> Tuple[DimensionStatus, str]:
     """Check that protocol regression test surface is importable."""
     try:
         importlib.import_module("galaxy_gateway.android_bridge")
-        from galaxy_gateway.android_bridge import AndroidBridge
+        AndroidBridge = upper_ports.resolve("gateway.android_bridge.AndroidBridge")
 
         bridge = AndroidBridge()
         registered = {mt.value for mt in bridge._message_handlers}
@@ -469,7 +471,7 @@ def _eval_android_local_ai_status_declared() -> Tuple[DimensionStatus, str]:
 def _eval_aip_v3_version_stable() -> Tuple[DimensionStatus, str]:
     """Check AIP v3 version string stability."""
     try:
-        from galaxy_gateway.android.message_builder import MessageBuilder
+        MessageBuilder = upper_ports.resolve("gateway.android.message_builder.MessageBuilder")
 
         ack = MessageBuilder.device_register_ack("smoke", True, "ok")
         version = ack.get("version")

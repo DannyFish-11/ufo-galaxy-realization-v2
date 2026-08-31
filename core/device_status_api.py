@@ -44,6 +44,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from core import upper_ports
 from core.status_ws_envelope import build_status_frame
 from nodes.common.cors_config import get_cors_origins
 
@@ -232,7 +233,7 @@ class DeviceStatusManager:
     def _udm_write_register(device_state: "DeviceState") -> None:
         """Write device registration to UDM SSOT (best-effort, never raises)."""
         try:
-            from galaxy_gateway.ssot import udm_write_register  # noqa: PLC0415
+            udm_write_register = upper_ports.resolve("gateway.ssot.udm_write_register")
 
             # Extract capability list from hardware fields where available.
             hw = device_state.hardware
@@ -276,7 +277,7 @@ class DeviceStatusManager:
     def _udm_write_unregister(device_id: str) -> None:
         """Write device offline/unregister to UDM SSOT (best-effort, never raises)."""
         try:
-            from galaxy_gateway.ssot import udm_write_unregister  # noqa: PLC0415
+            udm_write_unregister = upper_ports.resolve("gateway.ssot.udm_write_unregister")
 
             udm_write_unregister(device_id)
         except Exception as exc:

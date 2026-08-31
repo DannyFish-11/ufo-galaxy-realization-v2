@@ -37,6 +37,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.MainLoopL4Enhanced")
 
 L4_CANONICAL_RUNTIME_SENTINEL = "L4_CANONICAL_RUNTIME::core.galaxy_main_loop_l4_enhanced"
@@ -46,7 +48,7 @@ L4_CANONICAL_RUNTIME_SENTINEL = "L4_CANONICAL_RUNTIME::core.galaxy_main_loop_l4_
 # ---------------------------------------------------------------------------
 
 try:
-    from enhancements.perception.environment_scanner import EnvironmentScanner
+    EnvironmentScanner = upper_ports.resolve("enhancements.perception.environment_scanner.EnvironmentScanner")
 
     _PERCEPTION_AVAILABLE = True
 except Exception as _e:  # pragma: no cover - depends on environment
@@ -55,11 +57,9 @@ except Exception as _e:  # pragma: no cover - depends on environment
     _PERCEPTION_AVAILABLE = False
 
 try:
-    from enhancements.reasoning.goal_decomposer import (
-        Goal,
-        GoalDecomposer,
-        GoalType,
-    )
+    Goal = upper_ports.resolve("enhancements.reasoning.goal_decomposer.Goal")
+    GoalDecomposer = upper_ports.resolve("enhancements.reasoning.goal_decomposer.GoalDecomposer")
+    GoalType = upper_ports.resolve("enhancements.reasoning.goal_decomposer.GoalType")
 
     _GOAL_DECOMPOSER_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -70,7 +70,7 @@ except Exception as _e:  # pragma: no cover
     _GOAL_DECOMPOSER_AVAILABLE = False
 
 try:
-    from enhancements.reasoning.autonomous_planner import AutonomousPlanner
+    AutonomousPlanner = upper_ports.resolve("enhancements.reasoning.autonomous_planner.AutonomousPlanner")
 
     _PLANNER_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -79,7 +79,7 @@ except Exception as _e:  # pragma: no cover
     _PLANNER_AVAILABLE = False
 
 try:
-    from enhancements.reasoning.world_model import WorldModel
+    WorldModel = upper_ports.resolve("enhancements.reasoning.world_model.WorldModel")
 
     _WORLD_MODEL_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -88,7 +88,7 @@ except Exception as _e:  # pragma: no cover
     _WORLD_MODEL_AVAILABLE = False
 
 try:
-    from enhancements.reasoning.metacognition_service import MetaCognitionService
+    MetaCognitionService = upper_ports.resolve("enhancements.reasoning.metacognition_service.MetaCognitionService")
 
     _METACOGNITION_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -97,7 +97,7 @@ except Exception as _e:  # pragma: no cover
     _METACOGNITION_AVAILABLE = False
 
 try:
-    from enhancements.reasoning.autonomous_coder import AutonomousCoder
+    AutonomousCoder = upper_ports.resolve("enhancements.reasoning.autonomous_coder.AutonomousCoder")
 
     _CODER_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -106,7 +106,8 @@ except Exception as _e:  # pragma: no cover
     _CODER_AVAILABLE = False
 
 try:
-    from enhancements.execution.action_executor import ActionExecutor, ExecutionStatus
+    ActionExecutor = upper_ports.resolve("enhancements.execution.action_executor.ActionExecutor")
+    ExecutionStatus = upper_ports.resolve("enhancements.execution.action_executor.ExecutionStatus")
 
     _EXECUTOR_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -116,7 +117,7 @@ except Exception as _e:  # pragma: no cover
     _EXECUTOR_AVAILABLE = False
 
 try:
-    from enhancements.monitoring.status_monitor import StatusMonitor
+    StatusMonitor = upper_ports.resolve("enhancements.monitoring.status_monitor.StatusMonitor")
 
     _MONITOR_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -125,7 +126,7 @@ except Exception as _e:  # pragma: no cover
     _MONITOR_AVAILABLE = False
 
 try:
-    from enhancements.safety.safety_manager import SafetyManager
+    SafetyManager = upper_ports.resolve("enhancements.safety.safety_manager.SafetyManager")
 
     _SAFETY_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -134,7 +135,7 @@ except Exception as _e:  # pragma: no cover
     _SAFETY_AVAILABLE = False
 
 try:
-    from enhancements.learning.learning_optimizer import LearningOptimizer
+    LearningOptimizer = upper_ports.resolve("enhancements.learning.learning_optimizer.LearningOptimizer")
 
     _LEARNING_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
@@ -422,7 +423,8 @@ class GalaxyMainLoopL4:
         if self.planner is None or not discovered:
             return
         try:
-            from enhancements.reasoning.autonomous_planner import Resource, ResourceType
+            Resource = upper_ports.resolve("enhancements.reasoning.autonomous_planner.Resource")
+            ResourceType = upper_ports.resolve("enhancements.reasoning.autonomous_planner.ResourceType")
         except Exception:  # pragma: no cover - 规划模块不可用时静默跳过
             return
         resources = []

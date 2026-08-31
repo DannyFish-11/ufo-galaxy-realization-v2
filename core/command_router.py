@@ -96,6 +96,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
+from core import upper_ports
 from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.CommandRouter")
@@ -1822,10 +1823,8 @@ class CommandRouter:
                 }
 
             try:
-                from galaxy_gateway.webrtc_proxy import (
-                    initiate_webrtc_for_task,
-                    is_webrtc_ready_for_device,
-                )
+                initiate_webrtc_for_task = upper_ports.resolve("gateway.webrtc_proxy.initiate_webrtc_for_task")
+                is_webrtc_ready_for_device = upper_ports.resolve("gateway.webrtc_proxy.is_webrtc_ready_for_device")
 
                 # Fast path: already ready
                 if is_webrtc_ready_for_device(_wrtc_device):
@@ -2463,10 +2462,7 @@ class CommandRouter:
         # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
         try:
             from core.task_graph_runtime import GraphNodeState as _GNS
-            from core.task_graph_runtime import (
-                WorkflowContributorKind,
-                get_task_graph_runtime,
-            )
+            from core.task_graph_runtime import WorkflowContributorKind, get_task_graph_runtime
 
             _tgr = get_task_graph_runtime()
             _tgr.register_envelope(
@@ -3186,7 +3182,7 @@ class CommandRouter:
 
         _t0 = _time_m.monotonic()
         try:
-            from galaxy_gateway.device_router import device_router as _dr
+            _dr = upper_ports.resolve("gateway.device_router.device_router")
 
             context = dict(envelope.args or {})
             _meta = envelope.metadata or {}
@@ -3294,7 +3290,7 @@ class CommandRouter:
             # —— 另写一份的表现是两层各自演进,然后同一条命令在两边被判成不同的
             # task_type,而两边都不认为自己错了。
             try:
-                from galaxy_gateway.routing.policy import analyze_command as _analyze  # noqa: PLC0415
+                _analyze = upper_ports.resolve("gateway.routing.policy.analyze_command")
 
                 context["_pre_analysis"] = _analyze(envelope.tool_name, context)
                 context["_command_router_pre_analyzed"] = True
@@ -3700,7 +3696,7 @@ class CommandRouter:
 
         # ── Execute transport via DeviceRouter (WebSocket) ──────────────────
         try:
-            from galaxy_gateway.device_router import device_router as _dr  # lazy import
+            _dr = upper_ports.resolve("gateway.device_router.device_router")
 
             device = _dr.get_device(device_id)
             if device is None:

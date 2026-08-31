@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.Startup")
 
 
@@ -658,7 +660,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 9a-2. SessionRoaming + WakeEventBus + WakeRouter 初始化
     # ====================================================================
     try:
-        from galaxy_gateway.session_roaming import session_roaming
+        session_roaming = upper_ports.resolve("gateway.session_roaming.session_roaming")
 
         results["session_roaming"] = {
             "status": "ok",
@@ -756,7 +758,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 11. 三位一体世界模型
     # ====================================================================
     try:
-        from enhancements.reasoning.world_model import WorldModel
+        WorldModel = upper_ports.resolve("enhancements.reasoning.world_model.WorldModel")
 
         WorldModel()
         results["world_model"] = {"status": "ok", "pillars": ["ontology", "epistemology", "information"]}
@@ -913,7 +915,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 16. Galaxy Gateway 挂载（作为子应用）
     # ====================================================================
     try:
-        from galaxy_gateway.app import app as gateway_app
+        gateway_app = upper_ports.resolve("gateway.app.app")
 
         app.mount("/gateway", gateway_app)
 
@@ -933,7 +935,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         # 注:设备 WebSocket(/ws/device/{id})走根路径、由 unified_launcher 独立注册,
         # 不受此影响;本修复只补活 /gateway/* 的 REST 面。
         try:
-            from galaxy_gateway.bootstrap.lifecycle import init_gateway_core_services
+            init_gateway_core_services = upper_ports.resolve("gateway.bootstrap.lifecycle.init_gateway_core_services")
 
             (
                 _gw_dm,

@@ -129,11 +129,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Check import boundaries (warning mode)
-        # Warning-only: reports violations but does not fail CI.
-        # Switch to --strict once the existing violations are resolved.
+      - name: Check import boundaries (strict)
+        # 2026-08-31 起转 --strict：存量 70 处越界(core/ → galaxy_gateway/ 53、
+        # core/ → enhancements/ 17)已全部改走 core/upper_ports 的端口绑定表。
+        # 告警模式留着没有意义 —— 一道永远报警又永远不失败的闸等于没有闸。
         run: |
-          python scripts/check_import_boundaries.py
+          python scripts/check_import_boundaries.py --strict
           echo "✅ Import boundary check complete (warning mode)."
 
   # ---------------------------------------------------------------------------

@@ -40,6 +40,8 @@ from __future__ import annotations
 import logging
 from typing import Callable, Dict, Optional, Tuple
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.CompatWSVocabulary")
 
 __all__ = [
@@ -80,7 +82,7 @@ def _aip_canonical_or_none() -> Optional[Callable[[str], str]]:
     降级要**响**：静默降级的症状是"某些客户端的消息偶尔走不通"，指不回这里。
     """
     try:
-        from galaxy_gateway.protocol.compat import canonical_message_type
+        canonical_message_type = upper_ports.resolve("gateway.protocol.compat.canonical_message_type")
 
         return canonical_message_type
     except Exception as exc:  # noqa: BLE001 — 协议层缺席不该拖垮设备入口
