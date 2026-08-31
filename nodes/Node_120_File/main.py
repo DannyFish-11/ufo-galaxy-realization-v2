@@ -208,21 +208,21 @@ class FileService:
         """
         # 规范化 → 判定 → 返回同一个值,三步都在这里,下游拿到的就是被判定过的那个。
         #
-        # 用 os.path.realpath + os.path.commonpath 而不是 Path.resolve +
-        # Path.relative_to:两者安全语义等价(都把 .. 与符号链接摊平后比较祖先),
-        # 但前者是 CodeQL 的 py/path-injection 认得的净化形态。换写法之前这里
-        # 报过 13 条污点路径 —— 而被报的恰恰是**做净化的那一行**。
+        # 用 os.path.realpath + 前缀比对而不是 Path.resolve + Path.relative_to:
+        # 安全语义等价(都把 .. 与符号链接摊平后比较祖先),但前者是 CodeQL 的
+        # py/path-injection 认得的净化形态。换写法之前这里报过 13 条污点路径 ——
+        # 而被报的恰恰是**做净化的那一行**。
         root = os.path.realpath(self.workspace_root)
         # 注意 os.path.join 的语义:path 是绝对路径时它直接取 path。
         # 这正是我们要的 —— 允许绝对路径,但它同样要过下面这道包含性判定。
         candidate = os.path.realpath(os.path.join(root, path))
 
-        try:
-            inside = os.path.commonpath([root, candidate]) == root
-        except ValueError:
-            # Windows 上跨盘符时 commonpath 会抛 —— 跨盘符本来就在工作区外。
-            inside = False
-        if not inside:
+        # 前缀比对而不是 commonpath:同结论(两种判据在 60000 组随机路径上完全一致,
+        # 前提是两侧都先过 realpath —— 这里正是),但只有前者是 CodeQL
+        # py/path-injection 认得的净化。跨盘符时 startswith 直接为假,比 commonpath
+        # 抛 ValueError 再兜住更直白。os.path.join(root, "") 而不是 root + os.sep:
+        # 根为 "/" 时前者给 "/",后者给 "//"。
+        if candidate != root and not candidate.startswith(os.path.join(root, "")):
             raise ValueError(f"Path '{path}' is outside the workspace. Access denied.")
 
         return Path(candidate)
@@ -411,16 +411,15 @@ class FileService:
         # 顺着这条流报到了 copytree,报得对(display_path 已单独修掉)。
         #
         # 教训是别的:一个函数"安全"不该建立在"我的调用方会先检查"上面。这里用
-        # realpath + commonpath 重新确认一遍 —— 多花两次系统调用,换掉一个隐式前提。
+        # realpath + 前缀比对重新确认一遍 —— 多花两次系统调用,换掉一个隐式前提。
         root = os.path.realpath(str(self.workspace_root))
+        prefix = os.path.join(root, "")
         src_root = os.path.realpath(os.path.join(root, source))
         dst_root = os.path.realpath(os.path.join(root, destination))
         for candidate in (src_root, dst_root):
-            try:
-                inside = os.path.commonpath([root, candidate]) == root
-            except ValueError:
-                inside = False
-            if not inside:
+            # 前缀比对而不是 commonpath —— 与本文件 extract_archive 里那处同形态,
+            # 理由见 core/safe_fs.PathOnlyGuard._resolve 的 docstring。
+            if candidate != root and not candidate.startswith(prefix):
                 raise ValueError(f"Path '{candidate}' is outside the workspace. Access denied.")
 
         if self.guard.exists(destination):

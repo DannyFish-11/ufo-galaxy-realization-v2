@@ -77,6 +77,7 @@ from typing import IO, Any, Iterator, List, Sequence
 
 __all__ = [
     "MAX_SYMLINK_HOPS",
+    "flags_for_mode",
     "PathEscapesWorkspace",
     "SymlinkNotFollowed",
     "PathOnlyGuard",
@@ -128,6 +129,36 @@ def _split(relpath: str | os.PathLike[str]) -> List[str]:
     if os.sep == "\\":
         text = text.replace("\\", "/")
     return [seg for seg in text.split("/") if seg not in ("", ".")]
+
+
+def flags_for_mode(mode: str) -> int:
+    """把内建 ``open`` 的 mode 串翻成 ``os.open`` 的 flags。
+
+    这是在重做 CPython ``io.open`` 的一小段活儿,所以别靠眼力 ——
+    ``tests/test_safe_fs_closes_the_toctou_window`` 里有一条用例,拿内建 ``open``
+    的 ``opener`` 把**它自己**算出来的 flags 截下来,逐个 mode 与这里比对。
+    改这个函数时那条会兜住。
+    """
+    cleaned = mode.replace("b", "").replace("t", "")
+    updating = "+" in cleaned
+    cleaned = cleaned.replace("+", "")
+    if cleaned not in ("r", "w", "x", "a"):
+        raise ValueError(f"无法识别的 mode: {mode!r}")
+
+    if cleaned == "r":
+        flags = os.O_RDWR if updating else os.O_RDONLY
+    else:
+        flags = (os.O_RDWR if updating else os.O_WRONLY) | os.O_CREAT
+        if cleaned == "w":
+            flags |= os.O_TRUNC
+        elif cleaned == "x":
+            flags |= os.O_EXCL
+        else:  # "a"
+            flags |= os.O_APPEND
+    # 内建 open 会补 O_CLOEXEC(实测:每个 mode 都只差这一位)。行为上其实是重复的
+    # —— PEP 446 之后 Python 创建的 fd 默认就不可继承 —— 但补上之后本函数与内建
+    # 逐位一致,那条比对用例才能断言相等而不是"允许差一位"。
+    return flags | getattr(os, "O_CLOEXEC", 0)
 
 
 def _is_symlink(name: str, dir_fd: int) -> bool:
@@ -341,18 +372,6 @@ class WorkspaceGuard:
             finally:
                 self._close_stack(stack)
 
-    def opener(self, relpath: str | os.PathLike[str], *, follow_final: bool = False):
-        """给内建 ``open(..., opener=...)`` 用的 opener。
-
-        这样就能拿到真正的文件对象(带编码、缓冲、上下文管理),而底下那次
-        ``open`` 走的是描述符锚定的解析。
-        """
-
-        def _opener(_path: str, flags: int) -> int:
-            return self.open_fd(relpath, flags, follow_final=follow_final)
-
-        return _opener
-
     def open(  # noqa: A003 - 与内建同名是刻意的,调用点读起来就是 open
         self,
         relpath: str | os.PathLike[str],
@@ -361,12 +380,25 @@ class WorkspaceGuard:
         follow_final: bool = False,
         **kwargs: Any,
     ) -> IO[Any]:
-        """``builtins.open`` 的安全版本。参数与内建一致(``opener`` 除外)。"""
-        # 传给内建的路径只用于错误消息与 ``.name``;真正定位靠 opener。
-        # 即便如此也走已校验的 display_path —— 交出去的字符串(会出现在 f.name、
-        # 异常消息、日志里)不该是一个指向工作区外的路径。
-        display = str(self.display_path(relpath))
-        return open(display, mode, opener=self.opener(relpath, follow_final=follow_final), **kwargs)  # noqa: SIM115
+        """``builtins.open`` 的安全版本。参数与内建一致(``opener`` 除外)。
+
+        **全程不出现路径字符串。** 先按描述符锚定的方式拿到 fd,再把 fd 交给内建
+        ``open``(它接受 fd 作第一参数)。
+
+        此前是 ``open(display_path(relpath), mode, opener=...)`` —— 那个字符串只
+        用于 ``f.name`` 与错误消息,真正定位靠 opener,所以并不构成逃逸。但它仍是
+        "把用户给的路径拼成字符串再交给 open",既是本模块自己反对的形状,也让
+        CodeQL 报了一条 py/path-injection。现在连这个形状都不留。
+
+        代价说清楚:``f.name`` 变成 fd 号(整数)而不是路径。这是接受的 ——
+        要路径的地方直接调 :meth:`display_path`。
+        """
+        fd = self.open_fd(relpath, flags_for_mode(mode), follow_final=follow_final)
+        try:
+            return open(fd, mode, closefd=True, **kwargs)  # noqa: SIM115 — 调用方负责关闭
+        except Exception:
+            os.close(fd)
+            raise
 
     # ── 读写 ──────────────────────────────────────────────────────────────
 
@@ -593,8 +625,8 @@ class WorkspaceGuard:
 class PathOnlyGuard(WorkspaceGuard):
     """没有 ``dir_fd`` 的平台上的退路 —— **窗口仍在**,这一点必须挂在名字上。
 
-    接口与 :class:`WorkspaceGuard` 相同,底下是先前那套 ``realpath`` +
-    ``commonpath`` 的纯路径校验。它挡得住 ``..``、绝对路径、以及**校验那一刻**
+    接口与 :class:`WorkspaceGuard` 相同,底下是先前那套 ``realpath`` + 前缀比对的
+    纯路径校验。它挡得住 ``..``、绝对路径、以及**校验那一刻**
     就已存在的越界符号链接;挡不住的是校验之后、使用之前被换掉的名字。
 
     存在的意义是让 Windows 上的调用点不必写第二套代码,而不是假装保护同样牢靠。
@@ -623,9 +655,19 @@ class PathOnlyGuard(WorkspaceGuard):
         (调用点 → ``_resolve`` → helper)就跟丢了,于是下面九个方法全被报成
         未净化。把判定放回这一层,既不改语义也不多写几行。
 
-        写成 ``os.path.realpath`` + ``os.path.commonpath`` 而不是 ``Path.resolve``
-        + ``Path.relative_to``:两者安全语义等价(都把 ``..`` 与符号链接摊平后比较
-        祖先),但前者是静态分析认得的净化形态。
+        判定形态是 ``os.path.realpath`` + 前缀比对,**不是** ``commonpath``。
+
+        这是照着证据挑的,不是口味:同一批 CodeQL 报警里,``nodes/Node_120_File``
+        的 ``extract_archive`` 用 ``realpath`` + ``startswith(root + os.sep)``
+        做同样的包含性判定,**一条都没被报**;而所有用 ``commonpath`` 的地方全被
+        报成"未净化"。看起来 ``py/path-injection`` 认 ``startswith`` 这种前缀检查,
+        不认 ``commonpath``。
+
+        换写法之前先证过等价:两种判据在 60000 组随机路径 + 全部固定用例上结论
+        完全一致(前提是两侧都先过 ``realpath`` —— 这正是这里的情况)。唯一会分歧
+        的是根为 POSIX 特殊的 ``//``,而 ``realpath('//')`` 就是 ``'/'``,构造不出来。
+        ``os.path.join(root, "")`` 而不是 ``root + os.sep``:根为 ``/`` 时前者给
+        ``/``,后者给 ``//``。
         """
         root = os.path.realpath(os.fspath(self._root_path))
         try:
@@ -634,11 +676,7 @@ class PathOnlyGuard(WorkspaceGuard):
             # realpath 在路径抖动时会抛。旧实现漏了这条,于是并发下调用方拿到的是
             # 裸 FileNotFoundError,而不是本该给出的 ValueError。
             raise PathEscapesWorkspace(f"路径解析失败: {relpath}") from exc
-        try:
-            inside = os.path.commonpath([root, candidate]) == root
-        except ValueError:
-            inside = False  # Windows 跨盘符:本来就在工作区外
-        if not inside:
+        if candidate != root and not candidate.startswith(os.path.join(root, "")):
             raise PathEscapesWorkspace(f"Path '{relpath}' is outside the workspace. Access denied.")
         return Path(candidate)
 

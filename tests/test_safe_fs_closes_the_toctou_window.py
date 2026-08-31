@@ -176,10 +176,54 @@ def test_display_path_returns_the_real_location_for_an_inside_path(guard, ws):
     assert guard.display_path("") == ws.resolve()
 
 
-def test_open_reports_a_name_inside_the_workspace(guard, ws):
-    """文件对象的 ``.name`` 会进日志和异常消息 —— 它也该是个工作区内的路径。"""
+def test_open_never_goes_through_a_path_string(guard):
+    """``open()`` 全程不碰路径字符串 —— 拿到的是 fd,交给内建 open 的也是 fd。
+
+    这是刻意的取舍:``f.name`` 因此是 fd 号而不是路径。换来的是这条路上再没有
+    "把用户给的路径拼成字符串交给 open"这个形状 —— 那既是本模块自己反对的,
+    也是 CodeQL 报 py/path-injection 的那一条。要路径请调 ``display_path``。
+    """
     with guard.open("sub/a.txt") as handle:
-        assert handle.name == str((ws / "sub" / "a.txt").resolve())
+        assert isinstance(handle.name, int), f".name 应当是 fd,拿到的是 {handle.name!r}"
+        assert handle.read() == "inside-a"
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["r", "rb", "r+", "rb+", "w", "wb", "w+", "wb+", "a", "ab", "a+", "ab+", "x", "xb", "x+"],
+)
+def test_flags_for_mode_matches_what_builtin_open_computes(mode, tmp_path):
+    """``flags_for_mode`` 是在重做 CPython io.open 的一小段活儿 —— 不靠眼力,靠比对。
+
+    内建 ``open`` 会把自己算好的 flags 交给 ``opener``。这里把它截下来,和我们
+    自己算的逐位比。任何一个 mode 对不上,这条就红。
+    """
+    from core.safe_fs import flags_for_mode
+
+    target = tmp_path / "probe.bin"
+    if mode.startswith(("r", "a")) or "+" in mode:
+        target.write_bytes(b"seed")
+    if mode.startswith("x") and target.exists():
+        target.unlink()
+
+    captured = {}
+
+    def _capture(path, flags):
+        captured["flags"] = flags
+        return os.open(path, flags, 0o666)
+
+    with open(target, mode, opener=_capture) as handle:  # noqa: SIM115 — 上下文管理器已经在这
+        assert handle is not None
+    assert captured["flags"] == flags_for_mode(
+        mode
+    ), f"mode={mode!r}:内建算出 {captured['flags']:#o},我们算出 {flags_for_mode(mode):#o}"
+
+
+def test_flags_for_mode_rejects_nonsense(guard):
+    from core.safe_fs import flags_for_mode
+
+    with pytest.raises(ValueError):
+        flags_for_mode("q")
 
 
 # ── 拒穿越 ────────────────────────────────────────────────────────────────
