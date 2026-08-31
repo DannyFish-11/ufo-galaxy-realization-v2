@@ -18,6 +18,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.CrossDeviceSync")
 
 # Retains fire-and-forget phase-sync tasks.  asyncio.get_event_loop().create_task
@@ -249,7 +251,7 @@ async def _async_push_phase_to_all_devices(
     5. Latency is recorded for future prioritization
     """
     try:
-        from galaxy_gateway.android_bridge import android_bridge as _bridge  # noqa: PLC0415
+        _bridge = upper_ports.resolve("gateway.android_bridge.android_bridge")
     except Exception as exc:
         logger.debug("CrossDeviceSync: bridge not available: %s", exc)
         return
@@ -328,8 +330,8 @@ async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
     deliver via ``connection_manager.send_to_device`` (which has its own UCM
     fallback).  Reuses the same ``state_event`` message Android receives.
     """
-    from galaxy_gateway.android.handlers.wearos_sync import is_wearos_device  # noqa: PLC0415
-    from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
+    is_wearos_device = upper_ports.resolve("gateway.android.handlers.wearos_sync.is_wearos_device")
+    connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
 
     try:
         from core.routes._shared import registered_devices  # noqa: PLC0415
@@ -389,7 +391,7 @@ async def push_current_phase_to_device(device_id: str, *, sync_type: str = "cros
 
     msg = build_phase_state_event(new_phase=current_phase, sync_type=sync_type)
     try:
-        from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
+        connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
 
         await connection_manager.send_to_device(device_id, msg)
     except Exception as exc:  # noqa: BLE001
@@ -454,7 +456,7 @@ async def push_task_state_to_device(
 ) -> bool:
     """Push task state update to a specific Android device."""
     try:
-        from galaxy_gateway.android_bridge import android_bridge as _bridge  # noqa: PLC0415
+        _bridge = upper_ports.resolve("gateway.android_bridge.android_bridge")
 
         device = _bridge._devices.get(device_id)
         if device is None or device.websocket is None:

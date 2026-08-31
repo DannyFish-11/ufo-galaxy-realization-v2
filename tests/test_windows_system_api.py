@@ -494,9 +494,22 @@ class TestHotkeyPumpCannotBusySpin:
 
     @staticmethod
     def _run_pump_for(seconds: float):
-        """在 mock 的 user32 下跑泵,返回 (CPU 占用率, PeekMessageW 调用次数)。"""
+        """在 mock 的 user32 下跑泵,返回 (泵线程的 CPU 占用率, PeekMessageW 调用次数)。
+
+        量的是**泵线程自己**的 CPU,不是整个进程的。
+
+        第一版用的是 ``time.process_time()`` —— 那是**进程级**的,把所有线程算在一起。
+        本机安静时看着没问题,到了 CI 的 test-shard(4) 就误报:那一个进程里跑着 9700
+        条测试,还留着一堆没清干净的后台任务(同一轮日志里就有 ``NATSBus.
+        publish_presence_event``、``CapabilityRegistry._load_gateway`` 等若干
+        "Task was destroyed but it is pending")。它们烧的 CPU 全被记到了泵头上,
+        于是断言炸在 71%,而同一次测量里 ``PeekMessageW`` 只被调了 **512 次** ——
+        真空转时是 66590 次。两个信号直接打架,错的是量法不是被测对象。
+
+        改法:让 mock 的 ``PeekMessageW`` 在**泵线程内**采 ``time.thread_time()``。
+        它按线程计时,于是拿到的就是泵线程自己的 CPU,旁边多吵都不受影响。
+        """
         import ctypes as _ctypes
-        import threading as _threading
         import time as _time
         from unittest.mock import MagicMock
 
@@ -505,7 +518,16 @@ class TestHotkeyPumpCannotBusySpin:
         saved_avail, saved_u32 = wa._WIN32_AVAILABLE, wa._user32
         try:
             wa._WIN32_AVAILABLE = True
-            wa._user32 = MagicMock()
+            u32 = MagicMock()
+            samples: list[float] = []
+
+            def _peek(*_args, **_kwargs):
+                # 在泵线程里执行 —— thread_time() 因此量的是泵线程。
+                samples.append(_time.thread_time())
+                return 1  # 恒真:正是当年把泵变成空转的那个条件
+
+            u32.PeekMessageW.side_effect = _peek
+            wa._user32 = u32
             if not hasattr(_ctypes, "wintypes"):  # 非 Windows 主机
 
                 class _MSG:
@@ -519,15 +541,19 @@ class TestHotkeyPumpCannotBusySpin:
                 _ctypes.wintypes = _WT  # type: ignore[attr-defined]
 
             pump = wa._HotkeyPump()
-            cpu0, wall0 = _time.process_time(), _time.time()
+            wall0 = _time.time()
             pump.start()
             _time.sleep(seconds)
-            cpu = _time.process_time() - cpu0
             wall = _time.time() - wall0
             pump.stop()
             pump.join(timeout=5)
             assert not pump.is_alive(), "stop() 之后泵必须真的停下来"
-            return cpu / wall, wa._user32.PeekMessageW.call_count
+
+            calls = u32.PeekMessageW.call_count
+            assert calls >= 2, f"泵只调了 {calls} 次,采不到 CPU —— 这一轮测量无效"
+            # 首尾两次采样之间,泵线程自己烧掉的 CPU。
+            thread_cpu = samples[-1] - samples[0]
+            return thread_cpu / wall, calls
         finally:
             wa._WIN32_AVAILABLE, wa._user32 = saved_avail, saved_u32
 
@@ -536,6 +562,8 @@ class TestHotkeyPumpCannotBusySpin:
 
         阈值取 25%:修复前实测 ~100%,修复后实测 ~4%。留出的余量足够吸收
         CI 机器的抖动,又远低于"烧掉一个核"。
+
+        量的是泵线程自己的 CPU —— 见 :meth:`_run_pump_for` 里记的那次 CI 误报。
         """
         ratio, calls = self._run_pump_for(1.0)
         assert ratio < 0.25, f"消息泵在空转:CPU 占用 {ratio:.0%}(调用 {calls} 次)"

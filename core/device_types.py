@@ -16,11 +16,11 @@ galaxy_gateway.protocol.aip_v3 (30+ device subtypes).
 
 from enum import Enum
 
+from core import upper_ports
+
 # 从 AIP v3.0 重导出细分类型（协议层使用）
-from galaxy_gateway.protocol.aip_v3 import (
-    AIPDeviceType,
-    DevicePlatform,
-)
+AIPDeviceType = upper_ports.resolve("gateway.protocol.aip_v3.AIPDeviceType")
+DevicePlatform = upper_ports.resolve("gateway.protocol.aip_v3.DevicePlatform")
 
 # ============================================================================
 # 简化设备类型（core 层 + 路由层统一使用）

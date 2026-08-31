@@ -74,6 +74,18 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Tuple
 
+# 本模块**既是库也是脚本**(见文件末尾的 __main__ 守卫,CI 里就是
+# `python core/release_blocking_gate.py` 这么跑的)。直接跑时 sys.path[0] 是
+# core/ 而不是仓库根,`from core import ...` 会 ModuleNotFoundError。
+# 这里把仓库根补进去 —— 只在"没有包上下文"(即被当脚本跑)时补,正常 import 不受影响。
+if __package__ in (None, ""):  # pragma: no cover - 只在直接执行时成立
+    import os as _os
+    import sys as _sys
+
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.ReleaseBlockingGate")
 
 # ---------------------------------------------------------------------------
@@ -384,7 +396,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
 
     # AIP v3 version string
     try:
-        from galaxy_gateway.android.message_builder import MessageBuilder
+        MessageBuilder = upper_ports.resolve("gateway.android.message_builder.MessageBuilder")
 
         ack = MessageBuilder.device_register_ack("smoke", True, "ok")
         version = ack.get("version")
@@ -395,7 +407,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
 
     # Handler coverage
     try:
-        from galaxy_gateway.android_bridge import AndroidBridge
+        AndroidBridge = upper_ports.resolve("gateway.android_bridge.AndroidBridge")
 
         bridge = AndroidBridge()
         registered = {mt.value for mt in bridge._message_handlers}
@@ -410,7 +422,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
     try:
         import uuid as _uuid
 
-        from galaxy_gateway.routing.dispatch import build_aip_message
+        build_aip_message = upper_ports.resolve("gateway.routing.dispatch.build_aip_message")
 
         msg = build_aip_message(
             device_id="smoke",

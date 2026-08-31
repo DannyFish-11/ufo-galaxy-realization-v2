@@ -11,7 +11,7 @@ secret scanning, and architecture/complexity enforcement.
 |---|---|---|---|
 | Type checking | mypy | `type-check` | Strict on selected modules, warn elsewhere |
 | Secret scanning | gitleaks | `secret-scan` | Hard fail on any detected secret |
-| Import boundaries | `scripts/check_import_boundaries.py` | `import-boundaries` | Warning (strict mode available) |
+| Import boundaries | `scripts/check_import_boundaries.py` | `import-boundaries` | Hard fail (`--strict` since 2026-08-31) |
 | File complexity | `scripts/check_file_complexity.py` | `file-complexity` | Hard fail for new violations |
 
 ---
@@ -80,17 +80,64 @@ Enforces that lower-level layers do not import from higher-level layers:
 | `core` ↛ `dashboard` | `core/` | `dashboard.*` |
 | `core` ↛ `enhancements` | `core/` | `enhancements.*` |
 
-Currently runs in **warning mode** (CI reports violations but doesn't block).
-Once existing violations are resolved, switch the CI step to use `--strict`.
+Runs in **`--strict`** mode since 2026-08-31 — violations block CI.
+
+It used to run warning-only, with 70 pre-existing violations across 30 files
+(`core/` → `galaxy_gateway/` 53, `core/` → `enhancements/` 17). A gate that
+always warns and never fails is not a gate: it stops distinguishing "this got
+worse today" from "it has always been like this", so everyone learns to ignore
+it — and genuinely new violations ride in behind the noise.
+
+#### How `core/` reaches the upper layers now
+
+All 70 sites had the same shape — an optional upper-layer component with a
+graceful-degradation branch:
+
+```python
+try:
+    from galaxy_gateway.android_bridge import android_bridge
+    ...
+except Exception:
+    <degrade>
+```
+
+They now go through **`core/upper_ports.py`**, which resolves a *port name*
+against a binding table in **`config/upper_layer_ports.json`**:
+
+```python
+bridge = upper_ports.resolve("gateway.android_bridge.android_bridge")
+```
+
+`resolve()` is `importlib.import_module` + `getattr` — byte-for-byte the same
+lookup the import statement performed. Failure raises `PortUnavailable`, which
+**subclasses `ImportError`**, so every existing `except ImportError` /
+`except Exception` degradation branch still catches it unchanged.
+
+**What this buys, and what it does not.** It buys three things: `core/` no
+longer names an upper layer in code, so the rule is mechanically checkable;
+57 upward dependencies that were scattered across 30 files now sit in one
+auditable table; and `upper_ports.register()` lets the gateway — or a test —
+inject an implementation, which is the actual inversion seam (the table is just
+the default when nobody injects).
+
+It does **not** decouple anything. Those code paths still need the upper layer
+at runtime. Late binding is not decoupling; delete `galaxy_gateway/` and the
+affected features stop working — they just fail in the existing degradation
+branch instead of at import time.
+
+Adding a new upward dependency means adding a row to the binding table, which
+is exactly the point: it shows up in review as a table entry instead of hiding
+in the middle of a function.
+
+`tests/test_upper_ports_bindings_are_real.py` replaces the compile-time check
+the import statement used to provide: every declared port must actually resolve,
+every port used in `core/` must be declared, and no declared port may be unused.
 
 **Run locally:**
 
 ```bash
-# Warning mode (default)
-python scripts/check_import_boundaries.py
-
-# Strict mode (exits 1 on violations)
 python scripts/check_import_boundaries.py --strict
+pytest tests/test_upper_ports_bindings_are_real.py
 ```
 
 ### C2. File complexity budget

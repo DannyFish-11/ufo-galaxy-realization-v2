@@ -57,6 +57,8 @@ import logging
 import os
 import time
 
+from core import upper_ports
+
 _startup_time = time.time()
 from dataclasses import dataclass  # noqa: E402  启动时间戳须在重导入前捕获
 from datetime import datetime  # noqa: E402  启动时间戳须在重导入前捕获
@@ -248,9 +250,11 @@ def get_device_ingress_surface_report(
     env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Return a machine-readable view of canonical and compatibility ingress surfaces."""
-    from galaxy_gateway.routes.websocket import (
-        CANONICAL_DEVICE_INGRESS_AUTHORITY,
-        DEVICE_WS_INGRESS_SURFACE_REGISTRY,
+    CANONICAL_DEVICE_INGRESS_AUTHORITY = upper_ports.resolve(
+        "gateway.routes.websocket.CANONICAL_DEVICE_INGRESS_AUTHORITY"
+    )
+    DEVICE_WS_INGRESS_SURFACE_REGISTRY = upper_ports.resolve(
+        "gateway.routes.websocket.DEVICE_WS_INGRESS_SURFACE_REGISTRY"
     )
 
     return {

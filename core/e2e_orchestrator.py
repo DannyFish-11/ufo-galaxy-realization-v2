@@ -52,6 +52,8 @@ import logging
 import uuid as _uuid_mod
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.E2EOrchestrator")
 
 # ---------------------------------------------------------------------------
@@ -496,7 +498,7 @@ async def process_wake_event(
         {"session_id": str, "status": str}
     """
     try:
-        from galaxy_gateway.session_roaming import session_roaming
+        session_roaming = upper_ports.resolve("gateway.session_roaming.session_roaming")
 
         session = session_roaming.create_session(
             device_id=device_id,

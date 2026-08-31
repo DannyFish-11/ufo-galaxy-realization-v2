@@ -102,6 +102,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+from core import upper_ports
 from core.android_participation_truth_scoring import (
     get_android_participation_tier_score_bonus,
     normalize_android_participation_tier,
@@ -1785,7 +1786,8 @@ def _try_remote_handoff(
     Returns a result dict on success; a minimal failure dict on any error.
     """
     try:
-        from galaxy_gateway.agent_bridge import AgentBridge, HandoffContract  # type: ignore[attr-defined]
+        AgentBridge = upper_ports.resolve("gateway.agent_bridge.AgentBridge")
+        HandoffContract = upper_ports.resolve("gateway.agent_bridge.HandoffContract")
 
         bridge = AgentBridge() if hasattr(AgentBridge, "__init__") else None
         if bridge is not None and hasattr(bridge, "handoff"):
@@ -1880,7 +1882,7 @@ def _try_android_bridge_dispatch(
         on other errors — callers MAY fall back to local execution.
     """
     try:
-        from galaxy_gateway.android_bridge import android_bridge as _bridge  # type: ignore[attr-defined]
+        _bridge = upper_ports.resolve("gateway.android_bridge.android_bridge")
 
         # Check whether the device is in the Android transport cache.
         # This asks about *transport liveness* only (is there a live Android

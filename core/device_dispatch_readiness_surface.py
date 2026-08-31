@@ -41,6 +41,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
 from core.runtime_truth_governance import (
     TRUTH_GRADE_DURABLE,
     TRUTH_GRADE_PROJECTION,
@@ -103,8 +104,8 @@ def _enumerate_known_device_ids() -> List[str]:
 
     # 来源 2：注册 gap 存储（即使 UDM 不可用也能看到近期注册设备）
     try:
-        from galaxy_gateway.android.handlers.registration import (
-            get_all_devices_with_registration_gaps,
+        get_all_devices_with_registration_gaps = upper_ports.resolve(
+            "gateway.android.handlers.registration.get_all_devices_with_registration_gaps"
         )
 
         for did in get_all_devices_with_registration_gaps():

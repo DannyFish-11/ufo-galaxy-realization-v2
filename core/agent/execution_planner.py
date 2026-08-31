@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from core import upper_ports
 from core.agent.intent_router import IntentResult
 
 # C阶段 4B: 任务记忆（可选依赖）
@@ -51,7 +52,7 @@ async def _try_decompose_task(message: str, targets: list, context: dict) -> lis
     if len(targets) <= 1:
         return [{"target": targets[0] if targets else None, "message": message}]
     try:
-        from galaxy_gateway.task_decomposer import TaskDecomposer
+        TaskDecomposer = upper_ports.resolve("gateway.task_decomposer.TaskDecomposer")
 
         decomposer = TaskDecomposer(device_registry=None)
         # Use decompose_multi_device_command for multi-target tasks
@@ -1168,8 +1169,8 @@ class ExecutionPlanner:
             twin_id: Optional[str] = None
             twin_coupling: Optional[str] = None
             try:
-                from enhancements.agent_factory.twin_model import CouplingMode as _CM
-                from enhancements.agent_factory.twin_model import twin_manager as _tm
+                _CM = upper_ports.resolve("enhancements.agent_factory.twin_model.CouplingMode")
+                _tm = upper_ports.resolve("enhancements.agent_factory.twin_model.twin_manager")
 
                 if _tm is not None:
                     twin = _tm.create_twin(

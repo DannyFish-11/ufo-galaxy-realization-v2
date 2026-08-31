@@ -24,6 +24,7 @@ import asyncio
 import logging
 from typing import Optional
 
+from core import upper_ports
 from core.task_utils import create_tracked_task
 
 logger = logging.getLogger("Galaxy.EventBridge")
@@ -375,7 +376,7 @@ class EventBridge:
         # 8. SessionRoaming → EventBus (会话迁移)
         # ====================================================================
         try:
-            from galaxy_gateway.session_roaming import session_roaming
+            session_roaming = upper_ports.resolve("gateway.session_roaming.session_roaming")
 
             _orig_on_migrate = getattr(session_roaming, "_on_session_migrated", None)
 

@@ -44,6 +44,8 @@ from typing import Any, Dict, List, Optional  # noqa: E402  哨兵权威声明�
 
 from fastapi import WebSocket  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
+from core import upper_ports  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+
 from .models import UnifiedConnectionInfo, UnifiedConnectionState  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("Galaxy.Unified.ConnectionManager")
@@ -327,10 +329,11 @@ class UnifiedConnectionManager:
 
         # 2. 尝试通过 gateway websocket_manager 发送
         try:
-            from galaxy_gateway.app import websocket_manager as gw_ws_manager  # type: ignore
+            gw_ws_manager = upper_ports.resolve("gateway.app.websocket_manager")
 
             if gw_ws_manager and gw_ws_manager.is_device_connected(device_id):
-                from galaxy_gateway.protocol import AIPMessage, MessageType  # type: ignore
+                AIPMessage = upper_ports.resolve("gateway.protocol.AIPMessage")
+                MessageType = upper_ports.resolve("gateway.protocol.MessageType")
 
                 aip_msg = AIPMessage(
                     type=MessageType.COMMAND,
@@ -349,7 +352,7 @@ class UnifiedConnectionManager:
 
         # 3. 尝试通过 device_router 发送（保底）
         try:
-            from galaxy_gateway.device_router import device_router  # type: ignore
+            device_router = upper_ports.resolve("gateway.device_router.device_router")
 
             device = device_router.get_device(device_id)
             if device and getattr(device, "websocket", None):
@@ -456,7 +459,7 @@ class UnifiedConnectionManager:
 
         # 合并 gateway websocket_manager 设备
         try:
-            from galaxy_gateway.app import websocket_manager as gw_ws_manager  # type: ignore
+            gw_ws_manager = upper_ports.resolve("gateway.app.websocket_manager")
 
             if gw_ws_manager:
                 for did in gw_ws_manager.get_connected_devices():
@@ -473,7 +476,7 @@ class UnifiedConnectionManager:
 
         # 合并 device_router 设备
         try:
-            from galaxy_gateway.device_router import device_router  # type: ignore
+            device_router = upper_ports.resolve("gateway.device_router.device_router")
 
             for did, device in device_router.devices.items():
                 if did not in result:

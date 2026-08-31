@@ -35,6 +35,8 @@ from dataclasses import replace as _dc_replace
 from enum import Enum
 from typing import Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.AgentTeam")
 
 
@@ -45,8 +47,9 @@ def _soul_prefix(soul: str) -> str:
 
 # 孪生模型管理器（可选依赖）
 try:
-    from enhancements.agent_factory.twin_model import CouplingMode as TwinCouplingMode
-    from enhancements.agent_factory.twin_model import TwinModelManager, TwinState
+    TwinCouplingMode = upper_ports.resolve("enhancements.agent_factory.twin_model.CouplingMode")
+    TwinModelManager = upper_ports.resolve("enhancements.agent_factory.twin_model.TwinModelManager")
+    TwinState = upper_ports.resolve("enhancements.agent_factory.twin_model.TwinState")
 
     TWIN_AVAILABLE = True
 except ImportError:

@@ -34,6 +34,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core import upper_ports
 from core.routes._shared import connection_manager, node_status_cache, registered_devices
 
 logger = logging.getLogger("Galaxy.API")
@@ -126,7 +127,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         # PR5: SSOT write-through — legacy endpoint now delegates to UDM
         try:
-            from galaxy_gateway.ssot import udm_write_register
+            udm_write_register = upper_ports.resolve("gateway.ssot.udm_write_register")
 
             ok = udm_write_register(
                 device_id=req.device_id,
@@ -234,7 +235,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         # PR-E: SSOT — UDM heartbeat write first
         try:
-            from galaxy_gateway.ssot import udm_write_heartbeat
+            udm_write_heartbeat = upper_ports.resolve("gateway.ssot.udm_write_heartbeat")
 
             udm_write_heartbeat(req.device_id)
         except Exception as _udm_err:

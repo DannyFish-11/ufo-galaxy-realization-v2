@@ -65,6 +65,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.Capability")
 
 # ---------------------------------------------------------------------------
@@ -659,7 +661,8 @@ class CapabilityOrchestrator:
                 ROUTE_MODE_CROSS_DEVICE,
                 SUBSTRATE_CALLER_COMPAT,
             )
-            from galaxy_gateway.device_router import device_router as canonical_device_router
+
+            canonical_device_router = upper_ports.resolve("gateway.device_router.device_router")
 
             command = params.get("message", params.get("command", ""))
             context = {k: v for k, v in params.items() if k not in ("message", "command")}
@@ -676,7 +679,9 @@ class CapabilityOrchestrator:
                     "falling back to compatibility coordinator path: %s",
                     route_err,
                 )
-                from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
+                cross_device_coordinator = upper_ports.resolve(
+                    "gateway.cross_device_coordinator.cross_device_coordinator"
+                )
 
                 fallback_context = dict(context)
                 fallback_context["route_mode"] = ROUTE_MODE_COMPAT_FALLBACK

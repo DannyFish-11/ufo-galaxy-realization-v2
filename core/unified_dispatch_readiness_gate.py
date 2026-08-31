@@ -61,6 +61,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.UnifiedDispatchReadinessGate")
 
 # ---------------------------------------------------------------------------
@@ -662,9 +664,7 @@ def _evaluate_impl(
 def _check_registration_gaps(device_id: str) -> List[str]:
     """Return list of registration gaps for *device_id*; empty = none."""
     try:
-        from galaxy_gateway.android.handlers.registration import (
-            get_registration_gaps,
-        )
+        get_registration_gaps = upper_ports.resolve("gateway.android.handlers.registration.get_registration_gaps")
 
         return get_registration_gaps(device_id)
     except Exception as exc:
