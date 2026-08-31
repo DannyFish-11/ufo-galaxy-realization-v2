@@ -10,6 +10,17 @@ Galaxy - Universal Node Communication System - 修复版
 5. 添加TLS/SSL加密通信支持
 """
 
+# 本模块**既是库也是脚本**(见文件末尾的 __main__ 守卫)。直接跑
+# `python core/node_communication.py` 时 sys.path[0] 是 core/ 而不是仓库根,
+# 于是运行到函数体里那句 `from core.task_utils import ...`(第 4xx 行)才炸 ——
+# 比模块级导入更晚、更难查。这里在模块头就把仓库根补进去,只在"没有包上下文"
+# (即被当脚本跑)时补,正常 import 不受影响。
+if __package__ in (None, ""):  # pragma: no cover - 只在直接执行时成立
+    import os as _os
+    import sys as _sys
+
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 import asyncio
 import logging
 import ssl

@@ -44,6 +44,16 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+# 本模块**既是库也是脚本**(见文件末尾的 __main__ 守卫,CI 里就是
+# `python core/device_status_api.py` 这么跑的)。直接跑时 sys.path[0] 是
+# core/ 而不是仓库根,`from core import ...` 会 ModuleNotFoundError。
+# 这里把仓库根补进去 —— 只在"没有包上下文"(即被当脚本跑)时补,正常 import 不受影响。
+if __package__ in (None, ""):  # pragma: no cover - 只在直接执行时成立
+    import os as _os
+    import sys as _sys
+
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 from core import upper_ports
 from core.status_ws_envelope import build_status_frame
 from nodes.common.cors_config import get_cors_origins

@@ -73,7 +73,7 @@
     "core/nats_bus.py": 1572,
     "core/network_topology_runtime.py": 1542,
     "core/node_cognition_activation.py": 1194,
-    "core/node_communication.py": 1043,
+    "core/node_communication.py": 1054,
     "core/nodes/node_fabric_registry.py": 1079,
     "core/offline_replay_ordering_contract.py": 1040,
     "core/openclawd.py": 10316,
