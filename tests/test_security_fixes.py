@@ -208,6 +208,161 @@ class TestPathTraversalPrevention(unittest.TestCase):
                 svc._resolve_path("escape/secret.txt")
 
 
+class TestNode120ClosesTheTOCTOUWindow(unittest.TestCase):
+    """穿越防护最后一块:**校验过之后**路径被换掉。
+
+    ``_resolve_path`` 本身挡不住这个 —— 它校验的是"此刻这个名字指向哪儿",而真正
+    的 ``open()`` 在之后发生。实测:纯路径校验下 42953 次通过里有 576 次读到了
+    工作区外的文件。修法是让读写走 ``FileService.guard``,把校验与使用绑在同一个
+    文件描述符上。
+
+    这里测的是**服务层**(经由 ``read_file``/``write_file`` 这些对外接口),
+    ``core/safe_fs`` 那一层的单元测试在
+    ``tests/test_safe_fs_closes_the_toctou_window.py``。
+    """
+
+    def _service(self, workspace):
+        try:
+            from nodes.Node_120_File.main import FileService
+        except ImportError:
+            self.skipTest("Node_120 dependencies not available")
+        return FileService(workspace_root=workspace)
+
+    def _swap_forever(self, workspace, secret, stop):
+        """在"普通文件"与"指向工作区外的符号链接"之间原子替换 ``f.txt``。
+
+        ``rename`` 一个符号链接盖到已存在的普通文件上是允许且原子的 —— 这正是
+        纯路径校验挡不住的那条路。
+        """
+        plain = os.path.join(workspace, ".plain")
+        link = os.path.join(workspace, ".link")
+        target = os.path.join(workspace, "f.txt")
+        while not stop.is_set():
+            try:
+                with open(plain, "w", encoding="utf-8") as handle:
+                    handle.write("inside")
+                if os.path.islink(link):
+                    os.unlink(link)
+                os.symlink(secret, link)
+                os.rename(link, target)
+                os.rename(plain, target)
+            except OSError:
+                pass
+
+    def test_read_file_never_returns_content_from_outside(self):
+        import tempfile
+        import threading
+        import time
+
+        from core.safe_fs import dir_fd_supported
+
+        if not dir_fd_supported():
+            self.skipTest("本平台不支持 dir_fd")
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as outside:
+            secret = os.path.join(outside, "secret.txt")
+            with open(secret, "w", encoding="utf-8") as handle:
+                handle.write("TOP-SECRET-OUTSIDE")
+            with open(os.path.join(workspace, "f.txt"), "w", encoding="utf-8") as handle:
+                handle.write("inside")
+
+            svc = self._service(workspace)
+            self.assertTrue(
+                svc.guard.closes_toctou_window,
+                "这个平台上应当拿到描述符守卫;拿到纯路径实现说明降级了",
+            )
+
+            from nodes.Node_120_File.main import ReadRequest
+
+            stop = threading.Event()
+            thread = threading.Thread(target=self._swap_forever, args=(workspace, secret, stop), daemon=True)
+            thread.start()
+            leaked = attempts = refused = 0
+            try:
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                deadline = time.time() + 4
+                while time.time() < deadline:
+                    attempts += 1
+                    try:
+                        result = loop.run_until_complete(svc.read_file(ReadRequest(path="f.txt")))
+                    except (ValueError, OSError):
+                        refused += 1
+                        continue
+                    if "OUTSIDE" in result["content"]:
+                        leaked += 1
+                loop.close()
+            finally:
+                stop.set()
+                thread.join(timeout=10)
+
+            self.assertGreater(attempts, 50, f"压力不足,只跑了 {attempts} 轮")
+            self.assertGreater(refused, 0, "一次都没撞上替换 —— 这轮没形成竞态,断言等于没做")
+            self.assertEqual(leaked, 0, f"read_file 读到工作区外内容 {leaked} 次(共 {attempts} 轮)")
+
+    def test_write_file_never_writes_outside(self):
+        """写比读更要命:跟着外链写下去就是**改**工作区外的文件。"""
+        import tempfile
+        import threading
+        import time
+
+        from core.safe_fs import dir_fd_supported
+
+        if not dir_fd_supported():
+            self.skipTest("本平台不支持 dir_fd")
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as outside:
+            secret = os.path.join(outside, "secret.txt")
+            with open(secret, "w", encoding="utf-8") as handle:
+                handle.write("TOP-SECRET-OUTSIDE")
+            with open(os.path.join(workspace, "f.txt"), "w", encoding="utf-8") as handle:
+                handle.write("inside")
+
+            svc = self._service(workspace)
+            from nodes.Node_120_File.main import WriteRequest
+
+            stop = threading.Event()
+            thread = threading.Thread(target=self._swap_forever, args=(workspace, secret, stop), daemon=True)
+            thread.start()
+            try:
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                deadline = time.time() + 4
+                while time.time() < deadline:
+                    try:
+                        loop.run_until_complete(svc.write_file(WriteRequest(path="f.txt", content="OVERWRITTEN")))
+                    except (ValueError, OSError):
+                        pass
+                loop.close()
+            finally:
+                stop.set()
+                thread.join(timeout=10)
+
+            with open(secret, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), "TOP-SECRET-OUTSIDE", "工作区外的文件被改写了")
+
+    def test_reads_do_not_go_through_resolve_path_anymore(self):
+        """``_resolve_path`` 的返回值只许用于展示,不许再拿去 ``open()``。
+
+        这条守的是回归 —— 只要有人把读写改回 ``path.read_text()``,窗口就又开了,
+        而且不会有任何测试自然发红。
+        """
+        try:
+            import inspect
+
+            from nodes.Node_120_File.main import FileService
+        except ImportError:
+            self.skipTest("Node_120 dependencies not available")
+
+        for name in ("read_file", "write_file", "append_file", "calculate_hash"):
+            source = inspect.getsource(getattr(FileService, name))
+            self.assertIn("self.guard", source, f"{name} 没有走 guard")
+            for banned in ("path.read_text(", "path.read_bytes(", "path.write_text(", "open(path"):
+                self.assertNotIn(banned, source, f"{name} 又回到按路径打开了: {banned}")
+
+
 # =============================================================================
 # exec() 沙箱
 # =============================================================================
