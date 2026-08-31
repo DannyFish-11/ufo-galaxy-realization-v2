@@ -579,6 +579,86 @@ class WorkspaceGuard:
         finally:
             self._close_stack(stack)
 
+    # 目录树复制上限:防御成环(``..`` 已在解析层挡住,但硬链接构造的怪树仍可能很深)。
+    MAX_COPY_DEPTH = 64
+
+    def copytree(self, src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        """描述符锚定的目录树复制。
+
+        先前这里是 ``shutil.copytree(display_path(src), display_path(dst))`` —— 两端
+        的**根**过了校验,但树内部是逐个条目按名字重新打开的,那正是本模块通篇在
+        反对的形状:回到路径字符串,保证就没了。当时如实写在 docstring 里说"没堵上",
+        现在堵上。
+
+        下降全程只用 ``dir_fd``:``os.scandir(fd)`` 列目录,``os.open(name, dir_fd=)``
+        进下一层,``O_NOFOLLOW`` 保证不会被中途换成符号链接骗走。
+
+        符号链接**原样复制成符号链接**(不跟随),与 ``shutil.copytree(symlinks=True)``
+        一致 —— 跟随就等于把链接指向的东西(可能在工作区外)拷进来。
+        """
+        src_stack, src_name = self._descend(self._segments(src), keep_last=False)
+        try:
+            if src_name is not None:
+                raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), os.fspath(src))
+            self.mkdir(dst, parents=True, exist_ok=False)
+            dst_stack, dst_name = self._descend(self._segments(dst), keep_last=False)
+            try:
+                if dst_name is not None:  # pragma: no cover - 刚 mkdir 出来的必然是目录
+                    raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), os.fspath(dst))
+                self._copy_into(src_stack[-1], dst_stack[-1], depth=0)
+            finally:
+                self._close_stack(dst_stack)
+        finally:
+            self._close_stack(src_stack)
+
+    def _copy_into(self, src_fd: int, dst_fd: int, *, depth: int) -> None:
+        """把 *src_fd* 这一层的内容复制到 *dst_fd*,再对子目录递归。"""
+        if depth > self.MAX_COPY_DEPTH:
+            raise PathEscapesWorkspace(f"目录层数超过 {self.MAX_COPY_DEPTH},拒绝继续下降")
+        for entry in os.scandir(src_fd):
+            if entry.is_symlink():
+                # 原样搬链接本身,不跟随。
+                os.symlink(os.readlink(entry.name, dir_fd=src_fd), entry.name, dir_fd=dst_fd)
+            elif entry.is_dir(follow_symlinks=False):
+                os.mkdir(entry.name, dir_fd=dst_fd)
+                sub_src = os.open(entry.name, _DIR_FLAGS, dir_fd=src_fd)
+                try:
+                    sub_dst = os.open(entry.name, _DIR_FLAGS, dir_fd=dst_fd)
+                    try:
+                        self._copy_into(sub_src, sub_dst, depth=depth + 1)
+                        os.chmod(entry.name, stat_module.S_IMODE(os.stat(sub_src).st_mode), dir_fd=dst_fd)
+                    finally:
+                        os.close(sub_dst)
+                finally:
+                    os.close(sub_src)
+            elif entry.is_file(follow_symlinks=False):
+                self._copy_one_file(entry.name, src_fd, dst_fd)
+            # 其余(设备、socket、FIFO)一律跳过 —— 沙箱里复制它们没有意义,
+            # 而"照搬"反而可能把宿主的东西带进来。
+
+    @staticmethod
+    def _copy_one_file(name: str, src_fd: int, dst_fd: int) -> None:
+        import shutil
+
+        source_fd = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=src_fd)
+        try:
+            info = os.fstat(source_fd)
+            target_fd = os.open(
+                name,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0),
+                0o666,
+                dir_fd=dst_fd,
+            )
+            try:
+                with os.fdopen(os.dup(source_fd), "rb") as reader, os.fdopen(os.dup(target_fd), "wb") as writer:
+                    shutil.copyfileobj(reader, writer)
+                os.fchmod(target_fd, stat_module.S_IMODE(info.st_mode))
+                os.utime(target_fd, ns=(info.st_atime_ns, info.st_mtime_ns))
+            finally:
+                os.close(target_fd)
+        finally:
+            os.close(source_fd)
+
     def rename(self, src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
         """改名/移动。两端都锚定在各自的父目录描述符上,整个操作是内核原子的。"""
         src_stack, src_name = self._descend(self._segments(src), keep_last=True)
@@ -719,6 +799,13 @@ class PathOnlyGuard(WorkspaceGuard):
         import shutil
 
         shutil.rmtree(self._resolve(relpath))
+
+    def copytree(self, src, dst):  # type: ignore[override]
+        import shutil
+
+        # 没有 dir_fd,只能按路径来:两端的**根**过校验,树内部仍是路径式下降。
+        # symlinks=True 至少保证不跟随链接把工作区外的内容拷进来。
+        shutil.copytree(self._resolve(src), self._resolve(dst), symlinks=True)
 
     def rename(self, src, dst):  # type: ignore[override]
         os.rename(self._resolve(src), self._resolve(dst))

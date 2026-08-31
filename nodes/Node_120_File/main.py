@@ -393,38 +393,22 @@ class FileService:
             os.close(src_fd)
 
     def _copy_tree(self, source: str, destination: str) -> None:
-        """目录树复制。
+        """目录树复制 —— 全程走 guard,不回到路径字符串。
 
-        .. warning::
-           **这一条没有完全堵上。** 树内部是逐个条目重新按路径打开的:先列目录拿到
-           名字,再按名字打开 —— 中间同样能被换掉。真要堵,得把整棵树的下降也做成
-           描述符锚定(``os.fwalk`` + ``dir_fd``),那是另一件事,这里不假装做到了。
+        先前这里是 ``shutil.copytree(guard.display_path(src), guard.display_path(dst))``:
+        两端的**根**过了校验,但树内部逐个条目按名字重新打开,中间同样能被换掉。
+        那条残留窗口当时如实写在这儿说"没堵上",现在由
+        :meth:`core.safe_fs.WorkspaceGuard.copytree` 堵上 —— 整棵树的下降只用
+        ``dir_fd`` + ``O_NOFOLLOW``。
 
-           已经做到的是:**根**在 guard 里解析,且下降途中不跟随任何符号链接
-           (``symlinks=True`` 把链接原样复制成链接,而不是顺着它把工作区外的内容
-           拷进来)—— 后者才是先前 ``copytree`` 默认行为下真正的越界风险。
+        符号链接原样复制成链接、不跟随,所以也不会把工作区外的内容拷进来。
+
+        Windows(无 ``dir_fd``)上 ``PathOnlyGuard.copytree`` 仍是路径实现,弱一档 ——
+        那是平台限制,不是这里偷懒;``guard.closes_toctou_window`` 会如实标出来。
         """
-        # 两端**在这里自己再判一次**落点,不指望调用方已经判过。
-        #
-        # 先前这里直接用 guard.display_path() 的结果喂 copytree —— 而当时
-        # display_path 是纯拼接,能交出工作区外的路径。CodeQL 的 py/path-injection
-        # 顺着这条流报到了 copytree,报得对(display_path 已单独修掉)。
-        #
-        # 教训是别的:一个函数"安全"不该建立在"我的调用方会先检查"上面。这里用
-        # realpath + 前缀比对重新确认一遍 —— 多花两次系统调用,换掉一个隐式前提。
-        root = os.path.realpath(str(self.workspace_root))
-        prefix = os.path.join(root, "")
-        src_root = os.path.realpath(os.path.join(root, source))
-        dst_root = os.path.realpath(os.path.join(root, destination))
-        for candidate in (src_root, dst_root):
-            # 前缀比对而不是 commonpath —— 与本文件 extract_archive 里那处同形态,
-            # 理由见 core/safe_fs.PathOnlyGuard._resolve 的 docstring。
-            if candidate != root and not candidate.startswith(prefix):
-                raise ValueError(f"Path '{candidate}' is outside the workspace. Access denied.")
-
         if self.guard.exists(destination):
             self.guard.rmtree(destination)
-        shutil.copytree(src_root, dst_root, symlinks=True)
+        self.guard.copytree(source, destination)
 
     async def copy(self, request: CopyMoveRequest) -> Dict[str, Any]:
         """Copy file or directory."""

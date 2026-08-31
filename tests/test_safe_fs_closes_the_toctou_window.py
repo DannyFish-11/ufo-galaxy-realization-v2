@@ -496,3 +496,152 @@ def test_path_only_guard_refuses_every_mutating_surface(path_guard, outside, op)
 def test_path_only_guard_display_path_refuses_escape(path_guard):
     with pytest.raises(PathEscapesWorkspace):
         path_guard.display_path("../../etc/passwd")
+
+
+# ── copytree:整棵树的下降也必须是描述符锚定的 ────────────────────────────
+
+
+def _tree_snapshot(root):
+    """把一棵树抄成可比对的形状:类型、权限、内容/链接目标。"""
+    import stat as stat_module
+
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in sorted(dirnames + filenames):
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, root)
+            info = os.lstat(full)
+            if stat_module.S_ISLNK(info.st_mode):
+                out[rel] = ("link", os.readlink(full))
+            elif stat_module.S_ISDIR(info.st_mode):
+                out[rel] = ("dir", stat_module.S_IMODE(info.st_mode))
+            else:
+                out[rel] = ("file", stat_module.S_IMODE(info.st_mode), open(full, "rb").read())
+    return out
+
+
+@pytest.fixture()
+def rich_tree(ws):
+    """带深度、空目录、二进制、相对链接、绝对链接、非默认权限的一棵树。"""
+    (ws / "src" / "deep" / "deeper").mkdir(parents=True)
+    (ws / "src" / "f1.txt").write_text("one", encoding="utf-8")
+    (ws / "src" / "deep" / "f2.bin").write_bytes(b"\x00\x01\x02")
+    (ws / "src" / "deep" / "deeper" / "f3.txt").write_text("three", encoding="utf-8")
+    (ws / "src" / "empty").mkdir()
+    os.symlink("f1.txt", ws / "src" / "link_rel")
+    os.symlink("/etc/passwd", ws / "src" / "link_abs")
+    os.chmod(ws / "src" / "f1.txt", 0o640)
+    os.chmod(ws / "src" / "deep", 0o750)
+    return ws
+
+
+def test_copytree_matches_shutil_exactly(guard, rich_tree, tmp_path):
+    """与 ``shutil.copytree(symlinks=True)`` 逐条一致 —— 换实现不许改行为。"""
+    import shutil
+
+    reference = tmp_path / "reference"
+    shutil.copytree(rich_tree / "src", reference, symlinks=True)
+    guard.copytree("src", "copied")
+    assert _tree_snapshot(rich_tree / "copied") == _tree_snapshot(reference)
+
+
+def test_copytree_copies_symlinks_as_symlinks(guard, rich_tree, outside):
+    """指向工作区外的链接被**原样搬成链接**,而不是把它指的内容拷进来。
+
+    跟随就等于把工作区外的文件复制进沙箱 —— 这正是 ``copytree`` 默认行为下真正的
+    越界风险。
+    """
+    os.symlink(outside / "secret.txt", rich_tree / "src" / "escape")
+    guard.copytree("src", "copied")
+    copied = rich_tree / "copied" / "escape"
+    assert copied.is_symlink(), "应当是链接"
+    assert not (rich_tree / "copied" / "escape").is_file() or copied.is_symlink()
+    # 工作区里不该出现那段秘密内容
+    for dirpath, _dirs, files in os.walk(rich_tree / "copied"):
+        for name in files:
+            full = os.path.join(dirpath, name)
+            if os.path.islink(full):
+                continue
+            assert b"TOP-SECRET-OUTSIDE" not in open(full, "rb").read()
+
+
+def test_copytree_refuses_a_source_outside_the_workspace(guard):
+    with pytest.raises(PathEscapesWorkspace):
+        guard.copytree("../outside", "stolen")
+
+
+def test_copytree_refuses_a_destination_outside_the_workspace(guard, rich_tree):
+    with pytest.raises(PathEscapesWorkspace):
+        guard.copytree("src", "../outside/pwned")
+
+
+def test_copytree_caps_depth(guard, ws):
+    """防御性上限:层数过深直接拒,不无限递归下去。"""
+    from core.safe_fs import WorkspaceGuard
+
+    deep = ws / "chain"
+    parts = ["chain"] + [f"d{i}" for i in range(WorkspaceGuard.MAX_COPY_DEPTH + 3)]
+    (ws.joinpath(*parts)).mkdir(parents=True)
+    with pytest.raises(PathEscapesWorkspace):
+        guard.copytree("chain", "chain_copy")
+    assert deep.exists()
+
+
+@pytest.mark.timeout(120)
+def test_copytree_never_pulls_in_content_from_outside_under_churn(ws, outside):
+    """有人在树里反复把普通文件换成"指向工作区外"的符号链接时,拷出来的东西
+    里**一次**都不许出现工作区外的内容。
+
+    这是 ``_copy_tree`` 先前那条已知未堵窗口的直接检验:旧实现是
+    ``shutil.copytree(路径, 路径)`` —— 树内部逐个条目按名字重开,中间能被换掉。
+    """
+    src = ws / "src"
+    (src / "sub").mkdir(parents=True)
+    for i in range(20):
+        (src / "sub" / f"f{i}.txt").write_text("inside", encoding="utf-8")
+    secret = outside / "secret.txt"
+
+    stop = threading.Event()
+
+    def churn():
+        link = src / "sub" / ".tmplink"
+        plain = src / "sub" / ".tmpplain"
+        i = 0
+        while not stop.is_set():
+            i = (i + 1) % 20
+            target = src / "sub" / f"f{i}.txt"
+            try:
+                plain.write_text("inside", encoding="utf-8")
+                if link.is_symlink():
+                    os.unlink(link)
+                os.symlink(secret, link)
+                os.rename(link, target)
+                os.rename(plain, target)
+            except OSError:
+                pass
+
+    thread = threading.Thread(target=churn, daemon=True)
+    thread.start()
+    leaked = rounds = 0
+    try:
+        with WorkspaceGuard(ws) as g:
+            deadline = time.time() + 4
+            while time.time() < deadline:
+                rounds += 1
+                dest = f"copy{rounds}"
+                try:
+                    g.copytree("src", dest)
+                except (OSError, PathEscapesWorkspace):
+                    continue
+                for dirpath, _dirs, files in os.walk(ws / dest):
+                    for name in files:
+                        full = os.path.join(dirpath, name)
+                        if os.path.islink(full):
+                            continue
+                        if b"TOP-SECRET-OUTSIDE" in open(full, "rb").read():
+                            leaked += 1
+    finally:
+        stop.set()
+        thread.join(timeout=10)
+    assert rounds > 3, f"压力不足,只跑了 {rounds} 轮"
+    assert leaked == 0, f"拷进来了工作区外的内容 {leaked} 次(共 {rounds} 轮)"
