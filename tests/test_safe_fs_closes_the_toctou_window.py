@@ -371,3 +371,84 @@ def test_the_window_this_module_exists_to_close_is_real(ws, outside):
 
     print(f"\n旧写法:校验通过 {passed} 次,其中读到工作区外 {leaked} 次")
     assert passed > 0, "参照组一次都没通过校验,这轮压力测试没有意义"
+
+
+# ── PathOnlyGuard:Windows 回退实现的穿越防护 ─────────────────────────────
+#
+# 这一档**没有**抗竞态能力(没有 dir_fd 就做不到),但"挡住此刻就已越界的路径"
+# 这件事必须做到。此前它一行测试都没有 —— 一个安全边界零覆盖,是本次补上的。
+
+
+@pytest.fixture()
+def path_guard(ws):
+    from core.safe_fs import PathOnlyGuard
+
+    return PathOnlyGuard(ws)
+
+
+def test_path_only_guard_advertises_its_weaker_guarantee(path_guard):
+    """它必须**自报**关不上窗口 —— 调用方据此判断拿到的是哪一档。"""
+    assert path_guard.closes_toctou_window is False
+
+
+def test_path_only_guard_reads_and_writes_inside(path_guard, ws):
+    assert path_guard.read_text("sub/a.txt") == "inside-a"
+    path_guard.write_text("sub/new.txt", "写进去的")
+    assert (ws / "sub" / "new.txt").read_text(encoding="utf-8") == "写进去的"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "../outside/secret.txt",
+        "../../etc/passwd",
+        "/etc/passwd",
+        "sub/../../outside/secret.txt",
+    ],
+)
+def test_path_only_guard_refuses_traversal(path_guard, bad):
+    with pytest.raises(PathEscapesWorkspace):
+        path_guard.read_text(bad)
+
+
+def test_path_only_guard_refuses_a_symlink_that_escapes(path_guard, ws, outside):
+    """工作区**内**的符号链接指向外面 —— realpath 会摊平它,必须判出界。"""
+    os.symlink(outside, ws / "escape")
+    with pytest.raises(PathEscapesWorkspace):
+        path_guard.read_text("escape/secret.txt")
+
+
+def test_path_only_guard_refuses_a_final_symlink_that_escapes(path_guard, ws, outside):
+    os.symlink(outside / "secret.txt", ws / "f.txt")
+    with pytest.raises(PathEscapesWorkspace):
+        path_guard.read_text("f.txt")
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda g: g.write_text("../outside/pwned.txt", "x"),
+        lambda g: g.unlink("../outside/secret.txt"),
+        lambda g: g.mkdir("../outside/pwned"),
+        lambda g: g.rmdir("../outside"),
+        lambda g: g.rmtree("../outside"),
+        lambda g: g.rename("top.txt", "../outside/moved.txt"),
+        lambda g: g.rename("../outside/secret.txt", "stolen.txt"),
+        lambda g: g.listdir("../outside"),
+        lambda g: g.stat("../outside/secret.txt"),
+        lambda g: g.open_fd("../outside/secret.txt", os.O_RDONLY),
+    ],
+)
+def test_path_only_guard_refuses_every_mutating_surface(path_guard, outside, op):
+    """**每一个**对外方法都要挡住,不能只有读那条路守着。
+
+    这条是拿参数化把整个接口面扫一遍 —— 漏掉任何一个方法,那个方法就是后门。
+    """
+    with pytest.raises(PathEscapesWorkspace):
+        op(path_guard)
+    assert (outside / "secret.txt").read_text(encoding="utf-8") == "TOP-SECRET-OUTSIDE", "工作区外的文件被动过了"
+
+
+def test_path_only_guard_display_path_refuses_escape(path_guard):
+    with pytest.raises(PathEscapesWorkspace):
+        path_guard.display_path("../../etc/passwd")

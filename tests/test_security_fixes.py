@@ -343,6 +343,40 @@ class TestNode120ClosesTheTOCTOUWindow(unittest.TestCase):
             with open(secret, encoding="utf-8") as handle:
                 self.assertEqual(handle.read(), "TOP-SECRET-OUTSIDE", "工作区外的文件被改写了")
 
+    def test_copy_tree_validates_its_own_arguments(self):
+        """``_copy_tree`` 不许把"落点校验"外包给调用方。
+
+        它先前直接拿 ``guard.display_path()`` 的结果喂 ``shutil.copytree`` —— 而当时
+        ``display_path`` 是纯拼接,能交出工作区外的路径。走 ``copy()`` 进来时不可利用
+        (上游 ``_resolve_path`` 已经拦过),但"我安全是因为调用方会先检查"不是安全,
+        是把责任推给了别人。这条直接调 ``_copy_tree``,绕开上游那道。
+        """
+        try:
+            from nodes.Node_120_File.main import FileService
+        except ImportError:
+            self.skipTest("Node_120 dependencies not available")
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as workspace, tempfile.TemporaryDirectory() as outside:
+            with open(os.path.join(outside, "secret.txt"), "w", encoding="utf-8") as handle:
+                handle.write("TOP-SECRET-OUTSIDE")
+            svc = FileService(workspace_root=workspace)
+
+            with self.assertRaises(ValueError):
+                svc._copy_tree("../" + os.path.basename(outside), "stolen")
+            self.assertFalse(
+                os.path.exists(os.path.join(workspace, "stolen")),
+                "工作区外的目录被拷进来了",
+            )
+
+            os.mkdir(os.path.join(workspace, "src"))
+            with self.assertRaises(ValueError):
+                svc._copy_tree("src", "../" + os.path.basename(outside) + "/pwned")
+            self.assertFalse(
+                os.path.exists(os.path.join(outside, "pwned")),
+                "写到了工作区外",
+            )
+
     def test_reads_do_not_go_through_resolve_path_anymore(self):
         """``_resolve_path`` 的返回值只许用于展示,不许再拿去 ``open()``。
 

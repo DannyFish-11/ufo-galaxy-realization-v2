@@ -77,7 +77,6 @@ from typing import IO, Any, Iterator, List, Sequence
 
 __all__ = [
     "MAX_SYMLINK_HOPS",
-    "contained_path",
     "PathEscapesWorkspace",
     "SymlinkNotFollowed",
     "PathOnlyGuard",
@@ -129,35 +128,6 @@ def _split(relpath: str | os.PathLike[str]) -> List[str]:
     if os.sep == "\\":
         text = text.replace("\\", "/")
     return [seg for seg in text.split("/") if seg not in ("", ".")]
-
-
-def contained_path(root: str | os.PathLike[str], relpath: str | os.PathLike[str]) -> Path:
-    """把 *relpath* 折算成 *root* 底下的绝对路径;落到 root 之外就抛。
-
-    这是**纯路径**判定,和 :class:`WorkspaceGuard` 的描述符解析不是一回事:它没有
-    抗竞态能力(判定完到使用之间仍可被换掉)。它有两个用处:
-
-    1. 给 :meth:`WorkspaceGuard.display_path` 用 —— 交给人看的路径也不许指到工作区外;
-    2. 给 :class:`PathOnlyGuard` 用 —— 没有 ``dir_fd`` 的平台上只剩这一道。
-
-    写成 ``os.path.realpath`` + ``os.path.commonpath`` 而不是 ``Path.resolve`` +
-    ``Path.relative_to``:两者安全语义等价,但前者是静态分析(CodeQL
-    ``py/path-injection``)认得的净化形态。
-    """
-    root_real = os.path.realpath(os.fspath(root))
-    try:
-        candidate = os.path.realpath(os.path.join(root_real, os.fspath(relpath)))
-    except OSError as exc:
-        # realpath 在路径抖动时会抛。旧实现漏了这条,于是并发下调用方拿到的是裸
-        # FileNotFoundError,而不是本该给出的 ValueError。
-        raise PathEscapesWorkspace(f"路径解析失败: {relpath}") from exc
-    try:
-        inside = os.path.commonpath([root_real, candidate]) == root_real
-    except ValueError:
-        inside = False  # Windows 跨盘符:本来就在工作区外
-    if not inside:
-        raise PathEscapesWorkspace(f"Path '{relpath}' is outside the workspace. Access denied.")
-    return Path(candidate)
 
 
 def _is_symlink(name: str, dir_fd: int) -> bool:
@@ -645,8 +615,32 @@ class PathOnlyGuard(WorkspaceGuard):
         object.__setattr__(self, "_closed", True)
 
     def _resolve(self, relpath: str | os.PathLike[str]) -> Path:
-        """唯一的落点判定 —— 本类所有操作都先过这里。"""
-        return contained_path(self._root_path, relpath)
+        """唯一的落点判定 —— 本类所有操作都先过这里。
+
+        判定**内联**在这个函数里,不再委托给一个公用 helper。这不是风格偏好:
+        CodeQL 的 ``py/path-injection`` 能顺着"净化函数 → 调用点"跟**一层**
+        (先前 ``Node_120._resolve_path`` 就是这个形状,跟得住),但再多一层
+        (调用点 → ``_resolve`` → helper)就跟丢了,于是下面九个方法全被报成
+        未净化。把判定放回这一层,既不改语义也不多写几行。
+
+        写成 ``os.path.realpath`` + ``os.path.commonpath`` 而不是 ``Path.resolve``
+        + ``Path.relative_to``:两者安全语义等价(都把 ``..`` 与符号链接摊平后比较
+        祖先),但前者是静态分析认得的净化形态。
+        """
+        root = os.path.realpath(os.fspath(self._root_path))
+        try:
+            candidate = os.path.realpath(os.path.join(root, os.fspath(relpath)))
+        except OSError as exc:
+            # realpath 在路径抖动时会抛。旧实现漏了这条,于是并发下调用方拿到的是
+            # 裸 FileNotFoundError,而不是本该给出的 ValueError。
+            raise PathEscapesWorkspace(f"路径解析失败: {relpath}") from exc
+        try:
+            inside = os.path.commonpath([root, candidate]) == root
+        except ValueError:
+            inside = False  # Windows 跨盘符:本来就在工作区外
+        if not inside:
+            raise PathEscapesWorkspace(f"Path '{relpath}' is outside the workspace. Access denied.")
+        return Path(candidate)
 
     # 下面全部退回路径实现。签名与父类一致,只是保证弱一档。
 

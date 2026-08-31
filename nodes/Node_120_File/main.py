@@ -404,8 +404,25 @@ class FileService:
            (``symlinks=True`` 把链接原样复制成链接,而不是顺着它把工作区外的内容
            拷进来)—— 后者才是先前 ``copytree`` 默认行为下真正的越界风险。
         """
-        src_root = self.guard.display_path(source)
-        dst_root = self.guard.display_path(destination)
+        # 两端**在这里自己再判一次**落点,不指望调用方已经判过。
+        #
+        # 先前这里直接用 guard.display_path() 的结果喂 copytree —— 而当时
+        # display_path 是纯拼接,能交出工作区外的路径。CodeQL 的 py/path-injection
+        # 顺着这条流报到了 copytree,报得对(display_path 已单独修掉)。
+        #
+        # 教训是别的:一个函数"安全"不该建立在"我的调用方会先检查"上面。这里用
+        # realpath + commonpath 重新确认一遍 —— 多花两次系统调用,换掉一个隐式前提。
+        root = os.path.realpath(str(self.workspace_root))
+        src_root = os.path.realpath(os.path.join(root, source))
+        dst_root = os.path.realpath(os.path.join(root, destination))
+        for candidate in (src_root, dst_root):
+            try:
+                inside = os.path.commonpath([root, candidate]) == root
+            except ValueError:
+                inside = False
+            if not inside:
+                raise ValueError(f"Path '{candidate}' is outside the workspace. Access denied.")
+
         if self.guard.exists(destination):
             self.guard.rmtree(destination)
         shutil.copytree(src_root, dst_root, symlinks=True)
