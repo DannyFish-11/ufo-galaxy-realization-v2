@@ -155,6 +155,33 @@ def test_root_itself_cannot_be_opened_as_a_file(guard):
         guard.read_text("")
 
 
+# ── display_path:交出去的字符串同样不许指到工作区外 ──────────────────────
+
+
+def test_display_path_refuses_to_hand_out_a_path_outside_the_workspace(guard):
+    """``display_path`` 曾经是纯拼接,``"../../etc/passwd"`` 会原样返回
+    ``<工作区>/../../etc/passwd``。
+
+    当时不可利用 —— 唯一的调用方 ``Node_120._copy_tree`` 上游已经拦过一道。但那是
+    靠调用方兜着,不是靠这个函数自己站得住;而它交出去的路径正是喂给
+    ``shutil.copytree`` 的那个。CodeQL 的 ``py/path-injection`` 顺着这条流报到了
+    ``copytree``,报得对。
+    """
+    with pytest.raises(PathEscapesWorkspace):
+        guard.display_path("../../etc/passwd")
+
+
+def test_display_path_returns_the_real_location_for_an_inside_path(guard, ws):
+    assert guard.display_path("sub/a.txt") == (ws / "sub" / "a.txt").resolve()
+    assert guard.display_path("") == ws.resolve()
+
+
+def test_open_reports_a_name_inside_the_workspace(guard, ws):
+    """文件对象的 ``.name`` 会进日志和异常消息 —— 它也该是个工作区内的路径。"""
+    with guard.open("sub/a.txt") as handle:
+        assert handle.name == str((ws / "sub" / "a.txt").resolve())
+
+
 # ── 拒穿越 ────────────────────────────────────────────────────────────────
 
 

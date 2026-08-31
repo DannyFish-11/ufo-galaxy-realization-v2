@@ -77,6 +77,7 @@ from typing import IO, Any, Iterator, List, Sequence
 
 __all__ = [
     "MAX_SYMLINK_HOPS",
+    "contained_path",
     "PathEscapesWorkspace",
     "SymlinkNotFollowed",
     "PathOnlyGuard",
@@ -128,6 +129,35 @@ def _split(relpath: str | os.PathLike[str]) -> List[str]:
     if os.sep == "\\":
         text = text.replace("\\", "/")
     return [seg for seg in text.split("/") if seg not in ("", ".")]
+
+
+def contained_path(root: str | os.PathLike[str], relpath: str | os.PathLike[str]) -> Path:
+    """把 *relpath* 折算成 *root* 底下的绝对路径;落到 root 之外就抛。
+
+    这是**纯路径**判定,和 :class:`WorkspaceGuard` 的描述符解析不是一回事:它没有
+    抗竞态能力(判定完到使用之间仍可被换掉)。它有两个用处:
+
+    1. 给 :meth:`WorkspaceGuard.display_path` 用 —— 交给人看的路径也不许指到工作区外;
+    2. 给 :class:`PathOnlyGuard` 用 —— 没有 ``dir_fd`` 的平台上只剩这一道。
+
+    写成 ``os.path.realpath`` + ``os.path.commonpath`` 而不是 ``Path.resolve`` +
+    ``Path.relative_to``:两者安全语义等价,但前者是静态分析(CodeQL
+    ``py/path-injection``)认得的净化形态。
+    """
+    root_real = os.path.realpath(os.fspath(root))
+    try:
+        candidate = os.path.realpath(os.path.join(root_real, os.fspath(relpath)))
+    except OSError as exc:
+        # realpath 在路径抖动时会抛。旧实现漏了这条,于是并发下调用方拿到的是裸
+        # FileNotFoundError,而不是本该给出的 ValueError。
+        raise PathEscapesWorkspace(f"路径解析失败: {relpath}") from exc
+    try:
+        inside = os.path.commonpath([root_real, candidate]) == root_real
+    except ValueError:
+        inside = False  # Windows 跨盘符:本来就在工作区外
+    if not inside:
+        raise PathEscapesWorkspace(f"Path '{relpath}' is outside the workspace. Access denied.")
+    return Path(candidate)
 
 
 def _is_symlink(name: str, dir_fd: int) -> bool:
@@ -205,6 +235,22 @@ class WorkspaceGuard:
         if os.path.isabs(text):
             text = os.path.relpath(text, self._root_path)
         return _split(text)
+
+    def _normalized_segments(self, relpath: str | os.PathLike[str]) -> List[str]:
+        """把请求路径归约成不含 ``..`` 的段序列;想爬到根之上就抛。
+
+        纯词法,不碰文件系统。``..`` 的处理与 :meth:`_descend` 一致 —— 那边弹的是
+        fd 栈,这边弹的是名字栈,两处判"越界"的依据必须是同一条:栈空了还要弹。
+        """
+        out: List[str] = []
+        for name in self._segments(relpath):
+            if name == "..":
+                if not out:
+                    raise PathEscapesWorkspace(f"Path '{relpath}' 试图爬到工作区根之上")
+                out.pop()
+            else:
+                out.append(name)
+        return out
 
     # ── 解析核心 ──────────────────────────────────────────────────────────
 
@@ -347,7 +393,9 @@ class WorkspaceGuard:
     ) -> IO[Any]:
         """``builtins.open`` 的安全版本。参数与内建一致(``opener`` 除外)。"""
         # 传给内建的路径只用于错误消息与 ``.name``;真正定位靠 opener。
-        display = str(self._root_path / os.fspath(relpath))
+        # 即便如此也走已校验的 display_path —— 交出去的字符串(会出现在 f.name、
+        # 异常消息、日志里)不该是一个指向工作区外的路径。
+        display = str(self.display_path(relpath))
         return open(display, mode, opener=self.opener(relpath, follow_final=follow_final), **kwargs)  # noqa: SIM115
 
     # ── 读写 ──────────────────────────────────────────────────────────────
@@ -548,13 +596,28 @@ class WorkspaceGuard:
     # ── 展示 ──────────────────────────────────────────────────────────────
 
     def display_path(self, relpath: str | os.PathLike[str]) -> Path:
-        """给人看的绝对路径。
+        """给人看的绝对路径;落到工作区外就抛。
 
-        **不要**拿它回去做真正的打开 —— 一旦回到路径字符串,本模块的全部保证就
-        都失效了。它只用于响应体、日志和错误消息。
+        **不要**拿它回去做真正的打开 —— 一旦回到路径字符串,描述符锚定的那套保证
+        就失效了。它只用于响应体、日志和错误消息。
+
+        .. note::
+           这里**必须**校验,尽管它"只是拿来显示"。此前它是纯拼接:
+           ``display_path("../../etc/passwd")`` 老老实实返回
+           ``<工作区>/../../etc/passwd`` —— 一个交出去就能指到工作区外的路径。
+           当时不可利用(唯一的调用方 ``Node_120._copy_tree`` 上游已经拦过一道),
+           但那是靠调用方兜着,不是靠这个函数自己站得住。CodeQL 的
+           ``py/path-injection`` 正是顺着这条流报到 ``shutil.copytree`` 的,报得对。
+
+           校验用的是**纯词法**的 ``..`` 归约(见 :meth:`_normalized_segments`),
+           不是 ``realpath``。两个理由:一是这个函数不该碰文件系统 —— 它只是拼个
+           字符串,加一次 ``realpath`` 就等于给每次 open 加一次系统调用,而且在
+           路径抖动时会**误抛**;二是 ``realpath`` 会跟随符号链接,于是"最后一段是
+           指向工作区外的符号链接"这种情况会在这里就被判成越界 —— 那本该由描述符
+           那条路来判(它给的是 :class:`SymlinkNotFollowed`,语义更准)。
+           **不许**让一个只负责显示的函数抢在真正的防线前面下结论。
         """
-        segments = self._segments(relpath)
-        return self._root_path.joinpath(*segments) if segments else self._root_path
+        return self._root_path.joinpath(*self._normalized_segments(relpath))
 
 
 class PathOnlyGuard(WorkspaceGuard):
@@ -582,20 +645,8 @@ class PathOnlyGuard(WorkspaceGuard):
         object.__setattr__(self, "_closed", True)
 
     def _resolve(self, relpath: str | os.PathLike[str]) -> Path:
-        """老的判定形态,原样保留(包括它是 CodeQL 认得的净化写法这一点)。"""
-        root = os.path.realpath(self._root_path)
-        try:
-            candidate = os.path.realpath(os.path.join(root, os.fspath(relpath)))
-        except OSError as exc:
-            # 旧实现漏了这一条:realpath 在路径抖动时会抛,调用方本该看到 ValueError。
-            raise PathEscapesWorkspace(f"路径解析失败: {relpath}") from exc
-        try:
-            inside = os.path.commonpath([root, candidate]) == root
-        except ValueError:
-            inside = False  # Windows 跨盘符
-        if not inside:
-            raise PathEscapesWorkspace(f"Path '{relpath}' is outside the workspace. Access denied.")
-        return Path(candidate)
+        """唯一的落点判定 —— 本类所有操作都先过这里。"""
+        return contained_path(self._root_path, relpath)
 
     # 下面全部退回路径实现。签名与父类一致,只是保证弱一档。
 
