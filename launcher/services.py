@@ -186,13 +186,14 @@ def _try_start_docker_daemon(docker_path: str) -> None:
 
 
 def _get_lan_ip() -> str:
-    """Return the host's primary LAN IPv4 address, or empty string if unavailable."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-    except Exception:
-        return ""
+    """Return the host's primary LAN IPv4 address, or empty string if unavailable.
+
+    探测收口到 :mod:`core.lan_address`(仓里原有五份各写各的实现)。契约不变:
+    探不到返回空串。
+    """
+    from core.lan_address import detect_lan_ip_or_empty
+
+    return detect_lan_ip_or_empty()
 
 
 #: 端口预检专用的探测地址。刻意只探环回口,绝不绑通配地址,详见

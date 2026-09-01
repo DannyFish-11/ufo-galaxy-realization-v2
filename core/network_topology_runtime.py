@@ -31,7 +31,6 @@ import json
 import logging
 import os
 import platform
-import socket
 import subprocess
 import threading
 import time
@@ -1288,12 +1287,17 @@ class NetworkTopologyRuntime:
 
     @staticmethod
     def _get_lan_ip() -> str:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-        finally:
-            s.close()
+        """本机局域网 IP;探不到返回空串。
+
+        探测收口到 :mod:`core.lan_address`(仓里原有五份各写各的实现)。
+        行为变化:原实现探测失败时**抛异常**,由 ``_discover_self`` 的
+        ``except Exception: pass`` 吞掉,连带把下一行的 ``lan_subnet`` 一起跳过。
+        现在返回空串,``_subnet_from_ip("")`` 照常返回空串,两个字段都是"空"
+        而不是"一个空一个没赋值"。
+        """
+        from core.lan_address import detect_lan_ip_or_empty
+
+        return detect_lan_ip_or_empty()
 
     @staticmethod
     def _subnet_from_ip(ip: str, prefix: int = 24) -> str:

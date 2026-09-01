@@ -420,7 +420,11 @@ def build_local_card(
         # 拿到的名片候选路径都是空的 —— 多路可达这件事对它整个不存在,而且没有
         # 任何报错,只表现成"这台设备只能在局域网里配上"。
         cands = build_candidates(did, port)
-        eps.setdefault("websocket", f"ws://{_local_ip()}:{port}/ws/device/{did}")
+        # 同上:探不到就不写这个端点。写一个环回地址进名片,消费端无从分辨
+        # "这台机器就在本机"和"这台机器当时没探到自己的地址"。
+        _ip = _local_ip()
+        if _ip:
+            eps.setdefault("websocket", f"ws://{_ip}:{port}/ws/device/{did}")
     return create_agent_card(
         did,
         name=os.getenv("GALAXY_DEVICE_NAME", "").strip() or did,
@@ -447,8 +451,14 @@ def build_candidates(device_id: str, port: int) -> List[Dict[str, Any]]:
     **不带 :9000**,本地端口由 ``tailscale serve`` 映射。这一点写错的话,
     手表会拿到一个语法正确但必然连不上的地址。
     """
-    urls: Dict[str, str] = {"lan": f"ws://{_local_ip()}:{port}/ws/device/{device_id}"}
+    # 探不到局域网地址时**不发** lan 这条候选,而不是发一条指向 127.0.0.1 的。
+    # 少一条路,设备会顺着 priority 试下一条(tailscale/funnel);发一条有毒的,
+    # 设备会先把 priority=1 试到超时,而且那条路永远不会通。
+    lan_ip = _local_ip()
+    urls: Dict[str, str] = {}
     order: List[str] = ["lan"]
+    if lan_ip:
+        urls["lan"] = f"ws://{lan_ip}:{port}/ws/device/{device_id}"
     try:
         from core.tailscale_manager import TailscaleManager  # noqa: PLC0415
 
@@ -472,17 +482,18 @@ def build_candidates(device_id: str, port: int) -> List[Dict[str, Any]]:
     ]
 
 
-def _local_ip() -> str:
-    """取本机在局域网中的出口 IP;失败退回 127.0.0.1。"""
-    try:
-        import socket
+def _local_ip() -> Optional[str]:
+    """取本机在局域网中的出口 IP;探不到返回 ``None``。
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(("10.255.255.255", 1))  # 不发包,只为让内核选路
-            return s.getsockname()[0]
-        finally:
-            s.close()
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("本机 IP 探测失败,退回 127.0.0.1: %s", exc)
-        return "127.0.0.1"
+    改前这里失败会返回 ``"127.0.0.1"``。那个兜底有毒:本函数的产出是要**发给别的
+    设备**的 —— :func:`build_candidates` 会把它作为 ``kind="lan"``、``priority=1``
+    的候选写进配对名片,手机拿到后第一个就试它,而 ``127.0.0.1`` 在手机上指向手机
+    自己。结果是一个格式完全正确、却必然连不通的最高优先级地址,没有异常也没有告警,
+    排查方向被引向"网络有问题"。
+
+    探测本身收口到 :mod:`core.lan_address` —— 仓里原有五份各写各的实现,
+    失败语义和探测目标都不一致。
+    """
+    from core.lan_address import detect_lan_ip  # noqa: PLC0415
+
+    return detect_lan_ip()
