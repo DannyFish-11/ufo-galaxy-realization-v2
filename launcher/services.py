@@ -186,11 +186,7 @@ def _try_start_docker_daemon(docker_path: str) -> None:
 
 
 def _get_lan_ip() -> str:
-    """Return the host's primary LAN IPv4 address, or empty string if unavailable.
-
-    探测收口到 :mod:`core.lan_address`(仓里原有五份各写各的实现)。契约不变:
-    探不到返回空串。
-    """
+    """Host's primary LAN IPv4, or "" if unavailable. 探测收口在 :mod:`core.lan_address`。"""
     from core.lan_address import detect_lan_ip_or_empty
 
     return detect_lan_ip_or_empty()
