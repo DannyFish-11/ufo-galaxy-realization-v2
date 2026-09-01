@@ -40,6 +40,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import WebSocket
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.DeviceComm")
 
 
@@ -48,7 +50,7 @@ logger = logging.getLogger("Galaxy.DeviceComm")
 # ============================================================================
 
 try:
-    from galaxy_gateway.protocol.aip_v3 import MessageType as AIPv3MessageType
+    AIPv3MessageType = upper_ports.resolve("gateway.protocol.aip_v3.MessageType")
 except ImportError:
     AIPv3MessageType = None  # type: ignore[assignment,misc]
 
@@ -507,7 +509,7 @@ class DeviceCommunication:
             # etc.) are mapped to their v3 equivalents here; v3 messages pass
             # through unchanged.  After this point routing only sees v3 names.
             try:
-                from galaxy_gateway.protocol.compat import normalise_to_v3_dict
+                normalise_to_v3_dict = upper_ports.resolve("gateway.protocol.compat.normalise_to_v3_dict")
 
                 v3_msg = normalise_to_v3_dict(raw_msg)
             except Exception as _norm_err:
@@ -759,7 +761,8 @@ class DeviceCommunication:
     async def _handle_wake_event(self, device_id: str, payload: dict):
         """将唤醒事件转发到 WakeEventBus"""
         try:
-            from galaxy_gateway.wake_event_bus import RawWakeEvent, wake_event_bus
+            RawWakeEvent = upper_ports.resolve("gateway.wake_event_bus.RawWakeEvent")
+            wake_event_bus = upper_ports.resolve("gateway.wake_event_bus.wake_event_bus")
 
             raw = RawWakeEvent(
                 source_device_id=device_id,

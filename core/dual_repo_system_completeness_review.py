@@ -130,6 +130,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.DualRepoSystemCompletenessReview")
 
 __all__ = [
@@ -1077,7 +1079,7 @@ class DualRepoSystemCompletenessReviewer:
         handoff_types_runtime_verified: Optional[bool] = None
         bridge_handlers_runtime_verified: Optional[bool] = None
         try:
-            from galaxy_gateway.protocol.aip_v3 import MessageType  # type: ignore[import]
+            MessageType = upper_ports.resolve("gateway.protocol.aip_v3.MessageType")
 
             reconciliation_type_runtime_verified = (
                 MessageType.RECONCILIATION_SIGNAL.value == reconciliation_signal_value
@@ -1087,7 +1089,7 @@ class DualRepoSystemCompletenessReviewer:
             logger.warning("Exception suppressed: %s", exc)
 
         try:
-            import galaxy_gateway.android_bridge as android_bridge  # type: ignore[import]
+            android_bridge = upper_ports.resolve("gateway.android_bridge")
 
             bridge_handlers_runtime_verified = all(hasattr(android_bridge, name) for name in gateway_handler_names)
         except Exception as exc:

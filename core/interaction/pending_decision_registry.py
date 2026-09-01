@@ -52,6 +52,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.HITL")
 
 _DEFAULT_TIMEOUT_S: float = 60.0
@@ -436,7 +438,7 @@ async def request_human_decision(
 
 async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
     """Default transport: deliver via the gateway connection manager."""
-    from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
+    connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
 
     await connection_manager.send_to_device(device_id, message)
 
@@ -444,7 +446,7 @@ async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
 async def _discover_target_devices() -> List[str]:
     """Auto-discover connected WearOS + phone device ids to ask."""
     try:
-        from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
+        connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
     except Exception:  # noqa: BLE001
         return []
     try:

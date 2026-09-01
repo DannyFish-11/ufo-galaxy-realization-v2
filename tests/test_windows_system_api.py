@@ -494,9 +494,22 @@ class TestHotkeyPumpCannotBusySpin:
 
     @staticmethod
     def _run_pump_for(seconds: float):
-        """在 mock 的 user32 下跑泵,返回 (CPU 占用率, PeekMessageW 调用次数)。"""
+        """在 mock 的 user32 下跑泵,返回 (泵线程的 CPU 占用率, PeekMessageW 调用次数)。
+
+        量的是**泵线程自己**的 CPU,不是整个进程的。
+
+        第一版用的是 ``time.process_time()`` —— 那是**进程级**的,把所有线程算在一起。
+        本机安静时看着没问题,到了 CI 的 test-shard(4) 就误报:那一个进程里跑着 9700
+        条测试,还留着一堆没清干净的后台任务(同一轮日志里就有 ``NATSBus.
+        publish_presence_event``、``CapabilityRegistry._load_gateway`` 等若干
+        "Task was destroyed but it is pending")。它们烧的 CPU 全被记到了泵头上,
+        于是断言炸在 71%,而同一次测量里 ``PeekMessageW`` 只被调了 **512 次** ——
+        真空转时是 66590 次。两个信号直接打架,错的是量法不是被测对象。
+
+        改法:让 mock 的 ``PeekMessageW`` 在**泵线程内**采 ``time.thread_time()``。
+        它按线程计时,于是拿到的就是泵线程自己的 CPU,旁边多吵都不受影响。
+        """
         import ctypes as _ctypes
-        import threading as _threading
         import time as _time
         from unittest.mock import MagicMock
 
@@ -505,7 +518,16 @@ class TestHotkeyPumpCannotBusySpin:
         saved_avail, saved_u32 = wa._WIN32_AVAILABLE, wa._user32
         try:
             wa._WIN32_AVAILABLE = True
-            wa._user32 = MagicMock()
+            u32 = MagicMock()
+            samples: list[float] = []
+
+            def _peek(*_args, **_kwargs):
+                # 在泵线程里执行 —— thread_time() 因此量的是泵线程。
+                samples.append(_time.thread_time())
+                return 1  # 恒真:正是当年把泵变成空转的那个条件
+
+            u32.PeekMessageW.side_effect = _peek
+            wa._user32 = u32
             if not hasattr(_ctypes, "wintypes"):  # 非 Windows 主机
 
                 class _MSG:
@@ -519,63 +541,32 @@ class TestHotkeyPumpCannotBusySpin:
                 _ctypes.wintypes = _WT  # type: ignore[attr-defined]
 
             pump = wa._HotkeyPump()
-            cpu0, wall0 = _time.process_time(), _time.time()
+            wall0 = _time.time()
             pump.start()
             _time.sleep(seconds)
-            cpu = _time.process_time() - cpu0
             wall = _time.time() - wall0
             pump.stop()
             pump.join(timeout=5)
             assert not pump.is_alive(), "stop() 之后泵必须真的停下来"
-            return cpu / wall, wa._user32.PeekMessageW.call_count
+
+            calls = u32.PeekMessageW.call_count
+            assert calls >= 2, f"泵只调了 {calls} 次,采不到 CPU —— 这一轮测量无效"
+            # 首尾两次采样之间,泵线程自己烧掉的 CPU。
+            thread_cpu = samples[-1] - samples[0]
+            return thread_cpu / wall, calls
         finally:
             wa._WIN32_AVAILABLE, wa._user32 = saved_avail, saved_u32
-
-    @staticmethod
-    def _idle_ratio(seconds: float) -> float:
-        """同样长度、**不起泵**的一段窗口里,本进程烧了多少 CPU。"""
-        import time as _time
-
-        cpu0, wall0 = _time.process_time(), _time.time()
-        _time.sleep(seconds)
-        return (_time.process_time() - cpu0) / (_time.time() - wall0)
 
     def test_pump_does_not_burn_a_core_when_the_api_always_returns_truthy(self):
         """恒真的 PeekMessageW 不能把泵变成满核空转。
 
-        这条断言的口径有个前提,不满足时它测不出东西
-        ------------------------------------------------
-        ``time.process_time()`` 是**整个进程所有线程**的 CPU,不是泵那条线程的。
-        单独跑这个文件时进程里没别人,量到的约等于泵自己;可它在 CI 上跑在 9724 条
-        用例的分片末尾,前面留下的后台线程(NATSBus.publish_presence_event、
-        DecayController._async_decay_sequence、未关闭的 aiohttp session…)也在烧,
-        全被算在泵头上 —— 实测本地单跑 ~4%,CI 上两次量到 57% 与 67%,而泵没变过。
+        阈值取 25%:修复前实测 ~100%,修复后实测 ~4%。留出的余量足够吸收
+        CI 机器的抖动,又远低于"烧掉一个核"。
 
-        减本底也救不了它。实测过:机器已经跑满时再加一条空转线程,进程 CPU 不会变多
-        (只是从别人那儿抢),于是**真的空转量出来的增量是 +0%**。也就是说这个口径
-        在饱和的进程里根本分不出「泵在转」和「别人在转」——
-        放宽阈值会更糟:那样两边都测不出。
-
-        所以:本底高到这个测量没有意义时,如实报「量不出」,而不是假装通过或假装失败。
-        空转这件事本身有另一条口径干净的判据在守 —— 见下面的
-        ``test_pump_rate_is_bounded``:调用次数只属于这个 mock,不受别的线程影响。
-        同一次模拟里,空转 14506 次 / 正常 1024 次,那条阈值 5000 切得很开。
-
-        下面仍然减了一次本底,那只是本底已经低到 25% 以内、这个口径还站得住时的
-        一点小修正;门能不能咬住人,靠的是上面那道「量不准就说量不准」,不是这次相减。
+        量的是泵线程自己的 CPU —— 见 :meth:`_run_pump_for` 里记的那次 CI 误报。
         """
-        base = self._idle_ratio(1.0)
-        if base > 0.25:
-            pytest.skip(
-                f"本进程已有 {base:.0%} 的后台 CPU 占用(别的用例留下的线程),"
-                "进程级 CPU 这个口径在这里量不出泵自己烧了多少 —— "
-                "空转由 test_pump_rate_is_bounded 的调用次数口径守着。"
-            )
         ratio, calls = self._run_pump_for(1.0)
-        excess = ratio - base
-        assert excess < 0.25, (
-            f"消息泵在空转:泵带来的 CPU 增量 {excess:.0%}" f"(总占用 {ratio:.0%},本底 {base:.0%},调用 {calls} 次)"
-        )
+        assert ratio < 0.25, f"消息泵在空转:CPU 占用 {ratio:.0%}(调用 {calls} 次)"
 
     def test_pump_rate_is_bounded(self):
         """每轮取数有上限、且无条件让出 —— 于是速率有硬上限。

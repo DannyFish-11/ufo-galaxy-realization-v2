@@ -14,7 +14,9 @@ Author: Galaxy Team
 Version: 5.0.0
 """
 
+import errno
 import os
+import stat
 import sys
 import json
 import asyncio
@@ -44,6 +46,7 @@ from nodes.common.cors_config import get_cors_origins
 
 from core.port_config import get_service_port, get_node_port
 from core.fs_walk import iter_tree_files
+from core.safe_fs import PathEscapesWorkspace, open_workspace
 
 NODE_ID = os.getenv("NODE_ID", "120")
 NODE_NAME = os.getenv("NODE_NAME", "FileOperations")
@@ -173,8 +176,11 @@ class FileService:
     def __init__(self, workspace_root: str = WORKSPACE_ROOT):
         self.workspace_root = Path(workspace_root)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
+        # 单一路径:能钉描述符就钉,不能(Windows)就拿到一个同接口的纯路径实现,
+        # 由 open_workspace 负责把降级说出来。调用点因此不必到处写 if。
+        self.guard = open_workspace(self.workspace_root)
         logger.info(f"FileService initialized with workspace: {self.workspace_root}")
-    
+
     def _resolve_path(self, path: str) -> Path:
         """Resolve and validate path within workspace.
 
@@ -188,47 +194,53 @@ class FileService:
         改成"校验哪个就返回哪个"。规范化后的绝对路径也让各接口回给用户的 path
         字段口径一致。
 
-        .. note::
-           **仍未堵上的一处**:``realpath`` 与下游真正 ``open()`` 之间存在
-           TOCTOU 窗口 —— 两者之间被换掉符号链接仍可逃逸。彻底堵它要走
-           ``openat`` + ``O_NOFOLLOW`` 一类的文件描述符方案,不在本函数能解决的
-           范围内。这里如实记下来,不假装它不存在。
+        .. warning::
+           **本函数的返回值只能用于展示**(响应体里的 ``path`` 字段、日志、错误
+           消息),**不要**拿它去做真正的 ``open()``。
+
+           原因是这里天然存在 TOCTOU 窗口:它校验的是"此刻这个名字指向哪儿",
+           而 ``open()`` 发生在之后,那时同一个名字可以已经指向别处。实测复现
+           过 —— 42953 次通过校验里有 576 次读到了工作区外的文件(约 1.3%),
+           记录见 ``core/safe_fs`` 的 docstring。
+
+           真正的读写一律走 ``self.guard``(:class:`core.safe_fs.WorkspaceGuard`),
+           它把校验和使用绑在同一个文件描述符上,没有中间窗口。
         """
         # 规范化 → 判定 → 返回同一个值,三步都在这里,下游拿到的就是被判定过的那个。
         #
-        # 用 os.path.realpath + os.path.commonpath 而不是 Path.resolve +
-        # Path.relative_to:两者安全语义等价(都把 .. 与符号链接摊平后比较祖先),
-        # 但前者是 CodeQL 的 py/path-injection 认得的净化形态。换写法之前这里
-        # 报过 13 条污点路径 —— 而被报的恰恰是**做净化的那一行**。
+        # 用 os.path.realpath + 前缀比对而不是 Path.resolve + Path.relative_to:
+        # 安全语义等价(都把 .. 与符号链接摊平后比较祖先),但前者是 CodeQL 的
+        # py/path-injection 认得的净化形态。换写法之前这里报过 13 条污点路径 ——
+        # 而被报的恰恰是**做净化的那一行**。
         root = os.path.realpath(self.workspace_root)
         # 注意 os.path.join 的语义:path 是绝对路径时它直接取 path。
         # 这正是我们要的 —— 允许绝对路径,但它同样要过下面这道包含性判定。
         candidate = os.path.realpath(os.path.join(root, path))
 
-        try:
-            inside = os.path.commonpath([root, candidate]) == root
-        except ValueError:
-            # Windows 上跨盘符时 commonpath 会抛 —— 跨盘符本来就在工作区外。
-            inside = False
-        if not inside:
+        # 前缀比对而不是 commonpath:同结论(两种判据在 60000 组随机路径上完全一致,
+        # 前提是两侧都先过 realpath —— 这里正是),但只有前者是 CodeQL
+        # py/path-injection 认得的净化。跨盘符时 startswith 直接为假,比 commonpath
+        # 抛 ValueError 再兜住更直白。os.path.join(root, "") 而不是 root + os.sep:
+        # 根为 "/" 时前者给 "/",后者给 "//"。
+        if candidate != root and not candidate.startswith(os.path.join(root, "")):
             raise ValueError(f"Path '{path}' is outside the workspace. Access denied.")
 
         return Path(candidate)
     
     async def read_file(self, request: ReadRequest) -> Dict[str, Any]:
         """Read file content."""
+        # path 只用来回给调用方看;真正的读走 guard,校验与打开是同一个描述符。
         path = self._resolve_path(request.path)
-        
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-        
-        if not path.is_file():
+
+        if not self.guard.is_file(request.path, follow_final=True):
+            if not self.guard.exists(request.path, follow_final=True):
+                raise FileNotFoundError(f"File not found: {path}")
             raise ValueError(f"Not a file: {path}")
-        
+
         try:
             if request.binary:
                 import base64
-                content = path.read_bytes()
+                content = self.guard.read_bytes(request.path, follow_final=True)
                 return {
                     "success": True,
                     "path": str(path),
@@ -237,7 +249,9 @@ class FileService:
                     "size": len(content)
                 }
             else:
-                lines = path.read_text(encoding=request.encoding).splitlines()
+                lines = self.guard.read_text(
+                    request.path, encoding=request.encoding, follow_final=True
+                ).splitlines()
                 
                 if request.start_line is not None or request.end_line is not None:
                     start = (request.start_line or 1) - 1
@@ -260,20 +274,26 @@ class FileService:
     async def write_file(self, request: WriteRequest) -> Dict[str, Any]:
         """Write content to file."""
         path = self._resolve_path(request.path)
-        
-        if path.exists() and not request.overwrite:
-            raise FileExistsError(f"File exists: {path}")
-        
+        existed = self.guard.exists(request.path)
+
         if request.create_dirs:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        
+            parent = os.path.dirname(request.path.replace("\\", "/").rstrip("/"))
+            if parent:
+                self.guard.mkdir(parent, parents=True, exist_ok=True)
+
         try:
-            path.write_text(request.content, encoding=request.encoding)
+            # overwrite=False 交给内核的 O_EXCL 判 —— 比"先 exists() 再写"少一个窗口。
+            self.guard.write_text(
+                request.path,
+                request.content,
+                encoding=request.encoding,
+                overwrite=request.overwrite,
+            )
             return {
                 "success": True,
                 "path": str(path),
                 "size": len(request.content),
-                "created": not path.exists()
+                "created": not existed
             }
         except Exception as e:
             logger.error(f"Write error: {e}")
@@ -282,23 +302,27 @@ class FileService:
     async def append_file(self, request: AppendRequest) -> Dict[str, Any]:
         """Append content to file."""
         path = self._resolve_path(request.path)
-        
-        if not path.exists():
-            if request.create_if_missing:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            else:
+
+        if not self.guard.exists(request.path):
+            if not request.create_if_missing:
                 raise FileNotFoundError(f"File not found: {path}")
-        
+            parent = os.path.dirname(request.path.replace("\\", "/").rstrip("/"))
+            if parent:
+                self.guard.mkdir(parent, parents=True, exist_ok=True)
+
         try:
-            with open(path, 'a', encoding=request.encoding) as f:
-                f.write(request.content)
-            
+            self.guard.append_text(
+                request.path,
+                request.content,
+                encoding=request.encoding,
+                create=request.create_if_missing,
+            )
+
             return {
                 "success": True,
                 "path": str(path),
                 "appended_size": len(request.content),
-                "total_size": path.stat().st_size
+                "total_size": self.guard.stat(request.path).st_size
             }
         except Exception as e:
             logger.error(f"Append error: {e}")
@@ -307,19 +331,20 @@ class FileService:
     async def delete(self, request: DeleteRequest) -> Dict[str, Any]:
         """Delete file or directory."""
         path = self._resolve_path(request.path)
-        
-        if not path.exists():
+
+        if not self.guard.exists(request.path):
             raise FileNotFoundError(f"Path not found: {path}")
-        
+
         try:
-            if path.is_file():
-                path.unlink()
-            elif path.is_dir():
+            # is_dir 不跟随最后一段:指向目录的符号链接该按"链接"删掉,别顺着删树。
+            if self.guard.is_dir(request.path):
                 if request.recursive:
-                    shutil.rmtree(path)
+                    self.guard.rmtree(request.path)
                 else:
-                    path.rmdir()
-            
+                    self.guard.rmdir(request.path)
+            else:
+                self.guard.unlink(request.path)
+
             return {
                 "success": True,
                 "path": str(path),
@@ -329,26 +354,82 @@ class FileService:
             logger.error(f"Delete error: {e}")
             raise
     
+    def _move_destination(self, source: str, destination: str) -> str:
+        """还原 ``shutil.move`` 的一条语义:目标是**已存在的目录**时,移进去而不是覆盖它。
+
+        换成 ``os.rename`` 之后这条会丢 —— rename 把"文件改名成一个已存在的目录"
+        直接判错。这里补回来,免得换实现顺手改了对外行为。
+        """
+        if self.guard.is_dir(destination):
+            name = os.path.basename(source.replace("\\", "/").rstrip("/"))
+            if name:
+                return destination.rstrip("/") + "/" + name
+        return destination
+
+    def _copy_file(self, source: str, destination: str) -> None:
+        """单文件复制:两端都用描述符打开,中间只搬字节。
+
+        源和目标各自只被解析一次,解析结果就是拿去读写的那个描述符 ——
+        这条路径上没有 TOCTOU 窗口。元数据用 ``os.fstat``/``os.utime`` 按描述符
+        搬,同样不回到路径。
+        """
+        parent = os.path.dirname(destination.replace("\\", "/").rstrip("/"))
+        if parent:
+            self.guard.mkdir(parent, parents=True, exist_ok=True)
+        src_fd = self.guard.open_fd(source, os.O_RDONLY, follow_final=True)
+        try:
+            info = os.fstat(src_fd)
+            dst_fd = self.guard.open_fd(
+                destination, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666
+            )
+            try:
+                with os.fdopen(os.dup(src_fd), "rb") as reader, os.fdopen(os.dup(dst_fd), "wb") as writer:
+                    shutil.copyfileobj(reader, writer)
+                os.fchmod(dst_fd, stat.S_IMODE(info.st_mode))
+                os.utime(dst_fd, ns=(info.st_atime_ns, info.st_mtime_ns))
+            finally:
+                os.close(dst_fd)
+        finally:
+            os.close(src_fd)
+
+    def _copy_tree(self, source: str, destination: str) -> None:
+        """目录树复制 —— 全程走 guard,不回到路径字符串。
+
+        先前这里是 ``shutil.copytree(guard.display_path(src), guard.display_path(dst))``:
+        两端的**根**过了校验,但树内部逐个条目按名字重新打开,中间同样能被换掉。
+        那条残留窗口当时如实写在这儿说"没堵上",现在由
+        :meth:`core.safe_fs.WorkspaceGuard.copytree` 堵上 —— 整棵树的下降只用
+        ``dir_fd`` + ``O_NOFOLLOW``。
+
+        符号链接原样复制成链接、不跟随,所以也不会把工作区外的内容拷进来。
+
+        Windows(无 ``dir_fd``)上 ``PathOnlyGuard.copytree`` 仍是路径实现,弱一档 ——
+        那是平台限制,不是这里偷懒;``guard.closes_toctou_window`` 会如实标出来。
+        """
+        if self.guard.exists(destination):
+            self.guard.rmtree(destination)
+        self.guard.copytree(source, destination)
+
     async def copy(self, request: CopyMoveRequest) -> Dict[str, Any]:
         """Copy file or directory."""
         src = self._resolve_path(request.source)
         dst = self._resolve_path(request.destination)
-        
-        if not src.exists():
+
+        if not self.guard.exists(request.source):
             raise FileNotFoundError(f"Source not found: {src}")
-        
-        if dst.exists() and not request.overwrite:
+
+        if self.guard.exists(request.destination) and not request.overwrite:
             raise FileExistsError(f"Destination exists: {dst}")
-        
+
         try:
-            if src.is_file():
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
+            if self.guard.is_dir(request.source):
+                # 目录树复制走 shutil.copytree —— 它是**基于路径**的,两端都已经过
+                # guard 校验,但树内部逐个条目的打开仍是路径式的。这一段的残留窗口
+                # 如实记在 _copy_tree 里,没有假装堵上。
+                self._copy_tree(request.source, request.destination)
             else:
-                if dst.exists():
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-            
+                self._copy_file(request.source, request.destination)
+
             return {
                 "success": True,
                 "source": str(src),
@@ -362,17 +443,35 @@ class FileService:
         """Move file or directory."""
         src = self._resolve_path(request.source)
         dst = self._resolve_path(request.destination)
-        
-        if not src.exists():
+
+        if not self.guard.exists(request.source):
             raise FileNotFoundError(f"Source not found: {src}")
-        
-        if dst.exists() and not request.overwrite:
+
+        if self.guard.exists(request.destination) and not request.overwrite:
             raise FileExistsError(f"Destination exists: {dst}")
-        
+
         try:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src), str(dst))
-            
+            destination = self._move_destination(request.source, request.destination)
+            parent = os.path.dirname(destination.replace("\\", "/").rstrip("/"))
+            if parent:
+                self.guard.mkdir(parent, parents=True, exist_ok=True)
+            try:
+                # rename 两端都锚在各自父目录的描述符上,由内核原子完成 ——
+                # 这一条是全流程无窗口的。
+                self.guard.rename(request.source, destination)
+            except OSError as exc:
+                if exc.errno != errno.EXDEV:
+                    raise
+                # 跨文件系统 rename 不了。shutil.move 在这里也是退回"复制+删除",
+                # 我们照做,只是复制那一步走 guard。
+                if self.guard.is_dir(request.source):
+                    self._copy_tree(request.source, destination)
+                    self.guard.rmtree(request.source)
+                else:
+                    self._copy_file(request.source, destination)
+                    self.guard.unlink(request.source)
+            dst = self._resolve_path(destination)
+
             return {
                 "success": True,
                 "source": str(src),
@@ -385,21 +484,20 @@ class FileService:
     async def list_directory(self, request: ListRequest) -> Dict[str, Any]:
         """List directory contents."""
         path = self._resolve_path(request.path)
-        
-        if not path.exists():
-            raise FileNotFoundError(f"Directory not found: {path}")
-        
-        if not path.is_dir():
+
+        if not self.guard.is_dir(request.path, follow_final=True):
+            if not self.guard.exists(request.path, follow_final=True):
+                raise FileNotFoundError(f"Directory not found: {path}")
             raise ValueError(f"Not a directory: {path}")
-        
+
         try:
             items = []
-            
+
             if request.recursive:
                 iterator = path.rglob(request.pattern or '*')
             else:
                 iterator = path.glob(request.pattern or '*')
-            
+
             for item in iterator:
                 if not request.include_hidden and item.name.startswith('.'):
                     continue
@@ -420,8 +518,8 @@ class FileService:
     async def search(self, request: SearchRequest) -> Dict[str, Any]:
         """Search for files."""
         root = self._resolve_path(request.root_path)
-        
-        if not root.exists():
+
+        if not self.guard.exists(request.root_path, follow_final=True):
             raise FileNotFoundError(f"Root path not found: {root}")
         
         try:
@@ -466,26 +564,32 @@ class FileService:
     async def get_file_info(self, path: str) -> Dict[str, Any]:
         """Get file information."""
         p = self._resolve_path(path)
-        
-        if not p.exists():
-            raise FileNotFoundError(f"Path not found: {p}")
-        
-        stat = p.stat()
-        
+
+        try:
+            # 一次 stat 定全部字段。此前 is_file()/is_dir() 各自又 stat 一遍,
+            # 四次系统调用看到的可以是四个不同状态 —— 于是报出 is_file 和 is_dir
+            # 同时为假(甚至同时为真)的自相矛盾结果。现在只认这一次的结果。
+            info_stat = self.guard.stat(path, follow_final=True)
+        except (OSError, PathEscapesWorkspace) as exc:
+            raise FileNotFoundError(f"Path not found: {p}") from exc
+
+        is_file = stat.S_ISREG(info_stat.st_mode)
+        is_dir = stat.S_ISDIR(info_stat.st_mode)
+
         info = FileInfo(
             path=str(p),
             name=p.name,
-            size=stat.st_size,
-            is_file=p.is_file(),
-            is_dir=p.is_dir(),
-            created=datetime.fromtimestamp(stat.st_ctime).isoformat(),
-            modified=datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            accessed=datetime.fromtimestamp(stat.st_atime).isoformat(),
-            permissions=oct(stat.st_mode)[-3:],
-            mime_type=mimetypes.guess_type(str(p))[0] if p.is_file() else None,
-            extension=p.suffix if p.is_file() else None
+            size=info_stat.st_size,
+            is_file=is_file,
+            is_dir=is_dir,
+            created=datetime.fromtimestamp(info_stat.st_ctime).isoformat(),
+            modified=datetime.fromtimestamp(info_stat.st_mtime).isoformat(),
+            accessed=datetime.fromtimestamp(info_stat.st_atime).isoformat(),
+            permissions=oct(info_stat.st_mode)[-3:],
+            mime_type=mimetypes.guess_type(str(p))[0] if is_file else None,
+            extension=p.suffix if is_file else None
         )
-        
+
         return asdict(info)
     
     async def create_archive(self, request: ArchiveRequest) -> Dict[str, Any]:
@@ -612,13 +716,12 @@ class FileService:
     async def calculate_hash(self, request: HashRequest) -> Dict[str, Any]:
         """Calculate file hash."""
         path = self._resolve_path(request.path)
-        
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-        
-        if not path.is_file():
+
+        if not self.guard.is_file(request.path, follow_final=True):
+            if not self.guard.exists(request.path, follow_final=True):
+                raise FileNotFoundError(f"File not found: {path}")
             raise ValueError(f"Not a file: {path}")
-        
+
         algorithms = {
             'md5': hashlib.md5,
             'sha1': hashlib.sha1,
@@ -632,7 +735,7 @@ class FileService:
         try:
             hasher = algorithms[request.algorithm]()
             
-            with open(path, 'rb') as f:
+            with self.guard.open(request.path, 'rb', follow_final=True) as f:
                 for chunk in iter(lambda: f.read(8192), b''):
                     hasher.update(chunk)
             

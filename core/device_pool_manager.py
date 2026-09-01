@@ -55,6 +55,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.DevicePoolManager")
 
 
@@ -461,7 +463,7 @@ class DevicePoolManager:
     ) -> None:
         """Write device registration to UDM SSOT (best-effort, never raises)."""
         try:
-            from galaxy_gateway.ssot import udm_write_register  # noqa: PLC0415
+            udm_write_register = upper_ports.resolve("gateway.ssot.udm_write_register")
 
             udm_write_register(
                 device_id=device_id,
@@ -482,7 +484,7 @@ class DevicePoolManager:
     def _udm_write_unregister(device_id: str) -> None:
         """Write device unregister to UDM SSOT (best-effort, never raises)."""
         try:
-            from galaxy_gateway.ssot import udm_write_unregister  # noqa: PLC0415
+            udm_write_unregister = upper_ports.resolve("gateway.ssot.udm_write_unregister")
 
             udm_write_unregister(device_id)
         except Exception as exc:

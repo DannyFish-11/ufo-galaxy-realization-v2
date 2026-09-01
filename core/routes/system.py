@@ -41,6 +41,7 @@ from datetime import datetime
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from core import upper_ports
 from core.routes._shared import (
     connection_manager,
     node_status_cache,
@@ -444,7 +445,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # GALAXY_SYSTEM_MODE 派生") and system_mode's own precedence.
         try:
             if os.getenv("GALAXY_CROSS_DEVICE_ENABLED") is not None:
-                from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+                is_cross_device_enabled = upper_ports.resolve("gateway.cross_device_switch.is_cross_device_enabled")
 
                 cross_device_on = is_cross_device_enabled()
         except Exception as exc:

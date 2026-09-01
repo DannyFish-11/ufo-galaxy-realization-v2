@@ -63,6 +63,8 @@ import uuid
 from typing import List  # auto: missing import
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from core import upper_ports
+
 logger = logging.getLogger("Galaxy.Unified.EntrypointRouter")
 
 
@@ -322,7 +324,7 @@ def resolve_entry_mode(
         # Step 1: check cross-device master switch
         _cross_device_on = False
         try:
-            from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+            is_cross_device_enabled = upper_ports.resolve("gateway.cross_device_switch.is_cross_device_enabled")
 
             _cross_device_on = is_cross_device_enabled()
         except Exception as exc:
