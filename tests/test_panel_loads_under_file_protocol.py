@@ -58,8 +58,7 @@ class TestTheBuiltPageCanLoadOverFileProtocol:
         """``type="module"`` 会被 file:// 的 CORS 拦掉,脚本根本不执行。"""
         offenders = re.findall(r"<script[^>]*\btype=[\"']module[\"'][^>]*>", dist_html)
         assert not offenders, (
-            "构建产物里还有 type=\"module\" 脚本 —— file:// 下会被 CORS 拦掉,"
-            f"面板会白屏且不报错: {offenders}"
+            '构建产物里还有 type="module" 脚本 —— file:// 下会被 CORS 拦掉,' f"面板会白屏且不报错: {offenders}"
         )
 
     def test_no_crossorigin_attribute(self, dist_html: str) -> None:
@@ -97,14 +96,12 @@ class TestTheBuildConfigStillEnforcesIt:
         return VITE_CONFIG.read_text(encoding="utf-8")
 
     def test_base_is_relative(self, vite_src: str) -> None:
-        assert re.search(r"base:\s*['\"]\./['\"]", vite_src), (
-            "vite.config.ts 里没有 base: './' —— 产物会引用绝对路径"
-        )
+        assert re.search(r"base:\s*['\"]\./['\"]", vite_src), "vite.config.ts 里没有 base: './' —— 产物会引用绝对路径"
 
     def test_output_format_is_classic(self, vite_src: str) -> None:
-        assert re.search(r"format:\s*['\"]iife['\"]", vite_src), (
-            "输出格式不是 iife —— ES module 产物在 file:// 下加载不了"
-        )
+        assert re.search(
+            r"format:\s*['\"]iife['\"]", vite_src
+        ), "输出格式不是 iife —— ES module 产物在 file:// 下加载不了"
 
     def test_demo_data_is_off_in_the_committed_page(self, dist_html: str) -> None:
         """演示数据绝不能随产物出厂。
@@ -114,16 +111,13 @@ class TestTheBuildConfigStillEnforcesIt:
         """
         m = re.search(r'name="galaxy-demo"\s+content="([^"]*)"', dist_html)
         assert m is not None, "构建产物里找不到 galaxy-demo 这个 meta"
-        assert m.group(1) != "on", (
-            "构建产物里 galaxy-demo=on —— 演示数据会出厂,"
-            "用户看到的假卡片和真数据分不开"
-        )
+        assert m.group(1) != "on", "构建产物里 galaxy-demo=on —— 演示数据会出厂," "用户看到的假卡片和真数据分不开"
 
 
 class TestMountingDoesNotDependOnScriptPlacement:
     def test_main_waits_for_the_dom(self) -> None:
         """挂载不该只靠「标签属性没被人改坏」。"""
         src = MAIN_TS.read_text(encoding="utf-8")
-        assert "DOMContentLoaded" in src and "readyState" in src, (
-            "main.ts 没有等 DOM —— 一旦构建产物的 defer 丢了,面板就静默不挂"
-        )
+        assert (
+            "DOMContentLoaded" in src and "readyState" in src
+        ), "main.ts 没有等 DOM —— 一旦构建产物的 defer 丢了,面板就静默不挂"

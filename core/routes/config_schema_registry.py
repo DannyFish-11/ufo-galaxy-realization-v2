@@ -223,8 +223,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "category": "advanced",
         "description": (
-            "跳过桌面壳这一启动阶段（无头/服务端部署用；"
-            "打开后不再探测或安装 Electron 依赖，面板也不会被拉起）"
+            "跳过桌面壳这一启动阶段（无头/服务端部署用；" "打开后不再探测或安装 Electron 依赖，面板也不会被拉起）"
         ),
     },
     "QDRANT_URL": {
