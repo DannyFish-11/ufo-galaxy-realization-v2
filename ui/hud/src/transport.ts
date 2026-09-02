@@ -9,7 +9,7 @@
  * 另外两个当不存在。同一个事实读两处,迟早会出现两处不一致而没人发现。
  */
 import type { RenderPosture } from './types';
-import type { LockstepReason, LockstepState, Phase } from './types';
+import type { DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, Phase } from './types';
 
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
@@ -49,6 +49,8 @@ export interface PresenceHandlers {
   onClose?(): void;
   onPosture?(frame: PostureFrame): void;
   onTurn?(role: 'user' | 'agent', text: string, final: boolean): void;
+  /** 设备清单变了。来自 WS 的 `panel_feed` 帧。 */
+  onDevices?(rows: readonly DeviceRow[]): void;
 }
 
 /**
@@ -123,6 +125,11 @@ export class PresenceSocket {
     if (m['type'] === 'state_event') {
       const frame = readPosture(payload['render']);
       if (frame) this.#h.onPosture?.(frame);
+      return;
+    }
+    if (m['type'] === 'panel_feed') {
+      const rows = readDevices(m['feed']);
+      if (rows) this.#h.onDevices?.(rows);
       return;
     }
     if (m['type'] === 'conversation') {
@@ -222,4 +229,48 @@ export async function streamChat(
       }
     }
   }
+}
+
+/** 后端 `topology_nodes[].status` → 面板的三档。认不出来的当离线,不当在线。 */
+const DEVICE_STATE: Record<string, DeviceState> = {
+  online: 'online',
+  degraded: 'degraded',
+  offline: 'offline',
+};
+
+/**
+ * `panel_feed.topology_nodes` → 岛上那份设备清单。
+ *
+ * **这份 feed 里没有「它在忙什么」这件事。** 节点上只有 `messageCount`(累计
+ * 计数,不是速率),边上那个 `messageRate` 说的是链路不是设备。所以 `load` 一律
+ * 给 null、`doing` 一律给空串 —— 类型上 null 本来就是「不知道」,跟 'idle'
+ * (知道它闲着)是两件事。拿累计计数硬凑一个忙闲出来,岛上那道光就会替一台
+ * 谁也没问过的机器说话。
+ *
+ * 后端哪天真送了忙闲,再从这里接上,不必改别处。
+ */
+export function readDevices(raw: unknown): readonly DeviceRow[] | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const nodes = (raw as Record<string, unknown>)['topology_nodes'];
+  if (!Array.isArray(nodes)) return null;
+  const now = Date.now();
+  const rows: DeviceRow[] = [];
+  for (const n of nodes) {
+    if (!n || typeof n !== 'object') continue;
+    const o = n as Record<string, unknown>;
+    const id = typeof o['id'] === 'string' ? o['id'] : '';
+    if (!id) continue;
+    const seenMs = typeof o['lastSeen'] === 'number' ? o['lastSeen'] : null;
+    const load: DeviceLoad = null;
+    rows.push({
+      id,
+      name: typeof o['label'] === 'string' && o['label'] ? o['label'] : id,
+      role: typeof o['role'] === 'string' ? o['role'] : 'participant',
+      state: DEVICE_STATE[String(o['status'])] ?? 'offline',
+      load,
+      doing: '',
+      lastSeenS: seenMs === null ? null : Math.max(0, (now - seenMs) / 1000),
+    });
+  }
+  return rows;
 }

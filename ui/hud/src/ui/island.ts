@@ -25,6 +25,18 @@ const ELEVATION: Record<ModalityState, string> = {
 
 const DEVICE_ELEVATION = { online: 'up', degraded: 'low', offline: 'sunk' } as const;
 
+/**
+ * 收起态那颗药丸只有 186px:感知恒定四格吃掉一半,剩下的宽度按 v18 的排法
+ * 装得下四格设备。设备数会长(七台、十台都可能),不设上限就会顶穿右边缘。
+ *
+ * 截断了**必须留痕**:留痕那一小格自己也占宽,所以一旦要留痕就只画三格。
+ * 谁被留下按状态排:在线 > 降级 > 离线 —— 余光里该看见的是「还有谁醒着」。
+ */
+const MINI_DEVICES = 4;
+const MINI_DEVICES_TRUNCATED = 3;
+
+const DEVICE_ORDER: Record<DeviceRow['state'], number> = { online: 0, degraded: 1, offline: 2 };
+
 /** 忙 → 光掠得多频繁。忙则频繁,闲则数秒一次。 */
 const RATE = { busy: '1.9s', idle: '7.5s' } as const;
 
@@ -134,7 +146,13 @@ export function createIsland(onToggle: () => void): IslandHandles {
 
   // 展开之后点它任何一处都收回去。挡住内部点击的话就永远关不上 ——
   // 因为展开态整个内部就是那一层。
-  island.addEventListener('click', onToggle);
+  //
+  // stopPropagation 是必须的:document 上那个「点别处收起」的监听器会收到
+  // 同一次冒泡上来的 click,于是刚展开就被自己关掉 —— 看起来是「点了没反应」。
+  island.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onToggle();
+  });
 
   function render(
     perception: PerceptionView | null,
@@ -162,23 +180,73 @@ export function createIsland(onToggle: () => void): IslandHandles {
       );
     }
     const live = modalities.filter((m) => m.state === 'live').length;
-    perCount.textContent = modalities.length ? `${live} / ${modalities.length} 在收` : '未接';
+    // 「四条都没在收」和「这条链路压根没建起来」是两件事。
+    //
+    // 后端如实报着 perception.source = 'unwired',而这行字原先只按数量算,
+    // 于是两种情形写出来一模一样是 `0 / 4 在收` —— 看着像此刻恰好安静,其实是
+    // 桌面壳一帧都没推过。契约特地分了这两个值,面板不能在最后一步把它抹平。
+    const wired = perception !== null && perception.source === 'live';
+    perCount.textContent = !modalities.length
+      ? '未接'
+      : wired
+        ? `${live} / ${modalities.length} 在收`
+        : `${modalities.length} 条 · 还没接上`;
+    perKey.dataset['unwired'] = String(modalities.length > 0 && !wired);
 
-    for (const d of devices) {
+    // 收起态只装得下几格,展开态一个不少。
+    const truncated = devices.length > MINI_DEVICES;
+    const miniCap = truncated ? MINI_DEVICES_TRUNCATED : MINI_DEVICES;
+    const miniPick = devices
+      .map((d, i) => ({ d, i }))
+      .sort((a, b) => DEVICE_ORDER[a.d.state] - DEVICE_ORDER[b.d.state] || a.i - b.i)
+      .slice(0, miniCap)
+      .sort((a, b) => a.i - b.i)
+      .map(({ i }) => i);
+    const inMini = new Set(miniPick);
+
+    for (const [i, d] of devices.entries()) {
       const shape = `t-dev${d.role === 'controller' ? ' wide' : d.role === 'wearable' ? ' tiny' : ''}`;
       const elev = DEVICE_ELEVATION[d.state];
-      const busy = d.state === 'offline' ? undefined : d.load === 'busy' ? ('busy' as const) : ('idle' as const);
-      miniDev.append(tile(shape, elev, busy));
+      // load 有三种:忙、闲、**不知道**(null)。不知道就不给光 ——
+      // 那道光是「这台机器此刻在动」的断言,后端没说过的话不能替它说。
+      // 原先把 null 归进 idle,于是一台从没报过忙闲的机器,在岛上也每 7.5 秒
+      // 亮一次,看着就像连上了、正闲着。
+      const busy =
+        d.state === 'offline' || d.load === null
+          ? undefined
+          : d.load === 'busy'
+            ? ('busy' as const)
+            : ('idle' as const);
+      if (inMini.has(i)) miniDev.append(tile(shape, elev, busy));
       const note =
         d.state === 'offline'
           ? d.lastSeenS === null
             ? '离线 · 从没连上过'
             : `离线 · 上次 ${formatAgo(d.lastSeenS)}`
-          : d.doing || '空闲';
+          : d.doing
+            ? d.doing
+            : d.load === null
+              ? // 「在线」和「降级」是两档,写出来也得是两句 —— 一台降级的机器
+                // 顶着「在线」两个字,那格沉下去的深度就白做了。
+                `${d.state === 'degraded' ? '降级' : '在线'} · ${
+                  d.lastSeenS === null ? '没报过在忙什么' : `${formatAgo(d.lastSeenS)}有心跳`
+                }`
+              : '空闲';
       devList.append(unit(shape, elev, busy, d.name, note, d.load === 'busy'));
+    }
+    if (truncated) {
+      const more = document.createElement('span');
+      more.className = 'mini-more';
+      more.setAttribute('aria-hidden', 'true');
+      miniDev.append(more);
     }
     const online = devices.filter((d) => d.state !== 'offline').length;
     devCount.textContent = devices.length ? `${online} / ${devices.length} 在线` : '未接';
+    // 收起态截了几台,只有无障碍标签说得出口 —— 药丸上那一小格留痕是给眼睛的。
+    island.setAttribute(
+      'aria-label',
+      devices.length ? `感知与设备 · ${online} / ${devices.length} 台在线` : '感知与设备',
+    );
   }
 
   function setHeight(px: number): void {

@@ -15,10 +15,11 @@ import { PresenceSocket, streamChat, toPhase } from './transport';
 import { WAKE_CANDIDATES, platform } from './platform';
 import { createDeck } from './ui/deck';
 import { createLine } from './ui/line';
+import type { LineTrust } from './ui/line';
 import { createIsland } from './ui/island';
 import { createThread } from './ui/thread';
 import { createDock } from './ui/dock';
-import type { Bundle, Turn } from './types';
+import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
 
 /**
  * 后端在哪。
@@ -82,7 +83,7 @@ function mount(host: HTMLElement): void {
     const s = store.state;
     panel.dataset['slim'] = String(s.slim);
     deck.render();
-    line.update(s.phase, s.slim);
+    line.update(s.phase, s.slim, lineTrust(s.posture));
     island.render(s.posture?.perception ?? null, s.devices, s.islandOpen);
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
     thread.render(s.turns, s.lockstep, s.lockstepReason);
@@ -108,6 +109,7 @@ function mount(host: HTMLElement): void {
       }
     },
     onTurn: (role, text, final) => appendTurn(role, text, final),
+    onDevices: (rows) => store.patch({ devices: rows }),
   });
   socket.start();
 
@@ -194,6 +196,21 @@ function mount(host: HTMLElement): void {
 }
 
 /**
+ * 这条线现在算不算数 —— **唯一一处判定**。
+ *
+ * 契约里 `degraded` 与 `source` 各说一件事:前者是「本拍跑在降级模式」,后者是
+ * 「这份姿态是实算的(continuum)还是按相位锚点兜的底(anchor_only)」。降级优先,
+ * 因为它更重。姿态还没来的时候也算兜底 —— 那时候画的相位是初值,不是它的相位。
+ *
+ * 判定只写在这里。散在各处的话,迟早有一处忘了改,而那一处画出来的线会说谎。
+ */
+function lineTrust(posture: RenderPosture | null): LineTrust {
+  if (posture === null) return 'anchor';
+  if (posture.degraded) return 'degraded';
+  return posture.source === 'continuum' ? 'live' : 'anchor';
+}
+
+/**
  * 演示数据。
  *
  * **默认不装。** 只有页面上写了 `<meta name="galaxy-demo" content="on">`
@@ -229,6 +246,57 @@ function seedDemo(store: Store): void {
     };
   });
 
+  // 感知恒定四条。这四档刻意各占一种 —— 让「闭着」和「没有」在演示里
+  // 就分得开:摄像头是你按了暂停,系统声是这台机器根本没这条通路。
+  const perception = {
+    source: 'live',
+    is_sensing: true,
+    privacy_paused: false,
+    ambient_action: 'none',
+    ambient_rationale: '',
+    modalities: [
+      { modality: 'screen', state: 'live', signal_age_s: 0.4 },
+      { modality: 'camera', state: 'paused', signal_age_s: null },
+      { modality: 'microphone', state: 'suppressed', signal_age_s: 1.2 },
+      { modality: 'system_audio', state: 'unavailable', signal_age_s: null },
+    ],
+  } as unknown as PerceptionView;
+
+  const devices: DeviceRow[] = [
+    { id: 'local', name: '本机 · 台式', role: 'controller', state: 'online',
+      load: 'busy', doing: '在跑：整理三天的记录', lastSeenS: 0 },
+    { id: 'phone', name: '手机', role: 'participant', state: 'online',
+      load: 'idle', doing: '', lastSeenS: 3 },
+    { id: 'watch', name: '手表', role: 'wearable', state: 'degraded',
+      load: 'idle', doing: '信号弱，心跳慢了', lastSeenS: 41 },
+    { id: 'pad', name: '平板', role: 'participant', state: 'offline',
+      load: null, doing: '', lastSeenS: 7200 },
+    { id: 'brain', name: '书房 · 主脑', role: 'controller', state: 'online',
+      load: 'busy', doing: '在跑：向量库重建', lastSeenS: 1 },
+    { id: 'speaker', name: '客厅音箱', role: 'wearable', state: 'online',
+      load: 'idle', doing: '', lastSeenS: 12 },
+    { id: 'old', name: '旧笔记本', role: 'participant', state: 'offline',
+      load: null, doing: '', lastSeenS: 518400 },
+  ];
+
+  const turns: Turn[] = [
+    {
+      id: 'demo-u', role: 'user',
+      text: '把上周那份显存路由的结论整理一下，我要拿去汇报。',
+      pending: '', attachments: [], streaming: false,
+    },
+    {
+      id: 'demo-a', role: 'agent',
+      text: '那份结论落在八月中旬那张卡片里。核心是三条：本地档位按显存分级、',
+      // 还没被念出来、因此还没上屏的那一截 —— 锁步就长这样
+      pending: '草稿位只在实测过倍数之后才开、云端只在本地明确不够时接手。',
+      attachments: [
+        { kind: 'image', name: '显存分级曲线.png', note: '那三天里你截给我的' },
+      ],
+      streaming: true,
+    },
+  ];
+
   const bundles: Bundle[] = [
     { key: 'omnimodal', name: '全模态', note: '屏 摄 麦 系统声', on: true, keyCount: 20, overrides: 1 },
     { key: 'crossDevice', name: '跨设备', note: '发现 配对 主脑 手机 手表', on: true, keyCount: 36, overrides: 0 },
@@ -236,7 +304,13 @@ function seedDemo(store: Store): void {
     { key: 'autonomy', name: '自主', note: '问过再做', on: false, keyCount: 58, overrides: 0 },
   ];
 
-  store.patch({ cards, bundles, start: clampStart(0, cards.length), drawn: 0 });
+  store.patch({
+    cards, bundles, devices, turns,
+    posture: { perception } as unknown as RenderPosture,
+    phase: 'liminal',
+    start: clampStart(0, cards.length),
+    drawn: 0,
+  });
 }
 
 function demoEnabled(): boolean {

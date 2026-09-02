@@ -183,8 +183,19 @@ export function createDeck(store: Store): DeckHandles {
       // 离被抽的那张越远,落位越晚一点。整叠是「让了一下」,不是齐刷刷弹。
       const away = open ? Math.abs(v - rel) : 0;
       node.style.transitionDelay = `${isDrawn ? 0 : Math.min(3, away) * 22}ms`;
-      node.style.zIndex = String(!open ? 20 + v : v <= rel ? 20 + v : 60 - v);
-      node.style.opacity = v < 0 || v >= VISIBLE_CARDS ? '0' : '1';
+      // 层序**永远随位置递增**:靠下那张压在靠上那张前面,那 40px 的唇口
+      // 才露得出来。这里曾经写成被抽那张之下倒序(60 - v),结果第二张把它
+      // 底下三张整个盖住 —— 看着像只有两张卡,其实五张都在,只是全被压住了。
+      node.style.zIndex = String(20 + v);
+      // 池子里那张备用卡在视野外候着。**光把它调透明是不够的** ——
+      // opacity: 0 照样吃点击:它比谁都靠下、层序又最高,于是点在下面几张
+      // 唇口上的手指全被它接走,把一张看不见的卡「抽」了出来,整叠缩到顶上
+      // 13px 一档,界面看着就空了。看不见的东西不能接手。
+      const off = v < 0 || v >= VISIBLE_CARDS;
+      node.style.opacity = off ? '0' : '1';
+      node.style.pointerEvents = off ? 'none' : '';
+      node.setAttribute('aria-hidden', String(off));
+      node.tabIndex = off ? -1 : 0;
     }
 
     // 小块

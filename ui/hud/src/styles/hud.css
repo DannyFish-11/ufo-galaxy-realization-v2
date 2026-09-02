@@ -246,6 +246,21 @@ body {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9) 52%, transparent);
   transform: translateX(calc(-1 * var(--pw, 96px)));
 }
+/* 兜底的相位不能跟实算的画得一样。**不加字、不加图标** —— 仪器自己失色:
+   色带褪成灰紫、那道光按可见度下限走。余光里看得出「这拍它没在测」,
+   又不会有个牌子横在那儿抢注意力。 */
+.line[data-trust='anchor'] { filter: saturate(0.22); }
+.line[data-trust='anchor'] .line-pulse { opacity: 0; }
+.line[data-trust='anchor'][data-run='true'] .line-pulse { animation-name: pulse-run-faint; }
+.line[data-trust='degraded'] { filter: saturate(0.12) brightness(0.97); }
+.line[data-trust='degraded'][data-run='true'] .line-pulse { animation-name: pulse-run-faint; }
+@keyframes pulse-run-faint {
+  0%        { transform: translateX(calc(-1 * var(--pw))); opacity: 0; }
+  8%        { opacity: calc(var(--amp, 0.5) * 0.35); }
+  30%       { opacity: calc(var(--amp, 0.5) * 0.35); }
+  36%, 100% { transform: translateX(var(--w)); opacity: 0; }
+}
+
 .line[data-run='true'] .line-pulse {
   animation: pulse-run var(--dur, 3.4s) linear infinite;
 }
@@ -300,7 +315,19 @@ body {
   opacity: 1; pointer-events: auto; transition-delay: 0.15s;
 }
 .mini-group { display: flex; align-items: center; gap: 5px; }
-.mini-group + .mini-group { margin-left: 12px; }
+.mini-group + .mini-group { margin-left: 12px; gap: 4px; }
+/* 收起态装不下的那几台留下的痕:两颗小点,不是省略号 ——
+   它跟旁边那排格子同族,不像文字那样把眼睛拽过去。 */
+.mini-more {
+  width: 3px; height: 13px; flex: none;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--ink-3) 0 3px,
+    transparent 3px 6px
+  );
+  opacity: 0.5;
+}
 
 /* 一块「实物」。**离墙多远就是它的状态** —— 不用状态点。 */
 .tile {
@@ -376,6 +403,9 @@ body {
   margin: 9px 14px 0 0;
 }
 .dev-key { margin-top: 22px; }
+/* 「还没接上」跟「此刻没在收」要分得开。数字那一栏偏一点点,不喊。 */
+.sec-key[data-unwired='true'] b { color: var(--ink-3); font-variant-numeric: normal; }
+
 .dev-list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 6px; padding-right: 12px; }
 .dev-list::-webkit-scrollbar { width: 5px; }
 .dev-list::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
