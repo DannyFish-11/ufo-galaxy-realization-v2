@@ -303,6 +303,27 @@ export function createDeck(store: Store): DeckHandles {
 
   rest.addEventListener('click', () => store.patch({ slim: !store.state.slim }));
 
+  /**
+   * 轨道自己变宽变窄要**自己看见**。
+   *
+   * 收窄是一段 CSS 宽度过渡。`render()` 在状态变的那一刻跑,`sizeDeck()` 量到的
+   * 还是 192px 的旧宽度,于是小块按 192 × 0.62 算成 119px 高;等轨道真缩到 44px,
+   * 没有任何东西回头重算 —— 44 宽配 119 高,比该有的样子长了三倍多,看着就是
+   * 一根根竖条,不是一叠小块。外层那个 ResizeObserver 盯的是整壳,轨道自己缩了
+   * 它不响。
+   *
+   * 只认**宽度**变化:sizeDeck 会改 deck 的高,高变了再触发一轮就成了自激。
+   */
+  let lastWidth = 0;
+  const ro = new ResizeObserver(() => {
+    const w = blocks.clientWidth;
+    if (w === lastWidth) return;
+    lastWidth = w;
+    sizeDeck();
+    layout();
+  });
+  ro.observe(blocks);
+
   function render(): void {
     rail.dataset['slim'] = String(store.state.slim);
     remap();
