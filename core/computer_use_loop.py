@@ -39,6 +39,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from core.computer_use_memory import ComputerUseEpisodicMemory
+
 logger = logging.getLogger("Galaxy.ComputerUse")
 
 # 动作白名单:模型可用的全部动作(与 Node_36/45 真实能力对齐)。
@@ -244,6 +246,7 @@ class ComputerUseLoop:
         perceive_fn: 替身感知(测试用);返回屏幕帧 base64 或 None。
         act_fn: 替身执行(测试用);签名 (action, params, node_id) -> {success, error}。
         node_id: 桌面操作节点,缺省 Node_36_UIAWindows。
+        memory: 情景记忆替身(测试用);None 则用 ComputerUseEpisodicMemory()。
     """
 
     def __init__(
@@ -252,11 +255,15 @@ class ComputerUseLoop:
         perceive_fn: Optional[Callable[[], Awaitable[Optional[str]]]] = None,
         act_fn: Optional[Callable[[str, Dict[str, Any], str], Awaitable[Dict[str, Any]]]] = None,
         node_id: str = _DEFAULT_NODE,
+        memory: Any = None,
     ) -> None:
         self._router = router
         self._perceive = perceive_fn or _default_perceive
         self._act = act_fn or _default_act
         self._node_id = node_id
+        # 情景记忆:失败的步骤(带截图)与任务结局写进跨模态记忆,开跑前召回一次。
+        # 没配记忆后端时整体是 no-op —— 见 core/computer_use_memory 的说明。
+        self._memory = memory if memory is not None else ComputerUseEpisodicMemory()
 
     def _get_router(self):
         if self._router is None:
@@ -265,18 +272,34 @@ class ComputerUseLoop:
             self._router = get_llm_router()
         return self._router
 
-    async def _plan_step(self, instruction: str, history: List[StepRecord], screen_b64: str) -> Optional[Dict]:
-        """一步规划:任务 + 步骤史 + 截图 → 动作 JSON。"""
+    async def _plan_step(
+        self,
+        instruction: str,
+        history: List[StepRecord],
+        screen_b64: str,
+        experience: str = "",
+    ) -> Optional[Dict]:
+        """一步规划:任务 + 步骤史 + 截图 (+ 过往经验) → 动作 JSON。
+
+        *experience* 是本次运行开跑前召回的跨模态记忆(见
+        :mod:`core.computer_use_memory`)。空串表示「没有可用记忆或没命中」——
+        此时**整段都不出现在提示词里**,而不是塞一句「过往经验:(无)」。后者会让
+        模型以为系统查过且确实没有,而实际可能是记忆层根本没配。
+        """
         hist_lines = [
             f"步骤{r.index}: {r.action}({json.dumps(r.params, ensure_ascii=False)})"
             f" → {'成功' if r.success else '失败:' + r.error} | {r.reason}"
             for r in history[-8:]  # 只带最近 8 步,防上下文膨胀
         ]
         hist_text = "\n".join(hist_lines) if hist_lines else "(尚未执行任何步骤)"
+        exp_text = f"\n\n过往经验(来自记忆,可能来自别的运行):\n{experience}" if experience else ""
         user_content = [
             {
                 "type": "text",
-                "text": f"任务:{instruction}\n\n已执行步骤:\n{hist_text}\n\n当前屏幕见截图。请给出下一步动作 JSON。",
+                "text": (
+                    f"任务:{instruction}{exp_text}\n\n已执行步骤:\n{hist_text}"
+                    "\n\n当前屏幕见截图。请给出下一步动作 JSON。"
+                ),
             },
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{screen_b64}"}},
         ]
@@ -309,12 +332,40 @@ class ComputerUseLoop:
         except Exception:  # noqa: BLE001 — 仲裁器不可用时闭环照常跑
             _guard_token = None
         try:
-            return await self._run_guarded(instruction, max_steps=max_steps, dry_run=dry_run)
+            result = await self._run_guarded(instruction, max_steps=max_steps, dry_run=dry_run)
         finally:
             if _guard_token is not None:
                 from core.windows_execution_arbiter import _in_computer_use_loop as _cv
 
                 _cv.reset(_guard_token)
+
+        # 结局写在这一层,而不是 _run_guarded 里:那个函数有六个 return 点
+        # (disabled / bad_request / no_perception / plan_failed / action_rejected /
+        # loop_detected / done|fail / max_steps),逐个补写必然漏掉一个,而漏掉的
+        # 多半是最少见、也最值得记的那条退出路径。这里收成一处。
+        #
+        # dry_run 不写:它没有真的操作任何东西,记进去只会污染召回。
+        if not dry_run:
+            await self._write_outcome(instruction, result)
+        return result
+
+    async def _write_outcome(self, instruction: str, result: Dict[str, Any]) -> None:
+        """把一次运行的结局写进情景记忆。
+
+        结局不带截图 —— 它是对整段情景的总结,不对应某一个具体画面;而失败的那些
+        步骤已经各自带着自己的截图了。:mod:`core.computer_use_memory` 在没有截图时
+        会退回纯文本写入。
+        """
+        try:
+            await self._memory.remember_outcome(
+                instruction,
+                success=bool(result.get("success")),
+                stop_reason=str(result.get("stop_reason", "")),
+                message=str(result.get("message", "")),
+                step_count=len(result.get("steps") or []),
+            )
+        except Exception as exc:  # noqa: BLE001 — 记不上结局不该改变任务的返回值
+            logger.debug("情景记忆结局写入失败(不影响返回): %s", exc)
 
     async def _run_guarded(
         self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False
@@ -335,6 +386,20 @@ class ComputerUseLoop:
         recent_sig: List[str] = []  # 循环检测:最近动作签名
         t0 = time.monotonic()
 
+        # 开跑前召回一次,整轮复用。不每步召回:那会把提示词撑大,也会把一次运行的
+        # 延迟乘上步数,而「过往经验」在一个任务里基本是恒定的。
+        # 裸调是不行的:契约是「记忆坏掉不该中断一个正在操作真实键鼠的闭环」,
+        # 而这个契约必须在**调用点**成立。默认实现自己吞异常,但注入进来的替身
+        # (或将来换的另一个实现)不一定守规矩 —— 这条 try 是最初漏掉的,被
+        # tests/test_computer_use_memory.py::test_记忆层抛异常时任务照常完成 抓到。
+        try:
+            experience = await self._memory.recall_experience(instruction)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("情景记忆召回失败(不影响任务): %s", exc)
+            experience = ""
+        if experience:
+            logger.info("computer_use 召回到过往经验 %d 条", experience.count("\n") + 1)
+
         for i in range(1, limit + 1):
             # ── 1. 感知 ────────────────────────────────────────────────
             screen = await self._perceive()
@@ -350,7 +415,7 @@ class ComputerUseLoop:
                 }
 
             # ── 2. 规划 ────────────────────────────────────────────────
-            planned = await self._plan_step(instruction, steps, screen)
+            planned = await self._plan_step(instruction, steps, screen, experience)
             if not planned:
                 return {
                     "success": False,
@@ -430,6 +495,22 @@ class ComputerUseLoop:
                 params,
                 "ok" if rec.success else f"失败:{rec.error}",
             )
+
+            # 只记失败:顺利走过去的步骤下次也会顺利走过去,而失败那一步才是下次
+            # 需要知道的。带上**当时那张截图** —— 让下次能凭「这个界面」召回,
+            # 而不只是凭任务描述的字面相似。
+            if not rec.success:
+                try:
+                    await self._memory.remember_failure(
+                        instruction,
+                        index=i,
+                        action=action,
+                        params=params,
+                        error=rec.error,
+                        screen_b64=screen,
+                    )
+                except Exception as exc:  # noqa: BLE001 — 同上:写不进记忆不该中断操作
+                    logger.debug("情景记忆失败步骤写入失败(不影响任务): %s", exc)
 
             # ── 5. 静置后进入下一轮感知 ────────────────────────────────
             if action != "wait":
