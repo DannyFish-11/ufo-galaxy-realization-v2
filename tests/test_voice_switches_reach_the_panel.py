@@ -33,7 +33,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SETTINGS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/SettingsTab.tsx"
+# 旧的 React 面板(SettingsTab.tsx / ModelsTab.tsx / App.css)已被这一版 HUD 面板
+# 整个替换掉。那两份手写的键清单不是渲染代码而是**判据**,所以没跟着删,搬进了
+# panel/src/settings_inventory.ts;这里改指那一份。
+#
+# 要说清楚的是:**那份清单当前没有任何界面在渲染** —— 新面板的设置浮层只有四个
+# 整档开关,「全部设置」按钮还没接东西。清单是那个待建设置面的规格。这道门守的
+# 依然是同一件事:清单里出现的键,后端必须认得,否则 POST /api/config 会 400。
+SETTINGS_INVENTORY = REPO_ROOT / "electron/renderer/panel/src/settings_inventory.ts"
+PANEL_SRC = REPO_ROOT / "electron/renderer/panel/src"
+SETTINGS_TAB = SETTINGS_INVENTORY
 
 #: 语音/感知栈的模块范围 —— **按目录模式派生,不是手写清单**。
 #:
@@ -456,7 +465,7 @@ class TestEveryVoiceSwitchIsRegisteredFrontend:
         delegated = _extract_delegated_categories()
         assert delegated, "一个委派都没有的话,这条测试就成了空转"
 
-        models_tab = SETTINGS_TAB.parent / "ModelsTab.tsx"
+        models_tab = SETTINGS_INVENTORY  # provider 键现在在 PROVIDER_KEYS 里
         owner_src = models_tab.read_text(encoding="utf-8") if models_tab.exists() else ""
         orphans = []
         for key, meta in CONFIG_SCHEMA.items():
@@ -659,49 +668,56 @@ class TestPanelCanActuallySaveThem:
 
 
 class TestOnePullSwitchAcrossThePanel:
-    """用户要求:全面板统一用推拉开关,参照 worker 那个。
+    """用户要求:全面板统一用推拉开关。
 
-    ``MeshView`` 的 NATS Worker 开关用的是 App.css 里的 ``.switch`` / ``.switch-knob``。
-    ``SettingsTab`` 原先自带一份 ``.settings-toggle``(白滑块 + accent 底、无描边),
-    两者并排出现在同一个面板里看得出不一致。已统一到 ``.switch``。
+    **判据没变,载体换了。** 旧 React 面板里有两份开关样式并排出现
+    (``MeshView`` 用 App.css 的 ``.switch``,``SettingsTab`` 自带一份
+    ``.settings-toggle``),看得出不一致,当时统一到了 ``.switch``。
+
+    那个面板已整个换成这一版 HUD。现在唯一的开关是设置浮层里那四个整档开关用的
+    ``.knob``(定义在 ``styles/hud.css``)。这三条继续守同一件事:
+    **只有一种开关样式,而且它真的是滑动的。**
     """
 
-    def test_settings_toggle_uses_the_same_classes_as_the_worker_switch(self):
-        src = SETTINGS_TAB.read_text(encoding="utf-8")
-        block = src[src.index("function ToggleSwitch") : src.index("function PasswordInput")]
-        assert "'switch'" in block or "`switch" in block, "ToggleSwitch 没有用 .switch 类名"
-        assert "switch-knob" in block, "ToggleSwitch 缺少 .switch-knob 滑块"
+    def _hud_css(self) -> str:
+        return (PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
 
-    def test_the_duplicate_toggle_style_is_gone(self):
-        """反向验证:那份重复样式必须真的被删掉,而不是留着继续被别处引用。"""
-        css = (SETTINGS_TAB.parent / "SettingsTab.css").read_text(encoding="utf-8")
-        selectors = re.findall(r"^\.settings-toggle[^\n]*\{", css, re.M)
-        assert not selectors, f"SettingsTab.css 里仍有重复的开关样式: {selectors}"
+    def test_the_one_toggle_style_exists_and_slides(self):
+        """被统一到的那一份必须真的存在、而且真的是左右滑动的。"""
+        css = self._hud_css()
+        assert ".knob {" in css, "hud.css 里找不到 .knob —— 开关样式没了?"
+        on = css[css.index("aria-pressed='true'] .knob::after") :][:200]
+        assert "translateX" in on, "开关并不是左右滑动的?样式可能已改"
 
-    def test_no_source_still_uses_the_removed_class(self):
-        """必须比对**去掉注释后**的代码。
+    def test_only_one_toggle_style_in_the_whole_panel(self):
+        """反向验证:整个面板不许出现第二份开关样式。
 
-        第一版这条直接在整份文件里搜 ``settings-toggle`` 字面量,结果被自己的说明
-        注释绊倒 —— 两个文件里都留了一段「这里原先有一份 .settings-toggle,已删除」
-        的注释。那种写法测的是「文件里有没有提到这个名字」,而要测的是
+        比对**去掉注释后**的代码。早先同类的一条直接搜字面量,结果被自己的说明
+        注释绊倒 —— 那测的是「文件里有没有提到这个名字」,而要测的是
         「还有没有代码在用它」。
         """
-        panel_src = SETTINGS_TAB.parent.parent
-        block_comment = re.compile(r"/\*.*?\*/", re.S)
-        line_comment = re.compile(r"^\s*//.*$", re.M)
+        import re as _re
+
+        block_comment = _re.compile(r"/\*.*?\*/", _re.S)
+        line_comment = _re.compile(r"^\s*//.*$", _re.M)
+        # 旧面板那两个名字,以及任何新冒出来的「第二份开关」
+        forbidden = ("settings-toggle", "switch-knob")
         stale = []
-        for path in panel_src.rglob("*"):
-            if path.suffix not in {".tsx", ".ts", ".css"}:
+        for path in PANEL_SRC.rglob("*"):
+            if path.suffix not in {".ts", ".tsx", ".css"}:
                 continue
             code = line_comment.sub("", block_comment.sub("", path.read_text(encoding="utf-8")))
-            if "settings-toggle" in code:
-                stale.append(str(path.relative_to(panel_src)))
-        assert not stale, f"这些文件的**代码**里还在用已删除的 .settings-toggle: {stale}"
+            for name in forbidden:
+                if name in code:
+                    stale.append(f"{path.relative_to(PANEL_SRC)}::{name}")
+        assert not stale, f"面板里出现了第二份开关样式: {stale}"
 
-    def test_worker_switch_style_exists_and_slides(self):
-        """被参照的那份样式得真的存在、而且真的是左右滑动的。"""
-        app_css = (SETTINGS_TAB.parent.parent / "App.css").read_text(encoding="utf-8")
-        assert ".switch {" in app_css
-        assert ".switch-knob {" in app_css
-        knob_on = app_css[app_css.index(".switch.on .switch-knob") :][:200]
-        assert "translateX" in knob_on, "worker 开关并不是左右滑动的?样式可能已改"
+    def test_the_toggle_is_actually_wired_to_a_bundle(self):
+        """样式在、却没有任何控件用它,就是「看着接上了其实没有」。
+
+        ``.knob`` 必须真的挂在设置浮层那几个整档开关上 —— 否则这道门守的只是一段
+        没人渲染的 CSS。
+        """
+        dock = (PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert "'knob'" in dock or '"knob"' in dock, "dock.ts 里没有任何控件用 .knob"
+        assert "aria-pressed" in dock, "开关没有 aria-pressed —— 读屏软件读不出开还是关"

@@ -218,6 +218,15 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "agent",
         "description": "Ollama 本地模型服务的地址（留空=自动探测常见端口）",
     },
+    "GALAXY_SKIP_DESKTOP_SURFACE": {
+        "default": "false",
+        "type": "boolean",
+        "category": "advanced",
+        "description": (
+            "跳过桌面壳这一启动阶段（无头/服务端部署用；"
+            "打开后不再探测或安装 Electron 依赖，面板也不会被拉起）"
+        ),
+    },
     "QDRANT_URL": {
         "default": "",
         "type": "url",

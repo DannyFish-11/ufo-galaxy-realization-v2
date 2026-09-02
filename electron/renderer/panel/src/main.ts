@@ -28,10 +28,35 @@ import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './t
  * 焊在某个打包器上了。外壳(Electron / Tauri / 直接开网页)注入这一行即可,
  * 三者一视同仁。留空 = 同源。
  */
+/**
+ * 后端在哪。按这个顺序问:
+ *
+ * 1. **外壳给的** —— `window.galaxyShell.base`。Electron 的 preload 在页面脚本
+ *    之前把它挂上去(见 electron/preload.js),所以这里同步就能拿到。地址本身
+ *    只在 electron/main.js 推导一次,这边不重推。
+ * 2. `<meta name="galaxy-base">` —— 在浏览器里开发时用。
+ * 3. 同源。
+ *
+ * 第一条不能省:Electron 用 file:// 加载面板,那时 `location.origin` 是 `null`,
+ * 「同源」没有任何意义 —— WebSocket 会去连一个不存在的东西然后一直退避重试,
+ * 界面上只看得到「一直连不上」,看不出为什么。
+ */
 function backendBase(): string {
+  const shell = (window as { galaxyShell?: { base?: string } }).galaxyShell;
+  const fromShell = shell?.base?.trim();
+  if (fromShell) return fromShell;
+
   const meta = document.querySelector('meta[name="galaxy-base"]');
-  const v = meta?.getAttribute('content')?.trim();
-  return v || location.origin;
+  const fromMeta = meta?.getAttribute('content')?.trim();
+  if (fromMeta) return fromMeta;
+
+  // file:// 下 origin 是字符串 'null'。拿它当地址只会一直连不上,
+  // 而且看不出原因 —— 说出来。
+  if (location.origin === 'null' || location.protocol === 'file:') {
+    console.error('[hud] 没有外壳提供后端地址,而页面是 file:// 打开的 —— 连不上后端');
+    return '';
+  }
+  return location.origin;
 }
 const BASE = backendBase();
 
@@ -322,7 +347,30 @@ function demoEnabled(): boolean {
   );
 }
 
-const host = document.getElementById('hud');
-if (host) mount(host);
+/**
+ * 挂载。**不能假设脚本跑的时候 body 已经在了。**
+ *
+ * 这个产物打成经典脚本(IIFE)是为了能在 file:// 下加载 —— Electron 用
+ * loadFile() 打开它,而 `type="module"` 在 file:// 下会被 CORS 拦掉。代价是
+ * 经典脚本**不像 module 那样默认 defer**:标签在 <head> 里就立刻执行,那一刻
+ * `#hud` 还不存在,`getElementById` 返回 null,于是什么都不挂 —— 而且不报错。
+ *
+ * 构建时会给标签补 defer,但挂载这件事不该只靠「标签属性没被人改坏」。这里
+ * 自己等一次 DOM。
+ */
+function boot(): void {
+  const host = document.getElementById('hud');
+  if (host) {
+    mount(host);
+    return;
+  }
+  console.error('[hud] 页面里没有 #hud,面板无处可挂');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot, { once: true });
+} else {
+  boot();
+}
 
 export { mount, seedDemo, demoEnabled, VISIBLE_CARDS };

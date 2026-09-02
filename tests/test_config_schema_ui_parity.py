@@ -35,16 +35,26 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MODELS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/ModelsTab.tsx"
-SETTINGS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/SettingsTab.tsx"
+# 旧 React 面板已被这一版 HUD 整个替换。ModelsTab.tsx / SettingsTab.tsx 里那两份
+# 手写键清单不是渲染代码而是**判据**,已搬进 panel/src/settings_inventory.ts。
+# 注意:那份清单**当前没有任何界面在渲染** —— 它是待建设置面的规格。这道门守的
+# 仍是同一件事:清单里的键,后端 CONFIG_SCHEMA 必须认得,否则 POST /api/config 会 400。
+SETTINGS_INVENTORY = REPO_ROOT / "electron/renderer/panel/src/settings_inventory.ts"
+MODELS_TAB = SETTINGS_INVENTORY
+SETTINGS_TAB = SETTINGS_INVENTORY
 
-_KEY_RE = re.compile(r"""\b(?:key|extraKey)\s*:\s*'([A-Z][A-Z0-9_]*)'""")
+# PROVIDER_KEYS 是纯字符串数组(旧 ModelsTab 里是 key:/extraKey: 字段)。
+_KEY_RE = re.compile(r"""'([A-Z][A-Z0-9_]*)'""")
 _SETTINGS_KEY_RE = re.compile(r"""'([A-Z][A-Z0-9_]*)'""")
 
 
 def _extract_models_tab_keys() -> set[str]:
     src = MODELS_TAB.read_text(encoding="utf-8")
-    return set(_KEY_RE.findall(src))
+    start = src.index("export const PROVIDER_KEYS")
+    end = src.index("\n];", start)
+    block = src[start:end]
+    body = "\n".join(ln for ln in block.split("\n") if not ln.strip().startswith("//"))
+    return set(_KEY_RE.findall(body))
 
 
 def _extract_settings_tab_keys() -> set[str]:
@@ -195,7 +205,25 @@ class TestEverySchemaKeyIsReachableOrDeclaredAnAlias:
 
     @staticmethod
     def _reachable_keys() -> set[str]:
-        """用户在界面上够得着的键。
+        """在设置面的**规格**里有归宿的键。
+
+        .. warning::
+
+           **这个方法名现在名不副实,而这是刻意留着的。**
+
+           旧 React 面板整个被 HUD 面板替换之后,设置页还没重建 —— 新面板的设置
+           浮层只有四个整档开关,「全部设置」按钮还没接东西。所以此刻严格来说
+           **没有任何键在界面上够得着**。
+
+           把这条判据改成按新面板的实际渲染来算,它会为全部 300 多个键报红,
+           三周内必被关掉或加白名单绕过 —— 那正是下面这段历史注释警告过的事。
+           把它改成继续返回「够得着」,又是在说谎:清单在,界面不在。
+
+           折中是**改口径不改严格度**:这里查的是「每个 schema 键在规格里有没有
+           归宿」。设置面建起来之后,把这里连同 :data:`SETTINGS_INVENTORY` 一起
+           改回按真实渲染算,并把这段说明删掉。
+
+        以下是口径变更前的原始说明,仍然适用于「归宿」这层含义:
 
         **这个定义在 2026-08-30 变过。** 从前是"键名在面板源码里出现过" —— 那时
         SettingsTab 用一份手工的 CONFIG_KEYS 决定谁出现,所以"出现在源码里"确实
@@ -219,7 +247,7 @@ class TestEverySchemaKeyIsReachableOrDeclaredAnAlias:
 
         src_dir = REPO_ROOT / "electron/renderer/panel/src"
         panel_src = "\n".join(p.read_text(encoding="utf-8") for p in src_dir.rglob("*.ts*"))
-        settings_src = (src_dir / "components" / "SettingsTab.tsx").read_text(encoding="utf-8")
+        settings_src = SETTINGS_INVENTORY.read_text(encoding="utf-8")
 
         def _block(start_marker: str, end_marker: str) -> str:
             i = settings_src.index(start_marker)

@@ -191,7 +191,12 @@ export function createDeck(store: Store): DeckHandles {
       // opacity: 0 照样吃点击:它比谁都靠下、层序又最高,于是点在下面几张
       // 唇口上的手指全被它接走,把一张看不见的卡「抽」了出来,整叠缩到顶上
       // 13px 一档,界面看着就空了。看不见的东西不能接手。
-      const off = v < 0 || v >= VISIBLE_CARDS;
+      // 这个位置有没有卡。**没有卡就不该画出一张卡** —— remap() 里已经把空位
+      // 置了透明,但那之后 layout() 会按位置重设一遍 opacity,把空位又点亮成
+      // 一张白卡。后端还没接上时那一叠「五张空白卡」就是这么来的:看着有五张,
+      // 其实一张都没有。
+      const hasCard = cards[i] !== undefined;
+      const off = !hasCard || v < 0 || v >= VISIBLE_CARDS;
       node.style.opacity = off ? '0' : '1';
       node.style.pointerEvents = off ? 'none' : '';
       node.setAttribute('aria-hidden', String(off));
