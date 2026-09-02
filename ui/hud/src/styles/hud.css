@@ -1,0 +1,543 @@
+@import './tokens.css';
+
+* { box-sizing: border-box; }
+
+html, body, #hud { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(118% 82% at 22% -8%, #e4deec, transparent 54%),
+    radial-gradient(96% 62% at 88% -4%, #c6bcd4, transparent 52%),
+    radial-gradient(105% 75% at 90% 106%, #cfc7dc, transparent 58%),
+    var(--f-mid);
+}
+
+/* ══ 壳 ══════════════════════════════════════════════════════════════ */
+.shell {
+  height: 100%;
+  padding: 20px;
+  border-radius: 34px;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 104% at 14% -14%, rgba(250, 248, 254, 0.58), transparent 58%),
+    radial-gradient(72% 78% at 92% -8%, rgba(158, 144, 166, 0.26), transparent 60%),
+    radial-gradient(70% 100% at 98% 110%, rgba(160, 150, 176, 0.3), transparent 64%),
+    linear-gradient(158deg, #e3ddec, #d2cae0 52%, #c6bdd6);
+  box-shadow:
+    inset 0 1px 0 var(--lite),
+    0 1px 2px var(--shade-1),
+    0 30px 62px -28px var(--shade-3);
+}
+.panel {
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  gap: 26px;
+  transition: grid-template-columns var(--t-rail) var(--ease);
+}
+.panel[data-slim='true'] { grid-template-columns: var(--rail-slim) 1fr; }
+
+/* ══ 左:一整根长框 ═══════════════════════════════════════════════════
+   收起展开都是这一个框自己变宽变窄。卡片长在里面,卡片下面露出来的
+   就是框自己的面 —— 那本来就是留白,不铺底也不描边。
+   ═══════════════════════════════════════════════════════════════════ */
+.rail { display: flex; flex-direction: column; min-width: 0; }
+.frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(168deg, var(--s-hi), var(--s-lo));
+  box-shadow:
+    inset 0 1px 0 var(--lite),
+    inset 0 -22px 34px -28px var(--shade-3),
+    0 1px 2px var(--shade-1),
+    0 18px 40px -22px var(--shade-3);
+  transition: padding var(--t-rail) var(--ease);
+}
+.panel[data-slim='true'] .frame { padding: 10px 8px; }
+
+.deck { flex: none; position: relative; min-height: 0; }
+.slot { position: absolute; inset: 0; }
+
+/* 滚轮:平时完全不在。只有在滑、或者滑到头的时候才极轻地浮一下。
+   浮在框内左沿,**不参与布局** —— 一占宽度,收窄时小块就被挤偏了。 */
+.wheel {
+  position: absolute;
+  left: -6px; top: 0; bottom: 0;
+  width: 3px;
+  z-index: 5;
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.5s var(--ease);
+}
+.wheel::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent,
+    rgba(93, 84, 102, 0.11) 14%, rgba(93, 84, 102, 0.11) 86%, transparent);
+}
+.wheel[data-on='true'] { opacity: 1; }
+.panel[data-slim='true'] .wheel { width: 2px; left: -5px; }
+.thumb {
+  position: absolute; left: -1px; right: -1px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--a-pale), var(--a-mid));
+  opacity: 0.5;
+  transition: top var(--t-card) var(--ease), height 0.42s var(--ease),
+    opacity 0.4s var(--ease), box-shadow 0.4s var(--ease);
+}
+/* 到头了 —— 也只是那一小段亮一下,不弹不抖 */
+.wheel[data-edge='true'] .thumb {
+  opacity: 0.9;
+  box-shadow: 0 0 9px -1px rgba(136, 120, 144, 0.8);
+}
+
+/* ── 卡 ─────────────────────────────────────────────────────────────
+   质感靠三样:一层极细的哑光颗粒(没有它,面看着像塑料贴纸)、一道看得见
+   的切边(真卡有厚度)、以及抬起时**分层**张开的投影(不是一整块变大)。
+   ─────────────────────────────────────────────────────────────────── */
+.stack { position: absolute; inset: 0; overflow: hidden; border-radius: 16px; }
+.panel[data-slim='true'] .stack { display: none; }
+
+.card {
+  position: absolute;
+  left: 0; width: 100%;
+  aspect-ratio: 1 / 1.586;          /* ID-1 竖放,54 × 85.6 */
+  display: flex; flex-direction: column;
+  padding: 14px 15px 0;
+  border: 0; border-radius: 11px;
+  font: inherit; text-align: left; cursor: pointer;
+  overflow: hidden;
+  background: linear-gradient(166deg, var(--o-hi), var(--o-lo));
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 84, 102, 0.1),
+    inset 0 1px 0 rgba(252, 251, 255, 0.55),
+    inset 0 -12px 16px -14px var(--shade-3),
+    0 1px 1px var(--shade-2),
+    0 4px 8px -5px var(--shade-3);
+  will-change: transform;
+  transition: transform var(--t-card) var(--heavy), box-shadow 620ms var(--ease);
+}
+.card[data-warp='true'] { transition: none; }
+.card::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none; border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+}
+.card::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none; border-radius: inherit;
+  background: linear-gradient(148deg, rgba(253, 252, 255, 0.5), transparent 42%);
+}
+.card[data-drawn='true'] {
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 84, 102, 0.12),
+    inset 0 1px 0 rgba(252, 251, 255, 0.62),
+    inset 0 -12px 16px -14px var(--shade-3),
+    0 1px 1px var(--shade-2),
+    0 6px 10px -6px rgba(93, 84, 102, 0.26),
+    0 16px 24px -12px var(--shade-3),
+    0 32px 52px -20px var(--shade-4);
+}
+.card:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+
+.card-title {
+  position: relative;
+  font-size: 13.5px; font-weight: 400; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-title[data-unnamed='true'] { color: var(--ink-3); }
+.card-span {
+  position: relative;
+  margin-top: 3px;
+  font-size: 10.5px; letter-spacing: 0.03em; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.card-plot {
+  position: relative;
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 44px; margin: auto 0 0;
+}
+.card-plot i {
+  flex: 1;
+  border-radius: 1.5px 1.5px 0 0;
+  background: linear-gradient(180deg, var(--a-mid), rgba(136, 120, 144, 0.18));
+}
+.card-foot {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 -15px; padding: 8px 15px 10px;
+  font-size: 10.5px; line-height: 1.5; color: var(--ink-3);
+  box-shadow: inset 0 1px 0 rgba(93, 84, 102, 0.09);
+}
+.card-nfc {
+  flex: none; width: 15px; height: 11px;
+  border-radius: 2.5px;
+  box-shadow: inset 0 0 0 1px rgba(107, 99, 118, 0.34);
+  opacity: 0.8;
+}
+
+/* ── 收起态的小块:宽扁的圆角小方,不是圆点也不是线 ── */
+.blocks { display: none; position: absolute; inset: 0; flex-direction: column; gap: 6px; }
+.panel[data-slim='true'] .blocks { display: flex; }
+.blk {
+  width: 100%;
+  border: 0; padding: 0; border-radius: 5px; cursor: pointer;
+  background: linear-gradient(168deg, var(--o-hi), var(--o-lo));
+  box-shadow: inset 0 0.5px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.16);
+  opacity: 0.55;
+  transition: opacity 0.45s var(--ease), background 0.45s var(--ease),
+    box-shadow 0.45s var(--ease), height 0.42s var(--ease);
+}
+.blk:hover { opacity: 0.85; }
+.blk[data-in-window='true'] { opacity: 0.95; }
+.blk[data-drawn='true'] {
+  opacity: 1;
+  background: linear-gradient(168deg, var(--a-mid), #7a6c83);
+  box-shadow: inset 0 0.5px 0 rgba(252, 251, 255, 0.32), 0 2px 6px var(--shade-3);
+}
+/* 不可知的那三天:虚线空心。**空和不知道必须分得开** */
+.blk[data-unknown='true'] {
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(136, 120, 144, 0.5);
+}
+.blk[data-unknown='true'][data-drawn='true'] {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--a-mid);
+}
+.blk:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+
+/* 卡片放完之后露出来的那片 —— 就是框自己的面。点它收放。视觉上不存在。 */
+.rest {
+  flex: 1; min-height: 40px;
+  border: 0; background: none; padding: 0; cursor: pointer;
+}
+.rest:focus-visible {
+  outline: 2px solid var(--a-mid); outline-offset: -6px; border-radius: 16px;
+}
+
+/* ── 底下那条线:只管本机 ── */
+.line-zone { flex: none; height: 24px; display: flex; align-items: center; margin-top: 12px; }
+.line {
+  position: relative; width: 100%; height: 3px;
+  border-radius: 999px; overflow: hidden;
+  background: linear-gradient(90deg, var(--a-deep), var(--a-mid) 45%, var(--a-pale));
+}
+.line-pulse {
+  position: absolute; top: 0; left: 0;
+  width: var(--pw, 96px); height: 3px;
+  border-radius: 999px; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9) 52%, transparent);
+  transform: translateX(calc(-1 * var(--pw, 96px)));
+}
+.line[data-run='true'] .line-pulse {
+  animation: pulse-run var(--dur, 3.4s) linear infinite;
+}
+@keyframes pulse-run {
+  0%        { transform: translateX(calc(-1 * var(--pw))); opacity: 0; }
+  8%        { opacity: var(--amp, 0.5); }
+  30%       { opacity: var(--amp, 0.5); }
+  36%, 100% { transform: translateX(var(--w)); opacity: 0; }
+}
+
+/* ══ 右 ═══════════════════════════════════════════════════════════════ */
+.main { display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+/* ── 岛:同一个东西自己长大,不是弹出来一个新浮层 ──
+   宽、高、圆角连续过渡,内容交叉淡入。展开后与左边卡片区顶对齐、等高。 */
+.island {
+  position: absolute; top: 0; right: 0; z-index: 70;
+  width: 186px; height: 40px;
+  border: 0; padding: 0; border-radius: 20px;
+  display: block; text-align: left; font: inherit; cursor: pointer;
+  overflow: hidden;
+  background: linear-gradient(162deg, rgba(236, 231, 244, 0.8), rgba(206, 198, 220, 0.7));
+  -webkit-backdrop-filter: blur(22px) saturate(1.55);
+  backdrop-filter: blur(22px) saturate(1.55);
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 3px rgba(93, 84, 102, 0.14);
+  transition: width var(--t-island) var(--ease), height var(--t-island) var(--ease),
+    border-radius var(--t-island) var(--ease), box-shadow var(--t-island) var(--ease),
+    background 0.42s var(--ease);
+}
+.island[data-open='true'] {
+  width: 100%; height: var(--island-h, 420px);
+  border-radius: 24px; cursor: default;
+  background: linear-gradient(162deg, rgba(234, 229, 243, 0.94), rgba(205, 197, 220, 0.9));
+  box-shadow: inset 0 1px 0 var(--lite), 0 2px 6px rgba(93, 84, 102, 0.1),
+    0 28px 60px -22px var(--shade-4);
+}
+.island:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+/* 没有 backdrop-filter 时(软件渲染 / 旧 WebView)回落实色,不破版 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .island { background: linear-gradient(162deg, #ece7f4, #cec6dc); }
+}
+
+.island-view { position: absolute; inset: 0; transition: opacity 0.26s var(--ease); }
+.island-mini { display: flex; align-items: center; gap: 12px; padding: 0 12px; }
+.island[data-open='true'] .island-mini { opacity: 0; pointer-events: none; }
+.island-full {
+  opacity: 0; pointer-events: none;
+  display: flex; flex-direction: column;
+  padding: 15px 6px 13px 18px;
+}
+.island[data-open='true'] .island-full {
+  opacity: 1; pointer-events: auto; transition-delay: 0.15s;
+}
+.mini-group { display: flex; align-items: center; gap: 5px; }
+.mini-group + .mini-group { margin-left: 12px; }
+
+/* 一块「实物」。**离墙多远就是它的状态** —— 不用状态点。 */
+.tile {
+  position: relative; flex: none;
+  border-radius: 5px; overflow: hidden;
+  background: linear-gradient(166deg, var(--o-hi), var(--o-lo));
+  box-shadow: inset 0 0.5px 0 var(--lite), 0 1.5px 3px rgba(93, 84, 102, 0.26);
+  transition: box-shadow 0.45s var(--ease), opacity 0.45s var(--ease),
+    background 0.45s var(--ease);
+}
+/* 降级:几乎贴平 */
+.tile[data-elev='low'] {
+  box-shadow: inset 0 0.5px 0 var(--lite-soft), 0 0.5px 1px rgba(93, 84, 102, 0.16);
+  opacity: 0.72;
+}
+/* 离线 / 这条通路从没来过东西:沉进表面,只剩凹槽,没有影子 */
+.tile[data-elev='sunk'] {
+  background: none;
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.22), inset 0 -0.5px 0 var(--lite-soft);
+  opacity: 0.85;
+}
+/* 被刻意闭上的那两档:盖一道。shut = 这一拍屏蔽;paused = 你按了暂停 */
+.tile[data-elev='shut']::before,
+.tile[data-elev='paused']::before {
+  content: '';
+  position: absolute; left: 14%; right: 14%; top: 50%;
+  height: 1px; margin-top: -0.5px;
+  background: rgba(61, 55, 69, 0.4); border-radius: 1px;
+}
+.tile[data-elev='paused'] {
+  background: none;
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), inset 0 -0.5px 0 var(--lite-soft);
+}
+/* 活跃:一道细光斜掠而过。忙就掠得频繁,闲就几秒才飘一次。
+   忙不忙是**余光里感觉到**的,不是读出来的。 */
+.tile-sheen {
+  position: absolute; top: -30%; bottom: -30%; left: 0; width: 52%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.82), transparent);
+  transform: translateX(-160%); opacity: 0;
+}
+.tile[data-busy] .tile-sheen { animation: sheen var(--rate, 6s) linear infinite; }
+@keyframes sheen {
+  0%        { transform: translateX(-160%); opacity: 0; }
+  8%        { opacity: 0.8; }
+  22%       { opacity: 0.8; }
+  30%, 100% { transform: translateX(230%); opacity: 0; }
+}
+
+.t-screen { width: 17px; height: 12px; }
+.t-camera { width: 13px; height: 13px; border-radius: 50%; }
+.t-mic    { width: 8px;  height: 15px; border-radius: 999px; }
+.t-sys    { width: 13px; height: 9px;  border-radius: 3px; }
+.t-dev    { width: 15px; height: 19px; border-radius: 4px; }
+.t-dev.wide { width: 20px; height: 14px; }
+.t-dev.tiny { width: 11px; height: 14px; }
+
+/* 展开:上面感知(就四条,两行摆完),下面设备(会长,自己滚)。
+   **没有一条分隔线** —— 线横在中间,眼睛会停在线上而不是内容上。 */
+.sec-key {
+  flex: none;
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-right: 14px;
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sec-key b {
+  font-weight: 400; font-size: 10px; letter-spacing: 0.06em;
+  text-transform: none; color: var(--a-mid);
+}
+.per-grid {
+  flex: none;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px;
+  margin: 9px 14px 0 0;
+}
+.dev-key { margin-top: 22px; }
+.dev-list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 6px; padding-right: 12px; }
+.dev-list::-webkit-scrollbar { width: 5px; }
+.dev-list::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
+.dev-list::-webkit-scrollbar-track { background: transparent; }
+.unit {
+  display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 11px;
+  height: 36px; padding: 0 8px 0 2px; border-radius: 9px;
+}
+.dev-list .unit + .unit { margin-top: 2px; }
+.unit-icon { display: flex; justify-content: center; }
+.unit-name {
+  display: block; font-size: 12.5px; line-height: 1.3; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.unit-note {
+  display: block; font-size: 10.5px; line-height: 1.3; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.unit-note[data-active='true'] { color: var(--a-mid); }
+
+/* ── 对话 ── */
+.thread {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 22px;
+  padding: 52px 8px 18px 4px;   /* 顶上让开那块岛 */
+}
+.turn { max-width: 34rem; font-size: 14.5px; line-height: 1.8; }
+.turn[data-role='user'] {
+  align-self: flex-end;
+  padding: 11px 18px;
+  border-radius: 20px 20px 7px 20px;
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.1);
+}
+/* 还没被念出来、因此还没上屏的那一截。锁步生效时它是灰的;
+   一旦脱钩,它会被一次性放开 —— 那一刻由 .lockstep-mark 说明。 */
+.turn-pending { color: var(--ink-3); }
+.turn-caret {
+  display: inline-block; width: 2px; height: 1.05em;
+  border-radius: 1px; background: var(--a-mid); vertical-align: -3px;
+  animation: caret 1.15s steps(2) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+/* 降级必须留痕:声音和文字已经脱钩,界面上不能一声不吭 */
+.lockstep-mark {
+  align-self: flex-start;
+  font-size: 11px; color: var(--warn);
+  padding: 2px 0;
+}
+.attach {
+  display: flex; align-items: center; gap: 13px;
+  max-width: 21rem; padding: 10px; border-radius: 18px;
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.1);
+}
+.attach-thumb {
+  flex: none; width: 50px; height: 50px; border-radius: 13px;
+  background: radial-gradient(78% 78% at 28% 18%, #bdb4c6, #766b80 68%, #514860);
+}
+.attach-name { display: block; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+.attach-note { display: block; font-size: 11.5px; line-height: 1.55; color: var(--ink-3); }
+
+/* ── 底:左边一个 + 收文件图片,右下角是设置 ── */
+.dock { flex: none; display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+.round {
+  flex: none; width: 40px; height: 40px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  display: grid; place-items: center; color: var(--ink-2);
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 3px rgba(93, 84, 102, 0.16);
+  transition: transform 0.48s var(--ease), color 0.35s var(--ease);
+}
+.round:hover { color: var(--ink); }
+.round:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+.round[data-kind='gear'][aria-expanded='true'] { transform: rotate(72deg); }
+.round[data-kind='plus'][aria-expanded='true'] { transform: rotate(45deg); }
+.field {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 5px 5px 20px; border-radius: 999px;
+  background: linear-gradient(166deg, rgba(245, 243, 248, 0.7), rgba(223, 218, 231, 0.72));
+  box-shadow: inset 0 1px 0 var(--lite);
+}
+.field input {
+  flex: 1; min-width: 0;
+  border: 0; outline: 0; background: none;
+  font: inherit; font-size: 14px; color: var(--ink);
+}
+.field input::placeholder { color: var(--ink-3); }
+.send {
+  flex: none; width: 32px; height: 32px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  display: grid; place-items: center; color: #f4f2f7;
+  background: linear-gradient(162deg, var(--a-mid), #77687f);
+  box-shadow: 0 1px 3px rgba(93, 84, 102, 0.28);
+  transition: filter 0.3s var(--ease);
+}
+.send:hover { filter: brightness(1.1); }
+.send:focus-visible { outline: 2px solid var(--a-deep); outline-offset: 2px; }
+
+/* ── 两端的浮层 ── */
+.pop {
+  position: absolute; bottom: 52px; z-index: 60;
+  padding: 7px; border-radius: 22px;
+  opacity: 0; pointer-events: none;
+  background: linear-gradient(162deg, rgba(234, 229, 243, 0.9), rgba(205, 197, 220, 0.87));
+  -webkit-backdrop-filter: blur(30px) saturate(1.65);
+  backdrop-filter: blur(30px) saturate(1.65);
+  box-shadow: inset 0 1px 0 var(--lite), 0 2px 6px rgba(93, 84, 102, 0.1),
+    0 26px 56px -20px var(--shade-4);
+  transition: transform 0.46s var(--ease), opacity 0.28s var(--ease);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .pop { background: linear-gradient(162deg, #eae5f3, #cdc5dc); }
+}
+.pop[data-side='left']  { left: 0;  width: 14rem;   transform-origin: 0 100%;   transform: translateY(10px) scale(0.94); }
+.pop[data-side='right'] { right: 0; width: 18.5rem; transform-origin: 100% 100%; transform: translateY(12px) scale(0.93); border-radius: 26px; padding: 8px; }
+.pop[data-open='true'] { transform: none; opacity: 1; pointer-events: auto; }
+
+.pop-item {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  border: 0; background: none; cursor: pointer;
+  padding: 9px 12px; border-radius: 16px;
+  font: inherit; font-size: 13.5px; text-align: left; color: var(--ink);
+  transition: background 0.3s var(--ease);
+}
+.pop-item:hover { background: rgba(252, 251, 255, 0.34); }
+.pop-item:focus-visible { outline: 2px solid var(--a-mid); outline-offset: -2px; }
+.pop-item svg { flex: none; color: var(--ink-2); }
+
+/* 整档开关:一个开关管一整片配置键,不是一个键 */
+.bundle {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: 0; background: none; cursor: pointer;
+  padding: 11px 14px; border-radius: 19px;
+  font: inherit; text-align: left;
+  transition: background 0.3s var(--ease);
+}
+.bundle:hover { background: rgba(252, 251, 255, 0.34); }
+.bundle:focus-visible { outline: 2px solid var(--a-mid); outline-offset: -2px; }
+.bundle-name { display: block; font-size: 14px; }
+.bundle-note { display: block; margin-top: 1px; font-size: 11.5px; color: var(--ink-3); }
+/* 有键被手改得偏离了这一档 —— 档位显示为「开 · 有偏离」,不能只显示"开" */
+.bundle-note[data-drift='true'] { color: var(--warn); }
+.knob {
+  position: relative; flex: none;
+  margin-left: auto; width: 39px; height: 23px; border-radius: 999px;
+  background: rgba(107, 99, 118, 0.24);
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.18);
+  transition: background 0.4s var(--ease), box-shadow 0.4s var(--ease);
+}
+.knob::after {
+  content: '';
+  position: absolute; top: 2.5px; left: 2.5px; width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(168deg, var(--o-hi), var(--o));
+  box-shadow: 0 1px 3px rgba(93, 84, 102, 0.34);
+  transition: transform 0.4s var(--ease);
+}
+.bundle[aria-pressed='true'] .knob {
+  background: linear-gradient(90deg, var(--a-mid), #9a8ca3);
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), 0 0 15px -3px rgba(136, 120, 144, 0.6);
+}
+.bundle[aria-pressed='true'] .knob::after { transform: translateX(16px); }
+.pop-more { margin-top: 8px; font-size: 13px; color: var(--ink-2); border-radius: 19px; padding: 10px 14px 11px; }

@@ -1,0 +1,69 @@
+/* ══════════════════════════════════════════════════════════════════════
+   一根灰紫轴,加三支去饱和的语义色。不引入第二个强调色。
+
+   白只是**透过来的光**,不是物体本身的颜色 —— 所以没有一处填纯白,
+   高光一律是低透明度的暖白叠加。面与面之间只差一点点明度,靠顶边一道
+   受光和底下一团柔影分层,不靠给每条边刷白。
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light;
+
+  /* 场:壳之外 */
+  --f-mid: #cac3d6;
+  --f-lit: #ddd6e7;
+
+  /* 块白:应用面的三档 */
+  --s-hi: #ede9f2;
+  --s: #e3deea;
+  --s-lo: #d6d0e0;
+
+  /* 浮在面上的物件:卡、小块、气泡 */
+  --o-hi: #f2eff6;
+  --o: #e7e2ee;
+  --o-lo: #dad4e3;
+
+  --ink: #3d3745;
+  --ink-2: #6b6376;
+  --ink-3: #948c9e;
+
+  /* 那根轴 */
+  --a-deep: #4a4152;
+  --a-mid: #887890;
+  --a-pale: #b3aabb;
+
+  /* 语义色。跟强调色是两件事 —— 用强调色兼职表示"正常",
+     "正常"和"选中"就再也分不开了。 */
+  --ok: #6e9080;
+  --warn: #a88b52;
+  --bad: #a06a6a;
+
+  /* 光与影 */
+  --lite: rgba(252, 251, 255, 0.5);
+  --lite-soft: rgba(252, 251, 255, 0.3);
+  --shade-1: rgba(93, 84, 102, 0.07);
+  --shade-2: rgba(93, 84, 102, 0.13);
+  --shade-3: rgba(93, 84, 102, 0.3);
+  --shade-4: rgba(93, 84, 102, 0.46);
+
+  --font: 'Onest', system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+
+  /* 起止都带缓动。有分量的东西起步慢、走得快、落得久。 */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --heavy: cubic-bezier(0.5, 0.02, 0.18, 1);
+
+  --t-card: 780ms;
+  --t-rail: 560ms;
+  --t-island: 560ms;
+
+  --rail-w: 212px;
+  --rail-slim: 60px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-card: 1ms;
+    --t-rail: 1ms;
+    --t-island: 1ms;
+  }
+}
