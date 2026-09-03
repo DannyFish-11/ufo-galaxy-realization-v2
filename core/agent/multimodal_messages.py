@@ -13,6 +13,15 @@ from __future__ import annotations
 import os
 from typing import Any, List, Union
 
+MULTIMODAL_TASK_KEY = "__multimodal_context__"
+"""执行路径上 task dict 里承载 MultiModalContext 的键名。
+
+task dict 会被 ``json.dumps`` 成 user 消息，而 MultiModalContext 是 pydantic 对象、
+根本不可序列化。约定这个键之后，消费端（``agent_factory._execute_single_task``）先把它
+摘出来交给 :func:`build_user_message_content`，剩下的部分才 dumps —— 生产端和消费端
+共用同一个常量，改名不会漏掉一边。
+"""
+
 
 def native_mm_enabled() -> bool:
     return os.getenv("GALAXY_NATIVE_MM_CHAT", "0").strip().lower() in ("1", "true", "yes", "on")

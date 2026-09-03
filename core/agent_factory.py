@@ -27,6 +27,21 @@ except ImportError:
 logger = logging.getLogger("Galaxy.AgentFactory")
 
 
+def _task_echo(task: Any) -> Any:
+    """回显 task 时剥掉图像负载。
+
+    结果里的 ``task`` 会一路走到 API 响应；图像是 pydantic 对象且体积以 MB 计，原样回显
+    既撑爆响应，也让 ``json.dumps`` 当场抛 TypeError —— 回显只需标一下有没有图。
+    """
+    from core.agent.multimodal_messages import MULTIMODAL_TASK_KEY
+
+    if not isinstance(task, dict) or MULTIMODAL_TASK_KEY not in task:
+        return task
+    echo = {k: v for k, v in task.items() if k != MULTIMODAL_TASK_KEY}
+    echo[MULTIMODAL_TASK_KEY] = "<multimodal payload stripped>"
+    return echo
+
+
 class SecurityPolicyViolation(Exception):
     """编排边界安全策略违规异常。"""
 
@@ -999,7 +1014,7 @@ class AgentFactory:
                 agent.metrics["tasks_failed"] += 1
                 results.append(
                     {
-                        "task": task,
+                        "task": _task_echo(task),
                         "error": f"Task timed out after {self.TASK_TIMEOUT_SECONDS}s",
                         "error_type": "TimeoutError",
                         "latency_ms": latency,
@@ -1013,7 +1028,7 @@ class AgentFactory:
             except Exception as e:
                 logger.debug("Fallback triggered: %s", e)
                 agent.metrics["tasks_failed"] += 1
-                results.append({"task": task, "error": str(e)})
+                results.append({"task": _task_echo(task), "error": str(e)})
 
         agent.state = AgentState.IDLE
         agent.last_active = time.time()
@@ -1034,9 +1049,18 @@ class AgentFactory:
           4. 无 tool_calls 时返回最终文本
         """
         if self.llm_router:
+            # 局部 import：模块级引用 core.agent.* 会触发 __init__ → kernel →
+            # execution_planner → 本文件的循环导入。
+            from core.agent.multimodal_messages import MULTIMODAL_TASK_KEY, build_user_message_content
+
+            # 图像不进 json.dumps：MultiModalContext 不可序列化，且 base64 当文本发过去
+            # 只烧 token，模型不会当图看。摘出来走 OpenAI content 数组。
+            mm_ctx = task.get(MULTIMODAL_TASK_KEY)
+            serializable_task = {k: v for k, v in task.items() if k != MULTIMODAL_TASK_KEY}
+            task_text = json.dumps(serializable_task, ensure_ascii=False)
             messages = [
                 {"role": "system", "content": agent.config.system_prompt},
-                {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
+                {"role": "user", "content": build_user_message_content(task_text, mm_ctx)},
             ]
 
             # 收集可用工具
@@ -1123,7 +1147,7 @@ class AgentFactory:
             )
             resp = loop.final_response
             return {
-                "task": task,
+                "task": _task_echo(task),
                 "output": (resp.content if resp else None) or "Agent 达到最大迭代次数",
                 "provider": getattr(resp, "provider", "") if resp else "",
                 "tool_calls": [r.model_dump() for r in tool_records],
@@ -1135,7 +1159,7 @@ class AgentFactory:
         else:
             # 无 LLM，模拟执行
             return {
-                "task": task,
+                "task": _task_echo(task),
                 "output": f"Agent {agent.config.name} 已处理任务（无 LLM 模式）",
                 "simulated": True,
                 "status": "simulated",
