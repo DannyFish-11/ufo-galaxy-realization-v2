@@ -7,7 +7,7 @@
 一个本地变量、不发任何请求。开关看着能动,后端什么都不知道 —— 正是这个仓库反复
 要躲的那类「看起来接上了,其实没有」。
 
-现在定义在 core/routes/config_schema_registry.py 的 ``CONFIG_BUNDLES``(唯一定义处),
+现在定义在 core/routes/config_bundles.py 的 ``CONFIG_BUNDLES``(唯一定义处),
 由 ``GET /api/config/bundles`` 现算、``POST`` 写回。这个文件守四件事:
 
 1. 每一档的主键**真的存在**于 CONFIG_SCHEMA —— 否则那是个永远点不动的开关;
@@ -19,12 +19,14 @@
 
 from __future__ import annotations
 
+import fnmatch
 import os
 
 import pytest
 
 from core.routes.config import _bundle_state
-from core.routes.config_schema_registry import CONFIG_BUNDLES, CONFIG_SCHEMA
+from core.routes.config_bundles import CONFIG_BUNDLES
+from core.routes.config_schema_registry import CONFIG_SCHEMA
 
 
 class TestEveryBundleIsWiredToSomethingReal:
@@ -234,3 +236,71 @@ class TestTheModelTierKeyMatchesTheRealCatalog:
         desc = CONFIG_SCHEMA["GALAXY_MODEL_TIER"]["description"]
         missing = [t.key for t in all_tiers() if f"{t.key}=" not in desc]
         assert not missing, f"描述里没有点到这些档: {missing}"
+
+
+class TestABundleActuallyOwnsWhatItClaimsToOwn:
+    """一档说自己管什么,那些键就必须真的在它那一类里。
+
+    这条是这次分类归口留下的门。归口之前的实况:
+
+    * 「跨设备」那一档管 ``devices``,而主脑的总线(``GALAXY_NATS_*``)在
+      ``network``、主脑自己的两个旋钮在 ``advanced``。于是设置页上,总开关
+      ``GALAXY_MASTER_BRAIN_ENABLED``(描述里明写「启用主脑编排 + worker/NATS
+      分布式」)在「设备与跨设备」那一格,它的总线在「网络与端口」那一格,
+      它的状态文件在「进阶与调优」那一格 —— 一件事被拆到三处,而三处都不说
+      对方存在。
+    * WebRTC 数据通道同理:关掉它失去的是**手机那端**的摄像头与麦克风,
+      配套的 TURN 与信令超时却和它一起待在 ``network``。
+
+    这类错法不会报错,只会让人在设置页上找不到东西 —— 或者更糟,改了一半。
+
+    ``owns`` 把「这一档管哪些机件」从注释里的说法变成**可证伪的声明**:
+
+    1. 声明里的每条模式都必须真的命中键(命中不到 = 声明在静默缩小,
+       与手写清单漏一项是同一种失效);
+    2. 命中的每个键都必须真的在这一档的 category 里。
+
+    第 2 条也是**反向**的保护:想把一个键挪出去,得先把它从 owns 里划掉 ——
+    也就是得先把「这一档不管它了」这句话写下来。
+    """
+
+    @pytest.mark.parametrize("bundle", CONFIG_BUNDLES, ids=lambda b: b["key"])
+    def test_every_claim_matches_at_least_one_key(self, bundle: dict) -> None:
+        dead = [p for p in bundle["owns"] if not fnmatch.filter(CONFIG_SCHEMA.keys(), p)]
+        assert not dead, (
+            f"档位「{bundle['name']}」声称管着这些机件,而 CONFIG_SCHEMA 里一个都没有: {dead} —— "
+            "键改了名的话,这条声明会静默失效,而不是报错"
+        )
+
+    @pytest.mark.parametrize("bundle", CONFIG_BUNDLES, ids=lambda b: b["key"])
+    def test_everything_it_claims_is_in_its_category(self, bundle: dict) -> None:
+        stray = {}
+        for pattern in bundle["owns"]:
+            for key in fnmatch.filter(CONFIG_SCHEMA.keys(), pattern):
+                cat = CONFIG_SCHEMA[key].get("category")
+                if cat != bundle["category"]:
+                    stray[key] = cat
+        assert not stray, (
+            f"档位「{bundle['name']}」管 {bundle['category']},却声称管着这些落在别处的键: {stray} —— "
+            "设置页按 category 分组,这些键会出现在另一格里,"
+            "总开关和它的旋钮就被拆到了两个地方"
+        )
+
+    def test_no_key_is_claimed_by_two_bundles(self) -> None:
+        """一个键不许被两档同时声称管着 —— 那样「谁说了算」就没有答案。"""
+        owner: dict[str, str] = {}
+        clashes = {}
+        for bundle in CONFIG_BUNDLES:
+            for pattern in bundle["owns"]:
+                for key in fnmatch.filter(CONFIG_SCHEMA.keys(), pattern):
+                    if key in owner and owner[key] != bundle["key"]:
+                        clashes[key] = (owner[key], bundle["key"])
+                    owner[key] = bundle["key"]
+        assert not clashes, f"这些键被两档同时声称管着: {clashes}"
+
+    @pytest.mark.parametrize("bundle", CONFIG_BUNDLES, ids=lambda b: b["key"])
+    def test_the_primary_is_among_what_it_claims(self, bundle: dict) -> None:
+        """主键必须在自己的声明里 —— 一档连自己那个开关都不声称管,说不过去。"""
+        assert any(
+            fnmatch.fnmatchcase(bundle["primary"], p) for p in bundle["owns"]
+        ), f"档位「{bundle['name']}」的 owns 里没有它自己的主键 {bundle['primary']}"

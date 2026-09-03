@@ -20,7 +20,8 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 # 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
 # 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
-from core.routes.config_schema_registry import CONFIG_BUNDLES, CONFIG_SCHEMA  # noqa: E402
+from core.routes.config_bundles import CONFIG_BUNDLES  # noqa: E402
+from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 
 __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA"]
 
@@ -436,7 +437,7 @@ def _write_env_file_with(overrides=None, exclude=None):
 # 整档开关 —— 面板上那四个「一个开关管一整片」的档位
 # ---------------------------------------------------------------------------
 #
-# 定义在 core/routes/config_schema_registry.py 的 CONFIG_BUNDLES(唯一定义处)。
+# 定义在 core/routes/config_bundles.py 的 CONFIG_BUNDLES(唯一定义处)。
 # 这里只负责【现算】它此刻的样子并写回,不重复那份定义。
 
 

@@ -317,3 +317,61 @@ class TestEverySchemaKeyIsReachableOrDeclaredAnAlias:
         assert "VLLM_URL" not in CONFIG_SCHEMA
         assert "VLLM_URL" not in _NON_SECRET_MODEL_KEYS
         assert "LOCAL_VLLM_URL" in CONFIG_SCHEMA
+
+
+def _extract_hint_groups() -> dict[str, list[str]]:
+    """``{分组名: [键, ...]}`` —— 分组名就是设置页拿去查表的那个 category。"""
+    src = SETTINGS_TAB.read_text(encoding="utf-8")
+    start = src.index("export const KEY_ORDER_HINT")
+    block = src[start : src.index("\n};", start)]
+    parts = re.split(r"\n  ([a-z_]+): \[", block)[1:]
+    out: dict[str, list[str]] = {}
+    for name, body in zip(parts[0::2], parts[1::2]):
+        body = "\n".join(ln for ln in body.split("\n") if not ln.strip().startswith("//"))
+        out[name] = _SETTINGS_KEY_RE.findall(body)
+    return out
+
+
+class TestTheOrderHintIsLookedUpByARealCategory:
+    """顺序提示的**分组名**必须是后端真会返回的 category。
+
+    设置页是 ``KEY_ORDER_HINT[item.category]`` 这样查的:分组名对不上,查出来就是
+    ``undefined``,那一类默默按字母序排 —— 不报错,不留痕,只是这份表白写了。
+
+    实况(2026-09-03 修):九个分组名里有八个是**更早一版**的后端分类
+    (behavior / ports / auth / mesh / circuit / storage / dev / slo)。后端早改成了
+    voice / perception / agent / … 这九类,只有 ``network`` 这个名字碰巧还对得上。
+    也就是说 303 个键里有 291 个的顺序提示从来没有生效过,而两边都不报错。
+
+    这正是本仓要躲的那类失效:**接口还在、调用还在、什么都没发生。**
+
+    第二条(成员关系)同样重要:分组名对了、键列错了类,那个键仍然查不到自己的
+    顺序 —— 表面上「它在表里」,实际还是字母序。
+    """
+
+    def test_every_group_name_is_a_real_category(self):
+        from core.routes.config import CONFIG_SCHEMA
+
+        real = {m.get("category", "") for m in CONFIG_SCHEMA.values()}
+        bogus = sorted(set(_extract_hint_groups()) - real)
+        assert not bogus, (
+            f"KEY_ORDER_HINT 里这些分组名不是后端真会返回的 category: {bogus} —— "
+            f"设置页查不到它们,那几类会默默按字母序排。真有的是: {sorted(real)}"
+        )
+
+    def test_every_key_is_listed_under_its_own_category(self):
+        from core.routes.config import CONFIG_SCHEMA
+
+        misfiled = {}
+        for group, keys in _extract_hint_groups().items():
+            for key in keys:
+                meta = CONFIG_SCHEMA.get(key)
+                if meta is None:
+                    continue  # 由 TestSettingsTabKeysExistInConfigSchema 管
+                if meta.get("category") != group:
+                    misfiled[key] = (group, meta.get("category"))
+        shown = dict(list(misfiled.items())[:20])
+        assert not misfiled, (
+            f"{len(misfiled)} 个键被列在了别的分类下面(列出的是 列在哪 → 实际属于哪,"
+            f"只展示前 20 个): {shown} —— 设置页按实际 category 查表,查不到就还是字母序"
+        )

@@ -12,7 +12,7 @@
 ``from core.routes.config import CONFIG_SCHEMA`` 一律不受影响 —— 拆的是文件,不是接口。
 """
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 # 所有支持的配置项（键 → {默认值, 类型, 类别, 描述}）
 CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
@@ -340,25 +340,25 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_NATS_ENABLED": {
         "default": "true",
         "type": "boolean",
-        "category": "network",
+        "category": "devices",
         "description": "启用 NATS 消息总线（多设备协同的传输底座;单机自用可以关 · 默认开）",
     },
     "GALAXY_NATS_URL": {
         "default": "nats://localhost:4222",
         "type": "url",
-        "category": "network",
+        "category": "devices",
         "description": "NATS 消息总线的地址（默认本机;接到别的机器上才需要改）",
     },
     "GALAXY_NATS_EXECUTOR_TIMEOUT": {
         "default": "30",
         "type": "number",
-        "category": "network",
+        "category": "devices",
         "description": "NATS 执行器超时(秒 · 默认 30)",
     },
     "GALAXY_NATS_EXECUTOR_FALLBACK": {
         "default": "sync",
         "type": "select",
-        "category": "network",
+        "category": "devices",
         "description": "NATS 不可用时怎么办（sync=退回本机同步执行 · 默认 sync）",
         "options": ["sync", "async", "reject"],
     },
@@ -524,7 +524,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_MASTER_BRAIN_STATE_PATH": {
         "default": "",
         "type": "string",
-        "category": "advanced",
+        "category": "devices",
         "description": "主脑状态文件路径（留空=用内置默认位置）",
     },
     "CHROMA_PERSIST_DIR": {
@@ -1903,7 +1903,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_TS_ADVERTISE_RELAY": {
         "default": "true",
         "type": "boolean",
-        "category": "network",
+        "category": "devices",
         "description": "把本机登记为 Tailscale 中继（帮别的设备转发 · 默认开）",
     },
     "GALAXY_TS_FUNNEL": {
@@ -1927,7 +1927,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_SIGNALING_TIMEOUT_S": {
         "default": "",
         "type": "number",
-        "category": "network",
+        "category": "devices",
         "description": "WebRTC 信令超时(秒；留空=用内置默认)",
     },
     "GALAXY_MEMORY_BACKENDS": {
@@ -2148,13 +2148,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {
         "default": "false",
         "type": "boolean",
-        "category": "network",
+        "category": "devices",
         "description": "WebRTC 数据通道（浏览器/手机端把摄像头与麦克风的采集结果直接推给感知层 · 默认关）",
     },
     "GALAXY_TURN_URLS": {
         "default": "",
         "type": "string",
-        "category": "network",
+        "category": "devices",
         "description": "TURN 中继服务器地址（NAT 穿不透时靠它转发音视频）",
     },
     "GALAXY_HEADSCALE_URL": {
@@ -2217,7 +2217,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S": {
         "default": "300",
         "type": "number",
-        "category": "advanced",
+        "category": "devices",
         "description": "主脑扩缩容重评估间隔(秒 · 默认 300)",
     },
     "GALAXY_TEMPORAL_URL": {
@@ -2233,58 +2233,3 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "网关适配器死信队列的主题名（处理不了的消息扔这儿）",
     },
 }
-
-
-# ---------------------------------------------------------------------------
-# 整档开关 —— 一个开关管一整片键
-# ---------------------------------------------------------------------------
-#
-# 面板上那四个开关(全模态 / 跨设备 / 声音 / 自主)不是四个配置键,是四**档**:
-# 每一档对应上面 CONFIG_SCHEMA 里的一个 category,一档管几十个键。
-#
-# **这份表是那件事的唯一定义处。**
-#
-# 面板不许自己再存一份「哪一档管哪些键」——那样同一个事实两处各存,迟早一处
-# 说开、另一处说关,而且没人看得见。面板只渲染 GET /api/config/bundles 现算出来
-# 的结果。这四行之前确实在面板里写死过(连 keyCount 都是手抄的数字),点一下只翻
-# 一个本地变量、不发任何请求 —— 开关看着能动,后端什么都不知道。
-#
-# 每一档的开合由它的**主键**说了算,而不是「这一档里的键是不是都开着」:
-# 一档里几十个键各有各的默认值,拿它们投票投不出一个人能预期的结果。主键就是
-# 那个「这项能力到底开不开」的键,其余是它的细调。
-#
-# ``primary`` 的类型决定这一档在界面上是什么控件。**不是所有档都是两态的**:
-# GALAXY_AUTONOMY 是 safe / guided / autonomous 三档,渲染成推拉开关会把中间
-# 那档吞掉 —— 这个仓库为「三态开关被当成布尔」栽过一次,见
-# tests/test_voice_switches_reach_the_panel.py 里那条。
-CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
-    {
-        "key": "omnimodal",
-        "name": "全模态",
-        "note": "屏 摄 麦 系统声",
-        "category": "perception",
-        "primary": "GALAXY_AMBIENT_LOOP",
-    },
-    {
-        "key": "cross_device",
-        "name": "跨设备",
-        "note": "发现 配对 主脑 手机 手表",
-        "category": "devices",
-        "primary": "GALAXY_CROSS_DEVICE_ENABLED",
-    },
-    {
-        "key": "voice",
-        "name": "声音",
-        "note": "跟文字锁步",
-        "category": "voice",
-        "primary": "GALAXY_SPEAK",
-    },
-    {
-        "key": "autonomy",
-        "name": "自主",
-        "note": "问过再做",
-        "category": "agent",
-        # 三档,不是开关。见上面那段说明。
-        "primary": "GALAXY_AUTONOMY",
-    },
-)
