@@ -64,6 +64,8 @@ export interface DockCallbacks {
   onSend(text: string): void;
   onTogglePopover(which: 'feed' | 'settings'): void;
   onToggleBundle(key: Bundle['key']): void;
+  /** 打开那 332 个键的细调面。这个按钮从前不接任何东西 —— 一个死键。 */
+  onOpenAllSettings(): void;
 }
 
 export function createDock(cb: DockCallbacks): DockHandles {
@@ -149,6 +151,10 @@ export function createDock(cb: DockCallbacks): DockHandles {
   more.className = 'pop-item pop-more';
   more.type = 'button';
   more.textContent = '全部设置';
+  more.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cb.onOpenAllSettings();
+  });
   settings.append(bundleHost, more);
 
   wrap.append(dock, feed, settings);

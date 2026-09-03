@@ -11,7 +11,16 @@
 import './styles/hud.css';
 
 import { Store, VISIBLE_CARDS, clampStart, initialState } from './store';
-import { PresenceSocket, fetchBundles, nextBundleValue, setBundle, streamChat, toPhase } from './transport';
+import {
+  PresenceSocket,
+  fetchAllConfig,
+  fetchBundles,
+  nextBundleValue,
+  saveConfig,
+  setBundle,
+  streamChat,
+  toPhase,
+} from './transport';
 import { WAKE_CANDIDATES, platform } from './platform';
 import { createDeck } from './ui/deck';
 import { createLine } from './ui/line';
@@ -19,6 +28,7 @@ import type { LineTrust } from './ui/line';
 import { createIsland } from './ui/island';
 import { createThread } from './ui/thread';
 import { createDock } from './ui/dock';
+import { createSettings } from './ui/settings';
 import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
 
 /**
@@ -84,9 +94,15 @@ function mount(host: HTMLElement): void {
     onTogglePopover: (which) =>
       store.patch({ popover: store.state.popover === which ? null : which }),
     onToggleBundle: (key) => void flipBundle(key),
+    onOpenAllSettings: () => void openAllSettings(),
   });
 
-  main.append(island.root, thread.root, dock.root);
+  const settings = createSettings({
+    onClose: () => store.patch({ settingsOpen: false }),
+    onSave: (changes) => void applyConfig(changes),
+  });
+
+  main.append(island.root, thread.root, dock.root, settings.root);
   panel.append(deck.root, main);
   shell.append(panel);
   host.replaceChildren(shell);
@@ -108,6 +124,7 @@ function mount(host: HTMLElement): void {
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
     thread.render(s.turns, s.lockstep, s.lockstepReason);
     dock.render(s.bundles, s.popover);
+    settings.render(s.config, s.settingsOpen, s.configBusy);
   }
 
   store.subscribe(render);
@@ -132,6 +149,33 @@ function mount(host: HTMLElement): void {
     store.patch({
       bundles: store.state.bundles.map((b) => (b.key === key ? updated : b)),
     });
+  }
+
+  /**
+   * 打开全部设置。**每次打开都重新拉** —— 配置可能被别处改过(命令行、.env、
+   * 另一台设备),拿缓存显示会让人对着一份过期的值做决定。
+   */
+  async function openAllSettings(): Promise<void> {
+    store.patch({ settingsOpen: true, popover: null, configBusy: true });
+    const items = await fetchAllConfig(BASE);
+    store.patch({ config: items, configBusy: false });
+  }
+
+  /**
+   * 写回一批改动。**成功之后重新拉一次,以后端为准。**
+   *
+   * 后端那条路是「先落盘、成功才应用到内存」,而且批次里有一个未知键就整批 400。
+   * 不重新拉的话,界面显示的是我以为写进去的值,而后端可能一个都没收 ——
+   * 那正是「看起来接上了,其实没有」。
+   */
+  async function applyConfig(changes: Readonly<Record<string, string>>): Promise<void> {
+    store.patch({ configBusy: true });
+    const ok = await saveConfig(BASE, changes);
+    const items = await fetchAllConfig(BASE);
+    store.patch({ config: items, configBusy: false });
+    if (!ok) return;
+    // 档位那几档也可能被这批改动波及(它们的主键就在这 332 个里),重新算一遍。
+    await loadBundles();
   }
 
   /** 拉一次真实档位。拉不到就**保持空**,不拿演示数据顶上。 */

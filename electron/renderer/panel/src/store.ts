@@ -15,6 +15,7 @@ import type {
   RenderPosture,
   Turn,
 } from './types';
+import type { ConfigItem } from './transport';
 
 export interface HudState {
   /** 连上后端了没有。false 时下面的东西全是上一次的残值或空态 */
@@ -45,6 +46,11 @@ export interface HudState {
   readonly turns: readonly Turn[];
   readonly devices: readonly DeviceRow[];
   readonly bundles: readonly Bundle[];
+  /** 全部设置那 332 个键。null = **还没拉到**,与「一个键都没有」是两件事。 */
+  readonly config: readonly ConfigItem[] | null;
+  readonly settingsOpen: boolean;
+  /** 正在拉或正在写。用来把保存按钮压住,免得连点写两遍。 */
+  readonly configBusy: boolean;
 
   /** 右上那块岛展开了没有 */
   readonly islandOpen: boolean;
@@ -68,6 +74,9 @@ export const initialState: HudState = {
   turns: [],
   devices: [],
   bundles: [],
+  config: null,
+  settingsOpen: false,
+  configBusy: false,
   islandOpen: false,
   popover: null,
 };

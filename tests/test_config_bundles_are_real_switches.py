@@ -182,3 +182,55 @@ def test_every_bundle_state_survives_a_clean_environment(monkeypatch) -> None:
         assert state["unwired"] is False
         assert state["value"] == CONFIG_SCHEMA[bundle["primary"]]["default"]
         assert os.environ.get(bundle["primary"]) is None
+
+
+class TestTheModelTierKeyMatchesTheRealCatalog:
+    """``GALAXY_MODEL_TIER`` 的选项必须覆盖目录里真实存在的每一档。
+
+    这条守两件事,都出过:
+
+    1. **描述少说了两档。** 原先写的是「填 A/B 可钉死用哪一档」,而
+       core/model_catalog.py 的 _TIERS 里有 A/B/C/D 四档 —— 说明少两档,人就只会
+       在两档里挑,而 C 恰恰是当前默认在用的那一档。
+    2. **类型是 string 而不是 select。** 设置页据 type 决定控件形态,string 会渲染
+       成自由文本框;档位表只认 A/B/C/D,填错的后果是 load_tier() 静默回落到默认档
+       —— 用户以为自己钉住了某一档,其实没有。
+    """
+
+    def test_it_is_a_select_not_a_free_text_box(self) -> None:
+        meta = CONFIG_SCHEMA["GALAXY_MODEL_TIER"]
+        assert meta["type"] == "select", "档位是枚举,不能让人自由输入"
+        assert "options" in meta, "select 没有 options —— 设置页只能猜"
+
+    def test_every_real_tier_is_offered(self) -> None:
+        from core.model_catalog import all_tiers
+
+        offered = set(CONFIG_SCHEMA["GALAXY_MODEL_TIER"]["options"])
+        real = {t.key for t in all_tiers()}
+        missing = sorted(real - offered)
+        assert not missing, (
+            f"目录里有这些档,而配置项里选不到: {missing} —— " "人只会在选得到的档里挑,选不到的那档等于不存在"
+        )
+
+    def test_no_phantom_tier_is_offered(self) -> None:
+        """反向:选项里不许出现目录里没有的档 —— 选了会静默回落。"""
+        from core.model_catalog import all_tiers
+
+        offered = {o for o in CONFIG_SCHEMA["GALAXY_MODEL_TIER"]["options"] if o}
+        real = {t.key for t in all_tiers()}
+        phantom = sorted(offered - real)
+        assert not phantom, f"配置项里有目录中不存在的档: {phantom}"
+
+    def test_the_empty_choice_is_offered(self) -> None:
+        """「不钉,按能力自动判」是默认值,它必须在选项里表达得出来。"""
+        meta = CONFIG_SCHEMA["GALAXY_MODEL_TIER"]
+        assert "" in meta["options"], "「不钉死」这个选择在界面上表达不出来"
+        assert meta["default"] == "", "默认应当是不钉死"
+
+    def test_the_description_names_every_tier(self) -> None:
+        """描述里得把每一档都点到名 —— 少说一档,人就不知道有它。"""
+        from core.model_catalog import all_tiers
+
+        desc = CONFIG_SCHEMA["GALAXY_MODEL_TIER"]["description"]
+        missing = [t.key for t in all_tiers() if f"{t.key}=" not in desc]
+        assert not missing, f"描述里没有点到这些档: {missing}"

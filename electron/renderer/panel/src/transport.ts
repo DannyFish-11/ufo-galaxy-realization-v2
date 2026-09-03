@@ -366,3 +366,98 @@ export function nextBundleValue(b: Bundle): string | null {
   }
   return null;
 }
+
+
+// ---------------------------------------------------------------------------
+// 全部设置 —— 332 个键的细调面
+// ---------------------------------------------------------------------------
+//
+// 分组**不在这里定义**:每个键属于哪一类由后端 `/api/config/all` 的 `category`
+// 现算,面板只按 `settings_inventory.ts` 里那份**顺序提示**排一下。这条区分是
+// 这个仓库栽过一次的地方 —— 从前分组写在前端一份手写清单里,漏一个键的后果是
+// 「它在设置页上完全看不见,后端却明明有它,还不报错」。
+
+export interface ConfigItem {
+  readonly key: string;
+  /** 当前值。后端给的是字符串,原样搬 —— 不预先按 type 转,转错了看不出来。 */
+  readonly value: string;
+  readonly defaultValue: string;
+  /** boolean / select / number / string / url / password … 决定画什么控件 */
+  readonly type: string;
+  readonly category: string;
+  readonly description: string;
+  readonly options?: readonly string[];
+  /** 当前值偏离了默认。**这是留痕**,不是装饰。 */
+  readonly overridden: boolean;
+}
+
+function readConfigItem(key: string, raw: unknown): ConfigItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const str = (k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : String(o[k] ?? ''));
+  const value = str('value');
+  const defaultValue = str('default');
+  const opts = Array.isArray(o['options'])
+    ? (o['options'] as unknown[]).map((v) => String(v))
+    : undefined;
+  return {
+    key,
+    value,
+    defaultValue,
+    type: str('type') || 'string',
+    // 后端没给 category 时归到 other 而不是丢掉 —— 丢掉就等于那个键在设置页上
+    // 消失了,而它在后端明明存在。
+    category: str('category') || 'other',
+    description: str('description'),
+    ...(opts && opts.length ? { options: opts } : {}),
+    overridden: value !== defaultValue,
+  };
+}
+
+/** 拉全部配置。拉不到返回 null —— **不返回空对象**:「没接上」与「一个键都没有」是两件事。 */
+export async function fetchAllConfig(base: string): Promise<readonly ConfigItem[] | null> {
+  try {
+    const resp = await fetch(base + '/api/config/all', { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      console.error('[hud] 拉配置失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    const out: ConfigItem[] = [];
+    for (const [k, v] of Object.entries(body)) {
+      const item = readConfigItem(k, v);
+      if (item) out.push(item);
+    }
+    return out;
+  } catch (err) {
+    console.error('[hud] 拉配置失败:', err);
+    return null;
+  }
+}
+
+/**
+ * 写回若干个键。返回后端**认下来**的那些键,失败返回 null。
+ *
+ * 后端那条路是「先落盘、成功才应用到内存」,而且批次里有一个未知键就整批 400。
+ * 所以这里不做乐观更新:写成功之后重新拉一次,以后端为准。
+ */
+export async function saveConfig(
+  base: string,
+  changes: Readonly<Record<string, string>>,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(base + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: changes }),
+    });
+    if (!resp.ok) {
+      console.error('[hud] 保存配置被拒:', resp.status, await resp.text().catch(() => ''));
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[hud] 保存配置失败:', err);
+    return false;
+  }
+}

@@ -288,9 +288,17 @@ export const PROVIDER_KEYS: readonly string[] = [
  * 「声称委派出去的键,是不是真的在那边」—— 否则「委派」就是「藏起来」的好听说法。
  */
 export const DELEGATED_CATEGORIES = new Set<string>([
-  // 模型 API key 归供应商目录那一档:那边带中文名、用途标注和配套 base URL,
-  // 拍平成设置页的 key-value 行会把这些信息全毁掉。见 PROVIDER_KEYS。
-  'llm',
+  // **这里现在是空的,而且这件事必须说清楚。**
+  //
+  // 原先 'llm' 在这儿,理由是「模型 API key 归 ModelsTab:那边是供应商目录,
+  // 拍平成设置页的 key-value 行会把中文名/用途标注/配套 base URL 全毁掉」。
+  //
+  // 那个理由当时成立。但 ModelsTab 随旧 React 面板一起删掉了 —— **委派的目的地
+  // 不存在了**。继续把 llm 标成「已委派」,等于声称那 29 个供应商键在别处管着,
+  // 而实际上它们无处可配。这正是「委派」变成「藏起来」的好听说法的那一刻。
+  //
+  // 所以 llm 收回到设置页,并在 CATEGORIES 里给了它自己的标签。等供应商目录那个
+  // 界面真的建起来,再把它移回来 —— 到那时这一行有目的地,才配叫委派。
 ]);
 
 export interface CategoryDef {
@@ -317,5 +325,6 @@ export const CATEGORIES: readonly CategoryDef[] = [
   { key: 'devices', label: '设备与跨设备', icon: '🕸️' },
   { key: 'security', label: '安全与权限', icon: '🔒' },
   { key: 'network', label: '网络与端口', icon: '🌐' },
+  { key: 'llm', label: '供应商与密钥', icon: '🔑' },
   { key: 'advanced', label: '进阶与调优', icon: '🛠️', advanced: true },
 ];

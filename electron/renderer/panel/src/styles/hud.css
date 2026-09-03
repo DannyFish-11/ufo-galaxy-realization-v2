@@ -596,3 +596,86 @@ body {
    一个永远关着、点了也没反应的开关,比一条说明更容易骗到人。 */
 .bundle[data-unwired='true'] { opacity: 0.5; cursor: not-allowed; }
 .bundle-note[data-unwired='true'] { color: var(--warn); }
+
+/* ── 全部设置:那 332 个键的细调面 ──
+   盖在对话区上,不另开窗口 —— 它跟设置浮层是同一件事的两个深度,
+   飞出一个新窗口会让人觉得离开了面板。 */
+.settings-full {
+  position: absolute; inset: 0; z-index: 90;
+  display: none; flex-direction: column;
+  border-radius: 24px; overflow: hidden;
+  background: linear-gradient(168deg, rgba(238, 234, 245, 0.97), rgba(224, 219, 234, 0.95));
+  -webkit-backdrop-filter: blur(26px) saturate(1.4);
+  backdrop-filter: blur(26px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--lite), 0 24px 60px -24px var(--shade-4);
+}
+.settings-full[data-open='true'] { display: flex; }
+/* 正在拉或正在写:压住,但**不遮住内容** —— 盖一层白的话人就看不见自己刚改的是什么了 */
+.settings-full[data-busy='true'] .sf-body { opacity: 0.55; pointer-events: none; }
+
+.sf-head {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; box-shadow: inset 0 -1px 0 rgba(93, 84, 102, 0.1);
+}
+.sf-title { font-size: 15px; color: var(--ink); }
+.sf-count { flex: 1; font-size: 11.5px; color: var(--ink-3); }
+.sf-save {
+  border: 0; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 12.5px; color: #fff;
+  background: var(--a-mid);
+  box-shadow: 0 1px 3px var(--shade-3);
+}
+.sf-save:disabled { opacity: 0.4; cursor: default; }
+.sf-close {
+  flex: none; width: 26px; height: 26px; border: 0; border-radius: 50%;
+  cursor: pointer; background: rgba(252, 251, 255, 0.55); position: relative;
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+}
+.sf-close::before, .sf-close::after {
+  content: ''; position: absolute; left: 7px; top: 12px;
+  width: 12px; height: 1.5px; border-radius: 1px; background: var(--ink-2);
+}
+.sf-close::before { transform: rotate(45deg); }
+.sf-close::after { transform: rotate(-45deg); }
+
+.sf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 18px; }
+.sf-body::-webkit-scrollbar { width: 6px; }
+.sf-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
+
+.sf-sec { padding-top: 14px; }
+.sf-sec-head {
+  margin: 0 0 6px; font-size: 12.5px; font-weight: 400; color: var(--ink-2);
+  display: flex; align-items: center; gap: 8px;
+}
+.sf-sec-head b { font-weight: 400; font-size: 11px; color: var(--ink-3); }
+
+.sf-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px;
+  padding: 9px 10px; border-radius: 10px; min-height: 42px;
+}
+.sf-row:nth-child(even) { background: rgba(252, 251, 255, 0.3); }
+/* 改过默认的那些,左缘留一道痕。**不是装饰** —— 排障时第一个要问的就是
+   「这个值是默认还是有人改过」。 */
+.sf-row[data-overridden='true'] { box-shadow: inset 3px 0 0 var(--a-mid); }
+.sf-text { min-width: 0; }
+.sf-key {
+  display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color: var(--ink); letter-spacing: 0.01em;
+}
+.sf-desc {
+  display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.4; color: var(--ink-3);
+}
+.sf-input {
+  flex: none; width: 190px; padding: 6px 10px;
+  border: 0; border-radius: 8px; font: inherit; font-size: 12px; color: var(--ink);
+  background: rgba(252, 251, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+}
+.sf-input:focus { outline: 2px solid var(--a-mid); outline-offset: 1px; }
+.sf-stages { display: flex; gap: 5px; }
+.sf-stages .stage { cursor: pointer; border: 0; font: inherit; }
+.sf-stages .stage[data-picked='true'] {
+  color: #fff; background: var(--a-mid);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.2);
+}
+.sf-empty { padding: 40px 0; text-align: center; font-size: 12.5px; color: var(--warn); }

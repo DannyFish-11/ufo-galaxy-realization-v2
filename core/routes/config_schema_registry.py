@@ -1574,9 +1574,26 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     },
     "GALAXY_MODEL_TIER": {
         "default": "",
-        "type": "string",
+        # **必须是 select,不能是 string。**
+        #
+        # 原先是 string 且没有 options —— 设置页据 type 决定控件形态,于是这一栏
+        # 渲染成自由文本框:能填进任何垃圾,而档位表只认 A/B/C/D,填错的后果是
+        # load_tier() 静默回落到默认档,用户以为自己钉住了某一档,其实没有。
+        "type": "select",
+        # 空串 = 不钉,按能力自动判。它必须在选项里,否则「不钉」这个选择在界面上
+        # 表达不出来 —— 那才是默认值。
+        "options": ["", "A", "B", "C", "D"],
         "category": "agent",
-        "description": "强制档位（留空=按能力自动判；填 A/B 可钉死用哪一档）",
+        # 原先写的是「填 A/B 可钉死用哪一档」。**实际有四档**(见
+        # core/model_catalog.py 的 _TIERS):A 轻量本地 / B 全模态单模型 /
+        # C 双模型·35B 推理位 / D 双模型·9B 推理位。说明少两档,人就只会在
+        # 两档里挑,而 C 恰恰是当前默认在用的那一档。
+        "description": (
+            "强制本地档位（留空=按能力自动判）。"
+            "A=轻量本地(Gemma 4 系，无独显也能跑) · "
+            "B=全模态单模型(MiniCPM-o，需显卡) · "
+            "C=双模型/35B 推理位 · D=双模型/9B 推理位"
+        ),
     },
     "GALAXY_HF_OLLAMA_FALLBACK": {
         "default": "true",

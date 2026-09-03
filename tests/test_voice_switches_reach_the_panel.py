@@ -453,20 +453,36 @@ class TestEveryVoiceSwitchIsRegisteredFrontend:
             f"也没显式委派给别的 tab)—— 它们在界面上不会出现: {homeless}"
         )
 
-    def test_delegated_categories_are_actually_owned_by_that_tab(self):
+    def test_delegation_is_never_a_nicer_word_for_hiding(self):
         """委派不能是一句空话。
 
-        声明「llm 这一类归 ModelsTab」之后,那些键必须真的在 ModelsTab.tsx 里出现。
-        否则「委派」就成了「藏起来」的好听说法 —— 而这正是本仓最常见的那种失效:
-        看起来有人管,其实没有。
+        原判据是「声明 llm 归 ModelsTab 之后,那些键必须真的在 ModelsTab.tsx 里出现」。
+        ModelsTab 随旧 React 面板一起删掉了,委派清单也跟着空了 —— 于是原判据变成
+        了空转,还得靠 ``assert delegated`` 硬撑着才不至于绿得毫无内容。
+
+        判据本身没有失效,失效的是它的载体。这里把它**按原意重述,并且更严**:
+
+        * 委派一旦存在,目的地必须真的收着那些键(原判据,保留);
+        * 委派**不存在**时,这些键必须真的在设置页上有位置 —— 也就是它们的
+          category 得在 ``CATEGORIES`` 里有中文标签。
+
+        两条合起来说的是同一件事:**每个键都得有人管,而且管它的那个地方真的在。**
+        少了第二条,把 DELEGATED_CATEGORIES 清空就能让这道门闭嘴 —— 而那恰恰是
+        「llm（未分类）」出现在设置页上的那次真实回归。
         """
         from core.routes.config import CONFIG_SCHEMA
 
         delegated = _extract_delegated_categories()
-        assert delegated, "一个委派都没有的话,这条测试就成了空转"
+        decorated = _extract_decorated_categories()
 
-        models_tab = SETTINGS_INVENTORY  # provider 键现在在 PROVIDER_KEYS 里
-        owner_src = models_tab.read_text(encoding="utf-8") if models_tab.exists() else ""
+        # ① 委派出去的,目的地必须真的收着。
+        #
+        # 目的地在哪由委派方自己说了算,所以这里在**整个面板源码**里找 —— 找不到
+        # 就说明这些键在任何一个界面上都出不来,不管委派清单怎么写。
+        panel_src = SETTINGS_INVENTORY.parent
+        owner_src = "\n".join(
+            p.read_text(encoding="utf-8") for p in sorted(panel_src.rglob("*.ts")) if p != SETTINGS_INVENTORY
+        )
         orphans = []
         for key, meta in CONFIG_SCHEMA.items():
             if meta.get("category") not in delegated:
@@ -479,7 +495,30 @@ class TestEveryVoiceSwitchIsRegisteredFrontend:
             if "别名" in str(meta.get("description", "")):
                 continue
             orphans.append(key)
-        assert not orphans, f"这些键声称委派给了 ModelsTab,但那边找不到它们: {orphans}"
+        assert not orphans, (
+            "这些键的 category 声称已委派给别处,而面板源码里找不到它们 —— "
+            f"「委派」在这里等于「藏起来」: {sorted(orphans)}"
+        )
+
+        # ② 没委派出去的,设置页上必须有它自己的那一格。
+        #
+        # groupByCategory() 不会丢掉未装饰的类别(丢了整整一类就没人看得见了),
+        # 而是渲染成「xxx（未分类）」。所以这条不测「看不看得见」,测的是**看见的
+        # 是不是人话** —— 一格叫「llm（未分类）」的设置,用户没法知道该不该动它。
+        undecorated = sorted(
+            {
+                meta.get("category", "")
+                for key, meta in CONFIG_SCHEMA.items()
+                if meta.get("category") not in delegated
+                and meta.get("category") not in decorated
+                and key not in _PENDING_SECRET_ROUTING
+                and key not in _NOT_USER_SETTINGS
+            }
+        )
+        assert not undecorated, (
+            f"这些 category 既没委派出去、在 CATEGORIES 里也没有中文标签: {undecorated} —— "
+            "设置页会把它们渲染成「xxx（未分类）」,用户看得见却不知道那是什么"
+        )
 
 
 class TestSchemaEntriesAreHonest:
