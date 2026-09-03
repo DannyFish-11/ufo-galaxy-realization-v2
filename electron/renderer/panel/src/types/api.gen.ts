@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 400 条 · 组件 schema 106 个
+// 路径 402 条 · 组件 schema 106 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -158,6 +158,8 @@ export type ApiPath =
   | "/api/v1/hybrid/execute"
   | "/api/v1/hybrid/registry"
   | "/api/v1/hybrid/stats"
+  | "/api/v1/memory/cards"
+  | "/api/v1/memory/cards/{card_id}/turns"
   | "/api/v1/memory/cold"
   | "/api/v1/memory/drift/check"
   | "/api/v1/memory/drift/config"
@@ -562,6 +564,8 @@ export const API_METHODS = {
   "/api/v1/hybrid/execute": ["post"],
   "/api/v1/hybrid/registry": ["get"],
   "/api/v1/hybrid/stats": ["get"],
+  "/api/v1/memory/cards": ["get"],
+  "/api/v1/memory/cards/{card_id}/turns": ["get"],
   "/api/v1/memory/cold": ["get"],
   "/api/v1/memory/drift/check": ["post"],
   "/api/v1/memory/drift/config": ["get", "put"],

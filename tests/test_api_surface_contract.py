@@ -116,12 +116,22 @@ def _panel_calls() -> dict[str, set[str]]:
     生成物)。第一版就踩了这个自指陷阱,被清单那条断言当场抓出来。
 
     也跳过**第三方绝对地址里的路径** —— 见 :func:`_is_third_party_url_path`。
+
+    并且**先去掉注释**。这一条是踩出来的:``transport.ts`` 里有一段注释解释
+    「路径要写全、不要拼」,顺手引了前缀 ``/api/perception/desktop``,于是扫描器
+    把那句说明当成了一次真实调用,报成「面板调了后端没有的端点」。
+
+    这类误报比漏报更危险:它让一条正确的门变成噪音,而噪音门迟早被加白名单绕过
+    或者直接删掉。这个仓库为「扫的是文件文本而不是代码」栽过两次(另两处判据
+    分别被块注释和 docstring 绊倒),两次的修法都是同一句:**比对去掉注释后的代码**。
     """
+    block = re.compile(r"/\*.*?\*/", re.S)
+    line = re.compile(r"^\s*//.*$", re.M)
     out: dict[str, set[str]] = {}
     for f in _PANEL_SRC.rglob("*.ts*"):
         if f.name.endswith(".gen.ts"):
             continue
-        text = f.read_text(encoding="utf-8")
+        text = line.sub("", block.sub("", f.read_text(encoding="utf-8")))
         for m in re.finditer(r"(/(?:api|ws)/[A-Za-z0-9/_${}.-]*)", text):
             if _is_third_party_url_path(text, m.start()):
                 continue

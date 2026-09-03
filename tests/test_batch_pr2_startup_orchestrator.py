@@ -34,6 +34,28 @@ PROJECT_ROOT = pathlib.Path(__file__).parent.parent
 # ===========================================================================
 
 
+@pytest.fixture(autouse=True)
+def _no_desktop_surface(monkeypatch):
+    """``run_startup_sequence()`` 的桌面壳阶段在 electron 包不完整时会**真去跑
+    `npm install`** —— 一条联网装依赖的单元测试。整个文件都挡住。
+
+    这是这个文件反复在 CI 上超时的根因:并发一高,那次 npm install 就撞穿 pytest
+    的 120 秒;而子进程自己的 timeout 也是 120 秒,**内层不小于外层**,于是生产
+    代码里那条 "npm install timed out after 120s" 的优雅降级永远到不了。本地跑不
+    出来,只因为本地要么装好了(跳过安装)、要么装不通(秒退)。
+
+    **作用域必须是模块,不是某一个类。** 头一版只挂在 ``TestSystemOrchestrator``
+    上,理由是「这一组每条都直接调 run_startup_sequence」——那句话当时是对的,但
+    它描述的是**当时那一组**,而不是这个文件。``TestHookRegistration`` 同样调它,
+    于是在 CI 上照旧超时,只是换了个用例名。按调用点圈范围,不按「我改的那一组」
+    圈范围。
+
+    关掉它之后这些用例只验编排本身:七个阶段都在、顺序不乱、摘要成形 —— 那本来
+    就是它们要验的,跟能不能装上 Electron 依赖没有关系。
+    """
+    monkeypatch.setenv("GALAXY_SKIP_DESKTOP_SURFACE", "true")
+
+
 class TestSystemOrchestratorExports:
     def test_module_importable(self):
         mod = importlib.import_module("core.system_orchestrator")
@@ -340,20 +362,6 @@ class TestStartupSummary:
 
 
 class TestSystemOrchestrator:
-    @pytest.fixture(autouse=True)
-    def _no_desktop_surface(self, monkeypatch):
-        """这一组每条都直接调 run_startup_sequence(),而它的桌面壳阶段在 electron
-        包不完整时会真去跑 `npm install` —— 单元测试不该联网装依赖。
-
-        这正是这条测试反复在 CI 上超时的根因:并发一高,那次 npm install 就撞穿
-        pytest 的 120 秒;而子进程自己的 timeout 也是 120 秒,内层不小于外层,
-        生产代码里那条 "npm install timed out after 120s" 的优雅降级永远到不了。
-        本地跑不出来,只因为本地要么装好了、要么装不通(秒退)。
-
-        关掉它之后这一组只验编排本身:七个阶段都在、顺序不乱、摘要成形。
-        """
-        monkeypatch.setenv("GALAXY_SKIP_DESKTOP_SURFACE", "true")
-
     def test_instantiable(self):
         from core.system_orchestrator import SystemOrchestrator
 

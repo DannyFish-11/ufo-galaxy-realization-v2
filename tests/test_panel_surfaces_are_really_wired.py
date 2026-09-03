@@ -57,12 +57,12 @@ class TestEveryNewlyWiredEndpointIsInTheBuiltBundle:
         ("endpoint", "what"),
         [
             ("/api/v1/sessions/ingest_turns", "喂文件"),
-            # 路径在代码里是 base + '/api/perception/desktop' + '/privacy/pause' 拼出来的,
-            # 产物里没有拼好的整串。分开钉两截 —— 钉整串会在一次无害的重构后误报,
-            # 而误报的判据迟早被人删掉。
-            ("/api/perception/desktop", "隐私暂停"),
-            ("/privacy/pause", "隐私暂停"),
-            ("/privacy/resume", "隐私恢复"),
+            # 整串,不是两截。头一版是拼出来的(base + 前缀 + 后缀),于是
+            # tests/test_api_surface_contract.py 那道「面板调的端点后端必须有」
+            # 的门只扫得到前缀 /api/perception/desktop,把它当成一个不存在的端点
+            # 报红。路径写全之后两道门看到的是同一个东西。
+            ("/api/perception/desktop/privacy/pause", "隐私暂停"),
+            ("/api/perception/desktop/privacy/resume", "隐私恢复"),
             ("/api/v1/memory/cards", "记忆卡片"),
             ("/api/v1/chat/stream", "对话"),
         ],

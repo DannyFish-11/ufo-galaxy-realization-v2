@@ -725,11 +725,15 @@ export async function ingestFiles(
  * 而且只在启动那一刻对;删了。
  */
 export async function setPrivacy(base: string, paused: boolean): Promise<boolean> {
-  const path = paused ? '/privacy/pause' : '/privacy/resume';
+  // **整条路径写全,不要拼。** 拼出来的路径在源码里只是两截字符串,
+  // tests/test_api_surface_contract.py 那道「面板调的端点后端必须有」的门
+  // 扫不出完整地址 —— 它会把前缀 `/api/perception/desktop` 当成一个端点,报成
+  // 「后端没有这个端点」。门看不见的调用,等于这条路没有人守。
+  const path = paused
+    ? '/api/perception/desktop/privacy/pause'
+    : '/api/perception/desktop/privacy/resume';
   try {
-    const resp = await fetch(base + '/api/perception/desktop' + path + '?reason=panel', {
-      method: 'POST',
-    });
+    const resp = await fetch(base + path + '?reason=panel', { method: 'POST' });
     if (!resp.ok) {
       console.error('[hud] 切隐私状态被拒:', resp.status);
       return false;
