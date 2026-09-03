@@ -130,8 +130,11 @@ class ExecutionPlan(BaseModel):
 
     此前执行路径没有这个字段，「看这张截图帮我改掉这个设置」的截图在组装计划时就丢了。
     单 Agent 路径会把它拼成 OpenAI content 数组原生投喂（agent_factory._execute_single_task）。
-    ⚠️ team / swarm / fractal 尚未消费：那几条路径有 11 处各自组装 messages，且会对
-    ``context`` 做 ``json.dumps``，塞不可序列化对象进去会当场炸。
+    team / swarm / fractal 也消费本字段，但**只送到「成员第一次面对用户原始任务」的
+    那些点**（各成员独立作答、子任务执行、critic 的执行者、流水线第一站、MoA 第一层、
+    任务分解）；综合、聚合、复审、路由分类那几处读的是别的 agent 产出的文本，跟画面
+    无关，附图只会把成本乘以层数。图像全程走独立形参，绝不进 ``context``（那里会被
+    ``json.dumps``）。见 ``core.agent_team._seeing`` 与 ``core.fractal_agent._seeing``。
     """
 
 
@@ -1322,7 +1325,14 @@ class ExecutionPlanner:
                 "session_id": plan.session_id,
                 "tools": plan.tool_schemas,
             }
-            team_result = await manager.execute_team(team.team_id, plan.message, context)
+            # 图像走独立形参,不进 context —— context 在 _execute_parallel / MoA 第 1 层
+            # 会被 json.dumps,MultiModalContext 是 pydantic 对象,塞进去当场抛 TypeError。
+            team_result = await manager.execute_team(
+                team.team_id,
+                plan.message,
+                context,
+                multimodal_context=plan.multimodal_context,
+            )
             exec_step.duration_ms = (time.monotonic() - t1) * 1000
             exec_step.success = team_result.success
             exec_step.output = team_result.to_dict()
@@ -1402,7 +1412,11 @@ class ExecutionPlanner:
                 "session_id": plan.session_id,
                 "tools": plan.tool_schemas,
             }
-            fractal_result = await executor.run(plan.message, context)
+            fractal_result = await executor.run(
+                plan.message,
+                context,
+                multimodal_context=plan.multimodal_context,
+            )
             exec_step.duration_ms = (time.monotonic() - t1) * 1000
             exec_step.success = fractal_result.success if hasattr(fractal_result, "success") else True
             exec_step.output = {

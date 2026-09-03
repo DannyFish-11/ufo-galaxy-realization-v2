@@ -33,7 +33,7 @@ import uuid
 from dataclasses import dataclass
 from dataclasses import replace as _dc_replace
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from core import upper_ports
 
@@ -43,6 +43,22 @@ logger = logging.getLogger("Galaxy.AgentTeam")
 def _soul_prefix(soul: str) -> str:
     """格式化 SOUL 约束为 system prompt 前缀（单/Team/Fractal 统一格式）。"""
     return f"【SOUL约束 - 必须严格遵守】\n{soul}\n\n" if soul else ""
+
+
+def _seeing(text: str, mm: Any) -> Any:
+    """把用户消息构造成【能带图】的形态；``mm`` 为 None 或开关未开时原样返回字符串。
+
+    只用在**成员第一次面对用户原始任务**的那些点。综合/聚合/复审/路由分类读的是别的
+    agent 产出的文本，跟画面无关，附图只是把成本乘以层数 —— 本文件"哪几处调 _seeing"
+    就是这条界线的全部体现。
+    图像绝不进 ``context``：``_execute_parallel`` 与 MoA 第 1 层会对它做 ``json.dumps``，
+    pydantic 对象进去当场抛。局部 import 是为了避开 core.agent 的循环导入。
+    """
+    if mm is None:
+        return text
+    from core.agent.multimodal_messages import build_user_message_content
+
+    return build_user_message_content(text, mm)
 
 
 # 孪生模型管理器（可选依赖）
@@ -298,10 +314,17 @@ class AgentTeam:
             result["twin_status"] = twin_status
         return result
 
-    async def execute(self, task: str, context: Optional[Dict] = None) -> TeamResult:
+    async def execute(
+        self,
+        task: str,
+        context: Optional[Dict] = None,
+        *,
+        multimodal_context: Any = None,
+    ) -> TeamResult:
         """根据策略执行团队任务
 
         执行过程中自动更新每个成员的孪生体状态快照。
+        ``multimodal_context`` 走独立形参而非 ``context``（后者会被 json.dumps）。见 :func:`_seeing`。
         """
         self.status = TeamStatus.EXECUTING
         t0 = time.monotonic()
@@ -312,17 +335,17 @@ class AgentTeam:
 
         try:
             if self.strategy == TeamStrategy.PARALLEL:
-                result = await self._execute_parallel(task, context)
+                result = await self._execute_parallel(task, context, multimodal_context)
             elif self.strategy == TeamStrategy.SPECIALIZED:
-                result = await self._execute_specialized(task, context)
+                result = await self._execute_specialized(task, context, multimodal_context)
             elif self.strategy == TeamStrategy.SWARM:
-                result = await self._execute_swarm(task, context)
+                result = await self._execute_swarm(task, context, multimodal_context)
             elif self.strategy == TeamStrategy.CRITIC:
-                result = await self._execute_critic(task, context)
+                result = await self._execute_critic(task, context, multimodal_context)
             elif self.strategy == TeamStrategy.PIPELINE:
-                result = await self._execute_pipeline(task, context)
+                result = await self._execute_pipeline(task, context, multimodal_context)
             elif self.strategy == TeamStrategy.MOA:
-                result = await self._execute_moa(task, context)
+                result = await self._execute_moa(task, context, multimodal_context)
             else:
                 raise ValueError(f"未知策略: {self.strategy}")
 
@@ -444,7 +467,7 @@ class AgentTeam:
 
     # ─────── 策略 1: PARALLEL (Perplexity 风格) ───────
 
-    async def _execute_parallel(self, task: str, context: Optional[Dict]) -> TeamResult:
+    async def _execute_parallel(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
         """每个成员用不同 LLM 独立回答同一任务，最后综合"""
         soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
@@ -454,7 +477,7 @@ class AgentTeam:
                     "role": "system",
                     "content": soul_pfx + f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。",
                 },
-                {"role": "user", "content": task},
+                {"role": "user", "content": _seeing(task, mm)},
             ]
             if context:
                 messages[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
@@ -499,16 +522,16 @@ class AgentTeam:
 
     # ─────── 策略 2: SPECIALIZED (特种部队分工) ───────
 
-    async def _execute_specialized(self, task: str, context: Optional[Dict]) -> TeamResult:
+    async def _execute_specialized(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
         """LLM 分解子任务 → 每个子任务匹配最优 Agent+LLM → 并行执行 → 综合"""
         soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
         # Step 1: 用 LLM 分解任务
-        subtasks = await self._decompose_task(task, context)
+        subtasks = await self._decompose_task(task, context, mm)
 
         if not subtasks:
-            # 分解失败，退回 parallel
-            return await self._execute_parallel(task, context)
+            # 分解失败，退回 parallel（mm 必须带上：回退路径丢图 = 只有分解失败时才看不见屏幕）
+            return await self._execute_parallel(task, context, mm)
 
         # Step 2: 为每个子任务分配最优成员
         assignments = []
@@ -556,7 +579,8 @@ class AgentTeam:
         async def _exec_subtask(subtask: Dict, member: TeamMember) -> MemberResult:
             messages = [
                 {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}。你的任务是: {subtask['title']}"},
-                {"role": "user", "content": subtask["description"]},
+                # 子任务是原始任务的一部分，面对的是同一块屏幕 —— 照样要看得见
+                {"role": "user", "content": _seeing(subtask["description"], mm)},
             ]
             result = await self._call_member_with_tools(member, messages)
             # 前缀子任务标题
@@ -584,14 +608,14 @@ class AgentTeam:
 
     # ─────── 策略 3: SWARM (群体智能) ───────
 
-    async def _execute_swarm(self, task: str, context: Optional[Dict]) -> TeamResult:
+    async def _execute_swarm(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
         """批量 Agent 并行执行同一任务，多数投票或综合合并"""
         soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
         async def _call_member(member: TeamMember) -> MemberResult:
             messages = [
                 {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}。请独立思考并给出你的回答。"},
-                {"role": "user", "content": task},
+                {"role": "user", "content": _seeing(task, mm)},
             ]
             return await self._call_member_with_tools(member, messages)
 
@@ -612,7 +636,7 @@ class AgentTeam:
 
     # ─────── 策略 4: CRITIC (做/审分离) ───────
 
-    async def _execute_critic(self, task: str, context: Optional[Dict]) -> TeamResult:
+    async def _execute_critic(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
         """做/审分离：executor(本地小模型)产出 → critic(开源大模型)审核 → 不通过则打回重做。
 
         这是"大小模型配合"的核心落地：用一个独立的、更强的审核者(而非小模型自评)
@@ -628,7 +652,7 @@ class AgentTeam:
         if critic is None:
             # 没有独立审核者 → 退回 parallel，避免自审失真
             logger.debug("CRITIC: 无独立 critic 成员，退回 parallel")
-            return await self._execute_parallel(task, context)
+            return await self._execute_parallel(task, context, mm)
         if executor is None:
             return TeamResult(
                 team_id=self.team_id,
@@ -660,7 +684,8 @@ class AgentTeam:
                 exec_sys = soul_pfx + f"你是 {executor.agent_name}（执行者）。请根据审核意见修订你的产出。"
             exec_msgs = [
                 {"role": "system", "content": exec_sys},
-                {"role": "user", "content": exec_user},
+                # 执行者每轮都在对着屏幕干活；下面的复审者读的是文字产出，不附图。
+                {"role": "user", "content": _seeing(exec_user, mm)},
             ]
             exec_res = await self._call_member_with_tools(executor, exec_msgs)
             # 用副本标注轮次，避免就地改写共享的 TeamMember（多轮会互相覆盖）
@@ -740,7 +765,7 @@ class AgentTeam:
 
     # ─────── 策略 5: PIPELINE (流水线交接) ───────
 
-    async def _execute_pipeline(self, task: str, context: Optional[Dict]) -> TeamResult:
+    async def _execute_pipeline(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
         """流水线：成员按顺序交接，前一步产出为后一步输入，最后一步即最终交付。
 
         成员顺序即流水线阶段顺序（由 _create_members 按角色绑定合适的脑）。
@@ -761,7 +786,7 @@ class AgentTeam:
                     f"你是流水线第 {stage_no} 站 {member.agent_name}（{member.role_in_team}）。"
                     f"这是多步协作的第一步，请完成你这一环节并产出供下一站继续。"
                 )
-                stage_user = task
+                stage_user_content: Any = _seeing(task, mm)
             else:
                 stage_sys = soul_pfx + (
                     f"你是流水线第 {stage_no} 站 {member.agent_name}（{member.role_in_team}）。"
@@ -771,10 +796,11 @@ class AgentTeam:
                         else "请在上一站产出的基础上继续推进你这一环节。"
                     )
                 )
-                stage_user = f"原始任务:\n{task}\n\n上一站产出:\n{prev_output}\n\n请完成你这一站的工作。"
+                # 后续站读的是上一站的文字产出，不附图
+                stage_user_content = f"原始任务:\n{task}\n\n上一站产出:\n{prev_output}\n\n请完成你这一站的工作。"
             msgs = [
                 {"role": "system", "content": stage_sys},
-                {"role": "user", "content": stage_user},
+                {"role": "user", "content": stage_user_content},
             ]
             res = await self._call_member_with_tools(member, msgs)
             res.member = _dc_replace(member, role_in_team=f"stage{stage_no}:{member.role_in_team}")
@@ -796,7 +822,7 @@ class AgentTeam:
 
     # ─────── 策略 6: MOA (Mixture of Agents 多层协作) ───────
 
-    async def _execute_moa(self, task: str, context: Optional[Dict]) -> TeamResult:
+    async def _execute_moa(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
         """MoA 多层协作:proposer 层扇出 → 精炼层(读全部前层产出) → 聚合器终稿。
 
         与 PARALLEL(单层并行+综合)的区别:MoA 是【多层】的——第 2 层起,每个
@@ -848,15 +874,16 @@ class AgentTeam:
                         f"你是 {member.agent_name}({member.role_in_team})。"
                         f"请以你的独特视角【独立】完成任务,给出完整回答。"
                     )
-                    user = task
+                    user_content: Any = _seeing(task, mm)
                 else:
                     sys = soul_pfx + (
                         f"你是 {member.agent_name}({member.role_in_team}),现在是多层协作的第 {_layer} 层。"
                         f"请仔细阅读上一层全部候选回答:指出其中的共识、冲突与错误,"
                         f"在其基础上产出一份【更准确、更完整】的改进版回答(直接给终稿,不要点评格式)。"
                     )
-                    user = f"原始任务:\n{task}\n\n上一层候选回答:\n{_candidates_text(prev_outputs)}"
-                msgs = [{"role": "system", "content": sys}, {"role": "user", "content": user}]
+                    # 第 2 层起读的是上一层候选文本，不附图
+                    user_content = f"原始任务:\n{task}\n\n上一层候选回答:\n{_candidates_text(prev_outputs)}"
+                msgs = [{"role": "system", "content": sys}, {"role": "user", "content": user_content}]
                 if _layer == 1 and context:
                     msgs[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
                 try:
@@ -944,8 +971,12 @@ class AgentTeam:
 
     # ─────── 辅助方法 ───────
 
-    async def _decompose_task(self, task: str, context: Optional[Dict]) -> List[Dict]:
-        """用 LLM 分解任务为子任务列表"""
+    async def _decompose_task(self, task: str, context: Optional[Dict], mm: Any = None) -> List[Dict]:
+        """用 LLM 分解任务为子任务列表。
+
+        这一步要看得见屏幕：看不到画面去拆「把这张截图里的设置改掉」只能产出通用步骤，
+        后面每个成员再拿着通用步骤各自去猜。它是整条链路的第一步，且只调一次。
+        """
         try:
             prompt = f"""将以下任务分解为 2-5 个独立的子任务。
 
@@ -957,7 +988,7 @@ class AgentTeam:
 只返回 JSON，不要其他内容。"""
 
             response = await self._router.chat(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": _seeing(prompt, mm)}],
                 task_type="planning",
                 max_tokens=1024,
                 temperature=0.3,
@@ -1367,12 +1398,19 @@ class TeamManager:
             template=template,
         )
 
-    async def execute_team(self, team_id: str, task: str, context: Optional[Dict] = None) -> TeamResult:
-        """执行团队任务"""
+    async def execute_team(
+        self,
+        team_id: str,
+        task: str,
+        context: Optional[Dict] = None,
+        *,
+        multimodal_context: Any = None,
+    ) -> TeamResult:
+        """执行团队任务。``multimodal_context`` 见 :meth:`AgentTeam.execute`。"""
         team = self.teams.get(team_id)
         if not team:
             raise ValueError(f"Team {team_id} 不存在")
-        return await team.execute(task, context)
+        return await team.execute(task, context, multimodal_context=multimodal_context)
 
     async def execute_team_task(
         self,
