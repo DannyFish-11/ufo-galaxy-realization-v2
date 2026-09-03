@@ -129,3 +129,45 @@ export interface Bundle {
   readonly unwired: boolean;
 }
 
+
+/**
+ * 本机模型档位(A/B/C/D)在面板上的样子。
+ *
+ * **档位不是开关,是四选一。** 它和上面那四档整档开关放在同一个浮层里,但形状
+ * 不同:开关问「开不开」,档位问「用哪一套」。压成一个循环按钮(点一下 A→B→C→D)
+ * 也不行 —— 那样人看不见有几档,更看不见哪几档这台机器根本跑不动。
+ *
+ * 唯一定义处是 core/model_catalog.py 的 `_TIERS`,经 `GET /api/v1/models/catalog`
+ * 出来。面板不许自己再存一份档位表。
+ */
+export interface ModelTier {
+  /** 'A' | 'B' | 'C' | 'D' —— 不写死成联合类型:目录里加一档,面板要跟着显示出来 */
+  readonly key: string;
+  readonly label: string;
+  readonly desc: string;
+  /** single = 一个模型全包;composite = 感知位 + 推理位两个模型 */
+  readonly kind: string;
+  /** 这一档真正会加载的型号 */
+  readonly activeTags: readonly string[];
+  /**
+   * 这台机器装不装得下这一档。
+   *
+   * **`unknown` 与 `ok` 必须分开**:硬件没探到时是 unknown。当成 ok 的话,面板
+   * 把「不知道」画成「能跑」,而人是照着这个画面选档的。聚合规则在后端
+   * (core/routes/models.py::_tier_fit),不在这里 —— 判据跟着渲染代码走的话,
+   * 换个界面就得重写一遍,两处迟早给出不同答案。
+   */
+  readonly fit: 'ok' | 'no_gpu' | 'insufficient_vram' | 'unknown';
+  /** 为什么装不下,后端给的原话;fit 为 ok 时是空串 */
+  readonly fitReason: string;
+  /** 是哪几个型号卡住的 */
+  readonly blockedBy: readonly string[];
+}
+
+/** 档位这一栏的整体状态。current 为空串 = **还没拉到**,不是「没有档位」。 */
+export interface TierView {
+  readonly current: string;
+  readonly tiers: readonly ModelTier[];
+  /** 感知位/推理位当前各是哪个型号,从当前档的 slots 里取,只读展示 */
+  readonly slots: readonly { readonly role: string; readonly model: string }[];
+}

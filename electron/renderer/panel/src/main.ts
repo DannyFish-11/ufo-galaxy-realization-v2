@@ -15,9 +15,11 @@ import {
   PresenceSocket,
   fetchAllConfig,
   fetchBundles,
+  fetchTiers,
   nextBundleValue,
   saveConfig,
   setBundle,
+  setTier,
   streamChat,
   toPhase,
 } from './transport';
@@ -95,6 +97,7 @@ function mount(host: HTMLElement): void {
       store.patch({ popover: store.state.popover === which ? null : which }),
     onToggleBundle: (key) => void flipBundle(key),
     onOpenAllSettings: () => void openAllSettings(),
+    onPickTier: (key) => void pickTier(key),
   });
 
   const settings = createSettings({
@@ -120,10 +123,10 @@ function mount(host: HTMLElement): void {
     panel.dataset['slim'] = String(s.slim);
     deck.render();
     line.update(s.phase, s.slim, lineTrust(s.posture));
-    island.render(s.posture?.perception ?? null, s.devices, s.islandOpen);
+    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.islandOpen);
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
     thread.render(s.turns, s.lockstep, s.lockstepReason);
-    dock.render(s.bundles, s.popover);
+    dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
     settings.render(s.config, s.settingsOpen, s.configBusy);
   }
 
@@ -184,6 +187,29 @@ function mount(host: HTMLElement): void {
     if (rows) store.patch({ bundles: rows });
   }
   void loadBundles();
+
+  /**
+   * 换本机模型档位。**先问后端,再改界面** —— 同 flipBundle 那条理由,而且换档
+   * 的失败面比翻开关大得多:要驱逐旧模型、拉新模型、热刷 LLM 路由。
+   */
+  async function pickTier(key: string): Promise<void> {
+    const view = store.state.tiers;
+    if (!view || key === view.current) return;
+    store.patch({ tierGaps: [] });
+    const { ok, gaps } = await setTier(BASE, key);
+    if (!ok) return; // 失败原因已由 setTier 打出来;界面保持在原来那一档
+    // 换完重新拉:后端可能没给到我请求的那一档(档位被别处钉死、资源对齐失败),
+    // 以它认下的为准。缺依赖照原样带上 —— 只写日志等于没说。
+    await loadTiers();
+    store.patch({ tierGaps: gaps });
+  }
+
+  /** 拉一次档位目录。拉不到**保持 null**,浮层那一行会说「读不到」而不是空着。 */
+  async function loadTiers(): Promise<void> {
+    const view = await fetchTiers(BASE);
+    if (view) store.patch({ tiers: view });
+  }
+  void loadTiers();
 
   // ── 后端:实时那条 ───────────────────────────────────────────────
   const socket = new PresenceSocket(BASE, {

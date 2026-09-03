@@ -415,6 +415,19 @@ body {
 /* 「还没接上」跟「此刻没在收」要分得开。数字那一栏偏一点点,不喊。 */
 .sec-key[data-unwired='true'] b { color: var(--ink-3); font-variant-numeric: normal; }
 
+/* 岛内最下面那行:此刻在跑哪一档。**只读** —— 岛是状态面,不是控制面。
+   dev-list 会自己滚,这一行 flex:none 钉在它下面,不跟着滚走。 */
+.brain-key { flex: none; margin-top: 18px; }
+.brain-line {
+  flex: none;
+  margin-top: 5px; padding-right: 14px;
+  font-size: 11px; line-height: 1.45; color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+/* 读不到目录、或者当前这一档这台机器根本跑不动 —— 两种都得看得出来。
+   岛上写着「C 档」而它跑不动 C,是最难查的那种误导。 */
+.brain-line[data-unwired='true'] { color: var(--warn); }
+
 .dev-list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 6px; padding-right: 12px; }
 .dev-list::-webkit-scrollbar { width: 5px; }
 .dev-list::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
@@ -579,6 +592,42 @@ body {
   box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), 0 0 15px -3px rgba(136, 120, 144, 0.6);
 }
 .bundle[aria-pressed='true'] .knob::after { transform: translateX(16px); }
+/* ── 设置浮层第五行:本机模型档位 ──
+   它长得和上面那四档不一样,因为它不是一回事:上面是开关(开不开),这里是
+   四选一(用哪一套)。所以不给推拉开关,给一排看得见全部档位的牌子。
+
+   **跑不动的档照画,不藏起来。** 藏了之后「这台机器没有 C 档」和「C 档在那儿
+   但你的显卡带不动」在界面上一模一样,而这两件事的下一步完全不同。 */
+.tier-row {
+  margin-top: 8px; padding-top: 9px;
+  box-shadow: inset 0 1px 0 rgba(93, 84, 102, 0.1);
+}
+.tier-head { padding: 2px 4px 7px; }
+.tier-stages { padding: 0 4px; }
+.tier-stages .stage { min-width: 30px; text-align: center; }
+
+/* 装不下:留着能点(人可能就是知道自己机器行),但画上警示边,别让它看着和
+   能跑的一样。原因在 title 里说全。 */
+.tier-stages .stage[data-fit='no_gpu'],
+.tier-stages .stage[data-fit='insufficient_vram'] {
+  color: var(--warn);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+/* 硬件没探到 —— **不是「能跑」**。虚线边:一眼看出这一档没被评估过。 */
+.tier-stages .stage[data-fit='unknown'] {
+  box-shadow: none;
+  outline: 1px dashed rgba(93, 84, 102, 0.3); outline-offset: -1px;
+}
+/* 选中的那一档压过 fit 的着色:先说清楚"现在在哪一档",再说"跑不跑得动"。 */
+.tier-stages .stage[data-picked='true'] {
+  color: #fff; background: var(--a-mid);
+}
+.tier-stages .stage[data-picked='true'][data-fit='no_gpu'],
+.tier-stages .stage[data-picked='true'][data-fit='insufficient_vram'] {
+  background: var(--warn);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.2);
+}
+
 .pop-more { margin-top: 8px; font-size: 13px; color: var(--ink-2); border-radius: 19px; padding: 10px 14px 11px; }
 
 /* 多态档位那枚小牌子。三档(safe / guided / autonomous)一个推拉开关表达不了,

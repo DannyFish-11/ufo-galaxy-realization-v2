@@ -12,7 +12,7 @@
  * 屏幕上的符号需要解读,而这种东西跟人的周边视觉阻抗匹配得更好:
  * 忙不忙是**余光里感觉到**的,不是读出来的。
  */
-import type { DeviceRow, ModalityState, ModalityView, PerceptionView } from '../types';
+import type { DeviceRow, ModalityState, ModalityView, PerceptionView, TierView } from '../types';
 
 /** 状态 → 离墙多远。五档,不是布尔 —— 「闭着」和「没有」是两件事。 */
 const ELEVATION: Record<ModalityState, string> = {
@@ -107,7 +107,12 @@ function unit(shape: string, elev: string, busy: 'busy' | 'idle' | undefined, na
 
 export interface IslandHandles {
   readonly root: HTMLElement;
-  render(perception: PerceptionView | null, devices: readonly DeviceRow[], open: boolean): void;
+  render(
+    perception: PerceptionView | null,
+    devices: readonly DeviceRow[],
+    tiers: TierView | null,
+    open: boolean,
+  ): void;
   /** 展开后与左边卡片区顶对齐、等高。 */
   setHeight(px: number): void;
 }
@@ -140,7 +145,18 @@ export function createIsland(onToggle: () => void): IslandHandles {
   devKey.append(document.createTextNode('设备'), devCount);
   const devList = document.createElement('span');
   devList.className = 'dev-list';
-  full.append(perKey, perGrid, devKey, devList);
+
+  // 展开态最下面一行:此刻在跑哪一档、哪两个型号。**只读。**
+  //
+  // 换档在设置浮层那边(那里能看见一共有几档、哪几档这台机器跑不动)。这里只
+  // 回答「现在是什么」—— 岛是状态面,不是控制面;把换档也塞进来的话,人会在
+  // 余光里误触一次代价很大的操作(驱逐旧模型、拉新模型、热刷 LLM 路由)。
+  const brainKey = document.createElement('span');
+  brainKey.className = 'sec-key brain-key';
+  brainKey.append(document.createTextNode('本机模型'));
+  const brainLine = document.createElement('span');
+  brainLine.className = 'brain-line';
+  full.append(perKey, perGrid, devKey, devList, brainKey, brainLine);
 
   island.append(mini, full);
 
@@ -157,6 +173,7 @@ export function createIsland(onToggle: () => void): IslandHandles {
   function render(
     perception: PerceptionView | null,
     devices: readonly DeviceRow[],
+    tiers: TierView | null,
     open: boolean,
   ): void {
     island.dataset['open'] = String(open);
@@ -247,6 +264,31 @@ export function createIsland(onToggle: () => void): IslandHandles {
       'aria-label',
       devices.length ? `感知与设备 · ${online} / ${devices.length} 台在线` : '感知与设备',
     );
+
+    // 本机模型那一行。**三种状态各写各的话**:
+    //   null      —— 没拉到目录。不是「没有档位」,别写成空白。
+    //   有 current —— 写出档位标签和两位实际在跑的型号。「C 档」三个字说不出
+    //                在跑哪两个模型,而那才是人想确认的东西。
+    //   current 空 —— 拉到了目录但一档都没选定。这也得说出来。
+    if (tiers === null) {
+      brainLine.textContent = '读不到档位';
+      brainLine.dataset['unwired'] = 'true';
+    } else {
+      const cur = tiers.tiers.find((t) => t.key === tiers.current);
+      const slots = tiers.slots.filter((s) => s.model).map((s) => `${s.role} ${s.model}`);
+      brainLine.textContent = cur
+        ? slots.length
+          ? `${cur.key} 档 · ${slots.join(' + ')}`
+          : `${cur.key} 档 · ${cur.label}`
+        : tiers.current
+          ? `${tiers.current} 档（目录里没有这一档）`
+          : '还没选定档位';
+      // 装不下也要说 —— 岛上写着「C 档」而这台机器跑不动 C,是最难查的那种误导。
+      brainLine.dataset['unwired'] = String(!cur || cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram');
+      if (cur && cur.fit !== 'ok' && cur.fit !== 'unknown') {
+        brainLine.textContent += ` · ${cur.fitReason}`;
+      }
+    }
   }
 
   function setHeight(px: number): void {

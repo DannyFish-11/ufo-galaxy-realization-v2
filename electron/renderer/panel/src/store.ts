@@ -13,6 +13,7 @@ import type {
   MemoryCard,
   Phase,
   RenderPosture,
+  TierView,
   Turn,
 } from './types';
 import type { ConfigItem } from './transport';
@@ -46,6 +47,13 @@ export interface HudState {
   readonly turns: readonly Turn[];
   readonly devices: readonly DeviceRow[];
   readonly bundles: readonly Bundle[];
+  /**
+   * 本机模型档位(A/B/C/D)。null = **还没拉到**,与「没有档位」是两件事 ——
+   * 前者浮层里那一行画成「读取中」,后者才该说「这台机器没有本机档位」。
+   */
+  readonly tiers: TierView | null;
+  /** 换档时后端报回来的「这一档缺什么依赖」。空数组 = 不缺;必须画出来。 */
+  readonly tierGaps: readonly string[];
   /** 全部设置那 332 个键。null = **还没拉到**,与「一个键都没有」是两件事。 */
   readonly config: readonly ConfigItem[] | null;
   readonly settingsOpen: boolean;
@@ -74,6 +82,8 @@ export const initialState: HudState = {
   turns: [],
   devices: [],
   bundles: [],
+  tiers: null,
+  tierGaps: [],
   config: null,
   settingsOpen: false,
   configBusy: false,

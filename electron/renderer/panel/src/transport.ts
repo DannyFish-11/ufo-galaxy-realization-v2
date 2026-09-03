@@ -9,7 +9,7 @@
  * 另外两个当不存在。同一个事实读两处,迟早会出现两处不一致而没人发现。
  */
 import type { RenderPosture } from './types';
-import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, Phase } from './types';
+import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, ModelTier, Phase, TierView } from './types';
 
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
@@ -459,5 +459,116 @@ export async function saveConfig(
   } catch (err) {
     console.error('[hud] 保存配置失败:', err);
     return false;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// 本机模型档位 —— A/B/C/D
+// ---------------------------------------------------------------------------
+//
+// 档位表的唯一定义处是 core/model_catalog.py 的 _TIERS。面板只渲染
+// `GET /api/v1/models/catalog` 返回的东西,一个字都不自己存 —— 目录里加一档、
+// 改一个型号,面板要立刻跟着变,而不是等人回来改前端。
+
+function readTier(raw: unknown, fitMap: Record<string, unknown>): ModelTier | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const key = typeof o['key'] === 'string' ? o['key'] : '';
+  if (!key) return null;
+
+  const f = (fitMap[key] ?? {}) as Record<string, unknown>;
+  const rawFit = typeof f['fit'] === 'string' ? f['fit'] : '';
+  // 后端没给判断就是**没判断**。这里不补 'ok' —— 补了就是把「不知道」画成「能跑」。
+  const fit: ModelTier['fit'] =
+    rawFit === 'ok' || rawFit === 'no_gpu' || rawFit === 'insufficient_vram' ? rawFit : 'unknown';
+
+  return {
+    key,
+    label: typeof o['label'] === 'string' ? o['label'] : key,
+    desc: typeof o['desc'] === 'string' ? o['desc'] : '',
+    kind: typeof o['kind'] === 'string' ? o['kind'] : '',
+    activeTags: Array.isArray(o['active_tags'])
+      ? (o['active_tags'] as unknown[]).filter((v): v is string => typeof v === 'string')
+      : [],
+    fit,
+    fitReason: typeof f['reason'] === 'string' ? f['reason'] : fit === 'unknown' ? '硬件未探测到' : '',
+    blockedBy: Array.isArray(f['blocked_by'])
+      ? (f['blocked_by'] as unknown[]).filter((v): v is string => typeof v === 'string')
+      : [],
+  };
+}
+
+/** 拉一次档位目录。拉不到返回 null —— 与「一档都没有」是两件事。 */
+export async function fetchTiers(base: string): Promise<TierView | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/models/catalog', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) {
+      console.error('[hud] 拉档位目录失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (!Array.isArray(body['tiers'])) return null;
+    const fitMap = (body['tier_fit'] ?? {}) as Record<string, unknown>;
+    const tiers = (body['tiers'] as unknown[])
+      .map((t) => readTier(t, fitMap))
+      .filter((t): t is ModelTier => t !== null);
+    const current = typeof body['current_tier'] === 'string' ? body['current_tier'] : '';
+
+    // 感知位/推理位从**当前那一档**的 slots 里取。取不到就是空数组 —— 岛内那行
+    // 会说「未知」,而不是编一个型号名出来。
+    const cur = (body['tiers'] as unknown[]).find(
+      (t) => (t as Record<string, unknown>)?.['key'] === current,
+    ) as Record<string, unknown> | undefined;
+    const slots = Array.isArray(cur?.['slots'])
+      ? (cur!['slots'] as unknown[])
+          .map((s) => s as Record<string, unknown>)
+          .map((s) => ({
+            role: typeof s['role'] === 'string' ? s['role'] : '',
+            model: typeof s['selected'] === 'string' ? s['selected'] : '',
+          }))
+          .filter((s) => s.role !== '')
+      : [];
+
+    return { current, tiers, slots };
+  } catch (err) {
+    console.error('[hud] 拉档位目录失败:', err);
+    return null;
+  }
+}
+
+/**
+ * 换档。**不在前端先乐观切一下** —— 换档要驱逐旧模型、拉新模型,失败的可能性
+ * 比翻一个开关大得多;先切了再对账的话,界面会停在一个后端并不认同的档位上。
+ *
+ * 返回 ``runtime_gaps``:后端算出来的「这一档缺什么依赖」。**必须画出来** ——
+ * 只写日志等于没说,用户会以为换成了而其实那一档跑不起来。
+ */
+export async function setTier(
+  base: string,
+  key: string,
+): Promise<{ ok: boolean; gaps: readonly string[] }> {
+  try {
+    const resp = await fetch(base + '/api/v1/models/tier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier: key }),
+    });
+    if (!resp.ok) {
+      console.error('[hud] 换档被拒:', resp.status, await resp.text().catch(() => ''));
+      return { ok: false, gaps: [] };
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    const gaps = Array.isArray(body['runtime_gaps'])
+      ? (body['runtime_gaps'] as unknown[])
+          .map((g) => (g as Record<string, unknown>)?.['detail'])
+          .filter((d): d is string => typeof d === 'string')
+      : [];
+    return { ok: body['success'] === true, gaps };
+  } catch (err) {
+    console.error('[hud] 换档失败:', err);
+    return { ok: false, gaps: [] };
   }
 }

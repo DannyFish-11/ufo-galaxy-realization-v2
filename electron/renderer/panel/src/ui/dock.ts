@@ -12,7 +12,7 @@
  * 「开 · 有偏离」而不是「开」—— 否则档位说开、底下某个键说关,就是同一个
  * 事实两处各存一份,而且没人看得见。
  */
-import type { Bundle } from '../types';
+import type { Bundle, TierView } from '../types';
 import { platform } from '../platform';
 
 const ICONS = {
@@ -57,7 +57,12 @@ function gearIcon(): SVGSVGElement {
 
 export interface DockHandles {
   readonly root: HTMLElement;
-  render(bundles: readonly Bundle[], popover: 'feed' | 'settings' | null): void;
+  render(
+    bundles: readonly Bundle[],
+    tiers: TierView | null,
+    tierGaps: readonly string[],
+    popover: 'feed' | 'settings' | null,
+  ): void;
 }
 
 export interface DockCallbacks {
@@ -66,6 +71,8 @@ export interface DockCallbacks {
   onToggleBundle(key: Bundle['key']): void;
   /** 打开那 332 个键的细调面。这个按钮从前不接任何东西 —— 一个死键。 */
   onOpenAllSettings(): void;
+  /** 换本机模型档位。**不是开关** —— 见下面那一行的说明。 */
+  onPickTier(key: string): void;
 }
 
 export function createDock(cb: DockCallbacks): DockHandles {
@@ -155,11 +162,106 @@ export function createDock(cb: DockCallbacks): DockHandles {
     e.stopPropagation();
     cb.onOpenAllSettings();
   });
-  settings.append(bundleHost, more);
+  const tierHost = document.createElement('div');
+  tierHost.className = 'tier-row';
+  settings.append(bundleHost, tierHost, more);
 
   wrap.append(dock, feed, settings);
 
-  function render(bundles: readonly Bundle[], popover: 'feed' | 'settings' | null): void {
+  /**
+   * 第五行:本机模型档位。
+   *
+   * **它长得和上面那四档不一样,因为它不是一回事。** 上面是开关:一个开关问
+   * 「这项能力开不开」。这里是四选一:A 轻量本地 / B 全模态单模型 / C 双模型·
+   * 35B 推理位 / D 双模型·9B 推理位 —— 问的是「用哪一套」。
+   *
+   * 三种做不得的画法,以及为什么:
+   *
+   * 1. **压成一个循环按钮**(点一下 A→B→C→D)。那样人看不见一共有几档,更看不见
+   *    自己这台机器跑不动哪几档 —— 而后者恰恰是选档时唯一重要的信息。上面那四档
+   *    里 GALAXY_AUTONOMY 用了循环,是因为它只有三档且每一档都随时能用;档位不是。
+   * 2. **把跑不动的档藏起来。** 藏了之后「这台机器没有 C 档」和「C 档在那儿但你
+   *    的显卡带不动」在界面上一模一样,而这两件事的下一步完全不同(一个是没救,
+   *    一个是换显卡/换量化)。所以跑不动的档照画,写清楚为什么。
+   * 3. **硬件没探到时当成能跑。** 那是把「不知道」画成「能跑」。unknown 单独一种
+   *    样子,点得动(人可能就是知道自己机器行),但不假装评估过。
+   *
+   * 细调的逃生口在「全部设置 → 思考与执行 → GALAXY_MODEL_TIER」:那里能把档位
+   * 钉死成一个固定值,也能留空让系统按能力自己判。这一行是常用路径,那里是兜底。
+   */
+  function renderTiers(view: TierView | null, gaps: readonly string[]): void {
+    tierHost.replaceChildren();
+
+    const head = document.createElement('div');
+    head.className = 'tier-head';
+    const name = document.createElement('span');
+    name.className = 'bundle-name';
+    name.textContent = '本机模型';
+    const note = document.createElement('span');
+    note.className = 'bundle-note';
+    head.append(name, note);
+    tierHost.append(head);
+
+    if (view === null) {
+      // **说清楚是「没拉到」。** 空着的话,和「这台机器没有本机档位」分不开。
+      note.textContent = '读不到档位目录 —— 后端没接上，不是没有档位';
+      note.dataset['unwired'] = 'true';
+      return;
+    }
+
+    const cur = view.tiers.find((t) => t.key === view.current);
+    // 当前档的两位(感知位 / 推理位)如实报出来 —— 「C 档」三个字说不出实际在跑
+    // 哪两个型号,而那才是人想确认的东西。
+    const slots = view.slots.filter((s) => s.model).map((s) => `${s.role} ${s.model}`);
+    note.textContent = cur
+      ? slots.length
+        ? `${cur.label} · ${slots.join(' + ')}`
+        : cur.label
+      : view.current
+        ? `当前 ${view.current} 档（目录里没有这一档）`
+        : '还没选定档位';
+
+    const chips = document.createElement('div');
+    chips.className = 'sf-stages tier-stages';
+    for (const t of view.tiers) {
+      const chip = document.createElement('button');
+      chip.className = 'stage';
+      chip.type = 'button';
+      chip.textContent = t.key;
+      chip.dataset['picked'] = String(t.key === view.current);
+      chip.dataset['fit'] = t.fit;
+      // 跑不动的照画、照点得动 —— 拦住的话,人连"为什么"都看不到。
+      // 但要在标题上把原因说全:装不下哪几个型号,后端的原话是什么。
+      chip.title =
+        t.fit === 'ok'
+          ? `${t.label}\n${t.desc}`
+          : `${t.label}\n${t.desc}\n\n⚠ ${t.fitReason}` +
+            (t.blockedBy.length ? `（${t.blockedBy.join('、')}）` : '');
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cb.onPickTier(t.key);
+      });
+      chips.append(chip);
+    }
+    tierHost.append(chips);
+
+    // 换档后后端报回来的缺依赖。**只写日志等于没说** —— 用户会以为换成了,
+    // 而那一档其实跑不起来。
+    for (const g of gaps) {
+      const warn = document.createElement('div');
+      warn.className = 'bundle-note';
+      warn.dataset['unwired'] = 'true';
+      warn.textContent = g;
+      tierHost.append(warn);
+    }
+  }
+
+  function render(
+    bundles: readonly Bundle[],
+    tiers: TierView | null,
+    tierGaps: readonly string[],
+    popover: 'feed' | 'settings' | null,
+  ): void {
     feed.dataset['open'] = String(popover === 'feed');
     settings.dataset['open'] = String(popover === 'settings');
     plus.setAttribute('aria-expanded', String(popover === 'feed'));
@@ -215,6 +317,8 @@ export function createDock(cb: DockCallbacks): DockHandles {
       });
       bundleHost.append(row);
     }
+
+    renderTiers(tiers, tierGaps);
   }
 
   return { root: wrap, render };
