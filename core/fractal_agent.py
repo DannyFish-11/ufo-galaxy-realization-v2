@@ -23,6 +23,21 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.FractalAgent")
 
 
+def _seeing(text: str, mm: Any) -> Any:
+    """把用户消息构造成【能带图】的形态；``mm`` 为 None 或开关未开时原样返回字符串。
+
+    只用在「真正对着屏幕干活」的两处：叶子任务的原子执行，和任务分解。
+    ``_assess_complexity``（给任务打个复杂度标签）与 ``_synthesize``（综合子结果文本）
+    不附图 —— 它们跟画面上有什么无关，而这两处**每一层每个任务都会调**，附图等于
+    把成本乘以任务树的规模。
+    """
+    if mm is None:
+        return text
+    from core.agent.multimodal_messages import build_user_message_content
+
+    return build_user_message_content(text, mm)
+
+
 def _soul_prefix(soul: str) -> str:
     """格式化 SOUL 约束为 system prompt 前缀（单/Team/Fractal 统一格式）。"""
     return f"【SOUL约束 - 必须严格遵守】\n{soul}\n\n" if soul else ""
@@ -48,6 +63,13 @@ class FractalTask:
     id: str
     description: str
     context: Dict = field(default_factory=dict)
+    multimodal_context: Any = None
+    """随任务带上来的图像/视频。
+
+    **刻意不放进 ``context``**：``_execute_atomic`` 会对 context 做 ``json.dumps``，
+    而它是 pydantic 对象，塞进去当场抛 TypeError。子任务分解时逐级继承 —— 拆出来的
+    每一步面对的还是同一块屏幕。
+    """
     complexity: Complexity = Complexity.ATOMIC
     parent_task_id: Optional[str] = None
     subtask_ids: List[str] = field(default_factory=list)
@@ -238,9 +260,12 @@ class FractalAgent:
                         },
                         {
                             "role": "user",
-                            "content": (
-                                f"执行任务: {task.description}\n"
-                                f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
+                            "content": _seeing(
+                                (
+                                    f"执行任务: {task.description}\n"
+                                    f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
+                                ),
+                                task.multimodal_context,
                             ),
                         },
                     ],
@@ -360,9 +385,14 @@ class FractalAgent:
                     },
                     {
                         "role": "user",
-                        "content": (
-                            f"请分解以下任务:\n{task.description}\n\n"
-                            f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
+                        # 看不见画面去分解「把这张截图里的设置改掉」，只能产出一堆通用
+                        # 步骤，后面每一层再拿着通用步骤各自去猜。第一步错，后面全歪。
+                        "content": _seeing(
+                            (
+                                f"请分解以下任务:\n{task.description}\n\n"
+                                f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
+                            ),
+                            task.multimodal_context,
                         ),
                     },
                 ],
@@ -376,6 +406,7 @@ class FractalAgent:
                         id=f"{task.id}_sub{i}",
                         description=st_data.get("description", ""),
                         context={**task.context, **st_data.get("context", {})},
+                        multimodal_context=task.multimodal_context,
                         parent_task_id=task.id,
                     )
                 )
@@ -411,6 +442,7 @@ class FractalAgent:
                     id=f"{task.id}_sub{i}",
                     description=part,
                     context=task.context,
+                    multimodal_context=task.multimodal_context,
                     parent_task_id=task.id,
                 )
             )
@@ -498,18 +530,27 @@ class FractalExecutor:
         self.max_subtasks = max_subtasks
         self.executions: Dict[str, Dict] = {}
 
-    async def run(self, task_description: str, context: Optional[Dict] = None) -> FractalResult:
+    async def run(
+        self,
+        task_description: str,
+        context: Optional[Dict] = None,
+        *,
+        multimodal_context: Any = None,
+    ) -> FractalResult:
         """
         执行分形任务
 
         Args:
             task_description: 任务描述
             context: 上下文信息
+            multimodal_context: 随任务带上来的图像/视频。走独立形参而不是塞进
+                ``context`` —— 后者会被 ``json.dumps``，pydantic 对象进去就抛。
         """
         task = FractalTask(
             id=f"task_{uuid.uuid4().hex[:8]}",
             description=task_description,
             context=context or {},
+            multimodal_context=multimodal_context,
         )
 
         root_agent = FractalAgent(
