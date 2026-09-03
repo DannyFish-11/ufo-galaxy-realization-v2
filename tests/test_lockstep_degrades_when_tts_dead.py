@@ -534,3 +534,45 @@ def test_every_emitted_value_is_in_the_declared_vocabulary(monkeypatch):
         assert f["state"] in chat_mod.LOCKSTEP_STATES, f"未登记的 state: {f['state']!r}"
         if "reason" in f:
             assert f["reason"] in chat_mod.LOCKSTEP_REASONS, f"未登记的 reason: {f['reason']!r}"
+
+
+class TestTheSilentPathAlsoLeavesATrace:
+    """**一句都没念出来时,收尾那条路也必须留痕并把文字吐出去。**
+
+    锁步有两条路:循环里那条(runtime 逐个吐 delta)和收尾那条(非流式适配器,
+    整段一次返回)。前者遇到「首句宽限内一句都没念出来」会发 degraded;后者从前
+    **什么都不发** —— 它靠一句注释把责任推给客户端:「done 的 response=全文 会把
+    气泡快照到权威全文」。
+
+    那是一条**没写进契约的要求**。SSE 文档里 delta 才是文字通道,只累加 delta 的
+    客户端因此拿到一个空气泡 —— 而空气泡跟「它想了想没什么好说的」长得一模一样。
+    实测撞到过:这台机器没有可用发声器,面板画了个空气泡。
+
+    同一条规则两条路给出不同行为,是这个仓库最常栽的那种不一致。
+    """
+
+    def test_the_tail_path_emits_degraded_and_the_text(self):
+        """收尾那条路的源码里必须同时有「报降级」和「把 text 吐出去」。"""
+        import re
+        from pathlib import Path as _P
+
+        src = _P(__file__).resolve().parent.parent / "core/routes/chat.py"
+        code = src.read_text(encoding="utf-8")
+        # 只看收尾那一段:从「锁步收尾(TTS 正常)」到下一个 elif 分支
+        start = code.index("锁步收尾(TTS 正常)")
+        end = code.index("elif _lockstep and _ls_degraded", start)
+        tail = code[start:end]
+        assert re.search(
+            r"revealed_chars == 0 and text", tail
+        ), "收尾那条路没有「一个字都没露出来」这个判断 —— 那种情况会静默丢掉整轮答复"
+        assert '"state": "degraded"' in tail, "一句都没念出来却不报 degraded —— 降级没有留痕"
+        assert '"reason": "no_first_sentence"' in tail, "报了降级却不说为什么"
+        assert re.search(
+            r'"type": "delta", "text": text', tail
+        ), "报了降级却没把权威全文吐出去 —— 只认 delta 的客户端还是拿到空气泡"
+
+    def test_both_paths_use_the_same_reason_word(self):
+        """两条路对同一件事必须用同一个词,否则排查时对不上。"""
+        from core.routes.chat import LOCKSTEP_REASONS
+
+        assert "no_first_sentence" in LOCKSTEP_REASONS

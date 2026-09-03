@@ -1005,8 +1005,28 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         streamed_chars += len(_ls_pending)
                         yield _sse({"type": "delta", "text": _ls_pending})
                         _ls_pending = ""
-                    # 兜底:语音未能覆盖全文(TTS 部分/全失败)不在此逐字补 ——
-                    # 下面 done 的 response=全文 会把气泡快照到权威全文,自然补齐。
+                    # ── 一个字都没露出来:这是降级,要留痕、要把文字补出去 ──
+                    #
+                    # 从前这里靠「done 的 response=全文 会把气泡快照到权威全文」兜底。
+                    # 那是把一条**没写进契约的要求**交给客户端:SSE 文档里 delta 才是
+                    # 文字通道,只累加 delta 的客户端拿到的是**空气泡** —— 而空气泡跟
+                    # 「它想了想没什么好说的」长得一模一样。实测撞到过(无可用发声器时
+                    # engaged + 零 delta + done 带全文)。
+                    #
+                    # 而且它**静默**:开场报了 engaged,之后没有任何一帧说「声音没跟上」。
+                    # 循环里那条流式路径遇到同样的事会发 degraded/no_first_sentence ——
+                    # 同一条规则两条路给出不同行为。这里与它对齐。
+                    if revealed_chars == 0 and text:
+                        yield _sse({"type": "lockstep", "state": "degraded", "reason": "no_first_sentence"})
+                        if not manifested:
+                            manifested = True
+                            yield _sse({"type": "phase", "phase": "manifest"})
+                        streamed_chars += len(text)
+                        yield _sse({"type": "delta", "text": text})
+                        logger.info("文字/语音锁步:一句都没念出来,已转全文直出并报降级。")
+                    # 露出过一部分但没覆盖全文的(TTS 部分失败)仍不在此补:补吐会与已
+                    # 露出的重复,而 done 的全文足以补齐。区别在**有没有留痕**:上面那种
+                    # 是静默丢字,这一种只是尾巴短一截,且前端已看到文字在动。
                 elif _lockstep and _ls_degraded and speaker is not None:
                     # 锁步已降级:文字早已逐字直出(streamed_chars>0),reveal_q 不再取用。
                     # 补吐理论残余,并收尾语音(尾音由后台 _player 播完,不阻塞 done ——

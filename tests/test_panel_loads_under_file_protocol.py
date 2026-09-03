@@ -121,3 +121,39 @@ class TestMountingDoesNotDependOnScriptPlacement:
         assert (
             "DOMContentLoaded" in src and "readyState" in src
         ), "main.ts 没有等 DOM —— 一旦构建产物的 defer 丢了,面板就静默不挂"
+
+
+class TestTheShellDoesNotScrollAwayWhenTheThreadIsLong:
+    """对话一长,输入栏不许被推出视口。
+
+    ``.main`` 是 ``.panel``(grid)的项,而 **grid / flex 项的 ``min-height``
+    默认是 ``auto``** —— 它拒绝缩到比内容更矮。少了 ``min-height: 0``,对话一长
+    ``.main`` 就跟着内容长到两千多像素,``.thread`` 的 ``flex:1`` 按那个被撑大的
+    高度算,``overflow-y:auto`` 永远不生效,底下那条输入栏被推到视口外一千八百
+    像素的地方 —— **够不着**。
+
+    实测过:30 条历史时 ``.main`` 高 2646px、``.thread`` 高 2604px 且
+    ``scrollHeight == clientHeight``(根本没在滚)、``.dock`` 的 top 是 2624px,
+    而视口只有 860px。
+
+    这个 bug 一直在,只是从前面板每次打开都是空白对话所以没人撞上 —— 把历史接
+    回来的那一刻它才露出来。所以这条钉在 CSS 上:一行删掉就红。
+    """
+
+    def test_main_can_shrink_below_its_content(self) -> None:
+        css = (PANEL / "src" / "styles" / "hud.css").read_text(encoding="utf-8")
+        block = re.search(r"\.main\s*\{([^}]*)\}", css)
+        assert block, "hud.css 里找不到 .main 了?"
+        body = block.group(1)
+        assert "min-height: 0" in body, (
+            ".main 少了 min-height: 0 —— 它是 grid 项,默认 min-height:auto 会拒绝缩到"
+            "比内容矮,于是对话一长 .thread 就不滚了,输入栏被推出视口"
+        )
+
+    def test_the_thread_is_the_one_that_scrolls(self) -> None:
+        css = (PANEL / "src" / "styles" / "hud.css").read_text(encoding="utf-8")
+        block = re.search(r"\.thread\s*\{([^}]*)\}", css)
+        assert block, "hud.css 里找不到 .thread 了?"
+        body = block.group(1)
+        assert "overflow-y: auto" in body, "对话区不再自己滚 —— 那就得整页滚,外壳会跟着走"
+        assert "min-height: 0" in body, ".thread 自己也要能缩,否则它把 .main 顶开"

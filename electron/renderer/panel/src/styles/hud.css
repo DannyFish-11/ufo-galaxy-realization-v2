@@ -281,7 +281,20 @@ body {
 }
 
 /* ══ 右 ═══════════════════════════════════════════════════════════════ */
-.main { display: flex; flex-direction: column; min-width: 0; position: relative; }
+/* `min-height: 0` 不是可省的一行。
+
+   .main 是 .panel(grid)的项,而 **grid/flex 项的 min-height 默认是 auto** ——
+   意思是它拒绝缩到比内容更矮。于是对话一长,.main 就跟着内容长到两千多像素,
+   .thread 的 `flex:1` 是按那个被撑大的高度算的,`overflow-y:auto` 永远不生效,
+   底下那条输入栏被推到视口外一千八百像素的地方,**够不着**。
+
+   这个 bug 一直在,只是从前面板每次打开都是空白对话所以没人撞上 —— 把历史接
+   回来的那一刻它才露出来。 */
+.main {
+  display: flex; flex-direction: column;
+  min-width: 0; min-height: 0;
+  position: relative;
+}
 
 /* ── 岛:同一个东西自己长大,不是弹出来一个新浮层 ──
    宽、高、圆角连续过渡,内容交叉淡入。展开后与左边卡片区顶对齐、等高。 */
