@@ -27,22 +27,49 @@ def native_mm_enabled() -> bool:
     return os.getenv("GALAXY_NATIVE_MM_CHAT", "0").strip().lower() in ("1", "true", "yes", "on")
 
 
+#: 单次请求最多附多少张【静止图】(视频关键帧另有 MAX_KEYFRAMES 上限)。
+MAX_IMAGES = 4
+
+
+def _dedupe_against(parts: List[dict], seen_urls: set) -> List[dict]:
+    """丢掉与已附静止图逐字相同的关键帧（连同它前面那行标注）。
+
+    关键帧序列的最后一帧几乎必然就是"当前这一帧" —— 它已经作为静止图附过一次。
+    不去重就是把同一张整屏截图发两遍：钱翻倍，而模型多看一遍也不会多知道什么。
+    """
+    out: List[dict] = []
+    for i in range(0, len(parts) - 1, 2):
+        label, image = parts[i], parts[i + 1]
+        url = image.get("image_url", {}).get("url")
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        out.extend([label, image])
+    return out
+
+
 def build_user_message_content(text: str, multimodal_context: Any) -> Union[str, List[dict]]:
-    """有图像且启用时返回 OpenAI content 数组;否则返回纯文本 ``text``。"""
+    """有图像/视频且启用时返回 OpenAI content 数组;否则返回纯文本 ``text``。"""
     if not native_mm_enabled() or multimodal_context is None:
         return text
     images = getattr(multimodal_context, "images", None) or []
-    if not images:
+    videos = getattr(multimodal_context, "video", None) or []
+    if not images and not videos:
         return text
     content: List[dict] = [{"type": "text", "text": text}]
-    for im in images[:4]:  # 最多 4 张,控成本
+    seen_urls: set = set()
+    for im in images[:MAX_IMAGES]:
         mime = getattr(im, "mime", "image/jpeg") or "image/jpeg"
         data = getattr(im, "data", "") or ""
         if data:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{data}"},
-                }
-            )
+            url = f"data:{mime};base64,{data}"
+            seen_urls.add(url)
+            content.append({"type": "image_url", "image_url": {"url": url}})
+    # 视频排在静止图之后:静止图是"此刻",关键帧序列是"这段时间里发生了什么",
+    # 后者带自己的时间戳标注,放在末尾不会被误读成对前面那张图的说明。
+    if videos:
+        from core.video_keyframes import build_video_content_parts
+
+        for vid in videos[:1]:  # 一次一段:两段视频的时间轴叠在一个 content 数组里没法区分
+            content.extend(_dedupe_against(build_video_content_parts(vid), seen_urls))
     return content if len(content) > 1 else text

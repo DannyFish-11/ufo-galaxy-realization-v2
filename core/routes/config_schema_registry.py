@@ -1200,6 +1200,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "桌面感知帧的保鲜时长(秒,超过就算过期不再当作当前画面 · 默认 10)",
     },
+    "GALAXY_PERCEPTION_KEYFRAMES": {
+        "default": "4",
+        "type": "number",
+        "category": "behavior",
+        "description": "屏幕保留最近几帧（让 AI 能看出「刚才发生了什么」而不只是此刻 · 0=只留当前一帧 · 默认 4）",
+    },
     "GALAXY_PERCEPTION_PRIVACY_DEFAULT": {
         "default": "active",
         "type": "select",
