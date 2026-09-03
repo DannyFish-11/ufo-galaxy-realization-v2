@@ -53,14 +53,26 @@ def test_the_sibling_checkout_is_not_hard_pinned(checkout_step: dict):
     assert "steps.sibling.outputs.ref" in ref, f"ref 不是解析出来的，而是写死的: {ref!r}"
 
 
-def test_only_pull_requests_look_for_a_matching_branch(resolve_step: dict):
-    """push（含 main）必须永远用默认分支：主干要对着主干验证。"""
-    env = resolve_step.get("env") or {}
-    pr_branch = str(env.get("PR_BRANCH", ""))
-    assert "pull_request" in pr_branch and "head_ref" in pr_branch, (
-        f"PR_BRANCH 不是只在 pull_request 事件下取 head_ref: {pr_branch!r} —— "
-        "若 push 也去找同名分支，main 就不再是对着 main 验证的了"
-    )
+def test_the_default_branch_is_always_validated_against_the_default_branch(resolve_step: dict):
+    """需要守住的不变式只有一条：main 必须对着 main 验证。
+
+    边界刻意划在「是不是 main」，不是「是不是 PR」。本仓 push 与 pull_request 都触发
+    CI；若 push 那一遍恒用默认分支，跨仓改动就永远有一条注定红的运行 —— 墙没拆掉，
+    只是挪了个位置。手表仓正是这样红了一轮才发现的。
+    """
+    run = resolve_step["run"]
+    assert (
+        '[ "$BRANCH" != "$DEFAULT_REF" ]' in run
+    ), "没有『分支名等于默认分支就不去找同名分支』这一条 —— main 可能被拿去对着别的 ref 验证"
+
+
+def test_branch_name_is_taken_correctly_for_both_event_kinds(resolve_step: dict):
+    """PR 上必须取 head_ref：``github.ref_name`` 在 PR 事件里是 ``123/merge``，不是分支名。"""
+    branch = str((resolve_step.get("env") or {}).get("BRANCH", ""))
+    assert "pull_request" in branch and "head_ref" in branch, f"PR 上没取 head_ref: {branch!r}"
+    assert (
+        "github.ref_name" in branch
+    ), f"非 PR 事件没有回落到 ref_name: {branch!r} —— 推特性分支那一遍会恒用默认分支，必然红"
 
 
 def test_it_falls_back_instead_of_failing(resolve_step: dict):

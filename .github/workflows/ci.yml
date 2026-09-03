@@ -589,25 +589,28 @@ jobs:
       # 分支上,漂移门就会红,只能先合安卓再回来重跑。test_grounding_rule_is_one_rule
       # 直接读安卓仓的 GroundingArbiter.kt 比对阈值,正好是最容易撞上这条的用例。
       #
-      # 改成: PR 上先找兄弟仓里【同名分支】,没有才回落默认分支; push(含 main)永远用默认分支。
-      # 后半句是前提 —— 主干必须始终对着主干验证。
+      # 改成: **默认分支对着默认分支验证,其它分支先找兄弟仓的同名分支**。
+      # 边界划在「是不是 main」而不是「是不是 PR」: 本仓 push 与 pull_request 都触发 CI,
+      # 若 push 那一遍恒用默认分支,跨仓改动就永远有一条注定红的运行,墙只是挪了个位置。
+      # 需要守住的不变式只有一条: main 必须对着 main 验证。
       - name: 解析兄弟仓要 checkout 的 ref
         id: sibling
         env:
           SIBLING_REPO: ${{ env.ANDROID_REPO_FULL_NAME }}
           CROSS_REPO_TOKEN: ${{ github.token }}
-          PR_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
+          # PR 用 head_ref(ref_name 在 PR 上是 "123/merge",不是分支名); 其余用 ref_name。
+          BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
           DEFAULT_REF=main
           REF="$DEFAULT_REF"
-          if [ -n "$PR_BRANCH" ] && [ "$PR_BRANCH" != "$DEFAULT_REF" ]; then
+          if [ -n "$BRANCH" ] && [ "$BRANCH" != "$DEFAULT_REF" ]; then
             # 不回显 URL(带 token)。探测失败(网络/权限)一律按默认分支处理:
             # 宁可回到旧行为,也不要因为探测本身把整条门弄红。
             if git ls-remote --exit-code --heads \
                  "https://x-access-token:${CROSS_REPO_TOKEN}@github.com/${SIBLING_REPO}.git" \
-                 "refs/heads/${PR_BRANCH}" >/dev/null 2>&1; then
-              REF="$PR_BRANCH"
+                 "refs/heads/${BRANCH}" >/dev/null 2>&1; then
+              REF="$BRANCH"
             fi
           fi
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
@@ -619,7 +622,7 @@ jobs:
               echo "### ⚠️ 跨仓比对用的是兄弟仓的分支，不是 \`main\`"
               echo
               echo "- 兄弟仓：\`${SIBLING_REPO}\`"
-              echo "- 使用的 ref：\`${REF}\`（PR 同名分支）"
+              echo "- 使用的 ref：\`${REF}\`（兄弟仓同名分支）"
               echo
               echo "**合并顺序有要求**：这条绿只证明「两个分支放在一起是一致的」，"
               echo "不证明合进 \`main\` 之后也一致。必须**先合兄弟仓的对应 PR**，再合本 PR；"
