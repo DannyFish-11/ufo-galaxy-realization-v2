@@ -157,7 +157,7 @@ class TestItIsWiredToARealCaller:
         for key in (ca._MAX_MB_KEY, ca._MIN_DAYS_KEY):
             assert key in CONFIG_SCHEMA, f"{key} 没登记进 CONFIG_SCHEMA"
 
-        panel = open("electron/renderer/panel/src/components/SettingsTab.tsx", encoding="utf-8").read()
+        panel = open("electron/renderer/panel/src/settings_inventory.ts", encoding="utf-8").read()
         for key in (ca._MAX_MB_KEY, ca._MIN_DAYS_KEY):
             assert key in panel, f"{key} 没出现在面板里"
 

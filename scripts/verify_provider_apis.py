@@ -56,7 +56,12 @@ from typing import Any, Dict, List, Optional, Tuple
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-MODELS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/ModelsTab.tsx"
+# 旧 React 面板已被 HUD 面板整个替换。「模型 tab 能配哪些 key」这份清单不是
+# 渲染代码而是判据,已搬进 settings_inventory.ts 的 PROVIDER_KEYS。
+#
+# 注意:那一档**当前没有界面** —— 新面板的设置浮层只有四个整档开关。这份清单
+# 是待建设置面的规格,这个脚本据此核对「配置里有 key 的家,规格里也列了」。
+PANEL_INVENTORY = REPO_ROOT / "electron/renderer/panel/src/settings_inventory.ts"
 
 
 def is_placeholder(value: str) -> bool:
@@ -72,11 +77,24 @@ _ANTHROPIC_HEADERS = {"anthropic-version": "2023-06-01"}
 
 
 def _panel_keys() -> set:
-    """面板「模型」tab 里真实存在输入框的那些 key。"""
-    if not MODELS_TAB.exists():
+    """规格里列出的供应商 key(settings_inventory.ts 的 PROVIDER_KEYS)。
+
+    文件不在就**说出来**。这里原先是 ``if not ...exists(): return set()`` ——
+    静默返回空集意味着面板文件一改名,这项核对就永远比对空集、永远「通过」,
+    而没有任何人知道它已经不查东西了。
+    """
+    if not PANEL_INVENTORY.exists():
+        print(
+            f"⚠ 找不到 {PANEL_INVENTORY.relative_to(REPO_ROOT)} —— "
+            "「配置里有 key 的家,面板规格里也列了」这一项**没有核对**",
+            file=sys.stderr,
+        )
         return set()
-    src = MODELS_TAB.read_text(encoding="utf-8")
-    return set(re.findall(r"\b(?:key|extraKey)\s*:\s*'([A-Z][A-Z0-9_]*)'", src))
+    src = PANEL_INVENTORY.read_text(encoding="utf-8")
+    start = src.index("export const PROVIDER_KEYS")
+    block = src[start : src.index("\n];", start)]
+    body = "\n".join(ln for ln in block.split("\n") if not ln.strip().startswith("//"))
+    return set(re.findall(r"'([A-Z][A-Z0-9_]*)'", body))
 
 
 #: HTTP 状态 → **固定措辞**的解释。上游响应体一律不输出(见 ``_fetch_models``),
