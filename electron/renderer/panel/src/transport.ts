@@ -9,7 +9,7 @@
  * 另外两个当不存在。同一个事实读两处,迟早会出现两处不一致而没人发现。
  */
 import type { RenderPosture } from './types';
-import type { DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, Phase } from './types';
+import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, Phase } from './types';
 
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
@@ -273,4 +273,96 @@ export function readDevices(raw: unknown): readonly DeviceRow[] | null {
     });
   }
   return rows;
+}
+
+
+// ---------------------------------------------------------------------------
+// 整档开关
+// ---------------------------------------------------------------------------
+//
+// 「哪一档管哪些键、开合看哪个主键」的唯一定义处在后端
+// (core/routes/config_schema_registry.py 的 CONFIG_BUNDLES)。这里只搬运。
+
+function readBundle(raw: unknown): Bundle | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const key = typeof o['key'] === 'string' ? o['key'] : '';
+  if (!key) return null;
+
+  const unwired = o['unwired'] === true;
+  const opts = Array.isArray(o['options'])
+    ? (o['options'] as unknown[]).filter((v): v is string => typeof v === 'string')
+    : undefined;
+
+  return {
+    key,
+    name: typeof o['name'] === 'string' ? o['name'] : key,
+    note: typeof o['note'] === 'string' ? o['note'] : '',
+    primary: typeof o['primary'] === 'string' ? o['primary'] : '',
+    // 主键不存在时后端不给 value —— 那时**不能补一个默认值**:补上之后界面就
+    // 画出一个看着正常、其实什么都没接的开关。空串在渲染那侧被当成「没接上」。
+    value: typeof o['value'] === 'string' ? o['value'] : '',
+    type: typeof o['type'] === 'string' ? o['type'] : '',
+    ...(opts && opts.length ? { options: opts } : {}),
+    keyCount: typeof o['key_count'] === 'number' ? o['key_count'] : 0,
+    overrides: typeof o['overrides'] === 'number' ? o['overrides'] : 0,
+    unwired,
+  };
+}
+
+/** 拉一次档位。拉不到就返回 null —— **不返回空数组**:「没接上」和「一档都没有」是两件事。 */
+export async function fetchBundles(base: string): Promise<readonly Bundle[] | null> {
+  try {
+    const resp = await fetch(base + '/api/config/bundles', { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      console.error('[hud] 拉档位失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as { bundles?: unknown };
+    if (!Array.isArray(body.bundles)) return null;
+    return body.bundles.map(readBundle).filter((b): b is Bundle => b !== null);
+  } catch (err) {
+    console.error('[hud] 拉档位失败:', err);
+    return null;
+  }
+}
+
+/**
+ * 把一档设成某个值,返回后端**重新算过**的那一档。
+ *
+ * 刻意不在前端先乐观翻一下再对账:那样写失败时界面会停在一个后端并不认同的
+ * 状态上,而这正是「看起来接上了,其实没有」最常见的形态。以后端返回的为准。
+ */
+export async function setBundle(
+  base: string,
+  key: string,
+  value: string,
+): Promise<Bundle | null> {
+  try {
+    const resp = await fetch(base + '/api/config/bundles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    });
+    if (!resp.ok) {
+      console.error('[hud] 改档位被拒:', resp.status, await resp.text().catch(() => ''));
+      return null;
+    }
+    const body = (await resp.json()) as { bundle?: unknown };
+    return readBundle(body.bundle);
+  } catch (err) {
+    console.error('[hud] 改档位失败:', err);
+    return null;
+  }
+}
+
+/** 这一档下一步该是什么值。布尔翻面;select 在自己的档位里循环。 */
+export function nextBundleValue(b: Bundle): string | null {
+  if (b.unwired || !b.type) return null;
+  if (b.type === 'boolean') return b.value === 'true' ? 'false' : 'true';
+  if (b.options && b.options.length > 0) {
+    const i = b.options.indexOf(b.value);
+    return b.options[(i + 1) % b.options.length] ?? b.options[0] ?? null;
+  }
+  return null;
 }

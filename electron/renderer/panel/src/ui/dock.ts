@@ -164,7 +164,20 @@ export function createDock(cb: DockCallbacks): DockHandles {
       const row = document.createElement('button');
       row.className = 'bundle';
       row.type = 'button';
-      row.setAttribute('aria-pressed', String(b.on));
+      // **不是所有档都是两态的。** GALAXY_AUTONOMY 是 safe / guided / autonomous
+      // 三档,压成 aria-pressed 的真假会把中间那档吞掉 —— 这个仓库为「三态被当成
+      // 布尔」栽过一次。两态的用 aria-pressed,多态的用 data-state 出档位名。
+      const twoState = b.type === 'boolean';
+      const on = b.value === 'true';
+      if (b.unwired) {
+        row.dataset['unwired'] = 'true';
+        row.disabled = true;
+      } else if (twoState) {
+        row.setAttribute('aria-pressed', String(on));
+      } else {
+        row.dataset['state'] = b.value;
+        row.setAttribute('aria-label', `${b.name}:${b.value}`);
+      }
       const text = document.createElement('span');
       const name = document.createElement('span');
       name.className = 'bundle-name';
@@ -172,14 +185,24 @@ export function createDock(cb: DockCallbacks): DockHandles {
       const note = document.createElement('span');
       note.className = 'bundle-note';
       // 有偏离就说出来。只显示"开"等于把不一致藏起来。
-      note.textContent = b.overrides > 0
-        ? `${b.note} · 有 ${b.overrides} 项手改过`
-        : `${b.note} · 管 ${b.keyCount} 个键`;
+      note.textContent = b.unwired
+        ? `${b.note} · 没接上(主键 ${b.primary || '未知'} 不存在)`
+        : b.overrides > 0
+          ? `${b.note} · 有 ${b.overrides} 项手改过`
+          : `${b.note} · 管 ${b.keyCount} 个键`;
       if (b.overrides > 0) note.dataset['drift'] = 'true';
+      if (b.unwired) note.dataset['unwired'] = 'true';
       text.append(name, note);
-      const knob = document.createElement('span');
-      knob.className = 'knob';
-      row.append(text, knob);
+
+      // 两态给推拉开关;多态给一枚写着当前档位的小牌子 —— 一个开关表达不了三档。
+      const control = document.createElement('span');
+      if (twoState || b.unwired) {
+        control.className = 'knob';
+      } else {
+        control.className = 'stage';
+        control.textContent = b.value;
+      }
+      row.append(text, control);
       row.addEventListener('click', (e) => {
         e.stopPropagation();
         cb.onToggleBundle(b.key);

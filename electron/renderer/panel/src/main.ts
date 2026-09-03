@@ -11,7 +11,7 @@
 import './styles/hud.css';
 
 import { Store, VISIBLE_CARDS, clampStart, initialState } from './store';
-import { PresenceSocket, streamChat, toPhase } from './transport';
+import { PresenceSocket, fetchBundles, nextBundleValue, setBundle, streamChat, toPhase } from './transport';
 import { WAKE_CANDIDATES, platform } from './platform';
 import { createDeck } from './ui/deck';
 import { createLine } from './ui/line';
@@ -83,12 +83,7 @@ function mount(host: HTMLElement): void {
     onSend: (text) => void send(text),
     onTogglePopover: (which) =>
       store.patch({ popover: store.state.popover === which ? null : which }),
-    onToggleBundle: (key) =>
-      store.patch({
-        bundles: store.state.bundles.map((b) =>
-          b.key === key ? { ...b, on: !b.on } : b,
-        ),
-      }),
+    onToggleBundle: (key) => void flipBundle(key),
   });
 
   main.append(island.root, thread.root, dock.root);
@@ -116,6 +111,35 @@ function mount(host: HTMLElement): void {
   }
 
   store.subscribe(render);
+
+  /**
+   * 翻一档。**先问后端,再改界面。**
+   *
+   * 不做乐观更新:写失败时界面会停在一个后端并不认同的状态上,而那正是
+   * 「看起来接上了,其实没有」最常见的形态。后端返回什么,界面就是什么。
+   */
+  async function flipBundle(key: string): Promise<void> {
+    const current = store.state.bundles.find((b) => b.key === key);
+    if (!current) return;
+    const next = nextBundleValue(current);
+    if (next === null) {
+      // 主键不存在,或类型认不出来 —— 点了没反应是**对的**,但要说出为什么。
+      console.error(`[hud] 档位「${current.name}」没有接上任何东西(主键 ${current.primary || '未知'})`);
+      return;
+    }
+    const updated = await setBundle(BASE, key, next);
+    if (!updated) return; // 失败原因已由 setBundle 打出来;界面保持不动
+    store.patch({
+      bundles: store.state.bundles.map((b) => (b.key === key ? updated : b)),
+    });
+  }
+
+  /** 拉一次真实档位。拉不到就**保持空**,不拿演示数据顶上。 */
+  async function loadBundles(): Promise<void> {
+    const rows = await fetchBundles(BASE);
+    if (rows) store.patch({ bundles: rows });
+  }
+  void loadBundles();
 
   // ── 后端:实时那条 ───────────────────────────────────────────────
   const socket = new PresenceSocket(BASE, {
@@ -322,12 +346,19 @@ function seedDemo(store: Store): void {
     },
   ];
 
+  // 演示用的四档。**形状与后端 /api/config/bundles 一致**,但值是编的 ——
+  // 真实的一份由 fetchBundles() 拉,见 mount() 里那段。
   const bundles: Bundle[] = [
-    { key: 'omnimodal', name: '全模态', note: '屏 摄 麦 系统声', on: true, keyCount: 20, overrides: 1 },
-    { key: 'crossDevice', name: '跨设备', note: '发现 配对 主脑 手机 手表', on: true, keyCount: 36, overrides: 0 },
-    { key: 'voice', name: '声音', note: '跟文字锁步', on: true, keyCount: 63, overrides: 0 },
-    { key: 'autonomy', name: '自主', note: '问过再做', on: false, keyCount: 58, overrides: 0 },
-  ];
+    { key: 'omnimodal', name: '全模态', note: '屏 摄 麦 系统声', primary: 'GALAXY_AMBIENT_LOOP',
+      value: 'true', type: 'boolean', keyCount: 20, overrides: 1, unwired: false },
+    { key: 'cross_device', name: '跨设备', note: '发现 配对 主脑 手机 手表', primary: 'GALAXY_CROSS_DEVICE_ENABLED',
+      value: 'true', type: 'boolean', keyCount: 36, overrides: 0, unwired: false },
+    { key: 'voice', name: '声音', note: '跟文字锁步', primary: 'GALAXY_SPEAK',
+      value: 'true', type: 'boolean', keyCount: 63, overrides: 0, unwired: false },
+    { key: 'autonomy', name: '自主', note: '问过再做', primary: 'GALAXY_AUTONOMY',
+      value: 'guided', type: 'select', options: ['safe', 'guided', 'autonomous'],
+      keyCount: 58, overrides: 0, unwired: false },
+  ];;
 
   store.patch({
     cards, bundles, devices, turns,

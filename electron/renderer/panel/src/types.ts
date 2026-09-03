@@ -92,13 +92,40 @@ export interface Attachment {
 }
 
 /** 一个整档开关。它管着一片配置键,而不是一个键。 */
+/**
+ * 一档整档开关。
+ *
+ * **这个形状由后端说了算** —— `GET /api/config/bundles` 现算出来什么就是什么。
+ * 面板不许自己再存一份「哪一档管哪些键」:那样同一个事实两处各存,迟早一处说开、
+ * 另一处说关,而且没人看得见。这四档之前确实在面板里写死过,连 keyCount 都是
+ * 手抄的数字,点一下只翻一个本地变量、不发任何请求。
+ */
 export interface Bundle {
-  readonly key: 'omnimodal' | 'crossDevice' | 'voice' | 'autonomy';
+  readonly key: string;
   readonly name: string;
   readonly note: string;
-  readonly on: boolean;
-  /** 这一档管着多少个键 —— 从后端 category 现算,不写死 */
+  /** 这一档的主键 —— 开合由它说了算,写回也写它 */
+  readonly primary: string;
+  /**
+   * 主键当前的值(字符串,后端原样给)。
+   *
+   * **不预先压成布尔。** `GALAXY_AUTONOMY` 是 safe / guided / autonomous 三档,
+   * 压成布尔会把中间那档吞掉 —— 这个仓库为「三态被当成布尔」栽过一次。
+   */
+  readonly value: string;
+  readonly type: string;
+  /** select 型才有。有它就说明这一档不是两态的。 */
+  readonly options?: readonly string[];
+  /** 这一档管着多少个键 —— 后端按 category 现算,不写死 */
   readonly keyCount: number;
-  /** 有几个键被手动改得偏离了这一档 —— >0 时档位显示为「开 · 有偏离」 */
+  /** 有几个键被手动改得偏离了默认 —— >0 时档位显示为「有 N 项手改过」 */
   readonly overrides: number;
+  /**
+   * 这一档的主键在后端不存在。
+   *
+   * 出现它就说明档位接到了一个不存在的东西上。**必须画得出来** ——
+   * 否则界面上是一个永远关着、点了也没反应的开关。
+   */
+  readonly unwired: boolean;
 }
+

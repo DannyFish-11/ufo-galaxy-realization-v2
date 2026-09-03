@@ -580,3 +580,19 @@ body {
 }
 .bundle[aria-pressed='true'] .knob::after { transform: translateX(16px); }
 .pop-more { margin-top: 8px; font-size: 13px; color: var(--ink-2); border-radius: 19px; padding: 10px 14px 11px; }
+
+/* 多态档位那枚小牌子。三档(safe / guided / autonomous)一个推拉开关表达不了,
+   所以直接把当前那档写出来 —— 少一个需要解读的符号。 */
+.stage {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px; letter-spacing: 0.02em; color: var(--ink-2);
+  background: rgba(252, 251, 255, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+}
+
+/* 没接上的那一档:主键在后端不存在。压平、去掉指针,并且**点不动** ——
+   一个永远关着、点了也没反应的开关,比一条说明更容易骗到人。 */
+.bundle[data-unwired='true'] { opacity: 0.5; cursor: not-allowed; }
+.bundle-note[data-unwired='true'] { color: var(--warn); }

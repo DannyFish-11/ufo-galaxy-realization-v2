@@ -12,7 +12,7 @@
 ``from core.routes.config import CONFIG_SCHEMA`` 一律不受影响 —— 拆的是文件,不是接口。
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 # 所有支持的配置项（键 → {默认值, 类型, 类别, 描述}）
 CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
@@ -2216,3 +2216,58 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "网关适配器死信队列的主题名（处理不了的消息扔这儿）",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# 整档开关 —— 一个开关管一整片键
+# ---------------------------------------------------------------------------
+#
+# 面板上那四个开关(全模态 / 跨设备 / 声音 / 自主)不是四个配置键,是四**档**:
+# 每一档对应上面 CONFIG_SCHEMA 里的一个 category,一档管几十个键。
+#
+# **这份表是那件事的唯一定义处。**
+#
+# 面板不许自己再存一份「哪一档管哪些键」——那样同一个事实两处各存,迟早一处
+# 说开、另一处说关,而且没人看得见。面板只渲染 GET /api/config/bundles 现算出来
+# 的结果。这四行之前确实在面板里写死过(连 keyCount 都是手抄的数字),点一下只翻
+# 一个本地变量、不发任何请求 —— 开关看着能动,后端什么都不知道。
+#
+# 每一档的开合由它的**主键**说了算,而不是「这一档里的键是不是都开着」:
+# 一档里几十个键各有各的默认值,拿它们投票投不出一个人能预期的结果。主键就是
+# 那个「这项能力到底开不开」的键,其余是它的细调。
+#
+# ``primary`` 的类型决定这一档在界面上是什么控件。**不是所有档都是两态的**:
+# GALAXY_AUTONOMY 是 safe / guided / autonomous 三档,渲染成推拉开关会把中间
+# 那档吞掉 —— 这个仓库为「三态开关被当成布尔」栽过一次,见
+# tests/test_voice_switches_reach_the_panel.py 里那条。
+CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
+    {
+        "key": "omnimodal",
+        "name": "全模态",
+        "note": "屏 摄 麦 系统声",
+        "category": "perception",
+        "primary": "GALAXY_AMBIENT_LOOP",
+    },
+    {
+        "key": "cross_device",
+        "name": "跨设备",
+        "note": "发现 配对 主脑 手机 手表",
+        "category": "devices",
+        "primary": "GALAXY_CROSS_DEVICE_ENABLED",
+    },
+    {
+        "key": "voice",
+        "name": "声音",
+        "note": "跟文字锁步",
+        "category": "voice",
+        "primary": "GALAXY_SPEAK",
+    },
+    {
+        "key": "autonomy",
+        "name": "自主",
+        "note": "问过再做",
+        "category": "agent",
+        # 三档,不是开关。见上面那段说明。
+        "primary": "GALAXY_AUTONOMY",
+    },
+)
