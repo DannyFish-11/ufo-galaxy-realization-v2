@@ -1779,6 +1779,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "原生多模态对话格式（把图片/音频按模型原生格式发，而不是转文字 · 默认关）",
     },
+    "GALAXY_CU_MEMORY": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "桌面操作记住失败经验（下次遇到同一个界面会带上「上次这么点没用」· 默认开）",
+    },
     "GALAXY_HITL_CONFIRM_GATE": {
         "default": "false",
         "type": "boolean",

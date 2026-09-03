@@ -190,6 +190,13 @@ RETRIEVAL_MODULE_EXEMPTIONS: Dict[str, str] = {
         "Audited twice: the memory__recall tool returns text to the LLM, and the "
         "tool-exposure gate decides visibility without reading retrieved content."
     ),
+    "core.computer_use_memory": (
+        "Audited: recalled experience is concatenated into the planner prompt for "
+        "the model to weigh — this module never re-parses it. The structural "
+        "guarantee is downstream: whatever the model answers goes through "
+        "computer_use_loop's ALLOWED_ACTIONS whitelist, so a retrieved memory "
+        "cannot widen the action space it was already confined to."
+    ),
     "core.eval.memory_eval": (
         "Evaluation harness, not a runtime path. It measures retrieval quality, "
         "which necessarily means calling retrieval."
