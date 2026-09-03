@@ -73,6 +73,14 @@ export interface DockCallbacks {
   onOpenAllSettings(): void;
   /** 换本机模型档位。**不是开关** —— 见下面那一行的说明。 */
   onPickTier(key: string): void;
+  /**
+   * 用户挑好了文件。
+   *
+   * 从前这里是 `void platform().pickFiles(accept)` —— 拿到 File[] 之后**什么都
+   * 不做**。选完文件、浮层收起、界面毫无变化,而用户以为喂进去了。这是这个仓库
+   * 反复要躲的那类失效里最难察觉的一种:操作有反馈(浮层关了),结果没有。
+   */
+  onFeed(files: readonly File[]): void;
 }
 
 export function createDock(cb: DockCallbacks): DockHandles {
@@ -144,7 +152,14 @@ export function createDock(cb: DockCallbacks): DockHandles {
     item.type = 'button';
     item.textContent = label;
     if (accept) {
-      item.addEventListener('click', () => void platform().pickFiles(accept));
+      item.addEventListener('click', () => {
+        void platform()
+          .pickFiles(accept)
+          .then((files) => {
+            // 用户按了取消 —— 什么都不做是对的,但也不该假装发生了什么。
+            if (files.length) cb.onFeed(files);
+          });
+      });
     }
     feed.append(item);
   }
@@ -223,7 +238,11 @@ export function createDock(cb: DockCallbacks): DockHandles {
 
     const chips = document.createElement('div');
     chips.className = 'sf-stages tier-stages';
-    for (const t of view.tiers) {
+    // **按档位名排,不按后端给的顺序。** core/model_catalog.py 的 _TIERS 是个 dict,
+    // 迭代出来是定义顺序(A B D C)—— 那是后端的内部次序,不是给人看的次序,D 排在
+    // C 前面读起来就是错的。「有哪几档」归后端,「按什么顺序摆」归这里。
+    const ordered = [...view.tiers].sort((a, b) => a.key.localeCompare(b.key));
+    for (const t of ordered) {
       const chip = document.createElement('button');
       chip.className = 'stage';
       chip.type = 'button';
@@ -293,11 +312,14 @@ export function createDock(cb: DockCallbacks): DockHandles {
       const note = document.createElement('span');
       note.className = 'bundle-note';
       // 有偏离就说出来。只显示"开"等于把不一致藏起来。
+      // 「管 N 个键」拿掉了:那个数字不影响任何决定,却占着本该说清这一档管什么的
+      // 位置。**有键被手改过仍然要说** —— 那条是真会影响判断的:档位显示「开」而
+      // 底下某个键被人改成了关,不说出来就是同一个事实两处各存、且没人看得见。
       note.textContent = b.unwired
         ? `${b.note} · 没接上(主键 ${b.primary || '未知'} 不存在)`
         : b.overrides > 0
           ? `${b.note} · 有 ${b.overrides} 项手改过`
-          : `${b.note} · 管 ${b.keyCount} 个键`;
+          : b.note;
       if (b.overrides > 0) note.dataset['drift'] = 'true';
       if (b.unwired) note.dataset['unwired'] = 'true';
       text.append(name, note);

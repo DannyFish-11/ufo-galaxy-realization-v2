@@ -579,6 +579,11 @@ class AgentKernel:
             session_id=session_id,
             device_id=device_id,
             context=context,
+            # 执行路径此前把 multimodal_context 整个丢在这里：CHAT_ONLY 分支一路带到
+            # _fallback_chat，而 task_execute / hybrid 组装 ExecutionPlan 时压根没这个字段。
+            # 结果是「看这张截图，帮我改掉这个设置」——恰恰是最需要看图的那类请求——
+            # 图像在这一行静默消失。
+            multimodal_context=multimodal_context,
         )
         # PR-18: pass activation budget to planner for breadth guidance.
         # PR-19: pass memory bias to planner for continuity/retrieval/novelty guidance.

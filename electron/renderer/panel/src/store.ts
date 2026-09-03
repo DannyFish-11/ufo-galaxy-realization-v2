@@ -22,6 +22,18 @@ export interface HudState {
   /** 连上后端了没有。false 时下面的东西全是上一次的残值或空态 */
   readonly connected: boolean;
   /**
+   * 后端认下的会话 id。空串 = **还没有过一轮对话**,不是「会话不存在」——
+   * 历史、记忆卡片、喂文件都按它去问,面板自己编一个的话问出来永远是空的。
+   */
+  readonly sessionId: string;
+  /**
+   * 桌面感知有没有被按停。null = 还没问到后端。
+   *
+   * **不拿 false 兜底** —— 「不知道停没停」被画成「正在采」,是这个开关唯一
+   * 不能犯的错。
+   */
+  readonly privacyPaused: boolean | null;
+  /**
    * 后端每帧算好的双轴渲染契约。**这是"此刻"的唯一权威**。
    *
    * null = 从没收到过。**不要拿它和"全零"混为一谈** —— 没收到过和
@@ -36,7 +48,11 @@ export interface HudState {
   readonly lockstep: LockstepState;
   readonly lockstepReason: LockstepReason;
 
-  readonly cards: readonly MemoryCard[];
+  /**
+   * 左栏那叠卡片。null = **还没拉到**(或后端不认识这条会话),与「这条线上一张
+   * 卡都没有」是两件事 —— 后者画成空态是对的,前者画成空态是在骗人。
+   */
+  readonly cards: readonly MemoryCard[] | null;
   /** 窗口起点:眼前那五张是 cards[start .. start+VISIBLE) */
   readonly start: number;
   /** 抽出来的那张的下标;-1 = 没有抽出任何一张,整叠归位 */
@@ -70,12 +86,14 @@ export const VISIBLE_CARDS = 5;
 
 export const initialState: HudState = {
   connected: false,
+  sessionId: '',
+  privacyPaused: null,
   posture: null,
   postureDrift: [],
   phase: 'silent',
   lockstep: 'off',
   lockstepReason: '',
-  cards: [],
+  cards: null,
   start: 0,
   drawn: -1,
   slim: false,

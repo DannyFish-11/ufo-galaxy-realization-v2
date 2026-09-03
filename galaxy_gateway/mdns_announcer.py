@@ -69,31 +69,21 @@ class MdnsAnnouncer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def get_lan_ip() -> str:
-        """Best-effort LAN IP detection. Falls back to 127.0.0.1."""
-        try:
-            # Method 1: connect to a public address to determine outgoing iface
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(2)
-            try:
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-            finally:
-                s.close()
-            if ip and not ip.startswith("127."):
-                return ip
-        except Exception:
-            pass
+    def get_lan_ip() -> Optional[str]:
+        """本机局域网 IP;探不到返回 ``None``。
 
-        try:
-            # Method 2: hostname resolution
-            ip = socket.gethostbyname(socket.gethostname())
-            if ip and not ip.startswith("127."):
-                return ip
-        except Exception:
-            pass
+        改前这里的兜底是 ``"127.0.0.1"``,而调用方 :meth:`start` 会把它**广播到
+        整个局域网**。任何听到的手机/手表都会拿到一个必然连不通的地址 —— 在它们
+        那边,``127.0.0.1`` 指向它们自己。
 
-        return "127.0.0.1"
+        探测收口到 :mod:`core.lan_address`(仓里原有五份各写各的实现,失败语义与
+        探测目标都不一致)。那份实现还修了一个更隐蔽的问题:原来只探
+        ``8.8.8.8:80``,要求内核选得出一条到**公网**的路 —— 而"局域网通、公网
+        不通"正是本产品的主场景,那种机器上原实现会误判成"没有局域网地址"。
+        """
+        from core.lan_address import detect_lan_ip
+
+        return detect_lan_ip()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -108,6 +98,12 @@ class MdnsAnnouncer:
 
         try:
             ip = self.get_lan_ip()
+            if not ip:
+                # 宁可不广播,也不广播一个环回地址。
+                # 广播出去的后果不是"发现失败",而是"发现成功但连不上" ——
+                # 后者的排查成本高得多,因为设备侧看到的是一个格式正确的地址。
+                logger.warning("mDNS: 未探测到局域网地址,跳过广播(不发布环回地址)")
+                return False
             desc = {
                 "path": "/ws/device/{device_id}",
                 "proto": "aip-v3",

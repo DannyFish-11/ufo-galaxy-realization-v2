@@ -160,7 +160,8 @@ export function createDeck(store: Store): DeckHandles {
   }
 
   function layout(): void {
-    const { cards, start, drawn, slim } = store.state;
+    const { start, drawn, slim } = store.state;
+    const cards = store.state.cards ?? [];
     const height = cardHeight();
     const open = drawn >= 0;
     const rel = open ? drawn - start : -1;
@@ -232,7 +233,8 @@ export function createDeck(store: Store): DeckHandles {
 
   /** 把池子里的每一张对到正确的下标。只在窗口整体变了时调。 */
   function remap(): void {
-    const { cards, start } = store.state;
+    const { start } = store.state;
+    const cards = store.state.cards ?? [];
     for (const [k, node] of pool.entries()) {
       const i = start + k;
       const card = cards[i];
@@ -262,7 +264,7 @@ export function createDeck(store: Store): DeckHandles {
 
   function turn(dir: 1 | -1): void {
     const s = store.state;
-    const next = clampStart(s.start + dir, s.cards.length);
+    const next = clampStart(s.start + dir, (s.cards ?? []).length);
     if (next === s.start) {
       flashWheel(true); // 到头了
       return;
@@ -273,7 +275,7 @@ export function createDeck(store: Store): DeckHandles {
     const leaving = dir > 0 ? s.start : s.start + VISIBLE_CARDS;
     const entering = dir > 0 ? next + VISIBLE_CARDS : next;
     const node = pool.find((n) => Number(n.dataset['index']) === leaving) ?? pool[0];
-    const card = store.state.cards[entering];
+    const card = (store.state.cards ?? [])[entering];
     if (node && card) {
       node.dataset['warp'] = 'true';
       fill(node, card, entering);

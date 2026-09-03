@@ -21,6 +21,14 @@ core/perception_grounding.py — 界面定位的权威归属
 三者互不相识，而契约里给另外两条预留的位置（``UISource.ANDROID_A11Y`` /
 ``VISION`` / ``OCR``）至今零生产者。
 
+（后续进展，写在这里免得这张表变成过期地图：Stage B 的
+:mod:`core.vision_ui_projection` 让 ``vision_pipeline`` 成为 ``UIGraph`` 的生产者，
+Stage C 的 :mod:`core.android_ui_snapshot` 让设备上报的 a11y 树成为另一个，两处
+"零生产者"都已补上。**剩下的分歧在规则本身**：Android 那份有四路裁决矩阵，服务端
+只认 ``[n]`` 序号、对模型给出的坐标没有任何裁决。那一格由 Stage D 的
+:mod:`core.grounding_arbitration` 收敛 —— 本模块决定"谁说了算"，那个模块决定
+"说了算的一方按什么规则判"。）
+
 在这种状态下**先把 a11y 树传上来是错的**：没有归属约定，结果只会是第四份实现，
 而且是延迟最高的那一份。所以本模块只做一件事——**写下判断规则**，不读、不算、
 不决定，形状对齐 :mod:`core.semantic_anchoring`。

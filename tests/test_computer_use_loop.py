@@ -62,6 +62,15 @@ def _fast(monkeypatch):
     monkeypatch.setenv("GALAXY_CU_SETTLE_S", "0")
     monkeypatch.delenv("GALAXY_COMPUTER_USE", raising=False)
     monkeypatch.delenv("GALAXY_CU_MAX_STEPS", raising=False)
+    # 情景记忆在本文件里一律关掉:这些用例测的是闭环本身。
+    #
+    # 不关的话它们会写进**真实**的记忆后端 —— 默认 vector_backend 是启用的
+    # (get_unified_memory().enabled 为 True)。本容器里 chromadb 没装,后端降级成
+    # 本地关键词、不落盘,所以看起来"没事";但在装了 chromadb 的机器上,跑一次单测
+    # 就会往 ./chroma_db 写进十几条假任务记录,而且再也不会被清掉。
+    #
+    # 记忆这条线的行为由 tests/test_computer_use_memory.py 用注入的替身单独测。
+    monkeypatch.setenv("GALAXY_CU_MEMORY", "0")
 
 
 # ───────────────────── 完整闭环 ─────────────────────

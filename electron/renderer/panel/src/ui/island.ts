@@ -25,6 +25,13 @@ const ELEVATION: Record<ModalityState, string> = {
 
 const DEVICE_ELEVATION = { online: 'up', degraded: 'low', offline: 'sunk' } as const;
 
+/** 双模型档里那两位的中文名。后端给的是 perception / reasoning / both。 */
+const ROLE_LABEL: Record<string, string> = {
+  perception: '感知位',
+  reasoning: '推理位',
+  both: '一位全包',
+};
+
 /**
  * 收起态那颗药丸只有 186px:感知恒定四格吃掉一半,剩下的宽度按 v18 的排法
  * 装得下四格设备。设备数会长(七台、十台都可能),不设上限就会顶穿右边缘。
@@ -111,13 +118,20 @@ export interface IslandHandles {
     perception: PerceptionView | null,
     devices: readonly DeviceRow[],
     tiers: TierView | null,
+    privacyPaused: boolean | null,
     open: boolean,
   ): void;
   /** 展开后与左边卡片区顶对齐、等高。 */
   setHeight(px: number): void;
 }
 
-export function createIsland(onToggle: () => void): IslandHandles {
+export interface IslandCallbacks {
+  onToggle(): void;
+  /** 按停 / 恢复桌面感知。**这是岛上唯一一个能按的东西** —— 见下方说明。 */
+  onPrivacy(paused: boolean): void;
+}
+
+export function createIsland(cb: IslandCallbacks): IslandHandles {
   const island = document.createElement('button');
   island.className = 'island';
   island.type = 'button';
@@ -136,7 +150,28 @@ export function createIsland(onToggle: () => void): IslandHandles {
   const perKey = document.createElement('span');
   perKey.className = 'sec-key';
   const perCount = document.createElement('b');
-  perKey.append(document.createTextNode('感知'), perCount);
+
+  /**
+   * 「别看了」。**岛上唯一一个能按的东西。**
+   *
+   * 破一次「岛是状态面不是控制面」的例,理由是这个动作与别的设置不同类:
+   * 它要的是**此刻立刻生效**,而不是「改个配置等它生效」。要人先开设置浮层、
+   * 再翻到感知那一栏、再找到某个键 —— 想遮住摄像头的那几秒里,这条路太长了。
+   *
+   * 它就摆在四条感知通路的正上方:要停的东西和停它的开关在同一处,不用回想
+   * 「这个开关管的是哪几条」。
+   */
+  const privacy = document.createElement('button');
+  privacy.className = 'privacy-btn';
+  privacy.type = 'button';
+  privacy.addEventListener('click', (e) => {
+    // 岛自己那个「点哪儿都收起」的监听在外层。不拦住的话,按一下暂停顺手
+    // 把岛关了 —— 而这一按恰恰是最需要看见结果的一按。
+    e.stopPropagation();
+    cb.onPrivacy(privacy.dataset['paused'] !== 'true');
+  });
+
+  perKey.append(document.createTextNode('感知'), privacy, perCount);
   const perGrid = document.createElement('span');
   perGrid.className = 'per-grid';
   const devKey = document.createElement('span');
@@ -153,7 +188,8 @@ export function createIsland(onToggle: () => void): IslandHandles {
   // 余光里误触一次代价很大的操作(驱逐旧模型、拉新模型、热刷 LLM 路由)。
   const brainKey = document.createElement('span');
   brainKey.className = 'sec-key brain-key';
-  brainKey.append(document.createTextNode('本机模型'));
+  const brainTier = document.createElement('b');
+  brainKey.append(document.createTextNode('本机模型'), brainTier);
   const brainLine = document.createElement('span');
   brainLine.className = 'brain-line';
   full.append(perKey, perGrid, devKey, devList, brainKey, brainLine);
@@ -167,16 +203,31 @@ export function createIsland(onToggle: () => void): IslandHandles {
   // 同一次冒泡上来的 click,于是刚展开就被自己关掉 —— 看起来是「点了没反应」。
   island.addEventListener('click', (e) => {
     e.stopPropagation();
-    onToggle();
+    cb.onToggle();
   });
 
   function render(
     perception: PerceptionView | null,
     devices: readonly DeviceRow[],
     tiers: TierView | null,
+    privacyPaused: boolean | null,
     open: boolean,
   ): void {
     island.dataset['open'] = String(open);
+
+    // 三态,不是两态。null = **还没问到后端**:那时按钮不该说「正在采」,
+    // 也不该说「已暂停」—— 说错任何一边都比说「不知道」糟。
+    privacy.dataset['paused'] = String(privacyPaused === true);
+    privacy.dataset['unknown'] = String(privacyPaused === null);
+    privacy.textContent =
+      privacyPaused === null ? '状态未知' : privacyPaused ? '已暂停 · 点恢复' : '暂停感知';
+    privacy.title =
+      privacyPaused === null
+        ? '问不到后端的隐私状态'
+        : privacyPaused
+          ? '感知已停:屏幕/摄像头/麦克风/系统声都不再采,缓存已清空'
+          : '立刻停止采集并清空缓存（环境循环、电脑操作、会话记忆、多模态注入同时失明）';
+    privacy.setAttribute('aria-pressed', String(privacyPaused === true));
     island.setAttribute('aria-expanded', String(open));
 
     miniPer.replaceChildren();
@@ -271,23 +322,36 @@ export function createIsland(onToggle: () => void): IslandHandles {
     //                在跑哪两个模型,而那才是人想确认的东西。
     //   current 空 —— 拉到了目录但一档都没选定。这也得说出来。
     if (tiers === null) {
-      brainLine.textContent = '读不到档位';
+      brainTier.textContent = '读不到';
+      brainKey.dataset['unwired'] = 'true';
+      brainLine.textContent = '拿不到档位目录 —— 后端没接上';
       brainLine.dataset['unwired'] = 'true';
+      brainLine.title = '';
     } else {
       const cur = tiers.tiers.find((t) => t.key === tiers.current);
-      const slots = tiers.slots.filter((s) => s.model).map((s) => `${s.role} ${s.model}`);
-      brainLine.textContent = cur
-        ? slots.length
-          ? `${cur.key} 档 · ${slots.join(' + ')}`
-          : `${cur.key} 档 · ${cur.label}`
+      const bad = !!cur && (cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram');
+      brainTier.textContent = cur
+        ? `${cur.key} 档`
         : tiers.current
-          ? `${tiers.current} 档（目录里没有这一档）`
+          ? `${tiers.current} 档?`
+          : '未选定';
+      brainKey.dataset['unwired'] = String(!cur || bad);
+
+      // 型号名一行摆完,摆不下就省略 —— 全称在 title 里,也在设置浮层那一行里
+      // 完整写着。**岛是余光扫一眼的地方**,不该为两个型号 id 吃掉设备列表三分之一
+      // 的高度(它先前正是这么干的:设备列表从 123px 缩到 73px,四台只露两台)。
+      const slots = tiers.slots.filter((x) => x.model).map((x) => `${ROLE_LABEL[x.role] ?? x.role} ${x.model}`);
+      const detail = cur
+        ? slots.length
+          ? slots.join(' · ')
+          : cur.label
+        : tiers.current
+          ? '目录里没有这一档'
           : '还没选定档位';
       // 装不下也要说 —— 岛上写着「C 档」而这台机器跑不动 C,是最难查的那种误导。
-      brainLine.dataset['unwired'] = String(!cur || cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram');
-      if (cur && cur.fit !== 'ok' && cur.fit !== 'unknown') {
-        brainLine.textContent += ` · ${cur.fitReason}`;
-      }
+      brainLine.textContent = bad ? `${cur!.fitReason} · ${detail}` : detail;
+      brainLine.title = detail;
+      brainLine.dataset['unwired'] = String(!cur || bad);
     }
   }
 

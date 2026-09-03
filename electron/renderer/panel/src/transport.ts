@@ -9,7 +9,7 @@
  * 另外两个当不存在。同一个事实读两处,迟早会出现两处不一致而没人发现。
  */
 import type { RenderPosture } from './types';
-import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, ModelTier, Phase, TierView } from './types';
+import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, MemoryCard, ModelTier, Phase, TierView, Turn } from './types';
 
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
@@ -149,11 +149,25 @@ export class PresenceSocket {
 
 export interface ChatHandlers {
   onPhase?(phase: Phase): void;
+  /**
+   * 后端认下的会话 id。**必须接住** —— 历史、记忆卡片、补录都按它去问,
+   * 面板自己编一个的话,问出来的永远是空的。
+   */
+  onSession?(sessionId: string): void;
   onDelta?(text: string): void;
   /** 作废已经流出去的内容。收到它就把这一轮清空重来。 */
   onReset?(): void;
   onLockstep?(state: LockstepState, reason: LockstepReason): void;
-  onDone?(): void;
+  /**
+   * 这一轮说完了。``response`` 是后端在 done 帧里给的**完整答复**。
+   *
+   * 为什么需要它:锁步 `engaged` 时文字是跟着语音一句句放出来的,而这台机器上
+   * 没有可用的发声器时,实测**一个 delta 都不会发** —— 整段答复只存在于 done
+   * 帧的 response 里。只认 delta 的客户端会把整轮答复丢掉,画出一个空气泡。
+   *
+   * 所以 done 里的 response 不是"冗余的重复",是这条路上唯一到得了的那一份。
+   */
+  onDone?(response: string): void;
   onError?(message: string): void;
 }
 
@@ -219,13 +233,20 @@ export async function streamChat(
           );
           break;
         case 'done':
-          h.onDone?.();
+          h.onDone?.(typeof ev['response'] === 'string' ? ev['response'] : '');
           break;
         case 'error':
           h.onError?.(String(ev['error'] ?? ''));
           break;
+        case 'meta': {
+          // 后端在这里说「这轮记到哪条会话上了」。conversation_session_id 优先:
+          // runtime_session_id 是这一次运行的 id,不是记忆挂靠的那条线。
+          const sid = ev['session_id'];
+          if (typeof sid === 'string' && sid) h.onSession?.(sid);
+          break;
+        }
         default:
-          break; // meta 等:面板不用,但不当成错误
+          break; // 认不出来的帧:忽略,但不当成错误
       }
     }
   }
@@ -304,7 +325,6 @@ function readBundle(raw: unknown): Bundle | null {
     value: typeof o['value'] === 'string' ? o['value'] : '',
     type: typeof o['type'] === 'string' ? o['type'] : '',
     ...(opts && opts.length ? { options: opts } : {}),
-    keyCount: typeof o['key_count'] === 'number' ? o['key_count'] : 0,
     overrides: typeof o['overrides'] === 'number' ? o['overrides'] : 0,
     unwired,
   };
@@ -570,5 +590,242 @@ export async function setTier(
   } catch (err) {
     console.error('[hud] 换档失败:', err);
     return { ok: false, gaps: [] };
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// 会话历史 —— 面板不该每次打开都从空白开始
+// ---------------------------------------------------------------------------
+
+/**
+ * 把一条会话的历史读回来。
+ *
+ * 拉不到返回 null,**不返回空数组** —— 「后端没接上」和「这条会话确实没说过话」
+ * 是两件事,画成一样的话,一次连不上的启动看起来就跟失忆一模一样。
+ */
+export async function fetchHistory(
+  base: string,
+  sessionId: string,
+  maxTurns = 50,
+): Promise<readonly Turn[] | null> {
+  if (!sessionId) return null;
+  try {
+    const resp = await fetch(
+      `${base}/api/v1/sessions/${encodeURIComponent(sessionId)}/history?max_turns=${maxTurns}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!resp.ok) {
+      // 404 = 后端不认识这条会话(通常是本地存的 id 过期了)。这不是错误,
+      // 但也不是「没有历史」—— 交给调用方决定要不要重开一条。
+      console.error('[hud] 拉历史失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as { success?: boolean; history?: unknown };
+    if (body.success === false || !Array.isArray(body.history)) return null;
+    return body.history
+      .map((raw, i) => readHistoryTurn(raw, i))
+      .filter((t): t is Turn => t !== null);
+  } catch (err) {
+    console.error('[hud] 拉历史失败:', err);
+    return null;
+  }
+}
+
+function readHistoryTurn(raw: unknown, i: number): Turn | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const text = typeof o['content'] === 'string' ? o['content'] : '';
+  if (!text) return null;
+  // 后端的角色是 user / assistant / system。system 不上屏 —— 它是给模型的,
+  // 不是说给人听的;画出来会让人以为自己看漏了一段对话。
+  const role = String(o['role'] ?? '');
+  if (role === 'system') return null;
+  const md = (o['metadata'] ?? {}) as Record<string, unknown>;
+  const files = Array.isArray(md['ingested_files']) ? (md['ingested_files'] as unknown[]) : [];
+  return {
+    id: `h-${i}-${String(o['timestamp'] ?? '')}`,
+    role: role === 'user' ? 'user' : 'agent',
+    text,
+    pending: '',
+    attachments: files
+      .filter((f): f is string => typeof f === 'string')
+      .map((name) => ({ kind: 'file' as const, name, note: '' })),
+    // 历史里的每一条都已经说完了 —— streaming 为真会让最后一条永远转圈。
+    streaming: false,
+  };
+}
+
+
+// ---------------------------------------------------------------------------
+// 喂东西进去 —— 选中的文件要真的进对话与记忆
+// ---------------------------------------------------------------------------
+
+/**
+ * 把用户挑的文件补录成对话轮次。
+ *
+ * `/api/v1/sessions/ingest_turns` 走的是 `record_session_turn` 那道统一记忆门
+ * (会话历史 + 工作记忆 + 对话记忆 + 统一语义记忆一次写齐)。所以喂进去的东西
+ * **和正常说话走的是同一条路** —— 不是另存一份面板自己的清单。
+ *
+ * 返回后端实际录进去了几条。`null` = 没接上。**「录了 0 条」和「没接上」要分开**:
+ * 前者是文件被后端拒了(空内容、格式不认),后者是请求根本没到。
+ */
+export async function ingestFiles(
+  base: string,
+  sessionId: string,
+  files: readonly { readonly name: string; readonly text: string }[],
+): Promise<number | null> {
+  if (!sessionId || !files.length) return null;
+  try {
+    const resp = await fetch(base + '/api/v1/sessions/ingest_turns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        turns: files.map((f) => ({
+          role: 'user',
+          content: f.text,
+          ts: Date.now() / 1000,
+          // 留痕:这条轮次是喂进来的文件,不是人打出来的。历史读回来时靠它
+          // 还原成附件,而不是一整屏莫名其妙的正文。
+          metadata: { source: 'panel_ingest', ingested_files: [f.name] },
+        })),
+      }),
+    });
+    if (!resp.ok) {
+      console.error('[hud] 喂文件被拒:', resp.status, await resp.text().catch(() => ''));
+      return null;
+    }
+    const body = (await resp.json()) as { success?: boolean; ingested?: unknown };
+    if (body.success !== true) return null;
+    return typeof body.ingested === 'number' ? body.ingested : 0;
+  } catch (err) {
+    console.error('[hud] 喂文件失败:', err);
+    return null;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// 隐私暂停 —— 一按就别看了
+// ---------------------------------------------------------------------------
+
+export interface PrivacyState {
+  readonly paused: boolean;
+  /** 为什么停的(后端原样给:`panel` / `user` / …)。空串 = 没在停。 */
+  readonly reason: string;
+}
+
+// 后端还给了 `rejected_frames` / `rejected_audio` / `rejected_system_audio`
+// (暂停期间各挡下多少)和 `epoch`。**这里不搬** —— 界面上没有地方画它们,
+// 搬一个没人渲染的字段进来就是又一处「看着接上了、其实没用上」。真要画的
+// 那天再接,那时它才有意义。
+
+function readPrivacy(raw: unknown): PrivacyState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const p = (o['privacy'] ?? o) as Record<string, unknown>;
+  if (typeof p['paused'] !== 'boolean') return null;
+  return {
+    paused: p['paused'],
+    reason: typeof p['reason'] === 'string' ? p['reason'] : '',
+  };
+}
+
+export async function fetchPrivacy(base: string): Promise<PrivacyState | null> {
+  try {
+    const resp = await fetch(base + '/api/perception/desktop/privacy', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    return readPrivacy(await resp.json());
+  } catch (err) {
+    console.error('[hud] 读隐私状态失败:', err);
+    return null;
+  }
+}
+
+/**
+ * 暂停 / 恢复桌面感知。
+ *
+ * 闸门在后端的 DesktopPerceptionStore(唯一进出口),一按四个消费方同时失明,
+ * 没有绕行路径。面板这侧**不做乐观切换** —— 「以为停了其实还在采」是这个开关
+ * 唯一不能犯的错。以后端返回的状态为准。
+ */
+export async function setPrivacy(base: string, paused: boolean): Promise<PrivacyState | null> {
+  const path = paused ? '/privacy/pause' : '/privacy/resume';
+  try {
+    const resp = await fetch(base + '/api/perception/desktop' + path + '?reason=panel', {
+      method: 'POST',
+    });
+    if (!resp.ok) {
+      console.error('[hud] 切隐私状态被拒:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['success'] !== true) return null;
+    return readPrivacy(body);
+  } catch (err) {
+    console.error('[hud] 切隐私状态失败:', err);
+    return null;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// 记忆卡片 —— 一条线折成的三天切片
+// ---------------------------------------------------------------------------
+//
+// **「怎么切」不在这里。** 三天这个粒度、边界锚在哪、weight 相对谁归一,全部在
+// 后端 core/memory_cards.py 一处。面板照着切好的片画,自己不做任何分段判断 ——
+// 否则同一条线在这里切五张、在别的界面切六张,两边都以为自己是对的。
+
+function readCard(raw: unknown): MemoryCard | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o['id'] === 'string' ? o['id'] : '';
+  if (!id) return null;
+  return {
+    id,
+    title: typeof o['title'] === 'string' ? o['title'] : '',
+    from: typeof o['from'] === 'string' ? o['from'] : '',
+    to: typeof o['to'] === 'string' ? o['to'] : '',
+    // **null 不能塌成 0。** 0 = 这三天确实什么都没发生;null = 这三天没有留下
+    // 可读的记录。卡面上前者是空、后者是虚线空心,人看到的下一步完全不同。
+    weight: typeof o['weight'] === 'number' ? o['weight'] : null,
+    turns: typeof o['turns'] === 'number' ? o['turns'] : 0,
+    modalities: Array.isArray(o['modalities'])
+      ? (o['modalities'] as unknown[]).filter((m): m is string => typeof m === 'string')
+      : [],
+    profile: Array.isArray(o['profile'])
+      ? (o['profile'] as unknown[]).filter((n): n is number => typeof n === 'number')
+      : [],
+  };
+}
+
+/** 拉这条线的卡片。null = 没接上或后端不认识这条会话,与「一张卡都没有」不同。 */
+export async function fetchCards(
+  base: string,
+  sessionId: string,
+): Promise<readonly MemoryCard[] | null> {
+  if (!sessionId) return null;
+  try {
+    const resp = await fetch(
+      base + '/api/v1/memory/cards?session_id=' + encodeURIComponent(sessionId),
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!resp.ok) {
+      console.error('[hud] 拉记忆卡片失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as { known?: boolean; cards?: unknown };
+    // 后端不认识这条会话时 known=false。**那不是「没有卡片」** —— 返回空数组
+    // 会让面板画出一个干净的空态,人以为自己真的没聊过。
+    if (body.known !== true || !Array.isArray(body.cards)) return null;
+    return body.cards.map(readCard).filter((c): c is MemoryCard => c !== null);
+  } catch (err) {
+    console.error('[hud] 拉记忆卡片失败:', err);
+    return null;
   }
 }

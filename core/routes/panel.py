@@ -677,4 +677,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.exception("记忆线查询失败")
             return JSONResponse({"error": "memory thread unavailable"}, status_code=503)
 
+    @router.get("/api/v1/memory/cards")
+    async def memory_cards(session_id: str = ""):
+        """一条记忆线折成的卡片(每张盖连续三天)。
+
+        **「怎么切」的判断不在这里,也不在面板里**,在 core/memory_cards.py 一处。
+        这个端点只是把它接出去 —— 同一条线在面板上切五张、在别的界面上切六张,
+        那就是同一个事实两处各存,而且两边都以为自己是对的。
+        """
+        try:
+            from core.memory_cards import cards_for_thread
+
+            return JSONResponse(cards_for_thread(session_id))
+        except Exception:
+            logger.exception("记忆卡片查询失败")
+            # 503 而不是空数组:**「读不到」和「这条线上没有卡片」是两件事**,
+            # 返回 [] 会让面板画出一个干净的空态,人以为自己真的没聊过。
+            return JSONResponse({"error": "memory cards unavailable"}, status_code=503)
+
     return router

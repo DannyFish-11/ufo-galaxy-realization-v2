@@ -15,10 +15,15 @@ import {
   PresenceSocket,
   fetchAllConfig,
   fetchBundles,
+  fetchCards,
+  fetchHistory,
+  fetchPrivacy,
   fetchTiers,
   nextBundleValue,
   saveConfig,
+  ingestFiles,
   setBundle,
+  setPrivacy,
   setTier,
   streamChat,
   toPhase,
@@ -87,12 +92,14 @@ function mount(host: HTMLElement): void {
   const main = document.createElement('div');
   main.className = 'main';
 
-  const island = createIsland(() =>
-    store.patch({ islandOpen: !store.state.islandOpen }),
-  );
+  const island = createIsland({
+    onToggle: () => store.patch({ islandOpen: !store.state.islandOpen }),
+    onPrivacy: (paused) => void flipPrivacy(paused),
+  });
   const thread = createThread();
   const dock = createDock({
     onSend: (text) => void send(text),
+    onFeed: (files) => void feedFiles(files),
     onTogglePopover: (which) =>
       store.patch({ popover: store.state.popover === which ? null : which }),
     onToggleBundle: (key) => void flipBundle(key),
@@ -123,7 +130,7 @@ function mount(host: HTMLElement): void {
     panel.dataset['slim'] = String(s.slim);
     deck.render();
     line.update(s.phase, s.slim, lineTrust(s.posture));
-    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.islandOpen);
+    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyPaused, s.islandOpen);
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
     thread.render(s.turns, s.lockstep, s.lockstepReason);
     dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
@@ -204,6 +211,156 @@ function mount(host: HTMLElement): void {
     store.patch({ tierGaps: gaps });
   }
 
+  // ── 会话 · 历史 · 记忆卡片 · 喂东西 · 隐私 ─────────────────────────
+
+  /** 上次那条会话记在哪。换机器/清缓存就没了 —— 那时从空白开始是对的。 */
+  const SESSION_KEY = 'galaxy.session_id';
+
+  function rememberSession(sid: string): void {
+    try {
+      window.localStorage.setItem(SESSION_KEY, sid);
+    } catch {
+      // 隐私模式 / 站点数据被禁 —— 记不住只是下次要重新开一条,不该炸。
+    }
+  }
+
+  function recallSession(): string {
+    try {
+      return window.localStorage.getItem(SESSION_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * 开面板时把上次那条对话读回来。
+   *
+   * 从前这里什么都没有:每次打开都是一屏空白,而后端明明记着。那不是「新对话」,
+   * 是**看起来失忆**。
+   *
+   * 读不到时**保持空**并说明白 —— 拿演示数据顶上就等于伪造记忆。
+   */
+  async function restoreSession(): Promise<void> {
+    const sid = recallSession();
+    if (!sid) return;
+    const turns = await fetchHistory(BASE, sid);
+    if (turns === null) {
+      // 后端不认识这条 id(通常是它过期了)。**丢掉本地那条**,否则接下来每一次
+      // 拉历史、拉卡片都会对着一个不存在的会话问,而且永远拿不到东西。
+      console.warn('[hud] 后端不认识上次那条会话,重新开一条:', sid);
+      try {
+        window.localStorage.removeItem(SESSION_KEY);
+      } catch {
+        /* 同上 */
+      }
+      return;
+    }
+    store.patch({ sessionId: sid, turns });
+    await loadCards();
+  }
+
+  /**
+   * 拉左栏那叠卡片。
+   *
+   * **「怎么切」不在这里** —— 三天这个粒度、边界锚在哪、weight 相对谁归一,
+   * 全在后端 core/memory_cards.py 一处。面板照着切好的片画。
+   */
+  async function loadCards(): Promise<void> {
+    const sid = store.state.sessionId;
+    if (!sid) return;
+    const cards = await fetchCards(BASE, sid);
+    // null = 没拉到。**保持 null**,别塌成空数组 —— 空数组在界面上是「这条线
+    // 上什么都没有」,而那是句谎话。
+    if (cards !== null) {
+      store.patch({ cards, start: clampStart(store.state.start, cards.length) });
+    }
+  }
+
+  /**
+   * 把挑中的文件喂进这条对话。
+   *
+   * 走 `/api/v1/sessions/ingest_turns`,也就是**正常说话走的同一条记忆门**
+   * (会话历史 + 工作记忆 + 对话记忆 + 统一语义记忆一次写齐),不是面板另存
+   * 一份自己的清单。
+   */
+  async function feedFiles(files: readonly File[]): Promise<void> {
+    const sid = store.state.sessionId;
+    if (!sid) {
+      // 还没有会话就没有地方可挂。**说出来** —— 静默丢掉正是这个按钮原来的毛病。
+      console.warn('[hud] 还没开始对话,先说一句再喂文件');
+      pushNotice('还没开始对话 —— 先说一句,再把文件喂进来');
+      return;
+    }
+    store.patch({ popover: null });
+
+    const readable: { name: string; text: string }[] = [];
+    const unreadable: string[] = [];
+    for (const f of files) {
+      try {
+        // 只读得动文本。二进制在这条路上没有意义 —— 补录端点收的是**对话轮次**,
+        // 不是附件存储。图片那条要走多模态注入,那是另一条路,还没接。
+        const text = await f.text();
+        if (text.trim()) readable.push({ name: f.name, text });
+        else unreadable.push(f.name);
+      } catch {
+        unreadable.push(f.name);
+      }
+    }
+    if (unreadable.length) {
+      // 读不动的**要说**,不能混在「成功」里 —— 用户会以为整批都进去了。
+      pushNotice(`这几个读不出文本，没有喂进去：${unreadable.join('、')}`);
+    }
+    if (!readable.length) return;
+
+    const n = await ingestFiles(BASE, sid, readable);
+    if (n === null) {
+      pushNotice('文件没能喂进去 —— 后端没接上或拒绝了这一批');
+      return;
+    }
+    // **先把历史读回来,再报数。** 反过来的话,那句提示刚挂上去就被整条历史
+    // 覆盖掉了 —— 实测过一次:后端确实收下了文件,而界面上什么话都没说。
+    const turns = await fetchHistory(BASE, sid);
+    if (turns !== null) store.patch({ turns });
+    // 以后端**实际录进去的条数**为准。前端按选中数量报数的话,后端拒掉几条
+    // 就没人知道了。
+    pushNotice(n === readable.length ? `喂进去 ${n} 个文件` : `${readable.length} 个里后端只收下 ${n} 个`);
+    await loadCards();
+  }
+
+  /** 把一句提示挂到对话流里。面板没有单独的提示条,而这些话不该只进控制台。 */
+  function pushNotice(text: string): void {
+    store.patch({
+      turns: [
+        ...store.state.turns,
+        { id: `n-${Date.now()}`, role: 'agent', text, pending: '', attachments: [], streaming: false },
+      ],
+    });
+  }
+
+  /**
+   * 按停 / 恢复桌面感知。
+   *
+   * **不做乐观切换。** 「以为停了其实还在采」是这个开关唯一不能犯的错,所以
+   * 界面永远显示后端返回的状态;写失败就保持原样并说出来。
+   */
+  async function flipPrivacy(paused: boolean): Promise<void> {
+    const st = await setPrivacy(BASE, paused);
+    if (st === null) {
+      pushNotice(paused ? '没能暂停感知 —— 后端没接上，它还在采' : '没能恢复感知 —— 后端没接上');
+      return;
+    }
+    store.patch({ privacyPaused: st.paused });
+  }
+
+  /** 问一次当前隐私状态。问不到就保持 null —— 那时按钮显示「状态未知」。 */
+  async function loadPrivacy(): Promise<void> {
+    const st = await fetchPrivacy(BASE);
+    if (st !== null) store.patch({ privacyPaused: st.paused });
+  }
+
+  void restoreSession();
+  void loadPrivacy();
+
   /** 拉一次档位目录。拉不到**保持 null**,浮层那一行会说「读不到」而不是空着。 */
   async function loadTiers(): Promise<void> {
     const view = await fetchTiers(BASE);
@@ -276,15 +433,52 @@ function mount(host: HTMLElement): void {
       { message: text },
       {
         onPhase: (phase) => store.patch({ phase }),
+        // 后端说这轮记到哪条会话上了。**接住它** —— 历史、记忆卡片、喂文件
+        // 全按它去问;面板自己编一个的话,问出来永远是空的。
+        onSession: (sid) => {
+          if (sid && sid !== store.state.sessionId) {
+            store.patch({ sessionId: sid });
+            rememberSession(sid);
+          }
+        },
         onDelta: (chunk) => patchAgent((t) => ({ ...t, text: t.text + chunk })),
         // 作废已经流出去的内容:清空这一轮重来,不是往后追加。
         onReset: () => patchAgent((t) => ({ ...t, text: '', pending: '' })),
         onLockstep: (state, reason) =>
           store.patch({ lockstep: state, lockstepReason: reason }),
-        onDone: () => patchAgent((t) => ({ ...t, streaming: false })),
+        onDone: (response) => {
+          // **一个 delta 都没来的时候,拿 done 里的 response 兜底。**
+          //
+          // 实测(对着真的 chat router):锁步是 `engaged` 而这台机器上没有可用的
+          // 发声器时,文字要跟着语音走 —— 语音永远没来,于是一个 delta 都不发,
+          // 整段答复只存在于 done 帧的 response 里。只认 delta 的话,答复就丢了,
+          // 面板画出一个空气泡。而空气泡跟「它想了想没什么好说的」长得一模一样。
+          //
+          // 这不是给后端打补丁:done.response 本来就是后端在那一帧里明说的答复,
+          // 读它是对的。同一次请求换成不走锁步(no_speaker)时,delta 正常发三条、
+          // 内容与 response 一致,两条路对得上。
+          //
+          // 真的什么都没有时才说「什么都没拿到」—— 那句话必须留给真正空的那种。
+          patchAgent((t) => ({
+            ...t,
+            streaming: false,
+            text:
+              t.text ||
+              response ||
+              '这一轮后端没有返回任何内容 —— 不是它没话说，是这条路上什么都没拿到',
+          }));
+          // 这一轮进了记忆,卡片就变了。**重新问后端**,不在前端自己给最新那张
+          // 卡的计数加一 —— 切片的判断只有后端做得了(这一轮可能落进新的三天)。
+          void loadCards();
+        },
         onError: (msg) => {
+          // 只写 console.warn 等于没说 —— 出错的那一轮在界面上照样是个空气泡。
           console.warn('[hud] chat/stream:', msg);
-          patchAgent((t) => ({ ...t, streaming: false }));
+          patchAgent((t) => ({
+            ...t,
+            streaming: false,
+            text: t.text ? `${t.text}\n\n（这一轮中断了：${msg}）` : `这一轮没能说完：${msg}`,
+          }));
         },
       },
     );
@@ -420,14 +614,14 @@ function seedDemo(store: Store): void {
   // 真实的一份由 fetchBundles() 拉,见 mount() 里那段。
   const bundles: Bundle[] = [
     { key: 'omnimodal', name: '全模态', note: '屏 摄 麦 系统声', primary: 'GALAXY_AMBIENT_LOOP',
-      value: 'true', type: 'boolean', keyCount: 20, overrides: 1, unwired: false },
+      value: 'true', type: 'boolean', overrides: 1, unwired: false },
     { key: 'cross_device', name: '跨设备', note: '发现 配对 主脑 手机 手表', primary: 'GALAXY_CROSS_DEVICE_ENABLED',
-      value: 'true', type: 'boolean', keyCount: 36, overrides: 0, unwired: false },
+      value: 'true', type: 'boolean', overrides: 0, unwired: false },
     { key: 'voice', name: '声音', note: '跟文字锁步', primary: 'GALAXY_SPEAK',
-      value: 'true', type: 'boolean', keyCount: 63, overrides: 0, unwired: false },
+      value: 'true', type: 'boolean', overrides: 0, unwired: false },
     { key: 'autonomy', name: '自主', note: '问过再做', primary: 'GALAXY_AUTONOMY',
       value: 'guided', type: 'select', options: ['safe', 'guided', 'autonomous'],
-      keyCount: 58, overrides: 0, unwired: false },
+      overrides: 0, unwired: false },
   ];;
 
   store.patch({

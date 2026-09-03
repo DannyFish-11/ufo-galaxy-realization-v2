@@ -406,6 +406,30 @@ body {
   font-weight: 400; font-size: 10px; letter-spacing: 0.06em;
   text-transform: none; color: var(--a-mid);
 }
+/* 「别看了」。岛上唯一一个能按的东西 —— 破例的理由在 island.ts 那段注释里:
+   它要的是此刻立刻生效,而要人先开设置、再翻到感知那栏、再找某个键,
+   想遮住摄像头的那几秒里这条路太长。 */
+.privacy-btn {
+  margin-left: auto; margin-right: 10px;
+  padding: 2px 9px 3px;
+  border: 0; border-radius: 999px;
+  font: inherit; font-size: 10px; letter-spacing: 0.04em; text-transform: none;
+  color: var(--ink-2); cursor: pointer;
+  background: rgba(252, 251, 255, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+  transition: background 0.3s var(--ease), color 0.3s var(--ease);
+}
+.privacy-btn:hover { background: rgba(252, 251, 255, 0.85); }
+/* 已暂停:实心,一眼看出「现在什么都没在采」—— 这是它最重要的一个状态。 */
+.privacy-btn[data-paused='true'] {
+  color: #fff; background: var(--warn); box-shadow: none;
+}
+/* 问不到后端 —— **不是「正在采」**。虚线边:说不出口的时候就说不知道。 */
+.privacy-btn[data-unknown='true'] {
+  color: var(--ink-3); background: none;
+  box-shadow: none; outline: 1px dashed rgba(93, 84, 102, 0.3); outline-offset: -1px;
+}
+
 .per-grid {
   flex: none;
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px;
@@ -417,12 +441,14 @@ body {
 
 /* 岛内最下面那行:此刻在跑哪一档。**只读** —— 岛是状态面,不是控制面。
    dev-list 会自己滚,这一行 flex:none 钉在它下面,不跟着滚走。 */
-.brain-key { flex: none; margin-top: 18px; }
+/* 抬头与「感知」「设备」同一个骨架:左边名字、右边当前档。型号名一行摆完,
+   摆不下省略 —— 岛是余光扫一眼的地方,不该为两个型号 id 吃掉设备列表的高度。 */
+.brain-key { flex: none; margin-top: 14px; }
 .brain-line {
   flex: none;
-  margin-top: 5px; padding-right: 14px;
-  font-size: 11px; line-height: 1.45; color: var(--ink-2);
-  overflow-wrap: anywhere;
+  margin-top: 4px; padding-right: 14px;
+  font-size: 11px; line-height: 1.4; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* 读不到目录、或者当前这一档这台机器根本跑不动 —— 两种都得看得出来。
    岛上写着「C 档」而它跑不动 C,是最难查的那种误导。 */

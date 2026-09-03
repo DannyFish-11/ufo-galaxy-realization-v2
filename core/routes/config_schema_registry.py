@@ -1213,6 +1213,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "perception",
         "description": "桌面感知帧的保鲜时长(秒,超过就算过期不再当作当前画面 · 默认 10)",
     },
+    "GALAXY_PERCEPTION_KEYFRAMES": {
+        "default": "4",
+        "type": "number",
+        "category": "perception",
+        "description": "屏幕保留最近几帧（让 AI 能看出「刚才发生了什么」而不只是此刻 · 0=只留当前一帧 · 默认 4）",
+    },
     "GALAXY_PERCEPTION_PRIVACY_DEFAULT": {
         "default": "active",
         "type": "select",
@@ -1808,6 +1814,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "boolean",
         "category": "perception",
         "description": "原生多模态对话格式（把图片/音频按模型原生格式发，而不是转文字 · 默认关）",
+    },
+    "GALAXY_CU_MEMORY": {
+        "default": "true",
+        "type": "boolean",
+        "category": "agent",
+        "description": "桌面操作记住失败经验（下次遇到同一个界面会带上「上次这么点没用」· 默认开）",
     },
     "GALAXY_HITL_CONFIRM_GATE": {
         "default": "false",

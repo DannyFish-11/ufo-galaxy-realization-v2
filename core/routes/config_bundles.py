@@ -54,6 +54,7 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
             "GALAXY_DESKTOP_PERCEPTION_TTL",
             "GALAXY_VIDEO_FPS_*",
             "GALAXY_SYSTEM_AUDIO_*",
+            "GALAXY_PERCEPTION_KEYFRAMES",
         ),
     },
     {

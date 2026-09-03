@@ -31,7 +31,6 @@ import json
 import logging
 import os
 import platform
-import socket
 import subprocess
 import threading
 import time
@@ -1288,12 +1287,10 @@ class NetworkTopologyRuntime:
 
     @staticmethod
     def _get_lan_ip() -> str:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-        finally:
-            s.close()
+        """本机局域网 IP;探不到返回空串(原实现是抛异常,被上层 except 吞掉)。见 :mod:`core.lan_address`。"""
+        from core.lan_address import detect_lan_ip_or_empty
+
+        return detect_lan_ip_or_empty()
 
     @staticmethod
     def _subnet_from_ip(ip: str, prefix: int = 24) -> str:

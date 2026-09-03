@@ -97,8 +97,11 @@ export interface Attachment {
  *
  * **这个形状由后端说了算** —— `GET /api/config/bundles` 现算出来什么就是什么。
  * 面板不许自己再存一份「哪一档管哪些键」:那样同一个事实两处各存,迟早一处说开、
- * 另一处说关,而且没人看得见。这四档之前确实在面板里写死过,连 keyCount 都是
+ * 另一处说关,而且没人看得见。这四档之前确实在面板里写死过,连「管几个键」都是
  * 手抄的数字,点一下只翻一个本地变量、不发任何请求。
+ *
+ * 后端的 `key_count` **不搬到这里** —— 界面上已经不显示那个数字了(它不影响任何
+ * 决定)。搬一个没人渲染的字段进来,就是又一处「看着接上了、其实没用上」。
  */
 export interface Bundle {
   readonly key: string;
@@ -116,8 +119,6 @@ export interface Bundle {
   readonly type: string;
   /** select 型才有。有它就说明这一档不是两态的。 */
   readonly options?: readonly string[];
-  /** 这一档管着多少个键 —— 后端按 category 现算,不写死 */
-  readonly keyCount: number;
   /** 有几个键被手动改得偏离了默认 —— >0 时档位显示为「有 N 项手改过」 */
   readonly overrides: number;
   /**
