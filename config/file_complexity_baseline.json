@@ -142,7 +142,7 @@
     "galaxy_gateway/orchestrator/task_orchestrator.py": 1051,
     "galaxy_gateway/websocket_handler.py": 1262,
     "launcher/node_startup.py": 1003,
-    "launcher/services.py": 2242,
+    "launcher/services.py": 2270,
     "main.py": 1718,
     "nodes/Node_112_SelfHealing/main.py": 1160,
     "nodes/Node_58_ModelRouter/main.py": 1082,

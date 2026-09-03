@@ -2,12 +2,13 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 399 条 · 组件 schema 103 个
+// 路径 400 条 · 组件 schema 104 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
   | "/api/config"
   | "/api/config/all"
+  | "/api/config/bundles"
   | "/api/config/probe"
   | "/api/config/save"
   | "/api/devices/heartbeat"
@@ -411,6 +412,7 @@ export type ApiPath =
 export const API_METHODS = {
   "/api/config": ["get", "post"],
   "/api/config/all": ["get"],
+  "/api/config/bundles": ["get", "post"],
   "/api/config/probe": ["post"],
   "/api/config/save": ["post"],
   "/api/devices/heartbeat": ["post"],
@@ -876,6 +878,11 @@ export interface BudgetRecordRequest {
   "session_id": string;
   "tenant_id"?: string;
   "tokens_used": number;
+}
+
+export interface BundleUpdateRequest {
+  "key": string;
+  "value": string;
 }
 
 export interface ChatRequest {
