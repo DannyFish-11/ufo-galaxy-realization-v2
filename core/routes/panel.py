@@ -695,4 +695,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             # 返回 [] 会让面板画出一个干净的空态,人以为自己真的没聊过。
             return JSONResponse({"error": "memory cards unavailable"}, status_code=503)
 
+    @router.get("/api/v1/memory/cards/{card_id}/turns")
+    async def memory_card_turns(card_id: str, session_id: str = ""):
+        """抽出来那张卡那几天说了什么。
+
+        区间判断与卡片列表**共用同一套分桶**(core/memory_cards.py 的
+        ``_bucket_turns``),不是拿 from/to 再比一次日期 —— 比日期就有了第二份
+        「边界怎么算」的理解,而两份差一点点的表现是「点开这张卡少了两句」。
+        """
+        try:
+            from core.memory_cards import turns_in_card
+
+            return JSONResponse(turns_in_card(session_id, card_id))
+        except Exception:
+            logger.exception("记忆卡片内容查询失败")
+            return JSONResponse({"error": "memory card turns unavailable"}, status_code=503)
+
     return router

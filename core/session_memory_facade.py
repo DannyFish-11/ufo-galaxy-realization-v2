@@ -42,6 +42,44 @@ def _is_adjacent_duplicate(
     return False
 
 
+#: 一条轮次带进来的模态,用**感知契约那套名字**(screen / camera / microphone /
+#: system_audio)加上两个多模态请求特有的(image / video)。
+#:
+#: 名字必须与 core/phase_contract.py 的 PerceptionModality 对得上:岛上四条通路
+#: 用那套名字,记忆卡片上那一栏也用那套名字。各写一套的话,同一件事在两处叫不同
+#: 的名字,而没人会去对。
+_MODALITY_IMAGE = "image"
+_MODALITY_AUDIO = "microphone"
+_MODALITY_SCREEN = "screen"
+_MODALITY_VIDEO = "video"
+
+
+def modalities_of(multimodal_context: Any) -> List[str]:
+    """这一轮带进来了哪些模态。**判断只在这里做一次。**
+
+    记忆卡片上那一栏靠它才有内容 —— 不写的话那一栏永远是空的,一个看着接好了、
+    其实没有任何生产者的字段。而「那三天是看着屏幕聊的还是纯打字」恰恰是回头找
+    那几天时最好用的线索。
+
+    **拿不准就不写。** 猜一个「文字」出来,卡面上就出现了一个谁也没说过的事实;
+    空列表在渲染那侧是「没记录」,与「确实只有文字」不必分开(两者对人是一样的)。
+    """
+    if multimodal_context is None:
+        return []
+    out: List[str] = []
+    if getattr(multimodal_context, "images", None):
+        out.append(_MODALITY_IMAGE)
+    if getattr(multimodal_context, "audio", None):
+        out.append(_MODALITY_AUDIO)
+    if getattr(multimodal_context, "video", None):
+        out.append(_MODALITY_VIDEO)
+    # screen 是个自由字典(分辨率、窗口标题、抓取时刻);**空字典不算**,
+    # 那是「带了这个字段但里面什么都没有」,不是「看了屏幕」。
+    if getattr(multimodal_context, "screen", None):
+        out.append(_MODALITY_SCREEN)
+    return out
+
+
 async def record_session_turn(
     *,
     conversation_session_id: str,

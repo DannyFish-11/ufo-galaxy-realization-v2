@@ -37,7 +37,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 #: 一张卡片盖住几天。改这里就改了所有界面上的卡片粒度。
 SLICE_DAYS = 3
@@ -47,6 +47,9 @@ _DAY_S = 86400.0
 
 #: 卡面中段那条「图」分几段。段数固定,于是不同卡片的图形可以直接比高低。
 PROFILE_BINS = 6
+
+#: 一条有时间戳的轮次都没有时,那唯一一张卡的 id。**只在这一处写**。
+UNDATED_CARD_ID = "undated"
 
 #: 一条轮次的时间戳小于这个值就当作「没有时间戳」。
 #:
@@ -104,6 +107,44 @@ def _iso_day(ts: float) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(ts))
 
 
+def _bucket_turns(
+    turns: Sequence[Any], *, now: Optional[float] = None
+) -> Tuple[List[Tuple[str, float, List[Any]]], List[Any]]:
+    """**分桶规则的唯一实现。** 返回 ``[(卡片 id, 起点秒, 轮次), ...]`` 与「没有
+    时间戳的那些」。
+
+    卡片列表和「点开一张卡看里面」两条路都从这里出发。曾经它们各写了一遍:
+    一份用 ``max(最后一条, now)`` 定桶数(于是末尾会多出几个空桶),另一份只看
+    最后一条 —— 于是最新那几张空卡在「点开」那条路上是「认不出这张卡」,而不是
+    「这几天没说话」。两份对同一条规则的理解差一点点,表现出来就是点开某张卡
+    什么都没有,而没人会去查。
+    """
+    dated: List[Tuple[float, Any]] = []
+    undated: List[Any] = []
+    for t in turns or []:
+        ts = _turn_ts(t)
+        (dated.append((ts, t)) if ts else undated.append(t))
+    if not dated:
+        return [], undated
+
+    dated.sort(key=lambda p: p[0])
+    span = SLICE_DAYS * _DAY_S
+    origin = _day_floor(dated[0][0])
+    # 桶的个数看「第一条到最后一条」,再加上**到现在为止**的这段 —— 中间和末尾
+    # 空着的段照样成桶,那些就是 weight=0 的安静期。跳过它们,卡片之间会出现
+    # 看不见的时间断层。
+    last = max(dated[-1][0], float(now) if now else dated[-1][0])
+    count = max(1, int((last - origin) // span) + 1)
+
+    buckets: List[Tuple[str, float, List[Any]]] = [
+        (f"{_iso_day(origin + i * span)}+{SLICE_DAYS}d", origin + i * span, []) for i in range(count)
+    ]
+    for ts, t in dated:
+        idx = min(count - 1, max(0, int((ts - origin) // span)))
+        buckets[idx][2].append(t)
+    return buckets, undated
+
+
 def slice_turns_into_cards(
     turns: Sequence[Any],
     *,
@@ -121,20 +162,16 @@ def slice_turns_into_cards(
     if not turns:
         return []
 
-    dated: List[Tuple[float, Any]] = []
-    undated: List[Any] = []
-    for t in turns:
-        ts = _turn_ts(t)
-        (dated.append((ts, t)) if ts else undated.append(t))
+    buckets, undated = _bucket_turns(turns, now=now)
 
-    if not dated:
+    if not buckets:
         # **一条有时间戳的轮次都没有。** 不能凭空造一段时间出来,但也不能装作
         # 什么都没有 —— 那些轮次真实存在。给一张 weight=None 的卡:有内容,
         # 但「这几天有多浓」这个问题没有答案。
         return [
             {
-                "id": "undated",
-                "title": (titles or {}).get("undated", ""),
+                "id": UNDATED_CARD_ID,
+                "title": (titles or {}).get(UNDATED_CARD_ID, ""),
                 "from": "",
                 "to": "",
                 "weight": None,
@@ -144,56 +181,94 @@ def slice_turns_into_cards(
             }
         ]
 
-    dated.sort(key=lambda p: p[0])
-    span = SLICE_DAYS * _DAY_S
-    origin = _day_floor(dated[0][0])
-    last = max(dated[-1][0], float(now) if now else dated[-1][0])
-
-    # 桶的个数由「第一条轮次到最后一条轮次」决定 —— 中间空着的段照样成桶,
-    # 那些就是 weight=0 的安静期。跳过它们的话,卡片之间会出现看不见的时间断层。
-    bucket_count = max(1, int((last - origin) // span) + 1)
-    buckets: List[List[Tuple[float, Any]]] = [[] for _ in range(bucket_count)]
-    for ts, t in dated:
-        idx = min(bucket_count - 1, max(0, int((ts - origin) // span)))
-        buckets[idx].append((ts, t))
-
     # 没有时间戳的那些轮次全部挂到**最后一张**卡,并让它的 weight 变成 None:
     # 那张卡确实有内容,但已经数不清它到底有多浓了。丢掉它们会让总轮次数对不上。
-    if undated:
-        buckets[-1].extend((0.0, t) for t in undated)
+    tail_undated = len(undated)
+    span = SLICE_DAYS * _DAY_S
+    busiest = max(len(b[2]) for b in buckets)
+    if tail_undated:
+        busiest = max(busiest, len(buckets[-1][2]) + tail_undated)
 
-    busiest = max((len(b) for b in buckets), default=0)
     cards: List[Dict[str, Any]] = []
-    for i, bucket in enumerate(buckets):
-        start = origin + i * span
-        end = start + span - 1.0
-        has_undated = any(ts == 0.0 for ts, _ in bucket)
-        count = len(bucket)
+    for i, (cid, start, bucket) in enumerate(buckets):
+        is_last = i == len(buckets) - 1
+        extra = undated if (is_last and tail_undated) else []
+        count = len(bucket) + len(extra)
 
-        if has_undated:
+        if extra:
             weight: Optional[float] = None
             profile: List[float] = []
         else:
             weight = (count / busiest) if busiest else 0.0
             profile = _profile(bucket, start, span)
 
-        cid = f"{_iso_day(start)}+{SLICE_DAYS}d"
         cards.append(
             {
                 "id": cid,
                 "title": (titles or {}).get(cid, ""),
                 "from": _iso_day(start),
-                "to": _iso_day(end),
+                "to": _iso_day(start + span - 1.0),
                 "weight": weight,
                 "turns": count,
-                "modalities": sorted({m for _, t in bucket for m in _turn_modalities(t)}),
+                "modalities": sorted({m for t in list(bucket) + list(extra) for m in _turn_modalities(t)}),
                 "profile": profile,
             }
         )
     return cards
 
 
-def _profile(bucket: Iterable[Tuple[float, Any]], start: float, span: float) -> List[float]:
+def turns_in_card(session_id: str, card_id: str, *, session_manager: Any = None, limit: int = 400) -> Dict[str, Any]:
+    """抽出来那张卡对应的那几天,到底说了些什么。
+
+    **区间判断仍然只在这里做。** 面板拿到卡片之后自己按 from/to 过滤历史,等于
+    在前端重做一遍切片:两处对「这一天算前一张还是后一张」的理解迟早不一致,而
+    不一致的表现是「点开这张卡,里面少了两句」——没人会去查。
+
+    走的是与卡片列表**同一个** ``_bucket_turns``,不是拿 from/to 去比日期。
+    """
+    from core.session_manager import get_session_manager
+
+    sm = session_manager or get_session_manager()
+    root = sm.thread_root_of(session_id) if session_id else ""
+    if not root:
+        return {"known": False, "card_id": card_id, "found": False, "turns": []}
+
+    turns: List[Any] = []
+    for sess in sm.sessions_in_thread(root):
+        turns.extend(m.to_dict() for m in (getattr(sess, "history", None) or []))
+
+    buckets, undated = _bucket_turns(turns)
+    picked: Optional[List[Any]] = None
+    if not buckets:
+        if card_id == UNDATED_CARD_ID:
+            picked = list(undated)
+    else:
+        for i, (cid, _start, bucket) in enumerate(buckets):
+            if cid != card_id:
+                continue
+            picked = list(bucket)
+            if i == len(buckets) - 1:
+                picked.extend(undated)
+            break
+
+    if picked is None:
+        # **卡片 id 认不出来**不是「这张卡是空的」。前者说明面板拿着一张过期的卡
+        # (线增长之后末尾多出了新桶),后者才是真的那几天没说过话。
+        return {"known": True, "card_id": card_id, "found": False, "turns": []}
+
+    return {
+        "known": True,
+        "card_id": card_id,
+        "found": True,
+        "total": len(picked),
+        # 一张卡可能盖着几百条。**截断要留痕** —— 悄悄少给几条,人会以为那几天
+        # 就说了这么多。取最后 limit 条(离现在近的更可能是人要找的)。
+        "truncated": len(picked) > limit,
+        "turns": picked[-limit:],
+    }
+
+
+def _profile(bucket: Sequence[Any], start: float, span: float) -> List[float]:
     """卡面中段那条图:这三天内部的疏密。
 
     段内归一(最高的一段是 1.0),因为它回答的是「这三天里忙在哪一头」——
@@ -201,7 +276,10 @@ def _profile(bucket: Iterable[Tuple[float, Any]], start: float, span: float) -> 
     """
     bins = [0] * PROFILE_BINS
     width = span / PROFILE_BINS
-    for ts, _ in bucket:
+    for t in bucket:
+        ts = _turn_ts(t)
+        if not ts:
+            continue
         k = min(PROFILE_BINS - 1, max(0, int((ts - start) / width)))
         bins[k] += 1
     top = max(bins) if bins else 0

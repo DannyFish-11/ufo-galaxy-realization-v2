@@ -57,7 +57,12 @@ class TestEveryNewlyWiredEndpointIsInTheBuiltBundle:
         ("endpoint", "what"),
         [
             ("/api/v1/sessions/ingest_turns", "喂文件"),
-            ("/api/perception/desktop/privacy", "隐私暂停"),
+            # 路径在代码里是 base + '/api/perception/desktop' + '/privacy/pause' 拼出来的,
+            # 产物里没有拼好的整串。分开钉两截 —— 钉整串会在一次无害的重构后误报,
+            # 而误报的判据迟早被人删掉。
+            ("/api/perception/desktop", "隐私暂停"),
+            ("/privacy/pause", "隐私暂停"),
+            ("/privacy/resume", "隐私恢复"),
             ("/api/v1/memory/cards", "记忆卡片"),
             ("/api/v1/chat/stream", "对话"),
         ],
@@ -113,14 +118,23 @@ class TestDegradationIsVisibleNotSilent:
         body = m.group(1)
         assert "patchAgent" in body, "onError 只写了日志 —— 出错的那一轮在界面上还是个空气泡"
 
-    def test_privacy_has_three_states_not_two(self):
-        """``null``(还没问到后端)不许被当成「正在采」。
+    def test_privacy_is_read_from_the_posture_frame_not_a_second_copy(self):
+        """停没停这件事**只有一个权威:posture 帧**。
 
-        说错任何一边都比说「不知道」糟:说成已暂停会让人放心地在摄像头前做别的事;
-        说成正在采会让人以为按钮坏了。
+        ``perception.privacy_paused`` 每一帧都带着。面板另外攒一份(启动时问一次
+        HTTP、点一下改一次)就是同一个事实两处各存 —— 从托盘 / 命令行 / 另一台
+        设备按停之后,帧里说停了、四条通路画成 paused,而按钮还写着「暂停感知」:
+        一个界面同时给出两个互相矛盾的答案,而且没人看得见。
+
+        这条判据的头一版正是钉着那份副本(``privacyPaused === null``)。副本删掉
+        之后它跟着红了 —— **载体没了,判据本身没失效**,所以这里按原意重述,并且
+        比原来更严:不但要有三态,还要证明那三态是从帧里读的。
         """
-        code = _code_only(PANEL_SRC / "ui" / "island.ts")
-        assert "privacyPaused === null" in code, "隐私状态被压成了两态 —— 「不知道」没有自己的样子"
+        island = _code_only(PANEL_SRC / "ui" / "island.ts")
+        assert "perception.privacy_paused" in island, "岛不再从 posture 帧读隐私状态 —— 那就一定是从别处又攒了一份"
+        assert "perception === null" in island, "「还没收到过帧」没有自己的样子 —— 隐私状态被压成了两态"
+        store = _code_only(PANEL_SRC / "store.ts")
+        assert "privacyPaused" not in store, "store 里又出现了 privacyPaused —— 副本一存下来,别处按停之后两份会当场打架"
 
     def test_cards_and_history_keep_null_distinct_from_empty(self):
         """「没拉到」与「确实是空的」在状态里必须分得开。"""
@@ -128,7 +142,12 @@ class TestDegradationIsVisibleNotSilent:
         assert (
             "readonly cards: readonly MemoryCard[] | null" in store
         ), "cards 不再可为 null —— 「还没拉到」会被画成「这条线上什么都没有」,而那是句谎话"
-        assert "readonly privacyPaused: boolean | null" in store
+        # 左栏空着能是三件不同的事,三件都得说得出口:还没聊过 / 读不到 /
+        # 这条线确实是空的。长得一样的话,「后端没接上」就被画成了「你还没聊过」,
+        # 而人会照着后者去做,再说一句,然后发现还是空的。
+        deck = _code_only(PANEL_SRC / "ui" / "deck.ts")
+        for phrase in ("还没聊过", "读不到记忆卡片", "还没有可折成卡片"):
+            assert phrase in deck, f"左栏那三种空态少了一种: {phrase}"
 
 
 class TestTheSessionIdComesFromTheBackend:

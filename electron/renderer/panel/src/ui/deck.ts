@@ -44,7 +44,7 @@ export interface DeckHandles {
   render(): void;
 }
 
-export function createDeck(store: Store): DeckHandles {
+export function createDeck(store: Store, onDraw?: (index: number) => void): DeckHandles {
   const rail = el('div', 'rail');
   const frame = el('div', 'frame');
   const deck = el('div', 'deck');
@@ -55,9 +55,18 @@ export function createDeck(store: Store): DeckHandles {
   const blocks = el('div', 'blocks');
   const rest = el('button', 'rest');
 
+  /**
+   * 一张卡都没有时说一句话。
+   *
+   * **空着的左栏能是三件不同的事**:还没聊过、读不到、这条线上确实没东西。
+   * 三种长得一模一样的话,「后端没接上」就被画成了「你还没聊过」—— 而人会
+   * 照着后者去做(再说一句),然后发现还是空的,也不知道为什么。
+   */
+  const empty = el('div', 'deck-empty');
+
   wheel.setAttribute('aria-hidden', 'true');
   wheel.append(thumb);
-  slot.append(stack, blocks);
+  slot.append(stack, blocks, empty);
   deck.append(wheel, slot);
   rest.type = 'button';
   rest.setAttribute('aria-label', '收起或展开左栏');
@@ -74,7 +83,14 @@ export function createDeck(store: Store): DeckHandles {
       const i = Number(card.dataset['index']);
       if (!Number.isInteger(i)) return;
       // 点已经抽出来的那张,它自己收回去 —— 不用跑去点空白。
-      store.patch({ drawn: store.state.drawn === i ? -1 : i });
+      const next = store.state.drawn === i ? -1 : i;
+      store.patch({ drawn: next });
+      // 抽出来一张卡,就该看得到那几天说了什么。
+      //
+      // 从前这里只翻一个本地变量 —— 卡片是真数据、抽出来也有动画,但**点开
+      // 之后什么都没有**。那是「看起来接上了」最舒服的一种伪装:每一步都有
+      // 反馈,只是最后一步不存在。
+      onDraw?.(next);
     });
     stack.append(card);
     pool.push(card);
@@ -88,7 +104,10 @@ export function createDeck(store: Store): DeckHandles {
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       const i = Number(b.dataset['index']);
-      if (Number.isInteger(i)) store.patch({ drawn: i });
+      if (Number.isInteger(i)) {
+        store.patch({ drawn: i });
+        onDraw?.(i);
+      }
     });
     blocks.append(b);
     blks.push(b);
@@ -162,6 +181,19 @@ export function createDeck(store: Store): DeckHandles {
   function layout(): void {
     const { start, drawn, slim } = store.state;
     const cards = store.state.cards ?? [];
+
+    // 三种空,三句话。收窄时不说 —— 那时整栏只有 44px 宽,放不下也不该放。
+    empty.textContent = slim
+      ? ''
+      : cards.length
+        ? ''
+        : store.state.cards === null
+          ? store.state.sessionId
+            ? '读不到记忆卡片 —— 后端没接上'
+            : '还没聊过 · 说一句，这里就会开始记'
+          : '这条线上还没有可折成卡片的对话';
+    empty.dataset['unwired'] = String(store.state.cards === null && !!store.state.sessionId);
+    empty.hidden = !empty.textContent;
     const height = cardHeight();
     const open = drawn >= 0;
     const rel = open ? drawn - start : -1;

@@ -658,6 +658,7 @@ class AgentKernel:
             control_session_id=control_session_id,
             runtime_attachment_session_id=runtime_attachment_session_id,
             device_id=device_id,
+            multimodal_context=multimodal_context,
         )
 
         return resp
@@ -808,16 +809,23 @@ class AgentKernel:
         control_session_id: str = "",
         runtime_attachment_session_id: str = "",
         device_id: str = "",
+        multimodal_context: Optional[Any] = None,
     ) -> None:
         """通过统一会话记忆入口记录会话历史（失败不中断主流程）。"""
         try:
-            from core.session_memory_facade import record_session_turn
+            from core.session_memory_facade import modalities_of, record_session_turn
 
             metadata = {
                 "control_session_id": control_session_id,
                 "runtime_attachment_session_id": runtime_attachment_session_id,
                 "record_origin": "agent_kernel",
             }
+            # 这一轮带进来了哪些模态,记进轮次里 —— 记忆卡片上那一栏靠它才有内容。
+            # 不记的话那一栏永远是空的:一个看着接好了、其实没有任何生产者的字段。
+            # 判断在 session_memory_facade.modalities_of 一处,与感知契约同一套名字。
+            mods = modalities_of(multimodal_context)
+            if mods:
+                metadata["modalities"] = mods
             await record_session_turn(
                 conversation_session_id=session_id,
                 role="user",

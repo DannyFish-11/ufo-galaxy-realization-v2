@@ -27,12 +27,17 @@ export interface HudState {
    */
   readonly sessionId: string;
   /**
-   * 桌面感知有没有被按停。null = 还没问到后端。
+   * 正在写隐私状态(POST 在飞)。**这不是「停没停」** —— 停没停的唯一权威是
+   * posture 帧里的 `perception.privacy_paused`,每一帧都带着,由渲染那侧直接读。
    *
-   * **不拿 false 兜底** —— 「不知道停没停」被画成「正在采」,是这个开关唯一
-   * 不能犯的错。
+   * 这里只记「按钮按下去了、还没回来」,用来把按钮压住免得连点写两遍。
+   *
+   * 曾经这里存的是 `privacyPaused: boolean | null`,由启动时问一次 HTTP 拿到。
+   * 那是**同一个事实两处各存**:别处(托盘、命令行、另一台设备)按停之后,帧里
+   * 说停了、四条通路画成 paused,而这个按钮还写着「暂停感知」—— 一个界面同时
+   * 给出两个互相矛盾的答案,而且没人看得见。
    */
-  readonly privacyPaused: boolean | null;
+  readonly privacyBusy: boolean;
   /**
    * 后端每帧算好的双轴渲染契约。**这是"此刻"的唯一权威**。
    *
@@ -87,7 +92,7 @@ export const VISIBLE_CARDS = 5;
 export const initialState: HudState = {
   connected: false,
   sessionId: '',
-  privacyPaused: null,
+  privacyBusy: false,
   posture: null,
   postureDrift: [],
   phase: 'silent',

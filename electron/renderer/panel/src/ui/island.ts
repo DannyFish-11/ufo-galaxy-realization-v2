@@ -118,7 +118,7 @@ export interface IslandHandles {
     perception: PerceptionView | null,
     devices: readonly DeviceRow[],
     tiers: TierView | null,
-    privacyPaused: boolean | null,
+    privacyBusy: boolean,
     open: boolean,
   ): void;
   /** 展开后与左边卡片区顶对齐、等高。 */
@@ -168,6 +168,7 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     // 岛自己那个「点哪儿都收起」的监听在外层。不拦住的话,按一下暂停顺手
     // 把岛关了 —— 而这一按恰恰是最需要看见结果的一按。
     e.stopPropagation();
+    if (privacy.disabled) return;
     cb.onPrivacy(privacy.dataset['paused'] !== 'true');
   });
 
@@ -210,24 +211,32 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     perception: PerceptionView | null,
     devices: readonly DeviceRow[],
     tiers: TierView | null,
-    privacyPaused: boolean | null,
+    privacyBusy: boolean,
     open: boolean,
   ): void {
     island.dataset['open'] = String(open);
 
-    // 三态,不是两态。null = **还没问到后端**:那时按钮不该说「正在采」,
-    // 也不该说「已暂停」—— 说错任何一边都比说「不知道」糟。
-    privacy.dataset['paused'] = String(privacyPaused === true);
-    privacy.dataset['unknown'] = String(privacyPaused === null);
+    // **停没停这件事只有一个权威:posture 帧。**
+    //
+    // `perception.privacy_paused` 每一帧都带着。面板另外攒一份(启动时问一次
+    // HTTP、点一下改一次)就是同一个事实两处各存 —— 别处按停之后帧里说停了、
+    // 四条通路画成 paused,而按钮还写着「暂停感知」。这里直接读那一份。
+    //
+    // 三态,不是两态。`perception` 为 null = **还没收到过帧**:那时按钮不该说
+    // 「正在采」,也不该说「已暂停」—— 说错任何一边都比说「不知道」糟。
+    const paused = perception === null ? null : perception.privacy_paused;
+    privacy.dataset['paused'] = String(paused === true);
+    privacy.dataset['unknown'] = String(paused === null);
+    privacy.disabled = paused === null || privacyBusy;
     privacy.textContent =
-      privacyPaused === null ? '状态未知' : privacyPaused ? '已暂停 · 点恢复' : '暂停感知';
+      paused === null ? '状态未知' : privacyBusy ? '…' : paused ? '已暂停 · 点恢复' : '暂停感知';
     privacy.title =
-      privacyPaused === null
-        ? '问不到后端的隐私状态'
-        : privacyPaused
+      paused === null
+        ? '还没收到过感知帧 —— 停没停不知道'
+        : paused
           ? '感知已停:屏幕/摄像头/麦克风/系统声都不再采,缓存已清空'
           : '立刻停止采集并清空缓存（环境循环、电脑操作、会话记忆、多模态注入同时失明）';
-    privacy.setAttribute('aria-pressed', String(privacyPaused === true));
+    privacy.setAttribute('aria-pressed', String(paused === true));
     island.setAttribute('aria-expanded', String(open));
 
     miniPer.replaceChildren();

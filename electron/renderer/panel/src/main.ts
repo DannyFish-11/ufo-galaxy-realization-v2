@@ -15,9 +15,9 @@ import {
   PresenceSocket,
   fetchAllConfig,
   fetchBundles,
+  fetchCardTurns,
   fetchCards,
   fetchHistory,
-  fetchPrivacy,
   fetchTiers,
   nextBundleValue,
   saveConfig,
@@ -85,7 +85,7 @@ function mount(host: HTMLElement): void {
   const panel = document.createElement('div');
   panel.className = 'panel';
 
-  const deck = createDeck(store);
+  const deck = createDeck(store, (i) => void openCard(i));
   const line = createLine();
   deck.root.append(line.root);
 
@@ -130,7 +130,7 @@ function mount(host: HTMLElement): void {
     panel.dataset['slim'] = String(s.slim);
     deck.render();
     line.update(s.phase, s.slim, lineTrust(s.posture));
-    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyPaused, s.islandOpen);
+    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyBusy, s.islandOpen);
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
     thread.render(s.turns, s.lockstep, s.lockstepReason);
     dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
@@ -260,6 +260,48 @@ function mount(host: HTMLElement): void {
   }
 
   /**
+   * 抽出来一张卡 —— 把那几天的对话摆上来。
+   *
+   * **区间判断在后端**(与卡片列表同一套分桶)。面板拿 from/to 自己筛历史的话,
+   * 两处对「这一天算前一张还是后一张」的理解迟早差一点,而差的那点表现出来是
+   * 「点开这张卡少了两句」——没人会去查。
+   *
+   * `index < 0` = 卡片被推回去了,那就回到当前会话的对话。
+   */
+  async function openCard(index: number): Promise<void> {
+    const sid = store.state.sessionId;
+    if (!sid) return;
+    if (index < 0) {
+      const turns = await fetchHistory(BASE, sid);
+      if (turns !== null) store.patch({ turns });
+      return;
+    }
+    const card = (store.state.cards ?? [])[index];
+    if (!card) return;
+
+    const got = await fetchCardTurns(BASE, sid, card.id);
+    if (got === null) {
+      // 后端不认识这张卡(手上这份过期了),或者根本没接上。**说出来** ——
+      // 静默保持原样的话,人会以为这张卡里就是当前这些对话。
+      pushNotice(`打不开「${card.from} – ${card.to}」这张卡 —— 后端没接上，或这张卡已经过期`);
+      return;
+    }
+    const head: Turn[] = [
+      {
+        id: `card-${card.id}`,
+        role: 'agent',
+        text: got.truncated
+          ? `${card.from} – ${card.to} 这三天，共 ${got.total} 条，下面是最近的 ${got.turns.length} 条`
+          : `${card.from} – ${card.to} 这三天，共 ${got.total} 条`,
+        pending: '',
+        attachments: [],
+        streaming: false,
+      },
+    ];
+    store.patch({ turns: [...head, ...got.turns] });
+  }
+
+  /**
    * 拉左栏那叠卡片。
    *
    * **「怎么切」不在这里** —— 三天这个粒度、边界锚在哪、weight 相对谁归一,
@@ -340,26 +382,24 @@ function mount(host: HTMLElement): void {
   /**
    * 按停 / 恢复桌面感知。
    *
-   * **不做乐观切换。** 「以为停了其实还在采」是这个开关唯一不能犯的错,所以
-   * 界面永远显示后端返回的状态;写失败就保持原样并说出来。
+   * **写完不在这里存结果。** 停没停的唯一权威是 posture 帧里的
+   * `perception.privacy_paused`,下一帧(最快 0.4 秒)就会带着新状态回来,界面
+   * 跟着它变。这里只管把按钮压住免得连点写两遍。
+   *
+   * 曾经这里 `store.patch({ privacyPaused: st.paused })` —— 那就是同一个事实
+   * 两处各存:别处(托盘、命令行、另一台设备)按停之后帧里说停了,而面板这份
+   * 副本还是旧的,按钮和它下面那四条通路当场自相矛盾。
    */
   async function flipPrivacy(paused: boolean): Promise<void> {
-    const st = await setPrivacy(BASE, paused);
-    if (st === null) {
+    store.patch({ privacyBusy: true });
+    const ok = await setPrivacy(BASE, paused);
+    store.patch({ privacyBusy: false });
+    if (!ok) {
       pushNotice(paused ? '没能暂停感知 —— 后端没接上，它还在采' : '没能恢复感知 —— 后端没接上');
-      return;
     }
-    store.patch({ privacyPaused: st.paused });
-  }
-
-  /** 问一次当前隐私状态。问不到就保持 null —— 那时按钮显示「状态未知」。 */
-  async function loadPrivacy(): Promise<void> {
-    const st = await fetchPrivacy(BASE);
-    if (st !== null) store.patch({ privacyPaused: st.paused });
   }
 
   void restoreSession();
-  void loadPrivacy();
 
   /** 拉一次档位目录。拉不到**保持 null**,浮层那一行会说「读不到」而不是空着。 */
   async function loadTiers(): Promise<void> {
@@ -430,7 +470,11 @@ function mount(host: HTMLElement): void {
 
     await streamChat(
       BASE,
-      { message: text },
+      // **带上会话 id。** 不带的话后端按它自己的默认会话收这一轮 —— 而面板
+      // 刚刚从本地存的 id 把上一条对话读了回来。于是屏幕上显示的是 A 的历史、
+      // 新说的话记进了 B,两边都「成功」,没有一处报错。空串时后端照旧自己开
+      // 一条,并在 meta 帧里把 id 告诉我们。
+      { message: text, session_id: store.state.sessionId },
       {
         onPhase: (phase) => store.patch({ phase }),
         // 后端说这轮记到哪条会话上了。**接住它** —— 历史、记忆卡片、喂文件

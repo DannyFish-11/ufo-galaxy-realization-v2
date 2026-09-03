@@ -98,7 +98,9 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
     {
         "key": "voice",
         "name": "声音",
-        "note": "跟文字锁步",
+        # 「声字同文」:念出来的和写在屏上的是同一份文字,一句一句对齐着走。
+        # 这一档管的就是那件事(以及它做不到时怎么如实降级)。
+        "note": "声字同文",
         "category": "voice",
         "primary": "GALAXY_SPEAK",
         "owns": (

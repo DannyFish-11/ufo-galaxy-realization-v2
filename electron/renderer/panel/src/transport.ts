@@ -711,49 +711,20 @@ export async function ingestFiles(
 // 隐私暂停 —— 一按就别看了
 // ---------------------------------------------------------------------------
 
-export interface PrivacyState {
-  readonly paused: boolean;
-  /** 为什么停的(后端原样给:`panel` / `user` / …)。空串 = 没在停。 */
-  readonly reason: string;
-}
-
-// 后端还给了 `rejected_frames` / `rejected_audio` / `rejected_system_audio`
-// (暂停期间各挡下多少)和 `epoch`。**这里不搬** —— 界面上没有地方画它们,
-// 搬一个没人渲染的字段进来就是又一处「看着接上了、其实没用上」。真要画的
-// 那天再接,那时它才有意义。
-
-function readPrivacy(raw: unknown): PrivacyState | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const p = (o['privacy'] ?? o) as Record<string, unknown>;
-  if (typeof p['paused'] !== 'boolean') return null;
-  return {
-    paused: p['paused'],
-    reason: typeof p['reason'] === 'string' ? p['reason'] : '',
-  };
-}
-
-export async function fetchPrivacy(base: string): Promise<PrivacyState | null> {
-  try {
-    const resp = await fetch(base + '/api/perception/desktop/privacy', {
-      headers: { Accept: 'application/json' },
-    });
-    if (!resp.ok) return null;
-    return readPrivacy(await resp.json());
-  } catch (err) {
-    console.error('[hud] 读隐私状态失败:', err);
-    return null;
-  }
-}
-
 /**
- * 暂停 / 恢复桌面感知。
+ * 暂停 / 恢复桌面感知。返回**写成功了没有**,不返回状态。
  *
  * 闸门在后端的 DesktopPerceptionStore(唯一进出口),一按四个消费方同时失明,
- * 没有绕行路径。面板这侧**不做乐观切换** —— 「以为停了其实还在采」是这个开关
- * 唯一不能犯的错。以后端返回的状态为准。
+ * 没有绕行路径。
+ *
+ * **这里不把新状态带回去。** 停没停的唯一权威是 posture 帧里的
+ * `perception.privacy_paused`,每一帧都带着;写完等下一帧即可(最快 0.4 秒)。
+ * 从这条路再回传一份,就是同一个事实两处各存 —— 别处按停之后两份会立刻打架。
+ *
+ * 曾经这里有一个 `fetchPrivacy()` 启动时问一次 HTTP。它和帧里那份是同一件事,
+ * 而且只在启动那一刻对;删了。
  */
-export async function setPrivacy(base: string, paused: boolean): Promise<PrivacyState | null> {
+export async function setPrivacy(base: string, paused: boolean): Promise<boolean> {
   const path = paused ? '/privacy/pause' : '/privacy/resume';
   try {
     const resp = await fetch(base + '/api/perception/desktop' + path + '?reason=panel', {
@@ -761,14 +732,17 @@ export async function setPrivacy(base: string, paused: boolean): Promise<Privacy
     });
     if (!resp.ok) {
       console.error('[hud] 切隐私状态被拒:', resp.status);
-      return null;
+      return false;
     }
     const body = (await resp.json()) as Record<string, unknown>;
-    if (body['success'] !== true) return null;
-    return readPrivacy(body);
+    if (body['success'] !== true) return false;
+    // 后端回了 200 却没说自己现在停没停 —— 那不算写成功。**不当作成功**:
+    // 界面会因此不提示任何东西,而人以为按下去了。
+    const st = (body['privacy'] ?? {}) as Record<string, unknown>;
+    return typeof st['paused'] === 'boolean';
   } catch (err) {
     console.error('[hud] 切隐私状态失败:', err);
-    return null;
+    return false;
   }
 }
 
@@ -826,6 +800,49 @@ export async function fetchCards(
     return body.cards.map(readCard).filter((c): c is MemoryCard => c !== null);
   } catch (err) {
     console.error('[hud] 拉记忆卡片失败:', err);
+    return null;
+  }
+}
+
+
+/**
+ * 抽出来那张卡那几天说了什么。
+ *
+ * **区间判断不在这里。** 面板拿到卡片之后自己按 from/to 去筛历史,等于在前端
+ * 重做一遍切片 —— 两处对「这一天算前一张还是后一张」的理解迟早不一致,而不
+ * 一致的表现是「点开这张卡少了两句」,没人会去查。所以问后端要,后端用与卡片
+ * 列表**同一套分桶**取出来。
+ *
+ * `null` = 没接上。`found: false` = 这张卡后端不认识(面板手上那张过期了)——
+ * 与「这几天确实没说话」是两件事,后者是 `found: true` 加一个空数组。
+ */
+export async function fetchCardTurns(
+  base: string,
+  sessionId: string,
+  cardId: string,
+): Promise<{ turns: readonly Turn[]; total: number; truncated: boolean } | null> {
+  if (!sessionId || !cardId) return null;
+  try {
+    const resp = await fetch(
+      `${base}/api/v1/memory/cards/${encodeURIComponent(cardId)}/turns` +
+        `?session_id=${encodeURIComponent(sessionId)}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!resp.ok) {
+      console.error('[hud] 拉卡片内容失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['found'] !== true || !Array.isArray(body['turns'])) return null;
+    return {
+      turns: (body['turns'] as unknown[])
+        .map((raw, i) => readHistoryTurn(raw, i))
+        .filter((t): t is Turn => t !== null),
+      total: typeof body['total'] === 'number' ? body['total'] : 0,
+      truncated: body['truncated'] === true,
+    };
+  } catch (err) {
+    console.error('[hud] 拉卡片内容失败:', err);
     return null;
   }
 }
