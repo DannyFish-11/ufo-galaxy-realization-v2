@@ -603,6 +603,7 @@ jobs:
             tests/test_pr46_schema_version_gate_runtime_enforcement.py \
             tests/test_android_cross_repo_dedupe_contract.py \
             tests/test_cross_repo_android_repo_contract_snapshot.py \
+            tests/test_grounding_rule_is_one_rule.py \
             -v --tb=short
           echo "✅ Android ↔ V2 contract compatibility gate passed."
 

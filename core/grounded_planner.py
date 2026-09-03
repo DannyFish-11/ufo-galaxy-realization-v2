@@ -47,6 +47,12 @@ class PlannedAction(BaseModel):
     needs_model: bool = False  # True=结构点不准,得让模型(看着截图+结构)判断
     grounding_prompt: str = ""  # needs_model 时:与截图一同发给模型的辅助提示
     reason: str = ""
+    fusion_source: str = ""
+    """坐标裁决的来源标签(agreement / tree_override / tree_rescue / vlm_only)。
+
+    非坐标路径为空串。留在动作上是为了让"这一点是谁定的"可审计 —— 阈值将来要按
+    真机数据调,没有这一列就只能拍脑袋。
+    """
 
     @property
     def executable(self) -> bool:
@@ -69,18 +75,20 @@ def plan(
     else:
         gr = resolve_target(graph, instruction, action=action)
 
-    if gr.ok and gr.node is not None:
-        center = gr.node.bounds.center() if gr.node.bounds is not None else None
+    if gr.ok:
+        # 落点统一走 target_center():裁决出的坐标优先于节点中心(理由见该方法)。
+        center = gr.target_center()
         return PlannedAction(
             action=gr.action,
-            node_id=gr.node.node_id,
-            label=gr.node.label,
+            node_id=gr.node.node_id if gr.node is not None else "",
+            label=gr.node.label if gr.node is not None else "",
             coordinates=[center[0], center[1]] if center is not None else None,
             text=gr.text,
             confidence=gr.confidence,
             strategy=gr.strategy,
             needs_model=False,
             reason=gr.reason,
+            fusion_source=gr.fusion_source,
         )
 
     # 结构点不准 → 交给多模态模型(它一直看着截图;结构清单作辅助一起给)
