@@ -99,6 +99,57 @@ class MultiModalAudio(BaseModel):
     )
 
 
+class MultiModalVideoFrame(BaseModel):
+    """One sampled keyframe inside a :class:`MultiModalVideo` sequence.
+
+    Carries a base64 still plus **where in the clip it came from**.  The offset
+    is the whole point: a bag of stills says *what* was on screen, an ordered
+    sequence with offsets says *what happened*.
+    """
+
+    mime: str = Field(default="image/jpeg", description="MIME type of the keyframe still.")
+    data: str = Field(description="Base64-encoded keyframe bytes.")
+    offset_ms: int = Field(
+        default=0,
+        ge=0,
+        description="Milliseconds from the start of the clip to this keyframe.",
+    )
+
+
+class MultiModalVideo(BaseModel):
+    """A short video, carried as an **ordered keyframe sequence**, not raw bytes.
+
+    Deliberately not raw container bytes.  Nothing in this stack can decode an
+    mp4 without ffmpeg, and no vision model reachable through the router accepts
+    a video container — every one of them takes stills.  Sampling to keyframes
+    here (rather than pretending to carry video and dropping it downstream) is
+    what makes the payload actually deliverable to a model.
+    """
+
+    frames: List[MultiModalVideoFrame] = Field(
+        default_factory=list,
+        description="Keyframes in capture order, earliest first.",
+    )
+    source: Optional[str] = Field(
+        default=None,
+        description="Origin of the clip, e.g. 'desktop_screen', 'desktop_camera', 'upload'.",
+    )
+    duration_ms: int = Field(
+        default=0,
+        ge=0,
+        description="Wall-clock span covered by the keyframes (first → last).",
+    )
+    sampled_from: int = Field(
+        default=0,
+        ge=0,
+        description="How many frames the keyframes were sampled out of (0 = unknown).",
+    )
+    timestamp: Optional[datetime] = Field(
+        default=None,
+        description="UTC capture time of the clip's first frame (ISO 8601).",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Aggregate context model
 # ---------------------------------------------------------------------------
@@ -128,6 +179,13 @@ class MultiModalContext(BaseModel):
     audio: List[MultiModalAudio] = Field(
         default_factory=list,
         description="Ordered list of audio payloads.  Each item is base64-encoded.",
+    )
+    video: List[MultiModalVideo] = Field(
+        default_factory=list,
+        description=(
+            "Short clips carried as ordered keyframe sequences.  Empty for every "
+            "existing text/image/audio caller — nothing breaks by ignoring it."
+        ),
     )
     screen: Optional[Dict[str, Any]] = Field(
         default=None,

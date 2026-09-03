@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 398 条 · 组件 schema 103 个
+// 路径 398 条 · 组件 schema 105 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -1178,6 +1178,7 @@ export interface MultiModalContext {
   "metadata"?: Record<string, unknown>;
   "screen"?: Record<string, unknown> | null;
   "sensor"?: Record<string, unknown> | null;
+  "video"?: Array<MultiModalVideo>;
 }
 
 export interface MultiModalImage {
@@ -1185,6 +1186,20 @@ export interface MultiModalImage {
   "mime": string;
   "source"?: string | null;
   "timestamp"?: string | null;
+}
+
+export interface MultiModalVideo {
+  "duration_ms"?: number;
+  "frames"?: Array<MultiModalVideoFrame>;
+  "sampled_from"?: number;
+  "source"?: string | null;
+  "timestamp"?: string | null;
+}
+
+export interface MultiModalVideoFrame {
+  "data": string;
+  "mime"?: string;
+  "offset_ms"?: number;
 }
 
 export interface NodeCallRequest {

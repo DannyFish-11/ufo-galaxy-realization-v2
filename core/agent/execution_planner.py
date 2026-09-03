@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from core import upper_ports
 from core.agent.intent_router import IntentResult
+from core.agent.multimodal_messages import MULTIMODAL_TASK_KEY
 
 # C阶段 4B: 任务记忆（可选依赖）
 try:
@@ -123,6 +124,15 @@ class ExecutionPlan(BaseModel):
 
     timeout: float = 60.0
     """任务执行超时（秒）"""
+
+    multimodal_context: Optional[Any] = None
+    """随消息带上来的图像负载（``core.schemas.multimodal.MultiModalContext``）。
+
+    此前执行路径没有这个字段，「看这张截图帮我改掉这个设置」的截图在组装计划时就丢了。
+    单 Agent 路径会把它拼成 OpenAI content 数组原生投喂（agent_factory._execute_single_task）。
+    ⚠️ team / swarm / fractal 尚未消费：那几条路径有 11 处各自组装 messages，且会对
+    ``context`` 做 ``json.dumps``，塞不可序列化对象进去会当场炸。
+    """
 
 
 class ExecutionResult(BaseModel):
@@ -1197,6 +1207,10 @@ class ExecutionPlanner:
                 "session_id": plan.session_id,
                 "tools": plan.tool_schemas,
             }
+            # 单独的键：task_dict 会被 json.dumps 成 user 消息，base64 进 JSON 只烧 token，
+            # 没有模型会把它当图看。消费端摘出来改走 content 数组。
+            if plan.multimodal_context is not None:
+                task_dict[MULTIMODAL_TASK_KEY] = plan.multimodal_context
             exec_result = await factory.execute_agent_task(agent.id, task_dict)
             exec_step.duration_ms = (time.monotonic() - t1) * 1000
             exec_step.success = exec_result.get("success", True)

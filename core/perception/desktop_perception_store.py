@@ -61,7 +61,8 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, Optional, Tuple
+from collections import deque
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.DesktopPerceptionStore")
 
@@ -71,6 +72,21 @@ def _default_ttl() -> float:
         return max(1.0, float(os.getenv("GALAXY_DESKTOP_PERCEPTION_TTL", "10")))
     except (ValueError, TypeError):
         return 10.0
+
+
+def _keyframe_ring_size() -> int:
+    """滚动关键帧环的长度。0 = 关闭（只留"最新一帧"的旧行为）。
+
+    这个环是"视频"在本仓里唯一真实的来源：此前每来一帧就覆盖上一帧，上一帧当场
+    消失，于是「刚才屏幕上发生了什么」「动画卡在哪一步」结构上无法回答 —— 模型
+    永远只看得到提问那一瞬间。环把同一个 TTL 窗口内的帧留下来，不延长保留时间、
+    不新增落盘，只是不再自我覆盖。
+    """
+    try:
+        n = int(os.getenv("GALAXY_PERCEPTION_KEYFRAMES", "4"))
+    except ValueError:
+        return 4
+    return max(0, min(n, 16))  # 上限 16:每帧是整屏 base64,再多就是几十 MB 常驻内存
 
 
 def _is_screen_source(source: str) -> bool:
@@ -101,6 +117,10 @@ class DesktopPerceptionStore:
         self._scr_mime: str = "image/jpeg"
         self._scr_ts: float = 0.0
         self._screen_meta: Optional[Dict[str, Any]] = None
+        # 滚动关键帧环（分槽，与上面的"最新帧"同槽同闸门）。元素为 (b64, mime, ts)。
+        self._ring_size: int = _keyframe_ring_size()
+        self._scr_ring: Deque[Tuple[str, str, float]] = deque(maxlen=self._ring_size or 1)
+        self._cam_ring: Deque[Tuple[str, str, float]] = deque(maxlen=self._ring_size or 1)
         # audio (麦克风：听人说话)
         self._audio_b64: Optional[str] = None
         self._audio_mime: str = "audio/webm"
@@ -149,6 +169,10 @@ class DesktopPerceptionStore:
         self._audio_ts = 0.0
         self._sys_audio_b64 = None
         self._sys_audio_ts = 0.0
+        # 关键帧环也必须清:它保存的正是"暂停前那一段发生了什么",漏清等于隐私急停
+        # 只挡住了当下这一帧,却把此前几秒的完整过程留在内存里等人来读。
+        self._scr_ring.clear()
+        self._cam_ring.clear()
 
     def pause(self, reason: str = "user") -> Dict[str, Any]:
         """立即切断感知:拒收后续帧/音频,并清空已缓存内容。幂等。"""
@@ -249,6 +273,7 @@ class DesktopPerceptionStore:
                 self._scr_mime = mime or "image/jpeg"
                 self._scr_ts = time.time()
                 self._scr_received += 1
+                self._push_ring_unlocked(self._scr_ring, image_b64, self._scr_mime, self._scr_ts)
                 if screen is not None:
                     self._screen_meta = screen
             else:
@@ -256,9 +281,33 @@ class DesktopPerceptionStore:
                 self._cam_mime = mime or "image/jpeg"
                 self._cam_ts = time.time()
                 self._cam_received += 1
+                self._push_ring_unlocked(self._cam_ring, image_b64, self._cam_mime, self._cam_ts)
                 # 旧链路偶尔把 screen 结构挂在摄像头帧上，也一并保留
                 if screen is not None:
                     self._screen_meta = screen
+
+    def _push_ring_unlocked(
+        self,
+        ring: "Deque[Tuple[str, str, float]]",
+        image_b64: str,
+        mime: str,
+        ts: float,
+    ) -> None:
+        """把一帧压进滚动环。调用方必须已持有锁，且必须已过隐私闸门。
+
+        与上一帧逐字相同就不压 —— 静止画面下采集仍在跑，不去重的话环会被同一帧的
+        若干份拷贝填满，抽出来的"关键帧序列"实际是一张图重复 N 次：白烧 token，
+        还会让模型以为"这段时间什么都没变"其实是我们没留下证据。
+        """
+        if self._ring_size <= 0:
+            return
+        if ring and ring[-1][0] == image_b64:
+            return
+        ring.append((image_b64, mime, ts))
+
+    def _fresh_keyframes_unlocked(self, ring: "Deque[Tuple[str, str, float]]") -> List[Tuple[str, str, float]]:
+        """取环里仍在 TTL 窗口内的帧。过期帧不进模型（与最新帧同一条新鲜度规则）。"""
+        return [item for item in ring if self._fresh(item[2])]
 
     def update_audio(self, audio_b64: str, *, mime: str = "audio/webm") -> None:
         """隐私暂停期间拒收。判定与写入同一次持锁(理由见 update_frame)。"""
@@ -427,6 +476,8 @@ class DesktopPerceptionStore:
                 MultiModalAudio,
                 MultiModalContext,
                 MultiModalImage,
+                MultiModalVideo,
+                MultiModalVideoFrame,
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("multimodal schema unavailable: %s", exc)
@@ -449,6 +500,10 @@ class DesktopPerceptionStore:
             screen_meta = self._screen_meta if meta_fresh else None
             aud = (self._audio_b64, self._audio_mime) if aud_fresh else (None, None)
             sysaud = (self._sys_audio_b64, self._sys_audio_mime) if sys_fresh else (None, None)
+            # 屏幕的滚动关键帧:同一把锁内取,取出来就是不可变元组的普通列表。
+            # 只做屏幕不做摄像头 —— "这段时间发生了什么"几乎总是在问屏幕上的过程
+            # (点了没反应、动画卡住、报错一闪而过);摄像头再来一路只是翻倍烧 token。
+            scr_keyframes = self._fresh_keyframes_unlocked(self._scr_ring)
 
         # 若调用方已带图像，尊重之，不注入（避免覆盖显式上传）
         existing_images = list(getattr(existing, "images", []) or []) if existing is not None else []
@@ -475,6 +530,27 @@ class DesktopPerceptionStore:
                 )
             )
 
+        # 视频:≥2 帧才有意义 —— 一帧的"序列"就是那张静止图,已经在 images 里了,
+        # 再包一层只会把同一张图发两遍。
+        video = []
+        if len(scr_keyframes) >= 2:
+            t0 = scr_keyframes[0][2]
+            video.append(
+                MultiModalVideo(
+                    source="desktop_screen",
+                    frames=[
+                        MultiModalVideoFrame(
+                            data=b64,
+                            mime=fmime or "image/jpeg",
+                            offset_ms=max(0, int((fts - t0) * 1000)),
+                        )
+                        for b64, fmime, fts in scr_keyframes
+                    ],
+                    duration_ms=max(0, int((scr_keyframes[-1][2] - t0) * 1000)),
+                    sampled_from=len(scr_keyframes),
+                )
+            )
+
         metadata = {
             "injected_by": "desktop_perception_store",
             "ambient": True,
@@ -485,6 +561,7 @@ class DesktopPerceptionStore:
                     ("screen", bool(scr[0])),
                     ("audio", bool(aud[0])),
                     ("system_audio", bool(sysaud[0])),
+                    ("screen_video", bool(video)),
                 )
                 if on
             ],
@@ -504,6 +581,7 @@ class DesktopPerceptionStore:
         return MultiModalContext(
             images=images,
             audio=audio,
+            video=video,
             screen=screen,
             metadata=metadata,
         )

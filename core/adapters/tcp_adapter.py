@@ -312,18 +312,20 @@ class TCPAdapter(TransportAdapter):
         try:
             import socket
 
+            from core.lan_address import detect_lan_ip
+
             # 修复:原来把枚举 IPVersion.AllV4 当 IP 地址列表传给 ServiceInfo
             # ("自动获取 IP"并不是该参数的语义),注册要么直接抛异常被吞、要么
-            # 注册出无效记录——本机服务从未真正可被发现。这里用 UDP connect
-            # 技巧探测本机对外 IP,按契约传【打包后的字节地址】。
-            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                probe.connect(("8.8.8.8", 80))
-                local_ip = probe.getsockname()[0]
-            except Exception:  # noqa: BLE001 — 无外网路由时退回 hostname 解析
-                local_ip = socket.gethostbyname(socket.gethostname())
-            finally:
-                probe.close()
+            # 注册出无效记录——本机服务从未真正可被发现。
+            #
+            # 第二轮:探测收口到 core.lan_address(仓里原有六份各写各的实现)。
+            # 原来的退路 gethostbyname(gethostname()) 在 Debian/Ubuntu 上常常解出
+            # 127.0.1.1 —— 那会把一个**环回地址广播到局域网**,任何听到的设备拿到
+            # 的都是指向它自己的地址。探不到就不注册,比注册一条必然连不通的记录好。
+            local_ip = detect_lan_ip()
+            if not local_ip:
+                logger.warning("mDNS: 未探测到局域网地址,跳过服务注册(不广播环回地址)")
+                return
 
             zc = zeroconf.Zeroconf()
             info = zeroconf.ServiceInfo(

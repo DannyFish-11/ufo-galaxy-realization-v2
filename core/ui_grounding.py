@@ -35,6 +35,7 @@ from core.schemas.ui_element import UIActionKind, UIElementNode, UIGraph
 
 
 class GroundingStrategy(str, Enum):
+    COORDINATE = "coordinate"  # 模型直接给了坐标(视觉定位模型的原生输出) → 走裁决矩阵
     LABEL_EXACT = "label_exact"  # 结构确定性快路径:精确名匹配
     LABEL_SUBSTRING = "label_substring"  # 结构确定性快路径:子串名匹配
     INDEX_REF = "index_ref"  # 模型(看着截图+结构)回了 [n] 序号
@@ -49,12 +50,30 @@ class GroundingResult(BaseModel):
     strategy: GroundingStrategy = GroundingStrategy.NONE
     confidence: float = 0.0
     reason: str = ""
+    coordinate: Optional["tuple[int, int]"] = None
+    """裁决后的最终点击点。仅 COORDINATE 策略下非 None —— 其余策略的落点由 node.bounds 决定。"""
+    fusion_source: str = ""
+    """裁决来源标签(agreement / tree_override / tree_rescue / vlm_only),与 Android 侧同名。"""
 
     @property
     def ok(self) -> bool:
-        return self.node is not None
+        """能否直接落地。
+
+        裁决出坐标也算 —— ``vlm_only`` 那一格没有匹配的树节点,但视觉给的坐标本身
+        就是可执行的答案。此前 ``ok`` 只看 node,那一格会被判成"点不准"再去问一遍
+        模型,而模型上一轮已经答过了:同一个问题问两遍,拿到同一个答案,再问第三遍。
+        """
+        return self.node is not None or self.coordinate is not None
 
     def target_center(self) -> "Optional[tuple[int, int]]":
+        """最终落点。裁决坐标优先于节点中心。
+
+        ``agreement`` 那一格里两者都有,而该用的是**视觉那一点** —— 树只是给它加了
+        信用,并没有说"应该点控件正中间"。大控件(工具栏、列表行)的中心往往落在
+        另一个子控件上,拿中心替换掉模型的落点会点错。
+        """
+        if self.coordinate is not None:
+            return self.coordinate
         if self.node is not None and self.node.bounds is not None:
             return self.node.bounds.center()
         return None
@@ -193,10 +212,38 @@ def resolve_target(graph: UIGraph, instruction: str, *, action: Optional[UIActio
 # 模型回复里的 [n] 序号引用(to_prompt 的 DFS 序 == graph.flatten() 序)
 _INDEX_REF = re.compile(r"\[(\d+)\]")
 
+#: 模型直接给坐标的写法:``(420, 315)`` / ``420,315`` / ``x=420 y=315`` / ``点 420 315``。
+#: 视觉定位模型(SeeClick / Qwen-VL / MAI-UI 这一类)的**原生输出就是坐标** —— 此前
+#: parse_model_action 只认 [n],模型答对了也用不上,只能落回按名匹配再 defer_to_model。
+_COORD_REF = re.compile(
+    r"(?:x\s*[=:]\s*)?(?<![\d.])(\d{1,5})(?![\d.])\s*[,，]\s*(?:y\s*[=:]\s*)?(?<![\d.])(\d{1,5})(?![\d.])"
+)
+
+
+def parse_coordinate(reply: str) -> Optional["tuple[int, int]"]:
+    """从模型回复里抽出一个坐标点;抽不到返回 None。
+
+    只认**逗号分隔**的一对数 —— 空格分隔会把"点第 3 个 420"之类的句子误读成坐标,
+    宁可漏认也不能错认:错认的后果是在无关位置点一下,而漏认只是退回原有路径。
+    """
+    m = _COORD_REF.search(reply or "")
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
 
 def parse_model_action(reply: str, graph: UIGraph, *, action: Optional[UIActionKind] = None) -> GroundingResult:
     """模型回复 → 控件。优先解析 [n] 序号引用;否则回退到按名解析(resolve_target)。"""
     flat: List[UIElementNode] = graph.flatten()
+
+    # 坐标优先于序号:模型给出坐标就说明它在看画面直接定位,这时结构树的角色是
+    # **裁决**(救场 / 推翻 / 加信用),不是另一条并行的解析路径。规则本身不写在这里,
+    # 全系统只有 core.grounding_arbitration 一份 —— 与 Android 的 GroundingArbiter
+    # 共用同一张矩阵、同一组阈值。
+    point = parse_coordinate(reply)
+    if point is not None:
+        return _arbitrate_coordinate(reply, graph, flat, point, action)
+
     m = _INDEX_REF.search(reply or "")
     if m:
         idx = int(m.group(1))
@@ -221,6 +268,43 @@ def parse_model_action(reply: str, graph: UIGraph, *, action: Optional[UIActionK
     # 无序号 / 越界 → 剥掉方括号引用,当自然语言意图解析
     cleaned = _INDEX_REF.sub(" ", reply or "").strip()
     return resolve_target(graph, cleaned, action=action)
+
+
+def _arbitrate_coordinate(
+    reply: str,
+    graph: UIGraph,
+    flat: List[UIElementNode],
+    point: "tuple[int, int]",
+    action: Optional[UIActionKind],
+) -> GroundingResult:
+    """模型坐标 + 结构树 → 裁决结果。规则来自 core.grounding_arbitration(单一权威)。"""
+    from core.grounding_arbitration import VisionPoint, fuse
+
+    x, y = point
+    fused = fuse(
+        reply or "",
+        VisionPoint(x=x, y=y, confidence=0.9),
+        flat,
+        screen=(graph.screen_width, graph.screen_height),
+    )
+    txt = extract_text_to_type(reply)
+    node = fused.node if isinstance(fused.node, UIElementNode) else None
+    if action is not None:
+        act = action
+    elif txt and node is not None and node.editable:
+        act = UIActionKind.SET_TEXT
+    else:
+        act = infer_action(reply)
+    return GroundingResult(
+        node=node,
+        action=act,
+        text=txt if act is UIActionKind.SET_TEXT else "",
+        strategy=GroundingStrategy.COORDINATE,
+        confidence=fused.confidence,
+        coordinate=(fused.x, fused.y),
+        fusion_source=fused.source,
+        reason=f"模型给出坐标({x},{y}) → 裁决 {fused.source} → ({fused.x},{fused.y})",
+    )
 
 
 def build_grounding_prompt(graph: UIGraph, instruction: str) -> str:

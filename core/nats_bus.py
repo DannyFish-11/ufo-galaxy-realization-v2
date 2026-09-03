@@ -61,7 +61,6 @@ import asyncio  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import json  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import os  # noqa: E402  哨兵权威声明置顶是本仓设计习语
-import socket  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from typing import Any, Callable, Dict, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
 logger = logging.getLogger("nats_bus")
@@ -129,16 +128,13 @@ except ImportError:
 def _get_lan_ip() -> str:
     """Return the host's primary LAN IPv4 address, or empty string if unavailable.
 
-    Uses a UDP socket pointed at a public address to discover which local
-    interface the OS would route outbound traffic through.  No data is
-    actually transmitted.
+    探测收口到 :mod:`core.lan_address`(仓里原有五份各写各的实现)。契约不变:
+    探不到返回空串。原实现只探 ``8.8.8.8:80``,在"局域网通、公网不通"的机器上
+    会误判成没有局域网地址;收口后的实现先探私网地址,不要求有公网路由。
     """
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-    except Exception:
-        return ""
+    from core.lan_address import detect_lan_ip_or_empty
+
+    return detect_lan_ip_or_empty()
 
 
 def _try_emit_event(event_type_name: str, data: dict) -> None:
