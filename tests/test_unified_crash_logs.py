@@ -204,21 +204,105 @@ def test_cleanup_never_touches_crash_area(temp_log_root):
     assert all("crashes" not in str(p) for p, _ in deletions)
 
 
-# ── 4. 托盘单行入口 ──────────────────────────────────────────────────────
+# ── 4. 崩溃日志入口:有且只有一个 ────────────────────────────────────────
+#
+# 所有者当初的要求是「崩溃日志单独弄一行」,那时那一行在托盘菜单里。后来托盘
+# 菜单按所有者要求**整个清空**,于是那一行搬到了启动横幅上(见
+# launcher/services.py 的 summary_card)。
+#
+# 守的东西没变,还是同样两件:
+#   1. 崩溃日志**得有**一个入口 —— 没有的话出了事没人找得到那份聚合;
+#   2. 入口**只能有一个** —— 分裂过一次(「三态动画日志」只覆盖 Electron 一份、
+#      与 View Logs 指向两个不同根),那种状态下人会看错地方。
+#
+# 所以这里改成**跨托盘与横幅一起数**:两处加起来必须恰好一个。这比原先只数托盘
+# 更严 —— 哪天有人把托盘那一行加回来而横幅那行还在,原先那条不会红,这条会。
 
 
-def test_tray_has_single_crash_entry_and_no_split_log_entries():
-    """托盘必须有独立的崩溃日志一行,且旧的分裂入口已移除。"""
-    tray = (Path(__file__).resolve().parent.parent / "windows_service" / "tray_icon.py").read_text(encoding="utf-8")
+def _code_only(path: "Path") -> str:
+    """去掉注释与文档字符串之后的代码。
 
-    assert "self._open_crash_log" in tray, "缺少崩溃日志处理器"
-    assert "崩溃日志 (Crash Log)" in tray, "托盘缺少崩溃日志单行入口"
-    # 旧入口(只覆盖 Electron 一份、与 View Logs 指向不同根)必须已移除
-    assert "_open_overlay_log" not in tray.replace("# ", ""), "旧的三态动画日志入口应已合并移除"
+    **这一步不是讲究,是必需的。** 直接在文件文本里数 ``MenuItem(``,会把
+    ``_build_menu`` 文档里那行「要把退出加回来,在这里补一行」的示例一起数进去 ——
+    那测的是「文件里有没有提到这个名字」,而要测的是「还有没有代码在用它」。
+    这个仓库为同一个坑栽过不止一次。
+    """
+    import ast
+
+    src = path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    spans: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            doc = node.body[0] if node.body else None
+            if (
+                isinstance(doc, ast.Expr)
+                and isinstance(doc.value, ast.Constant)
+                and isinstance(doc.value.value, str)
+                and doc.end_lineno is not None
+            ):
+                spans.append((doc.lineno, doc.end_lineno))
+    drop = {n for a, b in spans for n in range(a, b + 1)}
+    return "\n".join(ln for i, ln in enumerate(src.splitlines(), 1) if i not in drop and not ln.strip().startswith("#"))
 
 
-def test_tray_crash_entry_count_is_one():
-    """崩溃入口只能有一行 —— 所有者明确要求"单独弄一行"。"""
-    tray = (Path(__file__).resolve().parent.parent / "windows_service" / "tray_icon.py").read_text(encoding="utf-8")
-    menu_lines = [ln for ln in tray.splitlines() if "MenuItem(" in ln and "崩溃日志" in ln]
-    assert len(menu_lines) == 1, f"崩溃日志入口应恰好一行,实际 {len(menu_lines)}"
+def _crash_entries() -> list[str]:
+    """全仓里「崩溃日志入口」的所有出处。托盘菜单项 + 横幅行,各算一个。"""
+    root = Path(__file__).resolve().parent.parent
+    found: list[str] = []
+
+    tray = _code_only(root / "windows_service" / "tray_icon.py")
+    found += [f"托盘菜单:{ln.strip()}" for ln in tray.splitlines() if "MenuItem(" in ln and "崩溃" in ln]
+
+    launcher = (root / "launcher" / "services.py").read_text(encoding="utf-8")
+    found += [f"就绪横幅:{ln.strip()}" for ln in launcher.splitlines() if '("崩溃"' in ln]
+
+    return found
+
+
+def test_there_is_exactly_one_crash_log_entry():
+    """崩溃日志入口有且只有一个 —— 没有则没人找得到,多个则会看错地方。"""
+    entries = _crash_entries()
+    assert len(entries) == 1, f"崩溃日志入口应恰好一个,实际 {len(entries)}: {entries}"
+
+
+def test_the_crash_entry_points_at_a_real_path_not_a_menu_that_is_gone():
+    """入口必须指向**真实存在的东西**。
+
+    托盘菜单清空之后,横幅一度还写着「托盘 →「💥 崩溃日志」」—— 指路指向一个不
+    存在的菜单项,用户会在托盘上找半天然后以为是自己没找到。现在横幅给的是路径,
+    而路径来自 core.log_paths(唯一事实来源),不在横幅里另拼一份。
+    """
+    from launcher.services import _crash_hint
+
+    hint = _crash_hint()
+    assert "托盘" not in hint, "崩溃入口又指回托盘了 —— 那个菜单是空的"
+    assert hint.endswith(".log"), f"崩溃入口不像一个日志路径: {hint}"
+    # 与 core.log_paths 现算的那条比,而不是跟一个写死的字符串比。
+    from core.log_paths import crash_latest_path
+
+    assert hint == str(crash_latest_path()), (
+        f"崩溃入口与 core.log_paths 不一致 —— 又分裂出第二个根了。" f"横幅给的是 {hint},权威是 {crash_latest_path()}"
+    )
+
+
+def test_the_old_split_entry_is_still_gone():
+    """旧的分裂入口(只覆盖 Electron 一份、与 View Logs 指向不同根)必须仍然不在。"""
+    root = Path(__file__).resolve().parent.parent
+    tray = (root / "windows_service" / "tray_icon.py").read_text(encoding="utf-8")
+    assert "_open_overlay_log" not in tray.replace("# ", ""), "旧的三态动画日志入口又回来了"
+
+
+def test_the_tray_menu_is_empty_by_design():
+    """托盘菜单是空的 —— 这是所有者明确要求的,不是漏做。
+
+    钉住它,是因为「菜单空着」与「菜单坏了」在外面看起来一模一样。这条一旦红,
+    要么是有人往里加了东西(那就该同时更新上面那条计数判据),要么是那个承接
+    单击的不可见默认项被误删了(那样托盘就成了一张点不动的贴纸)。
+    """
+    root = Path(__file__).resolve().parent.parent
+    tray = _code_only(root / "windows_service" / "tray_icon.py")
+    menu_items = [ln for ln in tray.splitlines() if "MenuItem(" in ln]
+    assert len(menu_items) == 1, f"托盘菜单应只有那一个不可见默认项,实际 {len(menu_items)} 项"
+    assert "visible=False" in tray, "承接单击的默认项必须是不可见的,否则菜单就不是空的"
+    assert "default=True" in tray, "没有默认项的话,点托盘不会触发任何回调"
