@@ -48,6 +48,7 @@ __all__ = [
     "mirror_to_mesh",
     "publisher_for",
     "unpublishable_message_types",
+    "mesh_exempt_message_types",
     "AIP_MESH_MIRROR_AUTHORITY",
 ]
 
@@ -107,6 +108,39 @@ _PUBLISHER_BY_TYPE: Dict[str, str] = {
 }
 
 
+#: 明确**不镜像到网格**的类型 → 理由。
+#:
+#: 做成 {类型: 理由} 而不是一个名字列表:一条没有理由的豁免,和把门关掉没有区别。
+#: 上面那张表回答"该走哪个发布器",这张表回答"为什么它根本不该上网格"——两个问题
+#: 都必须有答案,不能有第三类"没人管过"的消息。
+#:
+#: 实时语音通话这六条全部落在这里,理由不是"懒得写发布器",是**写了会出事**:
+_MESH_EXEMPT: Dict[str, str] = {
+    "voice_call_start": (
+        "承载完整的 SDP offer —— 设备的内网与公网地址、ICE ufrag/pwd、DTLS 指纹。"
+        "那是一次通话的会话凭据,广播到网格上等于发给每一个节点。"
+    ),
+    "voice_call_accepted": "同上,承载 SDP answer,同样是会话凭据。",
+    "voice_ice": (
+        "ICE 候选逐条暴露设备所在的网络位置(内网网段、运营商出口地址)。" "第三方节点拿它没有任何用处,只剩泄露。"
+    ),
+    "voice_event": ("承载用户说话的实时转写文本。把它镜像给网格上每个节点,就是把私人对话广播出去。"),
+    "voice_interrupt": ("只在一条 WebRTC 通话的两端之间有意义(让对端立刻停口),第三方节点收到它无事可做。"),
+    "voice_call_end": (
+        "同上,通话生命周期只对这条链路的两端有意义。"
+        "\n"
+        "注意区分:'这台设备正在通话中'确实是网格该知道的事 —— 但那属于在场/可打断性,"
+        "由 state_event 承载,不是把通话信令原样转发出去。把它接进 state_event 是另一件事,"
+        "不在实时语音通话这一轮的范围里。"
+    ),
+}
+
+
+def mesh_exempt_message_types() -> Dict[str, str]:
+    """明确不上网格的类型及其理由。给体检与测试读,不要在运行路径上用。"""
+    return dict(_MESH_EXEMPT)
+
+
 def publisher_for(msg_type: Any) -> str:
     """这个消息类型该走哪个 ``NATSBus`` 发布器;没登记则返回空串。"""
     return _PUBLISHER_BY_TYPE.get(str(getattr(msg_type, "value", msg_type)), "")
@@ -121,6 +155,9 @@ def unpublishable_message_types() -> Tuple[str, ...]:
     只统计**有对应模型类**的类型:``MsgType`` 里有几个成员(如 ``broadcast``、
     ``parallel_subtask``)是别的链路的线上词汇,并没有 AIP v3 模型类,不属于
     本层的职责范围。
+
+    ``_MESH_EXEMPT`` 里的类型也不计入 —— 它们不是"忘了接",是**明确不该上网格**,
+    每一条都在那张表里写了理由。
     """
     from core.schemas.aip_v3 import AIPMessage as _Base  # noqa: PLC0415
 
@@ -131,7 +168,7 @@ def unpublishable_message_types() -> Tuple[str, ...]:
         if default is None:
             continue  # 基类本身:type 是必填、没有默认值
         value = str(getattr(default, "value", default))
-        if value not in _PUBLISHER_BY_TYPE:
+        if value not in _PUBLISHER_BY_TYPE and value not in _MESH_EXEMPT:
             missing.append(value)
     return tuple(sorted(missing))
 
