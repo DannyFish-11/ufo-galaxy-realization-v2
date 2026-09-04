@@ -778,3 +778,78 @@ body {
   box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.2);
 }
 .sf-empty { padding: 40px 0; text-align: center; font-size: 12.5px; color: var(--warn); }
+
+/* ── 我的模型服务 ────────────────────────────────────────────────────────────
+   这一段和上面那 335 个键长得不一样是有意的:那边一个键一行,这边一张卡片一条
+   端点 —— 因为它带状态(通没通)、带来源(型号是谁报的)、带动作(重验/删)。
+   画成一样的行,这三件事就没地方摆了。 */
+.up-sec { padding-bottom: 6px; }
+.up-hint {
+  margin: 0 0 10px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3);
+}
+.up-notice[hidden] { display: none; }
+.up-notice {
+  margin-bottom: 10px; padding: 8px 11px; border-radius: 9px;
+  font-size: 11.5px; line-height: 1.45; color: var(--warn);
+  background: rgba(255, 244, 230, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(196, 130, 60, 0.18);
+}
+.up-list { display: flex; flex-direction: column; gap: 8px; }
+
+.up-card {
+  padding: 11px 12px; border-radius: 11px;
+  background: rgba(252, 251, 255, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.1);
+}
+.up-top { display: flex; align-items: center; gap: 8px; }
+.up-top b { font-weight: 500; font-size: 12.5px; color: var(--ink); }
+
+/* 三态三个颜色。**live 与 declared 不共用一个绿点** —— 把「网关自己报的型号」
+   和「你自己敲的型号」画成同一件事,敲错一个字时人会以为是系统坏了。 */
+.up-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.up-card[data-state='live'] .up-dot { background: #4f9d69; }
+.up-card[data-state='declared'] .up-dot { background: var(--a-mid); }
+.up-card[data-state='unverified'] .up-dot { background: var(--warn); }
+.up-state { font-size: 11px; color: var(--ink-3); }
+.up-card[data-state='unverified'] .up-state { color: var(--warn); }
+
+.up-addr {
+  display: block; margin-top: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; color: var(--ink-2); word-break: break-all;
+}
+.up-meta { display: block; margin-top: 4px; font-size: 11px; line-height: 1.45; color: var(--ink-3); }
+.up-card[data-state='unverified'] .up-meta { color: var(--warn); }
+
+.up-models { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.up-models code {
+  padding: 2px 7px; border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px; color: var(--ink-2);
+  background: rgba(252, 251, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.1);
+}
+.up-more { align-self: center; font-size: 10.5px; color: var(--ink-3); }
+
+.up-acts { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.up-nokey { flex: 1; font-size: 10.5px; color: var(--ink-3); }
+.up-btn {
+  border: 0; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: var(--ink-2);
+  background: rgba(252, 251, 255, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+}
+.up-btn:hover { color: var(--ink); }
+.up-danger:hover { color: var(--warn); }
+
+/* 表单一列铺开,不挤成一行 —— 五个框挤一行的话每个都窄到看不清填的是什么。 */
+.up-form {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 10px; padding: 11px 12px; border-radius: 11px;
+  background: rgba(252, 251, 255, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.08);
+}
+.up-form .sf-input { width: auto; }
+.up-form .sf-save { align-self: flex-start; margin-top: 2px; }
+
+.up-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }

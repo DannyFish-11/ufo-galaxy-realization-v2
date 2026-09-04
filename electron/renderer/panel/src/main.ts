@@ -14,6 +14,10 @@ import { Store, VISIBLE_CARDS, clampStart, initialState } from './store';
 import {
   PresenceSocket,
   fetchAllConfig,
+  fetchUserProviders,
+  saveUserProvider,
+  verifyUserProvider,
+  deleteUserProvider,
   fetchBundles,
   fetchCardTurns,
   fetchCards,
@@ -36,6 +40,8 @@ import { createIsland } from './ui/island';
 import { createThread } from './ui/thread';
 import { createDock } from './ui/dock';
 import { createSettings } from './ui/settings';
+import { createUserProviders } from './ui/user_providers';
+import type { UserProviderDraft } from './ui/user_providers';
 import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
 
 /**
@@ -107,9 +113,16 @@ function mount(host: HTMLElement): void {
     onPickTier: (key) => void pickTier(key),
   });
 
+  const userProviders = createUserProviders({
+    onSave: (draft) => void saveEndpoint(draft),
+    onVerify: (id) => void verifyEndpoint(id),
+    onDelete: (id) => void deleteEndpoint(id),
+  });
+
   const settings = createSettings({
     onClose: () => store.patch({ settingsOpen: false }),
     onSave: (changes) => void applyConfig(changes),
+    topSection: userProviders.root,
   });
 
   main.append(island.root, thread.root, dock.root, settings.root);
@@ -135,6 +148,7 @@ function mount(host: HTMLElement): void {
     thread.render(s.turns, s.lockstep, s.lockstepReason);
     dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
     settings.render(s.config, s.settingsOpen, s.configBusy);
+    userProviders.render(s.userProviders, s.userProvidersBusy, s.userProviderNotice);
   }
 
   store.subscribe(render);
@@ -169,6 +183,9 @@ function mount(host: HTMLElement): void {
     store.patch({ settingsOpen: true, popover: null, configBusy: true });
     const items = await fetchAllConfig(BASE);
     store.patch({ config: items, configBusy: false });
+    // 端点走的是另一条路,和那 335 个键一起重新拉 —— 同样的理由:别拿缓存
+    // 让人对着过期的状态做决定(Key 会过期、网关会挂)。
+    await loadEndpoints();
   }
 
   /**
@@ -186,6 +203,57 @@ function mount(host: HTMLElement): void {
     if (!ok) return;
     // 档位那几档也可能被这批改动波及(它们的主键就在这 332 个里),重新算一遍。
     await loadBundles();
+  }
+
+  // ── 我的模型服务 ──────────────────────────────────────────────────────────
+
+  /** 拉一次已声明的端点。拉不到就**留 null**,让界面说「后端没接上」而不是「你没加过」。 */
+  async function loadEndpoints(): Promise<void> {
+    const rows = await fetchUserProviders(BASE);
+    store.patch({ userProviders: rows });
+  }
+
+  /**
+   * 加一条或改一条,**存完立刻验一次**。
+   *
+   * 不自动验的话,用户存完看到的是「没验过」,他会以为自己漏了一步 —— 而这一步
+   * 本来就该系统自己做。存了就验,是这个功能"确保自己生效"的意思。
+   */
+  async function saveEndpoint(draft: UserProviderDraft): Promise<void> {
+    store.patch({ userProvidersBusy: true, userProviderNotice: '' });
+    const res = await saveUserProvider(BASE, draft);
+    if (!res.ok) {
+      // 后端给的那句人话直接显示。**别自己改写** —— 它比前端更清楚为什么拒。
+      store.patch({ userProvidersBusy: false, userProviderNotice: res.reason });
+      await loadEndpoints();
+      return;
+    }
+    // 存成功才清表单 —— 失败时留着他刚填的东西,不让他重打一遍。
+    userProviders.clearForm();
+    await verifyUserProvider(BASE, res.row.id);
+    await loadEndpoints();
+    store.patch({ userProvidersBusy: false });
+  }
+
+  async function verifyEndpoint(id: string): Promise<void> {
+    store.patch({ userProvidersBusy: true, userProviderNotice: '' });
+    const row = await verifyUserProvider(BASE, id);
+    await loadEndpoints();
+    store.patch({
+      userProvidersBusy: false,
+      // 验完把结论说出来。没通过时后端已经写清卡在哪一步,照搬。
+      userProviderNotice: row && row.state === 'unverified' ? row.state_reason : '',
+    });
+  }
+
+  async function deleteEndpoint(id: string): Promise<void> {
+    store.patch({ userProvidersBusy: true, userProviderNotice: '' });
+    const ok = await deleteUserProvider(BASE, id);
+    await loadEndpoints();
+    store.patch({
+      userProvidersBusy: false,
+      userProviderNotice: ok ? '' : '删不掉 —— 后端没有接受这次请求',
+    });
   }
 
   /** 拉一次真实档位。拉不到就**保持空**,不拿演示数据顶上。 */

@@ -850,3 +850,136 @@ export async function fetchCardTurns(
     return null;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 我的模型服务 —— 用户自己声明的端点
+//
+// 与上面那些「配置项」不同:这是一张**对象表**,不是扁平的键值。所以它不走
+// /api/config,自己一条路。后端判据全在 core/user_providers.py,这里只搬运。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 一条用户声明的端点。**没有 api_key 字段** —— 后端永不回显密钥,只给 has_key。 */
+export interface UserProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly base_url: string;
+  readonly protocol: string;
+  /** 当前认哪些型号(网关报的优先,其次是人手填的)。 */
+  readonly models: readonly string[];
+  /** 人手填的那份。空 = 交给网关的 /models 去发现。 */
+  readonly declared_models: readonly string[];
+  /** 网关自己报的那份。空 = **没问出来**,不是「网关是空的」。 */
+  readonly discovered_models: readonly string[];
+  /** live=两步都过 · declared=网关不报型号但人手填了且试调过 · unverified=没过 */
+  readonly state: string;
+  /** 没过的时候卡在哪一步。过了就是空串。 */
+  readonly state_reason: string;
+  readonly verified_at: number | null;
+  readonly added_by: string;
+  readonly has_key: boolean;
+}
+
+function readUserProvider(v: unknown): UserProvider | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o['id'] !== 'string') return null;
+  const strs = (k: string): string[] =>
+    Array.isArray(o[k]) ? (o[k] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+  return {
+    id: o['id'],
+    label: typeof o['label'] === 'string' ? o['label'] : o['id'],
+    base_url: typeof o['base_url'] === 'string' ? o['base_url'] : '',
+    protocol: typeof o['protocol'] === 'string' ? o['protocol'] : 'openai',
+    models: strs('models'),
+    declared_models: strs('declared_models'),
+    discovered_models: strs('discovered_models'),
+    state: typeof o['state'] === 'string' ? o['state'] : 'unverified',
+    state_reason: typeof o['state_reason'] === 'string' ? o['state_reason'] : '',
+    verified_at: typeof o['verified_at'] === 'number' ? o['verified_at'] : null,
+    added_by: typeof o['added_by'] === 'string' ? o['added_by'] : 'user',
+    has_key: o['has_key'] === true,
+  };
+}
+
+/** 拉这台机器上声明过的端点。拉不到返回 null —— 与「一条都没有」是两件事。 */
+export async function fetchUserProviders(base: string): Promise<readonly UserProvider[] | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/providers/user', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) {
+      console.error('[hud] 拉用户端点失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    const rows = Array.isArray(body['providers']) ? (body['providers'] as unknown[]) : [];
+    return rows.map(readUserProvider).filter((x): x is UserProvider => x !== null);
+  } catch (err) {
+    console.error('[hud] 拉用户端点失败:', err);
+    return null;
+  }
+}
+
+/** 新增或改一条。后端拒绝时返回它给的那句人话 —— 直接显示给用户,别自己编。 */
+export async function saveUserProvider(
+  base: string,
+  body: {
+    id: string;
+    label: string;
+    base_url: string;
+    protocol: string;
+    models: readonly string[];
+    api_key?: string;
+  },
+): Promise<{ ok: true; row: UserProvider } | { ok: false; reason: string }> {
+  try {
+    const resp = await fetch(base + '/api/v1/providers/user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = (await resp.json()) as Record<string, unknown>;
+    if (!resp.ok) {
+      const detail = typeof json['detail'] === 'string' ? json['detail'] : `后端拒绝了（HTTP ${resp.status}）`;
+      return { ok: false, reason: detail };
+    }
+    const row = readUserProvider(json);
+    return row ? { ok: true, row } : { ok: false, reason: '后端返回的内容看不懂' };
+  } catch (err) {
+    return { ok: false, reason: `发不出去：${String(err)}` };
+  }
+}
+
+/**
+ * 两步自证。**没通过也返回 ok** —— 「没通过」是一个结论,不是一次请求错误,
+ * 结论在 row.state / row.state_reason 里。
+ */
+export async function verifyUserProvider(
+  base: string,
+  id: string,
+): Promise<UserProvider | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/providers/user/' + encodeURIComponent(id) + '/verify', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    return readUserProvider(await resp.json());
+  } catch (err) {
+    console.error('[hud] 验证端点失败:', err);
+    return null;
+  }
+}
+
+/** 删掉一条（连同它在 vault 里的密钥）。 */
+export async function deleteUserProvider(base: string, id: string): Promise<boolean> {
+  try {
+    const resp = await fetch(base + '/api/v1/providers/user/' + encodeURIComponent(id), {
+      method: 'DELETE',
+    });
+    return resp.ok;
+  } catch (err) {
+    console.error('[hud] 删除端点失败:', err);
+    return false;
+  }
+}

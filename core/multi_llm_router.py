@@ -2156,18 +2156,68 @@ class MultiLLMRouter:
                 #
                 # 现在:不注册,并**大声说**为什么,以及两条出路各是什么。留痕用
                 # warning 不用 debug —— 降级不留痕等于没降级。
+                #
+                # 这条日志**不带地址**。第一版带了(``地址=%s``),CodeQL 判成
+                # "clear-text logging of sensitive information" 并且判得对:
+                # oneapi_url 是从 ``_get_key()`` 那条凭证解析链上取下来的,而中转
+                # 地址真的可能内嵌 ``user:pass@``,也常常是不该进日志的内网主机名。
+                # 少一个地址不影响排障 —— 下面已经点名了要检查哪两个环境变量,
+                # 而那两个的值就在用户自己手里。
                 logger.warning(
                     "OneAPI 配了地址和密钥,但一个型号都问不出来 —— 这一家没有注册,不会参与选路。"
                     "两条出路:①检查 ONEAPI_URL/ONEAPI_API_KEY 是否正确、网关的 /v1/models 是否开放;"
                     "②如果你的网关有意不开放 /v1/models,就在 config/api_config.json 的 "
-                    "oneapi.models 里把型号列出来。地址=%s",
-                    oneapi_url,
+                    "oneapi.models 里把型号列出来。"
                 )
+
+        self._register_user_providers()
 
         logger.info(
             f"LLM 路由器已初始化（配置优先级: Dashboard > ENV），发现 {len(self.providers)} 个提供商: "
             f"{list(self.providers.keys())}"
         )
+
+    def _register_user_providers(self) -> None:
+        """把用户在面板上声明的端点注册进来 —— 不改仓库就能加一家。
+
+        与上面那些的区别只有一条:型号表不是我们写死的,是**用户填的或从他的网关
+        问来的**。所以这里不做任何"补全"或"猜测",``core.user_providers`` 给什么
+        就是什么。
+
+        只注册验过的(``routable_providers()`` 已经筛过)。没验过的留在存储里、
+        在面板上显示为未验证,但不进候选池 —— 让一个可能根本不通的端点参与选路,
+        失败会推迟到真发请求那一刻,而用户看到的只是"它怎么不回话"。
+
+        id 的唯一性由 ``user_providers.validate_id()`` 在写入时挡住(不准与
+        PROVIDER_REGISTRY 的名字重名)。这里再挡一次是因为存储文件可能被手改 ——
+        真撞上就跳过并说出来,**绝不覆盖**已注册的直连厂商:那等于把密钥和全部
+        对话内容悄悄改道,正是 core/endpoint_admission.py 警告的那条路。
+        """
+        try:
+            from core.user_providers import api_key_for, routable_providers
+        except Exception as exc:  # pragma: no cover - 存储层坏掉不该拖垮整个路由器
+            logger.debug("用户端点未加载(非致命): %s", exc)
+            return
+
+        for up in routable_providers():
+            if up.id in self.providers:
+                logger.warning(
+                    "用户端点「%s」与一个已注册的提供商重名，已跳过 —— 不会顶掉它。" "请在面板上给这条端点改个名字。",
+                    up.id,
+                )
+                continue
+            models = up.models()
+            cfg = ProviderConfig(
+                name=up.id,
+                api_key=api_key_for(up.id),
+                base_url=up.base_url,
+                models=models,
+                default_model=models[0],
+                env_key="",  # 密钥在 vault 里，没有对应的环境变量名
+                source_type="user",
+            )
+            self.providers[up.id] = cfg
+            self.adapters[up.id] = AnthropicAdapter(cfg) if up.protocol == "anthropic" else OpenAIAdapter(cfg)
 
     def _discover_oneapi_models(self, base_url: str, api_key: str) -> List[str]:
         """从 config/api_config.json 读取已配置模型，并尝试通过 /v1/models 动态补充"""

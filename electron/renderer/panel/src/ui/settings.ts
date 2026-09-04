@@ -86,6 +86,17 @@ export interface SettingsCallbacks {
   onClose(): void;
   /** 攒够一批一起写 —— 一个键一次请求的话,改十个键就是十次落盘。 */
   onSave(changes: Readonly<Record<string, string>>): void;
+  /**
+   * 摆在最前面的那一段(现在是「我的模型服务」)。
+   *
+   * 做成一个**外部传进来的元素**而不是在这里实现:那一段管的是对象表(端点),
+   * 不是键值,渲染节奏也不一样(它自己会因为验证结果刷新)。塞进这个文件会让
+   * 「一个键一行」的渲染逻辑和「一张卡片一个端点」的纠缠在一起。
+   *
+   * 摆最前面是有意的:人来到这一页,多半是为了接一个自己的模型服务,而不是为了
+   * 调第 200 个环境变量。
+   */
+  readonly topSection?: HTMLElement;
 }
 
 export function createSettings(cb: SettingsCallbacks): SettingsHandles {
@@ -252,6 +263,8 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
       // **说清楚是「没拉到」而不是「一个键都没有」。** 空白页会让人以为
       // 这台机器真的没有可配的东西。
       body.replaceChildren();
+      // 键拉不到,不代表端点那一段也拉不到 —— 它走的是另一条路,照样摆出来。
+      if (cb.topSection) body.append(cb.topSection);
       const empty = document.createElement('div');
       empty.className = 'sf-empty';
       empty.textContent = '拉不到配置 —— 后端没接上，不是没有可配的东西';
@@ -267,6 +280,7 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
       : `${items.length} 项`;
 
     body.replaceChildren();
+    if (cb.topSection) body.append(cb.topSection);
     for (const g of groups) {
       const sec = document.createElement('section');
       sec.className = 'sf-sec';

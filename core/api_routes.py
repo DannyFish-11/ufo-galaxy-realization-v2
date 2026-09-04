@@ -326,6 +326,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import remote_desktop as remote_desktop_routes
     from core.routes import sessions, system, tasks, twin
     from core.routes import ui_act as ui_act_route
+    from core.routes import user_providers as user_providers_route
     from core.routes import vault, vision
 
     try:
@@ -443,6 +444,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(nodes.create_oauth_router())
     router.include_router(config_route.router)
     router.include_router(models_route.router)
+    # 「我的模型服务」：用户/agent 声明的端点，与 PROVIDER_REGISTRY 那层分开。
+    router.include_router(user_providers_route.router)
     router.include_router(ui_act_route.router)
     router.include_router(computer_use_route.router)
     router.include_router(modality_route.router)

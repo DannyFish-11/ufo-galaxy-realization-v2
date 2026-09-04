@@ -16,7 +16,7 @@ import type {
   TierView,
   Turn,
 } from './types';
-import type { ConfigItem } from './transport';
+import type { ConfigItem, UserProvider } from './transport';
 
 export interface HudState {
   /** 连上后端了没有。false 时下面的东西全是上一次的残值或空态 */
@@ -77,6 +77,16 @@ export interface HudState {
   readonly tierGaps: readonly string[];
   /** 全部设置那 332 个键。null = **还没拉到**,与「一个键都没有」是两件事。 */
   readonly config: readonly ConfigItem[] | null;
+
+  /**
+   * 用户自己声明的模型端点。null = **还没拉到**,与「一条都没加过」是两件事 ——
+   * 前者要说「后端没接上」,后者要说「填一个地址就行」。画成同一个空白,用户
+   * 会以为自己加过的东西丢了。
+   */
+  readonly userProviders: readonly UserProvider[] | null;
+  readonly userProvidersBusy: boolean;
+  /** 上一次操作的结果(后端拒绝的那句人话,或验证结论)。空 = 没有要说的。 */
+  readonly userProviderNotice: string;
   readonly settingsOpen: boolean;
   /** 正在拉或正在写。用来把保存按钮压住,免得连点写两遍。 */
   readonly configBusy: boolean;
@@ -108,6 +118,9 @@ export const initialState: HudState = {
   tiers: null,
   tierGaps: [],
   config: null,
+  userProviders: null,
+  userProvidersBusy: false,
+  userProviderNotice: '',
   settingsOpen: false,
   configBusy: false,
   islandOpen: false,
