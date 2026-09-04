@@ -95,6 +95,18 @@ class MsgType(str, Enum):
     WEBRTC_UNBIND = "webrtc_unbind"
     WEBRTC_TRANSPORT_STATE = "webrtc_transport_state"
 
+    # ── Extended: 实时语音通话(设备 ↔ AI,像打电话一样)──
+    # 音频本身走 WebRTC 媒体轨,不走这条控制通道 —— 这里只承载信令、事件与打断。
+    # 分工的理由:WebSocket 建立在 TCP 上,丢一个包后面全堵,而重传回来的是过期音频;
+    # 实时语音里迟到的音频没有价值。手表天线小、贴在手腕上、跟着人走,又是最容易
+    # 落在弱信号下的设备,所以媒体必须走能丢包补偿、能抖动缓冲的 WebRTC。
+    VOICE_CALL_START = "voice_call_start"
+    VOICE_CALL_ACCEPTED = "voice_call_accepted"
+    VOICE_CALL_END = "voice_call_end"
+    VOICE_ICE = "voice_ice"
+    VOICE_EVENT = "voice_event"
+    VOICE_INTERRUPT = "voice_interrupt"
+
 
 # ---------------------------------------------------------------------------
 # Base model — every AIP v3 message extends this
@@ -515,7 +527,114 @@ class AckMsg(AIPMessage):
 # ---------------------------------------------------------------------------
 
 # Mapping from MsgType → message class
+
+
+# ---------------------------------------------------------------------------
+# 实时语音通话消息(控制平面)
+# ---------------------------------------------------------------------------
+#
+# 分工:**信令与事件走这里,音频走 WebRTC 媒体轨**。
+#
+# 为什么音频不走这条通道:AIP WebSocket 建立在 TCP 上。丢一个包,它后面的所有数据都
+# 被堵住(队头阻塞),而重传回来的是**过期音频** —— 实时语音里迟到的音频没有价值,
+# 只会把延迟越堆越高。WebRTC 走 UDP,丢了就丢了,配合抖动缓冲与丢包补偿,听感上
+# 只是一瞬轻微失真。手表天线小、贴在手腕上、跟着人移动,是最容易落在弱信号下的
+# 设备;而独立流量(LTE)下网络更不可控 —— 所以媒体面必须是 WebRTC。
+#
+# 为什么信令还走这条通道:设备已经连着它了,不必为通话再开一条连接;而且文字事件
+# (转写、回复增量)本来就属于控制面,和任务、心跳共用同一条有序可靠通道最自然。
+
+
+class VoiceCallStartMsg(AIPMessage):
+    """VOICE_CALL_START —— 设备发起一次实时语音通话,并带上 WebRTC offer。
+
+    发起即协商:把 SDP offer 直接放在这条消息里,省掉一次往返。设备侧的交互是
+    「点一下进入通话」,那一下就应该开始建立媒体通道,而不是先问一句再开始。
+    """
+
+    type: MsgType = Field(default=MsgType.VOICE_CALL_START)
+    sdp: str = Field(default="", description="设备侧生成的 WebRTC offer(SDP 文本)")
+    sdp_type: str = Field(default="offer", description="SDP 类型,恒为 offer")
+    sample_rate: int = Field(default=48000, description="设备侧采集采样率(Hz);WebRTC 默认 48k")
+    locale: str = Field(default="", description="期望的对话语言,如 zh-CN;留空由服务端决定")
+
+
+class VoiceCallAcceptedMsg(AIPMessage):
+    """VOICE_CALL_ACCEPTED —— 网关接受通话,回 answer。
+
+    ``call_id`` 是这一通电话的标识:后续的 ICE、事件、打断、挂断都带它。设备可能
+    在极短时间内连点两次,没有它就分不清哪条事件属于哪一通。
+    """
+
+    type: MsgType = Field(default=MsgType.VOICE_CALL_ACCEPTED)
+    call_id: str = Field(default="", description="本次通话标识,后续所有语音消息都要带")
+    sdp: str = Field(default="", description="网关侧的 WebRTC answer(SDP 文本)")
+    sdp_type: str = Field(default="answer", description="SDP 类型,恒为 answer")
+    provider: str = Field(default="", description="实际接通的后端,如 openai_realtime / gemini_live")
+
+
+class VoiceIceMsg(AIPMessage):
+    """VOICE_ICE —— 双向的 ICE candidate 交换。
+
+    刻意做成独立消息而不是塞进 offer/answer:Trickle ICE 能让媒体通道在候选还在
+    收集时就开始建立。等收齐再发,建连时间会明显变长 —— 用户点了「通话」却要
+    干等,正是这类产品最劝退的地方。
+    """
+
+    type: MsgType = Field(default=MsgType.VOICE_ICE)
+    call_id: str = Field(default="", description="所属通话")
+    candidate: str = Field(default="", description="ICE candidate 字符串;空串表示候选收集结束")
+    sdp_mid: str = Field(default="", description="candidate 所属的 media stream id")
+    sdp_m_line_index: int = Field(default=0, description="candidate 所属的 m-line 序号")
+
+
+class VoiceEventMsg(AIPMessage):
+    """VOICE_EVENT —— 通话过程中的下行事件(转写、回复文字、回合边界)。
+
+    ``event`` 直接取 :class:`core.voice_duplex_session.DuplexEventType` 的字符串值,
+    **不重新命名**。中间再翻译一层就等于给自己造一份会漂的映射表 —— 上游加一个
+    事件类型,这边不跟就静默丢掉,而丢掉的偏偏是新功能。
+    """
+
+    type: MsgType = Field(default=MsgType.VOICE_EVENT)
+    call_id: str = Field(default="", description="所属通话")
+    event: str = Field(default="", description="DuplexEventType 的值,如 partial_transcript")
+    text: str = Field(default="", description="转写或回复文本(视事件类型而定)")
+    error: str = Field(default="", description="event=error 时的原因")
+
+
+class VoiceInterruptMsg(AIPMessage):
+    """VOICE_INTERRUPT —— 用户插话,让服务端立刻停口(barge-in)。
+
+    走控制面而不是靠服务端 VAD 自己发现:设备侧知道得更早、更准(它手里有本地
+    麦克风与平台 AEC 的结果),而「被打断后还要说完半句」是双工语音里最出戏的
+    一种失败。
+    """
+
+    type: MsgType = Field(default=MsgType.VOICE_INTERRUPT)
+    call_id: str = Field(default="", description="所属通话")
+    reason: str = Field(default="user_speech", description="打断原因:user_speech / user_tap")
+
+
+class VoiceCallEndMsg(AIPMessage):
+    """VOICE_CALL_END —— 挂断。双向:用户挂断,或服务端侧异常终止。
+
+    两侧都能发起是刻意的:设备掉线时网关必须能单方面收尾,否则 provider 那头的
+    会话会一直挂着计费。
+    """
+
+    type: MsgType = Field(default=MsgType.VOICE_CALL_END)
+    call_id: str = Field(default="", description="所属通话")
+    reason: str = Field(default="user_hangup", description="挂断原因:user_hangup / error / timeout / device_gone")
+
+
 _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
+    MsgType.VOICE_CALL_START: VoiceCallStartMsg,
+    MsgType.VOICE_CALL_ACCEPTED: VoiceCallAcceptedMsg,
+    MsgType.VOICE_CALL_END: VoiceCallEndMsg,
+    MsgType.VOICE_ICE: VoiceIceMsg,
+    MsgType.VOICE_EVENT: VoiceEventMsg,
+    MsgType.VOICE_INTERRUPT: VoiceInterruptMsg,
     MsgType.DEVICE_REGISTER: DeviceRegisterMsg,
     MsgType.DEVICE_UNREGISTER: DeviceUnregisterMsg,
     MsgType.HEARTBEAT: HeartbeatMsg,
