@@ -170,18 +170,45 @@ class TestCostDegradationReordersButNeverDrops:
             assert len(before) == len(after), f"{task}: 长度变了,可能有重复或丢失"
 
     def test_the_expensive_ones_really_move_back(self, policy, telemetry, rates):
-        """fast_response 上限 0.01,openai/anthropic 都是 0.015 —— 必须被排到后面。
+        """fast_response 上限 0.01,超出的必须在 **priorities 这一层里**被排到最后。
 
-        这是当前唯一会发生重排的任务类型(其余任务的上限都高于所有家的单价),所以它就是
-        本次改动是否真的生效的唯一可观测证据。
+        2026-09-04 改判据 —— 原来这里写的是"openai/anthropic 都是 0.015,必须被排到
+        后面",并对**整个返回列表**断言"所有便宜的都在所有贵的前面"。那个断言只在
+        价格表凑巧的时候成立:
+
+        · 返回的列表是两层拼起来的 —— ``priorities``(成本降级作用的那一层)在前,
+          ``fallback_chain`` 在后。fallback 按定义就该排在所有 priorities 之后,
+          不管它便宜不便宜,那是"前面全挂了才轮到你"的意思,不是排序失灵。
+        · 当时 anthropic 是 0.015、跟 openai 一样超上限,两家都落在"贵"那一组、
+          又都在尾部,跨层的断言才**碰巧**为真。
+        · 之后 Claude Sonnet 5 的真实输出价是 $10/M(= 0.010),不超 0.01 上限,
+          于是它成了"便宜的",却仍然因为身处 fallback 层而排在最后 —— 跨层断言
+          当场失效。失效的是断言的前提,不是被测的行为。
+
+        所以改成在**降级真正作用的那一层**上判,并补一条更硬的:openai 必须真的
+        动过位置。只判"贵的在后面"是不够的 —— 如果它本来就在最后,不做任何降级
+        也能过。
         """
         ceiling = _cost_ceiling("fast_response", policy)
+        priorities = list(policy["task_routing"]["fast_response"]["priorities"])
+
+        before, _ = _resolve_provider_order("fast_response", policy, telemetry, None, None)
         after, _ = _resolve_provider_order("fast_response", policy, telemetry, None, rates)
-        pricey = [p for p in after if rates.get(p, 0.0) > ceiling]
-        assert pricey, "没有任何一家超出 fast_response 的上限?那这条测试失去意义"
-        cheap_positions = [i for i, p in enumerate(after) if p not in pricey]
-        pricey_positions = [i for i, p in enumerate(after) if p in pricey]
-        assert max(cheap_positions) < min(pricey_positions), f"贵的没有被排到最后: {after}"
+
+        in_tier = [p for p in after if p in priorities]
+        pricey = [p for p in in_tier if rates.get(p, 0.0) > ceiling]
+        assert pricey, "priorities 这一层里没有任何一家超出 fast_response 的上限?那这条测试失去意义"
+
+        cheap_positions = [i for i, p in enumerate(in_tier) if p not in pricey]
+        pricey_positions = [i for i, p in enumerate(in_tier) if p in pricey]
+        assert max(cheap_positions) < min(pricey_positions), f"贵的没有被排到 priorities 层的最后: {in_tier}"
+
+        # 反向保险:贵的那些必须真的**移动过**,而不是本来就在末尾。
+        for p in pricey:
+            assert before.index(p) < after.index(p), (
+                f"{p} 超出上限却没有被往后挪(降级前 {before.index(p)} → 降级后 {after.index(p)})"
+                f" —— 只判「贵的在后面」会让「本来就在后面」也蒙混过关。"
+            )
 
     def test_order_changes_at_all(self, policy, telemetry, rates):
         """反向保险:如果传 rates 与不传毫无差别,说明这条路根本没接上。"""

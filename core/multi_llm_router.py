@@ -1595,349 +1595,12 @@ ADAPTER_MAP = {
 #              这道闸的价值所在。
 #   extra      透传给 ProviderConfig 的其它非默认字段(multimodal / supports_tools /
 #              supports_vision / max_tokens 等)
-PROVIDER_REGISTRY: List[Dict[str, Any]] = [
-    {
-        "name": "openai",
-        "env_key": "OPENAI_API_KEY",
-        "base_url": "https://api.openai.com/v1",
-        "base_env": "OPENAI_API_BASE",
-        "base_key": "openai_base",
-        "models": ["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
-        "default_model": "gpt-5.6",
-        # 双工(语音实时)型号。与上面的文本型号分开列：两者走的是不同接口
-        # (Realtime WebSocket vs Chat Completions),上游的下线节奏也不同 ——
-        # 此前 voice_duplex_session 把型号写死在代码里、不在本 registry 中,
-        # 于是 verify_provider_apis.py 的上游比对完全覆盖不到它,漂移无人发现。
-        "realtime_models": ["gpt-realtime"],
-        "default_realtime_model": "gpt-realtime",
-        "cost_in": 0.005,
-        "cost_out": 0.015,
-        "extra": {"multimodal": True},
-    },
-    {
-        "name": "anthropic",
-        "env_key": "ANTHROPIC_API_KEY",
-        "protocol": "anthropic",
-        "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
-        "default_model": "claude-sonnet-5",
-        "cost_in": 0.003,
-        "cost_out": 0.015,
-        "extra": {"multimodal": True},
-    },
-    {
-        "name": "google",
-        "env_key": "GOOGLE_API_KEY",
-        "alt_env": ["GEMINI_API_KEY"],
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "models": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
-        "default_model": "gemini-3.5-flash",
-        # Live API(BidiGenerateContent)的原生音频型号,同样与文本型号分开维护。
-        "realtime_models": ["gemini-2.5-flash-native-audio-preview-12-2025"],
-        "default_realtime_model": "gemini-2.5-flash-native-audio-preview-12-2025",
-        # Live API 的 WebSocket 接口版本。官方文档现给 v1beta;v1alpha 仅用于
-        # affective dialog / proactive audio 等尚未升级的特性。做成字段而非写死,
-        # 是因为这个版本号历史上换过,写死在 URL 里会再次悄悄过期。
-        "realtime_api_version": "v1beta",
-        "cost_in": 0.00125,
-        "cost_out": 0.005,
-        "extra": {"multimodal": True},
-    },
-    {
-        # Grok 4.6 —— 联网核实,2026-08-12 发布,xAI 官方 API / OpenRouter / Cursor /
-        # Vercel / Cloudflare 同步上线(2026-08-19 又上了 Amazon Bedrock,分发渠道
-        # 增加,不影响这条走的是官方直连),base_url/协议与 4.5 一致(同一
-        # provider,只是新模型 id),不是猜的命名惯例延伸。
-        #
-        # cost_in/cost_out(2026-08-20 复核补全):定价按 prompt 长度分两档,不是
-        # 单一价——200K token 以下 $2/$6(每 1M,输入/输出;缓存输入更低,
-        # $0.5/M),超过 200K 翻倍到 $4/$12。Grok 4.6 本身有 500K 上下文,真实
-        # 请求越过 200K 那条线是会发生的情形,不是理论上的边界。跟上面 deepseek
-        # 那条同样的理由:cost_budget 判的是"会不会超预算",单一静态字段没法表示
-        # 分档定价,算贵了顶多提前降级、算便宜了才会让真实花费超预算却没触发
-        # 保护——两种错法不对等,故意按**高档(超 200K)**登记。
-        "name": "xai",
-        "env_key": "XAI_API_KEY",
-        "base_url": "https://api.x.ai/v1",
-        "models": ["grok-4.6", "grok-4.5", "grok-4.3"],
-        "default_model": "grok-4.6",
-        "cost_in": 0.004,
-        "cost_out": 0.012,
-        "extra": {"multimodal": True},
-    },
-    {
-        # Meta Llama API(联网核实 llama.developer.meta.com 官方文档):OpenAI 兼容 base
-        # 是 api.llama.com/compat/v1,不是 api.meta.ai;"muse-spark" 并非真实模型,
-        # 改用官方 Llama-4 模型名。注意:Meta 已于 2026-07-06 起【收尾 Llama API 公测】
-        # (仅美区 waitlist),该 provider 实际多半不可用——保留正确配置,能用则用,
-        # 不能用则由 verify_provider 如实报错、路由自动跳过。
-        "name": "meta",
-        "env_key": "META_API_KEY",
-        "base_url": "https://api.llama.com/compat/v1",
-        "models": ["Llama-4-Maverick-17B-128E-Instruct-FP8", "Llama-4-Scout-17B-16E-Instruct-FP8"],
-        "default_model": "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        "cost_in": 0.00125,
-        "cost_out": 0.00425,
-        "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192},
-    },
-    {
-        # Agnes AI:全模态免费 API(2026),OpenAI 兼容协议。
-        # agnes-2.5-flash 2026-07-13 发布(agentic/编码强化,免费不限量);
-        # 2.0 仍可用作兜底(256K 上下文/64K 输出,免费档 20 RPM)。
-        # 2.5 的准确串遵循官方命名规约(1.5→2.0→2.5),若有出入由 L4
-        # 模型名单自动同步(/models 对账)+ 面板 verify_provider 试调纠正。
-        # 图像(agnes-image-2.x)/视频(agnes-video-v2.0)模型不入聊天路由,
-        # 属扩展层能力,按需另接。
-        "name": "agnes",
-        "env_key": "AGNES_API_KEY",
-        "base_url": "https://apihub.agnes-ai.com/v1",
-        "models": ["agnes-2.5-flash", "agnes-2.0-flash"],
-        "default_model": "agnes-2.5-flash",
-        "cost_in": 0.0,
-        "cost_out": 0.0,
-        "extra": {"multimodal": True, "supports_vision": True, "supports_tools": True},
-    },
-    {
-        "name": "mistral",
-        "env_key": "MISTRAL_API_KEY",
-        "base_url": "https://api.mistral.ai/v1",
-        "models": ["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
-        "default_model": "mistral-large-3",
-        "cost_in": 0.002,
-        "cost_out": 0.006,
-        "extra": {"multimodal": True},
-    },
-    {
-        # deepseek-v4-pro 型号 id 本身仍正确。cost_in/cost_out 这次真的更新了——
-        # 2026-08-20 联网复核:上一版(2026-08-15)判"只有聚合站信号、没有一手
-        # 确认,不动"是对的,这次不一样,是**真事**:DeepSeek 2026-08-16 16:00 UTC
-        # 生效一轮分时段涨价,TechTimes / Yahoo Finance / Fortune / Engadget /
-        # Quartz / InfoWorld / Forbes 等八家独立信源交叉确认同一组数字(不是
-        # 单一聚合站估算)——
-        #
-        #   输出(缓存未命中):  $0.87/M flat  → 非高峰 $1.98/M · 高峰 $3.96/M
-        #   输入(缓存未命中):  $0.435/M flat → 非高峰 $0.66/M · 高峰 $1.32/M
-        #   缓存命中另有约 98% 折扣(未拿到缓存命中的确切数字,不编)
-        #
-        # cost_in/cost_out 是驱动 cost_budget SLO 判断的**单一静态值**,没法表示
-        # 分时段定价;这里按**高峰价**(更贵的那档)登记——SLO 判断的是"会不会
-        # 超预算触发降级",算贵了顶多提前降级,算便宜了才会让真实花费超预算却
-        # 没触发保护,两种错法不对等,故意往贵了算。要拿分时段各档的精确数字,
-        # 配好 DEEPSEEK_API_KEY 跑 verify_provider_apis.py --only deepseek。
-        "name": "deepseek",
-        "env_key": "DEEPSEEK_API_KEY",
-        "base_url": "https://api.deepseek.com/v1",
-        "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
-        "default_model": "deepseek-v4-pro",
-        "cost_in": 0.00132,
-        "cost_out": 0.00396,
-    },
-    {
-        "name": "qwen",
-        "env_key": "QWEN_API_KEY",
-        "alt_env": ["DASHSCOPE_API_KEY"],
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "models": ["qwen3.8-max", "qwen3.8-coder", "qwen-flash", "qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
-        "default_model": "qwen3.8-max",
-        "cost_in": 0.0025,
-        "cost_out": 0.0075,
-        "extra": {"multimodal": True},
-    },
-    {
-        # 2026-08-27 三次联网核实 —— **上一轮(2026-08-15)的结论已经过期了**,
-        # 先把它原样记下来,免得后来人以为这里一直是这么写的:
-        #
-        #   那次查到的是"GLM-5.3 确实能调,但服务它的是编码套餐专属端点
-        #   /api/coding/paas/v4,通用端点的定价表还只到 glm-5.2",据此把 glm-5.3
-        #   挡在这条之外,另开了下面的 zhipu_coding。当时那个判断是对的。
-        #
-        # 之后发生了两件事:
-        #   · 2026-08-19  GLM-5.3 通用 API 上线,就在这条一直在用的
-        #     ``open.bigmodel.cn/api/paas/v4`` 上,按 token 计价(官方口径:与
-        #     GLM-5.2 同价)。
-        #   · 2026-08-26  GLM-5.3-Flash 上线,并以 MIT 开源(zai-org/GLM-5.3-Flash,
-        #     safetensors)。GLM-5 系列首个原生多模态:320B 总参 / 18B 激活,
-        #     1M 上下文,文/图/视频,同样在通用端点上。
-        #
-        # 所以"把 glm-5.3 挡在这条外面"的前提没有了。继续挡,就变成按一条已经不
-        # 成立的旧结论把型号关在门外 —— 那和当初要防的 404 是同一类错误(判据与
-        # 事实对不上),只是方向反过来:上次是会打到错的端点,这次是明明能调却调不到。
-        #
-        # zhipu_coding **不废**:订阅制计费 + 专属 base_url 这两点没变,它仍然是
-        # 另一件事,见下面那条自己的注释。
-        #
-        # 核实来源(留着是为了下次复查有起点,不是为了好看):
-        #   https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash
-        #   https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3
-        #
-        # 有一处**故意没有跟着改**:cost_in/cost_out 是 provider 级的单一数字,而
-        # glm-5.3 与 glm-5.3-flash 差了大约一个数量级(flash 约为 5.3 的 1/10)。
-        # 这份 registry 没有"按型号计价"的字段,硬填一个折中值等于臆造一个谁都对
-        # 不上的数。保持原值不动,并在这里写明:它现在只对重档那一档近似成立,
-        # 选到 flash 时真实成本比这个数低得多。
-        #
-        # 迁移注意(现在不用改,但别踩):GLM-5.3 系列强制思考,不再接受
-        # ``thinking.type=disabled``,传了请求直接失败。本仓的 OpenAI 兼容适配器
-        # 从不发这个字段(只发 model/messages/temperature/max_tokens/tools/
-        # response_format),走的是默认的 enabled,所以这次不需要动适配器 ——
-        # 这一段是写给以后想加"关掉思考"开关的人看的。
-        "name": "zhipu",
-        "env_key": "ZHIPU_API_KEY",
-        "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        # 海外访问用 Z.ai 的同构端点 ``https://api.z.ai/api/paas/v4``:型号名、
-        # OpenAI 兼容协议、Bearer 鉴权全都一样,**只有域名不同**。所以不另开一条
-        # provider(那会多出一份要同步的型号表),而是沿用 openai 那条先例,用
-        # base_env/base_key 覆盖 base_url。覆盖之后 core.endpoint_admission 会把
-        # 这家判成 ``overridden`` 并写进诊断面 —— 这正是要的效果:换地址这件事
-        # 必须留痕,不能悄悄发生。
-        "base_env": "ZHIPU_API_BASE",
-        "base_key": "zhipu_base",
-        # 出站白名单要认得这个主机,否则"按上面注释把地址指到官方海外端点"这件事
-        # 在 enforce 档下会被自己的闸打死。注意它**不**让 endpoint_admission 把
-        # 覆盖判成 canonical —— 换地址就是换了,那件事必须照样留痕。
-        "alt_base_urls": ["https://api.z.ai/api/paas/v4"],
-        "models": ["glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5.1-flash", "glm-4-plus"],
-        "default_model": "glm-5.3",
-        "cost_in": 0.001,
-        "cost_out": 0.001,
-        "extra": {"multimodal": True},
-    },
-    {
-        # GLM 编码套餐(GLM Coding Plan,2026-08-15 联网核实)——**独立条目**,
-        # 不是给上面 zhipu 顺手加个型号那么简单,三处结构性差异决定了它必须分开:
-        #
-        # 1. base_url 不同:编码套餐专属端点 /api/coding/paas/v4,不是通用端点
-        #    /api/paas/v4。同一个 API Key 打错端点一样 404——这正是把它错放进
-        #    zhipu.models 会踩的坑。
-        # 2. 计费方式不同:这不是这份 registry 里其它条目那种按 token 计价——它是
-        #    订阅制月费(Lite $18 / Pro $80 / Max $168,年付打七折左右,按官方站点
-        #    截至复查时的定价页)。cost_in/cost_out 折算不出有意义的"每千 token"
-        #    数字,所以下面两个值不是真定价,是**故意设高的哨兵**(远高于本 registry
-        #    任何真实按 token 计价的条目)——ProviderConfig 的字段类型是 float,
-        #    传 None 会在 _cost_ordered_ladder() 的 sort/求和里直接 TypeError
-        #    (写这条时先踩了一遍这个坑,再改掉的)。哨兵值确保:就算它意外进了某个
-        #    按成本排序的候选池,也绝不会因为"看起来最便宜"被排到前面。
-        # 3. 使用范围不同:官方文档把它限定在"编码 agent 工作流"(仓库问答/代码
-        #    生成/调试/修复/自动化开发),不是通用聊天端点。
-        #
-        # env_key 是独立的 ZHIPU_CODING_API_KEY,不沿用 ZHIPU_API_KEY——原因不是
-        # 两把 key 在官方那边不能共用(官方文档说编码套餐同样用 BigModel 控制台
-        # 生成的 key),而是本仓的 provider 注册逻辑(_register_from_registry)按
-        # env_key 是否有值决定要不要激活这个 provider,并把它自动放进
-        # _cost_ordered_ladder() 那样按成本排序的候选池——**不看这个 provider 是否
-        # 出现在 PROVIDER_MODEL_MAP 或 config/llm_routing_policy.yaml 的任务路由
-        # 优先级里**(第一版以为不接那两处就够,核对注册/候选池代码才发现不够,
-        # 已改)。如果沿用 ZHIPU_API_KEY,任何配了普通 zhipu 聊天 key 的人都会被
-        # 静默激活这个 provider——多数人没有编码套餐订阅,会白打一堆 403/404;
-        # 少数真有订阅的人,也可能在没打算用编码配额的场景里被自动选中而悄悄烧掉
-        # 配额。独立 env 名把"要不要接编码套餐"变成一次显式动作:同一串 key 值
-        # 大可以填两遍,但填不填 ZHIPU_CODING_API_KEY 这件事必须是用户自己决定的。
-        #
-        # 残留限制(如实记录,没有假装解决了):真设了 ZHIPU_CODING_API_KEY 之后,
-        # _cost_ordered_ladder() 仍然会把它当成任意任务类型的候选之一——那个方法
-        # 按"已注册+有 key"筛选候选池,不看 provider 是不是该任务类型"该用的那家"。
-        # 999.0 的哨兵价保证它排到候选梯队最后一档、绝不会被优先选中(已用
-        # deepseek 同时配置的场景验证:候选梯队按成本升序是
-        # [deepseek, zhipu_coding],不是反过来)——但极端情况下(所有真实
-        # provider 都不可用,只有 zhipu_coding 配了 key)它仍可能被当成兜底调用去
-        # 处理一次编码套餐 ToS 没打算覆盖的任务类型。把它限定到"只接编码类任务"
-        # 需要改 _cost_ordered_ladder 本身按任务类型过滤候选池,那是比这次范围大
-        # 得多的改动,没有一并做。
-        "name": "zhipu_coding",
-        "env_key": "ZHIPU_CODING_API_KEY",
-        "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-        # 套餐里能用的型号跟着官方走:glm-5.3 与 glm-5.3-flash 都在。
-        # 注意这两个型号**同时**出现在上面的 zhipu 条目里 —— 那不是重复登记,
-        # 是同一款模型的两条售卖路径(按 token 计价的通用端点 / 订阅制的编码端点),
-        # base_url 与计费方式都不同,谁也替代不了谁。
-        "models": ["glm-5.3", "glm-5.3-flash"],
-        "default_model": "glm-5.3",
-        "cost_in": 999.0,
-        "cost_out": 999.0,
-        "extra": {
-            "multimodal": True
-        },  # billing=订阅制/scope=编码 agent 限定,见上面注释；ProviderConfig 没有对应字段,不能塞进 extra
-    },
-    {
-        # 官方 OpenAI 兼容端点(联网核实 platform.minimax.io 官方文档):base 是
-        # api.minimax.io/v1,不是旧的 api.minimax.chat(已非官方端点)。当前主力
-        # MiniMax-M3(1M 上下文·agentic),M2.7/M2.5 仍在。模型名大小写按官方。
-        "name": "minimax",
-        "env_key": "MINIMAX_API_KEY",
-        "base_url": "https://api.minimax.io/v1",
-        "models": ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.5"],
-        "default_model": "MiniMax-M3",
-        "cost_in": 0.001,
-        "cost_out": 0.004,
-        "extra": {"multimodal": True},
-    },
-    {
-        "name": "step",
-        "env_key": "STEP_API_KEY",
-        "base_url": "https://api.stepfun.com/v1",
-        "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
-        "default_model": "step-3.7-flash",
-        "cost_in": 0.001,
-        "cost_out": 0.004,
-        "extra": {"multimodal": True},
-    },
-    {
-        "name": "mimo",
-        "env_key": "MIMO_API_KEY",
-        "base_url": "https://api.xiaomimimo.com/v1",
-        "models": ["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
-        "default_model": "mimo-v2.5-pro",
-        "cost_in": 0.00002,
-        "cost_out": 0.00008,
-    },
-    {
-        "name": "moonshot",
-        "env_key": "MOONSHOT_API_KEY",
-        "base_url": "https://api.moonshot.cn/v1",
-        "models": ["kimi-k3", "kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
-        "default_model": "kimi-k3",
-        "cost_in": 0.002,
-        "cost_out": 0.002,
-    },
-    {
-        "name": "perplexity",
-        "env_key": "PERPLEXITY_API_KEY",
-        # SONAR_API_KEY 是面板公开的别名,"已配置"角标本就认它;缺了这行会导致
-        # 面板亮绿标而路由器不读 → 密钥静默失效(见 tests/test_panel_api_key_routing.py)
-        "alt_env": ["SONAR_API_KEY"],
-        "base_url": "https://api.perplexity.ai",
-        "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
-        "default_model": "sonar-pro",
-        "cost_in": 0.001,
-        "cost_out": 0.001,
-        "extra": {"supports_tools": False},
-    },
-    {
-        "name": "groq",
-        "env_key": "GROQ_API_KEY",
-        "base_url": "https://api.groq.com/openai/v1",
-        "models": ["llama-3.3-70b-versatile"],
-        "default_model": "llama-3.3-70b-versatile",
-        "cost_in": 0.00059,
-        "cost_out": 0.00079,
-        "extra": {"supports_tools": True},
-    },
-    {
-        # OpenRouter:OpenAI 兼容的聚合器,"openrouter/auto" 让其自选底层模型。
-        # cost 0 为占位——真实成本随所选底层模型浮动,由计费层回填。
-        "name": "openrouter",
-        "env_key": "OPENROUTER_API_KEY",
-        "base_url": "https://openrouter.ai/api/v1",
-        "models": ["openrouter/auto"],
-        "default_model": "openrouter/auto",
-        "cost_in": 0.0,
-        "cost_out": 0.0,
-        # extra 会被 **unpack 进 ProviderConfig,只能用其合法字段;聚合器语义用
-        # source_type="api" 即可(无 aggregator 字段,误用会让整个路由器构造崩溃)。
-        "extra": {"supports_tools": True},
-    },
-]
-
+# ── 厂商/型号表已搬到 core/provider_registry.py ────────────────────────────
+# 搬走的理由见那个文件的开头:这张表的价值有一半在核实出处的注释里,四百多行
+# 全长在路由器文件里会把复杂度门顶红,而路由器该管的是「怎么选」不是「有哪些」。
+# 这里保留 re-export —— 仓库里既有的 `from core.multi_llm_router import
+# PROVIDER_REGISTRY` 全部照常可用,不制造一次无谓的全仓改名。
+from core.provider_registry import PROVIDER_REGISTRY  # noqa: E402  (模块级常量,位置随原表)
 
 # PR-515 / GAP-512-009: MultiLLMRouter is the MODEL SELECTION AUTHORITY
 # (distinct from CommandRouter's COMMAND_ORCHESTRATION_AUTHORITY).
@@ -2471,16 +2134,35 @@ class MultiLLMRouter:
             oneapi_url = self._normalize_base_url(os.environ.get("ONEAPI_URL", ""))
         if oneapi_key and not oneapi_key.lower().startswith(PLACEHOLDER_PREFIXES) and oneapi_url:
             models = self._discover_oneapi_models(oneapi_url, oneapi_key)
-            cfg = ProviderConfig(
-                name="oneapi",
-                api_key=oneapi_key,
-                base_url=f"{oneapi_url}/v1",
-                models=models,
-                default_model=models[0] if models else "gpt-4o",
-                env_key="ONEAPI_API_KEY",
-            )
-            self.providers["oneapi"] = cfg
-            self.adapters["oneapi"] = OpenAIAdapter(cfg)
+            if models:
+                cfg = ProviderConfig(
+                    name="oneapi",
+                    api_key=oneapi_key,
+                    base_url=f"{oneapi_url}/v1",
+                    models=models,
+                    default_model=models[0],
+                    env_key="ONEAPI_API_KEY",
+                )
+                self.providers["oneapi"] = cfg
+                self.adapters["oneapi"] = OpenAIAdapter(cfg)
+            else:
+                # 2026-09-04:这里原来在问不出型号时**编两个出来**
+                # (``default_model=models[0] if models else "gpt-4o"``),于是网关
+                # 明明没有 gpt-4o 也照样注册成功、照样进候选池,直到真发请求才失败。
+                #
+                # 「一个型号都问不出来」与「网关就是空的」是两件事,更与「有 gpt-4o」
+                # 是两件事。编一个出来把三者抹成一样,正是本仓最怕的那种:看起来接
+                # 上了,其实没有。
+                #
+                # 现在:不注册,并**大声说**为什么,以及两条出路各是什么。留痕用
+                # warning 不用 debug —— 降级不留痕等于没降级。
+                logger.warning(
+                    "OneAPI 配了地址和密钥,但一个型号都问不出来 —— 这一家没有注册,不会参与选路。"
+                    "两条出路:①检查 ONEAPI_URL/ONEAPI_API_KEY 是否正确、网关的 /v1/models 是否开放;"
+                    "②如果你的网关有意不开放 /v1/models,就在 config/api_config.json 的 "
+                    "oneapi.models 里把型号列出来。地址=%s",
+                    oneapi_url,
+                )
 
         logger.info(
             f"LLM 路由器已初始化（配置优先级: Dashboard > ENV），发现 {len(self.providers)} 个提供商: "
@@ -2519,10 +2201,10 @@ class MultiLLMRouter:
             logger.debug(f"OneAPI /v1/models discovery failed (non-fatal): {e}")
 
         # 3. 若仍为空，使用保守默认值
-        if not models:
-            models = ["gpt-4o", "gpt-4o-mini"]
-            logger.debug("OneAPI: falling back to default model list")
-
+        # 问不出来就如实返回空表。**不要在这里编型号** —— 从前这里会回
+        # ``["gpt-4o", "gpt-4o-mini"]``,那是凭空造出两个这个网关未必认的串;
+        # 调用方拿到非空列表,就没办法再区分"发现成功"与"发现失败"。
+        # 空表的处理在调用方(不注册 + warning),见那里的说明。
         return models
 
     # ───────── 复杂度评估 ─────────
