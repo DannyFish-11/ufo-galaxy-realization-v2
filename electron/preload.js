@@ -60,4 +60,21 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   saveConfig: () => ipcRenderer.invoke('galaxy:save-config'),
 });
 
+// ── 外壳告诉面板:后端在哪 ──
+//
+// 面板(electron/renderer/panel)是**外壳无关的**:它不 import electron,
+// 也不假设自己跑在 Electron 里。它按这个顺序找后端地址:
+//   1. window.galaxyShell.base —— 外壳给的(就是这里)
+//   2. <meta name="galaxy-base"> —— 浏览器里开发时用
+//   3. 同源
+//
+// file:// 下"同源"没有意义,所以 Electron 这条路必须给出真实地址,否则
+// WebSocket 会去连一个不存在的东西然后一直退避重试 —— 界面上就是
+// 「连接指示一直是断的」,而没有任何报错说得清为什么。
+const _baseArg = process.argv.find((a) => a.startsWith('--galaxy-base='));
+contextBridge.exposeInMainWorld('galaxyShell', {
+  base: _baseArg ? _baseArg.slice('--galaxy-base='.length) : '',
+  name: 'electron',
+});
+
 console.log('[Preload] galaxyAPI IPC bridge ready');

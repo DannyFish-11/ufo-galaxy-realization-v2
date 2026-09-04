@@ -24,8 +24,6 @@ import importlib
 import pathlib
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 PROJECT_ROOT = pathlib.Path(__file__).parent.parent
 
 
@@ -665,3 +663,47 @@ class TestSystemModeResolution:
         orch = SystemOrchestrator()
         result = orch._run_phase_2_resolve_mode()
         assert result.data.get("system_mode") == "desktop-local"
+
+
+class TestNoTestEverShellsOutToNpmInstall:
+    """守住那条 conftest 级的挡板**本身**,而不是它这次挡住的那几个文件。
+
+    这个坑按文件补过两次,两次都补漏了:头一版挂在 ``TestSystemOrchestrator``
+    这一个类上(同文件的 ``TestHookRegistration`` 照旧超时),第二版提到本文件的
+    模块级(而 ``test_pr4_v6_boundary_integration`` 又超时)。全仓一共**五个**
+    文件调 ``run_startup_sequence()``。
+
+    按「我这次看到的那一组」圈范围就会一直漏下去,所以挡板落在 ``tests/conftest.py``
+    ——套件级。这条测试守的是**挡板还在不在**:
+
+    * 它验的是运行时事实(这一刻这条路真的被跳过了),不是「conftest 里有没有那
+      几个字」——后者会被一次无害的重命名骗过去。
+    * 挡板一旦被删,这条会**当场红**;而不是像从前那样只是某个用例悄悄变慢,
+      直到某天 CI 并发一高才炸,还换个用例名。
+    """
+
+    def test_the_desktop_surface_phase_is_skipped_under_pytest(self):
+        from core.system_orchestrator import SystemOrchestrator
+
+        summary = SystemOrchestrator().run_startup_sequence()
+        desktop = [r for r in summary.phase_results if r.phase.name == "DESKTOP_SURFACE"]
+        assert desktop, "启动序列里没有 DESKTOP_SURFACE 阶段了?那这条判据要跟着改"
+        detail = str(desktop[0].detail or "")
+        assert "GALAXY_SKIP_DESKTOP_SURFACE" in detail, (
+            "桌面壳阶段没有被跳过 —— conftest 里那道挡板没生效。"
+            "它一没生效,这一批测试就会真的去跑 npm install:子进程 timeout 与 "
+            f"pytest-timeout 都是 120 秒,内层不小于外层,优雅降级永远到不了。实际拿到: {detail!r}"
+        )
+
+    def test_the_guard_is_opt_out_not_opt_in(self):
+        """挡板必须是**默认开、要显式声明才关**。
+
+        反过来(默认关、要挡的人自己加 fixture)就是前两次的做法 —— 而前两次都
+        漏了文件。默认开的话,新写的测试**什么都不用做**就是安全的。
+        """
+        from pathlib import Path
+
+        conftest = (Path(__file__).resolve().parent / "conftest.py").read_text(encoding="utf-8")
+        assert "_no_desktop_surface_in_tests" in conftest, "conftest 里那道挡板不见了"
+        assert "autouse=True" in conftest
+        assert "real_desktop_surface" in conftest, "没有留显式的退出口 —— 真要验那条路的测试没法说出口"

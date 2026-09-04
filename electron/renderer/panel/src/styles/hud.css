@@ -1,0 +1,914 @@
+@import './tokens.css';
+
+* { box-sizing: border-box; }
+
+html, body, #hud { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(118% 82% at 22% -8%, #e4deec, transparent 54%),
+    radial-gradient(96% 62% at 88% -4%, #c6bcd4, transparent 52%),
+    radial-gradient(105% 75% at 90% 106%, #cfc7dc, transparent 58%),
+    var(--f-mid);
+}
+
+/* ══ 壳 ══════════════════════════════════════════════════════════════ */
+.shell {
+  height: 100%;
+  padding: 20px;
+  border-radius: 34px;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 104% at 14% -14%, rgba(250, 248, 254, 0.58), transparent 58%),
+    radial-gradient(72% 78% at 92% -8%, rgba(158, 144, 166, 0.26), transparent 60%),
+    radial-gradient(70% 100% at 98% 110%, rgba(160, 150, 176, 0.3), transparent 64%),
+    linear-gradient(158deg, #e3ddec, #d2cae0 52%, #c6bdd6);
+  box-shadow:
+    inset 0 1px 0 var(--lite),
+    0 1px 2px var(--shade-1),
+    0 30px 62px -28px var(--shade-3);
+}
+.panel {
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  gap: 26px;
+  transition: grid-template-columns var(--t-rail) var(--ease);
+}
+.panel[data-slim='true'] { grid-template-columns: var(--rail-slim) 1fr; }
+
+/* ══ 左:一整根长框 ═══════════════════════════════════════════════════
+   收起展开都是这一个框自己变宽变窄。卡片长在里面,卡片下面露出来的
+   就是框自己的面 —— 那本来就是留白,不铺底也不描边。
+   ═══════════════════════════════════════════════════════════════════ */
+.rail { display: flex; flex-direction: column; min-width: 0; }
+.frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(168deg, var(--s-hi), var(--s-lo));
+  box-shadow:
+    inset 0 1px 0 var(--lite),
+    inset 0 -22px 34px -28px var(--shade-3),
+    0 1px 2px var(--shade-1),
+    0 18px 40px -22px var(--shade-3);
+  transition: padding var(--t-rail) var(--ease);
+}
+.panel[data-slim='true'] .frame { padding: 10px 8px; }
+
+.deck { flex: none; position: relative; min-height: 0; }
+.slot { position: absolute; inset: 0; }
+
+/* 滚轮:平时完全不在。只有在滑、或者滑到头的时候才极轻地浮一下。
+   浮在框内左沿,**不参与布局** —— 一占宽度,收窄时小块就被挤偏了。 */
+.wheel {
+  position: absolute;
+  left: -6px; top: 0; bottom: 0;
+  width: 3px;
+  z-index: 5;
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.5s var(--ease);
+}
+.wheel::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent,
+    rgba(93, 84, 102, 0.11) 14%, rgba(93, 84, 102, 0.11) 86%, transparent);
+}
+.wheel[data-on='true'] { opacity: 1; }
+.panel[data-slim='true'] .wheel { width: 2px; left: -5px; }
+.thumb {
+  position: absolute; left: -1px; right: -1px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--a-pale), var(--a-mid));
+  opacity: 0.5;
+  transition: top var(--t-card) var(--ease), height 0.42s var(--ease),
+    opacity 0.4s var(--ease), box-shadow 0.4s var(--ease);
+}
+/* 到头了 —— 也只是那一小段亮一下,不弹不抖 */
+.wheel[data-edge='true'] .thumb {
+  opacity: 0.9;
+  box-shadow: 0 0 9px -1px rgba(136, 120, 144, 0.8);
+}
+
+/* ── 卡 ─────────────────────────────────────────────────────────────
+   质感靠三样:一层极细的哑光颗粒(没有它,面看着像塑料贴纸)、一道看得见
+   的切边(真卡有厚度)、以及抬起时**分层**张开的投影(不是一整块变大)。
+   ─────────────────────────────────────────────────────────────────── */
+.stack { position: absolute; inset: 0; overflow: hidden; border-radius: 16px; }
+.panel[data-slim='true'] .stack { display: none; }
+
+.card {
+  position: absolute;
+  left: 0; width: 100%;
+  aspect-ratio: 1 / 1.586;          /* ID-1 竖放,54 × 85.6 */
+  display: flex; flex-direction: column;
+  padding: 14px 15px 0;
+  border: 0; border-radius: 11px;
+  font: inherit; text-align: left; cursor: pointer;
+  overflow: hidden;
+  background: linear-gradient(166deg, var(--o-hi), var(--o-lo));
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 84, 102, 0.1),
+    inset 0 1px 0 rgba(252, 251, 255, 0.55),
+    inset 0 -12px 16px -14px var(--shade-3),
+    /* 往上投的那两道是关键。一张卡压在另一张上面,能把自己的上缘从背后
+       那张身上分出来的,只有**向上**的影子 —— 下面那几道向下的落影全在
+       卡自己 305px 的底边,而底边被压在别的卡后面、又被 .deck 裁掉,一像素
+       都露不出来。没有它们,四条唇口就只是四行同色的浅条,不是四张叠着的卡。 */
+    0 -1px 1px rgba(93, 84, 102, 0.1),
+    0 -7px 12px -7px rgba(93, 84, 102, 0.3),
+    0 1px 1px var(--shade-2),
+    0 4px 8px -5px var(--shade-3);
+  will-change: transform;
+  transition: transform var(--t-card) var(--heavy), box-shadow 620ms var(--ease);
+}
+.card[data-warp='true'] { transition: none; }
+.card::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none; border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+}
+.card::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none; border-radius: inherit;
+  background: linear-gradient(148deg, rgba(253, 252, 255, 0.5), transparent 42%);
+}
+.card[data-drawn='true'] {
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 84, 102, 0.12),
+    inset 0 1px 0 rgba(252, 251, 255, 0.62),
+    inset 0 -12px 16px -14px var(--shade-3),
+    /* 抽出的那张离得更远,往上投得更开一点。 */
+    0 -1px 1px rgba(93, 84, 102, 0.12),
+    0 -10px 18px -8px rgba(93, 84, 102, 0.34),
+    0 1px 1px var(--shade-2),
+    0 6px 10px -6px rgba(93, 84, 102, 0.26),
+    0 16px 24px -12px var(--shade-3),
+    0 32px 52px -20px var(--shade-4);
+}
+.card:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+
+.card-title {
+  position: relative;
+  font-size: 13.5px; font-weight: 400; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-title[data-unnamed='true'] { color: var(--ink-3); }
+.card-span {
+  position: relative;
+  margin-top: 3px;
+  font-size: 10.5px; letter-spacing: 0.03em; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.card-plot {
+  position: relative;
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 44px; margin: auto 0 0;
+}
+.card-plot i {
+  flex: 1;
+  border-radius: 1.5px 1.5px 0 0;
+  background: linear-gradient(180deg, var(--a-mid), rgba(136, 120, 144, 0.18));
+}
+.card-foot {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 -15px; padding: 8px 15px 10px;
+  font-size: 10.5px; line-height: 1.5; color: var(--ink-3);
+  box-shadow: inset 0 1px 0 rgba(93, 84, 102, 0.09);
+}
+.card-nfc {
+  flex: none; width: 15px; height: 11px;
+  border-radius: 2.5px;
+  box-shadow: inset 0 0 0 1px rgba(107, 99, 118, 0.34);
+  opacity: 0.8;
+}
+
+/* ── 收起态的小块:宽扁的圆角小方,不是圆点也不是线 ── */
+.blocks { display: none; position: absolute; inset: 0; flex-direction: column; gap: 6px; }
+.panel[data-slim='true'] .blocks { display: flex; }
+.blk {
+  width: 100%;
+  border: 0; padding: 0; border-radius: 5px; cursor: pointer;
+  background: linear-gradient(168deg, var(--o-hi), var(--o-lo));
+  box-shadow: inset 0 0.5px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.16);
+  opacity: 0.55;
+  transition: opacity 0.45s var(--ease), background 0.45s var(--ease),
+    box-shadow 0.45s var(--ease), height 0.42s var(--ease);
+}
+.blk:hover { opacity: 0.85; }
+.blk[data-in-window='true'] { opacity: 0.95; }
+.blk[data-drawn='true'] {
+  opacity: 1;
+  background: linear-gradient(168deg, var(--a-mid), #7a6c83);
+  box-shadow: inset 0 0.5px 0 rgba(252, 251, 255, 0.32), 0 2px 6px var(--shade-3);
+}
+/* 不可知的那三天:虚线空心。**空和不知道必须分得开** */
+.blk[data-unknown='true'] {
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(136, 120, 144, 0.5);
+}
+.blk[data-unknown='true'][data-drawn='true'] {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--a-mid);
+}
+.blk:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+
+/* 卡片放完之后露出来的那片 —— 就是框自己的面。点它收放。视觉上不存在。 */
+.rest {
+  flex: 1; min-height: 40px;
+  border: 0; background: none; padding: 0; cursor: pointer;
+}
+.rest:focus-visible {
+  outline: 2px solid var(--a-mid); outline-offset: -6px; border-radius: 16px;
+}
+
+/* ── 底下那条线:只管本机 ── */
+.line-zone { flex: none; height: 24px; display: flex; align-items: center; margin-top: 12px; }
+.line {
+  position: relative; width: 100%; height: 3px;
+  border-radius: 999px; overflow: hidden;
+  background: linear-gradient(90deg, var(--a-deep), var(--a-mid) 45%, var(--a-pale));
+}
+.line-pulse {
+  position: absolute; top: 0; left: 0;
+  width: var(--pw, 96px); height: 3px;
+  border-radius: 999px; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9) 52%, transparent);
+  transform: translateX(calc(-1 * var(--pw, 96px)));
+}
+/* 兜底的相位不能跟实算的画得一样。**不加字、不加图标** —— 仪器自己失色:
+   色带褪成灰紫、那道光按可见度下限走。余光里看得出「这拍它没在测」,
+   又不会有个牌子横在那儿抢注意力。 */
+.line[data-trust='anchor'] { filter: saturate(0.22); }
+.line[data-trust='anchor'] .line-pulse { opacity: 0; }
+.line[data-trust='anchor'][data-run='true'] .line-pulse { animation-name: pulse-run-faint; }
+.line[data-trust='degraded'] { filter: saturate(0.12) brightness(0.97); }
+.line[data-trust='degraded'][data-run='true'] .line-pulse { animation-name: pulse-run-faint; }
+@keyframes pulse-run-faint {
+  0%        { transform: translateX(calc(-1 * var(--pw))); opacity: 0; }
+  8%        { opacity: calc(var(--amp, 0.5) * 0.35); }
+  30%       { opacity: calc(var(--amp, 0.5) * 0.35); }
+  36%, 100% { transform: translateX(var(--w)); opacity: 0; }
+}
+
+.line[data-run='true'] .line-pulse {
+  animation: pulse-run var(--dur, 3.4s) linear infinite;
+}
+@keyframes pulse-run {
+  0%        { transform: translateX(calc(-1 * var(--pw))); opacity: 0; }
+  8%        { opacity: var(--amp, 0.5); }
+  30%       { opacity: var(--amp, 0.5); }
+  36%, 100% { transform: translateX(var(--w)); opacity: 0; }
+}
+
+/* ══ 右 ═══════════════════════════════════════════════════════════════ */
+/* `min-height: 0` 不是可省的一行。
+
+   .main 是 .panel(grid)的项,而 **grid/flex 项的 min-height 默认是 auto** ——
+   意思是它拒绝缩到比内容更矮。于是对话一长,.main 就跟着内容长到两千多像素,
+   .thread 的 `flex:1` 是按那个被撑大的高度算的,`overflow-y:auto` 永远不生效,
+   底下那条输入栏被推到视口外一千八百像素的地方,**够不着**。
+
+   这个 bug 一直在,只是从前面板每次打开都是空白对话所以没人撞上 —— 把历史接
+   回来的那一刻它才露出来。 */
+.main {
+  display: flex; flex-direction: column;
+  min-width: 0; min-height: 0;
+  position: relative;
+}
+
+/* ── 岛:同一个东西自己长大,不是弹出来一个新浮层 ──
+   宽、高、圆角连续过渡,内容交叉淡入。展开后与左边卡片区顶对齐、等高。 */
+.island {
+  position: absolute; top: 0; right: 0; z-index: 70;
+  width: 186px; height: 40px;
+  border: 0; padding: 0; border-radius: 20px;
+  display: block; text-align: left; font: inherit; cursor: pointer;
+  overflow: hidden;
+  background: linear-gradient(162deg, rgba(236, 231, 244, 0.8), rgba(206, 198, 220, 0.7));
+  -webkit-backdrop-filter: blur(22px) saturate(1.55);
+  backdrop-filter: blur(22px) saturate(1.55);
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 3px rgba(93, 84, 102, 0.14);
+  transition: width var(--t-island) var(--ease), height var(--t-island) var(--ease),
+    border-radius var(--t-island) var(--ease), box-shadow var(--t-island) var(--ease),
+    background 0.42s var(--ease);
+}
+.island[data-open='true'] {
+  width: 100%; height: var(--island-h, 420px);
+  border-radius: 24px; cursor: default;
+  background: linear-gradient(162deg, rgba(234, 229, 243, 0.94), rgba(205, 197, 220, 0.9));
+  box-shadow: inset 0 1px 0 var(--lite), 0 2px 6px rgba(93, 84, 102, 0.1),
+    0 28px 60px -22px var(--shade-4);
+}
+.island:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+/* 没有 backdrop-filter 时(软件渲染 / 旧 WebView)回落实色,不破版 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .island { background: linear-gradient(162deg, #ece7f4, #cec6dc); }
+}
+
+.island-view { position: absolute; inset: 0; transition: opacity 0.26s var(--ease); }
+.island-mini { display: flex; align-items: center; gap: 12px; padding: 0 12px; }
+.island[data-open='true'] .island-mini { opacity: 0; pointer-events: none; }
+.island-full {
+  opacity: 0; pointer-events: none;
+  display: flex; flex-direction: column;
+  padding: 15px 6px 13px 18px;
+}
+.island[data-open='true'] .island-full {
+  opacity: 1; pointer-events: auto; transition-delay: 0.15s;
+}
+.mini-group { display: flex; align-items: center; gap: 5px; }
+.mini-group + .mini-group { margin-left: 12px; gap: 4px; }
+/* 收起态装不下的那几台留下的痕:两颗小点,不是省略号 ——
+   它跟旁边那排格子同族,不像文字那样把眼睛拽过去。 */
+.mini-more {
+  width: 3px; height: 13px; flex: none;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--ink-3) 0 3px,
+    transparent 3px 6px
+  );
+  opacity: 0.5;
+}
+
+/* 一块「实物」。**离墙多远就是它的状态** —— 不用状态点。 */
+.tile {
+  position: relative; flex: none;
+  border-radius: 5px; overflow: hidden;
+  background: linear-gradient(166deg, var(--o-hi), var(--o-lo));
+  box-shadow: inset 0 0.5px 0 var(--lite), 0 1.5px 3px rgba(93, 84, 102, 0.26);
+  transition: box-shadow 0.45s var(--ease), opacity 0.45s var(--ease),
+    background 0.45s var(--ease);
+}
+/* 降级:几乎贴平 */
+.tile[data-elev='low'] {
+  box-shadow: inset 0 0.5px 0 var(--lite-soft), 0 0.5px 1px rgba(93, 84, 102, 0.16);
+  opacity: 0.72;
+}
+/* 离线 / 这条通路从没来过东西:沉进表面,只剩凹槽,没有影子 */
+.tile[data-elev='sunk'] {
+  background: none;
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.22), inset 0 -0.5px 0 var(--lite-soft);
+  opacity: 0.85;
+}
+/* 被刻意闭上的那两档:盖一道。shut = 这一拍屏蔽;paused = 你按了暂停 */
+.tile[data-elev='shut']::before,
+.tile[data-elev='paused']::before {
+  content: '';
+  position: absolute; left: 14%; right: 14%; top: 50%;
+  height: 1px; margin-top: -0.5px;
+  background: rgba(61, 55, 69, 0.4); border-radius: 1px;
+}
+.tile[data-elev='paused'] {
+  background: none;
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), inset 0 -0.5px 0 var(--lite-soft);
+}
+/* 活跃:一道细光斜掠而过。忙就掠得频繁,闲就几秒才飘一次。
+   忙不忙是**余光里感觉到**的,不是读出来的。 */
+.tile-sheen {
+  position: absolute; top: -30%; bottom: -30%; left: 0; width: 52%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.82), transparent);
+  transform: translateX(-160%); opacity: 0;
+}
+.tile[data-busy] .tile-sheen { animation: sheen var(--rate, 6s) linear infinite; }
+@keyframes sheen {
+  0%        { transform: translateX(-160%); opacity: 0; }
+  8%        { opacity: 0.8; }
+  22%       { opacity: 0.8; }
+  30%, 100% { transform: translateX(230%); opacity: 0; }
+}
+
+.t-screen { width: 17px; height: 12px; }
+.t-camera { width: 13px; height: 13px; border-radius: 50%; }
+.t-mic    { width: 8px;  height: 15px; border-radius: 999px; }
+.t-sys    { width: 13px; height: 9px;  border-radius: 3px; }
+.t-dev    { width: 15px; height: 19px; border-radius: 4px; }
+.t-dev.wide { width: 20px; height: 14px; }
+.t-dev.tiny { width: 11px; height: 14px; }
+
+/* 展开:上面感知(就四条,两行摆完),下面设备(会长,自己滚)。
+   **没有一条分隔线** —— 线横在中间,眼睛会停在线上而不是内容上。 */
+.sec-key {
+  flex: none;
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-right: 14px;
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sec-key b {
+  font-weight: 400; font-size: 10px; letter-spacing: 0.06em;
+  text-transform: none; color: var(--a-mid);
+}
+/* 「别看了」。岛上唯一一个能按的东西 —— 破例的理由在 island.ts 那段注释里:
+   它要的是此刻立刻生效,而要人先开设置、再翻到感知那栏、再找某个键,
+   想遮住摄像头的那几秒里这条路太长。 */
+.privacy-btn {
+  margin-left: auto; margin-right: 10px;
+  padding: 2px 9px 3px;
+  border: 0; border-radius: 999px;
+  font: inherit; font-size: 10px; letter-spacing: 0.04em; text-transform: none;
+  color: var(--ink-2); cursor: pointer;
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.7), rgba(240, 236, 246, 0.5));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+  transition: background 0.3s var(--ease), color 0.3s var(--ease),
+    transform 0.24s var(--ease);
+}
+.privacy-btn:hover {
+  background: linear-gradient(166deg, rgba(253, 252, 255, 0.9), rgba(246, 243, 251, 0.7));
+  transform: translateY(-0.5px);
+}
+/* 已暂停:实心,一眼看出「现在什么都没在采」—— 这是它最重要的一个状态。 */
+.privacy-btn[data-paused='true'] {
+  color: #fff; background: var(--warn); box-shadow: none;
+}
+/* 问不到后端 —— **不是「正在采」**。虚线边:说不出口的时候就说不知道。 */
+.privacy-btn[data-unknown='true'] {
+  color: var(--ink-3); background: none;
+  box-shadow: none; outline: 1px dashed rgba(93, 84, 102, 0.3); outline-offset: -1px;
+}
+
+.per-grid {
+  flex: none;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px;
+  margin: 9px 14px 0 0;
+}
+.dev-key { margin-top: 22px; }
+/* 「还没接上」跟「此刻没在收」要分得开。数字那一栏偏一点点,不喊。 */
+.sec-key[data-unwired='true'] b { color: var(--ink-3); font-variant-numeric: normal; }
+
+/* 岛内最下面那行:此刻在跑哪一档。**只读** —— 岛是状态面,不是控制面。
+   dev-list 会自己滚,这一行 flex:none 钉在它下面,不跟着滚走。 */
+/* 抬头与「感知」「设备」同一个骨架:左边名字、右边当前档。型号名一行摆完,
+   摆不下省略 —— 岛是余光扫一眼的地方,不该为两个型号 id 吃掉设备列表的高度。 */
+.brain-key { flex: none; margin-top: 14px; }
+.brain-line {
+  flex: none;
+  margin-top: 4px; padding-right: 14px;
+  font-size: 11px; line-height: 1.4; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 读不到目录、或者当前这一档这台机器根本跑不动 —— 两种都得看得出来。
+   岛上写着「C 档」而它跑不动 C,是最难查的那种误导。 */
+.brain-line[data-unwired='true'] { color: var(--warn); }
+
+.dev-list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 6px; padding-right: 12px; }
+.dev-list::-webkit-scrollbar { width: 5px; }
+.dev-list::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
+.dev-list::-webkit-scrollbar-track { background: transparent; }
+.unit {
+  display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 11px;
+  height: 36px; padding: 0 8px 0 2px; border-radius: 9px;
+}
+.dev-list .unit + .unit { margin-top: 2px; }
+.unit-icon { display: flex; justify-content: center; }
+.unit-name {
+  display: block; font-size: 12.5px; line-height: 1.3; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.unit-note {
+  display: block; font-size: 10.5px; line-height: 1.3; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.unit-note[data-active='true'] { color: var(--a-mid); }
+
+/* ── 对话 ── */
+.thread {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 22px;
+  padding: 52px 8px 18px 4px;   /* 顶上让开那块岛 */
+}
+.turn { max-width: 34rem; font-size: 14.5px; line-height: 1.8; }
+.turn[data-role='user'] {
+  align-self: flex-end;
+  padding: 11px 18px;
+  border-radius: 20px 20px 7px 20px;
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.1);
+}
+/* 还没被念出来、因此还没上屏的那一截。锁步生效时它是灰的;
+   一旦脱钩,它会被一次性放开 —— 那一刻由 .lockstep-mark 说明。 */
+.turn-pending { color: var(--ink-3); }
+.turn-caret {
+  display: inline-block; width: 2px; height: 1.05em;
+  border-radius: 1px; background: var(--a-mid); vertical-align: -3px;
+  animation: caret 1.15s steps(2) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+/* 降级必须留痕:声音和文字已经脱钩,界面上不能一声不吭 */
+.lockstep-mark {
+  align-self: flex-start;
+  font-size: 11px; color: var(--warn);
+  padding: 2px 0;
+}
+.attach {
+  display: flex; align-items: center; gap: 13px;
+  max-width: 21rem; padding: 10px; border-radius: 18px;
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.1);
+}
+.attach-thumb {
+  flex: none; width: 50px; height: 50px; border-radius: 13px;
+  background: radial-gradient(78% 78% at 28% 18%, #bdb4c6, #766b80 68%, #514860);
+}
+.attach-name { display: block; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+.attach-note { display: block; font-size: 11.5px; line-height: 1.55; color: var(--ink-3); }
+
+/* ── 底:左边一个 + 收文件图片,右下角是设置 ── */
+.dock { flex: none; display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+.round {
+  flex: none; width: 40px; height: 40px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  display: grid; place-items: center; color: var(--ink-2);
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 3px rgba(93, 84, 102, 0.16);
+  transition: transform 0.48s var(--ease), color 0.35s var(--ease);
+}
+.round:hover { color: var(--ink); }
+.round:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
+.round[data-kind='gear'][aria-expanded='true'] { transform: rotate(72deg); }
+.round[data-kind='plus'][aria-expanded='true'] { transform: rotate(45deg); }
+.field {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 5px 5px 20px; border-radius: 999px;
+  background: linear-gradient(166deg, rgba(245, 243, 248, 0.7), rgba(223, 218, 231, 0.72));
+  box-shadow: inset 0 1px 0 var(--lite);
+}
+.field input {
+  flex: 1; min-width: 0;
+  border: 0; outline: 0; background: none;
+  font: inherit; font-size: 14px; color: var(--ink);
+}
+.field input::placeholder { color: var(--ink-3); }
+.send {
+  flex: none; width: 32px; height: 32px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  display: grid; place-items: center; color: #f4f2f7;
+  background: linear-gradient(162deg, var(--a-mid), #77687f);
+  box-shadow: 0 1px 3px rgba(93, 84, 102, 0.28);
+  transition: filter 0.3s var(--ease);
+}
+.send:hover { filter: brightness(1.1); }
+.send:focus-visible { outline: 2px solid var(--a-deep); outline-offset: 2px; }
+
+/* 左栏空着时那一句。三种空各说各的 —— 「后端没接上」被画成「你还没聊过」的话,
+   人会照着后者去做,再说一句,然后发现还是空的。 */
+.deck-empty {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 26px;
+  font-size: 12px; line-height: 1.7; text-align: center;
+  color: var(--ink-3);
+}
+.deck-empty[data-unwired='true'] { color: var(--warn); }
+
+/* ── 两端的浮层 ── */
+.pop {
+  position: absolute; bottom: 52px; z-index: 60;
+  padding: 7px; border-radius: 22px;
+  opacity: 0; pointer-events: none;
+  background: linear-gradient(162deg, rgba(234, 229, 243, 0.9), rgba(205, 197, 220, 0.87));
+  -webkit-backdrop-filter: blur(30px) saturate(1.65);
+  backdrop-filter: blur(30px) saturate(1.65);
+  box-shadow: inset 0 1px 0 var(--lite), 0 2px 6px rgba(93, 84, 102, 0.1),
+    0 26px 56px -20px var(--shade-4);
+  transition: transform 0.46s var(--ease), opacity 0.28s var(--ease);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .pop { background: linear-gradient(162deg, #eae5f3, #cdc5dc); }
+}
+.pop[data-side='left']  { left: 0;  width: 14rem;   transform-origin: 0 100%;   transform: translateY(10px) scale(0.94); }
+.pop[data-side='right'] { right: 0; width: 18.5rem; transform-origin: 100% 100%; transform: translateY(12px) scale(0.93); border-radius: 26px; padding: 8px; }
+.pop[data-open='true'] { transform: none; opacity: 1; pointer-events: auto; }
+
+.pop-item {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  border: 0; background: none; cursor: pointer;
+  padding: 9px 12px; border-radius: 16px;
+  font: inherit; font-size: 13.5px; text-align: left; color: var(--ink);
+  transition: background 0.3s var(--ease);
+}
+.pop-item:hover { background: rgba(252, 251, 255, 0.34); }
+.pop-item:focus-visible { outline: 2px solid var(--a-mid); outline-offset: -2px; }
+.pop-item svg { flex: none; color: var(--ink-2); }
+
+/* 整档开关:一个开关管一整片配置键,不是一个键 */
+.bundle {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: 0; background: none; cursor: pointer;
+  padding: 11px 14px; border-radius: 19px;
+  font: inherit; text-align: left;
+  transition: background 0.3s var(--ease);
+}
+.bundle:hover { background: rgba(252, 251, 255, 0.34); }
+.bundle:focus-visible { outline: 2px solid var(--a-mid); outline-offset: -2px; }
+.bundle-name { display: block; font-size: 14px; }
+.bundle-note { display: block; margin-top: 1px; font-size: 11.5px; color: var(--ink-3); }
+/* 有键被手改得偏离了这一档 —— 档位显示为「开 · 有偏离」,不能只显示"开" */
+.bundle-note[data-drift='true'] { color: var(--warn); }
+.knob {
+  position: relative; flex: none;
+  margin-left: auto; width: 39px; height: 23px; border-radius: 999px;
+  background: rgba(107, 99, 118, 0.24);
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.18);
+  transition: background 0.4s var(--ease), box-shadow 0.4s var(--ease);
+}
+.knob::after {
+  content: '';
+  position: absolute; top: 2.5px; left: 2.5px; width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(168deg, var(--o-hi), var(--o));
+  box-shadow: 0 1px 3px rgba(93, 84, 102, 0.34);
+  transition: transform 0.4s var(--ease);
+}
+.bundle[aria-pressed='true'] .knob {
+  background: linear-gradient(90deg, var(--a-mid), #9a8ca3);
+  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), 0 0 15px -3px rgba(136, 120, 144, 0.6);
+}
+.bundle[aria-pressed='true'] .knob::after { transform: translateX(16px); }
+/* ── 设置浮层第五行:本机模型档位 ──
+   它长得和上面那四档不一样,因为它不是一回事:上面是开关(开不开),这里是
+   四选一(用哪一套)。所以不给推拉开关,给一排看得见全部档位的牌子。
+
+   **跑不动的档照画,不藏起来。** 藏了之后「这台机器没有 C 档」和「C 档在那儿
+   但你的显卡带不动」在界面上一模一样,而这两件事的下一步完全不同。 */
+.tier-row {
+  margin-top: 8px; padding-top: 11px; position: relative;
+}
+/* 分组用一道**两端化开**的浅痕,不用横贯到底的实线 —— 实线会把浮层切成
+   两个盒子,而这五行本来就是一件事的五个方面。 */
+.tier-row::before {
+  content: ''; position: absolute; top: 0; left: 4px; right: 4px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(93, 84, 102, 0.14) 22%,
+    rgba(93, 84, 102, 0.14) 78%, transparent);
+}
+.tier-head { padding: 2px 4px 7px; }
+.tier-stages { padding: 0 4px; }
+.tier-stages .stage { min-width: 30px; text-align: center; }
+
+/* 装不下:留着能点(人可能就是知道自己机器行),但画上警示边,别让它看着和
+   能跑的一样。原因在 title 里说全。 */
+.tier-stages .stage[data-fit='no_gpu'],
+.tier-stages .stage[data-fit='insufficient_vram'] {
+  color: var(--warn);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+/* 硬件没探到 —— **不是「能跑」**。虚线边:一眼看出这一档没被评估过。 */
+.tier-stages .stage[data-fit='unknown'] {
+  box-shadow: none;
+  outline: 1px dashed rgba(93, 84, 102, 0.3); outline-offset: -1px;
+}
+/* 选中的那一档压过 fit 的着色:先说清楚"现在在哪一档",再说"跑不跑得动"。 */
+.tier-stages .stage[data-picked='true'] {
+  color: #fff; background: var(--a-mid);
+}
+.tier-stages .stage[data-picked='true'][data-fit='no_gpu'],
+.tier-stages .stage[data-picked='true'][data-fit='insufficient_vram'] {
+  background: var(--warn);
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.24);
+}
+
+.pop-more { margin-top: 8px; font-size: 13px; color: var(--ink-2); border-radius: 19px; padding: 10px 14px 11px; }
+
+/* 多态档位那枚小牌子。三档(safe / guided / autonomous)一个推拉开关表达不了,
+   所以直接把当前那档写出来 —— 少一个需要解读的符号。 */
+.stage {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px; letter-spacing: 0.02em; color: var(--ink-2);
+  background: rgba(252, 251, 255, 0.5);
+  box-shadow: inset 0 1px 0 var(--lite-soft);
+  transition: background 0.28s var(--ease), color 0.28s var(--ease);
+}
+
+/* 没接上的那一档:主键在后端不存在。压平、去掉指针,并且**点不动** ——
+   一个永远关着、点了也没反应的开关,比一条说明更容易骗到人。 */
+.bundle[data-unwired='true'] { opacity: 0.5; cursor: not-allowed; }
+.bundle-note[data-unwired='true'] { color: var(--warn); }
+
+/* ── 全部设置:那 332 个键的细调面 ──
+   盖在对话区上,不另开窗口 —— 它跟设置浮层是同一件事的两个深度,
+   飞出一个新窗口会让人觉得离开了面板。 */
+.settings-full {
+  position: absolute; inset: 0; z-index: 90;
+  display: flex; flex-direction: column;
+  border-radius: 24px; overflow: hidden;
+  background: linear-gradient(168deg, rgba(238, 234, 245, 0.97), rgba(224, 219, 234, 0.95));
+  -webkit-backdrop-filter: blur(26px) saturate(1.4);
+  backdrop-filter: blur(26px) saturate(1.4);
+  box-shadow: inset 0 1px 0 var(--lite), 0 24px 60px -24px var(--shade-4);
+
+  /* 从齿轮那一角长出来,不是凭空出现一个新窗口。
+     此前这里是 display:none ↔ flex —— **硬切**,一帧之内整页盖上来。岛那边
+     早就做对了(宽高圆角连续过渡、内容交叉淡入),这一片却是另一套观感。
+     同一个界面上两种出场方式,人会觉得这两块东西不是一个软件里的。
+
+     原点定在右下:齿轮就在坞的右端、坞在底部。从别处长出来会让人下意识去找
+     "刚才我点的是哪儿"。 */
+  transform-origin: 100% 100%;
+  opacity: 0; visibility: hidden;
+  transform: translateY(10px) scale(0.972);
+  transition: opacity 0.3s var(--ease), transform 0.42s var(--ease),
+    visibility 0s linear 0.42s;
+}
+.settings-full[data-open='true'] {
+  opacity: 1; visibility: visible;
+  transform: none;
+  transition: opacity 0.26s var(--ease), transform 0.42s var(--ease),
+    visibility 0s linear 0s;
+}
+/* 内容比容器晚一点点到 —— 先看见"一片东西升起来",再看见上面写了什么。
+   同时到的话像一张贴图突然出现。 */
+.settings-full .sf-body { transition: opacity 0.3s var(--ease) 0.06s; }
+.settings-full[data-open='false'] .sf-body { opacity: 0; transition-delay: 0s; }
+/* 正在拉或正在写:压住,但**不遮住内容** —— 盖一层白的话人就看不见自己刚改的是什么了 */
+.settings-full[data-busy='true'] .sf-body { opacity: 0.55; pointer-events: none; }
+
+.sf-head {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px 12px;
+}
+.sf-title { font-size: 15px; color: var(--ink); }
+.sf-count { flex: 1; font-size: 11.5px; color: var(--ink-3); }
+.sf-save {
+  border: 0; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 12.5px; color: #fff;
+  background: var(--a-mid);
+  box-shadow: 0 1px 3px var(--shade-3);
+}
+.sf-save:disabled { opacity: 0.4; cursor: default; }
+.sf-close {
+  flex: none; width: 26px; height: 26px; border: 0; border-radius: 50%;
+  cursor: pointer; position: relative;
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 3px rgba(93, 84, 102, 0.14);
+}
+.sf-close::before, .sf-close::after {
+  content: ''; position: absolute; left: 7px; top: 12px;
+  width: 12px; height: 1.5px; border-radius: 1px; background: var(--ink-2);
+}
+.sf-close::before { transform: rotate(45deg); }
+.sf-close::after { transform: rotate(-45deg); }
+
+.sf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 18px; }
+.sf-body::-webkit-scrollbar { width: 6px; }
+.sf-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
+
+.sf-sec { padding-top: 20px; }
+/* 段头。图标删掉之后,分段的重量全靠排版扛 —— 字号略大一点、字重略沉一点、
+   上下留白拉开,比一个彩色小人偶顶用,也不会喧宾夺主。 */
+.sf-sec-head {
+  margin: 0 0 8px; font-size: 13px; font-weight: 450; color: var(--ink);
+  letter-spacing: 0.01em;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.sf-sec-head b { font-weight: 400; font-size: 11px; color: var(--ink-3); }
+
+.sf-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px;
+  padding: 9px 10px; border-radius: 10px; min-height: 42px;
+}
+/* 改过默认的那些,左缘留一道痕。**不是装饰** —— 排障时第一个要问的就是
+   「这个值是默认还是有人改过」。 */
+.sf-row[data-overridden='true'] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--a-mid) 16%, transparent), transparent 38%);
+}
+.sf-text { min-width: 0; }
+.sf-key {
+  display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color: var(--ink); letter-spacing: 0.01em;
+}
+.sf-desc {
+  display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.4; color: var(--ink-3);
+}
+.sf-input {
+  flex: none; width: 190px; padding: 6px 10px;
+  border: 0; border-radius: 8px; font: inherit; font-size: 12px; color: var(--ink);
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.72), rgba(240, 236, 246, 0.6));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+}
+/* 聚焦不用 2px 硬框(那是网页表单的样子),用一圈化开的光。 */
+.sf-input:focus {
+  outline: none;
+  background: linear-gradient(166deg, rgba(253, 252, 255, 0.9), rgba(244, 241, 250, 0.75));
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.8),
+    0 0 0 3px color-mix(in srgb, var(--a-mid) 18%, transparent),
+    0 1px 3px var(--shade-2);
+}
+.sf-stages { display: flex; gap: 5px; }
+.sf-stages .stage { cursor: pointer; border: 0; font: inherit; }
+.sf-stages .stage[data-picked='true'] {
+  color: #fff; background: var(--a-mid);
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.22);
+}
+.sf-empty { padding: 40px 0; text-align: center; font-size: 12.5px; color: var(--warn); }
+
+/* ── 我的模型服务 ────────────────────────────────────────────────────────────
+   这一段和上面那 335 个键长得不一样是有意的:那边一个键一行,这边一张卡片一条
+   端点 —— 因为它带状态(通没通)、带来源(型号是谁报的)、带动作(重验/删)。
+   画成一样的行,这三件事就没地方摆了。 */
+.up-sec { padding-bottom: 6px; }
+.up-hint {
+  margin: 0 0 10px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3);
+}
+.up-notice[hidden] { display: none; }
+.up-notice {
+  margin-bottom: 10px; padding: 8px 11px; border-radius: 9px;
+  font-size: 11.5px; line-height: 1.45; color: var(--warn);
+  background: linear-gradient(166deg, rgba(255, 246, 233, 0.72), rgba(252, 240, 226, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.6);
+}
+.up-list { display: flex; flex-direction: column; gap: 10px; }
+
+.up-card {
+  padding: 12px 13px; border-radius: 13px;
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.52), rgba(238, 234, 245, 0.34));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+}
+.up-top { display: flex; align-items: center; gap: 8px; }
+.up-top b { font-weight: 500; font-size: 12.5px; color: var(--ink); }
+
+/* 三态三个颜色。**live 与 declared 不共用一个绿点** —— 把「网关自己报的型号」
+   和「你自己敲的型号」画成同一件事,敲错一个字时人会以为是系统坏了。 */
+.up-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.up-card[data-state='live'] .up-dot { background: #4f9d69; }
+.up-card[data-state='declared'] .up-dot { background: var(--a-mid); }
+.up-card[data-state='unverified'] .up-dot { background: var(--warn); }
+.up-state { font-size: 11px; color: var(--ink-3); }
+.up-card[data-state='unverified'] .up-state { color: var(--warn); }
+
+.up-addr {
+  display: block; margin-top: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; color: var(--ink-2); word-break: break-all;
+}
+.up-meta { display: block; margin-top: 4px; font-size: 11px; line-height: 1.45; color: var(--ink-3); }
+.up-card[data-state='unverified'] .up-meta { color: var(--warn); }
+
+.up-models { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.up-models code {
+  padding: 2px 7px; border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px; color: var(--ink-2);
+  background: rgba(252, 251, 255, 0.62);
+  box-shadow: inset 0 1px 0 var(--lite-soft);
+}
+.up-more { align-self: center; font-size: 10.5px; color: var(--ink-3); }
+
+.up-acts { display: flex; align-items: center; gap: 2px; margin-top: 9px; margin-left: -9px; }
+.up-nokey { flex: 1; font-size: 10.5px; color: var(--ink-3); }
+.up-btn {
+  /* 纯文字,悬停才显形。三枚小白药丸并排也是"框"的一种 —— 而且它们是次要
+     动作,不该和主按钮抢同样的视觉重量。 */
+  border: 0; padding: 4px 9px; border-radius: 9px; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: var(--ink-3);
+  background: transparent; box-shadow: none;
+  transition: color 0.22s var(--ease), background 0.22s var(--ease);
+}
+.up-btn:hover { color: var(--ink); background: rgba(252, 251, 255, 0.5); }
+.up-danger:hover { color: var(--bad); background: rgba(160, 106, 106, 0.09); }
+
+/* 新增表单:**和那 335 个键用同一个节奏**,左边一句话、右边一个控件。
+   第一版是五条等宽等圆的白横条竖着摞起来 —— 同一个页面上两套排版,那块东西
+   看着像从别处贴过来的;而且五条一样宽、一样圆、一样白的横条本身,就是那种
+   "生成出来的界面"最典型的样子。现在它和上下文同一个节奏,不需要任何边框
+   就自己归位了。 */
+.up-form { margin-top: 4px; }
+.up-row { min-height: 44px; }
+.up-label { display: block; font-size: 12.5px; color: var(--ink); }
+.up-row .sf-desc { margin-top: 2px; }
+/* 地址和型号要写得下,给宽的;名字那种给窄的 —— 宽窄本身就是一种提示。
+   用显式的 .up-wide,**不用 nth-child** —— 按位置指宽窄的话,谁把表单重排一下,
+   宽度就悄悄跟错了字段,而且不报错。 */
+.up-input { width: 190px; }
+.up-wide { width: 268px; }
+/* 按钮落在刚才打字那一列下面,不孤零零杵在左边。 */
+.up-form .sf-save { display: block; margin: 10px 10px 4px auto; }
+.up-proto { justify-content: flex-end; }
+
+.up-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }
+
+/* 协议那一排档位牌。用与设置页同一套 .sf-stages —— 全面板只有一种"选一个"的
+   画法,多一种就等于让人重新学一次。 */
+.up-proto .stage { cursor: pointer; border: 0; font: inherit; }

@@ -2,12 +2,13 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 398 条 · 组件 schema 105 个
+// 路径 405 条 · 组件 schema 107 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
   | "/api/config"
   | "/api/config/all"
+  | "/api/config/bundles"
   | "/api/config/probe"
   | "/api/config/save"
   | "/api/devices/heartbeat"
@@ -157,6 +158,8 @@ export type ApiPath =
   | "/api/v1/hybrid/execute"
   | "/api/v1/hybrid/registry"
   | "/api/v1/hybrid/stats"
+  | "/api/v1/memory/cards"
+  | "/api/v1/memory/cards/{card_id}/turns"
   | "/api/v1/memory/cold"
   | "/api/v1/memory/drift/check"
   | "/api/v1/memory/drift/config"
@@ -164,6 +167,7 @@ export type ApiPath =
   | "/api/v1/memory/stats"
   | "/api/v1/memory/store"
   | "/api/v1/memory/tasks"
+  | "/api/v1/memory/thread"
   | "/api/v1/memory/unified/status"
   | "/api/v1/mesh/android-lifecycle"
   | "/api/v1/mesh/coordinator-summary"
@@ -300,6 +304,9 @@ export type ApiPath =
   | "/api/v1/protocols/skills/{name}/execute"
   | "/api/v1/protocols/skills/{name}/reload"
   | "/api/v1/protocols/status"
+  | "/api/v1/providers/user"
+  | "/api/v1/providers/user/{pid}"
+  | "/api/v1/providers/user/{pid}/verify"
   | "/api/v1/rag/patterns"
   | "/api/v1/rag/query"
   | "/api/v1/rag/stats"
@@ -410,6 +417,7 @@ export type ApiPath =
 export const API_METHODS = {
   "/api/config": ["get", "post"],
   "/api/config/all": ["get"],
+  "/api/config/bundles": ["get", "post"],
   "/api/config/probe": ["post"],
   "/api/config/save": ["post"],
   "/api/devices/heartbeat": ["post"],
@@ -559,6 +567,8 @@ export const API_METHODS = {
   "/api/v1/hybrid/execute": ["post"],
   "/api/v1/hybrid/registry": ["get"],
   "/api/v1/hybrid/stats": ["get"],
+  "/api/v1/memory/cards": ["get"],
+  "/api/v1/memory/cards/{card_id}/turns": ["get"],
   "/api/v1/memory/cold": ["get"],
   "/api/v1/memory/drift/check": ["post"],
   "/api/v1/memory/drift/config": ["get", "put"],
@@ -566,6 +576,7 @@ export const API_METHODS = {
   "/api/v1/memory/stats": ["get"],
   "/api/v1/memory/store": ["post"],
   "/api/v1/memory/tasks": ["get"],
+  "/api/v1/memory/thread": ["get"],
   "/api/v1/memory/unified/status": ["get"],
   "/api/v1/mesh/android-lifecycle": ["get"],
   "/api/v1/mesh/coordinator-summary": ["get"],
@@ -702,6 +713,9 @@ export const API_METHODS = {
   "/api/v1/protocols/skills/{name}/execute": ["post"],
   "/api/v1/protocols/skills/{name}/reload": ["post"],
   "/api/v1/protocols/status": ["get"],
+  "/api/v1/providers/user": ["get", "post"],
+  "/api/v1/providers/user/{pid}": ["delete"],
+  "/api/v1/providers/user/{pid}/verify": ["post"],
   "/api/v1/rag/patterns": ["get"],
   "/api/v1/rag/query": ["post"],
   "/api/v1/rag/stats": ["get"],
@@ -874,6 +888,11 @@ export interface BudgetRecordRequest {
   "session_id": string;
   "tenant_id"?: string;
   "tokens_used": number;
+}
+
+export interface BundleUpdateRequest {
+  "key": string;
+  "value": string;
 }
 
 export interface ChatRequest {
@@ -1460,6 +1479,15 @@ export interface UnquarantineResponse {
   "device_id": string;
   "message": string;
   "was_quarantined": boolean;
+}
+
+export interface UserProviderIn {
+  "api_key"?: string | null;
+  "base_url": string;
+  "id": string;
+  "label"?: string;
+  "models"?: Array<string>;
+  "protocol"?: string;
 }
 
 export interface ValidationError {

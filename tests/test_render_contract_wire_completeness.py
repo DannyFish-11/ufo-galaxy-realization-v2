@@ -40,8 +40,12 @@ import pytest
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PANEL_SRC = REPO_ROOT / "electron" / "renderer" / "panel" / "src"
 GEN_TS = PANEL_SRC / "types" / "phase_contract.gen.ts"
-HOOK_TS = PANEL_SRC / "hooks" / "useRenderPosture.ts"
-APP_CSS = PANEL_SRC / "App.css"
+# 旧 React 面板已被 HUD 面板整个替换。这三条判据一条没变,只是各自的**载体**
+# 换了地方:
+#   useRenderPosture.ts  →  transport.ts(那份字段表叫 POSTURE_FIELDS)
+#   App.css              →  styles/hud.css
+HOOK_TS = PANEL_SRC / "transport.ts"
+APP_CSS = PANEL_SRC / "styles" / "hud.css"
 TOKENS_CSS = PANEL_SRC / "styles" / "tokens.css"
 
 
@@ -59,7 +63,7 @@ def _generated_ts_fields() -> Set[str]:
 
 def _hook_expected_fields() -> Set[str]:
     src = HOOK_TS.read_text(encoding="utf-8")
-    body = src.split("export const RENDER_POSTURE_FIELDS = [")[1].split("] as const;")[0]
+    body = src.split("const POSTURE_FIELDS = [")[1].split("] as const;")[0]
     return set(re.findall(r"'([\w_]+)'", body))
 
 
@@ -141,8 +145,15 @@ def test_the_panel_actually_imports_the_generated_render_contract():
     "RenderPosture",于是把类型改名、注释里还留着旧名字时它照样绿。变异验证出来的。
     """
     # 形如:import type { RenderPosture } from '@/types/phase_contract.gen';
+    # `@contract` 是 vite/tsconfig 里指向 phase_contract.gen.ts 的别名(见
+    # electron/renderer/panel/vite.config.ts)。只认字面路径的话,用别名导入会被
+    # 判成"没人 import" —— 而别名恰恰是为了不复制一份契约才设的。
+    # `export type { … } from` 与 `import` 一样是**真绑定**:HUD 面板刻意用一个
+    # types.ts 统一 re-export,免得每个文件各自去找那份生成文件。只认 import 的话,
+    # 这条会把那种写法判成「没人用」—— 而它恰恰是为了不复制一份契约才这么写的。
     import_re = re.compile(
-        r"import\s+(?:type\s+)?\{[^}]*\bRenderPosture\b[^}]*\}\s*from\s*['\"][^'\"]*phase_contract\.gen['\"]"
+        r"(?:import|export)\s+(?:type\s+)?\{[^}]*\bRenderPosture\b[^}]*\}\s*from\s*"
+        r"['\"](?:[^'\"]*phase_contract\.gen|@contract)['\"]"
     )
     importers: List[str] = []
     for path in PANEL_SRC.rglob("*.ts*"):
@@ -156,7 +167,7 @@ def test_the_panel_actually_imports_the_generated_render_contract():
 def test_the_panel_actually_reads_payload_render():
     """必须真的读 ``payload.render`` —— 后端就挂在那儿。"""
     src = HOOK_TS.read_text(encoding="utf-8")
-    assert "render?" in src or "payload?.render" in src, "前端没有读 payload.render"
+    assert "render?" in src or "payload?.render" in src or "payload['render']" in src, "前端没有读 payload.render"
 
 
 # ── 3. 骨架就是骨架:不许偷偷改观感 ───────────────────────────────────────────

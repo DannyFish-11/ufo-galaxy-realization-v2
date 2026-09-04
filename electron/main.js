@@ -869,11 +869,16 @@ function createPanelWindow() {
     const fs = require('fs');
     // 优先加载 Vite 构建产物 (dist/)。renderer/panel/index.html 现在是构建
     // 入口（指向 src/main.tsx），不能直接被浏览器/Electron 当页面加载。
-    const distPath = path.join(__dirname, 'renderer', 'panel', 'dist', 'index.html');
-    const legacyPath = path.join(__dirname, 'renderer', 'panel', 'index.html');
-    const panelPath = fs.existsSync(distPath) ? distPath : legacyPath;
+    // 只认构建产物。**没有"回退到源码入口"这条路。**
+    //
+    // 这里原先在 dist/ 缺失时回退到 renderer/panel/index.html。那是 Vite 的
+    // 构建入口(指向 src/main.ts),用 file:// 加载它只会得到一个空页面 ——
+    // 而面板窗口是 transparent 的,于是表现为「F12 按了没反应」,还不报错。
+    // 一条注定白屏的回退路,比直接说"产物不在"有害。
+    const panelPath = path.join(__dirname, 'renderer', 'panel', 'dist', 'index.html');
     if (!fs.existsSync(panelPath)) {
-        console.log('[Panel] panel build not found — run: cd electron/renderer/panel && npm install && npm run build');
+        console.error('[Panel] 构建产物不存在: ' + panelPath);
+        console.error('[Panel] 修法: cd electron/renderer/panel && npm ci && npm run build');
         return null;
     }
 
@@ -900,6 +905,13 @@ function createPanelWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
             webSecurity: true,
+            // 网关地址随进程参数进渲染层。**必须是同步能拿到的** —— 面板一挂载
+            // 就起 WebSocket,而 ipcRenderer.invoke 是异步的,socket 会先拿着空
+            // 地址连一遍、失败、退避,然后才等到真地址。
+            //
+            // 地址仍然只在这里推导一次(GATEWAY_BASE),preload 只是转交 ——
+            // 让 preload 自己从 env 拼一遍的话,同一个事实就有两处定义了。
+            additionalArguments: [`--galaxy-base=${GATEWAY_BASE}`],
         }
     });
 
@@ -932,7 +944,7 @@ function createPanelWindow() {
                 '<body style="margin:0;background:#11131c;color:#eaf6ff;font-family:Segoe UI,system-ui;' +
                 'display:flex;align-items:center;justify-content:center;height:100vh;text-align:center">' +
                 '<div><h2>Galaxy 控制面板加载失败</h2>' +
-                '<p style="opacity:.7">请重建面板：cd electron/renderer/panel &amp;&amp; npm install &amp;&amp; npm run build<br>' +
+                '<p style="opacity:.7">请重建面板：cd electron/renderer/panel &amp;&amp; npm ci &amp;&amp; npm run build<br>' +
                 '详情见 logs/electron.log</p></div></body>'));
         } catch (e) { /* ignore */ }
     });

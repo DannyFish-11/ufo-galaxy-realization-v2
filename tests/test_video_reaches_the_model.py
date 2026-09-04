@@ -265,11 +265,36 @@ def test_keyframe_schema_default_agrees_with_the_code(monkeypatch):
 
 
 def test_keyframe_switch_reaches_the_settings_panel():
-    """面板源码里没有这个键，用户就永远看不到、也关不掉这个滚动缓冲。"""
-    import pathlib
+    """面板上没有这个键，用户就永远看不到、也关不掉这个滚动缓冲。
 
-    src = pathlib.Path("electron/renderer/panel/src/components/SettingsTab.tsx").read_text(encoding="utf-8")
-    assert "GALAXY_PERCEPTION_KEYFRAMES" in src
+    **判据没变，载体换了。** 原先查的是 ``SettingsTab.tsx`` 里有没有这个字符串；
+    那个 React 面板已被新 HUD 整个替换掉，文件不在了（CI 上表现为
+    ``FileNotFoundError``）。而新面板的设置页**不再手写键清单** —— 它按
+    ``/api/config/all`` 返回的 ``category`` 现算分组，一个键只要登记在
+    ``CONFIG_SCHEMA`` 里就一定渲染得出来。
+
+    所以现在查的是那个真正决定「看不看得见」的地方：键在不在 schema 里，以及它的
+    category 有没有在 ``CATEGORIES`` 里有中文标签（没有的话会渲染成
+    「xxx（未分类）」，用户看得见却不知道那是什么 —— 这个仓库刚为
+    ``behavior`` 这个已废弃的分类名栽过一次，正是这个键）。
+
+    这比原来严：原来只要有人在 tsx 里写过这串字就算过，哪怕那一行早就不渲染了。
+    """
+    import re
+    from pathlib import Path
+
+    from core.routes.config import CONFIG_SCHEMA
+
+    meta = CONFIG_SCHEMA.get("GALAXY_PERCEPTION_KEYFRAMES")
+    assert meta is not None, "GALAXY_PERCEPTION_KEYFRAMES 没登记进 CONFIG_SCHEMA —— 设置页上根本不会出现它"
+
+    inventory = Path("electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
+    start = inventory.index("export const CATEGORIES")
+    decorated = set(re.findall(r"key:\s*'([a-z_]+)'", inventory[start : inventory.index("\n];", start)]))
+    assert meta.get("category") in decorated, (
+        f"它的 category {meta.get('category')!r} 在设置页上没有中文标签 —— "
+        f"会渲染成「{meta.get('category')}（未分类）」。有标签的是: {sorted(decorated)}"
+    )
 
 
 @pytest.mark.parametrize("raw,expected", [("", 4), ("abc", 4), ("-3", 0), ("999", 16), ("2", 2)])

@@ -206,7 +206,7 @@ class TestBothLoadPathsAskTheSameAuthority:
         """判据接上了但用户改不了，等于没接 —— 面板上要有它们的位置。"""
         import pathlib
 
-        tsx = pathlib.Path("electron/renderer/panel/src/components/SettingsTab.tsx").read_text(encoding="utf-8")
+        tsx = pathlib.Path("electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
         assert "GALAXY_LLAMA_CTX" in tsx
         assert "GALAXY_OLLAMA_NUM_CTX" in tsx
 

@@ -662,6 +662,28 @@ class UnifiedWebUI:
 # ============================================================================
 
 
+def _log_root_hint() -> "Path":
+    """统一日志根目录。唯一事实来源是 core.log_paths.log_root。"""
+    from pathlib import Path as _Path
+
+    try:
+        from core.log_paths import log_root
+
+        return log_root()
+    except Exception:  # noqa: BLE001 — 横幅不该因为导入失败就不显示
+        return _Path(__file__).resolve().parent.parent / "logs"
+
+
+def _crash_hint() -> str:
+    """崩溃聚合视图的路径。"""
+    try:
+        from core.log_paths import crash_latest_path
+
+        return str(crash_latest_path())
+    except Exception:  # noqa: BLE001
+        return str(_log_root_hint() / "crashes" / "latest.log")
+
+
 class GalaxyUnified:
     """Galaxy 统一系统"""
 
@@ -2026,8 +2048,14 @@ class GalaxyUnified:
                 ("面板", f"http://localhost:{port}"),
                 ("文档", f"http://localhost:{port}/docs"),
                 ("唤醒", "Ctrl+Alt+Space    隐藏 Ctrl+Alt+H"),
-                ("崩溃", "托盘 →「💥 崩溃日志」(全仓崩溃已合并去重)"),
-                ("日志", "托盘 →「View Logs(统一日志目录)」"),
+                # 指路必须指向**真实存在的东西**。
+                #
+                # 这两行原先写的是「托盘 →「💥 崩溃日志」」和「托盘 →「View Logs」」。
+                # 托盘菜单按所有者要求清空之后,那两个入口不存在了 —— 横幅还照旧指过去,
+                # 用户就会去点一个没有的东西。改成直接给路径:路径来自
+                # core.log_paths(唯一事实来源),不在这里另拼一份。
+                ("崩溃", f"{_crash_hint()}(全仓崩溃已合并去重)"),
+                ("日志", str(_log_root_hint())),
             ],
             degraded=degraded_items or None,
             hints=[("停止", "Ctrl+C"), ("详细", "python main.py -v")],

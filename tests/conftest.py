@@ -255,6 +255,37 @@ GALAXY_TEST_API_TOKEN = "galaxy-test-suite-token-0123456789abcdef"
 os.environ["GALAXY_API_TOKEN"] = GALAXY_TEST_API_TOKEN
 
 
+@pytest.fixture(autouse=True)
+def _no_desktop_surface_in_tests(request, monkeypatch):
+    """**没有一条单元测试该去联网跑 `npm install`。**
+
+    ``SystemOrchestrator.run_startup_sequence()`` 的 DESKTOP_SURFACE 阶段在
+    electron 包不完整时会真的 shell 出去装依赖。而那条路上的超时嵌套是反的:
+    子进程自己的 timeout 与 pytest-timeout 都是 120 秒,**内层不小于外层**,于是
+    生产代码里那句 "npm install timed out after 120s" 的优雅降级永远到不了 ——
+    这条测试只有两种结局:秒过,或者硬超时。本地复现不出来,只因为本地要么依赖
+    装好了(跳过安装)、要么根本装不通(秒退);CI runner 上 registry 可达、又并发
+    二十来个作业时,那次安装就撞穿 120 秒。
+
+    **为什么放在 conftest 而不是某个测试文件里。**
+
+    这个坑我按文件补过两次,两次都补漏了:头一次挂在
+    ``test_batch_pr2_startup_orchestrator.TestSystemOrchestrator`` 上(同文件的
+    ``TestHookRegistration`` 照旧超时),第二次提到那个文件的模块级(而
+    ``test_pr4_v6_boundary_integration`` 又超时)。全仓一共**五个**文件调
+    ``run_startup_sequence()``。
+
+    按「我这次看到的那一组」圈范围,就会一直漏下去。判据其实是套件级的:
+    *这个测试套件里不许有测试去跑 npm install*。所以它落在 conftest。
+
+    真要验那条路的测试,用 ``@pytest.mark.real_desktop_surface`` 显式声明 ——
+    **说出来**,而不是碰巧没被挡住。
+    """
+    if request.node.get_closest_marker("real_desktop_surface"):
+        return
+    monkeypatch.setenv("GALAXY_SKIP_DESKTOP_SURFACE", "true")
+
+
 @pytest.fixture
 def auth_headers():
     """访问受鉴权端点时带上的请求头。

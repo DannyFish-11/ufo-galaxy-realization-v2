@@ -557,6 +557,24 @@ class SystemOrchestrator:
         # (npm install/npm start 各跑两遍),且谁先抢到 Electron 自身的单实例锁完全
         # 随机、可能是没被注入正确网关端口的那一个。这里先查锁,已有存活实例则
         # 直接跳过(不做任何 npm 探测/安装工作)。
+        # 无头部署与测试:显式关掉桌面壳这一阶段。
+        #
+        # 这个阶段在 electron 包不完整时会真的去跑 `npm install`(联网、子进程),
+        # 而 tests/test_batch_pr2_startup_orchestrator.py 里有四条测试直接调
+        # run_startup_sequence(),于是单元测试会发起网络安装 —— CI 上并发一高就
+        # 撞穿 pytest 那 120 秒;更糟的是子进程自己的 timeout 也是 120 秒,内层不
+        # 小于外层,下面那条 "npm install timed out after 120s" 的优雅降级**永远
+        # 到不了**,只能硬超时。
+        #
+        # 对无头/服务端部署这个开关本来也该有:那种机器上没人看 GUI,不该为它装
+        # 一套 Electron 依赖。
+        if os.environ.get("GALAXY_SKIP_DESKTOP_SURFACE", "").lower() in ("1", "true", "yes"):
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.DEGRADED,
+                detail="Desktop surface skipped (GALAXY_SKIP_DESKTOP_SURFACE)",
+            )
+
         from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
 
         if already_running():

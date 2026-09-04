@@ -97,11 +97,58 @@ async def get_catalog() -> Dict[str, Any]:
                 else:
                     fits[tag] = "ok"
         snap["gpu_fit"] = fits
+        snap["tier_fit"] = _tier_fit(snap, fits)
     except Exception as exc:  # 探测失败不阻塞目录,但如实说明未评估
         logger.debug("catalog 硬件探测失败: %s", exc)
         snap["hardware"] = {"has_gpu": None, "probe_error": type(exc).__name__}
         snap["gpu_fit"] = {}
+        # **探测失败时每一档都是 unknown,不是 ok。** 没探到和探到「装得下」是
+        # 两件事;当成 ok 的话,面板会把「不知道」画成「能跑」,而用户是照着这个
+        # 画面选档的。
+        snap["tier_fit"] = {
+            t.get("key", ""): {"fit": "unknown", "blocked_by": [], "reason": "硬件未探测到"}
+            for t in snap.get("tiers", []) or []
+        }
     return snap
+
+
+#: gpu_fit 里最坏的那一档说了算。顺序即严重程度。
+_FIT_RANK = {"ok": 0, "insufficient_vram": 1, "no_gpu": 2}
+
+_FIT_REASON = {
+    "ok": "",
+    "insufficient_vram": "显存装不下,会溢出到内存",
+    "no_gpu": "需要显卡,这台机器没有",
+}
+
+
+def _tier_fit(snap: Dict[str, Any], fits: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+    """一档整体装不装得下 —— **这个判断在这里做,不在面板里做。**
+
+    ``gpu_fit`` 是**逐模型**的。面板要显示的却是「这一档能不能选」,中间隔着一步
+    聚合。那一步如果放到前端,判据就跟着渲染代码走了:换个界面就得重写一遍,两处
+    迟早给出不同答案 —— 而这个仓库对「同一个事实两处各存」栽过不止一次。
+
+    聚合规则:看 ``active_tags``(这一档真正会加载的那几个),取其中**最坏**的那个。
+    候选表里没被选中的型号不算 —— 一档四选一,其中一个装不下不代表这一档不能用。
+
+    没有 fit 记录的 tag(云端模型、探测没覆盖到的)按 ok 计:它们不吃本机显存。
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+    for tier in snap.get("tiers", []) or []:
+        worst, blocked = "ok", []
+        for tag in tier.get("active_tags", []) or []:
+            fit = fits.get(tag, "ok")
+            if fit != "ok":
+                blocked.append(tag)
+            if _FIT_RANK.get(fit, 0) > _FIT_RANK.get(worst, 0):
+                worst = fit
+        out[tier.get("key", "")] = {
+            "fit": worst,
+            "blocked_by": blocked,
+            "reason": _FIT_REASON.get(worst, ""),
+        }
+    return out
 
 
 def _catalog_placeholder(status: str = "unknown") -> Dict[str, Dict[str, Any]]:

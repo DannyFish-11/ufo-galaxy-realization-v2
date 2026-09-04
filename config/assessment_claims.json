@@ -326,6 +326,54 @@
           "expected": true
         }
       ]
+    },
+    {
+      "id": "memory-thread-wired",
+      "source": "本次记忆连续性接线(2026-08-29)",
+      "recorded_on": "2026-08-29",
+      "statement": "对话不再每次自成一根:SessionManager 的四个 Session 构造点全部经 _apply_thread 调 resolve_thread,新对话挂到该 owner 已有的 root_id 上。判据只有一份(core/memory_thread.py),四处共用。",
+      "supersedes": "此前 fork_session() 的唯一生产调用方是 core/agentic/workflow.py 的并行分支 —— 血缘机制建好了,但从没人用它表达「这次接着上次」。对话那一层因此是一堆按会话切开的岛,而记忆的其余五层都是连续的。",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "resolve_thread",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "sessions_in_thread",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "MEMORY_THREAD_AUTHORITY",
+          "scope": "core",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "lockstep-degradation-is-visible",
+      "source": "本次 lockstep 帧(2026-08-30)",
+      "recorded_on": "2026-08-30",
+      "statement": "文字/语音锁步的降级不再对前端隐形:SSE 增加 {type:'lockstep'} 帧,三态 engaged/off/degraded 由 LOCKSTEP_STATES 登记,降级帧在补吐之前发出。",
+      "supersedes": "此前 SSE 只有 phase/delta/reset/meta/done/error 六种帧。锁步降级之后文字从「逐句跟着嘴」转为「逐字直出」,声音与文字已经脱钩,而界面上完全看不出来 —— 与本仓「降级必须留痕」这条规矩相悖。",
+      "predicates": [
+        {
+          "kind": "symbol_exists",
+          "target": "LOCKSTEP_STATES",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "LOCKSTEP_REASONS",
+          "scope": "core",
+          "expected": true
+        }
+      ]
     }
   ]
 }

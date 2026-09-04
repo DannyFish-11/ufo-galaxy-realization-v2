@@ -378,7 +378,7 @@ def test_e01_switch_is_registered_backend_and_panel():
 
     assert "GALAXY_EXECUTION_ISOLATION" in CONFIG_SCHEMA
     root = Path(__file__).resolve().parent.parent
-    panel = (root / "electron/renderer/panel/src/components/SettingsTab.tsx").read_text(encoding="utf-8")
+    panel = (root / "electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
     assert "'GALAXY_EXECUTION_ISOLATION'" in panel
 
 
