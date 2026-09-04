@@ -29,7 +29,6 @@ from galaxy_gateway.voice_call_route import (
     DEVICE_ORIGINATED,
     VOICE_CALL_TYPES,
     VoiceCallRoute,
-    active_route_count,
     close_voice_route,
 )
 from galaxy_gateway.websocket_handler import handle_message, handle_websocket
@@ -422,7 +421,10 @@ async def test_interrupt_from_the_watch_reaches_the_session(monkeypatch: Any, fa
         await handle_message("conn_int", wire("voice_interrupt", reason="user_speech"), ws)
 
         assert fake_session.interrupted == 1, "打断没有传到 provider"
-        assert call.downlink_track.buffered_bytes == 0, "缓冲没清干净,AI 会硬说完半句"
+        # 断言用户**听到的**,而不是某个内部计数器:打断之后下一帧必须是静音。
+        # 缓冲没清干净的话,这一帧里还是刚才那段 440Hz —— 也就是 AI 硬说完半句。
+        frame = await asyncio.wait_for(call.downlink_track.recv(), timeout=2.0)
+        assert bytes(frame.planes[0]) == b"\x00" * len(bytes(frame.planes[0])), "缓冲没清干净,AI 会硬说完半句"
     finally:
         await close_voice_route("conn_int")
         await device.close()
@@ -447,13 +449,14 @@ async def test_connection_teardown_ends_the_call(monkeypatch: Any, fake_session:
     try:
         await _negotiate(ws, device, "conn_tear")
         assert get_call_registry().active_count() == 1
-        assert active_route_count() >= 1
 
         had = await close_voice_route("conn_tear")
 
         assert had is True
         assert fake_session.closed is True, "provider 会话没关 —— 这是一条在计费的泄漏"
         assert get_call_registry().active_count() == 0
+        # 再挂一次必须返回 False:连接级表项确实被摘掉了,而不是留着一条僵尸。
+        assert await close_voice_route("conn_tear") is False, "连接级路由表没清干净"
     finally:
         await device.close()
 
@@ -528,7 +531,26 @@ async def test_real_connection_loop_ends_the_call_on_disconnect(monkeypatch: Any
         assert ws.last("voice_call_accepted") is not None, f"通话没接通,回包是 {ws.sent}"
         assert fake_session.closed is True, "断线后 provider 会话没关 —— 这是一条在计费的泄漏"
         assert get_call_registry().active_count() == 0
-        assert active_route_count() == 0, "连接级路由表没清干净"
+        assert await close_voice_route("conn_loop") is False, "连接循环没有摘掉连接级路由表项"
     finally:
         await close_voice_route("conn_loop")
         await device.close()
+
+
+def test_gateway_shutdown_ends_active_calls():
+    """网关整体退出时必须挂断还开着的通话。
+
+    这是一条**源码级**守卫,不是行为测试:跑完整 lifespan 要把整个网关启起来,代价远大
+    于它能证明的东西。它只钉一件事 —— lifespan 的 shutdown 段里确实调了
+    ``end_all``。真正的挂断行为由 ``test_end_all_closes_every_call`` 覆盖。
+
+    为什么值得单钉:单条通话的收尾在 WebSocket 断开路径上,那条路盖不住"进程整体退出
+    时还有通话在跑"。部署重启、滚动更新每次都会走到这一种,而 provider 那头的会话不会
+    自己知道进程没了 —— 它会一直挂着计费,且没有任何报错。
+    """
+    from pathlib import Path
+
+    src = Path("galaxy_gateway/bootstrap/lifecycle.py").read_text(encoding="utf-8")
+    shutdown = src.split("Shutting down Galaxy Gateway", 1)
+    assert len(shutdown) == 2, "找不到 shutdown 段 —— 这条守卫失效了,先修守卫"
+    assert "end_all" in shutdown[1], "lifespan 的 shutdown 段没有挂断在跑的通话"

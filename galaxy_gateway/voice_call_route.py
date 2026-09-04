@@ -296,11 +296,6 @@ async def close_voice_route(connection_id: str, reason: str = "connection_closed
     return had_call
 
 
-def active_route_count() -> int:
-    """当前挂着的连接端点数。给测试和运维视图用。"""
-    return len(_ROUTES)
-
-
 async def maybe_handle_voice_message(
     connection_id: str,
     msg_type: Any,

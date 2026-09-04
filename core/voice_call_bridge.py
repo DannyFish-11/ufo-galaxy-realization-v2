@@ -147,11 +147,6 @@ def _make_downlink_track_class() -> type:
                     self.dropped_bytes += excess
                     logger.warning("下行缓冲溢出,丢弃最旧 %d 字节(累计 %d)", excess, self.dropped_bytes)
 
-        @property
-        def buffered_bytes(self) -> int:
-            """还没播出去的下行字节数。给打断验证与运维视图用 —— 打断之后它必须是 0。"""
-            return len(self._buf)
-
         async def clear(self) -> None:
             """清空未播出的下行音频 —— barge-in 时用。
 
