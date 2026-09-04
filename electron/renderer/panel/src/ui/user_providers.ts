@@ -34,13 +34,20 @@ export interface UserProviderDraft {
 
 export interface UserProviderCallbacks {
   onSave(draft: UserProviderDraft): void;
+  /** 把这条填回表单去改。密钥不回填 —— 留空表示不改。 */
+  onEdit(row: UserProvider): void;
   onVerify(id: string): void;
   onDelete(id: string): void;
 }
 
 export interface UserProviderHandles {
   readonly root: HTMLElement;
-  render(rows: readonly UserProvider[] | null, busy: boolean, notice: string): void;
+  render(
+    rows: readonly UserProvider[] | null,
+    protocols: readonly string[],
+    busy: boolean,
+    notice: string,
+  ): void;
   /**
    * 清空新增表单。存成功之后由调用方来调。
    *
@@ -51,6 +58,8 @@ export interface UserProviderHandles {
    * 失败时**不清** —— 那时表单里是他刚填的东西,清掉等于让他重打一遍。
    */
   clearForm(): void;
+  /** 把一条端点填回表单（供「编辑」用）。 */
+  fillForm(row: UserProvider): void;
 }
 
 const STATE_TEXT: Record<string, string> = {
@@ -81,7 +90,7 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
   const hint = document.createElement('p');
   hint.className = 'up-hint';
   hint.textContent =
-    '任何 OpenAI 兼容的地址都能加进来（one-api / new-api / 自建 vLLM / 公司内网网关）。加完会真发一次一个 token 的试调 —— 通了才让它参与选路。';
+    '任何 OpenAI 兼容的地址都能加进来（one-api / new-api / 自建 vLLM / 自定义网关）。加完会真发一次一个 token 的试调 —— 通了才让它参与选路。';
 
   const list = document.createElement('div');
   list.className = 'up-list';
@@ -103,8 +112,42 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
     return i;
   }
 
+  /**
+   * 协议。**一排可点的档位牌,名单由后端给。**
+   *
+   * 此前这里写死成 'openai' —— 而后端一直支持 anthropic。那不是"少做了一个
+   * 功能",是**后端有能力、界面上够不着**:一个 Claude 兼容的网关加不进来,
+   * 而且从界面上完全看不出为什么。这正是本仓最怕那种缺陷的镜像。
+   *
+   * 名单从 /api/v1/providers/user 一起返回,不在这里写第二份 —— 写死的名单
+   * 会在后端增减协议时悄悄错开,而且不报错。
+   */
+  const protoRow = document.createElement('span');
+  protoRow.className = 'sf-stages up-proto';
+  let picked = '';
+
+  function renderProtocols(list: readonly string[]): void {
+    if (!picked && list.length) picked = list[0] ?? '';
+    protoRow.replaceChildren();
+    for (const proto of list) {
+      const chip = document.createElement('button');
+      chip.className = 'stage';
+      chip.type = 'button';
+      chip.textContent = proto;
+      chip.dataset['picked'] = String(proto === picked);
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        picked = proto;
+        for (const sib of protoRow.children) {
+          (sib as HTMLElement).dataset['picked'] = String((sib as HTMLElement).textContent === proto);
+        }
+      });
+      protoRow.append(chip);
+    }
+  }
+
   const fId = field('短名字，如 my-gw（小写字母数字-_）');
-  const fLabel = field('显示名，如 公司内网网关');
+  const fLabel = field('显示名，如 我的自定义服务');
   const fUrl = field('https://…/v1');
   const fKey = field('API Key（没有鉴权就留空）', 'password');
   const fModels = field('型号，逗号隔开。留空=让网关自己报');
@@ -123,14 +166,14 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
       id: fId.value.trim(),
       label: fLabel.value.trim() || fId.value.trim(),
       base_url: fUrl.value.trim(),
-      protocol: 'openai',
+      protocol: picked || 'openai',
       models,
       // 空串表示「不改」,新增时也一样 —— 无鉴权的自建服务就是没有 Key。
       ...(fKey.value ? { api_key: fKey.value } : {}),
     });
   });
 
-  form.append(fId, fLabel, fUrl, fKey, fModels, add);
+  form.append(fId, fLabel, fUrl, protoRow, fKey, fModels, add);
   root.append(head, hint, notice, list, form);
   root.addEventListener('click', (e) => e.stopPropagation());
 
@@ -180,6 +223,16 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
 
     const acts = document.createElement('div');
     acts.className = 'up-acts';
+    // 改一条端点从前只能整份重打(同 id 是更新语义,但表单是空的)。
+    // 「编辑」把这条的字段填回表单 —— **密钥不回填**,那等于把它重新摊到 DOM 上。
+    const edit = document.createElement('button');
+    edit.className = 'up-btn';
+    edit.type = 'button';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cb.onEdit(p);
+    });
     const reverify = document.createElement('button');
     reverify.className = 'up-btn';
     reverify.type = 'button';
@@ -202,14 +255,20 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
       nokey.textContent = '没填 Key';
       acts.append(nokey);
     }
-    acts.append(reverify, del);
+    acts.append(edit, reverify, del);
 
     el.append(top, addr, meta, models, acts);
     return el;
   }
 
-  function render(rows: readonly UserProvider[] | null, busy: boolean, msg: string): void {
+  function render(
+    rows: readonly UserProvider[] | null,
+    protocols: readonly string[],
+    busy: boolean,
+    msg: string,
+  ): void {
     root.dataset['busy'] = String(busy);
+    renderProtocols(protocols);
     notice.hidden = !msg;
     notice.textContent = msg;
 
@@ -238,5 +297,21 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
     for (const i of [fId, fLabel, fUrl, fKey, fModels]) i.value = '';
   }
 
-  return { root, render, clearForm };
+  function fillForm(row: UserProvider): void {
+    fId.value = row.id;
+    fLabel.value = row.label;
+    fUrl.value = row.base_url;
+    // **密钥不回填。** 留空 = 不改,后端保留原来那份。把它重新摊到 DOM 上
+    // 没有任何好处 —— 录屏、截图、远程桌面都会把它一起带走。
+    fKey.value = '';
+    fKey.placeholder = row.has_key ? '已存过（留空=不改）' : 'API Key（没有鉴权就留空）';
+    fModels.value = row.declared_models.join(', ');
+    picked = row.protocol;
+    for (const sib of protoRow.children) {
+      (sib as HTMLElement).dataset['picked'] = String((sib as HTMLElement).textContent === row.protocol);
+    }
+    fId.scrollIntoView({ block: 'nearest' });
+  }
+
+  return { root, render, clearForm, fillForm };
 }

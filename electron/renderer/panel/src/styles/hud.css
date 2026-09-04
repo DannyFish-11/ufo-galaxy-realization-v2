@@ -853,3 +853,7 @@ body {
 .up-form .sf-save { align-self: flex-start; margin-top: 2px; }
 
 .up-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }
+
+/* 协议那一排档位牌。用与设置页同一套 .sf-stages —— 全面板只有一种"选一个"的
+   画法,多一种就等于让人重新学一次。 */
+.up-proto { padding: 2px 0; }

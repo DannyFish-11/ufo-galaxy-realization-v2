@@ -84,6 +84,11 @@ export interface HudState {
    * 会以为自己加过的东西丢了。
    */
   readonly userProviders: readonly UserProvider[] | null;
+  /**
+   * 后端认哪些协议。空数组 = 还没拉到 —— 那时协议牌一个都不画,而不是画一个
+   * 猜出来的 openai。猜出来的那一颗会让人以为「只支持这一种」。
+   */
+  readonly userProviderProtocols: readonly string[];
   readonly userProvidersBusy: boolean;
   /** 上一次操作的结果(后端拒绝的那句人话,或验证结论)。空 = 没有要说的。 */
   readonly userProviderNotice: string;
@@ -119,6 +124,7 @@ export const initialState: HudState = {
   tierGaps: [],
   config: null,
   userProviders: null,
+  userProviderProtocols: [],
   userProvidersBusy: false,
   userProviderNotice: '',
   settingsOpen: false,

@@ -115,6 +115,7 @@ function mount(host: HTMLElement): void {
 
   const userProviders = createUserProviders({
     onSave: (draft) => void saveEndpoint(draft),
+    onEdit: (row) => userProviders.fillForm(row),
     onVerify: (id) => void verifyEndpoint(id),
     onDelete: (id) => void deleteEndpoint(id),
   });
@@ -148,7 +149,12 @@ function mount(host: HTMLElement): void {
     thread.render(s.turns, s.lockstep, s.lockstepReason);
     dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
     settings.render(s.config, s.settingsOpen, s.configBusy);
-    userProviders.render(s.userProviders, s.userProvidersBusy, s.userProviderNotice);
+    userProviders.render(
+      s.userProviders,
+      s.userProviderProtocols,
+      s.userProvidersBusy,
+      s.userProviderNotice,
+    );
   }
 
   store.subscribe(render);
@@ -209,8 +215,13 @@ function mount(host: HTMLElement): void {
 
   /** 拉一次已声明的端点。拉不到就**留 null**,让界面说「后端没接上」而不是「你没加过」。 */
   async function loadEndpoints(): Promise<void> {
-    const rows = await fetchUserProviders(BASE);
-    store.patch({ userProviders: rows });
+    const page = await fetchUserProviders(BASE);
+    store.patch({
+      userProviders: page ? page.providers : null,
+      // 拉不到时**不动**已有的协议名单:那份是后端说的,一次网络抖动不该让
+      // 协议牌整排消失,让人以为这个功能坏了。
+      ...(page ? { userProviderProtocols: page.supportedProtocols } : {}),
+    });
   }
 
   /**

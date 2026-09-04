@@ -28,6 +28,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.user_providers import (
+    SUPPORTED_PROTOCOLS,
     ProviderIdRejected,
     api_key_for,
     delete_provider,
@@ -75,12 +76,18 @@ async def _refresh_router() -> None:
 
 @router.get("")
 async def list_user_providers() -> Dict[str, Any]:
+    """列出全部端点，**并把「支持哪些协议」一起给出去**。
+
+    面板要画一排协议档位牌。那份名单如果由前端自己写死,就成了第二处权威 ——
+    后端加一种协议,界面上永远看不见;后端去掉一种,界面还让人选,选了才 400。
+    本仓已经因为「同一件事两处各存一份」栽过好几次,这里从源头堵掉。
+    """
     rows = []
     for p in list_providers():
         d = p.to_public()
         d["has_key"] = bool(api_key_for(p.id))
         rows.append(d)
-    return {"providers": rows}
+    return {"providers": rows, "supported_protocols": list(SUPPORTED_PROTOCOLS)}
 
 
 @router.post("")

@@ -354,3 +354,80 @@ class TestThePanelIsActuallyWiredToThoseEndpoints:
         css = (self.PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
         for state in ("live", "declared", "unverified"):
             assert f"data-state='{state}'" in css, f"{state} 这一态没有自己的样式 —— 三种状态被画成了同一件事"
+
+
+class TestEveryProtocolTheBackendAcceptsIsReachableFromThePanel:
+    """后端认的协议，界面上必须选得到。
+
+    这一条是补的：第一版面板把 protocol 写死成 'openai'，而后端一直也认
+    'anthropic'。那不是"少做了一个功能"，是**后端有能力、界面上够不着** ——
+    一个 Claude 兼容的网关加不进来，而且从界面上完全看不出为什么。
+
+    它是本仓最怕那种缺陷的镜像：不是"看起来接上了其实没有"，而是
+    "其实有，但没有任何入口"。两者都靠肉眼发现不了，所以都要有门。
+
+    修法不是在前端也列一份名单（那就成了第二处权威，后端增减协议时会悄悄错开
+    且不报错），而是让后端把名单一起返回、前端照着画。
+    """
+
+    PANEL_SRC = Path(__file__).resolve().parents[1] / "electron/renderer/panel/src"
+
+    def test_the_list_endpoint_publishes_the_supported_protocols(self, client):
+        body = client.get("/api/v1/providers/user").json()
+        from core.user_providers import SUPPORTED_PROTOCOLS
+
+        assert body.get("supported_protocols") == list(SUPPORTED_PROTOCOLS), (
+            "列表端点没有把「支持哪些协议」发出去 —— 那前端只能自己写死一份，"
+            "而写死的那份会在后端增减协议时悄悄错开。"
+        )
+
+    def test_the_panel_reads_that_list_instead_of_hardcoding_one(self):
+        transport = (self.PANEL_SRC / "transport.ts").read_text(encoding="utf-8")
+        ui = (self.PANEL_SRC / "ui/user_providers.ts").read_text(encoding="utf-8")
+
+        assert "supported_protocols" in transport, "transport.ts 没有读后端给的协议名单"
+        assert "renderProtocols(" in ui, "界面上没有按名单画协议档位牌"
+        assert "protocol: 'openai'," not in ui, "协议还是写死的 'openai' —— 后端认的其它协议在界面上够不着。"
+
+    @pytest.mark.parametrize("proto", ["openai", "anthropic"])
+    def test_each_protocol_is_actually_accepted_end_to_end(self, client, proto):
+        """不只是"名单里有"，而是**真的存得进去**。"""
+        r = client.post(
+            "/api/v1/providers/user",
+            json={"id": f"gw-{proto}", "base_url": "https://x.example.com/v1", "protocol": proto},
+        )
+        assert r.status_code == 200, f"协议 {proto} 在名单里，却存不进去"
+        assert r.json()["protocol"] == proto
+
+
+class TestEditingDoesNotLeakTheKeyBackIntoTheDom:
+    """「编辑」把一条端点填回表单时，密钥**不回填**。
+
+    把它重新摊到 DOM 上没有任何好处 —— 想看的人本来就看得到，而不想泄露的场合
+    （录屏、截图、远程桌面）它会跟着一起走。留空表示不改，后端保留原来那份。
+
+    这条与设置页里那 26 个密钥输入框是同一条规矩，写成门是因为「编辑」这个新入口
+    很容易顺手把值填回去。
+    """
+
+    PANEL_SRC = Path(__file__).resolve().parents[1] / "electron/renderer/panel/src"
+
+    def test_fill_form_never_assigns_a_key_value(self):
+        ui = (self.PANEL_SRC / "ui/user_providers.ts").read_text(encoding="utf-8")
+        assert "function fillForm(" in ui, "没有「编辑」这条路 —— 改一条端点只能整份重打"
+        body = ui.split("function fillForm(", 1)[1].split("\n  }", 1)[0]
+        assert "fKey.value = ''" in body, "fillForm 里没有把密钥框清空 —— 它可能被回填了"
+        assert "row.has_key ?" in body, "没有把「存过没有」表达出来，用户会以为自己没存过"
+
+    def test_omitting_the_key_on_update_keeps_the_stored_one(self, client):
+        """端到端：改标签不必重填 Key。"""
+        from core.user_providers import api_key_for
+
+        client.post(
+            "/api/v1/providers/user",
+            json={"id": "gw", "base_url": "https://x.example.com/v1", "api_key": "sk-keep-me"},
+        )
+        client.post(
+            "/api/v1/providers/user", json={"id": "gw", "label": "改了个名", "base_url": "https://x.example.com/v1"}
+        )
+        assert api_key_for("gw") == "sk-keep-me", "只改了标签，密钥却丢了 —— 那等于逼人每次都重填"

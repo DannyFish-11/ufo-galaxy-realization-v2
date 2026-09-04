@@ -901,8 +901,18 @@ function readUserProvider(v: unknown): UserProvider | null {
   };
 }
 
+/** 端点清单 + 后端支持哪些协议。 */
+export interface UserProviderPage {
+  readonly providers: readonly UserProvider[];
+  /**
+   * 后端认哪些协议。**由后端给,前端不自己写死** —— 写死就成了第二处权威:
+   * 后端加一种,界面永远看不见;后端去掉一种,界面还让人选,选了才 400。
+   */
+  readonly supportedProtocols: readonly string[];
+}
+
 /** 拉这台机器上声明过的端点。拉不到返回 null —— 与「一条都没有」是两件事。 */
-export async function fetchUserProviders(base: string): Promise<readonly UserProvider[] | null> {
+export async function fetchUserProviders(base: string): Promise<UserProviderPage | null> {
   try {
     const resp = await fetch(base + '/api/v1/providers/user', {
       headers: { Accept: 'application/json' },
@@ -913,7 +923,13 @@ export async function fetchUserProviders(base: string): Promise<readonly UserPro
     }
     const body = (await resp.json()) as Record<string, unknown>;
     const rows = Array.isArray(body['providers']) ? (body['providers'] as unknown[]) : [];
-    return rows.map(readUserProvider).filter((x): x is UserProvider => x !== null);
+    const protos = Array.isArray(body['supported_protocols'])
+      ? (body['supported_protocols'] as unknown[]).filter((x): x is string => typeof x === 'string')
+      : [];
+    return {
+      providers: rows.map(readUserProvider).filter((x): x is UserProvider => x !== null),
+      supportedProtocols: protos,
+    };
   } catch (err) {
     console.error('[hud] 拉用户端点失败:', err);
     return null;
