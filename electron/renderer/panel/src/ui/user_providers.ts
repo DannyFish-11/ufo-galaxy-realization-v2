@@ -83,7 +83,7 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
 
   const head = document.createElement('h3');
   head.className = 'sf-sec-head';
-  head.textContent = '🔌 我的模型服务';
+  head.textContent = '我的模型服务';
   const n = document.createElement('b');
   head.append(n);
 

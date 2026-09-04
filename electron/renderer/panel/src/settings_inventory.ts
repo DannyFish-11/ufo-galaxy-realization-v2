@@ -246,12 +246,18 @@ export const DELEGATED_CATEGORIES = new Set<string>([
 export interface CategoryDef {
   readonly key: string;
   readonly label: string;
-  readonly icon: string;
   readonly advanced?: boolean;
 }
 
 /**
- * 分类的显示装饰(中文标签 + 图标)。
+ * 分类的中文标签。
+ *
+ * **没有图标这一栏。** 原来每一类配一个 emoji(🔊 👁️ 🧠 …),2026-09-04 整个删掉 ——
+ * 连字段一起删,不留一个填空字符串的空壳。九个彩色小人偶排在一列,是"生成出来的
+ * 界面"最容易被认出来的标记之一;而且它们一个字的信息都没多给:「说话与听」旁边
+ * 放一个喇叭,读的人早就知道那是说话与听了。
+ *
+ * 段与段的分隔改由排版承担(字号、间距、段头的字重)。
  *
  * 这一版分类是**按「人想干什么」分的**,不是按工程子系统 —— 「说话与听」而不是
  * 「TTS/ASR」,「思考与执行」而不是「agent runtime」。改这里之前先想清楚:
@@ -264,13 +270,13 @@ export interface CategoryDef {
  * 多半是来调某一个具体的键,不是来浏览的。
  */
 export const CATEGORIES: readonly CategoryDef[] = [
-  { key: 'voice', label: '说话与听', icon: '🔊' },
-  { key: 'perception', label: '感知', icon: '👁️' },
-  { key: 'agent', label: '思考与执行', icon: '🧠' },
-  { key: 'memory', label: '记忆', icon: '🗂️' },
-  { key: 'devices', label: '设备与跨设备', icon: '🕸️' },
-  { key: 'security', label: '安全与权限', icon: '🔒' },
-  { key: 'network', label: '网络与端口', icon: '🌐' },
-  { key: 'llm', label: '供应商与密钥', icon: '🔑' },
-  { key: 'advanced', label: '进阶与调优', icon: '🛠️', advanced: true },
+  { key: 'voice', label: '说话与听' },
+  { key: 'perception', label: '感知' },
+  { key: 'agent', label: '思考与执行' },
+  { key: 'memory', label: '记忆' },
+  { key: 'devices', label: '设备与跨设备' },
+  { key: 'security', label: '安全与权限' },
+  { key: 'network', label: '网络与端口' },
+  { key: 'llm', label: '供应商与密钥' },
+  { key: 'advanced', label: '进阶与调优', advanced: true },
 ];

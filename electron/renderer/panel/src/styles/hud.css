@@ -775,10 +775,13 @@ body {
 .sf-body::-webkit-scrollbar { width: 6px; }
 .sf-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
 
-.sf-sec { padding-top: 14px; }
+.sf-sec { padding-top: 20px; }
+/* 段头。图标删掉之后,分段的重量全靠排版扛 —— 字号略大一点、字重略沉一点、
+   上下留白拉开,比一个彩色小人偶顶用,也不会喧宾夺主。 */
 .sf-sec-head {
-  margin: 0 0 6px; font-size: 12.5px; font-weight: 400; color: var(--ink-2);
-  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 8px; font-size: 13px; font-weight: 450; color: var(--ink);
+  letter-spacing: 0.01em;
+  display: flex; align-items: baseline; gap: 8px;
 }
 .sf-sec-head b { font-weight: 400; font-size: 11px; color: var(--ink-3); }
 

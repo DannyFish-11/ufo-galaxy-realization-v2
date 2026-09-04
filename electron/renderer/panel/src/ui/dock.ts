@@ -254,7 +254,7 @@ export function createDock(cb: DockCallbacks): DockHandles {
       chip.title =
         t.fit === 'ok'
           ? `${t.label}\n${t.desc}`
-          : `${t.label}\n${t.desc}\n\n⚠ ${t.fitReason}` +
+          : `${t.label}\n${t.desc}\n\n装不下:${t.fitReason}` +
             (t.blockedBy.length ? `（${t.blockedBy.join('、')}）` : '');
       chip.addEventListener('click', (e) => {
         e.stopPropagation();

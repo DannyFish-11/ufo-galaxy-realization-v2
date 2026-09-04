@@ -115,3 +115,57 @@ def test_widths_are_not_pinned_by_position() -> None:
     assert (
         ".up-form .up-row:nth-child(" not in css
     ), "表单的宽窄又按位置指定了 —— 重排一下就会跟错字段。用 .up-wide 这类显式标记。"
+
+
+_PANEL_SRC = Path(__file__).resolve().parents[1] / "electron/renderer/panel/src"
+
+#: 表情/图形符号的码位段。只拦这些 —— 箭头、中文标点、数学符号照常用。
+_PICTOGRAPH = re.compile("[\U0001f000-\U0001faff☀-➿⬀-⯿️]")
+
+#: 只看**字符串字面量**。注释里出现的符号不算 —— 那是写给读代码的人的，
+#: 不会出现在界面上。第一版如果按整份文件扫，`// 名字 → 显示名` 这种说明
+#: 会被判成违规，人只好把说明改掉，信息就这么没了。本会话已经栽过两次
+#: 同形状的坑（api-surface 扫描器、settings_inventory 的门），这里一开始就分开。
+_LITERAL = re.compile(r"'[^'\n]*'|\"[^\"\n]*\"|`[^`]*`")
+
+
+def _emoji_in_ui_strings() -> list[str]:
+    hits: list[str] = []
+    for path in sorted(_PANEL_SRC.rglob("*.ts")):
+        if ".gen.ts" in path.name:
+            continue  # 生成物：源头在后端，不在这儿改
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+            stripped = line.strip()
+            if stripped.startswith(("*", "//", "/*")):
+                continue
+            for literal in _LITERAL.findall(line):
+                if _PICTOGRAPH.search(literal):
+                    hits.append(f"{path.relative_to(_PANEL_SRC.parent)}:{lineno}  {literal[:50]}")
+    return hits
+
+
+def test_no_emoji_reaches_the_screen() -> None:
+    """界面上不出现 emoji。
+
+    原来九个分类各配一个（喇叭、眼睛、脑子…），加上「我的模型服务」那个插头、
+    档位牌提示里那个警示符号。删干净了，连 CategoryDef 的 icon 字段一起删 ——
+    留一个填空字符串的空壳，下一个人只会把它填回去。
+
+    理由有两条，第二条才是主要的：
+    · 一列彩色小人偶是"生成出来的界面"最容易被认出来的标记之一；
+    · 它们一个字的信息都没多给 —— 「说话与听」旁边放一个喇叭，读的人早就知道
+      那是说话与听了。分段的重量交给排版（字号、字重、留白）扛。
+    """
+    hits = _emoji_in_ui_strings()
+    assert not hits, (
+        "这些界面字符串里又出现了 emoji：\n  " + "\n  ".join(hits) + "\n"
+        "分段和强调交给排版做（字号/字重/留白），别靠小人偶。"
+    )
+
+
+def test_the_category_list_has_no_icon_field_left_behind() -> None:
+    """删就删干净 —— 留一个空字段，下一个人只会把它填回去。"""
+    src = (_PANEL_SRC / "settings_inventory.ts").read_text(encoding="utf-8")
+    assert "icon" not in src, "CategoryDef 里还留着 icon 的痕迹"
+    settings = (_PANEL_SRC / "ui/settings.ts").read_text(encoding="utf-8")
+    assert "g.icon" not in settings, "设置页表头还在拼图标"

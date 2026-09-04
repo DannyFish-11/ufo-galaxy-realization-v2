@@ -44,7 +44,7 @@ function isSecret(item: ConfigItem): boolean {
  */
 export function groupByCategory(
   items: readonly ConfigItem[],
-): ReadonlyArray<{ key: string; label: string; icon: string; items: ConfigItem[] }> {
+): ReadonlyArray<{ key: string; label: string; items: ConfigItem[] }> {
   const buckets = new Map<string, ConfigItem[]>();
   for (const it of items) {
     const list = buckets.get(it.category);
@@ -62,17 +62,17 @@ export function groupByCategory(
     });
   }
 
-  const out: Array<{ key: string; label: string; icon: string; items: ConfigItem[] }> = [];
+  const out: Array<{ key: string; label: string; items: ConfigItem[] }> = [];
   for (const c of CATEGORIES) {
     const list = buckets.get(c.key);
     if (list && list.length) {
-      out.push({ key: c.key, label: c.label, icon: c.icon, items: list });
+      out.push({ key: c.key, label: c.label, items: list });
       buckets.delete(c.key);
     }
   }
   // 剩下的是 CATEGORIES 里没声明的类别。**不丢** —— 丢了那一整类就没人看得见。
   for (const [cat, list] of buckets) {
-    out.push({ key: cat, label: `${cat}（未分类）`, icon: '·', items: list });
+    out.push({ key: cat, label: `${cat}（未分类）`, items: list });
   }
   return out;
 }
@@ -286,7 +286,7 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
       sec.className = 'sf-sec';
       const h = document.createElement('h3');
       h.className = 'sf-sec-head';
-      h.textContent = `${g.icon} ${g.label}`;
+      h.textContent = g.label;
       const n = document.createElement('b');
       n.textContent = String(g.items.length);
       h.append(n);
