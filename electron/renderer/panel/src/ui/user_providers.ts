@@ -103,14 +103,47 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
   const form = document.createElement('div');
   form.className = 'up-form';
 
-  function field(placeholder: string, type = 'text'): HTMLInputElement {
+  /**
+   * 表单的一行。**用和那 335 个键完全一样的排版** —— 左边一句话说这是什么,
+   * 右边一个控件。
+   *
+   * 第一版是五个等宽的圆角白条竖着摞起来,看着像一个弹出对话框掉进了设置页:
+   * 同一个页面上两套排版,人会觉得这块东西是从别处贴过来的。而且五条一样宽、
+   * 一样圆、一样白的横条本身就是那种"生成出来的界面"最典型的样子。
+   *
+   * 现在它和上下文用同一个节奏,不需要任何边框就自己归位了。
+   */
+  function field(
+    label: string,
+    hint: string,
+    placeholder: string,
+    type = 'text',
+    wide = false,
+  ): HTMLInputElement {
+    const row = document.createElement('div');
+    row.className = 'sf-row up-row';
+    const text = document.createElement('span');
+    text.className = 'sf-text';
+    const name = document.createElement('span');
+    name.className = 'up-label';
+    name.textContent = label;
+    const desc = document.createElement('span');
+    desc.className = 'sf-desc';
+    desc.textContent = hint;
+    text.append(name, desc);
+
     const i = document.createElement('input');
-    i.className = 'sf-input';
+    i.className = wide ? 'sf-input up-input up-wide' : 'sf-input up-input';
     i.type = type;
     i.placeholder = placeholder;
     i.addEventListener('click', (e) => e.stopPropagation());
+
+    row.append(text, i);
+    formRows.push(row);
     return i;
   }
+
+  const formRows: HTMLElement[] = [];
 
   /**
    * 协议。**一排可点的档位牌,名单由后端给。**
@@ -122,8 +155,20 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
    * 名单从 /api/v1/providers/user 一起返回,不在这里写第二份 —— 写死的名单
    * 会在后端增减协议时悄悄错开,而且不报错。
    */
+  const protoLine = document.createElement('div');
+  protoLine.className = 'sf-row up-row';
+  const protoText = document.createElement('span');
+  protoText.className = 'sf-text';
+  const protoName = document.createElement('span');
+  protoName.className = 'up-label';
+  protoName.textContent = '协议';
+  const protoHint = document.createElement('span');
+  protoHint.className = 'sf-desc';
+  protoHint.textContent = '这家网关讲哪一套。名单由后端给，不是这里写死的';
+  protoText.append(protoName, protoHint);
   const protoRow = document.createElement('span');
   protoRow.className = 'sf-stages up-proto';
+  protoLine.append(protoText, protoRow);
   let picked = '';
 
   function renderProtocols(list: readonly string[]): void {
@@ -146,11 +191,11 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
     }
   }
 
-  const fId = field('短名字，如 my-gw（小写字母数字-_）');
-  const fLabel = field('显示名，如 我的自定义服务');
-  const fUrl = field('https://…/v1');
-  const fKey = field('API Key（没有鉴权就留空）', 'password');
-  const fModels = field('型号，逗号隔开。留空=让网关自己报');
+  const fId = field('名字', '这条端点在系统里的标识，小写字母数字与 - _', 'my-gw');
+  const fLabel = field('显示名', '你自己看的名字，留空就用上面那个', '我的自定义服务');
+  const fUrl = field('地址', 'OpenAI 兼容的 base URL，通常以 /v1 结尾', 'https://…/v1', 'text', true);
+  const fKey = field('API Key', '没有鉴权的自建服务就留空', '', 'password');
+  const fModels = field('型号', '逗号隔开。留空 = 让网关自己报', '留空即可', 'text', true);
   const add = document.createElement('button');
   add.className = 'sf-save';
   add.type = 'button';
@@ -173,7 +218,9 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
     });
   });
 
-  form.append(fId, fLabel, fUrl, protoRow, fKey, fModels, add);
+  // 顺序:名字 → 显示名 → 地址 → 协议 → Key → 型号 → 按钮。
+  // 协议插在地址后面,因为"这个地址讲哪套协议"是紧接着地址要回答的问题。
+  form.append(formRows[0]!, formRows[1]!, formRows[2]!, protoLine, formRows[3]!, formRows[4]!, add);
   root.append(head, hint, notice, list, form);
   root.addEventListener('click', (e) => e.stopPropagation());
 

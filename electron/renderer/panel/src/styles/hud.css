@@ -428,11 +428,15 @@ body {
   border: 0; border-radius: 999px;
   font: inherit; font-size: 10px; letter-spacing: 0.04em; text-transform: none;
   color: var(--ink-2); cursor: pointer;
-  background: rgba(252, 251, 255, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
-  transition: background 0.3s var(--ease), color 0.3s var(--ease);
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.7), rgba(240, 236, 246, 0.5));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+  transition: background 0.3s var(--ease), color 0.3s var(--ease),
+    transform 0.24s var(--ease);
 }
-.privacy-btn:hover { background: rgba(252, 251, 255, 0.85); }
+.privacy-btn:hover {
+  background: linear-gradient(166deg, rgba(253, 252, 255, 0.9), rgba(246, 243, 251, 0.7));
+  transform: translateY(-0.5px);
+}
 /* 已暂停:实心,一眼看出「现在什么都没在采」—— 这是它最重要的一个状态。 */
 .privacy-btn[data-paused='true'] {
   color: #fff; background: var(--warn); box-shadow: none;
@@ -649,8 +653,14 @@ body {
    **跑不动的档照画,不藏起来。** 藏了之后「这台机器没有 C 档」和「C 档在那儿
    但你的显卡带不动」在界面上一模一样,而这两件事的下一步完全不同。 */
 .tier-row {
-  margin-top: 8px; padding-top: 9px;
-  box-shadow: inset 0 1px 0 rgba(93, 84, 102, 0.1);
+  margin-top: 8px; padding-top: 11px; position: relative;
+}
+/* 分组用一道**两端化开**的浅痕,不用横贯到底的实线 —— 实线会把浮层切成
+   两个盒子,而这五行本来就是一件事的五个方面。 */
+.tier-row::before {
+  content: ''; position: absolute; top: 0; left: 4px; right: 4px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(93, 84, 102, 0.14) 22%,
+    rgba(93, 84, 102, 0.14) 78%, transparent);
 }
 .tier-head { padding: 2px 4px 7px; }
 .tier-stages { padding: 0 4px; }
@@ -675,7 +685,7 @@ body {
 .tier-stages .stage[data-picked='true'][data-fit='no_gpu'],
 .tier-stages .stage[data-picked='true'][data-fit='insufficient_vram'] {
   background: var(--warn);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.2);
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.24);
 }
 
 .pop-more { margin-top: 8px; font-size: 13px; color: var(--ink-2); border-radius: 19px; padding: 10px 14px 11px; }
@@ -688,7 +698,8 @@ body {
   border-radius: 999px;
   font-size: 11px; letter-spacing: 0.02em; color: var(--ink-2);
   background: rgba(252, 251, 255, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+  box-shadow: inset 0 1px 0 var(--lite-soft);
+  transition: background 0.28s var(--ease), color 0.28s var(--ease);
 }
 
 /* 没接上的那一档:主键在后端不存在。压平、去掉指针,并且**点不动** ——
@@ -701,20 +712,42 @@ body {
    飞出一个新窗口会让人觉得离开了面板。 */
 .settings-full {
   position: absolute; inset: 0; z-index: 90;
-  display: none; flex-direction: column;
+  display: flex; flex-direction: column;
   border-radius: 24px; overflow: hidden;
   background: linear-gradient(168deg, rgba(238, 234, 245, 0.97), rgba(224, 219, 234, 0.95));
   -webkit-backdrop-filter: blur(26px) saturate(1.4);
   backdrop-filter: blur(26px) saturate(1.4);
   box-shadow: inset 0 1px 0 var(--lite), 0 24px 60px -24px var(--shade-4);
+
+  /* 从齿轮那一角长出来,不是凭空出现一个新窗口。
+     此前这里是 display:none ↔ flex —— **硬切**,一帧之内整页盖上来。岛那边
+     早就做对了(宽高圆角连续过渡、内容交叉淡入),这一片却是另一套观感。
+     同一个界面上两种出场方式,人会觉得这两块东西不是一个软件里的。
+
+     原点定在右下:齿轮就在坞的右端、坞在底部。从别处长出来会让人下意识去找
+     "刚才我点的是哪儿"。 */
+  transform-origin: 100% 100%;
+  opacity: 0; visibility: hidden;
+  transform: translateY(10px) scale(0.972);
+  transition: opacity 0.3s var(--ease), transform 0.42s var(--ease),
+    visibility 0s linear 0.42s;
 }
-.settings-full[data-open='true'] { display: flex; }
+.settings-full[data-open='true'] {
+  opacity: 1; visibility: visible;
+  transform: none;
+  transition: opacity 0.26s var(--ease), transform 0.42s var(--ease),
+    visibility 0s linear 0s;
+}
+/* 内容比容器晚一点点到 —— 先看见"一片东西升起来",再看见上面写了什么。
+   同时到的话像一张贴图突然出现。 */
+.settings-full .sf-body { transition: opacity 0.3s var(--ease) 0.06s; }
+.settings-full[data-open='false'] .sf-body { opacity: 0; transition-delay: 0s; }
 /* 正在拉或正在写:压住,但**不遮住内容** —— 盖一层白的话人就看不见自己刚改的是什么了 */
 .settings-full[data-busy='true'] .sf-body { opacity: 0.55; pointer-events: none; }
 
 .sf-head {
   flex: none; display: flex; align-items: center; gap: 12px;
-  padding: 14px 18px; box-shadow: inset 0 -1px 0 rgba(93, 84, 102, 0.1);
+  padding: 16px 18px 12px;
 }
 .sf-title { font-size: 15px; color: var(--ink); }
 .sf-count { flex: 1; font-size: 11.5px; color: var(--ink-3); }
@@ -727,8 +760,9 @@ body {
 .sf-save:disabled { opacity: 0.4; cursor: default; }
 .sf-close {
   flex: none; width: 26px; height: 26px; border: 0; border-radius: 50%;
-  cursor: pointer; background: rgba(252, 251, 255, 0.55); position: relative;
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+  cursor: pointer; position: relative;
+  background: linear-gradient(166deg, var(--o-hi), var(--o));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 3px rgba(93, 84, 102, 0.14);
 }
 .sf-close::before, .sf-close::after {
   content: ''; position: absolute; left: 7px; top: 12px;
@@ -752,10 +786,11 @@ body {
   display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px;
   padding: 9px 10px; border-radius: 10px; min-height: 42px;
 }
-.sf-row:nth-child(even) { background: rgba(252, 251, 255, 0.3); }
 /* 改过默认的那些,左缘留一道痕。**不是装饰** —— 排障时第一个要问的就是
    「这个值是默认还是有人改过」。 */
-.sf-row[data-overridden='true'] { box-shadow: inset 3px 0 0 var(--a-mid); }
+.sf-row[data-overridden='true'] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--a-mid) 16%, transparent), transparent 38%);
+}
 .sf-text { min-width: 0; }
 .sf-key {
   display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -767,15 +802,22 @@ body {
 .sf-input {
   flex: none; width: 190px; padding: 6px 10px;
   border: 0; border-radius: 8px; font: inherit; font-size: 12px; color: var(--ink);
-  background: rgba(252, 251, 255, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.72), rgba(240, 236, 246, 0.6));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
 }
-.sf-input:focus { outline: 2px solid var(--a-mid); outline-offset: 1px; }
+/* 聚焦不用 2px 硬框(那是网页表单的样子),用一圈化开的光。 */
+.sf-input:focus {
+  outline: none;
+  background: linear-gradient(166deg, rgba(253, 252, 255, 0.9), rgba(244, 241, 250, 0.75));
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.8),
+    0 0 0 3px color-mix(in srgb, var(--a-mid) 18%, transparent),
+    0 1px 3px var(--shade-2);
+}
 .sf-stages { display: flex; gap: 5px; }
 .sf-stages .stage { cursor: pointer; border: 0; font: inherit; }
 .sf-stages .stage[data-picked='true'] {
   color: #fff; background: var(--a-mid);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.2);
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.22);
 }
 .sf-empty { padding: 40px 0; text-align: center; font-size: 12.5px; color: var(--warn); }
 
@@ -791,15 +833,15 @@ body {
 .up-notice {
   margin-bottom: 10px; padding: 8px 11px; border-radius: 9px;
   font-size: 11.5px; line-height: 1.45; color: var(--warn);
-  background: rgba(255, 244, 230, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(196, 130, 60, 0.18);
+  background: linear-gradient(166deg, rgba(255, 246, 233, 0.72), rgba(252, 240, 226, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.6);
 }
-.up-list { display: flex; flex-direction: column; gap: 8px; }
+.up-list { display: flex; flex-direction: column; gap: 10px; }
 
 .up-card {
-  padding: 11px 12px; border-radius: 11px;
-  background: rgba(252, 251, 255, 0.42);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.1);
+  padding: 12px 13px; border-radius: 13px;
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.52), rgba(238, 234, 245, 0.34));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
 }
 .up-top { display: flex; align-items: center; gap: 8px; }
 .up-top b { font-weight: 500; font-size: 12.5px; color: var(--ink); }
@@ -826,34 +868,44 @@ body {
   padding: 2px 7px; border-radius: 999px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10.5px; color: var(--ink-2);
-  background: rgba(252, 251, 255, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.1);
+  background: rgba(252, 251, 255, 0.62);
+  box-shadow: inset 0 1px 0 var(--lite-soft);
 }
 .up-more { align-self: center; font-size: 10.5px; color: var(--ink-3); }
 
-.up-acts { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.up-acts { display: flex; align-items: center; gap: 2px; margin-top: 9px; margin-left: -9px; }
 .up-nokey { flex: 1; font-size: 10.5px; color: var(--ink-3); }
 .up-btn {
-  border: 0; padding: 4px 11px; border-radius: 999px; cursor: pointer;
-  font: inherit; font-size: 11.5px; color: var(--ink-2);
-  background: rgba(252, 251, 255, 0.75);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.13);
+  /* 纯文字,悬停才显形。三枚小白药丸并排也是"框"的一种 —— 而且它们是次要
+     动作,不该和主按钮抢同样的视觉重量。 */
+  border: 0; padding: 4px 9px; border-radius: 9px; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: var(--ink-3);
+  background: transparent; box-shadow: none;
+  transition: color 0.22s var(--ease), background 0.22s var(--ease);
 }
-.up-btn:hover { color: var(--ink); }
-.up-danger:hover { color: var(--warn); }
+.up-btn:hover { color: var(--ink); background: rgba(252, 251, 255, 0.5); }
+.up-danger:hover { color: var(--bad); background: rgba(160, 106, 106, 0.09); }
 
-/* 表单一列铺开,不挤成一行 —— 五个框挤一行的话每个都窄到看不清填的是什么。 */
-.up-form {
-  display: flex; flex-direction: column; gap: 6px;
-  margin-top: 10px; padding: 11px 12px; border-radius: 11px;
-  background: rgba(252, 251, 255, 0.28);
-  box-shadow: inset 0 0 0 1px rgba(93, 84, 102, 0.08);
-}
-.up-form .sf-input { width: auto; }
-.up-form .sf-save { align-self: flex-start; margin-top: 2px; }
+/* 新增表单:**和那 335 个键用同一个节奏**,左边一句话、右边一个控件。
+   第一版是五条等宽等圆的白横条竖着摞起来 —— 同一个页面上两套排版,那块东西
+   看着像从别处贴过来的;而且五条一样宽、一样圆、一样白的横条本身,就是那种
+   "生成出来的界面"最典型的样子。现在它和上下文同一个节奏,不需要任何边框
+   就自己归位了。 */
+.up-form { margin-top: 4px; }
+.up-row { min-height: 44px; }
+.up-label { display: block; font-size: 12.5px; color: var(--ink); }
+.up-row .sf-desc { margin-top: 2px; }
+/* 地址和型号要写得下,给宽的;名字那种给窄的 —— 宽窄本身就是一种提示。
+   用显式的 .up-wide,**不用 nth-child** —— 按位置指宽窄的话,谁把表单重排一下,
+   宽度就悄悄跟错了字段,而且不报错。 */
+.up-input { width: 190px; }
+.up-wide { width: 268px; }
+/* 按钮落在刚才打字那一列下面,不孤零零杵在左边。 */
+.up-form .sf-save { display: block; margin: 10px 10px 4px auto; }
+.up-proto { justify-content: flex-end; }
 
 .up-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }
 
 /* 协议那一排档位牌。用与设置页同一套 .sf-stages —— 全面板只有一种"选一个"的
    画法,多一种就等于让人重新学一次。 */
-.up-proto { padding: 2px 0; }
+.up-proto .stage { cursor: pointer; border: 0; font: inherit; }
