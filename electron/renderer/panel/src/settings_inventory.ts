@@ -203,7 +203,6 @@ export const PROVIDER_KEYS: readonly string[] = [
   'GROQ_API_KEY',
   'HF_API_TOKEN',
   'LOCAL_VLLM_URL',
-  'META_API_KEY',
   'MIMO_API_KEY',
   'MINIMAX_API_KEY',
   'MISTRAL_API_KEY',

@@ -48,12 +48,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "Gemini 的 API Key（GOOGLE_API_KEY 的别名，填任一即可）",
     },
     "XAI_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "xAI 的 API Key（Grok 系列）"},
-    "META_API_KEY": {
-        "default": "",
-        "type": "string",
-        "category": "llm",
-        "description": "Meta 模型的 API Key（Muse Spark 接入）",
-    },
     "MISTRAL_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Mistral 的 API Key"},
     "AGNES_API_KEY": {
         "default": "",

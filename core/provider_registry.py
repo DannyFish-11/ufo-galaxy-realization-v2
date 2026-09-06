@@ -61,6 +61,21 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "base_env": "OPENAI_API_BASE",
         "base_key": "openai_base",
         "models": [
+            # 2026-09-06:GPT-6 Astra **进目录了**。上一版这里写着"它确实发布了,但
+            # 公开模型目录与 API 文档里没有任何对应的请求 ID,凭命名惯例猜一个填进来
+            # 就是这份 registry 最不该犯的错" —— 那条判断当时是对的,现在前提变了:
+            # developers.openai.com/api/docs/models/gpt-6-astra 已经是一个正式页面,
+            # 串就是 ``gpt-6-astra``,1,050,000 上下文 / 128K 输出 / $10 入 $50 出
+            # (缓存输入 $1)。
+            #
+            # **但它有两个怪癖,见本文件末尾的 MODEL_QUIRKS。**不处理就每次必炸:
+            # 它不接受 temperature / top_p / logprobs,而本仓的适配器每次都发
+            # temperature。
+            #
+            # 不设为 default:①仍在限量放量(Trusted Access / 各付费档陆续开),
+            # 你的 key 未必有权限;②$50/M 输出是 Sol 的 1.67 倍、Luna 的 8 倍。
+            # 想用就在面板上显式选它。
+            "gpt-6-astra",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -183,21 +198,28 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "cost_out": 0.012,
         "extra": {"multimodal": True},
     },
-    {
-        # Meta Llama API(联网核实 llama.developer.meta.com 官方文档):OpenAI 兼容 base
-        # 是 api.llama.com/compat/v1,不是 api.meta.ai;"muse-spark" 并非真实模型,
-        # 改用官方 Llama-4 模型名。注意:Meta 已于 2026-07-06 起【收尾 Llama API 公测】
-        # (仅美区 waitlist),该 provider 实际多半不可用——保留正确配置,能用则用,
-        # 不能用则由 verify_provider 如实报错、路由自动跳过。
-        "name": "meta",
-        "env_key": "META_API_KEY",
-        "base_url": "https://api.llama.com/compat/v1",
-        "models": ["Llama-4-Maverick-17B-128E-Instruct-FP8", "Llama-4-Scout-17B-16E-Instruct-FP8"],
-        "default_model": "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        "cost_in": 0.00125,
-        "cost_out": 0.00425,
-        "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192},
-    },
+    # ── Meta 直连 API：**已删除，因为它关停了** ────────────────────────────
+    #
+    # 2026-09-06 复核：Llama API 公测已于 **2026-07-06 关停**，服务下线，请求返回
+    # sunset 响应并给出改道指引（llama.developer.meta.com/docs）。官方建议改用
+    # 支持 Llama 的第三方 provider。
+    #
+    # 上一版这条已经写了「Meta 已于 2026-07-06 起收尾公测，该 provider 实际多半
+    # 不可用，保留正确配置，能用则用」。那个判断在当时是稳妥的 —— 但**现在它已经
+    # 从「多半不可用」变成「确定不可用」**，留着就和 deepseek-chat 是同一类东西：
+    # 注册成功、选路成功，直到真发请求才失败。所以按同一个规矩删掉。
+    #
+    # 连带删掉的还有 META_API_KEY 在这几处的声明：config_schema_registry /
+    # routes/config / credential_vault / multi_llm_router 的 env 映射 /
+    # 面板 settings_inventory / .env.example。在设置里留一个通向死服务的密钥框，
+    # 本身就是一次误导。
+    #
+    # **还想跑 Llama 怎么办**：走已经在表里的 `groq`（当前登记
+    # llama-3.3-70b-versatile）或 `openrouter`。注意 Groq 上 Llama 4 那两个型号
+    # (meta-llama/llama-4-*) 的状态我在离线环境里**没能核实**——它们有各自的文档
+    # 页，但 Groq 的 deprecations 页又说 2026-02-20 已弃用。证据打架，所以这次
+    # 不动 groq 那条；要确认请在真机上跑 scripts/verify_provider_apis.py。
+    #
     {
         # Agnes AI:全模态免费 API(2026),OpenAI 兼容协议。
         # agnes-2.5-flash 2026-07-13 发布(agentic/编码强化,免费不限量);
@@ -459,3 +481,47 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"supports_tools": True},
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# 型号级怪癖:同一家 provider 里,某个型号跟别的不一样
+# ---------------------------------------------------------------------------
+#: **「这个型号和别的不一样」的唯一权威表。**
+#:
+#: 上面那张 registry 是 provider 级的:一家一套 base_url、一套协议、一个
+#: supports_tools。但上游偶尔会放出**跟同门师兄弟不一样**的型号,provider 级的
+#: 字段表达不了。第一个这样的例子是 gpt-6-astra。
+#:
+#: 不把这些散在适配器里用 ``if model == ...`` 写:那样第二个怪癖会写在第二个地方,
+#: 第三个写在第三个地方,然后就没人说得清"到底哪些型号有特殊处理"。
+#:
+#: 字段:
+#:   omit_params   —— 发请求时**必须不带**的字段。带了上游直接拒。
+#:   tools_broken  —— 在本仓走的 chat/completions 上,工具调用**不工作**。
+#:                    (gpt-6-astra 的工具要走 Responses API,而本仓没有那条适配器。)
+#:   why           —— 出处与原因。没有它,过两年没人知道这条还成不成立。
+MODEL_QUIRKS: Dict[str, Dict[str, Any]] = {
+    "gpt-6-astra": {
+        "omit_params": ("temperature", "top_p", "logprobs"),
+        "tools_broken": True,
+        "why": (
+            "developers.openai.com/api/docs/models/gpt-6-astra:支持 v1/chat/completions、"
+            "v1/responses、v1/batch;但不接受自定义 temperature / top_p / logprobs,"
+            "且**工具调用要走 Responses API**。本仓只有 chat/completions 适配器,"
+            "所以在这里工具是不工作的 —— 真要用它做 agent,得先写 Responses 适配器。"
+        ),
+    },
+}
+
+
+def quirks_for(model: str) -> Dict[str, Any]:
+    """这个型号有没有特殊处理。没有就返回空字典。
+
+    按**前缀**匹配:上游常在正式串后面挂日期快照(``gpt-6-astra-2026-09-01``),
+    精确匹配会让快照串悄悄绕过怪癖处理 —— 而那正是"看起来接上了,其实没有"。
+    """
+    name = (model or "").strip()
+    for key, quirks in MODEL_QUIRKS.items():
+        if name == key or name.startswith(key + "-"):
+            return quirks
+    return {}

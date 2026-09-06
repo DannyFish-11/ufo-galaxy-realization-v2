@@ -175,7 +175,6 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GOOGLE_API_KEY",
     "xai": "XAI_API_KEY",
-    "meta": "META_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "agnes": "AGNES_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
@@ -855,6 +854,36 @@ class OpenAIAdapter(BaseProviderAdapter):
             body["tools"] = tools
         if response_format:
             body["response_format"] = response_format
+
+        # ── 型号级怪癖 ──────────────────────────────────────────────────────
+        # 有的型号跟同门师兄弟不一样。第一个例子是 gpt-6-astra:它**不接受**
+        # temperature / top_p / logprobs,而上面这几行每次都发 temperature ——
+        # 不处理的话,把它登记进目录就等于登记了一个每次调用必炸的选项。
+        #
+        # 判据在 core.provider_registry.MODEL_QUIRKS,**不在这里**。散着写
+        # `if model == "..."` 的话,第二个怪癖会写在第二个地方,然后就没人说得清
+        # 到底哪些型号有特殊处理。
+        from core.provider_registry import quirks_for
+
+        _quirks = quirks_for(model)
+        for _param in _quirks.get("omit_params", ()):
+            body.pop(_param, None)
+
+        # 工具在这条传输上不工作的型号:**说出来再丢**。
+        #
+        # 静默丢掉是最坏的做法 —— 上层以为这一轮有工具可用,模型却只能空口作答,
+        # 而答案看起来是正常的。丢了不说,就是本仓最怕的那种失败:看起来接上了,
+        # 其实没有。这里留痕,并把出处一起打出来,让人一眼知道该去哪确认。
+        if tools and _quirks.get("tools_broken"):
+            body.pop("tools", None)
+            logger.warning(
+                "型号 %s 在 chat/completions 上不支持工具调用,这一轮的 %d 个工具已被丢弃 —— "
+                "它答得出话,但做不了事。要用它跑 agent,得先给这个仓库写一条 Responses API "
+                "适配器。依据:%s",
+                model,
+                len(tools),
+                _quirks.get("why", "见 core/provider_registry.MODEL_QUIRKS"),
+            )
 
         # 真流式:消费端挂了 TokenStream 且不是结构化输出请求时,SSE 边生成边吐字。
         # 任何流式失败都作废已流出内容并退回下面的非流式老路径(行为兜底不变)。
