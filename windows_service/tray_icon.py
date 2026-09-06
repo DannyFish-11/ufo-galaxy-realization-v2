@@ -1,24 +1,40 @@
 """
-windows_service.tray_icon -- Galaxy System Tray
-===============================================
+windows_service.tray_icon — Galaxy 系统托盘 / Galaxy System Tray
+================================================================
 
-- 托盘图标为彩色渐变球，色调与 Galaxy ASCII 启动横幅一致；
-  warning/error/offline 时在右下角叠加状态色圆点（黄/红/灰）
-- 右键菜单：显示GUI / 配置 / 重启 / 退出
-- 双击显示主 GUI
-- 启动时自动检查 Galaxy 服务状态
+**这一版是重写的,不是在旧托盘上做删减。**
 
-依赖::
+旧托盘的右键菜单有九项(显示面板 / 唤醒覆盖层 / 隐藏覆盖层 / 配置面板 /
+崩溃日志 / 查看日志 / 远程桌面接管 / 重启服务 / 退出)。按所有者要求全部移除,
+菜单**留空**,后续要放什么再放什么。
+
+于是这个模块现在只做两件事:
+
+1. **在托盘上显示这台机器的状态** —— 定稿星云图标,非 running 时右下角叠一颗
+   状态色圆点。图标那一段原样保留:它是视觉身份,和被移除的那九个入口无关。
+2. **点它打开面板** —— 左键 / 双击。这是唯一保留的功能。
+
+菜单为空但仍要能点开面板,靠的是一个 ``visible=False`` 的默认项:pystray 用
+「默认项」承接单击,而不可见项不进右键菜单。**这不是取巧** —— 没有默认项的话
+单击不会触发任何回调,托盘就成了一张纯图片。
+
+.. warning::
+
+   菜单里**没有退出项**。这是所有者明确要求的「暂时先不要放任何东西」。
+   要停掉托盘:结束 ``python main.py`` 那个进程(控制台 Ctrl+C),或由调用方拿
+   ``GalaxyTray.stop()``。要把退出加回来,见 ``_build_menu`` 的注释。
+
+对用户可见的文字一律**中英双写**(tooltip、通知),因为托盘是系统级表层,
+读它的人不一定和跑它的人是同一个。
+
+依赖 / Requires::
 
     pip install pystray Pillow
 
-Usage::
+用法 / Usage::
 
-    # 独立启动托盘
-    python -m windows_service.tray_icon
-
-    # 或作为 Galaxy 的一部分启动
-    from windows_service.tray_icon import create_tray, start_tray_in_thread
+    python -m windows_service.tray_icon               # 独立启动 / standalone
+    from windows_service.tray_icon import start_tray_in_thread
 """
 
 from __future__ import annotations
@@ -30,7 +46,6 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from pathlib import Path
 from typing import Callable
 
@@ -38,55 +53,27 @@ logger = logging.getLogger("Galaxy.Tray")
 
 
 # ---------------------------------------------------------------------------
-# 统一日志根 / 崩溃专区路径
-# ---------------------------------------------------------------------------
-# 托盘可能在未把项目根加入 sys.path 的环境下被单独拉起(windows_service 场景),
-# 故用带回退的薄封装:能导入 core.log_paths 就用唯一事实来源,导不到也不让
-# 日志入口失效(回退到与其默认值一致的 <项目根>/logs)。
-def _log_root() -> Path:
-    """统一日志根目录(唯一事实来源:core.log_paths.log_root)。"""
-    try:
-        from core.log_paths import log_root
-
-        return log_root()
-    except Exception:  # noqa: BLE001 — 托盘入口不能因导入失败而不可用
-        fallback = Path(__file__).resolve().parent.parent / "logs"
-        fallback.mkdir(parents=True, exist_ok=True)
-        return fallback
-
-
-def _crash_latest_path() -> Path:
-    """崩溃聚合视图路径(与 core.log_paths.crash_latest_path 一致)。"""
-    try:
-        from core.log_paths import crash_latest_path
-
-        return crash_latest_path()
-    except Exception:  # noqa: BLE001
-        d = _log_root() / "crashes"
-        d.mkdir(parents=True, exist_ok=True)
-        return d / "latest.log"
-
-
-# ---------------------------------------------------------------------------
-# 可选依赖 —— pystray 和 Pillow
+# 可选依赖 / Optional dependencies —— pystray 与 Pillow
 # ---------------------------------------------------------------------------
 
 _HAVE_TRAY = False
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    from PIL import Image, ImageDraw, ImageFilter
 
     import pystray
 
     _HAVE_TRAY = True
 except ImportError:
-    logger.warning("pystray or Pillow not installed; system tray unavailable")
+    logger.warning(
+        "未安装 pystray / Pillow,系统托盘不可用 / "
+        "pystray or Pillow not installed; system tray unavailable"
+    )
 
 
 # ---------------------------------------------------------------------------
-# 图标生成
+# 图标生成 / Icon rendering
 # ---------------------------------------------------------------------------
 
-# 状态指示圆点颜色 (R, G, B) —— 仅在非 running 状态时叠加到渐变球右下角
 _STATUS_COLORS = {
     "running": (0, 200, 100),  # 鲜绿 — 正常运行
     "warning": (255, 200, 0),  # 琥珀黄 — 警告/降级
@@ -232,17 +219,31 @@ def create_icon_image(
     _overlay_status_pip(canvas, status, S)
     return canvas.resize((width, height), Image.LANCZOS)
 
+# ---------------------------------------------------------------------------
+# 状态提示 / Status tooltips —— 中英双写
+# ---------------------------------------------------------------------------
+
+# 托盘 tooltip 是系统级表层,读它的人不一定懂中文,也不一定懂英文,所以两种都给。
+_STATUS_TOOLTIPS = {
+    "running": "Galaxy V2 · 运行中 / Running",
+    "warning": "Galaxy V2 · 降级 / Degraded",
+    "error": "Galaxy V2 · 错误 / Error",
+    "offline": "Galaxy V2 · 离线 / Offline",
+}
+
+#: 单击托盘时那个不可见默认项的名字。不进菜单,但辅助技术会读到它。
+_ACTIVATE_LABEL = "显示面板 / Show panel"
+
 
 # ---------------------------------------------------------------------------
-# 托盘图标构建
+# 托盘控制器 / Tray controller
 # ---------------------------------------------------------------------------
 
 
 class GalaxyTray:
-    """Galaxy V2 系统托盘控制器。
+    """Galaxy V2 系统托盘控制器 / system tray controller.
 
-    管理 pystray 图标生命周期、菜单动作和
-    状态更新。
+    只管两件事:图标状态,和「点开面板」。菜单是空的。
     """
 
     def __init__(
@@ -256,16 +257,16 @@ class GalaxyTray:
         self._current_status = "offline"
         self._status_lock = threading.Lock()
 
-    # ── 属性 ──
+    # ── 属性 / Properties ──
 
     @property
     def icon(self) -> pystray.Icon | None:
         return self._icon
 
-    # ── 状态管理 ──
+    # ── 状态 / Status ──
 
     def set_status(self, status: str) -> None:
-        """更新托盘图标状态（线程安全）。"""
+        """更新托盘图标状态(线程安全)/ Update tray status (thread-safe)."""
         if status not in _STATUS_COLORS:
             status = "offline"
 
@@ -279,48 +280,52 @@ class GalaxyTray:
                 new_image = create_icon_image(status)
                 if new_image:
                     self._icon.icon = new_image
-                    self._icon.title = _STATUS_TOOLTIPS.get(status, "Galaxy V2 AI")
-            except Exception as exc:
-                logger.debug("Status update failed: %s", exc)
+                    self._icon.title = _STATUS_TOOLTIPS.get(status, "Galaxy V2")
+            except Exception as exc:  # noqa: BLE001 — 状态更新失败不该拖垮托盘
+                logger.debug("状态更新失败 / status update failed: %s", exc)
 
         if self.on_status_change:
             self.on_status_change(status)
 
-    # ── 菜单动作 ──
+    # ── 唯一保留的动作:打开面板 / The one action that stays ──
 
     @staticmethod
     def _post_ipc(path: str, timeout: float = 1.0) -> bool:
-        """向 Electron 主进程的 IPC HTTP 端点 POST（用于托盘可靠地控制 UI）。
+        """向 Electron 主进程的 IPC 端点 POST / POST to Electron's IPC endpoint.
 
-        端口与 main.js / core.lumiv_websocket_bridge 一致：GALAXY_IPC_PORT 默认 9231。
-        成功返回 True；Electron 未运行（连接被拒）返回 False。
+        端口与 main.js、core.lumiv_websocket_bridge 一致:``GALAXY_IPC_PORT``,默认 9231。
+        Electron 没在跑(连接被拒)时返回 False —— **不抛异常,也不假装成功**。
         """
         import urllib.request
 
         port = os.environ.get("GALAXY_IPC_PORT", "9231")
         url = f"http://127.0.0.1:{port}{path}"
         try:
-            req = urllib.request.Request(url, data=b"{}", method="POST", headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(
+                url, data=b"{}", method="POST", headers={"Content-Type": "application/json"}
+            )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.getcode() == 200
-        except Exception:
+        except Exception:  # noqa: BLE001 — 连不上就是连不上,如实返回 False
             return False
 
-    def _open_gui(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """打开 Galaxy 控制面板。
+    def open_panel(self, icon: "pystray.Icon | None" = None, item: object = None) -> None:
+        """打开 / 切换面板 —— Open or toggle the panel.
 
-        优先通过 IPC 让【正在运行的】Electron 打开/切换面板窗口 —— 这条路径不依赖
-        全局快捷键（F12 常被输入法/开发者工具占用），是「面板打不开」时最可靠的入口。
-        若 Electron 未运行（IPC 连接被拒），回退为 npm start 拉起桌面层。
+        两条路,按可靠性排:
+
+        1. **IPC**(Electron 已在跑)—— 不依赖全局快捷键。快捷键常被输入法、
+           远程桌面或别的应用吞掉,IPC 不会。
+        2. **拉起桌面壳**(Electron 没在跑)—— 只在依赖完整时才尝试;残缺时
+           ``npm start`` 会静默失败(CREATE_NO_WINDOW,没有任何窗口),用户感受
+           就是「点了没反应」。
+
+        两条都不通就发一条**说得出下一步**的通知,而不是开一个空白页。
         """
-        # 1) 首选：IPC 直接打开面板（Electron 在跑）
         if self._post_ipc("/ipc/toggle-panel"):
-            logger.info("Panel toggled via IPC")
+            logger.info("面板已切换(经 IPC)/ panel toggled via IPC")
             return
 
-        # 2) 回退:Electron 未运行 → 依赖完整才尝试拉起;否则直接开 Web 面板。
-        #    此前依赖残缺时 npm start 静默失败(CREATE_NO_WINDOW、无任何提示),
-        #    用户感受就是"托盘点了没反应"。后端面板本身一直可用,浏览器兜底。
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         electron_dir = os.path.join(project_root, "electron")
 
@@ -331,272 +336,79 @@ class GalaxyTray:
                 from core.electron_launch_guard import electron_package_intact
 
                 electron_ready = electron_package_intact(electron_dir)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 electron_ready = os.path.isdir(os.path.join(electron_dir, "node_modules"))
 
         if electron_ready:
             try:
+                # Windows 上 npm 是 npm.cmd(批处理),CreateProcess 不能直接执行它,
+                # 所以显式解析出可执行文件,而不是把整串丢给 shell 解释。
+                npm = shutil.which("npm.cmd") or shutil.which("npm") if sys.platform == "win32" else shutil.which("npm")
+                if not npm:
+                    raise FileNotFoundError("未在 PATH 中找到 npm / npm not found in PATH")
                 if sys.platform == "win32":
-                    # B8: 原为 Popen(["npm","start"], shell=True)。argv 列表配
-                    # shell=True 在 Windows 上语义混乱 —— Python 会把列表拼成命令串
-                    # 再交给 cmd.exe 解释，路径含空格时的引用规则由 cmd 决定，
-                    # 且平白引入一层 shell 解析。
-                    #
-                    # 之所以当初要 shell=True：npm 在 Windows 上是 npm.cmd（批处理），
-                    # CreateProcess 不能直接执行 .cmd。正确做法是显式解析出可执行文件，
-                    # 而不是把整串丢给 shell。
-                    npm = shutil.which("npm.cmd") or shutil.which("npm")
-                    if not npm:
-                        raise FileNotFoundError("未在 PATH 中找到 npm/npm.cmd")
                     subprocess.Popen(
                         [npm, "start"], cwd=electron_dir, creationflags=subprocess.CREATE_NO_WINDOW
                     )
                 else:
-                    npm = shutil.which("npm")
-                    if not npm:
-                        raise FileNotFoundError("未在 PATH 中找到 npm")
                     subprocess.Popen([npm, "start"], cwd=electron_dir)
-                logger.info("Electron GUI launched from %s", electron_dir)
+                logger.info("已拉起桌面壳 / desktop shell launched from %s", electron_dir)
                 return
-            except Exception as exc:
-                logger.error("Failed to launch GUI: %s", exc)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("拉起桌面壳失败 / failed to launch shell: %s", exc)
 
-        # 3) 最终兜底:桌面壳起不来 —— 如实告知,不再打开浏览器。
-        #
-        # 此前这里回退到 http://localhost:<port>/operator-console。那个并行 Web
-        # 表层已随面板收敛删除,再打开只会得到 404;网关根路径 / 也没注册任何路由。
-        # 面板现在只有一份(Tauri/Electron 壳内的 React 面板),壳起不来就是没有面板,
-        # 报一个能直接照做的原因,比开一个空白页诚实。
         self._show_notification(
             "Galaxy",
             "桌面壳未就绪,面板打不开。\n"
-            "Tauri:在 desktop-tauri/src-tauri 执行 cargo build --release。\n"
-            "Electron 回退:在 electron/ 执行 npm install,\n"
+            "Desktop shell not ready — the panel cannot open.\n"
+            "在 electron/ 执行 npm install,"
             "并在 electron/renderer/panel/ 执行 npm install && npm run build。",
         )
-        logger.error(
-            "Desktop shell unavailable and no web fallback exists "
-            "(panel surface is Tauri/Electron-only since the parallel web consoles were removed)"
-        )
-
-    def _wake_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """通过 IPC 唤醒三态覆盖层（不依赖快捷键）。
-
-        走 /ipc/wake（始终【显示】，幂等不隐藏），保证点「Wake Overlay」一定看得见，
-        不会因 toggle 把已显示的外壳反而藏起来。
-        """
-        if self._post_ipc("/ipc/wake"):
-            logger.info("Overlay shown via IPC (/ipc/wake)")
-        else:
-            self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
-
-    def _hide_overlay(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """通过 IPC 隐藏三态覆盖层（不依赖快捷键）。
-
-        补齐"放下"的托盘兜底——此前托盘只有 Wake(显示)一个入口,没有对应的隐藏
-        菜单项;若 Ctrl+Alt+H 等隐藏快捷键在用户机器上被占用而注册失败,唤醒后的
-        覆盖层就完全没有办法收起去。走 /ipc/hide-overlay(始终【隐藏】,幂等不显示)。
-        """
-        if self._post_ipc("/ipc/hide-overlay"):
-            logger.info("Overlay hidden via IPC (/ipc/hide-overlay)")
-        else:
-            self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
-
-    def _open_config(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """打开配置面板 —— 即 React 面板的「设置」页。
-
-        此前它在浏览器里开 /api-manager。那是一份独立的 Web 配置表层
-        (static/api-manager,只有构建产物没有源码),与 React 面板的 SettingsTab
-        各写各的配置读写,是"面板改了设置、另一处不认"的来源。表层收敛后
-        /api-manager 已删除,配置的唯一入口就是 React 面板。
-
-        走与「Show Panel」相同的 IPC 通道:壳在跑就切出面板窗口;壳没跑则如实
-        提示,而不是打开一个 404。
-        """
-        if self._post_ipc("/ipc/toggle-panel"):
-            logger.info("Config panel opened via IPC (React panel · 设置)")
-            return
-        self._show_notification(
-            "Galaxy",
-            "桌面壳未运行,配置面板打不开。\n配置现在是 React 面板的「设置」页,需要壳在跑。",
-        )
-        logger.error("Config panel unavailable: desktop shell not running")
-
-    def _open_logs(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """在文件资源管理器中打开【统一日志根目录】。
-
-        统一前的真 bug:此处硬编码 ``~/.galaxy/logs``,而启动器/覆盖层/节点全部
-        写在项目内 ``logs/`` —— 用户从托盘点进来看到的是个几乎空的目录,真正的
-        日志在另一个地方,排障时白跑一趟。现改为读 :func:`core.log_paths.log_root`
-        这一唯一事实来源(尊重 GALAXY_LOG_DIR),与所有写入方指向同一处。
-        """
-        log_dir = str(_log_root())
-        os.makedirs(log_dir, exist_ok=True)
-        if sys.platform == "win32":
-            os.startfile(log_dir)  # type: ignore[attr-defined]
-        else:
-            webbrowser.open(f"file://{log_dir}")
-
-    def _open_crash_log(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """【崩溃日志专区】—— 托盘单独一行,一键打开全系统崩溃聚合视图。
-
-        统一前的痛点:崩溃分散在多个文件(覆盖层 GPU 崩溃在 electron.log、后端
-        未处理异常在 lumiv.log、服务层在 windows_service.log、节点在 nodes/*.log),
-        而托盘只有一个"三态动画日志"入口、只能看覆盖层那一份 —— 真机出问题时
-        用户要自己挨个翻文件、还得辨认哪几行才是崩溃。
-
-        现在:点这一行即时触发 :func:`core.crash_log_aggregator.aggregate_crashes`
-        扫描统一日志根下的全部日志,把崩溃片段(traceback / fatal / GPU 崩溃 /
-        WinError / 未处理异常等)跨来源去重后汇总到 ``logs/crashes/latest.log``
-        并直接打开。源日志只读不改,单一入口一眼定位。
-        """
-        try:
-            from core.crash_log_aggregator import aggregate_crashes
-
-            log_path, count = aggregate_crashes()
-            logger.info("Crash aggregation: %d block(s) -> %s", count, log_path)
-        except Exception as exc:
-            # 聚合失败不能让入口失效:退化为直接打开崩溃目录里已有的聚合文件,
-            # 再不行就打开崩溃目录本身,保证这一行永远"点得开"。
-            logger.error("Crash aggregation failed: %s", exc)
-            try:
-                log_path = _crash_latest_path()
-                if not log_path.exists():
-                    log_path.parent.mkdir(parents=True, exist_ok=True)
-                    log_path.write_text(
-                        "（崩溃聚合暂不可用）\n"
-                        f"聚合器执行失败：{exc}\n"
-                        "可直接查看同目录及上级日志根中的各源日志。\n",
-                        encoding="utf-8",
-                    )
-            except Exception as inner:
-                self._show_notification("崩溃日志", f"无法打开崩溃日志：{inner}")
-                return
-
-        try:
-            target = str(log_path)
-            if sys.platform == "win32":
-                os.startfile(target)  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", target])
-            else:
-                subprocess.Popen(["xdg-open", target])
-            logger.info("Opened crash log: %s", target)
-        except Exception as exc:
-            logger.error("Failed to open crash log: %s", exc)
-            self._show_notification("崩溃日志", f"无法打开崩溃日志：{log_path}\n{exc}")
-
-    def _toggle_remote_desktop(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """开/关【兜底远程桌面(VNC)】——人类手动接管通道,仅 Tailscale 私网内、默认关。
-
-        AI 自动操控为主;这是你想亲自看/控那台电脑时的兜底。点一下切换开关,并弹出
-        连接地址(vnc://<tailscale_ip>:5900)。需先连上 Tailscale + 装好 VNC 服务端
-        (或设 GALAXY_VNC_CMD)。
-        """
-        try:
-            from core.remote_desktop import get_remote_desktop_manager
-
-            mgr = get_remote_desktop_manager()
-            if mgr.is_running():
-                mgr.disable()
-                self._show_notification("远程桌面(兜底)", "已关闭。")
-            else:
-                res = mgr.enable()
-                if res.get("success"):
-                    addr = res.get("address") or "(地址未知)"
-                    self._show_notification("远程桌面(兜底)已开启", f"在 Tailscale 内用 VNC 连:\n{addr}")
-                else:
-                    self._show_notification("远程桌面(兜底)开启失败", str(res.get("error", "未知错误")))
-        except Exception as exc:
-            logger.error("Toggle remote desktop failed: %s", exc)
-            self._show_notification("远程桌面(兜底)", f"操作失败：{exc}")
-
-    def _restart_service(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """重启 Galaxy 服务（或子进程）。"""
-        logger.info("Restart requested via tray menu")
-        self.set_status("warning")
-
-        if self.galaxy_process is not None:
-            try:
-                self.galaxy_process.terminate()
-                self.galaxy_process.wait(timeout=10)
-            except Exception:
-                try:
-                    self.galaxy_process.kill()
-                except Exception:
-                    pass
-                self.galaxy_process = None
-
-        # 如果作为 Windows 服务运行，提示用户使用服务管理器
-        self._show_notification(
-            "Galaxy V2 AI",
-            "Service restart initiated.\nIf running as Windows service, use 'Services.msc'.",
-        )
-        self.set_status("running")
-
-    def _exit_tray(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """退出托盘（优雅关闭）。"""
-        logger.info("Exit requested via tray menu")
-        self._show_notification("Galaxy V2 AI", "Shutting down...")
-        icon.stop()
-
-        if self.galaxy_process is not None:
-            try:
-                self.galaxy_process.terminate()
-                self.galaxy_process.wait(timeout=10)
-            except Exception:
-                try:
-                    self.galaxy_process.kill()
-                except Exception:
-                    pass
-
-        # 不要调用 sys.exit(0) — 这会杀死父进程
-        logger.info("Tray icon stopped")
+        logger.error("桌面壳不可用 / desktop shell unavailable")
 
     def _show_notification(self, title: str, message: str) -> None:
-        """显示气球通知（如果支持）。"""
-        if self._icon and hasattr(self._icon, "notify"):
+        """发一条系统通知(不支持就静默跳过)/ Show a system notification."""
+        if self._icon is not None and _HAVE_TRAY:
             try:
                 self._icon.notify(message, title)
-            except Exception:
+            except Exception:  # noqa: BLE001 — 平台不支持通知时不该炸
                 pass
 
-    # ── 构建菜单 ──
+    # ── 菜单 / Menu ──
 
-    def _build_menu(self) -> pystray.Menu:
-        """构建右键菜单。"""
+    def _build_menu(self) -> "pystray.Menu":
+        """右键菜单 —— **空的**。/ The context menu — deliberately empty.
+
+        所有者要求:把之前那九项全部删掉,暂时先不放任何东西。
+
+        唯一的成员是一个 ``visible=False`` 的默认项。它不出现在右键菜单里,
+        但 pystray 用「默认项」承接单击 —— 没有它,点托盘不会触发任何回调,
+        这个图标就只是一张贴纸。
+
+        要把「退出」加回来,在这里补一行::
+
+            pystray.MenuItem("退出 / Quit", lambda icon, item: self.stop())
+
+        在那之前,停掉托盘的办法是结束 ``python main.py`` 那个进程,
+        或由调用方拿 :meth:`stop`。
+        """
         return pystray.Menu(
             pystray.MenuItem(
-                lambda text: f"Status: {self._current_status.upper()}",
-                lambda icon, item: None,
-                enabled=False,
+                _ACTIVATE_LABEL,
+                self.open_panel,
+                default=True,
+                visible=False,
             ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Show Panel (F12)", self._open_gui, default=True),
-            pystray.MenuItem("Wake Overlay (Ctrl+Alt+Space)", self._wake_overlay),
-            pystray.MenuItem("Hide Overlay (Ctrl+Alt+H)", self._hide_overlay),
-            pystray.MenuItem("Config Panel", self._open_config),
-            pystray.Menu.SEPARATOR,
-            # ── 日志区(所有者要求:崩溃日志单独一行,统一入口)──
-            # 上一行 = 崩溃专区(跨全部日志聚合去重,排障首选);
-            # 下一行 = 统一日志根目录(看全部原始日志)。
-            # 此前的"三态动画日志"只覆盖 Electron 一份、且与 View Logs 指向两个
-            # 不同根目录,已合并进这两行,不再各开各的。
-            pystray.MenuItem("💥 崩溃日志 (Crash Log)", self._open_crash_log),
-            pystray.MenuItem("View Logs (统一日志目录)", self._open_logs),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("远程桌面接管 (VNC 兜底, 开/关)", self._toggle_remote_desktop),
-            pystray.MenuItem("Restart Service", self._restart_service),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Exit", self._exit_tray),
         )
 
-    # ── 生命周期 ──
+    # ── 生命周期 / Lifecycle ──
 
-    def create(self) -> pystray.Icon | None:
-        """创建（但不启动）系统托盘图标。"""
+    def create(self) -> "pystray.Icon | None":
+        """创建(但不启动)托盘图标 / Create the icon without running it."""
         if not _HAVE_TRAY:
-            logger.error("pystray / Pillow required for system tray")
+            logger.error(
+                "系统托盘需要 pystray 与 Pillow / pystray and Pillow are required for the tray"
+            )
             return None
 
         icon_image = create_icon_image(self._current_status)
@@ -610,36 +422,39 @@ class GalaxyTray:
             menu=self._build_menu(),
         )
 
-        # 双击事件
+        # 双击也走同一条路 / double-click takes the same path
         if hasattr(self._icon, "double_click"):
-            self._icon.double_click = lambda icon: self._open_gui(icon, None)  # type: ignore[method-assign]
+            self._icon.double_click = lambda icon: self.open_panel(icon, None)  # type: ignore[method-assign]
 
         return self._icon
 
     def run(self) -> None:
-        """阻塞运行托盘图标（必须在主线程调用）。"""
+        """阻塞运行(必须在主线程)/ Run blocking (main thread only)."""
         if self._icon is None:
             self.create()
         if self._icon:
-            logger.info("Starting system tray icon...")
+            logger.info("托盘启动中 / starting system tray ...")
             self._icon.run()
 
     def run_detached(self) -> threading.Thread:
-        """在后台线程中运行托盘图标并返回线程句柄。"""
+        """在后台线程里跑 / Run in a background thread."""
         thread = threading.Thread(target=self.run, name="GalaxyTray", daemon=True)
         thread.start()
-        logger.info("Tray icon started in background thread")
+        logger.info("托盘已在后台线程启动 / tray started in background thread")
         return thread
 
     def stop(self) -> None:
-        """停止托盘图标。"""
+        """停掉托盘 / Stop the tray.
+
+        菜单里没有退出项,所以这是**代码侧唯一的**停法。
+        """
         if self._icon:
             self._icon.stop()
             self._icon = None
 
 
 # ---------------------------------------------------------------------------
-# 便捷函数
+# 便捷函数 / Convenience helpers
 # ---------------------------------------------------------------------------
 
 
@@ -647,24 +462,18 @@ def create_tray(
     galaxy_process: subprocess.Popen[str] | None = None,
     on_status_change: Callable[[str], None] | None = None,
 ) -> GalaxyTray | None:
-    """工厂函数 —— 创建 GalaxyTray 实例并初始化图标。
+    """建好托盘但不启动 / Build the tray without starting it.
 
-    参数:
-        galaxy_process: 可选的 Galaxy 子进程引用，用于重启/终止
-        on_status_change: 状态变化时的可选回调
-
-    返回:
-        已配置好但尚未运行的 GalaxyTray 实例，或者如果 pystray
-        不可用则返回 None
+    pystray 或 Pillow 缺席时返回 ``None`` —— **不抛异常**:托盘是可选表层,
+    它不可用不该让整个启动失败。
     """
     if not _HAVE_TRAY:
-        logger.warning("System tray unavailable (pystray / Pillow not installed)")
+        logger.warning(
+            "系统托盘不可用(缺 pystray / Pillow)/ system tray unavailable (pystray / Pillow missing)"
+        )
         return None
 
-    tray = GalaxyTray(
-        galaxy_process=galaxy_process,
-        on_status_change=on_status_change,
-    )
+    tray = GalaxyTray(galaxy_process=galaxy_process, on_status_change=on_status_change)
     tray.create()
     return tray
 
@@ -673,24 +482,23 @@ def start_tray_in_thread(
     galaxy_process: subprocess.Popen[str] | None = None,
     on_status_change: Callable[[str], None] | None = None,
 ) -> GalaxyTray | None:
-    """一键启动 —— 在后台线程中创建并启动托盘。
+    """一步启动 / Create and start in one call.
 
-    返回:
-        GalaxyTray 实例，如果不可用则返回 None。
-        调用者可通过 tray.set_status("running|warning|error|offline") 更新状态
+    返回 ``GalaxyTray``,不可用时返回 ``None``。调用方可用
+    ``tray.set_status("running" | "warning" | "error" | "offline")`` 更新状态。
     """
     tray = create_tray(galaxy_process, on_status_change)
     if tray is None:
         return None
 
     tray.run_detached()
-    time.sleep(0.5)  # 让图标有时间出现
+    time.sleep(0.5)  # 给图标一点时间出现 / let the icon appear
     tray.set_status("running")
     return tray
 
 
 # ---------------------------------------------------------------------------
-# 独立入口点
+# 独立入口 / Standalone entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -700,15 +508,20 @@ if __name__ == "__main__":
     )
 
     if not _HAVE_TRAY:
-        print("ERROR: pystray and Pillow are required.")
-        print("Install with:  pip install pystray Pillow")
+        print("错误:需要 pystray 与 Pillow / ERROR: pystray and Pillow are required.")
+        print("安装 / Install:  pip install pystray Pillow")
         sys.exit(1)
 
-    tray = create_tray()
-    if tray:
-        tray.set_status("running")
-        print("Galaxy V2 system tray is running. Right-click the icon for menu.")
-        tray.run()
+    _tray = create_tray()
+    if _tray:
+        _tray.set_status("running")
+        print(
+            "Galaxy V2 托盘已启动。点击图标打开面板;右键菜单是空的。\n"
+            "Galaxy V2 tray is running. Click the icon to open the panel; "
+            "the context menu is intentionally empty.\n"
+            "停止 / To stop: Ctrl+C"
+        )
+        _tray.run()
     else:
-        print("Failed to create tray icon")
+        print("托盘创建失败 / failed to create tray icon")
         sys.exit(1)

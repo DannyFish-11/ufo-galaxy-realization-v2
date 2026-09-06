@@ -1,26 +1,31 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "skipLibCheck": true,
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
     "baseUrl": ".",
+    // 面板的 src/ 是**纯浏览器代码**,一个 node 内置模块都不 import。
+    //
+    // 不写死这一行的话,tsc 会沿目录树向上自动收集所有 @types/* —— 这个目录
+    // 位于 electron/ 下,父级 electron/node_modules/@types 里躺着 node、keyv、
+    // yauzl 等一堆 Electron 自己的类型包,于是面板的类型检查结果会随「上级装了
+    // 什么」而变。空数组把这条隐式通路关掉:面板只认自己声明的类型。
+    "types": [],
     "paths": {
-      "@/*": ["src/*"]
-    },
-    "typeRoots": ["./node_modules/@types"]
+      "@/*": ["src/*"],
+      "@contract": ["./src/types/phase_contract.gen.ts"]
+    }
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src"]
 }

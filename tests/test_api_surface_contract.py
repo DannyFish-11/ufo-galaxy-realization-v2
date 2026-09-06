@@ -116,12 +116,22 @@ def _panel_calls() -> dict[str, set[str]]:
     生成物)。第一版就踩了这个自指陷阱,被清单那条断言当场抓出来。
 
     也跳过**第三方绝对地址里的路径** —— 见 :func:`_is_third_party_url_path`。
+
+    并且**先去掉注释**。这一条是踩出来的:``transport.ts`` 里有一段注释解释
+    「路径要写全、不要拼」,顺手引了前缀 ``/api/perception/desktop``,于是扫描器
+    把那句说明当成了一次真实调用,报成「面板调了后端没有的端点」。
+
+    这类误报比漏报更危险:它让一条正确的门变成噪音,而噪音门迟早被加白名单绕过
+    或者直接删掉。这个仓库为「扫的是文件文本而不是代码」栽过两次(另两处判据
+    分别被块注释和 docstring 绊倒),两次的修法都是同一句:**比对去掉注释后的代码**。
     """
+    block = re.compile(r"/\*.*?\*/", re.S)
+    line = re.compile(r"^\s*//.*$", re.M)
     out: dict[str, set[str]] = {}
     for f in _PANEL_SRC.rglob("*.ts*"):
         if f.name.endswith(".gen.ts"):
             continue
-        text = f.read_text(encoding="utf-8")
+        text = line.sub("", block.sub("", f.read_text(encoding="utf-8")))
         for m in re.finditer(r"(/(?:api|ws)/[A-Za-z0-9/_${}.-]*)", text):
             if _is_third_party_url_path(text, m.start()):
                 continue
@@ -234,14 +244,31 @@ class TestPanelCallsResolve:
         idx = snippet.index("/api/")
         assert _is_third_party_url_path(snippet, idx) is False
 
-    def test_the_inventory_is_not_empty(self):
-        """自证:上面两条在扫描器什么都数不出来时也会绿。"""
-        assert len(_panel_calls()) > 10
+    #: 新面板真正对话的那几条。**点名,不数数。**
+    #:
+    #: 这两条自证判据原先是「至少 10 个 / 至少 15 个端点」—— 那个数字是按旧的
+    #: React 面板标定的:它有设置页、模型目录、Mesh、能力、配对、诊断六个视图,
+    #: 各自拉各自的接口。这一版 HUD 面板把这些全去掉了,只剩两条真正的通路:
+    #: 一条 WebSocket 收此刻的状态,一条 SSE 发一句话。
+    #:
+    #: 所以旧阈值现在必红,而且**它红得没有信息量** —— 它说的是「比以前少」,
+    #: 不是「扫描器坏了」。直接把阈值调小是最坏的改法:那等于把一条自证判据的
+    #: 强度交给一个没人再核过的数字。改成点名之后这条更严:正则一旦失效,这两个
+    #: 名字就找不到,当场红;而且它顺带写下了「面板到底跟后端说哪几句话」。
+    _MUST_CALL = {
+        "/ws/desktop-presence",  # 此刻的状态(含 panel_feed 设备帧)
+        "/api/v1/chat/stream",  # 说一句话
+    }
 
-    def test_panel_calls_were_actually_found(self) -> None:
-        """自证:上面那条不得因为正则失效而退化成"零调用、必绿"。"""
-        calls = _panel_calls()
-        assert len(calls) >= 15, f"只从面板源码里解析出 {len(calls)} 个端点,正则大概率坏了"
+    def test_the_panel_still_talks_to_the_backend(self) -> None:
+        """自证:上面两条在扫描器什么都数不出来时也会绿。"""
+        calls = set(_panel_calls())
+        missing = sorted(self._MUST_CALL - calls)
+        assert not missing, (
+            f"面板源码里找不到这几条通路: {missing} —— "
+            "要么面板真的不再调它们了,要么扫描器的正则坏了。"
+            f"当前数出来的是: {sorted(calls)}"
+        )
 
     def test_scanner_does_not_read_its_own_generated_output(self) -> None:
         """自证:扫描器必须跳过 ``*.gen.ts``。

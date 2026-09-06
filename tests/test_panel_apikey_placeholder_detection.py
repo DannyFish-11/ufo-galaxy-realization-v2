@@ -223,6 +223,29 @@ class TestOneApiFallbackRejectsUnderscorePlaceholder:
     'your_oneapi_api_key_here',这里锁定它不会被注册成"可用 provider"。
     """
 
+    @staticmethod
+    def _pin_discovery(monkeypatch):
+        """把「问得出型号」这一步固定住,让注册与否只取决于占位符过滤。
+
+        2026-09-04 补:OneAPI 的注册从此还多一个条件 —— 问不出任何型号就不注册
+        (改动前它会编 ``gpt-4o`` 出来顶上)。这两条测试用「有没有注册」当作
+        「占位符过滤有没有生效」的观测点,而 ``https://oneapi.example.com`` 是个
+        不会应答的假域名,发现必然失败。不固定住的话:
+
+        · 真 key 那条会红 —— 不是过滤误伤了它,是根本没走到那一步;
+        · 占位符那条会**假绿** —— 就算过滤整个坏掉,它也照样"没注册",
+          于是这条测试从此再也抓不到它本来要抓的回归。
+
+        假绿比红更危险。所以两条都固定,让观测点重新只对准占位符过滤。
+        """
+        from core.multi_llm_router import MultiLLMRouter
+
+        monkeypatch.setattr(
+            MultiLLMRouter,
+            "_discover_oneapi_models",
+            lambda self, base_url, api_key: ["pinned-model-for-this-test"],
+        )
+
     def test_underscore_placeholder_env_fallback_not_registered(self, monkeypatch, only_env_layer):
         # 前两层必须一起隔离。CI 上实测:别的测试文件会把 'sk-oneapi-x' 灌进
         # UnifiedConfig 的 _config 缓存(那层还原不了 os.environ 的快照),于是
@@ -235,6 +258,7 @@ class TestOneApiFallbackRejectsUnderscorePlaceholder:
         monkeypatch.delenv("ONEAPI_URL", raising=False)
         monkeypatch.setenv("ONEAPI_API_KEY", "your_oneapi_api_key_here")
         monkeypatch.setenv("ONEAPI_URL", "https://oneapi.example.com")
+        self._pin_discovery(monkeypatch)
         router = MultiLLMRouter()
         assert "oneapi" not in router.providers, (
             "未编辑的占位符 'your_oneapi_api_key_here' 被当成真实密钥," "OneAPI provider 被错误注册"
@@ -248,6 +272,7 @@ class TestOneApiFallbackRejectsUnderscorePlaceholder:
         monkeypatch.delenv("ONEAPI_URL", raising=False)
         monkeypatch.setenv("ONEAPI_API_KEY", "sk-real-oneapi-key-1234567890")
         monkeypatch.setenv("ONEAPI_URL", "https://oneapi.example.com")
+        self._pin_discovery(monkeypatch)
         router = MultiLLMRouter()
         assert "oneapi" in router.providers, "真实密钥不应被占位符过滤误伤"
 

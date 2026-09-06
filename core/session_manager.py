@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from core.atomic_json import atomic_write_json
+from core.memory_thread import is_identifying_owner, resolve_thread
 
 logger = logging.getLogger("Galaxy.SessionManager")
 
@@ -237,6 +238,11 @@ class SessionManager:
         self._sessions: Dict[str, Session] = {}
         # user_id → active session_id 映射
         self._user_active_session: Dict[str, str] = {}
+        # user_id → 这个 owner 落在哪条记忆线上。与上面那张表的区别是它**只记根**,
+        # 因此在会话对象本身被清掉之后仍然有效。见 core/memory_thread.py:
+        # MAX_SESSIONS = 100 这个意图摆在那儿却没人执行,哪天有人实现淘汰,
+        # 没有这张表的话记忆会在那一刻无声地断回一堆岛。
+        self._user_thread_root: Dict[str, str] = {}
         # 别名映射:设备本地/离线生成的 session_id → 归一化的 canonical 会话主线。
         # 跨设备统一上下文的核心:手机离线时自建一条本地会话线,重连后经
         # /api/v1/sessions/reconcile 把它「认领」到桌面的用户主线上——之后该本地
@@ -257,6 +263,68 @@ class SessionManager:
 
     # ═══════════════════ 会话生命周期 ═══════════════════
 
+    def _apply_thread(self, session: "Session", owner: str, *, new_root: bool = False) -> None:
+        """给刚构造出来的会话定血缘 —— 它接的是哪一条记忆。
+
+        **四个构造点都必须走这里。** 判据本身在 core/memory_thread.py,不在这儿:
+        这个类里有四处在 ``Session(...)``,判据写进其中任何一处,另外三处就会漂,
+        而漂了之后的表现是「有些对话接上了、有些没接上」,没人会立刻发现。
+
+        改造之前这四处都不设 root_id,于是 ``__post_init__`` 让每条会话自成一根 ——
+        「每开一次新对话就是一套全新的记忆」正是从这儿来的。
+        """
+        # 这三处一律用 getattr 取,不直接点属性 —— 本类存在**绕过 __init__ 的构造
+        # 路径**(测试里的 SessionManager.__new__(SessionManager) 就是,生产里的
+        # 反序列化同理)。那些调用点只会设它们当时知道的字段;新加一个实例属性就
+        # 直接点它,等于把每一个既有的 __new__ 构造点都变成地雷,而且报的是
+        # AttributeError,看起来像那些调用点的错,其实是这次加属性的人的错。
+        active = getattr(self, "_user_active_session", None) or {}
+        sessions = getattr(self, "_sessions", None) or {}
+        remembered = getattr(self, "_user_thread_root", None) or {}
+
+        prev_id = active.get(owner, "")
+        prev = sessions.get(prev_id) if prev_id else None
+        if prev is not None and prev.id == session.id:
+            prev = None  # 自己不能当自己的上一条
+        decision = resolve_thread(
+            owner,
+            prev,
+            new_root=new_root,
+            remembered_root=remembered.get(owner, ""),
+        )
+        if decision.root_id:
+            session.root_id = decision.root_id
+            session.parent_id = decision.parent_id
+        else:
+            # 空根 = 由这条会话自己当根(__post_init__ 已经处理)。
+            session.root_id = session.root_id or session.id
+        # 只给**标识得了人**的 owner 记根。session::<id> 那类是拿会话自己的 id
+        # 现编的,每个会话一个、永远不会被第二条会话复用 —— 给它记一条根,这张表
+        # 就会随匿名会话数无界增长,而且记下的每一条都永远用不上。
+        if session.root_id and is_identifying_owner(owner):
+            if getattr(self, "_user_thread_root", None) is None:
+                self._user_thread_root = {}
+            self._user_thread_root[owner] = session.root_id
+        # 留痕:这条线是怎么连起来的、或者为什么没连上。事后可查,不用靠猜。
+        session.metadata.update(decision.to_metadata())
+
+    def thread_root_of(self, session_id: str) -> str:
+        """这条会话属于哪条记忆。查不到返回空串(**不是**返回它自己)。"""
+        session = self._sessions.get(str(session_id or ""))
+        return str(getattr(session, "root_id", "") or "") if session is not None else ""
+
+    def sessions_in_thread(self, root_id: str) -> List["Session"]:
+        """一条记忆里的全部会话,按创建时间升序。
+
+        记忆卡片折的就是这个:一条线上的对话,而不是一堆互不相干的会话。
+        """
+        root = str(root_id or "")
+        if not root:
+            return []
+        found = [s for s in self._sessions.values() if str(getattr(s, "root_id", "") or "") == root]
+        found.sort(key=lambda s: float(getattr(s, "created_at", 0.0) or 0.0))
+        return found
+
     def _create_session_locked(self, user_id: str, device_id: str = "") -> Session:
         """create_session 的持锁内核——调用方必须已持有 self._lock。
 
@@ -272,10 +340,11 @@ class SessionManager:
             devices=devices,
             active_device=device_id,
         )
+        self._apply_thread(session, user_id)
         self._sessions[session_id] = session
         self._user_active_session[user_id] = session_id
         self._persist_state()
-        logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id})")
+        logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id}, root={session.root_id})")
         return session
 
     async def create_session(self, user_id: str, device_id: str = "") -> Session:
@@ -301,6 +370,7 @@ class SessionManager:
                     devices=devices,
                     active_device=device_id,
                 )
+                self._apply_thread(session, owner)
                 self._sessions[session_id] = session
                 if owner:
                     self._user_active_session[owner] = session_id
@@ -367,6 +437,7 @@ class SessionManager:
                     devices=[device_id] if device_id else [],
                     active_device=device_id,
                 )
+                self._apply_thread(session, owner)
                 self._sessions[session_id] = session
                 if owner:
                     self._user_active_session[owner] = session_id
@@ -400,6 +471,7 @@ class SessionManager:
                 devices=[device_id] if device_id else [],
                 active_device=device_id,
             )
+            self._apply_thread(session, user_id)
             self._sessions[new_id] = session
             self._user_active_session[user_id] = new_id
             self._persist_state()
@@ -879,6 +951,7 @@ class SessionManager:
             data = {
                 "sessions": {sid: s.to_dict() for sid, s in self._sessions.items()},
                 "user_active_session": self._user_active_session,
+                "user_thread_root": getattr(self, "_user_thread_root", None) or {},
                 "session_aliases": self._session_aliases,
             }
             atomic_write_json(_SESSION_FILE, data, ensure_ascii=False, indent=2)
@@ -895,6 +968,7 @@ class SessionManager:
             for sid, sdata in data.get("sessions", {}).items():
                 self._sessions[sid] = Session.from_dict(sdata)
             self._user_active_session = data.get("user_active_session", {})
+            self._user_thread_root = data.get("user_thread_root", {})
             self._session_aliases = data.get("session_aliases", {}) or {}
             logger.info(f"已恢复 {len(self._sessions)} 个会话")
         except Exception as e:

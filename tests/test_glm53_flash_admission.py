@@ -161,7 +161,7 @@ class TestInternationalEndpointIsWiredEndToEnd:
         assert _lists(_NON_SECRET_MODEL_KEYS, "ZHIPU_API_BASE")
 
     def test_the_panel_offers_the_input(self):
-        src = REPO_ROOT / "electron/renderer/panel/src/components/ModelsTab.tsx"
+        src = REPO_ROOT / "electron/renderer/panel/src/settings_inventory.ts"
         assert "ZHIPU_API_BASE" in src.read_text(encoding="utf-8")
 
 

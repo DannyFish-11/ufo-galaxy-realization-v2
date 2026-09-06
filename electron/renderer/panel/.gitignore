@@ -1,0 +1,6 @@
+node_modules/
+
+# dist/ **不能**忽略:CI 的 panel-dist-consistency 门直接
+# `git diff --exit-code -- electron/renderer/panel/dist/`,
+# 而 Electron 生产环境加载的就是 dist/index.html。不提交构建产物,
+# 用户看到的永远是上一版界面。

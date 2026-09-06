@@ -20,9 +20,10 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 # 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
 # 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
+from core.routes.config_bundles import CONFIG_BUNDLES  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 
-__all__ = ["CONFIG_SCHEMA"]
+__all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA"]
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -430,3 +431,107 @@ def _write_env_file_with(overrides=None, exclude=None):
 # main.py 顶部真正生效的 dotenv.load_dotenv() 那段逻辑,造成隐蔽回归)。
 # .env → os.environ 的真正加载点在 main.py / unified_launcher.py 顶部
 # 的 load_dotenv() 调用,已删除此处死代码。
+
+
+# ---------------------------------------------------------------------------
+# 整档开关 —— 面板上那四个「一个开关管一整片」的档位
+# ---------------------------------------------------------------------------
+#
+# 定义在 core/routes/config_bundles.py 的 CONFIG_BUNDLES(唯一定义处)。
+# 这里只负责【现算】它此刻的样子并写回,不重复那份定义。
+
+
+class BundleUpdateRequest(BaseModel):
+    """把某一档设成某个值。``value`` 直接写进这一档的主键。"""
+
+    key: str
+    value: str
+
+
+def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
+    """现算一档此刻的样子。**每一个数字都是数出来的,没有一个是写死的。**
+
+    - ``value`` / ``type`` / ``options``:主键的当前值与它的控件形态。
+      三档的 select 必须原样透出 —— 压成布尔会把中间那档吞掉。
+    - ``key_count``:这一档管几个键。
+    - ``overrides``:这一档里有几个键被**手动改得偏离了默认**。
+
+    ``overrides`` 是这套设计能不能成立的关键。有键被手改过时,档位必须显示成
+    「开 · 有偏离」而不是「开」—— 否则档位说开、底下某个键说关,就是同一个事实
+    两处各存一份,而且没人看得见。
+    """
+    primary = bundle["primary"]
+    meta = CONFIG_SCHEMA.get(primary)
+    if meta is None:
+        # 主键不存在 = 这一档接到了一个不存在的东西上。**说出来**,不要静默跳过:
+        # 静默的话面板上会出现一个永远关着、点了也没反应的开关。
+        return {
+            "key": bundle["key"],
+            "name": bundle["name"],
+            "note": bundle["note"],
+            "category": bundle["category"],
+            "primary": primary,
+            "unwired": True,
+            "reason": f"主键 {primary} 不在 CONFIG_SCHEMA 里",
+        }
+
+    in_category = [k for k, m in CONFIG_SCHEMA.items() if m.get("category") == bundle["category"]]
+    overrides = sum(1 for k in in_category if k in os.environ and os.environ[k] != CONFIG_SCHEMA[k]["default"])
+
+    state: Dict[str, Any] = {
+        "key": bundle["key"],
+        "name": bundle["name"],
+        "note": bundle["note"],
+        "category": bundle["category"],
+        "primary": primary,
+        "unwired": False,
+        "value": os.environ.get(primary, meta["default"]),
+        "default": meta["default"],
+        "type": meta["type"],
+        "key_count": len(in_category),
+        "overrides": overrides,
+    }
+    if "options" in meta:
+        state["options"] = meta["options"]
+    return state
+
+
+@router.get("/bundles")
+async def get_bundles():
+    """面板设置浮层里那几档的当前状态(现算)。"""
+    return {"bundles": [_bundle_state(b) for b in CONFIG_BUNDLES]}
+
+
+@router.post("/bundles")
+async def set_bundle(req: BundleUpdateRequest):
+    """翻一档 —— 实际写的是这一档的主键,复用 update_config 那条唯一写入路径。
+
+    不另写一遍落盘逻辑:那边已经处理了「先落盘、成功才应用到 os.environ」以及
+    url 补协议头这些事,再抄一份必然漂。
+    """
+    bundle = next((b for b in CONFIG_BUNDLES if b["key"] == req.key), None)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail=f"没有这一档: {req.key}")
+
+    primary = bundle["primary"]
+    meta = CONFIG_SCHEMA.get(primary)
+    if meta is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"档位 {req.key} 的主键 {primary} 不在 CONFIG_SCHEMA 里 —— 它没有接上任何东西",
+        )
+
+    allowed = meta.get("options")
+    if allowed and req.value not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{primary} 只接受 {allowed},收到 {req.value!r}",
+        )
+    if meta["type"] == "boolean" and req.value not in ("true", "false"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{primary} 是布尔,只接受 'true' / 'false',收到 {req.value!r}",
+        )
+
+    await update_config(ConfigUpdateRequest(config={primary: req.value}))
+    return {"bundle": _bundle_state(bundle)}

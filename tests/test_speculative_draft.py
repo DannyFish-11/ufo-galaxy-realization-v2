@@ -214,7 +214,7 @@ def test_c10_the_kill_switch_is_registered_everywhere():
     from core.routes.config import CONFIG_SCHEMA
 
     assert "GALAXY_SPECULATIVE_DRAFT" in CONFIG_SCHEMA
-    panel = (sd.PROJECT_ROOT / "electron/renderer/panel/src/components/SettingsTab.tsx").read_text(encoding="utf-8")
+    panel = (sd.PROJECT_ROOT / "electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
     assert "'GALAXY_SPECULATIVE_DRAFT'" in panel
 
 

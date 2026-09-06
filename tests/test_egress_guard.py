@@ -244,5 +244,5 @@ def test_g02_switches_are_registered(key):
 def test_g03_switches_reach_the_panel(key):
     from pathlib import Path
 
-    src = Path(__file__).resolve().parent.parent / ("electron/renderer/panel/src/components/SettingsTab.tsx")
+    src = Path(__file__).resolve().parent.parent / ("electron/renderer/panel/src/settings_inventory.ts")
     assert f"'{key}'" in src.read_text(encoding="utf-8")

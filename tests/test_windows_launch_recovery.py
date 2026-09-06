@@ -389,5 +389,27 @@ def test_ready_banner_points_at_existing_tray_entries():
     assert banner_rows, "就绪横幅应给出日志指路"
     joined = "\n".join(banner_rows)
     assert "三态动画日志" not in joined, "该托盘入口已在日志统一时移除,横幅不能再指向它"
-    assert "崩溃日志" in joined and "崩溃日志" in tray
-    assert "View Logs" in joined and "View Logs" in tray
+
+    # 判据改成**通用**的了。
+    #
+    # 原先这里钉的是两个具体名字(「崩溃日志」「View Logs」必须同时出现在横幅与
+    # 托盘源码里)。托盘菜单按所有者要求清空之后那两项不存在了,而这条断言只会说
+    # 「找不到 View Logs」,说不出真正的毛病是**横幅在给一条走不通的路**。
+    #
+    # 现在查的是那件事本身:横幅里每一处「托盘 →「X」」,托盘里都得真有 X。
+    # 这样托盘再增减菜单项时,这道门自己就跟得上,不必回来改名字。
+    import re as _re
+
+    pointed_at = _re.findall(r"托盘\s*→\s*「([^」]+)」", joined)
+    missing = [
+        name
+        for name in pointed_at
+        # 托盘源码里出现这个名字,才算这一项真的在
+        if name.split("(")[0].strip() not in tray
+    ]
+    assert not missing, (
+        f"就绪横幅让用户去托盘找这些项,但托盘里没有: {missing} —— " "指路指向一个不存在的入口,比不指路更糟"
+    )
+
+    # 反向自证:横幅得**真的给出**日志去处,否则上面那条在「什么都不指」时也绿。
+    assert _re.search(r"logs|日志", joined), "横幅没有给出任何日志去处"

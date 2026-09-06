@@ -339,10 +339,26 @@ class OpenCodeEngine:
         }
 
     def get_supported_models(self) -> dict:
-        return {
-            "openai": ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini"],
-            "anthropic": ["claude-opus-4-20250514", "claude-sonnet-4-20250514"],
-            "deepseek": ["deepseek-chat", "deepseek-coder"],
-            "google": ["gemini-2.0-flash", "gemini-2.0-pro"],
-            "ollama": ["codellama", "deepseek-coder"],
-        }
+        """本引擎能用哪些型号 —— 答案来自 PROVIDER_REGISTRY,这里不再自己存一份。
+
+        2026-09-04:这里原来是**第三份手写型号表**,停在 2024 年(gpt-4o / o1 /
+        o3-mini / claude-opus-4-20250514 / deepseek-chat / gemini-2.0-flash)。
+        它不是死代码 —— ``nodes/Node_117_OpenCode/server.py`` 把它当接口对外提供,
+        于是调用方拿到的是一份两年前的清单,其中 deepseek-chat 已经彻底退役。
+
+        同一个毛病连着犯三次(registry / 拓扑默认表 / 这里),说明问题不在哪个
+        清单写得不好,而在**"有哪些型号"这件事被允许有多份答案**。三份都改成
+        从 registry 现算之后,加一个厂商只需要动 registry 一处。
+
+        ``ollama`` 不在 PROVIDER_REGISTRY 里(它是本机推理,不是云端厂商,型号由
+        本机装了什么决定),所以单独留一行,并且**只列本仓真的当编码模型用的那些**。
+        """
+        try:
+            from core.multi_llm_router import PROVIDER_REGISTRY
+        except Exception:  # pragma: no cover - 路由器不可用时不该让接口整个塌掉
+            return {}
+
+        models = {spec["name"]: list(spec.get("models") or []) for spec in PROVIDER_REGISTRY if spec.get("models")}
+        # 本机 Ollama:型号取决于用户 pull 了什么,registry 管不到,这里给编码常用档。
+        models["ollama"] = ["qwen3-coder", "deepseek-coder-v2", "codellama"]
+        return models

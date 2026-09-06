@@ -1,16 +1,19 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Galaxy — Colorless Lens</title>
-  <!-- Vite 入口必须指向源码入口 src/main.tsx，构建时由 Vite 编译并注入
-       带哈希的产物。此前误指向已构建的 assets/*.js，导致每次构建只是复制
-       旧产物、源码改动永远不生效（面板长期停留在过期版本）。 -->
-  <script type="module" src="./assets/main-CblVcgtx.js"></script>
-  <link rel="stylesheet" href="./assets/main-C-ZFLzgu.css">
-</head>
-<body>
-  <div id="root"></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- 后端在哪。留空 = 同源。外壳(Electron / Tauri)按需改写这一行。 -->
+    <meta name="galaxy-base" content="" />
+    <!-- 演示数据。**生产必须是 off。**
+         悄悄塞假数据的话,「有卡片」和「后端没接上」在界面上就分不开了 ——
+         用户会以为记忆卡片已经接好了,其实那几张是写死的。
+         本地看设计时临时改成 "on",别提交。 -->
+    <meta name="galaxy-demo" content="off" />
+    <title>Galaxy</title>
+    <script defer src="./assets/index-B28NkhbT.js"></script>
+  </head>
+  <body>
+    <div id="hud"></div>
+  </body>
 </html>

@@ -637,4 +637,78 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             timings = []
         return JSONResponse(content={"success": True, "count": len(timings), "timings": timings})
 
+    @router.get("/api/v1/memory/thread")
+    async def memory_thread(session_id: str = ""):
+        """一条会话属于哪套记忆,以及那条线上有哪些会话。
+
+        在 core/memory_thread.py 那条判据接上之前,这个端点没有意义:每开一次
+        新对话就自成一根,「线」上永远只有一条会话。
+        """
+        try:
+            from core.memory_thread import BASIS_MEANS, MEMORY_THREAD_AUTHORITY
+            from core.session_manager import get_session_manager
+
+            sm = get_session_manager()
+            root = sm.thread_root_of(session_id) if session_id else ""
+            sessions = sm.sessions_in_thread(root) if root else []
+            return JSONResponse(
+                {
+                    "authority": MEMORY_THREAD_AUTHORITY,
+                    "session_id": session_id,
+                    # 查不到返回空串而不是它自己 —— 「不知道」与「它自成一根」
+                    # 是两回事,混掉的话面板会把查错的 id 画成一条新线。
+                    "thread_root": root,
+                    "session_count": len(sessions),
+                    "sessions": [
+                        {
+                            "id": s.id,
+                            "created_at": s.created_at,
+                            "updated_at": s.updated_at,
+                            "parent_id": s.parent_id,
+                            "basis": (s.metadata or {}).get("memory_thread_basis", "unrecorded"),
+                            "message_count": len(s.history or []),
+                        }
+                        for s in sessions
+                    ],
+                    "basis_means": BASIS_MEANS,
+                }
+            )
+        except Exception:
+            logger.exception("记忆线查询失败")
+            return JSONResponse({"error": "memory thread unavailable"}, status_code=503)
+
+    @router.get("/api/v1/memory/cards")
+    async def memory_cards(session_id: str = ""):
+        """一条记忆线折成的卡片(每张盖连续三天)。
+
+        **「怎么切」的判断不在这里,也不在面板里**,在 core/memory_cards.py 一处。
+        这个端点只是把它接出去 —— 同一条线在面板上切五张、在别的界面上切六张,
+        那就是同一个事实两处各存,而且两边都以为自己是对的。
+        """
+        try:
+            from core.memory_cards import cards_for_thread
+
+            return JSONResponse(cards_for_thread(session_id))
+        except Exception:
+            logger.exception("记忆卡片查询失败")
+            # 503 而不是空数组:**「读不到」和「这条线上没有卡片」是两件事**,
+            # 返回 [] 会让面板画出一个干净的空态,人以为自己真的没聊过。
+            return JSONResponse({"error": "memory cards unavailable"}, status_code=503)
+
+    @router.get("/api/v1/memory/cards/{card_id}/turns")
+    async def memory_card_turns(card_id: str, session_id: str = ""):
+        """抽出来那张卡那几天说了什么。
+
+        区间判断与卡片列表**共用同一套分桶**(core/memory_cards.py 的
+        ``_bucket_turns``),不是拿 from/to 再比一次日期 —— 比日期就有了第二份
+        「边界怎么算」的理解,而两份差一点点的表现是「点开这张卡少了两句」。
+        """
+        try:
+            from core.memory_cards import turns_in_card
+
+            return JSONResponse(turns_in_card(session_id, card_id))
+        except Exception:
+            logger.exception("记忆卡片内容查询失败")
+            return JSONResponse({"error": "memory card turns unavailable"}, status_code=503)
+
     return router

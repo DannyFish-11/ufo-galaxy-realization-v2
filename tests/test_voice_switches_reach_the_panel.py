@@ -33,7 +33,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SETTINGS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/SettingsTab.tsx"
+# 旧的 React 面板(SettingsTab.tsx / ModelsTab.tsx / App.css)已被这一版 HUD 面板
+# 整个替换掉。那两份手写的键清单不是渲染代码而是**判据**,所以没跟着删,搬进了
+# panel/src/settings_inventory.ts;这里改指那一份。
+#
+# 要说清楚的是:**那份清单当前没有任何界面在渲染** —— 新面板的设置浮层只有四个
+# 整档开关,「全部设置」按钮还没接东西。清单是那个待建设置面的规格。这道门守的
+# 依然是同一件事:清单里出现的键,后端必须认得,否则 POST /api/config 会 400。
+SETTINGS_INVENTORY = REPO_ROOT / "electron/renderer/panel/src/settings_inventory.ts"
+PANEL_SRC = REPO_ROOT / "electron/renderer/panel/src"
+SETTINGS_TAB = SETTINGS_INVENTORY
 
 #: 语音/感知栈的模块范围 —— **按目录模式派生,不是手写清单**。
 #:
@@ -176,14 +185,36 @@ def _extract_config_reads() -> dict[str, list[str]]:
 
 
 def _extract_settings_tab_keys() -> set[str]:
-    """从 SettingsTab.tsx 的 CONFIG_KEYS 字典字面量里取出所有 key。"""
+    """从 SettingsTab.tsx 的 KEY_ORDER_HINT 里取出所有 key。
+
+    这份清单**不再是分组的定义**(2026-08-30 起分组由 /api/config/all 返回的
+    category 现算),只是同类内的顺序提示。但它仍然值得查一遍:里面写错一个键名,
+    那个键就会掉到字母序末尾而不报错。
+    """
     src = SETTINGS_TAB.read_text(encoding="utf-8")
-    start = src.index("const CONFIG_KEYS")
+    start = src.index("const KEY_ORDER_HINT")
     end = src.index("\n};", start)
     block = src[start:end]
     # 去掉注释行:注释里会提到 CONFIG_SCHEMA 等大写标识符,不是配置键。
     body = "\n".join(ln for ln in block.split("\n") if not ln.strip().startswith("//"))
     return set(re.findall(r"'([A-Z][A-Z0-9_]*)'", body))
+
+
+def _extract_decorated_categories() -> set[str]:
+    """CATEGORIES 里有显示装饰(标签/图标)的分类。"""
+    src = SETTINGS_TAB.read_text(encoding="utf-8")
+    start = src.index("const CATEGORIES")
+    end = src.index("\n];", start)
+    return set(re.findall(r"key:\s*'([a-z_]+)'", src[start:end]))
+
+
+def _extract_delegated_categories() -> set[str]:
+    """显式声明「由别的 tab 拥有」的分类。"""
+    src = SETTINGS_TAB.read_text(encoding="utf-8")
+    start = src.index("const DELEGATED_CATEGORIES")
+    end = src.index("]);", start)
+    body = "\n".join(ln for ln in src[start:end].split("\n") if not ln.strip().startswith("//"))
+    return set(re.findall(r"'([a-z_]+)'", body))
 
 
 class TestTheModuleScopeIsDerivedNotHandWritten:
@@ -386,17 +417,107 @@ class TestRealtimeKeyRoutesToSecretStore:
 
 
 class TestEveryVoiceSwitchIsRegisteredFrontend:
-    def test_every_config_read_is_listed_in_the_panel(self):
+    """用户改得了它吗 —— 这条保证在 2026-08-30 换了实现,但**没有变弱**。
+
+    从前:成员关系写在 SettingsTab.tsx 的 CONFIG_KEYS 里,一个键没列进去就在设置页上
+    完全看不见。于是这条测试查的是"列没列"。
+
+    现在:分组由 /api/config/all 返回的 category 现算,列不列只影响排序。所以"可达"
+    这件事改由另一个前提保证 —— **这个键的 category 得有归宿**:要么在 CATEGORIES 里
+    有显示装饰,要么被显式委派给别的 tab。
+
+    新判据比旧的严:旧的只查键在不在清单里,查不出"某个 category 根本没人管"这种情况
+    (那会让整整一类设置项一起消失,而不是漏一个)。
+    """
+
+    def test_every_config_read_has_a_home_in_the_ui(self):
+        from core.routes.config import CONFIG_SCHEMA
+
         found = _extract_config_reads()
-        panel_keys = _extract_settings_tab_keys()
-        missing = {
-            key: mods
-            for key, mods in found.items()
-            if key not in panel_keys and key not in _PENDING_SECRET_ROUTING and key not in _NOT_USER_SETTINGS
-        }
-        assert not missing, (
-            "以下配置键在代码里被读取,但 SettingsTab.tsx 的 CONFIG_KEYS 里没列 —— "
-            f"面板设置页上没有它们的位置,用户只能手改 .env: {missing}"
+        decorated = _extract_decorated_categories()
+        delegated = _extract_delegated_categories()
+        homed = decorated | delegated
+
+        homeless = {}
+        for key, mods in found.items():
+            if key in _PENDING_SECRET_ROUTING or key in _NOT_USER_SETTINGS:
+                continue
+            meta = CONFIG_SCHEMA.get(key)
+            if meta is None:
+                continue  # 由同文件的 test_every_config_read_is_in_config_schema 管
+            cat = meta.get("category", "")
+            if cat not in homed:
+                homeless[key] = (cat, mods)
+        assert not homeless, (
+            "以下配置键的 category 在设置页上没有归宿(既没在 CATEGORIES 里装饰,"
+            f"也没显式委派给别的 tab)—— 它们在界面上不会出现: {homeless}"
+        )
+
+    def test_delegation_is_never_a_nicer_word_for_hiding(self):
+        """委派不能是一句空话。
+
+        原判据是「声明 llm 归 ModelsTab 之后,那些键必须真的在 ModelsTab.tsx 里出现」。
+        ModelsTab 随旧 React 面板一起删掉了,委派清单也跟着空了 —— 于是原判据变成
+        了空转,还得靠 ``assert delegated`` 硬撑着才不至于绿得毫无内容。
+
+        判据本身没有失效,失效的是它的载体。这里把它**按原意重述,并且更严**:
+
+        * 委派一旦存在,目的地必须真的收着那些键(原判据,保留);
+        * 委派**不存在**时,这些键必须真的在设置页上有位置 —— 也就是它们的
+          category 得在 ``CATEGORIES`` 里有中文标签。
+
+        两条合起来说的是同一件事:**每个键都得有人管,而且管它的那个地方真的在。**
+        少了第二条,把 DELEGATED_CATEGORIES 清空就能让这道门闭嘴 —— 而那恰恰是
+        「llm（未分类）」出现在设置页上的那次真实回归。
+        """
+        from core.routes.config import CONFIG_SCHEMA
+
+        delegated = _extract_delegated_categories()
+        decorated = _extract_decorated_categories()
+
+        # ① 委派出去的,目的地必须真的收着。
+        #
+        # 目的地在哪由委派方自己说了算,所以这里在**整个面板源码**里找 —— 找不到
+        # 就说明这些键在任何一个界面上都出不来,不管委派清单怎么写。
+        panel_src = SETTINGS_INVENTORY.parent
+        owner_src = "\n".join(
+            p.read_text(encoding="utf-8") for p in sorted(panel_src.rglob("*.ts")) if p != SETTINGS_INVENTORY
+        )
+        orphans = []
+        for key, meta in CONFIG_SCHEMA.items():
+            if meta.get("category") not in delegated:
+                continue
+            if key in _PENDING_SECRET_ROUTING or key in _NOT_USER_SETTINGS:
+                continue
+            if re.search(r"['\"]" + re.escape(key) + r"['\"]", owner_src):
+                continue
+            # 别名键(描述里写明是另一个键的别名)不必各自出现
+            if "别名" in str(meta.get("description", "")):
+                continue
+            orphans.append(key)
+        assert not orphans, (
+            "这些键的 category 声称已委派给别处,而面板源码里找不到它们 —— "
+            f"「委派」在这里等于「藏起来」: {sorted(orphans)}"
+        )
+
+        # ② 没委派出去的,设置页上必须有它自己的那一格。
+        #
+        # groupByCategory() 不会丢掉未装饰的类别(丢了整整一类就没人看得见了),
+        # 而是渲染成「xxx（未分类）」。所以这条不测「看不看得见」,测的是**看见的
+        # 是不是人话** —— 一格叫「llm（未分类）」的设置,用户没法知道该不该动它。
+        undecorated = sorted(
+            {
+                meta.get("category", "")
+                for key, meta in CONFIG_SCHEMA.items()
+                if meta.get("category") not in delegated
+                and meta.get("category") not in decorated
+                and key not in _PENDING_SECRET_ROUTING
+                and key not in _NOT_USER_SETTINGS
+            }
+        )
+        assert not undecorated, (
+            f"这些 category 既没委派出去、在 CATEGORIES 里也没有中文标签: {undecorated} —— "
+            "设置页会把它们渲染成「xxx（未分类）」,用户看得见却不知道那是什么"
         )
 
 
@@ -586,49 +707,56 @@ class TestPanelCanActuallySaveThem:
 
 
 class TestOnePullSwitchAcrossThePanel:
-    """用户要求:全面板统一用推拉开关,参照 worker 那个。
+    """用户要求:全面板统一用推拉开关。
 
-    ``MeshView`` 的 NATS Worker 开关用的是 App.css 里的 ``.switch`` / ``.switch-knob``。
-    ``SettingsTab`` 原先自带一份 ``.settings-toggle``(白滑块 + accent 底、无描边),
-    两者并排出现在同一个面板里看得出不一致。已统一到 ``.switch``。
+    **判据没变,载体换了。** 旧 React 面板里有两份开关样式并排出现
+    (``MeshView`` 用 App.css 的 ``.switch``,``SettingsTab`` 自带一份
+    ``.settings-toggle``),看得出不一致,当时统一到了 ``.switch``。
+
+    那个面板已整个换成这一版 HUD。现在唯一的开关是设置浮层里那四个整档开关用的
+    ``.knob``(定义在 ``styles/hud.css``)。这三条继续守同一件事:
+    **只有一种开关样式,而且它真的是滑动的。**
     """
 
-    def test_settings_toggle_uses_the_same_classes_as_the_worker_switch(self):
-        src = SETTINGS_TAB.read_text(encoding="utf-8")
-        block = src[src.index("function ToggleSwitch") : src.index("function PasswordInput")]
-        assert "'switch'" in block or "`switch" in block, "ToggleSwitch 没有用 .switch 类名"
-        assert "switch-knob" in block, "ToggleSwitch 缺少 .switch-knob 滑块"
+    def _hud_css(self) -> str:
+        return (PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
 
-    def test_the_duplicate_toggle_style_is_gone(self):
-        """反向验证:那份重复样式必须真的被删掉,而不是留着继续被别处引用。"""
-        css = (SETTINGS_TAB.parent / "SettingsTab.css").read_text(encoding="utf-8")
-        selectors = re.findall(r"^\.settings-toggle[^\n]*\{", css, re.M)
-        assert not selectors, f"SettingsTab.css 里仍有重复的开关样式: {selectors}"
+    def test_the_one_toggle_style_exists_and_slides(self):
+        """被统一到的那一份必须真的存在、而且真的是左右滑动的。"""
+        css = self._hud_css()
+        assert ".knob {" in css, "hud.css 里找不到 .knob —— 开关样式没了?"
+        on = css[css.index("aria-pressed='true'] .knob::after") :][:200]
+        assert "translateX" in on, "开关并不是左右滑动的?样式可能已改"
 
-    def test_no_source_still_uses_the_removed_class(self):
-        """必须比对**去掉注释后**的代码。
+    def test_only_one_toggle_style_in_the_whole_panel(self):
+        """反向验证:整个面板不许出现第二份开关样式。
 
-        第一版这条直接在整份文件里搜 ``settings-toggle`` 字面量,结果被自己的说明
-        注释绊倒 —— 两个文件里都留了一段「这里原先有一份 .settings-toggle,已删除」
-        的注释。那种写法测的是「文件里有没有提到这个名字」,而要测的是
+        比对**去掉注释后**的代码。早先同类的一条直接搜字面量,结果被自己的说明
+        注释绊倒 —— 那测的是「文件里有没有提到这个名字」,而要测的是
         「还有没有代码在用它」。
         """
-        panel_src = SETTINGS_TAB.parent.parent
-        block_comment = re.compile(r"/\*.*?\*/", re.S)
-        line_comment = re.compile(r"^\s*//.*$", re.M)
+        import re as _re
+
+        block_comment = _re.compile(r"/\*.*?\*/", _re.S)
+        line_comment = _re.compile(r"^\s*//.*$", _re.M)
+        # 旧面板那两个名字,以及任何新冒出来的「第二份开关」
+        forbidden = ("settings-toggle", "switch-knob")
         stale = []
-        for path in panel_src.rglob("*"):
-            if path.suffix not in {".tsx", ".ts", ".css"}:
+        for path in PANEL_SRC.rglob("*"):
+            if path.suffix not in {".ts", ".tsx", ".css"}:
                 continue
             code = line_comment.sub("", block_comment.sub("", path.read_text(encoding="utf-8")))
-            if "settings-toggle" in code:
-                stale.append(str(path.relative_to(panel_src)))
-        assert not stale, f"这些文件的**代码**里还在用已删除的 .settings-toggle: {stale}"
+            for name in forbidden:
+                if name in code:
+                    stale.append(f"{path.relative_to(PANEL_SRC)}::{name}")
+        assert not stale, f"面板里出现了第二份开关样式: {stale}"
 
-    def test_worker_switch_style_exists_and_slides(self):
-        """被参照的那份样式得真的存在、而且真的是左右滑动的。"""
-        app_css = (SETTINGS_TAB.parent.parent / "App.css").read_text(encoding="utf-8")
-        assert ".switch {" in app_css
-        assert ".switch-knob {" in app_css
-        knob_on = app_css[app_css.index(".switch.on .switch-knob") :][:200]
-        assert "translateX" in knob_on, "worker 开关并不是左右滑动的?样式可能已改"
+    def test_the_toggle_is_actually_wired_to_a_bundle(self):
+        """样式在、却没有任何控件用它,就是「看着接上了其实没有」。
+
+        ``.knob`` 必须真的挂在设置浮层那几个整档开关上 —— 否则这道门守的只是一段
+        没人渲染的 CSS。
+        """
+        dock = (PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert "'knob'" in dock or '"knob"' in dock, "dock.ts 里没有任何控件用 .knob"
+        assert "aria-pressed" in dock, "开关没有 aria-pressed —— 读屏软件读不出开还是关"

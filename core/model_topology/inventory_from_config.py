@@ -93,16 +93,50 @@ INVENTORY_CONFIG_AUTHORITY: str = "core.model_topology.inventory_from_config.Inv
 # (Used to produce minimal NormalizedTopologyEntry objects from config state.)
 # ---------------------------------------------------------------------------
 
-# Default primary model IDs per provider (used when no richer inventory exists).
-_PROVIDER_DEFAULT_MODEL: dict = {
-    "openai": "gpt-4o",
-    "anthropic": "claude-3-5-sonnet-20241022",
-    "gemini": "gemini-1.5-pro",
-    "deepseek": "deepseek-chat",
-    "groq": "llama-3.1-70b-versatile",
-    "openrouter": "openrouter/auto",
-    "oneapi": "oneapi-aggregated",
-}
+# Default primary model IDs per provider.
+#
+# 2026-09-04:这里原来是**第二份手写型号表**,停在 2024 年 —— gpt-4o /
+# claude-3-5-sonnet-20241022 / gemini-1.5-pro / deepseek-chat /
+# llama-3.1-70b-versatile。其中 deepseek-chat 已于 2026-07-24 彻底退役,
+# 其余几个也早被各家更新了好几代。
+#
+# 它烂掉的原因不是有人偷懒,是**结构本身就保证它会烂**:"某厂商默认用哪个型号"
+# 这件事在 core.multi_llm_router.PROVIDER_REGISTRY 里已经有一份权威答案,而这里
+# 又存了一份。两份就必然分岔,分岔了也没有任何东西会报错 —— 直到真发请求 404。
+#
+# 改成从 registry 现算。别名映射只处理"两边叫法不同"这一件事(本模块历史上用
+# ``gemini``,registry 里叫 ``google``),不再重复任何型号串。
+# ``oneapi`` 留在这里是对的:它是聚合器,不在 PROVIDER_REGISTRY 的直连厂商层
+# (见 core/oneapi_system_position.py 对它架构位置的定义),没有"默认型号"可言,
+# 用一个显式的哨兵值表示"这一档由上游聚合器决定"。
+_PROVIDER_ALIAS_TO_REGISTRY: dict = {"gemini": "google"}
+
+_AGGREGATOR_SENTINEL_MODEL: dict = {"oneapi": "oneapi-aggregated"}
+
+
+def _default_model_for(provider_id: str) -> str:
+    """某厂商的默认型号 —— 唯一答案在 PROVIDER_REGISTRY,这里只做查询。
+
+    查不到时返回 ``f"{provider_id}-default"``,与改动前的行为一致:那是个显然
+    不像真型号的串,打到上游会干脆地 404,而不是伪装成某个能跑的型号。
+    """
+    if provider_id in _AGGREGATOR_SENTINEL_MODEL:
+        return _AGGREGATOR_SENTINEL_MODEL[provider_id]
+
+    registry_name = _PROVIDER_ALIAS_TO_REGISTRY.get(provider_id, provider_id)
+    try:
+        from core.multi_llm_router import PROVIDER_REGISTRY
+    except Exception:  # pragma: no cover - 路由器不可用时不该拖垮拓扑构建
+        return f"{provider_id}-default"
+
+    for spec in PROVIDER_REGISTRY:
+        if spec.get("name") == registry_name:
+            model = spec.get("default_model")
+            if model:
+                return str(model)
+            break
+    return f"{provider_id}-default"
+
 
 # Default display names per provider.
 _PROVIDER_DISPLAY_NAME: dict = {
@@ -191,7 +225,7 @@ def _make_minimal_entry(
             display_name=_PROVIDER_DISPLAY_NAME.get(provider_id, provider_id),
         ),
         model=ModelIdentity(
-            model_id=_PROVIDER_DEFAULT_MODEL.get(provider_id, f"{provider_id}-default"),
+            model_id=_default_model_for(provider_id),
             provider_id=provider_id,
         ),
         modality=ModalityCapability.from_multimodal_flag(multimodal),
