@@ -3,9 +3,17 @@
 把 MultiModalContext 里的图像构造成 **OpenAI 风格 content 数组**(text + image_url
 data URL),让图像在普通 chat 里也能**原生送达模型**(不再被文本摘要化)。
 
-⚠️ 仅对 **OpenAI 兼容 provider** 安全(它们原样转发 messages)。Gemini 等适配器会对
-``m["content"]`` 做字符串拼接,收到数组会崩——因此默认**关闭**,需 OpenAI 兼容主链
-且显式开启 ``GALAXY_NATIVE_MM_CHAT=1`` 才生效。关闭时返回纯文本,行为与原先一致。
+这个数组是仓内的**规范表示**;发出去之前由 ``core.modality.to_native`` 翻译成
+各条协议的原生形状(Anthropic 的 base64 source 块 / Responses 的 input_image /
+Ollama 的 message 级 images)。
+
+**2026-09-06 起默认开。** 此前默认关,理由写在这里:"仅对 OpenAI 兼容 provider
+安全,别的适配器会对 ``m["content"]`` 做字符串拼接,收到数组会崩"。那句话当时是
+对的 —— 而它描述的是一个**没修的缺陷**,不是一条该长期存在的限制。现在四条传输
+都过 ``core.modality``,那个理由不再成立,所以默认跟着改。
+
+关掉它(``GALAXY_NATIVE_MM_CHAT=0``)仍然有效:图会被压成文字摘要,行为回到以前。
+留这个开关是给"上游临时不认某种部件"那种时候用的,不是给日常用的。
 """
 
 from __future__ import annotations
@@ -24,7 +32,7 @@ task dict 会被 ``json.dumps`` 成 user 消息，而 MultiModalContext 是 pyda
 
 
 def native_mm_enabled() -> bool:
-    return os.getenv("GALAXY_NATIVE_MM_CHAT", "0").strip().lower() in ("1", "true", "yes", "on")
+    return os.getenv("GALAXY_NATIVE_MM_CHAT", "1").strip().lower() in ("1", "true", "yes", "on")
 
 
 #: 单次请求最多附多少张【静止图】(视频关键帧另有 MAX_KEYFRAMES 上限)。

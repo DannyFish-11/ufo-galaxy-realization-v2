@@ -1810,10 +1810,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "本机播放声音（关掉则只出文字不出声 · 默认开）",
     },
     "GALAXY_NATIVE_MM_CHAT": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "perception",
-        "description": "原生多模态对话格式（把图片/音频按模型原生格式发，而不是转文字 · 默认关）",
+        "description": "原生多模态对话格式（把图片按模型原生格式发，而不是先转成文字摘要 · 默认开）",
     },
     "GALAXY_CU_MEMORY": {
         "default": "true",
