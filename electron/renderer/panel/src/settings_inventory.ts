@@ -204,6 +204,7 @@ export const PROVIDER_KEYS: readonly string[] = [
   'HF_API_TOKEN',
   'LOCAL_VLLM_URL',
   'MIMO_API_KEY',
+  'META_API_KEY',
   'MINIMAX_API_KEY',
   'MISTRAL_API_KEY',
   'MOONSHOT_API_KEY',

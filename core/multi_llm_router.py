@@ -175,6 +175,7 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GOOGLE_API_KEY",
     "xai": "XAI_API_KEY",
+    "meta": "META_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "agnes": "AGNES_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
@@ -500,19 +501,30 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "gemini-3.5-flash",
     },
     "meta": {
-        # 对齐 PROVIDER_REGISTRY['meta'] 的真实模型名(api.llama.com/compat/v1)。
-        # 此前全部映射到 "muse-spark-1.1" —— registry 注释已明确它【并非真实模型】,
-        # 而 map 对每个 TaskType 都有值、消费方永远取 map 值(不落到 default_model),
-        # 于是每个走 meta 的请求都拿假模型名去请求 → 400/404、provider 被判 DOWN。
-        # 重档用 Maverick(旗舰),快档用 Scout(轻量)。
-        TaskType.REASONING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.FAST_RESPONSE: "Llama-4-Scout-17B-16E-Instruct-FP8",
-        TaskType.CODING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.CREATIVE: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.ANALYSIS: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.PLANNING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.AGENT_CONTROL: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.GENERAL: "Llama-4-Scout-17B-16E-Instruct-FP8",
+        # 2026-09-06:全部改回 muse-spark(现为 1.3)。**这一格改错过一次,而且是
+        # 被上游的一句错注释带错的**,过程记在这儿:
+        #
+        #   · 某一版把这里从 "muse-spark-1.1" 改成 Llama-4,理由写的是
+        #     「registry 注释已明确它并非真实模型」。
+        #   · 那句 registry 注释本身是错的 —— Muse Spark 一直是 Meta 真实的
+        #     **闭源 agentic 线**,只是和开源 Llama 不是一条线。
+        #   · 于是这一格从"指着一个被误判为假的真型号",变成"指着另一条产品线的
+        #     型号",而那条线的自家 API 后来还关停了。
+        #
+        # 一次错判被下游照抄,是这类错误最典型的传播方式。所以两边的注释都写长了:
+        # registry 那条讲清 Meta 有两条线,这条讲清它被带错过。
+        #
+        # 这一家只登记了一个型号,所以八个槽位同值。**仍然逐个写出来**而不是删掉
+        # 这一格:map 对每个 TaskType 都有值时消费方永远取 map 值、不落到
+        # default_model;删了这格反而是换一套语义,不是简化。
+        TaskType.REASONING: "muse-spark-1.3",
+        TaskType.FAST_RESPONSE: "muse-spark-1.3",
+        TaskType.CODING: "muse-spark-1.3",
+        TaskType.CREATIVE: "muse-spark-1.3",
+        TaskType.ANALYSIS: "muse-spark-1.3",
+        TaskType.PLANNING: "muse-spark-1.3",
+        TaskType.AGENT_CONTROL: "muse-spark-1.3",
+        TaskType.GENERAL: "muse-spark-1.3",
     },
     "xai": {
         # Grok 4.6(联网核实 2026-08-12 发布,多源交叉确认):同 4.5 的 V9 基座/1.5T
@@ -869,17 +881,21 @@ class OpenAIAdapter(BaseProviderAdapter):
         for _param in _quirks.get("omit_params", ()):
             body.pop(_param, None)
 
-        # 工具在这条传输上不工作的型号:**说出来再丢**。
+        # 工具在这条传输上不工作的型号:**换条路,不是丢工具**。
         #
-        # 静默丢掉是最坏的做法 —— 上层以为这一轮有工具可用,模型却只能空口作答,
-        # 而答案看起来是正常的。丢了不说,就是本仓最怕的那种失败:看起来接上了,
-        # 其实没有。这里留痕,并把出处一起打出来,让人一眼知道该去哪确认。
-        if tools and _quirks.get("tools_broken"):
+        # 上一版这里是"丢掉并留痕" —— 那时本仓只有 chat/completions 一条路,
+        # 留痕已经是当时能做到的最诚实的处理(至少不是静默地少做一件事)。
+        # 补了 ResponsesAdapter 之后,正确的做法是走过去。
+        #
+        # 兜底仍然留着:选传输那一步在 _pick_adapter(),它已经把这种轮次拦去
+        # Responses 了。真走到这里还带着工具,说明有人绕过了 _pick_adapter ——
+        # 那时**说出来再丢**,而不是让上游收到一个它不认的字段。
+        if tools and _quirks.get("needs_responses_for_tools"):
             body.pop("tools", None)
             logger.warning(
-                "型号 %s 在 chat/completions 上不支持工具调用,这一轮的 %d 个工具已被丢弃 —— "
-                "它答得出话,但做不了事。要用它跑 agent,得先给这个仓库写一条 Responses API "
-                "适配器。依据:%s",
+                "型号 %s 带着 %d 个工具走到了 chat/completions —— 它的工具只在 Responses 上工作。"
+                "这一轮的工具已丢弃。正常路径不该到这里:选传输在 _pick_adapter(),"
+                "说明有调用方绕过了它。依据:%s",
                 model,
                 len(tools),
                 _quirks.get("why", "见 core/provider_registry.MODEL_QUIRKS"),
@@ -1010,6 +1026,147 @@ class OpenAIAdapter(BaseProviderAdapter):
             tool_calls=tool_calls,
             raw_response=None,  # 流式无整包 JSON;下游一律以 LLMResponse 字段为准
         )
+
+
+class ResponsesAdapter(BaseProviderAdapter):
+    """OpenAI **Responses** 格式 —— 本仓的第二条传输。
+
+    ## 为什么需要它
+
+    ``OpenAIAdapter`` 走的是 ``/chat/completions``。那条路够用了很久,直到出现
+    **在 chat/completions 上残缺的型号**:``gpt-6-astra`` 支持 chat/completions,
+    但**工具调用只能走 Responses**。没有这条适配器时,我们只能在那种型号上把工具
+    丢掉并留痕 —— 答得出话,做不了事。
+
+    现在三家都讲这个格式(各自一手文档核实过):
+
+    * **OpenAI** —— 原生;``gpt-6-astra`` 的工具必须走这里
+    * **Meta Model API** —— 官方说 Chat Completions 与 Responses 两种格式同一后端
+    * **DeepSeek** —— ``api.deepseek.com`` 原生支持 Responses 格式(为 Codex 适配),
+      v4-flash / v4-pro 都可以
+
+    ## 与 chat/completions 的三处真差别
+
+    1. **``input`` 不是 ``messages``。** 形状相近(role/content),但字段名不同,
+       而且它接受"上一轮的输出条目"直接回灌 —— 本仓暂时只送 role/content,
+       多轮仍由上层拼好整段历史传进来,与 chat 那条一致。
+    2. **工具是平铺的。** chat 里是 ``{"type":"function","function":{...}}``,
+       Responses 里是 ``{"type":"function","name":...,"parameters":...}`` 平一层。
+       不转换的话上游会当成没有工具 —— 又是一次"看起来接上了,其实没有"。
+    3. **``max_output_tokens``,不是 ``max_tokens``。** 名字不同,发错了会被忽略,
+       于是输出长度悄悄变成上游默认值。
+
+    ## 不做的事
+
+    不实现流式。Responses 的 SSE 事件模型与 chat 那条完全不同,而本仓的流式消费端
+    (TokenStream)是照 chat 的 delta 写的。硬接一半的话,"流式失败退回非流式"那条
+    兜底会被触发得毫无规律 —— 那比不支持更难排查。需要流式的轮次仍走 chat 那条。
+    """
+
+    async def chat(
+        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
+    ) -> LLMResponse:
+        headers = {"Content-Type": "application/json"}
+        if (self.config.api_key or "").strip():
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+
+        body: Dict[str, Any] = {
+            "model": model,
+            "input": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if tools:
+            body["tools"] = self._flatten_tools(tools)
+
+        # 型号级怪癖对两条传输一视同仁:gpt-6-astra 在 Responses 上同样不收
+        # temperature / top_p。判据仍在 provider_registry,不在这里另存一份。
+        from core.provider_registry import quirks_for
+
+        for _param in quirks_for(model).get("omit_params", ()):
+            body.pop(_param, None)
+
+        t0 = time.monotonic()
+        resp = await self._post_with_retry(
+            f"{self.config.base_url}/responses",
+            headers=headers,
+            body=body,
+        )
+        latency = (time.monotonic() - t0) * 1000
+        data = resp.json()
+        content, tool_calls = self._read_output(data)
+        usage = data.get("usage") or {}
+
+        return LLMResponse(
+            content=content,
+            provider=self.config.name,
+            model=model,
+            # Responses 用 input_tokens / output_tokens;chat 用 prompt_/completion_。
+            # 两个名字都认,取不到就是 0 —— **不猜**,0 在上层是"没拿到用量"。
+            input_tokens=int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0),
+            output_tokens=int(usage.get("output_tokens") or usage.get("completion_tokens") or 0),
+            latency_ms=latency,
+            tool_calls=tool_calls or None,
+            raw_response=data,
+        )
+
+    @staticmethod
+    def _flatten_tools(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """chat 的嵌套工具声明 → Responses 的平铺形状。
+
+        已经是平的就原样放行 —— 调用方可能直接按 Responses 的形状给。
+        """
+        out: List[Dict[str, Any]] = []
+        for tool in tools:
+            fn = tool.get("function")
+            if not isinstance(fn, dict):
+                out.append(tool)
+                continue
+            flat: Dict[str, Any] = {"type": "function", "name": fn.get("name", "")}
+            if fn.get("description"):
+                flat["description"] = fn["description"]
+            if fn.get("parameters") is not None:
+                flat["parameters"] = fn["parameters"]
+            out.append(flat)
+        return out
+
+    @staticmethod
+    def _read_output(data: Dict[str, Any]) -> Tuple[str, List[Dict[str, Any]]]:
+        """从 Responses 的 ``output`` 数组里读出文字与工具调用。
+
+        ``output`` 是一串条目,类型混着来:``message`` 里是文字(它自己的 content
+        又是一串带 type 的块),``function_call`` 是一次工具调用。**不是**
+        ``choices[0].message`` 那种单点结构 —— 照 chat 的形状去读会读到空。
+
+        认不出来的条目类型直接跳过,不抛异常:上游加新类型是常事,为一个不认识的
+        条目让整轮失败,代价远大于收益。
+        """
+        text_parts: List[str] = []
+        calls: List[Dict[str, Any]] = []
+        for item in data.get("output") or []:
+            if not isinstance(item, dict):
+                continue
+            kind = item.get("type")
+            if kind == "message":
+                for block in item.get("content") or []:
+                    if isinstance(block, dict) and isinstance(block.get("text"), str):
+                        text_parts.append(block["text"])
+            elif kind == "function_call":
+                # 回填成 chat 那边的形状,让上层只认识一种工具调用结构。
+                calls.append(
+                    {
+                        "id": item.get("call_id") or item.get("id") or "",
+                        "type": "function",
+                        "function": {
+                            "name": item.get("name", ""),
+                            "arguments": item.get("arguments", ""),
+                        },
+                    }
+                )
+        # 有的实现同时给一个拼好的 output_text,拿它当兜底(不覆盖已读到的)。
+        if not text_parts and isinstance(data.get("output_text"), str):
+            text_parts.append(data["output_text"])
+        return "".join(text_parts), calls
 
 
 class AnthropicAdapter(BaseProviderAdapter):
@@ -2205,6 +2362,38 @@ class MultiLLMRouter:
             f"LLM 路由器已初始化（配置优先级: Dashboard > ENV），发现 {len(self.providers)} 个提供商: "
             f"{list(self.providers.keys())}"
         )
+
+    def _pick_adapter(self, provider: str, model: str, tools: Any = None) -> Any:
+        """这一轮走哪条传输 —— **唯一的判断处**。
+
+        默认走注册时那条(多数是 chat/completions)。只有一种情况换路:
+        **这一轮要用工具,而这个型号的工具只在 Responses 上工作**
+        (目前只有 gpt-6-astra,判据在 provider_registry.MODEL_QUIRKS)。
+
+        为什么不干脆让那些型号一律走 Responses:本仓的流式消费端是照 chat 的
+        delta 写的,Responses 的事件模型完全不同。不带工具的轮次走 chat 能拿到
+        流式,换过去就没有了 —— 为一个用不上的能力牺牲每一轮的体感,不划算。
+
+        换路要**留痕**:传输换了却没人知道,排查时会对着错的那条路找问题。
+        """
+        base = self.adapters.get(provider)
+        if not tools:
+            return base
+
+        from core.provider_registry import quirks_for
+
+        if not quirks_for(model).get("needs_responses_for_tools"):
+            return base
+
+        cfg = self.providers.get(provider)
+        if cfg is None:  # pragma: no cover - providers 与 adapters 同步注册
+            return base
+
+        key = f"{provider}::responses"
+        if key not in self.adapters:
+            self.adapters[key] = ResponsesAdapter(cfg)
+            logger.info("为 %s 建了一条 Responses 传输:型号 %s 的工具只在那条路上工作。", provider, model)
+        return self.adapters[key]
 
     def _register_user_providers(self) -> None:
         """把用户在面板上声明的端点注册进来 —— 不改仓库就能加一家。
@@ -3942,7 +4131,7 @@ class MultiLLMRouter:
             if mdl is None:
                 mdl = self.providers[prov_name].default_model
 
-            adapter = self.adapters[prov_name]
+            adapter = self._pick_adapter(prov_name, model, tools)
             tried_providers.append(prov_name)
 
             # 断路器检查

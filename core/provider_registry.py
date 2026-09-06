@@ -60,6 +60,7 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "base_url": "https://api.openai.com/v1",
         "base_env": "OPENAI_API_BASE",
         "base_key": "openai_base",
+        "supports_responses": True,
         "models": [
             # 2026-09-06:GPT-6 Astra **进目录了**。上一版这里写着"它确实发布了,但
             # 公开模型目录与 API 文档里没有任何对应的请求 ID,凭命名惯例猜一个填进来
@@ -198,28 +199,48 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "cost_out": 0.012,
         "extra": {"multimodal": True},
     },
-    # ── Meta 直连 API：**已删除，因为它关停了** ────────────────────────────
-    #
-    # 2026-09-06 复核：Llama API 公测已于 **2026-07-06 关停**，服务下线，请求返回
-    # sunset 响应并给出改道指引（llama.developer.meta.com/docs）。官方建议改用
-    # 支持 Llama 的第三方 provider。
-    #
-    # 上一版这条已经写了「Meta 已于 2026-07-06 起收尾公测，该 provider 实际多半
-    # 不可用，保留正确配置，能用则用」。那个判断在当时是稳妥的 —— 但**现在它已经
-    # 从「多半不可用」变成「确定不可用」**，留着就和 deepseek-chat 是同一类东西：
-    # 注册成功、选路成功，直到真发请求才失败。所以按同一个规矩删掉。
-    #
-    # 连带删掉的还有 META_API_KEY 在这几处的声明：config_schema_registry /
-    # routes/config / credential_vault / multi_llm_router 的 env 映射 /
-    # 面板 settings_inventory / .env.example。在设置里留一个通向死服务的密钥框，
-    # 本身就是一次误导。
-    #
-    # **还想跑 Llama 怎么办**：走已经在表里的 `groq`（当前登记
-    # llama-3.3-70b-versatile）或 `openrouter`。注意 Groq 上 Llama 4 那两个型号
-    # (meta-llama/llama-4-*) 的状态我在离线环境里**没能核实**——它们有各自的文档
-    # 页，但 Groq 的 deprecations 页又说 2026-02-20 已弃用。证据打架，所以这次
-    # 不动 groq 那条；要确认请在真机上跑 scripts/verify_provider_apis.py。
-    #
+    {
+        # ── Meta:Muse Spark(闭源 agentic 线),**不是** Llama ────────────────
+        #
+        # 这一条被删过一次又加回来,过程本身值得记下来,免得下一个人重蹈:
+        #
+        # 2026-09-06 我把整条 meta 删了,理由是「Llama API 公测 2026-07-06 关停」。
+        # **那个事实是真的,但它说的是另一条产品线。** Meta 有两条:
+        #   · Llama —— 开放权重,自家的 llama.developer.meta.com API 确实已关停,
+        #     官方引导改用第三方(本仓的 groq / openrouter 就是那条路);
+        #   · **Muse Spark** —— 闭源 agentic 模型线,走 **Meta Model API**
+        #     (api.meta.ai),活得好好的,2026-09-02 刚发 1.3。
+        # 拿前者的关停去删后者,是把两个同名不同物的东西当成了一个。
+        #
+        # 更早还有一次反向的错:某一版把这条的型号从 muse-spark 改成了 Llama-4,
+        # 注释写「"muse-spark" 并非真实模型」。那句话是错的 —— 它一直是真的,
+        # 而且是这条 provider 本来的主角。两次错的根都一样:**没有分清 Meta 的
+        # 两条线**。所以这段注释写长一点,让下一个人一眼看见这里有个坑。
+        #
+        # 2026-09-06 核实(developer.meta.com/ai/models/muse-spark、
+        # research.meta.ai/blog/introducing-muse-spark-1-3、dev.meta.ai/docs):
+        #   muse-spark-1.3   2026-09-02 发布,面向长时程 / 多 agent 工作流,
+        #                    输出上限 131,072;标准 xhigh 档 $1.25 入 / $4.25 出,
+        #                    缓存输入 $0.15(约 88% 折扣)
+        #   base_url         https://api.meta.ai/v1(OpenAI SDK 直接指过来即可)
+        #
+        # **它同时讲 Chat Completions 和 Responses 两种格式**(还有 Anthropic 的
+        # Messages,在裸主机名上)。所以下面标了 supports_responses —— 这条是
+        # 本仓第二条传输能用在它身上的依据,不是猜的。
+        #
+        # 上一版留下的 1.1 / 1.2 不再登记:官方说升级只需换 model id、端点与
+        # SDK 都不变,没有留旧版的必要;真要用旧版,面板上「我的模型服务」里
+        # 自己填一条就行。
+        "name": "meta",
+        "env_key": "META_API_KEY",
+        "base_url": "https://api.meta.ai/v1",
+        "models": ["muse-spark-1.3"],
+        "default_model": "muse-spark-1.3",
+        "cost_in": 0.00125,
+        "cost_out": 0.00425,
+        "supports_responses": True,
+        "extra": {"multimodal": True, "supports_tools": True},
+    },
     {
         # Agnes AI:全模态免费 API(2026),OpenAI 兼容协议。
         # agnes-2.5-flash 2026-07-13 发布(agentic/编码强化,免费不限量);
@@ -271,6 +292,9 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         # 是**它们已经不存在了** —— 官方公告(api-docs.deepseek.com/updates)写明
         # 两者于 2026-07-24 15:59 UTC 完全退役、不再可访问。留着的后果不是多余,
         # 是路由器可能选中一个必然失败的型号,而失败发生在真发请求那一刻。
+        # api.deepseek.com 原生支持 OpenAI Responses 格式(为 Codex 适配),
+        # v4-flash / v4-pro 都可以。核实:api-docs.deepseek.com/guides/responses_api
+        "supports_responses": True,
         "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
         "default_model": "deepseek-v4-pro",
         "cost_in": 0.00132,
@@ -497,18 +521,24 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
 #:
 #: 字段:
 #:   omit_params   —— 发请求时**必须不带**的字段。带了上游直接拒。
-#:   tools_broken  —— 在本仓走的 chat/completions 上,工具调用**不工作**。
-#:                    (gpt-6-astra 的工具要走 Responses API,而本仓没有那条适配器。)
+#:   needs_responses_for_tools
+#:                 —— 这一轮带工具时必须走 Responses 传输,chat/completions 上
+#:                    它的工具不工作。传输的选择在 _pick_adapter() 里,判据在这。
 #:   why           —— 出处与原因。没有它,过两年没人知道这条还成不成立。
 MODEL_QUIRKS: Dict[str, Dict[str, Any]] = {
     "gpt-6-astra": {
         "omit_params": ("temperature", "top_p", "logprobs"),
-        "tools_broken": True,
+        # 这一轮**要用工具**时必须换到 Responses 传输。
+        #
+        # 上一版这里写的是 ``tools_broken: True`` —— 那时本仓只有
+        # chat/completions 一条路,只能把工具丢掉并留痕(答得出话,做不了事)。
+        # 现在有了 ResponsesAdapter,这条从"残疾"变成"换条路走"。
+        "needs_responses_for_tools": True,
         "why": (
             "developers.openai.com/api/docs/models/gpt-6-astra:支持 v1/chat/completions、"
             "v1/responses、v1/batch;但不接受自定义 temperature / top_p / logprobs,"
-            "且**工具调用要走 Responses API**。本仓只有 chat/completions 适配器,"
-            "所以在这里工具是不工作的 —— 真要用它做 agent,得先写 Responses 适配器。"
+            "且**工具调用要走 Responses API**。本仓 2026-09-06 补了 ResponsesAdapter,"
+            "所以带工具的轮次会自动换到 /responses;不带工具时仍走 chat/completions。"
         ),
     },
 }

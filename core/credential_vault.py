@@ -113,6 +113,7 @@ _ENV_MAPPING: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GOOGLE_API_KEY",
     "xai": "XAI_API_KEY",
+    "meta": "META_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "agnes": "AGNES_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",

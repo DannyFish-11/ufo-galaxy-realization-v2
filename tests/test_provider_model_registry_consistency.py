@@ -100,7 +100,10 @@ class TestOfficialEndpoints:
         "mistral": "api.mistral.ai",
         "perplexity": "api.perplexity.ai",
         "xai": "api.x.ai",
-        "meta": "api.llama.com",
+        # 2026-09-06 改:Meta 有两条线,这条 provider 是**闭源的 Muse Spark**,
+        # 走 Meta Model API(api.meta.ai);开源 Llama 自家的 api.llama.com 已于
+        # 2026-07-06 关停。这张表原来钉的是后者 —— 钉错了对象。
+        "meta": "api.meta.ai",
     }
 
     @pytest.mark.parametrize("provider,host", sorted(OFFICIAL_HOSTS.items()))

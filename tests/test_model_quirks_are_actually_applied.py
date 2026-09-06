@@ -122,10 +122,16 @@ class TestTheAdapterActuallyObeysTheTable:
         body = _body_for(monkeypatch, "some-other-model")
         assert "temperature" in body, "没有怪癖的型号也被删掉了 temperature —— 那是一刀切，不是按表办事"
 
-    def test_tools_are_dropped_loudly_never_silently(self, monkeypatch, caplog):
-        """工具在这条路上不工作的型号：丢可以，**不许不吭声**。
+    def test_tools_reaching_the_wrong_transport_are_dropped_loudly(self, monkeypatch, caplog):
+        """兜底：工具走错了传输，丢可以，**不许不吭声**。
 
-        静默丢掉是最坏的：上层以为有工具，模型只能空口作答，而答案看起来正常。
+        2026-09-06 改了语义。原来这条钉的是"chat/completions 上工具不工作的型号，
+        丢掉并留痕" —— 那时本仓只有一条传输，留痕已经是当时最诚实的处理。
+
+        现在有了 ResponsesAdapter，这种轮次由 ``_pick_adapter()`` 换到 /responses，
+        **正常路径根本不会走到这里**（换路那条另有 test_responses_transport_is_real
+        钉着）。这条降级成兜底：真走到了，说明有调用方绕过了 _pick_adapter，
+        那时也必须说出来，而不是让上游收到一个它不认的字段。
         """
         import logging
 
@@ -134,7 +140,7 @@ class TestTheAdapterActuallyObeysTheTable:
         monkeypatch.setattr(
             provider_registry,
             "MODEL_QUIRKS",
-            {"sentinel-model": {"tools_broken": True, "why": "测试用出处"}},
+            {"sentinel-model": {"needs_responses_for_tools": True, "why": "测试用出处"}},
         )
         tools = [{"type": "function", "function": {"name": "do_thing"}}]
         with caplog.at_level(logging.WARNING):
