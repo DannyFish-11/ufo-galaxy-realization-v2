@@ -306,16 +306,23 @@ class TestTheDeclarationCanActuallyBeReached:
     def test_the_key_is_settable_from_the_panel(self):
         """这个键必须在设置面上配得到 —— 只认环境变量的开关等于没有开关。
 
-        面板那份清单与后端 schema 的对账另有专门的门(test_config_schema_ui_parity),
-        这里只钉"两边都登记了",因为这一条是这一轮新加的。
+        **这条判据换过一次形状**,换的原因值得记下来:
+
+        第一版断言它出现在 ``settings_inventory.ts`` 里。后来这个键从 ``agent``
+        类挪到了 ``llm`` 类(它说的是厂商的事),而 ``llm`` **不在** KEY_ORDER_HINT
+        里 —— 那一类按字母序排,压根不需要顺序提示。于是这条当场红了,而它报的
+        "面板上却排不出这一行"是**假的**:设置页的每一行都是拿后端
+        ``/api/config/all`` 的返回现算的,进了 CONFIG_SCHEMA 就有那一行。
+
+        第一版把"在顺序提示清单里"当成了"面板上配得到"的判据。那两件事不是
+        同一件 —— 29 个 llm 键里有好几个都不在那份清单里,照样配得到。
+        所以判据改成真正承重的那一条:它在 CONFIG_SCHEMA 里、归在厂商那一档。
         """
         from core.routes.config_schema_registry import CONFIG_SCHEMA
 
-        assert "GALAXY_RESPONSES_PROVIDERS" in CONFIG_SCHEMA
-        inventory = (
-            __import__("pathlib").Path("electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
-        )
-        assert "GALAXY_RESPONSES_PROVIDERS" in inventory, "后端认这个键，面板上却排不出这一行"
+        meta = CONFIG_SCHEMA.get("GALAXY_RESPONSES_PROVIDERS")
+        assert meta is not None, "后端不认这个键 —— 面板上保存它会 400"
+        assert meta["category"] == "llm", "它说的是厂商的事,该和密钥在同一档里"
 
     def test_the_helper_reads_the_registry_and_does_not_keep_a_second_list(self):
         """``speaks_responses`` 只是读 registry。它要是自己存一份就会各说各话。"""
