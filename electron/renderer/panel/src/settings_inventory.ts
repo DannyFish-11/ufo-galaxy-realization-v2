@@ -5,8 +5,10 @@
  *
  * 旧的 React 面板被这一版 HUD 整个替换掉了。旧面板里有两处手写的键清单:
  *
- * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(304 个键,9 类)。
- *   搬过来那天是 303 个,下面那道数目门盯着这个数不许烂。
+ * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(303 个键,9 类)。
+ *   搬过来那天也是 303 个 —— 中间进过一个又挪去了 llm 类,而 llm 不在这份
+ *   顺序提示里(那一类按字母序排),所以数目又回到了原点。下面那道数目门
+ *   盯着这个数不许烂。
  * - `ModelsTab.tsx` 的 provider 键 —— 供应商那一档能配哪些键(25 个,
  *   下面的 `PROVIDER_KEYS` 是 26 个:多出来的 `OLLAMA_MODEL` 见那里的说明)
  *
@@ -111,7 +113,6 @@ export const KEY_ORDER_HINT: Record<string, string[]> = {
     'GALAXY_REHEARSAL_COMPLEXITY_FLOOR', 'GALAXY_DURABLE_EXEC', 'GALAXY_DISPATCH_IDEMPOTENCY',
     'OLLAMA_URL', 'GALAXY_ROUTER_ADAPTIVE_CONCURRENCY', 'GALAXY_ROUTER_CB_ENABLED',
     'GALAXY_ROUTER_MAX_QUEUE_DEPTH', 'GALAXY_MODELS_PROBE_BUDGET', 'GALAXY_MODELS_STATUS_TTL',
-    'GALAXY_RESPONSES_PROVIDERS',
   ],
   memory: [
     'GALAXY_CONTEXT_ARCHIVE_MAX_MB', 'GALAXY_CONTEXT_ARCHIVE_MIN_DAYS',

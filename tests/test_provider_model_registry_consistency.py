@@ -356,11 +356,45 @@ class TestZhipuCodingPlan:
 
         assert _PROVIDER_ENV_KEY_MAP["zhipu_coding"] == _REGISTRY["zhipu_coding"]["env_key"]
 
-    def test_not_wired_into_per_task_model_map(self):
-        """不出现在 PROVIDER_MODEL_MAP 里——这只是"没有为它单独配任务槽位"
-        这件事本身的真实性判据,不是"因此绝对不会被自动选中"的完整证明
-        (那一半在 registry 注释里如实记录了残留限制,没有在这里假装钉住)。"""
-        assert "zhipu_coding" not in PROVIDER_MODEL_MAP
+    def test_it_is_never_the_preferred_pick(self):
+        """这一条**换过判据**(2026-09-06),换的原因写在这里。
+
+        原来断言的是"不出现在 ``PROVIDER_MODEL_MAP`` 里",并且自己就说清楚了:
+        那只是"没有为它单独配任务槽位"这件事本身的真实性判据,**不是**"因此
+        绝对不会被自动选中"的证明。
+
+        后来发现它有个副作用:没有任务槽位 → 什么任务都落到 ``default_model``
+        (glm-5.3),于是套餐里同样可用的 ``glm-5.3-flash`` **登记了却永远选不到**。
+        那不是这条判据想保护的东西 —— 它想保护的是"不会被优先选中",而那个
+        性质**根本不由这张表决定**,由哨兵价决定(见上面那条)。
+
+        所以把判据换成真正承重的那一条,并且把原来那半句"完整证明"补上:
+        在一个所有家都可用的候选池里,选出来的不能是它。
+        """
+        from core.llm_types import ProviderConfig
+        from core.multi_llm_router import PROVIDER_MODEL_MAP, MultiLLMRouter, TaskType
+
+        # 槽位已经配上了(glm-5.3-flash 因此有了归宿),这不影响下面那条性质。
+        assert PROVIDER_MODEL_MAP["zhipu_coding"][TaskType.FAST_RESPONSE] == "glm-5.3-flash"
+
+        r = MultiLLMRouter.__new__(MultiLLMRouter)
+        r.providers, r.adapters = {}, {}
+        for spec in PROVIDER_REGISTRY:
+            cfg = ProviderConfig(
+                name=spec["name"],
+                api_key="sk-test",
+                base_url=spec["base_url"],
+                models=list(spec["models"]),
+                default_model=spec["default_model"],
+                cost_per_1k_input=spec["cost_in"],
+                cost_per_1k_output=spec["cost_out"],
+            )
+            r.providers[spec["name"]] = cfg
+            r.adapters[spec["name"]] = object()
+
+        for task in TaskType:
+            picked = r.select_brain_for_task(task).provider
+            assert picked != "zhipu_coding", f"{task.name} 选中了订阅制的编码套餐 —— 哨兵价没挡住"
 
 
 class TestConfigExampleStaysInSync:

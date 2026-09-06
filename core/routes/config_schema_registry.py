@@ -2159,7 +2159,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     "GALAXY_RESPONSES_PROVIDERS": {
         "default": "",
         "type": "string",
-        "category": "agent",
+        # 它说的是"这几家用哪条接口",属于厂商那一档的事,归口到 llm。
+        # 上一版放在 agent 里 —— 用户要在"智能体与模型"那一类里找一个纯粹的
+        # 厂商设置,而"供应商与密钥"就在旁边。
+        "category": "llm",
         "description": "让这些厂商走 Responses 接口（逗号分隔，如 deepseek,meta · 那条路没有逐字流式 · 默认空）",
     },
     # --- WebRTC & Network ---

@@ -361,6 +361,73 @@ def _provider_quality_tier(name: str, cfg: Optional["ProviderConfig"] = None) ->
 
 
 # 提供商 → 推荐模型 (2026-05-29 全面更新)
+#: **目录里有、但这张表故意不用的型号** —— 每一个都要写清为什么。
+#:
+#: 存在的理由:``PROVIDER_MODEL_MAP`` 是选型号的唯一入口
+#: (``select_model_by_complexity`` 只读它,读不到才落 ``default_model``),
+#: registry 的 ``models`` 列表**从不参与选型**。所以一个型号进了目录却没进这张表,
+#: 运行时与"没加"是同一件事。
+#:
+#: 这一点本身没问题 —— 各家的旧档留在目录里当回退是有用的(用户可以显式指名,
+#: ``/models`` 对账也要认它们)。有问题的是**分不清哪些是有意留的、哪些是忘了接的**:
+#: 上一轮加的 gpt-6-astra / gemini-3.8-flash / glm-5.3-flash 就是这样静静躺了几天,
+#: 而它们本该是各自那一档最该被选中的型号。
+#:
+#: 所以把"有意留着"写成一份**要给理由**的名单,剩下的由
+#: ``tests/test_every_catalogued_model_has_a_home.py`` 挡:目录里出现一个既不在
+#: 选择表、又不在这份名单里的型号,门当场红。忘了接的新型号自己会喊。
+FALLBACK_ONLY_MODELS: Dict[str, Dict[str, str]] = {
+    "openai": {
+        "gpt-5.6-sol": "就是 gpt-5.6 的另一个名字(旗舰 Sol 的全称),表里用短名即可,两个都排等于同一个型号占两格",
+        "gpt-5.3-codex": "编码专用档。没有一手依据说它在本仓的 CODING 场景强过 gpt-5.6,不凭感觉排",
+        "gpt-5.5": "上一代旗舰,5.6 家族顶替之后留作这一家自己的旧档回退",
+        "gpt-4o": "更老的一代,留作旧档回退(也是不少第三方中转唯一认的串)",
+    },
+    "anthropic": {
+        "claude-fable-5-1": "这一档的定位与 opus/sonnet 的分工没有一手依据,不凭感觉给它安排任务槽",
+    },
+    "google": {
+        "gemini-3.7-flash": "上一代 flash,3.8 顶替之后留作旧档回退",
+        "gemini-3.6-flash": "更早一代 flash,留作旧档回退",
+        "gemini-3.5-flash": "2026-09-06 之前八格全用它;抬到 3.8 之后留作旧档回退",
+        "gemini-3.5-flash-lite": "更省的一档,本仓的 FAST_RESPONSE 已由 3.8-flash 承担",
+        "gemini-3.5-pro": "Pro 与新一代 flash 谁更适合重档没有一手实测,不排;要用请显式指名",
+        "gemini-2.5-pro": "上一个大版本的 Pro,留着是因为不少中转只认这个串",
+    },
+    "xai": {
+        "grok-4.5": "上一代旗舰。4.6 与它同基座、靠后训练提升,4.5 留作这一家自己的旧档回退",
+        "grok-4.3": "更早一代,留着是因为部分中转只认这个串;正常选路不该落到它",
+    },
+    "agnes": {"agnes-2.0-flash": "上一代免费档。2.5-flash 已承担全部任务槽,它留作 2.5 临时不可用时的兜底"},
+    "mistral": {
+        "mistral-medium-3": "中档。large-3 已覆盖全部任务槽,没有依据说中档在哪一格更合适",
+        "mistral-large-2": "上一代旗舰,留作 large-3 之外的旧档回退",
+    },
+    "qwen": {
+        "qwen3.7-max": "上一代旗舰,3.8-max 顶替之后留作旧档回退",
+        "qwen3.7-coder": "上一代编码档,3.8-coder 顶替之后留作旧档回退",
+        "qwen3-235b-a22b": "开源权重档,与 max 线不是同一条,留作显式指名用",
+    },
+    "zhipu": {
+        "glm-5.2": "上一代重档,2026-08-27 被 5.3 顶替,留作旧档回退",
+        "glm-5.1": "更早一代重档,留作旧档回退",
+        "glm-5.1-flash": "上一代快档,现由 5.3-flash 承担",
+        "glm-4-plus": "GLM-4 世代的加强档,留着是因为部分中转只认这个串",
+    },
+    "minimax": {"MiniMax-M2.5": "上一代。M3/M2.7 已覆盖重快两档,它留作旧档回退"},
+    "step": {"step-3.7-mini": "最小档,turbo 已承担 FAST_RESPONSE"},
+    "mimo": {"mimo-v2.5-standard": "中档,pro/lite 已覆盖两端"},
+    "moonshot": {
+        "kimi-k2.5": "上一代。k3/k2.6 已覆盖现用的四格,它留作旧档回退",
+        "moonshot-v1-128k": "Kimi 改名之前的串,留着是因为部分中转仍按它路由",
+    },
+    "perplexity": {
+        "sonar-reasoning-pro": "检索+推理档;本仓把 REASONING 给了 deep-research,两者定位重叠,不重复排",
+        "sonar": "基础档,sonar-pro 已承担 GENERAL/ANALYSIS",
+    },
+}
+
+
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
         # GPT-5.6 家族(2026-07-09 GA,2026-08-15 联网复核型号 id 仍正确):
@@ -368,7 +435,15 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         # luna=快而省。价位在 2026-07-30 降过一轮(terra -20%、luna -80%,
         # sol 未变)——型号 id 不受影响,这里不复述具体数字,理由同 deepseek
         # 那条注释:没有一手定价页确认前不改会影响路由的 cost_in/cost_out。
-        TaskType.REASONING: "gpt-5.6",
+        # 2026-09-06:REASONING 升到 gpt-6-astra。此前它只进了 registry 目录、
+        # 没进这张表 —— 而**选型号只读这张表**(select_model_by_complexity),
+        # 目录里的 models 列表从不参与选型。于是"加了一个最强的型号"和"没加"
+        # 在运行时是同一件事,连为它写的 ResponsesAdapter 都一次都不会被触发。
+        #
+        # 只给 REASONING,不给 AGENT_CONTROL / CODING:它的工具调用**必须走
+        # Responses**(MODEL_QUIRKS),而那条传输没有逐字流式。推理那一格本来就
+        # 少有逐字体感需求,工具重的那几格换过去会让每一轮都变成"一次性出现"。
+        TaskType.REASONING: "gpt-6-astra",
         TaskType.FAST_RESPONSE: "gpt-5.6-luna",
         TaskType.CODING: "gpt-5.6",
         TaskType.CREATIVE: "gpt-5.6",
@@ -379,7 +454,9 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     },
     "anthropic": {
         TaskType.REASONING: "claude-opus-5",
-        TaskType.FAST_RESPONSE: "claude-sonnet-5",
+        # FAST_RESPONSE 用 haiku:它本来就是这一档的型号,而在此之前它只躺在
+        # 目录里、一格也没占,等于登记了却永远选不到。
+        TaskType.FAST_RESPONSE: "claude-haiku-4-5-20251001",
         TaskType.CODING: "claude-sonnet-5",
         TaskType.CREATIVE: "claude-opus-5",
         TaskType.ANALYSIS: "claude-opus-5",
@@ -388,16 +465,25 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "claude-sonnet-5",
     },
     "google": {
-        # 注:gemini-3.5-pro 延期到 2026-07-17 才发布——此前表里引用它会 404。
-        # 现全走 GA 的 3.5-flash;Pro 上线后把 CODING/PLANNING/AGENT 升回去。
-        TaskType.REASONING: "gemini-3.5-flash",
-        TaskType.FAST_RESPONSE: "gemini-3.5-flash",
-        TaskType.CODING: "gemini-3.5-flash",
-        TaskType.CREATIVE: "gemini-3.5-flash",
-        TaskType.ANALYSIS: "gemini-3.5-flash",
-        TaskType.PLANNING: "gemini-3.5-flash",
-        TaskType.AGENT_CONTROL: "gemini-3.5-flash",
-        TaskType.GENERAL: "gemini-3.5-flash",
+        # 2026-09-06:全部从 gemini-3.5-flash 抬到 gemini-3.8-flash。
+        #
+        # 这一格修的是**两处权威说了两句不同的话**:registry 里 google 的
+        # default_model 早已是 gemini-3.8-flash,而这张表八格全钉在 3.5-flash,
+        # 于是路由器永远选 3.5 —— 目录里那个"默认"从来没生效过。
+        #
+        # 旁边原本还留着一句"Pro 上线后把 CODING/PLANNING/AGENT 升回去"。
+        # gemini-3.5-pro 早就在目录里了,那句话的条件满足过、没人回来改 ——
+        # 一条**过期的待办**留在注释里,比没有更糟。现在不留待办:3.5-pro
+        # 与 3.8-flash 谁更适合这几格,没有一手依据,就不凭感觉排;它留在
+        # FALLBACK_ONLY_MODELS 里,想用的人显式指名即可。
+        TaskType.REASONING: "gemini-3.8-flash",
+        TaskType.FAST_RESPONSE: "gemini-3.8-flash",
+        TaskType.CODING: "gemini-3.8-flash",
+        TaskType.CREATIVE: "gemini-3.8-flash",
+        TaskType.ANALYSIS: "gemini-3.8-flash",
+        TaskType.PLANNING: "gemini-3.8-flash",
+        TaskType.AGENT_CONTROL: "gemini-3.8-flash",
+        TaskType.GENERAL: "gemini-3.8-flash",
     },
     "meta": {
         # 2026-09-06:全部改回 muse-spark(现为 1.3)。**这一格改错过一次,而且是
@@ -481,6 +567,22 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.FAST_RESPONSE: "glm-5.3-flash",
         TaskType.CREATIVE: "glm-5.3",
         TaskType.PLANNING: "glm-5.3",
+    },
+    "zhipu_coding": {
+        # 2026-09-06 补。这一家此前**在这张表里一格都没有** —— 上一轮把
+        # glm-5.3 / glm-5.3-flash 落进 registry 目录时漏了这一步,于是无论什么
+        # 任务都落到 default_model(glm-5.3),而 glm-5.3-flash 登记了却永远选不到。
+        #
+        # 与 zhipu 那一格同型号、同分工(重档 5.3、快档 5.3-flash):这是同一家的
+        # 编码专用端点,不是另一批模型,分工没有理由不一样。
+        TaskType.REASONING: "glm-5.3",
+        TaskType.FAST_RESPONSE: "glm-5.3-flash",
+        TaskType.CODING: "glm-5.3",
+        TaskType.CREATIVE: "glm-5.3",
+        TaskType.ANALYSIS: "glm-5.3",
+        TaskType.PLANNING: "glm-5.3",
+        TaskType.AGENT_CONTROL: "glm-5.3",
+        TaskType.GENERAL: "glm-5.3",
     },
     "minimax": {
         # 对齐 PROVIDER_REGISTRY['minimax'].models(大小写敏感的官方 id):
@@ -775,6 +877,54 @@ _LOCAL_OPENAI_LANES: List[Dict[str, Any]] = [
 
 #: 已经就"点了名却没登记"这件事说过话的 provider。只为**不刷屏**,不参与任何判断。
 _RESPONSES_REFUSED: set = set()
+
+
+#: 特殊发现分支读的键。这几家不走 PROVIDER_REGISTRY(它们要么要探测本机、要么
+#: 型号表是动态问来的),所以它们的键推导不出来,只能列在这儿。
+#:
+#: 加一条的判据只有一个:**这个键的值变了之后,``_auto_discover_providers()``
+#: 会注册出不一样的东西吗**。会,就列进来;不会,就别列 —— 这份名单越长,
+#: 保存配置时被无谓触发的刷新就越多。
+_EXTRA_REGISTRATION_KEYS: Tuple[str, ...] = (
+    "OLLAMA_URL",  # 本机 Ollama 的地址
+    "OLLAMA_MODEL",  # 选中的主脑 → 决定 default_model
+    "ONEAPI_URL",  # OneAPI 网关
+    "ONEAPI_API_KEY",
+    "GALAXY_LOCAL_OPENAI_URL",  # 本地 OpenAI 兼容服务(llama.cpp server / OVMS)
+    "GALAXY_LOCAL_OPENAI_KEY",
+    "GALAXY_LOCAL_OPENAI_MODEL",
+    "GALAXY_LOCAL_OPENAI_SERVES",
+    "GALAXY_REASONING_OPENAI_URL",  # 推理位那台
+    "GALAXY_REASONING_OPENAI_KEY",
+    "GALAXY_REASONING_OPENAI_MODEL",
+    "GALAXY_REASONING_OPENAI_SERVES",
+    "HF_API_TOKEN",  # HuggingFace 本地模型那一支
+)
+
+
+def keys_that_change_registration() -> frozenset:
+    """改了之后**路由器必须重新注册**的键 —— 唯一权威,给保存配置那一步用。
+
+    以前那一步的判据是 ``category == "llm"``。它挡住了一件真事:``OLLAMA_URL``、
+    ``GALAXY_LOCAL_OPENAI_URL``、``GALAXY_REASONING_OPENAI_URL`` 这些**注册时才读**
+    的键,分类是 ``agent``,于是在设置页填完保存成功、值也落盘了,**路由器却不会
+    重新注册这一家**,要重启进程才生效 —— 而面板一个字都不说。同一家 Ollama,
+    改型号(``OLLAMA_MODEL``,llm 类)会刷新、改地址(``OLLAMA_URL``,agent 类)不会,
+    自己跟自己都不一致。
+
+    分类是给**人看的**(设置页按"人想干什么"分九类),它回答不了"这个键会不会
+    影响注册"。所以这里按后者直接列,并且**大部分是从 PROVIDER_REGISTRY 推导的** ——
+    新加一家厂商不必回来改这份名单,它自己就在里面了。
+    """
+    from core.provider_registry import PROVIDER_REGISTRY as _REG
+
+    keys = set(_EXTRA_REGISTRATION_KEYS)
+    for entry in _REG:
+        for field in ("env_key", "base_env"):
+            if entry.get(field):
+                keys.add(entry[field])
+        keys.update(entry.get("alt_env") or ())
+    return frozenset(keys)
 
 
 def _responses_opt_in() -> frozenset:
