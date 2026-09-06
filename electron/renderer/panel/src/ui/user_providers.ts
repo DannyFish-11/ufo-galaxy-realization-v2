@@ -193,7 +193,7 @@ export function createUserProviders(cb: UserProviderCallbacks): UserProviderHand
 
   const fId = field('名字', '这条端点在系统里的标识，小写字母数字与 - _', 'my-gw');
   const fLabel = field('显示名', '你自己看的名字，留空就用上面那个', '我的自定义服务');
-  const fUrl = field('地址', 'OpenAI 兼容的 base URL，通常以 /v1 结尾', 'https://…/v1', 'text', true);
+  const fUrl = field('地址', '这家网关的 base URL，通常以 /v1 结尾', 'https://…/v1', 'text', true);
   const fKey = field('API Key', '没有鉴权的自建服务就留空', '', 'password');
   const fModels = field('型号', '逗号隔开。留空 = 让网关自己报', '留空即可', 'text', true);
   const add = document.createElement('button');

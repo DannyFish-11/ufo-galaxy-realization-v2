@@ -234,3 +234,210 @@ class TestTheDeclarationsMatchTheDocs:
             m.startswith("muse-spark") for m in meta["models"]
         ), f"meta 的型号变成了 {meta['models']} —— 这条 provider 是 Muse Spark 线，不是 Llama"
         assert "api.meta.ai" in meta["base_url"]
+
+
+class TestTheDeclarationCanActuallyBeReached:
+    """声明支持 Responses 的那几家,**必须真的有一条路能走到那条传输上**。
+
+    这一批是补一个真实的缺口:在它之前,``supports_responses`` 只在
+    ``_pick_adapter`` 的怪癖分支里间接起作用,而那条分支只认 gpt-6-astra。
+    deepseek 和 meta 标着支持,却**一处也到不了** —— 声明摆在那里和没有一样,
+    正是本仓最怕的那种形状(看起来接上了,其实没有)。
+
+    现在的路是 ``GALAXY_RESPONSES_PROVIDERS``:用户点名哪几家走 Responses。
+    下面既钉"点了名要真的换过去",也钉"点了一家没声明的要被拒",后者同样重要 ——
+    换过去只会在真发请求那一刻 404,那时看到的是"这家怎么不回话"。
+    """
+
+    @staticmethod
+    def _router(provider: str):
+        from core.multi_llm_router import MultiLLMRouter, OpenAIAdapter, ProviderConfig
+
+        r = MultiLLMRouter.__new__(MultiLLMRouter)
+        cfg = ProviderConfig(
+            name=provider,
+            api_key="sk-test",
+            base_url="https://example.invalid/v1",
+            models=["m-1"],
+            default_model="m-1",
+        )
+        r.providers = {provider: cfg}
+        r.adapters = {provider: OpenAIAdapter(cfg)}
+        return r
+
+    @pytest.mark.parametrize("provider", ["deepseek", "meta"])
+    def test_naming_a_declared_vendor_really_switches_transport(self, monkeypatch, provider):
+        from core.multi_llm_router import ResponsesAdapter
+
+        monkeypatch.setenv("GALAXY_RESPONSES_PROVIDERS", provider)
+        r = self._router(provider)
+        picked = r._pick_adapter(provider, "m-1", tools=None)
+        assert isinstance(picked, ResponsesAdapter), (
+            f"点了名的 {provider} 还走在原来那条传输上 —— " "registry 里的 supports_responses 又变成了一个到不了的声明"
+        )
+
+    def test_naming_a_vendor_that_never_declared_it_is_refused_not_attempted(self, monkeypatch, caplog):
+        """google 没登记讲 Responses。点它的名要**当场拒绝并说出来**。
+
+        照办的后果是 404 发生在真发请求那一刻,而那时的现象是"这家不回话",
+        没人会想到是传输选错了。
+        """
+        import logging
+
+        from core.multi_llm_router import OpenAIAdapter
+
+        monkeypatch.setenv("GALAXY_RESPONSES_PROVIDERS", "google")
+        monkeypatch.setattr("core.multi_llm_router._RESPONSES_REFUSED", set())
+        r = self._router("google")
+        with caplog.at_level(logging.WARNING, logger="Galaxy.LLMRouter"):
+            picked = r._pick_adapter("google", "m-1", tools=None)
+
+        assert isinstance(picked, OpenAIAdapter), "把一家没声明支持的换去了 Responses —— 那是保证在上游 404"
+        assert any("GALAXY_RESPONSES_PROVIDERS" in rec.message for rec in caplog.records), "拒绝了却没留痕"
+
+    def test_not_naming_anybody_changes_nothing(self, monkeypatch):
+        """反面保险:默认(空)时谁都不换,免得上面两条靠"一律换"通过。"""
+        from core.multi_llm_router import OpenAIAdapter
+
+        monkeypatch.delenv("GALAXY_RESPONSES_PROVIDERS", raising=False)
+        r = self._router("deepseek")
+        assert isinstance(r._pick_adapter("deepseek", "m-1", tools=None), OpenAIAdapter)
+
+    def test_the_key_is_settable_from_the_panel(self):
+        """这个键必须在设置面上配得到 —— 只认环境变量的开关等于没有开关。
+
+        面板那份清单与后端 schema 的对账另有专门的门(test_config_schema_ui_parity),
+        这里只钉"两边都登记了",因为这一条是这一轮新加的。
+        """
+        from core.routes.config_schema_registry import CONFIG_SCHEMA
+
+        assert "GALAXY_RESPONSES_PROVIDERS" in CONFIG_SCHEMA
+        inventory = (
+            __import__("pathlib").Path("electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
+        )
+        assert "GALAXY_RESPONSES_PROVIDERS" in inventory, "后端认这个键，面板上却排不出这一行"
+
+    def test_the_helper_reads_the_registry_and_does_not_keep_a_second_list(self):
+        """``speaks_responses`` 只是读 registry。它要是自己存一份就会各说各话。"""
+        from core.provider_registry import PROVIDER_REGISTRY, speaks_responses
+
+        for entry in PROVIDER_REGISTRY:
+            assert speaks_responses(entry["name"]) is bool(entry.get("supports_responses"))
+        assert speaks_responses("some-user-gateway") is False, "没登记过的名字不该被当成讲 Responses"
+
+    def test_a_refused_opt_in_does_not_switch_off_the_quirk_path(self, monkeypatch):
+        """点错一个名字,不该顺手关掉另一条本该生效的换路。
+
+        两条判断各管各的:一条是用户点名,一条是"这个型号的工具只在 Responses 上
+        工作"。第一版里前者拒绝后直接 return,于是把后者一起短路了 —— 那时的现象
+        是工具**静静地**不工作,而人只会怀疑自己填错了那个名字。
+
+        这里的组合(把 openai 的型号挂在别家名下)是人为的,为的是钉住两条判断
+        彼此独立,而不是碰巧共用了一条路。
+        """
+        from core.multi_llm_router import ResponsesAdapter
+
+        monkeypatch.setenv("GALAXY_RESPONSES_PROVIDERS", "mistral")
+        monkeypatch.setattr("core.multi_llm_router._RESPONSES_REFUSED", set())
+        r = self._router("mistral")
+        picked = r._pick_adapter("mistral", "gpt-6-astra", tools=TOOLS)
+        assert isinstance(picked, ResponsesAdapter), "被拒的点名把怪癖那条换路一起关掉了 —— 工具会静静地不工作"
+
+    def test_the_refusal_points_a_user_endpoint_at_the_panel_not_at_the_registry(self, monkeypatch, caplog):
+        """用户自己加的端点不归 registry 管 —— 指错地方比不指更糟。
+
+        它的协议在面板「我的模型服务」那一条上;让人去翻 provider_registry.py
+        只会浪费时间,而且找不到任何跟他有关的东西。
+        """
+        import logging
+
+        from core.multi_llm_router import MultiLLMRouter, OpenAIAdapter, ProviderConfig
+
+        monkeypatch.setenv("GALAXY_RESPONSES_PROVIDERS", "my-gw")
+        monkeypatch.setattr("core.multi_llm_router._RESPONSES_REFUSED", set())
+        r = MultiLLMRouter.__new__(MultiLLMRouter)
+        cfg = ProviderConfig(
+            name="my-gw",
+            api_key="",
+            base_url="http://127.0.0.1:1/v1",
+            models=["m-1"],
+            default_model="m-1",
+            env_key="",
+            source_type="user",
+        )
+        r.providers = {"my-gw": cfg}
+        r.adapters = {"my-gw": OpenAIAdapter(cfg)}
+        with caplog.at_level(logging.WARNING, logger="Galaxy.LLMRouter"):
+            r._pick_adapter("my-gw", "m-1", tools=None)
+
+        said = " ".join(rec.getMessage() for rec in caplog.records)
+        assert "我的模型服务" in said, "让用户去翻 provider_registry.py —— 那里没有他这条端点"
+        assert "provider_registry" not in said
+
+
+class TestTheVerifyScriptCanSettleTheClaimOnTheRealMachine:
+    """``supports_responses`` 是照厂商文档写的。真机脚本要能**把它证伪**。
+
+    文档说有、实际没有,是本仓栽过的那类事;而这一条在 CI 上永远验不了(没有真
+    key)。所以判据落在 ``scripts/verify_provider_apis.py`` 上:配好 key 跑一次,
+    它会拿一个上游认账的型号往 ``/responses`` 发一次 1-token 试调。
+    """
+
+    @staticmethod
+    def _probe():
+        import importlib.util
+        import pathlib
+
+        path = pathlib.Path(__file__).resolve().parents[1] / "scripts/verify_provider_apis.py"
+        spec = importlib.util.spec_from_file_location("verify_provider_apis", path)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+        return mod._probe_responses
+
+    def test_a_live_responses_endpoint_passes_and_gets_a_responses_body(self):
+        probe = self._probe()
+        with _Upstream() as up:
+            why = probe(up.base_url, "sk-test", "m-1", 10.0)
+            body = up.seen[-1]
+
+        assert why == "", f"真的 /responses 端点被判成不通:{why}"
+        assert "input" in body and "max_output_tokens" in body, f"发过去的不是 Responses 的形状:{body}"
+
+    def test_a_gateway_without_that_route_is_called_out_in_plain_words(self):
+        """404 要说成"这个 base_url 上没有 /responses",不是一个光秃秃的状态码。
+
+        这条门的价值全在措辞上:看到 "HTTP 404" 的人会去查型号、查密钥;看到
+        "supports_responses 与实际不符"的人才会去改那个声明。
+        """
+        import socket
+        import threading
+
+        import uvicorn
+        from fastapi import FastAPI
+
+        app = FastAPI()
+
+        @app.get("/v1/models")
+        def models():  # noqa: ANN202
+            return {"data": [{"id": "m-1"}]}
+
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = int(s.getsockname()[1])
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            import time
+
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.05)
+            why = self._probe()(f"http://127.0.0.1:{port}/v1", "sk-test", "m-1", 10.0)
+        finally:
+            server.should_exit = True
+            thread.join(timeout=5)
+
+        assert "supports_responses" in why, f"没说到点子上:{why}"

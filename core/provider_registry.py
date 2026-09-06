@@ -555,3 +555,19 @@ def quirks_for(model: str) -> Dict[str, Any]:
         if name == key or name.startswith(key + "-"):
             return quirks
     return {}
+
+
+def speaks_responses(provider: str) -> bool:
+    """这家**是不是核实过讲 Responses**。registry 是唯一权威,这里只是读它。
+
+    存在的理由是别处不要再写一遍 ``next(p for p in PROVIDER_REGISTRY ...)``:
+    同一个判断写第二遍,两处就会在某次改动后各说各话。
+
+    没登记过的名字(用户自己加的端点、本地槽位)一律返回 ``False`` —— 那些的
+    协议由 ``core/user_providers.py`` 的 ``protocol`` 字段各自说了算,不归这里管。
+    """
+    name = (provider or "").strip().lower()
+    for entry in PROVIDER_REGISTRY:
+        if entry.get("name") == name:
+            return bool(entry.get("supports_responses"))
+    return False

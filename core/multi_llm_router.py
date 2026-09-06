@@ -1850,6 +1850,25 @@ _LOCAL_OPENAI_LANES: List[Dict[str, Any]] = [
 ]
 
 
+#: 已经就"点了名却没登记"这件事说过话的 provider。只为**不刷屏**,不参与任何判断。
+_RESPONSES_REFUSED: set = set()
+
+
+def _responses_opt_in() -> frozenset:
+    """哪几家被用户点名走 Responses 传输。
+
+    来源是 ``GALAXY_RESPONSES_PROVIDERS``(逗号分隔的 provider 名),面板上
+    「智能体与模型」那一类里可以填。**每次都重读**:设置面改完就生效,不必重启 ——
+    改了要重启才算数、而界面上又不说,是另一种"看起来接上了,其实没有"。
+
+    这个键存在的理由:registry 里 deepseek / meta / openai 都核实过讲 Responses,
+    但除了 gpt-6-astra 那条怪癖以外,原先**没有任何一条路能走到那条传输上** ——
+    声明摆在那里却一处也到不了,和没声明没区别。
+    """
+    raw = os.environ.get("GALAXY_RESPONSES_PROVIDERS", "") or ""
+    return frozenset(n.strip().lower() for n in raw.split(",") if n.strip())
+
+
 class MultiLLMRouter:
     """
     多 LLM 智能路由器
@@ -2366,25 +2385,58 @@ class MultiLLMRouter:
     def _pick_adapter(self, provider: str, model: str, tools: Any = None) -> Any:
         """这一轮走哪条传输 —— **唯一的判断处**。
 
-        默认走注册时那条(多数是 chat/completions)。只有一种情况换路:
-        **这一轮要用工具,而这个型号的工具只在 Responses 上工作**
-        (目前只有 gpt-6-astra,判据在 provider_registry.MODEL_QUIRKS)。
+        默认走注册时那条(多数是 chat/completions)。两种情况换到 Responses:
 
-        为什么不干脆让那些型号一律走 Responses:本仓的流式消费端是照 chat 的
-        delta 写的,Responses 的事件模型完全不同。不带工具的轮次走 chat 能拿到
+        1. **用户点名了这一家**(``GALAXY_RESPONSES_PROVIDERS`` 里列着它)。
+           只对 registry 里**核实过讲 Responses** 的那几家生效;点名一家没声明的
+           会被拒并留痕 —— 换过去只会在真发请求那一刻 404,而那时看到的是
+           "这家怎么不回话",没人会想到是传输选错了。
+        2. **这一轮要用工具,而这个型号的工具只在 Responses 上工作**
+           (目前只有 gpt-6-astra,判据在 provider_registry.MODEL_QUIRKS)。
+
+        为什么第 2 条不干脆让那些型号一律走 Responses:本仓的流式消费端是照 chat
+        的 delta 写的,Responses 的事件模型完全不同。不带工具的轮次走 chat 能拿到
         流式,换过去就没有了 —— 为一个用不上的能力牺牲每一轮的体感,不划算。
+        第 1 条是用户自己权衡后点的名(他要的是 Responses 那套语义),所以照办,
+        但**每建一条都说一句它没有流式**,别让人以为是自己机器慢。
 
         换路要**留痕**:传输换了却没人知道,排查时会对着错的那条路找问题。
         """
         base = self.adapters.get(provider)
+
+        from core.provider_registry import quirks_for, speaks_responses
+
+        if provider in _responses_opt_in():
+            if speaks_responses(provider):
+                return self._responses_adapter_for(provider, model, base)
+            if provider not in _RESPONSES_REFUSED:
+                _RESPONSES_REFUSED.add(provider)
+                _cfg = self.providers.get(provider)
+                if _cfg is not None and getattr(_cfg, "source_type", "") == "user":
+                    # 用户自己加的端点不归 registry 管,它的协议在面板那一条上。
+                    # 指错地方比不指更糟:人会去翻一个跟他无关的文件。
+                    _how = "「我的模型服务」里把这条端点的协议改成 responses"
+                else:
+                    _how = "先拿到那家的一手文档,把 supports_responses 写进 core/provider_registry.PROVIDER_REGISTRY"
+                logger.warning(
+                    "GALAXY_RESPONSES_PROVIDERS 里点了「%s」,但它没有登记支持 Responses,"
+                    "这一家仍走原来那条传输。要让它走那条路:%s。",
+                    provider,
+                    _how,
+                )
+            # 拒了之后**不 return**,继续往下走怪癖那条:那两条判断各管各的,
+            # 在这里短路等于让"点错一个名字"顺手关掉另一条本该生效的换路。
+
         if not tools:
             return base
-
-        from core.provider_registry import quirks_for
 
         if not quirks_for(model).get("needs_responses_for_tools"):
             return base
 
+        return self._responses_adapter_for(provider, model, base)
+
+    def _responses_adapter_for(self, provider: str, model: str, base: Any) -> Any:
+        """拿(必要时建)这一家的 Responses 传输。建不出来就如实退回原来那条。"""
         cfg = self.providers.get(provider)
         if cfg is None:  # pragma: no cover - providers 与 adapters 同步注册
             return base
@@ -2392,7 +2444,12 @@ class MultiLLMRouter:
         key = f"{provider}::responses"
         if key not in self.adapters:
             self.adapters[key] = ResponsesAdapter(cfg)
-            logger.info("为 %s 建了一条 Responses 传输:型号 %s 的工具只在那条路上工作。", provider, model)
+            logger.info(
+                "为 %s 建了一条 Responses 传输(这一轮的型号是 %s)。注意这条路**没有流式** —— "
+                "回答会一次性出现,不是逐字。",
+                provider,
+                model,
+            )
         return self.adapters[key]
 
     def _register_user_providers(self) -> None:
@@ -2435,7 +2492,12 @@ class MultiLLMRouter:
                 source_type="user",
             )
             self.providers[up.id] = cfg
-            self.adapters[up.id] = AnthropicAdapter(cfg) if up.protocol == "anthropic" else OpenAIAdapter(cfg)
+            if up.protocol == "anthropic":
+                self.adapters[up.id] = AnthropicAdapter(cfg)
+            elif up.protocol == "responses":
+                self.adapters[up.id] = ResponsesAdapter(cfg)
+            else:
+                self.adapters[up.id] = OpenAIAdapter(cfg)
 
     def _discover_oneapi_models(self, base_url: str, api_key: str) -> List[str]:
         """从 config/api_config.json 读取已配置模型，并尝试通过 /v1/models 动态补充"""

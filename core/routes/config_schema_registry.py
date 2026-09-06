@@ -2153,6 +2153,15 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "agent",
         "description": "模型状态缓存时长(秒 · 默认 3)",
     },
+    # 2026-09-06 补。没有这个键之前,registry 里 deepseek / meta 标着
+    # supports_responses,却没有任何一条路能走到那条传输上 —— 声明摆着、一处也
+    # 到不了。判据在 core/multi_llm_router._responses_opt_in()。
+    "GALAXY_RESPONSES_PROVIDERS": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "让这些厂商走 Responses 接口（逗号分隔，如 deepseek,meta · 那条路没有逐字流式 · 默认空）",
+    },
     # --- WebRTC & Network ---
     # 说明原先只有 "WebRTC Data Channel" 一句英文 —— 面板上照原样显示,中文用户看不懂
     # 这开了会发生什么。是这一轮把守卫范围改成按目录派生之后,

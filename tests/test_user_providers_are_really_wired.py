@@ -389,7 +389,7 @@ class TestEveryProtocolTheBackendAcceptsIsReachableFromThePanel:
         assert "renderProtocols(" in ui, "界面上没有按名单画协议档位牌"
         assert "protocol: 'openai'," not in ui, "协议还是写死的 'openai' —— 后端认的其它协议在界面上够不着。"
 
-    @pytest.mark.parametrize("proto", ["openai", "anthropic"])
+    @pytest.mark.parametrize("proto", ["openai", "anthropic", "responses"])
     def test_each_protocol_is_actually_accepted_end_to_end(self, client, proto):
         """不只是"名单里有"，而是**真的存得进去**。"""
         r = client.post(
@@ -431,3 +431,98 @@ class TestEditingDoesNotLeakTheKeyBackIntoTheDom:
             "/api/v1/providers/user", json={"id": "gw", "label": "改了个名", "base_url": "https://x.example.com/v1"}
         )
         assert api_key_for("gw") == "sk-keep-me", "只改了标签，密钥却丢了 —— 那等于逼人每次都重填"
+
+
+def _build_responses_only_gateway() -> FastAPI:
+    """一个**只讲 Responses** 的网关：有 /v1/responses，没有 /v1/chat/completions。
+
+    这种网关是真实存在的(OpenAI 自己的新端点、以及照着它做的中转)。用
+    ``openai`` 协议指过来会怎样:列型号那一步照过,试调打 /chat/completions 吃
+    404 —— 报出来的是"试调被拒（HTTP 404）",看起来像密钥或型号不对。所以
+    ``responses`` 必须是一种**单独的协议**,不能拿 openai 凑合。
+    """
+    app = FastAPI()
+
+    def _check(auth: str) -> None:
+        if auth != f"Bearer {GOOD_KEY}":
+            raise HTTPException(status_code=401, detail="bad key")
+
+    @app.get("/v1/models")
+    def models(authorization: str = Header(default="")):  # noqa: ANN202
+        _check(authorization)
+        return {"data": [{"id": "r-fast"}]}
+
+    @app.post("/v1/responses")
+    def responses(body: dict, authorization: str = Header(default="")):  # noqa: ANN202
+        _check(authorization)
+        # 形状也要对:发成 chat 的 messages/max_tokens 就当没带内容拒掉,
+        # 否则这条门只证明"打对了路径",证明不了"发对了东西"。
+        if "input" not in body or "max_output_tokens" not in body:
+            raise HTTPException(status_code=422, detail="not a responses body")
+        return {
+            "output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+
+    return app
+
+
+class _ResponsesGateway(_Gateway):
+    def __init__(self) -> None:
+        self.port = _free_port()
+        cfg = uvicorn.Config(_build_responses_only_gateway(), host="127.0.0.1", port=self.port, log_level="error")
+        self.server = uvicorn.Server(cfg)
+        self.thread = threading.Thread(target=self.server.run, daemon=True)
+
+
+class TestTheResponsesProtocolIsAThirdRealOption:
+    """``responses`` 不是 ``openai`` 的别名 —— 试调打的是另一条路、发的是另一套字段。
+
+    2026-09-06 补。在它之前,一个只讲 Responses 的端点在这套「我的模型服务」里
+    **接不上**:唯一能选的 openai 协议会去打 /chat/completions。
+    """
+
+    def test_a_responses_only_gateway_verifies_green(self, store):
+        from core.user_providers import upsert_provider, verify
+
+        with _ResponsesGateway() as gw:
+            upsert_provider(pid="r-gw", label="", base_url=gw.base_url, api_key=GOOD_KEY, protocol="responses")
+            p = verify("r-gw")
+
+        assert p.state == "live", f"只讲 Responses 的网关没验过:{p.state_reason}"
+        assert p.models() == ["r-fast"]
+
+    def test_the_same_gateway_fails_under_the_openai_protocol(self, store):
+        """反面保险:这条门必须是**协议**带来的差别,不是网关本身好接。
+
+        没有这一条,上面那条在"两种协议其实打同一条路"的实现下也会绿。
+        """
+        from core.user_providers import upsert_provider, verify
+
+        with _ResponsesGateway() as gw:
+            upsert_provider(pid="o-gw", label="", base_url=gw.base_url, api_key=GOOD_KEY, protocol="openai")
+            p = verify("o-gw")
+
+        assert p.state == "unverified", "拿 openai 协议打只讲 Responses 的网关竟然过了 —— 那说明试调没真打出去"
+        assert "试调" in p.state_reason
+
+    def test_the_router_gives_it_the_responses_transport(self, store, monkeypatch):
+        """存对了协议还不够 —— 路由器要真的给它 ResponsesAdapter。
+
+        给成 OpenAIAdapter 的话,验证是绿的、面板是绿的,**只有真对话时**才 404。
+        """
+        from core.multi_llm_router import MultiLLMRouter, ResponsesAdapter
+
+        with _ResponsesGateway() as gw:
+            from core.user_providers import upsert_provider, verify
+
+            upsert_provider(pid="r-gw", label="", base_url=gw.base_url, api_key=GOOD_KEY, protocol="responses")
+            verify("r-gw")
+
+            r = MultiLLMRouter.__new__(MultiLLMRouter)
+            r.providers = {}
+            r.adapters = {}
+            r._register_user_providers()
+
+        assert "r-gw" in r.adapters, "验过的端点没进候选池"
+        assert isinstance(r.adapters["r-gw"], ResponsesAdapter), "给了它 chat/completions 那条传输 —— 真对话时会 404"
