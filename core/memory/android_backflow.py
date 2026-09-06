@@ -28,12 +28,30 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("Galaxy.Memory.AndroidBackflow")
 
 # Android MemoryEntry 的字段(见 OpenClawdMemoryBackflow.kt)
-_ENTRY_FIELDS = ("task_id", "goal", "status", "summary", "steps", "route_mode", "timestamp_ms")
+#: 一条回流事件的字段。
+#:
+#: ``device_id`` + ``seq`` 是后补的,补它们不是为了多两个字段,是为了让这里能成为一本
+#: **账本**:设备各自维护单调序号,断网时在本地缓存、联网后补传 —— 补传必然产生重复,
+#: 而 (device_id, seq) 就是判重的唯一依据。少了这一对,重复与乱序都无从识别。
+#:
+#: 序号刻意**不由服务端分配**:服务端分配的号只反映"到达顺序",而断网缓存要保住的恰恰
+#: 是"发生顺序"。两者在补传场景下必然不同,那正是需要序号的那个场景。
+_ENTRY_FIELDS = (
+    "task_id",
+    "device_id",
+    "seq",
+    "goal",
+    "status",
+    "summary",
+    "steps",
+    "route_mode",
+    "timestamp_ms",
+)
 
 
 def _data_dir() -> str:
@@ -48,7 +66,14 @@ class AndroidMemoryBackflow:
         self._lock = threading.RLock()
         base = path or os.path.join(_data_dir(), "android_task_backflow.jsonl")
         self._path = base
+        #: 全部事件,按到达顺序。这才是账本本体。
+        self._events: List[Dict[str, Any]] = []
+        #: 派生视图:每个 task 的最新态。**必须保留** —— /api/v1/memory/query 返回
+        #: ``[entry]``,而 Android 侧是 parseFirstEntry 取第一条;若改成返回全部历史,
+        #: 安卓拿到的会是**最旧**那条,而且不报错。
         self._index: Dict[str, Dict[str, Any]] = {}
+        #: 已见过的 (device_id, seq)。补传去重用。
+        self._seen: Set[Tuple[str, int]] = set()
         self._load()
 
     # ── 持久化 ──────────────────────────────────────────────────────────
@@ -63,24 +88,32 @@ class AndroidMemoryBackflow:
                     if not line:
                         continue
                     try:
-                        e = json.loads(line)
-                        tid = str(e.get("task_id", "")).strip()
-                        if tid:
-                            self._index[tid] = e  # 后写覆盖
+                        # 改前这里是 self._index[tid] = e —— 后写覆盖。文件本身是追加写
+                        # 的,历史一直躺在磁盘上,但重启之后每个 task 只剩最后一条,中间
+                        # 步骤全部消失。追加写却在载入时坍缩,等于白追加。
+                        self._accept(json.loads(line), persist=False)
                     except Exception:
                         # 此前是裸 continue:损坏行被静默丢弃,而下面那句只报
                         # 载入成功的条数 —— 一个半数损坏的文件看起来和完整文件
                         # 一模一样,调用方无从知道记忆缺了一块。
                         n_bad += 1
                         continue
+            # 报事件数与任务数两个 —— 只报其中一个都会误导:载入 900 条事件、
+            # 落在 3 个任务上,和载入 3 条事件是完全不同的两件事。
             if n_bad:
                 logger.warning(
-                    "Android 回流记忆:%d 行损坏已跳过(成功载入 %d 条): %s",
+                    "Android 回流记忆:%d 行损坏已跳过(载入 %d 条事件 / %d 个任务): %s",
                     n_bad,
+                    len(self._events),
                     len(self._index),
                     self._path,
                 )
-            logger.info("Android 回流记忆载入 %d 条: %s", len(self._index), self._path)
+            logger.info(
+                "Android 回流记忆载入 %d 条事件 / %d 个任务: %s",
+                len(self._events),
+                len(self._index),
+                self._path,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.debug("android backflow load skipped: %s", exc)
 
@@ -91,6 +124,35 @@ class AndroidMemoryBackflow:
                 fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as exc:  # noqa: BLE001
             logger.debug("android backflow append skipped: %s", exc)
+
+    def _accept(self, e: Dict[str, Any], *, persist: bool) -> bool:
+        """收下一条事件。已经见过的 ``(device_id, seq)`` 返回 False 且不收。
+
+        **调用方须持有 self._lock**(``_load`` 在构造期独占,``store`` 显式持锁)。
+
+        去重只在 device_id 与 seq 都给全时才可能发生。两者缺一就退化成"照单全收" ——
+        这是刻意的:发送侧还没补上这两个字段时,不应该因为"没有序号"就把事件丢掉或者
+        把不同事件误判成同一条。宁可暂时不去重,不可误删。
+        """
+        tid = str(e.get("task_id", "")).strip()
+        if not tid:
+            return False
+
+        dev = str(e.get("device_id") or "").strip()
+        seq = e.get("seq")
+        key: Optional[Tuple[str, int]] = None
+        if dev and isinstance(seq, int):
+            key = (dev, seq)
+            if key in self._seen:
+                return False
+
+        self._events.append(e)
+        self._index[tid] = e
+        if key is not None:
+            self._seen.add(key)
+        if persist:
+            self._append(e)
+        return True
 
     # ── 公开 API ────────────────────────────────────────────────────────
     def store(self, entry: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,8 +171,11 @@ class AndroidMemoryBackflow:
             norm["steps"] = [] if norm.get("steps") is None else [str(norm["steps"])]
 
         with self._lock:
-            self._index[tid] = norm
-            self._append(norm)
+            fresh = self._accept(norm, persist=True)
+        if not fresh:
+            # 补传重复:已经收过同一条 (device_id, seq)。直接返回规范化结果,
+            # 调用方看到的仍是成功 —— 幂等的定义就是"重复提交与提交一次结果相同"。
+            return norm
 
         # 汇入统一记忆(语义/跨模态)——best-effort，失败不影响存取
         try:
@@ -153,13 +218,31 @@ class AndroidMemoryBackflow:
             return self._index.get(tid)
 
     def recent(self, n: int = 20) -> List[Dict[str, Any]]:
+        """最近 n 条**事件**,新的在前。
+
+        改前这里取的是 ``_index.values()`` —— 每个任务只有最新一条,所以"最近 20 条"
+        实际是"最近 20 个任务的终态"。一个跑了三十步的任务在里面只占一行,中间发生过
+        什么完全看不到,而那恰恰是"最近发生了什么"这个问题想问的东西。
+        """
         with self._lock:
             items = sorted(
-                self._index.values(),
+                self._events,
                 key=lambda e: e.get("timestamp_ms", 0),
                 reverse=True,
             )
         return items[: max(1, min(n, 200))]
+
+    def history(self, task_id: str) -> List[Dict[str, Any]]:
+        """一个任务的全部事件,按发生顺序。没有则空列表。
+
+        与 :meth:`get` 的分工:``get`` 回答"这个任务现在什么状态"(给 Android 的
+        parseFirstEntry 用),``history`` 回答"这个任务是怎么走到这一步的"。
+        """
+        tid = str(task_id or "").strip()
+        if not tid:
+            return []
+        with self._lock:
+            return [e for e in self._events if str(e.get("task_id", "")).strip() == tid]
 
     def count(self) -> int:
         with self._lock:

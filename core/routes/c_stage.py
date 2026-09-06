@@ -66,13 +66,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
     @router.get("/api/v1/memory/query")
-    async def android_memory_query(task_id: str = ""):
+    async def android_memory_query(task_id: str = "", history: bool = False):
         """按 task_id 取回此前回流的 Android 任务记忆。
 
-        命中返回 ``[entry]`` 数组(与 android parseFirstEntry 兼容)；未命中返回 404。
+        默认命中返回 ``[entry]`` 数组,里面是该任务的**最新态** —— 这个形状不能改:
+        Android 侧是 parseFirstEntry 取第一条,改成返回全部历史会让它拿到最旧那条,
+        而且不报错。
+
+        ``history=1`` 时返回该任务的**全部事件**,按发生顺序。默认关着,所以老调用方
+        的行为一个字都没变。未命中一律 404。
         """
         try:
             from core.memory.android_backflow import get_android_backflow
+
+            if history:
+                events = get_android_backflow().history(task_id)
+                if not events:
+                    return JSONResponse(
+                        {"success": False, "error": "not found", "task_id": task_id},
+                        status_code=404,
+                    )
+                return JSONResponse(events)
 
             entry = get_android_backflow().get(task_id)
             if entry is None:
