@@ -373,7 +373,7 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
 
-        # 密钥统一走 core.credential_vault.resolve_key(Dashboard → Vault → 环境变量),
+        # 密钥统一走 core.credential_vault.resolve_key(面板落盘的那份 → Vault → 环境变量),
         # **不再自己 os.getenv**。原因是这条路以前与路由器那条取法不一样:
         #   · 面板存进 Vault / secrets.env 的密钥,直接 getenv 在某些路径上看不见;
         #   · 占位符("your_..._here")在路由器那侧会被过滤,在这里会被当成真密钥,

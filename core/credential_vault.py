@@ -545,7 +545,13 @@ def migrate_env_to_vault(dry_run: bool = False) -> Dict[str, bool]:
 
 
 def resolve_key(*env_names: str, actor: str = "system") -> str:
-    """按**同一条链**取一个密钥:Dashboard(UnifiedConfig) → Vault → 环境变量。
+    """按**同一条链**取一个密钥:面板落盘的那份 → Vault → 环境变量。
+
+    第一层的准确说法是 ``UnifiedConfig`` —— 它读 ``runtime/config.json`` 与
+    ``runtime/secrets.env``,而写这两个文件的就是**面板**(设置页保存 →
+    ``POST /api/config`` → ``ConfigService.set_secret`` → ``UnifiedConfig.reload()``)。
+    仓里不少地方把这一层叫 "Dashboard",那是旧 React 面板留下的名字,那个面板
+    已经被这一版 HUD 整个换掉了 —— 照着它找的人会去找一个不存在的东西。
 
     ## 为什么这一条要收在这里
 
@@ -577,7 +583,7 @@ def resolve_key(*env_names: str, actor: str = "system") -> str:
     for name in env_names:
         if not name:
             continue
-        # 1. Dashboard / UnifiedConfig
+        # 1. 面板落盘的那份(UnifiedConfig 读 runtime/config.json + runtime/secrets.env)
         try:
             from core.unified_config import config as _cfg
 

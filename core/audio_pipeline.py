@@ -94,7 +94,7 @@ class AudioPipeline:
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
-        # 密钥统一走 core.credential_vault.resolve_key(Dashboard → Vault → 环境变量)。
+        # 密钥统一走 core.credential_vault.resolve_key(面板落盘的那份 → Vault → 环境变量)。
         # 这里原本是裸 os.getenv:面板存进 Vault / secrets.env 的密钥在某些路径上
         # 看不见,而占位符会被当成真密钥 —— 那一路"看起来配好了",一发请求才认证失败。
         #
