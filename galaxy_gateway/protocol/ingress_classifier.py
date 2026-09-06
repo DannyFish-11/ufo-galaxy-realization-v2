@@ -159,6 +159,14 @@ _KIND_TO_CLASS: Dict[str, str] = {
     IngressEventKind.ACK: IngressMessageClass.TRANSPORT,
     IngressEventKind.PING: IngressMessageClass.TRANSPORT,
     IngressEventKind.OPERATOR_ACTION_RESULT: IngressMessageClass.EXECUTION,
+    # 实时语音通话信令:建/拆通话、交换 ICE 候选、打断、会话事件。都不携带任务,
+    # 也不携带音频(音频走 WebRTC 媒体通道),只有会话生命周期语义 → TRANSPORT。
+    IngressEventKind.VOICE_CALL_START: IngressMessageClass.TRANSPORT,
+    IngressEventKind.VOICE_CALL_ACCEPTED: IngressMessageClass.TRANSPORT,
+    IngressEventKind.VOICE_CALL_END: IngressMessageClass.TRANSPORT,
+    IngressEventKind.VOICE_ICE: IngressMessageClass.TRANSPORT,
+    IngressEventKind.VOICE_EVENT: IngressMessageClass.TRANSPORT,
+    IngressEventKind.VOICE_INTERRUPT: IngressMessageClass.TRANSPORT,
 }
 
 

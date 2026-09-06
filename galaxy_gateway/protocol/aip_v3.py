@@ -455,6 +455,18 @@ class MessageType(str, Enum):
     WEBRTC_UNBIND = "webrtc_unbind"
     WEBRTC_TRANSPORT_STATE = "webrtc_transport_state"
 
+    # ── 实时语音通话(设备 ↔ AI,像打电话一样)──
+    # 只有信令、事件、打断走这条控制通道;**音频走 WebRTC 媒体轨**。
+    # 音频不进 AIP 的理由:它建在 TCP 上,丢一个包后面全堵,而重传回来的是过期音频 ——
+    # 实时语音里迟到的音频没有价值,只会把延迟越堆越高。手表天线小、贴在手腕上、
+    # 跟着人移动,又常走独立流量,是最容易落在弱信号下的设备,所以媒体面必须能丢包补偿。
+    VOICE_CALL_START = "voice_call_start"
+    VOICE_CALL_ACCEPTED = "voice_call_accepted"
+    VOICE_CALL_END = "voice_call_end"
+    VOICE_ICE = "voice_ice"
+    VOICE_EVENT = "voice_event"
+    VOICE_INTERRUPT = "voice_interrupt"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

@@ -82,6 +82,7 @@ from galaxy_gateway.protocol.ingress_classifier import classify_ingress_kind
 from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind, NormalizedIngressEvent
 from galaxy_gateway.protocol.normalized_ingress_event import from_aip_message as _ingress_event_from_aip
 from galaxy_gateway.ssot import udm_write_heartbeat, udm_write_register, udm_write_unregister
+from galaxy_gateway.voice_call_route import close_voice_route, maybe_handle_voice_message
 
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
@@ -392,6 +393,12 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
     except Exception as e:
         logger.error("❌ WebSocket 处理异常: %s", e)
     finally:
+        # 先收通话再收连接:disconnect() 全程持锁,而挂断要 await 关网络。漏了这一步,
+        # 手表进隧道断线后 provider 那头会挂着一条会话继续计费,且没有任何报错提示。
+        try:
+            await close_voice_route(connection_id)
+        except Exception as _voice_err:  # noqa: BLE001
+            logger.warning("通话收尾失败(非致命): %s", _voice_err)
         await connection_manager.disconnect(connection_id)
 
 
@@ -479,6 +486,15 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
         # android_bridge (the canonical Android ingress) rather than handled
         # independently here.  Transport-class messages (register, heartbeat,
         # status, wake, command) remain handled by this module.
+
+        # 通话信令自成一支,在 kind 分派链**之前**截住:它不属于下面任何一类业务,掉进
+        # 链尾的未知分支就是设备收到一条 error、通话永远接不通。音频不从这里过 —— 它在
+        # WebRTC 媒体通道里走,理由见 voice_call_route 的模块说明。
+        if await maybe_handle_voice_message(
+            connection_id, aip_msg.type, aip_msg.payload, event.device_id, websocket.send_json
+        ):
+            return
+
         if event.kind in _ANDROID_DOMAIN_KINDS:
             # Delegate to android_bridge — the canonical Android business ingress.
             # Pass the original raw message dict; android_bridge normalizes it

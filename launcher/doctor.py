@@ -593,12 +593,16 @@ def _check_aip_protocol_is_fully_publishable(report: DoctorReport) -> None:
 
     这套协议是为各种设备铺的路,缺一种消息的发布器,就意味着那种消息可以在
     别的链路上被构造出来、却永远上不了网格 —— 别的节点无从知道它发生过。
+
+    例外是**明确不该上网格**的那几种(见 ``_MESH_EXEMPT``):实时语音通话的信令
+    里带着 SDP、ICE 候选与转写文本,广播给每个节点不是补全,是泄露。它们不计入
+    缺失,但数量会报出来 —— 否则"明确不上网格"和"忘了接"在用户眼里长得一模一样。
     这是**静态**判据(查的是消息类与发布表的对应),所以不需要真机、不需要
     连上 NATS 也能查,放在体检里而不是只放在 CI 里:装在用户机器上的那一份
     同样要能自己说清楚协议全不全。
     """
     try:
-        from core.aip_mesh_mirror import unpublishable_message_types
+        from core.aip_mesh_mirror import mesh_exempt_message_types, unpublishable_message_types
     except ImportError as exc:
         report.add("AIP v3 协议可上网格", Status.DEGRADED, "镜像层不可用", str(exc)[:200])
         return
@@ -612,7 +616,9 @@ def _check_aip_protocol_is_fully_publishable(report: DoctorReport) -> None:
             "这些类型永远上不了网格:" + ", ".join(missing),
         )
     else:
-        report.add("AIP v3 协议可上网格", Status.OK, "全部消息类型均有发布器")
+        exempt = len(mesh_exempt_message_types())
+        detail = "全部消息类型均有发布器" if not exempt else f"均有发布器,另 {exempt} 种明确不上网格"
+        report.add("AIP v3 协议可上网格", Status.OK, detail)
 
 
 def _check_every_plane_has_a_jetstream_stream(report: DoctorReport) -> None:

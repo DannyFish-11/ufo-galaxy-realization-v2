@@ -591,6 +591,19 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # ------------------------------------------------------------------
     logger.info("Shutting down Galaxy Gateway...")
 
+    # 先挂断还开着的实时语音通话。进程要走了,但 provider 那头的会话不会自己知道:
+    # OpenAI Realtime / Gemini Live 的连接靠我们主动关,不关就一直挂着计费,而且没有
+    # 任何报错提示。单条通话的收尾在 WebSocket 断开路径上做,这里管的是"进程整体退出
+    # 时还有通话在跑"这一种 —— 部署重启、滚动更新每次都会走到。
+    try:
+        from core.voice_call_bridge import get_call_registry
+
+        _ended = await asyncio.wait_for(get_call_registry().end_all(reason="gateway_shutdown"), timeout=5.0)
+        if _ended:
+            logger.info("关闭时挂断了 %d 通实时语音通话", _ended)
+    except Exception:
+        logger.warning("关闭时挂断通话失败(可能有 provider 会话残留)", exc_info=True)
+
     # Stop the multimodal ingest bus if it was started on this loop — its
     # bus/pipeline tasks would otherwise be destroyed while pending when the
     # loop closes.

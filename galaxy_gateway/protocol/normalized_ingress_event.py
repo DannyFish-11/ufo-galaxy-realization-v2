@@ -135,6 +135,19 @@ class IngressEventKind:
     OPERATOR_ACTION_RESULT: str = "operator_action_result"
     PING: str = "ping"
 
+    # Realtime voice call signalling (Wear/Android ↔ gateway WebRTC handshake).
+    # Registered here for the same reason ACK/PING were: an unregistered type
+    # normalises to UNKNOWN, and the log line above the dispatch would then
+    # report kind=unknown for every frame of a working call.  These carry no
+    # task payload and no audio — audio rides the WebRTC media channel — so
+    # they classify as TRANSPORT alongside the other session-lifecycle frames.
+    VOICE_CALL_START: str = "voice_call_start"
+    VOICE_CALL_ACCEPTED: str = "voice_call_accepted"
+    VOICE_CALL_END: str = "voice_call_end"
+    VOICE_ICE: str = "voice_ice"
+    VOICE_EVENT: str = "voice_event"
+    VOICE_INTERRUPT: str = "voice_interrupt"
+
     # Unknown / unrecognised
     UNKNOWN: str = "unknown"
 
@@ -171,6 +184,12 @@ class IngressEventKind:
         ACK,
         OPERATOR_ACTION_RESULT,
         PING,
+        VOICE_CALL_START,
+        VOICE_CALL_ACCEPTED,
+        VOICE_CALL_END,
+        VOICE_ICE,
+        VOICE_EVENT,
+        VOICE_INTERRUPT,
         UNKNOWN,
     }
 

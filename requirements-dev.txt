@@ -55,3 +55,15 @@ coverage>=7.4.0
 # 装进 dev 依赖 = 测试环境有它、生产仍可选。两条路径这才都被覆盖:
 # 主判据由真 webrtcvad 跑,回退路径由显式 use_webrtc=False 的用例跑。
 webrtcvad-wheels>=2.0.14 ; platform_system != "Emscripten"
+
+# aiortc —— 设备实时语音通话的媒体面(core/voice_call_bridge)。
+#
+# 与 webrtcvad-wheels 同一个理由进 dev 依赖:这条链路上会出错的地方几乎全在"真的传
+# 一遍"才暴露 —— 重采样把音调弄错、出站轨不按时间产帧导致对端听到加速播放、帧的
+# pts/time_base 不对导致轨被判无效、打断时缓冲没清干净所以 AI 又硬说完半句。把
+# RTCPeerConnection mock 掉,以上每一条都会被"测试通过"盖住。
+#
+# 装进 dev = 测试环境有它、生产仍可选(webrtc_available() 缺了会如实说明原因并拒绝
+# 通话,不静默假装接通)。test_voice_call_bridge_real_webrtc 里另有一条守卫,确保这个
+# 依赖被拿掉时测试是**红**的而不是静默跳过。
+aiortc>=1.9.0 ; platform_system != "Emscripten"

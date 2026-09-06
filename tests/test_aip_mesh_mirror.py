@@ -21,6 +21,7 @@ from unittest.mock import patch
 import pytest
 
 from core.aip_mesh_mirror import (
+    mesh_exempt_message_types,
     mirror_to_mesh,
     publisher_for,
     unpublishable_message_types,
@@ -78,6 +79,53 @@ def test_every_aip_message_class_has_a_mesh_publisher():
     """
     missing = unpublishable_message_types()
     assert missing == (), f"这些 AIP v3 消息类型没有网格发布器:{list(missing)}"
+
+
+def test_every_exemption_states_why():
+    """豁免必须写理由,而且理由不能是敷衍的一句。
+
+    这道门的价值全在"新增一个消息类就必须回答它上不上网格"。如果豁免可以只写个
+    名字,那它就退化成一个绕过门的名单 —— 下一个人往里加一行,谁也不会去想为什么。
+    """
+    for name, reason in mesh_exempt_message_types().items():
+        assert reason.strip(), f"{name} 的豁免没有写理由"
+        assert len(reason.strip()) >= 20, f"{name} 的豁免理由太敷衍:{reason!r}"
+
+
+def test_a_type_is_never_both_published_and_exempt():
+    """同一种消息不能既在发布表里、又在豁免表里 —— 那是两个互相矛盾的答案。"""
+    from core.aip_mesh_mirror import _MESH_EXEMPT, _PUBLISHER_BY_TYPE
+
+    both = sorted(set(_PUBLISHER_BY_TYPE) & set(_MESH_EXEMPT))
+    assert not both, f"这些类型同时被登记为「要发布」和「不该上网格」:{both}"
+
+
+def test_exemptions_are_real_message_types():
+    """豁免表里写的必须是真存在的类型。
+
+    写错一个字不会报错,只会让那条豁免永远不生效,而真正的那种消息悄悄变回"缺发布器"
+    —— 或者更糟:它在协议里已经被删了,豁免却还留着,把一条早就不存在的债记在账上。
+    """
+    from galaxy_gateway.protocol.aip_v3 import MessageType
+
+    known = {m.value for m in MessageType}
+    unknown = sorted(set(mesh_exempt_message_types()) - known)
+    assert not unknown, f"豁免表里这些类型在协议里不存在:{unknown}"
+
+
+def test_voice_call_signalling_is_the_exempt_set():
+    """豁免目前**只有**实时语音通话那六条。
+
+    钉死这个集合,是为了让下一次往里加东西成为一个必须解释的动作,而不是顺手一行。
+    """
+    assert set(mesh_exempt_message_types()) == {
+        "voice_call_start",
+        "voice_call_accepted",
+        "voice_call_end",
+        "voice_ice",
+        "voice_event",
+        "voice_interrupt",
+    }
 
 
 def test_the_table_points_at_methods_that_actually_exist():
