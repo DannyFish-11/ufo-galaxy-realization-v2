@@ -2165,6 +2165,42 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "llm",
         "description": "让这些厂商走 Responses 接口（逗号分隔，如 deepseek,meta · 那条路没有逐字流式 · 默认空）",
     },
+    # ── 视觉/音频那两条多模态路真的在读、面板上却一直配不了的五个键 ──────
+    #
+    # 2026-09-06 补。core/vision_pipeline.py 与 core/audio_pipeline.py 读它们,
+    # 而它们不在这份 schema 里 = 面板上根本没有这一行。后果不是"少个高级选项":
+    # 换一家 OCR 中转、换一个音频型号,只能去改 .env 或者改代码 —— 而面板恰恰是
+    # 这个系统让人配 API 的地方。
+    "NOVITA_API_KEY": {
+        "default": "",
+        "type": "password",
+        "category": "llm",
+        "description": "Novita 平台密钥（DeepSeek OCR 2 的默认托管方 · 留空则用上面那个专用密钥）",
+    },
+    "DEEPSEEK_OCR2_API_BASE": {
+        "default": "https://api.novita.ai/v3/openai",
+        "type": "url",
+        "category": "llm",
+        "description": "看图识屏那一步的接口地址（换中转/自建时改这里 · 默认走 Novita）",
+    },
+    "DEEPSEEK_OCR2_MODEL": {
+        "default": "deepseek/deepseek-ocr2",
+        "type": "string",
+        "category": "llm",
+        "description": "看图识屏用的型号（换中转时它的型号串常常不一样）",
+    },
+    "GEMINI_AUDIO_MODEL": {
+        "default": "gemini-2.0-flash",
+        "type": "string",
+        "category": "llm",
+        "description": "听声音用的 Gemini 型号（走 Google 那条时用它）",
+    },
+    "OPENAI_AUDIO_MODEL": {
+        "default": "gpt-4o-audio-preview",
+        "type": "string",
+        "category": "llm",
+        "description": "听声音用的 OpenAI 型号（走 OpenAI 兼容那条时用它）",
+    },
     # --- WebRTC & Network ---
     # 说明原先只有 "WebRTC Data Channel" 一句英文 —— 面板上照原样显示,中文用户看不懂
     # 这开了会发生什么。是这一轮把守卫范围改成按目录派生之后,

@@ -542,3 +542,65 @@ def migrate_env_to_vault(dry_run: bool = False) -> Dict[str, bool]:
         logger.info("migrate_env_to_vault: stored '%s'", key_name)
 
     return results
+
+
+def resolve_key(*env_names: str, actor: str = "system") -> str:
+    """按**同一条链**取一个密钥:Dashboard(UnifiedConfig) → Vault → 环境变量。
+
+    ## 为什么这一条要收在这里
+
+    这条链原本只长在 ``MultiLLMRouter._get_key()`` 里,是个方法。于是不在路由器里
+    的那些消费方 —— ``core/vision_pipeline.py``、``core/audio_pipeline.py`` ——
+    只能自己 ``os.getenv``。后果是**同一把 key,两处的取法不一样**:
+
+    * 面板把密钥存进 ``runtime/secrets.env`` / Vault 时,只读 ``os.getenv`` 的那一侧
+      在某些路径上根本看不见它;
+    * 占位符("your_..._here")在路由器那侧会被过滤,在直接 getenv 那侧会被当成
+      真密钥 —— 于是那条路"看起来配好了",一发请求就认证失败;
+    * 名字的回落各写各的:音频那条 ``GEMINI_API_KEY`` 取不到会退回
+      ``GOOGLE_API_KEY``,视觉那条不会。**同一台机器、同一把 Google 密钥,
+      语音能用、看图不能用**,而没有任何一处会说出这件事。
+
+    所以链收在这里,谁要取密钥都问它。
+
+    ## 名字的顺序就是回落的顺序
+
+    ``resolve_key("GEMINI_API_KEY", "GOOGLE_API_KEY")`` 的意思是:先找专用名,
+    找不到用通用名。传的是**环境变量的真实长名**,不是 provider 短名 ——
+    短名那层兼容留在路由器自己的 ``_get_key()`` 里,不往下扩散。
+
+    取不到返回空串。空串与"取到一个占位符"在这里是同一个结论(都不能用),
+    但**日志会说清是哪一种** —— 配了占位符却以为配好了,是最难查的一种。
+    """
+    import os as _os
+
+    for name in env_names:
+        if not name:
+            continue
+        # 1. Dashboard / UnifiedConfig
+        try:
+            from core.unified_config import config as _cfg
+
+            val = _cfg.get(f"api_keys.{name}", "") or _cfg.get(f"api_keys.{name.lower()}", "")
+            if val and not is_placeholder(str(val)):
+                return str(val)
+        except Exception:  # noqa: BLE001 —— 取不到就往下一层,不能因此让整条链断掉
+            pass
+        # 2. Vault
+        try:
+            val = get_vault().get_credential(name, actor=actor)
+            if val and not is_placeholder(val):
+                return val
+        except Exception:  # noqa: BLE001
+            pass
+        # 3. 环境变量
+        val = _os.environ.get(name, "")
+        if val and not is_placeholder(val):
+            return val
+        if val:
+            logger.warning(
+                "%s 配的是占位符(%s...),按未配置处理。这条如果不说,那一路会「看起来配好了」," "一发请求才认证失败。",
+                name,
+                val[:8],
+            )
+    return ""

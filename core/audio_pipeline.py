@@ -94,13 +94,19 @@ class AudioPipeline:
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
-        # Gemini（与 VisionPipeline 同源 key）
-        self.gemini_api_key = self.config.get(
-            "gemini_api_key", os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
-        )
+        # 密钥统一走 core.credential_vault.resolve_key(Dashboard → Vault → 环境变量)。
+        # 这里原本是裸 os.getenv:面板存进 Vault / secrets.env 的密钥在某些路径上
+        # 看不见,而占位符会被当成真密钥 —— 那一路"看起来配好了",一发请求才认证失败。
+        #
+        # "与 VisionPipeline 同源 key"这句话原本只是注释;现在两边真的是同一个函数、
+        # 同一串回落名字了(此前视觉那条不回落 GOOGLE_API_KEY,于是同一把钥匙
+        # 语音能用、看图不能用)。
+        from core.credential_vault import resolve_key
+
+        self.gemini_api_key = self.config.get("gemini_api_key", resolve_key("GEMINI_API_KEY", "GOOGLE_API_KEY"))
         self.gemini_model = self.config.get("gemini_audio_model", os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.0-flash"))
         # OpenAI 兼容音频模型
-        self.openai_api_key = self.config.get("openai_api_key", os.getenv("OPENAI_API_KEY", ""))
+        self.openai_api_key = self.config.get("openai_api_key", resolve_key("OPENAI_API_KEY"))
         self.openai_api_base = self.config.get(
             "openai_api_base", os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
         )

@@ -373,9 +373,19 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
 
+        # 密钥统一走 core.credential_vault.resolve_key(Dashboard → Vault → 环境变量),
+        # **不再自己 os.getenv**。原因是这条路以前与路由器那条取法不一样:
+        #   · 面板存进 Vault / secrets.env 的密钥,直接 getenv 在某些路径上看不见;
+        #   · 占位符("your_..._here")在路由器那侧会被过滤,在这里会被当成真密钥,
+        #     于是这一路"看起来配好了",一发请求才认证失败;
+        #   · 名字回落各写各的 —— **同一台机器、同一把 Google 密钥,语音能用、
+        #     看图不能用**,因为音频那条会从 GEMINI_API_KEY 退回 GOOGLE_API_KEY,
+        #     这条不会。那是个真的、静默的坑,现在两条走同一个函数。
+        from core.credential_vault import resolve_key
+
         # DeepSeek OCR 2 配置
         self.deepseek_api_key = self.config.get(
-            "deepseek_ocr2_api_key", os.getenv("DEEPSEEK_OCR2_API_KEY", os.getenv("NOVITA_API_KEY", ""))
+            "deepseek_ocr2_api_key", resolve_key("DEEPSEEK_OCR2_API_KEY", "NOVITA_API_KEY")
         )
         self.deepseek_api_base = self.config.get(
             "deepseek_ocr2_api_base", os.getenv("DEEPSEEK_OCR2_API_BASE", "https://api.novita.ai/v3/openai")
@@ -384,11 +394,12 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
             "deepseek_ocr2_model", os.getenv("DEEPSEEK_OCR2_MODEL", "deepseek/deepseek-ocr2")
         )
 
-        # Gemini 配置（Level 2 降级）
-        self.gemini_api_key = self.config.get("gemini_api_key", os.getenv("GEMINI_API_KEY", ""))
+        # Gemini 配置（Level 2 降级）—— GOOGLE_API_KEY 是同一把钥匙的通用名,
+        # 面板上主推的也是它,不回落等于让填了它的人白填。
+        self.gemini_api_key = self.config.get("gemini_api_key", resolve_key("GEMINI_API_KEY", "GOOGLE_API_KEY"))
 
         # OpenRouter 配置（Level 3 降级，Qwen3-VL）
-        self.openrouter_api_key = self.config.get("openrouter_api_key", os.getenv("OPENROUTER_API_KEY", ""))
+        self.openrouter_api_key = self.config.get("openrouter_api_key", resolve_key("OPENROUTER_API_KEY"))
 
         # 本地 vLLM 配置
         self.local_vllm_url = self.config.get("local_vllm_url", os.getenv("LOCAL_VLLM_URL", ""))
