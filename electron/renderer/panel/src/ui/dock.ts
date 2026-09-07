@@ -238,6 +238,12 @@ export function createDock(cb: DockCallbacks): DockHandles {
 
     const chips = document.createElement('div');
     chips.className = 'sf-stages tier-stages';
+    // **四选一,要说出来是四选一。** 这四个钮此前只有 data-picked(给 CSS 用),
+    // 无障碍上就是四个分别叫 "A" "B" "C" "D" 的光秃秃按钮 —— 读屏读不出一共几档、
+    // 更读不出现在在哪一档。上面那几行 bundle 早就分了"两态用 aria-pressed、
+    // 多态用 data-state",这一行是漏网的。单选组的正确形状是 radiogroup/radio。
+    chips.setAttribute('role', 'radiogroup');
+    chips.setAttribute('aria-label', '本机模型档位');
     // **按档位名排,不按后端给的顺序。** core/model_catalog.py 的 _TIERS 是个 dict,
     // 迭代出来是定义顺序(A B D C)—— 那是后端的内部次序,不是给人看的次序,D 排在
     // C 前面读起来就是错的。「有哪几档」归后端,「按什么顺序摆」归这里。
@@ -247,8 +253,17 @@ export function createDock(cb: DockCallbacks): DockHandles {
       chip.className = 'stage';
       chip.type = 'button';
       chip.textContent = t.key;
-      chip.dataset['picked'] = String(t.key === view.current);
+      const picked = t.key === view.current;
+      chip.dataset['picked'] = String(picked);
       chip.dataset['fit'] = t.fit;
+      chip.setAttribute('role', 'radio');
+      chip.setAttribute('aria-checked', String(picked));
+      // 光一个 "A" 读不出是什么档 —— 把档名也给读屏。跑不动的那几档在这里就说清楚,
+      // 因为它们照样点得动(见上面的说明),看不见 title 的人更需要这句。
+      chip.setAttribute(
+        'aria-label',
+        t.fit === 'ok' ? t.label : `${t.label}（装不下:${t.fitReason}）`,
+      );
       // 跑不动的照画、照点得动 —— 拦住的话,人连"为什么"都看不到。
       // 但要在标题上把原因说全:装不下哪几个型号,后端的原话是什么。
       chip.title =
