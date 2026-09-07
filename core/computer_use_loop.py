@@ -36,8 +36,9 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from core.computer_use_dialects import map_action_to_screen, measure_screenshot
 from core.computer_use_memory import ComputerUseEpisodicMemory
 
 logger = logging.getLogger("Galaxy.ComputerUse")
@@ -157,17 +158,30 @@ def _parse_action_json(text: str) -> Optional[Dict[str, Any]]:
     """
     if not text:
         return None
-    from core.computer_use_dialects import translate_any  # noqa: PLC0415 —— 就近 import
-
-    action, dialect, why = translate_any(text)
-    if action is None:
+    actions, dialect, why = _translate_all(text)
+    if not actions:
         if why:
             logger.debug("动作解析失败: %s", why)
         return None
     if dialect and dialect != "native":
-        logger.info("按 %s 方言解出动作: %s", dialect, action.get("action"))
-    return action
+        logger.info("按 %s 方言解出 %d 个动作", dialect, len(actions))
+    return actions[0]
 
+
+def _translate_all(payload):
+    """方言层的**单一出口**:任何形状 → 有序的规范动作清单。
+
+    包一层是为了让"这一轮解出了几个动作"只有一处知道 —— OpenAI 的 computer_call
+    一次可能给好几步(actions 是有序数组),只取第一个就是在静默丢动作。
+    """
+    from core.computer_use_dialects import translate_sequence  # noqa: PLC0415
+
+    return translate_sequence(payload)
+
+
+#: "还没去问"的哨兵。不能用 None —— None 是"问过了,拿不到",两者的下一步不同:
+#: 前者该去问一次,后者不该再问,而且必须让每一步都知道坐标没换算过。
+_SCREEN_SIZE_UNRESOLVED = object()
 
 _NATIVE_TOOL_ENV = "GALAXY_COMPUTER_USE_NATIVE_TOOL"
 
@@ -193,8 +207,6 @@ def _parse_tool_calls(tool_calls: Any) -> Optional[Dict[str, Any]]:
     """
     if not tool_calls:
         return None
-    from core.computer_use_dialects import translate_any  # noqa: PLC0415
-
     for call in tool_calls:
         if not isinstance(call, dict):
             continue
@@ -208,12 +220,60 @@ def _parse_tool_calls(tool_calls: Any) -> Optional[Dict[str, Any]]:
             continue
         if not isinstance(args, dict):
             continue
-        action, dialect, why = translate_any({"type": "tool_use", "name": fn.get("name") or "computer", "input": args})
-        if action is not None:
-            logger.info("按 %s 方言从 tool_calls 解出动作: %s", dialect, action.get("action"))
-            return action
+        block = {"type": "tool_use", "name": fn.get("name") or "computer", "input": args}
+        # toolset 那一代(20260801+)的动作名就是成员名(name),块上另带 toolset_name,
+        # input 里**没有** action。路由把厂商响应归一成 OpenAI 形状时,toolset_name
+        # 落在 function 之外会丢掉,于是方言认不出这一整家。
+        # 按"input 里有没有 action"反推形状,把身份证补回去。
+        if "action" not in args:
+            from core.computer_use_dialects import (  # noqa: PLC0415
+                TOOLSET_NAME_COMPUTER,
+                TOOLSET_NAME_FIELD,
+            )
+
+            block[TOOLSET_NAME_FIELD] = call.get(TOOLSET_NAME_FIELD) or TOOLSET_NAME_COMPUTER
+        actions, dialect, why = _translate_all(block)
+        if actions:
+            logger.info("按 %s 方言从 tool_calls 解出动作: %s", dialect, actions[0].get("action"))
+            return actions[0]
         if why:
             logger.debug("tool_calls 解析失败: %s", why)
+    return None
+
+
+async def _screen_size_via_node(node_id: str) -> Optional[Tuple[int, int]]:
+    """问执行节点要**真实屏幕**尺寸(它 pyautogui.size() 得到的那个)。
+
+    为什么必须问执行侧,而不是自己算:点击最终落在**它**的坐标系里。
+    Node_36 / Node_45 都有 ``screen_size`` 这个动作。
+
+    拿不到就返回 ``None`` —— 上层据此**不换算**并留痕,而不是假设跟截图一样大。
+    """
+    try:
+        from core.node_invocation import InvocationSource, invoke_node  # noqa: PLC0415
+
+        result = await invoke_node(
+            node_id,
+            "screen_size",
+            {},
+            invocation_source=InvocationSource.UNKNOWN,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("取屏幕尺寸失败(%s),坐标将不换算: %s", node_id, exc)
+        return None
+    if not getattr(result, "success", False):
+        logger.debug("节点没给出屏幕尺寸(%s),坐标将不换算", getattr(result, "error", "") or "无错误信息")
+        return None
+    inner = getattr(result, "result", None)
+    if not isinstance(inner, dict):
+        return None
+    width, height = inner.get("width"), inner.get("height")
+    try:
+        if width and height:
+            return int(width), int(height)
+    except (TypeError, ValueError):
+        pass
+    logger.debug("屏幕尺寸返回里没有可用的 width/height,坐标将不换算")
     return None
 
 
@@ -459,6 +519,9 @@ class ComputerUseLoop:
         self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False
     ) -> Dict[str, Any]:
         """闭环本体。调用方必须是 :meth:`run`（它负责递归保护标记的置位与复位）。"""
+        # 真实屏幕尺寸每轮只问一次执行节点。哨兵值区分"还没问"与"问了但拿不到"——
+        # 后者是 None,意味着这一轮全程都不换算坐标(并且每一步都会留痕)。
+        screen_size: Any = _SCREEN_SIZE_UNRESOLVED
         if not computer_use_enabled():
             return {
                 "success": False,
@@ -519,6 +582,19 @@ class ComputerUseLoop:
                     "message": "规划模型未返回可解析的动作 JSON",
                     "steps": [s.to_dict() for s in steps],
                 }
+            # ── 2.5 坐标归位 ───────────────────────────────────────────
+            # 模型给的坐标属于**它看到的那张截图**;手最终点在**真实屏幕**上。
+            # 两边尺寸一旦不同(DPI 缩放、采集端压缩),每一次点击都按同一个比例偏,
+            # 而且不报错 —— 界面看着"差不多点对了",只是总差一点。
+            # 判据在 core.computer_use_dialects.map_action_to_screen:
+            # 有一边不知道就**不换算**并标 coord_space=screenshot,绝不假设 1:1。
+            if screen_size is _SCREEN_SIZE_UNRESOLVED:
+                screen_size = await _screen_size_via_node(self._node_id)
+            shot_size, _shot_why = measure_screenshot(screen)
+            planned, _coord_why = map_action_to_screen(planned, shot_size=shot_size, screen_size=screen_size)
+            if _coord_why:
+                logger.info("坐标: %s", _coord_why)
+
             action = str(planned.get("action", "")).strip().lower()
             reason = str(planned.get("reason", ""))
             params = {k: v for k, v in planned.items() if k not in ("action", "reason")}

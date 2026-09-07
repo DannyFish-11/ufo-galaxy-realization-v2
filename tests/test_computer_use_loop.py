@@ -88,7 +88,11 @@ def test_full_loop_click_type_done():
     assert out["success"] is True and out["stop_reason"] == "done"
     assert out["message"] == "已输入完成"
     assert [d["action"] for d in dispatched] == ["click", "type"]
-    assert dispatched[0]["params"] == {"x": 100, "y": 200}
+    # 除了坐标,每一步还带着 coord_space —— 这一步的坐标到底是截图像素还是屏幕像素,
+    # 事后必须看得出来(拿不到屏幕尺寸时就不换算,标 screenshot)。
+    assert dispatched[0]["params"]["x"] == 100
+    assert dispatched[0]["params"]["y"] == 200
+    assert dispatched[0]["params"]["coord_space"] in ("screen", "screenshot")
     assert len(out["steps"]) == 3
 
 

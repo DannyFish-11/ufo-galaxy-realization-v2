@@ -24,9 +24,9 @@ from unittest.mock import patch
 import pytest
 
 from core.computer_use_dialects import (
-    ANTHROPIC_BUILTIN_TOOL_BETAS,
-    DEFAULT_ANTHROPIC_BETA,
+    ANTHROPIC_TOOL_VERSIONS,
     DEFAULT_ANTHROPIC_COMPUTER_TYPE,
+    LEGACY_ANTHROPIC_COMPUTER_TYPE,
     anthropic_betas_for_tools,
     anthropic_tool_for_screenshot,
     anthropic_tool_schema,
@@ -50,7 +50,10 @@ def _png_b64(width: int, height: int) -> str:
 
 class TestWhatCountsAsNativeShape:
     def test_builtin_computer_tool_is_native(self):
-        assert is_anthropic_native_tool(anthropic_tool_schema(1920, 1080)) is True
+        assert (
+            is_anthropic_native_tool(anthropic_tool_schema(1920, 1080, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE))
+            is True
+        )
 
     def test_a_converted_custom_tool_is_native(self):
         assert is_anthropic_native_tool({"name": "f", "input_schema": {"type": "object"}}) is True
@@ -74,19 +77,26 @@ class TestWhatCountsAsNativeShape:
 
 class TestBetaFlags:
     def test_computer_tool_asks_for_its_beta(self):
-        tool = anthropic_tool_schema(800, 600)
-        assert anthropic_betas_for_tools([tool]) == [DEFAULT_ANTHROPIC_BETA]
+        tool = anthropic_tool_schema(800, 600, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
+        assert anthropic_betas_for_tools([tool]) == [ANTHROPIC_TOOL_VERSIONS[LEGACY_ANTHROPIC_COMPUTER_TYPE].beta]
 
     def test_unregistered_type_gets_no_invented_beta(self):
         """没登记的 type 不许编一个旗标出来 —— 编错了照样 400,而且错得更难查。"""
         assert anthropic_betas_for_tools([{"type": "bash_20241022"}]) == []
 
+    def test_the_newest_generation_needs_no_header(self):
+        """20260801 起不需要 beta 头 —— 这跟"没见过这个 type"是两回事。"""
+        assert anthropic_betas_for_tools([anthropic_tool_schema()]) == []
+        assert ANTHROPIC_TOOL_VERSIONS[DEFAULT_ANTHROPIC_COMPUTER_TYPE].beta is None
+
     def test_function_tools_need_no_beta(self):
         assert anthropic_betas_for_tools([{"type": "function", "function": {"name": "f"}}]) == []
 
     def test_duplicates_collapse(self):
-        tool = anthropic_tool_schema(800, 600)
-        assert anthropic_betas_for_tools([tool, tool, tool]) == [DEFAULT_ANTHROPIC_BETA]
+        tool = anthropic_tool_schema(800, 600, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
+        assert anthropic_betas_for_tools([tool, tool, tool]) == [
+            ANTHROPIC_TOOL_VERSIONS[LEGACY_ANTHROPIC_COMPUTER_TYPE].beta
+        ]
 
     def test_no_tools_no_betas(self):
         assert anthropic_betas_for_tools(None) == []
@@ -94,7 +104,7 @@ class TestBetaFlags:
 
     def test_registry_is_the_one_authority(self):
         """旗标只在登记表里定义一份。"""
-        assert ANTHROPIC_BUILTIN_TOOL_BETAS[DEFAULT_ANTHROPIC_COMPUTER_TYPE] == DEFAULT_ANTHROPIC_BETA
+        assert ANTHROPIC_TOOL_VERSIONS[LEGACY_ANTHROPIC_COMPUTER_TYPE].beta == "computer-use-2025-11-24"
 
 
 # --------------------------------------------------------------------------
@@ -105,13 +115,15 @@ class TestBetaFlags:
 class TestTheToolActuallySurvivesConversion:
     def test_computer_tool_is_not_dropped(self):
         """改之前这里返回的是 ``[]`` —— 声明了工具,发出去却什么都没有。"""
-        tool = anthropic_tool_schema(2560, 1440)
+        tool = anthropic_tool_schema(2560, 1440, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
         out = AnthropicAdapter._convert_tools([tool])
         assert out == [tool]
 
     def test_computer_tool_keeps_its_dimensions(self):
         """尺寸不能在转换里丢 —— 模型是按这个坐标系给点的。"""
-        out = AnthropicAdapter._convert_tools([anthropic_tool_schema(2560, 1440)])
+        out = AnthropicAdapter._convert_tools(
+            [anthropic_tool_schema(2560, 1440, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)]
+        )
         assert out[0]["display_width_px"] == 2560
         assert out[0]["display_height_px"] == 1440
 
@@ -123,7 +135,7 @@ class TestTheToolActuallySurvivesConversion:
         assert out == [{"name": "f", "description": "", "input_schema": {"type": "object"}}]
 
     def test_mixed_batch_keeps_both(self):
-        tool = anthropic_tool_schema(1024, 768)
+        tool = anthropic_tool_schema(1024, 768, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
         out = AnthropicAdapter._convert_tools([tool, {"type": "function", "function": {"name": "f", "parameters": {}}}])
         assert len(out) == 2
         assert out[0] == tool
@@ -156,30 +168,34 @@ class TestTheToolActuallySurvivesConversion:
 
 class TestDimensionsComeFromTheActualScreenshot:
     def test_measures_the_real_image(self):
-        tool, why = anthropic_tool_for_screenshot(_png_b64(1366, 768))
+        tool, why = anthropic_tool_for_screenshot(_png_b64(1366, 768), tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
         assert why == ""
         assert (tool["display_width_px"], tool["display_height_px"]) == (1366, 768)
 
     def test_a_different_size_gives_a_different_declaration(self):
         """不是回一个写死的默认值。"""
-        a, _ = anthropic_tool_for_screenshot(_png_b64(800, 600))
-        b, _ = anthropic_tool_for_screenshot(_png_b64(2560, 1440))
+        a, _ = anthropic_tool_for_screenshot(_png_b64(800, 600), tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
+        b, _ = anthropic_tool_for_screenshot(_png_b64(2560, 1440), tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
         assert a["display_width_px"] != b["display_width_px"]
 
     def test_no_screenshot_declares_nothing(self):
-        tool, why = anthropic_tool_for_screenshot("")
+        tool, why = anthropic_tool_for_screenshot("", tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
         assert tool is None
         assert why, "拒绝了却说不出为什么"
 
     def test_unreadable_bytes_declare_nothing(self):
         """量不出来时**绝不填默认分辨率** —— 填了就是在保证每一次点击都偏。"""
-        tool, why = anthropic_tool_for_screenshot(base64.b64encode(b"not an image").decode())
+        tool, why = anthropic_tool_for_screenshot(
+            base64.b64encode(b"not an image").decode(), tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE
+        )
         assert tool is None
         assert "量不出" in why
 
     def test_the_reason_is_specific_not_generic(self):
-        _, why_empty = anthropic_tool_for_screenshot("")
-        _, why_bad = anthropic_tool_for_screenshot(base64.b64encode(b"nope").decode())
+        _, why_empty = anthropic_tool_for_screenshot("", tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
+        _, why_bad = anthropic_tool_for_screenshot(
+            base64.b64encode(b"nope").decode(), tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE
+        )
         assert why_empty != why_bad, "两种失败给了同一句话,等于没说"
 
 

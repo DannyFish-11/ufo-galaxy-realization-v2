@@ -14,15 +14,27 @@ import json
 import pytest
 
 from core.computer_use_dialects import (
-    DEFAULT_ANTHROPIC_BETA,
     DEFAULT_ANTHROPIC_COMPUTER_TYPE,
     DIALECT_ANTHROPIC,
     DIALECT_NATIVE,
     DIALECTS,
+    LEGACY_ANTHROPIC_COMPUTER_TYPE,
+    anthropic_beta_for_type,
     anthropic_tool_schema,
-    translate_any,
+    translate_sequence,
 )
 from core.computer_use_loop import ALLOWED_ACTIONS, _parse_action_json
+
+
+def _one(payload, **kw):
+    """取序列里的第一个动作 —— 一次只给一个动作的方言,清单长度本来就是 1。
+
+    方言层的唯一出口是 :func:`translate_sequence`(OpenAI 一次可能给好几步,
+    只取第一个就是在静默丢动作)。这些用例盯的是"认不认得出、翻得对不对",
+    所以在这里收一下窄口,省得每条都写 ``[0]``。
+    """
+    actions, dialect, why = translate_sequence(payload, **kw)
+    return (actions[0] if actions else None), dialect, why
 
 
 def _tool_use(action_input: dict) -> dict:
@@ -57,13 +69,13 @@ class TestTheOldPathIsUntouched:
         assert _parse_action_json('```json\n{"action":"done"}\n```') == {"action": "done"}
 
     def test_native_is_recognised_as_native(self):
-        _, dialect, _ = translate_any('{"action":"wait","seconds":1}')
+        _, dialect, _ = _one('{"action":"wait","seconds":1}')
         assert dialect == DIALECT_NATIVE
 
 
 class TestAnthropicToolUse:
     def test_the_real_response_from_the_docs_is_understood(self):
-        action, dialect, why = translate_any(REAL_RESPONSE)
+        action, dialect, why = _one(REAL_RESPONSE)
         assert dialect == DIALECT_ANTHROPIC, why
         assert action is not None
 
@@ -86,27 +98,27 @@ class TestAnthropicToolUse:
     )
     def test_action_names_and_coordinates_are_translated(self, raw, expected):
         """名字对不上是真会咬人的:``key`` 原样传下去会被白名单拒掉。"""
-        action, _, why = translate_any(_tool_use(raw))
+        action, _, why = _one(_tool_use(raw))
         assert action is not None, why
         for k, v in expected.items():
             assert action[k] == v
 
     def test_drag_carries_both_ends(self):
-        action, _, why = translate_any(
+        action, _, why = _one(
             _tool_use({"action": "left_click_drag", "start_coordinate": [1, 2], "coordinate": [3, 4]})
         )
         assert action is not None, why
         assert (action["from_x"], action["from_y"], action["to_x"], action["to_y"]) == (1, 2, 3, 4)
 
     def test_drag_missing_an_endpoint_is_refused_not_guessed(self):
-        action, _, why = translate_any(_tool_use({"action": "left_click_drag", "coordinate": [3, 4]}))
+        action, _, why = _one(_tool_use({"action": "left_click_drag", "coordinate": [3, 4]}))
         assert action is None and "start_coordinate" in why
 
     def test_screenshot_becomes_a_wait_and_that_is_documented(self):
         """``screenshot`` 是"想再看一眼"。本仓的循环每一步都会重新截图,
         所以翻成 wait —— 这是**转义**,必须在源码里写明,不能当等价映射蒙混过去。
         """
-        action, _, _ = translate_any(_tool_use({"action": "screenshot"}))
+        action, _, _ = _one(_tool_use({"action": "screenshot"}))
         assert action["action"] == "wait"
 
         import inspect
@@ -128,7 +140,7 @@ class TestAnthropicToolUse:
             {"action": "scroll", "coordinate": [1, 1], "direction": "down", "magnitude": 3},
             {"action": "screenshot"},
         ):
-            action, _, why = translate_any(_tool_use(raw))
+            action, _, why = _one(_tool_use(raw))
             assert action is not None, why
             assert action["action"] in ALLOWED_ACTIONS, f"{raw} 翻成了白名单外的 {action['action']}"
 
@@ -137,7 +149,7 @@ class TestItNeverGuesses:
     """认不出就说认不出 —— 猜错会在无关位置点一下,认不出只是这一步不执行。"""
 
     def test_an_unknown_anthropic_action_is_refused(self):
-        action, dialect, why = translate_any(_tool_use({"action": "teleport"}))
+        action, dialect, why = _one(_tool_use({"action": "teleport"}))
         assert action is None
         assert dialect == DIALECT_ANTHROPIC
         assert "teleport" in why
@@ -149,18 +161,18 @@ class TestItNeverGuesses:
     def test_a_malformed_coordinate_is_not_coerced(self):
         """``coordinate`` 形状不对时不许硬凑一个点出来。"""
         for bad in ([1], [1, 2, 3], "100,200", None):
-            action, _, _ = translate_any(_tool_use({"action": "click", "coordinate": bad}))
+            action, _, _ = _one(_tool_use({"action": "click", "coordinate": bad}))
             if action is not None:
                 assert "x" not in action, f"从 {bad!r} 里凑出了坐标"
 
     def test_the_reason_is_always_given_when_it_fails(self):
-        _, _, why = translate_any("完全认不出的东西")
+        _, _, why = _one("完全认不出的东西")
         assert why, "认不出必须说清是为什么"
 
 
 class TestTheToolSchemaMatchesTheRealScreen:
     def test_the_declared_size_is_what_you_pass_in(self):
-        schema = anthropic_tool_schema(2560, 1440)
+        schema = anthropic_tool_schema(2560, 1440, tool_type=LEGACY_ANTHROPIC_COMPUTER_TYPE)
         assert schema["display_width_px"] == 2560
         assert schema["display_height_px"] == 1440
         assert schema["name"] == "computer"
@@ -170,9 +182,10 @@ class TestTheToolSchemaMatchesTheRealScreen:
 
         写死一个旧串会拿到旧行为甚至直接报错,所以必须能换。
         """
-        assert anthropic_tool_schema(800, 600, tool_type="computer_20990101")["type"] == "computer_20990101"
         assert DEFAULT_ANTHROPIC_COMPUTER_TYPE.startswith("computer_")
-        assert DEFAULT_ANTHROPIC_BETA.startswith("computer-use-")
+        # 默认必须指向**已登记**的版本;没登记的串要被明确拒绝,不能默默发出去
+        assert anthropic_beta_for_type(DEFAULT_ANTHROPIC_COMPUTER_TYPE)[1] is True
+        assert anthropic_beta_for_type("computer_20990101") == (None, False)
 
     def test_the_source_warns_about_dpi_mismatch(self):
         """声明尺寸与真实屏幕不一致 → 坐标系统性偏移,而且不会报错。
@@ -183,8 +196,11 @@ class TestTheToolSchemaMatchesTheRealScreen:
 
         import core.computer_use_dialects as d
 
-        src = inspect.getsource(d.anthropic_tool_schema)
+        # 坑在坐标换算那一段,不在声明构造器里 —— 声明只是把尺寸写对,
+        # 真正会咬人的是"模型按截图的像素给坐标,手却点在屏幕上"。
+        src = inspect.getsource(d)
         assert "DPI" in src
+        assert "map_action_to_screen" in src
 
 
 class TestTheDialectTableIsOneAuthority:
@@ -199,5 +215,5 @@ class TestTheDialectTableIsOneAuthority:
         assert names.index(DIALECT_ANTHROPIC) < names.index(DIALECT_NATIVE)
 
     def test_you_can_pin_a_single_dialect_for_diagnosis(self):
-        action, dialect, why = translate_any(REAL_RESPONSE, only=DIALECT_NATIVE)
+        action, dialect, why = _one(REAL_RESPONSE, only=DIALECT_NATIVE)
         assert action is None and dialect == "" and "只试了" in why
