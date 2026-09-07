@@ -45,7 +45,7 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.Orchestrator")
 
@@ -225,6 +225,46 @@ PhaseHook = Callable[[], PhaseResult]
 # ---------------------------------------------------------------------------
 # SystemOrchestrator — the staged bring-up engine
 # ---------------------------------------------------------------------------
+
+
+# ── Phase 6 装前端依赖的等待上限(秒) ──────────────────────────────────────
+#
+# 一处权威:两处 subprocess.run 和那条超时降级文案都从这里取,不各写各的数。
+#
+# 为什么要能调小:这两个数原本硬写成 120/300,而调它的测试跑在 pytest 的
+# 120 秒上限里 —— **内层不小于外层**,于是 `npm install timed out after 120s`
+# 那条优雅降级永远到不了,只能被外层硬超时打断(看起来接上了,其实没有)。
+# 现在默认值不变(真机行为一个字没改),但环境变量能把内层压到外层以下,
+# 那条降级路径因此变成可真正走到、可被测试盯住的路径。
+NPM_INSTALL_TIMEOUT_S = 120.0
+# 镜像重试给得更宽(国内换源本来就慢),但跟着上面的开关一起缩。
+NPM_INSTALL_MIRROR_TIMEOUT_S = 300.0
+
+
+def npm_install_timeouts() -> Tuple[float, float]:
+    """取(首次, 镜像重试)两个等待上限,**每次调用现读环境变量**。
+
+    不在模块级把 env 读死:那样值会冻在 import 那一刻,谁先 import 谁说了算,
+    调用方再设环境变量也没用 —— 又是一种"看起来能调,其实调不动"。
+    """
+
+    def _read(name: str, default: float) -> float:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            return default
+        try:
+            val = float(raw)
+        except ValueError:
+            logger.warning("%s=%r 不是数字,按默认 %gs 走。", name, raw, default)
+            return default
+        if val <= 0:
+            logger.warning("%s=%r 不是正数,按默认 %gs 走。", name, raw, default)
+            return default
+        return val
+
+    primary = _read("GALAXY_NPM_INSTALL_TIMEOUT_S", NPM_INSTALL_TIMEOUT_S)
+    mirror = _read("GALAXY_NPM_INSTALL_MIRROR_TIMEOUT_S", primary * 2.5)
+    return primary, mirror
 
 
 class SystemOrchestrator:
@@ -622,9 +662,8 @@ class SystemOrchestrator:
         # 这个阶段在 electron 包不完整时会真的去跑 `npm install`(联网、子进程),
         # 而 tests/test_batch_pr2_startup_orchestrator.py 里有四条测试直接调
         # run_startup_sequence(),于是单元测试会发起网络安装 —— CI 上并发一高就
-        # 撞穿 pytest 那 120 秒;更糟的是子进程自己的 timeout 也是 120 秒,内层不
-        # 小于外层,下面那条 "npm install timed out after 120s" 的优雅降级**永远
-        # 到不了**,只能硬超时。
+        # 撞穿 pytest 那 120 秒。等待上限见 NPM_INSTALL_TIMEOUT_S(可用
+        # GALAXY_NPM_INSTALL_TIMEOUT_S 调小,让内层严格小于外层,优雅降级才到得了)。
         #
         # 对无头/服务端部署这个开关本来也该有:那种机器上没人看 GUI,不该为它装
         # 一套 Electron 依赖。
@@ -694,6 +733,7 @@ class SystemOrchestrator:
             # 紧接着 npm 却报 "up to date"(其实好好的)。这里降为中性 INFO、措辞改成
             # "正在准备/补齐",只有 npm install 真失败(下面的分支)才升级为告警。
             _first_install = not os.path.isdir(node_modules)
+            _npm_timeout, _npm_mirror_timeout = npm_install_timeouts()
             logger.info(
                 "[启动·桌面壳] %s桌面前端依赖(npm install，首次可能数分钟)…",
                 "首次准备" if _first_install else "补齐",
@@ -708,7 +748,7 @@ class SystemOrchestrator:
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    timeout=120,
+                    timeout=_npm_timeout,
                 )
                 if npm_result.returncode != 0:
                     # 官方 registry 网络失败(国内常见)→ npmmirror 镜像重试一次
@@ -734,7 +774,7 @@ class SystemOrchestrator:
                             text=True,
                             encoding="utf-8",
                             errors="replace",
-                            timeout=300,
+                            timeout=_npm_mirror_timeout,
                         )
                 if npm_result.returncode != 0:
                     return PhaseResult(
@@ -747,8 +787,8 @@ class SystemOrchestrator:
                 return PhaseResult(
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
-                    detail="npm install timed out after 120s",
-                    said="装前端依赖超时(120 秒没装完),这次先不开桌面壳",
+                    detail=f"npm install timed out after {_npm_timeout:g}s",
+                    said=f"装前端依赖超时({_npm_timeout:g} 秒没装完),这次先不开桌面壳",
                 )
 
         # 拉起前核实到【运行时二进制】——真机根因("依赖残缺后补齐"仍闪退循环):

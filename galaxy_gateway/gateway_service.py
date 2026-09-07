@@ -247,17 +247,42 @@ async def _close_all_clients():
 
 
 def _cleanup_clients_sync():
-    """Synchronous cleanup for atexit — best-effort close."""
-    try:
-        import asyncio
+    """atexit 的收尾:尽力关掉 HTTP 连接池。
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_close_all_clients())
-        else:
-            loop.run_until_complete(_close_all_clients())
+    这里的难处是**进程已经在退出了**。原来的写法是
+    ``asyncio.get_event_loop()`` —— 到 atexit 这一刻,启动器的停机路径早就把那个
+    循环 ``close()`` 掉了,于是:
+
+      * ``loop.is_running()`` 是 False → 走 ``run_until_complete``
+      * 在已关闭的循环上调用它当场抛 RuntimeError
+      * 被 ``except Exception: pass`` 吞掉,而协程对象**从没被 await 过**
+
+    结果就是进程最后一刻打一条
+    ``RuntimeWarning: coroutine '_close_all_clients' was never awaited``。
+    真跑实测里它正好挂在"系统已停止"后面,看着像停机出了事,其实是这段收尾
+    自己没写对 —— 而且连接池一个都没真的关掉(看起来接上了,其实没有)。
+
+    改法:自己起一个**干净的**循环把收尾真的跑完;实在跑不成就显式 ``close()``
+    掉那个协程,不留一条误导人的告警。
+    """
+    import asyncio
+
+    coro = _close_all_clients()
+    loop = None
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(coro)
+        coro = None  # 真的 await 过了
     except Exception:
         pass
+    finally:
+        if coro is not None:
+            coro.close()  # 没跑成 —— 显式收掉,别留 "never awaited"
+        if loop is not None:
+            try:
+                loop.close()
+            except Exception:
+                pass
 
 
 atexit.register(_cleanup_clients_sync)

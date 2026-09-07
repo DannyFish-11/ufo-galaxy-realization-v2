@@ -35,6 +35,7 @@ importer（``main.py`` 与六个测试文件）在并存期继续可用。它在
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import socket
@@ -497,6 +498,23 @@ class UnifiedWebUI:
                 allow_headers=get_cors_headers(),
             )
 
+            # === 步骤 1.5：favicon —— 把一条恒定的 404 变成一个真的图标 ===
+            # 浏览器/Electron 一开页面就会自己去要 /favicon.ico。仓库里此前没有
+            # 任何图标,于是这条请求恒定 404,面板一开、/docs 一开就在网关日志里
+            # 留一条无人认领的 404。图标只在 core/brand_icon.py 定义一次。
+            # 无鉴权:它是给浏览器自动请求用的,加口令只会让它继续 404。
+            @self.app.get("/favicon.ico", include_in_schema=False)
+            async def _favicon():
+                from fastapi.responses import Response
+
+                from core.brand_icon import FAVICON_MEDIA_TYPE, FAVICON_SVG
+
+                return Response(
+                    content=FAVICON_SVG,
+                    media_type=FAVICON_MEDIA_TYPE,
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+
             # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
             try:
                 from core.startup import bootstrap_subsystems
@@ -617,6 +635,36 @@ class UnifiedWebUI:
                 self.app, host=self.config.host, port=self.config.web_ui_port, log_level="warning"
             )
             server = uvicorn.Server(_uvi_config)
+
+            # ── 进程级信号归启动器管,不归 uvicorn 管 ────────────────────────
+            # uvicorn 的 serve() 一进去就用 signal.signal() 把 SIGINT/SIGTERM
+            # 换成自己的 handle_exit(>=0.29 在 capture_signals() 里,更早的版本
+            # 在 install_signal_handlers() 里)。那是它**作为顶层入口**时该做的
+            # 事;在这里它只是被启动器拉起的一个子部件。
+            #
+            # 实测清楚一点,别把话说过头:被它换掉之后,main.py 那个用
+            # loop.add_signal_handler 挂的处理器**仍然会触发**(事件循环走的是
+            # 自己的唤醒 fd),所以这不是"进程收不掉"的原因 —— 那个原因在
+            # core/process_signals.py 里写着(两处各自注册,后者顶掉前者)。
+            #
+            # 它真正的害处是:同一个 SIGTERM 会让**两条**停机同时开跑 ——
+            # uvicorn 自己拆 HTTP 服务、启动器也在拆,谁先谁后不定。真跑日志里
+            # 那条 "unregister_all_services skipped as it does blocking i/o"
+            # 就是这么来的。摘掉它的信号入口,停机只剩 main.py 那一条路。
+            _sig_muted = False
+            if hasattr(server, "capture_signals"):  # uvicorn >= 0.29
+                server.capture_signals = contextlib.nullcontext  # type: ignore[method-assign]
+                _sig_muted = True
+            if hasattr(server, "install_signal_handlers"):  # uvicorn < 0.29
+                server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+                _sig_muted = True
+            if not _sig_muted:
+                # 两个入口都没有 = uvicorn 换了 API。宁可吵一句,也不要静悄悄地
+                # 退回"停机失灵"——那正是这段代码存在的原因。
+                logger.warning(
+                    "uvicorn %s 没有可屏蔽的信号入口,SIGTERM 可能仍被它抢走,停机会失灵。",
+                    getattr(uvicorn, "__version__", "?"),
+                )
 
             # ── 绑定前先自检端口 ──
             # 端口被占时,uvicorn 是在后台任务里 `sys.exit(1)`,真机上的表现是:
@@ -1730,19 +1778,25 @@ class GalaxyUnified:
 
             cs = CoreServiceLauncher(self.service_manager, self.config)
             results = await cs.start_all()
+            # start_all 现在返回**真实状态**("running" / "partial" / "failed"),
+            # 不再是 bool —— UFO 在"部分可用"时也返回 True,拿 bool 数就会数出
+            # 「3/3 就绪」,而日志里同时写着「部分可用」。两处说的必须是同一件事。
             _r = results if isinstance(results, dict) else {}
             items = [
-                ("Device Agent 管理器", _r.get("device_agent_manager", False)),
-                ("设备状态 API :8766", _r.get("device_status_api", False)),
-                ("Microsoft UFO 集成", _r.get("microsoft_ufo_integration", False)),
+                ("Device Agent 管理器", _r.get("device_agent_manager", "failed")),
+                ("设备状态 API :8766", _r.get("device_status_api", "failed")),
+                ("Microsoft UFO 集成", _r.get("microsoft_ufo_integration", "failed")),
             ]
-            up = sum(1 for _, v in items if v)
-            st = "ok" if up == len(items) else ("warn" if up else "fail")
+            _word = {"running": ("就绪", "ok"), "failed": ("未起来", "warn")}
+            up = sum(1 for _, v in items if v == "running")
+            part = sum(1 for _, v in items if v not in ("running", "failed"))
+            st = "ok" if up == len(items) else ("warn" if up or part else "fail")
+            _summary = f"{up}/{len(items)} 就绪" + (f" · {part} 个部分可用" if part else "")
             _emit(
                 "核心服务",
-                f"{up}/{len(items)} 就绪",
+                _summary,
                 st,
-                details=[(n, "就绪" if v else "未就绪", "ok" if v else "warn") for n, v in items],
+                details=[(n, *_word.get(v, (f"部分可用({v})", "warn"))) for n, v in items],
             )
         except Exception as exc:
             _emit("核心服务", "启动失败", "fail")
@@ -2104,6 +2158,20 @@ class GalaxyUnified:
         print_status("正在停止系统...", "loading")
         self.service_manager.state = SystemState.STOPPING
         self.running = False
+
+        # 先请 uvicorn **按它自己的方式**收 —— should_exit 是它的公开停机开关。
+        #
+        # 不这么做会怎样(真跑实测):停机时只有外面那一刀 task.cancel(),uvicorn 的
+        # lifespan 任务被取消,starlette 就把那个 CancelledError 当错误打出来,
+        # 于是"✓ 系统已停止"后面紧跟一段 `ERROR: Traceback ... CancelledError`
+        # 的裸栈 —— 正常停机的屏幕上出现一段看着像崩溃的东西。
+        # 置了 should_exit,它会自己关连接、跑完 lifespan shutdown 再返回。
+        try:
+            server = getattr(getattr(self, "web_ui", None), "_server", None)
+            if server is not None:
+                server.should_exit = True
+        except Exception as exc:  # noqa: BLE001 —— 收尾路径,拿不到就算了
+            logger.debug("请求 uvicorn 优雅停机失败(继续走后面的收尾): %s", exc)
 
         # 优雅关闭核心子系统（事件桥 → 监控 → 缓存）
         try:

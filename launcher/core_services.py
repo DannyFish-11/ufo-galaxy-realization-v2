@@ -89,18 +89,56 @@ class CoreServiceLauncher:
             logger.error("微软 UFO 集成启动失败: %s", e)
             return False
 
-    async def start_all(self) -> Dict[str, bool]:
-        """启动所有核心服务"""
-        results: Dict[str, bool] = {}
+    #: 三个核心服务的显示名。名字只此一处,调用方不另抄。
+    SERVICE_LABELS = {
+        "device_agent_manager": "Device Agent 管理器",
+        "device_status_api": "设备状态 API",
+        "microsoft_ufo_integration": "Microsoft UFO 集成",
+    }
 
-        print_status("启动 Device Agent 管理器...", "step")
-        results["device_agent_manager"] = await self.start_device_agent_manager()
+    def _recorded_status(self, key: str, started: bool) -> str:
+        """这个服务**实际**是什么状态。
+
+        不能只看 ``start_*`` 的返回值:``start_microsoft_ufo_integration`` 在
+        "部分可用"时也返回 ``True``(它确实不算失败),于是调用方数出来是
+        「3/3 就绪」—— 而日志里同时写着「微软 UFO 集成部分可用」。同一件事两处
+        各说各的,屏幕上那句还是更好听的那个。
+
+        真状态在 ``service_manager`` 里记着(``running`` / ``partial``),这里取它。
+        """
+        if not started:
+            return "failed"
+        svc = self.service_manager.services.get(key)
+        return str(getattr(svc, "status", "") or "running")
+
+    async def start_all(self) -> Dict[str, str]:
+        """启动所有核心服务，**每一个都给出结果**。
+
+        返回 ``{服务名: "running" / "partial" / "failed"}``。
+
+        此前这里是三行 ``print_status("启动 X...", "step")`` **只报开始、不报结果** ——
+        真跑实测,屏幕上就是三行 `▶ 启动 …` 挂在那儿,成没成一个字都没有。
+        这三个都是秒级的,所以不需要"开始"那一行:直接给结论。
+        """
+        results: Dict[str, str] = {}
+
+        started = await self.start_device_agent_manager()
+        results["device_agent_manager"] = self._recorded_status("device_agent_manager", started)
 
         if self.config.enable_device_api:
-            print_status("启动设备状态 API...", "step")
-            results["device_status_api"] = await self.start_device_status_api()
+            started = await self.start_device_status_api()
+            results["device_status_api"] = self._recorded_status("device_status_api", started)
 
-        print_status("启动微软 UFO 集成...", "step")
-        results["microsoft_ufo_integration"] = await self.start_microsoft_ufo_integration()
+        started = await self.start_microsoft_ufo_integration()
+        results["microsoft_ufo_integration"] = self._recorded_status("microsoft_ufo_integration", started)
+
+        for key, status in results.items():
+            label = self.SERVICE_LABELS.get(key, key)
+            if status == "running":
+                print_status(f"{label} 就绪", "success")
+            elif status == "failed":
+                print_status(f"{label} 未起来", "error")
+            else:
+                print_status(f"{label} 部分可用({status})", "warning")
 
         return results

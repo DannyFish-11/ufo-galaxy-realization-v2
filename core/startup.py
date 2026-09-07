@@ -290,13 +290,44 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 本就【不支持】,必然抛 NotImplementedError——这是平台预期行为,不是故障。
     # Windows 下 Ctrl+C 仍能通过 KeyboardInterrupt 正常停止。之前这里打 WARNING
     # 让用户以为出了问题,现在按平台区分:Windows/非主线程用 info 级如实说明。
-    try:
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_handle_signal(s)))
-        logger.info("已注册 SIGTERM/SIGINT 信号处理器")
-    except (RuntimeError, NotImplementedError):
-        logger.info("跳过 asyncio 信号处理器注册（Windows 或非主线程下不支持,属预期;" "Ctrl+C 仍可正常停止）")
+    #
+    # 还有一条**比平台差异更要命**的:``add_signal_handler`` 是覆盖语义,不报错、
+    # 不留痕。这里是被 ``main.py`` 的启动过程调用的,所以**后**注册 —— 之前它把
+    # 顶层入口挂的停机处理器直接顶掉了,而这里的处理器只关子系统、**不结束事件
+    # 循环**。真跑实测:SIGTERM 打进来,日志里只有一条 zeroconf 注销告警,主协程
+    # 照常转,进程 300 秒后仍在,只有 SIGKILL 收得掉。
+    #
+    # 现在按归属登记来:顶层入口先认领,这里就不再注册(它的停机路径本来就会调
+    # shutdown_subsystems(),见 launcher/shutdown.async_shutdown)。
+    # 没有顶层入口时(单独用 bootstrap_subsystems)照旧注册,行为一个字没变。
+    from core.process_signals import (  # noqa: PLC0415 —— 就近 import,避免模块级环依赖
+        SIGNAL_OWNER_CORE_STARTUP,
+        claim_process_signals,
+        process_signals_owner,
+    )
+
+    if not claim_process_signals(SIGNAL_OWNER_CORE_STARTUP):
+        # 注意这里是 **ok**,不是 "skipped"。
+        #
+        # 停机信号**确实有人接**(顶层入口接的),只是不由这里接。报成 skipped 会
+        # 让下面那句"⚠ signal_handlers: skipped"出现在每一次正常启动里,读起来
+        # 像"没人管信号了" —— 而事实恰好相反。真跑实测:那句 WARNING 一冒出来,
+        # 就又是一条混在真问题里的假问题。
+        results["signal_handlers"] = {
+            "status": "ok",
+            "owner": process_signals_owner(),
+            "note": "由顶层入口统一接管(这里不重复注册,重复注册会把它顶掉)",
+        }
+    else:
+        try:
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_handle_signal(s)))
+            logger.info("已注册 SIGTERM/SIGINT 信号处理器")
+            results["signal_handlers"] = {"status": "ok"}
+        except (RuntimeError, NotImplementedError) as exc:
+            logger.info("跳过 asyncio 信号处理器注册（Windows 或非主线程下不支持,属预期;" "Ctrl+C 仍可正常停止）")
+            results["signal_handlers"] = {"status": "skipped", "reason": str(exc) or "平台不支持"}
 
     # 启动前校验依赖图
     dep_errors = _validate_startup_deps()

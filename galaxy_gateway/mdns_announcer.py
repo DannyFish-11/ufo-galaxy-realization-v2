@@ -139,7 +139,11 @@ class MdnsAnnouncer:
         try:
             if self._zc and self._info:
                 self._zc.unregister_service(self._info)
-                self._zc.close()
+                # close() 不能直接调:在事件循环线程上 zeroconf 会跳过注销,
+                # 广播要等 TTL 才消失。统一走 core/zeroconf_close.py。
+                from core.zeroconf_close import close_zeroconf
+
+                close_zeroconf(self._zc, label="mDNS 广播(_galaxy._tcp)")
         except Exception as e:
             logger.debug("mDNS: cleanup error: %s", e)
         finally:

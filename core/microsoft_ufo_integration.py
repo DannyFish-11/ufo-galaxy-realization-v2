@@ -249,18 +249,41 @@ class MicrosoftUFOAutomator(BaseUIAutomator):
             return await self._initialize_fallback()
 
     async def _initialize_fallback(self) -> bool:
-        """初始化降级方案"""
+        """初始化降级方案(pyautogui)。
+
+        这里必须把**三种状态分开**说,不能只有"装了/没装":
+
+        1. 没装             → ImportError
+        2. 装了但**没有桌面**  → 无头机器上 ``import pyautogui`` 抛的是
+                              ``KeyError: 'DISPLAY'``(它 import 期就去连 X11),
+                              **不是 ImportError**
+        3. 好了
+
+        原来只 ``except ImportError``,于是第 2 种会**穿透出去**:真跑实测,
+        装上 pyautogui 之后无头机上这个 KeyError 直接从降级路径里逃出来 ——
+        本该"可选功能不可用"的事变成异常上抛。更早的日志还会把第 2 种说成
+        "pyautogui 未安装",而它明明装着 —— 说的和现实相反。
+        """
         try:
             import pyautogui  # noqa: F401
-
-            self.is_initialized = True
-            logger.info("Fallback to pyautogui")
-            return True
         except ImportError:
-            # pyautogui 是可选的 GUI 自动化回退依赖；缺失属正常(非致命)，降为
-            # warning，避免新克隆启动刷出吓人的红色 ERROR。
-            logger.warning("pyautogui 未安装，GUI 自动化回退不可用(可选功能，不影响启动)")
+            # 可选依赖缺失属正常(非致命),降为 warning,别让新克隆启动刷红。
+            logger.warning("pyautogui 没装,GUI 自动化回退用不了(可选功能,不影响启动)。装法: pip install pyautogui")
             return False
+        except Exception as exc:  # noqa: BLE001
+            # 装了,但这台机器上用不起来(最常见:无头/没有 X11 DISPLAY)。
+            # 照实说是哪一种,不要说成"没装"。
+            _headless = isinstance(exc, KeyError) and "DISPLAY" in str(exc)
+            logger.warning(
+                "pyautogui 装了但在这台机器上起不来(%s),GUI 自动化回退不可用%s",
+                f"{type(exc).__name__}: {exc}",
+                "。这台机器没有桌面(无 DISPLAY),无头部署下属正常" if _headless else "",
+            )
+            return False
+
+        self.is_initialized = True
+        logger.info("Fallback to pyautogui")
+        return True
 
     async def get_active_window(self) -> Optional[UIElement]:
         """获取当前活动窗口

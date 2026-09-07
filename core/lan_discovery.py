@@ -109,10 +109,12 @@ class LanDiscovery:
                 pass
         self._browsers.clear()
         if self._zc is not None:
-            try:
-                self._zc.close()
-            except Exception:  # noqa: BLE001
-                pass
+            # 不直接 close():在事件循环线程上 zeroconf 会**跳过注销**,只留一条
+            # "skipped as it does blocking i/o" 的告警,广播其实还挂着。
+            # 见 core/zeroconf_close.py。
+            from core.zeroconf_close import close_zeroconf
+
+            close_zeroconf(self._zc, label="LAN 发现(mDNS 浏览)")
             self._zc = None
 
     # ── 镜像(可直接单测,不依赖 zeroconf) ─────────────────────────────
