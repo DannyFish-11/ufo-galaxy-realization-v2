@@ -9,6 +9,7 @@ fastapi>=0.109.0
 starlette>=0.35.0          # core/performance.py 直接导入(middleware/types);此前仅靠 fastapi 传递依赖带入,显式声明
 uvicorn[standard]>=0.27.0
 pydantic>=2.9.0
+email-validator>=2.0.0    # nodes/Node_16_Email 用 pydantic.EmailStr,它要这个额外包;此前没声明 → 干净环境里 Node_16 永远 import 失败(真跑 python main.py --check-only 实测)
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
 

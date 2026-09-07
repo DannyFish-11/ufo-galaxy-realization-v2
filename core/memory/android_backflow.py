@@ -53,6 +53,34 @@ _ENTRY_FIELDS = (
     "timestamp_ms",
 )
 
+#: 一条任务记忆里**必须至少有一样**的内容字段。
+#:
+#: 剩下的四个字段(task_id / device_id / seq / timestamp_ms)全是**信封**:补得出来
+#: 或者可有可无。只有信封没有内容,存下去就是一条空记录。
+#:
+#: 为什么要有这条:实测(真跑 `POST /api/v1/memory/store`,body 用了别的形状)——
+#: ``store()`` 按 ``_ENTRY_FIELDS`` 逐个 ``entry.get()``,不认识的键**静悄悄丢掉**,
+#: 再给这条空记录编一个 task_id,然后返回 ``success: true``。查回来是
+#: ``goal=null, status=null, summary=null, steps=[]``,而且 ``_mirror_to_unified``
+#: 还会往统一记忆里写一条只有 "[Android任务]" 四个字的条目。
+#: 端上哪天改了字段名或多包了一层,拿到的是绿灯和一堆空记录 —— 没人会发现。
+_ENTRY_CONTENT_FIELDS = ("goal", "status", "summary", "steps")
+
+
+class EmptyEntryError(ValueError):
+    """整条回流里一个内容字段都没有 —— 这不是"存不下",是"根本没给东西"。"""
+
+
+def _has_content(value: Any) -> bool:
+    """这个字段算不算"给了东西"。空串、空列表、None 都不算。"""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, dict, set)):
+        return bool(value)
+    return True
+
 
 def _data_dir() -> str:
     d = os.getenv("GALAXY_DATA_DIR", "").strip() or os.path.join(os.getcwd(), "data")
@@ -159,8 +187,17 @@ class AndroidMemoryBackflow:
         """保存一条 Android 任务记忆。返回规范化后的 entry。
 
         会精确按 task_id 落盘，并把摘要文本汇入统一语义/跨模态记忆。
+
+        Raises:
+            EmptyEntryError: 整条里一个内容字段都没有(见 :data:`_ENTRY_CONTENT_FIELDS`)。
+                宁可当场说"你没给东西",也不要存一条空记录再回一个 ``success: true``。
         """
         norm = {k: entry.get(k) for k in _ENTRY_FIELDS}
+        if not any(_has_content(norm.get(k)) for k in _ENTRY_CONTENT_FIELDS):
+            raise EmptyEntryError(
+                "回流体里没有任何内容字段(" + "/".join(_ENTRY_CONTENT_FIELDS) + "),"
+                "不存空记录。收到的键: " + (", ".join(sorted(str(k) for k in (entry or {}))) or "(空)")
+            )
         tid = str(norm.get("task_id") or "").strip()
         if not tid:
             tid = f"android_{int(time.time() * 1000)}"

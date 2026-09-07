@@ -1139,17 +1139,23 @@ def _run_services_probe(*, status_only: bool) -> int:
     前者查的是**被启动的系统**（依赖、配置、core 模块、109 个节点能不能 import），
     后者查的是**启动器自己**（要素有没有搬丢、有没有第二份实现）。
     """
-    import asyncio as _asyncio
-
     from launcher import record as _record
     from launcher.services import GalaxyUnified, _run_check_only
+    from launcher.shutdown import run_and_drain
 
     lumiv = GalaxyUnified()
     try:
         if status_only:
             lumiv.show_status()
         else:
-            _asyncio.run(_run_check_only(lumiv))
+            # 不能用 asyncio.run:节点 import 起的后台任务里有吞掉 CancelledError 的,
+            # 收尾会永远等下去(实测 --check-only 报告打完就再也不退)。见 run_and_drain。
+            run_and_drain(
+                _run_check_only(lumiv),
+                on_stuck=lambda names: print_item(
+                    f"{len(names)} 个后台任务没响应取消，已直接退出", "warn", ", ".join(names[:3])
+                ),
+            )
     except KeyboardInterrupt:
         return _record.EXIT_INTERRUPTED
     return _record.EXIT_OK

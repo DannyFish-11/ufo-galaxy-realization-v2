@@ -56,10 +56,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             import asyncio
 
-            from core.memory.android_backflow import get_android_backflow
+            from core.memory.android_backflow import EmptyEntryError, get_android_backflow
 
             # store() 含落盘 + 汇入统一记忆(首次可能触发嵌入模型加载)，放线程池避免阻塞事件循环
-            saved = await asyncio.to_thread(get_android_backflow().store, body or {})
+            try:
+                saved = await asyncio.to_thread(get_android_backflow().store, body or {})
+            except EmptyEntryError as exc:
+                # 一个内容字段都没有 —— 这是**调用方给错了**,不是服务端出错,所以 400 不是 500。
+                # 此前这种 body 会静悄悄存成一条空记录并回 success:true(真跑实测)。
+                logger.warning("android_memory_store 收到空回流体: %s", exc)
+                return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
             return JSONResponse({"success": True, "task_id": saved.get("task_id")})
         except Exception as e:
             logger.warning("android_memory_store error: %s", e)

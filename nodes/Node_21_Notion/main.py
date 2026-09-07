@@ -8,6 +8,7 @@ Notion API 集成
 """
 
 import asyncio
+import logging
 import os
 import requests
 from datetime import datetime
@@ -15,6 +16,8 @@ from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from nodes.common.cors_config import get_cors_origins
+
+logger = logging.getLogger("Galaxy.Node21.Notion")
 
 app = FastAPI(title="Node 21 - Notion", version="1.0.0")
 
@@ -50,7 +53,9 @@ class NotionTools:
         self.initialized = bool(self.api_key)
         
         if not self.initialized:
-            print("Warning: NOTION_API_KEY not set")
+            # 原本是 print() —— 库模块构造时直接抢屏,真跑 `python main.py --check-only`
+            # 时它会插在"节点导入检查"中间(还是英文、还不走对勾列)。改进日志。
+            logger.warning("NOTION_API_KEY 未配置,Notion 节点以未初始化状态存在")
         
     def _get_headers(self) -> dict:
         """获取请求头"""
