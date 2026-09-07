@@ -479,14 +479,6 @@ def strip_modalities(messages: Sequence[Any], blocked: Sequence[str]) -> List[An
     return out
 
 
-def flatten_to_text(messages: Sequence[Any]) -> List[Any]:
-    """把规范表示整个压成纯文本 —— ``strip_modalities`` 挡下全部富模态时的特例。
-
-    留着这个名字是因为调用方按它找;实现委托给上面那个,免得两处各写各的。
-    """
-    return strip_modalities(messages, [m for m in ALL_MODALITIES if m != TEXT])
-
-
 def prepare(
     protocol: str,
     messages: Sequence[Any],
