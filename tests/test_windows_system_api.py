@@ -506,27 +506,58 @@ class TestHotkeyPumpCannotBusySpin:
         于是断言炸在 71%,而同一次测量里 ``PeekMessageW`` 只被调了 **512 次** ——
         真空转时是 66590 次。两个信号直接打架,错的是量法不是被测对象。
 
-        改法:让 mock 的 ``PeekMessageW`` 在**泵线程内**采 ``time.thread_time()``。
+        改法:让桩的 ``PeekMessageW`` 在**泵线程内**采 ``time.thread_time()``。
         它按线程计时,于是拿到的就是泵线程自己的 CPU,旁边多吵都不受影响。
+
+        **然后同一个坑又踩了第二次**(CI:``CPU 占用 49%(调用 1008 次)``):
+        线程计时没错,但计进去的还有**测量桩自己**的开销 —— 当时用的是
+        ``MagicMock``,每次调用都要构造 ``call`` 对象、追加 ``call_args_list``。
+        1008 次这个数字反而证明泵是对的(硬上限 1280/秒,真空转是 66590 次)。
+        现在换成轻量桩,并把桩自身开销当场测出来扣掉:量的才是泵。
         """
         import ctypes as _ctypes
         import time as _time
-        from unittest.mock import MagicMock
 
         from core.system_api import windows_adapter as wa
 
         saved_avail, saved_u32 = wa._WIN32_AVAILABLE, wa._user32
         try:
             wa._WIN32_AVAILABLE = True
-            u32 = MagicMock()
-            samples: list[float] = []
 
-            def _peek(*_args, **_kwargs):
-                # 在泵线程里执行 —— thread_time() 因此量的是泵线程。
-                samples.append(_time.thread_time())
-                return 1  # 恒真:正是当年把泵变成空转的那个条件
+            # 这里**刻意不用 MagicMock** —— 这是同一个坑的第二次。
+            #
+            # 第一次:量的是整进程 CPU,旁边测试的噪声全算到泵头上(见下面那段)。
+            # 改用 thread_time() 之后好了一阵,然后 CI 又红:
+            # ``CPU 占用 49%(调用 1008 次)``。
+            #
+            # 1008 次这个数字本身就说明泵是**对的** —— 泵的结构是"每轮最多 64 条 +
+            # 无条件 wait(50ms)",硬上限 1280 条/秒,1008 正好在里面;而真空转时是
+            # 66590 次。两个信号又一次打架,错的还是量法。
+            #
+            # 这次的噪声源是 MagicMock 自己:它每次调用都要构造 ``call`` 对象、
+            # 往 ``call_args_list`` 里追加。跑到这条用例时进程里已经跑过近万个测试,
+            # 内存压力下这些开销被放大,而它们**全部记在泵线程的 thread_time 里**。
+            # 本机实测:同样 1008 次,MagicMock 路径 11.33ms,纯桩 0.45ms —— 25 倍。
+            #
+            # 所以换成一个只做两件事的轻量桩(数次数、采时间),再把桩自己的开销
+            # 当场测出来扣掉。量的才是泵。
+            class _U32Stub:
+                """只数次数、只采时间。不记参数、不构造对象。"""
 
-            u32.PeekMessageW.side_effect = _peek
+                def __init__(self) -> None:
+                    self.call_count = 0
+                    self.first = 0.0
+                    self.last = 0.0
+
+                def PeekMessageW(self, *_args, **_kwargs):  # noqa: N802 —— 对齐 Win32 名字
+                    now = _time.thread_time()
+                    if self.call_count == 0:
+                        self.first = now
+                    self.last = now
+                    self.call_count += 1
+                    return 1  # 恒真:正是当年把泵变成空转的那个条件
+
+            u32 = _U32Stub()
             wa._user32 = u32
             if not hasattr(_ctypes, "wintypes"):  # 非 Windows 主机
 
@@ -549,11 +580,22 @@ class TestHotkeyPumpCannotBusySpin:
             pump.join(timeout=5)
             assert not pump.is_alive(), "stop() 之后泵必须真的停下来"
 
-            calls = u32.PeekMessageW.call_count
+            calls = u32.call_count
             assert calls >= 2, f"泵只调了 {calls} 次,采不到 CPU —— 这一轮测量无效"
             # 首尾两次采样之间,泵线程自己烧掉的 CPU。
-            thread_cpu = samples[-1] - samples[0]
-            return thread_cpu / wall, calls
+            thread_cpu = u32.last - u32.first
+
+            # 把**桩自己**的开销扣掉:同样次数、同一台机器、此刻的负载下,
+            # 光是"调用桩"这件事要花多少 CPU。慢机器上它自然大一些,于是这个
+            # 扣减是自适应的 —— 不必为 CI 的快慢另设一套阈值。
+            probe = _U32Stub()
+            t0 = _time.thread_time()
+            for _ in range(calls):
+                probe.PeekMessageW(None, None, 0, 0, 1)
+            stub_cost = _time.thread_time() - t0
+
+            pump_cpu = max(0.0, thread_cpu - stub_cost)
+            return pump_cpu / wall, calls
         finally:
             wa._WIN32_AVAILABLE, wa._user32 = saved_avail, saved_u32
 
