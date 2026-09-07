@@ -264,6 +264,53 @@ def section(title: str) -> None:
         print(f"\n  {title}")
 
 
+#: ``SystemOrchestrator`` 的阶段状态 → 本模块的状态词。
+#: 键用状态的**名字**而不是枚举本身：这样本模块不必在导入期就把
+#: ``core.system_orchestrator`` 拖进来（它会连带拉起半个后端）。
+_PREFLIGHT_STATUS: Dict[str, str] = {
+    "OK": "ok",
+    "DEGRADED": "warn",
+    "SKIPPED": "info",
+    "FAILED": "error",
+    "PENDING": "info",
+    "RUNNING": "info",
+}
+
+
+def print_preflight_phase(phase: Any, result: Any) -> None:
+    """把 ``run_startup_sequence`` 的每个阶段打出来（作为它的 ``on_phase`` 旁观者）。
+
+    在此之前，Phase 1 里面那六个子阶段只有 ``logger.info``，而 ``main.py`` 的控制台
+    handler 是 WARNING 级 —— 屏幕上根本看不到它们。真机症状是："环境检查以后就停
+    那儿了，然后就没显示了"：并不是卡死，是六个阶段照跑，只是一声不吭；而 Phase 6
+    「桌面表面」会同步跑 ``npm install``（首次数分钟，npm 自己的进度还被
+    ``capture_output`` 吃掉），沉默于是长到只能被理解成挂了。
+
+    走 :func:`step` 而不是裸 ``print``：这是启动路径唯一的输出咽喉，同一行顺带记进
+    ``runtime/startup.json`` —— 启动出问题时可以直接把那个文件发出来，而不是截一张
+    彩色终端的图让人猜。
+
+    Args:
+        phase:  ``core.system_orchestrator.StartupPhase``。
+        result: ``PhaseResult``；为 ``None`` 表示这个阶段**即将开始**。
+                只有会长时间不吭声的阶段（``PHASE_MAY_BLOCK``）才在这时预告一行，
+                其余都是亚秒级，预告只会让输出白白翻倍。
+
+    栏目不在这里指定：``print_phase("[Phase 1] 系统预检")`` 已经通过
+    :func:`set_column` 把当前栏目定下来了，这里跟着走就对。
+    """
+    from core.system_orchestrator import PHASE_LABELS, PHASE_MAY_BLOCK
+
+    label = PHASE_LABELS.get(phase, getattr(phase, "name", str(phase)))
+    if result is None:
+        why = PHASE_MAY_BLOCK.get(phase)
+        if why:
+            step(f"{label}(进行中)", "info", why)
+        return
+    status = _PREFLIGHT_STATUS.get(getattr(result.status, "name", ""), "info")
+    step(label, status, result.detail)
+
+
 def rule() -> None:
     """一条与横幅同渐变的横线。"""
     try:

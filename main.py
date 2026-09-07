@@ -455,7 +455,13 @@ def _run_orchestrator_preflight() -> bool:
         from core.system_orchestrator import SystemOrchestrator
 
         orch = SystemOrchestrator(continue_on_failure=False, strict_preflight=strict)
-        summary = orch.run_startup_sequence()
+        # 六个子阶段以前只有 logger.info(控制台 handler 是 WARNING 级),于是
+        # "[Phase 1] 系统预检" 之后控制台整段沉默 —— 接上打印器(见其 docstring)。
+        try:
+            from launcher.ui import print_preflight_phase as _printer
+        except Exception:  # noqa: BLE001 — 显示层缺席绝不能挡启动
+            _printer = None
+        summary = orch.run_startup_sequence(on_phase=_printer)
         logger.info("Orchestrator bring-up complete:\n%s", summary)
         _health_status = "healthy"
         _failed_validations.clear()

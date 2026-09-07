@@ -94,6 +94,20 @@ class StartupPhase(Enum):
     READINESS_SUMMARY = 7  # Phase 7 — Final readiness summary
 
 
+#: 阶段的中文名 —— **唯一出处**。控制台要打这些阶段的进度（见 ``main.py`` 的
+#: ``_run_orchestrator_preflight``），名字就只能从这里取，不许在入口再抄一份。
+PHASE_LABELS: Dict["StartupPhase", str] = {}
+
+#: 哪些阶段【会长时间不吭声】，以及为什么。
+#:
+#: 这不是装饰。Phase 6 会同步 ``subprocess.run([npm, "install"], capture_output=True)``：
+#: npm 自己的进度输出被 capture 吃掉，本模块的 ``logger.info`` 又只进
+#: ``logs/lumiv.log``（``main.py`` 的控制台 handler 是 WARNING 级），于是首次启动
+#: 时"环境检查"之后控制台可以整整几分钟一个字都没有 —— 用户只能理解成卡死了。
+#: 入口拿这里的理由，在阶段【开始前】先打一行，把沉默解释掉。
+PHASE_MAY_BLOCK: Dict["StartupPhase", str] = {}
+
+
 class PhaseStatus(Enum):
     """Result status for a single startup phase."""
 
@@ -108,6 +122,25 @@ class PhaseStatus(Enum):
 # ---------------------------------------------------------------------------
 # Phase result — typed, inspectable, extensible
 # ---------------------------------------------------------------------------
+
+
+PHASE_LABELS.update(
+    {
+        StartupPhase.LOAD_CONFIG: "载入配置",
+        StartupPhase.RESOLVE_MODE: "解析系统模式",
+        StartupPhase.ENV_CHECKS: "环境判据",
+        StartupPhase.BACKGROUND_SUBSYSTEMS: "后台子系统",
+        StartupPhase.RUNTIME_SUBJECT: "运行时主体",
+        StartupPhase.DESKTOP_SURFACE: "桌面表面",
+        StartupPhase.READINESS_SUMMARY: "就绪汇总",
+    }
+)
+
+PHASE_MAY_BLOCK.update(
+    {
+        StartupPhase.DESKTOP_SURFACE: "首次要装 Electron 前端依赖(npm install)，可能数分钟；已装好则秒过",
+    }
+)
 
 
 @dataclass
@@ -918,7 +951,11 @@ class SystemOrchestrator:
     # Main entry-point
     # ------------------------------------------------------------------
 
-    def run_startup_sequence(self) -> StartupSummary:
+    def run_startup_sequence(
+        self,
+        *,
+        on_phase: Optional[Callable[[StartupPhase, Optional["PhaseResult"]], None]] = None,
+    ) -> StartupSummary:
         """Execute all startup phases in order and return a :class:`StartupSummary`.
 
         Phases run sequentially.  If a phase returns ``FAILED`` and
@@ -928,6 +965,19 @@ class SystemOrchestrator:
         Extra hooks registered via :meth:`register_hook` run immediately after
         the built-in logic for each phase and can supplement or override the
         default result.
+
+        Args:
+            on_phase: 可选的**只读旁观者**，用来把进度实时交出去。每个阶段调用两次：
+                开始前 ``(phase, None)``，结束后 ``(phase, result)``。
+
+                有这个参数是因为本方法此前把六个阶段【一口气跑完才返回】，而中间
+                的进展只有 ``logger.info``（进 ``logs/lumiv.log``，控制台 handler
+                是 WARNING 级）。于是 ``main.py`` 打完 "[Phase 1] 系统预检" 之后，
+                控制台在 Phase 6 跑 ``npm install`` 期间可以几分钟毫无输出 —— 看起来
+                就是卡死。旁观者让入口能在【阶段发生时】就打出来。
+
+                它**不能改变任何结果**（返回值被忽略），抛异常也只记一条 warning：
+                一个显示用的回调绝不允许把启动带崩。
         """
         summary = StartupSummary()
         failed = False
@@ -941,7 +991,16 @@ class SystemOrchestrator:
             (StartupPhase.DESKTOP_SURFACE, self._run_phase_6_desktop_surface),
         ]
 
+        def _notify(phase: StartupPhase, result: Optional[PhaseResult]) -> None:
+            if on_phase is None:
+                return
+            try:
+                on_phase(phase, result)
+            except Exception as exc:  # noqa: BLE001 — 显示层绝不能挡启动
+                logger.warning("on_phase observer raised for %s: %s", phase.name, exc)
+
         for phase, runner in _phase_runners:
+            _notify(phase, None)
             if failed and not self.continue_on_failure:
                 result = PhaseResult(
                     phase=phase,
@@ -963,6 +1022,7 @@ class SystemOrchestrator:
 
             summary.add_result(result)
             logger.info("  %s", result)
+            _notify(phase, result)
 
             if result.status == PhaseStatus.FAILED:
                 failed = True
@@ -974,7 +1034,9 @@ class SystemOrchestrator:
                 break
 
         # Phase 7 — readiness summary (always runs)
+        _notify(StartupPhase.READINESS_SUMMARY, None)
         summary_result = self._run_phase_7_readiness_summary(summary)
         summary.add_result(summary_result)
+        _notify(StartupPhase.READINESS_SUMMARY, summary_result)
 
         return summary
