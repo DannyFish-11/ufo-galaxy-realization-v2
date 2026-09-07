@@ -1,7 +1,7 @@
 # 统一融合入口文件 - 由系统自动生成（已修复 sys.path 污染）
+import asyncio
 import importlib.util
 import logging
-import asyncio
 import os
 
 _node_dir = os.path.dirname(os.path.abspath(__file__))
@@ -14,8 +14,7 @@ def _import_node_main():
     if not os.path.exists(main_path):
         return None
     spec = importlib.util.spec_from_file_location(
-        "Node_45_DesktopAuto.main", main_path,
-        submodule_search_locations=[_node_dir]
+        "Node_45_DesktopAuto.main", main_path, submodule_search_locations=[_node_dir]
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

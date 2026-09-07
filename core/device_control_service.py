@@ -298,23 +298,35 @@ class DeviceControlService:
                 except Exception as _sapi_err:
                     logger.debug("device_control | system_api open_app fallback | %s", _sapi_err)
 
-                # Fallback: Node_45_Desktop HTTP API
+                # Fallback: Node_45_Desktop 的 /launch_app
+                #
+                # 这里原来有两处硬伤,而且是**同一段代码里的两条死路**:
+                #
+                # 1. 一张写死的"应用名 → 绝对路径"表,只有微信和浏览器两条,而且
+                #    路径只对"装在 C 盘默认位置的英文版 Windows"成立 —— 装到 D 盘、
+                #    换个语言、用绿色版,全都不认。
+                # 2. 更要命的是它 POST 到 ``/open_app`` —— **Node_45 根本没有这个
+                #    端点**。也就是说即使 app_name 命中了那张表,请求也只会 404:
+                #    这条"兜底"从来就没成功过一次。旁边那句"修复:未配置的 app 之前
+                #    返回 success=True 的假象"的注释,修的正是同一处的另一半,
+                #    而端点不存在这一半一直没人发现。典型的"看起来接上了,其实没有"。
+                #
+                # 现在收敛到 Node_45 的 ``/launch_app``:它不维护任何路径表,按平台
+                # 走系统自己的启动方式(Windows ``start`` / macOS ``open`` /
+                # Linux PATH 查找),把"这台机器上这个名字指向哪个程序"交还给系统 ——
+                # 那本来就是系统说了算的事,不该由一张写死的表来猜。
                 client = await self._get_client()
-                app_paths = {
-                    "微信": "C:\\Program Files\\Tencent\\WeChat\\WeChat.exe",
-                    "浏览器": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-                }
-                app_path = app_paths.get(app_name)
-                if app_path:
-                    response = await client.post(f"{self.node_urls['desktop']}/open_app", json={"app_path": app_path})
+                try:
+                    response = await client.post(
+                        f"{self.node_urls['desktop']}/launch_app",
+                        json={"target": app_name},
+                    )
                     result = response.json()
-                else:
-                    # 修复:未配置的 app 之前返回 success=True("已打开"的假象),
-                    # 上层据此汇报成功、不再兜底 → 用户以为打开了实际没打开。
+                except Exception as _exc:  # noqa: BLE001
+                    # 连不上也要如实说,不许静默变成"已打开"。
                     result = {
                         "success": False,
-                        "message": f"App {app_name} not configured",
-                        "error": "app_not_configured",
+                        "error": f"桌面节点(Node_45)调不通:{_exc}",
                     }
                 logger.info("Windows open_app (node fallback): %s -> %s", app_name, result)
                 return result

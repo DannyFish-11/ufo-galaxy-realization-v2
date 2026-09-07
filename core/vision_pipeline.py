@@ -228,6 +228,12 @@ class VisionResult:
     engine_used: str = ""
     processing_time_ms: float = 0
     error: str = ""
+    attempts: List[Dict[str, Any]] = field(default_factory=list)
+    """逐档试下来的经过:试了谁、可不可用、成没成。
+
+    降级必须留痕 —— 光有一个 ``engine_used`` 说不清"为什么没走本地那一档"
+    (是没配?连不上?还是识别失败?),这三种情况的处理方式完全不同。
+    """
 
     @property
     def full_text(self) -> str:
@@ -404,9 +410,28 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
         # 本地 vLLM 配置
         self.local_vllm_url = self.config.get("local_vllm_url", os.getenv("LOCAL_VLLM_URL", ""))
 
+        # ── 端侧 GUI grounding 后端(本地专用视觉模型)──────────────────────
+        #
+        # 补的是这条链上**唯一缺的那一档**。原来的四档:前三档全在云端,第四档
+        # (Tesseract)虽在本机却只认字、不懂控件。也就是说想要真正的界面理解,
+        # 就必须把屏幕截图发出去 —— 与"个人 AI、数据不出设备"的立场正面冲突。
+        #
+        # 这一档指向**本机**一个 OpenAI 兼容的 vision 端点:llama-server /
+        # vLLM / LM Studio / Ollama,或任何端侧 GUI-VLA 模型自带的本地服务
+        # (如 Mano-P 一类)都行 —— 这里只依赖"OpenAI 兼容 + 收图片"这个接口
+        # 形状,不绑定任何一家的实现。
+        #
+        # 没配就整档跳过,现有部署行为一个字不变。
+        self.local_gui_url = self.config.get("local_gui_url", os.getenv("GALAXY_LOCAL_GUI_VLM_URL", "")).rstrip("/")
+        self.local_gui_model = self.config.get("local_gui_model", os.getenv("GALAXY_LOCAL_GUI_VLM_MODEL", ""))
+        self.local_gui_timeout = float(
+            self.config.get("local_gui_timeout", os.getenv("GALAXY_LOCAL_GUI_VLM_TIMEOUT_S", "120"))
+        )
+
         # 统计
         self._stats = {
             "total_calls": 0,
+            "local_gui_calls": 0,
             "deepseek_calls": 0,
             "gemini_calls": 0,
             "qwen_calls": 0,
@@ -484,47 +509,43 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
             if task_context:
                 prompt += f"\n\nAdditional context: {task_context}"
 
-        # 按降级策略尝试各引擎
+        # ── 按登记表逐档降级 ────────────────────────────────────────────
+        # 顺序与每一档的可用性判断都在 core/vision_backends.py 一处定义。
+        # 这里原本是写死的 if 瀑布(Level 1..4),加一档得改本函数;而且"这一档
+        # 的数据出不出设备"没有任何地方说得出来。逐条判断一个字没改,只是挪了家。
         result = None
         engine_used = ""
+        attempts: List[Dict[str, Any]] = []  # 试过谁、为什么没成 —— 降级必须留痕
 
-        # Level 1: DeepSeek OCR 2
-        if self.deepseek_api_key or self.local_vllm_url:
-            result = await self._call_deepseek_ocr2(image_base64, prompt)
+        for backend in self.backends():
+            if not backend.available(self):
+                attempts.append({"backend": backend.name, "outcome": "unavailable"})
+                continue
+            result = await backend.call(self, image_base64, prompt)
             if result:
-                engine_used = "deepseek_ocr2"
-                self._stats["deepseek_calls"] += 1
-
-        # Level 2: Gemini
-        if not result and self.gemini_api_key:
-            result = await self._call_gemini(image_base64, prompt)
-            if result:
-                engine_used = "gemini"
-                self._stats["gemini_calls"] += 1
-
-        # Level 3: Qwen3-VL via OpenRouter
-        if not result and self.openrouter_api_key:
-            result = await self._call_qwen_vl(image_base64, prompt)
-            if result:
-                engine_used = "qwen3_vl"
-                self._stats["qwen_calls"] += 1
-
-        # Level 4: Tesseract 离线降级
-        if not result:
-            result = await self._call_tesseract_fallback(image_base64)
-            if result:
-                engine_used = "tesseract"
-                self._stats["tesseract_calls"] += 1
+                engine_used = backend.name
+                self._stats[backend.stat_key] = self._stats.get(backend.stat_key, 0) + 1
+                attempts.append({"backend": backend.name, "outcome": "ok", "local": backend.local})
+                if not backend.local:
+                    # 截图是屏幕内容。它离开这台设备这件事,必须留下痕迹。
+                    logger.info("视觉识别走了云端后端 %s —— %s", backend.label, backend.privacy_note)
+                break
+            attempts.append({"backend": backend.name, "outcome": "failed"})
 
         if not result:
             self._stats["errors"] += 1
-            return VisionResult(success=False, error="所有视觉引擎均不可用")
+            return VisionResult(
+                success=False,
+                error="所有视觉引擎均不可用",
+                attempts=attempts,
+            )
 
         # 解析结果
         processing_time = (time.time() - start_time) * 1000
         vision_result = self._parse_result(result, mode, engine_used)
         vision_result.processing_time_ms = processing_time
         vision_result.engine_used = engine_used
+        vision_result.attempts = attempts
 
         # 融合：将 OCR 文本与 GUI 元素关联
         if mode == "full":
@@ -599,6 +620,128 @@ If not found, return: {{"found": false, "reason": "why not found"}}"""
     # =========================================================================
     # 引擎调用
     # =========================================================================
+
+    def backends(self) -> "List[Any]":
+        """本实例可用的视觉后端,已按顺序排好。
+
+        每一档的 ``available`` 都是从原来那条 if 瀑布**逐条照搬**过来的:
+
+        =============  ==========================================  ====  =========
+        档              原来的判断                                   本地  懂控件
+        =============  ==========================================  ====  =========
+        local_gui       (新增)配了 GALAXY_LOCAL_GUI_VLM_URL         是    是
+        deepseek_ocr2   ``self.deepseek_api_key or self.local_vllm_url``  否   是
+        gemini          ``self.gemini_api_key``                     否    是
+        qwen3_vl        ``self.openrouter_api_key``                 否    是
+        tesseract       无条件(兜底)                                是    **否**
+        =============  ==========================================  ====  =========
+
+        最后一列是这张表真正的价值:在补上 ``local_gui`` 之前,**"本地"与"懂控件"
+        这两件事在任何一档上都无法同时成立** —— 想要真正的界面理解就必须上云。
+        """
+        from core.vision_backends import (  # noqa: PLC0415 —— 就近 import,避免模块级环依赖
+            BACKEND_DEEPSEEK,
+            BACKEND_GEMINI,
+            BACKEND_LOCAL_GUI,
+            BACKEND_QWEN_VL,
+            BACKEND_TESSERACT,
+            VisionBackend,
+            ordered_backends,
+        )
+
+        registry = {
+            BACKEND_LOCAL_GUI: VisionBackend(
+                name=BACKEND_LOCAL_GUI,
+                label="端侧 GUI 视觉模型",
+                local=True,
+                grounding=True,
+                stat_key="local_gui_calls",
+                available=lambda p: bool(p.local_gui_url),
+                call=lambda p, img, prompt: p._call_local_gui(img, prompt),
+            ),
+            BACKEND_DEEPSEEK: VisionBackend(
+                name=BACKEND_DEEPSEEK,
+                label="DeepSeek OCR 2",
+                local=False,
+                grounding=True,
+                stat_key="deepseek_calls",
+                available=lambda p: bool(p.deepseek_api_key or p.local_vllm_url),
+                call=lambda p, img, prompt: p._call_deepseek_ocr2(img, prompt),
+            ),
+            BACKEND_GEMINI: VisionBackend(
+                name=BACKEND_GEMINI,
+                label="Gemini 2.0 Flash",
+                local=False,
+                grounding=True,
+                stat_key="gemini_calls",
+                available=lambda p: bool(p.gemini_api_key),
+                call=lambda p, img, prompt: p._call_gemini(img, prompt),
+            ),
+            BACKEND_QWEN_VL: VisionBackend(
+                name=BACKEND_QWEN_VL,
+                label="Qwen3-VL (OpenRouter)",
+                local=False,
+                grounding=True,
+                stat_key="qwen_calls",
+                available=lambda p: bool(p.openrouter_api_key),
+                call=lambda p, img, prompt: p._call_qwen_vl(img, prompt),
+            ),
+            BACKEND_TESSERACT: VisionBackend(
+                name=BACKEND_TESSERACT,
+                label="Tesseract + 规则",
+                local=True,
+                # 这个 False 不是笔误:它认得出字,认不出"那是个按钮"。
+                # 把它标成懂控件,就等于让上层以为界面理解一直有兜底 —— 没有。
+                grounding=False,
+                stat_key="tesseract_calls",
+                available=lambda p: True,  # 兜底档,无条件参与
+                call=lambda p, img, prompt: p._call_tesseract_fallback(img),
+            ),
+        }
+        return ordered_backends(registry)
+
+    async def _call_local_gui(self, image_base64: str, prompt: str) -> Optional[Dict]:
+        """调用**本机**的 GUI grounding 视觉模型(OpenAI 兼容 /chat/completions)。
+
+        为什么单独一档,而不是复用 ``local_vllm_url``:那个字段是 DeepSeek OCR 2
+        那一档的**替身端点**(走同一个 model 名、同一套 prompt),语义上属于云端那
+        一档的本地化部署。这里要的是**另一件事** —— 一个专门做 GUI 理解的端侧
+        模型,它有自己的 model 名、自己的超时(端侧推理通常慢得多),而且是这条链
+        上唯一"既在本机、又懂控件"的档。两者混用会让"数据出不出设备"这个判据
+        再也说不清。
+        """
+        try:
+            client = await self._get_client()
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "model": self.local_gui_model or "local-gui-vlm",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
+                            {"type": "text", "text": prompt},
+                        ],
+                    }
+                ],
+                "max_tokens": 4096,
+                "temperature": 0.1,
+            }
+            response = await client.post(
+                f"{self.local_gui_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self.local_gui_timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return self._extract_json(content)
+        except Exception as e:
+            # 本地端点连不上是**最常见的正常情况**(没起服务),但仍要留一句:
+            # 它决定了这次识别到底走没走出这台设备。
+            logger.warning("端侧 GUI 视觉后端调用失败(将继续降级): %s", e)
+            return None
 
     async def _call_deepseek_ocr2(self, image_base64: str, prompt: str) -> Optional[Dict]:
         """调用 DeepSeek OCR 2"""
