@@ -201,30 +201,105 @@ class TestLaunchAppCannotBeTurnedIntoACommandLine:
         assert '"cmd"' not in code and "'cmd'" not in code, "又把字符串交给 cmd.exe 解析了"
         assert "/c" not in code
 
-    def test_a_legitimate_program_still_launches(self):
-        """防注入不能把正常用法一起挡掉。"""
+    def test_an_allowlisted_program_still_launches(self, monkeypatch):
+        """加了授权门,不能把正常用法一起挡掉。"""
         import shutil
 
         from nodes.Node_45_DesktopAuto.main import _resolve_launch_target
 
-        if shutil.which("true"):
-            resolved, why = _resolve_launch_target("true")
-            assert resolved is not None and why == ""
-            assert resolved.endswith("true")
+        if not shutil.which("true"):
+            pytest.skip("本机没有 /usr/bin/true")
+        monkeypatch.setenv("GALAXY_LAUNCH_APP_ALLOWLIST", "true")
+        resolved, why = _resolve_launch_target("true")
+        assert resolved is not None and why == ""
+        assert resolved.endswith("true")
 
-    def test_an_absolute_path_that_exists_is_accepted(self, tmp_path):
+    def test_an_allowlisted_absolute_path_is_accepted(self, monkeypatch, tmp_path):
         from nodes.Node_45_DesktopAuto.main import _resolve_launch_target
 
         f = tmp_path / "prog"
         f.write_text("#!/bin/sh\n")
+        monkeypatch.setenv("GALAXY_LAUNCH_APP_ALLOWLIST", str(f))
         resolved, why = _resolve_launch_target(str(f))
         assert resolved == str(f.resolve()), why
 
-    def test_a_name_that_resolves_to_nothing_is_refused(self):
+    def test_a_name_that_resolves_to_nothing_is_refused(self, monkeypatch):
         from nodes.Node_45_DesktopAuto.main import _resolve_launch_target
 
+        monkeypatch.setenv("GALAXY_LAUNCH_APP_ALLOWLIST", "definitely-not-a-real-binary-xyz")
         resolved, why = _resolve_launch_target("definitely-not-a-real-binary-xyz")
         assert resolved is None and why
+
+
+class TestLaunchAppNeedsExplicitAuthorisation:
+    """ "按名字启动任意程序"这件事,过滤字符是挡不住的 —— 只能靠授权。
+
+    第二版修复(去 shell + 过滤元字符 + 先解析成真实文件)挡住了命令**拼接**,
+    但没挡住命令**本身**:``isfile(target)`` 放行任意绝对路径,
+    ``which(target)`` 放行 PATH 里的任意程序(sh / python / curl 都在)。
+    **还是远程任意代码执行**,只是要求那个文件已经存在 —— CodeQL 第二轮照旧报
+    critical,还多报一条 path-injection,它是对的。
+
+    现在:默认整个关着;开启后调用方的字符串只用来**在清单里查表**,
+    真正拿去启动的是清单里的那一项。
+    """
+
+    DANGEROUS = ["/bin/sh", "sh", "bash", "python3", "curl", "/usr/bin/python3", "nc"]
+
+    @pytest.fixture(autouse=True)
+    def _no_allowlist_by_default(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_LAUNCH_APP_ALLOWLIST", raising=False)
+
+    @pytest.mark.parametrize("target", DANGEROUS + ["true", "notepad"])
+    def test_everything_is_refused_when_no_allowlist_is_configured(self, client, target):
+        """默认关着 —— 连无害的程序也不许,因为"无害"不该由这段代码来判断。"""
+        body = client.post("/launch_app", json={"target": target}).json()
+        assert body["success"] is False
+        assert "默认是关着的" in body["error"]
+
+    def test_the_refusal_says_how_to_turn_it_on(self, client):
+        """拒绝要说清怎么开 —— 不然就是个查不出原因的死端点。"""
+        body = client.post("/launch_app", json={"target": "notepad"}).json()
+        assert "GALAXY_LAUNCH_APP_ALLOWLIST" in body["error"]
+
+    @pytest.mark.parametrize("target", DANGEROUS)
+    def test_a_narrow_allowlist_does_not_let_anything_else_through(self, client, monkeypatch, target):
+        monkeypatch.setenv("GALAXY_LAUNCH_APP_ALLOWLIST", "true")
+        body = client.post("/launch_app", json={"target": target}).json()
+        assert body["success"] is False, f"清单里只有 true,却放行了 {target!r}"
+        assert "不在允许清单里" in body["error"]
+
+    def test_matching_is_exact_not_prefix_or_substring(self, client, monkeypatch):
+        """前缀/包含匹配都能被绕 —— 必须精确。"""
+        monkeypatch.setenv("GALAXY_LAUNCH_APP_ALLOWLIST", "true")
+        for sneaky in ("true;sh", "true sh", "truex", "TRUE", "/usr/bin/true"):
+            body = client.post("/launch_app", json={"target": sneaky}).json()
+            assert body["success"] is False, f"精确匹配被绕过了:{sneaky!r}"
+
+    def test_nothing_dangerous_actually_ran(self, client, monkeypatch):
+        """光看返回值不够 —— 确认那些程序真的没被起来。"""
+        import os
+
+        probe = "/tmp/galaxy_launch_authz_probe"
+        if os.path.exists(probe):
+            os.remove(probe)
+        monkeypatch.setenv("GALAXY_LAUNCH_APP_ALLOWLIST", "true")
+        for target in ("touch", "/usr/bin/touch", "sh", "/bin/sh"):
+            client.post("/launch_app", json={"target": target})
+        assert not os.path.exists(probe), "被拒的程序其实跑起来了"
+
+    def test_the_user_string_never_reaches_the_command_line(self):
+        """源码判据:拿去启动的必须是清单里那一项,不是调用方给的字符串。"""
+        import inspect
+
+        import nodes.Node_45_DesktopAuto.main as m
+
+        src = inspect.getsource(m._resolve_launch_target)
+        code = "\n".join(ln for ln in src.split("\n") if not ln.lstrip().startswith("#"))
+        # which()/isfile() 的入参必须是 approved(来自清单),不能是 target
+        assert "_shutil.which(approved)" in code
+        assert "_shutil.which(target)" not in code, "又把调用方的字符串直接拿去解析了"
+        assert "_os.path.isfile(target)" not in code, "又把调用方的字符串直接当路径用了"
 
 
 class TestNewEndpointsDoNotLeakExceptionText:

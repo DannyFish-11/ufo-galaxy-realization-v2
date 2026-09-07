@@ -265,58 +265,90 @@ async def wait(request: WaitRequest):
     return {"success": True, "waited_seconds": seconds, "requested_seconds": request.seconds}
 
 
-#: target 里出现这些字符一律拒收。
+#: 允许启动哪些程序 —— 由**部署方**在环境变量里声明,逗号分隔。
 #:
-#: 纵深防御:下面的启动路径已经**不经过任何 shell**了,这一层是第二道 ——
-#: 真正的程序名里不会有这些字符,出现了就说明有人在试着拼命令。
-_SHELL_METACHARS = set("&|;<>$`\n\r\"'")
+#: 例:``GALAXY_LAUNCH_APP_ALLOWLIST=notepad,chrome,code``
+#:
+#: 不设 = 这个端点整个关着。这是**默认安全**,不是不方便:见下面 why。
+_LAUNCH_ALLOWLIST_ENV = "GALAXY_LAUNCH_APP_ALLOWLIST"
+
+
+def _launch_allowlist() -> "List[str]":
+    """读允许清单。每次现读 —— 改了配置不必重启才生效。"""
+    import os as _os
+
+    raw = _os.environ.get(_LAUNCH_ALLOWLIST_ENV, "")
+    return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 def _resolve_launch_target(target: str) -> "tuple[Optional[str], str]":
-    """把 target 解析成**一个真实存在的可执行文件路径**。
+    """把 target 解析成一个**允许启动的**可执行文件路径。
 
-    返回 ``(路径, 出错原因)``;解析不出来就 ``(None, 原因)``。
+    返回 ``(路径, 出错原因)``;不允许或找不到就 ``(None, 原因)``。
 
-    为什么必须先解析再启动:上一版 Windows 分支写的是
+    这里改过两版,两版都不够,记下来免得再走回头路:
+
+    **第一版**(Windows 分支)::
 
         subprocess.Popen(["cmd", "/c", "start", "", target], shell=False)
 
-    ``shell=False`` 是障眼法 —— **cmd.exe 自己就是 shell**,``/c`` 后面的内容
-    由它解析。而 ``target`` 直接来自 HTTP 请求体,塞一个 ``foo & calc`` 就是
-    任意命令执行。这是个对外的端点,等于把这台机器交出去(CodeQL
-    py/command-line-injection,critical)。当时那句注释还把"start 走 shell 解析"
-    当成优点写着 —— 那正是漏洞本身。
+    ``shell=False`` 是障眼法 —— cmd.exe 自己就是 shell,``/c`` 后面由它解析。
+    ``target`` 来自 HTTP 请求体,``foo & calc`` 就是任意命令执行
+    (CodeQL py/command-line-injection,critical)。
 
-    现在:先把名字解析成一个确实存在的文件,再用 argv 数组启动。用户给的字符串
-    **永远不会被任何 shell 解析**。
+    **第二版**:去掉 shell、过滤 shell 元字符、先把名字解析成真实文件再用 argv 启动。
+    挡住了命令**拼接**,但没挡住命令**本身** —— ``os.path.isfile(target)`` 放行任意
+    绝对路径,``shutil.which(target)`` 放行 PATH 里的任意程序(``sh`` / ``python`` /
+    ``curl`` 都在里面)。**还是远程任意代码执行**,只是要求那个文件已经存在。
+    CodeQL 第二轮照旧报 critical,而且多报了一条 path-injection —— 它是对的。
+
+    **想明白的事**:"按名字启动任意程序"作为一个 HTTP 端点,本质上不是过滤字符能
+    解决的,只能靠**授权**。所以:
+
+    1. **默认整个关着**。不设 :data:`_LAUNCH_ALLOWLIST_ENV` 就一律拒绝;
+    2. 开启时,调用方给的字符串只用来**在清单里查表**;
+    3. 命中之后,拿去解析和启动的是**清单里的那一项**(部署方写的),
+       不是调用方给的字符串 —— 用户输入到此为止,不进 path、不进命令行。
+
+    与刚从 ``device_control_service`` 删掉的那张 app_paths 表**不是一回事**:
+    那张表是代码里写死"微信 → C:\\Program Files\\..."的**猜测**,只对某一台机器
+    成立、必然过时;这张清单是部署方对自己机器做的**授权声明**,由知情者决定。
     """
     import os as _os
     import shutil as _shutil
 
+    allowlist = _launch_allowlist()
+    if not allowlist:
+        return None, (
+            f"启动程序的能力默认是关着的。要开:设 {_LAUNCH_ALLOWLIST_ENV}=<允许的程序名,逗号分隔>。"
+            "这是个能在本机起进程的接口,不做白名单就等于把机器交出去。"
+        )
+
     if not target:
         return None, "target 不能为空"
-    if _SHELL_METACHARS & set(target):
-        return None, "target 含有不允许的字符(命令拼接嫌疑),已拒绝"
 
-    # 1) 直接就是一个存在的路径
-    if _os.path.isfile(target):
-        return _os.path.abspath(target), ""
-    # 2) PATH 里找得到的程序名
-    found = _shutil.which(target)
+    # **精确**匹配,不做前缀/包含 —— 那两种都能被绕。
+    if target not in allowlist:
+        return None, "这个程序不在允许清单里"
+
+    # 关键:下面用的是 allowlist 里的那一项(部署方写的),不是调用方传来的字符串。
+    approved = allowlist[allowlist.index(target)]
+
+    if _os.path.isabs(approved) and _os.path.isfile(approved):
+        return _os.path.abspath(approved), ""
+    found = _shutil.which(approved)
     if found:
         return _os.path.abspath(found), ""
-    return None, "在 PATH 和文件系统里都找不到这个程序;请给完整路径,或先把它装到 PATH 上"
+    return None, "清单里有这一项,但这台机器上找不到它;请在清单里写完整路径"
 
 
 @app.post("/launch_app")
 async def launch_app(request: LaunchAppRequest):
-    """拉起一个程序。
+    """拉起一个程序 —— **需要部署方显式授权**。
 
-    刻意**不在这里放"应用名 → 绝对路径"的字典**:那种表一写死就只对写它的
-    那台机器成立(装在 D 盘、换了语言、绿色版全都不认),而且会散成两处。
-
-    安全立场:target 先被解析成一个**真实存在的可执行文件**,再以 argv 数组启动,
-    全程不经过 shell。见 :func:`_resolve_launch_target`。
+    刻意不在代码里放"应用名 → 绝对路径"的字典(那种表只对写它的那台机器成立)。
+    允许启动什么由 :data:`_LAUNCH_ALLOWLIST_ENV` 声明,默认什么都不许。
+    安全立场与两版历史见 :func:`_resolve_launch_target`。
     """
     import subprocess
 
@@ -326,12 +358,11 @@ async def launch_app(request: LaunchAppRequest):
         return {"success": False, "error": why}
 
     try:
-        # argv 数组 + 无 shell:这里没有任何东西会被解释成命令。
+        # argv 数组 + 无 shell + 路径来自允许清单:三重都占住。
         subprocess.Popen([resolved])  # noqa: S603
         return {"success": True, "target": target, "resolved": resolved}
     except Exception as e:
-        # 异常详情只进日志 —— 它会带出路径、权限等服务端信息
-        # (CodeQL py/stack-trace-exposure)。给调用方一句固定的话。
+        # 异常详情只进日志(CodeQL py/stack-trace-exposure)。
         logger.warning("launch_app 启动失败 target=%r resolved=%r: %s", target, resolved, e)
         return {"success": False, "error": "启动失败,详情见服务端日志"}
 
