@@ -30,7 +30,8 @@ tests/test_voice_switches_reach_the_panel.py 里那条。
 
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+import fnmatch
+from typing import Any, Dict, Iterable, List, Tuple
 
 CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
     {
@@ -139,3 +140,27 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
         ),
     },
 )
+
+
+def owned_keys(bundle: Dict[str, Any], schema_keys: Iterable[str]) -> List[str]:
+    """把一档的 ``owns``(带 glob)展开成**它真正管的那些键**。唯一展开处。
+
+    为什么要有这个函数
+    ==================
+    ``owns`` 原本**只有测试读**,运行时的 ``key_count`` / ``overrides`` 全是按
+    ``category`` 数的。两者差得很远 —— 实测「自主」这一档 ``owns`` 展开只有 5 个键,
+    而 ``category == "agent"`` 有 59 个。于是:
+
+    * 面板上「自主」那一行显示「有 1 项手改过」,那一项其实是 ``GALAXY_MODEL_TIER``
+      —— 它是**第五行 ABCD 那个控件**写进去的,跟"要不要问过再做"毫无关系;
+    * 而这个文件里那段"这里**没有** GALAXY_HITL_*……留在 owns 之外不是含糊过去,
+      是把「这一档不管它」这句话写下来"的说明,在运行时**根本不成立** ——
+      那些键的 category 也是 agent,照样被数进来。文档说的和现实相反。
+
+    现在运行时改成读这里,``owns`` 才真的是"这一档管哪些键"的唯一定义处。
+    """
+    keys = set(schema_keys)
+    out: set = set()
+    for pattern in bundle.get("owns", ()):
+        out.update(fnmatch.filter(keys, pattern))
+    return sorted(out)
