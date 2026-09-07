@@ -410,7 +410,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/sessions")
     async def create_session(req: CreateSessionRequest):
         """创建新会话"""
-        session = sm.create_session(req.user_id, req.device_id)
+        # SessionManager.create_session 是 **async** 的(它要拿 self._lock)。
+        # 这里原来漏了 await —— session 拿到的是个协程对象,下一行 .to_summary()
+        # 直接 AttributeError。真跑实测:POST /api/v1/sessions 一律 HTTP 500
+        # ("'coroutine' object has no attribute 'to_summary'"),也就是说
+        # **建会话这条 HTTP 路从来没通过**。
+        session = await sm.create_session(req.user_id, req.device_id)
         return JSONResponse(
             {
                 "success": True,
@@ -432,7 +437,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/sessions/{session_id}/join")
     async def join_session(session_id: str, req: JoinSessionRequest):
         """设备加入会话"""
-        ok = sm.join_session(session_id, req.device_id)
+        # 同上,join_session 也是 async。漏 await 的后果比上面那条更隐蔽:
+        # ok 拿到的是协程对象,**恒为真**,于是 404 分支永远走不到 ——
+        # 会话根本不存在时这个接口照样回 success: true,而设备压根没加进去。
+        ok = await sm.join_session(session_id, req.device_id)
         if not ok:
             return JSONResponse(
                 {"success": False, "error": f"会话不存在: {session_id}"},

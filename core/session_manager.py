@@ -8,13 +8,23 @@ Galaxy - 跨设备统一会话管理器
 - 新设备加入时自动同步历史
 - WebSocket 广播会话更新到所有关联设备
 
-用法:
+用法（注意 ``get_or_create_session`` / ``add_message`` / ``create_session`` /
+``join_session`` / ``fork_session`` / ``detach_session`` / ``ensure_session``
+都是 **async** 的，它们要拿 ``self._lock``）:
+
     from core.session_manager import get_session_manager
 
     sm = get_session_manager()
-    session = sm.get_or_create_session(user_id="user_001", device_id="phone_01")
-    sm.add_message(session.id, "user", "打开微信", device_id="phone_01")
-    history = sm.get_history(session.id, max_turns=20)
+    session = await sm.get_or_create_session(user_id="user_001", device_id="phone_01")
+    await sm.add_message(session.id, "user", "打开微信", device_id="phone_01")
+    history = sm.get_history(session.id, max_turns=20)   # 这个是同步的
+
+同步语境下用配套的 ``*_sync`` 版本（``get_or_create_session_sync`` /
+``ensure_session_sync``），不要直接调上面那几个。
+
+这段示例原本把 await 全漏了 —— 而 ``core/routes/sessions.py`` 的建会话与加入会话
+两条路就是照着它写的，于是 POST /api/v1/sessions 恒 500、join 恒回 success:true
+却什么都没做。示例写错，抄的人就跟着错。
 """
 
 import asyncio
