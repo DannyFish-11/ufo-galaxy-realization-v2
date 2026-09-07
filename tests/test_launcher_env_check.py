@@ -510,3 +510,59 @@ def test_env_staleness_is_ok_when_nothing_missing():
     )
     row = next(s for s in report.to_steps() if s.name == ".env 覆盖度")
     assert row.status is Status.OK
+
+
+class TestPhaseZeroDoesNotGoDarkWhileItProbes:
+    """`[Phase 0] 环境检查` 底下不许长时间一个字都没有。
+
+    所有者第二次反馈：「卡在零上，然后又动不了，跟刚才一样」。第一次修的是
+    Phase 1 六个子阶段只写日志的问题 —— **Phase 0 有一模一样的毛病，当时没动**：
+    ``check_environment()`` 是"跑完全部再返回"，五个外部探测(pip / npm / node /
+    electron / ollama)**串行**跑，各自超时 15 / 10 / 10 / 8 秒，最坏加起来 43 秒；
+    这 43 秒里调用方还没拿到结果，屏幕上就只有一行标题。
+
+    Windows 上更慢:npm 实际是 npm.cmd，起子进程要过 cmd.exe，再加杀软逐个扫。
+
+    这里钉两件事:探测**并发**(最坏耗时从"求和"变成"取最大")，以及入口在开探
+    之前先说一声。
+    """
+
+    def test_the_external_probes_run_concurrently(self) -> None:
+        import inspect
+
+        from launcher import env_check as ec
+
+        src = inspect.getsource(ec.check_environment)
+        assert "ThreadPoolExecutor" in src, (
+            "五个外部探测又变回串行了 —— 各自超时加起来最坏 43 秒，" "这段时间 [Phase 0] 底下一个字都没有"
+        )
+        for name in ("_probe_pip", "_probe_npm", "_probe_node", "_probe_ollama"):
+            assert f"pool.submit({name})" in src, f"{name} 没有并发提交"
+
+    def test_electron_still_waits_for_the_npm_verdict(self) -> None:
+        """唯一的顺序依赖:electron 那一条要先知道 npm 在不在。并发不能把它打乱。"""
+        import inspect
+
+        from launcher import env_check as ec
+
+        src = inspect.getsource(ec.check_environment)
+        assert "_probe_electron(npm_ok" in src, "electron 探测没有拿 npm 的结论"
+        assert src.index("npm_ok, npm_version, npm_path = f_npm.result()") < src.index("_probe_electron(npm_ok")
+
+    def test_the_entrypoint_says_something_before_it_blocks(self) -> None:
+        import inspect
+
+        import main
+
+        src = inspect.getsource(main.phase0_env_check)
+        assert src.index('print_item("正在探测外部工具"') < src.index(
+            "check_environment("
+        ), "入口在开始探测之前没有说一声 —— 屏幕会先空着"
+
+    def test_the_facts_are_unchanged_by_going_concurrent(self, tmp_path) -> None:
+        """并发只该改快慢,不该改结论。"""
+        from launcher import env_check as ec
+
+        a = ec.check_environment(env_file=tmp_path / "nope.env", electron_dir=tmp_path / "nope")
+        b = ec.check_environment(env_file=tmp_path / "nope.env", electron_dir=tmp_path / "nope")
+        assert a == b

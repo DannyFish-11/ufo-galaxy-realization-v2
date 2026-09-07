@@ -514,11 +514,31 @@ def check_environment(*, env_file: Optional[Path] = None, electron_dir: Optional
         # 唯一有用的信息。这是 launch_desktop 的 early-return，保留。
         return EnvReport(python_version=py_version, python_ok=False, python_executable=py_exe, pip_ok=False)
 
-    pip_ok, pip_version = _probe_pip()
-    npm_ok, npm_version, npm_path = _probe_npm()
-    node_ok, node_version = _probe_node()
+    # 五个外部探测**并发跑**,不再一个等一个。
+    #
+    # 它们各自都有超时(pip 15s / npm 10s / node 10s / ollama 8s),串行起来最坏
+    # 要 43 秒 —— 而这 43 秒里 `[Phase 0] 环境检查` 底下**一个字都没有**:
+    # check_environment 是"跑完全部再返回",调用方拿到结果才开始打行。
+    # 真机上这正是「环境检查之后就停那儿了」的一半:Windows 上 npm 是 npm.cmd、
+    # 起子进程要过 cmd.exe,再加上杀软逐个扫,单次探测比 Linux 慢一个量级。
+    #
+    # 这些探测彼此独立(唯一的例外是 electron 要先知道 npm 在不在),而且全是
+    # 等子进程的 IO —— 线程池正好。最坏耗时从"求和"变成"取最大"。
+    from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415 —— 只此一处用到
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_pip = pool.submit(_probe_pip)
+        f_npm = pool.submit(_probe_npm)
+        f_node = pool.submit(_probe_node)
+        f_ollama = pool.submit(_probe_ollama)
+
+        pip_ok, pip_version = f_pip.result()
+        npm_ok, npm_version, npm_path = f_npm.result()
+        node_ok, node_version = f_node.result()
+        ollama_installed, ollama_running, ollama_models = f_ollama.result()
+
+    # electron 那一条要用 npm 的结论,所以排在后面(它自己不起子进程,只看文件)。
     electron_ok, electron_probe = _probe_electron(npm_ok, electron_dir)
-    ollama_installed, ollama_running, ollama_models = _probe_ollama()
 
     env_path = env_file if env_file is not None else ENV_FILE
     env_exists = env_path.exists()

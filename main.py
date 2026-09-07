@@ -522,6 +522,13 @@ def phase0_env_check() -> dict:
     """
     from launcher import env_check as _env_check
 
+    # 先说一声再去探。check_environment 是"跑完全部再返回"的:五个外部探测
+    # (pip / npm / node / electron / ollama)都各自要起子进程,并发之后最坏仍是
+    # 单次超时的量级(15 秒)。这 15 秒里如果一个字都不打,屏幕上就是
+    # 「[Phase 0] 环境检查」底下空着 —— 与 Phase 6 那个 npm install 同一个毛病,
+    # 也正是所有者反馈的「卡在零上、动不了」。
+    print_item("正在探测外部工具", "info", "pip / npm / Node.js / Electron / Ollama —— 装了什么就查什么")
+
     # 路径由本文件给：ENV_FILE / ELECTRON_DIR 的所有权留在入口，
     # 检查器不再自己持一份同名常量（也让这两个路径保持可注入）。
     report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
