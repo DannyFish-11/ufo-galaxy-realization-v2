@@ -3,6 +3,7 @@ Node 45: DesktopAuto - 跨平台桌面自动化
 """
 
 import base64
+import logging
 import os
 import sys
 import time
@@ -20,9 +21,28 @@ app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
 
+logger = logging.getLogger("Galaxy.Node45.DesktopAuto")
+
 pyautogui = None
-#: 为什么用不了(没装 / 装了但这台机器起不来)。空 = 能用。
+
+#: 三种"用不了"各自的**常量**说法。
+#:
+#: 为什么必须是常量:这几句会原样进 HTTP 响应体。一旦把异常文本(哪怕只是
+#: ``f"{type(e).__name__}: {e}"``)拼进去,就是 CodeQL 那条
+#: py/stack-trace-exposure —— 服务端内部信息经异常泄露给外部调用方。
+#: 本文件此前正是这么写的,11 个端点全中。
+#:
+#: 详情不是不要,是**只进日志**(见 pyautogui_unavailable_detail),与
+#: core/routes/c_stage.py 里那处同一个处理法:对外一句固定的话,对内留全。
+REASON_NOT_INSTALLED = "pyautogui 没装,桌面自动化用不了。装法: pip install pyautogui"
+REASON_HEADLESS = "pyautogui 装了,但这台机器没有桌面(无 DISPLAY),桌面自动化用不了"
+REASON_BROKEN = "pyautogui 装了,但在这台机器上起不来,桌面自动化用不了(详情见服务端日志)"
+
+#: 给调用方看的那一句(常量之一)。空 = 能用。
 pyautogui_unavailable_reason = ""
+#: 给排障看的那一句,带异常类型与消息。**不许进响应**,只进日志。
+pyautogui_unavailable_detail = ""
+
 try:
     import pyautogui as _pyautogui
 
@@ -30,7 +50,9 @@ try:
     _pyautogui.PAUSE = 0.1
     pyautogui = _pyautogui
 except ImportError as _exc:
-    pyautogui_unavailable_reason = f"没装 pyautogui({_exc})。装法: pip install pyautogui"
+    pyautogui_unavailable_reason = REASON_NOT_INSTALLED
+    pyautogui_unavailable_detail = f"ImportError: {_exc}"
+    logger.warning("%s(%s)", pyautogui_unavailable_reason, pyautogui_unavailable_detail)
 except Exception as _exc:  # noqa: BLE001
     # 只 except ImportError 是不够的:**装了但没有桌面**时,pyautogui 在 import 期就
     # 去连 X11,抛的是 `KeyError: 'DISPLAY'` —— 不是 ImportError,于是它会穿透出去
@@ -38,9 +60,9 @@ except Exception as _exc:  # noqa: BLE001
     # 的节点导入检查从 125/125 掉到 124/125,报 `Node_45_DesktopAuto KeyError: 'DISPLAY'`。
     # 无头机器上这属正常,该降级,不该崩。
     _headless = isinstance(_exc, KeyError) and "DISPLAY" in str(_exc)
-    pyautogui_unavailable_reason = f"pyautogui 装了但在这台机器上起不来({type(_exc).__name__}: {_exc})" + (
-        "。这台机器没有桌面(无 DISPLAY),无头部署下属正常" if _headless else ""
-    )
+    pyautogui_unavailable_reason = REASON_HEADLESS if _headless else REASON_BROKEN
+    pyautogui_unavailable_detail = f"{type(_exc).__name__}: {_exc}"
+    logger.warning("%s(%s)", pyautogui_unavailable_reason, pyautogui_unavailable_detail)
 
 
 class ClickRequest(BaseModel):
@@ -85,7 +107,7 @@ async def health():
 @app.post("/click")
 async def click(request: ClickRequest):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         pyautogui.click(x=request.x, y=request.y, clicks=request.clicks, button=request.button)
@@ -97,7 +119,7 @@ async def click(request: ClickRequest):
 @app.post("/double_click")
 async def double_click(x: int, y: int):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         pyautogui.doubleClick(x=x, y=y)
@@ -109,7 +131,7 @@ async def double_click(x: int, y: int):
 @app.post("/type")
 async def type_text(request: TypeRequest):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         pyautogui.write(request.text, interval=request.interval)
@@ -121,7 +143,7 @@ async def type_text(request: TypeRequest):
 @app.post("/hotkey")
 async def press_hotkey(request: KeyRequest):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         keys = request.keys.split("+")
@@ -134,7 +156,7 @@ async def press_hotkey(request: KeyRequest):
 @app.post("/press")
 async def press_key(key: str):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         pyautogui.press(key)
@@ -146,7 +168,7 @@ async def press_key(key: str):
 @app.post("/move")
 async def move_mouse(request: MoveRequest):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         pyautogui.moveTo(request.x, request.y, duration=request.duration)
@@ -158,7 +180,7 @@ async def move_mouse(request: MoveRequest):
 @app.post("/scroll")
 async def scroll(amount: int, x: Optional[int] = None, y: Optional[int] = None):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         pyautogui.scroll(amount, x=x, y=y)
@@ -170,7 +192,7 @@ async def scroll(amount: int, x: Optional[int] = None, y: Optional[int] = None):
 @app.get("/screenshot")
 async def take_screenshot():
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         import io
@@ -187,7 +209,7 @@ async def take_screenshot():
 @app.get("/position")
 async def get_position():
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         x, y = pyautogui.position()
@@ -199,7 +221,7 @@ async def get_position():
 @app.get("/screen_size")
 async def get_screen_size():
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         width, height = pyautogui.size()
@@ -211,7 +233,7 @@ async def get_screen_size():
 @app.post("/locate")
 async def locate_on_screen(request: LocateRequest):
     if not pyautogui:
-        return {"success": False, "error": pyautogui_unavailable_reason or "pyautogui not installed"}
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
     try:
         location = pyautogui.locateOnScreen(request.image_path, confidence=request.confidence)

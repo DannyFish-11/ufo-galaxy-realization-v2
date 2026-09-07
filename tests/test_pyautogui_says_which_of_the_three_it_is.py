@@ -98,3 +98,55 @@ class TestNode45DoesNotDieOnAHeadlessBox:
             installed = False
         if installed:
             assert "没装" not in reason, f"装着却说没装:{reason}"
+
+
+class TestTheReasonThatReachesCallersCarriesNoExceptionText:
+    """进 HTTP 响应的那句话必须是**常量** —— 这是 CodeQL 拦的那条。
+
+    我第一版把 ``f"{type(exc).__name__}: {exc}"`` 拼进了
+    ``pyautogui_unavailable_reason``,而那个字符串会原样进 11 个端点的响应体:
+    py/stack-trace-exposure,11 处全中(PR #1633 的 CodeQL 评论)。
+
+    详情不是不要,是只进日志。对外一句固定的话,对内留全 —— 与
+    core/routes/c_stage.py 里那处同一个处理法。
+    """
+
+    def _mod(self):
+        import importlib
+
+        return importlib.import_module("nodes.Node_45_DesktopAuto.main")
+
+    def test_the_reason_is_one_of_the_three_constants(self):
+        mod = self._mod()
+        allowed = {"", mod.REASON_NOT_INSTALLED, mod.REASON_HEADLESS, mod.REASON_BROKEN}
+        assert mod.pyautogui_unavailable_reason in allowed
+
+    def test_no_exception_type_or_message_leaks_into_it(self):
+        mod = self._mod()
+        reason = mod.pyautogui_unavailable_reason
+        for leak in ("KeyError", "ImportError", "Traceback", "DISPLAY'", "Errno"):
+            assert leak not in reason, f"异常文本漏进了会进响应的那句话:{reason}"
+
+    def test_the_detail_still_keeps_what_troubleshooting_needs(self):
+        mod = self._mod()
+        if mod.pyautogui is None:
+            # 用不了的时候,详情必须留得下来 —— 只是留在日志侧。
+            assert mod.pyautogui_unavailable_detail
+            assert ":" in mod.pyautogui_unavailable_detail
+
+    def test_the_endpoints_never_return_the_detail(self):
+        """源码判据:11 个端点返回的只能是那句常量,不能是 detail。"""
+        import os
+
+        src = open(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "nodes",
+                "Node_45_DesktopAuto",
+                "main.py",
+            ),
+            encoding="utf-8",
+        ).read()
+        # 从第一个路由起到文件末尾 —— 端点里一次都不许出现 detail。
+        endpoints = src[src.index("@app.") :]
+        assert "pyautogui_unavailable_detail" not in endpoints, "端点把只该进日志的详情返回出去了"
