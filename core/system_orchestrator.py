@@ -94,6 +94,20 @@ class StartupPhase(Enum):
     READINESS_SUMMARY = 7  # Phase 7 — Final readiness summary
 
 
+#: 阶段的中文名 —— **唯一出处**。控制台要打这些阶段的进度（见 ``main.py`` 的
+#: ``_run_orchestrator_preflight``），名字就只能从这里取，不许在入口再抄一份。
+PHASE_LABELS: Dict["StartupPhase", str] = {}
+
+#: 哪些阶段【会长时间不吭声】，以及为什么。
+#:
+#: 这不是装饰。Phase 6 会同步 ``subprocess.run([npm, "install"], capture_output=True)``：
+#: npm 自己的进度输出被 capture 吃掉，本模块的 ``logger.info`` 又只进
+#: ``logs/lumiv.log``（``main.py`` 的控制台 handler 是 WARNING 级），于是首次启动
+#: 时"环境检查"之后控制台可以整整几分钟一个字都没有 —— 用户只能理解成卡死了。
+#: 入口拿这里的理由，在阶段【开始前】先打一行，把沉默解释掉。
+PHASE_MAY_BLOCK: Dict["StartupPhase", str] = {}
+
+
 class PhaseStatus(Enum):
     """Result status for a single startup phase."""
 
@@ -110,13 +124,44 @@ class PhaseStatus(Enum):
 # ---------------------------------------------------------------------------
 
 
+PHASE_LABELS.update(
+    {
+        StartupPhase.LOAD_CONFIG: "载入配置",
+        StartupPhase.RESOLVE_MODE: "解析系统模式",
+        StartupPhase.ENV_CHECKS: "环境判据",
+        StartupPhase.BACKGROUND_SUBSYSTEMS: "后台子系统",
+        StartupPhase.RUNTIME_SUBJECT: "运行时主体",
+        StartupPhase.DESKTOP_SURFACE: "桌面表面",
+        StartupPhase.READINESS_SUMMARY: "就绪汇总",
+    }
+)
+
+PHASE_MAY_BLOCK.update(
+    {
+        StartupPhase.DESKTOP_SURFACE: "首次要装 Electron 前端依赖(npm install),可能数分钟;已装好则秒过",
+    }
+)
+
+
 @dataclass
 class PhaseResult:
-    """Outcome of a single startup phase."""
+    """Outcome of a single startup phase.
+
+    ``detail`` 与 ``said`` 是**刻意分开**的两件事：
+
+    - ``detail`` —— 给机器和日志看的证据串。判据会在里面 grep
+      ``GALAXY_SKIP_DESKTOP_SURFACE`` / ``authority_boundary=`` /
+      ``required_nats_unreachable`` 这类锚点，所以它必须稳定、可搜、不翻译。
+    - ``said``   —— 给**人**看的一句话，打在控制台上。屏幕上原本全是
+      ``runtime subject authority chain importable`` 这种只有写的人看得懂的
+      英文碎片；把它翻译在显示层又会变成"猜字符串"，所以由**产出结果的那一处**
+      自己说一句人话。留空则显示层回退到 ``detail``（宁可露出英文，也不许瞎编）。
+    """
 
     phase: StartupPhase
     status: PhaseStatus
     detail: str = ""
+    said: str = ""
     data: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -232,14 +277,17 @@ class SystemOrchestrator:
 
             cfg = get_config()
             detail = "unified config loaded"
+            said = "配置已载入"
             if hasattr(cfg, "get_status_dict"):
                 status_d = cfg.get_status_dict()
                 llm_count = sum(1 for v in status_d.get("llm_apis", {}).values() if v)
                 detail = f"unified config loaded — {llm_count} LLM API(s) configured"
+                said = f"配置已载入,已填好 {llm_count} 家大模型的密钥"
             return PhaseResult(
                 phase=StartupPhase.LOAD_CONFIG,
                 status=PhaseStatus.OK,
                 detail=detail,
+                said=said,
                 data={"config_loaded": True},
             )
         except Exception as exc:
@@ -248,6 +296,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.LOAD_CONFIG,
                 status=PhaseStatus.DEGRADED,
                 detail=f"config load degraded — {exc}",
+                said=f"配置没能完整载入,先按默认值跑:{exc}",
             )
 
     def _run_phase_2_resolve_mode(self) -> PhaseResult:
@@ -270,10 +319,13 @@ class SystemOrchestrator:
             mode = "desktop-cross-device"
         detail = f"mode={mode}, nats_enabled={nats_enabled}, cross_device={cross_device}"
         logger.info("[启动·模式] %s", detail)
+        _scope = "可用其他设备" if cross_device else "只用本机"
+        _bus = "消息总线已开" if nats_enabled else "不用消息总线"
         return PhaseResult(
             phase=StartupPhase.RESOLVE_MODE,
             status=PhaseStatus.OK,
             detail=detail,
+            said=f"按 {mode} 跑 —— {_scope},{_bus}",
             data={"system_mode": mode, "nats_enabled": nats_enabled, "cross_device": cross_device},
         )
 
@@ -314,17 +366,20 @@ class SystemOrchestrator:
                 phase=StartupPhase.ENV_CHECKS,
                 status=PhaseStatus.FAILED,
                 detail="; ".join(issues),
+                said="环境有必须先修的问题:" + "; ".join(issues),
             )
         if issues:
             return PhaseResult(
                 phase=StartupPhase.ENV_CHECKS,
                 status=PhaseStatus.DEGRADED,
                 detail="; ".join(issues),
+                said="环境能跑,但有欠缺:" + "; ".join(issues),
             )
         return PhaseResult(
             phase=StartupPhase.ENV_CHECKS,
             status=PhaseStatus.OK,
             detail="environment checks passed",
+            said="环境判据全部通过",
         )
 
     def _run_phase_4_background_subsystems(self) -> PhaseResult:
@@ -486,6 +541,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
                 status=PhaseStatus.FAILED,
                 detail="background readiness failed — " + "; ".join(parts),
+                said="后台子系统没起来:" + "; ".join(parts),
                 data=diagnostics,
             )
 
@@ -494,6 +550,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
                 status=PhaseStatus.DEGRADED,
                 detail="background readiness degraded — " + "; ".join(issues),
+                said="后台子系统能用,但有欠缺:" + "; ".join(issues),
                 data=diagnostics,
             )
 
@@ -501,6 +558,7 @@ class SystemOrchestrator:
             phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
             status=PhaseStatus.OK,
             detail="background readiness verified for canonical routing",
+            said="后台子系统就绪,主链路由可用",
             data=diagnostics,
         )
 
@@ -531,11 +589,13 @@ class SystemOrchestrator:
                 phase=StartupPhase.RUNTIME_SUBJECT,
                 status=PhaseStatus.DEGRADED,
                 detail="; ".join(issues),
+                said="运行时主体有缺件:" + "; ".join(issues),
             )
         return PhaseResult(
             phase=StartupPhase.RUNTIME_SUBJECT,
             status=PhaseStatus.OK,
             detail="runtime subject authority chain importable",
+            said="运行时主体就绪,权威链完整",
         )
 
     def _run_phase_6_desktop_surface(self) -> PhaseResult:
@@ -573,6 +633,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
                 detail="Desktop surface skipped (GALAXY_SKIP_DESKTOP_SURFACE)",
+                said="按 GALAXY_SKIP_DESKTOP_SURFACE 的要求跳过了桌面壳",
             )
 
         from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
@@ -582,6 +643,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.OK,
                 detail="Electron GUI already running (started by another launch path)",
+                said="桌面壳已经在跑了(别的启动路径先拉起来的)",
             )
 
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -593,6 +655,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
                 detail="electron/ directory not found -- GUI not available",
+                said="找不到 electron/ 目录,这次没有桌面壳",
             )
 
         # 预检 Node.js / npm 可用性（在调用 npm install 前主动探测，
@@ -608,6 +671,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
                 detail="Electron GUI skipped (Node.js not installed or not in PATH)",
+                said="跳过桌面壳:没装 Node.js,或它不在 PATH 里",
             )
 
         # Check if node_modules exists AND electron 包完整(不能只看目录存在——
@@ -623,6 +687,7 @@ class SystemOrchestrator:
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
                     detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
+                    said="跳过桌面壳:装了 Node.js 但 PATH 里找不到 npm",
                 )
             # 首次(或依赖不完整)先【安静地装】,不要在装之前就抛一条像"报错"的
             # WARNING —— 真机反馈:启动一上来先喊"依赖缺失或不完整"、把用户吓一跳,
@@ -676,12 +741,14 @@ class SystemOrchestrator:
                         phase=StartupPhase.DESKTOP_SURFACE,
                         status=PhaseStatus.DEGRADED,
                         detail=f"npm install failed: {(npm_result.stderr or '')[:200]}",
+                        said=f"前端依赖没装上(npm install 失败):{(npm_result.stderr or '')[:120]}",
                     )
             except subprocess.TimeoutExpired:
                 return PhaseResult(
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
                     detail="npm install timed out after 120s",
+                    said="装前端依赖超时(120 秒没装完),这次先不开桌面壳",
                 )
 
         # 拉起前核实到【运行时二进制】——真机根因("依赖残缺后补齐"仍闪退循环):
@@ -701,6 +768,7 @@ class SystemOrchestrator:
                     phase=StartupPhase.DESKTOP_SURFACE,
                     status=PhaseStatus.DEGRADED,
                     detail=electron_binary_fix_hint("electron"),
+                    said="Electron 运行时二进制没补上,按提示手动修一次即可:" + electron_binary_fix_hint("electron"),
                 )
 
         # 拉起用的必须是 shutil.which 解析出来的**绝对路径**,不能是裸 "npm"。
@@ -714,6 +782,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
                 detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
+                said="跳过桌面壳:装了 Node.js 但 PATH 里找不到 npm",
             )
 
         # Launch Electron as detached subprocess
@@ -756,6 +825,7 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.OK,
                 detail=f"Electron GUI launched (pid={process.pid})",
+                said=f"桌面壳已拉起(进程号 {process.pid})",
                 data={"electron_pid": process.pid},
             )
 
@@ -767,12 +837,14 @@ class SystemOrchestrator:
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
                 detail=f"无法执行 npm({npm_path}): {exc}",
+                said=f"npm 跑不起来({npm_path}):{exc}",
             )
         except Exception as exc:
             return PhaseResult(
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
                 detail=f"Electron launch failed: {exc}",
+                said=f"桌面壳启动失败:{exc}",
             )
 
     def _drain_electron_output(self, process: subprocess.Popen) -> None:
@@ -900,10 +972,31 @@ class SystemOrchestrator:
                 exc,
             )
 
+        _all_n = len(summary.phase_results)
+        _ok_n = sum(1 for r in summary.phase_results if r.status == PhaseStatus.OK)
+        _degraded_n = sum(1 for r in summary.phase_results if r.status == PhaseStatus.DEGRADED)
+        _failed_n = sum(1 for r in summary.phase_results if r.status == PhaseStatus.FAILED)
+        _verdict = {
+            OrchestratorReadiness.READY: "一切就绪",
+            OrchestratorReadiness.DEGRADED: "可以用,有降级",
+            OrchestratorReadiness.FAILED: "有阶段失败",
+        }.get(summary.readiness, summary.readiness.value)
+        _parts = [f"{_ok_n}/{_all_n} 个阶段正常"]
+        if _degraded_n:
+            _parts.append(f"{_degraded_n} 个降级")
+        if _failed_n:
+            _parts.append(f"{_failed_n} 个失败")
+        if authority_boundary_status == "degraded":
+            _parts.append("权威边界降级")
+        if quasi_platform_state_boundary_status == "degraded":
+            _parts.append("平台态边界降级")
+        _said = f"{_verdict} —— " + "、".join(_parts)
+
         return PhaseResult(
             phase=StartupPhase.READINESS_SUMMARY,
             status=phase_status,
             detail=detail,
+            said=_said,
             data={
                 "readiness": summary.readiness.value,
                 "system_mode": summary.system_mode,
@@ -918,7 +1011,11 @@ class SystemOrchestrator:
     # Main entry-point
     # ------------------------------------------------------------------
 
-    def run_startup_sequence(self) -> StartupSummary:
+    def run_startup_sequence(
+        self,
+        *,
+        on_phase: Optional[Callable[[StartupPhase, Optional["PhaseResult"]], None]] = None,
+    ) -> StartupSummary:
         """Execute all startup phases in order and return a :class:`StartupSummary`.
 
         Phases run sequentially.  If a phase returns ``FAILED`` and
@@ -928,6 +1025,19 @@ class SystemOrchestrator:
         Extra hooks registered via :meth:`register_hook` run immediately after
         the built-in logic for each phase and can supplement or override the
         default result.
+
+        Args:
+            on_phase: 可选的**只读旁观者**，用来把进度实时交出去。每个阶段调用两次：
+                开始前 ``(phase, None)``，结束后 ``(phase, result)``。
+
+                有这个参数是因为本方法此前把六个阶段【一口气跑完才返回】，而中间
+                的进展只有 ``logger.info``（进 ``logs/lumiv.log``，控制台 handler
+                是 WARNING 级）。于是 ``main.py`` 打完 "[Phase 1] 系统预检" 之后，
+                控制台在 Phase 6 跑 ``npm install`` 期间可以几分钟毫无输出 —— 看起来
+                就是卡死。旁观者让入口能在【阶段发生时】就打出来。
+
+                它**不能改变任何结果**（返回值被忽略），抛异常也只记一条 warning：
+                一个显示用的回调绝不允许把启动带崩。
         """
         summary = StartupSummary()
         failed = False
@@ -941,12 +1051,22 @@ class SystemOrchestrator:
             (StartupPhase.DESKTOP_SURFACE, self._run_phase_6_desktop_surface),
         ]
 
+        def _notify(phase: StartupPhase, result: Optional[PhaseResult]) -> None:
+            if on_phase is None:
+                return
+            try:
+                on_phase(phase, result)
+            except Exception as exc:  # noqa: BLE001 — 显示层绝不能挡启动
+                logger.warning("on_phase observer raised for %s: %s", phase.name, exc)
+
         for phase, runner in _phase_runners:
+            _notify(phase, None)
             if failed and not self.continue_on_failure:
                 result = PhaseResult(
                     phase=phase,
                     status=PhaseStatus.SKIPPED,
                     detail="skipped due to earlier failure",
+                    said="前面的阶段失败了,这一步跳过",
                 )
             else:
                 result = runner()
@@ -963,6 +1083,7 @@ class SystemOrchestrator:
 
             summary.add_result(result)
             logger.info("  %s", result)
+            _notify(phase, result)
 
             if result.status == PhaseStatus.FAILED:
                 failed = True
@@ -974,7 +1095,9 @@ class SystemOrchestrator:
                 break
 
         # Phase 7 — readiness summary (always runs)
+        _notify(StartupPhase.READINESS_SUMMARY, None)
         summary_result = self._run_phase_7_readiness_summary(summary)
         summary.add_result(summary_result)
+        _notify(StartupPhase.READINESS_SUMMARY, summary_result)
 
         return summary

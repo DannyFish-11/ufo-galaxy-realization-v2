@@ -174,3 +174,39 @@ class TestTheBuiltPanelActuallyCallsTheTierEndpoints:
     def test_the_tier_row_is_in_the_built_bundle(self, bundle: str):
         assert "tier-stages" in bundle, "构建产物里没有档位那一排牌子"
         assert "本机模型" in bundle, "构建产物里没有档位那一行的抬头"
+
+
+class TestTheFourChipsSayWhichOneIsOn:
+    """四选一必须**说出来**是四选一 —— 不然读屏只听到四个叫 A/B/C/D 的光秃秃按钮。
+
+    真跑实测(Chromium 打开打包好的面板,指向真网关):四个档位钮此前只有
+    ``data-picked``(那是给 CSS 上色用的),``aria-pressed`` / ``aria-checked`` 全空,
+    外面也没有分组 —— 读屏读得出"有四个按钮",读不出"一共几档、现在在哪一档"。
+
+    同一个文件里 bundle 那几行早就分清了"两态用 aria-pressed、多态用 data-state"
+    (还专门写了为什么),档位这一行是漏网的那处。单选组的正确形状是
+    ``radiogroup`` + ``radio`` + ``aria-checked``。
+    """
+
+    def test_the_chips_are_a_radiogroup(self):
+        src = (PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert "'radiogroup'" in src, "档位那四个钮外面没有 radiogroup —— 读屏不知道它们是一组"
+        assert "aria-label', '本机模型档位'" in src.replace('"', "'"), "radiogroup 没有名字"
+
+    def test_each_chip_reports_whether_it_is_the_current_one(self):
+        src = (PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert "'radio'" in src, "档位钮没有 role=radio"
+        assert "aria-checked" in src, "档位钮不报自己是不是当前档 —— 光有 data-picked 只有 CSS 看得懂"
+
+    def test_the_chip_name_is_not_just_a_bare_letter(self):
+        """光一个 "A" 读不出是什么档。档名要给读屏,跑不动的还要说清为什么。"""
+        src = (PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert "装不下:${t.fitReason}" in src, "跑不动的档没把原因给到读屏"
+
+    def test_the_built_bundle_carries_it_too(self):
+        """dist 是 Electron 真正加载的东西 —— 源码改了没重建,用户看到的还是旧界面。"""
+        js = sorted(PANEL_DIST.glob("assets/*.js"))
+        assert js, "dist/assets 里没有构建产物"
+        blob = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in js)
+        assert "radiogroup" in blob, "dist 里没有 radiogroup —— 改了 src 但没重建"
+        assert "本机模型档位" in blob, "dist 里没有分组名 —— 改了 src 但没重建"

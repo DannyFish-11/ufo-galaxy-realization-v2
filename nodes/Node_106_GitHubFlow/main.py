@@ -13,6 +13,7 @@ GitHub 工作流自动化系统
 日期：2026-01-22
 """
 
+import logging
 import os
 import json
 import time
@@ -25,6 +26,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
 from nodes.common.cors_config import get_cors_origins
+
+# 本模块原本用 print() 直接往 stdout 喊话(还带 ✅/⚠️ 这种 2 显示格的 emoji)。
+# 真跑 `python main.py --check-only` 时,这几行会插进"节点导入检查"那一段中间,
+# 既不走启动界面的对勾列,也不进 logs/lumiv.log。库模块不该抢屏 —— 一律进日志。
+logger = logging.getLogger("Galaxy.Node106.GitHubFlow")
 
 app = FastAPI(title="Node 106 - GitHub Flow", version="1.0.0")
 app.add_middleware(
@@ -70,9 +76,9 @@ class GitHubClient:
         self.use_mock = not self.token  # Mock 模式（无需 Token）
         
         if self.use_mock:
-            print("⚠️ GitHub Token 未配置，使用 Mock 模式")
+            logger.warning("GITHUB_TOKEN 未配置,GitHub 客户端以 Mock 模式运行")
         else:
-            print("✅ GitHub Token 已配置")
+            logger.info("GITHUB_TOKEN 已配置,GitHub 客户端走真实 API")
     
     async def _request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
         """发送 HTTP 请求"""
@@ -186,7 +192,7 @@ class GitHubFlow:
         # 真实 API 永远走不到(与内层客户端脑裂)。改为直接复用客户端解析后的判定。
         self.use_mock = self.github.use_mock
 
-        print(f"✅ GitHub 工作流已初始化 (Mock 模式: {self.use_mock})")
+        logger.info("GitHub 工作流已初始化(Mock 模式: %s)", self.use_mock)
     
     async def create_issue_from_task(self, repo: str, task: str, labels: List[str] = None) -> Dict:
         """从任务创建 Issue"""
@@ -270,7 +276,7 @@ if __name__ == "__main__":
             else:
                 return self._mock_generate_code(title, body)
         except Exception as e:
-            print(f"⚠️ LLM 代码生成失败: {e}，使用 Mock 模式")
+            logger.warning("LLM 代码生成失败,退回 Mock 模式: %s", e)
             return self._mock_generate_code(title, body)
     
     async def review_pull_request(self, repo: str, pr_number: int) -> Dict:
@@ -340,7 +346,7 @@ PR 说明：{body}
             else:
                 return self._mock_review_code(title, body)
         except Exception as e:
-            print(f"⚠️ LLM 代码审查失败: {e}，使用 Mock 模式")
+            logger.warning("LLM 代码审查失败,退回 Mock 模式: %s", e)
             return self._mock_review_code(title, body)
     
     async def index_repo_to_kb(self, repo_url: str) -> Dict:

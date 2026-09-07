@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import fnmatch
 import os
+from pathlib import Path
 
 import pytest
 
 from core.routes.config import _bundle_state
-from core.routes.config_bundles import CONFIG_BUNDLES
+from core.routes.config_bundles import CONFIG_BUNDLES, owned_keys
 from core.routes.config_schema_registry import CONFIG_SCHEMA
 
 
@@ -61,23 +62,26 @@ class TestTheNumbersAreCounted:
     """数字必须是数出来的。写死的数字第一天是对的,第二天就开始骗人。"""
 
     @pytest.mark.parametrize("bundle", CONFIG_BUNDLES, ids=lambda b: b["key"])
-    def test_key_count_matches_the_schema(self, bundle: dict) -> None:
+    def test_key_count_is_what_this_bundle_actually_owns(self, bundle: dict) -> None:
+        """「管几个键」数的是 ``owns``,不是 ``category``。
+
+        此前数的是 category —— 而「自主」按 owns 只管 5 个键,category == "agent"
+        有 59 个。那 54 个差额里包括 ``GALAXY_MODEL_TIER`` 这种跟"要不要问过再做"
+        毫无关系的键。
+        """
         state = _bundle_state(bundle)
-        expected = sum(1 for m in CONFIG_SCHEMA.values() if m.get("category") == bundle["category"])
-        assert state["key_count"] == expected
+        assert state["key_count"] == len(owned_keys(bundle, CONFIG_SCHEMA.keys()))
 
     def test_overrides_counts_only_keys_that_differ_from_default(self, monkeypatch) -> None:
-        """``overrides`` 是「有几个键被手动改得偏离了默认」。
+        """``overrides`` 是「这一档管的键里,有几个被**绕过面板**改得偏离了默认」。
 
         它是这套设计能不能成立的关键:有键被手改过时档位要显示成「有 N 项手改过」
         而不是干净的「开」—— 否则档位说开、底下某个键说关,同一个事实两处各存一份,
         而且没人看得见。
         """
         bundle = CONFIG_BUNDLES[0]
-        category = bundle["category"]
-        victim = next(
-            k for k, m in CONFIG_SCHEMA.items() if m.get("category") == category and m["default"] not in ("", None)
-        )
+        owned = owned_keys(bundle, CONFIG_SCHEMA.keys())
+        victim = next(k for k in owned if k != bundle["primary"] and CONFIG_SCHEMA[k]["default"] not in ("", None))
 
         monkeypatch.delenv(victim, raising=False)
         base = _bundle_state(bundle)["overrides"]
@@ -89,6 +93,45 @@ class TestTheNumbersAreCounted:
         # 设成不同的值 —— 算偏离
         monkeypatch.setenv(victim, str(CONFIG_SCHEMA[victim]["default"]) + "__changed")
         assert _bundle_state(bundle)["overrides"] == base + 1, "手改过的键没有被算进偏离"
+
+    def test_using_this_bundles_own_switch_is_not_a_manual_override(self, monkeypatch) -> None:
+        """用这一档自己的开关把值调离默认,**不是**"手改过"。
+
+        真跑实测(Chromium 点面板上「自主」那一行):从 guided 点到 autonomous,
+        那一行当场变成「有 2 项手改过」—— 用自己的开关改一下,就被自己记了一笔。
+        主键就是这个开关,它偏离默认正是这个开关存在的意义。
+        """
+        bundle = next(b for b in CONFIG_BUNDLES if b["key"] == "autonomy")
+        primary = bundle["primary"]
+        for k in owned_keys(bundle, CONFIG_SCHEMA.keys()):
+            monkeypatch.delenv(k, raising=False)
+        base = _bundle_state(bundle)["overrides"]
+
+        monkeypatch.setenv(primary, "autonomous")
+        assert _bundle_state(bundle)["value"] == "autonomous", "开关没拨过去"
+        assert (
+            _bundle_state(bundle)["overrides"] == base
+        ), f"用「{bundle['name']}」自己的开关把 {primary} 调离默认,被算成了「手改过」"
+
+    def test_a_key_that_merely_shares_the_category_is_not_counted(self, monkeypatch) -> None:
+        """只是碰巧同 ``category``、不在这一档 ``owns`` 里的键,不算这一档的偏离。
+
+        真跑实测:面板第五行 ABCD 写的 ``GALAXY_MODEL_TIER``(category=agent)
+        被算进了「自主」的「有 1 项手改过」—— 用户点的是档位钮,面板却说他手改了。
+        """
+        bundle = next(b for b in CONFIG_BUNDLES if b["key"] == "autonomy")
+        owned = set(owned_keys(bundle, CONFIG_SCHEMA.keys()))
+        outsider = next(
+            k for k, m in CONFIG_SCHEMA.items() if m.get("category") == bundle["category"] and k not in owned
+        )
+        for k in owned:
+            monkeypatch.delenv(k, raising=False)
+        base = _bundle_state(bundle)["overrides"]
+
+        monkeypatch.setenv(outsider, str(CONFIG_SCHEMA[outsider]["default"]) + "__changed")
+        assert (
+            _bundle_state(bundle)["overrides"] == base
+        ), f"{outsider} 只是和「{bundle['name']}」同类,并不归它管,却被算进了它的偏离"
 
 
 class TestAThreeWaySwitchIsNotFlattenedIntoABoolean:
@@ -304,3 +347,51 @@ class TestABundleActuallyOwnsWhatItClaimsToOwn:
         assert any(
             fnmatch.fnmatchcase(bundle["primary"], p) for p in bundle["owns"]
         ), f"档位「{bundle['name']}」的 owns 里没有它自己的主键 {bundle['primary']}"
+
+
+class TestASubtitleIsOptionalButTheTraceIsNot:
+    """副标题可以不要;**留痕不能跟着一起没**。
+
+    「声字同文」的名字已经把这一档管什么说完了,「自主」右边那枚牌子已经把当前档
+    写出来了 —— 这两行都不需要副标题。但 ``overrides`` / ``unwired`` 那两句是
+    留痕,它们此前是拼在副标题后面的(``${b.note} · 有 N 项手改过``):副标题一空,
+    拼出来就成了以「 · 」开头的半句话。
+    """
+
+    PANEL_SRC = Path(__file__).resolve().parent.parent / "electron/renderer/panel/src"
+    PANEL_DIST = Path(__file__).resolve().parent.parent / "electron/renderer/panel/dist"
+
+    def test_an_empty_note_is_allowed(self) -> None:
+        empty = [b["name"] for b in CONFIG_BUNDLES if not b["note"]]
+        assert empty, "一档没有空副标题?那这份判据钉的是不存在的情况"
+
+    def test_the_trace_is_not_glued_onto_the_subtitle(self) -> None:
+        src = (self.PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert (
+            "`${b.note} · 有 ${b.overrides} 项手改过`" not in src
+        ), "留痕又被拼回副标题后面了 —— 副标题为空时会打出以「 · 」开头的半句话"
+        assert "note.hidden" in src, "空副标题的 note 元素没藏起来,会给行凭空撑出一截"
+
+    def test_the_pill_sits_in_the_same_column_as_the_toggles(self) -> None:
+        """多态那枚牌子要和上面几行的开关落在同一列。
+
+        ``.knob`` 一直有 ``margin-left:auto``,``.stage`` 没有 —— 于是牌子紧跟在
+        文字后面,文字一短就整个往左跑。去掉副标题之后这个错位一眼就能看见
+        (实测右边缘 1066.8 vs 开关的 1238.0)。
+        """
+        css = (self.PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
+        assert ".bundle > .stage" in css and "margin-left: auto" in css, "牌子没有和开关对齐"
+
+    def test_the_abcd_chips_are_not_dragged_right_by_that_rule(self) -> None:
+        """对齐规则只能管 bundle 行里的牌子 —— ABCD 那一排是并排的四个。"""
+        css = (self.PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
+        assert ".tier-stages > .stage { margin-left: auto" not in css
+        assert (
+            ".stage {\n  flex: none;\n  margin-left: auto" not in css
+        ), "margin-left:auto 写到了 .stage 通用规则上,ABCD 四个钮会被挤到右边"
+
+    def test_the_built_bundle_carries_both(self) -> None:
+        js = sorted(self.PANEL_DIST.glob("assets/*.js"))
+        assert js, "dist/assets 里没有构建产物"
+        blob = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in js)
+        assert ".bundle>.stage{margin-left:auto}" in blob.replace(" ", ""), "dist 里没有对齐规则 —— 改了 src 但没重建"

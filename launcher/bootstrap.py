@@ -39,8 +39,15 @@ def print_status(message: str, status: str = "info") -> None:
 
 
 def print_section(title: str) -> None:
-    """Print a section header."""
-    print_section_header(title)
+    """打印章节标题 —— 与 ``main.print_phase`` / ``launcher.services.print_section``
+    同一套(细线 + 干净标题),不再各打各的 ═══×60 大框。缺席时兜底回大框。
+    """
+    try:
+        from launcher import ui as _ui
+
+        _ui.section(title)
+    except Exception:  # noqa: BLE001 — 显示层缺席绝不能挡启动
+        print_section_header(title)
 
 
 # ---------------------------------------------------------------------------

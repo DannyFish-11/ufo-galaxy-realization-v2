@@ -148,9 +148,40 @@ async def _ensure_recommended_model():
         pass
 
 
+def print_row(label: str, status: str = "ok", value: str = "") -> None:
+    """打一行"图标 + 标签 + 值",列位与启动界面其余每一行一致。
+
+    ``print_status`` 是**单行、无值列**的助手:调用方只能把 "标签: 值" 挤进同一个
+    字符串。真跑 ``python main.py --check-only`` 就能看到后果 —— 整屏没有一个值列,
+    "核心依赖: 5/5 已安装" 全挤在标签列里,子项还得自己手打两个空格缩进。
+    这里改成把标签与值**分开交给** ``launcher.ui.step``(唯一输出咽喉),顺带进
+    ``runtime/startup.json``。``ui`` 缺席时退回老助手。
+    """
+    try:
+        from launcher import ui as _ui
+
+        _ui.step(label, status, value)
+    except Exception:  # noqa: BLE001 — 显示层缺席绝不能挡检查
+        print_status(f"{label}: {value}" if value else label, status)
+
+
 def print_section(title: str):
-    """打印章节标题。"""
-    print_section_header(title)
+    """打印章节标题。
+
+    走 ``launcher.ui.section``(即 ``cli_render.section``:细线 + 干净标题),
+    与 ``main.print_phase`` 是**同一套**。此前这里直接调 ``print_section_header``
+    的 ═══×60 大框 —— 真跑 ``python main.py --check-only`` 就能看到:同一屏里
+    Phase 段是细线、检查段是大框,两套视觉语言。``main.print_phase`` 的注释早
+    就把大框标成"旧的",这里是漏网的那一处。
+
+    ``launcher.ui`` 缺席时才退回大框(极端环境兜底,与 ``print_phase`` 同款)。
+    """
+    try:
+        from launcher import ui as _ui
+
+        _ui.section(title)
+    except Exception:  # noqa: BLE001 — 显示层缺席绝不能挡启动
+        print_section_header(title)
 
 
 def _try_start_docker_daemon(docker_path: str) -> None:
@@ -2179,28 +2210,30 @@ async def _run_check_only(lumiv: "GalaxyUnified"):
         for dep in OPTIONAL_DEPS:
             if not check_dependency(dep):
                 missing_optional.append(dep)
-        print_status(
-            f"核心依赖: {len(CORE_DEPS) - len(missing_core)}/{len(CORE_DEPS)} 已安装",
+        print_row(
+            "核心依赖",
             "success" if not missing_core else "error",
+            f"{len(CORE_DEPS) - len(missing_core)}/{len(CORE_DEPS)} 已安装"
+            + (f"，缺 {'、'.join(missing_core)}" if missing_core else ""),
         )
-        if missing_core:
-            for d in missing_core:
-                print_status(f"  缺失: {d}", "error")
-        print_status(
-            f"可选依赖: {len(OPTIONAL_DEPS) - len(missing_optional)}/{len(OPTIONAL_DEPS)} 已安装",
+        print_row(
+            "可选依赖",
             "success" if not missing_optional else "warning",
+            f"{len(OPTIONAL_DEPS) - len(missing_optional)}/{len(OPTIONAL_DEPS)} 已安装"
+            + (f"，缺 {'、'.join(missing_optional)}" if missing_optional else ""),
         )
-        if missing_optional:
-            for d in missing_optional:
-                print_status(f"  缺失: {d}", "warning")
     except Exception as e:
-        print_status(f"依赖检查脚本加载失败: {e}", "error")
+        print_row("依赖检查脚本", "error", f"加载失败: {e}")
 
     # 2. 配置检查
     print_section("配置检查")
     status = lumiv.config.get_status_dict()
     llm_count = sum(1 for v in status["llm_apis"].values() if v)
-    print_status(f"LLM API: {llm_count} 个已配置", "success" if llm_count > 0 else "warning")
+    print_row(
+        "大模型密钥",
+        "success" if llm_count > 0 else "warning",
+        f"{llm_count} 个已配置" if llm_count else "一个都没填，智能体跑不起来",
+    )
 
     # 3. 核心模块导入检查
     print_section("核心模块导入")
@@ -2228,9 +2261,11 @@ async def _run_check_only(lumiv: "GalaxyUnified"):
             __import__(mod_name)
             ok_count += 1
         except BaseException as e:
-            print_status(f"  {mod_name}: {type(e).__name__}: {e}", "error")
-    print_status(
-        f"核心模块: {ok_count}/{len(core_modules)} 可导入", "success" if ok_count == len(core_modules) else "warning"
+            print_row(mod_name, "error", f"{type(e).__name__}: {e}")
+    print_row(
+        "核心模块",
+        "success" if ok_count == len(core_modules) else "warning",
+        f"{ok_count}/{len(core_modules)} 可导入",
     )
 
     # 4. 节点导入检查
@@ -2251,17 +2286,16 @@ async def _run_check_only(lumiv: "GalaxyUnified"):
             except BaseException as e:
                 failed += 1
                 failed_names.append((node_dir.name, f"{type(e).__name__}: {str(e)[:80]}"))
-    print_status(f"节点: {loaded}/{loaded + failed} 可导入", "success" if failed == 0 else "warning")
-    if failed_names:
-        for name, err in failed_names:
-            print_status(f"  {name}: {err}", "warning")
+    print_row("节点导入", "success" if failed == 0 else "warning", f"{loaded}/{loaded + failed} 可导入")
+    for name, err in failed_names:
+        print_row(name, "warning", err)
 
     # 汇总
     print_section("检查完成")
     has_core_issues = bool(missing_core) if "missing_core" in locals() else False
     all_ok = (not has_core_issues) and ok_count == len(core_modules)
     if all_ok:
-        print_status("系统就绪，可以启动", "success")
+        print_row("总体", "success", "系统就绪，可以启动")
     else:
-        print_status("存在问题，请检查上方输出", "warning")
+        print_row("总体", "warning", "有问题，看上面标了 ⚠/✗ 的那几行")
     sys.stdout.flush()

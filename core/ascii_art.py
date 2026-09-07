@@ -33,6 +33,7 @@ import os
 import re
 import sys
 import unicodedata
+from typing import Optional
 
 #: 剥 ANSI 转义序列用（算显示宽度前必须剥掉，否则颜色码会被算进列数）。
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -370,25 +371,71 @@ def get_status_icon(status: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: 横幅要画得开的最小列宽（与 ``BANNER_WIDTH`` 同一件事的宽松上限）。
+_MIN_CONSOLE_COLUMNS = 120
+
+#: UTF-8 代码页。Windows 默认是 936(GBK) / 437，那两个下面框线字符会碎。
+_UTF8_CODE_PAGE = 65001
+
+
+def _console_code_page() -> Optional[int]:
+    """返回 Windows 控制台当前的输出代码页；问不到就返回 ``None``。
+
+    ``None`` 是「不知道」，不是「没问题」—— 调用方不得把它当成已经是 UTF-8，
+    也不得当成不是；探不到就什么都不说。
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+
+        return int(ctypes.windll.kernel32.GetConsoleOutputCP())  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 —— 探测失败只能是「不知道」
+        return None
+
+
+def _console_columns() -> Optional[int]:
+    """返回控制台列宽；问不到（或输出被重定向）返回 ``None``。"""
+    try:
+        import shutil
+
+        if not sys.stdout.isatty():
+            return None
+        return int(shutil.get_terminal_size().columns)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def print_powershell_hint() -> None:
-    """Print a one-time startup tip for Windows PowerShell users.
+    """在 Windows PowerShell 下提醒显示设置 —— **但只提真的探到的那几条**。
 
-    Recommends Consolas font, ≥120-column window width, and UTF-8 code page so
-    that the Galaxy ASCII banner renders without broken borders or missing glyphs.
+    它必须打在 :func:`print_banner` 之前：讲的就是「列宽/代码页不对，横幅会画烂」，
+    画烂之后再说就没意义了。
 
-    The hint is only printed when the process is running inside a Windows
-    PowerShell session (detected via the ``PSModulePath`` or ``PSVersionTable``
-    environment variables) and is silently skipped on other platforms.
+    以前这里是 **无条件打四行**：哪怕用户已经 ``chcp 65001``、窗口也拉到 160 列，
+    每次启动依旧被教一遍。现在改成按事实说话：
+
+    - 代码页不是 65001 → 才提 UTF-8；
+    - 列宽 < ``_MIN_CONSOLE_COLUMNS`` → 才提列宽；
+    - 字体**探不到**（没有可靠的公开接口），所以不单独拿它当理由开口，
+      只在已经探到别的毛病时顺带——那基本就说明这个窗口没被配置过。
+
+    两项都正常（或都探不到）就一个字也不打。非 Windows / 非 PowerShell 会话同样静默返回。
     """
     if os.name != "nt" or not (os.environ.get("PSModulePath") or os.environ.get("PSVersionTable")):
         return
-    print(
-        "\n[Galaxy Tip] PowerShell 显示建议:\n"
-        "  • 字体:   Consolas (右键标题栏 → 属性 → 字体)\n"
-        "  • 列宽:   窗口宽度 ≥ 120 列 (属性 → 布局 → 宽度 120)\n"
-        "  • UTF-8:  运行 chcp 65001 后再启动 Galaxy\n"
-        "  示例: chcp 65001 && python main.py\n"
-    )
+
+    tips = []
+    code_page = _console_code_page()
+    columns = _console_columns()
+    if columns is not None and columns < _MIN_CONSOLE_COLUMNS:
+        tips.append(f"  • 列宽:   当前 {columns} 列，建议 ≥ {_MIN_CONSOLE_COLUMNS} 列 (属性 → 布局 → 宽度 120)")
+    if code_page is not None and code_page != _UTF8_CODE_PAGE:
+        tips.append(f"  • UTF-8:  当前代码页 {code_page}，请先运行 chcp 65001 再启动 Galaxy")
+    if not tips:
+        return
+    tips.append("  • 字体:   Consolas (右键标题栏 → 属性 → 字体)——字体探不到，顺带一句")
+    print("\n[Galaxy Tip] PowerShell 显示建议:\n" + "\n".join(tips) + "\n")
 
 
 def print_banner(use_color: bool = True) -> None:

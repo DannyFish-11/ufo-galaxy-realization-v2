@@ -239,9 +239,9 @@ def test_advice_text_mentioning_critical_is_not_a_crash(temp_log_root):
     from core.crash_log_aggregator import aggregate_crashes
 
     (temp_log_root / "gateway.log").write_text(
-        "GALAXY_REQUIRE_API_TOKEN=true makes a missing token CRITICAL even with auth off "
-        "(staging). Without it, any client can command the API when auth is off.\n"
-        "  ✓  All CRITICAL checks passed.\n",
+        "另有 GALAXY_REQUIRE_API_TOKEN=true:即使没开鉴权,缺口令也算阻断(预发环境用)。"
+        "不设它、又关着鉴权的话,任何人都能命令这套接口。\n"
+        "  ✓ 关键项都齐了,不挡启动。\n",
         encoding="utf-8",
     )
     _, count = aggregate_crashes()

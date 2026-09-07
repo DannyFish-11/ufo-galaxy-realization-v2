@@ -144,27 +144,27 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="OPENAI_API_KEY",
         severity=Severity.WARNING,
-        description="OpenAI API key for LLM inference.",
-        hint="Set OPENAI_API_KEY=sk-… in .env (≥1 LLM provider key required to run agents).",
+        description="OpenAI 的密钥,用来调它家的大模型。",
+        hint="在 .env 里写 OPENAI_API_KEY=sk-…(至少要有一家大模型的密钥,智能体才跑得起来)。",
         groups=["core", "all"],
     ),
     EnvCheck(
         var="ANTHROPIC_API_KEY",
         severity=Severity.WARNING,
-        description="Anthropic Claude API key (optional if OpenAI is set).",
-        hint="Set ANTHROPIC_API_KEY=sk-ant-… in .env to use Claude (required when GALAXY_LLM_PROVIDER=anthropic).",
+        description="Anthropic Claude 的密钥(已经填了 OpenAI 的话,这个可不填)。",
+        hint="在 .env 里写 ANTHROPIC_API_KEY=sk-ant-… 就能用 Claude(GALAXY_LLM_PROVIDER=anthropic 时必须有)。",
         groups=["core", "all"],
     ),
     # ── Core: auth / security ────────────────────────────────────────────
     EnvCheck(
         var="GALAXY_API_TOKEN",
         severity=Severity.CRITICAL,
-        description="Bearer token used to authenticate REST + WebSocket endpoints.",
+        description="访问口令。REST 与 WebSocket 接口靠它认人。",
         hint=(
-            'Set GALAXY_API_TOKEN=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))") '
-            "in .env + GALAXY_AUTH_ENABLED=true to enforce.\n"
-            "GALAXY_REQUIRE_API_TOKEN=true makes a missing token CRITICAL even with auth off "
-            "(staging). Without it, any client can command the API when auth is off."
+            '在 .env 里写 GALAXY_API_TOKEN=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))"),'
+            "再加 GALAXY_AUTH_ENABLED=true 才真正生效。\n"
+            "另有 GALAXY_REQUIRE_API_TOKEN=true:即使没开鉴权,缺口令也算阻断(预发环境用)。"
+            "不设它、又关着鉴权的话,任何人都能命令这套接口。"
         ),
         groups=["core", "gateway", "all"],
     ),
@@ -172,10 +172,10 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="SECRETVAULT_MASTER_KEY",
         severity=Severity.WARNING,
-        description="Master encryption key for Node_03 SecretVault.",
+        description="密钥保险箱(Node_03 SecretVault)的主密钥。",
         hint=(
-            "Set SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
-            "print(Fernet.generate_key().decode())') in .env (required when GALAXY_SECRET_BACKEND=vault)."
+            "在 .env 里写 SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
+            "print(Fernet.generate_key().decode())')(GALAXY_SECRET_BACKEND=vault 时必须有)。"
         ),
         groups=["vault", "all"],
     ),
@@ -184,44 +184,40 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_SYSTEM_MODE",
         severity=Severity.INFO,
-        description="System startup/fabric mode (default: desktop-local).",
+        description="系统运行模式(默认 desktop-local:只在这一台机器上跑)。",
         hint=(
-            "desktop-local for single-machine (default); desktop-cross-device to activate the "
-            "cross-device fabric. See docs/SYSTEM_MODE_CONFIG.md."
+            "desktop-local = 单机(默认);desktop-cross-device = 打开跨设备编织层。" "细节见 docs/SYSTEM_MODE_CONFIG.md。"
         ),
         groups=["core", "gateway", "all"],
     ),
     EnvCheck(
         var="GALAXY_NATS_ENABLED",
         severity=Severity.INFO,
-        description="Enable the NATS bus (default: derived from GALAXY_SYSTEM_MODE).",
-        hint="true to force-enable NATS regardless of mode (default: off desktop-local, on cross-device).",
+        description="要不要开 NATS 消息总线(默认跟着 GALAXY_SYSTEM_MODE 走)。",
+        hint="填 true 可以不管模式强行打开(默认:单机关、跨设备开)。",
         groups=["gateway", "all"],
     ),
     EnvCheck(
         var="GALAXY_FABRIC_STRICT",
         severity=Severity.INFO,
-        description="Treat missing fabric dependencies as hard startup failures (default: false).",
-        hint=(
-            "true only in desktop-cross-device mode when NATS is mandatory; leave false "
-            "(default) for graceful degradation."
-        ),
+        description="编织层依赖缺失时是否直接判启动失败(默认 false)。",
+        hint=("只有在 desktop-cross-device 且 NATS 非有不可时才填 true;" "保持 false(默认)则缺了就降级运行。"),
         groups=["gateway", "all"],
     ),
     EnvCheck(
         var="GALAXY_NETWORK_MODE",
         severity=Severity.INFO,
-        description="Network topology mode: local | lan | tailscale | relay (default: local).",
-        hint="local (default) | lan (LAN-only) | tailscale (Tailscale fabric) | relay (public relay server).",
+        description="联网方式:local | lan | tailscale | relay(默认 local)。",
+        hint="local = 只本机(默认);lan = 只局域网;tailscale = 走 Tailscale;relay = 走公网中继服务器。",
         groups=["gateway", "all"],
     ),
     EnvCheck(
         var="GALAXY_CROSS_DEVICE_ENABLED",
         severity=Severity.INFO,
-        description="Enable/disable cross-device routing (default: derived from GALAXY_SYSTEM_MODE).",
+        description="要不要把任务路由到别的设备上(默认跟着 GALAXY_SYSTEM_MODE 走)。",
         hint=(
-            "true/false to force cross-device routing (false = safe single-device default); "
-            "auto-derived from GALAXY_SYSTEM_MODE when that is set."
+            "填 true/false 可以强行指定(false = 只用本机,最保险的默认);"
+            "设了 GALAXY_SYSTEM_MODE 的话会自动跟着它推导。"
         ),
         groups=["gateway", "all"],
     ),
@@ -229,26 +225,26 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_SIGNALING_TIMEOUT_S",
         severity=Severity.INFO,
-        description="WebRTC signaling timeout in seconds (default: 30).",
-        hint="Positive int seconds (default 30; raise to 60 on high-latency networks).",
+        description="WebRTC 建立连接的等待上限,单位秒(默认 30)。",
+        hint="填正整数秒(默认 30;网络慢的话调到 60)。",
         groups=["ws", "all"],
     ),
     # ── Android bridge ───────────────────────────────────────────────────
     EnvCheck(
         var="GALAXY_AUTH_ENABLED",
         severity=Severity.WARNING,
-        description="Enforce Bearer-token auth on all endpoints (default: false).",
-        hint="true in production (also needs GALAXY_API_TOKEN); without it Android clients connect unauthenticated.",
+        description="是否对所有接口强制校验访问口令(默认 false)。",
+        hint="正式环境填 true(同时要有 GALAXY_API_TOKEN);不开的话安卓端是免认证连进来的。",
         groups=["android", "gateway", "all"],
     ),
     # ── TLS ─────────────────────────────────────────────────────────────
     EnvCheck(
         var="GALAXY_TLS_CERT",
         severity=Severity.INFO,
-        description="Path to TLS certificate file (enables HTTPS when set with GALAXY_TLS_KEY).",
+        description="TLS 证书文件路径(和 GALAXY_TLS_KEY 一起填就启用 HTTPS)。",
         hint=(
-            "Set GALAXY_TLS_CERT=/path/cert.pem + GALAXY_TLS_KEY=/path/key.pem for HTTPS; "
-            "blank = plain HTTP (dev only)."
+            "要 HTTPS 就写 GALAXY_TLS_CERT=/path/cert.pem 加 GALAXY_TLS_KEY=/path/key.pem;"
+            "留空 = 明文 HTTP(只适合本机开发)。"
         ),
         groups=["gateway", "ws", "all"],
     ),
@@ -256,16 +252,16 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_NATS_URL",
         severity=Severity.INFO,
-        description="NATS control-plane URL (default: nats://localhost:4222).",
-        hint="nats://localhost:4222 to use the NATS control plane; unset disables NATS (paths become no-ops).",
+        description="NATS 控制面地址(默认 nats://localhost:4222)。",
+        hint="填 nats://localhost:4222 就用 NATS 控制面;不填就是不用,相关链路空转。",
         groups=["gateway", "all"],
     ),
     # ── Runtime bridge (optional) ────────────────────────────────────────
     EnvCheck(
         var="GALAXY_RUNTIME_URL",
         severity=Severity.INFO,
-        description="URL of the Galaxy Agent Runtime (for AgentBridge).",
-        hint="http://localhost:8200 if running the agent runtime; unset disables the agent bridge.",
+        description="Galaxy 智能体运行时的地址(给 AgentBridge 用)。",
+        hint="跑了智能体运行时就填 http://localhost:8200;不填就是不用这座桥。",
         groups=["gateway", "all"],
     ),
 ]
@@ -316,11 +312,22 @@ class PreflightReport:
         # (故 assertIn 一类测试不受影响)。任何导入失败都安全回退为无色。
         try:
             from core import cli_render as _r
+            from core.ascii_art import CONTENT_INDENT as _INDENT
+            from core.ascii_art import ICON_COL as _ICON_COL
             from core.ascii_art import Colors as _Co
+            from core.ascii_art import display_width as _display_width
+            from core.ascii_art import pad_display as _pad
 
             _use = _r._use_color()
         except Exception:  # noqa: BLE001 — 渲染增强失败绝不影响预检本身
             _use = False
+            _INDENT, _ICON_COL = 2, 2
+
+            def _display_width(text: str) -> int:  # type: ignore[misc]
+                return len(text)
+
+            def _pad(text: str, width: int) -> str:  # type: ignore[misc]
+                return text + " " * max(0, width - len(text))
 
             class _Co:  # type: ignore
                 BOLD = CYAN = DIM = GREEN = YELLOW = RED = ENDC = ""
@@ -328,20 +335,30 @@ class PreflightReport:
         def _c(t: str, color: str) -> str:
             return f"{color}{t}{_Co.ENDC}" if _use else t
 
+        def _row(icon: str, text: str, color: str) -> str:
+            """一行"图标 + 说明",列位与 ``cli_render.phase`` 完全一致。
+
+            此前这里是手写的 ``"  " + "✓  ..."``(图标后两个空格),于是本块的对勾
+            落在第 5 列,而启动界面其余每一行的对勾都在第 4 列 —— 同一屏里两条对勾列。
+            现在图标一律 ``pad_display(icon, ICON_COL)``,跟着几何常量走。
+            """
+            return " " * _INDENT + _c(_pad(icon, _ICON_COL), color) + text
+
         # 盒子标题按盒宽【居中计算】,不再手写空格——真机复现过标题行内宽 57、
         # 上下边框内宽 58,导致标题右侧 ║ 比边框的 ╗ 缩进一格(整个白框歪一行)。
         # 盒宽 58 与启动 banner(core.ascii_art)一致,两个白框从此完全对齐。
         _box_inner = 58
-        _title = "Galaxy Pre-flight Configuration Check"
-        _pad = max(0, _box_inner - len(_title))
-        _left = _pad // 2
-        _right = _pad - _left
+        _title = "Galaxy 启动前配置检查"
+        _title_w = _display_width(_title)
+        _gap = max(0, _box_inner - _title_w)
+        _left = _gap // 2
+        _right = _gap - _left
         _summary = (
-            f"  {_c('Mode', _Co.DIM)}  : {self.mode}   "
-            f"{_c('passed', _Co.DIM)} {_c(str(len(self.passed)), _Co.GREEN)}  "
-            f"{_c('warn', _Co.DIM)} {_c(str(len(self.warnings)), _Co.YELLOW)}  "
-            f"{_c('crit', _Co.DIM)} {_c(str(len(self.criticals)), _Co.RED)}"
-            f"   {_c(f'/ {len(self.findings)} checks', _Co.DIM)}"
+            " " * _INDENT + f"{_c('运行模式', _Co.DIM)} {self.mode}   "
+            f"{_c('通过', _Co.DIM)} {_c(str(len(self.passed)), _Co.GREEN)}  "
+            f"{_c('提醒', _Co.DIM)} {_c(str(len(self.warnings)), _Co.YELLOW)}  "
+            f"{_c('阻断', _Co.DIM)} {_c(str(len(self.criticals)), _Co.RED)}"
+            f"   {_c(f'共 {len(self.findings)} 项判据', _Co.DIM)}"
         )
         lines: List[str] = [
             "",
@@ -356,23 +373,23 @@ class PreflightReport:
         # ✅/⚠️/❌(带变体选择符、多数终端渲染成 2 格),避免整个克隆界面对号列
         # 因图标宽度不一而错位。每条:`• VAR — 描述`(变量名与描述并作一行,省一行),
         # 提示首行带 💡、续行只缩进不再重复 💡,条目间不留空行 → 更紧凑。
-        def _emit_section(header: str, color: str, findings: List["Finding"]) -> None:
-            lines.append("  " + _c(header, color))
-            lines.append("  " + _c("─" * 56, _Co.DIM))
+        def _emit_section(icon: str, header: str, color: str, findings: List["Finding"]) -> None:
+            lines.append(_row(icon, _c(header, color), color))
+            lines.append(" " * _INDENT + _c("─" * 56, _Co.DIM))
             for f in findings:
                 _desc = _c("— " + f.check.description, _Co.DIM)
-                lines.append(f"  {_c('•', color)} {_c(f.check.var, _Co.BOLD)} {_desc}")
+                lines.append(_row("•", f"{_c(f.check.var, _Co.BOLD)} {_desc}", color))
                 hint_lines = f.check.hint.splitlines()
                 for i, hint_line in enumerate(hint_lines):
-                    prefix = "💡 " if i == 0 else "   "
-                    lines.append("    " + _c(prefix + hint_line.strip(), _Co.DIM))
+                    prefix = "怎么办: " if i == 0 else "        "
+                    lines.append(" " * (_INDENT + _ICON_COL) + _c(prefix + hint_line.strip(), _Co.DIM))
 
         if self.criticals:
-            _emit_section("✗  CRITICAL — startup blocked", _Co.RED, self.criticals)
+            _emit_section("✗", "这些没配好,起不来 —— 必须先补上", _Co.RED, self.criticals)
         if self.warnings and verbose:
-            _emit_section("⚠  WARNING — degraded functionality", _Co.YELLOW, self.warnings)
+            _emit_section("⚠", "这些没配也能启动,但对应功能用不了", _Co.YELLOW, self.warnings)
         if self.ok:
-            lines.append("  " + _c("✓  All CRITICAL checks passed.", _Co.GREEN))
+            lines.append(_row("✓", _c("关键项都齐了,不挡启动。", _Co.GREEN), _Co.GREEN))
 
         lines.append("")
         return "\n".join(lines)
@@ -493,15 +510,11 @@ def _build_protected_compat_ws_policy_finding() -> Optional[Finding]:
         check=EnvCheck(
             var="GALAXY_ENABLE_CORE_COMPAT_WS",
             severity=Severity.CRITICAL,
-            description=(
-                "Core compatibility websocket ingress cannot be activated in protected "
-                "cross-device mode without an explicit override."
-            ),
+            description=("跨设备保护模式下,不显式放行就不能启用 core 兼容版 WebSocket 入口。"),
             hint=(
-                "Unset GALAXY_ENABLE_CORE_COMPAT_WS and use the canonical gateway ingress "
-                "/ws/device/{device_id} for production/cross-device operation.\n"
-                f"Only set {PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV}=true for explicitly "
-                "controlled migration/debug fallback sessions."
+                "把 GALAXY_ENABLE_CORE_COMPAT_WS 去掉,正式/跨设备场景请走正规入口 "
+                "/ws/device/{device_id}。\n"
+                f"只有在明确受控的迁移/排障场景下,才设 {PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV}=true。"
             ),
             groups=["gateway", "android", "all"],
             allow_placeholder=False,

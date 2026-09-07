@@ -238,6 +238,12 @@ export function createDock(cb: DockCallbacks): DockHandles {
 
     const chips = document.createElement('div');
     chips.className = 'sf-stages tier-stages';
+    // **四选一,要说出来是四选一。** 这四个钮此前只有 data-picked(给 CSS 用),
+    // 无障碍上就是四个分别叫 "A" "B" "C" "D" 的光秃秃按钮 —— 读屏读不出一共几档、
+    // 更读不出现在在哪一档。上面那几行 bundle 早就分了"两态用 aria-pressed、
+    // 多态用 data-state",这一行是漏网的。单选组的正确形状是 radiogroup/radio。
+    chips.setAttribute('role', 'radiogroup');
+    chips.setAttribute('aria-label', '本机模型档位');
     // **按档位名排,不按后端给的顺序。** core/model_catalog.py 的 _TIERS 是个 dict,
     // 迭代出来是定义顺序(A B D C)—— 那是后端的内部次序,不是给人看的次序,D 排在
     // C 前面读起来就是错的。「有哪几档」归后端,「按什么顺序摆」归这里。
@@ -247,8 +253,17 @@ export function createDock(cb: DockCallbacks): DockHandles {
       chip.className = 'stage';
       chip.type = 'button';
       chip.textContent = t.key;
-      chip.dataset['picked'] = String(t.key === view.current);
+      const picked = t.key === view.current;
+      chip.dataset['picked'] = String(picked);
       chip.dataset['fit'] = t.fit;
+      chip.setAttribute('role', 'radio');
+      chip.setAttribute('aria-checked', String(picked));
+      // 光一个 "A" 读不出是什么档 —— 把档名也给读屏。跑不动的那几档在这里就说清楚,
+      // 因为它们照样点得动(见上面的说明),看不见 title 的人更需要这句。
+      chip.setAttribute(
+        'aria-label',
+        t.fit === 'ok' ? t.label : `${t.label}（装不下:${t.fitReason}）`,
+      );
       // 跑不动的照画、照点得动 —— 拦住的话,人连"为什么"都看不到。
       // 但要在标题上把原因说全:装不下哪几个型号,后端的原话是什么。
       chip.title =
@@ -315,11 +330,17 @@ export function createDock(cb: DockCallbacks): DockHandles {
       // 「管 N 个键」拿掉了:那个数字不影响任何决定,却占着本该说清这一档管什么的
       // 位置。**有键被手改过仍然要说** —— 那条是真会影响判断的:档位显示「开」而
       // 底下某个键被人改成了关,不说出来就是同一个事实两处各存、且没人看得见。
-      note.textContent = b.unwired
-        ? `${b.note} · 没接上(主键 ${b.primary || '未知'} 不存在)`
+      // 副标题可以是空的(名字已经说完了这一档管什么,比如「声字同文」;或者右边
+      // 那枚牌子已经把当前档写出来了,比如「自主」)。**但留痕不能跟着一起没**:
+      // 空副标题时那两句照打,只是别带前导的「 · 」。
+      const tail = b.unwired
+        ? `没接上(主键 ${b.primary || '未知'} 不存在)`
         : b.overrides > 0
-          ? `${b.note} · 有 ${b.overrides} 项手改过`
-          : b.note;
+          ? `有 ${b.overrides} 项手改过`
+          : '';
+      note.textContent = tail ? (b.note ? `${b.note} · ${tail}` : tail) : b.note;
+      // 什么都没有就别占位 —— 空的 note 仍是 display:block,会给行凭空撑出一截。
+      note.hidden = note.textContent === '';
       if (b.overrides > 0) note.dataset['drift'] = 'true';
       if (b.unwired) note.dataset['unwired'] = 'true';
       text.append(name, note);

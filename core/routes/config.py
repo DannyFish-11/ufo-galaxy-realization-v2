@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 # 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
 # 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
-from core.routes.config_bundles import CONFIG_BUNDLES  # noqa: E402
+from core.routes.config_bundles import CONFIG_BUNDLES, owned_keys  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 
 __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA"]
@@ -475,12 +475,27 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
 
     - ``value`` / ``type`` / ``options``:主键的当前值与它的控件形态。
       三档的 select 必须原样透出 —— 压成布尔会把中间那档吞掉。
-    - ``key_count``:这一档管几个键。
-    - ``overrides``:这一档里有几个键被**手动改得偏离了默认**。
+    - ``key_count``:这一档管几个键 —— 按 ``owns`` 数,不按 ``category`` 数。
+    - ``overrides``:这一档管的键里,有几个被**绕过面板**改得偏离了默认。
 
     ``overrides`` 是这套设计能不能成立的关键。有键被手改过时,档位必须显示成
     「开 · 有偏离」而不是「开」—— 否则档位说开、底下某个键说关,就是同一个事实
     两处各存一份,而且没人看得见。
+
+    但它此前数错了两样东西,两样都会让这个数字**凭空冒出来**:
+
+    1. **按 category 数,不是按这一档真正管的键数。** 实测「自主」按 owns 只管 5 个键,
+       而 category == "agent" 有 59 个 —— 于是 ``GALAXY_MODEL_TIER``(第五行 ABCD
+       那个控件写的)被算进了「自主」的偏离。用户点的是档位钮,面板却告诉他
+       「自主 · 有 1 项手改过」。
+    2. **主键自己也被数进去。** 主键就是这一档的那个开关。用它把值调离默认,
+       正是这个开关存在的意义,不是"偏离"。实测点一下「自主」从 guided 调到
+       autonomous,那行当场变成「有 2 项手改过」—— 用自己的开关改一下,就被自己
+       记了一笔"手改"。
+
+    所以这里数的是:``owns`` 展开后的键,**去掉主键**,值存在于环境且不等于默认。
+    剩下的才是真正"绕过这一档的开关、从别处(.env / 命令行 / 另一台设备)改掉了"
+    的那些 —— 那才是要说出来的不一致。
     """
     primary = bundle["primary"]
     meta = CONFIG_SCHEMA.get(primary)
@@ -497,8 +512,10 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
             "reason": f"主键 {primary} 不在 CONFIG_SCHEMA 里",
         }
 
-    in_category = [k for k, m in CONFIG_SCHEMA.items() if m.get("category") == bundle["category"]]
-    overrides = sum(1 for k in in_category if k in os.environ and os.environ[k] != CONFIG_SCHEMA[k]["default"])
+    owned = owned_keys(bundle, CONFIG_SCHEMA.keys())
+    overrides = sum(
+        1 for k in owned if k != primary and k in os.environ and os.environ[k] != CONFIG_SCHEMA[k]["default"]
+    )
 
     state: Dict[str, Any] = {
         "key": bundle["key"],
@@ -510,7 +527,7 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
         "value": os.environ.get(primary, meta["default"]),
         "default": meta["default"],
         "type": meta["type"],
-        "key_count": len(in_category),
+        "key_count": len(owned),
         "overrides": overrides,
     }
     if "options" in meta:

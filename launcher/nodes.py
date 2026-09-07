@@ -558,8 +558,22 @@ class SystemManager:
             return False
 
     async def wait_for_node(self, config: NodeConfig, max_wait: int = 30) -> bool:
-        """等待节点启动"""
+        """等待节点启动。
+
+        每一轮除了探健康端口，还要问一句**这个子进程还活着吗**。
+
+        为什么加这一问(真跑 ``python main.py --backend`` 实测)：这个循环原本只探端口。
+        节点进程要是起来就崩(import 失败、端口被占、缺依赖)，端口自然永远不通，
+        于是这里干等满 30 秒，再报一句"启动超时" —— 而真相是它 0.1 秒就退了，
+        退出码和 ``logs/node_*.log`` 里的堆栈才是要看的东西。把"已经死了"说成
+        "还没起来"，正好把人引到错误的方向去查。
+
+        还有一个副作用同样实打实：``Popen`` 的子进程退出后，父进程不 ``poll()``
+        就一直是**僵尸**。实测一个跑了 15 分钟的后端进程挂着 15 个 ``<defunct>``
+        子进程(14 个 python + 1 个 nats-server)。``poll()`` 顺手就把它们收了。
+        """
         start_time = time.time()
+        process = self.processes.get(config.id)
 
         while time.time() - start_time < max_wait:
             if await self.check_node_health(config, timeout=2):
@@ -573,9 +587,18 @@ class SystemManager:
                 except Exception:
                     pass
                 return True
+
+            # 子进程已经退出 → 别再等了，直接说它死了、退出码是多少、日志在哪。
+            rc = process.poll() if process is not None else None
+            if rc is not None:
+                log_path = self.log_dir / f"node_{config.id}_{config.name}.log"
+                print(f"{RED}❌ 节点 {config.name} 启动后立即退出(退出码 {rc})，日志: {log_path}{RESET}")
+                self.node_status[config.id] = "exited"
+                return False
+
             await asyncio.sleep(1)
 
-        print(f"{RED}❌ 节点 {config.name} 启动超时{RESET}")
+        print(f"{RED}❌ 节点 {config.name} 启动超时(进程还活着，但健康端口 {config.port} 一直不通){RESET}")
         self.node_status[config.id] = "timeout"
         return False
 
