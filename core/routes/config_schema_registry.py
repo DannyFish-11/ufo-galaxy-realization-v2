@@ -1809,6 +1809,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "voice",
         "description": "本机播放声音（关掉则只出文字不出声 · 默认开）",
     },
+    # 原生音频与原生图像**分开一个开关**,理由写在
+    # core/agent/multimodal_messages.native_audio_wanted() 里:图像不发原生就是
+    # 什么都没有,而音频已经有 ASR 把"他说了什么"转成文字了,原生多出来的只有
+    # 语气/环境声那一部分 —— 不是每轮都值那个 token 钱。
+    "GALAXY_NATIVE_AUDIO_CHAT": {
+        "default": "false",
+        "type": "boolean",
+        "category": "perception",
+        "description": "把录音原样发给模型（默认关：默认走语音转文字，只在需要听语气/环境声时才开）",
+    },
     "GALAXY_NATIVE_MM_CHAT": {
         "default": "true",
         "type": "boolean",

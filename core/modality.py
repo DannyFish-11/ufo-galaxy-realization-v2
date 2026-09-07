@@ -83,6 +83,57 @@ MODEL_MODALITIES: Dict[str, Tuple[str, ...]] = {
     # 本仓走 core/vision_pipeline.py 那条,不在这张表里)。
     "deepseek-v4-pro": (TEXT,),
     "deepseek-v4-flash": (TEXT,),
+    # ── 能收音频的那几个 ────────────────────────────────────────────
+    #
+    # 依据不是我记得,是**这个仓库自己已经在跑的代码**:
+    #
+    #   core/audio_pipeline.py 的 build_openai_audio_payload() 对
+    #   ``gpt-4o-audio-preview``(OPENAI_AUDIO_MODEL 的默认值)发的就是
+    #   ``{"type":"input_audio","input_audio":{"data","format"}}``;
+    #   build_gemini_payload() 对 ``gemini-2.0-flash``(GEMINI_AUDIO_MODEL 的
+    #   默认值)发的是 ``inline_data{mime_type,data}``。
+    #
+    # 那两条是真的在工作的路径,所以这两个型号收音频是**已被本仓验证过的事实**,
+    # 不是从型号名字猜的。
+    "gpt-4o-audio-preview": (TEXT, IMAGE, AUDIO),
+    "gemini-2.0-flash": (TEXT, IMAGE, AUDIO),
+    # 全双工那条线上的型号本身就是音频原生(它们的整个存在意义就是听和说)。
+    # 登记它们不是为了让主链对话去调 —— 那条走 WebSocket、语义完全不同 ——
+    # 而是为了**任何一处问到它们时得到的是真话**。
+    "gpt-realtime": (TEXT, AUDIO),
+    "gpt-realtime-2": (TEXT, AUDIO),
+    "gpt-realtime-2.1": (TEXT, AUDIO),
+    "gemini-2.5-flash-native-audio-preview-12-2025": (TEXT, AUDIO),
+    "gemini-3.1-flash-live-preview": (TEXT, AUDIO),
+}
+
+#: **这条传输装不装得下这种模态。**
+#:
+#: 与上面那张表是两个**独立**的问题,任何一个不满足都不能发:
+#:
+#:   型号能收 + 传输能装  → 发
+#:   型号能收 + 传输装不下 → 降级(比如 Anthropic 上的音频)
+#:   型号收不了            → 降级
+#:
+#: 分开的理由很实在:同一个型号在不同传输上能力不一样。``gpt-4o-audio-preview``
+#: 在 chat/completions 上收 ``input_audio``,而本仓的 Responses 适配器**没有**
+#: 实现音频部件 —— 那不是型号的问题,是我们这一侧的问题,两者不该混成一个判断。
+#:
+#: 只登记**已经实现并且验过**的。没实现就别写在这里 —— 写了等于声称能发,
+#: 而实际发出去的是一个对面不认的形状,上游多半安静地忽略掉。
+PROTOCOL_MODALITIES: Dict[str, Tuple[str, ...]] = {
+    # chat/completions:图像 image_url、音频 input_audio,两样都实现了。
+    "openai": (TEXT, IMAGE, AUDIO),
+    # Anthropic Messages 有 image 块,**没有音频输入**。这不是没实现,
+    # 是这条协议本身不收 —— 所以标出来,让带音频的轮次如实降级而不是被静默丢掉。
+    "anthropic": (TEXT, IMAGE),
+    # Responses:``input_image`` 实现并验过了。音频部件**没有一手依据**,
+    # 不猜 —— 需要它的时候先去查文档、写实现、对着真服务器验，再回来加。
+    "responses": (TEXT, IMAGE),
+    # Ollama:图像挂 message 级 images。音频要走它的 /v1 兼容面
+    # (原生 /api/chat 的 audios 字段会被静默忽略,见 core/audio_pipeline.py 的
+    # 模块注释),而本适配器发的是 /api/chat —— 所以这条路上音频装不下。
+    "ollama": (TEXT, IMAGE),
 }
 
 #: 厂商级旗标 → 模态集合的换算。registry 里那几个布尔就是在说这件事,
@@ -228,6 +279,18 @@ def modalities_in(messages: Sequence[Any]) -> Tuple[str, ...]:
 #:   responses  ``{"type":"input_text"}`` / ``{"type":"input_image","image_url":"data:..."}``
 #:   ollama     图像挂到 message 级 ``images: ["<纯 base64>"]``,文本拼回字符串
 SUPPORTED_WIRE_PROTOCOLS: Tuple[str, ...] = ("openai", "anthropic", "responses", "ollama")
+
+
+def _part_modality(part: Dict[str, Any]) -> str:
+    """一个内容部件属于哪种模态。认不出来的按文字处理(它多半就是文字)。"""
+    ptype = part.get("type") or ""
+    if ptype in ("image_url", "image", "input_image"):
+        return IMAGE
+    if ptype in ("input_audio", "audio"):
+        return AUDIO
+    if ptype in ("video", "input_video"):
+        return VIDEO
+    return TEXT
 
 
 def _split_data_url(url: str) -> Tuple[str, str]:
@@ -383,24 +446,108 @@ def to_native(protocol: str, messages: Sequence[Any]) -> List[Any]:
     return fn(messages)
 
 
-def flatten_to_text(messages: Sequence[Any]) -> List[Any]:
-    """把规范表示压成纯文本消息 —— **降级路径,必须留痕后才用**。
+def strip_modalities(messages: Sequence[Any], blocked: Sequence[str]) -> List[Any]:
+    """把 ``blocked`` 里的模态从消息中摘掉 —— **降级路径,必须留痕后才用**。
 
-    给"这一轮选中的型号收不了图"那种情况准备的:与其把图发给一个看不见它的型号
-    (上游多半不报错,照常作答,于是没人知道它其实没看见),不如显式压成文字并说出来。
+    只摘被挡的那几种,不是一律压成文字:图像能发、音频装不下的时候,把图也一起
+    丢掉是白白少做一件事。
+
+    摘完只剩文字部件时,合并成一个字符串(与没有多模态的那条路逐字一致),并在
+    正文里写明少了什么 —— 空着不说,和"它想了想没什么好说的"长得一模一样。
     """
+    if not blocked:
+        return list(messages)
     out: List[Any] = []
     for m in messages:
         if not isinstance(m, dict) or not isinstance(m.get("content"), list):
             out.append(m)
             continue
-        texts = [
-            p.get("text", "") for p in m["content"] if isinstance(p, dict) and p.get("type") in ("text", "input_text")
-        ]
-        dropped = len(m["content"]) - len(texts)
-        note = f"\n[本轮有 {dropped} 项图像/音频内容未发送:所选型号不接收它们]" if dropped else ""
-        out.append({**m, "content": "\n".join(t for t in texts if t) + note})
+        kept: List[Any] = []
+        dropped = 0
+        for part in m["content"]:
+            if isinstance(part, dict) and _part_modality(part) in blocked:
+                dropped += 1
+                continue
+            kept.append(part)
+        if dropped:
+            note = f"[本轮有 {dropped} 项{'/'.join(blocked)}内容未发送:这一轮的型号或传输不接收它们]"
+            kept.append({"type": "text", "text": note})
+        if all(isinstance(p, dict) and p.get("type") in ("text", "input_text") for p in kept):
+            out.append({**m, "content": "\n".join(p.get("text", "") for p in kept if p.get("text"))})
+        else:
+            out.append({**m, "content": kept})
     return out
+
+
+def flatten_to_text(messages: Sequence[Any]) -> List[Any]:
+    """把规范表示整个压成纯文本 —— ``strip_modalities`` 挡下全部富模态时的特例。
+
+    留着这个名字是因为调用方按它找;实现委托给上面那个,免得两处各写各的。
+    """
+    return strip_modalities(messages, [m for m in ALL_MODALITIES if m != TEXT])
+
+
+def prepare(
+    protocol: str,
+    messages: Sequence[Any],
+    *,
+    model: str = "",
+    provider: str = "",
+    cfg: Any = None,
+) -> List[Any]:
+    """**适配器只调这一个函数。** 一次做完三件本来散在各处的事:
+
+    1. 这批消息实际带着哪些模态(看消息本身,不听调用方自述);
+    2. **两道闸**都过了才发 —— 这一轮的型号收不收、这条传输装不装得下;
+       任一不过就把那种模态摘掉并**说出来**;
+    3. 翻译成这条协议的原生形状。
+
+    两道闸分开的理由:同一个型号在不同传输上能力不一样。``gpt-4o-audio-preview``
+    在 chat/completions 上收音频,而本仓的 Responses 适配器没有实现音频部件 ——
+    前者是型号的事实,后者是我们这一侧的实现程度,混成一个判断就说不清到底缺在哪。
+
+    第 1 道闸的分寸:只在**核实过**这个型号收不了的时候才摘。``source="unknown"``
+    (用户自己加的端点、没登记过的型号)一律照发 —— 未知不是"不支持",按"不支持"
+    处理会让每一个用户自建的多模态端点永远收不到图,而且不留任何痕迹。
+
+    第 2 道闸没有"未知"一说:传输是我们自己写的,装不装得下这件事我们**必须**
+    知道。所以 ``PROTOCOL_MODALITIES`` 里没写的一律按装不下处理。
+    """
+    carried = modalities_in(messages)
+    rich = [m for m in carried if m != TEXT]
+    if not rich:
+        return to_native(protocol, messages)
+
+    proto = (protocol or "openai").strip().lower()
+    carriable = PROTOCOL_MODALITIES.get(proto, (TEXT,))
+    support = input_modalities(model, provider, cfg)
+
+    blocked: List[str] = []
+    for modality in rich:
+        if support.is_known and not support.can(modality):
+            blocked.append(modality)
+            logger.warning(
+                "这一轮带着 %s,但型号 %s(%s)不接收它(依据来源:%s)。已摘掉并在正文里说明 —— "
+                "直接发过去的话上游多半不报错、忽略掉,没人会发现它其实没看见。",
+                modality,
+                model or "(未指定)",
+                provider or "(未指定)",
+                support.source,
+            )
+        elif modality not in carriable:
+            blocked.append(modality)
+            logger.warning(
+                "这一轮带着 %s,而「%s」这条传输装不下它(本仓在这条路上实现的是:%s)。"
+                "已摘掉并在正文里说明。要让它走这条路,先去 core.modality.PROTOCOL_MODALITIES "
+                "旁边看那一条为什么没实现。",
+                modality,
+                proto,
+                "、".join(carriable),
+            )
+
+    if blocked:
+        messages = strip_modalities(messages, blocked)
+    return to_native(protocol, messages)
 
 
 def text_of(content: Any) -> str:
@@ -422,39 +569,3 @@ def text_of(content: Any) -> str:
         elif part is not None:
             out.append(str(part))
     return "\n".join(t for t in out if t)
-
-
-def prepare(
-    protocol: str,
-    messages: Sequence[Any],
-    *,
-    model: str = "",
-    provider: str = "",
-    cfg: Any = None,
-) -> List[Any]:
-    """**适配器只调这一个函数。** 一次做完三件本来散在各处的事:
-
-    1. 这批消息实际带着哪些模态(看消息本身,不听调用方自述);
-    2. 这一轮选中的型号收不收 —— 收不了就**压成文字并说出来**;
-    3. 翻译成这条协议的原生形状。
-
-    第 2 步的分寸:只在**核实过**这个型号收不了的时候才压。``source="unknown"``
-    (用户自己加的端点、没登记过的型号)一律照发 —— 未知不是"不支持",按"不支持"
-    处理会让每一个用户自建的多模态端点永远收不到图,而且不留任何痕迹。
-    """
-    carried = modalities_in(messages)
-    rich = [m for m in carried if m != TEXT]
-    if rich:
-        support = input_modalities(model, provider, cfg)
-        blocked = [m for m in rich if support.is_known and not support.can(m)]
-        if blocked:
-            logger.warning(
-                "这一轮带着 %s,但型号 %s(%s)不接收它们(依据来源:%s)。"
-                "已压成文字发出 —— 直接发过去的话上游多半不报错、忽略掉,没人会发现它其实没看见。",
-                "、".join(blocked),
-                model or "(未指定)",
-                provider or "(未指定)",
-                support.source,
-            )
-            messages = flatten_to_text(messages)
-    return to_native(protocol, messages)
