@@ -482,6 +482,15 @@ class AnthropicAdapter(BaseProviderAdapter):
             "Content-Type": "application/json",
         }
 
+        # 内建工具(computer / bash / text_editor)必须带对应的 beta 旗标,否则服务端
+        # 根本不认那个 type,整条请求 400。旗标从哪来是**一处权威**:
+        # core.computer_use_dialects 的登记表,不在这里另写一份。
+        from core.computer_use_dialects import anthropic_betas_for_tools
+
+        _betas = anthropic_betas_for_tools(tools)
+        if _betas:
+            headers["anthropic-beta"] = ",".join(_betas)
+
         # 先把规范表示(OpenAI content 数组)翻成 Anthropic 的块,再抽 system。
         # 顺序不能反:翻译之前 content 可能是数组,下面那句字符串拼接会当场 TypeError
         # ——**这条路以前就是炸的**,所以原生多模态一直只敢对 OpenAI 兼容面开。
@@ -550,10 +559,28 @@ class AnthropicAdapter(BaseProviderAdapter):
 
     @staticmethod
     def _convert_tools(openai_tools: List[Dict]) -> List[Dict]:
-        """OpenAI tool format → Anthropic tool format"""
-        anthropic_tools = []
-        for t in openai_tools:
-            if t.get("type") == "function":
+        """工具声明 → Anthropic 形状。**已经是 Anthropic 形状的原样放行**。
+
+        原来这里只认 ``type == "function"``,别的一律**静默丢掉**。后果是内建工具
+        (``computer_20241022`` 这类,没有 ``function`` 包装)传进来会变成空清单 ——
+        请求照发,模型只会说话不会动手,而且**不报任何错**。
+        这正是"看起来接上了,其实没有":调用方以为声明了 computer 工具,实际发出去的
+        ``tools`` 是 ``[]``。
+
+        所以改成三分支:原生形状放行、OpenAI function 翻译、**其余丢掉但留痕**。
+        丢掉这件事本身必须看得见,否则下一个人还要再查一遍同样的问题。
+        """
+        from core.computer_use_dialects import is_anthropic_native_tool
+
+        anthropic_tools: List[Dict] = []
+        for t in openai_tools or []:
+            if not isinstance(t, dict):
+                logger.warning("Anthropic 工具声明不是 dict,已丢弃: %r", t)
+                continue
+            if is_anthropic_native_tool(t):
+                anthropic_tools.append(t)
+                continue
+            if t.get("type") == "function" and isinstance(t.get("function"), dict):
                 fn = t["function"]
                 anthropic_tools.append(
                     {
@@ -562,6 +589,8 @@ class AnthropicAdapter(BaseProviderAdapter):
                         "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
                     }
                 )
+                continue
+            logger.warning("认不出的工具声明形状,已丢弃(不会发给 Anthropic): %s", t.get("type") or list(t))
         return anthropic_tools
 
 

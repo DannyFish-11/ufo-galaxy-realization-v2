@@ -34,7 +34,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -144,22 +143,78 @@ class StepRecord:
 
 
 def _parse_action_json(text: str) -> Optional[Dict[str, Any]]:
-    """模型回复 → 动作 dict。容忍 markdown 代码块/前后杂讯;解析不出返回 None。"""
+    """模型回复 → 规范动作 dict;认不出返回 None。
+
+    走 :mod:`core.computer_use_dialects` 的方言表,而不是只认本仓自己那套扁平 JSON。
+
+    为什么:本地模型按 planner prompt 回扁平 JSON 没问题,但厂商自带的 computer use
+    形状完全不同 —— Anthropic 走 ``tool_use`` 块、动作在 ``input.action``、坐标是
+    ``coordinate: [x, y]`` 数组,而且动作名也不一样(``key`` / ``mouse_move`` /
+    ``left_click_drag``)。直接喂给旧解析器一条都认不出来。
+
+    方言表让"支持哪几种"变成一处登记,而不是散在这个函数里的一串 if。
+    **认不出一律 None** —— 猜错会在无关位置点一下,认不出只是这一步不执行。
+    """
     if not text:
         return None
-    t = text.strip()
-    if "```" in t:
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", t)
-        if m:
-            t = m.group(1).strip()
-    start, end = t.find("{"), t.rfind("}")
-    if start == -1 or end <= start:
+    from core.computer_use_dialects import translate_any  # noqa: PLC0415 —— 就近 import
+
+    action, dialect, why = translate_any(text)
+    if action is None:
+        if why:
+            logger.debug("动作解析失败: %s", why)
         return None
-    try:
-        data = json.loads(t[start : end + 1])
-        return data if isinstance(data, dict) else None
-    except (json.JSONDecodeError, ValueError):
+    if dialect and dialect != "native":
+        logger.info("按 %s 方言解出动作: %s", dialect, action.get("action"))
+    return action
+
+
+_NATIVE_TOOL_ENV = "GALAXY_COMPUTER_USE_NATIVE_TOOL"
+
+
+def _native_tool_enabled() -> bool:
+    """要不要向厂商声明**原生 computer 工具**。默认关。
+
+    关着时规划走既有的提示词路径(模型按 planner prompt 回扁平 JSON),那条路今天在跑。
+    开着时会额外声明 Anthropic 的内建 computer 工具 —— 这要求这一轮的路由确实落到
+    支持内建工具的型号上,所以它是**显式开关**,不是自动推断:推断错了的表现是请求
+    带着一个对方不认的工具声明出门,而那种错很难从日志看出来是这里造成的。
+    """
+    return os.environ.get(_NATIVE_TOOL_ENV, "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _parse_tool_calls(tool_calls: Any) -> Optional[Dict[str, Any]]:
+    """路由归一化后的 ``tool_calls`` → 规范动作 dict;认不出返回 None。
+
+    各家适配器都会把厂商的工具调用归一成 OpenAI 形状
+    (``{"function": {"name", "arguments"}}``,arguments 是 JSON 串)。这里把它**还原成
+    一个 tool_use 块**再交给方言表,而不是另写一套解析 —— 动作名到底怎么映射(``key``
+    → ``press_key``、``coordinate`` → x/y)只能有一处说了算,散成两处迟早对不上。
+    """
+    if not tool_calls:
         return None
+    from core.computer_use_dialects import translate_any  # noqa: PLC0415
+
+    for call in tool_calls:
+        if not isinstance(call, dict):
+            continue
+        fn = call.get("function")
+        if not isinstance(fn, dict):
+            continue
+        raw_args = fn.get("arguments")
+        try:
+            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(args, dict):
+            continue
+        action, dialect, why = translate_any({"type": "tool_use", "name": fn.get("name") or "computer", "input": args})
+        if action is not None:
+            logger.info("按 %s 方言从 tool_calls 解出动作: %s", dialect, action.get("action"))
+            return action
+        if why:
+            logger.debug("tool_calls 解析失败: %s", why)
+    return None
 
 
 async def _default_perceive() -> Optional[str]:
@@ -316,15 +371,39 @@ class ComputerUseLoop:
             {"role": "system", "content": _PLANNER_SYSTEM},
             {"role": "user", "content": user_content},
         ]
+        # 厂商原生 computer 工具:默认**关**。开了才声明。
+        #
+        # 为什么默认关:开着就意味着这条请求必须落到支持内建工具的 Anthropic 型号上,
+        # 而路由是按 task_type 选的,选到别家就会带着一个别家不认的工具声明出门。
+        # 关着时走的是既有的提示词路径 —— 那条路今天在跑,不能因为加了这个而变。
+        #
+        # 尺寸从**这一张截图**量(见 anthropic_tool_for_screenshot),量不出就不声明:
+        # 声明一个错的分辨率不会报错,只会让每一次点击都偏,那比不声明糟得多。
+        tools = None
+        if _native_tool_enabled():
+            from core.computer_use_dialects import anthropic_tool_for_screenshot  # noqa: PLC0415
+
+            tool, why = anthropic_tool_for_screenshot(screen_b64)
+            if tool is None:
+                logger.warning("已开启原生 computer 工具,但这一步没声明成: %s —— 本步回落提示词路径", why)
+            else:
+                tools = [tool]
+                logger.debug("声明原生 computer 工具: %dx%d", tool["display_width_px"], tool["display_height_px"])
+
         try:
             resp = await asyncio.wait_for(
-                self._get_router().chat(messages=messages, task_type="agent_control", max_tokens=512),
+                self._get_router().chat(messages=messages, task_type="agent_control", max_tokens=512, tools=tools),
                 timeout=60.0,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("computer_use 规划调用失败: %s", exc)
             return None
-        return _parse_action_json(getattr(resp, "content", "") or "")
+        # 原生工具走的是 tool_calls,不是 content。两条都试:方言表本来就吃 Anthropic
+        # 的 tool_use 形状,所以这里只需要把它交给同一个解析口。
+        action = _parse_action_json(getattr(resp, "content", "") or "")
+        if action is None:
+            action = _parse_tool_calls(getattr(resp, "tool_calls", None))
+        return action
 
     async def run(self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False) -> Dict[str, Any]:
         """跑完整个任务闭环,返回 {success, stop_reason, message, steps}。

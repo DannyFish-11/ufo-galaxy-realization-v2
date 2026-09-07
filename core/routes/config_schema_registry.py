@@ -1091,6 +1091,15 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
             "可用: local_gui, deepseek_ocr2, gemini, qwen3_vl, tesseract"
         ),
     },
+    "GALAXY_COMPUTER_USE_NATIVE_TOOL": {
+        "default": "0",
+        "type": "bool",
+        "category": "agent",
+        "description": (
+            "规划下一步动作时,是否向厂商声明**原生 computer 工具**(Anthropic 内建工具)。"
+            "开了要求这一轮路由确实落到支持内建工具的型号上;关着走既有提示词路径"
+        ),
+    },
     "GALAXY_LAUNCH_APP_ALLOWLIST": {
         "default": "",
         "type": "string",

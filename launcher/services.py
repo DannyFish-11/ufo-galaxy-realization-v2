@@ -185,14 +185,35 @@ def print_section(title: str):
         print_section_header(title)
 
 
+def _linux_has_systemd() -> bool:
+    """这台 Linux 上到底有没有 systemd。
+
+    ``/run/systemd/system`` 存在是 systemd 官方给出的判断方式。容器里通常没有 ——
+    而这正是下面那条 systemctl 失效的原因。
+    """
+    return os.path.isdir("/run/systemd/system")
+
+
 def _try_start_docker_daemon(docker_path: str) -> None:
     """尽力拉起 Docker 守护进程（已安装但未运行时）。永不抛出。
 
     - Windows: 启动 Docker Desktop.exe（常见安装路径）。
     - macOS:   open -a Docker。
-    - Linux:   尝试 systemctl start docker（无 sudo；rootless/已授权时生效）。
+    - Linux:   有 systemd 就 ``systemctl start docker``;**没有 systemd 就直接拉
+      ``dockerd``** —— 容器里跑本项目时走的正是后面这条。
+
+    为什么要加后面那条(真跑实测):这个仓库在容器里跑时,每一次启动的基础设施那行
+    都是"Docker 未就绪"。查下来 ``docker`` / ``dockerd`` / ``containerd`` 三个二进制
+    **全都在**,缺的只是没人把 daemon 拉起来 —— 而原来这里在 Linux 上只会试
+    ``systemctl start docker``,容器里没有 systemd,那条命令必然失败。
+    于是"装了 Docker 却永远显示未就绪",而且看不出为什么。
+
+    实测直接 ``dockerd`` 就起来了:socket 出现、``docker info`` 报 Server Version
+    29.3.1 / overlayfs。所以这不是"环境不支持",是这里少走了一条路。
+
     安装 Docker 本身需要管理员权限/重启，无法可靠地静默完成，因此不在此处尝试安装。
     """
+    import shutil
     import subprocess as sp
 
     try:
@@ -212,7 +233,20 @@ def _try_start_docker_daemon(docker_path: str) -> None:
         elif sys.platform == "darwin":
             sp.Popen(["open", "-a", "Docker"])
         else:
-            sp.run(["systemctl", "start", "docker"], capture_output=True, timeout=20)
+            if _linux_has_systemd():
+                sp.run(["systemctl", "start", "docker"], capture_output=True, timeout=20)
+                return
+            # 没有 systemd(容器里最常见)——直接拉 dockerd。
+            # 后台起、不继承本进程的 stdout,日志进 logs/dockerd.log 好排查。
+            daemon = shutil.which("dockerd")
+            if not daemon:
+                logger.info("没有 systemd,也找不到 dockerd —— 这台机器上起不了 Docker 守护进程")
+                return
+            log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
+            with open(log_dir / "dockerd.log", "ab") as _dlog:
+                sp.Popen([daemon], stdout=_dlog, stderr=sp.STDOUT, start_new_session=True)  # noqa: S603
+            logger.info("没有 systemd,已直接拉起 dockerd(日志 logs/dockerd.log)")
     except Exception:
         pass
 
@@ -1001,11 +1035,16 @@ class GalaxyUnified:
                 "进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效",
             )
         if status == "daemon_down":
-            _hint = (
-                "手动启动 Docker Desktop 后重跑"
-                if runtime == "docker"
-                else "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑"
-            )
+            # 按**这台机器**说话。"启动 Docker Desktop"是 Windows/macOS 的说法,
+            # 在 Linux 上根本没有那个东西 —— 照着它做的人会去找一个不存在的程序。
+            if runtime != "docker":
+                _hint = "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑"
+            elif sys.platform in ("win32", "darwin"):
+                _hint = "手动启动 Docker Desktop 后重跑"
+            elif _linux_has_systemd():
+                _hint = "试 `sudo systemctl start docker` 后重跑"
+            else:
+                _hint = "这台机器没有 systemd —— 直接跑 `sudo dockerd &` 后重跑(日志 logs/dockerd.log)"
             return ("warn", f"{rt_name} 未就绪 — {_hint}", "")
         if status == "no_compose":
             return ("warn", f"未找到 {runtime} compose 命令 — 跳过 " f"(装 {runtime}-compose 或启用 compose 插件)", "")
