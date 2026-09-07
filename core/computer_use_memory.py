@@ -68,6 +68,15 @@ logger = logging.getLogger("Galaxy.ComputerUse.Memory")
 #: 召回条数上限。多了会把规划提示词挤满,而排在后面的相关度已经很低。
 MAX_RECALL = 3
 
+#: 召回时按这个倍数多取,再由 ``_rank_by_outcome`` 自己排。后端只会算语义相似度,
+#: 分不出成功与失败;取够数再筛就没得筛了。
+RECALL_OVERFETCH = 4
+
+#: 一次召回里最多放几条**失败**的经验。失败是有用的(上次这么做没成),但写入侧
+#: 是无条件写的 —— 同一个任务失败五次成功一次,不设上限就会召回三条全是失败,
+#: 而成功的那条被自己的失败挤了出去。
+MAX_FAILURE_RECALL = 1
+
 #: 注入提示词的单条经验最大长度,防止一条超长记忆吃掉整个上下文。
 MAX_EXPERIENCE_CHARS = 200
 
@@ -126,24 +135,98 @@ class ComputerUseEpisodicMemory:
 
     # ── 召回 ────────────────────────────────────────────────────────────────
 
-    async def recall_experience(self, instruction: str) -> str:
-        """召回与 *instruction* 相关的过往经验,返回可直接塞进提示词的文本。
+    async def recall_experience_parts(self, instruction: str) -> List[Any]:
+        """与 ``recall_experience`` 同一次召回,但**连画面一起带回来**。
 
-        没有可用后端、没有命中、或召回失败时一律返回空串 —— 调用方据此决定
-        「不加这一段」,而不是加一段「(无)」去占位。空串比占位更诚实:模型看到
-        「过往经验:(无)」会以为系统查过且确实没有,而实际可能是记忆层根本没配。
+        返回的是仓内的规范表示(OpenAI content 部件):一段文字 + 若干图/音。
+        调用方把它拼进 content 数组即可 —— 这一轮的型号收不收、这条传输装不装得下,
+        由 ``core.modality.prepare`` 那个唯一的头去判,这里不重复判。
+
+        **它取代了原来的 ``recall_experience()``(返回纯字符串那个)。** 一开始我是
+        两个方法并存的,想着"改契约不如加方法安全" —— 但加完之后旧的那个就没有任何
+        生产调用方了,而本仓的判据很直接:没有调用方的公开能力**就是不生效的**。
+        并存的真实代价是有人会去调旧的那个,于是同一次召回在两处走不同的路。
+
+        文字仍然是纯文字:调用方从返回值里挑 ``type == "text"`` 的那些拼起来即可
+        (``computer_use_loop`` 就是这么用的),不必为了拿文字再召回一次 ——
+        召回要打向量库,打两遍既慢、又可能因为并发写入拿到两份不一样的结果。
+
+        默认仍然只回文字:媒体回放要 ``GALAXY_MEMORY_REPLAY_MEDIA=1``,判据在
+        ``core.memory.media_store.replay_enabled()`` 那里写着为什么默认关。
         """
         if not self.available or not instruction.strip():
-            return ""
+            return []
         try:
-            hits = await asyncio.to_thread(self._get_memory().recall, instruction, top_k=MAX_RECALL)
+            hits = await asyncio.to_thread(self._get_memory().recall, instruction, top_k=MAX_RECALL * RECALL_OVERFETCH)
         except Exception as exc:  # noqa: BLE001
             logger.debug("情景记忆召回失败(不影响任务): %s", exc)
-            return ""
-        return self._format_experience(hits or [])
+            return []
+
+        ranked = self._rank_by_outcome(hits or [])
+        text = self._format_experience(ranked)
+        parts: List[Any] = []
+        if text:
+            parts.append({"type": "text", "text": text})
+
+        from core.memory.media_store import media_parts_for  # noqa: PLC0415
+
+        parts.extend(media_parts_for(ranked))
+        return parts
 
     @staticmethod
-    def _format_experience(hits: List[Any]) -> str:
+    def _outcome_of(hit: Any) -> str:
+        """这条经验记的是一次成功还是一次失败。分不出来算 ``unknown``。
+
+        两处都看,不是冗余:
+
+        * ``metadata["tags"]`` —— 写入时打的标(``execution_planner`` 会打
+          ``success`` / ``failure``),这是**权威**的那一份;
+        * 正文里的「结果[失败]」—— 后端各有各的元数据支持程度,有的会在往返中把
+          tags 丢掉。丢了之后正文里那四个字是**唯一还剩下的**结果信号。
+
+        只看第一处,遇到丢 tags 的后端就整批变成 unknown,加权等于没加。
+        """
+        meta = getattr(hit, "metadata", None) or {}
+        tags = meta.get("tags") or ()
+        if "failure" in tags:
+            return "failure"
+        if "success" in tags:
+            return "success"
+        content = getattr(hit, "content", "") or ""
+        if "结果[失败]" in content:
+            return "failure"
+        if "结果[成功]" in content:
+            return "success"
+        return "unknown"
+
+    @classmethod
+    def _rank_by_outcome(cls, hits: List[Any]) -> List[Any]:
+        """按结果重排:成功的优先,失败的**留但设上限**。
+
+        ## 为什么不是把失败的过滤掉
+
+        失败的经验是**有用的** —— "上次在这个界面点那个按钮没反应"正是
+        Reflexion 那类情景记忆的价值所在。全滤掉等于把教训一起扔了。
+
+        ## 为什么必须设上限
+
+        写入那一侧(``core/agent/execution_planner.py``)是**无条件写**的:每次执行
+        都进长期记忆,成功失败只差一个 tag。而召回是纯语义 top_k。于是同一个任务
+        试了五次失败一次成功,召回的三条很可能全是失败 —— 成功的那条被自己的
+        五次失败挤出去了。模型看到的是"这条路走不通"的五份证据和零份反例。
+
+        所以:成功的先排,失败的最多占 ``MAX_FAILURE_RECALL`` 个名额,``unknown``
+        (旧数据、别的链路写的)排在成功之后、失败之前 —— 它们没有"这次没成"这个
+        负面信号,不该被当成失败处理。
+        """
+        buckets: Dict[str, List[Any]] = {"success": [], "unknown": [], "failure": []}
+        for hit in hits:
+            buckets[cls._outcome_of(hit)].append(hit)
+        ranked = buckets["success"] + buckets["unknown"] + buckets["failure"][:MAX_FAILURE_RECALL]
+        return ranked[:MAX_RECALL]
+
+    @classmethod
+    def _format_experience(cls, hits: List[Any]) -> str:
         """把召回结果排成提示词里的一段。纯函数,便于单测。"""
         lines: List[str] = []
         for hit in hits[:MAX_RECALL]:
@@ -153,6 +236,11 @@ class ComputerUseEpisodicMemory:
             modality = getattr(hit, "modality", "text") or "text"
             # 标出模态:让模型知道这条经验背后是一张真实截图,而不是谁写的一句话。
             prefix = "[截图]" if modality == "image" else ""
+            # 失败的经验**标出来**。正文里本来就常带「结果[失败]」,但那是写入方的
+            # 格式约定,别的链路写进来的不一定有。标签由召回这一侧统一加,模型才不会
+            # 把一次失败的尝试读成一条可照做的经验。
+            if cls._outcome_of(hit) == "failure":
+                prefix = "[上次失败]" + prefix
             lines.append(f"- {prefix}{content[:MAX_EXPERIENCE_CHARS]}")
         return "\n".join(lines)
 

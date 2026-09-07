@@ -157,7 +157,13 @@ class TestTreatAsOpenSourceResolutionOrder:
         assert self._call("openrouter", "openrouter/auto") is True
 
     def test_unregistered_provider_with_open_model(self):
-        """meta 的实际情形:两个集合都没登记,但型号是 Llama-4 → 按模型判为开源。"""
+        """两个集合都没登记,但型号是 Llama-4 → 按模型判为开源。
+
+        这条**故意用字面型号串**,不经过 registry:它考的是规则本身,而规则不该
+        因为某一家 provider 来了或走了就失效。事实上 ``meta`` 那条 provider 已经
+        在 2026-09-06 被删(Llama API 关停),而这条照样成立、照样该守着 ——
+        Llama-4 的权重仍然是开放的,只是不再由 Meta 自己的 API 提供。
+        """
         assert self._call("meta", "Llama-4-Maverick-17B-128E-Instruct-FP8") is True
 
 
@@ -190,8 +196,22 @@ class TestAgainstTheRealRegistry:
                 conflicts.append(f"{provider}: 登记为专有但按模型判是 {verdict}")
         assert not conflicts, f"按模型判定与既有登记冲突(会静默改掉既有决定): {conflicts}"
 
-    def test_meta_resolves_to_open_by_its_models(self):
-        assert self._audit()["meta"]["openness"] == OPENNESS_OPEN
+    def test_a_llama_serving_provider_resolves_to_open_by_its_models(self):
+        """型号是 Llama 系 → 整家判为开放权重。
+
+        2026-09-06 换了载体:这条原来断言的是 ``meta``,而 Meta 的直连 API 已于
+        2026-07-06 关停、那条 provider 已从 registry 删除(见 provider_registry
+        里那段说明)。
+
+        **规则没变,变的是谁在承载它。** 现在是 ``groq``(登记
+        llama-3.3-70b-versatile,走同一条 ``^llama[-_.]?\d`` 正则)。改指过来,而不是
+        把这条删掉 —— 删掉的话,"Llama 系要判成开放"这件事就没有任何东西看着了,
+        而它跟 Meta 在不在一点关系都没有。
+
+        规则本身另有一条纯单元用例钉着(用字面型号串,不经过 registry),
+        两条一起才完整:一条管规则,一条管"真实 registry 里确实有它的用武之地"。
+        """
+        assert self._audit()["groq"]["openness"] == OPENNESS_OPEN
 
     def test_moonshot_is_detected_as_mixed(self):
         """真实数据里确实存在 provider 粒度表达不了的一家 —— 证明这个改动不是空谈。"""

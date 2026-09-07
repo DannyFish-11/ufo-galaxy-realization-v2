@@ -84,9 +84,15 @@ _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 #: 路由器里另有特殊发现逻辑的槽位(本地 Ollama / HF 本地 / OneAPI)。
 _RESERVED_EXTRA = ("ollama", "hf_local", "oneapi", "local", "default")
 
-#: 目前只认这两种协议。填别的会被拒 —— **不猜**:一个我们没实现适配器的协议
+#: 目前只认这三种协议。填别的会被拒 —— **不猜**:一个我们没实现适配器的协议
 #: 收下来,只会在真发请求时炸,那正是本仓最怕的失败形状。
-SUPPORTED_PROTOCOLS = ("openai", "anthropic")
+#:
+#: ``responses`` 是 2026-09-06 补的第三种。它与 ``openai`` 的鉴权、列型号那一步
+#: 完全一样,差别只在**发请求那一步**:打 ``/responses``、字段是 ``input`` 和
+#: ``max_output_tokens``、工具平铺(见 multi_llm_router.ResponsesAdapter)。所以
+#: 它不能靠 ``openai`` 凑合 —— 用 ``openai`` 指向一个只讲 Responses 的端点,
+#: 列型号会过、试调会 404,而用户看到的是"这个网关有问题"。
+SUPPORTED_PROTOCOLS = ("openai", "anthropic", "responses")
 
 #: 试调的超时。比 verify_provider_apis.py 的稍宽:用户网关常在内网/中转后面。
 _PROBE_TIMEOUT_S = 12.0
@@ -338,6 +344,11 @@ def _probe(p: UserProvider, api_key: str, model: str) -> str:
     if p.protocol == "anthropic":
         url = f"{p.base_url}/messages"
         body: Dict[str, Any] = {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
+    elif p.protocol == "responses":
+        # 这一步必须打 /responses:只讲 Responses 的端点上没有 /chat/completions,
+        # 拿 chat 的形状去试调会 404 —— 那时报的是"试调被拒",看起来像密钥不对。
+        url = f"{p.base_url}/responses"
+        body = {"model": model, "max_output_tokens": 1, "input": [{"role": "user", "content": "hi"}]}
     else:
         url = f"{p.base_url}/chat/completions"
         body = {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}

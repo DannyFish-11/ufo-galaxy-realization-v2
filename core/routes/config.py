@@ -41,7 +41,6 @@ _SECRET_MODEL_KEYS = [
     "DEEPSEEK_API_KEY",
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
-    "META_API_KEY",
     "GROQ_API_KEY",
     "OPENROUTER_API_KEY",
     "PERPLEXITY_API_KEY",
@@ -55,6 +54,7 @@ _SECRET_MODEL_KEYS = [
     "MINIMAX_API_KEY",
     "STEP_API_KEY",
     "MIMO_API_KEY",
+    "META_API_KEY",
     "MISTRAL_API_KEY",
     "AGNES_API_KEY",
     "HF_API_TOKEN",
@@ -275,8 +275,30 @@ async def update_config(req: ConfigUpdateRequest):
     # 保存路由必须快速返回:此刻配置已落盘、已进 os.environ(持久化真相已成立),
     # 慢的网络探测改为后台调度;需要探测结果的 verify-provider 端点自己有界等待
     # (wait_llm_router_refresh),新 key 依然"保存后即可验证",不牺牲功能。
+    #
+    # 判据是"这个键会不会影响 provider 注册",**不是**它的分类。
+    #
+    # 以前这里写的是 ``category == "llm"``。分类是给人看的(设置页按"人想干什么"
+    # 分九类),它回答不了这个问题,于是漏掉了一整类真事:``OLLAMA_URL`` /
+    # ``GALAXY_LOCAL_OPENAI_URL`` / ``GALAXY_REASONING_OPENAI_URL`` 都是**注册时
+    # 才读**的键、分类却是 agent —— 在设置页把本机推理服务的地址填好、保存成功、
+    # 值也落了盘,而路由器根本不会重新注册这一家,要重启才生效,面板一个字都不说。
+    # 同一家 Ollama,改型号会刷新、改地址不会,自己跟自己都不一致。
+    #
+    # 名单在 core.multi_llm_router.keys_that_change_registration(),大部分从
+    # PROVIDER_REGISTRY 推导 —— 新加一家厂商不必回来改这里。
     refreshed = None
-    if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in final):
+    try:
+        from core.multi_llm_router import keys_that_change_registration
+
+        _touches_registration = bool(set(final) & keys_that_change_registration())
+    except Exception as exc:  # noqa: BLE001 —— 判据取不到时**宁可多刷一次**
+        # 取不到就退回"只要动了 llm 类就刷"。宁可多刷一次(慢一点),
+        # 也不要少刷一次(用户填了地址却没生效,而且看不出来)。
+        logger.debug("注册键名单取不到,退回按分类判断: %s", exc)
+        _touches_registration = any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in final)
+
+    if _touches_registration:
         try:
             from core.multi_llm_router import schedule_llm_router_refresh
 

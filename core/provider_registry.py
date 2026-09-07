@@ -60,7 +60,23 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "base_url": "https://api.openai.com/v1",
         "base_env": "OPENAI_API_BASE",
         "base_key": "openai_base",
+        "supports_responses": True,
         "models": [
+            # 2026-09-06:GPT-6 Astra **进目录了**。上一版这里写着"它确实发布了,但
+            # 公开模型目录与 API 文档里没有任何对应的请求 ID,凭命名惯例猜一个填进来
+            # 就是这份 registry 最不该犯的错" —— 那条判断当时是对的,现在前提变了:
+            # developers.openai.com/api/docs/models/gpt-6-astra 已经是一个正式页面,
+            # 串就是 ``gpt-6-astra``,1,050,000 上下文 / 128K 输出 / $10 入 $50 出
+            # (缓存输入 $1)。
+            #
+            # **但它有两个怪癖,见本文件末尾的 MODEL_QUIRKS。**不处理就每次必炸:
+            # 它不接受 temperature / top_p / logprobs,而本仓的适配器每次都发
+            # temperature。
+            #
+            # 不设为 default:①仍在限量放量(Trusted Access / 各付费档陆续开),
+            # 你的 key 未必有权限;②$50/M 输出是 Sol 的 1.67 倍、Luna 的 8 倍。
+            # 想用就在面板上显式选它。
+            "gpt-6-astra",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -184,19 +200,46 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
-        # Meta Llama API(联网核实 llama.developer.meta.com 官方文档):OpenAI 兼容 base
-        # 是 api.llama.com/compat/v1,不是 api.meta.ai;"muse-spark" 并非真实模型,
-        # 改用官方 Llama-4 模型名。注意:Meta 已于 2026-07-06 起【收尾 Llama API 公测】
-        # (仅美区 waitlist),该 provider 实际多半不可用——保留正确配置,能用则用,
-        # 不能用则由 verify_provider 如实报错、路由自动跳过。
+        # ── Meta:Muse Spark(闭源 agentic 线),**不是** Llama ────────────────
+        #
+        # 这一条被删过一次又加回来,过程本身值得记下来,免得下一个人重蹈:
+        #
+        # 2026-09-06 我把整条 meta 删了,理由是「Llama API 公测 2026-07-06 关停」。
+        # **那个事实是真的,但它说的是另一条产品线。** Meta 有两条:
+        #   · Llama —— 开放权重,自家的 llama.developer.meta.com API 确实已关停,
+        #     官方引导改用第三方(本仓的 groq / openrouter 就是那条路);
+        #   · **Muse Spark** —— 闭源 agentic 模型线,走 **Meta Model API**
+        #     (api.meta.ai),活得好好的,2026-09-02 刚发 1.3。
+        # 拿前者的关停去删后者,是把两个同名不同物的东西当成了一个。
+        #
+        # 更早还有一次反向的错:某一版把这条的型号从 muse-spark 改成了 Llama-4,
+        # 注释写「"muse-spark" 并非真实模型」。那句话是错的 —— 它一直是真的,
+        # 而且是这条 provider 本来的主角。两次错的根都一样:**没有分清 Meta 的
+        # 两条线**。所以这段注释写长一点,让下一个人一眼看见这里有个坑。
+        #
+        # 2026-09-06 核实(developer.meta.com/ai/models/muse-spark、
+        # research.meta.ai/blog/introducing-muse-spark-1-3、dev.meta.ai/docs):
+        #   muse-spark-1.3   2026-09-02 发布,面向长时程 / 多 agent 工作流,
+        #                    输出上限 131,072;标准 xhigh 档 $1.25 入 / $4.25 出,
+        #                    缓存输入 $0.15(约 88% 折扣)
+        #   base_url         https://api.meta.ai/v1(OpenAI SDK 直接指过来即可)
+        #
+        # **它同时讲 Chat Completions 和 Responses 两种格式**(还有 Anthropic 的
+        # Messages,在裸主机名上)。所以下面标了 supports_responses —— 这条是
+        # 本仓第二条传输能用在它身上的依据,不是猜的。
+        #
+        # 上一版留下的 1.1 / 1.2 不再登记:官方说升级只需换 model id、端点与
+        # SDK 都不变,没有留旧版的必要;真要用旧版,面板上「我的模型服务」里
+        # 自己填一条就行。
         "name": "meta",
         "env_key": "META_API_KEY",
-        "base_url": "https://api.llama.com/compat/v1",
-        "models": ["Llama-4-Maverick-17B-128E-Instruct-FP8", "Llama-4-Scout-17B-16E-Instruct-FP8"],
-        "default_model": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        "base_url": "https://api.meta.ai/v1",
+        "models": ["muse-spark-1.3"],
+        "default_model": "muse-spark-1.3",
         "cost_in": 0.00125,
         "cost_out": 0.00425,
-        "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192},
+        "supports_responses": True,
+        "extra": {"multimodal": True, "supports_tools": True},
     },
     {
         # Agnes AI:全模态免费 API(2026),OpenAI 兼容协议。
@@ -249,6 +292,9 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         # 是**它们已经不存在了** —— 官方公告(api-docs.deepseek.com/updates)写明
         # 两者于 2026-07-24 15:59 UTC 完全退役、不再可访问。留着的后果不是多余,
         # 是路由器可能选中一个必然失败的型号,而失败发生在真发请求那一刻。
+        # api.deepseek.com 原生支持 OpenAI Responses 格式(为 Codex 适配),
+        # v4-flash / v4-pro 都可以。核实:api-docs.deepseek.com/guides/responses_api
+        "supports_responses": True,
         "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
         "default_model": "deepseek-v4-pro",
         "cost_in": 0.00132,
@@ -459,3 +505,69 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"supports_tools": True},
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# 型号级怪癖:同一家 provider 里,某个型号跟别的不一样
+# ---------------------------------------------------------------------------
+#: **「这个型号和别的不一样」的唯一权威表。**
+#:
+#: 上面那张 registry 是 provider 级的:一家一套 base_url、一套协议、一个
+#: supports_tools。但上游偶尔会放出**跟同门师兄弟不一样**的型号,provider 级的
+#: 字段表达不了。第一个这样的例子是 gpt-6-astra。
+#:
+#: 不把这些散在适配器里用 ``if model == ...`` 写:那样第二个怪癖会写在第二个地方,
+#: 第三个写在第三个地方,然后就没人说得清"到底哪些型号有特殊处理"。
+#:
+#: 字段:
+#:   omit_params   —— 发请求时**必须不带**的字段。带了上游直接拒。
+#:   needs_responses_for_tools
+#:                 —— 这一轮带工具时必须走 Responses 传输,chat/completions 上
+#:                    它的工具不工作。传输的选择在 _pick_adapter() 里,判据在这。
+#:   why           —— 出处与原因。没有它,过两年没人知道这条还成不成立。
+MODEL_QUIRKS: Dict[str, Dict[str, Any]] = {
+    "gpt-6-astra": {
+        "omit_params": ("temperature", "top_p", "logprobs"),
+        # 这一轮**要用工具**时必须换到 Responses 传输。
+        #
+        # 上一版这里写的是 ``tools_broken: True`` —— 那时本仓只有
+        # chat/completions 一条路,只能把工具丢掉并留痕(答得出话,做不了事)。
+        # 现在有了 ResponsesAdapter,这条从"残疾"变成"换条路走"。
+        "needs_responses_for_tools": True,
+        "why": (
+            "developers.openai.com/api/docs/models/gpt-6-astra:支持 v1/chat/completions、"
+            "v1/responses、v1/batch;但不接受自定义 temperature / top_p / logprobs,"
+            "且**工具调用要走 Responses API**。本仓 2026-09-06 补了 ResponsesAdapter,"
+            "所以带工具的轮次会自动换到 /responses;不带工具时仍走 chat/completions。"
+        ),
+    },
+}
+
+
+def quirks_for(model: str) -> Dict[str, Any]:
+    """这个型号有没有特殊处理。没有就返回空字典。
+
+    按**前缀**匹配:上游常在正式串后面挂日期快照(``gpt-6-astra-2026-09-01``),
+    精确匹配会让快照串悄悄绕过怪癖处理 —— 而那正是"看起来接上了,其实没有"。
+    """
+    name = (model or "").strip()
+    for key, quirks in MODEL_QUIRKS.items():
+        if name == key or name.startswith(key + "-"):
+            return quirks
+    return {}
+
+
+def speaks_responses(provider: str) -> bool:
+    """这家**是不是核实过讲 Responses**。registry 是唯一权威,这里只是读它。
+
+    存在的理由是别处不要再写一遍 ``next(p for p in PROVIDER_REGISTRY ...)``:
+    同一个判断写第二遍,两处就会在某次改动后各说各话。
+
+    没登记过的名字(用户自己加的端点、本地槽位)一律返回 ``False`` —— 那些的
+    协议由 ``core/user_providers.py`` 的 ``protocol`` 字段各自说了算,不归这里管。
+    """
+    name = (provider or "").strip().lower()
+    for entry in PROVIDER_REGISTRY:
+        if entry.get("name") == name:
+            return bool(entry.get("supports_responses"))
+    return False

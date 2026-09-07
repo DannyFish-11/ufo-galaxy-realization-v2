@@ -52,7 +52,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "string",
         "category": "llm",
-        "description": "Meta 模型的 API Key（Muse Spark 接入）",
+        "description": "Meta 的 API Key（Meta Model API / Muse Spark 系列，不是开源 Llama）",
     },
     "MISTRAL_API_KEY": {"default": "", "type": "string", "category": "llm", "description": "Mistral 的 API Key"},
     "AGNES_API_KEY": {
@@ -1809,11 +1809,50 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "voice",
         "description": "本机播放声音（关掉则只出文字不出声 · 默认开）",
     },
-    "GALAXY_NATIVE_MM_CHAT": {
+    # 原生音频与原生图像**分开一个开关**,理由写在
+    # core/agent/multimodal_messages.native_audio_wanted() 里:图像不发原生就是
+    # 什么都没有,而音频已经有 ASR 把"他说了什么"转成文字了,原生多出来的只有
+    # 语气/环境声那一部分 —— 不是每轮都值那个 token 钱。
+    # ── 记忆里的媒体:留存与回放 ──────────────────────────────────────
+    #
+    # 在这几个键之前,记忆是"找得到、看不见":CLIP/CLAP 把截图和录音编成向量,
+    # 所以一句话能召回它们 —— 但字节在摄入完就被删了(metadata 里那个 media_path
+    # 指向一个保证已不存在的临时文件),召回之后没有任何东西能把画面拿回来。
+    "GALAXY_MEMORY_MEDIA": {
+        "default": "true",
+        "type": "boolean",
+        "category": "memory",
+        "description": "把记忆里的截图/录音真的存下来（关掉=只留向量，能搜到但看不到原件 · 默认开）",
+    },
+    "GALAXY_MEMORY_MEDIA_MB": {
+        "default": "512",
+        "type": "number",
+        "category": "memory",
+        "description": "媒体库容量上限（MB，超出按最久未回忆逐出 · 默认 512）",
+    },
+    "GALAXY_MEMORY_MEDIA_DIR": {
+        "default": "",
+        "type": "string",
+        "category": "memory",
+        "description": "媒体库目录（留空=runtime/memory_media）",
+    },
+    "GALAXY_MEMORY_REPLAY_MEDIA": {
+        "default": "false",
+        "type": "boolean",
+        "category": "memory",
+        "description": "召回时把过往截图/录音也发给模型（很费 token，默认关：默认只回文字说明）",
+    },
+    "GALAXY_NATIVE_AUDIO_CHAT": {
         "default": "false",
         "type": "boolean",
         "category": "perception",
-        "description": "原生多模态对话格式（把图片/音频按模型原生格式发，而不是转文字 · 默认关）",
+        "description": "把录音原样发给模型（默认关：默认走语音转文字，只在需要听语气/环境声时才开）",
+    },
+    "GALAXY_NATIVE_MM_CHAT": {
+        "default": "true",
+        "type": "boolean",
+        "category": "perception",
+        "description": "原生多模态对话格式（把图片按模型原生格式发，而不是先转成文字摘要 · 默认开）",
     },
     "GALAXY_CU_MEMORY": {
         "default": "true",
@@ -1946,7 +1985,15 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "vector",
         "type": "string",
         "category": "memory",
-        "description": "启用的记忆后端（逗号分隔，如 vector,graph · 默认 vector）",
+        # 这句原来写的是「如 vector,graph」—— **graph 根本不是支持的后端**
+        # (core/memory/unified._build() 认的是 vector / omni / clip / clap 四个),
+        # 照着填不会报错也不会生效;而两个多模态后端一个字没提,想开图片记忆的人
+        # 在面板上根本找不到那个词。
+        "description": (
+            "启用的记忆后端（逗号分隔）：vector=本地向量(默认，零依赖) · "
+            "clip=图片记忆(一句话召回截图) · clap=声音记忆 · omni=Omni-SimpleMem。"
+            "clip/clap 首次启用会下载模型权重"
+        ),
     },
     "GALAXY_EMBED_MODEL": {
         "default": "paraphrase-multilingual-MiniLM-L12-v2",
@@ -2152,6 +2199,54 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "number",
         "category": "agent",
         "description": "模型状态缓存时长(秒 · 默认 3)",
+    },
+    # 2026-09-06 补。没有这个键之前,registry 里 deepseek / meta 标着
+    # supports_responses,却没有任何一条路能走到那条传输上 —— 声明摆着、一处也
+    # 到不了。判据在 core/multi_llm_router._responses_opt_in()。
+    "GALAXY_RESPONSES_PROVIDERS": {
+        "default": "",
+        "type": "string",
+        # 它说的是"这几家用哪条接口",属于厂商那一档的事,归口到 llm。
+        # 上一版放在 agent 里 —— 用户要在"智能体与模型"那一类里找一个纯粹的
+        # 厂商设置,而"供应商与密钥"就在旁边。
+        "category": "llm",
+        "description": "让这些厂商走 Responses 接口（逗号分隔，如 deepseek,meta · 那条路没有逐字流式 · 默认空）",
+    },
+    # ── 视觉/音频那两条多模态路真的在读、面板上却一直配不了的五个键 ──────
+    #
+    # 2026-09-06 补。core/vision_pipeline.py 与 core/audio_pipeline.py 读它们,
+    # 而它们不在这份 schema 里 = 面板上根本没有这一行。后果不是"少个高级选项":
+    # 换一家 OCR 中转、换一个音频型号,只能去改 .env 或者改代码 —— 而面板恰恰是
+    # 这个系统让人配 API 的地方。
+    "NOVITA_API_KEY": {
+        "default": "",
+        "type": "password",
+        "category": "llm",
+        "description": "Novita 平台密钥（DeepSeek OCR 2 的默认托管方 · 留空则用上面那个专用密钥）",
+    },
+    "DEEPSEEK_OCR2_API_BASE": {
+        "default": "https://api.novita.ai/v3/openai",
+        "type": "url",
+        "category": "llm",
+        "description": "看图识屏那一步的接口地址（换中转/自建时改这里 · 默认走 Novita）",
+    },
+    "DEEPSEEK_OCR2_MODEL": {
+        "default": "deepseek/deepseek-ocr2",
+        "type": "string",
+        "category": "llm",
+        "description": "看图识屏用的型号（换中转时它的型号串常常不一样）",
+    },
+    "GEMINI_AUDIO_MODEL": {
+        "default": "gemini-2.0-flash",
+        "type": "string",
+        "category": "llm",
+        "description": "听声音用的 Gemini 型号（走 Google 那条时用它）",
+    },
+    "OPENAI_AUDIO_MODEL": {
+        "default": "gpt-4o-audio-preview",
+        "type": "string",
+        "category": "llm",
+        "description": "听声音用的 OpenAI 型号（走 OpenAI 兼容那条时用它）",
     },
     # --- WebRTC & Network ---
     # 说明原先只有 "WebRTC Data Channel" 一句英文 —— 面板上照原样显示,中文用户看不懂

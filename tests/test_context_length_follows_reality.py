@@ -184,9 +184,18 @@ class TestBothLoadPathsAskTheSameAuthority:
     """
 
     def test_the_ollama_path_no_longer_hardcodes_its_own_number(self):
-        import core.multi_llm_router as mlr
+        """判据钉在**那段代码**上,不钉在它所在的文件上。
 
-        src = inspect.getsource(mlr)
+        原来读的是整个 ``core.multi_llm_router`` 模块的源码。2026-09-06 把四条
+        适配器拆去 ``core/llm_adapters.py`` 之后,这条当场红了 —— 红的不是它要
+        保护的性质(Ollama 仍然问调度器要预算),而是它**顺手编码进去的一个前提**:
+        "那段代码在那个文件里"。
+
+        搬家不该让判据失效。所以改成直接问那个类。
+        """
+        from core.multi_llm_router import OllamaAdapter
+
+        src = inspect.getsource(OllamaAdapter)
         assert "context_budget_for" in src, "Ollama 那条路还在自己拍数"
 
     def test_the_repo_demand_exceeds_both_old_constants(self):

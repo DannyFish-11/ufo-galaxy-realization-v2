@@ -70,11 +70,19 @@ class _FakeMemory:
         self.outcomes: List[Dict[str, Any]] = []
         self.recalls: List[str] = []
 
-    async def recall_experience(self, instruction: str) -> str:
+    async def recall_experience_parts(self, instruction: str):
+        """替身也走**真实契约**:返回内容部件,不是字符串。
+
+        2026-09-07 改:``recall_experience()``(返回纯字符串那个)被
+        ``recall_experience_parts()`` 取代了 —— 一次召回同时给文字和画面,
+        不必为了拿文字再打一遍向量库。替身跟着改,否则闭环调到一个替身没有的
+        方法上,异常会被那条"记忆坏掉不该中断闭环"的 try 吞掉,于是这个文件
+        看起来全绿、而召回其实一次都没成功过。
+        """
         self.recalls.append(instruction)
         if self.explode:
             raise RuntimeError("记忆后端炸了")
-        return self.experience
+        return [{"type": "text", "text": self.experience}] if self.experience else []
 
     async def remember_failure(self, instruction: str, **kw: Any) -> None:
         if self.explode:
@@ -303,7 +311,7 @@ def test_没有后端时整体是_no_op():
     """没配记忆后端 → available 为 False → 召回返回空串、写入什么都不做。"""
     epi = ComputerUseEpisodicMemory(memory=_NullBackend())
     assert epi.available is False
-    assert asyncio.run(epi.recall_experience("任务")) == ""
+    assert asyncio.run(epi.recall_experience_parts("任务")) == []
     # 不抛异常即可
     asyncio.run(epi.remember_outcome("任务", success=False, stop_reason="x", message="", step_count=0))
 

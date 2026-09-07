@@ -12,8 +12,6 @@ import logging
 import math
 import os
 import time
-from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
@@ -28,116 +26,17 @@ logger = logging.getLogger("Galaxy.LLMRouter")
 # ───────────────────── 数据模型 ─────────────────────
 
 
-class TaskType(Enum):
-    """任务类型 → 决定模型选择策略"""
-
-    REASONING = "reasoning"  # 复杂推理 → 强模型
-    FAST_RESPONSE = "fast_response"  # 快速问答 → 快模型
-    CODING = "coding"  # 代码生成 → 代码模型
-    CREATIVE = "creative"  # 创作 → 创意模型
-    ANALYSIS = "analysis"  # 分析 → 均衡模型
-    PLANNING = "planning"  # 规划 → 强推理模型
-    AGENT_CONTROL = "agent_control"  # Agent 指令生成
-    GENERAL = "general"
-
-
-class ProviderStatus(Enum):
-    HEALTHY = "healthy"
-    DEGRADED = "degraded"
-    DOWN = "down"
-
-
-@dataclass
-class ProviderConfig:
-    """单个提供商配置"""
-
-    name: str
-    api_key: str
-    base_url: str
-    models: List[str]
-    default_model: str
-    cost_per_1k_input: float = 0.0
-    cost_per_1k_output: float = 0.0
-    max_tokens: int = 4096
-    supports_tools: bool = True
-    supports_json_mode: bool = True
-    timeout: float = 60.0
-    multimodal: bool = False  # 是否原生支持多模态（图像/音频/视频输入）
-    env_key: str = ""  # 对应的环境变量名（用于可用性提示）
-    # PR-HA: 硬件感知 + 多模态优先新增字段
-    source_type: str = "api"  # "api" / "local" / "hf_local" / "oneapi"
-    hardware_tier: str = "remote"  # "gpu_full" / "gpu_quantized" / "cpu" / "remote"
-    supports_vision: bool = False  # 是否支持图像输入（VLM能力）
-    supports_audio: bool = False  # 是否支持音频输入
-    kv_cache_enabled: bool = False  # 是否启用KV cache（借鉴vLLM）
-    prefix_cache_enabled: bool = False  # 是否启用前缀缓存（借鉴SGLang RadixAttention）
-    quantization: str = "none"  # "none" / "q4" / "q5" / "q8" / "awq" / "gptq"
-    # 运行时状态
-    status: ProviderStatus = ProviderStatus.HEALTHY
-    latency_avg_ms: float = 0.0
-    error_count: int = 0
-    success_count: int = 0
-    last_error: Optional[str] = None
-    last_used: float = 0.0
-    down_since: float = 0.0  # 标记为 DOWN 的时刻(见 is_available())
-
-    def __post_init__(self) -> None:
-        # base_url 规范化收口在类型本身:任何构造路径(发现/面板保存/持久化
-        # 恢复)传进无协议头或空的 URL,都在这里一次修好,而不是指望每个
-        # 调用点自己记得。空值对本地 provider 回退默认地址,避免运行时
-        # 才炸 "Request URL is missing an 'http://' or 'https://' protocol."
-        raw = (self.base_url or "").strip()
-        if not raw and self.name == "ollama":
-            raw = os.environ.get("OLLAMA_URL", "").strip() or "http://localhost:11434"
-        if raw and not raw.startswith(("http://", "https://")):
-            raw = f"http://{raw}"
-        self.base_url = raw
-
-    def is_available(self, recovery_seconds: float = 60.0) -> bool:
-        """该 provider 现在是否该被当作候选。
-
-        修复:status 字段一旦被打成 DOWN(连续 5 次失败),此前【没有任何自愈
-        路径】——route()/route_multimodal_first()/select_brain_for_task() 等
-        十几处候选筛选全部一律排除 DOWN,而重新变回候选的唯一办法是成功调用
-        一次；但 DOWN 的 provider 永远不会被选为候选,自然也永远没机会成功调用，
-        于是一旦 DOWN 就【整个进程生命周期】卡死,除非手动触发 refresh_llm_router()
-        (保存一次 llm 类配置)或重启——同一个类里的断路器(ProviderCircuitBreaker)
-        反而设计对了(OPEN 到期自动进 HALF_OPEN 重新试探)，两套健康判断互相矛盾。
-        这里让 DOWN 状态也按同样的冷却窗口自动过期，恢复候选资格，真正出问题时
-        断路器仍会在 chat() 调用前再拦一道。
-        """
-        if self.status != ProviderStatus.DOWN:
-            return True
-        return bool(self.down_since) and (time.time() - self.down_since) >= recovery_seconds
-
-
-@dataclass
-class RoutingDecision:
-    """路由决策"""
-
-    provider: str
-    model: str
-    reason: str
-    alternatives: List[str] = field(default_factory=list)
-
-
-@dataclass
-class LLMResponse:
-    """统一响应"""
-
-    content: str
-    provider: str
-    model: str
-    input_tokens: int = 0
-    output_tokens: int = 0
-    latency_ms: float = 0.0
-    cost: float = 0.0
-    tool_calls: Optional[List[Dict]] = None
-    raw_response: Optional[Dict] = None
-    # L2 级联路由元数据
-    cascade_stage: int = 0  # 0-based:第几档答出来的(0=最便宜那档)
-    cascade_escalated: bool = False  # 是否发生过升级(便宜档不合格才升到更贵档)
-
+# 契约(TaskType / ProviderStatus / ProviderConfig / RoutingDecision / LLMResponse)
+# 搬去了 core/llm_types.py,适配器搬去了 core/llm_adapters.py。这里**原样再导出**:
+# 全仓有十几处按 `from core.multi_llm_router import ProviderConfig` 这样写,
+# 拆分不该让它们跟着改 —— 改了就是把一次内部整理变成一次全仓改动。
+from core.llm_types import (  # noqa: E402,F401  —— 重新导出,给既有 import 用
+    LLMResponse,
+    ProviderConfig,
+    ProviderStatus,
+    RoutingDecision,
+    TaskType,
+)
 
 # ───────────────────── 路由策略 ─────────────────────
 
@@ -462,6 +361,73 @@ def _provider_quality_tier(name: str, cfg: Optional["ProviderConfig"] = None) ->
 
 
 # 提供商 → 推荐模型 (2026-05-29 全面更新)
+#: **目录里有、但这张表故意不用的型号** —— 每一个都要写清为什么。
+#:
+#: 存在的理由:``PROVIDER_MODEL_MAP`` 是选型号的唯一入口
+#: (``select_model_by_complexity`` 只读它,读不到才落 ``default_model``),
+#: registry 的 ``models`` 列表**从不参与选型**。所以一个型号进了目录却没进这张表,
+#: 运行时与"没加"是同一件事。
+#:
+#: 这一点本身没问题 —— 各家的旧档留在目录里当回退是有用的(用户可以显式指名,
+#: ``/models`` 对账也要认它们)。有问题的是**分不清哪些是有意留的、哪些是忘了接的**:
+#: 上一轮加的 gpt-6-astra / gemini-3.8-flash / glm-5.3-flash 就是这样静静躺了几天,
+#: 而它们本该是各自那一档最该被选中的型号。
+#:
+#: 所以把"有意留着"写成一份**要给理由**的名单,剩下的由
+#: ``tests/test_every_catalogued_model_has_a_home.py`` 挡:目录里出现一个既不在
+#: 选择表、又不在这份名单里的型号,门当场红。忘了接的新型号自己会喊。
+FALLBACK_ONLY_MODELS: Dict[str, Dict[str, str]] = {
+    "openai": {
+        "gpt-5.6-sol": "就是 gpt-5.6 的另一个名字(旗舰 Sol 的全称),表里用短名即可,两个都排等于同一个型号占两格",
+        "gpt-5.3-codex": "编码专用档。没有一手依据说它在本仓的 CODING 场景强过 gpt-5.6,不凭感觉排",
+        "gpt-5.5": "上一代旗舰,5.6 家族顶替之后留作这一家自己的旧档回退",
+        "gpt-4o": "更老的一代,留作旧档回退(也是不少第三方中转唯一认的串)",
+    },
+    "anthropic": {
+        "claude-fable-5-1": "这一档的定位与 opus/sonnet 的分工没有一手依据,不凭感觉给它安排任务槽",
+    },
+    "google": {
+        "gemini-3.7-flash": "上一代 flash,3.8 顶替之后留作旧档回退",
+        "gemini-3.6-flash": "更早一代 flash,留作旧档回退",
+        "gemini-3.5-flash": "2026-09-06 之前八格全用它;抬到 3.8 之后留作旧档回退",
+        "gemini-3.5-flash-lite": "更省的一档,本仓的 FAST_RESPONSE 已由 3.8-flash 承担",
+        "gemini-3.5-pro": "Pro 与新一代 flash 谁更适合重档没有一手实测,不排;要用请显式指名",
+        "gemini-2.5-pro": "上一个大版本的 Pro,留着是因为不少中转只认这个串",
+    },
+    "xai": {
+        "grok-4.5": "上一代旗舰。4.6 与它同基座、靠后训练提升,4.5 留作这一家自己的旧档回退",
+        "grok-4.3": "更早一代,留着是因为部分中转只认这个串;正常选路不该落到它",
+    },
+    "agnes": {"agnes-2.0-flash": "上一代免费档。2.5-flash 已承担全部任务槽,它留作 2.5 临时不可用时的兜底"},
+    "mistral": {
+        "mistral-medium-3": "中档。large-3 已覆盖全部任务槽,没有依据说中档在哪一格更合适",
+        "mistral-large-2": "上一代旗舰,留作 large-3 之外的旧档回退",
+    },
+    "qwen": {
+        "qwen3.7-max": "上一代旗舰,3.8-max 顶替之后留作旧档回退",
+        "qwen3.7-coder": "上一代编码档,3.8-coder 顶替之后留作旧档回退",
+        "qwen3-235b-a22b": "开源权重档,与 max 线不是同一条,留作显式指名用",
+    },
+    "zhipu": {
+        "glm-5.2": "上一代重档,2026-08-27 被 5.3 顶替,留作旧档回退",
+        "glm-5.1": "更早一代重档,留作旧档回退",
+        "glm-5.1-flash": "上一代快档,现由 5.3-flash 承担",
+        "glm-4-plus": "GLM-4 世代的加强档,留着是因为部分中转只认这个串",
+    },
+    "minimax": {"MiniMax-M2.5": "上一代。M3/M2.7 已覆盖重快两档,它留作旧档回退"},
+    "step": {"step-3.7-mini": "最小档,turbo 已承担 FAST_RESPONSE"},
+    "mimo": {"mimo-v2.5-standard": "中档,pro/lite 已覆盖两端"},
+    "moonshot": {
+        "kimi-k2.5": "上一代。k3/k2.6 已覆盖现用的四格,它留作旧档回退",
+        "moonshot-v1-128k": "Kimi 改名之前的串,留着是因为部分中转仍按它路由",
+    },
+    "perplexity": {
+        "sonar-reasoning-pro": "检索+推理档;本仓把 REASONING 给了 deep-research,两者定位重叠,不重复排",
+        "sonar": "基础档,sonar-pro 已承担 GENERAL/ANALYSIS",
+    },
+}
+
+
 PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
         # GPT-5.6 家族(2026-07-09 GA,2026-08-15 联网复核型号 id 仍正确):
@@ -469,7 +435,15 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         # luna=快而省。价位在 2026-07-30 降过一轮(terra -20%、luna -80%,
         # sol 未变)——型号 id 不受影响,这里不复述具体数字,理由同 deepseek
         # 那条注释:没有一手定价页确认前不改会影响路由的 cost_in/cost_out。
-        TaskType.REASONING: "gpt-5.6",
+        # 2026-09-06:REASONING 升到 gpt-6-astra。此前它只进了 registry 目录、
+        # 没进这张表 —— 而**选型号只读这张表**(select_model_by_complexity),
+        # 目录里的 models 列表从不参与选型。于是"加了一个最强的型号"和"没加"
+        # 在运行时是同一件事,连为它写的 ResponsesAdapter 都一次都不会被触发。
+        #
+        # 只给 REASONING,不给 AGENT_CONTROL / CODING:它的工具调用**必须走
+        # Responses**(MODEL_QUIRKS),而那条传输没有逐字流式。推理那一格本来就
+        # 少有逐字体感需求,工具重的那几格换过去会让每一轮都变成"一次性出现"。
+        TaskType.REASONING: "gpt-6-astra",
         TaskType.FAST_RESPONSE: "gpt-5.6-luna",
         TaskType.CODING: "gpt-5.6",
         TaskType.CREATIVE: "gpt-5.6",
@@ -480,7 +454,9 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     },
     "anthropic": {
         TaskType.REASONING: "claude-opus-5",
-        TaskType.FAST_RESPONSE: "claude-sonnet-5",
+        # FAST_RESPONSE 用 haiku:它本来就是这一档的型号,而在此之前它只躺在
+        # 目录里、一格也没占,等于登记了却永远选不到。
+        TaskType.FAST_RESPONSE: "claude-haiku-4-5-20251001",
         TaskType.CODING: "claude-sonnet-5",
         TaskType.CREATIVE: "claude-opus-5",
         TaskType.ANALYSIS: "claude-opus-5",
@@ -489,31 +465,51 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "claude-sonnet-5",
     },
     "google": {
-        # 注:gemini-3.5-pro 延期到 2026-07-17 才发布——此前表里引用它会 404。
-        # 现全走 GA 的 3.5-flash;Pro 上线后把 CODING/PLANNING/AGENT 升回去。
-        TaskType.REASONING: "gemini-3.5-flash",
-        TaskType.FAST_RESPONSE: "gemini-3.5-flash",
-        TaskType.CODING: "gemini-3.5-flash",
-        TaskType.CREATIVE: "gemini-3.5-flash",
-        TaskType.ANALYSIS: "gemini-3.5-flash",
-        TaskType.PLANNING: "gemini-3.5-flash",
-        TaskType.AGENT_CONTROL: "gemini-3.5-flash",
-        TaskType.GENERAL: "gemini-3.5-flash",
+        # 2026-09-06:全部从 gemini-3.5-flash 抬到 gemini-3.8-flash。
+        #
+        # 这一格修的是**两处权威说了两句不同的话**:registry 里 google 的
+        # default_model 早已是 gemini-3.8-flash,而这张表八格全钉在 3.5-flash,
+        # 于是路由器永远选 3.5 —— 目录里那个"默认"从来没生效过。
+        #
+        # 旁边原本还留着一句"Pro 上线后把 CODING/PLANNING/AGENT 升回去"。
+        # gemini-3.5-pro 早就在目录里了,那句话的条件满足过、没人回来改 ——
+        # 一条**过期的待办**留在注释里,比没有更糟。现在不留待办:3.5-pro
+        # 与 3.8-flash 谁更适合这几格,没有一手依据,就不凭感觉排;它留在
+        # FALLBACK_ONLY_MODELS 里,想用的人显式指名即可。
+        TaskType.REASONING: "gemini-3.8-flash",
+        TaskType.FAST_RESPONSE: "gemini-3.8-flash",
+        TaskType.CODING: "gemini-3.8-flash",
+        TaskType.CREATIVE: "gemini-3.8-flash",
+        TaskType.ANALYSIS: "gemini-3.8-flash",
+        TaskType.PLANNING: "gemini-3.8-flash",
+        TaskType.AGENT_CONTROL: "gemini-3.8-flash",
+        TaskType.GENERAL: "gemini-3.8-flash",
     },
     "meta": {
-        # 对齐 PROVIDER_REGISTRY['meta'] 的真实模型名(api.llama.com/compat/v1)。
-        # 此前全部映射到 "muse-spark-1.1" —— registry 注释已明确它【并非真实模型】,
-        # 而 map 对每个 TaskType 都有值、消费方永远取 map 值(不落到 default_model),
-        # 于是每个走 meta 的请求都拿假模型名去请求 → 400/404、provider 被判 DOWN。
-        # 重档用 Maverick(旗舰),快档用 Scout(轻量)。
-        TaskType.REASONING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.FAST_RESPONSE: "Llama-4-Scout-17B-16E-Instruct-FP8",
-        TaskType.CODING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.CREATIVE: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.ANALYSIS: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.PLANNING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.AGENT_CONTROL: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-        TaskType.GENERAL: "Llama-4-Scout-17B-16E-Instruct-FP8",
+        # 2026-09-06:全部改回 muse-spark(现为 1.3)。**这一格改错过一次,而且是
+        # 被上游的一句错注释带错的**,过程记在这儿:
+        #
+        #   · 某一版把这里从 "muse-spark-1.1" 改成 Llama-4,理由写的是
+        #     「registry 注释已明确它并非真实模型」。
+        #   · 那句 registry 注释本身是错的 —— Muse Spark 一直是 Meta 真实的
+        #     **闭源 agentic 线**,只是和开源 Llama 不是一条线。
+        #   · 于是这一格从"指着一个被误判为假的真型号",变成"指着另一条产品线的
+        #     型号",而那条线的自家 API 后来还关停了。
+        #
+        # 一次错判被下游照抄,是这类错误最典型的传播方式。所以两边的注释都写长了:
+        # registry 那条讲清 Meta 有两条线,这条讲清它被带错过。
+        #
+        # 这一家只登记了一个型号,所以八个槽位同值。**仍然逐个写出来**而不是删掉
+        # 这一格:map 对每个 TaskType 都有值时消费方永远取 map 值、不落到
+        # default_model;删了这格反而是换一套语义,不是简化。
+        TaskType.REASONING: "muse-spark-1.3",
+        TaskType.FAST_RESPONSE: "muse-spark-1.3",
+        TaskType.CODING: "muse-spark-1.3",
+        TaskType.CREATIVE: "muse-spark-1.3",
+        TaskType.ANALYSIS: "muse-spark-1.3",
+        TaskType.PLANNING: "muse-spark-1.3",
+        TaskType.AGENT_CONTROL: "muse-spark-1.3",
+        TaskType.GENERAL: "muse-spark-1.3",
     },
     "xai": {
         # Grok 4.6(联网核实 2026-08-12 发布,多源交叉确认):同 4.5 的 V9 基座/1.5T
@@ -571,6 +567,22 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.FAST_RESPONSE: "glm-5.3-flash",
         TaskType.CREATIVE: "glm-5.3",
         TaskType.PLANNING: "glm-5.3",
+    },
+    "zhipu_coding": {
+        # 2026-09-06 补。这一家此前**在这张表里一格都没有** —— 上一轮把
+        # glm-5.3 / glm-5.3-flash 落进 registry 目录时漏了这一步,于是无论什么
+        # 任务都落到 default_model(glm-5.3),而 glm-5.3-flash 登记了却永远选不到。
+        #
+        # 与 zhipu 那一格同型号、同分工(重档 5.3、快档 5.3-flash):这是同一家的
+        # 编码专用端点,不是另一批模型,分工没有理由不一样。
+        TaskType.REASONING: "glm-5.3",
+        TaskType.FAST_RESPONSE: "glm-5.3-flash",
+        TaskType.CODING: "glm-5.3",
+        TaskType.CREATIVE: "glm-5.3",
+        TaskType.ANALYSIS: "glm-5.3",
+        TaskType.PLANNING: "glm-5.3",
+        TaskType.AGENT_CONTROL: "glm-5.3",
+        TaskType.GENERAL: "glm-5.3",
     },
     "minimax": {
         # 对齐 PROVIDER_REGISTRY['minimax'].models(大小写敏感的官方 id):
@@ -732,816 +744,15 @@ class ProviderCircuitBreaker:
         }
 
 
-class BaseProviderAdapter:
-    """提供商适配器基类"""
+# 四条传输的适配器在 core/llm_adapters.py。同样原样再导出。
+from core.llm_adapters import (  # noqa: E402,F401  —— 重新导出,给既有 import 用
+    AnthropicAdapter,
+    BaseProviderAdapter,
+    OllamaAdapter,
+    OpenAIAdapter,
+    ResponsesAdapter,
+)
 
-    DEFAULT_TIMEOUT = 30.0  # 默认请求超时
-    MAX_RETRIES = 2  # 最大重试次数
-    RETRY_BASE_DELAY = 1.0  # 重试基础延迟
-
-    # HTTP status codes that are safe to retry (transient errors)
-    _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-
-    def __init__(self, config: ProviderConfig):
-        self.config = config
-        self._client: Optional[httpx.AsyncClient] = None
-
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=self.config.timeout)
-        return self._client
-
-    async def _post_with_retry(
-        self,
-        url: str,
-        headers: Dict[str, str],
-        body: Dict[str, Any],
-    ) -> httpx.Response:
-        """POST request with automatic retry on transient failures (timeout, 5xx, 429).
-
-        Uses exponential backoff: RETRY_BASE_DELAY * 2^attempt seconds between retries.
-        Falls through to raise on non-retryable errors immediately.
-        """
-        # 出口闸:这是所有云端 provider POST 的收口点,所以判据放在这里就覆盖了
-        # 全部厂商 —— 在每个适配器里各写一遍必然漏掉一家,而漏的表现是"某家突然
-        # 连不上",没人会想到是这道闸。判据见 core/egress_guard.py。
-        # audit 档(默认)只记账不拦,enforce 档才会抛 EgressBlocked。
-        from core.egress_guard import check_egress  # noqa: PLC0415
-
-        check_egress(url, purpose=f"llm:{self.config.name}")
-
-        client = await self._get_client()
-        last_exc: Optional[Exception] = None
-        for attempt in range(self.MAX_RETRIES + 1):
-            try:
-                resp = await client.post(url, headers=headers, json=body)
-                if resp.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.MAX_RETRIES:
-                    delay = self.RETRY_BASE_DELAY * (2**attempt)
-                    logger.warning(
-                        "Retryable HTTP %d from %s (attempt %d/%d), retrying in %.1fs",
-                        resp.status_code,
-                        self.config.name,
-                        attempt + 1,
-                        self.MAX_RETRIES + 1,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                resp.raise_for_status()
-                return resp
-            except httpx.TimeoutException as e:
-                last_exc = e
-                if attempt < self.MAX_RETRIES:
-                    delay = self.RETRY_BASE_DELAY * (2**attempt)
-                    logger.warning(
-                        "Timeout from %s (attempt %d/%d), retrying in %.1fs",
-                        self.config.name,
-                        attempt + 1,
-                        self.MAX_RETRIES + 1,
-                        delay,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                raise
-            except httpx.HTTPStatusError:
-                # Non-retryable HTTP error, raise immediately
-                raise
-        # Should not reach here, but just in case
-        if last_exc:
-            raise last_exc
-        raise RuntimeError(f"Exhausted retries for {self.config.name}")
-
-    async def chat(
-        self,
-        messages: List[Dict],
-        model: str,
-        tools: Optional[List[Dict]] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        response_format: Optional[Dict] = None,
-        **kwargs,
-    ) -> LLMResponse:
-        raise NotImplementedError(
-            f"Provider adapter '{self.config.name}' 未实现 chat()，"
-            f"请使用具体的适配器子类 (OpenAI/Anthropic/Google/DeepSeek)"
-        )
-
-    async def close(self):
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-
-
-class OpenAIAdapter(BaseProviderAdapter):
-    """OpenAI / OpenAI-compatible adapter"""
-
-    async def chat(
-        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
-    ) -> LLMResponse:
-        headers = {"Content-Type": "application/json"}
-        # 无鉴权的自托管服务(llama.cpp server / OpenVINO Model Server 默认不开
-        # 鉴权)把 api_key 留空。此时**不能**照发 "Bearer " —— httpx 会在发出前就
-        # 抛 LocalProtocolError: Illegal header value b'Bearer '。真实调用实测:
-        # 一个 api_key="" 的 OpenAI 兼容 provider 每一次请求都在这一步直接炸,
-        # 连不上服务器,报错还长得像网络问题。留空就干脆不带这个头。
-        if (self.config.api_key or "").strip():
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
-        body: Dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if tools:
-            body["tools"] = tools
-        if response_format:
-            body["response_format"] = response_format
-
-        # 真流式:消费端挂了 TokenStream 且不是结构化输出请求时,SSE 边生成边吐字。
-        # 任何流式失败都作废已流出内容并退回下面的非流式老路径(行为兜底不变)。
-        _sink = kwargs.get("stream")
-        if _sink is not None and response_format is None:
-            try:
-                return await self._chat_streaming(
-                    headers=headers,
-                    body=body,
-                    model=model,
-                    sink=_sink,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.info("OpenAI 兼容流式失败,退回非流式: %s", exc)
-                try:
-                    _sink.reset()
-                except Exception:  # noqa: BLE001
-                    pass
-
-        t0 = time.monotonic()
-        resp = await self._post_with_retry(
-            f"{self.config.base_url}/chat/completions",
-            headers=headers,
-            body=body,
-        )
-        latency = (time.monotonic() - t0) * 1000
-        data = resp.json()
-
-        choice = data["choices"][0]
-        usage = data.get("usage", {})
-        tool_calls = None
-        if choice["message"].get("tool_calls"):
-            tool_calls = [tc for tc in choice["message"]["tool_calls"]]
-
-        return LLMResponse(
-            content=choice["message"].get("content") or "",
-            provider=self.config.name,
-            model=model,
-            input_tokens=usage.get("prompt_tokens", 0),
-            output_tokens=usage.get("completion_tokens", 0),
-            latency_ms=latency,
-            tool_calls=tool_calls,
-            raw_response=data,
-        )
-
-    @staticmethod
-    def _merge_tool_call_delta(acc: Dict[int, Dict[str, Any]], delta_tc: Dict[str, Any]) -> None:
-        """把一条流式 tool_call 增量并进按 index 聚合的累积表。
-
-        OpenAI 流式协议:tool_calls 增量按 ``index`` 定位;首个增量带 id/name,
-        后续增量只带 ``function.arguments`` 的字符串片段,需按序拼接。
-        """
-        idx = int(delta_tc.get("index", 0) or 0)
-        slot = acc.setdefault(
-            idx,
-            {
-                "id": "",
-                "type": "function",
-                "function": {"name": "", "arguments": ""},
-            },
-        )
-        if delta_tc.get("id"):
-            slot["id"] = delta_tc["id"]
-        if delta_tc.get("type"):
-            slot["type"] = delta_tc["type"]
-        fn = delta_tc.get("function") or {}
-        if fn.get("name"):
-            slot["function"]["name"] = fn["name"]
-        if fn.get("arguments"):
-            slot["function"]["arguments"] += fn["arguments"]
-
-    async def _chat_streaming(self, *, headers, body, model, sink) -> LLMResponse:
-        """OpenAI 兼容 SSE 真流式:content 增量喂 sink,tool_calls 增量按 index 组装。
-
-        只把【正文】流出给用户;工具调用参数片段绝不进 sink。usage 仅在服务端支持
-        ``stream_options.include_usage`` 时可得,拿不到就记 0(成本统计的已知取舍)。
-        """
-        stream_body = {**body, "stream": True, "stream_options": {"include_usage": True}}
-        client = await self._get_client()
-        t0 = time.monotonic()
-        content_parts: List[str] = []
-        tool_acc: Dict[int, Dict[str, Any]] = {}
-        usage: Dict[str, Any] = {}
-        async with client.stream(
-            "POST",
-            f"{self.config.base_url}/chat/completions",
-            headers=headers,
-            json=stream_body,
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                line = (line or "").strip()
-                if not line.startswith("data:"):
-                    continue
-                payload = line[5:].strip()
-                if not payload or payload == "[DONE]":
-                    continue
-                try:
-                    chunk = json.loads(payload)
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(chunk.get("usage"), dict):
-                    usage = chunk["usage"]
-                choices = chunk.get("choices") or []
-                if not choices:
-                    continue
-                delta = choices[0].get("delta") or {}
-                piece = delta.get("content")
-                if piece:
-                    content_parts.append(piece)
-                    sink.feed(piece)
-                for delta_tc in delta.get("tool_calls") or []:
-                    if isinstance(delta_tc, dict):
-                        self._merge_tool_call_delta(tool_acc, delta_tc)
-        latency = (time.monotonic() - t0) * 1000
-        tool_calls = [tool_acc[i] for i in sorted(tool_acc)] or None
-        return LLMResponse(
-            content="".join(content_parts),
-            provider=self.config.name,
-            model=model,
-            input_tokens=int(usage.get("prompt_tokens", 0) or 0),
-            output_tokens=int(usage.get("completion_tokens", 0) or 0),
-            latency_ms=latency,
-            tool_calls=tool_calls,
-            raw_response=None,  # 流式无整包 JSON;下游一律以 LLMResponse 字段为准
-        )
-
-
-class AnthropicAdapter(BaseProviderAdapter):
-    """Anthropic Claude adapter (Messages API)"""
-
-    async def chat(
-        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
-    ) -> LLMResponse:
-        headers = {
-            "x-api-key": self.config.api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
-
-        # 从 messages 提取 system
-        system_text = ""
-        user_messages = []
-        for m in messages:
-            if m["role"] == "system":
-                system_text += m["content"] + "\n"
-            else:
-                user_messages.append(m)
-
-        body: Dict[str, Any] = {
-            "model": model,
-            "messages": user_messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }
-        if system_text.strip():
-            body["system"] = system_text.strip()
-        if tools:
-            # 转换 OpenAI tool 格式 → Anthropic tool 格式
-            body["tools"] = self._convert_tools(tools)
-
-        t0 = time.monotonic()
-        resp = await self._post_with_retry(
-            f"{self.config.base_url}/messages",
-            headers=headers,
-            body=body,
-        )
-        latency = (time.monotonic() - t0) * 1000
-        data = resp.json()
-
-        content = ""
-        tool_calls = []
-        for block in data.get("content", []):
-            if block["type"] == "text":
-                content += block["text"]
-            elif block["type"] == "tool_use":
-                tool_calls.append(
-                    {
-                        "id": block["id"],
-                        "type": "function",
-                        "function": {
-                            "name": block["name"],
-                            "arguments": json.dumps(block["input"]),
-                        },
-                    }
-                )
-
-        usage = data.get("usage", {})
-        return LLMResponse(
-            content=content,
-            provider=self.config.name,
-            model=model,
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            latency_ms=latency,
-            tool_calls=tool_calls if tool_calls else None,
-            raw_response=data,
-        )
-
-    @staticmethod
-    def _convert_tools(openai_tools: List[Dict]) -> List[Dict]:
-        """OpenAI tool format → Anthropic tool format"""
-        anthropic_tools = []
-        for t in openai_tools:
-            if t.get("type") == "function":
-                fn = t["function"]
-                anthropic_tools.append(
-                    {
-                        "name": fn["name"],
-                        "description": fn.get("description", ""),
-                        "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
-                    }
-                )
-        return anthropic_tools
-
-
-class OllamaAdapter(BaseProviderAdapter):
-    """Ollama local model adapter
-
-    工具调用双协议:
-      1. **原生 function calling**(qwen/minicpm/llama3.1 等带工具模板的模型):
-         tools 随请求体,解析 message.tool_calls。
-      2. **文本协议兜底**(gemma 系等无工具模板的模型,Ollama 回 400
-         "does not support tools"):把工具清单注入系统消息,约定模型用一行
-         JSON ``{"tool_call": {"name": ..., "arguments": {...}}}`` 表达调用,
-         从回复文本解析并归一成 OpenAI 形状——gemma 也能真正调工具
-         (表达力略逊原生,但完整可用)。一旦某模型判定为无模板,按模型名
-         缓存,后续请求直接走文本协议,不再吃 400 往返。
-    """
-
-    #: 已判定不支持原生工具的模型(进程内缓存,免每次吃 400)
-    _text_protocol_models: set = set()
-
-    _TEXT_TOOL_INSTRUCTION = (
-        "你可以调用以下工具来完成任务。工具清单(JSON Schema):\n{tool_specs}\n"
-        "调用规则:需要调用工具时,只输出一行 JSON(不要任何其它文字、"
-        "不要代码围栏):\n"
-        '{{"tool_call": {{"name": "<工具名>", "arguments": {{<参数>}}}}}}\n'
-        "工具结果会以 [工具结果] 消息回给你;不需要工具时直接正常回答。"
-    )
-
-    @classmethod
-    def _tools_prompt(cls, tools: List[Dict]) -> str:
-        specs = []
-        for t in tools or []:
-            fn = t.get("function") if isinstance(t, dict) else None
-            if isinstance(fn, dict):
-                specs.append(
-                    {
-                        "name": fn.get("name", ""),
-                        "description": (fn.get("description") or "")[:200],
-                        "parameters": fn.get("parameters") or {},
-                    }
-                )
-        return cls._TEXT_TOOL_INSTRUCTION.format(tool_specs=json.dumps(specs, ensure_ascii=False))
-
-    @classmethod
-    def _inject_text_tools(cls, messages: List[Dict], tools: List[Dict]) -> List[Dict]:
-        """把工具清单作为系统消息注入(紧跟首条 system 之后,前缀尽量稳定)。"""
-        tool_msg = {"role": "system", "content": cls._tools_prompt(tools)}
-        out = list(messages)
-        idx = 1 if (out and out[0].get("role") == "system") else 0
-        out.insert(idx, tool_msg)
-        return out
-
-    @staticmethod
-    def _textualize_tool_history(messages: List[Dict]) -> List[Dict]:
-        """文本协议模型看不懂 role=tool / assistant.tool_calls——把工具轮历史
-        转成纯文本(assistant 的调用还原成它当初输出的 JSON 行;tool 结果转
-        user 的 [工具结果] 消息),模板不炸、上下文语义不丢。"""
-        out: List[Dict] = []
-        for m in messages:
-            if not isinstance(m, dict):
-                out.append(m)
-                continue
-            role = m.get("role")
-            if role == "assistant" and m.get("tool_calls"):
-                lines = []
-                for tc in m["tool_calls"]:
-                    fn = (tc or {}).get("function") or {}
-                    args = fn.get("arguments")
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except (ValueError, TypeError):
-                            args = {}
-                    lines.append(
-                        json.dumps(
-                            {"tool_call": {"name": fn.get("name", ""), "arguments": args or {}}}, ensure_ascii=False
-                        )
-                    )
-                content = (m.get("content") or "").strip()
-                out.append({"role": "assistant", "content": (content + "\n" if content else "") + "\n".join(lines)})
-            elif role == "tool":
-                out.append({"role": "user", "content": f"[工具结果] {m.get('content', '')}"})
-            else:
-                out.append(m)
-        return out
-
-    @staticmethod
-    def _parse_text_tool_calls(content: str) -> Optional[List[Dict]]:
-        """从回复文本解析 {"tool_call": {...}} 调用(容忍前后缀文字/代码围栏),
-        归一成 OpenAI 形状。没有合法调用返回 None(当普通回答)。"""
-        if not content or '"tool_call"' not in content:
-            return None
-        calls: List[Dict] = []
-        i = 0
-        while True:
-            k = content.find('"tool_call"', i)
-            if k < 0:
-                break
-            start = content.rfind("{", 0, k)
-            if start < 0:
-                i = k + 11
-                continue
-            depth = 0
-            end = -1
-            for j in range(start, len(content)):
-                if content[j] == "{":
-                    depth += 1
-                elif content[j] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        end = j
-                        break
-            if end < 0:
-                break
-            try:
-                obj = json.loads(content[start : end + 1])
-                tc = obj.get("tool_call") or {}
-                name = tc.get("name", "")
-                if name:
-                    calls.append(
-                        {
-                            "id": f"ollama_text_call_{len(calls)}_{name}",
-                            "type": "function",
-                            "function": {
-                                "name": name,
-                                "arguments": json.dumps(tc.get("arguments") or {}, ensure_ascii=False),
-                            },
-                        }
-                    )
-            except (ValueError, TypeError):
-                pass
-            i = end + 1 if end >= 0 else k + 11
-        return calls or None
-
-    @staticmethod
-    def _to_ollama_messages(messages):
-        """把消息规范成 Ollama 原生格式，让本地多模态模型(Gemma4/MiniCPM-o)真正"看到"图像。
-
-        Ollama /api/chat 的图像约定：在 message 上挂 ``images: ["<base64>", ...]``（纯 base64，
-        不含 data: 前缀）。上游可能用 OpenAI 风格的 ``content: [{type:"text"...},
-        {type:"image_url", image_url:{url:"data:image/..;base64,XXXX"}}]``，也可能已带 ``images``。
-        这里统一抽取：文本部分拼回 content 字符串，图像部分收进 images 数组。无图则原样返回。
-        """
-        out = []
-        for m in messages:
-            if not isinstance(m, dict):
-                out.append(m)
-                continue
-            content = m.get("content")
-            imgs = list(m.get("images") or [])
-            if isinstance(content, list):
-                text_parts = []
-                for part in content:
-                    if not isinstance(part, dict):
-                        text_parts.append(str(part))
-                        continue
-                    ptype = part.get("type")
-                    if ptype == "text":
-                        text_parts.append(part.get("text", ""))
-                    elif ptype in ("image_url", "image"):
-                        url = ""
-                        if isinstance(part.get("image_url"), dict):
-                            url = part["image_url"].get("url", "")
-                        else:
-                            url = part.get("image_url") or part.get("data") or part.get("image", "")
-                        if isinstance(url, str) and url:
-                            # 去掉 data:image/...;base64, 前缀
-                            imgs.append(url.split(",", 1)[1] if url.startswith("data:") else url)
-                new_m = {**m, "content": "\n".join(t for t in text_parts if t)}
-            else:
-                new_m = {**m}
-            if imgs:
-                new_m["images"] = imgs
-            elif "images" in new_m and not new_m["images"]:
-                new_m.pop("images", None)
-            out.append(new_m)
-        return out
-
-    @staticmethod
-    def _normalize_tool_calls(raw_calls: Any) -> Optional[List[Dict]]:
-        """Ollama 原生 tool_calls → OpenAI 形状(下游 ReAct 统一按此消费)。
-
-        差异:Ollama 的 function.arguments 是 **dict**(OpenAI 是 JSON 字符串),
-        且不带 id。这里统一转字符串 + 合成 id,让 openclawd 的
-        ``json.loads(fn["arguments"])`` 两家通吃。
-        """
-        if not raw_calls:
-            return None
-        out: List[Dict] = []
-        for i, tc in enumerate(raw_calls):
-            fn = (tc or {}).get("function") or {}
-            args = fn.get("arguments")
-            if isinstance(args, (dict, list)):
-                args = json.dumps(args, ensure_ascii=False)
-            elif not isinstance(args, str):
-                args = "{}"
-            out.append(
-                {
-                    "id": tc.get("id") or f"ollama_call_{i}_{fn.get('name', '')}",
-                    "type": "function",
-                    "function": {"name": fn.get("name", ""), "arguments": args},
-                }
-            )
-        return out or None
-
-    @staticmethod
-    def _is_tools_unsupported_error(exc: Exception) -> bool:
-        """Ollama 对无工具模板的模型(如 gemma 系)回 400 'does not support tools'。"""
-        try:
-            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
-                return exc.response.status_code == 400 and "tool" in exc.response.text.lower()
-        except Exception:  # noqa: BLE001
-            pass
-        return False
-
-    async def chat(
-        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
-    ) -> LLMResponse:
-        # 模型常驻不卸载(-1):Ollama 默认几分钟不用就卸出内存,下次请求整段
-        # 冷加载——真机"等待窗口未响应/像冷启动"的来源。按请求带上,即使
-        # ollama serve 是安装器自启的(拿不到我们 spawn 时的环境变量)也生效。
-        # 纯数字须转 int(JSON number;裸 "-1" 字符串无时长单位会解析失败),
-        # "10m" 之类的时长字符串原样透传。
-        _keep_alive: Any = os.environ.get("GALAXY_OLLAMA_KEEP_ALIVE", "-1")
-        try:
-            _keep_alive = int(_keep_alive)
-        except (TypeError, ValueError):
-            pass
-        _options: Dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
-        # num_ctx 显式设置:系统提示+工具定义+记忆+历史很容易超过模型默认上下文
-        # (常为 4096),一旦溢出 Ollama 滑窗截断 → 前缀 KV 缓存每轮全废 → 每轮
-        # ReAct 全量重预填,CPU 机上就是"越聊越慢"。设 0/空 则不传(回到模型默认)。
-        #
-        # 默认值**不再是写死的 8192**。那个数是拍的:本仓库按自己配的预算
-        # (GALAXY_TOOLS_MAX 个工具定义 + GALAXY_TOOL_PRUNE_KEEP_ROUNDS 轮工具结果
-        # + 系统提示)一次能装配到一万一千多 token —— 8192 同样不够,只是比 llama.cpp
-        # 那条路的 4096 好一点。两条加载路径各拍一个数、都没算过实际装配量,正是
-        # "同一判据两处各写各的"。现在两边都问 ComputeScheduler.context_budget_for。
-        try:
-            _env_num_ctx = os.environ.get("GALAXY_OLLAMA_NUM_CTX", "").strip()
-            if _env_num_ctx:
-                _num_ctx = int(_env_num_ctx)  # 显式指定一律尊重(含 0 = 不传)
-            else:
-                from core.compute_scheduler import get_compute_scheduler
-
-                _num_ctx, _ctx_why = get_compute_scheduler().context_budget_for(model)
-                logger.debug("Ollama 上下文预算: %s → num_ctx=%s(%s)", model, _num_ctx, _ctx_why)
-            if _num_ctx > 0:
-                _options["num_ctx"] = _num_ctx
-        except (TypeError, ValueError, Exception):  # noqa: BLE001 — 算不出来退回原来的保守默认
-            _options["num_ctx"] = 8192
-        body = {
-            "model": model,
-            "messages": self._to_ollama_messages(messages),
-            "stream": False,
-            "options": _options,
-            "keep_alive": _keep_alive,
-        }
-        # 原生 function calling:Ollama /api/chat 支持 OpenAI 形状的 tools
-        # (qwen/minicpm/llama3.1 等带工具模板的模型)。此前适配器收了 tools
-        # 却不发——本地主脑从来"看不到"工具,整个 ReAct 工具层对 Ollama 是哑的。
-        if tools:
-            body["tools"] = tools
-
-        # 调用点兜底:即使 config.base_url 因某条边缘路径被置空/缺协议头,
-        # 也在此归一,绝不把坏 URL 交给 httpx(否则炸 "Request URL is missing
-        # an 'http://' or 'https://' protocol")。
-        _base = (self.config.base_url or "").strip() or "http://localhost:11434"
-        if not _base.startswith(("http://", "https://")):
-            _base = f"http://{_base}"
-
-        # 已知无工具模板的模型(gemma 系,进程内缓存):直接走文本协议,
-        # 不再吃一次 400 往返。
-        if tools and model in type(self)._text_protocol_models:
-            return await self._chat_text_protocol(
-                base=_base,
-                messages=messages,
-                model=model,
-                tools=tools,
-                options=_options,
-                keep_alive=_keep_alive,
-                sink=kwargs.get("stream"),
-            )
-
-        # 真流式:消费端挂了 TokenStream 时走 NDJSON 流(CPU 慢速生成下体感差异
-        # 最大的一段——首句几秒就能上屏,不用等整段几十秒)。失败作废已流出内容,
-        # 退回下面的非流式老路径。
-        _sink = kwargs.get("stream")
-        if _sink is not None:
-            try:
-                return await self._chat_streaming(
-                    base=_base,
-                    body=body,
-                    model=model,
-                    sink=_sink,
-                )
-            except Exception as exc:  # noqa: BLE001
-                if self._is_tools_unsupported_error(exc) and "tools" in body:
-                    # 模型无工具模板(gemma 系):切文本协议重试——工具清单注入
-                    # 提示词、从文本解析 JSON 调用,gemma 也能真正调工具。
-                    logger.info(
-                        "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底",
-                        model,
-                    )
-                    try:
-                        _sink.reset()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    return await self._chat_text_protocol(
-                        base=_base,
-                        messages=messages,
-                        model=model,
-                        tools=tools,
-                        options=_options,
-                        keep_alive=_keep_alive,
-                        sink=_sink,
-                    )
-                logger.info("Ollama 流式失败,退回非流式: %s", exc)
-                try:
-                    _sink.reset()
-                except Exception:  # noqa: BLE001
-                    pass
-
-        t0 = time.monotonic()
-        try:
-            resp = await self._post_with_retry(
-                f"{_base}/api/chat",
-                headers={"Content-Type": "application/json"},
-                body=body,
-            )
-        except httpx.HTTPStatusError as exc:
-            if not (self._is_tools_unsupported_error(exc) and "tools" in body):
-                raise
-            logger.info(
-                "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底",
-                model,
-            )
-            return await self._chat_text_protocol(
-                base=_base,
-                messages=messages,
-                model=model,
-                tools=tools,
-                options=_options,
-                keep_alive=_keep_alive,
-                sink=kwargs.get("stream"),
-            )
-        latency = (time.monotonic() - t0) * 1000
-        data = resp.json()
-
-        _msg = data.get("message", {}) or {}
-        return LLMResponse(
-            content=_msg.get("content", ""),
-            provider=self.config.name,
-            model=model,
-            input_tokens=data.get("prompt_eval_count", 0),
-            output_tokens=data.get("eval_count", 0),
-            latency_ms=latency,
-            tool_calls=self._normalize_tool_calls(_msg.get("tool_calls")),
-            raw_response=data,
-        )
-
-    async def _chat_text_protocol(
-        self,
-        *,
-        base,
-        messages,
-        model,
-        tools,
-        options,
-        keep_alive,
-        sink=None,
-    ) -> LLMResponse:
-        """文本协议工具兜底:无工具模板模型(gemma 系)的完整工具调用通路。
-
-        - 工具清单注入系统消息;工具轮历史文本化(模板不炸);
-        - 非流式请求(避免半截 JSON 泄进面板气泡);
-        - 回复里解析到 {"tool_call": ...} → 归一成 OpenAI 形状返回给 ReAct;
-          没解析到 → 普通回答,整段补喂 sink(伪流式,面板仍有字)。
-        """
-        type(self)._text_protocol_models.add(model)
-        msgs = self._inject_text_tools(self._textualize_tool_history(messages), tools)
-        body = {
-            "model": model,
-            "messages": self._to_ollama_messages(msgs),
-            "stream": False,
-            "options": options,
-            "keep_alive": keep_alive,
-        }
-        t0 = time.monotonic()
-        resp = await self._post_with_retry(
-            f"{base}/api/chat",
-            headers={"Content-Type": "application/json"},
-            body=body,
-        )
-        latency = (time.monotonic() - t0) * 1000
-        data = resp.json()
-        _msg = data.get("message", {}) or {}
-        content = _msg.get("content", "") or ""
-        tool_calls = self._parse_text_tool_calls(content)
-        if tool_calls is None and sink is not None:
-            try:
-                sink.feed(content)
-            except Exception:  # noqa: BLE001
-                pass
-        return LLMResponse(
-            # 解析到调用时正文置空:JSON 调用行是协议载荷,不是给用户看的话
-            content="" if tool_calls else content,
-            provider=self.config.name,
-            model=model,
-            input_tokens=data.get("prompt_eval_count", 0),
-            output_tokens=data.get("eval_count", 0),
-            latency_ms=latency,
-            tool_calls=tool_calls,
-            raw_response=data,
-        )
-
-    async def _chat_streaming(self, *, base, body, model, sink) -> LLMResponse:
-        """Ollama /api/chat NDJSON 真流式:每行一个 JSON 块,message.content 是增量;
-        末块 done=true 携带 prompt_eval_count/eval_count(token 统计不丢)。"""
-        stream_body = {**body, "stream": True}
-        client = await self._get_client()
-        t0 = time.monotonic()
-        content_parts: List[str] = []
-        raw_tool_calls: List[Dict] = []
-        final: Dict[str, Any] = {}
-        async with client.stream(
-            "POST",
-            f"{base}/api/chat",
-            headers={"Content-Type": "application/json"},
-            json=stream_body,
-        ) as resp:
-            if getattr(resp, "status_code", 200) >= 400:
-                # 让 chat() 的"模型不支持工具 → 去工具重试"能拿到响应体判因
-                await resp.aread()
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                line = (line or "").strip()
-                if not line:
-                    continue
-                try:
-                    chunk = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                _cmsg = chunk.get("message") or {}
-                piece = _cmsg.get("content", "")
-                if piece:
-                    content_parts.append(piece)
-                    sink.feed(piece)
-                # 工具调用块:Ollama 流式在(通常是末尾的)块上整只给出
-                # message.tool_calls,不是 OpenAI 式碎片增量——直接收集,
-                # 绝不喂 sink(工具调用不是正文)。
-                if _cmsg.get("tool_calls"):
-                    raw_tool_calls.extend(_cmsg["tool_calls"])
-                if chunk.get("done"):
-                    final = chunk
-        latency = (time.monotonic() - t0) * 1000
-        return LLMResponse(
-            content="".join(content_parts),
-            provider=self.config.name,
-            model=model,
-            input_tokens=int(final.get("prompt_eval_count", 0) or 0),
-            output_tokens=int(final.get("eval_count", 0) or 0),
-            latency_ms=latency,
-            tool_calls=self._normalize_tool_calls(raw_tool_calls),
-            raw_response=final or None,
-        )
-
-
-# ───────────────────── 主路由器 ─────────────────────
-
-# L1 收口:协议 → 适配器工厂。此前每个 OpenAI 兼容提供商都有一个空壳子类
-# (class DeepSeekAdapter(OpenAIAdapter): pass …共 12 个),纯冗余。现在按【协议】
-# 选适配器:openai 兼容全用 OpenAIAdapter、anthropic 用 AnthropicAdapter、
-# 本地 ollama 用 OllamaAdapter。新增一个 OpenAI 兼容提供商不再需要建类。
 _ADAPTER_BY_PROTOCOL: Dict[str, type] = {
     "openai": OpenAIAdapter,
     "anthropic": AnthropicAdapter,
@@ -1662,6 +873,73 @@ _LOCAL_OPENAI_LANES: List[Dict[str, Any]] = [
         "what": "推理位/独显侧(FreeToken 的 ft serve、vLLM、llama.cpp server CUDA)",
     },
 ]
+
+
+#: 已经就"点了名却没登记"这件事说过话的 provider。只为**不刷屏**,不参与任何判断。
+_RESPONSES_REFUSED: set = set()
+
+
+#: 特殊发现分支读的键。这几家不走 PROVIDER_REGISTRY(它们要么要探测本机、要么
+#: 型号表是动态问来的),所以它们的键推导不出来,只能列在这儿。
+#:
+#: 加一条的判据只有一个:**这个键的值变了之后,``_auto_discover_providers()``
+#: 会注册出不一样的东西吗**。会,就列进来;不会,就别列 —— 这份名单越长,
+#: 保存配置时被无谓触发的刷新就越多。
+_EXTRA_REGISTRATION_KEYS: Tuple[str, ...] = (
+    "OLLAMA_URL",  # 本机 Ollama 的地址
+    "OLLAMA_MODEL",  # 选中的主脑 → 决定 default_model
+    "ONEAPI_URL",  # OneAPI 网关
+    "ONEAPI_API_KEY",
+    "GALAXY_LOCAL_OPENAI_URL",  # 本地 OpenAI 兼容服务(llama.cpp server / OVMS)
+    "GALAXY_LOCAL_OPENAI_KEY",
+    "GALAXY_LOCAL_OPENAI_MODEL",
+    "GALAXY_LOCAL_OPENAI_SERVES",
+    "GALAXY_REASONING_OPENAI_URL",  # 推理位那台
+    "GALAXY_REASONING_OPENAI_KEY",
+    "GALAXY_REASONING_OPENAI_MODEL",
+    "GALAXY_REASONING_OPENAI_SERVES",
+    "HF_API_TOKEN",  # HuggingFace 本地模型那一支
+)
+
+
+def keys_that_change_registration() -> frozenset:
+    """改了之后**路由器必须重新注册**的键 —— 唯一权威,给保存配置那一步用。
+
+    以前那一步的判据是 ``category == "llm"``。它挡住了一件真事:``OLLAMA_URL``、
+    ``GALAXY_LOCAL_OPENAI_URL``、``GALAXY_REASONING_OPENAI_URL`` 这些**注册时才读**
+    的键,分类是 ``agent``,于是在设置页填完保存成功、值也落盘了,**路由器却不会
+    重新注册这一家**,要重启进程才生效 —— 而面板一个字都不说。同一家 Ollama,
+    改型号(``OLLAMA_MODEL``,llm 类)会刷新、改地址(``OLLAMA_URL``,agent 类)不会,
+    自己跟自己都不一致。
+
+    分类是给**人看的**(设置页按"人想干什么"分九类),它回答不了"这个键会不会
+    影响注册"。所以这里按后者直接列,并且**大部分是从 PROVIDER_REGISTRY 推导的** ——
+    新加一家厂商不必回来改这份名单,它自己就在里面了。
+    """
+    from core.provider_registry import PROVIDER_REGISTRY as _REG
+
+    keys = set(_EXTRA_REGISTRATION_KEYS)
+    for entry in _REG:
+        for field in ("env_key", "base_env"):
+            if entry.get(field):
+                keys.add(entry[field])
+        keys.update(entry.get("alt_env") or ())
+    return frozenset(keys)
+
+
+def _responses_opt_in() -> frozenset:
+    """哪几家被用户点名走 Responses 传输。
+
+    来源是 ``GALAXY_RESPONSES_PROVIDERS``(逗号分隔的 provider 名),面板上
+    「智能体与模型」那一类里可以填。**每次都重读**:设置面改完就生效,不必重启 ——
+    改了要重启才算数、而界面上又不说,是另一种"看起来接上了,其实没有"。
+
+    这个键存在的理由:registry 里 deepseek / meta / openai 都核实过讲 Responses,
+    但除了 gpt-6-astra 那条怪癖以外,原先**没有任何一条路能走到那条传输上** ——
+    声明摆在那里却一处也到不了,和没声明没区别。
+    """
+    raw = os.environ.get("GALAXY_RESPONSES_PROVIDERS", "") or ""
+    return frozenset(n.strip().lower() for n in raw.split(",") if n.strip())
 
 
 class MultiLLMRouter:
@@ -2177,6 +1455,76 @@ class MultiLLMRouter:
             f"{list(self.providers.keys())}"
         )
 
+    def _pick_adapter(self, provider: str, model: str, tools: Any = None) -> Any:
+        """这一轮走哪条传输 —— **唯一的判断处**。
+
+        默认走注册时那条(多数是 chat/completions)。两种情况换到 Responses:
+
+        1. **用户点名了这一家**(``GALAXY_RESPONSES_PROVIDERS`` 里列着它)。
+           只对 registry 里**核实过讲 Responses** 的那几家生效;点名一家没声明的
+           会被拒并留痕 —— 换过去只会在真发请求那一刻 404,而那时看到的是
+           "这家怎么不回话",没人会想到是传输选错了。
+        2. **这一轮要用工具,而这个型号的工具只在 Responses 上工作**
+           (目前只有 gpt-6-astra,判据在 provider_registry.MODEL_QUIRKS)。
+
+        为什么第 2 条不干脆让那些型号一律走 Responses:本仓的流式消费端是照 chat
+        的 delta 写的,Responses 的事件模型完全不同。不带工具的轮次走 chat 能拿到
+        流式,换过去就没有了 —— 为一个用不上的能力牺牲每一轮的体感,不划算。
+        第 1 条是用户自己权衡后点的名(他要的是 Responses 那套语义),所以照办,
+        但**每建一条都说一句它没有流式**,别让人以为是自己机器慢。
+
+        换路要**留痕**:传输换了却没人知道,排查时会对着错的那条路找问题。
+        """
+        base = self.adapters.get(provider)
+
+        from core.provider_registry import quirks_for, speaks_responses
+
+        if provider in _responses_opt_in():
+            if speaks_responses(provider):
+                return self._responses_adapter_for(provider, model, base)
+            if provider not in _RESPONSES_REFUSED:
+                _RESPONSES_REFUSED.add(provider)
+                _cfg = self.providers.get(provider)
+                if _cfg is not None and getattr(_cfg, "source_type", "") == "user":
+                    # 用户自己加的端点不归 registry 管,它的协议在面板那一条上。
+                    # 指错地方比不指更糟:人会去翻一个跟他无关的文件。
+                    _how = "「我的模型服务」里把这条端点的协议改成 responses"
+                else:
+                    _how = "先拿到那家的一手文档,把 supports_responses 写进 core/provider_registry.PROVIDER_REGISTRY"
+                logger.warning(
+                    "GALAXY_RESPONSES_PROVIDERS 里点了「%s」,但它没有登记支持 Responses,"
+                    "这一家仍走原来那条传输。要让它走那条路:%s。",
+                    provider,
+                    _how,
+                )
+            # 拒了之后**不 return**,继续往下走怪癖那条:那两条判断各管各的,
+            # 在这里短路等于让"点错一个名字"顺手关掉另一条本该生效的换路。
+
+        if not tools:
+            return base
+
+        if not quirks_for(model).get("needs_responses_for_tools"):
+            return base
+
+        return self._responses_adapter_for(provider, model, base)
+
+    def _responses_adapter_for(self, provider: str, model: str, base: Any) -> Any:
+        """拿(必要时建)这一家的 Responses 传输。建不出来就如实退回原来那条。"""
+        cfg = self.providers.get(provider)
+        if cfg is None:  # pragma: no cover - providers 与 adapters 同步注册
+            return base
+
+        key = f"{provider}::responses"
+        if key not in self.adapters:
+            self.adapters[key] = ResponsesAdapter(cfg)
+            logger.info(
+                "为 %s 建了一条 Responses 传输(这一轮的型号是 %s)。注意这条路**没有流式** —— "
+                "回答会一次性出现,不是逐字。",
+                provider,
+                model,
+            )
+        return self.adapters[key]
+
     def _register_user_providers(self) -> None:
         """把用户在面板上声明的端点注册进来 —— 不改仓库就能加一家。
 
@@ -2217,7 +1565,12 @@ class MultiLLMRouter:
                 source_type="user",
             )
             self.providers[up.id] = cfg
-            self.adapters[up.id] = AnthropicAdapter(cfg) if up.protocol == "anthropic" else OpenAIAdapter(cfg)
+            if up.protocol == "anthropic":
+                self.adapters[up.id] = AnthropicAdapter(cfg)
+            elif up.protocol == "responses":
+                self.adapters[up.id] = ResponsesAdapter(cfg)
+            else:
+                self.adapters[up.id] = OpenAIAdapter(cfg)
 
     def _discover_oneapi_models(self, base_url: str, api_key: str) -> List[str]:
         """从 config/api_config.json 读取已配置模型，并尝试通过 /v1/models 动态补充"""
@@ -2626,6 +1979,20 @@ class MultiLLMRouter:
             heavy_model = provider_models.get(TaskType.REASONING, default)
             return heavy_model
 
+    def _can_see(self, provider: str, task_type: TaskType, complexity: float) -> bool:
+        """这一轮如果选中这家,它会用的那个型号收不收图像。
+
+        关键是**先算出型号再问**:问"这家能不能看图"会把纯代码档、检索问答档
+        一起放进来,而它们正是同一家里看不见图的那几个。
+        """
+        from core.modality import IMAGE, can_receive
+
+        cfg = self.providers.get(provider)
+        if cfg is None:  # pragma: no cover - candidates 来自 self.providers
+            return False
+        model = self.select_model_by_complexity(provider, task_type, complexity)
+        return can_receive(IMAGE, model, provider, cfg)
+
     def route(
         self, task_type: TaskType, preferred_provider: Optional[str] = None, complexity_score: float = 0.5
     ) -> RoutingDecision:
@@ -2775,11 +2142,21 @@ class MultiLLMRouter:
         if only_providers is not None:
             allow = set(only_providers)
             candidates = [n for n in candidates if n in allow]
-        # ── 模态硬过滤 ──
+        # ── 模态硬过滤:按**这一轮会选中的那个型号**判,不按厂商判 ──
+        #
+        # 以前这里读的是 provider 级的 multimodal 旗标。"这家有能看图的型号"
+        # 不等于"这一轮选中的型号能看图":同一家里 gpt-5.3-codex 是纯代码档、
+        # sonar 系是检索问答,选中它们再把图发过去,上游多半**不报错**,忽略图像
+        # 照常作答 —— 于是没有任何人会发现模型其实没看见那张图。
         if has_multimodal:
-            mm = [n for n in candidates if getattr(self.providers[n], "multimodal", False)]
+            mm = [n for n in candidates if self._can_see(n, task_type, complexity_score)]
             if mm:
                 candidates = mm
+            else:
+                logger.warning(
+                    "这一轮带着图像,但已配置的提供商里没有一个会选中能看图的型号 —— "
+                    "图会在发出前被压成文字。判据见 core.modality.input_modalities。"
+                )
         if not candidates:
             return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
 
@@ -3913,7 +3290,7 @@ class MultiLLMRouter:
             if mdl is None:
                 mdl = self.providers[prov_name].default_model
 
-            adapter = self.adapters[prov_name]
+            adapter = self._pick_adapter(prov_name, model, tools)
             tried_providers.append(prov_name)
 
             # 断路器检查

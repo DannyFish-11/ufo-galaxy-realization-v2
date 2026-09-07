@@ -235,6 +235,40 @@ def _fetch_models(base_url: str, api_key: str, *, protocol: Optional[str], timeo
     return "OK", sorted(ids)
 
 
+def _probe_responses(base_url: str, api_key: str, model: str, timeout: float) -> str:
+    """拿这个型号往 ``/responses`` 发一次 1-token 试调。过了返回空串。
+
+    为什么单独打一次而不是信 ``/models``:``supports_responses`` 这个声明是**照
+    厂商文档写的**,而文档与实际不一致正是本仓栽过的那种事。``/models`` 列得出
+    型号,只说明这个型号存在,不说明这家在这个 base_url 上开了第二条传输 ——
+    真相只有打过去才知道。
+
+    与本文件其它探测同一条规矩:**不读也不返回上游响应体**(可能回显密钥),
+    诊断只用状态码 + 固定措辞表。
+    """
+    url = base_url.rstrip("/") + "/responses"
+    body = json.dumps({"model": model, "input": [{"role": "user", "content": "hi"}], "max_output_tokens": 1}).encode()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "galaxy-provider-verify",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            return ""
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return "这个 base_url 上没有 /responses —— registry 里的 supports_responses 与实际不符"
+        return f"HTTP {exc.code} —— {_explain(exc.code)}"
+    except Exception as exc:  # noqa: BLE001
+        return f"连接失败({type(exc).__name__})"
+
+
 def live_probe(only: Optional[set], timeout: float) -> Tuple[List[str], List[Dict[str, Any]]]:
     """对每家已配置 key 的 provider 打官方 /models,并与 registry 比对型号。"""
     from core.multi_llm_router import PROVIDER_REGISTRY, get_llm_router
@@ -304,6 +338,18 @@ def live_probe(only: Optional[set], timeout: float) -> Tuple[List[str], List[Dic
                 " —— 可能已下线,也可能只是该端点不公布 Realtime/Live 型号,"
                 "请对照官方 Realtime/Live 文档人工确认"
             )
+        # 第二条传输:声明了讲 Responses 的,真打一次确认那条路开着。
+        # 只在型号对账过了之后打 —— 拿一个上游不认的型号去试,报出来的会是
+        # "型号不对",看起来却像"这家不支持 Responses",那是个会误导的结论。
+        if spec.get("supports_responses"):
+            probe_model = next((m for m in row["declared"] if m in upstream), "")
+            if not probe_model:
+                row["responses"] = "跳过(没有一个上游认账的型号可试)"
+            else:
+                why = _probe_responses(spec["base_url"], api_key, probe_model, timeout)
+                row["responses"] = "OK" if not why else why
+                if why:
+                    problems.append(f"{name}: 声明支持 Responses,实测这条路不通({probe_model}): {why}")
         rows.append(row)
     return problems, rows
 
@@ -367,6 +413,18 @@ def main() -> int:
             print(f"               ↳ {r['error']}")
         if r.get("missing_upstream"):
             print(f"               ↳ ❌ 上游不认: {r['missing_upstream']}")
+        # 第二条传输的实测结论要**印出来**。只写进 row 不打印,等于打了这一次
+        # 请求却没人看得见结果 —— 那和没打没区别。
+        if r.get("responses"):
+            # 「跳过」不是失败。把它也标成 ❌ 会让人去查一条根本没验过的路 ——
+            # 未知与不通是两件事,不许抹平。
+            if r["responses"] == "OK":
+                mark = "✅"
+            elif r["responses"].startswith("跳过"):
+                mark = "—"
+            else:
+                mark = "❌"
+            print(f"               ↳ {mark} Responses 传输: {r['responses']}")
     ok = not (static_problems or live_problems)
     print()
     print("✅ 全链路贯通" if ok else f"❌ 发现 {len(static_problems) + len(live_problems)} 个问题")

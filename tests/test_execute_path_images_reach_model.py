@@ -187,18 +187,48 @@ async def test_text_only_task_is_unchanged(native_mm_on):
 
 
 @pytest.mark.asyncio
-async def test_flag_off_falls_back_to_text(monkeypatch):
-    """默认关闭：Gemini 等适配器会对 content 做字符串拼接，收到数组会崩。"""
+async def test_the_escape_hatch_still_falls_back_to_text(monkeypatch):
+    """显式关掉时图仍然压回文字 —— 这个开关是给"上游临时不认某种部件"用的。"""
     monkeypatch.setenv("GALAXY_NATIVE_MM_CHAT", "0")
     router, _ = await _run_task_through_factory({"description": "看这张截图", MULTIMODAL_TASK_KEY: _ctx()})
     assert isinstance(router.messages[-1]["content"], str)
 
 
 @pytest.mark.asyncio
-async def test_flag_unset_defaults_to_off(monkeypatch):
+async def test_flag_unset_now_defaults_to_on(monkeypatch):
+    """2026-09-06 改的默认值。**这条以前断言的是相反的事**,改它是有意的。
+
+    原来默认关,理由是"只有 OpenAI 兼容适配器安全,别的收到 content 数组会崩"。
+    那描述的是一个**没修的缺陷**,不是该长期存在的限制:默认关意味着日常每一轮
+    带图的对话,模型看到的都只是一段文字摘要 —— 系统里那些 supports_vision 声明
+    因此一次也没真正兑现过。
+
+    现在四条传输都过 ``core.modality.to_native``(见
+    tests/test_the_image_really_arrives_in_each_wire_shape.py,四种原生形状各自
+    对着真服务器验过),那个理由不再成立,默认跟着改。
+    """
     monkeypatch.delenv("GALAXY_NATIVE_MM_CHAT", raising=False)
     router, _ = await _run_task_through_factory({"description": "看这张截图", MULTIMODAL_TASK_KEY: _ctx()})
-    assert isinstance(router.messages[-1]["content"], str)
+    content = router.messages[-1]["content"]
+    assert isinstance(content, list), "默认没把图原生送出去 —— 模型看到的还是文字摘要"
+    assert any(p.get("type") == "image_url" for p in content)
+
+
+def test_the_two_places_that_state_the_default_agree():
+    """代码里的默认值与面板 schema 里的默认值必须是同一件事。
+
+    分开写在两处,改一处忘一处的后果是:面板显示"开",实际读环境变量时是"关",
+    而用户在面板上把它拨过来拨过去都没有任何反应。
+    """
+    import inspect
+
+    from core.agent.multimodal_messages import native_mm_enabled
+    from core.routes.config_schema_registry import CONFIG_SCHEMA
+
+    src = inspect.getsource(native_mm_enabled)
+    code_default_on = '"GALAXY_NATIVE_MM_CHAT", "1"' in src
+    schema_default_on = CONFIG_SCHEMA["GALAXY_NATIVE_MM_CHAT"]["default"] == "true"
+    assert code_default_on == schema_default_on, "代码与面板 schema 对这个开关的默认值说了两句不同的话"
 
 
 # ── 5. 回显不能把 base64 原样吐回响应 ─────────────────────────────────
