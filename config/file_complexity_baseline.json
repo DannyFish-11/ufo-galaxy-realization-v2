@@ -107,7 +107,7 @@
     "core/scheduler.py": 1632,
     "core/schemas/unified_control_plan.py": 1307,
     "core/session_manager.py": 1011,
-    "core/startup.py": 1444,
+    "core/startup.py": 1451,
     "core/swarm_coordinator.py": 1041,
     "core/system_final_acceptance_verdict.py": 3809,
     "core/system_orchestrator.py": 1143,

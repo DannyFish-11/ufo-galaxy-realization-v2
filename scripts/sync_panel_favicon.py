@@ -44,7 +44,7 @@ def sync(path: Path = PANEL_INDEX, *, check_only: bool = False) -> int:
     """返回退出码:0 = 已一致(或已写回);1 = 不一致且 --check;2 = 找不到那一行。"""
     html = path.read_text(encoding="utf-8")
     if not _LINK_RE.search(html):
-        print(f"✗ {path} 里找不到 <link rel=\"icon\" …> 那一行 —— 先手工加一行占位再跑本脚本。")
+        print(f'✗ {path} 里找不到 <link rel="icon" …> 那一行 —— 先手工加一行占位再跑本脚本。')
         return 2
 
     updated = _LINK_RE.sub(lambda _m: expected_tag(), html, count=1)
