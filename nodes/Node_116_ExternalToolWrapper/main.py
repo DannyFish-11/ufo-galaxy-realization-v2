@@ -2,6 +2,7 @@
 Node 116 - ExternalToolWrapper (外部工具包装节点)
 提供外部工具和服务的统一封装和调用能力
 """
+
 import os
 import json
 import asyncio
@@ -35,21 +36,25 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Node 116 - ExternalToolWrapper", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+)
 
 
 class ToolType(str, Enum):
     """工具类型"""
-    CLI = "cli"                 # 命令行工具
-    API = "api"                 # API 服务
-    LIBRARY = "library"         # 程序库
-    SCRIPT = "script"           # 脚本
-    BINARY = "binary"           # 二进制程序
-    CONTAINER = "container"     # 容器
+
+    CLI = "cli"  # 命令行工具
+    API = "api"  # API 服务
+    LIBRARY = "library"  # 程序库
+    SCRIPT = "script"  # 脚本
+    BINARY = "binary"  # 二进制程序
+    CONTAINER = "container"  # 容器
 
 
 class ToolStatus(str, Enum):
     """工具状态"""
+
     AVAILABLE = "available"
     UNAVAILABLE = "unavailable"
     INSTALLING = "installing"
@@ -59,6 +64,7 @@ class ToolStatus(str, Enum):
 @dataclass
 class ExternalTool:
     """外部工具定义"""
+
     tool_id: str
     name: str
     tool_type: ToolType
@@ -79,6 +85,7 @@ class ExternalTool:
 @dataclass
 class ToolExecution:
     """工具执行记录"""
+
     execution_id: str
     tool_id: str
     command: str
@@ -93,13 +100,13 @@ class ToolExecution:
 
 class ExternalToolWrapper:
     """外部工具包装器"""
-    
+
     def __init__(self):
         self.tools: Dict[str, ExternalTool] = {}
         self.executions: List[ToolExecution] = []
         self._custom_handlers: Dict[str, Callable] = {}
         self._initialize_common_tools()
-    
+
     def _initialize_common_tools(self):
         """初始化常用工具"""
         common_tools = [
@@ -110,7 +117,7 @@ class ExternalToolWrapper:
                 description="Python 解释器",
                 command="python3",
                 check_command="python3 --version",
-                capabilities=["execute_script", "repl", "package_management"]
+                capabilities=["execute_script", "repl", "package_management"],
             ),
             ExternalTool(
                 tool_id="git",
@@ -119,7 +126,7 @@ class ExternalToolWrapper:
                 description="版本控制系统",
                 command="git",
                 check_command="git --version",
-                capabilities=["clone", "commit", "push", "pull", "branch"]
+                capabilities=["clone", "commit", "push", "pull", "branch"],
             ),
             ExternalTool(
                 tool_id="curl",
@@ -128,7 +135,7 @@ class ExternalToolWrapper:
                 description="HTTP 客户端",
                 command="curl",
                 check_command="curl --version",
-                capabilities=["http_request", "download", "upload"]
+                capabilities=["http_request", "download", "upload"],
             ),
             ExternalTool(
                 tool_id="docker",
@@ -137,7 +144,7 @@ class ExternalToolWrapper:
                 description="容器运行时",
                 command="docker",
                 check_command="docker --version",
-                capabilities=["container_run", "image_build", "container_manage"]
+                capabilities=["container_run", "image_build", "container_manage"],
             ),
             ExternalTool(
                 tool_id="ffmpeg",
@@ -146,7 +153,7 @@ class ExternalToolWrapper:
                 description="多媒体处理工具",
                 command="ffmpeg",
                 check_command="ffmpeg -version",
-                capabilities=["video_convert", "audio_convert", "stream"]
+                capabilities=["video_convert", "audio_convert", "stream"],
             ),
             ExternalTool(
                 tool_id="node",
@@ -155,53 +162,58 @@ class ExternalToolWrapper:
                 description="JavaScript 运行时",
                 command="node",
                 check_command="node --version",
-                capabilities=["execute_script", "npm", "package_management"]
+                capabilities=["execute_script", "npm", "package_management"],
             ),
         ]
-        
+
         for tool in common_tools:
             self.tools[tool.tool_id] = tool
-        
-        # 检查工具可用性（延迟到事件循环可用时）
-        try:
-            asyncio.get_running_loop()
-            _bt = asyncio.create_task(self._check_all_tools())
-            _BACKGROUND_TASKS.add(_bt)
-            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
-        except RuntimeError:
-            pass  # 无事件循环时跳过，待服务器启动后手动调用
-    
+
+        # 工具可用性探测**不在构造里做**。
+        #
+        # 这里原本是"只要当前有事件循环就 create_task 去探" —— 而本模块底部有
+        # `tool_wrapper = ExternalToolWrapper()`,于是**光是 import 这个模块**就会
+        # 起一串 subprocess 去跑 `docker --version` / `ffmpeg -version` 之类。
+        #
+        # 真跑实测:`python main.py --check-only` 会 import 全部 125 个节点,这条
+        # 探测任务就这么被点着了;报告打完进程要退时它还在子进程上挂着,取消也不
+        # 一定赶得上,于是 asyncio 收尾一直等 —— 连着三次被 timeout 杀掉(退出码 124)。
+        #
+        # import 一个模块不该有副作用,更不该起子进程。改成由服务器启动时显式调用
+        # (见下面的 startup 钩子);没起服务器的场景(比如导入扫描)就一个子进程都不起。
+        pass
+
     async def _check_all_tools(self):
         """检查所有工具的可用性"""
         for tool_id in self.tools:
             await self.check_tool(tool_id)
-    
+
     def register_tool(self, tool: ExternalTool) -> bool:
         """注册工具"""
         self.tools[tool.tool_id] = tool
         logger.info(f"Registered tool: {tool.tool_id} ({tool.name})")
         return True
-    
+
     def unregister_tool(self, tool_id: str) -> bool:
         """注销工具"""
         if tool_id in self.tools:
             del self.tools[tool_id]
             return True
         return False
-    
+
     async def check_tool(self, tool_id: str) -> ToolStatus:
         """检查工具可用性"""
         if tool_id not in self.tools:
             return ToolStatus.UNAVAILABLE
-        
+
         tool = self.tools[tool_id]
-        
+
         # 检查命令是否存在
         if tool.command:
             if not shutil.which(tool.command):
                 tool.status = ToolStatus.UNAVAILABLE
                 return tool.status
-        
+
         # 运行检查命令
         if tool.check_command:
             try:
@@ -210,7 +222,7 @@ class ExternalToolWrapper:
                     tool.status = ToolStatus.AVAILABLE
                     # 尝试提取版本
                     if result.stdout:
-                        lines = result.stdout.strip().split('\n')
+                        lines = result.stdout.strip().split("\n")
                         if lines:
                             tool.version = lines[0]
                 else:
@@ -220,22 +232,22 @@ class ExternalToolWrapper:
                 tool.status = ToolStatus.ERROR
         else:
             tool.status = ToolStatus.AVAILABLE
-        
+
         return tool.status
-    
+
     async def install_tool(self, tool_id: str) -> bool:
         """安装工具"""
         if tool_id not in self.tools:
             return False
-        
+
         tool = self.tools[tool_id]
-        
+
         if not tool.install_command:
             logger.warning(f"No install command for tool {tool_id}")
             return False
-        
+
         tool.status = ToolStatus.INSTALLING
-        
+
         try:
             result = await self._run_command(tool.install_command, timeout=300)
             if result.exit_code == 0:
@@ -248,53 +260,51 @@ class ExternalToolWrapper:
             logger.error(f"Tool installation failed for {tool_id}: {e}")
             tool.status = ToolStatus.ERROR
             return False
-    
-    async def execute(self, tool_id: str, arguments: List[str] = None,
-                      input_data: str = None, timeout: int = 60,
-                      working_dir: str = None) -> ToolExecution:
+
+    async def execute(
+        self,
+        tool_id: str,
+        arguments: List[str] = None,
+        input_data: str = None,
+        timeout: int = 60,
+        working_dir: str = None,
+    ) -> ToolExecution:
         """执行工具"""
         if tool_id not in self.tools:
             raise ValueError(f"Tool not found: {tool_id}")
-        
+
         tool = self.tools[tool_id]
-        
+
         if tool.status != ToolStatus.AVAILABLE:
             raise RuntimeError(f"Tool not available: {tool_id} (status: {tool.status})")
-        
+
         # 构建命令
         cmd_parts = [tool.command]
         if arguments:
             cmd_parts.extend(arguments)
-        
-        command = ' '.join(cmd_parts)
-        
+
+        command = " ".join(cmd_parts)
+
         # 创建执行记录
         execution = ToolExecution(
-            execution_id=str(uuid.uuid4()),
-            tool_id=tool_id,
-            command=command,
-            arguments=arguments or []
+            execution_id=str(uuid.uuid4()), tool_id=tool_id, command=command, arguments=arguments or []
         )
-        
+
         try:
             # 准备环境变量
             env = os.environ.copy()
             env.update(tool.environment)
-            
+
             # 执行命令
             result = await self._run_command(
-                command,
-                timeout=timeout,
-                input_data=input_data,
-                working_dir=working_dir,
-                env=env
+                command, timeout=timeout, input_data=input_data, working_dir=working_dir, env=env
             )
-            
+
             execution.exit_code = result.exit_code
             execution.stdout = result.stdout
             execution.stderr = result.stderr
             execution.success = result.exit_code == 0
-            
+
         except asyncio.TimeoutError:
             execution.stderr = "Execution timed out"
             execution.exit_code = -1
@@ -302,86 +312,100 @@ class ExternalToolWrapper:
             logger.debug("Fallback triggered: %s", e)
             execution.stderr = str(e)
             execution.exit_code = -1
-        
+
         execution.completed_at = datetime.now()
-        
+
         # 更新工具使用统计
         tool.last_used = datetime.now()
         tool.usage_count += 1
-        
+
         # 保存执行记录
         self.executions.append(execution)
         if len(self.executions) > 1000:
             self.executions = self.executions[-500:]
-        
+
         return execution
-    
-    async def _run_command(self, command: str, timeout: int = 60,
-                           input_data: str = None, working_dir: str = None,
-                           env: Dict = None) -> ToolExecution:
+
+    async def _run_command(
+        self, command: str, timeout: int = 60, input_data: str = None, working_dir: str = None, env: Dict = None
+    ) -> ToolExecution:
         """运行命令"""
         import shlex
+
         process = await asyncio.create_subprocess_exec(
             *shlex.split(command),
             stdin=asyncio.subprocess.PIPE if input_data else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=working_dir,
-            env=env
+            env=env,
         )
-        
+
         try:
             stdout, stderr = await asyncio.wait_for(
-                process.communicate(input_data.encode() if input_data else None),
-                timeout=timeout
+                process.communicate(input_data.encode() if input_data else None), timeout=timeout
             )
-            
+
             return ToolExecution(
                 execution_id="",
                 tool_id="",
                 command=command,
                 arguments=[],
                 exit_code=process.returncode,
-                stdout=stdout.decode('utf-8', errors='replace'),
-                stderr=stderr.decode('utf-8', errors='replace'),
-                success=process.returncode == 0
+                stdout=stdout.decode("utf-8", errors="replace"),
+                stderr=stderr.decode("utf-8", errors="replace"),
+                success=process.returncode == 0,
             )
-        except asyncio.TimeoutError:
-            process.kill()
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            # 超时**和被取消**都要收掉子进程。
+            #
+            # 原来只在超时那一支 kill,而且 kill 完不 wait。被取消时子进程照样活着、
+            # subprocess transport 一直挂在事件循环上,于是这个任务永远停在
+            # "cancelling" —— 实测后果:`python main.py --check-only` 报告打完之后
+            # 进程再也不退(asyncio.run 的收尾在等它),连着三次被 timeout 杀掉。
+            # py-spy 抓到的就是这一处:_check_all_tools → check_tool → _run_command。
+            #
+            # 这里不 await process.wait():已经处于取消语境,再 await 会立刻又被取消。
+            # kill 之后子进程由事件循环的 child watcher 回收,足够让本任务真的结束。
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass  # 它自己已经退了
             raise
-    
+
     def register_custom_handler(self, tool_id: str, handler: Callable):
         """注册自定义处理器"""
         self._custom_handlers[tool_id] = handler
-    
+
     async def execute_custom(self, tool_id: str, **kwargs) -> Any:
         """执行自定义工具"""
         if tool_id not in self._custom_handlers:
             raise ValueError(f"No custom handler for tool: {tool_id}")
-        
+
         handler = self._custom_handlers[tool_id]
         return await handler(**kwargs)
-    
+
     def get_tool(self, tool_id: str) -> Optional[ExternalTool]:
         """获取工具信息"""
         return self.tools.get(tool_id)
-    
-    def list_tools(self, tool_type: Optional[ToolType] = None,
-                   status: Optional[ToolStatus] = None) -> List[ExternalTool]:
+
+    def list_tools(
+        self, tool_type: Optional[ToolType] = None, status: Optional[ToolStatus] = None
+    ) -> List[ExternalTool]:
         """列出工具"""
         tools = list(self.tools.values())
-        
+
         if tool_type:
             tools = [t for t in tools if t.tool_type == tool_type]
         if status:
             tools = [t for t in tools if t.status == status]
-        
+
         return tools
-    
+
     def get_available_tools(self) -> List[str]:
         """获取可用工具列表"""
         return [t.tool_id for t in self.tools.values() if t.status == ToolStatus.AVAILABLE]
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取包装器状态"""
         return {
@@ -389,12 +413,23 @@ class ExternalToolWrapper:
             "available_tools": sum(1 for t in self.tools.values() if t.status == ToolStatus.AVAILABLE),
             "unavailable_tools": sum(1 for t in self.tools.values() if t.status == ToolStatus.UNAVAILABLE),
             "total_executions": len(self.executions),
-            "successful_executions": sum(1 for e in self.executions if e.success)
+            "successful_executions": sum(1 for e in self.executions if e.success),
         }
 
 
 # 全局实例
 tool_wrapper = ExternalToolWrapper()
+
+
+@app.on_event("startup")
+async def _warm_up_tool_status() -> None:
+    """服务器真正起来时才去探工具可用性 —— 而不是在 import 的时候。
+
+    任务句柄留在 ``_BACKGROUND_TASKS`` 里(防止被 GC),关服时随事件循环一起收掉。
+    """
+    task = asyncio.create_task(tool_wrapper._check_all_tools())
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
 # API 模型
@@ -409,6 +444,7 @@ class RegisterToolRequest(BaseModel):
     capabilities: List[str] = []
     environment: Dict[str, str] = {}
 
+
 class ExecuteToolRequest(BaseModel):
     tool_id: str
     arguments: List[str] = []
@@ -422,9 +458,11 @@ class ExecuteToolRequest(BaseModel):
 async def health_check():
     return {"status": "healthy", "node": "Node_116_ExternalToolWrapper"}
 
+
 @app.get("/status")
 async def get_status():
     return tool_wrapper.get_status()
+
 
 @app.post("/tools")
 async def register_tool(request: RegisterToolRequest):
@@ -437,11 +475,12 @@ async def register_tool(request: RegisterToolRequest):
         check_command=request.check_command,
         install_command=request.install_command,
         capabilities=request.capabilities,
-        environment=request.environment
+        environment=request.environment,
     )
     tool_wrapper.register_tool(tool)
     await tool_wrapper.check_tool(tool.tool_id)
     return {"success": True, "status": tool.status.value}
+
 
 @app.get("/tools")
 async def list_tools(tool_type: Optional[str] = None, status: Optional[str] = None):
@@ -450,9 +489,11 @@ async def list_tools(tool_type: Optional[str] = None, status: Optional[str] = No
     tools = tool_wrapper.list_tools(tt, ts)
     return [asdict(t) for t in tools]
 
+
 @app.get("/tools/available")
 async def get_available_tools():
     return tool_wrapper.get_available_tools()
+
 
 @app.get("/tools/{tool_id}")
 async def get_tool(tool_id: str):
@@ -461,31 +502,31 @@ async def get_tool(tool_id: str):
         raise HTTPException(status_code=404, detail="Tool not found")
     return asdict(tool)
 
+
 @app.post("/tools/{tool_id}/check")
 async def check_tool(tool_id: str):
     status = await tool_wrapper.check_tool(tool_id)
     return {"status": status.value}
+
 
 @app.post("/tools/{tool_id}/install")
 async def install_tool(tool_id: str):
     success = await tool_wrapper.install_tool(tool_id)
     return {"success": success}
 
+
 @app.post("/execute")
 async def execute_tool(request: ExecuteToolRequest):
     try:
         execution = await tool_wrapper.execute(
-            request.tool_id,
-            request.arguments,
-            request.input_data,
-            request.timeout,
-            request.working_dir
+            request.tool_id, request.arguments, request.input_data, request.timeout, request.working_dir
         )
         return asdict(execution)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.get("/executions")
 async def list_executions(tool_id: Optional[str] = None, limit: int = 50):
@@ -496,19 +537,24 @@ async def list_executions(tool_id: Optional[str] = None, limit: int = 50):
     return [asdict(e) for e in executions]
 
 
-
-
 class MCPCallRequest(BaseModel):
     tool: str
     params: dict = {}
+
 
 @app.post("/mcp/call")
 async def mcp_call(request: MCPCallRequest):
     """MCP tool call dispatcher"""
     if request.tool == "health":
-        return {"success": True, "tool": request.tool, "result": {"status": "healthy", "node": "Node_116_ExternalToolWrapper"}}
+        return {
+            "success": True,
+            "tool": request.tool,
+            "result": {"status": "healthy", "node": "Node_116_ExternalToolWrapper"},
+        }
     raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8116)

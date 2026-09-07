@@ -68,7 +68,20 @@ _ENTRY_CONTENT_FIELDS = ("goal", "status", "summary", "steps")
 
 
 class EmptyEntryError(ValueError):
-    """整条回流里一个内容字段都没有 —— 这不是"存不下",是"根本没给东西"。"""
+    """整条回流里一个内容字段都没有 —— 这不是"存不下",是"根本没给东西"。
+
+    ``required`` 里是**常量**(需要哪几个字段之一),给 HTTP 层直接回给调用方用;
+    ``received`` 是对方实际送来的键名,只进日志 —— 把请求内容原样回显出去没必要,
+    也正是 CodeQL 那条 "information exposure through an exception" 想拦的形状。
+    """
+
+    def __init__(self, received_keys: Tuple[str, ...] = ()) -> None:
+        self.required: Tuple[str, ...] = tuple(_ENTRY_CONTENT_FIELDS)
+        self.received: Tuple[str, ...] = tuple(received_keys)
+        super().__init__(
+            "回流体里没有任何内容字段(" + "/".join(self.required) + "),不存空记录。"
+            "收到的键: " + (", ".join(self.received) or "(空)")
+        )
 
 
 def _has_content(value: Any) -> bool:
@@ -194,10 +207,7 @@ class AndroidMemoryBackflow:
         """
         norm = {k: entry.get(k) for k in _ENTRY_FIELDS}
         if not any(_has_content(norm.get(k)) for k in _ENTRY_CONTENT_FIELDS):
-            raise EmptyEntryError(
-                "回流体里没有任何内容字段(" + "/".join(_ENTRY_CONTENT_FIELDS) + "),"
-                "不存空记录。收到的键: " + (", ".join(sorted(str(k) for k in (entry or {}))) or "(空)")
-            )
+            raise EmptyEntryError(tuple(sorted(str(k) for k in (entry or {}))))
         tid = str(norm.get("task_id") or "").strip()
         if not tid:
             tid = f"android_{int(time.time() * 1000)}"

@@ -64,12 +64,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except EmptyEntryError as exc:
                 # 一个内容字段都没有 —— 这是**调用方给错了**,不是服务端出错,所以 400 不是 500。
                 # 此前这种 body 会静悄悄存成一条空记录并回 success:true(真跑实测)。
+                #
+                # 回给对方的只有**常量**(缺哪几个字段之一),不把异常字符串塞进响应:
+                # 那条路会把服务端内部信息(以及对方送来的原始键名)带出去,正是 CodeQL
+                # "information exposure through an exception" 拦的形状。细节进日志。
                 logger.warning("android_memory_store 收到空回流体: %s", exc)
-                return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error": "回流体里没有任何内容字段，不存空记录",
+                        "required_any_of": list(exc.required),
+                    },
+                    status_code=400,
+                )
             return JSONResponse({"success": True, "task_id": saved.get("task_id")})
         except Exception as e:
-            logger.warning("android_memory_store error: %s", e)
-            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+            # 同上:异常详情只进日志,响应里给一句固定的话。
+            logger.warning("android_memory_store error: %s", e, exc_info=True)
+            return JSONResponse({"success": False, "error": "回流写入失败，详情见服务端日志"}, status_code=500)
 
     @router.get("/api/v1/memory/query")
     async def android_memory_query(task_id: str = "", history: bool = False):
