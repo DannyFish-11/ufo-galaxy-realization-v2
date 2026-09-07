@@ -208,7 +208,9 @@ class EnvReport:
         add(
             ".env 配置文件",
             Status.OK if self.env_exists else Status.DEGRADED,
-            f"{self.env_size_bytes // 1024 or 1}KB" if self.env_exists else "",
+            # 不在的时候原本是**空值** —— 屏幕上就是一行光秃秃的标签,读的人分不清
+            # 是"没这文件"还是"没查出来"。把话说出来。
+            f"{self.env_size_bytes // 1024 or 1}KB" if self.env_exists else "还没有这个文件",
             None if self.env_exists else "将从 .env.example 复制（依赖阶段自动完成）",
             size_bytes=self.env_size_bytes,
         )
@@ -253,7 +255,10 @@ class EnvReport:
         add(
             "Electron 依赖",
             Status.OK if self.electron_deps_ok else Status.DEGRADED,
-            "已就位" if self.electron_deps_ok else self.electron_probe,
+            # 屏幕上给人话,``probe=`` 里仍然留着原始探测词(``partial`` /
+            # ``missing`` / ``fallback-dir-exists``)当机器证据 —— 两者分开,
+            # 判据照旧 grep 得到,人也读得懂。
+            "已就位" if self.electron_deps_ok else _PROBE_SAID.get(self.electron_probe, self.electron_probe),
             None if self.electron_deps_ok else "依赖阶段会自动 npm install",
             probe=self.electron_probe,
         )
@@ -453,6 +458,16 @@ def _probe_electron(npm_ok: bool, electron_dir: Optional[Path] = None) -> Tuple[
     except Exception:
         exists = (root / "node_modules").exists()
         return exists, "fallback-dir-exists" if exists else "missing"
+
+
+#: Electron 探测词 → 屏幕上的人话。键与 ``_probe_electron`` 的返回值一一对应；
+#: 表里没有的词原样显示（宁可露出原词，也不瞎编一个说法）。
+_PROBE_SAID = {
+    "intact": "已就位",
+    "partial": "装了一半,还得补齐",
+    "missing": "还没装",
+    "fallback-dir-exists": "目录在,但查不出完不完整",
+}
 
 
 def _probe_ollama() -> Tuple[bool, bool, List[str]]:

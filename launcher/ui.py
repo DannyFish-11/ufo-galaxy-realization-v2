@@ -308,7 +308,9 @@ def print_preflight_phase(phase: Any, result: Any) -> None:
             step(f"{label}(进行中)", "info", why)
         return
     status = _PREFLIGHT_STATUS.get(getattr(result.status, "name", ""), "info")
-    step(label, status, result.detail)
+    # ``said`` 是那一处自己说的人话；空了才退回 ``detail``(机器证据串,多半是英文)。
+    # 宁可露出英文，也不在这里猜着翻译 —— 猜错比看不懂更糟。
+    step(label, status, getattr(result, "said", "") or result.detail)
 
 
 def rule() -> None:
