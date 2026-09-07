@@ -1055,6 +1055,51 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
             "llama-cpp-python 的进程内绑定不透出它们"
         ),
     },
+    # ── 端侧 GUI 视觉后端(截图不出设备的那一档)────────────────────────────
+    #
+    # 这四个键必须登记在这里,不是可有可无的手续:没登记的话
+    # GET /api/config/all 不返回它们、POST /api/config 还会当 unknown_keys
+    # 拒掉(400)—— 功能在代码里接好了,面板上却根本看不见也改不了。
+    "GALAXY_LOCAL_GUI_VLM_URL": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": (
+            "端侧 GUI 视觉模型地址(本机 OpenAI 兼容 vision 端点:llama-server / vLLM / "
+            "LM Studio / Ollama 均可)。填了它,界面理解就在本机做、截图不出设备;"
+            "留空=不启用,视觉走云端那几档"
+        ),
+    },
+    "GALAXY_LOCAL_GUI_VLM_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "端侧 GUI 视觉模型的型号名(按你本机服务里注册的名字填)",
+    },
+    "GALAXY_LOCAL_GUI_VLM_TIMEOUT_S": {
+        "default": "120",
+        "type": "number",
+        "category": "agent",
+        "description": "端侧 GUI 视觉模型的单次超时(秒)。端侧推理比云端慢得多,单独给",
+    },
+    "GALAXY_VISION_BACKEND_ORDER": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": (
+            "视觉后端的尝试顺序,逗号分隔;留空=默认(本地优先)。"
+            "可用: local_gui, deepseek_ocr2, gemini, qwen3_vl, tesseract"
+        ),
+    },
+    "GALAXY_LAUNCH_APP_ALLOWLIST": {
+        "default": "",
+        "type": "string",
+        "category": "security",
+        "description": (
+            "允许桌面节点启动哪些程序,逗号分隔、精确匹配(程序名或完整路径)。"
+            "留空=一个都不许 —— 这是个能在本机起进程的接口,默认关着"
+        ),
+    },
     "GALAXY_LOCAL_OPENAI_URL": {
         "default": "",
         "type": "string",
