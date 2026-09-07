@@ -1085,11 +1085,24 @@ class GalaxyUnified:
             app_dir = electron_dir.resolve()
             bin_name = "electron.cmd" if os.name == "nt" else "electron"
             local_electron = app_dir / "node_modules" / ".bin" / bin_name
+
+            # root 身份下 Chromium **硬性要求** --no-sandbox,否则进程当场 FATAL 退出。
+            # 全新克隆冷启动真跑实测:少了它,八次重启每次都是同一句
+            # "Running as root without --no-sandbox is not supported",而三级渲染
+            # 降级全程空转(根因跟显卡毫无关系)。
+            # 只在真需要时加 —— 它会削弱沙箱隔离,不该无条件常开。
+            _extra = _shell.electron_extra_argv(
+                no_sandbox=_shell.running_as_root() or bool(getattr(self, "_electron_no_sandbox", False))
+            )
             if local_electron.exists():
-                cmd = [str(local_electron), str(app_dir)]
+                cmd = [str(local_electron), *_extra, str(app_dir)]
             else:
                 npx = shutil.which("npx")
-                cmd = [npx, "electron", str(app_dir)] if npx else [npm, "exec", "--", "electron", str(app_dir)]
+                cmd = (
+                    [npx, "electron", *_extra, str(app_dir)]
+                    if npx
+                    else [npm, "exec", "--", "electron", *_extra, str(app_dir)]
+                )
             # Capture Electron stdout/stderr to logs/electron.log so crashes are
             # diagnosable (previously DEVNULL-swallowed → impossible to debug the
             # "exited, restarting" loop / why Ctrl+Space overlay never appears).
@@ -1255,6 +1268,7 @@ class GalaxyUnified:
         启动（start_tray_in_thread 内部 run_detached），后端存活期间托盘一直在。
         缺 pystray/Pillow 时优雅降级（非致命）。
         """
+        self._tray_unavailable_reason = ""
         try:
             from windows_service.tray_icon import start_tray_in_thread
 
@@ -1262,9 +1276,22 @@ class GalaxyUnified:
             if tray is not None:
                 self._tray = tray
                 return True
+            self._tray_unavailable_reason = "托盘没能建起来(详见日志)"
             return False
-        except Exception as exc:
-            logger.warning("系统托盘启动失败(非致命): %s", exc)
+        except ImportError as exc:
+            self._tray_unavailable_reason = "缺 pystray / Pillow"
+            logger.warning("系统托盘用不了:%s(非致命): %s", self._tray_unavailable_reason, exc)
+            return False
+        except Exception as exc:  # noqa: BLE001
+            # 只报"缺包"是不够的 —— 真跑实测,无头机器上这里抛的是
+            # `Bad display name ""`(pystray 连不上 X11),包**装着**。
+            # 那句写死的"不可用 (pip install pystray Pillow)"于是成了假话:
+            # 照着装十遍也好不了。按真实原因分开说。
+            _headless = "display" in str(exc).lower()
+            self._tray_unavailable_reason = (
+                "这台机器没有图形环境(无 DISPLAY),无头部署下属正常" if _headless else "起不来(详见日志)"
+            )
+            logger.warning("系统托盘用不了:%s(非致命): %s", self._tray_unavailable_reason, exc)
             return False
 
     def _electron_log_excerpt(self, max_lines: int = 8) -> str:
@@ -1319,6 +1346,8 @@ class GalaxyUnified:
         import asyncio
         import time
 
+        from launcher import shell as _shell
+
         restarts: list = []  # 最近 60s 窗口内的重启时间戳
         MAX_GPU = 3  # GPU 模式连续崩溃达此数 → 切软件渲染
         MAX_SW = 5  # 软件渲染也崩到此数 → 降级不透明 basic 窗口
@@ -1328,6 +1357,8 @@ class GalaxyUnified:
             self._electron_force_software = False
         if not hasattr(self, "_electron_basic_window"):
             self._electron_basic_window = False
+        if not hasattr(self, "_electron_no_sandbox"):
+            self._electron_no_sandbox = False
         while True:
             await asyncio.sleep(5)
             proc = getattr(self, "electron_proc", None)
@@ -1350,16 +1381,49 @@ class GalaxyUnified:
             now = time.time()
             restarts = [t for t in restarts if now - t < 60]
 
+            # ── 先分诊,再决定怎么救 ──────────────────────────────────────
+            # 此前这里**没有分诊**:任何崩溃都当渲染问题,一路 GPU → 软件渲染 →
+            # basic 窗口 地降级。真跑实测(root 冷启动)八次崩溃全是
+            # "Running as root without --no-sandbox is not supported",跟显卡毫无
+            # 关系 —— 三级降级空转,而屏幕上那句"显卡/驱动可能不支持"是错的诊断。
+            _tail = self._electron_log_excerpt()
+            _kind = _shell.classify_electron_crash(_tail)
+
+            # 沙箱那一类:补一个参数就能好,不该去动渲染档位。补过还崩才继续往下走。
+            if _kind == _shell.CRASH_ROOT_SANDBOX and not getattr(self, "_electron_no_sandbox", False):
+                self._electron_no_sandbox = True
+                restarts = []
+                logger.warning(
+                    "Electron 崩在沙箱上,不是渲染问题。%s 崩溃摘要(logs/electron.log 尾部)：\n    %s",
+                    _shell.CRASH_ADVICE[_shell.CRASH_ROOT_SANDBOX],
+                    _tail,
+                )
+                await self.start_desktop_shell()
+                continue
+
+            # 根本没有图形环境:再降多少档都变不出一块屏幕。别空转,直接说清楚。
+            if _kind == _shell.CRASH_NO_DISPLAY:
+                gave_up = True
+                logger.warning(
+                    "桌面壳起不来:%s后端与 API 仍在 http://localhost:%d 正常运行。" "日志尾部：\n    %s",
+                    _shell.CRASH_ADVICE[_shell.CRASH_NO_DISPLAY],
+                    self.config.web_ui_port,
+                    _tail,
+                )
+                continue
+
             # GPU 模式反复崩溃 → 自动降级为软件渲染（自适应核心）
             if (not self._electron_force_software) and len(restarts) >= MAX_GPU:
                 self._electron_force_software = True
                 restarts = []
                 logger.warning(
-                    "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试"
-                    "（你的显卡/驱动可能不支持透明窗口 GPU 合成）。"
+                    "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试。%s"
                     "崩溃摘要(logs/electron.log 尾部)：\n    %s",
                     MAX_GPU,
-                    self._electron_log_excerpt(),
+                    # 按**分诊结果**说话。认不出来就说认不出来,不许一律甩锅给显卡 ——
+                    # 那句话在 root/无显示的机器上是错的,会把人引到永远查不到的方向。
+                    _shell.CRASH_ADVICE.get(_kind, _shell.CRASH_ADVICE[_shell.CRASH_UNKNOWN]),
+                    _tail,
                 )
                 await self.start_desktop_shell()
                 continue
@@ -2065,7 +2129,9 @@ class GalaxyUnified:
         # 解耦 —— 后端在，托盘就在。
         tray_ok = await self.start_system_tray()
         _emit(
-            "系统托盘", "右下角常驻" if tray_ok else "不可用 (pip install pystray Pillow)", "ok" if tray_ok else "warn"
+            "系统托盘",
+            "右下角常驻" if tray_ok else (getattr(self, "_tray_unavailable_reason", "") or "不可用"),
+            "ok" if tray_ok else "warn",
         )
 
         # ── 远程桌面兜底(VNC)：默认关；GALAXY_REMOTE_DESKTOP=1 才自动开（仅 Tailscale 私网内）──
@@ -2158,6 +2224,24 @@ class GalaxyUnified:
         print_status("正在停止系统...", "loading")
         self.service_manager.state = SystemState.STOPPING
         self.running = False
+
+        # 停机期间把 nats-py 自己的日志按下去。
+        #
+        # 为什么:接下来我们要收掉 nats-server 子进程,而 NATS 客户端还挂着重连。
+        # 于是 nats-py 用它自己的 logger 打 ERROR + 完整 traceback ——
+        # 全新克隆冷启动真跑实测,"✓ 系统已停止"后面跟了两大段
+        # `nats: encountered error` / `ConnectionRefusedError: [Errno 111]` 的裸栈。
+        #
+        # 此刻"连不上"是**我们自己造成的、预期之内的**,跟运行期连不上完全是两回事:
+        # 运行期那种仍然该报。所以只在停机这一段静音,并且**留痕**说明为什么静音,
+        # 而不是全程调低了事。
+        try:
+            _nats_log = logging.getLogger("nats")
+            self._nats_log_level_before_stop = _nats_log.level
+            _nats_log.setLevel(logging.CRITICAL)
+            logger.debug("停机期间静音 nats 客户端日志(服务端是我们自己收的,重连报错属预期)")
+        except Exception as exc:  # noqa: BLE001 —— 收尾路径,静音失败也得继续停
+            logger.debug("静音 nats 日志失败(不影响停机): %s", exc)
 
         # 先请 uvicorn **按它自己的方式**收 —— should_exit 是它的公开停机开关。
         #

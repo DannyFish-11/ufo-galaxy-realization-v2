@@ -456,6 +456,93 @@ def render_env(*, force_software: bool = False, basic_window: bool = False) -> D
     return env
 
 
+# ── Electron 崩溃分诊 ────────────────────────────────────────────────────────
+#
+# 为什么必须分诊:此前 watch_processes 把**任何**崩溃都当成渲染问题,一路
+# GPU → 软件渲染 → basic 窗口 地降级,并且对用户说"你的显卡/驱动可能不支持透明
+# 窗口 GPU 合成"。
+#
+# 全新克隆冷启动真跑实测(root 用户):electron.log 里八次都是同一句
+#
+#     FATAL:electron_main_delegate.cc(295)] Running as root without --no-sandbox
+#     is not supported.
+#
+# 跟显卡毫无关系。于是三级降级全程空转(8 次重启一次都没能改变结果),而屏幕上
+# 那句"显卡/驱动可能不支持"是**错的诊断** —— 说的和现实相反,比不说更糟:
+# 照着它去查显卡驱动,永远查不到真因。
+
+#: 崩溃类别 —— 分诊结果。
+CRASH_ROOT_SANDBOX = "root_sandbox"  # root 下没加 --no-sandbox
+CRASH_NO_DISPLAY = "no_display"  # 根本没有图形环境
+CRASH_RENDER = "render"  # 真的像渲染/GPU 问题
+CRASH_UNKNOWN = "unknown"  # 认不出来 —— 就说认不出来,不许瞎归因
+
+#: 每一类的"人话"说明 + 该怎么办。一处定义,日志与降级分支都从这里取。
+CRASH_ADVICE = {
+    CRASH_ROOT_SANDBOX: (
+        "以 root 身份跑 Electron 必须加 --no-sandbox(Chromium 的硬性要求)," "与显卡驱动无关。已自动补上该参数重试。"
+    ),
+    CRASH_NO_DISPLAY: "这台机器没有图形环境(无 DISPLAY/X11),无头服务器上属正常。",
+    CRASH_RENDER: "看起来是渲染/GPU 合成的问题,按 硬件加速 → 软件渲染 → 不透明窗口 依次降级重试。",
+    CRASH_UNKNOWN: "认不出是哪一类崩溃 —— 请看下面的日志尾部原文,不猜原因。",
+}
+
+_ROOT_SANDBOX_MARKERS = (
+    "running as root without --no-sandbox",
+    "no-sandbox is not supported",
+)
+_NO_DISPLAY_MARKERS = (
+    "missing x server",
+    "cannot open display",
+    "bad display name",
+    "unable to open x display",
+)
+_RENDER_MARKERS = (
+    "gpu process isn't usable",
+    "gpu process launch failed",
+    "sharedimagemanager",
+    "failed to create gl context",
+    "viz::",
+    "swiftshader",
+)
+
+
+def classify_electron_crash(log_tail: str) -> str:
+    """按 electron.log 尾部原文判断这是**哪一类**崩溃。
+
+    认不出来就回 :data:`CRASH_UNKNOWN` —— 空与未知必须分得开,不许默认归到
+    渲染那一档(那正是此前那条错误诊断的来源)。
+    """
+    text = (log_tail or "").lower()
+    if not text.strip():
+        return CRASH_UNKNOWN
+    for marker in _ROOT_SANDBOX_MARKERS:
+        if marker in text:
+            return CRASH_ROOT_SANDBOX
+    for marker in _NO_DISPLAY_MARKERS:
+        if marker in text:
+            return CRASH_NO_DISPLAY
+    for marker in _RENDER_MARKERS:
+        if marker in text:
+            return CRASH_RENDER
+    return CRASH_UNKNOWN
+
+
+def electron_extra_argv(*, no_sandbox: bool = False) -> "list[str]":
+    """拉起 Electron 时要额外带的命令行参数。
+
+    ``--no-sandbox`` 只在**确实需要**时加(root 身份,或上一次崩溃就是因为它)——
+    它会削弱 Chromium 的沙箱隔离,不该无条件常开。
+    """
+    return ["--no-sandbox"] if no_sandbox else []
+
+
+def running_as_root() -> bool:
+    """当前是不是 root。非 POSIX 平台(Windows)一律 False。"""
+    getuid = getattr(os, "geteuid", None)
+    return bool(getuid and getuid() == 0)
+
+
 def preferred_shell(health: Optional[ShellHealth] = None) -> str:
     """选哪个壳：``"tauri"`` | ``"electron"`` | ``"none"``。
 
@@ -474,7 +561,15 @@ def preferred_shell(health: Optional[ShellHealth] = None) -> str:
 
 
 __all__ = [
+    "CRASH_ADVICE",
+    "CRASH_NO_DISPLAY",
+    "CRASH_RENDER",
+    "CRASH_ROOT_SANDBOX",
+    "CRASH_UNKNOWN",
     "ELECTRON_DIR",
+    "classify_electron_crash",
+    "electron_extra_argv",
+    "running_as_root",
     "NETWORK_FAILURE_MARKERS",
     "NPM_MIRROR_REGISTRY",
     "ShellHealth",
