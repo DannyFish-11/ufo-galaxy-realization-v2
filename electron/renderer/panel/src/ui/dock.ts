@@ -330,11 +330,17 @@ export function createDock(cb: DockCallbacks): DockHandles {
       // 「管 N 个键」拿掉了:那个数字不影响任何决定,却占着本该说清这一档管什么的
       // 位置。**有键被手改过仍然要说** —— 那条是真会影响判断的:档位显示「开」而
       // 底下某个键被人改成了关,不说出来就是同一个事实两处各存、且没人看得见。
-      note.textContent = b.unwired
-        ? `${b.note} · 没接上(主键 ${b.primary || '未知'} 不存在)`
+      // 副标题可以是空的(名字已经说完了这一档管什么,比如「声字同文」;或者右边
+      // 那枚牌子已经把当前档写出来了,比如「自主」)。**但留痕不能跟着一起没**:
+      // 空副标题时那两句照打,只是别带前导的「 · 」。
+      const tail = b.unwired
+        ? `没接上(主键 ${b.primary || '未知'} 不存在)`
         : b.overrides > 0
-          ? `${b.note} · 有 ${b.overrides} 项手改过`
-          : b.note;
+          ? `有 ${b.overrides} 项手改过`
+          : '';
+      note.textContent = tail ? (b.note ? `${b.note} · ${tail}` : tail) : b.note;
+      // 什么都没有就别占位 —— 空的 note 仍是 display:block,会给行凭空撑出一截。
+      note.hidden = note.textContent === '';
       if (b.overrides > 0) note.dataset['drift'] = 'true';
       if (b.unwired) note.dataset['unwired'] = 'true';
       text.append(name, note);

@@ -702,6 +702,13 @@ body {
   transition: background 0.28s var(--ease), color 0.28s var(--ease);
 }
 
+/* 那枚牌子要和上面几行的推拉开关**落在同一列**。``.knob`` 用 margin-left:auto
+   顶到右边缘,``.stage`` 此前没有 —— 于是它紧跟在文字后面,文字一短就整个往左跑。
+   去掉副标题之后这个错位一眼就能看见。
+   只对 bundle 行里的牌子生效:ABCD 那一排(``.tier-stages .stage``)是并排的四个,
+   给它们 auto 会把它们全推到右边挤成一堆。 */
+.bundle > .stage { margin-left: auto; }
+
 /* 没接上的那一档:主键在后端不存在。压平、去掉指针,并且**点不动** ——
    一个永远关着、点了也没反应的开关,比一条说明更容易骗到人。 */
 .bundle[data-unwired='true'] { opacity: 0.5; cursor: not-allowed; }

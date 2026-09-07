@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+from pathlib import Path
 
 import pytest
 
@@ -346,3 +347,51 @@ class TestABundleActuallyOwnsWhatItClaimsToOwn:
         assert any(
             fnmatch.fnmatchcase(bundle["primary"], p) for p in bundle["owns"]
         ), f"档位「{bundle['name']}」的 owns 里没有它自己的主键 {bundle['primary']}"
+
+
+class TestASubtitleIsOptionalButTheTraceIsNot:
+    """副标题可以不要;**留痕不能跟着一起没**。
+
+    「声字同文」的名字已经把这一档管什么说完了,「自主」右边那枚牌子已经把当前档
+    写出来了 —— 这两行都不需要副标题。但 ``overrides`` / ``unwired`` 那两句是
+    留痕,它们此前是拼在副标题后面的(``${b.note} · 有 N 项手改过``):副标题一空,
+    拼出来就成了以「 · 」开头的半句话。
+    """
+
+    PANEL_SRC = Path(__file__).resolve().parent.parent / "electron/renderer/panel/src"
+    PANEL_DIST = Path(__file__).resolve().parent.parent / "electron/renderer/panel/dist"
+
+    def test_an_empty_note_is_allowed(self) -> None:
+        empty = [b["name"] for b in CONFIG_BUNDLES if not b["note"]]
+        assert empty, "一档没有空副标题?那这份判据钉的是不存在的情况"
+
+    def test_the_trace_is_not_glued_onto_the_subtitle(self) -> None:
+        src = (self.PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert (
+            "`${b.note} · 有 ${b.overrides} 项手改过`" not in src
+        ), "留痕又被拼回副标题后面了 —— 副标题为空时会打出以「 · 」开头的半句话"
+        assert "note.hidden" in src, "空副标题的 note 元素没藏起来,会给行凭空撑出一截"
+
+    def test_the_pill_sits_in_the_same_column_as_the_toggles(self) -> None:
+        """多态那枚牌子要和上面几行的开关落在同一列。
+
+        ``.knob`` 一直有 ``margin-left:auto``,``.stage`` 没有 —— 于是牌子紧跟在
+        文字后面,文字一短就整个往左跑。去掉副标题之后这个错位一眼就能看见
+        (实测右边缘 1066.8 vs 开关的 1238.0)。
+        """
+        css = (self.PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
+        assert ".bundle > .stage" in css and "margin-left: auto" in css, "牌子没有和开关对齐"
+
+    def test_the_abcd_chips_are_not_dragged_right_by_that_rule(self) -> None:
+        """对齐规则只能管 bundle 行里的牌子 —— ABCD 那一排是并排的四个。"""
+        css = (self.PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
+        assert ".tier-stages > .stage { margin-left: auto" not in css
+        assert (
+            ".stage {\n  flex: none;\n  margin-left: auto" not in css
+        ), "margin-left:auto 写到了 .stage 通用规则上,ABCD 四个钮会被挤到右边"
+
+    def test_the_built_bundle_carries_both(self) -> None:
+        js = sorted(self.PANEL_DIST.glob("assets/*.js"))
+        assert js, "dist/assets 里没有构建产物"
+        blob = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in js)
+        assert ".bundle>.stage{margin-left:auto}" in blob.replace(" ", ""), "dist 里没有对齐规则 —— 改了 src 但没重建"

@@ -98,10 +98,11 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
     },
     {
         "key": "voice",
-        "name": "声音",
-        # 「声字同文」:念出来的和写在屏上的是同一份文字,一句一句对齐着走。
-        # 这一档管的就是那件事(以及它做不到时怎么如实降级)。
-        "note": "声字同文",
+        # 名字直接说清楚这一档管什么:念出来的和写在屏上的是同一份文字,一句一句
+        # 对齐着走(以及做不到时怎么如实降级)。原本是「声音」+ 副标题「声字同文」——
+        # 一行说得完的事不必占两行,而且「声音」这两个字太宽,什么都可能是它。
+        "name": "声字同文",
+        "note": "",
         "category": "voice",
         "primary": "GALAXY_SPEAK",
         "owns": (
@@ -119,7 +120,9 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
     {
         "key": "autonomy",
         "name": "自主",
-        "note": "问过再做",
+        # 不给副标题:右边那枚牌子已经把当前档写出来了(safe / guided / autonomous),
+        # 再写一句「问过再做」是同一件事说两遍,而且只对得上三档里的一档。
+        "note": "",
         "category": "agent",
         # 三档,不是开关。见模块开头那段说明。
         "primary": "GALAXY_AUTONOMY",
