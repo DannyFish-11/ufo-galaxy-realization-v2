@@ -278,6 +278,7 @@ class ComputerUseLoop:
         history: List[StepRecord],
         screen_b64: str,
         experience: str = "",
+        experience_media: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Dict]:
         """一步规划:任务 + 步骤史 + 截图 (+ 过往经验) → 动作 JSON。
 
@@ -303,6 +304,14 @@ class ComputerUseLoop:
             },
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{screen_b64}"}},
         ]
+        # 过往画面排在**当前屏幕之后**:当前这一张是「现在什么样」,是判断的主体;
+        # 召回来的是「上次什么样」,是参照。顺序反了模型容易把旧图当成现状。
+        #
+        # 这一轮的型号收不收图、这条传输装不装得下,由 core.modality 那个唯一的头
+        # 在发出前判(收不了会摘掉并留痕),这里不重复判一遍。
+        if experience_media:
+            user_content.append({"type": "text", "text": "下面是记忆里与此相关的过往画面/声音(供参照,不是现状):"})
+            user_content.extend(experience_media)
         messages = [
             {"role": "system", "content": _PLANNER_SYSTEM},
             {"role": "user", "content": user_content},
@@ -392,13 +401,21 @@ class ComputerUseLoop:
         # 而这个契约必须在**调用点**成立。默认实现自己吞异常,但注入进来的替身
         # (或将来换的另一个实现)不一定守规矩 —— 这条 try 是最初漏掉的,被
         # tests/test_computer_use_memory.py::test_记忆层抛异常时任务照常完成 抓到。
+        experience_media: List[Dict[str, Any]] = []
         try:
-            experience = await self._memory.recall_experience(instruction)
+            # 一次召回,两样东西:文字进提示词,画面(如果开了回放)作为内容部件带走。
+            # 走 ``recall_experience_parts`` 而不是两次召回 —— 召回本身要打向量库,
+            # 打两遍既慢又可能因为并发写入拿到两份不一样的结果。
+            parts = await self._memory.recall_experience_parts(instruction)
+            experience = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text").strip()
+            experience_media = [p for p in parts if p.get("type") != "text"]
         except Exception as exc:  # noqa: BLE001
             logger.debug("情景记忆召回失败(不影响任务): %s", exc)
             experience = ""
         if experience:
             logger.info("computer_use 召回到过往经验 %d 条", experience.count("\n") + 1)
+        if experience_media:
+            logger.info("computer_use 这一轮带回了 %d 项过往画面/声音", len(experience_media))
 
         for i in range(1, limit + 1):
             # ── 1. 感知 ────────────────────────────────────────────────
@@ -415,7 +432,7 @@ class ComputerUseLoop:
                 }
 
             # ── 2. 规划 ────────────────────────────────────────────────
-            planned = await self._plan_step(instruction, steps, screen, experience)
+            planned = await self._plan_step(instruction, steps, screen, experience, experience_media)
             if not planned:
                 return {
                     "success": False,

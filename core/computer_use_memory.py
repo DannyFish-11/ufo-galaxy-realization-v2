@@ -135,24 +135,43 @@ class ComputerUseEpisodicMemory:
 
     # ── 召回 ────────────────────────────────────────────────────────────────
 
-    async def recall_experience(self, instruction: str) -> str:
-        """召回与 *instruction* 相关的过往经验,返回可直接塞进提示词的文本。
+    async def recall_experience_parts(self, instruction: str) -> List[Any]:
+        """与 ``recall_experience`` 同一次召回,但**连画面一起带回来**。
 
-        没有可用后端、没有命中、或召回失败时一律返回空串 —— 调用方据此决定
-        「不加这一段」,而不是加一段「(无)」去占位。空串比占位更诚实:模型看到
-        「过往经验:(无)」会以为系统查过且确实没有,而实际可能是记忆层根本没配。
+        返回的是仓内的规范表示(OpenAI content 部件):一段文字 + 若干图/音。
+        调用方把它拼进 content 数组即可 —— 这一轮的型号收不收、这条传输装不装得下,
+        由 ``core.modality.prepare`` 那个唯一的头去判,这里不重复判。
+
+        **它取代了原来的 ``recall_experience()``(返回纯字符串那个)。** 一开始我是
+        两个方法并存的,想着"改契约不如加方法安全" —— 但加完之后旧的那个就没有任何
+        生产调用方了,而本仓的判据很直接:没有调用方的公开能力**就是不生效的**。
+        并存的真实代价是有人会去调旧的那个,于是同一次召回在两处走不同的路。
+
+        文字仍然是纯文字:调用方从返回值里挑 ``type == "text"`` 的那些拼起来即可
+        (``computer_use_loop`` 就是这么用的),不必为了拿文字再召回一次 ——
+        召回要打向量库,打两遍既慢、又可能因为并发写入拿到两份不一样的结果。
+
+        默认仍然只回文字:媒体回放要 ``GALAXY_MEMORY_REPLAY_MEDIA=1``,判据在
+        ``core.memory.media_store.replay_enabled()`` 那里写着为什么默认关。
         """
         if not self.available or not instruction.strip():
-            return ""
+            return []
         try:
-            # **多取一些再自己排。** 后端给的是纯语义相似度 —— 它不知道哪条是
-            # 成功的经验、哪条是失败的尝试,于是一次失败会和一次成功抢同一个名额。
-            # 取 MAX_RECALL 个再筛就没得筛了,所以这里按 OVERFETCH 倍取。
             hits = await asyncio.to_thread(self._get_memory().recall, instruction, top_k=MAX_RECALL * RECALL_OVERFETCH)
         except Exception as exc:  # noqa: BLE001
             logger.debug("情景记忆召回失败(不影响任务): %s", exc)
-            return ""
-        return self._format_experience(self._rank_by_outcome(hits or []))
+            return []
+
+        ranked = self._rank_by_outcome(hits or [])
+        text = self._format_experience(ranked)
+        parts: List[Any] = []
+        if text:
+            parts.append({"type": "text", "text": text})
+
+        from core.memory.media_store import media_parts_for  # noqa: PLC0415
+
+        parts.extend(media_parts_for(ranked))
+        return parts
 
     @staticmethod
     def _outcome_of(hit: Any) -> str:

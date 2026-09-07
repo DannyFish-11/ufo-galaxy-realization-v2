@@ -94,7 +94,7 @@
     "core/replay_foundation.py": 1094,
     "core/resource_pressure_capacity_contract.py": 1025,
     "core/routes/chat.py": 1127,
-    "core/routes/config_schema_registry.py": 2305,
+    "core/routes/config_schema_registry.py": 2342,
     "core/routes/operator.py": 2019,
     "core/routes/projection.py": 7558,
     "core/runtime/__init__.py": 1634,

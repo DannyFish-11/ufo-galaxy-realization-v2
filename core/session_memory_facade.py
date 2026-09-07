@@ -196,6 +196,23 @@ async def record_session_turn(
                             metadata=dict(_md),
                             caption=f"[mic @ user turn] {content[:80]}",
                         )
+                    # 视频:屏幕上"这几秒发生了什么"。一张静止图说的是屏幕上有什么,
+                    # 带时间偏移的有序帧说的是发生了什么 —— 后者才是"上次卡在哪一步"
+                    # 这类回忆需要的东西。
+                    #
+                    # 走 remember_video() 而不是 remember_media(modality="video"):
+                    # 本仓一路都用帧序列(没有 ffmpeg,视觉模型也不吃容器),那个方法
+                    # 才认帧;传容器字节进去只会被如实记成一行"没能解出画面"。
+                    _ctx = get_desktop_perception_store().build_multimodal_context()
+                    _videos = list(getattr(_ctx, "video", None) or []) if _ctx else []
+                    if _videos:
+                        await _aio_mm.to_thread(
+                            _um2.remember_video,
+                            _videos[0],
+                            tags=["perception"],
+                            metadata=dict(_md),
+                            caption=f"[screen @ user turn] {content[:80]}",
+                        )
         except Exception as exc:  # noqa: BLE001 — 跨模态记忆写入失败不影响主流程
             logger.debug("cross-modal memory write skipped: %s", exc)
 

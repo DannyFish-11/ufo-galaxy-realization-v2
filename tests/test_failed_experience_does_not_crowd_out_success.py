@@ -119,14 +119,14 @@ class TestItOverfetchesOrThereIsNothingToRank:
         from core.computer_use_memory import RECALL_OVERFETCH
 
         assert RECALL_OVERFETCH > 1
-        src = inspect.getsource(ComputerUseEpisodicMemory.recall_experience)
+        src = inspect.getsource(ComputerUseEpisodicMemory.recall_experience_parts)
         assert "RECALL_OVERFETCH" in src, "召回还是只取 MAX_RECALL 个 —— 排序无从谈起"
         assert "_rank_by_outcome" in src, "取回来了却没按结果排"
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_through_the_real_recall_path(monkeypatch):
-    """走真正的 recall_experience,不是只测排序函数。"""
+    """走真正的召回路径,不是只测排序函数。"""
     hits = [_hit(_exp("改设置", "失败"), tags=["failure"]) for _ in range(5)]
     hits.append(_hit(_exp("改设置", "成功"), tags=["success"]))
 
@@ -141,6 +141,7 @@ async def test_end_to_end_through_the_real_recall_path(monkeypatch):
     monkeypatch.setattr(cum, "_get_memory", lambda: _Mem())
     monkeypatch.setattr(type(cum), "available", property(lambda self: True))
 
-    text = await cum.recall_experience("改设置")
+    parts = await cum.recall_experience_parts("改设置")
+    text = "\n".join(p["text"] for p in parts if p["type"] == "text")
     assert "结果[成功]" in text, "端到端跑下来,成功的那条还是被挤掉了"
     assert text.count("[上次失败]") <= MAX_FAILURE_RECALL
