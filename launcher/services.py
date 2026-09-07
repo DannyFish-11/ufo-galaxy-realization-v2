@@ -1048,7 +1048,14 @@ class GalaxyUnified:
             return ("warn", f"{rt_name} 未就绪 — {_hint}", "")
         if status == "no_compose":
             return ("warn", f"未找到 {runtime} compose 命令 — 跳过 " f"(装 {runtime}-compose 或启用 compose 插件)", "")
-        return ("warn", f"{rt_name} 启动异常 (rc={rc})，详情见 logs/docker.log", "")
+        # 起不来时先分清是什么起不来。"启动异常 (rc=1)" 这句话底下至少有三种事
+        # (缺 .env 变量 / 拉不到镜像 / 端口被占),下一步动作完全不同 ——
+        # 尤其第一种跟 Docker 一点关系都没有,而那句话把人指向了 Docker。
+        # 判据见 launcher/compose_failures.py:认不出就说"未能判定",不猜。
+        from launcher.compose_failures import describe_compose_failure, read_compose_log_tail
+
+        _tail = read_compose_log_tail(str(PROJECT_ROOT / "logs" / "docker.log"))
+        return ("warn", describe_compose_failure(_tail, runtime_name=rt_name), "详情见 logs/docker.log")
 
     async def start_electron(self) -> bool:
         """启动 Electron 桌面三态覆盖层。
