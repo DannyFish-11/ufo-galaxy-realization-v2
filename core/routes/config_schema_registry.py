@@ -1559,6 +1559,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "advanced",
         "description": "等容器内服务就绪的超时(秒 · 默认 90)",
     },
+    "GALAXY_AUTO_PODMAN_API_WAIT": {
+        "default": "30",
+        "type": "number",
+        "category": "advanced",
+        "description": "Podman 专用:替你拉起 API socket 后等它出现的超时(秒 · 默认 30;podman compose 没有这个 socket 就跑不起来)",
+    },
     # --- 启动诊断(main.py、launcher/services.py)---
     "GALAXY_VERBOSE": {
         "default": "false",

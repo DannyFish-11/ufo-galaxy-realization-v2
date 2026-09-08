@@ -66,8 +66,9 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from launcher.record import Column, Status, StepResult
 
@@ -496,7 +497,106 @@ def _probe_ollama() -> Tuple[bool, bool, List[str]]:
     return True, True, models
 
 
-def check_environment(*, env_file: Optional[Path] = None, electron_dir: Optional[Path] = None) -> EnvReport:
+#: 每一项探测最多等多久(秒)。**这是墙钟上界,不是子进程的超时。**
+#:
+#: 两者的区别是这次要修的东西:``subprocess.run(timeout=)`` 只管它自己起的那个
+#: 子进程,管不了探测里别的东西 —— 比如 ``shutil.which()``。Windows 的 PATH 里
+#: 只要有一个掉线的网络盘,每一次 PATH 查找都会干等到 SMB 自己超时,而那期间
+#: 屏幕上一个字都没有。
+#:
+#: 所以这里再加一层:到点就**放弃这一项**,如实记成"没等到",继续往下走。
+PROBE_DEADLINE_S = {
+    "pip": 20.0,
+    "npm": 15.0,
+    "node": 15.0,
+    "ollama": 12.0,
+    "electron": 10.0,
+}
+
+#: 屏幕上的名字。和 :data:`PROBE_DEADLINE_S` 同一批键 —— 少一个就会显示成键名。
+PROBE_LABEL = {
+    "pip": "pip",
+    "npm": "npm",
+    "node": "Node.js",
+    "ollama": "Ollama",
+    "electron": "Electron 依赖",
+}
+
+#: 事件状态。调用方(main.py)据此画转圈/打勾。
+PROBE_START = "start"
+PROBE_DONE = "done"
+PROBE_TIMEOUT = "timeout"
+
+
+def _start_probe(name: str, fn, fallback, on_event=None):
+    """把一个探测**丢出去跑**,立刻返回一个句柄。不等它。
+
+    并发是刻意的:五个探测彼此独立(唯一例外是 electron 要先知道 npm 在不在),
+    而且全是等 IO。串行的话最坏耗时是**求和**,并发是**取最大** ——
+    上一版把它改成并发正是为了这个,这次加上界时不能把它改回串行。
+    """
+    import threading  # noqa: PLC0415 —— 只此一处用到
+
+    box: Dict[str, Any] = {"value": fallback}
+    finished = threading.Event()
+
+    def _work() -> None:
+        try:
+            box["value"] = fn()
+        except Exception:  # noqa: BLE001 — 探测炸了就是探测不到,不该带崩启动
+            box["value"] = fallback
+        finally:
+            finished.set()
+
+    if on_event:
+        on_event(name, PROBE_START, "")
+    threading.Thread(target=_work, name=f"galaxy-probe-{name}", daemon=True).start()
+    return name, finished, box, fallback
+
+
+def _collect_probe(handle, started_at: float, on_event=None):
+    """等一个已经在跑的探测,最多等到**它自己的**那条线。
+
+    ``started_at`` 是这一批**共同的**起跑时刻 —— 上界按它算,所以五个探测的
+    总耗时是"取最大"而不是"求和"。按各自的调用时刻算的话就又变回串行了。
+    """
+    name, finished, box, fallback = handle
+    deadline = PROBE_DEADLINE_S.get(name, 15.0)
+    remaining = deadline - (time.monotonic() - started_at)
+    if remaining > 0 and finished.wait(timeout=remaining):
+        if on_event:
+            on_event(name, PROBE_DONE, "")
+        return box["value"], True
+    if on_event:
+        on_event(name, PROBE_TIMEOUT, f"{deadline:.0f}s 没有回应")
+    return fallback, False
+
+
+def _run_with_deadline(name: str, fn, fallback, on_event=None):
+    """跑一个探测,最多等 :data:`PROBE_DEADLINE_S` 那么久。**永不无限阻塞。**
+
+    三条设计,每一条都对应一种真机上卡死的方式:
+
+    1. **守护线程**。非守护线程会让解释器退出时 join 它们 —— 一个卡住的探测
+       于是连 Ctrl+C 之后的收尾都能拖住。守护线程不会。
+    2. **绝不 join 超时的那个**。``ThreadPoolExecutor`` 的 ``with`` 块退出时
+       会 ``shutdown(wait=True)``,卡一个就全卡 —— 原来正是这么写的。
+       这里到点就走人,把那个线程扔在后面自生自灭。
+    3. **``result()`` 必须带上界**。原来是裸的 ``f.result()``,没有超时,
+       一个探测挂住就整个 Phase 0 停在那里,而且屏幕上什么都不打。
+
+    超时不是失败,是"没等到" —— 两者对下一步的含义不同,所以分开记。
+    """
+    handle = _start_probe(name, fn, fallback, on_event)
+    return _collect_probe(handle, time.monotonic(), on_event)
+
+
+def check_environment(
+    *,
+    env_file: Optional[Path] = None,
+    electron_dir: Optional[Path] = None,
+    on_event: Optional[Callable[[str, str, str], None]] = None,
+) -> EnvReport:
     """跑完整套环境检查，返回事实。**不打印任何东西。**
 
     Args:
@@ -506,6 +606,9 @@ def check_environment(*, env_file: Optional[Path] = None, electron_dir: Optional
                       文件在三个模块里各有一份常量 —— 改一处漏两处正是这次
                       统一要消掉的东西。
         electron_dir: 同理，Electron 目录。
+        on_event:     进度回调 ``(探测名, 状态, 说明)``,状态见 ``PROBE_START`` /
+                      ``PROBE_DONE`` / ``PROBE_TIMEOUT``。**给了才有实时进度** ——
+                      不给的话行为和以前一模一样(这个函数仍然不打印任何东西)。
     """
     py_version, py_ok, py_exe = _probe_python()
     if not py_ok:
@@ -524,21 +627,41 @@ def check_environment(*, env_file: Optional[Path] = None, electron_dir: Optional
     #
     # 这些探测彼此独立(唯一的例外是 electron 要先知道 npm 在不在),而且全是
     # 等子进程的 IO —— 线程池正好。最坏耗时从"求和"变成"取最大"。
-    from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415 —— 只此一处用到
+    # 每一项各自跑、各自有墙钟上界,谁都拖不住谁 —— 见 _run_with_deadline
+    # 里那三条(守护线程 / 不 join 超时的 / result 必须带上界)。
+    #
+    # 上一版是 ThreadPoolExecutor + 裸 f.result():那个 with 块退出时会 join
+    # 全部工作线程,而 result() 没有超时。任何一项挂住,Phase 0 就停在那里,
+    # 屏幕上一个字都没有 —— 所有者反馈的"卡在零步骤上,半天不出来"。
+    timed_out: List[str] = []
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        f_pip = pool.submit(_probe_pip)
-        f_npm = pool.submit(_probe_npm)
-        f_node = pool.submit(_probe_node)
-        f_ollama = pool.submit(_probe_ollama)
+    def _probe(name, fn, fallback):
+        value, ok = _run_with_deadline(name, fn, fallback, on_event)
+        if not ok:
+            timed_out.append(name)
+        return value
 
-        pip_ok, pip_version = f_pip.result()
-        npm_ok, npm_version, npm_path = f_npm.result()
-        node_ok, node_version = f_node.result()
-        ollama_installed, ollama_running, ollama_models = f_ollama.result()
+    started_at = time.monotonic()
+    handles = [
+        _start_probe("pip", _probe_pip, (False, ""), on_event),
+        _start_probe("npm", _probe_npm, (False, "", None), on_event),
+        _start_probe("node", _probe_node, (False, ""), on_event),
+        _start_probe("ollama", _probe_ollama, (False, False, []), on_event),
+    ]
+    collected = {}
+    for handle in handles:
+        value, ok = _collect_probe(handle, started_at, on_event)
+        collected[handle[0]] = value
+        if not ok:
+            timed_out.append(handle[0])
+
+    pip_ok, pip_version = collected["pip"]
+    npm_ok, npm_version, npm_path = collected["npm"]
+    node_ok, node_version = collected["node"]
+    ollama_installed, ollama_running, ollama_models = collected["ollama"]
 
     # electron 那一条要用 npm 的结论,所以排在后面(它自己不起子进程,只看文件)。
-    electron_ok, electron_probe = _probe_electron(npm_ok, electron_dir)
+    electron_ok, electron_probe = _probe("electron", lambda: _probe_electron(npm_ok, electron_dir), (False, "missing"))
 
     env_path = env_file if env_file is not None else ENV_FILE
     env_exists = env_path.exists()

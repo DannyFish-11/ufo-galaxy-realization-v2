@@ -528,26 +528,60 @@ class TestPhaseZeroDoesNotGoDarkWhileItProbes:
     """
 
     def test_the_external_probes_run_concurrently(self) -> None:
-        import inspect
+        """**按行为验,不钉实现。**
+
+        原来这条断言的是 ``ThreadPoolExecutor`` 和 ``pool.submit(...)``。
+        后来那个写法本身成了 bug 的一半(``with`` 块退出要 join 全部线程,
+        ``f.result()`` 又没有超时,一个探测挂住就整个 Phase 0 停住),于是换成了
+        带墙钟上界的守护线程 —— 而这条测试要守的性质**一点没变**:
+        最坏耗时是"取最大"而不是"求和"。
+
+        钉实现的代价就是这个:实现换了、性质还在,测试却红了。
+        """
+        import time
+        from unittest.mock import patch
 
         from launcher import env_check as ec
 
-        src = inspect.getsource(ec.check_environment)
-        assert "ThreadPoolExecutor" in src, (
-            "五个外部探测又变回串行了 —— 各自超时加起来最坏 43 秒，" "这段时间 [Phase 0] 底下一个字都没有"
+        delay = 0.6
+
+        def slow(value):
+            def _fn():
+                time.sleep(delay)
+                return value
+
+            return _fn
+
+        t0 = time.monotonic()
+        with patch.multiple(
+            ec,
+            _probe_pip=slow((True, "1")),
+            _probe_npm=slow((True, "2", "/npm")),
+            _probe_node=slow((True, "3")),
+            _probe_ollama=slow((True, True, [])),
+        ):
+            ec.check_environment()
+        elapsed = time.monotonic() - t0
+        assert elapsed < delay * 2.5, (
+            f"四个探测跑了 {elapsed:.2f}s(单个 {delay}s)—— 像是串行。"
+            "串行的话各自超时加起来最坏 43 秒,这段时间 [Phase 0] 底下一个字都没有"
         )
-        for name in ("_probe_pip", "_probe_npm", "_probe_node", "_probe_ollama"):
-            assert f"pool.submit({name})" in src, f"{name} 没有并发提交"
 
     def test_electron_still_waits_for_the_npm_verdict(self) -> None:
-        """唯一的顺序依赖:electron 那一条要先知道 npm 在不在。并发不能把它打乱。"""
-        import inspect
+        """唯一的顺序依赖:electron 那一条要先知道 npm 在不在。并发不能把它打乱。
+
+        同样改成按行为验:让 npm 探测报"没装",electron 就必须跟着报 missing ——
+        它拿到的确实是 npm 的结论,而不是自己另判了一次。
+        """
+        from unittest.mock import patch
 
         from launcher import env_check as ec
 
-        src = inspect.getsource(ec.check_environment)
-        assert "_probe_electron(npm_ok" in src, "electron 探测没有拿 npm 的结论"
-        assert src.index("npm_ok, npm_version, npm_path = f_npm.result()") < src.index("_probe_electron(npm_ok")
+        with patch.object(ec, "_probe_npm", lambda: (False, "", None)):
+            report = ec.check_environment()
+        assert report.npm_installed is False
+        assert report.electron_deps_ok is False
+        assert report.electron_probe == "missing", "electron 没有采纳 npm 的结论"
 
     def test_the_entrypoint_says_something_before_it_blocks(self) -> None:
         import inspect

@@ -27,7 +27,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
 
@@ -509,6 +509,62 @@ def daemon_up(rt: str) -> bool:
         )
     except Exception:  # noqa: BLE001
         return False
+
+
+def podman_api_socket() -> Tuple[str, bool]:
+    """Podman 的 API socket 路径,以及它此刻在不在。返回 ``(路径, 存在)``。
+
+    **问 podman 自己**,不猜路径 —— root 下是 ``/run/podman/podman.sock``,
+    rootless 下在 ``$XDG_RUNTIME_DIR/podman/`` 底下,还随发行版和配置变。
+    ``podman info`` 的 ``Host.RemoteSocket`` 就是权威。
+
+    拿不到时返回 ``("", False)``:路径未知和"路径知道但 socket 不在"是两回事,
+    前者不该被当成"socket 没起来"去尝试拉起一个不知道在哪的东西。
+    """
+    bin_ = runtime_binary("podman")
+    if not bin_:
+        return "", False
+    try:
+        out = subprocess.run(
+            [bin_, "info", "--format", "{{.Host.RemoteSocket.Path}}|{{.Host.RemoteSocket.Exists}}"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+    except Exception:  # noqa: BLE001
+        return "", False
+    if out.returncode != 0:
+        return "", False
+    raw = (out.stdout or "").strip()
+    path, _, exists = raw.partition("|")
+    return path.strip(), exists.strip().lower() == "true"
+
+
+def compose_api_ready(rt: str) -> Tuple[bool, str]:
+    """这个运行时**现在能不能跑 compose**。返回 ``(能, 说不能的原因)``。
+
+    为什么不能只看 ``daemon_up``(真跑实测出来的):Podman 装好之后
+    ``podman info`` 是**通的**,于是启动器认为它就绪、什么都不做;可
+    ``podman compose`` 实际会转发给 docker-compose,而后者要连
+    ``unix:///run/podman/podman.sock`` —— 那个 socket 是另一件事,
+    没起来就是 ``no such file or directory``。
+
+    "引擎在" 和 "compose 连得上" 是两个判据。混成一个,表现就是
+    基础设施那一行说不出为什么起不来。
+    """
+    if not daemon_up(rt):
+        return False, f"{display_name(rt)} 引擎未就绪"
+    if rt != "podman":
+        return True, ""
+    path, exists = podman_api_socket()
+    if not path:
+        # 问不出路径 —— 不当成 socket 没起来。别去拉一个不知道在哪的东西。
+        return True, ""
+    if not exists:
+        return False, f"Podman 的 API socket 不在: {path}"
+    return True, ""
 
 
 def compose_base(rt: str) -> Optional[List[str]]:

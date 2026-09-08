@@ -100,6 +100,13 @@ LOG_LOCATIONS: List[LogLocation] = [
         purpose="这台机器没有 systemd、由启动器直接拉起 dockerd 时,它的输出在这",
     ),
     LogLocation(
+        name="podman",
+        label="Podman API",
+        label_en="Podman API",
+        relpath="podman.log",
+        purpose="用 Podman 时:引擎在、compose 却连不上它的 socket —— 拉起 socket 的过程在这",
+    ),
+    LogLocation(
         name="ollama",
         label="本机模型",
         label_en="Local models",

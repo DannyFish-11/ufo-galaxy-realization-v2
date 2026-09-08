@@ -293,16 +293,99 @@ def test_the_old_split_entry_is_still_gone():
     assert "_open_overlay_log" not in tray.replace("# ", ""), "旧的三态动画日志入口又回来了"
 
 
-def test_the_tray_menu_is_empty_by_design():
-    """托盘菜单是空的 —— 这是所有者明确要求的,不是漏做。
+#: 被清掉的那九项。所有者当初的要求是「全部删掉」,所以它们一个都不许回来。
+#: 后来所有者要求「但凡需要日志的统一放进右下角的托盘里」,于是**只**多了「日志」
+#: 这一项 —— 那是新的要求,不是这九项复活。
+_REMOVED_NINE = (
+    "唤醒覆盖层",
+    "隐藏覆盖层",
+    "配置面板",
+    "崩溃日志",
+    "查看日志",
+    "远程桌面接管",
+    "重启服务",
+    "退出",
+)
 
-    钉住它,是因为「菜单空着」与「菜单坏了」在外面看起来一模一样。这条一旦红,
-    要么是有人往里加了东西(那就该同时更新上面那条计数判据),要么是那个承接
-    单击的不可见默认项被误删了(那样托盘就成了一张点不动的贴纸)。
+
+def _fake_tray():
+    """用假 pystray 把托盘真建出来。
+
+    这台机器没有 X11,真 pystray 一 import 就 ``Bad display name`` —— 所以要验
+    菜单的形状只能替掉它。**验真建出来的菜单,而不是数源码里 MenuItem( 出现几次**:
+    后者一改实现就红,而它想守的性质(菜单里到底有什么)其实没变。
     """
+    import sys
+    import types
+
+    fake = types.ModuleType("pystray")
+
+    class MenuItem:
+        def __init__(self, text, action=None, default=False, visible=True):
+            self.text, self.action = text, action
+            self.default, self.visible = default, visible
+
+    class Menu:
+        SEPARATOR = "---"
+
+        def __init__(self, *items):
+            self.items = items
+
+    fake.MenuItem, fake.Menu, fake.Icon = MenuItem, Menu, type("Icon", (), {})
+    sys.modules.setdefault("pystray", fake)
+    pil = sys.modules.setdefault("PIL", types.ModuleType("PIL"))
+    for sub in ("Image", "ImageDraw", "ImageFilter", "ImageFont"):
+        mod = sys.modules.setdefault(f"PIL.{sub}", types.ModuleType(f"PIL.{sub}"))
+        setattr(pil, sub, mod)
+
+    import windows_service.tray_icon as t
+
+    t.pystray = fake
+    t._HAVE_TRAY = True
+    tray = t.GalaxyTray.__new__(t.GalaxyTray)
+    tray._icon = None
+    return t, tray
+
+
+def test_the_tray_menu_holds_only_what_the_owner_asked_for():
+    """托盘菜单里只有所有者要过的东西。
+
+    先是「把之前那九项全部删掉,暂时先不放任何东西」;后来是「但凡需要日志的
+    统一放进右下角的托盘里」。所以现在**恰好**是:一个承接单击的不可见默认项,
+    加一个「日志」子菜单 —— 那九项一个都没回来。
+
+    钉住它,是因为「菜单空着」与「菜单坏了」在外面看起来一模一样;
+    而多出来一项没人要过的东西,和少了那个默认项一样是问题。
+    """
+    _t, tray = _fake_tray()
+    menu = tray._build_menu()
+
+    visible = [i for i in menu.items if getattr(i, "visible", True)]
+    assert len(visible) == 1, f"可见的顶层项应只有「日志」,实际 {[i.text for i in visible]}"
+    assert "日志" in visible[0].text
+
+    hidden = [i for i in menu.items if not getattr(i, "visible", True)]
+    assert len(hidden) == 1, "承接单击的不可见默认项必须有且只有一个"
+    assert hidden[0].default is True, "没有默认项的话,点托盘不会触发任何回调 —— 就成了一张贴纸"
+
+
+def test_the_removed_nine_did_not_come_back():
+    """那九项一个都不许回来。「日志」是新要求,不是它们复活。"""
     root = Path(__file__).resolve().parent.parent
     tray = _code_only(root / "windows_service" / "tray_icon.py")
-    menu_items = [ln for ln in tray.splitlines() if "MenuItem(" in ln]
-    assert len(menu_items) == 1, f"托盘菜单应只有那一个不可见默认项,实际 {len(menu_items)} 项"
-    assert "visible=False" in tray, "承接单击的默认项必须是不可见的,否则菜单就不是空的"
-    assert "default=True" in tray, "没有默认项的话,点托盘不会触发任何回调"
+    back = [name for name in _REMOVED_NINE if name in tray]
+    assert not back, f"被清掉的项又回来了: {back}"
+
+
+def test_the_logs_entry_is_one_entry_not_two():
+    """当初那两个日志入口的毛病是**指向不同的根**(见上面那条判据)。
+    现在只有一个入口,而且由 core.log_locations 那张登记表驱动 —— 不许再分裂。
+    """
+    _t, tray = _fake_tray()
+    menu = tray._build_menu()
+    log_entries = [i for i in menu.items if getattr(i, "visible", True) and "日志" in i.text]
+    assert len(log_entries) == 1, f"日志入口分裂成了 {len(log_entries)} 个"
+
+    root = Path(__file__).resolve().parent.parent
+    tray_src = _code_only(root / "windows_service" / "tray_icon.py")
+    assert "existing_logs" in tray_src, "日志菜单没有走 core.log_locations 那张登记表"
