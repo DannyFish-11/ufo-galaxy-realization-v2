@@ -24,6 +24,24 @@ app.add_middleware(
 
 logger = logging.getLogger("Galaxy.Node45.DesktopAuto")
 
+
+def _safe_error(action: str, exc: Exception) -> dict:
+    """异常 → 给调用方的错误。**完整细节只进日志,不出网。**
+
+    这个节点的每个端点都是 HTTP 接口,``str(e)`` 直接回给调用方等于把内部路径、
+    库版本、有时甚至栈信息一起送出去(CodeQL 的 py/stack-trace-exposure)。
+
+    但也不能只回一句"失败了" —— computer use 闭环靠这句话决定下一步怎么走,
+    含糊的错误会让模型原样重试一遍。所以折中:**带上异常类名**(``ValueError``
+    跟 ``OSError`` 指向的下一步完全不同),内容留在日志里。
+
+    这是本文件里同一类问题的**第三轮**。前两轮是逐个端点单独修的,修一个漏一堆;
+    这次收成一处,新加端点直接用它,不必每次重新想一遍该怎么措辞。
+    """
+    logger.exception("[%s] 执行失败", action)
+    return {"success": False, "error": f"{action} 执行失败: {type(exc).__name__}(详情见节点日志)"}
+
+
 pyautogui = None
 
 #: 三种"用不了"各自的**常量**说法。
@@ -147,7 +165,7 @@ async def click(request: ClickRequest):
         pyautogui.click(x=request.x, y=request.y, clicks=request.clicks, button=request.button)
         return {"success": True, "x": request.x, "y": request.y, "clicks": request.clicks}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("click", e)
 
 
 @app.post("/double_click")
@@ -159,7 +177,7 @@ async def double_click(x: int, y: int):
         pyautogui.doubleClick(x=x, y=y)
         return {"success": True, "x": x, "y": y}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("double_click", e)
 
 
 @app.post("/type")
@@ -171,7 +189,7 @@ async def type_text(request: TypeRequest):
         pyautogui.write(request.text, interval=request.interval)
         return {"success": True, "typed": len(request.text)}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("type_text", e)
 
 
 @app.post("/hotkey")
@@ -184,7 +202,7 @@ async def press_hotkey(request: KeyRequest):
         pyautogui.hotkey(*keys)
         return {"success": True, "keys": keys}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("press_hotkey", e)
 
 
 @app.post("/press")
@@ -196,7 +214,7 @@ async def press_key(key: str):
         pyautogui.press(key)
         return {"success": True, "key": key}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("press_key", e)
 
 
 @app.post("/move")
@@ -208,7 +226,7 @@ async def move_mouse(request: MoveRequest):
         pyautogui.moveTo(request.x, request.y, duration=request.duration)
         return {"success": True, "x": request.x, "y": request.y}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("move_mouse", e)
 
 
 @app.post("/scroll")
@@ -220,7 +238,7 @@ async def scroll(amount: int, x: Optional[int] = None, y: Optional[int] = None):
         pyautogui.scroll(amount, x=x, y=y)
         return {"success": True, "amount": amount}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("scroll", e)
 
 
 @app.post("/drag")
@@ -243,11 +261,7 @@ async def drag(request: DragRequest):
             "to": {"x": request.to_x, "y": request.to_y},
         }
     except Exception as e:
-        # 异常详情只进日志。这是本文件里同一类问题的第二轮:上一轮修的是
-        # "装了却说没装",这一轮是 CodeQL py/stack-trace-exposure ——
-        # str(e) 会把服务端内部信息(路径、坐标越界细节)带给调用方。
-        logger.warning("drag 失败: %s", e)
-        return {"success": False, "error": "拖拽失败,详情见服务端日志"}
+        return _safe_error("drag", e)
 
 
 @app.post("/wait")
@@ -401,7 +415,7 @@ async def take_screenshot():
         img_base64 = base64.b64encode(buffer.getvalue()).decode()
         return {"success": True, "image": img_base64, "width": screenshot.width, "height": screenshot.height}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("take_screenshot", e)
 
 
 @app.get("/position")
@@ -413,7 +427,7 @@ async def get_position():
         x, y = pyautogui.position()
         return {"success": True, "x": x, "y": y}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("get_position", e)
 
 
 @app.get("/screen_size")
@@ -425,7 +439,7 @@ async def get_screen_size():
         width, height = pyautogui.size()
         return {"success": True, "width": width, "height": height}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("get_screen_size", e)
 
 
 @app.post("/middle_click")
@@ -438,7 +452,7 @@ async def middle_click(request: ClickRequest):
         pyautogui.click(x=request.x, y=request.y, button="middle")
         return {"success": True, "x": request.x, "y": request.y}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("middle_click", e)
 
 
 @app.post("/triple_click")
@@ -451,7 +465,7 @@ async def triple_click(request: ClickRequest):
         pyautogui.click(x=request.x, y=request.y, clicks=3, interval=0.05)
         return {"success": True, "x": request.x, "y": request.y, "clicks": 3}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("triple_click", e)
 
 
 class HoldKeyRequest(BaseModel):
@@ -483,7 +497,7 @@ async def hold_key(request: HoldKeyRequest):
             pyautogui.keyUp(request.key)
         return {"success": True, "key": request.key, "seconds": seconds}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("hold_key", e)
 
 
 class MouseButtonRequest(BaseModel):
@@ -504,7 +518,7 @@ async def mouse_down(request: MouseButtonRequest):
         pyautogui.mouseDown(button=request.button)
         return {"success": True, "button": request.button}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("mouse_down", e)
 
 
 @app.post("/mouse_up")
@@ -518,7 +532,7 @@ async def mouse_up(request: MouseButtonRequest):
         pyautogui.mouseUp(button=request.button)
         return {"success": True, "button": request.button}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("mouse_up", e)
 
 
 class ZoomRequest(BaseModel):
@@ -556,7 +570,7 @@ async def zoom(request: ZoomRequest):
             "image_b64": base64.b64encode(buf.getvalue()).decode(),
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("zoom", e)
 
 
 @app.post("/locate")
@@ -582,7 +596,7 @@ async def locate_on_screen(request: LocateRequest):
             }
         return {"success": True, "found": False}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return _safe_error("locate_on_screen", e)
 
 
 @app.post("/mcp/call")

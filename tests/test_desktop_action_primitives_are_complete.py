@@ -321,10 +321,27 @@ class TestNewEndpointsDoNotLeakExceptionText:
 
     @pytest.mark.parametrize("fn_name", ["drag", "launch_app", "open_url"])
     def test_the_detail_still_goes_to_the_log(self, fn_name):
-        """详情不是不要,是只进日志 —— 两头都得占住。"""
+        """详情不是不要,是只进日志 —— 两头都得占住。
+
+        第三轮之后日志是在 ``_safe_error`` 里打的,不再是每个端点自己写一句。
+        所以这里认两种:自己就地记,或者交给那个统一出口(它内部 logger.exception)。
+        钉死"必须在这个函数体里出现 logger.warning"等于钉死实现位置,
+        而要守的性质是**异常不能被吞**。
+        """
         import inspect
 
         import nodes.Node_45_DesktopAuto.main as m
 
         src = inspect.getsource(getattr(m, fn_name))
-        assert "logger.warning" in src, f"{fn_name} 把异常吞了,日志里也查不到"
+        logged_here = "logger.warning" in src or "logger.exception" in src
+        logged_via_helper = "_safe_error(" in src
+        assert logged_here or logged_via_helper, f"{fn_name} 把异常吞了,日志里也查不到"
+
+    def test_the_shared_exit_really_logs(self):
+        """上一条允许"交给统一出口",那就得确认那个出口真的记了 ——
+        否则这条豁免就成了漏洞。"""
+        import inspect
+
+        import nodes.Node_45_DesktopAuto.main as m
+
+        assert "logger.exception" in inspect.getsource(m._safe_error)
