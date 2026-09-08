@@ -94,6 +94,26 @@ _N36_ACTION = {
 
 _DEFAULT_NODE = "Node_36_UIAWindows"
 
+
+def _script_system_prompt() -> str:
+    """脚本模式的系统提示词。
+
+    可用函数那一段由 :func:`core.desktop_script.script_api_prompt` 生成 ——
+    手写第二份的话,加了新动作却忘改提示词,模型永远不会用它;删了动作却留在
+    提示词里,模型会一直调一个不存在的函数。
+    """
+    from core.desktop_script import script_api_prompt  # noqa: PLC0415
+
+    return (
+        "你是桌面操作代理。根据任务和当前屏幕截图,写一小段脚本完成**接下来这一段**操作。\n\n"
+        "只输出脚本本身,不要 markdown 代码块、不要解释。\n"
+        "这不是完整的 Python:不能 import、不能用属性调用(如 os.system)、不能定义函数。\n\n"
+        + script_api_prompt()
+        + "\n\n坐标以你看到的这张截图为准,原点左上。\n"
+        "整个任务完成时,输出一行 done() ;确定做不到时输出 fail() 。"
+    )
+
+
 _PLANNER_SYSTEM = """你是桌面操作代理。根据任务、已执行步骤和当前屏幕截图,决定【下一步】动作。
 
 只返回一个 JSON 对象,不要任何其它文字:
@@ -200,6 +220,28 @@ def _translate_all(payload):
 #: "还没去问"的哨兵。不能用 None —— None 是"问过了,拿不到",两者的下一步不同:
 #: 前者该去问一次,后者不该再问,而且必须让每一步都知道坐标没换算过。
 _SCREEN_SIZE_UNRESOLVED = object()
+
+#: 规划粒度:``step`` = 一次一个动作(默认,今天在跑的);``script`` = 一次一小段脚本。
+#:
+#: 为什么要有 script:"翻到第三节,逐个勾七个开关"这种任务,七步之间根本没有需要
+#: 重新判断的东西,逐步走就是七次往返、七张截图。上游(OpenAI 对 GPT-6 Astra)
+#: 现在也推荐让模型写脚本、由调用方执行。
+#:
+#: 为什么默认还是 step:脚本一次改动界面上好几处,错了要回溯的范围也大。
+#: 让人显式选,不替他决定。
+_STRATEGY_ENV = "GALAXY_COMPUTER_USE_STRATEGY"
+STRATEGY_STEP = "step"
+STRATEGY_SCRIPT = "script"
+
+
+def computer_use_strategy() -> str:
+    """这一轮按哪种粒度规划。认不出的值一律回落 ``step``(并留痕)。"""
+    raw = os.environ.get(_STRATEGY_ENV, STRATEGY_STEP).strip().lower()
+    if raw in (STRATEGY_STEP, STRATEGY_SCRIPT):
+        return raw
+    logger.warning("%s=%r 认不出,按 %s 走", _STRATEGY_ENV, raw, STRATEGY_STEP)
+    return STRATEGY_STEP
+
 
 _NATIVE_TOOL_ENV = "GALAXY_COMPUTER_USE_NATIVE_TOOL"
 
@@ -483,6 +525,125 @@ class ComputerUseLoop:
             action = _parse_tool_calls(getattr(resp, "tool_calls", None))
         return action
 
+    async def _ask_for_script(
+        self,
+        instruction: str,
+        history: List[StepRecord],
+        screen_b64: str,
+        experience: str = "",
+    ) -> str:
+        """问模型要一段脚本。拿不到返回空串。"""
+        hist = "\n".join(
+            f"第{r.index}段: {r.action} → {'成功' if r.success else '失败:' + r.error}" for r in history[-5:]
+        )
+        exp = f"\n\n过往经验(来自记忆):\n{experience}" if experience else ""
+        messages = [
+            {"role": "system", "content": _script_system_prompt()},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"任务:{instruction}{exp}\n\n已跑过的段落:\n{hist or '(还没有)'}"
+                            "\n\n当前屏幕见截图。写出接下来这一段。"
+                        ),
+                    },
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{screen_b64}"}},
+                ],
+            },
+        ]
+        try:
+            resp = await asyncio.wait_for(
+                self._get_router().chat(messages=messages, task_type="agent_control", max_tokens=800),
+                timeout=60.0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("脚本规划调用失败: %s", exc)
+            return ""
+        text = (getattr(resp, "content", "") or "").strip()
+        # 模型常常还是套了代码块,尽管提示词说了不要 —— 剥掉,不因为这个整段拒绝。
+        if "```" in text:
+            import re as _re  # noqa: PLC0415
+
+            m = _re.search(r"```(?:python)?\s*([\s\S]*?)```", text)
+            if m:
+                text = m.group(1).strip()
+        return text
+
+    async def _run_one_script(
+        self,
+        instruction: str,
+        steps: List[StepRecord],
+        screen: str,
+        experience: str,
+        experience_media: Optional[List[Dict[str, Any]]],
+        screen_size: Any,
+        index: int,
+        t0: float,
+    ) -> Optional[Dict[str, Any]]:
+        """问一段脚本并跑掉它。返回 ``None`` 表示"这一段跑完了,接着下一轮"。
+
+        返回 dict 就是整个任务结束了(模型收尾、或者这一段出错到跑不下去)。
+        """
+        from core.desktop_script import run_script  # noqa: PLC0415
+
+        source = await self._ask_for_script(instruction, steps, screen, experience)
+        if not source:
+            return {
+                "success": False,
+                "stop_reason": "plan_failed",
+                "message": "规划模型没给出可用的脚本",
+                "steps": [s.to_dict() for s in steps],
+            }
+
+        shot_size, _ = measure_screenshot(screen)
+        dispatched: List[str] = []
+
+        async def _dispatch(action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+            # 白名单在这里也要过 —— 脚本层已经限死了能调哪些函数,但这条
+            # 不变式的权威是 ALLOWED_ACTIONS,两处对不上时以它为准。
+            if action not in ALLOWED_ACTIONS:
+                return {"success": False, "error": f"动作不在白名单: {action}"}
+            mapped, why = map_action_to_screen(
+                {"action": action, **params}, shot_size=shot_size, screen_size=screen_size
+            )
+            if why:
+                logger.debug("坐标: %s", why)
+            call_params = {k: v for k, v in mapped.items() if k != "action"}
+            dispatched.append(action)
+            return await self._act(action, call_params, self._node_id)
+
+        result = await run_script(source, _dispatch)
+        rec = StepRecord(
+            index,
+            f"script({result.executed}个动作)",
+            {"source": source, "actions": result.actions},
+            reason=f"脚本模式 · {', '.join(dispatched[:6])}{'…' if len(dispatched) > 6 else ''}",
+            dispatched=bool(dispatched),
+            success=result.ok,
+            error=result.error,
+        )
+        steps.append(rec)
+
+        if result.terminal:
+            return {
+                "success": result.terminal == "done",
+                "stop_reason": result.terminal,
+                "message": f"脚本自行收尾({result.terminal}),共执行 {result.executed} 个动作",
+                "steps": [s.to_dict() for s in steps],
+                "duration_s": round(time.monotonic() - t0, 1),
+            }
+        if not result.ok:
+            return {
+                "success": False,
+                "stop_reason": "script_failed",
+                "message": result.error,
+                "steps": [s.to_dict() for s in steps],
+                "duration_s": round(time.monotonic() - t0, 1),
+            }
+        return None
+
     async def run(self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False) -> Dict[str, Any]:
         """跑完整个任务闭环,返回 {success, stop_reason, message, steps}。
 
@@ -590,6 +751,21 @@ class ComputerUseLoop:
                     ),
                     "steps": [s.to_dict() for s in steps],
                 }
+
+            # ── 2'. 脚本模式 ───────────────────────────────────────────
+            # 一次问出一小段脚本,而不是一个动作。语言是受限的(见
+            # core.desktop_script:不能 import、不能属性调用、循环上界必须是字面量),
+            # 而且**解释执行,不 exec** —— 受限命名空间的 exec 是出了名的能逃。
+            # 每一个动作照样过坐标换算 + 白名单 + 同一条派发路径,一步都没绕。
+            if computer_use_strategy() == STRATEGY_SCRIPT:
+                if screen_size is _SCREEN_SIZE_UNRESOLVED:
+                    screen_size = await _screen_size_via_node(self._node_id)
+                outcome = await self._run_one_script(
+                    instruction, steps, screen, experience, experience_media, screen_size, i, t0
+                )
+                if outcome is not None:
+                    return outcome
+                continue
 
             # ── 2. 规划 ────────────────────────────────────────────────
             planned = await self._plan_step(instruction, steps, screen, experience, experience_media)

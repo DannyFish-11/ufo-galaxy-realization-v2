@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from core.log_locations import log_hint
 from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 45 - DesktopAuto", version="2.0.0")
@@ -39,7 +40,7 @@ def _safe_error(action: str, exc: Exception) -> dict:
     这次收成一处,新加端点直接用它,不必每次重新想一遍该怎么措辞。
     """
     logger.exception("[%s] 执行失败", action)
-    return {"success": False, "error": f"{action} 执行失败: {type(exc).__name__}(详情见节点日志)"}
+    return {"success": False, "error": f"{action} 执行失败: {type(exc).__name__}({log_hint('nodes')})"}
 
 
 pyautogui = None
@@ -55,7 +56,7 @@ pyautogui = None
 #: core/routes/c_stage.py 里那处同一个处理法:对外一句固定的话,对内留全。
 REASON_NOT_INSTALLED = "pyautogui 没装,桌面自动化用不了。装法: pip install pyautogui"
 REASON_HEADLESS = "pyautogui 装了,但这台机器没有桌面(无 DISPLAY),桌面自动化用不了"
-REASON_BROKEN = "pyautogui 装了,但在这台机器上起不来,桌面自动化用不了(详情见服务端日志)"
+REASON_BROKEN = f"pyautogui 装了,但在这台机器上起不来,桌面自动化用不了({log_hint('nodes')})"
 
 #: 给调用方看的那一句(常量之一)。空 = 能用。
 pyautogui_unavailable_reason = ""
@@ -379,7 +380,7 @@ async def launch_app(request: LaunchAppRequest):
     except Exception as e:
         # 异常详情只进日志(CodeQL py/stack-trace-exposure)。
         logger.warning("launch_app 启动失败 target=%r resolved=%r: %s", target, resolved, e)
-        return {"success": False, "error": "启动失败,详情见服务端日志"}
+        return {"success": False, "error": f"启动失败,{log_hint('nodes')}"}
 
 
 @app.post("/open_url")
@@ -398,7 +399,7 @@ async def open_url(request: OpenUrlRequest):
         return {"success": bool(opened), "url": url, "error": "" if opened else "这台机器上没有可用的浏览器"}
     except Exception as e:
         logger.warning("open_url 失败 url=%r: %s", url, e)
-        return {"success": False, "error": "打开失败,详情见服务端日志"}
+        return {"success": False, "error": f"打开失败,{log_hint('nodes')}"}
 
 
 @app.get("/screenshot")

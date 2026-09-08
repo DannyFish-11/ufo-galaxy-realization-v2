@@ -26,6 +26,8 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
+from core.log_locations import log_hint
+
 #: compose 在插值阶段就拒了(``${VAR:?message}`` 没给值)。
 FAIL_MISSING_ENV = "missing_env"
 #: 镜像拉不下来(网络 / 代理 / registry 拒绝)。
@@ -40,7 +42,7 @@ FAIL_ADVICE = {
     FAIL_MISSING_ENV: "补上 .env 里这几个键(值见 .env.example)后重跑 —— 这不是 Docker 的问题",
     FAIL_IMAGE_PULL: "拉镜像被拒/超时 —— 查网络或换镜像源后重跑;Docker 本身是好的",
     FAIL_PORT_IN_USE: "端口已被占用 —— 停掉占用的进程,或改 docker-compose.yml 的端口映射",
-    FAIL_UNKNOWN: "详情见 logs/docker.log",
+    FAIL_UNKNOWN: log_hint("docker"),
 }
 
 _MISSING_ENV_RE = re.compile(r"required variable ([A-Z_][A-Z0-9_]*) is missing a value")

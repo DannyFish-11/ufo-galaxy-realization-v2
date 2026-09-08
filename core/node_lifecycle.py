@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
+from core.log_locations import log_hint
 
 logger = logging.getLogger("Galaxy.NodeLifecycle")
 
@@ -216,7 +217,7 @@ def container_start_node(node: str) -> Dict[str, object]:
             [rt_bin, "build", "-t", image, str(node_dir)], stdout=logf, stderr=subprocess.STDOUT, timeout=1800
         )
         if b.returncode != 0:
-            return {"ok": False, "error": f"{rt} build 失败(详见 logs/nodes/{dir_name}.container.log)"}
+            return {"ok": False, "error": f"{rt} build 失败({log_hint('nodes')},{dir_name}.container.log)"}
         # 先清掉同名旧容器,再 run -d
         subprocess.run([rt_bin, "rm", "-f", cname], capture_output=True, timeout=30)
         run_cmd = [rt_bin, "run", "-d", "--name", cname, "--restart", "unless-stopped"]

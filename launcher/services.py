@@ -46,6 +46,7 @@ from typing import Dict, List, Optional, Tuple
 
 from core.ascii_art import Colors, print_banner, print_section_header, print_status_row
 from core.credential_vault import PLACEHOLDER_PREFIXES
+from core.log_locations import log_hint
 
 #: 仓库根。**搬迁必须显式算**：原文件在仓库根，用的是 ``Path(__file__).parent``；
 #: 搬进 ``launcher/`` 后同一个表达式指向 ``launcher/`` —— sys.path 会插错、
@@ -1032,7 +1033,7 @@ class GalaxyUnified:
             return (
                 "warn",
                 f"首次镜像下载中（{rt_name} 后台静默拉取）",
-                "进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效",
+                f"{log_hint('docker')}；本轮先跳过依赖节点，下次启动即生效",
             )
         if status == "daemon_down":
             # 按**这台机器**说话。"启动 Docker Desktop"是 Windows/macOS 的说法,
@@ -1055,7 +1056,7 @@ class GalaxyUnified:
         from launcher.compose_failures import describe_compose_failure, read_compose_log_tail
 
         _tail = read_compose_log_tail(str(PROJECT_ROOT / "logs" / "docker.log"))
-        return ("warn", describe_compose_failure(_tail, runtime_name=rt_name), "详情见 logs/docker.log")
+        return ("warn", describe_compose_failure(_tail, runtime_name=rt_name), log_hint("docker"))
 
     async def start_electron(self) -> bool:
         """启动 Electron 桌面三态覆盖层。
@@ -1517,7 +1518,7 @@ class GalaxyUnified:
                 "basic 窗口" if self._electron_basic_window else "软件渲染" if self._electron_force_software else "GPU"
             )
             logger.warning(
-                "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；详情见 logs/electron.log）…",
+                "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；" + log_hint("electron") + "）…",
                 _mode,
                 len(restarts),
             )

@@ -1091,6 +1091,26 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
             "可用: local_gui, deepseek_ocr2, gemini, qwen3_vl, tesseract"
         ),
     },
+    "GALAXY_COMPUTER_USE_STRATEGY": {
+        "default": "step",
+        "type": "select",
+        "options": ["step", "script"],
+        "category": "agent",
+        "description": (
+            "桌面操作的规划粒度。step=一次一个动作(默认);"
+            "script=一次写一小段受限脚本(不能 import/属性调用,解释执行不 exec),"
+            "适合「连点七个开关」这类中间无需重新判断的连续操作"
+        ),
+    },
+    "GALAXY_LOG_DIR": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": (
+            "日志放在哪。留空=项目下的 logs/。"
+            "托盘的「日志」菜单、以及所有「详情见…」的提示都按这个目录算,改了会一起跟着走"
+        ),
+    },
     "GALAXY_COMPUTER_USE_NATIVE_TOOL": {
         "default": "0",
         "type": "bool",
