@@ -88,7 +88,6 @@ class TestImagePull:
             "error pulling image configuration",
             "manifest unknown",
             "pull access denied for foo/bar",
-            "toomanyrequests: rate limit",
             "dial tcp: lookup registry-1.docker.io: no such host",
             "net/http: TLS handshake timeout",
         ],
@@ -96,10 +95,48 @@ class TestImagePull:
     def test_the_usual_pull_failures(self, line):
         assert classify_compose_failure(line)[0] == FAIL_IMAGE_PULL
 
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Image nats Error unknown: ... 429 Too Many Requests",
+            "toomanyrequests: You have reached your pull rate limit",
+            "pull rate limit exceeded",
+        ],
+    )
+    def test_rate_limiting_is_its_own_category(self, line):
+        """限流曾经算进"拉不到镜像"。分开是因为**下一步完全不同**:
+        限流不是网断了、也不是源不对,等一会儿或登录就好。归进拉镜像会让人
+        去折腾代理和镜像源,而那两样都没问题。"""
+        from launcher.compose_failures import FAIL_RATE_LIMITED
+
+        assert classify_compose_failure(line)[0] == FAIL_RATE_LIMITED
+
+    def test_a_bare_image_error_still_counts_as_a_pull_failure(self):
+        """真跑里遇到过连一个英文单词都不给的:``Image redis Error {"message":"Forbidden"}``。
+        所以除了关键词,还按**结构**认:哪个镜像被标成了 Error。"""
+        kind, images = classify_compose_failure(' Image redis:7-alpine Error {"message":"Forbidden"}')
+        assert kind == FAIL_IMAGE_PULL
+        assert images == ["redis:7-alpine"]
+
+    def test_it_says_which_image(self):
+        msg = describe_compose_failure(' Image redis:7-alpine Error {"message":"Forbidden"}')
+        assert "redis:7-alpine" in msg
+
+    def test_rate_limiting_wins_over_the_image_error_structure(self):
+        """429 那句本身就长在 ``Image X Error`` 里。结构那条更宽,必须排后面 ——
+        反过来的话限流会被当成一般的拉取失败。"""
+        from launcher.compose_failures import FAIL_RATE_LIMITED
+
+        line = " Image nats:2.10-alpine Error unknown: ... 429 Too Many Requests"
+        assert classify_compose_failure(line)[0] == FAIL_RATE_LIMITED
+
     def test_the_message_clears_docker_of_blame(self):
         msg = describe_compose_failure(REAL_IMAGE_PULL)
         assert "镜像" in msg
-        assert "Docker 本身是好的" in msg
+        # 措辞里刻意不写死运行时名 —— 跑 Podman 的人不该看到
+        # "Podman 拉不到镜像 …… Docker 本身是好的"。名字由 runtime_name 带。
+        assert "引擎本身是好的" in msg
+        assert "Docker 本身是好的" not in msg
 
     def test_runtime_name_is_honoured(self):
         """跑 Podman 的机器上不该看到 "Docker"。"""

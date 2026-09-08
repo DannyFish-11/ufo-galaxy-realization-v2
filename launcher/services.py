@@ -195,6 +195,88 @@ def _linux_has_systemd() -> bool:
     return os.path.isdir("/run/systemd/system")
 
 
+def _podman_engine_hint() -> str:
+    """Podman 引擎起不来时该干什么 —— 按平台说。"""
+    if sys.platform in ("win32", "darwin"):
+        return "Podman 虚机未就绪 — 试 `podman machine start` 后重跑"
+    # Linux 上 podman 是无守护的,压根没有 machine。info 都不通多半是
+    # rootless 没配好(subuid/subgid)或存储驱动的问题。
+    return "Podman 引擎未就绪 — Linux 上它无守护,`podman info` 都不通多半是 rootless 未配好(subuid/subgid)"
+
+
+def _podman_api_hint() -> str:
+    """引擎在、但 compose 连不上 API socket 时该干什么。"""
+    if sys.platform in ("win32", "darwin"):
+        return "试 `podman machine start` 后重跑"
+    if _linux_has_systemd():
+        return "试 `systemctl --user start podman.socket`(或系统级 `sudo systemctl start podman.socket`)后重跑"
+    return "这台机器没有 systemd —— 直接跑 `podman system service --time=0 &` 后重跑(" + log_hint("podman") + ")"
+
+
+def _try_start_podman_api(podman_path: str) -> None:
+    """尽力把 Podman 的 **API socket** 拉起来。永不抛出。
+
+    为什么需要这个(真跑实测):Podman 装好之后 ``podman info`` 是**通的**,
+    于是 ``daemon_up("podman")`` 返回 True、启动器认为它就绪、什么都不做。
+    可 ``podman compose`` 会转发给 docker-compose,而后者要连
+    ``unix:///run/podman/podman.sock`` —— 那个 socket 是另一件事:
+
+        unable to get image 'nats:2.10-alpine': failed to connect to the
+        docker API at unix:///run/podman/podman.sock ... no such file or directory
+
+    这就是 Docker 那个缺陷的**镜像版**,而且更阴:Docker 是"引擎没起来",
+    看得出来;Podman 是"引擎起来了、但另一样东西没起来",看起来一切正常。
+
+    三条路,按平台:
+
+    * macOS / Windows —— Podman 跑在虚机里,``podman machine start``;
+    * Linux + systemd —— ``systemctl --user start podman.socket``(rootless 常态),
+      不成再试系统级;
+    * Linux 无 systemd —— 直接 ``podman system service``(容器里走的就是这条)。
+    """
+    import subprocess as sp
+
+    try:
+        if sys.platform in ("win32", "darwin"):
+            # 虚机启动很慢,不等它 —— 上层有轮询。
+            sp.Popen([podman_path, "machine", "start"], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+            return
+
+        if _linux_has_systemd():
+            for unit_cmd in (
+                ["systemctl", "--user", "start", "podman.socket"],
+                ["systemctl", "start", "podman.socket"],
+            ):
+                try:
+                    if sp.run(unit_cmd, capture_output=True, timeout=20).returncode == 0:
+                        return
+                except Exception:  # noqa: BLE001 — 换下一条
+                    continue
+            return
+
+        # 没有 systemd:自己起。socket 路径**问 podman 要**,不猜 ——
+        # root 与 rootless 不在同一个地方,写死一个必然有一半机器是错的。
+        from core.container_runtime import podman_api_socket
+
+        sock, _exists = podman_api_socket()
+        if not sock:
+            logger.info("没有 systemd,也问不出 Podman 的 socket 路径 —— 这台机器上起不了它")
+            return
+        Path(sock).parent.mkdir(parents=True, exist_ok=True)
+        log_dir = PROJECT_ROOT / "logs"
+        log_dir.mkdir(exist_ok=True)
+        with open(log_dir / "podman.log", "ab") as _plog:
+            sp.Popen(  # noqa: S603 — 固定二进制 + 自己算出来的本机路径
+                [podman_path, "system", "service", "--time=0", f"unix://{sock}"],
+                stdout=_plog,
+                stderr=sp.STDOUT,
+                start_new_session=True,
+            )
+        logger.info("没有 systemd,已直接拉起 podman system service(日志 logs/podman.log)")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _try_start_docker_daemon(docker_path: str) -> None:
     """尽力拉起 Docker 守护进程（已安装但未运行时）。永不抛出。
 
@@ -1009,6 +1091,22 @@ class GalaxyUnified:
                         _time.sleep(3)
                 if not _daemon_up():
                     return ("daemon_down", None)
+
+            # 引擎在 ≠ compose 连得上。Podman 上这两件事是分开的(见
+            # _try_start_podman_api 里那段实测):info 通了,但 API socket 没起来,
+            # compose 照样连不上。所以这里按**compose 到底能不能跑**再判一次。
+            ready, why = cr.compose_api_ready(runtime)
+            if not ready and runtime == "podman":
+                _try_start_podman_api(rt_bin)
+                deadline = _time.time() + float(os.environ.get("GALAXY_AUTO_PODMAN_API_WAIT", "30"))
+                while _time.time() < deadline:
+                    ready, why = cr.compose_api_ready(runtime)
+                    if ready:
+                        break
+                    _time.sleep(2)
+            if not ready:
+                return ("api_down", why)
+
             base = _compose_base()
             if not base:
                 return ("no_compose", None)
@@ -1035,11 +1133,17 @@ class GalaxyUnified:
                 f"首次镜像下载中（{rt_name} 后台静默拉取）",
                 f"{log_hint('docker')}；本轮先跳过依赖节点，下次启动即生效",
             )
+        if status == "api_down":
+            # 这一条**不是**"没装"也不是"引擎没起来" —— 引擎好好的,是 compose
+            # 连不上它的 API。说成"未就绪"会让人去查引擎,而引擎根本没问题。
+            return ("warn", f"{rt_name} 引擎在,但 compose 连不上它 — {rc}", _podman_api_hint())
         if status == "daemon_down":
             # 按**这台机器**说话。"启动 Docker Desktop"是 Windows/macOS 的说法,
             # 在 Linux 上根本没有那个东西 —— 照着它做的人会去找一个不存在的程序。
+            # Podman 同理:Linux 上没有 machine 这个东西,叫人 `podman machine start`
+            # 跟叫人在 Linux 上启动 Docker Desktop 是同一种错。
             if runtime != "docker":
-                _hint = "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑"
+                _hint = _podman_engine_hint()
             elif sys.platform in ("win32", "darwin"):
                 _hint = "手动启动 Docker Desktop 后重跑"
             elif _linux_has_systemd():

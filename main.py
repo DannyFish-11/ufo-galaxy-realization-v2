@@ -529,9 +529,41 @@ def phase0_env_check() -> dict:
     # 也正是所有者反馈的「卡在零上、动不了」。
     print_item("正在探测外部工具", "info", "pip / npm / Node.js / Electron / Ollama —— 装了什么就查什么")
 
+    # 每一项单独列一行:在跑的转圈,跑完的打勾。
+    #
+    # 为什么不是一行"正在探测":那一行说不出**卡在哪一个**上。真机上这段
+    # 一动不动的时候,人需要知道是 npm 还是 ollama —— 两者的下一步完全不同。
+    # 探测本身现在有墙钟上界(见 env_check._collect_probe),所以最坏情况是
+    # 某一行转到上界然后变成 ⏱,而不是永远转下去。
+    _live = None
+    try:
+        from launcher.env_check import PROBE_LABEL, PROBE_TIMEOUT
+        from launcher.live_list import STATE_OK, STATE_TIMEOUT, LiveList
+
+        _live = LiveList([(k, PROBE_LABEL[k]) for k in ("pip", "npm", "node", "ollama", "electron")])
+
+        def _on_probe(name: str, state: str, detail: str) -> None:
+            if state == PROBE_TIMEOUT:
+                _live.update(name, STATE_TIMEOUT, detail)
+            elif state != "start":
+                _live.update(name, STATE_OK, "")
+
+        _live.start()
+    except Exception:  # noqa: BLE001 — 画不出进度绝不能挡住环境检查
+        _live = None
+
+        def _on_probe(name: str, state: str, detail: str) -> None:
+            return None
+
     # 路径由本文件给：ENV_FILE / ELECTRON_DIR 的所有权留在入口，
     # 检查器不再自己持一份同名常量（也让这两个路径保持可注入）。
-    report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
+    try:
+        report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR, on_event=_on_probe)
+    finally:
+        if _live is not None:
+            # 收尾必须在 finally 里:探测抛异常时不收的话,重绘线程会一直转,
+            # 而下面的结论行会被它一帧帧冲掉 —— 屏幕上就是结果闪烁不见。
+            _live.finish()
     for step in report.to_steps():
         # 优先走 _ui.step 而不是 print_item：事实已经是 StepResult 了，再翻译成
         # ("ok"/"warn", 文本) 又翻回来只会丢掉 hint 与 detail。
