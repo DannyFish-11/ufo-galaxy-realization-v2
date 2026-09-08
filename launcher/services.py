@@ -35,6 +35,7 @@ importer（``main.py`` 与六个测试文件）在并存期继续可用。它在
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import socket
@@ -45,6 +46,7 @@ from typing import Dict, List, Optional, Tuple
 
 from core.ascii_art import Colors, print_banner, print_section_header, print_status_row
 from core.credential_vault import PLACEHOLDER_PREFIXES
+from core.log_locations import log_hint
 
 #: 仓库根。**搬迁必须显式算**：原文件在仓库根，用的是 ``Path(__file__).parent``；
 #: 搬进 ``launcher/`` 后同一个表达式指向 ``launcher/`` —— sys.path 会插错、
@@ -184,14 +186,35 @@ def print_section(title: str):
         print_section_header(title)
 
 
+def _linux_has_systemd() -> bool:
+    """这台 Linux 上到底有没有 systemd。
+
+    ``/run/systemd/system`` 存在是 systemd 官方给出的判断方式。容器里通常没有 ——
+    而这正是下面那条 systemctl 失效的原因。
+    """
+    return os.path.isdir("/run/systemd/system")
+
+
 def _try_start_docker_daemon(docker_path: str) -> None:
     """尽力拉起 Docker 守护进程（已安装但未运行时）。永不抛出。
 
     - Windows: 启动 Docker Desktop.exe（常见安装路径）。
     - macOS:   open -a Docker。
-    - Linux:   尝试 systemctl start docker（无 sudo；rootless/已授权时生效）。
+    - Linux:   有 systemd 就 ``systemctl start docker``;**没有 systemd 就直接拉
+      ``dockerd``** —— 容器里跑本项目时走的正是后面这条。
+
+    为什么要加后面那条(真跑实测):这个仓库在容器里跑时,每一次启动的基础设施那行
+    都是"Docker 未就绪"。查下来 ``docker`` / ``dockerd`` / ``containerd`` 三个二进制
+    **全都在**,缺的只是没人把 daemon 拉起来 —— 而原来这里在 Linux 上只会试
+    ``systemctl start docker``,容器里没有 systemd,那条命令必然失败。
+    于是"装了 Docker 却永远显示未就绪",而且看不出为什么。
+
+    实测直接 ``dockerd`` 就起来了:socket 出现、``docker info`` 报 Server Version
+    29.3.1 / overlayfs。所以这不是"环境不支持",是这里少走了一条路。
+
     安装 Docker 本身需要管理员权限/重启，无法可靠地静默完成，因此不在此处尝试安装。
     """
+    import shutil
     import subprocess as sp
 
     try:
@@ -211,7 +234,20 @@ def _try_start_docker_daemon(docker_path: str) -> None:
         elif sys.platform == "darwin":
             sp.Popen(["open", "-a", "Docker"])
         else:
-            sp.run(["systemctl", "start", "docker"], capture_output=True, timeout=20)
+            if _linux_has_systemd():
+                sp.run(["systemctl", "start", "docker"], capture_output=True, timeout=20)
+                return
+            # 没有 systemd(容器里最常见)——直接拉 dockerd。
+            # 后台起、不继承本进程的 stdout,日志进 logs/dockerd.log 好排查。
+            daemon = shutil.which("dockerd")
+            if not daemon:
+                logger.info("没有 systemd,也找不到 dockerd —— 这台机器上起不了 Docker 守护进程")
+                return
+            log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
+            with open(log_dir / "dockerd.log", "ab") as _dlog:
+                sp.Popen([daemon], stdout=_dlog, stderr=sp.STDOUT, start_new_session=True)  # noqa: S603
+            logger.info("没有 systemd,已直接拉起 dockerd(日志 logs/dockerd.log)")
     except Exception:
         pass
 
@@ -497,6 +533,23 @@ class UnifiedWebUI:
                 allow_headers=get_cors_headers(),
             )
 
+            # === 步骤 1.5：favicon —— 把一条恒定的 404 变成一个真的图标 ===
+            # 浏览器/Electron 一开页面就会自己去要 /favicon.ico。仓库里此前没有
+            # 任何图标,于是这条请求恒定 404,面板一开、/docs 一开就在网关日志里
+            # 留一条无人认领的 404。图标只在 core/brand_icon.py 定义一次。
+            # 无鉴权:它是给浏览器自动请求用的,加口令只会让它继续 404。
+            @self.app.get("/favicon.ico", include_in_schema=False)
+            async def _favicon():
+                from fastapi.responses import Response
+
+                from core.brand_icon import FAVICON_MEDIA_TYPE, FAVICON_SVG
+
+                return Response(
+                    content=FAVICON_SVG,
+                    media_type=FAVICON_MEDIA_TYPE,
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+
             # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
             try:
                 from core.startup import bootstrap_subsystems
@@ -617,6 +670,36 @@ class UnifiedWebUI:
                 self.app, host=self.config.host, port=self.config.web_ui_port, log_level="warning"
             )
             server = uvicorn.Server(_uvi_config)
+
+            # ── 进程级信号归启动器管,不归 uvicorn 管 ────────────────────────
+            # uvicorn 的 serve() 一进去就用 signal.signal() 把 SIGINT/SIGTERM
+            # 换成自己的 handle_exit(>=0.29 在 capture_signals() 里,更早的版本
+            # 在 install_signal_handlers() 里)。那是它**作为顶层入口**时该做的
+            # 事;在这里它只是被启动器拉起的一个子部件。
+            #
+            # 实测清楚一点,别把话说过头:被它换掉之后,main.py 那个用
+            # loop.add_signal_handler 挂的处理器**仍然会触发**(事件循环走的是
+            # 自己的唤醒 fd),所以这不是"进程收不掉"的原因 —— 那个原因在
+            # core/process_signals.py 里写着(两处各自注册,后者顶掉前者)。
+            #
+            # 它真正的害处是:同一个 SIGTERM 会让**两条**停机同时开跑 ——
+            # uvicorn 自己拆 HTTP 服务、启动器也在拆,谁先谁后不定。真跑日志里
+            # 那条 "unregister_all_services skipped as it does blocking i/o"
+            # 就是这么来的。摘掉它的信号入口,停机只剩 main.py 那一条路。
+            _sig_muted = False
+            if hasattr(server, "capture_signals"):  # uvicorn >= 0.29
+                server.capture_signals = contextlib.nullcontext  # type: ignore[method-assign]
+                _sig_muted = True
+            if hasattr(server, "install_signal_handlers"):  # uvicorn < 0.29
+                server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+                _sig_muted = True
+            if not _sig_muted:
+                # 两个入口都没有 = uvicorn 换了 API。宁可吵一句,也不要静悄悄地
+                # 退回"停机失灵"——那正是这段代码存在的原因。
+                logger.warning(
+                    "uvicorn %s 没有可屏蔽的信号入口,SIGTERM 可能仍被它抢走,停机会失灵。",
+                    getattr(uvicorn, "__version__", "?"),
+                )
 
             # ── 绑定前先自检端口 ──
             # 端口被占时,uvicorn 是在后台任务里 `sys.exit(1)`,真机上的表现是:
@@ -950,18 +1033,30 @@ class GalaxyUnified:
             return (
                 "warn",
                 f"首次镜像下载中（{rt_name} 后台静默拉取）",
-                "进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效",
+                f"{log_hint('docker')}；本轮先跳过依赖节点，下次启动即生效",
             )
         if status == "daemon_down":
-            _hint = (
-                "手动启动 Docker Desktop 后重跑"
-                if runtime == "docker"
-                else "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑"
-            )
+            # 按**这台机器**说话。"启动 Docker Desktop"是 Windows/macOS 的说法,
+            # 在 Linux 上根本没有那个东西 —— 照着它做的人会去找一个不存在的程序。
+            if runtime != "docker":
+                _hint = "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑"
+            elif sys.platform in ("win32", "darwin"):
+                _hint = "手动启动 Docker Desktop 后重跑"
+            elif _linux_has_systemd():
+                _hint = "试 `sudo systemctl start docker` 后重跑"
+            else:
+                _hint = "这台机器没有 systemd —— 直接跑 `sudo dockerd &` 后重跑(日志 logs/dockerd.log)"
             return ("warn", f"{rt_name} 未就绪 — {_hint}", "")
         if status == "no_compose":
             return ("warn", f"未找到 {runtime} compose 命令 — 跳过 " f"(装 {runtime}-compose 或启用 compose 插件)", "")
-        return ("warn", f"{rt_name} 启动异常 (rc={rc})，详情见 logs/docker.log", "")
+        # 起不来时先分清是什么起不来。"启动异常 (rc=1)" 这句话底下至少有三种事
+        # (缺 .env 变量 / 拉不到镜像 / 端口被占),下一步动作完全不同 ——
+        # 尤其第一种跟 Docker 一点关系都没有,而那句话把人指向了 Docker。
+        # 判据见 launcher/compose_failures.py:认不出就说"未能判定",不猜。
+        from launcher.compose_failures import describe_compose_failure, read_compose_log_tail
+
+        _tail = read_compose_log_tail(str(PROJECT_ROOT / "logs" / "docker.log"))
+        return ("warn", describe_compose_failure(_tail, runtime_name=rt_name), log_hint("docker"))
 
     async def start_electron(self) -> bool:
         """启动 Electron 桌面三态覆盖层。
@@ -1037,11 +1132,24 @@ class GalaxyUnified:
             app_dir = electron_dir.resolve()
             bin_name = "electron.cmd" if os.name == "nt" else "electron"
             local_electron = app_dir / "node_modules" / ".bin" / bin_name
+
+            # root 身份下 Chromium **硬性要求** --no-sandbox,否则进程当场 FATAL 退出。
+            # 全新克隆冷启动真跑实测:少了它,八次重启每次都是同一句
+            # "Running as root without --no-sandbox is not supported",而三级渲染
+            # 降级全程空转(根因跟显卡毫无关系)。
+            # 只在真需要时加 —— 它会削弱沙箱隔离,不该无条件常开。
+            _extra = _shell.electron_extra_argv(
+                no_sandbox=_shell.running_as_root() or bool(getattr(self, "_electron_no_sandbox", False))
+            )
             if local_electron.exists():
-                cmd = [str(local_electron), str(app_dir)]
+                cmd = [str(local_electron), *_extra, str(app_dir)]
             else:
                 npx = shutil.which("npx")
-                cmd = [npx, "electron", str(app_dir)] if npx else [npm, "exec", "--", "electron", str(app_dir)]
+                cmd = (
+                    [npx, "electron", *_extra, str(app_dir)]
+                    if npx
+                    else [npm, "exec", "--", "electron", *_extra, str(app_dir)]
+                )
             # Capture Electron stdout/stderr to logs/electron.log so crashes are
             # diagnosable (previously DEVNULL-swallowed → impossible to debug the
             # "exited, restarting" loop / why Ctrl+Space overlay never appears).
@@ -1207,6 +1315,7 @@ class GalaxyUnified:
         启动（start_tray_in_thread 内部 run_detached），后端存活期间托盘一直在。
         缺 pystray/Pillow 时优雅降级（非致命）。
         """
+        self._tray_unavailable_reason = ""
         try:
             from windows_service.tray_icon import start_tray_in_thread
 
@@ -1214,9 +1323,22 @@ class GalaxyUnified:
             if tray is not None:
                 self._tray = tray
                 return True
+            self._tray_unavailable_reason = "托盘没能建起来(详见日志)"
             return False
-        except Exception as exc:
-            logger.warning("系统托盘启动失败(非致命): %s", exc)
+        except ImportError as exc:
+            self._tray_unavailable_reason = "缺 pystray / Pillow"
+            logger.warning("系统托盘用不了:%s(非致命): %s", self._tray_unavailable_reason, exc)
+            return False
+        except Exception as exc:  # noqa: BLE001
+            # 只报"缺包"是不够的 —— 真跑实测,无头机器上这里抛的是
+            # `Bad display name ""`(pystray 连不上 X11),包**装着**。
+            # 那句写死的"不可用 (pip install pystray Pillow)"于是成了假话:
+            # 照着装十遍也好不了。按真实原因分开说。
+            _headless = "display" in str(exc).lower()
+            self._tray_unavailable_reason = (
+                "这台机器没有图形环境(无 DISPLAY),无头部署下属正常" if _headless else "起不来(详见日志)"
+            )
+            logger.warning("系统托盘用不了:%s(非致命): %s", self._tray_unavailable_reason, exc)
             return False
 
     def _electron_log_excerpt(self, max_lines: int = 8) -> str:
@@ -1271,6 +1393,8 @@ class GalaxyUnified:
         import asyncio
         import time
 
+        from launcher import shell as _shell
+
         restarts: list = []  # 最近 60s 窗口内的重启时间戳
         MAX_GPU = 3  # GPU 模式连续崩溃达此数 → 切软件渲染
         MAX_SW = 5  # 软件渲染也崩到此数 → 降级不透明 basic 窗口
@@ -1280,6 +1404,8 @@ class GalaxyUnified:
             self._electron_force_software = False
         if not hasattr(self, "_electron_basic_window"):
             self._electron_basic_window = False
+        if not hasattr(self, "_electron_no_sandbox"):
+            self._electron_no_sandbox = False
         while True:
             await asyncio.sleep(5)
             proc = getattr(self, "electron_proc", None)
@@ -1302,16 +1428,49 @@ class GalaxyUnified:
             now = time.time()
             restarts = [t for t in restarts if now - t < 60]
 
+            # ── 先分诊,再决定怎么救 ──────────────────────────────────────
+            # 此前这里**没有分诊**:任何崩溃都当渲染问题,一路 GPU → 软件渲染 →
+            # basic 窗口 地降级。真跑实测(root 冷启动)八次崩溃全是
+            # "Running as root without --no-sandbox is not supported",跟显卡毫无
+            # 关系 —— 三级降级空转,而屏幕上那句"显卡/驱动可能不支持"是错的诊断。
+            _tail = self._electron_log_excerpt()
+            _kind = _shell.classify_electron_crash(_tail)
+
+            # 沙箱那一类:补一个参数就能好,不该去动渲染档位。补过还崩才继续往下走。
+            if _kind == _shell.CRASH_ROOT_SANDBOX and not getattr(self, "_electron_no_sandbox", False):
+                self._electron_no_sandbox = True
+                restarts = []
+                logger.warning(
+                    "Electron 崩在沙箱上,不是渲染问题。%s 崩溃摘要(logs/electron.log 尾部)：\n    %s",
+                    _shell.CRASH_ADVICE[_shell.CRASH_ROOT_SANDBOX],
+                    _tail,
+                )
+                await self.start_desktop_shell()
+                continue
+
+            # 根本没有图形环境:再降多少档都变不出一块屏幕。别空转,直接说清楚。
+            if _kind == _shell.CRASH_NO_DISPLAY:
+                gave_up = True
+                logger.warning(
+                    "桌面壳起不来:%s后端与 API 仍在 http://localhost:%d 正常运行。" "日志尾部：\n    %s",
+                    _shell.CRASH_ADVICE[_shell.CRASH_NO_DISPLAY],
+                    self.config.web_ui_port,
+                    _tail,
+                )
+                continue
+
             # GPU 模式反复崩溃 → 自动降级为软件渲染（自适应核心）
             if (not self._electron_force_software) and len(restarts) >= MAX_GPU:
                 self._electron_force_software = True
                 restarts = []
                 logger.warning(
-                    "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试"
-                    "（你的显卡/驱动可能不支持透明窗口 GPU 合成）。"
+                    "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试。%s"
                     "崩溃摘要(logs/electron.log 尾部)：\n    %s",
                     MAX_GPU,
-                    self._electron_log_excerpt(),
+                    # 按**分诊结果**说话。认不出来就说认不出来,不许一律甩锅给显卡 ——
+                    # 那句话在 root/无显示的机器上是错的,会把人引到永远查不到的方向。
+                    _shell.CRASH_ADVICE.get(_kind, _shell.CRASH_ADVICE[_shell.CRASH_UNKNOWN]),
+                    _tail,
                 )
                 await self.start_desktop_shell()
                 continue
@@ -1359,7 +1518,7 @@ class GalaxyUnified:
                 "basic 窗口" if self._electron_basic_window else "软件渲染" if self._electron_force_software else "GPU"
             )
             logger.warning(
-                "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；详情见 logs/electron.log）…",
+                "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；" + log_hint("electron") + "）…",
                 _mode,
                 len(restarts),
             )
@@ -1730,19 +1889,25 @@ class GalaxyUnified:
 
             cs = CoreServiceLauncher(self.service_manager, self.config)
             results = await cs.start_all()
+            # start_all 现在返回**真实状态**("running" / "partial" / "failed"),
+            # 不再是 bool —— UFO 在"部分可用"时也返回 True,拿 bool 数就会数出
+            # 「3/3 就绪」,而日志里同时写着「部分可用」。两处说的必须是同一件事。
             _r = results if isinstance(results, dict) else {}
             items = [
-                ("Device Agent 管理器", _r.get("device_agent_manager", False)),
-                ("设备状态 API :8766", _r.get("device_status_api", False)),
-                ("Microsoft UFO 集成", _r.get("microsoft_ufo_integration", False)),
+                ("Device Agent 管理器", _r.get("device_agent_manager", "failed")),
+                ("设备状态 API :8766", _r.get("device_status_api", "failed")),
+                ("Microsoft UFO 集成", _r.get("microsoft_ufo_integration", "failed")),
             ]
-            up = sum(1 for _, v in items if v)
-            st = "ok" if up == len(items) else ("warn" if up else "fail")
+            _word = {"running": ("就绪", "ok"), "failed": ("未起来", "warn")}
+            up = sum(1 for _, v in items if v == "running")
+            part = sum(1 for _, v in items if v not in ("running", "failed"))
+            st = "ok" if up == len(items) else ("warn" if up or part else "fail")
+            _summary = f"{up}/{len(items)} 就绪" + (f" · {part} 个部分可用" if part else "")
             _emit(
                 "核心服务",
-                f"{up}/{len(items)} 就绪",
+                _summary,
                 st,
-                details=[(n, "就绪" if v else "未就绪", "ok" if v else "warn") for n, v in items],
+                details=[(n, *_word.get(v, (f"部分可用({v})", "warn"))) for n, v in items],
             )
         except Exception as exc:
             _emit("核心服务", "启动失败", "fail")
@@ -2011,7 +2176,9 @@ class GalaxyUnified:
         # 解耦 —— 后端在，托盘就在。
         tray_ok = await self.start_system_tray()
         _emit(
-            "系统托盘", "右下角常驻" if tray_ok else "不可用 (pip install pystray Pillow)", "ok" if tray_ok else "warn"
+            "系统托盘",
+            "右下角常驻" if tray_ok else (getattr(self, "_tray_unavailable_reason", "") or "不可用"),
+            "ok" if tray_ok else "warn",
         )
 
         # ── 远程桌面兜底(VNC)：默认关；GALAXY_REMOTE_DESKTOP=1 才自动开（仅 Tailscale 私网内）──
@@ -2104,6 +2271,38 @@ class GalaxyUnified:
         print_status("正在停止系统...", "loading")
         self.service_manager.state = SystemState.STOPPING
         self.running = False
+
+        # 停机期间把 nats-py 自己的日志按下去。
+        #
+        # 为什么:接下来我们要收掉 nats-server 子进程,而 NATS 客户端还挂着重连。
+        # 于是 nats-py 用它自己的 logger 打 ERROR + 完整 traceback ——
+        # 全新克隆冷启动真跑实测,"✓ 系统已停止"后面跟了两大段
+        # `nats: encountered error` / `ConnectionRefusedError: [Errno 111]` 的裸栈。
+        #
+        # 此刻"连不上"是**我们自己造成的、预期之内的**,跟运行期连不上完全是两回事:
+        # 运行期那种仍然该报。所以只在停机这一段静音,并且**留痕**说明为什么静音,
+        # 而不是全程调低了事。
+        try:
+            _nats_log = logging.getLogger("nats")
+            self._nats_log_level_before_stop = _nats_log.level
+            _nats_log.setLevel(logging.CRITICAL)
+            logger.debug("停机期间静音 nats 客户端日志(服务端是我们自己收的,重连报错属预期)")
+        except Exception as exc:  # noqa: BLE001 —— 收尾路径,静音失败也得继续停
+            logger.debug("静音 nats 日志失败(不影响停机): %s", exc)
+
+        # 先请 uvicorn **按它自己的方式**收 —— should_exit 是它的公开停机开关。
+        #
+        # 不这么做会怎样(真跑实测):停机时只有外面那一刀 task.cancel(),uvicorn 的
+        # lifespan 任务被取消,starlette 就把那个 CancelledError 当错误打出来,
+        # 于是"✓ 系统已停止"后面紧跟一段 `ERROR: Traceback ... CancelledError`
+        # 的裸栈 —— 正常停机的屏幕上出现一段看着像崩溃的东西。
+        # 置了 should_exit,它会自己关连接、跑完 lifespan shutdown 再返回。
+        try:
+            server = getattr(getattr(self, "web_ui", None), "_server", None)
+            if server is not None:
+                server.should_exit = True
+        except Exception as exc:  # noqa: BLE001 —— 收尾路径,拿不到就算了
+            logger.debug("请求 uvicorn 优雅停机失败(继续走后面的收尾): %s", exc)
 
         # 优雅关闭核心子系统（事件桥 → 监控 → 缓存）
         try:

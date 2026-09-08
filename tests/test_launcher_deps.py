@@ -300,10 +300,6 @@ def test_unknown_tier_is_an_error_not_a_skip():
 def test_npm_install_rotates_electron_mirrors(monkeypatch, tmp_path):
     seen = []
 
-    class _R:
-        def __init__(self, rc):
-            self.returncode = rc
-
     def _run(cmd, **kw):
         # 看 **CLI flag**，不是看环境变量。
         #
@@ -314,9 +310,16 @@ def test_npm_install_rotates_electron_mirrors(monkeypatch, tmp_path):
         # 也就是说这条测试当时把 bug 一起钉住了。改成看 flag，并要求真实 URL。
         hit = [a for a in cmd if a.startswith("--electron_mirror=")]
         seen.append(hit[0].split("=", 1)[1] if hit else "")
-        return _R(0 if len(seen) == 3 else 1)
+        return (0 if len(seen) == 3 else 1), []
 
-    monkeypatch.setattr(deps.subprocess, "run", _run)
+    # 拦在 ``_run_npm_streaming`` 这一层，不是 ``subprocess.run``。
+    #
+    # npm 的输出改成接管到管道之后（为了屏幕上只留一句结论、不刷六十行堆栈），
+    # 真正起子进程的是 ``subprocess.Popen``，``subprocess.run`` 再也不在这条路上 ——
+    # 继续打 run 的桩，桩根本不会被调用，测试转而去跑**真的 npm**：本机没有
+    # /usr/bin/npm 就是 FileNotFoundError，三个候选全失败。
+    # 这条测试要钉的是"候选表的内容与次序"，那段逻辑在 npm_install 里，一个字没动。
+    monkeypatch.setattr(deps, "_run_npm_streaming", _run)
     r = deps.npm_install(tmp_path, npm_path="/usr/bin/npm")
     assert r.ok is True
     assert r.attempts == 3
@@ -335,10 +338,9 @@ def test_npm_install_uses_absolute_path(monkeypatch, tmp_path):
     """Windows 上 npm 是 npm.cmd，CreateProcess 不套用 PATHEXT。"""
     seen = []
 
-    class _R:
-        returncode = 0
-
-    monkeypatch.setattr(deps.subprocess, "run", lambda cmd, **k: (seen.append(cmd), _R())[1])
+    # npm 的输出接管到管道之后，起子进程的是 Popen；桩要打在 _run_npm_streaming
+    # 这一层，否则桩不会被调用、测试会去跑真的 npm。
+    monkeypatch.setattr(deps, "_run_npm_streaming", lambda cmd, **k: (seen.append(cmd), (0, []))[1])
     deps.npm_install(tmp_path, npm_path=r"C:\nodejs\npm.cmd")
     assert seen[0][0] == r"C:\nodejs\npm.cmd"
 
@@ -406,10 +408,8 @@ def test_electron_mirror_is_passed_as_cli_flag_not_only_env(monkeypatch, tmp_pat
     """
     seen = []
 
-    class _R:
-        returncode = 1
-
-    monkeypatch.setattr(deps.subprocess, "run", lambda cmd, **k: (seen.append(cmd), _R())[1])
+    # 同上：桩打在 _run_npm_streaming，不是 subprocess.run。
+    monkeypatch.setattr(deps, "_run_npm_streaming", lambda cmd, **k: (seen.append(cmd), (1, []))[1])
     deps.npm_install(tmp_path, npm_path="/usr/bin/npm")
 
     assert len(seen) == len(deps.ELECTRON_MIRROR_ATTEMPTS), "该把每个候选都试一遍"

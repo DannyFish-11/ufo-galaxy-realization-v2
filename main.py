@@ -522,6 +522,13 @@ def phase0_env_check() -> dict:
     """
     from launcher import env_check as _env_check
 
+    # 先说一声再去探。check_environment 是"跑完全部再返回"的:五个外部探测
+    # (pip / npm / node / electron / ollama)都各自要起子进程,并发之后最坏仍是
+    # 单次超时的量级(15 秒)。这 15 秒里如果一个字都不打,屏幕上就是
+    # 「[Phase 0] 环境检查」底下空着 —— 与 Phase 6 那个 npm install 同一个毛病,
+    # 也正是所有者反馈的「卡在零上、动不了」。
+    print_item("正在探测外部工具", "info", "pip / npm / Node.js / Electron / Ollama —— 装了什么就查什么")
+
     # 路径由本文件给：ENV_FILE / ELECTRON_DIR 的所有权留在入口，
     # 检查器不再自己持一份同名常量（也让这两个路径保持可注入）。
     report = _env_check.check_environment(env_file=ENV_FILE, electron_dir=ELECTRON_DIR)
@@ -647,7 +654,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             all_ok = False
 
     # 2.1 Python core dependencies
-    print_item("检查 Python 核心依赖...", "ok")
+    print_item("检查 Python 核心依赖", "info")
     # 清单搬到 launcher/deps.py:CORE_MODULES —— "这个项目启动需要什么"此前只存在
     # 于本函数体里,三个 installer 谁也不知道它(它们各自去装 requirements*.txt,
     # 与这份精选清单没有任何交叉校验)。平台相关的事件循环由 platform_core_modules()
@@ -659,7 +666,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         print_item("Python 核心依赖", "ok")
     else:
         print_item(f"缺失 {len(core_deps_missing)} 个包", "warn", f"{', '.join(core_deps_missing)}")
-        print_item("正在自动安装...", "ok")
+        print_item("自动安装缺失的核心依赖", "info")
         if _run_pip_install(core_deps_missing):
             print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
         else:
@@ -668,7 +675,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     # 2.2 .env auto-create
     if not env_status.get("env_exists") and ENV_EXAMPLE.exists():
-        print_item("从 .env.example 创建 .env...", "ok")
+        print_item("从 .env.example 创建 .env", "info")
         try:
             shutil.copy(ENV_EXAMPLE, ENV_FILE)
             print_item(".env 已创建", "ok", "请编辑配置你的 API Key")
@@ -773,10 +780,15 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             pass  # 复检本身出错 → 保持原判断,照常走安装
     if npm_cmd and not env_status.get("electron_deps_ok"):
         _node_modules_exists = (ELECTRON_DIR / "node_modules").exists()
-        if _node_modules_exists:
-            print_item("检测到 Electron 依赖残缺，正在补齐...", "ok")
-        else:
-            print_item("正在下载 Electron 依赖...", "ok")
+        # 动作行用「进行中」,不用 ✓。这是**正在做**,不是"做成了" ——
+        # 真跑实测过最难看的一幕:`✓ 检测到 Electron 依赖残缺，正在补齐...`
+        # 后面紧跟着六十行 npm 报错,再一句"npm install 仍失败"。那个 ✓ 从头到尾
+        # 都是错的。
+        print_item(
+            "补齐 Electron 依赖" if _node_modules_exists else "下载 Electron 依赖",
+            "info",
+            "首次可能数分钟,每 10 秒报一次进度",
+        )
 
         # 弱网加固:①electron 二进制走国内镜像(避开 GitHub 卡死,与
         # electron/.npmrc 双保险),多候选镜像轮换抗单点/路径失效;
@@ -786,7 +798,15 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # 轮换(避开 GitHub 卡死,与 electron/.npmrc 双保险)、npm 网络重试放宽、
         # 【流式输出】不 capture 让进度条可见(避免"看着像卡死")、失败逐镜像回退。
         # 这一整套此前只在本文件里有,launch_desktop 的 npm install 一条都没有。
-        _npm_result = _deps.npm_install(ELECTRON_DIR, npm_path=npm_cmd)
+        # npm 的原始输出**不再倾泻到屏幕**(它会把同一段二十行堆栈按镜像候选数
+        # 重复打三遍),全部进日志;屏幕上只留每 10 秒一次的心跳。
+        _npm_result = _deps.npm_install(
+            ELECTRON_DIR,
+            npm_path=npm_cmd,
+            on_progress=lambda secs, note: print_item(
+                f"  仍在装… 已 {int(secs)} 秒", "info", note or "npm 还没有新输出"
+            ),
+        )
         rc = 0 if _npm_result.ok else 1
         if _npm_result.ok and _npm_result.attempts > 1:
             print_item(
@@ -795,10 +815,14 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         if rc == 0:
             print_item("Electron 依赖就绪", "ok")
         else:
+            # 一句说得清原因的话(由 npm_failure_reason 从二十行里挑出来),
+            # 加一条能照抄的自救命令。原文在 logs/lumiv.log 里。
+            _why = (_npm_result.stderr_tail or "").strip()
             print_item(
-                "npm install 仍失败",
+                "Electron 依赖没装上",
                 "warn",
-                "可手动: cd electron && npm install --registry=https://registry.npmmirror.com",
+                (f"{_why} —— " if _why else "")
+                + "可手动: cd electron && npm install --registry=https://registry.npmmirror.com",
             )
 
     # 2.5 Ollama install hint + model auto-download
@@ -806,7 +830,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         print_item("Ollama 未安装", "warn", "curl -fsSL https://ollama.com/install.sh | sh")
         print_item("  或访问: https://ollama.com/download", "info")
     else:
-        print_item("正在检查 Ollama 模型...", "ok")
+        print_item("检查 Ollama 模型", "info")
         try:
             rc = sp.run(
                 ["ollama", "list"],
@@ -840,7 +864,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
 
     # 2.6 Voice dependencies (REQUIRED)
-    print_item("检查语音依赖...", "ok")
+    print_item("检查语音依赖", "info")
     # sounddevice 是"对它说话它就回应"这条主路径(VoiceLoop→麦克风采集)的关键依赖,
     # 之前这份清单漏了它 → 明明麦克风采集打不开,横幅却报"语音依赖 ✓",误导排查。
     # 注:import sounddevice 会一并加载 PortAudio 原生库,故它失败也能兜住"PortAudio 缺失"。
@@ -1634,7 +1658,7 @@ def main() -> int:
 
     # ── Start unified launcher (DIRECT CALL, not subprocess)
     print_phase("[系统启动]")
-    print_item("正在启动 Galaxy 后端服务...", "ok")
+    print_item("启动 Galaxy 后端服务", "info")
 
     # 直接指向新家。unified_launcher.py 已随启动器统一删除 —— 它当初只是
     # 服务编排的宿主文件，编排本体（GalaxyUnified）现在住在 launcher/services.py。
@@ -1678,27 +1702,96 @@ def main() -> int:
     # ``kill <pid>``（systemd / 托盘 / 任务管理器走的都是 SIGTERM）会直接终止
     # 进程、跳过全部清理：子进程不收、``.electron.pid`` 锁不清、NATS 不断开。
     # 判据与 Windows 回退细节见 launcher/gateway.install_signal_handlers。
+    _signalled = {"hit": False}
+
+    #: 停机时先让各任务**自己收**的窗口(秒),之后才 cancel。
+    _GRACE_SECONDS = 3.0
+    #: cancel 之后再等的上限(秒)。到点无论如何都走。
+    _CANCEL_SECONDS = 5.0
+
     def _run_with_signals() -> None:
+        """跑主协程,并让 SIGINT / SIGTERM **真的能把它收掉**。
+
+        此前信号处理器直接挂的是 ``lumiv.stop`` —— 它做的是清理(停子进程、断
+        NATS、关子系统),但**不结束事件循环**。于是 SIGTERM 打进来:清理跑完了,
+        ``run_until_complete(_run())`` 还在等 ``lumiv.start()``,而那个是长驻服务,
+        永远不返回。进程就这么活着。
+
+        真跑实测:``timeout 170 python main.py`` 到 250 秒进程仍在,只有 SIGKILL
+        收得掉。对应到桌面上就是"关不掉 / 托盘退出没反应 / 任务管理器结束不了"。
+
+        改法:把主协程做成一个可取消的 task,信号处理器先 ``stop()`` 清理、
+        **再 ``cancel()``** —— 后者才是让 ``run_until_complete`` 回得来的那一下。
+        第二次信号不再客气(说明第一次没收住),直接抛给默认处理。
+        """
         from launcher import gateway as _gw
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        _gw.install_signal_handlers(loop, lumiv.stop)
+        main_task = loop.create_task(_run())
+
+        def _on_signal() -> None:
+            if _signalled["hit"]:
+                return  # 已经在收了,别重入
+            _signalled["hit"] = True
+            try:
+                lumiv.stop()
+            except Exception as exc:  # noqa: BLE001 —— 清理出错也必须继续往下收
+                logger.warning("停机清理出错(继续退出): %s", exc)
+            finally:
+                main_task.cancel()
+
+        _gw.install_signal_handlers(loop, _on_signal)
         try:
-            loop.run_until_complete(_run())
+            loop.run_until_complete(main_task)
+        except asyncio.CancelledError:
+            pass  # 是我们自己取消的,这就是正常退出路径
         finally:
+            # ``stop()`` 里用 ensure_future 排出去的收尾给一个**有上限**的机会,
+            # 然后无论如何都走。不设上限的话又变成另一种"关不掉"。
+            #
+            # 顺序讲究:**先等,后砍**。stop() 已经把 uvicorn 的 should_exit 置上,
+            # 它需要几百毫秒自己跑完 lifespan shutdown;上来就 cancel 的话,那个
+            # lifespan 任务会把 CancelledError 当错误打成一段裸栈,正常停机的屏幕
+            # 上凭空多出一段像崩溃的东西(真跑实测见过)。所以先给一个短窗口让它们
+            # 自己收,收不完的才砍 —— 砍完仍然有上限,不会变成关不掉。
+            try:
+                pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+                if pending:
+                    loop.run_until_complete(asyncio.wait(pending, timeout=_GRACE_SECONDS))
+                    stragglers = [t for t in pending if not t.done()]
+                    for task in stragglers:
+                        task.cancel()
+                    if stragglers:
+                        loop.run_until_complete(asyncio.wait(stragglers, timeout=_CANCEL_SECONDS))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("收尾未完成的任务时出错(忽略): %s", exc)
             _gw.remove_signal_handlers(loop)
             try:
                 loop.close()
             except Exception:  # noqa: BLE001
                 pass
+            # 循环已经关了,这里阻塞是免费的 —— 把停机时为了不卡住循环而甩出去的
+            # mDNS 注销等完。等不完会照实说一句(广播要等 TTL 过期),不闷着。
+            try:
+                from core.zeroconf_close import drain_pending_closes
+
+                drain_pending_closes()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("等待 mDNS 注销收尾时出错(忽略): %s", exc)
 
     try:
         _run_with_signals()
+        if _signalled["hit"]:
+            # 被信号收掉不是"正常跑完"。与 Ctrl+C 同一个退出码,让自动化分得清。
+            print()
+            print_phase("[系统停止]")
+            print_item("已停止", "ok", "收到停机信号,所有服务已收")
+            _exit_code = _record.EXIT_INTERRUPTED
     except KeyboardInterrupt:
         print()
         print_phase("[系统停止]")
-        print_item("正在优雅关闭所有服务...", "ok")
+        print_item("正在优雅关闭所有服务", "info")
         lumiv.stop()
         print_item("所有服务已停止", "ok")
         # 被中断不是"成功"。沿用 shell 惯例 128+SIGINT(2)=130,让自动化能区分

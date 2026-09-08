@@ -19,6 +19,8 @@ from typing import Optional
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
+from core.log_locations import log_hint
+
 logger = logging.getLogger("Galaxy.API")
 
 
@@ -81,7 +83,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             # 同上:异常详情只进日志,响应里给一句固定的话。
             logger.warning("android_memory_store error: %s", e, exc_info=True)
-            return JSONResponse({"success": False, "error": "回流写入失败，详情见服务端日志"}, status_code=500)
+            return JSONResponse({"success": False, "error": f"回流写入失败，{log_hint('backend')}"}, status_code=500)
 
     @router.get("/api/v1/memory/query")
     async def android_memory_query(task_id: str = "", history: bool = False):

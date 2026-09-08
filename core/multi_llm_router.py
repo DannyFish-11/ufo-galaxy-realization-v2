@@ -1302,7 +1302,19 @@ class MultiLLMRouter:
                 if r.status_code == 200:
                     ollama_url = ollama_default_url
             except Exception as exc:
-                logger.warning("Exception suppressed: %s", exc)
+                # 这是"没配 Ollama 地址,顺手试一下默认端口"——试不通是**最常见的
+                # 正常情况**(压根没装 Ollama),不是故障。
+                #
+                # 这里原本是一句 `WARNING | Exception suppressed: [Errno 111]
+                # Connection refused`:没有主语、没有说在探什么、也没说不通会怎样,
+                # 而且是 WARNING 级。真跑实测里它就夹在启动日志中间,看着像出事了,
+                # 实际上 Phase 0 早就明明白白报过"⚠ Ollama 未安装"。
+                # 噪声混在真问题里,比没有日志更糟。
+                logger.debug(
+                    "本机没有 Ollama 在默认地址 %s 上应答(%s)——没配 OLLAMA_URL 时这属正常," "跳过本地 Ollama 提供商。",
+                    ollama_default_url,
+                    exc,
+                )
         if ollama_url and not ollama_url.lower().startswith(PLACEHOLDER_PREFIXES):
             # 检测 Ollama 实际可用的模型（包括 VLM）
             detected_models = ["gemma4:12b", "gemma4:e4b"]

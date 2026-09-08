@@ -147,6 +147,13 @@ def install_signal_handlers(loop: Any, on_shutdown: Any) -> None:
     """
     import signal as _signal
 
+    from core.process_signals import SIGNAL_OWNER_LAUNCHER, claim_process_signals
+
+    # 先认领归属。``add_signal_handler`` 是**覆盖**语义且不留痕 —— 谁后注册谁赢。
+    # 这里把"顶层入口说了算"这件事写进登记,后面 core.startup 就不会再顶掉它。
+    # 见 core/process_signals.py 里那段真跑实测(进程 300 秒收不掉)。
+    claim_process_signals(SIGNAL_OWNER_LAUNCHER)
+
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         try:
             loop.add_signal_handler(sig, on_shutdown)
@@ -161,11 +168,15 @@ def remove_signal_handlers(loop: Any) -> None:
     """收尾时摘掉信号处理器。失败不抛 —— 这是清理路径。"""
     import signal as _signal
 
+    from core.process_signals import SIGNAL_OWNER_LAUNCHER, release_process_signals
+
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         try:
             loop.remove_signal_handler(sig)
         except Exception:  # noqa: BLE001
             pass
+    # 摘完就把归属交还,否则同一进程里再起一轮(测试、setup 子命令)会认领不到。
+    release_process_signals(SIGNAL_OWNER_LAUNCHER)
 
 
 __all__ = [

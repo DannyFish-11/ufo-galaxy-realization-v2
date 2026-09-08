@@ -34,11 +34,11 @@ import asyncio
 import json
 import logging
 import os
-import re
 import time
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from core.computer_use_dialects import map_action_to_screen, measure_screenshot
 from core.computer_use_memory import ComputerUseEpisodicMemory
 
 logger = logging.getLogger("Galaxy.ComputerUse")
@@ -58,6 +58,16 @@ ALLOWED_ACTIONS = {
     "wait",
     "done",
     "fail",
+    # 下面这些是对齐厂商动作集补的(2026-09)。此前它们在方言层被登记成"上游有、
+    # 本仓执行侧没有",每次都只能跳过这一步 —— 而模型看不出是自己给错了还是
+    # 这边不支持,下一轮往往原样再给一次,白白烧掉一步预算。
+    "middle_click",
+    "triple_click",
+    "hold_key",
+    "mouse_down",
+    "mouse_up",
+    "cursor_position",
+    "zoom",
 }
 
 # 规范动作 → Node_36_UIAWindows 的动作名(执行节点缺省;其它节点的别名映射
@@ -72,9 +82,37 @@ _N36_ACTION = {
     "scroll": "scroll",
     "move": "move_mouse",
     "drag": "drag",
+    "middle_click": "middle_click",
+    "triple_click": "triple_click",
+    "hold_key": "hold_key",
+    "mouse_down": "mouse_down",
+    "mouse_up": "mouse_up",
+    # 节点那边这个动作早就有,只是名字不一样 —— 复用,不新开一个。
+    "cursor_position": "get_mouse_position",
+    "zoom": "zoom",
 }
 
 _DEFAULT_NODE = "Node_36_UIAWindows"
+
+
+def _script_system_prompt() -> str:
+    """脚本模式的系统提示词。
+
+    可用函数那一段由 :func:`core.desktop_script.script_api_prompt` 生成 ——
+    手写第二份的话,加了新动作却忘改提示词,模型永远不会用它;删了动作却留在
+    提示词里,模型会一直调一个不存在的函数。
+    """
+    from core.desktop_script import script_api_prompt  # noqa: PLC0415
+
+    return (
+        "你是桌面操作代理。根据任务和当前屏幕截图,写一小段脚本完成**接下来这一段**操作。\n\n"
+        "只输出脚本本身,不要 markdown 代码块、不要解释。\n"
+        "这不是完整的 Python:不能 import、不能用属性调用(如 os.system)、不能定义函数。\n\n"
+        + script_api_prompt()
+        + "\n\n坐标以你看到的这张截图为准,原点左上。\n"
+        "整个任务完成时,输出一行 done() ;确定做不到时输出 fail() 。"
+    )
+
 
 _PLANNER_SYSTEM = """你是桌面操作代理。根据任务、已执行步骤和当前屏幕截图,决定【下一步】动作。
 
@@ -144,22 +182,159 @@ class StepRecord:
 
 
 def _parse_action_json(text: str) -> Optional[Dict[str, Any]]:
-    """模型回复 → 动作 dict。容忍 markdown 代码块/前后杂讯;解析不出返回 None。"""
+    """模型回复 → 规范动作 dict;认不出返回 None。
+
+    走 :mod:`core.computer_use_dialects` 的方言表,而不是只认本仓自己那套扁平 JSON。
+
+    为什么:本地模型按 planner prompt 回扁平 JSON 没问题,但厂商自带的 computer use
+    形状完全不同 —— Anthropic 走 ``tool_use`` 块、动作在 ``input.action``、坐标是
+    ``coordinate: [x, y]`` 数组,而且动作名也不一样(``key`` / ``mouse_move`` /
+    ``left_click_drag``)。直接喂给旧解析器一条都认不出来。
+
+    方言表让"支持哪几种"变成一处登记,而不是散在这个函数里的一串 if。
+    **认不出一律 None** —— 猜错会在无关位置点一下,认不出只是这一步不执行。
+    """
     if not text:
         return None
-    t = text.strip()
-    if "```" in t:
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", t)
-        if m:
-            t = m.group(1).strip()
-    start, end = t.find("{"), t.rfind("}")
-    if start == -1 or end <= start:
+    actions, dialect, why = _translate_all(text)
+    if not actions:
+        if why:
+            logger.debug("动作解析失败: %s", why)
         return None
+    if dialect and dialect != "native":
+        logger.info("按 %s 方言解出 %d 个动作", dialect, len(actions))
+    return actions[0]
+
+
+def _translate_all(payload):
+    """方言层的**单一出口**:任何形状 → 有序的规范动作清单。
+
+    包一层是为了让"这一轮解出了几个动作"只有一处知道 —— OpenAI 的 computer_call
+    一次可能给好几步(actions 是有序数组),只取第一个就是在静默丢动作。
+    """
+    from core.computer_use_dialects import translate_sequence  # noqa: PLC0415
+
+    return translate_sequence(payload)
+
+
+#: "还没去问"的哨兵。不能用 None —— None 是"问过了,拿不到",两者的下一步不同:
+#: 前者该去问一次,后者不该再问,而且必须让每一步都知道坐标没换算过。
+_SCREEN_SIZE_UNRESOLVED = object()
+
+#: 规划粒度:``step`` = 一次一个动作(默认,今天在跑的);``script`` = 一次一小段脚本。
+#:
+#: 为什么要有 script:"翻到第三节,逐个勾七个开关"这种任务,七步之间根本没有需要
+#: 重新判断的东西,逐步走就是七次往返、七张截图。上游(OpenAI 对 GPT-6 Astra)
+#: 现在也推荐让模型写脚本、由调用方执行。
+#:
+#: 为什么默认还是 step:脚本一次改动界面上好几处,错了要回溯的范围也大。
+#: 让人显式选,不替他决定。
+_STRATEGY_ENV = "GALAXY_COMPUTER_USE_STRATEGY"
+STRATEGY_STEP = "step"
+STRATEGY_SCRIPT = "script"
+
+
+def computer_use_strategy() -> str:
+    """这一轮按哪种粒度规划。认不出的值一律回落 ``step``(并留痕)。"""
+    raw = os.environ.get(_STRATEGY_ENV, STRATEGY_STEP).strip().lower()
+    if raw in (STRATEGY_STEP, STRATEGY_SCRIPT):
+        return raw
+    logger.warning("%s=%r 认不出,按 %s 走", _STRATEGY_ENV, raw, STRATEGY_STEP)
+    return STRATEGY_STEP
+
+
+_NATIVE_TOOL_ENV = "GALAXY_COMPUTER_USE_NATIVE_TOOL"
+
+
+def _native_tool_enabled() -> bool:
+    """要不要向厂商声明**原生 computer 工具**。默认关。
+
+    关着时规划走既有的提示词路径(模型按 planner prompt 回扁平 JSON),那条路今天在跑。
+    开着时会额外声明 Anthropic 的内建 computer 工具 —— 这要求这一轮的路由确实落到
+    支持内建工具的型号上,所以它是**显式开关**,不是自动推断:推断错了的表现是请求
+    带着一个对方不认的工具声明出门,而那种错很难从日志看出来是这里造成的。
+    """
+    return os.environ.get(_NATIVE_TOOL_ENV, "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _parse_tool_calls(tool_calls: Any) -> Optional[Dict[str, Any]]:
+    """路由归一化后的 ``tool_calls`` → 规范动作 dict;认不出返回 None。
+
+    各家适配器都会把厂商的工具调用归一成 OpenAI 形状
+    (``{"function": {"name", "arguments"}}``,arguments 是 JSON 串)。这里把它**还原成
+    一个 tool_use 块**再交给方言表,而不是另写一套解析 —— 动作名到底怎么映射(``key``
+    → ``press_key``、``coordinate`` → x/y)只能有一处说了算,散成两处迟早对不上。
+    """
+    if not tool_calls:
+        return None
+    for call in tool_calls:
+        if not isinstance(call, dict):
+            continue
+        fn = call.get("function")
+        if not isinstance(fn, dict):
+            continue
+        raw_args = fn.get("arguments")
+        try:
+            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(args, dict):
+            continue
+        block = {"type": "tool_use", "name": fn.get("name") or "computer", "input": args}
+        # toolset 那一代(20260801+)的动作名就是成员名(name),块上另带 toolset_name,
+        # input 里**没有** action。路由把厂商响应归一成 OpenAI 形状时,toolset_name
+        # 落在 function 之外会丢掉,于是方言认不出这一整家。
+        # 按"input 里有没有 action"反推形状,把身份证补回去。
+        if "action" not in args:
+            from core.computer_use_dialects import (  # noqa: PLC0415
+                TOOLSET_NAME_COMPUTER,
+                TOOLSET_NAME_FIELD,
+            )
+
+            block[TOOLSET_NAME_FIELD] = call.get(TOOLSET_NAME_FIELD) or TOOLSET_NAME_COMPUTER
+        actions, dialect, why = _translate_all(block)
+        if actions:
+            logger.info("按 %s 方言从 tool_calls 解出动作: %s", dialect, actions[0].get("action"))
+            return actions[0]
+        if why:
+            logger.debug("tool_calls 解析失败: %s", why)
+    return None
+
+
+async def _screen_size_via_node(node_id: str) -> Optional[Tuple[int, int]]:
+    """问执行节点要**真实屏幕**尺寸(它 pyautogui.size() 得到的那个)。
+
+    为什么必须问执行侧,而不是自己算:点击最终落在**它**的坐标系里。
+    Node_36 / Node_45 都有 ``screen_size`` 这个动作。
+
+    拿不到就返回 ``None`` —— 上层据此**不换算**并留痕,而不是假设跟截图一样大。
+    """
     try:
-        data = json.loads(t[start : end + 1])
-        return data if isinstance(data, dict) else None
-    except (json.JSONDecodeError, ValueError):
+        from core.node_invocation import InvocationSource, invoke_node  # noqa: PLC0415
+
+        result = await invoke_node(
+            node_id,
+            "screen_size",
+            {},
+            invocation_source=InvocationSource.UNKNOWN,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("取屏幕尺寸失败(%s),坐标将不换算: %s", node_id, exc)
         return None
+    if not getattr(result, "success", False):
+        logger.debug("节点没给出屏幕尺寸(%s),坐标将不换算", getattr(result, "error", "") or "无错误信息")
+        return None
+    inner = getattr(result, "result", None)
+    if not isinstance(inner, dict):
+        return None
+    width, height = inner.get("width"), inner.get("height")
+    try:
+        if width and height:
+            return int(width), int(height)
+    except (TypeError, ValueError):
+        pass
+    logger.debug("屏幕尺寸返回里没有可用的 width/height,坐标将不换算")
+    return None
 
 
 async def _default_perceive() -> Optional[str]:
@@ -316,15 +491,158 @@ class ComputerUseLoop:
             {"role": "system", "content": _PLANNER_SYSTEM},
             {"role": "user", "content": user_content},
         ]
+        # 厂商原生 computer 工具:默认**关**。开了才声明。
+        #
+        # 为什么默认关:开着就意味着这条请求必须落到支持内建工具的 Anthropic 型号上,
+        # 而路由是按 task_type 选的,选到别家就会带着一个别家不认的工具声明出门。
+        # 关着时走的是既有的提示词路径 —— 那条路今天在跑,不能因为加了这个而变。
+        #
+        # 尺寸从**这一张截图**量(见 anthropic_tool_for_screenshot),量不出就不声明:
+        # 声明一个错的分辨率不会报错,只会让每一次点击都偏,那比不声明糟得多。
+        tools = None
+        if _native_tool_enabled():
+            from core.computer_use_dialects import anthropic_tool_for_screenshot  # noqa: PLC0415
+
+            tool, why = anthropic_tool_for_screenshot(screen_b64)
+            if tool is None:
+                logger.warning("已开启原生 computer 工具,但这一步没声明成: %s —— 本步回落提示词路径", why)
+            else:
+                tools = [tool]
+                logger.debug("声明原生 computer 工具: %dx%d", tool["display_width_px"], tool["display_height_px"])
+
         try:
             resp = await asyncio.wait_for(
-                self._get_router().chat(messages=messages, task_type="agent_control", max_tokens=512),
+                self._get_router().chat(messages=messages, task_type="agent_control", max_tokens=512, tools=tools),
                 timeout=60.0,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("computer_use 规划调用失败: %s", exc)
             return None
-        return _parse_action_json(getattr(resp, "content", "") or "")
+        # 原生工具走的是 tool_calls,不是 content。两条都试:方言表本来就吃 Anthropic
+        # 的 tool_use 形状,所以这里只需要把它交给同一个解析口。
+        action = _parse_action_json(getattr(resp, "content", "") or "")
+        if action is None:
+            action = _parse_tool_calls(getattr(resp, "tool_calls", None))
+        return action
+
+    async def _ask_for_script(
+        self,
+        instruction: str,
+        history: List[StepRecord],
+        screen_b64: str,
+        experience: str = "",
+    ) -> str:
+        """问模型要一段脚本。拿不到返回空串。"""
+        hist = "\n".join(
+            f"第{r.index}段: {r.action} → {'成功' if r.success else '失败:' + r.error}" for r in history[-5:]
+        )
+        exp = f"\n\n过往经验(来自记忆):\n{experience}" if experience else ""
+        messages = [
+            {"role": "system", "content": _script_system_prompt()},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"任务:{instruction}{exp}\n\n已跑过的段落:\n{hist or '(还没有)'}"
+                            "\n\n当前屏幕见截图。写出接下来这一段。"
+                        ),
+                    },
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{screen_b64}"}},
+                ],
+            },
+        ]
+        try:
+            resp = await asyncio.wait_for(
+                self._get_router().chat(messages=messages, task_type="agent_control", max_tokens=800),
+                timeout=60.0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("脚本规划调用失败: %s", exc)
+            return ""
+        text = (getattr(resp, "content", "") or "").strip()
+        # 模型常常还是套了代码块,尽管提示词说了不要 —— 剥掉,不因为这个整段拒绝。
+        if "```" in text:
+            import re as _re  # noqa: PLC0415
+
+            m = _re.search(r"```(?:python)?\s*([\s\S]*?)```", text)
+            if m:
+                text = m.group(1).strip()
+        return text
+
+    async def _run_one_script(
+        self,
+        instruction: str,
+        steps: List[StepRecord],
+        screen: str,
+        experience: str,
+        experience_media: Optional[List[Dict[str, Any]]],
+        screen_size: Any,
+        index: int,
+        t0: float,
+    ) -> Optional[Dict[str, Any]]:
+        """问一段脚本并跑掉它。返回 ``None`` 表示"这一段跑完了,接着下一轮"。
+
+        返回 dict 就是整个任务结束了(模型收尾、或者这一段出错到跑不下去)。
+        """
+        from core.desktop_script import run_script  # noqa: PLC0415
+
+        source = await self._ask_for_script(instruction, steps, screen, experience)
+        if not source:
+            return {
+                "success": False,
+                "stop_reason": "plan_failed",
+                "message": "规划模型没给出可用的脚本",
+                "steps": [s.to_dict() for s in steps],
+            }
+
+        shot_size, _ = measure_screenshot(screen)
+        dispatched: List[str] = []
+
+        async def _dispatch(action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+            # 白名单在这里也要过 —— 脚本层已经限死了能调哪些函数,但这条
+            # 不变式的权威是 ALLOWED_ACTIONS,两处对不上时以它为准。
+            if action not in ALLOWED_ACTIONS:
+                return {"success": False, "error": f"动作不在白名单: {action}"}
+            mapped, why = map_action_to_screen(
+                {"action": action, **params}, shot_size=shot_size, screen_size=screen_size
+            )
+            if why:
+                logger.debug("坐标: %s", why)
+            call_params = {k: v for k, v in mapped.items() if k != "action"}
+            dispatched.append(action)
+            return await self._act(action, call_params, self._node_id)
+
+        result = await run_script(source, _dispatch)
+        rec = StepRecord(
+            index,
+            f"script({result.executed}个动作)",
+            {"source": source, "actions": result.actions},
+            reason=f"脚本模式 · {', '.join(dispatched[:6])}{'…' if len(dispatched) > 6 else ''}",
+            dispatched=bool(dispatched),
+            success=result.ok,
+            error=result.error,
+        )
+        steps.append(rec)
+
+        if result.terminal:
+            return {
+                "success": result.terminal == "done",
+                "stop_reason": result.terminal,
+                "message": f"脚本自行收尾({result.terminal}),共执行 {result.executed} 个动作",
+                "steps": [s.to_dict() for s in steps],
+                "duration_s": round(time.monotonic() - t0, 1),
+            }
+        if not result.ok:
+            return {
+                "success": False,
+                "stop_reason": "script_failed",
+                "message": result.error,
+                "steps": [s.to_dict() for s in steps],
+                "duration_s": round(time.monotonic() - t0, 1),
+            }
+        return None
 
     async def run(self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False) -> Dict[str, Any]:
         """跑完整个任务闭环,返回 {success, stop_reason, message, steps}。
@@ -380,6 +698,9 @@ class ComputerUseLoop:
         self, instruction: str, *, max_steps: Optional[int] = None, dry_run: bool = False
     ) -> Dict[str, Any]:
         """闭环本体。调用方必须是 :meth:`run`（它负责递归保护标记的置位与复位）。"""
+        # 真实屏幕尺寸每轮只问一次执行节点。哨兵值区分"还没问"与"问了但拿不到"——
+        # 后者是 None,意味着这一轮全程都不换算坐标(并且每一步都会留痕)。
+        screen_size: Any = _SCREEN_SIZE_UNRESOLVED
         if not computer_use_enabled():
             return {
                 "success": False,
@@ -431,6 +752,21 @@ class ComputerUseLoop:
                     "steps": [s.to_dict() for s in steps],
                 }
 
+            # ── 2'. 脚本模式 ───────────────────────────────────────────
+            # 一次问出一小段脚本,而不是一个动作。语言是受限的(见
+            # core.desktop_script:不能 import、不能属性调用、循环上界必须是字面量),
+            # 而且**解释执行,不 exec** —— 受限命名空间的 exec 是出了名的能逃。
+            # 每一个动作照样过坐标换算 + 白名单 + 同一条派发路径,一步都没绕。
+            if computer_use_strategy() == STRATEGY_SCRIPT:
+                if screen_size is _SCREEN_SIZE_UNRESOLVED:
+                    screen_size = await _screen_size_via_node(self._node_id)
+                outcome = await self._run_one_script(
+                    instruction, steps, screen, experience, experience_media, screen_size, i, t0
+                )
+                if outcome is not None:
+                    return outcome
+                continue
+
             # ── 2. 规划 ────────────────────────────────────────────────
             planned = await self._plan_step(instruction, steps, screen, experience, experience_media)
             if not planned:
@@ -440,6 +776,19 @@ class ComputerUseLoop:
                     "message": "规划模型未返回可解析的动作 JSON",
                     "steps": [s.to_dict() for s in steps],
                 }
+            # ── 2.5 坐标归位 ───────────────────────────────────────────
+            # 模型给的坐标属于**它看到的那张截图**;手最终点在**真实屏幕**上。
+            # 两边尺寸一旦不同(DPI 缩放、采集端压缩),每一次点击都按同一个比例偏,
+            # 而且不报错 —— 界面看着"差不多点对了",只是总差一点。
+            # 判据在 core.computer_use_dialects.map_action_to_screen:
+            # 有一边不知道就**不换算**并标 coord_space=screenshot,绝不假设 1:1。
+            if screen_size is _SCREEN_SIZE_UNRESOLVED:
+                screen_size = await _screen_size_via_node(self._node_id)
+            shot_size, _shot_why = measure_screenshot(screen)
+            planned, _coord_why = map_action_to_screen(planned, shot_size=shot_size, screen_size=screen_size)
+            if _coord_why:
+                logger.info("坐标: %s", _coord_why)
+
             action = str(planned.get("action", "")).strip().lower()
             reason = str(planned.get("reason", ""))
             params = {k: v for k, v in planned.items() if k not in ("action", "reason")}

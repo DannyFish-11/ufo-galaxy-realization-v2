@@ -145,7 +145,10 @@ def test_失败的步骤带着当时的截图写进记忆():
     rec = mem.failures[0]
     assert rec["instruction"] == "打开设置"
     assert rec["action"] == "click"
-    assert rec["params"] == {"x": 10, "y": 20}
+    # coord_space 是这一步的坐标空间留痕,和坐标一起进记忆。
+    assert rec["params"]["x"] == 10
+    assert rec["params"]["y"] == 20
+    assert rec["params"]["coord_space"] in ("screen", "screenshot")
     assert rec["error"] == "act failed"
     assert rec["screen_b64"] == "SCREEN_B64", "没带上失败那一拍的截图"
 

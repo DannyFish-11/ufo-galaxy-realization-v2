@@ -51,12 +51,18 @@ faster-whisper 几百 MB、卡住就把首启拖死），而 ``install.sh`` 恰�
 from __future__ import annotations
 
 import dataclasses
+import logging
 import os
 import re
 import subprocess
 import sys
+import threading
+import time
+from collections import deque
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
+
+logger = logging.getLogger("Galaxy.Launcher.Deps")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -427,20 +433,135 @@ def install_requirements(tier: str, *, root: Optional[Path] = None, timeout: int
     return pip_install(["-r", str(path)], timeout=timeout, stream=True)
 
 
+#: 一行 npm 输出里,认得出"这是堆栈/噪音"的开头。这些**不往屏幕上放**,只进日志。
+_NPM_NOISE_PREFIXES = (
+    "npm error     at ",
+    "npm error   code:",
+    "npm error   path:",
+    "npm error   requestPath:",
+    "npm error }",
+    "npm error {",
+    "npm error       throw",
+    "npm error       ^",
+    "npm error node:internal",
+)
+
+#: 多久报一次"还在装"。npm 被管道接走之后自己几乎不打进度,
+#: 沉默久了就又变成"看着像卡死"。
+_NPM_HEARTBEAT_S = 10.0
+
+
+def _run_npm_streaming(
+    argv: "Sequence[str]",
+    *,
+    cwd: Path,
+    env: Dict[str, str],
+    timeout: int,
+    on_progress: "Optional[Callable[[float, str], None]]",
+) -> "Tuple[int, List[str]]":
+    """跑一次 npm,输出接管到管道:全部进日志,屏幕上只给心跳。
+
+    返回 ``(returncode, 输出末尾若干行)``。超时按失败处理并**收掉子进程** ——
+    不收的话它还在后台接着装,而这边已经当它失败去试下一个镜像了。
+    """
+    proc = subprocess.Popen(  # noqa: S603 —— argv 由本函数组装,无 shell
+        list(argv),
+        cwd=str(cwd),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    tail: "deque" = deque(maxlen=200)
+    last_meaningful = ""
+
+    def _pump() -> None:
+        nonlocal last_meaningful
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.rstrip("\n")
+            tail.append(line)
+            logger.debug("npm| %s", line)
+            text = line.strip()
+            if text and not text.startswith(_NPM_NOISE_PREFIXES):
+                last_meaningful = text[:120]
+
+    reader = threading.Thread(target=_pump, name="npm-output", daemon=True)
+    reader.start()
+
+    started = time.monotonic()
+    next_beat = started + _NPM_HEARTBEAT_S
+    while proc.poll() is None:
+        now = time.monotonic()
+        if now - started > timeout:
+            proc.kill()
+            proc.wait(timeout=10)
+            tail.append(f"npm error 超时:{timeout} 秒没装完,已中止")
+            break
+        if on_progress is not None and now >= next_beat:
+            on_progress(now - started, last_meaningful)
+            next_beat = now + _NPM_HEARTBEAT_S
+        time.sleep(0.25)
+
+    reader.join(timeout=5)
+    return (proc.returncode if proc.returncode is not None else 1), list(tail)
+
+
+def npm_failure_reason(lines: "Sequence[str]") -> str:
+    """从 npm 的输出里挑出**一句**说得清原因的话。
+
+    npm 失败时会打二十来行:``npm error code 1`` / 路径 / 完整 Node 堆栈 /
+    ``A complete log of this run can be found in: …``。里面真正有用的通常只有
+    ``npm error Error: …`` 那一行(它说了到底缺什么)。
+
+    为什么需要这个:此前 ``npm install`` 完全不 capture,三个镜像候选轮换失败就是
+    **同一段二十行堆栈原样打三遍**、六十多行糊满屏幕 —— 而前面 Phase 0/1 才刚
+    一行一句排得整整齐齐。原文不该丢(进日志),但屏幕上只该留一句。
+    """
+    for line in lines:
+        text = line.strip()
+        if text.startswith("npm error Error:"):
+            return text[len("npm error ") :].strip()
+    for line in lines:
+        text = line.strip()
+        if text.startswith("npm error code "):
+            return text[len("npm error ") :].strip()
+    for line in reversed(list(lines)):
+        text = line.strip()
+        if text and not text.startswith(_NPM_NOISE_PREFIXES):
+            return text
+    return ""
+
+
 def npm_install(
     cwd: Path,
     *,
     npm_path: Optional[str] = None,
     timeout: int = 900,
+    on_progress: "Optional[Callable[[float, str], None]]" = None,
 ) -> InstallResult:
     """``npm install`` + electron 二进制镜像轮换。
 
-    两条真机来的硬要求：
+    三条真机来的硬要求：
 
     * **用绝对路径调用 npm**。Windows 上 npm 是 ``npm.cmd``，``CreateProcess``
       不套用 ``PATHEXT`` —— 传裸 ``"npm"`` 会 ``FileNotFoundError``，报成"依赖
       安装失败"，而 npm 其实好端端装着。
-    * **不 capture**：npm 进度条要可见，否则慢网下看着像卡死。
+    * **要看得见在动**：慢网下装几分钟,一声不吭就是"看着像卡死"。
+    * **但不许拿堆栈糊屏**：此前为了第二条干脆完全不 capture,代价是失败时
+      同一段二十行 Node 堆栈**原样打三遍**(三个镜像候选各一遍),六十多行盖掉
+      前面所有干净的输出。真跑实测过,就是这个样子。
+
+    现在两条一起满足:输出**接管到管道**里(全部进日志),屏幕上只有
+    ``on_progress`` 每 :data:`_NPM_HEARTBEAT_S` 秒报一次"还在装 + 已用时",
+    失败时由 :func:`npm_failure_reason` 挑出一句说得清原因的话。
+
+    Args:
+        on_progress: ``(已用秒数, 最近一句有意义的输出)``。不传就完全安静
+                     (库层不打印,打印是调用方的事)。
     """
     import shutil as _shutil
 
@@ -467,9 +588,15 @@ def npm_install(
         if mirror:
             env["ELECTRON_MIRROR"] = mirror
         try:
-            rc = subprocess.run(
-                [npm, "install", *NPM_NET_FLAGS, *cli_mirror, *extra], cwd=str(cwd), env=env, timeout=timeout
-            ).returncode
+            rc, tail = _run_npm_streaming(
+                [npm, "install", *NPM_NET_FLAGS, *cli_mirror, *extra],
+                cwd=cwd,
+                env=env,
+                timeout=timeout,
+                on_progress=on_progress,
+            )
+            if rc != 0:
+                last_err = npm_failure_reason(tail)
         except Exception as exc:  # noqa: BLE001
             rc, last_err = 1, f"{type(exc).__name__}: {exc}"
         if rc == 0:
@@ -495,4 +622,5 @@ __all__ = [
     "pip_install",
     "install_requirements",
     "npm_install",
+    "npm_failure_reason",
 ]

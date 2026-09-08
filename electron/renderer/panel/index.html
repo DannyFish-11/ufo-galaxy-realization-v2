@@ -10,6 +10,9 @@
          用户会以为记忆卡片已经接好了,其实那几张是写死的。
          本地看设计时临时改成 "on",别提交。 -->
     <meta name="galaxy-demo" content="off" />
+    <!-- 图标内联成 data URI:壳里以 file:// 打开时没有同源后端可问,
+         留 favicon.ico 就是一条恒定 404。定义处 core/brand_icon.py。 -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%2211%22%20fill%3D%22none%22%20stroke%3D%22%23e8b464%22%20stroke-width%3D%224%22%2F%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%223.5%22%20fill%3D%22%23e8b464%22%2F%3E%3C%2Fsvg%3E" />
     <title>Galaxy</title>
   </head>
   <body>

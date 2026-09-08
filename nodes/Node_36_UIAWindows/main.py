@@ -7,16 +7,18 @@ Node 36: UIAWindows - 真实的 Windows 桌面自动化
 pip install pyautogui pillow pygetwindow pyperclip
 """
 
+import base64
 import os
 import sys
 import time
-import base64
-from io import BytesIO
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
+from io import BytesIO
+from typing import Any, Dict, List, Optional, Tuple
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 36 - UIAWindows", version="2.0.0")
@@ -85,6 +87,11 @@ class DragRequest(BaseModel):
 
 
 # ============ 工具类 ============
+#: 按住一个键最多多久。上游 hold_key 给到 300 秒,这里按本机风险收紧 ——
+#: 一个卡住的 hold 会让后续每一次输入都带着那个修饰键,表现是"键盘坏了"。
+HOLD_KEY_MAX_SECONDS = 30.0
+
+
 class UIATools:
     def __init__(self):
         self.initialized = IS_WINDOWS and pyautogui is not None
@@ -194,6 +201,110 @@ class UIATools:
         try:
             pyautogui.scroll(clicks, x=x, y=y)
             return {"success": True, "action": "scroll", "clicks": clicks}
+        except Exception as e:
+            return {"error": str(e)}
+
+    # ── 对齐厂商动作集补的五个 + zoom(2026-09) ─────────────────────────
+    # 此前 computer use 闭环碰到这些动作只能跳过,而模型看不出是自己给错了
+    # 还是这边不支持,下一轮常常原样再给一次,白烧一步预算。
+
+    def middle_click(self, x: int, y: int) -> Dict:
+        err = self.check()
+        if err:
+            return err
+        try:
+            pyautogui.click(x=x, y=y, button="middle")
+            return {"success": True, "action": "middle_click", "x": x, "y": y}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def triple_click(self, x: int, y: int) -> Dict:
+        """三击选中整行/整段。连点两次代替不了 —— 间隔一长就成了两次双击。"""
+        err = self.check()
+        if err:
+            return err
+        try:
+            pyautogui.click(x=x, y=y, clicks=3, interval=0.05)
+            return {"success": True, "action": "triple_click", "x": x, "y": y}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def hold_key(self, key: str, seconds: float = 1.0) -> Dict:
+        """按住一个键一段时间再松开。
+
+        ``finally`` 里一定要松:中途抛异常却不松开,那个键会一直是按下状态,
+        之后每一次输入都带着它 —— 用起来像键盘坏了,而且看不出是这一步造成的。
+        上限也必须有,一个卡住的 hold 会污染后面所有输入。
+        """
+        err = self.check()
+        if err:
+            return err
+        seconds = max(0.0, min(float(seconds), HOLD_KEY_MAX_SECONDS))
+        try:
+            pyautogui.keyDown(key)
+            try:
+                time.sleep(seconds)
+            finally:
+                pyautogui.keyUp(key)
+            return {"success": True, "action": "hold_key", "key": key, "seconds": seconds}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def mouse_down(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left") -> Dict:
+        """按下不放。与 mouse_up 配对,做框选一类 drag 表达不了的动作。"""
+        err = self.check()
+        if err:
+            return err
+        try:
+            if x is not None and y is not None:
+                pyautogui.moveTo(x, y)
+            pyautogui.mouseDown(button=button)
+            return {"success": True, "action": "mouse_down", "button": button}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def mouse_up(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left") -> Dict:
+        err = self.check()
+        if err:
+            return err
+        try:
+            if x is not None and y is not None:
+                pyautogui.moveTo(x, y)
+            pyautogui.mouseUp(button=button)
+            return {"success": True, "action": "mouse_up", "button": button}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def zoom(self, region: Optional[List[int]] = None) -> Dict:
+        """屏幕上某一块的放大图(base64 PNG)。
+
+        模型看整屏时小字常认不出来,zoom 是它自己要求"把这块放大给我看"。
+        所以这里**不动界面**,只返回图 —— 它是一次观察,不是一次操作。
+        """
+        err = self.check()
+        if err:
+            return err
+        box = list(region or [])
+        if len(box) != 4:
+            return {"error": "region 必须是 [x0, y0, x1, y1] 四个整数"}
+        x0, y0, x1, y1 = (int(v) for v in box)
+        if x1 <= x0 or y1 <= y0:
+            return {"error": f"region 不是一个有面积的矩形: {box}"}
+        try:
+            import base64 as _b64
+            import io as _io
+
+            img = pyautogui.screenshot(region=(x0, y0, x1 - x0, y1 - y0))
+            buf = _io.BytesIO()
+            img.save(buf, format="PNG")
+            return {
+                "success": True,
+                "action": "zoom",
+                "region": [x0, y0, x1, y1],
+                "width": img.width,
+                "height": img.height,
+                "image_b64": _b64.b64encode(buf.getvalue()).decode(),
+            }
         except Exception as e:
             return {"error": str(e)}
 
@@ -379,6 +490,18 @@ class UIATools:
             return self.scroll(params.get("clicks", 0), params.get("x"), params.get("y"))
         elif tool == "screenshot":
             return self.screenshot(params.get("save_path"))
+        elif tool == "middle_click":
+            return self.middle_click(params.get("x", 0), params.get("y", 0))
+        elif tool == "triple_click":
+            return self.triple_click(params.get("x", 0), params.get("y", 0))
+        elif tool == "hold_key":
+            return self.hold_key(params.get("key", ""), params.get("seconds", 1.0))
+        elif tool == "mouse_down":
+            return self.mouse_down(params.get("x"), params.get("y"), params.get("button", "left"))
+        elif tool == "mouse_up":
+            return self.mouse_up(params.get("x"), params.get("y"), params.get("button", "left"))
+        elif tool == "zoom":
+            return self.zoom(params.get("region"))
         elif tool == "get_mouse_position":
             return self.get_mouse_position()
         elif tool == "get_screen_size":

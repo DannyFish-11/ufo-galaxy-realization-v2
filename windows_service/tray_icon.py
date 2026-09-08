@@ -49,6 +49,10 @@ import time
 from pathlib import Path
 from typing import Callable
 
+# 日志有哪些、在哪、什么时候该看 —— 一处登记,托盘只负责把它摆出来。
+# 放在这里(而不是函数里就近 import):托盘菜单在建的时候就要它。
+from core.log_locations import LogLocation, existing_logs, logs_root
+
 logger = logging.getLogger("Galaxy.Tray")
 
 
@@ -58,15 +62,13 @@ logger = logging.getLogger("Galaxy.Tray")
 
 _HAVE_TRAY = False
 try:
-    from PIL import Image, ImageDraw, ImageFilter
-
     import pystray
+    from PIL import Image, ImageDraw, ImageFilter
 
     _HAVE_TRAY = True
 except ImportError:
     logger.warning(
-        "未安装 pystray / Pillow,系统托盘不可用 / "
-        "pystray or Pillow not installed; system tray unavailable"
+        "未安装 pystray / Pillow,系统托盘不可用 / " "pystray or Pillow not installed; system tray unavailable"
     )
 
 
@@ -219,6 +221,7 @@ def create_icon_image(
     _overlay_status_pip(canvas, status, S)
     return canvas.resize((width, height), Image.LANCZOS)
 
+
 # ---------------------------------------------------------------------------
 # 状态提示 / Status tooltips —— 中英双写
 # ---------------------------------------------------------------------------
@@ -233,6 +236,7 @@ _STATUS_TOOLTIPS = {
 
 #: 单击托盘时那个不可见默认项的名字。不进菜单,但辅助技术会读到它。
 _ACTIVATE_LABEL = "显示面板 / Show panel"
+_LOGS_LABEL = "日志 / Logs"
 
 
 # ---------------------------------------------------------------------------
@@ -301,9 +305,7 @@ class GalaxyTray:
         port = os.environ.get("GALAXY_IPC_PORT", "9231")
         url = f"http://127.0.0.1:{port}{path}"
         try:
-            req = urllib.request.Request(
-                url, data=b"{}", method="POST", headers={"Content-Type": "application/json"}
-            )
+            req = urllib.request.Request(url, data=b"{}", method="POST", headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.getcode() == 200
         except Exception:  # noqa: BLE001 — 连不上就是连不上,如实返回 False
@@ -347,9 +349,7 @@ class GalaxyTray:
                 if not npm:
                     raise FileNotFoundError("未在 PATH 中找到 npm / npm not found in PATH")
                 if sys.platform == "win32":
-                    subprocess.Popen(
-                        [npm, "start"], cwd=electron_dir, creationflags=subprocess.CREATE_NO_WINDOW
-                    )
+                    subprocess.Popen([npm, "start"], cwd=electron_dir, creationflags=subprocess.CREATE_NO_WINDOW)
                 else:
                     subprocess.Popen([npm, "start"], cwd=electron_dir)
                 logger.info("已拉起桌面壳 / desktop shell launched from %s", electron_dir)
@@ -376,6 +376,74 @@ class GalaxyTray:
 
     # ── 菜单 / Menu ──
 
+    @staticmethod
+    def _open_in_os(target: "Path") -> bool:
+        """交给系统默认程序打开一个文件或目录。打不开返回 False,**不抛**。
+
+        三个平台三条路,没有一条是通用的:Windows 用 ``os.startfile``,
+        macOS 用 ``open``,Linux 用 ``xdg-open``。
+        """
+        try:
+            if sys.platform == "win32":
+                os.startfile(str(target))  # noqa: S606 — 交给系统关联程序,不过 shell
+                return True
+            opener = "open" if sys.platform == "darwin" else "xdg-open"
+            subprocess.Popen(  # noqa: S603 — 固定命令名,参数是本机路径
+                [opener, str(target)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("打不开 %s / could not open: %s", target, exc)
+            return False
+
+    def _open_log(self, entry: "LogLocation") -> None:
+        """打开某一条日志。文件在打开这一步之间可能已经被清掉,所以再确认一次。"""
+        target = entry.path()
+        if not entry.exists():
+            self._show_notification(
+                f"{entry.label} / {entry.label_en}",
+                f"这条日志现在不存在 / not present yet:\n{target}",
+            )
+            return
+        if not self._open_in_os(target):
+            self._show_notification(
+                f"{entry.label} / {entry.label_en}",
+                f"系统没能打开它,路径在这 / could not open, path is:\n{target}",
+            )
+
+    def _open_logs_folder(self, icon: object = None, item: object = None) -> None:
+        root = logs_root()
+        if not root.is_dir():
+            self._show_notification("日志 / Logs", f"日志目录还没建起来 / logs folder not created yet:\n{root}")
+            return
+        self._open_in_os(root)
+
+    def _build_logs_menu(self) -> "list":
+        """「日志」子菜单 —— 按 :mod:`core.log_locations` 那张登记表出。
+
+        **只列此刻真的存在的那些**。列一个点开是空的条目比不列更让人困惑:
+        人会以为"日志是空的",而实际是这条链路压根没跑过。
+
+        每一项的 tooltip 不是"这是什么",而是**什么时候该来看它** ——
+        对着托盘找问题的人需要的是后者。
+        """
+        items = []
+        for entry in existing_logs():
+            items.append(
+                pystray.MenuItem(
+                    f"{entry.label} / {entry.label_en}",
+                    # 默认参数把 entry 绑住 —— 不绑的话所有项都会指向循环的最后一条。
+                    lambda _icon, _item, _e=entry: self._open_log(_e),
+                )
+            )
+        if items:
+            items.append(pystray.Menu.SEPARATOR)
+        items.append(pystray.MenuItem("打开日志文件夹 / Open logs folder", self._open_logs_folder))
+        return items
+
     def _build_menu(self) -> "pystray.Menu":
         """右键菜单 —— **空的**。/ The context menu — deliberately empty.
 
@@ -399,6 +467,12 @@ class GalaxyTray:
                 default=True,
                 visible=False,
             ),
+            pystray.MenuItem(
+                _LOGS_LABEL,
+                # 每次展开都重新出一遍 —— 日志是跑着跑着才出现的,
+                # 菜单建一次就固定的话,启动时还没有的那些永远不会出现在里面。
+                pystray.Menu(lambda: self._build_logs_menu()),
+            ),
         )
 
     # ── 生命周期 / Lifecycle ──
@@ -406,9 +480,7 @@ class GalaxyTray:
     def create(self) -> "pystray.Icon | None":
         """创建(但不启动)托盘图标 / Create the icon without running it."""
         if not _HAVE_TRAY:
-            logger.error(
-                "系统托盘需要 pystray 与 Pillow / pystray and Pillow are required for the tray"
-            )
+            logger.error("系统托盘需要 pystray 与 Pillow / pystray and Pillow are required for the tray")
             return None
 
         icon_image = create_icon_image(self._current_status)
@@ -468,9 +540,7 @@ def create_tray(
     它不可用不该让整个启动失败。
     """
     if not _HAVE_TRAY:
-        logger.warning(
-            "系统托盘不可用(缺 pystray / Pillow)/ system tray unavailable (pystray / Pillow missing)"
-        )
+        logger.warning("系统托盘不可用(缺 pystray / Pillow)/ system tray unavailable (pystray / Pillow missing)")
         return None
 
     tray = GalaxyTray(galaxy_process=galaxy_process, on_status_change=on_status_change)
