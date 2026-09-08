@@ -75,6 +75,8 @@ __all__ = [
     "COORD_SPACE_FIELD",
     "COORD_SPACE_SCREEN",
     "COORD_SPACE_SCREENSHOT",
+    "CANONICAL_SCROLL_PARAM",
+    "OPENAI_SCROLL_PX_PER_CLICK",
 ]
 
 
@@ -180,6 +182,90 @@ def _coord_pair(raw: Any) -> Optional[Tuple[int, int]]:
     return None
 
 
+#: 本仓规范里滚动的参数就叫 ``clicks``,**负数向下**(见 planner prompt 与
+#: Node_36 / Node_45 的 scroll 实现)。方言层必须翻到这个名字上 ——
+#: 上一版发的是 ``direction`` + ``amount``,执行侧读 ``clicks`` 读不到,
+#: 于是 ``params.get("clicks", 0)`` 拿到 0:**滚了个寂寞,还不报错**。
+CANONICAL_SCROLL_PARAM = "clicks"
+
+#: 竖直方向的符号:down 是负,up 是正(与 pyautogui 一致)。
+_SCROLL_SIGN = {"up": 1, "down": -1}
+
+
+def _fill_scroll_clicks(out: Dict[str, Any], tool_input: Dict[str, Any]) -> Optional[str]:
+    """Anthropic 的 ``scroll_direction`` + ``scroll_amount`` → 规范的 ``clicks``。
+
+    ``scroll_amount`` 官方就是**滚轮格数**,和 pyautogui 的单位是一回事,
+    所以这一步是换名字加符号,不是换算 —— 没有臆造的系数。
+
+    左右滚不做:执行侧(pyautogui.scroll)只有竖直方向,硬翻成竖直滚是**滚错方向**。
+    认不了就说认不了。返回 ``None`` 表示成功,否则是拒绝的原因。
+    """
+    direction = str(tool_input.get("scroll_direction", "")).strip().lower()
+    amount = tool_input.get("scroll_amount")
+    if direction in ("left", "right"):
+        return f"本仓执行侧只能竖直滚动,给不了 {direction!r}"
+    sign = _SCROLL_SIGN.get(direction)
+    if sign is None or amount is None:
+        # 方向或格数缺一个就不填 clicks —— 填了就是替它决定滚多少、往哪滚。
+        return None
+    try:
+        out[CANONICAL_SCROLL_PARAM] = sign * abs(int(amount))
+    except (TypeError, ValueError):
+        return f"scroll_amount 不是整数: {amount!r}"
+    return None
+
+
+def _fill_anthropic_params(out: Dict[str, Any], mapped: str, tool_input: Dict[str, Any]) -> Optional[str]:
+    """按 Anthropic 官方 input schema 把参数填进规范动作。**两代共用这一处**。
+
+    字段名的来历(platform.claude.com 的 computer use tool 文档,2026-09 核对):
+
+    ==================  =========================================================
+    动作                 官方 input 字段
+    ==================  =========================================================
+    ``scroll``          ``scroll_direction`` + ``scroll_amount``(都必填),
+                        可选 ``coordinate``、``text``(滚动时按住的键)
+    ``key``             ``text``(必填,就是键名/组合键)、``repeat``(可选 1-100)
+    ``hold_key``        ``text`` + ``duration``(秒,上限 300)
+    ``type``            ``text``
+    ``left_click_drag`` ``start_coordinate`` + ``coordinate``
+    ``triple_click``    ``coordinate``
+    ``zoom``            ``region``: ``[x0, y0, x1, y1]``
+    ==================  =========================================================
+
+    **上一版这里是错的**:``scroll`` 我写的是 ``direction`` / ``magnitude``,
+    凭感觉起的名字,没有一手依据。它的失败方式还特别阴 —— 名字对不上时
+    ``scroll`` 照样派发,只是丢了方向和量,**不报任何错**,表现为"滚了但没动"。
+    """
+    if mapped == "type":
+        out["text"] = str(tool_input.get("text", ""))
+    elif mapped == "press_key":
+        # 官方就叫 text。旧的 ``key`` 也认一下:老响应/别家实现里见过,认了不吃亏。
+        out["key"] = str(tool_input.get("text", "") or tool_input.get("key", ""))
+        repeat = tool_input.get("repeat")
+        if isinstance(repeat, int) and repeat > 1:
+            out["repeat"] = repeat
+    elif mapped == "hold_key":
+        out["key"] = str(tool_input.get("text", ""))
+        duration = tool_input.get("duration")
+        if duration is not None:
+            try:
+                out["seconds"] = float(duration)
+            except (TypeError, ValueError):
+                pass
+    elif mapped == "scroll":
+        return _fill_scroll_clicks(out, tool_input)
+    elif mapped == "zoom":
+        region = tool_input.get("region")
+        if isinstance(region, (list, tuple)) and len(region) == 4:
+            try:
+                out["region"] = [int(v) for v in region]
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
 def _anthropic_translate(payload: Any) -> Tuple[Optional[Dict[str, Any]], str]:
     block = _anthropic_find_tool_use(payload)  # 字符串与 dict 都吃
     if block is None:
@@ -209,16 +295,10 @@ def _anthropic_translate(payload: Any) -> Tuple[Optional[Dict[str, Any]], str]:
     elif point is not None:
         out.update({"x": point[0], "y": point[1]})
 
-    if mapped == "type":
-        out["text"] = str(tool_input.get("text", ""))
-    if mapped == "press_key":
-        out["key"] = str(tool_input.get("key", "") or tool_input.get("text", ""))
-    if mapped == "scroll":
-        if "direction" in tool_input:
-            out["direction"] = str(tool_input.get("direction", ""))
-        if "magnitude" in tool_input:
-            out["amount"] = tool_input.get("magnitude")
-    if mapped == "wait":
+    why = _fill_anthropic_params(out, mapped, tool_input)
+    if why:
+        return None, why
+    if mapped == "wait" and raw_action == "screenshot":
         out["seconds"] = 0.5  # screenshot 转义来的:只等一拍就重新看画面
 
     return out, ""
@@ -246,15 +326,15 @@ _TOOLSET_MEMBER_ACTION: Dict[str, Optional[str]] = {
     # screenshot 是"想再看一眼"。本仓循环每一步都会重新截图,所以等一拍即可。
     # 这是转义,不是等价映射。
     "screenshot": "wait",
-    # 下面这些上游有、本仓执行侧没有(见 computer_use_loop.ALLOWED_ACTIONS)。
-    # 登记成 None 而不是不写,是为了让消息说得出"是本仓缺,不是没认出来"。
-    "middle_click": None,
-    "triple_click": None,
-    "hold_key": None,
-    "left_mouse_down": None,
-    "left_mouse_up": None,
-    "cursor_position": None,
-    "zoom": None,
+    # 这几个原来登记成 None("上游有、本仓执行侧没有"),现在执行侧补齐了。
+    # 保留 None 这个表达能力本身 —— 下一代上游再加新成员时还要用它。
+    "middle_click": "middle_click",
+    "triple_click": "triple_click",
+    "hold_key": "hold_key",
+    "left_mouse_down": "mouse_down",
+    "left_mouse_up": "mouse_up",
+    "cursor_position": "cursor_position",
+    "zoom": "zoom",
 }
 
 #: toolset 块上的这个字段是它的身份证 —— 回传 tool_result 时也必须原样带上。
@@ -312,15 +392,9 @@ def _toolset_translate(payload: Any) -> Tuple[Optional[Dict[str, Any]], str]:
         out.update({"from_x": start[0], "from_y": start[1], "to_x": point[0], "to_y": point[1]})
     elif point is not None:
         out.update({"x": point[0], "y": point[1]})
-    if mapped == "type":
-        out["text"] = str(tool_input.get("text", ""))
-    if mapped == "press_key":
-        out["key"] = str(tool_input.get("key", "") or tool_input.get("text", ""))
-    if mapped == "scroll":
-        if "direction" in tool_input:
-            out["direction"] = str(tool_input.get("direction", ""))
-        if "magnitude" in tool_input:
-            out["amount"] = tool_input.get("magnitude")
+    why = _fill_anthropic_params(out, mapped, tool_input)
+    if why:
+        return None, why
     if mapped == "wait" and member == "screenshot":
         out["seconds"] = 0.5
     return out, ""
@@ -418,9 +492,9 @@ def _openai_one_action(raw: Any) -> Tuple[Optional[Dict[str, Any]], str]:
         else:
             return None, "keypress 没有可识别的按键字段(上游未公开字段级 schema)"
     if mapped == "scroll":
-        for field in ("scroll_x", "scroll_y", "amount"):
-            if field in raw:
-                out[field if field != "amount" else "amount"] = raw.get(field)
+        why = _fill_openai_scroll(out, raw)
+        if why:
+            return None, why
     if mapped == "drag":
         path = raw.get("path")
         pts: List[Tuple[int, int]] = []
@@ -445,6 +519,40 @@ def _openai_one_action(raw: Any) -> Tuple[Optional[Dict[str, Any]], str]:
     if kind == "screenshot":
         out["seconds"] = 0.5
     return out, ""
+
+
+#: OpenAI 的 ``scroll_x`` / ``scroll_y`` 是**像素距离**,而执行侧(pyautogui)按
+#: **滚轮格数**滚。两者之间没有一个放之四海皆准的换算 —— 一格滚多少像素由操作系统
+#: 和应用各自决定。所以这里给一个**明写出来的、可调的**近似,而不是假装它是事实:
+#: 原始像素值会原样留在动作里(``scroll_px_y``),日志和记忆里看得到换算前是什么。
+#:
+#: 要精确的话只有一条路:在目标机器上实测一格滚多少像素,然后改这个值。
+OPENAI_SCROLL_PX_PER_CLICK = 100.0
+
+
+def _fill_openai_scroll(out: Dict[str, Any], raw: Dict[str, Any]) -> Optional[str]:
+    """OpenAI 的像素距离 → 规范的 ``clicks``。返回 ``None`` 表示成功。
+
+    符号:``scroll_y`` 为正表示**向下**滚(内容上移),而 pyautogui 的 clicks
+    正数是向上,所以要取反。
+    """
+    if raw.get("scroll_x"):
+        return "本仓执行侧只能竖直滚动,给不了横向 scroll_x"
+    px = raw.get("scroll_y")
+    if px is None:
+        return None
+    try:
+        px_val = float(px)
+    except (TypeError, ValueError):
+        return f"scroll_y 不是数字: {px!r}"
+    out["scroll_px_y"] = px_val  # 换算前的原值,留痕
+    clicks = int(round(-px_val / OPENAI_SCROLL_PX_PER_CLICK))
+    # 给了非零像素就至少滚一格,否则小幅滚动会被四舍五入成"不滚",
+    # 而模型以为自己滚过了 —— 下一轮看到画面没变会开始纠正一个不存在的问题。
+    if clicks == 0 and px_val:
+        clicks = -1 if px_val > 0 else 1
+    out[CANONICAL_SCROLL_PARAM] = clicks
+    return None
 
 
 def _openai_translate_all(payload: Any) -> Tuple[List[Dict[str, Any]], str]:
@@ -855,3 +963,21 @@ def map_action_to_screen(
                 out[COORD_SPACE_FIELD] = COORD_SPACE_SCREENSHOT
                 return out, f"坐标字段 {kx}/{ky} 不是数字,整条都没换算"
     return out, f"截图 {sw}x{sh} → 屏幕 {dw}x{dh}(x×{fx:.4f}, y×{fy:.4f})"
+
+
+# ---------------------------------------------------------------------------
+# 为什么这里**没有** tool_result / computer_call_output 的构造器
+# ---------------------------------------------------------------------------
+#
+# 两家上游都规定了回传形状(Anthropic 的 tool_result 必须带 toolset_name,
+# OpenAI 的 computer_call_output 要带 call_id 和 detail:"original")。
+# 我按官方 schema 写过一版,然后删了 —— 因为本仓的闭环**根本不走那条路**。
+#
+# ``core/computer_use_loop.py`` 是**每一步重新问一次**:每次都新起一轮 chat,
+# 带上当前截图和文本化的步骤史,而不是把 tool_use / tool_result 接成一条持续对话。
+# 这是有意的:每一步都从"现在屏幕是什么样"重新判断,不继承上一轮的推断。
+# 代价是拿不到提示词缓存、也留不住模型自己的推理链;好处是任何一步出错都不会
+# 顺着对话一路传下去。
+#
+# 所以回传构造器在本仓没有调用方 —— 留着就是"看起来接上了,其实没有"。
+# 哪天要改成有状态的工具对话,再连着调用方一起加回来。

@@ -227,13 +227,41 @@ class TestToolsetResponses:
         assert action is None
         assert "start_coordinate" in why
 
-    @pytest.mark.parametrize("member", ["middle_click", "triple_click", "hold_key", "zoom", "cursor_position"])
-    def test_members_this_repo_cannot_execute_say_so(self, member):
+    def test_members_this_repo_cannot_execute_say_so(self, monkeypatch):
         """ "上游有、本仓没有"跟"没见过这个名字"是两回事 ——
-        前者该改本仓,后者该查上游,指向的下一步不同。"""
-        action, _, why = _one(_toolset(member))
+        前者该改本仓,后者该查上游,指向的下一步不同。
+
+        这七个成员(middle_click / triple_click / hold_key / left_mouse_down /
+        left_mouse_up / cursor_position / zoom)**现在都补齐了**,所以这里不再钉
+        具体清单 —— 钉了的话下次补齐一个就要改一次测试。真正要守住的是
+        **登记成 None 时会说"本仓不支持"**这个能力本身:下一代上游加新成员时还要用。
+        """
+        import core.computer_use_dialects as d
+
+        table = dict(d._TOOLSET_MEMBER_ACTION)
+        table["some_future_member"] = None
+        monkeypatch.setattr(d, "_TOOLSET_MEMBER_ACTION", table)
+
+        action, _, why = _one(_toolset("some_future_member"))
         assert action is None
         assert "本仓" in why
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "middle_click",
+            "triple_click",
+            "hold_key",
+            "left_mouse_down",
+            "left_mouse_up",
+            "cursor_position",
+            "zoom",
+        ],
+    )
+    def test_the_seven_are_no_longer_refused(self, member):
+        """反过来钉一遍:这七个曾经只能跳过,现在必须真的翻得出来。"""
+        action, _, why = _one(_toolset(member, coordinate=[1, 2], text="k", region=[0, 0, 9, 9]))
+        assert action is not None, why
 
     def test_an_unknown_member_is_not_guessed(self):
         action, _, why = _one(_toolset("teleport"))

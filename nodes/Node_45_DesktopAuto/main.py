@@ -2,13 +2,14 @@
 Node 45: DesktopAuto - 跨平台桌面自动化
 """
 
+import asyncio
 import base64
 import logging
 import os
 import sys
 import time
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -427,6 +428,137 @@ async def get_screen_size():
         return {"success": False, "error": str(e)}
 
 
+@app.post("/middle_click")
+async def middle_click(request: ClickRequest):
+    """中键点击。厂商动作集里一直有,本仓此前没有 —— 补上。"""
+    if not pyautogui:
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
+
+    try:
+        pyautogui.click(x=request.x, y=request.y, button="middle")
+        return {"success": True, "x": request.x, "y": request.y}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/triple_click")
+async def triple_click(request: ClickRequest):
+    """三击 —— 选中整行/整段,靠连点两次代替不了(间隔一长就变成两次双击)。"""
+    if not pyautogui:
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
+
+    try:
+        pyautogui.click(x=request.x, y=request.y, clicks=3, interval=0.05)
+        return {"success": True, "x": request.x, "y": request.y, "clicks": 3}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+class HoldKeyRequest(BaseModel):
+    key: str
+    seconds: float = 1.0
+
+
+#: 按住一个键最多多久。上游给到 300 秒,这里按本机风险收紧 ——
+#: 一个卡住的 hold 会让后续每一次输入都带着那个修饰键,表现是"键盘坏了"。
+HOLD_KEY_MAX_SECONDS = 30.0
+
+
+@app.post("/hold_key")
+async def hold_key(request: HoldKeyRequest):
+    """按住某个键一段时间再松开。
+
+    ``finally`` 里一定要松:中途抛异常却不松开,那个键会一直是按下状态,
+    之后每一次输入都带着它 —— 用起来像键盘坏了,而且看不出是这一步造成的。
+    """
+    if not pyautogui:
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
+
+    seconds = max(0.0, min(float(request.seconds), HOLD_KEY_MAX_SECONDS))
+    try:
+        pyautogui.keyDown(request.key)
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            pyautogui.keyUp(request.key)
+        return {"success": True, "key": request.key, "seconds": seconds}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+class MouseButtonRequest(BaseModel):
+    x: Optional[int] = None
+    y: Optional[int] = None
+    button: str = "left"
+
+
+@app.post("/mouse_down")
+async def mouse_down(request: MouseButtonRequest):
+    """按下不放。与 mouse_up 配对,用来做框选一类 drag 表达不了的动作。"""
+    if not pyautogui:
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
+
+    try:
+        if request.x is not None and request.y is not None:
+            pyautogui.moveTo(request.x, request.y)
+        pyautogui.mouseDown(button=request.button)
+        return {"success": True, "button": request.button}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mouse_up")
+async def mouse_up(request: MouseButtonRequest):
+    if not pyautogui:
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
+
+    try:
+        if request.x is not None and request.y is not None:
+            pyautogui.moveTo(request.x, request.y)
+        pyautogui.mouseUp(button=request.button)
+        return {"success": True, "button": request.button}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+class ZoomRequest(BaseModel):
+    region: List[int]  # [x0, y0, x1, y1]
+
+
+@app.post("/zoom")
+async def zoom(request: ZoomRequest):
+    """截屏中某一块的放大图,base64 PNG 返回。
+
+    模型看整屏时小字常常认不出来,zoom 是它自己要求"把这块放大给我看"。
+    所以这里**不动界面**,只返回图 —— 它是一次观察,不是一次操作。
+    """
+    if not pyautogui:
+        return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
+
+    region = list(request.region or [])
+    if len(region) != 4:
+        return {"success": False, "error": "region 必须是 [x0, y0, x1, y1] 四个整数"}
+    x0, y0, x1, y1 = (int(v) for v in region)
+    if x1 <= x0 or y1 <= y0:
+        return {"success": False, "error": f"region 不是一个有面积的矩形: {region}"}
+
+    try:
+        import io as _io
+
+        shot = pyautogui.screenshot(region=(x0, y0, x1 - x0, y1 - y0))
+        buf = _io.BytesIO()
+        shot.save(buf, format="PNG")
+        return {
+            "success": True,
+            "region": [x0, y0, x1, y1],
+            "width": shot.width,
+            "height": shot.height,
+            "image_b64": base64.b64encode(buf.getvalue()).decode(),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/locate")
 async def locate_on_screen(request: LocateRequest):
     if not pyautogui:
@@ -477,6 +609,18 @@ async def mcp_call(request: dict):
         return await get_position()
     elif tool == "screen_size":
         return await get_screen_size()
+    elif tool == "middle_click":
+        return await middle_click(ClickRequest(**params))
+    elif tool == "triple_click":
+        return await triple_click(ClickRequest(**params))
+    elif tool == "hold_key":
+        return await hold_key(HoldKeyRequest(**params))
+    elif tool == "mouse_down":
+        return await mouse_down(MouseButtonRequest(**params))
+    elif tool == "mouse_up":
+        return await mouse_up(MouseButtonRequest(**params))
+    elif tool == "zoom":
+        return await zoom(ZoomRequest(**params))
     elif tool == "locate":
         return await locate_on_screen(LocateRequest(**params))
     raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")

@@ -58,6 +58,16 @@ ALLOWED_ACTIONS = {
     "wait",
     "done",
     "fail",
+    # 下面这些是对齐厂商动作集补的(2026-09)。此前它们在方言层被登记成"上游有、
+    # 本仓执行侧没有",每次都只能跳过这一步 —— 而模型看不出是自己给错了还是
+    # 这边不支持,下一轮往往原样再给一次,白白烧掉一步预算。
+    "middle_click",
+    "triple_click",
+    "hold_key",
+    "mouse_down",
+    "mouse_up",
+    "cursor_position",
+    "zoom",
 }
 
 # 规范动作 → Node_36_UIAWindows 的动作名(执行节点缺省;其它节点的别名映射
@@ -72,6 +82,14 @@ _N36_ACTION = {
     "scroll": "scroll",
     "move": "move_mouse",
     "drag": "drag",
+    "middle_click": "middle_click",
+    "triple_click": "triple_click",
+    "hold_key": "hold_key",
+    "mouse_down": "mouse_down",
+    "mouse_up": "mouse_up",
+    # 节点那边这个动作早就有,只是名字不一样 —— 复用,不新开一个。
+    "cursor_position": "get_mouse_position",
+    "zoom": "zoom",
 }
 
 _DEFAULT_NODE = "Node_36_UIAWindows"
