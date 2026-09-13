@@ -113,10 +113,19 @@ def test_exemptions_are_real_message_types():
     assert not unknown, f"豁免表里这些类型在协议里不存在:{unknown}"
 
 
-def test_voice_call_signalling_is_the_exempt_set():
-    """豁免目前**只有**实时语音通话那六条。
+def test_the_exempt_set_is_exactly_these():
+    """豁免集合钉死。
 
-    钉死这个集合,是为了让下一次往里加东西成为一个必须解释的动作,而不是顺手一行。
+    钉死它,是为了让下一次往里加东西成为一个必须解释的动作,而不是顺手一行。
+    这条守卫已经起过一次作用:``agent_message`` 加进协议时它当场变红,逼着把
+    「为什么这一条也不上网格」写清楚,而不是让豁免表悄悄长胖。
+
+    目前的两类:
+
+      · 实时语音通话的六条信令 —— 承载 SDP/ICE(会话凭据、网络位置)与实时转写;
+      · ``agent_message`` —— 承载对话正文。
+
+    两类的共同点是**内容本身不该广播**,而不是"还没来得及接发布器"。
     """
     assert set(mesh_exempt_message_types()) == {
         "voice_call_start",
@@ -125,7 +134,23 @@ def test_voice_call_signalling_is_the_exempt_set():
         "voice_ice",
         "voice_event",
         "voice_interrupt",
+        "agent_message",
     }
+
+
+def test_conversation_content_is_never_mirrored_to_the_mesh():
+    """凡是承载对话正文/转写的类型,一律不上网格。
+
+    上一条钉的是「集合恰好是这几个」,这一条钉的是**为什么**。两条都要:
+    只钉集合,将来有人加一条同样载着对话内容的类型、又顺手接了发布器,集合那条
+    会红,但红的理由看不出来是"私人内容被广播了"。
+    """
+    exempt = set(mesh_exempt_message_types())
+    for carries_conversation in ("agent_message", "voice_event"):
+        assert carries_conversation in exempt, (
+            f"{carries_conversation} 承载对话内容,却没有被豁免 —— "
+            "镜像到网格就是把一段私人对话广播给每一个节点。"
+        )
 
 
 def test_the_table_points_at_methods_that_actually_exist():

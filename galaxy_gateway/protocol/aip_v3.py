@@ -467,6 +467,17 @@ class MessageType(str, Enum):
     VOICE_EVENT = "voice_event"
     VOICE_INTERRUPT = "voice_interrupt"
 
+    # ── 智能体主动发给设备的一句话 ──
+    # 这是协议里此前缺的一整类:已有的 decision_request 是「请你做个决定」(带选项、
+    # 等你选),voice_query 只有设备→网关一个方向,而「智能体想跟你说一句话」
+    # 没有任何一条类型能表达。
+    #
+    # 手表上这个缺口同时造成两件事说不通:
+    #   · 推送 —— 没有可推的东西,通知路径只接得住 decision_request;
+    #   · 上下文 —— 没有可存的东西,于是手表上一条会话记录都没有。
+    # 补上这一条,两件事同时成立:来了就是一条普通通知,存下来就是上下文。
+    AGENT_MESSAGE = "agent_message"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

@@ -107,6 +107,10 @@ class MsgType(str, Enum):
     VOICE_EVENT = "voice_event"
     VOICE_INTERRUPT = "voice_interrupt"
 
+    # 智能体主动发给设备的一句话。见 galaxy_gateway/protocol/aip_v3.MessageType
+    # 里同名成员的说明:它同时补上了「推送」与「上下文」两个缺口。
+    AGENT_MESSAGE = "agent_message"
+
 
 # ---------------------------------------------------------------------------
 # Base model — every AIP v3 message extends this
@@ -628,7 +632,50 @@ class VoiceCallEndMsg(AIPMessage):
     reason: str = Field(default="user_hangup", description="挂断原因:user_hangup / error / timeout / device_gone")
 
 
+class AgentMessageMsg(AIPMessage):
+    """AGENT_MESSAGE —— 智能体主动发给设备的一句话。
+
+    为什么需要单独一类
+    ==================
+    协议里此前没有任何一条类型能表达「智能体想跟你说一句话」:
+
+      · ``decision_request`` 是「请你做个决定」—— 带选项、等你选,语义是阻塞的;
+      · ``voice_query`` 只有设备→网关一个方向;
+      · ``event`` / ``liquid_event`` 是客户端本地 UI 事件,不是对话内容。
+
+    手表上这个缺口同时造成两件事说不通:通知路径无东西可推(只接得住
+    decision_request),会话存储无东西可存(于是手表上一条记录都没有)。
+
+    ``conversation_id`` 是「同一套上下文」的依据
+    ==========================================
+    同一段对话在手机、手表、电脑上看到的应该是同一串消息。靠时间戳拼不出来 ——
+    多设备各自的钟不一致,而且同一时刻可能有两段对话在进行。所以由发起方给出
+    会话标识,设备按它归拢。
+
+    ``requires_ack`` 与投递
+    ======================
+    默认不要求回执:绝大多数推送就是给人看一眼。要求回执时设备应在**展示给用户**
+    之后回一条 ``ack``,而不是在收到字节时就回 —— 前者才是「人看到了」的证据,
+    后者只证明网络通。
+    """
+
+    type: MsgType = Field(default=MsgType.AGENT_MESSAGE)
+    conversation_id: str = Field(default="", description="所属会话;跨设备按它归拢同一串上下文")
+    text: str = Field(default="", description="要展示给用户的正文")
+    title: str = Field(default="", description="通知标题;留空由设备用默认标题")
+    role: str = Field(default="assistant", description="发话方:assistant / system")
+    requires_ack: bool = Field(
+        default=False,
+        description="是否要求设备在展示给用户后回 ack(不是收到字节就回)",
+    )
+    reply_expected: bool = Field(
+        default=False,
+        description="是否期待用户回一句;为真时设备应在通知上给出直接回复入口",
+    )
+
+
 _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
+    MsgType.AGENT_MESSAGE: AgentMessageMsg,
     MsgType.VOICE_CALL_START: VoiceCallStartMsg,
     MsgType.VOICE_CALL_ACCEPTED: VoiceCallAcceptedMsg,
     MsgType.VOICE_CALL_END: VoiceCallEndMsg,
