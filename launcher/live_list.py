@@ -51,6 +51,18 @@ _ASCII_GLYPH = {
     STATE_TIMEOUT: "T",
 }
 
+#: 收尾时**还停在转圈态**的那一行怎么画。
+#:
+#: 这不是理论上的分支:``check_environment`` 在 Python 版本不达标时会在任何
+#: 探测开始之前就 early-return,五项一个事件都不会有;探测中途抛异常也一样
+#: (``finish()`` 在调用方的 ``finally`` 里)。那时候把最后一帧原样定住,屏幕上
+#: 留下的是**一个静止的转圈符** —— 看起来"还在跑",实际这一项根本没跑。
+#: 说的和现实相反,正是这个仓库最不许出现的那类缺陷,所以单独给它一个形状:
+#: 圆点 + 明说没有结论,和 ✓ / ⚠ / ⏱ 三种"有结论"彻底分开。
+_UNFINISHED_GLYPH = "·"
+_UNFINISHED_ASCII = "."
+_UNFINISHED_NOTE = "没有结论(前一步就返回了)"
+
 
 def stream_is_tty(stream: Optional[TextIO] = None) -> bool:
     """这条流能不能做原地重绘。拿不准一律当**不能** —— 宁可少画,不可画乱。"""
@@ -120,6 +132,14 @@ class LiveList:
             self._thread = None
         if self._tty:
             self._redraw(final=True)
+            return
+        # 非 TTY:完成的那些在 update() 里已经各打过一行了,这里补的是**没有
+        # 结论**的那几项 —— 日志里只有 4 行而登记了 5 项,少的那一项是谁,
+        # 靠数行数去猜不算说清楚。
+        with self._lock:
+            pending = [n for n in self._order if self._state[n] == STATE_RUNNING]
+        for name in pending:
+            self._write(self._line(name, final=True) + "\n")
 
     def __enter__(self) -> "LiveList":
         self.start()
@@ -138,7 +158,7 @@ class LiveList:
 
     def _redraw(self, *, final: bool = False) -> None:
         with self._lock:
-            lines = [self._line(name, locked=True) for name in self._order]
+            lines = [self._line(name, locked=True, final=final) for name in self._order]
         buf = []
         if self._drawn:
             # 退回这一块的开头。\r 到行首,再上移 N-1 行,逐行清掉。
@@ -155,16 +175,20 @@ class LiveList:
         self._write("".join(buf))
         self._drawn = len(lines) if not final else 0
 
-    def _line(self, name: str, *, locked: bool = False) -> str:
+    def _line(self, name: str, *, locked: bool = False, final: bool = False) -> str:
         if not locked:
             with self._lock:
                 state, value = self._state[name], self._value[name]
         else:
             state, value = self._state[name], self._value[name]
-        if state == STATE_RUNNING:
+        if state == STATE_RUNNING and final:
+            # 收尾了还没有结论 —— 不许再画转圈符(见 _UNFINISHED_GLYPH)。
+            icon = _UNFINISHED_GLYPH
+            value = value or _UNFINISHED_NOTE
+        elif state == STATE_RUNNING:
             icon = SPINNER_FRAMES[self._frame % len(SPINNER_FRAMES)]
         else:
-            icon = _GLYPH.get(state, "·")
+            icon = _GLYPH.get(state, _UNFINISHED_GLYPH)
         label = self._label[name]
         pad = max(1, self._label_width - _display_width(label))
         return f"{self._indent}{icon} {label}{' ' * pad}{value}"
@@ -176,7 +200,7 @@ class LiveList:
         except UnicodeEncodeError:
             # Windows 老控制台:换 ASCII 图标再来一次。画不出来也绝不能挡启动。
             try:
-                fallback = text
+                fallback = text.replace(_UNFINISHED_GLYPH, _UNFINISHED_ASCII)
                 for state, glyph in _GLYPH.items():
                     fallback = fallback.replace(glyph, _ASCII_GLYPH[state])
                 self._stream.write(fallback.encode("ascii", "replace").decode("ascii"))

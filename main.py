@@ -537,7 +537,7 @@ def phase0_env_check() -> dict:
     # 某一行转到上界然后变成 ⏱,而不是永远转下去。
     _live = None
     try:
-        from launcher.env_check import PROBE_LABEL, PROBE_TIMEOUT
+        from launcher.env_check import PROBE_LABEL, PROBE_START, PROBE_TIMEOUT
         from launcher.live_list import STATE_OK, STATE_TIMEOUT, LiveList
 
         _live = LiveList([(k, PROBE_LABEL[k]) for k in ("pip", "npm", "node", "ollama", "electron")])
@@ -545,7 +545,7 @@ def phase0_env_check() -> dict:
         def _on_probe(name: str, state: str, detail: str) -> None:
             if state == PROBE_TIMEOUT:
                 _live.update(name, STATE_TIMEOUT, detail)
-            elif state != "start":
+            elif state != PROBE_START:
                 _live.update(name, STATE_OK, "")
 
         _live.start()

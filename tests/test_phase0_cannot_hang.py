@@ -242,6 +242,78 @@ class TestTheLiveListItself:
         lst.finish()
 
 
+class TestNoVerdictDoesNotLookLikeProgress:
+    """收尾时还没有结论的那一行,不许留一个"静止的转圈符"。
+
+    这不是理论分支:``check_environment`` 在 Python 版本不达标时会在任何探测
+    开始**之前**就 early-return —— 五项一个事件都没有;探测中途抛异常也一样
+    (``finish()`` 在 main.py 的 ``finally`` 里)。那时候把最后一帧原样定住,
+    屏幕上留下的是 ``| pip`` ``/ npm`` 这样的东西:看起来"还在跑",实际这一项
+    根本没跑。说的和现实相反,是这个仓库最不许出现的那类缺陷。
+    """
+
+    def _finish_without_any_verdict(self, tty: bool):
+        import io as _io
+
+        from launcher.live_list import LiveList
+
+        class _Stream(_io.StringIO):
+            def isatty(self):
+                return tty
+
+        buf = _Stream()
+        lst = LiveList([("pip", "pip"), ("npm", "npm")], stream=buf)
+        lst.start()
+        lst.finish()
+        return buf.getvalue()
+
+    def test_a_pipe_says_it_has_no_verdict(self):
+        out = self._finish_without_any_verdict(tty=False)
+        # 两项都得被说出来 —— 少的那一项是谁,不能靠数行数去猜。
+        assert out.count("没有结论") == 2, out
+        assert "pip" in out and "npm" in out
+
+    def test_a_tty_does_not_freeze_a_spinner(self):
+        from launcher.live_list import SPINNER_FRAMES
+
+        out = self._finish_without_any_verdict(tty=True)
+        # 只看最后一帧(final 那一次重绘)。前面的动画帧里当然有转圈符。
+        final = out[out.rindex("\x1b[2K") :] if "\x1b[2K" in out else out
+        for frame in SPINNER_FRAMES:
+            assert frame not in final, f"收尾那一帧里还留着转圈符 {frame!r}: {final!r}"
+        assert "没有结论" in final
+
+    def test_no_verdict_is_not_dressed_up_as_a_result(self):
+        """没有结论必须和 ✓ / ⚠ / ⏱ 三种"有结论"彻底分开 —— 空 ≠ 未知。"""
+        from launcher.live_list import _GLYPH  # noqa: PLC2701 — 判据要看的就是这张表
+
+        out = self._finish_without_any_verdict(tty=False)
+        for glyph in _GLYPH.values():
+            assert glyph not in out, f"没有结论的行画成了 {glyph!r}:{out!r}"
+
+    def test_the_note_survives_an_ascii_only_console(self):
+        """Windows 老控制台编不了圆点。编不出来也绝不能挡启动,而且不许静默变成 ✓。"""
+        import io as _io
+
+        from launcher.live_list import _UNFINISHED_ASCII, LiveList  # noqa: PLC2701
+
+        class _Ascii(_io.StringIO):
+            def isatty(self):
+                return False
+
+            def write(self, text):  # 模拟 cp1252:非 ASCII 直接抛
+                text.encode("ascii")
+                return super().write(text)
+
+        buf = _Ascii()
+        lst = LiveList([("pip", "pip")], stream=buf)
+        lst.start()
+        lst.finish()
+        out = buf.getvalue()
+        assert _UNFINISHED_ASCII in out, out
+        assert "pip" in out
+
+
 class TestItIsActuallyWiredIntoPhase0:
     def test_main_builds_the_live_list(self):
         """构造得出来 ≠ 用上了。"""
