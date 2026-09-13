@@ -110,6 +110,8 @@ class MsgType(str, Enum):
     # 智能体主动发给设备的一句话。见 galaxy_gateway/protocol/aip_v3.MessageType
     # 里同名成员的说明:它同时补上了「推送」与「上下文」两个缺口。
     AGENT_MESSAGE = "agent_message"
+    DECISION_REQUEST = "decision_request"
+    DECISION_WITHDRAW = "decision_withdraw"
 
 
 # ---------------------------------------------------------------------------
@@ -674,8 +676,43 @@ class AgentMessageMsg(AIPMessage):
     )
 
 
+class DecisionWithdrawMsg(AIPMessage):
+    """DECISION_WITHDRAW —— 这条决策不用管了,收起来。
+
+    为什么必须有
+    ============
+    一条 ``decision_request`` 会被**并行分叉**给所有连着的手表与手机
+    (``pending_decision_registry._discover_target_devices``)。服务端处理了重复回答
+    ——「first reply wins」—— 但此前**没有任何东西告诉其余设备把通知撤下来**。
+
+    后果是用户可见的:手表上答完,手机上那条还挂着。点它服务端是 no-op,可手机本地的
+    ``ReplyReceiver`` 会把通知消掉,于是用户以为"答成功了",实际什么都没发生;更糟的
+    是他可能在那边给了个**不同**的答案。
+
+    这是 SIP 分叉的 CANCEL(RFC 3261 §16.7):某一支回了 200 OK,代理立刻向其余每一支
+    发 CANCEL,那些终端停止振铃。没有这一步,接起电话之后别的分机还在响。
+
+    只带 decision_id 和 reason
+    ==========================
+    设备要做的只是"把这条收起来",不需要知道别人答了什么。把答案一起发出去,等于把
+    一次私人决定广播给每一台设备。
+
+    ``reason`` 是**封闭枚举**(见 ``core.interaction.decision_withdrawal.WithdrawReason``),
+    不是自由文本 —— 设备要据此决定怎么呈现:"别人已经答了"静默收起,"超时了"可以留
+    一条痕迹。自由文本做不到这件事,设备只能把它当字符串显示或者去猜。
+    """
+
+    type: MsgType = Field(default=MsgType.DECISION_WITHDRAW)
+    decision_id: str = Field(default="", description="要收回的那次决策")
+    reason: str = Field(
+        default="cancelled",
+        description="为什么收回:answered_elsewhere / timed_out / cancelled / superseded",
+    )
+
+
 _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
     MsgType.AGENT_MESSAGE: AgentMessageMsg,
+    MsgType.DECISION_WITHDRAW: DecisionWithdrawMsg,
     MsgType.VOICE_CALL_START: VoiceCallStartMsg,
     MsgType.VOICE_CALL_ACCEPTED: VoiceCallAcceptedMsg,
     MsgType.VOICE_CALL_END: VoiceCallEndMsg,

@@ -73,7 +73,6 @@ CLIENT_ONLY_EXTENSIONS: Set[str] = {
     "phase_report",    # 客户端三态相位上报(client→面板)
     "event",           # 客户端通用 UI 事件
     "liquid_event",    # 灵动岛/液态玻璃动效事件(client 内部)
-    "decision_request",  # HITL 人类决策请求(wearos 本地渲染用)
     "unknown",         # Android 反序列化失败时的本地哨兵值,仅用于读路径
                        # (GalaxyWebSocketClient/MessageRouter 的 msgType == null 分支),
                        # 从不作为 wire 值真正发给 server —— 见 2026-07 排查。

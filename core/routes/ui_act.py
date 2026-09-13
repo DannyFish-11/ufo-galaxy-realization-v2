@@ -49,6 +49,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from core.agent_card import local_device_id
 from core.desktop_action_translation import DesktopDispatch
 from core.perception_grounding import normalize_platform
 from core.schemas.ui_element import UISource
@@ -159,6 +160,34 @@ async def ui_perception_state() -> Dict[str, Any]:
 
 def _node_action(node_id: str, action_value: str) -> str:
     return _ACTION_ALIAS.get(node_id, {}).get(action_value, action_value)
+
+
+#: 表示「就在本机」的 device_id 约定值。仲裁器全程用 ``device_id="local"``
+#: 操作本机(见 ``windows_aip_client`` 的 ``route_command(..., device_id="local")``)。
+_LOCAL_DEVICE_ALIASES = frozenset({"", "local", "localhost", "self", "this"})
+
+
+def targets_this_machine(device_id: str) -> bool:
+    """这个 device_id 指的是不是**本机**。
+
+    为什么必须问这一句
+    ------------------
+    桌面的结构化派发(读控件树 → 命中控件 → 动作)只有在"服务端就是那台机器"时才
+    成立。不是本机时,正确的路是 ``agent_deploy`` + ``agent_execute``:把 Agent 派过去,
+    由它在**对端本机**用自己的仲裁器执行(``core.device_policy.requires_agent_deploy``
+    对所有物理设备都返回 True)。
+
+    隔着网络替远端决定"点哪个按钮"是第二份实现,而且是更差的那份 —— 手里那张控件图
+    是几百毫秒前的。这正是 ``core.perception_grounding`` 的 POLICY_1 对 Android 说的
+    同一件事,换台机器它一字不差地成立。
+
+    ``PLATFORM_GROUNDING_OWNER`` 里 ``windows: SERVER`` 没错,但它**默认了**能走到这
+    条路的 windows 就是本机。那个前提此前没有写下来,也没有任何东西挡住有人拿远端
+    device_id 调进来。这个函数就是把它写下来。
+    """
+    return (device_id or "").strip().lower() in _LOCAL_DEVICE_ALIASES or (
+        (device_id or "").strip() == local_device_id()
+    )
 
 
 def _resolve_node(graph: Any, node_id: str) -> Optional[Dict[str, Any]]:
@@ -319,6 +348,18 @@ async def ui_act(req: UIActRequest) -> Dict[str, Any]:
     # 判据不只看 req.platform:调用方常常不填它,而漏填会让这条改进直接失效。
     # 图自己带着来源(UIA 图必然来自 Windows 桌面),这个信号比让人记得填一个字段可靠。
     desktop = (normalize_platform(req.platform) == "windows") or (graph.source == UISource.UIA)
+
+    if desktop and not targets_this_machine(req.device_id):
+        # 远端 Windows:明确拒绝并指路,而不是隔着网络去解析控件树。
+        # 从前这里会默默往下走 —— 看起来"派发成功了",实际是拿一张过期的图在盲点。
+        out["dispatched"] = False
+        out["dispatch_declined"] = (
+            f"目标设备 {req.device_id!r} 不是本机:桌面结构化派发只在服务端就是那台机器时成立。"
+            "跨设备请走 agent_deploy + agent_execute —— 把 Agent 派过去,由它在对端本机执行。"
+        )
+        out["needs_model"] = bool(planned.needs_model)
+        logger.info("ui_act: 目标 %s 非本机,拒绝桌面派发", req.device_id)
+        return out
 
     if desktop:
         dispatch = _translate_for_desktop(graph, planned)

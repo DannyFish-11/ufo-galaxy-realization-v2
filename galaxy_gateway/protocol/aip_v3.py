@@ -478,6 +478,24 @@ class MessageType(str, Enum):
     # 补上这一条,两件事同时成立:来了就是一条普通通知,存下来就是上下文。
     AGENT_MESSAGE = "agent_message"
 
+    # ── HITL:请你做个决定 / 这条不用管了 ──
+    # DECISION_REQUEST 一直在线上跑(request_human_decision → send_to_device),
+    # 却从没进过本枚举 —— 漂移检查里它被登记成 "客户端专有扩展(wearos 本地渲染用)",
+    # 而实际上**服务端是它的发送方**。一条服务端会发的消息不在服务端的类型表里,
+    # 等于这条消息在协议层面不存在。补进来。
+    DECISION_REQUEST = "decision_request"
+
+    # DECISION_WITHDRAW 是分叉之后的收尾。一条决策会被**并行分叉**给所有连着的
+    # 手表与手机;某一台答了之后,其余每一台都必须被告知收起来。
+    #
+    # 没有它的后果是用户可见的:手表上答完,手机上那条还挂着 —— 点它服务端是 no-op,
+    # 可手机本地会把通知消掉,于是用户以为自己答了,实际什么都没发生;更糟的是他可能
+    # 在那边给了个**不同**的答案。
+    #
+    # 这是 SIP 分叉的 CANCEL(RFC 3261 §16.7)那一步:某一支回了 200,代理立刻向其余
+    # 每一支发 CANCEL,那些终端停止振铃。
+    DECISION_WITHDRAW = "decision_withdraw"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

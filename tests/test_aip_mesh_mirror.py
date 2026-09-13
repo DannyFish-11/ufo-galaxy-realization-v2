@@ -120,12 +120,18 @@ def test_the_exempt_set_is_exactly_these():
     这条守卫已经起过一次作用:``agent_message`` 加进协议时它当场变红,逼着把
     「为什么这一条也不上网格」写清楚,而不是让豁免表悄悄长胖。
 
-    目前的两类:
+    它已经起过两次作用:``agent_message`` 与 ``decision_withdraw`` 加进协议时各红一次,
+    每次都逼着把「为什么这一条也不上网格」写清楚,而不是让豁免表悄悄长胖。
+
+    目前的三类:
 
       · 实时语音通话的六条信令 —— 承载 SDP/ICE(会话凭据、网络位置)与实时转写;
-      · ``agent_message`` —— 承载对话正文。
+      · ``agent_message`` —— 承载对话正文;
+      · ``decision_withdraw`` —— **收件人范围**不对。它要收回的通知只存在于当初被
+        分叉到的那几台设备上;网格上其余节点从没收到过那条请求,也就没有东西可收。
 
-    两类的共同点是**内容本身不该广播**,而不是"还没来得及接发布器"。
+    前两类的理由是「内容不该广播」,第三类是「收件人不是所有人」。理由不同,但结论
+    一样:都不上网格。两种理由都要能说出口 —— 说不出口的豁免就是没人管过。
     """
     assert set(mesh_exempt_message_types()) == {
         "voice_call_start",
@@ -135,6 +141,7 @@ def test_the_exempt_set_is_exactly_these():
         "voice_event",
         "voice_interrupt",
         "agent_message",
+        "decision_withdraw",
     }
 
 
