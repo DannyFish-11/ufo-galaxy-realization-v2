@@ -47,6 +47,7 @@ from typing import Dict, List, Optional, Tuple
 from core.ascii_art import Colors, print_banner, print_section_header, print_status_row
 from core.credential_vault import PLACEHOLDER_PREFIXES
 from core.log_locations import log_hint
+from core.proc_text import run_text
 
 #: 仓库根。**搬迁必须显式算**：原文件在仓库根，用的是 ``Path(__file__).parent``；
 #: 搬进 ``launcher/`` 后同一个表达式指向 ``launcher/`` —— sys.path 会插错、
@@ -72,6 +73,21 @@ def print_status(message: str, status: str = "info"):
     print_status_row(message, status=status)
 
 
+def _with_log_path(reason: str) -> str:
+    """给一句"用不了"的原因补上**日志在哪**。
+
+    托盘起不来时,平常那句"详情见 托盘 → 日志"是空头支票 —— 那个入口正是坏的。
+    所有者的原话是"相关的日志我也都看不到",说的就是这件事。所以这里补的是
+    文件路径,人拿着就能直接去看。
+    """
+    try:
+        from core.log_locations import log_file_hint
+
+        return f"{reason} · {log_file_hint('backend')}"
+    except Exception:  # noqa: BLE001 —— 补不上提示也不能把原因弄丢
+        return reason
+
+
 def _url_sentinel_audit() -> Tuple[str, str, str, List[Dict[str, str]]]:
     """收集克隆界面「启动自检」要展示的取证数据(全 best-effort,绝不抛)。
 
@@ -81,10 +97,8 @@ def _url_sentinel_audit() -> Tuple[str, str, str, List[Dict[str, str]]]:
     """
     version = "unknown"
     try:
-        r = subprocess.run(
+        r = run_text(
             ["git", "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
-            capture_output=True,
-            text=True,
             timeout=3,
             cwd=str(PROJECT_ROOT),  # 搬迁修正：原为 __file__ 所在目录(仓库根)
         )
@@ -1421,16 +1435,39 @@ class GalaxyUnified:
         """
         self._tray_unavailable_reason = ""
         try:
-            from windows_service.tray_icon import start_tray_in_thread
+            # 只 import 模块,再用 getattr 取"为什么用不了"。
+            #
+            # 一开始写的是 ``from ... import TRAY_UNAVAILABLE_REASON, start_tray_in_thread``,
+            # 结果把这个函数变脆了:模块里少了那个名字(旧版本、打包裁剪、测试里的桩)
+            # 就是 ImportError,于是**任何**失败都会掉进"缺 pystray / Pillow"那一支 ——
+            # 又一次把"起不来"说成"没装"。取原因这件事本身不该有失败的余地。
+            import importlib
 
-            tray = await asyncio.to_thread(start_tray_in_thread)
-            if tray is not None:
-                self._tray = tray
+            # 用 importlib.import_module 而不是 ``import windows_service.tray_icon as X``:
+            # 后者取的是**父包上的属性**,绕过 sys.modules —— 于是把模块替成桩件的
+            # 调用方(测试、打包裁剪)换不掉它,拿到的还是真模块。这不是测试的问题,
+            # 是"从哪儿取这个模块"这件事上两种写法语义不同,而我们要的是可替换的那种。
+            _tray_mod = importlib.import_module("windows_service.tray_icon")
+
+            start_tray_in_thread = _tray_mod.start_tray_in_thread
+            TRAY_UNAVAILABLE_REASON = getattr(_tray_mod, "TRAY_UNAVAILABLE_REASON", "")
+
+            result = await asyncio.to_thread(start_tray_in_thread)
+            # 三种返回,三种含义(以前只有"对象/None"两种,于是"起不来"被当成了成功):
+            #   GalaxyTray → 图标**真的**出现在托盘区了
+            #   str        → 起不来,内容就是原因
+            #   None       → 连建都没建起来(依赖缺席 / 这台机器没有桌面)
+            if isinstance(result, str):
+                self._tray_unavailable_reason = _with_log_path(result)
+                logger.warning("系统托盘没起来(非致命):%s", result)
+                return False
+            if result is not None:
+                self._tray = result
                 return True
-            self._tray_unavailable_reason = "托盘没能建起来(详见日志)"
+            self._tray_unavailable_reason = _with_log_path(TRAY_UNAVAILABLE_REASON or "托盘没能建起来")
             return False
         except ImportError as exc:
-            self._tray_unavailable_reason = "缺 pystray / Pillow"
+            self._tray_unavailable_reason = _with_log_path("缺 pystray / Pillow")
             logger.warning("系统托盘用不了:%s(非致命): %s", self._tray_unavailable_reason, exc)
             return False
         except Exception as exc:  # noqa: BLE001
@@ -1439,8 +1476,8 @@ class GalaxyUnified:
             # 那句写死的"不可用 (pip install pystray Pillow)"于是成了假话:
             # 照着装十遍也好不了。按真实原因分开说。
             _headless = "display" in str(exc).lower()
-            self._tray_unavailable_reason = (
-                "这台机器没有图形环境(无 DISPLAY),无头部署下属正常" if _headless else "起不来(详见日志)"
+            self._tray_unavailable_reason = _with_log_path(
+                "这台机器没有图形环境(无 DISPLAY),无头部署下属正常" if _headless else f"起不来({type(exc).__name__})"
             )
             logger.warning("系统托盘用不了:%s(非致命): %s", self._tray_unavailable_reason, exc)
             return False

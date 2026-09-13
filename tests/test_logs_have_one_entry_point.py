@@ -168,10 +168,25 @@ class TestTheTrayIsTheEntryPoint:
 
         fake.MenuItem, fake.Menu, fake.Icon = MenuItem, Menu, type("Icon", (), {})
         sys.modules.setdefault("pystray", fake)
-        pil = sys.modules.setdefault("PIL", types.ModuleType("PIL"))
-        for sub in ("Image", "ImageDraw", "ImageFilter", "ImageFont"):
-            mod = sys.modules.setdefault(f"PIL.{sub}", types.ModuleType(f"PIL.{sub}"))
-            setattr(pil, sub, mod)
+
+        # 只在 PIL **压根没装**时才补空壳,而且**不覆盖已经在 sys.modules 里的真货**。
+        #
+        # 上一版无条件 setdefault 了 PIL 与四个子模块。``setdefault`` 在真 PIL 还
+        # 没被 import 过的分片里会让空壳赢,而且**没有任何地方把它摘掉** —— 于是
+        # 这一份空壳留在 sys.modules 里,后面所有碰 PIL 的测试全被它毒到。
+        #
+        # CI 上实测过一次:test_tray_does_not_claim_it_is_there 里
+        # ``importlib.reload(windows_service.tray_icon)`` 重跑 ``from PIL import
+        # ImageDraw``,拿到的是这个空壳,于是 ``ImageDraw.Draw`` 不存在 ——
+        # 4 条判据一起红,而它们和 PIL 毫无关系。一个测试的残留改变了另一个测试
+        # 的结论,这是最难查的一类。
+        try:
+            import PIL  # noqa: F401 —— 真的装了就用真的,什么都不补
+        except ImportError:
+            pil = sys.modules.setdefault("PIL", types.ModuleType("PIL"))
+            for sub in ("Image", "ImageDraw", "ImageFilter", "ImageFont"):
+                mod = sys.modules.setdefault(f"PIL.{sub}", types.ModuleType(f"PIL.{sub}"))
+                setattr(pil, sub, mod)
 
         import windows_service.tray_icon as t
 

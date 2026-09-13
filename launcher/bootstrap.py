@@ -31,6 +31,7 @@ logger = logging.getLogger("Galaxy")
 # ---------------------------------------------------------------------------
 
 from core.ascii_art import print_section_header, print_status_row
+from core.proc_text import run_text
 
 
 def print_status(message: str, status: str = "info") -> None:
@@ -166,10 +167,8 @@ def _detect_tailscale_ip() -> str:
         import subprocess
 
         if shutil.which("tailscale"):
-            r = subprocess.run(
+            r = run_text(
                 ["tailscale", "ip", "-4"],
-                capture_output=True,
-                text=True,
                 timeout=5,
             )
             if r.returncode == 0 and r.stdout.strip():
@@ -294,10 +293,8 @@ class SystemConfig:
             tailscale_bin = shutil.which("tailscale")
             if not tailscale_bin:
                 return None
-            result = subprocess.run(
+            result = run_text(
                 [tailscale_bin, "ip", "-4"],
-                capture_output=True,
-                text=True,
                 timeout=1,
             )
             if result.returncode == 0:

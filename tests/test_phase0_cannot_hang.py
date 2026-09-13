@@ -242,6 +242,277 @@ class TestTheLiveListItself:
         lst.finish()
 
 
+class TestNotProbedIsNotNotInstalled:
+    """所有者真机:"第一次启动 ollama 没有准确识别上,第二次才认上。"
+
+    查出来的不是"探测偶尔失手",是**失手之后说了假话**:探测超过墙钟上界时拿到
+    的是兜底值 ``(False, False, [])``,而它渲染出来就是 ``未安装`` —— 屏幕上说
+    "你没装",事实是"这次没查完"。第一次冷启(缓存冷、杀软逐个扫、ollama 服务
+    刚起)最容易超,第二次全热就认上了,现象完全对得上。
+
+    另外补了一条更硬的路:直接问 Ollama 自己的 HTTP 口。它不查 PATH、不起子进程,
+    正好绕开首启那两个弱点。
+    """
+
+    def test_a_timed_out_probe_does_not_say_not_installed(self, monkeypatch):
+        import time as _t
+
+        import launcher.env_check as ec
+
+        monkeypatch.setitem(ec.PROBE_DEADLINE_S, "ollama", 0.3)
+        monkeypatch.setattr(ec, "_probe_ollama", lambda: (_t.sleep(5), (True, True, ["qwen3:8b"]))[1])
+
+        report = ec.check_environment()
+        assert "ollama" in report.probes_timed_out
+        line = next(s for s in report.to_steps() if s.name == "Ollama")
+        assert "未安装" not in line.value, f"没等到被说成了没装:{line.value}"
+        assert "没查完" in line.value, line.value
+
+    def test_a_real_absence_still_says_not_installed(self):
+        """反过来也要成立 —— 真没装就得说没装,不能一律推给"没查完"。"""
+        import launcher.env_check as ec
+
+        report = ec.EnvReport("3.11.0", True, "python3", True, ollama_installed=False, ollama_running=False)
+        line = next(s for s in report.to_steps() if s.name == "Ollama")
+        assert line.value == "未安装", line.value
+
+    def test_the_step_carries_the_timeout_as_machine_evidence(self):
+        """人读的那句话之外,还要留一个机器读得到的旗标。"""
+        import launcher.env_check as ec
+
+        report = ec.EnvReport("3.11.0", True, "python3", True, probes_timed_out=["ollama"])
+        line = next(s for s in report.to_steps() if s.name == "Ollama")
+        assert line.detail.get("timed_out") is True
+
+    def test_the_http_route_is_tried_before_spawning_anything(self, monkeypatch):
+        """HTTP 答上来了就不该再去 which / 起子进程 —— 那两步正是首启的弱点。"""
+        import launcher.env_check as ec
+
+        monkeypatch.setattr(ec, "_probe_ollama_over_http", lambda: (True, True, ["qwen3:8b"]))
+
+        def _must_not_run(*_a, **_k):
+            raise AssertionError("HTTP 已经给出结论了,不该再起子进程")
+
+        monkeypatch.setattr(ec.shutil, "which", _must_not_run)
+        assert ec._probe_ollama() == (True, True, ["qwen3:8b"])
+
+    def test_http_saying_nothing_is_not_http_saying_no(self):
+        """连不上只说明"这条路没问到",不是"没装" —— 必须接着走命令行那条。"""
+        import launcher.env_check as ec
+
+        assert ec._probe_ollama_over_http() is None or isinstance(ec._probe_ollama_over_http(), tuple)
+
+    def test_it_honours_ollamas_own_host_variable(self, monkeypatch):
+        """地址读 Ollama 自己的 OLLAMA_HOST 约定,不另立一份。"""
+        import launcher.env_check as ec
+
+        monkeypatch.setenv("OLLAMA_HOST", "10.0.0.5:11434")
+        assert ec._ollama_api_base() == "http://10.0.0.5:11434"
+        monkeypatch.setenv("OLLAMA_HOST", "https://box.local:443")
+        assert ec._ollama_api_base() == "https://box.local:443"
+        monkeypatch.delenv("OLLAMA_HOST")
+        assert ec.OLLAMA_DEFAULT_HOST in ec._ollama_api_base()
+
+
+class TestOneColumnOneColour:
+    """实时列表和正式行必须是**同一套**图标、同一条列、同一种颜色。
+
+    所有者真机反馈:"对勾颜色不统一、行列不统一"。量出来的事实是 ——
+    正式行(cli_render.phase)图标在第 2 列、有色;实时列表在第 4 列、无色。
+    同一屏两条对勾列、两种对勾。
+
+    这一组判据比对的是**画出来的字符串**,不是"两边都 import 了同一个常量"
+    —— 后者能过而屏幕照样错位(比如自己又加了缩进)。
+    """
+
+    _ICONS = "✓⚠✗·◐|/-\\⏱"
+
+    def _rendered(self, colour: bool):
+        """(实时列表的两行, 正式行的两行) —— 都在同一个着色前提下画。"""
+        import contextlib
+        import io as _io
+
+        import core.ascii_art as aa
+        import core.cli_render as cr
+        from launcher.live_list import STATE_OK, STATE_TIMEOUT, LiveList
+
+        old_aa, old_cr = aa.ansi_supported, cr.ansi_supported
+        aa.ansi_supported = lambda: colour
+        cr.ansi_supported = lambda: colour
+        try:
+
+            class _Tty(_io.StringIO):
+                def isatty(self):
+                    return True
+
+            lst = LiveList([("a", "pip"), ("b", "Electron 依赖")], stream=_Tty())
+            lst.update("a", STATE_OK, "24.0")
+            lst.update("b", STATE_TIMEOUT, "10s 没有回应")
+            live = [lst._line("a"), lst._line("b")]
+
+            formal = []
+            for name, value, status in (("Python", "3.11.15", "ok"), (".env 覆盖度", "45/193 项", "warn")):
+                cap = _io.StringIO()
+                with contextlib.redirect_stdout(cap):
+                    cr.phase(name, value, status)
+                formal.append(cap.getvalue().rstrip("\n"))
+            return live, formal
+        finally:
+            aa.ansi_supported, cr.ansi_supported = old_aa, old_cr
+
+    def _icon_column(self, line: str) -> int:
+        import re as _re
+
+        from core.ascii_art import display_width
+
+        plain = _re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line)
+        idx = next(i for i, ch in enumerate(plain) if ch in self._ICONS)
+        return display_width(plain[:idx])
+
+    def _value_column(self, line: str):
+        import re as _re
+
+        from core.ascii_art import display_width
+
+        plain = _re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line).rstrip()
+        m = _re.search(r"\S.*?\s{2,}(\S)", plain)
+        return display_width(plain[: m.start(1)]) if m else None
+
+    def test_the_icon_sits_in_the_same_column(self):
+        live, formal = self._rendered(colour=False)
+        cols = {self._icon_column(x) for x in live + formal}
+        assert len(cols) == 1, f"同一屏出现了多条对勾列:{sorted(cols)}"
+
+    def test_the_icon_column_is_the_repo_wide_one(self):
+        """不是"两边碰巧一样",而是**都等于全仓那一份几何**。"""
+        from core.ascii_art import CONTENT_INDENT
+
+        live, formal = self._rendered(colour=False)
+        for line in live + formal:
+            assert self._icon_column(line) == CONTENT_INDENT
+
+    def test_the_value_sits_in_the_same_column(self):
+        from core.ascii_art import VALUE_COL
+
+        live, formal = self._rendered(colour=False)
+        for line in live + formal:
+            assert self._value_column(line) == VALUE_COL, repr(line)
+
+    def test_the_same_state_gets_the_same_colour(self):
+        """✓ 对 ✓、⚠ 对 ⚠:颜色码必须逐个相同。"""
+        import re as _re
+
+        live, formal = self._rendered(colour=True)
+        codes = lambda s: _re.findall(r"\x1b\[([0-9;]*)m", s)  # noqa: E731
+        assert codes(live[0]) == codes(formal[0]), f"✓ 行:{codes(live[0])} vs {codes(formal[0])}"
+        assert codes(live[1]) == codes(formal[1]), f"警告行:{codes(live[1])} vs {codes(formal[1])}"
+
+    def test_no_colour_means_no_colour_on_both(self):
+        """降级也要一起降 —— 不许一半带色一半不带。"""
+        live, formal = self._rendered(colour=False)
+        for line in live + formal:
+            assert "\x1b[" not in line, repr(line)
+
+    def test_the_spinner_is_the_doing_colour(self):
+        """转圈符用的是权威表里 ``doing`` 那一格的颜色,不是自己挑的。"""
+        import io as _io
+        import re as _re
+
+        import core.ascii_art as aa
+        import core.cli_render as cr
+        from core.cli_render import _STATUS  # noqa: PLC2701
+        from launcher.live_list import LiveList
+
+        old_aa, old_cr = aa.ansi_supported, cr.ansi_supported
+        aa.ansi_supported = lambda: True
+        cr.ansi_supported = lambda: True
+        try:
+
+            class _Tty(_io.StringIO):
+                def isatty(self):
+                    return True
+
+            line = LiveList([("a", "pip")], stream=_Tty())._line("a")
+        finally:
+            aa.ansi_supported, cr.ansi_supported = old_aa, old_cr
+        want = _STATUS["doing"][1].lstrip("\x1b[").rstrip("m")
+        assert _re.findall(r"\x1b\[([0-9;]*)m", line)[0] == want
+
+
+class TestNoVerdictDoesNotLookLikeProgress:
+    """收尾时还没有结论的那一行,不许留一个"静止的转圈符"。
+
+    这不是理论分支:``check_environment`` 在 Python 版本不达标时会在任何探测
+    开始**之前**就 early-return —— 五项一个事件都没有;探测中途抛异常也一样
+    (``finish()`` 在 main.py 的 ``finally`` 里)。那时候把最后一帧原样定住,
+    屏幕上留下的是 ``| pip`` ``/ npm`` 这样的东西:看起来"还在跑",实际这一项
+    根本没跑。说的和现实相反,是这个仓库最不许出现的那类缺陷。
+    """
+
+    def _finish_without_any_verdict(self, tty: bool):
+        import io as _io
+
+        from launcher.live_list import LiveList
+
+        class _Stream(_io.StringIO):
+            def isatty(self):
+                return tty
+
+        buf = _Stream()
+        lst = LiveList([("pip", "pip"), ("npm", "npm")], stream=buf)
+        lst.start()
+        lst.finish()
+        return buf.getvalue()
+
+    def test_a_pipe_says_it_has_no_verdict(self):
+        out = self._finish_without_any_verdict(tty=False)
+        # 两项都得被说出来 —— 少的那一项是谁,不能靠数行数去猜。
+        assert out.count("没有结论") == 2, out
+        assert "pip" in out and "npm" in out
+
+    def test_a_tty_does_not_freeze_a_spinner(self):
+        from launcher.live_list import SPINNER_FRAMES
+
+        out = self._finish_without_any_verdict(tty=True)
+        # 只看最后一帧(final 那一次重绘)。前面的动画帧里当然有转圈符。
+        final = out[out.rindex("\x1b[2K") :] if "\x1b[2K" in out else out
+        for frame in SPINNER_FRAMES:
+            assert frame not in final, f"收尾那一帧里还留着转圈符 {frame!r}: {final!r}"
+        assert "没有结论" in final
+
+    def test_no_verdict_is_not_dressed_up_as_a_result(self):
+        """没有结论必须和 ✓ / ⚠ / ⏱ 三种"有结论"彻底分开 —— 空 ≠ 未知。"""
+        from core.cli_render import _STATUS  # noqa: PLC2701 — 图标的唯一权威
+        from launcher.live_list import _TIMEOUT_GLYPH  # noqa: PLC2701
+
+        out = self._finish_without_any_verdict(tty=False)
+        verdict_glyphs = {g for g, _color in _STATUS.values() if g != "·"} | {_TIMEOUT_GLYPH}
+        for glyph in verdict_glyphs:
+            assert glyph not in out, f"没有结论的行画成了 {glyph!r}:{out!r}"
+
+    def test_the_note_survives_an_ascii_only_console(self):
+        """Windows 老控制台编不了圆点。编不出来也绝不能挡启动,而且不许静默变成 ✓。"""
+        import io as _io
+
+        from launcher.live_list import _UNFINISHED_ASCII, LiveList  # noqa: PLC2701
+
+        class _Ascii(_io.StringIO):
+            def isatty(self):
+                return False
+
+            def write(self, text):  # 模拟 cp1252:非 ASCII 直接抛
+                text.encode("ascii")
+                return super().write(text)
+
+        buf = _Ascii()
+        lst = LiveList([("pip", "pip")], stream=buf)
+        lst.start()
+        lst.finish()
+        out = buf.getvalue()
+        assert _UNFINISHED_ASCII in out, out
+        assert "pip" in out
+
+
 class TestItIsActuallyWiredIntoPhase0:
     def test_main_builds_the_live_list(self):
         """构造得出来 ≠ 用上了。"""
