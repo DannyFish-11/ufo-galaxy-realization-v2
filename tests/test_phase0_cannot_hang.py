@@ -361,9 +361,9 @@ class TestOneColumnOneColour:
             aa.ansi_supported, cr.ansi_supported = old_aa, old_cr
 
     def _icon_column(self, line: str) -> int:
-        from core.ascii_art import display_width
-
         import re as _re
+
+        from core.ascii_art import display_width
 
         plain = _re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", line)
         idx = next(i for i, ch in enumerate(plain) if ch in self._ICONS)
@@ -415,14 +415,12 @@ class TestOneColumnOneColour:
 
     def test_the_spinner_is_the_doing_colour(self):
         """转圈符用的是权威表里 ``doing`` 那一格的颜色,不是自己挑的。"""
+        import io as _io
         import re as _re
 
         import core.ascii_art as aa
         import core.cli_render as cr
         from core.cli_render import _STATUS  # noqa: PLC2701
-
-        import io as _io
-
         from launcher.live_list import LiveList
 
         old_aa, old_cr = aa.ansi_supported, cr.ansi_supported

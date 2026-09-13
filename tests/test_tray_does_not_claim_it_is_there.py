@@ -75,16 +75,45 @@ def tray_module():
     ``start_tray_in_thread`` 的**返回约定**,和哪家后端无关。
     """
     fake, restore = _install_fake_pystray(lambda icon, setup: None)
+    reloaded = False
     try:
         import importlib
 
         mod = importlib.import_module("windows_service.tray_icon")
         importlib.reload(mod)
+        reloaded = True
         mod.pystray = fake
         mod._HAVE_TRAY = True
-        yield mod, fake
+        # 画图标那条路**不在这组判据的范围内** —— 这里验的是"起来了没有"的返回
+        # 约定。让它去真画的话,就把判据绑在了 Pillow 上:CI 上实测过一次,同一
+        # 分片里另一个测试往 sys.modules 塞了空壳 PIL 又没摘掉,这 4 条一起红,
+        # 而失败信息是 ``ImageDraw has no attribute 'Draw'`` —— 和托盘毫无关系。
+        #
+        # 那个残留已经修掉了(见 test_logs_have_one_entry_point),但判据不该
+        # 依赖别人守规矩:这里直接把画图标短路成一个占位对象。
+        saved_icon_fn = mod.create_icon_image
+        mod.create_icon_image = lambda *_a, **_k: object()
+        try:
+            yield mod, fake
+        finally:
+            mod.create_icon_image = saved_icon_fn
     finally:
         restore()
+        # 把模块**还原回真实状态**。
+        #
+        # 上一版只还原了 sys.modules 里的 pystray,却把 ``_HAVE_TRAY = True`` 和
+        # ``pystray = <假的>`` 留在真模块对象上 —— 于是后面 test_the_tray_says_why
+        # 那 6 条判据读到的是被我改过的模块,报出来的原因跟它们预期的不是一回事。
+        #
+        # 这正是我刚在 test_logs_have_one_entry_point 里挑出来的同一种毛病:
+        # 一个测试的残留改变了另一个测试的结论。自己不许犯。
+        if reloaded:
+            try:
+                import importlib as _il
+
+                _il.reload(_il.import_module("windows_service.tray_icon"))
+            except Exception:  # noqa: BLE001 —— 无头机器上真 import 会抛,那本来就是真实状态
+                pass
 
 
 def _run_ok(icon, setup):

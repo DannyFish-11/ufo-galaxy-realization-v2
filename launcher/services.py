@@ -1441,7 +1441,13 @@ class GalaxyUnified:
             # 结果把这个函数变脆了:模块里少了那个名字(旧版本、打包裁剪、测试里的桩)
             # 就是 ImportError,于是**任何**失败都会掉进"缺 pystray / Pillow"那一支 ——
             # 又一次把"起不来"说成"没装"。取原因这件事本身不该有失败的余地。
-            import windows_service.tray_icon as _tray_mod
+            import importlib
+
+            # 用 importlib.import_module 而不是 ``import windows_service.tray_icon as X``:
+            # 后者取的是**父包上的属性**,绕过 sys.modules —— 于是把模块替成桩件的
+            # 调用方(测试、打包裁剪)换不掉它,拿到的还是真模块。这不是测试的问题,
+            # 是"从哪儿取这个模块"这件事上两种写法语义不同,而我们要的是可替换的那种。
+            _tray_mod = importlib.import_module("windows_service.tray_icon")
 
             start_tray_in_thread = _tray_mod.start_tray_in_thread
             TRAY_UNAVAILABLE_REASON = getattr(_tray_mod, "TRAY_UNAVAILABLE_REASON", "")
