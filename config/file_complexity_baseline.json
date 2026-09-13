@@ -145,7 +145,7 @@
     "galaxy_gateway/websocket_handler.py": 1278,
     "launcher/node_startup.py": 1003,
     "launcher/services.py": 2635,
-    "main.py": 1855,
+    "main.py": 1885,
     "nodes/Node_112_SelfHealing/main.py": 1160,
     "nodes/Node_58_ModelRouter/main.py": 1082,
     "nodes/Node_71_MultiDeviceCoordination/core/multi_device_coordinator_engine.py": 1115,
