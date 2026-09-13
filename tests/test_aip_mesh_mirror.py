@@ -147,10 +147,9 @@ def test_conversation_content_is_never_mirrored_to_the_mesh():
     """
     exempt = set(mesh_exempt_message_types())
     for carries_conversation in ("agent_message", "voice_event"):
-        assert carries_conversation in exempt, (
-            f"{carries_conversation} 承载对话内容,却没有被豁免 —— "
-            "镜像到网格就是把一段私人对话广播给每一个节点。"
-        )
+        assert (
+            carries_conversation in exempt
+        ), f"{carries_conversation} 承载对话内容,却没有被豁免 —— 镜像到网格就是把一段私人对话广播给每一个节点。"
 
 
 def test_the_table_points_at_methods_that_actually_exist():
