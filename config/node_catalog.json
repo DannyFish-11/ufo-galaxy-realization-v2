@@ -1240,7 +1240,17 @@
       "type": "dev-code",
       "type_label": "开发/代码",
       "runnable": true,
-      "purpose": "Shell 命令执行器"
+      "purpose": "Shell 命令执行器",
+      "permissions": {
+        "actions": [
+          "execute",
+          "script",
+          "list_processes",
+          "kill",
+          "status",
+          "help"
+        ]
+      }
     },
     {
       "num": 123,

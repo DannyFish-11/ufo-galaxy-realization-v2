@@ -124,6 +124,36 @@ def _allowed_commands() -> frozenset:
     return _DEFAULT_ALLOWED_COMMANDS | added
 
 
+def _is_powershell_invocation(executable_name: str) -> bool:
+    """这次调用的是不是 PowerShell 解释器。"""
+    try:
+        from core.windows_powershell_policy import is_powershell
+    except Exception:  # noqa: BLE001 — 策略模块不可用时按"不是 PowerShell"处理,
+        return False    # 于是它落回 argv[0] 白名单 —— 而 powershell 不在里面,仍是拒绝。
+
+    return is_powershell(executable_name)
+
+
+def _powershell_allowed(command: str) -> bool:
+    """PowerShell 的 cmdlet 级判定。拒绝时把原因记进日志 —— 只回 False 排障时无从查起。"""
+    try:
+        from core.windows_powershell_policy import evaluate
+    except Exception as exc:  # noqa: BLE001 — 策略读不到时 fail-closed
+        logger.warning("PowerShell 策略不可用,拒绝执行: %s", exc)
+        return False
+
+    try:
+        argv = shlex.split(command, posix=False)
+    except ValueError:
+        logger.warning("PowerShell 命令引号不配对,拒绝")
+        return False
+
+    verdict = evaluate(argv)
+    if not verdict.allowed:
+        logger.warning("Blocked PowerShell: %s", verdict.reason)
+    return bool(verdict.allowed)
+
+
 def _executable_name(command: str) -> str:
     """取出命令串里真正会被执行的程序名（去掉路径与 .exe 后缀）。
 
@@ -234,6 +264,19 @@ class ShellService:
             if not exe:
                 logger.warning("Blocked empty command")
                 return False
+
+            # 1a) PowerShell 走**更细一层**的授权。
+            #
+            # argv[0] 级白名单对 git / ls 有效:程序本身决定了它能做什么。
+            # 但 `powershell -Command <任意字符串>` 是通用解释器 —— 把它放进
+            # argv[0] 白名单等于给了一把万能钥匙,白名单外的每个程序都能被它
+            # 调起来,这道白名单当场失效。
+            #
+            # 所以 PowerShell 不按程序名授权,按它后面跟的那个 cmdlet 授权。
+            # 判定在 core.windows_powershell_policy(纯函数,23 条用例)。
+            if _is_powershell_invocation(exe):
+                return _powershell_allowed(command)
+
             if exe not in _allowed_commands():
                 logger.warning(
                     "Blocked non-allowlisted executable %r (设 GALAXY_SHELL_ALLOWED_COMMANDS 可授权)",
