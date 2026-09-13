@@ -1559,6 +1559,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "advanced",
         "description": "等容器内服务就绪的超时(秒 · 默认 90)",
     },
+    "GALAXY_RUNTIME_PROMPT_TIMEOUT": {
+        "default": "20",
+        "type": "number",
+        "category": "advanced",
+        "description": "首启问你用 Docker 还是 Podman 时等多久(秒 · 默认 20;到点用默认项继续,不会把启动卡在那儿。设 0 = 一直等)",
+    },
     "GALAXY_AUTO_PODMAN_API_WAIT": {
         "default": "30",
         "type": "number",
