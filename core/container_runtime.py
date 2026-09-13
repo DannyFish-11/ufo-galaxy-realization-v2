@@ -25,12 +25,12 @@ import os
 import shutil
 import subprocess
 import sys
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
+from core.console_prompt import ask, timed_out_notice
 
 logger = logging.getLogger("Galaxy.ContainerRuntime")
 
@@ -142,65 +142,6 @@ def save_choice(rt: str, source: str = "unknown") -> None:
     os.environ["GALAXY_CONTAINER_RUNTIME"] = rt
 
 
-#: 交互提示等多久(秒)。到点用默认项继续,并在屏幕上说清楚用了哪个。
-#:
-#: 为什么必须有这个上界(全新克隆真跑发现)
-#: --------------------------------------
-#: 这个提示排在**系统托盘之前**(launcher/services.py:基础设施 → … → 系统托盘)。
-#: 没人按回车的话,``input()`` 就一直等着 —— 后面**所有**步骤都不会发生,托盘
-#: 自然也不会出现在右下角。所有者反馈的"卡在那儿"和"托盘没显示",在全新克隆上
-#: 是同一件事的两个面。
-#:
-#: 一个装完就双击图标启动的人,不会盯着控制台。所以这里给它一个上界:选择权
-#: 还在(在此之前任何时候按键都算数),但走开不会把启动卡死。
-DEFAULT_PROMPT_TIMEOUT_S = 20.0
-
-
-def _prompt_timeout_s() -> float:
-    raw = (os.environ.get("GALAXY_RUNTIME_PROMPT_TIMEOUT", "") or "").strip()
-    try:
-        return max(0.0, float(raw)) if raw else DEFAULT_PROMPT_TIMEOUT_S
-    except ValueError:
-        return DEFAULT_PROMPT_TIMEOUT_S
-
-
-def _input_with_timeout(prompt: str, timeout_s: float) -> Optional[str]:
-    """带上界的 ``input()``。到点返回 ``None``(= 没人回答),不是空串。
-
-    ``None`` 和 ``""`` 必须分开:空串是**用户按了回车**(明确选了默认),``None``
-    是**没人在**。两者接下来该说的话不一样。
-
-    实现上只能起一条守护线程去读:``input()`` 没有可移植的超时。到点之后那条
-    线程还挂在 stdin 上,用户后来敲的第一下会被它吃掉 —— 这是这个做法的已知
-    代价,写在这里而不是让人自己去撞。相对"永远卡住",这个代价是划算的。
-    """
-    if timeout_s <= 0:
-        try:
-            return input(prompt)
-        except (EOFError, KeyboardInterrupt):
-            return ""
-
-    box: List[Optional[str]] = []
-
-    def _read() -> None:
-        try:
-            box.append(input(prompt))
-        except EOFError:
-            # stdin 已经关了 —— **没有人能回答**,这和"按了回车"是两回事。
-            # 映射成 "" 的话,屏幕上会说成是用户选的默认;实际是根本没人在。
-            box.append(None)
-        except KeyboardInterrupt:
-            # Ctrl+C:人在,而且明确表示"别问了,走吧" —— 当作选默认。
-            box.append("")
-        except Exception:  # noqa: BLE001 —— 读不到就是没人回答
-            box.append(None)
-
-    t = threading.Thread(target=_read, name="GalaxyRuntimePrompt", daemon=True)
-    t.start()
-    t.join(timeout_s)
-    return box[0] if box else None
-
-
 def interactive_select(avail: List[str]) -> str:
     """两个运行时都装了时,让用户选一个作后台基础设施运行时。
 
@@ -234,15 +175,14 @@ def interactive_select(avail: List[str]) -> str:
         print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")
     r.rule()
     print("  " + _c("回车=用默认 · 数字=手选", Colors.DIM))
-    timeout_s = _prompt_timeout_s()
     while True:
-        answered = _input_with_timeout(f"  请选择运行时 [1-{len(avail)} / 回车]: ", timeout_s)
+        answered = ask(f"  请选择运行时 [1-{len(avail)} / 回车]: ")
         if answered is None:
             # 没人在。用默认继续,并且**把这件事说出来** —— 屏幕上不许让人
             # 以为是自己选的。
             print()
-            print("  " + _c(f"{timeout_s:.0f} 秒没人选,按默认用 {avail[0].capitalize()} 继续。", Colors.DIM))
-            print("  " + _c("下次想改:面板里设 GALAXY_CONTAINER_RUNTIME,或把这次的选择记下来。", Colors.DIM))
+            print("  " + _c(timed_out_notice("运行时", avail[0].capitalize()), Colors.DIM))
+            print("  " + _c("想改:面板里设 GALAXY_CONTAINER_RUNTIME(Docker / Podman)。", Colors.DIM))
             return avail[0]
         choice = answered.strip().lower()
         if choice == "":
@@ -381,7 +321,13 @@ def interactive_install_guide() -> str:
         "  " + _c(f"回车=记住默认({_RECOMMENDED.capitalize()}·更轻) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM)
     )
     try:
-        choice = input(f"  选择偏好运行时 [1-{len(_menu)} / 回车 / s]: ").strip().lower()
+        _answered = ask(f"  选择偏好运行时 [1-{len(_menu)} / 回车 / s]: ")
+        if _answered is None:
+            # 没人在 —— 用推荐项继续,而不是把启动挂在这儿(见 core/console_prompt)。
+            print("  " + _c(timed_out_notice("偏好运行时", _menu[0].capitalize()), Colors.DIM))
+            choice = ""
+        else:
+            choice = _answered.strip().lower()
     except (EOFError, KeyboardInterrupt):
         return ""
     if choice == "s":
@@ -465,7 +411,12 @@ def setup_wizard_select_runtime() -> str:
     r.rule()
     print("  " + _c("回车=用默认 · 数字=手选 · s=跳过(桌面照常运行)", Colors.DIM))
     try:
-        choice = input(f"  请选择运行时 [1-{len(menu)} / 回车 / s]: ").strip().lower()
+        _answered = ask(f"  请选择运行时 [1-{len(menu)} / 回车 / s]: ")
+        if _answered is None:
+            print("  " + _c(timed_out_notice("运行时", menu[0].capitalize()), Colors.DIM))
+            choice = ""
+        else:
+            choice = _answered.strip().lower()
     except (EOFError, KeyboardInterrupt):
         choice = ""
     if choice == "s":

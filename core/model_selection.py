@@ -21,6 +21,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from core.console_prompt import ask, timed_out_notice
+
 logger = logging.getLogger("Galaxy.ModelSelection")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -550,10 +552,16 @@ def interactive_select() -> str:
     r.rule()
     print("  " + _c("回车=用推荐档 · 数字=选档 · s=跳过下载", Colors.DIM))
     while True:
-        try:
-            choice = input(f"  请选择档位 [1-{len(tiers)} / 回车 / s]: ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        # 带上界地问(见 core/console_prompt):这个提示排在**系统托盘之前**,
+        # 没人按回车的话后面所有步骤都不发生 —— 连托盘都不会出现。
+        answered = ask(f"  请选择档位 [1-{len(tiers)} / 回车 / s]: ")
+        if answered is None:
+            # 没人在。用推荐档继续,并且把"这不是你选的"说出来。
+            print()
+            print("  " + _c(timed_out_notice("主脑档位", f"{rec_tier} 档(推荐)"), Colors.DIM))
+            print("  " + _c("想改:面板里设 GALAXY_MODEL_TIER。", Colors.DIM))
             return _commit(rec_tier)
+        choice = answered.strip().lower()
         if choice == "":
             return _commit(rec_tier)
         if choice == "s":
