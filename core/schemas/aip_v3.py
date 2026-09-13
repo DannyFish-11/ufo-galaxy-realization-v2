@@ -112,6 +112,9 @@ class MsgType(str, Enum):
     AGENT_MESSAGE = "agent_message"
     DECISION_REQUEST = "decision_request"
     DECISION_WITHDRAW = "decision_withdraw"
+    EXECUTION_PROPOSAL = "execution_proposal"
+    EXECUTION_COMMITMENT = "execution_commitment"
+    EXECUTION_COMMIT = "execution_commit"
 
 
 # ---------------------------------------------------------------------------
@@ -710,9 +713,68 @@ class DecisionWithdrawMsg(AIPMessage):
     )
 
 
+class ExecutionProposalMsg(AIPMessage):
+    """EXECUTION_PROPOSAL —— 动手之前先问一句:你能不能、你愿不愿意。
+
+    **只说做什么,不说怎么做。** 怎么做是对端 Agent 自己的事 —— 它有自己的四级降级链
+    (System API → UIA → 坐标 → VLM)和自己的就位自检。中心替它决定"点哪个按钮",
+    就是第二份实现,而且中心手里那份界面状态是几百毫秒前的。
+
+    这和 ``core.perception_grounding`` 的 POLICY_1 对 Android 说的是同一件事。
+    """
+
+    type: MsgType = Field(default=MsgType.EXECUTION_PROPOSAL)
+    proposal_id: str = Field(default="", description="这一轮协商的标识;承诺按它认领")
+    intent: str = Field(default="", description="要做的事,自然语言")
+    deadline_ms: int = Field(default=0, description="期望在这个时间点之前做完(Unix 毫秒);0=不限")
+    risk_level: str = Field(default="", description="动作风险分级,设备可据此自行加严")
+
+
+class ExecutionCommitmentMsg(AIPMessage):
+    """EXECUTION_COMMITMENT —— 设备自己判断之后的回答。
+
+    ``valid_until_ms`` 不是可选的
+    =============================
+    设备说"我能做"时看到的那一屏,几秒之后可能已经不在了。这和截图节流、控件树
+    复定位是同一类问题:**一个在时刻 T 成立的判断,不能无限期当成在 T+n 也成立。**
+
+    没有有效期的承诺等于让中心去赌"从收到承诺到真正派发之间什么都没变"。过期的
+    承诺一律作废重来,不赌。
+
+    ``decline_reason`` 是封闭枚举
+    =============================
+    借 SIP/Q.850 的纪律:拒绝永远带一个机器可读的原因,取自封闭集合。见
+    ``core.coordination_consensus.DeclineReason``。自由文本让中心只能把它当字符串
+    记进日志,没法据此换策略(忙 → 换一台;不就绪 → 等一会儿再问;权限不足 → 去问人)。
+    """
+
+    type: MsgType = Field(default=MsgType.EXECUTION_COMMITMENT)
+    proposal_id: str = Field(default="", description="认领哪一轮提议")
+    accepted: bool = Field(default=False, description="能不能做。默认 False —— fail-closed")
+    valid_until_ms: int = Field(default=0, description="这条承诺到什么时候失效(Unix 毫秒)")
+    decline_reason: str = Field(default="", description="不接时的原因,封闭枚举")
+    best_level: str = Field(default="", description="自报能走到哪一级(system_api/uia/gui/vlm)")
+
+
+class ExecutionCommitMsg(AIPMessage):
+    """EXECUTION_COMMIT —— 选定了,就是你(或者:这次不是你)。
+
+    落选的设备**也要收到**。否则它会一直占着为这次提议留的资源,而且不知道自己
+    已经出局 —— 和决策分叉不撤回是同一个形状的问题。
+    """
+
+    type: MsgType = Field(default=MsgType.EXECUTION_COMMIT)
+    proposal_id: str = Field(default="", description="哪一轮提议")
+    selected: bool = Field(default=False, description="这台是不是被选中的那台")
+    reason: str = Field(default="", description="没选中时说明为什么")
+
+
 _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
     MsgType.AGENT_MESSAGE: AgentMessageMsg,
     MsgType.DECISION_WITHDRAW: DecisionWithdrawMsg,
+    MsgType.EXECUTION_PROPOSAL: ExecutionProposalMsg,
+    MsgType.EXECUTION_COMMITMENT: ExecutionCommitmentMsg,
+    MsgType.EXECUTION_COMMIT: ExecutionCommitMsg,
     MsgType.VOICE_CALL_START: VoiceCallStartMsg,
     MsgType.VOICE_CALL_ACCEPTED: VoiceCallAcceptedMsg,
     MsgType.VOICE_CALL_END: VoiceCallEndMsg,

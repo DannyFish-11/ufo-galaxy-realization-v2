@@ -496,6 +496,26 @@ class MessageType(str, Enum):
     # 每一支发 CANCEL,那些终端停止振铃。
     DECISION_WITHDRAW = "decision_withdraw"
 
+    # ── 动手之前先问一句:你能不能、你愿不愿意 ──
+    #
+    # 中心把要做的事**提议**给候选设备,设备用**它自己的**判断回一条承诺或拒绝。
+    # 中心不替设备判断 —— 这和 perception_grounding 的 POLICY_1 是同一条原则:
+    # 设备端已经在做这件事,中心再判一次就是第二份实现,而且中心手里那份状态是
+    # 几百毫秒前的。
+    #
+    # 提议**只说做什么,不说怎么做**。怎么做是对端 Agent 自己的事(它有自己的
+    # 四级降级链)。
+    EXECUTION_PROPOSAL = "execution_proposal"
+
+    # 承诺**必带有效期**。设备说"我能做"时看到的那一屏,几秒之后可能已经不在了 ——
+    # 这和截图节流、控件树复定位是同一类问题:一个在时刻 T 成立的判断,不能无限期
+    # 当成在 T+n 也成立。过期的承诺一律作废重来,不去赌。
+    EXECUTION_COMMITMENT = "execution_commitment"
+
+    # 收齐承诺、选定执行面之后的落定。没有它,设备无从知道自己是被选中的那台还是
+    # 落选的那台 —— 而落选的那台必须知道,否则它会一直占着为这次提议留的资源。
+    EXECUTION_COMMIT = "execution_commit"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

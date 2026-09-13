@@ -130,8 +130,13 @@ def test_the_exempt_set_is_exactly_these():
       · ``decision_withdraw`` —— **收件人范围**不对。它要收回的通知只存在于当初被
         分叉到的那几台设备上;网格上其余节点从没收到过那条请求,也就没有东西可收。
 
-    前两类的理由是「内容不该广播」,第三类是「收件人不是所有人」。理由不同,但结论
-    一样:都不上网格。两种理由都要能说出口 —— 说不出口的豁免就是没人管过。
+    协商的三条(execution_proposal / execution_commitment / execution_commit)理由更硬:
+    **候选集合是安全边界**。相位 1 已经按 peer_trust 与 CapabilityTier 滤过候选池,
+    blocked 的对端是硬拒绝;把提议广播到网格,等于让一个被拉黑的对端看见我们正要
+    做什么,那道过滤就白做了。
+
+    三类理由分别是「内容不该广播」「收件人不是所有人」「广播会绕过一道安全过滤」。
+    结论一样:都不上网格。但理由必须各自说得出口 —— 说不出口的豁免就是没人管过。
     """
     assert set(mesh_exempt_message_types()) == {
         "voice_call_start",
@@ -142,6 +147,9 @@ def test_the_exempt_set_is_exactly_these():
         "voice_interrupt",
         "agent_message",
         "decision_withdraw",
+        "execution_proposal",
+        "execution_commitment",
+        "execution_commit",
     }
 
 
