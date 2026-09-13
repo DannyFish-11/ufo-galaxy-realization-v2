@@ -155,7 +155,63 @@ async def ui_perception_state() -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("界面快照统计不可读", exc_info=True)
         out["android_ui_snapshot_error"] = type(exc).__name__
+    out["desktop"] = desktop_perception_state()
     return out
+
+
+def desktop_perception_state() -> Dict[str, Any]:
+    """桌面这条腿此刻通不通,以及**下一次点击会走哪条路**。
+
+    为什么要能问这一句
+    ------------------
+    这条链上每一环都可能"看起来在工作,其实没有":
+
+      · 桌面 UIA 采集拿不到(不是 Windows / 没装 pywinauto)→ 结构图这条腿是空的,
+        但 ui_act 照样能用视觉投影跑起来,从响应上看不出差别;
+      · 仲裁器 import 得进来但 Level 1/2 是空的(服务端不是那台 Windows)→
+        "跑了仲裁器"和"用上了 UIA"长得一模一样,而后者才是按控件身份操作;
+      · 于是最后一米可能是 InvokePattern,也可能是盲点坐标 —— 调用方无从分辨。
+
+    三件事都是**能力探测**,不是"试一次看看":不抓窗口、不派动作、不改任何状态。
+    拿一次失败去反推能力是错的 —— 一次采集失败可能只是当时没有前台窗口。
+    """
+    from core.perception_grounding import describe_grounding_authority
+
+    state: Dict[str, Any] = {}
+
+    # ① 归属:这个平台是服务端说了算还是设备说了算
+    state["grounding_owner"] = describe_grounding_authority("windows")
+
+    # ② 采集:桌面 UIA 这条腿在不在
+    try:
+        from nodes.Node_36_UIAWindows.desktop_uia import availability
+
+        state["uia_capture"] = availability().to_dict()
+    except Exception as exc:  # noqa: BLE001 — 探测失败 ≠ 系统故障
+        state["uia_capture"] = {"available": False, "reason": f"探测失败: {type(exc).__name__}"}
+
+    # ③ 动作:仲裁器到底有没有 UIA 那一级
+    arbiter_has_uia = False
+    try:
+        from core.windows_execution_arbiter import get_windows_arbiter
+
+        arbiter_has_uia = bool(getattr(get_windows_arbiter(), "uia_available", False))
+        state["arbiter_uia_available"] = arbiter_has_uia
+    except Exception as exc:  # noqa: BLE001
+        state["arbiter_uia_available"] = False
+        state["arbiter_error"] = type(exc).__name__
+
+    # ④ 结论:下一次结构命中的点击会走哪条路。**这是调用方真正想知道的那一句。**
+    if arbiter_has_uia:
+        state["next_click_route"] = "uia_invoke"
+        state["next_click_note"] = "按控件身份操作,不经过鼠标"
+    else:
+        state["next_click_route"] = "coordinates"
+        state["next_click_note"] = (
+            "退坐标盲点:窗口若在采集之后动过这一下会落空,而且落在哪儿不可知。"
+            "服务端不是目标 Windows 时这是预期状态 —— 跨设备应走 agent_deploy + agent_execute。"
+        )
+    return state
 
 
 def _node_action(node_id: str, action_value: str) -> str:
