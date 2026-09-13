@@ -28,6 +28,8 @@ import logging
 import os
 import re
 
+from core.proc_text import run_text
+
 _LOCK_FILENAME = ".electron.pid"
 _logger = logging.getLogger(__name__)
 
@@ -446,7 +448,7 @@ def _windows_msvc_linker_dir(subprocess):
     if not os.path.isfile(vswhere):
         return None
     try:
-        out = subprocess.run(
+        out = run_text(
             [
                 vswhere,
                 "-latest",
@@ -457,8 +459,6 @@ def _windows_msvc_linker_dir(subprocess):
                 "-property",
                 "installationPath",
             ],
-            capture_output=True,
-            text=True,
             timeout=20,
         )
     except Exception:
@@ -503,7 +503,7 @@ def _windows_setup_msvc_build_env(subprocess) -> bool:
     if not os.path.isfile(vswhere):
         return False
     try:
-        out = subprocess.run(
+        out = run_text(
             [
                 vswhere,
                 "-latest",
@@ -514,8 +514,6 @@ def _windows_setup_msvc_build_env(subprocess) -> bool:
                 "-property",
                 "installationPath",
             ],
-            capture_output=True,
-            text=True,
             timeout=20,
         )
     except Exception:

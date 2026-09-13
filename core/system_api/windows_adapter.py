@@ -581,11 +581,17 @@ class WindowsAdapter(SystemAPI):
             pass
         # WMIC fallback
         try:
-            out = subprocess.check_output(
-                ["wmic", "process", "get", "ProcessId,Name"],
-                stderr=subprocess.DEVNULL,
-                timeout=10,
-            ).decode(errors="replace")
+            # wmic 在中文 Windows 上按控制台代码页(cp936)输出,不是 UTF-8。
+            # 裸 .decode() 默认 utf-8,进程名带中文时整段花掉 —— 走唯一那个解码器。
+            from core.proc_text import decode_output
+
+            out, _enc = decode_output(
+                subprocess.check_output(
+                    ["wmic", "process", "get", "ProcessId,Name"],
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                )
+            )
             procs: List[ProcessInfo] = []
             for line in out.splitlines()[1:]:
                 parts = line.split()

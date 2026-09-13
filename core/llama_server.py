@@ -179,6 +179,8 @@ def _run_help(binary: str) -> str:
         [binary, "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",  # 见 core/proc_text:不写 encoding 时 Windows 按 cp936 解 UTF-8 输出 → 乱码
+        errors="replace",
         timeout=_HELP_TIMEOUT_S,
         check=False,
     )

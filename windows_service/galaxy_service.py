@@ -207,6 +207,8 @@ if _HAVE_PYWIN32:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding="utf-8",  # 见 core/proc_text:不写 encoding 时 Windows 按 cp936 解 UTF-8 输出 → 乱码
+                    errors="replace",
                     bufsize=1,
                 )
 
@@ -296,6 +298,8 @@ if _HAVE_PYWIN32:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding="utf-8",  # 见 core/proc_text:不写 encoding 时 Windows 按 cp936 解 UTF-8 输出 → 乱码
+                    errors="replace",
                     bufsize=1,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
                 )

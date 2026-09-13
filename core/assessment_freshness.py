@@ -61,10 +61,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from core.proc_text import run_text
 
 logger = logging.getLogger("Galaxy.AssessmentFreshness")
 
@@ -158,10 +159,8 @@ def _grep(pattern: str, scope: str) -> Optional[List[str]]:
     if not root.exists():
         return None
     try:
-        proc = subprocess.run(
+        proc = run_text(
             ["grep", "-rn", "--include=*.py", "-E", pattern, str(root)],
-            capture_output=True,
-            text=True,
             timeout=60,
         )
     except Exception as exc:  # noqa: BLE001 — 搜不动就是问不出来,不猜
