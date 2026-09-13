@@ -380,6 +380,45 @@ class UIATools:
         except Exception as e:
             return {"error": str(e)}
 
+    @staticmethod
+    def _desktop_uia():
+        """拿到只读采集模块。
+
+        相对导入在 `fusion_entry` 那条路上解析不了:它用
+        `spec_from_file_location("Node_36_UIAWindows.main", ...)` 加载本文件,于是
+        `__package__` 是 "Node_36_UIAWindows",但那个包并不在 sys.modules 里 ——
+        `from .desktop_uia import` 会抛 `No module named 'Node_36_UIAWindows'`。
+
+        本节点里 ui_tree.py / ufo_deep_integration.py 早就是这个写法(try 相对、
+        except 退绝对)。这里照做,并且只写一处,别让三个方法各自 try 一遍。
+        """
+        try:
+            from . import desktop_uia  # type: ignore[import-not-found]
+        except ImportError:
+            import desktop_uia  # type: ignore[import-not-found,no-redef]
+        return desktop_uia
+
+    # ── 结构化读取(委托给 desktop_uia,不在这里再写一份)────────────────────
+    #
+    # 这三个动作在 config/node_catalog.json 里**早就声明**给 Node 36 了,但 main.py
+    # 一个都没实现 —— 权限白名单声明了节点没有的能力。后果不是报错,是更糟的一种:
+    # 走 invoke_node 时权限闸放行,然后撞上 "Unknown tool"。读 manifest 的人会以为
+    # 这个节点是 UIA-first 的,而它的动作面全是坐标。
+    #
+    # 实现放在 nodes.Node_36_UIAWindows.desktop_uia(只读、可接线、有 15 条测试),
+    # 这里只做转发。两份实现必然会漂,而漂的时候现场看不出是哪一份抓的树。
+
+    def get_ui_tree(self, window_title: Optional[str] = None, max_depth: int = 40) -> Dict:
+        return self._desktop_uia().get_ui_tree(window_title, max_depth)
+
+    def find_element(self, selector: Dict[str, Any]) -> Dict:
+        hit = self._desktop_uia().find_element(selector or {})
+        return {"success": hit is not None, "element": hit}
+
+    def find_elements(self, selector: Dict[str, Any]) -> Dict:
+        hits = self._desktop_uia().find_elements(selector or {})
+        return {"success": True, "elements": hits, "count": len(hits)}
+
     def window_action(self, title: str, action: str) -> Dict:
         if not IS_WINDOWS or not pygetwindow:
             return {"error": "pygetwindow not available"}
@@ -510,12 +549,46 @@ class UIATools:
             return self.list_windows()
         elif tool == "window_action":
             return self.window_action(params.get("title", ""), params.get("action", "focus"))
+        # manifest 把这五个声明成了**顶层动作**,而实现是 window_action 的子动作。
+        # 于是 invoke_node(action="focus") 过了权限闸却撞上 "Unknown tool" ——
+        # 声明与实现对不上的典型后果。这里按 manifest 的形状补上转发。
+        elif tool in ("focus", "minimize", "maximize", "restore", "close"):
+            return self.window_action(params.get("title", ""), tool)
+        elif tool == "get_ui_tree":
+            return self.get_ui_tree(params.get("window_title"), params.get("max_depth", 40))
+        elif tool == "find_element":
+            return self.find_element(params.get("selector", {}))
+        elif tool == "find_elements":
+            return self.find_elements(params.get("selector", {}))
         elif tool == "locate_on_screen":
             return self.locate_on_screen(params.get("image_path", ""), params.get("confidence", 0.9))
         return {"error": f"Unknown tool: {tool}"}
 
 
 tools = UIATools()
+
+
+# ── 统一执行器入口 ────────────────────────────────────────────────────────────
+#
+# `core.node_invocation.invoke_node` 把动作名转发给节点的 `execute`
+# (Golden Path 的 LocalNodeFacade 与 legacy 的 fusion_entry 最终都落到这里)。
+# `fusion_entry.FusionNode.execute` 在实例上按顺序找 process / execute / run / handle,
+# 一个都找不到就返回 `{"success": False, "error": "No executable method found"}`。
+#
+# 本节点的动作面叫 `call_tool`,这四个名字一个都没有 —— 于是
+# `invoke_node("Node_36_UIAWindows", "click", ...)` **什么都执行不了**,而且报的是
+# 一句泛化错误,看不出是接线断了还是动作不支持。实测:
+#
+#     execute('click') → {'success': False, 'error': 'No executable method found'}
+#
+# 这条路正是 `core/routes/ui_act.py` 结构化命中之后的派发目标。也就是说:读控件图、
+# grounding 命中、算出坐标 —— 全做完了,最后一步掉在地上。
+#
+# 补这个转发函数把它接上。刻意放在 main.py 而不是 fusion_entry.py:后者头一行写着
+# "由系统自动生成",改它会在下次生成时被覆盖。
+async def execute(command: str, **params) -> Dict[str, Any]:
+    """统一执行器入口:动作名 → `UIATools.call_tool`。"""
+    return await tools.call_tool(command, params or {})
 
 
 # ============ API 端点 ============
