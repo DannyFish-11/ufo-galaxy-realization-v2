@@ -28,8 +28,6 @@ import logging
 import os
 import re
 
-from core.proc_text import run_text
-
 _LOCK_FILENAME = ".electron.pid"
 _logger = logging.getLogger(__name__)
 
@@ -448,7 +446,13 @@ def _windows_msvc_linker_dir(subprocess):
     if not os.path.isfile(vswhere):
         return None
     try:
-        out = run_text(
+        # 走**传进来的** subprocess,不走模块级的 run_text ——
+        # 这两处的 subprocess 是注入的(见函数签名):调用方/测试要能换掉它。
+        # 上一版我为了统一编码把它改成了 run_text(),那就绕开了注入,
+        # 假的 subprocess 再也拦不住这一步 —— tests/test_electron_launch_guard.py
+        # 的 TestVcvarsBuildEnv 立刻变红。编码要统一,但不能把可替换性换掉:
+        # 显式带上和 core/proc_text.TEXT_KWARGS 同一组参数即可。
+        out = subprocess.run(
             [
                 vswhere,
                 "-latest",
@@ -459,6 +463,10 @@ def _windows_msvc_linker_dir(subprocess):
                 "-property",
                 "installationPath",
             ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=20,
         )
     except Exception:
@@ -503,7 +511,13 @@ def _windows_setup_msvc_build_env(subprocess) -> bool:
     if not os.path.isfile(vswhere):
         return False
     try:
-        out = run_text(
+        # 走**传进来的** subprocess,不走模块级的 run_text ——
+        # 这两处的 subprocess 是注入的(见函数签名):调用方/测试要能换掉它。
+        # 上一版我为了统一编码把它改成了 run_text(),那就绕开了注入,
+        # 假的 subprocess 再也拦不住这一步 —— tests/test_electron_launch_guard.py
+        # 的 TestVcvarsBuildEnv 立刻变红。编码要统一,但不能把可替换性换掉:
+        # 显式带上和 core/proc_text.TEXT_KWARGS 同一组参数即可。
+        out = subprocess.run(
             [
                 vswhere,
                 "-latest",
@@ -514,6 +528,10 @@ def _windows_setup_msvc_build_env(subprocess) -> bool:
                 "-property",
                 "installationPath",
             ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=20,
         )
     except Exception:
