@@ -181,72 +181,41 @@ class UFODeepIntegration:
     # ========================================================================
     # UI 元素操作
     # ========================================================================
-    
+
+    # 采集与查找已拆到 :mod:`nodes.Node_36_UIAWindows.desktop_uia`(只读,可接线)。
+    # 这里保留同名方法只为不打断既有调用方,实现一律委托过去 —— 两份实现必然会漂,
+    # 而漂的时候现场看不出是哪一份抓的树。
+    #
+    # 拆分的理由写在那个模块的 docstring 里:本类因为 launch_app / close_app 能执行
+    # 任意二进制而被 check_wiring 整体豁免为"故意不接线",连带把只读采集也关在门外,
+    # 于是"结构优先"的桌面那条腿没有任何活的生产者。
+
     def capture_desktop_graph(self, window_title: Optional[str] = None,
                               max_depth: int = 40) -> Optional[Dict[str, Any]]:
-        """读一棵真实的 Windows UIA 控件树 → 结构化 UIGraph（dict）。
+        """读一棵真实的 Windows UIA 控件树 → 结构化 UIGraph(dict)。委托给 desktop_uia。"""
+        from .desktop_uia import capture_desktop_graph as _capture
 
-        这是桌面 system-API 的"结构优先"输入:对着语义控件图(名为『发送』的按钮)
-        推理,而不是对着像素猜坐标。非 Windows / 缺 pywinauto 时返回 None(上层回退
-        视觉)。前台窗口默认;给 window_title 则按标题连接。"""
-        try:
-            from pywinauto import Desktop  # 延迟 import: 仅 Windows 可用
-        except Exception as e:  # noqa: BLE001
-            logger.info("capture_desktop_graph 不可用(非 Windows / 缺 pywinauto): %s", e)
-            return None
-        try:
-            from .ui_tree import build_ui_graph
-        except ImportError:
-            from ui_tree import build_ui_graph  # 直接运行时的回退
-        try:
-            desk = Desktop(backend="uia")
-            win = desk.window(title=window_title) if window_title else desk.window(active_only=True)
-            ctl = win.wrapper_object()
-            app = ""
-            try:
-                app = ctl.window_text()
-            except Exception:  # noqa: BLE001
-                pass
-            graph = build_ui_graph(ctl, app=app, device_id="windows", max_depth=max_depth)
-            return graph.model_dump()
-        except Exception as e:  # noqa: BLE001
-            logger.warning("capture_desktop_graph 失败: %s", e)
-            return None
+        return _capture(window_title, max_depth)
 
     async def get_ui_tree(self, window_title: Optional[str] = None,
                           max_depth: int = 40) -> Dict[str, Any]:
-        """结构化界面树端点。返回 ``{success, graph?, prompt?, error?}``。"""
-        graph = self.capture_desktop_graph(window_title, max_depth)
-        if graph is None:
-            return {"success": False, "error": "ui_tree_unavailable"}
-        try:
-            from core.schemas.ui_element import UIGraph
-            prompt = UIGraph.model_validate(graph).to_prompt()
-        except Exception:  # noqa: BLE001
-            prompt = ""
-        return {"success": True, "graph": graph, "prompt": prompt}
+        """结构化界面树端点。委托给 desktop_uia。"""
+        from .desktop_uia import get_ui_tree as _tree
+
+        return _tree(window_title, max_depth)
 
     async def find_element(self, selector: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """按选择器查找单个 UI 元素(结构化 UIA 树搜索;真做实,不再是桩)。
+        """按选择器查找单个 UI 元素。委托给 desktop_uia。"""
+        from .desktop_uia import find_element as _find_one
 
-        selector 支持: name/label · automation_id · class_name · control_type/role。
-        命中多个时可交互控件优先。非 Windows / 无树时返回 None。"""
-        hits = await self.find_elements(selector)
-        return hits[0] if hits else None
+        return _find_one(selector)
 
     async def find_elements(self, selector: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """按选择器查找全部匹配的 UI 元素(结构化 UIA 树搜索)。"""
-        graph = self.capture_desktop_graph()
-        if graph is None:
-            return []
-        try:
-            from core.schemas.ui_element import UIGraph
-            from .ui_tree import find_in_graph
-        except ImportError:
-            from core.schemas.ui_element import UIGraph
-            from ui_tree import find_in_graph
-        return [n.model_dump() for n in find_in_graph(UIGraph.model_validate(graph), selector)]
-    
+        """按选择器查找全部匹配的 UI 元素。委托给 desktop_uia。"""
+        from .desktop_uia import find_elements as _find_all
+
+        return _find_all(selector)
+
     def _element_to_dict(self, element) -> Dict[str, Any]:
         """将 UFO 元素转换为字典"""
         try:

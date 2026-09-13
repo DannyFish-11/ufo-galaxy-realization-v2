@@ -132,7 +132,7 @@
     "core/vision_pipeline.py": 1178,
     "core/voice_duplex_session.py": 1229,
     "core/webrtc_task_lifecycle.py": 1049,
-    "core/windows_execution_arbiter.py": 1152,
+    "core/windows_execution_arbiter.py": 1160,
     "enhancements/learning/autonomous_learning_engine.py": 1288,
     "galaxy_gateway/android/handlers/goal_execution.py": 1785,
     "galaxy_gateway/android/handlers/registration.py": 1671,

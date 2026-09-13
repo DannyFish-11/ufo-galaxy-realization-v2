@@ -466,6 +466,14 @@ class WindowsExecutionArbiter:
         if screenshot is not None:
             self._screenshot = screenshot
 
+    @property
+    def uia_available(self) -> bool:
+        """Level 2(UIA)此刻接上了没有 —— 派发前要能问,而不是派完从结果里猜。
+
+        为什么必须能问:见 ``tests/test_ui_act_never_pretends_to_have_uia.py``。
+        """
+        return self._uia is not None
+
     async def execute(
         self,
         action: str,
