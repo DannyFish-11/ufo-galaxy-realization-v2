@@ -220,3 +220,36 @@ def test_the_gateway_actually_routes_execution_commitment_to_the_registry():
         and n.func.value.func.id == "get_commitment_registry"
     }
     assert "resolve" in chained, "收到承诺却没有 resolve 对应的轮次"
+
+
+def test_the_gateway_takes_device_id_from_the_connection_not_from_the_payload():
+    """承诺的 device_id 以连接为准,不收设备自报的那个。
+
+    收设备自报的会开一个口子:一台设备在 payload 里填另一台的 id,就能替别人接下
+    这次任务,或者替别人拒绝 —— 而中心会照着这个假身份去派发。连接上的 device_id
+    是握手时定下的,设备改不了。
+
+    顺带还解决一个真问题:手表的 sendCommand 只在信封上带 device_id,内层 payload
+    里没有;按 payload 取会得到空串,那条承诺被当成"没问过的设备"丢掉,手表等于还是沉默。
+    """
+    import ast
+    import pathlib
+    import textwrap
+
+    src = pathlib.Path("galaxy_gateway/websocket_handler.py").read_text(encoding="utf-8")
+    fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.AsyncFunctionDef) and n.name == "handle_command")
+    body = textwrap.dedent(ast.get_source_segment(src, fn) or "")
+
+    # 找到喂给 resolve 的那个字典,确认它的 device_id 被连接上的值覆盖过。
+    assigns = [
+        n
+        for n in ast.walk(ast.parse(body))
+        if isinstance(n, ast.Assign)
+        and len(n.targets) == 1
+        and isinstance(n.targets[0], ast.Subscript)
+        and isinstance(n.targets[0].slice, ast.Constant)
+        and n.targets[0].slice.value == "device_id"
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "device_id"
+    ]
+    assert assigns, "承诺的 device_id 没有被连接上的值覆盖 —— 设备可以冒名顶替"

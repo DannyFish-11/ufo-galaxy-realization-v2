@@ -920,10 +920,18 @@ async def handle_command(connection_id: str, aip_msg):
             # 认不出这一轮（已超时收摊、或 proposal_id 是编的）时不报错：迟到的承诺
             # 是常态，不是故障。resolved=False 会如实回给设备，它据此知道自己白答了。
             _pid = str(_payload.get("proposal_id") or "")
+            # device_id 以**连接**为准，不收设备在 payload 里自报的那个：
+            # 那个字段是设备写的，一台设备可以填另一台的 id，从而替别人接下任务
+            # 或者替别人拒绝。连接上的 device_id 是握手时定下的，改不了。
+            # 顺带解决一个实际问题：手表的 sendCommand 只在信封上带 device_id，
+            # 内层 payload 里没有，按 payload 取会得到空串、这条承诺被当成
+            # "没问过的设备"丢掉 —— 手表等于还是沉默。
+            _commit_payload = dict(_payload)
+            _commit_payload["device_id"] = device_id
             try:
                 from core.coordination_commitment_collector import get_commitment_registry
 
-                _accepted_round = get_commitment_registry().resolve(_pid, dict(_payload))
+                _accepted_round = get_commitment_registry().resolve(_pid, _commit_payload)
             except Exception as _cm_err:
                 logger.debug("execution_commitment resolve skipped: %s", _cm_err)
                 _accepted_round = False

@@ -138,10 +138,6 @@ class CommitmentRegistry:
             return False
         return rnd.accept_reply(Commitment.from_payload(payload))
 
-    @property
-    def open_rounds(self) -> List[str]:
-        return list(self._rounds)
-
 
 _registry: Optional[CommitmentRegistry] = None
 

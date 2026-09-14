@@ -226,6 +226,25 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
             "跳过桌面壳这一启动阶段（无头/服务端部署用；" "打开后不再探测或安装 Electron 依赖，面板也不会被拉起）"
         ),
     },
+    "GALAXY_CONSENSUS_ROUND": {
+        "default": "1",
+        "type": "boolean",
+        "category": "advanced",
+        "description": (
+            "多台候选设备时，派发前先发一轮提议、按设备自己的回答收敛（默认开）。"
+            "关掉之后跨设备派发的行为和加入这一轮之前逐字相同"
+        ),
+    },
+    "GALAXY_PS_ALLOWED_CMDLETS": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": (
+            "PowerShell 白名单的**追加**项，逗号分隔（例：Get-Service,Test-Path）。"
+            "内置白名单只放只读 cmdlet；要放开写操作必须在这里显式写出来，"
+            "而且每一条仍然要人确认之后才执行"
+        ),
+    },
     "QDRANT_URL": {
         "default": "",
         "type": "url",
