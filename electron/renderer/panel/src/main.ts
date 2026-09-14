@@ -94,10 +94,13 @@ function mount(host: HTMLElement): void {
 
   const deck = createDeck(store, (i) => void openCard(i));
   const line = createLine();
-  // 「接上了什么」跟着那条线一起挂在左栏底下 —— 线说「本机在不在动」,
-  // 它说「哪几条真的通着」。两件事相邻,但各说各的,不合成一个控件。
+  // 「接上了什么」跟那条线一起挂在左栏底下 —— 它说「哪几条真的通着」,
+  // 线说「本机在不在动」。两件事相邻,但各说各的,不合成一个控件。
+  //
+  // 顺序:清单在上,线在**最下面**。线是这一栏的底,不是栏里的一道分隔 ——
+  // 夹在中间时它把左栏从视觉上切成了两半,而那两半本来是一体的。
   const wired = createWired();
-  deck.root.append(line.root, wired.root);
+  deck.root.append(wired.root, line.root);
 
   const main = document.createElement('div');
   main.className = 'main';
