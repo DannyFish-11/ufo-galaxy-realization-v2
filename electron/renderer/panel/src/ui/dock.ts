@@ -106,12 +106,40 @@ export function createDock(cb: DockCallbacks): DockHandles {
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = '说点什么，或者直接说话';
+  /**
+   * 输入条右侧那两小块:**现在用的是什么**。
+   *
+   * 借的是 Gemini 桌面版把 `Flash  Extended thinking` 低对比地摆在输入框里
+   * 那个做法 —— 不是下拉、不是徽章,就是**当前事实**,点得动。
+   *
+   * 为什么值得搬:`renderTiers` 那段注释里写着「档位是唯一定义处」。既然是
+   * 唯一定义处,它就该出现在**你即将用到它的那一行**,而不是要先点开设置浮层
+   * 才看得见。你正要说话,而"这句话会被谁接住"就写在旁边。
+   *
+   * 两块分开而不是拼成一句:左边是档(A/B/C/D,你选的),右边是这一档**实际
+   * 加载的型号**(后端给的)。拼成一句的话,"我选了 C 档"和"C 档现在真的在跑
+   * 这两个型号"就分不开了 —— 而这个仓库栽过的正是这种。
+   */
+  const now = document.createElement('button');
+  now.className = 'now';
+  now.type = 'button';
+  now.setAttribute('aria-label', '当前本机模型档位，点开设置');
+  const nowTier = document.createElement('span');
+  nowTier.className = 'now-tier';
+  const nowModel = document.createElement('span');
+  nowModel.className = 'now-model';
+  now.append(nowTier, nowModel);
+  now.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cb.onTogglePopover('settings');
+  });
+
   const send = document.createElement('button');
   send.className = 'send';
   send.type = 'button';
   send.setAttribute('aria-label', '发送');
   send.append(icon(ICONS.send, 15, 2));
-  field.append(input, send);
+  field.append(input, now, send);
 
   function submit(): void {
     const text = input.value.trim();
@@ -141,25 +169,67 @@ export function createDock(cb: DockCallbacks): DockHandles {
   const feed = document.createElement('div');
   feed.className = 'pop';
   feed.dataset['side'] = 'left';
-  for (const [label, accept] of [
-    ['图片', 'image/*'],
-    ['文件', '*/*'],
-    ['圈一块屏幕', ''],
-    ['网页链接', ''],
-  ] as const) {
+  /**
+   * 每一条:**标题是你想干什么,副行是它实际会做什么。**
+   *
+   * 借的是 Gemini 桌面版 Trending 那几张卡的写法 ——
+   * 「Organize my connected folders / Find unorganized files…, group by type,
+   * archive the clutter」。标题用人的意图,副行说清机制。
+   *
+   * 上一版这里是四个光秃秃的词:图片 / 文件 / 圈一块屏幕 / 网页链接。它们是
+   * **分类名**,不是"它会做什么" —— 点"图片"之后发生什么、喂进去之后它被当成
+   * 什么用,一个字都没有。而后两条根本还没接上,光看四个并排的词完全看不出来。
+   *
+   * 副行同时承担一件更要紧的事:**没接上的那两条,就在副行里说出来。** 藏起来
+   * 的话,"没这个功能"和"有但还没接"在界面上一模一样。
+   */
+  const FEED_ITEMS = [
+    {
+      title: '喂一张图进去',
+      how: '选中的图直接进这轮对话，并按记忆门存下来（原图留在 media_store）',
+      accept: 'image/*',
+    },
+    {
+      title: '喂一份文件进去',
+      how: '读成文字进这轮对话；存进记忆时带上来源，不以第一人称写入',
+      accept: '*/*',
+    },
+    {
+      title: '圈一块屏幕',
+      how: '还没接上 —— 圈选这条路径尚未接到感知侧，点了不会有反应',
+      accept: '',
+    },
+    {
+      title: '给一个网页链接',
+      how: '还没接上 —— 抓取与正文提取尚未接进喂入口，点了不会有反应',
+      accept: '',
+    },
+  ] as const;
+
+  for (const spec of FEED_ITEMS) {
     const item = document.createElement('button');
-    item.className = 'pop-item';
+    item.className = 'pop-item pop-card';
     item.type = 'button';
-    item.textContent = label;
-    if (accept) {
+    const t = document.createElement('span');
+    t.className = 'pop-card-t';
+    t.textContent = spec.title;
+    const h = document.createElement('span');
+    h.className = 'pop-card-h';
+    h.textContent = spec.how;
+    item.append(t, h);
+    if (spec.accept) {
       item.addEventListener('click', () => {
         void platform()
-          .pickFiles(accept)
+          .pickFiles(spec.accept)
           .then((files) => {
             // 用户按了取消 —— 什么都不做是对的,但也不该假装发生了什么。
             if (files.length) cb.onFeed(files);
           });
       });
+    } else {
+      // 没接上的:**照画、照显示,但明说点不动。** 藏起来的话人只会反复去点。
+      item.dataset['unwired'] = 'true';
+      item.disabled = true;
     }
     feed.append(item);
   }
@@ -362,6 +432,43 @@ export function createDock(cb: DockCallbacks): DockHandles {
     }
 
     renderTiers(tiers, tierGaps);
+    renderNow(tiers);
+  }
+
+  /**
+   * 输入条里那两小块的取值。
+   *
+   * 四种处境各说各的 —— 这一行**最容易**被写成"没值就空着",而空着的时候
+   * 「读不到目录」「还没选档」「选了个目录里没有的档」三件事长得一模一样。
+   */
+  function renderNow(view: TierView | null): void {
+    if (view === null) {
+      // 拉不到目录。空着的话,和"这台机器没有本机档位"分不开。
+      nowTier.textContent = '档位读不到';
+      nowModel.textContent = '';
+      now.dataset['state'] = 'unwired';
+      now.title = '读不到档位目录 —— 后端没接上，不是没有档位';
+      return;
+    }
+    const cur = view.tiers.find((t) => t.key === view.current);
+    if (!cur) {
+      now.dataset['state'] = view.current ? 'unwired' : 'none';
+      nowTier.textContent = view.current ? `${view.current} 档` : '未选档';
+      nowModel.textContent = '';
+      now.title = view.current
+        ? `当前 ${view.current} 档，但目录里没有这一档`
+        : '还没选定档位，点开设置里的「本机模型」';
+      return;
+    }
+    now.dataset['state'] = 'ok';
+    nowTier.textContent = `${cur.key} 档`;
+    // 右边只放**实际加载的型号**,而且只放一个 —— 这是一行内联标签,不是清单。
+    // 两位都有时取推理位那个(它决定这句话由谁想出来);详细的两位在设置里那行。
+    const models = view.slots.filter((sl) => sl.model);
+    nowModel.textContent = models.length ? models[models.length - 1]!.model : '';
+    now.title = models.length
+      ? `${cur.label}\n现在跑的是：${models.map((sl) => `${sl.role} ${sl.model}`).join(' + ')}`
+      : `${cur.label}\n这一档还没报出在跑哪个型号`;
   }
 
   return { root: wrap, render };

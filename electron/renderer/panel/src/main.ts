@@ -39,6 +39,7 @@ import type { LineTrust } from './ui/line';
 import { createIsland } from './ui/island';
 import { createThread } from './ui/thread';
 import { createDock } from './ui/dock';
+import { createWired, deriveWired } from './ui/wired';
 import { createSettings } from './ui/settings';
 import { createUserProviders } from './ui/user_providers';
 import type { UserProviderDraft } from './ui/user_providers';
@@ -93,7 +94,10 @@ function mount(host: HTMLElement): void {
 
   const deck = createDeck(store, (i) => void openCard(i));
   const line = createLine();
-  deck.root.append(line.root);
+  // 「接上了什么」跟着那条线一起挂在左栏底下 —— 线说「本机在不在动」,
+  // 它说「哪几条真的通着」。两件事相邻,但各说各的,不合成一个控件。
+  const wired = createWired();
+  deck.root.append(line.root, wired.root);
 
   const main = document.createElement('div');
   main.className = 'main';
@@ -141,11 +145,27 @@ function mount(host: HTMLElement): void {
   // ── 渲染:状态一变就重画。没有虚拟 DOM,也不需要 ────────────────────
   function render(): void {
     const s = store.state;
+    // 壳的**环境色温**跟着相位走(silent 偏冷 / manifest 偏暖,全在灰紫轴上)。
+    //
+    // 挂在壳上而不是各控件上:这一层是"整间屋子的光",不是某个物件的状态。
+    // 它和那条线、和岛的离墙高度是同一类通道 —— 不用读,余光里就成立。
+    // 取值同样只认 `s.phase`(唯一权威是 WS 的 payload.render,见文件头)。
+    shell.dataset['phase'] = s.phase;
     panel.dataset['slim'] = String(s.slim);
     deck.render();
     line.update(s.phase, s.slim, lineTrust(s.posture));
     island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyBusy, s.islandOpen);
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
+    wired.render(
+      deriveWired({
+        tiers: s.tiers,
+        providers: s.userProviders,
+        devices: s.devices,
+        perception: s.posture?.perception ?? null,
+        connected: s.connected,
+      }),
+      s.slim,
+    );
     thread.render(s.turns, s.lockstep, s.lockstepReason);
     dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
     settings.render(s.config, s.settingsOpen, s.configBusy);
@@ -223,6 +243,13 @@ function mount(host: HTMLElement): void {
       ...(page ? { userProviderProtocols: page.supportedProtocols } : {}),
     });
   }
+  // 开机就拉一次。
+  //
+  // 以前这条只在打开设置时拉,因为只有设置页要用。**现在「接上了什么」那张清单
+  // 也要用** —— 不在开机拉的话,那一行会一直写着「端点列表没拉到」,而实际上
+  // 后端好好的、端点也都验过了。清单说「不知道」,人却看得见后端是通的,
+  // 这就正好是那张清单要治的毛病:说的和现实相反。
+  void loadEndpoints();
 
   /**
    * 加一条或改一条,**存完立刻验一次**。
