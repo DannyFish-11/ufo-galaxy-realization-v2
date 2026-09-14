@@ -591,6 +591,67 @@ async def execute(command: str, **params) -> Dict[str, Any]:
     return await tools.call_tool(command, params or {})
 
 
+# ============ HTTP 动作权限闸 ============
+#
+# 这个节点有**两条**入口,而门禁此前只装在其中一条上:
+#
+#   1. 统一执行器 `core.node_invocation.invoke_node` → `execute()` → `call_tool`
+#      —— 这条路上有三道门:治理资格门、动作权限门、HITL 审批。
+#   2. 下面这些 FastAPI 路由 → 直接调 `tools.*`
+#      —— **一道都没有**。
+#
+# 后果不是抽象的。`config/node_catalog.json` 里给 Node 36 声明的动作白名单,
+# 是运维手上唯一能收紧这个节点的旋钮。今天把 `type_text` 从白名单里删掉:
+# 统一执行器会拒绝,而 `POST /type` 照常打字。那个旋钮在这条路上是假的。
+#
+# 同理,往 `call_tool` 里新加一个动作却忘了写进 manifest(最初提的
+# `run_powershell` 就是这个形状),统一执行器会拒,HTTP 会执行 —— manifest
+# 门禁的腐烂正是这样开始的。
+#
+# ## 为什么这里 fail-closed,而 `node_invocation` 那边 fail-open
+#
+# `node_invocation` 在门禁自身抛异常时记一条 warning 然后放行。那在**那条路上**
+# 是合理的:它前面还有治理门,后面还有 HITL 审批,权限门只是三层里的一层。
+#
+# 这条路上**一层都没有**。门禁拿不到就放行,等于这个补丁没打。所以这里相反:
+# 拿不到门禁 → 503,不执行。
+#
+# 还有一个更隐蔽的坑:`_load_permissions()` 读不到目录时返回空表,于是
+# `evaluate_action_permission` 把 Node 36 判成"未声明" → legacy **放行**。
+# 但 Node 36 是**确定声明了**的(32 个动作)。所以判定回来说它没声明,
+# 只可能是目录没读进来 —— 那是门禁坏了,不是 manifest 允许。这条路上按拒绝处理。
+NODE_ID = "Node_36_UIAWindows"
+
+
+def _require_action(action: str) -> None:
+    """HTTP 路由的动作权限闸。不通过就抛 HTTPException,通过则静默返回。
+
+    见上面那段注释:这里三种情况都拒 —— 门禁导入不了、判定说未声明、动作不在白名单。
+    """
+    try:
+        from core.node_action_permissions import evaluate_action_permission
+    except Exception as exc:  # noqa: BLE001 — 拿不到门禁就不执行,不是放行
+        raise HTTPException(
+            status_code=503,
+            detail=f"action-permission gate unavailable; refusing to act: {exc}",
+        ) from exc
+
+    decision = evaluate_action_permission(NODE_ID, action)
+    if not decision.declared:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"{NODE_ID} is known to declare its actions, but the gate reports it as "
+                f"undeclared — the catalog failed to load. Refusing to act on action {action!r}."
+            ),
+        )
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"action {action!r} denied by declared permission manifest: {decision.reason}",
+        )
+
+
 # ============ API 端点 ============
 @app.get("/health")
 async def health():
@@ -612,6 +673,7 @@ async def list_tools():
 
 @app.post("/click")
 async def api_click(request: ClickRequest):
+    _require_action("click")
     result = tools.click(request.x, request.y, request.button, request.clicks)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -620,6 +682,7 @@ async def api_click(request: ClickRequest):
 
 @app.post("/type")
 async def api_type(request: TypeRequest):
+    _require_action("type_text")
     result = tools.type_text(request.text, request.interval)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -628,6 +691,7 @@ async def api_type(request: TypeRequest):
 
 @app.post("/hotkey")
 async def api_hotkey(request: HotkeyRequest):
+    _require_action("hotkey")
     result = tools.hotkey(request.keys)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -636,6 +700,7 @@ async def api_hotkey(request: HotkeyRequest):
 
 @app.post("/move")
 async def api_move(request: MoveRequest):
+    _require_action("move_mouse")
     result = tools.move_mouse(request.x, request.y, request.duration)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -644,6 +709,7 @@ async def api_move(request: MoveRequest):
 
 @app.post("/drag")
 async def api_drag(request: DragRequest):
+    _require_action("drag")
     result = tools.drag(request.start_x, request.start_y, request.end_x, request.end_y, request.duration)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -652,6 +718,7 @@ async def api_drag(request: DragRequest):
 
 @app.get("/screenshot")
 async def api_screenshot():
+    _require_action("screenshot")
     result = tools.screenshot()
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -660,6 +727,7 @@ async def api_screenshot():
 
 @app.get("/mouse_position")
 async def api_mouse_position():
+    _require_action("get_mouse_position")
     result = tools.get_mouse_position()
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -668,6 +736,7 @@ async def api_mouse_position():
 
 @app.get("/screen_size")
 async def api_screen_size():
+    _require_action("get_screen_size")
     result = tools.get_screen_size()
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -676,6 +745,7 @@ async def api_screen_size():
 
 @app.get("/windows")
 async def api_list_windows():
+    _require_action("list_windows")
     result = tools.list_windows()
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -684,6 +754,7 @@ async def api_list_windows():
 
 @app.post("/window")
 async def api_window(request: WindowRequest):
+    _require_action("window_action")
     result = tools.window_action(request.title, request.action)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -692,9 +763,16 @@ async def api_window(request: WindowRequest):
 
 @app.post("/mcp/call")
 async def mcp_call(request: dict):
+    # 这条路由让调用方**指名**调用任意动作,是整个 HTTP 面上最需要门禁的一个。
+    # 先过闸再进 call_tool:不能让"未声明的动作"先执行、再靠 call_tool 的
+    # "Unknown tool" 兜底 —— 那个兜底保护的是拼错的名字,不是越权。
+    tool = str(request.get("tool") or "")
+    _require_action(tool)
     try:
-        result = await tools.call_tool(request.get("tool"), request.get("params", {}))
+        result = await tools.call_tool(tool, request.get("params", {}))
         return {"success": True, "result": result}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
