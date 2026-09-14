@@ -44,7 +44,11 @@ _TOKENS = _ROOT / "styles/tokens.css"
 
 
 def _oklch(hex_colour: str) -> tuple:
-    """sRGB 十六进制 → OKLCH 的 (L, C)。"""
+    """sRGB 十六进制 → OKLCH 的 (L, C, H)。
+
+    **要验"邻近"就得真的算色相**,靠眼看分不出 76 度和 280 度里哪一段是哪一段,
+    而正是那个跨度决定了整面是一条带还是几块颜色。
+    """
     r, g, b = (int(hex_colour[i : i + 2], 16) / 255 for i in (1, 3, 5))
 
     def lin(c):
@@ -57,7 +61,7 @@ def _oklch(hex_colour: str) -> tuple:
     big_l = 0.2104542553 * lc + 0.7936177850 * mc - 0.0040720468 * sc
     a = 1.9779984951 * lc - 2.4285922050 * mc + 0.4505937099 * sc
     bb = 0.0259040371 * lc + 0.7827717662 * mc - 0.8086757660 * sc
-    return big_l, math.hypot(a, bb)
+    return big_l, math.hypot(a, bb), math.degrees(math.atan2(bb, a)) % 360
 
 
 def _read(p: Path) -> str:
@@ -183,20 +187,59 @@ class TestTheThreePhasesReallyDiffer:
                 f"{phase} 这一相场上只有 {sorted(hues)} —— 少于三支色相," "那是一个颜色在变温,不是色系在过渡"
             )
 
-    def test_the_family_shares_one_saturation_and_lightness(self) -> None:
-        """五支之所以能凑在一起,靠的是 L/C 同档,不是色相接近。
+    def test_the_band_stays_narrow_and_low_contrast(self) -> None:
+        """**这是栽过两次的那一条。**
 
-        灰玫和灰青差了 130 度色相,照样不打架;真要坏事的是拿吸管从图上吸一支
-        彩度不在这一档的色进来 —— 它会从整面里跳出来,而且说不清哪儿不对。
-        这里用 OKLCH 反算,钉住三排各自的 L 与 C 一致。**要验"同一档"就得真的
-        算**,靠眼看是看不出 0.01 的彩度差的,而正是那 0.01 让一支色跳出来。
+        第一次:一根灰紫轴只挪色温 —— 所有者:「不是单一的某种色温在混合」。
+        第二次:把色相拉开 280 度(玫 20°/赭 68°/青 150°/蓝 242°/紫 300°),
+        五支同 L 同 C 摆在四个角 —— 所有者:「为什么莫兰迪色系会出现其他奇奇
+        怪怪的各种颜色」。
+
+        第二次错在哪儿:"同 L 同 C"只管住了三要素里的**两个**。色相一放到
+        280 度,那就是对比色 —— 而莫兰迪的第一条是**邻近色 + 低对比**。
+
+        所以这道门不再验"同 L 同 C",改验三件事:
+          1. 色相跨度是一条**窄带**(≤ 90°),不是半个色相环;
+          2. 同一档内任意两支的最大通道差**低**(≤ 26);
+          3. 彩度全部压在低位(加灰之后不可能高)。
+
+        第 2 条是有数的:上一版那五支是 39,这一版 17–20。看着"像几块不同的
+        颜色"的原因就在那个 39 上,靠形容词说不清,靠这个数说得清。
         """
         css = _read(_TOKENS)
         for step in (1, 2, 3):
-            hexes = re.findall(rf"--(?:rose|clay|sage|blue|viol)-{step}:\s*(#[0-9a-f]{{6}})", css)
-            assert len(hexes) == 5, f"第 {step} 档不是五支:{hexes}"
-            pairs = [_oklch(h) for h in hexes]
-            ls = [p[0] for p in pairs]
-            cs = [p[1] for p in pairs]
-            assert max(ls) - min(ls) < 0.02, f"第 {step} 档明度不齐({ls})—— 亮的那支会跳出来"
-            assert max(cs) - min(cs) < 0.012, f"第 {step} 档彩度不齐({cs})—— 艳的那支会跳出来"
+            hexes = re.findall(rf"--h\d-{step}:\s*(#[0-9a-f]{{6}})", css)
+            assert len(hexes) == 5, f"第 {step} 档不是五个站点:{hexes}"
+            rgbs = [tuple(int(h[i : i + 2], 16) for i in (1, 3, 5)) for h in hexes]
+
+            spread = max(abs(a[k] - b[k]) for a in rgbs for b in rgbs for k in range(3))
+            assert spread <= 26, (
+                f"第 {step} 档最大通道差 {spread} —— 太跳了,屏幕上会看成几块"
+                f"不同的颜色,而不是一条带。上一版那个错是 39。"
+            )
+
+            hues = [_oklch(h)[2] for h in hexes]
+            span = max(hues) - min(hues)
+            assert span <= 90, (
+                f"第 {step} 档色相跨了 {span:.0f} 度 —— 那是对比色,不是邻近色。" f"莫兰迪的第一条就是邻近色 + 低对比。"
+            )
+
+            chromas = [_oklch(h)[1] for h in hexes]
+            assert max(chromas) <= 0.05, (
+                f"第 {step} 档最高彩度 {max(chromas):.3f} —— 没加够灰," f"莫兰迪是所有颜色里都掺进灰白"
+            )
+
+    def test_no_hue_is_dragged_in_from_outside_the_band(self) -> None:
+        """场上四个角只许站这条带上的点,不许从外面扯一支进来。
+
+        所有者:「我让你在莫兰迪色系下手,没让你把其他颜色扯进来」。
+        冷的那一端必须是这条带自己的端点(灰蓝紫),不是一支真正的蓝。
+        """
+        css = _read(_TOKENS)
+        for phase in ("silent", "liminal", "manifest"):
+            blk = css[css.index(f"[data-phase='{phase}']") :]
+            blk = blk[: blk.index("}")]
+            refs = re.findall(r"--(?:field|wash)-\w+:\s*var\(--([\w-]+)\)", blk)
+            assert refs, f"{phase} 那一块是空的"
+            outsiders = [r for r in refs if not re.fullmatch(r"h\d-\d", r)]
+            assert not outsiders, f"{phase} 这一相引了带外的色:{outsiders} —— 场只许站在那条带上"

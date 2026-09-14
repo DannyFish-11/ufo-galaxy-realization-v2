@@ -371,11 +371,17 @@ body {
     background 0.42s var(--ease);
 }
 .island[data-open='true'] {
-  width: 100%; height: var(--island-h, 420px);
+  /* 不再拉满整行。内容只有两列,拉满之后右边三分之一是空的,读起来像一条
+     横幅而不是一块面。 */
+  width: min(100%, 33rem); height: var(--island-h, 420px);
   border-radius: 24px; cursor: default;
+  /* 展开之后它盖住整篇对话,**必须挡得住**。
+     上一版跟着"面都要透"那条一起降到了 80%,结果底下的对话直接透上来,
+     字压着字 —— 那不是通透,那是读不了。收起时是一枚小药丸,透一点没关系;
+     展开时它是一块面,面要能承字。 */
   background:
-    linear-gradient(162deg, rgba(253, 251, 255, 0.34), rgba(253, 251, 255, 0.16)),
-    color-mix(in srgb, var(--wash-1) 80%, transparent);
+    linear-gradient(162deg, rgba(253, 251, 255, 0.4), rgba(253, 251, 255, 0.2)),
+    color-mix(in srgb, var(--wash-1) 96%, transparent);
   box-shadow: inset 0 1px 0 var(--lite), 0 2px 6px rgba(93, 84, 102, 0.1),
     0 28px 60px -22px var(--shade-4);
 }
@@ -392,7 +398,13 @@ body {
   opacity: 0; pointer-events: none;
   display: flex; flex-direction: column;
   padding: 15px 6px 13px 18px;
+  /* 高度是按左边卡片区量的,内容比它高时以前是**直接裁掉** —— 「本机模型」
+     那一行就这么没的:它在那儿,只是看不见。看不见的事实等于没有。 */
+  overflow-y: auto;
 }
+.island-full::-webkit-scrollbar { width: 5px; }
+.island-full::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.2); border-radius: 999px; }
+.island-full::-webkit-scrollbar-track { background: transparent; }
 .island[data-open='true'] .island-full {
   opacity: 1; pointer-events: auto; transition-delay: 0.15s;
 }
@@ -415,8 +427,10 @@ body {
 .tile {
   position: relative; flex: none;
   border-radius: 5px; overflow: hidden;
-  background: linear-gradient(166deg, var(--veil-1), var(--veil-3));
-  box-shadow: inset 0 0.5px 0 var(--lite), 0 1.5px 3px rgba(93, 84, 102, 0.22);
+  /* 面比别处厚一档,影子也重一档。这块东西**靠离墙多远表示状态**,
+     淡到看不出高低,那个状态就没了 —— 上一版跟着整体变薄之后正是如此。 */
+  background: linear-gradient(166deg, rgba(253, 251, 255, 0.78), rgba(253, 251, 255, 0.46));
+  box-shadow: inset 0 0.5px 0 var(--lite), 0 2px 4px rgba(93, 84, 102, 0.3);
   transition: box-shadow 0.45s var(--ease), opacity 0.45s var(--ease),
     background 0.45s var(--ease);
 }
