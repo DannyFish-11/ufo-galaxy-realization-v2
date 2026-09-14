@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
+from core.console_prompt import ask, timed_out_notice
 
 logger = logging.getLogger("Galaxy.ContainerRuntime")
 
@@ -175,10 +176,15 @@ def interactive_select(avail: List[str]) -> str:
     r.rule()
     print("  " + _c("回车=用默认 · 数字=手选", Colors.DIM))
     while True:
-        try:
-            choice = input(f"  请选择运行时 [1-{len(avail)} / 回车]: ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        answered = ask(f"  请选择运行时 [1-{len(avail)} / 回车]: ")
+        if answered is None:
+            # 没人在。用默认继续,并且**把这件事说出来** —— 屏幕上不许让人
+            # 以为是自己选的。
+            print()
+            print("  " + _c(timed_out_notice("运行时", avail[0].capitalize()), Colors.DIM))
+            print("  " + _c("想改:面板里设 GALAXY_CONTAINER_RUNTIME(Docker / Podman)。", Colors.DIM))
             return avail[0]
+        choice = answered.strip().lower()
         if choice == "":
             return avail[0]
         if choice.isdigit():
@@ -315,7 +321,13 @@ def interactive_install_guide() -> str:
         "  " + _c(f"回车=记住默认({_RECOMMENDED.capitalize()}·更轻) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM)
     )
     try:
-        choice = input(f"  选择偏好运行时 [1-{len(_menu)} / 回车 / s]: ").strip().lower()
+        _answered = ask(f"  选择偏好运行时 [1-{len(_menu)} / 回车 / s]: ")
+        if _answered is None:
+            # 没人在 —— 用推荐项继续,而不是把启动挂在这儿(见 core/console_prompt)。
+            print("  " + _c(timed_out_notice("偏好运行时", _menu[0].capitalize()), Colors.DIM))
+            choice = ""
+        else:
+            choice = _answered.strip().lower()
     except (EOFError, KeyboardInterrupt):
         return ""
     if choice == "s":
@@ -399,7 +411,12 @@ def setup_wizard_select_runtime() -> str:
     r.rule()
     print("  " + _c("回车=用默认 · 数字=手选 · s=跳过(桌面照常运行)", Colors.DIM))
     try:
-        choice = input(f"  请选择运行时 [1-{len(menu)} / 回车 / s]: ").strip().lower()
+        _answered = ask(f"  请选择运行时 [1-{len(menu)} / 回车 / s]: ")
+        if _answered is None:
+            print("  " + _c(timed_out_notice("运行时", menu[0].capitalize()), Colors.DIM))
+            choice = ""
+        else:
+            choice = _answered.strip().lower()
     except (EOFError, KeyboardInterrupt):
         choice = ""
     if choice == "s":

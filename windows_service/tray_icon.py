@@ -47,7 +47,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, List
 
 # 日志有哪些、在哪、什么时候该看 —— 一处登记,托盘只负责把它摆出来。
 # 放在这里(而不是函数里就近 import):托盘菜单在建的时候就要它。
@@ -61,15 +61,31 @@ logger = logging.getLogger("Galaxy.Tray")
 # ---------------------------------------------------------------------------
 
 _HAVE_TRAY = False
+
+#: 托盘用不了时**具体是哪一种**。空串 = 能用。
+#:
+#: 以前这里只 ``except ImportError``,于是两件完全不同的事被混成一件:
+#:
+#: 1. 真的没装 pystray / Pillow          → ImportError
+#: 2. 装了,但这台机器没有桌面           → ``pystray`` 在 **import 期**就去连
+#:    X11,抛的是 ``Xlib.error.DisplayNameError``,**不是** ImportError
+#:
+#: 第 2 种会直接穿透出去,把 import 本模块的调用方一起带倒;而更早的文案还会
+#: 把它说成"未安装"—— 装着呢。和 pyautogui 那处是同一个形状的坑(见
+#: ``core/microsoft_ufo_integration._initialize_fallback`` 的注释)。
+TRAY_UNAVAILABLE_REASON = ""
+
 try:
     import pystray
     from PIL import Image, ImageDraw, ImageFilter
 
     _HAVE_TRAY = True
-except ImportError:
-    logger.warning(
-        "未安装 pystray / Pillow,系统托盘不可用 / " "pystray or Pillow not installed; system tray unavailable"
-    )
+except ImportError as _exc:
+    TRAY_UNAVAILABLE_REASON = f"缺 pystray / Pillow({_exc})"
+    logger.warning("未安装 pystray / Pillow,系统托盘不可用 / pystray or Pillow not installed: %s", _exc)
+except Exception as _exc:  # noqa: BLE001 —— 装了但这台机器上起不来,照实说是哪一种
+    TRAY_UNAVAILABLE_REASON = f"装了 pystray,但这台机器上起不来({type(_exc).__name__}: {_exc})"
+    logger.warning("系统托盘不可用(不是没装,是这台机器起不来): %s", _exc)
 
 
 # ---------------------------------------------------------------------------
@@ -508,12 +524,62 @@ class GalaxyTray:
             logger.info("托盘启动中 / starting system tray ...")
             self._icon.run()
 
-    def run_detached(self) -> threading.Thread:
-        """在后台线程里跑 / Run in a background thread."""
-        thread = threading.Thread(target=self.run, name="GalaxyTray", daemon=True)
+    def run_detached(self, *, wait_s: float = 8.0) -> str:
+        """在后台线程里跑,并**等到图标真的出现**再回来。
+
+        Returns:
+            空字符串 = 图标真的起来了;非空 = 起不来的原因(可直接显示给人)。
+
+        为什么不是"起个线程就返回"(真机缺陷,所有者:托盘没出现在右下角)
+        ----------------------------------------------------------------
+        上一版是 ``thread.start()`` 之后立刻 ``return thread``,调用方只看
+        "拿到对象了没"。可 ``icon.run()`` 是在**那个线程里**才开始跑的:它抛
+        异常(Windows 上 shell 还没就绪、图标资源建不出来、后端不支持……)时,
+        异常留在线程里,主线程什么都不知道 —— 屏幕上照样打
+        ``✓ 系统托盘  右下角常驻``。**说的和现实相反**。
+
+        现在用 pystray 自己的 ``setup=`` 回调:它是在**图标已经可见之后**才被
+        调用的,所以那一下才是"真的起来了"的证据。线程里的异常也收进来,原样
+        当作原因往外报。
+
+        等不到也不拖住启动:到点就返回一句"没等到",托盘线程留着继续尝试 ——
+        它后来自己起来了是好事,但在那之前屏幕上不许说它在。
+        """
+        started = threading.Event()
+        failure: List[str] = []
+
+        def _on_ready(icon) -> None:
+            try:
+                icon.visible = True
+            except Exception:  # noqa: BLE001 —— 有的后端不认这个属性,不影响"已就绪"
+                pass
+            started.set()
+
+        def _body() -> None:
+            try:
+                if self._icon is None:
+                    self.create()
+                if self._icon is None:
+                    failure.append("图标建不出来(见 logs/lumiv.log)")
+                    started.set()
+                    return
+                logger.info("托盘启动中 / starting system tray ...")
+                self._icon.run(setup=_on_ready)
+            except Exception as exc:  # noqa: BLE001
+                # 这一句是这次修复的核心:以前它只会消失在线程里。
+                failure.append(f"{type(exc).__name__}: {exc}")
+                logger.warning("托盘起不来 / tray failed to start: %s", exc, exc_info=True)
+                started.set()
+
+        thread = threading.Thread(target=_body, name="GalaxyTray", daemon=True)
         thread.start()
-        logger.info("托盘已在后台线程启动 / tray started in background thread")
-        return thread
+        self._thread = thread
+        if not started.wait(wait_s):
+            return f"{wait_s:.0f} 秒内没出现在托盘区(后台仍在尝试)"
+        if failure:
+            return failure[0]
+        logger.info("托盘图标已出现 / tray icon is visible")
+        return ""
 
     def stop(self) -> None:
         """停掉托盘 / Stop the tray.
@@ -540,7 +606,8 @@ def create_tray(
     它不可用不该让整个启动失败。
     """
     if not _HAVE_TRAY:
-        logger.warning("系统托盘不可用(缺 pystray / Pillow)/ system tray unavailable (pystray / Pillow missing)")
+        # 说的是**这一次**的真实原因(缺依赖 / 没有桌面 / 别的),不是一句写死的话。
+        logger.warning("系统托盘不可用:%s", TRAY_UNAVAILABLE_REASON or "原因不明")
         return None
 
     tray = GalaxyTray(galaxy_process=galaxy_process, on_status_change=on_status_change)
@@ -561,8 +628,11 @@ def start_tray_in_thread(
     if tray is None:
         return None
 
-    tray.run_detached()
-    time.sleep(0.5)  # 给图标一点时间出现 / let the icon appear
+    # 以前这里是 run_detached() + sleep(0.5) + 直接 return —— 睡够半秒不等于
+    # 图标出现了。现在等的是 pystray 的"已可见"回调,等不到就如实返回原因。
+    why = tray.run_detached()
+    if why:
+        return why
     tray.set_status("running")
     return tray
 

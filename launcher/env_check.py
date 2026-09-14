@@ -125,6 +125,19 @@ class EnvReport:
     ollama_running: bool = False
     ollama_models: List[str] = dataclasses.field(default_factory=list)
 
+    probes_timed_out: List[str] = dataclasses.field(default_factory=list)
+    """**这次没等到结论**的探测名(见 :data:`PROBE_DEADLINE_S`)。
+
+    这个字段是"空 ≠ 未知"的落点。超时的探测拿到的是**兜底值**,而兜底值和
+    "真的没有"长得一模一样:``ollama`` 的兜底是 ``(False, False, [])``,渲染
+    出来就是 ``未安装`` —— 屏幕上说的是"你没装",事实是"这次没查完"。
+
+    所有者真机上的现象正是这个:第一次启动 Ollama 没认出来,第二次才认上。
+    第一次冷启(文件缓存冷、杀软逐个扫、ollama 服务刚起)超过了墙钟上界,于是
+    被写成"未安装";第二次一切都热了,就认上了。**这不是探测偶尔失手,是失手
+    之后说了假话。**
+    """
+
     @property
     def model_available(self) -> bool:
         return bool(self.ollama_models)
@@ -263,13 +276,25 @@ class EnvReport:
             None if self.electron_deps_ok else "依赖阶段会自动 npm install",
             probe=self.electron_probe,
         )
-        if self.ollama_running:
+        if "ollama" in self.probes_timed_out:
+            # 没等到 ≠ 没装。给出的是"这次没查完",而不是一个假的结论。
+            ollama_status = Status.DEGRADED
+            ollama_value = f"这次没查完（超过 {PROBE_DEADLINE_S['ollama']:.0f} 秒）"
+            hint = "首次启动常见（缓存冷 / 杀软逐个扫）。已装的话下次就能认出来；也可先跑 `ollama list` 预热"
+        elif self.ollama_running:
             ollama_status, ollama_value, hint = Status.OK, "运行中", None
         elif self.ollama_installed:
             ollama_status, ollama_value, hint = Status.DEGRADED, "已安装，未运行", "ollama serve"
         else:
             ollama_status, ollama_value, hint = Status.DEGRADED, "未安装", "https://ollama.com/download"
-        add("Ollama", ollama_status, ollama_value, hint, models=list(self.ollama_models))
+        add(
+            "Ollama",
+            ollama_status,
+            ollama_value,
+            hint,
+            models=list(self.ollama_models),
+            timed_out="ollama" in self.probes_timed_out,
+        )
         if self.ollama_models:
             add("本地模型", Status.OK, "、".join(self.ollama_models[:3]), None, all_models=list(self.ollama_models))
         return steps
@@ -471,12 +496,66 @@ _PROBE_SAID = {
 }
 
 
+#: Ollama 的本地 HTTP 口。它自己的默认值,``OLLAMA_HOST`` 可覆盖。
+OLLAMA_DEFAULT_HOST = "127.0.0.1:11434"
+
+
+def _ollama_api_base() -> str:
+    """Ollama 的 HTTP 地址。读它自己的 ``OLLAMA_HOST`` 约定,不另立一份。"""
+    host = (os.environ.get("OLLAMA_HOST") or "").strip() or OLLAMA_DEFAULT_HOST
+    if "://" in host:
+        return host.rstrip("/")
+    return f"http://{host}"
+
+
+def _probe_ollama_over_http() -> Optional[Tuple[bool, bool, List[str]]]:
+    """问 Ollama 自己的 HTTP 口。**答上来就是最硬的证据**,答不上来返回 None。
+
+    为什么要有这一条(所有者真机:第一次启动没认出来,第二次才认上):
+
+    只走 ``shutil.which`` + ``ollama list`` 有两个都在首启命中的弱点 ——
+
+    1. ``which`` 查的是**本进程启动那一刻**的 PATH。Windows 上刚装完 Ollama,
+       安装器改的是注册表里的 PATH,已经跑着的父进程(以及它 spawn 出来的我们)
+       拿到的还是旧副本;要等下次开新会话才有。于是"装了却查不到"。
+    2. ``ollama list`` 要起一个子进程。首启时文件缓存是冷的、杀软还在逐个扫,
+       这一下就可能拖过墙钟上界 —— 拿到兜底值 ``(False, False, [])``。
+
+    HTTP 这条路两个弱点都没有:不查 PATH、不起子进程,本机回环几毫秒就回。
+    它答上来就同时证明了"装了"和"在跑",还顺带把模型列表给全了。
+
+    返回 ``None`` 表示**这条路没问过**(连不上/超时/格式不认识),不是
+    "没装" —— 调用方接着走命令行那条路,不许把 None 当成否定结论。
+    """
+    try:
+        import json as _json
+        import urllib.request
+
+        with urllib.request.urlopen(f"{_ollama_api_base()}/api/tags", timeout=2.0) as resp:
+            if getattr(resp, "status", 200) != 200:
+                return None
+            payload = _json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception:  # noqa: BLE001 —— 连不上只说明"这条路没问到",不说明没装
+        return None
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        return None
+    names = [m.get("name", "") for m in models if isinstance(m, dict) and m.get("name")]
+    return True, True, names
+
+
 def _probe_ollama() -> Tuple[bool, bool, List[str]]:
     """装没装 + 在不在跑 + 有哪些模型。
 
     后两项取 ``launch_desktop`` 的判据 —— ``main.py`` 只查了"装没装"，
     而"装了但没起来"和"起来了但一个模型都没有"是完全不同的处境。
+
+    两条路,强的排前面:先问 HTTP(见 :func:`_probe_ollama_over_http`),
+    问不到再走 PATH + ``ollama list``。
     """
+    via_http = _probe_ollama_over_http()
+    if via_http is not None:
+        return via_http
     if shutil.which("ollama") is None:
         return False, False, []
     try:
@@ -686,6 +765,7 @@ def check_environment(
         node_version=node_version,
         electron_deps_ok=electron_ok,
         electron_probe=electron_probe,
+        probes_timed_out=list(timed_out),
         ollama_installed=ollama_installed,
         ollama_running=ollama_running,
         ollama_models=ollama_models,

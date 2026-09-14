@@ -41,6 +41,9 @@ from fastapi import Header, HTTPException, status
 
 logger = logging.getLogger("Galaxy.Auth")
 
+#: "没配共享 token" 这句话说过没有。它讲的是配置状态,一个进程说一次就够。
+_NO_SHARED_TOKEN_SAID = False
+
 # Module-level flags: warnings issued at most once per process
 _dev_mode_warning_issued: bool = False
 _no_token_warning_issued: bool = False
@@ -435,11 +438,19 @@ async def require_auth(
     # 之前——但 verify_api_token 明确支持【配对发放的每设备 token】在无共享 env
     # token 时独立生效(见其注释),这里的预判把合法设备 token 全部拒了。改为
     # 只记日志提示,真正的判定交给 verify_api_token(设备 token→env token 顺序)。
-    if not get_active_tokens():
+    global _NO_SHARED_TOKEN_SAID
+    if not get_active_tokens() and not _NO_SHARED_TOKEN_SAID:
+        # 一个进程里只说一次。
+        #
+        # 这句话讲的是**配置状态**("没配共享 token"),不是"这一次请求有问题" ——
+        # 而它挂在按请求跑的依赖里,于是每一个受保护请求都会再打一遍。全新克隆
+        # 冷启时它就出现在 API 网关刚起来的那一行下面,像是出了错;真跑起来之后
+        # 更是会按请求量刷屏。同一个事实说一遍就够了。
+        _NO_SHARED_TOKEN_SAID = True
         logger.warning(
-            "Protected endpoint accessed with no active shared API tokens configured; "
-            "falling through to per-device token verification. "
-            "Set GALAXY_API_TOKEN or GALAXY_API_TOKENS for shared-token auth."
+            "没有配置共享 API token(GALAXY_API_TOKEN / GALAXY_API_TOKENS);"
+            "受保护接口改用【每设备配对 token】验证 —— 配过对的设备照常能用,"
+            "没配对的会被 401。这一条每个进程只说一次。"
         )
 
     # Normal auth flow: validate Bearer token

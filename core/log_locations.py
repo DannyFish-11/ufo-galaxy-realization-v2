@@ -168,6 +168,19 @@ def log_hint(name: str) -> str:
     return f"详情见 {TRAY_ROUTE} → {entry.label}(logs/{entry.relpath})"
 
 
+def log_file_hint(name: str = "backend") -> str:
+    """**只给文件路径**的那一句 —— 托盘自己起不来时用它。
+
+    ``log_hint`` 那句同时给"托盘 → 日志"和路径,平时正好。但托盘起不来的时候,
+    让人"去点托盘"就是一句废话:那个入口正是坏掉的东西。所以这里单出一句
+    只带绝对路径的,专给"托盘不可用"这一种处境。
+    """
+    entry = get_log(name)
+    if entry is None:
+        return f"日志在 {logs_root()}"
+    return f"日志在 {entry.path()}"
+
+
 __all__ = [
     "TRAY_ROUTE",
     "LogLocation",
@@ -176,4 +189,5 @@ __all__ = [
     "get_log",
     "existing_logs",
     "log_hint",
+    "log_file_hint",
 ]

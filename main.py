@@ -368,6 +368,18 @@ class SafeStreamHandler(logging.StreamHandler):
 log_dir = PROJECT_ROOT / "logs"
 log_dir.mkdir(exist_ok=True)
 
+#: 第三方库里"自己往控制台打全栈"的那些 —— 只落盘,不上控制台。
+#:
+#: 判据是:这条日志讲的是**库内部的重试/降级过程**,而同一件事启动器已经有
+#: 一行自己的结论。两者同屏出现时,人读到的是矛盾(红栈紧跟绿勾)。
+#:
+#: 不要往这里塞"我们自己的"logger —— 我们的结论就该上控制台。
+_THIRD_PARTY_FILE_ONLY_LOGGERS = (
+    "nats",  # 重连期把 ConnectionRefusedError 的完整栈按 ERROR 打出来
+    "nats.aio",  # 同一家的子 logger(有的版本走这个名字)
+)
+
+
 # SECURITY: Only configure logging if no handlers exist yet.
 # Multiple entry points (main.py, lumiv_daemon.py, daemon/galaxy_daemon.py)
 # call basicConfig; repeated calls are no-ops after the first.
@@ -395,6 +407,24 @@ if not logging.getLogger().handlers:
     _hf_logger = logging.getLogger("huggingface_hub")
     _hf_logger.propagate = False
     _hf_logger.addHandler(handler)
+
+    # 第三方库自己往控制台吼的那些:证据全留,但**不上控制台**。
+    #
+    # 全新克隆真跑逮到的一例:nats-py 在重连期把 ConnectionRefusedError 的**完整
+    # 栈**按 ERROR 打到自己的 logger 上(``nats: encountered error``),而紧接着
+    # 下一行就是我们自己打的 ``✓ 消息总线 nats://localhost:4222`` —— 它确实在
+    # 重试后连上了。于是屏幕上是"一大段红栈 + 一个绿勾",读的人完全没法判断
+    # 到底成没成。
+    #
+    # 这类"库内部的重试过程"不是给人看的结论:每条总线/服务的成败,启动器自己
+    # 已经有一行如实的判定(见 launcher/services.py 的 _emit)。所以这里把它们
+    # 从控制台摘掉,**一个字不少地**照旧写进 logs/lumiv.log。
+    #
+    # 写成表而不是一处一处特判:下一个吵的库只需在这里加一行。
+    for _noisy in _THIRD_PARTY_FILE_ONLY_LOGGERS:
+        _lg = logging.getLogger(_noisy)
+        _lg.propagate = False  # 不冒泡到根 → 不进控制台 handler
+        _lg.addHandler(handler)  # 但照旧落盘,证据不丢
 logger = logging.getLogger("Galaxy")
 
 # 静默 URL 哨兵:给 httpx 加一层【只观测、不干预】的薄壳,任何缺 http(s):// 协议头的
@@ -537,7 +567,7 @@ def phase0_env_check() -> dict:
     # 某一行转到上界然后变成 ⏱,而不是永远转下去。
     _live = None
     try:
-        from launcher.env_check import PROBE_LABEL, PROBE_TIMEOUT
+        from launcher.env_check import PROBE_LABEL, PROBE_START, PROBE_TIMEOUT
         from launcher.live_list import STATE_OK, STATE_TIMEOUT, LiveList
 
         _live = LiveList([(k, PROBE_LABEL[k]) for k in ("pip", "npm", "node", "ollama", "electron")])
@@ -545,7 +575,7 @@ def phase0_env_check() -> dict:
         def _on_probe(name: str, state: str, detail: str) -> None:
             if state == PROBE_TIMEOUT:
                 _live.update(name, STATE_TIMEOUT, detail)
-            elif state != "start":
+            elif state != PROBE_START:
                 _live.update(name, STATE_OK, "")
 
         _live.start()
