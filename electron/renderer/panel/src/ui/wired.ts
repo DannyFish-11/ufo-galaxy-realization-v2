@@ -41,7 +41,13 @@ export interface WiredRow {
   /** 这一条叫什么 */
   readonly name: string;
   readonly state: WiredState;
-  /** 右边那句:**现在到底是什么情况**,一句人话。不许为空。 */
+  /**
+   * 右边那几个字:**现在到底是什么情况**。不许为空。
+   *
+   * 要**短**。这是 HUD 上常驻的一列,不是一份报告 —— 所有者看了上一版的原话是
+   * 「文字信息密度还是太厚了,你这不有些脱离 HUD 的设计」。一眼扫过去要能扫完,
+   * 扫不完就等于没人看。完整的那句话进 `why`,鼠标停一下才出来。
+   */
   readonly detail: string;
   /**
    * 补一句原委。左栏那一列窄,`detail` 长了会被切掉 —— 被切掉的那半句正好是
@@ -75,12 +81,22 @@ export function deriveWired(input: {
   rows.push(
     input.connected
       ? { name: '后端', state: 'on', detail: '连着' }
-      : { name: '后端', state: 'off', detail: '没连上 —— 底下几行都问不到' },
+      : {
+          name: '后端',
+          state: 'off',
+          detail: '没连上',
+          why: '后端没连上 —— 底下几行都问不到，它们显示的是上一次的样子',
+        },
   );
 
   // ── 本机模型:看**实际加载的型号**,不看选了哪一档 ─────────────────────
   if (input.tiers === null) {
-    rows.push({ name: '本机模型', state: 'unknown', detail: '档位目录没拉到' });
+    rows.push({
+      name: '本机模型',
+      state: 'unknown',
+      detail: '没拉到',
+      why: '档位目录没拉到 —— 不是没有档位，是这次没问到',
+    });
   } else {
     const models = input.tiers.slots.filter((s) => s.model);
     if (models.length) {
@@ -94,30 +110,35 @@ export function deriveWired(input: {
       rows.push({
         name: '本机模型',
         state: 'part',
-        detail: `${input.tiers.current} 档，但没报出在跑哪个型号`,
+        detail: `${input.tiers.current} 档`,
+        why: `选了 ${input.tiers.current} 档，但这一档没报出在跑哪个型号`,
       });
     } else {
-      rows.push({ name: '本机模型', state: 'off', detail: '还没选定档位' });
+      rows.push({ name: '本机模型', state: 'off', detail: '未选档' });
     }
   }
 
   // ── 我的模型服务:`live` 才算通。**没验过的不算** ──────────────────────
   if (input.providers === null) {
-    rows.push({ name: '模型服务', state: 'unknown', detail: '端点列表没拉到' });
+    rows.push({
+      name: '模型服务',
+      state: 'unknown',
+      detail: '没拉到',
+      why: '端点列表没拉到 —— 不是一个都没加，是这次没问到',
+    });
   } else if (input.providers.length === 0) {
-    rows.push({ name: '模型服务', state: 'off', detail: '一个都没加' });
+    rows.push({ name: '模型服务', state: 'off', detail: '没加过' });
   } else {
     const live = input.providers.filter((p) => p.state === 'live');
     const rest = input.providers.length - live.length;
     rows.push({
       name: '模型服务',
       state: live.length === 0 ? 'off' : rest === 0 ? 'on' : 'part',
-      detail:
+      detail: `${live.length}/${input.providers.length} 验过`,
+      why:
         live.length === 0
-          ? `${input.providers.length} 个都没验过`
-          : rest === 0
-            ? `${live.length} 个验过了`
-            : `${live.length} 个验过，${rest} 个没验过`,
+          ? `加了 ${input.providers.length} 个端点，一个都还没验过 —— 没验过的不参与选路`
+          : `${input.providers.length} 个端点里 ${live.length} 个验过了，${rest} 个还没验`,
     });
   }
 
@@ -126,23 +147,41 @@ export function deriveWired(input: {
   const degraded = input.devices.filter((d) => d.state === 'degraded').length;
   if (input.devices.length === 0) {
     // 名册是空的。这台机器自己不进名册,所以空是正常的 —— 但也别说成"通"。
-    rows.push({ name: '其他设备', state: 'off', detail: '名册上没有别的设备' });
+    rows.push({
+      name: '其他设备',
+      state: 'off',
+      detail: '就这一台',
+      why: '名册上没有别的设备 —— 这台机器自己不进名册，所以空是正常的',
+    });
   } else {
     rows.push({
       name: '其他设备',
       state: online === 0 ? 'off' : degraded ? 'part' : 'on',
-      detail: degraded ? `${online} 台在线，${degraded} 台降级` : `${online} 台在线`,
+      detail: degraded ? `${online} 在线 · ${degraded} 降级` : `${online} 在线`,
+      why: degraded
+        ? `${online} 台在线，另有 ${degraded} 台降级 —— 降级和离线是两件事`
+        : `${online} 台在线`,
     });
   }
 
   // ── 感知:四条模态。`source === 'unwired'` = 进程里根本没有感知库 ────────
   if (input.perception === null) {
-    rows.push({ name: '感知', state: 'unknown', detail: '还没收到感知状态' });
+    rows.push({ name: '感知', state: 'unknown', detail: '没收到', why: '还没收到感知状态' });
   } else if (input.perception.source === 'unwired') {
-    rows.push({ name: '感知', state: 'off', detail: '这个进程里没有感知库' });
+    rows.push({
+      name: '感知',
+      state: 'off',
+      detail: '没装',
+      why: '这个进程里没有感知库 —— 看、听这几条都不在',
+    });
   } else if (input.perception.privacy_paused) {
     // 按了隐私暂停 —— 这是**你要的**,不是故障。单独说。
-    rows.push({ name: '感知', state: 'part', detail: '你按了隐私暂停' });
+    rows.push({
+      name: '感知',
+      state: 'part',
+      detail: '已暂停',
+      why: '你按了隐私暂停 —— 这是你要的，不是故障',
+    });
   } else {
     const on = input.perception.modalities.filter(
       (m) => m.state === 'live' || m.state === 'idle',
@@ -151,7 +190,8 @@ export function deriveWired(input: {
     rows.push({
       name: '感知',
       state: on === 0 ? 'off' : on === total ? 'on' : 'part',
-      detail: `${on}/${total} 条在`,
+      detail: `${on}/${total}`,
+      why: `${total} 条模态里 ${on} 条在`,
     });
   }
 
@@ -163,8 +203,8 @@ export function deriveWired(input: {
   rows.push({
     name: '容器运行时',
     state: 'unknown',
-    detail: '面板还没接这条',
-    why: '启动器屏幕上有（「基础设施 · Podman」那一行），但没有面板能调的接口',
+    detail: '没接口',
+    why: '面板还没接这条 —— 启动器屏幕上有（「基础设施 · Podman」那一行），但没有面板能调的接口',
   });
 
   return rows;

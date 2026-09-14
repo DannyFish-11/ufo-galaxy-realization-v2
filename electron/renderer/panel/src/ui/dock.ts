@@ -18,6 +18,10 @@ import { platform } from '../platform';
 const ICONS = {
   plus: 'M12 5v14M5 12h14',
   send: 'M12 19V5M5 12l7-7 7 7',
+  // 喂入口那三块。图要认得出是什么,字就不用解释它是什么。
+  image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5h.01',
+  file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5',
+  link: 'M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1',
 } as const;
 
 function icon(path: string, size = 17, width = 1.7): SVGSVGElement {
@@ -106,40 +110,20 @@ export function createDock(cb: DockCallbacks): DockHandles {
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = '说点什么，或者直接说话';
-  /**
-   * 输入条右侧那两小块:**现在用的是什么**。
-   *
-   * 借的是 Gemini 桌面版把 `Flash  Extended thinking` 低对比地摆在输入框里
-   * 那个做法 —— 不是下拉、不是徽章,就是**当前事实**,点得动。
-   *
-   * 为什么值得搬:`renderTiers` 那段注释里写着「档位是唯一定义处」。既然是
-   * 唯一定义处,它就该出现在**你即将用到它的那一行**,而不是要先点开设置浮层
-   * 才看得见。你正要说话,而"这句话会被谁接住"就写在旁边。
-   *
-   * 两块分开而不是拼成一句:左边是档(A/B/C/D,你选的),右边是这一档**实际
-   * 加载的型号**(后端给的)。拼成一句的话,"我选了 C 档"和"C 档现在真的在跑
-   * 这两个型号"就分不开了 —— 而这个仓库栽过的正是这种。
-   */
-  const now = document.createElement('button');
-  now.className = 'now';
-  now.type = 'button';
-  now.setAttribute('aria-label', '当前本机模型档位，点开设置');
-  const nowTier = document.createElement('span');
-  nowTier.className = 'now-tier';
-  const nowModel = document.createElement('span');
-  nowModel.className = 'now-model';
-  now.append(nowTier, nowModel);
-  now.addEventListener('click', (e) => {
-    e.stopPropagation();
-    cb.onTogglePopover('settings');
-  });
-
+  // 输入条上不再重复一遍"现在用的是哪个模型"。
+  //
+  // 上一版在这儿放了「A 档 · Gemma 4 · E4B」。所有者的原话:「对话栏没有必要
+  // 再放一遍,它是什么模型,有一个地方能让他知道,还有一个地方能让他再调整,
+  // 能确保意思被准确传达就可以了,不需要通篇什么地方都要放一下」。
+  //
+  // 而且这台机器上它已经有两个归宿了:左栏「接上了什么」里的那一行(知道),
+  // 设置浮层里的「本机模型」(调整)。第三处只是让整面更厚,不多说一件事。
   const send = document.createElement('button');
   send.className = 'send';
   send.type = 'button';
   send.setAttribute('aria-label', '发送');
   send.append(icon(ICONS.send, 15, 2));
-  field.append(input, now, send);
+  field.append(input, send);
 
   function submit(): void {
     const text = input.value.trim();
@@ -170,54 +154,41 @@ export function createDock(cb: DockCallbacks): DockHandles {
   feed.className = 'pop';
   feed.dataset['side'] = 'left';
   /**
-   * 每一条:**标题是你想干什么,副行是它实际会做什么。**
+   * 三块图标格,**一个词,不解释。**
    *
-   * 借的是 Gemini 桌面版 Trending 那几张卡的写法 ——
-   * 「Organize my connected folders / Find unorganized files…, group by type,
-   * archive the clutter」。标题用人的意图,副行说清机制。
+   * 上一版是四张带副行的卡,每张底下一句机制说明。所有者看了之后的原话:
+   * 「用很明显的图片什么的,然后上面写就是……这种就够了,犯不着解释这么一大通」。
+   * 对 —— 这是 HUD,不是说明书。图认得出是什么,字就不用再说一遍它是什么。
    *
-   * 上一版这里是四个光秃秃的词:图片 / 文件 / 圈一块屏幕 / 网页链接。它们是
-   * **分类名**,不是"它会做什么" —— 点"图片"之后发生什么、喂进去之后它被当成
-   * 什么用,一个字都没有。而后两条根本还没接上,光看四个并排的词完全看不出来。
+   * 「圈一块屏幕」整条去掉了。所有者:「到时候面板一整个好了,直接在上面一圈
+   * 就行了,不需要刻意把它放在那块再解释」。一个本该在画面上直接做的动作,
+   * 塞进菜单里当一个条目,本身就是绕路。
    *
-   * 副行同时承担一件更要紧的事:**没接上的那两条,就在副行里说出来。** 藏起来
-   * 的话,"没这个功能"和"有但还没接"在界面上一模一样。
+   * **没接上的那块仍然不许装作能用。** 但也不再占三行字去说:格子压暗、点不动,
+   * 底下一个「还没接」,完整的那句话进 title。屏幕上短,事实一个字没少。
    */
   const FEED_ITEMS = [
+    { key: 'image', label: '图片', accept: 'image/*', why: '' },
+    { key: 'file', label: '文件', accept: '*/*', why: '' },
     {
-      title: '喂一张图进去',
-      how: '选中的图直接进这轮对话，并按记忆门存下来（原图留在 media_store）',
-      accept: 'image/*',
-    },
-    {
-      title: '喂一份文件进去',
-      how: '读成文字进这轮对话；存进记忆时带上来源，不以第一人称写入',
-      accept: '*/*',
-    },
-    {
-      title: '圈一块屏幕',
-      how: '还没接上 —— 圈选这条路径尚未接到感知侧，点了不会有反应',
+      key: 'link',
+      label: '链接',
       accept: '',
-    },
-    {
-      title: '给一个网页链接',
-      how: '还没接上 —— 抓取与正文提取尚未接进喂入口，点了不会有反应',
-      accept: '',
+      why: '还没接上 —— 抓取与正文提取尚未接进喂入口，点了不会有反应',
     },
   ] as const;
 
   for (const spec of FEED_ITEMS) {
     const item = document.createElement('button');
-    item.className = 'pop-item pop-card';
+    item.className = 'pop-tile';
     item.type = 'button';
+    item.append(icon(ICONS[spec.key], 21, 1.5));
     const t = document.createElement('span');
-    t.className = 'pop-card-t';
-    t.textContent = spec.title;
-    const h = document.createElement('span');
-    h.className = 'pop-card-h';
-    h.textContent = spec.how;
-    item.append(t, h);
+    t.className = 'pop-tile-t';
+    t.textContent = spec.label;
+    item.append(t);
     if (spec.accept) {
+      item.title = spec.label;
       item.addEventListener('click', () => {
         void platform()
           .pickFiles(spec.accept)
@@ -227,9 +198,14 @@ export function createDock(cb: DockCallbacks): DockHandles {
           });
       });
     } else {
-      // 没接上的:**照画、照显示,但明说点不动。** 藏起来的话人只会反复去点。
+      // 没接上的:照画、照显示,但点不动,并且说得出为什么。
       item.dataset['unwired'] = 'true';
       item.disabled = true;
+      item.title = spec.why;
+      const n = document.createElement('span');
+      n.className = 'pop-tile-n';
+      n.textContent = '还没接';
+      item.append(n);
     }
     feed.append(item);
   }
@@ -432,44 +408,8 @@ export function createDock(cb: DockCallbacks): DockHandles {
     }
 
     renderTiers(tiers, tierGaps);
-    renderNow(tiers);
   }
 
-  /**
-   * 输入条里那两小块的取值。
-   *
-   * 四种处境各说各的 —— 这一行**最容易**被写成"没值就空着",而空着的时候
-   * 「读不到目录」「还没选档」「选了个目录里没有的档」三件事长得一模一样。
-   */
-  function renderNow(view: TierView | null): void {
-    if (view === null) {
-      // 拉不到目录。空着的话,和"这台机器没有本机档位"分不开。
-      nowTier.textContent = '档位读不到';
-      nowModel.textContent = '';
-      now.dataset['state'] = 'unwired';
-      now.title = '读不到档位目录 —— 后端没接上，不是没有档位';
-      return;
-    }
-    const cur = view.tiers.find((t) => t.key === view.current);
-    if (!cur) {
-      now.dataset['state'] = view.current ? 'unwired' : 'none';
-      nowTier.textContent = view.current ? `${view.current} 档` : '未选档';
-      nowModel.textContent = '';
-      now.title = view.current
-        ? `当前 ${view.current} 档，但目录里没有这一档`
-        : '还没选定档位，点开设置里的「本机模型」';
-      return;
-    }
-    now.dataset['state'] = 'ok';
-    nowTier.textContent = `${cur.key} 档`;
-    // 右边只放**实际加载的型号**,而且只放一个 —— 这是一行内联标签,不是清单。
-    // 两位都有时取推理位那个(它决定这句话由谁想出来);详细的两位在设置里那行。
-    const models = view.slots.filter((sl) => sl.model);
-    nowModel.textContent = models.length ? models[models.length - 1]!.model : '';
-    now.title = models.length
-      ? `${cur.label}\n现在跑的是：${models.map((sl) => `${sl.role} ${sl.model}`).join(' + ')}`
-      : `${cur.label}\n这一档还没报出在跑哪个型号`;
-  }
 
   return { root: wrap, render };
 }

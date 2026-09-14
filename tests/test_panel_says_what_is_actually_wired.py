@@ -21,12 +21,15 @@
    清单看起来就是完整的,而它不是。
 4. **开机就得去问。** 端点列表只在打开设置时才拉的话,这一行会一直写着
    「端点列表没拉到」,而后端好好的 —— 那正好是这张清单要治的毛病本身。
-5. **喂入口那两张没接上的卡不许能点。** 写着"点了不会有反应"却还能点,
+5. **喂入口那块没接上的格子不许能点。** 写着"点了不会有反应"却还能点,
    等于把这句话又变成一句空话。
+6. **一相里不止一支色相。** 所有者纠正过:"不是单一的某种色温在混合,这种才是
+   莫兰迪色系"。一根轴变冷暖不成系 —— 见本文件最后那三条。
 """
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -38,6 +41,23 @@ _DOCK = _ROOT / "ui/dock.ts"
 _MAIN = _ROOT / "main.ts"
 _HUD = _ROOT / "styles/hud.css"
 _TOKENS = _ROOT / "styles/tokens.css"
+
+
+def _oklch(hex_colour: str) -> tuple:
+    """sRGB 十六进制 → OKLCH 的 (L, C)。"""
+    r, g, b = (int(hex_colour[i : i + 2], 16) / 255 for i in (1, 3, 5))
+
+    def lin(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = lin(r), lin(g), lin(b)
+    lc = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    mc = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    sc = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    big_l = 0.2104542553 * lc + 0.7936177850 * mc - 0.0040720468 * sc
+    a = 1.9779984951 * lc - 2.4285922050 * mc + 0.4505937099 * sc
+    bb = 0.0259040371 * lc + 0.7827717662 * mc - 0.8086757660 * sc
+    return big_l, math.hypot(a, bb)
 
 
 def _read(p: Path) -> str:
@@ -126,22 +146,57 @@ class TestTheThreePhasesReallyDiffer:
         for phase in ("silent", "liminal", "manifest"):
             assert f"[data-phase='{phase}']" in css, f"{phase} 没有自己的色温"
 
-    def test_the_shell_reads_the_wash_tokens(self) -> None:
-        """底色写死的话,上面那三块 token 就白定义了。"""
+    def test_the_shell_reads_the_field_tokens(self) -> None:
+        """场写死的话,上面那几支 token 就白定义了。"""
         css = _read(_HUD)
-        shell = css[css.index(".shell") :][:900]
-        assert "var(--wash-1)" in shell and "var(--wash-3)" in shell, ".shell 没读 --wash-* —— 三态色温定义了却没接上"
-        assert "transition: background" in shell, "色温是硬切的。三态之间硬切一帧换底色,是这个面板最不该有的出场方式"
+        shell = css[css.index(".shell") :][:1400]
+        for pos in ("--field-tl", "--field-tr", "--field-br", "--field-bl", "--field-bg"):
+            assert f"var({pos})" in shell, f".shell 没读 {pos} —— 场定义了却没接上"
+        assert "transition: background" in shell, "换相位是硬切的。硬切一帧换整面的底,是这个面板最不该有的出场方式"
 
-    def test_the_three_washes_are_not_the_same_colour(self) -> None:
-        """定义了三块但填成一样的值,等于没做。"""
+    def test_each_phase_puts_a_different_cast_on_the_field(self) -> None:
+        """三相排出来的场不许重样,否则等于没做。"""
         css = _read(_TOKENS)
         seen = {}
         for phase in ("silent", "liminal", "manifest"):
             blk = css[css.index(f"[data-phase='{phase}']") :]
             blk = blk[: blk.index("}")]
-            seen[phase] = re.findall(r"--wash-\d:\s*(#[0-9a-fA-F]{6})", blk)
-            assert seen[phase], f"{phase} 那一块里一个 --wash-* 都没有"
-        assert (
-            len(set(map(tuple, seen.values()))) == 3
-        ), f"三态的底色有重样的:{seen} —— 那就不是三态色温,只是三个同名的块"
+            seen[phase] = re.findall(r"--field-\w+:\s*var\(--(\w+)-\d\)", blk)
+            assert len(seen[phase]) >= 4, f"{phase} 那一块没把场排满:{seen[phase]}"
+        assert len(set(map(tuple, seen.values()))) == 3, f"三相的场有重样的:{seen}"
+
+    def test_every_phase_shows_more_than_one_hue_at_once(self) -> None:
+        """**这是所有者纠正过的那一条。**
+
+        「你知道它为什么叫色系吗？不是单一的某种色温在混合,这种才是莫兰迪色系。」
+
+        上一版每一相只是同一根灰紫轴挪了挪色温 —— 那是一个颜色的两个样子,不是
+        一个系。一相里必须同时站着**至少三支不同色相**,整面才是几支颜色在互相
+        渗,而不是一支颜色在变温。
+        """
+        css = _read(_TOKENS)
+        for phase in ("silent", "liminal", "manifest"):
+            blk = css[css.index(f"[data-phase='{phase}']") :]
+            blk = blk[: blk.index("}")]
+            hues = set(re.findall(r"--field-\w+:\s*var\(--(\w+)-\d\)", blk))
+            assert len(hues) >= 3, (
+                f"{phase} 这一相场上只有 {sorted(hues)} —— 少于三支色相," "那是一个颜色在变温,不是色系在过渡"
+            )
+
+    def test_the_family_shares_one_saturation_and_lightness(self) -> None:
+        """五支之所以能凑在一起,靠的是 L/C 同档,不是色相接近。
+
+        灰玫和灰青差了 130 度色相,照样不打架;真要坏事的是拿吸管从图上吸一支
+        彩度不在这一档的色进来 —— 它会从整面里跳出来,而且说不清哪儿不对。
+        这里用 OKLCH 反算,钉住三排各自的 L 与 C 一致。**要验"同一档"就得真的
+        算**,靠眼看是看不出 0.01 的彩度差的,而正是那 0.01 让一支色跳出来。
+        """
+        css = _read(_TOKENS)
+        for step in (1, 2, 3):
+            hexes = re.findall(rf"--(?:rose|clay|sage|blue|viol)-{step}:\s*(#[0-9a-f]{{6}})", css)
+            assert len(hexes) == 5, f"第 {step} 档不是五支:{hexes}"
+            pairs = [_oklch(h) for h in hexes]
+            ls = [p[0] for p in pairs]
+            cs = [p[1] for p in pairs]
+            assert max(ls) - min(ls) < 0.02, f"第 {step} 档明度不齐({ls})—— 亮的那支会跳出来"
+            assert max(cs) - min(cs) < 0.012, f"第 {step} 档彩度不齐({cs})—— 艳的那支会跳出来"
