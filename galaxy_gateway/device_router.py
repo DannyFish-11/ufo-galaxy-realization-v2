@@ -278,6 +278,8 @@ def get_cross_device_coordinator():
     return cross_device_coordinator
 
 
+from core.coordination_consensus import narrow_devices  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # PR-02: Import dispatch boundary constants from the single authoritative
 # source of truth.  These constants replace inline string literals that were
@@ -1274,6 +1276,9 @@ class DeviceRouter:
             target_devices = self._resolve_explicit_target_devices(analysis, ctx)
             if not target_devices:
                 target_devices = self._select_devices(analysis)
+                # 多于一台候选时,选之前先问问它们本人:忙不忙、Agent 就位没有。
+                # 这些中心查不到,而且过几百毫秒就变。判定见 core.coordination_consensus。
+                target_devices = await narrow_devices(target_devices, command, ctx)
 
             if not target_devices:
                 emit_gateway_log(

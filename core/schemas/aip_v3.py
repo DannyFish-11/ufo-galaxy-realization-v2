@@ -107,6 +107,15 @@ class MsgType(str, Enum):
     VOICE_EVENT = "voice_event"
     VOICE_INTERRUPT = "voice_interrupt"
 
+    # 智能体主动发给设备的一句话。见 galaxy_gateway/protocol/aip_v3.MessageType
+    # 里同名成员的说明:它同时补上了「推送」与「上下文」两个缺口。
+    AGENT_MESSAGE = "agent_message"
+    DECISION_REQUEST = "decision_request"
+    DECISION_WITHDRAW = "decision_withdraw"
+    EXECUTION_PROPOSAL = "execution_proposal"
+    EXECUTION_COMMITMENT = "execution_commitment"
+    EXECUTION_COMMIT = "execution_commit"
+
 
 # ---------------------------------------------------------------------------
 # Base model — every AIP v3 message extends this
@@ -628,7 +637,144 @@ class VoiceCallEndMsg(AIPMessage):
     reason: str = Field(default="user_hangup", description="挂断原因:user_hangup / error / timeout / device_gone")
 
 
+class AgentMessageMsg(AIPMessage):
+    """AGENT_MESSAGE —— 智能体主动发给设备的一句话。
+
+    为什么需要单独一类
+    ==================
+    协议里此前没有任何一条类型能表达「智能体想跟你说一句话」:
+
+      · ``decision_request`` 是「请你做个决定」—— 带选项、等你选,语义是阻塞的;
+      · ``voice_query`` 只有设备→网关一个方向;
+      · ``event`` / ``liquid_event`` 是客户端本地 UI 事件,不是对话内容。
+
+    手表上这个缺口同时造成两件事说不通:通知路径无东西可推(只接得住
+    decision_request),会话存储无东西可存(于是手表上一条记录都没有)。
+
+    ``conversation_id`` 是「同一套上下文」的依据
+    ==========================================
+    同一段对话在手机、手表、电脑上看到的应该是同一串消息。靠时间戳拼不出来 ——
+    多设备各自的钟不一致,而且同一时刻可能有两段对话在进行。所以由发起方给出
+    会话标识,设备按它归拢。
+
+    ``requires_ack`` 与投递
+    ======================
+    默认不要求回执:绝大多数推送就是给人看一眼。要求回执时设备应在**展示给用户**
+    之后回一条 ``ack``,而不是在收到字节时就回 —— 前者才是「人看到了」的证据,
+    后者只证明网络通。
+    """
+
+    type: MsgType = Field(default=MsgType.AGENT_MESSAGE)
+    conversation_id: str = Field(default="", description="所属会话;跨设备按它归拢同一串上下文")
+    text: str = Field(default="", description="要展示给用户的正文")
+    title: str = Field(default="", description="通知标题;留空由设备用默认标题")
+    role: str = Field(default="assistant", description="发话方:assistant / system")
+    requires_ack: bool = Field(
+        default=False,
+        description="是否要求设备在展示给用户后回 ack(不是收到字节就回)",
+    )
+    reply_expected: bool = Field(
+        default=False,
+        description="是否期待用户回一句;为真时设备应在通知上给出直接回复入口",
+    )
+
+
+class DecisionWithdrawMsg(AIPMessage):
+    """DECISION_WITHDRAW —— 这条决策不用管了,收起来。
+
+    为什么必须有
+    ============
+    一条 ``decision_request`` 会被**并行分叉**给所有连着的手表与手机
+    (``pending_decision_registry._discover_target_devices``)。服务端处理了重复回答
+    ——「first reply wins」—— 但此前**没有任何东西告诉其余设备把通知撤下来**。
+
+    后果是用户可见的:手表上答完,手机上那条还挂着。点它服务端是 no-op,可手机本地的
+    ``ReplyReceiver`` 会把通知消掉,于是用户以为"答成功了",实际什么都没发生;更糟的
+    是他可能在那边给了个**不同**的答案。
+
+    这是 SIP 分叉的 CANCEL(RFC 3261 §16.7):某一支回了 200 OK,代理立刻向其余每一支
+    发 CANCEL,那些终端停止振铃。没有这一步,接起电话之后别的分机还在响。
+
+    只带 decision_id 和 reason
+    ==========================
+    设备要做的只是"把这条收起来",不需要知道别人答了什么。把答案一起发出去,等于把
+    一次私人决定广播给每一台设备。
+
+    ``reason`` 是**封闭枚举**(见 ``core.interaction.decision_withdrawal.WithdrawReason``),
+    不是自由文本 —— 设备要据此决定怎么呈现:"别人已经答了"静默收起,"超时了"可以留
+    一条痕迹。自由文本做不到这件事,设备只能把它当字符串显示或者去猜。
+    """
+
+    type: MsgType = Field(default=MsgType.DECISION_WITHDRAW)
+    decision_id: str = Field(default="", description="要收回的那次决策")
+    reason: str = Field(
+        default="cancelled",
+        description="为什么收回:answered_elsewhere / timed_out / cancelled / superseded",
+    )
+
+
+class ExecutionProposalMsg(AIPMessage):
+    """EXECUTION_PROPOSAL —— 动手之前先问一句:你能不能、你愿不愿意。
+
+    **只说做什么,不说怎么做。** 怎么做是对端 Agent 自己的事 —— 它有自己的四级降级链
+    (System API → UIA → 坐标 → VLM)和自己的就位自检。中心替它决定"点哪个按钮",
+    就是第二份实现,而且中心手里那份界面状态是几百毫秒前的。
+
+    这和 ``core.perception_grounding`` 的 POLICY_1 对 Android 说的是同一件事。
+    """
+
+    type: MsgType = Field(default=MsgType.EXECUTION_PROPOSAL)
+    proposal_id: str = Field(default="", description="这一轮协商的标识;承诺按它认领")
+    intent: str = Field(default="", description="要做的事,自然语言")
+    deadline_ms: int = Field(default=0, description="期望在这个时间点之前做完(Unix 毫秒);0=不限")
+    risk_level: str = Field(default="", description="动作风险分级,设备可据此自行加严")
+
+
+class ExecutionCommitmentMsg(AIPMessage):
+    """EXECUTION_COMMITMENT —— 设备自己判断之后的回答。
+
+    ``valid_until_ms`` 不是可选的
+    =============================
+    设备说"我能做"时看到的那一屏,几秒之后可能已经不在了。这和截图节流、控件树
+    复定位是同一类问题:**一个在时刻 T 成立的判断,不能无限期当成在 T+n 也成立。**
+
+    没有有效期的承诺等于让中心去赌"从收到承诺到真正派发之间什么都没变"。过期的
+    承诺一律作废重来,不赌。
+
+    ``decline_reason`` 是封闭枚举
+    =============================
+    借 SIP/Q.850 的纪律:拒绝永远带一个机器可读的原因,取自封闭集合。见
+    ``core.coordination_consensus.DeclineReason``。自由文本让中心只能把它当字符串
+    记进日志,没法据此换策略(忙 → 换一台;不就绪 → 等一会儿再问;权限不足 → 去问人)。
+    """
+
+    type: MsgType = Field(default=MsgType.EXECUTION_COMMITMENT)
+    proposal_id: str = Field(default="", description="认领哪一轮提议")
+    accepted: bool = Field(default=False, description="能不能做。默认 False —— fail-closed")
+    valid_until_ms: int = Field(default=0, description="这条承诺到什么时候失效(Unix 毫秒)")
+    decline_reason: str = Field(default="", description="不接时的原因,封闭枚举")
+    best_level: str = Field(default="", description="自报能走到哪一级(system_api/uia/gui/vlm)")
+
+
+class ExecutionCommitMsg(AIPMessage):
+    """EXECUTION_COMMIT —— 选定了,就是你(或者:这次不是你)。
+
+    落选的设备**也要收到**。否则它会一直占着为这次提议留的资源,而且不知道自己
+    已经出局 —— 和决策分叉不撤回是同一个形状的问题。
+    """
+
+    type: MsgType = Field(default=MsgType.EXECUTION_COMMIT)
+    proposal_id: str = Field(default="", description="哪一轮提议")
+    selected: bool = Field(default=False, description="这台是不是被选中的那台")
+    reason: str = Field(default="", description="没选中时说明为什么")
+
+
 _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
+    MsgType.AGENT_MESSAGE: AgentMessageMsg,
+    MsgType.DECISION_WITHDRAW: DecisionWithdrawMsg,
+    MsgType.EXECUTION_PROPOSAL: ExecutionProposalMsg,
+    MsgType.EXECUTION_COMMITMENT: ExecutionCommitmentMsg,
+    MsgType.EXECUTION_COMMIT: ExecutionCommitMsg,
     MsgType.VOICE_CALL_START: VoiceCallStartMsg,
     MsgType.VOICE_CALL_ACCEPTED: VoiceCallAcceptedMsg,
     MsgType.VOICE_CALL_END: VoiceCallEndMsg,

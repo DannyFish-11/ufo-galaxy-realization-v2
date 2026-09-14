@@ -427,13 +427,63 @@ async def request_human_decision(
     targets = devices if devices is not None else await _discover_target_devices()
     if not targets:
         logger.warning("HITL.request: no target devices for decision_id=%s", record.decision_id)
+    # 把**实际**分叉目标写回记录。此前这里漏了:register() 收到的是调用方传的
+    # devices(常见情况是 None → 空列表),而真正的目标是上面这行算出来的 ——
+    # 于是记录不知道自己分叉去了哪儿,收不回来。
+    record.devices = list(targets)
+    delivered: List[str] = []
     for did in targets:
         try:
             await _emit(did, decision_request)
+            delivered.append(did)
         except Exception as exc:  # noqa: BLE001
             logger.debug("HITL.request: emit to %s failed: %s", did, exc)
 
-    return await registry.await_decision(record)
+    outcome = await registry.await_decision(record)
+    await _withdraw_other_branches(delivered, outcome, _emit)
+    return outcome
+
+
+async def _withdraw_other_branches(
+    delivered: List[str],
+    outcome: "DecisionOutcome",
+    emit: "EmitCallback",
+) -> None:
+    """决策落定后,把**没人要的那几支**收回来。
+
+    照 SIP 分叉的做法(RFC 3261 §16.7):某一支应答之后,向其余每一支发 CANCEL。
+    没有这一步,你在手表上答完,手机上那条还挂着 —— 点它是 no-op,但手机本地会把
+    通知消掉,于是用户以为自己答了,实际什么都没发生;更糟的是他可能在那边给了个
+    **不同**的答案。
+
+    只发给投递成功过的设备:没投出去的那台本来就没有东西要收。
+    """
+    from core.interaction.decision_withdrawal import (
+        branches_to_withdraw,
+        build_withdraw_message,
+        reason_for_status,
+    )
+
+    status = getattr(getattr(outcome, "status", None), "value", "") or str(getattr(outcome, "status", ""))
+    reason = reason_for_status(status)
+    answered_by = str(getattr(outcome, "source", "") or "")
+    branches = branches_to_withdraw(delivered, answered_by)
+    if not branches:
+        return
+    message = build_withdraw_message(outcome.decision_id, reason)
+    for did in branches:
+        try:
+            await emit(did, message)
+        except Exception as exc:  # noqa: BLE001
+            # 收不回来不该让这次决策本身失败 —— 答案已经拿到了。但要留下痕迹:
+            # 那台设备上会挂着一条已经没有意义的通知。
+            logger.warning(
+                "HITL.withdraw: 撤回投递失败 device=%s decision=%s reason=%s: %s",
+                did,
+                outcome.decision_id,
+                reason.value,
+                exc,
+            )
 
 
 async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:

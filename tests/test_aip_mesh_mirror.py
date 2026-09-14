@@ -113,10 +113,30 @@ def test_exemptions_are_real_message_types():
     assert not unknown, f"豁免表里这些类型在协议里不存在:{unknown}"
 
 
-def test_voice_call_signalling_is_the_exempt_set():
-    """豁免目前**只有**实时语音通话那六条。
+def test_the_exempt_set_is_exactly_these():
+    """豁免集合钉死。
 
-    钉死这个集合,是为了让下一次往里加东西成为一个必须解释的动作,而不是顺手一行。
+    钉死它,是为了让下一次往里加东西成为一个必须解释的动作,而不是顺手一行。
+    这条守卫已经起过一次作用:``agent_message`` 加进协议时它当场变红,逼着把
+    「为什么这一条也不上网格」写清楚,而不是让豁免表悄悄长胖。
+
+    它已经起过两次作用:``agent_message`` 与 ``decision_withdraw`` 加进协议时各红一次,
+    每次都逼着把「为什么这一条也不上网格」写清楚,而不是让豁免表悄悄长胖。
+
+    目前的三类:
+
+      · 实时语音通话的六条信令 —— 承载 SDP/ICE(会话凭据、网络位置)与实时转写;
+      · ``agent_message`` —— 承载对话正文;
+      · ``decision_withdraw`` —— **收件人范围**不对。它要收回的通知只存在于当初被
+        分叉到的那几台设备上;网格上其余节点从没收到过那条请求,也就没有东西可收。
+
+    协商的三条(execution_proposal / execution_commitment / execution_commit)理由更硬:
+    **候选集合是安全边界**。相位 1 已经按 peer_trust 与 CapabilityTier 滤过候选池,
+    blocked 的对端是硬拒绝;把提议广播到网格,等于让一个被拉黑的对端看见我们正要
+    做什么,那道过滤就白做了。
+
+    三类理由分别是「内容不该广播」「收件人不是所有人」「广播会绕过一道安全过滤」。
+    结论一样:都不上网格。但理由必须各自说得出口 —— 说不出口的豁免就是没人管过。
     """
     assert set(mesh_exempt_message_types()) == {
         "voice_call_start",
@@ -125,7 +145,26 @@ def test_voice_call_signalling_is_the_exempt_set():
         "voice_ice",
         "voice_event",
         "voice_interrupt",
+        "agent_message",
+        "decision_withdraw",
+        "execution_proposal",
+        "execution_commitment",
+        "execution_commit",
     }
+
+
+def test_conversation_content_is_never_mirrored_to_the_mesh():
+    """凡是承载对话正文/转写的类型,一律不上网格。
+
+    上一条钉的是「集合恰好是这几个」,这一条钉的是**为什么**。两条都要:
+    只钉集合,将来有人加一条同样载着对话内容的类型、又顺手接了发布器,集合那条
+    会红,但红的理由看不出来是"私人内容被广播了"。
+    """
+    exempt = set(mesh_exempt_message_types())
+    for carries_conversation in ("agent_message", "voice_event"):
+        assert (
+            carries_conversation in exempt
+        ), f"{carries_conversation} 承载对话内容,却没有被豁免 —— 镜像到网格就是把一段私人对话广播给每一个节点。"
 
 
 def test_the_table_points_at_methods_that_actually_exist():

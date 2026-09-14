@@ -414,11 +414,15 @@
           "get_ui_tree",
           "health",
           "help",
+          "hold_key",
           "hotkey",
           "list_windows",
           "locate_on_screen",
           "maximize",
+          "middle_click",
           "minimize",
+          "mouse_down",
+          "mouse_up",
           "move_mouse",
           "press_key",
           "restore",
@@ -426,8 +430,10 @@
           "screenshot",
           "scroll",
           "status",
+          "triple_click",
           "type_text",
-          "window_action"
+          "window_action",
+          "zoom"
         ]
       }
     },
@@ -1234,7 +1240,17 @@
       "type": "dev-code",
       "type_label": "开发/代码",
       "runnable": true,
-      "purpose": "Shell 命令执行器"
+      "purpose": "Shell 命令执行器",
+      "permissions": {
+        "actions": [
+          "execute",
+          "script",
+          "list_processes",
+          "kill",
+          "status",
+          "help"
+        ]
+      }
     },
     {
       "num": 123,

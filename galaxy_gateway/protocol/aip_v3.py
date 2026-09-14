@@ -467,6 +467,55 @@ class MessageType(str, Enum):
     VOICE_EVENT = "voice_event"
     VOICE_INTERRUPT = "voice_interrupt"
 
+    # ── 智能体主动发给设备的一句话 ──
+    # 这是协议里此前缺的一整类:已有的 decision_request 是「请你做个决定」(带选项、
+    # 等你选),voice_query 只有设备→网关一个方向,而「智能体想跟你说一句话」
+    # 没有任何一条类型能表达。
+    #
+    # 手表上这个缺口同时造成两件事说不通:
+    #   · 推送 —— 没有可推的东西,通知路径只接得住 decision_request;
+    #   · 上下文 —— 没有可存的东西,于是手表上一条会话记录都没有。
+    # 补上这一条,两件事同时成立:来了就是一条普通通知,存下来就是上下文。
+    AGENT_MESSAGE = "agent_message"
+
+    # ── HITL:请你做个决定 / 这条不用管了 ──
+    # DECISION_REQUEST 一直在线上跑(request_human_decision → send_to_device),
+    # 却从没进过本枚举 —— 漂移检查里它被登记成 "客户端专有扩展(wearos 本地渲染用)",
+    # 而实际上**服务端是它的发送方**。一条服务端会发的消息不在服务端的类型表里,
+    # 等于这条消息在协议层面不存在。补进来。
+    DECISION_REQUEST = "decision_request"
+
+    # DECISION_WITHDRAW 是分叉之后的收尾。一条决策会被**并行分叉**给所有连着的
+    # 手表与手机;某一台答了之后,其余每一台都必须被告知收起来。
+    #
+    # 没有它的后果是用户可见的:手表上答完,手机上那条还挂着 —— 点它服务端是 no-op,
+    # 可手机本地会把通知消掉,于是用户以为自己答了,实际什么都没发生;更糟的是他可能
+    # 在那边给了个**不同**的答案。
+    #
+    # 这是 SIP 分叉的 CANCEL(RFC 3261 §16.7)那一步:某一支回了 200,代理立刻向其余
+    # 每一支发 CANCEL,那些终端停止振铃。
+    DECISION_WITHDRAW = "decision_withdraw"
+
+    # ── 动手之前先问一句:你能不能、你愿不愿意 ──
+    #
+    # 中心把要做的事**提议**给候选设备,设备用**它自己的**判断回一条承诺或拒绝。
+    # 中心不替设备判断 —— 这和 perception_grounding 的 POLICY_1 是同一条原则:
+    # 设备端已经在做这件事,中心再判一次就是第二份实现,而且中心手里那份状态是
+    # 几百毫秒前的。
+    #
+    # 提议**只说做什么,不说怎么做**。怎么做是对端 Agent 自己的事(它有自己的
+    # 四级降级链)。
+    EXECUTION_PROPOSAL = "execution_proposal"
+
+    # 承诺**必带有效期**。设备说"我能做"时看到的那一屏,几秒之后可能已经不在了 ——
+    # 这和截图节流、控件树复定位是同一类问题:一个在时刻 T 成立的判断,不能无限期
+    # 当成在 T+n 也成立。过期的承诺一律作废重来,不去赌。
+    EXECUTION_COMMITMENT = "execution_commitment"
+
+    # 收齐承诺、选定执行面之后的落定。没有它,设备无从知道自己是被选中的那台还是
+    # 落选的那台 —— 而落选的那台必须知道,否则它会一直占着为这次提议留的资源。
+    EXECUTION_COMMIT = "execution_commit"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

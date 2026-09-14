@@ -74,6 +74,18 @@ class TestExecutorIntegration:
         assert denial.get("allowed") is False and denial.get("declared") is True
 
     def test_catalog_declares_exactly_verified_nodes(self):
-        # 声明面 = 已核实 dispatch 表的 8 个节点(不自欺:未核实的不声明)
+        """声明面钉死:只有**已核实过 dispatch 表**的节点才进来。
+
+        钉死它,是为了让往里加节点成为一个必须解释的动作 —— 声明一个没核实过
+        动作面的节点,等于把 fail-closed 变成"按一份猜出来的清单拒绝",比不声明更糟。
+
+        122 是本轮加进来的:它是 **shell 执行节点**,此前一个动作声明都没有,于是
+        node_action_permissions 判它"未声明"→ legacy 放行。最需要白名单的那个节点
+        恰恰没有白名单。
+
+        它的动作面是核实过的:``nodes/Node_122_Shell/fusion_entry.py`` 的 ``execute``
+        自述 available_actions = execute / script / list_processes / kill,加上它自己
+        处理的 status / help 两个自述动作。
+        """
         table = nap._load_permissions()
-        assert set(table.keys()) == {27, 33, 34, 36, 45, 74, 92, 124}
+        assert set(table.keys()) == {27, 33, 34, 36, 45, 74, 92, 122, 124}

@@ -71,7 +71,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, FrozenSet
+from typing import Any, Dict, FrozenSet
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -190,6 +190,29 @@ _ANDROID_DOMAIN_KINDS: FrozenSet[str] = frozenset(
 )
 
 
+def _command_result(aip_msg, result: Dict[str, Any]) -> Dict[str, Any]:
+    """AIP v3 的 ``command_result`` 信封。
+
+    这 12 行此前在本文件里逐字抄了 5 遍,``success`` 的取法还抄出了三种写法
+    (``result["success"]`` / ``result.get("success", False)`` / 写死 True)。统一成
+    ``.get(..., False)``:字段缺失时是 False,而不是 KeyError —— 少一种"回话本身失败"的死法。
+
+    ``data`` 和 ``payload`` 都要给:手表的 AIPClient 读 ``json["data"]``,
+    其余客户端读 ``payload``,两边都是既成事实。
+    """
+    return {
+        "version": "3.0",
+        "message_id": str(uuid.uuid4()),
+        "correlation_id": aip_msg.message_id,
+        "type": MessageType.COMMAND_RESULT.value,
+        "device_id": aip_msg.device_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "success": bool(result.get("success", False)),
+        "data": result,
+        "payload": result,
+    }
+
+
 class GatewayWSManager:
     """WebSocket 连接管理器
 
@@ -299,8 +322,14 @@ class GatewayWSManager:
         if websocket is not None:
             await websocket.send_json(message)
 
-    async def send_to_device(self, device_id: str, message: Dict):
-        """发送消息到指定设备 — 委托 UCM 处理（含 fallback 逻辑）。"""
+    async def send_to_device(self, device_id: str, message: Dict) -> bool:
+        """发送消息到指定设备 — 委托 UCM 处理（含 fallback 逻辑）。
+
+        **返回送没送出去。** 此前这里无论成败都返回 ``None``：UCM 明明会返回 bool，
+        转发时被丢掉了，于是调用方无从区分"已送达"和"设备根本不可达"。实测后果是
+        协商轮次白等一个完整超时（设备早就不可达，却当成"发出去了，在等回话"）。
+        UCM 抛异常时同样是 ``False`` —— 异常和返回 False 都是"没送出去"。
+        """
         # Fast path: use local connection_id map for direct send
         async with self._lock:  # B4 fixed: lock-protected read
             connection_id = self.device_connections.get(device_id)
@@ -308,15 +337,18 @@ class GatewayWSManager:
         if connection_id and websocket is not None:
             try:
                 await websocket.send_json(message)
-                return
+                return True
             except Exception as e:
                 logger.warning("GatewayWSManager.send_to_device local send failed, delegating to UCM: %s", e)
 
         # Delegate to UCM (presence backbone) for fallback / gateway paths
         try:
-            await self._ucm().send_to_device(device_id, message)
+            # UCM 成功时返回 True；少数适配器返回 None 表示"成功但没有返回值"，
+            # 所以只把**显式的 False** 当失败，不把 None 当失败。
+            return await self._ucm().send_to_device(device_id, message) is not False
         except Exception as e:
             logger.error("❌ UCM send_to_device failed for %s: %s", device_id, e)
+            return False
 
     async def is_device_connected(self, device_id: str) -> bool:
         """Check if a device has an active connection (UCM is authoritative)."""
@@ -828,18 +860,7 @@ async def handle_command(connection_id: str, aip_msg):
                 except Exception as _vq_err:
                     logger.error("voice_query routing failed: %s", _vq_err)
                     result = {"success": False, "error": "voice query routing failed"}
-            response = {
-                "version": "3.0",
-                "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
-                "type": MessageType.COMMAND_RESULT.value,
-                "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "success": result.get("success", False),
-                # 手表 AIPClient 读 command_result 的 json["data"]；同时保留 payload 约定
-                "data": result,
-                "payload": result,
-            }
+            response = _command_result(aip_msg, result)
             await connection_manager.send_message(connection_id, response)
             return
         elif command_text == "phase_report":
@@ -858,17 +879,7 @@ async def handle_command(connection_id: str, aip_msg):
                 logger.debug("phase_report record skipped: %s", _pr_err)
             logger.info("📲 设备相位上报: device=%s phase=%s", device_id, reported_phase)
             result = {"success": bool(reported_phase), "phase": reported_phase}
-            response = {
-                "version": "3.0",
-                "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
-                "type": MessageType.COMMAND_RESULT.value,
-                "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "success": result["success"],
-                "data": result,
-                "payload": result,
-            }
+            response = _command_result(aip_msg, result)
             await connection_manager.send_message(connection_id, response)
             return
         elif command_text == "interruptibility":
@@ -899,17 +910,33 @@ async def handle_command(connection_id: str, aip_msg):
                     snapshot.confidence,
                 )
                 result = {"success": True, "band": snapshot.band}
-            response = {
-                "version": "3.0",
-                "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
-                "type": MessageType.COMMAND_RESULT.value,
-                "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "success": result["success"],
-                "data": result,
-                "payload": result,
-            }
+            response = _command_result(aip_msg, result)
+            await connection_manager.send_message(connection_id, response)
+            return
+        elif command_text == "execution_commitment":
+            # 设备对 execution_proposal 的表态：{proposal_id, accepted, valid_until_ms,
+            # decline_reason?, best_level?}。中心正卡在 collect_commitments 里等它。
+            #
+            # 认不出这一轮（已超时收摊、或 proposal_id 是编的）时不报错：迟到的承诺
+            # 是常态，不是故障。resolved=False 会如实回给设备，它据此知道自己白答了。
+            _pid = str(_payload.get("proposal_id") or "")
+            # device_id 以**连接**为准，不收设备在 payload 里自报的那个：
+            # 那个字段是设备写的，一台设备可以填另一台的 id，从而替别人接下任务
+            # 或者替别人拒绝。连接上的 device_id 是握手时定下的，改不了。
+            # 顺带解决一个实际问题：手表的 sendCommand 只在信封上带 device_id，
+            # 内层 payload 里没有，按 payload 取会得到空串、这条承诺被当成
+            # "没问过的设备"丢掉 —— 手表等于还是沉默。
+            _commit_payload = dict(_payload)
+            _commit_payload["device_id"] = device_id
+            try:
+                from core.coordination_commitment_collector import get_commitment_registry
+
+                _accepted_round = get_commitment_registry().resolve(_pid, _commit_payload)
+            except Exception as _cm_err:
+                logger.debug("execution_commitment resolve skipped: %s", _cm_err)
+                _accepted_round = False
+            result = {"success": True, "proposal_id": _pid, "resolved": _accepted_round}
+            response = _command_result(aip_msg, result)
             await connection_manager.send_message(connection_id, response)
             return
         elif command_text == "human_input":
@@ -982,17 +1009,7 @@ async def handle_command(connection_id: str, aip_msg):
                 except Exception as _hi_err:
                     logger.error("human_input routing failed: %s", _hi_err)
                     result = {"success": False, "error": "human input routing failed", "decision_id": decision_id}
-            response = {
-                "version": "3.0",
-                "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
-                "type": MessageType.COMMAND_RESULT.value,
-                "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "success": result.get("success", False),
-                "data": result,
-                "payload": result,
-            }
+            response = _command_result(aip_msg, result)
             await connection_manager.send_message(connection_id, response)
             return
 

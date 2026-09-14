@@ -49,6 +49,11 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from core.agent_card import local_device_id
+from core.desktop_action_translation import DesktopDispatch
+from core.perception_grounding import normalize_platform
+from core.schemas.ui_element import UISource
+
 logger = logging.getLogger("Galaxy.Routes.UIAct")
 
 router = APIRouter(prefix="/api/v1/ui", tags=["ui-act"])
@@ -150,11 +155,174 @@ async def ui_perception_state() -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("界面快照统计不可读", exc_info=True)
         out["android_ui_snapshot_error"] = type(exc).__name__
+    out["desktop"] = desktop_perception_state()
     return out
+
+
+def desktop_perception_state() -> Dict[str, Any]:
+    """桌面这条腿此刻通不通,以及**下一次点击会走哪条路**。
+
+    为什么要能问这一句
+    ------------------
+    这条链上每一环都可能"看起来在工作,其实没有":
+
+      · 桌面 UIA 采集拿不到(不是 Windows / 没装 pywinauto)→ 结构图这条腿是空的,
+        但 ui_act 照样能用视觉投影跑起来,从响应上看不出差别;
+      · 仲裁器 import 得进来但 Level 1/2 是空的(服务端不是那台 Windows)→
+        "跑了仲裁器"和"用上了 UIA"长得一模一样,而后者才是按控件身份操作;
+      · 于是最后一米可能是 InvokePattern,也可能是盲点坐标 —— 调用方无从分辨。
+
+    三件事都是**能力探测**,不是"试一次看看":不抓窗口、不派动作、不改任何状态。
+    拿一次失败去反推能力是错的 —— 一次采集失败可能只是当时没有前台窗口。
+    """
+    from core.perception_grounding import describe_grounding_authority
+
+    state: Dict[str, Any] = {}
+
+    # ① 归属:这个平台是服务端说了算还是设备说了算
+    state["grounding_owner"] = describe_grounding_authority("windows")
+
+    # ② 采集:桌面 UIA 这条腿在不在
+    try:
+        from nodes.Node_36_UIAWindows.desktop_uia import availability
+
+        state["uia_capture"] = availability().to_dict()
+    except Exception as exc:  # noqa: BLE001 — 探测失败 ≠ 系统故障
+        state["uia_capture"] = {"available": False, "reason": f"探测失败: {type(exc).__name__}"}
+
+    # ③ 动作:仲裁器到底有没有 UIA 那一级
+    arbiter_has_uia = False
+    try:
+        from core.windows_execution_arbiter import get_windows_arbiter
+
+        arbiter_has_uia = bool(getattr(get_windows_arbiter(), "uia_available", False))
+        state["arbiter_uia_available"] = arbiter_has_uia
+    except Exception as exc:  # noqa: BLE001
+        state["arbiter_uia_available"] = False
+        state["arbiter_error"] = type(exc).__name__
+
+    # ④ 结论:下一次结构命中的点击会走哪条路。**这是调用方真正想知道的那一句。**
+    if arbiter_has_uia:
+        state["next_click_route"] = "uia_invoke"
+        state["next_click_note"] = "按控件身份操作,不经过鼠标"
+    else:
+        state["next_click_route"] = "coordinates"
+        state["next_click_note"] = (
+            "退坐标盲点:窗口若在采集之后动过这一下会落空,而且落在哪儿不可知。"
+            "服务端不是目标 Windows 时这是预期状态 —— 跨设备应走 agent_deploy + agent_execute。"
+        )
+    return state
 
 
 def _node_action(node_id: str, action_value: str) -> str:
     return _ACTION_ALIAS.get(node_id, {}).get(action_value, action_value)
+
+
+#: 表示「就在本机」的 device_id 约定值。仲裁器全程用 ``device_id="local"``
+#: 操作本机(见 ``windows_aip_client`` 的 ``route_command(..., device_id="local")``)。
+_LOCAL_DEVICE_ALIASES = frozenset({"", "local", "localhost", "self", "this"})
+
+
+def targets_this_machine(device_id: str) -> bool:
+    """这个 device_id 指的是不是**本机**。
+
+    为什么必须问这一句
+    ------------------
+    桌面的结构化派发(读控件树 → 命中控件 → 动作)只有在"服务端就是那台机器"时才
+    成立。不是本机时,正确的路是 ``agent_deploy`` + ``agent_execute``:把 Agent 派过去,
+    由它在**对端本机**用自己的仲裁器执行(``core.device_policy.requires_agent_deploy``
+    对所有物理设备都返回 True)。
+
+    隔着网络替远端决定"点哪个按钮"是第二份实现,而且是更差的那份 —— 手里那张控件图
+    是几百毫秒前的。这正是 ``core.perception_grounding`` 的 POLICY_1 对 Android 说的
+    同一件事,换台机器它一字不差地成立。
+
+    ``PLATFORM_GROUNDING_OWNER`` 里 ``windows: SERVER`` 没错,但它**默认了**能走到这
+    条路的 windows 就是本机。那个前提此前没有写下来,也没有任何东西挡住有人拿远端
+    device_id 调进来。这个函数就是把它写下来。
+    """
+    return (device_id or "").strip().lower() in _LOCAL_DEVICE_ALIASES or (
+        (device_id or "").strip() == local_device_id()
+    )
+
+
+def _resolve_node(graph: Any, node_id: str) -> Optional[Dict[str, Any]]:
+    """按 PlannedAction.node_id(树路径)在图里找回那个控件节点。
+
+    找回来是为了拿 ``automation_id`` —— 规划器只带 node_id 和 label,而 node_id 是
+    树路径(``"0.3.1"``),不能当身份用。automation_id 在图里,不在规划结果里。
+    """
+    if graph is None or graph.root is None or not node_id:
+        return None
+    hits = graph.root.find_all(lambda n: n.node_id == node_id)
+    return hits[0].model_dump() if hits else None
+
+
+def _translate_for_desktop(graph: Any, planned: Any) -> "DesktopDispatch":
+    """命中的控件 → 仲裁器动作词。翻译规则在 core.desktop_action_translation。"""
+    from core.desktop_action_translation import translate
+
+    node = _resolve_node(graph, planned.node_id)
+    coords = tuple(planned.coordinates) if planned.coordinates else None
+    return translate(kind=planned.action.value, node=node, coordinates=coords, text=planned.text)
+
+
+async def _dispatch_via_arbiter(dispatch: Any, req: "UIActRequest", planned: Any) -> Optional[Dict[str, Any]]:
+    """经 Windows 执行仲裁器派发。仲裁器不可用时返回 None,由调用方决定回落。
+
+    返回 None 与返回 ``{"dispatched": False}`` 是两件事:前者是"这台机器上没有仲裁器"
+    (该回落),后者是"仲裁器跑了但没成"(不该再用别的路径重试一次)。
+    """
+    try:
+        from core.windows_execution_arbiter import get_windows_arbiter
+    except Exception as exc:  # noqa: BLE001 — 非 Windows 宿主 import 不进来是预期的
+        logger.info("ui_act: 执行仲裁器不可用: %s", exc)
+        return None
+
+    try:
+        arbiter = get_windows_arbiter()
+    except Exception as exc:  # noqa: BLE001
+        logger.info("ui_act: 执行仲裁器取不到实例: %s", exc)
+        return None
+
+    # 关键一问:这个仲裁器**到底有没有 UIA**。
+    #
+    # 仲裁器类长在 core/ 里,在 Linux 上一样 import 得进来 —— 只是它的 Level 1/2
+    # 适配器都需要 Windows,拿不到时静默为 None,于是 _try_uia 一律 SKIPPED、直接
+    # 降到坐标级。服务端与目标 Windows 不同机时就是这个状态。
+    #
+    # 不问这一句就派过去,结果会是:看起来"走了仲裁器",实际一路降到坐标,而调用方
+    # 以为自己按控件身份操作了。宁可回落到既有节点派发并**说出来**,也不要一个
+    # 看起来更高级、实际一样盲点的路径。
+    #
+    # 跨设备该怎么走(把意图交给 CommandRouter 派到对端、由对端 Agent 用它自己的
+    # 仲裁器执行)是另一件事,尚未定案 —— 这里只保证不谎报。
+    if dispatch.identity_used and not getattr(arbiter, "uia_available", False):
+        logger.info("ui_act: 仲裁器没有 UIA 这一级(服务端多半不是目标 Windows),不经它派发")
+        return None
+
+    try:
+        result = await arbiter.execute(
+            action=dispatch.action,
+            params=dict(dispatch.params),
+            device_id=req.device_id or "local",
+            instruction=req.instruction,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ui_act: 仲裁器派发失败: %s", exc)
+        return {"dispatched": False, "error": "dispatch_failed"}
+
+    payload: Dict[str, Any] = {
+        "dispatched": True,
+        "dispatched_action": f"arbiter.{dispatch.action}",
+        "result": result.to_dict() if hasattr(result, "to_dict") else {"success": bool(result)},
+    }
+    # 仲裁器自己记了"最后落在哪一级",把它抬到响应里 —— 否则调用方看到 success 就
+    # 以为走了 UIA,而实际上可能一路降到了坐标甚至 VLM。
+    level = getattr(result, "final_level", None) or getattr(result, "level", None)
+    if level is not None:
+        payload["executor_level"] = getattr(level, "value", str(level))
+    return payload
 
 
 @router.post("/act")
@@ -224,7 +392,46 @@ async def ui_act(req: UIActRequest) -> Dict[str, Any]:
     if not req.execute:
         return out  # dry-run:只规划
 
-    # 结构确定命中 → 经规范执行器派发到操作节点(带 ui_graph 结构化界面态)。
+    # ── 桌面:派给执行仲裁器,而不是直接派给坐标节点 ──────────────────────────
+    #
+    # 此前这里无条件派到 ``Node_36_UIAWindows`` 的 /click {x,y}。但 Node_36 是
+    # ``core.windows_execution_arbiter`` 四级降级链里的 **Level 3(坐标)**;
+    # Level 2(UIA,按控件身份 find_and_click)就在隔壁、一路到底都通,而且
+    # ``windows_aip_client`` 收到 task_assign 时走的正是仲裁器。
+    #
+    # 也就是说:结构化的活全干完了,结果却交给了整条链里最弱的一级。这里把它接上。
+    #
+    # 判据不只看 req.platform:调用方常常不填它,而漏填会让这条改进直接失效。
+    # 图自己带着来源(UIA 图必然来自 Windows 桌面),这个信号比让人记得填一个字段可靠。
+    desktop = (normalize_platform(req.platform) == "windows") or (graph.source == UISource.UIA)
+
+    if desktop and not targets_this_machine(req.device_id):
+        # 远端 Windows:明确拒绝并指路,而不是隔着网络去解析控件树。
+        # 从前这里会默默往下走 —— 看起来"派发成功了",实际是拿一张过期的图在盲点。
+        out["dispatched"] = False
+        out["dispatch_declined"] = (
+            f"目标设备 {req.device_id!r} 不是本机:桌面结构化派发只在服务端就是那台机器时成立。"
+            "跨设备请走 agent_deploy + agent_execute —— 把 Agent 派过去,由它在对端本机执行。"
+        )
+        out["needs_model"] = bool(planned.needs_model)
+        logger.info("ui_act: 目标 %s 非本机,拒绝桌面派发", req.device_id)
+        return out
+
+    if desktop:
+        dispatch = _translate_for_desktop(graph, planned)
+        out["desktop_dispatch"] = dispatch.to_dict()
+        if not dispatch.dispatchable:
+            out["dispatched"] = False
+            out["error"] = "no_actionable_target"
+            return out
+        arb_out = await _dispatch_via_arbiter(dispatch, req, planned)
+        if arb_out is not None:
+            out.update(arb_out)
+            return out
+        # 仲裁器拿不到(非 Windows 宿主 / 未装依赖)→ 落回节点派发,但**说出来**:
+        # 调用方若不知道这次没走仲裁器,就会以为自己用上了 UIA。
+        out["arbiter_unavailable"] = "执行仲裁器不可用,本次回落到坐标节点派发"
+
     # 安全:node_id 不可信,严格白名单校验后才交给 invoke_node(防路径穿越)。
     node_id = _safe_node_id(req.node_id) or "Node_36_UIAWindows"  # 非法/空 → 缺省桌面 UIA
     node_action = _node_action(node_id, planned.action.value)
