@@ -67,9 +67,25 @@ class TestFailuresAreNeverReportedAsSuccess:
 
     def test_launch_app_itself_refuses_an_empty_target(self):
         import importlib
+        import os
 
         from fastapi.testclient import TestClient
 
-        m = importlib.import_module("nodes.Node_45_DesktopAuto.main")
-        body = TestClient(m.app).post("/launch_app", json={"target": ""}).json()
+        # 节点 HTTP 面现在有一层身份认证(见 docs/NODE_HTTP_SECURITY_CONTRACT.md)。
+        # 不带令牌会先被 401,断言 body["success"] 因 KeyError 而红 ——
+        # **而这条要验的"空目标必须被拒"根本没被执行到**。
+        # 只把断言放宽成接受 401 是不行的:那样它会因为"被拦在门外"而通过,
+        # 空目标检查从此无人测试。所以带上令牌,真的打到那段代码。
+        token = "test-token-open-app"
+        prev = os.environ.get("GALAXY_API_TOKEN")
+        os.environ["GALAXY_API_TOKEN"] = token
+        try:
+            m = importlib.import_module("nodes.Node_45_DesktopAuto.main")
+            client = TestClient(m.app, headers={"Authorization": f"Bearer {token}"})
+            body = client.post("/launch_app", json={"target": ""}).json()
+        finally:
+            if prev is None:
+                os.environ.pop("GALAXY_API_TOKEN", None)
+            else:
+                os.environ["GALAXY_API_TOKEN"] = prev
         assert body["success"] is False

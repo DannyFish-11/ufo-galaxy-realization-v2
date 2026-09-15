@@ -70,6 +70,8 @@ _start_time = datetime.now()
 # 真正要写的时候 atomic_write_json 自己会 makedirs;读的时候 exists() 判空即可。
 _REGISTRY_FILE = Path(PLUGIN_REGISTRY_PATH) / "registry.json"
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title=f"Node {NODE_ID} - {NODE_NAME}", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -78,6 +80,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_115_PluginManager")
 
 
 # ---------------------------------------------------------------------------

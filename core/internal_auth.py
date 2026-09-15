@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import logging
 from typing import Dict
+from urllib.parse import urlparse
 
 logger = logging.getLogger("Galaxy.InternalAuth")
 
-__all__ = ["internal_auth_headers", "internal_token"]
+__all__ = ["internal_auth_headers", "internal_headers_for", "internal_token", "is_internal_url"]
 
 
 def internal_token() -> str:
@@ -49,3 +50,33 @@ def internal_auth_headers() -> Dict[str, str]:
     """内部调用要带的 header。没有令牌时是空字典 —— 见模块 docstring。"""
     token = internal_token()
     return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+#: 认得出来的"自己人"主机。令牌**只**发给这些地址。
+#:
+#: 为什么必须有这道判断:仓里同一个 httpx 客户端既打节点、也打 OpenAI / GitHub。
+#: 在客户端构造处无条件挂上 Authorization,等于把内部令牌送给第三方 —— 那不是
+#: 加固,是凭据外泄。所以按**目标地址**决定带不带,而不是按客户端。
+_INTERNAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})
+
+#: compose 里的服务名形如 ``node-36-uiawindows`` / ``galaxy-gateway`` / ``galaxy-core``。
+_INTERNAL_HOST_PREFIXES = ("node-", "galaxy-")
+
+
+def is_internal_url(url: str) -> bool:
+    """这个地址算不算"自己人"。判不准时返回 ``False`` —— 宁可不带令牌(调用方会收到
+    401,是个明确现象),也不要把令牌发给一个没认出来的主机。"""
+    try:
+        host = (urlparse(str(url or "")).hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return False
+    if not host:
+        return False
+    if host in _INTERNAL_HOSTS:
+        return True
+    return any(host.startswith(pfx) for pfx in _INTERNAL_HOST_PREFIXES)
+
+
+def internal_headers_for(url: str) -> Dict[str, str]:
+    """按目标地址决定要不要带令牌。外部地址一律不带。"""
+    return internal_auth_headers() if is_internal_url(url) else {}

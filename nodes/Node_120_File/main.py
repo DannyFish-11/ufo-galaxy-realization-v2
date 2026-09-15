@@ -754,11 +754,17 @@ class FileService:
 # FastAPI Application
 # =============================================================================
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title=f"Node {NODE_ID}: {NODE_NAME}",
     description="File operations service for Galaxy",
     version="5.0.0"
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_120_File")
 
 app.add_middleware(
     CORSMiddleware,

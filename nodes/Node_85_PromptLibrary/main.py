@@ -460,12 +460,18 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Node 85 shutdown complete")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title="Node 85: Prompt Library",
     description="提示词库 - 提示词管理、模板优化、最佳实践",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_85_PromptLibrary")
 
 app.add_middleware(
     CORSMiddleware,

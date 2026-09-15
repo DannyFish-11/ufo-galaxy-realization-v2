@@ -16,6 +16,8 @@ from nodes.common.cors_config import get_cors_origins
 
 logger = logging.getLogger("Node_130_AutonomousCoding")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 130 - AutonomousCoding", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -24,6 +26,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_130_AutonomousCoding")
 
 # Lazy engine access via fusion_entry
 from nodes.Node_130_AutonomousCoding.fusion_entry import _get_engine, _run_async

@@ -41,6 +41,8 @@ logger = logging.getLogger("Galaxy.Node105KB")
 # 而不直接调用 kb 全局实例（测试和内部集成除外）。
 KNOWLEDGE_CORE_ROLE = "primary_backend"
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 105 - Unified Knowledge Base", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -49,6 +51,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_105_UnifiedKnowledgeBase")
 
 # ============================================================================
 # 数据模型

@@ -319,9 +319,14 @@ async def lifespan(app: FastAPI):
     # 此前 POST(5s 超时)在 yield 前,状态机不在时会拖启动器健康检查预算。
     async def _register_with_state_machine() -> None:
         try:
+            from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
+            # 节点向状态机注册也要带身份 —— 状态机的 HTTP 面现在也有鉴权,
+            # 不带令牌的话每个节点的注册都会 401,而现象只是"节点起来了但没注册上"。
             async with httpx.AsyncClient() as client:
                 await client.post(
                     f"{STATE_MACHINE_URL}/node/register",
+                    headers=internal_headers_for(STATE_MACHINE_URL),
                     json={
                         "node_id": NODE_ID,
                         "node_name": NODE_NAME,
@@ -343,12 +348,18 @@ async def lifespan(app: FastAPI):
     
     logger.info(f"Shutting down Node {NODE_ID}")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Security Enforcer - Access Control for Galaxy",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_68_Security")
 
 app.add_middleware(
     CORSMiddleware,

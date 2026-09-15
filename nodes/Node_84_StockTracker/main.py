@@ -342,12 +342,18 @@ async def lifespan(app: FastAPI):
     await tracker.close()
     logger.info("Node 84 shutdown complete")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title="Node 84: Stock Tracker",
     description="股票追踪器 - 实时行情、技术指标、市场分析",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_84_StockTracker")
 
 app.add_middleware(
     CORSMiddleware,

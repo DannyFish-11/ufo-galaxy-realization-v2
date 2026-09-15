@@ -50,7 +50,12 @@ __all__ = ["DEFAULT_EXEMPT", "install_node_auth"]
 #: 摊给未认证方看。动作权限闸放它们过是另一回事(那道闸管的是"能不能做"),
 #: 认证这一层没有理由放。
 DEFAULT_EXEMPT: Dict[str, Set[str]] = {
+    # deploy/compose/full.yml 里 126 个 healthcheck 用的就是这个;另外三个是少数
+    # 服务的写法。全部只报告存活,不动手。
     "/health": {"GET", "HEAD"},
+    "/healthz": {"GET", "HEAD"},
+    "/readyz": {"GET", "HEAD"},
+    "/health/live": {"GET", "HEAD"},
 }
 
 

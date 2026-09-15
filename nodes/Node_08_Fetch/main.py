@@ -33,6 +33,8 @@ FETCH_MAX_RESPONSE_SIZE = int(os.getenv("FETCH_MAX_RESPONSE_SIZE", str(10 * 1024
 # 统计
 stats: Dict[str, int] = {"total_requests": 0, "success_count": 0, "error_count": 0}
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 08 - Fetch", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -41,6 +43,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_08_Fetch")
 
 
 # ─── 请求模型 ────────────────────────────────────────────────────────────────

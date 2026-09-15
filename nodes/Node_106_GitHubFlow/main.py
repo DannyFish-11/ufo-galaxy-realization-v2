@@ -32,6 +32,8 @@ from nodes.common.cors_config import get_cors_origins
 # 既不走启动界面的对勾列,也不进 logs/lumiv.log。库模块不该抢屏 —— 一律进日志。
 logger = logging.getLogger("Galaxy.Node106.GitHubFlow")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 106 - GitHub Flow", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -40,6 +42,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_106_GitHubFlow")
 
 # ============================================================================
 # 数据模型

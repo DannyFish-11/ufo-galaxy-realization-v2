@@ -33,7 +33,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # FastAPI 应用
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Academic Search Node", version="1.1.0")
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_97_AcademicSearch")
 
 # 配置
 ARXIV_API = "http://export.arxiv.org/api/query"
@@ -436,10 +442,13 @@ async def analyze_papers_with_agentcpm(papers: List[Dict], analysis_topic: str) 
             "save_to_memos": False
         }
 
+        from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{NODE_104_URL}/deep_research",
-                json=payload
+                json=payload,
+                headers=internal_headers_for(NODE_104_URL),
             )
             response.raise_for_status()
 
