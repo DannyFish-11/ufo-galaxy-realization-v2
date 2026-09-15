@@ -13,6 +13,7 @@ export type {
   ModalityState,
   ModalityView,
   PerceptionView,
+  AmbientAction,
   ExecutionChainView,
   HybridExecutionView,
   ThinkingLocusView,

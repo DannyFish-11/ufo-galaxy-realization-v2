@@ -115,6 +115,44 @@ class TestTheLeftRailHasNoBoxAroundTheCards:
         )
         assert "box-shadow:" not in body, "同上 —— 投影也会把它描成一块"
 
+    def test_the_place_you_click_to_collapse_can_actually_be_seen(self) -> None:
+        """收放左栏那片地方**不能是隐形的**。
+
+        把包卡片那块盒子撤掉之后，`.rest` 只剩 `background: none` 加一个只有键盘
+        看得见的 focus 圈 —— 功能好好的（212 → 60 → 212 实测过），但屏幕上没有任何
+        东西说这儿能按。一个谁都摸不到的按钮，和没有这个按钮是一回事。
+
+        补的不该是又一个盒子（那正是上一条刚拆掉的东西），而是**一道折痕**：面收边
+        的地方本来就该有一道痕。所以这道门要两件：平时看得见，而且指针落上来时
+        那道光**走的方向就是这一按会发生的事**。
+        """
+        css = _hud()
+        m = re.search(r"\n\.rest::before \{(.*?)\n\}", css, re.S)
+        assert m, "`.rest` 那道折痕没了 —— 收放左栏那片地方又变回隐形的了"
+        rest_opacity = re.search(r"opacity:\s*([\d.]+)", m.group(1))
+        assert (
+            rest_opacity and float(rest_opacity.group(1)) > 0.2
+        ), f"折痕淡到 {m.group(1).strip()} —— 平时看不见的话，这块能按的地方等于不存在"
+
+        # 方向：收窄着 → 光往外推（点了会变宽）；展开着 → 光往内收（点了会收窄）。
+        # 两头指的是同一个方向的话，那道光就不再是在说「按下去会怎样」了。
+        wide = re.search(r"\.rest:hover::after[^{]*\{([^}]*)\}", css)
+        slim = re.search(r"\.rail\[data-slim='true'\] \.rest:hover::after[^{]*\{([^}]*)\}", css)
+        assert wide and slim, "折痕上那道光没了 —— 收放方向就没人说得出来了"
+        a = re.search(r"animation(?:-name)?:\s*([\w-]+)", wide.group(1))
+        b = re.search(r"animation-name:\s*([\w-]+)", slim.group(1))
+        assert a and b and a.group(1) != b.group(1), (
+            f"展开着和收窄着走的是同一种光({a and a.group(1)} / {b and b.group(1)}) —— "
+            "那道光就只是在动，没有在说这一按会发生什么"
+        )
+
+        # 关了动效的人也得摸得到这块地方。**不是把它藏掉** —— 那一档就没了。
+        reduced = css[css.index("@media (prefers-reduced-motion: reduce)", css.index(".rest::after")) :]
+        reduced = reduced[: reduced.index("\n}\n.rest:focus-visible")]
+        assert ".rest::before" in reduced, (
+            "关了动效之后折痕没有补偿。那道光不走了，折痕还是那么淡，" "这块能按的地方对这些人就又隐形了"
+        )
+
 
 class TestACardMustHideTheOneBehindIt:
     def test_the_card_face_has_an_opaque_base(self) -> None:

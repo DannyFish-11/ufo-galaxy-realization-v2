@@ -69,7 +69,6 @@ export function createDeck(store: Store, onDraw?: (index: number) => void): Deck
   slot.append(stack, blocks, empty);
   deck.append(wheel, slot);
   rest.type = 'button';
-  rest.setAttribute('aria-label', '收起或展开左栏');
   frame.append(deck, rest);
   rail.append(frame);
 
@@ -369,6 +368,12 @@ export function createDeck(store: Store, onDraw?: (index: number) => void): Deck
 
   function render(): void {
     rail.dataset['slim'] = String(store.state.slim);
+    // 折痕那道光只说得出**方向**。往哪儿走是给余光的,「按下去会怎样」这句话
+    // 还得有人说得出口 —— 读屏软件读不出一道 clip-path 在动。
+    const slim = store.state.slim;
+    rest.setAttribute('aria-label', slim ? '展开左栏' : '收起左栏');
+    rest.setAttribute('aria-expanded', String(!slim));
+    rest.title = slim ? '展开左栏' : '收起左栏';
     remap();
     sizeDeck();
     layout();

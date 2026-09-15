@@ -304,10 +304,85 @@ body {
 }
 .blk:focus-visible { outline: 2px solid var(--a-mid); outline-offset: 2px; }
 
-/* 卡片放完之后露出来的那片 —— 就是框自己的面。点它收放。视觉上不存在。 */
+/* ── 卡片放完之后露出来的那片 ────────────────────────────────────────
+   这片就是框自己的面,点它收放左栏。
+
+   它从前**视觉上完全不存在**:`background: none` 加一个只有键盘能看见的
+   focus 圈。收放这件事本身是要留的 —— 但一个谁都摸不到的按钮,等于没有。
+
+   补的不是一个框,也不是一颗点。补的是**一道折痕**:面收边的地方本来就该有
+   一道痕,它不是贴上去的物件。折痕平时很淡(在,但不喊人);指针落上来时**那
+   道光自己走一趟**,而且走的方向就是这一按会发生的事 ——
+
+     收窄着 → 光从中点**向两端推开**   点了会变宽
+     展开着 → 光从两端**向中点收拢**   点了会收窄
+
+   跟岛下沿那道光同一套话:方向讲的是「会怎样」,不靠图标、不靠字、不引颜色。
+   ───────────────────────────────────────────────────────────────── */
 .rest {
+  position: relative;
   flex: 1; min-height: 40px;
   border: 0; background: none; padding: 0; cursor: pointer;
+}
+.rest::before,
+.rest::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 30px; height: 1.5px;
+  margin: -0.75px 0 0 -15px;
+  border-radius: 999px;
+  /* 收窄之后整栏只有 44px,折痕跟着短一截 —— 一道顶着两边的痕看着像条边框 */
+  transition: width var(--t-rail) var(--ease), margin var(--t-rail) var(--ease);
+}
+.rail[data-slim='true'] .rest::before,
+.rail[data-slim='true'] .rest::after {
+  width: 16px; margin-left: -8px;
+}
+/* 折痕本身:一道浅槽加底下一线受光。平时淡,指针落上来时清楚一点。 */
+.rest::before {
+  box-shadow: inset 0 0.5px 1px rgba(93, 84, 102, 0.22),
+    0 0.5px 0 rgba(255, 255, 255, 0.55);
+  opacity: 0.42;
+  transition: opacity 0.45s var(--ease), width var(--t-rail) var(--ease),
+    margin var(--t-rail) var(--ease);
+}
+.rest:hover::before,
+.rest:focus-visible::before { opacity: 0.88; }
+/* 走的那道光。平时不在 —— 这一条只在指针落上来时说话。 */
+.rest::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.95) 38% 62%,
+    transparent
+  );
+  opacity: 0;
+}
+/* 展开着:向中点收拢 —— 点了会收窄 */
+.rest:hover::after,
+.rest:focus-visible::after { animation: rest-in 1.7s var(--ease) infinite; }
+/* 收窄着:向两端推开 —— 点了会变宽 */
+.rail[data-slim='true'] .rest:hover::after,
+.rail[data-slim='true'] .rest:focus-visible::after { animation-name: rest-out; }
+@keyframes rest-out {
+  0%       { clip-path: inset(0 46% 0 46%); opacity: 0; }
+  22%      { opacity: 0.95; }
+  70%      { clip-path: inset(0 0 0 0); opacity: 0.95; }
+  100%     { clip-path: inset(0 0 0 0); opacity: 0; }
+}
+@keyframes rest-in {
+  0%       { clip-path: inset(0 0 0 0); opacity: 0; }
+  22%      { opacity: 0.95; }
+  70%      { clip-path: inset(0 46% 0 46%); opacity: 0.95; }
+  100%     { clip-path: inset(0 48% 0 48%); opacity: 0; }
+}
+/* 关了动效的人:光不走,但**折痕要更明显** —— 否则这一按又回到没人摸得到。 */
+@media (prefers-reduced-motion: reduce) {
+  .rest::after { animation: none; opacity: 0; }
+  .rest::before { opacity: 0.7; }
+  .rest:hover::before,
+  .rest:focus-visible::before { opacity: 1; }
 }
 .rest:focus-visible {
   outline: 2px solid var(--a-mid); outline-offset: -6px; border-radius: 16px;
@@ -374,7 +449,10 @@ body {
    宽、高、圆角连续过渡,内容交叉淡入。展开后与左边卡片区顶对齐、等高。 */
 .island {
   position: absolute; top: 0; right: 0; z-index: 70;
-  width: 186px; height: 40px;
+  /* 收起态的宽度**跟着里面那座星系**。186px 是从前给八格小方块留的;方块撤了
+     之后再撑那么宽,盘就得倾到 78° 才填得满,而那么平的角度下旋臂会压成一片糊。
+     112 × 40 对应 66° —— 两道旋臂还认得出来。 */
+  width: 112px; height: 40px;
   border: 0; padding: 0; border-radius: 20px;
   display: block; text-align: left; font: inherit; cursor: pointer;
   overflow: hidden;
@@ -413,7 +491,10 @@ body {
 }
 
 .island-view { position: absolute; inset: 0; transition: opacity 0.26s var(--ease); }
-.island-mini { display: flex; align-items: center; gap: 12px; padding: 0 12px; }
+/* 收起态:整枚药丸让给那座星系,**别的什么都不放**。
+   padding 只留一点点 —— 星系的晕本来就该贴到边上化开,留白多了它就成了
+   「摆在药丸中间的一个图标」,而不是透过药丸看出去的一片天。 */
+.island-mini { display: flex; align-items: center; justify-content: center; padding: 0 4px; }
 .island[data-open='true'] .island-mini { opacity: 0; pointer-events: none; }
 .island-full {
   opacity: 0; pointer-events: none;
@@ -429,20 +510,73 @@ body {
 .island[data-open='true'] .island-full {
   opacity: 1; pointer-events: auto; transition-delay: 0.15s;
 }
-.mini-group { display: flex; align-items: center; gap: 5px; }
-.mini-group + .mini-group { margin-left: 12px; gap: 4px; }
-/* 收起态装不下的那几台留下的痕:两颗小点,不是省略号 ——
-   它跟旁边那排格子同族,不像文字那样把眼睛拽过去。 */
-.mini-more {
-  width: 3px; height: 13px; flex: none;
-  border-radius: 2px;
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--ink-3) 0 3px,
-    transparent 3px 6px
-  );
-  opacity: 0.5;
+
+/* ── 收起态那枚药丸里的微缩星系 ───────────────────────────────────
+   它只讲一件事:**还有多少东西连着**。
+
+     连接浓度  →  整座星系有多亮(--gx-lum,由 galaxy.ts 按在线台数算)
+     每台连着的设备  →  星海里一颗明显更亮的星
+
+   为什么明暗能当量:一片星海亮不亮是**周边视觉直接给的**,不用把目光移过去
+   逐格读。这也是这块面板一直在走的那条路 —— 状态用深浅,不用符号。
+
+   颜色只有白。星是白的、核球是白的,尘埃带用的是面板本来的那一种灰紫阴影色。
+   **不引第二种色相** —— 在莫兰迪底子上,星系本来就该是这样。
+   ───────────────────────────────────────────────────────────────── */
+.galaxy {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  /* 名册变了是**亮度**在变,不是重画。整座星系一起淡进淡出,才像云开云合。 */
+  transition: opacity 0.9s var(--ease);
 }
+/* 名册还没接上:只剩一层极淡的轮廓。**一颗都不点亮** ——
+   点亮等于替后端断言「有这些设备连着」,而此刻面板一台都不知道。 */
+.galaxy[data-wired='false'] { opacity: 0.3; }
+.galaxy[data-wired='true'] { opacity: 1; }
+/* 盘的辉光与核球。--gx-lum 是连接浓度,0 = 没接上,1 = 连得满满当当。 */
+.gx-disc { opacity: calc(0.12 + 0.58 * var(--gx-lum, 0)); transition: opacity 1.1s var(--ease); }
+.gx-core { opacity: calc(0.1 + 0.5 * var(--gx-lum, 0)); transition: opacity 1.1s var(--ease); }
+/* 星海本身。
+   **顶不能顶到 1。** 底子是浅色的莫兰迪,星本来就是白的 —— 星海要是自己先到
+   了满白,那几颗「接着的设备」就再也亮不上去了,一台设备在画面上等于没说。
+   所以整片星海压在 0.62 以下,把上面那一截留给它们。
+
+   底压得很低(0.13),是为了把「连着的多」和「连着的少」拉开 —— 这一档只差一点点
+   的话,浓度那条映射在屏幕上就等于不存在。底也不能压到 0:一台都不在线时星系该是
+   **暗的**,不是**没有的**。 */
+.gx-field {
+  fill: #ffffff;
+  opacity: calc(0.13 + 0.49 * var(--gx-lum, 0));
+  transition: opacity 1.1s var(--ease);
+}
+/* 尘埃带:旋臂内侧那一道暗。没有它,亮处挨着亮处,整盘糊成一团雾。 */
+.gx-dust polyline {
+  stroke: rgba(74, 66, 82, 0.34);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  /* **很淡。** 这一道是用来把亮处和亮处分开的,不是用来看的;上一版它浓到
+     成了画面上最响的东西,整座星系看着像一根绕成 S 形的黑线。 */
+  opacity: calc(0.06 + 0.32 * var(--gx-lum, 0));
+  filter: blur(0.5px);
+  transition: opacity 1.1s var(--ease);
+}
+/* ── 被点亮的那几颗 = 接着的设备 ─────────────────────────────────
+   一台一颗,位置定死:第 n 台永远是同一颗星,掉线就是**那一颗**淡回星海,
+   不是整片重排。三档,不是布尔 —— 降级的亮一半。 */
+.gx-star .gx-halo-c { opacity: 0; transition: opacity 0.85s var(--ease); }
+.gx-star .gx-core-c { fill: #ffffff; opacity: 0; transition: opacity 0.85s var(--ease), r 0.85s var(--ease); }
+/* 在线:满白 + 一圈化开的光。**这一档要一眼看得出来** —— 它是「有一台连着」
+   在画面上唯一的说法。 */
+.gx-star[data-lit='on'] .gx-halo-c { opacity: 0.85; }
+.gx-star[data-lit='on'] .gx-core-c { opacity: 1; r: 1.5; }
+/* 降级:亮一半。顶着在线那一档的亮度,等于在余光里把降级说成了在线。 */
+.gx-star[data-lit='half'] .gx-halo-c { opacity: 0.38; }
+.gx-star[data-lit='half'] .gx-core-c { opacity: 0.66; r: 1; }
+/* 离线的那台不是「一颗暗星」,而是**没有那一颗** —— 它退回普通星海里去了 */
+.gx-star[data-lit='off'] .gx-halo-c,
+.gx-star[data-lit='off'] .gx-core-c { opacity: 0; }
 
 /* 一块「实物」。**离墙多远就是它的状态** —— 不用状态点。 */
 .tile {

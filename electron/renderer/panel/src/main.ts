@@ -718,8 +718,10 @@ function seedDemo(store: Store): void {
     source: 'live',
     is_sensing: true,
     privacy_paused: false,
-    ambient_action: 'none',
-    ambient_rationale: '',
+    // 上一拍它自己动了念头、又忍住了。**演示里这一位不能留 none** ——
+    // 留 none 的话下沿那道光永远歇着,岛上新长出来的这一位在图里等于不存在。
+    ambient_action: 'silent',
+    ambient_rationale: '你正在写东西，这条不急，等你停下来再说',
     modalities: [
       { modality: 'screen', state: 'live', signal_age_s: 0.4 },
       { modality: 'camera', state: 'paused', signal_age_s: null },
