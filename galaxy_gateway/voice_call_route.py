@@ -156,6 +156,13 @@ class VoiceCallRoute:
             if track.kind == "audio":
                 logger.info("device=%s 收到上行音频轨", self.device_id)
                 call.attach_uplink(track)
+            elif track.kind == "video":
+                # 视频轨此前被**静默丢弃** —— 设备推上来的画面进不了模型,而两端都
+                # 没有任何现象。现在要么真的接进双工会话,要么在日志里说清为什么没接
+                # (当前 provider 的双工面不收视频)。
+                logger.info("device=%s 收到上行视频轨", self.device_id)
+                if not call.attach_video_uplink(track):
+                    logger.info("device=%s 视频轨未接入(原因见上一行)", self.device_id)
 
         @pc.on("connectionstatechange")
         async def _on_state() -> None:

@@ -891,7 +891,21 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "select",
         "category": "agent",
         "description": "全双工语音的 provider（仅在全双工开启时生效）",
-        "options": ["openai_realtime", "gemini_live"],
+        # 这三个要与 core.voice_duplex_session._ADAPTERS 完全一致 —— 面板选不到的
+        # provider 等于没接。漂移由 tests/test_duplex_provider_options_match_adapters.py 挡住。
+        "options": ["openai_realtime", "gemini_live", "step_realtime"],
+    },
+    "GALAXY_DUPLEX_VIDEO_FPS": {
+        "default": "1.0",
+        "type": "number",
+        "category": "agent",
+        "description": "双工通话里画面上行的帧率(0=不节流;视频轨本身 15-30fps，原样转发会把实时接口的账单乘以几十倍)",
+    },
+    "GALAXY_DUPLEX_VIDEO_JPEG_QUALITY": {
+        "default": "75",
+        "type": "number",
+        "category": "agent",
+        "description": "画面上行的 JPEG 质量(30-95，超出范围会被夹紧)",
     },
     "GALAXY_REALTIME_MODEL": {
         "default": "",

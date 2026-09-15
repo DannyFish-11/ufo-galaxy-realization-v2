@@ -35,15 +35,12 @@ TTS 整段合成播放。每一步都要等上一步结束,所以"同一时刻�
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import logging
 import os
 import threading
-import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Optional
 
 logger = logging.getLogger("Galaxy.VoiceDuplex")
 
@@ -75,6 +72,10 @@ _NATIVE_REALTIME_PATH_DEFAULT = "/v1/realtime"
 _REALTIME_FALLBACK_MODEL = {
     "openai": "gpt-realtime",
     "google": "gemini-2.5-flash-native-audio-preview-12-2025",
+    # 阶跃:兜底**不**取最新的 stepaudio-3-realtime-preview,而取 step-2.5-realtime ——
+    # 前者的 id 字符串没能从官方文档核实(见 provider_registry 里那段说明)。
+    # 兜底是"registry 都读不到了"的最后一手,这种时候该用最有把握的那个名字。
+    "step": "step-2.5-realtime",
 }
 _REALTIME_FALLBACK_API_VERSION = "v1beta"
 
@@ -96,6 +97,12 @@ def _registry_realtime_model(provider_name: str) -> str:
     """该家的默认实时(双工)型号。"""
     spec = _registry_spec(provider_name)
     return str(spec.get("default_realtime_model") or _REALTIME_FALLBACK_MODEL.get(provider_name, ""))
+
+
+def _registry_realtime_voice(provider_name: str, fallback: str) -> str:
+    """该家的默认音色。阶跃的 realtime **必须**带 voice,所以这个值不能是空串。"""
+    spec = _registry_spec(provider_name)
+    return str(spec.get("default_realtime_voice") or fallback)
 
 
 def _registry_realtime_api_version(provider_name: str) -> str:
@@ -284,33 +291,6 @@ def duck_gain() -> float:
     return _num("GALAXY_VOICE_DUCK_GAIN", 0.25, lo=0.0, hi=1.0)
 
 
-class DuplexEventType(str, Enum):
-    """下行事件类型(provider 无关)。"""
-
-    SESSION_OPEN = "session_open"
-    USER_SPEECH_STARTED = "user_speech_started"  # 服务端 VAD 判定用户开口
-    USER_SPEECH_STOPPED = "user_speech_stopped"
-    PARTIAL_TRANSCRIPT = "partial_transcript"
-    FINAL_TRANSCRIPT = "final_transcript"
-    ASSISTANT_TEXT_DELTA = "assistant_text_delta"
-    ASSISTANT_AUDIO_DELTA = "assistant_audio_delta"
-    RESPONSE_DONE = "response_done"
-    ERROR = "error"
-    SESSION_CLOSED = "session_closed"
-
-
-@dataclass
-class DuplexEvent:
-    """一条下行事件。``raw`` 保留原始帧,便于排查 provider 侧的意外字段。"""
-
-    type: DuplexEventType
-    text: str = ""
-    audio_b64: str = ""
-    error: str = ""
-    ts: float = field(default_factory=time.time)
-    raw: Optional[Dict[str, Any]] = field(default=None, repr=False)
-
-
 @dataclass
 class DuplexSessionConfig:
     """双工会话参数。
@@ -390,7 +370,18 @@ class DuplexSessionConfig:
         url = configured_url
         model = (os.getenv("GALAXY_REALTIME_MODEL") or "").strip()
 
-        if provider == "gemini_live":
+        if provider == "step_realtime":
+            # 阶跃(StepFun)。协议与 OpenAI Realtime 同构,差别只在三处:
+            # 端点、鉴权头没有 OpenAI-Beta、以及 **voice 必填**。
+            key = resolve_secret("GALAXY_REALTIME_API_KEY", "STEP_API_KEY")
+            model = model or _registry_realtime_model("step")
+            voice = (os.getenv("GALAXY_REALTIME_VOICE") or "").strip() or _registry_realtime_voice(
+                "step", "qingchunshaonv"
+            )
+            if not url:
+                url = f"wss://api.stepfun.com/v1/realtime?model={model}"
+            missing = "GALAXY_REALTIME_API_KEY 或 STEP_API_KEY"
+        elif provider == "gemini_live":
             # 专用键优先于通用键:专门给双工配的那把先用,没配才退回该家的通用 key。
             key = resolve_secret("GALAXY_REALTIME_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
             model = model or _registry_realtime_model("google")
@@ -482,259 +473,38 @@ class DuplexSessionConfig:
         return cls(url=url, api_key=key, model=model, voice=voice, provider=provider)
 
 
-# ── 协议适配:全部是纯函数,不碰网络,可完整单测 ────────────────────────────
+# ── 协议适配(已拆到 core/voice_duplex_adapters.py)──────────────────────────
+#
+# 这里保留再导出,是为了让仓内既有的
+# ``from core.voice_duplex_session import DuplexEvent / get_adapter / …`` 一行都不用改。
+# 拆分的理由见那个模块的 docstring。
+from core.voice_duplex_adapters import (  # noqa: E402,F401  (E402:贴着上面那段说明;F401:这**就是**再导出)
+    _ADAPTERS,
+    DuplexEvent,
+    DuplexEventType,
+    GeminiLiveAdapter,
+    OpenAIRealtimeAdapter,
+    ProtocolAdapter,
+    StepRealtimeAdapter,
+    get_adapter,
+)
 
-
-class ProtocolAdapter:
-    """provider 帧格式适配器。
-
-    已实现:``OpenAIRealtimeAdapter``、``GeminiLiveAdapter``。新增 provider 时要在
-    ``_ADAPTERS`` 里登记 —— 未登记的名字显式抛错,绝不静默退回默认实现。
-    """
-
-    name = "abstract"
-
-    def session_update(self, cfg: DuplexSessionConfig) -> Dict[str, Any]:
-        raise NotImplementedError
-
-    def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
-        raise NotImplementedError
-
-    def text_frame(self, text: str) -> List[Dict[str, Any]]:
-        raise NotImplementedError
-
-    def interrupt_frame(self) -> Dict[str, Any]:
-        raise NotImplementedError
-
-    def decode(self, msg: Dict[str, Any]) -> Optional[DuplexEvent]:
-        raise NotImplementedError
-
-    def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
-        raise NotImplementedError
-
-
-class OpenAIRealtimeAdapter(ProtocolAdapter):
-    """OpenAI Realtime(``wss://api.openai.com/v1/realtime``)的帧格式。"""
-
-    name = "openai_realtime"
-
-    def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
-        return {
-            "Authorization": f"Bearer {cfg.api_key}",
-            "OpenAI-Beta": "realtime=v1",
-        }
-
-    def session_update(self, cfg: DuplexSessionConfig) -> Dict[str, Any]:
-        session: Dict[str, Any] = {
-            "modalities": ["text", "audio"],
-            "voice": cfg.voice,
-            "input_audio_format": "pcm16",
-            "output_audio_format": "pcm16",
-            "input_audio_transcription": {"model": "whisper-1"},
-            # 服务端 VAD:双工下回合边界由服务端判。本地不再"攒够 3 秒再转写"——
-            # 那正是回合制延迟的来源。
-            "turn_detection": {
-                "type": "server_vad",
-                "silence_duration_ms": int(cfg.silence_ms),
-            },
-        }
-        if cfg.instructions:
-            session["instructions"] = cfg.instructions
-        return {"type": "session.update", "session": session}
-
-    def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
-        return {
-            "type": "input_audio_buffer.append",
-            "audio": base64.b64encode(pcm16).decode("ascii"),
-        }
-
-    def text_frame(self, text: str) -> List[Dict[str, Any]]:
-        return [
-            {
-                "type": "conversation.item.create",
-                "item": {
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": text}],
-                },
-            },
-            {"type": "response.create"},
-        ]
-
-    def interrupt_frame(self) -> Dict[str, Any]:
-        """双工下的 barge-in:让服务端**停止当前回复**,而不是本地掐断播放。
-
-        回合制的 ``interrupt_speech()`` 只是停掉本地播放器,模型那边还在继续生成
-        (token 照烧、上下文照涨)。双工下必须让服务端也停。
-        """
-        return {"type": "response.cancel"}
-
-    _MAP = {
-        "session.created": DuplexEventType.SESSION_OPEN,
-        "session.updated": DuplexEventType.SESSION_OPEN,
-        "input_audio_buffer.speech_started": DuplexEventType.USER_SPEECH_STARTED,
-        "input_audio_buffer.speech_stopped": DuplexEventType.USER_SPEECH_STOPPED,
-        "response.done": DuplexEventType.RESPONSE_DONE,
-        "error": DuplexEventType.ERROR,
-    }
-
-    def decode(self, msg: Dict[str, Any]) -> Optional[DuplexEvent]:
-        """把一帧服务端消息翻成 ``DuplexEvent``;不认识的帧返回 None(而不是报错)。
-
-        provider 会不断加新事件类型,对未知帧报错会让会话动不动就断。未知帧只在
-        debug 级别记一笔。
-        """
-        t = str(msg.get("type") or "")
-        if not t:
-            return None
-
-        if t == "response.audio.delta":
-            return DuplexEvent(DuplexEventType.ASSISTANT_AUDIO_DELTA, audio_b64=str(msg.get("delta") or ""), raw=msg)
-        if t in ("response.text.delta", "response.audio_transcript.delta"):
-            return DuplexEvent(DuplexEventType.ASSISTANT_TEXT_DELTA, text=str(msg.get("delta") or ""), raw=msg)
-        if t == "conversation.item.input_audio_transcription.delta":
-            return DuplexEvent(DuplexEventType.PARTIAL_TRANSCRIPT, text=str(msg.get("delta") or ""), raw=msg)
-        if t == "conversation.item.input_audio_transcription.completed":
-            return DuplexEvent(DuplexEventType.FINAL_TRANSCRIPT, text=str(msg.get("transcript") or ""), raw=msg)
-        if t == "error":
-            err = msg.get("error") or {}
-            detail = err.get("message") if isinstance(err, dict) else str(err)
-            return DuplexEvent(DuplexEventType.ERROR, error=str(detail or "unknown"), raw=msg)
-
-        mapped = self._MAP.get(t)
-        if mapped is not None:
-            return DuplexEvent(mapped, raw=msg)
-        logger.debug("双工会话:未识别的服务端帧类型 %s(已忽略)", t)
-        return None
-
-
-class GeminiLiveAdapter(ProtocolAdapter):
-    """Gemini Live(``BidiGenerateContent``)的帧格式。
-
-    与 OpenAI Realtime 的差别不只是字段名,是**结构不同**:
-
-    - 配置不叫 ``session.update`` 而是连接后的**第一帧** ``setup``,且必须先发完它再发
-      任何音频 —— 顺序错了服务端会直接断开;
-    - 音频上行走 ``realtimeInput.mediaChunks[]``,每块带自己的 ``mimeType``(采样率写在
-      mime 里,如 ``audio/pcm;rate=16000``),不是像 OpenAI 那样在 session 里统一声明;
-    - 下行是 ``serverContent.modelTurn.parts[]`` 的**混合数组** —— 同一个 parts 里既可能
-      是 ``inlineData``(音频)也可能是 ``text``,得逐个 part 分派,而不是一个 part 一种事件;
-    - 回合边界由 ``serverContent.turnComplete`` / ``interrupted`` 标志给出,不是独立的
-      事件类型。
-
-    鉴权也不同:Gemini 走 URL 上的 ``?key=``,没有 Authorization 头。
-    """
-
-    name = "gemini_live"
-
-    def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
-        # key 在 URL query 里(见 from_env 组 URL 的地方),不走请求头
-        return {}
-
-    def session_update(self, cfg: DuplexSessionConfig) -> Dict[str, Any]:
-        setup: Dict[str, Any] = {
-            "model": f"models/{cfg.model}" if not cfg.model.startswith("models/") else cfg.model,
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice}}},
-            },
-        }
-        if cfg.instructions:
-            setup["systemInstruction"] = {"parts": [{"text": cfg.instructions}]}
-        return {"setup": setup}
-
-    def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
-        return {
-            "realtimeInput": {
-                "mediaChunks": [
-                    {
-                        "mimeType": "audio/pcm;rate=16000",
-                        "data": base64.b64encode(pcm16).decode("ascii"),
-                    }
-                ]
-            }
-        }
-
-    def text_frame(self, text: str) -> List[Dict[str, Any]]:
-        # Gemini 一帧即可:clientContent 带 turnComplete 就等于"说完了,该你了",
-        # 不需要 OpenAI 那种 create item + response.create 的两步。
-        return [
-            {
-                "clientContent": {
-                    "turns": [{"role": "user", "parts": [{"text": text}]}],
-                    "turnComplete": True,
-                }
-            }
-        ]
-
-    def interrupt_frame(self) -> Dict[str, Any]:
-        """Gemini 没有显式的 cancel 帧 —— 它靠**新的用户输入**打断当前回合。
-
-        发一个 ``turnComplete`` 的空 turn 即表示"我要说话了",服务端据此中止当前生成。
-        这与 OpenAI 的 ``response.cancel`` 语义等价,但机制不同,不能照抄。
-        """
-        return {"clientContent": {"turns": [], "turnComplete": True}}
-
-    def decode(self, msg: Dict[str, Any]) -> Optional[DuplexEvent]:
-        if msg.get("setupComplete") is not None:
-            return DuplexEvent(DuplexEventType.SESSION_OPEN, raw=msg)
-
-        err = msg.get("error")
-        if err:
-            detail = err.get("message") if isinstance(err, dict) else str(err)
-            return DuplexEvent(DuplexEventType.ERROR, error=str(detail or "unknown"), raw=msg)
-
-        sc = msg.get("serverContent")
-        if not isinstance(sc, dict):
-            logger.debug("Gemini Live:未识别的服务端帧(已忽略): %s", list(msg)[:3])
-            return None
-
-        # 被用户打断 —— 对齐成"用户开口"
-        if sc.get("interrupted"):
-            return DuplexEvent(DuplexEventType.USER_SPEECH_STARTED, raw=msg)
-        if sc.get("turnComplete"):
-            return DuplexEvent(DuplexEventType.RESPONSE_DONE, raw=msg)
-
-        turn = sc.get("modelTurn")
-        if isinstance(turn, dict):
-            # parts 是混合数组:音频优先(它才是要立刻播的),其次文本
-            for part in turn.get("parts") or []:
-                if not isinstance(part, dict):
-                    continue
-                inline = part.get("inlineData")
-                if isinstance(inline, dict) and inline.get("data"):
-                    return DuplexEvent(
-                        DuplexEventType.ASSISTANT_AUDIO_DELTA,
-                        audio_b64=str(inline.get("data")),
-                        raw=msg,
-                    )
-            for part in turn.get("parts") or []:
-                if isinstance(part, dict) and part.get("text"):
-                    return DuplexEvent(DuplexEventType.ASSISTANT_TEXT_DELTA, text=str(part["text"]), raw=msg)
-
-        # 用户语音的转写(Gemini 把它放在 inputTranscription 里)
-        it = sc.get("inputTranscription")
-        if isinstance(it, dict) and it.get("text"):
-            return DuplexEvent(DuplexEventType.FINAL_TRANSCRIPT, text=str(it["text"]), raw=msg)
-
-        logger.debug("Gemini Live:serverContent 里没有可识别的内容(已忽略)")
-        return None
-
-
-#: 已实现的适配器。新增 provider 时在这里登记 —— 未登记的显式抛错,
-#: **绝不**静默退回某个默认实现(那会让用户以为在用 A、实际发的是 B 的帧)。
-_ADAPTERS = {
-    OpenAIRealtimeAdapter.name: OpenAIRealtimeAdapter,
-    GeminiLiveAdapter.name: GeminiLiveAdapter,
-}
-
-
-def get_adapter(name: str = "openai_realtime") -> ProtocolAdapter:
-    cls = _ADAPTERS.get(name)
-    if cls is None:
-        raise ValueError(f"未实现的双工 provider 适配器: {name}(已实现: {', '.join(sorted(_ADAPTERS))})")
-    return cls()
-
+#: 本模块对外的名字,含上面那批再导出的。写出来,静态检查与 ``import *`` 才知道
+#: 它们是**有意**留在这里的,而不是忘了删的死导入。
+__all__ = [
+    "DuplexEvent",
+    "DuplexEventType",
+    "DuplexSession",
+    "DuplexSessionConfig",
+    "GeminiLiveAdapter",
+    "OpenAIRealtimeAdapter",
+    "PcmPlayer",
+    "ProtocolAdapter",
+    "StepRealtimeAdapter",
+    "duplex_enabled",
+    "get_adapter",
+    "open_duplex_session",
+]
 
 # ── 会话 ─────────────────────────────────────────────────────────────────────
 
@@ -771,6 +541,9 @@ class DuplexSession:
         self.events_emitted = 0
         self.events_dropped = 0
         self.bytes_uplinked = 0
+        #: 上行的**画面**帧数。与 bytes_uplinked 分开计:一条会话同时走音频和视频时,
+        #: "发了多少字节"回答不了"画面到底有没有在送"。
+        self.frames_uplinked = 0
         self.last_error = ""
 
     # ── 生命周期 ──────────────────────────────────────────────────────────
@@ -859,6 +632,43 @@ class DuplexSession:
         ok = await self._send_json(self.adapter.audio_frame(pcm16))
         if ok:
             self.bytes_uplinked += len(pcm16)
+        return ok
+
+    def supports_video_uplink(self) -> bool:
+        """这条会话的 provider 收不收视频帧。
+
+        **先问再采**:摄像头采集是有代价的(功耗、带宽、隐私提示),在一条根本不收视频的
+        会话上开采集,是白烧电还打一次不必要的权限弹窗。所以把它做成一个能提前问的事实,
+        而不是"发了才知道被丢掉"。
+        """
+        return self.adapter.video_frame(b"\x00") is not None
+
+    async def send_video_frame(self, jpeg: bytes, mime: str = "image/jpeg") -> bool:
+        """上行一帧画面(JPEG)。
+
+        返回 False 有**两种**原因,都会写进 ``last_error``,不会静默:
+
+        * ``video_unsupported_by_<provider>`` —— 这家双工接口不收视频。当前只有
+          Gemini Live 收(``realtimeInput.mediaChunks`` 里塞 ``image/jpeg``)。
+          OpenAI Realtime 与阶跃 realtime 这边我没有可依据的视频上行帧格式,
+          所以**不接**:凭猜测拼一个帧发出去,得到的要么是 session 被拒、要么是被静默
+          丢弃,两种都比"明确说这家不支持"更难排查。
+        * 会话没连上 / 发送失败 —— 与 ``send_audio`` 同路。
+
+        帧率、分辨率、编码由调用方决定。这里只管把一帧送出去。
+        """
+        if not jpeg:
+            return False
+        if not self._connected:
+            return False
+        frame = self.adapter.video_frame(jpeg, mime)
+        if frame is None:
+            self.last_error = f"video_unsupported_by_{self.adapter.name}"
+            logger.debug("双工会话:%s 不支持视频上行,该帧未发送", self.adapter.name)
+            return False
+        ok = await self._send_json(frame)
+        if ok:
+            self.frames_uplinked += 1
         return ok
 
     async def send_text(self, text: str) -> bool:
@@ -987,6 +797,8 @@ class DuplexSession:
             "events_emitted": self.events_emitted,
             "events_dropped": self.events_dropped,
             "bytes_uplinked": self.bytes_uplinked,
+            "video_frames_uplinked": self.frames_uplinked,
+            "video_uplink_supported": self.supports_video_uplink(),
             "queue_depth": self._queue.qsize(),
             "last_error": self.last_error or None,
         }
