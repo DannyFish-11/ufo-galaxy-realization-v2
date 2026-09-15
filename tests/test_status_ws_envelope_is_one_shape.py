@@ -56,9 +56,22 @@ def main_app_client():
 
 @pytest.fixture(scope="module")
 def device_status_client():
+    """:8766 那侧的客户端 —— **带上令牌**。
+
+    ``core/device_status_api.py`` 现在也在身份认证之内(见
+    docs/NODE_HTTP_SECURITY_CONTRACT.md):它由 ``launcher/core_services.py`` 用
+    ``uvicorn --host 0.0.0.0`` 真起着,开的是 ``/devices/register`` 一类写接口。
+    WS 握手不带令牌会被 1008 回绝。
+
+    不带令牌时这个文件会因 ``WebSocketDisconnect`` 而红 —— 但**它要验的"信封形状"
+    一个字都没验到**。把断言放宽成"接受被拒"是不行的:那样它会因为"被拦在门外"
+    而通过,两个 /ws/status 的形状从此无人比对。所以带上令牌,真的连进去取那一帧。
+    """
+    from tests.conftest import GALAXY_TEST_API_TOKEN
+
     from core.device_status_api import app as device_app
 
-    return TestClient(device_app)
+    return TestClient(device_app, headers={"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"})
 
 
 def test_both_status_endpoints_put_the_event_name_in_the_same_key(main_app_client, device_status_client):
