@@ -445,6 +445,39 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "base_url": "https://api.stepfun.com/v1",
         "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
         "default_model": "step-3.7-flash",
+        # 全双工(Realtime WebSocket)型号,与上面的文本型号分开维护 —— 和 openai /
+        # google 两家同一个理由:它们走的是完全不同的接口,上游下线节奏也不同。
+        #
+        # 端点:wss://api.stepfun.com/v1/realtime?model=<id>,协议与 OpenAI Realtime
+        # 同构(官方 Step-Realtime-Console 用的就是一份改过的 OpenAI SDK)。
+        #
+        # **各型号的核实程度不一样,如实标注:**
+        #
+        # · stepaudio-3-realtime-preview —— StepAudio 3 Realtime,2026-09-15 发布,
+        #   官方口径「原生全双工」:能判断何时回应/何时等待,处理临时打断与连续反馈,
+        #   并用 Think-While-Speaking 在出声的同时做私有推理。**但这个 id 字符串
+        #   我没能从官方文档核实**(platform.stepfun.com / .ai 与 arxiv 在本环境被
+        #   出网代理挡住),取自第三方仓库。放在首位是产品选择(要最新的那一档),
+        #   连不上时会在建连处明确报错,不会静默退回别的型号。
+        # · step-2.5-realtime —— 2026-05 发布,型号名在多个来源里一致,是目前
+        #   **唯一交叉验证过**的双工型号名。stepaudio-3 那个 id 若不对,改这一个即可。
+        # · step-audio-2 四兄弟 —— 官方 Step-Realtime-Console README 里列出的四个。
+        #
+        # 音频计价与文本不同轴,而 cost_in/cost_out 是 provider 级的**文本**单价,
+        # 表示不了它 —— 不硬填(同 openai 条目的处理)。
+        "realtime_models": [
+            "stepaudio-3-realtime-preview",
+            "step-2.5-realtime",
+            "step-audio-2",
+            "step-audio-2-mini",
+            "step-audio-2-think",
+            "step-audio-2-mini-think",
+        ],
+        "default_realtime_model": "stepaudio-3-realtime-preview",
+        #: 阶跃的 realtime 要求**必须**给 voice。官方示例值:qingchunshaonv(青春少女)、
+        #: wenrounansheng(温柔男声)。没有完整枚举可引,所以只钉默认值不做白名单校验 ——
+        #: 把一个我没见过全集的清单写成校验,会把合法音色挡在外面。
+        "default_realtime_voice": "qingchunshaonv",
         "cost_in": 0.001,
         "cost_out": 0.004,
         "extra": {"multimodal": True},

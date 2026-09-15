@@ -41,6 +41,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
 
+from core.config_flags import num as _num
+
 logger = logging.getLogger("Galaxy.VoiceCallBridge")
 
 #: 出站轨每帧的时长(毫秒)。20ms 是 WebRTC/Opus 的事实标准分包长度:再短包头开销占比
@@ -99,6 +101,42 @@ class _Resampler:
 # ---------------------------------------------------------------------------
 # 出站轨:把 provider 的下行音频变成 WebRTC 音频轨
 # ---------------------------------------------------------------------------
+
+
+#: 画面上行的默认帧率。视频轨本身是 15–30 fps,而双工面是按时长/token 计费的实时接口,
+#: 原样转发等于把账单和带宽乘以二三十倍。Gemini Live 的官方建议就是每秒一帧这个量级。
+#: 这是**产品决定**,所以写成可配的默认值,而不是埋进协议适配器。
+_VIDEO_FPS_DEFAULT = 1.0
+#: JPEG 质量。75 是"看得清界面文字、又不至于把每帧撑到几百 KB"的常用折中。
+_VIDEO_JPEG_QUALITY_DEFAULT = 75
+
+
+def _video_fps() -> float:
+    fps = _num("GALAXY_DUPLEX_VIDEO_FPS", _VIDEO_FPS_DEFAULT)
+    # 0 或负数 = 不节流。允许它,但那是显式选择,不是默认。
+    return max(0.0, float(fps))
+
+
+def _video_jpeg_quality() -> int:
+    q = int(_num("GALAXY_DUPLEX_VIDEO_JPEG_QUALITY", _VIDEO_JPEG_QUALITY_DEFAULT))
+    return min(95, max(30, q))
+
+
+def _frame_to_jpeg(frame: Any, quality: int) -> bytes:
+    """一帧 ``av.VideoFrame`` → JPEG 字节。编不出来时返回空串并记一行,不抛。
+
+    单帧编码失败(格式怪、帧损坏)不该把整条视频泵打断 —— 下一帧大概率是好的。
+    """
+    import io
+
+    try:
+        image = frame.to_image()  # av.VideoFrame → PIL.Image
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("画面帧编码为 JPEG 失败(已跳过该帧): %s", exc)
+        return b""
 
 
 def _make_downlink_track_class() -> type:
@@ -199,6 +237,12 @@ class VoiceCallStats:
 
     uplink_frames: int = 0
     uplink_bytes: int = 0
+    #: 画面上行。与音频分开计:一通电话同时走两条时,"上行了多少字节"回答不了
+    #: "画面到底有没有在送"。``uplink_video_dropped`` 是**被节流丢掉的**帧数 ——
+    #: 它不是故障,是设计,但得看得见,否则"帧率怎么这么低"无从解释。
+    uplink_video_frames: int = 0
+    uplink_video_bytes: int = 0
+    uplink_video_dropped: int = 0
     downlink_chunks: int = 0
     downlink_bytes: int = 0
     events: Dict[str, int] = field(default_factory=dict)
@@ -229,6 +273,7 @@ class VoiceCall:
         self.stats = VoiceCallStats()
         self._send_event = send_event
         self._uplink_task: Optional[asyncio.Task] = None
+        self._video_task: Optional[asyncio.Task] = None
         self._downlink_task: Optional[asyncio.Task] = None
         self._closed = False
         rate = int(getattr(getattr(session, "config", None), "sample_rate", 16000) or 16000)
@@ -263,6 +308,77 @@ class VoiceCall:
             raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("call=%s 上行泵异常: %s", self.call_id, exc)
+
+    def attach_video_uplink(self, track: Any) -> bool:
+        """接上设备的入站**视频**轨,把画面泵进 provider。
+
+        返回 False = 这一路没接起来,且原因已经记在日志里。两种情形:
+
+        * 当前 provider 的双工面不收视频(见 ``DuplexSession.supports_video_uplink``)。
+          这时**不启动泵** —— 启动了也只是把每一帧编码完再丢掉,白烧 CPU,
+          而手表那边还以为画面在送。
+        * 重复接入(和音频那条同样的防护)。
+
+        先问再采的另一半在设备侧:``supports_video_uplink()`` 是个可以提前问的事实,
+        客户端该在开摄像头**之前**问,而不是开完才发现没人要。
+        """
+        if self._video_task is not None:
+            logger.warning("call=%s 重复接入上行视频轨,忽略", self.call_id)
+            return False
+        supports = bool(getattr(self.session, "supports_video_uplink", lambda: False)())
+        if not supports:
+            provider = getattr(getattr(self.session, "adapter", None), "name", "?")
+            logger.info(
+                "call=%s 收到视频轨,但当前 provider(%s)的双工面不收视频 —— 不启动视频泵",
+                self.call_id,
+                provider,
+            )
+            return False
+        self._video_task = asyncio.create_task(self._pump_video_uplink(track))
+        return True
+
+    async def _pump_video_uplink(self, track: Any) -> None:
+        """按 ``GALAXY_DUPLEX_VIDEO_FPS`` 节流,把画面编成 JPEG 送进会话。
+
+        为什么要节流:视频轨是 15–30 fps,而双工面这条是按 token / 分钟计费的实时接口 ——
+        原样转发等于把账单和带宽乘以二三十倍,模型那边也用不上那么密的画面。
+        Gemini Live 的官方建议就是每秒一帧这个量级,所以默认取 1.0。
+
+        这个数字是**产品决定**,所以做成环境变量、默认写在这里,而不是埋在协议适配器里。
+        """
+        from aiortc.mediastreams import MediaStreamError
+
+        try:
+            from PIL import Image  # noqa: F401,PLC0415 - 只为确认可用
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("call=%s 缺 Pillow,画面无法编码为 JPEG,视频上行不启动: %s", self.call_id, exc)
+            return
+
+        fps = _video_fps()
+        quality = _video_jpeg_quality()
+        min_gap = 1.0 / fps if fps > 0 else 0.0
+        last_sent = 0.0
+
+        try:
+            while not self._closed:
+                frame = await track.recv()
+                now = time.monotonic()
+                if min_gap and (now - last_sent) < min_gap:
+                    self.stats.uplink_video_dropped += 1
+                    continue
+                jpeg = _frame_to_jpeg(frame, quality)
+                if not jpeg:
+                    continue
+                last_sent = now
+                if await self.session.send_video_frame(jpeg):
+                    self.stats.uplink_video_frames += 1
+                    self.stats.uplink_video_bytes += len(jpeg)
+        except MediaStreamError:
+            logger.info("call=%s 上行视频轨结束", self.call_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("call=%s 视频上行泵异常: %s", self.call_id, exc)
 
     # ── 下行 ────────────────────────────────────────────────────────────
 
@@ -355,7 +471,9 @@ class VoiceCall:
         if self._closed:
             return
         self._closed = True
-        for task in (self._uplink_task, self._downlink_task):
+        # 视频泵也要收。漏了它就是挂断之后画面还在往 provider 送 —— 和"漏关会话继续
+        # 计费"是同一类错误,而且更隐蔽:音频停了,人会以为整通电话已经结束。
+        for task in (self._uplink_task, self._video_task, self._downlink_task):
             if task is not None and not task.done():
                 task.cancel()
         try:
@@ -367,11 +485,14 @@ class VoiceCall:
         except Exception:  # noqa: BLE001
             pass
         logger.info(
-            "call=%s 已挂断(%s) 上行 %d 帧/%d 字节,下行 %d 块/%d 字节,事件 %s",
+            "call=%s 已挂断(%s) 上行 %d 帧/%d 字节,画面 %d 帧/%d 字节(节流丢 %d)," "下行 %d 块/%d 字节,事件 %s",
             self.call_id,
             reason,
             self.stats.uplink_frames,
             self.stats.uplink_bytes,
+            self.stats.uplink_video_frames,
+            self.stats.uplink_video_bytes,
+            self.stats.uplink_video_dropped,
             self.stats.downlink_chunks,
             self.stats.downlink_bytes,
             self.stats.events,

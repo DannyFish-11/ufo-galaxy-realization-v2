@@ -579,7 +579,7 @@ class VoiceCallAcceptedMsg(AIPMessage):
     call_id: str = Field(default="", description="本次通话标识,后续所有语音消息都要带")
     sdp: str = Field(default="", description="网关侧的 WebRTC answer(SDP 文本)")
     sdp_type: str = Field(default="answer", description="SDP 类型,恒为 answer")
-    provider: str = Field(default="", description="实际接通的后端,如 openai_realtime / gemini_live")
+    provider: str = Field(default="", description="实际接通的后端,如 openai_realtime / gemini_live / step_realtime")
 
 
 class VoiceIceMsg(AIPMessage):
