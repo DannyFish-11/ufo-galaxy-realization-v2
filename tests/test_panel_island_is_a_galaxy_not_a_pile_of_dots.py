@@ -234,6 +234,45 @@ class TestTheCollapsedPillHoldsTheGalaxyAndNothingElse:
         )
 
 
+class TestTheThingsTheTilesUsedToSayAreStillSaid:
+    """星系讲的是**设备**，讲不了感知。撤掉那四格小方块之后，感知那几件事在收起态
+    就没有画面可依附了 —— 而其中一件是**隐私急停停没停**。
+
+    人按下「别看了」，是因为此刻不想被看／被听。这一位要是悄悄消失，收起态的药丸
+    在急停生效时和平常长得一模一样 —— 这正是本仓库的头号毛病：看起来接上了，
+    其实没有；或者反过来，看起来在采，其实已经停了。
+
+    药丸上不再加东西是所有者定的，所以这道门守的是**说得出口的那一层**：读屏读得到，
+    指针停上去看得到。眼睛那一侧仍然是空的，那是一个已知的、还没补的洞。
+    """
+
+    def test_the_privacy_stop_is_still_spoken_in_the_collapsed_state(self) -> None:
+        code = _code(_ISLAND)
+        i = code.index("const senseWord")
+        block = code[i : code.index("island.setAttribute", i)]
+        assert "privacy_paused" in block or "paused === true" in block, (
+            f"收起态不再说「感知已暂停」了：{block.strip()[:200]}。"
+            "撤掉那四格小方块之后，这一位在收起态**只剩这一条路**；它一断，"
+            "急停生效时药丸和平常一模一样。"
+        )
+        # 三态，不是两态：停了 / 没停 / 还没收到过帧。压成布尔就等于替后端说话。
+        assert "perception === null" in block, "「还没收到过感知帧」被压进了「没停」—— 面板此刻根本不知道，不能说成没停"
+        # 说出来的话得真的进到给人看的那两处
+        label_i = code.index("'aria-label'", i)
+        label = code[label_i : code.index(");", label_i)]
+        assert "senseWord" in label, "感知那句话没有进无障碍标签"
+        title_i = code.index("island.title", i)
+        title = code[title_i : code.index(";", code.index("join(", title_i))]
+        assert "senseWord" in title, "感知那句话没有进 title —— 指针停上去看不到"
+
+    def test_the_perception_link_being_down_is_also_spoken(self) -> None:
+        """「四条都没在收」和「这条链路压根没建起来」是两件事，后者也得说得出口。"""
+        code = _code(_ISLAND)
+        i = code.index("const senseWord")
+        block = code[i : code.index("island.setAttribute", i)]
+        assert "wired" in block, "感知链路没建起来这一档在收起态没了 —— 它会被读成「此刻恰好安静」"
+
+
 class TestItStaysInWhiteLight:
     def test_the_galaxy_introduces_no_second_hue(self) -> None:
         """白光之外不引第二种颜色。这块面板上稍微加一点别的色相都很明显。"""

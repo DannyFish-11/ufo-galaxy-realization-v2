@@ -336,10 +336,31 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     // 互不粘连的星,再多就有设备没有自己的那一颗 —— 画面上看着是「就这么些」,
     // 而那正是这块面板最不许犯的那种错。眼睛这边没处放,至少这儿得说出来。
     const unplaced = Math.max(0, devices.length - LIT_CAPACITY);
+
+    // **感知停没停,收起态必须说得出口。**
+    //
+    // 从前这枚药丸上有四格小方块,按了「别看了」那一格会沉下去 —— 停没停是
+    // 余光可见的。改成星系之后那四格撤了,而星系讲的是**设备**,讲不了感知:
+    // 于是急停生效时,收起态的药丸和平常长得一模一样。
+    //
+    // 这一位是这块面板上最不该悄悄消失的:人按下它,是因为此刻不想被看/被听。
+    // 药丸上不再加东西(那是所有者定的),但至少这一层不能也是哑的 —— 读屏读
+    // 得到,指针停上去看得到。**眼睛那一侧仍然是空的,那是一个还没补的洞。**
+    // `paused` 是上面那一份 —— 停没停的唯一权威是 posture 帧,这里不另算一遍。
+    const senseWord =
+      paused === true
+        ? '感知已暂停'
+        : perception === null
+          ? '还没收到过感知帧'
+          : !wired && modalities.length > 0
+            ? '感知还没接上'
+            : '';
+
     island.setAttribute(
       'aria-label',
       [
         '感知与设备',
+        senseWord,
         devices.length ? `${online} / ${devices.length} 台在线` : '',
         unplaced ? `星图放不下其中 ${unplaced} 台` : '',
         act === null ? '' : AMBIENT_WORD[act] ?? '',
@@ -347,7 +368,12 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
         .filter(Boolean)
         .join(' · '),
     );
-    island.title = unplaced ? `星图只画得下 ${LIT_CAPACITY} 台，还有 ${unplaced} 台在展开态里` : '';
+    island.title = [
+      senseWord,
+      unplaced ? `星图只画得下 ${LIT_CAPACITY} 台，还有 ${unplaced} 台在展开态里` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
 
     // 本机模型那一行。**三种状态各写各的话**:
     //   null      —— 没拉到目录。不是「没有档位」,别写成空白。
