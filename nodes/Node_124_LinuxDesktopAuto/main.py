@@ -11,29 +11,37 @@ Node 124: LinuxDesktopAuto - Linux 桌面自动化控制节点
 依赖: xdotool, scrot (截图), xclip (剪贴板)
 安装: sudo apt install xdotool scrot xclip
 """
-import os
-import sys
 import asyncio
 import base64
 import logging
+import os
 import shutil
+import sys
 import tempfile
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Node_124_LinuxDesktopAuto")
+
+from nodes.common.action_gate import action_guard
 
 app = FastAPI(title="Node 124 - LinuxDesktopAuto", version="1.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"]
 )
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_124_LinuxDesktopAuto")
 
 
 # ========================= 工具检测 =========================
@@ -175,6 +183,7 @@ async def health():
 @app.post("/click")
 async def click(req: ClickRequest):
     """鼠标点击"""
+    _require("click")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -194,6 +203,7 @@ async def click(req: ClickRequest):
 @app.post("/type")
 async def type_text(req: TypeRequest):
     """文本输入"""
+    _require("type_text")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -205,6 +215,7 @@ async def type_text(req: TypeRequest):
 @app.post("/key")
 async def press_key(req: KeyRequest):
     """按键/快捷键"""
+    _require("press_key")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -218,6 +229,7 @@ async def press_key(req: KeyRequest):
 @app.post("/move")
 async def move_mouse(req: MoveRequest):
     """移动鼠标"""
+    _require("move_mouse")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -228,6 +240,7 @@ async def move_mouse(req: MoveRequest):
 @app.post("/drag")
 async def drag(req: DragRequest):
     """拖拽操作"""
+    _require("drag")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -251,6 +264,7 @@ async def drag(req: DragRequest):
 @app.post("/scroll")
 async def scroll(req: ScrollRequest):
     """滚动操作"""
+    _require("scroll")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -285,6 +299,7 @@ async def screenshot():
     私有目录里的一个尚不存在的文件名同时满足两边:目录本身 0700,别人进不来,
     也就没有抢占的余地。
     """
+    _require("screenshot")
     tmpdir = tempfile.mkdtemp(prefix="galaxy-screenshot-")
     tmp = os.path.join(tmpdir, "screen.png")
     try:
@@ -312,6 +327,7 @@ async def screenshot():
 @app.post("/window")
 async def window_action(req: WindowRequest):
     """窗口管理"""
+    _require("window_action")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -366,6 +382,7 @@ async def window_action(req: WindowRequest):
 @app.post("/clipboard")
 async def clipboard(req: ClipboardRequest):
     """剪贴板操作"""
+    _require("clipboard")
     if not XCLIP_AVAILABLE:
         raise HTTPException(500, "xclip not installed. Install: sudo apt install xclip")
 
@@ -384,6 +401,7 @@ async def clipboard(req: ClipboardRequest):
 @app.get("/mouse_position")
 async def get_mouse_position():
     """获取鼠标位置"""
+    _require("get_mouse_position")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -402,6 +420,7 @@ async def get_mouse_position():
 @app.get("/screen_size")
 async def get_screen_size():
     """获取屏幕分辨率"""
+    _require("get_screen_size")
     if XRANDR_AVAILABLE:
         output = await _run_cmd("xrandr | head -1")
         # 解析 "Screen 0: ... current 1920 x 1080"
@@ -422,6 +441,7 @@ async def get_screen_size():
 @app.get("/active_window")
 async def get_active_window():
     """获取当前活动窗口信息"""
+    _require("get_active_window")
     if not XDOTOOL_AVAILABLE:
         raise HTTPException(500, "xdotool not installed")
 
@@ -445,6 +465,7 @@ async def get_active_window():
 @app.post("/mcp/call")
 async def mcp_call(req: MCPRequest):
     """MCP统一调用接口"""
+    _require(str((request or {}).get("tool") or ""))
     tool_map = {
         "click": lambda p: click(ClickRequest(**p)),
         "type": lambda p: type_text(TypeRequest(**p)),

@@ -14,32 +14,33 @@ Author: Galaxy Team
 Version: 5.0.0
 """
 
-import os
-import sys
-import json
 import asyncio
+import json
 import logging
-import subprocess
-import signal
-import shlex
+import os
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
+import shlex
+import signal
+import subprocess
+import sys
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from dataclasses import dataclass, asdict
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import uvicorn
+
+from core.port_config import get_node_port, get_service_port
 from nodes.common.cors_config import get_cors_origins
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-from core.port_config import get_service_port, get_node_port
 
 NODE_ID = os.getenv("NODE_ID", "122")
 NODE_NAME = os.getenv("NODE_NAME", "ShellOperations")
@@ -765,7 +766,14 @@ class ShellService:
 # FastAPI Application
 # =============================================================================
 
+from nodes.common.action_gate import action_guard
+
 app = FastAPI(title=f"Node {NODE_ID}: {NODE_NAME}", description="Shell operations service for Galaxy", version="5.0.0")
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_122_Shell")
 
 app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
@@ -783,54 +791,63 @@ async def health_check():
 @app.post("/execute")
 async def execute_command(request: ExecuteRequest):
     """Execute shell command."""
+    _require("execute")
     return await shell_service.execute(request)
 
 
 @app.post("/script")
 async def execute_script(request: ScriptRequest):
     """Execute multi-line script."""
+    _require("script")
     return await shell_service.execute_script(request)
 
 
 @app.post("/background")
 async def execute_background(request: ExecuteRequest):
     """Execute command in background."""
+    _require("background")
     return await shell_service.execute_background(request)
 
 
 @app.post("/kill")
 async def kill_process(request: KillRequest):
     """Kill a running process."""
+    _require("kill")
     return await shell_service.kill_process(request)
 
 
 @app.get("/processes")
 async def list_processes():
     """List tracked processes."""
+    _require("list_processes")
     return shell_service.list_processes()
 
 
 @app.get("/env")
 async def get_environment(key: Optional[str] = None):
     """Get environment variables."""
+    _require("env")
     return shell_service.get_env(key)
 
 
 @app.get("/which")
 async def which_command(command: str):
     """Find command location."""
+    _require("which")
     return await shell_service.which(command)
 
 
 @app.get("/cwd")
 async def get_cwd():
     """Get current working directory."""
+    _require("cwd")
     return {"success": True, "cwd": str(shell_service.workspace_root)}
 
 
 @app.post("/run")
 async def quick_run(command: str, timeout: int = 60):
     """Quick command execution."""
+    _require("run")
     request = ExecuteRequest(command=command, timeout=timeout)
     return await shell_service.execute(request)
 

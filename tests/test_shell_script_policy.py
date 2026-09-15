@@ -13,13 +13,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 import types
 
 import pytest
-
-# uvicorn 只在节点的 __main__ 里用来起服务,和判定逻辑无关。
-sys.modules.setdefault("uvicorn", types.ModuleType("uvicorn"))
 
 from core.shell_script_policy import (  # noqa: E402
     DEFAULT_ALLOWED_INTERPRETERS,
@@ -102,7 +100,8 @@ def test_every_verdict_demands_a_human():
 # ── 接线:节点真的会用上面这些 ────────────────────────────────────────────────
 @pytest.fixture
 def node():
-    import nodes.Node_122_Shell.main as n122
+    with _uvicorn_stubbed():
+        import nodes.Node_122_Shell.main as n122
 
     return n122
 
@@ -197,3 +196,24 @@ async def _timed(coro):
     t = loop.time()
     out = await coro
     return out, loop.time() - t
+
+
+@contextlib.contextmanager
+def _uvicorn_stubbed():
+    """只在导入节点模块的那一瞬间塞一个 uvicorn 桩,出了作用域立刻摘掉。
+
+    起因:最初这行写在模块级(``sys.modules.setdefault("uvicorn", ...)``),
+    于是这个桩**泄漏到整个 pytest 会话** —— 按字母序排在后面的
+    ``test_responses_transport_is_real.py`` 原本因为缺 uvicorn 收集不了、被记成
+    collection error,有了桩之后变成能收集、然后失败。我的测试改变了别人的结果。
+
+    节点只在 ``__main__`` 里用 uvicorn 起服务,和这里要验的判定逻辑无关。
+    """
+    added = "uvicorn" not in sys.modules
+    if added:
+        sys.modules["uvicorn"] = types.ModuleType("uvicorn")
+    try:
+        yield
+    finally:
+        if added:
+            sys.modules.pop("uvicorn", None)

@@ -19,19 +19,15 @@ import random
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import uvicorn
-
-# ---------------------------------------------------------------------------
-# Port / CORS config (optional dependencies)
-# ---------------------------------------------------------------------------
 
 # 端口必须查**节点**表，不是**服务**表。
 # 这里原来是 `get_service_port("node_74") or 8074` —— 那个键在
@@ -44,6 +40,11 @@ import uvicorn
 # "address already in use" 直接退出。另外三个（72/73/74）字面量碰巧等于权威值，
 # 属于侥幸没事，一并改掉，不留"靠运气对"的。
 from nodes.common.node_port import resolve_node_port
+
+# ---------------------------------------------------------------------------
+# Port / CORS config (optional dependencies)
+# ---------------------------------------------------------------------------
+
 
 PORT = resolve_node_port("Node_74_DigitalTwin", 8074)
 
@@ -316,6 +317,8 @@ async def lifespan(app: FastAPI):
     logger.info("Node_74_DigitalTwin FastAPI 关闭")
 
 
+from nodes.common.action_gate import action_guard
+
 app = FastAPI(
     title="Node_74_DigitalTwin",
     description="数字孪生节点 API",
@@ -329,6 +332,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_74_DigitalTwin")
 
 # -- routes ------------------------------------------------------------------
 
@@ -357,6 +365,7 @@ def status():
 @app.get("/twin")
 def get_twin():
     """获取当前数字孪生状态"""
+    _require("get_twin")
     twin = _svc.get_twin_state()
     if twin is None:
         raise HTTPException(status_code=503, detail="数字孪生尚未初始化，请稍后重试")
@@ -366,6 +375,7 @@ def get_twin():
 @app.post("/twin/update")
 def update_twin(req: UpdateTwinRequest):
     """手动更新孪生状态"""
+    _require("update_twin")
     updates = {k: v for k, v in req.dict().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="没有提供更新字段")
@@ -379,6 +389,7 @@ def update_twin(req: UpdateTwinRequest):
 @app.get("/twin/history")
 def get_twin_history(limit: int = 50):
     """获取历史状态记录"""
+    _require("get_history")
     history = _svc.get_history(limit)
     return {"device_id": DEVICE_ID, "count": len(history), "history": history}
 
@@ -386,6 +397,7 @@ def get_twin_history(limit: int = 50):
 @app.post("/twin/simulate")
 async def simulate(req: SimulateRequest):
     """按需运行模拟步骤"""
+    _require("simulate")
     if req.steps < 1 or req.steps > 100:
         raise HTTPException(status_code=400, detail="steps 必须在 1~100 之间")
     results = await _svc.simulate_steps(req.steps, req.interval)
@@ -395,6 +407,7 @@ async def simulate(req: SimulateRequest):
 @app.post("/twin/reset")
 def reset_twin():
     """重置数字孪生到初始状态"""
+    _require("reset")
     _svc.reset_twin()
     return {"success": True, "message": "数字孪生已重置"}
 
@@ -402,6 +415,7 @@ def reset_twin():
 @app.get("/devices")
 def list_devices():
     """列出所有已注册设备"""
+    _require("list_devices")
     devs = _svc.list_devices()
     return {"devices": [asdict(d) for d in devs], "count": len(devs)}
 
@@ -409,12 +423,14 @@ def list_devices():
 @app.post("/device/register", status_code=201)
 def register_device(req: RegisterDeviceRequest):
     """注册新设备用于孪生监控"""
+    _require("register_device")
     dev = _svc.register_device(req.device_id, req.name, req.device_type, req.config)
     return asdict(dev)
 
 
 @app.post("/mcp/call")
 async def mcp_call(req: MCPCallRequest):
+    _require(str((request or {}).get("tool") or ""))
     p = req.params
     try:
         if req.tool == "get_twin":

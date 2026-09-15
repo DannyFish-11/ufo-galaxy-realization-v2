@@ -16,12 +16,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from core.log_locations import log_hint
+from nodes.common.action_gate import action_guard
 from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 45 - DesktopAuto", version="2.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_45_DesktopAuto")
 
 logger = logging.getLogger("Galaxy.Node45.DesktopAuto")
 
@@ -159,6 +165,7 @@ async def health():
 
 @app.post("/click")
 async def click(request: ClickRequest):
+    _require("click")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -171,6 +178,7 @@ async def click(request: ClickRequest):
 
 @app.post("/double_click")
 async def double_click(x: int, y: int):
+    _require("double_click")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -183,6 +191,7 @@ async def double_click(x: int, y: int):
 
 @app.post("/type")
 async def type_text(request: TypeRequest):
+    _require("type")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -195,6 +204,7 @@ async def type_text(request: TypeRequest):
 
 @app.post("/hotkey")
 async def press_hotkey(request: KeyRequest):
+    _require("hotkey")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -208,6 +218,7 @@ async def press_hotkey(request: KeyRequest):
 
 @app.post("/press")
 async def press_key(key: str):
+    _require("press")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -220,6 +231,7 @@ async def press_key(key: str):
 
 @app.post("/move")
 async def move_mouse(request: MoveRequest):
+    _require("move")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -232,6 +244,7 @@ async def move_mouse(request: MoveRequest):
 
 @app.post("/scroll")
 async def scroll(amount: int, x: Optional[int] = None, y: Optional[int] = None):
+    _require("scroll")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -245,6 +258,7 @@ async def scroll(amount: int, x: Optional[int] = None, y: Optional[int] = None):
 @app.post("/drag")
 async def drag(request: DragRequest):
     """拖拽:按下 → 移动 → 松开。"""
+    _require("drag")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -273,6 +287,7 @@ async def wait(request: WaitRequest):
     降级了,它照样该能用:模型的一串动作里夹着 wait,不该因为这一步"不可用"
     而整条中断。
     """
+    _require("wait")
     import asyncio as _asyncio
 
     # 给上限:模型给出一个离谱的秒数时,不该把这条 HTTP 请求挂死。
@@ -366,6 +381,7 @@ async def launch_app(request: LaunchAppRequest):
     允许启动什么由 :data:`_LAUNCH_ALLOWLIST_ENV` 声明,默认什么都不许。
     安全立场与两版历史见 :func:`_resolve_launch_target`。
     """
+    _require("launch_app")
     import subprocess
 
     target = (request.target or "").strip()
@@ -386,6 +402,7 @@ async def launch_app(request: LaunchAppRequest):
 @app.post("/open_url")
 async def open_url(request: OpenUrlRequest):
     """用系统默认浏览器打开 URL。"""
+    _require("open_url")
     import webbrowser
 
     url = (request.url or "").strip()
@@ -404,6 +421,7 @@ async def open_url(request: OpenUrlRequest):
 
 @app.get("/screenshot")
 async def take_screenshot():
+    _require("screenshot")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -421,6 +439,7 @@ async def take_screenshot():
 
 @app.get("/position")
 async def get_position():
+    _require("position")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -433,6 +452,7 @@ async def get_position():
 
 @app.get("/screen_size")
 async def get_screen_size():
+    _require("screen_size")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -446,6 +466,7 @@ async def get_screen_size():
 @app.post("/middle_click")
 async def middle_click(request: ClickRequest):
     """中键点击。厂商动作集里一直有,本仓此前没有 —— 补上。"""
+    _require("middle_click")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -459,6 +480,7 @@ async def middle_click(request: ClickRequest):
 @app.post("/triple_click")
 async def triple_click(request: ClickRequest):
     """三击 —— 选中整行/整段,靠连点两次代替不了(间隔一长就变成两次双击)。"""
+    _require("triple_click")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -486,6 +508,7 @@ async def hold_key(request: HoldKeyRequest):
     ``finally`` 里一定要松:中途抛异常却不松开,那个键会一直是按下状态,
     之后每一次输入都带着它 —— 用起来像键盘坏了,而且看不出是这一步造成的。
     """
+    _require("hold_key")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -510,6 +533,7 @@ class MouseButtonRequest(BaseModel):
 @app.post("/mouse_down")
 async def mouse_down(request: MouseButtonRequest):
     """按下不放。与 mouse_up 配对,用来做框选一类 drag 表达不了的动作。"""
+    _require("mouse_down")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -524,6 +548,7 @@ async def mouse_down(request: MouseButtonRequest):
 
 @app.post("/mouse_up")
 async def mouse_up(request: MouseButtonRequest):
+    _require("mouse_up")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -547,6 +572,7 @@ async def zoom(request: ZoomRequest):
     模型看整屏时小字常常认不出来,zoom 是它自己要求"把这块放大给我看"。
     所以这里**不动界面**,只返回图 —— 它是一次观察,不是一次操作。
     """
+    _require("zoom")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -576,6 +602,7 @@ async def zoom(request: ZoomRequest):
 
 @app.post("/locate")
 async def locate_on_screen(request: LocateRequest):
+    _require("locate")
     if not pyautogui:
         return {"success": False, "error": pyautogui_unavailable_reason or REASON_BROKEN}
 
@@ -602,6 +629,7 @@ async def locate_on_screen(request: LocateRequest):
 
 @app.post("/mcp/call")
 async def mcp_call(request: dict):
+    _require(str((request or {}).get("tool") or ""))
     tool = request.get("tool", "")
     params = request.get("params", {})
     if tool == "click":

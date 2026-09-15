@@ -13,17 +13,21 @@ Node 92: AutoControl - 统一自动操控接口
 """
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
-import os
 import asyncio
-import httpx
+import os
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from nodes.common.action_gate import action_guard
 from nodes.common.cors_config import get_cors_origins
 
 app = FastAPI(title="Node 92 - AutoControl", version="1.0.0")
@@ -34,6 +38,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_92_AutoControl")
 
 # ============================================================================
 # 配置
@@ -182,6 +191,7 @@ async def android_press_key(device_id: str, key: str) -> Dict[str, Any]:
 @app.post("/click")
 async def click(request: ClickRequest) -> Dict[str, Any]:
     """点击"""
+    _require("click")
     if request.platform == "windows":
         return await windows_click(request.x, request.y, request.clicks, request.button)
     elif request.platform == "android":
@@ -194,6 +204,7 @@ async def click(request: ClickRequest) -> Dict[str, Any]:
 @app.post("/input")
 async def input_text(request: InputRequest) -> Dict[str, Any]:
     """输入"""
+    _require("input")
     if request.platform == "windows":
         return await windows_input(request.text)
     elif request.platform == "android":
@@ -206,6 +217,7 @@ async def input_text(request: InputRequest) -> Dict[str, Any]:
 @app.post("/scroll")
 async def scroll(request: ScrollRequest) -> Dict[str, Any]:
     """滚动"""
+    _require("scroll")
     if request.platform == "windows":
         return await windows_scroll(request.amount)
     elif request.platform == "android":
@@ -219,6 +231,7 @@ async def scroll(request: ScrollRequest) -> Dict[str, Any]:
 @app.post("/press_key")
 async def press_key(request: PressKeyRequest) -> Dict[str, Any]:
     """按键"""
+    _require("press_key")
     if request.platform == "windows":
         return await windows_press_key(request.key)
     elif request.platform == "android":
@@ -231,6 +244,7 @@ async def press_key(request: PressKeyRequest) -> Dict[str, Any]:
 @app.post("/hotkey")
 async def hotkey(request: HotkeyRequest) -> Dict[str, Any]:
     """组合键"""
+    _require("hotkey")
     if request.platform == "windows":
         return await windows_hotkey(request.keys)
     elif request.platform == "android":
@@ -288,6 +302,7 @@ async def health():
 @app.post("/mcp/call")
 async def mcp_call(request: dict) -> Dict[str, Any]:
     """MCP 调用接口"""
+    _require(str((request or {}).get("tool") or ""))
     tool = request.get("tool", "")
     params = request.get("params", {})
     
