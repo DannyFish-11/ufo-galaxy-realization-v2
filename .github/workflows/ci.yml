@@ -499,8 +499,18 @@ jobs:
     # GitHub 只丢下一句 "The runner has received a shutdown signal",既没有失败清单
     # 也没有任何线索。设了之后至少得到一个明确的"作业超时",而且
     # pytest.ini 的 faulthandler_timeout 会在此之前把挂点的线程堆栈打进日志。
-    # 分片后单片实测约 5~6 分钟(全量约 20 分钟 ÷ 4),25 分钟留了 4 倍余量。
-    timeout-minutes: 25
+    #
+    # **这个上限盖的是「装依赖 + 跑用例」的总和,不只是用例。** 2026-09-15 栽过
+    # 一次:run 5877 里装依赖花了 16m31s(平时 3 分钟上下),只剩 8.5 分钟给用例,
+    # 而第 3 片要 11m24s —— 于是撞墙被 cancelled。汇总作业照实判红,但日志里
+    # 一条失败用例都没有,只有一句「分片整体结果: cancelled」,极难查。
+    # 同一轮第 4 片装依赖 16m13s、用例 7m26s,合计 23m45s 压线过了 —— 差别只在
+    # 那一片的用例短了 4 分钟。
+    #
+    # 注释里原先写的「单片实测约 5~6 分钟、25 分钟留了 4 倍余量」**已经过时**:
+    # 第 3 片现在实测 11m24s(11220 条),对总和来说 25 分钟只剩 1.5 倍余量。
+    # 抬到 40 分钟,并给装依赖上缓存(见下面那步)—— 两条一起才算把余量挣回来。
+    timeout-minutes: 40
     permissions:
       contents: read
     strategy:
@@ -513,6 +523,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          # 装依赖是这个作业里最长、也最不稳的一步(实测 3 分钟 ~ 16 分钟)。
+          # 那 16 分钟绝大部分是重复下载与编译轮子,四个分片各来一遍。
+          # 缓存键按两份 requirements 的内容算,依赖没变就不再下载。
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
       # ── 为什么要分片(实测证据,不是猜)────────────────────────────────
