@@ -118,6 +118,29 @@ export function createDock(cb: DockCallbacks): DockHandles {
   //
   // 而且这台机器上它已经有两个归宿了:左栏「接上了什么」里的那一行(知道),
   // 设置浮层里的「本机模型」(调整)。第三处只是让整面更厚,不多说一件事。
+  /**
+   * 液态玻璃:**光跟着手走。**
+   *
+   * Apple 那份材质说明里的一句话是关键 —— 这层材质"不会完全遮蔽底层内容",
+   * 并且"在响应直接触摸时会强调动效"。前半句这条输入条已经做到了(它是透的,
+   * 底下那道坡照样透上来);后半句还没有:它此刻是一块**不动的**玻璃。
+   *
+   * 所以加一道高光,位置跟着指针。这不是装饰 —— 玻璃之所以看起来是玻璃,
+   * 靠的就是"光在它表面的位置随视角变"。不动的高光是印上去的,动的才是反射。
+   *
+   * 只记位置,不记时间:CSS 那边用 transition 把它追过去,所以手停下来光会
+   * **跟过去再停住**,而不是死跟着指针。那一点点滞后就是"液态"的来源。
+   */
+  field.addEventListener('pointermove', (e) => {
+    const r = field.getBoundingClientRect();
+    field.style.setProperty('--lx', `${((e.clientX - r.left) / r.width) * 100}%`);
+    field.style.setProperty('--ly', `${((e.clientY - r.top) / r.height) * 100}%`);
+    field.dataset['lit'] = 'true';
+  });
+  field.addEventListener('pointerleave', () => {
+    delete field.dataset['lit'];
+  });
+
   const send = document.createElement('button');
   send.className = 'send';
   send.type = 'button';

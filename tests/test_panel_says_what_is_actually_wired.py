@@ -144,102 +144,138 @@ class TestDeadEntriesCannotBeClicked:
         assert "item.disabled = true" in src, "写着「点了不会有反应」却还能点 —— 那句话就又成了一句空话"
 
 
-class TestTheThreePhasesReallyDiffer:
-    def test_every_phase_declares_its_own_wash(self) -> None:
+class TestTheRampIsOneHueFadingIntoWhite:
+    """整面的颜色怎么分配 —— **量自所有者给的那张壁纸**，不是我定的。
+
+    这一段的判据换过两轮，两轮换的都是"我以为的规矩"：
+
+    * 第一轮钉的是「三态色温不许相同」—— 那时我以为色系是一根轴挪冷暖。
+    * 第二轮钉的是「一相里至少三支色相 + 五支同 L 同 C」—— 那时我以为色系是
+      多支颜色摆在一起。所有者看了实物：「为什么莫兰迪色系会出现其他奇奇怪怪
+      的各种颜色」。
+
+    **那两条判据本身就是错的。** 它们把我当时的误解钉住了，于是每次都"全绿"，
+    而屏幕上难看。判据能把错误也钉牢，这是它最危险的地方。
+
+    这一轮不再钉我的想法，钉**壁纸自己的数**（`51aa951c-image.png` 取样）：
+
+        色相    只有一支      314° ± 3°
+        明度    0.598 → 0.939  跨 0.34
+        彩度    0.043 → 0.004  越亮越淡
+
+    对照我上一版：五支色相、明度只跨 0.08、彩度基本不动 —— 所以整面是平的。
+
+    根子不在色相上，在**分配**上：白不是铺上去的一层，是颜色变亮之后自己去的
+    地方。彩度跟着明度降，亮到头就化进白。
+    """
+
+    def test_the_ramp_is_one_hue(self) -> None:
+        """多一支都会被看出来 —— 所有者：「哪怕稍微加一点，其实都很明显」。"""
         css = _read(_TOKENS)
-        for phase in ("silent", "liminal", "manifest"):
-            assert f"[data-phase='{phase}']" in css, f"{phase} 没有自己的色温"
+        hexes = re.findall(r"--m-\d:\s*(#[0-9a-f]{6})", css)
+        assert len(hexes) >= 5, f"坡上不到五档：{hexes}"
+        # 近白那几档彩度趋零，色相没有意义，会算出任意角度 —— 只看有彩度的。
+        hues = [_oklch(h)[2] for h in hexes if _oklch(h)[1] > 0.004]
+        span = max(hues) - min(hues)
+        assert span <= 8, (
+            f"坡上有 {len(hues)} 档带彩度的，色相跨了 {span:.1f} 度 —— "
+            f"这一面只许一支色相。第二支哪怕很淡也会被看出来。"
+        )
 
-    def test_the_shell_reads_the_field_tokens(self) -> None:
-        """场写死的话,上面那几支 token 就白定义了。"""
+    def test_chroma_falls_as_lightness_rises(self) -> None:
+        """**白是颜色变亮之后自己去的地方**，不是盖上去的一层。
+
+        壁纸就是这么走的：L 0.598 时 C=0.043，L 0.939 时 C=0.004。
+        彩度不跟着降的话，最亮那头会是一块"亮但仍然有色"的面 —— 它和白之间
+        就有一道看得见的界，而不是化进去。
+        """
+        css = _read(_TOKENS)
+        hexes = re.findall(r"--m-\d:\s*(#[0-9a-f]{6})", css)
+        pairs = [(_oklch(h)[0], _oklch(h)[1]) for h in hexes]
+        pairs.sort()
+        for (l0, c0), (l1, c1) in zip(pairs, pairs[1:]):
+            assert c1 <= c0 + 0.002, (
+                f"L={l1:.3f} 比 L={l0:.3f} 亮，彩度却没降（{c0:.4f} → {c1:.4f}）—— " f"越亮越该越淡，才化得进白"
+            )
+
+    def test_the_ramp_actually_has_range(self) -> None:
+        """明度跨度太小 = 整面是平的、闷的。这是上一版真正的毛病。"""
+        css = _read(_TOKENS)
+        ls = sorted(_oklch(h)[0] for h in re.findall(r"--m-\d:\s*(#[0-9a-f]{6})", css))
+        span = ls[-1] - ls[0]
+        assert span >= 0.18, f"明度只跨了 {span:.3f} —— 太平。壁纸跨 0.34，上一版跨 0.08 就是" f"「看着闷」的数值原因。"
+
+    def test_the_shell_reads_the_ramp(self) -> None:
         css = _read(_HUD)
-        shell = css[css.index(".shell") :][:1400]
-        for pos in ("--field-tl", "--field-tr", "--field-br", "--field-bl", "--field-bg"):
-            assert f"var({pos})" in shell, f".shell 没读 {pos} —— 场定义了却没接上"
-        assert "transition: background" in shell, "换相位是硬切的。硬切一帧换整面的底,是这个面板最不该有的出场方式"
+        shell = css[css.index(".shell") :][:1600]
+        for pos in ("--field-top", "--field-mid", "--field-bot"):
+            assert f"var({pos})" in shell, f".shell 没读 {pos} —— 坡定义了却没接上"
+        assert "transition: background" in shell, "换相位是硬切的"
 
-    def test_each_phase_puts_a_different_cast_on_the_field(self) -> None:
-        """三相排出来的场不许重样,否则等于没做。"""
+    def test_each_phase_sits_at_a_different_depth(self) -> None:
+        """只有一支色相，换不了颜色 —— 相位换的是这道坡沉多深。"""
         css = _read(_TOKENS)
         seen = {}
         for phase in ("silent", "liminal", "manifest"):
             blk = css[css.index(f"[data-phase='{phase}']") :]
             blk = blk[: blk.index("}")]
-            seen[phase] = re.findall(r"--field-\w+:\s*var\(--(\w+)-\d\)", blk)
-            assert len(seen[phase]) >= 4, f"{phase} 那一块没把场排满:{seen[phase]}"
-        assert len(set(map(tuple, seen.values()))) == 3, f"三相的场有重样的:{seen}"
+            seen[phase] = re.findall(r"--field-\w+:\s*var\(--(m-\d)\)", blk)
+            assert len(seen[phase]) >= 3, f"{phase} 没把坡排满：{seen[phase]}"
+        assert len(set(map(tuple, seen.values()))) == 3, f"三相坐的深浅有重样的：{seen}"
 
-    def test_every_phase_shows_more_than_one_hue_at_once(self) -> None:
-        """**这是所有者纠正过的那一条。**
+    def test_no_colour_is_dragged_in_from_outside_the_ramp(self) -> None:
+        """场只许站在这道坡上。
 
-        「你知道它为什么叫色系吗？不是单一的某种色温在混合,这种才是莫兰迪色系。」
-
-        上一版每一相只是同一根灰紫轴挪了挪色温 —— 那是一个颜色的两个样子,不是
-        一个系。一相里必须同时站着**至少三支不同色相**,整面才是几支颜色在互相
-        渗,而不是一支颜色在变温。
-        """
-        css = _read(_TOKENS)
-        for phase in ("silent", "liminal", "manifest"):
-            blk = css[css.index(f"[data-phase='{phase}']") :]
-            blk = blk[: blk.index("}")]
-            hues = set(re.findall(r"--field-\w+:\s*var\(--(\w+)-\d\)", blk))
-            assert len(hues) >= 3, (
-                f"{phase} 这一相场上只有 {sorted(hues)} —— 少于三支色相," "那是一个颜色在变温,不是色系在过渡"
-            )
-
-    def test_the_band_stays_narrow_and_low_contrast(self) -> None:
-        """**这是栽过两次的那一条。**
-
-        第一次:一根灰紫轴只挪色温 —— 所有者:「不是单一的某种色温在混合」。
-        第二次:把色相拉开 280 度(玫 20°/赭 68°/青 150°/蓝 242°/紫 300°),
-        五支同 L 同 C 摆在四个角 —— 所有者:「为什么莫兰迪色系会出现其他奇奇
-        怪怪的各种颜色」。
-
-        第二次错在哪儿:"同 L 同 C"只管住了三要素里的**两个**。色相一放到
-        280 度,那就是对比色 —— 而莫兰迪的第一条是**邻近色 + 低对比**。
-
-        所以这道门不再验"同 L 同 C",改验三件事:
-          1. 色相跨度是一条**窄带**(≤ 90°),不是半个色相环;
-          2. 同一档内任意两支的最大通道差**低**(≤ 26);
-          3. 彩度全部压在低位(加灰之后不可能高)。
-
-        第 2 条是有数的:上一版那五支是 39,这一版 17–20。看着"像几块不同的
-        颜色"的原因就在那个 39 上,靠形容词说不清,靠这个数说得清。
-        """
-        css = _read(_TOKENS)
-        for step in (1, 2, 3):
-            hexes = re.findall(rf"--h\d-{step}:\s*(#[0-9a-f]{{6}})", css)
-            assert len(hexes) == 5, f"第 {step} 档不是五个站点:{hexes}"
-            rgbs = [tuple(int(h[i : i + 2], 16) for i in (1, 3, 5)) for h in hexes]
-
-            spread = max(abs(a[k] - b[k]) for a in rgbs for b in rgbs for k in range(3))
-            assert spread <= 26, (
-                f"第 {step} 档最大通道差 {spread} —— 太跳了,屏幕上会看成几块"
-                f"不同的颜色,而不是一条带。上一版那个错是 39。"
-            )
-
-            hues = [_oklch(h)[2] for h in hexes]
-            span = max(hues) - min(hues)
-            assert span <= 90, (
-                f"第 {step} 档色相跨了 {span:.0f} 度 —— 那是对比色,不是邻近色。" f"莫兰迪的第一条就是邻近色 + 低对比。"
-            )
-
-            chromas = [_oklch(h)[1] for h in hexes]
-            assert max(chromas) <= 0.05, (
-                f"第 {step} 档最高彩度 {max(chromas):.3f} —— 没加够灰," f"莫兰迪是所有颜色里都掺进灰白"
-            )
-
-    def test_no_hue_is_dragged_in_from_outside_the_band(self) -> None:
-        """场上四个角只许站这条带上的点,不许从外面扯一支进来。
-
-        所有者:「我让你在莫兰迪色系下手,没让你把其他颜色扯进来」。
-        冷的那一端必须是这条带自己的端点(灰蓝紫),不是一支真正的蓝。
+        所有者：「我让你在莫兰迪色系下手，没让你把其他颜色扯进来」。
         """
         css = _read(_TOKENS)
         for phase in ("silent", "liminal", "manifest"):
             blk = css[css.index(f"[data-phase='{phase}']") :]
             blk = blk[: blk.index("}")]
             refs = re.findall(r"--(?:field|wash)-\w+:\s*var\(--([\w-]+)\)", blk)
-            assert refs, f"{phase} 那一块是空的"
-            outsiders = [r for r in refs if not re.fullmatch(r"h\d-\d", r)]
-            assert not outsiders, f"{phase} 这一相引了带外的色:{outsiders} —— 场只许站在那条带上"
+            outsiders = [r for r in refs if not re.fullmatch(r"m-\d", r)]
+            assert not outsiders, f"{phase} 引了坡外的色：{outsiders}"
+
+
+class TestStateIsToldByLightNotColour:
+    """那几个点用**光**说状态，不用红黄绿。
+
+    所有者：「那个点儿就是红绿绿黄，是有点不太好看……可以通过白光加动效的方式，
+    让人体会，而不是这种奇怪的颜色」。
+
+    这一面上只有一支色相，四个彩色小点是整面唯一跳出来的东西。而且它们坐在坡
+    最浅那一头（近白），白点在白底上看不见 —— 所以光要靠**深度**表达：
+    有光 = 浮起来，没光 = 沉下去。这本来就是这个面板的语言（岛上那几个小方块
+    同理）。
+    """
+
+    def test_the_dots_use_no_semantic_colour(self) -> None:
+        css = _read(_HUD)
+        block = css[css.index(".wired-dot {") : css.index(".wired-name")]
+        leaked = [t for t in ("--ok", "--warn", "--bad") if f"var({t})" in block]
+        assert not leaked, f"那几个点又用回了语义色 {leaked} —— 整面只有一支色相，" f"这几个彩点会是唯一跳出来的东西"
+
+    def test_on_carries_light_that_moves(self) -> None:
+        """通 = 有光在走。静止的亮点说不出"它还活着"。"""
+        css = _read(_HUD)
+        m = re.search(r"\.wired-row\[data-state='on'\] \.wired-dot \{([^}]*)\}", css)
+        assert m, "通那一态没有自己的画法"
+        assert "animation" in m.group(1), "通没有动效 —— 光不走，就只是个亮点"
+        assert "dot-breathe" in css and "@keyframes dot-breathe" in css
+
+    def test_motion_stops_when_the_user_asked_for_less(self) -> None:
+        css = _read(_HUD)
+        assert (
+            re.search(
+                r"prefers-reduced-motion[^}]*\}[^@]*?\.wired-row\[data-state='on'\]" r" \.wired-dot \{ animation: none",
+                css,
+                re.S,
+            )
+            or "animation: none" in css.split("prefers-reduced-motion")[-1]
+        ), "减少动效时呼吸没停 —— 那是人明确要求过的"
+
+    def test_all_four_states_still_look_different(self) -> None:
+        """去掉颜色之后，四态仍然必须一眼分得开。"""
+        css = _read(_HUD)
+        for state in ("on", "part", "off", "unknown"):
+            assert f".wired-row[data-state='{state}'] .wired-dot" in css, f"{state} 没有自己的画法"

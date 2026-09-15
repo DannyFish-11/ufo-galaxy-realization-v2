@@ -34,19 +34,23 @@ body {
   padding: 20px;
   border-radius: 34px;
   overflow: hidden;
-  /* ── 整面 = 几支莫兰迪在同一块地方互相渗 ──────────────────────────
-     不是一道渐变,是四支色相各占一角、各自化开,中间那支托底。它们 L/C 同档
-     (见 tokens.css),所以交界处不出脏色 —— 过渡是渗出来的,不是两块颜色对接。
+  /* ── 整面 = 一道竖坡,深在上、化进白在下 ──────────────────────────
+     跟壁纸同一个走法:一支色相,明度一路走到近白,彩度跟着降。
+     不是四个角各摆一支 —— 那样任何一支都会被看出来是"另一种颜色"。
 
-     壳自己不知道现在是哪一相,它只把那一相排好的场铺出来。
+     那两道极淡的斜向光只做**不匀**,不引入颜色:同一支色的更亮一档,
+     让这道坡不像一条打印出来的渐变。
      ──────────────────────────────────────────────────────────────── */
   background:
-    radial-gradient(116% 98% at 2% -10%, var(--field-tl), transparent 82%),
-    radial-gradient(112% 96% at 100% -8%, var(--field-tr), transparent 80%),
-    radial-gradient(118% 104% at 104% 106%, var(--field-br), transparent 82%),
-    radial-gradient(120% 106% at -6% 108%, var(--field-bl), transparent 84%),
-    radial-gradient(78% 58% at 46% 6%, rgba(253, 251, 255, var(--wash-lift)), transparent 76%),
-    var(--field-bg);
+    radial-gradient(120% 72% at 18% 4%, rgba(253, 252, 255, calc(var(--wash-lift) * 0.5)), transparent 62%),
+    radial-gradient(96% 60% at 92% 12%, rgba(253, 252, 255, calc(var(--wash-lift) * 0.34)), transparent 58%),
+    linear-gradient(
+      177deg,
+      var(--field-top) 0%,
+      var(--field-mid) 46%,
+      var(--field-bot) 88%,
+      var(--field-bot) 100%
+    );
   /* 慢。这一层是给余光的,不是给眼睛追的 —— 换相位要像天光变,不像开关。
      自定义属性本身不可过渡,所以过渡挂在 background 上(浏览器按插值重算)。 */
   transition: background var(--t-wash) linear;
@@ -165,20 +169,37 @@ body {
      ──────────────────────────────────────────────────────────────── */
   --fade: calc(1 - var(--depth, 0) * 0.17);
   --lift: calc(56% - var(--depth, 0) * 12%);
+  /* ── 面在化开,**缘不化** ──────────────────────────────────────────
+     从前边缘那几道光影也乘了 --fade。第 4 张的 --fade 只剩 .32,于是顶光
+     0.5×.32=.16、接触影 0.1×.32=.03 —— 几乎没有,四条唇口就成了四行同色的
+     浅条,看不出是四张叠着的卡。
+
+     可这两件事不是一件事:**面的颜色**该随深度化回底色(那是"逐渐消失");
+     **缘**说的是"这是另一张卡",这个事实不随深度消失。所以拆成两个量,
+     缘只淡到 .72 就不再淡了。
+
+     一条缘由两道构成,缺一不可:上沿一道极细的受光(纸的切口迎着光),
+     紧挨着它上方一道更细的接触影(纸压在纸上)。只有受光没有影 = 发光的贴纸;
+     只有影没有受光 = 一道脏边。两道一起才是"纸叠着纸"。 */
+  --edge: calc(0.72 + 0.28 * var(--fade));
   background:
     linear-gradient(174deg, rgba(253, 251, 255, 0.2), rgba(253, 251, 255, 0) 68%),
     color-mix(in srgb, #fdfbff var(--lift), var(--wash-2));
   mask-image: linear-gradient(180deg, #000 0 86%, rgba(0, 0, 0, 0.45) 95%, transparent);
   box-shadow:
-    inset 0 0 0 1px rgba(93, 84, 102, calc(0.09 * var(--fade))),
-    inset 0 1px 0 rgba(252, 251, 255, calc(0.5 * var(--fade))),
+    inset 0 0 0 1px rgba(93, 84, 102, calc(0.085 * var(--edge))),
+    /* 切口迎着光的那一道。压在 0.5px 上,让它是一条线,不是一条带。 */
+    inset 0 0.5px 0 rgba(255, 255, 255, calc(0.92 * var(--edge))),
+    inset 0 1.5px 1px -1px rgba(255, 255, 255, calc(0.45 * var(--edge))),
     inset 0 -12px 16px -14px var(--shade-3),
     /* 往上投的那两道是关键。一张卡压在另一张上面,能把自己的上缘从背后
        那张身上分出来的,只有**向上**的影子 —— 下面那几道向下的落影全在
        卡自己 305px 的底边,而底边被压在别的卡后面、又被 .deck 裁掉,一像素
        都露不出来。没有它们,四条唇口就只是四行同色的浅条,不是四张叠着的卡。 */
-    0 -1px 1px rgba(93, 84, 102, calc(0.1 * var(--fade))),
-    0 -7px 12px -7px rgba(93, 84, 102, calc(0.3 * var(--fade))),
+    /* 紧挨着上沿的接触影 —— 纸压在纸上那一道。它必须**细**:糊开就成了脏边。 */
+    0 -0.5px 0 rgba(93, 84, 102, calc(0.16 * var(--edge))),
+    0 -2px 2px -1px rgba(93, 84, 102, calc(0.13 * var(--edge))),
+    0 -8px 13px -8px rgba(93, 84, 102, calc(0.3 * var(--fade))),
     0 1px 1px rgba(93, 84, 102, calc(0.13 * var(--fade))),
     0 4px 8px -5px rgba(93, 84, 102, calc(0.3 * var(--fade)));
   will-change: transform;
@@ -625,9 +646,40 @@ body {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 10px;
   padding: 5px 5px 5px 20px; border-radius: 999px;
-  background: linear-gradient(166deg, var(--veil-1), var(--veil-2));
-  box-shadow: inset 0 1px 0 var(--lite);
+  /* 玻璃是**透镜**,不是一层更白的纱。
+     它坐在坡最浅那一头(近白),再往白里调就彻底没形了 —— 高光也无处可亮。
+     所以让它比周围**略沉一档**:底下那道坡照样透上来(它仍然是透的),
+     但边上一圈受光、里面一点点密度,才读得出是一块玻璃压在面上。 */
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)),
+    color-mix(in srgb, var(--m-3) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 0 0.5px rgba(93, 84, 102, 0.07),
+    0 1px 2px rgba(93, 84, 102, 0.07);
 }
+/* 液态玻璃:高光跟着指针走,并且**追得慢一点** —— 那点滞后就是"液态"。
+   不动的高光是印上去的,动的才是反射。手离开就化掉,不留痕。 */
+.field { position: relative; overflow: hidden; }
+.field::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(
+    42% 180% at var(--lx, 50%) var(--ly, 50%),
+    rgba(255, 255, 255, 0.95),
+    rgba(255, 255, 255, 0.34) 44%,
+    transparent 74%
+  );
+  opacity: 0;
+  transition: opacity 0.5s var(--ease), background 0.34s var(--ease);
+}
+.field[data-lit='true']::before { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .field::before { transition: opacity 0.5s var(--ease); }
+}
+.field > * { position: relative; z-index: 1; }
+
 .field input {
   flex: 1; min-width: 0;
   border: 0; outline: 0; background: none;
@@ -663,20 +715,79 @@ body {
   padding: 3px 2px; border-radius: 8px; min-width: 0;
   font-size: var(--t-mini); line-height: 1.5;
 }
+/* ── 状态用**光**说,不用颜色 ────────────────────────────────────────
+   从前这四态是红 / 黄 / 绿 / 空心。所有者:「那个点儿就是红绿绿黄,是有点不太
+   好看……可以通过白光加动效的方式,让人体会,而不是这种奇怪的颜色」。对 ——
+   这一面上只有一支色相,四个彩色小点是整面唯一跳出来的东西。
+
+   难处在于:这一栏坐在坡最浅的那一头(近白),**白点在白底上是看不见的**。
+   所以光不能靠"更白"表达,要靠**深度** —— 跟岛上那几个小方块同一套话:
+   有光 = 浮起来(外面一圈柔影把它从面里托出来);没光 = 沉下去(内凹,没有影)。
+   这也正是这个面板一直在用的语言:状态用深度,不用点。
+
+     通    亮核 + 柔晕,**慢慢呼吸**(光在走)
+     部分  只亮半边 —— "部分"就长成部分的样子
+     不通  沉进面里,不发光,不动
+     不知道 空心圈(**不是暗一点的实心**,那会被读成「弱的通」)
+
+   呼吸周期 4.2 秒,落在 0.24 Hz —— 刻意避开 0.2 Hz 那一带,让它待在余光里
+   (同 line.ts 的理由)。prefers-reduced-motion 下整条停掉。
+   ──────────────────────────────────────────────────────────────── */
 .wired-dot {
-  flex: none; width: 6px; height: 6px; border-radius: 999px;
-  align-self: center;
-  background: var(--ink-3);
-  box-shadow: inset 0 0.5px 0 var(--lite-soft);
+  flex: none; width: 7px; height: 7px; border-radius: 999px;
+  align-self: center; position: relative;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(93, 84, 102, 0.16),
+    inset 0 -1px 1.5px rgba(93, 84, 102, 0.14);
 }
-.wired-row[data-state='on'] .wired-dot { background: var(--ok); }
-.wired-row[data-state='part'] .wired-dot { background: var(--warn); }
-.wired-row[data-state='off'] .wired-dot { background: var(--bad); opacity: 0.78; }
+
+/* 通:亮核浮起来,外面一圈柔晕慢慢呼吸 */
+.wired-row[data-state='on'] .wired-dot {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    0 0 0 1.5px rgba(255, 255, 255, 0.55),
+    0 1px 2.5px rgba(93, 84, 102, 0.3),
+    0 0 7px 1px rgba(255, 255, 255, 0.85);
+  animation: dot-breathe 4.2s ease-in-out infinite;
+}
+
+/* 部分:只亮半边。**它就长成"部分"的样子**,不用另说一句 */
+.wired-row[data-state='part'] .wired-dot {
+  background: linear-gradient(118deg, #fff 0 46%, rgba(255, 255, 255, 0.24) 54% 100%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(93, 84, 102, 0.24),
+    0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+/* 不通:沉进面里。没有光,也没有向外的影 —— 它不浮 */
+.wired-row[data-state='off'] .wired-dot {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
+}
+
 /* 不知道 = 空心。**不是浅一点的实心** —— 那会被读成「弱的通」。 */
 .wired-row[data-state='unknown'] .wired-dot {
   background: none;
-  box-shadow: inset 0 0 0 1.2px var(--a-pale);
+  box-shadow: inset 0 0 0 1.2px rgba(93, 84, 102, 0.3);
 }
+
+@keyframes dot-breathe {
+  0%, 100% { box-shadow:
+    inset 0 0 0 0.5px rgba(255,255,255,.9), 0 0 0 1.5px rgba(255,255,255,.5),
+    0 1px 2.5px rgba(93,84,102,.3), 0 0 6px 0.5px rgba(255,255,255,.7); }
+  50% { box-shadow:
+    inset 0 0 0 0.5px rgba(255,255,255,.95), 0 0 0 2px rgba(255,255,255,.7),
+    0 1px 2.5px rgba(93,84,102,.26), 0 0 10px 2px rgba(255,255,255,1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wired-row[data-state='on'] .wired-dot { animation: none; }
+}
+
 .wired-name { flex: none; color: var(--ink-2); }
 .wired-detail {
   min-width: 0; flex: 1;
