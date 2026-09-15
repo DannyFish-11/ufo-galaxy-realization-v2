@@ -547,13 +547,23 @@ body {
    的话,浓度那条映射在屏幕上就等于不存在。底也不能压到 0:一台都不在线时星系该是
    **暗的**,不是**没有的**。 */
 .gx-field {
-  /* **不是白的。** 底子是浅色莫兰迪,白星在白底上只剩一层灰蒙蒙的雾;换成这条
-     色阶最深那一档,星海就是紫的 —— 跟整块面板同一支色相(314°),不是引第二种色。
-     「亮」在这儿的意思是**更实**:被点亮的那几颗不是更白,是颜色更立得住。 */
-  fill: var(--m-1);
+  /* 颜色在下面按档分 —— 这里只管整片有多浓。 */
   opacity: calc(0.13 + 0.49 * var(--gx-lum, 0));
   transition: opacity 1.1s var(--ease);
 }
+/* ── 星的颜色:**紫白一起,按面板那条色阶铺开** ────────────────────
+   整面的法子是一支色相从深走到近白(--m-1 … --m-6):深的地方是紫,亮到头就化
+   进白。星系照搬同一条 —— 暗星偏紫、亮星化进白。
+
+   全用白(第一版)在浅色底上只剩一层灰蒙蒙的雾;全用紫(第二版)又成了一块紫斑,
+   面板别处的白在这儿断掉了。**紫白一起才接得上。**
+
+   四档都读 token,不写死十六进制 —— 相位一换整面都走,这座星系得跟着走。 */
+.gx-t1 { fill: var(--m-1); }   /* 最暗的那批:最深的紫 */
+.gx-t2 { fill: var(--m-2); }
+.gx-t3 { fill: var(--m-4); }
+.gx-t4 { fill: var(--m-6); }   /* 最亮的那批:化进白 */
+
 /* 尘埃带:旋臂内侧那一道暗。没有它,亮处挨着亮处,整盘糊成一团雾。 */
 .gx-dust polyline {
   stroke: rgba(74, 66, 82, 0.34);
@@ -577,7 +587,9 @@ body {
    而不是 1.5 再加光晕)。同一支紫,只是立得住 —— 这就是「相对更亮」。 */
 .gx-star .gx-halo-c { opacity: 0; transition: opacity 0.85s var(--ease); }
 .gx-star .gx-core-c {
-  fill: var(--m-1);
+  /* 被点亮的是整片里最亮的 —— 按那条色阶,最亮的走近白。紫的星海上一颗白,
+     「相对更亮」就说出来了,而且不用套大光团。 */
+  fill: var(--m-6);
   opacity: 0; transition: opacity 0.85s var(--ease), r 0.85s var(--ease);
 }
 .gx-star[data-lit='on'] .gx-halo-c { opacity: 0.3; }
@@ -589,62 +601,6 @@ body {
 .gx-star[data-lit='off'] .gx-halo-c,
 .gx-star[data-lit='off'] .gx-core-c { opacity: 0; }
 
-/* 一块「实物」。**离墙多远就是它的状态** —— 不用状态点。 */
-.tile {
-  position: relative; flex: none;
-  border-radius: 5px; overflow: hidden;
-  /* 面比别处厚一档,影子也重一档。这块东西**靠离墙多远表示状态**,
-     淡到看不出高低,那个状态就没了 —— 上一版跟着整体变薄之后正是如此。 */
-  background: linear-gradient(166deg, rgba(253, 251, 255, 0.78), rgba(253, 251, 255, 0.46));
-  box-shadow: inset 0 0.5px 0 var(--lite), 0 2px 4px rgba(93, 84, 102, 0.3);
-  transition: box-shadow 0.45s var(--ease), opacity 0.45s var(--ease),
-    background 0.45s var(--ease);
-}
-/* 降级:几乎贴平 */
-.tile[data-elev='low'] {
-  box-shadow: inset 0 0.5px 0 var(--lite-soft), 0 0.5px 1px rgba(93, 84, 102, 0.16);
-  opacity: 0.72;
-}
-/* 离线 / 这条通路从没来过东西:沉进表面,只剩凹槽,没有影子 */
-.tile[data-elev='sunk'] {
-  background: none;
-  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.22), inset 0 -0.5px 0 var(--lite-soft);
-  opacity: 0.85;
-}
-/* 被刻意闭上的那两档:盖一道。shut = 这一拍屏蔽;paused = 你按了暂停 */
-.tile[data-elev='shut']::before,
-.tile[data-elev='paused']::before {
-  content: '';
-  position: absolute; left: 14%; right: 14%; top: 50%;
-  height: 1px; margin-top: -0.5px;
-  background: rgba(61, 55, 69, 0.4); border-radius: 1px;
-}
-.tile[data-elev='paused'] {
-  background: none;
-  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), inset 0 -0.5px 0 var(--lite-soft);
-}
-/* 活跃:一道细光斜掠而过。忙就掠得频繁,闲就几秒才飘一次。
-   忙不忙是**余光里感觉到**的,不是读出来的。 */
-.tile-sheen {
-  position: absolute; top: -30%; bottom: -30%; left: 0; width: 52%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.82), transparent);
-  transform: translateX(-160%); opacity: 0;
-}
-.tile[data-busy] .tile-sheen { animation: sheen var(--rate, 6s) linear infinite; }
-@keyframes sheen {
-  0%        { transform: translateX(-160%); opacity: 0; }
-  8%        { opacity: 0.8; }
-  22%       { opacity: 0.8; }
-  30%, 100% { transform: translateX(230%); opacity: 0; }
-}
-
-.t-screen { width: 17px; height: 12px; }
-.t-camera { width: 13px; height: 13px; border-radius: 50%; }
-.t-mic    { width: 8px;  height: 15px; border-radius: 999px; }
-.t-sys    { width: 13px; height: 9px;  border-radius: 3px; }
-.t-dev    { width: 15px; height: 19px; border-radius: 4px; }
-.t-dev.wide { width: 20px; height: 14px; }
-.t-dev.tiny { width: 11px; height: 14px; }
 
 /* 展开:上面感知(就四条,两行摆完),下面设备(会长,自己滚)。
    **没有一条分隔线** —— 线横在中间,眼睛会停在线上而不是内容上。 */
@@ -795,13 +751,13 @@ body {
 /* ── 眼睛:看不看 ─────────────────────────────────────────────
    三档,不是布尔。 */
 /* 在采:一双竖着的窄缝,睁着。 */
-.pet[data-eyes='open'] .pet-eye { y: 14px; height: 10px; opacity: 1; }
+.pet[data-eyes='open'] .pet-eye { y: 14.4px; height: 9.6px; opacity: 1; }
 /* 你按了「别看了」:压成一横。**这是急停在展开态最快被看见的地方** ——
    人不用读那行字就知道它不看了。 */
-.pet[data-eyes='shut'] .pet-eye { y: 18.4px; height: 2.2px; opacity: 0.9; }
+.pet[data-eyes='shut'] .pet-eye { y: 18.6px; height: 2.4px; opacity: 0.9; }
 /* 还没收到过感知帧:虚着。既不能画成睁着(等于替后端说「它正看着」),
    也不能画成闭着(等于说「已经停了」)。 */
-.pet[data-eyes='unknown'] .pet-eye { y: 14px; height: 10px; opacity: 0.4; }
+.pet[data-eyes='unknown'] .pet-eye { y: 14.4px; height: 9.6px; opacity: 0.4; }
 
 /* ── 身子:上一拍想了什么 ─────────────────────────────────────── */
 /* 还没自己动过念头:就那么坐着 */

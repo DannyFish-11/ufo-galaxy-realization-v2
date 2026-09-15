@@ -82,14 +82,19 @@ export function createPet(): PetHandles {
   breath.append(
     el('path', {
       class: 'pet-skin',
-      d: 'M20 5.5c7.2 0 11.6 1.3 13.2 4.2 1.6 2.9 1.9 6.6 1.9 10.6s-.4 7.7-2 10.5C31.4 33.6 27.1 35 20 35s-11.4-1.4-13-4.2c-1.6-2.8-2-6.5-2-10.5s.3-7.7 1.9-10.6C8.4 6.8 12.8 5.5 20 5.5z',
+      // **一颗圆润的卵石**,不是圆角方块 —— 方块那四条直边会让它看着像个图标;
+      // 边全收成弧、只在腰上略宽一点,才像一只待着的东西。
+      //
+      // 也不用正圆:正圆没有上下之分,呼吸起伏时看不出是在起伏还是在整体缩放。
+      d: 'M20 4.6c8 0 13.6 4.2 15 11 .6 2.9.6 5.9 0 8.8-1.4 7.2-6.8 11.6-15 11.6S6.4 31.6 5 24.4a22 22 0 0 1 0-8.8c1.4-6.8 7-11 15-11z',
     }),
   );
 
   // 眼睛。两道竖着的窄缝 —— 睁着是缝,闭上就压扁成一横。
   const eyes = el('g', { class: 'pet-eyes' });
-  const left = el('rect', { class: 'pet-eye', x: '13.4', y: '14', width: '3.6', height: '10', rx: '1.8' });
-  const right = el('rect', { class: 'pet-eye', x: '23', y: '14', width: '3.6', height: '10', rx: '1.8' });
+  // 眼睛也跟着圆一档:rx 给到半宽,两头就是整圆而不是倒角。
+  const left = el('rect', { class: 'pet-eye', x: '13.2', y: '14.4', width: '4', height: '9.6', rx: '2' });
+  const right = el('rect', { class: 'pet-eye', x: '22.8', y: '14.4', width: '4', height: '9.6', rx: '2' });
   eyes.append(left, right);
   breath.append(eyes);
   svg.append(body);
