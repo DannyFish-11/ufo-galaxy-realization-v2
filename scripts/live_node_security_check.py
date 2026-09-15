@@ -9,6 +9,15 @@ TestClient 走进程内 ASGI transport:不经过真实 socket、不跑 uvicorn �
 这个脚本做的事:用 uvicorn 把节点起在真实端口上,用真实 HTTP 客户端打它,
 逐条核对契约(见 docs/NODE_HTTP_SECURITY_CONTRACT.md)。
 
+## WebSocket 面也在核对之内
+
+HTTP 中间件看不见 WS 握手(scope 类型不同),所以 WS 是**另一层**、要单独验。
+仓里唯一带 WS 端点的节点是 ``Node_95_WebRTC_Receiver``,而它 import 就要 aiortc ——
+这台机器上装不上时,脚本会明确打出"未验",**不会算成通过**。
+
+不管 Node_95 能不能起,``--ws`` 这一段都会用同一个 ``install_node_auth`` 起一个
+最小 app 验一遍机制本身:没有它,"WS 这层到底有没有生效"在缺依赖的机器上就无人回答。
+
 ## 用法
 
     python3 scripts/live_node_security_check.py                  # 默认那几个敏感节点
@@ -47,6 +56,34 @@ app = getattr(m, "app", None) or getattr(m, "_health_app", None)
 if app is None:
     sys.exit(2)
 uvicorn.run(app, host="127.0.0.1", port=int(sys.argv[2]), log_level="warning")
+"""
+
+
+#: 带 WS 端点的节点。值是握手路径(已填好占位符)。
+WS_TARGETS: List[Tuple[str, str]] = [
+    ("nodes.Node_95_WebRTC_Receiver.main", "/signaling/live-check-device"),
+]
+
+#: 机制自检用的最小 app —— 除 install_node_auth 外什么都没装。
+_SERVE_WS_PROBE = """
+import sys, uvicorn
+sys.path.insert(0, %r)
+from fastapi import FastAPI, WebSocket
+from nodes.common.node_auth import install_node_auth
+app = FastAPI()
+install_node_auth(app, "LiveCheckProbe")
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.websocket("/signaling/{device_id}")
+async def signaling(websocket: WebSocket, device_id: str):
+    await websocket.accept()
+    await websocket.send_text("accepted-" + device_id)
+    await websocket.close()
+
+uvicorn.run(app, host="127.0.0.1", port=int(sys.argv[1]), log_level="warning")
 """
 
 
@@ -114,12 +151,121 @@ def check(module: str, path: str, method: str, body: dict) -> List[str]:
     return fails
 
 
+def _ws_attempt(url: str, headers: dict) -> Tuple[bool, str]:
+    """真发一次握手。返回 (连上了吗, 说明)。"""
+    import asyncio
+
+    import websockets
+
+    async def _go():
+        kwargs = {}
+        if headers:
+            import inspect
+
+            params = inspect.signature(websockets.connect).parameters
+            name = "additional_headers" if "additional_headers" in params else "extra_headers"
+            kwargs[name] = headers
+        async with websockets.connect(url, open_timeout=8, **kwargs) as ws:
+            # 判据是**握手成不成**,不是"有没有收到消息"。鉴权拦的就是握手;
+            # 而多数信令端点 accept 之后是等对方先说话的(Node_95 正是如此),
+            # 拿"收到第一条消息"当判据,会把一条已经建立的连接判成"没连上"。
+            try:
+                return f"已握手;首条消息 {(await asyncio.wait_for(ws.recv(), timeout=2))!r}"
+            except (asyncio.TimeoutError, TimeoutError):
+                return "已握手(端点在等对方先开口)"
+
+    try:
+        return True, str(asyncio.run(_go()))
+    except Exception as exc:  # noqa: BLE001 — 被拒也走这里
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def check_ws(label: str, argv: List[str], ws_path: str) -> List[str]:
+    """把一个带 WS 端点的 app 起起来,核对握手阶段的身份判定。"""
+    import httpx
+
+    port = _free_port()
+    base = f"http://127.0.0.1:{port}"
+    env = dict(os.environ, GALAXY_API_TOKEN=TOKEN, PYTHONPATH=os.getcwd())
+    env.pop("GALAXY_NODE_AUTH", None)
+    proc = subprocess.Popen(
+        [sys.executable, *argv, str(port)],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    fails: List[str] = []
+    try:
+        with httpx.Client() as c:
+            if not _wait(c, f"{base}/health", timeout=25.0):
+                err = (proc.stderr.read() or b"").decode()[-400:] if proc.stderr else ""
+                return [f"{label}: 起不来 / {err}"]
+
+        ws_url = f"ws://127.0.0.1:{port}{ws_path}"
+        ok_bare, why_bare = _ws_attempt(ws_url, {})
+        if ok_bare:
+            fails.append(f"{label}: {ws_path} 无令牌就握上手了(收到 {why_bare!r})")
+        ok_wrong, _ = _ws_attempt(ws_url, {"Authorization": "Bearer wrong"})
+        if ok_wrong:
+            fails.append(f"{label}: {ws_path} 错令牌就握上手了")
+        # 差分的另一半:只验"连不上"的话,把整条路堵死也会全绿。
+        ok_good, why_good = _ws_attempt(ws_url, {"Authorization": f"Bearer {TOKEN}"})
+        if not ok_good:
+            fails.append(f"{label}: {ws_path} 带对令牌反而连不上 —— {why_good}")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    return fails
+
+
+def _run_ws_section() -> Tuple[List[str], List[str]]:
+    """返回 (失败项, 未能验证的说明)。"""
+    fails: List[str] = []
+    unverified: List[str] = []
+
+    probe_src = _SERVE_WS_PROBE % (os.getcwd(),)
+    probe_fails = check_ws("机制自检(最小 app)", ["-c", probe_src], "/signaling/live-check-device")
+    print(f"  {'❌' if probe_fails else '✅'} {'机制自检(最小 app)':<26} WS /signaling/{{id}}")
+    for f in probe_fails:
+        print(f"       {f}")
+    fails += probe_fails
+
+    for module, ws_path in WS_TARGETS:
+        name = module.split(".")[1]
+        # 在子进程里探能不能导 —— 和真起服务同一个环境(PYTHONPATH=cwd),
+        # 也免得把一个重依赖的节点模块拉进本进程。
+        probe = subprocess.run(
+            [sys.executable, "-c", f"import importlib; importlib.import_module({module!r})"],
+            env=dict(os.environ, PYTHONPATH=os.getcwd()),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if probe.returncode != 0:
+            why = (probe.stderr.strip().splitlines() or ["(无输出)"])[-1]
+            print(f"  ⚠️  {name:<26} 未验 —— 本机导不进来: {why}")
+            unverified.append(f"{name}: {why}")
+            continue
+        node_fails = check_ws(name, ["-c", _SERVE, module], ws_path)
+        print(f"  {'❌' if node_fails else '✅'} {name:<26} WS {ws_path}")
+        for f in node_fails:
+            print(f"       {f}")
+        fails += node_fails
+
+    return fails, unverified
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("nodes", nargs="*", help="节点目录名,如 Node_06_Filesystem;留空=默认那批")
+    ap.add_argument("--ws", action="store_true", help="只验 WebSocket 面")
+    ap.add_argument("--no-ws", action="store_true", help="跳过 WebSocket 面")
     args = ap.parse_args()
 
-    for dep in ("uvicorn", "httpx"):
+    for dep in ("uvicorn", "httpx", "websockets"):
         try:
             importlib.import_module(dep)
         except ImportError:
@@ -132,19 +278,30 @@ def main() -> int:
 
     os.makedirs(tempfile.gettempdir(), exist_ok=True)
     all_fails: List[str] = []
-    for module, path, method, body in targets:
-        fails = check(module, path, method, body)
-        name = module.split(".")[1]
-        print(f"  {'❌' if fails else '✅'} {name:<26} {method} {path}")
-        for f in fails:
-            print(f"       {f}")
-        all_fails += fails
+    checked = 0
+    if not args.ws:
+        for module, path, method, body in targets:
+            fails = check(module, path, method, body)
+            name = module.split(".")[1]
+            print(f"  {'❌' if fails else '✅'} {name:<26} {method} {path}")
+            for f in fails:
+                print(f"       {f}")
+            all_fails += fails
+            checked += 1
+
+    unverified: List[str] = []
+    if not args.no_ws:
+        ws_fails, unverified = _run_ws_section()
+        all_fails += ws_fails
 
     print()
+    for note in unverified:
+        print(f"未能验证:{note}")
     if all_fails:
         print(f"—— {len(all_fails)} 项不符合契约 ——")
         return 1
-    print(f"—— {len(targets)} 个节点在真实 HTTP 上全部符合契约 ——")
+    tail = f",另有 {len(unverified)} 项未能在本机验证" if unverified else ""
+    print(f"—— 真实 HTTP/WS 上已核对的部分全部符合契约({checked} 个节点 + WS 面){tail} ——")
     return 0
 
 

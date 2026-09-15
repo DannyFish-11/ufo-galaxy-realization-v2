@@ -159,7 +159,13 @@ class WebSocketTransport(BaseTransport):
         logger.info(f"使用 WebSocket 发送数据到 {endpoint}")
         try:
             import websockets
-            async with websockets.connect(endpoint, open_timeout=10) as ws:
+
+            from core.internal_auth import ws_auth_kwargs_for
+
+            # endpoint 可能是本仓的节点,也可能是外部服务:令牌按目标地址决定带不带。
+            async with websockets.connect(
+                endpoint, open_timeout=10, **ws_auth_kwargs_for(endpoint)
+            ) as ws:
                 await ws.send(json.dumps(data, ensure_ascii=False))
             logger.info(f"WebSocket 发送成功: {json.dumps(data, ensure_ascii=False)}")
             return True

@@ -366,6 +366,13 @@ class SmartTransportRouter:
 
 
 app = FastAPI(title="SmartTransportRouter", version="1.0.0")
+
+# 身份认证。用本层自己的那一份(``galaxy_gateway/app.py`` 用的也是它),
+# 而不是节点侧的 install_node_auth —— 同一层里只该有一套规矩。
+# 本 app 没有 WebSocket 端点;真要加,得同时接上握手那一层(见该中间件的 docstring)。
+from galaxy_gateway.middleware import BearerAuthMiddleware  # noqa: E402
+
+app.add_middleware(BearerAuthMiddleware)
 app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )

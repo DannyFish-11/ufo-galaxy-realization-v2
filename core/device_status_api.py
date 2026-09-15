@@ -57,6 +57,7 @@ if __package__ in (None, ""):  # pragma: no cover - 只在直接执行时成立
 from core import upper_ports
 from core.status_ws_envelope import build_status_frame
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.node_auth import install_node_auth
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -492,6 +493,20 @@ app = FastAPI(title="Galaxy Device Status API", description="统一设备状态�
 app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
+
+# 身份认证。这个服务不在 nodes/ 下,但它的暴露面和节点是一样的:
+# ``launcher/core_services.py`` 用 ``uvicorn core.device_status_api:app --host 0.0.0.0``
+# 把它起在 ``device_api_port`` 上,而它提供的是**写**接口 ——
+# ``POST /devices/register``、``DELETE /devices/{device_id}``、
+# ``PUT /devices/{device_id}/status``、``POST /devices/{device_id}/heartbeat``,
+# 外加 ``GET /devices``(全量设备清单)和 ``WS /ws/status``。
+#
+# 把认证按"目录在不在 nodes/ 下"来铺,就会漏掉这一类。判据应当是
+# "**它有没有对外开一个 HTTP 面**"。走同一份实现,是为了不出现第二套规矩。
+#
+# 豁免表用默认的那张(只有存活探针)。这个服务没有 /health,也没有任何东西
+# 在探它 —— launcher 只管进程起没起,不打 HTTP。
+install_node_auth(app, "core.device_status_api")
 
 
 # Pydantic 模型

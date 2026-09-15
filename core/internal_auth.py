@@ -16,12 +16,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 logger = logging.getLogger("Galaxy.InternalAuth")
 
-__all__ = ["internal_auth_headers", "internal_headers_for", "internal_token", "is_internal_url"]
+__all__ = [
+    "internal_auth_headers",
+    "internal_headers_for",
+    "internal_token",
+    "is_internal_url",
+    "ws_auth_kwargs_for",
+]
 
 
 def internal_token() -> str:
@@ -80,3 +86,43 @@ def is_internal_url(url: str) -> bool:
 def internal_headers_for(url: str) -> Dict[str, str]:
     """按目标地址决定要不要带令牌。外部地址一律不带。"""
     return internal_auth_headers() if is_internal_url(url) else {}
+
+
+def _ws_header_kwarg() -> str:
+    """``websockets.connect`` 这一版把自定义请求头叫什么。
+
+    requirements 的下限是 ``websockets>=11.0``:11–13 叫 ``extra_headers``,
+    14 起改叫 ``additional_headers``。14+ 的 ``connect`` 还带 ``**kwargs``,
+    传错名字不会当场报错,而是一路下沉到底层再炸 —— 所以按签名判定,不靠版本号猜。
+    """
+    try:
+        import inspect  # noqa: PLC0415
+
+        import websockets  # noqa: PLC0415
+
+        params = inspect.signature(websockets.connect).parameters
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("无法判定 websockets 的 header 参数名: %s", exc)
+        return ""
+    if "additional_headers" in params:
+        return "additional_headers"
+    if "extra_headers" in params:
+        return "extra_headers"
+    return ""
+
+
+def ws_auth_kwargs_for(url: str) -> Dict[str, Any]:
+    """打内部 WebSocket 端点时传给 ``websockets.connect`` 的身份参数。
+
+    节点的 WS 面现在也在鉴权之内(见 ``nodes/common/node_auth.py``),不带令牌
+    会在**握手阶段**被 403 回绝。和 HTTP 那边同一个规矩:按**目标地址**决定带不带,
+    同一个函数既可能打本机节点、也可能打第三方信令服务。
+    """
+    headers = internal_headers_for(url)
+    if not headers:
+        return {}
+    name = _ws_header_kwarg()
+    if not name:
+        logger.warning("当前 websockets 版本不接受自定义请求头,内部 WS 调用将不带身份")
+        return {}
+    return {name: headers}

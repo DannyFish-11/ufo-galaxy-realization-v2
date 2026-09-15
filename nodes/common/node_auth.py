@@ -26,6 +26,20 @@
 借 ``galaxy_gateway/middleware.py`` 的形状:豁免按 (路径 → 允许的方法) 表达,
 而不是纯路径集合 —— 纯路径集合会把同一路径的 GET 和 POST 一起豁免。
 
+## HTTP 中间件管不到 WebSocket
+
+``@app.middleware("http")`` 落到 Starlette 的 ``BaseHTTPMiddleware``,它只处理
+``scope["type"] == "http"``;WebSocket 握手的 scope 是 ``"websocket"``,**整条都
+不经过它**。所以"给 125 个节点装上了 HTTP 鉴权"并不等于那些节点的 WS 端点也被挡住 ——
+实测:装了本模块的 app,``GET /status`` 401,同一个 app 上的 ``@app.websocket``
+不带任何令牌照样连上并收到数据。
+
+因此 WS 面另走一层**纯 ASGI 中间件**(``_WebSocketAuthGuard``),在握手被 accept
+**之前**判定。凭据只认 ``Authorization`` 头:放进 query string 的令牌会原样进入
+访问日志和 Referer,而本仓唯一的 WS 调用方(网关 ``webrtc_proxy`` 与
+``Node_96`` 的 WS 传输)都是能设请求头的 Python 客户端;安卓侧走网关
+``/ws/webrtc/{deviceId}``,不直连节点。
+
 ## 为什么 /health 必须豁免
 
 ``deploy/compose/full.yml`` 里每个节点的 healthcheck 是
@@ -42,7 +56,11 @@ from typing import Dict, Optional, Set
 
 logger = logging.getLogger("Galaxy.NodeAuth")
 
-__all__ = ["DEFAULT_EXEMPT", "install_node_auth"]
+__all__ = ["DEFAULT_EXEMPT", "WS_CLOSE_POLICY_VIOLATION", "install_node_auth"]
+
+#: WS 关闭码 1008 = policy violation。RFC 6455 给的就是"消息违反策略"这一格,
+#: 没有单独的"未认证"码;仓里 ``routes/websocket.py`` 回绝 legacy 入口用的也是它。
+WS_CLOSE_POLICY_VIOLATION = 1008
 
 #: 默认豁免:只有存活探针。值是允许的 HTTP 方法集合。
 #:
@@ -69,6 +87,75 @@ def _auth_disabled_explicitly() -> bool:
     return os.getenv("GALAXY_NODE_AUTH", "").strip().lower() in ("off", "0", "false", "no")
 
 
+async def _authorize(node_id: str, *, authorization, x_device_id, path: str):
+    """判定一次调用的身份。放行返回 ``None``,否则返回 ``(status, detail)``。
+
+    HTTP 面和 WebSocket 面共用这一份判定,是为了让两边**不可能**在"拿不到鉴权
+    模块怎么办""开关怎么读"这些地方分叉 —— 这类分叉正是 WS 面此前整条漏掉的
+    那种缺口的来源。
+    """
+    try:
+        from core.auth import is_auth_enabled, require_auth  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001 — 拿不到鉴权就不放行
+        logger.error("%s 鉴权模块不可用,拒绝请求 %s: %s", node_id, path, exc)
+        return 503, f"auth unavailable; refusing to serve: {exc}"
+
+    if not is_auth_enabled():
+        return None
+
+    try:
+        await require_auth(authorization=authorization, x_device_id=x_device_id)
+    except Exception as exc:  # noqa: BLE001 — HTTPException 也在内
+        return getattr(exc, "status_code", 401), getattr(exc, "detail", "unauthorized")
+
+    return None
+
+
+class _WebSocketAuthGuard:
+    """WebSocket 握手前的身份判定 —— 纯 ASGI,因为 HTTP 中间件看不见 WS scope。
+
+    拒绝方式是在 accept **之前**发 ``websocket.close``:按 ASGI 规范,这会让
+    服务器用 HTTP 403 回绝握手,连接从来没有建立过。**不能**用"先 accept
+    再 close" —— 那样端点的 ``await websocket.accept()`` 已经发生,客户端拿到的是
+    一条成功建立又断开的连接,而节点侧的 ``on_connect`` 副作用(Node_95 会把
+    ``state.signaling_connections[device_id]`` 填上)已经跑过了。
+    """
+
+    def __init__(self, app, node_id: str) -> None:
+        self.app = app
+        self.node_id = node_id
+
+    async def __call__(self, scope, receive, send):  # noqa: ANN001
+        if scope.get("type") != "websocket":
+            await self.app(scope, receive, send)
+            return
+
+        if _auth_disabled_explicitly():
+            await self.app(scope, receive, send)
+            return
+
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
+        path = scope.get("path", "")
+        verdict = await _authorize(
+            self.node_id,
+            authorization=headers.get("authorization"),
+            x_device_id=headers.get("x-device-id"),
+            path=path,
+        )
+        if verdict is None:
+            await self.app(scope, receive, send)
+            return
+
+        status, detail = verdict
+        logger.warning("%s 拒绝未认证 WebSocket 握手 %s: %s", self.node_id, path, detail)
+        # 规范要求先收下 websocket.connect,再回绝。
+        try:
+            await receive()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("%s 回绝握手时未能读到 connect 事件: %s", self.node_id, exc)
+        await send({"type": "websocket.close", "code": WS_CLOSE_POLICY_VIOLATION, "reason": str(detail)[:120]})
+
+
 def install_node_auth(app, node_id: str, exempt: Optional[Dict[str, Set[str]]] = None) -> None:
     """给 ``app`` 装上鉴权中间件。
 
@@ -91,33 +178,24 @@ def install_node_auth(app, node_id: str, exempt: Optional[Dict[str, Set[str]]] =
         if _auth_disabled_explicitly():
             return await call_next(request)
 
-        try:
-            from core.auth import is_auth_enabled, require_auth  # noqa: PLC0415
-        except Exception as exc:  # noqa: BLE001 — 拿不到鉴权就不放行
-            logger.error("%s 鉴权模块不可用,拒绝请求 %s: %s", node_id, request.url.path, exc)
-            return JSONResponse(
-                status_code=503,
-                content={"detail": f"auth unavailable; refusing to serve: {exc}"},
-            )
-
-        if not is_auth_enabled():
+        verdict = await _authorize(
+            node_id,
+            authorization=request.headers.get("authorization"),
+            x_device_id=request.headers.get("x-device-id"),
+            path=request.url.path,
+        )
+        if verdict is None:
             return await call_next(request)
 
-        try:
-            await require_auth(
-                authorization=request.headers.get("authorization"),
-                x_device_id=request.headers.get("x-device-id"),
-            )
-        except Exception as exc:  # noqa: BLE001 — HTTPException 也在内
-            status = getattr(exc, "status_code", 401)
-            detail = getattr(exc, "detail", "unauthorized")
+        status, detail = verdict
+        if status != 503:
             logger.warning("%s 拒绝未认证请求 %s %s: %s", node_id, request.method, request.url.path, detail)
-            return JSONResponse(
-                status_code=status,
-                content={"detail": detail},
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        return JSONResponse(
+            status_code=status,
+            content={"detail": detail},
+            headers={"WWW-Authenticate": "Bearer"} if status != 503 else None,
+        )
 
-        return await call_next(request)
+    app.add_middleware(_WebSocketAuthGuard, node_id=node_id)
 
-    logger.info("%s 已装上 HTTP 鉴权(豁免: %s)", node_id, sorted(table))
+    logger.info("%s 已装上 HTTP + WebSocket 鉴权(豁免: %s)", node_id, sorted(table))

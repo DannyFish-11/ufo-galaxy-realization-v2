@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.node_auth import install_node_auth
 from enhancements.multidevice.device_protocol import (
     DeviceInfo,
     DeviceCapabilities,
@@ -750,6 +751,8 @@ def create_app(device_manager: Optional[DeviceManager] = None) -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown():
         await manager.stop()
+
+    install_node_auth(app, "enhancements.multidevice.device_manager")
 
     @app.post("/devices/register", response_model=DeviceResponse)
     async def register_device(request: DeviceRegistrationRequest):

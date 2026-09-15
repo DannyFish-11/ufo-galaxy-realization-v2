@@ -106,6 +106,7 @@ from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.node_auth import install_node_auth
 
 app = FastAPI(title="Node {node_id} - {name}", version="1.0.0")
 
@@ -116,6 +117,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 身份认证 —— 见 docs/NODE_HTTP_SECURITY_CONTRACT.md
+install_node_auth(app, "Node_{node_id}_{name}")
 
 # =============================================================================
 # Tool Implementation

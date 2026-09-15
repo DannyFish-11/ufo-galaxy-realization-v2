@@ -3,6 +3,9 @@
 每个节点都自带一个 FastAPI 服务。这份文档说清楚：一次请求打到节点上，要过哪几道门、
 各道门回答什么问题、失败往哪个方向倒。
 
+**"HTTP 面"包含 WebSocket 握手。** 见下面《WebSocket 是另一层，必须单独装》——
+这两者在 Starlette 里是两条不同的路径，装了一条不等于装上了另一条。
+
 新增节点时照这份做，就不会漏；漏了的话 `tests/test_all_node_http_surfaces_require_auth.py`
 会变红。
 
@@ -54,6 +57,89 @@
 **`/status` 与 `/tools` 不豁免。** 它们同样不动手，但会把节点的能力面摊给未认证方看。
 动作权限闸放它们过是另一回事（那道闸管的是"能不能做"）。
 
+## WebSocket 是另一层，必须单独装
+
+`@app.middleware("http")` 落到 Starlette 的 `BaseHTTPMiddleware`，它**只处理
+`scope["type"] == "http"`**。WebSocket 握手的 scope 是 `"websocket"`，整条不经过它。
+
+这不是理论上的：125 个节点接上鉴权之后，实测（真 uvicorn、真握手）——
+
+```
+GET /status                 无令牌 -> 401
+WS  /signaling/{device_id}  无令牌 -> 连上了，并收到数据
+```
+
+`nodes/Node_95_WebRTC_Receiver/main.py` 上就有这么一条端点。所以 `install_node_auth()`
+除了 HTTP 中间件，还装一层**纯 ASGI** 的 `_WebSocketAuthGuard`：
+
+* 判定发生在 `accept()` **之前**。按 ASGI 规范，accept 前发 `websocket.close` 会让服务器
+  用 **HTTP 403** 回绝握手，连接从未建立。不能用"先 accept 再 close"——那样端点函数已经
+  跑过，Node_95 的 `state.signaling_connections[device_id]` 已经被未认证方写进去了。
+* 凭据**只认 `Authorization` 头**。放进 query string 的令牌会原样进入访问日志与 Referer；
+  而本仓的 WS 调用方（网关 `webrtc_proxy`、`Node_96` 的 WS 传输）都是能设请求头的 Python
+  客户端，安卓侧走网关 `/ws/webrtc/{deviceId}`、不直连节点。
+* 关闭码用 **1008**（policy violation）—— RFC 6455 没有单独的"未认证"码，
+  `galaxy_gateway/routes/websocket.py` 回绝 legacy 入口用的也是它。
+* `GALAXY_NODE_AUTH=off` 同时关掉两层。一个开关只关一半，会让运维以为自己关掉了。
+
+WS 面**没有第二道闸**：`nodes/common/action_gate` 按动作名判定，WS 端点没有动作名。
+所以这一层失守就是全无遮拦，它和 HTTP 面共用同一个 `_authorize()`，不允许分叉。
+
+打内部 WS 端点的调用方用 `core.internal_auth.ws_auth_kwargs_for(url)`：
+
+```python
+from core.internal_auth import ws_auth_kwargs_for
+
+async with websockets.connect(url, **ws_auth_kwargs_for(url)) as ws:
+    ...
+```
+
+它和 HTTP 那边同规矩——按**目标地址**决定带不带；同时吸收 `websockets` 的版本差异
+（11–13 叫 `extra_headers`，14 起叫 `additional_headers`，而 14+ 的 `**kwargs` 会让传错
+名字一路下沉到底层才炸）。
+
+## 判据是「有没有开 HTTP 面」，不是「在不在 `nodes/` 下」
+
+上一轮把 125 个节点全接上了，守卫也按 `nodes/Node_*/main.py` 扫。于是
+`core/device_status_api.py` 整个被漏掉 —— 它由 `launcher/core_services.py` 用
+`uvicorn core.device_status_api:app --host 0.0.0.0` 真起着，开的还是
+`POST /devices/register`、`DELETE /devices/{device_id}`、`PUT /devices/{device_id}/status`
+这些**写**接口，外加 `GET /devices` 和 `WS /ws/status`。
+
+所以判据换成：**代码里有没有 `FastAPI(...)`**。
+`tests/test_every_http_surface_declares_its_auth.py` 扫全仓（`nodes/` 由那边专管），
+每个 app 要么装了认证，要么在那份 `EXEMPT` 表里**写明理由**——没有第三种。
+
+| 位置 | 装的是哪一层 |
+|---|---|
+| `nodes/Node_*/main.py`（125 个） | `install_node_auth`（HTTP + WS） |
+| `templates/node_template/main.py`、`scripts/generate_tool_nodes.py` | `install_node_auth` —— 模板少一行等于每个新节点默认裸奔 |
+| `core/device_status_api.py` | `install_node_auth` |
+| `enhancements/learning/learning_node.py`、`enhancements/multidevice/{device_coordinator,device_manager}.py` | `install_node_auth` |
+| `core/device_agent_manager.py`、`core/microsoft_ufo_integration.py`（工厂，当前无调用方） | `install_node_auth` |
+| `galaxy_gateway/{app,gateway_service,unified_node_gateway,smart_transport_router}.py` | `BearerAuthMiddleware`（网关层自己那一份） |
+| `launcher/services.py` | 逐条 `Depends(require_auth)` |
+
+**逐条 `Depends` 的风险是漏一条。** `launcher/services.py` 里 `/api/status` 挂了，
+紧挨着的 `/api/services` 没挂，而两条返回同一份 `service_manager.get_status()` ——
+受保护的内容从没设防的那扇门原样出去。所以守卫对这种形式的要求是
+**每条非豁免路由都得有**，而不是"文件里出现过一次"。节点用中间件正是为了不必逐条记得。
+
+## 网关的 WS 入口是另一套，别把两边搞混
+
+`galaxy_gateway/middleware.py` 的 `BearerAuthMiddleware` 也是 `BaseHTTPMiddleware`，
+**同样管不到 WS**。它的 docstring 原先写着自己覆盖 "the WebSocket upgrade handshake"、
+还给出 `?token=` 用法——两句都不成立，已按事实改正。
+
+网关 WS 的身份在**带内**：客户端连上后发一帧 `auth`
+（`galaxy_gateway/android/handlers/auth.py`），`device_register` 核对认证状态，
+未通过就拒绝登记（`INGRESS_AUTHENTICATION_FAILED`、`participation_eligible=false`）。
+实测过：不带任何令牌连 `/ws/device/{id}` 能握上手，但 `device_register` 被拒。
+**这是一套成立的设计**，只是和握手那一层无关。
+
+节点侧没有带内协议可依托，所以节点走握手判定。两边形状不同是有原因的，
+不要把其中一边的结论套到另一边。
+
 ## 令牌从哪来
 
 `core/auth.py` 的零配置自签令牌，落在 `$GALAXY_DATA_DIR/`。compose 里 `galaxy-data`
@@ -100,7 +186,9 @@ resp = await client.post(url, json=payload, headers=internal_headers_for(url))
 2. 会动手的节点：在 `scripts/gen_node_catalog.py` 的 `_ACTION_PERMISSIONS` 里声明动作白名单
    （**不要**直接改 `config/node_catalog.json`，那是生成产物，下次重新生成会被抹掉），
    然后每条会动手的路由调一次 `_require("<动作名>")`；
-3. 路由名 ≠ 动作名（`/type` ↔ `type_text`、`/key` ↔ `press_key`），映射要显式写出来。
+3. 路由名 ≠ 动作名（`/type` ↔ `type_text`、`/key` ↔ `press_key`），映射要显式写出来；
+4. 加 `@app.websocket` 端点时，调用方改用 `ws_auth_kwargs_for(url)`——
+   `tests/test_node_websocket_auth.py` 会扫出"有 WS 端点却没装认证"的节点。
 
 守卫在 `tests/test_all_node_http_surfaces_require_auth.py` 与
 `tests/test_node_http_surfaces_are_gated.py`。
@@ -117,5 +205,12 @@ python3 scripts/live_node_security_check.py Node_06_Filesystem
 
 它用 uvicorn 把节点起在真实端口上,用真实 HTTP 客户端逐条核对本文档的契约:
 `/health` 免认证、无令牌 401、错令牌 401、对令牌放行。任一条不符就非零退出。
+
+WS 面同样在核对之内(`--ws` 只跑这一段):真发握手,核对无令牌被拒、错令牌被拒、
+**带对令牌握得上**——最后这条是差分的另一半,少了它,把整条路堵死也会全绿。
+
+带 WS 端点的节点只有 `Node_95_WebRTC_Receiver`,而它 import 就要 aiortc。本机装不上时
+脚本打出"未验"并在结尾单列,**不算通过**;同时它总会用同一个 `install_node_auth` 起一个
+最小 app 验一遍机制本身,免得"WS 这层到底生效没有"在缺依赖的机器上无人回答。
 
 依赖 `uvicorn` 与 `httpx`;缺了会直接说,不会假装跳过。
