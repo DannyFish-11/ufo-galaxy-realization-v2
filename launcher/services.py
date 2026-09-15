@@ -757,11 +757,8 @@ class UnifiedWebUI:
                     }
                 )
 
-            # 和上面的 /api/status 返回的是**同一份** service_manager.get_status(),
-            # 而那条要鉴权、这条不要 —— 逐条挂 Depends 的典型漏法:挂上了一条,
-            # 旁边那条忘了,受保护的内容从没设防的那扇门原样出去。
             @self.app.get("/api/services")
-            async def launcher_services(auth: dict = Depends(_require_auth)):
+            async def launcher_services(auth: dict = Depends(_require_auth)):  # 与 /api/status 同一份数据,原先这条不鉴权
                 return JSONResponse(self.service_manager.get_status())
 
             # === 步骤 7：启动 uvicorn ===
