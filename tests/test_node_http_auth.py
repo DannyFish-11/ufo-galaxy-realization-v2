@@ -160,3 +160,90 @@ def test_the_device_control_service_attaches_it_at_the_single_chokepoint():
     )
     names = {c.func.id for c in ast.walk(fn) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
     assert "internal_auth_headers" in names, "_get_client 没有带上内部身份"
+
+
+# ── 真实环境里发现的:HTTP 错误不能被当成正常结果 ─────────────────────────────
+def test_a_non_2xx_from_a_node_becomes_a_structured_error():
+    """节点返回 401 时,调用方必须拿到带 ``success`` 的结构化失败,而不是对方的错误体。
+
+    这条是**真跑出来的**:用 uvicorn 把 Node_92 起在真实端口上,让
+    ``DeviceControlService`` 走真实 HTTP 打它,不带令牌时拿回来的是
+    ``{"detail": "Missing Authorization header"}`` —— 一个没有 ``success`` 键的字典,
+    被原样当成结果往上传。调用方查 ``result["success"]`` 会 KeyError,
+    而真正的原因(没带令牌)一个字都没提。
+
+    十个调用点此前都是直接 ``response.json()``,不看状态码。
+    """
+    import core.device_control_service as dcs
+
+    class _Resp:
+        status_code = 401
+
+        @staticmethod
+        def json():
+            return {"detail": "Missing Authorization header"}
+
+    out = dcs.DeviceControlService._parse(_Resp())
+    assert out["success"] is False
+    assert out["status_code"] == 401
+    assert "401" in out["error"] and "Missing Authorization" in out["error"]
+
+
+def test_a_2xx_body_passes_through_unchanged():
+    """门禁只管失败路径,正常结果原样返回 —— 否则会改变所有既有调用方的预期。"""
+    import core.device_control_service as dcs
+
+    class _Ok:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"success": True, "stdout": "x"}
+
+    assert dcs.DeviceControlService._parse(_Ok()) == {"success": True, "stdout": "x"}
+
+
+def test_a_non_json_error_body_does_not_crash_the_caller():
+    """对方不一定回 JSON(网关 502、反代的 HTML 错误页)。那时也要给出结构化失败。"""
+    import core.device_control_service as dcs
+
+    class _Html:
+        status_code = 502
+        text = "<html>Bad Gateway</html>"
+
+        @staticmethod
+        def json():
+            raise ValueError("not json")
+
+    out = dcs.DeviceControlService._parse(_Html())
+    assert out["success"] is False and out["status_code"] == 502
+
+
+def test_every_call_site_goes_through_the_parser():
+    """十个调用点必须都走 ``_parse`` —— 漏一处就是一条会 KeyError 的路径。"""
+    import ast
+    import inspect
+
+    import core.device_control_service as dcs
+
+    src = inspect.getsource(dcs)
+    tree = ast.parse(src)
+
+    # ``_parse`` 自己当然要调 response.json() —— 它就是那个统一出口。
+    # 要查的是**别的地方**还有没有绕过它。
+    parser = next(
+        n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "_parse"
+    )
+    inside_parser = {id(n) for n in ast.walk(parser)}
+
+    raw = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "json"
+        and isinstance(n.func.value, ast.Name)
+        and n.func.value.id == "response"
+        and id(n) not in inside_parser
+    ]
+    assert not raw, f"_parse 之外还有 {len(raw)} 处直接 response.json():行 {raw}"

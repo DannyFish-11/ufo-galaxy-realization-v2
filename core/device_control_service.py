@@ -72,6 +72,34 @@ class DeviceControlService:
         # HTTP 客户端
         self._client: Optional[httpx.AsyncClient] = None
 
+    @staticmethod
+    def _parse(response) -> Dict[str, Any]:
+        """把 HTTP 响应变成本服务的结果形状。
+
+        此前十处都是直接 ``response.json()``,不看状态码 —— 于是对方返回 401
+        ``{"detail": "Missing Authorization header"}`` 时,这个字典被原样当成结果
+        往上传。调用方查 ``result["success"]`` 会 KeyError,而真正的原因(没带令牌)
+        一个字都没提。
+
+        实测确认过:节点面接上鉴权之后,不带令牌的调用拿到的就是那个 detail 字典。
+        """
+        if response.status_code >= 400:
+            detail = ""
+            try:
+                body = response.json()
+                detail = body.get("detail") or body.get("error") or str(body)
+            except Exception:  # noqa: BLE001 — 对方不一定回 JSON
+                detail = (response.text or "")[:200]
+            return {
+                "success": False,
+                "error": f"node returned HTTP {response.status_code}: {detail}",
+                "status_code": response.status_code,
+            }
+        try:
+            return response.json()
+        except Exception as exc:  # noqa: BLE001
+            return {"success": False, "error": f"node returned non-JSON body: {exc}"}
+
     async def _get_client(self) -> httpx.AsyncClient:
         """获取 HTTP 客户端（带内部身份）。
 
@@ -139,7 +167,7 @@ class DeviceControlService:
                     f"{self.node_urls['auto_control']}/click",
                     json={"device_id": device_id, "platform": "windows", "x": x, "y": y, "clicks": clicks},
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info(f"Windows click: ({x}, {y}) -> {result}")
                 return result
 
@@ -149,7 +177,7 @@ class DeviceControlService:
                     f"{self.node_urls['auto_control']}/click",
                     json={"device_id": device_id, "platform": "android", "x": x, "y": y},
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info(f"Android click: ({x}, {y}) -> {result}")
                 return result
 
@@ -180,7 +208,7 @@ class DeviceControlService:
                     f"{self.node_urls['auto_control']}/input",
                     json={"device_id": device_id, "platform": "windows", "text": text},
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info(f"Windows input: {text[:20]}... -> {result}")
                 return result
 
@@ -189,7 +217,7 @@ class DeviceControlService:
                     f"{self.node_urls['auto_control']}/input",
                     json={"device_id": device_id, "platform": "android", "text": text},
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info(f"Android input: {text[:20]}... -> {result}")
                 return result
 
@@ -221,7 +249,7 @@ class DeviceControlService:
                     f"{self.node_urls['auto_control']}/scroll",
                     json={"device_id": device_id, "platform": "windows", "amount": scroll_amount},
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info(f"Windows scroll: {direction} -> {result}")
                 return result
 
@@ -230,7 +258,7 @@ class DeviceControlService:
                     f"{self.node_urls['auto_control']}/scroll",
                     json={"device_id": device_id, "platform": "android", "direction": direction},
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info(f"Android scroll: {direction} -> {result}")
                 return result
 
@@ -261,7 +289,7 @@ class DeviceControlService:
                 f"{self.node_urls['auto_control']}/screenshot",
                 json={"device_id": device_id, "platform": device.platform.value},
             )
-            result = response.json()
+            result = self._parse(response)
             logger.info(f"Screenshot: {device_id} -> {result.get('success', False)}")
             return result
 
@@ -332,7 +360,7 @@ class DeviceControlService:
                         f"{self.node_urls['desktop']}/launch_app",
                         json={"target": app_name},
                     )
-                    result = response.json()
+                    result = self._parse(response)
                 except Exception as _exc:  # noqa: BLE001
                     # 连不上也要如实说,不许静默变成"已打开"。
                     result = {
@@ -360,7 +388,7 @@ class DeviceControlService:
                 response = await client.post(
                     f"{self.node_urls['adb']}/start_app", json={"device_id": device_id, "package": package}
                 )
-                result = response.json()
+                result = self._parse(response)
                 logger.info("Android open_app: %s (%s) -> %s", app_name, package, result)
                 return result
 
@@ -389,7 +417,7 @@ class DeviceControlService:
                 f"{self.node_urls['auto_control']}/press_key",
                 json={"device_id": device_id, "platform": device.platform.value, "key": key},
             )
-            result = response.json()
+            result = self._parse(response)
             logger.info(f"Press key: {key} -> {result}")
             return result
 

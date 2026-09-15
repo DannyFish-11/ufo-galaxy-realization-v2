@@ -104,3 +104,18 @@ resp = await client.post(url, json=payload, headers=internal_headers_for(url))
 
 守卫在 `tests/test_all_node_http_surfaces_require_auth.py` 与
 `tests/test_node_http_surfaces_are_gated.py`。
+
+## 在真实环境里验一遍
+
+CI 和单测都跑在进程内(TestClient 走 ASGI transport,不经真实 socket、不跑 uvicorn 的
+HTTP 解析、不跑 lifespan)。要确认"容器起来之后到底行不行",得真起进程:
+
+```bash
+python3 scripts/live_node_security_check.py                 # 默认那几个敏感节点
+python3 scripts/live_node_security_check.py Node_06_Filesystem
+```
+
+它用 uvicorn 把节点起在真实端口上,用真实 HTTP 客户端逐条核对本文档的契约:
+`/health` 免认证、无令牌 401、错令牌 401、对令牌放行。任一条不符就非零退出。
+
+依赖 `uvicorn` 与 `httpx`;缺了会直接说,不会假装跳过。
