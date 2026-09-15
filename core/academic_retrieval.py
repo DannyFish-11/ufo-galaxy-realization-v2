@@ -356,7 +356,13 @@ class AcademicRetriever:
                 "save_to_memos": False,  # we ingest through RAGMemory instead
             }
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(f"{_NODE_97_URL}/search", json=payload)
+                from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
+                resp = await client.post(
+                    f"{_NODE_97_URL}/search",
+                    json=payload,
+                    headers=internal_headers_for(_NODE_97_URL),
+                )
                 resp.raise_for_status()
                 data = resp.json()
                 return data.get("papers", [])

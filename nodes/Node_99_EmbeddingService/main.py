@@ -53,6 +53,8 @@ _start_time = datetime.now()
 _local_cache: Dict[str, List[float]] = {}
 _LOCAL_CACHE_MAX = 10000  # bound the fallback cache to avoid unbounded growth
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title=f"Node {NODE_ID} - {NODE_NAME}", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +63,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_99_EmbeddingService")
 
 # ---------------------------------------------------------------------------
 # Redis cache helpers (optional)

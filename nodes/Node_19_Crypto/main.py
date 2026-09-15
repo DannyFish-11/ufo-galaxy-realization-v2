@@ -43,6 +43,10 @@ except BaseException as e:
 if HAS_FASTAPI:
     app = FastAPI(title="Node 19 - Crypto", version="2.0.0")
     app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+    # HTTP 面的身份认证。此前没有任何认证,且绑 0.0.0.0。
+    from nodes.common.node_auth import install_node_auth
+
+    install_node_auth(app, "Node_19_Crypto")
 else:
     app = None
 

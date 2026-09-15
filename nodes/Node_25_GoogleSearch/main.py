@@ -110,6 +110,10 @@ class GoogleSearchNode:
             description="一个用于执行Google搜索的Galaxy节点",
             version="1.0.0"
         )
+        # HTTP 面的身份认证。这个节点的 app 是实例属性,所以装在构造之后。
+        from nodes.common.node_auth import install_node_auth
+
+        install_node_auth(self._app, "Node_25_GoogleSearch")
         self._setup_routes()
         self.status = NodeStatus.RUNNING
         self.logger.info(f"节点 {self.config.node_name} 初始化完成，状态: {self.status.value}")

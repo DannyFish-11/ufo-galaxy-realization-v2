@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.node_auth import install_node_auth
 from enhancements.multidevice.device_protocol import (
     AIPMessage, MessageType, DeviceInfo, DeviceStatus, ErrorCode,
     MessageBuilder, ProtocolValidator, ProtocolHandler, MessageRouter, ProtocolError
@@ -723,6 +724,8 @@ def create_app(coordinator: Optional[DeviceCoordinator] = None) -> FastAPI:
     async def shutdown():
         await coord.stop()
     
+    install_node_auth(app, "enhancements.multidevice.device_coordinator")
+
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for device communication"""

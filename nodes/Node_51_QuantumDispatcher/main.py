@@ -552,12 +552,18 @@ async def lifespan(app: FastAPI):
     if dispatcher:
         await dispatcher.http_client.aclose()
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Quantum Task Dispatcher - NL2QC Translation",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_51_QuantumDispatcher")
 
 app.add_middleware(
     CORSMiddleware,

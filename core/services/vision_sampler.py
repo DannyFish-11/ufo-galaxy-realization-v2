@@ -204,7 +204,11 @@ async def run_sampling_session(
         import aiohttp  # type: ignore
 
         t_end = time.monotonic() + duration
-        async with aiohttp.ClientSession() as session:
+        from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
+        # 会话级带上身份:Node_95 的 HTTP 面现在也有鉴权。按**目标地址**取 header,
+        # 外部地址会得到空字典,所以不会把内部令牌发给第三方。
+        async with aiohttp.ClientSession(headers=internal_headers_for(node_url)) as session:
             while time.monotonic() < t_end:
                 frame_start = time.monotonic()
                 raw = await _fetch_frame(session, device_id, node_url)

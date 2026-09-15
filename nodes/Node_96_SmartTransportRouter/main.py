@@ -159,7 +159,13 @@ class WebSocketTransport(BaseTransport):
         logger.info(f"使用 WebSocket 发送数据到 {endpoint}")
         try:
             import websockets
-            async with websockets.connect(endpoint, open_timeout=10) as ws:
+
+            from core.internal_auth import ws_auth_kwargs_for
+
+            # endpoint 可能是本仓的节点,也可能是外部服务:令牌按目标地址决定带不带。
+            async with websockets.connect(
+                endpoint, open_timeout=10, **ws_auth_kwargs_for(endpoint)
+            ) as ws:
                 await ws.send(json.dumps(data, ensure_ascii=False))
             logger.info(f"WebSocket 发送成功: {json.dumps(data, ensure_ascii=False)}")
             return True
@@ -313,8 +319,14 @@ class SmartTransportRouter:
 
 
 # --- 6. Web 服务 (FastAPI) ---
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Smart Transport Router Node", version="1.0.0")
 router: Optional[SmartTransportRouter] = None
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_96_SmartTransportRouter")
 
 @app.on_event("startup")
 async def startup_event():

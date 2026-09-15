@@ -30,6 +30,8 @@ MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "10"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 77 - TaskScheduler", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -38,6 +40,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_77_TaskScheduler")
 
 _start_time = datetime.now()
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)

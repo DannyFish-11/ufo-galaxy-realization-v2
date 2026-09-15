@@ -380,9 +380,13 @@ class RAGMemory:
             try:
                 import httpx
 
+                from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
+                _url = "http://localhost:8080/memory/recall"
                 async with httpx.AsyncClient(timeout=5) as client:
                     response = await client.post(
-                        "http://localhost:8080/memory/recall",
+                        _url,
+                        headers=internal_headers_for(_url),
                         json={"query": query, "limit": top_k - len(chunks)},
                     )
                     if response.status_code == 200:

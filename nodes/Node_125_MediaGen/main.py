@@ -461,6 +461,12 @@ try:
 
     _health_app = _FastAPI(title="Node_125_MediaGen", lifespan=_lifespan)
 
+    # HTTP 面的身份认证。这个节点的 app 叫 _health_app,但它不只有探针 ——
+    # 还有 POST /generate(会真的去生成媒体)与 /status,所以同样要认证。
+    from nodes.common.node_auth import install_node_auth
+
+    install_node_auth(_health_app, "Node_125_MediaGen")
+
     class _GenerateRequest(_BaseModel):
         media_type: str
         prompt: str

@@ -6,18 +6,19 @@ SECURITY: This node is in Layer 3 (Physical) and can ONLY be accessed by Node 50
 It cannot communicate with other L3 nodes or the internet.
 """
 
-import os
 import asyncio
 import logging
+import os
 import subprocess
-from typing import Dict, Optional, List
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Dict, List, Optional
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import uvicorn
+
 from nodes.common.cors_config import get_cors_origins
 
 # =============================================================================
@@ -316,7 +317,7 @@ class ADBController:
         """Take screenshot."""
         import base64
         import tempfile
-        
+
         # Create temp file
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
             temp_path = f.name
@@ -449,12 +450,26 @@ async def lifespan(app: FastAPI):
     logger.info(f"Shutting down Node {NODE_ID}")
     await adb_controller.stop()
 
+from nodes.common.action_gate import action_guard
+
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title=f"Galaxy Node {NODE_ID}: {NODE_NAME}",
     description="Android ADB Wrapper - Physical Layer Node (ISOLATED)",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# HTTP 面的身份认证。权限闸回答"这个动作允许吗",这一层回答"调用方是谁"——
+# 此前这个节点两个问题都没有答案。实现在 nodes.common.node_auth,
+# 判定复用 core.auth(网关与 launcher 早就在用的那一套)。
+install_node_auth(app, "Node_33_ADB")
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_33_ADB")
 
 app.add_middleware(
     CORSMiddleware,
@@ -503,6 +518,7 @@ async def health_check():
 @app.post("/execute", response_model=ADBResponse)
 async def execute_action(request: ADBRequest):
     """Execute an ADB action."""
+    _require(str(getattr(request, "action", "") or ""))
     start_time = datetime.now()
     
     try:
@@ -529,6 +545,7 @@ async def execute_action(request: ADBRequest):
 @app.get("/devices")
 async def get_devices():
     """Get connected devices."""
+    _require("devices")
     return await adb_controller.execute("devices", {})
 
 @app.get("/")

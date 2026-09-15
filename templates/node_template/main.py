@@ -46,6 +46,13 @@ except ImportError:  # running in isolation without the full project tree
     def get_cors_origins():
         return ["*"]
 
+# 身份认证(HTTP + WebSocket 两层)。见 docs/NODE_HTTP_SECURITY_CONTRACT.md。
+#
+# 这一条**不给 ImportError 兜底**:上面的 CORS 兜底成 ["*"] 只是放宽了浏览器来源,
+# 而认证兜底成 no-op 等于这层没装 —— 一个"在没有完整工程树时也能跑起来"的便利,
+# 不该以"跑起来的是个没有认证的节点"为代价。
+from nodes.common.node_auth import install_node_auth
+
 logger = logging.getLogger("Node_XXX_YourNodeName")
 
 # ---------------------------------------------------------------------------
@@ -104,6 +111,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 身份认证(HTTP + WebSocket 两层)。见 docs/NODE_HTTP_SECURITY_CONTRACT.md。
+# **不要删这一行**:模板是每个新节点的起点,这里少一行,等于每个新节点默认裸奔。
+install_node_auth(app, NODE_ID)
 
 
 # ---------------------------------------------------------------------------

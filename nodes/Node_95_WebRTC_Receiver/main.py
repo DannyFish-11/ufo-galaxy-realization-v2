@@ -115,7 +115,13 @@ async def _get_webrtc_ingress_bridge():
             _webrtc_ingress_bridge = None
     return _webrtc_ingress_bridge
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node_95: WebRTC Receiver", version="2.1 (Hybrid-C)")
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_95_WebRTC_Receiver")
 
 # ============================================================================
 # 全局状态

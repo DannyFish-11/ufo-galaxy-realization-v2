@@ -820,6 +820,12 @@ def create_device_api():
 
     app = FastAPI(title="Galaxy Device Manager API", version="2.0")
 
+    # 这个工厂当前没有调用方。装上不是因为它现在暴露着,而是因为下一个把它接起来的人
+    # 不会想到要补这一层 —— 那正是 core/device_status_api.py 漏掉认证的方式。
+    from nodes.common.node_auth import install_node_auth  # noqa: PLC0415
+
+    install_node_auth(app, "core.device_agent_manager")
+
     class RegisterDeviceRequest(BaseModel):
         device_id: str
         device_type: str

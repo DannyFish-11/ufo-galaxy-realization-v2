@@ -291,6 +291,8 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Node_72_KnowledgeBase FastAPI 关闭")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title="Node_72_KnowledgeBase",
     description="知识库管理服务 API",
@@ -304,6 +306,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_72_KnowledgeBase")
 
 # -- routes ------------------------------------------------------------------
 

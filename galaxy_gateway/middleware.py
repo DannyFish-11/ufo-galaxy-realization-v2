@@ -203,16 +203,27 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     Optional Bearer token middleware for the Galaxy Gateway.
 
     Enabled when ``GALAXY_AUTH_ENABLED=true`` and ``GALAXY_API_TOKEN`` is set.
-    All HTTP requests (REST and the WebSocket upgrade handshake) that carry a
-    path not in the exempt list must include::
+    All HTTP requests with a path not in the exempt list must include::
 
         Authorization: Bearer <token>
 
-    Alternatively WebSocket clients may pass the token as a query parameter::
-
-        /ws/device/my_device?token=<token>
-
     Rejected requests receive HTTP 401 with a JSON error payload.
+
+    **它管不到 WebSocket。** 这里原先写着"REST and the WebSocket upgrade
+    handshake",还给出 ``/ws/device/my_device?token=<token>`` 的用法 —— 两句都不成立:
+    本类继承 ``BaseHTTPMiddleware``,而它**只处理 ``scope["type"] == "http"``**;
+    WS 握手的 scope 是 ``"websocket"``,整条不经过 ``dispatch()``。实测(最小复现):
+    同一个 app 上 ``GET /api/x`` 401,``WS /ws/device/{id}`` 不带令牌照样连上。
+    query 参数那条路本类也从来没有读过。
+
+    WS 入口的身份**不在握手这一层**,在带内:客户端连上后发一帧 ``auth``
+    (``galaxy_gateway/android/handlers/auth.py``),``device_register`` 会核对认证
+    状态并在未通过时拒绝登记(``INGRESS_AUTHENTICATION_FAILED``,
+    ``participation_eligible=false``)。这是一套**成立**的设计,但它和本类无关 ——
+    把它写进本类的 docstring,会让人以为握手已经把关,从而在新增 WS 端点时不再接带内那一层。
+
+    节点侧不走这个形状:见 ``nodes/common/node_auth.py``,那里的 WS 是在握手阶段
+    用一层纯 ASGI 中间件判定的(节点面没有带内协议可依托)。
     The middleware is transparent (no-op) when auth is explicitly disabled
     so that existing clients continue to work without modification.
     """

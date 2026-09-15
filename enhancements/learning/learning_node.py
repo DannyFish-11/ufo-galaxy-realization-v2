@@ -292,6 +292,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# 身份认证(HTTP + WebSocket 两层)。这个模块不在 nodes/ 下,但它 `uvicorn.run` 起一个
+# 带 /learn、/feedback 写接口和一条 @app.websocket("/ws") 的 HTTP 面 —— 判据是
+# "有没有对外开 HTTP 面",不是"目录在哪"。见 docs/NODE_HTTP_SECURITY_CONTRACT.md。
+from nodes.common.node_auth import install_node_auth  # noqa: E402
+
+install_node_auth(app, "enhancements.learning.learning_node")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,

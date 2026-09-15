@@ -55,6 +55,7 @@ import httpx
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 
+from core.internal_auth import ws_auth_kwargs_for
 from core.port_config import get_node_port, get_service_port
 from galaxy_gateway.cross_device_switch import (
     ERROR_CODE_CROSS_DEVICE_DISABLED,
@@ -467,7 +468,12 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
 
     async def _run_session() -> None:
         """Inner coroutine so we can wrap with asyncio.wait_for for the timeout."""
-        async with websockets.connect(node95_ws_url, open_timeout=NODE95_CONNECT_TIMEOUT_S) as node_ws:
+        # Node_95 的 WS 面也在鉴权之内,不带令牌会在握手阶段被 403 回绝。
+        async with websockets.connect(
+            node95_ws_url,
+            open_timeout=NODE95_CONNECT_TIMEOUT_S,
+            **ws_auth_kwargs_for(node95_ws_url),
+        ) as node_ws:
             emit_gateway_log(
                 "signaling_tunnel_open",
                 trace_ctx=trace_ctx,

@@ -283,13 +283,21 @@
       "purpose": "智能家居设备控制",
       "permissions": {
         "actions": [
+          "control_device",
+          "get_device",
+          "ha_call",
+          "ha_states",
           "health",
           "help",
+          "list_devices",
+          "list_scenes",
           "off",
+          "register_device",
           "set_brightness",
           "set_temperature",
           "status",
-          "toggle"
+          "toggle",
+          "trigger_scene"
         ]
       }
     },
@@ -480,18 +488,28 @@
         "actions": [
           "click",
           "double_click",
+          "drag",
           "health",
           "help",
+          "hold_key",
           "hotkey",
+          "launch_app",
           "locate",
+          "middle_click",
+          "mouse_down",
+          "mouse_up",
           "move",
+          "open_url",
           "position",
           "press",
           "screen_size",
           "screenshot",
           "scroll",
           "status",
-          "type"
+          "triple_click",
+          "type",
+          "wait",
+          "zoom"
         ]
       }
     },
@@ -742,7 +760,8 @@
           "register_device",
           "reset",
           "simulate",
-          "status"
+          "status",
+          "update_twin"
         ]
       }
     },
@@ -1243,12 +1262,18 @@
       "purpose": "Shell 命令执行器",
       "permissions": {
         "actions": [
+          "background",
+          "cwd",
+          "env",
           "execute",
-          "script",
-          "list_processes",
+          "health",
+          "help",
           "kill",
+          "list_processes",
+          "run",
+          "script",
           "status",
-          "help"
+          "which"
         ]
       }
     },
@@ -1273,14 +1298,26 @@
       "purpose": "Linux 桌面自动化",
       "permissions": {
         "actions": [
+          "click",
+          "clipboard",
+          "drag",
           "get",
+          "get_active_window",
+          "get_mouse_position",
+          "get_screen_size",
           "health",
           "help",
           "list",
           "move",
+          "move_mouse",
+          "press_key",
           "resize",
+          "screenshot",
+          "scroll",
           "set",
-          "status"
+          "status",
+          "type_text",
+          "window_action"
         ]
       }
     },

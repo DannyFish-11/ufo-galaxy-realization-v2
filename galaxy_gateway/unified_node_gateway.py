@@ -34,6 +34,11 @@ logger = logging.getLogger("UnifiedGateway")
 
 app = FastAPI(title="Galaxy Unified Node Gateway")
 
+# 身份认证。这个 app 开的是 ``POST /api/nodes/{node_id}/execute`` —— 任意节点、任意命令。
+from galaxy_gateway.middleware import BearerAuthMiddleware  # noqa: E402
+
+app.add_middleware(BearerAuthMiddleware)
+
 # 节点实例缓存
 node_instances: Dict[str, Any] = {}
 

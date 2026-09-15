@@ -15,19 +15,24 @@ deployed independently.  If consolidation is ever needed, those endpoints should
 ported to Node_33 first, and Node_34 refocused exclusively on scrcpy screen mirroring.
 """
 import asyncio
+import base64
 import os
 import re
-import subprocess
 import shutil
+import subprocess
 import tempfile
-import base64
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from nodes.common.action_gate import action_guard
 from nodes.common.cors_config import get_cors_origins
+
+from nodes.common.node_auth import install_node_auth
 
 app = FastAPI(title="Node 34 - Scrcpy", version="2.0.0")
 app.add_middleware(
@@ -37,6 +42,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。权限闸回答"这个动作允许吗",这一层回答"调用方是谁"——
+# 此前这个节点两个问题都没有答案。实现在 nodes.common.node_auth,
+# 判定复用 core.auth(网关与 launcher 早就在用的那一套)。
+install_node_auth(app, "Node_34_Scrcpy")
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_34_Scrcpy")
 
 # =============================================================================
 # Configuration
@@ -128,6 +143,7 @@ async def health():
 @app.get("/devices")
 async def list_devices():
     """列出所有连接的 Android 设备"""
+    _require("devices")
     result = run_adb(["devices", "-l"])
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to list devices"))
@@ -209,6 +225,7 @@ def _resolve_output_path(requested: Optional[str]) -> str:
 @app.post("/screenshot")
 async def screenshot(request: ScreenshotRequest):
     """截取设备屏幕"""
+    _require("screenshot")
     output_path = _resolve_output_path(request.output_path)
     cmd = [ADB_PATH]
     if request.device:
@@ -229,6 +246,7 @@ async def screenshot(request: ScreenshotRequest):
 @app.post("/tap")
 async def tap(request: TapRequest):
     """点击屏幕指定位置"""
+    _require("tap")
     result = run_adb(["shell", "input", "tap", str(request.x), str(request.y)], device=request.device)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Tap failed"))
@@ -237,6 +255,7 @@ async def tap(request: TapRequest):
 @app.post("/swipe")
 async def swipe(request: SwipeRequest):
     """滑动屏幕"""
+    _require("swipe")
     result = run_adb([
         "shell", "input", "swipe",
         str(request.x1), str(request.y1),
@@ -250,6 +269,7 @@ async def swipe(request: SwipeRequest):
 @app.post("/input_text")
 async def input_text(request: InputTextRequest):
     """输入文本"""
+    _require("input_text")
     escaped_text = request.text.replace(" ", "%s").replace("'", "\\'")
     result = run_adb(["shell", "input", "text", escaped_text], device=request.device)
     if not result["success"]:
@@ -259,6 +279,7 @@ async def input_text(request: InputTextRequest):
 @app.post("/key_event")
 async def key_event(request: KeyEventRequest):
     """发送按键事件 (3=HOME, 4=BACK, 24=VOL_UP, 25=VOL_DOWN, 26=POWER)"""
+    _require("key_event")
     result = run_adb(["shell", "input", "keyevent", str(request.keycode)], device=request.device)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Key event failed"))
@@ -267,22 +288,26 @@ async def key_event(request: KeyEventRequest):
 @app.post("/press_home")
 async def press_home(request: DeviceRequest):
     """按 HOME 键"""
+    _require("press_home")
     return await key_event(KeyEventRequest(device=request.device, keycode=3))
 
 @app.post("/press_back")
 async def press_back(request: DeviceRequest):
     """按返回键"""
+    _require("press_back")
     return await key_event(KeyEventRequest(device=request.device, keycode=4))
 
 @app.post("/shell")
 async def shell_command(request: ShellRequest):
     """执行 shell 命令"""
+    _require("shell")
     result = run_adb(["shell", request.command], device=request.device, timeout=60)
     return result
 
 @app.post("/install")
 async def install_apk(request: InstallRequest):
     """安装 APK"""
+    _require("install")
     if not os.path.exists(request.apk_path):
         raise HTTPException(status_code=404, detail=f"APK not found: {request.apk_path}")
     result = run_adb(["install", "-r", request.apk_path], device=request.device, timeout=120)
@@ -293,6 +318,7 @@ async def install_apk(request: InstallRequest):
 @app.get("/packages")
 async def list_packages(device: Optional[str] = None):
     """列出已安装的应用"""
+    _require("packages")
     result = run_adb(["shell", "pm", "list", "packages"], device=device)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
@@ -302,6 +328,7 @@ async def list_packages(device: Optional[str] = None):
 @app.get("/device_info")
 async def device_info(device: Optional[str] = None):
     """获取设备信息"""
+    _require("device_info")
     info = {}
     result = run_adb(["shell", "getprop", "ro.product.model"], device=device)
     if result["success"]:
@@ -317,6 +344,7 @@ async def device_info(device: Optional[str] = None):
 @app.post("/mcp/call")
 async def mcp_call(request: dict):
     """MCP 工具调用接口"""
+    _require(str((request or {}).get("tool") or ""))
     tool = request.get("tool", "")
     params = request.get("params", {})
     

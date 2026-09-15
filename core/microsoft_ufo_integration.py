@@ -642,6 +642,11 @@ def create_ufo_api():
 
     app = FastAPI(title="Galaxy - Microsoft UFO Integration", version="2.0")
 
+    # 同 create_device_api:当前没有调用方,但它开的是点鼠标、敲键盘的接口。
+    from nodes.common.node_auth import install_node_auth  # noqa: PLC0415
+
+    install_node_auth(app, "core.microsoft_ufo_integration")
+
     class ClickRequest(BaseModel):
         x: int
         y: int

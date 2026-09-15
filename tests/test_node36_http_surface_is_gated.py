@@ -29,10 +29,21 @@ import nodes.Node_36_UIAWindows.main as node36  # noqa: E402
 NODE_NUM = 36
 
 
+#: 节点 HTTP 面现在还有一层身份认证(见 tests/test_node_http_auth.py)。这些用例要验的是
+#: **动作权限闸**,所以必须带令牌把认证那一层让开 —— 否则它们会因为 401 而红,
+#: 或者更糟:断言放宽成接受 401 之后"通过了",而权限闸从此无人测试。
+_TEST_TOKEN = "test-token-for-action-gate"
+
+
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("GALAXY_API_TOKEN", _TEST_TOKEN)
     perms.reset_cache()
-    yield fastapi_testclient.TestClient(node36.app, raise_server_exceptions=False)
+    yield fastapi_testclient.TestClient(
+        node36.app,
+        raise_server_exceptions=False,
+        headers={"Authorization": f"Bearer {_TEST_TOKEN}"},
+    )
     perms.reset_cache()
 
 

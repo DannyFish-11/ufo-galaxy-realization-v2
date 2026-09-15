@@ -317,12 +317,18 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Node 82 shutdown complete")
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title="Node 82: Network Guard",
     description="网络监控与防护 - 实时监控、流量分析、安全防护",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# HTTP 面的身份认证。此前这个节点的 HTTP 面没有任何认证,且绑 0.0.0.0。
+# 实现在 nodes.common.node_auth,判定复用 core.auth(网关与 launcher 早就在用)。
+install_node_auth(app, "Node_82_NetworkGuard")
 
 app.add_middleware(
     CORSMiddleware,

@@ -5,14 +5,15 @@ Node 27: SmartHome - 智能家居控制服务节点
 支持 Home Assistant 直连（长尾厂商如 Tuya 经 HA 集成桥接），并提供本地
 in-memory 设备回退。
 """
-import os
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from nodes.common.cors_config import get_cors_origins
 
 try:
@@ -40,6 +41,10 @@ _scenes: Dict[str, Dict[str, Any]] = {}
 
 stats: Dict[str, int] = {"commands_sent": 0, "ha_calls": 0, "error_count": 0}
 
+from nodes.common.action_gate import action_guard
+
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 27 - SmartHome", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +53,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。权限闸回答"这个动作允许吗",这一层回答"调用方是谁"——
+# 此前这个节点两个问题都没有答案。实现在 nodes.common.node_auth,
+# 判定复用 core.auth(网关与 launcher 早就在用的那一套)。
+install_node_auth(app, "Node_27_SmartHome")
+
+# HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
+# nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对
+# 统一执行器那条路生效。
+_require = action_guard("Node_27_SmartHome")
 
 
 # ─── 工具函数 ─────────────────────────────────────────────────────────────────
@@ -170,6 +185,7 @@ async def status():
 @app.get("/devices")
 async def list_devices():
     """列出所有已知设备。"""
+    _require("list_devices")
     return {
         "success": True,
         "devices": list(_devices.values()),
@@ -180,6 +196,7 @@ async def list_devices():
 @app.post("/devices/register")
 async def register_device(request: RegisterDeviceRequest):
     """注册新设备到内存注册表。"""
+    _require("register_device")
     device = {
         "device_id": request.device_id,
         "name": request.name,
@@ -197,6 +214,7 @@ async def register_device(request: RegisterDeviceRequest):
 @app.get("/devices/{device_id}")
 async def get_device(device_id: str):
     """获取指定设备的详细信息。"""
+    _require("get_device")
     device = _devices.get(device_id)
     if not device:
         raise HTTPException(
@@ -209,6 +227,7 @@ async def get_device(device_id: str):
 @app.post("/devices/control")
 async def control_device(request: ControlDeviceRequest):
     """控制设备（on/off/set_brightness 等）。如果配置了 HA，优先转发。"""
+    _require("control_device")
     stats["commands_sent"] += 1
     device = _devices.get(request.device_id)
 
@@ -258,12 +277,14 @@ async def control_device(request: ControlDeviceRequest):
 @app.get("/scenes")
 async def list_scenes():
     """列出所有场景。"""
+    _require("list_scenes")
     return {"success": True, "scenes": list(_scenes.values()), "count": len(_scenes)}
 
 
 @app.post("/scenes/trigger")
 async def trigger_scene(request: TriggerSceneRequest):
     """触发指定场景。如果配置了 HA，优先通过 HA 触发。"""
+    _require("trigger_scene")
     if HA_URL and HA_TOKEN:
         result = await _ha_post(f"/services/scene/turn_on", {"entity_id": request.scene_id})
         return {"success": True, "result": result, "source": "home_assistant"}
@@ -280,6 +301,7 @@ async def trigger_scene(request: TriggerSceneRequest):
 @app.post("/ha/call")
 async def ha_call(request: HACallRequest):
     """直接调用 Home Assistant 服务。需要 HA 配置。"""
+    _require("ha_call")
     payload: Dict[str, Any] = dict(request.data)
     if request.entity_id:
         payload["entity_id"] = request.entity_id
@@ -290,6 +312,7 @@ async def ha_call(request: HACallRequest):
 @app.get("/ha/states")
 async def ha_states():
     """获取 Home Assistant 所有实体状态。需要 HA 配置。"""
+    _require("ha_states")
     states = await _ha_get("/states")
     return {"success": True, "states": states, "count": len(states)}
 

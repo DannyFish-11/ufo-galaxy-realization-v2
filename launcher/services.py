@@ -758,7 +758,7 @@ class UnifiedWebUI:
                 )
 
             @self.app.get("/api/services")
-            async def launcher_services():
+            async def launcher_services(auth: dict = Depends(_require_auth)):  # 与 /api/status 同一份数据,原先这条不鉴权
                 return JSONResponse(self.service_manager.get_status())
 
             # === 步骤 7：启动 uvicorn ===

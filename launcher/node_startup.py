@@ -712,10 +712,23 @@ class NodeSystemLauncher:
                 "port": port,
                 "status": "running",
             }
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+            # 带上内部身份:这条打的是**网关**的 /api/v1/nodes/register,而网关的鉴权
+            # 中间件默认就是开的(core/auth.py 的 is_auth_enabled 默认 True),
+            # 这个路径也不在豁免表里 —— 也就是说不带令牌时它一直在 401,
+            # 而下面那个 except 把失败写成 debug "可忽略",于是从来没人看见。
+            from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=2),
+                headers=internal_headers_for(url),
+            ) as session:
                 async with session.post(url, json=payload) as resp:
                     if resp.status < 400:
                         logger.debug("节点 %s 已注册到运行时注册表", node_name)
+                    else:
+                        # 原来只在成功时记一行,失败悄无声息。401 和"网关没起来"
+                        # 是完全不同的两件事,看不见就没法区分。
+                        logger.debug("注册节点 %s 到运行时注册表被拒: HTTP %s", node_name, resp.status)
         except Exception as _exc:
             logger.debug("注册节点 %s 到运行时注册表失败（可忽略）: %s", node_name, _exc)
 

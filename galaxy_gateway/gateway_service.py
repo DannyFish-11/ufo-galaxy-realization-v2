@@ -60,6 +60,10 @@ def _build_standalone_app() -> FastAPI:
         allow_methods=get_cors_methods(),
         allow_headers=get_cors_headers(),
     )
+    # 身份认证:独立跑时也要有,和 galaxy_gateway/app.py 同一份中间件。
+    from galaxy_gateway.middleware import BearerAuthMiddleware  # noqa: PLC0415
+
+    standalone.add_middleware(BearerAuthMiddleware)
     # 路由注册在模块底部定义(那里才拿得到各 _impl 函数),此处按名字晚绑定调用。
     _register_standalone_routes(standalone)
     return standalone
