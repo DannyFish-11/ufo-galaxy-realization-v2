@@ -21,10 +21,17 @@ from pydantic import BaseModel
 
 from nodes.common.cors_config import get_cors_origins
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(title="Node 36 - UIAWindows", version="2.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
+
+# HTTP 面的身份认证。权限闸回答"这个动作允许吗",这一层回答"调用方是谁"——
+# 此前这个节点两个问题都没有答案。实现在 nodes.common.node_auth,
+# 判定复用 core.auth(网关与 launcher 早就在用的那一套)。
+install_node_auth(app, "Node_36_UIAWindows")
 
 # 检测是否在 Windows 上运行
 IS_WINDOWS = sys.platform == "win32"

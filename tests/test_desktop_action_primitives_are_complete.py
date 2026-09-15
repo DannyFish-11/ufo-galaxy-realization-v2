@@ -13,13 +13,34 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+#: 这些用例要验的是 ``launch_app`` 的注入防护与可执行文件白名单。节点 HTTP 面
+#: 现在还有一层身份认证(见 tests/test_node_http_auth.py),不带令牌会先被 401 拦掉 ——
+#: 那时断言 ``body["success"] is False`` 会因为 KeyError 而红,**而注入防护根本没被执行到**。
+#:
+#: 所以这里带上令牌:把认证那一层让开,好让这些用例真的打到它们要验的代码。
+#: 只放宽断言去接受 401 是不行的 —— 那样它们会因为"被拦在门外"而通过,
+#: 注入防护从此无人测试,且没有任何现象。
+_TEST_TOKEN = "test-token-desktop-primitives"
+
 
 @pytest.fixture(scope="module")
 def client():
     import importlib
 
+    # module 作用域的 fixture 用不了 monkeypatch,所以自己收尾:设上、用完还原。
+    # 直接留在 os.environ 里会泄漏给会话后面的用例。
+    import os
+
+    _prev = os.environ.get("GALAXY_API_TOKEN")
+    os.environ["GALAXY_API_TOKEN"] = _TEST_TOKEN
     m = importlib.import_module("nodes.Node_45_DesktopAuto.main")
-    return TestClient(m.app)
+    try:
+        yield TestClient(m.app, headers={"Authorization": f"Bearer {_TEST_TOKEN}"})
+    finally:
+        if _prev is None:
+            os.environ.pop("GALAXY_API_TOKEN", None)
+        else:
+            os.environ["GALAXY_API_TOKEN"] = _prev
 
 
 @pytest.fixture(scope="module")

@@ -73,9 +73,20 @@ class DeviceControlService:
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """获取 HTTP 客户端"""
+        """获取 HTTP 客户端（带内部身份）。
+
+        这个服务直接打节点的 HTTP 端点（Node_92 的 ``/click`` 等）。节点面接上鉴权
+        之后，不带令牌的调用会在自己的系统里被 401 —— 安全没加上多少，先把功能
+        打断了。令牌取自 ``core.internal_auth``（零配置自签，compose 里各容器共享
+        同一份），显式配置优先。
+
+        **装在这一个工厂上**，而不是 8 个调用点各加一次：漏一处就是一条会 401 的
+        路径，而且只在真被调用时才暴露。
+        """
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=30.0)
+            from core.internal_auth import internal_auth_headers  # noqa: PLC0415
+
+            self._client = httpx.AsyncClient(timeout=30.0, headers=internal_auth_headers())
         return self._client
 
     # =========================================================================

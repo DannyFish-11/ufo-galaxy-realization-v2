@@ -319,6 +319,8 @@ async def lifespan(app: FastAPI):
 
 from nodes.common.action_gate import action_guard
 
+from nodes.common.node_auth import install_node_auth
+
 app = FastAPI(
     title="Node_74_DigitalTwin",
     description="数字孪生节点 API",
@@ -332,6 +334,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# HTTP 面的身份认证。权限闸回答"这个动作允许吗",这一层回答"调用方是谁"——
+# 此前这个节点两个问题都没有答案。实现在 nodes.common.node_auth,
+# 判定复用 core.auth(网关与 launcher 早就在用的那一套)。
+install_node_auth(app, "Node_74_DigitalTwin")
 
 # HTTP 面的动作权限闸。判定在 core.node_action_permissions,接线在
 # nodes.common.action_gate —— 此前这一面一道门都没有,manifest 只对

@@ -128,6 +128,23 @@ LIVE_CASES = [
 ]
 
 
+#: 节点 HTTP 面现在还有一层身份认证(见 tests/test_node_http_auth.py)。这些用例要验的是
+#: **动作权限闸**,所以必须带令牌把认证那一层让开 —— 否则它们会因为 401 而红,
+#: 或者更糟:断言放宽成接受 401 之后"通过了",而权限闸从此无人测试。
+_TEST_TOKEN = "test-token-for-action-gate"
+
+
+@pytest.fixture(autouse=True)
+def _token_env(monkeypatch):
+    """用 monkeypatch 设令牌,**不要**直接改 os.environ。
+
+    最初这里是 ``os.environ["GALAXY_API_TOKEN"] = ...``,于是这个变量泄漏给整个
+    会话后面的用例 —— ``test_routes_import.py`` 单跑是绿的、跟在这后面跑就红。
+    我的测试改变了别人的结果,和之前那个模块级 uvicorn 桩是同一类错误。
+    """
+    monkeypatch.setenv("GALAXY_API_TOKEN", _TEST_TOKEN)
+
+
 def _client(module_path):
     testclient = pytest.importorskip("fastapi.testclient")
     try:
@@ -135,7 +152,11 @@ def _client(module_path):
             mod = importlib.import_module(module_path)
     except Exception as exc:  # noqa: BLE001 — 缺可选依赖的节点跳过,不是失败
         pytest.skip(f"{module_path} 导入不了(缺依赖): {type(exc).__name__}")
-    return testclient.TestClient(mod.app, raise_server_exceptions=False)
+    return testclient.TestClient(
+        mod.app,
+        raise_server_exceptions=False,
+        headers={"Authorization": f"Bearer {_TEST_TOKEN}"},
+    )
 
 
 @pytest.mark.parametrize("num,mod,path,body,action", LIVE_CASES, ids=lambda v: str(v))
