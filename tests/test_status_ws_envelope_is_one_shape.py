@@ -67,9 +67,8 @@ def device_status_client():
     一个字都没验到**。把断言放宽成"接受被拒"是不行的:那样它会因为"被拦在门外"
     而通过,两个 /ws/status 的形状从此无人比对。所以带上令牌,真的连进去取那一帧。
     """
-    from tests.conftest import GALAXY_TEST_API_TOKEN
-
     from core.device_status_api import app as device_app
+    from tests.conftest import GALAXY_TEST_API_TOKEN
 
     return TestClient(device_app, headers={"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"})
 
