@@ -21,19 +21,9 @@
  * 讲的事一件没丢 —— 全在展开态里,一条不少地写着话。
  *
  */
-import type { AmbientAction, DeviceRow, ModalityState, ModalityView, PerceptionView, TierView } from '../types';
+import type { AmbientAction, DeviceRow, ModalityView, PerceptionView, TierView } from '../types';
 import { LIT_CAPACITY, createGalaxy } from './galaxy';
-
-/** 状态 → 离墙多远。五档,不是布尔 —— 「闭着」和「没有」是两件事。 */
-const ELEVATION: Record<ModalityState, string> = {
-  live: 'up',
-  idle: 'up',
-  suppressed: 'shut',   // 它在说话,这一拍不听自己
-  paused: 'paused',     // 你按了隐私暂停
-  unavailable: 'sunk',  // 这条通路从没来过东西
-};
-
-const DEVICE_ELEVATION = { online: 'up', degraded: 'low', offline: 'sunk' } as const;
+import { POSE_WORD, createPet } from './pet';
 
 /** 双模型档里那两位的中文名。后端给的是 perception / reasoning / both。 */
 const ROLE_LABEL: Record<string, string> = {
@@ -42,29 +32,11 @@ const ROLE_LABEL: Record<string, string> = {
   both: '一位全包',
 };
 
-/** 忙 → 光掠得多频繁。忙则频繁,闲则数秒一次。 */
-const RATE = { busy: '1.9s', idle: '7.5s' } as const;
-
-/** 展开态把那一拍说成话。**四档各写各的** —— 少一句,那一档等于没画。 */
-const AMBIENT_WORD: Record<AmbientAction, string> = {
-  none: '还没决策过',
-  speak: '上一拍：开口了',
-  silent: '上一拍：忍住没说',
-  delegate: '上一拍：交给别人',
-};
-
 const MODALITY_LABEL: Record<string, string> = {
   screen: '屏幕',
   camera: '摄像头',
   microphone: '麦克风',
   system_audio: '系统声',
-};
-
-const MODALITY_SHAPE: Record<string, string> = {
-  screen: 't-screen',
-  camera: 't-camera',
-  microphone: 't-mic',
-  system_audio: 't-sys',
 };
 
 /** 这一档对人的意思。**每一档都得说得出口**,否则五档等于没分。 */
@@ -85,36 +57,32 @@ function modalityNote(m: ModalityView): string {
   }
 }
 
-function tile(shape: string, elevation: string, busy?: 'busy' | 'idle'): HTMLElement {
-  const t = document.createElement('span');
-  t.className = `tile ${shape}`;
-  t.dataset['elev'] = elevation;
-  if (busy) {
-    t.dataset['busy'] = busy;
-    t.style.setProperty('--rate', RATE[busy]);
-  }
-  const sheen = document.createElement('span');
-  sheen.className = 'tile-sheen';
-  t.append(sheen);
-  return t;
-}
-
-function unit(shape: string, elev: string, busy: 'busy' | 'idle' | undefined, name: string, note: string, active: boolean): HTMLElement {
+/**
+ * 展开态里的一行。
+ *
+ * **前面不放小方格。** 从前每行前面有一枚代表状态的小方块(离墙多远 = 什么状态),
+ * 于是一行 36px、两行文字、左边还占 26px 的图标槽。四条感知加七台设备摆下来,
+ * 整块岛就被撑满了,而它要说的事其实只有「谁是什么状态」。
+ *
+ * 现在照着系统设置面板那种排法:**名字在左,状态在右,一行说完**。方格撤了没有
+ * 丢事实 —— 那枚方块讲的每一档本来就有一句话(在收 / 你按了暂停 / 这台机器没有
+ * 这条通路……),话一直在右边写着,只是从前被挤到第二行去了。
+ */
+function unit(name: string, note: string, active: boolean, muted: boolean): HTMLElement {
   const row = document.createElement('span');
   row.className = 'unit';
-  const icon = document.createElement('span');
-  icon.className = 'unit-icon';
-  icon.append(tile(shape, elev, busy));
-  const text = document.createElement('span');
   const n = document.createElement('span');
   n.className = 'unit-name';
   n.textContent = name;
   const s = document.createElement('span');
   s.className = 'unit-note';
   s.textContent = note;
+  s.title = note;
   if (active) s.dataset['active'] = 'true';
-  text.append(n, s);
-  row.append(icon, text);
+  // 这一条不通 / 没有。**不是把整行调暗** —— 调暗了会被读成「不重要」,
+  // 而「这台机器没有摄像头」恰恰是要看见的事实。只把状态那半边标出来。
+  if (muted) row.dataset['off'] = 'true';
+  row.append(n, s);
   return row;
 }
 
@@ -206,7 +174,23 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
   wakeKey.append(document.createTextNode('自发注意力'), wakeWord);
   const wakeLine = document.createElement('span');
   wakeLine.className = 'brain-line';
-  full.append(perKey, perGrid, devKey, devList, brainKey, brainLine, wakeKey, wakeLine);
+
+  /**
+   * 那只小东西坐在这一栏右边。
+   *
+   * 它跟左边那两行讲的是**同一件事**,不是另一份数据 —— 脸讲得快(眼睛闭没闭、
+   * 身子探没探,不用读),字讲得准(为什么这么决定)。两边都从同一帧来,
+   * 所以不会出现「脸上笑着而字写着已暂停」那种两处不一致。
+   */
+  const pet = createPet();
+  const wakeWrap = document.createElement('span');
+  wakeWrap.className = 'wake-wrap';
+  const wakeText = document.createElement('span');
+  wakeText.className = 'wake-text';
+  wakeText.append(wakeKey, wakeLine);
+  wakeWrap.append(wakeText, pet.root);
+
+  full.append(perKey, perGrid, devKey, devList, brainKey, brainLine, wakeWrap);
 
   island.append(mini, full);
 
@@ -259,11 +243,13 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     // 遍历一个长度会变的数组,就永远画不出「这一侧没有」。
     const modalities = perception?.modalities ?? [];
     for (const m of modalities) {
-      const shape = MODALITY_SHAPE[m.modality] ?? 't-sys';
-      const elev = ELEVATION[m.state] ?? 'up';
-      const busy = m.state === 'live' ? ('busy' as const) : undefined;
       perGrid.append(
-        unit(shape, elev, busy, MODALITY_LABEL[m.modality] ?? m.modality, modalityNote(m), m.state === 'live'),
+        unit(
+          MODALITY_LABEL[m.modality] ?? m.modality,
+          modalityNote(m),
+          m.state === 'live',
+          m.state === 'unavailable',
+        ),
       );
     }
     const live = modalities.filter((m) => m.state === 'live').length;
@@ -284,7 +270,7 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     // 别的什么都不放。
     const act: AmbientAction | null = perception === null ? null : perception.ambient_action;
     const why = perception === null ? '' : perception.ambient_rationale;
-    wakeWord.textContent = act === null ? '未接' : AMBIENT_WORD[act] ?? '还没决策过';
+    wakeWord.textContent = act === null ? '未接' : POSE_WORD[act] ?? '还没决策过';
     wakeKey.dataset['unwired'] = String(act === null);
     wakeLine.textContent =
       act === null
@@ -293,24 +279,14 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     wakeLine.title = wakeLine.textContent;
     // 理由是空串时那行写的是替代话,不是后端原文 —— 降级留痕。
     wakeLine.dataset['unwired'] = String(act === null || (act !== 'none' && !why));
+    // 脸和话同一帧喂,两处不会讲岔。
+    pet.render(act, paused);
 
     // 星海只按名册亮暗,不在这里挑谁进得去 —— 挑法在 galaxy.ts,而且是定死的:
     // 第 n 台设备永远是同一颗星,掉线就是那一颗淡回去。
     galaxy.render(devices);
 
     for (const d of devices) {
-      const shape = `t-dev${d.role === 'controller' ? ' wide' : d.role === 'wearable' ? ' tiny' : ''}`;
-      const elev = DEVICE_ELEVATION[d.state];
-      // load 有三种:忙、闲、**不知道**(null)。不知道就不给光 ——
-      // 那道光是「这台机器此刻在动」的断言,后端没说过的话不能替它说。
-      // 原先把 null 归进 idle,于是一台从没报过忙闲的机器,在岛上也每 7.5 秒
-      // 亮一次,看着就像连上了、正闲着。
-      const busy =
-        d.state === 'offline' || d.load === null
-          ? undefined
-          : d.load === 'busy'
-            ? ('busy' as const)
-            : ('idle' as const);
       const note =
         d.state === 'offline'
           ? d.lastSeenS === null
@@ -325,7 +301,7 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
                   d.lastSeenS === null ? '没报过在忙什么' : `${formatAgo(d.lastSeenS)}有心跳`
                 }`
               : '空闲';
-      devList.append(unit(shape, elev, busy, d.name, note, d.load === 'busy'));
+      devList.append(unit(d.name, note, d.load === 'busy', d.state === 'offline'));
     }
     const online = devices.filter((d) => d.state !== 'offline').length;
     devCount.textContent = devices.length ? `${online} / ${devices.length} 在线` : '未接';
@@ -363,7 +339,7 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
         senseWord,
         devices.length ? `${online} / ${devices.length} 台在线` : '',
         unplaced ? `星图放不下其中 ${unplaced} 台` : '',
-        act === null ? '' : AMBIENT_WORD[act] ?? '',
+        act === null ? '' : POSE_WORD[act] ?? '',
       ]
         .filter(Boolean)
         .join(' · '),

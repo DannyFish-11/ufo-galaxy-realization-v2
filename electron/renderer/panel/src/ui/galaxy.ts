@@ -260,18 +260,21 @@ export function createGalaxy(): GalaxyHandles {
 
   const defs = el('defs', {});
   // 核球的光。盘面上那一团弥散的亮,不是一颗大星
+  //
+  // **颜色不写死。** 三处渐变全部读 `--m-1`(色阶最深那一档,与整面同一支色相
+  // 314°)。写死十六进制的话,相位一换整面都跟着走了,只有这座星系还是原来那种。
   const core = el('radialGradient', { id: 'gx-core', cx: '50%', cy: '50%', r: '50%' });
   core.append(
-    el('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.85' }),
-    el('stop', { offset: '38%', 'stop-color': '#ffffff', 'stop-opacity': '0.32' }),
-    el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0' }),
+    el('stop', { offset: '0%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0.72' }),
+    el('stop', { offset: '38%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0.26' }),
+    el('stop', { offset: '100%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0' }),
   );
   // 盘的辉光。铺在星底下,没有它整片星点是浮在药丸上的,不像一座星系
   const disc = el('radialGradient', { id: 'gx-disc', cx: '50%', cy: '50%', r: '50%' });
   disc.append(
-    el('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.3' }),
-    el('stop', { offset: '55%', 'stop-color': '#ffffff', 'stop-opacity': '0.11' }),
-    el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0' }),
+    el('stop', { offset: '0%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0.26' }),
+    el('stop', { offset: '55%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0.1' }),
+    el('stop', { offset: '100%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0' }),
   );
   /**
    * 被点亮那几颗星身上的光。
@@ -281,9 +284,9 @@ export function createGalaxy(): GalaxyHandles {
    */
   const glow = el('radialGradient', { id: 'gx-glow', cx: '50%', cy: '50%', r: '50%' });
   glow.append(
-    el('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '1' }),
-    el('stop', { offset: '26%', 'stop-color': '#ffffff', 'stop-opacity': '0.62' }),
-    el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0' }),
+    el('stop', { offset: '0%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0.9' }),
+    el('stop', { offset: '26%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0.4' }),
+    el('stop', { offset: '100%', 'stop-color': 'var(--m-1)', 'stop-opacity': '0' }),
   );
   defs.append(core, disc, glow);
 
@@ -332,8 +335,8 @@ export function createGalaxy(): GalaxyHandles {
   const litNodes: SVGElement[] = LIT.map((s) => {
     const g = el('g', { class: 'gx-star', transform: `translate(${s.x.toFixed(2)} ${s.y.toFixed(2)})` });
     g.append(
-      el('circle', { class: 'gx-halo-c', r: '4.6', fill: 'url(#gx-glow)' }),
-      el('circle', { class: 'gx-core-c', r: '1.05' }),
+      el('circle', { class: 'gx-halo-c', r: '2.6', fill: 'url(#gx-glow)' }),
+      el('circle', { class: 'gx-core-c', r: '0.95' }),
     );
     g.setAttribute('data-lit', 'off');
     litG.append(g);
