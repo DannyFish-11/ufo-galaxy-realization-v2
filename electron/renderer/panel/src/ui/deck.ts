@@ -69,7 +69,6 @@ export function createDeck(store: Store, onDraw?: (index: number) => void): Deck
   slot.append(stack, blocks, empty);
   deck.append(wheel, slot);
   rest.type = 'button';
-  rest.setAttribute('aria-label', '收起或展开左栏');
   frame.append(deck, rest);
   rail.append(frame);
 
@@ -220,6 +219,10 @@ export function createDeck(store: Store, onDraw?: (index: number) => void): Deck
       // 才露得出来。这里曾经写成被抽那张之下倒序(60 - v),结果第二张把它
       // 底下三张整个盖住 —— 看着像只有两张卡,其实五张都在,只是全被压住了。
       node.style.zIndex = String(20 + v);
+      // 这张排第几。样式那边拿它把整张卡再淡一档 —— 一叠卡因此是**往下化开**
+      // 的,不是五块等亮的板子。位置的唯一定义处还是上面那个 v,这里只是把它
+      // 说给样式听,不另算一遍。
+      node.style.setProperty('--depth', String(Math.max(0, v)));
       // 池子里那张备用卡在视野外候着。**光把它调透明是不够的** ——
       // opacity: 0 照样吃点击:它比谁都靠下、层序又最高,于是点在下面几张
       // 唇口上的手指全被它接走,把一张看不见的卡「抽」了出来,整叠缩到顶上
@@ -365,6 +368,12 @@ export function createDeck(store: Store, onDraw?: (index: number) => void): Deck
 
   function render(): void {
     rail.dataset['slim'] = String(store.state.slim);
+    // 折痕那道光只说得出**方向**。往哪儿走是给余光的,「按下去会怎样」这句话
+    // 还得有人说得出口 —— 读屏软件读不出一道 clip-path 在动。
+    const slim = store.state.slim;
+    rest.setAttribute('aria-label', slim ? '展开左栏' : '收起左栏');
+    rest.setAttribute('aria-expanded', String(!slim));
+    rest.title = slim ? '展开左栏' : '收起左栏';
     remap();
     sizeDeck();
     layout();

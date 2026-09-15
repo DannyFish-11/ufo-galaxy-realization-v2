@@ -42,7 +42,7 @@ curl "wttr.in/{city}?0"
 
 ```bash
 # 3-day forecast
-curl "wtt.in/{city}"
+curl "wttr.in/{city}"
 
 # JSON output
 curl "wttr.in/{city}?format=j1"

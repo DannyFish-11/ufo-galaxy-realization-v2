@@ -18,6 +18,10 @@ import { platform } from '../platform';
 const ICONS = {
   plus: 'M12 5v14M5 12h14',
   send: 'M12 19V5M5 12l7-7 7 7',
+  // 喂入口那三块。图要认得出是什么,字就不用解释它是什么。
+  image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5h.01',
+  file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5',
+  link: 'M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1',
 } as const;
 
 function icon(path: string, size = 17, width = 1.7): SVGSVGElement {
@@ -106,6 +110,37 @@ export function createDock(cb: DockCallbacks): DockHandles {
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = '说点什么，或者直接说话';
+  // 输入条上不再重复一遍"现在用的是哪个模型"。
+  //
+  // 上一版在这儿放了「A 档 · Gemma 4 · E4B」。所有者的原话:「对话栏没有必要
+  // 再放一遍,它是什么模型,有一个地方能让他知道,还有一个地方能让他再调整,
+  // 能确保意思被准确传达就可以了,不需要通篇什么地方都要放一下」。
+  //
+  // 而且这台机器上它已经有两个归宿了:左栏「接上了什么」里的那一行(知道),
+  // 设置浮层里的「本机模型」(调整)。第三处只是让整面更厚,不多说一件事。
+  /**
+   * 液态玻璃:**光跟着手走。**
+   *
+   * Apple 那份材质说明里的一句话是关键 —— 这层材质"不会完全遮蔽底层内容",
+   * 并且"在响应直接触摸时会强调动效"。前半句这条输入条已经做到了(它是透的,
+   * 底下那道坡照样透上来);后半句还没有:它此刻是一块**不动的**玻璃。
+   *
+   * 所以加一道高光,位置跟着指针。这不是装饰 —— 玻璃之所以看起来是玻璃,
+   * 靠的就是"光在它表面的位置随视角变"。不动的高光是印上去的,动的才是反射。
+   *
+   * 只记位置,不记时间:CSS 那边用 transition 把它追过去,所以手停下来光会
+   * **跟过去再停住**,而不是死跟着指针。那一点点滞后就是"液态"的来源。
+   */
+  field.addEventListener('pointermove', (e) => {
+    const r = field.getBoundingClientRect();
+    field.style.setProperty('--lx', `${((e.clientX - r.left) / r.width) * 100}%`);
+    field.style.setProperty('--ly', `${((e.clientY - r.top) / r.height) * 100}%`);
+    field.dataset['lit'] = 'true';
+  });
+  field.addEventListener('pointerleave', () => {
+    delete field.dataset['lit'];
+  });
+
   const send = document.createElement('button');
   send.className = 'send';
   send.type = 'button';
@@ -141,25 +176,59 @@ export function createDock(cb: DockCallbacks): DockHandles {
   const feed = document.createElement('div');
   feed.className = 'pop';
   feed.dataset['side'] = 'left';
-  for (const [label, accept] of [
-    ['图片', 'image/*'],
-    ['文件', '*/*'],
-    ['圈一块屏幕', ''],
-    ['网页链接', ''],
-  ] as const) {
+  /**
+   * 三块图标格,**一个词,不解释。**
+   *
+   * 上一版是四张带副行的卡,每张底下一句机制说明。所有者看了之后的原话:
+   * 「用很明显的图片什么的,然后上面写就是……这种就够了,犯不着解释这么一大通」。
+   * 对 —— 这是 HUD,不是说明书。图认得出是什么,字就不用再说一遍它是什么。
+   *
+   * 「圈一块屏幕」整条去掉了。所有者:「到时候面板一整个好了,直接在上面一圈
+   * 就行了,不需要刻意把它放在那块再解释」。一个本该在画面上直接做的动作,
+   * 塞进菜单里当一个条目,本身就是绕路。
+   *
+   * **没接上的那块仍然不许装作能用。** 但也不再占三行字去说:格子压暗、点不动,
+   * 底下一个「还没接」,完整的那句话进 title。屏幕上短,事实一个字没少。
+   */
+  const FEED_ITEMS = [
+    { key: 'image', label: '图片', accept: 'image/*', why: '' },
+    { key: 'file', label: '文件', accept: '*/*', why: '' },
+    {
+      key: 'link',
+      label: '链接',
+      accept: '',
+      why: '还没接上 —— 抓取与正文提取尚未接进喂入口，点了不会有反应',
+    },
+  ] as const;
+
+  for (const spec of FEED_ITEMS) {
     const item = document.createElement('button');
-    item.className = 'pop-item';
+    item.className = 'pop-tile';
     item.type = 'button';
-    item.textContent = label;
-    if (accept) {
+    item.append(icon(ICONS[spec.key], 21, 1.5));
+    const t = document.createElement('span');
+    t.className = 'pop-tile-t';
+    t.textContent = spec.label;
+    item.append(t);
+    if (spec.accept) {
+      item.title = spec.label;
       item.addEventListener('click', () => {
         void platform()
-          .pickFiles(accept)
+          .pickFiles(spec.accept)
           .then((files) => {
             // 用户按了取消 —— 什么都不做是对的,但也不该假装发生了什么。
             if (files.length) cb.onFeed(files);
           });
       });
+    } else {
+      // 没接上的:照画、照显示,但点不动,并且说得出为什么。
+      item.dataset['unwired'] = 'true';
+      item.disabled = true;
+      item.title = spec.why;
+      const n = document.createElement('span');
+      n.className = 'pop-tile-n';
+      n.textContent = '还没接';
+      item.append(n);
     }
     feed.append(item);
   }
@@ -363,6 +432,7 @@ export function createDock(cb: DockCallbacks): DockHandles {
 
     renderTiers(tiers, tierGaps);
   }
+
 
   return { root: wrap, render };
 }

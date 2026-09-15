@@ -11,8 +11,18 @@
  * 几秒才飘一次。这是 Weiser 与 Brown 那根 Dangling String 的做法 ——
  * 屏幕上的符号需要解读,而这种东西跟人的周边视觉阻抗匹配得更好:
  * 忙不忙是**余光里感觉到**的,不是读出来的。
+ *
+ * 收起态那枚药丸里装的是**一座微缩星系**(见 galaxy.ts)。它只讲一件事:
+ * **还有多少东西连着** —— 连接浓度就是整座星系的明暗,每一台连着的设备是星海
+ * 里一颗明显更亮的星。除此之外那枚药丸上什么都不放。
+ *
+ * 从前那儿是两排小方块(四条感知通路 + 几台设备)。方块得**数**,而数东西要用
+ * 中央视觉;一片星海亮不亮是周边视觉直接给的,不经过「读」那一步。那几格方块
+ * 讲的事一件没丢 —— 全在展开态里,一条不少地写着话。
+ *
  */
-import type { DeviceRow, ModalityState, ModalityView, PerceptionView, TierView } from '../types';
+import type { AmbientAction, DeviceRow, ModalityState, ModalityView, PerceptionView, TierView } from '../types';
+import { LIT_CAPACITY, createGalaxy } from './galaxy';
 
 /** 状态 → 离墙多远。五档,不是布尔 —— 「闭着」和「没有」是两件事。 */
 const ELEVATION: Record<ModalityState, string> = {
@@ -32,20 +42,16 @@ const ROLE_LABEL: Record<string, string> = {
   both: '一位全包',
 };
 
-/**
- * 收起态那颗药丸只有 186px:感知恒定四格吃掉一半,剩下的宽度按 v18 的排法
- * 装得下四格设备。设备数会长(七台、十台都可能),不设上限就会顶穿右边缘。
- *
- * 截断了**必须留痕**:留痕那一小格自己也占宽,所以一旦要留痕就只画三格。
- * 谁被留下按状态排:在线 > 降级 > 离线 —— 余光里该看见的是「还有谁醒着」。
- */
-const MINI_DEVICES = 4;
-const MINI_DEVICES_TRUNCATED = 3;
-
-const DEVICE_ORDER: Record<DeviceRow['state'], number> = { online: 0, degraded: 1, offline: 2 };
-
 /** 忙 → 光掠得多频繁。忙则频繁,闲则数秒一次。 */
 const RATE = { busy: '1.9s', idle: '7.5s' } as const;
+
+/** 展开态把那一拍说成话。**四档各写各的** —— 少一句,那一档等于没画。 */
+const AMBIENT_WORD: Record<AmbientAction, string> = {
+  none: '还没决策过',
+  speak: '上一拍：开口了',
+  silent: '上一拍：忍住没说',
+  delegate: '上一拍：交给别人',
+};
 
 const MODALITY_LABEL: Record<string, string> = {
   screen: '屏幕',
@@ -139,11 +145,8 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
 
   const mini = document.createElement('span');
   mini.className = 'island-view island-mini';
-  const miniPer = document.createElement('span');
-  miniPer.className = 'mini-group';
-  const miniDev = document.createElement('span');
-  miniDev.className = 'mini-group';
-  mini.append(miniPer, miniDev);
+  const galaxy = createGalaxy();
+  mini.append(galaxy.root);
 
   const full = document.createElement('span');
   full.className = 'island-view island-full';
@@ -193,7 +196,17 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
   brainKey.append(document.createTextNode('本机模型'), brainTier);
   const brainLine = document.createElement('span');
   brainLine.className = 'brain-line';
-  full.append(perKey, perGrid, devKey, devList, brainKey, brainLine);
+
+  // 展开之后把那一拍**说成话**。收起态只有一道光:光讲得出「往外还是往内」,
+  // 讲不出「为什么」。后端把理由原文一起发来了(已截断到 200 字),这儿是它
+  // 唯一放得下的地方。
+  const wakeKey = document.createElement('span');
+  wakeKey.className = 'sec-key brain-key';
+  const wakeWord = document.createElement('b');
+  wakeKey.append(document.createTextNode('自发注意力'), wakeWord);
+  const wakeLine = document.createElement('span');
+  wakeLine.className = 'brain-line';
+  full.append(perKey, perGrid, devKey, devList, brainKey, brainLine, wakeKey, wakeLine);
 
   island.append(mini, full);
 
@@ -239,8 +252,6 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     privacy.setAttribute('aria-pressed', String(paused === true));
     island.setAttribute('aria-expanded', String(open));
 
-    miniPer.replaceChildren();
-    miniDev.replaceChildren();
     perGrid.replaceChildren();
     devList.replaceChildren();
 
@@ -251,7 +262,6 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
       const shape = MODALITY_SHAPE[m.modality] ?? 't-sys';
       const elev = ELEVATION[m.state] ?? 'up';
       const busy = m.state === 'live' ? ('busy' as const) : undefined;
-      miniPer.append(tile(shape, elev, busy));
       perGrid.append(
         unit(shape, elev, busy, MODALITY_LABEL[m.modality] ?? m.modality, modalityNote(m), m.state === 'live'),
       );
@@ -270,18 +280,25 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
         : `${modalities.length} 条 · 还没接上`;
     perKey.dataset['unwired'] = String(modalities.length > 0 && !wired);
 
-    // 收起态只装得下几格,展开态一个不少。
-    const truncated = devices.length > MINI_DEVICES;
-    const miniCap = truncated ? MINI_DEVICES_TRUNCATED : MINI_DEVICES;
-    const miniPick = devices
-      .map((d, i) => ({ d, i }))
-      .sort((a, b) => DEVICE_ORDER[a.d.state] - DEVICE_ORDER[b.d.state] || a.i - b.i)
-      .slice(0, miniCap)
-      .sort((a, b) => a.i - b.i)
-      .map(({ i }) => i);
-    const inMini = new Set(miniPick);
+    // 上一拍自发注意力决定了什么。**只在展开态写着** —— 收起态那枚药丸归星系,
+    // 别的什么都不放。
+    const act: AmbientAction | null = perception === null ? null : perception.ambient_action;
+    const why = perception === null ? '' : perception.ambient_rationale;
+    wakeWord.textContent = act === null ? '未接' : AMBIENT_WORD[act] ?? '还没决策过';
+    wakeKey.dataset['unwired'] = String(act === null);
+    wakeLine.textContent =
+      act === null
+        ? '还没收到过感知帧 —— 上一拍决定了什么不知道'
+        : why || (act === 'none' ? '这条会话里它还没自己动过念头' : '后端没给理由');
+    wakeLine.title = wakeLine.textContent;
+    // 理由是空串时那行写的是替代话,不是后端原文 —— 降级留痕。
+    wakeLine.dataset['unwired'] = String(act === null || (act !== 'none' && !why));
 
-    for (const [i, d] of devices.entries()) {
+    // 星海只按名册亮暗,不在这里挑谁进得去 —— 挑法在 galaxy.ts,而且是定死的:
+    // 第 n 台设备永远是同一颗星,掉线就是那一颗淡回去。
+    galaxy.render(devices);
+
+    for (const d of devices) {
       const shape = `t-dev${d.role === 'controller' ? ' wide' : d.role === 'wearable' ? ' tiny' : ''}`;
       const elev = DEVICE_ELEVATION[d.state];
       // load 有三种:忙、闲、**不知道**(null)。不知道就不给光 ——
@@ -294,7 +311,6 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
           : d.load === 'busy'
             ? ('busy' as const)
             : ('idle' as const);
-      if (inMini.has(i)) miniDev.append(tile(shape, elev, busy));
       const note =
         d.state === 'offline'
           ? d.lastSeenS === null
@@ -311,19 +327,53 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
               : '空闲';
       devList.append(unit(shape, elev, busy, d.name, note, d.load === 'busy'));
     }
-    if (truncated) {
-      const more = document.createElement('span');
-      more.className = 'mini-more';
-      more.setAttribute('aria-hidden', 'true');
-      miniDev.append(more);
-    }
     const online = devices.filter((d) => d.state !== 'offline').length;
     devCount.textContent = devices.length ? `${online} / ${devices.length} 在线` : '未接';
-    // 收起态截了几台,只有无障碍标签说得出口 —— 药丸上那一小格留痕是给眼睛的。
+    // 星海是给余光的;读屏软件读不出「这片亮了几颗」,所以同一件事也得说成话。
+    // 药丸标了 aria-hidden 而标签里没有,这一整块对读屏就等于不存在。
+    //
+    // **设备多到星海排不下时必须留痕。** galaxy.ts 只挑得出 LIT_CAPACITY 颗
+    // 互不粘连的星,再多就有设备没有自己的那一颗 —— 画面上看着是「就这么些」,
+    // 而那正是这块面板最不许犯的那种错。眼睛这边没处放,至少这儿得说出来。
+    const unplaced = Math.max(0, devices.length - LIT_CAPACITY);
+
+    // **感知停没停,收起态必须说得出口。**
+    //
+    // 从前这枚药丸上有四格小方块,按了「别看了」那一格会沉下去 —— 停没停是
+    // 余光可见的。改成星系之后那四格撤了,而星系讲的是**设备**,讲不了感知:
+    // 于是急停生效时,收起态的药丸和平常长得一模一样。
+    //
+    // 这一位是这块面板上最不该悄悄消失的:人按下它,是因为此刻不想被看/被听。
+    // 药丸上不再加东西(那是所有者定的),但至少这一层不能也是哑的 —— 读屏读
+    // 得到,指针停上去看得到。**眼睛那一侧仍然是空的,那是一个还没补的洞。**
+    // `paused` 是上面那一份 —— 停没停的唯一权威是 posture 帧,这里不另算一遍。
+    const senseWord =
+      paused === true
+        ? '感知已暂停'
+        : perception === null
+          ? '还没收到过感知帧'
+          : !wired && modalities.length > 0
+            ? '感知还没接上'
+            : '';
+
     island.setAttribute(
       'aria-label',
-      devices.length ? `感知与设备 · ${online} / ${devices.length} 台在线` : '感知与设备',
+      [
+        '感知与设备',
+        senseWord,
+        devices.length ? `${online} / ${devices.length} 台在线` : '',
+        unplaced ? `星图放不下其中 ${unplaced} 台` : '',
+        act === null ? '' : AMBIENT_WORD[act] ?? '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
     );
+    island.title = [
+      senseWord,
+      unplaced ? `星图只画得下 ${LIT_CAPACITY} 台，还有 ${unplaced} 台在展开态里` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
 
     // 本机模型那一行。**三种状态各写各的话**:
     //   null      —— 没拉到目录。不是「没有档位」,别写成空白。

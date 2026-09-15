@@ -50,6 +50,10 @@ _RING_IS_ALLOWED_BECAUSE = {
     ".tier-stages .stage[data-fit='insufficient_vram']": "同上",
     ".tier-stages .stage[data-fit='unknown']": "虚线 = 这一档没被评估过，与「能跑」是两件事",
     ".privacy-btn[data-unknown='true']": "虚线 = 问不到后端，停没停不知道。与「正在采」是两件事",
+    ".wired-row[data-state='unknown'] .wired-dot": (
+        "空心 = 这一条**没问到**。填实了（哪怕调暗）会被读成「不通」，"
+        "而「不通」是一个问过了的结论 —— 那正是这张清单要治的那类假话"
+    ),
 }
 
 
