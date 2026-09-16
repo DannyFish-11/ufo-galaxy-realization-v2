@@ -94,15 +94,25 @@ class TestTheEyesReallyClose:
 
     def test_the_eyes_are_driven_by_the_privacy_flag(self) -> None:
         code = _code(_PET)
-        m = re.search(r"svg\.dataset\['eyes'\] = ([^;]+);", code)
+        m = re.search(r"svg\.dataset\['eyes'\]\s*=\s*([^;]+);", code)
         assert m, "眼睛不再由数据决定了"
         expr = m.group(1)
         assert "paused" in expr and "null" in expr, f"眼睛这一位不是三态：{expr.strip()}"
         island = _code(_ISLAND)
-        assert re.search(r"pet\.render\(act, paused\)", island), "岛不再把「停没停」喂给它 —— 脸就会跟那行字讲岔"
+        # 喂法是**一整份实时帧**，不是两个参数了。查的是那份帧里有没有带上「停没停」。
+        m2 = re.search(r"pet\.render\(\{(.*?)\}\);", island, re.S)
+        assert m2, "岛不再喂它了"
+        assert "paused," in m2.group(1), "岛不再把「停没停」喂给它 —— 脸就会跟那行字讲岔"
 
 
-class TestThePoseIsNotJustBreathing:
+class TestTheLiveLayerAndTheOneOffReaction:
+    """底子是实时的，上面叠一次性的反应。**这两层不能混。**
+
+    `ambient_action` 是「上一拍」—— 一个已经发生完的事实。拿它当常驻姿势，它会一直
+    卡在「忍住没说」那个样子不动，而下一次决策可能是几分钟以后。看着像死了，而且把
+    「刚才」说成了「一直」。
+    """
+
     def test_breathing_and_pose_are_on_different_layers(self) -> None:
         """**这一条守的是实际栽过的那一跤。**
 
@@ -113,34 +123,79 @@ class TestThePoseIsNotJustBreathing:
         breath = _rule(".pet-breath")
         assert "animation" not in body, (
             f".pet-body 上又挂了动画：{body.strip()}。"
-            "姿势就在这一层，动画一上来就把它压住了 —— 四种姿势会全部失效，而画面上还在动。"
+            "姿势就在这一层，动画一上来就把它压住了 —— 反应会全部失效，而画面上还在动。"
         )
         assert "animation" in breath, ".pet-breath 上没有呼吸了"
-        # 姿势确实写在 .pet-body 上
-        css = _css()
-        poses = re.findall(r"\.pet\[data-pose='(\w+)'\] \.pet-body\s*\{([^}]*)\}", css)
-        assert len(poses) >= 4, f"姿势只剩 {len(poses)} 种 —— 四档各一种，少一种那一档就没画"
 
-    def test_the_four_poses_are_actually_different(self) -> None:
-        """四种姿势不能有两种长得一样 —— 那等于把两档并成一档。"""
-        css = _css()
-        poses = dict(re.findall(r"\.pet\[data-pose='(\w+)'\] \.pet-body\s*\{\s*transform:\s*([^;]+);", css))
-        vals = [v.strip() for v in poses.values()]
-        assert len(set(vals)) == len(vals), f"有两档姿势写的是同一个变换：{poses}"
+    def test_blinking_is_its_own_layer_too(self) -> None:
+        """眨眼是 transform，眼睛的开合是几何量 —— 同一个坑，不能再踩一次。
 
-    def test_the_pose_comes_from_the_backend_decision(self) -> None:
+        挂同一层的话眨眼那条动画会把 `y` / `height` 压住，「按了急停」就闭不上了。
+        """
+        blink = _rule(".pet-blink")
+        # 查的是**它真的在放哪一支动画**，不是「出现过 animation 这个词」——
+        # `animation: none` 照样含那个词，判据会绿而屏幕上一动不动。
+        m = re.search(r"animation:\s*([\w-]+)", blink)
+        assert m and m.group(1) != "none", f"眨眼没了：{blink.strip()}。上面那些状态再准，看着也像一张贴纸。"
+        assert f"@keyframes {m.group(1)}" in _css(), f"眨眼放的是 {m.group(1)}，而这支关键帧根本不存在"
+        assert "height" not in blink and re.search(r"scaleY", _css()), "眨眼不该去改几何量"
+        # 本来就闭着的时候不眨 —— 那会变成抽搐
+        shut = _css()
+        assert re.search(
+            r"\.pet\[data-eyes='shut'\] \.pet-blink[^{]*\{[^}]*animation:\s*none", shut
+        ), "眼睛已经闭上了还在眨 —— 那是抽搐，不是眨眼"
+
+    def test_the_reaction_is_one_off_not_a_permanent_pose(self) -> None:
+        """演一遍就撤。**撤不掉的反应是在说谎** —— 它把「刚才」说成了「一直」。"""
         code = _code(_PET)
-        m = re.search(r"svg\.dataset\['pose'\] = ([^;]+);", code)
-        assert m, "姿势不再由数据决定了"
-        # 钉**形状**，不是钉「出现过 act 这三个字母」。
-        # 只查「含 act」是不够的：`true ? 'rest' : …act…` 照样含 act，而它是写死的。
+        assert "data-react" in _css(), "反应那一层没了"
+        # 撤必须发生在**那个定时器里**。
+        # 只查「文件里有 delete」是不够的：else 分支里还有一处，把定时器里那处
+        # 换掉，判据照样绿 —— 而反应就永远撤不掉了。
+        m = re.search(r"setTimeout\(\(\) => \{(.*?)\}", code, re.S)
+        assert m, "反应没有时限，等于常驻姿势"
+        assert "delete svg.dataset['react']" in m.group(1), (
+            f"定时器到点之后没有把反应撤掉：{m.group(1).strip()}。"
+            "它会一直卡在上一次决策的姿势上 —— 把「刚才」说成了「一直」。"
+        )
+
+    def test_the_base_layer_moves_with_every_frame(self) -> None:
+        """底子必须**每帧都在动**，不能只认那个几分钟才变一次的决策位。"""
+        code = _code(_PET)
+        for field, what in (("phase", "主轴此刻在哪一相"), ("activity", "阈限态里它在干嘛"), ("sensing", "在不在收")):
+            assert re.search(rf"svg\.dataset\['{field}'\]", code), f"底子里没有「{what}」了"
+        # 阈限内容是有序递进的，节奏也该是递进的
+        rates = re.findall(r"(none|understanding|thinking|rehearsing): '([\d.]+)s'", code)
+        assert len(rates) == 4, f"呼吸节奏不再按阈限内容分四档：{rates}"
+        order = {k: float(v) for k, v in rates}
+        assert (
+            order["none"] > order["understanding"] > order["thinking"] > order["rehearsing"]
+        ), f"越使劲反而喘得越慢：{order}"
+        # 刻意避开 0.2 Hz 那一带（0.18~0.22 Hz，即 4.55~5.56 秒）
+        for k, v in order.items():
+            hz = 1 / v
+            assert not (0.18 <= hz <= 0.22), (
+                f"{k} 那一档周期 {v}s ≈ {hz:.3f} Hz，落在 0.2 Hz 那一带 —— "
+                "那一带最容易被余光当成「有事发生」而反复把注意力拽走"
+            )
+
+    def test_the_reaction_comes_from_the_backend_decision(self) -> None:
+        code = _code(_PET)
+        m = re.search(r"svg\.dataset\['react'\]\s*=\s*([^;]+);", code)
+        assert m, "反应不再由数据决定了"
         expr = " ".join(m.group(1).split())
-        assert expr == "act === null ? 'unknown' : POSE[act] ?? 'rest'", (
-            f"姿势的来路变了：{expr}。"
-            "它必须先分出「还没收到过帧」，再直接按 ambient_action 查表 —— "
+        assert expr == "POSE[live.act] ?? 'rest'", (
+            f"反应的来路变了：{expr}。它必须直接按 ambient_action 查表 —— "
             "中间插任何一个恒真分支，四档就全塌成一档，而屏幕上因为还在呼吸，看着像活的。"
         )
-        assert re.search(r"POSE: Record<AmbientAction", code), "四档没有各自的姿势表"
+        assert re.search(r"POSE: Record<AmbientAction", code), "四档没有各自的反应"
+
+    def test_the_four_reactions_are_actually_different(self) -> None:
+        css = _css()
+        r = dict(re.findall(r"\.pet\[data-react='(\w+)'\] \.pet-body\s*\{\s*transform:\s*([^;]+);", css))
+        vals = [v.strip() for v in r.values()]
+        assert len(vals) >= 3, f"反应只剩 {len(vals)} 种"
+        assert len(set(vals)) == len(vals), f"有两档反应写的是同一个变换：{r}"
 
 
 class TestTheFaceAndTheWordsCannotDisagree:
@@ -160,5 +215,5 @@ class TestTheFaceAndTheWordsCannotDisagree:
         m = re.search(r"@media \(prefers-reduced-motion: reduce\) \{([^}]*\}[^}]*)\}", block)
         assert m, "桌宠没有照顾关了动效的人"
         inner = m.group(1)
-        assert ".pet-body" not in inner, "关了动效把姿势也停掉了 —— 那一档事实就没了"
+        assert ".pet-body" not in inner, "关了动效把底子那一层也停掉了 —— 相位就看不出来了"
         assert ".pet-eye" not in inner, "关了动效把眼睛也停掉了 —— 隐私急停就又看不见了"

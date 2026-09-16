@@ -24,6 +24,7 @@
 import type { AmbientAction, DeviceRow, ModalityView, PerceptionView, TierView } from '../types';
 import { LIT_CAPACITY, createGalaxy } from './galaxy';
 import { POSE_WORD, createPet } from './pet';
+import type { PetLive } from './pet';
 
 /** 双模型档里那两位的中文名。后端给的是 perception / reasoning / both。 */
 const ROLE_LABEL: Record<string, string> = {
@@ -94,6 +95,7 @@ export interface IslandHandles {
     tiers: TierView | null,
     privacyBusy: boolean,
     open: boolean,
+    now: { phase: PetLive['phase']; activity: string },
   ): void;
   /** 展开后与左边卡片区顶对齐、等高。 */
   setHeight(px: number): void;
@@ -210,6 +212,8 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     tiers: TierView | null,
     privacyBusy: boolean,
     open: boolean,
+    /** 此刻这一帧的主轴与阈限内容 —— 那只小东西的底子靠这两位实时动起来。 */
+    now: { phase: PetLive['phase']; activity: string },
   ): void {
     island.dataset['open'] = String(open);
 
@@ -280,7 +284,14 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     // 理由是空串时那行写的是替代话,不是后端原文 —— 降级留痕。
     wakeLine.dataset['unwired'] = String(act === null || (act !== 'none' && !why));
     // 脸和话同一帧喂,两处不会讲岔。
-    pet.render(act, paused);
+    pet.render({
+      phase: now.phase,
+      activity: now.activity,
+      // 「在不在收」有三态:还没收到过帧时是**不知道**,不是「没在收」。
+      sensing: perception === null ? null : perception.is_sensing,
+      paused,
+      act,
+    });
 
     // 星海只按名册亮暗,不在这里挑谁进得去 —— 挑法在 galaxy.ts,而且是定死的:
     // 第 n 台设备永远是同一颗星,掉线就是那一颗淡回去。

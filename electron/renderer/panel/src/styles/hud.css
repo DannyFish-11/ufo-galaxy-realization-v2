@@ -739,10 +739,39 @@ body {
   transform-box: fill-box; transform-origin: 50% 82%;
   transition: transform 0.5s var(--ease);
 }
+/* 呼吸的**快慢是实时的**:阈限态里它越往后使劲(懂 → 想 → 排演),喘得越快。
+   周期由 pet.ts 按 liminal_activity 给,四档都刻意避开 0.18~0.22 Hz 那一带;
+   这里的兜底值同样在带外(6s ≈ 0.167 Hz)。 */
 .pet-breath {
   transform-box: fill-box; transform-origin: 50% 82%;
-  animation: pet-breathe 5.2s var(--ease) infinite;
+  animation: pet-breathe var(--pet-rate, 6s) var(--ease) infinite;
 }
+/* ── 眨眼:单独一层 ───────────────────────────────────────────────
+   眨眼是 transform(压扁),眼睛的开合是几何量(y / height)。挂同一层的话动画会
+   把数据那一层整个压住 —— 「按了急停」就闭不上了。已经踩过一次,不再踩第二次。
+
+   眨眼**不接任何数据**:它不声称任何事,只是活的东西会眨眼。没有它,上面那些
+   状态再准,看着也像一张贴纸。 */
+.pet-blink {
+  transform-box: fill-box; transform-origin: 50% 50%;
+  animation: pet-blink 7.4s var(--ease) infinite;
+}
+/* 眼睛本来就闭着 / 还不知道睁没睁的时候不眨 —— 那会变成抽搐。 */
+.pet[data-eyes='shut'] .pet-blink,
+.pet[data-eyes='unknown'] .pet-blink { animation: none; }
+@keyframes pet-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.08); }
+}
+/* ── 底子:实时 ───────────────────────────────────────────────────
+   主轴此刻在哪一相。静的时候小而沉,显形时立起来。 */
+.pet[data-phase='silent'] .pet-skin { opacity: 0.72; }
+.pet[data-phase='silent'] .pet-body { transform: scale(0.94); }
+.pet[data-phase='liminal'] .pet-skin { opacity: 0.88; }
+.pet[data-phase='manifest'] .pet-skin { opacity: 1; }
+.pet[data-phase='manifest'] .pet-body { transform: scale(1.04) translate(0, -0.8px); }
+/* 在收的时候眼睛睁得开一点。**不知道就不动它** —— 那不是「没在收」。 */
+.pet[data-sensing='true'][data-eyes='open'] .pet-eye { height: 10.4px; y: 14px; }
 @keyframes pet-breathe {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.035); }
@@ -759,17 +788,18 @@ body {
    也不能画成闭着(等于说「已经停了」)。 */
 .pet[data-eyes='unknown'] .pet-eye { y: 14.4px; height: 9.6px; opacity: 0.4; }
 
-/* ── 身子:上一拍想了什么 ─────────────────────────────────────── */
-/* 还没自己动过念头:就那么坐着 */
-.pet[data-pose='rest'] .pet-body { transform: translate(0, 0); }
-/* 开口了:往前探一点 */
-.pet[data-pose='lean'] .pet-body { transform: translate(0, -1.6px) scale(1.05); }
-/* 忍住没说:缩一下,矮一点 */
-.pet[data-pose='tuck'] .pet-body { transform: translate(0, 1.4px) scale(0.93); }
-/* 交给别人了:偏向一边 */
-.pet[data-pose='aside'] .pet-body { transform: translate(3px, 0) rotate(7deg); }
-/* 还没收到过帧:身子也淡下去 —— 不知道就不摆姿势 */
-.pet[data-pose='unknown'] .pet-skin { fill: var(--m-4); }
+/* ── 上面叠的一次性反应:上一拍决定了什么 ─────────────────────────
+   **不是常驻姿势。** ambient_action 是「上一拍」—— 一个已经发生完的事实。
+   拿它当常驻姿势,它会一直卡在「忍住没说」那个样子不动,下一次决策可能是几分钟
+   以后,看着像死了。所以演一遍(1.6 秒)就撤回实时那一层。
+
+   写在 data-react 上,优先级高于 data-phase 那几条 —— 反应那一下盖住底子,
+   撤掉之后底子自己回来。 */
+.pet[data-react='lean'] .pet-body { transform: translate(0, -2.2px) scale(1.08); }
+.pet[data-react='tuck'] .pet-body { transform: translate(0, 1.6px) scale(0.9); }
+.pet[data-react='aside'] .pet-body { transform: translate(3.4px, 0) rotate(8deg); }
+/* 还没收到过帧:身子淡下去 —— 不知道就不摆样子 */
+.pet[data-eyes='unknown'] .pet-skin { fill: var(--m-4); opacity: 0.6; }
 
 @media (prefers-reduced-motion: reduce) {
   /* 呼吸停掉,但**姿势和眼睛都留着** —— 那两样是事实,不是动效。

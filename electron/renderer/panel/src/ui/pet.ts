@@ -7,22 +7,25 @@
  * 但它讲的是**一只在旁边待着的东西此刻什么心思** —— 那种事人天生会从一张脸上读,
  * 不会从一行状语里读。所以换成一只脸:同样的事实,换一种人本来就会的读法。
  *
- * ## 它不是装饰:每一种样子都**接着真数据**
+ * ## 它不是装饰:每一样都**接着每拍都在变的那份帧**
  *
- * 眼睛管**看不看**(隐私急停),身子管**上一拍想了什么**(自发注意力的决策):
+ * 这一位原先只认 `ambient_action`,而那是**上一拍的决策** —— 一个已经发生完的
+ * 事实。拿它当常驻姿势,它就会一直卡在「忍住没说」那个样子不动,下一次决策可能
+ * 是几分钟以后。看着像死了。
  *
- *   眼睛闭上   privacy_paused = true    你按了「别看了」,它就真的不看
- *   眼睛虚着   还没收到过感知帧          面板不知道 —— 不能画成「睁着」也不能画成「闭着」
- *   眼睛睁开   在采
+ * 所以拆成两层:
  *
- *   身子不动   none      还没自己动过念头
- *   往前探     speak     它开口了
- *   缩一下     silent    忍住没说
- *   偏向一边   delegate  交给别人了
+ *   **底子是实时的** —— 每一帧都在变的那几位:
+ *     phase              静 / 阈限 / 显形    它此刻整个人的状态
+ *     liminal_activity   懂 → 想 → 排演      阈限态里它在干嘛(有序递进)
+ *     is_sensing         在不在收             眼睛睁多开
+ *     privacy_paused     你按没按「别看了」    眼睛闭不闭
  *
- * **眼睛那一条是顺带补上的一个洞。** 收起态看不见隐私急停(药丸上只放星系,
- * 那是所有者定的);展开态这儿至少有一双眼睛会闭上 —— 那比一行「感知已暂停」
- * 更快被看见,因为人不需要去读它。
+ *   **上面叠一次性的反应** —— `ambient_action` 变了就演一遍,演完回到实时那一层。
+ *   一个已经过去的决策不该是一个永久的姿势:它是「刚才」,不是「一直」。
+ *
+ * 再加眨眼。眨眼不接任何数据 —— 它不声称任何事,只是**活的东西会眨眼**;
+ * 没有它,上面那些状态再准,看着也像一张贴纸。
  *
  * ## 颜色与呼吸
  *
@@ -34,13 +37,52 @@ import type { AmbientAction } from '../types';
 
 const svgNS = 'http://www.w3.org/2000/svg';
 
-/** 上一拍的决策 → 身子摆成什么样。**四档各一种**,少一种那一档就没画。 */
+/** 上一拍的决策 → 演哪一种反应。**四档各一种**,少一种那一档就没演。 */
 const POSE: Record<AmbientAction, string> = {
   none: 'rest',
   speak: 'lean',
   silent: 'tuck',
   delegate: 'aside',
 };
+
+/**
+ * 阈限态里它在干嘛 → 呼吸多快。
+ *
+ * 后端这一位是**有序递进**的(none → understanding → thinking → rehearsing),
+ * 所以节奏也该是递进的:越往后越快。这不是装饰 —— 它让「它在使劲」这件事
+ * 在余光里看得见,而不用去读那一行字。
+ *
+ * 四档**都刻意不落在 0.18~0.22 Hz 那一带**:那一带最容易被余光当成「有事发生」
+ * 而反复把注意力拽走。
+ *
+ *   none          6.0s ≈ 0.167 Hz   (慢于那一带)
+ *   understanding 4.3s ≈ 0.233 Hz   (快于那一带)
+ *   thinking      3.5s ≈ 0.286 Hz
+ *   rehearsing    2.9s ≈ 0.345 Hz
+ *
+ * 最慢那一档原先写的是 5.2 秒,而 5.2 秒 = 0.192 Hz **正好在带子里** —— 注释却写着
+ * 「刻意都不落在那一带」。说的和现实相反,是判据算出来才发现的。
+ */
+const BREATH: Record<string, string> = {
+  none: '6s',
+  understanding: '4.3s',
+  thinking: '3.5s',
+  rehearsing: '2.9s',
+};
+
+/** 此刻这只东西周围正在发生什么。**全部来自同一帧。** */
+export interface PetLive {
+  /** 主轴:静 / 阈限 / 显形 */
+  readonly phase: 'silent' | 'liminal' | 'manifest';
+  /** 阈限态里正在干嘛。非阈限态时后端给 none */
+  readonly activity: string;
+  /** 此刻在不在收。null = 还没收到过帧 */
+  readonly sensing: boolean | null;
+  /** 你按没按「别看了」。**三态** —— null = 还没收到过帧,不能塌进 false */
+  readonly paused: boolean | null;
+  /** 上一拍的决策。变了就演一遍 */
+  readonly act: AmbientAction | null;
+}
 
 /** 展开态那一行仍然要写话 —— 脸讲得出情绪,讲不出「为什么」。 */
 export const POSE_WORD: Record<AmbientAction, string> = {
@@ -58,11 +100,8 @@ function el(tag: string, attrs: Record<string, string>): SVGElement {
 
 export interface PetHandles {
   readonly root: SVGElement;
-  /**
-   * `paused` 三态:true = 你按了急停,false = 在采,null = **还没收到过帧**。
-   * null 不能塌进 false —— 那等于替后端断言「它正看着」。
-   */
-  render(act: AmbientAction | null, paused: boolean | null): void;
+  /** 喂一帧。**每一帧都喂** —— 底子那几位就是靠这个动起来的。 */
+  render(live: PetLive): void;
 }
 
 export function createPet(): PetHandles {
@@ -91,19 +130,56 @@ export function createPet(): PetHandles {
   );
 
   // 眼睛。两道竖着的窄缝 —— 睁着是缝,闭上就压扁成一横。
+  //
+  // 眨眼**单独一层**。眨眼是 transform(压扁),眼睛的开合是几何量(y / height) ——
+  // 挂同一层的话动画会把数据那一层整个压住,于是「按了急停」就闭不上了。
+  // 这跟姿势/呼吸那一处是同一个坑,已经踩过一次。
+  const blink = el('g', { class: 'pet-blink' });
   const eyes = el('g', { class: 'pet-eyes' });
   // 眼睛也跟着圆一档:rx 给到半宽,两头就是整圆而不是倒角。
   const left = el('rect', { class: 'pet-eye', x: '13.2', y: '14.4', width: '4', height: '9.6', rx: '2' });
   const right = el('rect', { class: 'pet-eye', x: '22.8', y: '14.4', width: '4', height: '9.6', rx: '2' });
   eyes.append(left, right);
-  breath.append(eyes);
+  blink.append(eyes);
+  breath.append(blink);
   svg.append(body);
 
-  function render(act: AmbientAction | null, paused: boolean | null): void {
-    // 身子:上一拍想了什么。null = 还没收到过帧,那就连姿势都不摆。
-    svg.dataset['pose'] = act === null ? 'unknown' : POSE[act] ?? 'rest';
-    // 眼睛:看不看。**三档**,不是布尔。
-    svg.dataset['eyes'] = paused === null ? 'unknown' : paused ? 'shut' : 'open';
+  /**
+   * 上一次演过的是哪一拍。
+   *
+   * `ambient_action` 是**驻留位**:同一个决策会跟着之后每一帧一遍遍发回来。照帧演的话
+   * 它每 0.4 秒抽一下 —— 既刺眼,又把「刚才」说成了「一直」。所以只在它变了的时候演。
+   */
+  let lastAct = '';
+  let reactTimer = 0;
+
+  function render(live: PetLive): void {
+    // ── 底子:实时 ────────────────────────────────────────────────
+    svg.dataset['phase'] = live.phase;
+    // 非阈限态时后端给 none,节奏就回到最慢那一档。
+    svg.style.setProperty('--pet-rate', BREATH[live.activity] ?? BREATH['none']!);
+    svg.dataset['activity'] = live.activity;
+    // 眼睛:闭 / 睁 / 虚。**三档**,不是布尔。
+    svg.dataset['eyes'] =
+      live.paused === null ? 'unknown' : live.paused ? 'shut' : 'open';
+    // 在收的时候睁得开一点。不知道就不动它 —— 那不是「没在收」。
+    svg.dataset['sensing'] = live.sensing === null ? 'unknown' : String(live.sensing);
+
+    // ── 上面叠一次性的反应 ───────────────────────────────────────
+    // 演完就撤,回到实时那一层。一个已经过去的决策不该留成一个永久的姿势。
+    const key = live.act === null ? '' : live.act;
+    if (key !== lastAct) {
+      lastAct = key;
+      window.clearTimeout(reactTimer);
+      if (live.act && live.act !== 'none') {
+        svg.dataset['react'] = POSE[live.act] ?? 'rest';
+        reactTimer = window.setTimeout(() => {
+          delete svg.dataset['react'];
+        }, 1600);
+      } else {
+        delete svg.dataset['react'];
+      }
+    }
   }
 
   return { root: svg, render };
