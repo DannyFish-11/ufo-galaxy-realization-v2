@@ -409,7 +409,13 @@ class TestGitHubInstallerContractEnforcement:
             },
         ):
             with patch("core.github_installer._fetch_repo", side_effect=fake_fetch):
-                with patch("core.github_installer._install_deps", return_value=True):
+                with patch(
+                    "core.github_installer.install_addon_deps",
+                    # 依赖安装已拆到 core.addon_dependency_isolation,返回值也从 bool
+                    # 变成结构化结果(要把"为什么没装"传出去)。桩跟着改成新契约 ——
+                    # 继续返回 True 的话这条会因为"形状对不上"而假绿。
+                    return_value={"attempted": True, "success": True, "scope": "venv"},
+                ):
                     with patch.dict("sys.modules", {"core.mcp_loader": MagicMock(mcp_loader=mock_loader)}):
                         result = _run(installer.install("https://github.com/owner/good-tool"))
 
