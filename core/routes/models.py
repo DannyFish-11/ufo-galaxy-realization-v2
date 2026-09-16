@@ -88,14 +88,7 @@ async def get_catalog() -> Dict[str, Any]:
                 spec = get_model(tag)
                 if spec is None or spec.source != "local":
                     continue
-                if not getattr(spec, "requires_gpu", False):
-                    fits[tag] = "ok"
-                elif not has_gpu:
-                    fits[tag] = "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
-                elif spec.size_mb_val > prof.max_model_size_mb:
-                    fits[tag] = "insufficient_vram"  # 有显卡但装不下:会溢出到内存
-                else:
-                    fits[tag] = "ok"
+                fits[tag] = model_fit(spec, has_gpu, int(prof.max_model_size_mb))
         snap["gpu_fit"] = fits
         snap["tier_fit"] = _tier_fit(snap, fits)
     except Exception as exc:  # 探测失败不阻塞目录,但如实说明未评估
@@ -120,6 +113,44 @@ _FIT_REASON = {
     "insufficient_vram": "显存装不下,会溢出到内存",
     "no_gpu": "需要显卡,这台机器没有",
 }
+
+
+def model_fit(spec: Any, has_gpu: bool, budget_mb: int) -> str:
+    """这一个型号在这台机器上装不装得下 —— **显存准入的唯一落点。**
+
+    返回 ``ok`` / ``no_gpu`` / ``insufficient_vram``。
+
+    ## 为什么问 ``runtime_mb()`` 而不是 ``size_mb``
+
+    这两个数**两个方向都会差很远**（见 :class:`core.model_catalog.ModelSpec`）：
+
+    * MiniCPM-o 4.5 权重 6 GB，但视觉/音频编码器与语音解码器要一起驻留，
+      实测 **11 GB** —— 比权重大。
+    * 35B-A3B 的 INT4 权重 18 GB，专家留内存后显存驻留 **7.3 GB** —— 比权重小。
+
+    拿权重去比显存预算，8 GB 卡上 MiniCPM-o 会被判成「放得下」，然后**加载到
+    一半 OOM**，而且报错在加载途中不在准入处 —— 现场看到的是「模型带不动」，
+    根本查不到是准入判错了。
+
+    这个毛病 :class:`ModelSpec` 拆两栏时就写在文档里了，:mod:`core.model_selection`
+    也照着改了，**唯独这条路没改** —— 模型层修好了、消费方没跟上，是这个仓库最
+    典型的那种半截修法：看起来接上了，其实没有。
+
+    ## 为什么单拎成一个函数
+
+    原先这几行是嵌在 ``/catalog`` 那个 async 端点里的，要测它得起事件循环、还得
+    真去 shell 出 nvidia-smi。于是它**从来没有被直接测过**——那条讲「显存准入只问
+    runtime_mb」的判据有 9 条，没有一条查得到这个调用点。抽成纯函数之后，
+    判据可以拿真目录直接问它。
+    """
+    if not getattr(spec, "requires_gpu", False):
+        return "ok"
+    if not has_gpu:
+        return "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
+    # **只问驻留量。** 没量过的型号 runtime_mb() 自己退回权重值(保守,但不是编的)。
+    if spec.runtime_mb() > budget_mb:
+        return "insufficient_vram"  # 有显卡但装不下:会溢出到内存
+    return "ok"
 
 
 def _tier_fit(snap: Dict[str, Any], fits: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
