@@ -327,7 +327,7 @@ class TestGitHubInstallerInstall:
         assert result["name"] == "test-skill"
         mock_register.assert_called_once()
 
-    @patch("core.github_installer._install_deps")
+    @patch("core.github_installer.install_addon_deps")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
     def test_invalid_skill_contract_rejected_before_deps(self, mock_fetch, mock_register, mock_install_deps, tmp_path):
@@ -354,7 +354,7 @@ class TestGitHubInstallerInstall:
             ("handler_function", "'handler_function' is required"),
         ],
     )
-    @patch("core.github_installer._install_deps")
+    @patch("core.github_installer.install_addon_deps")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
     def test_skill_contract_reports_specific_missing_handler_fields(

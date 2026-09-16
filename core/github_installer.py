@@ -22,7 +22,12 @@ Key features
 * Record install metadata (repo, ref, commit, timestamp, sha256) to
   ``data/github_addons/manifest.json``.
 * Detect addon type (``mcp_tool.json`` → MCP, ``skill.json`` → Skill).
-* Install Python dependencies into a per-addon venv (optional).
+* Install Python dependencies into a **per-addon venv** (``.galaxy-venv/``,
+  created with ``--system-site-packages``).  Never into the host environment
+  unless ``GALAXY_ADDON_HOST_DEPS=1`` is set explicitly.
+* Reject a third-party ``requirements.txt`` outright when it contains pip
+  **options** (``--index-url`` and friends) — the same supply-chain check the
+  per-dependency path already applied, which ``-r requirements.txt`` bypassed.
 * Register MCP tools into ``MCPDynamicGateway`` / ``MCPLoader``.
 * Register Skills into ``SkillLoader``.
 * Uninstall and clean up.
@@ -393,68 +398,14 @@ def _fetch_repo(owner: str, repo: str, ref: str, dest: Path) -> Optional[str]:
     return sha
 
 
-# ── Dependency Installation ───────────────────────────────────────────────────
-
-
-def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
-    """Install Python dependencies for an addon.
-
-    Uses the current Python environment (pip install --target is avoided to
-    keep things simple; a venv per addon would be safer but heavier).
-    Deps may be package names or paths relative to addon_dir.
-    """
-    req_file = addon_dir / "requirements.txt"
-    if not deps and not req_file.exists():
-        return True
-
-    pip_cmd = [sys.executable, "-m", "pip", "install", "--quiet"]
-    addon_root = addon_dir.resolve()
-    for dep in deps:
-        dep = dep.strip()
-        if not dep:
-            continue
-        # 安全:deps 来自第三方仓库的 manifest。"-" 开头的条目会被 pip 当作
-        # 【选项】(如 --index-url=恶意源 → 供应链注入),一律拒绝。
-        if dep.startswith("-"):
-            logger.warning("dep rejected (option-like, injection risk): %r", dep)
-            continue
-        # Relative paths (e.g. ".") resolved against addon_dir
-        if dep.startswith(".") or dep.startswith("/"):
-            # 源头净化:路径型依赖只允许安全字符集,在【构造任何路径之前】
-            # 就掐断污点(绝对路径 /etc/... 、含 shell 元字符等一律拒绝)。
-            if dep.startswith("/") or not re.fullmatch(r"[A-Za-z0-9_./-]+", dep):
-                logger.warning("dep rejected (unsafe path chars): %r", dep)
-                continue
-            dep_path = (addon_dir / dep).resolve()
-            # 二次防御:归一后必须仍落在 addon 目录内(防 ../ 穿越)。
-            # 用 is_relative_to 而不是 startswith 前缀判断——后者可被
-            # 同前缀旁路目录绕过(如 /addons-evil 通过 /addons 的检查)。
-            if not dep_path.is_relative_to(addon_root):
-                logger.warning("dep rejected (escapes addon dir): %r", dep)
-                continue
-            pip_cmd.append(str(dep_path))
-        else:
-            # 包名/版本规格:PEP 508 合法字符白名单(字母数字 + . _ - [ ] < > = ! ~ , ;
-            # 空格)。掐掉 shell 元字符与选项注入,再交给 pip(list 形式无 shell)。
-            if not re.fullmatch(r"[A-Za-z0-9._\-\[\]<>=!~,; ]+", dep):
-                logger.warning("dep rejected (unsafe package spec): %r", dep)
-                continue
-            pip_cmd.append(dep)
-
-    if req_file.exists():
-        pip_cmd += ["-r", str(req_file)]
-
-    logger.info("Installing dependencies: %s", pip_cmd[3:])  # skip ['python', '-m', 'pip']
-    try:
-        result = subprocess.run(
-            pip_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300
-        )
-        if result.returncode != 0:
-            logger.warning("Dependency install warnings/errors: %s", result.stderr[:500])
-        return result.returncode == 0
-    except Exception as exc:
-        logger.warning("Dependency install failed: %s", exc)
-        return False
+# ── Dependency Installation(已拆到 core/addon_dependency_isolation.py)────────
+#
+# 拆分理由见那个模块的 docstring。这里只保留本文件用得到的几个名字。
+from core.addon_dependency_isolation import (  # noqa: E402
+    add_venv_to_sys_path,
+    install_addon_deps,
+    venv_python,
+)
 
 
 def _run_coro_sync(coro: Any, timeout: float) -> Any:
@@ -494,13 +445,20 @@ def _run_coro_sync(coro: Any, timeout: float) -> Any:
 
 
 def _build_mcp_command(addon_dir: Path, entrypoint: Any) -> List[str]:
-    """Resolve an entrypoint value to a launch command list."""
+    """Resolve an entrypoint value to a launch command list.
+
+    **Python 入口优先用这个 addon 自己的 venv 解释器。** 建了 venv 却仍然拿
+    ``sys.executable`` 去起进程,那个 venv 就是摆设:依赖装在 venv 里,跑的却是宿主
+    解释器,addon 一 import 就找不到自己的包 —— 装了隔离、没人用隔离,比不装更糟
+    (还多一份让人以为已经隔离了的假象)。
+    """
     if isinstance(entrypoint, list):
         # Last element is treated as the script path relative to addon_dir
         return [str(addon_dir / part) if i == len(entrypoint) - 1 else part for i, part in enumerate(entrypoint)]
     entrypoint_str = str(entrypoint)
     if entrypoint_str.endswith(".py"):
-        return [sys.executable, str(addon_dir / entrypoint_str)]
+        python_exe = venv_python(addon_dir) or Path(sys.executable)
+        return [str(python_exe), str(addon_dir / entrypoint_str)]
     if entrypoint_str.endswith(".js"):
         node_exec = shutil.which("node") or "node"
         return [node_exec, str(addon_dir / entrypoint_str)]
@@ -640,6 +598,19 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
     # Contract validation guarantees 'name' is non-empty; prefer it over 'id' for display.
     name = skill_manifest.get("name") or skill_manifest.get("id", "")
 
+    # Skill 是 **exec_module 进本进程**的(core/skill_loader.py 用 importlib
+    # spec_from_file_location + exec_module),不像 MCP 那样起子进程。所以给它
+    # 换解释器这条路不存在 —— 能做的是把这个 addon venv 的 site-packages **追加**
+    # 到 sys.path,让 skill import 得到自己的依赖,而宿主环境仍然一个包都没多装。
+    #
+    # 追加而不是插到最前:同名包以宿主的为准,venv 只补宿主没有的。反过来会让一个
+    # addon 的 numpy 悄悄盖掉整个进程的 numpy。
+    #
+    # **说清楚这一层解决了什么、没解决什么**:它解决的是"依赖被装进宿主环境",
+    # 不是"第三方代码跑在隔离边界里" —— 后者对 in-process 的 skill 本来就不成立,
+    # 那是 core/execution_isolation.py 那条线的问题,不在这次范围内。
+    add_venv_to_sys_path(addon_dir)
+
     try:
         from core.skill_loader import skill_loader
 
@@ -667,6 +638,7 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
 
 def _register_skill_md(addon_dir: Path) -> Dict[str, Any]:
     """Register a SKILL.md addon via SkillMDLoader."""
+    add_venv_to_sys_path(addon_dir)  # 同 _register_skill:进程内加载,只能靠 sys.path
     try:
         from core.skill_md_loader import skill_md_loader
 
@@ -1110,9 +1082,9 @@ class GitHubInstaller:
 
         # 6. Install dependencies
         deps = tool_manifest.get("dependencies", [])
-        deps_result = {"attempted": False, "success": True}
+        deps_result: Dict[str, Any] = {"attempted": False, "success": True, "scope": "none"}
         if detected_type in {"mcp", "skill", "skill_md"} and (deps or (dest / "requirements.txt").exists()):
-            deps_result = {"attempted": True, "success": _install_deps(dest, deps)}
+            deps_result = install_addon_deps(dest, deps)
 
         # 7. Register
         if detected_type == "mcp":
