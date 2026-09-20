@@ -985,6 +985,14 @@ class GitHubInstaller:
                 "message": "Dry-run: URL is valid and would be installed.",
             }
 
+        # 1b. 要不要先问人。名单内免确认,名单外(allowlist 为空时)问一句。
+        #     只收紧不放宽:allowlist 非空而不命中,上面的 validate_repo_url 已经硬拒了。
+        from core.github_addon_admission import admit_addon_install
+
+        admission = await admit_addon_install(owner, repo, effective_ref)
+        if not admission.allowed:
+            return {"success": False, "error": admission.reason, "admission_rule": admission.rule}
+
         # 2. Prepare destination directory
         # ``.`` 和 ``-`` 在白名单里,所以 ``..`` 会**原样活下来** —— re.sub 只替换
         # 不在白名单里的字符,而 ``..`` 两个字符都在。于是 ``ref=".."`` 拼出来的 dest

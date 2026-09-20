@@ -362,7 +362,15 @@ class TestGitHubInstallerContractEnforcement:
 
         return patch("core.github_installer._fetch_repo", side_effect=_fake)
 
-    def test_invalid_contract_aborts_install(self, tmp_path):
+    def test_invalid_contract_aborts_install(self, tmp_path, monkeypatch):
+        # 这条要验的是"契约不合格 → 中止安装"。安装现在还有一道**更早**的准入闸
+        # (GITHUB_ALLOWLIST 为空时要人确认,测试环境无人可问 → 拒),不把仓库先放进
+        # 名单的话,它会因为"没过准入"而失败 —— 结果也是 success=False,但
+        # **契约那一段一行都没跑到**,这条用例从此形同虚设。
+        #
+        # 用 allowlist 而不是关掉闸:闸照常判定、照常放行,被测的那段照常执行。
+        monkeypatch.setenv("GITHUB_ALLOWLIST", "owner/*")
+        monkeypatch.delenv("GITHUB_BLOCKLIST", raising=False)
         installer = self._make_installer(tmp_path)
 
         # Prepare a repo dir with an invalid mcp_tool.json

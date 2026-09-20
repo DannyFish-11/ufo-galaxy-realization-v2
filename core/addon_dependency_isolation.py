@@ -114,11 +114,22 @@ def resolve_addon_dir(addon_dir: Path, root: Optional[Path] = None) -> Path:
     # ``_install_dir`` 是**可注入**的(测试里就直接赋值),而本模块默认读的是环境变量。
     # 两者不一致时,拿环境变量那个当基准,会把注入方的每一个**合法**目录都判成越界 ——
     # 一道永远说"不"的检查和一道永远说"是"的检查一样没用。
-    root = Path(root).resolve() if root is not None else addon_root()
-    resolved = Path(addon_dir).resolve()
-    if resolved != root and not resolved.is_relative_to(root):
-        raise AddonPathError(f"addon 目录不在 {root} 下,拒绝: {addon_dir!r} → {resolved}")
-    return resolved
+    root_str = os.path.realpath(str(root)) if root is not None else str(addon_root())
+    resolved_str = os.path.realpath(str(addon_dir))
+
+    # 用 ``realpath`` + ``startswith(root + os.sep)``,而不是 ``Path.is_relative_to``。
+    #
+    # 两者的**判定结果完全一样**(包括挡住 ``/addons-evil`` 通过 ``/addons`` 的检查 ——
+    # 那正是要带上 ``os.sep`` 的原因,少了它就退化成能被同前缀旁路目录绕过的前缀比较)。
+    # 换写法是为了让 CodeQL 认得出这里有一道 sanitizer:``py/path-injection`` 认的是
+    # "归一化 + 前缀校验"这个形状,``is_relative_to`` 它不建模,于是整条数据流一路被判成
+    # 未净化 —— 第一版就是这么在报出 11 条之后仍然全红的。
+    #
+    # 判据不变、可读性略降,换回一条能被自动化工具看见的证据。这笔交换是值得的:
+    # 一道扫描器看不见的检查,在下一个人改动这里时也一样看不见。
+    if resolved_str != root_str and not resolved_str.startswith(root_str + os.sep):
+        raise AddonPathError(f"addon 目录不在 {root_str} 下,拒绝: {addon_dir!r} → {resolved_str}")
+    return Path(resolved_str)
 
 
 def venv_dir(addon_dir: Path, root: Optional[Path] = None) -> Path:
