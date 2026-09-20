@@ -464,8 +464,9 @@ class GalaxyTray:
     def _build_measurements_menu(self) -> "list":
         """「本机模型实测」子菜单 —— 那几个数散在四个模块里，这儿是唯一并排的地方。
 
-        关于一个型号，仓库里同时存着四种来路不同的数：目录声明的权重、磁盘上那个
-        GGUF 的真实大小、量过一次写进源码的驻留量、**这台机器自己量的** KV 单价。
+        关于一个型号，仓库里同时存着四种来路不同的数：目录声明的权重、**这台机器上
+        那一份**的真实大小（Ollama 托管的问 Ollama，llama.cpp 那条问 ``models/``
+        底下的 GGUF）、量过一次写进源码的驻留量、这台机器自己量的 KV 单价。
         排查「模型带不动」时第一个要问的就是它们，而在此之前没有任何一处把它们
         摆在一起过。
 
@@ -484,9 +485,7 @@ class GalaxyTray:
             rows = measurement_rows(*self._hardware_budget())
         except Exception as exc:  # noqa: BLE001
             logger.debug("读不到模型实测账: %s", exc)
-            return [
-                pystray.MenuItem("读不到实测账 / measurements unavailable", None, enabled=False)
-            ]
+            return [pystray.MenuItem("读不到实测账 / measurements unavailable", None, enabled=False)]
 
         for row in rows:
             kv = f"KV {row.kv_per_1k_mb} MB/1K" if row.kv_per_1k_mb > 0 else f"KV {UNKNOWN}"
@@ -496,9 +495,7 @@ class GalaxyTray:
             items.append(pystray.MenuItem(label, self._export_measurements))
         if items:
             items.append(pystray.Menu.SEPARATOR)
-        items.append(
-            pystray.MenuItem("导出成日志文件 / Export as log", self._export_measurements)
-        )
+        items.append(pystray.MenuItem("导出成日志文件 / Export as log", self._export_measurements))
         return items
 
     def _hardware_budget(self) -> tuple:

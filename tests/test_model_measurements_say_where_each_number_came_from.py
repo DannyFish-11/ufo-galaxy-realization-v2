@@ -47,14 +47,20 @@ class TestAnUnmeasuredNumberSaysSo:
             )
 
     def test_a_downloaded_model_reports_the_real_file(self, monkeypatch) -> None:
-        """下载过就该报真文件 —— 否则「换过量化」这条信息永远浮不上来。"""
+        """下载过就该报真文件 —— 否则「换过量化」这条信息永远浮不上来。
+
+        钉在真正走 GGUF 那条路的型号上（``llama_cpp`` 源）。Gemma 4 全家走的是
+        Ollama，对它们 patch ``resolve_gguf_path`` 什么也证明不了。
+        """
         import core.local_model_backends as lmb
         import core.model_catalog as mc
 
         monkeypatch.setattr(lmb, "resolve_gguf_path", lambda _t: "/tmp/fake.gguf")
         monkeypatch.setattr(mc, "effective_weight_mb", lambda _t: 4321)
         rows = {r.tag: r for r in measurement_rows()}
-        assert rows["gemma4:12b"].weight_on_disk_mb == 4321
+        row = rows["qwen3.6:35b-a3b"]
+        assert row.weight_on_disk_mb == 4321
+        assert "GGUF" in row.weight_source, f"没说清这个数是从哪条路来的：{row.weight_source}"
 
     def test_swapping_the_quantization_is_called_out(self) -> None:
         """差值本身就是「你换过量化」这条信息 —— 默默用掉等于把它咽了。"""
@@ -87,23 +93,20 @@ class TestAnUnmeasuredNumberSaysSo:
         import core.model_catalog as mc
 
         monkeypatch.setattr(lmb, "resolve_gguf_path", lambda _t: None)
-        none_here = render_report(measurement_rows(), budget_mb=8192)
-        disk_lines = [ln for ln in none_here.split("\n") if "磁盘上那一份" in ln]
-        assert disk_lines, "报告里没有磁盘那一栏了"
-        for line in disk_lines:
-            assert mr.NOT_DOWNLOADED in line, (
-                f"一个都没下载，磁盘那一栏却写着「{line.strip()}」—— "
-                "「没量过」读的人会去查探测，「还没下载」读的人会去下载。"
-            )
+        gone = {r.tag: r for r in measurement_rows()}["qwen3.6:35b-a3b"]
+        assert gone.weight_on_disk_mb is None
+        assert mr.NOT_DOWNLOADED in gone.weight_source, (
+            f"文件不在 models/ 底下，却写着「{gone.weight_source}」—— "
+            "「没量过」读的人会去查探测，「还没下载」读的人会去下载。"
+        )
 
         # 判别点：下载过的那一行**不许**还写着「还没下载」，否则上面那条只要
         # 把这一栏写死成那个词就永远绿。
         monkeypatch.setattr(lmb, "resolve_gguf_path", lambda _t: "/tmp/fake.gguf")
         monkeypatch.setattr(mc, "effective_weight_mb", lambda _t: 4321)
-        have_it = render_report(measurement_rows(), budget_mb=8192)
-        for line in [ln for ln in have_it.split("\n") if "磁盘上那一份" in ln]:
-            assert mr.NOT_DOWNLOADED not in line, f"文件就在磁盘上，却还写着还没下载：{line.strip()}"
-            assert "4.2 GB" in line, f"下载过却没报真文件大小：{line.strip()}"
+        here = {r.tag: r for r in measurement_rows()}["qwen3.6:35b-a3b"]
+        assert mr.NOT_DOWNLOADED not in here.weight_source, f"文件就在，却还写着还没下载：{here.weight_source}"
+        assert here.weight_on_disk_mb == 4321
 
     def test_zero_is_never_printed_as_a_number(self) -> None:
         """没有的数写成 0，会被读成「量出来是零」。"""
@@ -112,6 +115,79 @@ class TestAnUnmeasuredNumberSaysSo:
         assert mr._fmt_mb(-5) == UNKNOWN
         assert mr._fmt_mb(512) == "512 MB"
         assert mr._fmt_mb(8192) == "8.0 GB"
+
+
+class TestTheReportAsksTheRightRoute:
+    """**这两条各自钉着一个我已经推上去、又自己找回来的毛病。**
+
+    它们同属一类：报告去问了一条对这个型号根本不适用的路，然后把那条路的沉默
+    当成了事实。
+    """
+
+    def test_an_ollama_model_is_never_called_missing_just_because_ollama_is_down(self, monkeypatch) -> None:
+        """**第二跤。** Ollama 没应答 ≠ 这台机器上没有这个模型。
+
+        第一版只问 ``resolve_gguf_path``（直给路径 / HF 登记表 / ``models/*.gguf``）。
+        可 Gemma 4 全家和 MiniCPM-o 走的都是 **Ollama**，权重压根不在 ``models/``
+        底下 —— 于是那一版对着一台 Ollama 拉齐了模型的机器，逐行写「还没下载」。
+
+        而这比它替换掉的「未量过」**更坏**：「未量过」是没有断言，「还没下载」是一个
+        **错的断言**，读的人会真的去重下一遍已经有的模型。
+        """
+        monkeypatch.setattr(mr, "_ollama_installed", lambda: None)  # 没起来
+        rows = {r.tag: r for r in measurement_rows()}
+        for tag in ("gemma4:e2b", "gemma4:e4b", "gemma4:12b", "openbmb/minicpm-o4.5"):
+            src = rows[tag].weight_source
+            assert mr.NOT_DOWNLOADED not in src, (
+                f"{tag} 由 Ollama 托管，Ollama 没应答却被写成「{src}」—— " "没问到和问过了那儿没有，是两件事。"
+            )
+            assert mr.UNREACHABLE in src, f"{tag} 没说清是「问不到」：{src}"
+
+    def test_when_ollama_answers_the_real_size_comes_through(self, monkeypatch) -> None:
+        """判别点的另一半：Ollama 答上来了，就得报它说的那个数。
+
+        少了这一条，上面那条只要永远写「问不到」就能绿 —— 那这一栏就再没有数了。
+        """
+        monkeypatch.setattr(mr, "_ollama_installed", lambda: {"gemma4:12b": 6720, "gemma4:e2b": 1700})
+        rows = {r.tag: r for r in measurement_rows()}
+        assert rows["gemma4:12b"].weight_on_disk_mb == 6720
+        assert "Ollama" in rows["gemma4:12b"].weight_source
+        # 表里没有的那一条,才是真的「还没下载」—— 这时候说它，是有根据的。
+        assert mr.NOT_DOWNLOADED in rows["gemma4:e4b"].weight_source
+
+    def test_a_twelve_b_is_never_answered_with_a_two_b_size(self, monkeypatch) -> None:
+        """Ollama 那张表里找不到精确的一条时，**不许按家族根名凑**。
+
+        路由那边按根名松匹配（``tag.split(":")[0]``）是对的 —— 它要的是"该向哪台
+        服务报哪个 id"。但 ``gemma4:12b`` 的根名是 ``gemma4``，拿它去匹配尺寸会
+        撞上 ``gemma4:e2b``，于是一个 12B 被答成 1.8 GB，准入照着放行、加载必 OOM。
+        目录里 :func:`core.model_catalog.exact_model` 存在的理由一模一样。
+        """
+        monkeypatch.setattr(mr, "_ollama_installed", lambda: {"gemma4:e2b": 1800})
+        rows = {r.tag: r for r in measurement_rows()}
+        assert (
+            rows["gemma4:12b"].weight_on_disk_mb is None
+        ), f"12B 被答成了 {rows['gemma4:12b'].weight_on_disk_mb} MB —— 那是 e2b 的数"
+        # 带后缀的同一个型号要认得出,否则这条门把真匹配也挡了。
+        monkeypatch.setattr(mr, "_ollama_installed", lambda: {"gemma4:12b-instruct": 7000})
+        rows = {r.tag: r for r in measurement_rows()}
+        assert rows["gemma4:12b"].weight_on_disk_mb == 7000, "带后缀的同一个型号没认出来"
+
+    def test_every_locally_loaded_model_is_on_the_books(self) -> None:
+        """**第三跤。** 凡是在本机加载的都要有这本账。
+
+        第一版的筛子是 ``source != "local"``，注释写着"云端模型不吃本机显存"。
+        两头都错：``all_models()`` 里压根没有云端型号，而 ``source`` 说的不是
+        云/本地、是**由哪个后端加载**。结果 ``llama_cpp`` 那三个被当成云端漏掉了 ——
+        其中 ``qwen3.6:35b-a3b`` 正是专家卸载那一例，显存账最该看的那一个，
+        被一句想当然的注释挡在了账外。
+        """
+        import core.model_catalog as mc
+
+        want = {s.tag for s in mc.all_models() if str(s.source).strip() in mc.BACKEND_BY_SOURCE}
+        got = {r.tag for r in measurement_rows()}
+        assert want == got, f"账上少了 {sorted(want - got)}，多了 {sorted(got - want)}"
+        assert "qwen3.6:35b-a3b" in got, "专家卸载那一例不在账上 —— 这本账最该看的就是它"
 
 
 class TestTheReportRefusesToGuess:

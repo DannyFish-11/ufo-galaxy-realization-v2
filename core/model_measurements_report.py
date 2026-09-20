@@ -48,6 +48,14 @@ UNKNOWN = "未量过"
 #: 一个词把两种情况都盖住，就等于把那条能动手的信息咽掉了。
 NOT_DOWNLOADED = "还没下载"
 
+#: 该问的那条路**没答上来**时写这个词。
+#:
+#: 它跟 :data:`NOT_DOWNLOADED` 的区别是这份报告里最要紧的一条：
+#: 「还没下载」是一个**断言**（我问过了，那儿没有），「问不到」是**没有断言**
+#: （该问的人没应答）。把后者写成前者，就是拿一个没根据的事实去回答人 ——
+#: 而这正是我在这份报告上犯的第二跤，见 :func:`_weight_on_this_machine`。
+UNREACHABLE = "问不到"
+
 
 @dataclass
 class ModelRow:
@@ -57,8 +65,13 @@ class ModelRow:
     requires_gpu: bool
     #: 目录声明的权重（MB）。0 = 目录里没填过。
     declared_weight_mb: int = 0
-    #: 磁盘上那个 GGUF 的真实大小（MB）。``None`` = 还没下载到本机。
+    #: 这台机器上那一份权重的真实大小（MB）。``None`` = 没拿到数。
+    #:
+    #: **拿不到有两种，必须靠 ``weight_source`` 分开**：该问的那条路答了"没有"
+    #: （还没下载），还是那条路根本没应答（问不到）。见 :func:`_weight_on_this_machine`。
     weight_on_disk_mb: Optional[int] = None
+    #: 上面那个数是从哪条路问到的 / 为什么没问到。
+    weight_source: str = UNKNOWN
     #: 驻留量（MB）与它的来路。
     runtime_mb: int = 0
     runtime_source: str = UNKNOWN
@@ -92,6 +105,110 @@ def _fmt_mb(value: Optional[int]) -> str:
     return f"{value} MB"
 
 
+def _ollama_installed() -> Optional[Dict[str, int]]:
+    """问 Ollama 自己：这台机器上装着哪些模型、各多大（MB）。
+
+    返回 ``None`` 表示**这条路没问到**（没起来 / 超时 / 格式不认识），
+    **不表示"一个都没装"**。调用方必须把这两者分开 —— 混在一起就会对着一台
+    模型齐全的机器说"还没下载"。
+
+    地址走 :func:`core.ollama_endpoint.resolve_ollama_base_url`，不另立一份。
+    """
+    try:
+        import json as _json
+        import urllib.request
+
+        from core.ollama_endpoint import resolve_ollama_base_url
+
+        url = f"{resolve_ollama_base_url()}/api/tags"
+        with urllib.request.urlopen(url, timeout=2.0) as resp:  # noqa: S310
+            if getattr(resp, "status", 200) != 200:
+                return None
+            payload = _json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("问不到 Ollama 装了什么: %s", exc)
+        return None
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        return None  # 格式不认识也是"没问到",不是"没装"
+    out: Dict[str, int] = {}
+    for m in models:
+        if not isinstance(m, dict):
+            continue
+        name = str(m.get("name") or "")
+        size = m.get("size")
+        if name and isinstance(size, (int, float)) and size > 0:
+            out[name] = int(size) // (1024 * 1024)
+    return out
+
+
+def _ollama_match(tag: str, installed: Dict[str, int]) -> Optional[int]:
+    """Ollama 那张表里哪一条是这个目录 tag —— **精确，或者带后缀的同一个**。
+
+    ``gemma4:12b`` 认 ``gemma4:12b`` 和 ``gemma4:12b-instruct``，
+    **不认** ``gemma4:e2b``。
+
+    这里刻意**不复用** :meth:`core.multi_llm_router.MultiLLMRouter._provider_serving`
+    的匹配：那一套按根名（``tag.split(":")[0]``）松匹配，对"该向哪台服务报哪个 id"
+    是对的，对**尺寸**是灾难性的 —— ``gemma4:12b`` 的根名是 ``gemma4``，会匹配上
+    ``gemma4:e2b``，于是一个 12B 被答成 1.8 GB。目录里 :func:`exact_model` 存在的
+    理由一模一样：**猜错的数字比没有数字更危险。**
+    """
+    if tag in installed:
+        return installed[tag]
+    for name, size in installed.items():
+        if name.startswith(f"{tag}-"):
+            return size
+    return None
+
+
+def _weight_on_this_machine(tag: str, effective_weight_mb: Any, installed: Optional[Dict[str, int]]) -> Any:
+    """这台机器上这份权重多大，以及**这个答案是从哪条路问到的**。
+
+    返回 ``(mb_or_None, source)``。
+
+    按这个 tag **实际由谁加载**分路 —— 这是第二跤的所在。第一版只问
+    :func:`~core.local_model_backends.resolve_gguf_path`（直给路径 / HF 登记表 /
+    ``models/*.gguf``），可 Gemma 4 全家和 MiniCPM-o 走的都是 **Ollama**，权重压根
+    不在 ``models/`` 底下。于是那一版对着一台 Ollama 拉齐了模型的机器，逐行写
+    「还没下载」—— 说的和现实相反，而且比它替换掉的「未量过」更坏：
+    「未量过」是没有断言，「还没下载」是一个**错的断言**。
+
+    三种没有数的情形必须各说各的：
+
+    * 那条路答了「没有」        → :data:`NOT_DOWNLOADED`（可操作：去下载）
+    * 那条路没应答              → :data:`UNREACHABLE`（先把它起起来再问）
+    * 压根没有能问的路          → :data:`UNKNOWN`
+    """
+    from core.model_catalog import backend_for_tag
+
+    backend = backend_for_tag(tag)
+
+    if backend == "ollama":
+        if installed is None:
+            return None, f"{UNREACHABLE} · Ollama 没应答"
+        size = _ollama_match(tag, installed)
+        if size is None:
+            return None, f"{NOT_DOWNLOADED} · Ollama 里没有这一条"
+        return size, "Ollama 里那一份"
+
+    # llama.cpp 这条路:权重是磁盘上的 GGUF 文件。
+    #
+    # **必须先问文件在不在**,不能直接拿 effective_weight_mb() 的返回值当"磁盘上的":
+    # 那个函数查不到文件时会**退回目录声明**(这是它该有的行为)。照着写的话,
+    # 一台一个模型都没下载的机器,报告会把目录里的数原样抄成"磁盘上那一份" ——
+    # 而这份报告存在的全部意义就是把这两者分开。这是第一跤。
+    try:
+        from core.local_model_backends import resolve_gguf_path
+
+        if resolve_gguf_path(tag):
+            return int(effective_weight_mb(tag)), "磁盘上的 GGUF"
+        return None, f"{NOT_DOWNLOADED} · models/ 底下没有"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("读不到 %s 的磁盘权重: %s", tag, exc)
+        return None, f"{UNREACHABLE} · 找不动文件"
+
+
 def measurement_rows(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = None) -> List[ModelRow]:
     """把目录里每个本地型号的账拉齐。
 
@@ -101,13 +218,29 @@ def measurement_rows(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = 
 
     这个函数**不探硬件**。探测要 shell 出 nvidia-smi，冷调用可达数秒；让调用方
     决定要不要付这个代价，比在这里偷偷付掉好。
+
+    但它**会打一个本机回环**：``GET /api/tags`` 问 Ollama 装了什么（2 秒上限，
+    整张表只问一次）。这条不让调用方选，因为没有它就答不出"这台机器上有没有
+    这一份" —— 而那正是这份账的题面。问不到就如实写「问不到」，绝不退回
+    「还没下载」：后者是一个断言，没根据就不能说。
     """
-    from core.model_catalog import all_models, effective_weight_mb
+    from core.model_catalog import BACKEND_BY_SOURCE, all_models, effective_weight_mb
+
+    # 问一次,给所有行用 —— 每行问一次的话,一张表要打十几个回环。
+    installed = _ollama_installed()
 
     rows: List[ModelRow] = []
     for spec in all_models():
-        if getattr(spec, "source", "") != "local":
-            continue  # 云端模型不吃本机显存，没有这本账
+        # 凡是**在本机加载**的都要有这本账。
+        #
+        # 这里第一版写的是 ``source != "local"``,理由记的是"云端模型不吃本机显存" ——
+        # 两头都错：``all_models()`` 里压根没有云端型号，而 ``source`` 说的不是
+        # 云/本地，是**由哪个后端加载**。于是 ``llama_cpp`` 那三个被当成云端漏掉了，
+        # 其中 ``qwen3.6:35b-a3b`` 正是专家卸载那一例 —— 显存账最该看的那一个，
+        # 被一句想当然的注释挡在了账外。权威是 ``BACKEND_BY_SOURCE``:
+        # 它有键，就说明这个 source 由某个本机后端加载。
+        if str(getattr(spec, "source", "")).strip() not in BACKEND_BY_SOURCE:
+            continue
         tag = spec.tag
         row = ModelRow(
             tag=tag,
@@ -115,19 +248,7 @@ def measurement_rows(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = 
             declared_weight_mb=int(spec.size_mb()),
         )
 
-        # 磁盘上那一份。
-        #
-        # **必须先问文件在不在**，不能直接拿 effective_weight_mb() 的返回值当"磁盘上的"：
-        # 那个函数查不到文件时会**退回目录声明**（这是它该有的行为）。照着写的话，
-        # 一台一个模型都没下载的机器，这份报告会把目录里的数原样抄成"磁盘上那一份" ——
-        # 而这份报告存在的全部意义就是把这两者分开。自己犯一遍要治的病，尤其要记下来。
-        try:
-            from core.local_model_backends import resolve_gguf_path
-
-            if resolve_gguf_path(tag):
-                row.weight_on_disk_mb = int(effective_weight_mb(tag))
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("读不到 %s 的磁盘权重: %s", tag, exc)
+        row.weight_on_disk_mb, row.weight_source = _weight_on_this_machine(tag, effective_weight_mb, installed)
 
         # 驻留量:目录量过就是量过的,没量过 runtime_mb() 会退回权重 —— 那一档必须说清楚。
         row.runtime_mb = int(spec.runtime_mb())
@@ -176,14 +297,15 @@ def render_report(rows: List[ModelRow], budget_mb: Optional[int] = None) -> str:
         f"显存预算：{_fmt_mb(budget_mb) if budget_mb else UNKNOWN}",
         "",
         "说明：每一栏都写着这个数是哪来的。「未量过」不等于 0 —— 前者是不知道，"
-        "后者是知道它不要钱；「还没下载」也不是「未量过」—— 那一条是能动手的。",
+        "后者是知道它不要钱。「还没下载」和「问不到」也不是一回事：前者是问过了、"
+        "那儿没有（去下载就是了），后者是该应答的那一位没应答（先把它起起来）。",
         "",
     ]
     for row in rows:
         out.append(f"── {row.tag}{'（需显卡）' if row.requires_gpu else ''}")
         out.append(f"     目录声明权重   {_fmt_mb(row.declared_weight_mb)}")
-        on_disk = _fmt_mb(row.weight_on_disk_mb) if row.weight_on_disk_mb else NOT_DOWNLOADED
-        out.append(f"     磁盘上那一份   {on_disk}")
+        have = _fmt_mb(row.weight_on_disk_mb) if row.weight_on_disk_mb else ""
+        out.append(f"     这台机器上那份 {have or row.weight_source}" + (f"  （{row.weight_source}）" if have else ""))
         out.append(f"     显存驻留       {_fmt_mb(row.runtime_mb)}  （{row.runtime_source}）")
         kv = f"{row.kv_per_1k_mb} MB/1K" if row.kv_per_1k_mb > 0 else UNKNOWN
         out.append(f"     KV 单价        {kv}  （{row.kv_source}）")
@@ -213,6 +335,7 @@ def snapshot(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = None) ->
                 "requires_gpu": r.requires_gpu,
                 "declared_weight_mb": r.declared_weight_mb,
                 "weight_on_disk_mb": r.weight_on_disk_mb,
+                "weight_source": r.weight_source,
                 "runtime_mb": r.runtime_mb,
                 "runtime_source": r.runtime_source,
                 "kv_per_1k_mb": r.kv_per_1k_mb,
