@@ -14,9 +14,18 @@ CodeQL 的 ``py/clear-text-logging-sensitive-data`` 在设备接入这条链上�
 **但"我读过代码，觉得没问题"不是判据。** 这个文件把它变成判据：真的驱动一遍
 接入链，把所有日志抓下来，断言令牌一个字符都没出现在里面。
 
-CodeQL 那 10 条据此记进 ``config/codeql_findings_ledger.json``（false-positive），
-本文件就是台账里那条的 ``guarded_by`` —— 哪天有人真往日志里写了令牌，这里会红，
-而不是等 CodeQL 的告警淹在存量里没人看。
+CodeQL 那 10 条曾据此记进 ``config/codeql_findings_ledger.json``（false-positive），
+本文件是台账里那条的 ``guarded_by``。
+
+**台账里那条已经删掉了**（PR #1641 run 35496726168）：那一轮 SARIF 里
+``py/clear-text-logging-sensitive-data`` 一条都没有了。没有定位到是哪次上游改动
+或哪次 CodeQL 规则更新让它们消失的 —— 只核实了它们确实不在当轮结果里，
+于是按台账自己的规矩（"确认已修掉的请删除，留着会让台账慢慢变成一份没人信的清单"）
+删除。若日后重新出现，会被对账脚本当成新增报出来。
+
+**本文件不随之删除**，因为它验的从来不是"CodeQL 怎么判"，而是
+"令牌到底有没有进日志"。告警没了不等于那件事不会发生 —— 哪天有人真往日志里
+写了令牌，这里会红，和 CodeQL 报不报无关。
 """
 
 from __future__ import annotations

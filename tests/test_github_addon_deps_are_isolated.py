@@ -55,16 +55,22 @@ from core.github_installer import _build_mcp_command
 
 @pytest.fixture(autouse=True)
 def _addon_root_is_the_tmp_dir(tmp_path, monkeypatch):
-    """把 addon 根指到本用例的 tmp_path。
+    """把 addon 根指到本用例 tmp_path 的**上一级**，于是 tmp_path 自己是一个 addon 目录。
 
-    `resolve_addon_dir` 现在要求 addon 目录落在安装根下（见
+    `resolve_addon_dir` 要求 addon 目录落在安装根下（见
     `TestAddonDirIsConfinedToTheAddonRoot` 的说明）。pytest 的 `tmp_path` 不在
     那个根下，所以下面每条用例都得先把根挪过来——否则它们会因为"越界被拒"而红，
     而**它们要验的东西一个都没验到**，和放宽断言是同一种坏法。
 
-    根设成 `tmp_path` 本身：`tmp_path` 等于根（允许），它下面的任何子目录也合法。
+    为什么是上一级而不是 `tmp_path` 本身（这一行是被真实结果改过一次的）：
+    第一版把根设成 `tmp_path` 自己，靠的是"根等于自己也算合法"这条额外放行。
+    那条放行后来去掉了——它把边界判定写成了 `A != B and not startswith(...)`，
+    而这种析取形状让 CodeQL 无法断定 startswith 成立，10 条 path-injection
+    一条没少。判定收敛成单一条件之后，根目录自己不再是合法 addon 目录，
+    这里也就必须给 tmp_path 一个真正的父级根——这同时更贴近线上的形状：
+    addon 目录永远是 `根/owner/repo/ref`，从来不是根自己。
     """
-    monkeypatch.setenv("GITHUB_INSTALL_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_INSTALL_DIR", str(tmp_path.parent))
 
 
 class TestRequirementsAreScannedBeforePip:
@@ -285,6 +291,111 @@ class TestAddonDirIsConfinedToTheAddonRoot:
 
         with pytest.raises(AddonPathError):
             resolve_addon_dir(Path(str(addon_root()) + "-evil"))
+
+    def test_the_root_itself_is_not_an_addon_dir(self):
+        """根目录自己也要拒。
+
+        addon 目录永远是 `根/owner/repo/ref`——根自己不是任何一个 addon。
+        额外放行它没有用处，却要把判定写成析取（`!= root or startswith`），
+        而析取正是让 CodeQL 看不见这道 sanitizer 的那个条件。这条用例把
+        "不再放行根自己"钉住，免得下次有人为了图方便又加回去。
+        """
+        from core.addon_dependency_isolation import AddonPathError, addon_root, resolve_addon_dir
+
+        with pytest.raises(AddonPathError):
+            resolve_addon_dir(addon_root())
+
+    def test_a_dot_dependency_installs_the_addon_itself(self, tmp_path, monkeypatch):
+        """路径型依赖 "." 指的就是 addon 目录自己——收紧边界不能把它误伤掉。
+
+        这是路径型依赖里最常见的一种（装这个仓库本身）。边界判定改成
+        `startswith(root + os.sep)` 之后，"." 归一化的结果恰好**等于**边界，
+        于是必须显式处理；不处理就会静默变成"这条依赖被丢掉了"，
+        而 pip 仍然成功退出——最难发现的那种坏法。
+        """
+        import subprocess as _sp
+
+        addon = tmp_path / "acme" / "widget"
+        addon.mkdir(parents=True)
+        fake_python = addon / ".galaxy-venv" / "bin" / "python"
+        fake_python.parent.mkdir(parents=True)
+        fake_python.write_text("", encoding="utf-8")
+
+        seen: list = []
+
+        class _Ok:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def _record(cmd, **kw):
+            seen.append(cmd)
+            return _Ok()
+
+        monkeypatch.setattr(_sp, "run", _record)
+        result = install_addon_deps(addon, ["."])
+        assert result["success"] is True, result
+        assert len(seen) == 1
+        assert str(addon.resolve()) in seen[0], seen[0]
+
+    def test_a_dot_dot_dependency_is_still_refused(self, tmp_path, monkeypatch):
+        """而 ".." 照样拒——放行的是"自己"，不是"上一级"。"""
+        import subprocess as _sp
+
+        addon = tmp_path / "acme" / "widget"
+        addon.mkdir(parents=True)
+        fake_python = addon / ".galaxy-venv" / "bin" / "python"
+        fake_python.parent.mkdir(parents=True)
+        fake_python.write_text("", encoding="utf-8")
+
+        seen: list = []
+
+        class _Ok:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def _record(cmd, **kw):
+            seen.append(cmd)
+            return _Ok()
+
+        monkeypatch.setattr(_sp, "run", _record)
+        install_addon_deps(addon, [".."])
+        assert len(seen) == 1
+        assert str(addon.parent.resolve()) not in seen[0], seen[0]
+
+    def test_a_same_prefix_sibling_dependency_is_refused(self, tmp_path, monkeypatch):
+        """`../widget-evil` 不能通过 `.../widget` 的前缀检查。
+
+        这正是前缀比较必须带路径分隔符的原因。少了 `os.sep`，
+        `/…/widget-evil` 会以 `/…/widget` 开头而被判成"在目录内"——
+        同一个坑仓里在 resolve_addon_dir 那段也写着，两处都要钉住。
+        """
+        import subprocess as _sp
+
+        addon = tmp_path / "acme" / "widget"
+        addon.mkdir(parents=True)
+        (tmp_path / "acme" / "widget-evil").mkdir()
+        fake_python = addon / ".galaxy-venv" / "bin" / "python"
+        fake_python.parent.mkdir(parents=True)
+        fake_python.write_text("", encoding="utf-8")
+
+        seen: list = []
+
+        class _Ok:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def _record(cmd, **kw):
+            seen.append(cmd)
+            return _Ok()
+
+        monkeypatch.setattr(_sp, "run", _record)
+        install_addon_deps(addon, ["../widget-evil"])
+        assert len(seen) == 1
+        evil = str((tmp_path / "acme" / "widget-evil").resolve())
+        assert evil not in seen[0], seen[0]
 
     def test_install_refuses_an_out_of_root_dir_without_touching_subprocess(self, monkeypatch):
         """越界目录：不装、不建 venv、**一次 subprocess 都不起**。"""

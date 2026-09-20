@@ -413,6 +413,7 @@ from core.addon_dependency_isolation import (  # noqa: E402
     install_addon_deps,
     venv_python,
 )
+from core.github_addon_admission import admit_addon_install, approval_mode  # noqa: E402
 
 
 def _run_coro_sync(coro: Any, timeout: float) -> Any:
@@ -987,8 +988,6 @@ class GitHubInstaller:
 
         # 1b. 要不要先问人。名单内免确认,名单外(allowlist 为空时)问一句。
         #     只收紧不放宽:allowlist 非空而不命中,上面的 validate_repo_url 已经硬拒了。
-        from core.github_addon_admission import admit_addon_install
-
         admission = await admit_addon_install(owner, repo, effective_ref)
         if not admission.allowed:
             return {"success": False, "error": admission.reason, "admission_rule": admission.rule}
@@ -1263,6 +1262,7 @@ class GitHubInstaller:
             "total_installed": len(addons),
             "mcp_tools": mcp_count,
             "skills": skill_count,
+            "approval_mode": approval_mode(),  # 面板要如实说"会不会先问人";判定规则只在准入模块那一处
         }
 
     async def install_dry_run(self, url: str, ref: Optional[str] = None) -> Dict[str, Any]:

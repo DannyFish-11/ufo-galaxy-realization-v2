@@ -54,7 +54,7 @@ from typing import List
 
 logger = logging.getLogger("Galaxy.AddonAdmission")
 
-__all__ = ["AdmissionVerdict", "admit_addon_install", "evaluate_addon_admission"]
+__all__ = ["AdmissionVerdict", "admit_addon_install", "approval_mode", "evaluate_addon_admission"]
 
 #: 显式声明"这台机器上没有人把关"。**只能开,不能默认**。
 ENV_UNATTENDED = "GALAXY_ADDON_UNATTENDED"
@@ -88,6 +88,23 @@ def evaluate_addon_admission(owner: str, repo: str, *, allowlist: List[str], blo
         return AdmissionVerdict(False, False, f"{slug} 不在 GITHUB_ALLOWLIST 里", "not_allowlisted")
 
     return AdmissionVerdict(True, True, f"GITHUB_ALLOWLIST 为空,{slug} 需要人确认", "unlisted")
+
+
+def approval_mode() -> str:
+    """现在装一个插件会发生什么 —— 给面板用,让它能如实说出来。
+
+    ``"allowlist"``   名单非空:名单内直接装,名单外**拒**(不是"问一下")。
+    ``"ask"``         名单为空:每次都要人确认。
+    ``"unattended"``  显式声明了这台机器上没有人把关,一律不问。
+
+    为什么不让面板自己按环境变量推:那会变成第二处权威。判定规则改一次,
+    界面上说的话就和实际行为分家 —— 而"界面说会问我、实际没问"是最坏的那种不一致。
+    """
+    from core.github_installer import _get_allowlist
+
+    if _unattended():
+        return "unattended"
+    return "allowlist" if _get_allowlist() else "ask"
 
 
 def _matches(slug: str, patterns: List[str]) -> bool:

@@ -106,9 +106,12 @@ def resolve_addon_dir(addon_dir: Path, root: Optional[Path] = None) -> Path:
     line),说的就是这件事:路径与命令行都依赖用户提供的值,而**使用点没有校验**。
 
     所以这里做的不是"消掉告警",是补上那道本来就该有的检查:归一化之后必须仍在根下。
-    用 ``is_relative_to`` 而不是前缀字符串比较 —— 后者会被同前缀旁路目录绕过
-    (``/addons-evil`` 能通过 ``/addons`` 的前缀检查)。这个坑仓里在
-    ``_install_deps`` 的路径型依赖那段已经踩过一次并写在注释里。
+    前缀比较必须带上路径分隔符 —— 否则会被同前缀旁路目录绕过(``/addons-evil`` 能
+    通过 ``/addons`` 的前缀检查)。这个坑仓里在 ``_install_deps`` 的路径型依赖那段
+    已经踩过一次并写在注释里。
+
+    **根目录自己不算合法的 addon 目录**:addon 目录永远是 ``根/owner/repo/ref``。
+    下面第 3 条注释说明了为什么这条"顺手放行"不能留。
     """
     # ``root`` 显式传入优先。**这一点不是可选的**:``GitHubInstaller`` 的
     # ``_install_dir`` 是**可注入**的(测试里就直接赋值),而本模块默认读的是环境变量。
@@ -117,17 +120,26 @@ def resolve_addon_dir(addon_dir: Path, root: Optional[Path] = None) -> Path:
     root_str = os.path.realpath(str(root)) if root is not None else str(addon_root())
     resolved_str = os.path.realpath(str(addon_dir))
 
-    # 用 ``realpath`` + ``startswith(root + os.sep)``,而不是 ``Path.is_relative_to``。
+    # 判据只有一条:**归一化之后必须以「根 + 分隔符」开头**。
     #
-    # 两者的**判定结果完全一样**(包括挡住 ``/addons-evil`` 通过 ``/addons`` 的检查 ——
-    # 那正是要带上 ``os.sep`` 的原因,少了它就退化成能被同前缀旁路目录绕过的前缀比较)。
-    # 换写法是为了让 CodeQL 认得出这里有一道 sanitizer:``py/path-injection`` 认的是
-    # "归一化 + 前缀校验"这个形状,``is_relative_to`` 它不建模,于是整条数据流一路被判成
-    # 未净化 —— 第一版就是这么在报出 11 条之后仍然全红的。
+    # 三件事挤在这一行里,每一件都是被实际结果改出来的:
     #
-    # 判据不变、可读性略降,换回一条能被自动化工具看见的证据。这笔交换是值得的:
-    # 一道扫描器看不见的检查,在下一个人改动这里时也一样看不见。
-    if resolved_str != root_str and not resolved_str.startswith(root_str + os.sep):
+    # 1. 用 ``realpath`` 而不是 ``Path.resolve``,用 ``startswith`` 而不是
+    #    ``Path.is_relative_to`` —— 两者判定完全一样,但 CodeQL 的 ``py/path-injection``
+    #    只认"归一化 + 前缀校验"这个形状,``is_relative_to`` 它不建模。第一版用后者,
+    #    报出的 11 条一条没少。
+    #
+    # 2. 必须带 ``os.sep``。少了它就退化成能被同前缀旁路目录绕过的前缀比较
+    #    (``/addons-evil`` 会通过 ``/addons`` 的检查)。
+    #
+    # 3. **判定必须是单一条件,不能和别的条件用 and/or 串起来。**
+    #    第二版写的是 ``if resolved_str != root_str and not resolved_str.startswith(...)``,
+    #    为的是额外放行"根目录自己"。结果 CodeQL 依然报满 10 条 —— 因为从
+    #    ``A and B`` 不成立,推不出 B 不成立;守卫一旦是析取,它就无法断定
+    #    ``startswith`` 为真,整条数据流照样被判成未净化。所以这里**不**再为根目录
+    #    自己开特例:addon 目录永远是 ``根/owner/repo/ref``,根目录本身从来不是一个
+    #    合法的 addon 目录,放行它既无用处,又恰好是让这道检查对工具隐形的那个条件。
+    if not resolved_str.startswith(root_str + os.sep):
         raise AddonPathError(f"addon 目录不在 {root_str} 下,拒绝: {addon_dir!r} → {resolved_str}")
     return Path(resolved_str)
 
@@ -302,7 +314,8 @@ def install_addon_deps(addon_dir: Path, deps: List[str], root: Optional[Path] = 
 
     pip_cmd = [str(python_exe), "-m", "pip", "install", "--quiet"]
     # 改名是必要的:模块级已经有一个 addon_root() 函数,同名局部变量会把它遮掉。
-    addon_boundary = addon_dir.resolve()
+    # 这里已经是 resolve_addon_dir 的返回值(realpath 过),再 realpath 一次是幂等的。
+    addon_boundary = os.path.realpath(str(addon_dir))
     for dep in deps:
         dep = dep.strip()
         if not dep:
@@ -319,14 +332,22 @@ def install_addon_deps(addon_dir: Path, deps: List[str], root: Optional[Path] = 
             if dep.startswith("/") or not re.fullmatch(r"[A-Za-z0-9_./-]+", dep):
                 logger.warning("dep rejected (unsafe path chars): %r", dep)
                 continue
-            dep_path = (addon_dir / dep).resolve()
-            # 二次防御:归一后必须仍落在 addon 目录内(防 ../ 穿越)。
-            # 用 is_relative_to 而不是 startswith 前缀判断——后者可被
-            # 同前缀旁路目录绕过(如 /addons-evil 通过 /addons 的检查)。
-            if not dep_path.is_relative_to(addon_boundary):
+            if dep.rstrip("/") in (".", ""):
+                # "." 就是 addon 目录自己(最常见的路径型依赖:装这个仓库本身)。
+                # 直接用已经校验过的边界值,不再走一遍"拼接再判回来" —— 少一次
+                # 拼接就少一条要证明安全的路径。
+                pip_cmd.append(addon_boundary)
+                continue
+            dep_real = os.path.realpath(os.path.join(addon_boundary, dep))
+            # 二次防御:归一后必须仍落在 addon 目录**之内**(防 ../ 穿越)。
+            #
+            # 形状和 resolve_addon_dir 里那道一致,理由也一致:realpath + 带分隔符的
+            # startswith,而且**单一条件**。原先这里写的是 is_relative_to —— 判定没错,
+            # 但 CodeQL 不建模它,于是这一处在扫描器眼里等于没有校验。
+            if not dep_real.startswith(addon_boundary + os.sep):
                 logger.warning("dep rejected (escapes addon dir): %r", dep)
                 continue
-            pip_cmd.append(str(dep_path))
+            pip_cmd.append(dep_real)
         else:
             # 包名/版本规格:PEP 508 合法字符白名单(字母数字 + . _ - [ ] < > = ! ~ , ;
             # 空格)。掐掉 shell 元字符与选项注入,再交给 pip(list 形式无 shell)。
