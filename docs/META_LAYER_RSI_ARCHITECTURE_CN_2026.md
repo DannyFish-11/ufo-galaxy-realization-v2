@@ -586,3 +586,224 @@ ManifestStageController 负责显现台阶段
 | 前端视觉动力学 | `electron/renderer/presence_motion.js` |
 | 权重准入 | `core/weights_admission.py` |
 | 模型供给与路由 | `core/model_topology/` |
+
+---
+
+# 第七部分 · 外部材料逐项对照
+
+> 本节回答一个问题：所有者提供的这批外部来源，**哪些本仓已经有了、哪些是真缺口、
+> 哪些不适用**。判定一律以代码坐标为准，不以"听起来先进"为准。
+
+## 7.1 先说结论：18 份材料收敛成 5 条轴
+
+这批材料看起来是 18 个不同的东西，实际上只在讲 5 件事。下面每条轴都给出
+"多份材料指向同一点"的证据，以及本仓在这条轴上的真实位置。
+
+| 轴 | 材料来源 | 本仓位置 |
+|----|---------|---------|
+| **轴一 · 裁决权** | MetaRSI 定律四、Comp AI CRM 原则一、LongHorizon Auditor、RSIAgent Verifier、SoL-Pi 证据保留归约器 | **有明确反例**，见 §1.3 缺口二 |
+| **轴二 · Harness 是可被生成/改写的对象** | MetaRSI Harness-RSI 五槽位、JIT-Agent 四模块即时生成、Harness Genome、Evo-GDPO | 五槽位齐全但全是手写常量 |
+| **轴三 · 自改进的成本** | SoL-Pi 四机制、Devin Fusion MoE、定律三载体迁移、Magnitude 硬件档案、Logit 融合 | **比预期成熟得多**，见 7.4 |
+| **轴四 · 记忆作为被改进的对象** | RSIAgent 文件记忆 + Curriculum + reconciliation、MetaRSI Data-RSI、六层架构长短时记忆 | 有写有读，无裁决无退役 |
+| **轴五 · 在场、打断与通信带宽** | VUI 注意力编排、Claude 后台席位、C2C / Mostik 潜空间通信、Headlong 自唤醒、前后端运行时解耦 | 在场无时钟；跨设备是文本包络 |
+
+## 7.2 轴一 · 裁决权 —— 五份材料指向同一件事
+
+这是本次对照里最强的信号：**五个互不相关的来源，独立地讲了同一条规则。**
+
+| 来源 | 它的说法 |
+|------|---------|
+| MetaRSI 定律四 | 可信度由不可写面度量。闭环内部，能力变强与放宽标准得分完全相同 |
+| Comp AI CRM 原则一 | **系统工具从不接受任何模型给出的置信度数值**。让 LLM 给自己打分，它总倾向给高分 |
+| LongHorizon-Harness | Auditor **独立**校验真实环境输出，只有审计通过才算有效进度 |
+| RSIAgent | Verifier 独立检查结果，把"我以为成功"与环境真实状态分开 |
+| SoL-Pi 机制四 | 小模型的诊断回执必须逐条与归档原始日志比对，**只有对得上的原文才放行** |
+
+而本仓恰好有一处标准反例（§1.3 缺口二）。本次对照还发现它比原先描述的更严重：
+
+`core/openclawd.py:434 / 458 / 488` 的工具描述里，三处都在鼓励模型把
+`engineer__apply` / `engineer__validate` / `engineer__record`
+**放在同一轮里一次发出**。这条指引本身是 SoL-Pi 机制一（动作融合）的朴素版本——
+省掉中间的模型往返，方向是对的。但它和 `passed` 默认 `true` 叠在一起，
+效果就变成：**在知道结果之前，先把结论写下来。**
+
+描述里补了一句"但如果验证还没跑，就不要提前发 engineer__validate"——这又是一条
+礼貌约定。SoL-Pi 的做法给出了正解：**动作可以融合，裁决必须核验。**
+融合的是"编辑 + 跑验证命令"，被融合进去的验证**由 harness 自己执行并读退出码**，
+而不是由模型声明。
+
+> 结论：M1 的范围应当扩大一点——不只是把 `passed` 下线，而是把
+> apply→validate 这一段做成**harness 侧的融合动作**：应用补丁、立刻跑验证命令、
+> 把退出码作为 Verdict。这样动作融合的收益保留，自证的路径被物理切断。
+
+## 7.3 轴二 · Harness 可被生成 —— JIT-Agent 的四模块对得上本仓
+
+JIT-Agent 把 Harness 规范成四个 Python 模块 + 一份 YAML 提示词配置。
+这个切法对到本仓是这样的：
+
+| JIT-Agent 模块 | 本仓对应 | 状态 |
+|---------------|---------|------|
+| `memory.py` 工作记忆构建与更新 | `core/session_memory_facade.py` + `core/memory/unified.py` + `core/context_compaction.py` | 有，且更细 |
+| `planning.py` 规划状态与指令形成 | `core/agent/execution_planner.py` + `core/grounded_planner.py` | 有 |
+| `action.py` 执行主循环 | `core/openclawd.py:_react_loop` + `core/computer_use_loop.py` | 有 |
+| `tool_policy.py` 工具曝光与调用约束 | `core/openclawd.py:_collect_tools` + `core/context_trim.py:select_tools_jit` + `core/governance/tool_governor.py` | 有 |
+| YAML 提示词配置 | **没有** —— prompt 是硬编码字符串 | **缺** |
+
+四个模块本仓都有，唯独第五样（提示词作为配置）缺失。这**独立地印证了 §2.2
+把 System Prompt 定为 Harness-RSI 第一刀**的判断：它是四模块协议里唯一没有落地的那一格。
+
+至于 JIT-Agent 的"每个任务即时生成一整套 Harness"——对本仓**不适用**，至少现在不。
+理由：本仓的 Harness 不是一份可丢弃的脚本，它是 955 个模块、125 个节点、
+一整套权威链与冻结守则。重新生成它等于重新生成整个系统。
+可迁移的是**另一半**：Evo-GDPO 的思路（从历史运行归档里蒸馏高分策略）
+正是 §2.2 Data-RSI 要做的事，而本仓的归档已经现成——`core/replay_foundation.py`
+（1094 行的任务执行回放与审计底盘）。
+
+**Harness Genome 的本仓形态**：不是可移植的代码包，而是"某一类任务下，
+五槽位的哪一组配置被验证器反复判过 ACCEPT"。它应该是一份可导出的配置快照，
+不是一个新框架。
+
+## 7.4 轴三 · 成本 —— 这条轴上本仓比预期成熟得多
+
+SoL-Pi 从 152 个点子里留下 4 个机制。逐条对本仓：
+
+| SoL-Pi 机制 | 本仓对应 | 判定 |
+|------------|---------|------|
+| **一 · 动作融合**（编辑与后续命令合成一个本地序列，省掉中间模型往返） | 只有提示词层面的朴素版（`core/openclawd.py:434/458/488` 叫模型"放在同一轮里"） | **缺 harness 侧实现**。见 7.2：这正是 M1 该补的形状 |
+| **二 · 在线上下文压缩**（按子任务算成本，未来省下的能覆盖重写代价才压） | `core/context_compaction.py:should_compact` —— 双触发器：水位（占用 ≥ 七成）+ **跑道**（`core/context_runway.py` 按烧率推算还剩几轮） | **已有，且切法不同**。本仓盯的是两种失败形态（慢涨 / 一步跨过），SoL-Pi 盯的是 KV-cache 重写的经济性。**两者不冲突，可以叠加**：跑道判"该压了"，成本判"现在压划不划算" |
+| **三 · 输出归档与索引**（大块输出落盘，上下文只留句柄+摘录，按页召回） | `core/context_archive.py` —— `archive_segment()` 原文整段落盘、`list_segments()` / `load_segment()` / `render_segment_text()` 分页召回 | **已有，等价实现**。该模块文件头甚至写明了不这样做会退化成"压缩=删除" |
+| **四 · 证据保留归约器**（小模型先读长日志，回执必须与归档原文逐条核验才放行） | `core/context_archive.py` 提供了归档与召回（核验的**素材**具备），但**没有**"廉价模型先读 + 核验后放行"这一层 | **缺**。而且这是轴一的同一条规则换了个场景 |
+
+另外两份材料落在同一条轴：
+
+- **Devin Fusion（前沿主模型 + 低成本副模型，成本降 43%）** → 本仓有
+  `core/multi_llm_router.py` 的路由级联、`core/model_topology/routing_policy.py`
+  的档位策略、`core/speculative_draft.py` 的草稿位（且该模块明确拒绝把它做成一个开关，
+  因为"开不开、开多大"取决于机器，有净亏 −44.6% 的实测反例）。
+  **同一思想本仓已有三处实现，纪律比原文更严。**
+- **Magnitude（硬件档案 + 模型元数据 → 判断配置是否合适与大致速度）** → 本仓有
+  `core/hardware_compute_profiler.py`（636 行实时 GPU/CPU/内存画像）、
+  `core/model_selection.py:recommend()`、`core/tts/compute_fit.py` 事前匹配预检、
+  以及 `core/context_measurements.py`——后者尤其关键：它的口径是
+  **"不臆造，去量"**，把 KV 单价从目录里的声明改成这台机器上的实测值。
+  **本仓在这条轴上走得比 Magnitude 更远。**
+- **三个小模型的 Logit 级融合** → 需要同 tokenizer/同词表 + 本地 transformers 并行前向，
+  本仓 `core/local_model_backends.py` 有 transformers 后端，技术上不是不能试。
+  但该文章的收益主张没有可复现证据，而本仓对这类主张已有既定处置
+  （见 `speculative_draft.py`：公开实测方向相反的案例同时存在）。
+  **判定：可作为 Model-RSI 的一个 flag 后实验，不进路线图。**
+
+## 7.5 轴四 · 记忆作为被改进的对象 —— RSIAgent 是最贴合的模板
+
+RSIAgent 的前提与本仓完全一致：**模型权重不变**。它的三件套：
+
+```
+Actor       在环境中执行任务
+Verifier    独立检查结果（把"我以为成功"和环境真实状态分开）
+Curriculum  决定下一项最有信息量的练习
+     ↓
+经验被归纳 → 修订(reconciliation) → 冻结成可跨任务复用的文件记忆
+```
+
+对到本仓：
+
+| RSIAgent 部件 | 本仓对应 | 状态 |
+|--------------|---------|------|
+| Actor | `OpenClawd` | 有 |
+| Verifier | **无独立角色**（`grep class .*Auditor` 在 core/ 下只命中三个不相干的治理模块） | **缺**——与轴一同一个洞 |
+| Curriculum | 无 | 缺。这正是 §2.3 横轴缺的**具体形态** |
+| 经验 → 文件记忆 | `core/task_memory.py` 的 `TaskSummary` + `core/cognitive/pattern_miner.py` | 有素材，无"冻结成规则"的一步 |
+| reconciliation（防止把一次局部结果写成无条件规律） | **无** | 缺 |
+
+RSIAgent 那套"带条件的操作性假设"（环境状态 + 前置条件 → 动作 → 结果/失败后果）
+正是本仓 `pattern_miner` 挖出来的东西**缺的那层结构**：现在挖出的是
+"strategy=A 成功率 95%"，没有前置条件，因此无法判断它在什么条件下不成立。
+
+同时要按论文自己的警告收紧：**Verifier 误判 PASS 会污染后续 Curriculum 与记忆。**
+这条对本仓的含义是——轴一没修好之前，轴四一步都不能走。
+
+> 顺带修正 §2.3 的一处含糊：横轴"选下一个算子"的具体形态就是 Curriculum
+> ——选**最有信息量的下一次练习**，而不是选"看起来最该改的地方"。
+
+## 7.6 轴五 · 在场、打断与通信带宽
+
+**VUI 注意力编排** —— 材料的核心是：系统不只要判断"说什么"，还要判断
+**"是否应该现在说"**；部分更新进 task memory 等下次、部分合并成一次摘要、
+只有真正需要即时决策的才主动打断。
+
+对到本仓：`core/ambient_attention_loop.py` 已经有
+SPEAK / SILENT / DELEGATE 三选一，以及冷却 + 场景去重兜"话痨"。
+**缺的是多任务并发时的仲裁**——现在是单拍单决策，没有"三个后台任务同时有事要说，
+先说哪个、哪些合并、哪些憋到下次"这一层。本仓有 `core/focus_stack.py`、
+`core/interruptibility_registry.py`、`core/human_intervention_taxonomy.py`
+三个相关模块，是否已经覆盖需要单独查一次，本文档不下结论。
+
+**Claude 在 Cowork 里的后台席位（不抢鼠标）** —— 对到本仓是
+`core/windows_execution_arbiter.py` 的四级回退链（System API → UIA → …）
+与 `core/computer_use_loop.py` 的自主截屏-决策-动作循环。
+**本仓已经是"后台席位"形态**，这条材料更多是佐证方向，不是缺口。
+
+**C2C / Mostik 潜空间通信（交换 KV-cache 或隐藏状态而非文本）** ——
+这条要说清楚，因为它最容易被误当成下一步：
+
+- 协议分层是对的：MCP = Agent↔工具，A2A = Agent↔Agent（文本层），
+  C2C = Agent↔Agent（表示层）。本仓的跨设备链路
+  （`core/unified/command_envelope.py` 的 `CommandEnvelope` / `ResultEnvelope`、
+  `contracts/handoff_envelope_v2.py` 的 `HandoffEnvelopeV2`）**全部是结构化 JSON**，
+  也就是 A2A 那一层。
+- **但本仓不具备 C2C 的前提。** C2C 要求收发双方是**同构模型**（同架构、同层数、
+  同 KV 布局）。本仓的参与方是 Windows 主机 + Android 设备 + 云端 API，
+  模型异构是常态，而且相当一部分参与方根本不持有模型。
+- 材料自己给出的限制也很关键：**Sharer 弱于 Receiver 时反而误导**。
+  这和轴一是同一个问题的另一种形态——一个不够格的来源，其输出被下游当成事实。
+- 带宽账也对不上：7B 模型 64k 上下文的 KV-cache 约 4GB，要 100ms 传完需要 40Gbps，
+  那是 RDMA 的范围；本仓的跨设备链路是 WebSocket / NATS。
+
+> **判定：C2C 现在不做，但架构不应当把它堵死。** 具体做法是：包络协议里
+> 保留一个**表示层载荷槽位**（声明式的，默认空），让未来的表示级传输有位置可落，
+> 而不必改动 `CommandEnvelope` 的骨架。这符合守则 R7.x（加法而非替换）。
+> 同时按材料的隐私提示记一条：KV-cache 比文本更私密，文本可审计而内部状态不可，
+> 本仓的日志脱敏（`core/log_redaction.py`）对它无效。
+
+**Headlong（不到 1 万行 Bash、自己醒来干活、干完来汇报）** ——
+对到本仓就是 `core/ambient_attention_loop.py`（2 秒一拍，默认开）
+加 `core/galaxy_main_loop_l4_enhanced.py`（L4 自治循环，**生产路径不可达**，
+该模块文件头自己写明了）。**形态本仓已有，差的是"自己醒来之后干什么"** ——
+也就是元层的 Kernel。这条材料印证了 §2.3 把元层做成后台循环的选择。
+
+## 7.7 剩下的：判定为不适用或仅供佐证
+
+| 材料 | 判定 |
+|------|------|
+| **Jev / Decision Execution Layer**（State+Question+Options → Choice+Confidence） | 形状上正好对应 `ExecutionPlanner._pick_strategy()` 与 `_determine_execution_path()` 这两处手写 if 链。**但不能照搬**：它返回 confidence，而轴一（Comp AI CRM 原则一）明确说系统工具不接受模型给出的置信度。**可用位置只有一处**：元层横轴（离线、可审计、选下一个算子），**绝不进 per-request 热路径**——那里本仓的既定纪律是决策路径必须对象锚定、确定性（见 `core/semantic_anchoring.py`）|
+| **NCP 预测下一个概念**（先想后说） | 模型内部机制，本仓不训练模型，**不适用**。系统层面的类比（先审议后落手）本仓已经有：LIMINAL 相位 + `core/liminal_rehearsal.py` |
+| **OpenBitFun**（Minimal/Standard/Ultimate 三档 + 插件生态） | 本仓有 `core/system_mode.py`（模式解析的权威）与 125 节点插件体系。**同构，无新增信息** |
+| **RabbitOS 3** | 材料只有"即将发布、封闭测试"，无可对照的技术内容 |
+| **六层智能体架构**（感知/记忆/认知规划/推理/工具调度/执行复盘） | 是对现有范式的描述，本仓六层全部有对应实现。**可作为对外介绍的框架，不构成改动依据** |
+| **前后端运行时态解耦**（所有者原话） | 已落在 §3.4，是本文档第三部分的核心命题 |
+
+## 7.8 对照之后，路线图的三处修订
+
+1. **M1 扩大范围**：不只把 `passed` 下线，而是把 apply→validate 做成
+   **harness 侧的融合动作**（应用 + 实跑 + 读退出码）。
+   依据：SoL-Pi 机制一 + 机制四的组合，以及 7.2 发现的三处"同一轮里发出"指引。
+2. **M4 增加一步**：Data-RSI 产出的不只是用例，还要有 RSIAgent 式的
+   **带前置条件的操作性假设** + reconciliation，否则挖出的统计无法判断适用边界。
+   横轴的形态正名为 **Curriculum**（选最有信息量的下一次练习）。
+3. **新增 M7（低优先级，不阻塞）**：在包络协议里留一个声明式的表示层载荷槽位，
+   为未来的 C2C 类传输留位置。默认空、无消费者、可整包删除——
+   按守则 R6.1（新协议类型必须有对应消费者）的要求，这一条**必须等到真有消费者时才落地**，
+   现在只记录意图，不写代码。
+
+## 7.9 一句话总结这次对照
+
+18 份材料里，**本仓已经做到甚至做得更好的有 6 条**（上下文压缩与归档、
+硬件感知、路由级联与草稿位、后台执行席位、模式挖掘、自发注意力）；
+**真正的缺口只有 3 个**，而且它们其实是同一个洞的三种形态：
+
+```
+裁决权不独立  →  记忆无法被信任地更新  →  没有 Curriculum 可以选下一步练什么
+（轴一）           （轴四）                  （横轴）
+```
+
+**先修轴一。在裁决面独立之前，其余全部是在给一个会自我打分的系统加速。**
