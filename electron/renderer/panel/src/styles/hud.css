@@ -1390,80 +1390,80 @@ body {
   background: linear-gradient(166deg, rgba(255, 246, 233, 0.72), rgba(252, 240, 226, 0.5));
   box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.6);
 }
-/* ── 分流:左边项目,右边接出来的工具 ──────────────────────────────────
+/* ── 分流:左边一个大框装项目,右边三个框装接出来的能力 ────────────────
    这一段里混着两种东西:"我接了一个项目"和"我多了一个模型能调的工具"。
    混成一列时,想找项目的人要在一堆工具里扒,反之亦然。
 
-   窄处塌成一列 —— 设置页本来就不宽,硬撑两栏会把卡片挤到读不了。塌了之后
-   分组标题还在,分流这件事不丢。 */
-.ga-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+   左边一栏一个框(项目),右边一栏三个框(MCP / Skill / MHS)。四个框**同一套
+   做法**,只是尺寸不同。
+
+   窄处塌成一列 —— 设置页本来就不宽,硬撑两栏会把每一行挤到读不了。
+   塌了之后框还在,分流这件事不丢。 */
+.ga-split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .ga-split[hidden] { display: none; }
 @container (max-width: 560px) { .ga-split { grid-template-columns: minmax(0, 1fr); } }
 .ga-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
-/* ── 一个分组:原生 <details>,不自己造展开收缩 ──────────────────────── */
-.ga-group { min-width: 0; }
-.ga-group-head {
-  display: flex; align-items: center; gap: 7px; cursor: pointer;
-  padding: 3px 2px; border-radius: 8px; list-style: none;
-  font-size: var(--t-small); color: var(--ink);
-}
-/* 去掉两家浏览器各自的小三角:方向由下面那道自己画的折角说,画两个会打架。 */
-.ga-group-head::-webkit-details-marker { display: none; }
-.ga-group-head::marker { content: ''; }
-.ga-group-head:hover { background: rgba(252, 251, 255, 0.5); }
-.ga-group-head svg { flex: none; color: var(--ink-3); }
-.ga-group-name { flex: 1; min-width: 0; }
-.ga-group-head b { font-weight: 400; font-size: var(--t-mini); color: var(--ink-3); }
-/* 自己画的折角:收起朝右,展开朝下。用边框拼,不引第二种图标画法。 */
-.ga-group-head::after {
-  content: ''; flex: none; width: 5px; height: 5px; margin-left: 2px;
-  border-right: 1.2px solid var(--ink-3); border-bottom: 1.2px solid var(--ink-3);
-  transform: rotate(-45deg); transition: transform 0.2s var(--ease);
-}
-.ga-group[open] > .ga-group-head::after { transform: rotate(45deg); }
-.ga-group-desc {
-  margin: 2px 0 8px 23px; font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3);
-}
-.ga-group-empty { padding: 6px 2px 2px 23px; font-size: var(--t-mini); color: var(--ink-3); opacity: 0.8; }
-
-.ga-list { display: flex; flex-direction: column; gap: 8px; }
-
-/* 卡片是**内嵌**的,不是浮起来的一块。
-
-   底色和这一页完全一样(不自带任何填充),边界靠一圈内凹的痕迹说 ——
-   整圈一道细线定边界,上沿压一道暗影、下沿留一道亮边,合起来读作
-   "这块面被按下去了"。
-
-   第一版和 .up-card 一样,是自带渐变底、带外投影的浮起卡片。排成一列之后
-   整段就变成一串亮条摞在页面上,而这一页其余地方(那 335 个键)全是裸行 ——
-   同一个页面上两种重量,那块东西看着就是贴上去的。 */
-.ga-card {
-  display: flex; flex-direction: column; gap: 3px; min-width: 0;
-  padding: 10px 12px; border-radius: 11px;
-  background: transparent;
+/* ── 一个框 ────────────────────────────────────────────────────────────
+   **内嵌**,不是浮起来的一块:底色就是这一页的底色,边界靠一圈内凹的痕迹说 ——
+   整圈一道细线定边界,上沿压一道暗影、下沿留一道亮边,合起来读作"这块面被按
+   下去了"。浮起来的框排成四个摞在页面上,而这一页其余地方(那 335 个键)全是
+   裸行,同一个页面上两种重量,那块东西看着就是贴上去的。 */
+.ga-frame {
+  display: flex; flex-direction: column; min-width: 0;
+  border-radius: 12px; overflow: hidden;
   box-shadow:
     inset 0 0 0 1px rgba(93, 84, 102, 0.11),
     inset 0 2px 3px -1px rgba(93, 84, 102, 0.17),
     inset 0 -1px 0 rgba(255, 255, 255, 0.6);
 }
-.ga-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.ga-name { font-weight: 500; font-size: var(--t-small); color: var(--ink); }
-.ga-repo {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--t-mini); color: var(--ink-2); word-break: break-all;
+.ga-frame-head {
+  flex: none; display: flex; align-items: center; gap: 7px;
+  padding: 9px 12px 7px; font-size: var(--t-small); color: var(--ink);
 }
-.ga-meta { margin-top: 2px; font-size: var(--t-mini); line-height: 1.45; color: var(--ink-3); }
-.ga-note { font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
-.ga-why { font-size: var(--t-mini); line-height: 1.45; color: var(--warn); }
-/* 依赖没装成是另一件事:它可能注册成功了,依赖却被整份拒了。 */
-.ga-deps { font-size: var(--t-mini); line-height: 1.45; color: var(--warn); }
-.ga-where {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--t-micro); color: var(--ink-3);
+.ga-frame-head svg { flex: none; color: var(--ink-3); }
+.ga-frame-name { flex: 1; min-width: 0; }
+.ga-frame-head b { font-weight: 400; font-size: var(--t-mini); color: var(--ink-3); }
+
+/* 框里自己滚,不是让整页跟着长:四个框各装各的,某一组装了二十条时,
+   不该把另外三组顶到屏幕外面去。滚动条照 .sf-body 那一套,不另画一种。 */
+.ga-frame-body {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 6px 8px;
+  display: flex; flex-direction: column; gap: 1px;
 }
-.ga-acts { display: flex; align-items: center; justify-content: flex-end; margin: 2px -9px -2px 0; }
+.ga-frame[data-form='project'] .ga-frame-body { max-height: 264px; }
+.ga-frame-body { max-height: 178px; }
+.ga-frame-body::-webkit-scrollbar { width: 6px; }
+.ga-frame-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
+.ga-frame-empty {
+  padding: 4px 6px 6px; font-size: var(--t-micro); line-height: 1.6; color: var(--ink-3);
+}
+
+/* ── 一条:压成一行 ────────────────────────────────────────────────────
+   图标带头、名字、状态点、移除。完整的那几句(坐标、落盘路径、卡在哪一步)
+   进 title,鼠标停一下才出来 —— 同左栏底下那块「接上了什么」的做法。
+
+   上一版每条占五六行,四个框摞起来一屏放不下两条。而这一页是拿来**扫**的:
+   先看有哪些,再点开看某一个。 */
+.ga-row-wrap { display: flex; flex-direction: column; }
+.ga-row-item {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  padding: 4px 6px; border-radius: 8px;
+  font-size: var(--t-mini); line-height: 1.5;
+}
+.ga-row-item:hover { background: rgba(252, 251, 255, 0.5); }
+.ga-row-icon { flex: none; color: var(--ink-3); }
+.ga-row-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink);
+}
+/* 「移除」悬停才显形:它是次要动作,而且一列里十个「移除」并排本身就是噪音。
+   键盘走到它时同样要出来 —— 只认 :hover 的话,不用鼠标的人永远够不着。 */
+.ga-row-del { flex: none; opacity: 0; padding: 2px 7px; transition: opacity 0.18s var(--ease); }
+.ga-row-item:hover .ga-row-del,
+.ga-row-del:focus-visible { opacity: 1; }
+.ga-why { padding: 0 6px 4px 26px; font-size: var(--t-micro); line-height: 1.5; color: var(--warn); }
 
 /* ── 状态用**光和深度**说,不用颜色 ──────────────────────────────────
    和左栏底下那块「接上了什么」同一套话(见 .wired-dot 那段)。所有者当初对
@@ -1474,15 +1474,15 @@ body {
      没接上  沉进面里,不发光
 
    **不呼吸。** 左栏那一块是常驻 HUD 上的一列,一个呼吸的光点是背景音;
-   这里是一份可能十几张卡片的清单,十几个光点一起呼吸就成了噪音。 */
+   这里是一份可能几十条的清单,几十个光点一起呼吸就成了噪音。 */
 .ga-dot {
-  flex: none; width: 7px; height: 7px; border-radius: 999px;
+  flex: none; width: 6px; height: 6px; border-radius: 999px;
   background: rgba(255, 255, 255, 0.5);
   box-shadow:
     inset 0 0 0 0.5px rgba(93, 84, 102, 0.16),
     inset 0 -1px 1.5px rgba(93, 84, 102, 0.14);
 }
-.ga-card[data-ok='true'] .ga-dot {
+.ga-row-item[data-ok='true'] .ga-dot {
   background: #fff;
   box-shadow:
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
@@ -1490,7 +1490,7 @@ body {
     0 1px 2.5px rgba(93, 84, 102, 0.3),
     0 0 7px 1px rgba(255, 255, 255, 0.85);
 }
-.ga-card[data-ok='false'] .ga-dot {
+.ga-row-item[data-ok='false'] .ga-dot {
   background: rgba(255, 255, 255, 0.18);
   box-shadow:
     inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),

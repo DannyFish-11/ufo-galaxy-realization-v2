@@ -14,19 +14,20 @@
  * MCP / Skill 是 GitHub 项目的**交集**,不是它的定义:接一个仓库可能是为了拿它
  * 跑实验、读它、拿它当素材。所以左栏那一档不是"降级",是并列的一档。
  *
- * ## 为什么右栏只有两组,而不是三组
+ * ## 右栏第三组 MHS:画出来,但把它**现在是什么**写清楚
  *
- * 本来要做的第三组是 MHS(Model Hardware Standard,Anthropic 2026-08-27 的研究预览)。
- * **做不了,而且仓里已经判过一次**:见 ``docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md``
- * 第 ④ 节 —— MHS 至今没有公开规范、没有 SDK、没有 schema、没有一致性测试,
- * "接入"只能照新闻稿把消息格式编出来,那不是实现协议,是造一个同名的赝品。
- * 那份文档还专门写了一节「也不放占位模块」,理由是本仓的历史:一路删掉的正是
- * 这种"先声明、以后再实现"的空架子。
+ * MHS = Model Hardware Standard,Anthropic 2026-08-27 的研究预览,定位是 MCP 的
+ * 硬件侧对应物。``docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md`` 第 ④ 节判过一次:
+ * 它至今没有公开规范、没有 SDK、没有 schema、没有一致性测试,所以**协议这一层
+ * 不实现**,也不放占位模块。那条判断没有变。
  *
- * 一个**永远是空的、而且永远填不满**的分组,就是界面版的占位模块。所以不画。
+ * 但"界面上有没有这一档"和"协议实不实现"是两件事。这一格画出来,并且如实写明:
+ * 规范还没开源,现在没有任何仓库能落进这一档;真到那天,MHS 的接入路径之一
+ * **就是 MCP**,它会从 MCP 那条路进来。
  *
- * 那份文档同时留了一个有用的观察:MHS 的接入路径之一**就是 MCP**。真到那天,
- * 它是 MCP 这一组里的一类,不是它旁边的第三组 —— 不需要另起一栏。
+ * 一个空格子本身不骗人;**一个不说明自己为什么空的空格子**才骗人 —— 它看起来像
+ * "你还没装",而实际是"这条路还不存在"。所以这一格的空态文案不是"还没有",
+ * 是把上面那两句说全。
  *
  * ## 「会不会先问我一句」必须写在脸上
  *
@@ -114,25 +115,43 @@ function icon(path: string, size = 14, width = 1.6): SVGSVGElement {
  */
 const GROUPS = [
   {
-    form: 'project' as const,
+    form: 'project',
     label: '项目',
+    side: 'left',
     // 文件夹:它就是一份代码,不是一个能调用的东西。
     path: 'M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
-    desc: '根上没有任何集成契约 —— 代码落盘，不注册成可调用的工具',
+    desc: '根上没有集成契约 —— 代码落盘，不注册成可调用的工具',
+    empty: '还没接过项目',
   },
   {
-    form: 'mcp' as const,
+    form: 'mcp',
     label: 'MCP 工具',
+    side: 'right',
     // 插头:接进网关,模型调得到。
     path: 'M9 3v5M15 3v5M6.5 8h11v4a5.5 5.5 0 0 1-11 0zM12 17.5V21',
-    desc: '根上有 mcp_tool.json，注册进了全系统共用的那套 MCP 网关',
+    desc: '根上有 mcp_tool.json，注册进了全系统共用的 MCP 网关',
+    empty: '还没有从 GitHub 接进来的 MCP 工具',
   },
   {
-    form: 'skill' as const,
+    form: 'skill',
     label: 'Skill',
+    side: 'right',
     // 一本册子:一段写好的做法。
     path: 'M5 4.5A1.5 1.5 0 0 1 6.5 3H18v18H6.5A1.5 1.5 0 0 1 5 19.5zM5 17h13M9 7.5h5',
     desc: '根上有 skill.json 或 SKILL.md，注册进了 SkillLoader',
+    empty: '还没有从 GitHub 接进来的 Skill',
+  },
+  {
+    form: 'mhs',
+    label: 'MHS',
+    side: 'right',
+    // 芯片:它管的是物理设备,不是软件工具。
+    path: 'M8 8h8v8H8zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3',
+    desc: 'Model Hardware Standard —— 让 agent 操作物理设备的规范，MCP 的硬件侧对应物',
+    // 空态**必须说清为什么空**。只写"还没有"会被读成"你还没装",
+    // 而实际是"这条路还不存在"。详见文件头那一节。
+    empty:
+      '规范还没开源（没有 schema / SDK / 一致性测试），现在没有任何仓库能落进这一档。真开源之后它的接入路径之一就是 MCP —— 会从 MCP 那条路进来，不需要另起一套传输。判断见 docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md 第 ④ 节。',
   },
 ] as const;
 
@@ -296,132 +315,111 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
   root.append(head, hint, policy, notice, wholeNote, split, form);
   root.addEventListener('click', (e) => e.stopPropagation());
 
-  function card(a: GitHubAddon): HTMLElement {
+  /**
+   * 一条。**压成一行**:图标带头、名字、状态点、移除。
+   *
+   * 完整的那几句话(仓库坐标、落盘路径、卡在哪一步)进 ``title``,鼠标停一下才出来。
+   * 这是左栏底下那块「接上了什么」用过的同一招,它那条 ``why`` 的注释写着理由:
+   * 「短的那句摆在屏幕上,长的那句进 title,一个字都不丢」。
+   *
+   * 改成一行是因为上一版每条占了五六行 —— 四个框摞起来,一屏放不下两条,
+   * 而这一页本来就是拿来**扫**的:先看有哪些,再点开看某一个。
+   */
+  function row(a: GitHubAddon, def: (typeof GROUPS)[number]): HTMLElement {
     const el = document.createElement('div');
-    el.className = 'ga-card';
+    el.className = 'ga-row-item';
     el.dataset['ok'] = String(a.ok);
 
-    const top = document.createElement('div');
-    top.className = 'ga-top';
+    // 一条条目也带图标:横着扫的时候,图标比一行等宽小字先被认出来。
+    // 用它所在那一组的图标 —— 同一种东西在界面上只有一个样子。
+    const glyph = icon(def.path, 13, 1.5);
+    glyph.classList.add('ga-row-icon');
+
+    const name = document.createElement('span');
+    name.className = 'ga-row-name';
+    name.textContent = a.name;
+
     const dot = document.createElement('span');
     dot.className = 'ga-dot';
-    const name = document.createElement('b');
-    name.className = 'ga-name';
-    name.textContent = a.name;
-    top.append(dot, name);
 
-    const repo = document.createElement('code');
-    repo.className = 'ga-repo';
-    // commit 截到 8 位:够认人,又不会把一行挤爆。ref 和 commit 都要有 ——
-    // 「装的是 main」和「装的是 main 上的哪一次提交」是两件事。
-    repo.textContent = `${a.owner}/${a.repo}@${a.ref}${a.commit ? ` · ${a.commit.slice(0, 8)}` : ''}`;
-
-    el.append(top, repo);
-
-    // 后端报了一个这里还不认识的形态。**说出来**,不要让它悄悄躺在「项目」组里
-    // 装成一个普通项目 —— 那样界面就在替后端说一句它没说过的话。
-    // 兜底把它放进「项目」是为了不让它消失;这一行是为了不让它伪装。
-    if (!GROUPS.some((g) => g.form === a.form)) {
-      const unknown = document.createElement('span');
-      unknown.className = 'ga-why';
-      unknown.textContent = `后端报的接入形态「${a.form}」这个面板还不认识，先按项目摆着`;
-      el.append(unknown);
-    }
-
-    if (!a.ok) {
-      // 没接上的时候,**卡在哪一步**比什么都重要 —— 这就是他要拿去排查的那句话。
-      const why = document.createElement('span');
-      why.className = 'ga-why';
-      why.textContent = a.formDetail || '注册或自证没通过';
-      el.append(why);
-    }
-
-    // 根上还摆着别的契约、但没被选中 —— 说出来。
-    //
-    // 判定是"第一个命中就停"(mcp → skill → SKILL.md),所以一个同时带 mcp_tool.json
-    // 和 skill.json 的仓库,skill.json 那份是**被忽略了**。不说的话,人会以为
-    // 那份文件有问题;说了他才知道这是判定顺序,不是坏了。
-    const ignored = GITHUB_CONTRACT_KEYS.filter((k) => a.contracts[k].present && !a.contracts[k].chosen);
-    if (ignored.length) {
-      const note = document.createElement('span');
-      note.className = 'ga-note';
-      note.textContent = `根上还有 ${ignored.map((k) => CONTRACT_TEXT[k]).join('、')}（判定顺序在前的那份已命中，这些没被选中）`;
-      el.append(note);
-    }
-
-    // 依赖没装成是**另一件事**:它可能注册成功了,但依赖被整份拒了。
-    if (a.depsError) {
-      const deps = document.createElement('span');
-      deps.className = 'ga-deps';
-      deps.textContent = `依赖：${a.depsError}`;
-      el.append(deps);
-    }
-
-    const meta = document.createElement('span');
-    meta.className = 'ga-meta';
-    meta.textContent = [DEPS_TEXT[a.depsScope] ?? a.depsScope, when(a.installedAt)].filter(Boolean).join(' · ');
-
-    const where = document.createElement('code');
-    where.className = 'ga-where';
-    where.textContent = a.installPath;
-
-    const acts = document.createElement('div');
-    acts.className = 'ga-acts';
     const del = document.createElement('button');
-    del.className = 'ga-btn ga-danger';
+    del.className = 'ga-btn ga-danger ga-row-del';
     del.type = 'button';
     del.textContent = '移除';
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       cb.onUninstall(a.name);
     });
-    acts.append(del);
 
-    el.append(meta, where, acts);
-    return el;
+    // title 里一个字都不丢。顺序按排障时会用到的先后:坐标 → 出了什么事 → 在哪儿。
+    const lines = [`${a.owner}/${a.repo}@${a.ref}`];
+    if (a.commit) lines.push(`commit ${a.commit.slice(0, 12)}`);
+    if (!a.ok) lines.push(a.formDetail || '注册或自证没通过');
+    if (!GROUPS.some((g) => g.form === a.form)) {
+      // 后端报了一个这里还不认识的形态。不能让它悄悄躺在「项目」组里装成普通项目。
+      lines.push(`后端报的接入形态「${a.form}」这个面板还不认识，先按项目摆着`);
+    }
+    const ignored = GITHUB_CONTRACT_KEYS.filter((k) => a.contracts[k].present && !a.contracts[k].chosen);
+    if (ignored.length) {
+      lines.push(`根上还有 ${ignored.map((k) => CONTRACT_TEXT[k]).join('、')}（判定顺序在前的那份已命中）`);
+    }
+    lines.push(DEPS_TEXT[a.depsScope] ?? a.depsScope);
+    if (a.depsError) lines.push(`依赖：${a.depsError}`);
+    lines.push(when(a.installedAt), a.installPath);
+    el.title = lines.filter(Boolean).join('\n');
+
+    el.append(glyph, name, dot, del);
+
+    // **没接上、或者依赖被拒**这两件事不许只躺在 title 里:它们要人去做点什么。
+    // 其余的(坐标、路径、时间)是查的时候才要,留在 title 就够。
+    const alert = !a.ok ? a.formDetail || '注册或自证没通过' : a.depsError ? `依赖：${a.depsError}` : '';
+    if (!alert) return el;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'ga-row-wrap';
+    const why = document.createElement('span');
+    why.className = 'ga-why';
+    why.textContent = alert;
+    wrap.append(el, why);
+    wrap.title = el.title;
+    return wrap;
   }
 
   /**
-   * 一个分组。**用原生 ``<details>``**,不自己造一套展开收缩。
+   * 一个框。四个框**同一套做法** —— 左边那个大的和右边三个小的只是尺寸不同。
    *
-   * 原生的那套自带键盘操作、自带无障碍语义、自带"状态就在 DOM 上"——
-   * 自己写一份要把这三件事各补一遍,而且每补一遍都是一次出错的机会。
-   *
-   * 空的分组**照样画出来**,只是默认收起。省掉的话,这一栏看起来就是完整的,
-   * 而它并不完整 ——「一个 Skill 都没接过」和「这里根本没有 Skill 这一档」
-   * 是两件事。这条和左栏底下那块「接上了什么」第 3 条规矩是同一条。
+   * 框里自己滚(``max-height`` + ``overflow-y``),不是让整页跟着长:四个框各装各的,
+   * 某一组装了二十条时,不该把另外三组顶到屏幕外面去。
    */
-  function group(def: (typeof GROUPS)[number], rows: readonly GitHubAddon[]): HTMLElement {
-    const box = document.createElement('details');
-    box.className = 'ga-group';
+  function frame(def: (typeof GROUPS)[number], rows: readonly GitHubAddon[]): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'ga-frame';
     box.dataset['form'] = def.form;
-    box.open = rows.length > 0;
 
-    const head = document.createElement('summary');
-    head.className = 'ga-group-head';
+    const head = document.createElement('div');
+    head.className = 'ga-frame-head';
     const label = document.createElement('span');
-    label.className = 'ga-group-name';
+    label.className = 'ga-frame-name';
     label.textContent = def.label;
     const n = document.createElement('b');
     n.textContent = String(rows.length);
-    head.append(icon(def.path), label, n);
+    head.append(icon(def.path, 15, 1.6), label, n);
+    head.title = def.desc;
 
-    const desc = document.createElement('p');
-    desc.className = 'ga-group-desc';
-    desc.textContent = def.desc;
-
-    const list = document.createElement('div');
-    list.className = 'ga-list';
+    const body = document.createElement('div');
+    body.className = 'ga-frame-body';
     if (!rows.length) {
       const e = document.createElement('div');
-      e.className = 'ga-group-empty';
-      e.textContent = '这一档还没有';
-      list.append(e);
+      e.className = 'ga-frame-empty';
+      // 空态**必须说清为什么空**。省掉的话,这一栏看起来就是完整的,而它并不完整
+      // ——「一个都没接过」和「这条路还不存在」是两件事。
+      e.textContent = def.empty;
+      body.append(e);
     } else {
-      for (const a of rows) list.append(card(a));
+      for (const a of rows) body.append(row(a, def));
     }
 
-    box.append(head, desc, list);
+    box.append(head, body);
     return box;
   }
 
@@ -482,8 +480,10 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
     for (const a of rows) (byForm.get(a.form) ?? byForm.get('project')!).push(a);
 
     for (const def of GROUPS) {
-      const target = def.form === 'project' ? colLeft : colRight;
-      target.append(group(def, byForm.get(def.form) ?? []));
+      // 去向由 ``side`` 说,不由"是不是 project"反推 —— 加第四档(MHS)的时候
+      // 那种反推就会悄悄把它送错栏,而且不报错。
+      const target = def.side === 'left' ? colLeft : colRight;
+      target.append(frame(def, byForm.get(def.form) ?? []));
     }
   }
 
