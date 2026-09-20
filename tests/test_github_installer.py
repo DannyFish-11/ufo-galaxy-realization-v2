@@ -250,6 +250,27 @@ class TestGitHubInstallerDryRun:
 
 
 class TestGitHubInstallerInstall:
+    @pytest.fixture(autouse=True)
+    def _repo_is_pre_approved(self, monkeypatch):
+        """把被测仓库放进 ``GITHUB_ALLOWLIST``。
+
+        安装现在有一道准入闸(``core/github_addon_admission.py``):
+        ``GITHUB_ALLOWLIST`` 为空时每次安装都要人确认,而测试环境没有设备可问 → 拒绝。
+        本类 8 条用例会全红,**而且它们要验的东西一条都没验到**(克隆、检测类型、
+        契约校验、manifest 落盘,全都在闸后面)。
+
+        **用 allowlist 而不是 ``GALAXY_ADDON_UNATTENDED=1``。** 后者是"把闸关掉",
+        那样这些用例会在一个生产里不存在的形态下跑,"某次安装忘了过闸"这类回归将
+        不再有测试发现 —— 正是这道闸要消除的盲区,不该在测试侧原样重建一遍。
+        前者是"这个仓库已获批准":闸照常判定、照常放行,被测的安装机制一点没少。
+
+        这条区分在 ``test_invalid_skill_contract_rejected_before_deps`` 上最要命:
+        不放进名单它照样 ``success=False``(**测试还是绿的**),但契约校验那一段
+        一行都没跑到,用例形同虚设。
+        """
+        monkeypatch.setenv("GITHUB_ALLOWLIST", "owner/*")
+        monkeypatch.delenv("GITHUB_BLOCKLIST", raising=False)
+
     def _make_installer(self, tmp_path, mcp_manifest=None, skill_manifest=None):
         """Return an installer with a mocked fetch that writes manifest files."""
         from core.github_installer import GitHubInstaller, _ManifestStore
