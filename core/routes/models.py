@@ -82,26 +82,26 @@ async def get_catalog() -> Dict[str, Any]:
             "recommended_quantization": prof.recommended_quantization,
         }
         fits: Dict[str, str] = {}
+        fit_details: Dict[str, Dict[str, Any]] = {}
         for tier in snap.get("tiers", []) or []:
             for m in tier.get("models", []) or []:
                 tag = m.get("tag", "")
                 spec = get_model(tag)
                 if spec is None or spec.source != "local":
                     continue
-                if not getattr(spec, "requires_gpu", False):
-                    fits[tag] = "ok"
-                elif not has_gpu:
-                    fits[tag] = "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
-                elif spec.size_mb_val > prof.max_model_size_mb:
-                    fits[tag] = "insufficient_vram"  # 有显卡但装不下:会溢出到内存
-                else:
-                    fits[tag] = "ok"
+                detail = fit_detail(spec, has_gpu, int(prof.max_model_size_mb))
+                fits[tag] = detail["fit"]
+                # 「差多少」也带出去。面板写「显存装不下」时人接着就问这个,
+                # 让它自己再算一遍等于同一个事实两处各存。
+                fit_details[tag] = detail
         snap["gpu_fit"] = fits
+        snap["gpu_fit_detail"] = fit_details
         snap["tier_fit"] = _tier_fit(snap, fits)
     except Exception as exc:  # 探测失败不阻塞目录,但如实说明未评估
         logger.debug("catalog 硬件探测失败: %s", exc)
         snap["hardware"] = {"has_gpu": None, "probe_error": type(exc).__name__}
         snap["gpu_fit"] = {}
+        snap["gpu_fit_detail"] = {}
         # **探测失败时每一档都是 unknown,不是 ok。** 没探到和探到「装得下」是
         # 两件事;当成 ok 的话,面板会把「不知道」画成「能跑」,而用户是照着这个
         # 画面选档的。
@@ -120,6 +120,137 @@ _FIT_REASON = {
     "insufficient_vram": "显存装不下,会溢出到内存",
     "no_gpu": "需要显卡,这台机器没有",
 }
+
+
+def model_fit(spec: Any, has_gpu: bool, budget_mb: int) -> str:
+    """这一个型号在这台机器上装不装得下 —— **显存准入的唯一落点。**
+
+    返回 ``ok`` / ``no_gpu`` / ``insufficient_vram``。
+
+    ## 为什么问 ``runtime_mb()`` 而不是 ``size_mb``
+
+    这两个数**两个方向都会差很远**（见 :class:`core.model_catalog.ModelSpec`）：
+
+    * MiniCPM-o 4.5 权重 6 GB，但视觉/音频编码器与语音解码器要一起驻留，
+      实测 **11 GB** —— 比权重大。
+    * 35B-A3B 的 INT4 权重 18 GB，专家留内存后显存驻留 **7.3 GB** —— 比权重小。
+
+    拿权重去比显存预算，8 GB 卡上 MiniCPM-o 会被判成「放得下」，然后**加载到
+    一半 OOM**，而且报错在加载途中不在准入处 —— 现场看到的是「模型带不动」，
+    根本查不到是准入判错了。
+
+    这个毛病 :class:`ModelSpec` 拆两栏时就写在文档里了，:mod:`core.model_selection`
+    也照着改了，**唯独这条路没改** —— 模型层修好了、消费方没跟上，是这个仓库最
+    典型的那种半截修法：看起来接上了，其实没有。
+
+    ## 为什么单拎成一个函数
+
+    原先这几行是嵌在 ``/catalog`` 那个 async 端点里的，要测它得起事件循环、还得
+    真去 shell 出 nvidia-smi。于是它**从来没有被直接测过**——那条讲「显存准入只问
+    runtime_mb」的判据有 9 条，没有一条查得到这个调用点。抽成纯函数之后，
+    判据可以拿真目录直接问它。
+
+    ## 为什么还要加上 KV cache
+
+    权重放得下 ≠ 跑得起来。**llama.cpp 在加载时把整个 KV cache 一次性分配掉**
+    （见 :meth:`core.compute_scheduler.ComputeScheduler.context_budget_for` 里同一条
+    注释），所以一个型号至少要放得下「驻留量 + 最短上下文那点 KV」才谈得上能加载。
+
+    默认主脑 ``gemma4:12b`` 就卡在这儿：驻留 8000 MB，在一块 8 GB 卡上准入判 ``ok``，
+    **余量只有 192 MB**，而它的上下文上限是 256K。KV 一分配就顶出去，而报错同样
+    发生在加载途中不在准入处。
+
+    KV 单价**实测优先**（:func:`core.context_measurements.effective_kv_mb_per_1k`）：
+    这台机器上量到过就用量到的，没量到才退回目录声明。
+
+    **单价未知(0)时不加这一项，也不假装加过。** 这跟调度器那边是同一条规矩：
+    不知道分母就不敢动真实需求 —— 拿一个编出来的数去收紧准入，和拿它去放开一样坏。
+    未知这件事本身由 :func:`fit_detail` 如实说出来。
+    """
+    return fit_detail(spec, has_gpu, budget_mb)["fit"]
+
+
+def fit_detail(spec: Any, has_gpu: bool, budget_mb: int) -> Dict[str, Any]:
+    """与 :func:`model_fit` 同一条判断，但把**算给谁看的那几个数**一起带出来。
+
+    面板上写着「显存装不下」的时候，人接着要问的是「差多少」。这里把驻留量、
+    KV 这一项、以及 KV 单价是**实测还是目录声明**都返回出去，托盘和面板据此
+    如实显示，不用各自再算一遍（各算一遍就是同一个事实两处各存）。
+
+    ## ``provisional``：这个 ``ok`` 是**有前提**的
+
+    KV 单价未知时这里不加那一项（见 :func:`model_fit`）。于是会出现一种
+    **过关过得很像样、其实没人验过**的情形：默认主脑 ``gemma4:12b`` 在一块 8 GB
+    卡上判 ``ok``，可余量只有 192 MB —— 只要有人量到它的 KV 单价超过
+    ``kv_break_even_per_1k``（这里就是 96 MB/1K），同一条判断立刻翻成装不下。
+
+    一个「取决于一个没人量过的数」的 ``ok``，和一个「算全了还是 ok」的 ``ok``，
+    **在屏幕上不能长得一样**。前者读的人会安心去用，然后在加载途中撞 OOM ——
+    而报错不在准入处，现场看到的只是「模型带不动」。所以把前提一起说出来：
+
+    * ``headroom_mb``            —— 还剩多少（差多少，负数就是差这么多）
+    * ``kv_break_even_per_1k``   —— KV 单价一旦超过这个数，结论就翻面
+    * ``provisional``            —— 这个 ``ok`` 压在一个未知数上
+
+    这三个都是**这里算的**，不让消费方各算一遍。
+    """
+    from core.model_catalog import MIN_CTX  # noqa: PLC0415  分区就地导入(见文件头注释)
+
+    tag = str(getattr(spec, "tag", "") or "")
+    resident = int(spec.runtime_mb()) if spec is not None else 0
+    detail: Dict[str, Any] = {
+        "fit": "ok",
+        "tag": tag,
+        "resident_mb": resident,
+        "kv_mb": 0,
+        "kv_per_1k_mb": 0,
+        "kv_source": "unknown",
+        "budget_mb": int(budget_mb),
+        "headroom_mb": int(budget_mb) - resident,
+        "kv_break_even_per_1k": 0,
+        "provisional": False,
+    }
+    if not getattr(spec, "requires_gpu", False):
+        # 不吃显存的型号,**整份预算原封不动** —— 写成 budget - resident 的话,
+        # 那个数看着像"占掉之后还剩这些",而它根本没占。
+        detail["headroom_mb"] = int(budget_mb)
+        return detail
+    if not has_gpu:
+        detail["fit"] = "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
+        # 没有卡就没有"还剩多少"这个问题。留着 budget - resident 会让面板显示
+        # 一个凭空的余量,而真相是这台机器上压根没有这块显存。
+        detail["headroom_mb"] = 0
+        return detail
+
+    # KV 单价:实测优先,目录兜底,都没有就是 0 = 不知道。
+    try:
+        from core.context_measurements import effective_kv_mb_per_1k, measured_source
+
+        per_1k = int(effective_kv_mb_per_1k(tag)) if tag else 0
+        detail["kv_source"] = measured_source(tag) if tag and per_1k > 0 else "unknown"
+    except Exception:  # noqa: BLE001 —— 量测存档读不到不该挡住准入
+        per_1k = 0
+    detail["kv_per_1k_mb"] = per_1k
+
+    # 最短上下文那一点 KV。**不知道单价就不加** —— 见 model_fit 的说明。
+    if per_1k > 0:
+        detail["kv_mb"] = int(per_1k * MIN_CTX / 1024)
+
+    detail["headroom_mb"] = int(budget_mb) - resident - int(detail["kv_mb"])
+
+    if resident + int(detail["kv_mb"]) > budget_mb:
+        detail["fit"] = "insufficient_vram"  # 有显卡但装不下:会溢出到内存
+        return detail
+
+    # 过了关。但**凭什么过的**要说清楚:单价未知时 KV 那一项没算进去,
+    # 于是这个 ok 压在一个没人量过的数上 —— 量一次就可能翻面。
+    if per_1k <= 0:
+        head = int(detail["headroom_mb"])
+        detail["provisional"] = True
+        # 余量能换成多少 KV 单价。整除是**朝严的方向取**:恰好等于这个数时还装得下,
+        # 超过才翻 —— 写成"超过 N 就翻面"，N 取得偏小只会让人更早去量,不会让人误判。
+        detail["kv_break_even_per_1k"] = max(0, head * 1024 // MIN_CTX)
+    return detail
 
 
 def _tier_fit(snap: Dict[str, Any], fits: Dict[str, str]) -> Dict[str, Dict[str, Any]]:

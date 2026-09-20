@@ -260,18 +260,23 @@ export function createGalaxy(): GalaxyHandles {
 
   const defs = el('defs', {});
   // 核球的光。盘面上那一团弥散的亮,不是一颗大星
+  //
+  // **颜色不写死。** 三处渐变全部读 `--m-1`(色阶最深那一档,与整面同一支色相
+  // 314°)。写死十六进制的话,相位一换整面都跟着走了,只有这座星系还是原来那种。
   const core = el('radialGradient', { id: 'gx-core', cx: '50%', cy: '50%', r: '50%' });
   core.append(
-    el('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.85' }),
-    el('stop', { offset: '38%', 'stop-color': '#ffffff', 'stop-opacity': '0.32' }),
-    el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0' }),
+    // 核球是整座星系最亮的一团 —— 按那条色阶,最亮的地方就该化进白。
+    el('stop', { offset: '0%', 'stop-color': 'var(--m-6)', 'stop-opacity': '0.95' }),
+    el('stop', { offset: '42%', 'stop-color': 'var(--m-5)', 'stop-opacity': '0.4' }),
+    el('stop', { offset: '100%', 'stop-color': 'var(--m-4)', 'stop-opacity': '0' }),
   );
   // 盘的辉光。铺在星底下,没有它整片星点是浮在药丸上的,不像一座星系
   const disc = el('radialGradient', { id: 'gx-disc', cx: '50%', cy: '50%', r: '50%' });
   disc.append(
-    el('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.3' }),
-    el('stop', { offset: '55%', 'stop-color': '#ffffff', 'stop-opacity': '0.11' }),
-    el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0' }),
+    // 盘的辉光走色阶中段:比核球深,比外圈的暗星浅。
+    el('stop', { offset: '0%', 'stop-color': 'var(--m-4)', 'stop-opacity': '0.34' }),
+    el('stop', { offset: '55%', 'stop-color': 'var(--m-3)', 'stop-opacity': '0.14' }),
+    el('stop', { offset: '100%', 'stop-color': 'var(--m-2)', 'stop-opacity': '0' }),
   );
   /**
    * 被点亮那几颗星身上的光。
@@ -281,9 +286,9 @@ export function createGalaxy(): GalaxyHandles {
    */
   const glow = el('radialGradient', { id: 'gx-glow', cx: '50%', cy: '50%', r: '50%' });
   glow.append(
-    el('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '1' }),
-    el('stop', { offset: '26%', 'stop-color': '#ffffff', 'stop-opacity': '0.62' }),
-    el('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0' }),
+    el('stop', { offset: '0%', 'stop-color': 'var(--m-6)', 'stop-opacity': '0.95' }),
+    el('stop', { offset: '26%', 'stop-color': 'var(--m-6)', 'stop-opacity': '0.5' }),
+    el('stop', { offset: '100%', 'stop-color': 'var(--m-6)', 'stop-opacity': '0' }),
   );
   defs.append(core, disc, glow);
 
@@ -315,10 +320,24 @@ export function createGalaxy(): GalaxyHandles {
     dust.append(el('polyline', { points: pts.join(' '), fill: 'none' }));
   }
 
+  //
+  // ── 星的颜色:**按亮度落在面板那条色阶上,不是一种紫到底** ──────────
+  //
+  // 整面的法子是一支色相从深走到近白(--m-1 … --m-6):深的地方是紫,亮到头就
+  // 化进白。星系照搬同一条 —— 暗星偏紫、亮星化进白,于是它跟面板是同一块布上
+  // 裁下来的,不是贴上去的一张图。
+  //
+  // 全用白(第一版)在浅色底上只剩一层灰蒙蒙的雾;全用紫(第二版)又成了一块
+  // 紫斑,面板别处的白在这儿断掉了。紫白一起才接得上。
+  const TONES = ['gx-t1', 'gx-t2', 'gx-t3', 'gx-t4'] as const;
   const field = el('g', { class: 'gx-field' });
   for (const s of STARS) {
+    // 这颗星有多亮 → 它落在色阶第几档。四档,边界取得让暗星占多数 ——
+    // 星系本来就是暗星多、亮星少,反过来会糊成一片白。
+    const tier = s.b > 0.78 ? 3 : s.b > 0.56 ? 2 : s.b > 0.3 ? 1 : 0;
     field.append(
       el('circle', {
+        class: TONES[tier]!,
         cx: s.x.toFixed(2), cy: s.y.toFixed(2), r: s.r.toFixed(2),
         opacity: s.b.toFixed(3),
       }),
@@ -332,8 +351,8 @@ export function createGalaxy(): GalaxyHandles {
   const litNodes: SVGElement[] = LIT.map((s) => {
     const g = el('g', { class: 'gx-star', transform: `translate(${s.x.toFixed(2)} ${s.y.toFixed(2)})` });
     g.append(
-      el('circle', { class: 'gx-halo-c', r: '4.6', fill: 'url(#gx-glow)' }),
-      el('circle', { class: 'gx-core-c', r: '1.05' }),
+      el('circle', { class: 'gx-halo-c', r: '2.6', fill: 'url(#gx-glow)' }),
+      el('circle', { class: 'gx-core-c', r: '0.95' }),
     );
     g.setAttribute('data-lit', 'off');
     litG.append(g);
