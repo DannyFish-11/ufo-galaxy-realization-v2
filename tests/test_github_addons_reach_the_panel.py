@@ -35,8 +35,23 @@ PANEL_SRC = Path(__file__).resolve().parents[1] / "electron/renderer/panel/src"
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
-    """把安装根指到临时目录，绝不碰开发机上真的 data/github_addons。"""
+    """把安装根指到临时目录，绝不碰开发机上真的 data/github_addons。
+
+    **只设环境变量是不够的。** 这一条是踩出来的：第一版只 monkeypatch 了
+    `GITHUB_INSTALL_DIR`，而路由拿的是 `get_github_installer()` —— 一个在 import
+    时就构造好的单例，它的 `_install_dir` 和 `_manifest` 早就按默认路径定死了。
+    结果那条端到端用例真的往仓库里的 `data/github_addons/` 克隆了一份 README，
+    还被我一起提交了上去。
+
+    所以这里把**单例本身**的两个字段都指到 tmp_path，跑完 monkeypatch 自动还原。
+    """
     monkeypatch.setenv("GITHUB_INSTALL_DIR", str(tmp_path))
+    from core.github_installer import _ManifestStore, get_github_installer
+
+    inst = get_github_installer()
+    monkeypatch.setattr(inst, "_install_dir", tmp_path)
+    monkeypatch.setattr(inst, "_manifest", _ManifestStore(tmp_path))
+
     from core.routes import github as route
 
     app = FastAPI()
