@@ -1,45 +1,45 @@
 /**
  * 「接进来的 GitHub 项目」—— 填一个仓库地址就把它接进来，随时能换掉。
  *
- * ## 为什么它和「我的模型服务」长得像，而不是像那 335 个键
+ * ## 两栏是一次**分流**,不是一张卡片的左右
  *
- * 同一个理由:一条插件不是「一个开关调到多少」,它有地址、有分支、有它到底
- * **注册上没有**、依赖装进了谁的环境。这些塞不进键值那套排版里 —— 硬塞的结果
- * 是四五个键之间有隐含关系,而键值界面表达不了关系。
+ * 左栏是**项目本身**:根上没有任何集成契约的那些 —— 代码落盘,不注册成任何工具。
+ * 右栏是**从项目里接出来的能力**,按形态分组:一个带 ``mcp_tool.json`` 的仓库
+ * 接进来之后就是一个 MCP 工具,它不出现在左栏,直接进右栏 MCP 那一组。
  *
- * 所以这一段刻意和 `user_providers.ts` 用同一套骨架(`sf-sec` / `sf-row` /
- * `sf-text` / `sf-desc` / `sf-input` / `sf-save` / `sf-empty` 全是共用的),
- * 差别只在它自己那几个 `.ga-*`。**不另起一套排版** —— 同一个页面上两套节奏,
- * 人会觉得这块东西是从别处贴过来的。
+ * 为什么要分流,而不是一列里按状态排:这一段里其实混着两种东西。
+ * "我接了一个项目"和"我多了一个模型能调的工具"是两件事,人来这一页找的往往
+ * 只是其中一件。混成一列时,想找项目的人要在一堆工具里扒,反之亦然。
  *
- * ## 接入形态是三档,而且是**并列**的三档
+ * MCP / Skill 是 GitHub 项目的**交集**,不是它的定义:接一个仓库可能是为了拿它
+ * 跑实验、读它、拿它当素材。所以左栏那一档不是"降级",是并列的一档。
  *
- * · MCP 工具    根上有 mcp_tool.json,注册成了一个 MCP 工具
- * · Skill       根上有 skill.json 或 SKILL.md,注册成了一个 Skill
- * · 项目完整形式  哪个契约都没有 —— 代码落盘,没注册成任何可调用的工具
+ * ## 为什么右栏只有两组,而不是三组
  *
- * **第三档不是失败。** MCP / Skill 是 GitHub 项目的**交集**,不是它的定义:
- * 接一个仓库可能是为了拿它跑实验、读它、拿它当素材。把它画成"降级"或"没接上",
- * 等于规定了"接项目 = 接工具",而那不是这个功能的全集。
+ * 本来要做的第三组是 MHS(Model Hardware Standard,Anthropic 2026-08-27 的研究预览)。
+ * **做不了,而且仓里已经判过一次**:见 ``docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md``
+ * 第 ④ 节 —— MHS 至今没有公开规范、没有 SDK、没有 schema、没有一致性测试,
+ * "接入"只能照新闻稿把消息格式编出来,那不是实现协议,是造一个同名的赝品。
+ * 那份文档还专门写了一节「也不放占位模块」,理由是本仓的历史:一路删掉的正是
+ * 这种"先声明、以后再实现"的空架子。
  *
- * 形态之外还有一个**正交**的位:这次接入到底成没成(``ok``)。它只对前两档有意义
- * —— 项目形态没有"注册"这一步,也就无所谓成败。没成的时候必须说出**卡在哪一步**,
- * 那句话就是他要拿去排查的东西;画成绿点等于告诉用户"这个工具能用",而模型
- * 调它的时候才会报错。这和隔壁 live/declared 不许共用一个绿点是同一条理由。
+ * 一个**永远是空的、而且永远填不满**的分组,就是界面版的占位模块。所以不画。
+ *
+ * 那份文档同时留了一个有用的观察:MHS 的接入路径之一**就是 MCP**。真到那天,
+ * 它是 MCP 这一组里的一类,不是它旁边的第三组 —— 不需要另起一栏。
  *
  * ## 「会不会先问我一句」必须写在脸上
  *
  * 装一个第三方仓库是有后果的动作。准入闸有三档(名单内免确认 / 每次问 /
  * 显式声明无人值守),这三档**必须由后端报**,不能让面板自己按环境变量推 ——
  * 那会成为第二处权威,判定规则改一次两边就分家,而"界面说会问我、实际没问"
- * 是最坏的那种不一致。所以 approvalMode 来自 `/api/v1/github/status`。
+ * 是最坏的那种不一致。
  *
- * ## 为什么这里没有「重新验证」按钮(隔壁有)
+ * ## 为什么这里没有「重新验证」按钮(隔壁「我的模型服务」有)
  *
  * 后端没有这个端点。唯一能"再验一次"的办法是拿同一个地址再装一遍,而那会
  * **重新克隆并覆盖**已经装好的那份 —— 一个写着"重新验证"的按钮干的是"重装",
- * 这正是这个仓最怕的那种不一致。缺的是后端能力,就照实缺着,不拿一个名不副实的
- * 按钮把它盖住。
+ * 这正是这个仓最怕的那种不一致。缺的是后端能力,就照实缺着。
  */
 import { GITHUB_CONTRACT_KEYS } from '../transport';
 import type { GitHubAddon, GitHubAddonStatus, GitHubContractKey } from '../transport';
@@ -76,40 +76,65 @@ export interface GitHubAddonHandles {
   clearForm(): void;
 }
 
-/** 接入形态。三档并列 —— 每一档都是一句完整的话,不是"成功/降级"的两个程度。 */
-const FORM_TEXT: Record<string, string> = {
-  mcp: '以 MCP 工具形式接入',
-  skill: '以 Skill 形式接入',
-  project: '以项目完整形式接入',
-};
-
-/** 三个接入槽的名字。顺序就是安装器的判定顺序:mcp → skill → SKILL.md。 */
+/** 三份契约的名字。顺序就是安装器的判定顺序:mcp → skill → SKILL.md。 */
 const CONTRACT_TEXT: Record<GitHubContractKey, string> = {
-  mcp: 'MCP 工具',
-  skill: 'Skill',
+  mcp: 'mcp_tool.json',
+  skill: 'skill.json',
   skill_md: 'SKILL.md',
 };
 
+const ICON_NS = 'http://www.w3.org/2000/svg';
+
 /**
- * 一个槽位的四态。**和左栏底下那块「接上了什么」同一套话** —— 用深度,不用颜色。
- *
- * on    这份契约在,而且就是它接上的
- * part  这份契约在,但没走通(被另一份抢了先,或者注册失败)
- * off   根上没有这份契约
+ * 一枚线条图标。形状与画法都照 ``ui/dock.ts`` 那个 helper —— 24 格、
+ * ``currentColor`` 描边、圆头圆角。全面板只有一种图标画法,多一种就要多认一次。
  */
-function slotState(a: GitHubAddon, key: GitHubContractKey): 'on' | 'part' | 'off' {
-  const c = a.contracts[key];
-  if (!c.present) return 'off';
-  if (c.chosen && a.ok) return 'on';
-  return 'part';
+function icon(path: string, size = 14, width = 1.6): SVGSVGElement {
+  const svg = document.createElementNS(ICON_NS, 'svg');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', String(width));
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ICON_NS, 'path');
+  p.setAttribute('d', path);
+  svg.append(p);
+  return svg;
 }
 
-/** 没接上的时候说什么。只有前两档会走到这儿 —— 项目形态没有"注册"这一步。 */
-const FAILED_TEXT: Record<string, string> = {
-  mcp: '本该接成 MCP 工具，没接上',
-  skill: '本该接成 Skill，没接上',
-  project: '拿下来了，但没接上',
-};
+/**
+ * 分流出来的几栏。
+ *
+ * ``project`` 单独在左边,两组工具在右边 —— 见文件头那一段。
+ * 没有 MHS 这一组,理由也写在那儿(仓里已经判过:没有规范可实现,而且不放占位)。
+ */
+const GROUPS = [
+  {
+    form: 'project' as const,
+    label: '项目',
+    // 文件夹:它就是一份代码,不是一个能调用的东西。
+    path: 'M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+    desc: '根上没有任何集成契约 —— 代码落盘，不注册成可调用的工具',
+  },
+  {
+    form: 'mcp' as const,
+    label: 'MCP 工具',
+    // 插头:接进网关,模型调得到。
+    path: 'M9 3v5M15 3v5M6.5 8h11v4a5.5 5.5 0 0 1-11 0zM12 17.5V21',
+    desc: '根上有 mcp_tool.json，注册进了全系统共用的那套 MCP 网关',
+  },
+  {
+    form: 'skill' as const,
+    label: 'Skill',
+    // 一本册子:一段写好的做法。
+    path: 'M5 4.5A1.5 1.5 0 0 1 6.5 3H18v18H6.5A1.5 1.5 0 0 1 5 19.5zM5 17h13M9 7.5h5',
+    desc: '根上有 skill.json 或 SKILL.md，注册进了 SkillLoader',
+  },
+] as const;
 
 /** 依赖装到哪。后端的 scope 原样翻译,不合并 —— 每一档的后果都不一样。 */
 const DEPS_TEXT: Record<string, string> = {
@@ -169,8 +194,25 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
   policyMeta.className = 'ga-policy-meta';
   policy.append(policyDot, policyText, policyMeta);
 
-  const list = document.createElement('div');
-  list.className = 'ga-list';
+  /**
+   * 分流出来的两栏。左边一栏(项目),右边一栏(接出来的工具,再分两组)。
+   *
+   * ``ga-split`` 在窄处会塌成一列 —— 设置页本来就不宽,硬撑两栏会把每张卡片
+   * 挤到读不了。塌成一列时分组的标题还在,分流这件事不丢。
+   */
+  const split = document.createElement('div');
+  split.className = 'ga-split';
+
+  const colLeft = document.createElement('div');
+  colLeft.className = 'ga-col';
+  const colRight = document.createElement('div');
+  colRight.className = 'ga-col';
+  split.append(colLeft, colRight);
+
+  /** 拉不到 / 一条都没有时,那句话摆在两栏上面,而不是塞进某一组里。 */
+  const wholeNote = document.createElement('div');
+  wholeNote.className = 'sf-empty';
+  wholeNote.hidden = true;
 
   const notice = document.createElement('div');
   notice.className = 'ga-notice';
@@ -251,29 +293,22 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
   });
 
   form.append(formRows[0]!, formRows[1]!, acts);
-  root.append(head, hint, policy, notice, list, form);
+  root.append(head, hint, policy, notice, wholeNote, split, form);
   root.addEventListener('click', (e) => e.stopPropagation());
 
   function card(a: GitHubAddon): HTMLElement {
     const el = document.createElement('div');
     el.className = 'ga-card';
-    el.dataset['form'] = a.form;
     el.dataset['ok'] = String(a.ok);
 
-    // ── 左:项目本体 ────────────────────────────────────────────────────
-    //
-    // 这一侧**只说这个仓库本身**:叫什么、从哪儿来的哪一次提交、依赖装在哪、
-    // 落在磁盘的什么位置。它接没接成工具是右边那一侧的事。
-    //
-    // 分成左右两栏,是因为这两件事本来就是两件事:一个 GitHub 项目接进来是完整的
-    // 一件事,"它顺带填上了哪个接入槽"是另一件。挤成一列的时候,项目本身的信息
-    // 会被接入状态的措辞盖过去 —— 而多数时候人是来找项目的。
-    const left = document.createElement('div');
-    left.className = 'ga-left';
-
+    const top = document.createElement('div');
+    top.className = 'ga-top';
+    const dot = document.createElement('span');
+    dot.className = 'ga-dot';
     const name = document.createElement('b');
     name.className = 'ga-name';
     name.textContent = a.name;
+    top.append(dot, name);
 
     const repo = document.createElement('code');
     repo.className = 'ga-repo';
@@ -281,71 +316,57 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
     // 「装的是 main」和「装的是 main 上的哪一次提交」是两件事。
     repo.textContent = `${a.owner}/${a.repo}@${a.ref}${a.commit ? ` · ${a.commit.slice(0, 8)}` : ''}`;
 
-    const meta = document.createElement('span');
-    meta.className = 'ga-meta';
-    meta.textContent = [DEPS_TEXT[a.depsScope] ?? a.depsScope, when(a.installedAt)].filter(Boolean).join(' · ');
+    el.append(top, repo);
 
-    left.append(name, repo, meta);
-
-    // 依赖没装成是**另一件事**:它可能注册成功了,但依赖被整份拒了。
-    // 合进上面那行会让人以为"接上了"就等于"依赖也齐了"。
-    if (a.depsError) {
-      const deps = document.createElement('span');
-      deps.className = 'ga-deps';
-      deps.textContent = `依赖：${a.depsError}`;
-      left.append(deps);
+    // 后端报了一个这里还不认识的形态。**说出来**,不要让它悄悄躺在「项目」组里
+    // 装成一个普通项目 —— 那样界面就在替后端说一句它没说过的话。
+    // 兜底把它放进「项目」是为了不让它消失;这一行是为了不让它伪装。
+    if (!GROUPS.some((g) => g.form === a.form)) {
+      const unknown = document.createElement('span');
+      unknown.className = 'ga-why';
+      unknown.textContent = `后端报的接入形态「${a.form}」这个面板还不认识，先按项目摆着`;
+      el.append(unknown);
     }
-
-    const where = document.createElement('code');
-    where.className = 'ga-where';
-    where.textContent = a.installPath;
-    left.append(where);
-
-    // ── 右:三个接入槽 ──────────────────────────────────────────────────
-    //
-    // 三个**都摆出来**,不是只画命中的那一个。摆出来才说得清"这个仓库根上有
-    // 什么、没有什么" —— 只画命中的那一个,另外两个就成了一片说不清的空白。
-    const right = document.createElement('div');
-    right.className = 'ga-right';
-
-    const slots = document.createElement('div');
-    slots.className = 'ga-slots';
-    for (const key of GITHUB_CONTRACT_KEYS) {
-      const row = document.createElement('div');
-      row.className = 'ga-slot';
-      row.dataset['state'] = slotState(a, key);
-      const dot = document.createElement('span');
-      dot.className = 'ga-dot';
-      const label = document.createElement('span');
-      label.className = 'ga-slot-name';
-      label.textContent = CONTRACT_TEXT[key];
-      row.append(dot, label);
-      slots.append(row);
-    }
-
-    // 一句结论。三个槽位说的是"根上有什么",这一句说的是"于是它以什么身份接进来了"
-    // —— 两者都要有:光看槽位看不出注册到底成没成。
-    const verdict = document.createElement('span');
-    verdict.className = 'ga-verdict';
-    verdict.textContent = a.ok ? (FORM_TEXT[a.form] ?? a.form) : (FAILED_TEXT[a.form] ?? '没接上');
-
-    right.append(slots, verdict);
 
     if (!a.ok) {
       // 没接上的时候,**卡在哪一步**比什么都重要 —— 这就是他要拿去排查的那句话。
       const why = document.createElement('span');
       why.className = 'ga-why';
       why.textContent = a.formDetail || '注册或自证没通过';
-      right.append(why);
-    } else if (a.form === 'project') {
-      // 项目形态:必须**说出**它没注册成工具。不说的话,这张卡片看起来和一个
-      // 真能调用的工具没有任何区别 —— 那就从"把成功说成失败"翻到了另一头。
-      const why = document.createElement('span');
-      why.className = 'ga-why';
-      why.textContent = '三份契约一份都没有，所以没有注册成可调用的工具';
-      right.append(why);
+      el.append(why);
     }
 
+    // 根上还摆着别的契约、但没被选中 —— 说出来。
+    //
+    // 判定是"第一个命中就停"(mcp → skill → SKILL.md),所以一个同时带 mcp_tool.json
+    // 和 skill.json 的仓库,skill.json 那份是**被忽略了**。不说的话,人会以为
+    // 那份文件有问题;说了他才知道这是判定顺序,不是坏了。
+    const ignored = GITHUB_CONTRACT_KEYS.filter((k) => a.contracts[k].present && !a.contracts[k].chosen);
+    if (ignored.length) {
+      const note = document.createElement('span');
+      note.className = 'ga-note';
+      note.textContent = `根上还有 ${ignored.map((k) => CONTRACT_TEXT[k]).join('、')}（判定顺序在前的那份已命中，这些没被选中）`;
+      el.append(note);
+    }
+
+    // 依赖没装成是**另一件事**:它可能注册成功了,但依赖被整份拒了。
+    if (a.depsError) {
+      const deps = document.createElement('span');
+      deps.className = 'ga-deps';
+      deps.textContent = `依赖：${a.depsError}`;
+      el.append(deps);
+    }
+
+    const meta = document.createElement('span');
+    meta.className = 'ga-meta';
+    meta.textContent = [DEPS_TEXT[a.depsScope] ?? a.depsScope, when(a.installedAt)].filter(Boolean).join(' · ');
+
+    const where = document.createElement('code');
+    where.className = 'ga-where';
+    where.textContent = a.installPath;
+
+    const acts = document.createElement('div');
+    acts.className = 'ga-acts';
     const del = document.createElement('button');
     del.className = 'ga-btn ga-danger';
     del.type = 'button';
@@ -354,10 +375,54 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
       e.stopPropagation();
       cb.onUninstall(a.name);
     });
-    right.append(del);
+    acts.append(del);
 
-    el.append(left, right);
+    el.append(meta, where, acts);
     return el;
+  }
+
+  /**
+   * 一个分组。**用原生 ``<details>``**,不自己造一套展开收缩。
+   *
+   * 原生的那套自带键盘操作、自带无障碍语义、自带"状态就在 DOM 上"——
+   * 自己写一份要把这三件事各补一遍,而且每补一遍都是一次出错的机会。
+   *
+   * 空的分组**照样画出来**,只是默认收起。省掉的话,这一栏看起来就是完整的,
+   * 而它并不完整 ——「一个 Skill 都没接过」和「这里根本没有 Skill 这一档」
+   * 是两件事。这条和左栏底下那块「接上了什么」第 3 条规矩是同一条。
+   */
+  function group(def: (typeof GROUPS)[number], rows: readonly GitHubAddon[]): HTMLElement {
+    const box = document.createElement('details');
+    box.className = 'ga-group';
+    box.dataset['form'] = def.form;
+    box.open = rows.length > 0;
+
+    const head = document.createElement('summary');
+    head.className = 'ga-group-head';
+    const label = document.createElement('span');
+    label.className = 'ga-group-name';
+    label.textContent = def.label;
+    const n = document.createElement('b');
+    n.textContent = String(rows.length);
+    head.append(icon(def.path), label, n);
+
+    const desc = document.createElement('p');
+    desc.className = 'ga-group-desc';
+    desc.textContent = def.desc;
+
+    const list = document.createElement('div');
+    list.className = 'ga-list';
+    if (!rows.length) {
+      const e = document.createElement('div');
+      e.className = 'ga-group-empty';
+      e.textContent = '这一档还没有';
+      list.append(e);
+    } else {
+      for (const a of rows) list.append(card(a));
+    }
+
+    box.append(head, desc, list);
+    return box;
   }
 
   function renderPolicy(status: GitHubAddonStatus | null): void {
@@ -392,25 +457,34 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
     notice.hidden = !msg;
     notice.textContent = msg;
 
-    list.replaceChildren();
+    colLeft.replaceChildren();
+    colRight.replaceChildren();
+
     if (rows === null) {
       // 「没拉到」不是「一个都没装」。空白会让人以为自己接过的项目丢了。
-      const e = document.createElement('div');
-      e.className = 'sf-empty';
-      e.textContent = '拉不到已接进来的项目 —— 后端没接上，不是你没接过';
-      list.append(e);
+      wholeNote.hidden = false;
+      wholeNote.textContent = '拉不到已接进来的项目 —— 后端没接上，不是你没接过';
+      split.hidden = true;
       n.textContent = '';
       return;
     }
+    split.hidden = false;
     n.textContent = String(rows.length);
+    wholeNote.hidden = rows.length > 0;
     if (!rows.length) {
-      const e = document.createElement('div');
-      e.className = 'sf-empty';
-      e.textContent = '还没接过。下面填一个仓库地址就行 —— 不用改代码，也不用重启。';
-      list.append(e);
-      return;
+      wholeNote.textContent = '还没接过。下面填一个仓库地址就行 —— 不用改代码，也不用重启。';
     }
-    for (const a of rows) list.append(card(a));
+
+    // 分流:一张卡片按它的形态进它该进的那一组,一个都不许落在两边之外。
+    // ``form`` 是后端给的唯一判定,认不出的一律归到「项目」—— 认不出的东西
+    // 少说一句话是安全的,悄悄消失不是。
+    const byForm = new Map<string, GitHubAddon[]>(GROUPS.map((g) => [g.form, []]));
+    for (const a of rows) (byForm.get(a.form) ?? byForm.get('project')!).push(a);
+
+    for (const def of GROUPS) {
+      const target = def.form === 'project' ? colLeft : colRight;
+      target.append(group(def, byForm.get(def.form) ?? []));
+    }
   }
 
   function clearForm(): void {

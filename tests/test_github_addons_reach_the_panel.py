@@ -284,54 +284,92 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         for env in ("GITHUB_ALLOWLIST", "GALAXY_ADDON_UNATTENDED"):
             assert env not in ui, f"界面自己读了 {env} —— 那就成了第二处权威，规则改一次两边分家"
 
-    def test_the_card_is_split_into_project_and_integration(self):
-        """左边是项目本体，右边是接入 —— 这两件事本来就是两件事。
+    def test_the_section_routes_projects_and_tools_into_separate_columns(self):
+        """这一段里混着两种东西，要**分流**：左边项目，右边接出来的工具。
 
-        挤成一列的时候，项目本身的信息会被接入状态的措辞盖过去，而多数时候人是
-        来找项目的：它从哪儿来的哪一次提交、代码落在磁盘什么位置。
+        "我接了一个项目"和"我多了一个模型能调的工具"是两件事，人来这一页找的
+        往往只是其中一件。混成一列时，想找项目的人要在一堆工具里扒，反之亦然。
         """
         ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
         css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
-        assert "'ga-left'" in ui and "'ga-right'" in ui, "卡片没有分成项目本体和接入两栏"
-        assert "grid-template-columns" in css.split(".ga-card {", 1)[1].split("}", 1)[0], "两栏不是用 grid 排的"
+        assert "'ga-split'" in ui, "没有分流，还是一列"
+        assert "const target = def.form === 'project' ? colLeft : colRight;" in ui, "分流的去向不是按形态定的"
+        assert ".ga-split {" in css and "grid-template-columns" in css.split(".ga-split {", 1)[1].split("}", 1)[0]
 
-    def test_all_three_contract_slots_are_drawn_not_just_the_chosen_one(self):
-        """三个槽位都要画出来，不是只画命中的那一个。
+    def test_every_addon_lands_in_exactly_one_group(self):
+        """一张卡片必须落进某一组，一个都不许掉在两边之外。
 
-        只画命中的那一个，另外两个就成了一片说不清的空白——而"这个仓库根上有
-        skill.json 但被 mcp_tool.json 抢了先"和"它根上什么都没有"是两件事。
+        掉出去的那一条**不会报错**，它只是从界面上消失 —— 而"我明明装过"和
+        "它不见了"之间没有任何提示，这正是最难发现的那种坏法。认不出的形态
+        归到「项目」：少说一句话是安全的，悄悄消失不是。
         """
         ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
-        transport = (PANEL_SRC / "transport.ts").read_text(encoding="utf-8")
-        assert "GITHUB_CONTRACT_KEYS" in transport, "三个槽位的名单没有一处权威"
-        assert "for (const key of GITHUB_CONTRACT_KEYS)" in ui, "界面没有把三个槽位都画出来"
-        assert "'present'" in transport and "'chosen'" in transport, (
-            "没有区分「根上摆着这份契约」和「它被选中走了注册」——只按后者画，" "等于替仓库说一句它没说过的话"
-        )
+        assert "byForm.get(a.form) ?? byForm.get('project')!" in ui, "认不出的形态没有兜底，会从界面上消失"
+        forms = {"project", "mcp", "skill"}
+        declared = {m for m in forms if f"form: '{m}' as const" in ui}
+        assert declared == forms, f"分组名单缺了：{forms - declared}"
 
-    def test_the_backend_reports_which_contracts_are_present(self, tmp_path):
-        from core.github_addon_integration import present_contracts
+    def test_groups_collapse_natively_and_empty_ones_are_still_drawn(self):
+        """用原生 <details>，而且空组照样画出来。
 
-        (tmp_path / "mcp_tool.json").write_text("{}", encoding="utf-8")
-        (tmp_path / "skill.json").write_text("{}", encoding="utf-8")
-        got = present_contracts(tmp_path)
-        assert got == {"mcp": True, "skill": True, "skill_md": False}, got
+        自己造一套展开收缩，要把键盘操作、无障碍语义、状态同步各补一遍，
+        每补一遍都是一次出错的机会。
 
-    def test_a_second_contract_is_reported_even_when_it_was_not_chosen(self, tmp_path):
-        """同时带两份契约时，没被选中的那一份也要如实报出来。"""
-        from core.github_addon_integration import build_integration, detect_addon_type, present_contracts
+        空组不许省：「一个 Skill 都没接过」和「这里根本没有 Skill 这一档」
+        是两件事。这条和左栏底下那块「接上了什么」第 3 条规矩是同一条。
+        """
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        assert "createElement('details')" in ui, "没用原生 details，自己造了一套"
+        assert "createElement('summary')" in ui
+        assert "box.open = rows.length > 0" in ui, "空组没有默认收起"
+        assert "这一档还没有" in ui, "空组什么都不画 —— 那一档在界面上就不存在了"
 
-        (tmp_path / "mcp_tool.json").write_text("{}", encoding="utf-8")
-        (tmp_path / "skill.json").write_text("{}", encoding="utf-8")
-        typ = detect_addon_type(tmp_path)
-        assert typ == "mcp", "判定顺序变了"
-        integration, _, _ = build_integration(typ, {"success": True}, {"success": True}, present_contracts(tmp_path))
-        assert integration["contracts"]["mcp"] == {"present": True, "chosen": True}
-        assert integration["contracts"]["skill"] == {
-            "present": True,
-            "chosen": False,
-        }, "根上明明有 skill.json，却报成了没有"
-        assert integration["contracts"]["skill_md"] == {"present": False, "chosen": False}
+    def test_each_group_has_an_icon_drawn_the_way_the_panel_draws_icons(self):
+        """分组要有图标，而且用面板**已有**的那一种画法。
+
+        多一种画法就要多认一次；而且 dock.ts 那个 helper 已经把 24 格、
+        currentColor 描边、圆头圆角定死了，另起一套迟早对不齐。
+        """
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        dock = (PANEL_SRC / "ui/dock.ts").read_text(encoding="utf-8")
+        assert "head.append(icon(def.path)" in ui, "分组标题上没有图标"
+        for attr in ("viewBox', '0 0 24 24'", "stroke', 'currentColor'"):
+            assert attr in ui and attr in dock, f"图标画法和 dock.ts 那套对不上：{attr}"
+
+    def test_a_contract_that_was_present_but_not_chosen_is_named(self):
+        """根上还摆着别的契约、但没被选中 —— 要说出来。
+
+        判定是"第一个命中就停"（mcp → skill → SKILL.md）。一个同时带
+        mcp_tool.json 和 skill.json 的仓库，后者是**被忽略了**。不说的话，
+        人会以为那份文件有问题；说了他才知道这是判定顺序，不是坏了。
+        """
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        assert "a.contracts[k].present && !a.contracts[k].chosen" in ui, "没被选中的契约被当成不存在"
+        assert "没被选中" in ui
+
+    def test_there_is_no_mhs_group_and_the_reason_is_on_file(self):
+        """右栏只有两组，没有 MHS —— 而且这条是**有据**的，不是忘了做。
+
+        MHS（Model Hardware Standard，Anthropic 2026-08-27 研究预览）在
+        `docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md` 第 ④ 节已经判过：至今没有
+        公开规范、没有 SDK、没有 schema、没有一致性测试，"接入"只能照新闻稿
+        把消息格式编出来 —— 那不是实现协议，是造一个同名的赝品。那份文档还专门
+        写了一节「也不放占位模块」，理由是本仓的历史：一路删掉的正是这种
+        "先声明、以后再实现"的空架子。
+
+        一个**永远是空的、而且永远填不满**的分组，就是界面版的占位模块。
+
+        这条门有两半：既挡住"哪天有人顺手把空分组加回去"，也挡住"那份判断被
+        删掉之后没人记得为什么不做"。规范真开源了，该做的是改这条门，
+        而不是绕过它。
+        """
+        doc = (PANEL_SRC.parents[3] / "docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md").read_text(encoding="utf-8")
+        assert "MHS" in doc and "也不放占位模块" in doc, "那份判断不在了 —— 不做 MHS 就成了一句没来由的话"
+
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        groups = ui.split("const GROUPS = [", 1)[1].split("] as const;", 1)[0]
+        assert "mhs" not in groups.lower(), "右栏加了一个永远填不满的 MHS 分组"
+        assert "EXTERNAL_AGENT_FRAMEWORK_EVALUATION" in ui, "没写明为什么只有两组 —— 下一个人会当成漏做"
 
     def test_state_is_told_with_light_and_depth_never_with_hue(self):
         """状态不许用颜色说。
@@ -399,14 +437,14 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
                 continue
             assert "inset" in part, f"卡片带着一道外投影（浮起来了）：{part.strip()}"
 
-    def test_a_project_form_addon_still_says_it_is_not_a_callable_tool(self):
-        """项目形态必须**说出**它没注册成工具。
+    def test_the_project_group_says_it_holds_no_callable_tools(self):
+        """「项目」那一组必须**说出**它里面的东西不是可调用工具。
 
-        不说的话，这张卡片看起来和一个真能调用的工具没有任何区别 ——
-        那就从"把成功说成失败"翻到了另一头，变成"把没接成工具说成接成了"。
+        不说的话，两栏看起来就是并列的两堆工具 —— 那就从"把成功说成失败"
+        翻到了另一头，变成"把没接成工具说成接成了"。
         """
         ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
-        assert "没有注册成可调用的工具" in ui, "项目形态的卡片没说清它不是一个可调用工具"
+        assert "不注册成可调用的工具" in ui, "「项目」这一组没说清它不是可调用工具"
 
     def test_the_three_approval_modes_are_styled_apart(self):
         css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
@@ -440,14 +478,18 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         assert "type" not in draft, f"表单草稿里出现了 type 字段：{draft!r}"
         assert "createElement('select')" not in ui, "表单里出现了类型选择器"
 
-    def test_an_unknown_form_still_shows_up_verbatim(self):
-        """认不出的形态要**露出来**，不能画成空白。
+    def test_an_unknown_form_is_named_not_silently_filed_as_a_project(self):
+        """后端将来多一档形态时，那张卡片要**说**自己认不出，而不是装成普通项目。
 
-        没有兜底的话，后端将来多一档形态时，那张卡片上的形态位就是空的 ——
-        而"什么都没显示"会被读成"没有形态"，不是"我不认识它"。
+        分流的兜底是把它放进「项目」组——那是为了不让它从界面上消失。但光有兜底
+        还不够：它会静静躺在项目堆里，看起来就是一个普通项目，而界面就在替后端
+        说一句它没说过的话。
+
+        两件事要同时做到：**不消失**（兜底）和**不伪装**（这一行）。
         """
         ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
-        assert "FORM_TEXT[a.form] ?? a.form" in ui, "形态显示没有兜底"
+        assert "!GROUPS.some((g) => g.form === a.form)" in ui, "认不出的形态没有被识别出来"
+        assert "这个面板还不认识" in ui, "认不出的形态悄悄装成了普通项目"
 
     def test_it_says_plainly_that_mcp_and_skill_are_what_a_repo_becomes(self):
         """「这上面的 MCP / skill 跟 GitHub 是不是一块儿的」必须在界面上答得出来。
