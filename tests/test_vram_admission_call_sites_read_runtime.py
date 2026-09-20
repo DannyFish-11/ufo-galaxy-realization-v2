@@ -137,11 +137,51 @@ class TestNoConsumerGoesBackToWeights:
             "显存相关的判断一律问 ModelSpec.runtime_mb()。"
         )
 
-    def test_the_one_authority_still_reads_runtime(self) -> None:
-        """``model_fit`` 自己必须问驻留量 —— 上面那条扫不到它（它用的是 budget_mb）。"""
+    @staticmethod
+    def _body(name: str) -> str:
         src = (_ROOT / "core/routes/models.py").read_text(encoding="utf-8")
-        body = src[src.index("def model_fit(") :]
+        body = src[src.index(f"def {name}(") :]
         body = body[: body.index("\ndef ")]
-        body = re.sub(r'"""(?:.|\n)*?"""', " ", body)
-        assert "runtime_mb()" in body, "显存准入的唯一落点不再问驻留量了"
-        assert not re.search(r"\bsize_mb(_val)?\b", body), "显存准入又读回权重了 —— 这正是这道门要拦的那一跤"
+        return re.sub(r'"""(?:.|\n)*?"""', " ", body)
+
+    def test_the_one_authority_still_reads_runtime(self) -> None:
+        """做那次比较的那个函数必须问驻留量 —— 上面那条扫不到它（它用的是 budget_mb）。
+
+        判据钉的是**做比较的那一个**，不是某个固定的函数名。落点从 ``model_fit``
+        挪到 ``fit_detail`` 时这条红过一次 —— 那是对的：权威搬了家，判据就该跟着搬，
+        而不是留在原地继续绿。
+        """
+        bodies = {n: self._body(n) for n in ("model_fit", "fit_detail")}
+        comparing = [n for n, b in bodies.items() if re.search(r"> *budget_mb", b)]
+        assert comparing, f"没有任何一个函数再拿显存预算做比较了：{list(bodies)}"
+        for name in comparing:
+            assert "runtime_mb()" in bodies[name], f"{name} 做显存准入却不问驻留量了"
+        # 两个都不许读权重 —— 包括那个只做转发的。
+        for name, body in bodies.items():
+            assert not re.search(r"\bsize_mb(_val)?\b", body), f"{name} 又读回权重了 —— 这正是这道门要拦的那一跤"
+
+    def test_the_kv_cache_is_counted_when_its_price_is_known(self) -> None:
+        """权重放得下 ≠ 跑得起来：llama.cpp 加载时把整个 KV cache 一次性分配掉。
+
+        单价**未知时不加**，这跟调度器是同一条规矩（不知道分母就不敢动真实需求）；
+        但**知道了就必须加**，否则那次测量等于白量。
+        """
+        body = self._body("fit_detail")
+        assert "effective_kv_mb_per_1k" in body, "准入不再问 KV 单价 —— 那台机器量到的那个数就白量了"
+        assert "MIN_CTX" in body, "KV 那一项不再按最短上下文算 —— 那它按的是什么？"
+        assert re.search(r"if per_1k > 0", body), "单价未知时也去加 KV —— 拿一个编出来的数收紧准入，和拿它放开一样坏"
+
+    def test_the_numbers_behind_the_verdict_come_out_too(self) -> None:
+        """面板写「显存装不下」时，人接着问的是「差多少」。
+
+        这几个数必须由准入这一处一起给出 —— 让面板自己再算一遍，就是同一个事实两处各存。
+        """
+        from core.routes.models import fit_detail as _fd
+
+        spec = get_model("gemma4:12b")
+        assert spec is not None
+        d = _fd(spec, True, _EIGHT_GB)
+        for key in ("fit", "tag", "resident_mb", "kv_mb", "kv_per_1k_mb", "kv_source", "budget_mb"):
+            assert key in d, f"准入结果里少了 {key} —— 面板就得自己去算"
+        assert d["resident_mb"] == spec.runtime_mb()
+        assert d["budget_mb"] == _EIGHT_GB

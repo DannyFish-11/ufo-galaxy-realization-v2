@@ -82,19 +82,26 @@ async def get_catalog() -> Dict[str, Any]:
             "recommended_quantization": prof.recommended_quantization,
         }
         fits: Dict[str, str] = {}
+        fit_details: Dict[str, Dict[str, Any]] = {}
         for tier in snap.get("tiers", []) or []:
             for m in tier.get("models", []) or []:
                 tag = m.get("tag", "")
                 spec = get_model(tag)
                 if spec is None or spec.source != "local":
                     continue
-                fits[tag] = model_fit(spec, has_gpu, int(prof.max_model_size_mb))
+                detail = fit_detail(spec, has_gpu, int(prof.max_model_size_mb))
+                fits[tag] = detail["fit"]
+                # 「差多少」也带出去。面板写「显存装不下」时人接着就问这个,
+                # 让它自己再算一遍等于同一个事实两处各存。
+                fit_details[tag] = detail
         snap["gpu_fit"] = fits
+        snap["gpu_fit_detail"] = fit_details
         snap["tier_fit"] = _tier_fit(snap, fits)
     except Exception as exc:  # 探测失败不阻塞目录,但如实说明未评估
         logger.debug("catalog 硬件探测失败: %s", exc)
         snap["hardware"] = {"has_gpu": None, "probe_error": type(exc).__name__}
         snap["gpu_fit"] = {}
+        snap["gpu_fit_detail"] = {}
         # **探测失败时每一档都是 unknown,不是 ok。** 没探到和探到「装得下」是
         # 两件事;当成 ok 的话,面板会把「不知道」画成「能跑」,而用户是照着这个
         # 画面选档的。
@@ -142,15 +149,70 @@ def model_fit(spec: Any, has_gpu: bool, budget_mb: int) -> str:
     真去 shell 出 nvidia-smi。于是它**从来没有被直接测过**——那条讲「显存准入只问
     runtime_mb」的判据有 9 条，没有一条查得到这个调用点。抽成纯函数之后，
     判据可以拿真目录直接问它。
+
+    ## 为什么还要加上 KV cache
+
+    权重放得下 ≠ 跑得起来。**llama.cpp 在加载时把整个 KV cache 一次性分配掉**
+    （见 :meth:`core.compute_scheduler.ComputeScheduler.context_budget_for` 里同一条
+    注释），所以一个型号至少要放得下「驻留量 + 最短上下文那点 KV」才谈得上能加载。
+
+    默认主脑 ``gemma4:12b`` 就卡在这儿：驻留 8000 MB，在一块 8 GB 卡上准入判 ``ok``，
+    **余量只有 192 MB**，而它的上下文上限是 256K。KV 一分配就顶出去，而报错同样
+    发生在加载途中不在准入处。
+
+    KV 单价**实测优先**（:func:`core.context_measurements.effective_kv_mb_per_1k`）：
+    这台机器上量到过就用量到的，没量到才退回目录声明。
+
+    **单价未知(0)时不加这一项，也不假装加过。** 这跟调度器那边是同一条规矩：
+    不知道分母就不敢动真实需求 —— 拿一个编出来的数去收紧准入，和拿它去放开一样坏。
+    未知这件事本身由 :func:`fit_detail` 如实说出来。
     """
+    return fit_detail(spec, has_gpu, budget_mb)["fit"]
+
+
+def fit_detail(spec: Any, has_gpu: bool, budget_mb: int) -> Dict[str, Any]:
+    """与 :func:`model_fit` 同一条判断，但把**算给谁看的那几个数**一起带出来。
+
+    面板上写着「显存装不下」的时候，人接着要问的是「差多少」。这里把驻留量、
+    KV 这一项、以及 KV 单价是**实测还是目录声明**都返回出去，托盘和面板据此
+    如实显示，不用各自再算一遍（各算一遍就是同一个事实两处各存）。
+    """
+    from core.model_catalog import MIN_CTX  # noqa: PLC0415  分区就地导入(见文件头注释)
+
+    tag = str(getattr(spec, "tag", "") or "")
+    resident = int(spec.runtime_mb()) if spec is not None else 0
+    detail: Dict[str, Any] = {
+        "fit": "ok",
+        "tag": tag,
+        "resident_mb": resident,
+        "kv_mb": 0,
+        "kv_per_1k_mb": 0,
+        "kv_source": "unknown",
+        "budget_mb": int(budget_mb),
+    }
     if not getattr(spec, "requires_gpu", False):
-        return "ok"
+        return detail
     if not has_gpu:
-        return "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
-    # **只问驻留量。** 没量过的型号 runtime_mb() 自己退回权重值(保守,但不是编的)。
-    if spec.runtime_mb() > budget_mb:
-        return "insufficient_vram"  # 有显卡但装不下:会溢出到内存
-    return "ok"
+        detail["fit"] = "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
+        return detail
+
+    # KV 单价:实测优先,目录兜底,都没有就是 0 = 不知道。
+    try:
+        from core.context_measurements import effective_kv_mb_per_1k, measured_source
+
+        per_1k = int(effective_kv_mb_per_1k(tag)) if tag else 0
+        detail["kv_source"] = measured_source(tag) if tag and per_1k > 0 else "unknown"
+    except Exception:  # noqa: BLE001 —— 量测存档读不到不该挡住准入
+        per_1k = 0
+    detail["kv_per_1k_mb"] = per_1k
+
+    # 最短上下文那一点 KV。**不知道单价就不加** —— 见 model_fit 的说明。
+    if per_1k > 0:
+        detail["kv_mb"] = int(per_1k * MIN_CTX / 1024)
+
+    if resident + int(detail["kv_mb"]) > budget_mb:
+        detail["fit"] = "insufficient_vram"  # 有显卡但装不下:会溢出到内存
+    return detail
 
 
 def _tier_fit(snap: Dict[str, Any], fits: Dict[str, str]) -> Dict[str, Dict[str, Any]]:

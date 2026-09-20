@@ -347,12 +347,23 @@ def _fake_tray():
     return t, tray
 
 
+#: 托盘顶层允许出现的项,以及**授权它的那句话**。
+#:
+#: 这是一份账,不是一个上限。每加一项都要在这里写下是谁要的、原话是什么 ——
+#: 否则这道判据就从「只有要过的东西」退化成「数目对得上就行」,而那正是它要拦的。
+_ASKED_FOR = {
+    "日志": "「但凡需要日志的统一放进右下角的托盘里」",
+    "本机模型实测": "「你顺带将以上所有模型跑过的测试数据,也一块儿搁进右下角的托盘里」",
+}
+
+
 def test_the_tray_menu_holds_only_what_the_owner_asked_for():
     """托盘菜单里只有所有者要过的东西。
 
     先是「把之前那九项全部删掉,暂时先不放任何东西」;后来是「但凡需要日志的
-    统一放进右下角的托盘里」。所以现在**恰好**是:一个承接单击的不可见默认项,
-    加一个「日志」子菜单 —— 那九项一个都没回来。
+    统一放进右下角的托盘里」;再后来是「把以上所有模型跑过的测试数据也一块儿
+    搁进右下角的托盘里」。所以现在**恰好**是:一个承接单击的不可见默认项,
+    加上 :data:`_ASKED_FOR` 里那几项 —— 那九项一个都没回来。
 
     钉住它,是因为「菜单空着」与「菜单坏了」在外面看起来一模一样;
     而多出来一项没人要过的东西,和少了那个默认项一样是问题。
@@ -361,8 +372,11 @@ def test_the_tray_menu_holds_only_what_the_owner_asked_for():
     menu = tray._build_menu()
 
     visible = [i for i in menu.items if getattr(i, "visible", True)]
-    assert len(visible) == 1, f"可见的顶层项应只有「日志」,实际 {[i.text for i in visible]}"
-    assert "日志" in visible[0].text
+    unasked = [i.text for i in visible if not any(k in i.text for k in _ASKED_FOR)]
+    assert not unasked, f"托盘里多出了没人要过的项: {unasked}。" f"要加就先在 _ASKED_FOR 里写下是谁要的、原话是什么。"
+    missing = [k for k in _ASKED_FOR if not any(k in i.text for i in visible)]
+    assert not missing, f"要过的项不见了: {missing} —— 分别出自 {[_ASKED_FOR[k] for k in missing]}"
+    assert len(visible) == len(_ASKED_FOR), f"顶层项应与 _ASKED_FOR 一一对应,实际 {[i.text for i in visible]}"
 
     hidden = [i for i in menu.items if not getattr(i, "visible", True)]
     assert len(hidden) == 1, "承接单击的不可见默认项必须有且只有一个"

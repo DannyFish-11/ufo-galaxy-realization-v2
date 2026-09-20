@@ -253,6 +253,7 @@ _STATUS_TOOLTIPS = {
 #: 单击托盘时那个不可见默认项的名字。不进菜单,但辅助技术会读到它。
 _ACTIVATE_LABEL = "显示面板 / Show panel"
 _LOGS_LABEL = "日志 / Logs"
+_MEASURE_LABEL = "本机模型实测 / Model measurements"
 
 
 # ---------------------------------------------------------------------------
@@ -460,21 +461,101 @@ class GalaxyTray:
         items.append(pystray.MenuItem("打开日志文件夹 / Open logs folder", self._open_logs_folder))
         return items
 
+    def _build_measurements_menu(self) -> "list":
+        """「本机模型实测」子菜单 —— 那几个数散在四个模块里，这儿是唯一并排的地方。
+
+        关于一个型号，仓库里同时存着四种来路不同的数：目录声明的权重、磁盘上那个
+        GGUF 的真实大小、量过一次写进源码的驻留量、**这台机器自己量的** KV 单价。
+        排查「模型带不动」时第一个要问的就是它们，而在此之前没有任何一处把它们
+        摆在一起过。
+
+        **每一项都带着"这数哪来的"。** 一个没量过的 KV 单价写成 0，和量出来真的是
+        0，在屏幕上必须长得不一样 —— 前者是"不知道"，后者是"知道它不要钱"。
+
+        每次展开都重算：模型是跑着跑着才被量到的，菜单建一次就固定的话，启动时
+        还没量到的那些永远不会更新。这一条与「日志」那个子菜单同理。
+
+        算数不在这儿。托盘只负责显示 —— 两边各算一遍，迟早给出不同答案。
+        """
+        items: List = []
+        try:
+            from core.model_measurements_report import UNKNOWN, measurement_rows
+
+            rows = measurement_rows(*self._hardware_budget())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读不到模型实测账: %s", exc)
+            return [
+                pystray.MenuItem("读不到实测账 / measurements unavailable", None, enabled=False)
+            ]
+
+        for row in rows:
+            kv = f"KV {row.kv_per_1k_mb} MB/1K" if row.kv_per_1k_mb > 0 else f"KV {UNKNOWN}"
+            fit = f" · {row.fit}" if row.fit else ""
+            label = f"{row.tag}  驻留 {row.runtime_mb} MB · {kv}{fit}"
+            # 点开这一条 = 把整份账写成文件再打开。菜单里一行放不下全部来路。
+            items.append(pystray.MenuItem(label, self._export_measurements))
+        if items:
+            items.append(pystray.Menu.SEPARATOR)
+        items.append(
+            pystray.MenuItem("导出成日志文件 / Export as log", self._export_measurements)
+        )
+        return items
+
+    def _hardware_budget(self) -> tuple:
+        """(显存预算, 有没有显卡)。探不到就是 ``(None, None)`` —— **不是 (0, False)**。
+
+        探不到和"探到这台机器没显卡"是两件事。给 0 的话，这份账里每一行都会写着
+        「装不下」，而真相是没人问过。
+        """
+        try:
+            from core.hardware_compute_profiler import get_hardware_profiler
+
+            prof = get_hardware_profiler().profile_sync()
+            return int(prof.max_model_size_mb), bool(prof.gpus)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("托盘探不到硬件画像: %s", exc)
+            return None, None
+
+    def _export_measurements(self, icon: object = None, item: object = None) -> None:
+        """把整份实测账写进日志目录再打开 —— 所有者说「放成日志或者单独列一栏都可以」，
+        这两样都做了：菜单里是一眼能看的摘要，这里是能存下来、能发给别人的那一份。
+        """
+        try:
+            from core.model_measurements_report import (
+                measurement_rows,
+                render_report,
+                report_filename,
+            )
+
+            budget, has_gpu = self._hardware_budget()
+            text = render_report(measurement_rows(budget, has_gpu), budget)
+            root = logs_root()
+            root.mkdir(parents=True, exist_ok=True)
+            target = root / report_filename()
+            target.write_text(text, encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("导出模型实测账失败: %s", exc)
+            self._show_notification("本机模型实测 / Measurements", f"导出失败 / export failed:\n{exc}")
+            return
+        self._open_in_os(target)
+
     def _build_menu(self) -> "pystray.Menu":
-        """右键菜单 —— **空的**。/ The context menu — deliberately empty.
+        """右键菜单 —— **只放所有者点名要过的东西**。
 
-        所有者要求:把之前那九项全部删掉,暂时先不放任何东西。
+        这里曾经是空的:所有者当时的要求是「把之前那九项全部删掉,暂时先不放任何
+        东西」。后来点名加过两样,各自都有原话:
 
-        唯一的成员是一个 ``visible=False`` 的默认项。它不出现在右键菜单里,
-        但 pystray 用「默认项」承接单击 —— 没有它,点托盘不会触发任何回调,
-        这个图标就只是一张贴纸。
+        * 「日志」—— 「但凡需要日志的统一放进右下角的托盘里」
+        * 「本机模型实测」—— 「把以上所有模型跑过的测试数据也一块儿搁进右下角的托盘里」
 
-        要把「退出」加回来,在这里补一行::
+        那九项一个都没回来。**再加一项之前先去看
+        ``tests/test_unified_crash_logs.py`` 里的 ``_ASKED_FOR``** —— 那是这份名单的
+        权威处,加了不记账,判据会红。
 
-            pystray.MenuItem("退出 / Quit", lambda icon, item: self.stop())
+        另有一个 ``visible=False`` 的默认项。它不出现在右键菜单里,但 pystray 用
+        「默认项」承接单击 —— 没有它,点托盘不会触发任何回调,这个图标就只是一张贴纸。
 
-        在那之前,停掉托盘的办法是结束 ``python main.py`` 那个进程,
-        或由调用方拿 :meth:`stop`。
+        停掉托盘的办法是结束 ``python main.py`` 那个进程,或由调用方拿 :meth:`stop`。
         """
         return pystray.Menu(
             pystray.MenuItem(
@@ -488,6 +569,11 @@ class GalaxyTray:
                 # 每次展开都重新出一遍 —— 日志是跑着跑着才出现的,
                 # 菜单建一次就固定的话,启动时还没有的那些永远不会出现在里面。
                 pystray.Menu(lambda: self._build_logs_menu()),
+            ),
+            pystray.MenuItem(
+                _MEASURE_LABEL,
+                # 同理:那几个数是模型被加载过才量到的,展开时才算。
+                pystray.Menu(lambda: self._build_measurements_menu()),
             ),
         )
 
