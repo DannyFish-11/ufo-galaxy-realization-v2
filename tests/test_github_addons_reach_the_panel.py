@@ -99,10 +99,20 @@ class TestTheBackendPublishesWhatThePanelNeeds:
         assert "token_configured" in body, "没说 token 配没配 —— 私有仓会在装的时候才失败"
         assert "install_dir" in body, "没说装在哪 —— 出问题时人连去哪儿看都不知道"
 
-    def test_list_returns_an_addons_array_even_when_empty(self, client):
-        """空也要是数组。给 null 或干脆不给这个键，前端分不清"没装过"和"拉不到"。"""
+    def test_list_always_returns_an_addons_array(self, client):
+        """``addons`` 永远是一个数组，哪怕一个都没有。
+
+        给 null、或干脆不给这个键，前端就分不清"没装过"和"拉不到"——那两件事
+        在界面上必须说成两句话。
+
+        这里断言的是**形状**，不是长度。第一版写的是 `== []`，它单独跑是绿的，
+        和别的用例一起跑就红：installer 是个单例，manifest 是共享的，同一轮里
+        别的用例装过东西。断言长度等于把一条形状门变成了一条依赖全局状态的门，
+        而那种门迟早会被人用 `-p no:randomly` 之类的办法绕过去，而不是修好。
+        """
         body = client.get("/api/v1/github/list").json()
-        assert body["addons"] == []
+        assert "addons" in body, "列表端点没有 addons 这个键"
+        assert isinstance(body["addons"], list), f"addons 不是数组：{type(body['addons'])}"
 
 
 class TestThePanelIsActuallyWiredToThoseEndpoints:
@@ -158,6 +168,96 @@ class TestThePanelIsActuallyWiredToThoseEndpoints:
         assert "await loadAddons()" in body, "装完没有重新拉 —— 界面显示的是前端拼的，不是后端认的"
 
 
+class TestAProjectWithNoContractIsASuccessfulInstall:
+    """接一个普通仓库（没有 mcp_tool.json / skill.json / SKILL.md）是一次**成功**的接入。
+
+    MCP / Skill 是 GitHub 项目的交集，不是它的定义：接一个仓库可能是为了拿它跑实验、
+    读它、拿它当素材。改之前 `install_success` 对所有类型一律看
+    `registration && verification`，而普通仓库那条路的 registration 被写死成
+    `success: False`，于是它**永远**返回 success=False + HTTP 400 —— 面板上只能
+    显示成一次失败，而它明明成功了。
+    """
+
+    def test_the_three_forms_come_from_one_place(self):
+        from core.github_addon_integration import integration_form
+
+        assert integration_form("mcp") == "mcp"
+        assert integration_form("skill") == "skill"
+        assert integration_form("skill_md") == "skill", "skill_md 是 Skill 的一种写法，不是第三种形态"
+        assert integration_form("ordinary_tool_repo") == "project"
+        assert (
+            integration_form("something-new-later") == "project"
+        ), "认不出的类型没有归到 project —— 认不出的东西要少说一句话，不能多说一句假话"
+
+    def test_no_contract_means_success_with_state_cloned_only(self):
+        from core.github_addon_integration import build_integration, cloned_only_results
+
+        reg, ver = cloned_only_results()
+        integration, ok, state = build_integration("ordinary_tool_repo", reg, ver)
+        assert ok is True, "接一个普通项目被判成了失败"
+        assert integration["form"] == "project"
+        assert integration["ok"] is True
+        assert state == "cloned_only", "落点状态被 success 带成了 verified"
+        assert integration["detail"], "没说清它以什么形式接进来的"
+
+    def test_a_contract_that_fails_to_register_is_still_a_failure(self):
+        """反面保险：这条改动放宽的只有"没有契约"那一档。
+
+        没有这一条，上面那条在"所有类型一律判成功"的实现下也会绿 ——
+        而那会把真正接坏的插件说成接好了。
+        """
+        from core.github_addon_integration import build_integration
+
+        integration, ok, state = build_integration(
+            "mcp", {"success": False, "error": "entrypoint 不存在"}, {"success": False}
+        )
+        assert ok is False
+        assert integration["form"] == "mcp"
+        assert state == "registration_or_verification_failed"
+        assert "entrypoint 不存在" in integration["detail"], "没说清卡在哪一步"
+
+    def test_the_cloned_only_results_carry_a_message_not_an_error(self):
+        """两份结果都不带 error。
+
+        带 error 的话，任何一个按"有没有 error"判成败的消费者都会把它读成失败 ——
+        而这正是改之前那个行为的来源。
+        """
+        from core.github_addon_integration import cloned_only_results
+
+        for part in cloned_only_results():
+            assert "error" not in part, f"项目形态的结果里带着 error：{part}"
+            assert part.get("message"), f"既没有 error 也没有 message，什么都没说：{part}"
+
+    def test_the_route_returns_200_for_a_project_form_install(self, client, monkeypatch, tmp_path):
+        """端到端：HTTP 状态码也要跟着对。
+
+        路由是 `200 if result["success"] else 400`。只改 success 而不核这一条，
+        面板拿到的仍然是一个 400 —— 而 transport 那边把 400 当成"后端拒绝了"。
+        """
+        import core.github_installer as gi
+
+        repo_src = tmp_path / "src"
+        repo_src.mkdir()
+        (repo_src / "README.md").write_text("just a project\n", encoding="utf-8")
+
+        def _fake_fetch(owner, repo, ref, dest):  # noqa: ANN001,ARG001
+            import shutil
+
+            shutil.copytree(repo_src, dest, dirs_exist_ok=True)
+            return "0" * 40
+
+        monkeypatch.setattr(gi, "_fetch_repo", _fake_fetch)
+        monkeypatch.setenv("GITHUB_ALLOWLIST", "owner/plain-repo")
+
+        resp = client.post("/api/v1/github/install", json={"url": "https://github.com/owner/plain-repo"})
+        assert resp.status_code == 200, f"接一个普通项目被回了 {resp.status_code}：{resp.text[:300]}"
+        body = resp.json()
+        assert body["success"] is True
+        assert body["integration"]["form"] == "project"
+        assert body["install_state"] == "cloned_only"
+        assert body["classification"]["integrable"] is False, "没说清它不是一个可调用工具"
+
+
 class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
     """界面上每一个判断都要有后端的出处。"""
 
@@ -169,15 +269,129 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         for env in ("GITHUB_ALLOWLIST", "GALAXY_ADDON_UNATTENDED"):
             assert env not in ui, f"界面自己读了 {env} —— 那就成了第二处权威，规则改一次两边分家"
 
-    def test_the_two_states_are_styled_apart(self):
-        """active / degraded 必须长得不一样。
+    def test_the_card_is_split_into_project_and_integration(self):
+        """左边是项目本体，右边是接入 —— 这两件事本来就是两件事。
 
-        "代码拿下来了但没注册上"画成绿点，等于告诉用户"这个工具能用"，
-        而实际上模型调它的时候才会报错。
+        挤成一列的时候，项目本身的信息会被接入状态的措辞盖过去，而多数时候人是
+        来找项目的：它从哪儿来的哪一次提交、代码落在磁盘什么位置。
+        """
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
+        assert "'ga-left'" in ui and "'ga-right'" in ui, "卡片没有分成项目本体和接入两栏"
+        assert "grid-template-columns" in css.split(".ga-card {", 1)[1].split("}", 1)[0], "两栏不是用 grid 排的"
+
+    def test_all_three_contract_slots_are_drawn_not_just_the_chosen_one(self):
+        """三个槽位都要画出来，不是只画命中的那一个。
+
+        只画命中的那一个，另外两个就成了一片说不清的空白——而"这个仓库根上有
+        skill.json 但被 mcp_tool.json 抢了先"和"它根上什么都没有"是两件事。
+        """
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        transport = (PANEL_SRC / "transport.ts").read_text(encoding="utf-8")
+        assert "GITHUB_CONTRACT_KEYS" in transport, "三个槽位的名单没有一处权威"
+        assert "for (const key of GITHUB_CONTRACT_KEYS)" in ui, "界面没有把三个槽位都画出来"
+        assert "'present'" in transport and "'chosen'" in transport, (
+            "没有区分「根上摆着这份契约」和「它被选中走了注册」——只按后者画，" "等于替仓库说一句它没说过的话"
+        )
+
+    def test_the_backend_reports_which_contracts_are_present(self, tmp_path):
+        from core.github_addon_integration import present_contracts
+
+        (tmp_path / "mcp_tool.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "skill.json").write_text("{}", encoding="utf-8")
+        got = present_contracts(tmp_path)
+        assert got == {"mcp": True, "skill": True, "skill_md": False}, got
+
+    def test_a_second_contract_is_reported_even_when_it_was_not_chosen(self, tmp_path):
+        """同时带两份契约时，没被选中的那一份也要如实报出来。"""
+        from core.github_addon_integration import build_integration, detect_addon_type, present_contracts
+
+        (tmp_path / "mcp_tool.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "skill.json").write_text("{}", encoding="utf-8")
+        typ = detect_addon_type(tmp_path)
+        assert typ == "mcp", "判定顺序变了"
+        integration, _, _ = build_integration(typ, {"success": True}, {"success": True}, present_contracts(tmp_path))
+        assert integration["contracts"]["mcp"] == {"present": True, "chosen": True}
+        assert integration["contracts"]["skill"] == {
+            "present": True,
+            "chosen": False,
+        }, "根上明明有 skill.json，却报成了没有"
+        assert integration["contracts"]["skill_md"] == {"present": False, "chosen": False}
+
+    def test_state_is_told_with_light_and_depth_never_with_hue(self):
+        """状态不许用颜色说。
+
+        这条不是审美偏好，是这个仓已经判过一次的事：左栏底下那块「接上了什么」
+        原先是红/黄/绿/空心四个彩色小点，所有者的原话写在 `.wired-dot` 那段注释里
+        ——「那个点儿就是红绿绿黄，是有点不太好看……可以通过白光加动效的方式，
+        让人体会，而不是这种奇怪的颜色」。这一面上只有一支色相，彩色小点是整面
+        唯一跳出来的东西。
+
+        我在第一版里又犯了一次（绿点 / 琥珀点）。所以写成门：凡是给这一段里的
+        小圆点定底色的规则，底色只能是中性的白/灰，不能带色相。
+
+        颜色仍然可以用在**字**上——「没人把关」「没接上」是需要人看见的一句话，
+        而字那一层没有深度可用。门只管点。
+        """
+        import re
+
+        css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
+        hued = ("var(--warn)", "var(--bad)", "var(--a-mid)", "var(--a-hi)", "var(--a-lo)")
+        offenders = []
+        for m in re.finditer(r"(\.ga-[^{}]*\.ga-dot[^{]*)\{([^}]*)\}", css):
+            selector, body = m.group(1).strip(), m.group(2)
+            for decl in body.split(";"):
+                if "background" not in decl:
+                    continue
+                if any(h in decl for h in hued):
+                    offenders.append(f"{selector} → {decl.strip()}")
+                    continue
+                for hexcol in re.findall(r"#([0-9a-fA-F]{3,8})", decl):
+                    h = hexcol[:6]
+                    if len(h) >= 6 and not (h[0:2] == h[2:4] == h[4:6]):
+                        offenders.append(f"{selector} → {decl.strip()}")
+        assert not offenders, "这一段的状态点用了色相（这个仓已经判过一次不要）：\n" + "\n".join(offenders)
+
+    def test_the_card_is_inset_not_a_raised_block(self):
+        """卡片是内嵌的：底色就是这一页的底色，边界靠一圈内凹痕迹说。
+
+        第一版和隔壁 `.up-card` 一样，是自带渐变底、带外投影的浮起卡片。排成一列
+        之后整段变成一串亮条摞在页面上，而这一页其余地方全是裸行——同一个页面上
+        两种重量，那块东西看着就是贴上去的。
         """
         css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
-        for state in ("active", "degraded"):
-            assert f"data-state='{state}'" in css, f"{state} 这一态没有自己的样式 —— 两种状态被画成了同一件事"
+        block = css.split(".ga-card {", 1)[1].split("}", 1)[0]
+        assert "background: transparent" in block, "卡片自带了填充 —— 那就不是内嵌的"
+        shadow = block.split("box-shadow:", 1)[1].split(";", 1)[0]
+        assert shadow.count("inset") >= 2, "边界痕迹不是内凹的"
+        # 按**顶层**逗号切。第一版直接 split(",")，结果被 rgba(93, 84, 102, .11)
+        # 里的逗号切碎，断言对着一个 " 84" 报错——一条自己解析错了的门，
+        # 报出来的话会把人引到完全不相干的地方。
+        parts, depth, cur = [], 0, ""
+        for ch in shadow:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            if ch == "," and depth == 0:
+                parts.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        parts.append(cur)
+        for part in parts:
+            if not part.strip():
+                continue
+            assert "inset" in part, f"卡片带着一道外投影（浮起来了）：{part.strip()}"
+
+    def test_a_project_form_addon_still_says_it_is_not_a_callable_tool(self):
+        """项目形态必须**说出**它没注册成工具。
+
+        不说的话，这张卡片看起来和一个真能调用的工具没有任何区别 ——
+        那就从"把成功说成失败"翻到了另一头，变成"把没接成工具说成接成了"。
+        """
+        ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
+        assert "没有注册成可调用的工具" in ui, "项目形态的卡片没说清它不是一个可调用工具"
 
     def test_the_three_approval_modes_are_styled_apart(self):
         css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
@@ -211,14 +425,14 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         assert "type" not in draft, f"表单草稿里出现了 type 字段：{draft!r}"
         assert "createElement('select')" not in ui, "表单里出现了类型选择器"
 
-    def test_an_unknown_addon_type_still_shows_up_verbatim(self):
-        """认不出的类型要**露出来**，不能画成空白。
+    def test_an_unknown_form_still_shows_up_verbatim(self):
+        """认不出的形态要**露出来**，不能画成空白。
 
-        没有兜底的话，后端将来多一种类型时，那张卡片上的类型位就是空的 ——
-        而"什么都没显示"会被读成"没有类型"，不是"我不认识它"。
+        没有兜底的话，后端将来多一档形态时，那张卡片上的形态位就是空的 ——
+        而"什么都没显示"会被读成"没有形态"，不是"我不认识它"。
         """
         ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
-        assert "KIND_TEXT[a.type] ?? a.type" in ui, "类型显示没有兜底"
+        assert "FORM_TEXT[a.form] ?? a.form" in ui, "形态显示没有兜底"
 
     def test_it_says_plainly_that_mcp_and_skill_are_what_a_repo_becomes(self):
         """「这上面的 MCP / skill 跟 GitHub 是不是一块儿的」必须在界面上答得出来。
@@ -232,7 +446,9 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         看到"2 个"就以为全系统只有 2 个 MCP 工具，是同一种误读。
         """
         ui = (PANEL_SRC / "ui/github_addons.ts").read_text(encoding="utf-8")
-        assert "会变成一个 MCP 工具或一个 Skill" in ui, "没说清 MCP / Skill 就是这个仓库变成的样子"
+        assert "不一定要让它变成工具" in ui, "没说清接项目 ≠ 接工具"
+        assert "顺带注册成一个 MCP 工具或一个 Skill" in ui, "没说清 MCP / Skill 是顺带的那一档"
+        assert "同样是一次成功的接入" in ui, "没说清项目形态也是成功"
         assert "只列" in ui and "系统自带的" in ui, "没说清这份清单不包含系统自带的那些"
 
     def test_no_markdown_markers_leak_into_visible_text(self):

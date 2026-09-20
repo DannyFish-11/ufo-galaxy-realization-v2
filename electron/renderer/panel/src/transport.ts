@@ -1008,9 +1008,13 @@ export async function deleteUserProvider(base: string, id: string): Promise<bool
  * 形状对齐后端 manifest 的记录(``core/github_installer.py`` 的 ``record``),
  * 只挑界面真的要用的字段 —— 全盘照搬会让后端每加一个内部字段,这里就得跟着改一次。
  */
+/** 三份集成契约。顺序就是安装器的判定顺序:mcp → skill → SKILL.md。 */
+export const GITHUB_CONTRACT_KEYS = ['mcp', 'skill', 'skill_md'] as const;
+export type GitHubContractKey = (typeof GITHUB_CONTRACT_KEYS)[number];
+
 export interface GitHubAddon {
   readonly name: string;
-  /** mcp | skill | skill_md */
+  /** 后端判定的原始类型:mcp / skill / skill_md / ordinary_tool_repo。排障用。 */
   readonly type: string;
   readonly owner: string;
   readonly repo: string;
@@ -1019,21 +1023,46 @@ export interface GitHubAddon {
   readonly installedAt: string;
   readonly installPath: string;
   /**
-   * active=注册并自证都过了,工具真的调得到 · degraded=装下来了但**没注册成功**。
+   * **接入形态** —— 三档是并列的,不是"成功/降级"两档。
    *
-   * 这个区分不能省。把两者画成同一个绿点,等于告诉用户"这个工具能用",
-   * 而实际上模型调它的时候才会报错 —— 和「我的模型服务」那边
-   * live/declared 不许画成一个点是同一条理由。
+   * · mcp      根上有 mcp_tool.json,注册成了一个 MCP 工具
+   * · skill    根上有 skill.json 或 SKILL.md,注册成了一个 Skill
+   * · project  哪个契约都没有 —— 以项目完整形式接进来:代码落盘,没注册成工具
+   *
+   * MCP / Skill 是 GitHub 项目的**交集**,不是它的定义。接一个仓库可能是为了拿它
+   * 跑实验、读它、当素材。把 project 画成一种失败,等于规定了"接项目 = 接工具"。
    */
-  readonly state: 'active' | 'degraded';
-  /** degraded 时卡在哪一步。active 时是空串。 */
-  readonly stateReason: string;
+  readonly form: 'mcp' | 'skill' | 'project';
+  /** 这次接入成没成。project 形态没有"注册"这一步,所以永远是 true。 */
+  readonly ok: boolean;
+  /** ok=false 时卡在哪一步;project 形态时是"它以什么形式接进来了"那句话。 */
+  readonly formDetail: string;
+  /**
+   * 三个接入槽各自的实情。面板右侧把三个都摆出来,所以三个都要有据可依。
+   *
+   * ``present`` = 根上摆着这份契约文件;``chosen`` = 它被选中并走了注册那条路。
+   * 两者不是一回事:一个仓库可能同时带 mcp_tool.json 和 skill.json,而只有前者
+   * 被选中。只按 chosen 画的话,另外两个槽就会一律显示成"没有" —— 那是在替
+   * 仓库说一句它没说过的话。
+   */
+  readonly contracts: Readonly<Record<GitHubContractKey, { present: boolean; chosen: boolean }>>;
   /** 依赖装到哪:venv / host / rejected / venv_unavailable / none。 */
   readonly depsScope: string;
   /** 依赖没装成时的原因(含 requirements.txt 被整份拒绝的那几行)。 */
   readonly depsError: string;
 }
 
+/**
+ * 形态与成败**优先读后端的 ``integration``**,读不到才退回自己推。
+ *
+ * 为什么留退路:``integration`` 是新加的字段,而 manifest 里躺着的是**以前装的**
+ * 那些记录 —— 它们没有这个字段。不留退路的话,升级之后已经装好的插件会集体
+ * 变成"认不出的形态",而它们明明好好的。
+ *
+ * 为什么退路**不**是默认路径:后端的判定是唯一权威。前端这份推导只是给老记录用的
+ * 兼容垫片,它推不出 project 这一档(老记录里没有任何字段能区分"没有契约"和
+ * "注册失败"),所以退回来的结论必然偏保守 —— 这正是它只能当垫片的原因。
+ */
 function readGitHubAddon(v: unknown): GitHubAddon | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
@@ -1042,33 +1071,71 @@ function readGitHubAddon(v: unknown): GitHubAddon | null {
   const sub = (k: string): Record<string, unknown> =>
     o[k] && typeof o[k] === 'object' ? (o[k] as Record<string, unknown>) : {};
 
-  const reg = sub('registration');
-  const ver = sub('verification');
-  const deps = sub('dependency_install');
-  const ok = reg['success'] === true && ver['success'] === true;
+  const type = str('type') || 'unknown';
+  const integration = sub('integration');
+  const rawForm = integration['form'];
 
-  // 卡在哪一步:注册没过就说注册,注册过了自证没过就说自证。
-  // 只写一句「没装好」是没用的 —— 那正是用户要拿去排查的那句话。
-  let reason = '';
-  if (!ok) {
-    if (reg['success'] !== true) {
-      reason = typeof reg['error'] === 'string' && reg['error'] ? `注册失败：${reg['error']}` : '注册没成功';
+  let form: GitHubAddon['form'];
+  let ok: boolean;
+  let formDetail: string;
+
+  if (rawForm === 'mcp' || rawForm === 'skill' || rawForm === 'project') {
+    form = rawForm;
+    ok = integration['ok'] === true;
+    formDetail = typeof integration['detail'] === 'string' ? (integration['detail'] as string) : '';
+  } else {
+    // 老记录的兼容垫片。按 type 认形态,按 registration+verification 认成败。
+    form = type === 'mcp' ? 'mcp' : type === 'skill' || type === 'skill_md' ? 'skill' : 'project';
+    const reg = sub('registration');
+    const ver = sub('verification');
+    // project 形态在老记录里也是 reg.success=false —— 那时它确实被当成失败记下来的。
+    // 这里按形态给结论:没有契约的就不该拿"注册成没成"去判。
+    ok = form === 'project' ? true : reg['success'] === true && ver['success'] === true;
+    if (!ok) {
+      formDetail =
+        reg['success'] !== true
+          ? typeof reg['error'] === 'string' && reg['error']
+            ? `注册失败：${reg['error']}`
+            : '注册没成功'
+          : typeof ver['error'] === 'string' && ver['error']
+            ? `自证失败：${ver['error']}`
+            : '自证没通过';
     } else {
-      reason = typeof ver['error'] === 'string' && ver['error'] ? `自证失败：${ver['error']}` : '自证没通过';
+      formDetail = form === 'project' ? '代码已落盘，没有注册成可调用的工具' : '';
     }
   }
 
+  // 三个槽位。老记录里没有 contracts —— 那就只能按被选中的那一个反推,
+  // 另外两个照实报"不知道"(present=false + chosen=false)。这是兼容垫片能做到的
+  // 全部:老记录里确实没有记下另外两份在不在。
+  const rawContracts = integration['contracts'];
+  const contractSrc: Record<string, unknown> =
+    rawContracts && typeof rawContracts === 'object' ? (rawContracts as Record<string, unknown>) : {};
+  const contracts = {} as Record<GitHubContractKey, { present: boolean; chosen: boolean }>;
+  for (const key of GITHUB_CONTRACT_KEYS) {
+    const slot = contractSrc[key];
+    if (slot && typeof slot === 'object') {
+      const o2 = slot as Record<string, unknown>;
+      contracts[key] = { present: o2['present'] === true, chosen: o2['chosen'] === true };
+    } else {
+      contracts[key] = { present: type === key, chosen: type === key };
+    }
+  }
+
+  const deps = sub('dependency_install');
   return {
     name: o['name'],
-    type: str('type') || 'unknown',
+    type,
     owner: str('owner'),
     repo: str('repo'),
     ref: str('ref'),
     commit: str('commit'),
     installedAt: str('installed_at'),
     installPath: str('install_path'),
-    state: ok ? 'active' : 'degraded',
-    stateReason: reason,
+    form,
+    ok,
+    formDetail,
+    contracts,
     depsScope: typeof deps['scope'] === 'string' ? (deps['scope'] as string) : 'none',
     depsError: typeof deps['error'] === 'string' ? (deps['error'] as string) : '',
   };

@@ -12,14 +12,20 @@
  * 差别只在它自己那几个 `.ga-*`。**不另起一套排版** —— 同一个页面上两套节奏,
  * 人会觉得这块东西是从别处贴过来的。
  *
- * ## 状态是两件事,不准画成一件
+ * ## 接入形态是三档,而且是**并列**的三档
  *
- * · active    克隆、注册、自证都过了,模型**真的调得到**
- * · degraded  代码拿下来了,但注册或自证没过 —— 调它的时候才会报错
+ * · MCP 工具    根上有 mcp_tool.json,注册成了一个 MCP 工具
+ * · Skill       根上有 skill.json 或 SKILL.md,注册成了一个 Skill
+ * · 项目完整形式  哪个契约都没有 —— 代码落盘,没注册成任何可调用的工具
  *
- * 把两者画成同一个绿点,等于告诉用户"这个工具能用"。这和隔壁
- * live/declared 不许共用一个绿点是同一条理由。degraded 时必须说出**卡在哪一步**,
- * 那句话就是他要拿去排查的东西。
+ * **第三档不是失败。** MCP / Skill 是 GitHub 项目的**交集**,不是它的定义:
+ * 接一个仓库可能是为了拿它跑实验、读它、拿它当素材。把它画成"降级"或"没接上",
+ * 等于规定了"接项目 = 接工具",而那不是这个功能的全集。
+ *
+ * 形态之外还有一个**正交**的位:这次接入到底成没成(``ok``)。它只对前两档有意义
+ * —— 项目形态没有"注册"这一步,也就无所谓成败。没成的时候必须说出**卡在哪一步**,
+ * 那句话就是他要拿去排查的东西;画成绿点等于告诉用户"这个工具能用",而模型
+ * 调它的时候才会报错。这和隔壁 live/declared 不许共用一个绿点是同一条理由。
  *
  * ## 「会不会先问我一句」必须写在脸上
  *
@@ -35,7 +41,8 @@
  * 这正是这个仓最怕的那种不一致。缺的是后端能力,就照实缺着,不拿一个名不副实的
  * 按钮把它盖住。
  */
-import type { GitHubAddon, GitHubAddonStatus } from '../transport';
+import { GITHUB_CONTRACT_KEYS } from '../transport';
+import type { GitHubAddon, GitHubAddonStatus, GitHubContractKey } from '../transport';
 
 export interface GitHubAddonDraft {
   url: string;
@@ -69,24 +76,39 @@ export interface GitHubAddonHandles {
   clearForm(): void;
 }
 
-const STATE_TEXT: Record<string, string> = {
-  active: '接上了',
-  degraded: '拿下来了，但没接上',
+/** 接入形态。三档并列 —— 每一档都是一句完整的话,不是"成功/降级"的两个程度。 */
+const FORM_TEXT: Record<string, string> = {
+  mcp: '以 MCP 工具形式接入',
+  skill: '以 Skill 形式接入',
+  project: '以项目完整形式接入',
+};
+
+/** 三个接入槽的名字。顺序就是安装器的判定顺序:mcp → skill → SKILL.md。 */
+const CONTRACT_TEXT: Record<GitHubContractKey, string> = {
+  mcp: 'MCP 工具',
+  skill: 'Skill',
+  skill_md: 'SKILL.md',
 };
 
 /**
- * 仓库接进来之后变成了什么。
+ * 一个槽位的四态。**和左栏底下那块「接上了什么」同一套话** —— 用深度,不用颜色。
  *
- * 这是一张**显示用**的对照表,不是一份"可选类型名单":表单里没有让人挑类型的
- * 入口(仓库自己的清单才是权威),所以这里不会出现"前端名单和后端名单错开"
- * 那种病。后端将来多一种类型,下面的 ``?? a.type`` 会把原值照样显示出来 ——
- * 认不出的东西要露出来,不能悄悄消失。
+ * on    这份契约在,而且就是它接上的
+ * part  这份契约在,但没走通(被另一份抢了先,或者注册失败)
+ * off   根上没有这份契约
  */
-const KIND_TEXT: Record<string, string> = {
-  mcp: 'MCP 工具',
-  skill: 'Skill',
-  skill_md: 'Skill（SKILL.md）',
-  ordinary_tool_repo: '只克隆了代码',
+function slotState(a: GitHubAddon, key: GitHubContractKey): 'on' | 'part' | 'off' {
+  const c = a.contracts[key];
+  if (!c.present) return 'off';
+  if (c.chosen && a.ok) return 'on';
+  return 'part';
+}
+
+/** 没接上的时候说什么。只有前两档会走到这儿 —— 项目形态没有"注册"这一步。 */
+const FAILED_TEXT: Record<string, string> = {
+  mcp: '本该接成 MCP 工具，没接上',
+  skill: '本该接成 Skill，没接上',
+  project: '拿下来了，但没接上',
 };
 
 /** 依赖装到哪。后端的 scope 原样翻译,不合并 —— 每一档的后果都不一样。 */
@@ -134,7 +156,7 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
   const hint = document.createElement('p');
   hint.className = 'ga-hint';
   hint.textContent =
-    '一个 GitHub 仓库接进来之后，会变成一个 MCP 工具或一个 Skill —— 由它根上的 mcp_tool.json / skill.json 说了算，注册进的是全系统共用的那套 MCP 网关与 SkillLoader。所以卡片上那个类型不是另一类东西，就是这个仓库变成的样子。这份清单只列从 GitHub 接进来的；系统自带的 MCP 工具和 Skill 不在这里。';
+    '接一个仓库不一定要让它变成工具。根上有 mcp_tool.json / skill.json / SKILL.md 的，会顺带注册成一个 MCP 工具或一个 Skill（进的是全系统共用的那套 MCP 网关与 SkillLoader）；没有的，就以项目完整形式接进来 —— 代码落盘，不注册任何工具，这同样是一次成功的接入。这份清单只列从 GitHub 接进来的；系统自带的 MCP 工具和 Skill 不在这里。';
 
   /** 准入策略那一行。**内容全部来自后端**,这里不按环境变量推第二份。 */
   const policy = document.createElement('div');
@@ -235,21 +257,23 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
   function card(a: GitHubAddon): HTMLElement {
     const el = document.createElement('div');
     el.className = 'ga-card';
-    el.dataset['state'] = a.state;
+    el.dataset['form'] = a.form;
+    el.dataset['ok'] = String(a.ok);
 
-    const top = document.createElement('div');
-    top.className = 'ga-top';
-    const dot = document.createElement('span');
-    dot.className = 'ga-dot';
+    // ── 左:项目本体 ────────────────────────────────────────────────────
+    //
+    // 这一侧**只说这个仓库本身**:叫什么、从哪儿来的哪一次提交、依赖装在哪、
+    // 落在磁盘的什么位置。它接没接成工具是右边那一侧的事。
+    //
+    // 分成左右两栏,是因为这两件事本来就是两件事:一个 GitHub 项目接进来是完整的
+    // 一件事,"它顺带填上了哪个接入槽"是另一件。挤成一列的时候,项目本身的信息
+    // 会被接入状态的措辞盖过去 —— 而多数时候人是来找项目的。
+    const left = document.createElement('div');
+    left.className = 'ga-left';
+
     const name = document.createElement('b');
+    name.className = 'ga-name';
     name.textContent = a.name;
-    const state = document.createElement('span');
-    state.className = 'ga-state';
-    state.textContent = STATE_TEXT[a.state] ?? a.state;
-    const kind = document.createElement('span');
-    kind.className = 'ga-kind';
-    kind.textContent = KIND_TEXT[a.type] ?? a.type;
-    top.append(dot, name, state, kind);
 
     const repo = document.createElement('code');
     repo.className = 'ga-repo';
@@ -259,32 +283,69 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
 
     const meta = document.createElement('span');
     meta.className = 'ga-meta';
-    if (a.state === 'degraded') {
-      // 没接上的时候,**卡在哪一步**比什么都重要 —— 这就是他要拿去排查的那句话。
-      meta.textContent = a.stateReason || '注册或自证没通过';
-    } else {
-      meta.textContent = [DEPS_TEXT[a.depsScope] ?? a.depsScope, when(a.installedAt)]
-        .filter(Boolean)
-        .join(' · ');
-    }
+    meta.textContent = [DEPS_TEXT[a.depsScope] ?? a.depsScope, when(a.installedAt)].filter(Boolean).join(' · ');
 
-    el.append(top, repo, meta);
+    left.append(name, repo, meta);
 
-    // 依赖没装成是**另一件事**:插件可能注册成功了,但它的依赖被整份拒了。
+    // 依赖没装成是**另一件事**:它可能注册成功了,但依赖被整份拒了。
     // 合进上面那行会让人以为"接上了"就等于"依赖也齐了"。
     if (a.depsError) {
       const deps = document.createElement('span');
       deps.className = 'ga-deps';
       deps.textContent = `依赖：${a.depsError}`;
-      el.append(deps);
+      left.append(deps);
     }
 
     const where = document.createElement('code');
     where.className = 'ga-where';
     where.textContent = a.installPath;
+    left.append(where);
 
-    const row = document.createElement('div');
-    row.className = 'ga-acts';
+    // ── 右:三个接入槽 ──────────────────────────────────────────────────
+    //
+    // 三个**都摆出来**,不是只画命中的那一个。摆出来才说得清"这个仓库根上有
+    // 什么、没有什么" —— 只画命中的那一个,另外两个就成了一片说不清的空白。
+    const right = document.createElement('div');
+    right.className = 'ga-right';
+
+    const slots = document.createElement('div');
+    slots.className = 'ga-slots';
+    for (const key of GITHUB_CONTRACT_KEYS) {
+      const row = document.createElement('div');
+      row.className = 'ga-slot';
+      row.dataset['state'] = slotState(a, key);
+      const dot = document.createElement('span');
+      dot.className = 'ga-dot';
+      const label = document.createElement('span');
+      label.className = 'ga-slot-name';
+      label.textContent = CONTRACT_TEXT[key];
+      row.append(dot, label);
+      slots.append(row);
+    }
+
+    // 一句结论。三个槽位说的是"根上有什么",这一句说的是"于是它以什么身份接进来了"
+    // —— 两者都要有:光看槽位看不出注册到底成没成。
+    const verdict = document.createElement('span');
+    verdict.className = 'ga-verdict';
+    verdict.textContent = a.ok ? (FORM_TEXT[a.form] ?? a.form) : (FAILED_TEXT[a.form] ?? '没接上');
+
+    right.append(slots, verdict);
+
+    if (!a.ok) {
+      // 没接上的时候,**卡在哪一步**比什么都重要 —— 这就是他要拿去排查的那句话。
+      const why = document.createElement('span');
+      why.className = 'ga-why';
+      why.textContent = a.formDetail || '注册或自证没通过';
+      right.append(why);
+    } else if (a.form === 'project') {
+      // 项目形态:必须**说出**它没注册成工具。不说的话,这张卡片看起来和一个
+      // 真能调用的工具没有任何区别 —— 那就从"把成功说成失败"翻到了另一头。
+      const why = document.createElement('span');
+      why.className = 'ga-why';
+      why.textContent = '三份契约一份都没有，所以没有注册成可调用的工具';
+      right.append(why);
+    }
+
     const del = document.createElement('button');
     del.className = 'ga-btn ga-danger';
     del.type = 'button';
@@ -293,8 +354,9 @@ export function createGitHubAddons(cb: GitHubAddonCallbacks): GitHubAddonHandles
       e.stopPropagation();
       cb.onUninstall(a.name);
     });
-    row.append(where, del);
-    el.append(row);
+    right.append(del);
+
+    el.append(left, right);
     return el;
   }
 

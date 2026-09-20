@@ -87,9 +87,16 @@ logger = logging.getLogger("Galaxy.GitHubInstaller")
 _PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 _DEFAULT_INSTALL_DIR = _PROJECT_ROOT / "data" / "github_addons"
 _MANIFEST_FILENAME = "manifest.json"
-_MCP_TOOL_MANIFEST = "mcp_tool.json"
-_SKILL_MANIFEST = "skill.json"
-_SKILL_MD_MANIFEST = "SKILL.md"
+# 契约文件名与接入形态判定都在 core/github_addon_integration.py —— 拆分理由见那边的
+# docstring。这里留旧名做别名,别处按旧名引用的地方不用跟着改。
+from core.github_addon_integration import MCP_TOOL_MANIFEST as _MCP_TOOL_MANIFEST  # noqa: E402
+from core.github_addon_integration import SKILL_MANIFEST as _SKILL_MANIFEST  # noqa: E402
+from core.github_addon_integration import (  # noqa: E402
+    build_integration,
+    cloned_only_results,
+    detect_addon_type,
+    present_contracts,
+)
 
 # Ingestion size limits — keep chunks small enough for the knowledge store
 # while preserving meaningful context.  These are intentionally conservative.
@@ -1021,16 +1028,7 @@ class GitHubInstaller:
         # 4. Detect addon type
         mcp_manifest_path = dest / _MCP_TOOL_MANIFEST
         skill_manifest_path = dest / _SKILL_MANIFEST
-        skill_md_path = dest / _SKILL_MD_MANIFEST
-
-        if addon_type == "mcp" or (addon_type is None and mcp_manifest_path.exists()):
-            detected_type = "mcp"
-        elif addon_type == "skill" or (addon_type is None and skill_manifest_path.exists()):
-            detected_type = "skill"
-        elif addon_type == "skill_md" or (addon_type is None and skill_md_path.exists()):
-            detected_type = "skill_md"
-        else:
-            detected_type = "ordinary_tool_repo"
+        detected_type = detect_addon_type(dest, addon_type)
 
         # 5. Read manifest
         tool_manifest: Dict[str, Any] = {}
@@ -1122,24 +1120,21 @@ class GitHubInstaller:
             reg_result = _register_skill_md(dest)
             verify_result = _verify_skill_md_install(reg_result)
         else:
-            reg_result = {
-                "success": False,
-                "state": "cloned_only",
-                "error": (
-                    "Repository cloned, but no supported install contract was found. "
-                    "Expected mcp_tool.json, skill.json, or SKILL.md."
-                ),
-            }
-            verify_result = {
-                "success": False,
-                "checks": {"integrable_type_detected": False},
-                "error": "ordinary tool repo cannot be auto-integrated",
-            }
+            # 以项目完整形式接进来:没有契约,也就没有"注册"这一步。
+            # 两份结果都不带 error —— 理由见 github_addon_integration。
+            reg_result, verify_result = cloned_only_results()
 
         addon_name = reg_result.get("name") or addon_name
 
         # 8. Compute checksum
         checksum = _sha256_dir(dest)
+
+        # 接入形态(mcp / skill / project)、成败、落点状态 —— 判定在
+        # core/github_addon_integration.py 那一处。三档是**并列**的,不是
+        # "成功/降级"两档:MCP / Skill 是 GitHub 项目的交集,不是它的定义。
+        integration, install_success, install_state = build_integration(
+            detected_type, reg_result, verify_result, present_contracts(dest)
+        )
 
         # 9. Record in manifest
         record: Dict[str, Any] = {
@@ -1156,18 +1151,22 @@ class GitHubInstaller:
             "dependency_install": deps_result,
             "registration": reg_result,
             "verification": verify_result,
+            # 面板读的就是这一份。必须写进 manifest:列表端点发的是 manifest 记录,
+            # 不写的话重启之后界面只能靠 reg/verify 反推 —— 第二处权威。
+            "integration": integration,
+            "install_state": install_state,
         }
         self._manifest.put(addon_name, record)
 
         logger.info(
-            "install done | name=%s type=%s commit=%.8s checksum=%.8s",
+            "install done | name=%s type=%s form=%s commit=%.8s checksum=%.8s",
             addon_name,
             detected_type,
+            integration["form"],
             commit_sha,
             checksum,
         )
 
-        install_success = bool(reg_result.get("success")) and bool(verify_result.get("success"))
         result = {
             "success": install_success,
             "name": addon_name,
@@ -1182,13 +1181,12 @@ class GitHubInstaller:
             "clone": {"success": True, "path": str(dest), "commit": commit_sha},
             "classification": {
                 "detected_type": detected_type,
-                "integrable": detected_type in {"mcp", "skill", "skill_md"},
+                # success=True 说"你要的事办成了",integrable=False 说"别指望能调用它"。
+                # 两句话都要在,少哪一句都会被误读。
+                "integrable": integration["form"] != "project",
             },
-            "install_state": (
-                "verified"
-                if install_success
-                else ("cloned_only" if detected_type == "ordinary_tool_repo" else "registration_or_verification_failed")
-            ),
+            "integration": integration,
+            "install_state": install_state,
             "registration": reg_result,
             "verification": verify_result,
         }

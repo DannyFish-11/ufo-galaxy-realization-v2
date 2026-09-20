@@ -1339,9 +1339,42 @@ body {
 .ga-policy-text { font-size: var(--t-mini); color: var(--ink-2); }
 .ga-policy-meta { flex: 1 1 100%; margin-top: 2px; font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
 .ga-dot { flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
-.ga-policy[data-mode='ask'] .ga-dot { background: #4f9d69; }
-.ga-policy[data-mode='allowlist'] .ga-dot { background: var(--a-mid); }
-.ga-policy[data-mode='unattended'] .ga-dot { background: var(--warn); }
+/* 四档同样用光和深度说,不用颜色 —— 同 .wired-dot 那套话。
+
+     ask         亮核浮起来:有人把关,每次都会问
+     allowlist   只亮半边:名单内免确认,名单外直接拒 —— "部分"就长成部分的样子
+     unattended  沉进面里:这台机器上没有把关这道光
+     unknown     空心圈:**没问到**。不是"不会问",是这条路还没接上
+
+   unknown 必须是空心而不是"暗一点的实心" —— 后者会被读成"弱的把关",
+   而它真正的意思是"我不知道"。这条是 .wired-dot 那段写明的坑,照搬。 */
+.ga-policy[data-mode='ask'] .ga-dot {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    0 0 0 1.5px rgba(255, 255, 255, 0.55),
+    0 1px 2.5px rgba(93, 84, 102, 0.3),
+    0 0 7px 1px rgba(255, 255, 255, 0.85);
+}
+.ga-policy[data-mode='allowlist'] .ga-dot {
+  background: linear-gradient(118deg, #fff 0 46%, rgba(255, 255, 255, 0.24) 54% 100%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(93, 84, 102, 0.24);
+}
+.ga-policy[data-mode='unattended'] .ga-dot {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
+}
+.ga-policy[data-mode='unknown'] .ga-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.2px rgba(93, 84, 102, 0.3);
+}
+/* 这两档的**文字**仍然偏警示色:一个是"没人把关",一个是"我不知道",
+   它们不是一种状态,是一句需要人看见的话。颜色用在字上,不用在点上 ——
+   点那一层已经有深度可用,而字没有。 */
 .ga-policy[data-mode='unattended'] .ga-policy-text { color: var(--warn); }
 .ga-policy[data-mode='unknown'] .ga-policy-text { color: var(--warn); }
 
@@ -1354,46 +1387,98 @@ body {
 }
 .ga-list { display: flex; flex-direction: column; gap: 10px; }
 
+/* 卡片是**内嵌**的,不是浮起来的一块。
+
+   底色和这一页完全一样(不自带任何填充),边界靠一圈内凹的痕迹说 ——
+   上沿一道暗、下沿一道亮,读起来就是"这块面被按下去了"。
+
+   这是被改过一次的:第一版和 .up-card 一样,是一块自带渐变底、带外投影的
+   浮起卡片。放三四张排成一列之后,整段就变成一串亮条摞在页面上,而这一页
+   其余地方(那 335 个键)全是裸行 —— 同一个页面上两种重量,那块东西看着就是
+   贴上去的。内嵌之后它和页面是同一块材料,只是被压出了一道槽。 */
 .ga-card {
-  padding: 12px 13px; border-radius: 13px;
-  background: linear-gradient(166deg, rgba(252, 251, 255, 0.52), rgba(238, 234, 245, 0.34));
-  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
-}
-.ga-top { display: flex; align-items: center; gap: 8px; }
-.ga-top b { font-weight: 500; font-size: var(--t-small); color: var(--ink); }
-
-/* 两态两个颜色。degraded **不是**绿的 —— 代码拿下来了但没注册上,
-   模型调它的时候才会报错,画成绿点就是在说一句假话。 */
-.ga-card[data-state='active'] .ga-dot { background: #4f9d69; }
-.ga-card[data-state='degraded'] .ga-dot { background: var(--warn); }
-.ga-state { font-size: var(--t-mini); color: var(--ink-3); }
-.ga-card[data-state='degraded'] .ga-state { color: var(--warn); }
-.ga-kind {
-  /* 非等宽:它现在是一句人话(「MCP 工具」),不是一个技术标识符。
-     等宽字体在这里会让它看起来像一段代码。 */
-  flex: none; margin-left: auto; padding: 2px 8px; border-radius: 999px;
-  font-size: var(--t-micro); color: var(--ink-3);
-  background: rgba(252, 251, 255, 0.62);
-  box-shadow: inset 0 1px 0 var(--lite-soft);
+  /* 右栏要放得下「本该接成 MCP 工具，没接上」这种整句,150px 会把它挤成两三行,
+     而它是这张卡片上最要紧的一句。给到三分之一,并且有下限。 */
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(196px, 34%);
+  gap: 10px 20px; align-items: start;
+  padding: 12px 14px; border-radius: 12px;
+  background: transparent;
+  /* 一圈**看得见**的内凹痕迹:整圈一道细线定边界,上沿压一道暗影、下沿留一道
+     亮边 —— 合起来读作"这块面被按下去了"。不加任何填充,底色就是这一页的底色。 */
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 84, 102, 0.11),
+    inset 0 2px 3px -1px rgba(93, 84, 102, 0.17),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6);
 }
 
+/* ── 左:项目本体 ────────────────────────────────────────────────────── */
+.ga-left { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ga-name { font-weight: 500; font-size: var(--t-small); color: var(--ink); }
 .ga-repo {
-  display: block; margin-top: 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--t-mini); color: var(--ink-2); word-break: break-all;
 }
-.ga-meta { display: block; margin-top: 4px; font-size: var(--t-mini); line-height: 1.45; color: var(--ink-3); }
-.ga-card[data-state='degraded'] .ga-meta { color: var(--warn); }
-/* 依赖没装成是另一件事:可能注册成功了、依赖却被整份拒了。
-   和上面那行合并会让人以为"接上了"就等于"依赖也齐了"。 */
-.ga-deps { display: block; margin-top: 4px; font-size: var(--t-mini); line-height: 1.45; color: var(--warn); }
-
-.ga-acts { display: flex; align-items: center; gap: 2px; margin-top: 9px; margin-right: -9px; }
+.ga-meta { font-size: var(--t-mini); line-height: 1.45; color: var(--ink-3); }
+/* 依赖没装成是另一件事:它可能注册成功了,依赖却被整份拒了。 */
+.ga-deps { font-size: var(--t-mini); line-height: 1.45; color: var(--warn); }
 .ga-where {
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--t-micro); color: var(--ink-3);
 }
+
+/* ── 右:三个接入槽 ──────────────────────────────────────────────────── */
+.ga-right { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.ga-slots { display: flex; flex-direction: column; gap: 2px; }
+.ga-slot { display: flex; align-items: center; gap: 7px; font-size: var(--t-mini); }
+.ga-slot-name { color: var(--ink-3); }
+.ga-slot[data-state='on'] .ga-slot-name { color: var(--ink); }
+.ga-slot[data-state='off'] .ga-slot-name { opacity: 0.5; }
+
+/* ── 状态用**光和深度**说,不用颜色 ──────────────────────────────────
+   和左栏底下那块「接上了什么」同一套话(见 .wired-dot 那段)。所有者当初对
+   那四个彩色小点的原话是「那个点儿就是红绿绿黄,是有点不太好看」—— 这一面上
+   只有一支色相,彩色小点是整面唯一跳出来的东西,这里不能再犯一次。
+
+     on    亮核浮起来 —— 这份契约在,而且就是它接上的
+     part  只亮半边 —— 契约在,但没走通("部分"就长成部分的样子)
+     off   沉进面里,不发光 —— 根上没有这份契约
+
+   **不呼吸。** 左栏那一块是常驻 HUD 上的一列,一个呼吸的光点是背景音;
+   这里是一份可能有十几张卡片的清单,十几个光点一起呼吸就成了噪音。
+   那一套话里"有光/没光"是靠深度说的,动效只是它的一个可选修饰。 */
+.ga-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(93, 84, 102, 0.16),
+    inset 0 -1px 1.5px rgba(93, 84, 102, 0.14);
+}
+.ga-slot[data-state='on'] .ga-dot {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    0 0 0 1.5px rgba(255, 255, 255, 0.55),
+    0 1px 2.5px rgba(93, 84, 102, 0.3),
+    0 0 7px 1px rgba(255, 255, 255, 0.85);
+}
+.ga-slot[data-state='part'] .ga-dot {
+  background: linear-gradient(118deg, #fff 0 46%, rgba(255, 255, 255, 0.24) 54% 100%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(93, 84, 102, 0.24);
+}
+.ga-slot[data-state='off'] .ga-dot {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
+}
+
+.ga-verdict { margin-top: 3px; font-size: var(--t-mini); line-height: 1.45; color: var(--ink-2); }
+.ga-card[data-ok='false'] .ga-verdict { color: var(--warn); }
+.ga-why { font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
+.ga-card[data-ok='false'] .ga-why { color: var(--warn); }
 .ga-btn {
   /* 同 .up-btn:纯文字,悬停才显形。次要动作不该和主按钮抢视觉重量。 */
   border: 0; padding: 4px 9px; border-radius: 9px; cursor: pointer;
@@ -1401,6 +1486,7 @@ body {
   background: transparent; box-shadow: none;
   transition: color 0.22s var(--ease), background 0.22s var(--ease);
 }
+.ga-right .ga-btn { margin: 2px 0 0 -9px; }
 .ga-btn:hover { color: var(--ink); background: rgba(252, 251, 255, 0.5); }
 .ga-danger:hover { color: var(--bad); background: rgba(160, 106, 106, 0.09); }
 
