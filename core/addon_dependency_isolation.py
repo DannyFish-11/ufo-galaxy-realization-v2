@@ -313,6 +313,8 @@ def install_addon_deps(addon_dir: Path, deps: List[str], root: Optional[Path] = 
         scope = "host"
 
     pip_cmd = [str(python_exe), "-m", "pip", "install", "--quiet"]
+    #: 位置参数(包名、路径型依赖)单独攒着,最后跟在 ``--`` 后面交给 pip。见下面。
+    specs: List[str] = []
     # 改名是必要的:模块级已经有一个 addon_root() 函数,同名局部变量会把它遮掉。
     # 这里已经是 resolve_addon_dir 的返回值(realpath 过),再 realpath 一次是幂等的。
     addon_boundary = os.path.realpath(str(addon_dir))
@@ -336,7 +338,7 @@ def install_addon_deps(addon_dir: Path, deps: List[str], root: Optional[Path] = 
                 # "." 就是 addon 目录自己(最常见的路径型依赖:装这个仓库本身)。
                 # 直接用已经校验过的边界值,不再走一遍"拼接再判回来" —— 少一次
                 # 拼接就少一条要证明安全的路径。
-                pip_cmd.append(addon_boundary)
+                specs.append(addon_boundary)
                 continue
             dep_real = os.path.realpath(os.path.join(addon_boundary, dep))
             # 二次防御:归一后必须仍落在 addon 目录**之内**(防 ../ 穿越)。
@@ -347,17 +349,32 @@ def install_addon_deps(addon_dir: Path, deps: List[str], root: Optional[Path] = 
             if not dep_real.startswith(addon_boundary + os.sep):
                 logger.warning("dep rejected (escapes addon dir): %r", dep)
                 continue
-            pip_cmd.append(dep_real)
+            specs.append(dep_real)
         else:
             # 包名/版本规格:PEP 508 合法字符白名单(字母数字 + . _ - [ ] < > = ! ~ , ;
             # 空格)。掐掉 shell 元字符与选项注入,再交给 pip(list 形式无 shell)。
             if not re.fullmatch(r"[A-Za-z0-9._\-\[\]<>=!~,; ]+", dep):
                 logger.warning("dep rejected (unsafe package spec): %r", dep)
                 continue
-            pip_cmd.append(dep)
+            specs.append(dep)
 
     if req_file.exists():
         pip_cmd += ["-r", str(req_file)]
+
+    # ── ``--``:位置参数到此为止,后面的一律不当选项 ─────────────────────────
+    #
+    # 上面已经逐条拒了 ``-`` 开头的 dep。这一条是**第二道**,挡的是"第一道哪天被
+    # 绕过或被改坏"。实测过两边的差别:
+    #
+    #   pip install --quiet -- '--index-url=https://…'
+    #     → ERROR: Invalid requirement: '--index-url=…'   (当成包名,拒了)
+    #   pip install --quiet    '--index-url=https://…'
+    #     → ERROR: You must give at least one requirement  (**选项被吃掉了**)
+    #
+    # 第二种就是供应链注入的形状:索引源被换掉,而命令看起来只是装了个包。
+    # ``-r`` 必须留在 ``--`` 前面(它是选项);位置参数全部挪到后面。
+    if specs:
+        pip_cmd += ["--", *specs]
 
     logger.info("Installing dependencies into %s: %s", scope, pip_cmd[4:])  # skip ['python','-m','pip','install']
     try:

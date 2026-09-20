@@ -87,16 +87,21 @@ export interface SettingsCallbacks {
   /** 攒够一批一起写 —— 一个键一次请求的话,改十个键就是十次落盘。 */
   onSave(changes: Readonly<Record<string, string>>): void;
   /**
-   * 摆在最前面的那一段(现在是「我的模型服务」)。
+   * 摆在最前面的那几段(现在是「我的模型服务」和「接进来的 GitHub 项目」)。
    *
-   * 做成一个**外部传进来的元素**而不是在这里实现:那一段管的是对象表(端点),
-   * 不是键值,渲染节奏也不一样(它自己会因为验证结果刷新)。塞进这个文件会让
-   * 「一个键一行」的渲染逻辑和「一张卡片一个端点」的纠缠在一起。
+   * 做成**外部传进来的元素**而不是在这里实现:那几段管的是对象表(端点、插件),
+   * 不是键值,渲染节奏也不一样(它们各自会因为验证结果或安装结果刷新)。
+   * 塞进这个文件会让「一个键一行」的渲染逻辑和「一张卡片一条记录」的纠缠在一起。
    *
-   * 摆最前面是有意的:人来到这一页,多半是为了接一个自己的模型服务,而不是为了
-   * 调第 200 个环境变量。
+   * 从单个 `topSection` 改成一个**数组**,是因为第二段出现的时候,
+   * 单槽位只剩两条路:要么在这里硬塞第二个字段(`topSection2`),要么让调用方
+   * 自己拿一个 div 把两段包起来 —— 后者会凭空多出一层它不需要的容器,
+   * 而那层容器的间距、busy 态该归谁管,立刻就说不清了。顺序由调用方给的顺序决定。
+   *
+   * 摆最前面是有意的:人来到这一页,多半是为了接一个自己的模型服务或一个项目,
+   * 而不是为了调第 200 个环境变量。
    */
-  readonly topSection?: HTMLElement;
+  readonly topSections?: readonly HTMLElement[];
 }
 
 export function createSettings(cb: SettingsCallbacks): SettingsHandles {
@@ -263,8 +268,8 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
       // **说清楚是「没拉到」而不是「一个键都没有」。** 空白页会让人以为
       // 这台机器真的没有可配的东西。
       body.replaceChildren();
-      // 键拉不到,不代表端点那一段也拉不到 —— 它走的是另一条路,照样摆出来。
-      if (cb.topSection) body.append(cb.topSection);
+      // 键拉不到,不代表上面那几段也拉不到 —— 它们各走各的路,照样摆出来。
+      if (cb.topSections) body.append(...cb.topSections);
       const empty = document.createElement('div');
       empty.className = 'sf-empty';
       empty.textContent = '拉不到配置 —— 后端没接上，不是没有可配的东西';
@@ -280,7 +285,7 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
       : `${items.length} 项`;
 
     body.replaceChildren();
-    if (cb.topSection) body.append(cb.topSection);
+    if (cb.topSections) body.append(...cb.topSections);
     for (const g of groups) {
       const sec = document.createElement('section');
       sec.className = 'sf-sec';

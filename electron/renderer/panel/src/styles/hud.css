@@ -1313,6 +1313,112 @@ body {
    画法,多一种就等于让人重新学一次。 */
 .up-proto .stage { cursor: pointer; border: 0; font: inherit; }
 
+/* ── 接进来的 GitHub 项目 ────────────────────────────────────────────────────
+   和上面那一段共用同一套骨架(.sf-sec / .sf-row / .sf-text / .sf-desc /
+   .sf-input / .sf-save / .sf-empty),这里只写它自己多出来的那几件事:
+   准入策略那一行、两态卡片、仓库坐标与落盘位置。
+
+   **不另起一套排版。** 同一个页面上两套节奏,人会觉得这块东西是从别处贴来的;
+   而且到那时两套都得各改一遍,漂移是迟早的。 */
+.ga-sec { padding-bottom: 6px; }
+.ga-hint { margin: 0 0 10px; font-size: var(--t-mini); line-height: 1.5; color: var(--ink-3); }
+
+/* 准入策略。三档三个颜色 —— allowlist 与 unattended 都不问人,但一个是
+   "只有名单里的能进",另一个是"谁都能进"。共用一个点就等于把后者说成前者。
+   拉不到时是第四种(unknown),**不许画成其中任何一档**。
+
+   **它不是一张卡片。** 第一版给它加了圆角、底色和内阴影 —— 那立刻在这一页上
+   多出一种谁都没有的容器:上面那 335 个键是裸行,端点和插件是对象卡片,
+   而这只是一句关于"接下来会发生什么"的说明文字。给说明文字套个框,
+   它就会被当成一个可操作的对象,而且那个框本身就是"生成出来的界面"最典型的样子。
+   现在它和 .ga-hint / .up-hint 同一个节奏:一行字,靠颜色区分三档。 */
+.ga-policy {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin: -4px 0 10px;
+}
+.ga-policy-text { font-size: var(--t-mini); color: var(--ink-2); }
+.ga-policy-meta { flex: 1 1 100%; margin-top: 2px; font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
+.ga-dot { flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.ga-policy[data-mode='ask'] .ga-dot { background: #4f9d69; }
+.ga-policy[data-mode='allowlist'] .ga-dot { background: var(--a-mid); }
+.ga-policy[data-mode='unattended'] .ga-dot { background: var(--warn); }
+.ga-policy[data-mode='unattended'] .ga-policy-text { color: var(--warn); }
+.ga-policy[data-mode='unknown'] .ga-policy-text { color: var(--warn); }
+
+.ga-notice[hidden] { display: none; }
+.ga-notice {
+  margin-bottom: 10px; padding: 8px 11px; border-radius: 9px;
+  font-size: var(--t-mini); line-height: 1.45; color: var(--warn);
+  background: linear-gradient(166deg, rgba(255, 246, 233, 0.72), rgba(252, 240, 226, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.6);
+}
+.ga-list { display: flex; flex-direction: column; gap: 10px; }
+
+.ga-card {
+  padding: 12px 13px; border-radius: 13px;
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.52), rgba(238, 234, 245, 0.34));
+  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+}
+.ga-top { display: flex; align-items: center; gap: 8px; }
+.ga-top b { font-weight: 500; font-size: var(--t-small); color: var(--ink); }
+
+/* 两态两个颜色。degraded **不是**绿的 —— 代码拿下来了但没注册上,
+   模型调它的时候才会报错,画成绿点就是在说一句假话。 */
+.ga-card[data-state='active'] .ga-dot { background: #4f9d69; }
+.ga-card[data-state='degraded'] .ga-dot { background: var(--warn); }
+.ga-state { font-size: var(--t-mini); color: var(--ink-3); }
+.ga-card[data-state='degraded'] .ga-state { color: var(--warn); }
+.ga-kind {
+  /* 非等宽:它现在是一句人话(「MCP 工具」),不是一个技术标识符。
+     等宽字体在这里会让它看起来像一段代码。 */
+  flex: none; margin-left: auto; padding: 2px 8px; border-radius: 999px;
+  font-size: var(--t-micro); color: var(--ink-3);
+  background: rgba(252, 251, 255, 0.62);
+  box-shadow: inset 0 1px 0 var(--lite-soft);
+}
+
+.ga-repo {
+  display: block; margin-top: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--t-mini); color: var(--ink-2); word-break: break-all;
+}
+.ga-meta { display: block; margin-top: 4px; font-size: var(--t-mini); line-height: 1.45; color: var(--ink-3); }
+.ga-card[data-state='degraded'] .ga-meta { color: var(--warn); }
+/* 依赖没装成是另一件事:可能注册成功了、依赖却被整份拒了。
+   和上面那行合并会让人以为"接上了"就等于"依赖也齐了"。 */
+.ga-deps { display: block; margin-top: 4px; font-size: var(--t-mini); line-height: 1.45; color: var(--warn); }
+
+.ga-acts { display: flex; align-items: center; gap: 2px; margin-top: 9px; margin-right: -9px; }
+.ga-where {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--t-micro); color: var(--ink-3);
+}
+.ga-btn {
+  /* 同 .up-btn:纯文字,悬停才显形。次要动作不该和主按钮抢视觉重量。 */
+  border: 0; padding: 4px 9px; border-radius: 9px; cursor: pointer;
+  font: inherit; font-size: var(--t-mini); color: var(--ink-3);
+  background: transparent; box-shadow: none;
+  transition: color 0.22s var(--ease), background 0.22s var(--ease);
+}
+.ga-btn:hover { color: var(--ink); background: rgba(252, 251, 255, 0.5); }
+.ga-danger:hover { color: var(--bad); background: rgba(160, 106, 106, 0.09); }
+
+.ga-form { margin-top: 4px; }
+.ga-row { min-height: 44px; }
+.ga-label { display: block; font-size: var(--t-small); color: var(--ink); }
+.ga-row .sf-desc { margin-top: 2px; }
+/* 宽窄用显式类,不用 nth-child —— 按位置指宽窄的话,谁把表单重排一下,
+   宽度就悄悄跟错了字段,而且不报错。 */
+.ga-input { width: 190px; }
+.ga-wide { width: 268px; }
+/* 「先验一下」和「接进来」并排落在打字那一列下面。前者是次要动作,用文字按钮;
+   两个同等重量的主按钮会让人不知道该点哪个。 */
+.ga-form-acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 10px 10px 4px 0; }
+.ga-form-acts .sf-save { margin: 0; }
+
+.ga-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }
+
 /* color-mix 用不了时(比 Chromium 111 更旧的壳)回落到实色面。
    融不进底色,但**挡得住**后面那张 —— 两害相权,先保证读得出来。 */
 @supports not (background: color-mix(in srgb, #fff 50%, #000)) {

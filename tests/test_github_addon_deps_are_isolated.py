@@ -397,6 +397,74 @@ class TestAddonDirIsConfinedToTheAddonRoot:
         evil = str((tmp_path / "acme" / "widget-evil").resolve())
         assert evil not in seen[0], seen[0]
 
+    def test_positional_args_are_fenced_off_with_an_end_of_options_marker(self, tmp_path, monkeypatch):
+        """位置参数一律跟在 `--` 后面 —— 第二道，挡的是第一道被改坏那天。
+
+        第一道是逐条拒 `-` 开头的 dep。这条门验的是就算那道被绕过，pip 也不会把
+        它当选项吃掉。真实差别实测过：
+
+            pip install --quiet -- '--index-url=…'  → Invalid requirement（拒了）
+            pip install --quiet    '--index-url=…'  → 选项被吃掉，索引源真的被换
+
+        `-r` 必须留在 `--` 前面，它是选项，挪到后面 pip 会把它当包名。
+        """
+        import subprocess as _sp
+
+        addon = tmp_path / "acme" / "widget"
+        addon.mkdir(parents=True)
+        (addon / "requirements.txt").write_text("requests\n", encoding="utf-8")
+        fake_python = addon / ".galaxy-venv" / "bin" / "python"
+        fake_python.parent.mkdir(parents=True)
+        fake_python.write_text("", encoding="utf-8")
+
+        seen: list = []
+
+        class _Ok:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        monkeypatch.setattr(_sp, "run", lambda cmd, **kw: (seen.append(cmd), _Ok())[1])
+        install_addon_deps(addon, ["requests", "httpx>=0.27"])
+
+        assert len(seen) == 1
+        cmd = seen[0]
+        assert "--" in cmd, f"没有 end-of-options 标记：{cmd}"
+        cut = cmd.index("--")
+        assert cmd.index("-r") < cut, "-r 跑到了 -- 后面，pip 会把它当包名"
+        assert cmd[cut + 1 :] == ["requests", "httpx>=0.27"], f"位置参数没有全部挪到 -- 后面：{cmd}"
+        assert all(not a.startswith("-") or a == "--" for a in cmd[cut:]), cmd
+
+    def test_pip_really_stops_reading_options_after_the_marker(self):
+        """不是"我以为 pip 支持 `--`"，是真起一次 pip 看它怎么答。
+
+        这条门若哪天因为 pip 换了参数解析而红，那正是要知道的事 ——
+        第二道防线失效了，而代码看起来没有任何变化。
+        """
+        import subprocess as _sp
+        import sys as _sys
+
+        evil = "--index-url=https://example-evil.invalid/simple"
+        with_marker = _sp.run(
+            [_sys.executable, "-m", "pip", "install", "--quiet", "--dry-run", "--", evil],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        without = _sp.run(
+            [_sys.executable, "-m", "pip", "install", "--quiet", "--dry-run", evil],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        blob = (with_marker.stdout + with_marker.stderr).lower()
+        assert "invalid requirement" in blob, f"加了 -- 之后 pip 没有把它当成包名：{blob[:300]!r}"
+
+        # 对照组：不加 -- 时它**不是**"非法包名"，而是被当成选项吃掉了。
+        # 没有这一半，上面那条在"pip 本来就拒绝任何带 -- 的东西"下也会绿。
+        other = (without.stdout + without.stderr).lower()
+        assert "invalid requirement" not in other, "不加 -- 时 pip 也把它当包名拒了 —— 那说明这条门证明不了 -- 起了作用"
+
     def test_install_refuses_an_out_of_root_dir_without_touching_subprocess(self, monkeypatch):
         """越界目录：不装、不建 venv、**一次 subprocess 都不起**。"""
         import subprocess as _sp

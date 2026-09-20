@@ -8,8 +8,8 @@
     "vendored": "第三方代码,不由本仓维护。"
   },
   "_rule_of_thumb": "写 reason 时回答一句『为什么它不该被改』,而不是『它不重要』。答不上来的,就应该去改代码而不是记在这里。",
-  "_measured_at": "PR #1641 run 35496726168,python.sarif 共 30 条(其中 10 条是本 PR 新引入、已在本次提交里改掉,故不记账)。本次同时做了两件台账维护:(1) py/full-ssrf 的 8 条行号随上游改动漂移,照 SARIF 更新;(2) py/clear-text-logging-sensitive-data 的 10 条在本轮 SARIF 里已全部消失,按本台账自己的规矩删除。**需要说明**:这 10 条的消失不是本 PR 造成的,我也没有定位到是哪次上游改动让它们消失的 —— 只核实了它们确实不在当轮 SARIF 里。若日后重新出现,会被当成新增报出来,那正是删除它们的意义。",
-  "total_recorded": 20,
+  "_measured_at": "PR #1641 run 35496726168(head 01e0bfd)报出本 PR 新引入的 10 条;下一轮(head 670ebef)只剩 1 条 —— 9 条 py/path-injection 已改掉并核实消失,剩下的 py/command-line-injection 记在下面(mitigated)。同轮做的台账维护:py/full-ssrf 的 8 条行号照 SARIF 更新;py/clear-text-logging-sensitive-data 的 10 条已不在结果里,按规矩删除 —— 没有定位到是哪次上游改动让它们消失的,只核实了它们确实不在当轮结果里。",
+  "total_recorded": 21,
   "findings": [
     {
       "rule": "py/full-ssrf",
@@ -85,6 +85,20 @@
         "external/microsoft_ufo/llm/openai.py:571"
       ],
       "reason": "external/ 下是 vendored 的第三方代码(microsoft UFO),不由本仓维护 —— 本仓的其它守卫(check_wiring 的引用扫描等)也一律跳过这个目录。真要处理应当走上游,而不是在 vendor 副本里改出一份和上游不同的代码。"
+    },
+    {
+      "rule": "py/command-line-injection",
+      "count": 1,
+      "status": "mitigated",
+      "locations": [
+        "core/addon_dependency_isolation.py:381"
+      ],
+      "reason": "pip 的命令行里必然带着两样从配置推出来的路径:venv 解释器和 addon 目录 —— 装一个 addon 的依赖,argv 里不可能不出现它装在哪。所以这条不是「改一下写法就没了」,它是这个功能的数据依赖本身。\n\n同一轮里另外 9 条 py/path-injection 是真的,并且已经改掉了(单一条件的 realpath + 带分隔符前缀校验,见 resolve_addon_dir)。这一条没跟着消失,是因为 py/command-line-injection 用的是另一套 sanitizer:路径归一化 + 前缀校验不在它的名单里。这是实测出来的,不是推断 —— 同一次提交、同一次扫描,9 条清了,这条没动。\n\n实际拦的是什么:\n1. subprocess.run 传的是 list,全程没有 shell —— shell 元字符这条路根本不存在;\n2. 每一个位置参数要么是常量,要么是证明过落在 addon 根下的路径(realpath + startswith(root + os.sep)),要么是过了 PEP 508 白名单正则的包名;\n3. `-` 开头的 dep 一律拒(--index-url=恶意源 → 供应链注入);\n4. requirements.txt 先整份扫再喂 pip,有一行是 pip 选项就整份拒;\n5. 位置参数全部跟在 `--` 后面,pip 从那儿起不再读选项。第 5 条实测过差别:加 `--` 时 pip 报 Invalid requirement(当成包名拒了),不加时选项被吃掉。\n\nCodeQL 这五条一条都看不见 —— 它们是运行时判定与参数布局,不是它认识的 sanitizer 形态。",
+      "guarded_by": [
+        "tests/test_github_addon_deps_are_isolated.py::TestAddonDirIsConfinedToTheAddonRoot",
+        "tests/test_github_addon_deps_are_isolated.py::TestRequirementsAreScannedBeforePip",
+        "tests/test_github_addon_deps_are_isolated.py::TestRequirementsAreScannedBeforePip::test_pip_really_stops_reading_options_after_the_marker"
+      ]
     }
   ]
 }
