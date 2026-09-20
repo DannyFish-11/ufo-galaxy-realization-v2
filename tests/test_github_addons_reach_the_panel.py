@@ -310,6 +310,36 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         assert "max-height" in css.split(".ga-frame-body", 1)[1][:600], "没有高度上限，框会被内容撑到多长就多长"
         assert "overscroll-behavior: contain" in body, "滚到底之后会把整页带着一起滚 —— 在一页四个可滚区域里，那很难用"
 
+    def test_the_left_frame_stretches_to_match_the_right_column(self):
+        """两栏下沿对齐：左边那个大框拉伸到和右边三个（含两道间距）一样高。
+
+        改之前左栏是 start 对齐，左框只有自己内容那么高，右边三个摞起来高得多，
+        左下角空出一大块。那块空白不表达任何东西，却和"项目这一栏内容少"长得
+        一模一样 —— 而实际上那只是两栏的自然高度不同。
+
+        **这条门只能核到 CSS 规则在不在。** 真正的验证是在 headless Chromium 里
+        量的，三种数据各量一次（下沿差都是 0 像素）：
+
+        ===============  ==========  ==========================================
+        少量             427 / 427   左框拉伸填满
+        两边都满         476 / 476   MCP 框内滚（15 条装在 178px 里）
+        只有项目、无工具  326 / 326   左框内滚（40 条），不把行撑高
+        ===============  ==========  ==========================================
+
+        规则少一条，这三种里至少有一种会塌回去，所以这里逐条钉住。
+        """
+        css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
+        split = css.split(".ga-split {", 1)[1].split("}", 1)[0]
+        assert "align-items: stretch" in split, "两栏不是拉伸对齐 —— 左下角会空出一块"
+
+        assert ".ga-col:first-child > .ga-frame { flex: 1 1 0; min-height: 0; }" in css, (
+            "左框没有吃满整栏；min-height: 0 少了的话，grid 子项的自动最小尺寸是 "
+            "min-content，框会被内容顶到自然高度，行高反过来被左栏拉大，stretch 就失效了"
+        )
+        left_body = css.split(".ga-frame[data-form='project'] .ga-frame-body {", 1)[1].split("}", 1)[0]
+        assert "max-height: none" in left_body, "左框的 body 还封着顶 —— 它会在上限处停住，左下角的空白又回来了"
+        assert "flex: 1 1 0" in left_body, "左框的 body 没有撑开，多出来的高度不会归它的滚动区"
+
     def test_every_addon_lands_in_exactly_one_group(self):
         """一张卡片必须落进某一组，一个都不许掉在两边之外。
 
@@ -487,7 +517,11 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         看着就是贴上去的。
         """
         css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
-        block = css.split(".ga-frame {", 1)[1].split("}", 1)[0]
+        # 取**行首**那条 `.ga-frame {`。第一版直接 split(".ga-frame {")，
+        # 结果被后加的 `.ga-col:first-child > .ga-frame {` 抢先匹配走了 ——
+        # 它以同样的字串结尾，而且排在前面。一条会被别的选择器劫持的门，
+        # 报出来的话会把人引到完全不相干的地方（当时报的是 IndexError）。
+        block = css.split("\n.ga-frame {", 1)[1].split("}", 1)[0]
         assert "background" not in block, "框自带了填充 —— 那就不是内嵌的"
         shadow = block.split("box-shadow:", 1)[1].split(";", 1)[0]
         assert shadow.count("inset") >= 2, "边界痕迹不是内凹的"

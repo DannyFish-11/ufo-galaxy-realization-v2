@@ -1399,10 +1399,27 @@ body {
 
    窄处塌成一列 —— 设置页本来就不宽,硬撑两栏会把每一行挤到读不了。
    塌了之后框还在,分流这件事不丢。 */
-.ga-split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+/* 两栏**下沿对齐**:左边那个大框拉伸到和右边三个(含两道间距)一样高。
+
+   改之前左边是 start 对齐 —— 左框只有自己内容那么高,右边三个摞起来高得多,
+   左下角空出一大块。那块空白不表达任何东西,却在版面上和"项目这一栏内容少"
+   长得一模一样,而实际上那只是两栏的自然高度不同。
+
+   做法:行高由**右栏**定(它是三个框的自然高度之和),左框 stretch 填满,
+   多出来的高度归它自己的滚动区。所以左框的 body 不设 max-height,改成 flex 撑开
+   —— 设了的话,它会在 264px 处停住,空白又回来了。
+
+   `min-height: 0` 那两条不是装饰:grid 子项和 flex 子项的自动最小尺寸是 min-content,
+   不显式清零的话,框会被内容顶到自然高度,行高反过来被左栏拉大,stretch 就失效了。 */
+.ga-split {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 12px; align-items: stretch;
+}
 .ga-split[hidden] { display: none; }
 @container (max-width: 560px) { .ga-split { grid-template-columns: minmax(0, 1fr); } }
-.ga-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ga-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+/* 左栏只有一个框,让它吃满整栏。右栏那三个各自保持自然高度(各有上限)。 */
+.ga-col:first-child > .ga-frame { flex: 1 1 0; min-height: 0; }
 
 /* ── 一个框 ────────────────────────────────────────────────────────────
    **内嵌**,不是浮起来的一块:底色就是这一页的底色,边界靠一圈内凹的痕迹说 ——
@@ -1432,8 +1449,12 @@ body {
   padding: 0 6px 8px;
   display: flex; flex-direction: column; gap: 1px;
 }
-.ga-frame[data-form='project'] .ga-frame-body { max-height: 264px; }
+/* 右边三个各自封顶;左边那个不封顶 —— 它的高度由两栏对齐这件事决定,
+   封顶会让它在 264px 处停住,左下角的空白就又回来了。 */
 .ga-frame-body { max-height: 178px; }
+.ga-frame[data-form='project'] .ga-frame-body { max-height: none; flex: 1 1 0; }
+/* 右栏三个框总高不足时(比如一条都没接过),左框也不该缩成一条缝。 */
+.ga-frame[data-form='project'] { min-height: 132px; }
 .ga-frame-body::-webkit-scrollbar { width: 6px; }
 .ga-frame-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
 .ga-frame-empty {
