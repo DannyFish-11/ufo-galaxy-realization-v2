@@ -206,12 +206,41 @@ electron/renderer/app.js → presence_motion.js → WebGL
 `render`（双轴忠实契约 `core.phase_contract.RenderPosture`，主轴 lifecycle + 副轴 continuum
 四相 + 阈限态在推演什么）。契约本身是完备的。
 
-**耦合点是节律，不是契约**：桥是**纯事件驱动**，而事件只在主体处理请求时产生。
-`_build_message()` 里 `event_category` 写的是 `"ambient_tick"`（`core/lumiv_websocket_bridge.py:795`），
-但全仓 `ambient_tick` 只出现两处，都是字面量——**没有任何时钟在发 tick**。
+> **更正（本节初稿写错了一句）**：初稿写的是"没有任何时钟在发 tick"。
+> **这句不准确。** 时钟是有的——`RuntimeSession._continuum_tick_loop()`
+> （`core/desktop_presence_runtime.py:452`），200ms 一拍，把 `presence_intensity` /
+> `coherence` / 倾向量 / 阈限活动推上 `StateEventBus`。
+> 更正之后的结论比原来**更强**，见下。
 
-后果：没有请求 = 没有新帧 = 屏幕上的在场靠前端弹簧自己衰减到静默。主体"在场但不表达"这个
-设计承诺，在视觉上只体现为"沉默"，而不是"活着"。
+**真正的耦合点：三态生命周期就是"一次请求的状态机"。**
+
+三件事叠在一起才是完整图景：
+
+1. `RuntimeSession` 是**每请求创建、请求完即丢**的。该类 docstring 原话
+   （`core/desktop_presence_runtime.py:170`）：
+   *"The session is ephemeral and is discarded once the request completes."*
+2. 三态 `tristate` 是这个会话的一个**字段**（`core/desktop_presence_runtime.py:199`），
+   不是某个常驻对象的状态。
+3. 200ms tick 由 `_on_advance_tick()`（`:535`）控制：进 `LIMINAL` 启动、回 `SILENT` 停止；
+   而 tick 循环本身的条件是 `while self._tick_running and self.tristate in (LIMINAL, MANIFEST)`
+   （`:464`）——**`SILENT` 相位根本不在循环条件里**。
+
+于是：**没有请求的时候，主体在代码里不是"静默"，是"没有实例"。**
+`SILENT` 这一态只作为"会话结束前的最后一跳"短暂存在过，随即连同会话一起被丢弃。
+
+这跟设计承诺是矛盾的：`TriState.SILENT` 的 docstring 写的是
+*"subject at rest; native multimodal host ingress continues in the background"*
+——即"在场但不表达"，那应当是一个**持续状态**。
+
+而桥（`GalaxyPresenceBridge`）是纯事件驱动的下游，它只能拿到上游发的东西。
+`_build_message()` 里 `event_category` 写着 `"ambient_tick"`
+（`core/lumiv_websocket_bridge.py:795`），但全仓该字符串只出现两处、都是字面量——
+**没有任何"环境拍"真的存在**，那个名字描述的是一个还没被实现的东西。
+
+后果：没有请求 = 没有新帧 = 屏幕上的在场靠前端弹簧自己衰减到静默。
+
+> **所以第三部分的命题要改写**：要补的不是"给动画加一个时钟"（那只治表象），
+> 而是**把三态从请求会话里提出来，交给一个常驻的设备主体持有**。见 §3.2 修订。
 
 ### 已有的独立时钟先例
 
@@ -400,9 +429,32 @@ Loop Kernel   collect → propose → verify → commit → feed back
 
 ## 3.1 现在的耦合，一句话
 
-**屏幕上的在场，只在主体处理请求时才被更新。**
+**三态生命周期就是"一次请求的状态机"** —— 没有请求时，主体在代码里没有实例
+（证据见 §1.6 的更正块）。屏幕上的在场只是这件事的表象。
 
 ## 3.2 目标形态
+
+> **修订说明（所有者澄清后）**：本节初稿把目标写成"给在场加一个独立时钟"。
+> 那只治表象。所有者要的是**主体与载体分离**：中心智能体一直在运行，
+> 不绑死在任何一台设备上；三态是**设备作为"相对主体"在本机的表现**，
+> 归设备主体所有，不归中心智能体。换设备因此可行。
+> 下面的 `PresenceRuntime` 仍然成立，但它的正确身份是
+> **设备相对主体（DeviceSubject）的表现层**，而不是一个挂在桌面外壳旁边的时钟。
+> 三层切分见 §3.2bis（待所有者确认后固化）。
+
+### 3.2bis 三层切分（待确认）
+
+| 层 | 职责 | 生命周期 | 本仓已有的契约 |
+|----|------|---------|---------------|
+| **DeviceSubject**（设备相对主体） | 持有三态、本机感知与呈现、本机模态能力声明 | **常驻**（每台设备一个） | `contracts/distributed_subject_contract_v1.py` 的 *bounded relative subject runtime* + *runtime attachment*；`contracts/local_runtime_host.py`；`core/bounded_subject_platform_boundary.py` 第 2 条边界轴 |
+| **OpenClawd**（中心智能体） | 认知与执行。attach 上来干活，干完 detach。**不持有三态** | 常驻于中心 | 现有 `core/openclawd.py` |
+| **RuntimeSession** | 降级为"这一次请求的追踪 ID"（`runtime_session_id` 的载体） | 每请求（维持现状） | 现有 `core/desktop_presence_runtime.py:166` |
+
+**要点：这套概念本仓已经定好了，只是目前只给安卓用。** 电脑走的是
+`DesktopPresenceRuntime` 那条更早的路，没有被建模成"相对主体"。
+因此这项工作**不是发明新抽象，是让电脑也用上所有者自己已经定的契约**。
+
+### 3.2ter 原目标形态（作为 DeviceSubject 的表现层仍然成立）
 
 ```
 PresenceRuntime（独立时钟，语义拍 ~20-30Hz —— 是语义拍，不是渲染帧）
