@@ -176,6 +176,23 @@ def fit_detail(spec: Any, has_gpu: bool, budget_mb: int) -> Dict[str, Any]:
     面板上写着「显存装不下」的时候，人接着要问的是「差多少」。这里把驻留量、
     KV 这一项、以及 KV 单价是**实测还是目录声明**都返回出去，托盘和面板据此
     如实显示，不用各自再算一遍（各算一遍就是同一个事实两处各存）。
+
+    ## ``provisional``：这个 ``ok`` 是**有前提**的
+
+    KV 单价未知时这里不加那一项（见 :func:`model_fit`）。于是会出现一种
+    **过关过得很像样、其实没人验过**的情形：默认主脑 ``gemma4:12b`` 在一块 8 GB
+    卡上判 ``ok``，可余量只有 192 MB —— 只要有人量到它的 KV 单价超过
+    ``kv_break_even_per_1k``（这里就是 96 MB/1K），同一条判断立刻翻成装不下。
+
+    一个「取决于一个没人量过的数」的 ``ok``，和一个「算全了还是 ok」的 ``ok``，
+    **在屏幕上不能长得一样**。前者读的人会安心去用，然后在加载途中撞 OOM ——
+    而报错不在准入处，现场看到的只是「模型带不动」。所以把前提一起说出来：
+
+    * ``headroom_mb``            —— 还剩多少（差多少，负数就是差这么多）
+    * ``kv_break_even_per_1k``   —— KV 单价一旦超过这个数，结论就翻面
+    * ``provisional``            —— 这个 ``ok`` 压在一个未知数上
+
+    这三个都是**这里算的**，不让消费方各算一遍。
     """
     from core.model_catalog import MIN_CTX  # noqa: PLC0415  分区就地导入(见文件头注释)
 
@@ -189,11 +206,20 @@ def fit_detail(spec: Any, has_gpu: bool, budget_mb: int) -> Dict[str, Any]:
         "kv_per_1k_mb": 0,
         "kv_source": "unknown",
         "budget_mb": int(budget_mb),
+        "headroom_mb": int(budget_mb) - resident,
+        "kv_break_even_per_1k": 0,
+        "provisional": False,
     }
     if not getattr(spec, "requires_gpu", False):
+        # 不吃显存的型号,**整份预算原封不动** —— 写成 budget - resident 的话,
+        # 那个数看着像"占掉之后还剩这些",而它根本没占。
+        detail["headroom_mb"] = int(budget_mb)
         return detail
     if not has_gpu:
         detail["fit"] = "no_gpu"  # 需显卡但没有:CPU 硬爬,如实告警
+        # 没有卡就没有"还剩多少"这个问题。留着 budget - resident 会让面板显示
+        # 一个凭空的余量,而真相是这台机器上压根没有这块显存。
+        detail["headroom_mb"] = 0
         return detail
 
     # KV 单价:实测优先,目录兜底,都没有就是 0 = 不知道。
@@ -210,8 +236,20 @@ def fit_detail(spec: Any, has_gpu: bool, budget_mb: int) -> Dict[str, Any]:
     if per_1k > 0:
         detail["kv_mb"] = int(per_1k * MIN_CTX / 1024)
 
+    detail["headroom_mb"] = int(budget_mb) - resident - int(detail["kv_mb"])
+
     if resident + int(detail["kv_mb"]) > budget_mb:
         detail["fit"] = "insufficient_vram"  # 有显卡但装不下:会溢出到内存
+        return detail
+
+    # 过了关。但**凭什么过的**要说清楚:单价未知时 KV 那一项没算进去,
+    # 于是这个 ok 压在一个没人量过的数上 —— 量一次就可能翻面。
+    if per_1k <= 0:
+        head = int(detail["headroom_mb"])
+        detail["provisional"] = True
+        # 余量能换成多少 KV 单价。整除是**朝严的方向取**:恰好等于这个数时还装得下,
+        # 超过才翻 —— 写成"超过 N 就翻面"，N 取得偏小只会让人更早去量,不会让人误判。
+        detail["kv_break_even_per_1k"] = max(0, head * 1024 // MIN_CTX)
     return detail
 
 

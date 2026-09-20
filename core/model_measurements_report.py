@@ -80,6 +80,12 @@ class ModelRow:
     kv_source: str = "未知"
     #: 这台机器上此刻的准入结论（要硬件画像才有；拿不到就是 None）。
     fit: Optional[str] = None
+    #: 准入之后还剩多少显存（MB）。负数就是差这么多。
+    headroom_mb: Optional[int] = None
+    #: 这个 ``ok`` 压在"KV 单价没人量过"上面 —— 量一次就可能翻面。
+    provisional: bool = False
+    #: KV 单价一旦超过这个数，上面那个结论就翻成装不下。0 = 不适用。
+    kv_break_even_per_1k: int = 0
     notes: List[str] = field(default_factory=list)
 
     def weight_diverged(self) -> bool:
@@ -268,7 +274,11 @@ def measurement_rows(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = 
             try:
                 from core.routes.models import fit_detail
 
-                row.fit = str(fit_detail(spec, has_gpu, int(budget_mb))["fit"])
+                d = fit_detail(spec, has_gpu, int(budget_mb))
+                row.fit = str(d["fit"])
+                row.headroom_mb = int(d["headroom_mb"])
+                row.provisional = bool(d["provisional"])
+                row.kv_break_even_per_1k = int(d["kv_break_even_per_1k"])
             except Exception as exc:  # noqa: BLE001
                 logger.debug("拿不到 %s 的准入结论: %s", tag, exc)
 
@@ -277,7 +287,9 @@ def measurement_rows(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = 
                 f"磁盘上是 {_fmt_mb(row.weight_on_disk_mb)}，目录记的是 "
                 f"{_fmt_mb(row.declared_weight_mb)} —— 你换过量化"
             )
-        if row.requires_gpu and row.kv_per_1k_mb <= 0:
+        # KV 没量到这件事只说一次。有准入结论时,渲染那边会说得更具体
+        # （「单价一旦超过 N MB/1K 就翻面」）—— 两条都出就是同一句话说两遍。
+        if row.requires_gpu and row.kv_per_1k_mb <= 0 and not row.provisional:
             row.notes.append("KV 单价还没量到：加载一次就能量出来，在那之前准入不敢把它算进去")
         rows.append(row)
     return rows
@@ -310,7 +322,20 @@ def render_report(rows: List[ModelRow], budget_mb: Optional[int] = None) -> str:
         kv = f"{row.kv_per_1k_mb} MB/1K" if row.kv_per_1k_mb > 0 else UNKNOWN
         out.append(f"     KV 单价        {kv}  （{row.kv_source}）")
         if row.fit is not None:
-            out.append(f"     这台机器上     {row.fit}")
+            verdict = row.fit
+            # 余量只对**吃显存的**型号有意义。不需显卡的那几档整份预算原封不动,
+            # 给它写个"余 8 GB"会让人以为它占着卡。
+            if row.requires_gpu and row.headroom_mb is not None:
+                head = row.headroom_mb
+                verdict += f"  （余 {_fmt_mb(head)}）" if head > 0 else f"  （差 {_fmt_mb(-head)}）"
+            out.append(f"     这台机器上     {verdict}")
+            if row.provisional:
+                # 一个「取决于没人量过的数」的 ok,和一个「算全了还是 ok」的 ok,
+                # 在屏幕上不能长得一样。前者读的人会安心去用,然后在加载途中撞 OOM。
+                out.append(
+                    f"     ⚠ 这个 ok 是有前提的：KV 还没量过，没算进去。单价一旦超过 "
+                    f"{row.kv_break_even_per_1k} MB/1K，这一档就翻成装不下。"
+                )
         for note in row.notes:
             out.append(f"     ⚠ {note}")
         out.append("")
@@ -341,6 +366,9 @@ def snapshot(budget_mb: Optional[int] = None, has_gpu: Optional[bool] = None) ->
                 "kv_per_1k_mb": r.kv_per_1k_mb,
                 "kv_source": r.kv_source,
                 "fit": r.fit,
+                "headroom_mb": r.headroom_mb,
+                "provisional": r.provisional,
+                "kv_break_even_per_1k": r.kv_break_even_per_1k,
                 "notes": list(r.notes),
             }
             for r in rows

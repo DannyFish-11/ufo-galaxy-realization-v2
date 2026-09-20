@@ -236,6 +236,44 @@ class TestTheReportRefusesToGuess:
         assert rows, "目录里一个本地型号都没有"
         assert all(r.fit in {"ok", "insufficient_vram", "no_gpu"} for r in rows)
 
+    def test_a_conditional_ok_never_reads_as_a_plain_ok(self) -> None:
+        """报告里那个 ``ok``，**必须带着它的前提一起出现**。
+
+        准入那一处已经把 ``provisional`` 算出来了（见
+        ``test_vram_admission_call_sites_read_runtime.py``）。这一条守的是
+        **它有没有真的走到屏幕上** —— 算出来了没显示，跟没算一样。
+        这个仓库最典型的坏法就是这个：看起来接上了，其实没有。
+        """
+        rows = measurement_rows(budget_mb=8192, has_gpu=True)
+        row = {r.tag: r for r in rows}["gemma4:12b"]
+        assert row.provisional is True, "准入那几个数没被取回来 —— 中间断了"
+        assert row.headroom_mb == 192, f"余量算成了 {row.headroom_mb}"
+
+        text = render_report(rows, budget_mb=8192)
+        block = text.split("── gemma4:12b")[1].split("──")[0]
+        assert "有前提" in block, (
+            "默认主脑靠一个没人量过的数过的关，报告却只写了个光秃秃的 ok。"
+            "读的人会安心去用，然后在加载途中撞 OOM —— 而报错不在准入处。"
+        )
+        assert f"{row.kv_break_even_per_1k} MB/1K" in block, "没说单价到多少会翻面 —— 那这条警告没法行动"
+        assert "余 192 MB" in block, "没写「差多少」—— 人看到装不下之后第一句就是问这个"
+
+    def test_a_model_that_needs_no_card_shows_no_vram_headroom(self) -> None:
+        """判别点：余量不是每一行都印。不需显卡的那几档印出来就是在说它占着卡。
+
+        少了这一条，上面那条只要每行都拼个余量就能绿。
+        """
+        text = render_report(measurement_rows(budget_mb=8192, has_gpu=True), budget_mb=8192)
+        block = text.split("── gemma4:e2b")[1].split("──")[0]
+        assert "余" not in block, f"不吃显存的型号却印了余量：{block.strip()}"
+
+    def test_the_kv_warning_is_not_said_twice(self) -> None:
+        """同一句话说两遍，读的人会以为是两件事。"""
+        text = render_report(measurement_rows(budget_mb=8192, has_gpu=True), budget_mb=8192)
+        block = text.split("── gemma4:12b")[1].split("──")[0]
+        kv_warnings = [ln for ln in block.split("\n") if "⚠" in ln and "KV" in ln]
+        assert len(kv_warnings) == 1, f"KV 那件事说了 {len(kv_warnings)} 遍：{kv_warnings}"
+
     def test_the_report_text_marks_every_unknown(self) -> None:
         """渲染出来的那份文本里，没量过的地方必须**看得见**是没量过。"""
         text = render_report(measurement_rows(budget_mb=8192, has_gpu=True), budget_mb=8192)
@@ -274,3 +312,46 @@ class TestTheTrayOnlyDisplays:
         body = body[: body.index("\n    def ")]
         body = re.sub(r'"""(?:.|\n)*?"""', " ", body)
         assert re.search(r"return None, None", body), "探不到硬件时没有返回 (None, None) —— 给 0 会让每一行都写着装不下"
+
+
+class TestOnlyOnePlaceSaysWhoTheMainBrainIs:
+    """「主脑是谁」只有一处说了算。
+
+    ``core/huggingface_model_manager.py`` 的 ``RECOMMENDED_MODELS`` 上面曾经写着
+    「本地主脑首选：Gemma 4 E4B」，而 :func:`core.model_catalog.default_model`
+    返回的是 ``gemma4:12b``。两条路各有各的清单本身没问题（一条走 ``ollama pull``，
+    一条从 HF 拉 GGUF），**坏在那句话**：照着它去装的人，装完发现跑起来的是另一个。
+
+    这不是接线断了，是**说的和现实相反** —— 比断了更难发现，因为一切都正常运转。
+    """
+
+    def test_the_hf_download_table_does_not_claim_to_name_the_main_brain(self) -> None:
+        import core.model_catalog as mc
+
+        src = (_ROOT / "core/huggingface_model_manager.py").read_text(encoding="utf-8")
+        default = mc.default_model()
+
+        # 那张表周围任何"主脑首选/默认主脑是谁"的断言,都必须和目录对得上。
+        for line in src.split("\n"):
+            if "主脑" not in line or "首选" not in line:
+                continue
+            assert default in line, (
+                f"这一行在宣布主脑是谁,却不是目录里那个（{default}）：{line.strip()}\n"
+                "「主脑是谁」的权威是 core.model_catalog.default_model()。"
+                "两处各说各的,照着这句话去装的人会装错。"
+            )
+
+    def test_the_default_brain_has_a_way_to_be_installed(self) -> None:
+        """默认主脑必须有一条装得上的路 —— 否则「默认」是句空话。
+
+        它不在 HF 那张表里**不是漏了**：它走的是 ``ollama pull``。这一条钉的就是
+        那条路确实认这个 tag，免得哪天两边都以为对方管。
+        """
+        import core.model_catalog as mc
+
+        default = mc.default_model()
+        assert (
+            mc.backend_for_tag(default) == "ollama"
+        ), f"默认主脑 {default} 不走 ollama 了，那它得在 HF 那张表里有条目 —— 去确认一下"
+        sel = (_ROOT / "core/model_selection.py").read_text(encoding="utf-8")
+        assert "def background_pull" in sel, "ollama pull 那条路没了，默认主脑就装不上了"

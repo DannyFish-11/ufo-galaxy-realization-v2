@@ -171,6 +171,80 @@ class TestNoConsumerGoesBackToWeights:
         assert "MIN_CTX" in body, "KV 那一项不再按最短上下文算 —— 那它按的是什么？"
         assert re.search(r"if per_1k > 0", body), "单价未知时也去加 KV —— 拿一个编出来的数收紧准入，和拿它放开一样坏"
 
+    def test_an_ok_that_rests_on_an_unknown_says_so(self) -> None:
+        """**一个「取决于没人量过的数」的 ok，不能和「算全了还是 ok」长得一样。**
+
+        KV 单价未知时准入不加那一项（这是对的，见上一条）。可这样就会出现一种
+        过关过得很像样、其实没人验过的情形：默认主脑 ``gemma4:12b`` 驻留 8000 MB，
+        在一块 8 GB 卡上判 ``ok``，**余量只有 192 MB** —— 只要有人量到它的 KV 单价
+        超过 96 MB/1K，同一条判断立刻翻面。
+
+        不把这个前提说出来，读的人会安心去用，然后在**加载途中**撞 OOM —— 而报错
+        不在准入处，现场看到的只是「模型带不动」。这个仓库为这条路径栽过一次了。
+        """
+        from core.routes.models import fit_detail as _fd
+
+        spec = get_model("gemma4:12b")
+        assert spec is not None
+        d = _fd(spec, True, _EIGHT_GB)
+        assert d["fit"] == "ok"
+        assert d["provisional"] is True, "KV 没量过就过的关，却没说这个 ok 是有前提的"
+        assert d["headroom_mb"] == _EIGHT_GB - spec.runtime_mb()
+        assert d["kv_break_even_per_1k"] > 0, "没说单价到多少会翻面 —— 那这个警告没法行动"
+        # 翻面点必须是**真的**翻面点,不是随手一个正数。
+        from core.model_catalog import MIN_CTX
+
+        assert d["kv_break_even_per_1k"] == d["headroom_mb"] * 1024 // MIN_CTX
+
+    def test_an_ok_with_kv_counted_is_not_provisional(self, monkeypatch) -> None:
+        """判别点的另一半：KV 真算进去了的 ok，**不许**还挂着那个前提。
+
+        少了这一条，上面那条只要把 ``provisional`` 恒设为 True 就能绿 —— 于是每一行
+        都挂着警告，等于没有警告。
+        """
+        import core.context_measurements as cm
+
+        monkeypatch.setattr(cm, "effective_kv_mb_per_1k", lambda _t: 20)
+        monkeypatch.setattr(cm, "measured_source", lambda _t: "实测")
+        from core.routes.models import fit_detail as _fd
+
+        spec = get_model("gemma4:12b")
+        d = _fd(spec, True, 16384)
+        assert d["fit"] == "ok"
+        assert d["kv_mb"] > 0, "单价量到了却没算进去"
+        assert d["provisional"] is False, "KV 已经算进去了，还说这个 ok 是有前提的"
+        # **余量必须把 KV 减掉。** 目录里此刻没有一个型号量过 KV 单价，于是
+        # ``kv_mb`` 处处是 0 —— 只看目录的话，余量减不减 KV 一个字都不会变，
+        # 这一栏就成了空判据。只有在这儿（单价是造出来的）才分得出来。
+        assert d["headroom_mb"] == 16384 - spec.runtime_mb() - d["kv_mb"], (
+            f"余量 {d['headroom_mb']} 没把 KV 那 {d['kv_mb']} MB 减掉 —— "
+            "面板会照着它说「还剩这么多」，而那块显存已经被 KV 占了。"
+        )
+
+    def test_a_refusal_is_never_provisional(self) -> None:
+        """判不下的时候没有"前提"可言 —— 它已经是结论了。"""
+        from core.routes.models import fit_detail as _fd
+
+        d = _fd(get_model("openbmb/minicpm-o4.5"), True, _EIGHT_GB)
+        assert d["fit"] == "insufficient_vram"
+        assert d["provisional"] is False
+        assert d["headroom_mb"] < 0, "装不下，余量却不是负的 —— 那「差多少」这一栏是错的"
+
+    def test_a_model_that_needs_no_card_does_not_report_a_vram_headroom(self) -> None:
+        """不吃显存的型号，整份预算原封不动。
+
+        写成 ``budget - resident`` 的话，那个数看着像「占掉之后还剩这些」，
+        而它根本没占 —— 面板照着显示，就等于说这一档占着卡。
+        """
+        from core.routes.models import fit_detail as _fd
+
+        d = _fd(get_model("gemma4:e2b"), True, _EIGHT_GB)
+        assert d["headroom_mb"] == _EIGHT_GB, "不吃显存的型号却报了个被占掉的余量"
+        # 没有卡的时候更没有"还剩多少"这回事。
+        no_card = _fd(get_model("openbmb/minicpm-o4.5"), False, _EIGHT_GB)
+        assert no_card["fit"] == "no_gpu"
+        assert no_card["headroom_mb"] == 0, "这台机器上没有这块显存，却报了个余量"
+
     def test_the_numbers_behind_the_verdict_come_out_too(self) -> None:
         """面板写「显存装不下」时，人接着问的是「差多少」。
 
