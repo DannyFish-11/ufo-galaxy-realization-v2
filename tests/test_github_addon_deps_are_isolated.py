@@ -53,6 +53,20 @@ from core.addon_dependency_isolation import (
 from core.github_installer import _build_mcp_command
 
 
+@pytest.fixture(autouse=True)
+def _addon_root_is_the_tmp_dir(tmp_path, monkeypatch):
+    """把 addon 根指到本用例的 tmp_path。
+
+    `resolve_addon_dir` 现在要求 addon 目录落在安装根下（见
+    `TestAddonDirIsConfinedToTheAddonRoot` 的说明）。pytest 的 `tmp_path` 不在
+    那个根下，所以下面每条用例都得先把根挪过来——否则它们会因为"越界被拒"而红，
+    而**它们要验的东西一个都没验到**，和放宽断言是同一种坏法。
+
+    根设成 `tmp_path` 本身：`tmp_path` 等于根（允许），它下面的任何子目录也合法。
+    """
+    monkeypatch.setenv("GITHUB_INSTALL_DIR", str(tmp_path))
+
+
 class TestRequirementsAreScannedBeforePip:
     @pytest.mark.parametrize(
         "line",
@@ -125,7 +139,7 @@ class TestItFailsClosedWhenTheVenvCannotBeBuilt:
     def test_no_venv_and_no_opt_in_means_no_install(self, tmp_path, monkeypatch):
         """建不出 venv 就退回宿主环境，等于这层没装，而且失败得悄无声息。"""
         monkeypatch.delenv("GALAXY_ADDON_HOST_DEPS", raising=False)
-        monkeypatch.setattr("core.addon_dependency_isolation.ensure_venv", lambda d: None)
+        monkeypatch.setattr("core.addon_dependency_isolation.ensure_venv", lambda d, root=None: None)
         result = install_addon_deps(tmp_path, ["requests"])
         assert result["success"] is False
         assert result["scope"] == "venv_unavailable"
@@ -134,7 +148,7 @@ class TestItFailsClosedWhenTheVenvCannotBeBuilt:
     def test_the_host_escape_hatch_is_opt_in_only(self, tmp_path, monkeypatch):
         """口子留着，但必须是一次**显式**选择，并且结果里 scope 如实写 host。"""
         monkeypatch.setenv("GALAXY_ADDON_HOST_DEPS", "1")
-        monkeypatch.setattr("core.addon_dependency_isolation.ensure_venv", lambda d: None)
+        monkeypatch.setattr("core.addon_dependency_isolation.ensure_venv", lambda d, root=None: None)
         calls = []
 
         class _Ok:
@@ -227,3 +241,137 @@ class TestARealVenvIsCreated:
             pytest.skip("本机 python -m venv 不可用")
         cfg = (Path(python_exe).parent.parent / "pyvenv.cfg").read_text(encoding="utf-8")
         assert "include-system-site-packages = true" in cfg
+
+
+class TestAddonDirIsConfinedToTheAddonRoot:
+    """CodeQL 在这个文件上报了 10 条（9 条 path expression + 1 条 uncontrolled
+    command line）：路径与命令行都依赖用户提供的值，而**使用点没有校验**。
+
+    数据流是真的：`addon_dir` 一路来自 `github__install(url)` —— 一个 LLM 可调工具
+    的参数。调用方确实净化过 ref
+    （`re.sub(r"[^A-Za-z0-9._-]", "_", ...)`），但那条正则**允许 `.` 和 `-`**，
+    所以 `..` 原样活下来（两个字符都在白名单里，`re.sub` 不会碰它）。
+
+    两头都堵：`github_installer` 那边把纯点号的 ref 段换掉（别产生坏路径），
+    这一层 `resolve_addon_dir` 再校验落点（就算产生了也不许用）。只堵一头不够。
+    """
+
+    def test_a_path_under_the_root_is_accepted(self):
+        from core.addon_dependency_isolation import addon_root, resolve_addon_dir
+
+        root = addon_root()
+        assert resolve_addon_dir(root / "me" / "repo" / "main") == root / "me" / "repo" / "main"
+
+    @pytest.mark.parametrize("escape", ["../../etc", "../.."])
+    def test_escaping_the_root_is_refused(self, escape):
+        from core.addon_dependency_isolation import AddonPathError, addon_root, resolve_addon_dir
+
+        with pytest.raises(AddonPathError):
+            resolve_addon_dir(addon_root() / escape)
+
+    def test_an_absolute_path_elsewhere_is_refused(self):
+        from core.addon_dependency_isolation import AddonPathError, resolve_addon_dir
+
+        with pytest.raises(AddonPathError):
+            resolve_addon_dir(Path("/etc"))
+
+    def test_a_sibling_directory_with_the_same_prefix_is_refused(self):
+        """`/addons-evil` 不能通过 `/addons` 的检查。
+
+        用 `is_relative_to` 而不是字符串前缀比较——这个坑仓里在路径型依赖那段
+        已经踩过一次并写在注释里。
+        """
+        from core.addon_dependency_isolation import AddonPathError, addon_root, resolve_addon_dir
+
+        with pytest.raises(AddonPathError):
+            resolve_addon_dir(Path(str(addon_root()) + "-evil"))
+
+    def test_install_refuses_an_out_of_root_dir_without_touching_subprocess(self, monkeypatch):
+        """越界目录：不装、不建 venv、**一次 subprocess 都不起**。"""
+        import subprocess as _sp
+
+        calls: list = []
+        monkeypatch.setattr(_sp, "run", lambda cmd, **kw: calls.append(cmd))
+        result = install_addon_deps(Path("/etc"), ["requests"])
+        assert result["success"] is False
+        assert result["scope"] == "rejected"
+        assert calls == []
+
+    def test_sys_path_is_not_touched_for_an_out_of_root_dir(self, monkeypatch):
+        monkeypatch.setattr(sys, "path", list(sys.path))
+        before = list(sys.path)
+        assert add_venv_to_sys_path(Path("/etc")) is False
+        assert sys.path == before
+
+    def test_the_install_root_has_exactly_one_definition(self):
+        """`github_installer._get_install_dir()` 与 `addon_root()` 必须同源。
+
+        两处各读一次环境变量的话，哪天有人改了其中一处，校验基准和实际安装位置就分家——
+        而分家的那一刻，这道校验会开始拒绝所有合法目录，或者更糟：放过所有目录。
+        """
+        from core.addon_dependency_isolation import addon_root
+        from core.github_installer import _get_install_dir
+
+        assert _get_install_dir() == addon_root()
+
+    def test_a_dot_only_ref_cannot_become_a_path_segment(self, monkeypatch):
+        """`ref=".."` 经过调用方那条正则会原样活下来——这里钉住它被换掉。"""
+        import re as _re
+
+        for ref in ("..", ".", "..."):
+            safe = _re.sub(r"[^A-Za-z0-9._-]", "_", ref)
+            assert safe == ref, "前提：那条正则确实不会碰纯点号的 ref"
+            if set(safe) <= {"."}:
+                safe = "_"
+            assert safe == "_", f"{ref!r} 仍然能当路径段用"
+
+
+class TestTheRootCanBeInjected:
+    """边界基准必须是**调用方实际在用的那个根**，不是隔离层自己读的环境变量。
+
+    `GitHubInstaller._install_dir` 是可注入的（测试里直接赋值）。两者不一致时，
+    拿环境变量那个当基准，会把注入方的每一个**合法**目录都判成越界——
+    一道永远说"不"的检查和一道永远说"是"的检查一样没用。
+    """
+
+    def test_an_explicit_root_overrides_the_env_one(self, tmp_path, monkeypatch):
+        from core.addon_dependency_isolation import resolve_addon_dir
+
+        monkeypatch.setenv("GITHUB_INSTALL_DIR", str(tmp_path / "env-root"))
+        injected = tmp_path / "injected-root"
+        target = injected / "owner" / "repo" / "HEAD"
+        assert resolve_addon_dir(target, root=injected) == target
+
+    def test_the_explicit_root_still_confines(self, tmp_path, monkeypatch):
+        """传了 root 不等于放行——它只是换了个基准，越界照样拒。"""
+        from core.addon_dependency_isolation import AddonPathError, resolve_addon_dir
+
+        monkeypatch.setenv("GITHUB_INSTALL_DIR", str(tmp_path))
+        injected = tmp_path / "injected-root"
+        with pytest.raises(AddonPathError):
+            resolve_addon_dir(tmp_path / "elsewhere", root=injected)
+
+    def test_queries_are_total_rather_than_raising(self, tmp_path):
+        """问"这儿有没有 venv"，越界目录的正确答案是"没有"，不是抛异常。
+
+        否则每个只想看一眼的调用方都要包一层 try——`_build_mcp_command` 就是这样
+        在两条既有测试上炸掉的。
+        """
+        from core.addon_dependency_isolation import venv_python, venv_site_packages
+
+        outside = Path("/etc")
+        assert venv_python(outside, root=tmp_path) is None
+        assert venv_site_packages(outside, root=tmp_path) is None
+
+    def test_actions_still_refuse(self, tmp_path, monkeypatch):
+        """动作照样拒：建 venv、装依赖、改 sys.path，一个都不许对越界目录做。"""
+        import subprocess as _sp
+
+        from core.addon_dependency_isolation import ensure_venv
+
+        calls: list = []
+        monkeypatch.setattr(_sp, "run", lambda cmd, **kw: calls.append(cmd))
+        assert ensure_venv(Path("/etc"), root=tmp_path) is None
+        assert install_addon_deps(Path("/etc"), ["requests"], root=tmp_path)["scope"] == "rejected"
+        assert add_venv_to_sys_path(Path("/etc"), root=tmp_path) is False
+        assert calls == [], "对越界目录起了子进程"

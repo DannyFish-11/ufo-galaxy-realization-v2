@@ -123,8 +123,15 @@ def _get_token() -> str:
 
 
 def _get_install_dir() -> Path:
-    raw = os.environ.get("GITHUB_INSTALL_DIR", "").strip()
-    return Path(raw) if raw else _DEFAULT_INSTALL_DIR
+    """安装根。**唯一定义在 ``core.addon_dependency_isolation.addon_root()``。**
+
+    那边拿它当"addon 只能待在这个范围里"的校验基准。两处各读一次环境变量的话,
+    哪天有人改了其中一处(加个默认值、改个变量名),校验基准和实际安装位置就分家了 ——
+    而分家的那一刻,那道校验会开始拒绝所有合法目录,或者更糟:放过所有目录。
+    """
+    from core.addon_dependency_isolation import addon_root
+
+    return addon_root()
 
 
 def _get_allowlist() -> List[str]:
@@ -979,7 +986,16 @@ class GitHubInstaller:
             }
 
         # 2. Prepare destination directory
+        # ``.`` 和 ``-`` 在白名单里,所以 ``..`` 会**原样活下来** —— re.sub 只替换
+        # 不在白名单里的字符,而 ``..`` 两个字符都在。于是 ``ref=".."`` 拼出来的 dest
+        # 带着一个向上跳的路径段。CodeQL 在 addon_dependency_isolation 上报的那 10 条
+        # (9 条 path expression + 1 条 uncontrolled command line)指的就是这条数据流。
+        #
+        # 两头都堵:这里把纯点号的段换掉,那边 ``resolve_addon_dir`` 再校验一次落点。
+        # 只堵一头不够 —— 这一层是"别产生坏路径",那一层是"就算产生了也不许用"。
         safe_ref = re.sub(r"[^A-Za-z0-9._-]", "_", effective_ref)
+        if set(safe_ref) <= {"."}:  # "" / "." / ".." / "..." 一律不接受
+            safe_ref = "_"
         dest = self._install_dir / owner / repo / safe_ref
         dest.mkdir(parents=True, exist_ok=True)
 
@@ -1084,7 +1100,9 @@ class GitHubInstaller:
         deps = tool_manifest.get("dependencies", [])
         deps_result: Dict[str, Any] = {"attempted": False, "success": True, "scope": "none"}
         if detected_type in {"mcp", "skill", "skill_md"} and (deps or (dest / "requirements.txt").exists()):
-            deps_result = install_addon_deps(dest, deps)
+            # 把**本 installer 实际用的根**传下去。隔离层默认读环境变量,而这个字段
+            # 是可注入的(测试里直接赋值);不传的话,注入方的每个合法目录都会被判越界。
+            deps_result = install_addon_deps(dest, deps, root=self._install_dir)
 
         # 7. Register
         if detected_type == "mcp":

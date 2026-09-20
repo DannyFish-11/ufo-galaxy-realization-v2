@@ -72,13 +72,71 @@ def _host_deps_allowed() -> bool:
     return os.getenv(_ENV_ALLOW_HOST_DEPS, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def venv_dir(addon_dir: Path) -> Path:
-    return addon_dir / _VENV_DIRNAME
+#: addon 的安装根。**这是本模块唯一认可的活动范围** —— 传进来的 addon_dir 必须落在
+#: 它下面,否则一律拒绝。
+#:
+#: 和 ``github_installer._get_install_dir()`` 读同一个环境变量,而且那边改成从这里取,
+#: 不留第二份定义 —— 两份会漂移,而漂移的那一刻这道校验就失效了。
+_ENV_INSTALL_DIR = "GITHUB_INSTALL_DIR"
+_DEFAULT_ADDON_ROOT = Path(__file__).resolve().parent.parent / "data" / "github_addons"
 
 
-def venv_python(addon_dir: Path) -> Optional[Path]:
-    """这个 addon 的 venv 解释器;没建过就返回 None。"""
-    venv = venv_dir(addon_dir)
+def addon_root() -> Path:
+    raw = os.environ.get(_ENV_INSTALL_DIR, "").strip()
+    return (Path(raw) if raw else _DEFAULT_ADDON_ROOT).resolve()
+
+
+class AddonPathError(ValueError):
+    """``addon_dir`` 不在 addon 根目录下 —— 拒绝在它上面做任何事。"""
+
+
+def resolve_addon_dir(addon_dir: Path, root: Optional[Path] = None) -> Path:
+    """把 ``addon_dir`` 归一化,并**确认它确实落在 addon 根下**;否则抛。
+
+    ## 为什么这道校验必须在这一层,而不是"调用方已经净化过了"
+
+    ``addon_dir`` 的来源是 ``github__install(url)`` —— 一个 **LLM 可调工具的参数**。
+    调用方 ``github_installer`` 确实净化过:
+    ``safe_ref = re.sub(r"[^A-Za-z0-9._-]", "_", effective_ref)``。
+    但那条正则**允许 ``.`` 和 ``-``**,于是 ``ref=".."`` 原样活下来
+    (``re.sub`` 只换非白名单字符,``..`` 两个字符都在白名单里),
+    拼出来的 ``dest`` 就带着一个向上跳的路径段。
+
+    CodeQL 在这个文件上报了 10 条(9 条 path expression + 1 条 uncontrolled command
+    line),说的就是这件事:路径与命令行都依赖用户提供的值,而**使用点没有校验**。
+
+    所以这里做的不是"消掉告警",是补上那道本来就该有的检查:归一化之后必须仍在根下。
+    用 ``is_relative_to`` 而不是前缀字符串比较 —— 后者会被同前缀旁路目录绕过
+    (``/addons-evil`` 能通过 ``/addons`` 的前缀检查)。这个坑仓里在
+    ``_install_deps`` 的路径型依赖那段已经踩过一次并写在注释里。
+    """
+    # ``root`` 显式传入优先。**这一点不是可选的**:``GitHubInstaller`` 的
+    # ``_install_dir`` 是**可注入**的(测试里就直接赋值),而本模块默认读的是环境变量。
+    # 两者不一致时,拿环境变量那个当基准,会把注入方的每一个**合法**目录都判成越界 ——
+    # 一道永远说"不"的检查和一道永远说"是"的检查一样没用。
+    root = Path(root).resolve() if root is not None else addon_root()
+    resolved = Path(addon_dir).resolve()
+    if resolved != root and not resolved.is_relative_to(root):
+        raise AddonPathError(f"addon 目录不在 {root} 下,拒绝: {addon_dir!r} → {resolved}")
+    return resolved
+
+
+def venv_dir(addon_dir: Path, root: Optional[Path] = None) -> Path:
+    """这个 addon 的 venv 目录。**越界会抛** —— 路径拼接前先确认落点。"""
+    return resolve_addon_dir(addon_dir, root) / _VENV_DIRNAME
+
+
+def venv_python(addon_dir: Path, root: Optional[Path] = None) -> Optional[Path]:
+    """这个 addon 的 venv 解释器;没建过、或目录越界,都返回 None。
+
+    **查询类的函数保持"全函数"(不抛)**:问"这儿有没有 venv",越界目录的正确答案是
+    "没有",而不是抛一个异常让每个只想看一眼的调用方去接。真正要拦的是**动作** ——
+    建 venv、装依赖、改 sys.path,那几处在下面各自拒绝。
+    """
+    try:
+        venv = venv_dir(addon_dir, root)
+    except AddonPathError:
+        return None
     for rel in ("bin/python", "Scripts/python.exe"):
         candidate = venv / rel
         if candidate.exists():
@@ -86,9 +144,15 @@ def venv_python(addon_dir: Path) -> Optional[Path]:
     return None
 
 
-def venv_site_packages(addon_dir: Path) -> Optional[Path]:
-    """venv 的 site-packages。Skill 走 ``add_venv_to_sys_path`` 用它 —— 见那里的说明。"""
-    venv = venv_dir(addon_dir)
+def venv_site_packages(addon_dir: Path, root: Optional[Path] = None) -> Optional[Path]:
+    """venv 的 site-packages。Skill 走 ``add_venv_to_sys_path`` 用它 —— 见那里的说明。
+
+    同 ``venv_python``:越界返回 None,不抛。
+    """
+    try:
+        venv = venv_dir(addon_dir, root)
+    except AddonPathError:
+        return None
     if not venv.exists():
         return None
     for pattern in ("lib/python*/site-packages", "Lib/site-packages"):
@@ -98,18 +162,23 @@ def venv_site_packages(addon_dir: Path) -> Optional[Path]:
     return None
 
 
-def ensure_venv(addon_dir: Path) -> Optional[Path]:
+def ensure_venv(addon_dir: Path, root: Optional[Path] = None) -> Optional[Path]:
     """给这个 addon 建一个 venv,返回它的解释器路径;建不出来返回 None。
 
     用 ``--system-site-packages``:宿主已经装好的东西(httpx、pydantic 这些)照样能 import,
     **新装的只落在 venv 里**。这次要解决的是"往宿主环境里写",不是"不许读宿主的包" ——
     后者会让每个 addon 都要重装一遍整个依赖树,慢到没人会用,而没人用的隔离等于没有隔离。
     """
-    existing = venv_python(addon_dir)
+    existing = venv_python(addon_dir, root)
     if existing is not None:
         return existing
 
-    target = venv_dir(addon_dir)
+    try:
+        target = venv_dir(addon_dir, root)
+    except AddonPathError as exc:
+        # 动作:越界就不建。返回 None 让调用方按"venv 不可用"处理(它是 fail-closed 的)。
+        logger.warning("拒绝为越界目录建 venv: %s", exc)
+        return None
     try:
         result = subprocess.run(
             [sys.executable, "-m", "venv", "--system-site-packages", str(target)],
@@ -125,7 +194,7 @@ def ensure_venv(addon_dir: Path) -> Optional[Path]:
     if result.returncode != 0:
         logger.warning("addon venv 创建失败(%s): %s", addon_dir.name, (result.stderr or "")[:300])
         return None
-    return venv_python(addon_dir)
+    return venv_python(addon_dir, root)
 
 
 #: requirements 文件里,以这些开头的行是 **pip 选项**而不是包名。
@@ -167,7 +236,7 @@ def scan_requirements_file(req_file: Path) -> List[str]:
     return violations
 
 
-def install_addon_deps(addon_dir: Path, deps: List[str]) -> Dict[str, Any]:
+def install_addon_deps(addon_dir: Path, deps: List[str], root: Optional[Path] = None) -> Dict[str, Any]:
     """装这个 addon 的 Python 依赖 —— **装进它自己的 venv**,不是宿主环境。
 
     原先这里是 ``[sys.executable, "-m", "pip", "install", …]``,注释还写着
@@ -178,6 +247,12 @@ def install_addon_deps(addon_dir: Path, deps: List[str]) -> Dict[str, Any]:
     返回结构化结果而不是 bool:拒绝的原因(哪一行、为什么)必须能传到调用方,
     只回一个 False 等于把"为什么不装"丢了。
     """
+    try:
+        addon_dir = resolve_addon_dir(addon_dir, root)
+    except AddonPathError as exc:
+        logger.warning("拒绝为越界目录装依赖: %s", exc)
+        return {"attempted": False, "success": False, "scope": "rejected", "error": str(exc)}
+
     req_file = addon_dir / "requirements.txt"
     if not deps and not req_file.exists():
         return {"attempted": False, "success": True, "scope": "none"}
@@ -197,7 +272,7 @@ def install_addon_deps(addon_dir: Path, deps: List[str]) -> Dict[str, Any]:
 
     # ── 选装到哪 ────────────────────────────────────────────────────────────
     scope = "venv"
-    python_exe = ensure_venv(addon_dir)
+    python_exe = ensure_venv(addon_dir, root)
     if python_exe is None:
         if not _host_deps_allowed():
             # **fail closed**。建不出 venv 就退回宿主环境,等于这层没装 ——
@@ -215,7 +290,8 @@ def install_addon_deps(addon_dir: Path, deps: List[str]) -> Dict[str, Any]:
         scope = "host"
 
     pip_cmd = [str(python_exe), "-m", "pip", "install", "--quiet"]
-    addon_root = addon_dir.resolve()
+    # 改名是必要的:模块级已经有一个 addon_root() 函数,同名局部变量会把它遮掉。
+    addon_boundary = addon_dir.resolve()
     for dep in deps:
         dep = dep.strip()
         if not dep:
@@ -236,7 +312,7 @@ def install_addon_deps(addon_dir: Path, deps: List[str]) -> Dict[str, Any]:
             # 二次防御:归一后必须仍落在 addon 目录内(防 ../ 穿越)。
             # 用 is_relative_to 而不是 startswith 前缀判断——后者可被
             # 同前缀旁路目录绕过(如 /addons-evil 通过 /addons 的检查)。
-            if not dep_path.is_relative_to(addon_root):
+            if not dep_path.is_relative_to(addon_boundary):
                 logger.warning("dep rejected (escapes addon dir): %r", dep)
                 continue
             pip_cmd.append(str(dep_path))
@@ -264,15 +340,15 @@ def install_addon_deps(addon_dir: Path, deps: List[str]) -> Dict[str, Any]:
                 "scope": scope,
                 "error": (result.stderr or "").strip()[:500] or "pip 退出码非 0",
             }
-        return {"attempted": True, "success": True, "scope": scope, "venv": str(venv_dir(addon_dir))}
+        return {"attempted": True, "success": True, "scope": scope, "venv": str(venv_dir(addon_dir, root))}
     except Exception as exc:  # noqa: BLE001
         logger.warning("Dependency install failed: %s", exc)
         return {"attempted": True, "success": False, "scope": scope, "error": str(exc)}
 
 
-def add_venv_to_sys_path(addon_dir: Path) -> bool:
+def add_venv_to_sys_path(addon_dir: Path, root: Optional[Path] = None) -> bool:
     """把 addon venv 的 site-packages 追加进 ``sys.path``。已在里面就不重复加。"""
-    site_dir = venv_site_packages(addon_dir)
+    site_dir = venv_site_packages(addon_dir, root)  # 越界时它返回 None
     if site_dir is None:
         return False
     entry = str(site_dir)
