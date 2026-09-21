@@ -742,8 +742,10 @@ body {
   transition: transform 0.5s var(--ease);
 }
 /* 呼吸的**快慢是实时的**:阈限态里它越往后使劲(懂 → 想 → 排演),喘得越快。
-   周期由 pet.ts 按 liminal_activity 给,四档都刻意避开 0.18~0.22 Hz 那一带;
-   这里的兜底值同样在带外(6s ≈ 0.167 Hz)。 */
+   周期由 pet.ts 按 liminal_activity 给,四档都避开要躲的那一带;判据在 motion.ts,
+   **不在这段注释里** —— 这儿原先写的是"0.18~0.22 Hz",比真带子(0.17–0.25)窄,
+   而 understanding 档 4.3s = 0.233 Hz 恰好卡在两者之间,于是照这句话看它是合格的。
+   兜底值取 --c-breath,跟 pet.ts 最慢那一档对齐。 */
 .pet-breath {
   transform-box: fill-box; transform-origin: 50% 82%;
   animation: pet-breathe var(--pet-rate, var(--c-breath)) var(--ease) infinite;

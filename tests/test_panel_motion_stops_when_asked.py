@@ -38,9 +38,21 @@ _TOKENS = _PANEL / "styles" / "tokens.css"
 _HUD = _PANEL / "styles" / "hud.css"
 _MOTION = _PANEL / "motion.ts"
 
-# 唯一的一份判据，跟 src/motion.ts 对齐。两边对不上由下面那条测试负责发现。
-AVOID_LO = 0.17
-AVOID_HI = 0.25
+
+def _band() -> tuple[float, float]:
+    """频段边界从 src/motion.ts 读，**不在这儿再抄一份**。
+
+    抄一份就是第四份。写这道门的时候我在这里确实抄了 0.17 / 0.25，还配了一条
+    "两边对不上就报错"的断言 —— 那仍然是两份数字加一条对账，而对账只在两边都
+    被想起来改的时候才有用。同一轮里又在
+    tests/test_the_island_pet_is_wired_to_real_state.py 翻出了第四份
+    (硬写的 0.18 / 0.22，正是放行 4.3s 的那条窄带)。所以两边都改成读这一处。
+    """
+    ts = _MOTION.read_text(encoding="utf-8")
+    lo = re.search(r"AVOID_LO\s*=\s*([\d.]+)", ts)
+    hi = re.search(r"AVOID_HI\s*=\s*([\d.]+)", ts)
+    assert lo and hi, "motion.ts 里读不到 AVOID_LO / AVOID_HI"
+    return float(lo.group(1)), float(hi.group(1))
 
 
 def _code(path: pathlib.Path) -> str:
@@ -51,8 +63,9 @@ def _code(path: pathlib.Path) -> str:
 
 
 def _in_band(seconds: float) -> bool:
+    lo, hi = _band()
     hz = 1 / seconds
-    return AVOID_LO <= hz <= AVOID_HI
+    return lo <= hz <= hi
 
 
 def _cycle_tokens() -> dict[str, float]:
@@ -118,11 +131,33 @@ def _loops() -> list[str]:
 
 
 class TestNoPeriodSitsInTheBand:
-    def test_the_test_and_motion_ts_agree_on_the_band(self) -> None:
-        """判据只有一份。这里的 LO/HI 跟 motion.ts 对不上，就是又长出第二份了。"""
-        ts = _MOTION.read_text(encoding="utf-8")
-        assert re.search(rf"AVOID_LO\s*=\s*{AVOID_LO}\b", ts), "motion.ts 的 AVOID_LO 跟这道门对不上"
-        assert re.search(rf"AVOID_HI\s*=\s*{AVOID_HI}\b", ts), "motion.ts 的 AVOID_HI 跟这道门对不上"
+    def test_the_band_is_sane(self) -> None:
+        """判据只有一份，所以这里不核对数值 —— 那会变成第二份。只兜住手滑。
+
+        单一权威的意思就是：motion.ts 说了算。但一个退化的带子(lo >= hi)或者
+        一个明显不是人眼那个量级的数，是手滑不是决定，所以还是拦一下。
+        """
+        lo, hi = _band()
+        assert lo < hi, f"频段退化了：{lo} >= {hi}，等于谁都拦不住"
+        assert 0.05 <= lo and hi <= 0.5, f"频段跑到了 {lo}–{hi} Hz —— 不在余光那个量级上，多半是手滑"
+
+    def test_nobody_hardcodes_the_band_again(self) -> None:
+        """这一条钉的是**第四份**。
+
+        tests/ 里曾经硬写着 `0.18 <= hz <= 0.22`：比真带子窄，于是 4.3s = 0.233 Hz
+        在那道门下是绿的。判据的第二份从来不是"多一层保险"，而是"两份里宽的那份
+        被窄的那份悄悄废掉"。所以这里禁的就是把数字直接跟 hz 比。
+        """
+        offenders = []
+        for f in sorted(pathlib.Path(__file__).parent.glob("*.py")):
+            src = f.read_text(encoding="utf-8")
+            src = re.sub(r'"""(?:.|\n)*?"""', "", src)  # 散文里写数字不算
+            if re.search(r"hz\s*[<>]=?\s*0\.\d+|0\.\d+\s*[<>]=?\s*hz", src):
+                offenders.append(f.name)
+        assert not offenders, (
+            f"这些测试又把频段数字硬写进了跟 hz 的比较：{offenders}。"
+            "频段只有一份，在 electron/renderer/panel/src/motion.ts —— 读它，别抄它。"
+        )
 
     def test_only_motion_ts_defines_the_band(self) -> None:
         """第二份判据就是第三次翻车的成因 —— pet.ts 曾自带一条更窄的带子。"""

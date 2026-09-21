@@ -49,6 +49,40 @@ def _css() -> str:
     return re.sub(r"/\*.*?\*/", " ", _CSS.read_text(encoding="utf-8"), flags=re.S)
 
 
+def _avoid_band() -> tuple[float, float]:
+    """要躲开的频段。**唯一的一份在 src/motion.ts** —— 这里只读，不抄。"""
+    ts = (_PANEL / "motion.ts").read_text(encoding="utf-8")
+    lo = re.search(r"AVOID_LO\s*=\s*([\d.]+)", ts)
+    hi = re.search(r"AVOID_HI\s*=\s*([\d.]+)", ts)
+    assert lo and hi, "motion.ts 里读不到 AVOID_LO / AVOID_HI —— 判据的那一份没了"
+    return float(lo.group(1)), float(hi.group(1))
+
+
+def _reduced_motion_block(css: str) -> str:
+    """取出**第一个** prefers-reduced-motion 块（按花括号配对）。"""
+    blocks = _all_reduced_motion_blocks(css)
+    assert blocks, "这份样式里没有 prefers-reduced-motion 块"
+    return blocks[0]
+
+
+def _all_reduced_motion_blocks(css: str) -> list[str]:
+    """所有 prefers-reduced-motion 块。只看一个块，就看不见别处偷偷冻住的东西。"""
+    out: list[str] = []
+    for m in re.finditer(r"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{", css):
+        depth, i = 0, m.end() - 1
+        for j in range(i, len(css)):
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    out.append(css[i : j + 1])
+                    break
+        else:
+            raise AssertionError("prefers-reduced-motion 块没闭合")
+    return out
+
+
 def _rule(selector: str) -> str:
     css = _css()
     m = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
@@ -171,11 +205,16 @@ class TestTheLiveLayerAndTheOneOffReaction:
         assert (
             order["none"] > order["understanding"] > order["thinking"] > order["rehearsing"]
         ), f"越使劲反而喘得越慢：{order}"
-        # 刻意避开 0.2 Hz 那一带（0.18~0.22 Hz，即 4.55~5.56 秒）
+        # 刻意避开余光最容易被勾住的那一带。**边界读 motion.ts，不在这儿抄。**
+        #
+        # 这里原先硬写着 0.18~0.22。那是全仓第四份判据，而且比真带子(0.17~0.25)窄 ——
+        # 于是 understanding 档 4.3s = 0.233 Hz 在这道门下是绿的，它其实在带里。
+        # 判据的第二份从来不是多一层保险，而是宽的那份被窄的那份悄悄废掉。
+        lo, hi = _avoid_band()
         for k, v in order.items():
             hz = 1 / v
-            assert not (0.18 <= hz <= 0.22), (
-                f"{k} 那一档周期 {v}s ≈ {hz:.3f} Hz，落在 0.2 Hz 那一带 —— "
+            assert not (lo <= hz <= hi), (
+                f"{k} 那一档周期 {v}s ≈ {hz:.3f} Hz，落在要躲开的 {lo}–{hi} Hz 带里 —— "
                 "那一带最容易被余光当成「有事发生」而反复把注意力拽走"
             )
 
@@ -208,12 +247,41 @@ class TestTheFaceAndTheWordsCannotDisagree:
         ), "岛里又攒了一份自己的说法 —— 同一件事两处各写各的，改一处忘一处就开始讲岔"
 
     def test_reduced_motion_keeps_the_facts(self) -> None:
-        """关了动效的人：呼吸可以停，**姿势和眼睛不能停** —— 那两样是事实，不是动效。"""
+        """关了动效的人：呼吸可以停，**姿势和眼睛不能停** —— 那两样是事实，不是动效。
+
+        判据没变，盯的地方变了。停的动作原先是 hud.css 里紧挨着 `.pet-breath`
+        写的一句 `animation: none`；那种逐处写法被实测证明六条循环里会漏四条
+        （伪类比它更特指），所以收进了 tokens.css 的一条通配规则。
+
+        于是这一条现在钉两件事，而且比原来严：
+          · 呼吸确实会停 —— 通配那条在，且带 `!important`；
+          · 事实确实留着 —— **任何** reduced-motion 块（两个文件都扫，不止
+            `.pet-breath` 后面那一个）都不许碰 `.pet-body` / `.pet-eye`，
+            而且通配那条只准动 `animation` 与 `transition-property`。
+            后半句是新加的：通配规则一旦写上 `transform: none !important`，
+            姿势会被整平，而原来那种只看局部块的写法看不见这件事。
+        """
         css = _css()
-        i = css.index(".pet-breath")
-        block = css[i:]
-        m = re.search(r"@media \(prefers-reduced-motion: reduce\) \{([^}]*\}[^}]*)\}", block)
-        assert m, "桌宠没有照顾关了动效的人"
-        inner = m.group(1)
-        assert ".pet-body" not in inner, "关了动效把底子那一层也停掉了 —— 相位就看不出来了"
-        assert ".pet-eye" not in inner, "关了动效把眼睛也停掉了 —— 隐私急停就又看不见了"
+        assert ".pet-breath" in css and "pet-breathe" in css, "呼吸那一层没了 —— 无事可停"
+
+        tokens = _code(_PANEL / "styles" / "tokens.css")
+        block = _reduced_motion_block(tokens)
+        assert re.search(
+            r"\*\s*,\s*\*::before\s*,\s*\*::after\s*\{[^}]*animation\s*:\s*none\s*!important",
+            block,
+            re.S,
+        ), "关了动效之后呼吸没停 —— tokens.css 里那条通配的 `animation: none !important` 不见了"
+
+        for name, text in (("hud.css", css), ("tokens.css", tokens)):
+            for inner in _all_reduced_motion_blocks(text):
+                assert ".pet-body" not in inner, f"{name} 关了动效把底子那一层也停掉了 —— 相位就看不出来了"
+                assert ".pet-eye" not in inner, f"{name} 关了动效把眼睛也停掉了 —— 隐私急停就又看不见了"
+
+        universal = re.search(r"\*\s*,\s*\*::before\s*,\s*\*::after\s*\{([^}]*)\}", block, re.S)
+        assert universal
+        touched = set(re.findall(r"([a-z-]+)\s*:", universal.group(1)))
+        assert touched <= {"animation", "transition-property"}, (
+            f"通配那条还动了 {sorted(touched - {'animation', 'transition-property'})}。"
+            "它盖住整个界面 —— 在那里设 transform / y / height 之类的值，"
+            "等于把桌宠的姿势和眼睛一起抹平，而那两样是事实，不是动效。"
+        )
