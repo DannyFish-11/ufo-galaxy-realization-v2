@@ -999,3 +999,256 @@ export async function deleteUserProvider(base: string, id: string): Promise<bool
     return false;
   }
 }
+
+// ── GitHub 插件 ───────────────────────────────────────────────────────────────
+
+/**
+ * 一个装进来的 GitHub 插件。
+ *
+ * 形状对齐后端 manifest 的记录(``core/github_installer.py`` 的 ``record``),
+ * 只挑界面真的要用的字段 —— 全盘照搬会让后端每加一个内部字段,这里就得跟着改一次。
+ */
+/** 三份集成契约。顺序就是安装器的判定顺序:mcp → skill → SKILL.md。 */
+export const GITHUB_CONTRACT_KEYS = ['mcp', 'skill', 'skill_md'] as const;
+export type GitHubContractKey = (typeof GITHUB_CONTRACT_KEYS)[number];
+
+export interface GitHubAddon {
+  readonly name: string;
+  /** 后端判定的原始类型:mcp / skill / skill_md / ordinary_tool_repo。排障用。 */
+  readonly type: string;
+  readonly owner: string;
+  readonly repo: string;
+  readonly ref: string;
+  readonly commit: string;
+  readonly installedAt: string;
+  readonly installPath: string;
+  /**
+   * **接入形态** —— 三档是并列的,不是"成功/降级"两档。
+   *
+   * · mcp      根上有 mcp_tool.json,注册成了一个 MCP 工具
+   * · skill    根上有 skill.json 或 SKILL.md,注册成了一个 Skill
+   * · project  哪个契约都没有 —— 以项目完整形式接进来:代码落盘,没注册成工具
+   *
+   * MCP / Skill 是 GitHub 项目的**交集**,不是它的定义。接一个仓库可能是为了拿它
+   * 跑实验、读它、当素材。把 project 画成一种失败,等于规定了"接项目 = 接工具"。
+   */
+  readonly form: 'mcp' | 'skill' | 'project';
+  /** 这次接入成没成。project 形态没有"注册"这一步,所以永远是 true。 */
+  readonly ok: boolean;
+  /** ok=false 时卡在哪一步;project 形态时是"它以什么形式接进来了"那句话。 */
+  readonly formDetail: string;
+  /**
+   * 三个接入槽各自的实情。面板右侧把三个都摆出来,所以三个都要有据可依。
+   *
+   * ``present`` = 根上摆着这份契约文件;``chosen`` = 它被选中并走了注册那条路。
+   * 两者不是一回事:一个仓库可能同时带 mcp_tool.json 和 skill.json,而只有前者
+   * 被选中。只按 chosen 画的话,另外两个槽就会一律显示成"没有" —— 那是在替
+   * 仓库说一句它没说过的话。
+   */
+  readonly contracts: Readonly<Record<GitHubContractKey, { present: boolean; chosen: boolean }>>;
+  /** 依赖装到哪:venv / host / rejected / venv_unavailable / none。 */
+  readonly depsScope: string;
+  /** 依赖没装成时的原因(含 requirements.txt 被整份拒绝的那几行)。 */
+  readonly depsError: string;
+}
+
+/**
+ * 形态与成败**优先读后端的 ``integration``**,读不到才退回自己推。
+ *
+ * 为什么留退路:``integration`` 是新加的字段,而 manifest 里躺着的是**以前装的**
+ * 那些记录 —— 它们没有这个字段。不留退路的话,升级之后已经装好的插件会集体
+ * 变成"认不出的形态",而它们明明好好的。
+ *
+ * 为什么退路**不**是默认路径:后端的判定是唯一权威。前端这份推导只是给老记录用的
+ * 兼容垫片,它推不出 project 这一档(老记录里没有任何字段能区分"没有契约"和
+ * "注册失败"),所以退回来的结论必然偏保守 —— 这正是它只能当垫片的原因。
+ */
+function readGitHubAddon(v: unknown): GitHubAddon | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o['name'] !== 'string') return null;
+  const str = (k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  const sub = (k: string): Record<string, unknown> =>
+    o[k] && typeof o[k] === 'object' ? (o[k] as Record<string, unknown>) : {};
+
+  const type = str('type') || 'unknown';
+  const integration = sub('integration');
+  const rawForm = integration['form'];
+
+  let form: GitHubAddon['form'];
+  let ok: boolean;
+  let formDetail: string;
+
+  if (rawForm === 'mcp' || rawForm === 'skill' || rawForm === 'project') {
+    form = rawForm;
+    ok = integration['ok'] === true;
+    formDetail = typeof integration['detail'] === 'string' ? (integration['detail'] as string) : '';
+  } else {
+    // 老记录的兼容垫片。按 type 认形态,按 registration+verification 认成败。
+    form = type === 'mcp' ? 'mcp' : type === 'skill' || type === 'skill_md' ? 'skill' : 'project';
+    const reg = sub('registration');
+    const ver = sub('verification');
+    // project 形态在老记录里也是 reg.success=false —— 那时它确实被当成失败记下来的。
+    // 这里按形态给结论:没有契约的就不该拿"注册成没成"去判。
+    ok = form === 'project' ? true : reg['success'] === true && ver['success'] === true;
+    if (!ok) {
+      formDetail =
+        reg['success'] !== true
+          ? typeof reg['error'] === 'string' && reg['error']
+            ? `注册失败：${reg['error']}`
+            : '注册没成功'
+          : typeof ver['error'] === 'string' && ver['error']
+            ? `自证失败：${ver['error']}`
+            : '自证没通过';
+    } else {
+      formDetail = form === 'project' ? '代码已落盘，没有注册成可调用的工具' : '';
+    }
+  }
+
+  // 三个槽位。老记录里没有 contracts —— 那就只能按被选中的那一个反推,
+  // 另外两个照实报"不知道"(present=false + chosen=false)。这是兼容垫片能做到的
+  // 全部:老记录里确实没有记下另外两份在不在。
+  const rawContracts = integration['contracts'];
+  const contractSrc: Record<string, unknown> =
+    rawContracts && typeof rawContracts === 'object' ? (rawContracts as Record<string, unknown>) : {};
+  const contracts = {} as Record<GitHubContractKey, { present: boolean; chosen: boolean }>;
+  for (const key of GITHUB_CONTRACT_KEYS) {
+    const slot = contractSrc[key];
+    if (slot && typeof slot === 'object') {
+      const o2 = slot as Record<string, unknown>;
+      contracts[key] = { present: o2['present'] === true, chosen: o2['chosen'] === true };
+    } else {
+      contracts[key] = { present: type === key, chosen: type === key };
+    }
+  }
+
+  const deps = sub('dependency_install');
+  return {
+    name: o['name'],
+    type,
+    owner: str('owner'),
+    repo: str('repo'),
+    ref: str('ref'),
+    commit: str('commit'),
+    installedAt: str('installed_at'),
+    installPath: str('install_path'),
+    form,
+    ok,
+    formDetail,
+    contracts,
+    depsScope: typeof deps['scope'] === 'string' ? (deps['scope'] as string) : 'none',
+    depsError: typeof deps['error'] === 'string' ? (deps['error'] as string) : '',
+  };
+}
+
+/** 装插件之前会不会先问人。由后端给 —— 前端自己按环境变量推会成为第二处权威。 */
+export interface GitHubAddonStatus {
+  readonly tokenConfigured: boolean;
+  readonly installDir: string;
+  readonly allowlist: readonly string[];
+  readonly blocklist: readonly string[];
+  /** allowlist=名单内直接装、名单外拒 · ask=每次都问 · unattended=一律不问 */
+  readonly approvalMode: string;
+}
+
+export interface GitHubAddonPage {
+  readonly addons: readonly GitHubAddon[];
+  readonly status: GitHubAddonStatus | null;
+}
+
+/** 拉已装插件 + 安装策略。拉不到返回 null —— 与「一个都没装」是两件事。 */
+export async function fetchGitHubAddons(base: string): Promise<GitHubAddonPage | null> {
+  try {
+    const [listResp, statusResp] = await Promise.all([
+      fetch(base + '/api/v1/github/list', { headers: { Accept: 'application/json' } }),
+      fetch(base + '/api/v1/github/status', { headers: { Accept: 'application/json' } }),
+    ]);
+    if (!listResp.ok) {
+      console.error('[hud] 拉 GitHub 插件失败:', listResp.status);
+      return null;
+    }
+    const body = (await listResp.json()) as Record<string, unknown>;
+    const rows = Array.isArray(body['addons']) ? (body['addons'] as unknown[]) : [];
+
+    let status: GitHubAddonStatus | null = null;
+    if (statusResp.ok) {
+      const s = (await statusResp.json()) as Record<string, unknown>;
+      const strs = (k: string): string[] =>
+        Array.isArray(s[k]) ? (s[k] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+      status = {
+        tokenConfigured: s['token_configured'] === true,
+        installDir: typeof s['install_dir'] === 'string' ? s['install_dir'] : '',
+        allowlist: strs('allowlist'),
+        blocklist: strs('blocklist'),
+        approvalMode: typeof s['approval_mode'] === 'string' ? s['approval_mode'] : '',
+      };
+    }
+    return {
+      addons: rows.map(readGitHubAddon).filter((x): x is GitHubAddon => x !== null),
+      status,
+    };
+  } catch (err) {
+    console.error('[hud] 拉 GitHub 插件失败:', err);
+    return null;
+  }
+}
+
+/**
+ * 装一个，或者只验一下地址（dry_run）。
+ *
+ * **被准入闸拒绝也走 ok:false** —— 那是一个结论,不是请求出错,而且后端给的那句话
+ * (要人确认 / 不在名单里 / 被名单挡了)就是用户要看的,别自己编。
+ *
+ * 为什么没有「装下来了但没注册成功」这一路:后端在 reg/verify 任一没过时
+ * 就返回 `success:false` + HTTP 400,于是那种情况本来就走 ok:false。
+ * 曾经在这里写过一个 `degraded: true` 的成功分支 —— 它**永远不会被走到**,
+ * 而一段永远不执行的分支会让人以为这条路被处理过了。degraded 只在
+ * `/api/v1/github/list` 的记录上有意义(manifest 是在成败判定之前就写下的),
+ * 那一处由 `readGitHubAddon` 负责。
+ */
+export async function installGitHubAddon(
+  base: string,
+  body: { url: string; ref?: string; type?: string; dry_run?: boolean },
+): Promise<{ ok: true; name: string; dryRun: boolean; message: string } | { ok: false; reason: string }> {
+  try {
+    const resp = await fetch(base + '/api/v1/github/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = (await resp.json()) as Record<string, unknown>;
+    const pick = (k: string): string => (typeof json[k] === 'string' ? (json[k] as string) : '');
+    if (!resp.ok || json['success'] !== true) {
+      // error → failure_reason → detail(FastAPI 的校验错误走这个)→ 兜底的状态码。
+      // 顺序是有意的:越靠前的越具体,而具体的那句才是能拿去排查的。
+      const reason =
+        pick('error') || pick('failure_reason') || pick('detail') || `后端拒绝了（HTTP ${resp.status}）`;
+      return { ok: false, reason };
+    }
+    return {
+      ok: true,
+      name: pick('name'),
+      dryRun: json['dry_run'] === true,
+      message: pick('message'),
+    };
+  } catch (err) {
+    return { ok: false, reason: `发不出去：${String(err)}` };
+  }
+}
+
+/** 卸一个（连同它装在 data/github_addons 下的那份副本）。 */
+export async function uninstallGitHubAddon(base: string, name: string): Promise<boolean> {
+  try {
+    const resp = await fetch(base + '/api/v1/github/uninstall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!resp.ok) return false;
+    const json = (await resp.json()) as Record<string, unknown>;
+    return json['success'] === true;
+  } catch (err) {
+    console.error('[hud] 卸载插件失败:', err);
+    return false;
+  }
+}

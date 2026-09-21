@@ -250,6 +250,27 @@ class TestGitHubInstallerDryRun:
 
 
 class TestGitHubInstallerInstall:
+    @pytest.fixture(autouse=True)
+    def _repo_is_pre_approved(self, monkeypatch):
+        """把被测仓库放进 ``GITHUB_ALLOWLIST``。
+
+        安装现在有一道准入闸(``core/github_addon_admission.py``):
+        ``GITHUB_ALLOWLIST`` 为空时每次安装都要人确认,而测试环境没有设备可问 → 拒绝。
+        本类 8 条用例会全红,**而且它们要验的东西一条都没验到**(克隆、检测类型、
+        契约校验、manifest 落盘,全都在闸后面)。
+
+        **用 allowlist 而不是 ``GALAXY_ADDON_UNATTENDED=1``。** 后者是"把闸关掉",
+        那样这些用例会在一个生产里不存在的形态下跑,"某次安装忘了过闸"这类回归将
+        不再有测试发现 —— 正是这道闸要消除的盲区,不该在测试侧原样重建一遍。
+        前者是"这个仓库已获批准":闸照常判定、照常放行,被测的安装机制一点没少。
+
+        这条区分在 ``test_invalid_skill_contract_rejected_before_deps`` 上最要命:
+        不放进名单它照样 ``success=False``(**测试还是绿的**),但契约校验那一段
+        一行都没跑到,用例形同虚设。
+        """
+        monkeypatch.setenv("GITHUB_ALLOWLIST", "owner/*")
+        monkeypatch.delenv("GITHUB_BLOCKLIST", raising=False)
+
     def _make_installer(self, tmp_path, mcp_manifest=None, skill_manifest=None):
         """Return an installer with a mocked fetch that writes manifest files."""
         from core.github_installer import GitHubInstaller, _ManifestStore
@@ -327,7 +348,7 @@ class TestGitHubInstallerInstall:
         assert result["name"] == "test-skill"
         mock_register.assert_called_once()
 
-    @patch("core.github_installer._install_deps")
+    @patch("core.github_installer.install_addon_deps")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
     def test_invalid_skill_contract_rejected_before_deps(self, mock_fetch, mock_register, mock_install_deps, tmp_path):
@@ -354,7 +375,7 @@ class TestGitHubInstallerInstall:
             ("handler_function", "'handler_function' is required"),
         ],
     )
-    @patch("core.github_installer._install_deps")
+    @patch("core.github_installer.install_addon_deps")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
     def test_skill_contract_reports_specific_missing_handler_fields(
@@ -385,17 +406,40 @@ class TestGitHubInstallerInstall:
         mock_register.assert_not_called()
 
     @patch("core.github_installer._fetch_repo")
-    def test_install_no_manifest(self, mock_fetch, tmp_path):
-        """No manifest found -- should return cloned_only + explicit failure reason."""
+    def test_install_no_manifest_is_a_success_not_a_failure(self, mock_fetch, tmp_path):
+        """没有契约 = **以项目完整形式接入**，是一种成功的接法，不是一次失败。
+
+        这条用例的断言是**故意改掉的**（原先断言 `success is False` + 有
+        `failure_reason`）。改的理由不是为了让它变绿——改之前这条链是对的、
+        断言也如实描述了当时的行为。是那个行为本身错了：
+
+        `install_success` 对所有类型一律看 `registration && verification`，而普通
+        仓库那条路的 `registration` 被写死成 `success: False`。于是接一个普通项目
+        **永远**返回 success=False + HTTP 400，面板上只能显示成一次失败——而
+        MCP / Skill 是 GitHub 项目的交集，不是它的定义：接一个仓库可能是为了拿它
+        跑实验、读它、拿它当素材。
+
+        变的只有"成没成"这个判定。**"它没成为一个可调用工具"这句话一个字都没少**：
+        `install_state` 仍然是 `cloned_only`，`classification.integrable` 仍然是
+        False，`integration.form` 是 `project`——下面逐条钉住，免得哪天有人把
+        success 改对了却顺手把这几句删了，那才是真的把失败说成成功。
+        """
         mock_fetch.side_effect = self._patch_fetch(tmp_path)
 
         inst = self._make_installer(tmp_path)
         result = _run(inst.install("https://github.com/owner/repo"))
 
-        assert result["success"] is False
+        assert result["success"] is True, "接一个普通项目被判成了失败"
         assert result["type"] == "ordinary_tool_repo"
-        assert result["install_state"] == "cloned_only"
-        assert "failure_reason" in result
+        assert result["install_state"] == "cloned_only", "落点状态被 success 带成了 verified"
+        assert result["integration"]["form"] == "project"
+        assert result["integration"]["ok"] is True
+        assert result["classification"]["integrable"] is False, "没说清它不是一个可调用工具"
+        assert "failure_reason" not in result, "成功的一次接入却带着失败原因"
+        # 代码真的落盘了——"成功"不能只是一个布尔值。
+        assert (tmp_path / result["install_path"].split(str(tmp_path))[-1].lstrip("/")).exists() or Path(
+            result["install_path"]
+        ).exists()
 
     @patch("core.github_installer._verify_skill_md_install")
     @patch("core.github_installer._register_skill_md")

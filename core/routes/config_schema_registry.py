@@ -331,6 +331,30 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "TLS 证书路径（走 HTTPS 时填；留空=用明文 HTTP，仅限本机）",
     },
+    "GITHUB_ALLOWLIST": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "允许安装的 GitHub 仓库（逗号分隔，支持 myorg/*）。名单内免确认；留空=每次安装都要人确认",
+    },
+    "GITHUB_BLOCKLIST": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "禁止安装的 GitHub 仓库（逗号分隔，支持通配）。命中即拒，人确认也绕不过",
+    },
+    "GALAXY_ADDON_UNATTENDED": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "设为 1 = 声明这台机器上没有人把关，装插件不再问人（无头部署用；不是默认）",
+    },
+    "GALAXY_ADDON_HOST_DEPS": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "设为 1 = 允许把 addon 依赖装进宿主 Python 环境（默认装进 addon 自己的 venv）",
+    },
     "GITHUB_TOKEN": {
         "default": "",
         "type": "string",

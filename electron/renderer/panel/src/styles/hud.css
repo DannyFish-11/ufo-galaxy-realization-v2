@@ -1259,7 +1259,12 @@ body {
 .sf-close::before { transform: rotate(45deg); }
 .sf-close::after { transform: rotate(-45deg); }
 
-.sf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 18px; }
+/* container-type: inline-size —— 让 .ga-split 能按**这一栏的宽度**塌成一列,
+   而不是按整个窗口。设置页是个浮层,窗口宽不代表这一栏宽。 */
+.sf-body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 18px;
+  container-type: inline-size;
+}
 .sf-body::-webkit-scrollbar { width: 6px; }
 .sf-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
 
@@ -1400,6 +1405,249 @@ body {
 /* 协议那一排档位牌。用与设置页同一套 .sf-stages —— 全面板只有一种"选一个"的
    画法,多一种就等于让人重新学一次。 */
 .up-proto .stage { cursor: pointer; border: 0; font: inherit; }
+
+/* ── 接进来的 GitHub 项目 ────────────────────────────────────────────────────
+   和上面那一段共用同一套骨架(.sf-sec / .sf-row / .sf-text / .sf-desc /
+   .sf-input / .sf-save / .sf-empty),这里只写它自己多出来的那几件事:
+   准入策略那一行、两态卡片、仓库坐标与落盘位置。
+
+   **不另起一套排版。** 同一个页面上两套节奏,人会觉得这块东西是从别处贴来的;
+   而且到那时两套都得各改一遍,漂移是迟早的。 */
+.ga-sec { padding-bottom: 6px; }
+.ga-hint { margin: 0 0 10px; font-size: var(--t-mini); line-height: 1.5; color: var(--ink-3); }
+
+/* 准入策略。四档各不相同 —— allowlist 与 unattended 都不问人,但一个是
+   "只有名单里的能进",另一个是"谁都能进"。共用一个样子就等于把后者说成前者。
+   拉不到时是第四种(unknown),**不许画成其中任何一档**。
+
+   **它不是一张卡片。** 第一版给它加了圆角、底色和内阴影 —— 那立刻在这一页上
+   多出一种谁都没有的容器:上面那 335 个键是裸行,端点和插件是对象卡片,
+   而这只是一句关于"接下来会发生什么"的说明文字。给说明文字套个框,
+   它就会被当成一个可操作的对象,而且那个框本身就是"生成出来的界面"最典型的样子。
+   现在它和 .ga-hint / .up-hint 同一个节奏:一行字。
+
+   四档的区分**靠光和深度**,不靠颜色 —— 见下面那段。第一版这里还留着一条
+   `.ga-dot { background: var(--ink-3) }`:那是改成光之前的写法,改完忘了删。
+   它不显示(四档各自都覆盖了 background),但它和紧跟的注释互相矛盾,
+   而一条自相矛盾的死规则会把下一个读它的人带偏。 */
+.ga-policy {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin: -4px 0 10px;
+}
+.ga-policy-text { font-size: var(--t-mini); color: var(--ink-2); }
+.ga-policy-meta { flex: 1 1 100%; margin-top: 2px; font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
+/* 这一行是 baseline 对齐的,点得自己居中。大小和底色都归下面那条统一的 .ga-dot 管。 */
+.ga-policy .ga-dot { align-self: center; }
+/* 四档同样用光和深度说,不用颜色 —— 同 .wired-dot 那套话。
+
+     ask         亮核浮起来:有人把关,每次都会问
+     allowlist   只亮半边:名单内免确认,名单外直接拒 —— "部分"就长成部分的样子
+     unattended  沉进面里:这台机器上没有把关这道光
+     unknown     空心圈:**没问到**。不是"不会问",是这条路还没接上
+
+   unknown 必须是空心而不是"暗一点的实心" —— 后者会被读成"弱的把关",
+   而它真正的意思是"我不知道"。这条是 .wired-dot 那段写明的坑,照搬。 */
+.ga-policy[data-mode='ask'] .ga-dot {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    0 0 0 1.5px rgba(255, 255, 255, 0.55),
+    0 1px 2.5px rgba(93, 84, 102, 0.3),
+    0 0 7px 1px rgba(255, 255, 255, 0.85);
+}
+.ga-policy[data-mode='allowlist'] .ga-dot {
+  background: linear-gradient(118deg, #fff 0 46%, rgba(255, 255, 255, 0.24) 54% 100%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(93, 84, 102, 0.24);
+}
+.ga-policy[data-mode='unattended'] .ga-dot {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
+}
+.ga-policy[data-mode='unknown'] .ga-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.2px rgba(93, 84, 102, 0.3);
+}
+/* 这两档的**文字**仍然偏警示色:一个是"没人把关",一个是"我不知道",
+   它们不是一种状态,是一句需要人看见的话。颜色用在字上,不用在点上 ——
+   点那一层已经有深度可用,而字没有。 */
+.ga-policy[data-mode='unattended'] .ga-policy-text { color: var(--warn); }
+.ga-policy[data-mode='unknown'] .ga-policy-text { color: var(--warn); }
+
+.ga-notice[hidden] { display: none; }
+.ga-notice {
+  margin-bottom: 10px; padding: 8px 11px; border-radius: 9px;
+  font-size: var(--t-mini); line-height: 1.45; color: var(--warn);
+  background: linear-gradient(166deg, rgba(255, 246, 233, 0.72), rgba(252, 240, 226, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.6);
+}
+/* ── 分流:左边一个大框装项目,右边三个框装接出来的能力 ────────────────
+   这一段里混着两种东西:"我接了一个项目"和"我多了一个模型能调的工具"。
+   混成一列时,想找项目的人要在一堆工具里扒,反之亦然。
+
+   左边一栏一个框(项目),右边一栏三个框(MCP / Skill / MHS)。四个框**同一套
+   做法**,只是尺寸不同。
+
+   窄处塌成一列 —— 设置页本来就不宽,硬撑两栏会把每一行挤到读不了。
+   塌了之后框还在,分流这件事不丢。 */
+/* 两栏**下沿对齐**:左边那个大框拉伸到和右边三个(含两道间距)一样高。
+
+   改之前左边是 start 对齐 —— 左框只有自己内容那么高,右边三个摞起来高得多,
+   左下角空出一大块。那块空白不表达任何东西,却在版面上和"项目这一栏内容少"
+   长得一模一样,而实际上那只是两栏的自然高度不同。
+
+   做法:行高由**右栏**定(它是三个框的自然高度之和),左框 stretch 填满,
+   多出来的高度归它自己的滚动区。所以左框的 body 不设 max-height,改成 flex 撑开
+   —— 设了的话,它会在 264px 处停住,空白又回来了。
+
+   `min-height: 0` 那两条不是装饰:grid 子项和 flex 子项的自动最小尺寸是 min-content,
+   不显式清零的话,框会被内容顶到自然高度,行高反过来被左栏拉大,stretch 就失效了。 */
+.ga-split {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 12px; align-items: stretch;
+}
+.ga-split[hidden] { display: none; }
+@container (max-width: 560px) { .ga-split { grid-template-columns: minmax(0, 1fr); } }
+.ga-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+/* 左栏只有一个框,让它吃满整栏。右栏那三个各自保持自然高度(各有上限)。 */
+.ga-col:first-child > .ga-frame { flex: 1 1 0; min-height: 0; }
+
+/* ── 一个框 ────────────────────────────────────────────────────────────
+   **内嵌**,不是浮起来的一块:底色就是这一页的底色,边界靠一圈内凹的痕迹说 ——
+   整圈一道细线定边界,上沿压一道暗影、下沿留一道亮边,合起来读作"这块面被按
+   下去了"。浮起来的框排成四个摞在页面上,而这一页其余地方(那 335 个键)全是
+   裸行,同一个页面上两种重量,那块东西看着就是贴上去的。 */
+.ga-frame {
+  display: flex; flex-direction: column; min-width: 0;
+  border-radius: 12px; overflow: hidden;
+  /* 四条边的痕迹**全部由柔影给**,一条 1px 的线都不画。
+
+     `tokens.css` 开头那条规矩是「靠顶边受光和柔影分层,**不靠给每条边刷白**」,
+     `tests/test_panel_has_no_decorative_boxes.py` 守着它。我第一版给这个框套了
+     `inset 0 0 0 1px` —— 那正是那道门要拦的东西,而且理由成立:一圈等宽的细线
+     就是"一格一格的框"最典型的画法。
+
+     去掉那圈线之后"内嵌"这件事一点没丢,因为它本来就不是线给的:
+     上沿压一道暗影、下沿留一道亮边,合起来读作"这块面被按下去了"——
+     正是同一条规矩的反向用法。两侧各补一道**带模糊的**内阴影(不是线),
+     四条边就都有了交代。 */
+  box-shadow:
+    inset 0 3px 4px -2px rgba(93, 84, 102, 0.2),
+    inset 1px 0 3px -2px rgba(93, 84, 102, 0.16),
+    inset -1px 0 3px -2px rgba(93, 84, 102, 0.16),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.66);
+}
+.ga-frame-head {
+  flex: none; display: flex; align-items: center; gap: 7px;
+  padding: 9px 12px 7px; font-size: var(--t-small); color: var(--ink);
+}
+.ga-frame-head svg { flex: none; color: var(--ink-3); }
+.ga-frame-name { flex: 1; min-width: 0; }
+.ga-frame-head b { font-weight: 400; font-size: var(--t-mini); color: var(--ink-3); }
+
+/* 框里自己滚,不是让整页跟着长:四个框各装各的,某一组装了二十条时,
+   不该把另外三组顶到屏幕外面去。滚动条照 .sf-body 那一套,不另画一种。 */
+.ga-frame-body {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 6px 8px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+/* 右边三个各自封顶;左边那个不封顶 —— 它的高度由两栏对齐这件事决定,
+   封顶会让它在 264px 处停住,左下角的空白就又回来了。 */
+.ga-frame-body { max-height: 178px; }
+.ga-frame[data-form='project'] .ga-frame-body { max-height: none; flex: 1 1 0; }
+/* 右栏三个框总高不足时(比如一条都没接过),左框也不该缩成一条缝。 */
+.ga-frame[data-form='project'] { min-height: 132px; }
+.ga-frame-body::-webkit-scrollbar { width: 6px; }
+.ga-frame-body::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
+.ga-frame-empty {
+  padding: 4px 6px 6px; font-size: var(--t-micro); line-height: 1.6; color: var(--ink-3);
+}
+
+/* ── 一条:压成一行 ────────────────────────────────────────────────────
+   图标带头、名字、状态点、移除。完整的那几句(坐标、落盘路径、卡在哪一步)
+   进 title,鼠标停一下才出来 —— 同左栏底下那块「接上了什么」的做法。
+
+   上一版每条占五六行,四个框摞起来一屏放不下两条。而这一页是拿来**扫**的:
+   先看有哪些,再点开看某一个。 */
+.ga-row-wrap { display: flex; flex-direction: column; }
+.ga-row-item {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  padding: 4px 6px; border-radius: 8px;
+  font-size: var(--t-mini); line-height: 1.5;
+}
+.ga-row-item:hover { background: rgba(252, 251, 255, 0.5); }
+.ga-row-icon { flex: none; color: var(--ink-3); }
+.ga-row-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink);
+}
+/* 「移除」悬停才显形:它是次要动作,而且一列里十个「移除」并排本身就是噪音。
+   键盘走到它时同样要出来 —— 只认 :hover 的话,不用鼠标的人永远够不着。 */
+.ga-row-del { flex: none; opacity: 0; padding: 2px 7px; transition: opacity 0.18s var(--ease); }
+.ga-row-item:hover .ga-row-del,
+.ga-row-del:focus-visible { opacity: 1; }
+.ga-why { padding: 0 6px 4px 26px; font-size: var(--t-micro); line-height: 1.5; color: var(--warn); }
+
+/* ── 状态用**光和深度**说,不用颜色 ──────────────────────────────────
+   和左栏底下那块「接上了什么」同一套话(见 .wired-dot 那段)。所有者当初对
+   那四个彩色小点的原话是「那个点儿就是红绿绿黄,是有点不太好看」—— 这一面上
+   只有一支色相,彩色小点是整面唯一跳出来的东西,这里不能再犯一次。
+
+     接上了  亮核浮起来
+     没接上  沉进面里,不发光
+
+   **不呼吸。** 左栏那一块是常驻 HUD 上的一列,一个呼吸的光点是背景音;
+   这里是一份可能几十条的清单,几十个光点一起呼吸就成了噪音。 */
+.ga-dot {
+  flex: none; width: 6px; height: 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(93, 84, 102, 0.16),
+    inset 0 -1px 1.5px rgba(93, 84, 102, 0.14);
+}
+.ga-row-item[data-ok='true'] .ga-dot {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.9),
+    0 0 0 1.5px rgba(255, 255, 255, 0.55),
+    0 1px 2.5px rgba(93, 84, 102, 0.3),
+    0 0 7px 1px rgba(255, 255, 255, 0.85);
+}
+.ga-row-item[data-ok='false'] .ga-dot {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
+}
+
+.ga-btn {
+  /* 同 .up-btn:纯文字,悬停才显形。次要动作不该和主按钮抢视觉重量。 */
+  border: 0; padding: 4px 9px; border-radius: 9px; cursor: pointer;
+  font: inherit; font-size: var(--t-mini); color: var(--ink-3);
+  background: transparent; box-shadow: none;
+  transition: color 0.22s var(--ease), background 0.22s var(--ease);
+}
+.ga-btn:hover { color: var(--ink); background: rgba(252, 251, 255, 0.5); }
+.ga-danger:hover { color: var(--bad); background: rgba(160, 106, 106, 0.09); }
+
+.ga-form { margin-top: 4px; }
+.ga-row { min-height: 44px; }
+.ga-label { display: block; font-size: var(--t-small); color: var(--ink); }
+.ga-row .sf-desc { margin-top: 2px; }
+/* 宽窄用显式类,不用 nth-child —— 按位置指宽窄的话,谁把表单重排一下,
+   宽度就悄悄跟错了字段,而且不报错。 */
+.ga-input { width: 190px; }
+.ga-wide { width: 268px; }
+/* 「先验一下」和「接进来」并排落在打字那一列下面。前者是次要动作,用文字按钮;
+   两个同等重量的主按钮会让人不知道该点哪个。 */
+.ga-form-acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 10px 10px 4px 0; }
+.ga-form-acts .sf-save { margin: 0; }
+
+.ga-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }
 
 /* color-mix 用不了时(比 Chromium 111 更旧的壳)回落到实色面。
    融不进底色,但**挡得住**后面那张 —— 两害相权,先保证读得出来。 */

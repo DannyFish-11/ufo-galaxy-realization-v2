@@ -339,11 +339,19 @@ class TestThePanelIsActuallyWiredToThoseEndpoints:
         assert f"{verb}(" in src, f"main.ts 里没有调用 {verb} —— 那它就是个没接线的按钮"
 
     def test_the_section_is_mounted_into_the_settings_page(self):
+        """创建了还不够，必须**交给设置页**，否则它永远不会出现在屏幕上。
+
+        断言从 `topSection: userProviders.root` 改成按名字找，是因为设置页的顶部
+        槽位从单个元素变成了一个数组（第二段「接进来的 GitHub 项目」加进来之后）。
+        这条门要挡的是"建了但没挂上"，不是"必须写成某一种字面量"——
+        钉死字面量会让每一次正当的重构都在这里误报一次，而误报多了这道门就废了。
+        """
         main = (self.PANEL_SRC / "main.ts").read_text(encoding="utf-8")
         settings = (self.PANEL_SRC / "ui/settings.ts").read_text(encoding="utf-8")
         assert "createUserProviders(" in main, "main.ts 没有创建这一段"
-        assert "topSection: userProviders.root" in main, "创建了但没交给设置页 —— 那它永远不会出现在屏幕上"
-        assert "cb.topSection" in settings, "设置页没有把它挂进 body"
+        mounted = [ln for ln in main.splitlines() if "topSections:" in ln or "userProviders.root" in ln]
+        assert any("userProviders.root" in ln for ln in mounted), "创建了但没交给设置页 —— 那它永远不会出现在屏幕上"
+        assert "cb.topSections" in settings, "设置页没有把它挂进 body"
 
     def test_all_three_states_have_their_own_styling(self):
         """live / declared / unverified 必须长得不一样。

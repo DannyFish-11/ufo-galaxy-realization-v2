@@ -18,6 +18,9 @@ import {
   saveUserProvider,
   verifyUserProvider,
   deleteUserProvider,
+  fetchGitHubAddons,
+  installGitHubAddon,
+  uninstallGitHubAddon,
   fetchBundles,
   fetchCardTurns,
   fetchCards,
@@ -43,6 +46,8 @@ import { createWired, deriveWired } from './ui/wired';
 import { createSettings } from './ui/settings';
 import { createUserProviders } from './ui/user_providers';
 import type { UserProviderDraft } from './ui/user_providers';
+import { createGitHubAddons } from './ui/github_addons';
+import type { GitHubAddonDraft } from './ui/github_addons';
 import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
 
 /**
@@ -127,10 +132,18 @@ function mount(host: HTMLElement): void {
     onDelete: (id) => void deleteEndpoint(id),
   });
 
+  const githubAddons = createGitHubAddons({
+    onInstall: (draft) => void installAddon(draft),
+    onDryRun: (draft) => void dryRunAddon(draft),
+    onUninstall: (name) => void uninstallAddon(name),
+  });
+
   const settings = createSettings({
     onClose: () => store.patch({ settingsOpen: false }),
     onSave: (changes) => void applyConfig(changes),
-    topSection: userProviders.root,
+    // 顺序:先模型服务,再 GitHub 项目。两者都是"接一个外面的东西进来",
+    // 而模型服务是更多人来这一页要办的那件事。
+    topSections: [userProviders.root, githubAddons.root],
   });
 
   main.append(island.root, thread.root, dock.root, settings.root);
@@ -184,6 +197,12 @@ function mount(host: HTMLElement): void {
       s.userProvidersBusy,
       s.userProviderNotice,
     );
+    githubAddons.render(
+      s.githubAddons,
+      s.githubAddonStatus,
+      s.githubAddonsBusy,
+      s.githubAddonNotice,
+    );
   }
 
   store.subscribe(render);
@@ -218,9 +237,10 @@ function mount(host: HTMLElement): void {
     store.patch({ settingsOpen: true, popover: null, configBusy: true });
     const items = await fetchAllConfig(BASE);
     store.patch({ config: items, configBusy: false });
-    // 端点走的是另一条路,和那 335 个键一起重新拉 —— 同样的理由:别拿缓存
-    // 让人对着过期的状态做决定(Key 会过期、网关会挂)。
-    await loadEndpoints();
+    // 端点和插件各走各的路,和那 335 个键一起重新拉 —— 同样的理由:别拿缓存
+    // 让人对着过期的状态做决定(Key 会过期、网关会挂、插件会被别处卸掉)。
+    // 安装策略也在这一趟里:GITHUB_ALLOWLIST 可能刚刚就在上面那批键里被改了。
+    await Promise.all([loadEndpoints(), loadAddons()]);
   }
 
   /**
@@ -300,6 +320,83 @@ function mount(host: HTMLElement): void {
     store.patch({
       userProvidersBusy: false,
       userProviderNotice: ok ? '' : '删不掉 —— 后端没有接受这次请求',
+    });
+  }
+
+  // ── 接进来的 GitHub 项目 ──────────────────────────────────────────────────
+
+  /**
+   * 拉一次已接进来的项目 + 安装策略。拉不到就**留 null**,让界面说
+   * 「后端没接上」而不是「你没接过」。
+   */
+  async function loadAddons(): Promise<void> {
+    const page = await fetchGitHubAddons(BASE);
+    store.patch({
+      githubAddons: page ? page.addons : null,
+      // 策略拉不到时**不动**已有的那份:一次网络抖动不该让"会不会先问你"
+      // 这句话消失 —— 它消失的时候界面只能说"不知道",而人会当成"不会问"。
+      ...(page && page.status ? { githubAddonStatus: page.status } : {}),
+    });
+  }
+  // 开机就拉一次 —— 同端点那条理由:设置页没打开过,不代表这些项目不存在。
+  void loadAddons();
+
+  /**
+   * 只验地址,不落盘。
+   *
+   * 后端的 dry_run 在**准入闸之前**返回,所以它能告诉你"地址合法、没被名单挡",
+   * 但**不能**告诉你"装的时候会不会弹出来问你一句"。这里的措辞照这个边界写 ——
+   * 说成"验过了就能装"是一句会被现实打脸的话。
+   */
+  async function dryRunAddon(draft: GitHubAddonDraft): Promise<void> {
+    if (!draft.url) {
+      store.patch({ githubAddonNotice: '先填一个仓库地址' });
+      return;
+    }
+    store.patch({ githubAddonsBusy: true, githubAddonNotice: '' });
+    const res = await installGitHubAddon(BASE, { ...draft, dry_run: true });
+    store.patch({
+      githubAddonsBusy: false,
+      githubAddonNotice: res.ok
+        ? '地址能用，也没被名单挡住。真装的时候还要过准入闸（上面那行写着会不会先问你）。'
+        : res.reason,
+    });
+  }
+
+  /**
+   * 真装一个。**装完重新拉一次列表**,界面上看到的是后端认下的那份,
+   * 不是这里乐观拼出来的 —— 同 flipBundle 那条理由。
+   */
+  async function installAddon(draft: GitHubAddonDraft): Promise<void> {
+    if (!draft.url) {
+      store.patch({ githubAddonNotice: '先填一个仓库地址' });
+      return;
+    }
+    store.patch({ githubAddonsBusy: true, githubAddonNotice: '' });
+    const res = await installGitHubAddon(BASE, draft);
+    if (!res.ok) {
+      // 后端给的那句人话直接显示。**别自己改写** —— 被准入闸拦下、不在名单里、
+      // 注册没过,这三件事它说得比前端清楚,而它们要采取的行动完全不同。
+      store.patch({ githubAddonsBusy: false, githubAddonNotice: res.reason });
+      await loadAddons();
+      return;
+    }
+    // 装成功才清表单 —— 失败时留着他刚填的地址,不让他重打一遍。
+    githubAddons.clearForm();
+    await loadAddons();
+    store.patch({
+      githubAddonsBusy: false,
+      githubAddonNotice: res.name ? `接上了：${res.name}` : '',
+    });
+  }
+
+  async function uninstallAddon(name: string): Promise<void> {
+    store.patch({ githubAddonsBusy: true, githubAddonNotice: '' });
+    const ok = await uninstallGitHubAddon(BASE, name);
+    await loadAddons();
+    store.patch({
+      githubAddonsBusy: false,
+      githubAddonNotice: ok ? '' : '移除不掉 —— 后端没有接受这次请求',
     });
   }
 
