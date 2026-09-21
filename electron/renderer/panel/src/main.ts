@@ -170,7 +170,13 @@ function mount(host: HTMLElement): void {
     panel.dataset['slim'] = String(s.slim);
     deck.render();
     line.update(s.phase, s.slim, lineTrust(s.posture));
-    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyBusy, s.islandOpen);
+    // 最后那一位是**实时的**:主轴此刻在哪一相、阈限态里它在干嘛。
+    // 那只小东西的底子靠这两位每帧动起来 —— 只喂 ambient_action 的话它会卡在
+    // 上一次决策的姿势上不动,下一次决策可能是几分钟以后。
+    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyBusy, s.islandOpen, {
+      phase: s.phase,
+      activity: s.posture?.liminal_activity ?? 'none',
+    });
     island.setHeight(deck.root.querySelector('.deck')?.clientHeight ?? 0);
     wired.render(
       deriveWired({

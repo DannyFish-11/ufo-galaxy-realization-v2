@@ -482,31 +482,52 @@ class TestTheUiDoesNotInventWhatTheBackendDidNotSay:
         原先是红/黄/绿/空心四个彩色小点，所有者的原话写在 `.wired-dot` 那段注释里
         ——「那个点儿就是红绿绿黄，是有点不太好看……可以通过白光加动效的方式，
         让人体会，而不是这种奇怪的颜色」。这一面上只有一支色相，彩色小点是整面
-        唯一跳出来的东西。
+        唯一跳出来的东西。我在第一版里又犯了一次（绿点 / 琥珀点）。
 
-        我在第一版里又犯了一次（绿点 / 琥珀点）。所以写成门：凡是给这一段里的
-        小圆点定底色的规则，底色只能是中性的白/灰，不能带色相。
+        判据是**允许清单**，不是禁止清单。第一版列的是
+        `var(--warn) / var(--bad) / var(--a-mid)` 这几个已知的彩色 token —— 结果
+        漏掉了 `var(--ink-3)`（#948c9e，一支带紫的灰），那条规则在合并时被我
+        自己留在文件里，门一声没响。禁止清单永远漏下一个；允许清单只会误伤，
+        而误伤是看得见的。
 
-        颜色仍然可以用在**字**上——「没人把关」「没接上」是需要人看见的一句话，
-        而字那一层没有深度可用。门只管点。
+        允许的只有：白/透明/无、中性灰的 rgba()、以及灰阶十六进制。
+        真要给点上颜色，该做的是改这条门并说清为什么，不是绕过它。
         """
         import re
 
-        css = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
-        hued = ("var(--warn)", "var(--bad)", "var(--a-mid)", "var(--a-hi)", "var(--a-lo)")
+        raw = (PANEL_SRC / "styles/hud.css").read_text(encoding="utf-8")
+        # **先把注释剥掉。** 这一条也是踩出来的：上面那段解释里逐字引了一条
+        # `.ga-dot { background: var(--ink-3) }`（讲的正是"这条已经删了"），
+        # 而扫描器把那段散文当成了规则，报出一条根本不存在的违规。
+        # 一条会被注释触发的门，改的人只会去改注释，不会去改代码。
+        css = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+
+        def _is_neutral(value: str) -> bool:
+            v = value.strip().lower()
+            if v in ("none", "transparent", "#fff", "#ffffff", "inherit", "currentcolor"):
+                return True
+            m = re.fullmatch(r"rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)\s*(?:[,/]\s*[\d.]+\s*)?\)", v)
+            if m:
+                r, g, b = (int(x) for x in m.groups())
+                return r == g == b  # 中性灰才算
+            m = re.fullmatch(r"#([0-9a-f]{6})([0-9a-f]{2})?", v)
+            if m:
+                h = m.group(1)
+                return h[0:2] == h[2:4] == h[4:6]
+            # linear-gradient(...) 里只允许白与透明白 —— "只亮半边"那一档用它
+            if v.startswith("linear-gradient("):
+                return not re.search(r"var\(--|#(?!fff)", v)
+            return False
+
         offenders = []
         for m in re.finditer(r"(\.ga-[^{}]*\.ga-dot[^{]*)\{([^}]*)\}", css):
             selector, body = m.group(1).strip(), m.group(2)
             for decl in body.split(";"):
-                if "background" not in decl:
+                if ":" not in decl or not decl.split(":", 1)[0].strip().endswith("background"):
                     continue
-                if any(h in decl for h in hued):
-                    offenders.append(f"{selector} → {decl.strip()}")
-                    continue
-                for hexcol in re.findall(r"#([0-9a-fA-F]{3,8})", decl):
-                    h = hexcol[:6]
-                    if len(h) >= 6 and not (h[0:2] == h[2:4] == h[4:6]):
-                        offenders.append(f"{selector} → {decl.strip()}")
+                value = decl.split(":", 1)[1]
+                if not _is_neutral(value):
+                    offenders.append(f"{selector} → background:{value.strip()}")
         assert not offenders, "这一段的状态点用了色相（这个仓已经判过一次不要）：\n" + "\n".join(offenders)
 
     def test_the_frame_is_inset_not_a_raised_block(self):

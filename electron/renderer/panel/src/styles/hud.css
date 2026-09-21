@@ -547,10 +547,23 @@ body {
    的话,浓度那条映射在屏幕上就等于不存在。底也不能压到 0:一台都不在线时星系该是
    **暗的**,不是**没有的**。 */
 .gx-field {
-  fill: #ffffff;
+  /* 颜色在下面按档分 —— 这里只管整片有多浓。 */
   opacity: calc(0.13 + 0.49 * var(--gx-lum, 0));
   transition: opacity 1.1s var(--ease);
 }
+/* ── 星的颜色:**紫白一起,按面板那条色阶铺开** ────────────────────
+   整面的法子是一支色相从深走到近白(--m-1 … --m-6):深的地方是紫,亮到头就化
+   进白。星系照搬同一条 —— 暗星偏紫、亮星化进白。
+
+   全用白(第一版)在浅色底上只剩一层灰蒙蒙的雾;全用紫(第二版)又成了一块紫斑,
+   面板别处的白在这儿断掉了。**紫白一起才接得上。**
+
+   四档都读 token,不写死十六进制 —— 相位一换整面都走,这座星系得跟着走。 */
+.gx-t1 { fill: var(--m-1); }   /* 最暗的那批:最深的紫 */
+.gx-t2 { fill: var(--m-2); }
+.gx-t3 { fill: var(--m-4); }
+.gx-t4 { fill: var(--m-6); }   /* 最亮的那批:化进白 */
+
 /* 尘埃带:旋臂内侧那一道暗。没有它,亮处挨着亮处,整盘糊成一团雾。 */
 .gx-dust polyline {
   stroke: rgba(74, 66, 82, 0.34);
@@ -565,75 +578,29 @@ body {
 /* ── 被点亮的那几颗 = 接着的设备 ─────────────────────────────────
    一台一颗,位置定死:第 n 台永远是同一颗星,掉线就是**那一颗**淡回星海,
    不是整片重排。三档,不是布尔 —— 降级的亮一半。 */
+/* ── 被点亮的那几颗 ───────────────────────────────────────────
+   **仍然是小粒子,不是大光团。** 上一版给它们套了一圈 r=4.6 的白色光晕,
+   在 112px 的药丸里那就是七八个显眼的白点摆在星系上,像贴上去的,不像星系
+   自己的一部分。
+
+   现在只做两件:比周围**实一档**(不透明度到顶)、**大一点点**(半径 0.95 → 1.25,
+   而不是 1.5 再加光晕)。同一支紫,只是立得住 —— 这就是「相对更亮」。 */
 .gx-star .gx-halo-c { opacity: 0; transition: opacity 0.85s var(--ease); }
-.gx-star .gx-core-c { fill: #ffffff; opacity: 0; transition: opacity 0.85s var(--ease), r 0.85s var(--ease); }
-/* 在线:满白 + 一圈化开的光。**这一档要一眼看得出来** —— 它是「有一台连着」
-   在画面上唯一的说法。 */
-.gx-star[data-lit='on'] .gx-halo-c { opacity: 0.85; }
-.gx-star[data-lit='on'] .gx-core-c { opacity: 1; r: 1.5; }
-/* 降级:亮一半。顶着在线那一档的亮度,等于在余光里把降级说成了在线。 */
-.gx-star[data-lit='half'] .gx-halo-c { opacity: 0.38; }
-.gx-star[data-lit='half'] .gx-core-c { opacity: 0.66; r: 1; }
+.gx-star .gx-core-c {
+  /* 被点亮的是整片里最亮的 —— 按那条色阶,最亮的走近白。紫的星海上一颗白,
+     「相对更亮」就说出来了,而且不用套大光团。 */
+  fill: var(--m-6);
+  opacity: 0; transition: opacity 0.85s var(--ease), r 0.85s var(--ease);
+}
+.gx-star[data-lit='on'] .gx-halo-c { opacity: 0.3; }
+.gx-star[data-lit='on'] .gx-core-c { opacity: 1; r: 1.25; }
+/* 降级:实一半。顶着在线那一档,等于在余光里把降级说成了在线。 */
+.gx-star[data-lit='half'] .gx-halo-c { opacity: 0.12; }
+.gx-star[data-lit='half'] .gx-core-c { opacity: 0.55; r: 1; }
 /* 离线的那台不是「一颗暗星」,而是**没有那一颗** —— 它退回普通星海里去了 */
 .gx-star[data-lit='off'] .gx-halo-c,
 .gx-star[data-lit='off'] .gx-core-c { opacity: 0; }
 
-/* 一块「实物」。**离墙多远就是它的状态** —— 不用状态点。 */
-.tile {
-  position: relative; flex: none;
-  border-radius: 5px; overflow: hidden;
-  /* 面比别处厚一档,影子也重一档。这块东西**靠离墙多远表示状态**,
-     淡到看不出高低,那个状态就没了 —— 上一版跟着整体变薄之后正是如此。 */
-  background: linear-gradient(166deg, rgba(253, 251, 255, 0.78), rgba(253, 251, 255, 0.46));
-  box-shadow: inset 0 0.5px 0 var(--lite), 0 2px 4px rgba(93, 84, 102, 0.3);
-  transition: box-shadow 0.45s var(--ease), opacity 0.45s var(--ease),
-    background 0.45s var(--ease);
-}
-/* 降级:几乎贴平 */
-.tile[data-elev='low'] {
-  box-shadow: inset 0 0.5px 0 var(--lite-soft), 0 0.5px 1px rgba(93, 84, 102, 0.16);
-  opacity: 0.72;
-}
-/* 离线 / 这条通路从没来过东西:沉进表面,只剩凹槽,没有影子 */
-.tile[data-elev='sunk'] {
-  background: none;
-  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.22), inset 0 -0.5px 0 var(--lite-soft);
-  opacity: 0.85;
-}
-/* 被刻意闭上的那两档:盖一道。shut = 这一拍屏蔽;paused = 你按了暂停 */
-.tile[data-elev='shut']::before,
-.tile[data-elev='paused']::before {
-  content: '';
-  position: absolute; left: 14%; right: 14%; top: 50%;
-  height: 1px; margin-top: -0.5px;
-  background: rgba(61, 55, 69, 0.4); border-radius: 1px;
-}
-.tile[data-elev='paused'] {
-  background: none;
-  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.2), inset 0 -0.5px 0 var(--lite-soft);
-}
-/* 活跃:一道细光斜掠而过。忙就掠得频繁,闲就几秒才飘一次。
-   忙不忙是**余光里感觉到**的,不是读出来的。 */
-.tile-sheen {
-  position: absolute; top: -30%; bottom: -30%; left: 0; width: 52%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.82), transparent);
-  transform: translateX(-160%); opacity: 0;
-}
-.tile[data-busy] .tile-sheen { animation: sheen var(--rate, 6s) linear infinite; }
-@keyframes sheen {
-  0%        { transform: translateX(-160%); opacity: 0; }
-  8%        { opacity: 0.8; }
-  22%       { opacity: 0.8; }
-  30%, 100% { transform: translateX(230%); opacity: 0; }
-}
-
-.t-screen { width: 17px; height: 12px; }
-.t-camera { width: 13px; height: 13px; border-radius: 50%; }
-.t-mic    { width: 8px;  height: 15px; border-radius: 999px; }
-.t-sys    { width: 13px; height: 9px;  border-radius: 3px; }
-.t-dev    { width: 15px; height: 19px; border-radius: 4px; }
-.t-dev.wide { width: 20px; height: 14px; }
-.t-dev.tiny { width: 11px; height: 14px; }
 
 /* 展开:上面感知(就四条,两行摆完),下面设备(会长,自己滚)。
    **没有一条分隔线** —— 线横在中间,眼睛会停在线上而不是内容上。 */
@@ -676,12 +643,14 @@ body {
   box-shadow: none; outline: 1px dashed rgba(93, 84, 102, 0.3); outline-offset: -1px;
 }
 
+/* 压成一行之后不再分两列:两列的话右边那半只剩十来个字宽,
+   「这台机器没有这条通路」会被截成「这台机器没…」。 */
 .per-grid {
   flex: none;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px;
-  margin: 9px 14px 0 0;
+  display: flex; flex-direction: column;
+  margin: 7px 14px 0 0;
 }
-.dev-key { margin-top: 22px; }
+.dev-key { margin-top: 16px; }
 /* 「还没接上」跟「此刻没在收」要分得开。数字那一栏偏一点点,不喊。 */
 .sec-key[data-unwired='true'] b { color: var(--ink-3); font-variant-numeric: normal; }
 
@@ -689,7 +658,7 @@ body {
    dev-list 会自己滚,这一行 flex:none 钉在它下面,不跟着滚走。 */
 /* 抬头与「感知」「设备」同一个骨架:左边名字、右边当前档。型号名一行摆完,
    摆不下省略 —— 岛是余光扫一眼的地方,不该为两个型号 id 吃掉设备列表的高度。 */
-.brain-key { flex: none; margin-top: 14px; }
+.brain-key { flex: none; margin-top: 12px; }
 .brain-line {
   flex: none;
   margin-top: 4px; padding-right: 14px;
@@ -700,25 +669,144 @@ body {
    岛上写着「C 档」而它跑不动 C,是最难查的那种误导。 */
 .brain-line[data-unwired='true'] { color: var(--warn); }
 
-.dev-list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 6px; padding-right: 12px; }
+.dev-list { flex: 1; min-height: 0; overflow-y: auto; margin-top: 5px; padding-right: 12px; }
 .dev-list::-webkit-scrollbar { width: 5px; }
 .dev-list::-webkit-scrollbar-thumb { background: rgba(107, 99, 118, 0.22); border-radius: 999px; }
 .dev-list::-webkit-scrollbar-track { background: transparent; }
+/* 一行:**名字在左,状态在右,一行说完。**
+
+   从前每行前面有一枚小方格(离墙多远 = 什么状态),一行 36px、两行文字、左边
+   还占 26px 的图标槽。四条感知加七台设备摆下来整块岛就满了,而它要说的事其实
+   只有「谁是什么状态」。照系统设置面板那种排法压成一行之后,行高从 36px 降到
+   24px,同样的高度里能多摆五行。
+
+   方格撤了没有丢事实 —— 那枚方块讲的每一档本来就有一句话,话一直在右边写着,
+   只是从前被挤到第二行去了。 */
 .unit {
-  display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 11px;
-  height: 36px; padding: 0 8px 0 2px; border-radius: 9px;
+  display: flex; align-items: baseline; gap: 10px;
+  height: 24px; padding: 0 2px;
 }
-.dev-list .unit + .unit { margin-top: 2px; }
-.unit-icon { display: flex; justify-content: center; }
 .unit-name {
-  display: block; font-size: var(--t-small); line-height: 1.3; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: none; font-size: var(--t-small); line-height: 1.3; color: var(--ink);
+  white-space: nowrap;
 }
+/* 状态靠右。中间那段空白就是分隔 —— **不画线**:线横在中间,眼睛会停在线上
+   而不是内容上。 */
 .unit-note {
-  display: block; font-size: var(--t-micro); line-height: 1.3; color: var(--ink-3);
+  flex: 1; min-width: 0; text-align: right;
+  font-size: var(--t-micro); line-height: 1.3; color: var(--ink-3);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .unit-note[data-active='true'] { color: var(--a-mid); }
+/* 这条通路没有 / 这台机器离线。**只淡状态那半边,不淡整行** —— 整行调暗会被
+   读成「不重要」,而「这台机器没有摄像头」恰恰是要看见的事实。 */
+.unit[data-off='true'] .unit-name { color: var(--ink-2); }
+.unit[data-off='true'] .unit-note { opacity: 0.66; }
+
+/* ── 「自发注意力」那一栏右边坐着的小东西 ────────────────────────
+   它跟左边那两行讲的是同一件事,不是另一份数据:脸讲得快(眼睛闭没闭、身子探
+   没探,不用读),字讲得准(为什么这么决定)。
+
+   身子用面板自己那支紫,眼睛用近白那一档 —— **不引第二种色相**。
+   ───────────────────────────────────────────────────────────────── */
+.wake-wrap {
+  flex: none;
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 12px; padding-right: 14px;
+}
+.wake-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wake-text .brain-key { margin-top: 0; }
+.pet {
+  flex: none;
+  width: 42px; height: 42px;
+  overflow: visible;
+}
+.pet-skin {
+  fill: var(--m-2);
+  transition: fill 0.6s var(--ease);
+}
+.pet-eye {
+  fill: var(--m-6);
+  transition: y 0.34s var(--ease), height 0.34s var(--ease),
+    opacity 0.34s var(--ease), fill 0.6s var(--ease);
+}
+/* 身子极慢地呼吸一下。5.2 秒 —— 刻意避开 0.2 Hz 那一带:那一带最容易被余光
+   当成「有事发生」而反复把注意力拽走。 */
+/* 外层管**姿势**(上一拍想了什么),内层管**呼吸**。分两层是必须的:
+   同挂一层时动画那条 transform 优先级压过普通声明,姿势永远推不动,
+   而屏幕上看着"有在动" —— 那是最难查的一类坏法。 */
+.pet-body {
+  transform-box: fill-box; transform-origin: 50% 82%;
+  transition: transform 0.5s var(--ease);
+}
+/* 呼吸的**快慢是实时的**:阈限态里它越往后使劲(懂 → 想 → 排演),喘得越快。
+   周期由 pet.ts 按 liminal_activity 给,四档都刻意避开 0.18~0.22 Hz 那一带;
+   这里的兜底值同样在带外(6s ≈ 0.167 Hz)。 */
+.pet-breath {
+  transform-box: fill-box; transform-origin: 50% 82%;
+  animation: pet-breathe var(--pet-rate, 6s) var(--ease) infinite;
+}
+/* ── 眨眼:单独一层 ───────────────────────────────────────────────
+   眨眼是 transform(压扁),眼睛的开合是几何量(y / height)。挂同一层的话动画会
+   把数据那一层整个压住 —— 「按了急停」就闭不上了。已经踩过一次,不再踩第二次。
+
+   眨眼**不接任何数据**:它不声称任何事,只是活的东西会眨眼。没有它,上面那些
+   状态再准,看着也像一张贴纸。 */
+.pet-blink {
+  transform-box: fill-box; transform-origin: 50% 50%;
+  animation: pet-blink 7.4s var(--ease) infinite;
+}
+/* 眼睛本来就闭着 / 还不知道睁没睁的时候不眨 —— 那会变成抽搐。 */
+.pet[data-eyes='shut'] .pet-blink,
+.pet[data-eyes='unknown'] .pet-blink { animation: none; }
+@keyframes pet-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.08); }
+}
+/* ── 底子:实时 ───────────────────────────────────────────────────
+   主轴此刻在哪一相。静的时候小而沉,显形时立起来。 */
+.pet[data-phase='silent'] .pet-skin { opacity: 0.72; }
+.pet[data-phase='silent'] .pet-body { transform: scale(0.94); }
+.pet[data-phase='liminal'] .pet-skin { opacity: 0.88; }
+.pet[data-phase='manifest'] .pet-skin { opacity: 1; }
+.pet[data-phase='manifest'] .pet-body { transform: scale(1.04) translate(0, -0.8px); }
+/* 在收的时候眼睛睁得开一点。**不知道就不动它** —— 那不是「没在收」。 */
+.pet[data-sensing='true'][data-eyes='open'] .pet-eye { height: 10.4px; y: 14px; }
+@keyframes pet-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+/* ── 眼睛:看不看 ─────────────────────────────────────────────
+   三档,不是布尔。 */
+/* 在采:一双竖着的窄缝,睁着。 */
+.pet[data-eyes='open'] .pet-eye { y: 14.4px; height: 9.6px; opacity: 1; }
+/* 你按了「别看了」:压成一横。**这是急停在展开态最快被看见的地方** ——
+   人不用读那行字就知道它不看了。 */
+.pet[data-eyes='shut'] .pet-eye { y: 18.6px; height: 2.4px; opacity: 0.9; }
+/* 还没收到过感知帧:虚着。既不能画成睁着(等于替后端说「它正看着」),
+   也不能画成闭着(等于说「已经停了」)。 */
+.pet[data-eyes='unknown'] .pet-eye { y: 14.4px; height: 9.6px; opacity: 0.4; }
+
+/* ── 上面叠的一次性反应:上一拍决定了什么 ─────────────────────────
+   **不是常驻姿势。** ambient_action 是「上一拍」—— 一个已经发生完的事实。
+   拿它当常驻姿势,它会一直卡在「忍住没说」那个样子不动,下一次决策可能是几分钟
+   以后,看着像死了。所以演一遍(1.6 秒)就撤回实时那一层。
+
+   写在 data-react 上,优先级高于 data-phase 那几条 —— 反应那一下盖住底子,
+   撤掉之后底子自己回来。 */
+.pet[data-react='lean'] .pet-body { transform: translate(0, -2.2px) scale(1.08); }
+.pet[data-react='tuck'] .pet-body { transform: translate(0, 1.6px) scale(0.9); }
+.pet[data-react='aside'] .pet-body { transform: translate(3.4px, 0) rotate(8deg); }
+/* 还没收到过帧:身子淡下去 —— 不知道就不摆样子 */
+.pet[data-eyes='unknown'] .pet-skin { fill: var(--m-4); opacity: 0.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* 呼吸停掉,但**姿势和眼睛都留着** —— 那两样是事实,不是动效。
+     停的必须是 .pet-breath:呼吸在内层。拆成两层之后这里一度还写着 .pet-body,
+     那条规则等于没写 —— 关了动效的人照样看着它一起一伏。 */
+  .pet-breath { animation: none; }
+}
 
 /* ── 对话 ── */
 .thread {
@@ -1328,22 +1416,28 @@ body {
 .ga-sec { padding-bottom: 6px; }
 .ga-hint { margin: 0 0 10px; font-size: var(--t-mini); line-height: 1.5; color: var(--ink-3); }
 
-/* 准入策略。三档三个颜色 —— allowlist 与 unattended 都不问人,但一个是
-   "只有名单里的能进",另一个是"谁都能进"。共用一个点就等于把后者说成前者。
+/* 准入策略。四档各不相同 —— allowlist 与 unattended 都不问人,但一个是
+   "只有名单里的能进",另一个是"谁都能进"。共用一个样子就等于把后者说成前者。
    拉不到时是第四种(unknown),**不许画成其中任何一档**。
 
    **它不是一张卡片。** 第一版给它加了圆角、底色和内阴影 —— 那立刻在这一页上
    多出一种谁都没有的容器:上面那 335 个键是裸行,端点和插件是对象卡片,
    而这只是一句关于"接下来会发生什么"的说明文字。给说明文字套个框,
    它就会被当成一个可操作的对象,而且那个框本身就是"生成出来的界面"最典型的样子。
-   现在它和 .ga-hint / .up-hint 同一个节奏:一行字,靠颜色区分三档。 */
+   现在它和 .ga-hint / .up-hint 同一个节奏:一行字。
+
+   四档的区分**靠光和深度**,不靠颜色 —— 见下面那段。第一版这里还留着一条
+   `.ga-dot { background: var(--ink-3) }`:那是改成光之前的写法,改完忘了删。
+   它不显示(四档各自都覆盖了 background),但它和紧跟的注释互相矛盾,
+   而一条自相矛盾的死规则会把下一个读它的人带偏。 */
 .ga-policy {
   display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
   margin: -4px 0 10px;
 }
 .ga-policy-text { font-size: var(--t-mini); color: var(--ink-2); }
 .ga-policy-meta { flex: 1 1 100%; margin-top: 2px; font-size: var(--t-micro); line-height: 1.5; color: var(--ink-3); }
-.ga-dot { flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+/* 这一行是 baseline 对齐的,点得自己居中。大小和底色都归下面那条统一的 .ga-dot 管。 */
+.ga-policy .ga-dot { align-self: center; }
 /* 四档同样用光和深度说,不用颜色 —— 同 .wired-dot 那套话。
 
      ask         亮核浮起来:有人把关,每次都会问
