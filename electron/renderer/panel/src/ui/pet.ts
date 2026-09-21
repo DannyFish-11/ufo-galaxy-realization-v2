@@ -33,6 +33,7 @@
  * 平时极慢地呼吸一下,周期 5.2 秒 —— 刻意避开 0.2 Hz 那一带(那一带最容易被
  * 余光当成"有事发生"而反复拽走注意力)。
  */
+import { checkPeriods } from '../motion';
 import type { AmbientAction } from '../types';
 
 const svgNS = 'http://www.w3.org/2000/svg';
@@ -52,24 +53,35 @@ const POSE: Record<AmbientAction, string> = {
  * 所以节奏也该是递进的:越往后越快。这不是装饰 —— 它让「它在使劲」这件事
  * 在余光里看得见,而不用去读那一行字。
  *
- * 四档**都刻意不落在 0.18~0.22 Hz 那一带**:那一带最容易被余光当成「有事发生」
- * 而反复把注意力拽走。
+ *   none          9.0s = 0.111 Hz
+ *   understanding 6.5s = 0.154 Hz
+ *   thinking      3.6s = 0.278 Hz
+ *   rehearsing    2.6s = 0.385 Hz
  *
- *   none          6.0s ≈ 0.167 Hz   (慢于那一带)
- *   understanding 4.3s ≈ 0.233 Hz   (快于那一带)
- *   thinking      3.5s ≈ 0.286 Hz
- *   rehearsing    2.9s ≈ 0.345 Hz
+ * 要躲开的那一带是 0.17–0.25 Hz,判据在 ../motion.ts —— **不在这段注释里**。
+ * 这四个数被改过两回,两回都是因为注释自己写了一份判据:
+ *   · 最慢那一档原先 5.2s = 0.192 Hz,正在带里,而注释写着「都避开」;
+ *   · 改完之后注释给自己定了条更窄的带子(0.18–0.22),于是 understanding 档
+ *     4.3s = 0.233 Hz 放行了 —— 那个值在真正的带子里。
+ * 第二回是这次量出来的。所以现在没有第二份数字,只有 checkPeriods。
  *
- * 最慢那一档原先写的是 5.2 秒,而 5.2 秒 = 0.192 Hz **正好在带子里** —— 注释却写着
- * 「刻意都不落在那一带」。说的和现实相反,是判据算出来才发现的。
+ * 顺带:0.17–0.25 Hz 对应 4.0–5.9 秒,这一段整个不能用,四档必须从它上面
+ * 跳到下面。跳的那一步放在 understanding → thinking(「在读」到「在想」),
+ * 因为那一步本来就该是最明显的一档变化。若硬要四档都挤在带子下面(<4s),
+ * 相邻两档只差零点几秒,余光里根本分不出来 —— 那等于这四档白分。
  */
 const BREATH: Record<string, string> = {
-  none: '6s',
-  understanding: '4.3s',
-  thinking: '3.5s',
-  rehearsing: '2.9s',
+  none: '9s',
+  understanding: '6.5s',
+  thinking: '3.6s',
+  rehearsing: '2.6s',
 };
 
+// 载入即跑。改表改越界了,当场说出来。
+checkPeriods(
+  'pet',
+  Object.entries(BREATH).map(([k, v]) => [k, Number.parseFloat(v)] as const),
+);
 /** 此刻这只东西周围正在发生什么。**全部来自同一帧。** */
 export interface PetLive {
   /** 主轴:静 / 阈限 / 显形 */

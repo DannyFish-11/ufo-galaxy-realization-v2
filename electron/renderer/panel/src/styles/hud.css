@@ -361,7 +361,7 @@ body {
 }
 /* 展开着:向中点收拢 —— 点了会收窄 */
 .rest:hover::after,
-.rest:focus-visible::after { animation: rest-in 1.7s var(--ease) infinite; }
+.rest:focus-visible::after { animation: rest-in var(--c-rest) var(--ease) infinite; }
 /* 收窄着:向两端推开 —— 点了会变宽 */
 .rail[data-slim='true'] .rest:hover::after,
 .rail[data-slim='true'] .rest:focus-visible::after { animation-name: rest-out; }
@@ -377,9 +377,11 @@ body {
   70%      { clip-path: inset(0 46% 0 46%); opacity: 0.95; }
   100%     { clip-path: inset(0 48% 0 48%); opacity: 0; }
 }
-/* 关了动效的人:光不走,但**折痕要更明显** —— 否则这一按又回到没人摸得到。 */
+/* 关了动效的人:光不走(在 tokens.css 里一次停掉),但**折痕要更明显** ——
+   否则这一按又回到没人摸得到。这里只管补偿,不管停。
+   ——— 这一格原先还写着 `.rest::after { animation: none }`,而动画挂在
+   `.rest:hover::after` 上,伪类更特指,那句从来没生效过。 */
 @media (prefers-reduced-motion: reduce) {
-  .rest::after { animation: none; opacity: 0; }
   .rest::before { opacity: 0.7; }
   .rest:hover::before,
   .rest:focus-visible::before { opacity: 1; }
@@ -420,7 +422,7 @@ body {
 }
 
 .line[data-run='true'] .line-pulse {
-  animation: pulse-run var(--dur, 3.4s) linear infinite;
+  animation: pulse-run var(--dur, var(--c-pulse)) linear infinite;
 }
 @keyframes pulse-run {
   0%        { transform: translateX(calc(-1 * var(--pw))); opacity: 0; }
@@ -740,11 +742,13 @@ body {
   transition: transform 0.5s var(--ease);
 }
 /* 呼吸的**快慢是实时的**:阈限态里它越往后使劲(懂 → 想 → 排演),喘得越快。
-   周期由 pet.ts 按 liminal_activity 给,四档都刻意避开 0.18~0.22 Hz 那一带;
-   这里的兜底值同样在带外(6s ≈ 0.167 Hz)。 */
+   周期由 pet.ts 按 liminal_activity 给,四档都避开要躲的那一带;判据在 motion.ts,
+   **不在这段注释里** —— 这儿原先写的是"0.18~0.22 Hz",比真带子(0.17–0.25)窄,
+   而 understanding 档 4.3s = 0.233 Hz 恰好卡在两者之间,于是照这句话看它是合格的。
+   兜底值取 --c-breath,跟 pet.ts 最慢那一档对齐。 */
 .pet-breath {
   transform-box: fill-box; transform-origin: 50% 82%;
-  animation: pet-breathe var(--pet-rate, 6s) var(--ease) infinite;
+  animation: pet-breathe var(--pet-rate, var(--c-breath)) var(--ease) infinite;
 }
 /* ── 眨眼:单独一层 ───────────────────────────────────────────────
    眨眼是 transform(压扁),眼睛的开合是几何量(y / height)。挂同一层的话动画会
@@ -754,7 +758,7 @@ body {
    状态再准,看着也像一张贴纸。 */
 .pet-blink {
   transform-box: fill-box; transform-origin: 50% 50%;
-  animation: pet-blink 7.4s var(--ease) infinite;
+  animation: pet-blink var(--c-blink) var(--ease) infinite;
 }
 /* 眼睛本来就闭着 / 还不知道睁没睁的时候不眨 —— 那会变成抽搐。 */
 .pet[data-eyes='shut'] .pet-blink,
@@ -801,12 +805,10 @@ body {
 /* 还没收到过帧:身子淡下去 —— 不知道就不摆样子 */
 .pet[data-eyes='unknown'] .pet-skin { fill: var(--m-4); opacity: 0.6; }
 
-@media (prefers-reduced-motion: reduce) {
-  /* 呼吸停掉,但**姿势和眼睛都留着** —— 那两样是事实,不是动效。
-     停的必须是 .pet-breath:呼吸在内层。拆成两层之后这里一度还写着 .pet-body,
-     那条规则等于没写 —— 关了动效的人照样看着它一起一伏。 */
-  .pet-breath { animation: none; }
-}
+/* 呼吸和眨眼在 prefers-reduced-motion 下会停,但**姿势和眼睛的开合都留着**
+   —— 那两样是事实,不是动效:它们是 transform / y / height,不是 animation,
+   所以那条通配的 `animation: none` 碰不到它们。正是为此才不能图省事写成
+   「关了动效就把 .pet 整个冻住」。 */
 
 /* ── 对话 ── */
 .thread {
@@ -828,7 +830,7 @@ body {
 .turn-caret {
   display: inline-block; width: 2px; height: 1.05em;
   border-radius: 1px; background: var(--a-mid); vertical-align: -3px;
-  animation: caret 1.15s steps(2) infinite;
+  animation: caret var(--c-caret) steps(2) infinite;
 }
 @keyframes caret { 50% { opacity: 0; } }
 /* 降级必须留痕:声音和文字已经脱钩,界面上不能一声不吭 */
@@ -897,9 +899,9 @@ body {
   transition: opacity 0.5s var(--ease), background 0.34s var(--ease);
 }
 .field[data-lit='true']::before { opacity: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .field::before { transition: opacity 0.5s var(--ease); }
-}
+/* 关了动效时这道高光只淡入淡出、不跟着光标走 —— 由 tokens.css 那条白名单
+   统一做掉(它放行 background-color,不放行 background)。这里原先单写过一条,
+   跟那条白名单是同一件事,留着会让人以为不止一处在管。 */
 .field > * { position: relative; z-index: 1; }
 
 .field input {
@@ -952,8 +954,10 @@ body {
      不通  沉进面里,不发光,不动
      不知道 空心圈(**不是暗一点的实心**,那会被读成「弱的通」)
 
-   呼吸周期 4.2 秒,落在 0.24 Hz —— 刻意避开 0.2 Hz 那一带,让它待在余光里
-   (同 line.ts 的理由)。prefers-reduced-motion 下整条停掉。
+   呼吸周期在 --c-dot(6.4 秒 = 0.156 Hz),避开 0.17–0.25 Hz 那一带,让它
+   待在余光里。原先写的是 4.2 秒 = 0.238 Hz,**正在带里**,而这段注释当时
+   写着「同 line.ts 的理由」—— line.ts 那份判据真算一遍就会拦下它。
+   周期在 tokens.css,判据在 motion.ts;关了动效时整条停,停在 tokens.css。
    ──────────────────────────────────────────────────────────────── */
 .wired-dot {
   flex: none; width: 7px; height: 7px; border-radius: 999px;
@@ -972,7 +976,7 @@ body {
     0 0 0 1.5px rgba(255, 255, 255, 0.55),
     0 1px 2.5px rgba(93, 84, 102, 0.3),
     0 0 7px 1px rgba(255, 255, 255, 0.85);
-  animation: dot-breathe 4.2s ease-in-out infinite;
+  animation: dot-breathe var(--c-dot) ease-in-out infinite;
 }
 
 /* 部分:只亮半边。**它就长成"部分"的样子**,不用另说一句 */
@@ -1005,9 +1009,6 @@ body {
   50% { box-shadow:
     inset 0 0 0 0.5px rgba(255,255,255,.95), 0 0 0 2px rgba(255,255,255,.7),
     0 1px 2.5px rgba(93,84,102,.26), 0 0 10px 2px rgba(255,255,255,1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .wired-row[data-state='on'] .wired-dot { animation: none; }
 }
 
 .wired-name { flex: none; color: var(--ink-2); }
