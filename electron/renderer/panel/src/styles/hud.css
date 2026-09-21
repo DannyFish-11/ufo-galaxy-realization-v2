@@ -1523,10 +1523,22 @@ body {
 .ga-frame {
   display: flex; flex-direction: column; min-width: 0;
   border-radius: 12px; overflow: hidden;
+  /* 四条边的痕迹**全部由柔影给**,一条 1px 的线都不画。
+
+     `tokens.css` 开头那条规矩是「靠顶边受光和柔影分层,**不靠给每条边刷白**」,
+     `tests/test_panel_has_no_decorative_boxes.py` 守着它。我第一版给这个框套了
+     `inset 0 0 0 1px` —— 那正是那道门要拦的东西,而且理由成立:一圈等宽的细线
+     就是"一格一格的框"最典型的画法。
+
+     去掉那圈线之后"内嵌"这件事一点没丢,因为它本来就不是线给的:
+     上沿压一道暗影、下沿留一道亮边,合起来读作"这块面被按下去了"——
+     正是同一条规矩的反向用法。两侧各补一道**带模糊的**内阴影(不是线),
+     四条边就都有了交代。 */
   box-shadow:
-    inset 0 0 0 1px rgba(93, 84, 102, 0.11),
-    inset 0 2px 3px -1px rgba(93, 84, 102, 0.17),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.6);
+    inset 0 3px 4px -2px rgba(93, 84, 102, 0.2),
+    inset 1px 0 3px -2px rgba(93, 84, 102, 0.16),
+    inset -1px 0 3px -2px rgba(93, 84, 102, 0.16),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.66);
 }
 .ga-frame-head {
   flex: none; display: flex; align-items: center; gap: 7px;

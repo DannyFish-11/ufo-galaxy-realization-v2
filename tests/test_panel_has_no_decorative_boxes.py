@@ -54,7 +54,41 @@ _RING_IS_ALLOWED_BECAUSE = {
         "空心 = 这一条**没问到**。填实了（哪怕调暗）会被读成「不通」，"
         "而「不通」是一个问过了的结论 —— 那正是这张清单要治的那类假话"
     ),
+    ".ga-policy[data-mode='unknown'] .ga-dot": (
+        "空心 = 装插件之前**会不会先问你**这件事没问到（后端没答）。"
+        "填实了会被读成「不会问」，而那是一个问过了的结论 —— 两者差着一次"
+        "「它到底会不会弹出来问我」。和上面 .wired-dot 那条是同一种信息、"
+        "同一套画法：这一段的四档状态本来就是照那套话做的"
+    ),
 }
+
+
+def _strip_comments(css: str) -> str:
+    """把 ``/* … */`` 换成等量的空行，行号不变。
+
+    **注释不是声明。** 这一条是踩出来的：有人（我）在 `.ga-frame` 上面写注释解释
+    「我第一版套了 `inset 0 0 0 1px`，那正是这道门要拦的东西」—— 代码里那圈线
+    确实已经删了，而扫描器照样把这段散文当成声明报了出来。
+
+    一条会被注释触发的门，改的人只会去改注释、不会去改代码；而**照着规矩写下
+    解释**反而最容易踩中，那就把这道门变成了"别写注释"。
+
+    换成等量空行而不是直接删掉：报出来的行号还要指得准。
+    """
+    out, i, n = [], 0, len(css)
+    while i < n:
+        start = css.find("/*", i)
+        if start == -1:
+            out.append(css[i:])
+            break
+        out.append(css[i:start])
+        end = css.find("*/", start + 2)
+        if end == -1:  # 没闭合：剩下的整段都当注释
+            out.append("\n" * css.count("\n", start))
+            break
+        out.append("\n" * css.count("\n", start, end))
+        i = end + 2
+    return "".join(out)
 
 
 def _selectors_with_rings() -> dict[str, str]:
@@ -62,8 +96,10 @@ def _selectors_with_rings() -> dict[str, str]:
 
     做法是从每一条 ring 声明往回找最近的选择器行。够用，因为这份 CSS 是手写的、
     一条规则一个选择器块；真要变复杂了，这道门会先误报，而误报比漏报安全。
+
+    先剥注释 —— 理由见 `_strip_comments`。
     """
-    lines = _CSS.read_text(encoding="utf-8").split("\n")
+    lines = _strip_comments(_CSS.read_text(encoding="utf-8")).split("\n")
     ring = re.compile(r"inset 0 0 0 1(\.\d+)?px|outline: 1px dashed")
     out: dict[str, str] = {}
     for i, line in enumerate(lines):
@@ -173,3 +209,18 @@ def test_the_category_list_has_no_icon_field_left_behind() -> None:
     assert "icon" not in src, "CategoryDef 里还留着 icon 的痕迹"
     settings = (_PANEL_SRC / "ui/settings.ts").read_text(encoding="utf-8")
     assert "g.icon" not in settings, "设置页表头还在拼图标"
+
+
+def test_the_scanner_reads_declarations_not_prose() -> None:
+    """这道门自己不许被注释触发。
+
+    写注释解释这条规矩（"别用 `inset 0 0 0 1px`"）是最正当的用法，
+    而它一度会让这道门红 —— 那等于在说"别写注释"。
+    """
+    css = ".x {\n  /* 别写 inset 0 0 0 1px */\n  color: red;\n}\n"
+    assert "inset 0 0 0 1px" not in _strip_comments(css), "注释没被剥掉"
+    # 行号要保住：报出来的位置还得指得准。
+    assert _strip_comments(css).count("\n") == css.count("\n")
+    # 反面保险：真声明照样看得见，否则上面那条在"整份剥空"的实现下也绿。
+    real = ".y {\n  box-shadow: inset 0 0 0 1px red;\n}\n"
+    assert "inset 0 0 0 1px" in _strip_comments(real)
