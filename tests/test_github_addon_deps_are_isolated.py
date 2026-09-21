@@ -554,3 +554,104 @@ class TestTheRootCanBeInjected:
         assert install_addon_deps(Path("/etc"), ["requests"], root=tmp_path)["scope"] == "rejected"
         assert add_venv_to_sys_path(Path("/etc"), root=tmp_path) is False
         assert calls == [], "对越界目录起了子进程"
+
+
+class TestTheLandingPathIsCheckedBeforeAnythingTouchesIt:
+    """落点要在**建目录之前**就判完，而且判定只有一处。
+
+    这一组是被 CodeQL 逼出来的第二轮：我把"这个仓库算什么"拆进
+    `core/github_addon_integration.py` 之后，`detect_addon_type` /
+    `present_contracts` 里那几句 `dest / "mcp_tool.json"` 就**离开了原来那道边界
+    检查的下游**——它们各自直接在一个没人验过的路径上做 `.exists()`。
+
+    影响面确实小（只读、只 `.exists()`），但形状正是上一轮修掉的那个：
+    "调用方已经净化过了"这句话，在拆分的那一刻就不再成立了。所以两头都堵：
+    源头算落点时判一次，两个查询函数自己也各判一次。
+    """
+
+    @pytest.mark.parametrize("ref", ["..", ".", "...", "", "../../etc"])
+    def test_a_dotted_ref_lands_in_its_own_folder_not_the_parent(self, tmp_path, ref):
+        """`..` 会原样活过那条白名单正则 —— 两个字符都在 `[A-Za-z0-9._-]` 里。
+
+        断言的是**落在哪**，不只是"还在根里"。这一条是变异改出来的：第一版只断言
+        `dest` 仍在根下、且 parts 里没有 `..`。把纯点号那句换掉的变异**活了下来**
+        —— 因为 `me/repo/..` 归一化之后是 `me/`，它确实还在根里，parts 里也确实
+        没有 `..`。可它落在了 owner 那一层，而那一层装着这个 owner 的**所有**仓库。
+
+        边界检查拦的是"爬出根"，拦不住"爬到同一个根里的别处"。两件事都要拦。
+        """
+        from core.github_addon_integration import safe_install_dest
+
+        dest, refusal = safe_install_dest(tmp_path, "me", "repo", ref)
+        assert dest is not None, f"正常的一次安装被拒了：{refusal}"
+        assert (
+            dest.parent == (tmp_path / "me" / "repo").resolve()
+        ), f"ref={ref!r} 落到了 {dest} —— 它该在 me/repo/ 下面，而不是爬到上一层"
+        assert ".." not in dest.parts
+
+    def test_a_same_prefix_sibling_root_is_refused(self, tmp_path):
+        """`/x/root-evil` 不能通过 `/x/root` 的前缀检查。
+
+        这一条也是变异改出来的：去掉 `+ os.sep` 的变异原先活着，因为现有的越界
+        用例（owner=`..`）落在根的**上面**，两种写法都拒。要抓住同前缀旁路，
+        落点必须恰好是"根名字加个后缀"的那个兄弟目录。
+        """
+        from core.github_addon_integration import safe_install_dest
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (tmp_path / "root-evil").mkdir()
+        dest, refusal = safe_install_dest(root, "..", "root-evil", "main")
+        assert dest is None, f"同前缀的旁路目录被放行了：{dest}"
+        assert "拒绝" in refusal
+
+    def test_a_normal_ref_is_accepted_untouched(self, tmp_path):
+        """反面保险：别把正常的 ref 也换掉了，否则上面那条在"一律拒绝"下也绿。"""
+        from core.github_addon_integration import safe_install_dest
+
+        dest, refusal = safe_install_dest(tmp_path, "me", "repo", "v1.2.3")
+        assert refusal == ""
+        assert dest is not None and dest.name == "v1.2.3"
+
+    def test_an_owner_that_climbs_out_is_refused(self, tmp_path):
+        """owner / repo 也是拼进路径的，不能只盯着 ref。"""
+        from core.github_addon_integration import safe_install_dest
+
+        dest, refusal = safe_install_dest(tmp_path, "..", "..", "main")
+        assert dest is None, f"越界的落点被放行了：{dest}"
+        assert "拒绝" in refusal
+
+    def test_the_two_queries_refuse_to_look_outside_the_root(self, tmp_path):
+        """两个查询函数自己也带边界，而且是**总函数**：越界答"没有"，不抛。
+
+        问"这个仓库根上有没有 mcp_tool.json"，越界目录的正确答案是"没有"——
+        不是抛一个异常让每个只想看一眼的调用方去接。这个区分在 `venv_python`
+        那儿已经立过一次。
+        """
+        from core.github_addon_integration import detect_addon_type, present_contracts
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "mcp_tool.json").write_text("{}", encoding="utf-8")
+        root = tmp_path / "root"
+        root.mkdir()
+
+        assert detect_addon_type(outside, root=root) == "ordinary_tool_repo", "越界目录里的 mcp_tool.json 被当真了"
+        assert present_contracts(outside, root=root) == {"mcp": False, "skill": False, "skill_md": False}
+
+        # 反面保险：根下的同一份契约必须**认得出来**，否则上面两条在
+        # "一律返回没有"的实现下也会绿。
+        inside = root / "me" / "repo" / "main"
+        inside.mkdir(parents=True)
+        (inside / "mcp_tool.json").write_text("{}", encoding="utf-8")
+        assert detect_addon_type(inside, root=root) == "mcp"
+        assert present_contracts(inside, root=root)["mcp"] is True
+
+    def test_no_root_given_means_no_limit(self, tmp_path):
+        """不传 root 就不设限 —— 仓里别处（和测试）按老签名调用时行为不变。"""
+        from core.github_addon_integration import detect_addon_type
+
+        d = tmp_path / "anywhere"
+        d.mkdir()
+        (d / "skill.json").write_text("{}", encoding="utf-8")
+        assert detect_addon_type(d) == "skill"

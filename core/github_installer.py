@@ -96,6 +96,7 @@ from core.github_addon_integration import (  # noqa: E402
     cloned_only_results,
     detect_addon_type,
     present_contracts,
+    safe_install_dest,
 )
 
 # Ingestion size limits — keep chunks small enough for the knowledge store
@@ -999,18 +1000,11 @@ class GitHubInstaller:
         if not admission.allowed:
             return {"success": False, "error": admission.reason, "admission_rule": admission.rule}
 
-        # 2. Prepare destination directory
-        # ``.`` 和 ``-`` 在白名单里,所以 ``..`` 会**原样活下来** —— re.sub 只替换
-        # 不在白名单里的字符,而 ``..`` 两个字符都在。于是 ``ref=".."`` 拼出来的 dest
-        # 带着一个向上跳的路径段。CodeQL 在 addon_dependency_isolation 上报的那 10 条
-        # (9 条 path expression + 1 条 uncontrolled command line)指的就是这条数据流。
-        #
-        # 两头都堵:这里把纯点号的段换掉,那边 ``resolve_addon_dir`` 再校验一次落点。
-        # 只堵一头不够 —— 这一层是"别产生坏路径",那一层是"就算产生了也不许用"。
-        safe_ref = re.sub(r"[^A-Za-z0-9._-]", "_", effective_ref)
-        if set(safe_ref) <= {"."}:  # "" / "." / ".." / "..." 一律不接受
-            safe_ref = "_"
-        dest = self._install_dir / owner / repo / safe_ref
+        # 2. 算出落点。两头都堵(纯点号的 ref 段 + 归一化后必须在根下),
+        #    判定在 github_addon_integration 那一处。越界的那次连目录都不建。
+        dest, refusal = safe_install_dest(self._install_dir, owner, repo, effective_ref)
+        if dest is None:
+            return {"success": False, "error": refusal, "install_state": "refused"}
         dest.mkdir(parents=True, exist_ok=True)
 
         # 3. Fetch repo
@@ -1028,7 +1022,7 @@ class GitHubInstaller:
         # 4. Detect addon type
         mcp_manifest_path = dest / _MCP_TOOL_MANIFEST
         skill_manifest_path = dest / _SKILL_MANIFEST
-        detected_type = detect_addon_type(dest, addon_type)
+        detected_type = detect_addon_type(dest, addon_type, root=self._install_dir)
 
         # 5. Read manifest
         tool_manifest: Dict[str, Any] = {}
@@ -1133,7 +1127,7 @@ class GitHubInstaller:
         # core/github_addon_integration.py 那一处。三档是**并列**的,不是
         # "成功/降级"两档:MCP / Skill 是 GitHub 项目的交集,不是它的定义。
         integration, install_success, install_state = build_integration(
-            detected_type, reg_result, verify_result, present_contracts(dest)
+            detected_type, reg_result, verify_result, present_contracts(dest, root=self._install_dir)
         )
 
         # 9. Record in manifest

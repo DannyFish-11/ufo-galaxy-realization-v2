@@ -37,6 +37,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -46,6 +48,8 @@ __all__ = [
     "SKILL_MD_MANIFEST",
     "INTEGRABLE_TYPES",
     "detect_addon_type",
+    "present_contracts",
+    "safe_install_dest",
     "integration_form",
     "build_integration",
     "cloned_only_results",
@@ -64,7 +68,26 @@ INTEGRABLE_TYPES = frozenset({"mcp", "skill", "skill_md"})
 _FORM_BY_TYPE = {"mcp": "mcp", "skill": "skill", "skill_md": "skill"}
 
 
-def detect_addon_type(dest: Path, forced_type: Optional[str] = None) -> str:
+def _inside(dest: Path, root: Optional[Path]) -> bool:
+    """``dest`` 归一化之后是否仍落在 ``root`` 之内。``root`` 为 None 时不设限。
+
+    判据和 ``addon_dependency_isolation.resolve_addon_dir`` 完全一样,而且是
+    **单一条件**:realpath 之后必须以「根 + 分隔符」开头。这一点不是风格 ——
+    守卫一旦和别的条件用 and/or 串起来,CodeQL 就推不出 startswith 为真,
+    整条数据流照样被判成未净化(那一轮 9 条 path-injection 就是这么来的)。
+
+    为什么这里**不复用**那个函数:它是"动作"用的,越界就抛。而下面两个是
+    **查询** —— 问"这个仓库根上有没有 mcp_tool.json",越界目录的正确答案是
+    "没有",不是抛一个异常让每个只想看一眼的调用方去接。这个区分在
+    ``venv_python`` 那儿已经立过一次。
+    """
+    if root is None:
+        return True
+    root_str = os.path.realpath(str(root))
+    return os.path.realpath(str(dest)).startswith(root_str + os.sep)
+
+
+def detect_addon_type(dest: Path, forced_type: Optional[str] = None, root: Optional[Path] = None) -> str:
     """看一眼仓库根,判定它是哪一种。
 
     ``forced_type`` 是调用方强制指定(排障用),优先于自动判定 —— 但注意它只改
@@ -74,7 +97,7 @@ def detect_addon_type(dest: Path, forced_type: Optional[str] = None) -> str:
     """
     if forced_type in ("mcp", "skill", "skill_md"):
         return forced_type
-    if forced_type is None:
+    if forced_type is None and _inside(dest, root):
         if (dest / MCP_TOOL_MANIFEST).exists():
             return "mcp"
         if (dest / SKILL_MANIFEST).exists():
@@ -84,7 +107,7 @@ def detect_addon_type(dest: Path, forced_type: Optional[str] = None) -> str:
     return "ordinary_tool_repo"
 
 
-def present_contracts(dest: Path) -> Dict[str, bool]:
+def present_contracts(dest: Path, root: Optional[Path] = None) -> Dict[str, bool]:
     """根上到底摆着哪几份契约。
 
     ``detect_addon_type`` 只回答"选中了哪一种"(按 mcp → skill → SKILL.md 的顺序,
@@ -94,6 +117,8 @@ def present_contracts(dest: Path) -> Dict[str, bool]:
     不报这一份的话,三个槽位就只能按 ``detected_type`` 点亮一个、另外两个一律画成
     "没有" —— 那是在**替仓库说一句它没说过的话**。
     """
+    if not _inside(dest, root):
+        return {"mcp": False, "skill": False, "skill_md": False}
     return {
         "mcp": (dest / MCP_TOOL_MANIFEST).exists(),
         "skill": (dest / SKILL_MANIFEST).exists(),
@@ -178,3 +203,32 @@ def cloned_only_results() -> Tuple[Dict[str, Any], Dict[str, Any]]:
             "message": "没有集成契约,因此没有可自证的对象 —— 这不是一次失败。",
         },
     )
+
+
+def safe_install_dest(install_dir: Path, owner: str, repo: str, ref: str) -> Tuple[Optional[Path], str]:
+    """算出这个仓库该落在哪。返回 ``(路径, "")`` 或 ``(None, 拒绝原因)``。
+
+    **两头都堵。**
+
+    一头是"别产生坏路径":``re.sub(r"[^A-Za-z0-9._-]", …)`` 这条白名单**允许 ``.``
+    和 ``-``**,于是 ``ref=".."`` 会原样活下来(两个字符都在白名单里,re.sub 不会碰
+    它),拼出来的落点就带着一个向上跳的路径段。所以纯点号的段一律换成 ``_``。
+
+    另一头是"就算产生了也不许用":归一化之后必须仍在安装根下。判据和
+    ``addon_dependency_isolation.resolve_addon_dir`` 一样,而且是**单一条件** ——
+    守卫一旦和别的条件用 and/or 串起来,CodeQL 就推不出 startswith 为真
+    (那一轮 9 条 path-injection 正是这么来的)。
+
+    为什么算这一步要独立成函数,而不是留在 ``install()`` 里:它是纯的
+    ——"给一组坐标,算出落点或说明为什么不行"—— 而 ``install()`` 那个协程要起网络、
+    要写盘。钉住这条判定的用例不该为了验一个路径去跑一遍安装。
+    """
+    safe_ref = re.sub(r"[^A-Za-z0-9._-]", "_", ref)
+    if set(safe_ref) <= {"."}:  # "" / "." / ".." / "..." 一律不接受
+        safe_ref = "_"
+    dest = install_dir / owner / repo / safe_ref
+    root_str = os.path.realpath(str(install_dir))
+    resolved = os.path.realpath(str(dest))
+    if not resolved.startswith(root_str + os.sep):
+        return None, f"安装落点不在 {root_str} 下,拒绝:{dest!r} → {resolved}"
+    return Path(resolved), ""
