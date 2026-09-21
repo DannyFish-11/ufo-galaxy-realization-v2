@@ -58,9 +58,7 @@ def _in_band(seconds: float) -> bool:
 def _cycle_tokens() -> dict[str, float]:
     """tokens.css 里的 --c-* 周期，单位秒。"""
     out: dict[str, float] = {}
-    for name, num, unit in re.findall(
-        r"(--c-[a-z-]+)\s*:\s*(\d*\.?\d+)(m?s)\s*;", _code(_TOKENS)
-    ):
+    for name, num, unit in re.findall(r"(--c-[a-z-]+)\s*:\s*(\d*\.?\d+)(m?s)\s*;", _code(_TOKENS)):
         out[name] = float(num) / (1000 if unit == "ms" else 1)
     return out
 
@@ -115,9 +113,7 @@ class TestEveryLoopGoesThroughAToken:
 def _loops() -> list[str]:
     """hud.css 里所有会一直转的 animation 声明。"""
     return [
-        m.group(1).strip()
-        for m in re.finditer(r"animation\s*:\s*([^;}]+)", _code(_HUD))
-        if "infinite" in m.group(1)
+        m.group(1).strip() for m in re.finditer(r"animation\s*:\s*([^;}]+)", _code(_HUD)) if "infinite" in m.group(1)
     ]
 
 
@@ -131,9 +127,7 @@ class TestNoPeriodSitsInTheBand:
     def test_only_motion_ts_defines_the_band(self) -> None:
         """第二份判据就是第三次翻车的成因 —— pet.ts 曾自带一条更窄的带子。"""
         others = [
-            p
-            for p in sorted(_PANEL.rglob("*.ts"))
-            if p != _MOTION and re.search(r"AVOID_(LO|HI)\s*=", _code_ts(p))
+            p for p in sorted(_PANEL.rglob("*.ts")) if p != _MOTION and re.search(r"AVOID_(LO|HI)\s*=", _code_ts(p))
         ]
         assert not others, f"这些文件又各自定义了一份频段判据：{[str(p) for p in others]}"
 
@@ -150,17 +144,13 @@ class TestNoPeriodSitsInTheBand:
         rates = _pet_breath()
         assert rates, "pet.ts 的 BREATH 表没读到 —— 这道门在空转"
         bad = {k: v for k, v in rates.items() if _in_band(v)}
-        assert not bad, "pet.ts 的呼吸档落在带里：" + ", ".join(
-            f"{k}={v}s={1 / v:.3f}Hz" for k, v in bad.items()
-        )
+        assert not bad, "pet.ts 的呼吸档落在带里：" + ", ".join(f"{k}={v}s={1 / v:.3f}Hz" for k, v in bad.items())
 
     def test_no_line_cadence_is_in_the_band(self) -> None:
         cad = _line_cadence()
         assert len(cad) == 6, f"line.ts 的 CADENCE 应该是三相位各两栏共 6 个，读到 {len(cad)} 个"
         bad = {k: v for k, v in cad.items() if _in_band(v)}
-        assert not bad, "line.ts 的脉冲周期落在带里：" + ", ".join(
-            f"{k}={v}s={1 / v:.3f}Hz" for k, v in bad.items()
-        )
+        assert not bad, "line.ts 的脉冲周期落在带里：" + ", ".join(f"{k}={v}s={1 / v:.3f}Hz" for k, v in bad.items())
 
 
 def _code_ts(path: pathlib.Path) -> str:
@@ -174,10 +164,7 @@ def _pet_breath() -> dict[str, float]:
     body = re.search(r"const BREATH[^=]*=\s*\{(.*?)\}", code, re.S)
     if not body:
         return {}
-    return {
-        k: float(v)
-        for k, v in re.findall(r"(\w+)\s*:\s*'(\d*\.?\d+)s'", body.group(1))
-    }
+    return {k: float(v) for k, v in re.findall(r"(\w+)\s*:\s*'(\d*\.?\d+)s'", body.group(1))}
 
 
 def _line_cadence() -> dict[str, float]:
@@ -200,9 +187,7 @@ class TestTurningMotionOffActuallyTurnsItOff:
 
     def test_the_stop_is_universal_and_covers_pseudo_elements(self) -> None:
         block = _reduce_block()
-        sel = re.search(
-            r"(\*\s*,\s*\*::before\s*,\s*\*::after\s*\{[^}]*\})", block, re.S
-        )
+        sel = re.search(r"(\*\s*,\s*\*::before\s*,\s*\*::after\s*\{[^}]*\})", block, re.S)
         assert sel, (
             "prefers-reduced-motion 里没有那条通配规则。`*` 不含伪元素，"
             "所以 ::before / ::after 必须单列 —— 漏掉伪元素，"
@@ -220,9 +205,26 @@ class TestTurningMotionOffActuallyTurnsItOff:
         assert wl, "通配规则里没有 transition-property 白名单 —— 写死秒数的位移过渡会照样滑"
         props = {p.strip() for p in wl.group(1).replace("\n", " ").split(",")}
         moving = {
-            "all", "transform", "translate", "scale", "rotate", "width", "height",
-            "top", "left", "right", "bottom", "margin", "padding", "inset", "gap",
-            "x", "y", "r", "grid-template-columns", "background",
+            "all",
+            "transform",
+            "translate",
+            "scale",
+            "rotate",
+            "width",
+            "height",
+            "top",
+            "left",
+            "right",
+            "bottom",
+            "margin",
+            "padding",
+            "inset",
+            "gap",
+            "x",
+            "y",
+            "r",
+            "grid-template-columns",
+            "background",
         }
         leaked = props & moving
         assert not leaked, (
