@@ -69,8 +69,33 @@ const SEG = {
   isle: [0.46, 0.88],   // 灵动岛从上边框长出来
 };
 
-// 阈限态越往后使劲，桌宠喘得越快。四档都刻意避开 0.18–0.22 Hz 那一带。
-const PET_RATE = { none: '6s', understanding: '4.3s', thinking: '3.5s', rehearsing: '2.9s' };
+// 阈限态越往后使劲，桌宠喘得越快。**这四个数就是面板那只桌宠的那四个数**
+// （panel/src/ui/pet.ts 的 BREATH），一字不差 —— 两只是同一只东西，不能一只
+// 喘 6 秒另一只喘 9 秒。判据钉在 tests/test_overlay_reads_the_two_axis_contract.py。
+//
+// 要躲开的那一带是 **0.17–0.25 Hz**，唯一权威在 panel/src/motion.ts 的
+// AVOID_LO / AVOID_HI，**不在这段注释里**。这里原先写的是 0.18–0.22，
+// 而 understanding 档原先取 4.3s = 0.233 Hz —— 按真带子它在里面，按注释
+// 自己写的窄带子它在外面。这条弯路 motion.ts 的开头已经记过两回：
+// line.ts 的 5.1s、pet.ts 的 5.2s，两回都是"判据写在注释里"。这是第三回，
+// 而且是照着那份注释又走了一遍。所以数字不再自己定，照抄权威那一份。
+//
+//   none          9.0s = 0.111 Hz
+//   understanding 6.5s = 0.154 Hz
+//   thinking      3.6s = 0.278 Hz
+//   rehearsing    2.6s = 0.385 Hz
+//
+// 0.17–0.25 Hz 对应 4.0–5.9 秒，这一整段不能用，四档必须从它上面跳到下面。
+// 跳的那一步放在 understanding → thinking（"在读"到"在想"），因为那一步
+// 本来就该是最明显的一档变化。
+const PET_RATE = { none: '9s', understanding: '6.5s', thinking: '3.6s', rehearsing: '2.6s' };
+
+// 上一拍的决策 → 演哪一种反应。**与面板那只同一张表**（panel/src/ui/pet.ts 的 POSE）。
+// 四档各一种，少一种那一档就没演。
+const POSE = { none: 'rest', speak: 'lean', silent: 'tuck', delegate: 'aside' };
+
+//: 反应演多久（毫秒）。与面板那只一致。
+const REACT_MS = 1600;
 
 const ACTIVITY_WORD = {
   none: 'Galaxy', understanding: '正在理解', thinking: '正在规划', rehearsing: '正在推演',
@@ -115,6 +140,8 @@ class GalaxyOverlay {
 
     this._lastKind = 'none';
     this._lastReturning = false;
+    this._lastAct = '';
+    this._reactTimer = 0;
     this.lastFrame = 0;
   }
 
@@ -345,10 +372,47 @@ class GalaxyOverlay {
     const sensing = (p && p.source !== 'unwired') ? String(!!p.is_sensing) : 'unknown';
     if (this.pet.dataset.sensing !== sensing) this.pet.dataset.sensing = sensing;
 
+    // 主轴此刻在哪一相：静的时候小而沉，显形时立起来。与面板那只同一套。
+    const life = (this.render && this.render.lifecycle) || this.phase;
+    const ph = (life === 'liminal' || life === 'manifest') ? life : 'silent';
+    if (this.pet.dataset.phase !== ph) this.pet.dataset.phase = ph;
+
     const act = (this.render && this.render.liminal_activity) || 'none';
     const rate = PET_RATE[act] || PET_RATE.none;
     if (this.pet.style.getPropertyValue('--pet-rate') !== rate) {
       this.pet.style.setProperty('--pet-rate', rate);
+    }
+
+    this._petReact(p);
+  }
+
+  // ── 上面叠一次性的反应：上一拍决定了什么 ──
+  //
+  // **不是常驻姿势。** `ambient_action` 是"上一拍" —— 一个已经发生完的事实。
+  // 拿它当常驻姿势，它会一直卡在"忍住没说"那个样子不动，而下一次决策可能是
+  // 几分钟以后，看着像死了。所以演一遍（REACT_MS）就撤回实时那一层。
+  //
+  // 而且它是**驻留位**：同一个决策会跟着之后每一帧一遍遍发回来。照帧演的话
+  // 它每一帧抽一下 —— 既刺眼，又把"刚才"说成了"一直"。所以只在它变了时演。
+  //
+  // 这一整段是照着面板那只搬的（panel/src/ui/pet.ts 末尾那段），逐条对齐：
+  // 同一张 POSE 表、同样只认变化、同样 1.6 秒撤回。两只桌宠读的是同一位数据，
+  // 行为就不能是两样。
+  _petReact(p) {
+    const act = (p && p.source !== 'unwired') ? (p.ambient_action || 'none') : null;
+    const key = act === null ? '' : act;
+    if (key === this._lastAct) return;
+    this._lastAct = key;
+
+    if (this._reactTimer) { clearTimeout(this._reactTimer); this._reactTimer = 0; }
+    if (act && act !== 'none') {
+      this.pet.dataset.react = POSE[act] || 'rest';
+      this._reactTimer = setTimeout(() => {
+        delete this.pet.dataset.react;
+        this._reactTimer = 0;
+      }, REACT_MS);
+    } else {
+      delete this.pet.dataset.react;
     }
   }
 }

@@ -217,19 +217,120 @@ class TestTheCornersLeaveNoTrace:
         )
 
 
+def _avoid_band() -> tuple[float, float]:
+    """要躲开的频段 —— **从权威那一份读**，不在本文件里重写一遍数字。
+
+    权威是 ``electron/renderer/panel/src/motion.ts`` 的 ``AVOID_LO`` /
+    ``AVOID_HI``。那个文件开头记着这条判据栽过的两次，两次都是同一种栽法：
+    判据写在注释里。而这一条判据**自己就是第三次**：它原先写死 0.18–0.22，
+    比真带子（0.17–0.25）窄，于是覆盖层桌宠的 understanding 档
+    4.3s = 0.233 Hz 从它底下走过去了 —— 那个值正是 motion.ts 点名记过的
+    同一个值。所以现在不留第二份数字。
+    """
+    ts = (_RENDERER / "panel" / "src" / "motion.ts").read_text(encoding="utf-8")
+    lo = re.search(r"AVOID_LO\s*=\s*([\d.]+)", ts)
+    hi = re.search(r"AVOID_HI\s*=\s*([\d.]+)", ts)
+    assert lo and hi, "panel/src/motion.ts 里读不到 AVOID_LO / AVOID_HI —— 权威那一份被改名或搬走了"
+    return float(lo.group(1)), float(hi.group(1))
+
+
+def _panel_breath() -> dict[str, str]:
+    """面板那只桌宠的四档呼吸周期（panel/src/ui/pet.ts 的 BREATH）。"""
+    ts = (_RENDERER / "panel" / "src" / "ui" / "pet.ts").read_text(encoding="utf-8")
+    block = re.search(r"const BREATH:[^=]*=\s*\{(.*?)\}", ts, re.S)
+    assert block, "panel/src/ui/pet.ts 里找不到 BREATH 表"
+    return dict(re.findall(r"(\w+):\s*'([^']+)'", block.group(1)))
+
+
+def _panel_pose() -> dict[str, str]:
+    """面板那只桌宠的反应表（panel/src/ui/pet.ts 的 POSE）。"""
+    ts = (_RENDERER / "panel" / "src" / "ui" / "pet.ts").read_text(encoding="utf-8")
+    block = re.search(r"const POSE:[^=]*=\s*\{(.*?)\}", ts, re.S)
+    assert block, "panel/src/ui/pet.ts 里找不到 POSE 表"
+    return dict(re.findall(r"(\w+):\s*'([^']+)'", block.group(1)))
+
+
+def _js_table(name: str) -> dict[str, str]:
+    """app.js 里某张 ``{ k: 'v' }`` 常量表。"""
+    m = re.search(r"const\s+" + name + r"\s*=\s*\{(.*?)\};", _js(), re.S)
+    assert m, f"app.js 里找不到 {name}"
+    return dict(re.findall(r"(\w+):\s*'([^']+)'", m.group(1)))
+
+
 class TestTheRhythmAvoidsTheBand:
     def test_no_period_lands_in_the_avoided_band(self) -> None:
-        """0.18–0.22 Hz 那一带是刻意避开的 —— 与面板同一条纪律。
+        """那一带是刻意避开的 —— 与面板同一条纪律，也是同一份数字。
 
         判据把周期换算成频率去比，不看注释怎么写：面板那边就是靠这条算出来，
         抓到我在注释里写了一句假话（"5.2 秒 ≈ 0.19 Hz，刻意不落在带内"）。
         """
+        lo, hi = _avoid_band()
         blob = _css() + _js()
-        periods = {float(x) for x in re.findall(r"(\d+\.?\d*)s\b", blob)}
+        # ``.5s`` 这种省掉整数位的写法要认全：原先的 ``\d+\.?\d*`` 会把它读成
+        # 5s = 0.2 Hz，凭空造出一个带内的假阳性。
+        periods = {float(x) for x in re.findall(r"(?<![\w.])(\d*\.?\d+)s\b", blob)}
         periods = {p for p in periods if 0.3 <= p <= 30}
         assert periods, "一个周期都没找到，判据大概是失效了"
-        bad = {p: round(1 / p, 3) for p in periods if 0.18 <= 1 / p <= 0.22}
-        assert not bad, f"这些周期落在 0.18–0.22 Hz 带内：{bad}"
+        bad = {p: round(1 / p, 3) for p in periods if lo <= 1 / p <= hi}
+        assert not bad, f"这些周期落在 {lo}–{hi} Hz 带内：{bad}"
+
+
+class TestTheTwoPetsAreTheSameCreature:
+    """岛上那只和面板那只是**同一只东西**，不是两只长得像的。
+
+    它们读的是同一位数据（``render.perception`` 与 ``render.liminal_activity``），
+    所以同一份数据必须演出同一个样子。一只喘 6 秒另一只喘 9 秒、一只会对上一拍的
+    决策有反应另一只没有 —— 那不是两种风格，那是其中一只在说假话。
+
+    权威放在面板那边（``panel/src/ui/pet.ts``）：那只先有、四档周期在那儿被
+    量过两回、要躲的频段也在它隔壁。覆盖层是纯 JS，import 不进 TS，所以表得抄
+    一份；抄一份就会漂，于是这里逐条核对两边没漂。同一套做法在
+    ``tests/test_tauri_frontend_staging.py::test_denylist_matches_build_rs``。
+    """
+
+    def test_the_breath_table_matches_the_panel(self) -> None:
+        ours, theirs = _js_table("PET_RATE"), _panel_breath()
+        assert ours == theirs, (
+            f"两只桌宠的呼吸表漂了：只在一边的是 {set(ours.items()) ^ set(theirs.items())}。"
+            "同一个 liminal_activity 必须喘成同一个样子。"
+        )
+
+    def test_the_reaction_table_matches_the_panel(self) -> None:
+        ours, theirs = _js_table("POSE"), _panel_pose()
+        assert ours == theirs, f"两只桌宠的反应表漂了：只在一边的是 {set(ours.items()) ^ set(theirs.items())}"
+
+    def test_every_pose_has_somewhere_to_land(self) -> None:
+        """表里每一档都得有对应的样式 —— 少一条那一档就是"演了但看不见"。"""
+        css = _css()
+        missing = [v for v in _js_table("POSE").values() if v != "rest" and f"data-react='{v}'" not in css]
+        assert not missing, f"这几档反应没有对应的 CSS：{missing} —— 它们会被演一遍然后什么也没发生"
+
+    def test_the_reaction_is_one_shot_and_edge_triggered(self) -> None:
+        """``ambient_action`` 是**驻留位**：同一个决策会跟着之后每一帧一遍遍回来。
+
+        照帧演的话它每一帧抽一下 —— 既刺眼，又把"刚才"说成了"一直"。
+        而不撤回的话它会一直卡在"忍住没说"那个姿势，下一次决策可能几分钟以后，
+        看着像死了。所以两件事都要：只认变化、演完撤回。
+        """
+        js = _js()
+        assert "ambient_action" in js, "覆盖层的桌宠不读 ambient_action —— 面板那只读了，两只就不是同一只了"
+        assert re.search(r"if\s*\(\s*key\s*===\s*this\._lastAct\s*\)\s*return", js), (
+            "反应没有边沿判定 —— ambient_action 每一帧都会回来，照帧演它就一直在抽"
+        )
+        assert re.search(r"delete\s+this\.pet\.dataset\.react", js), "反应演完不撤 —— 一个过去的决策会变成永久姿势"
+        assert re.search(r"setTimeout\((?:.|\n)*?REACT_MS\)", js), '撤回不是定时的 —— 那就没有「演一遍」这回事'
+
+    def test_the_reaction_outranks_the_resting_pose(self) -> None:
+        """``data-react`` 与 ``data-phase`` 两边特指度相同，谁在后面谁赢。
+
+        调个个儿的话，"忍住没说"那一下会被静息的 ``scale(.94)`` 吃掉 —— 属性
+        照样设上了、DOM 里看着对，屏幕上什么都没发生。这类坏法最难查，所以钉住。
+        """
+        css = _css()
+        phase = [m.start() for m in re.finditer(r"#pet\[data-phase='[^']+'\]\s*\.pet-body", css)]
+        react = [m.start() for m in re.finditer(r"#pet\[data-react='[^']+'\]\s*\.pet-body", css)]
+        assert phase and react, "data-phase / data-react 落在 .pet-body 上的规则没找齐"
+        assert min(react) > max(phase), "反应那几条排在静息姿势前面 —— 同特指度下它会被盖掉，演了等于没演"
 
 
 class TestThePetKeepsItsLayers:

@@ -193,16 +193,24 @@ body {
    —— 那是最难查的一类坏法。眨眼是 transform（压扁），眼睛开合是几何量（y/height），
    也必须分开，否则「按了急停」就闭不上。两条都在面板那边栽过，不再栽第二次。 */
 #pet { width: 19px; height: 19px; flex: none; overflow: visible; display: block; }
-.pet-body   { transform-box: fill-box; transform-origin: 50% 82%; }
+/* 外层管**姿势**（上一拍想了什么），中层管呼吸，内层管眨眼。
+   姿势要能被看见地过渡过去，所以它自己带 transition —— 直接跳变会像抽搐。 */
+.pet-body   { transform-box: fill-box; transform-origin: 50% 82%;
+              transition: transform .5s cubic-bezier(.32,.72,0,1); }
+/* 兜底值 9s 与 PET_RATE.none 对齐（面板那边是 --c-breath，同一个数）。
+   四档周期与要躲开的频段：判据在 panel/src/motion.ts，**不在这儿**。 */
 .pet-breath { transform-box: fill-box; transform-origin: 50% 82%;
-              animation: pet-breathe var(--pet-rate, 6s) ease-in-out infinite; }
+              animation: pet-breathe var(--pet-rate, 9s) ease-in-out infinite; }
 .pet-blink  { transform-box: fill-box; transform-origin: 50% 50%;
               animation: pet-blink 7.4s ease-in-out infinite; }
-.pet-skin   { fill: var(--c-warm); }
+.pet-skin   { fill: var(--c-warm); transition: opacity .6s cubic-bezier(.32,.72,0,1); }
 /* 眼睛取岛自己的底色：深色岛上身子是亮的那块，眼睛就该是挖穿的两道缝。
    几何属性在 SVG 上**必须带单位** —— y: 13.6 是非法长度，整条声明会被静默丢弃。 */
-.pet-eye    { fill: #0c0b11; y: 13.6px; height: 11px; }
-#pet[data-eyes='shut'] .pet-eye { y: 18.6px; height: 2.4px; }
+.pet-eye    { fill: #0c0b11; y: 13.6px; height: 11px;
+              transition: y .34s cubic-bezier(.32,.72,0,1),
+                          height .34s cubic-bezier(.32,.72,0,1),
+                          opacity .34s cubic-bezier(.32,.72,0,1); }
+#pet[data-eyes='shut'] .pet-eye { y: 18.6px; height: 2.4px; opacity: .9; }
 #pet[data-eyes='unknown'] .pet-eye { opacity: .4; }
 /* 在收的时候睁得开一点。data-sensing 与 data-eyes 分开两位 —— 睁没睁是三档事实，
    收没收是另一件事，压成一位就会把"没在收"画成"闭着"。 */
@@ -210,6 +218,21 @@ body {
 /* 眼睛本来就闭着 / 还不知道睁没睁的时候不眨 —— 那会变成抽搐。 */
 #pet[data-eyes='shut'] .pet-blink,
 #pet[data-eyes='unknown'] .pet-blink { animation: none; }
+/* ── 底子：实时。主轴此刻在哪一相 —— 静的时候小而沉，显形时立起来。 ── */
+#pet[data-phase='silent']   .pet-skin { opacity: .72; }
+#pet[data-phase='silent']   .pet-body { transform: scale(.94); }
+#pet[data-phase='liminal']  .pet-skin { opacity: .88; }
+#pet[data-phase='manifest'] .pet-skin { opacity: 1; }
+#pet[data-phase='manifest'] .pet-body { transform: scale(1.04) translate(0, -.8px); }
+/* 还没收到过帧：身子淡下去 —— 不知道就不摆样子。 */
+#pet[data-eyes='unknown'] .pet-skin { opacity: .6; }
+/* ── 上面叠的一次性反应：上一拍决定了什么 ──
+   **必须排在 data-phase 那几条后面**：两边特指度相同（都是 #pet[attr] .pet-body），
+   谁在后面谁赢。调过来的话"忍住没说"那一下会被静息的 scale(.94) 吃掉。
+   面板那边同一张表、同一个道理（hud.css 末段）。 */
+#pet[data-react='lean']  .pet-body { transform: translate(0, -2.2px) scale(1.08); }
+#pet[data-react='tuck']  .pet-body { transform: translate(0, 1.6px) scale(.9); }
+#pet[data-react='aside'] .pet-body { transform: translate(3.4px, 0) rotate(8deg); }
 @keyframes pet-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 @keyframes pet-blink   { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
 
@@ -217,6 +240,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .rim { animation: none; opacity: calc(var(--rim) * .86); }
   .rim.bloom { opacity: calc(var(--rim) * .34); }
+  /* 呼吸和眨眼停掉，但**姿势和眼睛的开合都留着** —— 那两样是事实不是动效
+     （它们是 transform / y / height，不是 animation）。所以这里不能图省事
+     写成把 #pet 整个冻住。面板那边同理。 */
   .pet-breath, .pet-blink { animation: none; }
 }
 </style>
@@ -240,7 +266,7 @@ body {
 <!-- 灵动岛 -->
 <div id="island">
   <span class="isl-in">
-    <svg id="pet" viewBox="0 0 40 40" data-eyes="unknown" aria-hidden="true">
+    <svg id="pet" viewBox="0 0 40 40" data-eyes="unknown" data-phase="silent" aria-hidden="true">
       <g class="pet-body"><g class="pet-breath">
         <path class="pet-skin" d="M20 4.6c8 0 13.6 4.2 15 11 .6 2.9.6 5.9 0 8.8-1.4 7.2-6.8 11.6-15 11.6S6.4 31.6 5 24.4a22 22 0 0 1 0-8.8c1.4-6.8 7-11 15-11z"/>
         <g class="pet-blink">
