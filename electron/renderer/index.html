@@ -6,110 +6,258 @@
 <title>Galaxy</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; }
-
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
 body {
-  /* 透明背景 — 桌面壁纸完全可见 */
-  background: transparent;
-  font-family: 'Inter', 'SF Pro Display', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
-  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system,
+               'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Canvas 覆盖全屏 */
-#overlay {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none;
-  z-index: 9999;
+/* ══════════════════════════════════════════════════════════════════════
+   三态覆盖层 —— 一条编排，不是三个画面。
+
+   四条边的氛围光向后延伸成为空间的墙，空间收回边框就是执行的开场。
+   全程 CSS（渐变 + 3D transform + 遮罩），**不用 WebGL**。
+
+   为什么不用 WebGL
+   ----------------
+   产品里带着一个把 GPU 整个关掉的开关（main.js 的 GALAXY_ELECTRON_GPU=0 →
+   disable-gpu + disable-gpu-compositing），而且它是因为真机反复崩溃才加的。
+   原来那套全屏片元着色器在软件渲染下实测 1080p 每帧 735ms（1.4fps）——
+   不是慢，是不能用；而它的代价 ∝ 像素数 × 帧率，与画面复杂度无关，
+   连只画一圈边缘光的静默态都要 82ms/帧。
+
+   这里要画的东西本来全是**形状**，交给合成器：有 GPU 走 GPU，没有就走
+   Skia 软件光栅，两条路都便宜。箱体透视是浏览器原生能力，不必手算 z 平面。
+
+   Tauri 侧共用这份前端（见 desktop-tauri/README.md），WebView2 与
+   Chromium 在这几个特性上行为一致。
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* 色谱：所有者给的参考图实测取样。色相 236°→324°，饱和度全程 ≤34%。
+     面板那支莫兰迪紫（314°，panel/src/styles/tokens.css）落在 rose 与 warm 之间 ——
+     两处同源，不是两套色。 */
+  --c-rose: #a38798;   /* H 324°  近 */
+  --c-warm: #cdb1c9;   /* H 309° */
+  --c-mid:  #b7a5c2;   /* H 277° */
+  --c-cool: #b2add2;   /* H 248° */
+  --c-far:  #a0a1d0;   /* H 239° */
+  --c-deep: #9295c1;   /* H 236°  远 */
+  --c-hot:  #ecdfeb;   /* 边光的热芯，近白 */
+
+  --rim: 1;            /* 边光浓度 —— 由感知状态给 */
+  --my: 0%;            /* 收回：两臂上退的阈值 */
+  --mx: 0%;            /* 收回：顶边左→右的阈值 */
+  --r: 260%;           /* 铺回：从顶部中间长开的半径。260% = 全透，即"没在铺回" */
+  --D: 0px;            /* 四壁的纵深 */
+  --wop: 0;            /* 四壁浓度 */
+  --n: .52;            /* 四壁近端浓度（四面同值，见下） */
+  --ih: 0px; --iw: 0px; --ir: 2px; --iop: 0; --itx: 0;   /* 灵动岛 */
 }
 
-/* 灵动岛 */
+/* ═══ ① 第一态：一条连续的边光 ═══
+   三条边（左·右·上）**是一个东西**，不是三段 —— 所以它就是一个描了边的圆角矩形，
+   底边那条颜色设成透明，左右两条靠圆角在底部自然收掉。
+
+   收回是一条路径上的事：纵向阈值从下往上推（两臂同时上退）→ 到顶只剩顶边之后，
+   横向阈值从左往右推。两条遮罩取交集，整个收回就是两个标量。 */
+.rim {
+  position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+  border: 3px solid var(--c-warm); border-radius: 12px;
+  border-bottom-color: transparent;
+  filter: blur(3.6px);                       /* 中晕那一层 */
+  opacity: var(--rim);
+  animation: rim-breathe 6s ease-in-out infinite;
+  /* 三条遮罩取交集：前两条管收回，第三条管铺回（dissolving 时用）。
+     不用的那条把半径开到 260% 就是全透，互不干扰。
+
+     铺回为什么是一个从顶部中间长出来的椭圆：它一次就把整条路径说清了 ——
+     先沿顶边朝左右两边同时铺开，到两角再顺左右两条边往下走。横轴按宽解析、
+     纵轴按高解析，屏幕本来就宽，所以横向铺得快、纵向跟上。一个标量，不用分段。 */
+  -webkit-mask-image:
+    linear-gradient(to top,   transparent var(--my), #000 calc(var(--my) + 5%)),
+    linear-gradient(to right, transparent calc(var(--mx) - 9%), #000 var(--mx)),
+    radial-gradient(ellipse var(--r) var(--r) at 50% 0%, #000 0%, #000 80%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to top,   transparent var(--my), #000 calc(var(--my) + 5%)),
+    linear-gradient(to right, transparent calc(var(--mx) - 9%), #000 var(--mx)),
+    radial-gradient(ellipse var(--r) var(--r) at 50% 0%, #000 0%, #000 80%, transparent 100%);
+  mask-composite: intersect;
+}
+/* ── 光感靠三层，不是一层 ──
+   光之所以看着是光，靠的是**一个很亮的芯 + 一圈散开的晕**：芯给亮度，晕给体积。
+   整条糊掉（只剩晕）光感就全没了 —— 一层均匀的糊只是灰纱；芯也不能是没糊过的
+   实边，那就成了一条描出来的发丝线，一圈硬边矩形框看着还像第二态那个洞口。
+
+     core   1.2px  近白  微糊 0.7px    —— 亮度
+     中晕   3px    本色  糊 3.6px      —— 体积
+     外晕   8px    本色  糊 12px·四成  —— 散开的那一圈
+   三层共用同一组遮罩，收回与铺回时一起走。 */
+.rim.core {
+  border-width: 1.2px; border-radius: 12px;
+  border-color: var(--c-hot); border-bottom-color: transparent;
+  filter: blur(0.7px);
+}
+.rim.bloom {
+  inset: -4px; border-width: 8px; border-radius: 16px;
+  filter: blur(12px); opacity: calc(var(--rim) * .4);
+}
+/* 6s ≈ 0.167 Hz —— 与面板同一条纪律：刻意避开 0.18–0.22 Hz 那一带。 */
+@keyframes rim-breathe { 0%, 100% { opacity: .62; } 50% { opacity: 1; } }
+
+/* ═══ ② 第二态：四条边一块儿向后延伸 ═══
+   不是"推"、不是翻转 —— 四面墙一开始就垂直于屏幕（转角写死 90°，不做动画），
+   动的只有**深度**。等于把屏幕这个矩形朝后挤出去，四条边是一个整体在延伸。 */
+.stage { position: fixed; inset: 0; pointer-events: none; z-index: 9997;
+         perspective: 800px; perspective-origin: 50% 48%; }
+.box { position: absolute; inset: 0; transform-style: preserve-3d; }
+
+/* ⚠ .box 这一层不能挂 opacity / filter / mask / mix-blend-mode ——
+      它们都会让 preserve-3d 失效，四面墙会被拍扁。浓度写在每面墙自己身上
+      （叶子节点，不影响 3D 上下文）。栽过两次，都是这一类。 */
+.wall { position: absolute; opacity: calc(var(--wop) * var(--n)); }
+.wall-t { top: 0;    left: 0; right: 0; height: var(--D);
+          transform-origin: 50% 0%;   transform: rotateX(-90deg); }
+.wall-b { bottom: 0; left: 0; right: 0; height: var(--D);
+          transform-origin: 50% 100%; transform: rotateX(90deg); }
+.wall-l { left: 0;  top: 0; bottom: 0; width: var(--D);
+          transform-origin: 0% 50%;   transform: rotateY(90deg); }
+.wall-r { right: 0; top: 0; bottom: 0; width: var(--D);
+          transform-origin: 100% 50%; transform: rotateY(-90deg); }
+
+/* ── 纵深靠调子，不靠线 ──
+   没有一根引导线、没有角线。四面**取同一个浓度** —— 角线的唯一来源就是四面不等；
+   齐平之后相邻两面共用那条棱，棱上深度相同、取的是渐变同一处，颜色本来就一样。
+   折边交给透视的收敛去说。
+
+   站点按衰减曲线取（alpha =(1-t)²，末端归零所以不留硬切），近端密、远端疏 ——
+   变化快的地方多给几站，曲线才不露折点。色相与 alpha 同一个 t，
+   于是"越远越淡"和"越远越冷"是同一件事在发生。 */
+.wall {
+  --wall-grad:
+    rgba(163,135,152,1.000) 0%,
+    rgba(171,143,162,0.922) 4%,
+    rgba(182,154,174,0.828) 9%,
+    rgba(194,166,189,0.722) 15%,
+    rgba(203,176,200,0.608) 22%,
+    rgba(193,170,197,0.476) 31%,
+    rgba(182,166,196,0.336) 42%,
+    rgba(179,171,206,0.202) 55%,
+    rgba(169,167,209,0.090) 70%,
+    rgba(156,158,204,0.023) 85%,
+    rgba(146,149,193,0.000) 100%;
+}
+.wall-t { background: linear-gradient(to bottom, var(--wall-grad)); }
+.wall-b { background: linear-gradient(to top,    var(--wall-grad)); }
+.wall-l { background: linear-gradient(to right,  var(--wall-grad)); }
+.wall-r { background: linear-gradient(to left,   var(--wall-grad)); }
+
+/* 远端那一点余光 —— 把墙的远端化掉，让人看不出空间在哪儿结束。
+   两头都收进透明、铺得比画面大一圈：只要它自己有边，那条边就是一道痕迹。
+   中间留空 —— 那才是望不到底的那一头，而尽头恰好是桌面本身。 */
+.mist {
+  position: absolute; inset: -45%;
+  transform: translateZ(calc(var(--D) * -0.92));
+  opacity: calc(var(--wop) * .3);
+  background: radial-gradient(ellipse 48% 46% at 50% 50%,
+                transparent 0%,
+                rgba(160,161,208,0.11) 88%,
+                transparent 100%);
+}
+
+/* ═══ ③ 灵动岛：紧贴上边框长出来，不是弹窗 ═══
+   顶边与屏幕上沿齐平、只有下面两个角是圆的、没有投影 —— 它是从边框里长出来的
+   一块。收到最小就是一道贴边的细线，**隐私急停留下的那道线就是它本身**。 */
 #island {
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  z-index: 10001;
-  height: 34px;
-  padding: 0 18px;
-  background: linear-gradient(180deg,
-    rgba(178,142,67,0.22) 0%,
-    rgba(212,175,55,0.14) 50%,
-    rgba(178,142,67,0.08) 100%
-  );
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  border: 0.5px solid rgba(255,248,240,0.1);
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: rgba(255,252,245,0.88);
-  font-size: 13px;
-  font-weight: 400;
-  letter-spacing: 0.4px;
-  box-shadow:
-    0 4px 20px rgba(178,142,67,0.08),
-    inset 0 0.5px 0 rgba(255,255,255,0.06);
-  /* 初始状态：隐藏在上方 */
-  transform: translateX(-50%) translateY(-60px) scale(0.85);
-  opacity: 0;
-  transition: transform 1.0s cubic-bezier(0.25, 0.1, 0.25, 1),
-              opacity 0.7s ease-out;
-  pointer-events: none;
+  position: fixed; left: 50%; top: 0; transform: translateX(-50%);
+  z-index: 10001; pointer-events: none;
+  height: var(--ih); width: var(--iw);
+  border-radius: 0 0 var(--ir) var(--ir);
+  background: linear-gradient(180deg, rgba(12,11,17,.95) 0%, rgba(20,18,28,.97) 100%);
+  box-shadow: 0 0 0 1px rgba(183,165,194,.26), 0 0 18px -4px rgba(183,165,194,.4);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  opacity: var(--iop);
 }
+.isl-in { display: flex; align-items: center; gap: 9px; opacity: var(--itx);
+          white-space: nowrap; }
+#islandText { font-size: 12px; color: #d0c9d8; }
+#islandMode { font-family: ui-monospace, Consolas, monospace; font-size: 10px;
+              color: var(--c-cool); padding: 1px 6px; border-radius: 999px;
+              background: rgba(255,255,255,.08); }
 
-#island.visible {
-  transform: translateX(-50%) translateY(0) scale(1);
-  opacity: 1;
-}
+/* ── 桌宠：坐在岛上 ──
+   **三层，刻意的。** 姿势在外层、呼吸在中层、眨眼在内层：同挂一层的话动画那条
+   transform 优先级压过普通声明，姿势永远推不动，而屏幕上因为还在呼吸看着"活的"
+   —— 那是最难查的一类坏法。眨眼是 transform（压扁），眼睛开合是几何量（y/height），
+   也必须分开，否则「按了急停」就闭不上。两条都在面板那边栽过，不再栽第二次。 */
+#pet { width: 19px; height: 19px; flex: none; overflow: visible; display: block; }
+.pet-body   { transform-box: fill-box; transform-origin: 50% 82%; }
+.pet-breath { transform-box: fill-box; transform-origin: 50% 82%;
+              animation: pet-breathe var(--pet-rate, 6s) ease-in-out infinite; }
+.pet-blink  { transform-box: fill-box; transform-origin: 50% 50%;
+              animation: pet-blink 7.4s ease-in-out infinite; }
+.pet-skin   { fill: var(--c-warm); }
+/* 眼睛取岛自己的底色：深色岛上身子是亮的那块，眼睛就该是挖穿的两道缝。
+   几何属性在 SVG 上**必须带单位** —— y: 13.6 是非法长度，整条声明会被静默丢弃。 */
+.pet-eye    { fill: #0c0b11; y: 13.6px; height: 11px; }
+#pet[data-eyes='shut'] .pet-eye { y: 18.6px; height: 2.4px; }
+#pet[data-eyes='unknown'] .pet-eye { opacity: .4; }
+/* 在收的时候睁得开一点。data-sensing 与 data-eyes 分开两位 —— 睁没睁是三档事实，
+   收没收是另一件事，压成一位就会把"没在收"画成"闭着"。 */
+#pet[data-sensing='true'][data-eyes='open'] .pet-eye { y: 13px; height: 12px; }
+/* 眼睛本来就闭着 / 还不知道睁没睁的时候不眨 —— 那会变成抽搐。 */
+#pet[data-eyes='shut'] .pet-blink,
+#pet[data-eyes='unknown'] .pet-blink { animation: none; }
+@keyframes pet-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+@keyframes pet-blink   { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
 
-#island .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(232,210,175,1) 0%, rgba(178,142,67,0.5) 100%);
-  box-shadow: 0 0 5px rgba(232,210,175,0.4);
-}
-
-/* 状态指示（开发模式，用户不可见） */
-#depth {
-  position: fixed;
-  bottom: 14px;
-  right: 18px;
-  z-index: 10000;
-  color: rgba(178,142,67,0.3);
-  font-size: 11px;
-  font-weight: 300;
-  letter-spacing: 0.6px;
-  pointer-events: none;
-}
-
-/* 状态点呼吸动画 */
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.8); }
+/* 关了动效的人：光不走，但**在场要留着** —— 那是事实，不是动效。 */
+@media (prefers-reduced-motion: reduce) {
+  .rim { animation: none; opacity: calc(var(--rim) * .86); }
+  .rim.bloom { opacity: calc(var(--rim) * .34); }
+  .pet-breath, .pet-blink { animation: none; }
 }
 </style>
 </head>
 <body>
 
-<!-- WebGL 渲染画布 -->
-<canvas id="overlay"></canvas>
+<!-- 第二态：四条边向后延伸出的空间 -->
+<div class="stage">
+  <div class="box">
+    <div class="wall wall-t"></div><div class="wall wall-b"></div>
+    <div class="wall wall-l"></div><div class="wall wall-r"></div>
+    <div class="mist"></div>
+  </div>
+</div>
+
+<!-- 第一态：三条边的氛围光（三层：外晕 / 中晕 / 热芯） -->
+<div class="rim bloom"></div>
+<div class="rim"></div>
+<div class="rim core"></div>
 
 <!-- 灵动岛 -->
 <div id="island">
-  <div class="dot"></div>
-  <span id="islandText">Galaxy</span>
+  <span class="isl-in">
+    <svg id="pet" viewBox="0 0 40 40" data-eyes="unknown" aria-hidden="true">
+      <g class="pet-body"><g class="pet-breath">
+        <path class="pet-skin" d="M20 4.6c8 0 13.6 4.2 15 11 .6 2.9.6 5.9 0 8.8-1.4 7.2-6.8 11.6-15 11.6S6.4 31.6 5 24.4a22 22 0 0 1 0-8.8c1.4-6.8 7-11 15-11z"/>
+        <g class="pet-blink">
+          <rect class="pet-eye" x="13.2" width="4" rx="2"/>
+          <rect class="pet-eye" x="22.8" width="4" rx="2"/>
+        </g>
+      </g></g>
+    </svg>
+    <span id="islandText">Galaxy</span>
+    <span id="islandMode" hidden></span>
+  </span>
 </div>
 
-<!-- 深度显示（开发模式） -->
-<div id="depth">0.00</div>
-
-<!-- 模块加载 -->
-<script src="webgl/context.js"></script>
-<!-- 深度运动（纯函数，无 DOM 依赖）。必须早于 app.js —— app.js 的渲染循环直接调它。 -->
+<!-- 模块加载。
+     presence_motion.js 必须早于 app.js —— 渲染循环直接调它。
+     它是 depth 的运动学（编排带匀速穿越 + 弹簧，倾向接速度、稳定度接阻尼），
+     与渲染方式无关，所以换掉 WebGL 之后原样保留，presence_motion.test.js 照旧。 -->
 <script src="presence_motion.js"></script>
 <script src="app.js"></script>
 <script src="perception-capture.js"></script>
