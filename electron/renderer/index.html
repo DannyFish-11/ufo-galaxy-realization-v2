@@ -51,6 +51,7 @@ body {
   --mx: 0%;            /* 收回：顶边左→右的阈值 */
   --r: 260%;           /* 铺回：从顶部中间长开的半径。260% = 全透，即"没在铺回" */
   --D: 0px;            /* 四壁的纵深 */
+  --persp: 800px;      /* 透视距离，跟着视口高走（见 .stage） */
   --wop: 0;            /* 四壁浓度 */
   --n: .52;            /* 四壁近端浓度（四面同值，见下） */
   --ih: 0px; --iw: 0px; --ir: 2px; --iop: 0; --itx: 0;   /* 灵动岛 */
@@ -110,8 +111,15 @@ body {
 /* ═══ ② 第二态：四条边一块儿向后延伸 ═══
    不是"推"、不是翻转 —— 四面墙一开始就垂直于屏幕（转角写死 90°，不做动画），
    动的只有**深度**。等于把屏幕这个矩形朝后挤出去，四条边是一个整体在延伸。 */
+/* 透视**必须跟着视口走**，不能写死。
+   四壁的纵深是 --D = 视口高 × 1.12，而投影只看 D 与 perspective 的比值。
+   写死 800px 的话，屏幕越高这个比值越大、隧道越深，近端那条粉色就越往里铺：
+   实测同一份代码，1120×700 上粉带占屏宽 20.7%，到 1920×1080 就成了 24.6%。
+   设计稿是在 1120×700 上定的（D=784 / perspective=800，比值 0.98），
+   所以这里按 视口高 × 1.1429 给，任何分辨率上比值都还是 0.98 —— 与设计稿一致。
+   数由 app.js 连同 --D 一起写（它本来就在算这个高度），CSS 只留兜底。 */
 .stage { position: fixed; inset: 0; pointer-events: none; z-index: 9997;
-         perspective: 800px; perspective-origin: 50% 48%; }
+         perspective: var(--persp, 800px); perspective-origin: 50% 48%; }
 .box { position: absolute; inset: 0; transform-style: preserve-3d; }
 
 /* ⚠ .box 这一层不能挂 opacity / filter / mask / mix-blend-mode ——

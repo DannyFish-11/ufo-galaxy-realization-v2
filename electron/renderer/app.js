@@ -310,6 +310,10 @@ class GalaxyOverlay {
     // 四壁：只长深度，转角写死 90°。
     const H = window.innerHeight || 900;
     s.setProperty('--D', (grow * H * 1.12).toFixed(1) + 'px');
+    // 透视跟着视口高一起给 —— 投影只看 D/perspective，写死 perspective 的话
+    // 屏幕越高隧道越深、近端那条粉色越往里铺（实测 20.7% → 24.6% 屏宽）。
+    // 1.1429 = 1.12 / 0.98，0.98 是设计稿上的 D/perspective（784 / 800）。
+    s.setProperty('--persp', (H * 1.1429).toFixed(1) + 'px');
     s.setProperty('--wop', grow.toFixed(4));
 
     // ── 第一态的浓度：只调浓淡，不动几何 ──

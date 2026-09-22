@@ -314,11 +314,11 @@ class TestTheTwoPetsAreTheSameCreature:
         """
         js = _js()
         assert "ambient_action" in js, "覆盖层的桌宠不读 ambient_action —— 面板那只读了，两只就不是同一只了"
-        assert re.search(r"if\s*\(\s*key\s*===\s*this\._lastAct\s*\)\s*return", js), (
-            "反应没有边沿判定 —— ambient_action 每一帧都会回来，照帧演它就一直在抽"
-        )
+        assert re.search(
+            r"if\s*\(\s*key\s*===\s*this\._lastAct\s*\)\s*return", js
+        ), "反应没有边沿判定 —— ambient_action 每一帧都会回来，照帧演它就一直在抽"
         assert re.search(r"delete\s+this\.pet\.dataset\.react", js), "反应演完不撤 —— 一个过去的决策会变成永久姿势"
-        assert re.search(r"setTimeout\((?:.|\n)*?REACT_MS\)", js), '撤回不是定时的 —— 那就没有「演一遍」这回事'
+        assert re.search(r"setTimeout\((?:.|\n)*?REACT_MS\)", js), "撤回不是定时的 —— 那就没有「演一遍」这回事"
 
     def test_the_reaction_outranks_the_resting_pose(self) -> None:
         """``data-react`` 与 ``data-phase`` 两边特指度相同，谁在后面谁赢。
