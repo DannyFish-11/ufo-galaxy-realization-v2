@@ -257,6 +257,20 @@ def _js_table(name: str) -> dict[str, str]:
     return dict(re.findall(r"(\w+):\s*'([^']+)'", m.group(1)))
 
 
+def _js_table_keys(name: str) -> set:
+    """同一张表，只要**键**。
+
+    ``_js_table`` 只认带引号的值，而 ``SENSE_GLOW`` / ``OPEN_BY_LIFECYCLE``
+    的值是数字 —— 拿它去查取值域会一条都读不出来，于是判据全绿却什么都没查。
+    写这一条时就是这么绿了一次。
+    """
+    m = re.search(r"const\s+" + name + r"\s*=\s*\{(.*?)\};", _js(), re.S)
+    assert m, f"app.js 里找不到 {name}"
+    keys = set(re.findall(r"(\w+)\s*:", m.group(1)))
+    assert keys, f"{name} 解析出来是空的 —— 判据会全绿但什么都没查"
+    return keys
+
+
 class TestTheRhythmAvoidsTheBand:
     def test_no_period_lands_in_the_avoided_band(self) -> None:
         """那一带是刻意避开的 —— 与面板同一条纪律，也是同一份数字。
@@ -379,25 +393,118 @@ class TestEmptyIsNotUnknown:
         assert "unwired" in js, "没有区分「这条通路从没来过东西」"
 
 
-class TestThePerceptionVocabularyComesFromTheContract:
-    def test_all_five_modality_states_are_handled(self) -> None:
-        """五档各有明确且不同的渲染含义，**刻意不是布尔** ——
-        布尔会把三件不同的事压成一件。取值域见 core.phase_contract.MODALITY_STATES。
+class TestEveryVocabularyMatchesTheContract:
+    """覆盖层的每一张取值表都要与契约**双向**一致：不少一档，也不多一档。
+
+    少一档的后果是那一档被画成别的档（``understanding`` 加进契约时，岛上的
+    ``ACTIVITY_WORD`` 漏改过一次，于是"在读"被画成了"Galaxy"）。多一档的后果
+    是一条永远走不到的分支，读代码的人会以为那种情况被处理过 —— 这个仓库为
+    "永远不执行的分支"单独写过注释警告（panel/src/transport.ts 的 degraded 那处）。
+
+    这一条取代了原先分开写的两条（SENSE_GLOW / ACTIVITY_WORD），理由是它们
+    各自只查了单向、而且只覆盖了六张表里的两张 —— ``MODE_WORD`` 对
+    ``HYBRID_EXECUTION_MODES``、``POSE`` 对 ``AMBIENT_ACTIONS`` 一直没人看着。
+    桌宠那两张表另有一条与面板对账（见 TestTheTwoPetsAreTheSameCreature），
+    但那一条挡不住**两边一起漂离契约**，所以这里再与契约核一次。
+    """
+
+    def _pairs(self):
+        from core.phase_contract import (
+            AMBIENT_ACTIONS,
+            HYBRID_EXECUTION_MODES,
+            LIFECYCLE_STATES,
+            LIMINAL_ACTIVITIES,
+            MODALITY_STATES,
+        )
+
+        return [
+            ("SENSE_GLOW", MODALITY_STATES, "模态状态", ()),
+            ("ACTIVITY_WORD", LIMINAL_ACTIVITIES, "阈限内容", ()),
+            ("PET_RATE", LIMINAL_ACTIVITIES, "阈限内容（桌宠呼吸）", ()),
+            ("MODE_WORD", HYBRID_EXECUTION_MODES, "混合执行手法", ()),
+            ("POSE", AMBIENT_ACTIONS, "自发注意力决策", ()),
+            # 'static' 是遗留 payload.phase 用的名字，契约里没有这一档 ——
+            # 旧后端不发 render 时覆盖层要逐位退回读 payload.phase，那条兜底路
+            # 靠它。所以它是**允许多出来**的一档，写在这里而不是默默放过。
+            ("OPEN_BY_LIFECYCLE", LIFECYCLE_STATES, "主轴生命周期", ("static",)),
+        ]
+
+    def test_no_state_is_missing_a_rendering(self) -> None:
+        js = _js()
+        for name, vocab, label, _extra in self._pairs():
+            keys = _js_table_keys(name)
+            missing = [v for v in vocab if v not in keys]
+            assert not missing, f"{label} {missing} 在 {name} 里没有画法 —— 那几档会被画成别的档"
+            assert js.count(name) >= 2, f"{name} 定义了但没人用 —— 一张没人读的表挡不住任何事"
+
+    def test_no_table_invents_a_state(self) -> None:
+        for name, vocab, label, extra in self._pairs():
+            surplus = sorted(_js_table_keys(name) - set(vocab) - set(extra))
+            assert not surplus, (
+                f"{name} 里多出 {surplus}，契约的 {label} 没有这几档 —— "
+                "一条永远走不到的分支会让人以为那种情况被处理过"
+            )
+
+
+class TestTheDegradationLeavesATrace:
+    """仓库的规矩是**降级必须留痕**。
+
+    契约里 ``degraded`` 说"continuum 本拍跑在降级模式"（tick 超预算、内部错误，
+    见 core/continuum/orchestrator.py），``source`` 说"这份姿态是实算的还是按
+    相位锚点兜的底"。此前覆盖层这两位一位都不读 —— 后端跑在降级模式时屏幕上
+    跟实算出来的一模一样，正是"看起来接上了，其实没有"那一类。
+
+    面板早就在画（hud.css 的 ``.line[data-trust=...]``），判定写在
+    ``panel/src/main.ts`` 的 ``lineTrust()`` 且注明"**唯一一处判定**"。
+    覆盖层照搬同一份，这里核两边没漂。
+    """
+
+    def test_the_rule_matches_the_panels(self) -> None:
+        ts = (_RENDERER / "panel" / "src" / "main.ts").read_text(encoding="utf-8")
+        theirs = re.search(r"function lineTrust\([^)]*\)[^{]*\{(.*?)\n\}", ts, re.S)
+        assert theirs, "panel/src/main.ts 里找不到 lineTrust() —— 权威那一份被改名或搬走了"
+        ours = re.search(r"function trustOf\([^)]*\)\s*\{(.*?)\n\}", _js(), re.S)
+        assert ours, "app.js 里没有 trustOf() —— 降级没有留痕"
+
+        def shape(body: str) -> list:
+            # 只比判定的骨架：哪三档、按什么次序、各自的条件。
+            return re.findall(r"return '(\w+)'|degraded|source\s*===\s*'(\w+)'", body)
+
+        assert shape(ours.group(1)) == shape(theirs.group(1)), (
+            "两边的可信度判定漂了 —— 面板和覆盖层会对同一拍给出不同的结论。\n"
+            f"覆盖层 {shape(ours.group(1))}\n面板   {shape(theirs.group(1))}"
+        )
+
+    def test_degraded_outranks_anchor(self) -> None:
+        """降级比兜底重：两者同时成立时必须报 degraded。"""
+        body = re.search(r"function trustOf\([^)]*\)\s*\{(.*?)\n\}", _js(), re.S).group(1)
+        assert body.index("degraded") < body.index("continuum"), "降级判定排在 source 之后 —— 降级会被报成兜底"
+
+    def test_the_trace_lands_on_the_space_only(self) -> None:
+        """只压空间，不压边光和桌宠。
+
+        那两样读的是 ``perception`` —— 另一条独立的只读拉取（``last_perception_status``），
+        continuum 降级跟"它此刻在不在看/在不在听"毫无关系。一并压暗就是替另一条链
+        说假话，而"说的和现实相反"是这个仓库的镜像缺陷。
         """
-        from core.phase_contract import MODALITY_STATES
+        css = _css()
+        assert re.search(r":root\[data-trust='degraded'\]", css), "没有 degraded 那一档的样式 —— 属性设了但画面上没有"
+        assert re.search(r":root\[data-trust='anchor'\]", css), "没有 anchor 那一档的样式"
+        for sel in (r"\.wall\s*\{", r"\.mist\s*\{"):
+            block = re.search(sel + r"([^}]*)\}", css)
+            assert block and "--trust-sat" in block.group(1), f"{sel} 没有接可信度 —— 空间不会留痕"
+        for sel in (r"\.rim\s*\{", r"#pet\s*\{"):
+            block = re.search(sel + r"([^}]*)\}", css)
+            assert block and "--trust-sat" not in block.group(
+                1
+            ), f"{sel} 也跟着压暗了 —— 那一层读的是 perception，不是 continuum，压它等于说假话"
 
-        js = _js()
-        m = re.search(r"SENSE_GLOW\s*=\s*\{([^}]*)\}", js)
-        assert m, "取不到 SENSE_GLOW"
-        table = m.group(1)
-        for state in MODALITY_STATES:
-            assert state in table, f"模态状态 {state} 没有对应的画法 —— 那一档会被画成别的档"
+    def test_the_filter_composes_instead_of_replacing(self) -> None:
+        """整条 ``filter`` 写死的话会把别的滤镜一起抹掉。
 
-    def test_the_island_words_cover_every_activity(self) -> None:
-        from core.phase_contract import LIMINAL_ACTIVITIES
-
-        js = _js()
-        m = re.search(r"ACTIVITY_WORD\s*=\s*\{([^}]*)\}", js)
-        assert m, "取不到 ACTIVITY_WORD"
-        for act in LIMINAL_ACTIVITIES:
-            assert act in m.group(1), f"阈限内容 {act} 在岛上没有说法 —— 加档时漏改过一次（understanding）"
+        ``.rim`` 那三层各自带着 blur（3.6 / 0.7 / 12px），再写一条 filter
+        就是覆盖而不是叠加 —— 模糊没了，边光会变成三条硬边。所以走 CSS 变量。
+        """
+        css = _css()
+        block = re.search(r"\.wall\s*\{([^}]*)\}", css).group(1)
+        assert "var(--trust-sat" in block, ".wall 的 filter 没走变量 —— 换个地方再加滤镜就会互相覆盖"

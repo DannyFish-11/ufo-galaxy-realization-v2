@@ -52,6 +52,8 @@ body {
   --r: 260%;           /* 铺回：从顶部中间长开的半径。260% = 全透，即"没在铺回" */
   --D: 0px;            /* 四壁的纵深 */
   --persp: 800px;      /* 透视距离，跟着视口高走（见 .stage） */
+  --trust-sat: 1;      /* 空间的可信度：实算 1 / 兜底 .22 / 降级 .12（见文末） */
+  --trust-bri: 1;
   --wop: 0;            /* 四壁浓度 */
   --n: .52;            /* 四壁近端浓度（四面同值，见下） */
   --ih: 0px; --iw: 0px; --ir: 2px; --iop: 0; --itx: 0;   /* 灵动岛 */
@@ -125,7 +127,8 @@ body {
 /* ⚠ .box 这一层不能挂 opacity / filter / mask / mix-blend-mode ——
       它们都会让 preserve-3d 失效，四面墙会被拍扁。浓度写在每面墙自己身上
       （叶子节点，不影响 3D 上下文）。栽过两次，都是这一类。 */
-.wall { position: absolute; opacity: calc(var(--wop) * var(--n)); }
+.wall { position: absolute; opacity: calc(var(--wop) * var(--n));
+        filter: saturate(var(--trust-sat, 1)) brightness(var(--trust-bri, 1)); }
 .wall-t { top: 0;    left: 0; right: 0; height: var(--D);
           transform-origin: 50% 0%;   transform: rotateX(-90deg); }
 .wall-b { bottom: 0; left: 0; right: 0; height: var(--D);
@@ -169,6 +172,7 @@ body {
   position: absolute; inset: -45%;
   transform: translateZ(calc(var(--D) * -0.92));
   opacity: calc(var(--wop) * .3);
+  filter: saturate(var(--trust-sat, 1)) brightness(var(--trust-bri, 1));
   background: radial-gradient(ellipse 48% 46% at 50% 50%,
                 transparent 0%,
                 rgba(160,161,208,0.11) 88%,
@@ -243,6 +247,22 @@ body {
 #pet[data-react='aside'] .pet-body { transform: translate(3.4px, 0) rotate(8deg); }
 @keyframes pet-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 @keyframes pet-blink   { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+
+/* ── 降级留痕：这一拍的姿态算不算数 ──
+   取值与面板那条线一模一样（hud.css 的 .line[data-trust=...]），判定也是同一份
+   （app.js 的 trustOf ← panel/src/main.ts 的 lineTrust）：
+     live      continuum 实算出来的
+     anchor    拿不到 continuum，按相位锚点兜的底
+     degraded  后端明说本拍跑在降级模式
+   兜底的相位和实算的相位摆出同样的光，人就没法知道自己在看的是测出来的还是猜出来的。
+
+   **只压空间，不压边光和桌宠。** 那两样读的是 perception —— 另一条独立的只读拉取，
+   continuum 降级跟"它此刻在不在看/在不在听"没关系。一并压暗就是替另一条链说假话。
+
+   走 CSS 变量而不是直接写 filter：.wall 上那条 filter 要跟别的滤镜**叠**，
+   整条覆盖掉的话（.rim 那三层各自带着 blur）会把模糊一起抹了。 */
+:root[data-trust='anchor']   { --trust-sat: .22; }
+:root[data-trust='degraded'] { --trust-sat: .12; --trust-bri: .97; }
 
 /* 关了动效的人：光不走，但**在场要留着** —— 那是事实，不是动效。 */
 @media (prefers-reduced-motion: reduce) {

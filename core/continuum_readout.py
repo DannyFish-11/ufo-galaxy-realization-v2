@@ -50,7 +50,20 @@ def last_continuum_posture() -> Optional[Any]:
     orch = getattr(inst, "_continuum_orchestrator", None)
     if orch is None:
         return None
-    return getattr(orch, "_last_state", None)
+    # ``_last_emitted`` 是**最近一拍真正交出去的**状态，成功与降级都算；
+    # ``_last_state`` 只记算对的那一拍（采样跳过时拿它顶上，不能 replay 一次失败）。
+    # 本函数的职责是"最近一拍是什么"，所以读前者。
+    #
+    # 此前读的是后者，而两条降级出口都不写它 —— 于是后端每一次降级，渲染端读到的
+    # 都还是上一次成功的那份：``RenderPosture.degraded`` 结构上永远为假，面板那条线
+    # 和覆盖层的空间照旧画着"实算"的样子。「降级必须留痕」在源头就断了。
+    # 见 core/continuum/orchestrator.py 里 _last_emitted 的长注释与
+    # tests/test_continuum_guardrails.py::TestDegradedTicksReachTheReadout。
+    #
+    # 兜底到 ``_last_state``：这个函数只读已经存在的实例，遇到旧对象时宁可给出
+    # 上一次成功的那份，也不要因为少一个属性就整个报"没有 continuum"。
+    emitted = getattr(orch, "_last_emitted", None)
+    return emitted if emitted is not None else getattr(orch, "_last_state", None)
 
 
 # ---------------------------------------------------------------------------

@@ -40,6 +40,7 @@
  * `render.is_returning` 给它兜底 —— 那一位是一拍性的，掉一拍消散就没了。
  * 第一态的浓度、眼睛、急停来自 `render.perception`（四模态五档 + privacy_paused）。
  * 岛上的字来自 `render.liminal_activity` 与 `render.hybrid_execution.mode`。
+ * 空间的可信度来自 `render.degraded` 与 `render.source`（判定与面板同一份）。
  *
  * 旧后端不发 `render` 时逐位退回读 `payload.phase`，覆盖层绝不因契约缺席而停摆。
  */
@@ -96,6 +97,22 @@ const POSE = { none: 'rest', speak: 'lean', silent: 'tuck', delegate: 'aside' };
 
 //: 反应演多久（毫秒）。与面板那只一致。
 const REACT_MS = 1600;
+
+// ── 这一拍的姿态算不算数 ──
+//
+// 契约里 `degraded` 与 `source` 各说一件事：前者是"continuum 本拍跑在降级模式"
+// （tick 超预算、内部错误，见 core/continuum/orchestrator.py），后者是"这份姿态
+// 是实算的（continuum）还是按相位锚点兜的底（anchor_only）"。降级优先，因为它更重；
+// 姿态还没来时也算兜底 —— 那时画的相位是初值，不是它的相位。
+//
+// **这段判定是从面板 main.ts 的 lineTrust() 一字不差搬过来的**，判据钉住两边不漂。
+// 仓库的规矩是「降级必须留痕」，而此前覆盖层这两位一位都不读：后端跑在降级模式时，
+// 屏幕上跟实算出来的一模一样 —— 那就是"看起来接上了，其实没有"。
+function trustOf(render) {
+  if (!render) return 'anchor';
+  if (render.degraded) return 'degraded';
+  return render.source === 'continuum' ? 'live' : 'anchor';
+}
 
 const ACTIVITY_WORD = {
   none: 'Galaxy', understanding: '正在理解', thinking: '正在规划', rehearsing: '正在推演',
@@ -335,6 +352,15 @@ class GalaxyOverlay {
     s.setProperty('--ir', (paused ? 2 : 2 + isle * 15).toFixed(1) + 'px');
     s.setProperty('--iop', paused ? '0.85' : (isle > 0.001 ? '1' : '0'));
     s.setProperty('--itx', Math.max(0, (isle - 0.55) / 0.45).toFixed(3));
+
+    // ── 降级留痕：只落在**空间**上，不落在边光和桌宠上 ──
+    //
+    // 这两位说的是 continuum 那条链，而空间（四壁 + 远端那层霭）正是跟着它走的。
+    // 边光和桌宠读的是 perception —— 那是另一条独立的只读拉取，continuum 降级
+    // 跟"它此刻在不在看/在不在听"毫无关系。一并压暗等于替另一条链说了假话，
+    // 那是本仓反复要躲的那一类。
+    const trust = trustOf(this.render);
+    if (this.root.dataset.trust !== trust) this.root.dataset.trust = trust;
 
     this._paintIsland(paused);
     this._paintPet(p, paused);
