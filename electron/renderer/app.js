@@ -36,7 +36,8 @@
  * ----------------
  * 整体编排跟**主轴** `render.lifecycle`（silent / liminal / manifest）——
  * core/phase_contract.py 写明它是"渲染端的首要依据"。
- * 退场看 `render.transition_kind`，不看深度往哪边走（理由见下）。
+ * 退场看 `render.transition_kind`，不看深度往哪边走（理由见下）；副轴的驻留位
+ * `render.is_returning` 给它兜底 —— 那一位是一拍性的，掉一拍消散就没了。
  * 第一态的浓度、眼睛、急停来自 `render.perception`（四模态五档 + privacy_paused）。
  * 岛上的字来自 `render.liminal_activity` 与 `render.hybrid_execution.mode`。
  *
@@ -113,6 +114,7 @@ class GalaxyOverlay {
     this.spread = 0;
 
     this._lastKind = 'none';
+    this._lastReturning = false;
     this.lastFrame = 0;
   }
 
@@ -178,6 +180,28 @@ class GalaxyOverlay {
       if (kind === 'dissolving') { this.spreading = true; this.spread = 0; }
       else if (kind === 'emerging' || kind === 'committing') { this.spreading = false; this.spread = 0; }
       this._lastKind = kind;
+    }
+
+    // ── 兜底：驻留位 `is_returning`，补一拍性的 transition_kind 补不到的场合 ──
+    //
+    // `transition_kind` 只在**那一拍**是 dissolving：桥每次广播完就把
+    // `_previous_lifecycle` 推进到本拍（见 lumiv_websocket_bridge._render_payload），
+    // 下一拍同档位就算成 'none'。也就是说消散只有一次机会被看见。
+    //
+    // 副轴的 `is_returning`（continuum_phase === 'receding'）是**驻留位**，整段
+    // 返回弧里都为真。契约把它单列出来的理由就是这个：主轴 silent 之下，
+    // 「刚做完正在消散」与「静息」只有这一位能分开。
+    //
+    // 于是两种场合靠它接住：覆盖层在返回弧中途才连上（重载/重连），或那一拍
+    // dissolving 广播恰好掉了。边沿触发 + 只在还没铺过时启动，所以不会把同一段
+    // 消散演两遍；同一拍两位都来时，上面的 kind 分支先起，这里被守卫挡掉。
+    const returning = !!(this.render && this.render.is_returning);
+    if (returning !== this._lastReturning) {
+      if (returning && !this.spreading && this.spread <= 0.001) {
+        this.spreading = true;
+        this.spread = 0;
+      }
+      this._lastReturning = returning;
     }
   }
 

@@ -135,6 +135,35 @@ class TestTheOrchestrationFollowsTheMainAxis:
         m = re.search(r"===\s*['\"]dissolving['\"]\s*\)\s*\{([^}]*)\}", js)
         assert m and "spreading" in m.group(1), "dissolving 没有触发铺回 —— 那它和 handoff 在画面上就是同一件事"
 
+    def test_the_resident_bit_backs_up_the_one_tick_bit(self) -> None:
+        """``transition_kind`` 是一拍性的，掉一拍消散就整段没了。
+
+        桥每次广播完就把 ``_previous_lifecycle`` 推进到本拍（见
+        ``lumiv_websocket_bridge._render_payload`` 结尾那一行），所以
+        ``dissolving`` 只在**那一拍**出现，下一拍同档位就算成 ``none``。
+        两种场合会把这一拍整个错过：覆盖层在返回弧中途才连上（重载／重连），
+        或那一拍广播恰好掉了。结果是「做完就散」被演成「什么都没发生」。
+
+        副轴的 ``is_returning`` 是驻留位（``continuum_phase == "receding"``，
+        整段返回弧里都为真），契约把它单列出来的理由正是这个。所以这里钉：
+        覆盖层必须**同时**读这两位，而且驻留位要真的能启动铺回。
+
+        只读一位的两种写法都被这一条挡下：只读 ``transition_kind`` 会丢掉
+        上面那两种场合；只读 ``is_returning`` 则分不出 handoff 与 dissolving
+        （handoff 时副轴根本不进 receding，那一位一直是假）。
+        """
+        js = _js()
+        assert "is_returning" in js, "覆盖层不读 is_returning —— 掉一拍 dissolving 就等于没消散过"
+        # 驻留位必须真的通向铺回，而不是读出来放着。
+        m = re.search(r"is_returning[^;]*;(?:.|\n){0,400}?\bspreading\s*=\s*true", js)
+        assert m, "is_returning 读了但没接上铺回 —— 那它只是个没人用的变量"
+        # 边沿触发：驻留位每拍都为真，照拍启动会把同一段消散反复重演。
+        assert re.search(r"returning\s*!==\s*this\._lastReturning", js), (
+            "is_returning 没有边沿判定 —— 返回弧里每一拍都会重演一遍铺回。"
+            "（构造函数里存了一位不算：要的是拿它跟本拍比。这一条最初就只钉了变量名，"
+            "把去掉比较、照拍触发的改法放过去了。）"
+        )
+
     def test_the_segments_overlap_so_nothing_goes_blank(self) -> None:
         """两段首尾相接的话，边光退干净了、墙还没长出来，屏幕会空一段。
 
