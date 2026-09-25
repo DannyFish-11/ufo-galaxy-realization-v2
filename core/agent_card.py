@@ -77,9 +77,10 @@ class AgentCard:
     #:
     #: 每项形如 ``{"kind": "lan"|"tailscale"|"funnel", "url": ..., "priority": 1}``。
     #: 之所以要多条:``endpoints["websocket"]`` 里那个内网 IP 出了网段就是死地址,
-    #: 扫码扫得再顺也连不上。三条各自覆盖一类现场 ——
+    #: 扫码扫得再顺也连不上。各自覆盖一类现场 ——
     #: lan(同一 Wi-Fi,最快) / tailscale(装了客户端的设备跨网 P2P) /
-    #: funnel(公网,手表带流量单独出门时**唯一**能用的一条)。
+    #: funnel(公网入口,**只在显式开启 GALAXY_TS_FUNNEL=1 时才出现** ——
+    #: 本系统设备间默认只走内网)。
     candidates: List[Dict[str, Any]] = field(default_factory=list)
     #: 签发者标识。单属主 Mesh 下就是本机 device_id;将来多属主时放 DID。
     issuer: str = ""
@@ -424,7 +425,9 @@ def build_local_card(
         # "这台机器就在本机"和"这台机器当时没探到自己的地址"。
         _ip = _local_ip()
         if _ip:
-            eps.setdefault("websocket", f"ws://{_ip}:{port}/ws/device/{did}")
+            from core.gateway_tls import ws_scheme  # noqa: PLC0415
+
+            eps.setdefault("websocket", f"{ws_scheme()}://{_ip}:{port}/ws/device/{did}")
     return create_agent_card(
         did,
         name=os.getenv("GALAXY_DEVICE_NAME", "").strip() or did,
@@ -458,7 +461,10 @@ def build_candidates(device_id: str, port: int) -> List[Dict[str, Any]]:
     urls: Dict[str, str] = {}
     order: List[str] = ["lan"]
     if lan_ip:
-        urls["lan"] = f"ws://{lan_ip}:{port}/ws/device/{device_id}"
+        from core.gateway_tls import ws_scheme  # noqa: PLC0415
+
+        # 协议跟着网关实际是否开 TLS 走,不在这里写死 —— 见 core/gateway_tls.py。
+        urls["lan"] = f"{ws_scheme()}://{lan_ip}:{port}/ws/device/{device_id}"
     try:
         from core.tailscale_manager import TailscaleManager  # noqa: PLC0415
 
@@ -467,7 +473,9 @@ def build_candidates(device_id: str, port: int) -> List[Dict[str, Any]]:
         ts_url = mgr.get_connection_url(port)
         if ts_url:
             urls["tailscale"] = f"{ts_url}/ws/device/{device_id}"
-        funnel = mgr.get_funnel_url()
+        # 公网入口只在显式开启时才进名片 —— 本机即使还挂着旧的 Funnel,
+        # 不要它就不交出去,否则设备会在你没注意时悄悄绕公网。
+        funnel = mgr.get_funnel_url() if mgr.funnel_advertised() else None
         if funnel:
             # 注意这里**不拼端口** —— Funnel 对外就是 443。
             base = funnel.replace("https://", "wss://", 1).rstrip("/")

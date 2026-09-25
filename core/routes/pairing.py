@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Dict, List, Optional
@@ -46,6 +47,30 @@ _TRUST_SCOPES: Dict[str, List[str]] = {
 
 def _scopes_for_trust(trust: str) -> List[str]:
     return list(_TRUST_SCOPES.get(str(trust).lower(), _TRUST_SCOPES["unknown"]))
+
+
+#: 哪些设备要在配对时拿"进 tailnet 的一次性钥匙"。
+#:
+#: 只有手表:Wear OS 装不了任何 VpnService 类 App(含 Tailscale),App 里嵌的是一个
+#: 用户态 tailnet 进程,它第一次加入要这把钥匙。手机装得了 Tailscale 官方 App,
+#: 自己登录即可 —— 给它发钥匙等于多发一份没人用、却能进 tailnet 的凭证。
+_EMBEDDED_TAILNET_DEVICE_TYPES = frozenset({"wearos"})
+
+
+async def _tailnet_join_for(device_type: str) -> Dict[str, object]:
+    """配对响应里关于"进 tailnet"的那两个字段。签不出来不影响配对本身。"""
+    if str(device_type).lower() not in _EMBEDDED_TAILNET_DEVICE_TYPES:
+        return {}
+    from core.headscale_join import JoinUnavailable, issue_join_key
+
+    try:
+        grant = await asyncio.to_thread(issue_join_key)
+    except JoinUnavailable as exc:
+        # 明确写出为什么没有、怎么修 —— 静默少一个字段会表现成"出门连不上",
+        # 而没人知道原因在这里。
+        logger.warning("配对成功,但没能给手表签发 tailnet 钥匙:%s", exc.reason)
+        return {"tailnet_join": None, "tailnet_join_unavailable": exc.to_dict()}
+    return {"tailnet_join": grant.to_dict()}
 
 
 def _server_error(where: str, exc: Exception) -> JSONResponse:
@@ -105,6 +130,13 @@ class TrustRequest(BaseModel):
 class CheckRequest(BaseModel):
     device_id: str
     intent: str = ""
+
+
+def _watch_tailnet_status() -> Dict[str, object]:
+    from core.headscale_join import join_status
+
+    st = join_status()
+    return {k: v for k, v in st.items() if k != "user"}
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -221,6 +253,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     # 但必须让调用方知道它没拿到令牌,否则会以为拿到了。
                     logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", subject, exc)
 
+            # 手表出门直连要靠这把钥匙。被拒(blocked,无作用域)的设备不给。
+            tailnet_fields = await _tailnet_join_for(req.device_type) if scopes else {}
+
             logger.info(
                 "配对成功:device_id=%s type=%s trust=%s scopes=%s(邀请来自 %s)",
                 subject,
@@ -243,6 +278,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     # 手里却只有那个出了网段就是死地址的内网 IP。
                     "candidates": card.candidates,
                     "gateway_device_id": card.device_id,
+                    **tailnet_fields,
                 }
             )
         except Exception as exc:  # noqa: BLE001
@@ -285,7 +321,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     continue
                 # 不在候选里 = 这条路现在不可用。**为什么**不可用要说清楚,
                 # 否则这一屏只是把"连不上"换了个地方显示。
-                if kind == "funnel" and not gate["ok"]:
+                if kind == "funnel" and not mgr.funnel_advertised():
+                    # 没要它,就说"没开",而不是"坏了"或"没装 Tailscale" ——
+                    # 那两种说法都会把人引去修一个本来就不该开的东西。
+                    paths.append(
+                        {
+                            "kind": kind,
+                            "up": False,
+                            "url": "",
+                            "reason": "not_enabled",
+                            "how_to_fix": "默认不开公网入口(设备间只走内网)。确实需要时设 GALAXY_TS_FUNNEL=1",
+                        }
+                    )
+                elif kind == "funnel" and not gate["ok"]:
                     paths.append(
                         {
                             "kind": kind,
@@ -312,9 +360,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "device_id": did,
                     "port": port,
                     "paths": paths,
-                    # 手表带流量单独出门时唯一能用的那条。单独拎出来,因为它是
-                    # 「出门还能不能用」这个问题的唯一判据。
+                    # 网关此刻是否**经本系统宣告**为公网可达。默认 false ——
+                    # 设备间只走内网;只有显式开启 Funnel 且它真通时才是 true。
                     "public_reachable": "funnel" in live_kinds,
+                    # 手表出门直连的前提:配对时能不能给它签发进 tailnet 的钥匙。
+                    # 只看配置、不发请求 —— 这个端点不该因为 headscale 慢而变慢。
+                    "watch_tailnet": _watch_tailnet_status(),
                 }
             )
         except Exception as exc:  # noqa: BLE001

@@ -200,10 +200,14 @@ def main():
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", _default_gw_port))
 
-    tls_cert = os.getenv("GALAXY_TLS_CERT", "").strip()
-    tls_key = os.getenv("GALAXY_TLS_KEY", "").strip()
+    # 与发给设备的地址(core.agent_card / TailscaleManager)**同一个判据** ——
+    # 两边各判各的时,出过"服务端明文、地址写 wss"那种必然握手失败的组合。
+    from core.gateway_tls import tls_paths
 
-    if tls_cert and tls_key:
+    _tls = tls_paths()
+    tls_cert, tls_key = _tls if _tls else ("", "")
+
+    if _tls:
         logger.info(
             "Starting Galaxy Gateway on %s:%s (TLS ENABLED, cert=%s)",
             host,

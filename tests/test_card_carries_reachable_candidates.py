@@ -7,9 +7,12 @@
 问题的形状
 ==========
 ``endpoints["websocket"]`` 里那个 ``ws://192.168.x.x:9000/...`` 出了网段就是死
-地址。扫码解决的是"不用手填 IP/端口/路径",解决不了"能不能连通"。手表带流量
-单独出门时,内网地址、tailnet 地址都够不着 —— Wear OS 没有 Tailscale 客户端,
-进不了 tailnet —— 只有 Funnel 那条公网路能用。名片里没有它,这台设备就配不上。
+地址。扫码解决的是"不用手填 IP/端口/路径",解决不了"能不能连通"。所以名片带
+一张候选表:lan / tailscale,以及**显式开启时**的 funnel(公网入口)。
+
+funnel 默认**不进**名片:本系统设备间只走内网,公网入口是要人主动要的东西。
+本机哪怕还挂着旧版本默认开的 Funnel,没要它就不许把公网地址交给设备 ——
+最后一节钉的就是这件事。
 
 三条容易写对一半的地方
 ======================
@@ -21,6 +24,8 @@
 """
 
 from __future__ import annotations
+
+from urllib.parse import urlparse
 
 import pytest
 
@@ -43,9 +48,14 @@ class _FakeManager:
         # 这个替身还拿着旧值,那条区分度测试就白测了。
         return TailscaleManager.NETWORK_PREFERENCE
 
-    def __init__(self, ts_url=None, funnel=None):
+    def __init__(self, ts_url=None, funnel=None, advertise=False):
         self._ts_url = ts_url
         self._funnel = funnel
+        # 默认与真身一致:不宣告。要测 funnel 形状的用例显式打开。
+        self._advertise = advertise
+
+    def funnel_advertised(self):
+        return self._advertise
 
     def get_connection_url(self, port):
         return self._ts_url
@@ -56,10 +66,10 @@ class _FakeManager:
 
 @pytest.fixture
 def fake_ts(monkeypatch):
-    def _install(ts_url=None, funnel=None):
+    def _install(ts_url=None, funnel=None, advertise=False):
         monkeypatch.setattr(
             "core.tailscale_manager.TailscaleManager",
-            lambda *a, **k: _FakeManager(ts_url, funnel),
+            lambda *a, **k: _FakeManager(ts_url, funnel, advertise),
         )
 
     return _install
@@ -70,15 +80,15 @@ def fake_ts(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_all_three_paths_are_listed(fake_ts):
-    fake_ts(ts_url="wss://100.99.88.77:9000", funnel="https://box.tail1234.ts.net")
+def test_all_three_paths_are_listed_when_funnel_is_asked_for(fake_ts):
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net", advertise=True)
     cands = build_candidates("dev-1", 9000)
     assert [c["kind"] for c in cands] == ["lan", "tailscale", "funnel"]
 
 
 def test_funnel_url_carries_no_local_port(fake_ts):
     """Funnel 对外就是 443。拼上 :9000 = 语法正确但必然连不上。"""
-    fake_ts(ts_url="wss://100.99.88.77:9000", funnel="https://box.tail1234.ts.net")
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net", advertise=True)
     funnel = [c for c in build_candidates("dev-1", 9000) if c["kind"] == "funnel"][0]
     assert funnel["url"] == "wss://box.tail1234.ts.net/ws/device/dev-1"
     assert ":9000" not in funnel["url"]
@@ -86,13 +96,13 @@ def test_funnel_url_carries_no_local_port(fake_ts):
 
 def test_funnel_url_is_wss_not_https(fake_ts):
     """名片里放的是 WebSocket 入口,设备端拿去直接连,不该再自己换协议。"""
-    fake_ts(funnel="https://box.tail1234.ts.net")
+    fake_ts(funnel="https://box.tail1234.ts.net", advertise=True)
     funnel = [c for c in build_candidates("dev-1", 9000) if c["kind"] == "funnel"][0]
     assert funnel["url"].startswith("wss://")
 
 
 def test_every_candidate_targets_this_device(fake_ts):
-    fake_ts(ts_url="wss://100.99.88.77:9000", funnel="https://box.tail1234.ts.net")
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net", advertise=True)
     for c in build_candidates("watch-7", 9000):
         assert c["url"].endswith("/ws/device/watch-7"), c
 
@@ -109,7 +119,7 @@ def test_order_comes_from_the_single_preference_list(fake_ts, monkeypatch):
     而"两处各写一份"正是排障时看到"名片第一条是局域网、设备却先连公网"的根因。
     """
     monkeypatch.setattr(TailscaleManager, "NETWORK_PREFERENCE", ["funnel", "tailscale", "lan"])
-    fake_ts(ts_url="wss://100.99.88.77:9000", funnel="https://box.tail1234.ts.net")
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net", advertise=True)
     assert [c["kind"] for c in build_candidates("dev-1", 9000)] == ["funnel", "tailscale", "lan"]
 
 
@@ -119,7 +129,7 @@ def test_priority_is_dense_when_a_path_is_missing(fake_ts):
     设备端是"从 priority 1 开始逐个试";留洞会让它跳过一档,
     表现成"明明有 Funnel 却从来没试过"。
     """
-    fake_ts(ts_url=None, funnel="https://box.tail1234.ts.net")
+    fake_ts(ts_url=None, funnel="https://box.tail1234.ts.net", advertise=True)
     cands = build_candidates("dev-1", 9000)
     assert [c["kind"] for c in cands] == ["lan", "funnel"]
     assert [c["priority"] for c in cands] == [1, 2]
@@ -202,9 +212,10 @@ def test_malformed_candidate_entries_are_dropped_not_crashed():
 
 
 def test_local_card_has_candidates(fake_ts):
-    fake_ts(ts_url="wss://100.99.88.77:9000", funnel="https://box.tail1234.ts.net")
+    """默认的名片:内网两条。本机即使挂着一个 Funnel,没要它就不进名片。"""
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net")
     card = build_local_card()
-    assert [c["kind"] for c in card.candidates] == ["lan", "tailscale", "funnel"]
+    assert [c["kind"] for c in card.candidates] == ["lan", "tailscale"]
 
 
 def test_explicit_endpoints_do_not_wipe_out_candidates(fake_ts):
@@ -213,7 +224,7 @@ def test_explicit_endpoints_do_not_wipe_out_candidates(fake_ts):
     结果:任何显式传 endpoints 的调用方拿到的名片候选路径都是空的 —— 多路可达
     对它整个不存在,而且不报错,只表现成"这台设备只能在局域网里配上"。
     """
-    fake_ts(funnel="https://box.tail1234.ts.net")
+    fake_ts(funnel="https://box.tail1234.ts.net", advertise=True)
     card = build_local_card(endpoints={"websocket": "ws://10.0.0.9:9000/ws/device/x"})
     assert card.endpoints["websocket"] == "ws://10.0.0.9:9000/ws/device/x", "显式端点被覆盖了"
     assert [c["kind"] for c in card.candidates] == ["lan", "funnel"]
@@ -235,3 +246,55 @@ def test_tailscale_blowing_up_degrades_to_lan(monkeypatch):
 
     monkeypatch.setattr("core.tailscale_manager.TailscaleManager", _boom)
     assert [c["kind"] for c in build_candidates("d1", 9000)] == ["lan"]
+
+
+# ---------------------------------------------------------------------------
+# 五、公网入口只在显式要它时才交给设备
+# ---------------------------------------------------------------------------
+
+
+def test_a_live_funnel_is_not_published_unless_asked_for(fake_ts):
+    """**这一节的核心。**
+
+    旧版本默认会自动开 Funnel,升级上来的机器上它可能还挂着。判据必须是"要不要",
+    不是"开没开" —— 否则这台网关会继续把公网地址写进每一张名片,设备就在你没
+    注意时悄悄绕公网,而本系统的意图是设备间只走内网。
+    """
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net", advertise=False)
+    cands = build_candidates("dev-1", 9000)
+    assert "funnel" not in [c["kind"] for c in cands]
+    # 按主机名精确比对,不做子串匹配。
+    hosts = {urlparse(c["url"]).hostname for c in cands}
+    assert "box.tail1234.ts.net" not in hosts, "公网地址漏进了名片"
+
+
+def test_default_candidates_are_internal_only(fake_ts):
+    """默认的两条都是内网:同网段直连,和 tailnet。"""
+    fake_ts(ts_url="ws://100.99.88.77:9000", funnel=None)
+    assert [c["kind"] for c in build_candidates("dev-1", 9000)] == ["lan", "tailscale"]
+
+
+def test_the_real_manager_does_not_advertise_funnel_by_default(monkeypatch):
+    """替身默认关,真身也得默认关 —— 否则上面那些用例测的是一个不存在的默认值。"""
+    import importlib
+
+    import core.tailscale_manager as tsm
+
+    monkeypatch.delenv("GALAXY_TS_FUNNEL", raising=False)
+    importlib.reload(tsm)
+    assert tsm.TailscaleManager.funnel_advertised() is False
+
+
+def test_funnel_can_still_be_asked_for_explicitly(monkeypatch):
+    """区分度:改的是默认值,不是把能力焊死。"""
+    import importlib
+
+    import core.tailscale_manager as tsm
+
+    monkeypatch.setenv("GALAXY_TS_FUNNEL", "1")
+    importlib.reload(tsm)
+    try:
+        assert tsm.TailscaleManager.funnel_advertised() is True
+    finally:
+        monkeypatch.delenv("GALAXY_TS_FUNNEL", raising=False)
+        importlib.reload(tsm)
