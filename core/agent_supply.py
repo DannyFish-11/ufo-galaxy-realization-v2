@@ -32,12 +32,14 @@
 非空时 ``on`` 档拒绝开跑。``admission_provisional`` 是另一件事：供得上，但显存准入的 ok
 压在一个没人量过的 KV 单价上 —— 照跑，但把前提一起报出来。
 
-灰度：``GALAXY_AGENT_SUPPLY = off | shadow | on``，默认 ``off``
-* ``off``    —— 三格不参与任何路径，行为与今天逐位一致；
-* ``shadow`` —— 算、绑、记，但执行仍走原路径；算出来的与路由实际选中的不一致就记 divergence；
-* ``on``     —— 声明过需求的 Agent 执行时读 SupplyDecision：按角色的 task_type、按决定的
-  provider/model 调用，``unmet`` 非空拒绝开跑。三格全空的 Agent 在 ``on`` 档下喂给 router
-  的入参与 ``off`` 逐字段相同 —— 不声明就什么都不变。
+灰度：``GALAXY_AGENT_SUPPLY = off | shadow | on``，默认 ``on``（认不得的取值按 ``off``）
+* ``off``    —— 三格不参与任何路径，行为与引入本模块前逐位一致；
+* ``shadow`` —— 对**每个** Agent 都算、绑、记，但执行仍走原路径；算出来的与路由实际选中的不一致
+  就记 divergence。这是显式打开的诊断档：它会为每个 Agent 调一次选脑（写路由回执）并做显存准入评估；
+* ``on``     —— 声明过需求的 Agent 算一次 SupplyDecision，执行时读它：按角色的 task_type、按决定的
+  provider/model 调用，``unmet`` 非空拒绝开跑。**三格全空的 Agent 什么都不算**（不调选脑、不写
+  路由回执、不探硬件），喂给 router 的入参与 ``off`` 逐字段相同 —— 不声明就什么都不变。所以默认开着
+  是安全的。
 """
 
 from __future__ import annotations
@@ -56,6 +58,7 @@ logger = logging.getLogger("Galaxy.AgentSupply")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SUPPLY_MODES: Tuple[str, ...] = ("off", "shadow", "on")
+DEFAULT_SUPPLY_MODE = "on"
 MODEL_PREFERENCES: Tuple[str, ...] = ("", "dispatch", "produce", "gatekeep")
 LOCUS_CONSTRAINTS: Tuple[str, ...] = ("", "local_only", "cloud_ok")
 MODALITIES: Tuple[str, ...] = ("vision_in", "audio_in", "audio_out", "video_in")
@@ -78,8 +81,8 @@ DIVERGENCE_LOG = REPO_ROOT / "runtime" / "agent_supply" / "divergences.jsonl"
 
 
 def agent_supply_mode() -> str:
-    raw = (os.environ.get("GALAXY_AGENT_SUPPLY", "off") or "off").strip().lower()
-    return raw if raw in SUPPLY_MODES else "off"
+    raw = (os.environ.get("GALAXY_AGENT_SUPPLY", DEFAULT_SUPPLY_MODE) or DEFAULT_SUPPLY_MODE).strip().lower()
+    return raw if raw in SUPPLY_MODES else "off"  # 认不得的取值按 off —— 宁可不算，不可误算
 
 
 # ---------------------------------------------------------------------------
@@ -274,9 +277,16 @@ def decide_supply(
 
 
 def supply_for_config(agent_id: str, config: Any, router: Any) -> Optional[SupplyDecision]:
-    """工厂在造出 Agent 时调：``off`` 档返回 ``None``（什么都不算）。"""
+    """工厂在造出 Agent 时调。``off`` 档、以及 ``on`` 档下三格全空的 Agent，返回 ``None``（什么都不算）。"""
     mode = agent_supply_mode()
     if mode == "off":
+        return None
+    declared = bool(
+        getattr(config, "model_preference", "")
+        or getattr(config, "modality_required", ())
+        or getattr(config, "locus_constraint", "")
+    )
+    if mode == "on" and not declared:
         return None
     try:
         return decide_supply(

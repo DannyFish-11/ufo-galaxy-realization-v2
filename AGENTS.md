@@ -103,7 +103,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   `GALAXY_GENOME` > `config/genomes/active.json` > default。default 与原硬编码逐字节一致（G9）
 - `core/agent_supply.py` - AgentConfig 的三格**需求**声明（model_preference / modality_required /
   locus_constraint，只能是枚举，不点名供应商 —— G13）→ `SupplyDecision` 绑在 Agent 上；
-  供不上就报（G14）。`GALAXY_AGENT_SUPPLY=off|shadow|on`，默认 off
+  供不上就报（G14）。`GALAXY_AGENT_SUPPLY=off|shadow|on`，默认 on（没声明需求的 Agent 什么都不算、行为照旧）
 
 ### 入口分流与参与方
 - `core/presence_line.py` - 手机/手表发起的请求**不驱动桌面三态**，相位只推给发起设备；

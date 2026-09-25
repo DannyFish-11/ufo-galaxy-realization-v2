@@ -202,11 +202,39 @@ def test_undeclared_agents_feed_the_router_identically_in_off_and_on(monkeypatch
     assert seen["off"] == seen["on"] == [{"task_type": "agent_control"}]
 
 
-def test_off_mode_computes_nothing(monkeypatch):
+@pytest.mark.parametrize("mode", [None, "off", "on"])
+def test_undeclared_agents_compute_nothing_by_default(monkeypatch, mode):
+    """默认是 on；on 与 off 下没声明需求的 Agent 都不调选脑、不写回执、不绑任何东西。"""
+    if mode is not None:
+        monkeypatch.setenv("GALAXY_AGENT_SUPPLY", mode)
     router = _Router()
     agent = _factory(router).create_from_template("planner")
     assert agent.supply is None and router.selected_roles == []
     assert "supply" not in agent.to_dict()
+
+
+def test_default_is_on_and_unknown_values_fall_back_to_off(monkeypatch):
+    assert sup.agent_supply_mode() == "on"
+    monkeypatch.setenv("GALAXY_AGENT_SUPPLY", "yes please")
+    assert sup.agent_supply_mode() == "off", "认不得的取值按 off —— 宁可不算，不可误算"
+
+
+def test_declared_agents_are_steered_by_default(monkeypatch):
+    router = _Router()
+    factory = _factory(router)
+    agent = factory.create_from_template("coordinator")
+    agent.config.model_preference = "dispatch"
+    agent.supply = sup.supply_for_config(agent.id, agent.config, router)
+    assert agent.supply is not None and agent.supply.steers
+    _run(factory, agent)
+    assert router.calls[-1]["provider"] == "ollama"
+
+
+def test_shadow_still_computes_for_every_agent(monkeypatch):
+    monkeypatch.setenv("GALAXY_AGENT_SUPPLY", "shadow")
+    router = _Router()
+    agent = _factory(router).create_from_template("planner")
+    assert agent.supply is not None and not agent.supply.steers
 
 
 # ---------------------------------------------------------------------------
