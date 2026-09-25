@@ -1916,6 +1916,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "设备准入闸：未配对批准的设备只能连接、不作为派发目标（批准后原地升级 · 默认关）",
     },
+    "GALAXY_AGENT_SUPPLY": {
+        "default": "off",
+        "type": "select",
+        "category": "agent",
+        "description": "子 Agent 按声明的需求选脑（off=照旧 / shadow=只算不用、对不上就记 / on=按需求选脑，供不上就报 · 默认 off）",
+        "options": ["off", "shadow", "on"],
+    },
     "GALAXY_GENOME": {
         "default": "",
         "type": "string",

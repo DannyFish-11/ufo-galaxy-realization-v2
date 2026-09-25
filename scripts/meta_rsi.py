@@ -34,6 +34,7 @@ from core.meta.store import ArtifactStore  # noqa: E402
 
 def _status(store: ArtifactStore) -> int:
     from core.meta.operators import registered_operators
+    from core.meta.supply import meta_supply_status
 
     counts = {t: len(store.list(t)) for t in ARTIFACT_TYPES}
     payload = {
@@ -44,6 +45,7 @@ def _status(store: ArtifactStore) -> int:
         "commits": store.commits()[-10:],
         "operators": registered_operators(),
         "recent_lessons": [a.payload for a in store.list("lesson", limit=5)],
+        "meta_supply": meta_supply_status(),
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
