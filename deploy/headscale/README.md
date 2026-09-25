@@ -57,35 +57,58 @@ tailscale up \
 
 The gateway will get IP `100.64.0.1`.
 
-### 4. Connect Wear OS Watch (Galaxy Watch 6 Classic LTE)
+### 4. Wear OS watch — **cannot join the tailnet directly**
 
-**Method A: adb sideload Tailscale APK**
+> ⚠️ This section previously said to `adb install` the Tailscale APK on the watch.
+> **That does not work**: Wear OS ships the VPN-consent activity as an empty stub
+> (`com.google.android.wearable.frameworkpackagestubs/.Stubs$VpnStub`), so any app
+> built on Android's `VpnService` — Tailscale included — crashes on launch. Reported
+> on exactly this device (Galaxy Watch 6 Classic):
+> [tailscale/tailscale#12177](https://github.com/tailscale/tailscale/issues/12177).
+> This is a platform limitation, not something a newer Tailscale build fixes.
 
-```bash
-# 1. Download Tailscale Android APK
-wget https://pkgs.tailscale.com/stable/tailscale-android.apk
+The watch reaches the gateway over the **internal network only**, by one of:
 
-# 2. Enable WiFi ADB on watch
-#    Settings > Developer Options > Wireless Debugging
+| Situation | Path | Status |
+|---|---|---|
+| Same Wi-Fi as the gateway | mDNS discovery → `ws://<lan-ip>:9000/ws/device/<id>` | works today |
+| Direct path not working | relay through the phone (Wear Data Layer) | fallback, planned |
+| Out (watch alone, or with phone nearby) | the watch app embeds Tailscale in **userspace** mode (`tsnet`, no `VpnService`) and joins the tailnet as its own node → direct WireGuard to the gateway | **built** — see below |
 
-# 3. Connect adb
-adb pair <WATCH_IP>:<PORT>
-adb connect <WATCH_IP>:<PORT>
+The public Funnel entry is **off by default** (`GALAXY_TS_FUNNEL=0`); devices talk
+over the internal network only. Set `GALAXY_TS_FUNNEL=1` only if you deliberately
+want the gateway reachable from the public internet.
 
-# 4. Install Tailscale
-adb install tailscale-android.apk
+#### How the watch joins (no typing on the watch)
 
-# 5. Login with auth key (via adb shell)
-adb shell tailscale up \
-  --login-server=http://<YOUR_SERVER_IP>:8080 \
-  --authkey=<AUTH_KEY> \
-  --hostname=galaxy-watch-001 \
-  --accept-routes
-```
+The watch app ships a small userspace tailnet process (`galaxy-wearos/tailnet/`).
+It needs a headscale pre-auth key **once**; the gateway hands one over during
+pairing, so nothing is typed on the watch:
 
-**Method B: Your Galaxy Wear app auto-connects**
+1. On the headscale host, create an API key for the gateway:
+   ```bash
+   docker exec headscale headscale apikeys create --expiration 365d
+   ```
+2. Give the gateway three settings (panel → network, or `.env`):
+   | Setting | Value |
+   |---|---|
+   | `GALAXY_HEADSCALE_URL` | this headscale server, e.g. `https://hs.example.com` |
+   | `GALAXY_HEADSCALE_API_KEY` | the key from step 1 (stored as a secret) |
+   | `GALAXY_HEADSCALE_USER` | `galaxy` (default, as created by `init.sh`) |
+3. Pair the watch as usual. The pairing response carries a **single-use,
+   10-minute, non-ephemeral** pre-auth key; the watch joins with it and from
+   then on reconnects with its own stored node identity.
 
-Your `TailscaleManager` code already detects `tailscale` binary and auto-discovers the gateway. After installing Tailscale APK via adb, your app will automatically find the gateway at `100.64.0.1` through `TailscaleAdapter`.
+If a key can't be issued (settings missing, API key rejected, headscale down),
+pairing still succeeds — home Wi-Fi keeps working — and the response says why
+(`tailnet_join_unavailable`). `GET /api/v1/pair/paths` shows the same under
+`watch_tailnet`.
+
+**The watch must be able to reach this headscale server from outside** (it is
+the rendezvous point: it tells the watch and the gateway where to find each
+other; data then flows directly between them, or via the embedded DERP relay —
+still end-to-end encrypted — when NAT hole punching fails). A headscale that is
+only reachable on your home LAN works at home but not outdoors.
 
 ### 5. Connect Android Phone
 
@@ -128,12 +151,17 @@ Your `core/adapters/tailscale_p2p_adapter.py`:
 
 ### WebSocket via Tailscale
 
-Your watch connects WebSocket directly to gateway's Tailscale IP:
+Tailnet devices (phone, desktop) connect to the gateway's Tailscale IP:
 ```
-wss://100.64.0.1:9000/ws/device/<deviceId>
+ws://100.64.0.1:9000/ws/device/<deviceId>
 ```
 
-This goes through WireGuard tunnel, encrypted end-to-end, zero latency overhead.
+**`ws://`, not `wss://`.** The WireGuard tunnel already encrypts and authenticates
+the traffic end-to-end. `wss://` to a bare IP has no workable certificate (public
+CAs don't issue certs for IPs; Tailscale/headscale certs are for MagicDNS names),
+and the gateway runs without TLS unless `GALAXY_TLS_CERT` + `GALAXY_TLS_KEY` are
+set — so a hardcoded `wss://` here was a guaranteed handshake failure. The scheme
+the gateway hands out now follows its actual TLS config (`core/gateway_tls.py`).
 
 ## Device IP Allocation
 
@@ -207,17 +235,13 @@ docker compose exec headscale headscale routes enable -i <ROUTE_ID>
 
 ## Troubleshooting
 
-### Watch can't connect to headscale
-```bash
-# Check if tailscale is running on watch
-adb shell tailscale status
+### Watch can't connect
 
-# If not, check network
-adb shell ping <YOUR_SERVER_IP>
-
-# Re-login
-adb shell tailscale up --login-server=http://<IP>:8080 --authkey=<KEY>
-```
+The watch is not a tailnet member (see section 4). Check instead:
+- it's on the same Wi-Fi as the gateway, and the gateway's mDNS announcer is on
+  (`GALAXY_MDNS` not set to `0`);
+- `GET /api/v1/pair/paths` on the gateway — it lists every path and why a down
+  one is down.
 
 ### Gateway can't see watch
 ```bash

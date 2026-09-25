@@ -105,6 +105,7 @@ OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 # import must follow the top-of-module stdlib imports already present above.
 # 下列带 F401 的名字是 PR-7 编排拆解后的兼容再导出面:测试与下游
 # 历史上从 core.openclawd 导入这些名字,必须保留。
+from core.interaction.agent_message import ASK_HUMAN_NOTIFY_TOOL, dispatch_notify_tool  # noqa: E402
 from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401,E402  re-export
@@ -818,6 +819,7 @@ _ASK_HUMAN_BUILTIN_TOOLS: List[Dict] = [
             },
         },
     },
+    ASK_HUMAN_NOTIFY_TOOL,
 ]
 
 
@@ -8180,8 +8182,10 @@ class OpenClawd:
         ``request_human_decision`` (→ device notification → ``human_input`` →
         registry resolve), threading the current session for traceability.
         """
+        if action == "notify":  # 告诉人一件事、不等回应 —— 见 core/interaction/agent_message.py
+            return await dispatch_notify_tool(arguments, session_id=getattr(self, "_current_session_id", "") or "")
         if action != "request":
-            return {"success": False, "error": f"Unknown ask_human action: {action!r} (valid: request)"}
+            return {"success": False, "error": f"Unknown ask_human action: {action!r} (valid: request, notify)"}
         title = str(arguments.get("title") or "").strip()
         if not title:
             return {"success": False, "error": "ask_human__request requires 'title'"}
