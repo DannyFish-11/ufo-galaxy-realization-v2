@@ -34,7 +34,13 @@ from core.verification_ladder import LEVELS, recommended_level, select_affected_
 
 def _git_changed(base: str) -> List[str]:
     proc = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...HEAD"], cwd=REPO_ROOT, capture_output=True, text=True, check=False
+        ["git", "diff", "--name-only", f"{base}...HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     if proc.returncode != 0:
         raise SystemExit(f"git diff 失败：{proc.stderr.strip()}")

@@ -225,6 +225,8 @@ class GitWorktreeSandbox:
             cwd=self.repo_root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if proc.returncode != 0:
@@ -241,6 +243,8 @@ class GitWorktreeSandbox:
             cwd=self.repo_root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         shutil.rmtree(self.path.parent, ignore_errors=True)

@@ -1910,6 +1910,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "首个字一出就显形（而不是等整句生成完 · 默认开）",
     },
+    "GALAXY_REQUIRE_DEVICE_APPROVAL": {
+        "default": "false",
+        "type": "boolean",
+        "category": "security",
+        "description": "设备准入闸：未配对批准的设备只能连接、不作为派发目标（批准后原地升级 · 默认关）",
+    },
     "GALAXY_PRESENCE_LINE": {
         "default": "true",
         "type": "boolean",

@@ -45,6 +45,9 @@ L3      全量 CI（46 个检查）                                只在合入�
 其余几种边：
 
 * ``importlib.import_module("core.x")`` / ``__import__("core.x")`` 的字面量参数；
+* **PEP 562 惰性包**：``__init__.py`` 定义了模块级 ``__getattr__`` 时，它里面字符串形式的
+  模块名（再导出表，如 ``core/runtime/__init__.py`` 的 ``_LAZY_SOURCES``）按懒导入算一跳 ——
+  ``from core.runtime import X`` 的使用者依赖 X 的来源模块，只导入子模块的则不依赖；
 * **测试文件**里字符串中的点号模块名与仓库路径：``patch("core.x.run")``、
   ``"scripts/check_x.py"``（子进程跑脚本：依赖脚本本身与它的一跳懒导入）。生产代码里
   的这类字符串多半是文档与登记表，不算；
@@ -95,8 +98,12 @@ LEVELS: Tuple[str, ...] = ("L0", "L1", "L2", "L3")
 
 #: 不扫描的目录（第三方 vendored 代码、运行时产物、依赖目录）。
 EXCLUDED_DIRS: frozenset = frozenset(
-    {".git", "external", "node_modules", "__pycache__", "runtime", ".venv", "venv", "build", "dist", ".mypy_cache"}
+    {".git", "external", "node_modules", "__pycache__", ".venv", "venv", "build", "dist", ".mypy_cache"}
 )
+
+#: 只在仓库根目录下排除的目录。``runtime/`` 是运行期数据目录 —— 但 ``core/runtime/`` 是一个
+#: 真实的包，按名字全局排除会让它整个从依赖图里消失（改它选出 0 个测试）。
+EXCLUDED_ROOT_DIRS: frozenset = frozenset({"runtime"})
 
 #: pytest.ini 的 testpaths —— 只有这些目录下的 ``test_*.py`` 算测试。
 TEST_ROOTS: Tuple[str, ...] = (
@@ -131,7 +138,7 @@ STATIC_GUARD_SCRIPTS: Tuple[str, ...] = (
 
 INIT_SUFFIX = "#init"
 
-_CACHE_VERSION = 4
+_CACHE_VERSION = 5
 _CACHE_PATH = REPO_ROOT / "runtime" / "verification_ladder" / "dependency_index.json"
 
 _DOTTED_RE = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$")
@@ -159,6 +166,8 @@ def _python_files(root: Path) -> List[Path]:
             continue
         for entry in entries:
             if entry.is_dir():
+                if current == root and entry.name in EXCLUDED_ROOT_DIRS:
+                    continue
                 if entry.name not in EXCLUDED_DIRS and not entry.name.startswith("."):
                     stack.append(entry)
             elif entry.suffix == ".py":
@@ -228,6 +237,10 @@ def _extract(source: str, rel_path: str) -> Dict[str, List[Any]]:
                 strings.add(value)
         child_top = toplevel and not isinstance(node, _DEFERRED_SCOPES)
         stack.extend((child, child_top) for child in ast.iter_child_nodes(node))
+    if rel_path.endswith("__init__.py") and any(
+        isinstance(n, ast.FunctionDef) and n.name == "__getattr__" for n in getattr(tree, "body", [])
+    ):
+        dynamic += [[value, False] for value in sorted(strings) if _DOTTED_RE.match(value)]
     return {"imports": imports, "dynamic": dynamic, "strings": sorted(strings)}
 
 

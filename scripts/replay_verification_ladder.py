@@ -53,7 +53,14 @@ MARKER = "LADDER_REPLAY_FAULT"
 
 
 def _dirty(rel: str) -> bool:
-    proc = subprocess.run(["git", "status", "--porcelain", "--", rel], cwd=REPO_ROOT, capture_output=True, text=True)
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "--", rel],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     return bool(proc.stdout.strip())
 
 
@@ -67,7 +74,15 @@ def _split(files: List[str], jobs: int) -> List[List[str]]:
 def _run_bucket(files: List[str], mode: str, timeout_s: float) -> subprocess.Popen:
     argv = [sys.executable, "-m", "pytest", *files, "-q", "-p", "no:cacheprovider", "-rfE", "--tb=line"]
     argv += ["--co"] if mode == "collect" else ["-m", CI_MARKER_EXPRESSION]
-    return subprocess.Popen(argv, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return subprocess.Popen(
+        argv,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 def _missed_tests(output: str, complement: List[str]) -> List[str]:

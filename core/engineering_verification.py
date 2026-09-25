@@ -337,6 +337,8 @@ def run_verification(
             cwd=str(cwd or REPO_ROOT),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=_timeout_s(timeout_s),
             check=False,
         )

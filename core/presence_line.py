@@ -71,7 +71,9 @@ PRESENCE_LINE_ENV = "GALAXY_PRESENCE_LINE"
 PRESENCE_LINE_LEGACY_SOURCES_ENV = "GALAXY_PRESENCE_LINE_LEGACY_SOURCES"
 
 #: 入口本身就说明请求来自远端身体。
-REMOTE_SOURCES: FrozenSet[str] = frozenset({"wear_voice", "wear_decision", "android_goal_execution", "android_vision"})
+REMOTE_SOURCES: FrozenSet[str] = frozenset(
+    {"wear_voice", "wear_decision", "android_goal_execution", "android_vision", "participant_task"}
+)
 
 #: 本机的耳朵、眼睛与操作员。
 HOST_SOURCES: FrozenSet[str] = frozenset(
@@ -124,7 +126,10 @@ def registered_device_kind(device_id: str) -> str:
         device = get_unified_device_manager().get_device(device_id)
         if device is not None:
             kind = getattr(device.device_type, "value", device.device_type)
-            if kind and str(kind).lower() != "unknown":
+            if not kind or str(kind).lower() == "unknown":
+                # 通用接入（core.participant_admission）把 UDM 枚举之外的原始类型留在 metadata 里
+                kind = (getattr(device, "metadata", None) or {}).get("participant_kind", "")
+            if kind:
                 return str(kind).lower()
     except Exception:  # noqa: BLE001 — 查不到就按查不到处理
         logger.debug("presence_line: UDM lookup failed for %s", device_id, exc_info=True)

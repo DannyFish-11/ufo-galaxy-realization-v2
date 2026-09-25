@@ -303,3 +303,56 @@ def test_cli_prints_l0_and_flags_untrustworthy_plans():
     assert ok.returncode == 0 and "tests/test_verdict_independence.py" in ok.stdout
     esc = subprocess.run([sys.executable, "scripts/select_affected_tests.py", "pytest.ini"], **run)
     assert esc.returncode == 2 and "全局配置" in esc.stderr
+
+
+LAZY_PACKAGE_REPO = {
+    "runtime/scratch.py": "import lazypkg.source\n",  # 仓库根目录下的 runtime/ 是运行期数据，不进图
+    "lazypkg/__init__.py": """
+        from importlib import import_module
+
+        _SOURCES = (("lazypkg.source", ("VALUE",)),)
+
+        def __getattr__(name):
+            for module, names in _SOURCES:
+                if name in names:
+                    return getattr(import_module(module), name)
+            raise AttributeError(name)
+    """,
+    "lazypkg/source.py": "VALUE = 1\n",
+    "lazypkg/sibling.py": "OTHER = 2\n",
+    "core/__init__.py": "",
+    "core/runtime/__init__.py": "",
+    "core/runtime/sink.py": "EVENTS = []\n",
+    "tests/test_uses_lazy_name.py": "from lazypkg import VALUE\n\ndef test_v():\n    assert VALUE == 1\n",
+    "tests/test_uses_submodule.py": "from lazypkg.sibling import OTHER\n\ndef test_o():\n    assert OTHER == 2\n",
+    "tests/test_nested_runtime.py": "from core.runtime.sink import EVENTS\n\ndef test_e():\n    assert EVENTS == []\n",
+}
+
+
+@pytest.fixture
+def lazy_repo(tmp_path, monkeypatch):
+    for rel, body in LAZY_PACKAGE_REPO.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(body), encoding="utf-8")
+    monkeypatch.setattr(vl, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(vl, "_CACHE_PATH", tmp_path / "runtime" / "idx.json")
+    return tmp_path
+
+
+def test_pep562_lazy_package_names_are_one_hop_edges(lazy_repo):
+    """``from lazypkg import VALUE`` 依赖 VALUE 的来源模块；只导入子模块的不依赖它。"""
+    assert _l0(["lazypkg/source.py"]) == {"tests/test_uses_lazy_name.py"}
+
+
+def test_only_the_root_runtime_dir_is_excluded(lazy_repo):
+    """``core/runtime/`` 是真实的包 —— 按名字全局排除 runtime 会让它从依赖图里消失（改它选出 0 个测试）。"""
+    index = vl.build_dependency_index(use_cache=False)
+    assert "core/runtime/sink.py" in index.files
+    assert "runtime/scratch.py" not in index.files
+    assert _l0(["core/runtime/sink.py"]) == {"tests/test_nested_runtime.py"}
+
+
+def test_real_nested_runtime_package_selects_its_tests():
+    plan = vl.select_affected_tests(["core/runtime/runtime_observability_sink.py"], vl.build_dependency_index())
+    assert plan.tests, "core/runtime/ 下的模块必须选得出测试"
