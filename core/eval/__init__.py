@@ -15,7 +15,7 @@ result 约定（与 agent_factory 的输出兼容）::
      "tool_calls": [{"tool"/"tool_name": str, ...}], ...}
 """
 
-from core.eval.cases import EvalCase, builtin_cases, load_cases
+from core.eval.cases import EvalCase, builtin_cases, default_cases, load_cases
 from core.eval.memory_eval import MemoryEvalCase, MemoryEvalReport, run_memory_eval
 from core.eval.runner import EvalReport, EvalRunner, run_eval
 from core.eval.scorer import CaseScore, score_case
@@ -23,6 +23,7 @@ from core.eval.scorer import CaseScore, score_case
 __all__ = [
     "EvalCase",
     "builtin_cases",
+    "default_cases",
     "load_cases",
     "CaseScore",
     "score_case",

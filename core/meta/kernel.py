@@ -72,7 +72,7 @@ OPERATOR_SCOPES: Dict[str, str] = {"data_rsi": "data", "harness_rsi": "harness",
 #: 每个可写面能写的路径前缀（G5）。Model-RSI 阶段一不开写：没有训练栈，且权重加载路径
 #: 绕过了 core/execution_isolation（见 core/weights_admission.py 文件头）。
 WRITABLE_SURFACES: Dict[str, Tuple[str, ...]] = {
-    "data": ("core/eval/cases/", "config/assessment_claims.json"),
+    "data": ("config/eval_cases/", "config/assessment_claims.json"),
     "harness": ("config/genomes/",),
     "model": (),
 }
@@ -389,12 +389,30 @@ def freshness_violation(operator_scope: str, signals: SignalBundle, store: Artif
     return ""
 
 
+def _stale_claims() -> List[str]:
+    """R9：当前过期的结论 id。问不出来时返回空表并告警（不把"没问"当成"都新鲜"去比）。"""
+    try:
+        from core.assessment_freshness import freshness_report
+
+        return list(freshness_report().get("stale") or [])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("结论保鲜复验失败，本次生效不比对: %s", exc)
+        return []
+
+
 def _lesson(
-    store: ArtifactStore, proposal: PatchProposal, parents: Tuple[str, ...], outcome: str, reason: str, level: str
+    store: ArtifactStore,
+    proposal: PatchProposal,
+    parents: Tuple[str, ...],
+    outcome: str,
+    reason: str,
+    level: str,
+    stale_claims: Sequence[str] = (),
 ) -> str:
     lesson = create_artifact(
         "lesson",
         {
+            "stale_claims": list(stale_claims),
             "hypothesis": proposal.rationale,
             "preconditions": {
                 "scope": proposal.scope,
@@ -422,8 +440,14 @@ def run_cycle(
     mode: Optional[str] = None,
     sandbox_factory: Optional[Callable[[], Any]] = None,
     live_root: Path = REPO_ROOT,
+    stale_claims: Optional[Callable[[], List[str]]] = None,
 ) -> CycleReport:
-    """跑一轮：采集（给定）→ 提案 → 验证 → 裁决 → 生效或回滚 → lesson。"""
+    """跑一轮：采集（给定）→ 提案 → 验证 → 裁决 → 生效或回滚 → lesson。
+
+    ``stale_claims``：生效前后各问一次「哪些结论过期了」，差集记进 lesson（R9：能力改了，系统对
+    自己的描述随之失效，这要自己报出来）。缺省在活树就是本仓库时用
+    :func:`core.assessment_freshness.freshness_report`，否则不比对。
+    """
     mode = mode or meta_rsi_mode()
     name = getattr(operator, "name", "")
     report = CycleReport(mode=mode, operator=name, status="ok")
@@ -438,6 +462,8 @@ def run_cycle(
     verifier = verifier or LadderVerifier()
     authority = authority or EvidenceAuthority()
     sandbox_factory = sandbox_factory or GitWorktreeSandbox
+    if stale_claims is None and live_root == REPO_ROOT:
+        stale_claims = _stale_claims
 
     stale = freshness_violation(operator.scope, signals, store)
     if stale:
@@ -511,18 +537,23 @@ def run_cycle(
         verdict_id = store.put(verdict)
 
         # 5 生效或回滚。
+        newly_stale: List[str] = []
         if level is not EvidenceTrustLevel.trusted:
             outcome, reason = "rolled_back", f"裁决为 {level.value}，不生效（G7）"
         elif mode != "on":
             outcome, reason = "shadow", "shadow 档：裁决为 trusted，但永不生效"
         else:
+            stale_before = set(stale_claims()) if stale_claims else set()
             live_reason = apply_changes(live_root, proposal.changes)
             if live_reason:
                 outcome, reason = "stale_patch", live_reason
             else:
                 store.record_commit(proposal.scope, patch_id, verdict_id, _now())
                 outcome, reason = "committed", "trusted，已生效"
-        lesson_id = _lesson(store, proposal, (patch_id, verdict_id), outcome, reason, level.value)
+                newly_stale = sorted(set(stale_claims()) - stale_before) if stale_claims else []
+                if newly_stale:
+                    reason += f"；因此失效、需要人重新推导的结论：{', '.join(newly_stale)}"
+        lesson_id = _lesson(store, proposal, (patch_id, verdict_id), outcome, reason, level.value, newly_stale)
         report.outcomes.append(PatchOutcome(patch_id, outcome, reason, score_id, verdict_id, lesson_id, level.value))
         logger.info("元层循环 | operator=%s patch=%s level=%s outcome=%s", name, patch_id, level.value, outcome)
     return report

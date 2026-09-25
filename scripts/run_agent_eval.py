@@ -39,16 +39,16 @@ async def galaxy_agent_fn(prompt: str) -> Dict[str, Any]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="run_agent_eval")
-    ap.add_argument("--cases", default="", help="JSONL 用例集路径(默认内置)")
+    ap.add_argument("--cases", default="", help="JSONL 用例集路径(默认：内置 + config/eval_cases/ 里的轨迹用例)")
     ap.add_argument("--baseline", default="", help="基线报告 JSON 路径(用于回归对比)")
     ap.add_argument("--out", default="", help="保存报告 JSON 路径")
     args = ap.parse_args()
 
     sys.path.insert(0, os.getcwd())
-    from core.eval import EvalRunner, load_cases
+    from core.eval import EvalRunner, default_cases, load_cases
     from core.eval.runner import EvalReport
 
-    cases = load_cases(args.cases)
+    cases = load_cases(args.cases) if args.cases else default_cases()
     report = asyncio.run(EvalRunner(cases).run(galaxy_agent_fn))
     d = report.to_dict()
 

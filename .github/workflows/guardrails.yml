@@ -259,7 +259,7 @@ jobs:
   # 模块级导入闭包里也不得出现它。判据见 core/meta/guards.py。
   # ---------------------------------------------------------------------------
   meta-layer:
-    name: Meta Layer Guards (G5 / G6 / G10 / G13)
+    name: Meta Layer Guards (G5 / G6 / G10 / G13 / R9)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -279,6 +279,11 @@ jobs:
       - name: Agent 供给声明只写需求、不点名供应商（G13）
         run: |
           python scripts/check_agent_supply_declaration.py
+
+      # R9：系统对自己的描述（config/assessment_claims.json）所依据的事实变了就红。
+      - name: 能力结论保鲜（R9）
+        run: |
+          python scripts/check_assessment_freshness.py
 
   # ---------------------------------------------------------------------------
   # C3. Wiring guardrail — 公开能力有没有调用方

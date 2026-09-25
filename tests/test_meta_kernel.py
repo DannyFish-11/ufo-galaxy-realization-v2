@@ -231,10 +231,10 @@ class TestKernel:
         assert report.status == "rejected"
 
     def test_g5_patch_outside_operator_scope_is_rejected(self, store, live, tmp_path):
-        patch = _genome_patch(path="core/eval/cases/x.jsonl", scope="data")
+        patch = _genome_patch(path="config/eval_cases/x.jsonl", scope="data")
         report = _cycle(Op([patch]), store, live, tmp_path, FixedVerifier([_obs()]), "on")
         assert report.outcomes[0].outcome == "rejected" and "G5" in report.outcomes[0].reason
-        assert not (live / "core/eval/cases/x.jsonl").exists()
+        assert not (live / "config/eval_cases/x.jsonl").exists()
 
     @pytest.mark.parametrize(
         "path",
@@ -309,7 +309,7 @@ class TestKernel:
     def test_stale_signals_stop_the_data_cycle(self, store, live, tmp_path):
         old = create_artifact("trace", {"t": 1}, operator="runtime", created_at="2026-01-01T00:00:00+00:00")
         store.record_commit("model", "patch:x", "verdict:y", "2026-02-01T00:00:00+00:00")
-        op = Op([_genome_patch(path="core/eval/cases/a.jsonl", scope="data")], name="data_rsi", scope="data")
+        op = Op([_genome_patch(path="config/eval_cases/a.jsonl", scope="data")], name="data_rsi", scope="data")
         report = _cycle(op, store, live, tmp_path, FixedVerifier([_obs()]), "on", SignalBundle(traces=(old,)))
         assert report.status == "stale_signals"
 

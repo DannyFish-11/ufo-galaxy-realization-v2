@@ -2,7 +2,7 @@
 
 一个 Kernel、三个算子、每个算子一个可写面（见 :mod:`core.meta.kernel`）：
 
-* ``data_rsi``    —— 放大已有能力并标定其边界；可写面 ``core/eval/cases/``、``config/assessment_claims.json``
+* ``data_rsi``    —— 放大已有能力并标定其边界；可写面 ``config/eval_cases/``、``config/assessment_claims.json``
 * ``harness_rsi`` —— 编辑脚手架，不碰权重；可写面 ``config/genomes/``
 * ``model_rsi``   —— 经有界训练内化进参数；阶段一只留接口，不开写
 
@@ -15,6 +15,12 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List
 
 
+def _data_rsi() -> Any:
+    from core.meta.operators.data_rsi import DataRSIOperator
+
+    return DataRSIOperator()
+
+
 def _harness_rsi() -> Any:
     from core.meta.operators.harness_rsi import HarnessRSIOperator
 
@@ -22,7 +28,7 @@ def _harness_rsi() -> Any:
 
 
 #: 名字 → 构造函数。
-OPERATOR_REGISTRY: Dict[str, Callable[[], Any]] = {"harness_rsi": _harness_rsi}
+OPERATOR_REGISTRY: Dict[str, Callable[[], Any]] = {"data_rsi": _data_rsi, "harness_rsi": _harness_rsi}
 
 
 def registered_operators() -> List[str]:

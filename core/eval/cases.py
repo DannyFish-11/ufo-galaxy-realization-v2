@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+#: 元层 Data-RSI 从执行轨迹生成的用例（见 core/meta/operators/data_rsi.py）。不存在时什么都不加。
+TRAJECTORY_CASES = Path(__file__).resolve().parent.parent.parent / "config" / "eval_cases" / "trajectories.jsonl"
 
 
 @dataclass
@@ -78,3 +82,12 @@ def load_cases(path: str) -> List[EvalCase]:
             except (json.JSONDecodeError, KeyError, ValueError):
                 continue
     return cases or builtin_cases()
+
+
+def default_cases() -> List[EvalCase]:
+    """不指定用例集时跑什么：内置冒烟用例 + 轨迹生成的回归 / 边界用例（有才加）。"""
+    cases = builtin_cases()
+    if TRAJECTORY_CASES.is_file():
+        seen = {c.id for c in cases}
+        cases += [c for c in load_cases(str(TRAJECTORY_CASES)) if c.id not in seen]
+    return cases
