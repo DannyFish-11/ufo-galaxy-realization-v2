@@ -10,6 +10,8 @@
     python scripts/meta_rsi.py propose --component instructions --path system_prompt \
         --value-file new_prompt.txt --rationale "……"      # 登记一条 Harness 提案（不生效）
     python scripts/meta_rsi.py run --operator harness_rsi  # 跑一轮（受 GALAXY_META_RSI 约束）
+    python scripts/meta_rsi.py run --operator auto         # 由 Curriculum 选下一轮跑哪个算子
+    python scripts/meta_rsi.py curriculum --history        # 统计表、纵轴条件、历次选择及理由
     python scripts/meta_rsi.py revert patch:0123456789abcdef --yes  # 整包回退一个已生效的补丁
 
 ``run`` 在 ``GALAXY_META_RSI=off``（默认）时什么都不做。
@@ -55,11 +57,38 @@ def _run(store: ArtifactStore, operator_name: str) -> int:
     from core.meta.kernel import SignalBundle, run_cycle
     from core.meta.operators import build_operator
 
-    operator = build_operator(operator_name)
-    signals = operator.collect(store) if hasattr(operator, "collect") else SignalBundle()
+    if operator_name == "auto":
+        from core.meta import meta_rsi_mode
+        from core.meta.curriculum import HORIZONTAL_ARMS, choose_next
+
+        if meta_rsi_mode() == "off":
+            print(json.dumps({"status": "disabled", "reason": f"{META_MODE_ENV}=off：元层不运行"}, ensure_ascii=False))
+            return 0
+        operators = {name: build_operator(name) for name in HORIZONTAL_ARMS}
+        choice, collected = choose_next(store, operators)
+        print(json.dumps({"curriculum": choice.to_dict()}, ensure_ascii=False, indent=2))
+        if choice.operator is None:
+            return 0
+        operator, signals = operators[choice.operator], collected[choice.operator]
+    else:
+        operator = build_operator(operator_name)
+        signals = operator.collect(store) if hasattr(operator, "collect") else SignalBundle()
     report = run_cycle(operator, signals, store=store)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     return 0 if report.status in ("ok", "disabled") else 1
+
+
+def _curriculum(store: ArtifactStore, history: bool) -> int:
+    from core.meta.curriculum import arm_table, choice_history, vertical_axis_readiness
+
+    payload: dict = {
+        "arms": {name: stats.to_dict() for name, stats in arm_table(store).items()},
+        "vertical_axis": vertical_axis_readiness(store),
+    }
+    if history:
+        payload["history"] = choice_history(store)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -73,7 +102,9 @@ def main(argv: List[str] | None = None) -> int:
     show = sub.add_parser("show")
     show.add_argument("artifact_id")
     run = sub.add_parser("run")
-    run.add_argument("--operator", required=True)
+    run.add_argument("--operator", required=True, help="算子名；auto = 由 Curriculum 选（见 core/meta/curriculum.py）")
+    cur = sub.add_parser("curriculum", help="各算子的统计表、纵轴启动条件；--history 列出历次选择及理由")
+    cur.add_argument("--history", action="store_true")
     prop = sub.add_parser("propose", help="登记一条 Harness 提案：只进存储，由下一轮 run 验证、裁决")
     prop.add_argument("--component", required=True)
     prop.add_argument("--path", required=True, help="组件内的点号路径，如 system_prompt 或 agent_templates.planner")
@@ -104,6 +135,8 @@ def main(argv: List[str] | None = None) -> int:
         return 0
     if args.command == "run":
         return _run(store, args.operator)
+    if args.command == "curriculum":
+        return _curriculum(store, args.history)
     if args.command == "propose":
         from core.meta.artifacts import create_artifact
         from core.meta.operators.harness_rsi import proposal_payload
