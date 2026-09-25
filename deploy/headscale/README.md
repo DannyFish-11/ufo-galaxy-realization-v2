@@ -72,15 +72,43 @@ The watch reaches the gateway over the **internal network only**, by one of:
 | Situation | Path | Status |
 |---|---|---|
 | Same Wi-Fi as the gateway | mDNS discovery → `ws://<lan-ip>:9000/ws/device/<id>` | works today |
-| Out, phone with you | watch ⇄ phone over the Wear Data Layer (Bluetooth/Wi-Fi, local), phone ⇄ gateway over the tailnet | planned |
-| Out, watch only | embed Tailscale in the app in **userspace** mode (`tsnet`/`libtailscale`, no `VpnService`) | planned |
+| Direct path not working | relay through the phone (Wear Data Layer) | fallback, planned |
+| Out (watch alone, or with phone nearby) | the watch app embeds Tailscale in **userspace** mode (`tsnet`, no `VpnService`) and joins the tailnet as its own node → direct WireGuard to the gateway | **built** — see below |
 
 The public Funnel entry is **off by default** (`GALAXY_TS_FUNNEL=0`); devices talk
 over the internal network only. Set `GALAXY_TS_FUNNEL=1` only if you deliberately
 want the gateway reachable from the public internet.
 
-The `100.64.0.10-19` range below stays reserved for watches for when the userspace
-path lands.
+#### How the watch joins (no typing on the watch)
+
+The watch app ships a small userspace tailnet process (`galaxy-wearos/tailnet/`).
+It needs a headscale pre-auth key **once**; the gateway hands one over during
+pairing, so nothing is typed on the watch:
+
+1. On the headscale host, create an API key for the gateway:
+   ```bash
+   docker exec headscale headscale apikeys create --expiration 365d
+   ```
+2. Give the gateway three settings (panel → network, or `.env`):
+   | Setting | Value |
+   |---|---|
+   | `GALAXY_HEADSCALE_URL` | this headscale server, e.g. `https://hs.example.com` |
+   | `GALAXY_HEADSCALE_API_KEY` | the key from step 1 (stored as a secret) |
+   | `GALAXY_HEADSCALE_USER` | `galaxy` (default, as created by `init.sh`) |
+3. Pair the watch as usual. The pairing response carries a **single-use,
+   10-minute, non-ephemeral** pre-auth key; the watch joins with it and from
+   then on reconnects with its own stored node identity.
+
+If a key can't be issued (settings missing, API key rejected, headscale down),
+pairing still succeeds — home Wi-Fi keeps working — and the response says why
+(`tailnet_join_unavailable`). `GET /api/v1/pair/paths` shows the same under
+`watch_tailnet`.
+
+**The watch must be able to reach this headscale server from outside** (it is
+the rendezvous point: it tells the watch and the gateway where to find each
+other; data then flows directly between them, or via the embedded DERP relay —
+still end-to-end encrypted — when NAT hole punching fails). A headscale that is
+only reachable on your home LAN works at home but not outdoors.
 
 ### 5. Connect Android Phone
 

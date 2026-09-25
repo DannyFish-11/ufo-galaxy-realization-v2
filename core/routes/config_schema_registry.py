@@ -2417,7 +2417,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "url",
         "category": "network",
-        "description": "Headscale 控制端地址（自建的 Tailscale 控制面）",
+        "description": "Headscale 控制端地址（自建的 Tailscale 控制面；手表出门直连也向它登记）",
+    },
+    # 密钥:以 _API_KEY 结尾 → classify_key() 归为 secret,走 runtime/secrets.env,不明文落 .env。
+    "GALAXY_HEADSCALE_API_KEY": {
+        "default": "",
+        "type": "password",
+        "category": "network",
+        "description": "Headscale 的 API 密钥（headscale apikeys create）。配对时用它给手表签一次性进网钥匙",
+    },
+    "GALAXY_HEADSCALE_USER": {
+        "default": "galaxy",
+        "type": "string",
+        "category": "network",
+        "description": "手表登记到 Headscale 的哪个用户下（默认 galaxy，与 deploy/headscale/init.sh 一致）",
     },
     "GALAXY_TAILSCALE_CHECK_INTERVAL": {
         "default": "60",
