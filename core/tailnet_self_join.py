@@ -47,7 +47,9 @@ def autojoin_enabled() -> bool:
 
 
 def _run(cmd: List[str]) -> "subprocess.CompletedProcess[str]":
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=UP_TIMEOUT_S)  # noqa: S603
+    return subprocess.run(  # noqa: S603
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=UP_TIMEOUT_S
+    )
 
 
 def this_hostname() -> str:
