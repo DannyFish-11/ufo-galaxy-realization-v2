@@ -2101,10 +2101,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "把本机登记为 Tailscale 中继（帮别的设备转发 · 默认开）",
     },
     "GALAXY_TS_FUNNEL": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "把网关经 Tailscale Funnel 暴露到公网（手表带流量单独出门时唯一能连的一条 · 默认开；未开鉴权时会被硬闸门拒绝执行）",
+        "description": "把网关经 Tailscale Funnel 暴露到公网（默认关 · 设备间只走内网；显式开启后未开鉴权时仍会被硬闸门拒绝执行）",
     },
     "GALAXY_ANDROID_WS_ENABLED": {
         "default": "false",

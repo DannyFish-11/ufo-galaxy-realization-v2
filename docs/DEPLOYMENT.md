@@ -67,16 +67,26 @@ verification checklist.
 
 ---
 
-## Reaching the gateway from mobile data (Tailscale Funnel)
+## Public entry via Tailscale Funnel (off by default)
 
-LAN, hotspot and Wi-Fi all reach the gateway directly.  A device that only has
-mobile data does not — and a Wear OS watch cannot join the tailnet either,
-because there is no Tailscale client for it.  Funnel is the one path that
-covers both: it exposes the gateway on the public internet over
-`https://<machine>.<tailnet>.ts.net`, and **the far side needs no client**.
+Devices reach the gateway over the **internal network only**: the same LAN /
+Wi-Fi directly, or across networks via the tailnet. Funnel is different — it
+exposes the gateway on the public internet over
+`https://<machine>.<tailnet>.ts.net`, and the far side needs no client.
 
-The gateway tries to bring Funnel up on startup (`GALAXY_TS_FUNNEL=1`, the
-default) and degrades quietly if it can't — startup is never blocked.
+**Funnel is off by default** (`GALAXY_TS_FUNNEL=0`). It used to default on, as
+the path for a Wear OS watch on mobile data (Wear OS cannot run Tailscale's
+`VpnService`-based client — see `deploy/headscale/README.md` §4). That put every
+gateway on the public internet by default, which is the opposite of this
+system's intent. Turn it on only if you deliberately want a public entry.
+
+If you upgraded from a version that auto-enabled it, Funnel may still be running.
+The gateway doesn't turn it off for you (you may have set it up for something
+else), but it logs a warning and `GET /api/v1/pair/paths` reports it. To remove
+it: `tailscale funnel reset`.
+
+When enabled, the gateway tries to bring Funnel up on startup and degrades
+quietly if it can't — startup is never blocked.
 
 **It will refuse to run when auth is off.**  `funnel_preflight()` is a hard
 gate, not a warning: with auth disabled, or with no usable token, not a single
@@ -95,7 +105,7 @@ refuses until it is granted, and the refusal text carries the link:
 
 | Variable | Default | Description |
 |---|---|---|
-| `GALAXY_TS_FUNNEL` | `true` | Try to expose the gateway publicly via Funnel on startup. Set `false` to keep the gateway tailnet-only (watches on mobile data then cannot connect). |
+| `GALAXY_TS_FUNNEL` | `false` | Expose the gateway publicly via Funnel on startup. Off by default: devices talk over the internal network only. |
 
 The public port is fixed to 443 (Tailscale allows only 443/8443/10000); the
 local gateway port is mapped behind it, so the URL handed to devices carries

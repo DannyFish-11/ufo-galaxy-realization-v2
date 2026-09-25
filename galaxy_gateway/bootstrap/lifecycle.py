@@ -225,8 +225,9 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         await _ts_mgr.initialize()
         if _ts_mgr.is_available():
             logger.info("Tailscale: available at %s", _ts_mgr.get_tailscale_ip())
-            # Funnel：把网关暴露到公网，手表带流量单独出门时唯一能用的那条路。
-            # 内部先过鉴权硬闸门 —— 没开鉴权就一行命令都不执行。best-effort，
+            # Funnel：把网关暴露到公网。**默认关**（设备间只走内网），显式
+            # GALAXY_TS_FUNNEL=1 才开；关着时若发现旧版本留下的 Funnel 仍在跑，
+            # 会大声告警但不替你关。开的话内部先过鉴权硬闸门。best-effort，
             # 拉不起来只留痕、不影响启动（与上面的 relay 宣告同一写法）。
             # 端口取仓库既有的权威解析（env → port_config → 9000），不在这里
             # 另写一份 —— 两处各算各的，就会出现"Funnel 映到 9000、网关其实在

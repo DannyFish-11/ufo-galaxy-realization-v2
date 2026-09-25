@@ -86,15 +86,33 @@ def test_funnel_blocked_by_the_auth_gate_says_so(client, monkeypatch):
     前者要去改一行配置，后者要去装个软件。混成一句"funnel 不可用"的话，
     用户会先去装 Tailscale，装完发现还是不行。
     """
+    from core.tailscale_manager import TailscaleManager
+
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
+    # 闸门只在"要开 Funnel"时才有意义 —— Funnel 现在默认关,所以显式要它。
+    monkeypatch.setattr(TailscaleManager, "_ADVERTISE_FUNNEL", True)
     p = _paths(client)["funnel"]
     assert p["up"] is False
     assert p["reason"] == "auth_disabled"
     assert p["how_to_fix"], "拒绝了却不告诉人怎么办"
 
 
+def test_funnel_off_by_default_says_not_enabled(client, monkeypatch):
+    """默认关的 Funnel 要报"没开",不能报成"坏了"或"没装 Tailscale"。
+
+    那两种说法会把人引去修一个本来就不该开的东西。
+    """
+    from core.tailscale_manager import TailscaleManager
+
+    monkeypatch.setattr(TailscaleManager, "_ADVERTISE_FUNNEL", False)
+    p = _paths(client)["funnel"]
+    assert p["up"] is False
+    assert p["reason"] == "not_enabled"
+    assert "GALAXY_TS_FUNNEL" in p["how_to_fix"]
+
+
 def test_public_reachable_is_a_single_clear_answer(client):
-    """「手表带流量出门还能不能用」只有一个判据，就是 funnel 通不通。
+    """「网关此刻是否经本系统宣告为公网可达」只有一个判据，就是 funnel 通不通。
 
     让人自己从三行状态里推这个结论，就会推错。
     """

@@ -190,6 +190,9 @@ def test_gate_blocks_before_any_command_runs(mgr, monkeypatch):
     走到闸门那一步。
     """
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
+    # 闸门守的是"要开 Funnel 的时候"—— Funnel 现在默认关,所以显式要它,
+    # 才走得到闸门这一步。
+    monkeypatch.setattr(type(mgr), "_ADVERTISE_FUNNEL", True)
     calls = []
     monkeypatch.setattr(
         "core.tailscale_manager.subprocess.run",
@@ -204,6 +207,7 @@ def test_gate_blocks_before_any_command_runs(mgr, monkeypatch):
 def test_gate_result_is_carried_out_not_swallowed(mgr, monkeypatch):
     """拒绝的原因要能一路带到调用方（面板要拿它显示人话）。"""
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
+    monkeypatch.setattr(type(mgr), "_ADVERTISE_FUNNEL", True)
     out = asyncio.run(mgr.ensure_funnel_enabled())
     assert out["detail"] and out["how_to_fix"]
 
@@ -231,18 +235,70 @@ def test_watch_url_is_not_a_hardcoded_ip(mgr, monkeypatch):
     assert "100.99.88.77" in (mgr.get_gateway_url_for_watch() or "")
 
 
-def test_watch_prefers_funnel_over_tailnet_address(mgr, monkeypatch):
-    """手表进不了 tailnet（Wear OS 没有客户端），tailnet 内地址对它没意义。"""
+def test_watch_gets_funnel_only_when_asked_for(mgr, monkeypatch):
+    """显式开了 Funnel,手表那条才给公网地址。"""
     mgr.ts_ip = "100.99.88.77"
+    monkeypatch.setattr(type(mgr), "_ADVERTISE_FUNNEL", True)
     monkeypatch.setattr(type(mgr), "get_funnel_url", lambda _s: "https://box.tailnet.ts.net")
     assert mgr.get_gateway_url_for_watch() == "wss://box.tailnet.ts.net"
 
 
-def test_connection_url_is_tls(mgr):
-    """Funnel 强制 TLS；两条路统一成 wss，设备端就不用按来源切协议。"""
+def test_watch_never_gets_a_public_address_by_default(mgr, monkeypatch):
+    """本机挂着一个旧 Funnel,但没人要它 —— 不许把公网地址交出去。"""
     mgr.ts_ip = "100.99.88.77"
-    url = mgr.get_connection_url(9000)
-    assert url and url.startswith("wss://"), f"还是明文：{url}"
+    monkeypatch.setattr(type(mgr), "_ADVERTISE_FUNNEL", False)
+    monkeypatch.setattr(type(mgr), "get_funnel_url", lambda _s: "https://box.tailnet.ts.net")
+    url = mgr.get_gateway_url_for_watch() or ""
+    assert "ts.net" not in url, f"没要公网入口却给了公网地址：{url}"
+    assert "100.99.88.77" in url
+
+
+def test_connection_url_follows_the_gateway_not_a_guess(mgr, monkeypatch):
+    """tailnet 地址的协议必须**跟着网关实际开没开 TLS 走**。
+
+    这里原先断言"必须是 wss"。但网关默认不开 TLS(没配证书就明文起),于是
+    那条断言钉住的是一个**必然握手失败**的组合:客户端拨 TLS、服务端说明文。
+    而且 wss 到裸 IP 本来就拿不到可信证书。tailnet 内的加密由 WireGuard 负责。
+
+    新判据两头都验:没配证书 → ws;配了 → wss。任何一头写死都会红。
+    """
+    mgr.ts_ip = "100.99.88.77"
+    monkeypatch.delenv("GALAXY_TLS_CERT", raising=False)
+    monkeypatch.delenv("GALAXY_TLS_KEY", raising=False)
+    assert mgr.get_connection_url(9000) == "ws://100.99.88.77:9000"
+
+    monkeypatch.setenv("GALAXY_TLS_CERT", "/etc/galaxy/cert.pem")
+    monkeypatch.setenv("GALAXY_TLS_KEY", "/etc/galaxy/key.pem")
+    assert mgr.get_connection_url(9000) == "wss://100.99.88.77:9000"
+
+
+def test_funnel_off_by_default_runs_no_funnel_command(mgr, monkeypatch):
+    """默认关:一条 ``tailscale funnel`` 都不许执行(只允许查一下状态)。"""
+    monkeypatch.setattr(type(mgr), "_ADVERTISE_FUNNEL", False)
+    monkeypatch.setattr(type(mgr), "get_funnel_url", lambda _s: None)
+    calls = []
+    monkeypatch.setattr(
+        "core.tailscale_manager.subprocess.run",
+        lambda *a, **k: calls.append(a) or pytest.fail("默认关却执行了 tailscale 命令"),
+    )
+    out = asyncio.run(mgr.ensure_funnel_enabled())
+    assert out["enabled"] is False
+    assert out["reason"] == "disabled_by_config"
+    assert calls == []
+
+
+def test_a_leftover_funnel_is_reported_loudly(mgr, monkeypatch):
+    """旧版本默认会自动开 Funnel。升级后它可能还挂在公网上 —— 必须说出来。
+
+    不替用户关(可能是手动为别的服务开的),但**不许沉默**:一个没人知道还开着
+    的公网入口,比一个明确开着的更危险。
+    """
+    monkeypatch.setattr(type(mgr), "_ADVERTISE_FUNNEL", False)
+    monkeypatch.setattr(type(mgr), "get_funnel_url", lambda _s: "https://box.tailnet.ts.net")
+    out = asyncio.run(mgr.ensure_funnel_enabled())
+    assert out["enabled"] is False
+    assert "box.tailnet.ts.net" in out["detail"], "旧 Funnel 还在跑却没说"
+    assert "tailscale funnel reset" in out["how_to_fix"]
 
 
 def test_funnel_url_parses_real_cli_shape(mgr, monkeypatch):

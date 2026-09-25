@@ -285,7 +285,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     continue
                 # 不在候选里 = 这条路现在不可用。**为什么**不可用要说清楚,
                 # 否则这一屏只是把"连不上"换了个地方显示。
-                if kind == "funnel" and not gate["ok"]:
+                if kind == "funnel" and not mgr.funnel_advertised():
+                    # 没要它,就说"没开",而不是"坏了"或"没装 Tailscale" ——
+                    # 那两种说法都会把人引去修一个本来就不该开的东西。
+                    paths.append(
+                        {
+                            "kind": kind,
+                            "up": False,
+                            "url": "",
+                            "reason": "not_enabled",
+                            "how_to_fix": "默认不开公网入口(设备间只走内网)。确实需要时设 GALAXY_TS_FUNNEL=1",
+                        }
+                    )
+                elif kind == "funnel" and not gate["ok"]:
                     paths.append(
                         {
                             "kind": kind,
@@ -312,8 +324,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "device_id": did,
                     "port": port,
                     "paths": paths,
-                    # 手表带流量单独出门时唯一能用的那条。单独拎出来,因为它是
-                    # 「出门还能不能用」这个问题的唯一判据。
+                    # 网关此刻是否**经本系统宣告**为公网可达。默认 false ——
+                    # 设备间只走内网;只有显式开启 Funnel 且它真通时才是 true。
                     "public_reachable": "funnel" in live_kinds,
                 }
             )
