@@ -84,6 +84,34 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 > 走对象层；若只是进 prompt 供 LLM 参考，走检索。**该换的是决策路径，不是检索能力**
 > ——`Node_105`、`academic_retrieval` 面对的本来就是非结构化文本，向量检索是对的工具。
 
+### 元层（RSI）—— 一个被学习信号闭合、并被权威边界切过一次的循环
+- `core/meta/` - Kernel（采集 → 提案 → 验证 → **裁决** → 生效/回滚 → lesson）+ 六型 artifact
+  （内容寻址、lineage 一等）。`GALAXY_META_RSI=off|shadow|on`，默认 off。CLI：`scripts/meta_rsi.py`
+- 三个算子各一个可写面：`data_rsi` → `config/eval_cases/`；`harness_rsi` → `config/genomes/`；
+  `model_rsi` 阶段一不开写。算子**不得改验证器**（scripts/、tests/、scorer、证据模型 —— G6）
+- `core/meta/curriculum.py` - 横轴：下一轮跑哪个算子（调度统计，不是裁决），每次选择可审计
+- `core/meta/supply.py` - 元层用**独立的** router 实例；RSI API 空位只登记意图
+- **裁决永远是四值 `EvidenceTrustLevel`，不是分数**：验证由 harness 跑（`core/engineering_verification.py`），
+  结论由 `classify_execution_evidence()` 给。提案者自报的成败只记为 `claimed_passed` / divergence
+  （`scripts/check_verdict_independence.py` 守着）
+- `core/verification_ladder.py` - 改了什么只验受影响的：`python scripts/select_affected_tests.py <文件…>`
+- 热路径模块（openclawd / command_router / desktop_presence_runtime / presence_line / …）**不得 import core.meta**（G10）
+
+### 提示词与 Agent 供给
+- `core/genome.py` + `config/genomes/<name>/` - 系统提示词与 Agent 模板提示词**不在代码里**。
+  合并语义：缺省＝继承、`null`＝删除、空串是值（被拒）。优先级：显式参数 > `GALAXY_SYSTEM_PROMPT` >
+  `GALAXY_GENOME` > `config/genomes/active.json` > default。default 与原硬编码逐字节一致（G9）
+- `core/agent_supply.py` - AgentConfig 的三格**需求**声明（model_preference / modality_required /
+  locus_constraint，只能是枚举，不点名供应商 —— G13）→ `SupplyDecision` 绑在 Agent 上；
+  供不上就报（G14）。`GALAXY_AGENT_SUPPLY=off|shadow|on`，默认 off
+
+### 入口分流与参与方
+- `core/presence_line.py` - 手机/手表发起的请求**不驱动桌面三态**，相位只推给发起设备；
+  在本机落手时交还桌面。`GALAXY_PRESENCE_LINE=off` 整体回退
+- `core/participant_admission.py` - 非安卓设备的通用接入（注册 → 进 mesh → 提交任务），
+  全程不经安卓命名模块。`core/participant_truth_ingress.py` - 参与方真相的通用入口（P3）
+- `core/runtime/__init__.py` 是 PEP 562 **惰性**再导出：导入 `core.runtime.*` 子模块不会装进安卓运行时
+
 ### 语音
 - `core/speech_output.py` - "说"的权威：引擎链选择 + 失败降级。公开入口
   `speak_response()`（说）与 `synthesize_to_file()`（只合成不播放，供 HTTP 接口）
@@ -160,6 +188,11 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `POST /api/v1/protocols/skills/{name}/reload` - 重载技能
 
 只读概览另有 `GET /api/v1/system/mcp` 与 `GET /api/v1/system/skills`。
+
+### 参与方（非安卓设备）
+- `POST /api/v1/participants/register` - 按设备自己的声明接入（自带入口令牌校验）
+- `POST /api/v1/participants/{id}/tasks` - 已接入的参与方提交任务
+- `GET /api/v1/participants` - 列表（需 API 鉴权）
 
 ### WebSocket
 - `/ws/device/{device_id}` - 设备连接

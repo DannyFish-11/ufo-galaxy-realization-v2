@@ -1,11 +1,28 @@
 # 元层与 RSI 架构：现状认定、设计与落地路线
 
-> **状态**：DISCUSSION — 设计讨论稿，尚未实现任何代码
+> **状态**：IMPLEMENTED（阶段一）— M0–M7 已按本文与《元层架构书》落地，见下方「落地状态」。
+> 正文保留为设计推导记录；与实现不一致之处以代码与测试为准。
 > **范围**：(1) 给主体核心 OpenClawd 加入元层（Meta Layer），为递归自我改进（RSI）留出注入空间；
 > (2) 把桌面在场／动画运行时与主体执行解耦，同时保留原生多模态与全模态能力
 > **前置文档**：`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`、
 > `docs/architecture/ARCHITECTURE_FREEZE_IMPLEMENTATION_GUARDRAILS.md`
 > **日期**：2026-09-20
+
+---
+
+## 落地状态（阶段一）
+
+| 里程碑 | 落在哪 | 验收由谁钉 |
+|---|---|---|
+| M0 裁决不可自证 | `core/verdict_independence.py` · `scripts/check_verdict_independence.py` | `tests/test_verdict_independence.py` |
+| M1 裁决面接证据模型 | `core/engineering_verification.py` · `core/self_improvement.py` | `tests/test_engineering_verification.py` |
+| M1.5 分级验证阶梯 | `core/verification_ladder.py` · `scripts/select_affected_tests.py` | `tests/test_verification_ladder.py` |
+| M2 元层骨架 | `core/meta/`（artifacts · store · kernel · guards） | `tests/test_meta_kernel.py` |
+| M3 入口分流 / 参与方通用接入 | `core/presence_line.py` · `core/participant_admission.py` · `core/participant_truth_ingress.py` | `tests/test_presence_line.py` · `tests/test_participant_admission.py` |
+| M4 提示词资产化 | `core/genome.py` · `config/genomes/` · `core/meta/operators/harness_rsi.py` | `tests/test_genome.py` |
+| M5 模型与模态供给 | `core/agent_supply.py` · `core/meta/supply.py` · `scripts/check_agent_supply_declaration.py` | `tests/test_agent_supply.py` |
+| M6 轨迹 → 用例 + 结论保鲜 | `core/meta/operators/data_rsi.py` · `core/eval/cases.py` | `tests/test_data_rsi.py` |
+| M7 Curriculum | `core/meta/curriculum.py` | `tests/test_curriculum.py` |
 
 ---
 
@@ -186,8 +203,9 @@ manifest_stage_controller.py / manifest_stage_state.py   显现台阶段
 入口目录白名单（`scripts/check_reachability.py:73`）——也就是说它被当成"部署侧入口"豁免了，
 而不是真的被谁调用。
 
-**（B）`electron/renderer/presence_motion.js`（146 行）+ `shaders/lumiv.frag` + `webgl/context.js`
-——这是真正在屏幕上跑的那套。** 它做的是视觉动力学：弹簧、编排限速器、着色器分幕。
+**（B）`electron/renderer/presence_motion.js` + `electron/renderer/index.html` 的覆盖层 CSS 编排
+——这是真正在屏幕上跑的那套。** 它做的是视觉动力学：弹簧、编排限速器、分幕。
+（本文初稿写时还是 `shaders/lumiv.frag` + `webgl/context.js`；那套 WebGL 已于 32eaa83 整体换成 CSS 编排。）
 质量很高，文件头把"倾向大 → 过渡更决绝"这件事为什么必须可测讲得很清楚。
 
 ### 驱动链与耦合点
@@ -199,7 +217,7 @@ GalaxyPresenceBridge 单例          core/lumiv_websocket_bridge.py
    ↓ _build_message() 组 state_event
 WS /ws/desktop-presence            core/api_routes.py:1469
    ↓
-electron/renderer/app.js → presence_motion.js → WebGL
+electron/renderer/app.js → presence_motion.js → 覆盖层 CSS 编排
 ```
 
 桥每次广播的消息里带两份姿态：`posture`（一维遗留投影，覆盖层按它调过参）和
@@ -501,7 +519,7 @@ ManifestStageController 负责显现台阶段
 |----|------|---------|------|
 | 后端 | **语义姿态**：phase / depth / intent / 塌缩倾向 / 回撤倾向 / 稳定度 / 阈限态在推演什么 | `core/phase_contract.py` 的 `RenderPosture`（双轴忠实契约，已完备） | 契约不动，只加**节律** |
 | 后端 | **节律**：按自己的拍子持续产出姿态 | **不存在** | ← 这是唯一真正新增的东西 |
-| 前端 | **视觉动力学**：弹簧、编排限速器、着色器分幕 | `presence_motion.js` + `shaders/lumiv.frag` | 不动 |
+| 前端 | **视觉动力学**：弹簧、编排限速器、分幕 | `presence_motion.js` + `index.html` 覆盖层 CSS | 不动 |
 | 前端 | **降级**：WS 断了继续用最后一帧 + 本地弹簧自衰减 | 已是当前行为 | 不动 |
 
 换句话说：**后端从"事件驱动的姿态"变成"连续的姿态流"，前端一行不改。**
