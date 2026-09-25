@@ -252,6 +252,31 @@ jobs:
           python scripts/check_verdict_independence.py
 
   # ---------------------------------------------------------------------------
+  # C2c. 元层守卫 —— 算子不得改验证器（G6），元层不进热路径（G10）
+  #
+  # core/meta 是自我改进循环本身。它的可写面与验证器（守卫门、测试、打分逻辑、
+  # 执法函数、元层自身）必须不相交；每个请求都会经过的模块不得 import 它，
+  # 模块级导入闭包里也不得出现它。判据见 core/meta/guards.py。
+  # ---------------------------------------------------------------------------
+  meta-layer:
+    name: Meta Layer Guards (G5 / G6 / G10)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 纯 AST 静态分析，不 import 任何业务模块，无需装依赖。
+      - name: 可写面与验证器不相交；热路径不加载元层
+        run: |
+          python scripts/check_meta_layer.py
+
+  # ---------------------------------------------------------------------------
   # C3. Wiring guardrail — 公开能力有没有调用方
   #
   # 抓的是本仓反复出现的一类缺陷:能力实现完整、单测全绿、文档详尽,但生产代码里

@@ -321,6 +321,11 @@ def run_verification(
             started_at=started,
         )
 
+    if cwd is not None and Path(cwd).resolve() != REPO_ROOT:
+        # 在隔离工作区里跑：守卫脚本的绝对路径换成工作区里的那一份，否则验的是活树而不是补丁。
+        root, sandbox = str(REPO_ROOT), str(Path(cwd).resolve())
+        argv = tuple(sandbox + a[len(root) :] if a.startswith(root + os.sep) else a for a in argv)
+
     t0 = time.monotonic()
     exit_code: Optional[int] = None
     timed_out = False
@@ -493,7 +498,11 @@ def assess_relevance(obs: VerificationObservation, target_files: Sequence[str]) 
 
 
 def _ladder_observations(
-    level: str, target_files: Sequence[str], proposal_id: str, timeout_s: Optional[float]
+    level: str,
+    target_files: Sequence[str],
+    proposal_id: str,
+    timeout_s: Optional[float],
+    cwd: Optional[Path] = None,
 ) -> List[VerificationObservation]:
     from core.verification_ladder import LEVELS, select_affected_tests
 
@@ -519,12 +528,14 @@ def _ladder_observations(
     if not target_files:
         return _refused("提案没有 target_files，阶梯无从知道改了什么")
     plan = select_affected_tests(target_files)
-    if level == "L0" and not plan.l0_trustworthy:
+    if level in ("L0", "L1") and not plan.l0_trustworthy:
+        # L1 = L0 + 守卫门。L0 选不出测试时 L1 只剩守卫门，而守卫门查的是结构、不是行为 ——
+        # 全绿的守卫门给不了一个「没有任何测试覆盖的改动」可信的通过。
         return _refused(f"L0 在这次改动上不可信：{plan.escalate_reason}。请用 {LADDER_PREFIX}L2")
     commands = plan.commands(level)
     if not commands:
         return _refused(f"{level} 没有可跑的命令：{plan.escalate_reason or '没有受影响的测试'}")
-    return [run_verification(c, proposal_id=proposal_id, timeout_s=timeout_s) for c in commands]
+    return [run_verification(c, proposal_id=proposal_id, timeout_s=timeout_s, cwd=cwd) for c in commands]
 
 
 def verify(
@@ -533,12 +544,17 @@ def verify(
     target_files: Sequence[str] = (),
     proposal_id: str = "",
     timeout_s: Optional[float] = None,
+    cwd: Optional[Path] = None,
 ) -> List[VerificationObservation]:
-    """验证的统一入口：普通命令跑一条并判相关性；``ladder:Lx`` 按 target_files 跑一组。"""
+    """验证的统一入口：普通命令跑一条并判相关性；``ladder:Lx`` 按 target_files 跑一组。
+
+    ``cwd`` 给出时（元层的隔离工作区），全部命令都在那里跑。
+    """
     if isinstance(command, str) and command.strip().startswith(LADDER_PREFIX):
         level = command.strip()[len(LADDER_PREFIX) :].strip().upper()
-        return _ladder_observations(level, target_files, proposal_id, timeout_s)
-    return [assess_relevance(run_verification(command, proposal_id=proposal_id, timeout_s=timeout_s), target_files)]
+        return _ladder_observations(level, target_files, proposal_id, timeout_s, cwd)
+    observation = run_verification(command, proposal_id=proposal_id, timeout_s=timeout_s, cwd=cwd)
+    return [assess_relevance(observation, target_files)]
 
 
 __all__ = [
