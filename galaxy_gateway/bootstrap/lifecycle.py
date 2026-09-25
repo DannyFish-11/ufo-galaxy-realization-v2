@@ -222,6 +222,19 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         from core.tailscale_manager import TailscaleManager  # noqa: PLC0415
 
         _ts_mgr = TailscaleManager()  # singleton via __new__; no get_tailscale_manager accessor exists
+        # 自建 tailnet:配了 headscale 而这台电脑还没加入时,先自己加入 —— 智能体和
+        # 网关都在这台机器上,它是整个 tailnet 的中心(core/tailnet_self_join.py)。
+        # 放在 initialize() 之前,这样紧接着的探测就能看到刚拿到的 100.x。
+        try:
+            from core.tailnet_self_join import autojoin_enabled, ensure_joined  # noqa: PLC0415
+
+            if autojoin_enabled():
+                _join = await asyncio.to_thread(ensure_joined)
+                app.state.tailnet_self_join = _join
+                if _join["state"] not in ("joined", "not_configured"):
+                    logger.warning("这台电脑没能加入自建 tailnet:%s 处置:%s", _join["detail"], _join["how_to_fix"])
+        except Exception as _sj_err:
+            logger.debug("tailnet self-join skipped (non-fatal): %s", _sj_err, exc_info=True)
         await _ts_mgr.initialize()
         if _ts_mgr.is_available():
             logger.info("Tailscale: available at %s", _ts_mgr.get_tailscale_ip())

@@ -20,6 +20,7 @@ Routes:
   GET    /api/v1/devices/{device_id}/runtime-host - PR-30: 获取单个设备的 Local Runtime Host 合约
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -297,7 +298,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             merged[did] = dev_dict
 
         devices = list(merged.values())
-        return JSONResponse({"devices": devices, "total": len(devices)})
+        # 与 headscale 对账:每台设备多一栏 tailnet(在不在自建网里、100.x、在不在线),
+        # 不属于任何设备的节点单列。headscale 没配或问不到时不影响这张列表本身。
+        try:
+            from core.tailnet_membership import annotate
+
+            tailnet = await asyncio.to_thread(annotate, devices)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("tailnet 对账跳过:%s", exc)
+            tailnet = {"configured": False, "reason": "error", "tailnet_only": []}
+        return JSONResponse({"devices": devices, "total": len(devices), "tailnet": tailnet})
 
     @router.get("/api/v1/devices/discover")
     async def discover_devices(

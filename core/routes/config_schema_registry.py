@@ -2276,6 +2276,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "设备信任名单文件（留空=用内置默认位置）",
     },
+    "GALAXY_TAILNET_MEMBERSHIP_PATH": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "设备↔tailnet 节点对账记录文件（留空=数据目录下 tailnet_membership.json）",
+    },
     "GALAXY_DEVICE_TOKEN_STORE": {
         "default": "",
         "type": "string",
@@ -2425,6 +2431,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "password",
         "category": "network",
         "description": "Headscale 的 API 密钥（headscale apikeys create）。配对时用它给手表签一次性进网钥匙",
+    },
+    "GALAXY_HEADSCALE_AUTOJOIN": {
+        "default": "true",
+        "type": "boolean",
+        "category": "network",
+        "description": "配好 Headscale 后，网关启动时让这台电脑自动加入自建 tailnet（需已装 Tailscale 客户端）",
     },
     "GALAXY_HEADSCALE_USER": {
         "default": "galaxy",
