@@ -43,6 +43,17 @@ pytest 退出码 5（没收集到）   ``completed_degraded``       quarantine
 
 pytest 的 5 单列：``-k 不存在的名字`` 能让它「成功地什么都没测」。一次什么都没测的
 验证不是通过。
+
+跑的是不是相关的测试
+====================
+退出码 0 只说明「跑的这些测试过了」，不说明「跑的是该跑的」。提案带着 ``target_files``
+时，显式指定的 pytest 测试文件必须至少有一个**依赖**这些文件（由
+:mod:`core.verification_ladder` 的依赖图判定）；否则观测记为 ``relevant=False``，
+证据链不完整，最多 provisional —— 跑一条无关的、必过的测试拿不到 trusted。
+
+也可以不自己挑：``ladder:L0`` / ``ladder:L1`` / ``ladder:L2`` 让 harness 按
+``target_files`` 算出该跑什么并去跑（见 :func:`verify`）。一组命令里**最差**的那条
+决定证据状态，全部通过且原文齐全才算证据链完整。
 """
 
 from __future__ import annotations
@@ -54,9 +65,9 @@ import shlex
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from core.execution_evidence_model import ExecutionEvidenceState
 
@@ -144,6 +155,9 @@ class VerificationObservation:
     evidence_ref: str
     rejection: str = ""
     started_at: float = field(default_factory=time.time)
+    relevant: Optional[bool] = None
+    """跑的测试是否依赖提案的 target_files；``None`` = 无从判断（没有 target_files 或不是 pytest）。"""
+    relevance_note: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -163,6 +177,8 @@ class VerificationObservation:
             evidence_ref=str(data.get("evidence_ref", "")),
             rejection=str(data.get("rejection", "")),
             started_at=float(data.get("started_at", 0.0)),
+            relevant=data.get("relevant"),
+            relevance_note=str(data.get("relevance_note", "")),
         )
 
 
@@ -390,16 +406,152 @@ def observation_to_evidence(obs: VerificationObservation) -> Tuple[ExecutionEvid
         return ExecutionEvidenceState.completed_degraded, False
     if obs.exit_code != 0:
         return ExecutionEvidenceState.failed, bool(obs.evidence_ref)
-    return ExecutionEvidenceState.locally_executed, bool(obs.recognized_verifier and obs.evidence_ref)
+    complete = bool(obs.recognized_verifier and obs.evidence_ref) and obs.relevant is not False
+    return ExecutionEvidenceState.locally_executed, complete
+
+
+#: 一组观测里「最差」的证据状态优先：前面的比后面的更不可信。
+_AGGREGATE_PRECEDENCE: Tuple[ExecutionEvidenceState, ...] = (
+    ExecutionEvidenceState.planned_not_started,
+    ExecutionEvidenceState.completed_degraded,
+    ExecutionEvidenceState.interrupted,
+    ExecutionEvidenceState.aborted,
+    ExecutionEvidenceState.failed,
+    ExecutionEvidenceState.locally_executed,
+)
+
+
+def evidence_for(observations: Sequence[VerificationObservation]) -> Tuple[ExecutionEvidenceState, bool, int]:
+    """一组观测 → ``(证据状态, 证据链是否完整, 决定性观测的下标)``。
+
+    最差的那条决定状态；只有每一条都通过且证据链完整，整体才完整。一条都没有 = 什么都没验证。
+    """
+    if not observations:
+        return ExecutionEvidenceState.planned_not_started, False, -1
+    graded = [observation_to_evidence(o) for o in observations]
+    rank = {state: i for i, state in enumerate(_AGGREGATE_PRECEDENCE)}
+    worst = min(range(len(graded)), key=lambda i: rank.get(graded[i][0], 0))
+    state = graded[worst][0]
+    complete = state is ExecutionEvidenceState.locally_executed and all(chain for _, chain in graded)
+    return state, complete, worst
+
+
+# ---------------------------------------------------------------------------
+# 相关性与阶梯
+# ---------------------------------------------------------------------------
+
+#: ``ladder:L0`` 这类伪命令的前缀。
+LADDER_PREFIX = "ladder:"
+
+
+def _explicit_pytest_targets(command: Tuple[str, ...]) -> List[str]:
+    """``python -m pytest a.py b.py::T -q`` → 仓库相对的测试文件列表。"""
+    if not _is_pytest(command):
+        return []
+    targets: List[str] = []
+    skip_next = False
+    for arg in command[3:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("-m", "-k", "-p", "-c", "--rootdir", "-o"):
+            skip_next = True
+            continue
+        if arg.startswith("-"):
+            continue
+        path = Path(arg.split("::", 1)[0])
+        path = path if path.is_absolute() else (REPO_ROOT / path)
+        try:
+            targets.append(path.resolve().relative_to(REPO_ROOT).as_posix())
+        except ValueError:
+            continue
+    return targets
+
+
+def assess_relevance(obs: VerificationObservation, target_files: Sequence[str]) -> VerificationObservation:
+    """给一次 pytest 观测标上「跑的是不是依赖 target_files 的测试」。"""
+    explicit = _explicit_pytest_targets(obs.command)
+    if not target_files or not explicit:
+        return obs
+    from core.verification_ladder import select_affected_tests
+
+    plan = select_affected_tests(target_files)
+    if not plan.tests:
+        return replace(obs, relevance_note="依赖图里没有测试依赖 target_files，无从判断相关性")
+    affected = set(plan.tests)
+    hit = [t for t in explicit if t in affected or any(a.startswith(t.rstrip("/") + "/") for a in affected)]
+    if hit:
+        return replace(obs, relevant=True, relevance_note=f"命中 {len(hit)} 个受影响的测试")
+    return replace(
+        obs,
+        relevant=False,
+        relevance_note=(
+            f"跑的测试 {explicit[:5]} 都不依赖 target_files —— 退出码 0 证明不了这次改动；"
+            f"依赖它们的测试共 {len(plan.tests)} 个，可用 ladder:L0 让 harness 去跑"
+        ),
+    )
+
+
+def _ladder_observations(
+    level: str, target_files: Sequence[str], proposal_id: str, timeout_s: Optional[float]
+) -> List[VerificationObservation]:
+    from core.verification_ladder import LEVELS, select_affected_tests
+
+    def _refused(why: str) -> List[VerificationObservation]:
+        return [
+            VerificationObservation(
+                command=(),
+                requested=f"{LADDER_PREFIX}{level}",
+                recognized_verifier=False,
+                executed=False,
+                exit_code=None,
+                timed_out=False,
+                duration_s=0.0,
+                evidence_ref="",
+                rejection=why,
+            )
+        ]
+
+    if level not in LEVELS:
+        return _refused(f"未知档位 {level!r}，可选 {LEVELS}")
+    if level == "L3":
+        return _refused("L3 是全量 CI，只能在合入主干时由 CI 跑，本地没有等价命令")
+    if not target_files:
+        return _refused("提案没有 target_files，阶梯无从知道改了什么")
+    plan = select_affected_tests(target_files)
+    if level == "L0" and not plan.l0_trustworthy:
+        return _refused(f"L0 在这次改动上不可信：{plan.escalate_reason}。请用 {LADDER_PREFIX}L2")
+    commands = plan.commands(level)
+    if not commands:
+        return _refused(f"{level} 没有可跑的命令：{plan.escalate_reason or '没有受影响的测试'}")
+    return [run_verification(c, proposal_id=proposal_id, timeout_s=timeout_s) for c in commands]
+
+
+def verify(
+    command: Union[str, Sequence[str], None],
+    *,
+    target_files: Sequence[str] = (),
+    proposal_id: str = "",
+    timeout_s: Optional[float] = None,
+) -> List[VerificationObservation]:
+    """验证的统一入口：普通命令跑一条并判相关性；``ladder:Lx`` 按 target_files 跑一组。"""
+    if isinstance(command, str) and command.strip().startswith(LADDER_PREFIX):
+        level = command.strip()[len(LADDER_PREFIX) :].strip().upper()
+        return _ladder_observations(level, target_files, proposal_id, timeout_s)
+    return [assess_relevance(run_verification(command, proposal_id=proposal_id, timeout_s=timeout_s), target_files)]
 
 
 __all__ = [
     "DEFAULT_TIMEOUT_S",
     "ENGINEERING_VERIFICATION_IS_OBSERVATION_ONLY",
     "FORBIDDEN_VERIFIER_FLAGS",
+    "LADDER_PREFIX",
     "RECOGNIZED_VERIFIERS",
     "VerificationObservation",
+    "assess_relevance",
+    "evidence_for",
     "normalize_verification_command",
     "observation_to_evidence",
     "run_verification",
+    "verify",
 ]

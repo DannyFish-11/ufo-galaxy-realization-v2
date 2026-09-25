@@ -90,7 +90,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from core.engineering_verification import observation_to_evidence, run_verification
+from core.engineering_verification import evidence_for, verify
 from core.execution_evidence_model import EvidenceTrustLevel, classify_execution_evidence
 
 logger = logging.getLogger("Galaxy.SelfImprovement")
@@ -638,10 +638,13 @@ class SelfHealingLoop:
                         "validate requires APPLY stage"
                     ),
                 }
+            target_files = list(proposal.target_files)
 
         # 验证在锁外跑：它可能要几分钟，不能让别的提案跟着排队。
-        observation = run_verification(command, proposal_id=proposal_id, timeout_s=timeout_s)
-        evidence_state, chain_complete = observation_to_evidence(observation)
+        # 普通命令跑一条（并判它跑的测试是否依赖 target_files）；ladder:Lx 按 target_files 跑一组。
+        observations = verify(command, target_files=target_files, proposal_id=proposal_id, timeout_s=timeout_s)
+        evidence_state, chain_complete, decisive = evidence_for(observations)
+        observation = observations[decisive]
         trust = classify_execution_evidence(evidence_state, truth_chain_complete=chain_complete)
         verified = trust is EvidenceTrustLevel.trusted
 
@@ -664,6 +667,7 @@ class SelfHealingLoop:
             )
         attempt: Dict[str, Any] = {
             "observation": observation.to_dict(),
+            "observations": [o.to_dict() for o in observations],
             "evidence_state": evidence_state.value,
             "truth_chain_complete": chain_complete,
             "trust_level": trust.value,
@@ -706,6 +710,8 @@ class SelfHealingLoop:
             "exit_code": observation.exit_code,
             "command": list(observation.command),
             "evidence_ref": observation.evidence_ref,
+            "commands": [list(o.command) for o in observations],
+            "evidence_refs": [o.evidence_ref for o in observations if o.evidence_ref],
             "divergence": divergence,
         }
         if not verified:
@@ -750,7 +756,10 @@ class SelfHealingLoop:
             attempts = list(proposal.verification_attempts)
 
         evidence_refs = [
-            a["observation"]["evidence_ref"] for a in attempts if a.get("observation", {}).get("evidence_ref")
+            o["evidence_ref"]
+            for a in attempts
+            for o in (a.get("observations") or [a.get("observation") or {}])
+            if o.get("evidence_ref")
         ]
         divergences = [a["divergence"] for a in attempts if a.get("divergence")]
 
@@ -897,6 +906,8 @@ def _unverified_reason(observation: Any, evidence_state: str, chain_complete: bo
         why = "没有收集到任何测试用例 —— 什么都没测不算通过"
     elif observation.exit_code not in (0, None):
         why = f"验证未通过（退出码 {observation.exit_code}，原文见 {observation.evidence_ref or '未落盘'}）"
+    elif getattr(observation, "relevant", None) is False:
+        why = observation.relevance_note
     elif not chain_complete:
         why = "退出码 0，但验证原文没能落盘 —— 没有证据的通过不予受理"
     else:

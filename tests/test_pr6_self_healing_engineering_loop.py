@@ -57,7 +57,7 @@ def _observation(exit_code: int = 0):
 
 def _evidence(exit_code: int = 0):
     """把 harness 的验证替换成一份给定退出码的观测。"""
-    return patch("core.self_improvement.run_verification", return_value=_observation(exit_code))
+    return patch("core.self_improvement.verify", return_value=[_observation(exit_code)])
 
 
 def _run(coro):
