@@ -258,9 +258,12 @@ class DependencyIndex:
 
 
 def _load_cache() -> Dict[str, Any]:
+    if not _CACHE_PATH.is_file():
+        return {}  # 冷启动：没有缓存是正常路径
     try:
         data = json.loads(_CACHE_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        logger.warning("依赖索引缓存不可读，按冷启动重建（%s）: %s", _CACHE_PATH, exc)
         return {}
     if not isinstance(data, dict) or data.get("version") != _CACHE_VERSION:
         return {}

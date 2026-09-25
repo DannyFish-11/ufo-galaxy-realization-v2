@@ -452,9 +452,10 @@ class HybridExecutionArbiter:
         # 送给渲染层：第三态"它现在在用什么手法"此前没有任何数据来源。
         # 不在请求里（直接调执行器、测试裸跑）时是空操作。
         try:
-            from core.liminal_activity import note_hybrid_execution
+            from core.liminal_activity import note_hybrid_execution, note_local_actuation
 
             note_hybrid_execution(_hybrid_decision)
+            note_local_actuation("hybrid_executor", device_id)
         except Exception as _note_exc:  # noqa: BLE001
             logger.debug("hybrid_executor | hybrid_decision_note_skipped | %s", _note_exc)
 

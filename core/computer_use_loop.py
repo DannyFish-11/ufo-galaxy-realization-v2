@@ -899,6 +899,10 @@ async def run_computer_use_task(
     node_id: str = _DEFAULT_NODE,
 ) -> Dict[str, Any]:
     """模块级便捷入口(REST 路由与 openclawd 工具都调这里)。"""
+    if not dry_run:  # 操作的是本机屏幕：手机发起的请求从这一刻起交还桌面外壳
+        from core.liminal_activity import note_local_actuation
+
+        note_local_actuation("computer_use")
     loop = ComputerUseLoop(node_id=node_id)
     return await loop.run(instruction, max_steps=max_steps, dry_run=dry_run)
 

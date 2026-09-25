@@ -48,6 +48,7 @@ __all__ = [
     "unbind_runtime_session",
     "note_liminal_activity",
     "note_hybrid_execution",
+    "note_local_actuation",
     "in_deliberation_window",
     "commit_to_manifest",
 ]
@@ -144,6 +145,32 @@ def note_hybrid_execution(decision: Optional[Dict[str, Any]]) -> bool:
         return True
     except Exception:  # noqa: BLE001 — 可见性绝不该拖垮请求
         logger.debug("note_hybrid_execution failed (non-fatal)", exc_info=True)
+        return False
+
+
+def note_local_actuation(kind: str, target_device_id: str = "") -> bool:
+    """宣告「这次请求在本机落手了」—— 不外显到桌面的请求由此交还桌面。
+
+    手机/手表发起的请求默认不驱动桌面外壳（见 :mod:`core.presence_line`）。可一旦它
+    真的操作了本机的应用或屏幕，桌面就成了在做事的那具身体，外壳理应跟着动。调用点
+    在落手的入口：混合执行器与 computer-use 回路。
+
+    Args:
+        kind: 落手方式（``hybrid_executor`` / ``computer_use``），进日志。
+        target_device_id: 落手的目标设备。目标是远端身体（手机、手表）时不交还。
+
+    Returns:
+        ``True`` 表示本次调用把会话交还了桌面；不在请求里、本就是桌面的请求都返回 ``False``。
+    """
+    session = _current_runtime_session.get()
+    if session is None or getattr(session, "host_bound", True):
+        return False
+    try:
+        from core.presence_line import attach_to_host
+
+        return attach_to_host(session, kind, target_device_id)
+    except Exception:  # noqa: BLE001 — 可见性绝不该拖垮执行
+        logger.debug("note_local_actuation failed (non-fatal)", exc_info=True)
         return False
 
 

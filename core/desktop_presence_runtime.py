@@ -107,6 +107,7 @@ from core.desktop_presence_system import (
 from core.liminal_activity import bind_runtime_session as _bind_runtime_session
 from core.liminal_activity import unbind_runtime_session as _unbind_runtime_session
 from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
+from core.presence_line import bind_presence_line as _bind_presence_line
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -212,6 +213,9 @@ class RuntimeSession:
         # 表达期的内容：这一轮用什么手法动手（``HybridExecutionDecision.to_dict()``）。
         # 由 core.liminal_activity.note_hybrid_execution 登记，同样经 200ms tick 上行。
         self.hybrid_execution: Optional[Dict[str, Any]] = None
+        # 入口分流（core/presence_line.py）：False 时相位不外显到桌面，只推给 origin_device_id。
+        self.host_bound: bool = True
+        self.origin_device_id: str = ""
 
     # ------------------------------------------------------------------
     # State helpers
@@ -327,6 +331,10 @@ class RuntimeSession:
             old_state.value,
             new_state.value,
         )
+        if not getattr(self, "host_bound", True):  # 游离会话：桌面不外显，只推给发起设备
+            from core.presence_line import advance_detached
+
+            return advance_detached(self, old_state, new_state)
         # 落耐久账 —— 与下面那次事件总线广播是**互补**的两件事:
         # 总线是给此刻在线的订阅者看的,广播完就没了;这一笔是给三天之后的人看的。
         # 三态此前一处都不落盘(DecisionTimeline 是进程内 list、RenderPosture 每拍现算),
@@ -887,6 +895,7 @@ class DesktopPresenceRuntime:
                 }
         """
         rsession = self._create_session(source)
+        _bind_presence_line(rsession, source, device_id)
         # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
         # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
         # core/liminal_activity.py。
@@ -992,13 +1001,14 @@ class DesktopPresenceRuntime:
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
         stream_sensing_active = self._has_active_stream_source()
-        self._update_presence_mode(
-            tri_state=rsession.tristate.value,
-            task_active=True,
-            sensing_active=bool(multimodal_context) or stream_sensing_active,
-            execution_active=False,
-            user_interaction=source in {"chat", "voice", "operator"},
-        )
+        if rsession.host_bound:
+            self._update_presence_mode(
+                tri_state=rsession.tristate.value,
+                task_active=True,
+                sensing_active=bool(multimodal_context) or stream_sensing_active,
+                execution_active=False,
+                user_interaction=source in {"chat", "voice", "operator"},
+            )
         self._log_request_start(
             rsession,
             message,
@@ -1030,13 +1040,14 @@ class DesktopPresenceRuntime:
             if rsession.tristate is not TriState.LIMINAL:
                 return
             rsession.advance(TriState.MANIFEST)
-            self._update_presence_mode(
-                tri_state=rsession.tristate.value,
-                task_active=True,
-                sensing_active=bool(multimodal_context) or stream_sensing_active,
-                execution_active=True,
-                user_interaction=source in {"chat", "voice", "operator"},
-            )
+            if rsession.host_bound:
+                self._update_presence_mode(
+                    tri_state=rsession.tristate.value,
+                    task_active=True,
+                    sensing_active=bool(multimodal_context) or stream_sensing_active,
+                    execution_active=True,
+                    user_interaction=source in {"chat", "voice", "operator"},
+                )
 
         _manifest_sink = None
         _manifest_orig_on_delta = None
@@ -1252,17 +1263,18 @@ class DesktopPresenceRuntime:
                 _enter_manifest()
             # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
-            self._update_presence_mode(
-                tri_state=rsession.tristate.value,
-                # 本次请求结束 ≠ 主体无事。若有常驻在场(如双工语音会话开着),
-                # 主体仍然在场,不能把外壳按回静默 —— 否则每次穿插的文字问答
-                # 结束都会把语音在场"顺手关掉"。
-                task_active=bool(self._ambient_registry()),
-                sensing_active=self._has_active_stream_source(),
-                execution_active=False,
-                user_interaction=source in {"chat", "voice", "operator"},
-                result_committed=True,
-            )
+            if rsession.host_bound:
+                self._update_presence_mode(
+                    tri_state=rsession.tristate.value,
+                    # 本次请求结束 ≠ 主体无事。若有常驻在场(如双工语音会话开着),
+                    # 主体仍然在场,不能把外壳按回静默 —— 否则每次穿插的文字问答
+                    # 结束都会把语音在场"顺手关掉"。
+                    task_active=bool(self._ambient_registry()),
+                    sensing_active=self._has_active_stream_source(),
+                    execution_active=False,
+                    user_interaction=source in {"chat", "voice", "operator"},
+                    result_committed=True,
+                )
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
             # contextvar 复位：请求结束后链路深处再调 note_liminal_activity 就是
@@ -3181,7 +3193,7 @@ class DesktopPresenceRuntime:
                 priority order: ``manifest`` > ``liminal`` > ``silent``.
         """
         try:
-            sessions = list(self._active_sessions.values())
+            sessions = [s for s in self._active_sessions.values() if getattr(s, "host_bound", True)]
             counts: Dict[str, int] = {
                 TriState.SILENT.value: 0,
                 TriState.LIMINAL.value: 0,

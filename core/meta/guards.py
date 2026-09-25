@@ -32,6 +32,7 @@ HOT_PATH_MODULES: Tuple[str, ...] = (
     "core/openclawd.py",
     "core/command_router.py",
     "core/desktop_presence_runtime.py",
+    "core/presence_line.py",
     "core/lumiv_websocket_bridge.py",
     "galaxy_gateway/websocket_handler.py",
 )

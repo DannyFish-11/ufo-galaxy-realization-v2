@@ -1910,6 +1910,31 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "首个字一出就显形（而不是等整句生成完 · 默认开）",
     },
+    "GALAXY_PRESENCE_LINE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "agent",
+        "description": "手机/手表发起的请求不驱动桌面三态（只推给发起的设备；在本机动手时交还桌面 · 默认开）",
+    },
+    "GALAXY_PRESENCE_LINE_LEGACY_SOURCES": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "按入口回退旧行为：列出的入口（逗号分隔，如 wear_voice,android_vision）仍驱动桌面三态",
+    },
+    "GALAXY_META_RSI": {
+        "default": "off",
+        "type": "select",
+        "category": "advanced",
+        "description": "元层自我改进循环（off=不跑 / shadow=只在隔离区验证、永不生效 / on=仅证据可信的补丁生效 · 默认 off）",
+        "options": ["off", "shadow", "on"],
+    },
+    "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S": {
+        "default": "600",
+        "type": "number",
+        "category": "advanced",
+        "description": "工程验证命令的超时秒数（自我改进循环跑测试/守卫时用 · 默认 600）",
+    },
     "GALAXY_LIMINAL_REHEARSAL": {
         "default": "auto",
         "type": "string",

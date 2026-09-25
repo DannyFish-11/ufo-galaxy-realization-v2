@@ -40,7 +40,7 @@ META_MODE_ENV: str = "GALAXY_META_RSI"
 
 def meta_rsi_mode() -> str:
     """当前灰度档位；取值不认得时按 ``off`` 处理（宁可不跑，不可误跑）。"""
-    raw = (os.environ.get(META_MODE_ENV, DEFAULT_META_MODE) or DEFAULT_META_MODE).strip().lower()
+    raw = (os.environ.get("GALAXY_META_RSI", DEFAULT_META_MODE) or DEFAULT_META_MODE).strip().lower()
     return raw if raw in META_MODES else DEFAULT_META_MODE
 
 
