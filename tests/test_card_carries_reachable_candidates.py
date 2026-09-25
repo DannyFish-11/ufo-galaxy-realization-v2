@@ -25,6 +25,8 @@ funnel 默认**不进**名片:本系统设备间只走内网,公网入口是要�
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 import pytest
 
 from core.agent_card import (
@@ -261,7 +263,9 @@ def test_a_live_funnel_is_not_published_unless_asked_for(fake_ts):
     fake_ts(ts_url="ws://100.99.88.77:9000", funnel="https://box.tail1234.ts.net", advertise=False)
     cands = build_candidates("dev-1", 9000)
     assert "funnel" not in [c["kind"] for c in cands]
-    assert not any("ts.net" in c["url"] for c in cands), "公网地址漏进了名片"
+    # 按主机名精确比对,不做子串匹配。
+    hosts = {urlparse(c["url"]).hostname for c in cands}
+    assert "box.tail1234.ts.net" not in hosts, "公网地址漏进了名片"
 
 
 def test_default_candidates_are_internal_only(fake_ts):

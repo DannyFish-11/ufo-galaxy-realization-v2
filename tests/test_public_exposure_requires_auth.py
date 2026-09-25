@@ -32,7 +32,9 @@ import asyncio
 import importlib
 import json
 import os
+import re
 import stat
+from urllib.parse import urlparse
 
 import pytest
 
@@ -297,7 +299,9 @@ def test_a_leftover_funnel_is_reported_loudly(mgr, monkeypatch):
     monkeypatch.setattr(type(mgr), "get_funnel_url", lambda _s: "https://box.tailnet.ts.net")
     out = asyncio.run(mgr.ensure_funnel_enabled())
     assert out["enabled"] is False
-    assert "box.tailnet.ts.net" in out["detail"], "旧 Funnel 还在跑却没说"
+    # 取出 detail 里提到的地址按主机名精确比对,不做子串匹配。
+    mentioned = {urlparse(u).hostname for u in re.findall(r"https?://[^\s）)]+", out["detail"])}
+    assert mentioned == {"box.tailnet.ts.net"}, "旧 Funnel 还在跑却没说"
     assert "tailscale funnel reset" in out["how_to_fix"]
 
 
