@@ -1916,6 +1916,18 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "设备准入闸：未配对批准的设备只能连接、不作为派发目标（批准后原地升级 · 默认关）",
     },
+    "GALAXY_GENOME": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "指定生效的 Genome（config/genomes/ 下的目录名）；留空=用元层指针或 default，填了就压过元层",
+    },
+    "GALAXY_SYSTEM_PROMPT": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "直接指定主对话的系统提示词（留空=用 Genome；填了就压过 Genome 与元层的一切改动）",
+    },
     "GALAXY_PRESENCE_LINE": {
         "default": "true",
         "type": "boolean",

@@ -7,6 +7,8 @@
     python scripts/meta_rsi.py status                      # 档位、存储、各型数量、生效记录
     python scripts/meta_rsi.py artifacts --type verdict    # 列 artifact
     python scripts/meta_rsi.py show verdict:0123456789abcdef   # 一件 artifact 及其祖先
+    python scripts/meta_rsi.py propose --component instructions --path system_prompt \
+        --value-file new_prompt.txt --rationale "……"      # 登记一条 Harness 提案（不生效）
     python scripts/meta_rsi.py run --operator harness_rsi  # 跑一轮（受 GALAXY_META_RSI 约束）
     python scripts/meta_rsi.py revert patch:0123456789abcdef --yes  # 整包回退一个已生效的补丁
 
@@ -70,6 +72,13 @@ def main(argv: List[str] | None = None) -> int:
     show.add_argument("artifact_id")
     run = sub.add_parser("run")
     run.add_argument("--operator", required=True)
+    prop = sub.add_parser("propose", help="登记一条 Harness 提案：只进存储，由下一轮 run 验证、裁决")
+    prop.add_argument("--component", required=True)
+    prop.add_argument("--path", required=True, help="组件内的点号路径，如 system_prompt 或 agent_templates.planner")
+    value = prop.add_mutually_exclusive_group(required=True)
+    value.add_argument("--value-file", help="新值（UTF-8 文本文件，原样作为字符串）")
+    value.add_argument("--delete", action="store_true", help="删除该键，交还继承值（写 null）")
+    prop.add_argument("--rationale", required=True, help="为什么这样改会更好 —— 带前置条件的操作性假设")
     rev = sub.add_parser("revert")
     rev.add_argument("patch_id")
     rev.add_argument("--yes", action="store_true", help="确认回退（会改真实目录里的文件）")
@@ -93,6 +102,18 @@ def main(argv: List[str] | None = None) -> int:
         return 0
     if args.command == "run":
         return _run(store, args.operator)
+    if args.command == "propose":
+        from core.meta.artifacts import create_artifact
+        from core.meta.operators.harness_rsi import proposal_payload
+
+        text = None if args.delete else Path(args.value_file).read_text(encoding="utf-8")
+        lesson = create_artifact(
+            "lesson",
+            proposal_payload(args.component, args.path.split("."), text, args.rationale),
+            operator="harness_rsi",
+        )
+        print(store.put(lesson))
+        return 0
     if args.command == "revert":
         if not args.yes:
             print("回退会改真实目录里的文件；确认请加 --yes", file=sys.stderr)

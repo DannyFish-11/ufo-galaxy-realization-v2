@@ -198,7 +198,21 @@ def write_surface_violation(scope: str, paths: Sequence[str]) -> str:
             return f"{path} 属于验证器 —— 算子不得改判卷标准（G6）"
         if not any(path == a.rstrip("/") or path.startswith(a) for a in allowed):
             return f"{path} 不在 {scope} 的可写面 {allowed} 内（G5）"
+        if _read_only_genome_component(path):
+            return f"{path} 是 Genome 的只读格 —— 阶段一「谁能想什么」不开写（设计规格 §04F）"
     return ""
+
+
+def _read_only_genome_component(path: str) -> bool:
+    from core.genome import READ_ONLY_COMPONENTS
+
+    parts = path.split("/")
+    return (
+        len(parts) == 5
+        and parts[:2] == ["config", "genomes"]
+        and parts[3] == "components"
+        and parts[4].rsplit(".", 1)[0] in READ_ONLY_COMPONENTS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +222,26 @@ def write_surface_violation(scope: str, paths: Sequence[str]) -> str:
 
 class SandboxUnavailable(RuntimeError):
     """无法建立隔离工作区（例如不是 git 检出）。"""
+
+
+def _mirror_writable_surfaces(live_root: Path, sandbox_root: Path) -> None:
+    """把活树上算子可写面的**当前**内容镜像进工作区。
+
+    工作区取自 HEAD，而此前生效的补丁写在活树上、未必进了 git。不镜像的话，下一个补丁
+    的「改动前内容」在工作区里对不上，一律被判为过期 —— 循环就只能跑一轮。
+    """
+    for prefix in {p for prefixes in WRITABLE_SURFACES.values() for p in prefixes}:
+        live, mirror = live_root / prefix, sandbox_root / prefix
+        if prefix.endswith("/"):
+            if mirror.exists():
+                shutil.rmtree(mirror)
+            if live.is_dir():
+                shutil.copytree(live, mirror, ignore=shutil.ignore_patterns("__pycache__"))
+        elif live.is_file():
+            mirror.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(live, mirror)
+        elif mirror.exists():
+            mirror.unlink()
 
 
 class GitWorktreeSandbox:
@@ -233,6 +267,7 @@ class GitWorktreeSandbox:
             shutil.rmtree(base, ignore_errors=True)
             raise SandboxUnavailable(f"无法建立隔离工作区：{proc.stderr.strip() or proc.stdout.strip()}")
         self.path = target
+        _mirror_writable_surfaces(self.repo_root, target)
         return self
 
     def __exit__(self, *exc: Any) -> None:

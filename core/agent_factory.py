@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 from core.atomic_json import atomic_write_json
+from core.genome import agent_template_prompt
 
 try:
     from core.monitoring import CircuitBreaker
@@ -507,6 +508,10 @@ class AgentFactory:
             raise ValueError(f"未知模板: {template_name}，可用: {available}")
 
         config = AGENT_TEMPLATES[template_name]
+        # 模板提示词是 Genome instructions 一格的 agent_templates（core/genome.py）；下面的显式覆盖压过它（G3）。
+        config = AgentConfig(
+            **{**config.__dict__, "system_prompt": agent_template_prompt(template_name, config.system_prompt)}
+        )
 
         # 应用覆盖
         if overrides:

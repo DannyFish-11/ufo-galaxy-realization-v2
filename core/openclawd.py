@@ -88,6 +88,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from core.genome import system_prompt as _genome_system_prompt
+
 _logger = logging.getLogger(__name__)
 logger = logging.getLogger("Galaxy.OpenClawd")
 
@@ -8931,17 +8933,9 @@ class OpenClawd:
 
             # 构建消息列表
             messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是 Galaxy 智能助手 (OpenClawd)，一个桌面级超级 AI 智能体。\n"
-                        "你可以帮助用户进行对话、任务管理、设备控制、代码执行等操作。\n"
-                        "当你需要执行操作时，请使用提供的工具。\n"
-                        "如果没有合适的工具，直接用文字回答。\n"
-                        "表达原则：直接、简洁，不复述问题、不加客套铺垫；"
-                        "要调用工具就直接调用，不要先输出长段解释。"
-                    ),
-                },
+                # 系统提示词是 Genome 的 instructions 一格（config/genomes/，见 core/genome.py）：
+                # 显式环境变量 > 生效中的 Genome > 内置默认；默认 Genome 与原硬编码逐字节一致（G9）。
+                {"role": "system", "content": _genome_system_prompt()},
             ]
 
             # PR-UNIFIED-MEMORY: Use the single unified memory entry point.

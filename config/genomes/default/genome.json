@@ -1,0 +1,17 @@
+{
+  "base": null,
+  "components": [
+    {
+      "id": "instructions",
+      "source": "./components/instructions.json"
+    },
+    {
+      "id": "model",
+      "source": "./components/model.json"
+    }
+  ],
+  "genome_id": "galaxy:default",
+  "genome_schema_version": "1",
+  "parent_id": null,
+  "version": 1
+}
