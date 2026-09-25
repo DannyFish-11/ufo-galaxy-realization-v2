@@ -43,6 +43,20 @@ _HUD = _ROOT / "styles/hud.css"
 _TOKENS = _ROOT / "styles/tokens.css"
 
 
+def _reduced_motion_block(css: str) -> str:
+    """取出 prefers-reduced-motion 那一整块（按花括号配对，不靠第一个 `}`）。"""
+    start = css.index("@media (prefers-reduced-motion: reduce)")
+    depth = 0
+    for j in range(css.index("{", start), len(css)):
+        if css[j] == "{":
+            depth += 1
+        elif css[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return css[start : j + 1]
+    raise AssertionError("prefers-reduced-motion 块没闭合")
+
+
 def _oklch(hex_colour: str) -> tuple:
     """sRGB 十六进制 → OKLCH 的 (L, C, H)。
 
@@ -264,15 +278,32 @@ class TestStateIsToldByLightNotColour:
         assert "dot-breathe" in css and "@keyframes dot-breathe" in css
 
     def test_motion_stops_when_the_user_asked_for_less(self) -> None:
-        css = _read(_HUD)
-        assert (
-            re.search(
-                r"prefers-reduced-motion[^}]*\}[^@]*?\.wired-row\[data-state='on'\]" r" \.wired-dot \{ animation: none",
-                css,
-                re.S,
-            )
-            or "animation: none" in css.split("prefers-reduced-motion")[-1]
-        ), "减少动效时呼吸没停 —— 那是人明确要求过的"
+        """减少动效时呼吸要停 —— 那是人明确要求过的。
+
+        停的动作**不在这个文件里**了：它收进了 tokens.css 的一条通配规则。
+        原先 hud.css 里是逐处写 `.wired-dot { animation: none }`，那种写法被实测
+        证明六条循环里会漏四条（`.rest::after` 那句拦不住 `.rest:hover::after`，
+        伪类更特指），所以整批删掉、收成一条。
+
+        这一条原先还带个兜底分支 `"animation: none" in css.split(...)[-1]`。
+        逐处那句删掉之后它**照样绿** —— 匹上的是隔了一截的、毫不相干的
+        `.pet[data-eyes='unknown'] .pet-blink { animation: none }`。
+        兜底分支一并删掉：一条能靠别处的规则变绿的断言，等于没有断言。
+        """
+        # 先确认真有东西要停，否则这一条是在为一个不存在的动效把关
+        hud = _read(_HUD)
+        m = re.search(r"\.wired-row\[data-state='on'\] \.wired-dot \{([^}]*)\}", hud)
+        assert m and "animation" in m.group(1), "通那一态本来就没有动效 —— 无事可停"
+
+        block = _reduced_motion_block(_read(_TOKENS))
+        assert re.search(
+            r"\*\s*,\s*\*::before\s*,\s*\*::after\s*\{[^}]*animation\s*:\s*none\s*!important",
+            block,
+            re.S,
+        ), (
+            "tokens.css 的 prefers-reduced-motion 里没有那条通配的 `animation: none !important`。"
+            "接线点的呼吸靠它停；少了它，`.wired-row[data-state='on'] .wired-dot` 的动效就没人拦。"
+        )
 
     def test_all_four_states_still_look_different(self) -> None:
         """去掉颜色之后，四态仍然必须一眼分得开。"""

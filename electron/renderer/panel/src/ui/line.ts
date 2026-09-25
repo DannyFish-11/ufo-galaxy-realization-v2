@@ -20,6 +20,7 @@
  * 真接后端之后,快慢该跟 `presence_intensity`(EMA 平滑的连续量)走,
  * 而不是按相位跳三档。那一步等投影链路查清楚再做,现在按相位是演示值。
  */
+import { checkPeriods } from '../motion';
 import type { Phase } from '../types';
 
 interface Cadence {
@@ -35,27 +36,17 @@ const CADENCE: Record<Phase, Cadence> = {
   manifest: { seconds: 2.2, slimSeconds: 3.2, amplitude: 0.72 },
 };
 
-/** 要躲开的那一带,单位 Hz。 */
-const AVOID_LO = 0.17;
-const AVOID_HI = 0.25;
-
-/** 落在带里就是不合格。周期 → 频率,只有一处换算。 */
-export function inAvoidBand(seconds: number): boolean {
-  const hz = 1 / seconds;
-  return hz >= AVOID_LO && hz <= AVOID_HI;
-}
-
 // 载入即跑。不静默 —— 越界要留痕,否则改坏了没人知道。
-for (const [phase, c] of Object.entries(CADENCE)) {
-  for (const [mode, secs] of [['常态', c.seconds], ['收窄', c.slimSeconds]] as const) {
-    if (inAvoidBand(secs)) {
-      console.error(
-        `[hud/line] ${phase} 的${mode}周期 ${secs}s = ${(1 / secs).toFixed(3)} Hz,` +
-          `落在要躲开的 ${AVOID_LO}–${AVOID_HI} Hz 带里。`,
-      );
-    }
-  }
-}
+// 判据本身不在这儿:它在 ../motion.ts,pet.ts 和 tokens.css 用的是同一份。
+// 这里原先自带一份 inAvoidBand,结果 pet.ts 就另写了一份**更窄的**带子,
+// 放行了一个真在带里的值。一份判据配三处周期,不是三份判据。
+checkPeriods(
+  'line',
+  Object.entries(CADENCE).flatMap(([phase, c]) => [
+    [`${phase} 常态`, c.seconds] as const,
+    [`${phase} 收窄`, c.slimSeconds] as const,
+  ]),
+);
 
 /**
  * 这条线**当前算不算数**。

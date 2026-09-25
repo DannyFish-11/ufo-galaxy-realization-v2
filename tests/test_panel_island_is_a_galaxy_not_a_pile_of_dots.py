@@ -62,9 +62,14 @@ def _body(code: str, opener: str) -> str:
     raise AssertionError(f"{opener} 的花括号没配上")
 
 
+def _css() -> str:
+    """CSS 去掉注释再看 —— 判据钉的是代码，不是注释里提过这个词。"""
+    return re.sub(r"/\*.*?\*/", " ", _CSS.read_text(encoding="utf-8"), flags=re.S)
+
+
 def _rule(selector: str) -> str:
     """把某条 CSS 规则的花括号里那一段取出来。"""
-    css = _CSS.read_text(encoding="utf-8")
+    css = _css()
     m = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert m, f"{selector} 这条规则没了"
     return m.group(1)
@@ -276,8 +281,15 @@ class TestTheThingsTheTilesUsedToSayAreStillSaid:
 class TestItStaysInWhiteLight:
     def test_the_galaxy_introduces_no_second_hue(self) -> None:
         """白光之外不引第二种颜色。这块面板上稍微加一点别的色相都很明显。"""
-        css = _CSS.read_text(encoding="utf-8")
-        block = css[css.index(".galaxy {") : css.index(".tile {")]
+        # 按**选择器**把星系那几条规则收齐，不按位置切。
+        #
+        # 这里原先是 `css[index(".galaxy {") : index(".tile {")]` —— 切片的终点是
+        # 一条毫不相干的规则。那条规则（前导小方格）后来被删掉，判据当场 ValueError。
+        # 按位置切还有更坏的一面：中间插一条别的规则，它会被悄悄算进星系里；
+        # 星系的规则挪到别处去，又会被悄悄漏掉。两种都不报错。
+        css = _css()
+        block = "".join(m.group(0) for m in re.finditer(r"(\.galaxy|\.gx-)[^{}]*\{[^}]*\}", css))
+        assert ".gx-t1" in block and ".gx-star" in block, "星系那几条规则没收齐"
         for hue in re.findall(r"#[0-9a-fA-F]{3,8}", block):
             assert hue.lower() in ("#fff", "#ffffff"), f"星系里出现了白之外的颜色：{hue}"
         for rgba in re.findall(r"rgba?\(([^)]*)\)", block):

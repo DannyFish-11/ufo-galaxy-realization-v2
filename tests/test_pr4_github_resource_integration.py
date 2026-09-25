@@ -64,6 +64,22 @@ def _make_ingester():
 # ===========================================================================
 
 
+@pytest.fixture
+def _repo_is_pre_approved(monkeypatch):
+    """把被测仓库放进 `GITHUB_ALLOWLIST`。
+
+    安装现在有一道准入闸：`GITHUB_ALLOWLIST` 为空时每次安装都要人确认，而测试环境
+    没有设备可问 → 拒绝（见 `core/github_addon_admission.py`）。
+
+    **用 allowlist 而不是 `GALAXY_ADDON_UNATTENDED=1`**：后者是"把闸关掉"，
+    那样这些用例会在一个生产里不存在的形态下跑，而"某次安装忘了过闸"这类回归
+    将不再有测试发现——这正是那道闸要消除的盲区，不该在测试侧原样重建一遍。
+    前者是"这个仓库已获批准"，闸照常判定、照常放行，被测的安装机制一点没少。
+    """
+    monkeypatch.setenv("GITHUB_ALLOWLIST", "owner/*")
+    monkeypatch.delenv("GITHUB_BLOCKLIST", raising=False)
+
+
 class TestAddonInstallPreserved:
     """Verify that GitHub addon installation still works after PR-4 changes."""
 
@@ -85,7 +101,9 @@ class TestAddonInstallPreserved:
     @patch("core.github_installer._verify_mcp_install")
     @patch("core.github_installer._register_mcp_tool")
     @patch("core.github_installer._fetch_repo")
-    def test_install_mcp_tool_still_works(self, mock_fetch, mock_register, mock_verify, tmp_path):
+    def test_install_mcp_tool_still_works(
+        self, mock_fetch, mock_register, mock_verify, tmp_path, _repo_is_pre_approved
+    ):
         """MCP tool installation still registers and records manifest."""
         mcp_manifest = {"name": "pr4-test-mcp", "entrypoint": "server.py"}
 
@@ -109,7 +127,7 @@ class TestAddonInstallPreserved:
     @patch("core.github_installer._verify_callable_skill_install")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
-    def test_install_skill_still_works(self, mock_fetch, mock_register, mock_verify, tmp_path):
+    def test_install_skill_still_works(self, mock_fetch, mock_register, mock_verify, tmp_path, _repo_is_pre_approved):
         """Skill installation still registers and records manifest."""
         skill_manifest = {
             "id": "pr4-test-skill",

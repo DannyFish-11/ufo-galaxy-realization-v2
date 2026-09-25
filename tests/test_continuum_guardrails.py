@@ -147,6 +147,93 @@ class TestTimeBudgetGuardrail:
 # ---------------------------------------------------------------------------
 
 
+class TestDegradedTicksReachTheReadout:
+    """降级那一拍必须落进 ``_last_state`` —— 否则渲染端**永远**看不到降级。
+
+    ``_last_state`` 是渲染契约唯一的取数口：``core.continuum_readout.
+    last_continuum_posture()`` 读的就是它，再经 ``phase_contract.
+    resolve_render_posture()`` 变成 ``payload.render.degraded`` / ``.source``，
+    面板的 ``lineTrust()`` 和覆盖层的 ``trustOf()`` 都据此画。
+
+    而两条降级出口（tick 超预算、管线抛异常）原先都是直接 ``return``，只有成功
+    那条走到函数末尾的 ``self._last_state = result``。后果是：降级那一拍把
+    ``degraded=True`` 返回给了直接调用方，契约那边却还读着**上一次成功**的那份 ——
+    报 ``degraded=False``、报上一次的相位。后端正在降级，界面画着"实算"的样子。
+
+    也就是说 ``RenderPosture.degraded`` 结构上**永远为假**，「降级必须留痕」
+    这条规矩在源头就断了。这一组钉住它不再断。
+
+    采样跳过那条分支**不在此列**：它返回的就是 ``_last_state`` 自己，那一拍没有
+    新事实，覆盖回去只会把时间戳搅乱（见 TestSamplingRateGuardrail）。
+    """
+
+    def test_budget_degradation_is_visible_to_the_next_reader(self):
+        metrics = ContinuumMetrics()
+        with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics):
+            orch = ContinuumOrchestrator(config=_make_cfg(max_tick_ms=0.0))
+            good = orch.run(trace_id="good")
+            assert good.degraded is False
+            assert orch._last_state is good and orch._last_emitted is good
+
+            orch._effective_cfg = orch._effective_cfg.model_copy(
+                update={"flags": orch._effective_cfg.flags.model_copy(update={"max_tick_ms": 0.0001})}
+            )
+            bad = orch.run(trace_id="bad")
+
+        assert bad.degraded is True, "这一拍本该降级，判据前提没成立"
+        assert orch._last_emitted is bad, (
+            "降级那一拍没落进 _last_emitted —— 契约会继续读上一次成功的那份，"
+            "报 degraded=False。后端在降级，界面却画着实算的样子。"
+        )
+        assert orch._last_emitted.degrade_reason == "tick_budget_exceeded"
+        assert orch._last_state is good, (
+            "降级的结果被塞进了 _last_state —— 那一位是采样跳过的兜底，" "之后每个被跳过的 tick 都会反复播这一次失败"
+        )
+
+    def test_pipeline_error_degradation_is_visible_too(self):
+        metrics = ContinuumMetrics()
+        with patch("core.continuum.orchestrator.get_continuum_metrics", return_value=metrics):
+            orch = ContinuumOrchestrator(config=_make_cfg())
+            orch.run(trace_id="good")
+            with patch.object(orch, "_run_pipeline", side_effect=RuntimeError("boom")):
+                bad = orch.run(trace_id="boom")
+
+        assert bad.degraded is True and bad.degrade_reason == "continuum_internal_error"
+        assert orch._last_emitted is bad, "管线抛异常那一拍也没落进 _last_emitted —— 与超预算那条同一个洞"
+
+    def test_the_render_contract_actually_reports_it(self):
+        """端到端核一次：这一位真能从 orchestrator 走到 RenderPosture。
+
+        前两条钉的是 ``_last_state`` 这个内部位；这一条钉的是**那条链没断** ——
+        readout 读的还是它、契约还搬它。少了这一条，上面两条可以全绿而渲染端
+        依旧什么都看不到。
+        """
+        from core.continuum_readout import last_continuum_posture
+        from core.openclawd import get_openclawd
+        from core.phase_contract import resolve_render_posture
+
+        orch = get_openclawd()._get_continuum_orchestrator()
+        if orch is None:
+            pytest.skip("continuum 未启用（拿不到 orchestrator，无从核对这条链）")
+
+        orch.run(trace_id="e2e-good")
+        assert resolve_render_posture("liminal").degraded is False
+
+        saved = orch._effective_cfg
+        try:
+            orch._effective_cfg = saved.model_copy(
+                update={"flags": saved.flags.model_copy(update={"max_tick_ms": 0.0001})}
+            )
+            orch.run(trace_id="e2e-bad")
+            assert last_continuum_posture().degraded is True, "readout 没看到降级"
+            posture = resolve_render_posture("liminal")
+            assert posture.degraded is True, "契约没把降级搬过去 —— 渲染端还是看不到"
+            assert posture.degrade_reason == "tick_budget_exceeded"
+        finally:
+            orch._effective_cfg = saved
+            orch.run(trace_id="e2e-restore")
+
+
 class TestSamplingRateGuardrail:
     def test_sampling_rate_one_runs_every_tick(self):
         """sampling_rate=1.0 should run every tick."""

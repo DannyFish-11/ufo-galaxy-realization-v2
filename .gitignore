@@ -194,3 +194,11 @@ runtime/oauth_connectors.json
 # 插件注册表是【运行时产物】：Node_115_PluginManager 启动时会把内置插件写进来，
 # 跑测试同样会生成。它不是源码，误提交会让每台机器的本地状态互相覆盖。
 plugins/registry.json
+
+# tests/test_the_wiring_gate_actually_blocks.py 会往 core/ 里塞一个探针文件，
+# 验完即删（try/finally）。它只在那条用例执行的那一两秒里存在。
+#
+# 忽略它不是为了掩盖什么，是为了让那个窗口里的一次 `git add -A` 无害：
+# 那条 finally 挡不住进程被杀（SIGKILL 不跑 finally），而本仓今天刚因为同一类
+# 机制把一份测试产物提交了上去（data/github_addons 下那个 README）。
+core/_wiring_gate_probe_tmp.py

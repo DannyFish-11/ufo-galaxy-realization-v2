@@ -15,10 +15,11 @@ if (process.platform === 'win32') {
 }
 
 // ── 透明全屏覆盖层稳定性（GPU 自适应）──
-// mainWindow 是 transparent + fullscreen + alwaysOnTop 的 WebGL2 覆盖层
-//（renderer/webgl/context.js + shaders/lumiv.frag，手写的全屏片元着色器，无框架）。
-// 注：此处原本写的是 "WebGL(three.js)"，但仓库里从来没有 import 过 three ——
-// electron/package.json 曾挂着 three ^0.160.0 这条从未被使用的依赖，已一并删除。
+// mainWindow 是 transparent + fullscreen + alwaysOnTop 的覆盖层。
+// **渲染已经不走 WebGL 了**：原来那套手写全屏片元着色器（renderer/webgl/context.js +
+// shaders/lumiv.frag）在下面这条软件渲染路径上实测 1080p 每帧 735ms（1.4fps）——
+// 不是慢，是不能用。现在整套改成 CSS（渐变 + 3D transform + 遮罩）交给合成器，
+// 有 GPU 走 GPU、没有就走软件光栅，两条路都便宜。见 renderer/app.js 的模块头。
 // 在部分 Windows GPU/驱动（尤其笔记本双显卡/混合输出）上，透明窗口 + GPU 合成会让
 // GPU 进程崩溃 → 窗口关闭 → window-all-closed → app.quit() → 闪退循环。
 // 策略：默认【开启】硬件加速（有独显的机器走 GPU、更流畅）；只有当启动器在检测到

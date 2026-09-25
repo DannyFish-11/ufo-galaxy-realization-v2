@@ -16,7 +16,7 @@ import type {
   TierView,
   Turn,
 } from './types';
-import type { ConfigItem, UserProvider } from './transport';
+import type { ConfigItem, GitHubAddon, GitHubAddonStatus, UserProvider } from './transport';
 
 export interface HudState {
   /** 连上后端了没有。false 时下面的东西全是上一次的残值或空态 */
@@ -92,6 +92,22 @@ export interface HudState {
   readonly userProvidersBusy: boolean;
   /** 上一次操作的结果(后端拒绝的那句人话,或验证结论)。空 = 没有要说的。 */
   readonly userProviderNotice: string;
+
+  /**
+   * 从 GitHub 接进来的项目。null = **还没拉到**,与「一个都没接过」是两件事 ——
+   * 同 userProviders 那条理由:画成同一个空白,人会以为自己接过的项目丢了。
+   */
+  readonly githubAddons: readonly GitHubAddon[] | null;
+  /**
+   * 安装策略(会不会先问人、名单是什么、token 配没配)。null = 还没拉到。
+   *
+   * **这份只能由后端给。** 面板自己按环境变量推会成为第二处权威,判定规则改一次
+   * 两边就分家 —— 而"界面说会问我、实际没问"是最坏的那种不一致。
+   */
+  readonly githubAddonStatus: GitHubAddonStatus | null;
+  readonly githubAddonsBusy: boolean;
+  /** 上一次安装/移除的结论(后端那句人话)。空 = 没有要说的。 */
+  readonly githubAddonNotice: string;
   readonly settingsOpen: boolean;
   /** 正在拉或正在写。用来把保存按钮压住,免得连点写两遍。 */
   readonly configBusy: boolean;
@@ -127,6 +143,10 @@ export const initialState: HudState = {
   userProviderProtocols: [],
   userProvidersBusy: false,
   userProviderNotice: '',
+  githubAddons: null,
+  githubAddonStatus: null,
+  githubAddonsBusy: false,
+  githubAddonNotice: '',
   settingsOpen: false,
   configBusy: false,
   islandOpen: false,

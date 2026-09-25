@@ -478,9 +478,22 @@ class HuggingFaceModelManager:
         return None
 
     # ── 推荐模型（预配置） ──
+    #
+    # **这张表不是"主脑是谁"的权威。** 权威在 :func:`core.model_catalog.default_model`
+    # （标了 ``is_default`` 的那一条，此刻是 ``gemma4:12b``），而它走的是
+    # ``ollama pull`` 那条路（见 :func:`core.model_selection.background_pull`），
+    # 压根不经过这张表 —— 所以这里没有它的条目**不是漏了**。
+    #
+    # 这张表是**另一条路**：从 HuggingFace 直接拉 GGUF / transformers 权重。
+    # 两条路各有各的清单，这是它们之间唯一的关系。
+    #
+    # 这里原本有一句话，把 E4B 这一条说成了全局的默认主脑。默认主脑改成 12B 之后
+    # 那句话就和现实反了，而两处各说各的，正是这个仓库最容易栽的那一跤：
+    # 照着它去装的人，装完发现跑起来的是另一个。改成只说这条路自己的事。
+    # 判据见 tests/test_model_measurements_say_where_each_number_came_from.py。
 
     RECOMMENDED_MODELS: Dict[str, Dict[str, str]] = {
-        # === 本地主脑首选：Google Gemma 4 E4B ===
+        # === HF 这条路上的轻量首选：Google Gemma 4 E4B ===
         # 发布日期: 2026-04-02 | 参数: 4.5B有效(8B含embeddings)
         # 原生多模态: 文本+图像+音频 | 上下文: 128K | 许可证: Apache 2.0
         # VRAM需求: 4-6GB (Q4量化) | Function Calling | 支持140+语言

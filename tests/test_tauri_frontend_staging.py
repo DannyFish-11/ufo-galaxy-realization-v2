@@ -111,9 +111,30 @@ class TestStagedSetIsComplete:
         """main.rs 用 WebviewUrl::App("panel/dist/index.html") 打开面板窗口。"""
         assert "panel/dist/index.html" in _staged_files(), "面板入口没被暂存，panel 窗口会 404"
 
-    def test_shaders_are_staged(self) -> None:
-        staged = _staged_files()
-        assert any(s.startswith("shaders/") for s in staged), "着色器没被暂存，覆盖层会退化到 DOM 兜底"
+    def test_every_local_asset_index_html_references_is_staged(self) -> None:
+        """页面引用的**任何**本地资源都得在暂存集里，不止 ``<script src>``。
+
+        这一条原本叫 ``test_shaders_are_staged``，钉的是 ``shaders/`` 下那两个文件。
+        覆盖层换掉 WebGL 之后着色器整个删了（见
+        ``tests/test_overlay_reads_the_two_axis_contract.py``），那条判据也就
+        没有对象了 —— 它给的理由"否则覆盖层会退化到 DOM 兜底"同样不再成立：
+        现在没有 WebGL 那条路，也就没有要兜底的东西。
+
+        **但它守的那件事还在**，只是不该再钉在某一个具体文件上：Tauri 按黑名单
+        收资产，漏掉一个运行期文件只在 release 构建里坏掉，而 CI 不构建 Tauri。
+        所以改成钉那条通则 —— 样式此刻内联在 index.html 里，哪天有人把它拆成
+        外部 .css，或者加一张图、一个字体，这一条就替他接住。
+        """
+        html = (_RENDERER / "index.html").read_text(encoding="utf-8")
+        refs = re.findall(r'(?:src|href)\s*=\s*"([^"]+)"', html)
+        staged = set(_staged_files())
+        missing = []
+        for r in refs:
+            if r.startswith(("http://", "https://", "//", "data:", "#")):
+                continue
+            if r.lstrip("./") not in staged:
+                missing.append(r)
+        assert not missing, f"index.html 引用的这些本地资源不在暂存集里：{missing} —— Tauri 构建出来会 404"
 
 
 class TestTheSavingIsReal:

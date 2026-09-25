@@ -141,7 +141,27 @@ class ContinuumOrchestrator:
         self._history: List[UnifiedState] = []
 
         # Last successfully computed state; used when a tick is sampled-out.
+        #
+        # **刻意只记成功的那一拍。** 采样跳过时返回的就是它，把降级的结果缓存进来
+        # 会让之后每一个被跳过的 tick 都反复播那一次失败 —— 见
+        # tests/test_continuum_guardrails.py::test_budget_exceeded_does_not_cache_last_state。
         self._last_state: Optional[ContinuumState] = None
+
+        # 最近一拍**真正交出去**的状态，成功与降级都算。
+        #
+        # 与 _last_state 是两件事，分开是因为它们服务两个互相冲突的要求：
+        #   _last_state    "最后一次算对的" —— 采样跳过时拿它顶上，不能是降级的；
+        #   _last_emitted  "最近一拍到底是什么" —— 渲染端要看的就是这个，降级也得看见。
+        #
+        # 此前只有 _last_state 一位，同时兼着两份差事，于是渲染那一份被牺牲了：
+        # 两条降级出口都是直接 return，只有成功那条走到末尾的 self._last_state = result。
+        # 而渲染契约唯一的取数口正是它（core.continuum_readout.last_continuum_posture
+        # → phase_contract.resolve_render_posture → payload.render.degraded）。
+        # 后果是 RenderPosture.degraded **结构上永远为假**：后端正在降级，面板那条线
+        # 和覆盖层的空间都还画着"实算"的样子，而「降级必须留痕」是这个仓库的规矩。
+        # 实测复现过：卡死 tick 预算后 run() 返回 degraded=True，而
+        # last_continuum_posture().degraded 仍是 False。
+        self._last_emitted: Optional[ContinuumState] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -196,7 +216,8 @@ class ContinuumOrchestrator:
                 runtime_session_id,
             )
         if not self._effective_cfg.flags.enabled:
-            return ContinuumState.formless_default()
+            self._last_emitted = ContinuumState.formless_default()
+            return self._last_emitted
 
         flags = self._effective_cfg.flags
         metrics = get_continuum_metrics()
@@ -218,6 +239,7 @@ class ContinuumOrchestrator:
                         effective_trace_id,
                         flags.sampling_rate,
                     )
+                self._last_emitted = fallback
                 return fallback
 
         t_start = time.monotonic()
@@ -243,7 +265,7 @@ class ContinuumOrchestrator:
                 elapsed_ms=elapsed_ms_tick,
                 degraded=True,
             )
-            return ContinuumState(
+            self._last_emitted = ContinuumState(
                 phase=ContinuumPhase.FORMLESS,
                 presence_intensity=0.0,
                 degraded=True,
@@ -251,6 +273,7 @@ class ContinuumOrchestrator:
                 trace_id=effective_trace_id or ContinuumState.__fields__["trace_id"].default_factory(),
                 metadata={"error": str(exc)},
             )
+            return self._last_emitted
 
         elapsed_ms_tick = (time.monotonic() - t_start) * 1_000
 
@@ -275,6 +298,9 @@ class ContinuumOrchestrator:
                 degraded=True,
                 budget_exceeded=True,
             )
+            # 降级的这一拍**不进** _last_state（那一位是采样跳过的兜底，不能replay
+            # 一次失败），但必须进 _last_emitted —— 渲染端读的是后者。
+            self._last_emitted = degraded_result
             return degraded_result
 
         # ------------------------------------------------------------------
@@ -300,6 +326,7 @@ class ContinuumOrchestrator:
             budget_exceeded=budget_exceeded,
         )
         self._last_state = result
+        self._last_emitted = result
         return result
 
     def reset(self) -> None:
@@ -310,6 +337,7 @@ class ContinuumOrchestrator:
         self._temporal.reset()
         self._history.clear()
         self._last_state = None
+        self._last_emitted = None
 
     # ------------------------------------------------------------------
     # Internal pipeline
