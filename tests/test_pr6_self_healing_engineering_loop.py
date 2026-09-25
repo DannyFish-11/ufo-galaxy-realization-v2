@@ -35,6 +35,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # ---------------------------------------------------------------------------
 
 
+def _observation(exit_code: int = 0):
+    """一份 harness 观测：认得的验证器、真的跑了、原文已落盘。
+
+    单元测试测的是状态机「拿到什么证据走到哪」，不重复跑子进程；真实子进程的端到端
+    验收在 tests/test_engineering_verification.py。
+    """
+    from core.engineering_verification import VerificationObservation
+
+    return VerificationObservation(
+        command=(sys.executable, "-m", "pytest", "-q"),
+        requested="pytest -q",
+        recognized_verifier=True,
+        executed=True,
+        exit_code=exit_code,
+        timed_out=False,
+        duration_s=0.01,
+        evidence_ref="context_archive:engineering-verification:test#1",
+    )
+
+
+def _evidence(exit_code: int = 0):
+    """把 harness 的验证替换成一份给定退出码的观测。"""
+    return patch("core.self_improvement.run_verification", return_value=_observation(exit_code))
+
+
 def _run(coro):
     """Run a coroutine synchronously in an isolated event loop."""
     loop = asyncio.new_event_loop()
@@ -343,10 +368,12 @@ class TestSelfHealingLoopStagedWorkflow:
         loop.attach_context(p.proposal_id, {})
         loop.plan_patch(p.proposal_id, "patch")
         loop.apply_patch(p.proposal_id)
-        result = loop.validate(p.proposal_id, validation_notes="all tests pass", passed=True)
+        with _evidence(exit_code=0):
+            result = loop.validate(p.proposal_id, validation_notes="all tests pass", command="pytest -q")
         assert result["success"] is True
         assert result["stage"] == EngineeringStage.VALIDATE.value
         assert result["validation_passed"] is True
+        assert result["trust_level"] == "trusted"
 
     def test_validate_requires_apply_stage(self):
         loop = self._fresh()
@@ -358,14 +385,20 @@ class TestSelfHealingLoopStagedWorkflow:
         assert result["success"] is False
 
     def test_validate_failed_recorded(self):
+        """验证没通过：记下这次观测，但不推进阶段 —— 停在 APPLY 等修正后再验。"""
+        from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         p = loop.submit_diagnosis("issue")
         loop.attach_context(p.proposal_id, {})
         loop.plan_patch(p.proposal_id, "patch")
         loop.apply_patch(p.proposal_id)
-        result = loop.validate(p.proposal_id, validation_notes="tests failed", passed=False)
-        assert result["success"] is True
+        with _evidence(exit_code=1):
+            result = loop.validate(p.proposal_id, validation_notes="tests failed", command="pytest -q")
+        assert result["success"] is False
         assert result["validation_passed"] is False
+        assert result["stage"] == EngineeringStage.APPLY.value
+        assert len(loop.get_proposal(p.proposal_id).verification_attempts) == 1
 
     def test_record_outcome_removes_from_pending(self):
         loop = self._fresh()
@@ -440,7 +473,8 @@ class TestSelfHealingLoopStagedWorkflow:
             r3 = loop.apply_patch(p.proposal_id, {"applied": True})
             assert r3["success"] is True
 
-            r4 = loop.validate(p.proposal_id, validation_notes="GC tests pass", passed=True)
+            with _evidence(exit_code=0):
+                r4 = loop.validate(p.proposal_id, validation_notes="GC tests pass", command="pytest -q")
             assert r4["success"] is True
 
             r5 = loop.record_outcome(p.proposal_id)
@@ -777,7 +811,8 @@ class TestOpenClawdDispatchEngineerTool:
             r4 = _run(oc._dispatch_engineer_tool("apply", {"proposal_id": pid}))
             assert r4["success"] is True
 
-            r5 = _run(oc._dispatch_engineer_tool("validate", {"proposal_id": pid, "passed": True, "notes": "ok"}))
+            with _evidence(exit_code=0):
+                r5 = _run(oc._dispatch_engineer_tool("validate", {"proposal_id": pid, "command": "pytest -q"}))
             assert r5["success"] is True
 
             r6 = _run(oc._dispatch_engineer_tool("record", {"proposal_id": pid}))

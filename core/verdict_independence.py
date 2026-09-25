@@ -161,14 +161,17 @@ VERDICT_WRITER_EXEMPTIONS: Dict[str, str] = {
 # 键不含行号 —— 行号会漂，而「同一处缺陷还在不在」不该随格式化改变。
 # 修掉一条就从这里删一条；测试断言扫描结果与这份清单**完全相等**，
 # 所以多出一条（新缺陷）或少了一条却没删（清单过期）都会红。
+#
+# 引入时（M0）这里记着四条，全在 engineer__validate 那条链上：
+#   S1 core/openclawd.py         engineer__validate.passed
+#   S2 core/openclawd.py         _dispatch_engineer_tool:passed
+#   S3 core/self_improvement.py  validate:validation_passed<-passed
+#   S4 core/self_improvement.py  <module>
+# M1 让验证由 harness 实跑、经 classify_execution_evidence() 定级之后清零。
+# 修复前的代码仍能被本闸抓到，见 tests/test_verdict_independence.py 的 git 回放用例。
 # ---------------------------------------------------------------------------
 
-KNOWN_UNRESOLVED: Tuple[Tuple[str, str, str], ...] = (
-    ("S1", "core/openclawd.py", "engineer__validate.passed"),
-    ("S2", "core/openclawd.py", "_dispatch_engineer_tool:passed"),
-    ("S3", "core/self_improvement.py", "validate:validation_passed<-passed"),
-    ("S4", "core/self_improvement.py", "<module>"),
-)
+KNOWN_UNRESOLVED: Tuple[Tuple[str, str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -345,11 +348,12 @@ def scan_source_for_self_certification(source: str, path: str = "<source>") -> L
 
 def _writes_verdict_attribute(tree: ast.AST) -> Optional[int]:
     for node in ast.walk(tree):
-        targets: Sequence[ast.AST] = ()
         if isinstance(node, ast.Assign):
-            targets = node.targets
+            targets: Sequence[ast.AST] = node.targets
         elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
             targets = (node.target,)
+        else:
+            continue
         for target in targets:
             if isinstance(target, ast.Attribute) and target.attr in VERDICT_ATTRIBUTE_NAMES:
                 return node.lineno

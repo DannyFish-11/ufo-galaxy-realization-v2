@@ -27,15 +27,31 @@ workflow before any code mutation can occur.
       ├─ Stage 2: GATHER_CONTEXT  — attach code/repo context to proposal
       ├─ Stage 3: PLAN_PATCH      — produce a concrete patch plan
       ├─ Stage 4: APPLY           — apply through approved execution path
-      ├─ Stage 5: VALIDATE        — run validation checks
+      ├─ Stage 5: VALIDATE        — harness runs the verification, reads the
+      │                             exit code, classify_execution_evidence()
+      │                             grades it; only ``trusted`` advances
       └─ Stage 6: RECORD_OUTCOME  — persist outcome to Knowledge Core
 
-No stage may be skipped; each ``engineer__apply`` call is guarded so that
-only proposals that have reached ``PLAN_PATCH`` stage may proceed.
+Each ``engineer__apply`` call is guarded so that only proposals that have
+reached ``PLAN_PATCH`` stage may proceed.  A *validated* outcome passes through
+every stage; an *unvalidated* outcome (verification failed or never produced
+trusted evidence) may be recorded straight from ``APPLY``, but only with at
+least one harness observation attached — so failures still become lessons,
+and nothing reaches the Knowledge Core as "validated" on someone's word.
+
+**Verdict independence (M1)**
+-----------------------------
+Whether a patch passed is never read from the proposer.  ``validate()`` runs a
+recognised verifier through :mod:`core.engineering_verification` (observation:
+exit code + archived raw output), then adjudicates with
+:func:`~core.execution_evidence_model.classify_execution_evidence`.  A caller's
+``passed`` is kept as ``claimed_passed`` — a claim, recorded for divergence
+analysis, never a verdict.  Guarded by :mod:`core.verdict_independence`.
 
 **Safety invariants**
 ---------------------
 * Proposals begin at ``DIAGNOSE`` and may only advance forward.
+* ``VALIDATE`` is reached only on ``EvidenceTrustLevel.trusted``.
 * ``APPLY`` is only permitted after ``PLAN_PATCH``.
 * All code mutations go through the loop; direct mutation bypasses are
   redirected here (see ``Node_112_SelfHealing`` update).
@@ -72,7 +88,10 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Union
+
+from core.engineering_verification import observation_to_evidence, run_verification
+from core.execution_evidence_model import EvidenceTrustLevel, classify_execution_evidence
 
 logger = logging.getLogger("Galaxy.SelfImprovement")
 
@@ -175,13 +194,19 @@ class PatchProposal:
     apply_result: Optional[Dict[str, Any]] = None
     """Result dict from the APPLY stage execution."""
     validation_passed: Optional[bool] = None
-    """Whether validation succeeded (set at VALIDATE stage)."""
+    """Whether validation succeeded — derived from ``trust_level``, never from a claim."""
     validation_notes: str = ""
     knowledge_entry_id: str = ""
     """Knowledge Core entry ID recorded at RECORD_OUTCOME stage."""
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    claimed_passed: Optional[bool] = None
+    """What the caller *said* about the outcome.  A claim, kept for divergence analysis."""
+    trust_level: str = ""
+    """``EvidenceTrustLevel`` of the latest harness verification ('' = never verified)."""
+    verification_attempts: List[Dict[str, Any]] = field(default_factory=list)
+    """Every harness verification: observation, evidence state, trust level, claim, divergence."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -199,6 +224,9 @@ class PatchProposal:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "metadata": self.metadata,
+            "claimed_passed": self.claimed_passed,
+            "trust_level": self.trust_level,
+            "verification_attempts": list(self.verification_attempts),
         }
 
     @classmethod
@@ -222,6 +250,9 @@ class PatchProposal:
         p.created_at = float(data.get("created_at", time.time()))
         p.updated_at = float(data.get("updated_at", time.time()))
         p.metadata = data.get("metadata", {})
+        p.claimed_passed = data.get("claimed_passed")
+        p.trust_level = data.get("trust_level", "")
+        p.verification_attempts = list(data.get("verification_attempts", []))
         return p
 
 
@@ -242,6 +273,14 @@ class EngineeringRecord:
     knowledge_entry_id: str = ""
     completed_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    outcome: str = ""
+    """``validated`` (reached VALIDATE on trusted evidence) or ``unvalidated``."""
+    trust_level: str = ""
+    evidence_refs: List[str] = field(default_factory=list)
+    """Archive references of the raw verification output, one per executed attempt."""
+    claimed_passed: Optional[bool] = None
+    divergences: List[Dict[str, Any]] = field(default_factory=list)
+    """Attempts where the caller's claim disagreed with the evidence."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -258,6 +297,11 @@ class EngineeringRecord:
             "knowledge_entry_id": self.knowledge_entry_id,
             "completed_at": self.completed_at,
             "metadata": self.metadata,
+            "outcome": self.outcome,
+            "trust_level": self.trust_level,
+            "evidence_refs": list(self.evidence_refs),
+            "claimed_passed": self.claimed_passed,
+            "divergences": list(self.divergences),
         }
 
     @classmethod
@@ -276,6 +320,11 @@ class EngineeringRecord:
         r.knowledge_entry_id = data.get("knowledge_entry_id", "")
         r.completed_at = float(data.get("completed_at", time.time()))
         r.metadata = data.get("metadata", {})
+        r.outcome = data.get("outcome", "")
+        r.trust_level = data.get("trust_level", "")
+        r.evidence_refs = list(data.get("evidence_refs", []))
+        r.claimed_passed = data.get("claimed_passed")
+        r.divergences = list(data.get("divergences", []))
         return r
 
 
@@ -289,6 +338,8 @@ class EngineeringLoopSnapshot:
     recent_records: List[Dict[str, Any]] = field(default_factory=list)
     authority: str = "OpenClawd/SelfHealingLoop"
     captured_at: float = field(default_factory=time.time)
+    verdict_divergence_count: int = 0
+    """Recorded outcomes in which a caller's claim disagreed with harness evidence."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -298,6 +349,7 @@ class EngineeringLoopSnapshot:
             "recent_records": self.recent_records,
             "authority": self.authority,
             "captured_at": self.captured_at,
+            "verdict_divergence_count": self.verdict_divergence_count,
         }
 
 
@@ -453,6 +505,7 @@ class SelfHealingLoop:
         self,
         proposal_id: str,
         apply_metadata: Optional[Dict[str, Any]] = None,
+        verify_command: Union[str, Sequence[str], None] = None,
     ) -> Dict[str, Any]:
         """Mark the proposal as applied and advance to ``APPLY`` stage.
 
@@ -462,9 +515,15 @@ class SelfHealingLoop:
         but this gate ensures the proposal cannot be applied unless it has a
         completed patch plan.
 
+        **Fused verification (R2).**  With ``verify_command`` the harness runs
+        the verification immediately after applying and reads its exit code —
+        apply → run → read in one step, with no point at which the proposer
+        reports an outcome.  The result is attached under ``"verification"``.
+
         Args:
             proposal_id:    ID of the :class:`PatchProposal`.
             apply_metadata: Optional result dict from the execution layer.
+            verify_command: Optional recognised verifier to run right after applying.
 
         Returns:
             ``{"success": bool, ...}``
@@ -512,7 +571,7 @@ class SelfHealingLoop:
             proposal.stage = EngineeringStage.APPLY
             proposal.updated_at = time.time()
         logger.info("SelfHealingLoop: proposal %s → APPLY", proposal_id)
-        return {
+        result: Dict[str, Any] = {
             "success": True,
             "proposal_id": proposal_id,
             "stage": EngineeringStage.APPLY.value,
@@ -522,6 +581,11 @@ class SelfHealingLoop:
             "side_effect_authorization": proposal.apply_result.get("side_effect_authorization", {}),
             "repo_mutation_truth": proposal.apply_result.get("repo_mutation_truth", {}),
         }
+        if verify_command:
+            verification = self.validate(proposal_id, command=verify_command)
+            result["verification"] = verification
+            result["stage"] = verification.get("stage", result["stage"])
+        return result
 
     # ------------------------------------------------------------------
     # Stage 5 — VALIDATE
@@ -531,17 +595,36 @@ class SelfHealingLoop:
         self,
         proposal_id: str,
         validation_notes: str = "",
-        passed: bool = True,
+        passed: Optional[bool] = None,
+        *,
+        command: Union[str, Sequence[str], None] = None,
+        timeout_s: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Record validation outcome and advance to ``VALIDATE`` stage.
+        """Run the verification in the harness and adjudicate it from evidence.
+
+        The harness executes ``command`` (recognised verifiers only, see
+        :mod:`core.engineering_verification`), archives the raw output and
+        reads the exit code.  The observation is graded by
+        :func:`classify_execution_evidence`; the proposal advances to
+        ``VALIDATE`` **only** on ``EvidenceTrustLevel.trusted``.  Otherwise it
+        stays at ``APPLY`` so the patch can be corrected and verified again
+        (or recorded as an unvalidated outcome).
+
+        ``passed`` is the caller's *claim*.  It is stored as ``claimed_passed``
+        and compared with the evidence — a disagreement is recorded as a
+        divergence, the highest-value learning signal this loop produces — but
+        it never decides anything.
 
         Args:
             proposal_id:      ID of the :class:`PatchProposal`.
-            validation_notes: Human-readable notes from the validation run.
-            passed:           Whether validation passed.
+            validation_notes: Human-readable notes.
+            passed:           Optional claim about the outcome (not a verdict).
+            command:          Verification to run, e.g. ``"pytest tests/test_x.py -q"``.
+            timeout_s:        Override for the verification timeout.
 
         Returns:
-            ``{"success": bool, ...}``
+            ``{"success": bool, ...}`` — ``success`` is true only when the
+            verification produced trusted evidence of a pass.
         """
         with self._lock:
             proposal = self._proposals.get(proposal_id)
@@ -555,17 +638,79 @@ class SelfHealingLoop:
                         "validate requires APPLY stage"
                     ),
                 }
-            proposal.validation_passed = passed
-            proposal.validation_notes = validation_notes
-            proposal.stage = EngineeringStage.VALIDATE
-            proposal.updated_at = time.time()
-        logger.info("SelfHealingLoop: proposal %s → VALIDATE (passed=%s)", proposal_id, passed)
-        return {
-            "success": True,
-            "proposal_id": proposal_id,
-            "stage": EngineeringStage.VALIDATE.value,
-            "validation_passed": passed,
+
+        # 验证在锁外跑：它可能要几分钟，不能让别的提案跟着排队。
+        observation = run_verification(command, proposal_id=proposal_id, timeout_s=timeout_s)
+        evidence_state, chain_complete = observation_to_evidence(observation)
+        trust = classify_execution_evidence(evidence_state, truth_chain_complete=chain_complete)
+        verified = trust is EvidenceTrustLevel.trusted
+
+        divergence: Optional[Dict[str, Any]] = None
+        if passed is not None and bool(passed) != verified:
+            divergence = {
+                "claimed_passed": bool(passed),
+                "evidence_verified": verified,
+                "trust_level": trust.value,
+                "exit_code": observation.exit_code,
+                "evidence_ref": observation.evidence_ref,
+            }
+            logger.warning(
+                "SelfHealingLoop: 声明与证据不一致 | proposal=%s claimed=%s evidence=%s trust=%s exit=%s",
+                proposal_id,
+                passed,
+                verified,
+                trust.value,
+                observation.exit_code,
+            )
+        attempt: Dict[str, Any] = {
+            "observation": observation.to_dict(),
+            "evidence_state": evidence_state.value,
+            "truth_chain_complete": chain_complete,
+            "trust_level": trust.value,
+            "verified": verified,
+            "claimed_passed": passed,
+            "notes": validation_notes,
+            "divergence": divergence,
         }
+
+        with self._lock:
+            proposal = self._proposals.get(proposal_id)
+            if proposal is None or proposal.stage != EngineeringStage.APPLY:
+                return {"success": False, "error": f"Proposal '{proposal_id}' changed during verification"}
+            proposal.verification_attempts.append(attempt)
+            if passed is not None:
+                proposal.claimed_passed = bool(passed)
+            proposal.trust_level = trust.value
+            proposal.validation_passed = verified
+            proposal.validation_notes = validation_notes
+            if verified:
+                proposal.stage = EngineeringStage.VALIDATE
+            proposal.updated_at = time.time()
+            stage = proposal.stage.value
+
+        logger.info(
+            "SelfHealingLoop: proposal %s verification → trust=%s state=%s exit=%s stage=%s",
+            proposal_id,
+            trust.value,
+            evidence_state.value,
+            observation.exit_code,
+            stage,
+        )
+        result: Dict[str, Any] = {
+            "success": verified,
+            "proposal_id": proposal_id,
+            "stage": stage,
+            "validation_passed": verified,
+            "trust_level": trust.value,
+            "evidence_state": evidence_state.value,
+            "exit_code": observation.exit_code,
+            "command": list(observation.command),
+            "evidence_ref": observation.evidence_ref,
+            "divergence": divergence,
+        }
+        if not verified:
+            result["error"] = _unverified_reason(observation, evidence_state.value, chain_complete)
+        return result
 
     # ------------------------------------------------------------------
     # Stage 6 — RECORD_OUTCOME
@@ -589,14 +734,25 @@ class SelfHealingLoop:
             proposal = self._proposals.get(proposal_id)
             if proposal is None:
                 return {"success": False, "error": f"Proposal '{proposal_id}' not found"}
-            if proposal.stage != EngineeringStage.VALIDATE:
+            if proposal.stage == EngineeringStage.VALIDATE:
+                outcome = "validated"
+            elif proposal.stage == EngineeringStage.APPLY and proposal.verification_attempts:
+                outcome = "unvalidated"
+            else:
                 return {
                     "success": False,
                     "error": (
                         f"Proposal '{proposal_id}' is at stage '{proposal.stage.value}'; "
-                        "record_outcome requires VALIDATE stage"
+                        "record_outcome requires VALIDATE stage, or APPLY with at least one "
+                        "harness verification attempt (so the outcome carries evidence)"
                     ),
                 }
+            attempts = list(proposal.verification_attempts)
+
+        evidence_refs = [
+            a["observation"]["evidence_ref"] for a in attempts if a.get("observation", {}).get("evidence_ref")
+        ]
+        divergences = [a["divergence"] for a in attempts if a.get("divergence")]
 
         # Compose knowledge content outside the lock (I/O may be slow)
         content_lines = [
@@ -606,12 +762,21 @@ class SelfHealingLoop:
             f"target_files={', '.join(proposal.target_files)}",
             f"validation_passed={proposal.validation_passed}",
             f"validation_notes={proposal.validation_notes}",
+            f"outcome={outcome}",
+            f"trust_level={proposal.trust_level or 'unverified'}",
+            f"verification_attempts={len(attempts)}",
+            f"evidence_refs={', '.join(evidence_refs)}",
         ]
+        if divergences:
+            content_lines.append(f"claim_evidence_divergences={len(divergences)}")
         content = "\n".join(content_lines)
         source_uri = f"engineering://{proposal.source}/{proposal.proposal_id}"
         tags = ["engineering", "self-healing", "fix"]
-        if proposal.validation_passed:
+        # 「validated」只由 trusted 证据挣来：走到 VALIDATE 阶段的前提就是 trusted。
+        if outcome == "validated":
             tags.append("validated")
+        else:
+            tags.extend(["unvalidated", f"trust:{proposal.trust_level or 'unverified'}"])
 
         knowledge_entry_id = ""
         try:
@@ -625,6 +790,9 @@ class SelfHealingLoop:
                     "proposal_id": proposal.proposal_id,
                     "validation_passed": proposal.validation_passed,
                     "target_files": proposal.target_files,
+                    "outcome": outcome,
+                    "trust_level": proposal.trust_level,
+                    "evidence_refs": evidence_refs,
                 },
             )
             logger.info(
@@ -639,7 +807,9 @@ class SelfHealingLoop:
                 exc,
             )
 
-        stages_completed = [s.value for s in _STAGE_ORDER]
+        stages_completed = [
+            s.value for s in _STAGE_ORDER if outcome == "validated" or s is not EngineeringStage.VALIDATE
+        ]
 
         with self._lock:
             proposal.knowledge_entry_id = knowledge_entry_id
@@ -658,6 +828,11 @@ class SelfHealingLoop:
                 validation_notes=proposal.validation_notes,
                 knowledge_entry_id=knowledge_entry_id,
                 metadata=dict(proposal.metadata),
+                outcome=outcome,
+                trust_level=proposal.trust_level,
+                evidence_refs=evidence_refs,
+                claimed_passed=proposal.claimed_passed,
+                divergences=divergences,
             )
             self._records.append(record)
             # trim oldest records if necessary
@@ -673,6 +848,9 @@ class SelfHealingLoop:
             "stage": EngineeringStage.RECORD_OUTCOME.value,
             "knowledge_entry_id": knowledge_entry_id,
             "validation_passed": record.validation_passed,
+            "outcome": outcome,
+            "trust_level": record.trust_level,
+            "evidence_refs": evidence_refs,
         }
 
     # ------------------------------------------------------------------
@@ -699,12 +877,34 @@ class SelfHealingLoop:
         with self._lock:
             pending = [p.to_dict() for p in self._proposals.values()]
             recent = [r.to_dict() for r in self._records[-20:]]
+            divergent = sum(1 for r in self._records if r.divergences)
         return EngineeringLoopSnapshot(
             pending_count=len(pending),
             recent_record_count=len(self._records),
             pending_proposals=pending,
             recent_records=recent,
+            verdict_divergence_count=divergent,
         )
+
+
+def _unverified_reason(observation: Any, evidence_state: str, chain_complete: bool) -> str:
+    """告诉提案者这次为什么没算通过，以及接下来能做什么。"""
+    if not observation.executed:
+        why = observation.rejection or "验证没有运行"
+    elif observation.timed_out:
+        why = "验证超时被终止"
+    elif evidence_state == "completed_degraded":
+        why = "没有收集到任何测试用例 —— 什么都没测不算通过"
+    elif observation.exit_code not in (0, None):
+        why = f"验证未通过（退出码 {observation.exit_code}，原文见 {observation.evidence_ref or '未落盘'}）"
+    elif not chain_complete:
+        why = "退出码 0，但验证原文没能落盘 —— 没有证据的通过不予受理"
+    else:
+        why = "验证没有产生可信证据"
+    return (
+        f"{why}。提案停在 APPLY：修正后可再次 validate；若要放弃，可直接 record_outcome "
+        "记下这次未通过的结局（带着已有的验证证据）。"
+    )
 
 
 # ---------------------------------------------------------------------------

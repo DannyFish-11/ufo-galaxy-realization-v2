@@ -4,6 +4,7 @@ A. 每个签名在最小样例上抓得到，在最近似的正当写法上不�
 B. S3 按数据流判：改参数名绕不过去
 C. S4 按推导范围判：新模块一写裁决就红，豁免表不许腐烂
 D. 仓库现状：扫描结果与存量清单**完全相等**；门的退出码
+E. git 回放：把扫描器指向修复前的真实代码，它必须抓到那四处 —— 抓不到已知缺陷的守卫等于没有守卫
 """
 
 from __future__ import annotations
@@ -26,6 +27,16 @@ from core.verdict_independence import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# 仍然带着 engineer__validate 自报成绩那条链的提交（M1 之前的 main）。
+_PRE_M1_COMMIT = "f49d0c7"
+
+
+def _git_show(ref: str, path: str) -> str:
+    proc = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=REPO_ROOT, capture_output=True, text=True)
+    if proc.returncode != 0:
+        pytest.skip(f"git object {ref}:{path} unavailable in this checkout")
+    return proc.stdout
 
 
 def _sigs(source: str) -> list[str]:
@@ -290,3 +301,31 @@ class TestLiveRepository:
         text = json.dumps(report, ensure_ascii=False)
         assert "PROPOSER_MUST_NOT_SELF_CERTIFY" in text
         assert set(report) >= {"findings", "unresolved", "stale_known_entries", "exemptions"}
+
+
+# ---------------------------------------------------------------------------
+# E. git 回放
+# ---------------------------------------------------------------------------
+
+
+class TestRealHistory:
+    def test_guard_catches_the_real_defect_in_openclawd(self):
+        src = _git_show(_PRE_M1_COMMIT, "core/openclawd.py")
+        keys = {f.key for f in scan_source_for_self_certification(src, "core/openclawd.py")}
+        assert ("S1", "core/openclawd.py", "engineer__validate.passed") in keys
+        assert ("S2", "core/openclawd.py", "_dispatch_engineer_tool:passed") in keys
+
+    def test_guard_catches_the_real_defect_in_self_improvement(self):
+        import ast
+
+        src = _git_show(_PRE_M1_COMMIT, "core/self_improvement.py")
+        keys = {f.key for f in scan_source_for_self_certification(src, "core/self_improvement.py")}
+        assert ("S3", "core/self_improvement.py", "validate:validation_passed<-passed") in keys
+        tree = ast.parse(src)
+        assert vi._writes_verdict_attribute(tree) is not None
+        assert not vi._references_name(tree, vi.CANONICAL_ENFORCEMENT_FUNCTION), "修复前它不走执法函数（S4）"
+
+    def test_same_files_are_clean_now(self):
+        for rel in ("core/openclawd.py", "core/self_improvement.py"):
+            src = (REPO_ROOT / rel).read_text(encoding="utf-8")
+            assert scan_source_for_self_certification(src, rel) == []

@@ -429,18 +429,18 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
             "description": (
                 "通过受控执行路径应用已计划的补丁，推进 PatchProposal 到 APPLY 阶段。"
                 "安全门控：仅处于 PLAN_PATCH 阶段的提案才允许应用，防止未经规划的直接代码变更。"
-                "\n注意本工具只推进阶段并记录授权与变更事实，真正的文件改动由你用别的工具完成。"
-                "因此当补丁已改完、验证也已经跑过（结果你已经知道了），可以把 "
-                "engineer__apply / engineer__validate / engineer__record 三个调用**放在同一轮里**"
-                "一次发出——它们会按顺序执行，阶段门照常逐个校验，省下两次往返。"
-                "但如果验证还没跑，就不要提前发 engineer__validate：那等于在不知道结果时先把结论写下来。"
+                "\n本工具只推进阶段并记录授权与变更事实，真正的文件改动由你用别的工具完成。"
+                "改完之后带上 verify_command，harness 会当场跑验证、读退出码、按证据定级——"
+                "apply 与验证融合成一步，你不需要也不能自己报告成败。"
+                "带了 verify_command 时，可以把 engineer__record 与本调用放在同一轮里一次发出。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "proposal_id": {
+                    "proposal_id": {"type": "string", "description": "由 engineer__diagnose 返回的 proposal_id"},
+                    "verify_command": {
                         "type": "string",
-                        "description": "由 engineer__diagnose 返回的 proposal_id",
+                        "description": "改完后由 harness 当场执行的验证命令，如 'pytest tests/test_x.py -q'",
                     },
                 },
                 "required": ["proposal_id"],
@@ -452,28 +452,20 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
         "function": {
             "name": "engineer__validate",
             "description": (
-                "记录验证结果（通过/失败）和验证说明，推进 PatchProposal 到 VALIDATE 阶段。"
-                "\n本工具**不替你跑验证**——它只登记你已经得到的结果。验证本身用别的工具跑"
-                "（跑测试、跑检查），拿到结果之后再调本工具如实登记。"
-                "已经拿到结果时，本调用可与 engineer__apply / engineer__record 放在同一轮里一次发出。"
+                "由 harness 跑一次验证并按证据定级，推进 PatchProposal 到 VALIDATE 阶段。"
+                "\n你提供 command（只接受 pytest / scripts/check_*.py / flake8 / mypy / black --check / "
+                "isort --check-only / node --test / npm test），harness 执行、读退出码、原文落盘，"
+                "经 classify_execution_evidence 定级；只有 trusted 才算通过。没通过则停在 APPLY，修正后再验。"
+                "成败由退出码决定，不由任何人声明。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "proposal_id": {
-                        "type": "string",
-                        "description": "由 engineer__diagnose 返回的 proposal_id",
-                    },
-                    "passed": {
-                        "type": "boolean",
-                        "description": "验证是否通过（默认 true）",
-                    },
-                    "notes": {
-                        "type": "string",
-                        "description": "验证说明或测试输出",
-                    },
+                    "proposal_id": {"type": "string", "description": "由 engineer__diagnose 返回的 proposal_id"},
+                    "command": {"type": "string", "description": "要跑的验证命令，如 'pytest tests/test_x.py -q'"},
+                    "notes": {"type": "string", "description": "验证说明（仅作记录，不影响判定）"},
                 },
-                "required": ["proposal_id"],
+                "required": ["proposal_id", "command"],
             },
         },
     },
@@ -485,7 +477,8 @@ _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
                 "将修复结果记录到统一知识库（Knowledge Core），推进 PatchProposal 到 RECORD_OUTCOME 阶段。"
                 "使用 RAGMemory.ingest_knowledge 写入，source_type='engineering'，"
                 "与其他知识共享同一 RAG 检索流水线，不创建独立的修复专用知识孤岛。"
-                "\n本调用不含任何判断，可与 engineer__apply / engineer__validate 放在同一轮里一次发出。"
+                "\n只有经 harness 验证为 trusted 的才标 validated；验证未通过时也可记录，结局标 unvalidated 并附证据。"
+                "本调用不含任何判断，可与带 verify_command 的 engineer__apply 放在同一轮里一次发出。"
             ),
             "parameters": {
                 "type": "object",
@@ -7979,18 +7972,21 @@ class OpenClawd:
                         "invoked_by": "core.openclawd._dispatch_engineer_tool",
                     },
                 }
-                return loop.apply_patch(
+                return await _asyncio_module.to_thread(
+                    loop.apply_patch,
                     proposal_id=proposal_id,
                     apply_metadata=apply_metadata,
+                    verify_command=arguments.get("verify_command"),
                 )
 
             elif action == "validate":
                 proposal_id = arguments.get("proposal_id", "")
                 if not proposal_id:
                     return {"success": False, "error": "engineer__validate requires 'proposal_id' argument"}
-                passed = bool(arguments.get("passed", True))
-                notes = arguments.get("notes", "")
-                return loop.validate(proposal_id=proposal_id, validation_notes=notes, passed=passed)
+                notes, command = arguments.get("notes", ""), arguments.get("command")
+                return await _asyncio_module.to_thread(
+                    loop.validate, proposal_id=proposal_id, validation_notes=notes, command=command
+                )
 
             elif action == "record":
                 proposal_id = arguments.get("proposal_id", "")
