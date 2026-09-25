@@ -329,7 +329,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "string",
         "category": "security",
-        "description": "TLS 证书路径（走 HTTPS 时填；留空=用明文 HTTP，仅限本机）",
+        "description": "TLS 证书路径（与 GALAXY_TLS_KEY 两个都填才开 HTTPS/wss；留空=明文，设备间走内网时的默认）",
+    },
+    "GALAXY_TLS_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "security",
+        "description": "TLS 私钥路径（与 GALAXY_TLS_CERT 两个都填才开；只填一个按没开算）",
     },
     "GITHUB_ALLOWLIST": {
         "default": "",
