@@ -784,36 +784,6 @@ class AndroidBridge:
                 _lc_disc_exc,
             )
 
-    async def _attach_transport_to_ucm(self, device_id: str, websocket: Any, message: Dict[str, Any]) -> None:
-        """把这条已通过注册的 WebSocket 登记进 UCM(连接与在线的权威)。
-
-        少了这一步,规范入口连进来的设备在 UCM 里没有连接记录:派发就绪闸判
-        「传输不在」、``UCM.send_to_device`` / ``send_command_and_wait`` 找不到它 ——
-        手机、手表、笔记本全都连着却派不到活。只有旧的 websocket_handler 做过这件事。
-        """
-        try:
-            from core.unified.connection_manager import get_unified_connection_manager
-
-            ucm = get_unified_connection_manager()
-            metadata = {
-                "device_type": message.get("device_type"),
-                "platform": message.get("platform"),
-                "ingress": message.get("_ingress_path"),
-            }
-            if ucm.get_connection(device_id) is not None:
-                await ucm.reconnect_patch(device_id, websocket, metadata)
-            else:
-                await ucm.register_connection(device_id, websocket, metadata)
-        except Exception as exc:  # noqa: BLE001 — 登记失败不该让注册本身失败,但要看得见
-            logger.warning("android_bridge: UCM 连接登记失败 device_id=%s: %s", device_id, exc)
-            return
-        try:
-            from core.device_onboarding.conversation import note_connected
-
-            await note_connected(device_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("android_bridge: 连上播报失败(non-fatal): %s", exc)
-
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
         """Mark device as ONLINE in UDM on reconnect (no duplicate identity created)."""
         self._patch_runtime_state_to_udm(
