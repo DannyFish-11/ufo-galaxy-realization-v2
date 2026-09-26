@@ -128,9 +128,13 @@ def test_the_counts_the_doc_states_are_the_counts_the_file_has() -> None:
     assert prov_block, "找不到 PROVIDER_KEYS 的字面量 —— 结构变了,这道门要跟着改"
     prov_keys = set(re.findall(r"'([A-Z0-9_]+)'", prov_block.group(1)))
 
+    cat_block = re.search(r"export const CATEGORIES[^=]*=\s*\[(.*?)\n\];", src, re.S)
+    assert cat_block, "找不到 CATEGORIES 的字面量 —— 结构变了,这道门要跟着改"
+    n_categories = len(re.findall(r"key:\s*'([a-z_]+)'", cat_block.group(1)))
+
     assert (
-        f"({len(hint_keys)} 个键,9 类)" in src
-    ), f"KEY_ORDER_HINT 现在有 {len(hint_keys)} 个键,文档开头写的不是这个数。"
+        f"({len(hint_keys)} 个键,{n_categories} 类)" in src
+    ), f"KEY_ORDER_HINT 现在有 {len(hint_keys)} 个键、CATEGORIES 有 {n_categories} 类,文档开头写的不是这两个数。"
     assert (
         f"`PROVIDER_KEYS` 是 {len(prov_keys)} 个" in src
     ), f"PROVIDER_KEYS 现在有 {len(prov_keys)} 个,文档开头写的不是这个数。"
