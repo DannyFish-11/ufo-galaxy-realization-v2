@@ -268,8 +268,7 @@ def test_runtime_no_longer_discards_the_callers_audience():
     """
     import core.desktop_presence_runtime as dpr
 
-    # 本体跑在可被「停」取消的子任务里(见 handle_request 的注释),受众在那里处理。
-    src = _code_only(dpr.DesktopPresenceRuntime._handle_request_body)
+    src = _code_only(dpr.DesktopPresenceRuntime.handle_request)
     assert "_explicit_operator" in src, "调用方传的受众又被丢掉了"
     # 显式值优先，没传才退回按 source 判
     assert "source == 'operator'" in src, "source='operator' 本身仍应算运维请求"

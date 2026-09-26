@@ -638,7 +638,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     #   data: {"type":"meta",  "session_id","model","runtime_session_id"}
     #   data: {"type":"lockstep","state","reason"}  ← 见下方 LOCKSTEP_STATES
     #   data: {"type":"done",  "response","intent","success","suggestions",
-    #          "visible_action_surface","session_id","model"}   # response 为权威全文
+    #          "visible_action_surface","session_id","model","stopped"}   # response 为权威全文
     #   data: {"type":"error", "error":"..."}
     #
     # done.response 是【边界过滤后】的权威全文——前端以它对账替换累积增量
@@ -664,13 +664,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.lumiv_websocket_bridge import emit_conversation as _emit_conv
 
-                _emit_conv(
-                    "user",
-                    req.message or "",
-                    source="text",
-                    turn_id=_turn_id,
-                    client_id=getattr(req, "client_id", "") or "",
-                )
+                _emit_conv("user", req.message or "", source="text", turn_id=_turn_id, client_id=req.client_id)
             except Exception:
                 _emit_conv = None  # type: ignore
 
@@ -966,13 +960,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 text = foreground_response or ""
                 # 一体化：AI 回应实时推给面板"实时上下文"视图。
                 if _emit_conv is not None:
-                    _emit_conv(
-                        "ai",
-                        text,
-                        source="text",
-                        turn_id=_turn_id,
-                        client_id=getattr(req, "client_id", "") or "",
-                    )
+                    _emit_conv("ai", text, source="text", turn_id=_turn_id, client_id=req.client_id)
 
                 if _lockstep and not _ls_degraded and speaker is not None:
                     # ── 锁步收尾(TTS 正常)────────────────────────────────────
@@ -1083,9 +1071,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "model": model,
                         "runtime_session_id": runtime_session_id,
                         "visible_action_surface": visible_action_surface,
-                        # 这一轮是被人按停的(/api/v1/presence/stop)。前端据此说「你停下了它」,
-                        # 而不是把空回复报成「后端什么都没给」—— 两件事的下一步完全不同。
-                        "stopped": bool(result.get("stopped")),
+                        "stopped": bool(result.get("stopped")),  # 被人叫停的:前端说「你叫停的」,不说「没拿到」
                     }
                 )
                 # 回到待机态。

@@ -114,8 +114,10 @@ class DuplexPresenceBridge:
                 self._source,
                 reason="realtime duplex voice session",
                 on_halt=self._halt,
-                on_interrupt=self._on_interrupt,
             )
+            # 人按「停」时只打断正在说的这一句（会话留着），见 core.presence_stop。
+            if self._on_interrupt is not None:
+                runtime.set_ambient_interrupt(self._handle, self._on_interrupt)
         except Exception as exc:  # noqa: BLE001
             logger.warning("双工常驻在场开启失败(双工照常运行,外壳不更新): %s", exc)
             return None

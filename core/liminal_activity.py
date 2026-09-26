@@ -79,6 +79,10 @@ def current_runtime_session() -> Optional[Any]:
 
 def bind_runtime_session(session: Any) -> "contextvars.Token":
     """把会话挂进当前 Context。由 ``handle_request`` 在建会话后调用。"""
+    # 「停」据此知道这一件事对应哪个运行时会话（见 core.presence_stop.stoppable）。
+    from core.presence_stop import note_bound_session
+
+    note_bound_session(session)
     return _current_runtime_session.set(session)
 
 

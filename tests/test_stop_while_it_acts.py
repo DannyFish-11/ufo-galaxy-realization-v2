@@ -2,11 +2,11 @@
 
 三件事，各钉各的：
 
-1. **停止通路**（``DesktopPresenceRuntime.stop_current_activity``）：取消在跑的请求，
-   调用方拿到的是一个 ``stopped=True`` 的正常返回值 —— 自发注意力循环、语音回路都是
+1. **停止通路**（``core.presence_stop``，混入 ``DesktopPresenceRuntime``）：取消在跑的
+   请求，调用方拿到的是一个 ``stopped=True`` 的正常返回值 —— 自发注意力循环、语音回路都是
    inline await ``handle_request`` 的，把 CancelledError 抛回去，停掉的就是整条循环。
 2. **「在动手」这一位**（``core.liminal_activity.acting`` → ``RuntimeSession``）：
-   进出成对、可嵌套；回静息时兜底清零；占着的叫停键一份不多、一份不少地还回去。
+   进出成对、可嵌套；被取消时照样退干净；占着的叫停键一份不多、一份不少地还回去。
 3. **叫停键**（``core.stop_key``）：只认真人按下的 Esc（它自己注入的不算），只在动手
    期间监听；分不清人按的和注入的平台上不占 —— 岛上也就不写「Esc 停止」。
 """
@@ -26,7 +26,6 @@ import core.stop_key as stop_key
 from core.desktop_presence_runtime import (
     DesktopPresenceRuntime,
     RuntimeSession,
-    TriState,
     get_desktop_presence_runtime,
 )
 from core.lumiv_websocket_bridge import GalaxyPresenceBridge
@@ -44,20 +43,28 @@ def _until(pred, timeout: float = 2.0) -> bool:
 # ── 1. 停止通路 ────────────────────────────────────────────────────────────
 
 
-def _blocking_body(started: asyncio.Event, runtime_session_id: str = "rs-1"):
-    async def body(message, **kwargs):
-        kwargs["_inflight"].runtime_session_id = runtime_session_id
+def _blocking_dispatch(started: asyncio.Event):
+    """让**真的** ``handle_request`` 停在它第一处真正的等待（派发）上，好从外面叫停。"""
+
+    async def _dispatch(*_a, **_k):
         started.set()
         await asyncio.sleep(3600)
-        return {"success": True, "response": "never"}
 
-    return body
+    return _dispatch
+
+
+def test_handle_request_is_the_stoppable_one():
+    from core.presence_stop import ActingMixin, StopMixin
+
+    assert getattr(DesktopPresenceRuntime.handle_request, "__stoppable__", False), "handle_request 不再可停"
+    assert issubclass(DesktopPresenceRuntime, StopMixin)
+    assert issubclass(RuntimeSession, ActingMixin)
 
 
 async def test_stop_cancels_the_request_but_the_caller_keeps_running():
     rt = DesktopPresenceRuntime()
     started = asyncio.Event()
-    rt._handle_request_body = _blocking_body(started)
+    rt._dispatch = _blocking_dispatch(started)
 
     async def caller_loop():
         # 自发注意力循环的形状：在自己的 tick 里 inline await，然后接着转。
@@ -65,17 +72,19 @@ async def test_stop_cancels_the_request_but_the_caller_keeps_running():
         return [first, "循环还在"]
 
     loop_task = asyncio.create_task(caller_loop())
-    await asyncio.wait_for(started.wait(), 2)
+    await asyncio.wait_for(started.wait(), 5)
 
     out = await rt.stop_current_activity(reason="panel")
-    assert out["stopped"] == [{"source": "ambient", "runtime_session_id": "rs-1"}]
+    (entry,) = out["stopped"]
+    assert entry["source"] == "ambient"
+    assert entry["runtime_session_id"], "「停」不知道停的是哪个运行时会话"
     assert out["reason"] == "panel"
 
-    first, after = await asyncio.wait_for(loop_task, 2)
+    first, after = await asyncio.wait_for(loop_task, 5)
     assert first["stopped"] is True, "被停下的请求要以 stopped=True 正常返回，不能抛进调用方"
     assert first["stop_reason"] == "panel"
     assert first["response"] == ""
-    assert first["runtime_session_id"] == "rs-1"
+    assert first["runtime_session_id"] == entry["runtime_session_id"]
     assert after == "循环还在", "停掉的应该是这一件事，不是整条循环"
     assert rt._inflight_registry() == {}, "停完之后登记表里不该还挂着它"
 
@@ -84,10 +93,10 @@ async def test_the_caller_being_cancelled_still_propagates():
     """反方向不变：调用方自己被取消（客户端断连、超时）时照旧取消到底。"""
     rt = DesktopPresenceRuntime()
     started = asyncio.Event()
-    rt._handle_request_body = _blocking_body(started)
+    rt._dispatch = _blocking_dispatch(started)
 
     task = asyncio.create_task(rt.handle_request("hi", source="chat"))
-    await asyncio.wait_for(started.wait(), 2)
+    await asyncio.wait_for(started.wait(), 5)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -110,7 +119,9 @@ async def test_stop_interrupts_what_an_ambient_presence_is_saying():
     async def on_interrupt():
         hits.append("interrupt")
 
-    handle = rt.open_ambient_presence("voice_duplex", on_interrupt=on_interrupt)
+    handle = rt.open_ambient_presence("voice_duplex")
+    assert rt.set_ambient_interrupt(handle, on_interrupt)
+    assert not rt.set_ambient_interrupt("no-such-handle", on_interrupt)
     try:
         out = await rt.stop_current_activity(reason="panel")
         assert hits == ["interrupt"]
@@ -156,18 +167,30 @@ async def test_acting_nests_and_holds_the_stop_key_exactly_once(recorded_key):
     assert calls == ["acquire", "release"]
 
 
-async def test_back_to_silent_clears_acting_and_returns_the_key_once(recorded_key):
-    """被停止 / 被取消那种没走完的路径：回静息时兜底清零，之后迟到的 finally 不再多还。"""
+async def test_a_stopped_action_still_returns_the_key(recorded_key):
+    """被「停」取消的那一段动手：acting() 的 finally 照样退干净，叫停键还回去。"""
+    from core.liminal_activity import acting, bind_runtime_session, unbind_runtime_session
+
     calls, _ = recorded_key
     s = RuntimeSession("chat")
-    s.advance(TriState.LIMINAL)
-    s.advance(TriState.MANIFEST)
-    s.enter_acting("computer_use")
-    s.advance(TriState.SILENT)
-    assert not s.acting
-    assert calls == ["acquire", "release"]
+    inside = asyncio.Event()
 
-    s.exit_acting()  # acting() 的 finally 晚到
+    async def act():
+        token = bind_runtime_session(s)
+        try:
+            with acting("computer_use"):
+                inside.set()
+                await asyncio.sleep(3600)
+        finally:
+            unbind_runtime_session(token)
+
+    task = asyncio.create_task(act())
+    await asyncio.wait_for(inside.wait(), 2)
+    assert s.acting and calls == ["acquire"]
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not s.acting
     assert calls == ["acquire", "release"]
 
 
@@ -439,12 +462,12 @@ def test_a_stopped_chat_stream_ends_with_a_done_frame_that_says_so(monkeypatch):
 
     import core.desktop_presence_runtime as dpr
     import core.routes.chat as chat_mod
-    from core.desktop_presence_runtime import _InflightRequest
+    from core.presence_stop import _InflightRequest, stopped_result
 
     class _StoppedRuntime:
         async def handle_request(self, *a, **k):
             handle = _InflightRequest(source="chat", runtime_session_id="rs-9", stopped=True, stop_reason="panel")
-            return DesktopPresenceRuntime._stopped_result(handle)
+            return stopped_result(handle)
 
     app = FastAPI()
     app.include_router(chat_mod.create_router(service_manager=None, config=None))
@@ -491,7 +514,8 @@ async def test_a_failing_interrupt_hook_is_named_but_its_exception_is_not_return
     def boom():
         raise RuntimeError("secret /home/someone/.config/token")
 
-    handle = rt.open_ambient_presence("voice_duplex", on_interrupt=boom)
+    handle = rt.open_ambient_presence("voice_duplex")
+    rt.set_ambient_interrupt(handle, boom)
     try:
         out = await rt.stop_current_activity(reason="panel")
         assert out["presences_failed"] == [handle]
