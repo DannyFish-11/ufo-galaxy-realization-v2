@@ -1116,6 +1116,17 @@ async def handle_command_result(bridge: "AndroidBridge", websocket: Any, message
         if not future.done():
             future.set_result(message)
 
+    # UCM.send_command_and_wait 按 command_id 等回包;规范入口此前只认 message_id,
+    # 那条等待永远等不到,只能超时。
+    command_id = message.get("command_id")
+    if command_id:
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+
+            get_unified_connection_manager().resolve_command_response(str(command_id), message)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("command_result → UCM 回填失败(non-fatal): %s", exc)
+
     # PR-13: reconcile inbound command_result signal against the host-side
     # execution tracker.  command_result is an ACK/result-style Android
     # execution signal; messages that carry contract_id or session_id identity

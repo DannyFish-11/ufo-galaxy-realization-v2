@@ -645,9 +645,8 @@ class CanonicalDispatcher:
         """Route a ``device__*`` invocation to the device communication layer.
 
         The canonical name format is ``device__<device_id>__<action>``.
-        The call is forwarded to :mod:`core.device_communication` via the
-        ``send_command`` path if the device is currently connected, or falls
-        back to a structured error response if it is not.
+        The call goes through UCM (``send_command_and_wait``) when the device
+        has a live connection there; otherwise a structured error is returned.
 
         Parameters
         ----------
@@ -667,10 +666,36 @@ class CanonicalDispatcher:
         device_id, action = parts[1], parts[2]
 
         try:
-            from core.device_communication import device_comm
+            # 走 UCM(连接权威)。此前走的 core.device_communication.device_comm 在生产里
+            # 从没有设备连进去(它的 connect() 全仓无人调用),每次都是「设备未连接」,
+            # 外层却报 success=True —— 调用方以为做成了。
+            from core.unified.connection_manager import get_unified_connection_manager
 
-            raw = await device_comm.send_command(device_id, action, arguments)
-            return DispatchResult(success=True, result=raw)
+            ucm = get_unified_connection_manager()
+            if not ucm.is_device_connected(device_id):
+                return DispatchResult(
+                    success=False,
+                    error=f"设备 '{device_id}' 当前没有连接",
+                    tool_name=tool_name,
+                    layer=CapabilityLayer.DEVICE,
+                )
+            raw = await ucm.send_command_and_wait(device_id, action, dict(arguments or {}), timeout=30.0)
+            payload = raw.get("payload", raw) if isinstance(raw, dict) else raw
+            failed = isinstance(raw, dict) and "payload" not in raw and bool(raw.get("error"))
+            if isinstance(payload, dict) and payload.get("success") is False:
+                failed = True
+            if failed:
+                err = (
+                    (payload.get("error") if isinstance(payload, dict) else None) or raw.get("error") or "设备执行失败"
+                )
+                return DispatchResult(
+                    success=False,
+                    result=payload,
+                    error=str(err),
+                    tool_name=tool_name,
+                    layer=CapabilityLayer.DEVICE,
+                )
+            return DispatchResult(success=True, result=payload)
         except Exception as exc:
             logger.warning(
                 "CanonicalDispatcher: device__%s__%s failed: %s",

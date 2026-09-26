@@ -9,7 +9,7 @@ MCP/技能/节点;资源表里从没放进过设备。这里不把几百个 ``de
     devices__ignore          不再提示某个候选
     devices__remove          移除成员(该收回的都收回)
     devices__invoke          调某台设备的一个动作(按它是原生/桥接/驱动节点/MCP 驱动分别路由)
-    devices__invite          邀请一台新设备(手机/手表:配对码;电脑:一条命令)
+    devices__invite          邀请一台新设备(手机/手表:配对码;笔记本:配对码 + 一条命令;worker:进网 + 启动命令)
     devices__acquire_driver  没有接入路径的候选:装一个 MCP 驱动(GitHub),或让模型写一个
     devices__bind_driver     把某个 MCP 工具认作这个候选的驱动,接入为成员
 
@@ -26,9 +26,9 @@ import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from core.device_onboarding.models import CandidateStatus, HumanStep, MemberRecord
+from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
-from core.device_onboarding.taxonomy import classify_type, is_native_transport
+from core.device_onboarding.taxonomy import is_native_transport
 
 logger = logging.getLogger("Galaxy.Onboarding.AgentTools")
 
@@ -87,14 +87,18 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         "devices__invite",
         "Invite a new device the user wants to add. phone/watch: returns a one-time pairing code to enter in the "
-        "Galaxy app. computer: returns one command to run on it (joins the private network and starts a worker).",
-        {"kind": {"type": "string", "enum": ["phone", "watch", "computer"]}},
+        "Galaxy app. laptop: a Windows computer the user wants you to operate (screen, mouse, keyboard) — returns "
+        "one command with a pairing code to run on it; it joins the private network by itself and you will be told "
+        "in the conversation when it connects. worker: a headless machine that only runs code jobs.",
+        {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "worker"]}},
         ["kind"],
     ),
     _fn(
         "devices__acquire_driver",
-        "For a candidate no join path can handle: install an MCP driver from a GitHub URL, or (generate=true, "
-        "asks the user first) have one written and sandbox-tested. Then call devices__bind_driver.",
+        "For a candidate no join path can handle. With no arguments: search the MCP tools already installed for "
+        "ones that match this device. source_url: install an MCP driver from GitHub. generate=true (asks the user "
+        "first): have one written and sandbox-tested. Then call devices__bind_driver. Once a kind of device has "
+        "a driver, later devices of the same kind can be joined with devices__join directly.",
         {
             "candidate_id": {"type": "string"},
             "source_url": {"type": "string", "description": "GitHub URL of an MCP server/skill that controls it"},
@@ -114,12 +118,44 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
 # ── 人在环 ───────────────────────────────────────────────────────────────────────
 
 
-async def _ask(what: str, session_id: str) -> Optional[str]:
-    """在手表上问一次。批准返回 None;否则返回不做的理由。"""
+async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
+    """问人要不要做。批准返回 None;否则返回该交回给智能体的结果。
+
+    * 这件事已经在对话里问过 → 按用户这一回合的原话判(规则见 conversation.py);
+    * 手表/手机连着 → 在手表上问(阻塞等回答,fail-closed),同时在对话里说一声问了什么;
+    * 都没有 → 在对话里问:本次不执行,交回一句要问用户的话,用户答了之后原样再调一次。
+    """
+    from core.device_onboarding.conversation import announce, confirm_in_conversation, is_pending
+
+    def _in_conversation() -> Optional[Dict[str, Any]]:
+        v = confirm_in_conversation(what, session_id)
+        if v["state"] == "approved":
+            return None
+        if v["state"] == "denied":
+            return {"success": False, "error": "用户在对话里说不要,没有执行"}
+        return {
+            "success": False,
+            "needs_confirmation": True,
+            "ask_user": v["ask_user"],
+            "next": "把 ask_user 原样问用户;用户回答之后,用同样的参数再调一次这个工具",
+        }
+
+    if is_pending(what, session_id):
+        return _in_conversation()
+    try:
+        from core.interaction.pending_decision_registry import _discover_target_devices
+
+        watch_up = bool(await _discover_target_devices())
+    except Exception:  # noqa: BLE001 — 探不到手表就在对话里问,不因此放行
+        watch_up = False
+    if not watch_up:
+        return _in_conversation()
+
     from core.interaction.high_risk_confirmation import confirm_high_risk_tool
 
+    await announce(f"我在手表上问你了:要{what}吗?")
     outcome = await confirm_high_risk_tool(tool_name=what, risk_level="设备接入", session_id=session_id)
-    return None if outcome.approved else f"没有执行:{outcome.reason}"
+    return None if outcome.approved else {"success": False, "error": f"没有执行:{outcome.reason}"}
 
 
 # ── list ─────────────────────────────────────────────────────────────────────────
@@ -177,9 +213,9 @@ async def _join(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         return {"success": False, "error": f"没有这个候选:{cid}(先 devices__list)"}
     if cand.human_step == HumanStep.APPROVE.value and cand.status == CandidateStatus.NEW.value:
         if not _auto_allows(HumanStep.APPROVE.value):
-            why = await _ask(f"把「{cand.name}」接入为设备", session_id)
-            if why:
-                return {"success": False, "error": why}
+            stop = await _ask(f"把「{cand.name}」接入为设备", session_id)
+            if stop:
+                return stop
     out = await svc.join(cid, dict(args.get("inputs") or {}))
     outcome = out.get("outcome") or {}
     if outcome.get("kind") == "needs_human":
@@ -194,9 +230,9 @@ async def _remove(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
     d = get_unified_device_manager().get_device(did)
     if d is None and get_onboarding_service().roster.get(did) is None:
         return {"success": False, "error": f"没有这个成员:{did}"}
-    why = await _ask(f"移除设备「{getattr(d, 'device_name', '') or did}」(同时收回它的网络身份)", session_id)
-    if why:
-        return {"success": False, "error": why}
+    stop = await _ask(f"移除设备「{getattr(d, 'device_name', '') or did}」(同时收回它的网络身份)", session_id)
+    if stop:
+        return stop
     return await get_onboarding_service().remove(did)
 
 
@@ -223,9 +259,9 @@ async def _invoke_mcp(d: Any, action: str, params: Dict[str, Any], session_id: s
 
     tool = str((d.metadata or {}).get("driver_mcp_tool") or d.bridge_id.removeprefix("mcp:"))
     if autonomy_level().value != "autonomous" and not is_read_action(action):
-        why = await _ask(f"对「{d.device_name or d.device_id}」执行 {action}", session_id)
-        if why:
-            return {"success": False, "error": why}
+        stop = await _ask(f"对「{d.device_name or d.device_id}」执行 {action}", session_id)
+        if stop:
+            return stop
     meta = d.metadata or {}
     return await get_mcp_gateway().execute_tool(
         tool,
@@ -308,7 +344,26 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             except JoinUnavailable as exc:
                 out["network"] = {"skipped": exc.reason, "how_to_fix": exc.how_to_fix}
         return out
-    if kind == "computer":
+    if kind in ("laptop", "computer"):
+        # 电脑作为「相对主体」接进来:和手机同一条配对链。一次性配对码 + 一条命令,
+        # 配对时顺带拿到进自建内网的钥匙,之后自动续期。见 windows_client/device_pairing.py。
+        card = build_local_card()
+        link = to_link(card)
+        code, expires_at = get_pairing_code_registry().issue(link)
+        gateway = _gateway_http_base(card)
+        cmd = f"python windows_client/windows_aip_client.py --pair {code} --gateway {gateway}"
+        return {
+            "success": True,
+            "human_step": HumanStep.RUN_COMMAND.value,
+            "code": code,
+            "expires_at": expires_at,
+            "commands": [cmd],
+            "tell_user": (
+                f"在那台电脑上(需要有本仓库和 Python)执行:{cmd} 。配对码 {code} 10 分钟内有效、只能用一次;"
+                "它连上来时我会在这里告诉你。"
+            ),
+        }
+    if kind == "worker":
         try:
             grant = issue_join_key()
         except JoinUnavailable as exc:
@@ -330,7 +385,26 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "tell_user": "在那台电脑上先执行第一条(进自建内网;钥匙 10 分钟内有效、只能用一次),"
             "再在它上面的本仓库副本里执行第二条(启动执行 worker)。它出现在候选里后我再帮你接入",
         }
-    return {"success": False, "error": "kind 只能是 phone / watch / computer"}
+    return {"success": False, "error": "kind 只能是 phone / watch / laptop / worker"}
+
+
+def _gateway_http_base(card: Any) -> str:
+    """配对命令里的主脑地址:局域网优先(新电脑多半还没进自建内网),其次名片里的其他路。"""
+    cands = sorted(
+        getattr(card, "candidates", None) or [], key=lambda c: (c.get("kind") != "lan", c.get("priority", 99))
+    )
+    for c in cands:
+        url = str(c.get("url") or "")
+        if "/ws/device/" in url:
+            base = url.split("/ws/device/", 1)[0]
+            return base.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+    try:
+        from core.electron_launch_guard import resolve_gateway_port
+
+        port = resolve_gateway_port()
+    except Exception:  # noqa: BLE001
+        port = 0
+    return f"http://<主脑电脑的地址>:{port or '<端口>'}"
 
 
 # ── 驱动:获取与绑定 ─────────────────────────────────────────────────────────────
@@ -359,9 +433,9 @@ async def _acquire_driver(args: Dict[str, Any], session_id: str) -> Dict[str, An
             **({"next": "用 devices__bind_driver 指定其中控制这台设备的 MCP 工具"} if ok else {}),
         }
     if args.get("generate"):
-        why = await _ask(f"为「{cand.name}」生成一个驱动程序(模型写代码,沙箱测试后加载)", session_id)
-        if why:
-            return {"success": False, "error": why}
+        stop = await _ask(f"为「{cand.name}」生成一个驱动程序(模型写代码,沙箱测试后加载)", session_id)
+        if stop:
+            return stop
         from core.mcp_gateway import get_mcp_gateway
 
         tool = f"driver_{_slug(cand.aip_device_type + '_' + (cand.name or cand.key))}"
@@ -378,35 +452,31 @@ async def _acquire_driver(args: Dict[str, Any], session_id: str) -> Dict[str, An
         if not res.get("success"):
             return {"success": False, "error": res.get("error") or "驱动生成失败", "detail": res}
         return await _bind_driver({"candidate_id": cand.candidate_id, "tool": res.get("tool_name", tool)})
+    from core.device_onboarding.drivers import search_installed
+
+    found = await search_installed(cand)
+    if found:
+        return {
+            "success": True,
+            "installed_matches": found,
+            "next": "已装的工具里有这些可能对得上;确认是哪个后用 devices__bind_driver 绑定。都不对的话给 source_url 或 generate=true",
+        }
     return {
         "success": False,
-        "error": "给一个 GitHub 上控制这类设备的 MCP 服务地址(source_url),或 generate=true 让我写一个(会先问你)",
+        "error": "已装的 MCP 工具里没有对得上的。给一个 GitHub 上控制这类设备的 MCP 服务地址(source_url),"
+        "或 generate=true 让我写一个(会先问你)",
     }
 
 
 async def _bind_driver(args: Dict[str, Any]) -> Dict[str, Any]:
+    from core.device_onboarding.drivers import bind_member
+
     svc = get_onboarding_service()
     cand = svc.candidates.get(str(args.get("candidate_id") or ""))
     tool = str(args.get("tool") or "").strip()
     if cand is None or not tool:
         return {"success": False, "error": "需要 candidate_id 与 tool"}
-    info = classify_type(cand.aip_device_type)
-    member = MemberRecord(
-        device_id=f"dev_{_slug(cand.name or cand.key)}_{cand.candidate_id[-6:]}",
-        device_name=cand.name or cand.key,
-        device_type=info.platform,
-        aip_device_type=info.aip_device_type,
-        transport="mcp",
-        bridge_id=f"mcp:{tool}",
-        capabilities=list(cand.capabilities) or ["invoke"],
-        metadata={"driver_mcp_tool": tool, "addresses": cand.addresses, "driver_device": dict(cand.identity)},
-        join_path="mcp_driver",
-        candidate_id=cand.candidate_id,
-    )
-    svc.admit(member)
-    cand.status = CandidateStatus.JOINED.value
-    cand.linked_device_id = member.device_id
-    svc.candidates.put(cand.candidate_id, cand)
+    member = bind_member(cand, tool, svc)
     return {"success": True, "device_id": member.device_id, "driver": tool}
 
 

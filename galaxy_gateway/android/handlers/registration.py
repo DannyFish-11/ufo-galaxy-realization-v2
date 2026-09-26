@@ -899,6 +899,7 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             bridge.put_local_device(device_id, device)
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
+        await bridge._attach_transport_to_ucm(device_id, websocket, message)
 
         # PR-G: extract canonical runtime attachment session identity.
         # Prefer the explicit field; fall back to a generated UUID so that
@@ -1525,6 +1526,7 @@ async def handle_device_reconnect(bridge: "AndroidBridge", websocket: Any, messa
                 bridge.put_local_device(device_id, device)
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
+        await bridge._attach_transport_to_ucm(device_id, websocket, message)
 
         # PR-G: classify reconnect outcome
         outcome = "new_attachment"

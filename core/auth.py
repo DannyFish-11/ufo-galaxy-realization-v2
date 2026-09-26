@@ -37,7 +37,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional, Set
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
 logger = logging.getLogger("Galaxy.Auth")
 
@@ -404,8 +404,29 @@ def verify_device_id(device_id: str) -> bool:
     return True
 
 
+#: 自带凭证的端点:凭证在请求体里、由端点自己核验,不是 API 令牌。
+#: 一台还没配对的设备手里没有任何 API 令牌 —— 要求它先带令牌才能来换令牌就是死锁。
+#:
+#: 这里是**唯一**的定义:HTTP 中间件(galaxy_gateway/middleware.py 的豁免表)和
+#: 下面的 ``require_auth`` 依赖都读它。此前豁免只写在中间件里,而配对路由挂载时
+#: 带着 ``Depends(require_auth)`` —— 鉴权默认开启后,中间件放行了,依赖又把它 401
+#: 回去:手机、手表、电脑一台都配不上。
+SELF_AUTHENTICATING_ENDPOINTS: dict = {
+    # 凭一次性配对码/带签名的链接接纳设备(端点内按来源节流)
+    "/api/v1/pair/claim": {"POST"},
+    # 凭一枚还有效、且签给本设备的配对令牌换新(端点内核验)
+    "/api/v1/pair/renew": {"POST"},
+}
+
+
+def is_self_authenticating(path: str, method: str) -> bool:
+    return (method or "").upper() in SELF_AUTHENTICATING_ENDPOINTS.get(path, set())
+
+
 async def require_auth(
-    authorization: Optional[str] = Header(None), x_device_id: Optional[str] = Header(None, alias="X-Device-ID")
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-ID"),
 ) -> dict:
     """
     FastAPI 依赖函数，用于端点鉴权
@@ -432,6 +453,8 @@ async def require_auth(
     # production mode (GALAXY_MODE=production) forces it on.
     if not is_auth_enabled():
         return {"authenticated": True, "device_id": x_device_id, "auth_enabled": False}
+    if is_self_authenticating(request.url.path, request.method):
+        return {"authenticated": False, "device_id": x_device_id, "self_authenticating": True}
 
     # Security: dev mode bypass removed — all requests require valid tokens。
     # 修复:此前 env token 为空(未配置/已过期)就直接 401,抢在 verify_api_token

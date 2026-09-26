@@ -17,6 +17,7 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
+from core.device_onboarding import drivers as _drivers  # noqa: F401,E402 — 登记「用已知驱动」这条接入路径
 from core.device_onboarding.join_paths import find_join_path, get_join_path, list_join_paths
 from core.device_onboarding.models import (
     AUTOMATABLE,
@@ -40,6 +41,15 @@ from core.device_onboarding.taxonomy import (
 )
 
 logger = logging.getLogger("Galaxy.Onboarding")
+
+#: 候选「接入要人做什么」的口语说法 —— 用在对话里的播报。
+_HUMAN_STEP_WORDS = {
+    HumanStep.NONE.value: "可以直接接入",
+    HumanStep.APPROVE.value: "你点个头就能接入",
+    HumanStep.PHYSICAL_CODE.value: "接入要设备上的配网码",
+    HumanStep.CONFIRM_ON_DEVICE.value: "接入要在设备上确认一下",
+    HumanStep.RUN_COMMAND.value: "接入要在它上面执行一条命令",
+}
 
 #: 自动接入到哪一级:off = 全等人;none = 只自动走不需要人的;approve = 连"同意"类也自动。
 AUTO_LEVELS = ("off", "none", "approve")
@@ -211,14 +221,16 @@ class OnboardingService:
                 cand.needs = {"what": "还没有能接入这类设备的路径;可以让智能体找一个驱动(MCP/技能)"}
         self.candidates.put(cid, cand)
 
-        if (
-            existing is None
-            and cand.present
-            and cand.join_path
-            and _auto_allows(cand.human_step)
-            and cand.status == CandidateStatus.NEW.value
-        ):
-            self._schedule(self.join(cid))
+        if existing is None and cand.present and cand.status == CandidateStatus.NEW.value:
+            if cand.join_path and _auto_allows(cand.human_step):
+                self._schedule(self.join(cid))
+            else:
+                # 第一次见到、又不会自动接入的:在对话里说一声,不等人来问。
+                from core.device_onboarding.conversation import note_new_candidate
+
+                note_new_candidate(
+                    cand.name, _HUMAN_STEP_WORDS.get(cand.human_step if cand.join_path else "", "还没有现成的接入方式")
+                )
         return cand
 
     def _schedule(self, coro: Any) -> None:

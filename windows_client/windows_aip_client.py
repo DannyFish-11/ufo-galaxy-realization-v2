@@ -27,7 +27,11 @@ Windows AIP v3.0 客户端
 desktop_automation.py）已被弃用，不再是主执行路径。
 
 启动方式:
-    python windows_client/windows_aip_client.py --host 127.0.0.1 --port 8000
+    第一次(主脑给了配对码):
+        python windows_client/windows_aip_client.py --pair 123456 --gateway http://主脑地址:端口
+    之后:
+        python windows_client/windows_aip_client.py
+    配对、凭据、令牌续期与进自建内网见 windows_client/device_pairing.py。
 
 Author: Galaxy Team
 Version: 2.0.0
@@ -200,13 +204,30 @@ class WindowsAIPClient:
     PROTOCOL_VERSION = "3.0"
     HEARTBEAT_INTERVAL = 30  # 秒
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8000, device_id: str = None):
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8000,
+        device_id: str = None,
+        state: Optional[Dict[str, Any]] = None,
+        state_file: Optional[str] = None,
+    ):
+        from windows_client import device_pairing as _dp
+
         self.host = host
         self.port = port
-        self.device_id = device_id or f"windows_{socket.gethostname()}_{uuid.uuid4().hex[:6]}"
+        self._state_file = state_file
+        #: 配对凭据(令牌、连接地址、设备 id)—— 见 windows_client/device_pairing.py
+        self.state: Dict[str, Any] = state if state is not None else _dp.load_state(state_file)
+        if device_id:
+            self.state["device_id"] = device_id
+        self.device_id = _dp.stable_device_id(self.state)
+        self.device_type = str(self.state.get("device_type") or "") or _dp.detect_device_type()
         self._ws = None
         self._running = False
         self._on_event_stream = None
+        #: 注册被入口拒掉的原因(令牌无效等)。设了就不再重连 —— 换多少次地址都一样被拒。
+        self.fatal: Optional[str] = None
 
     def set_event_stream_callback(self, callback):
         """Set callback for event_stream messages from the EventBus."""
@@ -228,21 +249,25 @@ class WindowsAIPClient:
     def _device_register_msg(self) -> Dict[str, Any]:
         msg = self._base_message("device_register")
         msg.update({
-            "device_type": "windows_desktop",
+            "device_type": self.device_type,
             "platform": "windows",
-            "name": socket.gethostname(),
+            "name": self.state.get("name") or socket.gethostname(),
             "model": "Windows PC",
             "os_version": _get_os_version(),
-            "capabilities": WINDOWS_SUPPORTED_ACTIONS,
+            # capabilities 在协议里是整数位图;动作名单走 supported_actions。
+            # 此前这里塞的是名字列表,入口 int(list) 直接抛错,注册一次都没成功过。
             "supported_actions": WINDOWS_SUPPORTED_ACTIONS,
         })
+        token = self.state.get("token")
+        if token:
+            msg["token"] = token
         return msg
 
     def _capability_report_msg(self) -> Dict[str, Any]:
         msg = self._base_message("capability_report")
         msg.update({
             "platform": "windows",
-            "device_type": "windows_desktop",
+            "device_type": self.device_type,
             "supported_actions": WINDOWS_SUPPORTED_ACTIONS,
         })
         return msg
@@ -308,6 +333,22 @@ class WindowsAIPClient:
                 self._on_event_stream(data)
             return
 
+        if msg_type == "device_register_ack" and data.get("success") is False:
+            code = data.get("error_code") or ""
+            why = data.get("message") or code or "注册被拒"
+            if code in ("INGRESS_AUTHENTICATION_FAILED", "INGRESS_IDENTITY_MISMATCH"):
+                self.fatal = (
+                    f"主脑拒绝了这台电脑:{why}。需要(重新)配对:让主脑给一个配对码,"
+                    "然后运行 python windows_client/windows_aip_client.py --pair <配对码> --gateway <主脑地址>"
+                )
+                logger.error(self.fatal)
+                self._running = False
+                if self._ws is not None:
+                    await self._ws.close()
+            else:
+                logger.error("注册失败:%s", why)
+            return
+
         if msg_type in ("device_register_ack", "heartbeat_ack", "capability_report_ack"):
             logger.debug(f"收到 ACK: {msg_type}")
             return
@@ -371,6 +412,20 @@ class WindowsAIPClient:
             await asyncio.sleep(self.HEARTBEAT_INTERVAL)
             if self._running:
                 await self._send(self._heartbeat_msg())
+                self._renew_token()
+
+    def _renew_token(self) -> None:
+        """令牌快过期就换新并存盘;下次重连时用新的。"""
+        from windows_client import device_pairing as _dp
+
+        try:
+            if _dp.renew_if_due(self.state):
+                _dp.save_state(self.state, self._state_file)
+                logger.info("配对令牌已续期")
+        except _dp.PairingError as exc:
+            logger.error("%s —— %s", exc, exc.how_to_fix)
+        except Exception as exc:  # noqa: BLE001 — 续期失败不打断连接,下次心跳再试
+            logger.warning("令牌续期失败,稍后再试: %s", exc)
 
     async def run(self):
         """连接服务端并保持运行"""
@@ -380,14 +435,20 @@ class WindowsAIPClient:
             logger.error("缺少 websockets 库，请运行: pip install websockets")
             return
 
-        uri = f"ws://{self.host}:{self.port}/ws/device/{self.device_id}"
-        logger.info(f"连接服务端: {uri}")
-        self._running = True
+        from windows_client import device_pairing as _dp
 
+        self._running = True
+        self._renew_token()
+        attempt = 0
         while self._running:
+            urls = _dp.connect_urls(self.state, self.host, self.port, self.device_id)
+            uri = urls[attempt % len(urls)]
+            attempt += 1
+            logger.info(f"连接主脑: {uri}")
             try:
-                async with websockets.connect(uri) as ws:
+                async with websockets.connect(uri, open_timeout=10) as ws:
                     self._ws = ws
+                    attempt -= 1  # 这条通了,断线后先重试它
                     logger.info(f"WebSocket 已连接，device_id={self.device_id}")
 
                     # AIP v3.0 握手
@@ -439,22 +500,49 @@ def main():
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    parser = argparse.ArgumentParser(description="Windows AIP v3.0 Client")
-    parser.add_argument("--host", default="127.0.0.1", help="服务端地址")
-    parser.add_argument("--port", type=int, default=8000, help="服务端端口")
-    parser.add_argument("--device-id", default=None, help="自定义设备 ID")
+    parser = argparse.ArgumentParser(description="Windows AIP v3.0 Client —— 把这台电脑接到主脑上")
+    parser.add_argument("--host", default="127.0.0.1", help="主脑地址(没配对过时的兜底)")
+    parser.add_argument("--port", type=int, default=8000, help="主脑端口(没配对过时的兜底)")
+    parser.add_argument("--device-id", default=None, help="自定义设备 ID(默认第一次生成后固定)")
+    parser.add_argument("--pair", default=None, metavar="CODE", help="主脑给的一次性配对码")
+    parser.add_argument("--gateway", default=None, help="主脑地址,如 http://192.168.1.10:8000(配对时用)")
+    parser.add_argument("--name", default=None, help="这台电脑在设备列表里叫什么")
     args = parser.parse_args()
 
-    client = WindowsAIPClient(
-        host=args.host,
-        port=args.port,
-        device_id=args.device_id,
-    )
+    from windows_client import device_pairing as _dp
+
+    state = _dp.load_state()
+    if args.device_id:
+        state["device_id"] = args.device_id
+    if args.pair:
+        gateway = args.gateway or f"http://{args.host}:{args.port}"
+        try:
+            resp = _dp.pair(
+                args.pair,
+                gateway,
+                state,
+                name=args.name or "",
+                capabilities=WINDOWS_SUPPORTED_ACTIONS,
+            )
+        except _dp.PairingError as exc:
+            print(f"✗ {exc}\n  下一步:{exc.how_to_fix}")
+            raise SystemExit(2)
+        _dp.save_state(state)
+        print(f"✓ 已配对:{state.get('name')}({state['device_id']})")
+        net = _dp.join_tailnet(resp.get("tailnet_join"), state["device_id"])
+        if net.get("state") == "joined":
+            print("✓ 已加入自建内网,带出门也能连回主脑")
+        elif net.get("how_to_fix"):
+            print(f"! 没能自动加入自建内网:{net.get('detail') or net['state']}\n  {net['how_to_fix']}")
+
+    client = WindowsAIPClient(host=args.host, port=args.port, state=state)
 
     try:
         asyncio.run(client.run())
     except KeyboardInterrupt:
         logger.info("客户端已停止")
+    if client.fatal:
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

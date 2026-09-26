@@ -555,7 +555,8 @@ _REGISTRY._register(
         zone=LayoutZone.LEGACY,
         description=(
             "Host-specific legacy shell (PR-3 retired, PR-8 demoted).  "
-            "Active sub-directory preserved: autonomy/ only — status_board_v2/ "
+            "Active: windows_aip_client.py (Windows device ingress) + device_pairing.py "
+            "(pairing / token renewal / tailnet join for that client) + autonomy/. status_board_v2/ "
             "was deleted by panel-surface convergence.  "
             "Root-level modules (client.py, ui_sidebar.py, desktop_automation.py, "
             "windows_mcp_server.py, main.py, key_listener.py, "

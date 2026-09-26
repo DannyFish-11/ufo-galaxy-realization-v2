@@ -153,6 +153,17 @@ API:`UCM.report_presence(device_id, channel, online, *, routable=None, detail=No
 
 ---
 
+### 5.1 UCM 是连接权威 —— 规范入口此前从没登记过
+
+实测(真网关 + 真客户端):规范设备入口 `/ws/device/{id}` 注册成功后,**从不**把连接登记进 UCM,
+只有旧的 `websocket_handler` 做过。于是 UCM 眼里没有任何手机/手表/电脑:派发就绪闸判「传输不在」
+(`V3_SLOT_BLOCKED`)、`UCM.send_to_device` / `send_command_and_wait` 找不到设备。同时 `device__*` 派发走的是
+`core.device_communication.device_comm`,它的 `connect()` 全仓无人调用,每次都「设备未连接」,外层却报成功。
+
+现在:注册/重连成功 → `UCM.register_connection`/`reconnect_patch`;断开 → `mark_offline`(旧连接晚关不会把
+新连接判离线);设备回 `command_result` → `UCM.resolve_command_response`;`device__*` 经
+`UCM.send_command_and_wait` 下发,成功与否取设备回包。
+
 ## 6. 接入路径(Join Path)注册表 —— 可插拔、可复用
 
 每条路径是一个类,声明:
@@ -201,8 +212,13 @@ V1 内置路径(`core/device_onboarding/join_paths.py`,顺序即优先级):
 3. **绑定**:`devices__bind_driver(candidate, tool)` 把某个 MCP 工具认作这台设备的驱动,以
    `bridge_id = "mcp:<工具>"` 接入为被接入成员;之后 `devices__invoke` 经 `mcp_gateway.execute_tool` 下行,
    非读操作在 guided 档先在手表上问。
-4. **尚未实现**:按设备种类的驱动复用(驱动覆盖表,下次同类设备自动绑定),以及"先在已安装的
-   MCP/技能里按标签找"。目前每台设备各自绑定一次。
+4. **先找已装的**:`devices__acquire_driver` 不给链接也不要求生成时,先在已装的 MCP 工具(MCP 服务
+   列出的工具 + 从 GitHub 装的)里按名字/描述/标签与设备信息(名称、类型、SSDP Server 头、型号)的重合度
+   排序返回,智能体确认后再 `bind_driver`(`core/device_onboarding/drivers.py`)。
+5. **按种类复用**:每绑定一次就记下「这一种设备 → 这个工具」(`onboarding_drivers.json`,持久化)。
+   之后发现同一种设备,它就有一条专门的接入路径 `known_mcp_driver`(排在所有泛化路径前面),
+   人点个头就接入(`GALAXY_ONBOARDING_AUTO=approve` 时自动)。「同一种」按来源给的型号信息判断;
+   说不清型号的(只知道 unknown/iot)**不记** —— 猜错等于拿一台设备的驱动去控另一台。
 
    关于 **MHS(Model Hardware Standard)**:MCP 的硬件侧对应物,至今没有公开规范/SDK/schema
    (判断见 `docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md` 第 ④ 节)。它开源之后接入路径之一就是 MCP ——
@@ -222,11 +238,56 @@ V1 内置路径(`core/device_onboarding/join_paths.py`,顺序即优先级):
 | `devices__ignore` | 不再提示某个候选 |
 | `devices__remove` | 移除成员:注销 UDM、清花名册、收回 tailnet 节点、从 Mesh 退出 |
 | `devices__invoke` | 调某台设备的一个动作:原生设备走 CanonicalDispatcher `device__…`(权限门照常);被接入设备走它的桥(HA → Node_27,自治档位审批照常) |
-| `devices__invite` | 邀请新设备:手机/手表给一次性配对码;电脑给两条命令(进内网 + 启动 edge worker) |
+| `devices__invite` | 邀请新设备:手机/手表给一次性配对码;笔记本(`laptop`)给一条带配对码的命令(§8.1);只跑代码的无头机器(`worker`)给进内网 + 启动 edge worker 两条命令 |
 | `devices__acquire_driver` / `devices__bind_driver` | 见 §7 |
 
 `home__*`(智能家居按名字控制)保留:它是被接入设备里最常用的一类的便捷入口,底层与
 `devices__invoke` 走同一条 Node_27 路。
+
+### 8.1 新笔记本怎么接进来(相对主体,不是第二个大脑)
+
+**不用 Windows MCP。** 仓库早就把那条路停掉了(`windows_client/windows_mcp_server.py` 导入即报错),
+唯一的 Windows 执行路径是 `windows_aip_client.py → WindowsExecutionArbiter`(系统 API → UIA → GUI → VLM)。
+MCP 是本机 stdio 协议,要操作另一台笔记本,还得自己再解决网络、鉴权、在线状态 —— 而这些配对链全都有。
+另一台笔记本没有三态、没有模型:它是主脑的**手和眼**(`partial_runtime_device`),
+怎么做、要不要问人,由主脑决定。
+
+和手机/手表**同一条配对链**:
+
+```
+你:「把我的笔记本接进来」
+智能体 devices__invite{kind: laptop} → 一次性配对码 + 一条命令(在对话里说给你)
+笔记本上:python windows_client/windows_aip_client.py --pair 7KQ2MX --gateway http://主脑:端口
+  ├─ POST /api/v1/pair/claim   → 能力令牌(签给这台笔记本的 id)+ 按可达性排好的连接地址 + tailnet 钥匙
+  ├─ 有 tailscale 且没登录任何网 → 用钥匙自己进自建内网(已在别的网里的不动)
+  └─ 凭据存本机(%APPDATA%/Galaxy/device.json);设备 id 第一次生成后固定
+对话里自动出现:「笔记本「书房」配对好了,正在连过来。」
+笔记本 → /ws/device/<id>  device_register 带令牌 → 入口核验 → UDM(身份)+ UCM(连接)
+对话里自动出现:「「书房」连上了,现在可以让我操作它。」
+智能体 devices__list 看得到它的动作(click / type / screenshot …)→ devices__invoke 经 UCM 下发、等回包
+令牌快过期 → POST /api/v1/pair/renew 凭旧令牌换新(被移除/拉黑的换不到;旧令牌随即撤销)
+```
+
+人只做一件事:在那台电脑上跑一次那条命令(物理上必须有人在场,这一步不能自动化)。之后重启直接
+`python windows_client/windows_aip_client.py`。被拒(令牌无效、被移除)时客户端**停下并说明要重新配对**,
+不再静默重连。
+
+### 8.2 设备的事在对话里自己出现
+
+与自发开口同一对出口(`emit_conversation` 推面板 + `record_session_turn` 记进对话主线),
+所以面板关了再开也还在(`core/device_onboarding/conversation.py`):
+
+* **播报**:第一次发现、又不会自动接入的候选(攒 5 秒合成一句,每台只说一次);配对成功;刚配对的设备第一次连上。
+* **确认**:接入、移除、调用被接入设备的写动作、生成驱动 —— 手表/手机连着就在手表上问(阻塞等回答,
+  fail-closed),同时在对话里说一声「我在手表上问你了」;都没有就**在对话里问**:本次不执行,把问题交回
+  智能体问你,你答了之后它原样再调一次。判定规则写死:
+  1. 问的那一回合里再调,不算答应 —— 智能体不能自己批准自己,工具返回里夹带的字也冒充不了你;
+  2. 只认人发起的回合(文字、语音、手表),自发注意力/视觉采样不算,来源未知一律不算;
+  3. 看你的**原话**(`RuntimeSession.request_text`),不看模型转述:短而明确的「好/可以/接入」算答应,
+     带否定的算拒绝,含糊的(「嗯」「行吧我再想想」)再问一次;
+  4. 一次答应只管一件事、用过即作废,十分钟没答作废。
+
+  一般高风险工具(`confirm_high_risk_tool`)的纪律不变:仍只在手表上问、问不到就不执行。
 
 ---
 
@@ -273,6 +334,11 @@ REST(`core/routes/onboarding.py`):
 * 被接入设备的写动作仍经 Node_27 权限白名单 + 自治档位(guided 下在手表上问)。
 * 生成驱动代码必须人批准;安装第三方 MCP/技能沿用 `github__install` 的既有审计。
 * `devices__remove` 同时收回 tailnet 身份,丢失的设备不能再进网。
+* 配对端点(`claim`、`renew`)是**自带凭证**的:凭证是一次性配对码 / 签给本设备的旧令牌,由端点自己核验。
+  它们只在 `core.auth.SELF_AUTHENTICATING_ENDPOINTS` 定义一次,HTTP 中间件与 `require_auth` 依赖都读它。
+  此前豁免只写在中间件里,路由上的 `Depends(require_auth)` 又把它 401 回去 —— 鉴权默认开启时,
+  手机、手表、电脑一台都配不上。`/api/v1/pair/card`(签发配对码)与其余配对操作仍要主人的令牌。
+* 对话里的确认规则见 §8.2;它只用于设备接入平面自己的确认,不放宽一般高风险工具。
 
 ---
 
@@ -300,7 +366,7 @@ REST(`core/routes/onboarding.py`):
 ## 15. 不在 V1 内(明确说明)
 
 * 手机/手表**在设备上弹窗确认加入**:需要两个 App 各加一个界面;V1 用"设备上输入配对码"完成同样的确认。
-* 协调者迁移(电脑关机时手机接管协调):另一个量级,见相对主体设计。
+* 协调者迁移(电脑关机时手机接管协调):所有者确认用不上,不做。
+* Windows MCP:不作为接入笔记本的方式(理由见 §8.1)。已经在跑某个 MCP 服务的设备,仍可用 `devices__bind_driver` 把它当驱动。
 * `HOME_*` 进 AIP 位图:需三仓同步。
 * Serial/DBus/CAN 传输适配器:仍未在启动时注册(需要按硬件依赖探测后再注册,未做)。
-* 按设备种类的驱动复用、在已安装 MCP/技能里按标签找驱动(见 §7)。
