@@ -161,19 +161,23 @@ def _emit(text: str) -> None:
 
 
 async def _record(text: str) -> None:
-    """记进当前对话主线(面板重开时从这里读回来)。会顺带写语义记忆,可能慢。"""
+    """记进当前对话主线(面板重开时从这里读回来)。
+
+    直接写 SessionManager —— 对话轮次的唯一属主,面板读的就是它。**不走**
+    ``record_session_turn``:那条门还会写语义记忆,第一次用时要在事件循环上同步
+    加载向量模型(干净环境里还要去下载),网关的事件循环就此卡住,设备连不进来。
+    设备播报不需要被语义检索到。
+    """
     try:
-        from core.conversation_mainline import mainline_session_id
-        from core.session_memory_facade import record_session_turn
+        from core.conversation_mainline import DEFAULT_MAINLINE_OWNER, mainline_session_id
+        from core.session_manager import get_session_manager
 
         sid = mainline_session_id(create=True)
-        if sid:
-            await record_session_turn(
-                conversation_session_id=sid,
-                role="assistant",
-                content=text,
-                metadata={"channel": "devices", "source": "device_onboarding"},
-            )
+        if not sid:
+            return
+        sm = get_session_manager()
+        await sm.ensure_session(sid, user_id=DEFAULT_MAINLINE_OWNER)
+        await sm.add_message(sid, "assistant", text, metadata={"channel": "devices", "source": "device_onboarding"})
     except Exception as exc:  # noqa: BLE001
         logger.debug("设备播报记进主线失败(非致命): %s", exc)
 
@@ -193,8 +197,7 @@ _background: set = set()
 def announce_soon(text: str) -> None:
     """播报,但**不让调用方等**:配对、注册、工具调用都不该被一句播报拖住。
 
-    推面板当场做;记进对话主线会顺带写语义记忆(要算向量),那一端的服务不在时要等到
-    超时 —— 曾经因此把配对请求整个拖成超时。所以有事件循环时记录一律丢到后台。
+    推面板当场做;记进对话主线要落盘,丢到后台,调用方不等。
     """
     text = (text or "").strip()
     if not text:

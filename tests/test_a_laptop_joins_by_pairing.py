@@ -330,16 +330,13 @@ def test_joining_the_private_network_uses_the_grant_and_never_hijacks_an_existin
 
 
 def test_pairing_does_not_wait_for_the_conversation_record(gateway, monkeypatch):
-    """记进对话主线会写语义记忆;那一端的服务不在时会一直等。配对不能被它拖住。
+    """记进对话主线要落盘;不管它多慢,配对都不能等它(CI 干净环境里曾因此 15 秒超时)。"""
+    from core.session_manager import get_session_manager
 
-    CI 的干净环境里就是这样:配对请求等到 15 秒超时。
-    """
-    import core.session_memory_facade as smf
-
-    async def stuck(**kw):
+    async def stuck(*a, **kw):
         await asyncio.sleep(60)
 
-    monkeypatch.setattr(smf, "record_session_turn", stuck)
+    monkeypatch.setattr(get_session_manager(), "add_message", stuck)
     started = time.time()
     _, state, resp = _pair(gateway)
     assert resp["success"] and state["token"]

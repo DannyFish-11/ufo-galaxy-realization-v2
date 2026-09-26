@@ -245,3 +245,21 @@ def test_a_yes_is_used_up_once_it_has_approved(env):
     yes = _turn("好")
     assert in_turn(yes) == "approved"
     assert in_turn(yes) == "asked"
+
+
+def test_a_notice_lands_in_the_mainline_without_touching_semantic_memory(env, monkeypatch):
+    """面板重开从主线读回这句话;但写入不能经过会加载向量模型的那条门(会卡住网关的事件循环)。"""
+    import core.session_memory_facade as smf
+    from core.conversation_mainline import mainline_session_id
+    from core.device_onboarding.conversation import announce
+    from core.session_manager import get_session_manager
+
+    def must_not_be_used(**kw):
+        raise AssertionError("设备播报不该走 record_session_turn")
+
+    monkeypatch.setattr(smf, "record_session_turn", must_not_be_used)
+    asyncio.run(announce("「书房」连上了"))
+    sid = mainline_session_id()
+    assert sid
+    history = get_session_manager().get_full_history(sid)
+    assert history[-1]["content"] == "「书房」连上了" and history[-1]["role"] == "assistant"
