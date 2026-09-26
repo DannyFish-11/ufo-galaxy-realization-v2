@@ -99,7 +99,7 @@ async def test_stop_is_idempotent_when_nothing_is_running():
     out = await rt.stop_current_activity(reason="hotkey")
     assert out["stopped"] == []
     assert out["presences_interrupted"] == []
-    assert out["errors"] == {}
+    assert out["presences_failed"] == []
 
 
 async def test_stop_interrupts_what_an_ambient_presence_is_saying():
@@ -480,3 +480,41 @@ async def test_a_broken_locality_check_never_blocks_execution(recorded_key, monk
     finally:
         unbind_runtime_session(token)
     assert seen["acting"] is False
+
+
+async def test_a_failing_interrupt_hook_is_named_but_its_exception_is_not_returned():
+    """停止的结果会原样回给 HTTP 调用方 —— 只说哪一段没打断，异常文本只进日志。"""
+    import json
+
+    rt = DesktopPresenceRuntime()
+
+    def boom():
+        raise RuntimeError("secret /home/someone/.config/token")
+
+    handle = rt.open_ambient_presence("voice_duplex", on_interrupt=boom)
+    try:
+        out = await rt.stop_current_activity(reason="panel")
+        assert out["presences_failed"] == [handle]
+        assert "secret" not in json.dumps(out, ensure_ascii=False)
+    finally:
+        await rt.halt_ambient_presence(handle)
+
+
+def test_the_stop_route_does_not_leak_exception_text(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import core.desktop_presence_runtime as dpr
+    from core.routes.panel import create_router
+
+    class _Broken:
+        async def stop_current_activity(self, *, reason="user_stop"):
+            raise RuntimeError("secret /home/someone/.config/token")
+
+    monkeypatch.setattr(dpr, "get_desktop_presence_runtime", lambda: _Broken())
+    app = FastAPI()
+    app.include_router(create_router())
+    resp = TestClient(app).post("/api/v1/presence/stop?reason=panel")
+    assert resp.status_code == 500
+    assert resp.json()["success"] is False
+    assert "secret" not in resp.text, "异常文本回给了调用方"

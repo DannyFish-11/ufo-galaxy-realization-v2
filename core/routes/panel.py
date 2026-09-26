@@ -620,9 +620,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             result = await get_desktop_presence_runtime().stop_current_activity(reason=reason)
             return JSONResponse(content={"success": True, **result})
-        except Exception as exc:  # noqa: BLE001
-            logger.error("presence stop failed: %s", exc)
-            return JSONResponse(content={"success": False, "error": str(exc)}, status_code=500)
+        except Exception:  # noqa: BLE001
+            # 异常细节只进日志,不回给调用方(可能带路径、堆栈、内部状态)。
+            logger.exception("presence stop failed")
+            return JSONResponse(content={"success": False, "error": "停止失败,详见后端日志"}, status_code=500)
 
     @router.get("/api/v1/panel/feed")
     async def get_panel_feed():

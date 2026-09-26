@@ -1911,7 +1911,10 @@ class DesktopPresenceRuntime:
             logger.debug("停止时掐断朗读失败(非致命): %s", exc)
 
         interrupted: List[str] = []
-        errors: Dict[str, str] = {}
+        # 哪几段常驻在场没能打断。**只记句柄、不记异常内容** —— 这个结果会原样回给
+        # HTTP 调用方（/api/v1/presence/stop），异常文本里可能有路径、堆栈、内部状态；
+        # 细节进日志。
+        failed: List[str] = []
         for h, entry in list(self._ambient_registry().items()):
             hook = entry.get("on_interrupt")
             if hook is None:
@@ -1921,9 +1924,9 @@ class DesktopPresenceRuntime:
                 if inspect.isawaitable(outcome):
                     await outcome
                 interrupted.append(h)
-            except Exception as exc:  # noqa: BLE001
-                errors[h] = str(exc)
-                logger.warning("常驻在场打断钩子失败 handle=%s: %s", h, exc)
+            except Exception:  # noqa: BLE001
+                failed.append(h)
+                logger.warning("常驻在场打断钩子失败 handle=%s", h, exc_info=True)
 
         if cancelled or speech_interrupted or interrupted:
             logger.info(
@@ -1937,7 +1940,7 @@ class DesktopPresenceRuntime:
             "stopped": cancelled,
             "speech_interrupted": speech_interrupted,
             "presences_interrupted": interrupted,
-            "errors": errors,
+            "presences_failed": failed,
             "reason": reason,
         }
 
