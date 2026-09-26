@@ -424,9 +424,9 @@ def is_self_authenticating(path: str, method: str) -> bool:
 
 
 async def require_auth(
-    request: Request,
     authorization: Optional[str] = Header(None),
     x_device_id: Optional[str] = Header(None, alias="X-Device-ID"),
+    request: Request = None,  # type: ignore[assignment] — FastAPI 按注解注入;直接调用的(节点鉴权)不传
 ) -> dict:
     """
     FastAPI 依赖函数，用于端点鉴权
@@ -453,7 +453,7 @@ async def require_auth(
     # production mode (GALAXY_MODE=production) forces it on.
     if not is_auth_enabled():
         return {"authenticated": True, "device_id": x_device_id, "auth_enabled": False}
-    if is_self_authenticating(request.url.path, request.method):
+    if request is not None and is_self_authenticating(request.url.path, request.method):
         return {"authenticated": False, "device_id": x_device_id, "self_authenticating": True}
 
     # Security: dev mode bypass removed — all requests require valid tokens。
