@@ -87,6 +87,8 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### 元层（RSI）—— 一个被学习信号闭合、并被权威边界切过一次的循环
 - `core/meta/` - Kernel（采集 → 提案 → 验证 → **裁决** → 生效/回滚 → lesson）+ 六型 artifact
   （内容寻址、lineage 一等）。`GALAXY_META_RSI=off|shadow|on`，默认 off。CLI：`scripts/meta_rsi.py`
+- 面板「全部设置 → 自我改进」只列 `GALAXY_META_RSI` 这一个总闸。同组其余键（Agent 供给、入口分流、Genome、
+  验证超时）默认即生效，登记在 `core/routes/config.py::PANEL_HIDDEN_KEYS`：能存能读，只是不列给面板
 - 三个算子各一个可写面：`data_rsi` → `config/eval_cases/`；`harness_rsi` → `config/genomes/`；
   `model_rsi` 阶段一不开写。算子**不得改验证器**（scripts/、tests/、scorer、证据模型 —— G6）
 - `core/meta/curriculum.py` - 横轴：下一轮跑哪个算子（调度统计，不是裁决），每次选择可审计

@@ -5,10 +5,11 @@
  *
  * 旧的 React 面板被这一版 HUD 整个替换掉了。旧面板里有两处手写的键清单:
  *
- * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(310 个键,10 类)。
+ * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(304 个键,10 类)。
  *   搬过来那天是 303 个、9 类 —— 中间进过一个又挪去了 llm 类,而 llm 不在这份
  *   顺序提示里(那一类按字母序排),所以数目又回到了原点;2026-09-25 加了
- *   「自我改进与分流」一类,7 个键。下面那道数目门盯着这两个数不许烂。
+ *   「自我改进」一类,只有自我改进循环一个开关(同组其余六个键默认即生效,
+ *   后端 `PANEL_HIDDEN_KEYS` 不列给面板)。下面那道数目门盯着这两个数不许烂。
  * - `ModelsTab.tsx` 的 provider 键 —— 供应商那一档能配哪些键(25 个,
  *   下面的 `PROVIDER_KEYS` 是 26 个:多出来的 `OLLAMA_MODEL` 见那里的说明)
  *
@@ -114,13 +115,10 @@ export const KEY_ORDER_HINT: Record<string, string[]> = {
     'OLLAMA_URL', 'GALAXY_ROUTER_ADAPTIVE_CONCURRENCY', 'GALAXY_ROUTER_CB_ENABLED',
     'GALAXY_ROUTER_MAX_QUEUE_DEPTH', 'GALAXY_MODELS_PROBE_BUDGET', 'GALAXY_MODELS_STATUS_TTL',
   ],
-  // 元层与入口分流:三个主开关在前(自我改进循环 / Agent 按需求选脑 / 手机手表不驱动桌面三态),
-  // 其余是它们的细调。
-  meta: [
-    'GALAXY_META_RSI', 'GALAXY_AGENT_SUPPLY', 'GALAXY_PRESENCE_LINE',
-    'GALAXY_GENOME', 'GALAXY_SYSTEM_PROMPT', 'GALAXY_PRESENCE_LINE_LEGACY_SOURCES',
-    'GALAXY_ENGINEERING_VERIFY_TIMEOUT_S',
-  ],
+  // 元层:面板上只有自我改进循环这一个总闸。同类的其余键(Agent 选脑、入口分流、
+  // Genome、验证超时)默认即生效,后端 core/routes/config.py::PANEL_HIDDEN_KEYS
+  // 不把它们列给面板,这里也就不写它们的顺序 —— 写了也查不到。
+  meta: ['GALAXY_META_RSI'],
   memory: [
     'GALAXY_CONTEXT_ARCHIVE_MAX_MB', 'GALAXY_CONTEXT_ARCHIVE_MIN_DAYS',
     'GALAXY_PHASE_LEDGER_DAYS', 'GALAXY_EXPERIENCE_STRATEGY', 'GALAXY_ACI_ENABLED',
@@ -283,7 +281,7 @@ export const CATEGORIES: readonly CategoryDef[] = [
   { key: 'voice', label: '说话与听' },
   { key: 'perception', label: '感知' },
   { key: 'agent', label: '思考与执行' },
-  { key: 'meta', label: '自我改进与分流' },
+  { key: 'meta', label: '自我改进' },
   { key: 'memory', label: '记忆' },
   { key: 'devices', label: '设备与跨设备' },
   { key: 'security', label: '安全与权限' },

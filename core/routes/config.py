@@ -23,7 +23,28 @@ ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 from core.routes.config_bundles import CONFIG_BUNDLES, owned_keys  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 
-__all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA"]
+__all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
+
+#: 登记在 CONFIG_SCHEMA 里、但**不列在面板上**的键。
+#:
+#: 仓库所有者的决定:元层与入口分流这一组,面板上只留自我改进循环(GALAXY_META_RSI)
+#: 一个开关;其余的默认就在「开 / 生效」的一侧,用户没有理由去动,列出来只是多一排
+#: 看不懂的控件。
+#:
+#: 隐藏不等于没接上:它们仍在 CONFIG_SCHEMA 里 —— POST /api/config 照收、.env 照写、
+#: 环境变量照读,只是 GET /api/config/all 不列。tests/test_panel_hidden_config_keys.py
+#: 钉住两条:隐藏的开关默认必须在「开」的一侧(否则就是一个用户找不到、又默认关着的
+#: 功能);GALAXY_META_RSI 永远不许隐藏 —— 它是自我改进循环的总闸。
+PANEL_HIDDEN_KEYS = frozenset(
+    {
+        "GALAXY_AGENT_SUPPLY",  # 默认 on:声明了需求的 Agent 按需求选脑
+        "GALAXY_PRESENCE_LINE",  # 默认开:手机/手表的请求不驱动桌面三态
+        "GALAXY_PRESENCE_LINE_LEGACY_SOURCES",  # 留空 = 所有入口都走新行为
+        "GALAXY_GENOME",  # 留空 = 元层指针或 default
+        "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
+        "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
+    }
+)
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -131,6 +152,8 @@ async def get_config():
 
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
+        if key in PANEL_HIDDEN_KEYS:
+            continue  # 登记了、能存能读,只是不列在面板上(见 PANEL_HIDDEN_KEYS)
         result[key] = {
             "value": os.environ.get(key, meta["default"]),
             "default": meta["default"],
