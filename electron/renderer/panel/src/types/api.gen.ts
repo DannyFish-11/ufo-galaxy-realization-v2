@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 410 条 · 组件 schema 107 个
+// 路径 411 条 · 组件 schema 107 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -31,6 +31,7 @@ export type ApiPath =
   | "/api/remote-desktop/status"
   | "/api/v1/acceptance/cross-repo-chain"
   | "/api/v1/acceptance/dual-repo-completeness-baseline"
+  | "/api/v1/agent/activity"
   | "/api/v1/agent/autonomous"
   | "/api/v1/agent/create"
   | "/api/v1/agent/deploy"
@@ -445,6 +446,7 @@ export const API_METHODS = {
   "/api/remote-desktop/status": ["get"],
   "/api/v1/acceptance/cross-repo-chain": ["get"],
   "/api/v1/acceptance/dual-repo-completeness-baseline": ["get"],
+  "/api/v1/agent/activity": ["get"],
   "/api/v1/agent/autonomous": ["post"],
   "/api/v1/agent/create": ["post"],
   "/api/v1/agent/deploy": ["post"],
@@ -906,6 +908,7 @@ export interface BundleUpdateRequest {
 }
 
 export interface ChatRequest {
+  "client_surface"?: string | null;
   "context"?: Array<Record<string, string>>;
   "device_id"?: string;
   "entry_mode"?: string | null;

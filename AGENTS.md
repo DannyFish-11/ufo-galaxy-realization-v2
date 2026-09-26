@@ -108,9 +108,11 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   供不上就报（G14）。`GALAXY_AGENT_SUPPLY=off|shadow|on`，默认 on（没声明需求的 Agent 什么都不算、行为照旧）
 
 ### 入口分流与参与方
-- `core/presence_line.py` - **只有电脑这边发起的请求进桌面三态**（本机感官、桌面控制面、不带设备号或带本机
-  标识的对话；电脑发起的跨设备/混合任务也算）。其余任何设备发起的——不看类型、不看是否登记——都不进：
-  直接交给智能体，相位只回推发起设备，也不在电脑上朗读回复；真在本机落手时才交还桌面。这是架构，**没有开关**
+- `core/presence_line.py` - **只有电脑这边发起的请求进桌面三态**（本机感官、桌面控制面、桌面外壳声明
+  `client_surface=desktop_shell` 的对话、带本机标识或不带设备号且连接来自本机的请求；电脑发起的跨设备/混合任务
+  也算）。其余——任何别的设备、别的机器、智能体自己的定时心跳——都不进：直接交给智能体，不在电脑上朗读或
+  边生成边念；真在本机落手时才交还桌面（回答仍归发起方）。这是架构，**没有开关**。自主工作用
+  `DesktopPresenceRuntime.autonomous_session(kind)`；`GET /api/v1/agent/activity` 列出全部请求（含不进三态的）
 - `core/participant_admission.py` - 非安卓设备的通用接入（注册 → 进 mesh → 提交任务），
   全程不经安卓命名模块。`core/participant_truth_ingress.py` - 参与方真相的通用入口（P3）
 - `core/runtime/__init__.py` 是 PEP 562 **惰性**再导出：导入 `core.runtime.*` 子模块不会装进安卓运行时
@@ -197,6 +199,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `POST /api/v1/participants/{id}/tasks` - 已接入的参与方提交任务
 - `POST /api/v1/participants/{id}/heartbeat` / `.../disconnect` - 保活与主动离开（写安卓心跳/断连写的同一批模块）
 - `GET /api/v1/participants` - 列表（需 API 鉴权）
+
+### 智能体活动
+- `GET /api/v1/agent/activity` - 智能体正在处理的全部请求：发起方、是否在桌面三态里、相位（需 API 鉴权）
 
 ### WebSocket
 - `/ws/device/{device_id}` - 设备连接

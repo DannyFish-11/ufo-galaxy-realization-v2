@@ -107,7 +107,9 @@ from core.desktop_presence_system import (
 from core.liminal_activity import bind_runtime_session as _bind_runtime_session
 from core.liminal_activity import unbind_runtime_session as _unbind_runtime_session
 from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
+from core.presence_line import activity_snapshot as _activity_snapshot
 from core.presence_line import advance_detached as _advance_detached
+from core.presence_line import autonomous_session as _autonomous_session
 from core.presence_line import bind_presence_line as _bind_presence_line
 from core.presence_line import register_local_identity as _register_local_identity
 
@@ -215,7 +217,8 @@ class RuntimeSession:
         # 表达期的内容：这一轮用什么手法动手（``HybridExecutionDecision.to_dict()``）。
         # 由 core.liminal_activity.note_hybrid_execution 登记，同样经 200ms tick 上行。
         self.hybrid_execution: Optional[Dict[str, Any]] = None
-        self.host_bound: bool = True  # False = 别的设备发起，不进桌面三态（core/presence_line.py）
+        self.host_bound: bool = True  # 此刻是否外显到桌面三态（core/presence_line.py）
+        self.desktop_originated: bool = True  # 是不是电脑发起的；落手交还桌面也不改它
         self.origin_device_id: str = ""
 
     # ------------------------------------------------------------------
@@ -833,6 +836,8 @@ class DesktopPresenceRuntime:
         multimodal_context: Optional[Any] = None,
         use_constellation: bool = True,
         entry_mode: Optional[str] = None,
+        client_host: Optional[str] = None,
+        client_surface: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Drive the full subject lifecycle for one top-level request.
@@ -876,6 +881,8 @@ class DesktopPresenceRuntime:
                 from the continuous ``MultimodalIngressBus`` host perception stream.
             use_constellation: When *True* (default) prefer
                 ConstellationRuntime for ``source="e2e"`` requests.
+            client_host / client_surface: HTTP 入口的连接来源与发起界面，只给入口分流判
+                「是不是电脑发起的」用（见 core/presence_line.py），不往下传。
             entry_mode: Pre-resolved execution mode (``"local"`` |
                 ``"cross_device"`` | ``"hybrid"``).  Forwarded to OpenClawd
                 without modification so the correct liminal branch is taken.
@@ -895,7 +902,7 @@ class DesktopPresenceRuntime:
                 }
         """
         rsession = self._create_session(source)
-        _bind_presence_line(rsession, source, device_id)
+        _bind_presence_line(rsession, source, device_id, client_host=client_host, client_surface=client_surface)
         # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
         # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
         # core/liminal_activity.py。
@@ -1333,7 +1340,7 @@ class DesktopPresenceRuntime:
         try:
             from core.speech_output import speak_response
 
-            if source != "ambient" and rsession.host_bound:
+            if source != "ambient" and rsession.desktop_originated:
                 speak_response(result.get("response", ""), source=source)
         except Exception:  # noqa: BLE001
             pass
@@ -1713,6 +1720,14 @@ class DesktopPresenceRuntime:
         session = RuntimeSession(source=source)
         self._active_sessions[session.runtime_session_id] = session
         return session
+
+    def autonomous_session(self, kind: str):
+        """智能体自己发起的工作用的会话：不进三态，真在本机落手时才进（core/presence_line.py）。"""
+        return _autonomous_session(kind, self._create_session, self._active_sessions)
+
+    def agent_activity(self) -> Dict[str, Any]:
+        """智能体此刻在处理的全部请求，含不进三态的 —— ``presence_summary`` 只数进三态的。"""
+        return _activity_snapshot(self._active_sessions.values())
 
     # ------------------------------------------------------------------
     # 常驻在场(ambient presence)

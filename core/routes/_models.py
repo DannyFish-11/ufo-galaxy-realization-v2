@@ -76,6 +76,9 @@ class ChatRequest(BaseModel):
     # participant.  Validated via the canonical contract layer (PR package 1,
     # post-533 dual-repo runtime unification).
     source_runtime_posture: Optional[str] = None
+    # 发起界面。只有电脑上的桌面外壳（Electron）会带 "desktop_shell"：它据此明确是电脑
+    # 发起的，进桌面三态（见 core/presence_line.py）。别的客户端不带。
+    client_surface: Optional[str] = None
 
     @field_validator("source_runtime_posture", mode="before")
     @classmethod

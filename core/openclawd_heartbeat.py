@@ -23,6 +23,7 @@ Key behaviours
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import time
@@ -325,13 +326,17 @@ class HeartbeatScheduler:
             }
         ]
 
-        # 5. Call OpenClawd.process()
+        # 5. Call OpenClawd.process() inside an autonomous session: heartbeat work is the
+        #    agent's own initiative, so it stays out of the desktop tri-state — unless it
+        #    actually acts on this machine, in which case note_local_actuation hands it to
+        #    the desktop (core/presence_line.py).
         try:
-            result = await self._openclawd.process(
-                message=prompt,
-                session_id=f"heartbeat_{self._cycle_count}",
-                context=context,
-            )
+            async with _autonomous_presence("heartbeat"):
+                result = await self._openclawd.process(
+                    message=prompt,
+                    session_id=f"heartbeat_{self._cycle_count}",
+                    context=context,
+                )
         except Exception as exc:
             logger.error("Heartbeat: OpenClawd.process() failed: %s", exc)
             return
@@ -355,6 +360,17 @@ class HeartbeatScheduler:
                 tier_label,
                 response_text,
             )
+
+
+def _autonomous_presence(kind: str) -> Any:
+    """The desktop runtime's autonomous session, or a no-op when the runtime is unavailable."""
+    try:
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+        return get_desktop_presence_runtime().autonomous_session(kind)
+    except Exception as exc:  # noqa: BLE001 — presence must never block the heartbeat
+        logger.warning("Heartbeat: autonomous presence session unavailable: %s", exc)
+        return contextlib.AsyncExitStack()  # async no-op (nullcontext is async-capable only on 3.10+)
 
 
 # ---------------------------------------------------------------------------

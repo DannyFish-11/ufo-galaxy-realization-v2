@@ -89,6 +89,15 @@ function backendBase(): string {
 }
 const BASE = backendBase();
 
+/**
+ * 是不是跑在电脑上的桌面外壳里。**只有 Electron 的 preload 会挂 `galaxyShell`**,在浏览器里
+ * 打开同一份面板(哪怕是手机的浏览器)就没有它。对话请求据此声明
+ * `client_surface: 'desktop_shell'` —— 后端的入口分流(core/presence_line.py)凭这句认定
+ * 「这是电脑发起的」,让它进桌面三态;不靠连接地址,因为容器、端口转发这类部署里外壳的
+ * 连接地址未必是本机地址。
+ */
+const IN_DESKTOP_SHELL = Boolean((window as { galaxyShell?: unknown }).galaxyShell);
+
 function mount(host: HTMLElement): void {
   const store = new Store(initialState);
 
@@ -686,7 +695,11 @@ function mount(host: HTMLElement): void {
       // 刚刚从本地存的 id 把上一条对话读了回来。于是屏幕上显示的是 A 的历史、
       // 新说的话记进了 B,两边都「成功」,没有一处报错。空串时后端照旧自己开
       // 一条,并在 meta 帧里把 id 告诉我们。
-      { message: text, session_id: store.state.sessionId },
+      {
+        message: text,
+        session_id: store.state.sessionId,
+        ...(IN_DESKTOP_SHELL ? { client_surface: 'desktop_shell' } : {}),
+      },
       {
         onPhase: (phase) => store.patch({ phase }),
         // 后端说这轮记到哪条会话上了。**接住它** —— 历史、记忆卡片、喂文件
