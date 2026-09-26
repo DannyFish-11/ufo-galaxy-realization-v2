@@ -920,6 +920,10 @@ body {
 }
 .send:hover { filter: brightness(1.1); }
 .send:focus-visible { outline: 2px solid var(--a-deep); outline-offset: 2px; }
+/* 停止键:同一个位置,换成实心方块,底色压深一档 —— 余光里就分得出此刻按下去是
+   「说」还是「停」。不换成红色:这一面没有红,一块红会比它要说的事大得多。 */
+.send[data-mode='stop'] { background: linear-gradient(162deg, var(--a-deep), #5d5466); }
+.send[data-mode='stop'] path { fill: currentColor; }
 
 /* 还没接上的:照画、照说,但点不动。藏起来的话人只会反复去点。 */
 

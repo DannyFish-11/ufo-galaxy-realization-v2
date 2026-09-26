@@ -508,3 +508,64 @@ class TestTheDegradationLeavesATrace:
         css = _css()
         block = re.search(r"\.wall\s*\{([^}]*)\}", css).group(1)
         assert "var(--trust-sat" in block, ".wall 的 filter 没走变量 —— 换个地方再加滤镜就会互相覆盖"
+
+
+class TestTheRimShowsWhatPerceptionSays:
+    """急停之后边光照样亮着 —— 那条呼吸曾是 CSS 关键帧。
+
+    关键帧里的 ``opacity`` 压过同一属性的普通声明：``--rim`` 写成 0（急停、没有通路）
+    也没用，屏幕上照旧一明一暗地亮着。第一态那条光是「我在看着」—— 它说的和事实
+    正好相反。所以呼吸改由 app.js 按帧给数（``--breath``），与浓度在 CSS 里相乘。
+    """
+
+    def test_the_rim_opacity_is_not_owned_by_a_keyframe(self) -> None:
+        css = _css()
+        m = re.search(r"(?m)^\.rim\s*\{([^}]*)\}", css)
+        assert m, ".rim 没了"
+        body = m.group(1)
+        assert "animation" not in body, "边光又挂上了关键帧 —— 它会压过 --rim，急停后照样亮"
+        assert re.search(r"opacity:\s*calc\(var\(--rim\)\s*\*\s*var\(--breath\)\)", body), "浓度与呼吸不是相乘关系了"
+        assert "@keyframes rim-breathe" not in css
+
+    def test_the_breath_is_given_every_frame(self) -> None:
+        js = _js()
+        assert "'--breath'" in js, "app.js 不再给呼吸 —— 边光会定格在某一口气上"
+        assert "breathPeriod" in js and "--c-rim" in js, "呼吸周期不再读 --c-rim —— 判据会在两处漂开"
+
+
+class TestTimeIsWallClock:
+    """软件合成下第二态 4–6fps。每帧最多推进一个定值的话，帧一慢整段编排跟着慢：
+    实测展开原本 1.7 秒走了 5 秒以上 —— 回答都出来了，空间还没长完。"""
+
+    def test_the_loop_integrates_real_elapsed_time(self) -> None:
+        js = _js()
+        assert re.search(r"const\s+MAX_GAP\s*=", js) and re.search(r"const\s+STEP\s*=", js)
+        assert not re.search(r"Math\.min\([^)]*,\s*0\.05\)", js), "又回到了每帧最多推进 0.05 秒"
+
+
+class TestTheIslandSaysHowToStop:
+    """它在动你的鼠标键盘时，岛上说一句「正在操作」，以及按哪个键能停。"""
+
+    def test_the_hint_reads_the_contract(self) -> None:
+        js = _js()
+        assert "r.stop_key" in js, "岛上那句「Esc 停止」不再照 render.stop_key 写"
+        # 不能从 acting 推出一个键名来：分不清人按的和注入的键的平台上，动手期间也没有键。
+        assert not re.search(r"['\"]Esc['\"]", js), "app.js 里写死了键名 —— 那是替后端承诺它占到了"
+
+    def test_acting_has_its_own_word(self) -> None:
+        js = _js()
+        assert re.search(r"ACTING_WORD\s*=\s*'正在操作'", js)
+        assert "r.acting" in js or "render.acting" in js
+
+
+class TestInvisibleLayersAreNotComposited:
+    """没有 GPU 时，看不见的全屏模糊层和 3D 墙照样每帧在 CPU 上合成。"""
+
+    def test_the_flags_hide_them(self) -> None:
+        css = _css()
+        assert re.search(r":root\[data-rim='off'\]\s*\.rim\s*\{\s*visibility:\s*hidden", css)
+        assert re.search(r":root\[data-space='off'\]\s*\.stage\s*\{\s*visibility:\s*hidden", css)
+
+    def test_the_renderer_sets_them(self) -> None:
+        js = _js()
+        assert "_flag('rim'" in js and "_flag('space'" in js

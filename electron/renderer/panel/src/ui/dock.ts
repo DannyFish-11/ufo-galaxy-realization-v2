@@ -18,6 +18,8 @@ import { platform } from '../platform';
 const ICONS = {
   plus: 'M12 5v14M5 12h14',
   send: 'M12 19V5M5 12l7-7 7 7',
+  // 停:一个实心的方块。线框方块在 15px 上读起来像一个空的复选框。
+  stop: 'M8 8h8v8H8z',
   // 喂入口那三块。图要认得出是什么,字就不用解释它是什么。
   image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5h.01',
   file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5',
@@ -66,11 +68,14 @@ export interface DockHandles {
     tiers: TierView | null,
     tierGaps: readonly string[],
     popover: 'feed' | 'settings' | null,
+    stoppable: boolean,
   ): void;
 }
 
 export interface DockCallbacks {
   onSend(text: string): void;
+  /** 让它现在住手。只在发送键变成停止键的时候按得到(见 render 的 stoppable)。 */
+  onStop(): void;
   onTogglePopover(which: 'feed' | 'settings'): void;
   onToggleBundle(key: Bundle['key']): void;
   /** 打开那 332 个键的细调面。这个按钮从前不接任何东西 —— 一个死键。 */
@@ -141,11 +146,27 @@ export function createDock(cb: DockCallbacks): DockHandles {
     delete field.dataset['lit'];
   });
 
+  /**
+   * 发送键,在它忙的时候就是停止键。
+   *
+   * **同一个位置,不另加一个键。** 它在回答、在念、在动你的鼠标键盘的时候,人要找的
+   * 就是「怎么让它停」—— 而手本来就在这儿。另开一个位置的话,那一刻人得先找到它。
+   *
+   * 回车照旧是发送:忙的时候接着打字、接着说,是正当的;按停止只能是有意的那一下。
+   */
   const send = document.createElement('button');
   send.className = 'send';
   send.type = 'button';
-  send.setAttribute('aria-label', '发送');
-  send.append(icon(ICONS.send, 15, 2));
+  const sendIcon = icon(ICONS.send, 15, 2);
+  const stopIcon = icon(ICONS.stop, 13, 2);
+  let stoppable = false;
+  function paintSend(): void {
+    send.dataset['mode'] = stoppable ? 'stop' : 'send';
+    send.setAttribute('aria-label', stoppable ? '停止' : '发送');
+    send.title = stoppable ? '让它现在停下' : '';
+    send.replaceChildren(stoppable ? stopIcon : sendIcon);
+  }
+  paintSend();
   field.append(input, send);
 
   function submit(): void {
@@ -154,7 +175,10 @@ export function createDock(cb: DockCallbacks): DockHandles {
     input.value = '';
     cb.onSend(text);
   }
-  send.addEventListener('click', submit);
+  send.addEventListener('click', () => {
+    if (stoppable) cb.onStop();
+    else submit();
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) submit();
   });
@@ -364,7 +388,12 @@ export function createDock(cb: DockCallbacks): DockHandles {
     tiers: TierView | null,
     tierGaps: readonly string[],
     popover: 'feed' | 'settings' | null,
+    canStop: boolean,
   ): void {
+    if (canStop !== stoppable) {
+      stoppable = canStop;
+      paintSend();
+    }
     feed.dataset['open'] = String(popover === 'feed');
     settings.dataset['open'] = String(popover === 'settings');
     plus.setAttribute('aria-expanded', String(popover === 'feed'));

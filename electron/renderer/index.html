@@ -47,6 +47,8 @@ body {
   --c-hot:  #ecdfeb;   /* 边光的热芯，近白 */
 
   --rim: 1;            /* 边光浓度 —— 由感知状态给 */
+  --breath: 1;         /* 边光的呼吸 —— 由 app.js 每帧给（见 .rim 那段为什么不用 animation） */
+  --c-rim: 6s;         /* 呼吸周期。app.js 从这里读，不另写一份数 */
   --my: 0%;            /* 收回：两臂上退的阈值 */
   --mx: 0%;            /* 收回：顶边左→右的阈值 */
   --r: 260%;           /* 铺回：从顶部中间长开的半径。260% = 全透，即"没在铺回" */
@@ -70,8 +72,16 @@ body {
   border: 3px solid var(--c-warm); border-radius: 12px;
   border-bottom-color: transparent;
   filter: blur(3.6px);                       /* 中晕那一层 */
-  opacity: var(--rim);
-  animation: rim-breathe 6s ease-in-out infinite;
+  /* 浓度 = 感知给的那一档 × 呼吸。**呼吸不能写成 animation。**
+     关键帧会压过同一属性上的普通声明：原先 opacity: var(--rim) 和一条改 opacity 的
+     呼吸动画挂在同一层，于是 --rim 一次都没生效过 —— 实测按了隐私急停，三层边光的
+     不透明度仍在 0.63–0.75 之间呼吸；「没有感知通路」「朗读时麦克风被屏蔽」那几档
+     也全被吃掉。只有开了「减少动效」（动画被关掉）时它才是对的。
+     桌宠那边为同一个坑写过注释（姿势与呼吸必须分层），这里又栽了一次。
+     所以呼吸改成一个数，由 app.js 按帧给（静默时 12fps，对一口 6 秒的呼吸足够），
+     两个量在这里相乘。顺带省掉一条全屏模糊层的 60fps 合成 —— 没有 GPU 时那是
+     第一态的主要开销。 */
+  opacity: calc(var(--rim) * var(--breath));
   /* 三条遮罩取交集：前两条管收回，第三条管铺回（dissolving 时用）。
      不用的那条把半径开到 260% 就是全透，互不干扰。
 
@@ -105,10 +115,19 @@ body {
 }
 .rim.bloom {
   inset: -4px; border-width: 8px; border-radius: 16px;
-  filter: blur(12px); opacity: calc(var(--rim) * .4);
+  filter: blur(12px); opacity: calc(var(--rim) * var(--breath) * .4);
 }
-/* 6s ≈ 0.167 Hz —— 与面板同一条纪律：刻意避开 0.18–0.22 Hz 那一带。 */
-@keyframes rim-breathe { 0%, 100% { opacity: .62; } 50% { opacity: 1; } }
+/* 呼吸周期 --c-rim = 6s ≈ 0.167 Hz —— 与面板同一条纪律：避开 0.17–0.25 Hz 那一带
+   （判据在 panel/src/motion.ts，tests/test_overlay_reads_the_two_axis_contract.py 核这里）。 */
+
+/* ── 看不见的就别画 ──
+   边光整条收回、或感知给的浓度是 0（急停 / 没有通路）时，三层全屏模糊照样在合成；
+   墙没长出来时，四面墙和那层霭也照样在合成。有 GPU 时这些都不值一提，没有 GPU
+   （GALAXY_ELECTRON_GPU=0，软件合成）时它们就是主要开销：实测 1080p 下第二态
+   只有 3.3fps，去掉这几样之后到 50fps。app.js 在它们确实不可见时打上标记。 */
+:root[data-rim='off'] .rim { visibility: hidden; }
+/* 空间那一条（:root[data-space='off'] .stage）写在 .stage 的定义后面 ——
+   .stage 的主规则要排第一个，守卫按第一条认透视在不在它身上。 */
 
 /* ═══ ② 第二态：四条边一块儿向后延伸 ═══
    不是"推"、不是翻转 —— 四面墙一开始就垂直于屏幕（转角写死 90°，不做动画），
@@ -123,6 +142,7 @@ body {
 .stage { position: fixed; inset: 0; pointer-events: none; z-index: 9997;
          perspective: var(--persp, 800px); perspective-origin: 50% 48%; }
 .box { position: absolute; inset: 0; transform-style: preserve-3d; }
+:root[data-space='off'] .stage { visibility: hidden; }
 
 /* ⚠ .box 这一层不能挂 opacity / filter / mask / mix-blend-mode ——
       它们都会让 preserve-3d 失效，四面墙会被拍扁。浓度写在每面墙自己身上
@@ -198,6 +218,12 @@ body {
 #islandMode { font-family: ui-monospace, Consolas, monospace; font-size: 10px;
               color: var(--c-cool); padding: 1px 6px; border-radius: 999px;
               background: rgba(255,255,255,.08); }
+/* 它正在动你的鼠标键盘时，怎么叫停写在最近处。岛上别的字都在说它在干嘛，只有这一句
+   是给人的 —— 所以用热芯那一档的暖白，不用冷调。**只在后端确实占到了那个键时才出现**
+   （render.stop_key，见 core/stop_key.py）：写着「Esc 停止」而按了没用，比不写更糟。 */
+#islandHint { font-size: 10.5px; color: var(--c-hot); padding: 1px 7px; border-radius: 999px;
+              background: rgba(236,223,235,.12);
+              box-shadow: inset 0 0 0 1px rgba(236,223,235,.24); }
 
 /* ── 桌宠：坐在岛上 ──
    **三层，刻意的。** 姿势在外层、呼吸在中层、眨眼在内层：同挂一层的话动画那条
@@ -263,10 +289,13 @@ body {
    整条覆盖掉的话（.rim 那三层各自带着 blur）会把模糊一起抹了。 */
 :root[data-trust='anchor']   { --trust-sat: .22; }
 :root[data-trust='degraded'] { --trust-sat: .12; --trust-bri: .97; }
+/* 实算的那一档不挂滤镜。saturate(1) brightness(1) 是恒等变换，但浏览器照样为每面墙
+   单开一层渲染面 —— 软件合成下这一项就让第二态的帧率掉了一半。 */
+:root[data-trust='live'] .wall, :root[data-trust='live'] .mist { filter: none; }
 
 /* 关了动效的人：光不走，但**在场要留着** —— 那是事实，不是动效。 */
 @media (prefers-reduced-motion: reduce) {
-  .rim { animation: none; opacity: calc(var(--rim) * .86); }
+  .rim { opacity: calc(var(--rim) * .86); }
   .rim.bloom { opacity: calc(var(--rim) * .34); }
   /* 呼吸和眨眼停掉，但**姿势和眼睛的开合都留着** —— 那两样是事实不是动效
      （它们是 transform / y / height，不是 animation）。所以这里不能图省事
@@ -305,6 +334,7 @@ body {
     </svg>
     <span id="islandText">Galaxy</span>
     <span id="islandMode" hidden></span>
+    <span id="islandHint" hidden></span>
   </span>
 </div>
 

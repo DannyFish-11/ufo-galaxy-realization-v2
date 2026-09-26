@@ -457,7 +457,8 @@ class TestGroupFHybridProducer:
 
         from core.hybrid_executor import HybridExecutionArbiter
 
-        src = inspect.getsource(HybridExecutionArbiter.execute)
+        # execute 只是外面那层「正在动手」的登记,选型在本体里。
+        src = inspect.getsource(HybridExecutionArbiter._execute_body)
         assert 'mode="sequential_degrade"' not in src, "执行器又把模式写死了 —— 策略引擎再次变成摆设"
         assert "evaluate_hybrid_execution_mode" in src, "执行器没有调用策略引擎"
 

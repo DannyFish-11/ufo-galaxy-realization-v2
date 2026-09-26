@@ -7,7 +7,10 @@
  *   过渡    两臂同时上退 → 顶边从左往右收 → 灵动岛从上边框长出来；
  *           同时四条边一块儿向后延伸出空间（不是"推"、不是翻转，只长深度）。
  *   第二态  空间就是沙盒，推演与决策在里面发生。岛上放文字，空间本身不写字。
- *   第三态  **两种，方向相反**（见下面 TRANSITION_KIND 那一段）。
+ *   第三态  空间收回，屏幕是干净的 —— 它在出字、出声、或动手。
+ *           **它在动你的鼠标键盘时**，岛从上边框长出来说一句「正在操作」，
+ *           以及（后端确实占到了叫停键的话）怎么叫停。
+ *   收场    光从顶部中间铺回三条边 —— 不是把收回倒着放。
  *   急停    同一个收拢手势，但没有岛滑出，顶上只留一道贴边细线。
  *
  * 为什么整套换掉了 WebGL
@@ -22,8 +25,12 @@
  * 有 0.13~0.35 秒纯黑），以及 `u_intent` 声明了但着色器里一次都没读 ——
  * 每帧都在 setUniform，一个像素都没到达。
  *
- * 现在要画的东西本来全是形状，交给合成器（渐变 + 3D transform + 遮罩）：
- * 有 GPU 走 GPU，没有就走软件光栅，两条路都便宜；箱体透视是浏览器原生能力。
+ * 现在要画的东西本来全是形状，交给合成器（渐变 + 3D transform + 遮罩）。
+ * **但软件合成下它并不天然便宜**：全屏的模糊层、带滤镜的 3D 面，每一帧都要在
+ * CPU 上重新合成。实测 1080p、无 GPU 时第二态只有 3.3fps —— 主要花在一条一直
+ * 在跑的边光呼吸动画（边光早就收回了，它还在合成）和四面墙上恒等的滤镜上。
+ * 所以看不见的层打标记不画（index.html 的 data-rim / data-space），呼吸改由这里
+ * 按帧给数，实算时不挂滤镜。
  *
  * 关于 mix-blend-mode
  * -------------------
@@ -36,10 +43,12 @@
  * ----------------
  * 整体编排跟**主轴** `render.lifecycle`（silent / liminal / manifest）——
  * core/phase_contract.py 写明它是"渲染端的首要依据"。
- * 退场看 `render.transition_kind`，不看深度往哪边走（理由见下）；副轴的驻留位
- * `render.is_returning` 给它兜底 —— 那一位是一拍性的，掉一拍消散就没了。
+ * 转移看**驻留的** `render.transition_seq` + `render.last_transition`：序号变了
+ * 就是发生过一次转移，不怕某一帧丢了、也不怕中途才连上。旧后端没有序号时退回
+ * 一拍性的 `render.transition_kind`；副轴的驻留位 `render.is_returning` 再兜一层。
  * 第一态的浓度、眼睛、急停来自 `render.perception`（四模态五档 + privacy_paused）。
- * 岛上的字来自 `render.liminal_activity` 与 `render.hybrid_execution.mode`。
+ * 岛上的字来自 `render.liminal_activity`、`render.hybrid_execution.mode` 与
+ * `render.acting`（它此刻在不在动手）与 `render.stop_key`（按哪个键能停）。
  * 空间的可信度来自 `render.degraded` 与 `render.source`（判定与面板同一份）。
  *
  * 旧后端不发 `render` 时逐位退回读 `payload.phase`，覆盖层绝不因契约缺席而停摆。
@@ -69,6 +78,30 @@ const SEG = {
   grow: [0.08, 0.72],   // 四壁向后延伸
   isle: [0.46, 0.88],   // 灵动岛从上边框长出来
 };
+
+// ── 与空间编排无关的三段时长（秒）──
+//
+// 边光自己收回去：从亮着直接进表达期（比如静息里直接开口说话）时，边光没有跟着
+// 空间收过，得自己收。走同一条路径（两臂上退 → 顶边左→右），用时与空间编排里
+// 那一段相当。原先这里是一帧里直接从全亮切到全收。
+const HIDE_SECONDS = 0.9;
+// 光从顶部中间铺回三条边。原先是 spread += 0.85 * dt，约 1.18 秒，不改。
+const SPREAD_SECONDS = 1 / 0.85;
+// 动手期间那座岛自己长出来 / 收回去（表达期空间是收着的，岛不能跟着空间走）。
+const ISLE_SECONDS = 0.45;
+
+// ── 时间怎么走 ──
+//
+// 原先每帧最多只推进 0.05 秒：帧一慢，整段编排跟着变慢。软件合成下实测第二态
+// 4–6fps，展开原本 1.7 秒，实际走了 5 秒以上 —— 回答都出来了，空间还没长完。
+// 现在按墙钟走：一帧里过了多久就推进多久，拆成小步给弹簧（它需要小步长才稳），
+// 只在间隔大到不正常（切走窗口、休眠）时封顶，免得回来时一步跳到头。
+const STEP = 1 / 60;
+const MAX_GAP = 0.25;
+
+// 呼吸的起伏：与原先那条关键帧同一对数（.62 ↔ 1）。周期读 index.html 的 --c-rim。
+const BREATH_LO = 0.62;
+const BREATH_HI = 1.0;
 
 // 阈限态越往后使劲，桌宠喘得越快。**这四个数就是面板那只桌宠的那四个数**
 // （panel/src/ui/pet.ts 的 BREATH），一字不差 —— 两只是同一只东西，不能一只
@@ -121,6 +154,8 @@ const MODE_WORD = {
   none: '', sequential_degrade: '顺序降级', parallel_race: '并行竞速',
   staged_hybrid: '分段混合', local_preferred: '本机优先', remote_preferred: '云端优先',
 };
+// 它在动你的鼠标键盘时岛上那句话。
+const ACTING_WORD = '正在操作';
 
 // 五档模态状态 → 边光浓度。**取值与含义抄自 core/phase_contract.MODALITY_STATES
 // 的注释**，那里逐档写明了该怎么画；这里不另立一套说法。
@@ -137,8 +172,10 @@ class GalaxyOverlay {
   constructor() {
     this.root = document.documentElement;
     this.island = document.getElementById('island');
+    this.islandInner = this.island ? this.island.querySelector('.isl-in') : null;
     this.islandText = document.getElementById('islandText');
     this.islandMode = document.getElementById('islandMode');
+    this.islandHint = document.getElementById('islandHint');
     this.pet = document.getElementById('pet');
 
     // 后端每一拍给的东西。拿不到就保持 null —— 绝不构造，也绝不假装知道。
@@ -151,10 +188,26 @@ class GalaxyOverlay {
     this.open = 0;
     this.openV = 0;
 
-    // 铺回（只在 dissolving 用）：光从顶部中间朝左右两边长开，再顺两边下来。
+    // 边光收回了多少：0 = 三条边全亮，1 = 全部收回。第二态里它跟着空间的编排走
+    // （SEG.pull 那一段），表达期由它自己收完（HIDE_SECONDS）。
+    this.hide = 0;
+
+    // 铺回：光从顶部中间朝左右两边长开，再顺两边下来。铺完停在 1，边光全亮。
     this.spreading = false;
     this.spread = 0;
 
+    // 动手期间那座岛的大小（与空间编排里长出来的那座取大）。
+    this.isleAct = 0;
+    // 岛展开到最大时多宽 —— 按岛上此刻那几个字量出来，不写死（见 _paintIsland）。
+    this.isleMax = 248;
+
+    // 边光的呼吸。周期读 index.html 的 --c-rim（判据在那边，这里不另写一份数）。
+    this.breathT = 0;
+    this.breathPeriod = 6;
+    this.reducedMotion = false;
+
+    // 转移：最近见过的驻留序号。null = 还没见过 —— 第一帧只记下，不补演。
+    this._seenSeq = null;
     this._lastKind = 'none';
     this._lastReturning = false;
     this._lastAct = '';
@@ -163,12 +216,25 @@ class GalaxyOverlay {
   }
 
   init() {
+    this._readRhythm();
     this._connectBackend();
     this._apply();
     requestAnimationFrame((t) => this._loop(t));
   }
 
-  // ── 后端接线（与改造前同一条路，未动）──
+  _readRhythm() {
+    try {
+      const v = parseFloat(getComputedStyle(this.root).getPropertyValue('--c-rim'));
+      if (v > 0) this.breathPeriod = v;
+    } catch (e) { /* 读不到就用兜底值 */ }
+    try {
+      const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+      this.reducedMotion = !!mq.matches;
+      if (mq.addEventListener) mq.addEventListener('change', (e) => { this.reducedMotion = !!e.matches; });
+    } catch (e) { /* 没有 matchMedia 的环境：按不减动效处理 */ }
+  }
+
+  // ── 后端接线 ──
 
   _connectBackend() {
     if (window.galaxyAPI && window.galaxyAPI.onBackendState) {
@@ -208,40 +274,43 @@ class GalaxyOverlay {
     if (payload.posture !== undefined) this.posture = payload.posture;
     if (payload.render !== undefined) this.render = payload.render;
 
-    // ── 第三态有两种收场，方向相反 ──
+    // ── 认转移 ──
+    //
+    // 第三态有两种收场，方向相反：
     //
     //   manifest → liminal  = handoff     做完接着下一轮
     //   manifest → silent   = dissolving  做完就散
     //
-    // 契约对这一位的注释就是冲着这件事写的：**退场编排该看这一位，而不是看深度
-    // 往哪边走** —— 深度倒着走只能把进场动画倒放，而这两件事本就该是两段不同的动作。
-    //
     // handoff 不需要在这儿做任何事：后端接着会报 lifecycle=liminal，展开度自己
-    // 回到 1，于是"收到一半又推出去"是主轴序列自然长出来的，不是编出来的。
-    // dissolving 才要额外一步：把光从顶部中间铺回三条边 —— 岛把它还回去。
-    const kind = (this.render && this.render.transition_kind) || 'none';
-    if (kind !== this._lastKind) {
-      if (kind === 'dissolving') { this.spreading = true; this.spread = 0; }
-      else if (kind === 'emerging' || kind === 'committing') { this.spreading = false; this.spread = 0; }
-      this._lastKind = kind;
+    // 回到 1。dissolving 要把光从顶部中间铺回三条边 —— 岛把它还回去。
+    //
+    // 优先看**驻留的**序号：一拍性的 transition_kind 只在转移之后的第一份广播里有，
+    // 覆盖层中途才连上、或那一份恰好丢了，这一拍就整个没了。序号每一份都带着。
+    const r = this.render;
+    if (r && typeof r.transition_seq === 'number') {
+      if (this._seenSeq === null) {
+        this._seenSeq = r.transition_seq;   // 中途连上：只记下，不补演
+      } else if (r.transition_seq !== this._seenSeq) {
+        this._seenSeq = r.transition_seq;
+        this._onTransition(r.last_transition || 'none');
+      }
+    } else {
+      // 旧后端没有序号：退回读一拍性的那一位。
+      const kind = (r && r.transition_kind) || 'none';
+      if (kind !== this._lastKind) {
+        this._lastKind = kind;
+        this._onTransition(kind);
+      }
     }
 
-    // ── 兜底：驻留位 `is_returning`，补一拍性的 transition_kind 补不到的场合 ──
+    // ── 兜底：驻留位 `is_returning` ──
     //
-    // `transition_kind` 只在**那一拍**是 dissolving：桥每次广播完就把
-    // `_previous_lifecycle` 推进到本拍（见 lumiv_websocket_bridge._render_payload），
-    // 下一拍同档位就算成 'none'。也就是说消散只有一次机会被看见。
-    //
-    // 副轴的 `is_returning`（continuum_phase === 'receding'）是**驻留位**，整段
-    // 返回弧里都为真。契约把它单列出来的理由就是这个：主轴 silent 之下，
-    // 「刚做完正在消散」与「静息」只有这一位能分开。
-    //
-    // 于是两种场合靠它接住：覆盖层在返回弧中途才连上（重载/重连），或那一拍
-    // dissolving 广播恰好掉了。边沿触发 + 只在还没铺过时启动，所以不会把同一段
-    // 消散演两遍；同一拍两位都来时，上面的 kind 分支先起，这里被守卫挡掉。
-    const returning = !!(this.render && this.render.is_returning);
+    // 副轴的 `is_returning`（continuum_phase === 'receding'）整段返回弧里都为真。
+    // 主轴 silent 之下，「刚做完正在消散」与「静息」只有这一位能分开。边沿触发 +
+    // 只在边光确实收着、还没铺过时启动，所以不会把同一段消散演两遍。
+    const returning = !!(r && r.is_returning);
     if (returning !== this._lastReturning) {
-      if (returning && !this.spreading && this.spread <= 0.001) {
+      if (returning && !this.spreading && this.spread <= 0.001 && this.hide > 0.001) {
         this.spreading = true;
         this.spread = 0;
       }
@@ -249,12 +318,72 @@ class GalaxyOverlay {
     }
   }
 
+  _onTransition(kind) {
+    // 只有边光确实收着的时候才铺回 —— 它本来就亮着时从零再铺一遍，是一次凭空的闪烁。
+    if (kind === 'dissolving') { if (this.hide > 0.001 && !this.spreading) { this.spreading = true; this.spread = 0; } }
+  }
+
+  // ── 边光：收回与铺回 ──
+  //
+  // 收回只有一条路径（两臂上退 → 顶边左→右），铺回只有一种样子（从顶部中间长开）。
+  // 回来的时候**不把收回倒着放** —— 那是进场动画倒放，这套编排从一开始就不要它。
+  _stepRim(dt) {
+    const life = (this.render && this.render.lifecycle) || this.phase;
+    const pull = ease(seg(this.open, 'pull'));
+
+    // 表达期屏幕是干净的：边光不能跟着空间一起回来。
+    //
+    // 展开度在 silent 和 manifest 都是 0（一个还没展开、一个已经收回），单靠它
+    // 分不出这两件事。而第一态那条光的含义是"在场但不表达"，manifest 恰恰是
+    // "对外表达" —— 收完之后它正在出字、出声或点你的鼠标，这时候亮着那条光等于说反了。
+    const hideTarget = (life === 'manifest') ? 1 : 0;
+    const opening = OPEN_BY_LIFECYCLE[life] === 1;
+
+    if (hideTarget > 0 || opening) {
+      // 要收（或空间在展开）：已铺满的那一段放掉，交回给收回的遮罩。
+      if (this.spreading || this.spread > 0) { this.spreading = false; this.spread = 0; }
+      if (hideTarget > 0) {
+        // 跟着空间收过的，从那儿接着收；从亮着直接进表达期的（静息里直接开口），自己收。
+        this.hide = Math.min(1, Math.max(this.hide, pull) + dt / HIDE_SECONDS);
+      } else {
+        // 第二态：收回跟着空间的编排走。已经收着的（表达完接着下一轮）不先亮一下再收。
+        this.hide = Math.max(pull, this.hide);
+      }
+    } else if (this.hide > 0.001) {
+      if (this.hide < 0.25 && !this.spreading) {
+        // 只收了一点点（刚进阈限就被叫停）：原路退回来就好，犯不着从零铺一遍。
+        this.hide = Math.max(0, this.hide - dt / HIDE_SECONDS);
+      } else {
+        // 该亮了，而它还收着：从顶部中间铺回来。
+        if (!this.spreading) { this.spreading = true; this.spread = 0; }
+        this.hide = 0;
+      }
+    }
+
+    if (this.spreading) {
+      this.spread += dt / SPREAD_SECONDS;
+      if (this.spread >= 1) { this.spread = 1; this.spreading = false; }
+    }
+  }
+
+  // ── 岛：动手期间自己长出来 ──
+  _stepIsle(dt) {
+    const acting = !!(this.render && this.render.acting);
+    const target = acting ? 1 : 0;
+    const step = dt / ISLE_SECONDS;
+    this.isleAct = target > this.isleAct
+      ? Math.min(target, this.isleAct + step)
+      : Math.max(target, this.isleAct - step);
+  }
+
   // ── 运动学：只决定"怎么走"，不决定"走到哪儿" ──
   //
   // 落点由主轴给（OPEN_BY_LIFECYCLE），过程交给 presence_motion：编排带里匀速
-  // 穿越（着色器时代留下的限速器，现在换成 CSS 依然需要 —— 相位广播是事件驱动的
-  // 离散跳变，纯弹簧约 100ms 就冲过整段，中间的动作在数学上看不见），带外走弹簧；
-  // 塌缩/回撤倾向接进穿越速度、稳定度接进阻尼（抖的时候别跟着抖）。
+  // 穿越（相位广播是事件驱动的离散跳变，纯弹簧约 100ms 就冲过整段，中间的动作在
+  // 数学上看不见），带外走弹簧；倾向接进穿越速度、稳定度接进阻尼。
+  //
+  // 倾向按**要去哪一相**取（toward），不按往哪边走取：这条轴上 manifest 是 0，
+  // 落手那一下是往下走 —— 按方向取就取成了回撤倾向。见 presence_motion.js 的 tendencyFor。
   _advance(dt) {
     const life = (this.render && this.render.lifecycle) || this.phase;
     const target = OPEN_BY_LIFECYCLE[life] !== undefined ? OPEN_BY_LIFECYCLE[life] : 0;
@@ -263,10 +392,12 @@ class GalaxyOverlay {
       this.open += (target - this.open) * Math.min(1, dt * 3);
       return;
     }
+    const toward = target > this.open ? 'open' : (life === 'manifest' ? 'commit' : 'retreat');
     const st = { depth: this.open, velocity: this.openV };
     PresenceMotion.advance(st, target, dt, {
       intent: this.intent,
       posture: this.render || this.posture,
+      toward: toward,
     });
     this.open = st.depth;
     this.openV = st.velocity;
@@ -275,21 +406,24 @@ class GalaxyOverlay {
   _loop(now) {
     requestAnimationFrame((t) => this._loop(t));
 
-    // 自适应帧率（无独显机器的省电闸，沿用改造前的取向）：
-    // 静默且没有过渡 → 12fps 只够那口慢呼吸；过渡中或已展开 → 30fps。
+    // 自适应帧率（无独显机器的省电闸）：静默且没有过渡 → 12fps，只够那口慢呼吸；
+    // 过渡中或已展开 → 30fps。
+    const life = (this.render && this.render.lifecycle) || this.phase;
     const moving = Math.abs(this.openV) > 0.0015
-      || Math.abs(this.open - (OPEN_BY_LIFECYCLE[(this.render && this.render.lifecycle) || this.phase] || 0)) > 0.01
-      || this.spreading;
+      || Math.abs(this.open - (OPEN_BY_LIFECYCLE[life] || 0)) > 0.01
+      || this.spreading
+      || (this.hide > 0.001 && this.hide < 0.999)
+      || (this.isleAct > 0.001 && this.isleAct < 0.999);
     const minFrameMs = 1000 / (this.open > 0.02 || moving ? 30 : 12);
     if (now - this.lastFrame < minFrameMs) return;
-    const dt = Math.min((now - this.lastFrame) / 1000, 0.05);
-    this.lastFrame = now;
 
-    this._advance(dt);
-    if (this.spreading) {
-      this.spread += 0.85 * dt;
-      if (this.spread >= 1) { this.spread = 1; this.spreading = false; }
-    }
+    // 按墙钟推进 —— 见 STEP / MAX_GAP 那一段。
+    const gap = Math.min((now - this.lastFrame) / 1000, MAX_GAP);
+    this.lastFrame = now;
+    for (let left = gap; left > 1e-6; left -= STEP) this._advance(Math.min(STEP, left));
+    this._stepRim(gap);
+    this._stepIsle(gap);
+    this.breathT += gap;
     this._apply();
   }
 
@@ -297,30 +431,21 @@ class GalaxyOverlay {
   _apply() {
     const s = this.root.style;
     const open = this.open;
-    const pull = ease(seg(open, 'pull'));
     const grow = easeOut(seg(open, 'grow'));
-    const isle = ease(seg(open, 'isle'));
+    const isle = Math.max(ease(seg(open, 'isle')), ease(this.isleAct));
 
     const p = (this.render && this.render.perception) || null;
     const paused = !!(p && p.privacy_paused);
 
-    // ── 表达期屏幕是干净的：边光**不能**跟着空间一起回来 ──
-    //
-    // 展开度在 silent 和 manifest 都是 0（一个还没展开、一个已经收回），单靠它
-    // 分不出这两件事。而第一态那条光的含义是"在场但不表达"，manifest 恰恰是
-    // "对外表达"—— 收完之后它正在点你的鼠标，这时候亮着那条光等于说反了。
-    // 所以表达期把收回量钉死在满格，光留在外面，屏幕让给桌面。
-    const life = (this.render && this.render.lifecycle) || this.phase;
-    const pullNow = (life === 'manifest') ? 1 : pull;
-
     // 收回 / 铺回：两条路各管各的，见 index.html 里那三条遮罩。
-    if (this.spreading || this.spread > 0.001) {
+    const spreadShown = this.spreading || this.spread > 0.001;
+    if (spreadShown) {
       s.setProperty('--my', '0%');
       s.setProperty('--mx', '0%');
       s.setProperty('--r', (this.spread * 260).toFixed(1) + '%');
     } else {
-      s.setProperty('--my', (sub(pullNow, 0, 0.62) * 100).toFixed(2) + '%');
-      s.setProperty('--mx', (sub(pullNow, 0.62, 1) * 109).toFixed(2) + '%');
+      s.setProperty('--my', (sub(this.hide, 0, 0.62) * 100).toFixed(2) + '%');
+      s.setProperty('--mx', (sub(this.hide, 0.62, 1) * 109).toFixed(2) + '%');
       s.setProperty('--r', '260%');
     }
 
@@ -338,7 +463,17 @@ class GalaxyOverlay {
     // 感知帧 2 秒才一拍，而且绝大多数拍是"看到了不打扰"（ambient 循环的门控层
     // 直接免费跳过）。跟着数据跳就是一惊一乍 —— 那本身就是打扰。
     // 所以光自己缓慢呼吸，后端只给四档：亮着 / 闭着 / 压成线 / 不亮。
-    s.setProperty('--rim', (paused ? 0 : this._senseGlow(p)).toFixed(3));
+    const glow = paused ? 0 : this._senseGlow(p);
+    s.setProperty('--rim', glow.toFixed(3));
+    // 呼吸与浓度在 index.html 里相乘 —— 为什么不能写成 animation 见那边 .rim 的注释。
+    const breath = this.reducedMotion
+      ? 1
+      : BREATH_LO + (BREATH_HI - BREATH_LO) * (0.5 - 0.5 * Math.cos((2 * Math.PI * this.breathT) / this.breathPeriod));
+    s.setProperty('--breath', breath.toFixed(3));
+
+    // 看不见的就别画（软件合成下这是主要开销，见 index.html）。
+    this._flag('rim', glow > 0.001 && (spreadShown || this.hide < 0.999) ? 'on' : 'off');
+    this._flag('space', grow > 0.001 ? 'on' : 'off');
 
     // ── 灵动岛：从上边框长出来。收到最小就是一道贴边细线。 ──
     //
@@ -346,7 +481,7 @@ class GalaxyOverlay {
     // 没线＝这台机器根本没有感知可用。契约把 privacy_paused 单独给一位，
     // 正是因为"用户按停了"是一个整体姿态，不是"恰好四条都闭着"。
     const h = paused ? 2 : 2 + isle * 31;
-    const w = paused ? 68 : 66 + isle * 182;
+    const w = paused ? 68 : 66 + isle * (this.isleMax - 66);
     s.setProperty('--ih', h.toFixed(1) + 'px');
     s.setProperty('--iw', w.toFixed(1) + 'px');
     s.setProperty('--ir', (paused ? 2 : 2 + isle * 15).toFixed(1) + 'px');
@@ -357,13 +492,16 @@ class GalaxyOverlay {
     //
     // 这两位说的是 continuum 那条链，而空间（四壁 + 远端那层霭）正是跟着它走的。
     // 边光和桌宠读的是 perception —— 那是另一条独立的只读拉取，continuum 降级
-    // 跟"它此刻在不在看/在不在听"毫无关系。一并压暗等于替另一条链说了假话，
-    // 那是本仓反复要躲的那一类。
+    // 跟"它此刻在不在看/在不在听"毫无关系。一并压暗等于替另一条链说了假话。
     const trust = trustOf(this.render);
     if (this.root.dataset.trust !== trust) this.root.dataset.trust = trust;
 
     this._paintIsland(paused);
     this._paintPet(p, paused);
+  }
+
+  _flag(name, value) {
+    if (this.root.dataset[name] !== value) this.root.dataset[name] = value;
   }
 
   _senseGlow(p) {
@@ -377,15 +515,35 @@ class GalaxyOverlay {
   }
 
   _paintIsland(paused) {
-    if (paused) { this.islandMode.hidden = true; return; }
+    if (paused) {
+      this.islandMode.hidden = true;
+      if (this.islandHint) this.islandHint.hidden = true;
+      return;
+    }
     const r = this.render || {};
+    const acting = !!r.acting;
     const act = r.liminal_activity || 'none';
     const mode = (r.hybrid_execution && r.hybrid_execution.mode) || 'none';
-    const word = ACTIVITY_WORD[act] || 'Galaxy';
-    if (this.islandText.textContent !== word) this.islandText.textContent = word;
+    // 动手期间先说它在动手；否则说阈限态里它在干嘛。
+    const word = acting ? ACTING_WORD : (ACTIVITY_WORD[act] || 'Galaxy');
+    let changed = false;
+    if (this.islandText.textContent !== word) { this.islandText.textContent = word; changed = true; }
     const m = MODE_WORD[mode] || '';
-    this.islandMode.hidden = !m;
-    if (m && this.islandMode.textContent !== m) this.islandMode.textContent = m;
+    if (this.islandMode.hidden !== !m) { this.islandMode.hidden = !m; changed = true; }
+    if (m && this.islandMode.textContent !== m) { this.islandMode.textContent = m; changed = true; }
+    // 怎么叫停：只照 `render.stop_key` 写 —— 后端的键盘监听确实占到了才有值
+    // （core/stop_key.py）。不能从 acting 推出来：分不清人按的和它自己注入的键的
+    // 平台上，动手期间也是空的。写着「Esc 停止」而按了没用，比不写更糟。
+    if (this.islandHint) {
+      const hint = acting && r.stop_key ? `${r.stop_key} 停止` : '';
+      if (this.islandHint.hidden !== !hint) { this.islandHint.hidden = !hint; changed = true; }
+      if (hint && this.islandHint.textContent !== hint) { this.islandHint.textContent = hint; changed = true; }
+    }
+    // 岛上的字变了，展开到最大时的宽度跟着量一次（字多了原来那 248px 装不下）。
+    if (changed && this.islandInner) {
+      const need = Math.ceil(this.islandInner.scrollWidth || 0) + 34;
+      this.isleMax = Math.max(248, need);
+    }
   }
 
   _paintPet(p, paused) {

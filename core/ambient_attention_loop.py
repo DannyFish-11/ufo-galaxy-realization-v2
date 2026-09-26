@@ -739,6 +739,7 @@ class AmbientAttentionLoop:
                 speak_response(decision.utterance, source="ambient")
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Ambient SPEAK 朗读失败(非致命): %s", exc)
+            await self._record_spoken(decision.utterance)
         elif decision.action == AmbientAction.DELEGATE:
             # 关键:委托要走完整 OpenClawd 认知(可能几十秒),而 _delegate 是被 await
             # 的、会阻塞本拍直到返回。若在这里(委托【开始】时)打冷却时间戳,等委托
@@ -748,6 +749,41 @@ class AmbientAttentionLoop:
             await self._delegate(decision, obs)
             self._last_action_ts = time.time()
         # SILENT：无请求进门，主体留在 SILENT，仅记录（在 _record 里做）。
+
+    async def _record_spoken(self, utterance: str) -> None:
+        """它自己开口说的话,进面板那份上下文 —— 此刻看得见,面板重开也在。
+
+        此前自发开口只进工作记忆的滚动日志(``_record`` 里那条 role="ambient"):
+        人听见它说了一句话,面板上一个字都没有;人接着回它一句,模型拿到的对话
+        上下文里也没有它自己刚说过的那句 —— 同一个主体,对自己的话失忆。
+
+        所以两件事:实时推给面板(与语音回合同一条对话通道),并作为一轮助手发言
+        记进当前对话主线(判据见 core/conversation_mainline.py)。任何一步失败都
+        只记日志 —— 记不上不该让它下次不敢开口。
+        """
+        text = (utterance or "").strip()
+        if not text:
+            return
+        try:
+            from core.lumiv_websocket_bridge import emit_conversation
+
+            emit_conversation("ai", text, source="ambient")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("自发开口推面板失败(非致命): %s", exc)
+        try:
+            from core.conversation_mainline import mainline_session_id
+            from core.session_memory_facade import record_session_turn
+
+            sid = mainline_session_id(create=True)
+            if sid:
+                await record_session_turn(
+                    conversation_session_id=sid,
+                    role="assistant",
+                    content=text,
+                    metadata={"channel": "ambient", "source": "ambient_speak"},
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("自发开口记进对话主线失败(非致命): %s", exc)
 
     async def _delegate(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
         """DELEGATE → handle_request 正门（source="ambient"）→ LIMINAL 执行分支。

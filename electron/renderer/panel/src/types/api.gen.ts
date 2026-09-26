@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 414 条 · 组件 schema 110 个
+// 路径 416 条 · 组件 schema 110 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -274,6 +274,7 @@ export type ApiPath =
   | "/api/v1/panel/feed"
   | "/api/v1/panel/unified"
   | "/api/v1/ports"
+  | "/api/v1/presence/stop"
   | "/api/v1/projection/agent-dispatch"
   | "/api/v1/projection/canonical-routing"
   | "/api/v1/projection/clone-to-use-acceptance"
@@ -343,6 +344,7 @@ export type ApiPath =
   | "/api/v1/sessions"
   | "/api/v1/sessions/ingest_turns"
   | "/api/v1/sessions/migrate"
+  | "/api/v1/sessions/primary"
   | "/api/v1/sessions/reconcile"
   | "/api/v1/sessions/{session_id}"
   | "/api/v1/sessions/{session_id}/history"
@@ -692,6 +694,7 @@ export const API_METHODS = {
   "/api/v1/panel/feed": ["get"],
   "/api/v1/panel/unified": ["get"],
   "/api/v1/ports": ["get"],
+  "/api/v1/presence/stop": ["post"],
   "/api/v1/projection/agent-dispatch": ["get"],
   "/api/v1/projection/canonical-routing": ["get"],
   "/api/v1/projection/clone-to-use-acceptance": ["get"],
@@ -761,6 +764,7 @@ export const API_METHODS = {
   "/api/v1/sessions": ["get", "post"],
   "/api/v1/sessions/ingest_turns": ["post"],
   "/api/v1/sessions/migrate": ["post"],
+  "/api/v1/sessions/primary": ["get"],
   "/api/v1/sessions/reconcile": ["post"],
   "/api/v1/sessions/{session_id}": ["get"],
   "/api/v1/sessions/{session_id}/history": ["get"],
@@ -914,6 +918,7 @@ export interface BundleUpdateRequest {
 }
 
 export interface ChatRequest {
+  "client_id"?: string;
   "context"?: Array<Record<string, string>>;
   "device_id"?: string;
   "entry_mode"?: string | null;

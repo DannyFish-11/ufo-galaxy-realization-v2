@@ -65,6 +65,11 @@ class TestEveryNewlyWiredEndpointIsInTheBuiltBundle:
             ("/api/perception/desktop/privacy/resume", "隐私恢复"),
             ("/api/v1/memory/cards", "记忆卡片"),
             ("/api/v1/chat/stream", "对话"),
+            # 发送键在它忙的时候就是停止键。请求进行中没有停止键,是「停」此前在面板上
+            # 完全不存在的那一半原因。
+            ("/api/v1/presence/stop", "停止"),
+            # 打开面板先问对话主线:面板关着时用嘴说的、它自己开口说的,都记在那一条上。
+            ("/api/v1/sessions/primary", "对话主线"),
         ],
     )
     def test_the_endpoint_is_reachable_from_the_built_page(self, bundle: str, endpoint: str, what: str):
@@ -105,7 +110,9 @@ class TestDegradationIsVisibleNotSilent:
         而空气泡跟「它想了想没什么好说的」长得一模一样。
         """
         code = _code_only(PANEL_SRC / "main.ts")
-        assert re.search(r"onDone:\s*\(response\)", code), (
+        # 第二个参数是「这一轮是不是被人叫停的」(done 帧的 stopped)—— 那种时候回复本来
+        # 就是空的,得说「停下了」;没被叫停时照旧拿 response 兜底,这条判据不变。
+        assert re.search(r"onDone:\s*\(response(?:,\s*\w+)?\)", code), (
             "onDone 不再接 done 帧里的 response —— 锁步吞掉 delta 的那种情况下," "整轮答复会丢掉,面板画出一个空气泡"
         )
         assert "response ||" in code or "|| response" in code, "接了 response 却没拿它兜底"

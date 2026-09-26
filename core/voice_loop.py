@@ -93,6 +93,8 @@ class VoiceLoop:
         self._duplex_loop: Optional[asyncio.AbstractEventLoop] = None
         # 双工↔统一主体的接线(见 core.duplex_presence_bridge);未启用双工时为 None
         self._duplex_bridge: Optional[Any] = None
+        # 面板上有没有一句 AI 回复正在流(双工里模型边说边出字)。收尾/被打断时合上。
+        self._duplex_ai_open: bool = False
 
     async def start(self) -> None:
         """启动语音闭环。
@@ -196,9 +198,18 @@ class VoiceLoop:
         # 把这条实时通路接回统一主体:三态持续在场(A1)、中心可叫停(A2)、
         # 轮次进同一份会话记忆(A3)。接线失败不影响双工本身 —— 见
         # core.duplex_presence_bridge 的模块说明。
+        from core.conversation_mainline import mainline_session_id
         from core.duplex_presence_bridge import DuplexPresenceBridge
 
-        self._duplex_bridge = DuplexPresenceBridge(session, source="voice_duplex")
+        # 轮次记进**当前对话主线** —— 面板读的就是这一条,面板关了再开,双工里说过的
+        # 话也在。此前缺省是每开一次自建一条 duplex-<时间戳>:话记下了,但记在一个
+        # 面板永远不会去读的地方。没有主线(还没聊过)时留空,走原来那条自建的路。
+        self._duplex_bridge = DuplexPresenceBridge(
+            session,
+            source="voice_duplex",
+            conversation_session_id=mainline_session_id(),
+            on_interrupt=self._duplex_stop_current,
+        )
         await self._duplex_bridge.open()
 
         # 上行:复用采集服务(因此复用 AEC),把每块样本转成 PCM16 发上去
@@ -273,6 +284,10 @@ class VoiceLoop:
                     # 这里只累积不落盘 —— 它在下行热路径上。
                     if self._duplex_bridge is not None:
                         self._duplex_bridge.note_assistant_delta(ev.text)
+                    # 声字同文:模型一边说,字一边进面板那份上下文。此前这一路只进了
+                    # 记忆 —— 双工里它说的每一句话,面板上一个字都没有。
+                    self._emit_panel("ai", ev.text, final=False)
+                    self._duplex_ai_open = True
                 elif ev.type is DuplexEventType.USER_SPEECH_STARTED:
                     if ducking_enabled() and self._duplex_player is not None:
                         self._duplex_player.duck()
@@ -293,6 +308,8 @@ class VoiceLoop:
                         await session.interrupt()
                         if self._duplex_player is not None:
                             self._duplex_player.unduck()
+                        # 被打断的那句到此为止 —— 面板上那一段合上,下一句另起。
+                        self._close_panel_ai_turn()
                         # A3:只有**真正的发言**才进记忆。应答("嗯""对")在上面那个
                         # 分支里,它们不是内容——把它们也记下来会污染上下文,让主体
                         # 以为用户说了一堆没有信息量的话。
@@ -304,6 +321,7 @@ class VoiceLoop:
                         self._duplex_player.unduck()
                     if self._duplex_bridge is not None:
                         await self._duplex_bridge.note_assistant_done()
+                    self._close_panel_ai_turn()
                     logger.debug("双工:一个回复回合结束")
                 elif ev.type is DuplexEventType.SESSION_CLOSED:
                     # 会话可能是**对端**断的(网络掉线/服务端超时),不一定走 stop()。
@@ -318,13 +336,37 @@ class VoiceLoop:
             logger.warning("双工下行消费异常结束: %s", exc)
 
     @staticmethod
-    def _emit_panel(role: str, text: str) -> None:
+    def _emit_panel(role: str, text: str, *, final: bool = True) -> None:
         try:
             from core.lumiv_websocket_bridge import emit_conversation
 
-            emit_conversation(role, text, source="voice")
+            emit_conversation(role, text, source="voice", final=final)
         except Exception as exc:  # noqa: BLE001
             logger.debug("emit_conversation 跳过(非致命): %s", exc)
+
+    def _close_panel_ai_turn(self) -> None:
+        """把面板上正在流的那一句 AI 回复合上(发一帧空的收尾帧)。没开着就什么都不做。"""
+        if getattr(self, "_duplex_ai_open", False):
+            self._duplex_ai_open = False
+            self._emit_panel("ai", "", final=True)
+
+    async def _duplex_stop_current(self) -> None:
+        """人按了「停」:让正在说的这一句停下,会话留着。
+
+        由 ``DesktopPresenceRuntime.stop_current_activity`` 经常驻在场的打断钩子调来。
+        三件事缺一不可:服务端停止生成(``interrupt``)、本地缓冲里已经下行的那半句
+        丢掉(``flush``,否则"停了"之后它还会把这半句念完)、面板上那一段合上。
+        """
+        session = self._duplex
+        if session is not None:
+            try:
+                await session.interrupt()
+            except Exception as exc:  # noqa: BLE001 — 服务端没收到也要把本地停干净
+                logger.debug("双工:停止时让服务端停下失败: %s", exc)
+        if self._duplex_player is not None:
+            self._duplex_player.flush()
+            self._duplex_player.unduck()
+        self._close_panel_ai_turn()
 
     async def _on_voice_input(self, text: str) -> None:
         """处理语音识别结果。

@@ -85,6 +85,20 @@ formless ──→ liminal ──→ manifest
 
 `next_phases` 直接给出当前相位的合法去向——用它**提前**编排，而不是等相位跳变后才反应。
 
+### 认出"发生过一次转移"：看驻留的序号，别只看一拍性的那位
+
+主轴的转移性质有两种给法：
+
+| 字段 | 性质 | 用法 |
+|---|---|---|
+| `transition_kind` | **一拍性**：只有转移之后组装的第一份广播带着 | 旧后端没有下面两位时的退路 |
+| `transition_seq` | **驻留**：本进程主轴转移过几次，每一份消息都带着同一个数 | 跟自己上次见过的比，变了就是发生过转移 |
+| `last_transition` | **驻留**：最近那次转移是哪一种（`TRANSITION_KINDS`） | 与 `transition_seq` 成对读 |
+
+只认一拍性的那位，覆盖层中途才连上、或那一份恰好丢了，这一拍就整个没了 ——
+「做完就散」的铺回动画不演，边光一直收着。第一次见到的序号只记下、不补演。
+给**单个**新客户端发的快照不会把一拍性的那位用掉（`consume_edge=False`）。
+
 > **历史教训**：旧的一维契约用 `retreat_tendency` 把 `manifest` 的深度朝 `liminal`
 > 的锚点漂移，表达的正是这个被禁止的转移。**旧契约能表达状态机禁止的转移，却表达
 > 不了它要求的那个（receding）。** 别重蹈。
@@ -119,7 +133,7 @@ formless ──→ liminal ──→ manifest
 契约把它带出来了：
 
 ```ts
-liminal_activity: "none" | "thinking" | "rehearsing"
+liminal_activity: "none" | "understanding" | "thinking" | "rehearsing"
 simulation: {
   is_active, simulation_kind,
   candidate_paths,      // ← 正在权衡的那几条，这就是阈限态的可视内容
@@ -128,8 +142,9 @@ simulation: {
 }
 ```
 
-**这是第二态最值得画的东西。** 不是一个"思考中"的转圈，而是"它在这几条路之间
-权衡，最后选了这条"。
+**覆盖层不画候选路径**（所有者的决定）：空间本身不写字，岛上只放一句它在干嘛
+（正在理解 / 正在规划 / 正在推演）。`simulation` 照样在契约里 —— 给面板、调试和
+以后别的表面用，不是给覆盖层往空间里画线的。
 
 两条链路都给：
 - `payload.render.simulation`——**持续**的，面板中途连上来也能立刻看到当前状态
@@ -160,22 +175,33 @@ degrade_reason: string | null
 
 ## 七、已知缺陷（接手时请先修，别在上面盖楼）
 
-1. **`usePanelData.ts` 读错路径**：`payload.presence_intensity` / `coherence` /
-   `collapse_tendency` 是**顶层**路径，而 state_event 里它们在 `payload.posture.*`。
-   `?? prev` 让它们永远保留初始 0——面板上「强度 0 / 连贯 0」就是这么来的，
-   不是智能体闲着。
-2. **面板不订阅预演事件**：`kind === "rehearsal"` 的 `skill.invoked` 全仓零消费方。
-3. **`usePhase.ts` 是三值开关**：子串匹配消息 type 取三态之一，且
-   `if (newPhase !== phaseRef.current)` 把相位内的移动全部丢弃——带内的连续变化
-   在面板上不可见。**新代码请直接消费 `payload.render`，别扩展这个 hook。**
+原先列在这里的三条都随 React 面板一起没了（`usePanelData.ts` 读错路径、`usePhase.ts`
+三值开关 —— 面板已换成纯 TS 的 HUD，只读 `payload.render`）。后来查出来、已经修掉的，
+记在这里防止回潮：
+
+1. **边光的呼吸曾是 CSS 关键帧**：关键帧里的 `opacity` 压过同一属性的普通声明，
+   `--rim` 写成 0（隐私急停、没有感知通路）也没用 —— 急停之后边光照样一明一暗地亮着，
+   说的和事实正好相反。现在呼吸由 `app.js` 按帧给 `--breath`，与浓度在 CSS 里相乘。
+2. **覆盖层的时间跟着帧率走**：每帧最多推进 0.05 秒，软件合成下第二态 4–6fps 时，
+   1.7 秒的展开实际走了 5 秒以上。现在按墙钟推进（`STEP` / `MAX_GAP`）。
+3. **朗读把空间重新推开**：说话时在场桥报的是 `liminal`（给已删掉的 React 面板打的补丁），
+   每次语音回答空间开合两次。朗读是对外表达，现在报 `manifest`。
+4. **面板的相位有两个写者**：SSE 的 `phase` 帧也往同一个状态位上写，线和岛会在两相之间
+   跳一下。现在面板只认 WS 的 `render`。
+
+仍然存在的：
+
+- **`skill.invoked`（`kind="rehearsal"`）全仓零消费方**。推演的内容已经经契约上行
+  （`liminal_activity` + `simulation`，见第五节），瞬时的逐步过程还没有人读。
 
 ---
 
 ## 八、遗留投影：`payload.posture`（别在新代码里用）
 
-`posture` / `depth_factor` 是一维遗留投影（三个锚点串在一条 depth 轴上）。保留它
-**只为兼容既有覆盖层** `electron/renderer/presence_motion.js`——那份代码按这三个
-锚点调过参，为换契约破坏它不值得。
+`posture` / `depth_factor` 是一维遗留投影（三个锚点串在一条 depth 轴上）。覆盖层
+已经不读它了：展开度按主轴给（`OPEN_BY_LIFECYCLE`，第三态是**收回**，照 depth 画会越张
+越大），`presence_motion.js` 的倾向与稳定度也从 `render` 里取。只有在后端**完全不发**
+`render` 的时候（旧后端），覆盖层才逐位退回读 `payload.phase` / `payload.posture`。
 
 新代码一律用 `payload.render`。
 
@@ -190,3 +216,32 @@ degrade_reason: string | null
 > 第 3 条不是形式主义。本契约第一版就是**写完没接进桥**，而当时那个守卫因为一个
 > 盲区（模块自己 `__all__` 里的字符串被算作"引用"）判了绿。盲区已修，现在拆掉唯一
 > 调用方它会精确报红。
+
+---
+
+## 十、表达期的两种样子：出字出声，与动手
+
+表达期（`lifecycle === "manifest"`）屏幕该是干净的。但它有两种样子，人对它们的需要完全不同：
+
+- **出字、出声**：看着、听着就行。朗读也算这一种 —— 在场桥在说话时把主轴抬到 `manifest`，
+  不会因为开口把空间重新推开。
+- **动你的鼠标键盘**：整个流程里人最需要知道、也最需要能叫停的时刻。
+
+契约里用两位把后者说清楚：
+
+| 字段 | 含义 | 谁报 |
+|---|---|---|
+| `acting` | 此刻是否正在操作这台机器（键鼠、窗口、应用） | 真正落手的那几处自己报：`core.liminal_activity.acting()`，由 `core/computer_use_loop.py` 与 `core/hybrid_executor.py` 进出 |
+| `stop_key` | 此刻按哪个键能叫停（如 `"Esc"`）；空串 = 没有 | `core/stop_key.py`，**只在键盘监听确实占到时才有值** |
+
+`hybrid_execution` 分不开这两种样子（模式选完就一直为真，点名级别的执行又根本不登记），
+所以 `acting` 单独一位，不从别的字段里猜。
+
+**`stop_key` 不能从 `acting` 推出来。** 它自己动手时也会按 Esc（`press_key: esc`），所以叫停键
+只认**真人按下**的那一下：pynput ≥ 1.8 在 Windows（`LLKHF_INJECTED`）与 macOS（事件源进程号）
+上分得清，Linux 上分不清（XTest 注入的键与真按的一样），就不占 —— 那时 `acting` 为真而 `stop_key`
+为空，渲染端照这一位**不写**「Esc 停止」。写着能停而按了没用，比不写更糟。
+
+叫停本身走 `POST /api/v1/presence/stop`（面板的停止键也是这条）：取消在跑的请求（调用方拿到
+`stopped=True` 的正常返回值，不会把整条自发注意力循环一起停掉）、掐断在念的话、打断双工里正在说
+的那一句（会话留着）。

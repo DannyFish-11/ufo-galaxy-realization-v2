@@ -423,6 +423,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             }
         )
 
+    # 必须注册在 /api/v1/sessions/{session_id} **之前** —— 路由按注册顺序匹配,
+    # 放在后面的话 "primary" 会被当成一个会话 id,永远 404。
+    @router.get("/api/v1/sessions/primary")
+    async def get_primary_session():
+        """当前对话主线 —— 面板上那条上下文是哪一条会话。
+
+        语音、双工、自发开口都记进这一条(判据只有一份,见 core/conversation_mainline.py),
+        面板打开时读它,于是面板关掉再开,前后说过的话都齐。没有任何真实对话时
+        ``session_id`` 为空串 —— 那是「还没聊过」,不是错误。
+        """
+        from core.conversation_mainline import mainline_session_id
+
+        sid = mainline_session_id()
+        return JSONResponse({"success": True, "session_id": sid})
+
     @router.get("/api/v1/sessions/{session_id}")
     async def get_session(session_id: str):
         """获取会话详情"""
