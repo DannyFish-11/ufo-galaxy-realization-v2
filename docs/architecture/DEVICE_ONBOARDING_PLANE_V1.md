@@ -168,17 +168,20 @@ class JoinPath(Protocol):
 `JoinOutcome` 要么是 `joined(device_id)`,要么是 `needs_human(说明 + 所需输入的结构化描述)`,
 要么是 `failed(原因)`。**新增一种设备 = 新增一条路径类 + 注册一行**,服务本身不改。
 
-V1 内置路径:
+V1 内置路径(`core/device_onboarding/join_paths.py`,顺序即优先级):
 
 | 路径 | 处理 | 人要做什么 | 结果角色 |
 |---|---|---|---|
-| `ha_entity` | HA 里已有的实体 | 无(HA 已由人配置、是可信控制面) | 被接入,`bridge_id=ha:…` |
-| `ha_discovered_flow` | HA 自己发现、等确认的集成(投屏、打印机、路由器、Hue…) | 无字段的一步确认:无;需要字段(PIN/配对码):按 HA 表单告诉人要填什么 | 集成建好后实体由 `ha_entity` 接入 |
-| `matter_via_ha` | 局域网里可配网的 Matter 设备 | **物理配网码**(贴纸/二维码) | 经 HA Matter 集成 → 实体 → 被接入 |
-| `galaxy_peer` | 开着本系统 App、还没配对的手机/手表 | **在设备上输入配对码**(码由智能体签发,推到手表/面板) | 主体或成员 |
-| `tailnet_node` | 已在自建 tailnet 里、但不属于任何成员的节点 | 同上(签配对码);若是跑 edge worker 的电脑则见下 | 成员 |
-| `edge_worker` | 在 NATS 上注册的 Go edge worker | **批准**一次(智能体在手表上问) | 成员(`partial_runtime_device`,transport=nats) |
-| `computer_command` | 要加入的新电脑(人主动要求) | **执行一条命令**(tailnet 一次性钥匙 + 启动 worker) | 成员 |
+| `matter_via_ha` | 局域网里可配网的 Matter 设备(`_matterc`) | **物理配网码**(贴纸/二维码),经 HA WS `matter/commission` | 经 HA 建好实体 → 被接入 |
+| `galaxy_peer` | 开着本系统 App、还没配对的手机/手表(`_galaxy*`);tailnet 里不属于任何成员的节点 | **在那台设备上输入配对码**(一次性、10 分钟) | 主体或成员 |
+| `edge_worker` | 在 NATS 上注册的 Go edge worker | **同意**一次(智能体在手表上问) | 成员(`partial_runtime_device`,transport=nats) |
+| `ha_flow` | HA 自己发现、等确认的集成 | 无字段的确认步自动推进;要 PIN/配对码时按 HA 表单告诉人填什么 | 集成建好后实体由 HA 桥接入 |
+| `via_home_assistant` | 其他局域网设备(投屏、HomeKit、UPnP…) | 在 HA 已发现的流里找到它并推进;HA 没发现时说明去加哪个集成 | 同上 |
+
+两种接入不走候选:
+* **HA 实体**:HA 桥镜像时直接以 `bridge_id=ha:<host>` 登记为被接入成员(HA 是人已配置的可信控制面)。
+* **新电脑**:不是"看见了再接",而是人要求邀请 —— `devices__invite(kind=computer)` 给两条命令
+  (tailnet 一次性钥匙 + 启动 edge worker),执行后它以 `edge_worker` 候选出现。
 
 **自动接入策略**(`GALAXY_ONBOARDING_AUTO`,默认 `none`):
 `none` = 只有 `human_step=none` 的路径自动走;`approve` = 连"批准"类也自动;`off` = 全部等人/智能体。
@@ -191,13 +194,20 @@ V1 内置路径:
 1. **解析**:成员登记后,解析平面用 `aip_device_type` → `transport` → `capability_classes` 查
    `device_node_map.yaml`。映射表补上:`transport: home_assistant → Node_27_SmartHome(shared)`。
    原生讲 AIP 的主体/成员(手机、手表)**不需要驱动**,解析为空是正确结果,标 `native`。
-2. **获取**(没有驱动时,智能体可发起,`devices__acquire_driver`):
-   1. 已安装的 MCP/技能里按标签找;
-   2. 智能体给出的 GitHub 链接 → `github__install`(已有);
-   3. 最后才 `mcp_gateway.handle_capability_gap` 让模型写一个 MCP 驱动(沙箱测试后加载、经 NATS
-      广播给所有成员)。生成代码属于高风险,**必须在手表上批准**。
-3. **回写**:获取成功后,这类设备以后怎么接,记进映射(驱动覆盖表 `data/driver_overrides.json`,
-   解析器与 YAML 合并读取)——系统每接一种新设备就多会一种。
+2. **获取**(没有接入路径的候选,智能体发起 `devices__acquire_driver`):
+   1. 智能体给出的 GitHub 链接 → 经 `github__install` 同一个安装器装上 MCP 服务;
+   2. 或 `generate=true`:`mcp_gateway.handle_capability_gap` 让模型写一个 MCP 驱动(沙箱测试后加载、
+      经 NATS 广播给所有成员)。生成代码属于高风险,**必须在手表上批准**(fail-closed)。
+3. **绑定**:`devices__bind_driver(candidate, tool)` 把某个 MCP 工具认作这台设备的驱动,以
+   `bridge_id = "mcp:<工具>"` 接入为被接入成员;之后 `devices__invoke` 经 `mcp_gateway.execute_tool` 下行,
+   非读操作在 guided 档先在手表上问。
+4. **尚未实现**:按设备种类的驱动复用(驱动覆盖表,下次同类设备自动绑定),以及"先在已安装的
+   MCP/技能里按标签找"。目前每台设备各自绑定一次。
+
+   关于 **MHS(Model Hardware Standard)**:MCP 的硬件侧对应物,至今没有公开规范/SDK/schema
+   (判断见 `docs/EXTERNAL_AGENT_FRAMEWORK_EVALUATION.md` 第 ④ 节)。它开源之后接入路径之一就是 MCP ——
+   在这里就是多一种驱动来源:桥前缀 `mhs:` 在 `BRIDGE_INVOKERS` 注册一行、获取步骤多一个来源,
+   候选、成员、在线、智能体工具都不变。
 
 ---
 
@@ -212,7 +222,8 @@ V1 内置路径:
 | `devices__ignore` | 不再提示某个候选 |
 | `devices__remove` | 移除成员:注销 UDM、清花名册、收回 tailnet 节点、从 Mesh 退出 |
 | `devices__invoke` | 调某台设备的一个动作:原生设备走 CanonicalDispatcher `device__…`(权限门照常);被接入设备走它的桥(HA → Node_27,自治档位审批照常) |
-| `devices__acquire_driver` | 见 §7 |
+| `devices__invite` | 邀请新设备:手机/手表给一次性配对码;电脑给两条命令(进内网 + 启动 edge worker) |
+| `devices__acquire_driver` / `devices__bind_driver` | 见 §7 |
 
 `home__*`(智能家居按名字控制)保留:它是被接入设备里最常用的一类的便捷入口,底层与
 `devices__invoke` 走同一条 Node_27 路。
@@ -225,11 +236,12 @@ REST(`core/routes/onboarding.py`):
 `GET /api/v1/onboarding/overview`(成员分组 + 候选 + 在线汇总)· `POST /api/v1/onboarding/candidates/{id}/join`
 · `POST …/ignore` · `DELETE /api/v1/onboarding/members/{device_id}` · `POST /api/v1/onboarding/scan`(立即扫一次)。
 
-面板:
-* 岛上的设备花名册改读 **UDM + UCM**(经 `RegisteredRuntimeDevice` 投影),不再读兼容缓存;
-* 新增「设备」抽屉:成员按角色分组(主体 / 成员 / 被接入)、在线点、能力类、桥;候选一栏带「接入」
-  「忽略」;需要人时就地显示要做什么(配对码、要填的字段、要执行的命令);顶部「添加设备」给出配对码
-  与二维码链接、tailnet 状态。
+面板(所有者定的:**右上角的设备列表保留原样,不加新界面**;接入经与智能体对话完成):
+* 右上角那块岛的设备名册(收起态星海的人数、展开态的列表)改由接入平面总览供数 ——
+  身份来自 UDM、在线来自 UCM(含非 WS 通道)。以前读兼容缓存 `registered_devices`,只有 REST
+  注册会写它,经 WS 连上的手机手表从不出现。被接入设备可能几百个,只以数量出现在推送里,
+  不进名册的小方块。
+* 接入、忽略、移除、邀请:对智能体说(`devices__*`),或调上面的 REST。
 
 ---
 
@@ -241,7 +253,7 @@ REST(`core/routes/onboarding.py`):
 | SSDP/UPnP | `core/device_onboarding/sources/ssdp.py`(新,轻量;Node_71 的实现在节点层,core 不能反向依赖) | 电视、路由器、DLNA、打印机 → 候选 |
 | Home Assistant 实体 | `core/ha_bridge.py`(镜像时交给 `ha_entity` 路径) | 被接入成员 |
 | HA 已发现的集成 | `sources/ha_flows.py`(轮询 `GET /api/config/config_entries/flow`) | `ha_discovered_flow` 候选 |
-| headscale 未归属节点 | `core/tailnet_membership.annotate` 的 `tailnet_only` | `tailnet_node` 候选 |
+| headscale 未归属节点 | `core/tailnet_membership.annotate` 的 `tailnet_only` | `galaxy_peer` 候选(签配对码) |
 | NATS edge worker | 订阅 `galaxy.workers.register` / `heartbeat` | `edge_worker` 候选;心跳 → UCM `nats` 通道 |
 | 配对成功 | `core/routes/pairing.py` | 直接成员(配对本身就是人在场的确认) |
 
@@ -290,4 +302,5 @@ REST(`core/routes/onboarding.py`):
 * 手机/手表**在设备上弹窗确认加入**:需要两个 App 各加一个界面;V1 用"设备上输入配对码"完成同样的确认。
 * 协调者迁移(电脑关机时手机接管协调):另一个量级,见相对主体设计。
 * `HOME_*` 进 AIP 位图:需三仓同步。
-* Serial/DBus/CAN 适配器:只在对应硬件依赖存在时注册(启动时探测),不强起。
+* Serial/DBus/CAN 传输适配器:仍未在启动时注册(需要按硬件依赖探测后再注册,未做)。
+* 按设备种类的驱动复用、在已安装 MCP/技能里按标签找驱动(见 §7)。
