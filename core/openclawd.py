@@ -94,6 +94,9 @@ logger = logging.getLogger("Galaxy.OpenClawd")
 OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 """Entrypoint role contract (PR-01): subject-core internal stage entry, not startup main entry."""
 
+from core.device_onboarding.agent_tools import DEVICES_BUILTIN_TOOLS, dispatch_devices_tool  # noqa: E402
+from core.device_onboarding.service import onboarding_enabled  # noqa: E402
+
 # ============================================================================
 # Helper: local-device detection + Parallel-group state machine
 # ============================================================================
@@ -7257,6 +7260,8 @@ class OpenClawd:
         tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
         if home_tools_enabled():  # 智能家居:配了 Home Assistant 才出现 —— 见 core/smart_home_tools.py
             tools.extend(HOME_BUILTIN_TOOLS)
+        if onboarding_enabled():  # 设备:看、接入、调用 —— 见 core/device_onboarding/agent_tools.py
+            tools.extend(DEVICES_BUILTIN_TOOLS)
 
         # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────
         try:
@@ -7318,6 +7323,7 @@ class OpenClawd:
             "computer_use__",
             "context__",
             "home__",
+            "devices__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
 
@@ -7577,6 +7583,11 @@ class OpenClawd:
                 # Agent-callable human-decision tool (PR-HITL): ask_human__request
                 action = tool_name[len("ask_human__") :]
                 return await self._dispatch_ask_human_tool(action, arguments)
+
+            elif tool_name.startswith("devices__"):
+                return await dispatch_devices_tool(
+                    tool_name[len("devices__") :], arguments, session_id=getattr(self, "_current_session_id", "") or ""
+                )
 
             elif tool_name.startswith("home__"):
                 return await dispatch_home_tool(

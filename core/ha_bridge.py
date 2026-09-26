@@ -180,6 +180,12 @@ class HABridge:
                     },
                 )
             dm.upsert_device_state(device_id, patch, source="ha_bridge")
+            # 在线态归 UCM:经这座桥的 bridge 通道(HA 说 unavailable/unknown 就是不在线)。
+            from core.unified.connection_manager import get_unified_connection_manager
+
+            get_unified_connection_manager().report_presence(
+                device_id, "bridge", online, detail={"bridge_id": self.bridge_id, "ha_state": value}
+            )
             return True
         except Exception as exc:  # noqa: BLE001
             logger.debug("HA 桥:镜像实体 %s 失败: %s", entity_id, exc)
