@@ -38,889 +38,997 @@ reconciliation helpers from ``core.android_participant_truth_ingress``.
 Closes TRUTH-005.
 """
 
+# ---------------------------------------------------------------------------
+# 惰性再导出（PEP 562）
+# ---------------------------------------------------------------------------
+# 本包原先在导入时**立即**导入下面全部 35 个模块 —— 其中 8 个是安卓命名的。于是任何
+# core.runtime.* 子模块（比如只想发一条观测事件的 runtime_observability_sink）
+# 一被导入，整套安卓运行时就跟着装进进程。设备无关的路径（core/participant_admission.py
+# 的通用参与方接入）因此在结构上**不可能**不经过安卓模块 —— 改良书 R7 的验收判据
+# 「非安卓设备全程不经过任何安卓命名的模块」正是被这一点挡住的。
+#
+# 现在每个名字仍然从 core.runtime 可取（from core.runtime import X、
+# core.runtime.X、__all__ 全都照旧），只是在**第一次被取用时**才导入其来源模块。
+# 每组是 (来源模块, 再导出的名字)；下面的注释原样保留自原先的 import 语句。
+from importlib import import_module as _import_module
+from typing import Any as _Any
+from typing import Dict as _Dict
+from typing import List as _List
+from typing import Tuple as _Tuple
+
 # PR-36: Cross-Runtime Result Merge Contract helpers
-from contracts.cross_runtime_result_merge import (
-    MergedRuntimeResult,
-    ResultMergePolicy,
-    ResultMergeSummary,
-    RuntimeResultRole,
-    RuntimeResultStatus,
-    RuntimeResultUnit,
-    build_merged_runtime_result,
-    build_result_merge_summary,
-)
-from contracts.cross_runtime_result_merge import from_execution_output as merge_unit_from_execution_output
-from contracts.cross_runtime_result_merge import from_local_takeover_result as merge_unit_from_takeover_result
-from contracts.cross_runtime_result_merge import from_source_dispatch_result as merge_unit_from_dispatch_result
-from contracts.cross_runtime_result_merge import (
-    merge_runtime_results,
+_LAZY_SOURCES: _Tuple[_Tuple[str, _Tuple[str, ...]], ...] = (
+    (
+        "contracts.cross_runtime_result_merge",
+        (
+            "MergedRuntimeResult",
+            "ResultMergePolicy",
+            "ResultMergeSummary",
+            "RuntimeResultRole",
+            "RuntimeResultStatus",
+            "RuntimeResultUnit",
+            "build_merged_runtime_result",
+            "build_result_merge_summary",
+        ),
+    ),
+    ("contracts.cross_runtime_result_merge", ("merge_unit_from_execution_output",)),
+    ("contracts.cross_runtime_result_merge", ("merge_unit_from_takeover_result",)),
+    ("contracts.cross_runtime_result_merge", ("merge_unit_from_dispatch_result",)),
+    ("contracts.cross_runtime_result_merge", ("merge_runtime_results",)),
+    # PR package 16 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical ingress path for Android delegated execution signals.
+    # Re-exported here so callers can reach the ingress API from core.runtime
+    # without importing the module directly.
+    # PR-21: canonical path closure sentinels; PR-22: ingress registry consolidation sentinels
+    (
+        "core.android_delegated_signal_ingress",
+        (
+            "ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY",
+            "ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL",
+            "CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL",
+            "CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY",
+            "IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY",
+            "INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY",
+            "INGRESS_DELEGATES_TO_RECONCILER_POLICY",
+            "INGRESS_EMISSION_SEQ_IS_PRESERVED_POLICY",
+            "INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY",
+            "INGRESS_IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
+            "INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY",
+            "INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY",
+            "INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY",
+            "INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL",
+            "INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY",
+            "INGRESS_REQUIRES_LOOKUP_KEY_POLICY",
+            "INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY",
+            "INGRESS_SIGNAL_ID_IS_PRESERVED_POLICY",
+            "INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY",
+            "INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY",
+            "TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY",
+            "DelegatedExecutionSignalEnvelope",
+            "DelegatedSignalKind",
+            "ResultKind",
+            "extract_delegated_signal_envelope",
+            "ingest_delegated_execution_signal",
+        ),
+    ),
+    # PR package 13 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical host-side Android execution signal reconciliation binding.
+    # Re-exported here so callers can reach the reconciler API from core.runtime
+    # without importing the module directly.
+    (
+        "core.android_execution_signal_reconciler",
+        (
+            "ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY",
+            "ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL",
+            "RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
+            "RECONCILER_ERROR_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
+            "RECONCILER_IDENTITY_IS_PRESERVED_ACROSS_RECONCILE_POLICY",
+            "RECONCILER_PR22_SENTINEL",
+            "RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY",
+            "RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY",
+            "RECONCILER_REQUIRES_CONTRACT_ID_OR_SESSION_ID_POLICY",
+            "RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY",
+            "RECONCILER_SIGNAL_MAPPING_IS_CANONICAL_POLICY",
+            "RECONCILER_TASK_STATUS_MAPS_TO_ACK_SIGNAL_CANONICALLY_POLICY",
+            "RECONCILER_TERMINAL_RECORD_BLOCKS_FURTHER_SIGNALS_POLICY",
+            "RECONCILER_TIMEOUT_SIGNAL_CLOSES_TRACKING_RECORD_POLICY",
+            "RECONCILER_UNKNOWN_SIGNAL_DEFAULTS_TO_PROGRESS_POLICY",
+            "AndroidExecutionSignalEnvelope",
+            "AndroidSignalKind",
+            "AndroidSignalReconcileOutcome",
+            "extract_signal_envelope",
+            "normalize_android_message_to_signal_kind",
+            "reconcile_android_execution_signal",
+            "reconcile_inbound_message",
+        ),
+    ),
+    # PR-4V2: Android Participant/Session/Runtime Truth Ingress and Canonical
+    # Reconciliation into V2 Orchestration State.
+    # Re-exported here so callers can reach the Android participant truth ingress
+    # API from core.runtime without importing the module directly.
+    (
+        "core.android_participant_truth_ingress",
+        (
+            "ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY",
+            "ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL",
+            "ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY",
+            "CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY",
+            "IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
+            "READINESS_ASSESSMENT_IS_ADVISORY_POLICY",
+            "RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY",
+            "RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY",
+            "RUNTIME_STATE_IS_AUDIT_ONLY_POLICY",
+            "SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY",
+            "STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY",
+            "TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY",
+            "TERMINAL_V2_STATE_WINS_CONFLICT_POLICY",
+            "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY",
+            "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL",
+            "AndroidParticipantReconcileOutcome",
+            "AndroidParticipantTruthEnvelope",
+            "AndroidParticipantTruthKind",
+            "extract_participant_truth_envelope",
+            "ingest_android_participant_truth_message",
+            "reconcile_android_participant_truth",
+        ),
+    ),
+    # PR package 11 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical MAIN-side attached-Android-runtime dispatch binding basis.
+    # Re-exported here so callers can reach the dispatch-binding API from
+    # core.runtime without importing the module directly.
+    (
+        "core.android_runtime_dispatch_binding",
+        (
+            "ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY",
+            "ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL",
+            "BINDING_CONTRACT_ID_IS_IMMUTABLE_POLICY",
+            "BINDING_REQUIRES_ATTACHED_SESSION_POLICY",
+            "BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+            "BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY",
+            "BINDING_SESSION_ID_MUST_MATCH_CONTRACT_POLICY",
+            "BINDING_STATE_IS_MONOTONIC_POLICY",
+            "BINDING_TRACKER_ID_IS_PROPAGATED_POLICY",
+            "DISPATCH_BINDING_REQUIRES_CONTRACT_ID_POLICY",
+            "RELEASED_BINDING_IS_TERMINAL_POLICY",
+            "AndroidRuntimeBindingSignal",
+            "AndroidRuntimeBindingState",
+            "AndroidRuntimeDispatchBindingIdentity",
+            "AndroidRuntimeDispatchBindingRecord",
+            "AndroidRuntimeDispatchBindingRuntime",
+            "AndroidRuntimeDispatchBindingSnapshot",
+            "advance_binding_state",
+            "build_dispatch_binding_snapshot",
+            "create_android_dispatch_binding",
+            "get_dispatch_binding",
+            "get_dispatch_binding_by_contract",
+            "get_dispatch_binding_runtime",
+            "list_bound_dispatch_bindings",
+            "record_dispatch_binding",
+            "reset_dispatch_binding_runtime",
+            "resolve_dispatch_binding",
+        ),
+    ),
+    # PR-5 (post-533 dual-repo runtime unification, MAIN repo side): Android
+    # first-class runtime host classification and identity.  Re-exported here
+    # so callers can reach Android host typing from core.runtime without
+    # importing the module directly.
+    (
+        "core.android_runtime_host",
+        (
+            "ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL",
+            "ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5",
+            "ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5",
+            "AndroidRuntimeHostIdentity",
+            "AndroidRuntimeHostRole",
+            "build_android_runtime_host_identity",
+            "classify_android_runtime_host",
+        ),
+    ),
+    # PR package 15 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): attached-runtime recovery readiness and inbound signal guard.
+    # Re-exported here so callers can reach the guard API from core.runtime
+    # without importing the module directly.
+    (
+        "core.attached_runtime_recovery_readiness",
+        (
+            "ACCEPTED_SIGNAL_IS_RECORDED_POLICY",
+            "ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY",
+            "ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL",
+            "DUPLICATE_SIGNAL_ID_IS_REJECTED_POLICY",
+            "GUARD_DECISION_IS_OBSERVABLE_POLICY",
+            "GUARD_MUST_PRECEDE_RECONCILE_POLICY",
+            "IDEMPOTENCY_KEY_USES_SIGNAL_ID_AND_CONTEXT_POLICY",
+            "OUT_OF_ORDER_EMISSION_SEQ_IS_REJECTED_POLICY",
+            "RECOVERY_READINESS_RING_BUFFER_SIZE",
+            "REJECTED_SIGNAL_MUST_NOT_REACH_TRACKER_POLICY",
+            "REPLAY_AT_SAME_SEQ_IS_REJECTED_POLICY",
+            "RING_BUFFER_IS_BOUNDED_POLICY",
+            "SEQ_INDEX_TRACKS_MAX_PER_CONTEXT_POLICY",
+            "STALE_EMISSION_SEQ_IS_REJECTED_POLICY",
+            "STALE_EMISSION_SEQ_THRESHOLD",
+            "IdempotencyKey",
+            "RecoveryReadinessRuntime",
+            "RecoveryReadinessSnapshot",
+            "RecoveryReadinessStatus",
+            "SeenSignalRecord",
+            "SignalGuardDecision",
+            "SignalGuardOutcome",
+            "build_idempotency_key",
+            "build_recovery_readiness_snapshot",
+            "check_signal_guard",
+            "get_recovery_readiness_runtime",
+            "guard_inbound_signal",
+            "record_seen_signal",
+            "reset_recovery_readiness_runtime",
+        ),
+    ),
+    # PR package 14 (post-533 dual-repo runtime unification master plan, MAIN
+    # side): canonical persistent attached-runtime reuse binding.
+    # Re-exported here so callers can reach the reuse binding API from core.runtime
+    # without importing the module directly.
+    (
+        "core.attached_runtime_reuse_binding",
+        (
+            "ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY",
+            "ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL",
+            "REUSE_BINDING_DISPATCH_BINDING_ID_IS_LATEST_POLICY",
+            "REUSE_BINDING_INVALIDATED_ON_DETACH_POLICY",
+            "REUSE_BINDING_INVALIDATED_ON_DISABLE_POLICY",
+            "REUSE_BINDING_INVALIDATED_ON_DISCONNECT_POLICY",
+            "REUSE_BINDING_IS_STABLE_TARGETING_SURFACE_POLICY",
+            "REUSE_BINDING_REQUIRES_ATTACHED_SESSION_POLICY",
+            "REUSE_BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+            "REUSE_BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY",
+            "REUSE_ELIGIBILITY_REQUIRES_ACTIVE_SESSION_POLICY",
+            "AttachedRuntimeReuseBindingIdentity",
+            "AttachedRuntimeReuseBindingRecord",
+            "AttachedRuntimeReuseBindingRuntime",
+            "AttachedRuntimeReuseBindingSnapshot",
+            "ReuseEligibilityStatus",
+            "ReuseInvalidationReason",
+            "build_reuse_binding_snapshot",
+            "establish_reuse_binding",
+            "evaluate_reuse_eligibility",
+            "get_reuse_binding",
+            "get_reuse_binding_by_device",
+            "get_reuse_binding_runtime",
+            "invalidate_reuse_binding",
+            "list_eligible_reuse_bindings",
+            "record_reuse_binding",
+            "register_dispatch_binding_id",
+            "reset_reuse_binding_runtime",
+        ),
+    ),
+    # PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical dispatch consumption of attached-runtime reuse bindings.
+    # Re-exported here to provide a stable public API surface for reuse dispatch
+    # functionality so callers can import from core.runtime without depending on
+    # the module path directly.
+    # PR-23: canonical takeover dispatch / delegated fallback
+    (
+        "core.attached_runtime_reuse_dispatch",
+        (
+            "ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY",
+            "ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL",
+            "DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY",
+            "REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY",
+            "REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY",
+            "REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY",
+            "REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY",
+            "REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY",
+            "REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY",
+            "REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY",
+            "REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY",
+            "REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY",
+            "REUSE_DISPATCH_PR22_SENTINEL",
+            "REUSE_DISPATCH_PR23_SENTINEL",
+            "REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY",
+            "REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY",
+            "REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY",
+            "REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY",
+            "REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY",
+            "STALE_EXECUTION_CONTEXT_CANNOT_ALTER_TAKEOVER_DECISION_PR23_POLICY",
+            "TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY",
+            "TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY",
+            "ReuseDispatchResolution",
+            "ReuseDispatchResolutionKind",
+            "TakeoverDispatchDecision",
+            "TakeoverRouteOutcome",
+            "dispatch_with_reuse_binding",
+            "resolve_reuse_dispatch_surface",
+            "resolve_takeover_or_fallback_route",
+            "write_back_dispatch_binding_id",
+        ),
+    ),
+    # PR package 7 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical persistent attached-runtime session semantics.  Re-exported
+    # here so callers can reach the attached-runtime session API from core.runtime
+    # without importing the module directly.
+    (
+        "core.attached_runtime_session",
+        (
+            "ATTACH_IS_IDEMPOTENT_POLICY",
+            "ATTACHED_RUNTIME_SESSION_AUTHORITY",
+            "ATTACHED_RUNTIME_SESSION_PR7_SENTINEL",
+            "ATTACHED_SESSION_PERSISTS_ACROSS_REQUESTS_POLICY",
+            "ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+            "ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY",
+            "ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY",
+            "DETACH_SIGNAL_REQUIRED_FOR_SESSION_TERMINATION_POLICY",
+            "DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY",
+            "DISCONNECTED_DOES_NOT_INVALIDATE_SESSION_POLICY",
+            "INVALIDATED_SESSION_IS_TERMINAL_POLICY",
+            "TRANSIENT_PRESENCE_DISTINCT_FROM_ATTACHED_SESSION_POLICY",
+            "AttachedRuntimeSessionRecord",
+            "AttachedRuntimeSessionRuntime",
+            "AttachedRuntimeSessionSnapshot",
+            "AttachmentLifecycleAction",
+            "AttachmentLifecycleSignal",
+            "AttachmentState",
+            "apply_lifecycle_signal",
+            "attach_runtime_session",
+            "build_attached_runtime_session_snapshot",
+            "classify_attach_lifecycle_action",
+            "classify_signal_lifecycle_action",
+            "get_attached_runtime_session",
+            "get_attached_runtime_session_runtime",
+            "list_active_attached_sessions",
+            "reset_attached_runtime_session_runtime",
+        ),
+    ),
+    # PR-23: canonical takeover dispatch authority sentinels
+    (
+        "core.attached_runtime_session_registry",
+        (
+            "ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL",
+            "ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL",
+            "ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY",
+            "ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL",
+            "REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY",
+            "REGISTRY_DETACH_REQUIRES_EXPLICIT_SIGNAL_POLICY",
+            "REGISTRY_DEVICE_HAS_AT_MOST_ONE_ACTIVE_SESSION_POLICY",
+            "REGISTRY_DISPATCH_MUST_CONSULT_REGISTRY_POLICY",
+            "REGISTRY_INVALIDATED_ENTRY_IS_TERMINAL_POLICY",
+            "REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY",
+            "REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY",
+            "REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY",
+            "REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY",
+            "REGISTRY_IS_SINGLE_TRUTH_SOURCE_POLICY",
+            "REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY",
+            "REGISTRY_LOOKUP_RETURNS_ACTIVE_ONLY_BY_DEFAULT_POLICY",
+            "REGISTRY_RECONCILIATION_MUST_CONSULT_REGISTRY_POLICY",
+            "REGISTRY_RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY",
+            "REGISTRY_REGISTER_REPLACES_OLD_SESSION_POLICY",
+            "REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY",
+            "REGISTRY_REUSE_MUST_CONSULT_REGISTRY_POLICY",
+            "REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY",
+            "AttachedSessionRegistry",
+            "AttachedSessionRegistryEntry",
+            "AttachedSessionRegistrySnapshot",
+            "InvalidationReason",
+            "RegistryEntryState",
+            "RegistryTransition",
+            "build_registry_snapshot",
+            "detach_session",
+            "get_session_registry",
+            "invalidate_session",
+            "list_active_sessions",
+            "lookup_active_session",
+            "lookup_session_by_device",
+            "reattach_session",
+            "reconnect_session",
+            "register_session",
+            "reset_session_registry",
+        ),
+    ),
+    # PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical device/host capability representation and scheduling-basis
+    # normalization.  Re-exported here so callers can reach the capability/
+    # scheduling API from core.runtime without importing the module directly.
+    (
+        "core.canonical_capability_scheduling_basis",
+        (
+            "ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY",
+            "CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY",
+            "CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL",
+            "CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY",
+            "COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY",
+            "FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+            "OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY",
+            "SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY",
+            "CapabilityTier",
+            "ExecutionSurface",
+            "ExecutionSurfaceEligibility",
+            "RuntimeCapabilityProfile",
+            "SchedulingBasisInputs",
+            "build_runtime_capability_profile",
+            "build_scheduling_basis_inputs",
+            "evaluate_execution_surface_eligibility",
+            "normalize_scheduling_inputs",
+        ),
+    ),
+    # PR-4 (post-533 dual-repo runtime host unification): canonical session truth
+    # and posture-aware result merge.  Re-exported here so callers can reach the
+    # session truth API from core.runtime without importing the module directly.
+    (
+        "core.canonical_session_truth",
+        (
+            "CANONICAL_SESSION_TRUTH_AUTHORITY",
+            "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
+            "CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY",
+            "JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY",
+            "OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY",
+            "POSTURE_AWARE_RESULT_FILTER_POLICY",
+            "CanonicalSessionTruthRecord",
+            "CanonicalSessionTruthRuntime",
+            "CanonicalSessionTruthSnapshot",
+            "SessionTruthSource",
+            "build_canonical_session_truth_snapshot",
+            "filter_result_units_by_posture",
+            "get_canonical_session_truth_runtime",
+            "merge_session_truth",
+            "record_session_truth",
+            "reset_canonical_session_truth_runtime",
+        ),
+    ),
+    # PR package 50 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): Unified Delegated Flow Entity — Cross-Device First-Class Citizen.
+    # Re-exported here so callers can reach the delegated flow entity API from
+    # core.runtime without importing the module directly.
+    (
+        "core.delegated_flow_entity",
+        (
+            "ANDROID_HOLDS_EXECUTION_TRUTH_POLICY",
+            "DELEGATED_FLOW_ENTITY_AUTHORITY",
+            "DELEGATED_FLOW_ENTITY_PR50_SENTINEL",
+            "DELEGATED_FLOW_ID_IS_IMMUTABLE_POLICY",
+            "EXTENSION_POINTS_ARE_FORWARD_COMPATIBLE_POLICY",
+            "FLOW_ENTITY_IS_SYSTEM_FIRST_CLASS_CITIZEN_POLICY",
+            "FLOW_KIND_UNIFIES_ALL_DELEGATED_WORK_POLICY",
+            "FLOW_LINEAGE_ID_SPANS_BOTH_SIDES_POLICY",
+            "FLOW_LINEAGE_IS_TRACEABLE_ACROSS_KIND_BOUNDARY_POLICY",
+            "FLOW_OBJECT_MAPPING_IS_ADDITIVE_POLICY",
+            "FLOW_PHASE_IS_MONOTONIC_POLICY",
+            "FLOW_TRUTH_AUTHORITY_IS_SCOPE_SEPARATED_POLICY",
+            "TERMINAL_FLOW_PHASE_BLOCKS_ADVANCEMENT_POLICY",
+            "V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY",
+            "DelegatedFlowEntity",
+            "DelegatedFlowEntityRecord",
+            "DelegatedFlowEntityRuntime",
+            "DelegatedFlowEntitySnapshot",
+            "DelegatedFlowExtensionPoints",
+            "DelegatedFlowIdentity",
+            "DelegatedFlowKind",
+            "DelegatedFlowObjectMapping",
+            "DelegatedFlowOwnerKind",
+            "DelegatedFlowOwnership",
+            "DelegatedFlowPhase",
+            "DelegatedFlowSignal",
+            "advance_flow_phase",
+            "attach_object_mapping",
+            "build_delegated_flow_snapshot",
+            "create_delegated_flow_entity",
+            "get_delegated_flow",
+            "get_delegated_flow_by_contract",
+            "get_delegated_flow_by_lineage",
+            "get_delegated_flow_entity_runtime",
+            "list_active_delegated_flows",
+            "record_delegated_flow",
+            "reset_delegated_flow_entity_runtime",
+        ),
+    ),
+    # PR package 8 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical delegated-runtime dispatch intent and handoff-preparation
+    # foundations.
+    (
+        "core.delegated_runtime_dispatch_intent",
+        (
+            "COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY",
+            "DELEGATED_RUNTIME_DISPATCH_INTENT_AUTHORITY",
+            "DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL",
+            "DELEGATION_INTENT_IS_ADDITIVE_TO_SESSION_POLICY",
+            "DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY",
+            "DELEGATION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+            "DISPATCH_RECORD_IS_IMMUTABLE_POLICY",
+            "HANDOFF_INPUTS_MUST_BE_SESSION_ANCHORED_POLICY",
+            "OBSERVER_ONLY_ROLE_BLOCKS_DELEGATION_POLICY",
+            "PREPARATION_STATE_IS_MONOTONICALLY_ADVANCING_POLICY",
+            "TARGET_ONLY_EXECUTOR_CANNOT_DELEGATE_POLICY",
+            "DelegatedRuntimeDispatchRecord",
+            "DelegatedRuntimeDispatchRuntime",
+            "DelegatedRuntimeDispatchSnapshot",
+            "DelegationIntent",
+            "DispatchEligibilityOutcome",
+            "HandoffInputBundle",
+            "HandoffPreparationState",
+            "build_delegated_dispatch_record",
+            "build_delegated_dispatch_snapshot",
+            "evaluate_dispatch_eligibility",
+            "get_delegated_dispatch_record",
+            "get_delegated_runtime_dispatch_runtime",
+            "list_pending_delegated_dispatch_records",
+            "prepare_handoff_inputs",
+            "record_delegated_dispatch_intent",
+            "reset_delegated_runtime_dispatch_runtime",
+        ),
+    ),
+    # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical delegated-runtime execution-tracking and acknowledgment
+    # basis.  Re-exported here so callers can reach the execution-tracking API
+    # from core.runtime without importing the module directly.
+    (
+        "core.delegated_runtime_execution_tracker",
+        (
+            "ACK_SEQUENCE_IS_MONOTONICALLY_INCREASING_POLICY",
+            "DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY",
+            "DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL",
+            "EXECUTION_PHASE_IS_MONOTONIC_POLICY",
+            "EXECUTION_TRACKING_POSTURE_IS_PROPAGATED_POLICY",
+            "EXECUTION_TRACKING_REQUIRES_CONTRACT_ID_POLICY",
+            "EXECUTION_TRACKING_REQUIRES_SESSION_ID_POLICY",
+            "PARTIAL_RESULT_DOES_NOT_CLOSE_TRACKING_POLICY",
+            "RESULT_IS_IMMUTABLE_ONCE_RECORDED_POLICY",
+            "TERMINAL_PHASE_BLOCKS_FURTHER_SIGNALS_POLICY",
+            "TRACKING_RECORD_IS_CONTRACT_ANCHORED_POLICY",
+            "AcknowledgmentSignal",
+            "DelegatedExecutionAcknowledgment",
+            "DelegatedExecutionIdentity",
+            "DelegatedExecutionPhase",
+            "DelegatedExecutionResult",
+            "DelegatedExecutionTrackingRecord",
+            "DelegatedExecutionTrackingRuntime",
+            "DelegatedExecutionTrackingSnapshot",
+            "apply_acknowledgment_signal",
+            "apply_result",
+            "build_execution_tracking_snapshot",
+            "create_execution_tracking_record",
+            "get_execution_tracking_record",
+            "get_execution_tracking_runtime",
+            "list_active_execution_tracking_records",
+            "record_execution_tracking",
+            "reset_execution_tracking_runtime",
+        ),
+    ),
+    # PR package 9 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical delegated-runtime handoff contract foundations.  Re-exported
+    # here so callers can reach the handoff-contract API from core.runtime without
+    # importing the module directly.
+    (
+        "core.delegated_runtime_handoff_contract",
+        (
+            "DELEGATED_RUNTIME_HANDOFF_CONTRACT_AUTHORITY",
+            "DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL",
+            "HANDOFF_CONTRACT_IDENTITY_IS_IMMUTABLE_POLICY",
+            "HANDOFF_CONTRACT_PAYLOAD_MUST_BE_NON_EMPTY_POLICY",
+            "HANDOFF_CONTRACT_POSTURE_IS_PRESERVED_POLICY",
+            "HANDOFF_CONTRACT_REQUIRES_ATTACHED_SESSION_POLICY",
+            "HANDOFF_CONTRACT_REQUIRES_DISPATCH_RECORD_POLICY",
+            "HANDOFF_CONTRACT_STATUS_IS_MONOTONIC_POLICY",
+            "HANDOFF_CONTRACT_TRACE_ID_IS_PROPAGATED_POLICY",
+            "HANDOFF_CONTRACT_VERSION_MUST_BE_EXPLICIT_POLICY",
+            "SEALED_CONTRACT_IS_DISPATCH_READY_POLICY",
+            "DelegatedHandoffContractIdentity",
+            "DelegatedHandoffContractMeta",
+            "DelegatedHandoffContractPayload",
+            "DelegatedHandoffContractRecord",
+            "DelegatedHandoffContractRuntime",
+            "DelegatedHandoffContractSnapshot",
+            "HandoffContractStatus",
+            "HandoffContractVersion",
+            "build_delegated_handoff_contract",
+            "build_handoff_contract_snapshot",
+            "get_handoff_contract",
+            "get_handoff_contract_runtime",
+            "list_pending_handoff_contracts",
+            "record_handoff_contract",
+            "reset_handoff_contract_runtime",
+            "seal_handoff_contract",
+        ),
+    ),
+    # PR package 20 (post-533 dual-repo runtime unification master plan, MAIN repo
+    # side): canonical delegated target selection policy layer.
+    (
+        "core.delegated_target_selection_policy",
+        (
+            "BASE_CANDIDATE_SCORE",
+            "DEGRADATION_SCORE_THRESHOLD",
+            "DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY",
+            "DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL",
+            "DETACH_COUNT_MAX_PENALTY",
+            "DETACH_COUNT_PENALTY_PER_UNIT",
+            "FAILURE_COUNT_MAX_PENALTY",
+            "FAILURE_COUNT_PENALTY_PER_UNIT",
+            "LOAD_MAX_PENALTY",
+            "LOAD_PENALTY_PER_10_EXECUTIONS",
+            "REUSE_VALID_BONUS",
+            "SELECTION_DECISION_IS_EXPLAINABLE_POLICY",
+            "SELECTION_HIGH_DETACH_COUNT_DEMOTES_CANDIDATE_POLICY",
+            "SELECTION_HIGH_FAILURE_COUNT_DEMOTES_CANDIDATE_POLICY",
+            "SELECTION_HIGH_RISK_CANDIDATE_MAY_DEGRADE_POLICY",
+            "SELECTION_MUST_CONSULT_REGISTRY_POLICY",
+            "SELECTION_NO_VALID_CANDIDATE_TRIGGERS_LOCAL_FALLBACK_POLICY",
+            "SELECTION_RANKING_IS_DETERMINISTIC_POLICY",
+            "SELECTION_REQUIRES_ACTIVE_ATTACHMENT_STATE_POLICY",
+            "SELECTION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
+            "SELECTION_REQUIRES_NO_INVALIDATION_REASON_POLICY",
+            "SELECTION_REUSE_VALID_IS_PREFERRED_POLICY",
+            "CandidateEvaluation",
+            "CandidateRejectionReason",
+            "SelectionCandidateContext",
+            "SelectionDecision",
+            "SelectionOutcome",
+            "build_selection_explanation",
+            "evaluate_candidate",
+            "rank_candidates",
+            "select_delegated_target",
+        ),
+    ),
+    # PR-5 Final: Final Cleanup and Invariant Tightening.
+    # Re-exported here so callers can reach the cleanup/guard API from
+    # core.runtime without importing the module directly.
+    (
+        "core.final_cleanup_invariant_tightening",
+        (
+            "CANONICAL_CAPABILITY_ROUTING_PATH",
+            "CANONICAL_COMPLETION_INGRESS_PATH",
+            "CANONICAL_PROVIDER_ROUTING_PATH",
+            "CANONICAL_RUNTIME_TRUTH_INGRESS_PATH",
+            "CANONICAL_VALIDATION_GATE_PATH",
+            "FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY",
+            "FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL",
+            "LEGACY_PATH_MUST_NOT_RE_ENTER_CANONICAL_SURFACE_POLICY",
+            "NO_BYPASS_CAPABILITY_ROUTING_POLICY",
+            "NO_BYPASS_COMPLETION_INGRESS_POLICY",
+            "NO_BYPASS_PROVIDER_ROUTING_POLICY",
+            "NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY",
+            "NO_BYPASS_VALIDATION_GATE_POLICY",
+            "SEMANTIC_CAPABILITY_TIER_POLICY",
+            "BypassGuardResult",
+            "BypassGuardVerdict",
+            "BypassInvariantViolation",
+        ),
+    ),
+    ("core.final_cleanup_invariant_tightening", ("FinalCleanupCapabilityTier",)),
+    (
+        "core.final_cleanup_invariant_tightening",
+        (
+            "CapabilityTierRecord",
+            "ClosureArea",
+            "FinalCleanupPostureSnapshot",
+            "assert_capability_routing_is_canonical",
+            "assert_completion_ingress_is_canonical",
+            "assert_provider_routing_is_canonical",
+            "assert_runtime_truth_ingress_is_canonical",
+            "assert_validation_gate_is_canonical",
+            "build_final_cleanup_posture_snapshot",
+            "get_capability_tier",
+            "get_capability_tier_registry",
+            "is_final_cleanup_posture_acceptable",
+            "run_all_no_bypass_guards",
+        ),
+    ),
+    # PR-6V2: Flow-Aware Result / Partial / Parallel Convergence.
+    (
+        "core.flow_aware_result_convergence",
+        (
+            "CROSS_DEVICE_RESULT_SURFACE_IS_TRANSPORT_BOUNDARY_POLICY",
+            "DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY",
+            "FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY",
+            "FLOW_AWARE_CONVERGENCE_AUTHORITY",
+            "FLOW_AWARE_CONVERGENCE_PR6V2_SENTINEL",
+            "FLOW_MISMATCH_QUARANTINES_RESULT_POLICY",
+            "GOAL_RESULT_AGGREGATOR_IS_GROUP_COMPLETION_SIGNAL_POLICY",
+            "LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY",
+            "PARALLEL_RESULTS_AGGREGATE_TO_PARENT_FLOW_VIA_GROUP_ID_POLICY",
+            "PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY",
+            "RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY",
+            "ConvergenceDecisionKind",
+            "ConvergenceFlowLineage",
+            "FlowAwareConvergenceCoordinator",
+            "FlowConvergenceSnapshot",
+            "ParallelFlowAggregationRecord",
+            "ResultConvergenceArtifact",
+            "ResultConvergenceContext",
+            "ResultSemanticKind",
+            "absorb_result",
+            "build_flow_convergence_snapshot",
+            "classify_result_semantic_kind",
+            "decide_convergence",
+            "get_flow_aware_convergence_coordinator",
+            "reset_flow_aware_convergence_coordinator",
+        ),
+    ),
+    # PR-5V2: Flow-Level Truth Ownership and Local/Central Truth Alignment.
+    (
+        "core.flow_level_truth_ownership",
+        (
+            "ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY",
+            "ANDROID_ADVANCED_AHEAD_OF_V2_CONFIRMATION_POLICY",
+            "ANDROID_CANCEL_FAILURE_RESULT_ARE_AUTHORITATIVE_UPWARD_POLICY",
+            "COMPAT_INFLUENCE_BLOCKS_AUTHORITATIVE_TRUTH_PATH_POLICY",
+            "EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY",
+            "FLOW_LEVEL_TRUTH_OWNERSHIP_AUTHORITY",
+            "FLOW_LEVEL_TRUTH_OWNERSHIP_PR5V2_SENTINEL",
+            "PARTIAL_RESULT_LIVES_IN_EXECUTION_TRACKING_RECORD_POLICY",
+            "POSTURE_CHANGE_QUARANTINES_PRIOR_EVIDENCE_POLICY",
+            "UNKNOWN_TRUTH_KIND_DEFAULTS_TO_ADVISORY_POLICY",
+            "V2_CANONICAL_OWNS_TERMINAL_FLOW_DECISION_POLICY",
+            "FlowTruthAlignmentContext",
+            "FlowTruthAlignmentRuntime",
+            "FlowTruthAlignmentSnapshot",
+            "FlowTruthDecisionArtifact",
+            "FlowTruthDecisionKind",
+            "FlowTruthOwnerKind",
+            "FlowTruthSemanticKind",
+            "PostureChangeHandling",
+            "PostureChangeImpactRecord",
+            "align_and_record",
+            "align_android_truth_with_canonical",
+            "build_flow_truth_alignment_snapshot",
+            "classify_flow_truth_kind",
+            "evaluate_posture_change_impact",
+            "get_flow_truth_alignment_runtime",
+            "record_flow_truth_decision",
+            "reset_flow_truth_alignment_runtime",
+        ),
+    ),
+    # PR-J: Live MeshSession Coordinator — incremental event-driven runtime driver.
+    # Re-exported here so callers can reach the live coordinator from core.runtime.
+    (
+        "core.mesh.live_mesh_session_coordinator",
+        (
+            "BARRIER_TRACKS_ACROSS_EVENTS_PR_J_POLICY",
+            "COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY",
+            "INCREMENTAL_PARTICIPANT_EVENTS_PR_J_POLICY",
+            "LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL",
+            "PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY",
+            "LiveMeshSessionCoordinator",
+            "create_live_mesh_session_coordinator",
+        ),
+    ),
+    # PR-37: Mesh Session Coordinator (mesh package)
+    # Imported here for convenience so consumers can reach the coordinator
+    # from either core.runtime or core.mesh.
+    # PR-J: live mesh runtime execution helpers; MESH-002 closure: MeshSession progression driver
+    (
+        "core.mesh.mesh_session_coordinator",
+        (
+            "MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY",
+            "MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL",
+            "MESH_SESSION_PROGRESSION_DRIVER_SENTINEL",
+            "SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY",
+            "SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY",
+            "MeshSessionCoordinator",
+            "MeshSessionProgressionDriver",
+            "MeshSessionProgressionFinalResult",
+            "coordinate_mesh_session",
+            "create_progression_driver",
+            "drop_participant",
+            "get_coordinator_summary",
+            "register_participant",
+            "run_live_mesh_session",
+            "update_participant_status",
+        ),
+    ),
+    # PR-6 (post-533 dual-repo runtime host unification): multi-device coordination
+    # authority and canonical role modelling.  Re-exported here so callers can
+    # reach the coordination role API from core.runtime without importing the
+    # module directly.
+    (
+        "core.multi_device_coordination_authority",
+        (
+            "COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY",
+            "MULTI_DEVICE_COORDINATION_AUTHORITY",
+            "MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL",
+            "OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY",
+            "SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY",
+            "TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY",
+            "CoordinationRole",
+            "CoordinationRoleRecord",
+            "CoordinationRoleRuntime",
+            "CoordinationRoleSnapshot",
+            "build_coordination_role_record",
+            "build_coordination_role_snapshot",
+            "derive_coordination_role",
+            "get_coordination_role_runtime",
+            "get_source_controller_device_id",
+            "record_coordination_role",
+            "reset_coordination_role_runtime",
+        ),
+    ),
+    # PR package 1 (post-533 dual-repo runtime unification, MAIN repo side):
+    # posture contract canonicalization enforcement layer.
+    (
+        "core.posture_contract_canonicalization",
+        (
+            "POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY",
+            "POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY",
+            "POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY",
+            "POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY",
+            "POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL",
+            "PostureBoundaryViolation",
+            "assert_posture_boundary_compliance",
+            "canonicalize_posture_in_payload",
+            "get_posture_from_payload",
+            "validate_posture_field_consistency",
+        ),
+    ),
+    # PR-35: Source Runtime Dispatch Orchestrator
+    # PR-24: dispatch selection truth consolidation; PR-25: mainline abnormal-path matrix +
+    # Phase A acceptance; PR-26: client-facing result surfacing normalization; PR-27:
+    # gateway-facing registration and capability error semantics hardening; PR-28: integrated
+    # regression closure and release-readiness tightening; PR-29: post-release follow-up
+    # tightening across dispatch and client semantics; PR-30: observability and diagnostics
+    # hardening for rollout safety; PR-31: rollout controls, default behaviors, and
+    # safe-operating release toggles; PR-32: staged mesh minimal executable closure; PR-J:
+    # live mesh runtime engine; PR-33: reconnect and recovery consistency hardening; PR-34:
+    # final product-grade cross-device and runtime acceptance pack; PR-closure: Android
+    # terminal signal → canonical ReplayFoundation truth
+    (
+        "core.runtime.source_dispatch_orchestrator",
+        (
+            "ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY",
+            "ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL",
+            "ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY",
+            "CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY",
+            "CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL",
+            "CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY",
+            "CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL",
+            "DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY",
+            "DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY",
+            "DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY",
+            "DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY",
+            "DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY",
+            "DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY",
+            "DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY",
+            "DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY",
+            "DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL",
+            "END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY",
+            "EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY",
+            "FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY",
+            "GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL",
+            "GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY",
+            "INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL",
+            "INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY",
+            "KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY",
+            "LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY",
+            "LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL",
+            "LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J_POLICY",
+            "LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY",
+            "MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL",
+            "MULTI_TARGET_RANKING_MATURITY_PR34_POLICY",
+            "NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY",
+            "OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL",
+            "PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY",
+            "POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL",
+            "READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY",
+            "RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY",
+            "RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL",
+            "REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY",
+            "REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY",
+            "REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY",
+            "REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY",
+            "REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY",
+            "REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY",
+            "REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY",
+            "RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY",
+            "RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY",
+            "RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY",
+            "RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY",
+            "ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL",
+            "ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY",
+            "SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY",
+            "SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY",
+            "SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY",
+            "SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY",
+            "SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY",
+            "SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY",
+            "SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY",
+            "STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY",
+            "STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY",
+            "STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL",
+            "STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY",
+            "STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY",
+            "STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY",
+            "SourceDispatchOrchestrator",
+            "build_source_dispatch_plan",
+            "orchestrate_source_runtime_dispatch",
+            "select_dispatch_mode",
+            "select_dispatch_target",
+        ),
+    ),
+    (
+        "core.runtime.target_takeover",
+        (
+            "TargetTakeoverHandler",
+            "adopt_handoff_session",
+            "build_local_takeover_context",
+            "execute_local_takeover",
+            "normalize_handoff_envelope",
+            "resolve_or_create_runtime_session",
+        ),
+    ),
+    # PR-2 (post-533 dual-repo runtime host unification): posture-aware source
+    # execution eligibility.  Re-exported here so callers can reach the
+    # eligibility API from core.runtime without importing the module directly.
+    (
+        "core.source_execution_eligibility",
+        (
+            "CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",
+            "COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL",
+            "JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",
+            "OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY",
+            "POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL",
+            "POSTURE_GATED_LOCAL_EXECUTION_POLICY",
+            "SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY",
+            "SourceExecutionEligibility",
+            "check_source_eligibility_with_coordination_role",
+            "check_source_execution_eligibility",
+            "is_source_eligible_for_local_execution",
+            "resolve_posture_for_eligibility",
+        ),
+    ),
+    # PR-6 (center-side): WebRTC Task-Lifecycle Integration.
+    # Re-exported here so callers can reach the WebRTC task-lifecycle API from
+    # core.runtime without importing the module directly.
+    (
+        "core.webrtc_task_lifecycle",
+        (
+            "BINDING_IS_TASK_SCOPED_SINGLE_SESSION_POLICY",
+            "DEGRADED_TRANSPORT_YIELDS_DEGRADED_TASK_POLICY",
+            "FAILED_TRANSPORT_YIELDS_FAILED_TASK_POLICY",
+            "RECONNECTED_TRANSPORT_RESUMES_RUNNING_TASK_POLICY",
+            "SESSION_BINDING_RECORD_IS_IMMUTABLE_POLICY",
+            "TEARDOWN_IS_IDEMPOTENT_POLICY",
+            "TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY",
+            "TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY",
+            "WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY",
+            "WEBRTC_TASK_LIFECYCLE_AUTHORITY",
+            "WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL",
+            "WebRTCTaskBinding",
+            "WebRTCTaskBindingSnapshot",
+            "WebRTCTaskLifecycleAction",
+            "WebRTCTaskSessionRegistry",
+            "WebRTCTransportState",
+            "apply_transport_state_to_task_lifecycle",
+            "bind_webrtc_session_to_task",
+            "build_webrtc_task_binding_snapshot",
+            "classify_transport_lifecycle_action",
+            "get_webrtc_task_binding",
+            "get_webrtc_task_session_registry",
+            "list_active_webrtc_task_bindings",
+            "reset_webrtc_task_session_registry",
+            "teardown_binding_on_task_terminal",
+        ),
+    ),
 )
 
-# PR package 16 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical ingress path for Android delegated execution signals.
-# Re-exported here so callers can reach the ingress API from core.runtime
-# without importing the module directly.
-# PR-21: canonical path closure sentinels; PR-22: ingress registry consolidation sentinels
-from core.android_delegated_signal_ingress import (  # noqa: E402
-    ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY,
-    ANDROID_DELEGATED_SIGNAL_INGRESS_PR16_SENTINEL,
-    CANONICAL_DELEGATED_EXECUTION_PATH_CLOSED_PR21_SENTINEL,
-    CANONICAL_PATH_IS_INGRESS_GUARD_RECONCILE_TRACKER_POLICY,
-    IDENTITY_CONTINUITY_ACROSS_CANONICAL_PATH_POLICY,
-    INGRESS_DELEGATED_SIGNAL_TYPE_IS_CANONICAL_POLICY,
-    INGRESS_DELEGATES_TO_RECONCILER_POLICY,
-    INGRESS_EMISSION_SEQ_IS_PRESERVED_POLICY,
-    INGRESS_GUARD_REJECTED_SIGNAL_IS_DROPPED_POLICY,
-    INGRESS_IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
-    INGRESS_NON_DESTRUCTIVE_ON_MISS_POLICY,
-    INGRESS_RECOVERY_GUARD_IS_MANDATORY_POLICY,
-    INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
-    INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
-    INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
-    INGRESS_REQUIRES_LOOKUP_KEY_POLICY,
-    INGRESS_RESULT_KIND_DISAMBIGUATES_RESULT_SIGNALS_POLICY,
-    INGRESS_SIGNAL_ID_IS_PRESERVED_POLICY,
-    INGRESS_SIGNAL_KIND_IS_EXPLICIT_FIELD_POLICY,
-    INGRESS_TRACKER_PHASE_CONSISTENT_WITH_SIGNAL_KIND_POLICY,
-    TERMINAL_STATE_IS_PROTECTED_AGAINST_REPLAY_POLICY,
-    DelegatedExecutionSignalEnvelope,
-    DelegatedSignalKind,
-    ResultKind,
-    extract_delegated_signal_envelope,
-    ingest_delegated_execution_signal,
-)
+#: 再导出时改过名的：再导出名 → 来源模块里的名字。
+_RENAMED: _Dict[str, str] = {
+    "merge_unit_from_execution_output": "from_execution_output",
+    "merge_unit_from_takeover_result": "from_local_takeover_result",
+    "merge_unit_from_dispatch_result": "from_source_dispatch_result",
+    "FinalCleanupCapabilityTier": "CapabilityTier",
+}
 
-# PR package 13 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical host-side Android execution signal reconciliation binding.
-# Re-exported here so callers can reach the reconciler API from core.runtime
-# without importing the module directly.
-from core.android_execution_signal_reconciler import (  # noqa: E402
-    ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY,
-    ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL,
-    RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
-    RECONCILER_ERROR_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
-    RECONCILER_IDENTITY_IS_PRESERVED_ACROSS_RECONCILE_POLICY,
-    RECONCILER_PR22_SENTINEL,
-    RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
-    RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
-    RECONCILER_REQUIRES_CONTRACT_ID_OR_SESSION_ID_POLICY,
-    RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY,
-    RECONCILER_SIGNAL_MAPPING_IS_CANONICAL_POLICY,
-    RECONCILER_TASK_STATUS_MAPS_TO_ACK_SIGNAL_CANONICALLY_POLICY,
-    RECONCILER_TERMINAL_RECORD_BLOCKS_FURTHER_SIGNALS_POLICY,
-    RECONCILER_TIMEOUT_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
-    RECONCILER_UNKNOWN_SIGNAL_DEFAULTS_TO_PROGRESS_POLICY,
-    AndroidExecutionSignalEnvelope,
-    AndroidSignalKind,
-    AndroidSignalReconcileOutcome,
-    extract_signal_envelope,
-    normalize_android_message_to_signal_kind,
-    reconcile_android_execution_signal,
-    reconcile_inbound_message,
-)
+_LAZY_EXPORTS: _Dict[str, _Tuple[str, str]] = {
+    name: (module, _RENAMED.get(name, name)) for module, names in _LAZY_SOURCES for name in names
+}
 
-# PR-4V2: Android Participant/Session/Runtime Truth Ingress and Canonical
-# Reconciliation into V2 Orchestration State.
-# Re-exported here so callers can reach the Android participant truth ingress
-# API from core.runtime without importing the module directly.
-from core.android_participant_truth_ingress import (  # noqa: E402
-    ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY,
-    ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL,
-    ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY,
-    CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
-    IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
-    READINESS_ASSESSMENT_IS_ADVISORY_POLICY,
-    RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
-    RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY,
-    RUNTIME_STATE_IS_AUDIT_ONLY_POLICY,
-    SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY,
-    STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY,
-    TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY,
-    TERMINAL_V2_STATE_WINS_CONFLICT_POLICY,
-    V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
-    V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL,
-    AndroidParticipantReconcileOutcome,
-    AndroidParticipantTruthEnvelope,
-    AndroidParticipantTruthKind,
-    extract_participant_truth_envelope,
-    ingest_android_participant_truth_message,
-    reconcile_android_participant_truth,
-)
 
-# PR package 11 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical MAIN-side attached-Android-runtime dispatch binding basis.
-# Re-exported here so callers can reach the dispatch-binding API from
-# core.runtime without importing the module directly.
-from core.android_runtime_dispatch_binding import (  # noqa: E402
-    ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY,
-    ANDROID_RUNTIME_DISPATCH_BINDING_PR11_SENTINEL,
-    BINDING_CONTRACT_ID_IS_IMMUTABLE_POLICY,
-    BINDING_REQUIRES_ATTACHED_SESSION_POLICY,
-    BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY,
-    BINDING_SESSION_ID_MUST_MATCH_CONTRACT_POLICY,
-    BINDING_STATE_IS_MONOTONIC_POLICY,
-    BINDING_TRACKER_ID_IS_PROPAGATED_POLICY,
-    DISPATCH_BINDING_REQUIRES_CONTRACT_ID_POLICY,
-    RELEASED_BINDING_IS_TERMINAL_POLICY,
-    AndroidRuntimeBindingSignal,
-    AndroidRuntimeBindingState,
-    AndroidRuntimeDispatchBindingIdentity,
-    AndroidRuntimeDispatchBindingRecord,
-    AndroidRuntimeDispatchBindingRuntime,
-    AndroidRuntimeDispatchBindingSnapshot,
-    advance_binding_state,
-    build_dispatch_binding_snapshot,
-    create_android_dispatch_binding,
-    get_dispatch_binding,
-    get_dispatch_binding_by_contract,
-    get_dispatch_binding_runtime,
-    list_bound_dispatch_bindings,
-    record_dispatch_binding,
-    reset_dispatch_binding_runtime,
-    resolve_dispatch_binding,
-)
+def __getattr__(name: str) -> _Any:
+    try:
+        module_name, attr = _LAZY_EXPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    value = getattr(_import_module(module_name), attr)
+    globals()[name] = value  # 取过一次就缓存，之后与普通属性无异
+    return value
 
-# PR-5 (post-533 dual-repo runtime unification, MAIN repo side): Android
-# first-class runtime host classification and identity.  Re-exported here
-# so callers can reach Android host typing from core.runtime without
-# importing the module directly.
-from core.android_runtime_host import (  # noqa: E402
-    ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL,
-    ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5,
-    ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5,
-    AndroidRuntimeHostIdentity,
-    AndroidRuntimeHostRole,
-    build_android_runtime_host_identity,
-    classify_android_runtime_host,
-)
 
-# PR package 15 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): attached-runtime recovery readiness and inbound signal guard.
-# Re-exported here so callers can reach the guard API from core.runtime
-# without importing the module directly.
-from core.attached_runtime_recovery_readiness import (  # noqa: E402
-    ACCEPTED_SIGNAL_IS_RECORDED_POLICY,
-    ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY,
-    ATTACHED_RUNTIME_RECOVERY_READINESS_PR15_SENTINEL,
-    DUPLICATE_SIGNAL_ID_IS_REJECTED_POLICY,
-    GUARD_DECISION_IS_OBSERVABLE_POLICY,
-    GUARD_MUST_PRECEDE_RECONCILE_POLICY,
-    IDEMPOTENCY_KEY_USES_SIGNAL_ID_AND_CONTEXT_POLICY,
-    OUT_OF_ORDER_EMISSION_SEQ_IS_REJECTED_POLICY,
-    RECOVERY_READINESS_RING_BUFFER_SIZE,
-    REJECTED_SIGNAL_MUST_NOT_REACH_TRACKER_POLICY,
-    REPLAY_AT_SAME_SEQ_IS_REJECTED_POLICY,
-    RING_BUFFER_IS_BOUNDED_POLICY,
-    SEQ_INDEX_TRACKS_MAX_PER_CONTEXT_POLICY,
-    STALE_EMISSION_SEQ_IS_REJECTED_POLICY,
-    STALE_EMISSION_SEQ_THRESHOLD,
-    IdempotencyKey,
-    RecoveryReadinessRuntime,
-    RecoveryReadinessSnapshot,
-    RecoveryReadinessStatus,
-    SeenSignalRecord,
-    SignalGuardDecision,
-    SignalGuardOutcome,
-    build_idempotency_key,
-    build_recovery_readiness_snapshot,
-    check_signal_guard,
-    get_recovery_readiness_runtime,
-    guard_inbound_signal,
-    record_seen_signal,
-    reset_recovery_readiness_runtime,
-)
+def __dir__() -> _List[str]:
+    return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
-# PR package 14 (post-533 dual-repo runtime unification master plan, MAIN
-# side): canonical persistent attached-runtime reuse binding.
-# Re-exported here so callers can reach the reuse binding API from core.runtime
-# without importing the module directly.
-from core.attached_runtime_reuse_binding import (  # noqa: E402
-    ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY,
-    ATTACHED_RUNTIME_REUSE_BINDING_PR14_SENTINEL,
-    REUSE_BINDING_DISPATCH_BINDING_ID_IS_LATEST_POLICY,
-    REUSE_BINDING_INVALIDATED_ON_DETACH_POLICY,
-    REUSE_BINDING_INVALIDATED_ON_DISABLE_POLICY,
-    REUSE_BINDING_INVALIDATED_ON_DISCONNECT_POLICY,
-    REUSE_BINDING_IS_STABLE_TARGETING_SURFACE_POLICY,
-    REUSE_BINDING_REQUIRES_ATTACHED_SESSION_POLICY,
-    REUSE_BINDING_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    REUSE_BINDING_REQUIRES_TARGET_DEVICE_ID_POLICY,
-    REUSE_ELIGIBILITY_REQUIRES_ACTIVE_SESSION_POLICY,
-    AttachedRuntimeReuseBindingIdentity,
-    AttachedRuntimeReuseBindingRecord,
-    AttachedRuntimeReuseBindingRuntime,
-    AttachedRuntimeReuseBindingSnapshot,
-    ReuseEligibilityStatus,
-    ReuseInvalidationReason,
-    build_reuse_binding_snapshot,
-    establish_reuse_binding,
-    evaluate_reuse_eligibility,
-    get_reuse_binding,
-    get_reuse_binding_by_device,
-    get_reuse_binding_runtime,
-    invalidate_reuse_binding,
-    list_eligible_reuse_bindings,
-    record_reuse_binding,
-    register_dispatch_binding_id,
-    reset_reuse_binding_runtime,
-)
-
-# PR package 17 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical dispatch consumption of attached-runtime reuse bindings.
-# Re-exported here to provide a stable public API surface for reuse dispatch
-# functionality so callers can import from core.runtime without depending on
-# the module path directly.
-# PR-23: canonical takeover dispatch / delegated fallback
-from core.attached_runtime_reuse_dispatch import (  # noqa: E402
-    ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY,
-    ATTACHED_RUNTIME_REUSE_DISPATCH_PR17_SENTINEL,
-    DELEGATED_FALLBACK_REQUIRES_INELIGIBLE_CANONICAL_PATH_PR23_POLICY,
-    REPLACED_SESSION_CANNOT_WIN_TAKEOVER_DISPATCH_PR23_POLICY,
-    REUSE_DISPATCH_DETACH_TRIGGERS_INELIGIBLE_RESOLUTION_POLICY,
-    REUSE_DISPATCH_ELIGIBILITY_GATE_IS_MANDATORY_POLICY,
-    REUSE_DISPATCH_ELIGIBLE_SURFACE_IS_REUSED_POLICY,
-    REUSE_DISPATCH_INELIGIBLE_BINDING_IS_REJECTED_POLICY,
-    REUSE_DISPATCH_INVALIDATION_HARD_STOP_POLICY,
-    REUSE_DISPATCH_LIVE_SESSION_CROSS_CHECK_IS_OPTIONAL_POLICY,
-    REUSE_DISPATCH_LOOKUP_PRECEDES_DISPATCH_POLICY,
-    REUSE_DISPATCH_NO_BINDING_ALLOWS_NEW_DISPATCH_POLICY,
-    REUSE_DISPATCH_PR22_SENTINEL,
-    REUSE_DISPATCH_PR23_SENTINEL,
-    REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
-    REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
-    REUSE_DISPATCH_RESOLUTION_IS_IMMUTABLE_POLICY,
-    REUSE_DISPATCH_SESSION_LOOKUP_PRECEDES_DEVICE_LOOKUP_POLICY,
-    REUSE_DISPATCH_WRITE_BACK_IS_MANDATORY_POLICY,
-    STALE_EXECUTION_CONTEXT_CANNOT_ALTER_TAKEOVER_DECISION_PR23_POLICY,
-    TAKEOVER_DISPATCH_CONSULTS_REGISTRY_FIRST_PR23_POLICY,
-    TAKEOVER_DISPATCH_DECISION_IS_DETERMINISTIC_PR23_POLICY,
-    ReuseDispatchResolution,
-    ReuseDispatchResolutionKind,
-    TakeoverDispatchDecision,
-    TakeoverRouteOutcome,
-    dispatch_with_reuse_binding,
-    resolve_reuse_dispatch_surface,
-    resolve_takeover_or_fallback_route,
-    write_back_dispatch_binding_id,
-)
-
-# PR package 7 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical persistent attached-runtime session semantics.  Re-exported
-# here so callers can reach the attached-runtime session API from core.runtime
-# without importing the module directly.
-from core.attached_runtime_session import (  # noqa: E402
-    ATTACH_IS_IDEMPOTENT_POLICY,
-    ATTACHED_RUNTIME_SESSION_AUTHORITY,
-    ATTACHED_RUNTIME_SESSION_PR7_SENTINEL,
-    ATTACHED_SESSION_PERSISTS_ACROSS_REQUESTS_POLICY,
-    ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY,
-    ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY,
-    DETACH_SIGNAL_REQUIRED_FOR_SESSION_TERMINATION_POLICY,
-    DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY,
-    DISCONNECTED_DOES_NOT_INVALIDATE_SESSION_POLICY,
-    INVALIDATED_SESSION_IS_TERMINAL_POLICY,
-    TRANSIENT_PRESENCE_DISTINCT_FROM_ATTACHED_SESSION_POLICY,
-    AttachedRuntimeSessionRecord,
-    AttachedRuntimeSessionRuntime,
-    AttachedRuntimeSessionSnapshot,
-    AttachmentLifecycleAction,
-    AttachmentLifecycleSignal,
-    AttachmentState,
-    apply_lifecycle_signal,
-    attach_runtime_session,
-    build_attached_runtime_session_snapshot,
-    classify_attach_lifecycle_action,
-    classify_signal_lifecycle_action,
-    get_attached_runtime_session,
-    get_attached_runtime_session_runtime,
-    list_active_attached_sessions,
-    reset_attached_runtime_session_runtime,
-)
-
-# PR-23: canonical takeover dispatch authority sentinels
-from core.attached_runtime_session_registry import (  # noqa: E402
-    ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
-    ATTACHED_RUNTIME_REGISTRY_TAKEOVER_DISPATCH_PR23_SENTINEL,
-    ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY,
-    ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL,
-    REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY,
-    REGISTRY_DETACH_REQUIRES_EXPLICIT_SIGNAL_POLICY,
-    REGISTRY_DEVICE_HAS_AT_MOST_ONE_ACTIVE_SESSION_POLICY,
-    REGISTRY_DISPATCH_MUST_CONSULT_REGISTRY_POLICY,
-    REGISTRY_INVALIDATED_ENTRY_IS_TERMINAL_POLICY,
-    REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY,
-    REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY,
-    REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY,
-    REGISTRY_IS_CANONICAL_TAKEOVER_DISPATCH_AUTHORITY_PR23_POLICY,
-    REGISTRY_IS_SINGLE_TRUTH_SOURCE_POLICY,
-    REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY,
-    REGISTRY_LOOKUP_RETURNS_ACTIVE_ONLY_BY_DEFAULT_POLICY,
-    REGISTRY_RECONCILIATION_MUST_CONSULT_REGISTRY_POLICY,
-    REGISTRY_RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY,
-    REGISTRY_REGISTER_REPLACES_OLD_SESSION_POLICY,
-    REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY,
-    REGISTRY_REUSE_MUST_CONSULT_REGISTRY_POLICY,
-    REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY,
-    AttachedSessionRegistry,
-    AttachedSessionRegistryEntry,
-    AttachedSessionRegistrySnapshot,
-    InvalidationReason,
-    RegistryEntryState,
-    RegistryTransition,
-    build_registry_snapshot,
-    detach_session,
-    get_session_registry,
-    invalidate_session,
-    list_active_sessions,
-    lookup_active_session,
-    lookup_session_by_device,
-    reattach_session,
-    reconnect_session,
-    register_session,
-    reset_session_registry,
-)
-
-# PR package 6 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical device/host capability representation and scheduling-basis
-# normalization.  Re-exported here so callers can reach the capability/
-# scheduling API from core.runtime without importing the module directly.
-from core.canonical_capability_scheduling_basis import (  # noqa: E402
-    ANDROID_HOST_CAPABILITY_LIFTED_FROM_PR5_POLICY,
-    CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY,
-    CANONICAL_CAPABILITY_SCHEDULING_BASIS_PR6_SENTINEL,
-    CAPABILITY_TIER_DRIVES_SURFACE_ELIGIBILITY_POLICY,
-    COMMAND_ONLY_TIER_BLOCKS_EXECUTION_PLACEMENT_POLICY,
-    FULL_RUNTIME_TIER_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    OBSERVER_ONLY_ROLE_EXCLUDED_FROM_SCHEDULING_POLICY,
-    SCHEDULING_BASIS_NORMALISATION_IS_ADDITIVE_POLICY,
-    CapabilityTier,
-    ExecutionSurface,
-    ExecutionSurfaceEligibility,
-    RuntimeCapabilityProfile,
-    SchedulingBasisInputs,
-    build_runtime_capability_profile,
-    build_scheduling_basis_inputs,
-    evaluate_execution_surface_eligibility,
-    normalize_scheduling_inputs,
-)
-
-# PR-4 (post-533 dual-repo runtime host unification): canonical session truth
-# and posture-aware result merge.  Re-exported here so callers can reach the
-# session truth API from core.runtime without importing the module directly.
-from core.canonical_session_truth import (  # noqa: E402
-    CANONICAL_SESSION_TRUTH_AUTHORITY,
-    CANONICAL_SESSION_TRUTH_PR4_SENTINEL,
-    CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY,
-    JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY,
-    OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY,
-    POSTURE_AWARE_RESULT_FILTER_POLICY,
-    CanonicalSessionTruthRecord,
-    CanonicalSessionTruthRuntime,
-    CanonicalSessionTruthSnapshot,
-    SessionTruthSource,
-    build_canonical_session_truth_snapshot,
-    filter_result_units_by_posture,
-    get_canonical_session_truth_runtime,
-    merge_session_truth,
-    record_session_truth,
-    reset_canonical_session_truth_runtime,
-)
-
-# PR package 50 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): Unified Delegated Flow Entity — Cross-Device First-Class Citizen.
-# Re-exported here so callers can reach the delegated flow entity API from
-# core.runtime without importing the module directly.
-from core.delegated_flow_entity import (  # noqa: E402
-    ANDROID_HOLDS_EXECUTION_TRUTH_POLICY,
-    DELEGATED_FLOW_ENTITY_AUTHORITY,
-    DELEGATED_FLOW_ENTITY_PR50_SENTINEL,
-    DELEGATED_FLOW_ID_IS_IMMUTABLE_POLICY,
-    EXTENSION_POINTS_ARE_FORWARD_COMPATIBLE_POLICY,
-    FLOW_ENTITY_IS_SYSTEM_FIRST_CLASS_CITIZEN_POLICY,
-    FLOW_KIND_UNIFIES_ALL_DELEGATED_WORK_POLICY,
-    FLOW_LINEAGE_ID_SPANS_BOTH_SIDES_POLICY,
-    FLOW_LINEAGE_IS_TRACEABLE_ACROSS_KIND_BOUNDARY_POLICY,
-    FLOW_OBJECT_MAPPING_IS_ADDITIVE_POLICY,
-    FLOW_PHASE_IS_MONOTONIC_POLICY,
-    FLOW_TRUTH_AUTHORITY_IS_SCOPE_SEPARATED_POLICY,
-    TERMINAL_FLOW_PHASE_BLOCKS_ADVANCEMENT_POLICY,
-    V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY,
-    DelegatedFlowEntity,
-    DelegatedFlowEntityRecord,
-    DelegatedFlowEntityRuntime,
-    DelegatedFlowEntitySnapshot,
-    DelegatedFlowExtensionPoints,
-    DelegatedFlowIdentity,
-    DelegatedFlowKind,
-    DelegatedFlowObjectMapping,
-    DelegatedFlowOwnerKind,
-    DelegatedFlowOwnership,
-    DelegatedFlowPhase,
-    DelegatedFlowSignal,
-    advance_flow_phase,
-    attach_object_mapping,
-    build_delegated_flow_snapshot,
-    create_delegated_flow_entity,
-    get_delegated_flow,
-    get_delegated_flow_by_contract,
-    get_delegated_flow_by_lineage,
-    get_delegated_flow_entity_runtime,
-    list_active_delegated_flows,
-    record_delegated_flow,
-    reset_delegated_flow_entity_runtime,
-)
-
-# PR package 8 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical delegated-runtime dispatch intent and handoff-preparation
-# foundations.
-from core.delegated_runtime_dispatch_intent import (  # noqa: E402
-    COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY,
-    DELEGATED_RUNTIME_DISPATCH_INTENT_AUTHORITY,
-    DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL,
-    DELEGATION_INTENT_IS_ADDITIVE_TO_SESSION_POLICY,
-    DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY,
-    DELEGATION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    DISPATCH_RECORD_IS_IMMUTABLE_POLICY,
-    HANDOFF_INPUTS_MUST_BE_SESSION_ANCHORED_POLICY,
-    OBSERVER_ONLY_ROLE_BLOCKS_DELEGATION_POLICY,
-    PREPARATION_STATE_IS_MONOTONICALLY_ADVANCING_POLICY,
-    TARGET_ONLY_EXECUTOR_CANNOT_DELEGATE_POLICY,
-    DelegatedRuntimeDispatchRecord,
-    DelegatedRuntimeDispatchRuntime,
-    DelegatedRuntimeDispatchSnapshot,
-    DelegationIntent,
-    DispatchEligibilityOutcome,
-    HandoffInputBundle,
-    HandoffPreparationState,
-    build_delegated_dispatch_record,
-    build_delegated_dispatch_snapshot,
-    evaluate_dispatch_eligibility,
-    get_delegated_dispatch_record,
-    get_delegated_runtime_dispatch_runtime,
-    list_pending_delegated_dispatch_records,
-    prepare_handoff_inputs,
-    record_delegated_dispatch_intent,
-    reset_delegated_runtime_dispatch_runtime,
-)
-
-# PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical delegated-runtime execution-tracking and acknowledgment
-# basis.  Re-exported here so callers can reach the execution-tracking API
-# from core.runtime without importing the module directly.
-from core.delegated_runtime_execution_tracker import (  # noqa: E402
-    ACK_SEQUENCE_IS_MONOTONICALLY_INCREASING_POLICY,
-    DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY,
-    DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL,
-    EXECUTION_PHASE_IS_MONOTONIC_POLICY,
-    EXECUTION_TRACKING_POSTURE_IS_PROPAGATED_POLICY,
-    EXECUTION_TRACKING_REQUIRES_CONTRACT_ID_POLICY,
-    EXECUTION_TRACKING_REQUIRES_SESSION_ID_POLICY,
-    PARTIAL_RESULT_DOES_NOT_CLOSE_TRACKING_POLICY,
-    RESULT_IS_IMMUTABLE_ONCE_RECORDED_POLICY,
-    TERMINAL_PHASE_BLOCKS_FURTHER_SIGNALS_POLICY,
-    TRACKING_RECORD_IS_CONTRACT_ANCHORED_POLICY,
-    AcknowledgmentSignal,
-    DelegatedExecutionAcknowledgment,
-    DelegatedExecutionIdentity,
-    DelegatedExecutionPhase,
-    DelegatedExecutionResult,
-    DelegatedExecutionTrackingRecord,
-    DelegatedExecutionTrackingRuntime,
-    DelegatedExecutionTrackingSnapshot,
-    apply_acknowledgment_signal,
-    apply_result,
-    build_execution_tracking_snapshot,
-    create_execution_tracking_record,
-    get_execution_tracking_record,
-    get_execution_tracking_runtime,
-    list_active_execution_tracking_records,
-    record_execution_tracking,
-    reset_execution_tracking_runtime,
-)
-
-# PR package 9 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical delegated-runtime handoff contract foundations.  Re-exported
-# here so callers can reach the handoff-contract API from core.runtime without
-# importing the module directly.
-from core.delegated_runtime_handoff_contract import (  # noqa: E402
-    DELEGATED_RUNTIME_HANDOFF_CONTRACT_AUTHORITY,
-    DELEGATED_RUNTIME_HANDOFF_CONTRACT_PR9_SENTINEL,
-    HANDOFF_CONTRACT_IDENTITY_IS_IMMUTABLE_POLICY,
-    HANDOFF_CONTRACT_PAYLOAD_MUST_BE_NON_EMPTY_POLICY,
-    HANDOFF_CONTRACT_POSTURE_IS_PRESERVED_POLICY,
-    HANDOFF_CONTRACT_REQUIRES_ATTACHED_SESSION_POLICY,
-    HANDOFF_CONTRACT_REQUIRES_DISPATCH_RECORD_POLICY,
-    HANDOFF_CONTRACT_STATUS_IS_MONOTONIC_POLICY,
-    HANDOFF_CONTRACT_TRACE_ID_IS_PROPAGATED_POLICY,
-    HANDOFF_CONTRACT_VERSION_MUST_BE_EXPLICIT_POLICY,
-    SEALED_CONTRACT_IS_DISPATCH_READY_POLICY,
-    DelegatedHandoffContractIdentity,
-    DelegatedHandoffContractMeta,
-    DelegatedHandoffContractPayload,
-    DelegatedHandoffContractRecord,
-    DelegatedHandoffContractRuntime,
-    DelegatedHandoffContractSnapshot,
-    HandoffContractStatus,
-    HandoffContractVersion,
-    build_delegated_handoff_contract,
-    build_handoff_contract_snapshot,
-    get_handoff_contract,
-    get_handoff_contract_runtime,
-    list_pending_handoff_contracts,
-    record_handoff_contract,
-    reset_handoff_contract_runtime,
-    seal_handoff_contract,
-)
-
-# PR package 20 (post-533 dual-repo runtime unification master plan, MAIN repo
-# side): canonical delegated target selection policy layer.
-from core.delegated_target_selection_policy import (  # noqa: E402
-    BASE_CANDIDATE_SCORE,
-    DEGRADATION_SCORE_THRESHOLD,
-    DELEGATED_TARGET_SELECTION_POLICY_AUTHORITY,
-    DELEGATED_TARGET_SELECTION_POLICY_PR20_SENTINEL,
-    DETACH_COUNT_MAX_PENALTY,
-    DETACH_COUNT_PENALTY_PER_UNIT,
-    FAILURE_COUNT_MAX_PENALTY,
-    FAILURE_COUNT_PENALTY_PER_UNIT,
-    LOAD_MAX_PENALTY,
-    LOAD_PENALTY_PER_10_EXECUTIONS,
-    REUSE_VALID_BONUS,
-    SELECTION_DECISION_IS_EXPLAINABLE_POLICY,
-    SELECTION_HIGH_DETACH_COUNT_DEMOTES_CANDIDATE_POLICY,
-    SELECTION_HIGH_FAILURE_COUNT_DEMOTES_CANDIDATE_POLICY,
-    SELECTION_HIGH_RISK_CANDIDATE_MAY_DEGRADE_POLICY,
-    SELECTION_MUST_CONSULT_REGISTRY_POLICY,
-    SELECTION_NO_VALID_CANDIDATE_TRIGGERS_LOCAL_FALLBACK_POLICY,
-    SELECTION_RANKING_IS_DETERMINISTIC_POLICY,
-    SELECTION_REQUIRES_ACTIVE_ATTACHMENT_STATE_POLICY,
-    SELECTION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    SELECTION_REQUIRES_NO_INVALIDATION_REASON_POLICY,
-    SELECTION_REUSE_VALID_IS_PREFERRED_POLICY,
-    CandidateEvaluation,
-    CandidateRejectionReason,
-    SelectionCandidateContext,
-    SelectionDecision,
-    SelectionOutcome,
-    build_selection_explanation,
-    evaluate_candidate,
-    rank_candidates,
-    select_delegated_target,
-)
-
-# PR-5 Final: Final Cleanup and Invariant Tightening.
-# Re-exported here so callers can reach the cleanup/guard API from
-# core.runtime without importing the module directly.
-from core.final_cleanup_invariant_tightening import (
-    CANONICAL_CAPABILITY_ROUTING_PATH,
-    CANONICAL_COMPLETION_INGRESS_PATH,
-    CANONICAL_PROVIDER_ROUTING_PATH,
-    CANONICAL_RUNTIME_TRUTH_INGRESS_PATH,
-    CANONICAL_VALIDATION_GATE_PATH,
-    FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY,
-    FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL,
-    LEGACY_PATH_MUST_NOT_RE_ENTER_CANONICAL_SURFACE_POLICY,
-    NO_BYPASS_CAPABILITY_ROUTING_POLICY,
-    NO_BYPASS_COMPLETION_INGRESS_POLICY,
-    NO_BYPASS_PROVIDER_ROUTING_POLICY,
-    NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY,
-    NO_BYPASS_VALIDATION_GATE_POLICY,
-    SEMANTIC_CAPABILITY_TIER_POLICY,
-    BypassGuardResult,
-    BypassGuardVerdict,
-    BypassInvariantViolation,
-)
-from core.final_cleanup_invariant_tightening import CapabilityTier as FinalCleanupCapabilityTier  # noqa: E402
-from core.final_cleanup_invariant_tightening import (
-    CapabilityTierRecord,
-    ClosureArea,
-    FinalCleanupPostureSnapshot,
-    assert_capability_routing_is_canonical,
-    assert_completion_ingress_is_canonical,
-    assert_provider_routing_is_canonical,
-    assert_runtime_truth_ingress_is_canonical,
-    assert_validation_gate_is_canonical,
-    build_final_cleanup_posture_snapshot,
-    get_capability_tier,
-    get_capability_tier_registry,
-    is_final_cleanup_posture_acceptable,
-    run_all_no_bypass_guards,
-)
-
-# PR-6V2: Flow-Aware Result / Partial / Parallel Convergence.
-from core.flow_aware_result_convergence import (  # noqa: E402
-    CROSS_DEVICE_RESULT_SURFACE_IS_TRANSPORT_BOUNDARY_POLICY,
-    DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY,
-    FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY,
-    FLOW_AWARE_CONVERGENCE_AUTHORITY,
-    FLOW_AWARE_CONVERGENCE_PR6V2_SENTINEL,
-    FLOW_MISMATCH_QUARANTINES_RESULT_POLICY,
-    GOAL_RESULT_AGGREGATOR_IS_GROUP_COMPLETION_SIGNAL_POLICY,
-    LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY,
-    PARALLEL_RESULTS_AGGREGATE_TO_PARENT_FLOW_VIA_GROUP_ID_POLICY,
-    PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY,
-    RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY,
-    ConvergenceDecisionKind,
-    ConvergenceFlowLineage,
-    FlowAwareConvergenceCoordinator,
-    FlowConvergenceSnapshot,
-    ParallelFlowAggregationRecord,
-    ResultConvergenceArtifact,
-    ResultConvergenceContext,
-    ResultSemanticKind,
-    absorb_result,
-    build_flow_convergence_snapshot,
-    classify_result_semantic_kind,
-    decide_convergence,
-    get_flow_aware_convergence_coordinator,
-    reset_flow_aware_convergence_coordinator,
-)
-
-# PR-5V2: Flow-Level Truth Ownership and Local/Central Truth Alignment.
-from core.flow_level_truth_ownership import (  # noqa: E402
-    ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY,
-    ANDROID_ADVANCED_AHEAD_OF_V2_CONFIRMATION_POLICY,
-    ANDROID_CANCEL_FAILURE_RESULT_ARE_AUTHORITATIVE_UPWARD_POLICY,
-    COMPAT_INFLUENCE_BLOCKS_AUTHORITATIVE_TRUTH_PATH_POLICY,
-    EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY,
-    FLOW_LEVEL_TRUTH_OWNERSHIP_AUTHORITY,
-    FLOW_LEVEL_TRUTH_OWNERSHIP_PR5V2_SENTINEL,
-    PARTIAL_RESULT_LIVES_IN_EXECUTION_TRACKING_RECORD_POLICY,
-    POSTURE_CHANGE_QUARANTINES_PRIOR_EVIDENCE_POLICY,
-    UNKNOWN_TRUTH_KIND_DEFAULTS_TO_ADVISORY_POLICY,
-    V2_CANONICAL_OWNS_TERMINAL_FLOW_DECISION_POLICY,
-    FlowTruthAlignmentContext,
-    FlowTruthAlignmentRuntime,
-    FlowTruthAlignmentSnapshot,
-    FlowTruthDecisionArtifact,
-    FlowTruthDecisionKind,
-    FlowTruthOwnerKind,
-    FlowTruthSemanticKind,
-    PostureChangeHandling,
-    PostureChangeImpactRecord,
-    align_and_record,
-    align_android_truth_with_canonical,
-    build_flow_truth_alignment_snapshot,
-    classify_flow_truth_kind,
-    evaluate_posture_change_impact,
-    get_flow_truth_alignment_runtime,
-    record_flow_truth_decision,
-    reset_flow_truth_alignment_runtime,
-)
-
-# PR-J: Live MeshSession Coordinator — incremental event-driven runtime driver.
-# Re-exported here so callers can reach the live coordinator from core.runtime.
-from core.mesh.live_mesh_session_coordinator import (  # noqa: E402
-    BARRIER_TRACKS_ACROSS_EVENTS_PR_J_POLICY,
-    COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY,
-    INCREMENTAL_PARTICIPANT_EVENTS_PR_J_POLICY,
-    LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL,
-    PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY,
-    LiveMeshSessionCoordinator,
-    create_live_mesh_session_coordinator,
-)
-
-# PR-37: Mesh Session Coordinator (mesh package)
-# Imported here for convenience so consumers can reach the coordinator
-# from either core.runtime or core.mesh.
-# PR-J: live mesh runtime execution helpers; MESH-002 closure: MeshSession progression driver
-from core.mesh.mesh_session_coordinator import (  # noqa: E402
-    MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY,
-    MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL,
-    MESH_SESSION_PROGRESSION_DRIVER_SENTINEL,
-    SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY,
-    SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY,
-    MeshSessionCoordinator,
-    MeshSessionProgressionDriver,
-    MeshSessionProgressionFinalResult,
-    coordinate_mesh_session,
-    create_progression_driver,
-    drop_participant,
-    get_coordinator_summary,
-    register_participant,
-    run_live_mesh_session,
-    update_participant_status,
-)
-
-# PR-6 (post-533 dual-repo runtime host unification): multi-device coordination
-# authority and canonical role modelling.  Re-exported here so callers can
-# reach the coordination role API from core.runtime without importing the
-# module directly.
-from core.multi_device_coordination_authority import (  # noqa: E402
-    COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY,
-    MULTI_DEVICE_COORDINATION_AUTHORITY,
-    MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL,
-    OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY,
-    SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY,
-    TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY,
-    CoordinationRole,
-    CoordinationRoleRecord,
-    CoordinationRoleRuntime,
-    CoordinationRoleSnapshot,
-    build_coordination_role_record,
-    build_coordination_role_snapshot,
-    derive_coordination_role,
-    get_coordination_role_runtime,
-    get_source_controller_device_id,
-    record_coordination_role,
-    reset_coordination_role_runtime,
-)
-
-# PR package 1 (post-533 dual-repo runtime unification, MAIN repo side):
-# posture contract canonicalization enforcement layer.
-from core.posture_contract_canonicalization import (  # noqa: E402
-    POSTURE_BOUNDARY_NO_CROSS_DEVICE_FLAG_CONFLATION_POLICY,
-    POSTURE_BOUNDARY_NO_ENTRY_MODE_CONFLATION_POLICY,
-    POSTURE_BOUNDARY_NO_FORMATION_ROLE_CONFLATION_POLICY,
-    POSTURE_CONTRACT_CANONICALIZATION_AUTHORITY,
-    POSTURE_CONTRACT_PR_PACKAGE_1_SENTINEL,
-    PostureBoundaryViolation,
-    assert_posture_boundary_compliance,
-    canonicalize_posture_in_payload,
-    get_posture_from_payload,
-    validate_posture_field_consistency,
-)
-
-# PR-35: Source Runtime Dispatch Orchestrator
-# PR-24: dispatch selection truth consolidation; PR-25: mainline abnormal-path matrix +
-# Phase A acceptance; PR-26: client-facing result surfacing normalization; PR-27:
-# gateway-facing registration and capability error semantics hardening; PR-28: integrated
-# regression closure and release-readiness tightening; PR-29: post-release follow-up
-# tightening across dispatch and client semantics; PR-30: observability and diagnostics
-# hardening for rollout safety; PR-31: rollout controls, default behaviors, and
-# safe-operating release toggles; PR-32: staged mesh minimal executable closure; PR-J:
-# live mesh runtime engine; PR-33: reconnect and recovery consistency hardening; PR-34:
-# final product-grade cross-device and runtime acceptance pack; PR-closure: Android
-# terminal signal → canonical ReplayFoundation truth
-from core.runtime.source_dispatch_orchestrator import (
-    ANDROID_ATTACHED_RUNTIME_ORCHESTRATION_STABILITY_PR34_POLICY,
-    ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
-    ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,
-    CAPABILITY_NOT_SATISFIED_FAILURE_IS_ACTIONABLE_PR27_POLICY,
-    CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL,
-    CLIENT_GATEWAY_RESULT_CONTRACT_ALIGNMENT_POST_RELEASE_PR29_POLICY,
-    CROSS_DEVICE_RUNTIME_ACCEPTANCE_PR34_SENTINEL,
-    DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY,
-    DELEGATED_EXECUTION_FALLBACK_SEMANTIC_CONSISTENCY_PR29_POLICY,
-    DELEGATED_EXECUTION_OBSERVABILITY_PR30_POLICY,
-    DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY,
-    DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY,
-    DISPATCH_FALLBACK_RESULT_MERGE_STABILITY_PR34_POLICY,
-    DISPATCH_PATH_DECISION_OBSERVABILITY_PR30_POLICY,
-    DISPATCH_SELECTION_COHESION_POST_RELEASE_PR29_POLICY,
-    DISPATCH_SELECTION_TRUTH_CONSOLIDATED_PR24_SENTINEL,
-    END_TO_END_DISPATCH_EXECUTION_RESULT_COHERENCE_PR28_POLICY,
-    EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY,
-    FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY,
-    GATEWAY_FACING_REGISTRATION_CAPABILITY_ERROR_SEMANTICS_HARDENED_PR27_SENTINEL,
-    GATEWAY_SETUP_CONNECTION_SIGNALS_ARE_DETERMINISTIC_PR27_POLICY,
-    INTEGRATED_REGRESSION_CLOSURE_RELEASE_READINESS_PR28_SENTINEL,
-    INTEGRATED_SELECTION_REGISTRY_REUSE_FALLBACK_BEHAVIOR_PR28_POLICY,
-    KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY,
-    LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY,
-    LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL,
-    LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J_POLICY,
-    LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY,
-    MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL,
-    MULTI_TARGET_RANKING_MATURITY_PR34_POLICY,
-    NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY,
-    OBSERVABILITY_DIAGNOSTICS_ROLLOUT_SAFETY_HARDENING_PR30_SENTINEL,
-    PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY,
-    POST_RELEASE_DISPATCH_CLIENT_SEMANTICS_TIGHTENING_PR29_SENTINEL,
-    READINESS_DEGRADED_BEHAVIOR_IS_REPORTED_THROUGH_STABLE_SIGNALS_PR27_POLICY,
-    RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY,
-    RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL,
-    REGISTRATION_CAPABILITY_READINESS_UNDER_INTEGRATED_SCENARIOS_PR28_POLICY,
-    REGISTRATION_FAILURE_IS_DISTINGUISHABLE_FROM_CAPABILITY_FAILURE_PR27_POLICY,
-    REGISTRATION_READINESS_CAPABILITY_FALLBACK_DIAGNOSTICS_PR30_POLICY,
-    REGISTRATION_READINESS_CAPABILITY_STABILITY_POST_RELEASE_PR29_POLICY,
-    REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY,
-    REGRESSION_STABILIZATION_RELEASE_READINESS_TIGHTENING_PR28_POLICY,
-    REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY,
-    RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY,
-    RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY,
-    RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY,
-    RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY,
-    ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL,
-    ROLLOUT_SAFETY_SIGNALS_CLIENT_RESULT_OBSERVABILITY_PR30_POLICY,
-    SELECTION_FALLBACK_IS_STABLE_AND_EXPLAINABLE_PR24_POLICY,
-    SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY,
-    SELECTION_PARTICIPATION_IS_REQUIRED_TRUTH_PR24_POLICY,
-    SELECTION_READINESS_IS_REQUIRED_TRUTH_PR24_POLICY,
-    SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY,
-    SELECTION_REGISTRY_IS_CANONICAL_GATE_PR24_POLICY,
-    SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY,
-    STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY,
-    STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY,
-    STAGED_MESH_MINIMAL_EXECUTABLE_CLOSURE_PR32_SENTINEL,
-    STAGED_MESH_PLAN_TO_EXECUTION_TRANSITION_PR32_POLICY,
-    STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY,
-    STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY,
-    SourceDispatchOrchestrator,
-    build_source_dispatch_plan,
-    orchestrate_source_runtime_dispatch,
-    select_dispatch_mode,
-    select_dispatch_target,
-)
-from core.runtime.target_takeover import (
-    TargetTakeoverHandler,
-    adopt_handoff_session,
-    build_local_takeover_context,
-    execute_local_takeover,
-    normalize_handoff_envelope,
-    resolve_or_create_runtime_session,
-)
-
-# PR-2 (post-533 dual-repo runtime host unification): posture-aware source
-# execution eligibility.  Re-exported here so callers can reach the
-# eligibility API from core.runtime without importing the module directly.
-from core.source_execution_eligibility import (  # noqa: E402; PR-2 coordination-role alignment
-    CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY,
-    COORDINATION_ROLE_ALIGNED_DISPATCH_SENTINEL,
-    JOIN_RUNTIME_SOURCE_ELIGIBLE_FOR_LOCAL_EXECUTION_POLICY,
-    OBSERVER_ONLY_ROLE_BLOCKS_EXECUTION_POLICY,
-    POSTURE_AWARE_DISPATCH_INTEGRATED_SENTINEL,
-    POSTURE_GATED_LOCAL_EXECUTION_POLICY,
-    SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY,
-    SourceExecutionEligibility,
-    check_source_eligibility_with_coordination_role,
-    check_source_execution_eligibility,
-    is_source_eligible_for_local_execution,
-    resolve_posture_for_eligibility,
-)
-
-# PR-6 (center-side): WebRTC Task-Lifecycle Integration.
-# Re-exported here so callers can reach the WebRTC task-lifecycle API from
-# core.runtime without importing the module directly.
-from core.webrtc_task_lifecycle import (  # noqa: E402
-    BINDING_IS_TASK_SCOPED_SINGLE_SESSION_POLICY,
-    DEGRADED_TRANSPORT_YIELDS_DEGRADED_TASK_POLICY,
-    FAILED_TRANSPORT_YIELDS_FAILED_TASK_POLICY,
-    RECONNECTED_TRANSPORT_RESUMES_RUNNING_TASK_POLICY,
-    SESSION_BINDING_RECORD_IS_IMMUTABLE_POLICY,
-    TEARDOWN_IS_IDEMPOTENT_POLICY,
-    TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY,
-    TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY,
-    WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY,
-    WEBRTC_TASK_LIFECYCLE_AUTHORITY,
-    WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL,
-    WebRTCTaskBinding,
-    WebRTCTaskBindingSnapshot,
-    WebRTCTaskLifecycleAction,
-    WebRTCTaskSessionRegistry,
-    WebRTCTransportState,
-    apply_transport_state_to_task_lifecycle,
-    bind_webrtc_session_to_task,
-    build_webrtc_task_binding_snapshot,
-    classify_transport_lifecycle_action,
-    get_webrtc_task_binding,
-    get_webrtc_task_session_registry,
-    list_active_webrtc_task_bindings,
-    reset_webrtc_task_session_registry,
-    teardown_binding_on_task_terminal,
-)
 
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path

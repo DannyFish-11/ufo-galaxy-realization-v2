@@ -101,6 +101,7 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import presence_line as _presence_line
 from core import presence_stop as _presence_stop
 from core.desktop_presence_system import (
     DesktopPresenceStateMachine,
@@ -165,7 +166,7 @@ _ADMISSION_REJECTED_MESSAGES = {
 }
 
 
-class RuntimeSession(_presence_stop.ActingMixin):
+class RuntimeSession(_presence_stop.ActingMixin, _presence_line.SessionOriginMixin):
     """Holds the lifecycle state of a single top-level request within the runtime shell.
 
     Each call to :meth:`DesktopPresenceRuntime.handle_request` creates one
@@ -329,6 +330,8 @@ class RuntimeSession(_presence_stop.ActingMixin):
             old_state.value,
             new_state.value,
         )
+        if not getattr(self, "host_bound", True):  # 别的设备发起：不进桌面三态，只推给发起设备
+            return _presence_line.advance_detached(self, old_state, new_state)
         # 落耐久账 —— 与下面那次事件总线广播是**互补**的两件事:
         # 总线是给此刻在线的订阅者看的,广播完就没了;这一笔是给三天之后的人看的。
         # 三态此前一处都不落盘(DecisionTimeline 是进程内 list、RenderPosture 每拍现算),
@@ -544,7 +547,7 @@ class RuntimeSession(_presence_stop.ActingMixin):
 # ---------------------------------------------------------------------------
 
 
-class DesktopPresenceRuntime(_presence_stop.StopMixin):
+class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOriginMixin):
     """Windows Desktop Runtime Shell — the outer presence layer of the unified subject.
 
     **Role in the unified subject**
@@ -666,9 +669,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
         so other devices (Android, WearOS, Home Assistant, etc.) can
         discover and interact with it via Mesh + NATS.
         """
-        import os
         import socket
-        import uuid as _uuid
 
         # Detection logic
         _env_enabled = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower() in {
@@ -695,7 +696,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
 
         # Generate device identity (hostname + uuid suffix)
         _hostname = socket.gethostname() or "galaxy-desktop"
-        _uuid_suffix = _uuid.uuid5(_uuid.NAMESPACE_DNS, f"galaxy-desktop-{_hostname}").hex[:8]
+        _uuid_suffix = uuid.uuid5(uuid.NAMESPACE_DNS, f"galaxy-desktop-{_hostname}").hex[:8]
         self._device_id = f"galaxy_desktop_{_hostname}_{_uuid_suffix}"
         self._device_name = f"Galaxy Desktop ({_hostname})"
         self._cross_device_enabled = True
@@ -886,7 +887,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
                     "entrypoint_source": str,   # observability tag
                 }
         """
-        rsession = self._create_session(source)
+        rsession = self._create_bound_session(source, device_id, kwargs)
         # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
         # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
         # core/liminal_activity.py。
@@ -992,7 +993,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
         stream_sensing_active = self._has_active_stream_source()
-        self._update_presence_mode(
+        self._express_presence(
             tri_state=rsession.tristate.value,
             task_active=True,
             sensing_active=bool(multimodal_context) or stream_sensing_active,
@@ -1030,7 +1031,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
             if rsession.tristate is not TriState.LIMINAL:
                 return
             rsession.advance(TriState.MANIFEST)
-            self._update_presence_mode(
+            self._express_presence(
                 tri_state=rsession.tristate.value,
                 task_active=True,
                 sensing_active=bool(multimodal_context) or stream_sensing_active,
@@ -1252,7 +1253,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
                 _enter_manifest()
             # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
-            self._update_presence_mode(
+            self._express_presence(
                 tri_state=rsession.tristate.value,
                 # 本次请求结束 ≠ 主体无事。若有常驻在场(如双工语音会话开着),
                 # 主体仍然在场,不能把外壳按回静默 —— 否则每次穿插的文字问答
@@ -1317,11 +1318,11 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
         # 例外:source="ambient" 只会由自发注意力循环的 DELEGATE 分支进来——委托是
         # "不出声、后台派活儿"的动作(三选一里 SPEAK 才该出声,且那条已在 ambient
         # 循环内直接朗读)。若这里也把委托的完整认知回复念出来,等于每次委托都多一句
-        # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读。
+        # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读;别的设备发起的也不念。
         try:
             from core.speech_output import speak_response
 
-            if source != "ambient":
+            if source != "ambient" and rsession.desktop_originated:
                 speak_response(result.get("response", ""), source=source)
         except Exception:  # noqa: BLE001
             pass
@@ -2247,8 +2248,6 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
         安全默认：默认仅记录、不自动执行；``GALAXY_ACTIVE_PERCEPTION=1`` 才真正自主行动
         （避免未经预期的自动操作）。无运行事件循环时安全丢弃。
         """
-        import os
-
         if os.getenv("GALAXY_ACTIVE_PERCEPTION", "").strip().lower() not in ("1", "true", "yes", "on"):
             logger.info(
                 "主动感知目标（已就绪，未自动执行；设 GALAXY_ACTIVE_PERCEPTION=1 开启自主行动）：%s",
@@ -3181,7 +3180,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin):
                 priority order: ``manifest`` > ``liminal`` > ``silent``.
         """
         try:
-            sessions = list(self._active_sessions.values())
+            sessions = [s for s in self._active_sessions.values() if getattr(s, "host_bound", True)]
             counts: Dict[str, int] = {
                 TriState.SILENT.value: 0,
                 TriState.LIMINAL.value: 0,

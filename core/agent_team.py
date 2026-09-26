@@ -1367,15 +1367,20 @@ class TeamManager:
         不可用时退回 providers 列表轮询，保证始终能建出成员。
         """
         agent_id = f"agent_{uuid.uuid4().hex[:8]}"
+        supply = None
         if self._factory:
             try:
                 agent = self._factory.create_from_template(template)
                 agent_id = agent.id
+                supply = getattr(agent, "supply", None)
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
         provider, model = "none", "none"
-        if hasattr(self._router, "select_brain_for_role"):
+        if supply is not None and supply.steers and supply.provider:
+            # 断点 4：Agent 身上已经绑着这次的供给结论 —— 成员用同一份，不在旁边另算一次。
+            provider, model = supply.provider, supply.model
+        elif hasattr(self._router, "select_brain_for_role"):
             try:
                 decision = self._router.select_brain_for_role(
                     role,

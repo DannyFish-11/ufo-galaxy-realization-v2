@@ -8,12 +8,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import uuid
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from core.continuity_adjudication import build_continuity_adjudication_evidence, decide_reconnect_pending_policy
+
+# 入口鉴权、身份闸与准入闸与设备种类无关，实现在 core/participant_admission.py（通用参与方接入
+# 与本路径共用同一份，语义逐位不变）。这里保留原名供本模块与既有调用方使用。
+from core.participant_admission import PAIRED_DEVICE_MIN_SCOPE as _PAIRED_DEVICE_MIN_SCOPE  # noqa: F401
+from core.participant_admission import evaluate_ingress_authentication as _evaluate_ingress_authentication
+from core.participant_admission import evaluate_ingress_identity as _evaluate_ingress_identity
+from core.participant_admission import extract_ingress_token as _extract_ingress_token  # noqa: F401
+from core.participant_admission import should_gate_unapproved as _should_gate_unapproved
+from core.participant_admission import verify_pairing_capability_token as _verify_pairing_capability_token  # noqa: F401
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice
 
@@ -562,169 +570,6 @@ def _enum_or_string(value: Any) -> Optional[str]:
         return str(value.value)
     text = str(value).strip()
     return text or None
-
-
-def _extract_ingress_token(message: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
-    """Extract device-ingress auth token from canonical and compat fields."""
-    token_fields = (
-        "_ingress_transport_token",
-        "token",
-        "auth_token",
-        "api_token",
-        "authorization",
-    )
-    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
-
-    for field in token_fields:
-        raw = message.get(field)
-        if raw is None:
-            raw = payload.get(field)
-        if raw is None:
-            continue
-        value = str(raw).strip()
-        if not value:
-            continue
-        if value.lower().startswith("bearer "):
-            value = value[7:].strip()
-        return value or None, field
-    return None, None
-
-
-#: 接纳"这台设备已配对"所需的最小作用域。与 core/routes/pairing.py 的
-#: ``_TRUST_SCOPES`` 对齐:除 ``blocked``(压根不发令牌)外每级都至少有它 ——
-#: 既不放进被拉黑的对端,也不把只读级别的正常设备挡在门外。
-_PAIRED_DEVICE_MIN_SCOPE = "device:status"
-
-
-def _verify_pairing_capability_token(token: str, device_id: str) -> bool:
-    """这枚令牌是不是 ``/api/v1/pair/claim`` 发给**本设备**的配对令牌。
-
-    单独判、不塞进 ``core.auth.verify_api_token``:配对令牌按信任级别限定作用域,
-    塞进通用校验就会被中间件当成合法 API 令牌,只读级别的手表随即能去写配置 ——
-    那是提权。这里问的是另一个问题:"这台设备配过对吗",只在设备入口成立。
-
-    绑定 ``subject == device_id``:否则一枚泄露的令牌换个 device_id 就能冒充接入。
-    """
-    try:
-        from core.capability_token import verify_token
-    except ImportError as exc:
-        # 只吞"模块不可用"。裸 except Exception 会把字段名写错这类自身缺陷
-        # 一并吞成"这不是配对令牌",配对令牌集体失效而日志里一个字都没有。
-        logger.debug("能力令牌模块不可用,跳过配对令牌校验: %s", exc)
-        return False
-
-    verdict = verify_token(token, required_scope=_PAIRED_DEVICE_MIN_SCOPE)
-    return bool(verdict.valid) and bool(device_id) and verdict.subject == device_id
-
-
-def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
-    """Evaluate token/auth boundary for device ingress registration."""
-    auth_enforced = False
-    active_token_count = 0
-    token: Optional[str] = None
-    token_source: Optional[str] = None
-    token_present = False
-    token_valid = False
-    paired_token = False
-
-    try:
-        from core.auth import get_active_tokens, is_auth_enabled, verify_api_token
-
-        auth_enforced = bool(is_auth_enabled())
-        active_token_count = len(get_active_tokens())
-        token, token_source = _extract_ingress_token(message)
-        token_present = bool(token)
-        # 配对令牌与环境/每设备令牌是**并列**的三条合法凭证。少了第一条,
-        # /api/v1/pair/claim 配对成功之后设备照样连不上 —— 配得上、连不了。
-        if token:
-            paired_token = _verify_pairing_capability_token(token, str(message.get("device_id") or "").strip())
-        token_valid = bool(token and (paired_token or verify_api_token(token)))
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        return {
-            "enforced": False,
-            "token_present": False,
-            "token_source": None,
-            "token_valid": False,
-            "active_token_count": 0,
-            "state": "auth_check_unavailable",
-            "reason": str(exc),
-        }
-
-    state = "not_enforced_no_token"
-    reason = ""
-    if auth_enforced:
-        if active_token_count <= 0:
-            state = "rejected_auth_misconfigured"
-            reason = "GALAXY_AUTH_ENABLED=true but no active gateway tokens are configured"
-        elif not token_present:
-            state = "rejected_token_missing"
-            reason = "Authentication is enforced; token is required"
-        elif not token_valid:
-            state = "rejected_token_invalid"
-            reason = "Token is present but invalid"
-        else:
-            state = "verified"
-            reason = "Token verified under enforced auth"
-    else:
-        if token_present and token_valid:
-            state = "verified_optional"
-            reason = "Token verified in compatibility mode (auth not enforced)"
-        elif token_present and not token_valid and active_token_count > 0:
-            state = "token_invalid_compat"
-            reason = "Invalid token provided in compatibility mode"
-
-    # 设备准入绑定:配对令牌是唯一"绑到这台设备"的凭据——它的 subject 必须等于本条
-    # 消息的 device_id。环境共享 token 不绑设备,它代表管理员,按 token_valid 放行。
-    #
-    # 令牌被抄走、换台设备呈递时:subject 对不上 → paired_token False,而它也不是
-    # 环境 token → verify_api_token 也 False,于是 token_valid 与 device_approved
-    # 一并为 False。挡住这一条不需要额外分支,binding 本身就够。
-    device_approved = paired_token or token_valid
-
-    return {
-        "enforced": auth_enforced,
-        "token_present": token_present,
-        "token_source": token_source,
-        "token_valid": token_valid,
-        "device_approved": device_approved,
-        "active_token_count": active_token_count,
-        "state": state,
-        "reason": reason,
-    }
-
-
-def _should_gate_unapproved(auth_outcome: Dict[str, Any]) -> bool:
-    """设备准入闸决策:是否应把【未批准】设备降级为 control_only。
-
-    仅当环境开关 GALAXY_REQUIRE_DEVICE_APPROVAL 打开、且设备【未批准】时返回 True。
-    默认关 → 恒 False → 注册行为与现状逐字节一致(opt-in)。
-
-    "已批准" == auth_outcome["device_approved"]:每设备 token 必须【发放给本 device_id】
-    才算本设备已批准(见 _evaluate_ingress_authentication 的绑定校验),否则一枚泄露 token
-    换个 device_id 就能冒充接入。共享/环境管理员 token 仍按 token_valid 放行。配对批准
-    发放的正是绑定本设备的 token,天然闭环。
-    """
-    require = os.environ.get("GALAXY_REQUIRE_DEVICE_APPROVAL", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-    return require and not bool(auth_outcome.get("device_approved"))
-
-
-def _evaluate_ingress_identity(
-    *,
-    message_device_id: str,
-    websocket_device_id: Optional[str],
-) -> Dict[str, Any]:
-    """Evaluate whether ingress path identity matches registration identity."""
-    if websocket_device_id and message_device_id and websocket_device_id != message_device_id:
-        return {
-            "matched": False,
-            "reason": ("device_id mismatch between WebSocket ingress path and " "device_register payload"),
-        }
-    return {"matched": True, "reason": ""}
 
 
 def _decorate_registration_boundary(

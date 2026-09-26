@@ -35,9 +35,10 @@ Critical (must-run) steps
 -------------------------
 The four steps that constitute a closed truth loop for a ``task_result``:
 
-1. **truth_ingress** — Ingest the Android participant truth into V2 canonical
-   orchestration state via
-   :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`.
+1. **truth_ingress** — Ingest the participant truth into V2 canonical
+   orchestration state via the generic
+   :func:`~core.participant_truth_ingress.ingest_participant_truth_message`
+   (default family: the Android implementation).
 2. **reconcile** — Reconcile the inbound signal against the host-side
    execution tracker via
    :func:`~core.android_execution_signal_reconciler.reconcile_inbound_message`.
@@ -294,12 +295,14 @@ class TruthChainOutcome:
 # Module-level imports (top-level so tests can patch them)
 # ---------------------------------------------------------------------------
 
+# 第 1 步调参与方真相的**通用**入口（P3 · R5.3 第 2 步）；它按消息声明的参与方族分派，
+# 默认族即安卓实现 —— 对今天的每一条消息行为不变。默认实现的后备模块不可用时照旧跳过。
 try:
-    from core.android_participant_truth_ingress import (
-        ingest_android_participant_truth_message as _ingest_participant_truth,
-    )
+    from core.participant_truth_ingress import DEFAULT_IMPLEMENTATION_AVAILABLE as _participant_truth_available
+    from core.participant_truth_ingress import ingest_participant_truth_message as _generic_participant_truth
 except ImportError:
-    _ingest_participant_truth = None  # type: ignore[assignment]
+    _participant_truth_available, _generic_participant_truth = False, None  # type: ignore[assignment]
+_ingest_participant_truth = _generic_participant_truth if _participant_truth_available else None
 
 try:
     from core.android_execution_signal_reconciler import reconcile_inbound_message as _reconcile_inbound_message
@@ -339,7 +342,7 @@ def _run_truth_ingress(
     message: Dict[str, Any],
     outcome: TruthChainOutcome,
 ) -> None:
-    """Step 1: ingest Android participant truth into V2 canonical state."""
+    """Step 1: ingest participant truth (any participant family) into V2 canonical state."""
     if _ingest_participant_truth is None:
         outcome.truth_ingress_status = StepStatus.SKIPPED_MODULE_UNAVAILABLE
         return
