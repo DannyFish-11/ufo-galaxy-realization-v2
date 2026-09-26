@@ -125,7 +125,7 @@ async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
     * 手表/手机连着 → 在手表上问(阻塞等回答,fail-closed),同时在对话里说一声问了什么;
     * 都没有 → 在对话里问:本次不执行,交回一句要问用户的话,用户答了之后原样再调一次。
     """
-    from core.device_onboarding.conversation import announce, confirm_in_conversation, is_pending
+    from core.device_onboarding.conversation import announce_soon, confirm_in_conversation, is_pending
 
     def _in_conversation() -> Optional[Dict[str, Any]]:
         v = confirm_in_conversation(what, session_id)
@@ -153,7 +153,7 @@ async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
 
     from core.interaction.high_risk_confirmation import confirm_high_risk_tool
 
-    await announce(f"我在手表上问你了:要{what}吗?")
+    announce_soon(f"我在手表上问你了:要{what}吗?")
     outcome = await confirm_high_risk_tool(tool_name=what, risk_level="设备接入", session_id=session_id)
     return None if outcome.approved else {"success": False, "error": f"没有执行:{outcome.reason}"}
 

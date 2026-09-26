@@ -327,3 +327,21 @@ def test_joining_the_private_network_uses_the_grant_and_never_hijacks_an_existin
     failed = dp.join_tailnet(grant, "lap-1", run=refused, which=lambda _: "tailscale")
     assert failed["state"] == "failed" and "k1" not in json.dumps(failed, ensure_ascii=False)
     assert dp.join_tailnet(None, "lap-1")["state"] == "no_grant"
+
+
+def test_pairing_does_not_wait_for_the_conversation_record(gateway, monkeypatch):
+    """记进对话主线会写语义记忆;那一端的服务不在时会一直等。配对不能被它拖住。
+
+    CI 的干净环境里就是这样:配对请求等到 15 秒超时。
+    """
+    import core.session_memory_facade as smf
+
+    async def stuck(**kw):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(smf, "record_session_turn", stuck)
+    started = time.time()
+    _, state, resp = _pair(gateway)
+    assert resp["success"] and state["token"]
+    assert time.time() - started < 5
+    assert gateway.spoken == ["笔记本「书房笔记本」配对好了,正在连过来。"]  # 推面板不等记录

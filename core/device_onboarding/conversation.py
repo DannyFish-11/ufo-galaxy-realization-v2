@@ -150,17 +150,18 @@ def reset_conversation_confirmations() -> None:
 # ── 播报 ─────────────────────────────────────────────────────────────────────────
 
 
-async def announce(text: str) -> None:
-    """作为一句助手发言:推给面板,并记进当前对话主线。失败只记日志。"""
-    text = (text or "").strip()
-    if not text:
-        return
+def _emit(text: str) -> None:
+    """实时推给面板(内存里的一次推送,很便宜)。"""
     try:
         from core.lumiv_websocket_bridge import emit_conversation
 
         emit_conversation("ai", text, source="devices")
     except Exception as exc:  # noqa: BLE001
         logger.debug("设备播报推面板失败(非致命): %s", exc)
+
+
+async def _record(text: str) -> None:
+    """记进当前对话主线(面板重开时从这里读回来)。会顺带写语义记忆,可能慢。"""
     try:
         from core.conversation_mainline import mainline_session_id
         from core.session_memory_facade import record_session_turn
@@ -177,19 +178,41 @@ async def announce(text: str) -> None:
         logger.debug("设备播报记进主线失败(非致命): %s", exc)
 
 
+async def announce(text: str) -> None:
+    """作为一句助手发言:推给面板,并记进当前对话主线。失败只记日志。"""
+    text = (text or "").strip()
+    if text:
+        _emit(text)
+        await _record(text)
+
+
+#: 还在跑的播报任务。留着引用,免得任务在跑完前被回收。
+_background: set = set()
+
+
 def announce_soon(text: str) -> None:
-    """在同步代码里播报:有运行中的事件循环就排进去,没有就当场跑完。"""
+    """播报,但**不让调用方等**:配对、注册、工具调用都不该被一句播报拖住。
+
+    推面板当场做;记进对话主线会顺带写语义记忆(要算向量),那一端的服务不在时要等到
+    超时 —— 曾经因此把配对请求整个拖成超时。所以有事件循环时记录一律丢到后台。
+    """
+    text = (text or "").strip()
+    if not text:
+        return
+    _emit(text)
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
     if loop is not None:
-        loop.create_task(announce(text))
+        task = loop.create_task(_record(text))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
         return
     try:
-        asyncio.run(announce(text))
+        asyncio.run(_record(text))
     except Exception as exc:  # noqa: BLE001
-        logger.debug("设备播报失败(非致命): %s", exc)
+        logger.debug("设备播报记进主线失败(非致命): %s", exc)
 
 
 class DiscoveryDigest:
@@ -254,7 +277,7 @@ async def note_paired(device_id: str, name: str, device_type: str = "") -> None:
     with _lock:
         _just_paired[device_id] = (label, time.time())
     kind = {"windows_laptop": "笔记本", "windows_desktop": "电脑", "wearos": "手表"}.get(device_type, "设备")
-    await announce(f"{kind}「{label}」配对好了,正在连过来。")
+    announce_soon(f"{kind}「{label}」配对好了,正在连过来。")
 
 
 async def note_connected(device_id: str) -> None:
@@ -263,4 +286,4 @@ async def note_connected(device_id: str) -> None:
     with _lock:
         hit = _just_paired.pop(device_id, None)
     if hit and now - hit[1] <= _JUST_PAIRED_TTL_S:
-        await announce(f"「{hit[0]}」连上了,现在可以让我操作它。")
+        announce_soon(f"「{hit[0]}」连上了,现在可以让我操作它。")
