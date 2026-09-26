@@ -106,6 +106,7 @@ OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 # 下列带 F401 的名字是 PR-7 编排拆解后的兼容再导出面:测试与下游
 # 历史上从 core.openclawd 导入这些名字,必须保留。
 from core.interaction.agent_message import ASK_HUMAN_NOTIFY_TOOL, dispatch_notify_tool  # noqa: E402
+from core.smart_home_tools import HOME_BUILTIN_TOOLS, dispatch_home_tool, home_tools_enabled  # noqa: E402
 from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401,E402  re-export
@@ -7254,6 +7255,8 @@ class OpenClawd:
 
         # ── Agent-callable human-decision tool (PR-HITL) ─────────────────────
         tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
+        if home_tools_enabled():  # 智能家居:配了 Home Assistant 才出现 —— 见 core/smart_home_tools.py
+            tools.extend(HOME_BUILTIN_TOOLS)
 
         # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────
         try:
@@ -7314,6 +7317,7 @@ class OpenClawd:
             "ask_human__",
             "computer_use__",
             "context__",
+            "home__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
 
@@ -7573,6 +7577,11 @@ class OpenClawd:
                 # Agent-callable human-decision tool (PR-HITL): ask_human__request
                 action = tool_name[len("ask_human__") :]
                 return await self._dispatch_ask_human_tool(action, arguments)
+
+            elif tool_name.startswith("home__"):
+                return await dispatch_home_tool(
+                    tool_name[len("home__") :], arguments, session_id=getattr(self, "_current_session_id", "") or ""
+                )
 
             elif tool_name.startswith("computer_use__"):
                 # computer use 自主闭环: computer_use__run

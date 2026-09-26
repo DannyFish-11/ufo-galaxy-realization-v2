@@ -247,6 +247,15 @@ async def update_config(req: ConfigUpdateRequest):
         except Exception as exc:  # noqa: BLE001
             logger.debug("ambient 循环即时开关失败(非致命): %s", exc)
 
+    # Home Assistant 地址/令牌/开关改动 → 设备镜像与事件流立刻按新配置重连,不必重启。
+    if set(final) & {"HOME_ASSISTANT_URL", "HOME_ASSISTANT_TOKEN", "GALAXY_HA_BRIDGE"}:
+        try:
+            from core.ha_bridge import restart_ha_bridge
+
+            await restart_ha_bridge()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("HA 桥按新配置重连失败(配置已保存,重启网关后生效): %s", exc)
+
     # UnifiedConfig 是进程启动时读一次 .env 就不再变的单例("Dashboard 优先级"
     # 那一层实际读的是它)——本函数只写了 os.environ/.env,从没告诉过它内容
     # 变了。同一进程内一直没炸,纯粹是因为 _get_key() 的兜底第三层直接读

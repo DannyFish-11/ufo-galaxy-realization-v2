@@ -1940,6 +1940,19 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "devices",
         "description": "接入 Home Assistant（能控智能家居 · 默认开，没装 HA 时自动跳过）",
     },
+    "HOME_ASSISTANT_URL": {
+        "default": "",
+        "type": "url",
+        "category": "devices",
+        "description": "Home Assistant 地址（如 http://192.168.1.20:8123 · 填了智能体才能开关家里的设备）",
+    },
+    # 以 _TOKEN 结尾 → classify_key() 归为 secret,走 runtime/secrets.env,不明文落 .env。
+    "HOME_ASSISTANT_TOKEN": {
+        "default": "",
+        "type": "password",
+        "category": "devices",
+        "description": "Home Assistant 长期访问令牌（HA 里 个人资料 → 安全 → 长期访问令牌 → 创建）",
+    },
     "GALAXY_TTS_VOICE": {
         "default": "zh-CN-XiaoxiaoNeural",
         "type": "string",

@@ -177,6 +177,14 @@ _TYPE_LABELS = {
 _META_ACTIONS = ["help", "status", "health"]
 _ACTION_PERMISSIONS: dict = {
     27: [
+        # 统一执行器那条路(智能体 → invoke_node → fusion_entry → SmartHomeService)
+        # 用的是 SmartHomeService 的方法名,不是 HTTP 路由名。此前表里只有路由名,
+        # 智能体一调 control 就被本闸以"不在白名单"拒掉 —— 能看见灯,关不了灯。
+        "discover",
+        "devices",
+        "control",
+        "scene",
+        "states",
         "control_device",
         "get_device",
         "ha_call",

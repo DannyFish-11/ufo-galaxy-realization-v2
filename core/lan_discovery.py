@@ -60,7 +60,7 @@ def _service_types() -> List[str]:
 
 def lan_discovery_enabled() -> bool:
     """是否应启动 LAN 发现：未被 GALAXY_LAN_DISCOVERY=0 显式关闭 且 zeroconf 可用。"""
-    if os.environ.get("GALAXY_LAN_DISCOVERY", "1").strip() == "0":
+    if os.environ.get("GALAXY_LAN_DISCOVERY", "1").strip().lower() in ("0", "false", "no", "off"):
         return False
     try:
         import zeroconf  # noqa: F401

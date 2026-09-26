@@ -59,7 +59,8 @@ _UNAVAILABLE_STATES = ("unavailable", "unknown")
 
 def ha_bridge_enabled() -> bool:
     """是否应启动 HA 桥：URL+TOKEN 齐 且未被 GALAXY_HA_BRIDGE=0 显式关闭。"""
-    if os.environ.get("GALAXY_HA_BRIDGE", "1").strip() == "0":
+    # 面板把布尔开关存成 "true"/"false" —— 只认 "0" 的话,在面板上关掉它不生效。
+    if os.environ.get("GALAXY_HA_BRIDGE", "1").strip().lower() in ("0", "false", "no", "off"):
         return False
     return bool(os.environ.get("HOME_ASSISTANT_URL", "").strip() and os.environ.get("HOME_ASSISTANT_TOKEN", "").strip())
 
@@ -274,3 +275,14 @@ def get_ha_bridge() -> HABridge:
     if _bridge_instance is None:
         _bridge_instance = HABridge()
     return _bridge_instance
+
+
+async def restart_ha_bridge() -> Dict[str, Any]:
+    """按当前环境变量重建 HA 桥(面板改了地址/令牌/开关后调用)。"""
+    global _bridge_instance
+    if _bridge_instance is not None:
+        await _bridge_instance.stop()
+        _bridge_instance = None
+    if not ha_bridge_enabled():
+        return {"status": "disabled"}
+    return {"status": "ok", **(await get_ha_bridge().start())}
