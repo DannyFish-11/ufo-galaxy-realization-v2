@@ -76,6 +76,9 @@ _WS_SEND_TIMEOUT_S: float = 2.0
 # 避免同一组数字在两处各写一份、改一处忘另一处。
 from core.phase_contract import PHASE_ANCHORS as MODE_DEPTH_MAP  # noqa: E402
 
+# 叫停键（它在动手时人按 Esc 能停）占没占到。键盘监听与本桥同一进程，直接读。
+from core.stop_key import label as _stop_key_label  # noqa: E402
+
 
 class GalaxyPresenceBridge:
     """
@@ -138,10 +141,28 @@ class GalaxyPresenceBridge:
     # （见 _posture_payload 与 _render_payload 的注释）。记报出去的那一份，
     # 转移语汇与渲染端看到的相位始终在同一套词汇里。
     #
-    # 于是 TTS 还在播时的 manifest → liminal 会被记成 handoff —— 这不是误标：
-    # 本文件的既有注释写着「说话即阈限在场」，那一段确实是执行完成后交接到阈限态
-    # 表达，随后才 dissolving 回静息。
+    # 说话地板现在报的是 manifest（朗读是表达，见 _build_message），所以 TTS 还在播
+    # 时 runtime 回到 SILENT 不再产生一次 manifest → liminal 的来回，而是一直停在
+    # manifest，念完才 dissolving 回静息。
     _previous_lifecycle: Optional[str] = None
+
+    # ── 主轴转移的**驻留**记录 ──
+    #
+    # transition_kind 是一拍性的：只有第一份在转移之后组装的消息带着它。新客户端
+    # 连上时的那份快照、或某一次广播恰好丢了，这一拍就整个没了（覆盖层为此单独接过
+    # is_returning 兜底）。所以这里再记两位驻留的：第几次转移、最近一次是哪一种。
+    # 消费方拿序号跟自己上次见过的比，变了就是发生过一次转移 —— 不依赖哪一帧。
+    _seq_lifecycle: Optional[str] = None
+    _transition_seq: int = 0
+    _last_transition: str = "none"
+
+    # 此刻在动手的会话（runtime_session_id）。按会话记而不是一位布尔：常驻在场与
+    # 一次请求的 200ms tick 会交替到达，一位布尔会被后到的那个来回翻。
+    # 用 frozenset 且改时整体替换 —— 这个类的默认值都挂在类上，就地 add 会漏进别的实例。
+    _acting_sessions: frozenset = frozenset()
+    # 最近一次广播出去的叫停键（core.stop_key.label()）。键盘监听是开始动手之后在
+    # 另一条线程里起的，占到的那一刻没有任何事件会顺带把它送出去 —— 靠它认出"变了"。
+    _stop_key_sent: str = ""
 
     # 桥接已启动
     _started: bool = False
@@ -247,7 +268,25 @@ class GalaxyPresenceBridge:
             posture = resolve_phase_posture(effective_phase)
         return posture.to_dict()
 
-    def _render_payload(self, effective_phase: str) -> Dict[str, Any]:
+    def _note_lifecycle(self, life: str) -> None:
+        """把「报出去的主轴」记进驻留的转移序号。幂等：同一档反复调用不算转移。
+
+        与一拍性的 transition_kind 分开记：那一位会被某一份消息「用掉」，这两位不会 ——
+        任何一份消息里都带着同样的序号和最近那次转移，谁先组装、谁后组装都一样。
+        """
+        if life == self._seq_lifecycle:
+            return
+        from core.phase_contract import transition_kind_of
+
+        prev = self._seq_lifecycle
+        self._seq_lifecycle = life
+        if prev is None:
+            # 本进程第一次报主轴：那是初值，不是一次转移。
+            return
+        self._transition_seq += 1
+        self._last_transition = transition_kind_of(prev, life)
+
+    def _render_payload(self, effective_phase: str, *, consume_edge: bool = True) -> Dict[str, Any]:
         """广播用的**忠实**渲染契约（见 core.phase_contract.RenderPosture）。
 
         与上面的 ``_posture_payload`` 并存而不是取代它：那份是一维遗留投影，既有
@@ -265,6 +304,11 @@ class GalaxyPresenceBridge:
         到本拍的主轴。放在这里而不是相位回调里，是因为这里才是「报出去的那一档」
         最终定型的地方（说话地板在此之前已经生效）。同档位的重复广播会算出
         ``transition_kind="none"``，不会把上一次真实转移误报成反复发生。
+
+        ``consume_edge=False`` 是给**单个新客户端的快照**用的（:meth:`_send_to`）：
+        那一份只发给一个人，不该把本该广播给所有人的那一拍用掉。此前快照也会推进
+        ``_previous_lifecycle`` —— 新客户端恰好在转移与广播之间连上时，其余客户端
+        就收不到那次 dissolving 了。驻留的 transition_seq 不受这个参数影响。
         """
         from core.phase_contract import (
             ExecutionChainView,
@@ -325,6 +369,7 @@ class GalaxyPresenceBridge:
             ambient_rationale=self._ambient_rationale,
         )
 
+        self._note_lifecycle(life)
         prev = self._previous_lifecycle
         posture = resolve_render_posture(
             life,
@@ -335,8 +380,13 @@ class GalaxyPresenceBridge:
             local_chain=local,
             cross_device_chain=cross,
             hybrid_execution=HybridExecutionView.from_decision_dict(self._hybrid_execution),
+            acting=bool(self._acting_sessions),
+            stop_key=_stop_key_label() if self._acting_sessions else "",
+            transition_seq=self._transition_seq,
+            last_transition=self._last_transition,
         )
-        self._previous_lifecycle = life
+        if consume_edge:
+            self._previous_lifecycle = life
         return posture.to_dict()
 
     def _on_continuum_state(self, event: Any) -> None:
@@ -384,13 +434,48 @@ class GalaxyPresenceBridge:
             hybrid = payload.get("hybrid_execution")
             if isinstance(hybrid, dict):
                 self._hybrid_execution = hybrid
+            # 此刻在不在动手。按会话记（见 _acting_sessions 的注释）。
+            if "acting" in payload:
+                sid = str(payload.get("runtime_session_id") or getattr(event, "runtime_session_id", "") or "")
+                self._note_acting(sid, bool(payload.get("acting")))
         except Exception:  # noqa: BLE001 — 可见性绝不该拖垮桥
             logger.debug("_on_continuum_state failed (non-fatal)", exc_info=True)
+
+    def _note_acting(self, runtime_session_id: str, acting: bool) -> None:
+        """登记某个会话此刻在不在动手；动手与否、叫停键占没占到，一变就广播。
+
+        这条 tick 本身**不触发广播**（阈限期靠 intent.update，表达期靠相位事件）。
+        而「开始动手 / 停手」恰恰发生在表达期中段，没有任何事件会顺带把它送出去。
+        叫停键更晚一拍：监听是开始动手之后在另一条线程里起的（见 core.stop_key），
+        占到的那一下也得送出去，否则岛上那句「Esc 停止」要等到下一次别的广播才出现。
+        tick 每 200ms 一拍，所以这里最多晚 200ms 看见。
+        """
+        if not runtime_session_id:
+            return
+        was = bool(self._acting_sessions)
+        if acting:
+            self._acting_sessions = self._acting_sessions | {runtime_session_id}
+        else:
+            self._acting_sessions = self._acting_sessions - {runtime_session_id}
+        now_acting = bool(self._acting_sessions)
+        key = _stop_key_label() if now_acting else ""
+        if now_acting != was or key != self._stop_key_sent:
+            self._stop_key_sent = key
+            try:
+                _bt = asyncio.get_running_loop().create_task(self._broadcast_state())
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
+            except RuntimeError:
+                pass  # 不在事件循环里（同步测试）—— 下一次广播会带上
 
     def _on_phase_silent(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "static"
         self._apply_posture("static")
         self._intent = 0.0
+        # 回到静息的那个会话不可能还在动手（tick 在 SILENT 已停，不会再送 false 来）。
+        sid = str(getattr(payload, "runtime_session_id", "") or "")
+        if sid:
+            self._acting_sessions = self._acting_sessions - {sid}
         # 主体回到静息：阈限内容随之归零。这里是它唯一的清空点 ——
         # continuum tick 在 SILENT 时已经停了，不会再送 liminal_activity="none" 过来，
         # 不在这清就会把上一次请求的候选路径一直挂到下一次请求。
@@ -765,11 +850,14 @@ class GalaxyPresenceBridge:
     async def _send_to(self, websocket: WebSocket) -> None:
         """向单个客户端发送当前状态(封顶超时:注册时若客户端卡死不阻塞调用方)。"""
         try:
-            await asyncio.wait_for(websocket.send_json(self._build_message()), timeout=_WS_SEND_TIMEOUT_S)
+            # 快照只发给这一个客户端 —— 不许把本该广播给所有人的那一拍转移用掉。
+            await asyncio.wait_for(
+                websocket.send_json(self._build_message(consume_edge=False)), timeout=_WS_SEND_TIMEOUT_S
+            )
         except Exception as exc:  # noqa: BLE001 — 含 TimeoutError
             logger.debug("Send to single client failed: %s", exc)
 
-    def _build_message(self, speaking_override: Optional[bool] = None) -> Dict[str, Any]:
+    def _build_message(self, speaking_override: Optional[bool] = None, *, consume_edge: bool = True) -> Dict[str, Any]:
         """构建与前端兼容的 state_event 消息。
 
         speaking_override:set_ai_speaking 的广播用【调用时快照值】而非任务运行时
@@ -778,18 +866,24 @@ class GalaxyPresenceBridge:
         丢失(说话动画偶发不起 + CI flaky)。默认 None → 沿用 live 值,其它调用点不变。
         """
         _speaking = self._speaking if speaking_override is None else speaking_override
-        # 说话地板:TTS 还在播时即使相位已回 SILENT(depth 0.05),也维持一个
-        # 可见的在场深度——说完(set_ai_speaking(False) 广播)才落回相位深度,
-        # 由渲染端弹簧自然缓落。消除"话没说完、画面先睡"的割裂。
+        # 说话地板:TTS 还在播时即使相位已回 SILENT,也不报静息 —— 说完
+        # (set_ai_speaking(False) 广播)才落回静息。消除"话没说完、画面先睡"的割裂。
+        #
+        # **报的是 manifest,不是 liminal。** 朗读是对外表达,不是审议:生命周期文档里
+        # manifest 就写着"出字、控设备";覆盖层的第二态是沙盘(推演与决策在里面发生)。
+        # 这里原先报 liminal,是给已经删掉的 React 面板(usePhase 只认 phase 字符串)打的
+        # 补丁 —— 换成双轴契约之后,它的效果变成:每次语音回答,沙盘空间收回去刚开始
+        # 执行,又因为开口说话被重新推开一遍(manifest → liminal 被记成 handoff),
+        # 念完才消散。一句回答,空间开合两次。
+        #
+        # 只提升 static:相位本来就在 liminal(比如上一句还在念、新请求已经进来审议)
+        # 或 manifest 时照实报,不拿"在说话"去盖掉真实的相位。
         _depth = self._current_depth
         _phase = self._current_mode
         if _speaking:
-            _depth = max(_depth, MODE_DEPTH_MAP["liminal"])
-            # 说话即"阈限在场":TTS 在相位已回 SILENT 之后才发声,若仍报 static,只认 phase 的
-            # 消费者(React 面板 usePhase)不会显示第二态。说话时把 phase/mode 报成 liminal,
-            # 与 overlay(读 depth+speaking)语义一致、面板与 overlay 同步显示第二态。
+            _depth = max(_depth, MODE_DEPTH_MAP["manifest"])
             if _phase == "static":
-                _phase = "liminal"
+                _phase = "manifest"
         return {
             "type": "state_event",
             "event_category": "ambient_tick",
@@ -814,7 +908,7 @@ class GalaxyPresenceBridge:
                 # 这份是双轴 —— 主轴 lifecycle（用户能感知的节奏）+ 副轴 continuum
                 # 四相（含 receding 返回弧），外加阈限态的可视内容（在推演哪几条
                 # 候选、提交了哪条）。新代码应当消费这一份。
-                "render": self._render_payload(_phase),
+                "render": self._render_payload(_phase, consume_edge=consume_edge),
                 # 自发注意力最近一拍（面板在场栏展示"在看/在听 + 决策"）。
                 "ambient": {
                     "seeing": self._ambient_seeing,
@@ -900,14 +994,23 @@ def emit_conversation(
     speaking: bool = False,
     turn_id: str = "",
     final: bool = True,
+    client_id: str = "",
 ) -> None:
-    """把一轮对话（"听到的"/"AI 说的"）实时推给面板的"实时上下文"视图。
+    """把一轮对话（"听到的"/"AI 说的"）实时推给面板的上下文。
 
-    与前端 useConversation 的契约对齐：type="conversation"，payload 含
-    role/text/source/speaking/turn_id/final。非阻塞、降级安全、永不抛出。
+    type="conversation"，payload 含 role/text/source/speaking/turn_id/final/client_id。
+    非阻塞、降级安全、永不抛出。
+
+    * ``final=False`` 是**流式增量**：同一个角色的连续增量拼成一句（双工里模型边说
+      边出字，就走这条）。收尾时发一帧 ``text=""``、``final=True`` 把这句合上 ——
+      空文本只在收尾帧里被允许，别的空帧照旧丢掉。
+    * ``client_id`` 是发起这一轮的界面实例。它自己已经从别的通道（/chat/stream 的
+      SSE）拿到了同样的字，凭这一位认出回声、不再画第二遍；别的界面照常显示。
     """
     try:
-        if not (text or "").strip():
+        if not (text or "").strip() and not final:
+            return
+        if not (text or "").strip() and final and role != "ai":
             return
         bridge = GalaxyPresenceBridge.get_instance()
         if speaking:
@@ -921,6 +1024,7 @@ def emit_conversation(
                 "speaking": bool(speaking),
                 "turn_id": str(turn_id or ""),
                 "final": bool(final),
+                "client_id": str(client_id or ""),
             },
         }
         _schedule(bridge._broadcast_conversation(msg))

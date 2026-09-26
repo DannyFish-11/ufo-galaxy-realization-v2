@@ -22,7 +22,8 @@ pyautogui>=0.9.54
 pytesseract>=0.3.10
 pygetwindow>=0.0.9; sys_platform == 'win32'
 pywinauto>=0.6.8; sys_platform == 'win32'
-pynput>=1.7.0
+# 1.8 起键盘回调带 injected(分得清人按的和注入的)—— core/stop_key.py 靠它才敢占 Esc
+pynput>=1.8.0
 keyboard>=0.13.5
 
 # ============================================================================

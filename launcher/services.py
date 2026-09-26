@@ -1795,13 +1795,13 @@ class GalaxyUnified:
 
                 async def process(self, text: str, source: str = "voice"):
                     try:
+                        from core.conversation_mainline import mainline_session_id
                         from core.desktop_presence_runtime import get_desktop_presence_runtime
 
-                        rt = get_desktop_presence_runtime()
-                        return await rt.handle_request(
+                        return await get_desktop_presence_runtime().handle_request(
                             message=text,
                             source=source,
-                            session_id="voice",
+                            session_id=mainline_session_id(create=True) or "voice",  # 记进对话主线:面板读的就是它
                             user_id="voice",
                             entry_mode="local",
                         )

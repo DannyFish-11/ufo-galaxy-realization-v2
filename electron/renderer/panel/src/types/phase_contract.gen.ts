@@ -413,8 +413,12 @@ export interface RenderPosture {
   lifecycle: Lifecycle;
   /** 主轴的上一档（相位事件自带 from_phase）；null=还没发生过转移 */
   previous_lifecycle: Lifecycle | null;
-  /** 刚才那次转移的性质 —— 退场编排看这一位，别从深度差里猜 */
+  /** 刚才那次转移的性质（一拍性：只有转移后的第一份广播带着） */
   transition_kind: TransitionKind;
+  /** 主轴转移过几次（驻留）—— 跟上次见过的比，变了就是发生过转移 */
+  transition_seq: number;
+  /** 最近那次转移的性质（驻留）—— 与 transition_seq 成对读 */
+  last_transition: TransitionKind;
   /** 【副轴】内部连续体四相，提供主轴给不出的纹理 */
   continuum_phase: RenderPhase;
   /** 副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位 */
@@ -435,6 +439,10 @@ export interface RenderPosture {
   perception: PerceptionView;
   /** 表达期用什么手法动手（GUI／API／混合） */
   hybrid_execution: HybridExecutionView;
+  /** 此刻是否正在动手（操作这台机器）—— 外壳据此把「停」摆到最近处 */
+  acting: boolean;
+  /** 此刻按哪个键能叫停（如 Esc）；空 = 没有 —— 只在键盘监听确实占到时才有值 */
+  stop_key: string;
   /** 四条模态通路走原生还是走桥 —— perception 说有没有信号，这一位说它怎么进去的 */
   pathway: ModalityPathwayView;
   /** 这一轮在哪儿想（本地／云端）；unknown=还没想过，不是本地 */

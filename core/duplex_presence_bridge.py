@@ -70,11 +70,14 @@ class DuplexPresenceBridge:
         source: str = "voice_duplex",
         device_id: str = "",
         user_id: str = "",
+        on_interrupt: Optional[Any] = None,
     ) -> None:
         self._session = session
         self._source = source
         self._device_id = device_id
         self._user_id = user_id
+        # 人按「停」时,让正在说的这一句停下(会话不关)。由持有方给 —— 播放器在它手里。
+        self._on_interrupt = on_interrupt
         # 会话 ID 缺省时自己造一个:没有它 record_session_turn 会直接 return,
         # 轮次就静默丢了 —— 那正是本模块要修的毛病,不能在自己身上重演。
         self._conversation_session_id = conversation_session_id or f"duplex-{int(time.time() * 1000):x}"
@@ -112,6 +115,9 @@ class DuplexPresenceBridge:
                 reason="realtime duplex voice session",
                 on_halt=self._halt,
             )
+            # 人按「停」时只打断正在说的这一句（会话留着），见 core.presence_stop。
+            if self._on_interrupt is not None:
+                runtime.set_ambient_interrupt(self._handle, self._on_interrupt)
         except Exception as exc:  # noqa: BLE001
             logger.warning("双工常驻在场开启失败(双工照常运行,外壳不更新): %s", exc)
             return None

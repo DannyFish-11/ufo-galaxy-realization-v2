@@ -2,6 +2,18 @@
 
 这份文件记的是**做了什么、代价是什么**，不是设计蓝图。
 
+> **之后又变了两处**（下面「收敛前」那张表是当时的快照，照原样留着）：
+>
+> - 面板从 React 重写成了**不依赖任何 UI 框架的 TypeScript**（`electron/renderer/panel/src/main.ts`
+>   起头）。下文提到的 `App.tsx` 已经不在了；它那段注释记的故障 —— 面板的三态来自一个与请求
+>   生命周期不同步的状态源 —— 现在由一条规矩挡着：**「此刻」只认 WS 的 `payload.render`，
+>   面板上相位只有一个写者**（`tests/test_panel_stops_and_keeps_one_context.py` 钉着）。
+> - 覆盖层的 WebGL 着色器拆掉了，换成 CSS 合成（`electron/renderer/app.js` + `index.html`），
+>   理由见 `app.js` 文件头：无 GPU 模式下全屏片元着色器每帧 735ms。
+>
+> 面板与覆盖层读的是同一份渲染契约（`core/phase_contract.py`），方向说明在
+> `docs/RENDER_CONTRACT_DIRECTION.md`。
+
 ## 收敛前：五份表层
 
 仓库同时存在五个面向用户的界面实现：
@@ -28,10 +40,10 @@
 
 ## 代价：这不是纯粹的去重
 
-前三份是重复或死代码，删掉没有损失。**`status_board_v2` 不是**——它有 React
+前三份是重复或死代码，删掉没有损失。**`status_board_v2` 不是**——它有
 面板没有对应物的能力，删除它是净减：
 
-| 能力 | 行数 | React 面板 |
+| 能力 | 行数 | 面板 |
 |---|---|---|
 | `topology_layout` 星座布局 | 867 | ❌ |
 | `topology_renderer` 拓扑渲染 | 637 | ❌ |
@@ -50,7 +62,7 @@ ConfigControlSurface → ConfigService → ConfigStore → runtime/config.json
                      → HotReloadConfigManager（写成功后热重载）
 ```
 
-React 面板走的是**另一条**链路：
+面板走的是**另一条**链路：
 
 ```
 设置页 → POST /api/config → CONFIG_SCHEMA（155 个键）→ .env / runtime/secrets.env
@@ -114,7 +126,7 @@ WS  /ws/desktop-presence
 
 ## 未做
 
-- **拓扑/可观测视图没有搬进 React 面板**。上面那张表的 ❌ 是当前状态，不是计划。
+- **拓扑/可观测视图没有搬进面板**。上面那张表的 ❌ 是当前状态，不是计划。
 - **两套配置写入链路没有合并**。provider/routing 维度的写能力要补回来，正确做法
   是把 `ConfigService`（写 `config.json`）与 `CONFIG_SCHEMA`（写 `.env`）合成一套，
   而不是给已删的表层造一个替身。

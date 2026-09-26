@@ -92,6 +92,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import os
@@ -100,6 +101,7 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import presence_stop as _presence_stop
 from core.desktop_presence_system import (
     DesktopPresenceStateMachine,
     build_desktop_presence_system_view,
@@ -163,7 +165,7 @@ _ADMISSION_REJECTED_MESSAGES = {
 }
 
 
-class RuntimeSession:
+class RuntimeSession(_presence_stop.ActingMixin):
     """Holds the lifecycle state of a single top-level request within the runtime shell.
 
     Each call to :meth:`DesktopPresenceRuntime.handle_request` creates one
@@ -410,8 +412,6 @@ class RuntimeSession:
         """启动后台 continuum 状态推送循环。"""
         if self._tick_running:
             return
-        import asyncio
-
         # 先确认有在跑的事件循环,再造协程对象。
         #
         # 原写法是直接 ``create_task(self._continuum_tick_loop())``:参数在调用前
@@ -455,8 +455,6 @@ class RuntimeSession:
         将 OpenClawd 的实时认知强度 (presence_intensity) 传递到
         GalaxyWebSocketBridge → 前端渲染，实现 AI 状态驱动外壳。
         """
-        import asyncio
-
         try:
             from core.state_event_bus import emit as _emit
         except Exception:
@@ -488,6 +486,7 @@ class RuntimeSession:
                     # 阈限态的内容。复用这条已有的 200ms 通道而不另开一条：桥已经
                     # 订阅着 continuum.state，多带两个字段的成本远小于再拉一条链路。
                     "liminal_activity": self.liminal_activity,
+                    "acting": self.acting,  # 此刻在不在动手：每拍都带，它的「否」本身就是信号
                 }
                 # 摘要只在有值时带上——没推演时不发空对象，省得下游把「没推演」
                 # 与「推演了但候选为空」混为一谈。
@@ -545,7 +544,7 @@ class RuntimeSession:
 # ---------------------------------------------------------------------------
 
 
-class DesktopPresenceRuntime:
+class DesktopPresenceRuntime(_presence_stop.StopMixin):
     """Windows Desktop Runtime Shell — the outer presence layer of the unified subject.
 
     **Role in the unified subject**
@@ -812,6 +811,7 @@ class DesktopPresenceRuntime:
     # Public API
     # ------------------------------------------------------------------
 
+    @_presence_stop.stoppable
     async def handle_request(
         self,
         message: str,

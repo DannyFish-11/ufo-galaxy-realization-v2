@@ -781,6 +781,22 @@ class RenderPosture:
     渲染端的退场编排应当看这一位，而不是看深度往哪边走 —— 深度倒着走只能
     把进场动画倒放，而 ``handoff``（做完接着下一轮）与 ``dissolving``（做完就散）
     本就该是两段不同的动作。
+
+    **它是一拍性的**：只有转移之后组装的第一份广播带着它。要靠得住地认出"发生过
+    一次转移"，看下面两位驻留的。
+    """
+
+    transition_seq: int
+    """本进程里主轴转移过几次。**驻留位**：每一份消息都带着同一个数。
+
+    消费方拿它跟自己上次见过的比，变了就是发生过转移 —— 不依赖是哪一帧、也不怕
+    某一帧丢了或自己中途才连上。
+    """
+
+    last_transition: str
+    """最近那一次主轴转移的性质，见 :data:`TRANSITION_KINDS`。**驻留位**。
+
+    与 :attr:`transition_seq` 成对读：序号变了，就按这一位编排。
     """
 
     # ── 副轴：内部连续体姿态（提供纹理，不决定整体编排）────────────────
@@ -833,6 +849,23 @@ class RenderPosture:
 
     hybrid_execution: HybridExecutionView
     """混合执行模式决策。未决策时是 :meth:`HybridExecutionView.undecided`。"""
+
+    acting: bool
+    """此刻它是否正在**动手** —— 操作这台机器（键鼠、窗口、应用）。
+
+    表达期有两种样子：出字/出声，和动你的鼠标键盘。前者屏幕该是干净的；后者是
+    整个流程里人最需要知道、也最需要能叫停的时刻。``hybrid_execution`` 分不开
+    这两者（模式选完就一直为真，点名级别的执行又根本不登记），所以由真正落手的
+    那几处自己报（``core.liminal_activity.acting``）。外壳据此把「停」摆到最近处。
+    """
+
+    stop_key: str
+    """此刻按哪个键能叫停它（如 ``"Esc"``）；空串 = 没有这样一个键。
+
+    只在动手期间、而且键盘监听**确实占到了**时才有值（``core.stop_key``）。
+    渲染端照这一位写「Esc 停止」—— 写着能停而按了没用，比不写更糟，所以不能从
+    ``acting`` 推出来：分不清人按的和它自己注入的键的平台上，动手期间也是空的。
+    """
 
     # ── 通路与归属：怎么进来的、在哪儿想 ────────────────────────────────
 
@@ -1059,6 +1092,11 @@ def _anchor_only_render_posture(
     lifecycle: str = "silent",
     previous_lifecycle: Optional[str] = None,
     perception_view: Optional[PerceptionView] = None,
+    *,
+    acting: bool = False,
+    stop_key: str = "",
+    transition_seq: int = 0,
+    last_transition: str = "none",
 ) -> RenderPosture:
     """拿不到 ContinuumState 时的兜底姿态——如实标注，不假装是算出来的。
 
@@ -1085,6 +1123,9 @@ def _anchor_only_render_posture(
         lifecycle=life,
         previous_lifecycle=prev,
         transition_kind=transition_kind_of(prev, life),
+        # 转移序号、动手与否都不来自 continuum —— 兜底时照实带上。
+        transition_seq=max(0, int(transition_seq or 0)),
+        last_transition=last_transition if last_transition in TRANSITION_KINDS else "none",
         continuum_phase=phase,
         is_returning=False,
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
@@ -1095,6 +1136,8 @@ def _anchor_only_render_posture(
         world_model=WorldModelView.unwired(),
         perception=perception_view,
         hybrid_execution=HybridExecutionView.undecided(),
+        acting=bool(acting),
+        stop_key=str(stop_key or "") if acting else "",
         # 通路与归属和感知同理：它们各有独立的只读通道，continuum 没跑不代表
         # "此刻走哪条通路 / 这一轮谁在想"不知道。兜底最常出现的场合正是第一态，
         # 在这里抹成空等于把这一层要修的问题原样搬进兜底路径。
@@ -1129,6 +1172,10 @@ def resolve_render_posture(
     cross_device_chain: Optional[ExecutionChainView] = None,
     hybrid_execution: Optional[HybridExecutionView] = None,
     perception: Optional[PerceptionView] = None,
+    acting: bool = False,
+    stop_key: str = "",
+    transition_seq: int = 0,
+    last_transition: str = "none",
 ) -> RenderPosture:
     """合成渲染姿态：主轴由调用方给，副轴与表达参数从 ``ContinuumState`` 读。
 
@@ -1146,6 +1193,9 @@ def resolve_render_posture(
         hybrid_execution: 混合执行模式决策；``None`` 时用「尚未决策」。
         perception: 第一态的感知视图；``None`` 时现取一次
             （:func:`resolve_perception_view` 自己会走只读拉取）。
+        acting: 此刻是否正在动手（操作这台机器）。
+        stop_key: 此刻按哪个键能叫停（``core.stop_key.label()``）；不在动手时一律为空。
+        transition_seq / last_transition: 主轴转移的驻留记录，由在场桥维护。
 
     三个视图为什么由外面传
     ----------------------
@@ -1187,7 +1237,15 @@ def resolve_render_posture(
     if state is None:
         state = last_continuum_posture()
     if state is None:
-        base = _anchor_only_render_posture(life, prev, percept)
+        base = _anchor_only_render_posture(
+            life,
+            prev,
+            percept,
+            acting=acting,
+            stop_key=stop_key,
+            transition_seq=transition_seq,
+            last_transition=last_transition,
+        )
         return dataclasses.replace(
             base,
             liminal_activity=activity,
@@ -1232,6 +1290,8 @@ def resolve_render_posture(
         lifecycle=life,
         previous_lifecycle=prev,
         transition_kind=transition_kind_of(prev, life),
+        transition_seq=max(0, int(transition_seq or 0)),
+        last_transition=last_transition if last_transition in TRANSITION_KINDS else "none",
         continuum_phase=phase,
         is_returning=phase == "receding",
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
@@ -1242,6 +1302,8 @@ def resolve_render_posture(
         world_model=WorldModelView.unwired(),
         perception=percept,
         hybrid_execution=hybrid,
+        acting=bool(acting),
+        stop_key=str(stop_key or "") if acting else "",
         pathway=pathway_view,
         thinking_locus=locus_view,
         runtime_domain=domain if domain in RUNTIME_DOMAINS else None,
@@ -1263,199 +1325,10 @@ def resolve_render_posture(
 
 
 def render_contract_schema() -> Dict[str, Any]:
-    """机器可读的忠实契约描述 —— ``scripts/gen_ts_types.py`` 据此生成 TS 类型。"""
-    return {
-        "phases": list(RENDER_PHASES),
-        "transitions": {k: list(v) for k, v in PHASE_TRANSITIONS.items()},
-        "forbidden": [{"from": a, "to": b, "why": why} for (a, b), why in FORBIDDEN_TRANSITIONS.items()],
-        "tri_state_map": dict(_TRI_STATE_MAP),
-        "lifecycle_states": list(LIFECYCLE_STATES),
-        "liminal_activities": list(LIMINAL_ACTIVITIES),
-        "simulation_kinds": list(SIMULATION_KINDS),
-        "runtime_domains": list(RUNTIME_DOMAINS),
-        "form_signatures": list(FORM_SIGNATURES),
-        "spatial_presences": list(SPATIAL_PRESENCES),
-        "chain_kinds": list(CHAIN_KINDS),
-        "hybrid_execution_modes": list(HYBRID_EXECUTION_MODES),
-        "world_model_sources": list(WORLD_MODEL_SOURCES),
-        "perception_modalities": list(PERCEPTION_MODALITIES),
-        "modality_states": list(MODALITY_STATES),
-        "ambient_actions": list(AMBIENT_ACTIONS),
-        "transition_kinds": list(TRANSITION_KINDS),
-        "pathway_modalities": list(PATHWAY_MODALITIES),
-        "pathway_modes": list(PATHWAY_MODES),
-        # 空串是合法取值（没被限制），生成端要把它保留成联合类型的一支。
-        "pathway_limits": list(PATHWAY_LIMITS),
-        "tier_kinds": list(TIER_KINDS),
-        "thinking_loci": list(THINKING_LOCI),
-        "route_types": list(ROUTE_TYPES),
-        "transition_kind_of": [{"from": a, "to": b, "kind": k} for (a, b), k in TRANSITION_KIND_OF.items()],
-        "sources": [PostureSource.CONTINUUM, PostureSource.ANCHOR_ONLY],
-        "chain_fields": [
-            {"name": "kind", "ts": "ChainKind", "doc": "local / cross_device —— 决定 last_target 的含义"},
-            {"name": "is_active", "ts": "boolean", "doc": "这条链是否跑过；false=还没跑过，不是「没有这条链」"},
-            {"name": "total_executions", "ts": "number", "doc": "本会话内这条链上的总执行次数"},
-            {"name": "canonical_executions", "ts": "number", "doc": "其中走完整规范链的次数"},
-            {"name": "legacy_executions", "ts": "number", "doc": "其中走遗留／非规范路径的次数"},
-            {"name": "chain_order", "ts": "string[]", "doc": "规范链的步骤名（有序）—— 空间里该画几段"},
-            {"name": "last_step", "ts": "string | null", "doc": "最近一次到达的步骤名"},
-            {"name": "last_target", "ts": "string | null", "doc": "local→task_id，cross_device→device_id"},
-        ],
-        "hybrid_fields": [
-            {"name": "is_decided", "ts": "boolean", "doc": "本轮是否真的做过模式选择"},
-            {"name": "mode", "ts": "HybridExecutionMode", "doc": "用什么手法动手；none=尚未决策"},
-            {"name": "reason", "ts": "string", "doc": "选它的理由（后端策略引擎原文）"},
-            {"name": "confidence", "ts": "number", "doc": "[0,1]：1=精确命中规则，0.5=启发式，0=兜底"},
-        ],
-        "modality_fields": [
-            {"name": "modality", "ts": "PerceptionModality", "doc": "screen / camera / microphone / system_audio"},
-            {"name": "state", "ts": "ModalityState", "doc": "五档之一 —— 刻意不是布尔，理由见该类型的注释"},
-            {
-                "name": "signal_age_s",
-                "ts": "number | null",
-                "doc": "距上次有信号多久（秒）；null=从没有过信号（与 0 是两件事）",
-            },
-        ],
-        "perception_fields": [
-            {"name": "source", "ts": "ViewSource", "doc": "unwired=进程里没有感知库，live=有"},
-            {"name": "is_sensing", "ts": "boolean", "doc": "任一模态 live。便利位，由 modalities 推出"},
-            {"name": "privacy_paused", "ts": "boolean", "doc": "隐私急停是否生效 —— 整体姿态，不是四条恰好都闭着"},
-            {"name": "modalities", "ts": "ModalityView[]", "doc": "恒定四条，缺席的以 unavailable 出现"},
-            {"name": "ambient_action", "ts": "AmbientAction", "doc": "自发注意力上一拍的决策；none=还没决策过"},
-            {"name": "ambient_rationale", "ts": "string", "doc": "那一拍为什么这么决定（后端原文，已截断）"},
-        ],
-        "pathway_lane_fields": [
-            {"name": "modality", "ts": "PathwayModality", "doc": "vision_in / audio_in / audio_out / video_in"},
-            {
-                "name": "mode",
-                "ts": "PathwayMode",
-                "doc": "native=一条通路直达；bridge=中间还有一段转换；unavailable=不通",
-            },
-            {
-                "name": "limited_by",
-                "ts": "PathwayLimit",
-                "doc": "谁把它限制住的：model=换模型 / serving=开环境变量 / device=换设备 / provider=换一家；空串=没被限制",
-            },
-        ],
-        "pathway_fields": [
-            {"name": "locus", "ts": "string", "doc": "这份结论照着谁算的：local 或某家 provider 名；空串=没协商过"},
-            {"name": "tier_kind", "ts": "TierKind", "doc": "本地档位形态；unknown=取不到档位表（不猜）"},
-            {"name": "is_wired", "ts": "boolean", "doc": "false=这个进程里没有协商层，四条全是占位空态"},
-            {"name": "lanes", "ts": "PathwayLane[]", "doc": "恒定四条，不通的以 unavailable 出现"},
-            {"name": "native_count", "ts": "number", "doc": "走原生的条数（由 lanes 推出的便利位）"},
-            {"name": "bridged_count", "ts": "number", "doc": "接了桥的条数（同上）"},
-        ],
-        "thinking_locus_fields": [
-            {"name": "is_decided", "ts": "boolean", "doc": "本进程是否路由过角色；false 时下面几位都是空的"},
-            {"name": "locus", "ts": "ThinkingLocus", "doc": "local / cloud；unknown=还没想过，**不是**本地"},
-            {"name": "provider", "ts": "string", "doc": "选中的提供商名；未决策时空串"},
-            {"name": "model", "ts": "string", "doc": "选中的型号"},
-            {"name": "role", "ts": "string", "doc": "这次路由是为哪个协作角色做的"},
-            {"name": "route_type", "ts": "RouteType", "doc": "dispatch=派活 / produce=产出 / gatekeep=把关"},
-            {"name": "reason", "ts": "string", "doc": "路由理由（后端原文，已截断）"},
-            {
-                "name": "is_fallback",
-                "ts": "boolean",
-                "doc": "角色意图没被满足：派活落到云端，或把关回落本地 —— 该画得不一样",
-            },
-            {
-                "name": "draft_active",
-                "ts": "boolean",
-                "doc": "本地这一轮开没开投机解码的草稿位；只在 locus=local 时有意义",
-            },
-            {
-                "name": "draft_speedup",
-                "ts": "number",
-                "doc": "这台机器实测的倍数；0=没测过，<1=测过且更慢（那时 draft_active 为 false）",
-            },
-        ],
-        "world_model_fields": [
-            {"name": "is_wired", "ts": "boolean", "doc": "世界模型是否已接到渲染链路；当前恒 false"},
-            {"name": "source", "ts": "WorldModelSource", "doc": "unwired=链路还没建，live=数就是这个"},
-            {"name": "entity_count", "ts": "number", "doc": "已知实体数；unwired 时的 0 是「不知道」"},
-            {"name": "entity_kinds", "ts": "string[]", "doc": "出现过的实体种类"},
-        ],
-        "simulation_fields": [
-            {"name": "is_active", "ts": "boolean", "doc": "当前是否有推演在跑"},
-            {"name": "simulation_kind", "ts": "SimulationKind", "doc": "none / speculative / sandbox"},
-            {"name": "candidate_paths", "ts": "string[]", "doc": "正在评估的候选执行路径 —— 阈限态在权衡什么"},
-            {"name": "committed_path", "ts": "string | null", "doc": "已提交的那条；仍在推演/全失败时 null"},
-            {"name": "is_committed", "ts": "boolean", "doc": "committed_path !== null"},
-            {"name": "step_count", "ts": "number", "doc": "已完成的推演步数"},
-            {"name": "scenario_label", "ts": "string | null", "doc": "场景的人类可读标签"},
-        ],
-        "fields": [
-            {"name": "lifecycle", "ts": "Lifecycle", "doc": "【主轴】主体生命周期 —— 渲染端的整体编排跟它走"},
-            {
-                "name": "previous_lifecycle",
-                "ts": "Lifecycle | null",
-                "doc": "主轴的上一档（相位事件自带 from_phase）；null=还没发生过转移",
-            },
-            {
-                "name": "transition_kind",
-                "ts": "TransitionKind",
-                "doc": "刚才那次转移的性质 —— 退场编排看这一位，别从深度差里猜",
-            },
-            {
-                "name": "continuum_phase",
-                "ts": "RenderPhase",
-                "doc": "【副轴】内部连续体四相，提供主轴给不出的纹理",
-            },
-            {
-                "name": "is_returning",
-                "ts": "boolean",
-                "doc": "副轴是否在返回弧上（receding）——把「刚做完」与「静息」分开的那一位",
-            },
-            {"name": "next_phases", "ts": "RenderPhase[]", "doc": "副轴从当前相位合法能去的下一相"},
-            {
-                "name": "liminal_activity",
-                "ts": "LiminalActivity",
-                # 取值列表由常量拼出，不手抄 —— 手抄那份漏掉过 understanding，而 TS 类型
-                # 本身是从同一个常量生成的，于是【类型对、注释错】，评审时最难看出来。
-                "doc": "阈限态里正在干嘛（有序递进）：" + " → ".join(LIMINAL_ACTIVITIES),
-            },
-            {"name": "simulation", "ts": "SimulationSummary", "doc": "沙盘推演摘要 —— 阈限态的可视内容之三"},
-            {"name": "local_chain", "ts": "ExecutionChainView", "doc": "本机执行链 —— 阈限态的可视内容之一"},
-            {
-                "name": "cross_device_chain",
-                "ts": "ExecutionChainView",
-                "doc": "跨设备执行链 —— 阈限态的可视内容之二",
-            },
-            {"name": "world_model", "ts": "WorldModelView", "doc": "世界模型 —— 留出的位置，当前恒 unwired"},
-            {
-                "name": "perception",
-                "ts": "PerceptionView",
-                "doc": "**第一态的主体** —— 原生多模态摄入此刻的样子；不随相位裁剪",
-            },
-            {
-                "name": "hybrid_execution",
-                "ts": "HybridExecutionView",
-                "doc": "表达期用什么手法动手（GUI／API／混合）",
-            },
-            {
-                "name": "pathway",
-                "ts": "ModalityPathwayView",
-                "doc": "四条模态通路走原生还是走桥 —— perception 说有没有信号，这一位说它怎么进去的",
-            },
-            {
-                "name": "thinking_locus",
-                "ts": "ThinkingLocusView",
-                "doc": "这一轮在哪儿想（本地／云端）；unknown=还没想过，不是本地",
-            },
-            {"name": "runtime_domain", "ts": "RuntimeDomain | null", "doc": "第二维：在哪儿跑；null=尚未判定"},
-            {"name": "motion", "ts": "number", "doc": "抽象运动能量 [0,1]"},
-            {"name": "intensity", "ts": "number", "doc": "整体在场强度 [0,1]"},
-            {"name": "form_signature", "ts": "FormSignature", "doc": "形态提示；receding 对应 collapsing_field"},
-            {"name": "spatial_presence", "ts": "SpatialPresence", "doc": "空间权重／贴近度"},
-            {"name": "texture_hint", "ts": "string", "doc": "质感描述（soft_dissolve 等）；空串=无提示"},
-            {"name": "presence_intensity", "ts": "number", "doc": "EMA 平滑的在场强度 [0,1]"},
-            {"name": "coherence", "ts": "number", "doc": "信号成意图的程度 [0,1]"},
-            {"name": "ambiguity", "ts": "number", "doc": "coherence 的反面 [0,1]"},
-            {"name": "collapse_tendency", "ts": "number", "doc": "推向塌缩（liminal→manifest）的概率质量 [0,1]"},
-            {"name": "retreat_tendency", "ts": "number", "doc": "推向 receding 的概率质量 [0,1]（不是退回上一档）"},
-            {"name": "stability", "ts": "number", "doc": "时间稳定度 [0,1]，低值表示刚振荡过"},
-            {"name": "source", "ts": "PhasePostureSource", "doc": "实算还是兜底"},
-            {"name": "degraded", "ts": "boolean", "doc": "continuum 本拍是否降级"},
-            {"name": "degrade_reason", "ts": "string | null", "doc": "仅 degraded=true 时有值"},
-        ],
-    }
+    """机器可读的忠实契约描述 —— ``scripts/gen_ts_types.py`` 据此生成 TS 类型。
+
+    描述本身在 :mod:`core.phase_contract_schema`（本文件在文件大小门禁的基线上）。
+    """
+    from core.phase_contract_schema import build_render_contract_schema
+
+    return build_render_contract_schema()
