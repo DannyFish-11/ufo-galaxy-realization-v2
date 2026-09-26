@@ -20,7 +20,7 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 try:
@@ -70,6 +70,8 @@ class ChatRequest(BaseModel):
     # When provided (and cross-device routing is enabled), forces cross_device
     # mode regardless of the online device count.
     target_device: Optional[str] = None
+    # 发起界面：只有电脑上的桌面外壳会带 "desktop_shell"（core/presence_line.py）。
+    client_surface: Optional[str] = None
     # Source-device runtime participation posture. Kept separate from entry_mode:
     # "control_only" means the source device remains only the controller;
     # "join_runtime" means the source device is also a runtime participant.
@@ -144,6 +146,7 @@ def _merge_parallel_result(result: dict) -> dict:
 @router.post("/api/v1/chat")
 async def chat_endpoint(
     request: ChatRequest,
+    http_request: Request = None,  # type: ignore[assignment]  # 直接调用时可不传
     auth: dict = Depends(_require_auth),
 ):
     """Adapter surface — delegates to DesktopPresenceRuntime (runtime shell).
@@ -189,6 +192,7 @@ async def chat_endpoint(
     # ── PR-1: Route through DesktopPresenceRuntime ──
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+        from core.presence_line import request_origin
 
         runtime = get_desktop_presence_runtime()
         # Normalise context: DesktopPresenceRuntime expects Optional[List[Dict]].
@@ -202,6 +206,7 @@ async def chat_endpoint(
             multimodal_context=request.multimodal_context,
             entry_mode=_entry_mode,
             source_runtime_posture=request.source_runtime_posture,
+            **request_origin(http_request, getattr(request, "client_surface", None)),
         )
         # Backward-compatible alias (reply = response) for legacy clients
         if isinstance(result, dict) and "reply" not in result:

@@ -65,7 +65,7 @@ import logging
 import os
 from typing import Any, AsyncIterator, Dict, List, Tuple
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from core.android_boundary_visibility_router import (
@@ -73,6 +73,7 @@ from core.android_boundary_visibility_router import (
     extract_android_originated_info,
 )
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
+from core.presence_line import desktop_conversation_mirror, desktop_incremental_speech, desktop_request, request_origin
 from core.routes._models import ChatRequest
 from core.subject_facing_foreground import (
     build_subject_facing_foreground,
@@ -392,7 +393,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # 副作用,真正需要它的调用方自己会去取(并付那一次的构造代价)。
 
     @router.post("/api/v1/chat")
-    async def chat(req: ChatRequest):
+    async def chat(req: ChatRequest, request: Request = None):  # type: ignore[assignment]  # 直接调用时可不传
         """
         /api/v1/chat — Compatibility Adapter Surface (PR-2)
 
@@ -470,6 +471,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 required_capabilities=req.required_capabilities,
                 multimodal_context=req.multimodal_context,
                 entry_mode=_entry_mode,
+                **request_origin(request, getattr(req, "client_surface", None)),
                 runtime_attachment_session_id=(
                     req.context[-1].get(
                         "runtime_attachment_session_id",
@@ -653,8 +655,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     @router.post("/api/v1/chat/stream")
-    async def chat_stream(req: ChatRequest):
+    async def chat_stream(req: ChatRequest, request: Request = None):  # type: ignore[assignment]
         """SSE 真流式对话 — 委派 DesktopPresenceRuntime → OpenClawd,token 级转发。"""
+        _origin, _on_desktop = desktop_request(request, req)  # 不是电脑发起的:不在电脑上念、不推进桌面视图
 
         async def _gen() -> AsyncIterator[str]:
             # 收到即进入"思考"态提示(前端在场带据此脉动)。
@@ -662,8 +665,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # 一体化：把用户输入实时推给面板的"实时上下文"视图（与在场共用 WS 通道）。
             _turn_id = req.session_id or ""
             try:
-                from core.lumiv_websocket_bridge import emit_conversation as _emit_conv
-
+                _emit_conv = desktop_conversation_mirror(_on_desktop)
                 _emit_conv("user", req.message or "", source="text", turn_id=_turn_id, client_id=req.client_id)
             except Exception:
                 _emit_conv = None  # type: ignore
@@ -696,15 +698,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # 边生成边念:能建则建;建成后在请求上下文里抑制收尾的整段重念。
             speaker = None
             try:
-                from core.speech_output import (
-                    begin_incremental_speech,
-                    suppress_final_speak_in_context,
-                )
+                from core.speech_output import suppress_final_speak_in_context
 
-                speaker = begin_incremental_speech(
-                    source="chat",
-                    on_sentence_start=lambda t: reveal_q.put_nowait(t),
-                )
+                speaker = desktop_incremental_speech(_on_desktop, source="chat", on_sentence_start=reveal_q.put_nowait)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
 
@@ -753,6 +749,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         required_capabilities=req.required_capabilities,
                         multimodal_context=req.multimodal_context,
                         entry_mode="local",
+                        **_origin,
                     )
 
             task = asyncio.get_running_loop().create_task(_run())

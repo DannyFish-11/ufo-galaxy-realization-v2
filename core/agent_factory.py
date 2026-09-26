@@ -15,9 +15,18 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from core.agent_supply import (
+    SupplyDecision,
+    call_kwargs,
+    record_divergence,
+    sanitize_declaration,
+    supply_for_config,
+    unmet_refusal,
+)
 from core.atomic_json import atomic_write_json
+from core.genome import agent_template_prompt
 
 try:
     from core.monitoring import CircuitBreaker
@@ -226,6 +235,10 @@ class AgentConfig:
     """从主控 Agent 继承的 SOUL 约束（只读，不可被子代覆盖）"""
     soul_supplement: str = ""
     """子 Agent 追加的补充性人格/能力说明（叠加到 inherited_soul 之后）"""
+    # 供给三格（core/agent_supply.py）：声明的是**需求**，不是供应商（G13）。全空＝今天的行为。
+    model_preference: str = ""  # "" | dispatch | produce | gatekeep
+    modality_required: Tuple[str, ...] = ()  # vision_in / audio_in / audio_out / video_in 的子集
+    locus_constraint: str = ""  # "" | local_only | cloud_ok
 
 
 @dataclass
@@ -251,6 +264,7 @@ class TaskAgent:
             "splits": 0,
         }
     )
+    supply: Optional[SupplyDecision] = None  # 造出来时一次算定、按 agent_id 绑在这里（断点 4）
 
     def to_dict(self) -> Dict:
         return {
@@ -266,6 +280,7 @@ class TaskAgent:
             "creation_mode": self.creation_mode.value,
             "metrics": self.metrics,
             "permissions": self.config.permissions,
+            **({"supply": self.supply.to_dict()} if self.supply is not None else {}),
         }
 
 
@@ -507,6 +522,10 @@ class AgentFactory:
             raise ValueError(f"未知模板: {template_name}，可用: {available}")
 
         config = AGENT_TEMPLATES[template_name]
+        # 模板提示词是 Genome instructions 一格的 agent_templates（core/genome.py）；下面的显式覆盖压过它（G3）。
+        config = AgentConfig(
+            **{**config.__dict__, "system_prompt": agent_template_prompt(template_name, config.system_prompt)}
+        )
 
         # 应用覆盖
         if overrides:
@@ -595,6 +614,7 @@ class AgentFactory:
                 max_subtasks=result.get("max_subtasks", 5),
                 max_depth=result.get("max_depth", 2),
                 metadata={"generated_from": task_description, "llm_config": result},
+                **sanitize_declaration(result),
             )
 
             agent = TaskAgent(
@@ -1048,6 +1068,8 @@ class AgentFactory:
           3. 调用 LLM（带 tools）→ 如果有 tool_calls → 执行 → 追加结果 → 继续
           4. 无 tool_calls 时返回最终文本
         """
+        if agent.supply is not None and agent.supply.steers and agent.supply.unmet:
+            return unmet_refusal(agent.supply, _task_echo(task))  # G14：供不上就报，不静默降级
         if self.llm_router:
             # 局部 import：模块级引用 core.agent.* 会触发 __init__ → kernel →
             # execution_planner → 本文件的循环导入。
@@ -1087,16 +1109,13 @@ class AgentFactory:
                 async def _call():
                     # PR-3: chat_with_tools() 在 Unified/Multi 两种 router 上均有定义，
                     # 确保统一策略层生效，无论持有哪种 router。
+                    # 断点 3：声明过需求的 Agent 在 on 档按角色的 task_type 与决定的脑调用；其余逐字段照旧。
                     if hasattr(self.llm_router, "chat_with_tools"):
                         return await self.llm_router.chat_with_tools(
-                            messages=msgs,
-                            tools=tools if tools else None,
-                            task_type="agent_control",
+                            messages=msgs, tools=tools if tools else None, **call_kwargs(agent.supply)
                         )
                     return await self.llm_router.chat(
-                        messages=msgs,
-                        tools=tools if tools else None,
-                        task_type="agent_control",
+                        messages=msgs, tools=tools if tools else None, **call_kwargs(agent.supply)
                     )
 
                 if self._llm_circuit_breaker:
@@ -1146,6 +1165,7 @@ class AgentFactory:
                 loop_detection_window=cfg.loop_detection_window,
             )
             resp = loop.final_response
+            record_divergence(agent.supply, getattr(resp, "provider", "") or "", getattr(resp, "model", "") or "")
             return {
                 "task": _task_echo(task),
                 "output": (resp.content if resp else None) or "Agent 达到最大迭代次数",
@@ -1273,6 +1293,7 @@ class AgentFactory:
 
     def _register_agent(self, agent: TaskAgent):
         self._check_rate_limit()
+        agent.supply = supply_for_config(agent.id, agent.config, self.llm_router)  # off 档为 None
         self.agents[agent.id] = agent
         self.message_bus.register(agent.id)
         self._creation_timestamps.append(time.time())
@@ -1633,6 +1654,10 @@ def get_agent_factory(llm_router=None) -> AgentFactory:
     global _factory_instance
     if _factory_instance is None:
         _factory_instance = AgentFactory(llm_router)
+    elif llm_router is not None and _factory_instance.llm_router is None:
+        # 断点 1：无参调用先到过，工厂就曾永久 llm_router=None、所有任务走 simulated。后到的 router 补上。
+        _factory_instance.llm_router = llm_router
+        logger.info("AgentFactory 采纳了后到的 llm_router（此前无参创建）")
     return _factory_instance
 
 

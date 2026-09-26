@@ -168,6 +168,7 @@ documents are **authoritative and current** vs historical or superseded.
 | [AGENTIC_OS_ARCHITECTURE.md](AGENTIC_OS_ARCHITECTURE.md) | Distributed agentic OS — global domain topology |
 | [AGENT_RESPONSIBILITY_AND_DISPATCH_GOVERNANCE.md](AGENT_RESPONSIBILITY_AND_DISPATCH_GOVERNANCE.md) | Agent responsibility & dispatch governance |
 | [AI_AGENT_SYSTEM_DESIGN.md](AI_AGENT_SYSTEM_DESIGN.md) | Galaxy AI agent system design |
+| [META_LAYER_RSI_ARCHITECTURE_CN_2026.md](META_LAYER_RSI_ARCHITECTURE_CN_2026.md) | **DISCUSSION** — 元层与 RSI 架构：现状认定 + 元层设计 + 在场/动画运行时解耦路线 |
 | [AI_OS_ARCHITECTURE_DESIGN.md](AI_OS_ARCHITECTURE_DESIGN.md) | AI Native OS architecture design review |
 | [UNIFIED_STARTUP.md](UNIFIED_STARTUP.md) | Unified startup flow |
 | [MANIFEST_STAGE.md](MANIFEST_STAGE.md) | Manifest stage |
@@ -383,11 +384,11 @@ reference. Current practice should consult ACTIVE documents above.
 
 | Status | Count |
 |--------|-------|
-| **ACTIVE** | 216 |
+| **ACTIVE** | 217 |
 | **HISTORICAL** | 55 |
 | **SUPERSEDED** | 7 |
 | **DEPRECATED** | 1 |
-| **Total** | **272** |
+| **Total** | **273** |
 
 ---
 

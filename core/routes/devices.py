@@ -122,6 +122,10 @@ def _is_device_registered_canonical(device_id: str) -> bool:
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create device management routes router."""
     router = APIRouter()
+    # 通用参与方接入（非安卓设备注册 / 提交任务 / 进 mesh）与设备注册同属免 API 鉴权组，自带入口令牌校验。
+    from core.routes import participants as _participants
+
+    router.include_router(_participants.create_router())
 
     @router.post("/api/v1/devices/register")
     async def register_device(req: DeviceRegisterRequest):

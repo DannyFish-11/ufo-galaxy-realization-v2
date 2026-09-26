@@ -1,6 +1,7 @@
 {
   "unreachable": [
     "core.local_agent_runtime",
+    "core.posture_contract_canonicalization",
     "core.truth_conflict_enforcement"
   ],
   "_comment": [
@@ -38,6 +39,15 @@
     "      canonical_write_confirmed=True/False，调用方说谎就照样通过，且要在每个 compat",
     "      写点手工插桩。本仓已有更强的做法——capability_registry._guard_routing_context_usage",
     "      用调用栈检查，不需要调用方配合。",
+    "",
+    "=========================================================================",
+    "三、惰性化后显形：此前只是被桶式 __init__ 的急切导入掩盖（1）",
+    "=========================================================================",
+    "  core.posture_contract_canonicalization (331)",
+    "      core/runtime/__init__.py 改成 PEP 562 惰性再导出（R7：导入任何 core.runtime.* 子模块",
+    "      不再顺带装进 8 个安卓模块）之后显形。它的 10 个名字仍可经 `from core.runtime import X`",
+    "      取到，但生产代码里没有一处取用 —— 此前『可达』只因为桶把它无条件导入。不是本次",
+    "      造成的死代码，是本次让它可见。接不接按本文件顶部两问另行定论，不在 R7 里顺手接。",
     "",
     "=========================================================================",
     "已接入 / 已删除（不再在本清单里）",

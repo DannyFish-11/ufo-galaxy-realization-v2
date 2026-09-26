@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 407 条 · 组件 schema 107 个
+// 路径 413 条 · 组件 schema 107 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -31,6 +31,7 @@ export type ApiPath =
   | "/api/remote-desktop/status"
   | "/api/v1/acceptance/cross-repo-chain"
   | "/api/v1/acceptance/dual-repo-completeness-baseline"
+  | "/api/v1/agent/activity"
   | "/api/v1/agent/autonomous"
   | "/api/v1/agent/create"
   | "/api/v1/agent/deploy"
@@ -267,6 +268,11 @@ export type ApiPath =
   | "/api/v1/pair/trust"
   | "/api/v1/panel/feed"
   | "/api/v1/panel/unified"
+  | "/api/v1/participants"
+  | "/api/v1/participants/register"
+  | "/api/v1/participants/{device_id}/disconnect"
+  | "/api/v1/participants/{device_id}/heartbeat"
+  | "/api/v1/participants/{device_id}/tasks"
   | "/api/v1/ports"
   | "/api/v1/presence/stop"
   | "/api/v1/projection/agent-dispatch"
@@ -442,6 +448,7 @@ export const API_METHODS = {
   "/api/remote-desktop/status": ["get"],
   "/api/v1/acceptance/cross-repo-chain": ["get"],
   "/api/v1/acceptance/dual-repo-completeness-baseline": ["get"],
+  "/api/v1/agent/activity": ["get"],
   "/api/v1/agent/autonomous": ["post"],
   "/api/v1/agent/create": ["post"],
   "/api/v1/agent/deploy": ["post"],
@@ -678,6 +685,11 @@ export const API_METHODS = {
   "/api/v1/pair/trust": ["post"],
   "/api/v1/panel/feed": ["get"],
   "/api/v1/panel/unified": ["get"],
+  "/api/v1/participants": ["get"],
+  "/api/v1/participants/register": ["post"],
+  "/api/v1/participants/{device_id}/disconnect": ["post"],
+  "/api/v1/participants/{device_id}/heartbeat": ["post"],
+  "/api/v1/participants/{device_id}/tasks": ["post"],
   "/api/v1/ports": ["get"],
   "/api/v1/presence/stop": ["post"],
   "/api/v1/projection/agent-dispatch": ["get"],
@@ -901,6 +913,7 @@ export interface BundleUpdateRequest {
 
 export interface ChatRequest {
   "client_id"?: string;
+  "client_surface"?: string | null;
   "context"?: Array<Record<string, string>>;
   "device_id"?: string;
   "entry_mode"?: string | null;

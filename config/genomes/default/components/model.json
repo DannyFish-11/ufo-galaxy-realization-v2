@@ -1,0 +1,7 @@
+{
+  "capability_facts": "core/model_catalog.py",
+  "model_topology": "core/model_topology/",
+  "role_brain_hints": "core/multi_llm_router.py::ROLE_BRAIN_HINTS",
+  "routing_policy": "config/llm_routing_policy.yaml",
+  "writable": false
+}
