@@ -781,6 +781,22 @@ class RenderPosture:
     渲染端的退场编排应当看这一位，而不是看深度往哪边走 —— 深度倒着走只能
     把进场动画倒放，而 ``handoff``（做完接着下一轮）与 ``dissolving``（做完就散）
     本就该是两段不同的动作。
+
+    **它是一拍性的**：只有转移之后组装的第一份广播带着它。要靠得住地认出"发生过
+    一次转移"，看下面两位驻留的。
+    """
+
+    transition_seq: int
+    """本进程里主轴转移过几次。**驻留位**：每一份消息都带着同一个数。
+
+    消费方拿它跟自己上次见过的比，变了就是发生过转移 —— 不依赖是哪一帧、也不怕
+    某一帧丢了或自己中途才连上。
+    """
+
+    last_transition: str
+    """最近那一次主轴转移的性质，见 :data:`TRANSITION_KINDS`。**驻留位**。
+
+    与 :attr:`transition_seq` 成对读：序号变了，就按这一位编排。
     """
 
     # ── 副轴：内部连续体姿态（提供纹理，不决定整体编排）────────────────
@@ -833,6 +849,23 @@ class RenderPosture:
 
     hybrid_execution: HybridExecutionView
     """混合执行模式决策。未决策时是 :meth:`HybridExecutionView.undecided`。"""
+
+    acting: bool
+    """此刻它是否正在**动手** —— 操作这台机器（键鼠、窗口、应用）。
+
+    表达期有两种样子：出字/出声，和动你的鼠标键盘。前者屏幕该是干净的；后者是
+    整个流程里人最需要知道、也最需要能叫停的时刻。``hybrid_execution`` 分不开
+    这两者（模式选完就一直为真，点名级别的执行又根本不登记），所以由真正落手的
+    那几处自己报（``core.liminal_activity.acting``）。外壳据此把「停」摆到最近处。
+    """
+
+    stop_key: str
+    """此刻按哪个键能叫停它（如 ``"Esc"``）；空串 = 没有这样一个键。
+
+    只在动手期间、而且键盘监听**确实占到了**时才有值（``core.stop_key``）。
+    渲染端照这一位写「Esc 停止」—— 写着能停而按了没用，比不写更糟，所以不能从
+    ``acting`` 推出来：分不清人按的和它自己注入的键的平台上，动手期间也是空的。
+    """
 
     # ── 通路与归属：怎么进来的、在哪儿想 ────────────────────────────────
 
@@ -1059,6 +1092,11 @@ def _anchor_only_render_posture(
     lifecycle: str = "silent",
     previous_lifecycle: Optional[str] = None,
     perception_view: Optional[PerceptionView] = None,
+    *,
+    acting: bool = False,
+    stop_key: str = "",
+    transition_seq: int = 0,
+    last_transition: str = "none",
 ) -> RenderPosture:
     """拿不到 ContinuumState 时的兜底姿态——如实标注，不假装是算出来的。
 
@@ -1085,6 +1123,9 @@ def _anchor_only_render_posture(
         lifecycle=life,
         previous_lifecycle=prev,
         transition_kind=transition_kind_of(prev, life),
+        # 转移序号、动手与否都不来自 continuum —— 兜底时照实带上。
+        transition_seq=max(0, int(transition_seq or 0)),
+        last_transition=last_transition if last_transition in TRANSITION_KINDS else "none",
         continuum_phase=phase,
         is_returning=False,
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
@@ -1095,6 +1136,8 @@ def _anchor_only_render_posture(
         world_model=WorldModelView.unwired(),
         perception=perception_view,
         hybrid_execution=HybridExecutionView.undecided(),
+        acting=bool(acting),
+        stop_key=str(stop_key or "") if acting else "",
         # 通路与归属和感知同理：它们各有独立的只读通道，continuum 没跑不代表
         # "此刻走哪条通路 / 这一轮谁在想"不知道。兜底最常出现的场合正是第一态，
         # 在这里抹成空等于把这一层要修的问题原样搬进兜底路径。
@@ -1129,6 +1172,10 @@ def resolve_render_posture(
     cross_device_chain: Optional[ExecutionChainView] = None,
     hybrid_execution: Optional[HybridExecutionView] = None,
     perception: Optional[PerceptionView] = None,
+    acting: bool = False,
+    stop_key: str = "",
+    transition_seq: int = 0,
+    last_transition: str = "none",
 ) -> RenderPosture:
     """合成渲染姿态：主轴由调用方给，副轴与表达参数从 ``ContinuumState`` 读。
 
@@ -1146,6 +1193,9 @@ def resolve_render_posture(
         hybrid_execution: 混合执行模式决策；``None`` 时用「尚未决策」。
         perception: 第一态的感知视图；``None`` 时现取一次
             （:func:`resolve_perception_view` 自己会走只读拉取）。
+        acting: 此刻是否正在动手（操作这台机器）。
+        stop_key: 此刻按哪个键能叫停（``core.stop_key.label()``）；不在动手时一律为空。
+        transition_seq / last_transition: 主轴转移的驻留记录，由在场桥维护。
 
     三个视图为什么由外面传
     ----------------------
@@ -1187,7 +1237,15 @@ def resolve_render_posture(
     if state is None:
         state = last_continuum_posture()
     if state is None:
-        base = _anchor_only_render_posture(life, prev, percept)
+        base = _anchor_only_render_posture(
+            life,
+            prev,
+            percept,
+            acting=acting,
+            stop_key=stop_key,
+            transition_seq=transition_seq,
+            last_transition=last_transition,
+        )
         return dataclasses.replace(
             base,
             liminal_activity=activity,
@@ -1232,6 +1290,8 @@ def resolve_render_posture(
         lifecycle=life,
         previous_lifecycle=prev,
         transition_kind=transition_kind_of(prev, life),
+        transition_seq=max(0, int(transition_seq or 0)),
+        last_transition=last_transition if last_transition in TRANSITION_KINDS else "none",
         continuum_phase=phase,
         is_returning=phase == "receding",
         next_phases=PHASE_TRANSITIONS.get(phase, ()),
@@ -1242,6 +1302,8 @@ def resolve_render_posture(
         world_model=WorldModelView.unwired(),
         perception=percept,
         hybrid_execution=hybrid,
+        acting=bool(acting),
+        stop_key=str(stop_key or "") if acting else "",
         pathway=pathway_view,
         thinking_locus=locus_view,
         runtime_domain=domain if domain in RUNTIME_DOMAINS else None,
@@ -1394,7 +1456,17 @@ def render_contract_schema() -> Dict[str, Any]:
             {
                 "name": "transition_kind",
                 "ts": "TransitionKind",
-                "doc": "刚才那次转移的性质 —— 退场编排看这一位，别从深度差里猜",
+                "doc": "刚才那次转移的性质（一拍性：只有转移后的第一份广播带着）",
+            },
+            {
+                "name": "transition_seq",
+                "ts": "number",
+                "doc": "主轴转移过几次（驻留）—— 跟上次见过的比，变了就是发生过转移",
+            },
+            {
+                "name": "last_transition",
+                "ts": "TransitionKind",
+                "doc": "最近那次转移的性质（驻留）—— 与 transition_seq 成对读",
             },
             {
                 "name": "continuum_phase",
@@ -1431,6 +1503,16 @@ def render_contract_schema() -> Dict[str, Any]:
                 "name": "hybrid_execution",
                 "ts": "HybridExecutionView",
                 "doc": "表达期用什么手法动手（GUI／API／混合）",
+            },
+            {
+                "name": "acting",
+                "ts": "boolean",
+                "doc": "此刻是否正在动手（操作这台机器）—— 外壳据此把「停」摆到最近处",
+            },
+            {
+                "name": "stop_key",
+                "ts": "string",
+                "doc": "此刻按哪个键能叫停（如 Esc）；空 = 没有 —— 只在键盘监听确实占到时才有值",
             },
             {
                 "name": "pathway",

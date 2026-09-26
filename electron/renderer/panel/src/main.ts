@@ -25,6 +25,7 @@ import {
   fetchCardTurns,
   fetchCards,
   fetchHistory,
+  fetchPrimarySession,
   fetchTiers,
   nextBundleValue,
   saveConfig,
@@ -32,6 +33,7 @@ import {
   setBundle,
   setPrivacy,
   setTier,
+  stopActivity,
   streamChat,
   toPhase,
 } from './transport';
@@ -89,8 +91,24 @@ function backendBase(): string {
 }
 const BASE = backendBase();
 
+/**
+ * 这个面板实例是谁。每次打开随机一个,不存。
+ *
+ * 只用来认回声:面板自己发起的那一轮,后端会同步推到 WS 的对话通道上给**别的**界面看,
+ * 而这里已经从 SSE 画过了(见 transport.ts 的 PresenceSocket)。
+ */
+function newClientId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch {
+    /* 非安全上下文里 randomUUID 会抛 —— 退回下面那条 */
+  }
+  return `hud-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function mount(host: HTMLElement): void {
   const store = new Store(initialState);
+  const clientId = newClientId();
 
   const shell = document.createElement('div');
   shell.className = 'shell';
@@ -117,6 +135,7 @@ function mount(host: HTMLElement): void {
   const thread = createThread();
   const dock = createDock({
     onSend: (text) => void send(text),
+    onStop: () => void stop(),
     onFeed: (files) => void feedFiles(files),
     onTogglePopover: (which) =>
       store.patch({ popover: store.state.popover === which ? null : which }),
@@ -189,7 +208,8 @@ function mount(host: HTMLElement): void {
       s.slim,
     );
     thread.render(s.turns, s.lockstep, s.lockstepReason);
-    dock.render(s.bundles, s.tiers, s.tierGaps, s.popover);
+    // 停止键:面板自己发起的那一轮在跑,或者它此刻正在动手(可能是一句语音让它动的)。
+    dock.render(s.bundles, s.tiers, s.tierGaps, s.popover, s.chatBusy || Boolean(s.posture?.acting));
     settings.render(s.config, s.settingsOpen, s.configBusy);
     userProviders.render(
       s.userProviders,
@@ -445,16 +465,22 @@ function mount(host: HTMLElement): void {
   }
 
   /**
-   * 开面板时把上次那条对话读回来。
+   * 开面板时把那条对话读回来。
    *
    * 从前这里什么都没有:每次打开都是一屏空白,而后端明明记着。那不是「新对话」,
    * 是**看起来失忆**。
    *
+   * **先问后端当前的对话主线,再退回本地记着的那一条。** 面板只是那份上下文的一个
+   * 视图:面板关着的时候,用嘴说的、它自己开口说的,都记在主线上(声字同文)。只认
+   * 本地那一条的话,重开面板看到的是打字那几轮,语音里说过的全不在。
+   *
    * 读不到时**保持空**并说明白 —— 拿演示数据顶上就等于伪造记忆。
    */
   async function restoreSession(): Promise<void> {
-    const sid = recallSession();
+    const primary = await fetchPrimarySession(BASE);
+    const sid = primary || recallSession();
     if (!sid) return;
+    if (primary) rememberSession(primary);
     const turns = await fetchHistory(BASE, sid);
     if (turns === null) {
       // 后端不认识这条 id(通常是它过期了)。**丢掉本地那条**,否则接下来每一次
@@ -638,25 +664,48 @@ function mount(host: HTMLElement): void {
     },
     onTurn: (role, text, final) => appendTurn(role, text, final),
     onDevices: (rows) => store.patch({ devices: rows }),
-  });
+  }, clientId);
   socket.start();
+
+  /**
+   * WS 上正在流的那一句(双工里它边说边出字)。只往**它**身上续。
+   *
+   * 从前是「最后一个同角色、还在流的气泡」就续 —— 而面板自己发起的那一轮也是在流的
+   * 气泡。于是它刚开口念打字那一轮的回答,语音那边的一句话就拼进了同一个气泡里。
+   */
+  let wsLive: { id: string; role: 'user' | 'agent' } | null = null;
 
   function appendTurn(role: 'user' | 'agent', text: string, final: boolean): void {
     const turns = store.state.turns.slice();
-    const last = turns[turns.length - 1];
-    if (last && last.role === role && last.streaming) {
-      turns[turns.length - 1] = { ...last, text: last.text + text, streaming: !final };
-    } else {
-      turns.push({
-        id: `${Date.now()}-${turns.length}`,
-        role,
-        text,
-        pending: '',
-        attachments: [],
-        streaming: !final,
-      });
+    const at = wsLive && wsLive.role === role ? turns.findIndex((t) => t.id === wsLive?.id) : -1;
+    if (at >= 0) {
+      const cur = turns[at] as Turn;
+      turns[at] = { ...cur, text: cur.text + text, streaming: !final };
+      if (final) wsLive = null;
+      store.patch({ turns });
+      return;
     }
+    // 空文本只出现在收尾帧里(把一句流式的话合上)。手上没有在流的那一句时,
+    // 没有可合上的 —— 画一个空气泡出来,就是一句它没说过的话。
+    if (!text) return;
+    const id = `w-${Date.now()}-${turns.length}`;
+    turns.push({ id, role, text, pending: '', attachments: [], streaming: !final });
+    wsLive = final ? null : { id, role };
     store.patch({ turns });
+  }
+
+  /**
+   * 叫停。先让后端停(它可能正因为一句语音在动鼠标键盘,那不是面板这条 SSE 管得到的);
+   * 后端没接下,才断开面板自己这一轮兜底。
+   */
+  let inflight: AbortController | null = null;
+
+  async function stop(): Promise<void> {
+    const ok = await stopActivity(BASE, 'panel');
+    if (!ok) {
+      inflight?.abort();
+      pushNotice('后端没接下这次「停」—— 只断开了面板这一轮；它若还在别处动手，按 Esc 或从托盘停');
+    }
   }
 
   async function send(text: string): Promise<void> {
@@ -669,7 +718,9 @@ function mount(host: HTMLElement): void {
       id: `a-${Date.now()}`, role: 'agent', text: '',
       pending: '', attachments: [], streaming: true,
     });
-    store.patch({ turns, lockstep: 'off', lockstepReason: '' });
+    const ctrl = new AbortController();
+    inflight = ctrl;
+    store.patch({ turns, lockstep: 'off', lockstepReason: '', chatBusy: true });
 
     const idx = turns.length - 1;
     const patchAgent = (fn: (t: Turn) => Turn): void => {
@@ -686,9 +737,14 @@ function mount(host: HTMLElement): void {
       // 刚刚从本地存的 id 把上一条对话读了回来。于是屏幕上显示的是 A 的历史、
       // 新说的话记进了 B,两边都「成功」,没有一处报错。空串时后端照旧自己开
       // 一条,并在 meta 帧里把 id 告诉我们。
-      { message: text, session_id: store.state.sessionId },
+      //
+      // client_id:这一轮会被同步推到 WS 的对话通道上,靠它认出那是自己的回声。
+      //
+      // **不接 phase 帧。** 此刻在哪一相只认 WS 的 render(见文件头)。这里曾经
+      // 写过 `onPhase: (phase) => store.patch({ phase })` —— 同一个状态位两个
+      // 写者,线和岛会在两个相位之间来回跳一下。
+      { message: text, session_id: store.state.sessionId, client_id: clientId },
       {
-        onPhase: (phase) => store.patch({ phase }),
         // 后端说这轮记到哪条会话上了。**接住它** —— 历史、记忆卡片、喂文件
         // 全按它去问;面板自己编一个的话,问出来永远是空的。
         onSession: (sid) => {
@@ -702,7 +758,17 @@ function mount(host: HTMLElement): void {
         onReset: () => patchAgent((t) => ({ ...t, text: '', pending: '' })),
         onLockstep: (state, reason) =>
           store.patch({ lockstep: state, lockstepReason: reason }),
-        onDone: (response) => {
+        onDone: (response, stopped) => {
+          if (stopped) {
+            // 人叫停的。回复本来就是空的 —— 说「停下了」,别说成「后端什么都没给」。
+            patchAgent((t) => ({
+              ...t,
+              streaming: false,
+              text: t.text ? `${t.text}\n\n（停在这里 —— 你叫停的）` : '停下了 —— 你叫停的',
+            }));
+            void loadCards();
+            return;
+          }
           // **一个 delta 都没来的时候,拿 done 里的 response 兜底。**
           //
           // 实测(对着真的 chat router):锁步是 `engaged` 而这台机器上没有可用的
@@ -737,7 +803,26 @@ function mount(host: HTMLElement): void {
           }));
         },
       },
-    );
+      ctrl.signal,
+    ).catch((err: unknown) => {
+      // 断开(stop 的兜底)或网络断了。**照样收尾** —— 不收的话气泡一直在闪光标,
+      // 发送键一直是停止键。
+      const aborted = err instanceof DOMException && err.name === 'AbortError';
+      patchAgent((t) => ({
+        ...t,
+        streaming: false,
+        text: aborted
+          ? t.text
+            ? `${t.text}\n\n（断开了 —— 你叫停的）`
+            : '断开了 —— 你叫停的'
+          : t.text
+            ? `${t.text}\n\n（这一轮中断了：${String(err)}）`
+            : `这一轮没能说完：${String(err)}`,
+      }));
+    }).finally(() => {
+      if (inflight === ctrl) inflight = null;
+      store.patch({ chatBusy: inflight !== null });
+    });
   }
 
   // ── 唤醒键 ──────────────────────────────────────────────────────

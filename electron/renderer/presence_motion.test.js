@@ -202,3 +202,48 @@ test('自证：稳定度确实进了摩擦项', () => {
   assert.ok(PM.STABILITY_DAMP > 0, 'STABILITY_DAMP 为 0 的话稳定度根本没接上');
   assert.ok(PM.TENDENCY_BOOST > 0, 'TENDENCY_BOOST 为 0 的话倾向根本没接上');
 });
+
+// ---------------------------------------------------------------------------
+// 5. 倾向按「要去哪儿」取（toward），不按「往哪边走」取
+// ---------------------------------------------------------------------------
+//
+// 覆盖层的轴是展开度：manifest 的展开度是 0，于是「落手」那一下是往下走。
+// 按方向取倾向的话，那一下用的是回撤倾向 —— 最该果断的时候按回撤的犹豫定速度。
+
+/** 从 from 走到 to，按给定的 toward 与倾向，数到达需要几帧。 */
+function framesFor(from, to, toward, posture) {
+  const st = { depth: from, velocity: 0 };
+  for (let i = 0; i < 600; i++) {
+    PM.advance(st, to, DT, { intent: 0.5, posture: posture, toward: toward });
+    if (Math.abs(st.depth - to) < 0.005) return i;
+  }
+  return Infinity;
+}
+
+test('落手（往下走）由塌缩倾向定速，不由回撤倾向定速', () => {
+  const decisive = { collapse_tendency: 0.95, retreat_tendency: 0.0, stability: 1 };
+  const hesitant = { collapse_tendency: 0.0, retreat_tendency: 0.0, stability: 1 };
+  const fast = framesFor(1, 0, 'commit', decisive);
+  const slow = framesFor(1, 0, 'commit', hesitant);
+  assert.ok(fast < slow, `塌缩倾向高时落手没有更快：decisive=${fast} hesitant=${slow}`);
+  // 回撤倾向对落手不起作用 —— 否则又把两件事混回一起了。
+  const retreatOnly = { collapse_tendency: 0.0, retreat_tendency: 0.95, stability: 1 };
+  assert.strictEqual(framesFor(1, 0, 'commit', retreatOnly), slow, '回撤倾向在影响落手的速度');
+});
+
+test('回撤（往下走）由回撤倾向定速', () => {
+  const eager = { collapse_tendency: 0.0, retreat_tendency: 0.95, stability: 1 };
+  const calm = { collapse_tendency: 0.0, retreat_tendency: 0.0, stability: 1 };
+  assert.ok(framesFor(1, 0, 'retreat', eager) < framesFor(1, 0, 'retreat', calm), '回撤倾向没接上');
+});
+
+test('不给 toward 时逐位退回按方向取（改造前的约定）', () => {
+  const posture = { collapse_tendency: 0.7, retreat_tendency: 0.2, stability: 1 };
+  const a = { depth: 0.9, velocity: 0 };
+  const b = { depth: 0.9, velocity: 0 };
+  for (let i = 0; i < 60; i++) {
+    PM.advance(a, 0.1, DT, { intent: 0.5, posture: posture });
+    PM.advance(b, 0.1, DT, { intent: 0.5, posture: posture, toward: 'retreat' });
+    assert.strictEqual(a.depth, b.depth, '缺省路径不再等于「往下走 = 回撤」');
+  }
+});

@@ -35,9 +35,10 @@ desktop_presence_runtime 里 ``_enter_manifest`` 上方的注释：此前拿到�
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 logger = logging.getLogger("Galaxy.LiminalActivity")
 
@@ -48,6 +49,7 @@ __all__ = [
     "unbind_runtime_session",
     "note_liminal_activity",
     "note_hybrid_execution",
+    "acting",
     "in_deliberation_window",
     "commit_to_manifest",
 ]
@@ -145,6 +147,42 @@ def note_hybrid_execution(decision: Optional[Dict[str, Any]]) -> bool:
     except Exception:  # noqa: BLE001 — 可见性绝不该拖垮请求
         logger.debug("note_hybrid_execution failed (non-fatal)", exc_info=True)
         return False
+
+
+@contextlib.contextmanager
+def acting(reason: str = "") -> Iterator[bool]:
+    """把一段代码标成「它此刻正在操作这台机器」（键鼠、窗口、应用）。
+
+    进出成对，可以嵌套（电脑操作闭环里再调一次应用自动化，算同一段）。
+    ``yield`` 出去的是有没有真的登记上 —— 不在一次 ``handle_request`` 里时是
+    ``False``，那时没有生命周期可挂，什么都不做。
+
+    为什么要单独这一位
+    ------------------
+    表达期（MANIFEST）有两种样子：出字/出声，和**动你的鼠标键盘**。前者屏幕该是
+    干净的；后者是整个流程里人最需要知道、也最需要能叫停的时刻。而此前渲染层拿到的
+    信号里没有一位能把这两者分开 —— ``hybrid_execution`` 在模式选完就一直为真，
+    直到回静默才清，点名了级别的执行（``force_level``）则根本不登记。
+
+    所以由真正落手的那两处（``core.computer_use_loop`` 与 ``core.hybrid_executor``）
+    自己说「我开始动了 / 我停了」，而不是让渲染层从别的字段里猜。
+    """
+    session = _current_runtime_session.get()
+    entered = False
+    if session is not None:
+        try:
+            session.enter_acting(reason)
+            entered = True
+        except Exception:  # noqa: BLE001 — 可见性绝不该拖垮执行
+            logger.debug("enter_acting failed (non-fatal)", exc_info=True)
+    try:
+        yield entered
+    finally:
+        if entered:
+            try:
+                session.exit_acting()
+            except Exception:  # noqa: BLE001
+                logger.debug("exit_acting failed (non-fatal)", exc_info=True)
 
 
 def in_deliberation_window() -> bool:

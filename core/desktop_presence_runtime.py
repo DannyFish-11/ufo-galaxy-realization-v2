@@ -92,6 +92,8 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 import inspect
 import logging
 import os
@@ -100,6 +102,7 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import stop_key as _stop_key
 from core.desktop_presence_system import (
     DesktopPresenceStateMachine,
     build_desktop_presence_system_view,
@@ -114,6 +117,40 @@ _BACKGROUND_TASKS: set = set()
 
 logger = logging.getLogger("Galaxy.Runtime")
 _STREAMING_BACKBONE_CONTRACT: Optional[Dict[str, Any]] = None
+
+
+def _stop_key_callback() -> Optional[Any]:
+    """人按下叫停键时要做的事。不在事件循环里时是 ``None`` —— 那时没有能停的东西。
+
+    返回的函数跑在**键盘监听线程**里（见 :mod:`core.stop_key`），所以它只把「停」
+    投递回事件循环，别的什么都不做：低层钩子的回调拖久了会被系统摘掉。
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+    def _stop_now() -> None:
+        task = loop.create_task(get_desktop_presence_runtime().stop_current_activity(reason="stop_key"))
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+    def _fire() -> None:
+        loop.call_soon_threadsafe(_stop_now)
+
+    return _fire
+
+
+@dataclasses.dataclass
+class _InflightRequest:
+    """一次正在跑的 ``handle_request``。「停」按它找到要取消的那个子任务。"""
+
+    source: str
+    task: Optional["asyncio.Future"] = None
+    runtime_session_id: str = ""
+    stopped: bool = False
+    stop_reason: str = ""
+
 
 DESKTOP_PRESENCE_RUNTIME_ENTRYPOINT_ROLE: str = "stage_entry"
 """Entrypoint role contract (PR-01): runtime shell stage entry, not main startup entry."""
@@ -212,6 +249,13 @@ class RuntimeSession:
         # 表达期的内容：这一轮用什么手法动手（``HybridExecutionDecision.to_dict()``）。
         # 由 core.liminal_activity.note_hybrid_execution 登记，同样经 200ms tick 上行。
         self.hybrid_execution: Optional[Dict[str, Any]] = None
+        # 此刻是否在操作这台机器（键鼠/窗口）。计数而不是布尔：电脑操作闭环里再调
+        # 一次应用自动化是嵌套的两段，外层没结束内层先退出时不能把它报成「停了」。
+        # 由 core.liminal_activity.acting() 进出，经 200ms tick 上行。
+        self._acting_depth: int = 0
+        self.acting_reason: str = ""
+        # 这一段动手有没有占着叫停键（core.stop_key 是按份计数的，占了几份就得还几份）。
+        self._holds_stop_key: bool = False
 
     # ------------------------------------------------------------------
     # State helpers
@@ -258,6 +302,36 @@ class RuntimeSession:
         非流式的 ``commit_to_manifest`` 时机不同）。加一条会误报的 warning 比不加更糟。
         """
         self.hybrid_execution = decision
+
+    @property
+    def acting(self) -> bool:
+        """此刻是否在操作这台机器。见 :func:`core.liminal_activity.acting`。"""
+        return self._acting_depth > 0
+
+    def enter_acting(self, reason: str = "") -> None:
+        self._acting_depth += 1
+        if self._acting_depth == 1:
+            self.acting_reason = reason
+            # 开始动手：占叫停键（人按 Esc 能停）。占没占到由 core.stop_key 自己判断，
+            # 渲染端只照 stop_key.label() 写 —— 这里不替它承诺。
+            fire = _stop_key_callback()
+            if fire is not None:
+                _stop_key.acquire(fire)
+                self._holds_stop_key = True
+
+    def exit_acting(self) -> None:
+        if self._acting_depth == 0:
+            return
+        self._acting_depth -= 1
+        if self._acting_depth == 0:
+            self._stop_acting()
+
+    def _stop_acting(self) -> None:
+        self._acting_depth = 0
+        self.acting_reason = ""
+        if self._holds_stop_key:
+            self._holds_stop_key = False
+            _stop_key.release()
 
     @staticmethod
     def _build_chain_views() -> Dict[str, Any]:
@@ -306,6 +380,9 @@ class RuntimeSession:
             # 上一轮选的模式对它没有意义。它与会话级累计的执行链视图不同 ——
             # 那两条不清（见在场桥 _on_phase_silent 的注释）。
             self.hybrid_execution = None
+            # 回到静息就不可能还在动手。正常路径上 acting() 的 finally 早已退干净；
+            # 这一句只兜「被停止／被取消」那种没走完的路径（叫停键一并还掉）。
+            self._stop_acting()
         elif new_state is TriState.MANIFEST:
             self.liminal_activity = "none"
         elif new_state is TriState.LIMINAL:
@@ -488,6 +565,9 @@ class RuntimeSession:
                     # 阈限态的内容。复用这条已有的 200ms 通道而不另开一条：桥已经
                     # 订阅着 continuum.state，多带两个字段的成本远小于再拉一条链路。
                     "liminal_activity": self.liminal_activity,
+                    # 此刻在不在动手。**每拍都带**（不像摘要那样有值才带）：它的
+                    # 「否」本身就是信号 —— 桥据此撤下「正在操作 · Esc 停止」。
+                    "acting": self.acting,
                 }
                 # 摘要只在有值时带上——没推演时不发空对象，省得下游把「没推演」
                 # 与「推演了但候选为空」混为一谈。
@@ -885,8 +965,71 @@ class DesktopPresenceRuntime:
                     "tristate": str,            # final phase ("silent")
                     "entrypoint_source": str,   # observability tag
                 }
+
+            When the user stops it midway (:meth:`stop_current_activity`), the
+            request still **returns** — with ``stopped=True`` — instead of raising
+            into the caller. See the note on the body below for why.
         """
+        # 请求本体跑在一个**子任务**里，"停"只取消这个子任务。
+        #
+        # 不能直接取消调用方的任务：自发注意力循环是在自己的 tick 里 inline await
+        # handle_request 的（见 ambient_attention_loop._delegate），语音回路也是。
+        # 把 CancelledError 抛回那里，停掉的就不是"这一件事"，而是整条循环。
+        # 所以本体单独成任务、单独可取消，调用方拿到的是一个正常的返回值。
+        #
+        # 反方向不变：调用方自己被取消时（/chat/stream 超时、客户端断连），asyncio
+        # 会顺着它正在等的这个子任务一并取消 —— 与改造前行为一致。
+        handle = _InflightRequest(source=source)
+        body = asyncio.ensure_future(
+            self._handle_request_body(
+                message,
+                source=source,
+                device_id=device_id,
+                session_id=session_id,
+                user_id=user_id,
+                context=context,
+                required_capabilities=required_capabilities,
+                multimodal_context=multimodal_context,
+                use_constellation=use_constellation,
+                entry_mode=entry_mode,
+                _inflight=handle,
+                **kwargs,
+            )
+        )
+        handle.task = body
+        registry = self._inflight_registry()
+        registry[id(body)] = handle
+        try:
+            return await body
+        except asyncio.CancelledError:
+            me = asyncio.current_task()
+            outer_cancelling = bool(getattr(me, "cancelling", lambda: 0)()) if me is not None else False
+            if handle.stopped and body.cancelled() and not outer_cancelling:
+                return self._stopped_result(handle)
+            raise
+        finally:
+            registry.pop(id(body), None)
+
+    async def _handle_request_body(
+        self,
+        message: str,
+        *,
+        source: str = "chat",
+        device_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        user_id: str = "default",
+        context: Optional[List[Dict]] = None,
+        required_capabilities: Optional[List[str]] = None,
+        multimodal_context: Optional[Any] = None,
+        use_constellation: bool = True,
+        entry_mode: Optional[str] = None,
+        _inflight: Optional["_InflightRequest"] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """:meth:`handle_request` 的本体。参数与返回值见那里的文档。"""
         rsession = self._create_session(source)
+        if _inflight is not None:
+            _inflight.runtime_session_id = rsession.runtime_session_id
         # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
         # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
         # core/liminal_activity.py。
@@ -1703,6 +1846,102 @@ class DesktopPresenceRuntime:
         return session
 
     # ------------------------------------------------------------------
+    # 停 —— 此刻它在做的、在说的，全部停下
+    # ------------------------------------------------------------------
+    #
+    # 此前全仓没有一条"让它现在停下"的通路：README 写着 Esc 能关结果，代码里
+    # 没有任何地方处理 Esc；面板在请求进行中没有停止键；/chat/stream 断连时会取消
+    # 任务，但面板从不断开。而表达期它可能正在动你的鼠标键盘 —— 那恰恰是人最需要
+    # 能叫停的时刻。
+    #
+    # 与 halt_ambient_presence 的分工：那一条是**收摊**（关掉常驻在场，比如挂断
+    # 双工会话）；这一条是**住手**：正在跑的请求取消、正在念的话掐断、常驻在场里
+    # 正在说的那一句打断 —— 但会话本身留着，人还可以接着说。
+
+    def _inflight_registry(self) -> Dict[int, _InflightRequest]:
+        """正在跑的请求（惰性建，理由同 :meth:`_ambient_registry`）。"""
+        registry = getattr(self, "_inflight_requests", None)
+        if registry is None:
+            registry = {}
+            self._inflight_requests = registry
+        return registry
+
+    @staticmethod
+    def _stopped_result(handle: _InflightRequest) -> Dict[str, Any]:
+        """被停下的请求交还给调用方的结果。
+
+        调用方拿到的是一个**正常返回值**，只是 ``stopped=True``、没有回复 ——
+        语音回路据此不念、/chat/stream 据此告诉面板"是你停下的"，而不是把它报成
+        "后端什么都没给"。
+        """
+        return {
+            "success": False,
+            "response": "",
+            "stopped": True,
+            "stop_reason": handle.stop_reason or "user_stop",
+            "runtime_session_id": handle.runtime_session_id,
+            "trace_id": handle.runtime_session_id,
+            "tristate": TriState.SILENT.value,
+            "entrypoint_source": handle.source,
+        }
+
+    async def stop_current_activity(self, *, reason: str = "user_stop") -> Dict[str, Any]:
+        """让它现在住手：取消在跑的请求、掐断在念的话、打断常驻在场里正在说的那一句。
+
+        幂等 —— 什么都没在做时调用也返回成功，各项为空。钩子失败不阻止其它项：
+        "停"不能因为某一处抛了异常就只停一半。
+        """
+        cancelled: List[Dict[str, str]] = []
+        for handle in list(self._inflight_registry().values()):
+            task = handle.task
+            if task is None or task.done():
+                continue
+            handle.stopped = True
+            handle.stop_reason = reason or "user_stop"
+            task.cancel()
+            cancelled.append({"source": handle.source, "runtime_session_id": handle.runtime_session_id})
+
+        speech_interrupted = False
+        try:
+            from core.speech_output import interrupt_speech, is_speaking
+
+            speech_interrupted = bool(is_speaking())
+            interrupt_speech()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("停止时掐断朗读失败(非致命): %s", exc)
+
+        interrupted: List[str] = []
+        errors: Dict[str, str] = {}
+        for h, entry in list(self._ambient_registry().items()):
+            hook = entry.get("on_interrupt")
+            if hook is None:
+                continue
+            try:
+                outcome = hook()
+                if inspect.isawaitable(outcome):
+                    await outcome
+                interrupted.append(h)
+            except Exception as exc:  # noqa: BLE001
+                errors[h] = str(exc)
+                logger.warning("常驻在场打断钩子失败 handle=%s: %s", h, exc)
+
+        if cancelled or speech_interrupted or interrupted:
+            logger.info(
+                "停止 | reason=%s 取消请求=%d 掐断朗读=%s 打断常驻在场=%d",
+                reason or "-",
+                len(cancelled),
+                speech_interrupted,
+                len(interrupted),
+            )
+        return {
+            "stopped": cancelled,
+            "speech_interrupted": speech_interrupted,
+            "presences_interrupted": interrupted,
+            "errors": errors,
+            "reason": reason,
+        }
+
+    # ------------------------------------------------------------------
     # 常驻在场(ambient presence)
     # ------------------------------------------------------------------
     #
@@ -1753,6 +1992,7 @@ class DesktopPresenceRuntime:
         *,
         reason: str = "",
         on_halt: Optional[Any] = None,
+        on_interrupt: Optional[Any] = None,
     ) -> str:
         """开启一段常驻在场,返回句柄(即 ``runtime_session_id``)。
 
@@ -1763,6 +2003,9 @@ class DesktopPresenceRuntime:
             on_halt: 可选的叫停钩子(同步或协程均可)。中心调用
                 :meth:`halt_ambient_presence` 时会执行它。**强烈建议传** ——
                 不传等于在中心背后开了一条它管不着的常驻通路。
+            on_interrupt: 可选的打断钩子(同步或协程均可)。人按「停」时
+                (:meth:`stop_current_activity`)执行 —— 只让**正在说的这一句**停下,
+                会话本身不关。与 ``on_halt`` 是两件事:一个是住手,一个是收摊。
 
         Returns:
             句柄字符串。重复调用会开出彼此独立的多段在场(例如桌面双工 + 手机双工)。
@@ -1773,6 +2016,7 @@ class DesktopPresenceRuntime:
             "source": source,
             "reason": reason,
             "on_halt": on_halt,
+            "on_interrupt": on_interrupt,
             "opened_at": time.time(),
         }
         # 一次性进入阈限,并**保持**。这里不会反复 advance —— 常驻在场的整个

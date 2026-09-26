@@ -1007,6 +1007,17 @@ class PcmPlayer:
             logger.debug("双工下行入缓冲失败(丢弃本块): %s", exc)
             return False
 
+    def flush(self) -> None:
+        """丢掉还没播的那一截，播放器本身不停。
+
+        人按「停」时用：服务端那边已经 ``interrupt()`` 了，但本地缓冲里还攒着
+        最多 ``_PLAYER_BUFFER_SEC`` 秒已经下行的声音 —— 不清掉的话，它会在"停了"
+        之后接着把这半句念完。
+        """
+        with self._lock:
+            if self._np is not None:
+                self._buf = self._np.zeros(0, dtype=self._np.float32)
+
     def stop(self) -> None:
         stream, self._stream = self._stream, None
         with self._lock:

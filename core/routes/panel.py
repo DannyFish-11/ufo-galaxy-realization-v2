@@ -602,6 +602,28 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=500,
             )
 
+    @router.post("/api/v1/presence/stop")
+    async def stop_presence_activity(
+        reason: str = Query(default="user_stop", description="谁按的停(仅用于观测):panel / hotkey / …"),
+    ) -> JSONResponse:
+        """让它现在住手:取消在跑的请求、掐断在念的话、打断常驻在场里正在说的那一句。
+
+        面板的停止键走这里。它在动手时人按的 Esc 不经 HTTP —— core/stop_key.py 在进程内
+        直接调同一个 ``stop_current_activity``,判据只有这一份。
+        与 ``/api/v1/operator/presence/ambient/halt`` 的分工:那一条是**收摊**
+        (关掉常驻在场);这一条是**住手** —— 会话留着,人还可以接着说。
+
+        幂等:什么都没在做时也返回成功,各项为空。
+        """
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+            result = await get_desktop_presence_runtime().stop_current_activity(reason=reason)
+            return JSONResponse(content={"success": True, **result})
+        except Exception as exc:  # noqa: BLE001
+            logger.error("presence stop failed: %s", exc)
+            return JSONResponse(content={"success": False, "error": str(exc)}, status_code=500)
+
     @router.get("/api/v1/panel/feed")
     async def get_panel_feed():
         """面板实时数据(桌面 Electron 面板的 IPC 契约 snake_case 字段)。

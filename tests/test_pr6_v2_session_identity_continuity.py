@@ -387,7 +387,8 @@ class TestIngressCarrierContextInvocationIdentity:
 
         from core.desktop_presence_runtime import DesktopPresenceRuntime
 
-        source = inspect.getsource(DesktopPresenceRuntime.handle_request)
+        # 本体跑在可被「停」取消的子任务里(见 handle_request 的注释),盖戳的代码在那里。
+        source = inspect.getsource(DesktopPresenceRuntime._handle_request_body)
         assert "invocation_id" in source
 
     def test_handle_request_control_session_id_in_ingress_context(self):
@@ -396,7 +397,8 @@ class TestIngressCarrierContextInvocationIdentity:
 
         from core.desktop_presence_runtime import DesktopPresenceRuntime
 
-        source = inspect.getsource(DesktopPresenceRuntime.handle_request)
+        # 本体跑在可被「停」取消的子任务里(见 handle_request 的注释),盖戳的代码在那里。
+        source = inspect.getsource(DesktopPresenceRuntime._handle_request_body)
         # ingress_carrier_context block should include control_session_id
         assert "control_session_id" in source
 

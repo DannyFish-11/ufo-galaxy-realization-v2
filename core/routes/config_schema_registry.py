@@ -1337,6 +1337,17 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "agent",
         "description": "每步操作后等界面反应的静置时长(秒,0~10 · 默认 1)",
     },
+    # core/stop_key.py:它在动手时,只认真人按下的 Esc(它自己注入的不算、也不吞键)。
+    "GALAXY_STOP_KEY": {
+        "default": "true",
+        "type": "boolean",
+        "category": "agent",
+        "description": (
+            "它在动你的鼠标键盘时,按 Esc 叫停(只在动手期间监听、只认真人按的 · 默认开)。"
+            "Windows / macOS 可用,Linux 分不清人按的和注入的,不开;"
+            "安全软件把键盘钩子当成键盘记录器时关掉,停止改走面板"
+        ),
+    },
     # --- 连续感知(core/perception/、core/multimodal/)---
     "GALAXY_DESKTOP_PERCEPTION_TTL": {
         "default": "10",

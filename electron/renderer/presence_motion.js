@@ -83,13 +83,37 @@
   }
 
   /**
+   * 这一段该用哪一种倾向。
+   *
+   * 倾向说的是**要去哪一相**：collapse_tendency 推向 manifest（落手），
+   * retreat_tendency 推向 receding（回撤）。所以该按「要去哪儿」取，而不是按
+   * 「往哪边走」取。
+   *
+   * 深度轴时代两者恰好一致 —— static .05 → liminal .62 → manifest .92 单调上升，
+   * 往上走就是往落手走、往下走就是回撤。覆盖层换成「展开度」之后不再一致：
+   * manifest 的展开度是 0（收回就是执行的开场），于是落手那一下是**往下走**，
+   * 按方向取就取成了回撤倾向 —— 最该果断的那一下，反而按回撤的犹豫程度来定速度。
+   *
+   * 所以调用方用 `toward` 说清楚：'commit'（去落手）、'retreat'（去回撤）、
+   * 'open'（展开，沿用塌缩倾向 —— 离下一档越近，展开得越决绝）。
+   * 没给时退回按方向取，与改造前逐位一致（presence_motion.test.js 里有旧实现比对）。
+   */
+  function tendencyFor(signals, gap, p) {
+    var toward = signals && signals.toward;
+    if (toward === 'commit' || toward === 'open') return p.collapse;
+    if (toward === 'retreat') return p.retreat;
+    return gap > 0 ? p.collapse : p.retreat;
+  }
+
+  /**
    * 推进一帧。
    *
    * @param {{depth:number, velocity:number}} state 会被【就地修改】——每帧都调，
    *        不制造垃圾对象。
-   * @param {number} target 后端给的目标深度（payload.depth_factor）
+   * @param {number} target 目标（覆盖层给的是展开度）
    * @param {number} dt 帧间隔（秒）
-   * @param {{intent:number, posture:Object|null}} signals
+   * @param {{intent:number, posture:Object|null, toward:string|undefined}} signals
+   *        toward 见 tendencyFor。
    * @returns {{depth:number, velocity:number}} 就是传进来的 state
    */
   function advance(state, target, dt, signals) {
@@ -102,10 +126,9 @@
     var inBand = Math.max(cur, target) > CHOREO_LO && Math.min(cur, target) < CHOREO_HI;
 
     if (inBand && Math.abs(gap) > CHOREO_GAP) {
-      // 匀速穿越编排带。速度由【意图强度】+【本方向的倾向】共同决定：
-      // 上行看塌缩倾向（推向下一档的概率质量），下行看回撤倾向。
+      // 匀速穿越编排带。速度由【意图强度】+【这一段要去的那一相的倾向】共同决定。
       // 倾向为 0 时化简为原式 1.0 + intent * 0.8。
-      var tendency = gap > 0 ? p.collapse : p.retreat;
+      var tendency = tendencyFor(signals, gap, p);
       var boost = 1.0 + intent * 0.8 + tendency * TENDENCY_BOOST;
       var speed = (gap > 0 ? CHOREO_UP : CHOREO_DOWN) * boost;
       var step = (gap > 0 ? 1 : -1) * Math.min(Math.abs(gap), speed * dt);

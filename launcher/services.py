@@ -1795,13 +1795,17 @@ class GalaxyUnified:
 
                 async def process(self, text: str, source: str = "voice"):
                     try:
+                        from core.conversation_mainline import mainline_session_id
                         from core.desktop_presence_runtime import get_desktop_presence_runtime
 
                         rt = get_desktop_presence_runtime()
                         return await rt.handle_request(
                             message=text,
                             source=source,
-                            session_id="voice",
+                            # 记进当前对话主线 —— 面板读的就是这一条。此前固定记进
+                            # "voice":嘴上说过的话不在面板那份上下文里,面板重开就看不到,
+                            # 文字对话时模型也不知道刚才语音里说过什么。
+                            session_id=mainline_session_id(create=True) or "voice",
                             user_id="voice",
                             entry_mode="local",
                         )
