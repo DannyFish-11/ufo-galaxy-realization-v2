@@ -148,6 +148,22 @@ mappings:
       provides: [SENSOR_MIC, INPUT_VOICE]
       requires: []
 
+  # ── 被接入设备:Home Assistant 桥 ──
+  # HA 里的灯、插座、空调、窗帘、Matter/Zigbee 设备……都经它下行。此前这类设备
+  # 只靠元数据里一句 control_via 旁路指向 Node_27,解析平面、面板、智能体各自认不出来。
+  - match:
+      transport: home_assistant
+    implementation:
+      node: Node_27_SmartHome
+      transport: home_assistant
+      port: 8027
+      startup: shared
+      healthcheck: /health
+    capabilities:
+      provides: [HOME_POWER, HOME_LIGHT, HOME_CLIMATE, HOME_COVER, HOME_LOCK, HOME_MEDIA, HOME_SENSOR, HOME_SCENE, HOME_VACUUM]
+      requires: []
+    note: "Home Assistant bridge — one node serves every HA entity"
+
   # ── Serial / UART ──
   - match:
       device_type: iot_generic

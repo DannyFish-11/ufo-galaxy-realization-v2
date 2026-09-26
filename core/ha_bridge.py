@@ -59,7 +59,8 @@ _UNAVAILABLE_STATES = ("unavailable", "unknown")
 
 def ha_bridge_enabled() -> bool:
     """是否应启动 HA 桥：URL+TOKEN 齐 且未被 GALAXY_HA_BRIDGE=0 显式关闭。"""
-    if os.environ.get("GALAXY_HA_BRIDGE", "1").strip() == "0":
+    # 面板把布尔开关存成 "true"/"false" —— 只认 "0" 的话,在面板上关掉它不生效。
+    if os.environ.get("GALAXY_HA_BRIDGE", "1").strip().lower() in ("0", "false", "no", "off"):
         return False
     return bool(os.environ.get("HOME_ASSISTANT_URL", "").strip() and os.environ.get("HOME_ASSISTANT_TOKEN", "").strip())
 
@@ -77,6 +78,13 @@ class HABridge:
         self.event_count = 0
         self.last_event_ts = 0.0
         self.connected = False
+
+    @property
+    def bridge_id(self) -> str:
+        """这座桥的身份:``ha:<host:port>``。被接入设备的 ``bridge_id`` 就是它。"""
+        from urllib.parse import urlparse
+
+        return f"ha:{urlparse(self._url).netloc or self._url}"
 
     # ── 生命周期 ──────────────────────────────────────────────────────
 
@@ -150,6 +158,7 @@ class HABridge:
                     "ha_domain": domain,
                     "ha_state": value,
                     "control_via": "Node_27_SmartHome",
+                    "bridge_id": self.bridge_id,
                 },
                 "source": "ha_bridge",
             }
@@ -162,9 +171,21 @@ class HABridge:
                     {
                         "device_type": "iot",
                         "device_name": patch["device_name"],
+                        # 被接入设备:代它说话的是这座桥。登记那一刻就带上,驱动解析
+                        # (transport=home_assistant → Node_27)与角色判定当场就对。
+                        "bridge_id": self.bridge_id,
+                        "transport": "home_assistant",
+                        "ha_entity_id": entity_id,
+                        "ha_domain": domain,
                     },
                 )
             dm.upsert_device_state(device_id, patch, source="ha_bridge")
+            # 在线态归 UCM:经这座桥的 bridge 通道(HA 说 unavailable/unknown 就是不在线)。
+            from core.unified.connection_manager import get_unified_connection_manager
+
+            get_unified_connection_manager().report_presence(
+                device_id, "bridge", online, detail={"bridge_id": self.bridge_id, "ha_state": value}
+            )
             return True
         except Exception as exc:  # noqa: BLE001
             logger.debug("HA 桥:镜像实体 %s 失败: %s", entity_id, exc)
@@ -274,3 +295,14 @@ def get_ha_bridge() -> HABridge:
     if _bridge_instance is None:
         _bridge_instance = HABridge()
     return _bridge_instance
+
+
+async def restart_ha_bridge() -> Dict[str, Any]:
+    """按当前环境变量重建 HA 桥(面板改了地址/令牌/开关后调用)。"""
+    global _bridge_instance
+    if _bridge_instance is not None:
+        await _bridge_instance.stop()
+        _bridge_instance = None
+    if not ha_bridge_enabled():
+        return {"status": "disabled"}
+    return {"status": "ok", **(await get_ha_bridge().start())}

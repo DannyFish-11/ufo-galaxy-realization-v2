@@ -320,6 +320,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import modality as modality_route
     from core.routes import models as models_route
     from core.routes import monitoring, nodes
+    from core.routes import onboarding as onboarding_routes
     from core.routes import pairing as pairing_routes
     from core.routes import perception as perception_routes
     from core.routes import relay
@@ -383,6 +384,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # 属授权面,必须鉴权 —— 否则任何人都能把自己提成 trusted。
     router.include_router(
         pairing_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps
+    )
+    # 设备接入平面:候选 → 成员、移除、邀请。能把设备拉进/踢出系统,必须鉴权。
+    router.include_router(
+        onboarding_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps
     )
     router.include_router(vault.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
     router.include_router(

@@ -1951,6 +1951,51 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "devices",
         "description": "接入 Home Assistant（能控智能家居 · 默认开，没装 HA 时自动跳过）",
     },
+    "GALAXY_ONBOARDING_ENABLED": {
+        "default": "true",
+        "type": "boolean",
+        "category": "devices",
+        "description": "设备接入平面(发现附近设备、候选/成员、智能体接入设备 · 默认开)",
+    },
+    "GALAXY_ONBOARDING_AUTO": {
+        "default": "none",
+        "type": "select",
+        "options": ["off", "none", "approve"],
+        "category": "devices",
+        "description": "自动接入到哪一级:off 全等人 / none 只自动接不需要人的 / approve 连「同意」类也自动"
+        "(配网码、设备上确认、执行命令永远要人)",
+    },
+    "GALAXY_ONBOARDING_SCAN_INTERVAL_S": {
+        "default": "60",
+        "type": "number",
+        "category": "advanced",
+        "description": "轮询发现来源(HA 已发现集成、自建内网、SSDP)的间隔秒数 · 默认 60",
+    },
+    "GALAXY_ONBOARDING_SSDP": {
+        "default": "true",
+        "type": "boolean",
+        "category": "advanced",
+        "description": "用 SSDP/UPnP 找局域网里的电视、路由器、打印机 · 默认开",
+    },
+    "GALAXY_ONBOARDING_STATE_DIR": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "候选账本与成员花名册放在哪(默认 GALAXY_DATA_DIR 或 ./data)",
+    },
+    "HOME_ASSISTANT_URL": {
+        "default": "",
+        "type": "url",
+        "category": "devices",
+        "description": "Home Assistant 地址（如 http://192.168.1.20:8123 · 填了智能体才能开关家里的设备）",
+    },
+    # 以 _TOKEN 结尾 → classify_key() 归为 secret,走 runtime/secrets.env,不明文落 .env。
+    "HOME_ASSISTANT_TOKEN": {
+        "default": "",
+        "type": "password",
+        "category": "devices",
+        "description": "Home Assistant 长期访问令牌（HA 里 个人资料 → 安全 → 长期访问令牌 → 创建）",
+    },
     "GALAXY_TTS_VOICE": {
         "default": "zh-CN-XiaoxiaoNeural",
         "type": "string",
@@ -2287,6 +2332,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "设备信任名单文件（留空=用内置默认位置）",
     },
+    "GALAXY_TAILNET_MEMBERSHIP_PATH": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "设备↔tailnet 节点对账记录文件（留空=数据目录下 tailnet_membership.json）",
+    },
     "GALAXY_DEVICE_TOKEN_STORE": {
         "default": "",
         "type": "string",
@@ -2436,6 +2487,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "password",
         "category": "network",
         "description": "Headscale 的 API 密钥（headscale apikeys create）。配对时用它给手表签一次性进网钥匙",
+    },
+    "GALAXY_HEADSCALE_AUTOJOIN": {
+        "default": "true",
+        "type": "boolean",
+        "category": "network",
+        "description": "配好 Headscale 后，网关启动时让这台电脑自动加入自建 tailnet（需已装 Tailscale 客户端）",
     },
     "GALAXY_HEADSCALE_USER": {
         "default": "galaxy",

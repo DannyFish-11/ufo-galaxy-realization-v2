@@ -1,79 +1,83 @@
-# Headscale Configuration — Galaxy Private Tailnet
 # ============================================================
-# This config creates a private Tailscale tailnet for Galaxy
-# devices, integrated with the V2 gateway.
-#
-# IP range: 100.64.0.0/10 (carrier-grade NAT, Tailscale default)
-# Gateway: 100.64.0.1 (V2 Galaxy Gateway)
-# Wear OS: 100.64.0.10+ (auto-assigned)
-# Android: 100.64.0.20+ (auto-assigned)
-#
-# IMPORTANT: Replace server_url with your actual server IP/hostname
-# before deploying. The devices need a reachable URL.
-#
-# Example: server_url: http://192.168.1.100:8080
-# Example: server_url: https://headscale.yourdomain.com
+# Headscale 配置 —— Galaxy 自建 tailnet 的会合点
 # ============================================================
+# 它做什么:让你的电脑、手表、手机互相找到对方(交换"我在哪")。
+# 数据本身不经过它 —— 打洞成功就是设备之间直连;打不通时经下面内置的
+# DERP 中继转发,仍然是端到端加密,它看不到内容。
+#
+# 【必须改】server_url:设备(包括出门在外的手表)用来找它的地址。
+#   · 必须是 https —— 内置 DERP 中继只在 TLS 下可用;
+#   · 必须从外网能访问 —— 只在家里局域网可达的话,出门就找不到它。
+#   常见做法:放在一台有域名的 VPS 上;或放在家里电脑上 + 路由器端口转发 + DDNS 域名。
+#   init.sh 会检查这一项有没有改,没改就不继续。
+server_url: https://hs.example.com
 
-# NOTE: Replace YOUR_SERVER_IP with your actual server IP or hostname.
-# 0.0.0.0 is invalid for server_url — devices need a reachable address.
-# Example: http://192.168.1.100:8080 or https://headscale.example.com
-server_url: http://YOUR_SERVER_IP:8080
-listen_addr: 0.0.0.0:8080
-metrics_listen_addr: 0.0.0.0:9090
-grpc_listen_addr: 0.0.0.0:50443
-grpc_allow_insecure: true
+# 证书:用内置的 Let's Encrypt 自动申请(需要 80 与 443 端口能从外网访问)。
+# 已经有反向代理(Caddy/Nginx)做 TLS 的话:把下面三行注释掉,listen_addr 改成
+# 127.0.0.1:8080,由代理把 https://<域名> 转到它。
+listen_addr: 0.0.0.0:443
+tls_letsencrypt_hostname: hs.example.com
+tls_letsencrypt_challenge_type: HTTP-01
+tls_letsencrypt_listen: ":80"
+tls_letsencrypt_cache_dir: /var/lib/headscale/cache
 
-# Private key for noise protocol
+# 管理接口只在本机:命令行走 unix socket,网关走上面的 https + API key。
+metrics_listen_addr: 127.0.0.1:9090
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
+
 noise:
   private_key_path: /var/lib/headscale/noise_private.key
 
-# IP allocation for tailnet devices
 prefixes:
   v4: 100.64.0.0/10
   v6: fd7a:115c:a1e0::/48
   allocation: sequential
 
-# DERP (relay) configuration
-# Use Tailscale's public DERP servers as fallback + our local DERP
+# 中继:用 headscale 自带的 DERP,不依赖 Tailscale 公司的中继服务器。
+# 它只在设备之间打洞失败时才用到(比如双方都在对称 NAT 后面)。
+# 想额外用 Tailscale 公共中继兜底:把 urls 改成
+#   - https://controlplane.tailscale.com/derpmap/default
 derp:
   server:
-    enabled: false
-  urls:
-    - https://controlplane.tailscale.com/derpmap/default
-  auto_update_enabled: true
-  update_frequency: 24h
+    enabled: true
+    region_id: 999
+    region_code: galaxy
+    region_name: Galaxy
+    stun_listen_addr: 0.0.0.0:3478
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+  urls: []
+  paths: []
+  auto_update_enabled: false
 
-# Ephemeral nodes (auto-remove when offline)
-ephemeral_node_inactivity_timeout: 30m
+# 手表的 tailnet 进程用非临时节点(离线不被清);这一项只影响显式申请临时节点的设备。
+node:
+  ephemeral:
+    inactivity_timeout: 30m
 
-# Database
 database:
   type: sqlite
   sqlite:
     path: /var/lib/headscale/db.sqlite
 
-# Logging
 log:
   level: info
   format: text
 
-# DNS (MagicDNS)
+# DNS:只给 tailnet 里的机器起名字(<名字>.galaxy.internal),
+# **不接管**各设备自己的 DNS —— 否则加入 tailnet 的电脑所有域名解析都会被改走。
 dns:
   magic_dns: true
-  base_domain: galaxy.tailnet
+  base_domain: galaxy.internal
+  override_local_dns: false
   nameservers:
-    global:
-      - 1.1.1.1
-      - 8.8.8.8
-  search_domains: []
+    global: []
 
-# Unix socket for CLI
 unix_socket: /var/run/headscale/headscale.sock
 unix_socket_permission: "0770"
 
-# ACL (Access Control List) — allow all within tailnet
-# Production: restrict which devices can talk to which
-policy:
-  mode: file
-  path: /var/lib/headscale/acl.hujson
+# 访问规则:不配 = 你 tailnet 里的设备可以互相访问(全是你自己的设备,这正是想要的)。
+# 需要收紧时见 acl.hujson,并把下面两行取消注释。
+# policy:
+#   path: /etc/headscale/acl.hujson

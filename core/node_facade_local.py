@@ -144,10 +144,19 @@ class LocalNodeFacade:
             if trace_id:
                 call_kwargs["trace_id"] = trace_id
 
-            if asyncio.iscoroutinefunction(handler):
-                result = await handler(command=action, **call_kwargs)
+            # 融合入口有两种写法:类方法 execute(self, command, **params)(上面那 5 个),
+            # 与模块函数 execute(action, params)(如 Node_27)。后者接不住 command=/**kwargs,
+            # 进了映射表就在这里当场 TypeError —— 按签名选调用方式。
+            if _takes_action_and_params(handler):
+                # 这种写法把 params 原样展开成服务方法的关键字参数 —— 只给调用方的参数,
+                # 追踪用的 device_id/trace_id 不混进去(否则方法签名接不住)。
+                user_params = dict(params) if params else {}
+                call = lambda: handler(action, user_params)  # noqa: E731
             else:
-                result = handler(command=action, **call_kwargs)
+                call = lambda: handler(command=action, **call_kwargs)  # noqa: E731
+            result = call()
+            if asyncio.iscoroutine(result):
+                result = await result
 
             duration_ms = int((time.time() - started) * 1000)
 
@@ -186,6 +195,20 @@ class LocalNodeFacade:
                 "action": action,
                 "via": "golden_path_local_facade",
             }
+
+
+def _takes_action_and_params(handler: Any) -> bool:
+    """``execute(action, params)`` 形的融合入口:没有 ``command`` 形参、也不收 ``**kwargs``。"""
+    import inspect
+
+    try:
+        sig = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return False
+    ps = sig.parameters
+    if "command" in ps or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in ps.values()):
+        return False
+    return "params" in ps
 
 
 # Singleton

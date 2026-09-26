@@ -886,6 +886,18 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"常驻注意力循环启动失败(非致命): {e}")
 
     # ====================================================================
+    # 15a-1b. 设备接入平面(候选 → 成员;docs/architecture/DEVICE_ONBOARDING_PLANE_V1.md)
+    # ====================================================================
+    # 先于 HA 桥与 LAN 发现:花名册里的成员以离线身份回灌设备表,之后各来源来报在线。
+    try:
+        from core.device_onboarding.runtime import start_onboarding
+
+        results["device_onboarding"] = await start_onboarding()
+    except Exception as e:
+        results["device_onboarding"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"设备接入平面启动失败(非致命): {e}")
+
+    # ====================================================================
     # 15a-2. Home Assistant 桥（Matter 阶段0:设备镜像 + 事件流上行）
     # ====================================================================
     # 把 HA 里的智能设备(含经 HA 配网的 Matter 设备)镜像进统一设备模型,
@@ -906,10 +918,10 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"HA 桥启动失败(非致命): {e}")
 
     # ====================================================================
-    # 15a-3. LAN mDNS 发现（Matter 阶段1:_matter._tcp 等服务浏览进 UDM）
+    # 15a-3. LAN mDNS 发现（Matter 阶段1:_matter._tcp 等服务浏览）
     # ====================================================================
     # Node_71 发现栈的接线落地版:多服务类型 mDNS 浏览(自家 _galaxy._tcp +
-    # Matter/_hap/_googlecast),发现即镜像进统一设备模型并发 DEVICE_UPDATED。
+    # Matter/_hap/_googlecast)。连接信息进 UCM lan 通道,是谁交给接入平面(候选/认领)。
     # zeroconf 缺失或 GALAXY_LAN_DISCOVERY=0 时优雅跳过。
     try:
         from core.lan_discovery import get_lan_discovery, lan_discovery_enabled
@@ -1348,6 +1360,14 @@ async def shutdown_subsystems():
         await _shutdown_with_timeout("常驻注意力循环", get_ambient_loop().stop())
     except Exception as e:
         logger.warning(f"常驻注意力循环停止失败: {e}")
+
+    # 0a-2b. 设备接入平面的轮询循环
+    try:
+        from core.device_onboarding.runtime import stop_onboarding
+
+        await _shutdown_with_timeout("设备接入平面", stop_onboarding())
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"设备接入平面停止失败: {e}")
 
     # 0a-3. HA 桥（bootstrap 15a-2 里启动，事件流后台任务需显式停）
     try:

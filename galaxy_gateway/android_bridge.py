@@ -507,6 +507,7 @@ class AndroidBridge:
     def _write_registration_to_udm(self, device_id: str, message: Dict[str, Any]) -> None:
         """Write canonical device identity/state to UnifiedDeviceManager on registration."""
         try:
+            from core.device_onboarding.taxonomy import classify_type
             from core.unified.device_manager import UnifiedDeviceManager
             from core.unified.models import UnifiedDevice, UnifiedDeviceType
 
@@ -541,6 +542,9 @@ class AndroidBridge:
                 device_id=device_id,
                 device_name=str(message.get("name") or "Android Device"),
                 device_type=utype,
+                # 细分类型(android_phone / android_wear…)另存,UDM 入口据此解析驱动。
+                aip_device_type=classify_type(raw_device_type, hints=message).aip_device_type,
+                transport="websocket",
                 capabilities=caps_list,
                 metadata=metadata,
                 source="android_bridge",

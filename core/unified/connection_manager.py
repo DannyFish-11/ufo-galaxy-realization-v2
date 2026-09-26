@@ -90,6 +90,9 @@ class UnifiedConnectionManager:
         self._pending_responses: Dict[str, asyncio.Future] = {}
         # 状态订阅者
         self._status_subscribers: List[WebSocket] = []
+        # 非 WebSocket 的在线通道:device_id → channel → {online, routable, last_seen, detail}
+        # (见 report_presence;WS 通道仍由上面两张表表达,逻辑不变)
+        self._channels: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self._lock = asyncio.Lock()
         self._initialized = True
 
@@ -278,6 +281,85 @@ class UnifiedConnectionManager:
                 )
         return timed_out
 
+    # ------------------------------------------------------------------
+    # 非 WebSocket 在线通道
+    # ------------------------------------------------------------------
+    #
+    # UCM 是在线态的唯一权威,可此前它只认 WebSocket:HA 里的灯、NATS 上的 edge
+    # worker、tailnet 节点、局域网广播的设备,各自把"在不在线"记在别处(UDM 状态、
+    # MasterBrain 的 worker 表、headscale……)。于是"在线"有四个来源,UCM 名为权威、
+    # 实为半个。通道把它们收回来:WS 逻辑逐字不变,其余来源经 report_presence 报进来。
+
+    #: 已知通道。WS 不在其中 —— 它仍由 register_connection / mark_offline 表达。
+    PRESENCE_CHANNELS = ("bridge", "nats", "tailnet", "lan")
+
+    #: 靠周期性上报维持的通道,超过这么久没报就不算在线(桥与 tailnet 是事件/对账驱动,不过期)。
+    CHANNEL_TTL_S = {"nats": 45.0, "lan": 900.0}
+
+    def report_presence(
+        self,
+        device_id: str,
+        channel: str,
+        online: bool,
+        *,
+        routable: Optional[bool] = None,
+        detail: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """某个非 WS 来源报告一台设备此刻在不在线。"""
+        if not device_id or channel not in self.PRESENCE_CHANNELS:
+            raise ValueError(f"unknown presence channel {channel!r} (known: {self.PRESENCE_CHANNELS})")
+        rec = self._channels.setdefault(device_id, {}).setdefault(channel, {})
+        rec.update(
+            {
+                "online": bool(online),
+                "routable": bool(online if routable is None else routable),
+                "last_seen": time.time() if online else rec.get("last_seen", 0.0),
+                "detail": dict(detail or {}),
+            }
+        )
+
+    def clear_presence(self, device_id: str, channel: Optional[str] = None) -> None:
+        """设备被移除时清掉它的通道记录(channel=None 清全部)。"""
+        if channel is None:
+            self._channels.pop(device_id, None)
+        else:
+            self._channels.get(device_id, {}).pop(channel, None)
+
+    def _channel_live(self, channel: str, rec: Dict[str, Any], now: float) -> bool:
+        if not rec.get("online"):
+            return False
+        ttl = self.CHANNEL_TTL_S.get(channel)
+        return ttl is None or (now - float(rec.get("last_seen") or 0.0)) <= ttl
+
+    def channel_presence(self, device_id: str) -> Dict[str, Dict[str, Any]]:
+        """一台设备在各个通道上的在线情况(含 WS),供面板与智能体解释"为什么在线/不在线"。"""
+        now = time.time()
+        out: Dict[str, Dict[str, Any]] = {}
+        info = self._connections.get(device_id)
+        if info is not None:
+            out["websocket"] = {
+                "online": device_id in self._websockets and bool(info.routable),
+                "routable": bool(info.routable),
+                "last_seen": info.last_seen,
+            }
+        for ch, rec in self._channels.get(device_id, {}).items():
+            out[ch] = {**rec, "online": self._channel_live(ch, rec, now)}
+        return out
+
+    def channel_entries(self, channel: str) -> Dict[str, Dict[str, Any]]:
+        """某通道上当前在线的全部设备:device_id → {online, routable, last_seen, detail}。"""
+        now = time.time()
+        return {
+            did: {**rec, "online": True}
+            for did, chans in self._channels.items()
+            for ch, rec in chans.items()
+            if ch == channel and self._channel_live(ch, rec, now)
+        }
+
+    def is_present(self, device_id: str) -> bool:
+        """任一通道在线。``is_device_connected`` 语义不变(仍只表示有 WS 句柄)。"""
+        return any(c.get("online") for c in self.channel_presence(device_id).values())
+
     def get_presence_view(self) -> Dict[str, Dict[str, Any]]:
         """返回所有已知设备的 presence 快照。
 
@@ -294,6 +376,23 @@ class UnifiedConnectionManager:
                 "last_seen": info.last_seen,
                 "state": info.state if isinstance(info.state, str) else info.state.value,
                 "total_reconnects": info.total_reconnects,
+            }
+        # 没有 WS 的设备:取非 WS 通道里在线的那一条(WS 条目上面已给,逐字不变)。
+        now = time.time()
+        for device_id, chans in self._channels.items():
+            if device_id in result:
+                continue
+            live = [(ch, r) for ch, r in chans.items() if self._channel_live(ch, r, now)]
+            best_ch, best = max(live, key=lambda cr: cr[1].get("last_seen") or 0.0) if live else (None, None)
+            last = max((float(r.get("last_seen") or 0.0) for r in chans.values()), default=0.0)
+            result[device_id] = {
+                "device_id": device_id,
+                "online": best is not None,
+                "routable": bool(best and best.get("routable")),
+                "last_seen": last,
+                "state": "connected" if best is not None else "disconnected",
+                "total_reconnects": 0,
+                "channel": best_ch,
             }
         return result
 
@@ -597,3 +696,10 @@ def get_unified_connection_manager() -> UnifiedConnectionManager:
     if _manager is None:
         _manager = UnifiedConnectionManager()
     return _manager
+
+
+def reset_unified_connection_manager() -> None:
+    """测试用:丢掉单例(连同它的连接表与在线通道)。"""
+    global _manager
+    _manager = None
+    UnifiedConnectionManager._instance = None

@@ -254,36 +254,30 @@ def test_rrep_forward_respects_ttl() -> None:
     assert forwarded[0].ttl == 4
 
 
-def test_neighbor_refresh_syncs_with_real_udm(tmp_path, monkeypatch) -> None:
-    """邻接刷新对着**真实 UDM API**:上线加入、下线清理、显式注入不动。
+def test_neighbor_refresh_syncs_with_real_discovery(tmp_path, monkeypatch) -> None:
+    """邻接刷新对着**真实发现路径**:上线加入、下线清理、显式注入不动。
 
-    真实路径复跑发现:第一版调用了不存在的 get_all_devices(),AttributeError 被
-    防御 except 吞掉 —— 发现型邻接自始至终静默空转。此钉用真实 UDM 防止再犯。
+    真实路径复跑发现过:第一版调用了不存在的 get_all_devices(),AttributeError 被
+    防御 except 吞掉 —— 发现型邻接自始至终静默空转。此钉走真实的 LanDiscovery 入口
+    (它把连接信息报进 UCM 的 lan 通道),防止再犯。
     """
     monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
-    from core.unified.device_manager import get_unified_device_manager
+    from core.lan_discovery import LanDiscovery
 
-    dm = get_unified_device_manager()
-    dm.register_device_from_dict("mdns_mesh_probe", {"device_type": "iot", "device_name": "probe"})
-    dm.upsert_device_state(
-        "mdns_mesh_probe",
-        {
-            "status": "online",
-            "ip_address": "127.0.0.9",
-            "port": 12345,
-            "metadata": {"protocol": "mdns", "service_type": "_galaxy._tcp.local."},
-        },
-        source="lan_discovery",
-    )
+    lan = LanDiscovery()
+    name = "mesh_probe._galaxy._tcp.local."
+    assert lan.ingest_service("_galaxy._tcp.local.", name, "127.0.0.9", 12345, {})
     ad = MeshRoutingAdapter(node_id="x")
     ad.add_neighbor("manual_peer", "127.0.0.8", 999)
     added = ad.refresh_neighbors_from_discovery()
-    assert added >= 1 and "mdns_mesh_probe" in ad._neighbors, f"在线 peer 没进邻接:{list(ad._neighbors)}"
+    probe_id = LanDiscovery._device_id(name)
+    assert added >= 1 and probe_id in ad._neighbors, f"在线 peer 没进邻接:{list(ad._neighbors)}"
+    assert ad._neighbors[probe_id] == ("127.0.0.9", 12345)
 
-    dm.upsert_device_state("mdns_mesh_probe", {"status": "offline"}, source="lan_discovery")
+    lan.service_removed("_galaxy._tcp.local.", name)
     ad._last_refresh = 0.0
     ad.refresh_neighbors_from_discovery()
-    assert "mdns_mesh_probe" not in ad._neighbors, "下线 peer 没被清理"
+    assert probe_id not in ad._neighbors, "下线 peer 没被清理"
     assert "manual_peer" in ad._neighbors, "显式注入的邻接被误清"
 
 

@@ -1,111 +1,45 @@
 # ============================================================
-# Headscale — Self-Hosted Tailscale Control Server
+# Headscale —— Galaxy 自建 tailnet 的会合点
 # ============================================================
-# Provides private Tailscale tailnet for Galaxy devices:
-# - V2 Gateway (100.64.0.1)
-# - Wear OS Watch (100.64.0.10)
-# - Android Phone (100.64.0.11)
-# - Other devices...
+# 用法(完整步骤见 README.md):
+#   1. 改 config.yaml 里的 server_url 与 tls_letsencrypt_hostname
+#   2. docker compose up -d
+#   3. ./init.sh        —— 建用户、生成 API key、写进网关配置
 #
-# Usage:
-#   cd deploy/headscale
-#   docker compose up -d
-#   docker compose logs -f
-#
-# Generate auth key for devices:
-#   docker compose exec headscale headscale preauthkeys create --user galaxy --reusable --ephemeral
+# 版本钉死:网关用到的 REST 接口(按用户 id 建钥匙、节点带 pre_auth_key)
+# 在 0.26 之后才是现在的形状;用 latest 会在某次上游升级时悄悄变样。
 # ============================================================
 
 services:
   headscale:
-    image: headscale/headscale:0.23
+    image: headscale/headscale:0.29.4
     container_name: galaxy-headscale
     restart: unless-stopped
-
     command: serve
-
     ports:
-      # Control server API (for device registration)
-      - "8080:8080"
-      # gRPC API
-      - "50443:50443"
-
+      # https:设备登记、网关 API、内置 DERP 中继都走这一个口
+      - "443:443"
+      # Let's Encrypt 签证书用(HTTP-01)
+      - "80:80"
+      # STUN:设备探测自己的公网地址,打洞要用
+      - "3478:3478/udp"
     volumes:
       - ./config.yaml:/etc/headscale/config.yaml:ro
+      - ./acl.hujson:/etc/headscale/acl.hujson:ro
       - headscale-data:/var/lib/headscale
-
-    networks:
-      - galaxy-headscale-net
-
+      - headscale-run:/var/run/headscale
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "headscale", "health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "5"
 
-  # Headscale Web UI for management
-  headscale-ui:
-    image: ghcr.io/gurucomputing/headscale-ui:latest
-    container_name: galaxy-headscale-ui
-    restart: unless-stopped
-
-    environment:
-      - HEADSCALE_URL=http://headscale:8080
-
-    ports:
-      - "3001:80"
-
-    networks:
-      - galaxy-headscale-net
-
-    depends_on:
-      headscale:
-        condition: service_healthy
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "3"
-
-  # DERP server (for relay when P2P not possible)
-  derp:
-    image: fredli/derper:latest
-    container_name: galaxy-derp
-    restart: unless-stopped
-
-    environment:
-      - DERP_VERIFY_CLIENTS=true
-      - DERP_DOMAIN=derp.galaxy.local
-      - DERP_CERT_MODE=manual
-
-    ports:
-      - "3478:3478/tcp"
-      - "3478:3478/udp"
-      - "3443:443/tcp"
-
-    networks:
-      - galaxy-headscale-net
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "3"
-
-networks:
-  galaxy-headscale-net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.25.0.0/16
-
 volumes:
   headscale-data:
+  headscale-run:

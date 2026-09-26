@@ -60,7 +60,7 @@ def _service_types() -> List[str]:
 
 def lan_discovery_enabled() -> bool:
     """是否应启动 LAN 发现：未被 GALAXY_LAN_DISCOVERY=0 显式关闭 且 zeroconf 可用。"""
-    if os.environ.get("GALAXY_LAN_DISCOVERY", "1").strip() == "0":
+    if os.environ.get("GALAXY_LAN_DISCOVERY", "1").strip().lower() in ("0", "false", "no", "off"):
         return False
     try:
         import zeroconf  # noqa: F401
@@ -71,7 +71,7 @@ def lan_discovery_enabled() -> bool:
 
 
 class LanDiscovery:
-    """mDNS 浏览 → UDM 镜像 + DEVICE_UPDATED 事件。"""
+    """mDNS 浏览 → UCM ``lan`` 通道 + 接入平面候选 + DEVICE_UPDATED 事件。"""
 
     def __init__(self) -> None:
         self._zc: Optional[Any] = None
@@ -81,6 +81,8 @@ class LanDiscovery:
         self.discovered_count = 0
         self.removed_count = 0
         self.last_seen_ts = 0.0
+        # mDNS 名 → 在线记在谁身上(成员 id 或发现身份),下线时清同一个
+        self._reported: Dict[str, str] = {}
 
     # ── 生命周期 ──────────────────────────────────────────────────────
 
@@ -131,46 +133,58 @@ class LanDiscovery:
         port: int = 0,
         properties: Optional[Dict[str, str]] = None,
     ) -> bool:
-        """一个 mDNS 服务出现/更新 → 注册/刷新进 UDM + 发事件。"""
+        """一个 mDNS 服务出现/更新 → 在线归 UCM(``lan`` 通道),是谁归接入平面。
+
+        以前这里直接把它写进 UDM(``iot``+在线):附近的投屏盒子和已接入的成员长得
+        一模一样,同一台手机还会以 ``mdns_*`` 的身份再出现一次。现在:
+
+        * 连接信息(地址/端口/服务类型)进 UCM 的 ``lan`` 通道 —— Mesh 直连邻接从这里读;
+        * 交给接入平面 ``observe()``:是已有成员就认领(按 TXT 里的 device_id 或地址),
+          否则记成候选,**不进 UDM、不进能力平面**。
+        """
         if not name:
             return False
         is_matter = service_type.startswith("_matter")
+        props = dict(properties or {})
         device_id = self._device_id(name)
+        detail = {
+            "host": address,
+            "port": port,
+            "service_type": service_type,
+            "mdns_name": name,
+            "properties": props,
+            "matter": is_matter,
+        }
         try:
-            from core.unified.device_manager import get_unified_device_manager
+            from core.device_onboarding.models import Observation
+            from core.device_onboarding.service import get_onboarding_service
 
-            dm = get_unified_device_manager()
-            patch = {
-                "device_name": name.split(".")[0] or name,
-                "status": "online",
-                "ip_address": address or None,
-                "port": port or None,
-                "capabilities": ["discovered"] + (["matter"] if is_matter else []),
-                "metadata": {
-                    "protocol": "mdns",
-                    "service_type": service_type,
-                    "mdns_name": name,
-                    "properties": dict(properties or {}),
-                    "matter": is_matter,
-                },
-                "source": "lan_discovery",
-            }
-            if dm.get_device(device_id) is None:
-                # 注册只立最小身份;完整状态走 SSOT upsert(register_device_from_dict
-                # 会把"多余键"整体当 metadata,嵌套错位)。
-                dm.register_device_from_dict(
-                    device_id,
-                    {
-                        "device_type": "iot",
-                        "device_name": patch["device_name"],
-                    },
-                )
-            dm.upsert_device_state(device_id, patch, source="lan_discovery")
-            self.discovered_count += 1
-            self.last_seen_ts = time.time()
+            obs = Observation(
+                source="mdns",
+                key=name,
+                name=name.split(".")[0] or name,
+                kind_hint=props.get("device_type") or props.get("platform") or ("matter" if is_matter else ""),
+                addresses=[address] if address else [],
+                identity={"device_id": props.get("device_id", ""), "ip": address},
+                properties={"service_type": service_type, "port": port, **props},
+            )
+            svc = get_onboarding_service()
+            member = svc.link(obs)
+            svc.observe(obs)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("LAN 发现:镜像 %s 失败: %s", name, exc)
+            logger.debug("LAN 发现:交给接入平面失败 %s: %s", name, exc)
+            member = None
+        try:
+            from core.unified.connection_manager import get_unified_connection_manager
+
+            # 已是成员:在线记在成员身上;否则记在发现身份上(Mesh 直连邻接读的就是它)。
+            get_unified_connection_manager().report_presence(member or device_id, "lan", True, detail=detail)
+            self._reported[name] = member or device_id
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("LAN 发现:上报在线失败 %s: %s", name, exc)
             return False
+        self.discovered_count += 1
+        self.last_seen_ts = time.time()
         try:
             from core.state_event_bus import StateEventType, emit
 
@@ -178,7 +192,7 @@ class LanDiscovery:
                 StateEventType.DEVICE_UPDATED,
                 "lan_discovery",
                 {
-                    "device_id": device_id,
+                    "device_id": member or device_id,
                     "service_type": service_type,
                     "address": address,
                     "port": port,
@@ -191,15 +205,18 @@ class LanDiscovery:
         return True
 
     def service_removed(self, service_type: str, name: str) -> None:
-        """服务下线 → UDM 标记 offline。"""
-        device_id = self._device_id(name)
+        """服务下线 → UCM ``lan`` 通道置离线,候选标记"不在了"。"""
+        device_id = self._reported.pop(name, None) or self._device_id(name)
         try:
-            from core.unified.device_manager import get_unified_device_manager
+            from core.unified.connection_manager import get_unified_connection_manager
 
-            dm = get_unified_device_manager()
-            if dm.get_device(device_id) is not None:
-                dm.upsert_device_state(device_id, {"status": "offline"}, source="lan_discovery")
-                self.removed_count += 1
+            ucm = get_unified_connection_manager()
+            ucm.report_presence(device_id, "lan", False)
+            from core.device_onboarding.models import Observation
+            from core.device_onboarding.service import get_onboarding_service
+
+            get_onboarding_service().observe(Observation(source="mdns", key=name, present=False))
+            self.removed_count += 1
         except Exception as exc:  # noqa: BLE001
             logger.debug("LAN 发现:下线 %s 处理失败: %s", name, exc)
 
