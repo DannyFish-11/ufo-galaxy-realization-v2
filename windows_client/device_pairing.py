@@ -51,7 +51,9 @@ def state_path() -> str:
     if override:
         return override
     base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".galaxy")
-    return os.path.join(base, "Galaxy", "device.json") if os.environ.get("APPDATA") else os.path.join(base, "device.json")
+    return (
+        os.path.join(base, "Galaxy", "device.json") if os.environ.get("APPDATA") else os.path.join(base, "device.json")
+    )
 
 
 def load_state(path: Optional[str] = None) -> Dict[str, Any]:
@@ -259,12 +261,13 @@ def join_tailnet(
         return {"state": "no_grant"}
     run = run or (lambda cmd: subprocess.run(cmd, capture_output=True, text=True, timeout=60))  # noqa: S603
     exe = which("tailscale")
-    cmd_text = f"tailscale up --login-server={grant['control_url']} --authkey={grant['auth_key']} --hostname={device_id}"
+    # 进网钥匙是秘密:不进任何提示、日志或屏幕输出。自动加入失败时,让人换一个配对码重来,
+    # 配对时会签一把新钥匙 —— 而不是把这一把抄给人去手敲。
+    retry = "让主脑再给一个配对码,重新运行一次 --pair(配对时会自动进内网)"
     if not exe:
         return {
             "state": "no_tailscale",
-            "how_to_fix": "装上 Tailscale(https://tailscale.com/download/windows)后再运行一次 --pair,或手动执行:"
-            + cmd_text,
+            "how_to_fix": "先装上 Tailscale(https://tailscale.com/download/windows),然后" + retry,
         }
     try:
         st = run([exe, "status", "--json"])
@@ -273,14 +276,19 @@ def join_tailnet(
         backend = ""
     if backend == "Running":
         return {"state": "already_in_a_tailnet"}
-    r = run([exe, "up", f"--login-server={grant['control_url']}", f"--authkey={grant['auth_key']}", f"--hostname={device_id}"])
+    r = run(
+        [
+            exe,
+            "up",
+            f"--login-server={grant['control_url']}",
+            f"--authkey={grant['auth_key']}",
+            f"--hostname={device_id}",
+        ]
+    )
     if r.returncode == 0:
         return {"state": "joined"}
-    return {
-        "state": "failed",
-        "detail": (r.stderr or r.stdout or "").strip()[:300],
-        "how_to_fix": "用管理员身份打开终端执行:" + cmd_text,
-    }
+    detail = (r.stderr or r.stdout or "").replace(str(grant["auth_key"]), "***").strip()[:300]
+    return {"state": "failed", "detail": detail, "how_to_fix": "用管理员身份打开终端," + retry}
 
 
 def os_label() -> str:

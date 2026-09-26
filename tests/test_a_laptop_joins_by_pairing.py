@@ -316,7 +316,14 @@ def test_joining_the_private_network_uses_the_grant_and_never_hijacks_an_existin
     )
     assert all(c[1] != "up" for c in calls)
     missing = dp.join_tailnet(grant, "lap-1", which=lambda _: None)
-    assert (
-        missing["state"] == "no_tailscale" and "tailscale up --login-server=https://hs.example" in missing["how_to_fix"]
-    )
+    assert missing["state"] == "no_tailscale" and "--pair" in missing["how_to_fix"]
+    assert "k1" not in json.dumps(missing)  # 钥匙是秘密,不进给人看的提示
+
+    def refused(cmd):
+        if cmd[1] == "status":
+            return subprocess.CompletedProcess(cmd, 0, json.dumps({"BackendState": "NeedsLogin"}), "")
+        return subprocess.CompletedProcess(cmd, 1, "", "access denied for --authkey=k1")
+
+    failed = dp.join_tailnet(grant, "lap-1", run=refused, which=lambda _: "tailscale")
+    assert failed["state"] == "failed" and "k1" not in json.dumps(failed, ensure_ascii=False)
     assert dp.join_tailnet(None, "lap-1")["state"] == "no_grant"
