@@ -106,7 +106,6 @@ OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 # 下列带 F401 的名字是 PR-7 编排拆解后的兼容再导出面:测试与下游
 # 历史上从 core.openclawd 导入这些名字,必须保留。
 from core.interaction.agent_message import ASK_HUMAN_NOTIFY_TOOL, dispatch_notify_tool  # noqa: E402
-from core.smart_home_tools import HOME_BUILTIN_TOOLS, dispatch_home_tool, home_tools_enabled  # noqa: E402
 from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401,E402  re-export
@@ -118,6 +117,7 @@ from core.orchestration.lifecycle import (  # noqa: E402
     _is_local_device,
     _SubtaskEntry,
 )
+from core.smart_home_tools import HOME_BUILTIN_TOOLS, dispatch_home_tool, home_tools_enabled  # noqa: E402
 
 # 当能力总线和直接加载路径均无法提供 Skill 参数 schema 时使用的默认值
 _DEFAULT_SKILL_SCHEMA: Dict = {

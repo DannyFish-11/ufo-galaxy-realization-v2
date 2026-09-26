@@ -212,7 +212,12 @@ async def dispatch_home_tool(action: str, arguments: Dict[str, Any], *, session_
         if not listed["success"]:
             return listed
         found = _filter(listed["devices"], str(args.get("query") or ""))
-        return {"success": True, "count": len(found), "devices": found[:MAX_LISTED], "truncated": len(found) > MAX_LISTED}
+        return {
+            "success": True,
+            "count": len(found),
+            "devices": found[:MAX_LISTED],
+            "truncated": len(found) > MAX_LISTED,
+        }
 
     if action == "scene":
         scene = str(args.get("scene") or "").strip()

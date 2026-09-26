@@ -191,7 +191,9 @@ def test_autonomous_level_does_not_ask(ha, monkeypatch):
     monkeypatch.setenv("GALAXY_AUTONOMY", "autonomous")
     asked = []
     _approve_on_watch(monkeypatch, True, asked)
-    out = _agent_call("home__control", {"device": "light.bedroom", "action": "set_brightness", "params": {"brightness_pct": 30}})
+    out = _agent_call(
+        "home__control", {"device": "light.bedroom", "action": "set_brightness", "params": {"brightness_pct": 30}}
+    )
     assert out["success"], out
     assert ha.posts() == [("/api/services/light/turn_on", {"entity_id": "light.bedroom", "brightness_pct": 30})]
     assert asked == []
