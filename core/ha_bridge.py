@@ -79,6 +79,13 @@ class HABridge:
         self.last_event_ts = 0.0
         self.connected = False
 
+    @property
+    def bridge_id(self) -> str:
+        """这座桥的身份:``ha:<host:port>``。被接入设备的 ``bridge_id`` 就是它。"""
+        from urllib.parse import urlparse
+
+        return f"ha:{urlparse(self._url).netloc or self._url}"
+
     # ── 生命周期 ──────────────────────────────────────────────────────
 
     async def start(self) -> Dict[str, Any]:
@@ -151,6 +158,7 @@ class HABridge:
                     "ha_domain": domain,
                     "ha_state": value,
                     "control_via": "Node_27_SmartHome",
+                    "bridge_id": self.bridge_id,
                 },
                 "source": "ha_bridge",
             }
@@ -163,6 +171,12 @@ class HABridge:
                     {
                         "device_type": "iot",
                         "device_name": patch["device_name"],
+                        # 被接入设备:代它说话的是这座桥。登记那一刻就带上,驱动解析
+                        # (transport=home_assistant → Node_27)与角色判定当场就对。
+                        "bridge_id": self.bridge_id,
+                        "transport": "home_assistant",
+                        "ha_entity_id": entity_id,
+                        "ha_domain": domain,
                     },
                 )
             dm.upsert_device_state(device_id, patch, source="ha_bridge")

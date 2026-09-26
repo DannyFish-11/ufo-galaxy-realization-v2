@@ -56,6 +56,11 @@ import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from datetime import datetime, timezone  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from typing import Any, Dict, List, Optional  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
+from core.device_onboarding.taxonomy import (  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+    classify_type,
+    normalize_device,
+)
+
 from .exceptions import DeviceManagerError  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from .models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
@@ -131,6 +136,9 @@ class UnifiedDeviceManager:
         if not isinstance(device, UnifiedDevice):
             raise DeviceManagerError(f"register_device requires a UnifiedDevice instance, got {type(device).__name__}")
 
+        # 统一词汇在这一个入口补齐(细分类型、能力类、角色、桥),不要求每条登记路径都记得做。
+        normalize_device(device)
+
         existing = self._devices.get(device.device_id)
         if existing is not None:
             # Preserve the original registration timestamp to avoid identity drift.
@@ -199,10 +207,16 @@ class UnifiedDeviceManager:
             已注册的 UnifiedDevice 实例。
         """
         device_type_raw = data.get("device_type", "unknown")
+        # 原样塞进粗类枚举会把 android_phone / wearos 这类细分写法全变成 unknown ——
+        # 先经统一词汇拿到粗类与细分类型,细分类型另存。
+        type_info = classify_type(device_type_raw, hints=data)
         try:
             device_type = UnifiedDeviceType(str(device_type_raw).lower())
         except ValueError:
-            device_type = UnifiedDeviceType.UNKNOWN
+            try:
+                device_type = UnifiedDeviceType(type_info.platform)
+            except ValueError:
+                device_type = UnifiedDeviceType.UNKNOWN
 
         status_raw = data.get("status", "online")
         try:
@@ -218,6 +232,10 @@ class UnifiedDeviceManager:
             ip_address=data.get("ip_address") or data.get("ip"),
             port=data.get("port"),
             capabilities=data.get("capabilities") or [],
+            aip_device_type=type_info.aip_device_type,
+            transport=str(data.get("transport") or ""),
+            bridge_id=str(data.get("bridge_id") or ""),
+            execution_model=str(data.get("execution_model") or ""),
             metadata={
                 k: v
                 for k, v in data.items()
@@ -232,6 +250,9 @@ class UnifiedDeviceManager:
                     "ip",
                     "port",
                     "capabilities",
+                    "transport",
+                    "bridge_id",
+                    "execution_model",
                 }
             },
             source=data.get("source", "dict_registration"),
@@ -695,6 +716,8 @@ class UnifiedDeviceManager:
         # CapabilityAssimilationLayer so the capability graph stays current.
         # This handles the case where capabilities arrive after the initial
         # registration (e.g. a separate capability_report message).
+        if "capabilities" in fields_changed or "metadata" in fields_changed:
+            normalize_device(device, keep_declared_classes=False)
         if "capabilities" in fields_changed:
             self._assimilate_device_to_capability_layer(device)
             self._sync_capabilities_to_authority(device)

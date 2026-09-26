@@ -87,6 +87,15 @@ class UnifiedDevice(BaseModel):
     port: Optional[int] = None
     capabilities: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    # ── 统一词汇(core/device_onboarding/taxonomy.py,UDM 登记入口统一补齐)──────────
+    # device_type 只装得下粗类(android/iot…);细分类型以前在这里被截断,驱动映射表
+    # 按细分类型建表,于是真实设备一台都解析不到驱动。细分类型单独存一份。
+    aip_device_type: str = ""  # AIP v3 细分类型:android_phone / android_wear / iot_generic …
+    form_factor: str = ""  # phone / watch / desktop / embedded …
+    transport: str = ""  # websocket / nats / home_assistant / mdns …(驱动解析的第二路径)
+    capability_classes: List[str] = Field(default_factory=list)  # 归一能力类:GUI_WRITE / HOME_POWER …
+    execution_model: str = ""  # 角色,取值同 RuntimeDeviceExecutionModel
+    bridge_id: str = ""  # 被接入设备:代它说话的桥,如 "ha:192.168.1.20:8123"
     registered_at: datetime = Field(default_factory=datetime.utcnow)
     last_heartbeat: Optional[datetime] = None
     # source 字段标记设备信息来源，便于调试
