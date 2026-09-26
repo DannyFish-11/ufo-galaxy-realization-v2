@@ -329,7 +329,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "string",
         "category": "security",
-        "description": "TLS 证书路径（走 HTTPS 时填；留空=用明文 HTTP，仅限本机）",
+        "description": "TLS 证书路径（与 GALAXY_TLS_KEY 两个都填才开 HTTPS/wss；留空=明文，设备间走内网时的默认）",
+    },
+    "GALAXY_TLS_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "security",
+        "description": "TLS 私钥路径（与 GALAXY_TLS_CERT 两个都填才开；只填一个按没开算）",
     },
     "GITHUB_ALLOWLIST": {
         "default": "",
@@ -2112,10 +2118,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "把本机登记为 Tailscale 中继（帮别的设备转发 · 默认开）",
     },
     "GALAXY_TS_FUNNEL": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "把网关经 Tailscale Funnel 暴露到公网（手表带流量单独出门时唯一能连的一条 · 默认开；未开鉴权时会被硬闸门拒绝执行）",
+        "description": "把网关经 Tailscale Funnel 暴露到公网（默认关 · 设备间只走内网；显式开启后未开鉴权时仍会被硬闸门拒绝执行）",
     },
     "GALAXY_ANDROID_WS_ENABLED": {
         "default": "false",
@@ -2422,7 +2428,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "url",
         "category": "network",
-        "description": "Headscale 控制端地址（自建的 Tailscale 控制面）",
+        "description": "Headscale 控制端地址（自建的 Tailscale 控制面；手表出门直连也向它登记）",
+    },
+    # 密钥:以 _API_KEY 结尾 → classify_key() 归为 secret,走 runtime/secrets.env,不明文落 .env。
+    "GALAXY_HEADSCALE_API_KEY": {
+        "default": "",
+        "type": "password",
+        "category": "network",
+        "description": "Headscale 的 API 密钥（headscale apikeys create）。配对时用它给手表签一次性进网钥匙",
+    },
+    "GALAXY_HEADSCALE_USER": {
+        "default": "galaxy",
+        "type": "string",
+        "category": "network",
+        "description": "手表登记到 Headscale 的哪个用户下（默认 galaxy，与 deploy/headscale/init.sh 一致）",
     },
     "GALAXY_TAILSCALE_CHECK_INTERVAL": {
         "default": "60",
