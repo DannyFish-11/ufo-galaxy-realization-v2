@@ -1940,6 +1940,38 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "devices",
         "description": "接入 Home Assistant（能控智能家居 · 默认开，没装 HA 时自动跳过）",
     },
+    "GALAXY_ONBOARDING_ENABLED": {
+        "default": "true",
+        "type": "boolean",
+        "category": "devices",
+        "description": "设备接入平面(发现附近设备、候选/成员、智能体接入设备 · 默认开)",
+    },
+    "GALAXY_ONBOARDING_AUTO": {
+        "default": "none",
+        "type": "select",
+        "options": ["off", "none", "approve"],
+        "category": "devices",
+        "description": "自动接入到哪一级:off 全等人 / none 只自动接不需要人的 / approve 连「同意」类也自动"
+        "(配网码、设备上确认、执行命令永远要人)",
+    },
+    "GALAXY_ONBOARDING_SCAN_INTERVAL_S": {
+        "default": "60",
+        "type": "number",
+        "category": "advanced",
+        "description": "轮询发现来源(HA 已发现集成、自建内网、SSDP)的间隔秒数 · 默认 60",
+    },
+    "GALAXY_ONBOARDING_SSDP": {
+        "default": "true",
+        "type": "boolean",
+        "category": "advanced",
+        "description": "用 SSDP/UPnP 找局域网里的电视、路由器、打印机 · 默认开",
+    },
+    "GALAXY_ONBOARDING_STATE_DIR": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "候选账本与成员花名册放在哪(默认 GALAXY_DATA_DIR 或 ./data)",
+    },
     "HOME_ASSISTANT_URL": {
         "default": "",
         "type": "url",

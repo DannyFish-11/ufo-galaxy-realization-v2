@@ -381,6 +381,8 @@ class OnboardingService:
             "can_initiate": can_initiate(model),
             "online": online,
             "channels": {k: bool(v.get("online")) for k, v in channels.items()},
+            # 最近一次任一通道报到的时间(秒);0 = 从没报到过
+            "last_seen": max((float(v.get("last_seen") or 0.0) for v in channels.values()), default=0.0),
             "capability_classes": list(d.capability_classes or []),
             "capabilities": list(d.capabilities or []),
             "bridge_id": d.bridge_id,

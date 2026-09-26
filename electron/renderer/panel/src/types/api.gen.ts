@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 408 条 · 组件 schema 108 个
+// 路径 414 条 · 组件 schema 110 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -223,6 +223,12 @@ export type ApiPath =
   | "/api/v1/observability/recent-calls"
   | "/api/v1/observability/stats"
   | "/api/v1/observability/trace/{trace_id}"
+  | "/api/v1/onboarding/candidates/{candidate_id}/ignore"
+  | "/api/v1/onboarding/candidates/{candidate_id}/join"
+  | "/api/v1/onboarding/invite"
+  | "/api/v1/onboarding/members/{device_id}"
+  | "/api/v1/onboarding/overview"
+  | "/api/v1/onboarding/scan"
   | "/api/v1/opencode/configure"
   | "/api/v1/opencode/generate"
   | "/api/v1/opencode/status"
@@ -635,6 +641,12 @@ export const API_METHODS = {
   "/api/v1/observability/recent-calls": ["get"],
   "/api/v1/observability/stats": ["get"],
   "/api/v1/observability/trace/{trace_id}": ["get"],
+  "/api/v1/onboarding/candidates/{candidate_id}/ignore": ["post"],
+  "/api/v1/onboarding/candidates/{candidate_id}/join": ["post"],
+  "/api/v1/onboarding/invite": ["post"],
+  "/api/v1/onboarding/members/{device_id}": ["delete"],
+  "/api/v1/onboarding/overview": ["get"],
+  "/api/v1/onboarding/scan": ["post"],
   "/api/v1/opencode/configure": ["post"],
   "/api/v1/opencode/generate": ["post"],
   "/api/v1/opencode/status": ["get"],
@@ -1145,6 +1157,14 @@ export interface IngestTurnsRequest {
   "session_id": string;
   "turns"?: Array<IngestTurnModel>;
   "user_id"?: string;
+}
+
+export interface InviteBody {
+  "kind": string;
+}
+
+export interface JoinBody {
+  "inputs"?: Record<string, unknown>;
 }
 
 export interface JoinKeyRequest {
