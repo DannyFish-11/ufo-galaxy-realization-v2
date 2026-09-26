@@ -52,6 +52,11 @@ export interface HudState {
 
   readonly lockstep: LockstepState;
   readonly lockstepReason: LockstepReason;
+  /**
+   * 面板自己发起的那一轮还在跑。发送键这时变成停止键 —— 请求进行中没有停止键,
+   * 是「停」这件事此前在面板上完全不存在的那一半原因。
+   */
+  readonly chatBusy: boolean;
 
   /**
    * 左栏那叠卡片。null = **还没拉到**(或后端不认识这条会话),与「这条线上一张
@@ -129,6 +134,7 @@ export const initialState: HudState = {
   phase: 'silent',
   lockstep: 'off',
   lockstepReason: '',
+  chatBusy: false,
   cards: null,
   start: 0,
   drawn: -1,

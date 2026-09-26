@@ -658,8 +658,16 @@ class ComputerUseLoop:
             _guard_token = _in_computer_use_loop.set(True)
         except Exception:  # noqa: BLE001 — 仲裁器不可用时闭环照常跑
             _guard_token = None
+        # 这一整段它在动这台机器的键鼠（本闭环只打 device_id="local"）—— 告诉在场层：
+        # 岛上写「正在操作」，人按 Esc 能停。
+        # dry_run 不算：它只规划、不落手，报成在操作是一句假话。
+        from contextlib import nullcontext
+
+        from core.liminal_activity import acting as _acting
+
         try:
-            result = await self._run_guarded(instruction, max_steps=max_steps, dry_run=dry_run)
+            with nullcontext() if dry_run else _acting("computer_use"):
+                result = await self._run_guarded(instruction, max_steps=max_steps, dry_run=dry_run)
         finally:
             if _guard_token is not None:
                 from core.windows_execution_arbiter import _in_computer_use_loop as _cv
@@ -899,10 +907,6 @@ async def run_computer_use_task(
     node_id: str = _DEFAULT_NODE,
 ) -> Dict[str, Any]:
     """模块级便捷入口(REST 路由与 openclawd 工具都调这里)。"""
-    if not dry_run:  # 操作的是本机屏幕：手机发起的请求从这一刻起交还桌面外壳
-        from core.liminal_activity import note_local_actuation
-
-        note_local_actuation("computer_use")
     loop = ComputerUseLoop(node_id=node_id)
     return await loop.run(instruction, max_steps=max_steps, dry_run=dry_run)
 

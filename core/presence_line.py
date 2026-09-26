@@ -81,7 +81,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, AsyncIterator, Callable, Dict, FrozenSet, Iterable, MutableMapping, Optional, Set
+from typing import Any, AsyncIterator, Callable, Dict, FrozenSet, Iterable, MutableMapping, Optional, Set, Tuple
 
 logger = logging.getLogger("Galaxy.PresenceLine")
 
@@ -198,6 +198,34 @@ def request_origin(request: Any, client_surface: Optional[str] = None) -> Dict[s
     """从 HTTP 请求取出分流要的两样：连接来源地址、发起界面。``request`` 是 Starlette 的 Request。"""
     client = getattr(request, "client", None)
     return {"client_host": getattr(client, "host", None), "client_surface": client_surface}
+
+
+def desktop_request(request: Any, body: Any, source: str = "chat") -> Tuple[Dict[str, Optional[str]], bool]:
+    """HTTP 入口一次取齐：分流要的来源参数（原样传给 ``handle_request``），以及这次是不是电脑发起的。"""
+    origin = request_origin(request, getattr(body, "client_surface", None))
+    return origin, decide_presence_line(source, getattr(body, "device_id", None), **origin).host_bound
+
+
+def _silent(*_args: Any, **_kwargs: Any) -> None:
+    return None
+
+
+def desktop_conversation_mirror(on_desktop: bool) -> Callable[..., Any]:
+    """推进桌面实时对话视图的函数；不是电脑发起的请求拿到一个什么都不做的替身。"""
+    if not on_desktop:
+        return _silent
+    from core.lumiv_websocket_bridge import emit_conversation
+
+    return emit_conversation
+
+
+def desktop_incremental_speech(on_desktop: bool, **kwargs: Any) -> Any:
+    """在电脑上边生成边念；不是电脑发起的请求不念，返回 ``None``（与「没建成」同义）。"""
+    if not on_desktop:
+        return None
+    from core.speech_output import begin_incremental_speech
+
+    return begin_incremental_speech(**kwargs)
 
 
 def bind_presence_line(
@@ -328,6 +356,55 @@ def activity_snapshot(sessions: Iterable[Any]) -> Dict[str, Any]:
     return {"sessions": rows, "in_tri_state": inside, "outside_tri_state": len(rows) - inside}
 
 
+_ORIGIN_KEYS = ("client_host", "client_surface")
+
+
+class SessionOriginMixin:
+    """``RuntimeSession`` 的分流字段默认值：进三态、电脑发起。建会话时由 :func:`bind_presence_line` 改写。"""
+
+    host_bound: bool = True  # 此刻是否外显到桌面三态；落手交还时会变成 True
+    desktop_originated: bool = True  # 是不是电脑发起的；建会话时定下，之后不变
+    origin_device_id: str = ""
+    presence_line_reason: str = ""
+
+
+class RuntimeOriginMixin:
+    """``DesktopPresenceRuntime`` 这一侧的入口分流。
+
+    与 :mod:`core.presence_stop` 同一个做法：在场运行时那个文件在文件大小门禁的基线上，
+    按仓库的规矩拆出来、以混入接上，不抬基线。
+    """
+
+    def _create_bound_session(self, source: str, device_id: Optional[str], kwargs: Dict[str, Any]) -> Any:
+        """建会话并判一次入口分流。
+
+        ``kwargs`` 是 ``handle_request`` 的 ``**kwargs``：HTTP 入口传的 ``client_host`` /
+        ``client_surface`` 在这里取走 —— 它们只给分流判发起方用，不往下传给智能体。
+        """
+        origin = {key: kwargs.pop(key, None) for key in _ORIGIN_KEYS}
+        register_local_identity(getattr(self, "_device_id", ""))
+        session = self._create_session(source)  # type: ignore[attr-defined]
+        bind_presence_line(session, source, device_id, **origin)
+        return session
+
+    def _express_presence(self, **mode: Any) -> Any:
+        """改桌面在场模式 —— 只对进三态的会话。会话取本次请求上下文里绑定的那一条。"""
+        from core.liminal_activity import current_runtime_session
+
+        session = current_runtime_session()
+        if session is not None and not getattr(session, "host_bound", True):
+            return None
+        return self._update_presence_mode(**mode)  # type: ignore[attr-defined]
+
+    def autonomous_session(self, kind: str) -> Any:
+        """智能体自己发起的工作用的会话：不进三态，真在本机落手时才进。"""
+        return autonomous_session(kind, self._create_session, self._active_sessions)  # type: ignore[attr-defined]
+
+    def agent_activity(self) -> Dict[str, Any]:
+        """智能体此刻在处理的全部请求，含不进三态的 —— ``presence_summary`` 只数进三态的。"""
+        return activity_snapshot(self._active_sessions.values())  # type: ignore[attr-defined]
+
+
 __all__ = [
     "AGENT_AUTONOMOUS_SOURCES",
     "DESKTOP_CONTROL_SOURCES",
@@ -336,12 +413,17 @@ __all__ = [
     "LOCAL_BODY_SOURCES",
     "REMOTE_SOURCES",
     "PresenceLineDecision",
+    "RuntimeOriginMixin",
+    "SessionOriginMixin",
     "activity_snapshot",
     "advance_detached",
     "attach_to_host",
     "autonomous_session",
     "bind_presence_line",
     "decide_presence_line",
+    "desktop_conversation_mirror",
+    "desktop_incremental_speech",
+    "desktop_request",
     "is_local_address",
     "is_local_body",
     "register_local_identity",

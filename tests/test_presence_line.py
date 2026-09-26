@@ -126,9 +126,14 @@ def test_the_device_type_does_not_matter(monkeypatch):
 
 
 def test_the_desktop_runtime_identity_counts_as_this_machine():
-    presence_line.register_local_identity("galaxy_desktop_box_1234abcd")
+    """在场运行时开跨设备时铸的 ``galaxy_desktop_*`` 就是这台电脑：带着它来的请求进三态。"""
+    runtime = DesktopPresenceRuntime()
+    runtime._device_id = "galaxy_desktop_box_1234abcd"
+    kwargs = {"client_host": "192.0.2.9", "client_surface": None, "other": 1}
+    session = runtime._create_bound_session("chat", "galaxy_desktop_box_1234abcd", kwargs)
+    assert session.host_bound is True and session.presence_line_reason == "desktop_origin"
+    assert kwargs == {"other": 1}, "分流参数在建会话时取走，不往下传给智能体"
     assert decide_presence_line("chat", "galaxy_desktop_box_1234abcd").host_bound is True
-    assert "_register_local_identity(self._device_id)" in inspect.getsource(DesktopPresenceRuntime)
 
 
 def test_there_is_no_switch(monkeypatch):
@@ -254,15 +259,37 @@ def test_note_local_actuation_goes_through_the_request_context():
 
 
 def test_actuation_entry_points_announce_themselves():
-    """两个本机落手入口都接了线 —— 缺了任何一个，交还桌面就只在一半路径上生效。"""
+    """交还桌面挂在 ``acting()`` 上：两个本机落手入口都进它，缺了任何一个就只在一半路径上生效。"""
     import inspect
 
-    from core import computer_use_loop, hybrid_executor
+    from core import computer_use_loop, hybrid_executor, liminal_activity
 
-    assert 'note_local_actuation("computer_use")' in inspect.getsource(computer_use_loop.run_computer_use_task)
-    assert 'note_local_actuation("hybrid_executor", device_id)' in inspect.getsource(
+    assert "note_local_actuation(reason)" in inspect.getsource(liminal_activity.acting)
+    assert '_acting("computer_use")' in inspect.getsource(computer_use_loop.ComputerUseLoop.run)
+    assert '_acting("hybrid_executor") if on_this_machine' in inspect.getsource(
         hybrid_executor.HybridExecutionArbiter.execute
     )
+
+
+def test_acting_hands_a_detached_request_to_the_desktop_before_marking_it(seb_events, phase_pushes, ledger):
+    from core.liminal_activity import acting, bind_runtime_session, unbind_runtime_session
+
+    session = RuntimeSession(source="participant_task")
+    bind_presence_line(session, "participant_task", "ipad-1")
+    order: List[str] = []
+    token = bind_runtime_session(session)
+    try:
+        with (
+            patch.object(session, "_on_advance_tick"),
+            patch.object(session, "enter_acting", side_effect=lambda r: order.append(f"acting:{session.host_bound}")),
+            patch.object(session, "exit_acting"),
+        ):
+            with acting("computer_use") as entered:
+                assert entered is True
+    finally:
+        unbind_runtime_session(token)
+    assert order == ["acting:True"], "先交还桌面，再登记在动手"
+    assert _phase_events(seb_events) == ["phase.liminal"]
 
 
 # ---------------------------------------------------------------------------

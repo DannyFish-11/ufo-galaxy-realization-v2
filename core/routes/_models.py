@@ -57,6 +57,10 @@ class ChatRequest(BaseModel):
     context: List[Dict[str, str]] = []
     user_id: str = ""  # 用户标识（跨设备统一会话）
     session_id: str = ""  # 会话 ID（跨设备共享）
+    # 发起这一轮的那个界面实例(面板每次打开随机生成一个)。/chat/stream 会把这一轮
+    # 同步推到 /ws/desktop-presence 的对话通道,供**别的**界面实时看见;发起方自己已经
+    # 从 SSE 拿到了同样的字,靠这一位认出回声、不再画第二遍。空串 = 调用方不关心。
+    client_id: str = ""
     required_capabilities: Optional[List[str]] = None  # Phase 2: scheduler hint
     # Multi-modal context bundle (PR 1).  Absent for text-only requests.
     # When present, ``multimodal_context.images`` carries base64-encoded image

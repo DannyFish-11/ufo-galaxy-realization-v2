@@ -13,10 +13,11 @@ import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, Lockst
 
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
-  'lifecycle', 'previous_lifecycle', 'transition_kind', 'continuum_phase',
+  'lifecycle', 'previous_lifecycle', 'transition_kind', 'transition_seq',
+  'last_transition', 'continuum_phase',
   'is_returning', 'next_phases', 'liminal_activity', 'simulation',
   'local_chain', 'cross_device_chain', 'world_model', 'perception',
-  'hybrid_execution', 'pathway', 'thinking_locus', 'runtime_domain',
+  'hybrid_execution', 'acting', 'stop_key', 'pathway', 'thinking_locus', 'runtime_domain',
   'motion', 'intensity', 'form_signature', 'spatial_presence', 'texture_hint',
   'presence_intensity', 'coherence', 'ambiguity', 'collapse_tendency',
   'retreat_tendency', 'stability', 'source', 'degraded', 'degrade_reason',
@@ -57,18 +58,24 @@ export interface PresenceHandlers {
  * `/ws/desktop-presence` 的连接。断了自己退避重连。
  *
  * 退避是**有上限的指数**:断线时不该把后端打穿,也不该久到人以为它死了。
+ *
+ * `clientId` 是这个面板实例的身份(每次打开随机生成一个)。它自己发起的那一轮,
+ * 后端也会同步推到这条通道上给**别的**界面看 —— 而这里已经从 /chat/stream 的 SSE
+ * 拿到了同样的字。认出自己的回声、不画第二遍,见 `#dispatch`。
  */
 export class PresenceSocket {
   #url: string;
   #h: PresenceHandlers;
+  #clientId: string;
   #sock: WebSocket | null = null;
   #retry = 0;
   #timer = 0;
   #stopped = false;
 
-  constructor(base: string, handlers: PresenceHandlers) {
+  constructor(base: string, handlers: PresenceHandlers, clientId = '') {
     this.#url = base.replace(/^http/, 'ws') + '/ws/desktop-presence';
     this.#h = handlers;
+    this.#clientId = clientId;
   }
 
   start(): void {
@@ -133,6 +140,8 @@ export class PresenceSocket {
       return;
     }
     if (m['type'] === 'conversation') {
+      // 自己发起的那一轮的回声:字已经从 SSE 画过了,再画一遍就是同一句话两个气泡。
+      if (this.#clientId && payload['client_id'] === this.#clientId) return;
       const role = payload['role'] === 'user' ? 'user' : 'agent';
       this.#h.onTurn?.(role, String(payload['text'] ?? ''), Boolean(payload['final']));
     }
@@ -148,7 +157,6 @@ export class PresenceSocket {
 }
 
 export interface ChatHandlers {
-  onPhase?(phase: Phase): void;
   /**
    * 后端认下的会话 id。**必须接住** —— 历史、记忆卡片、补录都按它去问,
    * 面板自己编一个的话,问出来的永远是空的。
@@ -166,8 +174,11 @@ export interface ChatHandlers {
    * 帧的 response 里。只认 delta 的客户端会把整轮答复丢掉,画出一个空气泡。
    *
    * 所以 done 里的 response 不是"冗余的重复",是这条路上唯一到得了的那一份。
+   *
+   * ``stopped`` = 这一轮是被人叫停的(/api/v1/presence/stop)。那时回复本来就是空的,
+   * 得说「停下了」,不能说成「后端什么都没给」—— 两件事的下一步完全不同。
    */
-  onDone?(response: string): void;
+  onDone?(response: string, stopped: boolean): void;
   onError?(message: string): void;
 }
 
@@ -176,6 +187,10 @@ export interface ChatHandlers {
  *
  * 用 fetch 而不是 EventSource:EventSource 只能 GET,而这条要带请求体。
  * 七种帧 —— phase / delta / reset / meta / lockstep / done / error。
+ *
+ * **phase 帧不读。** 此刻在哪一相,唯一权威是 WS 的 `payload.render`(见文件头)。
+ * 这里曾经把 SSE 的 phase 也写进同一个状态位 —— 两路各有各的时序,于是那条线
+ * 和岛会在两个相位之间来回跳一下,而且只在面板自己发起的那几轮里跳。
  */
 export async function streamChat(
   base: string,
@@ -218,8 +233,7 @@ export async function streamChat(
       }
       switch (ev['type']) {
         case 'phase':
-          h.onPhase?.(toPhase(String(ev['phase'] ?? '')));
-          break;
+          break; // 见函数头:相位只认 WS 的 render
         case 'delta':
           h.onDelta?.(String(ev['text'] ?? ''));
           break;
@@ -233,7 +247,7 @@ export async function streamChat(
           );
           break;
         case 'done':
-          h.onDone?.(typeof ev['response'] === 'string' ? ev['response'] : '');
+          h.onDone?.(typeof ev['response'] === 'string' ? ev['response'] : '', ev['stopped'] === true);
           break;
         case 'error':
           h.onError?.(String(ev['error'] ?? ''));
@@ -758,6 +772,57 @@ export async function setPrivacy(base: string, paused: boolean): Promise<boolean
 // **「怎么切」不在这里。** 三天这个粒度、边界锚在哪、weight 相对谁归一,全部在
 // 后端 core/memory_cards.py 一处。面板照着切好的片画,自己不做任何分段判断 ——
 // 否则同一条线在这里切五张、在别的界面切六张,两边都以为自己是对的。
+
+/**
+ * 让它现在住手:取消在跑的请求、掐断在念的话、打断双工里正在说的那一句。
+ *
+ * 不是断开 SSE:断开只能停面板**自己**发起的那一轮,而它可能正因为一句语音在动你的
+ * 鼠标键盘。后端把它停下之后,这一轮的 SSE 会照常收尾,done 帧带 `stopped: true`。
+ *
+ * 返回后端有没有接下这次「停」。没接下时调用方自己断开 SSE 兜底。
+ */
+export async function stopActivity(base: string, reason: string): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `${base}/api/v1/presence/stop?reason=${encodeURIComponent(reason)}`,
+      { method: 'POST' },
+    );
+    if (!resp.ok) {
+      console.error('[hud] 停止被拒:', resp.status);
+      return false;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    return body['success'] === true;
+  } catch (err) {
+    console.error('[hud] 停止失败:', err);
+    return false;
+  }
+}
+
+/**
+ * 当前对话主线是哪一条会话。
+ *
+ * 面板只是这份上下文的一个视图:语音、双工、它自己开口说的话都记在这一条上
+ * (判据在后端 core/conversation_mainline.py,这里不另判)。所以打开面板时先问它,
+ * 而不是只认本地记着的那一条 —— 面板关着的时候说过的话,全在主线上。
+ *
+ * `''` = 还没有任何真实对话;`null` = 没问到(后端没接上)。两者不能混:
+ * 前者就该从空白开始,后者该退回本地记着的那一条。
+ */
+export async function fetchPrimarySession(base: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`${base}/api/v1/sessions/primary`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['success'] !== true) return null;
+    return typeof body['session_id'] === 'string' ? body['session_id'] : null;
+  } catch (err) {
+    console.error('[hud] 问对话主线失败:', err);
+    return null;
+  }
+}
 
 function readCard(raw: unknown): MemoryCard | null {
   if (!raw || typeof raw !== 'object') return null;

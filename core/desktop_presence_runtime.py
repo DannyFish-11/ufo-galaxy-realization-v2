@@ -92,6 +92,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import os
@@ -100,6 +101,8 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core import presence_line as _presence_line
+from core import presence_stop as _presence_stop
 from core.desktop_presence_system import (
     DesktopPresenceStateMachine,
     build_desktop_presence_system_view,
@@ -107,11 +110,6 @@ from core.desktop_presence_system import (
 from core.liminal_activity import bind_runtime_session as _bind_runtime_session
 from core.liminal_activity import unbind_runtime_session as _unbind_runtime_session
 from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
-from core.presence_line import activity_snapshot as _activity_snapshot
-from core.presence_line import advance_detached as _advance_detached
-from core.presence_line import autonomous_session as _autonomous_session
-from core.presence_line import bind_presence_line as _bind_presence_line
-from core.presence_line import register_local_identity as _register_local_identity
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -168,7 +166,7 @@ _ADMISSION_REJECTED_MESSAGES = {
 }
 
 
-class RuntimeSession:
+class RuntimeSession(_presence_stop.ActingMixin, _presence_line.SessionOriginMixin):
     """Holds the lifecycle state of a single top-level request within the runtime shell.
 
     Each call to :meth:`DesktopPresenceRuntime.handle_request` creates one
@@ -217,9 +215,6 @@ class RuntimeSession:
         # 表达期的内容：这一轮用什么手法动手（``HybridExecutionDecision.to_dict()``）。
         # 由 core.liminal_activity.note_hybrid_execution 登记，同样经 200ms tick 上行。
         self.hybrid_execution: Optional[Dict[str, Any]] = None
-        self.host_bound: bool = True  # 此刻是否外显到桌面三态（core/presence_line.py）
-        self.desktop_originated: bool = True  # 是不是电脑发起的；落手交还桌面也不改它
-        self.origin_device_id: str = ""
 
     # ------------------------------------------------------------------
     # State helpers
@@ -336,7 +331,7 @@ class RuntimeSession:
             new_state.value,
         )
         if not getattr(self, "host_bound", True):  # 别的设备发起：不进桌面三态，只推给发起设备
-            return _advance_detached(self, old_state, new_state)
+            return _presence_line.advance_detached(self, old_state, new_state)
         # 落耐久账 —— 与下面那次事件总线广播是**互补**的两件事:
         # 总线是给此刻在线的订阅者看的,广播完就没了;这一笔是给三天之后的人看的。
         # 三态此前一处都不落盘(DecisionTimeline 是进程内 list、RenderPosture 每拍现算),
@@ -420,8 +415,6 @@ class RuntimeSession:
         """启动后台 continuum 状态推送循环。"""
         if self._tick_running:
             return
-        import asyncio
-
         # 先确认有在跑的事件循环,再造协程对象。
         #
         # 原写法是直接 ``create_task(self._continuum_tick_loop())``:参数在调用前
@@ -465,8 +458,6 @@ class RuntimeSession:
         将 OpenClawd 的实时认知强度 (presence_intensity) 传递到
         GalaxyWebSocketBridge → 前端渲染，实现 AI 状态驱动外壳。
         """
-        import asyncio
-
         try:
             from core.state_event_bus import emit as _emit
         except Exception:
@@ -498,6 +489,7 @@ class RuntimeSession:
                     # 阈限态的内容。复用这条已有的 200ms 通道而不另开一条：桥已经
                     # 订阅着 continuum.state，多带两个字段的成本远小于再拉一条链路。
                     "liminal_activity": self.liminal_activity,
+                    "acting": self.acting,  # 此刻在不在动手：每拍都带，它的「否」本身就是信号
                 }
                 # 摘要只在有值时带上——没推演时不发空对象，省得下游把「没推演」
                 # 与「推演了但候选为空」混为一谈。
@@ -555,7 +547,7 @@ class RuntimeSession:
 # ---------------------------------------------------------------------------
 
 
-class DesktopPresenceRuntime:
+class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOriginMixin):
     """Windows Desktop Runtime Shell — the outer presence layer of the unified subject.
 
     **Role in the unified subject**
@@ -677,9 +669,7 @@ class DesktopPresenceRuntime:
         so other devices (Android, WearOS, Home Assistant, etc.) can
         discover and interact with it via Mesh + NATS.
         """
-        import os
         import socket
-        import uuid as _uuid
 
         # Detection logic
         _env_enabled = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower() in {
@@ -706,10 +696,9 @@ class DesktopPresenceRuntime:
 
         # Generate device identity (hostname + uuid suffix)
         _hostname = socket.gethostname() or "galaxy-desktop"
-        _uuid_suffix = _uuid.uuid5(_uuid.NAMESPACE_DNS, f"galaxy-desktop-{_hostname}").hex[:8]
+        _uuid_suffix = uuid.uuid5(uuid.NAMESPACE_DNS, f"galaxy-desktop-{_hostname}").hex[:8]
         self._device_id = f"galaxy_desktop_{_hostname}_{_uuid_suffix}"
         self._device_name = f"Galaxy Desktop ({_hostname})"
-        _register_local_identity(self._device_id)  # 带着它来的请求是这台电脑自己发起的
         self._cross_device_enabled = True
 
         # Register to UDM (Unified Device Manager)
@@ -823,6 +812,7 @@ class DesktopPresenceRuntime:
     # Public API
     # ------------------------------------------------------------------
 
+    @_presence_stop.stoppable
     async def handle_request(
         self,
         message: str,
@@ -836,8 +826,6 @@ class DesktopPresenceRuntime:
         multimodal_context: Optional[Any] = None,
         use_constellation: bool = True,
         entry_mode: Optional[str] = None,
-        client_host: Optional[str] = None,
-        client_surface: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Drive the full subject lifecycle for one top-level request.
@@ -881,8 +869,6 @@ class DesktopPresenceRuntime:
                 from the continuous ``MultimodalIngressBus`` host perception stream.
             use_constellation: When *True* (default) prefer
                 ConstellationRuntime for ``source="e2e"`` requests.
-            client_host / client_surface: HTTP 入口的连接来源与发起界面，只给入口分流判
-                「是不是电脑发起的」用（见 core/presence_line.py），不往下传。
             entry_mode: Pre-resolved execution mode (``"local"`` |
                 ``"cross_device"`` | ``"hybrid"``).  Forwarded to OpenClawd
                 without modification so the correct liminal branch is taken.
@@ -901,8 +887,7 @@ class DesktopPresenceRuntime:
                     "entrypoint_source": str,   # observability tag
                 }
         """
-        rsession = self._create_session(source)
-        _bind_presence_line(rsession, source, device_id, client_host=client_host, client_surface=client_surface)
+        rsession = self._create_bound_session(source, device_id, kwargs)
         # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
         # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
         # core/liminal_activity.py。
@@ -1008,14 +993,13 @@ class DesktopPresenceRuntime:
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
         stream_sensing_active = self._has_active_stream_source()
-        if rsession.host_bound:
-            self._update_presence_mode(
-                tri_state=rsession.tristate.value,
-                task_active=True,
-                sensing_active=bool(multimodal_context) or stream_sensing_active,
-                execution_active=False,
-                user_interaction=source in {"chat", "voice", "operator"},
-            )
+        self._express_presence(
+            tri_state=rsession.tristate.value,
+            task_active=True,
+            sensing_active=bool(multimodal_context) or stream_sensing_active,
+            execution_active=False,
+            user_interaction=source in {"chat", "voice", "operator"},
+        )
         self._log_request_start(
             rsession,
             message,
@@ -1047,14 +1031,13 @@ class DesktopPresenceRuntime:
             if rsession.tristate is not TriState.LIMINAL:
                 return
             rsession.advance(TriState.MANIFEST)
-            if rsession.host_bound:
-                self._update_presence_mode(
-                    tri_state=rsession.tristate.value,
-                    task_active=True,
-                    sensing_active=bool(multimodal_context) or stream_sensing_active,
-                    execution_active=True,
-                    user_interaction=source in {"chat", "voice", "operator"},
-                )
+            self._express_presence(
+                tri_state=rsession.tristate.value,
+                task_active=True,
+                sensing_active=bool(multimodal_context) or stream_sensing_active,
+                execution_active=True,
+                user_interaction=source in {"chat", "voice", "operator"},
+            )
 
         _manifest_sink = None
         _manifest_orig_on_delta = None
@@ -1270,18 +1253,17 @@ class DesktopPresenceRuntime:
                 _enter_manifest()
             # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
-            if rsession.host_bound:
-                self._update_presence_mode(
-                    tri_state=rsession.tristate.value,
-                    # 本次请求结束 ≠ 主体无事。若有常驻在场(如双工语音会话开着),
-                    # 主体仍然在场,不能把外壳按回静默 —— 否则每次穿插的文字问答
-                    # 结束都会把语音在场"顺手关掉"。
-                    task_active=bool(self._ambient_registry()),
-                    sensing_active=self._has_active_stream_source(),
-                    execution_active=False,
-                    user_interaction=source in {"chat", "voice", "operator"},
-                    result_committed=True,
-                )
+            self._express_presence(
+                tri_state=rsession.tristate.value,
+                # 本次请求结束 ≠ 主体无事。若有常驻在场(如双工语音会话开着),
+                # 主体仍然在场,不能把外壳按回静默 —— 否则每次穿插的文字问答
+                # 结束都会把语音在场"顺手关掉"。
+                task_active=bool(self._ambient_registry()),
+                sensing_active=self._has_active_stream_source(),
+                execution_active=False,
+                user_interaction=source in {"chat", "voice", "operator"},
+                result_committed=True,
+            )
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
             # contextvar 复位：请求结束后链路深处再调 note_liminal_activity 就是
@@ -1720,14 +1702,6 @@ class DesktopPresenceRuntime:
         session = RuntimeSession(source=source)
         self._active_sessions[session.runtime_session_id] = session
         return session
-
-    def autonomous_session(self, kind: str):
-        """智能体自己发起的工作用的会话：不进三态，真在本机落手时才进（core/presence_line.py）。"""
-        return _autonomous_session(kind, self._create_session, self._active_sessions)
-
-    def agent_activity(self) -> Dict[str, Any]:
-        """智能体此刻在处理的全部请求，含不进三态的 —— ``presence_summary`` 只数进三态的。"""
-        return _activity_snapshot(self._active_sessions.values())
 
     # ------------------------------------------------------------------
     # 常驻在场(ambient presence)
@@ -2274,8 +2248,6 @@ class DesktopPresenceRuntime:
         安全默认：默认仅记录、不自动执行；``GALAXY_ACTIVE_PERCEPTION=1`` 才真正自主行动
         （避免未经预期的自动操作）。无运行事件循环时安全丢弃。
         """
-        import os
-
         if os.getenv("GALAXY_ACTIVE_PERCEPTION", "").strip().lower() not in ("1", "true", "yes", "on"):
             logger.info(
                 "主动感知目标（已就绪，未自动执行；设 GALAXY_ACTIVE_PERCEPTION=1 开启自主行动）：%s",

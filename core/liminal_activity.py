@@ -35,9 +35,10 @@ desktop_presence_runtime 里 ``_enter_manifest`` 上方的注释：此前拿到�
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 logger = logging.getLogger("Galaxy.LiminalActivity")
 
@@ -49,6 +50,7 @@ __all__ = [
     "note_liminal_activity",
     "note_hybrid_execution",
     "note_local_actuation",
+    "acting",
     "in_deliberation_window",
     "commit_to_manifest",
 ]
@@ -78,6 +80,10 @@ def current_runtime_session() -> Optional[Any]:
 
 def bind_runtime_session(session: Any) -> "contextvars.Token":
     """把会话挂进当前 Context。由 ``handle_request`` 在建会话后调用。"""
+    # 「停」据此知道这一件事对应哪个运行时会话（见 core.presence_stop.stoppable）。
+    from core.presence_stop import note_bound_session
+
+    note_bound_session(session)
     return _current_runtime_session.set(session)
 
 
@@ -152,8 +158,8 @@ def note_local_actuation(kind: str, target_device_id: str = "") -> bool:
     """宣告「这次请求在本机落手了」—— 不外显到桌面的请求由此交还桌面。
 
     不是电脑发起的请求不进桌面三态（见 :mod:`core.presence_line`）。可一旦它真的操作了
-    本机的应用或屏幕，桌面就成了在做事的那具身体，外壳理应跟着动。调用点在落手的入口：
-    混合执行器与 computer-use 回路。
+    本机的应用或屏幕，桌面就成了在做事的那具身体，外壳理应跟着动。调用点是 :func:`acting`
+    —— 混合执行器（目标是本机时）与 computer-use 回路（非 dry-run）落手时都进它。
 
     Args:
         kind: 落手方式（``hybrid_executor`` / ``computer_use``），进日志。
@@ -172,6 +178,45 @@ def note_local_actuation(kind: str, target_device_id: str = "") -> bool:
     except Exception:  # noqa: BLE001 — 可见性绝不该拖垮执行
         logger.debug("note_local_actuation failed (non-fatal)", exc_info=True)
         return False
+
+
+@contextlib.contextmanager
+def acting(reason: str = "") -> Iterator[bool]:
+    """把一段代码标成「它此刻正在操作这台机器」（键鼠、窗口、应用）。
+
+    进出成对，可以嵌套（电脑操作闭环里再调一次应用自动化，算同一段）。
+    ``yield`` 出去的是有没有真的登记上 —— 不在一次 ``handle_request`` 里时是
+    ``False``，那时没有生命周期可挂，什么都不做。
+
+    为什么要单独这一位
+    ------------------
+    表达期（MANIFEST）有两种样子：出字/出声，和**动你的鼠标键盘**。前者屏幕该是
+    干净的；后者是整个流程里人最需要知道、也最需要能叫停的时刻。而此前渲染层拿到的
+    信号里没有一位能把这两者分开 —— ``hybrid_execution`` 在模式选完就一直为真，
+    直到回静默才清，点名了级别的执行（``force_level``）则根本不登记。
+
+    所以由真正落手的那两处（``core.computer_use_loop`` 与 ``core.hybrid_executor``）
+    自己说「我开始动了 / 我停了」，而不是让渲染层从别的字段里猜。
+    """
+    session = _current_runtime_session.get()
+    entered = False
+    if session is not None:
+        # 在这台机器上动手 = 需要桌面：原本不进三态的请求（别的设备、智能体自己发起的）
+        # 从这一刻起交还桌面，先交还再登记「在动手」，外壳看到的顺序才对（core/presence_line.py）。
+        note_local_actuation(reason)
+        try:
+            session.enter_acting(reason)
+            entered = True
+        except Exception:  # noqa: BLE001 — 可见性绝不该拖垮执行
+            logger.debug("enter_acting failed (non-fatal)", exc_info=True)
+    try:
+        yield entered
+    finally:
+        if entered:
+            try:
+                session.exit_acting()
+            except Exception:  # noqa: BLE001
+                logger.debug("exit_acting failed (non-fatal)", exc_info=True)
 
 
 def in_deliberation_window() -> bool:

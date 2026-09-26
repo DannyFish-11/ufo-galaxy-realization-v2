@@ -73,7 +73,7 @@ from core.android_boundary_visibility_router import (
     extract_android_originated_info,
 )
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
-from core.presence_line import decide_presence_line, request_origin
+from core.presence_line import desktop_conversation_mirror, desktop_incremental_speech, desktop_request, request_origin
 from core.routes._models import ChatRequest
 from core.subject_facing_foreground import (
     build_subject_facing_foreground,
@@ -640,7 +640,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     #   data: {"type":"meta",  "session_id","model","runtime_session_id"}
     #   data: {"type":"lockstep","state","reason"}  ← 见下方 LOCKSTEP_STATES
     #   data: {"type":"done",  "response","intent","success","suggestions",
-    #          "visible_action_surface","session_id","model"}   # response 为权威全文
+    #          "visible_action_surface","session_id","model","stopped"}   # response 为权威全文
     #   data: {"type":"error", "error":"..."}
     #
     # done.response 是【边界过滤后】的权威全文——前端以它对账替换累积增量
@@ -657,23 +657,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/chat/stream")
     async def chat_stream(req: ChatRequest, request: Request = None):  # type: ignore[assignment]
         """SSE 真流式对话 — 委派 DesktopPresenceRuntime → OpenClawd,token 级转发。"""
-        _origin = request_origin(request, getattr(req, "client_surface", None))
-        # 不是电脑发起的(别的设备/别的机器):不在电脑上边生成边念、不推进桌面实时对话视图。
-        _on_desktop = decide_presence_line("chat", req.device_id, **_origin).host_bound
+        _origin, _on_desktop = desktop_request(request, req)  # 不是电脑发起的:不在电脑上念、不推进桌面视图
 
         async def _gen() -> AsyncIterator[str]:
             # 收到即进入"思考"态提示(前端在场带据此脉动)。
             yield _sse({"type": "phase", "phase": "liminal"})
             # 一体化：把用户输入实时推给面板的"实时上下文"视图（与在场共用 WS 通道）。
             _turn_id = req.session_id or ""
-            _emit_conv = None
-            if _on_desktop:
-                try:
-                    from core.lumiv_websocket_bridge import emit_conversation as _emit_conv
-
-                    _emit_conv("user", req.message or "", source="text", turn_id=_turn_id)
-                except Exception:
-                    _emit_conv = None  # type: ignore
+            try:
+                _emit_conv = desktop_conversation_mirror(_on_desktop)
+                _emit_conv("user", req.message or "", source="text", turn_id=_turn_id, client_id=req.client_id)
+            except Exception:
+                _emit_conv = None  # type: ignore
 
             try:
                 _chat_timeout = float(os.environ.get("GALAXY_CHAT_TIMEOUT_S", "90") or "90")
@@ -703,16 +698,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # 边生成边念:能建则建;建成后在请求上下文里抑制收尾的整段重念。
             speaker = None
             try:
-                from core.speech_output import (
-                    begin_incremental_speech,
-                    suppress_final_speak_in_context,
-                )
+                from core.speech_output import suppress_final_speak_in_context
 
-                if _on_desktop:
-                    speaker = begin_incremental_speech(
-                        source="chat",
-                        on_sentence_start=lambda t: reveal_q.put_nowait(t),
-                    )
+                speaker = desktop_incremental_speech(_on_desktop, source="chat", on_sentence_start=reveal_q.put_nowait)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
 
@@ -969,7 +957,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 text = foreground_response or ""
                 # 一体化：AI 回应实时推给面板"实时上下文"视图。
                 if _emit_conv is not None:
-                    _emit_conv("ai", text, source="text", turn_id=_turn_id)
+                    _emit_conv("ai", text, source="text", turn_id=_turn_id, client_id=req.client_id)
 
                 if _lockstep and not _ls_degraded and speaker is not None:
                     # ── 锁步收尾(TTS 正常)────────────────────────────────────
@@ -1080,6 +1068,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "model": model,
                         "runtime_session_id": runtime_session_id,
                         "visible_action_surface": visible_action_surface,
+                        "stopped": bool(result.get("stopped")),  # 被人叫停的:前端说「你叫停的」,不说「没拿到」
                     }
                 )
                 # 回到待机态。
