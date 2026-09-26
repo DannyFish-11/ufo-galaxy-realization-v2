@@ -8,7 +8,7 @@
  * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(304 个键,10 类)。
  *   搬过来那天是 303 个、9 类 —— 中间进过一个又挪去了 llm 类,而 llm 不在这份
  *   顺序提示里(那一类按字母序排),所以数目又回到了原点;2026-09-25 加了
- *   「自我改进」一类,只有自我改进循环一个开关(同组其余六个键默认即生效,
+ *   「自我改进」一类,只有自我改进循环一个开关(同组其余四个键默认即生效,
  *   后端 `PANEL_HIDDEN_KEYS` 不列给面板)。下面那道数目门盯着这两个数不许烂。
  * - `ModelsTab.tsx` 的 provider 键 —— 供应商那一档能配哪些键(25 个,
  *   下面的 `PROVIDER_KEYS` 是 26 个:多出来的 `OLLAMA_MODEL` 见那里的说明)
@@ -115,8 +115,8 @@ export const KEY_ORDER_HINT: Record<string, string[]> = {
     'OLLAMA_URL', 'GALAXY_ROUTER_ADAPTIVE_CONCURRENCY', 'GALAXY_ROUTER_CB_ENABLED',
     'GALAXY_ROUTER_MAX_QUEUE_DEPTH', 'GALAXY_MODELS_PROBE_BUDGET', 'GALAXY_MODELS_STATUS_TTL',
   ],
-  // 元层:面板上只有自我改进循环这一个总闸。同类的其余键(Agent 选脑、入口分流、
-  // Genome、验证超时)默认即生效,后端 core/routes/config.py::PANEL_HIDDEN_KEYS
+  // 元层:面板上只有自我改进循环这一个总闸。同类的其余键(Agent 选脑、Genome、
+  // 验证超时)默认即生效,后端 core/routes/config.py::PANEL_HIDDEN_KEYS
   // 不把它们列给面板,这里也就不写它们的顺序 —— 写了也查不到。
   meta: ['GALAXY_META_RSI'],
   memory: [

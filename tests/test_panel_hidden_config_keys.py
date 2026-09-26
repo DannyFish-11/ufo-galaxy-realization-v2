@@ -1,6 +1,6 @@
 """tests/test_panel_hidden_config_keys.py — 登记了、但不列在面板上的键。
 
-仓库所有者的决定:元层与入口分流这一组,面板「全部设置」里只留自我改进循环
+仓库所有者的决定:元层这一组,面板「全部设置」里只留自我改进循环
 (``GALAXY_META_RSI``)一个开关,其余的默认即生效、藏起来。
 
 本仓栽过的坑是「代码里接好了,面板上看不见也改不了」—— 所以「藏起来」必须和
@@ -63,13 +63,6 @@ def test_hidden_switches_default_to_on_and_match_the_code():
     assert CONFIG_SCHEMA["GALAXY_AGENT_SUPPLY"]["default"] == DEFAULT_SUPPLY_MODE
 
 
-def test_presence_line_is_on_when_nothing_is_set(monkeypatch):
-    from core.presence_line import presence_line_enabled
-
-    monkeypatch.delenv("GALAXY_PRESENCE_LINE", raising=False)
-    assert presence_line_enabled() is True
-
-
 def test_hidden_keys_can_still_be_saved(tmp_path, monkeypatch):
     """藏起来 ≠ 没接上:POST /api/config 照收、.env 照写。"""
     import core.config_store as config_store_module
@@ -85,17 +78,17 @@ def test_hidden_keys_can_still_be_saved(tmp_path, monkeypatch):
         ),
     )
     # update_config 会写 os.environ;先登记,测试结束时由 monkeypatch 还原。
-    monkeypatch.setenv("GALAXY_PRESENCE_LINE", "true")
+    monkeypatch.setenv("GALAXY_AGENT_SUPPLY", "on")
     monkeypatch.setenv("GALAXY_ENGINEERING_VERIFY_TIMEOUT_S", "600")
     app = FastAPI()
     app.include_router(config_module.router)
     resp = TestClient(app).post(
         "/api/config",
-        json={"config": {"GALAXY_PRESENCE_LINE": "false", "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S": "900"}},
+        json={"config": {"GALAXY_AGENT_SUPPLY": "shadow", "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S": "900"}},
     )
     assert resp.status_code == 200, resp.text
     env_text = (tmp_path / ".env.test").read_text(encoding="utf-8")
-    assert "GALAXY_PRESENCE_LINE=false" in env_text and "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S=900" in env_text
+    assert "GALAXY_AGENT_SUPPLY=shadow" in env_text and "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S=900" in env_text
 
 
 def test_the_panel_order_hint_does_not_list_hidden_keys():

@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 408 条 · 组件 schema 107 个
+// 路径 410 条 · 组件 schema 107 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -269,6 +269,8 @@ export type ApiPath =
   | "/api/v1/panel/unified"
   | "/api/v1/participants"
   | "/api/v1/participants/register"
+  | "/api/v1/participants/{device_id}/disconnect"
+  | "/api/v1/participants/{device_id}/heartbeat"
   | "/api/v1/participants/{device_id}/tasks"
   | "/api/v1/ports"
   | "/api/v1/projection/agent-dispatch"
@@ -681,6 +683,8 @@ export const API_METHODS = {
   "/api/v1/panel/unified": ["get"],
   "/api/v1/participants": ["get"],
   "/api/v1/participants/register": ["post"],
+  "/api/v1/participants/{device_id}/disconnect": ["post"],
+  "/api/v1/participants/{device_id}/heartbeat": ["post"],
   "/api/v1/participants/{device_id}/tasks": ["post"],
   "/api/v1/ports": ["get"],
   "/api/v1/projection/agent-dispatch": ["get"],

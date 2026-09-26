@@ -1941,18 +1941,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "meta",
         "description": "直接指定主对话的系统提示词（留空=用 Genome；填了就压过 Genome 与元层的一切改动）",
     },
-    "GALAXY_PRESENCE_LINE": {
-        "default": "true",
-        "type": "boolean",
-        "category": "meta",
-        "description": "手机/手表发起的请求不驱动桌面三态（只推给发起的设备；在本机动手时交还桌面 · 默认开）",
-    },
-    "GALAXY_PRESENCE_LINE_LEGACY_SOURCES": {
-        "default": "",
-        "type": "string",
-        "category": "meta",
-        "description": "按入口回退旧行为：列出的入口（逗号分隔，如 wear_voice,android_vision）仍驱动桌面三态",
-    },
     "GALAXY_META_RSI": {
         "default": "off",
         "type": "select",

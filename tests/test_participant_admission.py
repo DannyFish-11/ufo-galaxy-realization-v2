@@ -9,7 +9,8 @@
 * 真相链第 1 步调的是通用入口；不声明族的消息照旧落到安卓实现（行为逐位不变）；
 * 安卓的每一种真相都有通用对应；安卓实现满足通用协议；
 * 鉴权与准入闸与安卓注册路径是**同一份**代码（不是复制品）；
-* 参与方提交的任务被入口分流判为远端身体。
+* 参与方提交的任务不是电脑发起的：入口分流判为不进桌面三态；
+* 附着记录、心跳、断开写的是安卓路径写的同一批模块，全程同样不经安卓命名模块。
 """
 
 from __future__ import annotations
@@ -193,13 +194,13 @@ def test_participant_tasks_are_decided_as_a_remote_body():
 
 
 def test_raw_kind_outside_the_udm_enum_is_still_recognised_as_remote():
-    from core.presence_line import is_remote_device
+    from core.presence_line import is_local_body
 
     device_id = _device("watch")
     assert pa.admit_participant(
         pa.ParticipantDescriptor(device_id=device_id, device_type="wear_os"), message={"token": _token()}
     ).admitted
-    assert is_remote_device(device_id) is True
+    assert is_local_body(device_id) is False
 
 
 def _client():
@@ -259,7 +260,82 @@ def test_participant_routes_are_mounted_on_the_device_group():
     app = FastAPI()
     app.include_router(devices.create_router())
     paths = set(app.openapi()["paths"])
-    assert {"/api/v1/participants/register", "/api/v1/participants/{device_id}/tasks"} <= paths
+    assert {
+        "/api/v1/participants/register",
+        "/api/v1/participants/{device_id}/tasks",
+        "/api/v1/participants/{device_id}/heartbeat",
+        "/api/v1/participants/{device_id}/disconnect",
+    } <= paths
+
+
+def _admit(device_id: str, **kw):
+    descriptor = pa.ParticipantDescriptor(device_id=device_id, device_type=kw.pop("device_type", "ios"), **kw)
+    admission = pa.admit_participant(descriptor, message={"token": _token()})
+    assert admission.admitted, admission.to_dict()
+    return admission
+
+
+def test_admission_writes_the_same_attach_records_as_the_android_path():
+    """registry 铸身份，生命周期投影接收同一个 id —— 状态面读的是投影，通用参与方不能缺席。"""
+    from core.attached_runtime_session import get_attached_runtime_session
+    from core.attached_runtime_session_registry import lookup_session_by_device
+
+    device_id = _device()
+    assert _admit(device_id).steps["runtime_session"] is True
+    entry = lookup_session_by_device(device_id)
+    record = get_attached_runtime_session(device_id)
+    assert entry is not None and record is not None
+    assert record.attach_reason == pa.ADMISSION_SOURCE
+    assert record.session_id == entry.runtime_attachment_session_id != ""
+
+
+def test_heartbeat_and_disconnect_move_the_same_facts():
+    from core.attached_runtime_session_registry import lookup_session_by_device
+    from core.unified.device_manager import get_unified_device_manager
+
+    device_id = _device()
+    _admit(device_id)
+    creds = {"token": _token()}
+    assert pa.participant_heartbeat(device_id, credentials=creds)["success"] is True
+    assert get_unified_device_manager().get_device(device_id).last_heartbeat is not None
+
+    left = pa.participant_disconnect(device_id, credentials=creds)
+    assert left["success"] is True and left["steps"]["udm"] and left["steps"]["runtime_session"]
+    status = get_unified_device_manager().get_device(device_id).status
+    assert str(getattr(status, "value", status)) == "disconnected", "断开是标状态，不删身份"
+    assert lookup_session_by_device(device_id) is None, "附着会话已摘除"
+
+    pa.participant_heartbeat(device_id, credentials=creds)
+    status = get_unified_device_manager().get_device(device_id).status
+    assert str(getattr(status, "value", status)) == "online", "回来发心跳就恢复在线"
+
+
+def test_heartbeat_and_disconnect_refuse_strangers_and_bad_tokens(monkeypatch):
+    stranger = _device()
+    assert pa.participant_heartbeat(stranger)["error_code"] == "PARTICIPANT_NOT_ADMITTED"
+    assert pa.participant_disconnect(stranger)["error_code"] == "PARTICIPANT_NOT_ADMITTED"
+
+    device_id = _device()
+    _admit(device_id)
+    import core.auth as auth
+
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda: True)
+    monkeypatch.setattr(auth, "get_active_tokens", lambda: ["ADMIN"])
+    monkeypatch.setattr(auth, "verify_api_token", lambda t: t == "ADMIN")
+    assert pa.participant_disconnect(device_id, credentials={"token": "wrong"})["error_code"] == (
+        "INGRESS_AUTHENTICATION_FAILED"
+    )
+    assert pa.participant_heartbeat(device_id, credentials={"token": "ADMIN"})["success"] is True
+
+
+def test_heartbeat_and_disconnect_routes():
+    client = _client()
+    device_id = _device()
+    headers = {"Authorization": f"Bearer {_token()}"}
+    client.post("/api/v1/participants/register", json={"device_id": device_id, "device_type": "linux"}, headers=headers)
+    assert client.post(f"/api/v1/participants/{device_id}/heartbeat", headers=headers).status_code == 200
+    assert client.post(f"/api/v1/participants/{device_id}/disconnect", headers=headers).json()["success"] is True
+    assert client.post(f"/api/v1/participants/{_device()}/heartbeat", headers=headers).status_code == 404
 
 
 _TRACE_SCRIPT = textwrap.dedent("""
@@ -291,8 +367,13 @@ _TRACE_SCRIPT = textwrap.dedent("""
         message={{"token": token}},
     )
     result = asyncio.run(submit_participant_task(device_id, "hello", credentials={{"token": token}}))
+    from core.participant_admission import participant_disconnect, participant_heartbeat
+
+    beat = participant_heartbeat(device_id, credentials={{"token": token}})
+    left = participant_disconnect(device_id, credentials={{"token": token}})
     sys.setprofile(None)
-    print(json.dumps({{"admission": admission.to_dict(), "result": result, "touched": sorted(touched)}}))
+    print(json.dumps({{"admission": admission.to_dict(), "result": result, "beat": beat, "left": left,
+                      "touched": sorted(touched)}}))
     """)
 
 
@@ -309,4 +390,6 @@ def test_the_whole_flow_never_touches_an_android_named_module(tmp_path):
     assert report["admission"]["admitted"] is True, report["admission"]
     assert "mesh_peer" in report["admission"]["steps"] and not report["admission"]["gaps"], report["admission"]
     assert report["result"] == {"success": True, "source": "participant_task"}
+    assert report["beat"]["success"] is True
+    assert report["left"]["success"] is True and not report["left"]["gaps"], report["left"]
     assert report["touched"] == [], f"通用接入路径经过了安卓命名的模块: {report['touched']}"

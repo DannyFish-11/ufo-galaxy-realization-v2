@@ -16,7 +16,9 @@
   附着运行时会话 → Body Mesh 角色 → 能力同化 → 生命周期事件。
 * :func:`submit_participant_task` —— 已接入的参与方提交一句自然语言任务，交给
   ``DesktopPresenceRuntime.handle_request``（唯一收口，冻结守则 R1.1）。入口标为
-  ``participant_task``，由 :mod:`core.presence_line` 判为远端身体：桌面不跟着动。
+  ``participant_task``：不是电脑发起的，由 :mod:`core.presence_line` 判为不进桌面三态。
+* :func:`participant_heartbeat` / :func:`participant_disconnect` —— 在线保活与主动离开，
+  写的是安卓心跳 / 断连时写的同一批模块。
 
 鉴权与准入闸原样搬自安卓注册路径（那边现在 import 这里），语义逐位不变：
 配对令牌必须绑定本 ``device_id``；环境令牌代表管理员；``GALAXY_AUTH_ENABLED`` 打开时
@@ -325,7 +327,7 @@ def _write_udm(descriptor: ParticipantDescriptor) -> None:
             device_type=utype,
             status=UnifiedDeviceStatus.ONLINE,
             capabilities=list(descriptor.capabilities),
-            # 原始类型（wear_os 之类不在 UnifiedDeviceType 里）留在这里，入口分流据此认远端身体。
+            # 原始类型（wear_os 之类不在 UnifiedDeviceType 里）留在这里，供列表与审计按设备自己的说法显示。
             metadata={**descriptor.metadata, "participant_kind": descriptor.device_type},
             source=ADMISSION_SOURCE,
         )
@@ -359,12 +361,22 @@ def _open_mesh_session(descriptor: ParticipantDescriptor) -> str:
 
 
 def _attach_runtime_session(descriptor: ParticipantDescriptor, posture: str) -> str:
+    """与安卓注册路径同一对写法：registry 铸身份（唯一权威），生命周期投影**接收**它铸好的 id。
+
+    只写 registry 的话，这台设备在附着会话投影（``core.attached_runtime_session``，状态面读的
+    就是它）里不存在 —— 安卓设备在、通用参与方不在，同一件事两种结果。
+    """
+    from core.attached_runtime_session import attach_runtime_session
     from core.attached_runtime_session_registry import register_session
 
-    entry = register_session(
+    metadata = {"registration_trigger": ADMISSION_SOURCE, "participant_kind": descriptor.device_type}
+    entry = register_session(descriptor.device_id, posture=posture, metadata=metadata)
+    attach_runtime_session(
         descriptor.device_id,
-        posture=posture,
-        metadata={"registration_trigger": ADMISSION_SOURCE, "participant_kind": descriptor.device_type},
+        source_runtime_posture=posture,
+        runtime_attachment_session_id=str(getattr(entry, "runtime_attachment_session_id", "") or ""),
+        attach_reason=ADMISSION_SOURCE,
+        metadata=metadata,
     )
     return str(getattr(entry, "runtime_session_id", "") or "")
 
@@ -479,6 +491,95 @@ def admitted_participant(device_id: str) -> Optional[Any]:
     return device
 
 
+def _check_participant(device_id: str, credentials: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """已接入 + 鉴权。通过返回 ``None``，否则返回错误体。"""
+    if admitted_participant(device_id) is None:
+        return {"success": False, "error_code": "PARTICIPANT_NOT_ADMITTED"}
+    auth = evaluate_ingress_authentication({**(credentials or {}), "device_id": device_id})
+    if auth.get("enforced") and not auth.get("token_valid"):
+        return {"success": False, "error_code": "INGRESS_AUTHENTICATION_FAILED", "auth_state": auth.get("state")}
+    return None
+
+
+def participant_heartbeat(device_id: str, *, credentials: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """参与方的心跳：与安卓心跳写同一处 —— UDM ``heartbeat()``（离线时自动恢复 ONLINE）与 UCM。"""
+    refused = _check_participant(device_id, credentials)
+    if refused:
+        return refused
+    from core.unified.device_manager import get_unified_device_manager
+
+    get_unified_device_manager().heartbeat(device_id)
+    try:
+        from core.unified.connection_manager import get_unified_connection_manager
+
+        get_unified_connection_manager().update_heartbeat(device_id)
+    except Exception as exc:  # noqa: BLE001 — 与安卓路径同：UCM 失败不致命
+        logger.debug("participant heartbeat: UCM update failed: device_id=%s err=%s", device_id, exc)
+    return {"success": True, "device_id": device_id}
+
+
+def _mark_disconnected(device_id: str) -> None:
+    from core.unified.device_manager import get_unified_device_manager
+
+    get_unified_device_manager().upsert_device_state(device_id, {"status": "disconnected"}, source=ADMISSION_SOURCE)
+    from core.unified.connection_manager import get_unified_connection_manager
+
+    get_unified_connection_manager().mark_offline(device_id)
+
+
+def _terminate_mesh_sessions(device_id: str) -> None:
+    from core.mesh.mesh_session_lifecycle import get_lifecycle_coordinator, terminate_durable_session
+
+    for sid in get_lifecycle_coordinator().find_sessions_for_device(device_id):
+        terminate_durable_session(sid, outcome="cancelled", reason=f"participant_disconnect:{device_id}")
+
+
+def _detach_runtime_session(device_id: str) -> None:
+    from core.attached_runtime_session_registry import InvalidationReason, detach_session, lookup_session_by_device
+
+    entry = lookup_session_by_device(device_id)
+    if entry is not None:
+        detach_session(entry, reason=InvalidationReason.disconnected, metadata={"disconnect_source": ADMISSION_SOURCE})
+
+
+def _notify_readiness_lost(device_id: str) -> None:
+    from core.multi_device_runtime_harness import (
+        DeviceHealthEvent,
+        on_device_health_changed,
+        on_participant_readiness_changed,
+    )
+
+    on_device_health_changed(
+        DeviceHealthEvent(device_id=device_id, health_score=0.0, is_reachable=False, event_type="disconnect")
+    )
+    on_participant_readiness_changed(device_id, "lost", reason="participant_disconnect")
+
+
+def _emit_detach_event(device_id: str) -> None:
+    from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+
+    emit_device_lifecycle_event(
+        device_id, event_kind="detach", prior_state="online", new_state="disconnected", reason=ADMISSION_SOURCE
+    )
+
+
+def participant_disconnect(device_id: str, *, credentials: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """参与方主动离开。步骤与安卓断连时对同一批模块做的事相同（UDM 标断开而不删身份、UCM 离线、
+    终止 mesh 会话、registry 摘除附着、通知多设备编队、记生命周期事件）；每步不致命，失败记 gap。
+    """
+    refused = _check_participant(device_id, credentials)
+    if refused:
+        return refused
+    record = ParticipantAdmission(device_id=device_id, admitted=True)
+    _step(record, "udm", _mark_disconnected, device_id)
+    _step(record, "mesh_session", _terminate_mesh_sessions, device_id)
+    _step(record, "runtime_session", _detach_runtime_session, device_id)
+    _step(record, "formation", _notify_readiness_lost, device_id)
+    _step(record, "lifecycle_event", _emit_detach_event, device_id)
+    logger.info("参与方离开 | device_id=%s gaps=%s", device_id, record.gaps)
+    return {"success": True, "device_id": device_id, "steps": dict(record.steps), "gaps": record.gaps}
+
+
 async def submit_participant_task(
     device_id: str,
     message: str,
@@ -491,11 +592,9 @@ async def submit_participant_task(
     只有经 :func:`admit_participant` 接入过的设备能提交；鉴权开启时每次都要带有效令牌
     （配对令牌须绑定本设备）。任务交给在场运行时的唯一收口。
     """
-    if admitted_participant(device_id) is None:
-        return {"success": False, "error_code": "PARTICIPANT_NOT_ADMITTED"}
-    auth = evaluate_ingress_authentication({**(credentials or {}), "device_id": device_id})
-    if auth.get("enforced") and not auth.get("token_valid"):
-        return {"success": False, "error_code": "INGRESS_AUTHENTICATION_FAILED", "auth_state": auth.get("state")}
+    refused = _check_participant(device_id, credentials)
+    if refused:
+        return refused
 
     from core.desktop_presence_runtime import get_desktop_presence_runtime
 
@@ -517,6 +616,8 @@ __all__ = [
     "ParticipantDescriptor",
     "admit_participant",
     "admitted_participant",
+    "participant_disconnect",
+    "participant_heartbeat",
     "evaluate_ingress_authentication",
     "evaluate_ingress_identity",
     "extract_ingress_token",

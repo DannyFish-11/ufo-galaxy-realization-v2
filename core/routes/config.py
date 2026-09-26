@@ -27,7 +27,7 @@ __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 
 #: 登记在 CONFIG_SCHEMA 里、但**不列在面板上**的键。
 #:
-#: 仓库所有者的决定:元层与入口分流这一组,面板上只留自我改进循环(GALAXY_META_RSI)
+#: 仓库所有者的决定:元层这一组,面板上只留自我改进循环(GALAXY_META_RSI)
 #: 一个开关;其余的默认就在「开 / 生效」的一侧,用户没有理由去动,列出来只是多一排
 #: 看不懂的控件。
 #:
@@ -38,8 +38,6 @@ __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 PANEL_HIDDEN_KEYS = frozenset(
     {
         "GALAXY_AGENT_SUPPLY",  # 默认 on:声明了需求的 Agent 按需求选脑
-        "GALAXY_PRESENCE_LINE",  # 默认开:手机/手表的请求不驱动桌面三态
-        "GALAXY_PRESENCE_LINE_LEGACY_SOURCES",  # 留空 = 所有入口都走新行为
         "GALAXY_GENOME",  # 留空 = 元层指针或 default
         "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
         "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒

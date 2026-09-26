@@ -1,58 +1,45 @@
-"""core/presence_line.py — 入口分流：这一次请求，桌面这具身体要不要跟着动。
+"""core/presence_line.py — 入口分流：谁发起的请求，才进桌面三态。
 
-要解决什么（R3）
-================
-``DesktopPresenceRuntime.handle_request()`` 是所有入口的唯一收口 —— 桌面对话、手机
-提交的任务、手表语音、手机截屏分析都经过它，这是对的（冻结守则 R1.1：不另起一套
-入口）。但收口之后，**每一次**相位推进都做同样四件事：
+规则（这是架构，不是开关）
+==========================
+桌面三态（SILENT / LIMINAL / MANIFEST）是**电脑这具身体**的表达。只有**从电脑这边发起**的
+请求进三态；手机、手表、平板、另一台电脑、任何经通用接入进来的参与方 —— 不看类型、不看
+是否登记 —— 发起的请求**一律不进**：直接交给智能体处理，相位只回推给发起的那台设备。
 
-1. 在状态事件总线上发 ``phase.*`` —— 桌面外壳（lumiv 桥）订阅它来驱动三态动画；
-2. 落相位耐久账 —— 「这三天桌面是什么样子」；
-3. 把相位广播给**所有**已连的手机与手表；
-4. 起停 200ms 的 continuum tick —— 同样只喂桌面外壳。
+「从电脑这边发起」按类型化字段判，不猜文本（见 :mod:`core.semantic_anchoring` 的判据）：
 
-而 lumiv 桥**不看** ``request_source``。于是手机上发一句「帮我查快递」，桌面外壳在
-LIMINAL/MANIFEST 之间翻一遍，另一台手机和手表也跟着抖 —— 桌面这具身体什么都没做，
-却表现得像它在做。三态说的是「主体在哪一相」，表达它的必须是**真在做事的那具身体**。
+========================== =====================================================
+入口 ``source``            判定
+========================== =====================================================
+``REMOTE_SOURCES``         不进。入口本身就说明请求来自别的设备。
+``LOCAL_BODY_SOURCES``     进。本机麦克风、唤醒词、自发注意力、主动感知、桌面视觉。
+``DESKTOP_CONTROL_SOURCES`` 进。操作员面板、OpenClawd 直调、E2E 编排是桌面的控制面 ——
+                           它们带的 ``device_id`` 可能是**目标**设备（操作员把任务派给
+                           手机），所以按入口判，不按 ``device_id`` 判。
+其他（含 ``chat``）         ``device_id`` 是**发起**设备：没带、或是本机自己的标识 → 进；
+                           其余一律不进。
+========================== =====================================================
 
-本模块做的判定
-==============
-一次请求建会话时判一次，结果写在 ``RuntimeSession`` 上两个字段：
+**电脑上发起的跨设备 / 混合任务仍是电脑发起的。** 桌面面板发请求不带 ``device_id``，目标设备
+走 ``target_device`` / ``entry_mode``，操作员派发走控制面入口 —— 目标是别的设备不改变发起方，
+照样走三态。它与「手机发起的请求」不是一回事。
 
-* ``host_bound`` —— 这次请求是不是桌面这具身体自己的事。``True`` 时一切照旧。
-* ``origin_device_id`` —— 请求来自哪台设备。
-
-``host_bound=False``（下称「游离」）时，相位照常推进、照常记在会话里（认知段的阈限
-内容、预演闸门都照常工作），只是**不外显到桌面**：上面 1、2、4 跳过，3 只推给发起
-请求的那台设备 —— 手机上的三态照样是完整的。
-
-判据只读类型化字段，不猜文本（见 :mod:`core.semantic_anchoring` 的判据）：
-
-====================== ==========================================================
-入口 ``source``        判定
-====================== ==========================================================
-``REMOTE_SOURCES``     游离。入口本身就说明请求来自远端身体。
-``HOST_SOURCES``       宿主。本机麦克风、本机感知、本机操作员。
-其他（含 ``chat``）    看 ``device_id``：空、等于本机标识 → 宿主；在设备注册表里
-                       登记为 ``REMOTE_DEVICE_KINDS`` 之一 → 游离；其余 → 宿主。
-====================== ==========================================================
-
-「其余 → 宿主」是刻意的：未登记的设备、浏览器、另一台 PC 都按旧行为处理。另一台 PC
-**不**算远端 —— 桌面自己的客户端可能以 ``windows_xxx`` 之类的标识注册，把它判成远端
-会让本机对话的外壳静默下去，那是比「手机任务时桌面多抖一下」更糟的错误。宁可漏分，
-不可错分。
-
-落手即归位
+有需要才进
 ==========
-游离的请求一旦**真的在本机落手**（混合执行器操作本机应用、computer-use 操作本机
-屏幕），它就成了桌面这具身体的事。:func:`attach_to_host` 把会话改回宿主，并经
-正常的 ``advance()`` 补放一遍 ``SILENT → LIMINAL（→ MANIFEST）`` —— 外壳从这一刻
-起看到的相位与宿主请求完全一致。触发点在 :func:`core.liminal_activity.note_local_actuation`。
+不进三态的请求照常由智能体处理：会话里的相位照常推进（认知段的阈限内容、预演闸门照常
+工作），只是不外显到桌面 —— 不发 ``phase.*``、不落桌面相位账、不起 continuum tick、不改
+桌面在场模式、不在电脑上朗读回复；相位只推给发起的那台设备。
 
-开关
-====
-* ``GALAXY_PRESENCE_LINE=off`` —— 整体回退：所有请求都是宿主，行为与引入本模块前逐位一致。
-* ``GALAXY_PRESENCE_LINE_LEGACY_SOURCES=a,b`` —— 按入口回退：列出的 ``source`` 一律按宿主处理。
+一旦它**真的在本机落手**（computer-use 操作本机屏幕、混合执行器操作本机应用），桌面就成了
+在做事的那具身体：:func:`attach_to_host` 把会话交还桌面，经正常的 ``advance()`` 补放
+``SILENT → LIMINAL（→ MANIFEST）``。落手的目标不是本机（手机、别的电脑）时不交还。触发点在
+:func:`core.liminal_activity.note_local_actuation`。
+
+没有开关
+========
+曾经有 ``GALAXY_PRESENCE_LINE`` / ``GALAXY_PRESENCE_LINE_LEGACY_SOURCES`` 两个回退开关，也曾
+把「未登记的设备、另一台电脑」按宿主处理。按仓库所有者的要求两者都删了：谁发起就归谁，
+不是可调的偏好。
 
 本模块在热路径上（每请求一次），因此**不得** import ``core.meta``（守卫 G10），
 模块级也只依赖标准库。
@@ -61,30 +48,30 @@ LIMINAL/MANIFEST 之间翻一遍，另一台手机和手表也跟着抖 —— �
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
-from typing import Any, FrozenSet, Optional
+from typing import Any, FrozenSet, Optional, Set
 
 logger = logging.getLogger("Galaxy.PresenceLine")
 
-PRESENCE_LINE_ENV = "GALAXY_PRESENCE_LINE"
-PRESENCE_LINE_LEGACY_SOURCES_ENV = "GALAXY_PRESENCE_LINE_LEGACY_SOURCES"
-
-#: 入口本身就说明请求来自远端身体。
+#: 入口本身就说明请求来自别的设备。
 REMOTE_SOURCES: FrozenSet[str] = frozenset(
     {"wear_voice", "wear_decision", "android_goal_execution", "android_vision", "participant_task"}
 )
 
-#: 本机的耳朵、眼睛与操作员。
-HOST_SOURCES: FrozenSet[str] = frozenset(
-    {"voice", "voice_wake", "ambient", "active_perception", "operator", "openclawd", "e2e"}
+#: 本机的耳朵与眼睛 —— 物理上就长在这台电脑上。
+LOCAL_BODY_SOURCES: FrozenSet[str] = frozenset(
+    {"voice", "voice_wake", "ambient", "active_perception", "desktop_vision"}
 )
 
-#: 登记为这些类型的设备是远端身体。取值对齐 ``UnifiedDeviceType`` 与手表注册时上报的原始类型
-#: （``galaxy_gateway/android/handlers/wearos_sync.is_wearos_device``）。
-REMOTE_DEVICE_KINDS: FrozenSet[str] = frozenset({"android", "ios", "wear_os", "wearos", "watch", "galaxy_watch"})
+#: 桌面的控制面。它们带的 ``device_id`` 可能是目标设备，不能拿来判发起方。
+DESKTOP_CONTROL_SOURCES: FrozenSet[str] = frozenset({"operator", "openclawd", "e2e"})
+
+HOST_SOURCES: FrozenSet[str] = LOCAL_BODY_SOURCES | DESKTOP_CONTROL_SOURCES
 
 _LOCAL_ALIASES: FrozenSet[str] = frozenset({"local", "localhost", "host", "desktop"})
+
+#: 运行时登记的本机标识（例如桌面在场运行时开跨设备时铸的 ``galaxy_desktop_*``）。
+_registered_local_ids: Set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -94,13 +81,11 @@ class PresenceLineDecision:
     reason: str
 
 
-def presence_line_enabled() -> bool:
-    return (os.environ.get("GALAXY_PRESENCE_LINE", "on") or "on").strip().lower() not in ("off", "0", "false", "no")
-
-
-def _legacy_sources() -> FrozenSet[str]:
-    raw = os.environ.get("GALAXY_PRESENCE_LINE_LEGACY_SOURCES", "") or ""
-    return frozenset(part.strip() for part in raw.split(",") if part.strip())
+def register_local_identity(device_id: Optional[str]) -> None:
+    """把一个标识登记为「就是这台电脑」。由持有本机身份的模块在铸出身份时调用。"""
+    did = (device_id or "").strip()
+    if did:
+        _registered_local_ids.add(did)
 
 
 def _local_device_id() -> str:
@@ -112,71 +97,40 @@ def _local_device_id() -> str:
         return ""
 
 
-def registered_device_kind(device_id: str) -> str:
-    """设备在注册表里登记的类型；查不到返回空串。
-
-    先读 UDM（设备的事实来源），再读兼容缓存 ``registered_devices`` —— 手表经网关
-    ``handle_register`` 注册，原始类型（``wear_os`` 等）只留在后者里。
-    """
-    if not device_id:
-        return ""
-    try:
-        from core.unified.device_manager import get_unified_device_manager
-
-        device = get_unified_device_manager().get_device(device_id)
-        if device is not None:
-            kind = getattr(device.device_type, "value", device.device_type)
-            if not kind or str(kind).lower() == "unknown":
-                # 通用接入（core.participant_admission）把 UDM 枚举之外的原始类型留在 metadata 里
-                kind = (getattr(device, "metadata", None) or {}).get("participant_kind", "")
-            if kind:
-                return str(kind).lower()
-    except Exception:  # noqa: BLE001 — 查不到就按查不到处理
-        logger.debug("presence_line: UDM lookup failed for %s", device_id, exc_info=True)
-    try:
-        from core.routes._shared import registered_devices
-
-        return str((registered_devices.get(device_id) or {}).get("device_type", "")).lower()
-    except Exception:  # noqa: BLE001
-        return ""
-
-
-def is_remote_device(device_id: Optional[str]) -> bool:
-    """这台设备是不是一具远端身体。空、本机标识、未登记 —— 都不是。"""
+def is_local_body(device_id: Optional[str]) -> bool:
+    """这个标识是不是这台电脑自己。没带标识也算 —— 桌面面板发请求就不带。"""
     did = (device_id or "").strip()
-    if not did or did.lower() in _LOCAL_ALIASES or did == _local_device_id():
-        return False
-    return registered_device_kind(did) in REMOTE_DEVICE_KINDS
+    if not did or did.lower() in _LOCAL_ALIASES or did in _registered_local_ids:
+        return True
+    return did == _local_device_id()
 
 
 def decide_presence_line(source: str, device_id: Optional[str]) -> PresenceLineDecision:
     origin = (device_id or "").strip()
-    if not presence_line_enabled():
-        return PresenceLineDecision(True, origin, "presence_line_off")
-    if source in _legacy_sources():
-        return PresenceLineDecision(True, origin, "legacy_source")
     if source in REMOTE_SOURCES:
         return PresenceLineDecision(False, origin, "remote_source")
-    if source in HOST_SOURCES:
-        return PresenceLineDecision(True, origin, "host_source")
-    if is_remote_device(origin):
-        return PresenceLineDecision(False, origin, "remote_device")
-    return PresenceLineDecision(True, origin, "host_device" if origin else "no_device")
+    if source in LOCAL_BODY_SOURCES:
+        return PresenceLineDecision(True, origin, "local_body_source")
+    if source in DESKTOP_CONTROL_SOURCES:
+        return PresenceLineDecision(True, origin, "desktop_control_source")
+    if is_local_body(origin):
+        return PresenceLineDecision(True, origin, "desktop_origin" if origin else "no_device")
+    return PresenceLineDecision(False, origin, "other_device")
 
 
 def bind_presence_line(session: Any, source: str, device_id: Optional[str]) -> PresenceLineDecision:
-    """建会话时判一次，写到会话上。判定失败按宿主处理（旧行为）。"""
+    """建会话时判一次，写到会话上。判定本身出错时按宿主处理，并记一条告警。"""
     try:
         decision = decide_presence_line(source, device_id)
     except Exception:  # noqa: BLE001 — 分流判定绝不拖垮请求
-        logger.debug("presence_line: decision failed, falling back to host", exc_info=True)
+        logger.warning("presence_line: decision failed, treating as desktop-originated", exc_info=True)
         decision = PresenceLineDecision(True, (device_id or "").strip(), "decision_failed")
     session.host_bound = decision.host_bound
     session.origin_device_id = decision.origin_device_id
     session.presence_line_reason = decision.reason
     if not decision.host_bound:
         logger.info(
-            "请求不外显到桌面 | runtime_session_id=%s source=%s origin=%s reason=%s",
+            "请求不进桌面三态 | runtime_session_id=%s source=%s origin=%s reason=%s",
             getattr(session, "runtime_session_id", "?"),
             source,
             decision.origin_device_id or "-",
@@ -186,7 +140,7 @@ def bind_presence_line(session: Any, source: str, device_id: Optional[str]) -> P
 
 
 def advance_detached(session: Any, old_state: Any, new_state: Any) -> None:
-    """游离会话的相位推进：只推给发起请求的那台设备。"""
+    """不进三态的会话的相位推进：只推给发起请求的那台设备。"""
     origin = getattr(session, "origin_device_id", "") or ""
     if not origin:
         return
@@ -206,15 +160,15 @@ def advance_detached(session: Any, old_state: Any, new_state: Any) -> None:
 
 
 def attach_to_host(session: Any, kind: str, target_device_id: Optional[str] = "") -> bool:
-    """游离的请求在本机落手 —— 把它交还给桌面，并补放相位。
+    """不进三态的请求在本机落手 —— 把它交还给桌面，并补放相位。
 
     Returns:
-        ``True`` 表示这一次调用真的把会话从游离改成了宿主。
+        ``True`` 表示这一次调用真的把会话从「不进」改成了「进」。
     """
     if session is None or getattr(session, "host_bound", True):
         return False
-    if is_remote_device(target_device_id):
-        return False  # 落手落在远端身体上，桌面仍然不是主角
+    if not is_local_body(target_device_id):
+        return False  # 落手落在别的设备上，桌面仍然不是主角
     tri_state = type(session.tristate)
     current = session.tristate
     activity, summary = session.liminal_activity, session.simulation_summary
@@ -237,17 +191,15 @@ def attach_to_host(session: Any, kind: str, target_device_id: Optional[str] = ""
 
 
 __all__ = [
+    "DESKTOP_CONTROL_SOURCES",
     "HOST_SOURCES",
-    "PRESENCE_LINE_ENV",
-    "PRESENCE_LINE_LEGACY_SOURCES_ENV",
-    "REMOTE_DEVICE_KINDS",
+    "LOCAL_BODY_SOURCES",
     "REMOTE_SOURCES",
     "PresenceLineDecision",
     "advance_detached",
     "attach_to_host",
     "bind_presence_line",
     "decide_presence_line",
-    "is_remote_device",
-    "presence_line_enabled",
-    "registered_device_kind",
+    "is_local_body",
+    "register_local_identity",
 ]

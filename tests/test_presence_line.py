@@ -1,18 +1,22 @@
-"""tests/test_presence_line.py — 入口分流（R3）：远端身体发起的请求不外显到桌面。
+"""tests/test_presence_line.py — 入口分流：只有电脑这边发起的请求进桌面三态。
 
 钉住的性质：
 
-* 判据只读类型化事实（入口、设备注册类型），未知一律按旧行为（宿主）处理；
-* 游离会话的相位**照常推进**，但不发 ``phase.*``、不落桌面相位账、不起 tick，只推给发起设备；
+* 判据只读类型化事实（入口、发起设备标识）：本机感官与桌面控制面进；其余入口看发起设备，
+  没带或是本机自己的标识才进 —— 别的设备不看类型、不看是否登记，一律不进；
+* 电脑发起的跨设备 / 混合任务（带目标设备、操作员派发给手机）照样进；
+* 没有开关：环境变量改不了这条规则；
+* 不进的会话相位**照常推进**，但不发 ``phase.*``、不落桌面相位账、不起 tick、不在电脑上
+  朗读回复，只推给发起设备；
 * 本机对话逐位不变；
-* 游离请求一旦在本机落手就交还桌面，补放的相位序完整；
-* 两个开关都能把行为整体 / 按入口退回旧样子；
+* 不进的请求一旦在本机落手就交还桌面，补放的相位序完整；落在别的设备上不交还；
 * 分流模块在热路径守卫 G10 的名单里。
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -26,13 +30,8 @@ from core.presence_line import attach_to_host, bind_presence_line, decide_presen
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    monkeypatch.delenv(presence_line.PRESENCE_LINE_ENV, raising=False)
-    monkeypatch.delenv(presence_line.PRESENCE_LINE_LEGACY_SOURCES_ENV, raising=False)
     monkeypatch.setenv("GALAXY_DEVICE_ID", "desk-host")
-
-
-def _kinds(mapping: Dict[str, str]):
-    return patch.object(presence_line, "registered_device_kind", side_effect=lambda did: mapping.get(did, ""))
+    monkeypatch.setattr(presence_line, "_registered_local_ids", set())
 
 
 @pytest.fixture
@@ -64,6 +63,13 @@ def ledger(monkeypatch) -> List[tuple]:
     return rows
 
 
+@pytest.fixture
+def spoken(monkeypatch) -> List[str]:
+    said: List[str] = []
+    monkeypatch.setattr("core.speech_output.speak_response", lambda text, source="": said.append(source))
+    return said
+
+
 def _phase_events(events: List[Dict[str, Any]]) -> List[str]:
     return [e["type"] for e in events if str(e["type"]).startswith("phase.")]
 
@@ -80,63 +86,59 @@ def test_remote_sources_are_detached(source):
     assert decision.origin_device_id == "phone-1"
 
 
-@pytest.mark.parametrize("source", ["voice", "ambient", "operator", "active_perception"])
-def test_host_sources_stay_on_the_desktop_even_with_a_phone_id(source):
-    with _kinds({"phone-1": "android"}):
-        assert decide_presence_line(source, "phone-1").host_bound is True
+@pytest.mark.parametrize("source", sorted(presence_line.LOCAL_BODY_SOURCES))
+def test_local_senses_are_the_desktop(source):
+    assert decide_presence_line(source, None).host_bound is True
+
+
+@pytest.mark.parametrize("source", sorted(presence_line.DESKTOP_CONTROL_SOURCES))
+def test_desktop_control_surfaces_stay_on_the_desktop_even_when_the_id_is_a_target(source):
+    """操作员把任务派给手机时带的 device_id 是**目标**：发起方仍是电脑。"""
+    decision = decide_presence_line(source, "phone-1")
+    assert decision.host_bound is True and decision.reason == "desktop_control_source"
 
 
 @pytest.mark.parametrize(
-    "device_id, kind, host_bound",
+    "device_id, host_bound",
     [
-        (None, "", True),
-        ("", "", True),
-        ("desk-host", "android", True),  # 本机标识优先于注册类型
-        ("local", "", True),
-        ("phone-1", "android", False),
-        ("iphone", "ios", False),
-        ("watch-1", "wear_os", False),
-        ("other-pc", "windows", True),  # 另一台 PC 不算远端：宁可漏分，不可错分
-        ("browser-tab", "browser", True),
-        ("unregistered", "", True),
+        (None, True),  # 桌面面板发请求不带 device_id
+        ("", True),
+        ("desk-host", True),  # 本机标识（GALAXY_DEVICE_ID / 主机名）
+        ("local", True),
+        ("phone-1", False),
+        ("iphone", False),
+        ("watch-1", False),
+        ("other-pc", False),  # 另一台电脑也是别的设备
+        ("ipad-1", False),
+        ("linux-box", False),
+        ("unregistered", False),  # 不看是否登记
     ],
 )
-def test_chat_is_decided_by_the_registered_device_kind(device_id, kind, host_bound):
-    with _kinds({device_id or "": kind}):
-        assert decide_presence_line("chat", device_id).host_bound is host_bound
+def test_other_entries_are_decided_by_who_started_them(device_id, host_bound):
+    assert decide_presence_line("chat", device_id).host_bound is host_bound
 
 
-def test_registered_device_kind_reads_udm_first(monkeypatch):
-    fake_udm = SimpleNamespace(get_device=lambda did: SimpleNamespace(device_type=SimpleNamespace(value="android")))
+def test_the_device_type_does_not_matter(monkeypatch):
+    """登记成什么类型都一样：不是这台电脑就不进。"""
+    fake_udm = SimpleNamespace(get_device=lambda did: SimpleNamespace(device_type=SimpleNamespace(value="windows")))
     monkeypatch.setattr("core.unified.device_manager.get_unified_device_manager", lambda: fake_udm)
-    assert presence_line.registered_device_kind("phone-1") == "android"
-    assert presence_line.is_remote_device("phone-1") is True
+    assert decide_presence_line("chat", "other-pc").host_bound is False
 
 
-def test_registered_device_kind_falls_back_to_compat_cache_for_watches(monkeypatch):
-    monkeypatch.setattr(
-        "core.unified.device_manager.get_unified_device_manager",
-        lambda: SimpleNamespace(get_device=lambda did: None),
-    )
-    monkeypatch.setitem(
-        __import__("core.routes._shared", fromlist=["registered_devices"]).registered_devices,
-        "watch-9",
-        {"device_type": "wear_os"},
-    )
-    assert presence_line.registered_device_kind("watch-9") == "wear_os"
+def test_the_desktop_runtime_identity_counts_as_this_machine():
+    presence_line.register_local_identity("galaxy_desktop_box_1234abcd")
+    assert decide_presence_line("chat", "galaxy_desktop_box_1234abcd").host_bound is True
+    assert "_register_local_identity(self._device_id)" in inspect.getsource(DesktopPresenceRuntime)
 
 
-def test_kill_switch_makes_everything_host_bound(monkeypatch):
-    monkeypatch.setenv(presence_line.PRESENCE_LINE_ENV, "off")
-    decision = decide_presence_line("android_goal_execution", "phone-1")
-    assert decision.host_bound is True and decision.reason == "presence_line_off"
-
-
-def test_per_source_legacy_list(monkeypatch):
-    monkeypatch.setenv(presence_line.PRESENCE_LINE_LEGACY_SOURCES_ENV, "wear_voice, android_vision")
-    assert decide_presence_line("wear_voice", "w").host_bound is True
-    assert decide_presence_line("android_vision", "p").host_bound is True
-    assert decide_presence_line("android_goal_execution", "p").host_bound is False
+def test_there_is_no_switch(monkeypatch):
+    """这是架构，不是偏好：曾经的两个回退开关设了也没用，模块根本不读环境变量。"""
+    monkeypatch.setenv("GALAXY_PRESENCE_LINE", "off")
+    monkeypatch.setenv("GALAXY_PRESENCE_LINE_LEGACY_SOURCES", "wear_voice,chat")
+    assert decide_presence_line("wear_voice", "watch-1").host_bound is False
+    assert decide_presence_line("chat", "phone-1").host_bound is False
+    source = inspect.getsource(presence_line)
+    assert "os.environ" not in source and "getenv" not in source
 
 
 def test_decision_failure_falls_back_to_host():
@@ -220,12 +222,19 @@ def test_attach_during_liminal_keeps_the_deliberation_content(seb_events, phase_
     assert _phase_events(seb_events) == ["phase.liminal"]
 
 
-def test_actuation_on_a_remote_body_does_not_attach(phase_pushes):
+@pytest.mark.parametrize("target", ["phone-2", "linux-box", "other-pc"])
+def test_actuation_on_another_device_does_not_attach(phase_pushes, target):
     session = RuntimeSession(source="android_goal_execution")
     bind_presence_line(session, "android_goal_execution", "phone-1")
-    with _kinds({"phone-2": "android"}):
-        assert attach_to_host(session, "hybrid_executor", "phone-2") is False
+    assert attach_to_host(session, "hybrid_executor", target) is False
     assert session.host_bound is False
+
+
+def test_actuation_on_this_machine_by_name_attaches(phase_pushes):
+    session = RuntimeSession(source="participant_task")
+    bind_presence_line(session, "participant_task", "ipad-1")
+    with patch.object(session, "_on_advance_tick"):
+        assert attach_to_host(session, "hybrid_executor", "local") is True
 
 
 def test_note_local_actuation_goes_through_the_request_context():
@@ -272,32 +281,51 @@ def _run(runtime: DesktopPresenceRuntime, **kwargs) -> Dict[str, Any]:
         return asyncio.run(runtime.handle_request(message="帮我查快递", **kwargs))
 
 
-def test_phone_task_does_not_drive_the_desktop_shell(seb_events, phase_pushes, ledger):
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"source": "chat", "device_id": "phone-1", "entry_mode": "cross_device"},
+        {"source": "chat", "device_id": "linux-box"},  # 通用接入的参与方、未登记设备同样不进
+        {"source": "participant_task", "device_id": "ipad-1"},
+        {"source": "wear_voice", "device_id": "watch-1"},
+    ],
+)
+def test_other_devices_do_not_drive_the_desktop(seb_events, phase_pushes, ledger, spoken, kwargs):
     runtime = DesktopPresenceRuntime()
     mode_before = runtime._presence_state_machine.mode
-    with _kinds({"phone-1": "android"}):
-        result = _run(runtime, source="chat", device_id="phone-1", entry_mode="cross_device")
+    result = _run(runtime, **kwargs)
 
-    assert result.get("success") is True
+    assert result.get("success") is True, "不进三态不等于不处理：请求照样交给智能体"
     assert _phase_events(seb_events) == []
     assert ledger == []
     assert runtime._presence_state_machine.mode == mode_before
-    assert {p["target_device_id"] for p in phase_pushes} == {"phone-1"}
+    assert spoken == [], "别的设备发起的请求不该在电脑上念回复"
+    assert {p["target_device_id"] for p in phase_pushes} == {kwargs["device_id"]}
     assert [p["new_phase"] for p in phase_pushes] == ["liminal", "manifest", "silent"]
 
 
-def test_local_chat_drives_the_desktop_shell_as_before(seb_events, phase_pushes, ledger):
+def test_local_chat_drives_the_desktop_shell_as_before(seb_events, phase_pushes, ledger, spoken):
     runtime = DesktopPresenceRuntime()
     _run(runtime, source="chat")
     assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
     assert [row[1] for row in ledger] == ["liminal", "manifest", "silent"]
     assert all("target_device_id" not in p for p in phase_pushes)
+    assert spoken == ["chat"]
 
 
-def test_kill_switch_restores_the_old_broadcast(monkeypatch, seb_events, phase_pushes, ledger):
-    monkeypatch.setenv(presence_line.PRESENCE_LINE_ENV, "off")
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        # 桌面面板发起的跨设备：不带 device_id，目标走 target_device / entry_mode
+        {"source": "chat", "entry_mode": "cross_device", "target_device": "phone-1"},
+        {"source": "chat", "entry_mode": "hybrid"},
+        # 操作员把任务派给手机：device_id 是目标
+        {"source": "operator", "device_id": "phone-1", "entry_mode": "cross_device"},
+    ],
+)
+def test_cross_device_started_on_the_desktop_goes_through_the_tri_state(seb_events, phase_pushes, ledger, kwargs):
     runtime = DesktopPresenceRuntime()
-    _run(runtime, source="android_goal_execution", device_id="phone-1", entry_mode="cross_device")
+    _run(runtime, **kwargs)
     assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
     assert all("target_device_id" not in p for p in phase_pushes)
 

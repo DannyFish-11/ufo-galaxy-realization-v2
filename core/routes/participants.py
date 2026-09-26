@@ -4,6 +4,8 @@
 ----
   POST /api/v1/participants/register            一台设备按自己的声明接入：鉴权、写 UDM、进 mesh
   POST /api/v1/participants/{device_id}/tasks   已接入的参与方提交一句自然语言任务
+  POST /api/v1/participants/{device_id}/heartbeat   心跳：保持在线（离线时自动恢复）
+  POST /api/v1/participants/{device_id}/disconnect  主动离开：标断开、摘附着、终止 mesh 会话
   GET  /api/v1/participants                     经通用路径接入的参与方列表（需 API 鉴权）
 
 与设备注册同属免 API 鉴权组：设备呈递的是配对令牌（作用域受限、绑定本设备），它刻意
@@ -25,6 +27,12 @@ def _credentials(body: Dict[str, Any], authorization: Optional[str]) -> Dict[str
     if authorization and not any(creds.get(k) for k in ("token", "auth_token", "api_token", "authorization")):
         creds["authorization"] = authorization
     return creds
+
+
+def _reply(result: Dict[str, Any]) -> JSONResponse:
+    code = result.get("error_code", "")
+    status = 404 if code == "PARTICIPANT_NOT_ADMITTED" else 401 if code.startswith("INGRESS_") else 200
+    return JSONResponse(result, status_code=status)
 
 
 def create_router() -> APIRouter:
@@ -58,9 +66,23 @@ def create_router() -> APIRouter:
             session_id=body.get("session_id"),
             credentials=_credentials(body, authorization),
         )
-        code = result.get("error_code", "")
-        status = 404 if code == "PARTICIPANT_NOT_ADMITTED" else 401 if code.startswith("INGRESS_") else 200
-        return JSONResponse(result, status_code=status)
+        return _reply(result)
+
+    @router.post("/api/v1/participants/{device_id}/heartbeat")
+    async def heartbeat(
+        device_id: str, body: Optional[Dict[str, Any]] = Body(None), authorization: Optional[str] = Header(None)
+    ) -> JSONResponse:
+        from core.participant_admission import participant_heartbeat
+
+        return _reply(participant_heartbeat(device_id, credentials=_credentials(body or {}, authorization)))
+
+    @router.post("/api/v1/participants/{device_id}/disconnect")
+    async def disconnect(
+        device_id: str, body: Optional[Dict[str, Any]] = Body(None), authorization: Optional[str] = Header(None)
+    ) -> JSONResponse:
+        from core.participant_admission import participant_disconnect
+
+        return _reply(participant_disconnect(device_id, credentials=_credentials(body or {}, authorization)))
 
     @router.get("/api/v1/participants", dependencies=[Depends(require_auth)])
     async def list_participants() -> Dict[str, Any]:

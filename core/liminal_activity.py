@@ -151,13 +151,13 @@ def note_hybrid_execution(decision: Optional[Dict[str, Any]]) -> bool:
 def note_local_actuation(kind: str, target_device_id: str = "") -> bool:
     """宣告「这次请求在本机落手了」—— 不外显到桌面的请求由此交还桌面。
 
-    手机/手表发起的请求默认不驱动桌面外壳（见 :mod:`core.presence_line`）。可一旦它
-    真的操作了本机的应用或屏幕，桌面就成了在做事的那具身体，外壳理应跟着动。调用点
-    在落手的入口：混合执行器与 computer-use 回路。
+    不是电脑发起的请求不进桌面三态（见 :mod:`core.presence_line`）。可一旦它真的操作了
+    本机的应用或屏幕，桌面就成了在做事的那具身体，外壳理应跟着动。调用点在落手的入口：
+    混合执行器与 computer-use 回路。
 
     Args:
         kind: 落手方式（``hybrid_executor`` / ``computer_use``），进日志。
-        target_device_id: 落手的目标设备。目标是远端身体（手机、手表）时不交还。
+        target_device_id: 落手的目标设备。目标不是这台电脑（手机、手表、别的电脑）时不交还。
 
     Returns:
         ``True`` 表示本次调用把会话交还了桌面；不在请求里、本就是桌面的请求都返回 ``False``。

@@ -107,7 +107,9 @@ from core.desktop_presence_system import (
 from core.liminal_activity import bind_runtime_session as _bind_runtime_session
 from core.liminal_activity import unbind_runtime_session as _unbind_runtime_session
 from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
+from core.presence_line import advance_detached as _advance_detached
 from core.presence_line import bind_presence_line as _bind_presence_line
+from core.presence_line import register_local_identity as _register_local_identity
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -213,8 +215,7 @@ class RuntimeSession:
         # 表达期的内容：这一轮用什么手法动手（``HybridExecutionDecision.to_dict()``）。
         # 由 core.liminal_activity.note_hybrid_execution 登记，同样经 200ms tick 上行。
         self.hybrid_execution: Optional[Dict[str, Any]] = None
-        # 入口分流（core/presence_line.py）：False 时相位不外显到桌面，只推给 origin_device_id。
-        self.host_bound: bool = True
+        self.host_bound: bool = True  # False = 别的设备发起，不进桌面三态（core/presence_line.py）
         self.origin_device_id: str = ""
 
     # ------------------------------------------------------------------
@@ -331,10 +332,8 @@ class RuntimeSession:
             old_state.value,
             new_state.value,
         )
-        if not getattr(self, "host_bound", True):  # 游离会话：桌面不外显，只推给发起设备
-            from core.presence_line import advance_detached
-
-            return advance_detached(self, old_state, new_state)
+        if not getattr(self, "host_bound", True):  # 别的设备发起：不进桌面三态，只推给发起设备
+            return _advance_detached(self, old_state, new_state)
         # 落耐久账 —— 与下面那次事件总线广播是**互补**的两件事:
         # 总线是给此刻在线的订阅者看的,广播完就没了;这一笔是给三天之后的人看的。
         # 三态此前一处都不落盘(DecisionTimeline 是进程内 list、RenderPosture 每拍现算),
@@ -707,6 +706,7 @@ class DesktopPresenceRuntime:
         _uuid_suffix = _uuid.uuid5(_uuid.NAMESPACE_DNS, f"galaxy-desktop-{_hostname}").hex[:8]
         self._device_id = f"galaxy_desktop_{_hostname}_{_uuid_suffix}"
         self._device_name = f"Galaxy Desktop ({_hostname})"
+        _register_local_identity(self._device_id)  # 带着它来的请求是这台电脑自己发起的
         self._cross_device_enabled = True
 
         # Register to UDM (Unified Device Manager)
@@ -1329,11 +1329,11 @@ class DesktopPresenceRuntime:
         # 例外:source="ambient" 只会由自发注意力循环的 DELEGATE 分支进来——委托是
         # "不出声、后台派活儿"的动作(三选一里 SPEAK 才该出声,且那条已在 ambient
         # 循环内直接朗读)。若这里也把委托的完整认知回复念出来,等于每次委托都多一句
-        # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读。
+        # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读;别的设备发起的也不念。
         try:
             from core.speech_output import speak_response
 
-            if source != "ambient":
+            if source != "ambient" and rsession.host_bound:
                 speak_response(result.get("response", ""), source=source)
         except Exception:  # noqa: BLE001
             pass
