@@ -262,6 +262,74 @@ class ViaHomeAssistantPath(JoinPath):
         return str(same_handler[0].get("flow_id", "")) if len(same_handler) == 1 else ""
 
 
+# ── 局域网里开着远程登录的电脑:智能体登进去装客户端 ──────────────────────────────
+
+
+class RemoteInstallPath(JoinPath):
+    """一台开着远程登录的电脑:人给一次登录凭据,其余由智能体做完(见 remote_install.py)。
+
+    这条路省掉的是"人去敲命令",**不是"那台电脑同意"**:它得先自己打开远程登录,
+    人还得把凭据给我们一次。两样都齐了才有这条路 —— 所以 ``human_step`` 是
+    ``credential``,它不在 ``AUTOMATABLE`` 里,**永远不会被自动接入**。
+
+    只有真广播了 ``_ssh``/``_sftp-ssh`` 的电脑才走这条(``remote_login``),否则登不进去,
+    提议了也是白提。Windows 能登进去但执行层还不能远程装,那时如实回一条给人执行的命令。
+    """
+
+    name = "remote_install"
+    human_step = HumanStep.CREDENTIAL
+    description = "我登进那台电脑,把客户端装好并配对(需要你给一次登录凭据)"
+
+    def can_handle(self, cand: Candidate) -> bool:
+        p = cand.properties or {}
+        return cand.source == "mdns" and bool(p.get("is_computer")) and bool(p.get("remote_login"))
+
+    async def join(self, cand: Candidate, inputs: Dict[str, Any]) -> JoinOutcome:
+        from core.device_onboarding.remote_install import (
+            RemoteInstallError,
+            credential_inputs,
+            install_and_pair,
+        )
+
+        host = next((a for a in cand.addresses if a), "") or str((cand.properties or {}).get("mdns_server") or "")
+        if not host:
+            return JoinOutcome.fail("不知道那台电脑的地址")
+        if not str(inputs.get("username") or "").strip() or not (inputs.get("password") or inputs.get("private_key")):
+            return JoinOutcome.ask(
+                HumanStep.CREDENTIAL,
+                f"要我登进「{cand.name}」({host})把客户端装好的话,给我它的登录用户名和密码(或一份私钥)。"
+                "凭据只用这一次,不会存下来",
+                inputs=credential_inputs(),
+                host=host,
+            )
+
+        from core.agent_card import build_local_card, get_pairing_code_registry, to_link
+        from core.device_onboarding.gateway_address import gateway_http_base
+
+        card = build_local_card()
+        code, _expires = get_pairing_code_registry().issue(to_link(card))
+        gateway = gateway_http_base(card)
+        try:
+            out = await install_and_pair(host, inputs, code, gateway)
+        except RemoteInstallError as exc:
+            return JoinOutcome.fail(f"{exc}(下一步:{exc.how_to_fix})")
+        if not out.get("installed"):
+            # Windows:登进去了,但执行层还不能远程装 —— 如实给命令,不假装装好了
+            return JoinOutcome.ask(
+                HumanStep.RUN_COMMAND,
+                f"{out.get('why', '这台电脑不能远程装客户端')}。在它上面执行:{out['commands'][0]}",
+                commands=out.get("commands", []),
+                facts=out.get("facts", {}),
+            )
+        # 装好了、配对了,但**还不算成员** —— 成员身份由它自己连上主脑时经配对链产生
+        # (见 core/routes/pairing.py)。这里只报"手上这步做完了",接入平面按地址认领它。
+        return JoinOutcome.ask(
+            HumanStep.NONE,
+            f"已经在「{cand.name}」上装好客户端并配对,它连上来我就告诉你",
+            remote=out,
+        )
+
+
 # ── 插在主脑本机上的:串口设备、CAN 总线 ──────────────────────────────────────────
 
 
@@ -341,5 +409,12 @@ def list_join_paths() -> List[Dict[str, str]]:
 
 
 # 顺序即优先级:专门的在前,"经 HA"这条兜底在最后。
-for _p in (MatterViaHAPath(), GalaxyPeerPath(), LocalBusPath(), HAFlowPath(), ViaHomeAssistantPath()):
+for _p in (
+    MatterViaHAPath(),
+    GalaxyPeerPath(),
+    LocalBusPath(),
+    RemoteInstallPath(),
+    HAFlowPath(),
+    ViaHomeAssistantPath(),
+):
     register_join_path(_p)

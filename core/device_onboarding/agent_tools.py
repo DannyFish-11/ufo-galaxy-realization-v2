@@ -26,6 +26,7 @@ import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from core.device_onboarding.gateway_address import gateway_http_base
 from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
 from core.device_onboarding.taxonomy import is_native_transport
@@ -353,7 +354,7 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
         card = build_local_card()
         link = to_link(card)
         code, expires_at = get_pairing_code_registry().issue(link)
-        gateway = _gateway_http_base(card)
+        gateway = gateway_http_base(card)
         short = f"python -m device_client --pair {code} --install-autostart"
         full = f"python -m device_client --pair {code} --gateway {gateway} --install-autostart"
         return {
@@ -392,25 +393,6 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "开始领计算任务 —— 不用再接入一次。它是干活的机器,不进设备列表",
         }
     return {"success": False, "error": "kind 只能是 phone / watch / laptop / worker"}
-
-
-def _gateway_http_base(card: Any) -> str:
-    """配对命令里的主脑地址:局域网优先(新电脑多半还没进自建内网),其次名片里的其他路。"""
-    cands = sorted(
-        getattr(card, "candidates", None) or [], key=lambda c: (c.get("kind") != "lan", c.get("priority", 99))
-    )
-    for c in cands:
-        url = str(c.get("url") or "")
-        if "/ws/device/" in url:
-            base = url.split("/ws/device/", 1)[0]
-            return base.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
-    try:
-        from core.electron_launch_guard import resolve_gateway_port
-
-        port = resolve_gateway_port()
-    except Exception:  # noqa: BLE001
-        port = 0
-    return f"http://<主脑电脑的地址>:{port or '<端口>'}"
 
 
 # ── 驱动:获取与绑定 ─────────────────────────────────────────────────────────────

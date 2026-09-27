@@ -28,7 +28,9 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.lan_computers import COMPUTER_SERVICE_TYPES, is_computer_service, machine_key, summarize
 
 logger = logging.getLogger("Galaxy.LanDiscovery")
 
@@ -41,6 +43,9 @@ _DEFAULT_SERVICE_TYPES = [
     "_matterc._udp.local.",
     "_hap._tcp.local.",
     "_googlecast._tcp.local.",
+    # 电脑:远程登录 / 文件共享 / 型号信息 / 屏幕共享。见 core/lan_computers.py ——
+    # 同一台机器会同时广播好几条,那边负责合成一个候选、并猜它是什么。
+    *sorted(COMPUTER_SERVICE_TYPES),
 ]
 
 
@@ -83,6 +88,9 @@ class LanDiscovery:
         self.last_seen_ts = 0.0
         # mDNS 名 → 在线记在谁身上(成员 id 或发现身份),下线时清同一个
         self._reported: Dict[str, str] = {}
+        #: 电脑:机器键 → 这台机器身上见过的 mDNS 服务(一台 Mac 同时广播好几条)。
+        #: 合成一个候选靠它;某一条服务下线时,机器还有别的服务就不算"不在了"。
+        self._machine_services: Dict[str, Dict[str, Any]] = {}
 
     # ── 生命周期 ──────────────────────────────────────────────────────
 
@@ -125,6 +133,49 @@ class LanDiscovery:
     def _device_id(name: str) -> str:
         return "mdns_" + name.rstrip(".").replace(" ", "_")
 
+    def _note_computer(
+        self, service_type: str, name: str, address: str, props: Dict[str, str]
+    ) -> Optional[Dict[str, Any]]:
+        """这条广播属于一台电脑吗?是就累加到那台机器上并返回合成后的样子。"""
+        if not is_computer_service(service_type):
+            return None
+        key = machine_key(name, props)
+        row = self._machine_services.setdefault(
+            key, {"services": set(), "addresses": set(), "props": {}, "name": "", "members": set()}
+        )
+        row["services"].add(service_type)
+        if address:
+            row["addresses"].add(address)
+        # _device-info 带型号,别被后来不带型号的广播冲掉
+        row["props"].update({k: v for k, v in props.items() if v})
+        row["name"] = row["name"] or (name.split(".")[0] or key)
+        row["members"].add(name)
+        return {
+            "key": key,
+            "name": row["name"],
+            "addresses": row["addresses"],
+            "summary": summarize(row["services"], row["props"], row["addresses"]),
+        }
+
+    def _forget_computer_service(self, service_type: str, name: str) -> Optional[Tuple[bool, str]]:
+        """一条电脑服务下线 → ``(这台机器是否彻底不在了, 机器键)``;不是电脑服务返回 None。
+
+        机器键必须由这里给出:它是当初按 ``mdns_server`` 合成的,下线回调只带服务名,
+        单看名字推不出来(推出来的是实例名,对不上候选)。
+        """
+        if not is_computer_service(service_type):
+            return None
+        for key, row in list(self._machine_services.items()):
+            if name in row["members"]:
+                row["members"].discard(name)
+                row["services"].discard(service_type)
+                if not row["members"]:
+                    self._machine_services.pop(key, None)
+                    return True, key
+                return False, key
+        # 没记过这条(比如重启后收到的下线):按名字兜底,至少把它自己置离线
+        return True, machine_key(name, {})
+
     def ingest_service(
         self,
         service_type: str,
@@ -146,7 +197,11 @@ class LanDiscovery:
             return False
         is_matter = service_type.startswith("_matter")
         props = dict(properties or {})
-        device_id = self._device_id(name)
+        computer = self._note_computer(service_type, name, address, props)
+        # 电脑:key 用机器身份,这样一台机器的 _ssh / _smb / _device-info 合成一个候选,
+        # 而不是在列表里出现三次。其余类型逐字保持原来的行为(key = mDNS 名)。
+        obs_key = computer["key"] if computer else name
+        device_id = self._device_id(obs_key)
         detail = {
             "host": address,
             "port": port,
@@ -161,12 +216,21 @@ class LanDiscovery:
 
             obs = Observation(
                 source="mdns",
-                key=name,
-                name=name.split(".")[0] or name,
-                kind_hint=props.get("device_type") or props.get("platform") or ("matter" if is_matter else ""),
-                addresses=[address] if address else [],
+                key=obs_key,
+                name=(computer["name"] if computer else name.split(".")[0]) or name,
+                kind_hint=(
+                    computer["summary"]["computer_hint"]
+                    if computer
+                    else props.get("device_type") or props.get("platform") or ("matter" if is_matter else "")
+                ),
+                addresses=sorted(computer["addresses"]) if computer else ([address] if address else []),
                 identity={"device_id": props.get("device_id", ""), "ip": address},
-                properties={"service_type": service_type, "port": port, **props},
+                properties={
+                    "service_type": service_type,
+                    "port": port,
+                    **props,
+                    **(computer["summary"] if computer else {}),
+                },
             )
             svc = get_onboarding_service()
             member = svc.link(obs)
@@ -180,6 +244,9 @@ class LanDiscovery:
             # 已是成员:在线记在成员身上;否则记在发现身份上(Mesh 直连邻接读的就是它)。
             get_unified_connection_manager().report_presence(member or device_id, "lan", True, detail=detail)
             self._reported[name] = member or device_id
+            if computer:
+                # 下线时按机器键找回同一个在线身份(某一条服务名已经对不上了)
+                self._reported[computer["key"]] = member or device_id
         except Exception as exc:  # noqa: BLE001
             logger.debug("LAN 发现:上报在线失败 %s: %s", name, exc)
             return False
@@ -205,8 +272,19 @@ class LanDiscovery:
         return True
 
     def service_removed(self, service_type: str, name: str) -> None:
-        """服务下线 → UCM ``lan`` 通道置离线,候选标记"不在了"。"""
+        """服务下线 → UCM ``lan`` 通道置离线,候选标记"不在了"。
+
+        电脑要多一步:一台机器广播好几条服务,关掉屏幕共享不等于这台电脑不在了 ——
+        只有它最后一条广播也没了,才算"不在"(见 core/lan_computers.py)。
+        """
+        computer_gone = self._forget_computer_service(service_type, name)
+        if computer_gone is not None and computer_gone[0] is False:
+            return  # 这台机器还有别的服务在,不动它
         device_id = self._reported.pop(name, None) or self._device_id(name)
+        obs_key = name
+        if computer_gone is not None:
+            obs_key = computer_gone[1]
+            device_id = self._reported.pop(obs_key, None) or self._device_id(obs_key)
         try:
             from core.unified.connection_manager import get_unified_connection_manager
 
@@ -215,7 +293,7 @@ class LanDiscovery:
             from core.device_onboarding.models import Observation
             from core.device_onboarding.service import get_onboarding_service
 
-            get_onboarding_service().observe(Observation(source="mdns", key=name, present=False))
+            get_onboarding_service().observe(Observation(source="mdns", key=obs_key, present=False))
             self.removed_count += 1
         except Exception as exc:  # noqa: BLE001
             logger.debug("LAN 发现:下线 %s 处理失败: %s", name, exc)
@@ -244,6 +322,10 @@ class _Listener:
                 addrs = info.parsed_addresses() or []
                 address = addrs[0] if addrs else ""
                 port = int(info.port or 0)
+                # ServiceInfo.server 是目标主机名(nas.local.):同一台机器所有服务都指向它。
+                # 电脑靠它把多条广播合成一个候选,见 core/lan_computers.machine_key。
+                if getattr(info, "server", ""):
+                    props["mdns_server"] = str(info.server)
                 for k, v in (info.properties or {}).items():
                     try:
                         props[k.decode() if isinstance(k, bytes) else str(k)] = (

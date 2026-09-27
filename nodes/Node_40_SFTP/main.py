@@ -27,6 +27,7 @@ except ImportError:
     asyncssh = None
     ASYNCSSH_AVAILABLE = False
 
+from core.ssh_host_keys import connect_kwargs
 from nodes.common.node_auth import install_node_auth
 
 app = FastAPI(title="Node 40 - SFTP", version="2.0.0")
@@ -102,7 +103,8 @@ async def connect(request: ConnectRequest):
         return {"success": False, "error": "asyncssh not installed. Run: pip install asyncssh"}
     try:
         conn_id = request.conn_id or f"{request.username}@{request.host}:{request.port}"
-        kwargs = {"host": request.host, "port": request.port, "username": request.username, "known_hosts": None}
+        # 主机校验见 core/ssh_host_keys.py;此前这里传 known_hosts=None(不校验)。
+        kwargs = {"host": request.host, "port": request.port, "username": request.username, **connect_kwargs()}
         if request.password:
             kwargs["password"] = request.password
         if request.private_key:

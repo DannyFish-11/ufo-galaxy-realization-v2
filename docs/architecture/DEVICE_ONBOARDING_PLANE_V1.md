@@ -188,6 +188,7 @@ V1 内置路径(`core/device_onboarding/join_paths.py`,顺序即优先级):
 | `galaxy_peer` | 开着本系统 App、还没配对的手机/手表(`_galaxy*`);tailnet 里不属于任何成员的节点 | **在那台设备上输入配对码**(一次性、10 分钟) | 主体或成员 |
 | `ha_flow` | HA 自己发现、等确认的集成 | 无字段的确认步自动推进;要 PIN/配对码时按 HA 表单告诉人填什么 | 集成建好后实体由 HA 桥接入 |
 | `local_bus` | 插在主脑本机上的串口设备 / CAN 总线 | **同意**一次 | 被接入(`adapter_bridged_device`,transport=serial/canbus) |
+| `remote_install` | 局域网里开着远程登录(`_ssh`)的电脑 | **给一次登录凭据**(只用这一次,不落盘) | 智能体装好客户端并配对;它自己连上来才成为成员 |
 | `via_home_assistant` | 其他局域网设备(投屏、HomeKit、UPnP、蓝牙…) | 在 HA 已发现的流里找到它并推进;HA 没发现时说明去加哪个集成 | 同上 |
 
 不走候选的几种:
@@ -204,7 +205,7 @@ V1 内置路径(`core/device_onboarding/join_paths.py`,顺序即优先级):
 
 **自动接入策略**(`GALAXY_ONBOARDING_AUTO`,默认 `none`):
 `none` = 只有 `human_step=none` 的路径自动走;`approve` = 连"批准"类也自动;`off` = 全部等人/智能体。
-物理码、设备上确认、执行命令这三类**永远不能自动**。
+物理码、设备上确认、执行命令、登录凭据这四类**永远不能自动**(不在 `AUTOMATABLE` 里)。
 
 ---
 
@@ -319,6 +320,7 @@ REST(`core/routes/onboarding.py`):
 | 来源 | 实现 | 产出 |
 |---|---|---|
 | mDNS | `core/lan_discovery.py`(改为交给接入平面,而非直写 UDM) | `_galaxy*` → 认领已有成员或 `galaxy_peer` 候选;`_matterc` → `matter_via_ha`;其他 → 候选(若 HA 已配,提示经 HA 接入) |
+| mDNS(电脑) | 同上 + `core/lan_computers.py`:`_ssh` / `_sftp-ssh` / `_smb` / `_workstation` / `_device-info` / `_rfb` | 一台电脑的多条广播按 mDNS 目标主机名合成**一个**候选;从 `_device-info` 的 `model` 猜平台(猜不出就说"一台电脑");广播了 `_ssh` 才标 `remote_login`,那是 `remote_install` 这条路的前提 |
 | SSDP/UPnP | `core/device_onboarding/sources/ssdp.py`(新,轻量;Node_71 的实现在节点层,core 不能反向依赖) | 电视、路由器、DLNA、打印机 → 候选 |
 | Home Assistant 实体 | `core/ha_bridge.py`(镜像时交给 `ha_entity` 路径) | 被接入成员 |
 | HA 已发现的集成 | `sources/ha_flows.py`(轮询 `GET /api/config/config_entries/flow`) | `ha_discovered_flow` 候选 |
@@ -331,6 +333,35 @@ REST(`core/routes/onboarding.py`):
 插在主脑本机上的三类设备接入后是 `adapter_bridged_device` 成员,传输记为 `serial` / `canbus`,
 本机路径放在 `transport_target`。**登记不等于会说它的协议**(Arduino 自定义指令、Modbus、CANopen、J1939……),
 登记后智能体按能力 `serial_io` / `canbus` 去找驱动。
+
+---
+
+## 10.3 智能体远程把客户端装上(`remote_install`)
+
+**省掉的是"人去敲命令",不是"那台电脑同意"。** 这条路要两个前提,都由人给:
+
+1. 那台电脑自己开着远程登录(Mac:系统设置 → 共享 → 远程登录;Windows:可选功能 → OpenSSH 服务器;Linux 多半已开);
+2. 人把登录凭据给一次(用户名 + 密码或私钥)。
+
+齐了之后由 `core/device_onboarding/remote_install.py` 走完:
+
+```
+校验主机指纹 → 体检(uname / hostname / python / DISPLAY)→ SFTP 传客户端
+→ 远端执行 device_client --pair … --install-autostart → nohup 起在后台
+```
+
+几条不能松的:
+
+* **主机指纹先过**(`core/ssh_host_keys.py`)。第一次连记下并告诉人,之后对不上就拒 ——
+  局域网里冒充那台电脑骗走密码的路必须先堵上,否则这条"方便"本身就是个洞。
+  指纹不对时**一条命令都不会执行,凭据不会发出去**。
+* **凭据只用这一次**:不落盘、不进日志(`_redact`),随函数栈消失。
+* **远端命令里每一段插值都经 `shlex.quote`**。
+* **装得了什么如实说**:Linux / macOS 能传过去直接跑;Windows 的执行层是
+  `WindowsExecutionArbiter`(依赖本机组件),现在**不能**这样远程装 —— 那时回一条
+  给人执行的命令,不假装装好了。认不出系统就拒,不猜。
+* **装完配对完 ≠ 成员**:成员身份仍由它自己连上主脑时经配对链产生(`core/routes/pairing.py`),
+  接入平面按地址认领它。这一步只报"手上这步做完了"。
 
 ---
 
@@ -367,6 +398,7 @@ REST(`core/routes/onboarding.py`):
 | `GALAXY_ONBOARDING_SERIAL` / `_BLUETOOTH` / `_CAN` | true | 本机串口 / 蓝牙 / CAN 发现各自的开关 |
 | `GALAXY_ONBOARDING_CAN_LISTEN_S` | 1.0 | 每次扫描时在 up 的 CAN 口上被动监听多久(0 = 不听,最多 10) |
 | `GALAXY_BLUEZ_DBUS_ADDRESS` | 空(系统总线) | BlueZ 所在 D-Bus 的地址(主脑在容器里时用) |
+| `GALAXY_SSH_STRICT_HOST_KEYS` | false | 严格模式:连"第一次见"的机器也拒,指纹须事先录入 |
 
 ---
 
@@ -387,3 +419,5 @@ REST(`core/routes/onboarding.py`):
 * Windows MCP:不作为接入笔记本的方式(理由见 §8.1)。已经在跑某个 MCP 服务的设备,仍可用 `devices__bind_driver` 把它当驱动。
 * `HOME_*` 进 AIP 位图:需三仓同步。
 * 串口 / CAN 上的具体协议(Modbus、CANopen、J1939 解码等):发现和登记已做,协议由驱动提供,V1 不内置。
+* Windows 的远程安装:SSH 能登进去,但执行层依赖 Windows 本机组件,还不能远程装 —— 如实回一条命令给人。
+* macOS 远程装完后,桌面操作仍要人在那台机器上点一次「允许辅助功能 / 录屏」—— 苹果的硬性要求,绕不过。
