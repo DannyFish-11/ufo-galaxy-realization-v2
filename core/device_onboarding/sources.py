@@ -1,7 +1,8 @@
 """core/device_onboarding/sources.py — 发现来源:把各种"看见"翻成 Observation。
 
 事件型来源自己回调(mDNS 在 ``core/lan_discovery.py``、HA 实体在 ``core/ha_bridge.py``、
-NATS edge worker 在这里订阅);轮询型来源由 :func:`scan_once` 统一跑一遍,
+NATS edge worker 在这里订阅);轮询型来源由 :func:`scan_once` 统一跑一遍(插在主脑
+本机上的串口 / 蓝牙 / CAN 在 ``local_buses.py``),
 :func:`run_scan_loop` 按 ``GALAXY_ONBOARDING_SCAN_INTERVAL_S`` 周期执行。
 
 新来源的写法:把原始信息翻成 ``Observation``,调 ``get_onboarding_service().observe()``;
@@ -313,7 +314,16 @@ async def subscribe_workers() -> bool:
 async def scan_once() -> Dict[str, Any]:
     """所有轮询型来源跑一遍。每个来源独立失败,不连坐。"""
     out: Dict[str, Any] = {}
-    for name, fn in (("ha_flows", scan_ha_flows), ("tailnet", scan_tailnet), ("ssdp", scan_ssdp)):
+    from core.device_onboarding.local_buses import scan_bluetooth, scan_can, scan_serial
+
+    for name, fn in (
+        ("ha_flows", scan_ha_flows),
+        ("tailnet", scan_tailnet),
+        ("ssdp", scan_ssdp),
+        ("serial", scan_serial),
+        ("bluetooth", scan_bluetooth),
+        ("can", scan_can),
+    ):
         try:
             out[name] = await fn()
         except Exception as exc:  # noqa: BLE001

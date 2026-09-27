@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from core.device_onboarding import ha_client
 from core.device_onboarding.models import Candidate, HumanStep, JoinOutcome, MemberRecord
-from core.device_onboarding.taxonomy import classify_type
+from core.device_onboarding.taxonomy import ADAPTER_BRIDGED_DEVICE, classify_type
 
 logger = logging.getLogger("Galaxy.Onboarding.JoinPaths")
 
@@ -261,7 +261,8 @@ class ViaHomeAssistantPath(JoinPath):
     description = "经 Home Assistant 的对应集成接入"
 
     def can_handle(self, cand: Candidate) -> bool:
-        return cand.source in ("mdns", "ssdp")
+        # 蓝牙:HA 的 bluetooth 集成会自己发现、建流;这里按名字找到那个流推进
+        return cand.source in ("mdns", "ssdp", "bluetooth")
 
     async def join(self, cand: Candidate, inputs: Dict[str, Any]) -> JoinOutcome:
         handler = ha_handler_for(cand)
@@ -299,6 +300,51 @@ class ViaHomeAssistantPath(JoinPath):
         return str(same_handler[0].get("flow_id", "")) if len(same_handler) == 1 else ""
 
 
+# ── 插在主脑本机上的:串口设备、CAN 总线 ──────────────────────────────────────────
+
+
+class LocalBusPath(JoinPath):
+    """插在主脑这台机器上的串口设备 / CAN 总线(见 local_buses.py)。
+
+    点一下同意就登记为成员:有了固定身份和在线通道(拔掉、断开都看得到),传输记为
+    ``serial`` / ``canbus``,本机路径(``/dev/ttyUSB0``、``can0``)放在 ``transport_target``。
+    **登记不等于会说它的协议**:串口那头是 Arduino 自定义指令还是 Modbus,CAN 上跑的是
+    CANopen 还是 J1939,都要驱动来讲 —— 登记后智能体按能力 ``serial_io`` / ``canbus``
+    去找驱动(MCP / 技能),找不到就如实说。
+    """
+
+    name = "local_bus"
+    human_step = HumanStep.APPROVE
+    description = "同意把插在主脑上的这个设备登记为成员"
+
+    _TRANSPORT = {"serial": "serial", "can": "canbus"}
+
+    def can_handle(self, cand: Candidate) -> bool:
+        return cand.source in self._TRANSPORT
+
+    async def join(self, cand: Candidate, inputs: Dict[str, Any]) -> JoinOutcome:
+        device_id = cand.identity.get("device_id") or ""
+        if not device_id:
+            return JoinOutcome.fail("候选缺少设备 id")
+        props = dict(cand.properties)
+        target = str(props.get("device") or props.get("interface") or "")
+        info = classify_type(cand.aip_device_type)
+        return JoinOutcome.joined(
+            MemberRecord(
+                device_id=device_id,
+                device_name=cand.name or device_id,
+                device_type=info.platform,
+                aip_device_type=info.aip_device_type,
+                transport=self._TRANSPORT[cand.source],
+                execution_model=ADAPTER_BRIDGED_DEVICE,
+                capabilities=list(cand.capabilities),
+                metadata={"transport_target": target, "attached_to": "gateway_host", "bus_properties": props},
+                join_path=self.name,
+                candidate_id=cand.candidate_id,
+            )
+        )
+
+
 # ── 注册表 ──────────────────────────────────────────────────────────────────────
 
 _REGISTRY: List[JoinPath] = []
@@ -333,5 +379,12 @@ def list_join_paths() -> List[Dict[str, str]]:
 
 
 # 顺序即优先级:专门的在前,"经 HA"这条兜底在最后。
-for _p in (MatterViaHAPath(), GalaxyPeerPath(), EdgeWorkerPath(), HAFlowPath(), ViaHomeAssistantPath()):
+for _p in (
+    MatterViaHAPath(),
+    GalaxyPeerPath(),
+    EdgeWorkerPath(),
+    LocalBusPath(),
+    HAFlowPath(),
+    ViaHomeAssistantPath(),
+):
     register_join_path(_p)

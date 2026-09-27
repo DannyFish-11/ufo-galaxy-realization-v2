@@ -291,10 +291,10 @@ class UnifiedConnectionManager:
     # 实为半个。通道把它们收回来:WS 逻辑逐字不变,其余来源经 report_presence 报进来。
 
     #: 已知通道。WS 不在其中 —— 它仍由 register_connection / mark_offline 表达。
-    PRESENCE_CHANNELS = ("bridge", "nats", "tailnet", "lan")
+    PRESENCE_CHANNELS = ("bridge", "nats", "tailnet", "lan", "local")
 
     #: 靠周期性上报维持的通道,超过这么久没报就不算在线(桥与 tailnet 是事件/对账驱动,不过期)。
-    CHANNEL_TTL_S = {"nats": 45.0, "lan": 900.0}
+    CHANNEL_TTL_S = {"nats": 45.0, "lan": 900.0, "local": 900.0}
 
     def report_presence(
         self,

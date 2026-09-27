@@ -146,6 +146,7 @@ UCM 保持为**唯一**在线权威,但不再只认 WebSocket。新增 **presenc
 | `nats` | edge worker 心跳 | 心跳在 TTL 内 |
 | `tailnet` | headscale 对账 | 节点 online |
 | `lan` | mDNS/SSDP | 广播仍在 |
+| `local` | 本机串口 / 蓝牙 / CAN 扫描(`local_buses.py`) | 串口还插着;蓝牙已连接;CAN 口 up |
 
 API:`UCM.report_presence(device_id, channel, online, *, routable=None, detail=None)`。
 `get_presence_view()` 合并:WS 通道逻辑与之前**逐字一致**;无 WS 时取其他通道里最近的一条。
@@ -317,6 +318,13 @@ REST(`core/routes/onboarding.py`):
 | headscale 未归属节点 | `core/tailnet_membership.annotate` 的 `tailnet_only` | `galaxy_peer` 候选(签配对码) |
 | NATS edge worker | 订阅 `galaxy.workers.register` / `heartbeat` | `edge_worker` 候选;心跳 → UCM `nats` 通道 |
 | 配对成功 | `core/routes/pairing.py` | 直接成员(配对本身就是人在场的确认) |
+| 串口 | `core/device_onboarding/local_buses.py`:pyserial `list_ports`,没装时读 Linux sysfs `/sys/class/tty` | USB 转串口 / Arduino / ESP32 → `local_bus` 候选(身份按板子的 VID:PID:序列号,换口插还是它) |
+| 蓝牙(D-Bus) | 同上:`busctl --json call org.bluez / …ObjectManager GetManagedObjects`(系统总线,可用 `GALAXY_BLUEZ_DBUS_ADDRESS` 指到别处) | `org.bluez.Device1` → 候选,经 HA 的 bluetooth 集成接入 |
+| CAN | 同上:`/sys/class/net/*/type == 280`;接口 up 时被动监听 `GALAXY_ONBOARDING_CAN_LISTEN_S` 秒(只收不发)记下报文 ID | 每条总线一个 `local_bus` 候选,附总线上出现过的报文 ID |
+
+插在主脑本机上的三类设备接入后是 `adapter_bridged_device` 成员,传输记为 `serial` / `canbus`,
+本机路径放在 `transport_target`。**登记不等于会说它的协议**(Arduino 自定义指令、Modbus、CANopen、J1939……),
+登记后智能体按能力 `serial_io` / `canbus` 去找驱动。
 
 ---
 
@@ -350,6 +358,9 @@ REST(`core/routes/onboarding.py`):
 | `GALAXY_ONBOARDING_AUTO` | none | 自动接入到哪一级(off / none / approve) |
 | `GALAXY_ONBOARDING_SCAN_INTERVAL_S` | 60 | 轮询类来源(HA 集成、SSDP、tailnet)的周期 |
 | `GALAXY_ONBOARDING_STATE_DIR` | `data/` | 候选账本与花名册的位置 |
+| `GALAXY_ONBOARDING_SERIAL` / `_BLUETOOTH` / `_CAN` | true | 本机串口 / 蓝牙 / CAN 发现各自的开关 |
+| `GALAXY_ONBOARDING_CAN_LISTEN_S` | 1.0 | 每次扫描时在 up 的 CAN 口上被动监听多久(0 = 不听,最多 10) |
+| `GALAXY_BLUEZ_DBUS_ADDRESS` | 空(系统总线) | BlueZ 所在 D-Bus 的地址(主脑在容器里时用) |
 
 ---
 
@@ -369,4 +380,4 @@ REST(`core/routes/onboarding.py`):
 * 协调者迁移(电脑关机时手机接管协调):所有者确认用不上,不做。
 * Windows MCP:不作为接入笔记本的方式(理由见 §8.1)。已经在跑某个 MCP 服务的设备,仍可用 `devices__bind_driver` 把它当驱动。
 * `HOME_*` 进 AIP 位图:需三仓同步。
-* Serial/DBus/CAN 传输适配器:仍未在启动时注册(需要按硬件依赖探测后再注册,未做)。
+* 串口 / CAN 上的具体协议(Modbus、CANopen、J1939 解码等):发现和登记已做,协议由驱动提供,V1 不内置。
