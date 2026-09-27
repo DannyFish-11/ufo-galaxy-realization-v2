@@ -345,7 +345,11 @@ class SystemOrchestrator:
 
         logger.info("[启动·模式] Resolving system mode …")
         mode = os.environ.get("GALAXY_SYSTEM_MODE", "desktop-local").strip() or "desktop-local"
-        nats_enabled = os.environ.get("GALAXY_NATS_ENABLED", "").lower() in ("true", "1")
+        # 与真正拉起总线的那一处同一判据(launcher/services.py:GalaxyUnified.start_nats):
+        # 没写 false 就会去拉 nats-server。以前这里要"显式 true"才算开,于是屏幕上
+        # 先"不用消息总线",几十秒后又"✓ 消息总线 nats://localhost:4222"。
+        nats_explicitly_off = os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off")
+        nats_enabled = not nats_explicitly_off
         cross_device = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").lower() in ("true", "1")
         # Cross-device inference: an explicitly set GALAXY_NATS_URL is treated as
         # a signal that cross-device mode is intended, even if
@@ -360,7 +364,7 @@ class SystemOrchestrator:
         detail = f"mode={mode}, nats_enabled={nats_enabled}, cross_device={cross_device}"
         logger.info("[启动·模式] %s", detail)
         _scope = "可用其他设备" if cross_device else "只用本机"
-        _bus = "消息总线已开" if nats_enabled else "不用消息总线"
+        _bus = "消息总线稍后拉起(起不来就用进程内总线)" if nats_enabled else "不用消息总线(GALAXY_NATS_ENABLED=false)"
         return PhaseResult(
             phase=StartupPhase.RESOLVE_MODE,
             status=PhaseStatus.OK,
@@ -1062,9 +1066,11 @@ class SystemOrchestrator:
         _ok_n = sum(1 for r in summary.phase_results if r.status == PhaseStatus.OK)
         _degraded_n = sum(1 for r in summary.phase_results if r.status == PhaseStatus.DEGRADED)
         _failed_n = sum(1 for r in summary.phase_results if r.status == PhaseStatus.FAILED)
+        # 这一行打在 [Phase 1] 系统预检里 —— 后端服务、节点、大脑都还没起。以前说
+        # "一切就绪",下面紧跟着还有几十行在启动东西。说它实际是什么:预检。
         _verdict = {
-            OrchestratorReadiness.READY: "一切就绪",
-            OrchestratorReadiness.DEGRADED: "可以用,有降级",
+            OrchestratorReadiness.READY: "预检全部通过(服务接下来启动)",
+            OrchestratorReadiness.DEGRADED: "预检通过,有降级",
             OrchestratorReadiness.FAILED: "有阶段失败",
         }.get(summary.readiness, summary.readiness.value)
         _parts = [f"{_ok_n}/{_all_n} 个阶段正常"]

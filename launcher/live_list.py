@@ -41,6 +41,8 @@ STATE_RUNNING = "running"
 STATE_OK = "ok"
 STATE_WARN = "warn"
 STATE_TIMEOUT = "timeout"
+#: "查完了,结论另行给出" —— 中性的一格,不是 ✓。进度列表只管进度,不替结论表态。
+STATE_DONE = "done"
 
 #: 终态 → **唯一权威里的状态词**(``core.cli_render._STATUS`` 的键)。
 #:
@@ -53,6 +55,7 @@ STATE_TIMEOUT = "timeout"
 _STATE_TO_STATUS_WORD = {
     STATE_OK: "ok",
     STATE_WARN: "warn",
+    STATE_DONE: "info",
 }
 
 #: 超时那一格:唯一权威没有这个状态词,本模块自己给形状,但**着色走同一条路**。
@@ -370,6 +373,7 @@ def unicodedata_east_asian_wide(ch: str) -> bool:
 __all__ = [
     "SPINNER_FRAMES",
     "FRAME_INTERVAL",
+    "STATE_DONE",
     "STATE_RUNNING",
     "STATE_OK",
     "STATE_WARN",

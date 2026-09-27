@@ -66,6 +66,30 @@ def load_env_files_into_environ(root: str = "") -> None:
         pass
 
 
+def bootstrap_env_file(root: str = "") -> bool:
+    """首次启动:在**加载配置之前**从 ``.env.example`` 生成 ``.env``。返回这次是否新建。
+
+    以前是依赖阶段(Phase 2)才复制,而那时 Phase 1 已经按"没有 .env"的默认值把
+    系统模式判完了 —— 真机首启屏幕上先说"按 desktop-local 跑,不用消息总线",
+    后面服务起来时读到了刚复制出来的 .env(GALAXY_NATS_ENABLED=true),又
+    "✓ 消息总线 nats://localhost:4222"。同一次启动两套配置,第二次启动才一致。
+    """
+    try:
+        import shutil
+
+        _root = root or os.path.dirname(os.path.abspath(__file__))
+        env_path = os.path.join(_root, ".env")
+        example = os.path.join(_root, ".env.example")
+        if os.path.exists(env_path) or not os.path.exists(example):
+            return False
+        shutil.copyfile(example, env_path)
+        return True
+    except Exception:  # noqa: BLE001 — 复制失败时 Phase 2 还会再试一次并如实报错
+        return False
+
+
+_ENV_BOOTSTRAPPED = False
+
 # 调用点见下方「进程级配置的唯一调用点」—— 与 Windows 控制台、HF 端点合在
 # 一个 __main__ 守卫里,仍在其余 import 之前。
 
@@ -154,6 +178,7 @@ def configure_huggingface_endpoint() -> None:
 # HF 端点要早于任何 HF 库),所以调用点只能待在文件顶端。守卫保证它们只在
 # `python main.py` 时发生 —— `import main` 不产生任何全局副作用。
 if __name__ == "__main__":
+    _ENV_BOOTSTRAPPED = bootstrap_env_file()
     load_env_files_into_environ()
     configure_windows_console()
     configure_huggingface_endpoint()
@@ -568,15 +593,17 @@ def phase0_env_check() -> dict:
     _live = None
     try:
         from launcher.env_check import PROBE_LABEL, PROBE_START, PROBE_TIMEOUT
-        from launcher.live_list import STATE_OK, STATE_TIMEOUT, LiveList
+        from launcher.live_list import STATE_DONE, STATE_TIMEOUT, LiveList
 
         _live = LiveList([(k, PROBE_LABEL[k]) for k in ("pip", "npm", "node", "ollama", "electron")])
 
         def _on_probe(name: str, state: str, detail: str) -> None:
+            # 进度行只说"查完了没有",**不下结论** —— 结论是下面那组行。以前查完一律
+            # 画 ✓,于是同一屏先"✓ Electron 依赖"、几行后"⚠ Electron 依赖 还没装"。
             if state == PROBE_TIMEOUT:
                 _live.update(name, STATE_TIMEOUT, detail)
             elif state != PROBE_START:
-                _live.update(name, STATE_OK, "")
+                _live.update(name, STATE_DONE, "查完")
 
         _live.start()
     except Exception:  # noqa: BLE001 — 画不出进度绝不能挡住环境检查
@@ -613,6 +640,35 @@ def phase0_env_check() -> dict:
         except Exception:
             print_item(step.name, _STEP_STATUS_TO_LEGACY.get(step.status.value, "info"), step.value)
     return report.to_status_dict()
+
+
+def _settle_ollama_presence(env_status: dict, *, reprobe=None, install_hint=None) -> bool:
+    """依赖阶段:Ollama 到底装没装 —— 如实说,并返回"装了"。
+
+    Phase 0 那次如果是**超时**,那是"没等到",不是"没装"(真机:⏱ 12s 没有回应,之后
+    Ollama 在 localhost:11434 好好地跑着,依赖阶段却打"⚠ Ollama 未安装 curl … | sh")。
+    此刻缓存已热,再问一次;还是没等到就照实说没等到。安装命令按本机系统给。
+    """
+    from launcher import env_check as _ec
+
+    reprobe = reprobe or _ec.reprobe_ollama
+    install_hint = install_hint or _ec.ollama_install_hint
+    if not env_status.get("ollama_installed") and env_status.get("ollama_probe_timed_out"):
+        installed, running, _models, finished = reprobe()
+        env_status["ollama_installed"] = installed
+        env_status["ollama_running"] = running
+        env_status["ollama_probe_timed_out"] = not finished
+    if env_status.get("ollama_installed"):
+        return True
+    if env_status.get("ollama_probe_timed_out"):
+        print_item(
+            "Ollama 还是没查完",
+            "warn",
+            "不等于没装 —— 装了的话后面 AI 大脑那一步会认出来;没装: " + install_hint(),
+        )
+    else:
+        print_item("Ollama 未安装", "warn", install_hint())
+    return False
 
 
 def phase2_ensure_deps(env_status: dict) -> bool:
@@ -888,10 +944,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             )
 
     # 2.5 Ollama install hint + model auto-download
-    if not env_status.get("ollama_installed"):
-        print_item("Ollama 未安装", "warn", "curl -fsSL https://ollama.com/install.sh | sh")
-        print_item("  或访问: https://ollama.com/download", "info")
-    else:
+    if _settle_ollama_presence(env_status):
         print_item("检查 Ollama 模型", "info")
         try:
             rc = sp.run(
@@ -1702,6 +1755,8 @@ def main() -> int:
 
     # ── Phase 0: Environment check ───────────────────────
     print_phase("[Phase 0] 环境检查")
+    if _ENV_BOOTSTRAPPED:
+        print_item(".env 已从 .env.example 生成", "ok", "首次启动;按需编辑,API Key 也可以在面板里填")
     with _phase_timer("Phase 0 环境检查"):
         env_status = phase0_env_check()
 
