@@ -60,8 +60,15 @@ class DiscoveredNode:
     first_seen: float = field(default_factory=time.time)
     last_heartbeat: float = field(default_factory=time.time)
     version: str = ""
+    #: 这个节点的存活是不是靠 **UDP 心跳**判。只有真在广播的节点(发过 ANNOUNCE /
+    #: HEARTBEAT)才是;本机按注册表 / 启动器登记进来的节点从来不发 UDP 心跳,它们的
+    #: 存活以 HTTP 健康为准。以前一律按心跳超时判,于是刚打印完"✓ 全部 13 个节点就绪",
+    #: 35 秒后这 13 个正在跑的节点就被判"离线",``get_healthy_nodes()`` 也把它们剔掉。
+    heartbeat_tracked: bool = False
 
     def is_alive(self) -> bool:
+        if not self.heartbeat_tracked:
+            return self.state not in (DiscoveryState.OFFLINE, DiscoveryState.DEREGISTERED)
         return (time.time() - self.last_heartbeat) < NODE_TIMEOUT
 
     def to_dict(self) -> Dict:
@@ -73,6 +80,7 @@ class DiscoveredNode:
             "capabilities": self.capabilities,
             "state": self.state.value,
             "last_heartbeat": self.last_heartbeat,
+            "liveness": "udp_heartbeat" if self.heartbeat_tracked else "http_health",
             "version": self.version,
         }
 
@@ -367,6 +375,9 @@ class NodeDiscoveryService:
                 for node in list(self.nodes.values()):
                     if node.node_id == self.node_id:
                         continue
+                    if not node.heartbeat_tracked:
+                        # 不广播 UDP 心跳的本机节点:没心跳是常态,不是下线。
+                        continue
 
                     elapsed = now - node.last_heartbeat
 
@@ -384,14 +395,12 @@ class NodeDiscoveryService:
                         if node.state not in (DiscoveryState.HEALTHY, DiscoveryState.REGISTERED):
                             node.state = DiscoveryState.HEALTHY
 
-                # 聚合日志：避免一次刷出上百行红色「节点离线」。desktop-local 单机下，
-                # 从静态注册表 seed 的节点并不广播 UDP 心跳（其可用性以 HTTP 健康为准），
-                # 因此批量 UDP 超时属预期、非致命，不影响 API/网关。状态与回调逻辑不变。
+                # 聚合日志:避免一次刷出上百行「节点离线」。能走到这里的都是**真在广播**、
+                # 后来停了的节点 —— 本机登记的节点在上面已经跳过,不会再被误报。
                 if newly_offline:
                     if len(newly_offline) > 8:
                         logger.warning(
-                            "%d 个节点 UDP 心跳超时转为离线（单机下未广播心跳的节点属正常，"
-                            "以 HTTP 健康为准，不影响 API）。示例: %s …",
+                            "%d 个节点 UDP 心跳超时转为离线。示例: %s …",
                             len(newly_offline),
                             ", ".join(newly_offline[:8]),
                         )
@@ -453,6 +462,7 @@ class NodeDiscoveryService:
             state=DiscoveryState.HEALTHY,
             version=payload.get("version", ""),
             last_heartbeat=time.time(),
+            heartbeat_tracked=True,
         )
         self.nodes[node_id] = node
 
@@ -467,6 +477,7 @@ class NodeDiscoveryService:
         if node:
             was_offline = node.state in (DiscoveryState.OFFLINE, DiscoveryState.SUSPECT)
             node.last_heartbeat = time.time()
+            node.heartbeat_tracked = True
             node.state = DiscoveryState.HEALTHY
 
             if was_offline:

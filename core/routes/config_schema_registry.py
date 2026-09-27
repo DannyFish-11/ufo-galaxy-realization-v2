@@ -2182,6 +2182,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "本机回环也限流（默认关=本机不限）",
     },
+    "GALAXY_IP_BLOCK_LOOPBACK": {
+        "default": "false",
+        "type": "boolean",
+        "category": "security",
+        "description": "本机回环也会因连续失败被封禁（默认关=本机不封，免得桌面应用把自己锁在门外）",
+    },
     "GALAXY_DEVICE_TOKEN_RETENTION_DAYS": {
         "default": "30",
         "type": "number",

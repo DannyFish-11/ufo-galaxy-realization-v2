@@ -153,7 +153,11 @@ class TestThePreflightBlockIsInChinese:
 
         by_var = {c.var: c for c in _CHECKS}
         token = by_var["GALAXY_API_TOKEN"]
-        assert "GALAXY_API_TOKEN=$(python3 -c" in token.hint, "要照抄的命令被翻译坏了"
+        assert 'python -c "import secrets;print(secrets.token_urlsafe(32))"' in token.hint, "要照抄的命令被翻译坏了"
+        assert "GALAXY_API_TOKEN=" in token.hint
+        # 照抄的命令得在 Windows 上也能跑:bash 的 $(...) 在 cmd / PowerShell 里照抄即报错
+        for c in _CHECKS:
+            assert "$(" not in c.hint, f"{c.var} 的提示用了 bash 专有语法,Windows 上照抄不了"
         assert _CJK.search(token.description), "说明还没翻成人话"
 
     def test_every_check_speaks_chinese(self):

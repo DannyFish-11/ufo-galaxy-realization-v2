@@ -139,20 +139,32 @@ class EnvCheck:
 #   ws       — WebSocket / WebRTC / signaling
 #   vault    — Secret-vault back-end
 
+#: 生成口令的命令 —— 不用 bash 的 ``$(...)``:Windows 的 cmd / PowerShell 都照抄不了。
+_TOKEN_GEN_HINT = (
+    '先运行 python -c "import secrets;print(secrets.token_urlsafe(32))",'
+    "把打印出来的那串写进 .env:GALAXY_API_TOKEN=那串。"
+)
+
 _CHECKS: List[EnvCheck] = [
     # ── Core: LLM (at least one required; all WARNING) ───────────────────
     EnvCheck(
         var="OPENAI_API_KEY",
         severity=Severity.WARNING,
-        description="OpenAI 的密钥,用来调它家的大模型。",
-        hint="在 .env 里写 OPENAI_API_KEY=sk-…(至少要有一家大模型的密钥,智能体才跑得起来)。",
+        description="OpenAI 的密钥(只有要用 OpenAI 家的模型才需要)。",
+        hint=(
+            "要用就在 .env 里写 OPENAI_API_KEY=sk-…。不填也行:本机 Ollama 大脑、"
+            "或任何一家别的云端密钥(DeepSeek / Gemini / 通义…)都能让智能体跑起来。"
+        ),
         groups=["core", "all"],
     ),
     EnvCheck(
         var="ANTHROPIC_API_KEY",
         severity=Severity.WARNING,
-        description="Anthropic Claude 的密钥(已经填了 OpenAI 的话,这个可不填)。",
-        hint="在 .env 里写 ANTHROPIC_API_KEY=sk-ant-… 就能用 Claude(GALAXY_LLM_PROVIDER=anthropic 时必须有)。",
+        description="Anthropic Claude 的密钥(只有要用 Claude 才需要)。",
+        hint=(
+            "要用就在 .env 里写 ANTHROPIC_API_KEY=sk-ant-…(GALAXY_LLM_PROVIDER=anthropic 时必须有);"
+            "用本机 Ollama 或别家密钥的话可以不填。"
+        ),
         groups=["core", "all"],
     ),
     # ── Core: auth / security ────────────────────────────────────────────
@@ -160,12 +172,9 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_API_TOKEN",
         severity=Severity.CRITICAL,
         description="访问口令。REST 与 WebSocket 接口靠它认人。",
-        hint=(
-            '在 .env 里写 GALAXY_API_TOKEN=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))"),'
-            "再加 GALAXY_AUTH_ENABLED=true 才真正生效。\n"
-            "另有 GALAXY_REQUIRE_API_TOKEN=true:即使没开鉴权,缺口令也算阻断(预发环境用)。"
-            "不设它、又关着鉴权的话,任何人都能命令这套接口。"
-        ),
+        # 实际显示的提示由 _adjust_findings_for_token_policy 按鉴权真实状态改写 ——
+        # 同一个"没配"在鉴权开着时是正常(用本机令牌),关着时才是风险。
+        hint=_TOKEN_GEN_HINT,
         groups=["core", "gateway", "all"],
     ),
     # ── Core: secret back-end ────────────────────────────────────────────
@@ -174,8 +183,8 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.WARNING,
         description="密钥保险箱(Node_03 SecretVault)的主密钥。",
         hint=(
-            "在 .env 里写 SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
-            "print(Fernet.generate_key().decode())')(GALAXY_SECRET_BACKEND=vault 时必须有)。"
+            '先运行 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())",'
+            "把打印出来的那串写进 .env:SECRETVAULT_MASTER_KEY=那串(GALAXY_SECRET_BACKEND=vault 时必须有)。"
         ),
         groups=["vault", "all"],
     ),
@@ -233,8 +242,8 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_AUTH_ENABLED",
         severity=Severity.WARNING,
-        description="是否对所有接口强制校验访问口令(默认 false)。",
-        hint="正式环境填 true(同时要有 GALAXY_API_TOKEN);不开的话安卓端是免认证连进来的。",
+        description="是否对所有接口校验访问口令(默认开;只有写成 false 才关)。",
+        hint="保持默认(开)即可 —— 不配 GALAXY_API_TOKEN 也会自动签一个本机令牌,桌面前端自动带上。",
         groups=["android", "gateway", "all"],
     ),
     # ── TLS ─────────────────────────────────────────────────────────────
@@ -299,6 +308,12 @@ class PreflightReport:
         return [f for f in self.findings if f.present]
 
     @property
+    def defaulted(self) -> List[Finding]:
+        """没填、但只是信息级(有默认值 / 没用到这一家)的那些 —— 以前哪一栏都不算,
+        于是"通过 0 提醒 3 阻断 0 共 4 项"对不上数。"""
+        return [f for f in self.findings if not f.present and f.check.severity == Severity.INFO]
+
+    @property
     def ok(self) -> bool:
         """True only when there are no CRITICAL findings."""
         return len(self.criticals) == 0
@@ -358,7 +373,8 @@ class PreflightReport:
             f"{_c('通过', _Co.DIM)} {_c(str(len(self.passed)), _Co.GREEN)}  "
             f"{_c('提醒', _Co.DIM)} {_c(str(len(self.warnings)), _Co.YELLOW)}  "
             f"{_c('阻断', _Co.DIM)} {_c(str(len(self.criticals)), _Co.RED)}"
-            f"   {_c(f'共 {len(self.findings)} 项判据', _Co.DIM)}"
+            + (f"  {_c('用默认', _Co.DIM)} {len(self.defaulted)}" if self.defaulted else "")
+            + f"   {_c(f'共 {len(self.findings)} 项判据', _Co.DIM)}"
         )
         lines: List[str] = [
             "",
@@ -462,23 +478,113 @@ def _api_token_missing_is_critical() -> bool:
     return auth or require
 
 
+def _auth_explicitly_off() -> bool:
+    return os.environ.get("GALAXY_AUTH_ENABLED", "").strip().lower() in ("0", "false", "no", "off")
+
+
+def _auth_effectively_on() -> bool:
+    """与运行时同源:``core.auth.is_auth_enabled``(默认开)。取不到时按"没写 false 就开"。"""
+    try:
+        from core.auth import is_auth_enabled
+
+        return bool(is_auth_enabled())
+    except Exception:  # noqa: BLE001
+        return not _auth_explicitly_off()
+
+
 def _adjust_findings_for_token_policy(findings: List[Finding]) -> List[Finding]:
-    """Downgrade missing GALAXY_API_TOKEN from CRITICAL to WARNING when auth is off."""
+    """按鉴权的**真实**状态改写口令/鉴权两行。
+
+    以前这两行照着"鉴权默认关"写:缺口令一律说"再加 GALAXY_AUTH_ENABLED=true 才生效",
+    而鉴权早就默认开、缺口令时会自签本机令牌;``.env`` 里写了 false 的那一行反倒算"通过"。
+    """
+    out: List[Finding] = []
+    auth_on = _auth_effectively_on()
+    for f in findings:
+        var = f.check.var
+        if var == "GALAXY_API_TOKEN" and not f.present and f.check.severity == Severity.CRITICAL:
+            if _api_token_missing_is_critical():
+                out.append(f)
+            elif auth_on:
+                # 没配共享口令 ≠ 没鉴权:会签本机令牌。这是默认行为,不是提醒。
+                out.append(
+                    replace(
+                        f,
+                        check=replace(
+                            f.check,
+                            severity=Severity.INFO,
+                            description="没配共享口令 → 用自动签的本机令牌(data/api_token.json),桌面前端自动带上。",
+                            hint="别的设备走配对拿各自的令牌。要多台机器共用一个口令时再配:" + _TOKEN_GEN_HINT,
+                        ),
+                    )
+                )
+            else:
+                out.append(
+                    replace(
+                        f,
+                        check=replace(
+                            f.check,
+                            severity=Severity.WARNING,
+                            description="访问口令没配,而且鉴权被关掉了 —— 能连到这台机器的任何人都能调这套接口。",
+                            hint=(
+                                "把 .env 里的 GALAXY_AUTH_ENABLED=false 删掉或改成 true 就开了 —— 不用自己配口令,"
+                                "会自动签本机令牌。\n"
+                                "要多台机器共用一个口令:" + _TOKEN_GEN_HINT
+                            ),
+                        ),
+                    )
+                )
+        elif var == "GALAXY_AUTH_ENABLED":
+            if _auth_explicitly_off():
+                out.append(
+                    Finding(
+                        check=replace(
+                            f.check,
+                            severity=Severity.WARNING,
+                            description="鉴权被关掉了(GALAXY_AUTH_ENABLED=false)。",
+                            hint="删掉这一行或改成 true 即可恢复默认的开启状态。",
+                        ),
+                        present=False,
+                        value_hint="(explicitly false)",
+                    )
+                )
+            elif not f.present:
+                out.append(replace(f, check=replace(f.check, severity=Severity.INFO)))
+            else:
+                out.append(f)
+        else:
+            out.append(f)
+    return out
+
+
+def _other_llm_key_configured(exclude: str) -> bool:
+    """除 ``exclude`` 之外,有没有任何一家云端大模型密钥是真填了的。"""
+    try:
+        from core.provider_registry import PROVIDER_REGISTRY
+
+        names = set()
+        for p in PROVIDER_REGISTRY:
+            if p.get("env_key"):
+                names.add(p["env_key"])
+            names.update(p.get("alt_env") or [])
+    except Exception:  # noqa: BLE001
+        names = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"}
+    names.add("LLM_API_KEY")
+    names.discard(exclude)
+    return any(_is_set(n)[0] for n in names)
+
+
+def _adjust_findings_for_llm_sources(findings: List[Finding]) -> List[Finding]:
+    """某一家的密钥没填,但已经有别家的了 → 这不是提醒,只是"没用这家"。"""
     out: List[Finding] = []
     for f in findings:
         if (
-            f.check.var == "GALAXY_API_TOKEN"
+            f.check.var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
             and not f.present
-            and f.check.severity == Severity.CRITICAL
-            and not _api_token_missing_is_critical()
+            and f.check.severity == Severity.WARNING
+            and _other_llm_key_configured(f.check.var)
         ):
-            out.append(
-                Finding(
-                    check=replace(f.check, severity=Severity.WARNING),
-                    present=f.present,
-                    value_hint=f.value_hint,
-                )
-            )
+            out.append(replace(f, check=replace(f.check, severity=Severity.INFO)))
         else:
             out.append(f)
     return out
@@ -580,6 +686,7 @@ def run_preflight(
         findings.append(Finding(check=check, present=present, value_hint=hint))
 
     findings = _adjust_findings_for_token_policy(findings)
+    findings = _adjust_findings_for_llm_sources(findings)
     findings = _augment_findings_with_compat_ws_policy(findings, groups)
 
     report = PreflightReport(findings=findings, mode=mode)

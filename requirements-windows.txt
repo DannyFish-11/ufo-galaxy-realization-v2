@@ -39,3 +39,7 @@ edge-tts>=6.1.0
 # Sound
 # ============================================================================
 sounddevice>=0.4.0
+# 抓"系统正在放的声音"(AEC 回声消除的参考信号 + 让模型知道你在听什么)。
+# 官方 sounddevice 没有 WASAPI 回环(WasapiSettings 不认 loopback 参数),
+# 必须靠 PyAudioWPatch;没装时启动日志会如实说"AEC 没有参考信号"并给出这条命令。
+PyAudioWPatch>=0.2.12; sys_platform == 'win32'

@@ -187,6 +187,8 @@ class EnvReport:
             "node_installed": self.node_installed,
             "electron_deps_ok": self.electron_deps_ok,
             "ollama_installed": self.ollama_installed,
+            # 超时 ≠ 没装。依赖阶段据此决定是"再查一次"还是"给安装命令"。
+            "ollama_probe_timed_out": "ollama" in self.probes_timed_out,
             # launch_desktop 侧
             "python_ok": self.python_ok,
             "has_api_key": self.has_api_key,
@@ -246,13 +248,14 @@ class EnvReport:
                 missing_count=self.env_missing_count,
                 missing_sample=list(self.env_missing_sample),
             )
-        add(
-            "API Key",
-            Status.OK if self.has_api_key else Status.DEGRADED,
-            f"{self.api_keys_configured} 个" if self.has_api_key else "未配置",
-            None if self.has_api_key else "在面板里填，或编辑 .env",
-            count=self.api_keys_configured,
-        )
+        if self.has_api_key:
+            _key_status, _key_value, _key_hint = Status.OK, f"{self.api_keys_configured} 个", None
+        elif self.ollama_models:
+            # 没有云端密钥,但本机模型在 —— 智能体照样跑得起来,不是降级。
+            _key_status, _key_value, _key_hint = Status.OK, "未配置云端密钥 · 用本机模型", None
+        else:
+            _key_status, _key_value, _key_hint = Status.DEGRADED, "未配置", "在面板里填，或编辑 .env"
+        add("API Key", _key_status, _key_value, _key_hint, count=self.api_keys_configured)
         add(
             "npm",
             Status.OK if self.npm_installed else Status.FAILED,
@@ -286,7 +289,7 @@ class EnvReport:
         elif self.ollama_installed:
             ollama_status, ollama_value, hint = Status.DEGRADED, "已安装，未运行", "ollama serve"
         else:
-            ollama_status, ollama_value, hint = Status.DEGRADED, "未安装", "https://ollama.com/download"
+            ollama_status, ollama_value, hint = Status.DEGRADED, "未安装", ollama_install_hint()
         add(
             "Ollama",
             ollama_status,
@@ -389,6 +392,20 @@ def _probe_env_staleness(
     return len(expected), len(missing), missing[:6]
 
 
+def _llm_provider_key_names() -> frozenset:
+    """大模型厂商密钥的变量名全集(来自唯一权威 ``core.provider_registry``)。"""
+    try:
+        from core.provider_registry import PROVIDER_REGISTRY
+    except Exception:  # noqa: BLE001 — 取不到就退回按名字猜
+        return frozenset()
+    names = {"LLM_API_KEY"}
+    for p in PROVIDER_REGISTRY:
+        if p.get("env_key"):
+            names.add(str(p["env_key"]).upper())
+        names.update(str(a).upper() for a in (p.get("alt_env") or []))
+    return frozenset(names)
+
+
 def _probe_api_keys(env_file: Optional[Path] = None) -> int:
     """.env **与** runtime/secrets.env 合起来数，并过滤占位符。
 
@@ -405,13 +422,16 @@ def _probe_api_keys(env_file: Optional[Path] = None) -> int:
     except Exception:
         PLACEHOLDER_PREFIXES = ("your_", "example", "changeme", "<")  # type: ignore[assignment]
 
+    provider_keys = _llm_provider_key_names()
+
     def _accept(key: str, val: str) -> bool:
         val = (val or "").strip()
-        return (
-            bool(val)
-            and not val.lower().startswith(PLACEHOLDER_PREFIXES)
-            and any(t in key.upper() for t in _KEY_TOKENS)
-        )
+        k = key.strip().upper()
+        # 只数**大模型**的密钥。以前按名字里带 "KEY" 数,于是 .env.example 自带的
+        # MINIO_ACCESS_KEY=minioadmin、GALAXY_STOP_KEY=true 被当成"API Key 2 个",
+        # 而同一屏的配置检查却说一家大模型密钥都没有。
+        is_llm_key = k in provider_keys if provider_keys else any(t in k for t in _KEY_TOKENS)
+        return bool(val) and not val.lower().startswith(PLACEHOLDER_PREFIXES) and is_llm_key
 
     try:
         if env_path.exists():
@@ -542,6 +562,31 @@ def _probe_ollama_over_http() -> Optional[Tuple[bool, bool, List[str]]]:
         return None
     names = [m.get("name", "") for m in models if isinstance(m, dict) and m.get("name")]
     return True, True, names
+
+
+def ollama_install_hint(system: Optional[str] = None) -> str:
+    """按本机系统给**能照抄**的 Ollama 安装方式。
+
+    以前 Windows 上也打印 ``curl -fsSL https://ollama.com/install.sh | sh`` ——
+    PowerShell 里 ``curl`` 是 ``Invoke-WebRequest`` 的别名、也没有 ``sh``,照抄只会报错。
+    """
+    import platform  # noqa: PLC0415
+
+    name = (system or platform.system() or "").lower()
+    if name == "windows":
+        return "winget install Ollama.Ollama(或下载安装包 https://ollama.com/download/windows)"
+    if name == "darwin":
+        return "brew install ollama(或下载 https://ollama.com/download/mac)"
+    return "curl -fsSL https://ollama.com/install.sh | sh(或看 https://ollama.com/download)"
+
+
+def reprobe_ollama(on_event: Optional[Callable[[str, str, str], None]] = None) -> Tuple[bool, bool, List[str], bool]:
+    """再查一次 Ollama,仍然有墙钟上界。返回 ``(装了, 在跑, 模型, 这次查完了没有)``。
+
+    给依赖阶段用:Phase 0 那次超时多半是首启冷缓存,几十秒后再问通常秒回。
+    """
+    (installed, running, models), finished = _run_with_deadline("ollama", _probe_ollama, (False, False, []), on_event)
+    return installed, running, list(models), finished
 
 
 def _probe_ollama() -> Tuple[bool, bool, List[str]]:

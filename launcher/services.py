@@ -212,7 +212,7 @@ def _linux_has_systemd() -> bool:
 def _podman_engine_hint() -> str:
     """Podman 引擎起不来时该干什么 —— 按平台说。"""
     if sys.platform in ("win32", "darwin"):
-        return "Podman 虚机未就绪 — 试 `podman machine start` 后重跑"
+        return "虚机没起来,试 `podman machine start` 后重跑"
     # Linux 上 podman 是无守护的,压根没有 machine。info 都不通多半是
     # rootless 没配好(subuid/subgid)或存储驱动的问题。
     return "Podman 引擎未就绪 — Linux 上它无守护,`podman info` 都不通多半是 rootless 未配好(subuid/subgid)"
@@ -225,6 +225,27 @@ def _podman_api_hint() -> str:
     if _linux_has_systemd():
         return "试 `systemctl --user start podman.socket`(或系统级 `sudo systemctl start podman.socket`)后重跑"
     return "这台机器没有 systemd —— 直接跑 `podman system service --time=0 &` 后重跑(" + log_hint("podman") + ")"
+
+
+def infra_summary_hint(value: str, note: str = "") -> Optional[str]:
+    """总结卡"降级"行里基础设施那一项的修复建议 —— 按**实际处境**说。
+
+    以前固定一句"装 Docker/Podman 后重跑即恢复"。真机上 Podman 明明装好了、只是
+    虚机没起来,同一屏上面一行说"试 `podman machine start`",总结卡却叫人去装。
+    说不出具体动作时宁可不附建议,也不编一句。
+    """
+    value = value or ""
+    note = note or ""
+    if value.startswith("未安装"):
+        return "装 Docker 或 Podman 后重跑即恢复"
+    if "后重跑" in note:
+        return note
+    tail = value.rsplit(" — ", 1)[-1] if " — " in value else ""
+    if "后重跑" in tail:
+        return tail
+    if value.startswith("首次镜像下载中"):
+        return "镜像在后台下载,下次启动即生效"
+    return None
 
 
 def _try_start_podman_api(podman_path: str) -> None:
@@ -758,10 +779,18 @@ class UnifiedWebUI:
                 )
 
             @self.app.get("/api/services")
-            async def launcher_services(auth: dict = Depends(_require_auth)):  # 与 /api/status 同一份数据,原先这条不鉴权
+            async def launcher_services(
+                auth: dict = Depends(_require_auth),
+            ):  # 与 /api/status 同一份数据,原先这条不鉴权
                 return JSONResponse(self.service_manager.get_status())
 
             # === 步骤 7：启动 uvicorn ===
+            # 对外服务之前,鉴权必须就绪(鉴权开着就得有令牌)。正常启动时编排器 Phase 3
+            # 已经做过(要赶在桌面壳之前),这里是幂等的兜底 —— 绕开编排器直接起后端的
+            # 路径,以前会带着"鉴权开着、令牌一枚都没有"对外服务,所有受保护请求 401。
+            from core.auth import ensure_auth_config_validated
+
+            ensure_auth_config_validated()
             _uvi_config = uvicorn.Config(
                 self.app, host=self.config.host, port=self.config.web_ui_port, log_level="warning"
             )
@@ -1164,7 +1193,9 @@ class GalaxyUnified:
                 _hint = "试 `sudo systemctl start docker` 后重跑"
             else:
                 _hint = "这台机器没有 systemd —— 直接跑 `sudo dockerd &` 后重跑(日志 logs/dockerd.log)"
-            return ("warn", f"{rt_name} 未就绪 — {_hint}", "")
+            # 标签已经是"基础设施 · Podman",值里不再重复运行时名;"已安装"要说出来 ——
+            # 总结卡以前据此之外的一句"装 Docker/Podman"把装好了的人支去重装。
+            return ("warn", f"已安装,但没在运行 — {_hint}", "")
         if status == "no_compose":
             return ("warn", f"未找到 {runtime} compose 命令 — 跳过 " f"(装 {runtime}-compose 或启用 compose 插件)", "")
         # 起不来时先分清是什么起不来。"启动异常 (rc=1)" 这句话底下至少有三种事
@@ -2071,7 +2102,7 @@ class GalaxyUnified:
             d_value,
             d_status,
             details=d_details,
-            hint="装 Docker/Podman 后重跑即恢复" if d_status != "ok" else None,
+            hint=infra_summary_hint(d_value, d_note) if d_status != "ok" else None,
         )
 
         # ── 消息总线 ──

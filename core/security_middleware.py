@@ -499,11 +499,27 @@ def create_ip_block_middleware(app, block_list: Optional[IPBlockList] = None):
     if block_list is None:
         block_list = IPBlockList()
 
+    import os
+
+    # 与 create_rate_limit_middleware() / create_input_validation_middleware() 同一套判断,
+    # 那两个早就豁免了本机回环,唯独这里漏了。真机实证(全新克隆第一次启动):桌面壳
+    # 连续感知每两秒往 /api/perception/desktop/* 发帧,碰上鉴权开着而令牌没签出来
+    # (另一个 bug,见 system_orchestrator._ensure_auth_ready),一分钟 50 次 401 ——
+    # 于是把 127.0.0.1 **自己**封了 300 秒,面板与后端之间的所有请求一律 403,到期
+    # 解封又立刻再封。本机单用户桌面应用里"本机爆破本机"不是一个威胁模型,封本机
+    # 只会让应用自己瘫掉。GALAXY_IP_BLOCK_LOOPBACK=1 可强制对回环地址也封(测试用)。
+    #
+    # 注意:若网关挂在同机反向代理后面,所有远端请求看起来都来自 127.0.0.1 —— 这时
+    # 按 IP 封禁本来就不成立(会一人犯错全员被封),应在代理层做限流/封禁。
+    _block_loopback = os.environ.get("GALAXY_IP_BLOCK_LOOPBACK", "0").strip().lower() in ("1", "true", "yes", "on")
+    _LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
     class IPBlockMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next) -> Response:
             client_ip = request.client.host if request.client else "unknown"
+            exempt = not _block_loopback and client_ip in _LOOPBACK
 
-            if block_list.is_blocked(client_ip):
+            if not exempt and block_list.is_blocked(client_ip):
                 logger.warning(f"[安全] 已拦截被封禁 IP: {client_ip}")
                 return JSONResponse(
                     status_code=403,
@@ -512,8 +528,9 @@ def create_ip_block_middleware(app, block_list: Optional[IPBlockList] = None):
 
             response = await call_next(request)
 
-            # 记录失败请求
-            if response.status_code >= 400:
+            # 只有 4xx 算"客户端做错了事"。5xx 是**服务器自己**出了问题(模型没就绪、
+            # 下游挂了),把它记到客户端头上,等于服务端一出故障就把来访者封掉。
+            if not exempt and 400 <= response.status_code < 500:
                 block_list.record_failure(client_ip)
 
             return response
