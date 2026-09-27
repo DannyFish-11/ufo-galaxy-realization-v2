@@ -1,59 +1,23 @@
-// ACL Policy — Galaxy Tailnet
-// Open policy: all devices can communicate with each other
-// Production: restrict by tags for security
+// Galaxy tailnet 的访问规则(可选)。
+//
+// 默认 config.yaml 里没启用它:不配规则 = tailnet 里的设备可以互相访问。
+// 这里全是你自己的设备,这正是想要的。
+//
+// 什么时候需要:比如想让手表只能访问网关的 9000 端口、别的什么都碰不到。
+// 启用:把 config.yaml 末尾的 policy 两行取消注释,然后 docker compose restart。
+// 用户名的写法是 "<用户>@"(headscale 0.26 起的格式),与 init.sh 建的 galaxy 用户对应。
 {
-  // Host definitions (static IPs)
-  "hosts": {
-    "gateway": "100.64.0.1/32",
-    "watch-001": "100.64.0.10/32",
-    "android-001": "100.64.0.20/32"
-  },
-
-  // Tag definitions
   "tagOwners": {
-    "tag:gateway": ["galaxy-admin"],
-    "tag:watch": ["galaxy-admin"],
-    "tag:phone": ["galaxy-admin"],
-    "tag:desktop": ["galaxy-admin"]
+    "tag:gateway": ["galaxy@"],
+    "tag:watch": ["galaxy@"],
   },
 
-  // Access control: allow all tailnet devices to communicate
   "acls": [
-    {
-      "action": "accept",
-      "src": ["*"],
-      "dst": ["*:*"]
-    }
+    // 默认:互通。要收紧时删掉这一条,改用下面注释里的那几条。
+    { "action": "accept", "src": ["*"], "dst": ["*:*"] },
+
+    // 收紧示例:同一用户的设备互通,但带 tag:watch 的只能访问网关的 9000 端口。
+    // { "action": "accept", "src": ["galaxy@"], "dst": ["galaxy@:*"] },
+    // { "action": "accept", "src": ["tag:watch"], "dst": ["tag:gateway:9000"] },
   ],
-
-  // SSH policy (Tailscale SSH)
-  "ssh": [
-    {
-      "action": "accept",
-      "src": ["tag:desktop"],
-      "dst": ["tag:gateway"],
-      "users": ["galaxy"]
-    }
-  ]
-
-  // ── PR-PEER-RELAY: 对等中继限流（默认注释，避免旧版 Headscale 不识别 relays 键而拒整份 ACL）──
-  // 当你的控制端（官方 Tailscale，或较新支持 Peer Relay 的 Headscale）就绪后，取消下面注释并把
-  // 上一行 "ssh": [...] 后补一个逗号即可启用：只许你自己的手表/手机借道网关中继，防别人占带宽。
-  //
-  // "relays": [
-  //   {
-  //     "relay": "gateway",
-  //     "accept": ["tag:watch", "tag:phone", "tag:desktop"]
-  //   }
-  // ]
-
-  // ── 远程桌面(VNC)兜底接管：只许白名单设备访问网关的 5900 端口 ──
-  // 上面 "acls" 是开放策略(* → *);若要收紧成"只有我的手机/桌面能 VNC 进网关",把下面
-  // 这条加进 "acls" 数组(并确保数组各项间有逗号)。这样兜底接管口被 ACL 锁死、绝不外泄。
-  //
-  // {
-  //   "action": "accept",
-  //   "src": ["tag:phone", "tag:desktop"],
-  //   "dst": ["tag:gateway:5900"]
-  // }
 }

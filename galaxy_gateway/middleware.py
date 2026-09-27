@@ -52,15 +52,19 @@ _AUTH_EXEMPT: dict = {
     "/api/v1/health": {"GET", "HEAD"},
     # 面板角标读端点：只豁免 GET。同路径的 POST（写配置）必须过鉴权。
     "/api/v1/config": {"GET", "HEAD"},
-    # 配对接纳：**必须**豁免，否则死锁 —— 一台还没配对的设备手里没有任何令牌，
-    # 要求它先带令牌才能来换令牌，就永远进不来。凭证是那个一次性短码/链接本身
-    # （短码 10 分钟、用后即焚；链接带 HMAC 签名），不是 API 令牌。
+    # 配对接纳 / 令牌换新:自带凭证的端点,定义在 core.auth.SELF_AUTHENTICATING_ENDPOINTS
+    # (中间件与 require_auth 依赖读同一份,见那里的说明),下面合并进来。
     #
     # 只豁免 claim，**不豁免 /api/v1/pair/card**：card 是"出示本机名片"，每调一次
     # 就签发一个新短码。把它也公开，等于任何人都能自助领一张进门票——那时豁免
     # claim 就真的成了敞门。card 属于桌面主人的操作，走正常鉴权。
-    "/api/v1/pair/claim": {"POST"},
 }
+try:
+    from core.auth import SELF_AUTHENTICATING_ENDPOINTS as _SELF_AUTH
+
+    _AUTH_EXEMPT.update({p: set(m) for p, m in _SELF_AUTH.items()})
+except Exception as _self_auth_exc:  # noqa: BLE001 — 取不到就少豁免,宁可配不上也不多放
+    logger.warning("自带凭证端点表不可用,配对端点将要求 API 令牌: %s", _self_auth_exc)
 
 # 仅在非生产模式豁免；GALAXY_MODE=production 下一律要鉴权。
 _AUTH_EXEMPT_NON_PRODUCTION: dict = {

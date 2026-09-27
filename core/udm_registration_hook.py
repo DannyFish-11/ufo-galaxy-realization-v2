@@ -162,9 +162,11 @@ class UDMRegistrationHook:
         t0 = time.perf_counter()
 
         # Extract fields from UnifiedDevice (duck-typed)
-        device_type = self._extract(device, "device_type")
-        transport = self._extract(device, "transport")
-        capabilities = self._extract_list(device, "capabilities")
+        # 映射表按 AIP 细分类型建表;UDM 的 device_type 只是粗类(android/iot),拿它去查
+        # 一台都查不到。细分类型优先,能力用归一后的能力类(原始动作名另附,兼容旧表)。
+        device_type = self._extract(device, "aip_device_type") or self._extract(device, "device_type")
+        transport = self._extract(device, "transport") or None
+        capabilities = self._extract_list(device, "capability_classes") + self._extract_list(device, "capabilities")
         device_id = self._extract(device, "device_id")
 
         logger.info(
@@ -175,6 +177,13 @@ class UDMRegistrationHook:
             capabilities,
             source,
         )
+
+        # 自己讲 AIP 的设备(开着本系统 App 的手机手表、edge worker)不需要驱动节点。
+        from core.device_onboarding.taxonomy import is_native_transport
+
+        if is_native_transport(transport):
+            logger.info("[UDMHook] device_id=%s native AIP over %s — 无需驱动节点", device_id, transport)
+            return {"device_id": device_id, "native": True, "transport": transport, "resolved_node": None}
 
         # Resolve to Node
         resolver = get_resolver()

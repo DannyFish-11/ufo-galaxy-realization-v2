@@ -74,6 +74,7 @@ _READ_ACTION_PATTERNS: List[str] = [
     "screen_size",
     "get",
     "list",
+    "states",  # 读 Home Assistant 实体状态(Node_27)
 ]
 
 

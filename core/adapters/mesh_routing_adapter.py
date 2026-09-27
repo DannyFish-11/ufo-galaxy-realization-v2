@@ -21,7 +21,7 @@ Android 端阶段 1 的直连传输说的也是这套协议。
 
 边界（评估结论，不越线）
 ========================
-* 节点注册表视图 = **UDM**（peers 来自 lan_discovery 镜像进 UDM 的 mDNS 记录）；
+* 节点注册表视图 = **UCM 的 lan 通道**（peers 来自 lan_discovery 报进 UCM 的 mDNS 连接信息）；
   node_communication 自带的 NodeRegistry/LoadBalancer 与 UDM 冲突，**永不启用**。
 * 无派发权力：mesh 只是传输，不做任务分配（单权威架构不变）。
 * 无 peers 时 ``is_available`` 恒 False —— 单节点部署下本适配器天然沉默。
@@ -89,27 +89,26 @@ class MeshRoutingAdapter(TransportAdapter):
         self._neighbors[node_id] = (host, port)
 
     def refresh_neighbors_from_discovery(self) -> int:
-        """与 UDM 里 lan_discovery 镜像的 ``_galaxy._tcp`` peers 同步邻接。
+        """与 UCM ``lan`` 通道里 lan_discovery 报上来的 ``_galaxy*`` peers 同步邻接。
 
         新 peer 上线 → 加入；发现来源的 peer 下线/消失 → 移除（显式注入的邻接
         不动）；地址变了 → 更新。全程防御：UDM 不可用时保持现状。返回本次新增数。
         """
         added = 0
         try:
-            from core.unified.device_manager import get_unified_device_manager
+            from core.unified.connection_manager import get_unified_connection_manager
 
-            # get_online_devices(不存在 get_all_devices —— 第一版就错在这里,
-            # AttributeError 被防御 except 吞掉,发现型邻接静默空转;真实跑通才暴露)。
-            # 在线集合同时天然完成离线过滤:下线的 peer 不在返回集里 → 被清理。
+            # 直连邻接是**连接**信息,归 UCM:lan_discovery 把每个 mDNS 服务的地址/端口
+            # 报进 UCM 的 ``lan`` 通道(以前是写进 UDM,于是附近的投屏盒子也成了"设备")。
+            # 只返回在线条目,下线的 peer 天然不在集合里 → 被清理。
             current: Dict[str, Tuple[str, int]] = {}
-            for dev in get_unified_device_manager().get_online_devices():
-                meta = getattr(dev, "metadata", None) or {}
-                if meta.get("protocol") != "mdns" or "_galaxy" not in str(meta.get("service_type", "")):
+            for did, rec in get_unified_connection_manager().channel_entries("lan").items():
+                detail = rec.get("detail") or {}
+                if "_galaxy" not in str(detail.get("service_type", "")):
                     continue
-                host = getattr(dev, "ip_address", None)
-                port = getattr(dev, "port", None)
+                host, port = detail.get("host"), detail.get("port")
                 if host and port:
-                    current[dev.device_id] = (str(host), int(port))
+                    current[did] = (str(host), int(port))
             for nid, hp in current.items():
                 if nid not in self._neighbors:
                     self.add_neighbor(nid, *hp)

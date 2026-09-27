@@ -45,7 +45,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 #: 钥匙的默认有效期。配对完手表马上就用,不需要更久。
 DEFAULT_KEY_TTL_S = 600.0
@@ -63,6 +63,9 @@ class JoinGrant:
     control_url: str
     auth_key: str
     expires_at: float
+    #: headscale 里这把钥匙的 id。**不交给设备** —— 网关自己留着,用来把之后出现的
+    #: 那个节点认回到这台设备(见 core/tailnet_membership.py)。
+    key_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {"control_url": self.control_url, "auth_key": self.auth_key, "expires_at": self.expires_at}
@@ -123,44 +126,15 @@ def _pick(d: Dict[str, Any], *names: str) -> Any:
     return None
 
 
-def issue_join_key(ttl_s: float = DEFAULT_KEY_TTL_S, *, http_json: Optional[HttpJson] = None) -> JoinGrant:
-    """向 headscale 要一把一次性、短命的预授权密钥。
-
-    失败一律抛 :class:`JoinUnavailable`,带上可行动的修法。
-    """
+def _request(method: str, path: str, body: Optional[Dict[str, Any]], call: HttpJson) -> Dict[str, Any]:
+    """对 headscale 发一次请求;所有失败都翻译成带修法的 :class:`JoinUnavailable`。"""
     status = join_status()
     if not status["configured"]:
         raise JoinUnavailable(status["reason"], status["how_to_fix"])
     s = _settings()
-    call = http_json or _default_http_json
     headers = {"Authorization": f"Bearer {s['api_key']}", "Content-Type": "application/json"}
-
     try:
-        users = call("GET", f"{s['url']}/api/v1/user?{urllib.parse.urlencode({'name': s['user']})}", headers, None)
-        match = [u for u in (_pick(users, "users") or []) if str(u.get("name")) == s["user"]]
-        if not match:
-            raise JoinUnavailable(
-                "no_such_user",
-                f"headscale 上没有用户 {s['user']!r}:执行 `headscale users create {s['user']}`,"
-                "或把 GALAXY_HEADSCALE_USER 改成已有的用户",
-            )
-        # 新版 headscale 按数字 id 指定用户;JSON 里 uint64 以字符串形式出现。
-        user_id = str(match[0].get("id", ""))
-
-        expiration = datetime.fromtimestamp(time.time() + ttl_s, tz=timezone.utc)
-        created = call(
-            "POST",
-            f"{s['url']}/api/v1/preauthkey",
-            headers,
-            {
-                "user": user_id,
-                "reusable": False,
-                "ephemeral": False,
-                "expiration": expiration.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            },
-        )
-    except JoinUnavailable:
-        raise
+        return call(method, f"{s['url']}{path}", headers, body)
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
             raise JoinUnavailable(
@@ -176,8 +150,107 @@ def issue_join_key(ttl_s: float = DEFAULT_KEY_TTL_S, *, http_json: Optional[Http
     except (ValueError, TypeError) as exc:
         raise JoinUnavailable("bad_response", "headscale 的返回看不懂,可能版本不兼容") from exc
 
+
+def issue_join_key(
+    ttl_s: float = DEFAULT_KEY_TTL_S,
+    *,
+    reusable: bool = False,
+    http_json: Optional[HttpJson] = None,
+) -> JoinGrant:
+    """向 headscale 要一把一次性、短命的预授权密钥。
+
+    失败一律抛 :class:`JoinUnavailable`,带上可行动的修法。
+    """
+    s = _settings()
+    call = http_json or _default_http_json
+    users = _request("GET", f"/api/v1/user?{urllib.parse.urlencode({'name': s['user']})}", None, call)
+    match = [u for u in (_pick(users, "users") or []) if str(u.get("name")) == s["user"]]
+    if not match:
+        raise JoinUnavailable(
+            "no_such_user",
+            f"headscale 上没有用户 {s['user']!r}:执行 `headscale users create {s['user']}`,"
+            "或把 GALAXY_HEADSCALE_USER 改成已有的用户",
+        )
+    expiration = datetime.fromtimestamp(time.time() + ttl_s, tz=timezone.utc)
+    body = {
+        # headscale 0.26 起按用户数字 id 指定(JSON 里 uint64 以字符串出现);
+        # 更早的版本按用户名。先按 id,被拒再按名字 —— 两代部署都能用。
+        "user": str(match[0].get("id", "")),
+        "reusable": bool(reusable),
+        "ephemeral": False,
+        "expiration": expiration.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    try:
+        created = _request("POST", "/api/v1/preauthkey", body, call)
+    except JoinUnavailable as exc:
+        if exc.reason != "headscale_error":
+            raise
+        created = _request("POST", "/api/v1/preauthkey", dict(body, user=s["user"]), call)
+
     key_obj = _pick(created, "preAuthKey", "pre_auth_key") or {}
     key = str(key_obj.get("key", "")).strip()
     if not key:
         raise JoinUnavailable("bad_response", "headscale 回了成功却没有给出密钥,可能版本不兼容")
-    return JoinGrant(control_url=s["url"], auth_key=key, expires_at=expiration.timestamp())
+    return JoinGrant(
+        control_url=s["url"],
+        auth_key=key,
+        expires_at=expiration.timestamp(),
+        key_id=str(key_obj.get("id", "")),
+    )
+
+
+@dataclass(frozen=True)
+class TailnetNode:
+    """headscale 里的一台机器(tailnet 的一个成员)。"""
+
+    node_id: str
+    name: str
+    ips: Tuple[str, ...]
+    online: bool
+    last_seen: str
+    #: 它是凭哪一把预授权密钥加入的 —— 配对时记下的 key_id 靠它认回设备。
+    pre_auth_key_id: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "node_id": self.node_id,
+            "name": self.name,
+            "ips": list(self.ips),
+            "online": self.online,
+            "last_seen": self.last_seen,
+        }
+
+
+def _timestamp_text(v: Any) -> str:
+    if isinstance(v, dict):  # {"seconds": ...}(部分版本的形状)
+        try:
+            return datetime.fromtimestamp(int(v.get("seconds", 0)), tz=timezone.utc).isoformat()
+        except (TypeError, ValueError):
+            return ""
+    return str(v or "")
+
+
+def list_nodes(*, http_json: Optional[HttpJson] = None) -> List[TailnetNode]:
+    """headscale 上现有的全部节点。"""
+    data = _request("GET", "/api/v1/node", None, http_json or _default_http_json)
+    out: List[TailnetNode] = []
+    for n in _pick(data, "nodes") or []:
+        pak = _pick(n, "preAuthKey", "pre_auth_key") or {}
+        out.append(
+            TailnetNode(
+                node_id=str(n.get("id", "")),
+                name=str(_pick(n, "givenName", "given_name") or n.get("name") or ""),
+                ips=tuple(str(ip) for ip in (_pick(n, "ipAddresses", "ip_addresses") or [])),
+                online=bool(n.get("online", False)),
+                last_seen=_timestamp_text(_pick(n, "lastSeen", "last_seen")),
+                pre_auth_key_id=str(pak.get("id", "") if isinstance(pak, dict) else ""),
+            )
+        )
+    return out
+
+
+def delete_node(node_id: str, *, http_json: Optional[HttpJson] = None) -> None:
+    """把一台机器踢出 tailnet —— 它的节点身份作废,之后再也连不进来。"""
+    if not str(node_id).isdigit():
+        raise JoinUnavailable("bad_node_id", "节点 id 应当是数字")
+    _request("DELETE", f"/api/v1/node/{node_id}", None, http_json or _default_http_json)

@@ -707,6 +707,12 @@ def _build_participant_identity(
     )
 
 
+def _str_attr(obj: Any, name: str) -> str:
+    """只认真正的字符串 —— 适配器对任意形状的对象都要能降级,不能把 mock/None 当值。"""
+    val = getattr(obj, name, "")
+    return val if isinstance(val, str) else ""
+
+
 def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
     """Build a :class:`RegisteredRuntimeDevice` from a
     :class:`~core.unified.models.UnifiedDevice` (UDM SSOT).
@@ -736,6 +742,10 @@ def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
         # Platform from device_type
         raw_type = str(getattr(device, "device_type", "") or "")
         platform = RuntimeDevicePlatform.from_string(raw_type)
+        # 细分类型与形态:UDM 登记入口统一补齐(core/device_onboarding/taxonomy.py)。
+        # 以前这里只有被截断成粗类的 device_type,细分类型字段名不副实。
+        fine_type = _str_attr(device, "aip_device_type") or raw_type
+        form_factor = RuntimeDeviceFormFactor.from_string(_str_attr(device, "form_factor"))
 
         # Capabilities — UDM stores them as List[str]
         raw_caps: List[str] = list(getattr(device, "capabilities", []) or [])
@@ -750,8 +760,15 @@ def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
                 pass
 
         meta: Dict[str, Any] = dict(getattr(device, "metadata", {}) or {})
+        _bridge = _str_attr(device, "bridge_id")
+        _raw_classes = getattr(device, "capability_classes", None)
+        _classes = [str(c) for c in _raw_classes] if isinstance(_raw_classes, (list, tuple)) else []
+        if _classes:
+            meta.setdefault("capability_classes", _classes)
 
-        participant_identity = _build_participant_identity(metadata=meta)
+        participant_identity = _build_participant_identity(
+            direct={"bridge_id": _bridge} if _bridge else None, metadata=meta
+        )
         _meta_posture = (
             str(meta.get("source_runtime_posture", "control_only"))
             if isinstance(meta, dict) else "control_only"
@@ -761,7 +778,10 @@ def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
             if isinstance(meta, dict) else False
         )
         execution_model = _resolve_execution_model(
-            explicit_model=meta.get("device_execution_model") if isinstance(meta, dict) else None,
+            explicit_model=(
+                _str_attr(device, "execution_model")
+                or (meta.get("device_execution_model") if isinstance(meta, dict) else None)
+            ),
             source_runtime_posture=_meta_posture,
             is_runtime_host=_meta_runtime_host,
             runtime_enabled=online,
@@ -772,7 +792,8 @@ def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
             device_id=device_id,
             device_name=str(getattr(device, "device_name", "") or ""),
             platform=platform,
-            device_type=raw_type,
+            form_factor=form_factor,
+            device_type=fine_type,
             device_execution_model=execution_model,
             status=status,
             online=online,

@@ -269,13 +269,14 @@ class DeviceNodeResolver:
         return None
 
     def _resolve_by_capabilities(self, capabilities: List[str]) -> Optional[ResolvedMapping]:
-        cap_set = set(capabilities)
+        # 大小写不敏感:设备报 gui_read,映射表写 GUI_READ,本是同一个能力类。
+        cap_set = {str(c).upper() for c in capabilities}
         for m in self._mappings:
             match = m.get("match", {})
             # Only use capability matches that have NO device_type or transport
             if match.get("device_type") or match.get("transport"):
                 continue
-            required_caps = set(match.get("capabilities", []))
+            required_caps = {str(c).upper() for c in match.get("capabilities", [])}
             if required_caps and required_caps.issubset(cap_set):
                 return self._build_result(m, "capabilities", ",".join(sorted(required_caps)))
         return None

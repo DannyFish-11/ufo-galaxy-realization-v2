@@ -156,7 +156,12 @@ class AndroidDevice:
         distinguish real evidence from the unverified absent state.
         """
         raw_caps = data.get("capabilities")
-        if raw_caps is not None:
+        if isinstance(raw_caps, (list, tuple, set, dict)):
+            # 能力位是整数位图;报成名字列表的客户端(旧版 Windows 客户端就是)按「没报位图」
+            # 处理 —— 名字清单走 supported_actions。此前 int(list) 直接把注册打断。
+            caps = DeviceCapability.NONE
+            caps_reported = False
+        elif raw_caps is not None:
             caps = int(raw_caps)
             caps_reported = True
         else:

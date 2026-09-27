@@ -4,6 +4,7 @@
 ----
   GET    /api/v1/pair/card              本机名片(链接 + 短码,可扫码或口述)
   POST   /api/v1/pair/claim             凭链接或短码接纳一台对端,并签发能力令牌
+  POST   /api/v1/pair/renew             凭还有效的配对令牌换一枚新的(常驻设备用)
   GET    /api/v1/pair/peers             已登记对端列表
   GET    /api/v1/pair/peers/{device_id} 单个对端档案
   POST   /api/v1/pair/trust             调整对端信任级别 / 自动放行模式
@@ -55,11 +56,17 @@ def _scopes_for_trust(trust: str) -> List[str]:
 #: 用户态 tailnet 进程,它第一次加入要这把钥匙。手机装得了 Tailscale 官方 App,
 #: 自己登录即可 —— 给它发钥匙等于多发一份没人用、却能进 tailnet 的凭证。
 _EMBEDDED_TAILNET_DEVICE_TYPES = frozenset({"wearos"})
+#: 电脑:配对时同样给一把进网钥匙,由客户端自己用系统里的 tailscale 加入 —— 笔记本
+#: 带出门后还能连回来,不用人另外去签钥匙、抄命令。
+_COMPUTER_TAILNET_DEVICE_TYPES = frozenset(
+    {"windows_laptop", "windows_desktop", "macos_laptop", "macos_desktop", "linux_desktop", "linux_laptop"}
+)
+_TAILNET_AT_PAIRING_DEVICE_TYPES = _EMBEDDED_TAILNET_DEVICE_TYPES | _COMPUTER_TAILNET_DEVICE_TYPES
 
 
-async def _tailnet_join_for(device_type: str) -> Dict[str, object]:
+async def _tailnet_join_for(device_type: str, device_id: str = "") -> Dict[str, object]:
     """配对响应里关于"进 tailnet"的那两个字段。签不出来不影响配对本身。"""
-    if str(device_type).lower() not in _EMBEDDED_TAILNET_DEVICE_TYPES:
+    if str(device_type).lower() not in _TAILNET_AT_PAIRING_DEVICE_TYPES:
         return {}
     from core.headscale_join import JoinUnavailable, issue_join_key
 
@@ -68,8 +75,16 @@ async def _tailnet_join_for(device_type: str) -> Dict[str, object]:
     except JoinUnavailable as exc:
         # 明确写出为什么没有、怎么修 —— 静默少一个字段会表现成"出门连不上",
         # 而没人知道原因在这里。
-        logger.warning("配对成功,但没能给手表签发 tailnet 钥匙:%s", exc.reason)
+        logger.warning("配对成功,但没能给 %s 签发 tailnet 钥匙:%s", device_type, exc.reason)
         return {"tailnet_join": None, "tailnet_join_unavailable": exc.to_dict()}
+    # 记下"给这台设备签了哪把钥匙" —— 之后设备列表凭它把 headscale 里的节点认回来,
+    # 移除设备时也凭它把节点踢出 tailnet。
+    try:
+        from core.tailnet_membership import record_grant
+
+        record_grant(device_id, grant)
+    except Exception as exc:  # noqa: BLE001 — 记不下来不影响配对本身
+        logger.warning("tailnet 钥匙记录写入失败:%s", exc)
     return {"tailnet_join": grant.to_dict()}
 
 
@@ -120,11 +135,23 @@ class ClaimRequest(BaseModel):
     token_ttl_s: float = 24 * 3600.0
 
 
+class RenewRequest(BaseModel):
+    device_id: str
+    #: 手里这枚还没过期的配对令牌
+    token: str
+    token_ttl_s: float = 24 * 3600.0
+
+
 class TrustRequest(BaseModel):
     device_id: str
     trust: Optional[str] = None
     auto_accept: Optional[List[str]] = None
     note: Optional[str] = None
+
+
+class JoinKeyRequest(BaseModel):
+    #: 要加入的是什么设备:linux / macos / windows / android / ios —— 决定给命令还是给 App 里的步骤
+    device_kind: str = "linux"
 
 
 class CheckRequest(BaseModel):
@@ -254,7 +281,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     logger.warning("配对成功但能力令牌签发失败:device_id=%s: %s", subject, exc)
 
             # 手表出门直连要靠这把钥匙。被拒(blocked,无作用域)的设备不给。
-            tailnet_fields = await _tailnet_join_for(req.device_type) if scopes else {}
+            tailnet_fields = await _tailnet_join_for(req.device_type, subject) if scopes else {}
+
+            try:
+                from core.device_onboarding.conversation import note_paired
+
+                await note_paired(subject, req.name or subject, str(req.device_type).lower())
+            except Exception as exc:  # noqa: BLE001 — 播报失败不影响配对
+                logger.debug("配对播报失败: %s", exc)
 
             logger.info(
                 "配对成功:device_id=%s type=%s trust=%s scopes=%s(邀请来自 %s)",
@@ -283,6 +317,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         except Exception as exc:  # noqa: BLE001
             return _server_error("pair_claim", exc)
+
+    @router.post("/api/v1/pair/renew")
+    async def renew_token(req: RenewRequest):
+        """凭一枚**还有效**的配对令牌换一枚新的。
+
+        常驻设备(笔记本)不能每 24 小时重新配一次对。换发条件三条都要满足:
+        旧令牌签名对、没过期、没撤销;它签给的就是请求里的 device_id;这台设备
+        还在对端名册里(被移除/拉黑的换不到)。新令牌的作用域按**当前**信任级别算,
+        旧令牌随即撤销 —— 同一时刻只有一枚在用。
+
+        和 claim 一样对鉴权豁免:设备手里只有配对令牌,没有 API 令牌。
+        """
+        try:
+            from core.capability_token import issue_token, revoke, verify_token
+            from core.peer_trust import get_peer_trust_book
+
+            device_id = req.device_id.strip()
+            verdict = verify_token(req.token)
+            if not verdict.valid or not device_id or verdict.subject != device_id:
+                return JSONResponse(
+                    {"success": False, "error": "令牌无效、已过期或不属于这台设备,请重新配对"},
+                    status_code=401,
+                )
+            rec = get_peer_trust_book().get(device_id)
+            scopes = _scopes_for_trust(rec.trust) if rec is not None else []
+            if not scopes:
+                return JSONResponse({"success": False, "error": "这台设备已被移除或拉黑"}, status_code=403)
+            token = issue_token(device_id, scopes, ttl_s=req.token_ttl_s)
+            if verdict.jti:
+                revoke(verdict.jti)
+            return JSONResponse({"success": True, "capability_token": token, "token_scopes": scopes})
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("pair_renew", exc)
 
     @router.get("/api/v1/pair/paths")
     async def get_path_status():
@@ -433,9 +500,72 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             from core.peer_trust import get_peer_trust_book
 
             removed = get_peer_trust_book().remove(device_id)
-            return JSONResponse({"success": True, "removed": removed, "device_id": device_id})
+            # 移除设备 = 收回它的网络:不删 headscale 里的节点,丢了的手表仍是你
+            # tailnet 的正式成员 —— 配对令牌作废了,网却还通着。
+            from core.tailnet_membership import forget_device
+
+            tailnet = await asyncio.to_thread(forget_device, device_id)
+            return JSONResponse({"success": True, "removed": removed, "device_id": device_id, **tailnet})
         except Exception as exc:  # noqa: BLE001
             return _server_error("pair_remove_peer", exc)
+
+    @router.get("/api/v1/tailnet/status")
+    async def tailnet_status():
+        """自建 tailnet 的总览:配没配、这台电脑在不在里面、有几台机器。"""
+        try:
+            from core.headscale_join import JoinUnavailable, join_status, list_nodes
+            from core.tailnet_self_join import autojoin_enabled, current_state
+
+            st = join_status()
+            out: Dict[str, object] = {"success": True, **{k: v for k, v in st.items() if k != "user"}}
+            out["autojoin"] = autojoin_enabled()
+            out["this_computer"] = await asyncio.to_thread(current_state)
+            if st["configured"]:
+                try:
+                    nodes = await asyncio.to_thread(list_nodes)
+                    out["nodes"] = [n.to_dict() for n in nodes]
+                except JoinUnavailable as exc:
+                    out["nodes"] = []
+                    out["headscale_error"] = exc.to_dict()
+            return JSONResponse(out)
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("tailnet_status", exc)
+
+    @router.post("/api/v1/tailnet/join-this-computer")
+    async def tailnet_join_this_computer():
+        """让这台电脑加入自建 tailnet(启动时也会自动做一次)。"""
+        try:
+            from core.tailnet_self_join import ensure_joined
+
+            result = await asyncio.to_thread(ensure_joined)
+            return JSONResponse({"success": result["state"] == "joined", **result})
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("tailnet_join_this_computer", exc)
+
+    @router.post("/api/v1/tailnet/join-key")
+    async def tailnet_join_key(req: JoinKeyRequest):
+        """给另一台设备(手机 / 笔记本)签一把一次性加入钥匙,附上怎么用。
+
+        手表不走这里 —— 手表配对时自动拿钥匙。这是给装了 Tailscale 官方客户端的设备用的。
+        """
+        try:
+            from core.headscale_join import JoinUnavailable, issue_join_key
+            from core.tailnet_self_join import join_command_for
+
+            try:
+                grant = await asyncio.to_thread(issue_join_key)
+            except JoinUnavailable as exc:
+                return JSONResponse({"success": False, **exc.to_dict()}, status_code=409)
+            return JSONResponse(
+                {
+                    "success": True,
+                    "expires_at": grant.expires_at,
+                    "single_use": True,
+                    **join_command_for(req.device_kind.lower(), grant),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("tailnet_join_key", exc)
 
     @router.post("/api/v1/pair/check")
     async def check_intent(req: CheckRequest):

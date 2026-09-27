@@ -279,57 +279,77 @@ async def build_panel_feed() -> dict:
         feed["smart_devices"] = []
 
     # 节点/设备拓扑（真实设备列表 + 边）
+    #
+    # 来源是设备接入平面的总览:身份来自 UDM、在线来自 UCM(含 WS 之外的通道)。
+    # 以前读的是兼容缓存 registered_devices —— 只有 REST 注册会写它,经 WS 连上的
+    # 手机手表从没出现在面板上。被接入设备(HA 的灯、插座……)可能有几百个,不进
+    # 花名册的小方块,只报数量(feed["bridged_devices"])。
     try:
         import time as _time
 
+        from core.device_onboarding.service import get_onboarding_service
         from core.routes._shared import registered_devices
 
-        devs = dict(registered_devices)
+        overview = get_onboarding_service().overview()
         topo_nodes = []
         topo_edges = []
         healthy_cnt = 0
-        for did, d in devs.items():
+        rows = [v for g in ("subjects", "members", "observers") for v in overview["groups"][g]]
+        seen = {v["device_id"] for v in rows}
+        # 兼容:只经 REST 注册、不在 UDM 里的旧条目仍然显示
+        for did, d in dict(registered_devices).items():
+            if did in seen:
+                continue
             d = d or {}
-            status_raw = str(d.get("status", "online")).lower()
-            status = (
-                "online"
-                if status_raw in ("online", "healthy", "connected")
-                else "degraded" if status_raw in ("degraded", "slow") else "offline"
+            rows.append(
+                {
+                    "device_id": did,
+                    "name": d.get("name") or d.get("label") or did[:12],
+                    "online": str(d.get("status", "")).lower() in ("online", "healthy", "connected"),
+                    "form_factor": str(d.get("type", "")),
+                    "last_seen": 0.0,
+                    "role": "",
+                }
             )
+        for v in rows:
+            status = "online" if v["online"] else "offline"
             if status == "online":
                 healthy_cnt += 1
-            role_raw = str(d.get("role", d.get("type", "participant"))).lower()
+            ff = str(v.get("form_factor") or "")
             role = (
-                "controller"
-                if "controller" in role_raw or "desktop" in role_raw
-                else (
-                    "gateway"
-                    if "gateway" in role_raw
-                    else "wearable" if "wear" in role_raw or "watch" in role_raw else "participant"
-                )
+                "wearable"
+                if ff == "watch"
+                else "controller" if ff in ("desktop", "laptop", "server") else "participant"
             )
             topo_nodes.append(
                 {
-                    "id": did,
-                    "label": d.get("name") or d.get("label") or did[:12],
+                    "id": v["device_id"],
+                    "label": v["name"],
                     "role": role,
                     "status": status,
-                    "x": d.get("x", 0.5),
-                    "y": d.get("y", 0.5),
-                    "lastSeen": d.get("last_seen", int(_time.time() * 1000)),
-                    "messageCount": d.get("message_count", 0),
+                    "x": 0.5,
+                    "y": 0.5,
+                    # 面板把 null 读作"从没报到过",与 0 秒前是两件事
+                    "lastSeen": int(v["last_seen"] * 1000) if v.get("last_seen") else None,
+                    "messageCount": 0,
                 }
             )
             # 每个设备都通过本机（"desktop_local"）连接
             topo_edges.append(
                 {
                     "from": "desktop_local",
-                    "to": did,
-                    "label": role_raw,
+                    "to": v["device_id"],
+                    "label": v.get("role_label") or role,
                     "active": status == "online",
-                    "messageRate": d.get("message_rate", 0),
+                    "messageRate": 0,
                 }
             )
+        feed["bridged_devices"] = {
+            "total": len(overview["groups"]["bridged"]),
+            "online": sum(1 for v in overview["groups"]["bridged"] if v["online"]),
+        }
+        feed["onboarding"] = overview["summary"]
+        devs = {v["device_id"]: v for v in rows}
         # 本机节点始终存在
         topo_nodes.insert(
             0,

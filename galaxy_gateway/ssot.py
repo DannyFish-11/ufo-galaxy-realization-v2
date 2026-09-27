@@ -98,6 +98,7 @@ def udm_write_register(
         False — UDM write failed; caller must NOT update local caches.
     """
     try:
+        from core.device_onboarding.taxonomy import classify_type  # noqa: E402
         from core.unified.models import (  # noqa: E402
             UnifiedDevice,
             UnifiedDeviceStatus,
@@ -114,6 +115,8 @@ def udm_write_register(
             device_id=device_id,
             device_name=device_name,
             device_type=utype,
+            # 细分类型原样留下(上面按下划线截取的只是粗类),UDM 入口据此解析驱动。
+            aip_device_type=classify_type(device_type_raw, hints=metadata).aip_device_type,
             status=UnifiedDeviceStatus.ONLINE,
             capabilities=list(capabilities) if capabilities else [],
             metadata=metadata or {},

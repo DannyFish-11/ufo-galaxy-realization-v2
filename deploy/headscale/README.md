@@ -1,264 +1,140 @@
-# Headscale — Galaxy Private Tailnet
+# 自建 tailnet(Headscale)—— 从克隆到用起来
 
-Self-hosted Tailscale control server for Galaxy devices. Provides secure WireGuard mesh network for all your devices (gateway, watch, phone, desktop).
+你的电脑、手表、手机组成一张**只属于你**的内网。不管在家(同一个 Wi-Fi)还是出门
+(手表自己的流量),设备之间都走这张网直连电脑上的网关与智能体,不经过任何公网入口。
 
-## Architecture
+## 它是什么、不是什么
 
+| 部件 | 做什么 | 数据经过它吗 |
+|---|---|---|
+| **Headscale**(本目录) | 会合点:告诉设备"对方现在在哪" | ❌ 只交换地址 |
+| **内置 DERP 中继** | 两边都在难打洞的 NAT 后面时兜底转发 | ✅ 但端到端加密,它看不到内容 |
+| **网关**(这台电脑) | 智能体所在;自动加入 tailnet,并给手表发进网钥匙 | —— |
+
+绝大多数时候设备之间是**直连**的(打洞成功),中继只是兜底。
+
+### 一个硬前提
+
+**Headscale 必须能从外网访问。** 它是出门在外的手表找到你电脑的唯一办法;只在家里
+局域网可达的话,在家一切正常,出门就连不上。两种常见放法:
+
+- **一台有域名的 VPS**(推荐):最省事,家里网络怎么变都不影响;
+- **家里的电脑**:需要路由器把 80/443/3478(UDP)转发到这台电脑,再配一个 DDNS 域名。
+
+## 步骤
+
+### 1. 改两个地址
+
+`config.yaml` 里:
+
+```yaml
+server_url: https://hs.你的域名.com
+tls_letsencrypt_hostname: hs.你的域名.com
 ```
-                    Internet
-                        |
-         +--------------+--------------+
-         |                             |
-    [Headscale]                    [V2 Gateway]
-    Control Server                   (Galaxy)
-    :8080                            :9000
-    172.25.0.0/16                    172.20.0.0/16
-         |                             |
-    +----+----+              +---------+---------+
-    |         |              |                   |
-100.64.0.1  100.64.0.10  100.64.0.20       100.64.0.30
- (Gateway)  (Watch)       (Phone)          (Desktop)
-            [LTE/WiFi]    [WiFi]           [Anywhere]
-```
 
-## Quick Start
+证书由 Headscale 自动向 Let's Encrypt 申请(需要 80、443 端口能从外网访问)。
+已经有 Caddy/Nginx 做 TLS 的,按 `config.yaml` 里的注释改成反向代理模式。
 
-### 1. Start Headscale
+### 2. 启动
 
 ```bash
 cd deploy/headscale
 docker compose up -d
 ```
 
-### 2. Initialize (create user + auth key)
+需要放通的端口:`443/tcp`、`80/tcp`、`3478/udp`。
+
+### 3. 初始化(一次)
 
 ```bash
-# Make scripts executable (git does not preserve permissions)
-chmod +x init.sh connect-watch.sh
-
 ./init.sh
 ```
 
-Save the auth key — you'll need it for all devices.
+它会:建用户 `galaxy` → 生成网关用的 API key → **把地址和 key 直接写进网关配置**
+(`.env` 与 `runtime/secrets.env`,和面板保存设置是同一个去处)。
 
-### 3. Connect V2 Gateway (host machine)
+Headscale 在另一台机器(比如 VPS)上时用 `./init.sh --print-only`,它只打印两项,
+你把它们填到网关那台电脑的**面板 → 设置 → 网络与端口**:
 
-```bash
-# Install tailscale if not already installed
-# https://tailscale.com/download
+| 设置 | 值 |
+|---|---|
+| `GALAXY_HEADSCALE_URL` | `https://hs.你的域名.com` |
+| `GALAXY_HEADSCALE_API_KEY` | init.sh 打印的那串(按密钥保存,不明文落盘) |
+| `GALAXY_HEADSCALE_USER` | `galaxy`(默认,一般不用动) |
+| `GALAXY_HEADSCALE_AUTOJOIN` | 开(默认) |
 
-# Connect to your headscale server
-tailscale up \
-  --login-server=http://localhost:8080 \
-  --authkey=<AUTH_KEY_FROM_INIT> \
-  --hostname=gateway \
-  --accept-routes
-```
+### 4. 电脑加入 —— 自动
 
-The gateway will get IP `100.64.0.1`.
+这台电脑装好 [Tailscale 客户端](https://tailscale.com/download),**重启网关**即可。
+网关启动时发现"配了 Headscale、自己还没加入",就给自己签一把一次性钥匙并执行
+`tailscale up --login-server=...`。
 
-### 4. Wear OS watch — **cannot join the tailnet directly**
+| 情况 | 网关怎么做 |
+|---|---|
+| 已经在这个 tailnet 里 | 什么都不做 |
+| 已经登录在别的控制服务器(比如官方 Tailscale) | **不动它**,在状态里说明 |
+| 没装 Tailscale 客户端 | 提示去哪装 |
+| 权限不够(Linux 上 `tailscale up` 通常要 root) | 给出一条带钥匙的命令,`sudo` 执行一次即可(钥匙 10 分钟内有效) |
 
-> ⚠️ This section previously said to `adb install` the Tailscale APK on the watch.
-> **That does not work**: Wear OS ships the VPN-consent activity as an empty stub
-> (`com.google.android.wearable.frameworkpackagestubs/.Stubs$VpnStub`), so any app
-> built on Android's `VpnService` — Tailscale included — crashes on launch. Reported
-> on exactly this device (Galaxy Watch 6 Classic):
-> [tailscale/tailscale#12177](https://github.com/tailscale/tailscale/issues/12177).
-> This is a platform limitation, not something a newer Tailscale build fixes.
+也可以随时在面板里触发:`POST /api/v1/tailnet/join-this-computer`。
+状态看:`GET /api/v1/tailnet/status`。
 
-The watch reaches the gateway over the **internal network only**, by one of:
+### 5. 设备加入
 
-| Situation | Path | Status |
-|---|---|---|
-| Same Wi-Fi as the gateway | mDNS discovery → `ws://<lan-ip>:9000/ws/device/<id>` | works today |
-| Direct path not working | relay through the phone (Wear Data Layer) | fallback, planned |
-| Out (watch alone, or with phone nearby) | the watch app embeds Tailscale in **userspace** mode (`tsnet`, no `VpnService`) and joins the tailnet as its own node → direct WireGuard to the gateway | **built** — see below |
+- **手表**:正常配对就行。配对时网关自动发一把**一次性、10 分钟有效**的钥匙,
+  手表里的 tailnet 进程用它加入,之后凭自己的身份重连。手表上什么都不用输。
+  (手表装不了 Tailscale App —— Wear OS 把 VPN 授权做成了空壳;所以手表 App 里内置了
+  一个不需要 VPN 授权的 tailnet 进程,见 galaxy-wearos 仓 `tailnet/`。)
+- **手机 / 笔记本**(装 Tailscale 官方 App 的设备):面板里生成一次性钥匙
+  (`POST /api/v1/tailnet/join-key`,`device_kind` 填 `android` / `ios` / `linux` / `macos` / `windows`),
+  它会给出 App 里怎么填,或者一条可直接执行的命令。
 
-The public Funnel entry is **off by default** (`GALAXY_TS_FUNNEL=0`); devices talk
-over the internal network only. Set `GALAXY_TS_FUNNEL=1` only if you deliberately
-want the gateway reachable from the public internet.
+## 设备列表 = 一张表
 
-#### How the watch joins (no typing on the watch)
+面板的设备列表(`GET /api/v1/devices`)里,每台设备多一栏 `tailnet`:
+它在内网里的地址、在不在线。Headscale 里有、但不属于任何已配对设备的机器
+(比如你另外加的笔记本)单列在 `tailnet.tailnet_only`。
 
-The watch app ships a small userspace tailnet process (`galaxy-wearos/tailnet/`).
-It needs a headscale pre-auth key **once**; the gateway hands one over during
-pairing, so nothing is typed on the watch:
+怎么认出"这个节点就是这块手表":配对时网关记下给它签的是哪把钥匙,Headscale 的节点
+带着它是凭哪把钥匙加入的 —— 一一对应。
 
-1. On the headscale host, create an API key for the gateway:
-   ```bash
-   docker exec headscale headscale apikeys create --expiration 365d
-   ```
-2. Give the gateway three settings (panel → network, or `.env`):
-   | Setting | Value |
-   |---|---|
-   | `GALAXY_HEADSCALE_URL` | this headscale server, e.g. `https://hs.example.com` |
-   | `GALAXY_HEADSCALE_API_KEY` | the key from step 1 (stored as a secret) |
-   | `GALAXY_HEADSCALE_USER` | `galaxy` (default, as created by `init.sh`) |
-3. Pair the watch as usual. The pairing response carries a **single-use,
-   10-minute, non-ephemeral** pre-auth key; the watch joins with it and from
-   then on reconnects with its own stored node identity.
+**在面板里移除一台设备,会同时把它踢出 tailnet。** 手表丢了,移除它,它就再也连不进
+你的内网了。
 
-If a key can't be issued (settings missing, API key rejected, headscale down),
-pairing still succeeds — home Wi-Fi keeps working — and the response says why
-(`tailnet_join_unavailable`). `GET /api/v1/pair/paths` shows the same under
-`watch_tailnet`.
+## 访问规则(可选)
 
-**The watch must be able to reach this headscale server from outside** (it is
-the rendezvous point: it tells the watch and the gateway where to find each
-other; data then flows directly between them, or via the embedded DERP relay —
-still end-to-end encrypted — when NAT hole punching fails). A headscale that is
-only reachable on your home LAN works at home but not outdoors.
-
-### 5. Connect Android Phone
+默认不配规则 = 你 tailnet 里的设备互相可达(全是你自己的设备)。要收紧,比如
+"手表只能访问网关的 9000 端口",见 `acl.hujson` 里的示例,再把 `config.yaml` 末尾的
+`policy` 两行取消注释。改完可以先检查:
 
 ```bash
-tailscale up \
-  --login-server=http://<YOUR_SERVER_IP>:8080 \
-  --authkey=<AUTH_KEY> \
-  --hostname=galaxy-phone-001
+docker compose exec headscale headscale policy check --file /etc/headscale/acl.hujson
 ```
 
-### 6. Verify
+## 常用命令
 
 ```bash
-# On any connected device
-tailscale status
-
-# Should show:
-# 100.64.0.1  gateway         linux   active; direct <IP>:41641, tx 1234 rx 567
-# 100.64.0.10 galaxy-watch-001 android active; relay <server>, tx 100 rx 200
-# 100.64.0.20 galaxy-phone-001 android active; direct <IP>:41641, tx 500 rx 800
+docker compose exec headscale headscale nodes list        # 有哪些机器
+docker compose exec headscale headscale nodes delete -i N # 踢掉一台
+docker compose exec headscale headscale apikeys list      # 网关用的 API key
+docker compose logs -f headscale
 ```
 
-## Integration with V2 Gateway
+## 排障
 
-### Your existing TailscaleManager auto-discovers
+- **面板设备列表里 tailnet 一栏是空的**:看 `GET /api/v1/tailnet/status` 的
+  `reason` 与 `how_to_fix`;`api_key_rejected` 就重新跑 `./init.sh`。
+- **手表在家能连、出门连不上**:先确认手机流量下能打开 `https://hs.你的域名.com/health`;
+  打不开就是 Headscale 没暴露到外网。
+- **设备之间一直走中继(慢)**:检查 `3478/udp` 是否放通。
 
-Your `core/tailscale_manager.py` already:
-- Runs `tailscale status --json` every 30 seconds
-- Detects 100.64.0.x IPs
-- Emits STATE_EVENT AIP v3 messages on state changes
-- Provides `get_network_priority()` → `["tailscale", "lan", "internet"]`
+## 为什么是这样配的
 
-### TailscaleP2PAdapter for direct device communication
-
-Your `core/adapters/tailscale_p2p_adapter.py`:
-- Opens TCP connections directly to 100.64.0.x IPs
-- Bypasses the Galaxy Gateway relay entirely
-- ~5-20ms latency via WireGuard P2P
-- Falls back to DERP relay if direct connection fails
-
-### WebSocket via Tailscale
-
-Tailnet devices (phone, desktop) connect to the gateway's Tailscale IP:
-```
-ws://100.64.0.1:9000/ws/device/<deviceId>
-```
-
-**`ws://`, not `wss://`.** The WireGuard tunnel already encrypts and authenticates
-the traffic end-to-end. `wss://` to a bare IP has no workable certificate (public
-CAs don't issue certs for IPs; Tailscale/headscale certs are for MagicDNS names),
-and the gateway runs without TLS unless `GALAXY_TLS_CERT` + `GALAXY_TLS_KEY` are
-set — so a hardcoded `wss://` here was a guaranteed handshake failure. The scheme
-the gateway hands out now follows its actual TLS config (`core/gateway_tls.py`).
-
-## Device IP Allocation
-
-| IP Range | Device Type | Example |
-|----------|------------|---------|
-| 100.64.0.1 | V2 Gateway | gateway |
-| 100.64.0.10-19 | Wear OS Watches | galaxy-watch-001 (100.64.0.10) |
-| 100.64.0.20-29 | Android Phones | galaxy-phone-001 (100.64.0.20) |
-| 100.64.0.30-39 | Desktops | galaxy-desktop-001 (100.64.0.30) |
-
-## Management
-
-### Web UI
-```
-http://localhost:3001
-```
-
-### CLI Commands
-```bash
-cd deploy/headscale
-
-# List all devices
-docker compose exec headscale headscale nodes list
-
-# List users
-docker compose exec headscale headscale users list
-
-# Generate new auth key
-docker compose exec headscale headscale preauthkeys create --user galaxy --reusable --ephemeral
-
-# View node details
-docker compose exec headscale headscale nodes list -o json
-
-# Delete a node
-docker compose exec headscale headscale nodes delete -i <NODE_ID>
-
-# Route management (for subnet router)
-docker compose exec headscale headscale routes list
-docker compose exec headscale headscale routes enable -i <ROUTE_ID>
-```
-
-## Connecting Galaxy + Headscale Networks
-
-To allow Galaxy services (172.20.0.0/16) to reach Tailscale devices (100.64.0.0/10):
-
-```bash
-cd deploy/headscale
-
-# Start the subnet router
-docker compose -f docker-compose.yml -f network-bridge.yml up -d tailscale-router
-
-# Set auth key for router
-docker compose exec tailscale-router tailscale up \
-  --login-server=http://headscale:8080 \
-  --authkey=<AUTH_KEY> \
-  --advertise-routes=172.20.0.0/16 \
-  --hostname=gateway-router
-
-# Enable the route in headscale
-docker compose exec headscale headscale routes list
-docker compose exec headscale headscale routes enable -i <ROUTE_ID>
-```
-
-## Security Notes
-
-- Change ACL policy in `acl.hujson` for production
-- Use HTTPS for headscale server (with reverse proxy)
-- Rotate auth keys regularly
-- Ephemeral keys auto-expire (good for watches)
-- Reusable keys can be used for multiple devices
-
-## Troubleshooting
-
-### Watch can't connect
-
-The watch is not a tailnet member (see section 4). Check instead:
-- it's on the same Wi-Fi as the gateway, and the gateway's mDNS announcer is on
-  (`GALAXY_MDNS` not set to `0`);
-- `GET /api/v1/pair/paths` on the gateway — it lists every path and why a down
-  one is down.
-
-### Gateway can't see watch
-```bash
-# On gateway
-tailscale ping galaxy-watch-001
-
-# Check if direct connection or relay
-tailscale status
-
-# If relay, check UDP port 41641 is open on both sides
-```
-
-### P2P adapter connection refused
-```bash
-# Check if P2P server is listening on watch
-adb shell netstat -tlnp | grep 19721
-
-# Check firewall on watch
-adb shell iptables -L | grep 19721
-```
+- **版本钉在 0.29.4**:网关用到的 REST 接口(按用户 id 建钥匙、节点上带着加入所用的
+  钥匙)在 0.26 之后才是现在的形状;`latest` 会在上游升级时悄悄变样。网关对 0.26 以前
+  按用户名建钥匙的旧接口也做了兼容。
+- **中继用 Headscale 自带的**,默认不依赖 Tailscale 公司的中继服务器。
+- **DNS 不接管**:加入 tailnet 不会改掉这台电脑自己的 DNS。
+- **去掉了** 旧的 `connect-watch.sh`(它教人往手表上装 Tailscale,装不了)、
+  `network-bridge.yml`(子网路由方案,电脑直接加入 tailnet 之后不再需要)、
+  第三方 Web UI 与单独的 derper 容器(面板的设备列表现在就能看节点)。

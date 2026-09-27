@@ -283,7 +283,10 @@
       "purpose": "智能家居设备控制",
       "permissions": {
         "actions": [
+          "control",
           "control_device",
+          "devices",
+          "discover",
           "get_device",
           "ha_call",
           "ha_states",
@@ -293,8 +296,10 @@
           "list_scenes",
           "off",
           "register_device",
+          "scene",
           "set_brightness",
           "set_temperature",
+          "states",
           "status",
           "toggle",
           "trigger_scene"

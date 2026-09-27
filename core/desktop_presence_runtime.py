@@ -199,6 +199,9 @@ class RuntimeSession(_presence_stop.ActingMixin, _presence_line.SessionOriginMix
         self.runtime_session_id: str = uuid.uuid4().hex
         self.trace_id: str = self.runtime_session_id
         self.source: str = source
+        #: 这一回合发起方的原话。对话里的确认(「要接入吗?」「好」)靠它判断
+        #: 是不是**人**在这一回合明确答应了 —— 见 core/device_onboarding/conversation.py。
+        self.request_text: str = ""
         self.tristate: TriState = TriState.SILENT
         self.created_at: float = time.monotonic()
         self.transitions: List[tuple] = []
@@ -888,6 +891,7 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOri
                 }
         """
         rsession = self._create_bound_session(source, device_id, kwargs)
+        rsession.request_text = message if isinstance(message, str) else ""
         # 把本次会话挂进 contextvar，好让请求链路深处（OpenClawd 的认知段、
         # 阈限态预演）不改任何函数签名就能登记「阈限里在干嘛」。见
         # core/liminal_activity.py。

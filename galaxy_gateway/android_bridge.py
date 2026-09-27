@@ -507,6 +507,7 @@ class AndroidBridge:
     def _write_registration_to_udm(self, device_id: str, message: Dict[str, Any]) -> None:
         """Write canonical device identity/state to UnifiedDeviceManager on registration."""
         try:
+            from core.device_onboarding.taxonomy import classify_type
             from core.unified.device_manager import UnifiedDeviceManager
             from core.unified.models import UnifiedDevice, UnifiedDeviceType
 
@@ -519,12 +520,25 @@ class AndroidBridge:
                 caps_list = [str(c) for c in raw_caps]
             else:
                 caps_list = []
+            if not caps_list:
+                # 没报能力位图的客户端(电脑)用动作清单说明自己能做什么;不收进来,
+                # 智能体在设备列表里看到的就是一台「什么都不会」的设备。
+                caps_list = [str(a) for a in (message.get("supported_actions") or []) if a]
 
             raw_device_type = str(message.get("device_type", "android_phone")).lower()
+            type_info = classify_type(raw_device_type, hints=message)
             try:
                 utype = UnifiedDeviceType(raw_device_type)
             except ValueError:
-                utype = UnifiedDeviceType.ANDROID
+                # 细类型(windows_laptop 等)按它所属平台归大类;平台也认不出才按安卓兜底(历史行为)。
+                try:
+                    utype = (
+                        UnifiedDeviceType(type_info.platform)
+                        if type_info.platform not in ("", "unknown")
+                        else UnifiedDeviceType.ANDROID
+                    )
+                except ValueError:
+                    utype = UnifiedDeviceType.ANDROID
 
             metadata = {
                 "model": message.get("model", ""),
@@ -539,8 +553,13 @@ class AndroidBridge:
 
             device = UnifiedDevice(
                 device_id=device_id,
-                device_name=str(message.get("name") or "Android Device"),
+                device_name=str(
+                    message.get("name") or ("Android Device" if utype == UnifiedDeviceType.ANDROID else device_id)
+                ),
                 device_type=utype,
+                # 细分类型(android_phone / android_wear…)另存,UDM 入口据此解析驱动。
+                aip_device_type=type_info.aip_device_type,
+                transport="websocket",
                 capabilities=caps_list,
                 metadata=metadata,
                 source="android_bridge",
@@ -1746,14 +1765,25 @@ class AndroidBridge:
         """
         return [d for d in self._devices.values() if d.platform == DevicePlatform.ANDROID and d.connected]
 
-    async def disconnect_device(self, device_id: str):
+    async def disconnect_device(self, device_id: str, websocket: Any = None):
         """断开设备连接。
 
         .. note:: (PR-UDM-UNIFY) 此方法保留对 ``_devices`` 的修改，因为需要同步
             关闭 WebSocket 连接句柄（transport session cleanup）。但权威状态
             变更已通过 ``_patch_disconnect_to_udm()`` 同步写入 UDM。
             ``_devices`` 中的状态是 **transport cache mirror**，不是 SSOT。
+
+        传了 ``websocket`` 时,只有它仍是这台设备**当前**的连接才算断开。弱网下设备
+        常常先连上新的、旧的才慢慢关掉;旧连接的收尾若照样执行,会把刚连上的新连接
+        在本缓存、UDM、UCM 里一并判成离线 —— 设备明明连着,却再也派不到活。
         """
+        if websocket is not None:
+            async with self._lock:
+                current = self._devices.get(device_id)
+                stale = current is not None and current.websocket is not None and current.websocket is not websocket
+            if stale:
+                logger.info("旧连接关闭,设备已在新连接上,不做断开处理: %s", device_id)
+                return
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].connected = False

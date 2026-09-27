@@ -172,7 +172,7 @@ async def _handle_android_ws(
     finally:
         if device_id:
             try:
-                await android_bridge.disconnect_device(device_id)
+                await android_bridge.disconnect_device(device_id, websocket=websocket)
             except Exception as exc:
                 logger.debug("device ws disconnect cleanup failed: %s", exc)
 

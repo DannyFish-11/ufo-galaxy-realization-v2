@@ -76,7 +76,7 @@ exposes the gateway on the public internet over
 
 **Funnel is off by default** (`GALAXY_TS_FUNNEL=0`). It used to default on, as
 the path for a Wear OS watch on mobile data (Wear OS cannot run Tailscale's
-`VpnService`-based client — see `deploy/headscale/README.md` §4). That put every
+`VpnService`-based client — see `deploy/headscale/README.md`, 「设备加入」). That put every
 gateway on the public internet by default, which is the opposite of this
 system's intent. Turn it on only if you deliberately want a public entry.
 

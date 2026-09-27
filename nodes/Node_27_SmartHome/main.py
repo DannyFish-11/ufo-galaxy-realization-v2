@@ -319,6 +319,12 @@ async def ha_states():
 
 # ─── 融合入口服务(fusion_entry 统一调用) ────────────────────────────────────
 
+def _reload_ha_config() -> None:
+    global HA_URL, HA_TOKEN
+    HA_URL = os.getenv("HOME_ASSISTANT_URL", "").rstrip("/")
+    HA_TOKEN = os.getenv("HOME_ASSISTANT_TOKEN", "")
+
+
 def _http_exc_to_dict(exc: HTTPException) -> Dict[str, Any]:
     detail = exc.detail if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
     out = {"success": False}
@@ -333,10 +339,15 @@ class SmartHomeService:
     不向调用方抛 HTTPException(统一入口要的是可 JSON 化的结果,不是 HTTP 语义)。
     此前 fusion_entry 导入的这个类并不存在,统一入口一调 Node_27 就
     AttributeError——该类补上这条断链,让节点同时具备 HTTP(8027)与 fusion 两种身份。
+
+    fusion 这条路跑在网关进程里,模块只导入一次;而 HA 地址/令牌是在面板上填的,
+    保存后写进网关的环境变量。所以每次调用前重读一遍 —— 否则面板里填好了,
+    智能体仍报"没配 HA",要重启网关才好。
     """
 
     async def discover(self) -> Dict[str, Any]:
         """发现设备:配置了 HA 就拉全量实体镜像进内存设备表,否则返回内存设备。"""
+        _reload_ha_config()
         if HA_URL and HA_TOKEN:
             try:
                 states = await _ha_get("/states")
@@ -362,10 +373,12 @@ class SmartHomeService:
                 "devices": list(_devices.values()), "count": len(_devices)}
 
     async def devices(self) -> Dict[str, Any]:
+        _reload_ha_config()
         return await list_devices()
 
     async def control(self, device_id: str, action: str,
                       params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        _reload_ha_config()
         try:
             return await control_device(
                 ControlDeviceRequest(device_id=device_id, action=action, params=params or {})
@@ -374,6 +387,7 @@ class SmartHomeService:
             return _http_exc_to_dict(exc)
 
     async def scene(self, scene_id: str) -> Dict[str, Any]:
+        _reload_ha_config()
         try:
             return await trigger_scene(TriggerSceneRequest(scene_id=scene_id))
         except HTTPException as exc:
@@ -382,6 +396,7 @@ class SmartHomeService:
     async def ha_call(self, domain: str, service: str,
                       entity_id: Optional[str] = None,
                       data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        _reload_ha_config()
         try:
             return await ha_call(
                 HACallRequest(domain=domain, service=service, entity_id=entity_id, data=data or {})
@@ -390,6 +405,7 @@ class SmartHomeService:
             return _http_exc_to_dict(exc)
 
     async def states(self) -> Dict[str, Any]:
+        _reload_ha_config()
         try:
             return await ha_states()
         except HTTPException as exc:
