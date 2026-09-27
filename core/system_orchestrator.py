@@ -401,6 +401,11 @@ class SystemOrchestrator:
             if self.strict_preflight:
                 has_critical_failure = True
 
+        auth_said, auth_failed = self._ensure_auth_ready()
+        if auth_failed:
+            issues.append(auth_said)
+            has_critical_failure = True
+
         if has_critical_failure:
             return PhaseResult(
                 phase=StartupPhase.ENV_CHECKS,
@@ -419,8 +424,40 @@ class SystemOrchestrator:
             phase=StartupPhase.ENV_CHECKS,
             status=PhaseStatus.OK,
             detail="environment checks passed",
-            said="环境判据全部通过",
+            said=f"环境判据全部通过 · {auth_said}",
         )
+
+    @staticmethod
+    def _ensure_auth_ready() -> Tuple[str, bool]:
+        """鉴权就绪:鉴权开着就确保有令牌可用。返回 (给人看的一句, 是否无法继续)。
+
+        **必须在 Phase 6 拉起桌面壳之前做**。真机根因:本机自签令牌原本只在
+        ``galaxy_gateway`` 的完整 lifespan 里签,而真实启动路径(main.py → launcher)
+        刻意只跑那个 lifespan 的一半(见 core/startup.py 里 init_gateway_core_services
+        那段),令牌**从来没签出来过**。鉴权默认开着,于是全新克隆第一次启动:
+        桌面壳找不到令牌 → 每个请求 401 → 一分钟 50 次 → IP 封禁把 127.0.0.1
+        自己封了 → 面板与后端之间的全部通讯被拦。
+
+        签不出来(生产模式缺令牌、磁盘只读)是真的没法带着鉴权跑,返回失败;
+        以前这种情况会在 lifespan 里直接抛异常,这里保持同样的严格程度。
+        """
+        try:
+            from core.auth import auth_posture, ensure_auth_config_validated
+
+            ensure_auth_config_validated()
+            p = auth_posture()
+        except RuntimeError as exc:
+            return f"鉴权开着但没有可用令牌:{exc}", True
+        except Exception as exc:  # noqa: BLE001 — 判不出来就如实说判不出来,不冒充"通过"
+            logger.warning("[启动·环境检查] 鉴权状态判定失败: %s", exc)
+            return f"鉴权状态没判出来:{exc}", False
+        if not p["enabled"]:
+            return f"鉴权关着({p['source']})", False
+        if p["token"] == "configured":
+            return "鉴权开着(用 .env 里配的令牌)", False
+        if p["token"] == "local":
+            return "鉴权开着(本机令牌已就绪)", False
+        return "鉴权开着但没有可用令牌", True
 
     def _run_phase_4_background_subsystems(self) -> PhaseResult:
         """Phase 4 — Background subsystem readiness checks (verifiable).
@@ -834,6 +871,15 @@ class SystemOrchestrator:
             # core/electron_launch_guard.py 顶部说明)。
             env["GALAXY_GATEWAY_PORT"] = str(resolve_gateway_port())
             env.setdefault("PORT", env["GALAXY_GATEWAY_PORT"])
+            # 令牌目录钉成绝对路径传过去。这边缺省是 cwd/data,Electron 缺省是
+            # 「项目根/data」—— 不在项目根下启动 main.py 时两边就指向两个文件,
+            # 后端签的令牌 Electron 找不到,面板全 401(见 core/auth.local_token_dir)。
+            try:
+                from core.auth import local_token_dir
+
+                env.setdefault("GALAXY_DATA_DIR", local_token_dir())
+            except Exception as exc:  # noqa: BLE001 — 取不到就按老样子,别挡桌面壳
+                logger.debug("[启动·桌面壳] 令牌目录没取到: %s", exc)
 
             # Use shell=False for security; npm start will run electron .
             process = subprocess.Popen(

@@ -35,7 +35,7 @@ import hmac
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import Header, HTTPException, Request, status
 
@@ -183,6 +183,36 @@ _LOCAL_TOKEN_FILENAME = "api_token.json"
 def _local_token_path() -> str:
     base = os.getenv("GALAXY_DATA_DIR", "").strip() or os.path.join(os.getcwd(), "data")
     return os.path.join(base, _LOCAL_TOKEN_FILENAME)
+
+
+def local_token_dir() -> str:
+    """本机令牌所在目录的**绝对路径**。
+
+    拉起桌面壳(Electron)时要把它作为 ``GALAXY_DATA_DIR`` 传过去:这边缺省是
+    ``cwd/data``,那边缺省是「项目根/data」。用户在项目根下 ``python main.py`` 时
+    两者恰好相同;从别的目录启动就分叉 —— 后端签的令牌 Electron 找不到,面板
+    全部 401。传一个绝对路径过去,两边从此只认同一个文件。
+    """
+    return os.path.dirname(os.path.abspath(_local_token_path()))
+
+
+def auth_posture() -> Dict[str, Any]:
+    """此刻鉴权到底是什么状态 —— 给启动输出如实打一行用。
+
+    真机上第一次和第二次启动的鉴权状态不一样(第一次还没有 ``.env`` → 默认开;
+    第二次 ``.env`` 从 ``.env.example`` 复制来,里面写着 ``false`` → 关),而启动
+    输出一个字都没提,只能从"本机被自己封禁"这种后果反推。这一行就是为了让人
+    一眼看到。
+    """
+    enabled = is_auth_enabled()
+    raw = os.environ.get("GALAXY_AUTH_ENABLED")
+    if not enabled:
+        return {"enabled": False, "source": "GALAXY_AUTH_ENABLED=" + (raw or "")}
+    if os.getenv("GALAXY_API_TOKEN", "").strip() or os.getenv("GALAXY_API_TOKENS", "").strip():
+        return {"enabled": True, "token": "configured"}
+    if read_local_token():
+        return {"enabled": True, "token": "local", "path": _local_token_path()}
+    return {"enabled": True, "token": "missing"}
 
 
 def read_local_token() -> Optional[str]:

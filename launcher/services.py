@@ -762,6 +762,12 @@ class UnifiedWebUI:
                 return JSONResponse(self.service_manager.get_status())
 
             # === 步骤 7：启动 uvicorn ===
+            # 对外服务之前,鉴权必须就绪(鉴权开着就得有令牌)。正常启动时编排器 Phase 3
+            # 已经做过(要赶在桌面壳之前),这里是幂等的兜底 —— 绕开编排器直接起后端的
+            # 路径,以前会带着"鉴权开着、令牌一枚都没有"对外服务,所有受保护请求 401。
+            from core.auth import ensure_auth_config_validated
+
+            ensure_auth_config_validated()
             _uvi_config = uvicorn.Config(
                 self.app, host=self.config.host, port=self.config.web_ui_port, log_level="warning"
             )
