@@ -51,20 +51,40 @@ logger = logging.getLogger("Galaxy.API")
 # Device registry persistence helpers
 # ---------------------------------------------------------------------------
 
-_DEVICE_REGISTRY_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "registered_devices.json"
+# 注册表落在 ``$GALAXY_DATA_DIR`` 下，与其余持久化状态同一处（缺省仍是仓库的 data/）。
+# 此前这里写死成仓库的 data/，是全仓唯一不认 GALAXY_DATA_DIR 的持久化点：测试靠这个
+# 变量把状态引到临时目录，唯独设备注册表照写仓库 —— 跑一次测试，真实注册表里就多出
+# 一批测试设备（复测时启动后列出过 106 台）。
+_LEGACY_DEVICE_REGISTRY_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "registered_devices.json"
+
+
+def _device_registry_file() -> Path:
+    """注册表文件的当前位置。每次调用现取，``GALAXY_DATA_DIR`` 后设也生效。"""
+    base = os.getenv("GALAXY_DATA_DIR", "").strip()
+    return Path(base) / "registered_devices.json" if base else _LEGACY_DEVICE_REGISTRY_FILE
 
 
 def _load_registered_devices() -> Dict[str, Dict[str, Any]]:
-    """Load persisted device registry from disk (best-effort)."""
+    """Load persisted device registry from disk (best-effort).
+
+    新位置还没有文件、而旧位置（仓库 data/）有的时候，从旧位置读入一次 —— 设过
+    ``GALAXY_DATA_DIR`` 的部署升级后不会「忘掉」已登记的设备。之后的写入只落新位置，
+    旧文件原样留着，不删不改。
+    """
+    path = _device_registry_file()
+    if not path.exists() and path.resolve() != _LEGACY_DEVICE_REGISTRY_FILE.resolve():
+        if _LEGACY_DEVICE_REGISTRY_FILE.exists():
+            logger.info(f"设备注册表 {path} 还不存在，先从旧位置 {_LEGACY_DEVICE_REGISTRY_FILE} 读入；之后写新位置")
+            path = _LEGACY_DEVICE_REGISTRY_FILE
     try:
-        if _DEVICE_REGISTRY_FILE.exists():
-            with open(_DEVICE_REGISTRY_FILE, "r", encoding="utf-8") as f:
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             # Mark all loaded devices as offline (they need to re-heartbeat)
             for dev in data.values():
                 dev["status"] = "offline"
                 dev["online"] = False
-            logger.info(f"Loaded {len(data)} persisted devices from {_DEVICE_REGISTRY_FILE}")
+            logger.info(f"Loaded {len(data)} persisted devices from {path}")
             return data
     except Exception as e:
         logger.warning(f"Failed to load device registry: {e}")
@@ -73,9 +93,10 @@ def _load_registered_devices() -> Dict[str, Dict[str, Any]]:
 
 def _save_registered_devices(devices: Dict[str, Dict[str, Any]]) -> None:
     """Persist device registry to disk (best-effort, non-blocking intent)."""
+    path = _device_registry_file()
     try:
-        os.makedirs(_DEVICE_REGISTRY_FILE.parent, exist_ok=True)
-        atomic_write_json(_DEVICE_REGISTRY_FILE, devices, ensure_ascii=False, indent=2, default=str)
+        os.makedirs(path.parent, exist_ok=True)
+        atomic_write_json(path, devices, ensure_ascii=False, indent=2, default=str)
     except Exception as e:
         logger.warning(f"Failed to save device registry: {e}")
 

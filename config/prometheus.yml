@@ -17,27 +17,32 @@ global:
 #         - targets: ['alertmanager:9093']
 
 # ── Rules ──
-# rule_files:
-#   - /etc/prometheus/rules/*.yml
+# 告警规则见 config/prometheus_alerts.yml（deploy/compose/production.yml 把它挂到下面这个目录）。
+# 没接 Alertmanager 时规则照样求值，触发的告警在 Prometheus 的 /alerts 页上看得到。
+rule_files:
+  - /etc/prometheus/rules/*.yml
 
 # ── Scrape Targets ──
 scrape_configs:
   # Galaxy core API — main metrics endpoint
+  # 端口是 9000（Dockerfile EXPOSE 9000、compose 的 galaxy 服务、main.py 默认端口）。
+  # 此前这里写的 8080 / 8000 在任何一份 compose 里都不存在，于是一个指标都没抓到过。
   - job_name: 'galaxy-core'
     static_configs:
-      - targets: ['galaxy:8080']
+      - targets: ['galaxy:9000']
         labels:
           service: 'galaxy-core'
     metrics_path: '/metrics'
     scrape_interval: 15s
 
-  # Galaxy gateway
+  # Galaxy gateway —— 网关的 Prometheus 出口是 /gateway/metrics（/metrics 在网关上是 404），
+  # galaxy_legacy_dispatch_total 等网关管线计数器只在这里。
   - job_name: 'galaxy-gateway'
     static_configs:
-      - targets: ['gateway:8000']
+      - targets: ['gateway:9000']
         labels:
           service: 'gateway'
-    metrics_path: '/metrics'
+    metrics_path: '/gateway/metrics'
     scrape_interval: 30s
 
   # Galaxy dashboard
@@ -52,7 +57,7 @@ scrape_configs:
   # Galaxy health (detailed health info)
   - job_name: 'galaxy-health'
     static_configs:
-      - targets: ['galaxy:8080']
+      - targets: ['galaxy:9000']
     metrics_path: '/health/metrics'
     scrape_interval: 30s
 

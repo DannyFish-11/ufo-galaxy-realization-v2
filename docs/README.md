@@ -4,6 +4,9 @@ This directory contains architecture, protocol, audit, and operational documents
 `ufo-galaxy-realization-v2`. With 272 documents, this index identifies which
 documents are **authoritative and current** vs historical or superseded.
 
+> **2026-09-27：系统当前状态只看 [SYSTEM_STATUS.md](SYSTEM_STATUS.md)。** 那是逐项复测（真实启动、真实 HTTP、真实 docker 构建、全量测试）
+> 得出的结论。下面各表里标了「历史快照」的状态/审计/成熟度文档，都是写作当时的记录，之后没有随代码更新。
+
 ---
 
 ## Document Status Legend
@@ -21,12 +24,13 @@ documents are **authoritative and current** vs historical or superseded.
 
 | Document | Purpose |
 |----------|---------|
+| [SYSTEM_STATUS.md](SYSTEM_STATUS.md) | **当前系统状态（权威，2026-09-27 复测）** —— 完成度 / 完善度 / 设计完成度，每条附复测命令 |
 | [CLONE_TO_USE_REALITY.md](CLONE_TO_USE_REALITY.md) | **Authoritative quick-start** — canonical clone-to-use runtime truth |
 | [UNIFIED_SUBJECT_ARCHITECTURE.md](UNIFIED_SUBJECT_ARCHITECTURE.md) | Unified subject architecture (DesktopPresenceRuntime + OpenClawd) |
 | [LOCAL_EXECUTION_CHAIN.md](LOCAL_EXECUTION_CHAIN.md) | Local execution chain step-by-step |
 | [CROSS_DEVICE_EXECUTION_CHAIN.md](CROSS_DEVICE_EXECUTION_CHAIN.md) | Cross-device execution chain step-by-step |
 | [ANDROID_PROTOCOL_ALIGNMENT.md](ANDROID_PROTOCOL_ALIGNMENT.md) | AIP v3.0 protocol specification (authoritative) |
-| [ARCHITECTURE_COMPLETION_SCORECARD.md](ARCHITECTURE_COMPLETION_SCORECARD.md) | Architecture completion evaluation framework + PR-9 scorecard |
+| [ARCHITECTURE_COMPLETION_SCORECARD.md](ARCHITECTURE_COMPLETION_SCORECARD.md) | Architecture completion evaluation framework + PR-9 scorecard *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [MAINTAINER_RUNBOOK.md](MAINTAINER_RUNBOOK.md) | Maintainer operational reference |
 | [TEST_STRATEGY.md](TEST_STRATEGY.md) | Test layout, markers, CI jobs |
 | [DEPLOYMENT_SURFACES.md](DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
@@ -34,8 +38,8 @@ documents are **authoritative and current** vs historical or superseded.
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Deployment environment variables and configuration |
 | [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) | System deployment acceptance checklist |
 | [troubleshooting.md](troubleshooting.md) | Troubleshooting guide |
-| [SYSTEM_AUDIT_REPORT_ZH.md](SYSTEM_AUDIT_REPORT_ZH.md) | **中文联排系统性审查报告** (双仓真实架构状态 + 问题清单) |
-| [FINAL_INTEGRATED_SYSTEM_AUDIT.md](FINAL_INTEGRATED_SYSTEM_AUDIT.md) | Galaxy 系统最终整合审查报告 |
+| [SYSTEM_AUDIT_REPORT_ZH.md](SYSTEM_AUDIT_REPORT_ZH.md) | **中文联排系统性审查报告** (双仓真实架构状态 + 问题清单) *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [FINAL_INTEGRATED_SYSTEM_AUDIT.md](FINAL_INTEGRATED_SYSTEM_AUDIT.md) | Galaxy 系统最终整合审查报告 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [DASHBOARD_RETIREMENT_AND_MIGRATION.md](DASHBOARD_RETIREMENT_AND_MIGRATION.md) | Dashboard retirement declaration and migration guide |
 
 ---
@@ -44,19 +48,19 @@ documents are **authoritative and current** vs historical or superseded.
 
 | Document | Purpose |
 |----------|---------|
-| [DUAL_REPO_FULL_REAUDIT.md](DUAL_REPO_FULL_REAUDIT.md) | Full dual-repo re-audit (latest, most comprehensive) |
-| [DUAL_REPO_GAP_MATRIX.md](DUAL_REPO_GAP_MATRIX.md) | Structured gap matrix (supersedes all prior versions) |
-| [FOLLOWUP_IMPLEMENTATION_ROADMAP.md](FOLLOWUP_IMPLEMENTATION_ROADMAP.md) | Prioritized follow-up roadmap |
-| [ANDROID_PROTOCOL_MATURITY_MATRIX.md](ANDROID_PROTOCOL_MATURITY_MATRIX.md) | Android long-tail protocol maturity matrix |
-| [MULTI_DEVICE_RUNTIME_MATURITY.md](MULTI_DEVICE_RUNTIME_MATURITY.md) | Multi-device runtime component maturity |
-| [UNIFIED_SCHEDULING_AUTHORITY_MAP.md](UNIFIED_SCHEDULING_AUTHORITY_MAP.md) | Scheduling/routing authority chain map |
-| [TRUTH_PROJECTION_CONVERGENCE_MAP.md](TRUTH_PROJECTION_CONVERGENCE_MAP.md) | Truth/projection convergence audit |
-| [DUAL_REPO_COGNITION_AUDIT_ZH.md](DUAL_REPO_COGNITION_AUDIT_ZH.md) | 双仓联合认知审查 (中文版) |
-| [CODE_EVIDENCE_DUAL_REPO_SYSTEM_AUDIT.md](CODE_EVIDENCE_DUAL_REPO_SYSTEM_AUDIT.md) | 双仓联合纯代码证据审查 |
-| [GALAXY_SYSTEM_FORMAL_BASELINE_COGNITION_ZH.md](GALAXY_SYSTEM_FORMAL_BASELINE_COGNITION_ZH.md) | Galaxy 双仓系统正式基线认知文档 |
-| [MATURITY_REVIEW_2026Q2_DUAL_COORD.md](MATURITY_REVIEW_2026Q2_DUAL_COORD.md) | 双坐标系成熟度映射审查 2026Q2 |
-| [DUAL_REPO_SYSTEM_COMPLETENESS_REVIEW.md](DUAL_REPO_SYSTEM_COMPLETENESS_REVIEW.md) | 双仓系统完整性审查 |
-| [DUAL_REPO_COGNITIVE_MAP.md](DUAL_REPO_COGNITIVE_MAP.md) | 双仓认知地图 |
+| [DUAL_REPO_FULL_REAUDIT.md](DUAL_REPO_FULL_REAUDIT.md) | Full dual-repo re-audit (latest, most comprehensive) *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [DUAL_REPO_GAP_MATRIX.md](DUAL_REPO_GAP_MATRIX.md) | Structured gap matrix (supersedes all prior versions) *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [FOLLOWUP_IMPLEMENTATION_ROADMAP.md](FOLLOWUP_IMPLEMENTATION_ROADMAP.md) | Prioritized follow-up roadmap *（顶部附 2026-09-27 逐条复核表）* |
+| [ANDROID_PROTOCOL_MATURITY_MATRIX.md](ANDROID_PROTOCOL_MATURITY_MATRIX.md) | Android long-tail protocol maturity matrix *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [MULTI_DEVICE_RUNTIME_MATURITY.md](MULTI_DEVICE_RUNTIME_MATURITY.md) | Multi-device runtime component maturity *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [UNIFIED_SCHEDULING_AUTHORITY_MAP.md](UNIFIED_SCHEDULING_AUTHORITY_MAP.md) | Scheduling/routing authority chain map *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [TRUTH_PROJECTION_CONVERGENCE_MAP.md](TRUTH_PROJECTION_CONVERGENCE_MAP.md) | Truth/projection convergence audit *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [DUAL_REPO_COGNITION_AUDIT_ZH.md](DUAL_REPO_COGNITION_AUDIT_ZH.md) | 双仓联合认知审查 (中文版) *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [CODE_EVIDENCE_DUAL_REPO_SYSTEM_AUDIT.md](CODE_EVIDENCE_DUAL_REPO_SYSTEM_AUDIT.md) | 双仓联合纯代码证据审查 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [GALAXY_SYSTEM_FORMAL_BASELINE_COGNITION_ZH.md](GALAXY_SYSTEM_FORMAL_BASELINE_COGNITION_ZH.md) | Galaxy 双仓系统正式基线认知文档 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [MATURITY_REVIEW_2026Q2_DUAL_COORD.md](MATURITY_REVIEW_2026Q2_DUAL_COORD.md) | 双坐标系成熟度映射审查 2026Q2 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [DUAL_REPO_SYSTEM_COMPLETENESS_REVIEW.md](DUAL_REPO_SYSTEM_COMPLETENESS_REVIEW.md) | 双仓系统完整性审查 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [DUAL_REPO_COGNITIVE_MAP.md](DUAL_REPO_COGNITIVE_MAP.md) | 双仓认知地图 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 
 ---
 
@@ -67,14 +71,14 @@ documents are **authoritative and current** vs historical or superseded.
 | [ARCHITECTURE_BASELINE.md](ARCHITECTURE_BASELINE.md) | Architecture baseline — terminal state after PR-11 |
 | [ARCHITECTURE_STATUS_SURFACE.md](ARCHITECTURE_STATUS_SURFACE.md) | Architecture status surface |
 | [LEGACY_SURFACES.md](LEGACY_SURFACES.md) | Authoritative registry of retired legacy surfaces |
-| [LEGACY_DECOMMISSION_AUDIT.md](LEGACY_DECOMMISSION_AUDIT.md) | PR-516 legacy system decommission audit |
+| [LEGACY_DECOMMISSION_AUDIT.md](LEGACY_DECOMMISSION_AUDIT.md) | PR-516 legacy system decommission audit *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [LEGACY_PURGE_HARDENING.md](LEGACY_PURGE_HARDENING.md) | PR-10 final legacy purge and baseline hardening |
 | [MAINLINE_CONVERGENCE.md](MAINLINE_CONVERGENCE.md) | PR-8 system convergence and mainline integration |
-| [ARCHITECTURE_GAP_CLOSURE.md](ARCHITECTURE_GAP_CLOSURE.md) | Architecture gap closure: multi-device runtime, compatibility, convergence |
-| [AUTHORITATIVE_PATH_CONVERGENCE_AUDIT.md](AUTHORITATIVE_PATH_CONVERGENCE_AUDIT.md) | Authoritative path convergence audit |
+| [ARCHITECTURE_GAP_CLOSURE.md](ARCHITECTURE_GAP_CLOSURE.md) | Architecture gap closure: multi-device runtime, compatibility, convergence *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [AUTHORITATIVE_PATH_CONVERGENCE_AUDIT.md](AUTHORITATIVE_PATH_CONVERGENCE_AUDIT.md) | Authoritative path convergence audit *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [BOUNDED_SUBJECT_PLATFORM_BOUNDARY_V1.md](BOUNDED_SUBJECT_PLATFORM_BOUNDARY_V1.md) | Bounded subject platform boundary v1 |
 | [CANONICAL_TASK_EXECUTION_SPINE.md](CANONICAL_TASK_EXECUTION_SPINE.md) | PR-A: canonical task & execution spine |
-| [COMPLETE_SYSTEM_USABILITY_CLOSURE_PLAN.md](COMPLETE_SYSTEM_USABILITY_CLOSURE_PLAN.md) | Complete system usability closure plan |
+| [COMPLETE_SYSTEM_USABILITY_CLOSURE_PLAN.md](COMPLETE_SYSTEM_USABILITY_CLOSURE_PLAN.md) | Complete system usability closure plan *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [CONTRACT_TRUTH_POLICY_CLOSURE.md](CONTRACT_TRUTH_POLICY_CLOSURE.md) | Contract truth policy closure |
 
 ---
@@ -173,7 +177,7 @@ documents are **authoritative and current** vs historical or superseded.
 | [UNIFIED_STARTUP.md](UNIFIED_STARTUP.md) | Unified startup flow |
 | [MANIFEST_STAGE.md](MANIFEST_STAGE.md) | Manifest stage |
 | [NODE_ACTIVE_MANIFEST.md](NODE_ACTIVE_MANIFEST.md) | Node active manifest |
-| [NODE_SYSTEM_AUDIT.md](NODE_SYSTEM_AUDIT.md) | Node system audit |
+| [NODE_SYSTEM_AUDIT.md](NODE_SYSTEM_AUDIT.md) | Node system audit *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [V2_UNIFIED_STATE_CONTRACT.md](V2_UNIFIED_STATE_CONTRACT.md) | V2 unified state contract |
 | [DURABLE_RUNTIME_SESSION_SNAPSHOT.md](DURABLE_RUNTIME_SESSION_SNAPSHOT.md) | Durable runtime session snapshot |
 | [DATA_FLOW.md](DATA_FLOW.md) | Data flow documentation |
@@ -189,7 +193,7 @@ documents are **authoritative and current** vs historical or superseded.
 | [ANDROID_EVALUATOR_ARTIFACT_GOVERNANCE_INTEGRATION.md](ANDROID_EVALUATOR_ARTIFACT_GOVERNANCE_INTEGRATION.md) | Android evaluator artifact governance integration |
 | [ANDROID_TRUTH_RECONCILIATION_REVIEWER_GUIDE.md](ANDROID_TRUTH_RECONCILIATION_REVIEWER_GUIDE.md) | Android participant truth reconciliation reviewer guide |
 | [ANDROID_V2_JOINT_CONTINUITY_CONTRACT.md](ANDROID_V2_JOINT_CONTINUITY_CONTRACT.md) | Android-V2 joint continuity contract |
-| [V2_ANDROID_RUNTIME_CLOSURE_AUDIT.md](V2_ANDROID_RUNTIME_CLOSURE_AUDIT.md) | V2 Android runtime closure audit |
+| [V2_ANDROID_RUNTIME_CLOSURE_AUDIT.md](V2_ANDROID_RUNTIME_CLOSURE_AUDIT.md) | V2 Android runtime closure audit *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [MULTI_DEVICE_CONTROL_INTEGRITY_RESIDUAL_MAP.md](MULTI_DEVICE_CONTROL_INTEGRITY_RESIDUAL_MAP.md) | Multi-device control integrity residual map |
 | [MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md](MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md) | Multi-device E2E acceptance matrix |
 | [DEVICE_FORMATION_AND_MULTI_DEVICE_GROUPS.md](DEVICE_FORMATION_AND_MULTI_DEVICE_GROUPS.md) | Device formation and multi-device groups |
@@ -316,7 +320,7 @@ historical reference but are **not maintained** going forward.
 
 | Document | Context |
 |----------|---------|
-| [GALAXY_COMPLETE_FIX_REPORT.md](GALAXY_COMPLETE_FIX_REPORT.md) | Galaxy system completeness fix report (2026-02-05) |
+| [GALAXY_COMPLETE_FIX_REPORT.md](GALAXY_COMPLETE_FIX_REPORT.md) | Galaxy system completeness fix report (2026-02-05) *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [GALAXY_CORE_LOGIC_FIX_REPORT.md](GALAXY_CORE_LOGIC_FIX_REPORT.md) | Galaxy core logic layer fix report |
 | [HARDWARE_TRIGGER_FIX_REPORT.md](HARDWARE_TRIGGER_FIX_REPORT.md) | Hardware trigger system fix report |
 | [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) | Galaxy node system fix report |
@@ -337,30 +341,30 @@ reference. Current practice should consult ACTIVE documents above.
 | [HICLAW_IMPROVEMENTS.md](HICLAW_IMPROVEMENTS.md) | HiClaw improvements |
 | [KEY_ROTATION.md](KEY_ROTATION.md) | Key rotation documentation |
 | [MEMORY_FRESHNESS.md](MEMORY_FRESHNESS.md) | Memory freshness |
-| [NODE_SYSTEM_AUDIT.md](NODE_SYSTEM_AUDIT.md) | Node system audit |
+| [NODE_SYSTEM_AUDIT.md](NODE_SYSTEM_AUDIT.md) | Node system audit *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [GEMINI_RENDERING_PROTOCOL.md](GEMINI_RENDERING_PROTOCOL.md) | Gemini rendering protocol |
 | [GITHUB_ADDONS.md](GITHUB_ADDONS.md) | GitHub addons |
 | [system/DUAL_REPO_FULL_SYSTEM_BASELINE_V3.md](system/DUAL_REPO_FULL_SYSTEM_BASELINE_V3.md) | Dual-repo full system baseline V3 (historical) |
 | [acceptance/u1_u33_final_acceptance.md](acceptance/u1_u33_final_acceptance.md) | U1–U33 final acceptance |
-| [MATURITY_PROGRESS_REVIEW_2024.md](MATURITY_PROGRESS_REVIEW_2024.md) | 2024 maturity progress review |
-| [JOINT_CODE_INVESTIGATION_REVIEW.md](JOINT_CODE_INVESTIGATION_REVIEW.md) | Joint code investigation review |
-| [JOINT_CODE_REVIEW_DUAL_REPO_2026Q2.md](JOINT_CODE_REVIEW_DUAL_REPO_2026Q2.md) | Joint code review dual-repo 2026Q2 |
+| [MATURITY_PROGRESS_REVIEW_2024.md](MATURITY_PROGRESS_REVIEW_2024.md) | 2024 maturity progress review *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [JOINT_CODE_INVESTIGATION_REVIEW.md](JOINT_CODE_INVESTIGATION_REVIEW.md) | Joint code investigation review *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [JOINT_CODE_REVIEW_DUAL_REPO_2026Q2.md](JOINT_CODE_REVIEW_DUAL_REPO_2026Q2.md) | Joint code review dual-repo 2026Q2 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [JOINT_DUAL_REPO_COGNITION_CLOSURE_BASELINE_ZH.md](JOINT_DUAL_REPO_COGNITION_CLOSURE_BASELINE_ZH.md) | Joint dual-repo cognition closure baseline |
-| [JOINT_SYSTEM_REVIEW_V2_ANDROID_2026Q2.md](JOINT_SYSTEM_REVIEW_V2_ANDROID_2026Q2.md) | Joint system review V2 Android 2026Q2 |
+| [JOINT_SYSTEM_REVIEW_V2_ANDROID_2026Q2.md](JOINT_SYSTEM_REVIEW_V2_ANDROID_2026Q2.md) | Joint system review V2 Android 2026Q2 *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [review/COGNITION_AND_JOINT_REVIEW_UNIFIED_DISTRIBUTED_SYSTEM.md](review/COGNITION_AND_JOINT_REVIEW_UNIFIED_DISTRIBUTED_SYSTEM.md) | Cognition and joint review unified distributed system |
 | [MCP_ADDON_CONTRACT.md](MCP_ADDON_CONTRACT.md) | MCP addon contract |
 | [CONTINUUM_OBSERVABILITY.md](CONTINUUM_OBSERVABILITY.md) | Continuum observability |
 | [LOCAL_RUNTIME_HOST_CONTRACT.md](LOCAL_RUNTIME_HOST_CONTRACT.md) | Local runtime host contract |
 | [FORMAL_SYSTEM_BOUNDARY_OUTPUT_V1.md](FORMAL_SYSTEM_BOUNDARY_OUTPUT_V1.md) | Formal system boundary output v1 |
-| [FULL_SYSTEM_JOINT_REVIEW.md](FULL_SYSTEM_JOINT_REVIEW.md) | Full system joint review |
-| [CENTER_DISTRIBUTED_AGENT_SYSTEM_REVIEW.md](CENTER_DISTRIBUTED_AGENT_SYSTEM_REVIEW.md) | Center-governed distributed agent system review |
+| [FULL_SYSTEM_JOINT_REVIEW.md](FULL_SYSTEM_JOINT_REVIEW.md) | Full system joint review *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
+| [CENTER_DISTRIBUTED_AGENT_SYSTEM_REVIEW.md](CENTER_DISTRIBUTED_AGENT_SYSTEM_REVIEW.md) | Center-governed distributed agent system review *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 | [windows_mcp_server.md](windows_mcp_server.md) | Windows MCP server |
 | [command_protocol.md](command_protocol.md) | Command routing protocol (legacy entry) |
 | [ENTRYPOINT_AND_SURFACE_DEMOTION.md](ENTRYPOINT_AND_SURFACE_DEMOTION.md) | Entrypoint and surface demotion |
 | [DISTRIBUTED_SUBJECT_CONTRACT_V1.md](DISTRIBUTED_SUBJECT_CONTRACT_V1.md) | Distributed subject contract v1 |
 | [DISTRIBUTED_RELEASE_GATE_SKELETON.md](DISTRIBUTED_RELEASE_GATE_SKELETON.md) | Distributed release gate skeleton |
 | [DIAGNOSTICS_INSPECTION_INTERACTION.md](DIAGNOSTICS_INSPECTION_INTERACTION.md) | Diagnostics inspection interaction |
-| [V2_READINESS_GOVERNANCE_EVIDENCE_MATRIX.md](V2_READINESS_GOVERNANCE_EVIDENCE_MATRIX.md) | V2 readiness governance evidence matrix |
+| [V2_READINESS_GOVERNANCE_EVIDENCE_MATRIX.md](V2_READINESS_GOVERNANCE_EVIDENCE_MATRIX.md) | V2 readiness governance evidence matrix *（历史快照，当前状态见 SYSTEM_STATUS.md）* |
 
 ---
 
@@ -389,6 +393,8 @@ reference. Current practice should consult ACTIVE documents above.
 | **SUPERSEDED** | 7 |
 | **DEPRECATED** | 1 |
 | **Total** | **273** |
+
+2026-09-27：上表计数早于本次标注；其中 41 份状态/审计类文档已加「历史快照」说明（清单见 SYSTEM_STATUS.md 第 9 节），另新增 SYSTEM_STATUS.md。
 
 ---
 

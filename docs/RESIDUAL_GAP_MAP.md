@@ -1,5 +1,8 @@
 # Residual Gap Map — PR-512 System Closure Audit
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > Machine-readable residual gap catalog produced by PR-512.
 > Each entry is annotated with severity, owning layer, and follow-up PR.
 > The canonical in-code catalog lives in `core/runtime_closure_audit.py`

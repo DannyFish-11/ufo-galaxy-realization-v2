@@ -36,7 +36,15 @@ RUN groupadd -r galaxy && useradd -r -g galaxy -m -u 1000 galaxy \
     && mkdir -p /app/data /app/logs \
     && chown -R galaxy:galaxy /app
 
+# contracts/:网关的安卓处理器(galaxy_gateway.android.handlers.*,37 个模块)在模块顶层
+# import 它,缺了这些处理器在镜像里全部导入失败。integration/:core.perception 顶层 import
+# 的事件总线。tools/architecture/:core.system_completion_status 顶层 import。
+# 核对见 tests/test_container_images_ship_what_they_run.py。
 COPY --chown=galaxy:galaxy core/ ./core/
+COPY --chown=galaxy:galaxy contracts/ ./contracts/
+COPY --chown=galaxy:galaxy integration/ ./integration/
+COPY --chown=galaxy:galaxy tools/__init__.py ./tools/
+COPY --chown=galaxy:galaxy tools/architecture/ ./tools/architecture/
 COPY --chown=galaxy:galaxy config/ ./config/
 COPY --chown=galaxy:galaxy nodes/ ./nodes/
 COPY --chown=galaxy:galaxy enhancements/ ./enhancements/
@@ -60,7 +68,7 @@ COPY --chown=galaxy:galaxy requirements-core.txt .
 # compileall 显式调用 py_compile,不受 PYTHONDONTWRITEBYTECODE 影响,
 # 所以运行期那个环境变量可以照旧保留。
 # -q 只报错误;失败不阻断构建(个别文件语法不兼容当前版本时,退化成运行期编译)。
-RUN python -m compileall -q core/ galaxy_gateway/ nodes/ enhancements/ daemon/ || true
+RUN python -m compileall -q core/ contracts/ integration/ galaxy_gateway/ nodes/ enhancements/ daemon/ || true
 
 USER galaxy
 

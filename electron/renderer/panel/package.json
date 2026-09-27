@@ -1,6 +1,6 @@
 {
   "name": "galaxy-hud",
-  "version": "1.0.0",
+  "version": "2.3.23",
   "private": true,
   "type": "module",
   "description": "UFO Galaxy 面板。纯 TypeScript,不依赖任何 UI 框架,也不依赖任何桌面外壳。",

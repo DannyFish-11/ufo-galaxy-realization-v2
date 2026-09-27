@@ -50,6 +50,7 @@ from .node_registry import (
     get_registry,
     register_node,
 )
+from .version import __version__  # 版本号的唯一来源（core/version.py）
 
 # ============================================================================
 # 延迟导入工厂函数（避免循环依赖 + 按需加载）
@@ -287,5 +288,3 @@ __all__ = [
     "EdgeTTSEngine",
     "VoiceLoop",
 ]
-
-__version__ = "3.0.0"

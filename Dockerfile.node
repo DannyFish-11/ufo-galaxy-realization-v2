@@ -19,9 +19,14 @@ FROM python:3.11-slim AS base
 WORKDIR /app
 
 # System dependencies needed by various nodes
+# gcc + libc6-dev(连带 linux-libc-dev 内核头):requirements.txt 里的 pynput 在 Linux 上
+# 依赖 evdev,而 evdev 没有 manylinux 轮子,只能从源码编译。slim 基础镜像不带编译器,
+# 少了这两个包 `pip install -r requirements.txt` 在 evdev 处失败,整个节点镜像构建不出来。
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
+    gcc \
+    libc6-dev \
     libpq5 \
     tini \
     && rm -rf /var/lib/apt/lists/*

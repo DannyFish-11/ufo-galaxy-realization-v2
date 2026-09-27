@@ -36,7 +36,7 @@ if "%ANSI_OK%"=="1" (
         "'║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║'," ^
         "'║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║'," ^
         "'║                                                          ║'," ^
-        "'║     L4 Autonomous Intelligence System   v2.3.21          ║'," ^
+        "'║     L4 Autonomous Intelligence System   v2.3.23          ║'," ^
         "'║                                                          ║'," ^
         "'╚══════════════════════════════════════════════════════════╝';" ^
         "Write-Host '';$lines|ForEach-Object{gl $_};Write-Host ''"
@@ -51,7 +51,7 @@ if "%ANSI_OK%"=="1" (
     echo ║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║
     echo ║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║
     echo ║                                                          ║
-    echo ║     L4 Autonomous Intelligence System   v2.3.21          ║
+    echo ║     L4 Autonomous Intelligence System   v2.3.23          ║
     echo ║                                                          ║
     echo ╚══════════════════════════════════════════════════════════╝
     echo.

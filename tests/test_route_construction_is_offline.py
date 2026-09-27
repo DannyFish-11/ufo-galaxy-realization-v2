@@ -30,6 +30,7 @@ connection refused,看不出慢。但只要那个端口是被防火墙**丢包**
 from __future__ import annotations
 
 import socket
+import threading
 
 import pytest
 
@@ -43,9 +44,15 @@ def forbid_network(monkeypatch):
     """
     attempted: list = []
     real_connect = socket.socket.connect
+    # 只算**本测试线程**发起的连接。拼路由表是同步动作，要守的就是这个线程；
+    # socket.connect 是进程级打桩，别的测试遗留的后台线程（比如一个没停掉的重连客户端）
+    # 在这个窗口里连一下也会被记进来 —— CI 分片一变，这条就会替别人背锅。
+    # 其它线程照常被拦（不放行），只是不记账。
+    test_thread = threading.get_ident()
 
     def _blocked(self, address):
-        attempted.append(address)
+        if threading.get_ident() == test_thread:
+            attempted.append(address)
         raise ConnectionRefusedError(f"网络在本用例中被禁用: {address}")
 
     monkeypatch.setattr(socket.socket, "connect", _blocked)

@@ -145,6 +145,20 @@ class RecordingExecutor:
         }
 
 
+#: 本文件起过的笔记本客户端。DeviceClient.run() 断线后每 5 秒重连一次、永不自停;
+#: 测试结束不停它,网关关掉以后它就一直在后台重连到整个会话结束 —— 连接尝试会被
+#: 别的测试(tests/test_route_construction_is_offline.py 全局拦 socket.connect)记到
+#: 自己头上,CI 分片一变就红。每个测试结束都停掉。
+_LAPTOPS: list = []
+
+
+@pytest.fixture(autouse=True)
+def _stop_laptops_after_each_test():
+    yield
+    while _LAPTOPS:
+        _LAPTOPS.pop().client.stop()
+
+
 class Laptop:
     """真的 DeviceClient(连接层);执行插件换成记账的替身。"""
 
@@ -157,6 +171,7 @@ class Laptop:
         self.client = DeviceClient(self.executor, host="127.0.0.1", port=port, state=state)
         self.thread = threading.Thread(target=lambda: asyncio.run(self.client.run()), daemon=True)
         self.thread.start()
+        _LAPTOPS.append(self)
 
     def wait_connected(self, timeout=20.0) -> bool:
         from core.unified.connection_manager import get_unified_connection_manager

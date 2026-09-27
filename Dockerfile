@@ -49,12 +49,24 @@ RUN groupadd -r galaxy && useradd -r -g galaxy -m -u 1000 galaxy \
     && chown -R galaxy:galaxy /app
 
 # Copy project files (precise COPY, no whole project)
-COPY --chown=galaxy:galaxy requirements.txt main.py ./
+#
+# 拷哪些由 tests/test_container_images_ship_what_they_run.py 按 import 关系核对,
+# 不是凭印象列的。缺了的后果各不相同:
+#   entrypoint_role_contract.py / launcher/  main.py 顶层与 Phase 4-6 直接 import,缺一 CMD 即崩
+#   integration/                             core.perception 包在模块顶层 import 它,缺了整个感知层导入失败
+#   tools/architecture/                      core.system_completion_status 顶层 import(系统状态端点)
+#   scripts/check_dependencies.py            launcher 依赖检查的数据源(缺它只降级)
+# 此处原有的 `cli/` 在仓库里不存在,会让构建直接在 COPY 处失败。
+COPY --chown=galaxy:galaxy requirements.txt main.py entrypoint_role_contract.py ./
 COPY --chown=galaxy:galaxy core/ ./core/
+COPY --chown=galaxy:galaxy launcher/ ./launcher/
+COPY --chown=galaxy:galaxy integration/ ./integration/
 COPY --chown=galaxy:galaxy galaxy_gateway/ ./galaxy_gateway/
 COPY --chown=galaxy:galaxy contracts/ ./contracts/
 COPY --chown=galaxy:galaxy config/ ./config/
-COPY --chown=galaxy:galaxy cli/ ./cli/
+COPY --chown=galaxy:galaxy tools/__init__.py ./tools/
+COPY --chown=galaxy:galaxy tools/architecture/ ./tools/architecture/
+COPY --chown=galaxy:galaxy scripts/check_dependencies.py ./scripts/
 COPY --chown=galaxy:galaxy nodes/ ./nodes/
 COPY --chown=galaxy:galaxy enhancements/ ./enhancements/
 COPY --chown=galaxy:galaxy audit/ ./audit/
@@ -75,7 +87,7 @@ COPY --chown=galaxy:galaxy audit/ ./audit/
 # compileall 显式调用 py_compile,不受 PYTHONDONTWRITEBYTECODE 影响,
 # 所以运行期那个环境变量可以照旧保留。
 # -q 只报错误;失败不阻断构建(个别文件语法不兼容当前版本时,退化成运行期编译)。
-RUN python -m compileall -q core/ galaxy_gateway/ nodes/ enhancements/ contracts/ || true
+RUN python -m compileall -q core/ launcher/ galaxy_gateway/ nodes/ enhancements/ contracts/ || true
 
 USER galaxy
 

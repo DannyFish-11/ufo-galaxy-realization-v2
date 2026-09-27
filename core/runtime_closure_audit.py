@@ -266,9 +266,9 @@ CLOSURE_STATUS_DEGRADED: str = "DEGRADED"
 #   gap_id      — stable identifier (never reused)
 #   severity    — one of GAP_SEVERITY_* constants
 #   layer       — owning layer or module
-#   description — concise description of what is not yet closed
+#   description — what was open at PR-512, and (once closed) where it closed
 #   follow_up   — suggested PR reference for resolution
-#   is_residual — True when closure is deferred beyond PR-512
+#   is_residual — True when closure was deferred beyond PR-512 (historical; the description says where it closed)
 
 _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
     {
@@ -276,10 +276,10 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_HIGH,
         "layer": "core/routes/tasks.py",
         "description": (
-            "API task ingress (POST /api/v1/tasks) front-loads CanonicalTask "
-            "but does not write a TaskExecutionRecord to ReplayFoundation. "
-            "The task_id flows into the canonical runtime but audit lineage "
-            "is not recorded for API-ingressed tasks."
+            "CLOSED by PR-513: POST /api/v1/tasks calls "
+            "ReplayFoundation.record_task_execution() right after the CanonicalTask "
+            "front-load (core/routes/tasks.py, GAP-512-001 sentinel), so API-ingressed "
+            "tasks carry audit lineage. Kept as the historical record of the gap."
         ),
         "follow_up": "PR-513",
         "is_residual": True,
@@ -289,10 +289,10 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_HIGH,
         "layer": "core/scheduler.py",
         "description": (
-            "Scheduler's relay and mesh paths stamp CANONICAL_TASK_FRONT_LOADED "
-            "sentinel but the resulting CanonicalTask is not registered in "
-            "TaskGraphRuntime before dispatch, creating a gap between task-graph "
-            "realization (PR-508) and the scheduler's mesh/relay codepaths."
+            "CLOSED by PR-513: _exec_relay(), _exec_mesh_send() and _exec_broadcast() "
+            "register the front-loaded CanonicalTask in TaskGraphRuntime before "
+            "dispatch (core/scheduler.py, GAP-512-002 sentinel). "
+            "Kept as the historical record of the gap."
         ),
         "follow_up": "PR-513",
         "is_residual": True,
@@ -302,11 +302,11 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_MEDIUM,
         "layer": "core/projection_surface_bridge.py",
         "description": (
-            "ProjectionSurfaceBridge.enrich_runtime_projection() enriches "
-            "projection dicts from OperatorSurface, but the status board "
-            "surfaces (desktop_projection, React panel) do not yet call "
-            "enrich_runtime_projection() in their assembly paths. "
-            "Bridge is wired but not yet consumed by all projection endpoints."
+            "CLOSED by PR-514: the projection routes run their payloads through "
+            "authority_conflict_elimination.enrich_projection_with_runtime_authority() "
+            "(core/routes/projection.py), so status surfaces read the canonical "
+            "runtime authority instead of assembling their own. "
+            "Kept as the historical record of the gap."
         ),
         "follow_up": "PR-514",
         "is_residual": False,
@@ -316,10 +316,10 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_MEDIUM,
         "layer": "core/capability_network_runtime_policy.py",
         "description": (
-            "query_routable_executors() and query_network_path() are available "
-            "for router/policy consumption, but the CommandRouter does not yet "
-            "call these helpers before selecting dispatch targets. "
-            "Routing decisions may bypass canonical capability/network truth."
+            "CLOSED by PR-513: CommandRouter.route_envelope() consults "
+            "query_routable_executors() / query_network_path() before choosing "
+            "dispatch targets (core/command_router.py). Production callers are pinned "
+            "by config/assessment_claims.json GAP-512-004-capability-graph-consulted."
         ),
         "follow_up": "PR-513",
         "is_residual": True,
@@ -329,11 +329,11 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_MEDIUM,
         "layer": "core/operator_surface.py / core/routes/operator.py",
         "description": (
-            "OperatorSurface.operator_snapshot() is exposed via the REST API "
-            "(GET /api/v1/operator/snapshot) but the status board / desktop "
-            "projection surface does not consume the operator snapshot. "
-            "The status board still assembles its own runtime view without "
-            "reading from the canonical operator surface."
+            "CLOSED by PR-514: the operator snapshot reaches the status board: "
+            "enrich_projection_with_runtime_authority() injects operator_snapshot_dict "
+            "and core.unified_panel_aggregation (GET /api/v1/panel) reads "
+            "OperatorSurface.operator_snapshot(). "
+            "Kept as the historical record of the gap."
         ),
         "follow_up": "PR-514",
         "is_residual": False,
@@ -343,10 +343,10 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_LOW,
         "layer": "galaxy_gateway/orchestrator/task_orchestrator.py",
         "description": (
-            "TaskOrchestrator front-loads CanonicalTask (PR-507) but does not "
-            "register an audit event via AuditEventSemantics after successful "
-            "orchestration handoff, leaving the audit trail incomplete for "
-            "gateway-orchestrated tasks."
+            "CLOSED by PR-513: TaskOrchestrator emits "
+            "AuditEventSemantics.audit_task_dispatched after device selection "
+            "(galaxy_gateway/orchestrator/task_orchestrator.py, GAP-512-006 sentinel). "
+            "Kept as the historical record of the gap."
         ),
         "follow_up": "PR-513",
         "is_residual": True,
@@ -356,9 +356,9 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_LOW,
         "layer": "core/agent/kernel.py",
         "description": (
-            "AgentKernel front-loads CanonicalTask (PR-507) but does not emit "
-            "a TASK_ADMITTED audit event, creating a gap between task admission "
-            "and the canonical audit vocabulary defined in PR-506."
+            "CLOSED by PR-513: AgentKernel._process() emits audit_task_admitted after "
+            "the CanonicalTask front-load (core/agent/kernel.py, GAP-512-007 sentinel). "
+            "Kept as the historical record of the gap."
         ),
         "follow_up": "PR-513",
         "is_residual": True,
@@ -368,10 +368,10 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_RESIDUAL,
         "layer": "desktop_projection / electron_renderer_panel",
         "description": (
-            "Desktop projection surfaces (ContinuumState, DesktopStatusProjection) "
-            "still maintain their own topology/route representations independently "
-            "of NetworkTopologyRuntime. Final presentation authority clarification "
-            "is out of scope for PR-512 and PR-513."
+            "CLOSED by PR-514 as a boundary, not a merge: desktop projections keep "
+            "their own topology/route representation, but NO_COMPETING_TOPOLOGY_TRUTH_POLICY "
+            "(core/authority_conflict_elimination.py) declares them presentation-only; "
+            "NetworkTopologyRuntime stays the single authority."
         ),
         "follow_up": "PR-514",
         "is_residual": False,
@@ -381,11 +381,11 @@ _KNOWN_RESIDUAL_GAPS: List[Dict[str, Any]] = [
         "severity": GAP_SEVERITY_RESIDUAL,
         "layer": "core/critical_path_harness.py",
         "description": (
-            "Multi-model intelligent routing supply (model topology / provider "
-            "routing) remains expressed through the ContinuumState/TopologyRoutePlan "
-            "projection path only, without a canonical runtime authority equivalent "
-            "to NetworkTopologyRuntime for the device/network domain. "
-            "This is a known accepted gap deferred to a dedicated model-topology PR."
+            "CLOSED by PR-515: core/critical_path_harness.py establishes a canonical "
+            "runtime authority for model/provider routing supply "
+            "(NO_COMPETING_ROUTING_AUTHORITY_POLICY), equivalent to "
+            "NetworkTopologyRuntime for the device/network domain. "
+            "Kept as the historical record of the gap."
         ),
         "follow_up": "PR-515",
         "is_residual": False,

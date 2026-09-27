@@ -259,7 +259,7 @@ services:
   # ── Galaxy Core API + Management UI ──────────────────────────
   galaxy:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: galaxy-core
     ports:
@@ -285,9 +285,9 @@ services:
       qdrant:
         condition: service_healthy
     volumes:
-      - ./core:/app/core:ro
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
       - galaxy-data:/app/data
       - galaxy-logs:/app/logs
     networks:
@@ -302,7 +302,7 @@ services:
   # ── Galaxy API Gateway ────────────────────────────────────────
   galaxy-gateway:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.gateway
     container_name: galaxy-gateway
     ports:
@@ -334,7 +334,7 @@ services:
   #    All primary client traffic must go through galaxy-core:9000.) ────
   galaxy-launcher:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: galaxy-launcher
     profiles: [core, full]
@@ -358,9 +358,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
       - galaxy-logs:/app/logs
     networks:
@@ -370,7 +370,7 @@ services:
   # ── Galaxy Edge Worker ────────────────────────────────────────
   galaxy-worker:
     build:
-      context: ./worker
+      context: ../../worker
       dockerfile: Dockerfile
     container_name: galaxy-worker
     profiles: [worker, full]
@@ -402,7 +402,7 @@ services:
   # Node_01_OneAPI — 统一API网关
   node-01-oneapi:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_01_OneAPI
@@ -423,9 +423,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -440,7 +440,7 @@ services:
   # Node_09_Sandbox — 沙箱执行环境
   node-09-sandbox:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_09_Sandbox
@@ -461,9 +461,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -478,7 +478,7 @@ services:
   # Node_110_SmartOrchestrator — 智能编排器
   node-110-smartorchestrator:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_110_SmartOrchestrator
@@ -499,9 +499,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -516,7 +516,7 @@ services:
   # Node_111_ContextManager — 上下文管理器
   node-111-contextmanager:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_111_ContextManager
@@ -537,9 +537,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -554,7 +554,7 @@ services:
   # Node_112_SelfHealing — 自愈系统
   node-112-selfhealing:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_112_SelfHealing
@@ -575,9 +575,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -592,7 +592,7 @@ services:
   # Node_00_StateMachine — 状态机核心 - 系统状态管理
   node-00-statemachine:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_00_StateMachine
@@ -613,9 +613,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -630,7 +630,7 @@ services:
   # Node_02_Tasker — 任务调度引擎
   node-02-tasker:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_02_Tasker
@@ -651,9 +651,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -668,7 +668,7 @@ services:
   # Node_03_SecretVault — 密钥保险箱
   node-03-secretvault:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_03_SecretVault
@@ -689,9 +689,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -706,7 +706,7 @@ services:
   # Node_04_Router — 全局路由器
   node-04-router:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_04_Router
@@ -727,9 +727,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -744,7 +744,7 @@ services:
   # Node_05_Auth — 认证授权中心
   node-05-auth:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_05_Auth
@@ -765,9 +765,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -782,7 +782,7 @@ services:
   # Node_06_Filesystem — 文件系统管理
   node-06-filesystem:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_06_Filesystem
@@ -803,9 +803,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -820,7 +820,7 @@ services:
   # Node_07_Git — Git版本控制
   node-07-git:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_07_Git
@@ -841,9 +841,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -858,7 +858,7 @@ services:
   # Node_08_Fetch — 网络请求服务
   node-08-fetch:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_08_Fetch
@@ -879,9 +879,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -896,7 +896,7 @@ services:
   # Node_10_Slack — Slack集成
   node-10-slack:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_10_Slack
@@ -917,9 +917,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -934,7 +934,7 @@ services:
   # Node_11_GitHub — GitHub集成
   node-11-github:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_11_GitHub
@@ -955,9 +955,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -972,7 +972,7 @@ services:
   # Node_12_Postgres — PostgreSQL数据库
   node-12-postgres:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_12_Postgres
@@ -993,9 +993,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1010,7 +1010,7 @@ services:
   # Node_13_SQLite — SQLite数据库
   node-13-sqlite:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_13_SQLite
@@ -1031,9 +1031,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1048,7 +1048,7 @@ services:
   # Node_14_FFmpeg — 音视频处理
   node-14-ffmpeg:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_14_FFmpeg
@@ -1069,9 +1069,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1086,7 +1086,7 @@ services:
   # Node_15_OCR — 光学字符识别
   node-15-ocr:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_15_OCR
@@ -1107,9 +1107,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1124,7 +1124,7 @@ services:
   # Node_16_Email — 邮件服务
   node-16-email:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_16_Email
@@ -1145,9 +1145,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1162,7 +1162,7 @@ services:
   # Node_17_EdgeTTS — 文本转语音
   node-17-edgetts:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_17_EdgeTTS
@@ -1183,9 +1183,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1200,7 +1200,7 @@ services:
   # Node_18_DeepL — 翻译服务
   node-18-deepl:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_18_DeepL
@@ -1221,9 +1221,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1238,7 +1238,7 @@ services:
   # Node_19_Crypto — 加密服务
   node-19-crypto:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_19_Crypto
@@ -1259,9 +1259,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1276,7 +1276,7 @@ services:
   # Node_20_Qdrant — 向量数据库
   node-20-qdrant:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_20_Qdrant
@@ -1297,9 +1297,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1314,7 +1314,7 @@ services:
   # Node_21_Notion — Notion集成
   node-21-notion:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_21_Notion
@@ -1335,9 +1335,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1352,7 +1352,7 @@ services:
   # Node_22_BraveSearch — Brave搜索
   node-22-bravesearch:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_22_BraveSearch
@@ -1373,9 +1373,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1390,7 +1390,7 @@ services:
   # Node_26_Discord — Discord 集成
   node-26-discord:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_26_Discord
@@ -1411,9 +1411,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1428,7 +1428,7 @@ services:
   # Node_23_Time — 时间服务
   node-23-time:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_23_Time
@@ -1449,9 +1449,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1466,7 +1466,7 @@ services:
   # Node_24_Weather — 天气服务
   node-24-weather:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_24_Weather
@@ -1487,9 +1487,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1504,7 +1504,7 @@ services:
   # Node_25_GoogleSearch — Google搜索
   node-25-googlesearch:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_25_GoogleSearch
@@ -1525,9 +1525,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1542,7 +1542,7 @@ services:
   # Node_27_SmartHome — 智能家居控制
   node-27-smarthome:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_27_SmartHome
@@ -1563,9 +1563,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1580,7 +1580,7 @@ services:
   # Node_28_Reserved — 保留节点28
   node-28-reserved:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_28_Reserved
@@ -1601,9 +1601,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1618,7 +1618,7 @@ services:
   # Node_29_Reserved — 保留节点29
   node-29-reserved:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_29_Reserved
@@ -1639,9 +1639,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1656,7 +1656,7 @@ services:
   # Node_30_Reserved — 保留节点30
   node-30-reserved:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_30_Reserved
@@ -1677,9 +1677,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1694,7 +1694,7 @@ services:
   # Node_31_Reserved — 保留节点31
   node-31-reserved:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_31_Reserved
@@ -1715,9 +1715,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1732,7 +1732,7 @@ services:
   # Node_32_Reserved — 保留节点32
   node-32-reserved:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_32_Reserved
@@ -1753,9 +1753,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1770,7 +1770,7 @@ services:
   # Node_33_ADB — Android调试桥
   node-33-adb:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_33_ADB
@@ -1791,9 +1791,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1808,7 +1808,7 @@ services:
   # Node_34_Scrcpy — 屏幕镜像控制
   node-34-scrcpy:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_34_Scrcpy
@@ -1829,9 +1829,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1846,7 +1846,7 @@ services:
   # Node_35_AppleScript — AppleScript自动化
   node-35-applescript:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_35_AppleScript
@@ -1867,9 +1867,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1884,7 +1884,7 @@ services:
   # Node_36_UIAWindows — Windows UI自动化
   node-36-uiawindows:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_36_UIAWindows
@@ -1905,9 +1905,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1922,7 +1922,7 @@ services:
   # Node_37_LinuxDBus — Linux D-Bus控制
   node-39-ssh:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_39_SSH
@@ -1943,9 +1943,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1960,7 +1960,7 @@ services:
   # Node_40_SFTP — SFTP文件传输
   node-40-sftp:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_40_SFTP
@@ -1981,9 +1981,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -1998,7 +1998,7 @@ services:
   # Node_41_MQTT — MQTT消息队列
   node-43-mavlink:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_43_MAVLink
@@ -2019,9 +2019,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2036,7 +2036,7 @@ services:
   # Node_44_NFC — NFC近场通信
   node-44-nfc:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_44_NFC
@@ -2057,9 +2057,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2074,7 +2074,7 @@ services:
   # Node_45_DesktopAuto — 桌面自动化
   node-45-desktopauto:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_45_DesktopAuto
@@ -2095,9 +2095,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2112,7 +2112,7 @@ services:
   # Node_46_Camera — 摄像头控制
   node-46-camera:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_46_Camera
@@ -2133,9 +2133,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2150,7 +2150,7 @@ services:
   # Node_47_Audio — 音频控制
   node-47-audio:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_47_Audio
@@ -2171,9 +2171,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2188,7 +2188,7 @@ services:
   # Node_49_OctoPrint — 3D打印控制
   node-49-octoprint:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_49_OctoPrint
@@ -2209,9 +2209,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2226,7 +2226,7 @@ services:
   # Node_48_Serial — 串口通信
   node-50-transformer:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_50_Transformer
@@ -2247,9 +2247,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2264,7 +2264,7 @@ services:
   # Node_51_QuantumDispatcher — 量子计算调度器
   node-51-quantumdispatcher:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_51_QuantumDispatcher
@@ -2285,9 +2285,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2302,7 +2302,7 @@ services:
   # Node_52_QiskitSimulator — Qiskit量子模拟器
   node-52-qiskitsimulator:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_52_QiskitSimulator
@@ -2323,9 +2323,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2340,7 +2340,7 @@ services:
   # Node_53_GraphLogic — 图逻辑推理
   node-53-graphlogic:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_53_GraphLogic
@@ -2361,9 +2361,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2378,7 +2378,7 @@ services:
   # Node_54_SymbolicMath — 符号数学计算
   node-54-symbolicmath:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_54_SymbolicMath
@@ -2399,9 +2399,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2416,7 +2416,7 @@ services:
   # Node_55_MultiModal — 多模态处理
   node-55-multimodal:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_55_MultiModal
@@ -2437,9 +2437,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2454,7 +2454,7 @@ services:
   # Node_56_Planning — 规划引擎
   node-56-planning:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_56_Planning
@@ -2475,9 +2475,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2492,7 +2492,7 @@ services:
   # Node_57_QuantumCloud — 量子云服务
   node-57-quantumcloud:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_57_QuantumCloud
@@ -2513,9 +2513,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2530,7 +2530,7 @@ services:
   # Node_58_ModelRouter — 模型路由器
   node-58-modelrouter:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_58_ModelRouter
@@ -2551,9 +2551,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2568,7 +2568,7 @@ services:
   # Node_59_CausalInference — 因果推理
   node-59-causalinference:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_59_CausalInference
@@ -2589,9 +2589,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2606,7 +2606,7 @@ services:
   # Node_61_GeometricReasoning — 几何推理
   node-61-geometricreasoning:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_61_GeometricReasoning
@@ -2627,9 +2627,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2644,7 +2644,7 @@ services:
   # Node_62_ProbabilisticProgramming — 概率编程
   node-62-probabilisticprogramming:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_62_ProbabilisticProgramming
@@ -2665,9 +2665,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2682,7 +2682,7 @@ services:
   # Node_64_Telemetry — 遥测数据收集
   node-64-telemetry:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_64_Telemetry
@@ -2703,9 +2703,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2720,7 +2720,7 @@ services:
   # Node_65_LoggerCentral — 中央日志系统
   node-65-loggercentral:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_65_LoggerCentral
@@ -2741,9 +2741,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2758,7 +2758,7 @@ services:
   # Node_66_ConfigManager — 配置管理器
   node-66-configmanager:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_66_ConfigManager
@@ -2779,9 +2779,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2796,7 +2796,7 @@ services:
   # Node_67_HealthMonitor — 健康监控
   node-67-healthmonitor:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_67_HealthMonitor
@@ -2817,9 +2817,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2834,7 +2834,7 @@ services:
   # Node_68_Security — 安全监控
   node-68-security:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_68_Security
@@ -2855,9 +2855,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2872,7 +2872,7 @@ services:
   # Node_69_BackupRestore — 备份恢复
   node-69-backuprestore:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_69_BackupRestore
@@ -2893,9 +2893,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2910,7 +2910,7 @@ services:
   # Node_70_AutonomousLearning — 自主学习系统
   node-70-autonomouslearning:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_70_AutonomousLearning
@@ -2931,9 +2931,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2948,7 +2948,7 @@ services:
   # Node_71_MultiDeviceCoordination — 多设备协调
   node-71-multidevicecoordination:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_71_MultiDeviceCoordination
@@ -2969,9 +2969,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -2986,7 +2986,7 @@ services:
   # Node_72_KnowledgeBase — 知识库系统
   node-72-knowledgebase:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_72_KnowledgeBase
@@ -3007,9 +3007,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3024,7 +3024,7 @@ services:
   # Node_73_Learning — 自学习系统
   node-73-learning:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_73_Learning
@@ -3045,9 +3045,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3062,7 +3062,7 @@ services:
   # Node_74_DigitalTwin — 数字孪生
   node-74-digitaltwin:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_74_DigitalTwin
@@ -3083,9 +3083,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3100,7 +3100,7 @@ services:
   # Node_75_DataPipeline — 数据处理管道
   node-75-datapipeline:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_75_DataPipeline
@@ -3121,9 +3121,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3138,7 +3138,7 @@ services:
   # Node_76_AlertManager — 告警管理器
   node-76-alertmanager:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_76_AlertManager
@@ -3159,9 +3159,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3176,7 +3176,7 @@ services:
   # Node_77_TaskScheduler — 任务调度器
   node-77-taskscheduler:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_77_TaskScheduler
@@ -3197,9 +3197,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3214,7 +3214,7 @@ services:
   # Node_78_DataValidator — 数据校验服务
   node-78-datavalidator:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_78_DataValidator
@@ -3235,9 +3235,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3252,7 +3252,7 @@ services:
   # Node_79_LocalLLM — 本地大语言模型
   node-79-localllm:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_79_LocalLLM
@@ -3273,9 +3273,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3290,7 +3290,7 @@ services:
   # Node_81_Orchestrator — 任务编排器
   node-81-orchestrator:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_81_Orchestrator
@@ -3311,9 +3311,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3328,7 +3328,7 @@ services:
   # Node_82_NetworkGuard — 网络守卫
   node-82-networkguard:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_82_NetworkGuard
@@ -3349,9 +3349,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3366,7 +3366,7 @@ services:
   # Node_83_NewsAggregator — 新闻聚合器
   node-83-newsaggregator:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_83_NewsAggregator
@@ -3387,9 +3387,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3404,7 +3404,7 @@ services:
   # Node_84_StockTracker — 股票追踪
   node-84-stocktracker:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_84_StockTracker
@@ -3425,9 +3425,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3442,7 +3442,7 @@ services:
   # Node_85_PromptLibrary — 提示词库
   node-85-promptlibrary:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_85_PromptLibrary
@@ -3463,9 +3463,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3480,7 +3480,7 @@ services:
   # Node_86_SpeechProcessor — 语音处理服务
   node-86-speechprocessor:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_86_SpeechProcessor
@@ -3501,9 +3501,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3518,7 +3518,7 @@ services:
   # Node_87_ImageAnalysis — 图像分析服务
   node-87-imageanalysis:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_87_ImageAnalysis
@@ -3539,9 +3539,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3556,7 +3556,7 @@ services:
   # Node_88_WorkflowEngine — 工作流引擎
   node-88-workflowengine:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_88_WorkflowEngine
@@ -3577,9 +3577,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3594,7 +3594,7 @@ services:
   # Node_89_APIGateway — API网关
   node-89-apigateway:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_89_APIGateway
@@ -3615,9 +3615,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3632,7 +3632,7 @@ services:
   # Node_90_MultimodalVision — 多模态视觉
   node-90-multimodalvision:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_90_MultimodalVision
@@ -3653,9 +3653,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3670,7 +3670,7 @@ services:
   # Node_91_MultimodalAgent — 多模态智能体
   node-91-multimodalagent:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_91_MultimodalAgent
@@ -3691,9 +3691,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3708,7 +3708,7 @@ services:
   # Node_92_AutoControl — 自动控制
   node-92-autocontrol:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_92_AutoControl
@@ -3729,9 +3729,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3746,7 +3746,7 @@ services:
   # Node_93_VideoProcessor — 视频处理与分析
   node-93-videoprocessor:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_93_VideoProcessor
@@ -3767,9 +3767,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3784,7 +3784,7 @@ services:
   # Node_94_AudioAnalysis — 音频分析与转录
   node-94-audioanalysis:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_94_AudioAnalysis
@@ -3805,9 +3805,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3822,7 +3822,7 @@ services:
   # Node_95_WebRTC_Receiver — WebRTC接收器
   node-95-webrtc-receiver:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_95_WebRTC_Receiver
@@ -3843,9 +3843,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3860,7 +3860,7 @@ services:
   # Node_96_SmartTransportRouter — 智能传输路由
   node-96-smarttransportrouter:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_96_SmartTransportRouter
@@ -3881,9 +3881,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3898,7 +3898,7 @@ services:
   # Node_97_AcademicSearch — 学术搜索
   node-97-academicsearch:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_97_AcademicSearch
@@ -3919,9 +3919,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3936,7 +3936,7 @@ services:
   # Node_98_MultimodalFusion — 多模态融合
   node-98-multimodalfusion:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_98_MultimodalFusion
@@ -3957,9 +3957,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -3974,7 +3974,7 @@ services:
   # Node_99_EmbeddingService — 嵌入向量服务
   node-99-embeddingservice:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_99_EmbeddingService
@@ -3995,9 +3995,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4012,7 +4012,7 @@ services:
   # Node_100_MemorySystem — 记忆系统V2
   node-100-memorysystem:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_100_MemorySystem
@@ -4033,9 +4033,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4050,7 +4050,7 @@ services:
   # Node_101_CodeEngine — 代码引擎
   node-101-codeengine:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_101_CodeEngine
@@ -4071,9 +4071,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4088,7 +4088,7 @@ services:
   # Node_102_DebugOptimize — 调试优化
   node-102-debugoptimize:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_102_DebugOptimize
@@ -4109,9 +4109,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4126,7 +4126,7 @@ services:
   # Node_103_KnowledgeGraph — 知识图谱
   node-103-knowledgegraph:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_103_KnowledgeGraph
@@ -4147,9 +4147,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4164,7 +4164,7 @@ services:
   # Node_104_AgentCPM — 智能体CPM
   node-104-agentcpm:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_104_AgentCPM
@@ -4185,9 +4185,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4202,7 +4202,7 @@ services:
   # Node_105_UnifiedKnowledgeBase — 统一知识库
   node-105-unifiedknowledgebase:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_105_UnifiedKnowledgeBase
@@ -4223,9 +4223,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4240,7 +4240,7 @@ services:
   # Node_106_GitHubFlow — GitHub工作流
   node-106-githubflow:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_106_GitHubFlow
@@ -4261,9 +4261,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4278,7 +4278,7 @@ services:
   # Node_107_FunctionCalling — 函数调用调度器
   node-107-functioncalling:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_107_FunctionCalling
@@ -4299,9 +4299,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4316,7 +4316,7 @@ services:
   # Node_108_MetaCognition — 元认知系统
   node-108-metacognition:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_108_MetaCognition
@@ -4337,9 +4337,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4354,7 +4354,7 @@ services:
   # Node_109_ProactiveSensing — 主动感知
   node-109-proactivesensing:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_109_ProactiveSensing
@@ -4375,9 +4375,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4392,7 +4392,7 @@ services:
   # Node_113_AndroidVLM — Android视觉语言模型
   node-113-androidvlm:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_113_AndroidVLM
@@ -4413,9 +4413,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4430,7 +4430,7 @@ services:
   # Node_114_DocumentIntelligence — 文档智能解析与理解
   node-114-documentintelligence:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_114_DocumentIntelligence
@@ -4451,9 +4451,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4468,7 +4468,7 @@ services:
   # Node_115_PluginManager — 插件管理器
   node-115-pluginmanager:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_115_PluginManager
@@ -4489,9 +4489,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4506,7 +4506,7 @@ services:
   # Node_116_ExternalToolWrapper — 外部工具包装器
   node-116-externaltoolwrapper:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_116_ExternalToolWrapper
@@ -4527,9 +4527,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4544,7 +4544,7 @@ services:
   # Node_117_OpenCode — 开放代码
   node-117-opencode:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_117_OpenCode
@@ -4565,9 +4565,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4582,7 +4582,7 @@ services:
   # Node_118_NodeFactory — 节点工厂
   node-118-nodefactory:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_118_NodeFactory
@@ -4603,9 +4603,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4620,7 +4620,7 @@ services:
   # Node_119_BenchmarkEval — 基准评测系统
   node-119-benchmarkeval:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_119_BenchmarkEval
@@ -4641,9 +4641,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4658,7 +4658,7 @@ services:
   # Node_120_File — 文件操作服务
   node-120-file:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_120_File
@@ -4679,9 +4679,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4696,7 +4696,7 @@ services:
   # Node_121_Web — Web操作与代理
   node-121-web:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_121_Web
@@ -4717,9 +4717,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4734,7 +4734,7 @@ services:
   # Node_122_Shell — Shell命令执行器
   node-122-shell:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_122_Shell
@@ -4755,9 +4755,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4772,7 +4772,7 @@ services:
   # Node_123_Calendar — 日历服务
   node-123-calendar:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_123_Calendar
@@ -4793,9 +4793,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4810,7 +4810,7 @@ services:
   # Node_124_LinuxDesktopAuto — Linux桌面自动化
   node-124-linuxdesktopauto:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_124_LinuxDesktopAuto
@@ -4831,9 +4831,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4848,7 +4848,7 @@ services:
   # Node_125_MediaGen — 媒体生成
   node-125-mediagen:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_125_MediaGen
@@ -4869,9 +4869,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4886,7 +4886,7 @@ services:
   # Node_126_AgentSwarm — 智能体集群
   node-126-agentswarm:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_126_AgentSwarm
@@ -4907,9 +4907,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4924,7 +4924,7 @@ services:
   # Node_127_BambuLab — BambuLab 3D打印
   node-127-bambulab:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_127_BambuLab
@@ -4945,9 +4945,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -4962,7 +4962,7 @@ services:
   # Node_128_MediaGen — 媒体生成
   node-128-mediagen:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_128_MediaGen
@@ -4983,9 +4983,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -5000,7 +5000,7 @@ services:
   # Node_130_AutonomousCoding — 自主编码智能体
   node-130-autonomouscoding:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_130_AutonomousCoding
@@ -5021,9 +5021,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -5038,7 +5038,7 @@ services:
   # Node_60_ReinforcementLearning — 强化学习引擎
   node-60-reinforcementlearning:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_60_ReinforcementLearning
@@ -5059,9 +5059,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -5076,7 +5076,7 @@ services:
   # Node_63_FuzzyLogicEngine — 模糊逻辑推理引擎
   node-63-fuzzylogicengine:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_63_FuzzyLogicEngine
@@ -5097,9 +5097,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network
@@ -5114,7 +5114,7 @@ services:
   # Node_80_MemorySystem — 记忆系统
   node-80-memorysystem:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile.node
       args:
         NODE_NAME: Node_80_MemorySystem
@@ -5135,9 +5135,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./config:/app/config:ro
-      - ./nodes:/app/nodes:ro
-      - ./core:/app/core:ro
+      - ../../config:/app/config:ro
+      - ../../nodes:/app/nodes:ro
+      - ../../core:/app/core:ro
       - galaxy-data:/app/data
     networks:
       - galaxy-network

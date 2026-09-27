@@ -1699,10 +1699,10 @@ _register(
             "(a legacy fallback coordinator, PR-S3) and core.device_communication.send_command "
             "outside the canonical CanonicalTask → TaskEnvelope → CommandRouter.route_envelope() "
             "spine.  "
-            "Canonical session continuity and cross-device handoff: "
-            "core.canonical_session_axis + core.attached_runtime_session.  "
-            "SessionRoamingManager is retained only so existing session-roaming "
-            "call sites do not immediately break."
+            "Session taxonomy / attachment live in core.canonical_session_axis + "
+            "core.attached_runtime_session, but NEITHER provides migration yet.  "
+            "SessionRoamingManager stays the working migration path until one does; "
+            "do not merge its store with another (claim session-migration-*)."
         ),
         pr_guardrail_added="PR-M",
         notes=(

@@ -1,6 +1,6 @@
 {
   "name": "ufo-galaxy-realization-v2",
-  "version": "1.0.0",
+  "version": "2.3.23",
   "description": "UFO Galaxy AI System -- Center-based Multi-Relative-Subject Distributed AI",
   "scripts": {
     "install:all": "pip install -r requirements.txt && npm run install:electron && npm run install:gui",

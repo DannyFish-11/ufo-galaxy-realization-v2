@@ -1,5 +1,8 @@
 # 双仓联合纯代码证据审查：系统真实完成度与边界判断
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > **审查对象**：`DannyFish-11/ufo-galaxy-realization-v2`（以下 V2） + `DannyFish-11/ufo-galaxy-android`（以下 Android）
 >
 > **证据来源**：`core/`、`galaxy_gateway/`、`.github/workflows/`、`tests/`、Android `service/`、`network/`、`planner/`、`grounding/`、`inference/`、`webrtc/`、`runtime/`、测试目录及 CI workflow。

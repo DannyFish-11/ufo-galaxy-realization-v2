@@ -39,11 +39,11 @@ import contextlib
 import logging
 import os
 import socket
-import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from core import version as _version
 from core.ascii_art import Colors, print_banner, print_section_header, print_status_row
 from core.credential_vault import PLACEHOLDER_PREFIXES
 from core.log_locations import log_hint
@@ -620,7 +620,7 @@ class UnifiedWebUI:
             from core.auth import require_auth as _require_auth
             from nodes.common.cors_config import get_cors_headers, get_cors_methods, get_cors_origins
 
-            self.app = FastAPI(title="Galaxy", description="L4 级自主性智能系统", version="2.0")
+            self.app = FastAPI(title="Galaxy", description="L4 级自主性智能系统", version=_version.__version__)
             self.app.add_middleware(
                 CORSMiddleware,
                 allow_origins=get_cors_origins(),
@@ -750,7 +750,7 @@ class UnifiedWebUI:
                 return JSONResponse(
                     {
                         "status": "running",
-                        "version": "2.0",
+                        "version": _version.__version__,
                         "state": self.service_manager.state.name,
                         "services": self.service_manager.get_status(),
                         "config": self.config.get_status_dict(),
@@ -2380,7 +2380,7 @@ class GalaxyUnified:
         # (模型没拉好/没配 Key)配的建议完全不同，共用会文不对题、误导用户。
         degraded_items = [(n, h) for n, s, h in phases_state if s in ("warn", "fail")]
         r.summary_card(
-            title="Galaxy L4 · v2.3.21",
+            title=f"Galaxy L4 · {_version.GALAXY_VERSION}",
             state_ok=ok_n,
             state_degraded=len(degraded_items),
             rows=[

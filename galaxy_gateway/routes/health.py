@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from starlette.responses import Response
 
+from core.version import __version__
 from galaxy_gateway.dependencies import get_llm_router_instance, get_nats_adapter, get_openclawd, get_websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def health_check(wsm=Depends(get_websocket_manager)):
     """Basic health check."""
     return {
         "status": "healthy",
-        "version": "3.0.0",
+        "version": __version__,
         "devices_connected": wsm.get_device_count(),
     }
 
@@ -78,7 +79,7 @@ async def enhanced_health_check(
     """Enhanced health check — includes LLM and AI module status."""
     result: Dict[str, Any] = {
         "status": "healthy",
-        "version": "3.0.0",
+        "version": __version__,
         "devices_connected": wsm.get_device_count(),
         "ai_modules": {
             "openclawd": "available" if openclawd is not None else "unavailable",

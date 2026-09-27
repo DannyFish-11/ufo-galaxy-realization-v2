@@ -10,6 +10,44 @@
 
 ---
 
+## 2026-09-27 状态复核（读正文之前先看这里）
+
+> 下面的正文是 2026-04 的原始路线图，保留原样作为记录。**逐条对照代码复核之后的当前状态以这张表为准**；
+> 全系统的状态见 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md)。
+> 汇总：16 项已落地、1 项有意保留、5 项部分完成、2 项未做。唯一的 P0（D1）早已实现。
+
+| 项 | 当前状态 | 依据（代码） |
+|---|---|---|
+| A1 能力图强制 | 已落地 | `core/command_router.py` `route_envelope()` 在选目标前调 `query_routable_executors()` / `query_network_path()`，不再只是建议；结论 `GAP-512-004-capability-graph-consulted` |
+| A2 DeviceRouter 策略残留 | 已落地 | 策略分析抽到 `routing.policy`，CommandRouter 盖 `_command_router_pre_analyzed`，命中时底座跳过自己的分析；结论 `A2-device-router-policy-residue-open`、`SCHED-003-passthrough-wired` |
+| A3 DevicePool ↔ 能力同化 | 已落地 | `core/device_pool_manager.py` 调 `query_routable_executors()` |
+| A4 投影端点收敛 | 已落地 | `core/routes/projection.py` 经 `enrich_projection_with_runtime_authority()`；`tests/test_projection_remaining_gap_closure.py` 钉住 `outward_truth` 非空 |
+| A5 merged_results 全量来源 | 部分 | 有 `core/multi_device_projection_canonicalization.py`；编组数据是否全部取自规范读契约未逐项复核 |
+| A6 桌面投影收敛 | 已落地（划边界） | GAP-512-008：桌面投影保留自己的表示，但 `NO_COMPETING_TOPOLOGY_TRUTH_POLICY` 声明它只做呈现 |
+| B1 Mesh 会话生命周期引擎 | 已落地（结构） | `core/mesh/mesh_session_progression_driver.py` 驱动状态迁移；运行时仍登记 `mesh=structural_only` |
+| B2 协调器实时状态 | 已落地（结构） | `core/mesh/live_mesh_session_coordinator.py` / `live_mesh_runtime_engine.py` |
+| B3 跨运行时结果合并 | 部分 | `live_mesh_runtime_engine._merge_participant_results()` + `mesh_session_coordinator.update_with_merged_result()`；没有独立的合并引擎，也没有写 ReplayFoundation |
+| B4 Mesh 会话持久化 | 已落地 | `core/mesh/mesh_session_persistence.py`、`body_mesh_persistence.py`、`recover_mesh_sessions()` |
+| B5 动态编组重平衡 | 已落地（结构） | `core/device_formation/formation_rebalance_engine.py` + `formation_rebalance_trigger.py` |
+| B6 检查点恢复 | 部分 | 会话级的重启恢复有（B4），按任务步骤的检查点续跑引擎没有 |
+| C1 DeviceRouter 残留退役 | 已落地（兜底有意保留） | 同 A2：兜底路径留给不提供预分析的老调用方 |
+| C2 CapabilityRegistry 路由守卫 | 已落地 | `core/capability_registry.py` 的 `CapabilityRegistryMisuseEvent` |
+| C3 LEGACY_DISPATCH 可观测 | 已落地 | 指标 `galaxy_legacy_dispatch_total`（`galaxy_gateway/observability.py`，Q7 已在代码里决定）；告警规则 `GalaxyLegacyDispatchUsed` 在 `config/prometheus_alerts.yml`（2026-09-27 补齐，prometheus 抓取目标同时改对） |
+| C4 TaskRouter 文件移除 | 有意保留 | 仍在盘上，已登记为 LEGACY COMPAT 治理面；删不删是产品决定（结论 `C4-task-router-still-on-disk`） |
+| C5 安卓 REST 兼容别名退役 | 部分 | 弃用头与用量记账已有（`deprecation_headers`、`compat_usage.record_use`）；删除要等安卓侧 |
+| C6 旧 WS 路径退役 | 未做 | `/ws/ufo3` 仍在 `galaxy_gateway/routes/websocket.py`（已计入用量记账） |
+| D1 task_cancel（原 P0） | 已落地 | `handle_task_cancel` @ `galaxy_gateway/android/handlers/task_lifecycle.py`（结论 `D1-task-cancel-implemented`） |
+| D2 task_status | 已落地 | 结论 `D2-task-status-implemented` |
+| D3 session_migrate 统一 | 未做 | 规范面没有迁移能力，这条退役路径当前走不通（结论 `session-migration-has-no-canonical-home`） |
+| D4 安卓能力入同化层 | 已落地 | `registration.py` 调 `assimilate_device`（结论 `D4-android-capabilities-assimilated`） |
+| D5 WebRTC 任务生命周期 | 部分 | 绑定与拆除已接上生产调用方；能力仍登记为 EXPERIMENTAL，要真机证据（结论 `webrtc-binding-wired` / `webrtc-still-experimental`） |
+| D6 安卓本地真相对账 | 已落地（V2 侧） | `galaxy_gateway/android/handlers/reconciliation_signal.py`、`device_state_snapshot.py`；安卓侧不在本次复核范围 |
+
+设计问题 Q1–Q7：Q1（A1）、Q2（A3）、Q5（D5 走近期接线）、Q7（C3 走指标）已经由代码回答；
+Q3（会话迁移规范面）仍然悬着，并且是 D3 的真实阻塞；Q4、Q6 需要跨仓决定。
+
+---
+
 ## Roadmap principles
 
 1. **Correctness before capability**: P0/P1 items address correctness failures visible
@@ -410,15 +448,15 @@ protocol with V2 outward truth.
 ## Prioritized sequence summary
 
 ### Immediate (P0)
-1. **D1** — task_cancel canonical handler (correctness failure)
+1. **D1** — task_cancel canonical handler (correctness failure) — *2026-09-27 复核：已落地*
 
 ### Short-term (P1)
-2. **A1** — CommandRouter capability graph enforcement
+2. **A1** — CommandRouter capability graph enforcement — *已落地*
 3. **A2** — DeviceRouter policy residue extraction (C1)
 4. **C2** — CapabilityRegistry routing guard
 5. **B1** — MeshSession lifecycle engine
 6. **B2** — MeshSessionCoordinator live state engine
-7. **D2** — task_status canonical handler
+7. **D2** — task_status canonical handler — *已落地*
 8. **D3** — session_migrate canonical path unification
 
 ### Medium-term (P2)
@@ -429,14 +467,14 @@ protocol with V2 outward truth.
 13. **B3** — CrossRuntimeResultMerge engine
 14. **B4** — Mesh session persistence
 15. **C3** — LEGACY_DISPATCH observability
-16. **D4** — Android capability ingress wiring
+16. **D4** — Android capability ingress wiring — *已落地*
 17. **D5** — WebRTC-task lifecycle integration
 18. **D6** — Android local truth reconciliation
 
 ### Longer-term (P3/P4)
 19. **B5** — Dynamic formation rebalance
 20. **B6** — Recovery / resume from checkpoint
-21. **C4** — TaskRouter file removal
+21. **C4** — TaskRouter file removal — *有意保留（已治理为 LEGACY COMPAT）*
 22. **C5** — Android REST compat alias retirement
 23. **C6** — Legacy WebSocket path retirement
 
@@ -455,7 +493,7 @@ explicit design decisions before their dependent PRs can be opened:
 | Q4 | Android local state: V2 authoritative, Android authoritative, or explicit sync? | D6 |
 | Q5 | WebRTC-task lifecycle: near-term or longer-term? | D5 |
 | Q6 | AIP v2 binary retirement date? | C5, C6 |
-| Q7 | LEGACY_DISPATCH: metrics or log-only? | C3 |
+| Q7 | LEGACY_DISPATCH: metrics or log-only? *(2026-09-27：已在代码里决定为指标)* | C3 |
 
 ---
 

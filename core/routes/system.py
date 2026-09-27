@@ -48,6 +48,7 @@ from core.routes._shared import (
     registered_devices,
     task_queue,
 )
+from core.version import __version__ as _galaxy_version
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -98,7 +99,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(
             {
                 "status": "running",
-                "version": "2.0.0",
+                "version": _galaxy_version,
                 "timestamp": datetime.now().isoformat(),
                 "services": services,
                 "devices": {

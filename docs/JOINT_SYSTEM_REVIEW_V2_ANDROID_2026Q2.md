@@ -1,4 +1,8 @@
 # 双仓联合系统深度审查报告
+
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 ## ufo-galaxy-realization-v2 × ufo-galaxy-android — 2026 Q2
 
 > **审查方法**：直接基于两仓主分支当前真实代码、测试文件、CI workflow 作出判断。

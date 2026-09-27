@@ -135,7 +135,9 @@ jobs:
         with:
           cosign-release: "v2.4.0"
 
-      # Build the image and export the digest for cosign/SBOM
+      # Build the image and load it into the local Docker daemon for SBOM.
+      # 不要再加 `outputs: type=docker,dest=…`:显式 outputs 会取代 load,镜像只落成 tar、
+      # 不进守护进程,下一步 syft 按 tag 找不到镜像(2026-09-26 run 36236799682 即此失败)。
       - name: Build image (${{ matrix.name }})
         id: build
         uses: docker/build-push-action@v6
@@ -146,7 +148,6 @@ jobs:
           load: true
           tags: "localhost/${{ matrix.name }}:${{ github.sha }}"
           build-args: ${{ matrix.build-args || '' }}
-          outputs: type=docker,dest=/tmp/${{ matrix.name }}.tar
 
       # Generate SBOM using the Anchore SBOM action (wraps syft)
       - name: Generate SBOM — ${{ matrix.name }}

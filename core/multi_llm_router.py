@@ -3429,10 +3429,10 @@ class MultiLLMRouter:
 
                 continue
 
-        # 优雅降级：返回标准化错误响应而非崩溃
-        logger.error(f"所有提供商调用失败: {tried_providers}")
+        from core.llm_unavailable_reply import unavailable_reply  # 优雅降级：回说明而不崩
+
         return LLMResponse(
-            content=f"所有 AI 服务暂时不可用（已尝试: {', '.join(tried_providers)}），请检查 API Key 配置后重试。",
+            content=unavailable_reply(tried_providers),
             provider="none",
             model="none",
             input_tokens=0,

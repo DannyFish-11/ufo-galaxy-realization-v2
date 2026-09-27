@@ -93,7 +93,7 @@ print_banner() {
         _print_gradient_line "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║"
         _print_gradient_line "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║"
         _print_gradient_line "║                                                          ║"
-        _print_gradient_line "║     L4 Autonomous Intelligence System   v2.3.21          ║"
+        _print_gradient_line "║     L4 Autonomous Intelligence System   v2.3.23          ║"
         _print_gradient_line "║                                                          ║"
         _print_gradient_line "╚══════════════════════════════════════════════════════════╝"
     else
@@ -106,7 +106,7 @@ print_banner() {
         echo "║  ╚██████╔╝██║  ██║███████╗██║  ██║██╔╝ ██╗   ██║        ║"
         echo "║   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝        ║"
         echo "║                                                          ║"
-        echo "║     L4 Autonomous Intelligence System   v2.3.21          ║"
+        echo "║     L4 Autonomous Intelligence System   v2.3.23          ║"
         echo "║                                                          ║"
         echo "╚══════════════════════════════════════════════════════════╝"
     fi
