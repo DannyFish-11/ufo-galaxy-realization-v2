@@ -72,6 +72,10 @@ except ImportError:  # pragma: no cover
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create system & config routes router."""
     router = APIRouter()
+    # 智能体活动（含不进桌面三态的请求）与系统状态同属需要 API 鉴权的一组。
+    from core.routes import agent_activity as _agent_activity
+
+    router.include_router(_agent_activity.create_router())
 
     @router.get("/api/v1/system/status")
     async def system_status():

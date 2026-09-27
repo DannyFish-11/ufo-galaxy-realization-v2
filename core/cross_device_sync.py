@@ -209,11 +209,17 @@ def emit_cross_device_phase_sync(
     session_id: str,
     source: str = "desktop_presence_runtime",
     trace_id: str = "",
+    target_device_id: str = "",
 ) -> None:
     """Fire-and-forget: push phase change to all connected Android devices.
 
     Called synchronously from RuntimeSession.advance().
     Uses asyncio.create_task so it never blocks the caller.
+
+    ``target_device_id`` non-empty narrows the push to that one device (Android
+    or WearOS).  Used for requests that never surface on the desktop — see
+    :mod:`core.presence_line`: the phone that asked sees its own phases, the
+    other bodies are left alone.
     """
     try:
         loop = asyncio.get_running_loop()
@@ -224,6 +230,7 @@ def emit_cross_device_phase_sync(
                 session_id=session_id,
                 source=source,
                 trace_id=trace_id,
+                target_device_id=target_device_id,
             )
         )
         # Keep a strong reference until the task completes so it can't be GC'd
@@ -240,6 +247,7 @@ async def _async_push_phase_to_all_devices(
     session_id: str,
     source: str,
     trace_id: str,
+    target_device_id: str = "",
 ) -> None:
     """Adaptive async concurrent push to all connected devices.
 
@@ -272,13 +280,15 @@ async def _async_push_phase_to_all_devices(
     # The same state_event msg is reused; the watch parses payload.to_phase.
     # Done first so it runs even when there are zero android_bridge devices.
     try:
-        await _push_phase_to_wearos_devices(msg)
+        await _push_phase_to_wearos_devices(msg, target_device_id=target_device_id)
     except Exception as _wear_err:  # noqa: BLE001
         logger.debug("CrossDeviceSync: wearos phase push failed: %s", _wear_err)
 
     # Collect connected devices
     connected: List[Tuple[str, Any]] = []
     for device_id, device in _bridge._devices.items():
+        if target_device_id and device_id != target_device_id:
+            continue
         if device.websocket is not None and getattr(device, "connected", False):
             connected.append((device_id, device))
 
@@ -321,7 +331,7 @@ async def _async_push_phase_to_all_devices(
     )
 
 
-async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
+async def _push_phase_to_wearos_devices(msg: Dict[str, Any], *, target_device_id: str = "") -> None:
     """PR-WEAR-PHASE-SYNC: push the phase state_event to connected WearOS watches.
 
     WearOS connections live in the gateway ``connection_manager`` (registered via
@@ -339,6 +349,8 @@ async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
         registered_devices = {}
 
     device_ids = await connection_manager.get_connected_devices()
+    if target_device_id:
+        device_ids = [did for did in device_ids if did == target_device_id]
     wear_ids = [
         did for did in device_ids if is_wearos_device(str((registered_devices.get(did) or {}).get("device_type", "")))
     ]

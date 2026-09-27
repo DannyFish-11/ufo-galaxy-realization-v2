@@ -92,6 +92,15 @@ function backendBase(): string {
 const BASE = backendBase();
 
 /**
+ * 是不是跑在电脑上的桌面外壳里。**只有 Electron 的 preload 会挂 `galaxyShell`**,在浏览器里
+ * 打开同一份面板(哪怕是手机的浏览器)就没有它。对话请求据此声明
+ * `client_surface: 'desktop_shell'` —— 后端的入口分流(core/presence_line.py)凭这句认定
+ * 「这是电脑发起的」,让它进桌面三态;不靠连接地址,因为容器、端口转发这类部署里外壳的
+ * 连接地址未必是本机地址。
+ */
+const IN_DESKTOP_SHELL = Boolean((window as { galaxyShell?: unknown }).galaxyShell);
+
+/**
  * 这个面板实例是谁。每次打开随机一个,不存。
  *
  * 只用来认回声:面板自己发起的那一轮,后端会同步推到 WS 的对话通道上给**别的**界面看,
@@ -743,7 +752,14 @@ function mount(host: HTMLElement): void {
       // **不接 phase 帧。** 此刻在哪一相只认 WS 的 render(见文件头)。这里曾经
       // 写过 `onPhase: (phase) => store.patch({ phase })` —— 同一个状态位两个
       // 写者,线和岛会在两个相位之间来回跳一下。
-      { message: text, session_id: store.state.sessionId, client_id: clientId },
+      //
+      // client_surface:只有电脑上的桌面外壳会带,后端据此认定这一轮是电脑发起的(见上面 IN_DESKTOP_SHELL)。
+      {
+        message: text,
+        session_id: store.state.sessionId,
+        client_id: clientId,
+        ...(IN_DESKTOP_SHELL ? { client_surface: 'desktop_shell' } : {}),
+      },
       {
         // 后端说这轮记到哪条会话上了。**接住它** —— 历史、记忆卡片、喂文件
         // 全按它去问;面板自己编一个的话,问出来永远是空的。

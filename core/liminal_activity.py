@@ -49,6 +49,7 @@ __all__ = [
     "unbind_runtime_session",
     "note_liminal_activity",
     "note_hybrid_execution",
+    "note_local_actuation",
     "acting",
     "in_deliberation_window",
     "commit_to_manifest",
@@ -153,6 +154,32 @@ def note_hybrid_execution(decision: Optional[Dict[str, Any]]) -> bool:
         return False
 
 
+def note_local_actuation(kind: str, target_device_id: str = "") -> bool:
+    """宣告「这次请求在本机落手了」—— 不外显到桌面的请求由此交还桌面。
+
+    不是电脑发起的请求不进桌面三态（见 :mod:`core.presence_line`）。可一旦它真的操作了
+    本机的应用或屏幕，桌面就成了在做事的那具身体，外壳理应跟着动。调用点是 :func:`acting`
+    —— 混合执行器（目标是本机时）与 computer-use 回路（非 dry-run）落手时都进它。
+
+    Args:
+        kind: 落手方式（``hybrid_executor`` / ``computer_use``），进日志。
+        target_device_id: 落手的目标设备。目标不是这台电脑（手机、手表、别的电脑）时不交还。
+
+    Returns:
+        ``True`` 表示本次调用把会话交还了桌面；不在请求里、本就是桌面的请求都返回 ``False``。
+    """
+    session = _current_runtime_session.get()
+    if session is None or getattr(session, "host_bound", True):
+        return False
+    try:
+        from core.presence_line import attach_to_host
+
+        return attach_to_host(session, kind, target_device_id)
+    except Exception:  # noqa: BLE001 — 可见性绝不该拖垮执行
+        logger.debug("note_local_actuation failed (non-fatal)", exc_info=True)
+        return False
+
+
 @contextlib.contextmanager
 def acting(reason: str = "") -> Iterator[bool]:
     """把一段代码标成「它此刻正在操作这台机器」（键鼠、窗口、应用）。
@@ -174,6 +201,9 @@ def acting(reason: str = "") -> Iterator[bool]:
     session = _current_runtime_session.get()
     entered = False
     if session is not None:
+        # 在这台机器上动手 = 需要桌面：原本不进三态的请求（别的设备、智能体自己发起的）
+        # 从这一刻起交还桌面，先交还再登记「在动手」，外壳看到的顺序才对（core/presence_line.py）。
+        note_local_actuation(reason)
         try:
             session.enter_acting(reason)
             entered = True

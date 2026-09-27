@@ -128,10 +128,15 @@ def test_bookkeeping_tail_tells_the_model_it_may_batch():
 def test_validate_does_not_invite_fabricated_results():
     """省往返不能变成『还没跑就先写结论』。
 
-    engineer__validate 只登记结果、不替谁跑验证。批量的前提是结果已经拿到了，
-    这一点必须写在描述里，否则『可以合并』会被读成『可以提前断言』。
+    此前的防线是一句提醒：engineer__validate 只登记结果、不替谁跑验证，所以批量的前提
+    是结果已经拿到了。M1 之后这件事从「提醒」变成「结构」：验证由 harness 跑、退出码由
+    harness 读，工具面上已经没有能让模型声明成败的字段（core/verdict_independence.py 的
+    S1 在整个仓库里钉着这一点）。描述要把这个说清楚，否则模型会继续以为要自己报结果。
     """
     val = _engineer_desc("engineer__validate")
-    assert "不替你跑验证" in val
-    assert "已经拿到结果" in val
-    assert "不要提前发 engineer__validate" in _engineer_desc("engineer__apply")
+    assert "harness" in val
+    assert "退出码" in val
+    assert "不由任何人声明" in val
+    for t in oc._ENGINEER_BUILTIN_TOOLS:
+        props = t["function"]["parameters"].get("properties", {})
+        assert not any(v.get("type") == "boolean" for k, v in props.items() if k in {"passed", "success", "verified"})
