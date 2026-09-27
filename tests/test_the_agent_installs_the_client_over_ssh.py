@@ -74,6 +74,18 @@ def test_credentials_are_never_echoed_back():
     red = ri._redact({"username": "me", "password": "hunter2", "private_key": "-----BEGIN", "port": 22})
     assert red["username"] == "me" and red["port"] == 22
     assert "hunter2" not in str(red) and "BEGIN" not in str(red)
+    assert red["auth"] == "private_key"  # 说清用的哪种,但不说内容
+
+
+def test_an_unknown_new_credential_field_is_dropped_rather_than_logged():
+    """白名单的意义:将来多加一个凭据字段而忘了标 secret,也不会被写进日志。
+
+    黑名单做不到这一点 —— 没列进去的就原样输出,这正是 CodeQL 判 clear-text logging
+    的理由(它是对的)。
+    """
+    red = ri._redact({"username": "me", "totp_seed": "JBSWY3DPEHPK3PXP", "smartcard_pin": "4242"})
+    assert red == {"username": "me"}
+    assert "JBSWY3DPEHPK3PXP" not in str(red) and "4242" not in str(red)
 
 
 def test_this_path_can_never_be_auto_joined():

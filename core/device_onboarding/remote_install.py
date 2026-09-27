@@ -106,10 +106,25 @@ def credential_inputs() -> List[Dict[str, Any]]:
     ]
 
 
+#: 允许出现在日志里的字段 —— **白名单**。
+#:
+#: 这里刻意不用"把已知的密码字段摘掉"那种黑名单:将来给 :func:`credential_inputs`
+#: 多加一个凭据字段而忘了标 ``secret``,黑名单会把它原样写进日志,白名单只会把它漏掉。
+#: 安全的默认是"漏掉",不是"照写"。
+#: (CodeQL 也认这一点:黑名单版本里 ``inputs`` 整个流进 logger,它判 clear-text logging,
+#:  而且它是对的 —— 那个判断依赖运行时的 secret 标记正确。)
+_LOGGABLE_FIELDS = ("username", "host", "port")
+
+
 def _redact(inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """能进日志/回包的那一份 —— 把密码私钥摘掉。"""
-    secret = {i["name"] for i in credential_inputs() if i.get("secret")}
-    return {k: ("<已收到,不记录>" if k in secret and v else v) for k, v in (inputs or {}).items()}
+    """能进日志的那一份:只有白名单里的字段,外加"用的哪种凭据"这个事实(不含凭据本身)。"""
+    src = inputs or {}
+    safe: Dict[str, Any] = {k: v for k, v in src.items() if k in _LOGGABLE_FIELDS}
+    if src.get("private_key"):
+        safe["auth"] = "private_key"
+    elif src.get("password"):
+        safe["auth"] = "password"
+    return safe
 
 
 # ── 远端执行的几步(每一步都是可单测的纯函数 + 一次远端调用) ─────────────────────
