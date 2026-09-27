@@ -157,6 +157,15 @@ _EXEMPT_NAMES: Dict[str, str] = {
         "那是产品决定,不该由改这行代码的人顺手定。在那之前它保持不可达,"
         "而这条豁免是为了让下一个人看见理由,而不是又去接一遍。"
     ),
+    "validate_host_public_key": (
+        "**调用方是 asyncssh,不在本仓库里**。core/ssh_host_keys.py 里这个方法是 "
+        "asyncssh.SSHClient 的钩子:握手拿到对方主机公钥时由 asyncssh 自己调,"
+        "用来判「这台机器是不是我认识的那台」。本仓库不该有任何地方直接调它 —— "
+        "直接调等于绕过握手自说自话地判一遍,判了也不影响连接成不成。"
+        "「该被谁调用」的正确答案:asyncssh 的握手流程,经 connect_kwargs() 挂上去。"
+        "tests/test_ssh_verifies_who_it_is_talking_to.py 起真的 asyncssh 服务端,"
+        "换掉主机密钥后断言连接被拒、密码没发出去 —— 那就是它真的生效的证据。"
+    ),
     "clear_ledger": (
         "**故意不接线**。core/egress_guard.py 的出站账本是个有界 ring buffer,"
         "它自己会滚,生产路径上没有任何一处**应该**去清空它 —— 一个能被远程清账本的"

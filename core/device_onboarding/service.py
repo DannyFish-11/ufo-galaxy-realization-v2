@@ -49,6 +49,7 @@ _HUMAN_STEP_WORDS = {
     HumanStep.PHYSICAL_CODE.value: "接入要设备上的配网码",
     HumanStep.CONFIRM_ON_DEVICE.value: "接入要在设备上确认一下",
     HumanStep.RUN_COMMAND.value: "接入要在它上面执行一条命令",
+    HumanStep.CREDENTIAL.value: "给我那台机器的登录凭据,剩下的我来做",
 }
 
 #: 自动接入到哪一级:off = 全等人;none = 只自动走不需要人的;approve = 连"同意"类也自动。

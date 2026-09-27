@@ -24,6 +24,7 @@ class HumanStep(str, Enum):
     PHYSICAL_CODE = "physical_code"  # 设备上的配网码/PIN(只有人手里有)
     CONFIRM_ON_DEVICE = "confirm_on_device"  # 在那台设备上操作(输配对码)
     RUN_COMMAND = "run_command"  # 在那台设备上执行一条命令
+    CREDENTIAL = "credential"  # 那台机器的登录凭据(只有人手里有;给了就由智能体代劳)
 
 
 #: 可被配置自动化的档位,按从严到宽排列。
