@@ -153,9 +153,9 @@ class SystemAudioCaptureService:
                 return True
         try:
             from core.multimodal.system_audio_ingest import (
+                choose_loopback_target,
                 open_loopback_stream,
                 probe,
-                resolve_loopback_target,
             )
         except Exception as exc:  # noqa: BLE001
             self._unavailable_reason = f"import_failed: {exc}"
@@ -182,12 +182,9 @@ class SystemAudioCaptureService:
             hostapis = [dict(h) for h in sd.query_hostapis()]
             import platform
 
-            target, reason = resolve_loopback_target(
-                devices,
-                hostapis,
-                os_name=platform.system(),
-                has_wasapi_settings=hasattr(sd, "WasapiSettings"),
-            )
+            # 和 probe() 用同一个选目标入口 —— 以前这里自己用 hasattr 判,探测和真开流
+            # 判据不一致,于是 "探测可用 → 开流 TypeError"。
+            target, reason = choose_loopback_target(sd, devices, hostapis, os_name=platform.system())
             if target is None:
                 self._unavailable_reason = reason
                 logger.warning("系统播放声采集目标解析失败: %s", reason)
