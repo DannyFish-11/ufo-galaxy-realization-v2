@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
 
+from core.ssh_host_keys import connect_kwargs
 from nodes.common.node_auth import install_node_auth
 
 app = FastAPI(title="Node 39 - SSH", version="2.0.0")
@@ -52,16 +53,21 @@ class SSHManager:
             if conn.private_key:
                 client_keys = [asyncssh.import_private_key(conn.private_key)]
 
+            # 主机校验:第一次连记下指纹,之后对不上就拒(core/ssh_host_keys.py)。
+            # 此前这里传 known_hosts=None —— 那是**关掉**校验,局域网里冒充那台机器
+            # 就能把用户名密码骗走。
             connection = await asyncssh.connect(
                 host=conn.host,
                 port=conn.port,
                 username=conn.username,
                 password=conn.password,
                 client_keys=client_keys,
-                known_hosts=None
+                **connect_kwargs()
             )
             self.connections[conn_id] = connection
             return True
+        except asyncssh.HostKeyNotVerifiable as e:
+            raise RuntimeError(f"SSH host key verification failed: {e}") from e
         except Exception as e:
             raise RuntimeError(f"SSH connection failed: {e}")
 
