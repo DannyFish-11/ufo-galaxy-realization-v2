@@ -2039,6 +2039,13 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "advanced",
         "description": "每次扫描时在开着的 CAN 口上静听几秒,记下总线上有哪些报文 ID(只听不发;0 = 不听,最多 10)",
     },
+    "GALAXY_SSH_STRICT_HOST_KEYS": {
+        "default": "false",
+        "type": "boolean",
+        "category": "advanced",
+        "description": "严格核对远程机器的身份指纹:连第一次见的机器也拒("
+        "指纹要事先录进来)。默认关 —— 第一次连时记下指纹并告诉你,之后对不上就拒",
+    },
     "GALAXY_BLUEZ_DBUS_ADDRESS": {
         "default": "",
         "type": "string",
