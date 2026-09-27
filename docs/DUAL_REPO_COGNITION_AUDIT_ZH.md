@@ -1,5 +1,8 @@
 # 双仓联合认知审查（中文版）——基于当前真实代码
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > **文档类型**：代码驱动型双仓系统认知审查  
 > **审查范围**：`DannyFish-11/ufo-galaxy-realization-v2`（V2 控制平面）
 > + `DannyFish-11/ufo-galaxy-android`（Android 执行参与者）  

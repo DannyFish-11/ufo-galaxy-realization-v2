@@ -2,6 +2,9 @@
 
 > 本文件为 AI Agent 提供系统知识索引，每轮对话自动加载。
 > 基于 Vercel 研究：被动上下文比主动调用更可靠。
+>
+> **系统当前做到了哪儿、哪里是断的：只看 `docs/SYSTEM_STATUS.md`**（逐项复测，附复测命令）。
+> docs/ 下其余状态/审计/成熟度文档是历史快照，里面的缺口与分数可能已经过期。
 
 ## 系统概述
 
@@ -131,12 +134,15 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   说走 speech_output、听走 modality_bridge，**不另起一套引擎选择**
 
 ### API 层
-- `core/api_routes.py` - REST API 和 WebSocket 路由
-- `dashboard/backend/main.py` - WebUI 后端
+- `core/api_routes.py` - REST API 和 WebSocket 路由（挂 `core/routes/*`）
+- `galaxy_gateway/app.py` - 设备网关；规范的设备 WebSocket 入口 `/ws/device/{device_id}` 在 `galaxy_gateway/routes/websocket.py`
+- 原 `dashboard/` WebUI 后端已退役（`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`），不要再找它
 
 ### UI 层
-- `enhancements/clients/windows_client/scroll_paper_geek_ui.py` - 主 UI
-- `enhancements/clients/windows_client/run_ui.py` - 启动脚本
+- `electron/` + `electron/renderer/panel/src/` - 桌面外壳与面板（纯 TS，只认 WS 的 `payload.render`，见 `docs/RENDER_CONTRACT_DIRECTION.md`）
+- `core/desktop_presence_runtime.py` - 桌面三态运行时（silent / liminal / manifest）
+- `enhancements/clients/windows_client/run_ui.py` 是**硬禁用的桩**，只会发一条弃用警告；原先写在这里的
+  `scroll_paper_geek_ui.py` 不存在
 
 ## 消息协议
 
@@ -217,8 +223,11 @@ python main.py                # 启动系统（权威入口）
 
 ### 运行测试
 ```bash
-python test_system_real.py
+python -m pytest tests/                                   # 全量（CI 用 Python 3.11）
+python scripts/select_affected_tests.py <改过的文件…>      # 只跑受影响的
+python main.py --check-only                               # 不起服务，只查依赖/配置/核心模块/节点导入
 ```
+原先写在这里的 `test_system_real.py` 不存在。
 
 ### 配置 API Key
 ```bash
@@ -271,13 +280,13 @@ cp .env.example .env
 
 ## 版本信息
 
-- 版本: v2.3.21+
-- Python: 3.9+
+- 版本：启动横幅显示 `v2.3.21`（`launcher/services.py`），但 `core.__version__` 是 `3.0.0`、镜像标签是 `2.3.23` —— README 抬头又写 `v10.0` —— 四处不一致，见 `docs/SYSTEM_STATUS.md` 第 7 节
+- Python：**3.11**（CI 与镜像唯一验证过的版本；更低版本未经验证）
 - Android: 7.0+
 
 ## 相关文档
 
 详细文档请参考：
+- `docs/SYSTEM_STATUS.md` - **当前系统状态（权威）**
 - `README.md` - 项目说明
-- `README_V2.md` - V2 版本说明
-- `docs/` - 详细文档目录
+- `docs/README.md` - 文档索引（标明哪些是现行、哪些是历史快照）

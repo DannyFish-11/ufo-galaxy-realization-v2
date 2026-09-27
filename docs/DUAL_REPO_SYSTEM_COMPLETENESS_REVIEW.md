@@ -1,5 +1,8 @@
 # 双仓系统完成度审查总览
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > **文档类型**：Reviewer-facing 系统完成度评审 artifact  
 > **覆盖范围**：`DannyFish-11/ufo-galaxy-realization-v2`（V2 控制平面）+ `DannyFish-11/ufo-galaxy-android`（Android 执行参与者）  
 > **审查基准**：基于真实代码引用，不基于愿景或设计文档。  

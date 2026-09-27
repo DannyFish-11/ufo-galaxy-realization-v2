@@ -1,5 +1,8 @@
 # Architecture Completion Scorecard
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > **PR-9** — Formalize architecture completion evaluation dimensions and scorecard
 
 This document explains the canonical framework for evaluating Galaxy architecture completion.  It defines the ten evaluation dimensions, how scoring works, and how contributors should update the scorecard after major architecture PRs.

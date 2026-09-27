@@ -1,5 +1,8 @@
 # 全系统联合审查报告：ufo-galaxy-realization-v2 + ufo-galaxy-android
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > **审查性质**：以 V2 为权威中心，以 Android 为运行时参与者，基于两个仓库的真实代码、测试、
 > 配置和集成路径，对完整双仓产品系统进行中文联合审查。  
 > **主仓库**：`DannyFish-11/ufo-galaxy-realization-v2`  

@@ -1,6 +1,8 @@
 # Galaxy — 桌面原生 AI 助手系统
 
 > **版本**: v10.0 | **模型**: Gemma 4 E4B / 26B / 31B + MiniCPM-o 4.5 / V 4.6 | **日期**: 2026-07-05
+>
+> **当前做到了哪儿、哪里还是断的**：见 [`docs/SYSTEM_STATUS.md`](docs/SYSTEM_STATUS.md)（2026-09-27 逐项复测，附复测命令）。
 
 ---
 
@@ -211,6 +213,9 @@ docker compose up -d
 ```
 启动：Galaxy Gateway、Ollama、Neo4j、Qdrant、Redis、MongoDB、NATS
 
+> 2026-09-27 之前，`Dockerfile` 引用了一个不存在的 `cli/`，还漏拷了 `launcher/` 等启动必需的目录，镜像构建不出来，
+> 构建出来也起不了；`Dockerfile.gateway` 则漏了 `contracts/`。这些现已修复，由 `tests/test_container_images_ship_what_they_run.py` 守着。
+
 ### 方式三：手动分别启动
 ```bash
 # 终端1：Gateway
@@ -225,7 +230,7 @@ cd electron && npm install && npm start
 ## 安装步骤
 
 ### 前提
-- Python 3.10+
+- Python 3.11（CI 与镜像验证的版本；更低版本未经验证）
 - Node.js 18+
 - Ollama (本地模型)
 

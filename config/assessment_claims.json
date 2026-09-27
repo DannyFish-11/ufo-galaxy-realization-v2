@@ -24,9 +24,9 @@
     {
       "id": "D1-task-cancel-implemented",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "task_cancel 已有规范处理器(handle_task_cancel @ galaxy_gateway/android/handlers/task_lifecycle.py)",
-      "supersedes": "该文档仍把 D1 列为『Immediate (P0)』唯一项,措辞是 correctness failure affecting users today —— 已过期,需要人去改那份文档",
+      "supersedes": "该文档仍把 D1 列为『Immediate (P0)』唯一项,措辞是 correctness failure affecting users today —— 已过期,需要人去改那份文档 〔2026-09-27 已改源文档:FOLLOWUP_IMPLEMENTATION_ROADMAP.md 顶部复核表与 P0 行已标为已落地〕",
       "predicates": [
         {
           "kind": "symbol_exists",
@@ -39,9 +39,9 @@
     {
       "id": "D2-task-status-implemented",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "task_status 已有规范处理器",
-      "supersedes": "该文档仍把 D2 列为 P1 待办 —— 已过期",
+      "supersedes": "该文档仍把 D2 列为 P1 待办 —— 已过期 〔2026-09-27 已改源文档:路线图复核表已标为已落地〕",
       "predicates": [
         {
           "kind": "symbol_exists",
@@ -54,9 +54,9 @@
     {
       "id": "GAP-512-004-capability-graph-consulted",
       "source": "core/runtime_closure_audit.py::_KNOWN_RESIDUAL_GAPS",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "选路真的会问能力图:query_routable_executors 在 core/ 里有生产调用方(command_router 与 device_pool_manager)",
-      "supersedes": "该清单仍列 GAP-512-004 为 MEDIUM/开着,而 scheduling_truth_harness 明写 closes GAP-512-004 —— 已过期",
+      "supersedes": "该清单仍列 GAP-512-004 为 MEDIUM/开着,而 scheduling_truth_harness 明写 closes GAP-512-004 —— 已过期 〔2026-09-27 已改源文档:_KNOWN_RESIDUAL_GAPS 九条描述已逐条改为 CLOSED by PR-5xx 与所在位置〕",
       "predicates": [
         {
           "kind": "has_production_caller",
@@ -69,9 +69,9 @@
     {
       "id": "Q7-legacy-dispatch-metric-exists",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (Q7)",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "LEGACY_DISPATCH 走指标这件事已经做了:galaxy_legacy_dispatch_total 在网关的 Prometheus 输出里",
-      "supersedes": "该文档仍把 Q7『指标还是只记日志』列为待决定的设计问题 —— 决定已经在代码里了",
+      "supersedes": "该文档仍把 Q7『指标还是只记日志』列为待决定的设计问题 —— 决定已经在代码里了 〔2026-09-27 已改源文档:路线图 Q 表已标为已在代码里决定;告警规则仍未做,记在复核表 C3〕",
       "predicates": [
         {
           "kind": "has_production_caller",
@@ -84,9 +84,9 @@
     {
       "id": "D4-android-capabilities-assimilated",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (D4)",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "Android 注册上报的能力真的进了同化层(registration.py 调 assimilate_device)",
-      "supersedes": "该文档写的是 not confirmed forwarded —— 已确认,是接上的",
+      "supersedes": "该文档写的是 not confirmed forwarded —— 已确认,是接上的 〔2026-09-27 已改源文档:路线图复核表已标为已落地〕",
       "predicates": [
         {
           "kind": "has_production_caller",
@@ -183,9 +183,9 @@
     {
       "id": "A2-device-router-policy-residue-open",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (A2/C1)",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "DeviceRouter 的 _analyze_command 仍有调用方 —— 但那是**兜底路径**:CommandRouter 现在会盖 _command_router_pre_analyzed/_pre_analysis,命中时底座跳过自己的分析。兜底保留是有意的(不供预分析的旧调用方照旧能跑)",
-      "supersedes": "路线图 A2/C1 描述的是「策略逻辑还在底座里」。逻辑已抽到 routing.policy,passthrough 也已接通;剩下的兜底路径是有意保留的向后兼容,不是残留。",
+      "supersedes": "路线图 A2/C1 描述的是「策略逻辑还在底座里」。逻辑已抽到 routing.policy,passthrough 也已接通;剩下的兜底路径是有意保留的向后兼容,不是残留。 〔2026-09-27 已改源文档:路线图复核表 A2/C1 已写明兜底是有意保留〕",
       "predicates": [
         {
           "kind": "has_production_caller",
@@ -198,9 +198,9 @@
     {
       "id": "C4-task-router-still-on-disk",
       "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (C4)",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "galaxy_gateway/task_router.py 仍在盘上,但已在 orchestration_authority/legacy_paths.py 登记为 LEGACY COMPAT 治理面 —— 不是疏忽,删不删是产品决定",
-      "supersedes": "路线图 C4 写的是『确认已从盘上移除』,而它没被移除。两边都对,只是路线图没写它已经被治理起来了。",
+      "supersedes": "路线图 C4 写的是『确认已从盘上移除』,而它没被移除。两边都对,只是路线图没写它已经被治理起来了。 〔2026-09-27 已改源文档:路线图复核表 C4 已写为有意保留、已治理〕",
       "predicates": [
         {
           "kind": "path_exists",
@@ -213,9 +213,9 @@
     {
       "id": "acceptance-verdict-surface-exists",
       "source": "audit/completion_matrix.json::acceptance_verdict (15%, 2026-04-29)",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "最终受理裁决面已经存在(core/system_final_acceptance_verdict.py 等),CI 里 Governance Verdict Gate 是 blocking",
-      "supersedes": "矩阵把该域记为 15% missing,依据是 2026-04-29 的 code-path tracing。四个月过去,那个分数从没重推过 —— 需要人重新推导,这道门不替他算。",
+      "supersedes": "矩阵把该域记为 15% missing,依据是 2026-04-29 的 code-path tracing。四个月过去,那个分数从没重推过 —— 需要人重新推导,这道门不替他算。 〔2026-09-27 已改源文档:completion_matrix 已逐域复核(rederived_2026_09_27 字段,结论档位不打分),acceptance_verdict 改判 partial_closed〕",
       "predicates": [
         {
           "kind": "path_exists",
@@ -255,9 +255,9 @@
     {
       "id": "session-migration-has-no-canonical-home",
       "source": "core/orchestration_authority/legacy_paths.py(session_roaming 条目)",
-      "recorded_on": "2026-08-29",
+      "recorded_on": "2026-09-27",
       "statement": "会话迁移没有规范面。session_roaming 已登记为 LEGACY_COMPATIBILITY,声明的规范替代是 core.canonical_session_axis + core.attached_runtime_session —— 但那两处都**不提供迁移能力**:前者是分类学(会话族/标识符角色/快照),后者是挂载生命周期(attach/detach),两个模块里 def migrate_* 命中为 0。全仓真正的迁移实现只有三处,一处也不在规范面上。",
-      "supersedes": "legacy_paths 的 recommendation 读起来像「去用规范面就行了」,而规范面没有这个能力。所以这条退役路径当前走不通 —— 要么先把规范的迁移面建出来,要么如实改那段 recommendation。在那之前不该做「两个 store 合并」:合出来的东西仍然不是规范面,只是第三个。",
+      "supersedes": "legacy_paths 的 recommendation 读起来像「去用规范面就行了」,而规范面没有这个能力。所以这条退役路径当前走不通 —— 要么先把规范的迁移面建出来,要么如实改那段 recommendation。在那之前不该做「两个 store 合并」:合出来的东西仍然不是规范面,只是第三个。 〔2026-09-27 已改源文档:legacy_paths 的 recommendation 已如实改为「规范面尚无迁移能力,SessionRoamingManager 仍是可用路径,不要合并 store」;规范迁移面本身仍未建〕",
       "predicates": [
         {
           "kind": "path_exists",

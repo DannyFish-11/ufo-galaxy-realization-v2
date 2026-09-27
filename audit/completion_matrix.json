@@ -3,128 +3,149 @@
     "date": "2026-04-29",
     "repos": ["ufo-galaxy-realization-v2", "ufo-galaxy-android"],
     "method": "real-code-path-tracing",
-    "auditor": "copilot-coding-agent"
+    "auditor": "copilot-coding-agent",
+    "rederived": "2026-09-27：V2 侧逐域、逐缺口对照代码复核，写在各条的 rederived_2026_09_27 字段（结论档位，不打分）；score_pct 保留为 2026-04-29 的历史值。全系统现状见 docs/SYSTEM_STATUS.md"
   },
   "completion_by_domain": {
     "center_runtime_startup_orchestration": {
       "score_pct": 65,
       "status": "partial_closed",
       "evidence_file": "main.py:SystemOrchestrator + launcher/services.py",
-      "notes": "7-phase startup exists; orchestrator + launcher work; but UDM/UCM/registry stability conditional"
+      "notes": "7-phase startup exists; orchestrator + launcher work; but UDM/UCM/registry stability conditional",
+      "rederived_2026_09_27": {"verdict": "closed_measured", "evidence": "main.py + launcher/services.py", "note": "2026-09-27 实测：干净环境 python main.py --backend 约 45 秒就绪，自报 4 正常 · 7 降级，每项降级写明原因与装法"}
     },
     "websocket_connection_layer": {
       "score_pct": 80,
       "status": "closed",
       "evidence_file": "galaxy_gateway/routes/websocket.py + network/GalaxyWebSocketClient.kt",
-      "notes": "CANONICAL path /ws/device/{device_id} complete; COMPAT paths /ws/android/* complete; legacy /ws/ufo3 disabled; AIP v3 normalisation on ingress"
+      "notes": "CANONICAL path /ws/device/{device_id} complete; COMPAT paths /ws/android/* complete; legacy /ws/ufo3 disabled; AIP v3 normalisation on ingress",
+      "rederived_2026_09_27": {"verdict": "closed_tested", "evidence": "galaxy_gateway/routes/websocket.py + tests/integration/test_separated_process_ws_e2e.py", "note": "跨进程 WS E2E 在测；/ws/ufo3 仍在（路线图 C6 未做）"}
     },
     "device_registration_handshake": {
       "score_pct": 70,
       "status": "partial_closed",
       "evidence_file": "galaxy_gateway/android/handlers/registration.py",
-      "notes": "UDM write + local cache update solid; 7 downstream steps (mesh session, runtime session registry, body mesh roles, auto-enrollment) are all try/except silent-degrade"
+      "notes": "UDM write + local cache update solid; 7 downstream steps (mesh session, runtime session registry, body mesh roles, auto-enrollment) are all try/except silent-degrade",
+      "rederived_2026_09_27": {"verdict": "partial_closed_observable", "evidence": "galaxy_gateway/android/handlers/registration.py", "note": "下游步骤失败按设备记账、可查询；仍不 fail-closed（G002）"}
     },
     "heartbeat_liveness": {
       "score_pct": 85,
       "status": "closed",
       "evidence_file": "galaxy_gateway/android/handlers/heartbeat.py + GalaxyWebSocketClient.kt",
-      "notes": "30s heartbeat from Android; center handles + UDM heartbeat update; UCM mark_online"
+      "notes": "30s heartbeat from Android; center handles + UDM heartbeat update; UCM mark_online",
+      "rederived_2026_09_27": {"verdict": "closed_tested", "evidence": "galaxy_gateway/android/handlers/heartbeat.py", "note": "未发现回退；安卓侧不在复核范围"}
     },
     "offline_queue_reconnect": {
       "score_pct": 85,
       "status": "closed",
       "evidence_file": "network/OfflineTaskQueue.kt + GalaxyWebSocketClient.kt",
-      "notes": "FIFO, max 50, SharedPreferences persistence, session authority bounding (discardForDifferentSession), reconnect drain implemented"
+      "notes": "FIFO, max 50, SharedPreferences persistence, session authority bounding (discardForDifferentSession), reconnect drain implemented",
+      "rederived_2026_09_27": {"verdict": "not_rederived_android_scope", "note": "证据在安卓仓，本次未复核"}
     },
     "reconnect_continuity_classification": {
       "score_pct": 80,
       "status": "closed",
       "evidence_file": "galaxy_gateway/android/handlers/registration.py:handle_device_reconnect + core/attached_runtime_session_registry.py",
-      "notes": "classify_reconnect_outcome -> continuity_resume / new_attachment; runtime_attachment_session_id echoed to client"
+      "notes": "classify_reconnect_outcome -> continuity_resume / new_attachment; runtime_attachment_session_id echoed to client",
+      "rederived_2026_09_27": {"verdict": "closed_tested", "evidence": "galaxy_gateway/android/handlers/registration.py", "note": "未发现回退"}
     },
     "task_assign_dispatch_center_to_android": {
       "score_pct": 70,
       "status": "partial_closed",
       "evidence_file": "galaxy_gateway/device_router.py + galaxy_gateway/android/handlers/task_submit.py + GalaxyConnectionService.kt",
-      "notes": "task_assign sent via DeviceRouter -> android_bridge -> WS; Android receives + routes to AgentRuntimeBridge or EdgeExecutor; dispatch decision quality depends on UDM accuracy"
+      "notes": "task_assign sent via DeviceRouter -> android_bridge -> WS; Android receives + routes to AgentRuntimeBridge or EdgeExecutor; dispatch decision quality depends on UDM accuracy",
+      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "core/command_router.py + core/device_pool_manager.py", "note": "选路前查能力图已落地（A1/A3）；安卓执行侧不在复核范围"}
     },
     "task_result_truth_chain": {
       "score_pct": 50,
       "status": "partial_closed",
       "evidence_file": "core/task_result_canonical_truth_chain.py + galaxy_gateway/android/handlers/task_lifecycle.py",
-      "notes": "4-step truth chain code exists and is called; BUT all 4 steps are try/except silent-degrade; is_truth_chain_complete=False only prints warning, does not block or retry"
+      "notes": "4-step truth chain code exists and is called; BUT all 4 steps are try/except silent-degrade; is_truth_chain_complete=False only prints warning, does not block or retry",
+      "rederived_2026_09_27": {"verdict": "partial_closed_observable", "evidence": "core/task_result_canonical_truth_chain.py + core/operator_execution_observability_surface.py", "note": "不完整的真相链进 IncompleteResultLedger 并在 operator 面可见；仍不阻断、不重试、无死信（G001）"}
     },
     "task_result_idempotency": {
       "score_pct": 85,
       "status": "closed",
       "evidence_file": "core/durable_result_idempotency.py + task_lifecycle.handle_task_result",
-      "notes": "durable store check before processing; duplicate suppressed; cross-restart safe"
+      "notes": "durable store check before processing; duplicate suppressed; cross-restart safe",
+      "rederived_2026_09_27": {"verdict": "closed_tested", "evidence": "core/durable_result_idempotency.py", "note": "未发现回退"}
     },
     "local_edge_execution": {
       "score_pct": 60,
       "status": "partial_closed",
       "evidence_file": "agent/EdgeExecutor.kt + service/GalaxyConnectionService.kt",
-      "notes": "EdgeExecutor handles task_assign actions (touch/input/shell/screenshot); depends on Accessibility permission being granted; STATUS_SUCCESS/ERROR/CANCELLED/TIMEOUT mapped"
+      "notes": "EdgeExecutor handles task_assign actions (touch/input/shell/screenshot); depends on Accessibility permission being granted; STATUS_SUCCESS/ERROR/CANCELLED/TIMEOUT mapped",
+      "rederived_2026_09_27": {"verdict": "not_rederived_android_scope", "note": "证据在安卓仓，本次未复核"}
     },
     "autonomous_goal_execution": {
       "score_pct": 50,
       "status": "partial_closed",
       "evidence_file": "agent/AutonomousExecutionPipeline.kt + GalaxyConnectionService.handleGoalExecution",
-      "notes": "Pipeline exists; local_model_inference conditionally available (requires both components up); dependency on grounding/OCR/LLM"
+      "notes": "Pipeline exists; local_model_inference conditionally available (requires both components up); dependency on grounding/OCR/LLM",
+      "rederived_2026_09_27": {"verdict": "not_rederived_android_scope", "note": "证据在安卓仓，本次未复核"}
     },
     "goal_result_truth_chain": {
       "score_pct": 25,
       "status": "nominal_only",
       "evidence_file": "galaxy_gateway/android/handlers/goal_execution.py",
-      "notes": "goal_result handler exists but does NOT call run_task_result_truth_chain; only basic memory backflow"
+      "notes": "goal_result handler exists but does NOT call run_task_result_truth_chain; only basic memory backflow",
+      "rederived_2026_09_27": {"verdict": "closed_tested", "evidence": "galaxy_gateway/android/handlers/goal_execution.py", "note": "goal_result 走 UnifiedResultIngress（含真相链），ingress 不可用时回退直接跑真相链（G003 已关）"}
     },
     "handoff_v2_takeover": {
       "score_pct": 55,
       "status": "partial_closed",
       "evidence_file": "agent/DelegatedTakeoverExecutor.kt + agent/TakeoverEligibilityAssessor.kt + galaxy_gateway/android/handlers/takeover_response.py",
-      "notes": "Protocol aligned; eligibility assessment exists; actual execution depth in DelegatedTakeoverExecutor depends on local agent capabilities"
+      "notes": "Protocol aligned; eligibility assessment exists; actual execution depth in DelegatedTakeoverExecutor depends on local agent capabilities",
+      "rederived_2026_09_27": {"verdict": "not_rederived_android_scope", "evidence": "galaxy_gateway/android/handlers/takeover_response.py", "note": "V2 处理器在；执行深度取决于安卓侧，本次未复核"}
     },
     "memory_backflow": {
       "score_pct": 70,
       "status": "partial_closed",
       "evidence_file": "core/openclawd_memory_backflow.py + task_lifecycle.handle_task_result",
-      "notes": "Called after truth chain in handle_task_result; try/except so non-blocking; OpenClawd module must be available"
+      "notes": "Called after truth chain in handle_task_result; try/except so non-blocking; OpenClawd module must be available",
+      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "core/openclawd_memory_backflow.py", "note": "未重新推导"}
     },
     "acceptance_verdict": {
       "score_pct": 15,
       "status": "missing",
       "evidence_file": "core/canonical_completion_ingress.py (nearest)",
-      "notes": "No explicit acceptance verdict mechanism; completion = accepted (optimistic). HITL approval routes exist (core/routes/approvals.py) but not wired into task completion chain"
+      "notes": "No explicit acceptance verdict mechanism; completion = accepted (optimistic). HITL approval routes exist (core/routes/approvals.py) but not wired into task completion chain",
+      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "core/system_final_acceptance_verdict.py + core/canonical_completion_ingress.py + core/engineering_verification.py", "note": "原判 missing 已过期：逐条结果带 acceptance_verdict（缺省 unknown → provisional 信任），系统级裁决与四档执行证据都在；HITL 审批未成为必经门（G004）"}
     },
     "governance_active_enforce": {
       "score_pct": 20,
       "status": "nominal_only",
       "evidence_file": "core/agent_governance/ + config/governance_policy.json + core/routes/governance.py",
-      "notes": "Governance config + routes exist; NOT called in task execution chain; passive policy store only"
+      "notes": "Governance config + routes exist; NOT called in task execution chain; passive policy store only",
+      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "core/unified_execution_governance.py + core/runtime/source_dispatch_orchestrator.py", "note": "统一执行治理已接进 source_dispatch_orchestrator 派发路径；是否覆盖所有执行入口未复核"}
     },
     "p2p_mesh_coordination": {
       "score_pct": 30,
       "status": "nominal_only",
       "evidence_file": "galaxy_gateway/android/handlers/mesh_topology.py + galaxy_gateway/android/handlers/peer_exchange.py + core/mesh/body_mesh_registry.py",
-      "notes": "Peer exchange messages handled, body mesh roles registered; full P2P multi-device task coordination not traced to complete closure"
+      "notes": "Peer exchange messages handled, body mesh roles registered; full P2P multi-device task coordination not traced to complete closure",
+      "rederived_2026_09_27": {"verdict": "structural_only", "evidence": "core/mesh/mesh_session_progression_driver.py + core/mesh/live_mesh_runtime_engine.py + core/canonical_capability_status.py", "note": "引擎代码已在，运行时登记 mesh=structural_only：缺的是真机多设备证据，不是代码"}
     },
     "federation_multi_center": {
       "score_pct": 20,
       "status": "nominal_only",
       "evidence_file": "core/routes/federation.py",
-      "notes": "Federation routes exist; actual multi-instance task routing not traced"
+      "notes": "Federation routes exist; actual multi-instance task routing not traced",
+      "rederived_2026_09_27": {"verdict": "structural_only", "evidence": "core/routes/federation.py + core/canonical_capability_status.py", "note": "运行时登记 federation=structural_only"}
     },
     "observability_telemetry": {
       "score_pct": 65,
       "status": "partial_closed",
       "evidence_file": "core/runtime/runtime_observability_sink.py + observability/GalaxyLogger.kt + config/prometheus.yml",
-      "notes": "Prometheus + Grafana configured; runtime_observability_sink emits lifecycle events; Android has GalaxyLogger; not all paths emit structured events"
+      "notes": "Prometheus + Grafana configured; runtime_observability_sink emits lifecycle events; Android has GalaxyLogger; not all paths emit structured events",
+      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "galaxy_gateway/observability.py", "note": "LEGACY_DISPATCH 指标已有，告警规则没有（路线图 C3）"}
     },
     "end_to_end_usability": {
       "score_pct": 40,
       "status": "partial_closed",
       "evidence_file": "multiple",
-      "notes": "Core link (register->dispatch->execute->result->memory-backflow) can run; truth/acceptance chain has gaps; goal execution depends on local capabilities; no E2E integration tests"
+      "notes": "Core link (register->dispatch->execute->result->memory-backflow) can run; truth/acceptance chain has gaps; goal execution depends on local capabilities; no E2E integration tests",
+      "rederived_2026_09_27": {"verdict": "partial_closed_measured", "evidence": "docs/SYSTEM_STATUS.md", "note": "单机主链实测可用（启动、接口、对话降级、入口分流）；跨设备需真机；E2E 测试已有（G007 已关）"}
     }
   },
   "critical_gaps": [
@@ -134,7 +155,8 @@
       "title": "Truth chain steps are all try/except silent-degrade",
       "files": ["core/task_result_canonical_truth_chain.py", "galaxy_gateway/android/handlers/task_lifecycle.py"],
       "impact": "is_truth_chain_complete=False does not block processing; truth may never close",
-      "fix_direction": "Make Step3 (authority_state_update) and Step4 (completion_linkage) hard-fail or retry; propagate incomplete truth to dead-letter queue"
+      "fix_direction": "Make Step3 (authority_state_update) and Step4 (completion_linkage) hard-fail or retry; propagate incomplete truth to dead-letter queue",
+      "rederived_2026_09_27": {"verdict": "partial_observable", "evidence": "core/task_result_canonical_truth_chain.py", "note": "由静默变为可观测（IncompleteResultLedger），仍不阻断"}
     },
     {
       "id": "G002",
@@ -142,7 +164,8 @@
       "title": "Device registration downstream steps all silent-degrade",
       "files": ["galaxy_gateway/android/handlers/registration.py"],
       "impact": "Device may be in UDM but absent from runtime_session_registry and body_mesh_registry; affects dispatch decisions",
-      "fix_direction": "Make attach_runtime_session and register_session required steps; fail registration if they cannot be completed"
+      "fix_direction": "Make attach_runtime_session and register_session required steps; fail registration if they cannot be completed",
+      "rederived_2026_09_27": {"verdict": "partial_observable", "evidence": "galaxy_gateway/android/handlers/registration.py", "note": "失败的下游步骤逐设备记账，注册不因此失败"}
     },
     {
       "id": "G003",
@@ -150,7 +173,8 @@
       "title": "goal_result missing truth chain",
       "files": ["galaxy_gateway/android/handlers/goal_execution.py"],
       "impact": "goal_result does not go through 4-step truth chain; truth/acceptance asymmetry between task and goal",
-      "fix_direction": "Call run_task_result_truth_chain (or dedicated goal_result_truth_chain) in handle_goal_execution_result"
+      "fix_direction": "Call run_task_result_truth_chain (or dedicated goal_result_truth_chain) in handle_goal_execution_result",
+      "rederived_2026_09_27": {"verdict": "closed", "evidence": "galaxy_gateway/android/handlers/goal_execution.py", "note": "走 UnifiedResultIngress，回退直接跑真相链"}
     },
     {
       "id": "G004",
@@ -158,7 +182,8 @@
       "title": "No final acceptance / verdict mechanism",
       "files": ["core/canonical_completion_ingress.py"],
       "impact": "completion = accepted (optimistic); false-positive results not detected",
-      "fix_direction": "Add task_acceptance_ledger with explicit verdict states; wire HITL approval routes into completion chain"
+      "fix_direction": "Add task_acceptance_ledger with explicit verdict states; wire HITL approval routes into completion chain",
+      "rederived_2026_09_27": {"verdict": "partial", "evidence": "core/system_final_acceptance_verdict.py + core/canonical_completion_ingress.py", "note": "裁决字段贯通，unknown→provisional；HITL 未成必经门"}
     },
     {
       "id": "G005",
@@ -166,7 +191,8 @@
       "title": "AutonomousExecutionPipeline local LLM conditional availability not handled",
       "files": ["agent/AutonomousExecutionPipeline.kt", "service/GalaxyConnectionService.kt"],
       "impact": "goal_execution silently degrades when local LLM unavailable; center not notified for LLM-assisted fallback",
-      "fix_direction": "Explicit capability_unavailable signal when local LLM is down; center falls back to cloud LLM + notifies Android of strategy"
+      "fix_direction": "Explicit capability_unavailable signal when local LLM is down; center falls back to cloud LLM + notifies Android of strategy",
+      "rederived_2026_09_27": {"verdict": "not_rederived_android_scope", "note": "安卓仓"}
     },
     {
       "id": "G006",
@@ -174,7 +200,8 @@
       "title": "Compat WS path truth chain consistency",
       "files": ["core/api_routes.py (compat /ws/device handler)"],
       "impact": "Legacy core-direct clients bypass canonical gateway truth chain handling",
-      "fix_direction": "Ensure compat path task_result handler calls same run_task_result_truth_chain as canonical gateway handler"
+      "fix_direction": "Ensure compat path task_result handler calls same run_task_result_truth_chain as canonical gateway handler",
+      "rederived_2026_09_27": {"verdict": "closed", "evidence": "core/api_routes.py", "note": "兼容 WS 同走统一 ingress，受保护跨设备模式下默认被挡"}
     },
     {
       "id": "G007",
@@ -182,7 +209,8 @@
       "title": "No E2E integration tests",
       "files": ["tests/"],
       "impact": "No machine-verifiable evidence that full chain (register->dispatch->execute->result->truth_chain_complete) works",
-      "fix_direction": "Add tests/integration/test_e2e_task_lifecycle.py using real FastAPI WebSocket test client"
+      "fix_direction": "Add tests/integration/test_e2e_task_lifecycle.py using real FastAPI WebSocket test client",
+      "rederived_2026_09_27": {"verdict": "closed", "evidence": "tests/integration/test_separated_process_ws_e2e.py + tests/integration/test_multi_device_failure_recovery_e2e.py", "note": "tests/integration 下 36 个文件"}
     }
   ],
   "message_type_coverage": {

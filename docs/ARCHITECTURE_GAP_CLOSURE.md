@@ -1,5 +1,8 @@
 # Architecture Gap Closure: Multi-Device Runtime, Compatibility, and Convergence Hardening
 
+> **历史快照（2026-09-27 标注）**：本文记录的是写作当时的状态，之后没有随代码更新，里面的缺口、分数、优先级可能已经过期。
+> 当前状态以 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md) 为准。
+
 > **PR Status**: Implementation — closes identified architecture gaps in the Galaxy dual-repo system.
 > **Primary repo**: `DannyFish-11/ufo-galaxy-realization-v2`
 > **Related repo**: `DannyFish-11/ufo-galaxy-android` (linked design constraints)
