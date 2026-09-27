@@ -25,20 +25,27 @@
 跨设备、多设备和联邦这三块代码都在，但**没有经过真机验证**，运行时自己也把它们登记为
 `structural_only` / `experimental`。
 
-**完善度：主路径扎实，外围有几处真断点，这次查出来最严重的是容器镜像。**
+**完善度：主路径扎实。复测查出来的断点这次已全部修掉，剩下的需要决定或真机（第 7 节）。**
 主分支上所有的 CI 门都是绿的，唯独 **Supply-Chain：三个容器镜像一个都构建不出来**，
 而且就算构建出来，其中两个也跑不起来。从 2026-08-31 起，这条工作流在 main 上每周的定时运行都是红的
 （至少连续 4 周）。PR 上却一直显示绿：在 PR 上它只跑哈希校验和节点报告两步，构建镜像那一步
-只在 push 和定时运行时才跑。所以红灯只出现在 main 上，一直没人去查原因。本次 PR 已修复并加了守卫（第 6 节）。
-另外还有几处较小的完善度问题，见第 7 节，留待决定。
+只在 push 和定时运行时才跑。所以红灯只出现在 main 上，一直没人去查原因。
+同样「写着但跑不起来」的还有：
+- `deploy/compose/` 下的编排文件，路径全部指错了地方；
+- prometheus 抓的端口是错的；
+- 设备注册表不认数据目录；
+- 版本号五处不一致；
+- 测试会漏状态、留下常驻进程。
+
+这些都已修复并加了守卫（第 6 节）。
 
 **整体设计完成度：历史设计缺口基本关完，在建设计的阶段一已落地；最大的落差在文档。**
 - 2026-04 审计列的 7 个关键缺口（G001–G007）：V2 侧 3 个已关，3 个由「静默」变成「可观测」（但仍不阻断），
   1 个属于安卓仓（不在本次范围）。
 - 运行时闭合审计的 9 个残余缺口（GAP-512-001…009）**全部已在代码里关闭**，但清单里的描述一直没改，
   本次已更正。
-- 后续路线图的 24 项里：15 项已落地（其中 A6 是以划边界的方式关闭的，A2/C1 有意保留了兜底路径），
-  1 项有意保留（C4），6 项部分完成，2 项未做。
+- 后续路线图的 24 项里：16 项已落地（其中 A6 是以划边界的方式关闭的，A2/C1 有意保留了兜底路径），
+  1 项有意保留（C4），5 项部分完成，2 项未做。
 - 最大的落差在文档：286 份 Markdown 里，最近两个月只改过 9 份。
 
 ---
@@ -48,7 +55,7 @@
 | 部分 | Python 文件 | Python 行数 | 说明 |
 |---|---:|---:|---|
 | `core/` | 1,008 | 548,148 | 主体。中位文件 387 行；133 个文件超过 1000 行，8 个超过 3000 行（最大 `openclawd.py` 10,330） |
-| `tests/` | 1,318 | ~638,000 | 测试行数多于 core 本身 |
+| `tests/` | 1,322 | ~639,000 | 测试行数多于 core 本身 |
 | `external/` | 807 | 204,021 | 外部代码原样入库（microsoft_ufo、agentcpm、channels、memos），不算本仓自写 |
 | `nodes/` | 476 | 94,865 | 125 个 `Node_*` 目录 |
 | `galaxy_gateway/` | 107 | 41,645 | 设备网关（规范的设备 WebSocket 入口） |
@@ -86,8 +93,13 @@ git ls-files -z 'core/*.py' | xargs -0 cat | wc -l
 `/api/v1/participants`、`/api/v1/protocols/mcp`、`/api/v1/protocols/skills`、`/api/v1/system/mcp`、
 `/api/v1/system/skills`、`/api/config/all` —— **全部返回 200**。
 
-`POST /api/v1/chat` 在没配 Key 时 0.5 秒返回 `success: true`，回复内容是「所有 AI 服务暂时不可用（已尝试: ），请检查 API Key 配置后重试。」
-降级是明确的，不是崩溃；只是括号里「已尝试」后面是空的，见第 7 节。
+`POST /api/v1/chat` 在没配 Key 时 0.5 秒返回 `success: true`，回复是「还没有可用的 AI 服务：没有配置任何 API Key，
+也没有检测到本地模型。请在面板「全部设置」里填一个 API Key，或者启动 Ollama 并拉取模型，然后再试。」
+降级是明确的，不会崩溃。修复前这句是「所有 AI 服务暂时不可用（已尝试: ）」，括号里是空的，见第 6.3 节。
+
+版本号：`/api/v1/system/status`、`/api/status`、OpenAPI 的 `info.version` 都是 `2.3.23`，启动总结卡是
+「Galaxy L4 · v2.3.23」。修复后重启，`/api/v1/devices` 里不再有测试设备。OpenAPI 共 429 个路径
+（其中约 420 个来自 `core/api_routes.py`，其余是启动器自己的 `/api/status` 等）。
 
 ### 2.3 入口分流：只有电脑发起的请求进桌面三态
 
@@ -119,9 +131,9 @@ GALAXY_API_TOKEN=t python main.py --backend --port 19000 --host 127.0.0.1   # �
 
 | 项 | 结果 |
 |---|---|
-| 全量测试 `pytest tests/` | **45,068 通过 / 6 失败 / 156 跳过**。6 个失败单独重跑全部通过，属于测试隔离问题，详见第 8 节 |
+| 全量测试 `pytest tests/` | 修复后 **45,117 通过**，唯一 1 个失败已当场修掉（第 8 节）。复测前的 6 个失败都是测试隔离问题，已全部修复 |
 | 仓库守卫 `scripts/check_*.py` | 导入边界、文件复杂度、证据锚点、可达性、裁决独立性、元层、接线、债务冻结、主线路由、工作流 YAML、遗留回归、语义锚定、Agent 供给声明、仓库卫生 —— **全部通过**。`check_codeql_ledger` 本地判失败，原因是本地没有 SARIF 文件；它只在 CI 里有意义，并且是有意设计成「找不到就判失败」 |
-| 结论保鲜 `check_assessment_freshness` | 18/18 条结论新鲜 |
+| 结论保鲜 `check_assessment_freshness` | 21/21 条结论新鲜（本次新增 3 条：设备注册表认数据目录、版本号唯一来源、LEGACY_DISPATCH 告警） |
 | 就绪报告 `generate_system_readiness_report.py` | 42/42 通过。**注意它只查「文件在不在、模块能不能导入」**，所以它绿着的时候，镜像照样构建不出来 |
 | 可达性 | 3 个模块不可达（已登记基线） |
 | 未接线 | 756 个公开能力没有生产调用方（基线 760；这一轮接上了 4 个） |
@@ -186,9 +198,9 @@ python scripts/check_assessment_freshness.py
 
 | 结论 | 条目 |
 |---|---|
-| 已落地（15） | A1, A2, A3, A4, A6（划边界关闭）, B1, B2, B4, B5, C1（兜底有意保留）, C2, D1, D2, D4, D6（V2 侧） |
+| 已落地（16） | A1, A2, A3, A4, A6（划边界关闭）, B1, B2, B4, B5, C1（兜底有意保留）, C2, C3（指标 + 告警规则，本次补齐告警）, D1, D2, D4, D6（V2 侧） |
 | 有意保留（1） | C4：`galaxy_gateway/task_router.py` 仍在盘上，已登记为 LEGACY COMPAT 治理面；删不删是产品决定 |
-| 部分（6） | A5, B3, B6, C3（指标有、告警没有）, C5, D5 |
+| 部分（5） | A5, B3, B6, C5, D5 |
 | 未做（2） | C6（`/ws/ufo3` 仍在）, D3（会话迁移没有规范面 —— 见结论 `session-migration-has-no-canonical-home`） |
 
 ### 5.3 多设备这一块到底到了哪儿
@@ -203,7 +215,9 @@ python scripts/check_assessment_freshness.py
 
 ---
 
-## 6. 本次查出并已修复：三个容器镜像
+## 6. 本次查出并已修复
+
+### 6.1 三个容器镜像
 
 2026-09-26 那次 Supply-Chain run（36236799682）里，三个镜像都失败了；从 2026-08-31 起每周的定时运行也都是红的。本地复现后逐一修复。
 
@@ -223,22 +237,53 @@ python scripts/check_assessment_freshness.py
 
 对修复前的文件运行这个测试，上面这些缺失会全部报出来。
 
----
+### 6.2 部署编排与监控
 
-## 7. 本次查出、没修，留给决定
-
-| 问题 | 位置 | 后果 |
+| 问题 | 修复 | 验证 |
 |---|---|---|
-| 设备注册表的路径写死在仓库里 | `core/routes/_shared.py:54` 把路径写死成 `<repo>/data/registered_devices.json`，不跟 `GALAXY_DATA_DIR`。另外 15 个模块都跟这个变量，`tests/conftest.py` 也正是靠它把测试隔离开 | 测试注册的设备会写进真实的注册表：本次启动后 `/api/v1/devices` 列出了 **106 台测试设备**。改路径会让已设置 `GALAXY_DATA_DIR` 的部署「忘掉」已注册设备，需要做迁移兜底，因此没有顺手改 |
-| 测试隔离：顺序依赖与孤儿进程 | 见第 8 节 | 本地一次跑全量会有 4 个假红；每跑一次全量都会留下 2 个常驻节点进程 |
-| 版本号四处不一致 | 启动横幅 `v2.3.21`（`launcher/services.py`）、`core.__version__ = "3.0.0"`、镜像标签 `2.3.23`、README 抬头 `v10.0` | 用户和部署看到的版本号互相对不上 |
-| 无 Key 时的提示里「已尝试」列表为空 | `POST /api/v1/chat` | 提示变成「（已尝试: ）」，少了信息 |
-| LEGACY_DISPATCH 只有指标，没有告警规则 | `galaxy_gateway/observability.py` 有 `galaxy_legacy_dispatch_total`；`deploy/`、`config/` 里没有对应告警 | 路线图 C3 要求的「超过基线就告警」这一半没做 |
-| 会话迁移没有规范面 | 见结论 `session-migration-has-no-canonical-home` | 路线图 D3 走不通；在建出规范面之前不应该合并两个 store |
-| 自我改进总闸默认关闭 | `GALAXY_META_RSI`，默认 `off` | 由仓库所有者决定 |
-| 未接线 / 不可达 | 756 个公开能力没有生产调用方；3 个模块不可达 | 都已登记基线，不会再增长；存量需要逐个判断删还是接 |
+| `deploy/compose/` 下的 `full.yml`（`python main.py --docker-full` 用的就是它）、`production.yml`（部署文档里的生产入口）和 `kimi.yml`，把相对路径写成 `.`、`./core`、`.env`。Compose 按**文件所在目录**解析这些路径，结果都指向 `deploy/compose/`：116 个服务找不到 Dockerfile，`./core` 等挂载会拿空目录盖住容器里的代码，生产入口因为找不到 `env_file` 直接启动失败 | 所有指向仓库根的相对路径改成 `../..` | `docker compose config` 解析后，构建上下文和挂载源全部落在仓库根 |
+| `config/prometheus.yml` 抓 `galaxy:8080` / `gateway:8000`，但服务实际都监听 9000；网关的指标出口是 `/gateway/metrics`（`/metrics` 在网关上是 404）。一个指标都没抓到过 | 目标改为 9000；网关改抓 `/gateway/metrics` | promtool：配置合法 |
+| 路线图 C3 的告警这一半：`galaxy_legacy_dispatch_total` 有计数，没有告警 | 新增 `config/prometheus_alerts.yml`：`GalaxyLegacyDispatchUsed`（15 分钟内走到旧派发路径就告警）、`GalaxyTargetDown`；`production.yml` 把它挂进 prometheus 读规则的目录 | promtool：2 条规则识别到 |
+
+防回潮：`tests/test_deploy_surfaces_resolve.py` 核对以下几点：
+- compose 路径解析后真实存在；
+- 抓取端口是服务在听的端口；
+- 网关抓取路径真的存在；
+- 告警引用的指标真的有代码在导出；
+- 规则文件挂进了 prometheus 读的目录。
+
+对修复前的文件运行这个测试，会有 6 项报红。
+
+### 6.3 运行时与测试
+
+| 问题 | 修复 | 验证 |
+|---|---|---|
+| 设备注册表路径写死成仓库的 `data/registered_devices.json`，是全仓唯一不认 `GALAXY_DATA_DIR` 的持久化点。测试注册的设备会写进真实注册表，复测时启动后列出过 106 台测试设备 | `core/routes/_shared.py` 改为跟随 `GALAXY_DATA_DIR`（没设时仍是仓库 `data/`，行为不变）。新位置还没有文件时，从旧位置读入一次，之后只写新位置，旧文件不删不改 | `tests/test_device_registry_follows_data_dir.py` |
+| 版本号五处不一致：横幅和 `--version` 是 v2.3.21，`core`/网关的 `__version__` 是 3.0.0，状态接口是 2.0.0，镜像标签是 2.3.23，README 是 v10.0 | 唯一来源 `core/version.py`（2.3.23，取已出现过的最高版本号），Python 代码一律从这里 import；Dockerfile 的 LABEL、启动脚本横幅、三个 npm 包（用 `npm version` 改，锁文件同步）、README 由测试核对 | `tests/test_version_single_source.py`；`python main.py --version` → `Galaxy v2.3.23` |
+| 没配任何 Key、也没有本地模型时，对话回「所有 AI 服务暂时不可用（已尝试: ）」，括号里是空的 | 一个都没试到时直接说缺什么、怎么补；试过但都失败时照旧列出试过哪些（`core/llm_unavailable_reply.py`） | `tests/test_llm_unavailable_reply.py`（含经过真实路由器的一条） |
+| 测试顺序依赖：`test_config_schema_ui_parity.py` 先跑，后面 4 个视觉/密钥测试必红。根因是保存配置会把假 Key 写进 `os.environ`，并 reload 进程级 `UnifiedConfig` 单例；测试只隔离了文件 | 该测试的 fixture 同时隔离 `os.environ`，收尾后让单例从复原后的状态重新读一次 | 同样顺序连跑，52 个全部通过（修复前 4 个失败） |
+| 测试遗留常驻节点进程：`GalaxyUnified.__init__` 会登记一个真的会起子进程的节点激活执行器（生产里正该如此），它是进程级全局，一直不撤。之后任何触发设备注册的测试都会拉起真实节点进程 | `tests/conftest.py` 在每个测试结束后把执行器复原成测试开始前的样子 | 复现序列之后残留节点进程数为 0（修复前为 2） |
+| 网关 `/health` 报的 `version` 写死为 3.0.0 | 同上，从 `core/version.py` 取 | 同上 |
+| 测试遗留后台重连客户端：`tests/test_a_laptop_joins_by_pairing.py` 起的真实 `DeviceClient` 测完不停，每 5 秒重连一次，持续整个会话；`tests/test_route_construction_is_offline.py` 进程级拦 `socket.connect`，把这些连接记到自己头上（本 PR 首次推送后 CI test-shard 4 因此红过一次） | 该文件每个测试结束都停掉客户端；离线用例只记本测试线程发起的连接（其它线程照常被拦，只是不记账） | 修复前：测完 11 秒内有 6 次后台连接；修复后为 0 次 |
+
+## 7. 还没解决的（多数需要决定，或需要真机）
+
+| 问题 | 位置 / 依据 | 为什么这次没改 |
+|---|---|---|
+| 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
+| 真相链、注册下游步骤不完整时只记账、不阻断 | G001 / G002（第 5.2 节） | 「失败就拒收」还是「记下来继续」是策略取舍，改了会改变线上行为 |
+| 会话迁移没有规范面 | 结论 `session-migration-has-no-canonical-home`；路线图 D3 | 要先设计规范的迁移面；在那之前不应该合并两个 store |
+| 面板：拓扑/可观测视图没搬进面板；两套配置写入链路（ConfigService 写 config.json、CONFIG_SCHEMA 写 .env）没合并 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板与配置层的收敛设计 |
+| 推演的逐步过程（`skill.invoked`，`kind="rehearsal"`）没有任何消费方 | `RENDER_CONTRACT_DIRECTION.md` 第七节 | 要在面板上加一个新视图，属于前端设计 |
+| 旧 WS 路径 `/ws/ufo3` 未退役 | 路线图 C6 | 需要安卓侧先确认老客户端已迁走 |
+| 自我改进总闸默认关闭 | `GALAXY_META_RSI=off` | 由仓库所有者决定 |
+| 未接线 / 不可达 | 756 个公开能力没有生产调用方；3 个模块不可达 | 都已登记基线，不会再增长；存量要逐个判断是删还是接 |
 | 大文件 | core 有 133 个文件超过 1000 行 | 已有复杂度基线守着，只许拆、不许涨 |
-| 文档漂移 | 286 份 Markdown 中，2026-08-05 之后只改过 9 份 | 本次给 41 份状态/审计类文档加了快照说明，指向本文 |
+| 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；复现一次要 4 分钟，这次没有定位到创建点 |
+| 文档漂移 | 286 份 Markdown 中，2026-08-05 之后只改过 9 份 | 本次给 41 份状态/审计类文档加了快照说明，指向本文；正文保留原样 |
+
+本地跑过测试的工作树里，旧位置的 `data/registered_devices.json` 可能已经混进了测试设备（修复前的测试写进去的）。
+这个文件不进仓库，删掉即可。
 
 安卓仓和手表不在本次复测范围内。
 
@@ -248,11 +293,16 @@ python scripts/check_assessment_freshness.py
 
 `pytest tests/`（`--timeout=300`，本地 Python 3.11，与 CI 同版本），一次跑完整套：
 
-| 通过 | 失败 | 跳过 | 用时 |
-|---:|---:|---:|---|
-| 45,068 | 6 | 156 | 31 分 25 秒 |
+| 轮次 | 通过 | 失败 | 跳过 | 用时 |
+|---|---:|---:|---:|---|
+| 复测前（main @ 6489ff6 + 镜像修复） | 45,068 | 6 | 156 | 31 分 25 秒 |
+| 本次全部修复后 | 45,117 | 1 → 0 | 151 | 31 分 54 秒 |
 
-6 个失败**单独重跑全部通过**，都不是产品代码的问题，但都是真实的测试隔离缺陷：
+修复后那一轮唯一的失败，是我自己改出来的：`core/ascii_art.py` 改成从 `core.version` 取版本号以后，
+被当脚本直接跑（`python core/ascii_art.py`）时仓库根不在 `sys.path` 上。已按 `core/release_blocking_gate.py`
+的同一做法补上引导，那条用例（`tests/test_core_scripts_run_standalone.py`）通过。
+
+复测前那 6 个失败**单独重跑全部通过**，都不是产品代码的问题，但都是真实的测试隔离缺陷，**本次都已修掉**（第 6.3 节）：
 
 - `tests/test_vision_backends_are_pluggable.py` ×3、`tests/test_the_vision_and_audio_lanes_use_the_same_keys.py` ×1：
   顺序依赖。只要 `tests/test_config_schema_ui_parity.py` 先跑，这 4 个就必定失败（本地稳定复现：
@@ -260,11 +310,14 @@ python scripts/check_assessment_freshness.py
   前者留下的 key 被视觉后端的可用性判断读到了。CI 是绿的，只是因为分片把它们分开了。**这个问题 main 上本来就有。**
 - `tests/test_launcher_doctor.py` ×2：依赖本机环境（有没有装 nats-py 等包）。补齐这些包之后单独跑能通过。
 
-另外观察到两件事：
+另外观察到三件事，本次也都已修掉：
 - 测试会拉起真实节点进程，并且测试结束后进程还在：
   `tests/test_device_drivers_are_reused_and_found.py`（Node_33_ADB）和 `tests/test_device_onboarding_taxonomy.py`（Node_45_DesktopAuto）。
   这两个进程的父进程是 1，套件结束后一直活着。
-- 测试会写进仓库的 `data/registered_devices.json`，原因见第 7 节第一条。
+- 测试会写进仓库的 `data/registered_devices.json`（设备注册表不认 `GALAXY_DATA_DIR`）。
+- `tests/test_a_laptop_joins_by_pairing.py` 起的真实设备客户端测完不停，网关关掉以后每 5 秒重连一次，
+  一直持续到整个会话结束。`tests/test_route_construction_is_offline.py` 在进程级拦截 `socket.connect`，
+  会把这些连接算到自己头上。本 PR 第一次推送后，CI 分片的组合变了，test-shard 4 因此红过一次。
 
 ```bash
 python -m pytest -q -p no:cacheprovider --timeout=300 tests/

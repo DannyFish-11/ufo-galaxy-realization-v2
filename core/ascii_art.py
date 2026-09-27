@@ -35,6 +35,14 @@ import sys
 import unicodedata
 from typing import Optional
 
+# 本模块带 __main__ 守卫，会被当脚本直接跑（`python core/ascii_art.py`）。那时 sys.path[0]
+# 是 core/ 而不是仓库根，下面的 `from core.version …` 会 ModuleNotFoundError。只在没有包
+# 上下文（即被当脚本跑）时把仓库根补进去 —— 与 core/release_blocking_gate.py 同一个做法。
+if __package__ in (None, ""):  # pragma: no cover - 只在直接执行时成立
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.version import GALAXY_VERSION  # noqa: E402  —— 版本号的唯一来源
+
 #: 剥 ANSI 转义序列用（算显示宽度前必须剥掉，否则颜色码会被算进列数）。
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -42,7 +50,7 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 # 版本 & 标语 (single source of truth)
 # ---------------------------------------------------------------------------
 
-GALAXY_VERSION = "v2.3.21"
+# GALAXY_VERSION 从 core.version 取（见文件顶部的 import），这里不再另写一份。
 GALAXY_TAGLINE = "L4 Autonomous Intelligence System"
 
 # ---------------------------------------------------------------------------

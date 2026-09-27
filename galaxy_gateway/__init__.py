@@ -11,7 +11,8 @@ Galaxy Gateway - 跨平台分布式 Agent 网关
 7. 会话漫游管理 (SessionRoaming)
 """
 
-__version__ = "3.0.0"
+from core.version import __version__  # 与主程序同一个版本号（core/version.py）
+
 __author__ = "UFO Galaxy Team"
 
 from .session_roaming import Session, SessionContext, SessionRoamingManager, SessionState, session_roaming

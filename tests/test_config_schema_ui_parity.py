@@ -28,9 +28,11 @@ SONAR_API_KEY/VLLM_URL)补进 CONFIG_SCHEMA。
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -102,6 +104,17 @@ class TestSettingsTabKeysExistInConfigSchema:
 class TestPostConfigEndToEnd:
     """直接打 POST /api/config,复现并验证修复。"""
 
+    @pytest.fixture(autouse=True)
+    def _unified_config_is_reloaded_from_the_restored_state(self):
+        """保存会调 ``UnifiedConfig.reload()``，把（临时的）假密钥读进进程级单例；
+        ``credential_vault.resolve_key`` 第一层问的正是它。文件和环境变量在 monkeypatch
+        收尾时复原，单例却不会 —— 于是收尾之后再 reload 一次，让它从复原后的状态重新读。
+        （autouse 先建后拆：它的收尾排在 monkeypatch 复原之后。）"""
+        yield
+        from core.unified_config import config
+
+        config.reload()
+
     def _client(self, tmp_path, monkeypatch):
         import core.config_store as config_store_module
         import core.routes.config as config_module
@@ -122,6 +135,19 @@ class TestPostConfigEndToEnd:
                 secrets_path=tmp_path / "secrets.env.test",
             ),
         )
+
+        # 隔离 os.environ：POST /api/config 落盘成功后会 os.environ.update(...)（这是它的本职：
+        # 保存即时生效）。上面两处只隔离了文件，环境变量没隔离 —— 这里存进去的假 Key
+        # (OPENROUTER_API_KEY / DEEPSEEK_OCR2_API_KEY …) 会一直留在本进程里，排在后面的
+        # 用例读到它们：tests/test_vision_backends_are_pluggable.py 的三条和
+        # tests/test_the_vision_and_audio_lanes_use_the_same_keys.py 的一条只要排在本文件
+        # 之后就必红（CI 分片恰好把它们分开，所以 CI 一直绿）。
+        # 先 setenv 让 monkeypatch 记下原状（原本没有的，收尾时删掉），再按原状复位。
+        for key in config_module.CONFIG_SCHEMA:
+            present = key in os.environ
+            monkeypatch.setenv(key, os.environ.get(key, ""))
+            if not present:
+                monkeypatch.delenv(key)
 
         app = FastAPI()
         app.include_router(config_module.router)

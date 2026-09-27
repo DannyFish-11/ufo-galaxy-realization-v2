@@ -359,6 +359,24 @@ def _reset_session_registry():
     yield
 
 
+# 节点激活执行器:``GalaxyUnified.__init__`` 会往 ``core.node_activation_policy`` 登记一个
+# **真的会起子进程**的执行器(launcher_adapter.activate —— 生产里这正是它该做的)。
+# 可它是进程级全局,登记了就不撤:任何一个测试只要构造过一次 GalaxyUnified,此后整个
+# 会话里凡是触发"设备注册 / 首次能力请求"的测试,都会真的拉起节点进程。复测时抓到过:
+# tests/test_device_drivers_are_reused_and_found.py 拉起 Node_33_ADB、
+# tests/test_device_onboarding_taxonomy.py 拉起 Node_45_DesktopAuto,父进程是 1,
+# 整套跑完仍然常驻。这里逐测试复原成测试开始前的样子。
+@pytest.fixture(autouse=True)
+def _no_leaked_node_activation_executor():
+    """Auto-use: 测试里登记的节点激活执行器,测试结束就撤掉。"""
+    mod = sys.modules.get("core.node_activation_policy")
+    before = mod.get_activation_executor() if mod is not None else None
+    yield
+    mod = sys.modules.get("core.node_activation_policy")
+    if mod is not None and mod.get_activation_executor() is not before:
+        mod.set_activation_executor(before)
+
+
 # 反自激励门是带【时间状态】的进程单例:任何测试只要走过一次朗读路径
 # (speak_response / IncrementalSpeaker),就会往门里登记一段"刚说过的话",而它在留存
 # 窗口内(默认 6 秒 + 按文本长度估算的朗读耗时)会让所有以 recently_spoke() 为条件的

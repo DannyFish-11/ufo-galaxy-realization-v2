@@ -374,6 +374,63 @@
           "expected": true
         }
       ]
+    },
+    {
+      "id": "device-registry-follows-data-dir",
+      "source": "本次复测修复(2026-09-27)",
+      "recorded_on": "2026-09-27",
+      "statement": "设备注册表认 GALAXY_DATA_DIR:core/routes/_shared.py 每次现取 _device_registry_file(),没设才落仓库 data/;新位置没有文件时从旧位置读入一次。",
+      "supersedes": "此前写死成仓库的 data/registered_devices.json,是全仓唯一不认 GALAXY_DATA_DIR 的持久化点 —— 测试注册的设备写进真实注册表,复测启动后列出过 106 台测试设备。",
+      "predicates": [
+        {
+          "kind": "symbol_exists",
+          "target": "_device_registry_file",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "_device_registry_file",
+          "scope": "core",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "version-single-source",
+      "source": "本次复测修复(2026-09-27)",
+      "recorded_on": "2026-09-27",
+      "statement": "版本号只有一个来源 core/version.py;Python 表层一律 import 它,非 Python 的几处由 tests/test_version_single_source.py 核对。",
+      "supersedes": "此前同一个系统报出五个版本号(v2.3.21 / 3.0.0 / 2.0.0 / 2.3.23 / v10.0),各写死在自己的文件里。",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "core/version.py",
+          "scope": ".",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "GALAXY_VERSION",
+          "scope": "core",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "legacy-dispatch-alert-exists",
+      "source": "docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md (C3)",
+      "recorded_on": "2026-09-27",
+      "statement": "LEGACY_DISPATCH 的告警这一半也做了:config/prometheus_alerts.yml 的 GalaxyLegacyDispatchUsed,规则文件挂进 prometheus 读规则的目录;抓取目标改到服务真正监听的 9000 与网关的 /gateway/metrics。",
+      "supersedes": "此前只有计数器没有告警,而且 prometheus 抓的是 galaxy:8080 / gateway:8000 —— 任何 compose 里都没有这两个端口,一个指标都没抓到过。",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "config/prometheus_alerts.yml",
+          "scope": ".",
+          "expected": true
+        }
+      ]
     }
   ]
 }

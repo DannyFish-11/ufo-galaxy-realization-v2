@@ -14,7 +14,7 @@
 
 > 下面的正文是 2026-04 的原始路线图，保留原样作为记录。**逐条对照代码复核之后的当前状态以这张表为准**；
 > 全系统的状态见 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md)。
-> 汇总：15 项已落地、1 项有意保留、6 项部分完成、2 项未做。唯一的 P0（D1）早已实现。
+> 汇总：16 项已落地、1 项有意保留、5 项部分完成、2 项未做。唯一的 P0（D1）早已实现。
 
 | 项 | 当前状态 | 依据（代码） |
 |---|---|---|
@@ -32,7 +32,7 @@
 | B6 检查点恢复 | 部分 | 会话级的重启恢复有（B4），按任务步骤的检查点续跑引擎没有 |
 | C1 DeviceRouter 残留退役 | 已落地（兜底有意保留） | 同 A2：兜底路径留给不提供预分析的老调用方 |
 | C2 CapabilityRegistry 路由守卫 | 已落地 | `core/capability_registry.py` 的 `CapabilityRegistryMisuseEvent` |
-| C3 LEGACY_DISPATCH 可观测 | 部分 | 指标 `galaxy_legacy_dispatch_total` 已有（`galaxy_gateway/observability.py`，Q7 已在代码里决定）；**告警规则没有** |
+| C3 LEGACY_DISPATCH 可观测 | 已落地 | 指标 `galaxy_legacy_dispatch_total`（`galaxy_gateway/observability.py`，Q7 已在代码里决定）；告警规则 `GalaxyLegacyDispatchUsed` 在 `config/prometheus_alerts.yml`（2026-09-27 补齐，prometheus 抓取目标同时改对） |
 | C4 TaskRouter 文件移除 | 有意保留 | 仍在盘上，已登记为 LEGACY COMPAT 治理面；删不删是产品决定（结论 `C4-task-router-still-on-disk`） |
 | C5 安卓 REST 兼容别名退役 | 部分 | 弃用头与用量记账已有（`deprecation_headers`、`compat_usage.record_use`）；删除要等安卓侧 |
 | C6 旧 WS 路径退役 | 未做 | `/ws/ufo3` 仍在 `galaxy_gateway/routes/websocket.py`（已计入用量记账） |

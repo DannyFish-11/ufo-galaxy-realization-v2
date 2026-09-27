@@ -49,6 +49,8 @@ from typing import Any, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.version import __version__ as _galaxy_version
+
 # ── New sub-modules (extracted from this file) ──
 from galaxy_gateway.bootstrap.lifecycle import lifespan
 from galaxy_gateway.middleware import BearerAuthMiddleware  # re-exported for compat
@@ -95,7 +97,7 @@ heartbeat_scheduler: Optional[Any] = None
 app = FastAPI(
     title="Galaxy Gateway",
     description="跨平台分布式 Agent 网关",
-    version="3.0.0",
+    version=_galaxy_version,
     lifespan=lifespan,
 )
 

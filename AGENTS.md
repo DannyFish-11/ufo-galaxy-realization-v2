@@ -40,6 +40,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/unified_config.py` - 统一配置管理器
 - `config.json` - 主配置文件
 - `.env` - 环境变量（API Key）
+- `GALAXY_DATA_DIR` - 运行时数据目录（缺省仓库 `data/`）。**所有**持久化状态都认它，设备注册表也不例外 —— 新加的持久化点别写死路径，`tests/conftest.py` 靠它把测试状态隔离到临时目录
 
 ### 设备管理
 - `core/device_registry.py` - 设备注册和发现
@@ -221,6 +222,10 @@ python main.py                # 启动系统（权威入口）
 # 服务编排在 launcher/services.py（GalaxyUnified），由 main.py 在 Phase 4-6 直接 import 调用；它没有自己的 CLI
 ```
 
+容器：根目录 `docker-compose.yml`；`deploy/compose/{full,production,kimi}.yml` 里的相对路径按**文件所在目录**解析，
+指向仓库根的一律写 `../..`（`tests/test_deploy_surfaces_resolve.py` 守着）。镜像要拷哪些目录由
+`tests/test_container_images_ship_what_they_run.py` 按 import 关系核对 —— 新增顶层包被 core 顶层 import 时，Dockerfile 要跟着拷。
+
 ### 运行测试
 ```bash
 python -m pytest tests/                                   # 全量（CI 用 Python 3.11）
@@ -280,7 +285,7 @@ cp .env.example .env
 
 ## 版本信息
 
-- 版本：启动横幅显示 `v2.3.21`（`launcher/services.py`），但 `core.__version__` 是 `3.0.0`、镜像标签是 `2.3.23` —— README 抬头又写 `v10.0` —— 四处不一致，见 `docs/SYSTEM_STATUS.md` 第 7 节
+- 版本：v2.3.23，**唯一来源 `core/version.py`**。横幅、`--version`、`core`/`galaxy_gateway` 的 `__version__`、状态接口、镜像标签、启动脚本、npm 包、README 都从这里取或由 `tests/test_version_single_source.py` 核对 —— 改版本只改那一处
 - Python：**3.11**（CI 与镜像唯一验证过的版本；更低版本未经验证）
 - Android: 7.0+
 

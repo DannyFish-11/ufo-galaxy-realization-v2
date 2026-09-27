@@ -138,7 +138,7 @@
       "status": "partial_closed",
       "evidence_file": "core/runtime/runtime_observability_sink.py + observability/GalaxyLogger.kt + config/prometheus.yml",
       "notes": "Prometheus + Grafana configured; runtime_observability_sink emits lifecycle events; Android has GalaxyLogger; not all paths emit structured events",
-      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "galaxy_gateway/observability.py", "note": "LEGACY_DISPATCH 指标已有，告警规则没有（路线图 C3）"}
+      "rederived_2026_09_27": {"verdict": "partial_closed", "evidence": "galaxy_gateway/observability.py + config/prometheus.yml + config/prometheus_alerts.yml", "note": "LEGACY_DISPATCH 指标 + 告警规则已齐（路线图 C3）；prometheus 抓取目标原先端口全错（8080/8000），已改为 9000 与网关的 /gateway/metrics。其余路径是否都发结构化事件未复核"}
     },
     "end_to_end_usability": {
       "score_pct": 40,

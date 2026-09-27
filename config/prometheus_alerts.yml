@@ -1,0 +1,33 @@
+# Galaxy — Prometheus 告警规则
+# ==============================
+# 挂载：deploy/compose/production.yml 把本文件挂到 /etc/prometheus/rules/galaxy.yml，
+#       config/prometheus.yml 的 rule_files 读这个目录。
+# 校验：tests/test_monitoring_config_matches_the_services.py（规则引用的指标必须真的有人导出）。
+
+groups:
+  - name: galaxy-legacy-paths
+    rules:
+      # 路线图 C3：LEGACY_DISPATCH 走指标已经做了（galaxy_legacy_dispatch_total，网关
+      # device_router / cross_device_coordinator 走旧派发路径时 +1），告警这一半一直没做。
+      # 基线是 0 —— 旧派发路径只为兼容保留，走到一次就说明有调用方还没迁到规范派发链。
+      - alert: GalaxyLegacyDispatchUsed
+        expr: increase(galaxy_legacy_dispatch_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "旧派发路径（LEGACY_DISPATCH）在 15 分钟内被走到了 {{ $value | humanize }} 次"
+          description: >-
+            有任务绕开了规范派发链（CanonicalTask → TaskEnvelope → CommandRouter.route_envelope），
+            走了 galaxy_gateway 的旧派发兜底。看网关日志里的 LEGACY_DISPATCH 找调用方，
+            迁到规范链上；确认是有意保留的兼容调用再调高本规则的基线。
+
+  - name: galaxy-availability
+    rules:
+      - alert: GalaxyTargetDown
+        expr: up{job=~"galaxy-core|galaxy-gateway"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} 抓不到指标超过 2 分钟"
+          description: "服务停了，或者 /metrics 路径、端口与 config/prometheus.yml 不一致。"

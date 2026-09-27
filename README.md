@@ -1,67 +1,66 @@
 # Galaxy — 桌面原生 AI 助手系统
 
-> **版本**: v10.0 | **模型**: Gemma 4 E4B / 26B / 31B + MiniCPM-o 4.5 / V 4.6 | **日期**: 2026-07-05
+> **版本**：v2.3.23（唯一来源 `core/version.py`；`python main.py --version`）· **Python**：3.11 · **许可证**：MIT
 >
-> **当前做到了哪儿、哪里还是断的**：见 [`docs/SYSTEM_STATUS.md`](docs/SYSTEM_STATUS.md)（2026-09-27 逐项复测，附复测命令）。
+> **当前做到了哪儿、哪里还是断的**：见 [`docs/SYSTEM_STATUS.md`](docs/SYSTEM_STATUS.md)（逐项复测，每条附复测命令）。
+> 本 README 只写代码里真实存在、可以复核的东西。
 
 ---
 
 ## 一句话介绍
 
-**Galaxy** 是一个桌面原生 AI 助手系统。通过 Electron 三态覆盖层（SILENT/LIMINAL/MANIFEST）直接在桌面上与 AI 对话，本地运行 Ollama 模型（Gemma 4 全系 / MiniCPM-o 4.5 / MiniCPM-V 4.6），支持远程服务器操作、AI 搜索、持久记忆、Skill 扩展。
+**Galaxy** 是一个以电脑为主体的 AI 助手。它常驻在桌面上，边看边听，用三态覆盖层（SILENT / LIMINAL / MANIFEST）
+表达自己；能调本地模型（Ollama，按显卡分档）或云端模型，能操作本机、远程 Linux 服务器和接入的其它设备，
+有持久记忆、MCP / Skill 扩展，以及一个默认关闭、由验证器而不是由自己裁决的自我改进层。
 
 ---
 
-## 系统架构
+## 整体架构（按代码实际分层）
 
 ```
-用户桌面
-    │
-    │ Ctrl+Alt+Space 唤醒
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│          Electron 桌面覆盖层                 │
-│  ┌──────────────────┐  ┌──────────────────┐ │
-│  │ mainWindow       │  │ panelWindow      │ │
-│  │ (全屏透明覆盖层)  │  │ (F12 控制面板)   │ │
-│  │                  │  │                  │ │
-│  │ SILENT ──LIMINAL │  │ 维态/星元/设置    │ │
-│  │   ──── MANIFEST  │  │ STANDBY + 三态点  │ │
-│  │                  │  │                  │ │
-│  │ WebSocket        │  │                  │ │
-│  │ ws://localhost   │  │                  │ │
-│  └────────┬─────────┘  └──────────────────┘ │
-└───────────┼─────────────────────────────────┘
-            │
-            ▼
-┌─────────────────────────────────────────────┐
-│          Galaxy Gateway (FastAPI)            │
-│  端口: 9000                                  │
-│                                              │
-│  REST API: /api/v1/*                         │
-│  WebSocket: /ws/desktop-presence             │
-│                                              │
-│  路由:                                       │
-│    /api/v1/agents/linux/*  (远程服务器操作)   │
-│    /api/v1/agents/sandbox/* (沙箱安全执行)    │
-│    /api/v1/devices/*       (设备管理)         │
-│    /api/v1/tasks/*         (任务调度)         │
-│    /api/v1/llm/*           (LLM 调用)         │
-│    ... 37 个端点                             │
-└───────────┬─────────────────────────────────┘
-            │
-            ├── 本地模型: Ollama (Gemma 4 E4B/E2B/12B/26B/31B + MiniCPM)
-            ├── 云端兜底: DeepSeek → OpenRouter → Groq
-            ├── 持久记忆: SQLite (/app/data/)
-            ├── 上下文压缩: 突破 128K 限制
-            └── Skill 系统: 动态加载扩展
+                    ┌──────────── 用户交互 ─────────────┐
+   桌面三态覆盖层  electron/（或 desktop-tauri/）   面板 electron/renderer/panel/（纯 TS）
+                    │   WS  /ws/desktop-presence（只认 payload.render）
+                    ▼
+┌──────────────────────────── Galaxy 后端 · python main.py · 端口 9000 ─────────────────────────────┐
+│ 入口与编排   main.py → launcher/（环境检查 · 依赖 · 桌面壳 · 服务编排 · 节点生命周期）               │
+│ HTTP / WS   core/api_routes.py 挂 core/routes/*，并合并网关表层 → 约 420 个 HTTP 端点、7 个 WS 端点 │
+│                                                                                                   │
+│ 主体        core/desktop_presence_runtime.py  桌面三态运行时（唯一主体核心）                        │
+│ 入口分流    core/presence_line.py  只有电脑发起的请求进三态；别的设备、智能体自主工作直接交给智能体  │
+│ 智能体      core/openclawd.py（执行）· core/agent/execution_planner.py（策略选择唯一决策点）        │
+│ 模型路由    core/multi_llm_router.py  本地优先 → 按任务类型的云端候选 → 都不可用时明确告知          │
+│ 对象层      core/canonical_task.py · canonical_task_store.py · ontology/links.py（决策走确定性查询）│
+│ 设备        galaxy_gateway/（安卓规范入口 /ws/device/{id}）· participant_admission.py（非安卓通用接入）│
+│             device_onboarding/（设备接入平面：候选 → 成员）                                        │
+│ 语音        speech_output.py（说）· modality_bridge.py（听）· tts/ · routes/openai_audio.py         │
+│ 记忆        core/memory/ · conversation_mainline.py（声字同文：所有说过的话进同一条主线）           │
+│ 元层 (RSI)  core/meta/  采集 → 提案 → 验证 → 裁决 → 生效/回滚；GALAXY_META_RSI 默认 off             │
+└───────────────────────────────────────────────────────────────────────────────────────────────────┘
+        │                              │                                 │
+   节点 nodes/（125 个，按需启动）   本地模型 Ollama（A/B/C/D 档）      云端模型（DeepSeek / OpenAI / Anthropic / … 按 Key 启用）
 ```
 
-统一主体架构:桌面在场运行时(DesktopPresenceRuntime)是唯一主体核心,
-Electron 覆盖层/面板只是运行时外壳(runtime shell);OpenClawd 作为执行策略层
-(PolicyGate 白名单 + 沙箱)挂在主体之下。详见
-[docs/UNIFIED_SUBJECT_ARCHITECTURE.md](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)。
+统一主体：桌面在场运行时（DesktopPresenceRuntime）是唯一主体核心，Electron / Tauri 覆盖层和面板只是它的
+运行时外壳；OpenClawd 作为执行策略层（PolicyGate 白名单 + 沙箱）挂在主体之下。
+
+- 代码地图与约定（每轮给 AI 助手加载的那份）：[`AGENTS.md`](AGENTS.md)
+- 统一主体架构：[`docs/UNIFIED_SUBJECT_ARCHITECTURE.md`](docs/UNIFIED_SUBJECT_ARCHITECTURE.md)
+- 元层设计与落地状态：[`docs/META_LAYER_RSI_ARCHITECTURE_CN_2026.md`](docs/META_LAYER_RSI_ARCHITECTURE_CN_2026.md)
+- 前端必须遵守的渲染契约：[`docs/RENDER_CONTRACT_DIRECTION.md`](docs/RENDER_CONTRACT_DIRECTION.md)
+
+### 规模（2026-09-27 实测）
+
+| 部分 | Python 文件 | 行数 | 说明 |
+|---|---:|---:|---|
+| `core/` | 1,008 | ~55 万 | 主体 |
+| `nodes/` | 476 | ~9.5 万 | 125 个节点 |
+| `galaxy_gateway/` | 107 | ~4.2 万 | 设备网关 |
+| `contracts/` · `launcher/` | 48 | ~3.8 万 | 跨运行时契约 · 启动编排 |
+| `tests/` | 1,300+ | ~64 万 | 全量约 4.5 万个测试 |
+| `external/` | 807 | ~20 万 | 外部代码原样入库，不算本仓自写 |
+
+本仓自写 Python（不含测试与 `external/`）约 79 万行；另有 Electron 外壳与面板约 1.2 万行 TS/JS。
 
 ---
 
@@ -92,75 +91,81 @@ Electron 覆盖层/面板只是运行时外壳(runtime shell);OpenClawd 作为�
 
 ---
 
+---
+
 ## 核心能力
 
-### 1. 本地多模态 AI (Ollama)
-- **模型**: Google Gemma 4 全系 (E4B 默认 / E2B / 12B / 26B MoE / 31B) + MiniCPM-o 4.5 / MiniCPM-V 4.6
-- **显存**: E4B ~5GB | 12B ~8GB | 26B ~15.6GB | 31B ~17.4GB (4-bit)
-- **上下文**: 128K-256K tokens
-- **Ollama 版本**: 需要 0.22+ (`ollama --version` 检查)
-- **突破**: 通过上下文压缩 + 记忆召回，对话长度理论上无限
+### 1. 本地模型（Ollama），按显卡分档
 
-### 2. 模型宕机保护 (四级级联回退)
-```
-用户请求
-  │
-  ▼
-[本地 Ollama Gemma 4 / MiniCPM] ──失败──┐
-  │ 成功                      ▼
-返回结果              [DeepSeek API]
-                        │ 失败
-                        ▼
-                [OpenRouter API]
-                        │ 失败
-                        ▼
-                  [Groq API]
-                        │
-                        ▼
-                  返回结果 (标记 fallback)
-```
+| 档 | 组成 | 说明 |
+|---|---|---|
+| **A** 轻量本地 | Gemma 4 系（e2b / e4b / 12b）单模型 | 看 + 听（原生），说走 TTS；无独显也能跑 |
+| **B** 全模态单模型 | MiniCPM-o 4.5 | 看 / 听 / 说全原生，需要显卡 |
+| **C** 双模型 · 35B 推理位 | 推理位 Qwen3.6-35B-A3B 或 Agents-A1（MoE，需专家卸载），感知位四选一 | 推理位常驻独显，感知位走核显 |
+| **D** 双模型 · 9B 推理位 | 推理位 Qwythos-9B v2（稠密），感知位同 C | |
 
-### 3. 远程服务器操作 (Linux Agent)
-注册你的服务器（华为云/阿里云/任何 Linux），通过对话远程操作：
+启动时按硬件推荐一档（装得下且跑得起来的最高档；无独显 → A）；`python main.py --select-model` 或面板里随时换。
+定义在 `core/model_catalog.py`，推荐逻辑在 `core/model_selection.py`。
+
+### 2. 模型路由与降级
+
+`core/multi_llm_router.py`：本地模型可用时优先走本地，同时按任务类型带上云端候选（例如推理类依次
+ollama → anthropic → openai → meta → deepseek → …，偏好表 `TASK_ROUTING_PREFERENCES`）；
+失败自动切下一个，断路器拦住连续失败的提供商。一个都不可用时**不崩**，明确告诉用户缺什么：
+没配 Key、也没本地模型时回「还没有可用的 AI 服务……」，试过但都失败时列出试过哪些（`core/llm_unavailable_reply.py`）。
+
+### 3. 入口分流：谁发起的请求进桌面三态
+
+只有**电脑这边发起**的请求进三态（桌面外壳、本机感官、本机标识、不带设备号且来自本机的连接）；
+手机、手表、别的机器、智能体自己的定时心跳都不进 —— 直接交给智能体，不在电脑上朗读。
+这是架构，没有开关（`core/presence_line.py`）。`GET /api/v1/agent/activity` 列出智能体手上的全部请求，
+包括不进三态的那些。
+
+### 4. 设备接入
+
+- 安卓：规范入口 `galaxy_gateway/routes/websocket.py` 的 `/ws/device/{device_id}`（AIP v3）。
+- 非安卓设备：`POST /api/v1/participants/register` → `/tasks` → `/heartbeat` → `/disconnect`，全程不经安卓命名模块。
+- 设备接入平面（`core/device_onboarding/`）：发现候选 → 需要人做什么就说清楚 → 成为成员；同型号设备复用驱动。
+
+### 5. 远程 Linux 服务器（`/api/v1/agents/linux/*`）
+
+注册服务器后通过对话远程操作（SSH 密钥/密码、远程文件读写、系统信息、批量操作）：
 ```bash
-# 注册服务器
 curl -X POST http://localhost:9000/api/v1/agents/linux/servers \
-  -H "Content-Type: application/json" \
-  -d '{"name":"华为云","host":"IP","port":22,"user":"root","key_path":"~/.ssh/id_rsa"}'
-
-# 远程执行命令
-curl -X POST http://localhost:9000/api/v1/agents/linux/servers/ID/execute \
-  -d '{"command":"uname -a && df -h"}'
+  -H "Authorization: Bearer $GALAXY_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"我的服务器","host":"IP","port":22,"user":"root","key_path":"~/.ssh/id_rsa"}'
 ```
-支持：SSH 密钥/密码认证、远程文件读写、系统信息查看、批量操作。
 
-### 4. AI 搜索 (Tavily)
-AI 原生搜索引擎，basic/advanced 深度搜索，结果自动注入对话上下文。
+### 6. 沙箱执行（`/api/v1/agents/sandbox/*`）
 
-### 5. 混合知识库 (Node_80)
-- **向量层**: sentence-transformers 语义搜索
-- **图层**: 实体关系网络，多跳遍历
-- **持久化**: SQLite 磁盘存储
+32 条危险命令模式拦截；默认内存 256 MB、超时 30 秒（`galaxy_gateway/routes/sandbox.py`）。
+OpenClawd 的 PolicyGate 另有应用启动白名单与命令注入检测。
 
-### 6. 沙箱安全执行
-- 危险命令黑名单 (`rm -rf`, `dd`, `mkfs` 等 16 种)
-- 资源限制 (内存 256MB, CPU 30秒超时)
-- **OpenClawd PolicyGate**: 应用启动白名单 + 命令注入检测
+### 7. MCP 与技能
 
-### 7. Skill 系统
-动态加载自定义技能包：
-```
-skills/
-└── my_skill/
-    ├── skill.json      # 技能描述
-    └── handler.py      # 执行逻辑
-```
-通过 `skill__<id>` 工具调用。
+- MCP 服务器：`/api/v1/protocols/mcp/*`（加载、列工具、调用、重载），实现在 `core/mcp_loader.py`。
+- 技能：`skill.json` 包（`core/skill_loader.py`，按 SkillPackageContract 校验）或 `SKILL.md`（`core/skill_md_loader.py`）；
+  以 `skill__<id>` 工具的形式交给智能体。
 
-### 8. DAG 动态编排
-- **StarSplit**: 自动检测并行任务，最大拆分 8 个子任务
-- **预测性调度**: Welford 在线算法学习历史执行时间
-- **不变量验证**: I1(依赖存在) I2(无环) I3(参数一致)
+### 8. 记忆与语音
+
+- 记忆：`core/memory/` 统一记忆层；`Node_80_MemorySystem` 提供短期（Redis）/ 长期（Memos）/ 语义（ChromaDB）/ 画像（SQLite）四层。
+- 说：`core/speech_output.py` 选引擎、失败降级；克隆音色默认打 AudioSeal 水印。听：`core/modality_bridge.py`
+  （全模态模型在线时让它自己听，否则 Whisper / SenseVoice）。OpenAI 兼容端点 `/v1/audio/*`。
+
+### 9. 自我改进（元层，默认关闭）
+
+`core/meta/`：一次改进 = 采集 → 提案 → 由 harness 跑验证 → 四值证据裁决 → 生效或回滚，每一步留 lineage。
+提案者自报的成败只记为 claimed，不算数；算子不得改验证器。总闸 `GALAXY_META_RSI=off|shadow|on`，**默认 off**，
+面板「全部设置 → 自我改进」里就这一个开关。CLI：`python scripts/meta_rsi.py`。
+
+### 10. 节点（125 个，按需启动）
+
+节点定义在 `node_dependencies.json`，启动档位由 `core/node_activation_policy.py` 判定：
+13 个常开（核心组：StateMachine、OneAPI、Tasker、SecretVault、Router、Auth、Filesystem、Git、Fetch、
+Sandbox、SmartOrchestrator、ContextManager、SelfHealing），102 个首次用到时才起（lazy），
+2 个设备接入时起（on_demand），2 个共享，6 个不启动。分组：extended 55 · development 31 · academic 23 · core 13 · tools 2 · enhancement 1。
+完整清单见 `nodes/`，`python main.py nodes status` 查看运行情况。
 
 ---
 
@@ -170,27 +175,22 @@ skills/
 ```bash
 python main.py
 ```
-自动完成：环境检查 → 依赖安装 → 模型下载 → Gateway 启动 → **桌面壳启动**
+自动完成：环境检查 → 缺的依赖补装 → 本机模型档位 → 后端启动（9000）→ 桌面壳启动。
+缺什么就降级什么，并在启动总结里逐项写明原因和装法（没有 Key、没有 Ollama 也能起来）。
 
-**桌面壳默认优先 Tauri（轻量：内存/启动/体积远小于 Electron），无则回退 Electron：**
-- 检测到 Rust(cargo) 工具链 → 首次自动 `cargo build --release`（约数分钟，之后每次秒起并直接优先 Tauri）；
-  Linux 需先装 webkit2gtk 等系统依赖。
-- 无 Rust / 构建失败 → 自动回退 Electron，功能一致（前端同一套 renderer，行为对等）。
-- `GALAXY_TAURI_AUTOBUILD=0` 关闭自动构建；`GALAXY_DESKTOP_SHELL=electron` 强制用 Electron。
-
-选项：
 ```bash
+python main.py --version        # 版本号
 python main.py --check          # 只检查环境
-python main.py --backend        # 只启动 Gateway（不拉桌面壳）
-python main.py --desktop-only   # 只把桌面壳挂到已在跑的 Gateway 上（Tauri 优先，回退 Electron）
-python main.py --check-only     # 依赖/配置/核心模块/节点导入全查一遍，不启动
+python main.py --check-only     # 依赖 / 配置 / 核心模块 / 节点导入全查一遍，不启动
+python main.py --backend        # 只启动后端，不拉桌面壳
+python main.py --desktop-only   # 只把桌面壳挂到已在跑的后端上
 python main.py --status         # 查看系统状态
 python main.py doctor           # 给启动器自身做一次体检
+python main.py nodes start -g core   # 节点生命周期
 ```
 
-> 启动器已统一：`launch_desktop.py` / `unified_launcher.py` / `system_manager.py` /
-> `install.py` 四个本体已删除，要素全部收敛到 `main.py` + `launcher/`。
-> 老命令的对照写法见 `docs/LAUNCHER_UNIFICATION_PLAN.md` §4。
+桌面壳默认优先 Tauri（`desktop-tauri/`，轻量），没有 Rust 工具链或构建失败时自动回退 Electron（`electron/`），
+两者用同一套前端。`GALAXY_TAURI_AUTOBUILD=0` 关闭自动构建；`GALAXY_DESKTOP_SHELL=electron` 强制 Electron。
 
 #### Tauri 桌面壳构建依赖（想用轻量壳时）
 启动器会**自动构建**一次 Tauri 壳，但需要以下系统依赖（缺则自动回退 Electron，并在日志给出安装命令）：
@@ -207,22 +207,23 @@ python main.py doctor           # 给启动器自身做一次体检
 装好后跑 `python main.py`，首次自动 `cargo build --release`（约数分钟），之后每次秒起并直接优先 Tauri。
 不想用 Tauri：`GALAXY_TAURI_AUTOBUILD=0`（关自动构建）或 `GALAXY_DESKTOP_SHELL=electron`（强制 Electron）。
 
-### 方式二：Docker Compose（后端服务）
+### 方式二：Docker Compose
 ```bash
+cp .env.example .env            # 先填必填项（NEO4J_PASSWORD 等，缺了 compose 会直接报出来）
 docker compose up -d
 ```
-启动：Galaxy Gateway、Ollama、Neo4j、Qdrant、Redis、MongoDB、NATS
+默认起：galaxy（后端）、galaxy-gateway、ollama、neo4j、qdrant、redis、mongodb、minio、nats；
+`--profile full` 再加 oneapi、memos、temporal、agentcpm 等，`--profile webrtc` 加 coturn。
 
-> 2026-09-27 之前，`Dockerfile` 引用了一个不存在的 `cli/`，还漏拷了 `launcher/` 等启动必需的目录，镜像构建不出来，
-> 构建出来也起不了；`Dockerfile.gateway` 则漏了 `contracts/`。这些现已修复，由 `tests/test_container_images_ship_what_they_run.py` 守着。
+其它编排在 `deploy/compose/`：`full.yml`（全部节点，`python main.py --docker-full`）、`production.yml`（24/7 + 监控）。
+这些文件的相对路径按文件所在目录解析，2026-09-27 前全都指错了地方（构建找不到 Dockerfile、挂载盖成空目录），
+现已改为指向仓库根，由 `tests/test_deploy_surfaces_resolve.py` 守着；镜像拷进去的文件够不够自己跑，
+由 `tests/test_container_images_ship_what_they_run.py` 守着。
 
 ### 方式三：手动分别启动
 ```bash
-# 终端1：Gateway
-python main.py
-
-# 终端2：Electron 桌面覆盖层
-cd electron && npm install && npm start
+python main.py --backend                 # 终端 1：后端
+cd electron && npm install && npm start  # 终端 2：Electron 桌面覆盖层
 ```
 
 ---
@@ -230,9 +231,9 @@ cd electron && npm install && npm start
 ## 安装步骤
 
 ### 前提
-- Python 3.11（CI 与镜像验证的版本；更低版本未经验证）
-- Node.js 18+
-- Ollama (本地模型)
+- Python 3.11（CI 与镜像唯一验证过的版本）
+- Node.js 18+（桌面壳）
+- Ollama（可选，本地模型）
 
 ### 1. 克隆仓库
 
@@ -263,178 +264,103 @@ git sparse-checkout set --no-cone '/*' '!external/agentcpm/eval'
 > git clone 不支持断点续传——中断后重试是从零开始，所以弱网下**优先用 ②/③ 减小体积**，
 > 而不是反复重试完整克隆。
 
-### 2. 安装 Python 依赖
+### 2. 安装依赖
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
+python3 -m venv .venv && source .venv/bin/activate   # Linux/macOS
 pip install -r requirements.txt
+cd electron && npm install && cd ..
 ```
+（`python main.py install --core|--enhance|--all` 也能装。）
 
-### 3. 安装 Electron 依赖
-```bash
-cd electron && npm install
-```
-
-### 4. 配置环境变量
+### 3. 配置
 ```bash
 cp .env.example .env
-# 编辑 .env，至少配置一个 LLM API Key（云端兜底用）
+```
+至少配一个 LLM API Key，或者装好 Ollama。所有配置项（约 390 个）都登记在 `CONFIG_SCHEMA`
+（`core/routes/config_schema_registry.py`），面板「全部设置」里能看能改，保存即时生效。常用的几个：
+
+```bash
+DEEPSEEK_API_KEY=...            # 或 OPENAI_API_KEY / ANTHROPIC_API_KEY / OPENROUTER_API_KEY …
+OLLAMA_URL=http://localhost:11434
+GALAXY_MODEL_TIER=              # 空 = 按硬件推荐；A / B / C / D
+GALAXY_API_TOKEN=               # 后端 API 鉴权令牌（GALAXY_AUTH_ENABLED 默认开）
+GALAXY_DATA_DIR=                # 运行时数据目录，缺省为仓库的 data/
 ```
 
-### 5. 启动
+### 4. 启动
 ```bash
 python main.py
 ```
 
 ---
 
-## 环境变量配置 (.env)
+## API
+
+后端在 `http://localhost:9000`，约 420 个 HTTP 端点，完整列表看 `http://localhost:9000/docs`（OpenAPI）。
+主要分组（按端点数）：
+
+| 前缀 | 用途 |
+|---|---|
+| `/api/v1/operator/*` · `/api/v1/projection/*` · `/api/v1/observability/*` | 运行时状态、投影、可观测 |
+| `/api/v1/devices/*` · `/api/v1/participants/*` · `/api/v1/pair/*` · `/api/v1/onboarding/*` | 设备与参与方 |
+| `/api/v1/mesh/*` · `/api/v1/federation/*` · `/api/v1/relay/*` | 多设备协同（结构在、未经真机验证，见 SYSTEM_STATUS） |
+| `/api/v1/agents/linux/*` · `/api/v1/agents/sandbox/*` · `/api/v1/agent/activity` | 智能体能力与活动 |
+| `/api/v1/protocols/mcp/*` · `/api/v1/protocols/skills/*` | MCP 与技能 |
+| `/api/v1/chat` · `/api/v1/chat/stream` · `/api/v1/sessions/*` · `/api/v1/memory/*` | 对话、会话、记忆 |
+| `/api/v1/models/*` · `/api/config*` · `/api/v1/vault/*` | 模型档位、配置、密钥 |
+| `/health/live` · `/health` · `/metrics` · `/gateway/metrics` | 健康与 Prometheus 指标 |
+
+WebSocket：`/ws/desktop-presence`（桌面外壳）、`/ws/device/{id}`（安卓规范入口）、`/ws/status`、
+`/ws/android*`、`/ws/webrtc/{id}`，以及兼容旧客户端的 `/ws/ufo3/{id}`（待退役）。
+
+---
+
+## 关键文件
+
+| 文件 | 说明 |
+|---|---|
+| `main.py` · `launcher/` | 唯一入口 · 启动编排 |
+| `core/version.py` | 版本号唯一来源 |
+| `core/desktop_presence_runtime.py` · `core/presence_line.py` | 桌面三态主体 · 入口分流 |
+| `core/openclawd.py` · `core/agent/execution_planner.py` | 智能体执行 · 策略选择 |
+| `core/multi_llm_router.py` · `core/model_catalog.py` | 模型路由 · 模型与档位目录 |
+| `core/canonical_task.py` · `core/semantic_anchoring.py` | 任务本体 · 「决策走对象层」判据 |
+| `core/meta/` · `core/genome.py` · `config/genomes/` | 元层 · 提示词资产 |
+| `galaxy_gateway/` · `core/participant_admission.py` · `core/device_onboarding/` | 设备接入 |
+| `electron/` · `electron/renderer/panel/` · `desktop-tauri/` | 桌面外壳 · 面板 · Tauri 壳 |
+| `nodes/` · `node_dependencies.json` | 节点 · 节点定义 |
+| `config/prometheus.yml` · `config/prometheus_alerts.yml` | 指标抓取 · 告警规则 |
+| `scripts/check_*.py` | 仓库守卫（导入边界、复杂度、可达性、接线、裁决独立性…） |
+
+---
+
+## 测试与质量门
 
 ```bash
-# === 必需 ===
-# 至少一个 LLM API Key（云端兜底）
-OPENAI_API_KEY=sk-your-key-here
-# 或
-DEEPSEEK_API_KEY=your-key-here
-
-# === 本地模型 (Ollama) ===
-# 官方模型库: https://ollama.com/library
-# 需要 Ollama 0.22+，检查版本: ollama --version
-#
-# --- Google Gemma 4 (2026/4 发布，多模态，Apache 2.0) ---
-# E4B = Effective 4B，默认推荐，~5GB 显存
-# E2B = Effective 2B，最小边缘模型，~3.2GB
-# 12B = 2026/6 新发布，无编码器多模态+原生音频，~8GB
-# 26B = MoE (4B active)，最佳性能/速度平衡，~15.6GB
-# 31B = Dense 旗舰，最高质量，~17.4GB
-OLLAMA_MODEL=gemma4:e4b             # 默认: E4B 快速响应
-# OLLAMA_MODEL=gemma4:e2b           # 最小: E2B 边缘设备
-# OLLAMA_MODEL=gemma4:12b           # 均衡: 12B Unified 多模态
-# OLLAMA_MODEL=gemma4:26b           # 性能: 26B MoE 强推理
-# OLLAMA_MODEL=gemma4:31b           # 旗舰: 31B Dense 最高质量
-#
-# --- MiniCPM 系列 (面壁智能，Ollama 官方库) ---
-# OLLAMA_MODEL=minicpm-o:4.5        # 全双工多模态实时流 (2026/2/3)
-# OLLAMA_MODEL=minicpm-v:4.6        # 视觉理解 1.3B (2026/5/11，Ollama官方)
-#
-# Ollama 服务地址（默认本地，可改为远程）
-OLLAMA_URL=http://localhost:11434
-
-# === 系统配置 ===
-GALAXY_SYSTEM_MODE=desktop-local
-GALAXY_LOG_LEVEL=INFO
-PORT=9000
-
-# === AI 搜索 ===
-TAVILY_API_KEY=tvly-your-key
-
-# === 持久记忆 ===
-MEMORY_DB_PATH=/app/data/galaxy_memory.db
-
-# === 远程服务器 (Linux Agent) ===
-SSH_HOST=your-server-ip
-SSH_USER=root
-SSH_KEY_PATH=/home/you/.ssh/id_rsa
-
-# === 其他按需配置 ===
+python -m pytest tests/                                  # 全量（约 4.5 万个，30 分钟左右）
+python scripts/select_affected_tests.py <改过的文件…>     # 只跑受影响的
+for s in scripts/check_*.py; do python "$s"; done        # 仓库守卫
 ```
-
----
-
-## API 路由 (37 个端点)
-
-| 路由 | 端点数 | 说明 |
-|------|--------|------|
-| `/api/v1/health/*` | 6 | 健康检查 |
-| `/api/v1/devices/*` | 7 | 设备管理 |
-| `/api/v1/tasks/*` | 5 | 任务调度 |
-| `/api/v1/sessions/*` | 4 | Session 管理 |
-| `/api/v1/chat/*` | 2 | 对话 |
-| `/api/v1/llm/*` | 1 | LLM 调用 |
-| `/api/v1/agents/linux/*` | 9 | **远程服务器操作** (新增) |
-| `/api/v1/agents/sandbox/*` | 3 | **沙箱安全执行** (新增) |
-
-WebSocket: `ws://localhost:9000/ws/desktop-presence`
-
----
-
-## 节点列表 (135+)
-
-### R9 新增节点
-
-| 节点 | 功能 | 类名 |
-|------|------|------|
-| Node_Linux_Agent | 远程 Linux 服务器操作 (SSH) | LinuxAgent |
-| Node_Tavily_Search | AI 原生搜索 | TavilySearchManager |
-| Node_80_KnowledgeBase | 混合知识库 (向量+图) | HybridKnowledgeStore |
-
-### 核心节点
-
-| 类别 | 节点 |
-|------|------|
-| 本地计算 | Node_06_Filesystem, Node_36_LocalCompute, Node_45_SystemAgent, Node_Linux_Agent |
-| 移动设备 | Node_33_AndroidBridge, Node_34_Scrcpy, Node_113_AndroidVLM |
-| 数据库 | Node_12_Postgres, Node_13_SQLite, Node_20_Qdrant, Node_80_KnowledgeBase |
-| 搜索 | Node_08_BraveSearch, Node_22_Search, Node_25_GoogleSearch, Node_Tavily_Search |
-| 通信 | Node_10_Slack, Node_16_Email, Node_26_Discord |
-| 智能家居 | Node_27_SmartHome, Node_38_BLE, Node_41_MQTT, Node_42_CANbus, Node_43_MAVLink |
-| 媒体处理 | Node_14_FFmpeg, Node_15_OCR, Node_17_EdgeTTS, Node_46_Camera, Node_86_VideoProc |
-| 开发工具 | Node_07_Git, Node_09_Sandbox, Node_100_MemorySystem, Node_118_NodeFactory, Node_122_Shell |
-| AI/ML | Node_01_OneAPI, Node_50_Transformer, Node_79_LocalLLM, Node_99_EmbedService |
-| 3D打印 | Node_49_OctoPrint, Node_127_BambuLab |
-| 监控运维 | Node_23_Time, Node_24_Weather, Node_65_LoggerCentral, Node_76_AlertManager |
-
-完整节点列表见 `nodes/` 目录。
-
----
-
-## 关键文件位置
-
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| 主入口 | `main.py` | 系统编排器 |
-| 启动器实现 | `launcher/` | 环境检查 / 依赖 / 桌面壳 / 服务编排 / 节点生命周期 |
-| Gateway | `galaxy_gateway/app.py` | FastAPI 应用 |
-| Electron 入口 | `electron/main.js` | 桌面主进程 |
-| 三态管理 | `electron/renderer/app.js` | SILENT/LIMINAL/MANIFEST |
-| NLU 引擎 | `galaxy_gateway/enhanced_nlu_v2.py` | Gemma 4 / MiniCPM + 级联回退 |
-| 长上下文/记忆 | `core/memory/` | 统一记忆层（原 `core/context_compressor.py` 已删除，见下） |
-| 沙箱 | `galaxy_gateway/routes/sandbox.py` | 安全检查 |
-| Linux Agent | `galaxy_gateway/routes/linux_agent.py` | 远程服务器 |
-| 事件总线 | `core/state_event_bus.py` | 三态事件发布订阅 |
-| 记忆系统 | `nodes/Node_100_MemorySystem/main.py` | SQLite 持久化 |
-| 环境模板 | `.env.example` | 复制为 `.env` 后配置 |
+CI 在 `.github/workflows/`（15 条），全部跑在 Python 3.11 上。
 
 ---
 
 ## 相关仓库
 
-| 仓库 | 代码规模 | 职责 |
-|------|----------|------|
-| [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) | ~28万行 Kotlin | Android 客户端 (APK) — AIP v3 协议、本地 MobileVLM 推理、SeeClick 视觉定位 |
-| ufo-galaxy-realization-v2（本仓库） | ~66万行 Python | 服务端 + Galaxy Gateway + Electron 桌面覆盖层 |
-
-**Android 客户端快速开始**：
-```bash
-git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
-cd ufo-galaxy-android
-./build_apk.sh
-adb install app/build/outputs/apk/debug/app-debug.apk
-```
-
-完整 Android 文档：`docs/ANDROID_COMPAT.md`
+- [ufo-galaxy-android](https://github.com/DannyFish-11/ufo-galaxy-android) —— Android 客户端（AIP v3 协议、本地推理、视觉定位）。
+  文档见 `docs/ANDROID_COMPAT.md`。本仓复测不覆盖安卓侧。
 
 ---
 
 ## 安全
 
-- **沙箱**: 危险命令黑名单 + 资源限制
-- **PolicyGate**: OpenClawd 应用启动白名单
-- **SSH 密钥**: Linux Agent 优先使用密钥认证
-- **CodeQL**: GitHub 自动安全扫描
+- API 鉴权默认开启（`GALAXY_AUTH_ENABLED`），令牌 `GALAXY_API_TOKEN`；密钥经 `core/credential_vault.py` 统一取用，占位符不算密钥。
+- 节点 HTTP 面一律 fail-closed（`docs/NODE_HTTP_SECURITY_CONTRACT.md`）。
+- 沙箱危险命令拦截 + 资源限制；OpenClawd PolicyGate 白名单。
+- CI：CodeQL、gitleaks 密钥扫描、供应链（依赖哈希校验、SBOM 签名）。
 
 ---
 
 ## 许可证
 
-MIT License
+MIT License（见 `LICENSE`）

@@ -1,7 +1,7 @@
 {
   "name": "ufo-galaxy-desktop-presence",
   "productName": "Galaxy",
-  "version": "1.0.0",
+  "version": "2.3.23",
   "description": "Three-state fullscreen AI assistant desktop overlay",
   "main": "main.js",
   "scripts": {
