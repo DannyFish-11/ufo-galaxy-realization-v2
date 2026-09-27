@@ -96,8 +96,7 @@ def test_remote_login_is_only_true_when_ssh_is_actually_advertised():
 def test_all_services_of_one_machine_share_a_key():
     props = {"mdns_server": "studio.local."}
     keys = {
-        lc.machine_key(f"Danny's Mac._{s}._tcp.local.", props)
-        for s in ("ssh", "smb", "rfb", "device-info", "sftp-ssh")
+        lc.machine_key(f"Danny's Mac._{s}._tcp.local.", props) for s in ("ssh", "smb", "rfb", "device-info", "sftp-ssh")
     }
     assert keys == {"studio.local"}  # 实例名再怎么不同,机器只有一个
     # 拿不到目标主机名时退回实例名
