@@ -43,7 +43,7 @@ class CandidateStatus(str, Enum):
 class Observation:
     """发现来源看见的一个东西。"""
 
-    source: str  # mdns / ssdp / ha_flow / tailnet / nats_worker / manual
+    source: str  # mdns / ssdp / ha_flow / tailnet / serial / bluetooth / can / manual
     key: str  # 在该来源内稳定唯一:mDNS 名、SSDP USN、HA flow_id、headscale 节点 id、worker id
     name: str = ""
     kind_hint: str = ""  # 原始类型提示,交给 taxonomy.classify_type

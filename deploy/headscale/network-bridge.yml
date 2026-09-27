@@ -1,0 +1,53 @@
+# ============================================================
+# Network Bridge: Headscale ↔ Galaxy
+# ============================================================
+# This extends the Galaxy docker-compose with Headscale
+# connectivity, allowing Galaxy services to reach devices
+# via their Tailscale IPs (100.64.0.x).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f network-bridge.yml up -d
+# ============================================================
+
+services:
+  # Extend Galaxy Gateway to see Tailscale devices
+  galaxy-gateway:
+    networks:
+      - galaxy-headscale-net
+
+  galaxy:
+    networks:
+      - galaxy-headscale-net
+
+  # Tailscale subnet router (optional)
+  # Routes between Galaxy internal network (172.20.0.0/16)
+  # and Tailscale tailnet (100.64.0.0/10)
+  tailscale-router:
+    image: tailscale/tailscale:latest
+    container_name: galaxy-tailscale-router
+    restart: unless-stopped
+
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    environment:
+      - TS_AUTHKEY=${GALAXY_HEADSCALE_AUTHKEY}
+      - TS_EXTRA_ARGS=--login-server=http://headscale:8080 --advertise-routes=172.20.0.0/16 --hostname=gateway-router
+      - TS_STATE_DIR=/var/lib/tailscale
+
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+
+    networks:
+      - galaxy-headscale-net
+      - galaxy-net
+
+    depends_on:
+      headscale:
+        condition: service_healthy
+
+networks:
+  galaxy-headscale-net:
+    external: true

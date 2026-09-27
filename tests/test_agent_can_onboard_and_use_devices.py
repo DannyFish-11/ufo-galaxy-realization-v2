@@ -17,12 +17,11 @@ import pytest
 
 from core.device_onboarding.service import get_onboarding_service, reset_onboarding_service
 
-_WORKER = {
-    "worker_id": "worker-nas",
-    "hostname": "nas",
-    "device_type": "linux",
-    "capabilities": [{"name": "code_exec"}],
-}
+#: 一块插在主脑上的板子 —— 用它当"需要同意一下"的候选样本。
+#: (NATS worker 不是发现来源,见 core/device_onboarding/sources.py 模块头。)
+_SERIAL = {"device": "/dev/ttyACM0", "vid": "2341", "pid": "0043", "serial_number": "758", "product": "nas"}
+_SERIAL_ID = "serial-usb-2341-0043-758"
+_SERIAL_NAME = "nas(/dev/ttyACM0)"
 
 
 @pytest.fixture
@@ -97,10 +96,10 @@ def _udm():
     return get_unified_device_manager()
 
 
-def _worker_candidate():
-    from core.device_onboarding.sources import _on_worker_register
+def _serial_candidate():
+    from core.device_onboarding import local_buses as lb
 
-    asyncio.run(_on_worker_register(_WORKER))
+    get_onboarding_service().observe(lb.serial_observation(_SERIAL))
     return _agent("devices__list", {})["candidates"][0]["candidate_id"]
 
 
@@ -123,13 +122,13 @@ def test_the_agent_is_offered_the_device_tools():
 
 def test_list_shows_members_by_role_and_candidates(env):
     _udm().register_device_from_dict("phone-1", {"device_type": "Android_Agent", "transport": "websocket"})
-    _worker_candidate()
+    _serial_candidate()
     out = _agent("devices__list", {})
     assert out["success"]
     assert [m["device_id"] for m in out["members"]["subjects"]] == ["phone-1"]
     assert out["members"]["subjects"][0]["can_initiate"] is True
     [c] = out["candidates"]
-    assert (c["name"], c["join_path"], c["human_step"]) == ("nas", "edge_worker", "approve")
+    assert (c["name"], c["join_path"], c["human_step"]) == (_SERIAL_NAME, "local_bus", "approve")
 
 
 # ── 接入 ────────────────────────────────────────────────────────────────
@@ -137,19 +136,19 @@ def test_list_shows_members_by_role_and_candidates(env):
 
 def test_joining_asks_on_the_watch_and_joins_when_approved(env):
     _watch_says(env, True)
-    cid = _worker_candidate()
+    cid = _serial_candidate()
     out = _agent("devices__join", {"candidate_id": cid})
     assert out["success"] and out["outcome"]["kind"] == "joined"
-    assert env.asked == ["把「nas」接入为设备"]
-    assert _udm().get_device("worker-nas") is not None
+    assert env.asked == [f"把「{_SERIAL_NAME}」接入为设备"]
+    assert _udm().get_device(_SERIAL_ID) is not None
 
 
 def test_joining_is_refused_when_the_user_says_no(env):
     _watch_says(env, False)
-    cid = _worker_candidate()
+    cid = _serial_candidate()
     out = _agent("devices__join", {"candidate_id": cid})
     assert not out["success"] and "拒绝" in out["error"]
-    assert _udm().get_device("worker-nas") is None
+    assert _udm().get_device(_SERIAL_ID) is None
 
 
 def test_physical_steps_come_back_as_what_to_tell_the_user(env):
@@ -361,12 +360,12 @@ def test_rest_overview_join_and_remove(env):
     app = FastAPI()
     app.include_router(create_router())
     client = TestClient(app)
-    cid = _worker_candidate()
+    cid = _serial_candidate()
     ov = client.get("/api/v1/onboarding/overview").json()
     assert ov["summary"]["candidates"] == 1 and ov["candidates"][0]["candidate_id"] == cid
     r = client.post(f"/api/v1/onboarding/candidates/{cid}/join", json={"inputs": {}})
     assert r.status_code == 200 and r.json()["outcome"]["kind"] == "joined"
     assert client.get("/api/v1/onboarding/overview").json()["summary"]["members"] == 1
-    r = client.delete("/api/v1/onboarding/members/worker-nas")
+    r = client.delete(f"/api/v1/onboarding/members/{_SERIAL_ID}")
     assert r.status_code == 200 and r.json()["device_table"] is True
     assert client.post("/api/v1/onboarding/candidates/nope/join", json={}).status_code == 404

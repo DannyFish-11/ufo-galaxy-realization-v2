@@ -1,12 +1,19 @@
 """core/device_onboarding/sources.py — 发现来源:把各种"看见"翻成 Observation。
 
-事件型来源自己回调(mDNS 在 ``core/lan_discovery.py``、HA 实体在 ``core/ha_bridge.py``、
-NATS edge worker 在这里订阅);轮询型来源由 :func:`scan_once` 统一跑一遍(插在主脑
-本机上的串口 / 蓝牙 / CAN 在 ``local_buses.py``),
+事件型来源自己回调(mDNS 在 ``core/lan_discovery.py``、HA 实体在 ``core/ha_bridge.py``);
+轮询型来源由 :func:`scan_once` 统一跑一遍(插在主脑本机上的串口 / 蓝牙 / CAN 在
+``local_buses.py``),
 :func:`run_scan_loop` 按 ``GALAXY_ONBOARDING_SCAN_INTERVAL_S`` 周期执行。
 
 新来源的写法:把原始信息翻成 ``Observation``,调 ``get_onboarding_service().observe()``;
 它若知道在线与否,调 UCM ``report_presence``。其余交给接入平面。
+
+**NATS worker 生命周期不是发现来源。** ``galaxy.workers.*`` 是消息分发层:worker 能上总线,
+说明它已经过了总线自己的信任门,已经在收发消息了 —— 事后再问"要不要接入它"没有意义。
+它的消费者只有 MasterBrain(``_on_worker_event`` → ``register_worker``,进的是调度拓扑,
+不是设备名册)。接入平面也去订阅,会把单向的一条边接成环:worker 事件 → observe → 接入时
+``register_device_from_dict`` → device→worker convergence 再发 worker 事件 → ……
+(今天两头主题名一单一复没撞上,环没闭合 —— 那是取名的意外,不是设计的防护。)
 """
 
 from __future__ import annotations
@@ -238,74 +245,6 @@ async def scan_tailnet() -> int:
         keys.append(key)
     mark_absent("tailnet", keys)
     return len(keys)
-
-
-# ── NATS 上的 Go edge worker ─────────────────────────────────────────────────────
-
-
-def worker_observation(data: Dict[str, Any]) -> Optional[Observation]:
-    reg = data.get("worker_register") if isinstance(data.get("worker_register"), dict) else data
-    wid = str(reg.get("worker_id") or "")
-    if not wid:
-        return None
-    caps = []
-    for c in reg.get("capabilities") or []:
-        name = c.get("name") if isinstance(c, dict) else c
-        if name:
-            caps.append(str(name))
-    return Observation(
-        source="nats_worker",
-        key=wid,
-        name=str(reg.get("hostname") or wid),
-        kind_hint=str(reg.get("device_type") or reg.get("platform") or "linux"),
-        identity={"worker_id": wid},
-        capabilities=caps + (["docker"] if reg.get("has_docker") else []) + (["gpu"] if reg.get("has_gpu") else []),
-        properties={
-            "hostname": reg.get("hostname", ""),
-            "platform": reg.get("platform", ""),
-            "has_docker": bool(reg.get("has_docker")),
-            "has_gpu": bool(reg.get("has_gpu")),
-            "cpu_cores": reg.get("cpu_cores", 0),
-            "memory_total_mb": reg.get("memory_total_mb", 0),
-        },
-    )
-
-
-async def _on_worker_register(data: Dict[str, Any]) -> None:
-    obs = worker_observation(data or {})
-    if obs is None:
-        return
-    get_onboarding_service().observe(obs)
-    from core.unified.connection_manager import get_unified_connection_manager
-
-    get_unified_connection_manager().report_presence(obs.key, "nats", True)
-
-
-async def _on_worker_heartbeat(data: Dict[str, Any]) -> None:
-    hb = data.get("heartbeat") if isinstance(data.get("heartbeat"), dict) else data
-    wid = str((hb or {}).get("worker_id") or "")
-    if wid:
-        from core.unified.connection_manager import get_unified_connection_manager
-
-        get_unified_connection_manager().report_presence(wid, "nats", True, detail={"status": hb.get("status", "")})
-
-
-async def subscribe_workers() -> bool:
-    """订阅 edge worker 的注册与心跳。用独立的 durable,不与 MasterBrain 分摊消息。"""
-    try:
-        from core.nats_bus import get_nats_bus
-        from core.nats_subjects import WorkerLifecycleSubjects
-
-        bus = get_nats_bus()
-        if not bus.is_connected():
-            return False
-        wrap = bus._wrap_aip_v3_callback  # noqa: SLF001 — 与 MasterBrain 同一套 v3→旧格式转换
-        await bus.subscribe(WorkerLifecycleSubjects.REGISTER, wrap(_on_worker_register), durable="onboarding-workers")
-        await bus.subscribe(WorkerLifecycleSubjects.HEARTBEAT, wrap(_on_worker_heartbeat), durable="onboarding-hb")
-        return True
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("edge worker 订阅跳过: %s", exc)
-        return False
 
 
 # ── 统一调度 ──────────────────────────────────────────────────────────────────────

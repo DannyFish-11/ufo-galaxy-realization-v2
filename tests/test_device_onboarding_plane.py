@@ -141,39 +141,63 @@ def test_ignored_candidates_stay_ignored_across_restarts(plane):
     assert ov["candidates"] == [] and ov["summary"]["ignored"] == 1
 
 
-# ── edge worker:同意 → 成员;重启不丢;在线来自 NATS 通道 ──────────────────
+# ── 需要"同意一下"的候选:同意 → 成员;重启不丢;在线来自通道 ──────────────────
+#
+# 拿插在主脑上的串口设备当样本 —— 它的接入路径(local_bus)就是"批准一档"。
+# NATS worker **不是**发现来源(理由见 core/device_onboarding/sources.py 模块头),
+# 所以这里不再用它做样本。
+
+#: 一块插在主脑上的板子(product 只报一个名字,很多 USB 转串口设备就是这样)。
+_SERIAL = {"device": "/dev/ttyACM0", "vid": "2341", "pid": "0043", "serial_number": "758", "product": "nas"}
+_SERIAL_ID = "serial-usb-2341-0043-758"
 
 
-_WORKER = {
-    "worker_register": {
-        "worker_id": "worker-nas",
-        "hostname": "nas",
-        "device_type": "linux",
-        "platform": "linux/amd64",
-        "has_docker": True,
-        "capabilities": [{"name": "code_exec"}],
-    }
-}
+def _see_serial():
+    """走真实来源函数:端口字典 → Observation → observe()。"""
+    from core.device_onboarding import local_buses as lb
+
+    return get_onboarding_service().observe(lb.serial_observation(_SERIAL))
 
 
-def test_edge_worker_waits_for_approval_by_default_then_joins(plane):
-    from core.device_onboarding.sources import _on_worker_heartbeat, _on_worker_register
-
-    asyncio.run(_on_worker_register(_WORKER))
+def test_a_candidate_waits_for_approval_by_default_then_joins(plane):
+    _see_serial()
     [cand] = plane.overview()["candidates"]
-    assert (cand["join_path"], cand["human_step"], cand["status"]) == ("edge_worker", "approve", "new")
-    assert _udm().get_device("worker-nas") is None
+    assert (cand["join_path"], cand["human_step"], cand["status"]) == ("local_bus", "approve", "new")
+    assert _udm().get_device(_SERIAL_ID) is None
 
     out = asyncio.run(plane.join(cand["candidate_id"]))
     assert out["success"] and out["outcome"]["kind"] == "joined"
-    d = _udm().get_device("worker-nas")
-    assert (d.transport, d.execution_model, d.aip_device_type) == ("nats", "partial_runtime_device", "linux_desktop")
-    assert "COMPUTE" in d.capability_classes
+    d = _udm().get_device(_SERIAL_ID)
+    assert (d.transport, d.execution_model) == ("serial", "adapter_bridged_device")
 
-    asyncio.run(_on_worker_heartbeat({"worker_id": "worker-nas", "status": "idle"}))
-    [nas] = plane.overview()["groups"]["members"]
-    assert nas["online"] is True and nas["channels"] == {"nats": True}
-    assert nas["driver"] == {"kind": "native"}
+    _ucm().report_presence(_SERIAL_ID, "local", True)
+    # 插在主脑上的设备是"被接入"的一类,归 bridged 组,不是能自己跑运行时的成员
+    [board] = plane.overview()["groups"]["bridged"]
+    assert board["online"] is True and board["channels"] == {"local": True}
+
+
+def test_the_onboarding_plane_does_not_ingest_nats_worker_lifecycle(plane):
+    """worker 生命周期是分发层,消费者只有 MasterBrain。
+
+    接入平面再去订阅,就把"设备 → 发 worker 事件 → 调度器"这条单向边接成了环
+    (worker 事件 → observe → 接入时 register_device_from_dict → 又发 worker 事件)。
+    这条测试钉住那条边不再存在。
+    """
+    import pkgutil
+
+    import core.device_onboarding as pkg
+
+    offenders = {}
+    for mod in pkgutil.iter_modules(pkg.__path__):
+        text = open(f"{pkg.__path__[0]}/{mod.name}.py", encoding="utf-8").read()
+        # 模块头的说明文字里会提到它为什么不在这儿,所以只看代码行
+        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        code = code.split('"""')
+        code = "".join(code[::2])  # 去掉 docstring
+        hits = [n for n in ("WorkerLifecycleSubjects", "galaxy.workers.", "subscribe_worker") if n in code]
+        if hits:
+            offenders[mod.name] = hits
+    assert offenders == {}, f"接入平面不该碰 worker 生命周期: {offenders}"
 
 
 def test_members_survive_a_restart_as_offline_until_a_source_reports(plane):
@@ -182,7 +206,7 @@ def test_members_survive_a_restart_as_offline_until_a_source_reports(plane):
 
     plane.admit(
         MemberRecord(
-            device_id="worker-nas", device_name="nas", device_type="linux", transport="nats", join_path="edge_worker"
+            device_id=_SERIAL_ID, device_name="nas", device_type="iot", transport="serial", join_path="local_bus"
         )
     )
     reset_unified_device_manager()  # 进程重启:UDM 只在内存
@@ -190,32 +214,30 @@ def test_members_survive_a_restart_as_offline_until_a_source_reports(plane):
     assert get_onboarding_service().rehydrate() == 1
     from core.unified.models import UnifiedDeviceStatus
 
-    d = _udm().get_device("worker-nas")
+    d = _udm().get_device(_SERIAL_ID)
     assert d.status in (UnifiedDeviceStatus.OFFLINE, "offline") and not d.is_online()
-    assert d.transport == "nats"  # 身份完整回来了,只是还没人报在线
+    assert d.transport == "serial"  # 身份完整回来了,只是还没人报在线
 
 
-def test_auto_level_approve_joins_workers_without_asking(plane, monkeypatch):
+def test_auto_level_approve_joins_without_asking(plane, monkeypatch):
     monkeypatch.setenv("GALAXY_ONBOARDING_AUTO", "approve")
-    from core.device_onboarding.sources import _on_worker_register
 
     async def go():
-        await _on_worker_register(_WORKER)
+        _see_serial()
         for _ in range(20):
             await asyncio.sleep(0)
 
     asyncio.run(go())
-    assert _udm().get_device("worker-nas") is not None
+    assert _udm().get_device(_SERIAL_ID) is not None
 
 
 def test_joined_member_is_enrolled_into_the_mesh(plane):
-    from core.device_onboarding.sources import _on_worker_register
     from core.mesh.mesh_auto_enrollment import get_auto_enrollment_service
 
-    asyncio.run(_on_worker_register(_WORKER))
+    _see_serial()
     [cand] = plane.overview()["candidates"]
     asyncio.run(plane.join(cand["candidate_id"]))
-    rec = get_auto_enrollment_service().get_record("worker-nas")
+    rec = get_auto_enrollment_service().get_record(_SERIAL_ID)
     assert rec is not None and rec.registered
 
 
@@ -223,20 +245,18 @@ def test_joined_member_is_enrolled_into_the_mesh(plane):
 
 
 def test_remove_takes_back_everything(plane):
-    from core.device_onboarding.sources import _on_worker_heartbeat, _on_worker_register
-
-    asyncio.run(_on_worker_register(_WORKER))
+    _see_serial()
     [cand] = plane.overview()["candidates"]
     asyncio.run(plane.join(cand["candidate_id"]))
-    asyncio.run(_on_worker_heartbeat({"worker_id": "worker-nas"}))
+    _ucm().report_presence(_SERIAL_ID, "local", True)
 
-    out = asyncio.run(plane.remove("worker-nas"))
+    out = asyncio.run(plane.remove(_SERIAL_ID))
     assert out["success"] and out["roster"] and out["device_table"]
-    assert _udm().get_device("worker-nas") is None
-    assert not _ucm().is_present("worker-nas")
-    assert plane.roster.get("worker-nas") is None
+    assert _udm().get_device(_SERIAL_ID) is None
+    assert not _ucm().is_present(_SERIAL_ID)
+    assert plane.roster.get(_SERIAL_ID) is None
     # 再次看见 → 新候选,而不是"已接入"
-    asyncio.run(_on_worker_register(_WORKER))
+    _see_serial()
     [again] = plane.overview()["candidates"]
     assert again["status"] == "new"
 

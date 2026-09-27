@@ -49,7 +49,7 @@
 | G5 | 在线态只认 WebSocket | UCM `register_connection` 必须有 WebSocket;HA 设备、NATS worker、tailnet 节点的在线各记各的 | "在线"有 4 个来源,UCM 名为权威、实为半个 |
 | G6 | UDM 只在内存 | `UnifiedDeviceManager._devices` 无持久化 | 重启后被桥接的成员消失,要等来源再推一次 |
 | G7 | 并行设备表 | 面板花名册读 `core.routes._shared.registered_devices`(兼容缓存,只有 REST 注册会写);MasterBrain 另有 `_workers` | 面板上看不到经 WS 连上的手机手表;Go edge worker 不进 UDM |
-| G8 | 闲置零件 | `MeshAutoEnrollmentService` 零调用;`mcp_gateway.handle_capability_gap` 零调用;Serial/DBus/CAN 适配器未注册;Node_71 的 SSDP 未接线 | 设计好的能力没有入口 |
+| G8 | 闲置零件 | `MeshAutoEnrollmentService` 零调用;`mcp_gateway.handle_capability_gap` 零调用;Serial/DBus/CAN 只有发送适配器、没有发现;Node_71 的 SSDP 未接线 | 设计好的能力没有入口 |
 | G9 | 智能家居不在统一映射里 | HA 实体只靠 `metadata.control_via` 旁路指向 Node_27 | 解析平面、面板、智能体各自认不出它是"经桥接的设备" |
 | G10 | 配对入口不在面板 | 面板源码没有任何 `/api/v1/pair/*` 调用 | 配对码只能手敲接口拿 |
 
@@ -143,7 +143,7 @@ UCM 保持为**唯一**在线权威,但不再只认 WebSocket。新增 **presenc
 |---|---|---|
 | `websocket` | 既有 `register_connection` | 不变 |
 | `bridge` | HA 桥 / 其他桥 | 实体状态非 unavailable/unknown |
-| `nats` | edge worker 心跳 | 心跳在 TTL 内 |
+| `nats` | 走 NATS 可达的**设备**(接入平面不写这条 —— worker 不是设备) | 心跳在 TTL 内 |
 | `tailnet` | headscale 对账 | 节点 online |
 | `lan` | mDNS/SSDP | 广播仍在 |
 | `local` | 本机串口 / 蓝牙 / CAN 扫描(`local_buses.py`) | 串口还插着;蓝牙已连接;CAN 口 up |
@@ -186,14 +186,21 @@ V1 内置路径(`core/device_onboarding/join_paths.py`,顺序即优先级):
 |---|---|---|---|
 | `matter_via_ha` | 局域网里可配网的 Matter 设备(`_matterc`) | **物理配网码**(贴纸/二维码),经 HA WS `matter/commission` | 经 HA 建好实体 → 被接入 |
 | `galaxy_peer` | 开着本系统 App、还没配对的手机/手表(`_galaxy*`);tailnet 里不属于任何成员的节点 | **在那台设备上输入配对码**(一次性、10 分钟) | 主体或成员 |
-| `edge_worker` | 在 NATS 上注册的 Go edge worker | **同意**一次(智能体在手表上问) | 成员(`partial_runtime_device`,transport=nats) |
 | `ha_flow` | HA 自己发现、等确认的集成 | 无字段的确认步自动推进;要 PIN/配对码时按 HA 表单告诉人填什么 | 集成建好后实体由 HA 桥接入 |
-| `via_home_assistant` | 其他局域网设备(投屏、HomeKit、UPnP…) | 在 HA 已发现的流里找到它并推进;HA 没发现时说明去加哪个集成 | 同上 |
+| `local_bus` | 插在主脑本机上的串口设备 / CAN 总线 | **同意**一次 | 被接入(`adapter_bridged_device`,transport=serial/canbus) |
+| `via_home_assistant` | 其他局域网设备(投屏、HomeKit、UPnP、蓝牙…) | 在 HA 已发现的流里找到它并推进;HA 没发现时说明去加哪个集成 | 同上 |
 
-两种接入不走候选:
+不走候选的几种:
 * **HA 实体**:HA 桥镜像时直接以 `bridge_id=ha:<host>` 登记为被接入成员(HA 是人已配置的可信控制面)。
-* **新电脑**:不是"看见了再接",而是人要求邀请 —— `devices__invite(kind=computer)` 给两条命令
-  (tailnet 一次性钥匙 + 启动 edge worker),执行后它以 `edge_worker` 候选出现。
+* **新电脑(带桌面)**:人要求邀请 —— `devices__invite(kind=laptop)` 给配对码和一条命令,
+  它走和手机同一条配对链(见 §8.1),配对成功即成员。
+* **无头 edge worker**:**不经接入平面**。`devices__invite(kind=worker)` 给的是"进网 + 起容器"两条命令 ——
+  那是让它能上 NATS 总线;能上总线本身就是它的信任门。上线后由 MasterBrain
+  (`_on_worker_event` → `register_worker`)收进**调度拓扑**,不进设备名册。
+  理由:`galaxy.workers.*` 是消息分发层。worker 已经在收发消息了,事后再问"要不要接入它"没有意义;
+  而且接入平面若去订阅,就把"设备 →(convergence)→ 发 worker 事件 → 调度器"这条单向边接成了环
+  (worker 事件 → observe → 接入时 `register_device_from_dict` → 又发 worker 事件)。
+  见 `core/device_onboarding/sources.py` 模块头。
 
 **自动接入策略**(`GALAXY_ONBOARDING_AUTO`,默认 `none`):
 `none` = 只有 `human_step=none` 的路径自动走;`approve` = 连"批准"类也自动;`off` = 全部等人/智能体。
@@ -316,7 +323,6 @@ REST(`core/routes/onboarding.py`):
 | Home Assistant 实体 | `core/ha_bridge.py`(镜像时交给 `ha_entity` 路径) | 被接入成员 |
 | HA 已发现的集成 | `sources/ha_flows.py`(轮询 `GET /api/config/config_entries/flow`) | `ha_discovered_flow` 候选 |
 | headscale 未归属节点 | `core/tailnet_membership.annotate` 的 `tailnet_only` | `galaxy_peer` 候选(签配对码) |
-| NATS edge worker | 订阅 `galaxy.workers.register` / `heartbeat` | `edge_worker` 候选;心跳 → UCM `nats` 通道 |
 | 配对成功 | `core/routes/pairing.py` | 直接成员(配对本身就是人在场的确认) |
 | 串口 | `core/device_onboarding/local_buses.py`:pyserial `list_ports`,没装时读 Linux sysfs `/sys/class/tty` | USB 转串口 / Arduino / ESP32 → `local_bus` 候选(身份按板子的 VID:PID:序列号,换口插还是它) |
 | 蓝牙(D-Bus) | 同上:`busctl --json call org.bluez / …ObjectManager GetManagedObjects`(系统总线,可用 `GALAXY_BLUEZ_DBUS_ADDRESS` 指到别处) | `org.bluez.Device1` → 候选,经 HA 的 bluetooth 集成接入 |

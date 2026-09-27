@@ -90,7 +90,8 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
         "Galaxy app. laptop: a Windows, macOS or Linux computer the user wants you to operate (screen, mouse, "
         "keyboard) — returns one command with a pairing code to run on it; it finds this system on the LAN, joins the "
         "private network, starts on login, and you will be told in the conversation when it connects. worker: a "
-        "headless machine that only runs code jobs.",
+        "headless machine that only runs code jobs — it joins the message bus and starts taking jobs on its own, "
+        "so it needs no onboarding and does not appear in the device list.",
         {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "worker"]}},
         ["kind"],
     ),
@@ -387,7 +388,8 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "human_step": HumanStep.RUN_COMMAND.value,
             "commands": [join, worker],
             "tell_user": "在那台电脑上先执行第一条(进自建内网;钥匙 10 分钟内有效、只能用一次),"
-            "再在它上面的本仓库副本里执行第二条(启动执行 worker)。它出现在候选里后我再帮你接入",
+            "再在它上面的本仓库副本里执行第二条(启动执行 worker)。起来之后它自己上消息总线、"
+            "开始领计算任务 —— 不用再接入一次。它是干活的机器,不进设备列表",
         }
     return {"success": False, "error": "kind 只能是 phone / watch / laptop / worker"}
 

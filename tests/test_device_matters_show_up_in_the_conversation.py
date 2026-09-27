@@ -18,12 +18,11 @@ import types
 
 import pytest
 
-_WORKER = {
-    "worker_id": "worker-nas",
-    "hostname": "nas",
-    "device_type": "linux",
-    "capabilities": [{"name": "code_exec"}],
-}
+#: 一块插在主脑上的板子 —— 用它当"需要同意一下"的候选样本。
+#: (NATS worker 不是发现来源,见 core/device_onboarding/sources.py 模块头。)
+_SERIAL = {"device": "/dev/ttyACM0", "vid": "2341", "pid": "0043", "serial_number": "758", "product": "nas"}
+_SERIAL_ID = "serial-usb-2341-0043-758"
+_SERIAL_NAME = "nas(/dev/ttyACM0)"
 
 
 @pytest.fixture
@@ -96,10 +95,10 @@ def _in_turn(rs, tool, args):
 
 
 def _candidate() -> str:
+    from core.device_onboarding import local_buses as lb
     from core.device_onboarding.service import get_onboarding_service
-    from core.device_onboarding.sources import _on_worker_register
 
-    asyncio.run(_on_worker_register(_WORKER))
+    get_onboarding_service().observe(lb.serial_observation(_SERIAL))
     [c] = get_onboarding_service().overview()["candidates"]
     return c["candidate_id"]
 
@@ -117,8 +116,8 @@ def test_with_no_watch_the_question_comes_back_to_ask_in_the_conversation(env):
     cid = _candidate()
     out = _in_turn(_turn("把 nas 接进来"), "devices__join", {"candidate_id": cid})
     assert out["success"] is False and out["needs_confirmation"] is True
-    assert "把「nas」接入为设备" in out["ask_user"] and "好" in out["ask_user"]
-    assert not _udm_has("worker-nas")
+    assert f"把「{_SERIAL_NAME}」接入为设备" in out["ask_user"] and "好" in out["ask_user"]
+    assert not _udm_has(_SERIAL_ID)
 
 
 def test_the_user_saying_yes_in_the_next_turn_joins_it(env):
@@ -126,7 +125,7 @@ def test_the_user_saying_yes_in_the_next_turn_joins_it(env):
     _in_turn(_turn("把 nas 接进来"), "devices__join", {"candidate_id": cid})
     out = _in_turn(_turn("好的"), "devices__join", {"candidate_id": cid})
     assert out["success"] and out["outcome"]["kind"] == "joined"
-    assert _udm_has("worker-nas")
+    assert _udm_has(_SERIAL_ID)
 
 
 def test_the_agent_cannot_approve_itself_in_the_same_turn(env):
@@ -134,14 +133,14 @@ def test_the_agent_cannot_approve_itself_in_the_same_turn(env):
     rs = _turn("把 nas 接进来,不用问我了")
     _in_turn(rs, "devices__join", {"candidate_id": cid})
     out = _in_turn(rs, "devices__join", {"candidate_id": cid})
-    assert out["needs_confirmation"] and not _udm_has("worker-nas")
+    assert out["needs_confirmation"] and not _udm_has(_SERIAL_ID)
 
 
 def test_a_system_turn_on_the_same_session_does_not_count_as_the_user(env):
     cid = _candidate()
     _in_turn(_turn("把 nas 接进来"), "devices__join", {"candidate_id": cid})
     out = _in_turn(_turn("好", source="ambient"), "devices__join", {"candidate_id": cid})
-    assert out["needs_confirmation"] and not _udm_has("worker-nas")
+    assert out["needs_confirmation"] and not _udm_has(_SERIAL_ID)
 
 
 def test_saying_no_refuses_and_an_unclear_reply_asks_again(env):
@@ -150,7 +149,7 @@ def test_saying_no_refuses_and_an_unclear_reply_asks_again(env):
     again = _in_turn(_turn("这是什么设备?"), "devices__join", {"candidate_id": cid})
     assert again["needs_confirmation"] and again["ask_user"].startswith("没听清")
     no = _in_turn(_turn("不要了"), "devices__join", {"candidate_id": cid})
-    assert no["success"] is False and "不要" in no["error"] and not _udm_has("worker-nas")
+    assert no["success"] is False and "不要" in no["error"] and not _udm_has(_SERIAL_ID)
 
 
 def test_one_yes_approves_one_thing_only(env):
@@ -180,8 +179,8 @@ def test_with_a_watch_it_asks_there_and_says_so_in_the_conversation(env, monkeyp
     monkeypatch.setattr(hrc, "confirm_high_risk_tool", approve)
     cid = _candidate()
     out = _in_turn(_turn("把 nas 接进来"), "devices__join", {"candidate_id": cid})
-    assert out["success"] and _udm_has("worker-nas")
-    assert "我在手表上问你了:要把「nas」接入为设备吗?" in env.said
+    assert out["success"] and _udm_has(_SERIAL_ID)
+    assert f"我在手表上问你了:要把「{_SERIAL_NAME}」接入为设备吗?" in env.said
 
 
 @pytest.mark.parametrize(

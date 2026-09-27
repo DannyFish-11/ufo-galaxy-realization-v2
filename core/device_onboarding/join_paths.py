@@ -75,44 +75,6 @@ class GalaxyPeerPath(JoinPath):
         )
 
 
-# ── NATS 上注册的 Go edge worker ─────────────────────────────────────────────────
-
-
-class EdgeWorkerPath(JoinPath):
-    """一台跑着 edge worker 的电脑。它已经在 tailnet + NATS 上,点一下同意就成为成员。"""
-
-    name = "edge_worker"
-    human_step = HumanStep.APPROVE
-    description = "同意这台电脑作为执行成员加入"
-
-    def can_handle(self, cand: Candidate) -> bool:
-        return cand.source == "nats_worker"
-
-    async def join(self, cand: Candidate, inputs: Dict[str, Any]) -> JoinOutcome:
-        info = classify_type(cand.aip_device_type)
-        props = dict(cand.properties)
-        return JoinOutcome.joined(
-            MemberRecord(
-                device_id=cand.key,
-                device_name=cand.name or cand.key,
-                device_type=info.platform,
-                aip_device_type=info.aip_device_type,
-                transport="nats",
-                execution_model="partial_runtime_device",
-                capabilities=list(cand.capabilities) or ["code_exec"],
-                metadata={
-                    "worker_id": cand.key,
-                    "hostname": props.get("hostname", ""),
-                    "platform": props.get("platform", ""),
-                    "has_docker": bool(props.get("has_docker")),
-                    "has_gpu": bool(props.get("has_gpu")),
-                },
-                join_path=self.name,
-                candidate_id=cand.candidate_id,
-            )
-        )
-
-
 # ── Home Assistant:它自己发现、等人确认的集成 ────────────────────────────────────
 
 #: 看起来像"只有人手里才有"的字段名 —— 出现在表单里就是物理码类步骤。
@@ -379,12 +341,5 @@ def list_join_paths() -> List[Dict[str, str]]:
 
 
 # 顺序即优先级:专门的在前,"经 HA"这条兜底在最后。
-for _p in (
-    MatterViaHAPath(),
-    GalaxyPeerPath(),
-    EdgeWorkerPath(),
-    LocalBusPath(),
-    HAFlowPath(),
-    ViaHomeAssistantPath(),
-):
+for _p in (MatterViaHAPath(), GalaxyPeerPath(), LocalBusPath(), HAFlowPath(), ViaHomeAssistantPath()):
     register_join_path(_p)
