@@ -70,22 +70,31 @@ def test_the_pair_command_quotes_everything_it_interpolates():
     assert "rm" not in argv[5:] and "--install-autostart" in argv and "--no-run" in argv
 
 
-def test_credentials_are_never_echoed_back():
-    red = ri._redact({"username": "me", "password": "hunter2", "private_key": "-----BEGIN", "port": 22})
-    assert red["username"] == "me" and red["port"] == 22
-    assert "hunter2" not in str(red) and "BEGIN" not in str(red)
-    assert red["auth"] == "private_key"  # 说清用的哪种,但不说内容
+def test_the_log_line_says_which_credential_was_used_but_never_its_content():
+    fields = ri.log_fields("me", "nas.local", 22, has_password=False, has_private_key=True)
+    assert fields == {"username": "me", "host": "nas.local", "port": 22, "auth": "private_key"}
+    assert ri.log_fields("me", "h", 22, has_password=True, has_private_key=False)["auth"] == "password"
 
 
-def test_an_unknown_new_credential_field_is_dropped_rather_than_logged():
-    """白名单的意义:将来多加一个凭据字段而忘了标 secret,也不会被写进日志。
+def test_the_log_builder_cannot_even_receive_a_credential():
+    """凭据在数据流上到不了日志 —— 不是"记得摘掉",是传都传不进来。
 
-    黑名单做不到这一点 —— 没列进去的就原样输出,这正是 CodeQL 判 clear-text logging
-    的理由(它是对的)。
+    这条钉的是**签名**:机密只以布尔出现。以后有人想把 inputs 整个塞进去记一笔,
+    这条会先拦下来。
     """
-    red = ri._redact({"username": "me", "totp_seed": "JBSWY3DPEHPK3PXP", "smartcard_pin": "4242"})
-    assert red == {"username": "me"}
-    assert "JBSWY3DPEHPK3PXP" not in str(red) and "4242" not in str(red)
+    import inspect
+    import typing
+
+    params = inspect.signature(ri.log_fields).parameters
+    assert set(params) == {"username", "host", "port", "has_password", "has_private_key"}
+    # from __future__ import annotations 会把注解变成字符串,得解析回来再比
+    hints = typing.get_type_hints(ri.log_fields)
+    assert hints["has_password"] is bool and hints["has_private_key"] is bool  # 只收"有没有",不收内容
+
+    # 模块里也不该再有"把整份 inputs 交给 logger"的写法
+    for line in inspect.getsource(ri).splitlines():
+        if "logger." in line:
+            assert "inputs" not in line, f"这行把 inputs 交给了日志:{line.strip()}"
 
 
 def test_this_path_can_never_be_auto_joined():

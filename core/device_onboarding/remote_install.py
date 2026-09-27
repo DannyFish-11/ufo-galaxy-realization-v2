@@ -106,25 +106,26 @@ def credential_inputs() -> List[Dict[str, Any]]:
     ]
 
 
-#: 允许出现在日志里的字段 —— **白名单**。
-#:
-#: 这里刻意不用"把已知的密码字段摘掉"那种黑名单:将来给 :func:`credential_inputs`
-#: 多加一个凭据字段而忘了标 ``secret``,黑名单会把它原样写进日志,白名单只会把它漏掉。
-#: 安全的默认是"漏掉",不是"照写"。
-#: (CodeQL 也认这一点:黑名单版本里 ``inputs`` 整个流进 logger,它判 clear-text logging,
-#:  而且它是对的 —— 那个判断依赖运行时的 secret 标记正确。)
-_LOGGABLE_FIELDS = ("username", "host", "port")
+def log_fields(username: str, host: str, port: int, *, has_password: bool, has_private_key: bool) -> Dict[str, Any]:
+    """能进日志的那一份。**凭据连参数都不是** —— 只收"有没有",不收内容。
 
+    这里走了三步才到位,把过程留下:
 
-def _redact(inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """能进日志的那一份:只有白名单里的字段,外加"用的哪种凭据"这个事实(不含凭据本身)。"""
-    src = inputs or {}
-    safe: Dict[str, Any] = {k: v for k, v in src.items() if k in _LOGGABLE_FIELDS}
-    if src.get("private_key"):
-        safe["auth"] = "private_key"
-    elif src.get("password"):
-        safe["auth"] = "password"
-    return safe
+    1. 一开始是黑名单(把 ``inputs`` 里标了 ``secret`` 的字段摘掉,其余照写)。
+       功能上没错,但正确性依赖那个标记一直维护对:以后多加一个凭据字段忘了标,
+       它就原样进日志。CodeQL 判 clear-text logging,**判得对**。
+    2. 改成白名单(只挑 ``username``/``host``/``port``)。安全性够了,但 CodeQL 仍然判红 ——
+       也有道理:那个字典推导还是在**读那份含密码的字典的值**,静态上看不出读到的
+       一定是非机密的那几个键。
+    3. 现在这样:调用方逐个传非机密的标量,机密只传"有没有"这个布尔。
+       于是密码在数据流上根本到不了日志 —— 不是"我们记得摘掉",是**传都传不进来**。
+    """
+    return {
+        "username": username,
+        "host": host,
+        "port": port,
+        "auth": "private_key" if has_private_key else ("password" if has_password else "none"),
+    }
 
 
 # ── 远端执行的几步(每一步都是可单测的纯函数 + 一次远端调用) ─────────────────────
@@ -214,7 +215,8 @@ async def install_and_pair(
     """登进去、装上、配对。返回做了什么;失败抛 :class:`RemoteInstallError`。
 
     ``connector`` 只为测试留口:默认用 :func:`_asyncssh_connect`(真 SSH,带主机指纹校验)。
-    凭据从 ``inputs`` 里拿,用完就随函数栈消失 —— **不写盘、不进日志**(日志走 :func:`_redact`)。
+    凭据从 ``inputs`` 里拿,用完就随函数栈消失 —— **不写盘、不进日志**
+    (日志走 :func:`log_fields`,它连参数都收不到凭据本身)。
     """
     username = str(inputs.get("username") or "").strip()
     if not username:
@@ -228,7 +230,10 @@ async def install_and_pair(
     except (TypeError, ValueError):
         port = 22
 
-    logger.info("远程接入 %s@%s:%s(凭据 %s)", username, host, port, _redact(inputs))
+    logger.info(
+        "远程接入 %s",
+        log_fields(username, host, port, has_password=bool(password), has_private_key=bool(private_key)),
+    )
     connect = connector or _asyncssh_connect
     session = await connect(host=host, port=port, username=username, password=password, private_key=private_key)
     try:
