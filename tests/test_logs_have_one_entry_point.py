@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import inspect
 import re
 import sys
 import types
@@ -157,6 +158,18 @@ class TestTheTrayIsTheEntryPoint:
 
         class MenuItem:
             def __init__(self, text, action=None, default=False, visible=True):
+                # 必须和真 pystray 一样检查动作的参数个数(pystray/_base.py 的
+                # MenuItem._assert_action:按 __code__.co_argcount 数,**带默认值的也算**,
+                # 超过 2 个就 raise ValueError)。
+                #
+                # 这个假货以前什么都收,于是日志菜单那个 ``lambda _icon, _item, _e=entry``
+                # (3 个参数)在这里一直绿,真机上每次启动托盘都崩 —— 测试替身比真货宽松,
+                # 等于没测。
+                code = getattr(action, "__code__", None)
+                if code is not None:
+                    argcount = code.co_argcount - (1 if inspect.ismethod(action) else 0)
+                    if argcount > 2:
+                        raise ValueError(action)
                 self.text, self.action = text, action
                 self.default, self.visible = default, visible
 
@@ -198,6 +211,27 @@ class TestTheTrayIsTheEntryPoint:
         tray._open_in_os = lambda p: (opened.append(Path(p)), True)[1]
         tray._show_notification = lambda a, b: opened.append(("通知", a))
         return t, tray, opened
+
+    def test_each_log_item_opens_its_own_log_when_clicked(self, monkeypatch, tmp_path):
+        """真 pystray 会用 (icon, item) 两个参数调动作。每一项必须打开**它自己**那条,
+        而不是循环里最后一条(不绑 entry 时的经典错误)。"""
+        monkeypatch.setenv("GALAXY_LOG_DIR", str(tmp_path))
+        for e in [e for e in LOG_LOCATIONS if not e.is_dir][:3]:
+            f = tmp_path / e.relpath
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("x", encoding="utf-8")
+        _t, tray, _ = self._tray()
+        opened = []
+        tray._open_log = lambda entry: opened.append(entry.label)
+        items = [
+            i
+            for i in tray._build_logs_menu()
+            if not isinstance(i, str) and i.text != "打开日志文件夹 / Open logs folder"
+        ]
+        assert len(items) >= 3
+        for it in items:
+            it.action("icon", it)  # pystray 的调法
+        assert opened == [i.text.split(" / ")[0] for i in items]
 
     def test_the_menu_lists_the_logs_that_exist(self):
         _t, tray, _ = self._tray()

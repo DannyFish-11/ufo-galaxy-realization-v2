@@ -438,6 +438,22 @@ class GalaxyTray:
             return
         self._open_in_os(root)
 
+    def _log_opener(self, entry):
+        """给一条日志造菜单动作。**参数必须正好两个** ``(icon, item)``。
+
+        原来写成 ``lambda _icon, _item, _e=entry: …``,用默认参数把 entry 绑住 —— 绑
+        是对的(不绑的话每一项都会指向循环的最后一条),但 pystray 数参数用的是
+        ``__code__.co_argcount``,**带默认值的也算**:三个参数它直接 ``raise ValueError``,
+        整个托盘起不来。真机上每次启动都是"系统托盘 ⚠ 降级"。
+
+        这里改成闭包:entry 由外层函数的局部变量绑住,动作本身只收那两个参数。
+        """
+
+        def _open(_icon, _item):
+            self._open_log(entry)
+
+        return _open
+
     def _build_logs_menu(self) -> "list":
         """「日志」子菜单 —— 按 :mod:`core.log_locations` 那张登记表出。
 
@@ -449,13 +465,7 @@ class GalaxyTray:
         """
         items = []
         for entry in existing_logs():
-            items.append(
-                pystray.MenuItem(
-                    f"{entry.label} / {entry.label_en}",
-                    # 默认参数把 entry 绑住 —— 不绑的话所有项都会指向循环的最后一条。
-                    lambda _icon, _item, _e=entry: self._open_log(_e),
-                )
-            )
+            items.append(pystray.MenuItem(f"{entry.label} / {entry.label_en}", self._log_opener(entry)))
         if items:
             items.append(pystray.Menu.SEPARATOR)
         items.append(pystray.MenuItem("打开日志文件夹 / Open logs folder", self._open_logs_folder))
