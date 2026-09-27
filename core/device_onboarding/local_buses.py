@@ -32,6 +32,7 @@ import time
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from core.device_onboarding.models import CandidateStatus, Observation
+from core.proc_text import run_text
 
 logger = logging.getLogger("Galaxy.Onboarding.LocalBuses")
 
@@ -183,9 +184,8 @@ def _busctl_managed_objects(timeout_s: float = 5.0) -> Dict[str, Any]:
     if not exe:
         return {}
     try:
-        cp = subprocess.run(  # noqa: S603 — argv 列表,不经 shell
-            [exe, _bus_arg(), *_BUSCTL_ARGS], capture_output=True, text=True, timeout=timeout_s
-        )
+        # run_text 而不是 subprocess.run(text=True):中文 Windows 上后者会用 cp936 解 UTF-8
+        cp = run_text([exe, _bus_arg(), *_BUSCTL_ARGS], timeout=timeout_s)
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.debug("busctl 调用失败: %s", exc)
         return {}

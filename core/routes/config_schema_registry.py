@@ -2015,6 +2015,36 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "advanced",
         "description": "用 SSDP/UPnP 找局域网里的电视、路由器、打印机 · 默认开",
     },
+    "GALAXY_ONBOARDING_SERIAL": {
+        "default": "true",
+        "type": "boolean",
+        "category": "advanced",
+        "description": "找插在这台电脑上的串口设备(USB 转串口、Arduino、ESP32) · 默认开",
+    },
+    "GALAXY_ONBOARDING_BLUETOOTH": {
+        "default": "true",
+        "type": "boolean",
+        "category": "advanced",
+        "description": "找这台电脑蓝牙里配过对、扫到过的设备(经系统蓝牙服务读) · 默认开",
+    },
+    "GALAXY_ONBOARDING_CAN": {
+        "default": "true",
+        "type": "boolean",
+        "category": "advanced",
+        "description": "找这台电脑上的 CAN 总线接口 · 默认开",
+    },
+    "GALAXY_ONBOARDING_CAN_LISTEN_S": {
+        "default": "1.0",
+        "type": "number",
+        "category": "advanced",
+        "description": "每次扫描时在开着的 CAN 口上静听几秒,记下总线上有哪些报文 ID(只听不发;0 = 不听,最多 10)",
+    },
+    "GALAXY_BLUEZ_DBUS_ADDRESS": {
+        "default": "",
+        "type": "string",
+        "category": "advanced",
+        "description": "蓝牙服务所在的系统总线地址(留空 = 本机系统总线;主脑跑在容器里、要读宿主蓝牙时才填)",
+    },
     "GALAXY_ONBOARDING_STATE_DIR": {
         "default": "",
         "type": "string",
