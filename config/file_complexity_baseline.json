@@ -112,7 +112,7 @@
     "core/startup.py": 1471,
     "core/swarm_coordinator.py": 1041,
     "core/system_final_acceptance_verdict.py": 3809,
-    "core/system_orchestrator.py": 1193,
+    "core/system_orchestrator.py": 1195,
     "core/task_graph.py": 1087,
     "core/task_graph_runtime.py": 2076,
     "core/telemetry_freshness_contract.py": 1074,
