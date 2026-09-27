@@ -12,16 +12,14 @@ Node 124: LinuxDesktopAuto - Linux 桌面自动化控制节点
 安装: sudo apt install xdotool scrot xclip
 """
 import asyncio
-import base64
 import logging
 import os
 import shutil
 import sys
-import tempfile
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -31,6 +29,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Node_124_LinuxDesktopAuto")
 
 from nodes.common.action_gate import action_guard
+
+try:  # 作为包导入(nodes.Node_124_LinuxDesktopAuto.main)与直接运行两种方式都要能找到
+    from nodes.Node_124_LinuxDesktopAuto import x11_actions as x11
+except ImportError:  # pragma: no cover
+    import x11_actions as x11  # type: ignore
 
 from nodes.common.node_auth import install_node_auth
 
@@ -67,55 +70,6 @@ logger.info(f"Linux Desktop Tools: xdotool={XDOTOOL_AVAILABLE}, scrot={SCROT_AVA
 
 
 # ========================= 辅助函数 =========================
-
-async def _run_cmd(cmd: str, timeout: float = 10.0) -> str:
-    """执行系统命令"""
-    import shlex
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *shlex.split(cmd),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(), timeout=timeout
-        )
-        if process.returncode != 0:
-            err = stderr.decode().strip()
-            logger.warning(f"Command failed: {cmd} -> {err}")
-            return ""
-        return stdout.decode().strip()
-    except asyncio.TimeoutError:
-        logger.error(f"Command timeout: {cmd}")
-        return ""
-    except Exception as e:
-        logger.error(f"Command error: {cmd} -> {e}")
-        return ""
-
-
-async def _run_cmd_input(argv: List[str], input_text: str, timeout: float = 10.0) -> bool:
-    """执行系统命令并通过 stdin 传入数据（无 shell，避免管道/引号注入问题）。"""
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *argv,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await asyncio.wait_for(
-            process.communicate(input=input_text.encode()), timeout=timeout
-        )
-        if process.returncode != 0:
-            logger.warning(f"Command failed: {argv} -> {stderr.decode().strip()}")
-            return False
-        return True
-    except asyncio.TimeoutError:
-        logger.error(f"Command timeout: {argv}")
-        return False
-    except Exception as e:
-        logger.error(f"Command error: {argv} -> {e}")
-        return False
-
 
 # ========================= 请求模型 =========================
 
@@ -187,292 +141,126 @@ async def health():
     }
 
 
+# 动作本体都在 x11_actions(与笔记本客户端的 Linux 执行插件共用一份):命令按参数列表
+# 执行、不拼字符串。这里只管 HTTP 面:先过动作权限闸,再把活交出去。
+
+
+async def _do(fn, *args, **kwargs):
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
 @app.post("/click")
 async def click(req: ClickRequest):
     """鼠标点击"""
     _require("click")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    button_map = {"left": "1", "middle": "2", "right": "3"}
-    btn = button_map.get(req.button, "1")
-
-    # 移动鼠标到目标位置
-    await _run_cmd(f"xdotool mousemove {req.x} {req.y}")
-    # 执行点击
-    for _ in range(req.clicks):
-        await _run_cmd(f"xdotool click {btn}")
-
-    return {"success": True, "action": "click", "x": req.x, "y": req.y,
-            "button": req.button, "clicks": req.clicks}
+    return await _do(x11.click, req.x, req.y, req.button, req.clicks)
 
 
 @app.post("/type")
 async def type_text(req: TypeRequest):
-    """文本输入"""
+    """文本输入(文字经 stdin 交给 xdotool,任何引号都原样打出)"""
     _require("type_text")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    # xdotool type 支持 Unicode
-    await _run_cmd(f"xdotool type --delay {req.delay_ms} -- '{req.text}'")
-    return {"success": True, "action": "type", "text_length": len(req.text)}
+    return await _do(x11.type_text, req.text, req.delay_ms)
 
 
 @app.post("/key")
 async def press_key(req: KeyRequest):
-    """按键/快捷键"""
+    """按键/快捷键,如 ctrl+c、alt+F4、Return"""
     _require("press_key")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    # xdotool key 支持组合键，如 "ctrl+c", "alt+F4"
-    # 将常见格式转换为 xdotool 格式
-    keys = req.keys.replace("ctrl", "ctrl").replace("alt", "alt").replace("shift", "shift")
-    await _run_cmd(f"xdotool key {keys}")
-    return {"success": True, "action": "key", "keys": req.keys}
+    return await _do(x11.press_key, req.keys)
 
 
 @app.post("/move")
 async def move_mouse(req: MoveRequest):
     """移动鼠标"""
     _require("move_mouse")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    await _run_cmd(f"xdotool mousemove {req.x} {req.y}")
-    return {"success": True, "action": "move", "x": req.x, "y": req.y}
+    return await _do(x11.move, req.x, req.y)
 
 
 @app.post("/drag")
 async def drag(req: DragRequest):
-    """拖拽操作"""
+    """拖拽"""
     _require("drag")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    await _run_cmd(f"xdotool mousemove {req.start_x} {req.start_y}")
-    await _run_cmd("xdotool mousedown 1")
-    # 分步移动实现平滑拖拽
-    steps = max(1, req.duration_ms // 50)
-    dx = (req.end_x - req.start_x) / steps
-    dy = (req.end_y - req.start_y) / steps
-    for i in range(steps):
-        x = int(req.start_x + dx * (i + 1))
-        y = int(req.start_y + dy * (i + 1))
-        await _run_cmd(f"xdotool mousemove {x} {y}")
-        await asyncio.sleep(0.05)
-    await _run_cmd("xdotool mouseup 1")
-
-    return {"success": True, "action": "drag",
-            "from": [req.start_x, req.start_y], "to": [req.end_x, req.end_y]}
+    return await _do(x11.drag, req.start_x, req.start_y, req.end_x, req.end_y, req.duration_ms)
 
 
 @app.post("/scroll")
 async def scroll(req: ScrollRequest):
-    """滚动操作"""
+    """滚动"""
     _require("scroll")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    if req.x is not None and req.y is not None:
-        await _run_cmd(f"xdotool mousemove {req.x} {req.y}")
-
-    direction_map = {
-        "up": f"xdotool click --repeat {req.amount} 4",
-        "down": f"xdotool click --repeat {req.amount} 5",
-        "left": f"xdotool click --repeat {req.amount} 6",
-        "right": f"xdotool click --repeat {req.amount} 7",
-    }
-    cmd = direction_map.get(req.direction, direction_map["down"])
-    await _run_cmd(cmd)
-
-    return {"success": True, "action": "scroll", "direction": req.direction, "amount": req.amount}
+    return await _do(x11.scroll, req.direction, req.amount, req.x, req.y)
 
 
 @app.post("/screenshot")
 async def screenshot():
-    """屏幕截图
-
-    安全:临时文件放进一个 **0700 的私有目录**,而不是 ``tempfile.mktemp()``。
-
-    mktemp 只返回一个路径、并不创建文件,于是"取到路径"和"外部工具写进去"之间
-    存在一个窗口 —— 同机的其他用户可以抢先在那个路径放一个符号链接,让截图落到
-    别处去。而这里写的是**整个桌面的截图**,泄露的是屏幕上当时的一切。
-    CodeQL 的 py/insecure-temporary-file 报的就是它。
-
-    为什么用 mkdtemp 而不是 mkstemp:路径要交给外部命令(scrot / import)去写。
-    mkstemp 会**先把文件建出来**,而有些版本的 scrot 遇到已存在的文件会拒绝写。
-    私有目录里的一个尚不存在的文件名同时满足两边:目录本身 0700,别人进不来,
-    也就没有抢占的余地。
-    """
+    """整屏截图(临时文件在 0700 私有目录里,见 x11_actions.screenshot)"""
     _require("screenshot")
-    tmpdir = tempfile.mkdtemp(prefix="galaxy-screenshot-")
-    tmp = os.path.join(tmpdir, "screen.png")
-    try:
-        if not SCROT_AVAILABLE:
-            # 回退到 xdotool + import (ImageMagick)
-            if _check_tool("import"):
-                await _run_cmd(f"import -window root {tmp}")
-            else:
-                raise HTTPException(500, "scrot or ImageMagick not installed")
-        else:
-            await _run_cmd(f"scrot {tmp}")
-
-        try:
-            with open(tmp, "rb") as f:
-                img_data = base64.b64encode(f.read()).decode("utf-8")
-            return {"success": True, "action": "screenshot", "image_base64": img_data}
-        except FileNotFoundError:
-            return {"success": False, "error": "Screenshot failed"}
-    finally:
-        # 原来的 os.remove 只在成功分支上;截图失败时那个文件(以及现在的目录)
-        # 会一直留着。放进 finally 才是真的每次都清。
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    return await _do(x11.screenshot)
 
 
 @app.post("/window")
 async def window_action(req: WindowRequest):
-    """窗口管理"""
+    """窗口管理:focus / minimize / maximize / close / resize / move / list"""
     _require("window_action")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    result = {"success": True, "action": f"window_{req.action}"}
-
-    if req.action == "list":
-        # 列出所有窗口
-        output = await _run_cmd("xdotool search --name ''")
-        window_ids = output.strip().split("\n") if output else []
-        windows = []
-        for wid in window_ids[:50]:  # 限制数量
-            if wid.strip():
-                name = await _run_cmd(f"xdotool getwindowname {wid.strip()}")
-                if name:
-                    windows.append({"id": wid.strip(), "name": name})
-        result["windows"] = windows
-        return result
-
-    # 查找窗口
-    window_id = req.window_id
-    if not window_id and req.window_name:
-        output = await _run_cmd(f"xdotool search --name '{req.window_name}'")
-        if output:
-            window_id = output.strip().split("\n")[0]
-
-    if not window_id:
-        return {"success": False, "error": "Window not found"}
-
-    action_map = {
-        "focus": f"xdotool windowactivate {window_id}",
-        "minimize": f"xdotool windowminimize {window_id}",
-        "maximize": f"wmctrl -i -r {window_id} -b toggle,maximized_vert,maximized_horz" if WMCTRL_AVAILABLE else f"xdotool windowsize {window_id} 100% 100%",
-        "close": f"xdotool windowclose {window_id}",
-    }
-
-    if req.action == "resize" and req.width and req.height:
-        cmd = f"xdotool windowsize {window_id} {req.width} {req.height}"
-    elif req.action == "move" and req.x is not None and req.y is not None:
-        cmd = f"xdotool windowmove {window_id} {req.x} {req.y}"
-    else:
-        cmd = action_map.get(req.action)
-
-    if cmd:
-        await _run_cmd(cmd)
-        result["window_id"] = window_id
-    else:
-        result = {"success": False, "error": f"Unknown window action: {req.action}"}
-
-    return result
+    return await _do(
+        x11.window, req.action, req.window_name, req.window_id, req.width, req.height, req.x, req.y
+    )
 
 
 @app.post("/clipboard")
 async def clipboard(req: ClipboardRequest):
-    """剪贴板操作"""
+    """剪贴板 get / set"""
     _require("clipboard")
-    if not XCLIP_AVAILABLE:
-        raise HTTPException(500, "xclip not installed. Install: sudo apt install xclip")
-
-    if req.action == "get":
-        content = await _run_cmd("xclip -selection clipboard -o")
-        return {"success": True, "action": "clipboard_get", "content": content}
-    elif req.action == "set" and req.content:
-        # 通过 stdin 把内容喂给 xclip（_run_cmd 用 create_subprocess_exec，
-        # 不经过 shell，故 shell 管道 "| xclip" 不会被解释——必须直接写 stdin）
-        ok = await _run_cmd_input(["xclip", "-selection", "clipboard"], req.content)
-        return {"success": ok, "action": "clipboard_set", "content_length": len(req.content)}
-    else:
-        return {"success": False, "error": "Invalid clipboard action"}
+    return await _do(x11.clipboard, req.action, req.content)
 
 
 @app.get("/mouse_position")
 async def get_mouse_position():
-    """获取鼠标位置"""
+    """鼠标位置"""
     _require("get_mouse_position")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    output = await _run_cmd("xdotool getmouselocation")
-    # 输出格式: x:123 y:456 screen:0 window:12345
-    parts = {}
-    for part in output.split():
-        if ":" in part:
-            key, val = part.split(":", 1)
-            parts[key] = int(val) if val.isdigit() else val
-
-    return {"success": True, "x": parts.get("x", 0), "y": parts.get("y", 0),
-            "screen": parts.get("screen", 0)}
+    return await _do(x11.mouse_position)
 
 
 @app.get("/screen_size")
 async def get_screen_size():
-    """获取屏幕分辨率"""
+    """屏幕分辨率"""
     _require("get_screen_size")
-    if XRANDR_AVAILABLE:
-        output = await _run_cmd("xrandr | head -1")
-        # 解析 "Screen 0: ... current 1920 x 1080"
-        if "current" in output:
-            parts = output.split("current")[1].strip().split(",")[0].strip()
-            dims = parts.split(" x ")
-            if len(dims) == 2:
-                return {"success": True, "width": int(dims[0].strip()), "height": int(dims[1].strip())}
-    elif XDOTOOL_AVAILABLE:
-        output = await _run_cmd("xdotool getdisplaygeometry")
-        parts = output.split()
-        if len(parts) == 2:
-            return {"success": True, "width": int(parts[0]), "height": int(parts[1])}
-
-    return {"success": False, "error": "Cannot determine screen size"}
+    return await _do(x11.screen_size)
 
 
 @app.get("/active_window")
 async def get_active_window():
-    """获取当前活动窗口信息"""
+    """当前活动窗口"""
     _require("get_active_window")
-    if not XDOTOOL_AVAILABLE:
-        raise HTTPException(500, "xdotool not installed")
-
-    wid = await _run_cmd("xdotool getactivewindow")
-    if wid:
-        name = await _run_cmd(f"xdotool getwindowname {wid}")
-        pid = await _run_cmd(f"xdotool getwindowpid {wid}")
-        geo = await _run_cmd(f"xdotool getwindowgeometry {wid}")
-        return {
-            "success": True,
-            "window_id": wid,
-            "window_name": name,
-            "pid": pid,
-            "geometry": geo
-        }
-    return {"success": False, "error": "No active window"}
+    return await _do(x11.active_window)
 
 
 # ========================= MCP 统一接口 =========================
 
+
+_MCP_TOOL_ACTIONS = {
+    "click": "click",
+    "type": "type_text",
+    "key": "press_key",
+    "move": "move_mouse",
+    "drag": "drag",
+    "scroll": "scroll",
+    "screenshot": "screenshot",
+    "window": "window_action",
+    "clipboard": "clipboard",
+    "mouse_position": "get_mouse_position",
+    "screen_size": "get_screen_size",
+    "active_window": "get_active_window",
+}
+
+
 @app.post("/mcp/call")
 async def mcp_call(req: MCPRequest):
     """MCP统一调用接口"""
-    _require(str((request or {}).get("tool") or ""))
+    # 工具名 → manifest 里的动作名(两者不同:type ↔ type_text 等),先按动作名过闸;
+    # 不认识的工具名照样过闸 —— 闸对未声明的动作 fail closed。
+    # 此前这一行引用了一个不存在的变量 request,每次调用都 NameError。
+    _require(_MCP_TOOL_ACTIONS.get(req.tool, req.tool))
     tool_map = {
         "click": lambda p: click(ClickRequest(**p)),
         "type": lambda p: type_text(TypeRequest(**p)),

@@ -321,9 +321,10 @@ def test_invite_a_laptop_gives_one_command_with_a_real_pairing_code(env):
 
     out = _agent("devices__invite", {"kind": "laptop"})
     assert out["success"] and out["human_step"] == "run_command"
-    [cmd] = out["commands"]
-    assert cmd.startswith("python windows_client/windows_aip_client.py --pair ") and "--gateway http" in cmd
-    assert out["code"] in cmd and out["code"] in out["tell_user"]
+    short, full = out["commands"]
+    assert short == f"python -m device_client --pair {out['code']} --install-autostart"
+    assert full.startswith(f"python -m device_client --pair {out['code']} --gateway http")
+    assert short in out["tell_user"] and full in out["tell_user"]
     assert get_pairing_code_registry().resolve(out["code"]) is not None
 
 

@@ -1,17 +1,19 @@
-"""windows_client/device_pairing.py — 这台电脑作为「相对主体」接入主脑:配对、凭据、续期、进网。
+"""device_client/pairing.py — 这台电脑作为「相对主体」接入主脑:配对、凭据、续期、进网、找主脑。
+
+Windows / Linux / macOS 共用;在本机怎么动手由执行插件决定(``device_client/executors``)。
 
 和手机/手表走同一条配对链(``core/routes/pairing.py``),不另起一套:
 
     主脑(智能体)          devices__invite kind=laptop → 一次性配对码 + 一条命令
-    这台电脑              python windows_client/windows_aip_client.py --pair 123456 --gateway http://主脑地址:端口
+    这台电脑              python -m device_client --pair 123456            (同一局域网里自己找主脑;找不到再加 --gateway)
                           ├─ POST /api/v1/pair/claim   → 能力令牌 + 按可达性排好的连接地址 + tailnet 钥匙
                           ├─ 有 tailscale 且没登录任何网 → 用那把钥匙自己进自建 tailnet(带出门也连得回来)
-                          └─ 凭据存本机;之后直接 python windows_aip_client.py 就行
+                          └─ 凭据存本机;之后直接 python -m device_client 就行
     每次连上              device_register 带上令牌 → 规范入口核验(令牌签给的就是本机 id)
     令牌快过期            POST /api/v1/pair/renew 凭旧令牌换新 —— 常驻设备不用每天重配
 
-它不是第二个大脑:没有三态、没有模型,只是主脑的手和眼(执行都走
-``WindowsExecutionArbiter``)。要不要做某件事,由主脑那边的权限门和确认决定。
+它不是第二个大脑:没有三态、没有模型,只是主脑的手和眼。要不要做某件事,
+由主脑那边的权限门和确认决定。
 """
 
 from __future__ import annotations
@@ -23,13 +25,14 @@ import platform
 import shutil
 import socket
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
-logger = logging.getLogger("windows-aip-client.pairing")
+logger = logging.getLogger("galaxy-device-client.pairing")
 
 #: 离过期还剩这么久就换新令牌。
 RENEW_AHEAD_S = 6 * 3600.0
@@ -46,14 +49,20 @@ class PairingError(Exception):
 
 
 def state_path() -> str:
-    """凭据文件位置。``GALAXY_DEVICE_STATE`` 可覆盖(测试、多开)。"""
+    """凭据文件位置。``GALAXY_DEVICE_STATE`` 可覆盖(测试、多开)。
+
+    Windows: %APPDATA%/Galaxy/device.json;macOS: ~/Library/Application Support/Galaxy/device.json;
+    其他: ~/.galaxy/device.json。
+    """
     override = os.environ.get("GALAXY_DEVICE_STATE", "").strip()
     if override:
         return override
-    base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".galaxy")
-    return (
-        os.path.join(base, "Galaxy", "device.json") if os.environ.get("APPDATA") else os.path.join(base, "device.json")
-    )
+    if os.environ.get("APPDATA"):
+        return os.path.join(os.environ["APPDATA"], "Galaxy", "device.json")
+    home = os.path.expanduser("~")
+    if sys.platform == "darwin":
+        return os.path.join(home, "Library", "Application Support", "Galaxy", "device.json")
+    return os.path.join(home, ".galaxy", "device.json")
 
 
 def load_state(path: Optional[str] = None) -> Dict[str, Any]:
@@ -87,21 +96,32 @@ def stable_device_id(state: Dict[str, Any]) -> str:
     did = str(state.get("device_id") or "").strip()
     if not did:
         host = "".join(ch for ch in socket.gethostname().lower() if ch.isalnum() or ch == "-")[:24] or "pc"
-        did = f"windows_{host}_{uuid.uuid4().hex[:6]}"
+        did = f"{this_platform()}_{host}_{uuid.uuid4().hex[:6]}"
         state["device_id"] = did
     return did
 
 
-def detect_device_type() -> str:
-    """有电池的算笔记本。探不到就按台式机报(不会影响能力,只影响怎么称呼它)。"""
+def this_platform() -> str:
+    """windows / macos / linux(其余按 linux 处理)。"""
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
+
+
+def detect_device_type(platform_name: Optional[str] = None) -> str:
+    """``<平台>_laptop`` 或 ``<平台>_desktop``。有电池的算笔记本;探不到按台式机报
+    (不影响能力,只影响怎么称呼它)。"""
+    plat = platform_name or this_platform()
     try:
         import psutil  # type: ignore
 
         if psutil.sensors_battery() is not None:
-            return "windows_laptop"
+            return f"{plat}_laptop"
     except Exception:  # noqa: BLE001
         pass
-    return "windows_desktop"
+    return f"{plat}_desktop"
 
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
@@ -165,7 +185,7 @@ def pair(
         "name": name or socket.gethostname(),
         "device_type": device_type or detect_device_type(),
         "capabilities": list(capabilities or []),
-        "note": "windows_aip_client",
+        "note": f"device_client ({this_platform()})",
         "token_ttl_s": TOKEN_TTL_S,
     }
     resp = post(f"{base}/api/v1/pair/claim", body)
@@ -220,6 +240,80 @@ def renew_if_due(
     return True
 
 
+def discover_gateways(
+    timeout_s: float = 3.0, browse: Optional[Callable[[float], List[Dict[str, Any]]]] = None
+) -> List[str]:
+    """在局域网里找主脑(网关以 mDNS ``_galaxy._tcp`` 广播自己),返回 http 基址列表。
+
+    同一服务类型里可能还有别的 Galaxy 节点;只认 TXT 里 ``path`` 指向设备入口的那种。
+    找不到(没装 zeroconf、不在一个网段、组播被挡)就返回空列表,由调用方提示加 --gateway。
+    """
+    rows = (browse or _browse_mdns)(timeout_s)
+    out: List[str] = []
+    for r in rows:
+        props = r.get("properties") or {}
+        if "/ws/device/" not in str(props.get("path", "")):
+            continue
+        scheme = "https" if str(props.get("tls", "false")).lower() == "true" else "http"
+        for addr in r.get("addresses") or []:
+            url = f"{scheme}://{addr}:{int(r.get('port') or 0)}"
+            if url not in out and r.get("port"):
+                out.append(url)
+    return out
+
+
+def _browse_mdns(timeout_s: float) -> List[Dict[str, Any]]:
+    try:
+        from zeroconf import ServiceBrowser, Zeroconf  # type: ignore
+    except ImportError:
+        return []
+    found: List[Dict[str, Any]] = []
+    zc = Zeroconf()
+
+    class _Listener:
+        def add_service(self, zc_, type_, name):  # noqa: ANN001
+            info = zc_.get_service_info(type_, name, timeout=int(timeout_s * 1000))
+            if info is None:
+                return
+            props = {
+                (k.decode() if isinstance(k, bytes) else str(k)): (v.decode() if isinstance(v, bytes) else v)
+                for k, v in (info.properties or {}).items()
+            }
+            found.append({"addresses": info.parsed_addresses(), "port": info.port, "properties": props})
+
+        def update_service(self, *a):  # noqa: ANN002
+            pass
+
+        def remove_service(self, *a):  # noqa: ANN002
+            pass
+
+    try:
+        ServiceBrowser(zc, "_galaxy._tcp.local.", _Listener())
+        time.sleep(timeout_s)
+    finally:
+        zc.close()
+    return found
+
+
+def pair_anywhere(
+    code: str,
+    state: Dict[str, Any],
+    gateways: List[str],
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """依次向找到的每个主脑出示配对码,哪个认就配哪个(码只在签发它的那个主脑上有效)。"""
+    last: Optional[PairingError] = None
+    for gw in gateways:
+        try:
+            return pair(code, gw, state, **kwargs)
+        except PairingError as exc:
+            last = exc
+    raise last or PairingError(
+        "在局域网里没找到主脑",
+        "确认两台机器在同一个网络;或者加上 --gateway http://主脑地址:端口",
+    )
+
+
 def connect_urls(state: Dict[str, Any], fallback_host: str, fallback_port: int, device_id: str) -> List[str]:
     """按可达性排好的连接地址:配对时主脑给的在前,命令行给的兜底。"""
     urls: List[str] = []
@@ -267,7 +361,7 @@ def join_tailnet(
     if not exe:
         return {
             "state": "no_tailscale",
-            "how_to_fix": "先装上 Tailscale(https://tailscale.com/download/windows),然后" + retry,
+            "how_to_fix": "先装上 Tailscale(https://tailscale.com/download),然后" + retry,
         }
     try:
         st = run([exe, "status", "--json"])

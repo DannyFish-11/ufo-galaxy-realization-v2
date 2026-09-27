@@ -87,9 +87,10 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         "devices__invite",
         "Invite a new device the user wants to add. phone/watch: returns a one-time pairing code to enter in the "
-        "Galaxy app. laptop: a Windows computer the user wants you to operate (screen, mouse, keyboard) — returns "
-        "one command with a pairing code to run on it; it joins the private network by itself and you will be told "
-        "in the conversation when it connects. worker: a headless machine that only runs code jobs.",
+        "Galaxy app. laptop: a Windows, macOS or Linux computer the user wants you to operate (screen, mouse, "
+        "keyboard) — returns one command with a pairing code to run on it; it finds this system on the LAN, joins the "
+        "private network, starts on login, and you will be told in the conversation when it connects. worker: a "
+        "headless machine that only runs code jobs.",
         {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "worker"]}},
         ["kind"],
     ),
@@ -345,22 +346,25 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
                 out["network"] = {"skipped": exc.reason, "how_to_fix": exc.how_to_fix}
         return out
     if kind in ("laptop", "computer"):
-        # 电脑作为「相对主体」接进来:和手机同一条配对链。一次性配对码 + 一条命令,
-        # 配对时顺带拿到进自建内网的钥匙,之后自动续期。见 windows_client/device_pairing.py。
+        # 电脑作为「相对主体」接进来:和手机同一条配对链。Windows / macOS / Linux 同一条命令
+        # (device_client:连接层共用,本机怎么动手由执行插件决定)。同一局域网里客户端自己
+        # 找主脑,所以短命令只带配对码;找不到时用带地址的那条。
         card = build_local_card()
         link = to_link(card)
         code, expires_at = get_pairing_code_registry().issue(link)
         gateway = _gateway_http_base(card)
-        cmd = f"python windows_client/windows_aip_client.py --pair {code} --gateway {gateway}"
+        short = f"python -m device_client --pair {code} --install-autostart"
+        full = f"python -m device_client --pair {code} --gateway {gateway} --install-autostart"
         return {
             "success": True,
             "human_step": HumanStep.RUN_COMMAND.value,
             "code": code,
             "expires_at": expires_at,
-            "commands": [cmd],
+            "commands": [short, full],
             "tell_user": (
-                f"在那台电脑上(需要有本仓库和 Python)执行:{cmd} 。配对码 {code} 10 分钟内有效、只能用一次;"
-                "它连上来时我会在这里告诉你。"
+                f"在那台电脑上(Windows、Mac、Linux 都一样,需要有本仓库和 Python)进到仓库目录,执行:{short} 。"
+                f"如果它说在局域网里找不到主脑,改用:{full} 。配对码 {code} 10 分钟内有效、只能用一次;"
+                "之后它开机会自己连上,连上时我会在这里告诉你。"
             ),
         }
     if kind == "worker":

@@ -1,9 +1,9 @@
 """一台笔记本怎么接进来、智能体怎么用上它 —— 全程走真的。
 
 真的网关(uvicorn,规范设备入口 + 权威 API 层,**鉴权开着**,和默认部署一样)、
-真的笔记本客户端(``windows_client/windows_aip_client.py``,真 WebSocket)、
+真的笔记本客户端(``device_client``:三个系统共用的连接层,真 WebSocket)、
 真的配对/令牌/UDM/UCM/接入平面/智能体工具入口。只替掉一处:笔记本上
-「真的去点屏幕」的那一步(``_execute_command``),断言它**真的被调到**、参数对。
+「真的去点屏幕」的那一步(执行插件),断言它**真的被调到**、参数对。
 
 这条链此前在五个地方断着,每一处都有用例钉住:
 
@@ -114,18 +114,47 @@ def gateway(tmp_path, monkeypatch):
         r()
 
 
+class RecordingExecutor:
+    """执行插件的替身:照插件接口报动作清单,把收到的动作记下来。"""
+
+    name = "recording"
+    platform = "linux"
+
+    def __init__(self):
+        self.done: list = []
+
+    def available(self):
+        return True, ""
+
+    def supported_actions(self):
+        return ["click", "type", "screenshot"]
+
+    def execute(self, action, params=None):
+        self.done.append((action, dict(params or {})))
+        return {"success": True}
+
+    def execute_agent_task(self, payload):
+        return {"success": False, "error": "not supported"}
+
+    def describe(self):
+        return {
+            "executor": self.name,
+            "platform": self.platform,
+            "available": True,
+            "actions": self.supported_actions(),
+        }
+
+
 class Laptop:
-    """真的 WindowsAIPClient;只把「在 Windows 上执行」换成记账。"""
+    """真的 DeviceClient(连接层);执行插件换成记账的替身。"""
 
     def __init__(self, gw, monkeypatch, state):
-        import windows_client.windows_aip_client as wac
+        from device_client.client import DeviceClient
 
-        self.done: list = []
-        monkeypatch.setattr(
-            wac, "_execute_command", lambda action, params: (self.done.append((action, params)), {"success": True})[1]
-        )
+        self.executor = RecordingExecutor()
+        self.done = self.executor.done
         port = int(gw.url.rsplit(":", 1)[1])
-        self.client = wac.WindowsAIPClient(host="127.0.0.1", port=port, state=state)
+        self.client = DeviceClient(self.executor, host="127.0.0.1", port=port, state=state)
         self.thread = threading.Thread(target=lambda: asyncio.run(self.client.run()), daemon=True)
         self.thread.start()
 
@@ -143,7 +172,7 @@ class Laptop:
 
 
 def _pair(gw, name="书房笔记本"):
-    from windows_client import device_pairing as dp
+    from device_client import pairing as dp
 
     invite = gw.agent("invite", {"kind": "laptop"})
     state: dict = {}
@@ -183,7 +212,7 @@ def test_an_unpaired_laptop_is_refused_and_says_so_instead_of_retrying_forever(g
 
 
 def test_the_laptop_keeps_its_identity_across_restarts(gateway, monkeypatch):
-    from windows_client import device_pairing as dp
+    from device_client import pairing as dp
 
     _, state, _ = _pair(gateway)
     dp.save_state(state)
@@ -223,7 +252,7 @@ def test_pairing_is_reachable_with_auth_on_but_the_rest_of_pairing_is_not(gatewa
 
 def test_the_token_renews_and_the_old_one_stops_working(gateway):
     from core.capability_token import verify_token
-    from windows_client import device_pairing as dp
+    from device_client import pairing as dp
 
     _, state, _ = _pair(gateway)
     old = state["token"]
@@ -238,7 +267,7 @@ def test_the_token_renews_and_the_old_one_stops_working(gateway):
 
 def test_a_removed_laptop_cannot_renew(gateway):
     from core.peer_trust import get_peer_trust_book
-    from windows_client import device_pairing as dp
+    from device_client import pairing as dp
 
     _, state, _ = _pair(gateway)
     get_peer_trust_book().remove(state["device_id"])
@@ -248,7 +277,7 @@ def test_a_removed_laptop_cannot_renew(gateway):
 
 
 def test_a_token_cannot_be_renewed_for_another_device(gateway):
-    from windows_client import device_pairing as dp
+    from device_client import pairing as dp
 
     _, a, _ = _pair(gateway, name="A")
     _, b, _ = _pair(gateway, name="B")
@@ -291,7 +320,7 @@ def test_an_old_connection_closing_late_does_not_take_the_new_one_offline(gatewa
 def test_joining_the_private_network_uses_the_grant_and_never_hijacks_an_existing_one():
     import subprocess
 
-    from windows_client import device_pairing as dp
+    from device_client import pairing as dp
 
     grant = {"control_url": "https://hs.example", "auth_key": "k1"}
     calls = []
