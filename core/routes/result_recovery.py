@@ -21,6 +21,16 @@ from fastapi import APIRouter, HTTPException
 
 def create_router() -> APIRouter:
     router = APIRouter()
+    register(router)
+    return router
+
+
+def register(router: APIRouter) -> None:
+    """把四个端点直接登记到 *router* 上。
+
+    可观测性路由用它挂载，而不是 ``include_router`` 一个子路由：新版 FastAPI 把被包含的子路由存成一个
+    没有 ``.path`` 的条目，遍历 ``router.routes`` 读 ``.path`` 的既有调用方会因此出错。
+    """
 
     @router.get("/api/v1/results/isolated")
     async def list_isolated(include_dismissed: bool = False) -> Dict[str, Any]:
@@ -60,7 +70,5 @@ def create_router() -> APIRouter:
             raise HTTPException(status_code=404, detail=f"隔离队列里没有 {key}")
         return row
 
-    return router
 
-
-__all__ = ["create_router"]
+__all__ = ["create_router", "register"]

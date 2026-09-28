@@ -69,7 +69,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     # 真相链隔离队列：运行面的待处理项，与本组同样免鉴权（面板直接读）。
     from core.routes import result_recovery as _result_recovery
 
-    router.include_router(_result_recovery.create_router())
+    _result_recovery.register(router)
 
     # ── 活跃 LLM 路由 + Fallback ─────────────────────────────────────────
 

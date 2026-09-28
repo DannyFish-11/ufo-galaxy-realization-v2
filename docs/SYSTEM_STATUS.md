@@ -311,8 +311,14 @@ python scripts/check_assessment_freshness.py
 |---|---:|---:|---:|---|
 | 复测前（main @ 6489ff6 + 镜像修复） | 45,068 | 6 | 156 | 31 分 25 秒 |
 | 本次全部修复后 | 45,117 | 1 → 0 | 151 | 31 分 54 秒 |
+| 2026-09-28 这一轮（第 6.4 节）之后 | 45,197 | 3 → 0 | 152 | 34 分 46 秒 |
 
-修复后那一轮唯一的失败，是我自己改出来的：`core/ascii_art.py` 改成从 `core.version` 取版本号以后，
+2026-09-28 那一轮的 3 个失败也是本轮自己改出来的（CI test-shard 1 同样红了）：隔离队列的路由原先用 `include_router`
+挂进可观测性路由，新版 FastAPI 把被包含的子路由存成一个没有 `.path` 的条目，
+`tests/test_pr4_execution_evidence_canonical_truth.py` 的 P 组遍历 `router.routes` 读 `.path` 时出错。改为把端点直接登记到
+可观测性路由上（`core/routes/result_recovery.register`），那 3 条通过。
+
+上一轮修复后唯一的失败，是我自己改出来的：`core/ascii_art.py` 改成从 `core.version` 取版本号以后，
 被当脚本直接跑（`python core/ascii_art.py`）时仓库根不在 `sys.path` 上。已按 `core/release_blocking_gate.py`
 的同一做法补上引导，那条用例（`tests/test_core_scripts_run_standalone.py`）通过。
 
