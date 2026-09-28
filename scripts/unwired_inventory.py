@@ -29,7 +29,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -82,6 +82,228 @@ ROLES = (
 )
 
 
+# 按**用途**分组(路径规则,先命中先生效)。与上面按名字的角色是两根轴:角色说「这个函数是查询还是动作」,
+# 用途说「它属于系统的哪一块」。文档里对每一组的人话解释在生成段之外,由人维护。
+THEMES = [
+    ("nodes", "节点服务里的方法", [r"^nodes/"]),
+    (
+        "android",
+        "安卓协作的契约、治理与对账层",
+        [
+            r"android",
+            r"^core/attached_runtime_",
+            r"^core/ugcp_",
+            r"^core/takeover_tracking",
+            r"^core/v2_android",
+            r"^core/delegated_runtime",
+            r"^core/delegated_flow_post",
+            r"^core/delegated_flow_entity",
+            r"^core/conversation_continuity_truth",
+            r"^core/offline_replay_ordering",
+            r"^core/inflight_task_continuity",
+            r"^core/pr3_session",
+            r"^core/pr4_operator",
+            r"^core/cross_repo_protocol",
+            r"^core/full_system_baseline",
+            r"wearos",
+            r"^core/mesh/android_",
+        ],
+    ),
+    (
+        "persist",
+        "持久化、重启恢复与断点续跑",
+        [
+            r"^core/delegated_flow_(persistence|recovery|decision)",
+            r"^core/flow_continuity",
+            r"^core/continuation_rebind",
+            r"^core/hybrid_orchestration_continuity",
+            r"^core/replay_",
+            r"^core/task_envelope_lifecycle",
+            r"^core/mesh/mesh_session_lifecycle",
+            r"^core/recovery_truth_surface",
+            r"^core/task_graph_runtime",
+            r"^core/task_lifecycle\.py",
+        ],
+    ),
+    (
+        "observe",
+        "指标、可观测与审计记录",
+        [
+            r"slo_metrics",
+            r"^core/resilience/metrics",
+            r"observability",
+            r"telemetry",
+            r"^core/decision_timeline",
+            r"^core/audit_event_semantics",
+            r"^core/control_plane/audit_ledger",
+            r"orchestration_review_surface",
+            r"routing_explanation",
+            r"^core/device_activation_registry",
+            r"^core/task_cost_ledger",
+            r"^core/protocol_drift_registry",
+            r"^core/log_redaction",
+        ],
+    ),
+    (
+        "govern",
+        "架构治理：权威声明、边界断言与自检",
+        [
+            r"truth",
+            r"authority",
+            r"^core/compat_",
+            r"^core/outward_",
+            r"^core/mainline_convergence",
+            r"^core/runtime_invariant",
+            r"boundary",
+            r"^core/release_governance",
+            r"^core/governance_validation",
+            r"^core/capability_tier",
+            r"governance",
+            r"^core/node_lifecycle_governor",
+            r"^core/production_baseline",
+            r"harness",
+            r"^core/runtime_closure_audit",
+            r"^core/runtime_readiness",
+            r"^core/audit_layer/",
+            r"^core/repo_layout_registry",
+            r"^core/ui_surface_authority",
+            r"^core/multi_subject_closure",
+            r"^core/unified_action_lifecycle",
+            r"^core/subject_facing_foreground",
+            r"^core/system_orchestrator",
+            r"^core/unified_execution_governance",
+            r"^core/unified_dispatch_readiness",
+            r"^core/multi_device_control_integrity",
+            r"^core/health_evidence_policy",
+            r"^core/acl\.py",
+        ],
+    ),
+    (
+        "mesh",
+        "多设备编组、协同网络与拓扑",
+        [
+            r"^core/mesh",
+            r"^core/device_formation/",
+            r"^core/presence/",
+            r"^core/multi_device_",
+            r"^core/constellation",
+            r"swarm",
+            r"^core/orchestration/global_arbiter",
+            r"^core/cross_device_",
+            r"^core/network_",
+            r"^core/capability_network",
+            r"^core/proxy_relay",
+            r"^core/device_worker_convergence",
+        ],
+    ),
+    (
+        "device",
+        "设备与节点：注册、发现、连接、通信、传输",
+        [
+            r"^core/device_",
+            r"^core/node_",
+            r"^core/nodes/",
+            r"^core/lan_discovery",
+            r"^core/connection_manager",
+            r"^core/tailscale",
+            r"^core/adapters/",
+            r"^core/aip_transport",
+            r"^core/peer_trust",
+            r"^core/target_device",
+            r"^core/nats_bus",
+            r"^galaxy_gateway/",
+        ],
+    ),
+    (
+        "route",
+        "能力、模型与执行路由",
+        [
+            r"^core/capabilit",
+            r"^core/unified/capability",
+            r"router",
+            r"routing",
+            r"^core/model_",
+            r"^core/huggingface",
+            r"^core/hf_endpoint",
+            r"^core/local_brain",
+            r"^core/compute_scheduler",
+            r"^core/concurrency_manager",
+            r"^core/native_modal",
+            r"^core/modality_bridge",
+            r"^core/degraded_operation",
+            r"^core/hybrid_execution_policy",
+            r"^core/remote_execution",
+            r"^core/gateway_capability",
+            r"^core/runtime/",
+            r"^core/command_router",
+            r"^core/execution_spine",
+            r"^core/fusion_entry",
+            r"^core/canonical_task_dispatch",
+            r"^core/unified/llm_router",
+            r"^core/execution/",
+        ],
+    ),
+    (
+        "agent",
+        "智能体、认知与记忆",
+        [
+            r"^core/agent",
+            r"^core/ai_intent",
+            r"^core/cognitive/",
+            r"^core/continuum/",
+            r"^core/feedback_loop",
+            r"^core/user_preference",
+            r"^core/task_memory",
+            r"^core/openclawd",
+            r"^core/orchestration/",
+            r"^core/grounded_planner",
+            r"^core/react_progress",
+            r"^core/dag_evolver",
+            r"^core/focus_stack",
+            r"^core/persona/",
+            r"^core/vector_backend",
+            r"^core/vision_pipeline",
+            r"^core/generative_ui",
+            r"^core/digital_twin",
+            r"^core/microsoft_ufo",
+            r"^core/galaxy_main_loop",
+            r"^core/safe_executor",
+            r"^core/e2e_orchestrator",
+            r"^core/interaction/",
+            r"^core/session_",
+            r"^core/canonical_session_axis",
+            r"^core/canonical_ownership",
+        ],
+    ),
+    (
+        "presence",
+        "语音、桌面在场与感知",
+        [
+            r"speech",
+            r"^core/tts/",
+            r"^core/voice",
+            r"^core/duplex",
+            r"^core/output/",
+            r"^core/desktop_",
+            r"^core/perception/",
+            r"^core/multimodal/",
+            r"^core/interruptibility",
+            r"^core/phase_contract",
+            r"^core/state_event_bus",
+            r"^core/fast_loop",
+        ],
+    ),
+    ("platform", "配置、启动、安全、扩展与通用基础件", [r"^core/", r"^launcher/"]),
+]
+
+
+def theme_of(path: str) -> Tuple[str, str]:
+    for key, label, pats in THEMES:
+        if any(re.search(p, path) for p in pats):
+            return key, label
+    return "other", "其他"
+
+
 def role_of(name: str) -> str:
     for label, pattern in ROLES:
         if re.search(pattern, name):
@@ -126,15 +348,26 @@ def area_of(path: str) -> str:
     return "core/（其余单文件）"
 
 
-def _kind_index(path: str, cache: Dict[str, Dict[int, str]]) -> Dict[int, str]:
+def _first_line(doc: str) -> str:
+    for ln in (doc or "").strip().splitlines():
+        ln = ln.strip()
+        if ln and not set(ln) <= set("=-~#*"):
+            return ln[:120]
+    return ""
+
+
+def _kind_index(path: str, cache: Dict[str, Dict[int, Tuple[str, str]]]) -> Dict[int, Tuple[str, str]]:
+    """行号 → (所属类名或空串, 函数自己说明的第一行)。"""
     if path not in cache:
-        idx: Dict[int, str] = {}
+        idx: Dict[int, Tuple[str, str]] = {}
         tree = ast.parse((REPO_ROOT / path).read_text(encoding="utf-8"))
         for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                idx.setdefault(node.lineno, ("", _first_line(ast.get_docstring(node) or "")))
             if isinstance(node, ast.ClassDef):
                 for b in node.body:
                     if isinstance(b, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        idx[b.lineno] = node.name
+                        idx[b.lineno] = (node.name, _first_line(ast.get_docstring(b) or ""))
         cache[path] = idx
     return cache[path]
 
@@ -160,11 +393,12 @@ def collect() -> Dict[str, object]:
     unreachable_paths = {m.replace(".", "/") + ".py" for m in unreachable}
 
     tested = _test_referenced([n for n, _ in unwired])
-    cache: Dict[str, Dict[int, str]] = {}
+    cache: Dict[str, Dict[int, Tuple[str, str]]] = {}
     rows = []
     for name, where in unwired:
         path, line = where.rsplit(":", 1)
-        owner = _kind_index(path, cache).get(int(line), "")
+        owner, doc = _kind_index(path, cache).get(int(line), ("", ""))
+        theme, theme_label = theme_of(path)
         rows.append(
             {
                 "name": name,
@@ -175,6 +409,9 @@ def collect() -> Dict[str, object]:
                 "tested": name in tested,
                 "role": role_of(name),
                 "area": area_of(path),
+                "theme": theme,
+                "theme_label": theme_label,
+                "doc": doc,
                 "module_unreachable": path in unreachable_paths,
             }
         )
@@ -215,6 +452,19 @@ def render(data: Dict[str, object]) -> str:
             t = sum(x["tested"] for x in lst)
             out.append(f"| {label} | {len(lst)} | {t} | {len(lst) - t} |")
     out.append("")
+    out.append("### 按用途")
+    out.append("")
+    out.append("| 用途 | 条数 | 其中只有测试引用 | 其中连测试都没有 | 文件数 |")
+    out.append("|---|---|---|---|---|")
+    by_theme: Dict[str, List[dict]] = defaultdict(list)
+    for r in rows:
+        by_theme[r["theme"]].append(r)
+    for key, label, _pats in THEMES:
+        lst = by_theme.get(key, [])
+        if lst:
+            t = sum(x["tested"] for x in lst)
+            out.append(f"| {label} | {len(lst)} | {t} | {len(lst) - t} | {len({x['path'] for x in lst})} |")
+    out.append("")
     out.append("### 按子系统")
     out.append("")
     out.append("| 子系统 | 条数 | 文件数 |")
@@ -234,22 +484,26 @@ def render(data: Dict[str, object]) -> str:
     out.append("")
     out.append("### 逐文件清单")
     out.append("")
-    out.append("标记：`M` 类方法（后跟所属类）、`F` 模块函数；`T` 只有测试在引用；`—` 连测试都没有。")
+    out.append("按用途分组，每个函数后面是它**自己的说明**（docstring 第一行，原文照录；没写说明的标「无说明」）。")
+    out.append("标记：`T` 只有测试在引用；`—` 连测试都没有。")
     out.append("")
     by_file: Dict[str, List[dict]] = defaultdict(list)
     for r in rows:
         by_file[r["path"]].append(r)
-    for area, lst in sorted(by_area.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+    for key, label, _pats in THEMES:
+        lst = by_theme.get(key, [])
+        if not lst:
+            continue
         files = sorted({x["path"] for x in lst})
-        out.append(f"<details><summary><code>{area}</code> — {len(lst)} 条</summary>")
+        out.append(f"<details><summary>{label} — {len(lst)} 条</summary>")
         out.append("")
         for path in files:
             items = sorted(by_file[path], key=lambda x: int(x["at"].rsplit(":", 1)[1]))
-            cells = []
+            out.append(f"- `{path}`")
             for x in items:
-                kind = f"M {x['owner']}." if x["kind"] == "method" else "F "
-                cells.append(f"`{kind}{x['name']}` {'T' if x['tested'] else '—'} · {x['role']}")
-            out.append(f"- `{path}`（{len(items)}）：" + "；".join(cells))
+                name = f"{x['owner']}.{x['name']}" if x["owner"] else x["name"]
+                doc = (x["doc"] or "无说明").replace("|", "\\|")
+                out.append(f"  - `{name}` {'T' if x['tested'] else '—'} — {doc}")
         out.append("")
         out.append("</details>")
         out.append("")

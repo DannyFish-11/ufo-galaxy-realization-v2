@@ -160,11 +160,10 @@ WS  /ws/desktop-presence
 - 自己接的模型服务 —— 「我的模型服务」（`/api/v1/providers/user`）；
 - 原生多模态开关 —— `GALAXY_NATIVE_MM_CHAT`。
 
-**要所有者定的**（本轮未做）：
+**所有者的答复**（2026-09-28）：
 
-1. 要不要一个「有 Key 但先别用这家」的 provider 开关？要的话这是**新能力**：路由器得先认它
-   （现在不认），再在面板上放开关 —— 不是把孤岛接上。
-2. `ConfigService` 的非密钥那一半与 `inventory_from_config`：删，还是给它们找一个运行时读者。
+1. 「有 Key 但先别用这家」的 provider 开关 —— **不要**。所以这几维不会有运行时读者。
+2. `ConfigService` 的非密钥那一半与 `inventory_from_config`：删还是留，和其余未接线代码的处置放在一块儿，后面做。
    清单见 `docs/UNWIRED_CODE_INVENTORY.md`。
 
 另记一处潜在隐患（同样没有生产调用方，所以今天不会触发）：`core/unified_config.py` 的

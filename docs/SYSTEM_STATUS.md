@@ -278,7 +278,7 @@ python scripts/check_assessment_freshness.py
 | 真相链不完整 | 后台延迟 5 秒**只重跑失败的步骤**一次（成功过的步骤不做第二遍）。补齐了就从账本撤掉；仍不收口就进隔离队列：落盘在 `$GALAXY_DATA_DIR/isolated_results.json`（重启后还在），`GET /api/v1/results/isolated` 可查，`…/{key}/retry`、`…/{key}/dismiss` 可再试或知悉，面板「全部设置」最上面一段显示（一条都没有时不占位置）。接口只给类型化字段，原始结果内容不外露。**顺带修了一处真问题**：回退路径上 1–3 步失败时，`TruthChainStepError` 会从 `handle_task_result` / `handle_goal_execution_result` 里直接抛出去，等待方拿不到结果、一直等到超时 —— 现在接住，回答照常先给出去 | `tests/test_truth_chain_recovery.py`（13 条，含「真相链抛错时等待方仍马上拿到结果」） |
 | 会话迁移规范面（D3） | 新建 `core/session_migration.py`，四个外部入口（核心 REST、网关 REST、网关 WS、安卓桥）都调它。它先找会话在哪个存储里：核心会话走原来那套两阶段提交（逐行搬过来）；**唤醒事件建的漫游会话**交给 `SessionRoamingManager` 自己的两阶段提交 —— 以前网关 `GET /api/v1/sessions` 列的正是这些会话，拿同一个网关的迁移端点去迁却会 404，任何端点都迁不了它们。两个存储过同一道作用域判据；**不合并**两个存储。`core/routes/sessions.py` 的旧名保留为转发 | `tests/test_session_migration_canonical_surface.py`（9 条）；`tests/test_session_migration_consistency.py` 的 D 组改为钉新事实 |
 | ↳ 顺带查出的两个问题 | ① `core/event_bridge.py` 日志写「SessionRoaming → EventBus 已连接」，挂的却是不存在的属性 `_on_session_migrated`（管理器调的是 `_on_migrated`），`SESSION_MIGRATED` 从没发出过；核心会话的迁移也从不发。现在两边都发，前端能收到。② 漫游会话落盘写死在 `~/.galaxy/session_roaming`，不认 `GALAXY_DATA_DIR`（测试每跑一次就往真实家目录写一批快照）；现在跟随，没设时仍是原位置，新位置没有文件时只读一次旧位置 | 同上 |
-| 面板配置写入合并 | **复核后前提不成立，没有做「合并」。** `ConfigService` 写进 `runtime/config.json` 的 provider 开关、`native_multimodal_policy`、网络地址、安卓推理模式，运行时**没有任何读者**（仅有的读者 `validate()` 与 `model_topology/inventory_from_config` 自己也没有生产调用方）。生产里真正在写配置的只有一条：面板 → `POST /api/config`（非密钥进 `.env` 与进程环境，密钥经 `ConfigService.set_secret` 落 `secrets.env`）。把那几个开关接到面板上只会得到按了不起作用的按钮。真正生效的 provider/路由控制面板上都已经有。已如实改写 `PANEL_SURFACE_CONVERGENCE.md` 与 `core/operational_enablement_audit.py` 的说明 | 结论 `config-json-provider-dims-have-no-runtime-reader` |
+| 面板配置写入合并 | **复核后前提不成立，没有做「合并」。** `ConfigService` 写进 `runtime/config.json` 的 provider 开关、`native_multimodal_policy`、网络地址、安卓推理模式，运行时**没有任何读者**（仅有的读者 `validate()` 与 `model_topology/inventory_from_config` 自己也没有生产调用方）。生产里真正在写配置的只有一条：面板 → `POST /api/config`（非密钥进 `.env` 与进程环境，密钥经 `ConfigService.set_secret` 落 `secrets.env`）。把那几个开关接到面板上只会得到按了不起作用的按钮。真正生效的 provider/路由控制面板上都已经有。已如实改写 `PANEL_SURFACE_CONVERGENCE.md` 与 `core/operational_enablement_audit.py` 的说明。「有 Key 但先别用这家」的 provider 开关是新能力，所有者答复**不要** | 结论 `config-json-provider-dims-have-no-runtime-reader` |
 | 面板显示推演过程 | `skill.invoked`（`kind="rehearsal"`）到面板只触发一次设备清单推送，步骤内容从没到过面板。新增 WS `type="rehearsal"` 帧（`core/rehearsal_panel_push.py`，只推类型化字段，工具参数与模拟响应不推），面板在对话区与输入条之间画出最近一次推演，每一行写明「模拟」还是「真查了（只读）」；发下一句话时清空。面板 dist 已重建 | `tests/test_rehearsal_panel_push.py`；`npm run build`（含 `tsc --noEmit`）通过 |
 | 死代码 | **只清点，没删、没接。** 755 条未接线、3 个不可达模块逐类查清，写在 `docs/UNWIRED_CODE_INVENTORY.md`（可用 `python scripts/unwired_inventory.py --write` 重新生成）。其中「看得见但不生效」的几簇最值得先定：运行 SLO 指标的 13 个 `record_*` 没有生产调用方（`/metrics` 上那些计数恒为 0）；委托流持久化只接了读、没人写（重启后「从检查点恢复」走不到）。基线重记 760 → 755（4 条早已接上的过期条目 + 本轮接上的 `set_migration_callback`） | 同左 |
 
@@ -287,12 +287,11 @@ python scripts/check_assessment_freshness.py
 | 问题 | 位置 / 依据 | 为什么这次没改 |
 |---|---|---|
 | 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
-| 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者这次定的策略只覆盖结果真相链；注册要不要同样补跑/隔离，没定 |
+| 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者 2026-09-28 答复：**后面做**，和未接线代码的处置放在一块儿 |
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |
-| 要不要一个「有 Key 但先别用这家」的 provider 开关 | 第 6.4 节「面板配置写入合并」 | 这是**新能力**（路由器现在不认任何开关），不是把孤岛接上；要所有者定 |
 | 旧 WS 路径 `/ws/ufo3` 未退役 | 路线图 C6 | 需要安卓侧先确认老客户端已迁走 |
 | 自我改进总闸默认关闭 | `GALAXY_META_RSI=off` | 由仓库所有者决定 |
-| 未接线 / 不可达：删还是接 | 755 条 + 3 个模块，逐类清单与建议见 `docs/UNWIRED_CODE_INVENTORY.md` | 所有者要求先弄清楚再动；清单已给，等决定 |
+| 未接线 / 不可达：删还是接 | 755 条 + 3 个模块。**按用途说它们是干什么的**见 `docs/UNWIRED_CODE_INVENTORY.md` 第 2 节，逐个函数的原文说明在文末 | 所有者要求先弄清楚再动；清单已给。所有者 2026-09-28：后面和 G002 放一块儿做 |
 | 大文件 | core 有 133 个文件超过 1000 行 | 已有复杂度基线守着，只许拆、不许涨 |
 | 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；复现一次要 4 分钟，这次没有定位到创建点 |
 | 文档漂移 | 286 份 Markdown 中，2026-08-05 之后只改过 9 份 | 本次给 41 份状态/审计类文档加了快照说明，指向本文；正文保留原样 |
