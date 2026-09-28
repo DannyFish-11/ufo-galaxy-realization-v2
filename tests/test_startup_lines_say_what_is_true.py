@@ -276,3 +276,28 @@ def test_phase_1_does_not_claim_everything_is_ready():
     src = inspect.getsource(so)
     assert 'OrchestratorReadiness.READY: "一切就绪"' not in src
     assert 'OrchestratorReadiness.READY: "预检全部通过' in src
+
+
+def test_the_summary_card_does_not_send_people_to_a_404_panel():
+    """真机总结卡:``面板   http://localhost:9000`` —— 那个地址上没有网页面板,浏览器打开是 404。"""
+    import inspect
+    import logging
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from core.api_routes import create_api_routes
+    from launcher import services
+
+    logging.disable(logging.CRITICAL)
+    try:
+        app = FastAPI()
+        app.include_router(create_api_routes(service_manager=None, config=None))
+        root = TestClient(app).get("/").status_code
+    finally:
+        logging.disable(logging.NOTSET)
+
+    src = inspect.getsource(services)
+    if root == 404:
+        assert '("面板", f"http://localhost:{port}")' not in src, "根路径没有页面,却在总结卡里叫它'面板'"
+        assert "面板在桌面窗口里" in src
