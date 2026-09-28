@@ -546,14 +546,14 @@
       ]
     },
     {
-      "id": "zero-trust-security-policy-has-no-enforcer",
-      "source": "docs/UNWIRED_CODE_INVENTORY.md(第七节 7.1 第 1 条)",
-      "recorded_on": "2026-09-28",
-      "statement": "PUT /api/v1/security/policy 改的零信任规则表,唯一的执行方 SecurityInterceptor.check_and_intercept 在生产里没有调用方:改那张表只有 /evaluate 端点会回显,任何真实执行都不经过它。",
+      "id": "zero-trust-table-adds-confirmation-at-dispatch",
+      "source": "core/command_router.py(_is_high_risk_command / _zero_trust_requires_hitl)",
+      "recorded_on": "2026-09-29",
+      "statement": "PUT /api/v1/security/policy 改的零信任规则表进了派发门:CommandRouter._is_high_risk_command 是「内置高危词表 或 规则表要求人工确认」,表只能加确认、不能把内置高危命令改成免确认;只因规则表命中的命令,审批走 SecurityInterceptor.check_and_intercept(带表里的风险级别与命中规则)。",
       "predicates": [
         {
           "kind": "symbol_exists",
-          "target": "check_and_intercept",
+          "target": "_zero_trust_requires_hitl",
           "scope": "core",
           "expected": true
         },
@@ -561,7 +561,13 @@
           "kind": "has_production_caller",
           "target": "check_and_intercept",
           "scope": "core",
-          "expected": false
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "tests/test_governance_is_enforced.py",
+          "scope": "",
+          "expected": true
         }
       ]
     },

@@ -555,7 +555,17 @@ class MCPDynamicGateway:
         request_id = str((data or {}).get("request_id") or "")
         tool_name = str((data or {}).get("tool_name") or "")
         try:
-            raw_args = (data or {}).get("arguments_json") or "{}"
+            # 网格上别的大脑发来的调用是外部输入：与注册同一道防腐层（尺寸、幻觉字段、逐字段兜底）
+            validated = await self._acl.validate_mcp_call(dict(data or {}))
+            if not validated["success"]:
+                await self._publish_call_response(
+                    request_id, error=f"invalid MCPCallRequest: {validated.get('error')}", started=started
+                )
+                return
+            call = validated["data"]
+            request_id = call.request_id or request_id
+            tool_name = call.tool_name or tool_name
+            raw_args = call.arguments_json or "{}"
             try:
                 arguments = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args or {})
             except (TypeError, ValueError) as exc:

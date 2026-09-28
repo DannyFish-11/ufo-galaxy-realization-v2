@@ -184,6 +184,7 @@ __all__ = [
     # Convenience — flow entity
     "persist_flow_entity_snapshot",
     "restore_flow_entities",
+    "rehydrate_flow_entity_runtime",
     # Singleton accessors
     "get_session_durable_store",
     "reset_session_durable_store",
@@ -739,6 +740,7 @@ class DelegatedFlowPersistenceBundle:
         contracts: Optional[List[Any]] = None,
         bindings: Optional[List[Any]] = None,
         flow_entities: Optional[List[Any]] = None,
+        categories: Optional[List[str]] = None,
     ) -> Dict[str, bool]:
         """Persist all four object categories in one call.
 
@@ -759,11 +761,15 @@ class DelegatedFlowPersistenceBundle:
         flow_entities:
             List of :class:`~core.delegated_flow_entity.DelegatedFlowEntity`
             objects.  If None, the module singleton is queried.
+        categories:
+            Only write these categories (``"session"`` / ``"contract"`` /
+            ``"binding"`` / ``"flow_entity"``); the others' snapshots are left
+            untouched.  ``None`` writes all four.
 
         Returns
         -------
         dict[str, bool]
-            Mapping from category name to success flag.
+            Mapping from written category name to success flag.
         """
         if sessions is None:
             from core.attached_runtime_session_registry import get_session_registry as _gsr
@@ -782,12 +788,14 @@ class DelegatedFlowPersistenceBundle:
 
             flow_entities = _gfer().list_all()
 
-        return {
-            "session": self.session_store.save(sessions),
-            "contract": self.contract_store.save(contracts),
-            "binding": self.binding_store.save(bindings),
-            "flow_entity": self.flow_entity_store.save(flow_entities),
+        writes = {
+            "session": (self.session_store, sessions),
+            "contract": (self.contract_store, contracts),
+            "binding": (self.binding_store, bindings),
+            "flow_entity": (self.flow_entity_store, flow_entities),
         }
+        wanted = writes if categories is None else [c for c in writes if c in set(categories)]
+        return {name: writes[name][0].save(writes[name][1]) for name in wanted}
 
     # ------------------------------------------------------------------
     # Coordinated restore
@@ -1135,3 +1143,28 @@ def restore_flow_entities(
     _store = store if store is not None else get_flow_entity_durable_store()
     _, objects = _store.load()
     return objects
+
+
+def rehydrate_flow_entity_runtime(
+    *,
+    store: Optional[FlowEntityDurableStore] = None,
+    runtime: Optional[Any] = None,
+) -> int:
+    """Put the persisted flow entities back into the in-process runtime after a restart.
+
+    The recovery coordinator looks flows up in the runtime
+    (``DelegatedFlowRecoveryCoordinator`` → ``get_by_flow_id``); without this a
+    flow that was in flight before the restart can never be found again.
+    Entities already present in the runtime win over their on-disk version.
+    Returns how many were put back.
+    """
+    if runtime is None:
+        from core.delegated_flow_entity import get_delegated_flow_entity_runtime
+
+        runtime = get_delegated_flow_entity_runtime()
+    restored = 0
+    for entity in reversed(restore_flow_entities(store=store)):  # 快照是新的在前，按原次序放回
+        if runtime.get_by_flow_id(entity.delegated_flow_id) is None:
+            runtime.put(entity)
+            restored += 1
+    return restored

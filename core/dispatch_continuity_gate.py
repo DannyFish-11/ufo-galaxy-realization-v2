@@ -77,6 +77,7 @@ DISPATCH_CONTINUITY_LEGALITY_GATE_APPLIED: str = (
 __all__ = [
     "DISPATCH_CONTINUITY_LEGALITY_ENFORCEMENT_ENV",
     "DISPATCH_CONTINUITY_LEGALITY_GATE_APPLIED",
+    "associate_resumed_mesh_execution",
     "build_dispatch_continuity_context",
     "evaluate_dispatch_continuity_legality",
 ]
@@ -206,3 +207,30 @@ def evaluate_dispatch_continuity_legality(
         "latency_ms": 0.0,
         "_constraint_chain_trace": dict(trace),
     }
+
+
+def associate_resumed_mesh_execution(envelope: "TaskEnvelope") -> Optional[Any]:
+    """断连 / 交接后续跑的执行，挂回它原先所在的 Mesh 会话。
+
+    信封带着 PR-F 的 ``continuity_context``（序列化的 ``DispatchContinuityContext``），里面的
+    ``prior_mesh_session_id`` 说明它是某个 Mesh 会话里的执行续上来的。此前这条关联没人记：
+    ``associate_resumed_execution_with_session`` 是 Mesh 生命周期给续跑写好的规范挂钩，却没有
+    调用方，续跑的执行在 Mesh 会话里查不到来历。不是续跑（没有上下文或没有 Mesh 会话）时什么都不做；
+    会话不在或已终结时返回 ``None``。
+    """
+    ctx = getattr(envelope, "continuity_context", None) or {}
+    mesh_session_id = ctx.get("prior_mesh_session_id") or ctx.get("mesh_session_id")
+    if not mesh_session_id:
+        return None
+    try:
+        from core.mesh.mesh_session_lifecycle import associate_resumed_execution_with_session
+
+        return associate_resumed_execution_with_session(
+            str(mesh_session_id),
+            dict(ctx),
+            resumed_dispatch_id=str((envelope.metadata or {}).get("dispatch_id") or envelope.task_id),
+            resumed_trace_id=envelope.trace_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — 关联失败不阻断派发
+        logger.debug("resumed mesh execution association skipped: %s", exc)
+        return None

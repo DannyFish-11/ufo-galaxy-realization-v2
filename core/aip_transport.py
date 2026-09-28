@@ -141,6 +141,8 @@ class AIPTransport:
         # 链路历史:(transport, target) → 尝试/成功/EWMA 延迟。由 _send_with_fallback
         # 的真实发送结果喂入,反哺后续候选排序(表现差的链路下沉,好的上浮)。
         self._link_stats: Dict[Tuple[str, str], Dict[str, float]] = {}
+        # 每个目标当前实际走通的传输:变了才写一次拓扑边(见 _note_path)
+        self._current_path: Dict[str, str] = {}
 
     # -- 需求感知选路 --------------------------------------------------------
 
@@ -355,17 +357,6 @@ class AIPTransport:
 
     # -- 自动传输选择 ------------------------------------------------------
 
-    async def probe_best_transport(self, target: str) -> Optional[str]:
-        """探测到目标设备的最佳传输。
-
-        按优先级顺序检查各传输的可用性，返回第一个可用的。
-        """
-        for ttype in self._transport_priority:
-            adapter = self._adapters.get(ttype)
-            if adapter and await adapter.is_available(target):
-                return ttype
-        return None
-
     async def _select_adapter(
         self,
         target: str,
@@ -488,6 +479,7 @@ class AIPTransport:
                 result["_transport_used"] = ttype
                 if result.get("success"):
                     self._record_attempt(ttype, target, True, latency_ms)
+                    self._note_path(target, ttype, fallback_used=len(attempted) > 1)
                     if len(attempted) > 1:
                         logger.info(
                             "PR-28 fallback success: %s → %s for %s (tried: %s)",
@@ -511,11 +503,47 @@ class AIPTransport:
             target,
             errors,
         )
+        self._note_path_lost(target)
         return {
             "success": False,
             "error": f"All transports failed (tried: {attempted}): {' | '.join(errors)}",
             "_attempted": attempted,
         }
+
+    # -- 拓扑回写 ----------------------------------------------------------
+    # 选路一直在**读**拓扑(_assess_via_topology),却从不把实际走通 / 走不通的路径写回去,
+    # 拓扑里的边永远是静态登记时的样子。这里只在路径**变化**时写(换了传输、或全部走不通),
+    # 不在每次发送时写 —— 拓扑写入会落盘。
+
+    @staticmethod
+    def _path_source() -> str:
+        from core.network_topology_runtime import get_network_topology_runtime
+
+        return get_network_topology_runtime()._my_device_id or "server"
+
+    def _note_path(self, target: str, ttype: str, *, fallback_used: bool) -> None:
+        if self._current_path.get(target) == ttype:
+            return
+        self._current_path[target] = ttype
+        try:
+            from core.capability_network_runtime_policy import absorb_path_change_event
+
+            absorb_path_change_event(self._path_source(), target, transport_strategy=ttype, fallback_used=fallback_used)
+        except Exception as exc:  # noqa: BLE001 — 拓扑回写失败不影响发送结果
+            logger.debug("topology path write-back skipped for %s: %s", target, exc)
+
+    def _note_path_lost(self, target: str) -> None:
+        ttype = self._current_path.pop(target, None)
+        if ttype is None:
+            return
+        try:
+            from core.network_topology_runtime import TopologyConnectionState, get_network_topology_runtime
+
+            get_network_topology_runtime().update_edge_state(
+                f"{self._path_source()}::{target}::{ttype}", TopologyConnectionState.UNAVAILABLE, preferred=False
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("topology path-lost write-back skipped for %s: %s", target, exc)
 
     # -- 内部工具 ----------------------------------------------------------
 

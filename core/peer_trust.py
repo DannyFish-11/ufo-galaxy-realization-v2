@@ -52,28 +52,12 @@ class TrustLevel(str, Enum):
     TRUSTED = "trusted"
 
 
-#: 由低到高的次序,用于比较(不要依赖 Enum 定义顺序做大小比较)。
-_ORDER: Dict[str, int] = {
-    TrustLevel.BLOCKED.value: 0,
-    TrustLevel.UNKNOWN.value: 1,
-    TrustLevel.ASK.value: 2,
-    TrustLevel.FRIEND.value: 3,
-    TrustLevel.TRUSTED.value: 4,
-}
-
-
 class PermissionResult(str, Enum):
     """一次意图检查的结论。"""
 
     ALLOWED = "allowed"
     DENIED = "denied"
     REQUIRE_APPROVAL = "require_approval"
-
-
-def trust_rank(level: Any) -> int:
-    """把任意信任级别表示折算成可比较的序数;不认识的按 UNKNOWN。"""
-    raw = getattr(level, "value", level)
-    return _ORDER.get(str(raw).strip().lower(), _ORDER[TrustLevel.UNKNOWN.value])
 
 
 def coerce_trust(level: Any, default: TrustLevel = TrustLevel.UNKNOWN) -> TrustLevel:

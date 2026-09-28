@@ -511,8 +511,12 @@ class TaskEnvelopeLifecycleRegistry:
 
     # ── Timeout handling ──────────────────────────────────────────────────────
 
-    def cancel_timed_out(self) -> List[str]:
+    def cancel_timed_out(self, grace_s: float = 0.0) -> List[str]:
         """Cancel all pending envelopes whose wall-clock age exceeds their timeout.
+
+        ``grace_s`` extends every record's timeout for this sweep, so an awaiter
+        using the same timeout gets to finish with its own ``TimeoutError``
+        before the sweep cancels the future underneath it.
 
         For each timed-out record:
         * The associated future (if any) is cancelled.
@@ -530,7 +534,7 @@ class TaskEnvelopeLifecycleRegistry:
         now = time.time()
         cancelled_ids: List[str] = []
         for task_id, record in list(self._pending.items()):
-            if record.is_timed_out(now):
+            if record.is_timed_out(now - grace_s):
                 logger.warning(
                     "lifecycle_registry.timeout | task_id=%s trace_id=%s "
                     "tool=%s target=%s elapsed=%.2fs timeout=%.1fs owner=%s",

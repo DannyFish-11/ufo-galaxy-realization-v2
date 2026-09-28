@@ -1241,6 +1241,22 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning("持久化结果幂等性存储初始化失败（降级）: %s", _exc)
 
     # ====================================================================
+    # 21b. 周期维护 —— 各注册表写好了「清扫过期项」却没人按时调（节点心跳超时、
+    # 超时信封、待决项、任务记忆 TTL、安全策略热重载、委托流落盘……）。一个循环按
+    # 各项自己的周期调它们；网关的清扫在第 16 步已经挂进同一个循环。
+    # ====================================================================
+    try:
+        from core.periodic_maintenance import register_core_sweeps
+
+        _maintenance = register_core_sweeps()
+        _maintenance.start()
+        results["periodic_maintenance"] = {"status": "ok", "sweeps": len(_maintenance.status()["sweeps"])}
+    except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
+        results["periodic_maintenance"] = {"status": "degraded", "error": str(_exc)}
+        logger.warning("周期维护未启动（降级）: %s", _exc)
+
+    # ====================================================================
     # 汇总
     # ====================================================================
     elapsed = time.monotonic() - t0
@@ -1323,6 +1339,15 @@ async def shutdown_subsystems():
             logger.warning("任务生命周期快照持久化失败（关闭前）")
     except Exception as e:
         logger.warning(f"任务生命周期快照持久化失败: {e}")
+
+    # 0-maint. 周期维护循环（bootstrap 21b 里启动）；停的时候再落一次委托流，恢复协调器
+    # 下次启动读的就是这一份
+    try:
+        from core.periodic_maintenance import get_periodic_maintenance
+
+        await _shutdown_with_timeout("周期维护循环", get_periodic_maintenance().stop())
+    except Exception as e:
+        logger.warning(f"周期维护循环停止失败: {e}")
 
     # 0-worker. Worker 消费循环(融合·域7:此前 start_worker_runtime 在 bootstrap
     # 里启动却从未被本函数停止——NATS 订阅/后台任务在关机时泄漏,循环生命周期

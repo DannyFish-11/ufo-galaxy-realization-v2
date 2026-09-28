@@ -437,6 +437,40 @@ def announce_node_to_discovery(
         return False
 
 
+def bind_discovery_to_capability_presence(discovery: Any) -> bool:
+    """节点加入 / 更新 / 离开，同步到能力同化层里这个节点的在场状态。
+
+    发现服务早就有加入 / 离开 / 更新三个回调口，却没有订阅方：节点停了，同化层里它仍是
+    ONLINE，``query_routable_executors`` 照样把它当成可路由的执行者。这里只改**已在同化层里的**
+    节点的在场（加入 / 更新 → 心跳，离开 → 离线），不凭发现事件新建记录 —— 节点的能力记录由
+    能力注册表那条路径负责，这里不另起一份。同一个发现服务只绑一次。
+    """
+    if getattr(discovery, "_capability_presence_bound", False):
+        return False
+    discovery.on_node_joined(lambda node: mark_node_seen(getattr(node, "node_id", "")))
+    discovery.on_node_updated(lambda node: mark_node_seen(getattr(node, "node_id", "")))
+    discovery.on_node_left(lambda node: mark_node_gone(getattr(node, "node_id", ""), reason="discovery_node_left"))
+    discovery._capability_presence_bound = True
+    return True
+
+
+def mark_node_seen(node_id: str) -> None:
+    """节点还活着（发现服务见到它 / 连接管理器连上它）：同化层里它的在场刷新为在线。"""
+    from core.capability_network_runtime_policy import absorb_heartbeat_event
+
+    if node_id:
+        absorb_heartbeat_event(str(node_id))
+
+
+def mark_node_gone(node_id: str, *, reason: str) -> None:
+    """节点走了（发现服务里注销 / 连接断开）：同化层里它的在场改为离线。不在同化层里就什么都不做。"""
+    from core.capability_assimilation import get_capability_assimilation_layer
+
+    layer = get_capability_assimilation_layer()
+    if node_id and layer.get_record(str(node_id)) is not None:
+        layer.mark_offline(str(node_id), reason=reason)
+
+
 def initialize_discovery_from_startup(
     discovery: Any,
     fabric: Any,
@@ -465,6 +499,7 @@ def initialize_discovery_from_startup(
         "NodeDiscoveryRuntime: initializing discovery from startup " "(policy: %s)",
         DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY[:60] + "...",
     )
+    bind_discovery_to_capability_presence(discovery)
     seeded = seed_fabric_nodes_into_discovery(fabric, discovery)
     total_in_discovery = len(getattr(discovery, "nodes", {}))
     logger.info(

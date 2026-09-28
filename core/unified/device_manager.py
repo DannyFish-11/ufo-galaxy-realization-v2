@@ -140,6 +140,7 @@ class UnifiedDeviceManager:
         normalize_device(device)
 
         existing = self._devices.get(device.device_id)
+        was_active = existing is not None and self._is_active(existing.status)
         if existing is not None:
             # Preserve the original registration timestamp to avoid identity drift.
             device.registered_at = existing.registered_at
@@ -198,6 +199,7 @@ class UnifiedDeviceManager:
         # 不起节点）。此前解析只在启动期触发，运行中热插的设备要等重启才被解析。
         # best-effort：hook 失败绝不影响注册主路径。
         self._feed_resolution_plane(device)
+        self._notify_presence(device, was_active, known_before=existing is not None, reason="registered")
 
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
@@ -275,7 +277,11 @@ class UnifiedDeviceManager:
         self._remove_capabilities_from_bus(device_id)
         self._clear_capabilities_from_authority(device_id, caps)
 
-        self._devices.pop(device_id)
+        leaving = self._devices.pop(device_id)
+        if self._is_active(leaving.status):
+            from core.unified.presence_fanout import presence_changed
+
+            presence_changed(leaving, online=False, reason="unregistered")
         logger.info(
             "Device unregistered",
             extra={"event": "unregister_device", "device_id": device_id},
@@ -283,6 +289,25 @@ class UnifiedDeviceManager:
 
         # PR-DEVICE-WORKER-FUSION: Remove the device from the NATS Worker plane.
         self._unregister_device_worker(device_id)
+
+    # ------------------------------------------------------------------
+    # 上下线通知（拓扑、同化层在场、健康评分、Mesh 编组；见 core/unified/presence_fanout.py）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_active(status: Any) -> bool:
+        from core.unified.presence_fanout import is_active
+
+        return is_active(status)
+
+    def _notify_presence(self, device: UnifiedDevice, was_active: bool, *, known_before: bool, reason: str) -> None:
+        """「是否在线」翻转了才通知；从离线回到在线且之前就在册，算重连。"""
+        now_active = self._is_active(device.status)
+        if now_active == was_active:
+            return
+        from core.unified.presence_fanout import presence_changed
+
+        presence_changed(device, online=now_active, reconnected=now_active and known_before, reason=reason)
 
     # ------------------------------------------------------------------
     # Internal capability helpers
@@ -645,6 +670,7 @@ class UnifiedDeviceManager:
         now = datetime.now(timezone.utc)
         fields_changed: list = []
 
+        was_active = self._is_active(device.status)
         # -- status --
         if "status" in patch:
             new_status = patch["status"]
@@ -723,6 +749,8 @@ class UnifiedDeviceManager:
             self._sync_capabilities_to_authority(device)
         elif "status" in fields_changed:
             self._sync_capabilities_to_authority(device)
+        if "status" in fields_changed:
+            self._notify_presence(device, was_active, known_before=True, reason=f"status:{source}")
 
         return device
 
@@ -737,6 +765,7 @@ class UnifiedDeviceManager:
             return
 
         now = datetime.now(timezone.utc)
+        was_active = self._is_active(device.status)
         device.status = status
         device.last_heartbeat = now
         device.updated_at = now
@@ -751,6 +780,7 @@ class UnifiedDeviceManager:
             },
         )
         self._sync_capabilities_to_authority(device)
+        self._notify_presence(device, was_active, known_before=True, reason="status_update")
 
     def heartbeat(self, device_id: str) -> None:
         """记录设备心跳；若设备处于离线/错误态则自动恢复为 ONLINE。
@@ -781,6 +811,10 @@ class UnifiedDeviceManager:
                         "state_version": device.state_version,
                     },
                 )
+                self._notify_presence(device, False, known_before=True, reason="heartbeat_recovery")
+            from core.unified.presence_fanout import heartbeat_seen
+
+            heartbeat_seen(device_id)
 
             # PR-DEVICE-WORKER-FUSION: Sync heartbeat to NATS Worker plane.
             self._sync_worker_heartbeat(device_id)
@@ -842,6 +876,7 @@ class UnifiedDeviceManager:
             if elapsed > threshold:
                 device.status = UnifiedDeviceStatus.OFFLINE
                 marked_offline.append(device.device_id)
+                self._notify_presence(device, True, known_before=True, reason="heartbeat_timeout")
                 logger.warning(
                     "Device auto-offline: no heartbeat within timeout+grace",
                     extra={

@@ -819,9 +819,27 @@ class CommandRouter:
     # ------------------------------------------------------------------
 
     def _is_high_risk_command(self, command: str) -> bool:
-        """Return True when *command* matches a known high-risk pattern."""
+        """Return True when *command* matches a known high-risk pattern.
+
+        内置高危词表命中，或零信任规则表（``PUT /api/v1/security/policy`` 改的那张）要求人工确认。
+        此前那张表只被 ``/evaluate`` 端点读，改它对任何执行都不起作用。表只能在内置词表之上
+        **加**确认，不能把内置的高危命令改成免确认。
+        """
+        return self._is_builtin_high_risk(command) or self._zero_trust_requires_hitl(command)
+
+    def _is_builtin_high_risk(self, command: str) -> bool:
         cmd_lower = command.lower()
         return any(kw in cmd_lower for kw in self._HIGH_RISK_COMMANDS)
+
+    @staticmethod
+    def _zero_trust_requires_hitl(command: str) -> bool:
+        try:
+            from core.routes.security_policy import evaluate_policy
+
+            return bool(evaluate_policy(action=command, tool=command).get("require_hitl"))
+        except Exception as exc:  # noqa: BLE001 — 表不可用时退回内置词表，不放大也不放行
+            logger.debug("zero-trust policy evaluation unavailable: %s", exc)
+            return False
 
     async def _await_high_risk_confirmation(
         self, command: str, device_id: str, task_id: str, trace_id: str
@@ -1774,6 +1792,10 @@ class CommandRouter:
             envelope = _lcm.mark_running(envelope)
         except Exception as _lc_exc:
             logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
+        if getattr(envelope, "continuity_context", None):
+            from core.dispatch_continuity_gate import associate_resumed_mesh_execution
+
+            associate_resumed_mesh_execution(envelope)
 
         # ── PR-WEBRTC-TASK-LIFECYCLE: WebRTC signaling handshake ──────────────
         # When the envelope declares that it requires a WebRTC video stream,
@@ -3937,13 +3959,24 @@ class CommandRouter:
 
                 interceptor = get_security_interceptor()
                 try:
-                    ack_token = await interceptor.require_approval(
-                        action=command,
-                        task_id=task_id,
-                        risk_level=RiskLevel.HIGH,
-                        requestor="command_router",
-                        context={"device_id": device_id, "command": command, "payload": payload},
-                    )
+                    if self._is_builtin_high_risk(command):
+                        ack_token = await interceptor.require_approval(
+                            action=command,
+                            task_id=task_id,
+                            risk_level=RiskLevel.HIGH,
+                            requestor="command_router",
+                            context={"device_id": device_id, "command": command, "payload": payload},
+                        )
+                    else:
+                        # 只因零信任规则表才进来的：审批单带上表给的风险级别与命中的规则
+                        _decision = await interceptor.check_and_intercept(
+                            command,
+                            tool=command,
+                            task_id=task_id,
+                            requestor="command_router",
+                            context={"device_id": device_id, "command": command, "payload": payload},
+                        )
+                        ack_token = _decision["ack_token"]
                     self._emit_audit(
                         _EvHITL.APPROVAL_GRANTED,
                         trace_id=trace_id,

@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 427 条 · 组件 schema 111 个
+// 路径 428 条 · 组件 schema 111 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -218,6 +218,7 @@ export type ApiPath =
   | "/api/v1/observability/execution/schema"
   | "/api/v1/observability/execution/trace/{trace_id}"
   | "/api/v1/observability/gateway"
+  | "/api/v1/observability/maintenance"
   | "/api/v1/observability/model-route"
   | "/api/v1/observability/nats"
   | "/api/v1/observability/orchestration-review"
@@ -649,6 +650,7 @@ export const API_METHODS = {
   "/api/v1/observability/execution/schema": ["get"],
   "/api/v1/observability/execution/trace/{trace_id}": ["get"],
   "/api/v1/observability/gateway": ["get"],
+  "/api/v1/observability/maintenance": ["get"],
   "/api/v1/observability/model-route": ["get"],
   "/api/v1/observability/nats": ["get"],
   "/api/v1/observability/orchestration-review": ["get"],

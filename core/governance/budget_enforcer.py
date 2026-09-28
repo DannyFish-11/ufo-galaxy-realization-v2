@@ -377,3 +377,17 @@ class BudgetEnforcer:
     def all_session_ids(self) -> list[str]:
         """Return all tracked session IDs."""
         return list(self._session.keys())
+
+
+_enforcer: Optional[BudgetEnforcer] = None
+
+
+def get_budget_enforcer() -> BudgetEnforcer:
+    """进程内唯一的预算执行器：模型路由在调用前后用它，``/api/v1/governance/budget`` 读的也是它。"""
+    global _enforcer
+    if _enforcer is None:
+        from core.governance.policy_schema import load_governance_policy
+
+        policy = load_governance_policy()
+        _enforcer = BudgetEnforcer(policy.budget_policy, policy.model_policy)
+    return _enforcer

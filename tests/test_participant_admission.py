@@ -178,6 +178,7 @@ def test_a_non_android_device_joins_the_mesh():
         "body_mesh",
         "capability_assimilation",
         "lifecycle_event",
+        "mesh_enrollment",
     }
     record = pa.admitted_participant(device_id)
     assert record is not None and record.metadata["participant_kind"] == "ios"

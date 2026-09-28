@@ -40,6 +40,7 @@ Routes:
   GET /api/v1/observability/recent-calls             - 近期工具 / 设备调用（最多 50 条）
   GET /api/v1/observability/trace/{id}               - 按 task_id 或 command_id 查 trace
   GET /api/v1/observability/stats                    - trace 存储统计
+  GET /api/v1/observability/maintenance              - 周期维护：各项清扫的周期、次数、最近结果与错误
   GET /health/nats                                   - NATS bus 连接状态与统计 (Phase E)
   GET /api/v1/observability/nats                     - NATS bus + MasterBrain 拓扑 (Phase E)
   GET /api/v1/observability/bus-events               - 最近 NATS 总线事件 (Phase E)
@@ -295,6 +296,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:
             logger.warning("observability/stats error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @router.get("/api/v1/observability/maintenance")
+    async def observability_maintenance():
+        """周期维护循环的状态：每项清扫的周期、跑了几次、最近一次的结果与错误。
+
+        清扫都是静默生效的（没过期就什么也不发生），循环停了或某项一直报错从外面看不出来，
+        所以把它们的计数摆在这里。
+        """
+        from core.periodic_maintenance import get_periodic_maintenance
+
+        return JSONResponse(get_periodic_maintenance().status())
 
     # ── 上下文层:预判式注入(ACI)与焦点栈 ────────────────────────────────
     #

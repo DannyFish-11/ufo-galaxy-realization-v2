@@ -177,6 +177,9 @@ class CanonicalCompletionIngress:
                 self._futures_by_task_id[task_id] = fut
                 logger.debug("canonical_completion_ingress: registered task_id=%r", task_id)
 
+        rebind = _rebind_registry() if task_id else None
+        if rebind is not None:
+            rebind.register_new_waiter(task_id)
         return fut
 
     # ------------------------------------------------------------------
@@ -410,6 +413,9 @@ class CanonicalCompletionIngress:
 
         try:
             fut.set_result(envelope)
+            rebind = _rebind_registry()
+            if rebind is not None:
+                rebind.mark_completed(getattr(envelope, "task_id", None) or key)
             return True
         except asyncio.InvalidStateError:
             logger.debug(
@@ -509,6 +515,21 @@ class CanonicalCompletionIngress:
 
 _singleton: Optional[CanonicalCompletionIngress] = None
 _singleton_lock: threading.Lock = threading.Lock()
+
+
+def _rebind_registry() -> Optional[Any]:
+    """续接重绑注册表：重启后重新派发的任务，登记新的等待方 → rebound，结果送达 → completed。
+
+    恢复协调器只记「待重绑」（``register_rebind_pending``）；这两半此前没人记，续接闭环
+    永远判不成。不是重启重绑的任务在注册表里查不到，两个调用都是空操作。
+    """
+    try:
+        from core.continuation_rebind_registry import get_continuation_rebind_registry
+
+        return get_continuation_rebind_registry()
+    except Exception as exc:  # noqa: BLE001 — 记账不影响结果送达
+        logger.debug("canonical_completion_ingress: rebind registry unavailable: %s", exc)
+        return None
 
 
 def get_canonical_completion_ingress() -> CanonicalCompletionIngress:

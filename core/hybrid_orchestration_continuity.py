@@ -751,7 +751,10 @@ class HybridOrchestrationContinuityRegistry:
                 execution_id,
             )
             return False
-        return record.transition(target_state, reason=reason, result=result)
+        applied = record.transition(target_state, reason=reason, result=result)
+        if applied:
+            _persist_record(record)
+        return applied
 
     # ------------------------------------------------------------------
     # Queries
@@ -817,6 +820,7 @@ class HybridOrchestrationContinuityRegistry:
                 )
                 if applied:
                     count += 1
+                    _persist_record(record)
             elif record.lifecycle_state == HybridOrchestrationLifecycleState.created:
                 # Created executions never started: cancel them directly
                 applied = record.transition(
@@ -825,6 +829,7 @@ class HybridOrchestrationContinuityRegistry:
                 )
                 if applied:
                     count += 1
+                    _persist_record(record)
 
         logger.info(
             "HybridOrchestrationContinuityRegistry: marked %d executions as " "interrupted/cancelled (reason=%r)",
@@ -1111,6 +1116,21 @@ class HybridContinuityPersistenceStore:
                 )
         return records
 
+    def prune_settled(self, *, older_than_s: float) -> int:
+        """Delete on-disk records nobody will act on again once they are older than *older_than_s*.
+
+        "Settled" means terminal, or interrupted: nothing resumes a hybrid
+        execution after a restart, so an interrupted record would otherwise be
+        re-restored on every later restart forever.  Returns how many were deleted.
+        """
+        cutoff = time.time() - older_than_s
+        pruned = 0
+        for record in self.list_all():
+            settled = record.is_terminal or record.lifecycle_state == HybridOrchestrationLifecycleState.interrupted
+            if settled and (record.updated_at or 0) < cutoff and self.delete(record.execution_id):
+                pruned += 1
+        return pruned
+
     def delete(self, execution_id: str) -> bool:
         """Remove the persisted record for *execution_id*.
 
@@ -1182,6 +1202,19 @@ def reset_hybrid_persistence_store() -> None:
 # ---------------------------------------------------------------------------
 # Module-level persistence convenience functions
 # ---------------------------------------------------------------------------
+
+
+def _persist_record(record: HybridOrchestrationRecord) -> None:
+    """Every applied state change goes to disk, so restart recovery (step 4) has something to read.
+
+    Before this, state only ever changed in memory: the store was never written
+    and recovery always found it empty.  Best-effort — a failed write never
+    blocks the transition itself.
+    """
+    try:
+        save_hybrid_execution(record)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("hybrid execution persist skipped: %s", exc)
 
 
 def save_hybrid_execution(

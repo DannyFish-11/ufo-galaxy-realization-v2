@@ -1120,8 +1120,12 @@ class MasterBrain:
             logger.warning("MasterBrain: unrecognized worker registration payload: %s", data)
             return
         try:
-            reg = WorkerRegistrationModel.model_validate(payload)
-            await self.register_worker(reg)
+            # 与任务派发 / 结果回流同一道防腐层：尺寸上限、幻觉字段守卫、逐字段兜底解析、审计
+            validated = await self._acl.validate_worker_registration(payload)
+            if not validated["success"]:
+                logger.warning("MasterBrain: worker registration rejected by ACL — %s", validated.get("error"))
+                return
+            await self.register_worker(validated["data"])
         except Exception as exc:
             logger.warning("MasterBrain: worker registration parse error — %s", exc)
 

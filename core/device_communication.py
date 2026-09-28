@@ -221,7 +221,6 @@ class DeviceCommunication:
         # 事件回调
         self._on_device_connected: List[Callable] = []
         self._on_device_disconnected: List[Callable] = []
-        self._on_device_message: List[Callable] = []
 
         # 配置
         self.heartbeat_interval = 30.0
@@ -818,16 +817,6 @@ class DeviceCommunication:
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
 
-        elif event_type == "message":
-            for callback in list(self._on_device_message):
-                try:
-                    if asyncio.iscoroutinefunction(callback):
-                        await callback(device_id, message)
-                    else:
-                        callback(device_id, message)
-                except Exception as e:
-                    logger.error(f"事件回调失败: {e}")
-
     def on_device_connected(self, callback: Callable):
         """注册设备连接事件回调"""
         self._on_device_connected.append(callback)
@@ -835,10 +824,6 @@ class DeviceCommunication:
     def on_device_disconnected(self, callback: Callable):
         """注册设备断开事件回调"""
         self._on_device_disconnected.append(callback)
-
-    def on_device_message(self, callback: Callable):
-        """注册设备消息事件回调"""
-        self._on_device_message.append(callback)
 
     # ========================================================================
     # 统计

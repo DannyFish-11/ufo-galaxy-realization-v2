@@ -62,12 +62,12 @@ def _get_policy():
 
 
 def _get_budget_enforcer():
+    # 与模型路由同一个实例：这里读到的花费就是真实调用记下的花费
     global _budget_enforcer
     if _budget_enforcer is None:
-        from core.governance.budget_enforcer import BudgetEnforcer
+        from core.governance.budget_enforcer import get_budget_enforcer
 
-        p = _get_policy()
-        _budget_enforcer = BudgetEnforcer(p.budget_policy, p.model_policy)
+        _budget_enforcer = get_budget_enforcer()
     return _budget_enforcer
 
 
