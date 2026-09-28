@@ -99,7 +99,7 @@ def validate_auth_config() -> None:
 
     # Production mode: enforce strict auth requirements
     if mode == "production":
-        token = os.environ.get("GALAXY_API_TOKEN", "")
+        token = configured_api_token()
         if not token or len(token) < 32:
             raise RuntimeError(
                 "Production mode requires GALAXY_API_TOKEN with minimum 32 characters. "
@@ -121,7 +121,7 @@ def validate_auth_config() -> None:
     # 修复:轮换清单 GALAXY_API_TOKENS 是文档支持的等价配置(get_active_tokens
     # 完整支持)。此前只查 GALAXY_API_TOKEN——按文档流程完成密钥轮换(只留
     # GALAXY_API_TOKENS)后,启动校验反而 RuntimeError 拒绝启动。
-    if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN") and not os.getenv("GALAXY_API_TOKENS", "").strip():
+    if is_auth_enabled() and not has_configured_shared_token():
         # 鉴权默认已改为开启，所以这里不能再直接拒绝启动 —— 那会让每一个
         # 零配置的现有安装升级后起不来。先给它签一个本机令牌；只有连签都签不出来
         # （磁盘只读等）才是真的没法带着鉴权跑，那时候才拒绝。
@@ -154,8 +154,41 @@ def ensure_auth_config_validated() -> None:
 
 
 def _parse_token_list(env_value: str) -> List[str]:
-    """Split a comma-separated token list, dropping empty entries."""
-    return [t.strip() for t in env_value.split(",") if t.strip()]
+    """Split a comma-separated token list, dropping empty entries and template placeholders."""
+    return [t.strip() for t in env_value.split(",") if t.strip() and not _is_placeholder_token(t)]
+
+
+def _is_placeholder_token(value: str) -> bool:
+    """``.env.example`` 里没改过的模板值(``your_galaxy_api_token_here`` 之类)。
+
+    模板是公开的。把它当真令牌收下,等于任何读过仓库的人都能过鉴权;它还会让
+    "已经配了共享令牌"成立,于是本机令牌不签,桌面前端反被 401。一律视同没配。
+
+    判据刻意比 ``credential_vault.is_placeholder`` 窄:那边按前缀认 ``xxx`` /
+    ``todo`` / ``example``,拿来判令牌会误伤恰好以这几个字母开头的真随机令牌
+    (``secrets.token_urlsafe`` 的字母表里都有),那是一次莫名其妙的锁死。这里只认
+    模板的写法(``your_…`` / ``your-…`` / ``<…>``)和几个整串的惯用占位词。
+    """
+    v = (value or "").strip().lower()
+    return v.startswith(("your_", "your-", "<")) or v in _PLACEHOLDER_WORDS
+
+
+_PLACEHOLDER_WORDS = frozenset({"changeme", "change_me", "change-me", "todo", "example", "xxx", "token", "secret"})
+
+
+def configured_api_token() -> str:
+    """``GALAXY_API_TOKEN`` 的有效值;没配或还是模板占位值时返回空串。"""
+    value = os.getenv("GALAXY_API_TOKEN", "").strip()
+    return "" if _is_placeholder_token(value) else value
+
+
+def configured_api_tokens() -> List[str]:
+    """``GALAXY_API_TOKENS`` 里的有效令牌(已剔除模板占位值)。"""
+    return _parse_token_list(os.getenv("GALAXY_API_TOKENS", ""))
+
+
+def has_configured_shared_token() -> bool:
+    return bool(configured_api_token() or configured_api_tokens())
 
 
 def _is_token_expired(expiry_str: str) -> bool:
@@ -208,7 +241,7 @@ def auth_posture() -> Dict[str, Any]:
     raw = os.environ.get("GALAXY_AUTH_ENABLED")
     if not enabled:
         return {"enabled": False, "source": "GALAXY_AUTH_ENABLED=" + (raw or "")}
-    if os.getenv("GALAXY_API_TOKEN", "").strip() or os.getenv("GALAXY_API_TOKENS", "").strip():
+    if has_configured_shared_token():
         return {"enabled": True, "token": "configured"}
     if read_local_token():
         return {"enabled": True, "token": "local", "path": _local_token_path()}
@@ -248,7 +281,7 @@ def ensure_local_token() -> Optional[str]:
     签不出来（磁盘只读等）返回 ``None`` 并留痕，由调用方决定是拒绝启动还是降级
     —— 这里不替它做主。
     """
-    if os.getenv("GALAXY_API_TOKEN", "").strip() or os.getenv("GALAXY_API_TOKENS", "").strip():
+    if has_configured_shared_token():
         return None
 
     existing = read_local_token()
@@ -290,7 +323,7 @@ def get_active_tokens() -> List[str]:
     active: List[str] = []
 
     # Legacy single-token variable
-    single = os.getenv("GALAXY_API_TOKEN", "").strip()
+    single = configured_api_token()
     if single:
         expiry_str = os.getenv("GALAXY_API_TOKEN_EXPIRY", "").strip()
         if expiry_str and _is_token_expired(expiry_str):
