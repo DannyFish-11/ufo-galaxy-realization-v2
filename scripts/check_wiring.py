@@ -269,8 +269,25 @@ def _is_singleton_reset(node) -> bool:
     return False
 
 
+#: 按「文件 + 函数名」的精确豁免,数据与理由在 config/wiring_exemptions.json。
+#: 只收测试钩子与框架回调两类;同名的别处函数不受影响。
+FILE_EXEMPTIONS_PATH = REPO_ROOT / "config" / "wiring_exemptions.json"
+FILE_EXEMPTION_KINDS = ("testhook", "framework")
+
+
+def load_file_exemptions(path: Path = FILE_EXEMPTIONS_PATH) -> Dict[str, Dict[str, List[str]]]:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8")).get("exemptions", {})
+
+
+_FILE_EXEMPTIONS = load_file_exemptions()
+
+
 def _is_exempt(rel: str, name: str) -> bool:
     if name in _EXEMPT_NAMES:
+        return True
+    if name in _FILE_EXEMPTIONS.get(rel, {}):
         return True
     if name.startswith(_EXEMPT_PREFIXES):
         return True
