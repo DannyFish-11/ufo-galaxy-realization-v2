@@ -742,6 +742,19 @@ def _derive_trust_safety_gating_record(
     )
 
 
+def _switch_events_of(source_recovery_dict: Dict[str, Any]) -> List[Any]:
+    """快照里的主源切换事件。
+
+    :class:`SourceRecoverySnapshot` 的键是 ``recent_switch_events``；这里原先只认
+    ``primary_source_switch_events``，于是把真实快照传进来永远判「没有切换」。两个都认。
+    """
+    return list(
+        source_recovery_dict.get("primary_source_switch_events")
+        or source_recovery_dict.get("recent_switch_events")
+        or []
+    )
+
+
 def _derive_source_switch_record(
     *,
     source_recovery_dict: Dict[str, Any],
@@ -751,7 +764,7 @@ def _derive_source_switch_record(
 ) -> DecisionTraceRecord:
     """Derive a ``source_switch`` :class:`DecisionTraceRecord` from a
     :class:`~core.multimodal.source_recovery_policy.SourceRecoverySnapshot` dict."""
-    switch_events = source_recovery_dict.get("primary_source_switch_events") or []
+    switch_events = _switch_events_of(source_recovery_dict)
     if not switch_events:
         return DecisionTraceRecord(
             kind=DecisionKind.SOURCE_SWITCH.value,
@@ -764,9 +777,12 @@ def _derive_source_switch_record(
 
     last = switch_events[-1] if isinstance(switch_events[-1], dict) else {}
     modality = last.get("modality") or "unknown"
-    previous_id = last.get("previous_primary_id")
-    new_id = last.get("new_primary_id")
-    reason = last.get("switch_reason") or "re-election by source recovery policy"
+    # SourceRecoverySnapshot 的切换事件用的是 previous_source_id / new_source_id / reason；
+    # 旧名 previous_primary_id / new_primary_id / switch_reason 照认。此前只认旧名，
+    # 真实快照传进来永远取不到值。
+    previous_id = last.get("previous_primary_id") or last.get("previous_source_id")
+    new_id = last.get("new_primary_id") or last.get("new_source_id")
+    reason = last.get("switch_reason") or last.get("reason") or "re-election by source recovery policy"
 
     decision_summary = (
         f"primary {modality} source switched"
@@ -1007,8 +1023,7 @@ def record_source_switch_event(
     on failure.
     """
     try:
-        switch_events = source_recovery_dict.get("primary_source_switch_events") or []
-        if not switch_events:
+        if not _switch_events_of(source_recovery_dict):
             return None
 
         record = _derive_source_switch_record(

@@ -1120,6 +1120,16 @@ def _summarize_fallback_dimension(fallback_trace: Optional[Any]) -> AlignmentDim
 # ---------------------------------------------------------------------------
 
 
+def _count_projection_mismatch() -> None:
+    """投影与控制面对不上 → 计入选路控制环的 projection_mismatch_count（此前只列出、不计数）。"""
+    try:
+        from core.routing_observability import get_control_loop_metrics
+
+        get_control_loop_metrics().record_projection_mismatch()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("alignment_surface: mismatch count skipped: %s", exc)
+
+
 def build_execution_policy_alignment_surface(
     *,
     runtime_governance_snapshot: Optional[Any] = None,
@@ -1251,6 +1261,8 @@ def build_execution_policy_alignment_surface(
 
         # 7. Build hints
         alignment_hints = _build_hints(dimensions, posture, mismatches, resolved_domain)
+        if mismatches:
+            _count_projection_mismatch()
 
         return ExecutionPolicyAlignmentSummary(
             alignment_id=aid,

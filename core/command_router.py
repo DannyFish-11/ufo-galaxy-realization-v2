@@ -96,6 +96,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
+from core import dispatch_telemetry as _dispatch_telemetry
 from core import upper_ports
 from core.schemas.task_envelope import TaskEnvelope
 
@@ -1352,6 +1353,7 @@ class CommandRouter:
                 agent_capabilities=_meta.get("agent_capabilities"),
             )
             if not acl_result.allowed:
+                _dispatch_telemetry.on_route_rejected(envelope, "ACL_DENIED")
                 return {
                     "request_id": envelope.task_id,
                     "task_id": envelope.task_id,
@@ -1403,6 +1405,7 @@ class CommandRouter:
                     )
                 except Exception as _audit_exc:  # noqa: BLE001
                     logger.debug("route_envelope HITL audit emit skipped: %s", _audit_exc)
+                _dispatch_telemetry.on_route_rejected(envelope, "HITL_APPROVAL_REQUIRED")
                 return {
                     "success": False,
                     "result": None,
@@ -1570,6 +1573,7 @@ class CommandRouter:
                         _update["metadata"] = _merged_meta
                     envelope = envelope.model_copy(update=_update)
                 else:
+                    _dispatch_telemetry.on_route_rejected(envelope, "INVALID_ENVELOPE")
                     return {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
@@ -1803,6 +1807,7 @@ class CommandRouter:
                     "requires_webrtc=True but no device resolved task_id=%s",
                     envelope.task_id,
                 )
+                _dispatch_telemetry.on_route_rejected(envelope, "INVALID_ENVELOPE")
                 return {
                     "request_id": envelope.task_id,
                     "task_id": envelope.task_id,
@@ -1861,6 +1866,7 @@ class CommandRouter:
                             envelope.task_id,
                             _wrtc_ready_result.message,
                         )
+                        _dispatch_telemetry.on_route_rejected(envelope, "WEBRTC_TASK_INIT_FAILED")
                         return {
                             "request_id": envelope.task_id,
                             "task_id": envelope.task_id,
@@ -2083,6 +2089,9 @@ class CommandRouter:
                         )
                         _cap_confirmed_targets = _fallback_targets
                         _cap_unconfirmed_targets = _current_targets
+                        _dispatch_telemetry.on_fallback(
+                            envelope, "capability_mismatch", f"{_current_targets}→{_fallback_targets}"
+                        )
                         envelope = envelope.model_copy(update={"targets": _fallback_targets})
                         envelope = envelope.model_copy(
                             update={
@@ -2104,6 +2113,7 @@ class CommandRouter:
                             _cap_query_caps,
                         )
                         _cap_unconfirmed_targets = _current_targets
+                        _dispatch_telemetry.on_route_rejected(envelope, "capability_mismatch")
                         _t0_val = locals().get("_t0_val") or 0.0
                         return {
                             "request_id": envelope.task_id,
@@ -2144,6 +2154,7 @@ class CommandRouter:
                         _current_targets_for_empty,
                     )
                     _cap_unconfirmed_targets = _current_targets_for_empty
+                    _dispatch_telemetry.on_route_rejected(envelope, "capability_mismatch_no_executor")
                     return {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
@@ -2391,6 +2402,7 @@ class CommandRouter:
                     _constraint_chain_trace["v3_slot_gate_applied"] = True
                     _constraint_chain_trace["v3_blocked_targets"] = list(_v3_blocked_targets)
                     _v3_blocked_result["_constraint_chain_trace"] = dict(_constraint_chain_trace)
+                    _dispatch_telemetry.on_route_rejected(envelope, "V3_SLOT_BLOCKED")
                     return _v3_blocked_result
 
             except Exception as _v3_exc:
@@ -2410,6 +2422,7 @@ class CommandRouter:
                         "route_envelope [V3-slot-gate]: strict mode blocks dispatch on authority error: %s",
                         _v3_exc,
                     )
+                    _dispatch_telemetry.on_route_rejected(envelope, "V3_SLOT_BLOCKED")
                     return {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
@@ -2544,6 +2557,7 @@ class CommandRouter:
                 "route_envelope: ReplayFoundation route writes skipped: %s",
                 _replay_pre_exc,
             )
+        _dispatch_telemetry.on_dispatch_planned(envelope, _pre_dispatch_expl_str, _live_expl_builder)
 
         # ── PR-G: Emit dispatch decision event for observability sink ─────────
         # Emit before executing so the event is recorded even if dispatch fails.
@@ -2956,6 +2970,7 @@ class CommandRouter:
                 )
         except Exception as _lc_exc:
             logger.debug("Lifecycle terminal transition skipped: %s", _lc_exc)
+        _dispatch_telemetry.on_dispatch_finished(envelope, result)
 
         # ── PR-5 RemoteExecutionMode: propagate through result ───────────────
         if envelope.remote_execution_mode is not None:

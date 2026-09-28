@@ -250,13 +250,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 <!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->
 
-未接线公开能力 **630** 条，分布在 **314** 个文件。
+未接线公开能力 **599** 条，分布在 **306** 个文件。
 
 | 维度 | 数 |
 |---|---|
-| 类方法 / 模块函数 | 409 / 221 |
-| 只有测试在引用（写了、测了、没接） | 456 |
-| 全仓连测试都没引用 | 174 |
+| 类方法 / 模块函数 | 392 / 207 |
+| 只有测试在引用（写了、测了、没接） | 427 |
+| 全仓连测试都没引用 | 172 |
 | 所在模块本身从入口不可达 | 4 |
 
 ### 按名字表明的角色
@@ -267,9 +267,9 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 序列化/转换 | 19 | 14 | 5 |
 | 事件回调 | 10 | 5 | 5 |
 | 判定谓词 | 96 | 81 | 15 |
-| 只读查询 | 115 | 90 | 25 |
-| 计算/构造 | 91 | 81 | 10 |
-| 动作/变更 | 285 | 173 | 112 |
+| 只读查询 | 114 | 89 | 25 |
+| 计算/构造 | 86 | 77 | 9 |
+| 动作/变更 | 260 | 149 | 111 |
 
 ### 按用途
 
@@ -278,11 +278,11 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 节点服务里的方法 | 39 | 2 | 37 | 20 |
 | 安卓协作的契约、治理与对账层 | 83 | 76 | 7 | 40 |
 | 持久化、重启恢复与断点续跑 | 52 | 47 | 5 | 13 |
-| 指标、可观测与审计记录 | 48 | 45 | 3 | 21 |
-| 架构治理：权威声明、边界断言与自检 | 75 | 67 | 8 | 36 |
+| 指标、可观测与审计记录 | 21 | 20 | 1 | 14 |
+| 架构治理：权威声明、边界断言与自检 | 73 | 65 | 8 | 36 |
 | 多设备编组、协同网络与拓扑 | 47 | 36 | 11 | 24 |
 | 设备与节点：注册、发现、连接、通信、传输 | 77 | 38 | 39 | 38 |
-| 能力、模型与执行路由 | 63 | 46 | 17 | 33 |
+| 能力、模型与执行路由 | 61 | 44 | 17 | 32 |
 | 智能体、认知与记忆 | 63 | 39 | 24 | 40 |
 | 语音、桌面在场与感知 | 20 | 19 | 1 | 13 |
 | 配置、启动、安全、扩展与通用基础件 | 63 | 41 | 22 | 36 |
@@ -293,14 +293,14 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 | 去处 | 条数 | 意思 |
 |---|---|---|
-| 接上（`wire`） | 216 | 该有人调它：写明调用点（文件、第几行附近、在做什么的时候） |
-| 挂出来（`surface`） | 135 | 该有人读它：写明挂到哪个端点 / 面板 / 诊断输出 |
+| 接上（`wire`） | 186 | 该有人调它：写明调用点（文件、第几行附近、在做什么的时候） |
+| 挂出来（`surface`） | 134 | 该有人读它：写明挂到哪个端点 / 面板 / 诊断输出 |
 | 删掉（`delete`） | 101 | 已被别的实现取代或根本没有用途：写明被什么取代 |
 | 随对象走（`object`） | 91 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
 | 测试钩子（`testhook`） | 0 | 只为测试或断言存在（复位、注入、不变量断言），不该进生产路径 |
 | 框架回调（`framework`） | 0 | 由第三方框架按名字回调（zeroconf、asyncio），清单误报 |
 | 产品决定（`product`） | 4 | 接不接是功能取舍，不是技术问题：等所有者定 |
-| 合计 | 547 | |
+| 合计 | 516 | |
 
 按用途 × 去处：
 
@@ -308,16 +308,16 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 节点服务里的方法 | 21 | 15 | 0 | 3 | 0 | 0 | 0 | 39 |
 | 持久化、重启恢复与断点续跑 | 32 | 14 | 2 | 4 | 0 | 0 | 0 | 52 |
-| 指标、可观测与审计记录 | 26 | 15 | 3 | 4 | 0 | 0 | 0 | 48 |
-| 架构治理：权威声明、边界断言与自检 | 11 | 11 | 39 | 14 | 0 | 0 | 0 | 75 |
+| 指标、可观测与审计记录 | 0 | 14 | 3 | 4 | 0 | 0 | 0 | 21 |
+| 架构治理：权威声明、边界断言与自检 | 9 | 11 | 39 | 14 | 0 | 0 | 0 | 73 |
 | 多设备编组、协同网络与拓扑 | 29 | 5 | 1 | 10 | 0 | 0 | 2 | 47 |
 | 设备与节点：注册、发现、连接、通信、传输 | 33 | 13 | 21 | 9 | 0 | 0 | 1 | 77 |
-| 能力、模型与执行路由 | 13 | 26 | 9 | 14 | 0 | 0 | 1 | 63 |
+| 能力、模型与执行路由 | 11 | 26 | 9 | 14 | 0 | 0 | 1 | 61 |
 | 智能体、认知与记忆 | 20 | 15 | 7 | 21 | 0 | 0 | 0 | 63 |
 | 语音、桌面在场与感知 | 5 | 10 | 1 | 4 | 0 | 0 | 0 | 20 |
 | 配置、启动、安全、扩展与通用基础件 | 26 | 11 | 18 | 8 | 0 | 0 | 0 | 63 |
 
-<details><summary>接上（wire）— 216 条</summary>
+<details><summary>接上（wire）— 186 条</summary>
 
 - `core/acl.py`
   - `AntiCorruptionLayer.validate_mcp_call`：core/mcp_gateway.py 执行 LLM 发起的工具调用前（它已用 acl 校验 MCP 注册，调用这一半没接）
@@ -333,10 +333,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `core/aip_transport.py`
   - `AIPTransport.unregister_adapter`：galaxy_gateway/bootstrap/lifecycle.py 关停阶段对称地卸下注册过的适配器
   - `AIPTransport.probe_best_transport`：AIPTransport 发送选路处（同文件 send 路径）在首选链路失败时先探测再切换；目前切换只靠静态优先级
-- `core/audit_event_semantics.py`
-  - `audit_route_decision`：core/command_router.py 的 CommandRouter.route_envelope 选定目标之后（与第 2562 行 emit_dispatch_decision_event 同处）；同文件的 audit_fallback_triggered / audit_retry_triggered 已在第 4056 / 4289 行这样接着
-  - `audit_policy_decision`：core/runtime/execution_target_policy_engine.py 的 apply_failure_handling_policy / apply_degraded_readiness_policy 得出结论处（这两处本身也还没接，见「接上」里的 execution_target_policy_engine；接上时一起记审计）
-  - `audit_failure_domain`：core/failure_domains.py 给失败定域的地方（command_router 捕获派发失败、归类 failure domain 之后）
 - `core/capability_assimilation.py`
   - `CapabilityAssimilationLayer.mark_stale_if_expired`：与 NodeFabricRegistry.mark_offline_if_stale 放进同一个周期清扫（launcher/node_startup.py）
 - `core/capability_bus.py`
@@ -375,15 +371,10 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `SecurityInterceptor.check_and_intercept`：工具真正执行之前（openclawd ReAct 循环调工具处）。PUT /api/v1/security/policy 改的那张零信任规则表，唯一的读者就是它，而它在生产里没人调 —— 现在改那张表对任何执行都不起作用，只有 /evaluate 端点会回显
 - `core/control_plane/smart_scheduler.py`
   - `DeviceScoringEngine.rank_devices`：galaxy_gateway/wake_router.py 选唤醒设备处要全排名（现在只取最佳）；或诊断里展示排名
-- `core/critical_path_harness.py`
-  - `record_ingress_path`：openclawd 多模态入口处（它已在同一模块调 record_provider_switch / record_route_selection）
-  - `record_execution_dispatch`：openclawd 执行派发处（openclawd 已在同一模块调 record_provider_switch / record_route_selection）
 - `core/cross_device_sync.py`
   - `push_task_state_to_device`：安卓相关（推任务状态到手机），先放着；非安卓参与方要这个能力时，放在 core/participant_admission.py 的任务状态更新处
 - `core/dag_evolver.py`
   - `DAGEvolver.on_missing_capability`：core/constellation_runtime.py 执行 DAG 时遇到能力缺口的分支（它已持有 DAGEvolver）
-- `core/decision_timeline.py`
-  - `record_source_switch_event`：core/desktop_presence_runtime.py 感知源切换处（该文件第 2742 行已在往 decision_timeline 记别的事件）
 - `core/delegated_flow_decision_history.py`
   - `record_delegated_flow_event`：安卓委托流状态变化处（安卓相关，按你的意思先放着）
 - `core/delegated_flow_persistence.py`
@@ -407,10 +398,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `DeviceOrchestrator.register_device_in_pool`：core/udm_registration_hook.py 设备注册处同步进 DevicePoolManager（否则池里只有 command_router 自己放进去的设备）
 - `core/error_framework.py`
   - `ErrorTracker.is_error_spike`：core/health_integration.py（已持有 ErrorTracker）健康判定里加错误峰值
-- `core/execution_observability/normalizers.py`
-  - `normalize_task_envelope`：core/command_router.py route_envelope 收到信封时产出执行事件（现在执行事件只有部分来源）
-  - `normalize_task_graph_result`：core/task_graph_runtime.py 任务图跑完处
-  - `normalize_arbiter_attempt`：core/orchestration/global_arbiter.py 仲裁记一次尝试处
 - `core/failure_domains.py`
   - `map_to_pr_b_domain`：core/schemas/execution_failure.py 生成失败记录时归到 PR-B 规范词表（两套词表现在各说各的）
 - `core/feedback_loop.py`
@@ -432,8 +419,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `save_hybrid_execution`：core/hybrid_executor.py 每次 registry.transition 之后（第 521 行起共 8 处），或直接放进 HybridOrchestrationContinuityRegistry.transition 里：现在状态只在内存里变，从不落盘，重启恢复第 4 步读到的永远是空
 - `core/interaction/pending_decision_registry.py`
   - `PendingDecisionRegistry.sweep_expired`：待决项的周期清扫（与 truth_chain_recovery 同类后台任务）；现在超时的待决项只在被读到时才发现
-- `core/log_redaction.py`
-  - `redact_secret`：core/routes/config.py 与 core/config_service.py 记日志涉及密钥值的地方（同模块别的函数已被节点用上）
 - `core/mcp_addon_contract.py`
   - `build_mcp_addon_contract_summary`：core/github_installer.py 安装 MCP 插件后记日志 / 审计
 - `core/mcp_gateway.py`
@@ -477,20 +462,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `NodeFabricRegistry.expire_stale_capabilities`：launcher/node_startup.py 的周期清扫里，与 mark_offline_if_stale 一起跑
 - `core/openclawd_memory_backflow.py`
   - `store_result_envelope`：openclawd / desktop_presence_runtime 目前用 store_task_result；拿到 ResultEnvelope 的地方（结果真相链收口处）改用规范入口
-- `core/operational_slo_metrics.py`
-  - `OperationalSLOMetrics.record_dispatch_attempt`：core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）
-  - `OperationalSLOMetrics.record_dispatch_success`：core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）；派发结果成功时
-  - `OperationalSLOMetrics.record_dispatch_failure`：core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）；派发结果失败时
-  - `OperationalSLOMetrics.record_route_rejection`：core/command_router.py 第 2099 / 2139 行「capability-mismatch/reject」分支
-  - `OperationalSLOMetrics.record_fallback_triggered`：core/command_router.py 第 2077 行「capability-mismatch/fallback」分支与第 4056 行 audit_fallback_triggered 同处
-  - `OperationalSLOMetrics.record_recovery_attempt`：core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时
-  - `OperationalSLOMetrics.record_recovery_resumed`：core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；处置为 RESUMABLE 并续上时
-  - `OperationalSLOMetrics.record_recovery_replayed`：core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；处置为 REPLAY_ONLY 时
-  - `OperationalSLOMetrics.record_recovery_reissued`：core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；重新派发时
-  - `OperationalSLOMetrics.record_recovery_failed`：core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；恢复失败 / 放弃时
-  - `OperationalSLOMetrics.record_startup_recovery_scan`：core/runtime_restart_recovery.py run_startup_recovery 得出报告后（报告里已有扫描数与动作数）
-  - `OperationalSLOMetrics.record_audit_persist_success`：core/replay_audit_persistence.py ReplayAuditStore.append 返回 True 时
-  - `OperationalSLOMetrics.record_audit_persist_failure`：core/replay_audit_persistence.py ReplayAuditStore.append 返回 True 时；返回 False / 抛错时
 - `core/orchestration/global_arbiter.py`
   - `GlobalArbiter.suggest_device`：core/request_admission.py（已持有仲裁器）请求未指定设备时给建议
 - `core/outward_truth_source_registry.py`
@@ -509,16 +480,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `AsyncTaskQueue.force_stop`：进程关停时（launcher 关停阶段）在排空超时后强停
 - `core/react_progress.py`
   - `ToolOutcome.retriable`：openclawd ReAct 循环判断是否原样重试工具处
-- `core/resilience/metrics.py`
-  - `ResilienceMetrics.record_circuit_open`：core/resilience/circuit_breaker.py 第 214 / 245 行状态切到 OPEN 时
-- `core/routing_explanation/live_decision.py`
-  - `LiveRoutingDecisionBuilder.record_policy_band`：core/command_router.py 里用 LiveRoutingDecisionBuilder 组装选路解释的地方（已在用这个类），把当时的执行策略档一并记上
-- `core/routing_observability.py`
-  - `ControlLoopMetrics.record_projection_mismatch`：core/routes/projection.py 投影与控制面对账不一致处（现只统计不记数）
-  - `build_fallback_decision_event`：core/openclawd.py 第 1992 行 record_routing_decision 同处，决策是回退时
-- `core/runtime/execution_target_policy_engine.py`
-  - `apply_failure_handling_policy`：command_router 派发失败分支
-  - `apply_degraded_readiness_policy`：core/command_router.py 第 2749 行已调 apply_target_selection_policy，就绪度降级时再过这一条
 - `core/safe_executor.py`
   - `SafeExecutor.as_tool_definition`：把安全执行器作为工具登记进 LLM 工具列表（core/routes/config_schema_registry.py 已引用 SafeExecutor）
 - `core/security_policy_loader.py`
@@ -568,8 +529,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `DeviceRouter.aggregate_results`：多设备任务收口处：galaxy_gateway/orchestrator/parallel_tracker.py finalize 之后汇总
 - `galaxy_gateway/gateway_nats_adapter.py`
   - `GatewayNATSAdapter.resolve_task`：本适配器订阅 galaxy.task.result 的回调里按 task_id 解开等待中的 future
-- `galaxy_gateway/observability.py`
-  - `TraceContext.child_span`：galaxy_gateway/device_router.py 一个任务扇出到多台设备时给每路一个子 span（该文件已在用 TraceContext）
 - `galaxy_gateway/orchestrator/parallel_tracker.py`
   - `ParallelGroupTracker.finalize_if_complete`：record_parallel_fields 记录每个子结果之后调用
   - `ParallelGroupTracker.expire_timeouts`：网关周期任务（galaxy_gateway/bootstrap/lifecycle.py）定时清扫超时并行组
@@ -608,7 +567,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>挂出来（surface）— 135 条</summary>
+<details><summary>挂出来（surface）— 134 条</summary>
 
 - `core/adapters/ble_adapter.py`
   - `BLEAdapter.list_connected`：传输诊断：与 AIPTransport.transport_stats 一起进 core/routes/diagnostics.py（BLEAdapter 已在 galaxy_gateway/bootstrap/lifecycle.py 第 500 行注册）
@@ -732,8 +691,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `admission_snapshot`：docstring：供诊断接口取用 —— core/routes/diagnostics.py
 - `core/resilience/metrics.py`
   - `ResilienceMetrics.rejection_rate_per_minute`：core/routes/resilience.py（该路由已读同一个指标对象）
-- `core/routing_observability.py`
-  - `build_routing_analytics_snapshot`：core/routes/observability.py /api/v1/observability/model-route 一并返回
 - `core/runtime/runtime_observability_sink.py` — `RuntimeObservabilitySink.list_device_lifecycle_events`、`RuntimeObservabilitySink.list_mesh_session_transition_events`、`RuntimeObservabilitySink.list_dispatch_decision_events`、`RuntimeObservabilitySink.list_recovery_decision_events`、`RuntimeObservabilitySink.counters`：core/routes/observability.py 加只读端点：事件由安卓桥、Mesh、命令路由、参与方接入写入，现在只有 build_observability_snapshot 汇总读得到明细
 - `core/runtime_closure_audit.py`
   - `run_closure_audit`：core/api_routes.py 已 import 本模块（只取了哨兵常量）；做成诊断端点，或 scripts/ 下的离线审计
@@ -1023,8 +980,8 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 | 子系统 | 条数 | 文件数 |
 |---|---|---|
-| `core/（其余单文件）` | 217 | 115 |
-| `galaxy_gateway/` | 44 | 23 |
+| `core/（其余单文件）` | 194 | 110 |
+| `galaxy_gateway/` | 43 | 22 |
 | `core/capability_*` | 22 | 8 |
 | `core/android_*` | 20 | 13 |
 | `core/delegated_*` | 20 | 5 |
@@ -1043,15 +1000,15 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | `core/v2_*` | 8 | 2 |
 | `core/control_plane/` | 7 | 5 |
 | `core/cross_*` | 7 | 3 |
-| `core/execution_observability/` | 7 | 4 |
-| `core/runtime/` | 7 | 2 |
 | `core/continuation_*` | 6 | 1 |
 | `core/desktop_*` | 6 | 2 |
 | `core/flow_*` | 6 | 1 |
 | `core/orchestration/` | 6 | 5 |
 | `core/truth_*` | 6 | 3 |
 | `core/governance/` | 5 | 2 |
+| `core/runtime/` | 5 | 1 |
 | `core/runtime_*` | 5 | 3 |
+| `core/execution_observability/` | 4 | 4 |
 | `nodes/Node_70_AutonomousLearning/` | 4 | 1 |
 | `core/adapters/` | 3 | 3 |
 | `core/continuum/` | 3 | 2 |
@@ -1067,7 +1024,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | `core/capability_runtime/` | 2 | 2 |
 | `core/cross_device_policy/` | 2 | 1 |
 | `core/perception/` | 2 | 1 |
-| `core/resilience/` | 2 | 1 |
 | `nodes/Node_05_Auth/` | 2 | 1 |
 | `nodes/Node_109_ProactiveSensing/` | 2 | 1 |
 | `nodes/Node_54_SymbolicMath/` | 2 | 1 |
@@ -1082,7 +1038,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | `core/persona/` | 1 | 1 |
 | `core/queueing/` | 1 | 1 |
 | `core/reliability_contract/` | 1 | 1 |
-| `core/routing_explanation/` | 1 | 1 |
+| `core/resilience/` | 1 | 1 |
 | `nodes/Node_106_GitHubFlow/` | 1 | 1 |
 | `nodes/Node_108_MetaCognition/` | 1 | 1 |
 | `nodes/Node_14_FFmpeg/` | 1 | 1 |
@@ -1365,19 +1321,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>指标、可观测与审计记录 — 48 条</summary>
+<details><summary>指标、可观测与审计记录 — 21 条</summary>
 
-- `core/audit_event_semantics.py`
-  - `audit_route_decision` T — Emit a ROUTE_DECISION audit record.
-  - `audit_policy_decision` T — Emit a POLICY_DECISION audit record.
-  - `audit_failure_domain` T — Emit a FAILURE_DOMAIN_IDENTIFIED audit record.
 - `core/control_plane/audit_ledger.py`
   - `AuditLedger.verify_chain` T — 校验哈希链完整性。返回 ``{"intact": bool, "count": int, "broken_at": int\|None}``。
   - `AuditLedger.to_dag` T — Return the full ledger as a DAG adjacency list.
 - `core/decision_diff_telemetry.py`
   - `record_candidate_diff` T — Record a cross-device candidate selection legacy-vs-canonical diff.
-- `core/decision_timeline.py`
-  - `record_source_switch_event` T — Convenience builder: derive and record a ``source_switch`` event from a
 - `core/device_activation_registry.py`
   - `DeviceActivationRegistry.export_json` — — Export recent records as JSON-serializable dicts.
 - `core/execution_observability/event_schema.py`
@@ -1386,27 +1336,8 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `ExecutorLevel.from_win_exec_level` T — Convert a ``WinExecLevel`` enum value (or its string repr).
 - `core/execution_observability/normalizers.py`
   - `normalize_e2e_context` T — Build an :class:`ExecutionEvent` from a ``core/e2e_orchestrator.py``
-  - `normalize_task_envelope` T — Build an :class:`ExecutionEvent` from a ``TaskEnvelope`` or similar
-  - `normalize_task_graph_result` T — Build an :class:`ExecutionEvent` from a ``TaskGraph.run()`` result dict.
-  - `normalize_arbiter_attempt` T — Build an :class:`ExecutionEvent` from a ``WinExecAttempt`` (arbiter log).
 - `core/execution_observability/trace_schema.py`
   - `TraceCorrelation.from_task_graph` T — Normalise from a :class:`~core.task_graph.TaskGraph` instance.
-- `core/log_redaction.py`
-  - `redact_secret` — — 把一个**已知是密钥**的值脱敏。
-- `core/operational_slo_metrics.py`
-  - `OperationalSLOMetrics.record_dispatch_attempt` T — Record one task dispatch attempt.
-  - `OperationalSLOMetrics.record_dispatch_success` T — Record a successful task dispatch outcome.
-  - `OperationalSLOMetrics.record_dispatch_failure` T — Record a failed task dispatch outcome.
-  - `OperationalSLOMetrics.record_route_rejection` T — Record one route rejection with its reason.
-  - `OperationalSLOMetrics.record_fallback_triggered` T — Record one fallback trigger.
-  - `OperationalSLOMetrics.record_recovery_attempt` T — Record one recovery attempt (regardless of outcome).
-  - `OperationalSLOMetrics.record_recovery_resumed` T — Record one recovery that resulted in a resumed execution.
-  - `OperationalSLOMetrics.record_recovery_replayed` T — Record one recovery that resulted in a replayed execution.
-  - `OperationalSLOMetrics.record_recovery_reissued` T — Record one recovery that resulted in a reissued dispatch.
-  - `OperationalSLOMetrics.record_recovery_failed` T — Record one recovery attempt that failed.
-  - `OperationalSLOMetrics.record_startup_recovery_scan` T — Record the outcome of a startup recovery scan.
-  - `OperationalSLOMetrics.record_audit_persist_success` T — Record one successful durable audit record write.
-  - `OperationalSLOMetrics.record_audit_persist_failure` T — Record one failed durable audit record write.
 - `core/operator_execution_observability_surface.py`
   - `OperatorExecutionEvidenceEntry.requires_operator_attention` T — True iff operator intervention or review is indicated.
 - `core/orchestration_review_surface.py`
@@ -1416,14 +1347,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `drift_summary` T — 给就绪/诊断面用的摘要。
   - `has_unrecognized_drift` T — 是否见过**不认识的取值**(契约已分叉的信号)。
 - `core/resilience/metrics.py`
-  - `ResilienceMetrics.record_circuit_open` T — 无说明
   - `ResilienceMetrics.rejection_rate_per_minute` T — Rejections in the last 60 s (rolling window).
-- `core/routing_explanation/live_decision.py`
-  - `LiveRoutingDecisionBuilder.record_policy_band` — — Record the execution-policy band active at dispatch time.
-- `core/routing_observability.py`
-  - `ControlLoopMetrics.record_projection_mismatch` T — Increment the projection/control mismatch counter.
-  - `build_fallback_decision_event` T — Build a :class:`FallbackDecisionEvent` from a :class:`RoutingDecisionEvent`.
-  - `build_routing_analytics_snapshot` T — Build a :class:`RoutingAnalyticsSnapshot` from the current global metrics.
 - `core/runtime/runtime_observability_sink.py`
   - `RuntimeObservabilitySink.list_device_lifecycle_events` T — Return a copy of the current device lifecycle event buffer.
   - `RuntimeObservabilitySink.list_mesh_session_transition_events` T — Return a copy of the current mesh session transition event buffer.
@@ -1434,12 +1358,10 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `SLOMetrics.startup_duration_ms` T — Startup duration in milliseconds, or ``None`` if not yet recorded.
 - `core/task_cost_ledger.py`
   - `current_task_bill` T — 无说明
-- `galaxy_gateway/observability.py`
-  - `TraceContext.child_span` T — Return a new TraceContext with the same trace_id and a fresh span_id.
 
 </details>
 
-<details><summary>架构治理：权威声明、边界断言与自检 — 75 条</summary>
+<details><summary>架构治理：权威声明、边界断言与自检 — 73 条</summary>
 
 - `core/acl.py`
   - `AntiCorruptionLayer.validate_mcp_call` — — Validate MCP tool call request from LLM.
@@ -1455,8 +1377,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `core/compat_legacy_path_blocking_canonicalization.py`
   - `CompatLegacyBlockingRecord.is_quarantined` T — Return True when this record represents a quarantine decision.
 - `core/critical_path_harness.py`
-  - `record_ingress_path` T — Record a multimodal ingress event in the harness ring buffer.
-  - `record_execution_dispatch` T — Record an execution dispatch event in the harness ring buffer.
   - `snapshot_critical_path` T — Return a plain-dictionary snapshot of the critical path harness.
 - `core/cross_device_dispatch_boundary.py`
   - `classify_dispatch_call` T — Classify a cross-device dispatch call into one of the four boundary
@@ -1751,7 +1671,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>能力、模型与执行路由 — 63 条</summary>
+<details><summary>能力、模型与执行路由 — 61 条</summary>
 
 - `core/agent/intent_router.py`
   - `IntentResult.is_execution` T — 是否需要进入执行链路（task_execute 或 hybrid）。
@@ -1842,9 +1762,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `is_native_active` T — 无说明
 - `core/remote_execution_mode_resolver.py`
   - `ModeResolutionResult.as_remote_execution_mode` T — Return the resolved mode as a :class:`RemoteExecutionMode` enum.
-- `core/runtime/execution_target_policy_engine.py`
-  - `apply_failure_handling_policy` T — Apply the failure handling policy and return a
-  - `apply_degraded_readiness_policy` T — Apply the degraded-readiness policy and return a
 - `core/unified/capability_resolver.py`
   - `CapabilityResolver.resolve_by_tag` T — Return validated contracts whose tags include *tag*.
 - `core/unified/llm_router.py`

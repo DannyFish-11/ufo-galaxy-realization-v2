@@ -782,12 +782,23 @@ class SourceRecoveryPolicy:
                 new_id = self.reelect_primary_video(registry, PrimarySourceSwitchReason.NO_PRIMARY)
                 video_reelected = new_id is not None
 
+        if audio_reelected or video_reelected:
+            self._record_switch_in_timeline(registry)
         return {
             "evicted": evicted,
             "audio_reelected": audio_reelected,
             "video_reelected": video_reelected,
             "flap_smoothed_ids": flap_smoothed_ids,
         }
+
+    def _record_switch_in_timeline(self, registry: Any) -> None:
+        """主源真的换了 → 决策时间线记一条 source_switch（操作员回放能看到为什么换）。"""
+        try:
+            from core.decision_timeline import record_source_switch_event
+
+            record_source_switch_event(source_recovery_dict=self.snapshot(registry).to_dict())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("source recovery: timeline record skipped: %s", exc)
 
     # ------------------------------------------------------------------
     # Snapshot

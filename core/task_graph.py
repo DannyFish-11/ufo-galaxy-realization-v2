@@ -853,7 +853,30 @@ class TaskGraph:
             result.elapsed_ms,
             self.trace_id,
         )
+        self._record_execution_event(result)
         return result
+
+    def _record_execution_event(self, result: "GraphExecutionResult") -> None:
+        """任务图跑完 → 一条统一执行事件（进 /api/v1/observability/execution/recent-events）。"""
+        try:
+            from core.execution_observability.event_log import record_execution_event
+            from core.execution_observability.normalizers import normalize_task_graph_result
+
+            failed = [nid for nid, st in result.node_statuses.items() if st == NodeStatus.FAILED.value]
+            summary = {
+                "success": result.success,
+                "failed": failed,
+                "trace_id": self.trace_id,
+                "graph_id": self.graph_id,
+                "runtime_session_id": self.runtime_session_id,
+                "elapsed_ms": result.elapsed_ms,
+            }
+            record_execution_event(
+                normalize_task_graph_result(summary, graph=self, message=f"graph {self.graph_id} finished"),
+                origin="task_graph",
+            )
+        except Exception as exc:  # noqa: BLE001 — 记账不拖垮任务图
+            logger.debug("TaskGraph '%s' | execution event skipped: %s", self.graph_id, exc)
 
     # ------------------------------------------------------------------
     # PR-12: Policy enforcement helpers

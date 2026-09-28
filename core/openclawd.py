@@ -4491,9 +4491,16 @@ class OpenClawd:
         # not only through ContinuumState / TopologyRoutePlan projections.
         # Per HARNESS_NON_BLOCKING_POLICY, this block never aborts the primary path.
         try:
+            from core.critical_path_harness import record_ingress_path as _harness_record_ingress
             from core.critical_path_harness import record_provider_switch as _harness_record_switch
             from core.critical_path_harness import record_route_selection as _harness_record_route
 
+            _harness_record_ingress(
+                trace_id=trace_id or "",
+                active_modalities=list(_multimodal_route.get("active_modalities") or []),
+                requires_native_multimodal=bool((_canonical_perception or {}).get("requires_native_multimodal")),
+                source="OpenClawd._resolve_multimodal_ingress_decision",
+            )
             _harness_record_route(
                 trace_id=trace_id or "",
                 route_type=_multimodal_route.get("route_type", ""),

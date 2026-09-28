@@ -1735,6 +1735,9 @@ def run_startup_recovery(
         task_lifecycle_store=task_lifecycle_store,
     )
     report = coordinator.run_recovery()
+    from core.recovery_telemetry import record_recovery_outcome
+
+    record_recovery_outcome(report)
     if not _explicit:
         _startup_recovery_report = report
     return report

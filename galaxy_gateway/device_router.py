@@ -1904,7 +1904,15 @@ class DeviceRouter:
             _limit = int(os.environ.get("GALAXY_MULTI_DEVICE_DISPATCH_LIMIT", "8"))
             _dispatch_sem = asyncio.Semaphore(max(1, _limit))
 
+            # 每一路子任务一个子 span：同一个 trace_id、各自的 span_id，网关日志里能分清是哪一路。
+            _parent_trace = TraceContext.from_message(task)
+
             async def _bounded_dispatch(subtask: Dict, device: "Device") -> Dict:
+                _child = _parent_trace.child_span()
+                subtask.setdefault("trace_id", _child.trace_id)
+                subtask["span_id"] = _child.span_id
+                subtask["parent_span_id"] = _parent_trace.span_id
+                emit_gateway_log("subtask_dispatch", trace_ctx=_child, device_id=getattr(device, "device_id", ""))
                 async with _dispatch_sem:
                     return await self.dispatch_task(subtask, device)
 

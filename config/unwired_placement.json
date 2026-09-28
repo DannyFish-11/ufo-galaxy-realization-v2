@@ -87,20 +87,6 @@
     "galaxy_gateway/bootstrap/lifecycle.py 关停阶段对称地卸下注册过的适配器"
    ]
   },
-  "core/audit_event_semantics.py": {
-   "audit_failure_domain": [
-    "wire",
-    "core/failure_domains.py 给失败定域的地方（command_router 捕获派发失败、归类 failure domain 之后）"
-   ],
-   "audit_policy_decision": [
-    "wire",
-    "core/runtime/execution_target_policy_engine.py 的 apply_failure_handling_policy / apply_degraded_readiness_policy 得出结论处（这两处本身也还没接，见「接上」里的 execution_target_policy_engine；接上时一起记审计）"
-   ],
-   "audit_route_decision": [
-    "wire",
-    "core/command_router.py 的 CommandRouter.route_envelope 选定目标之后（与第 2562 行 emit_dispatch_decision_event 同处）；同文件的 audit_fallback_triggered / audit_retry_triggered 已在第 4056 / 4289 行这样接着"
-   ]
-  },
   "core/cache.py": {
    "*": [
     "delete",
@@ -502,14 +488,6 @@
    ]
   },
   "core/critical_path_harness.py": {
-   "record_execution_dispatch": [
-    "wire",
-    "openclawd 执行派发处（openclawd 已在同一模块调 record_provider_switch / record_route_selection）"
-   ],
-   "record_ingress_path": [
-    "wire",
-    "openclawd 多模态入口处（它已在同一模块调 record_provider_switch / record_route_selection）"
-   ],
    "snapshot_critical_path": [
     "surface",
     "core/routes/diagnostics.py 关键路径快照"
@@ -543,12 +521,6 @@
    "record_candidate_diff": [
     "delete",
     "迁移期的新旧选路差异遥测（模块自标 legacy）。唯一还在用的是 entrypoint_router 的 record_entry_mode_diff；跨设备候选选择已只剩新路径，没有「旧的」可比"
-   ]
-  },
-  "core/decision_timeline.py": {
-   "record_source_switch_event": [
-    "wire",
-    "core/desktop_presence_runtime.py 感知源切换处（该文件第 2742 行已在往 decision_timeline 记别的事件）"
    ]
   },
   "core/degraded_operation_envelope.py": {
@@ -788,21 +760,9 @@
    ]
   },
   "core/execution_observability/normalizers.py": {
-   "normalize_arbiter_attempt": [
-    "wire",
-    "core/orchestration/global_arbiter.py 仲裁记一次尝试处"
-   ],
    "normalize_e2e_context": [
     "delete",
     "产出源是 core/e2e_orchestrator.process_user_input，它本身无人调用、判为该删（见「删掉」）；e2e_orchestrator 里真正被用的只有 process_wake_event"
-   ],
-   "normalize_task_envelope": [
-    "wire",
-    "core/command_router.py route_envelope 收到信封时产出执行事件（现在执行事件只有部分来源）"
-   ],
-   "normalize_task_graph_result": [
-    "wire",
-    "core/task_graph_runtime.py 任务图跑完处"
    ]
   },
   "core/execution_observability/trace_schema.py": {
@@ -987,12 +947,6 @@
    "LocalBrainManager.switch_brain": [
     "surface",
     "core/routes/models.py 加「切换本地主脑模型」（面板模型页）"
-   ]
-  },
-  "core/log_redaction.py": {
-   "redact_secret": [
-    "wire",
-    "core/routes/config.py 与 core/config_service.py 记日志涉及密钥值的地方（同模块别的函数已被节点用上）"
    ]
   },
   "core/mainline_convergence.py": {
@@ -1333,60 +1287,6 @@
     "openclawd / desktop_presence_runtime 目前用 store_task_result；拿到 ResultEnvelope 的地方（结果真相链收口处）改用规范入口"
    ]
   },
-  "core/operational_slo_metrics.py": {
-   "OperationalSLOMetrics.record_audit_persist_failure": [
-    "wire",
-    "core/replay_audit_persistence.py ReplayAuditStore.append 返回 True 时；返回 False / 抛错时"
-   ],
-   "OperationalSLOMetrics.record_audit_persist_success": [
-    "wire",
-    "core/replay_audit_persistence.py ReplayAuditStore.append 返回 True 时"
-   ],
-   "OperationalSLOMetrics.record_dispatch_attempt": [
-    "wire",
-    "core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）"
-   ],
-   "OperationalSLOMetrics.record_dispatch_failure": [
-    "wire",
-    "core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）；派发结果失败时"
-   ],
-   "OperationalSLOMetrics.record_dispatch_success": [
-    "wire",
-    "core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）；派发结果成功时"
-   ],
-   "OperationalSLOMetrics.record_fallback_triggered": [
-    "wire",
-    "core/command_router.py 第 2077 行「capability-mismatch/fallback」分支与第 4056 行 audit_fallback_triggered 同处"
-   ],
-   "OperationalSLOMetrics.record_recovery_attempt": [
-    "wire",
-    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时"
-   ],
-   "OperationalSLOMetrics.record_recovery_failed": [
-    "wire",
-    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；恢复失败 / 放弃时"
-   ],
-   "OperationalSLOMetrics.record_recovery_reissued": [
-    "wire",
-    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；重新派发时"
-   ],
-   "OperationalSLOMetrics.record_recovery_replayed": [
-    "wire",
-    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；处置为 REPLAY_ONLY 时"
-   ],
-   "OperationalSLOMetrics.record_recovery_resumed": [
-    "wire",
-    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；处置为 RESUMABLE 并续上时"
-   ],
-   "OperationalSLOMetrics.record_route_rejection": [
-    "wire",
-    "core/command_router.py 第 2099 / 2139 行「capability-mismatch/reject」分支"
-   ],
-   "OperationalSLOMetrics.record_startup_recovery_scan": [
-    "wire",
-    "core/runtime_restart_recovery.py run_startup_recovery 得出报告后（报告里已有扫描数与动作数）"
-   ]
-  },
   "core/operator_execution_observability_surface.py": {
    "*": [
     "object",
@@ -1564,43 +1464,9 @@
    ]
   },
   "core/resilience/metrics.py": {
-   "ResilienceMetrics.record_circuit_open": [
-    "wire",
-    "core/resilience/circuit_breaker.py 第 214 / 245 行状态切到 OPEN 时"
-   ],
    "ResilienceMetrics.rejection_rate_per_minute": [
     "surface",
     "core/routes/resilience.py（该路由已读同一个指标对象）"
-   ]
-  },
-  "core/routing_explanation/live_decision.py": {
-   "LiveRoutingDecisionBuilder.record_policy_band": [
-    "wire",
-    "core/command_router.py 里用 LiveRoutingDecisionBuilder 组装选路解释的地方（已在用这个类），把当时的执行策略档一并记上"
-   ]
-  },
-  "core/routing_observability.py": {
-   "ControlLoopMetrics.record_projection_mismatch": [
-    "wire",
-    "core/routes/projection.py 投影与控制面对账不一致处（现只统计不记数）"
-   ],
-   "build_fallback_decision_event": [
-    "wire",
-    "core/openclawd.py 第 1992 行 record_routing_decision 同处，决策是回退时"
-   ],
-   "build_routing_analytics_snapshot": [
-    "surface",
-    "core/routes/observability.py /api/v1/observability/model-route 一并返回"
-   ]
-  },
-  "core/runtime/execution_target_policy_engine.py": {
-   "apply_degraded_readiness_policy": [
-    "wire",
-    "core/command_router.py 第 2749 行已调 apply_target_selection_policy，就绪度降级时再过这一条"
-   ],
-   "apply_failure_handling_policy": [
-    "wire",
-    "command_router 派发失败分支"
    ]
   },
   "core/runtime/runtime_observability_sink.py": {
@@ -2003,12 +1869,6 @@
    "*": [
     "delete",
     "整个模块零导入；文件传输走 galaxy_gateway/android/handlers/file_transfer.py"
-   ]
-  },
-  "galaxy_gateway/observability.py": {
-   "TraceContext.child_span": [
-    "wire",
-    "galaxy_gateway/device_router.py 一个任务扇出到多台设备时给每路一个子 span（该文件已在用 TraceContext）"
    ]
   },
   "galaxy_gateway/orchestrator/parallel_tracker.py": {

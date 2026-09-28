@@ -297,7 +297,11 @@ class UnifiedConfig:
         if save:
             self.save()
 
-        logger.debug(f"设置配置: {key} = {'***' if 'key' in key.lower() or 'token' in key.lower() else value}")
+        from core.log_redaction import redact_secret
+
+        # 原先只看键名里有没有 key/token，secret / password 一类会原样进日志。
+        _secretish = any(w in key.lower() for w in ("key", "token", "secret", "password", "passwd"))
+        logger.debug("设置配置: %s = %s", key, redact_secret(value) if _secretish else value)
 
     def _trigger_callbacks(self, key: str, old_value: Any, new_value: Any):
         """触发配置变更回调"""

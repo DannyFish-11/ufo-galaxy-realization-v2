@@ -97,6 +97,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             # 构建 fallback 列表：把非 primary 的、可用的 provider 标为 fallback
             fallbacks = [p for p in providers if not p.get("is_primary", False) and p.get("available", False)]
+            from core.routing_observability import build_routing_analytics_snapshot, recent_fallback_decisions
 
             return JSONResponse(
                 {
@@ -106,6 +107,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "fallbacks": fallbacks,
                     "router_stats": status,
                     "uptime_seconds": round(_time.time() - _startup_time, 1),
+                    # OpenClawd 每次多模态选路的累计分布，以及最近几次真实发生的回退明细
+                    "routing_analytics": build_routing_analytics_snapshot().to_dict(),
+                    "recent_fallbacks": recent_fallback_decisions(20),
                 }
             )
         except Exception as exc:
@@ -537,6 +541,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.command_router import get_gateway_trace_store
+            from core.execution_observability.event_log import recent_execution_events
             from core.execution_observability.normalizers import normalize_observability_payload
 
             store = get_gateway_trace_store()
@@ -549,12 +554,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 except Exception as inner_exc:
                     logger.debug("execution/recent-events: normalise error: %s", inner_exc)
                     events.append({"raw": entry, "normalise_error": str(inner_exc)})
+            # 各层在真实发生处规范化后追加的事件：派发信封、任务图收尾、Windows 仲裁尝试。
+            layered = recent_execution_events(limit)
 
             return JSONResponse(
                 {
                     "count": len(events),
                     "schema_version": "pr7-v1",
                     "events": events,
+                    "layered_count": len(layered),
+                    "layered_events": layered,
                 }
             )
         except Exception as exc:
