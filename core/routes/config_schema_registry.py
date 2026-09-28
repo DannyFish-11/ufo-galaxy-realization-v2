@@ -277,10 +277,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     },
     # --- Authentication & Security ---
     "GALAXY_AUTH_ENABLED": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "security",
-        "description": "启用鉴权（默认关=本机自用免验证；对外开放前务必打开）",
+        "description": "启用鉴权（默认开：本机自动签令牌、其他设备走配对；写 false 等于谁都能调接口）",
     },
     "GALAXY_API_TOKEN": {
         "default": "",
