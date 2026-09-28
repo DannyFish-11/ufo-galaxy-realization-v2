@@ -148,7 +148,10 @@ simulation: {
 
 两条链路都给：
 - `payload.render.simulation`——**持续**的，面板中途连上来也能立刻看到当前状态
-- `skill.invoked` 事件（`kind="rehearsal"`, `simulated=true`）——**瞬时**的逐步过程
+- `skill.invoked` 事件（`kind="rehearsal"`, `simulated=true`）——**瞬时**的逐步过程。
+  这条在 StateEventBus 上；面板桥对 `skill.*` 只安排设备清单推送，所以另有一帧 WS
+  `type="rehearsal"`（`core/rehearsal_panel_push.py`）把每一步送到面板，面板在对话区与输入条
+  之间照实画出来（`ui/rehearsal.ts`，每一行都写明「模拟」还是「真查了」）
 
 ### 一致性保证
 
@@ -189,10 +192,11 @@ degrade_reason: string | null
 4. **面板的相位有两个写者**：SSE 的 `phase` 帧也往同一个状态位上写，线和岛会在两相之间
    跳一下。现在面板只认 WS 的 `render`。
 
-仍然存在的：
+5. **推演的逐步过程没有消费方**：`skill.invoked`（`kind="rehearsal"`）到面板只触发一次设备清单
+   推送，步骤内容从没到过面板。2026-09-28 补上 WS `type="rehearsal"` 帧与面板那一段
+   （`tests/test_rehearsal_panel_push.py`）。推的只有类型化字段，工具参数与模拟响应不推。
 
-- **`skill.invoked`（`kind="rehearsal"`）全仓零消费方**。推演的内容已经经契约上行
-  （`liminal_activity` + `simulation`，见第五节），瞬时的逐步过程还没有人读。
+目前没有已知的仍然存在的缺陷。
 
 ---
 

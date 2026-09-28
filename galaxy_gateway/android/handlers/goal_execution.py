@@ -70,9 +70,10 @@ except ImportError:
 # goal_execution_result routes through the same four-step canonical chain:
 #   (1) truth_ingress, (2) reconcile, (3) authority_update, (4) completion_linkage.
 try:
+    from core.task_result_canonical_truth_chain import TruthChainStepError as _TruthChainStepError
     from core.task_result_canonical_truth_chain import run_task_result_truth_chain as _run_task_result_truth_chain
 except ImportError:
-    _run_task_result_truth_chain = None  # type: ignore[assignment]
+    _run_task_result_truth_chain = _TruthChainStepError = None  # type: ignore[assignment,misc]
 
 # PR-EG: Unified execution governance — top-level import so tests can patch() it.
 # Provides the unified gate evaluation for goal_execution / parallel_subtask /
@@ -1570,11 +1571,10 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             _ingest_ger_err,
         )
         if _run_task_result_truth_chain is not None:
-            _ger_ttc_outcome = _run_task_result_truth_chain(
-                message,
-                task_id=task_id,
-                result_status=status,
-            )
+            try:  # 1–3 步失败已进账本并排了后台补跑;接住,别挡住回答(所有者决定:自动重试,失败再隔离)
+                _ger_ttc_outcome = _run_task_result_truth_chain(message, task_id=task_id, result_status=status)
+            except _TruthChainStepError as _ger_tc_exc:
+                _ger_ttc_outcome = _ger_tc_exc.outcome
             if not _ger_ttc_outcome.is_truth_chain_complete:
                 result_lineage["reconciliation_lineage"] = "truth_chain_fallback_incomplete"
                 result_lineage["closure_lineage"] = "truth_chain_fallback_incomplete"

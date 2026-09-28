@@ -12,11 +12,12 @@ import type {
   LockstepState,
   MemoryCard,
   Phase,
+  RehearsalStep,
   RenderPosture,
   TierView,
   Turn,
 } from './types';
-import type { ConfigItem, GitHubAddon, GitHubAddonStatus, UserProvider } from './transport';
+import type { ConfigItem, GitHubAddon, GitHubAddonStatus, IsolatedResult, UserProvider } from './transport';
 
 export interface HudState {
   /** 连上后端了没有。false 时下面的东西全是上一次的残值或空态 */
@@ -117,6 +118,23 @@ export interface HudState {
   /** 正在拉或正在写。用来把保存按钮压住,免得连点写两遍。 */
   readonly configBusy: boolean;
 
+  /**
+   * 最近一次阈限态推演的步骤(WS `rehearsal` 帧)。空数组 = 这一轮没有推演,整段不画。
+   * 发下一句话时清空 —— 上一件事的推演挂在下一件事旁边,人会以为是在推演新的这件。
+   */
+  readonly rehearsal: readonly RehearsalStep[];
+
+  /**
+   * 真相链补跑后仍没收口的结果。null = **还没拉到**,与「一条都没有」是两件事 ——
+   * 前者要说「后端没接上」,后者整段不画。
+   */
+  readonly isolated: readonly IsolatedResult[] | null;
+  /** 还排着队、没到补跑时间的条数 */
+  readonly isolatedPending: number;
+  readonly isolatedBusy: boolean;
+  /** 上一次「再试一次 / 知道了」的结论。空 = 没有要说的。 */
+  readonly isolatedNotice: string;
+
   /** 右上那块岛展开了没有 */
   readonly islandOpen: boolean;
   /** 底下两个浮层,同一时刻最多开一个 */
@@ -155,6 +173,11 @@ export const initialState: HudState = {
   githubAddonNotice: '',
   settingsOpen: false,
   configBusy: false,
+  rehearsal: [],
+  isolated: null,
+  isolatedPending: 0,
+  isolatedBusy: false,
+  isolatedNotice: '',
   islandOpen: false,
   popover: null,
 };

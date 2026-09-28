@@ -377,6 +377,18 @@ def _no_leaked_node_activation_executor():
         mod.set_activation_executor(before)
 
 
+# 真相链没收口时会排一次【延迟数秒】的后台补跑(core.truth_chain_recovery)。不撤掉的话,
+# 这个测试里排的补跑会在后面某个测试运行时到点,改写那时的全局账本 —— 又一个离污染源很远的
+# 顺序依赖。这里逐测试取消未到点的补跑、清空内存状态(盘上的隔离文件在临时数据目录里)。
+@pytest.fixture(autouse=True)
+def _no_leaked_truth_chain_retries():
+    """Auto-use: 测试里排下的真相链补跑,测试结束就取消。"""
+    yield
+    mod = sys.modules.get("core.truth_chain_recovery")
+    if mod is not None:
+        mod.get_truth_chain_recovery().reset()
+
+
 # 反自激励门是带【时间状态】的进程单例:任何测试只要走过一次朗读路径
 # (speak_response / IncrementalSpeaker),就会往门里登记一段"刚说过的话",而它在留存
 # 窗口内(默认 6 秒 + 按文本长度估算的朗读耗时)会让所有以 recently_spoke() 为条件的

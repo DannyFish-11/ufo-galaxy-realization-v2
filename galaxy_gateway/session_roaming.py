@@ -53,8 +53,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("UFO-Galaxy.SessionRoaming")
 
-# 持久化存储目录（JSON 文件）
-PERSISTENCE_DIR = Path(os.path.expanduser("~")) / ".galaxy" / "session_roaming"
+# 持久化存储目录（JSON 文件）。跟随 GALAXY_DATA_DIR —— 本仓所有持久化状态都认它，tests/conftest.py 靠它把
+# 测试状态隔离到临时目录；此前这里写死在家目录，测试跑一次就往真实的 ~/.galaxy 里写一批会话快照。
+# 没设这个变量时仍是原来的 ~/.galaxy/session_roaming。设了而新位置还没有会话文件时，读一次旧位置（只读），
+# 已有的漫游会话不会因为设了变量就"丢了"。
+_LEGACY_PERSISTENCE_DIR = Path(os.path.expanduser("~")) / ".galaxy" / "session_roaming"
+_DATA_DIR = os.environ.get("GALAXY_DATA_DIR", "").strip()
+PERSISTENCE_DIR = Path(_DATA_DIR) / "session_roaming" if _DATA_DIR else _LEGACY_PERSISTENCE_DIR
 PERSISTENCE_FILE = PERSISTENCE_DIR / "sessions.json"
 
 
@@ -218,8 +223,12 @@ class SessionRoamingManager:
     def _load_sessions_from_disk(self):
         """从磁盘 JSON 文件加载会话数据。"""
         try:
-            if PERSISTENCE_FILE.exists():
-                data = json.loads(PERSISTENCE_FILE.read_text(encoding="utf-8"))
+            source = PERSISTENCE_FILE
+            legacy = _LEGACY_PERSISTENCE_DIR / "sessions.json"
+            if not source.exists() and source == PERSISTENCE_DIR / "sessions.json" and legacy.exists():
+                source = legacy
+            if source.exists():
+                data = json.loads(source.read_text(encoding="utf-8"))
                 for sid, sdict in data.get("sessions", {}).items():
                     try:
                         session = Session(

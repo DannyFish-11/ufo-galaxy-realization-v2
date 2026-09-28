@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 423 条 · 组件 schema 111 个
+// 路径 427 条 · 组件 schema 111 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -333,6 +333,10 @@ export type ApiPath =
   | "/api/v1/resilience/circuit-breakers/{target}/reset"
   | "/api/v1/resilience/metrics"
   | "/api/v1/resilience/metrics/prom"
+  | "/api/v1/results/isolated"
+  | "/api/v1/results/isolated/{key}"
+  | "/api/v1/results/isolated/{key}/dismiss"
+  | "/api/v1/results/isolated/{key}/retry"
   | "/api/v1/runtime/domain"
   | "/api/v1/runtime/phase-ledger"
   | "/api/v1/runtime/result-merge-summary"
@@ -760,6 +764,10 @@ export const API_METHODS = {
   "/api/v1/resilience/circuit-breakers/{target}/reset": ["post"],
   "/api/v1/resilience/metrics": ["get"],
   "/api/v1/resilience/metrics/prom": ["get"],
+  "/api/v1/results/isolated": ["get"],
+  "/api/v1/results/isolated/{key}": ["get"],
+  "/api/v1/results/isolated/{key}/dismiss": ["post"],
+  "/api/v1/results/isolated/{key}/retry": ["post"],
   "/api/v1/runtime/domain": ["get"],
   "/api/v1/runtime/phase-ledger": ["get"],
   "/api/v1/runtime/result-merge-summary": ["get"],

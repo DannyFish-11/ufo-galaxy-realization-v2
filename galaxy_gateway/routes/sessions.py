@@ -90,9 +90,9 @@ async def migrate_session(
 ):
     """Trigger session migration to a target device."""
     try:
-        from core.routes.sessions import migrate_session_via_canonical_manager
+        from core.session_migration import migrate_session as migrate_via_canonical_surface
 
-        result = await migrate_session_via_canonical_manager(
+        result = await migrate_via_canonical_surface(
             session_id=session_id,
             target_device=request.target_device_id,
         )

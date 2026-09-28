@@ -833,6 +833,24 @@ body {
   animation: caret var(--c-caret) steps(2) infinite;
 }
 @keyframes caret { 50% { opacity: 0; } }
+/* ── 推演过程(阈限态) ──
+   夹在对话区与输入条之间。它是「动手之前想了什么」,不是对话的一部分,所以不画成
+   气泡;字号降一档、墨色淡一档。真查了的那一行(只读工具直通)用正常墨色,
+   与模拟的分开 —— 分不开的话,人会把模拟当成已经发生的事。 */
+.rehearsal[hidden] { display: none; }
+.rehearsal {
+  margin: 0 8px 10px 4px; padding: 9px 13px 10px; border-radius: 13px;
+  font-size: var(--t-mini); line-height: 1.55; color: var(--ink-3);
+  background: linear-gradient(166deg, rgba(252, 251, 255, 0.42), rgba(238, 234, 245, 0.26));
+  box-shadow: inset 0 1px 0 var(--lite-soft);
+}
+.rh-head { margin-bottom: 4px; color: var(--ink-2); }
+.rh-list { margin: 0; padding-left: 1.3em; }
+.rh-step[data-real='true'] { color: var(--ink-2); }
+.rh-step[data-step='attempt_failed'],
+.rh-step[data-step='validation_reject'] { color: var(--warn); }
+.rh-step[data-step='attempt_success'] { color: var(--ink-2); }
+
 /* 降级必须留痕:声音和文字已经脱钩,界面上不能一声不吭 */
 .lockstep-mark {
   align-self: flex-start;

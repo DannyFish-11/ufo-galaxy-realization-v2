@@ -103,9 +103,10 @@ except ImportError:
 # PR-TTC: Canonical must-run truth chain for task_result processing.
 # Top-level import so tests can patch() the chain function.
 try:
+    from core.task_result_canonical_truth_chain import TruthChainStepError as _TruthChainStepError
     from core.task_result_canonical_truth_chain import run_task_result_truth_chain as _run_task_result_truth_chain
 except ImportError:
-    _run_task_result_truth_chain = None  # type: ignore[assignment]
+    _run_task_result_truth_chain = _TruthChainStepError = None  # type: ignore[assignment,misc]
 
 # PR-V1-RESULT: V1 unified continuity legality authority — top-level import so
 # tests can patch() the evaluate function and import failures are handled
@@ -921,11 +922,13 @@ async def handle_task_result(bridge: "AndroidBridge", websocket: Any, message: D
     # ingress did not handle this result path.
     if not _unified_result_ingress_ran:
         if _run_task_result_truth_chain is not None:
-            _truth_chain_outcome = _run_task_result_truth_chain(
-                message,
-                task_id=task_id,
-                result_status=result_status,
-            )
+            # 1–3 步失败抛 TruthChainStepError(已进账本、排了后台补跑 core.truth_chain_recovery);接住,回答照常交给等待方。
+            try:
+                _truth_chain_outcome = _run_task_result_truth_chain(
+                    message, task_id=task_id, result_status=result_status
+                )
+            except _TruthChainStepError as _tc_exc:
+                _truth_chain_outcome = _tc_exc.outcome
             if not _truth_chain_outcome.is_truth_chain_complete:
                 logger.warning(
                     "handle_task_result: truth chain incomplete for task_id=%r: %s",
@@ -933,10 +936,7 @@ async def handle_task_result(bridge: "AndroidBridge", websocket: Any, message: D
                     _truth_chain_outcome.incomplete_reason,
                 )
             else:
-                logger.debug(
-                    "handle_task_result: truth chain complete for task_id=%r",
-                    task_id,
-                )
+                logger.debug("handle_task_result: truth chain complete for task_id=%r", task_id)
         else:
             # Fallback: canonical truth chain module unavailable — run legacy
             # best-effort helpers so existing behaviour is preserved.

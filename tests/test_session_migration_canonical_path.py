@@ -70,8 +70,9 @@ async def test_gateway_session_route_uses_canonical_helper() -> None:
         async def _fake_migrate_session_via_canonical_manager(**kwargs):
             return dict(fake_result)
 
+        # 网关路由直接调迁移的规范面 core.session_migration.migrate_session(D3)。
         mp.setattr(
-            "core.routes.sessions.migrate_session_via_canonical_manager",
+            "core.session_migration.migrate_session",
             _fake_migrate_session_via_canonical_manager,
         )
         response = await gateway_sessions.migrate_session(

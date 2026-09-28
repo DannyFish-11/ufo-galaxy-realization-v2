@@ -47,6 +47,7 @@ Routes:
   GET /api/v1/observability/execution/recent-events  - 最近统一执行事件 (PR-7)
   GET /api/v1/observability/execution/trace/{id}     - 统一 trace 上下文查询 (PR-7)
   GET /api/v1/observability/context-layer            - ACI 命中统计 + 焦点栈快照
+  GET/POST /api/v1/results/isolated[...]             - 真相链补跑后仍没收口的结果（见 core/routes/result_recovery.py）
 """
 
 import logging
@@ -65,6 +66,10 @@ _startup_time = _time.time()
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create observability routes router."""
     router = APIRouter()
+    # 真相链隔离队列：运行面的待处理项，与本组同样免鉴权（面板直接读）。
+    from core.routes import result_recovery as _result_recovery
+
+    router.include_router(_result_recovery.create_router())
 
     # ── 活跃 LLM 路由 + Fallback ─────────────────────────────────────────
 

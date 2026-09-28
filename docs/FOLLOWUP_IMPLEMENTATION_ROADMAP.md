@@ -10,11 +10,12 @@
 
 ---
 
-## 2026-09-27 状态复核（读正文之前先看这里）
+## 2026-09-27 状态复核（2026-09-28 更新；读正文之前先看这里）
 
 > 下面的正文是 2026-04 的原始路线图，保留原样作为记录。**逐条对照代码复核之后的当前状态以这张表为准**；
 > 全系统的状态见 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md)。
-> 汇总：16 项已落地、1 项有意保留、5 项部分完成、2 项未做。唯一的 P0（D1）早已实现。
+> 汇总：17 项已落地、1 项有意保留、5 项部分完成、1 项未做。唯一的 P0（D1）早已实现。
+> 2026-09-28：D3 落地（会话迁移规范面 `core/session_migration.py`）。
 
 | 项 | 当前状态 | 依据（代码） |
 |---|---|---|
@@ -38,13 +39,14 @@
 | C6 旧 WS 路径退役 | 未做 | `/ws/ufo3` 仍在 `galaxy_gateway/routes/websocket.py`（已计入用量记账） |
 | D1 task_cancel（原 P0） | 已落地 | `handle_task_cancel` @ `galaxy_gateway/android/handlers/task_lifecycle.py`（结论 `D1-task-cancel-implemented`） |
 | D2 task_status | 已落地 | 结论 `D2-task-status-implemented` |
-| D3 session_migrate 统一 | 未做 | 规范面没有迁移能力，这条退役路径当前走不通（结论 `session-migration-has-no-canonical-home`） |
+| D3 session_migrate 统一 | 已落地（2026-09-28） | 规范面 `core/session_migration.migrate_session`：核心 REST、网关 REST/WS、安卓桥四个入口都调它；它先找会话在哪个存储，唤醒建的漫游会话交给 `SessionRoamingManager`（以前任何端点都迁不了它们）；两个存储**不合并**。结论 `session-migration-canonical-surface`（取代 `session-migration-has-no-canonical-home`） |
 | D4 安卓能力入同化层 | 已落地 | `registration.py` 调 `assimilate_device`（结论 `D4-android-capabilities-assimilated`） |
 | D5 WebRTC 任务生命周期 | 部分 | 绑定与拆除已接上生产调用方；能力仍登记为 EXPERIMENTAL，要真机证据（结论 `webrtc-binding-wired` / `webrtc-still-experimental`） |
 | D6 安卓本地真相对账 | 已落地（V2 侧） | `galaxy_gateway/android/handlers/reconciliation_signal.py`、`device_state_snapshot.py`；安卓侧不在本次复核范围 |
 
 设计问题 Q1–Q7：Q1（A1）、Q2（A3）、Q5（D5 走近期接线）、Q7（C3 走指标）已经由代码回答；
-Q3（会话迁移规范面）仍然悬着，并且是 D3 的真实阻塞；Q4、Q6 需要跨仓决定。
+Q3（会话迁移规范面）2026-09-28 由代码回答：规范面是 `core/session_migration.py`，不是 `session_roaming.py`
+也不是 `core/routes/sessions.py`；Q4、Q6 需要跨仓决定。
 
 ---
 

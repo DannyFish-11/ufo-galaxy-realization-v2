@@ -127,10 +127,49 @@ WS  /ws/desktop-presence
 ## 未做
 
 - **拓扑/可观测视图没有搬进面板**。上面那张表的 ❌ 是当前状态，不是计划。
-- **两套配置写入链路没有合并**。provider/routing 维度的写能力要补回来，正确做法
-  是把 `ConfigService`（写 `config.json`）与 `CONFIG_SCHEMA`（写 `.env`）合成一套，
-  而不是给已删的表层造一个替身。
+- ~~**两套配置写入链路没有合并**~~ —— 2026-09-28 复核后这一条的前提不成立，见下一节。
 - 历史设计文档（`docs/TOPOLOGY_*.md`、`docs/OBSERVABILITY_HISTORY.md`、
   `docs/DIAGNOSTICS_INSPECTION_INTERACTION.md` 等）**未改写**。它们是当时的设计
   记录，描述的是那个时点的事实；把它们改成好像从来没存在过，比留着更失真。
   需要知道"现在还有没有"的读者，以本文件为准。
+
+## 复核：「两套配置写入链路」其实只有一套在生效（2026-09-28）
+
+上文「写能力的损失」一节的事实没错：`ConfigControlSurface` 删掉后，`ConfigService` 的
+`set_toggle` / `set_native_mm_policy` 等写方法失去了唯一生产调用方。但当时没有追问的是
+**这些键写进去之后谁在读**。逐个查下来：
+
+| `runtime/config.json` 里的维度 | 写它的 | 运行时读它的 |
+|---|---|---|
+| `providers.*.enabled`（provider 开关） | `ConfigService.set_toggle` / `set_oneapi` | **没有**。路由器按 API Key 在不在决定一家 provider 参不参与；`ConfigService.validate()` 与 `core/model_topology/inventory_from_config.py` 是仅有的读者，而它们自己都没有生产调用方 |
+| `routing.native_multimodal_policy` | `ConfigService.set_native_mm_policy` | **没有**。运行时认的是 `GALAXY_NATIVE_MM_CHAT`（开/关），面板上能写 |
+| `providers.oneapi.base_url` | `ConfigService.set_oneapi` | **没有**。运行时认的是 `ONEAPI_URL`，面板上能写 |
+| `network.nats_url` 等 5 个地址 | `ConfigService.set_network_url` | **没有**。运行时认的是 `GALAXY_NATS_URL`（面板上能写）；另 4 个没有运行时对应物 |
+| `android.inference_mode` | `ConfigService.set_android_inference_mode` | **没有** |
+
+生产里真正在写配置的只有**一条**：面板 → `POST /api/config` → 非密钥进 `.env` 与进程环境（当次生效），
+密钥经 `ConfigService.set_secret` / `delete_secret` 落 `runtime/secrets.env`。`ConfigService` 在生产里
+活着的只有这个密钥库角色；它的非密钥那一半（写 `config.json` 的 5 个方法 + `validate()` + 读它的
+`inventory_from_config`）是一座**没有生产写入方、也没有生产读取方**的孤岛。
+
+所以「把两套合成一套」无从谈起 —— 生效的只有一套。把那几个开关接到面板上，只会得到几个
+**按了不起作用**的按钮。真正生效的 provider / 路由控制，面板上都已经有了：
+
+- 各家 API Key、OneAPI 地址与 Key、本机推理服务地址 —— 「全部设置」里对应的键；
+- 模型档位与主脑 —— `/api/v1/models/tier`；
+- 自己接的模型服务 —— 「我的模型服务」（`/api/v1/providers/user`）；
+- 原生多模态开关 —— `GALAXY_NATIVE_MM_CHAT`。
+
+**要所有者定的**（本轮未做）：
+
+1. 要不要一个「有 Key 但先别用这家」的 provider 开关？要的话这是**新能力**：路由器得先认它
+   （现在不认），再在面板上放开关 —— 不是把孤岛接上。
+2. `ConfigService` 的非密钥那一半与 `inventory_from_config`：删，还是给它们找一个运行时读者。
+   清单见 `docs/UNWIRED_CODE_INVENTORY.md`。
+
+另记一处潜在隐患（同样没有生产调用方，所以今天不会触发）：`core/unified_config.py` 的
+`UnifiedConfig.save()`（`set(..., save=True)` 会调它）会用「名字里带 key/token/secret/password 的
+键」**整个覆盖** `.env`，而且是明文。哪天有人调用它，`.env` 里其余配置会被清掉、密钥会回到明文。
+
+复测：`python scripts/check_wiring.py --all | grep -E "set_toggle|set_native_mm_policy|build_inventory"`；
+结论登记在 `config/assessment_claims.json` 的 `config-json-provider-dims-have-no-runtime-reader`。

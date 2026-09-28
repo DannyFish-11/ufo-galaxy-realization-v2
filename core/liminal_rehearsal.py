@@ -25,9 +25,9 @@
 让真实执行"按剧本走,遇偏差再自调"。
 
 可打断(阶段三):预演跑在请求任务里,面板 barge-in/超时取消即
-asyncio.CancelledError,预演立即终止且零真实副作用;每步经 StateEventBus
-的 skill.invoked 事件推到面板(payload.kind="rehearsal", simulated=True),
-推演过程可见。
+asyncio.CancelledError,预演立即终止且零真实副作用;每步发 StateEventBus
+的 skill.invoked 事件(payload.kind="rehearsal", simulated=True),并经
+core.rehearsal_panel_push 推一帧 WS type="rehearsal" 到面板 —— 推演过程可见。
 
 成本闸门:GALAXY_LIMINAL_REHEARSAL = 0(关) | 1(凡有工具即预演) |
 auto(默认:复杂度 ≥ GALAXY_REHEARSAL_COMPLEXITY_FLOOR 且有工具才预演)。
@@ -95,9 +95,14 @@ def should_rehearse(complexity: float, tools: Optional[List[Dict[str, Any]]]) ->
 
 
 def _emit_rehearsal_event(step: str, payload: Dict[str, Any]) -> None:
-    """预演过程可见化:经既有 skill.invoked 事件族上面板(面板推送允许清单
-    含 "skill." 族)。payload 恒带 kind="rehearsal" + simulated=True,消费方
-    可与真实工具调用区分——语义即"(模拟)工具调用活动"。"""
+    """预演过程可见化。两件事：
+
+    1. 经既有 skill.invoked 事件族发到 StateEventBus(payload 恒带 kind="rehearsal" + simulated=True,
+       消费方可与真实工具调用区分)。**这条到不了面板的步骤内容** —— 面板桥对 skill.* 只安排一次
+       防抖的设备清单推送;
+    2. 所以另推一帧 WS ``type="rehearsal"`` 给面板(:mod:`core.rehearsal_panel_push`),面板在对话区与
+       输入条之间照实画出来。
+    """
     try:
         from core.state_event_bus import StateEventType
         from core.state_event_bus import emit as _emit
@@ -109,6 +114,12 @@ def _emit_rehearsal_event(step: str, payload: Dict[str, Any]) -> None:
         )
     except Exception as exc:  # noqa: BLE001 — 可见化失败绝不影响预演
         logger.debug("预演事件发布失败(忽略): %s", exc)
+    try:
+        from core.rehearsal_panel_push import push_rehearsal_step
+
+        push_rehearsal_step(step, payload)
+    except Exception as exc:  # noqa: BLE001 — 同上
+        logger.debug("预演步骤推面板失败(忽略): %s", exc)
 
 
 @dataclass

@@ -75,6 +75,7 @@ Public API
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -592,6 +593,10 @@ class IncompleteResultLedger:
         """Return the number of recorded incomplete outcomes."""
         return len(self._records)
 
+    def discard(self, task_id: str) -> bool:
+        """撤掉 *task_id* 的记录（后台补跑已把它收口时用）；本来就没有则返回 ``False``。"""
+        return self._records.pop(task_id, None) is not None
+
     def clear(self) -> None:
         """Remove all entries (useful in tests to reset between test cases)."""
         self._records.clear()
@@ -700,6 +705,7 @@ def run_task_result_truth_chain(
         # remains inspectable via get_incomplete_result_ledger() even when
         # the caller catches the exception.
         _incomplete_result_ledger.record(outcome)
+        _hand_to_recovery(outcome, message)
         logger.error(
             "task_result truth chain HARDENED FAILURE: task_id=%r status=%r "
             "reason=%r "
@@ -760,8 +766,59 @@ def run_task_result_truth_chain(
         # monitoring surfaces can query get_incomplete_result_ledger() to detect
         # tasks that arrived without a fully-closed truth chain.
         _incomplete_result_ledger.record(outcome)
+        _hand_to_recovery(outcome, message)
 
     return outcome
+
+
+# ---------------------------------------------------------------------------
+# 没收口之后：后台补跑一次，仍不行就隔离（所有者决定，见 core.truth_chain_recovery）
+# ---------------------------------------------------------------------------
+
+# 步骤名 → (outcome 上的 status 字段, 异常字段)。补跑与隔离都按这张表认"哪一步失败了"。
+TRUTH_CHAIN_STEPS: Dict[str, tuple] = {
+    "truth_ingress": ("truth_ingress_status", "_truth_ingress_exc"),
+    "reconcile": ("reconcile_status", "_reconcile_exc"),
+    "authority_update": ("authority_update_status", "_authority_update_exc"),
+    "completion_linkage": ("completion_linkage_status", "_completion_linkage_exc"),
+}
+
+
+def failed_steps(outcome: TruthChainOutcome) -> List[str]:
+    """*outcome* 里判为失败的步骤名，口径与 ``_compute_completeness`` 相同（只看类型化 status）。"""
+    return [name for name, (attr, _exc) in TRUTH_CHAIN_STEPS.items() if outcome._fatal_status(getattr(outcome, attr))]
+
+
+def rerun_failed_steps(outcome: TruthChainOutcome, message: Dict[str, Any]) -> TruthChainOutcome:
+    """只重跑 *outcome* 里失败的那几步，返回一份新的 outcome（原对象不动）。
+
+    成功过的步骤不再执行 —— 真相写入、生命周期推进都不该做两遍。这里**不抛**
+    :class:`TruthChainStepError`、**不写**账本：它是给后台补跑用的，结论由调用方处置。
+    """
+    retried = dataclasses.replace(outcome)
+    todo = failed_steps(retried)
+    for name in todo:
+        setattr(retried, TRUTH_CHAIN_STEPS[name][1], None)
+    if "truth_ingress" in todo:
+        _run_truth_ingress(message, retried)
+    if "reconcile" in todo:
+        _run_reconcile(message, retried)
+    if "authority_update" in todo:
+        _run_authority_state_update(retried.task_id, retried.result_status, retried)
+    if "completion_linkage" in todo:
+        _run_completion_linkage(retried.task_id, message, retried)
+    retried._compute_completeness()
+    return retried
+
+
+def _hand_to_recovery(outcome: TruthChainOutcome, message: Dict[str, Any]) -> None:
+    """把没收口的结果交给后台补跑。从不抛、从不阻塞 —— 回答照常先交给用户。"""
+    try:
+        from core.truth_chain_recovery import get_truth_chain_recovery
+
+        get_truth_chain_recovery().schedule(outcome, message)
+    except Exception as exc:  # noqa: BLE001 — 补跑排不上不能挡住结果本身；账本里照样有这条
+        logger.warning("truth_chain: recovery not scheduled task_id=%r exc=%s", outcome.task_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -783,4 +840,8 @@ __all__ = [
     # Incomplete result observable state
     "IncompleteResultLedger",
     "get_incomplete_result_ledger",
+    # 补跑（后台重试失败步骤）
+    "TRUTH_CHAIN_STEPS",
+    "failed_steps",
+    "rerun_failed_steps",
 ]

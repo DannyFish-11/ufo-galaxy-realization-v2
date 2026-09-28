@@ -357,9 +357,9 @@ DESKTOP_BOARD_IS_CONTROL_SURFACE: bool = False
 set_network_url / set_android_inference_mode 五个写方法，在生产代码里失去了
 唯一调用方。方法本身还在、单元测试也还在，但没有任何运行期入口能触达它们。
 
-要消掉这个落差，正确做法是把这两套并行的配置写入链路合成一套（而不是给
-已删表层再造一个替身）。在那之前，这个常量必须是 False —— 写成 True 会让
-这份审计谎报一项系统并不具备的能力。
+2026-09-28 复核：那两项写的键（providers.*.enabled、routing.native_multimodal_policy）运行时**没有读者**；路由器按
+API Key 在不在决定 provider 参不参与，真正生效的控制面板都能写（同一条 POST /api/config），没有第二条生效链路可合。
+真要 provider 开关是新能力（见 docs/PANEL_SURFACE_CONVERGENCE.md）；本常量仍必须是 False，否则审计谎报能力。
 """
 
 DESKTOP_BOARD_WRITE_OPERATIONS: List[str] = []

@@ -378,7 +378,9 @@ class EventBridge:
         try:
             session_roaming = upper_ports.resolve("gateway.session_roaming.session_roaming")
 
-            _orig_on_migrate = getattr(session_roaming, "_on_session_migrated", None)
+            # 回调属性叫 _on_migrated、入口是 set_migration_callback。此前这里读写的是不存在的
+            # _on_session_migrated —— 日志说"已连接"，SESSION_MIGRATED 却从没发出过。
+            _orig_on_migrate = getattr(session_roaming, "_on_migrated", None)
 
             async def _session_migrated_handler(session_id: str, from_device: str, to_device: str):
                 event_bus.publish_sync(
@@ -395,7 +397,7 @@ class EventBridge:
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
 
-            session_roaming._on_session_migrated = _session_migrated_handler
+            session_roaming.set_migration_callback(_session_migrated_handler)
             _wired_count += 1
             logger.info("EventBridge: SessionRoaming → EventBus 已连接")
         except Exception as e:

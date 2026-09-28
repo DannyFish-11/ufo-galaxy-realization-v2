@@ -1262,9 +1262,9 @@ async def handle_session_migrate(connection_id: str, aip_msg):
         session_id = payload.get("session_id", "")
         target_device_id = payload.get("target_device_id", device_id)
 
-        from core.routes.sessions import migrate_session_via_canonical_manager
+        from core.session_migration import migrate_session as migrate_via_canonical_surface
 
-        result = await migrate_session_via_canonical_manager(
+        result = await migrate_via_canonical_surface(
             session_id=session_id,
             source_device=device_id,
             target_device=target_device_id,
