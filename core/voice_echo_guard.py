@@ -346,11 +346,6 @@ def classify_asr_text(text: str) -> Tuple[str, float, str]:
     return get_echo_guard().classify(text)
 
 
-def is_self_echo(text: str) -> bool:
-    """便捷判定:这段转写是不是 AI 自己的回声。"""
-    return classify_asr_text(text)[0] == VERDICT_SELF_ECHO
-
-
 def recently_spoke() -> bool:
     """模块级快捷入口:留存窗口内是否还有刚说过的话。"""
     return get_echo_guard().recently_spoke()

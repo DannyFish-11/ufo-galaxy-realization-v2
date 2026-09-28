@@ -41,8 +41,6 @@ class NodeSpec(Protocol):
 class CircularDependencyError(Exception):
     """Raised when circular dependency is detected"""
 
-    pass
-
 
 class DependencyResolver:
     """
@@ -145,10 +143,6 @@ class DependencyResolver:
             raise CircularDependencyError(f"Circular dependency detected among: {unresolved}")
 
         return result
-
-    def resolve_all_startup_order(self) -> List[str]:
-        """Resolve startup order for all nodes"""
-        return self.resolve_startup_order(list(self.nodes.keys()))
 
     def get_parallel_groups(self, node_ids: List[str]) -> List[List[str]]:
         """

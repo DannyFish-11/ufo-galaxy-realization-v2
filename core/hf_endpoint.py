@@ -104,8 +104,3 @@ def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
         )
         _cache.update(ts=time.monotonic(), endpoint="")
         return ""
-
-
-def endpoint_reachable(timeout: float = 2.0) -> bool:
-    """是否存在可达的 HF 下载端点(带缓存,见 pick_endpoint)。"""
-    return bool(pick_endpoint(timeout=timeout))

@@ -317,18 +317,6 @@ class UnifiedConfig:
                 except Exception as e:
                     logger.error(f"配置回调失败: {e}")
 
-    def on_change(self, key: str, callback):
-        """
-        注册配置变更回调
-
-        Args:
-            key: 配置键（使用 "*" 监听所有变更）
-            callback: 回调函数 (key, old_value, new_value) -> None
-        """
-        if key not in self._callbacks:
-            self._callbacks[key] = []
-        self._callbacks[key].append(callback)
-
     def save(self):
         """保存配置到文件"""
         # 保存到 config.json

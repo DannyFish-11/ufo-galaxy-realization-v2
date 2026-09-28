@@ -34,7 +34,6 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -153,21 +152,6 @@ class DeviceMessage:
                 "correlation_id": self.correlation_id,
             }
         )
-
-    def to_aip_v3_dict(self) -> dict:
-        """转换为 AIP v3.0 格式的字典"""
-        return {
-            "version": "3.0",
-            "message_id": self.message_id,
-            "type": self.type.to_aip_v3(),
-            "device_id": self.device_id,
-            "timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
-            "correlation_id": self.correlation_id,
-            "payload": {
-                "action": self.action,
-                **self.payload,
-            },
-        }
 
     @classmethod
     def from_json(cls, data: str) -> "DeviceMessage":

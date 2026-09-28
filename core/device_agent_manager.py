@@ -149,27 +149,22 @@ class BaseDeviceAgent(ABC):
     @abstractmethod
     async def connect(self) -> bool:
         """连接到设备"""
-        pass
 
     @abstractmethod
     async def disconnect(self) -> bool:
         """断开设备连接"""
-        pass
 
     @abstractmethod
     async def execute_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """执行设备命令"""
-        pass
 
     @abstractmethod
     async def get_status(self) -> Dict[str, Any]:
         """获取设备状态"""
-        pass
 
     @abstractmethod
     async def get_capabilities(self) -> List[DeviceCapability]:
         """获取设备能力列表"""
-        pass
 
     def on(self, event: str, handler: Callable):
         """注册事件处理器"""
@@ -811,86 +806,6 @@ device_manager = DeviceAgentManager()
 # ============================================================================
 # FastAPI 路由（可选）
 # ============================================================================
-
-
-def create_device_api():
-    """创建设备管理 API"""
-    from fastapi import FastAPI, HTTPException
-    from pydantic import BaseModel
-
-    app = FastAPI(title="Galaxy Device Manager API", version="2.0")
-
-    # 这个工厂当前没有调用方。装上不是因为它现在暴露着,而是因为下一个把它接起来的人
-    # 不会想到要补这一层 —— 那正是 core/device_status_api.py 漏掉认证的方式。
-    from nodes.common.node_auth import install_node_auth  # noqa: PLC0415
-
-    install_node_auth(app, "core.device_agent_manager")
-
-    class RegisterDeviceRequest(BaseModel):
-        device_id: str
-        device_type: str
-        device_name: str
-        capabilities: List[str] = []
-        metadata: Dict[str, Any] = {}
-
-    class ExecuteCommandRequest(BaseModel):
-        command: str
-        params: Dict[str, Any] = {}
-
-    @app.post("/devices/register")
-    async def register_device(request: RegisterDeviceRequest):
-        device_info = DeviceInfo(
-            device_id=request.device_id,
-            device_type=DeviceType(request.device_type),
-            device_name=request.device_name,
-            capabilities=[DeviceCapability(c) for c in request.capabilities],
-            metadata=request.metadata,
-        )
-        agent = await device_manager.register_device(device_info)
-        if agent:
-            return {"success": True, "device_id": request.device_id}
-        raise HTTPException(status_code=400, detail="Failed to register device")
-
-    @app.delete("/devices/{device_id}")
-    async def unregister_device(device_id: str):
-        success = await device_manager.unregister_device(device_id)
-        if success:
-            return {"success": True}
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    @app.get("/devices")
-    async def list_devices():
-        return await device_manager.get_all_status()
-
-    @app.get("/devices/{device_id}")
-    async def get_device_status(device_id: str):
-        agent = device_manager.get_agent(device_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Device not found")
-        return await agent.get_status()
-
-    @app.post("/devices/{device_id}/execute")
-    async def execute_command(device_id: str, request: ExecuteCommandRequest):
-        result = await device_manager.execute_on_device(device_id, request.command, request.params)
-        return result
-
-    @app.post("/devices/{device_id}/connect")
-    async def connect_device(device_id: str):
-        agent = device_manager.get_agent(device_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Device not found")
-        success = await agent.connect()
-        return {"success": success}
-
-    @app.post("/devices/{device_id}/disconnect")
-    async def disconnect_device(device_id: str):
-        agent = device_manager.get_agent(device_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Device not found")
-        success = await agent.disconnect()
-        return {"success": success}
-
-    return app
 
 
 # ============================================================================

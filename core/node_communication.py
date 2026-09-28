@@ -747,21 +747,6 @@ class UniversalCommunicator:
 
         return responses
 
-    async def activate_self(self, node_id: str, action: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Node self-activation"""
-        params = params or {}
-
-        logger.info(f"Node {node_id} self-activating: {action}")
-
-        if action == "restart_service":
-            return {"status": "success", "action": "restart_service", "service": params.get("service")}
-        elif action == "update_config":
-            return {"status": "success", "action": "update_config", "config": params}
-        elif action == "report_status":
-            return await self._handle_status({"source_id": node_id, "payload": params})
-        else:
-            return {"status": "error", "message": f"Unknown action: {action}"}
-
     async def _cleanup_loop(self):
         """定期清理任务"""
         while True:

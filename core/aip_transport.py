@@ -112,7 +112,6 @@ class TransportAdapter(ABC):
 
     async def close(self) -> None:
         """清理资源。"""
-        pass
 
 
 class AIPTransport:
@@ -559,7 +558,3 @@ def get_aip_transport() -> AIPTransport:
     if _transport_instance is None:
         _transport_instance = AIPTransport()
     return _transport_instance
-
-
-def register_transport_adapter(adapter: TransportAdapter) -> None:
-    get_aip_transport().register_adapter(adapter)

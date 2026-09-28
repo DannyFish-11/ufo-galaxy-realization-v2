@@ -1111,16 +1111,6 @@ async def start_local_brain(backend: str = "auto") -> bool:
     return result
 
 
-async def check_local_brain() -> Dict[str, Any]:
-    """检查本地主脑状态的便捷函数
-
-    Returns:
-        Dict: 本地主脑状态
-    """
-    brain = get_local_brain_manager()
-    return await brain.health_check()
-
-
 # ── 与 model_catalog 收口(尺寸/默认主脑的 SSOT 是目录)────────────────────────────
 # 目录内 curated 模型(Gemma 4 系 / MiniCPM-o)的尺寸与"默认主脑"以 core.model_catalog
 # 为唯一真相源;此处把它们回填进本类的表,避免两处重复维护(目录赢)。非目录的通用

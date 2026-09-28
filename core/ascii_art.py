@@ -556,16 +556,6 @@ def print_status_row(
 # ---------------------------------------------------------------------------
 
 
-def print_galaxy(style: str = "minimal") -> None:
-    """打印 Galaxy ASCII 艺术字（旧版接口，新代码请使用 print_banner()）。"""
-    if style == "large":
-        print(GALAXY_ASCII_LARGE)
-    elif style == "minimal":
-        print(GALAXY_ASCII_MINIMAL)
-    else:
-        print(GALAXY_ASCII)
-
-
 if __name__ == "__main__":
     print_banner()
     print_section_header("系统状态")

@@ -82,26 +82,3 @@ class ContinuumStateAdapter:
                 logger.warning("ContinuumOrchestrator unavailable: %s", exc)
                 return None
         return openclawd_instance._continuum_orchestrator
-
-    @staticmethod
-    async def run_continuum(
-        orchestrator: Any,
-        trace_id: str,
-        multimodal_context: Optional[Dict] = None,
-        runtime_session_id: Optional[str] = None,
-    ) -> Optional[Dict]:
-        """Delegate continuum execution to *orchestrator*.
-
-        Returns the ``state_continuum`` dict or ``None`` on failure.
-        """
-        if orchestrator is None:
-            return None
-        try:
-            return await orchestrator.run(
-                trace_id=trace_id,
-                multimodal_context=multimodal_context,
-                runtime_session_id=runtime_session_id,
-            )
-        except Exception as exc:
-            logger.warning("ContinuumStateAdapter.run_continuum failed: %s", exc)
-            return None

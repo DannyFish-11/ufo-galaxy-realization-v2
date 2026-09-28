@@ -430,20 +430,6 @@ class MessageRouter:
             payload={"timestamp": time.time()},
         )
 
-    async def send_request(self, request: Request, timeout: float = 30.0) -> Response:
-        """发送请求并等待响应"""
-        future = asyncio.get_running_loop().create_future()
-        self.pending_requests[request.header.message_id] = future
-
-        try:
-            # 这里需要实际的发送逻辑
-            # 暂时直接路由
-            response = await asyncio.wait_for(future, timeout=timeout)
-            return response
-        except asyncio.TimeoutError:
-            self.pending_requests.pop(request.header.message_id, None)
-            return Response.from_request(request, success=False, error="请求超时")
-
 
 # ============================================================================
 # 协议适配器
@@ -452,44 +438,6 @@ class MessageRouter:
 
 class ProtocolAdapter:
     """协议适配器 - 用于与外部系统通信"""
-
-    @staticmethod
-    def to_android_format(message: Message) -> Dict[str, Any]:
-        """转换为 Android 端格式"""
-        return {
-            "id": message.header.message_id,
-            "type": message.header.message_type.value,
-            "action": message.action,
-            "data": message.payload,
-            "timestamp": int(message.header.timestamp * 1000),  # 毫秒
-            "source": message.header.source_node,
-            "target": message.header.target_node,
-        }
-
-    @staticmethod
-    def from_android_format(data: Dict[str, Any]) -> Message:
-        """从 Android 端格式转换"""
-        return Message(
-            header=MessageHeader(
-                message_id=data.get("id", str(uuid.uuid4())),
-                message_type=MessageType(data.get("type", "request")),
-                timestamp=data.get("timestamp", time.time() * 1000) / 1000,
-                source_node=data.get("source", ""),
-                target_node=data.get("target", ""),
-            ),
-            action=data.get("action", ""),
-            payload=data.get("data", {}),
-        )
-
-    @staticmethod
-    def to_websocket_format(message: Message) -> str:
-        """转换为 WebSocket 格式"""
-        return message.to_json()
-
-    @staticmethod
-    def from_websocket_format(json_str: str) -> Message:
-        """从 WebSocket 格式转换"""
-        return Message.from_json(json_str)
 
 
 # ============================================================================
