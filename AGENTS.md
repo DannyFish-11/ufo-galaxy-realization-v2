@@ -246,6 +246,7 @@ python -m pytest tests/                                   # 全量（CI 用 Pyth
 python scripts/select_affected_tests.py <改过的文件…>      # 只跑受影响的
 python main.py --check-only                               # 不起服务，只查依赖/配置/核心模块/节点导入
 python scripts/unwired_inventory.py --write               # 刷新 docs/UNWIRED_CODE_INVENTORY.md（未接线/不可达代码逐类清单）
+python scripts/unwired_inventory.py --check               # 核对 config/unwired_placement.json（安卓以外每个未接线函数的去处）与清单对得上
 ```
 原先写在这里的 `test_system_real.py` 不存在。
 

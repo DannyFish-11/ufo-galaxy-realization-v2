@@ -13,11 +13,16 @@
 
 **分类只是按名字与引用关系做的初筛，不是处置结论。** 每一条是删是接，仍要逐条看。
 
+逐条看过的结果在 ``config/unwired_placement.json``：安卓部分以外的每个函数该放在哪里（接到哪个调用点、
+挂到哪个端点、被什么取代所以该删、只是测试钩子、框架回调、随对象走、还是产品决定）。这里把它渲染进文档，
+``--check`` 核对它与当前清单一一对得上。
+
 用法
 ----
   python scripts/unwired_inventory.py                 # 打印摘要
   python scripts/unwired_inventory.py --write         # 刷新 docs/UNWIRED_CODE_INVENTORY.md 的生成段
   python scripts/unwired_inventory.py --json          # 机器可读
+  python scripts/unwired_inventory.py --check         # 放置表是否覆盖全部非安卓条目、有没有过期条目
 """
 
 from __future__ import annotations
@@ -40,6 +45,21 @@ import check_wiring  # noqa: E402
 DOC_PATH = REPO_ROOT / "docs" / "UNWIRED_CODE_INVENTORY.md"
 BEGIN = "<!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->"
 END = "<!-- END GENERATED -->"
+PLACEMENT_PATH = REPO_ROOT / "config" / "unwired_placement.json"
+
+# 去处类别（顺序即文档里的顺序）。放置表里只允许这几种。
+PLACEMENTS = (
+    ("wire", "接上", "该有人调它：写明调用点（文件、第几行附近、在做什么的时候）"),
+    ("surface", "挂出来", "该有人读它：写明挂到哪个端点 / 面板 / 诊断输出"),
+    ("delete", "删掉", "已被别的实现取代或根本没有用途：写明被什么取代"),
+    ("object", "随对象走", "对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义"),
+    ("testhook", "测试钩子", "只为测试或断言存在（复位、注入、不变量断言），不该进生产路径"),
+    ("framework", "框架回调", "由第三方框架按名字回调（zeroconf、asyncio），清单误报"),
+    ("product", "产品决定", "接不接是功能取舍，不是技术问题：等所有者定"),
+)
+PLACEMENT_KEYS = tuple(k for k, _l, _d in PLACEMENTS)
+# 所有者安排暂缓的部分，不要求有去处。
+DEFERRED_THEMES = ("android",)
 
 # 顺序即优先级：先命中的类别生效。
 ROLES = (
@@ -372,6 +392,53 @@ def _kind_index(path: str, cache: Dict[str, Dict[int, Tuple[str, str]]]) -> Dict
     return cache[path]
 
 
+def load_placement() -> Dict[str, Dict[str, List[str]]]:
+    if not PLACEMENT_PATH.exists():
+        return {}
+    return json.loads(PLACEMENT_PATH.read_text(encoding="utf-8")).get("placement", {})
+
+
+def _placement_key(row: dict) -> str:
+    return f"{row['owner']}.{row['name']}" if row["owner"] else row["name"]
+
+
+def resolve_placement(row: dict, table: Dict[str, Dict[str, List[str]]]):
+    """(类别, 放在哪里) 或 None。先按「类名.方法名」，再按裸名，最后按该文件的「*」。"""
+    per_file = table.get(row["path"]) or {}
+    for key in (_placement_key(row), row["name"], "*"):
+        if key in per_file:
+            val = per_file[key]
+            if isinstance(val, list) and len(val) == 2:
+                return val[0], val[1]
+            return "", ""  # 格式不对：check_placement 会把它列进 bad
+    return None
+
+
+def check_placement(rows: List[dict], table: Dict[str, Dict[str, List[str]]]) -> Dict[str, List[str]]:
+    """放置表与当前清单对账：缺去处的、类别不认识的、已经不在清单里的（过期）。"""
+    missing, bad, stale = [], [], []
+    used: Dict[str, set] = defaultdict(set)
+    for r in rows:
+        if r["theme"] in DEFERRED_THEMES:
+            continue
+        got = resolve_placement(r, table)
+        if got is None:
+            missing.append(f"{r['path']}::{_placement_key(r)}")
+            continue
+        per_file = table[r["path"]]
+        for key in (_placement_key(r), r["name"], "*"):
+            if key in per_file:
+                used[r["path"]].add(key)
+                break
+    for path, per_file in table.items():
+        for key, val in per_file.items():
+            if not (isinstance(val, list) and len(val) == 2 and val[0] in PLACEMENT_KEYS and str(val[1]).strip()):
+                bad.append(f"{path}::{key}")
+            if key not in used.get(path, set()):
+                stale.append(f"{path}::{key}")
+    return {"missing": missing, "bad": bad, "stale": stale}
+
+
 def _test_referenced(names: List[str]) -> set:
     found: set = set()
     wanted = set(names)
@@ -385,14 +452,16 @@ def _test_referenced(names: List[str]) -> set:
     return found
 
 
-def collect() -> Dict[str, object]:
+def collect(reachability: bool = True) -> Dict[str, object]:
+    """``reachability=False`` 跳过可达性分析（它占了大半耗时）；只核对去处表时用。"""
     definitions, def_count = check_wiring.collect_definitions(check_wiring._iter_definition_files())
     referenced = check_wiring.collect_references(check_wiring._iter_reference_files())
     unwired = check_wiring.find_unwired(definitions, referenced, def_count)
-    unreachable = check_reachability.compute_unreachable()
+    unreachable = check_reachability.compute_unreachable() if reachability else []
     unreachable_paths = {m.replace(".", "/") + ".py" for m in unreachable}
 
     tested = _test_referenced([n for n, _ in unwired])
+    placement = load_placement()
     cache: Dict[str, Dict[int, Tuple[str, str]]] = {}
     rows = []
     for name, where in unwired:
@@ -415,6 +484,8 @@ def collect() -> Dict[str, object]:
                 "module_unreachable": path in unreachable_paths,
             }
         )
+        got = resolve_placement(rows[-1], placement)
+        rows[-1]["placement"], rows[-1]["placement_where"] = got if got else ("", "")
     modules = []
     for mod in unreachable:
         p = REPO_ROOT / (mod.replace(".", "/") + ".py")
@@ -465,6 +536,55 @@ def render(data: Dict[str, object]) -> str:
             t = sum(x["tested"] for x in lst)
             out.append(f"| {label} | {len(lst)} | {t} | {len(lst) - t} | {len({x['path'] for x in lst})} |")
     out.append("")
+    out.append("### 每个函数放在哪里（安卓部分按所有者安排暂缓，不在其列）")
+    out.append("")
+    out.append("逐条核对的结果在 `config/unwired_placement.json`。这是**去处**，不是已执行的处置：删与接都等所有者定。")
+    out.append("")
+    out.append("| 去处 | 条数 | 意思 |")
+    out.append("|---|---|---|")
+    placed = [r for r in rows if r["theme"] not in DEFERRED_THEMES]
+    by_cat: Dict[str, List[dict]] = defaultdict(list)
+    for r in placed:
+        by_cat[r["placement"] or "（未定）"].append(r)
+    for key, label, meaning in PLACEMENTS:
+        out.append(f"| {label}（`{key}`） | {len(by_cat.get(key, []))} | {meaning} |")
+    if by_cat.get("（未定）"):
+        out.append(f"| （未定） | {len(by_cat['（未定）'])} | 放置表里还没有这一条 |")
+    out.append(f"| 合计 | {len(placed)} | |")
+    out.append("")
+    out.append("按用途 × 去处：")
+    out.append("")
+    out.append("| 用途 | " + " | ".join(label for _k, label, _m in PLACEMENTS) + " | 合计 |")
+    out.append("|---|" + "---:|" * (len(PLACEMENTS) + 1))
+    for theme_key, theme_label, _pats in THEMES:
+        lst = [r for r in placed if r["theme"] == theme_key]
+        if not lst:
+            continue
+        cells = [str(sum(r["placement"] == k for r in lst)) for k, _l, _m in PLACEMENTS]
+        out.append(f"| {theme_label} | " + " | ".join(cells) + f" | {len(lst)} |")
+    out.append("")
+    for key, label, _meaning in PLACEMENTS:
+        lst = by_cat.get(key, [])
+        if not lst:
+            continue
+        out.append(f"<details><summary>{label}（{key}）— {len(lst)} 条</summary>")
+        out.append("")
+        grouped: Dict[str, List[dict]] = defaultdict(list)
+        for r in lst:
+            grouped[r["path"]].append(r)
+        for path in sorted(grouped):
+            items = sorted(grouped[path], key=lambda x: int(x["at"].rsplit(":", 1)[1]))
+            wheres = {x["placement_where"] for x in items}
+            if len(items) > 1 and len(wheres) == 1:
+                names = "、".join(f"`{_placement_key(x)}`" for x in items)
+                out.append(f"- `{path}` — {names}：{wheres.pop()}")
+                continue
+            out.append(f"- `{path}`")
+            for x in items:
+                out.append(f"  - `{_placement_key(x)}`：{x['placement_where']}")
+        out.append("")
+        out.append("</details>")
+        out.append("")
     out.append("### 按子系统")
     out.append("")
     out.append("| 子系统 | 条数 | 文件数 |")
@@ -514,8 +634,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true", help=f"刷新 {DOC_PATH.relative_to(REPO_ROOT)} 的生成段")
     ap.add_argument("--json", action="store_true", help="输出机器可读 JSON")
+    ap.add_argument("--check", action="store_true", help=f"核对 {PLACEMENT_PATH.relative_to(REPO_ROOT)} 与当前清单")
     args = ap.parse_args()
-    data = collect()
+    data = collect(reachability=not args.check)
+    if args.check:
+        report = check_placement(data["rows"], load_placement())  # type: ignore[arg-type]
+        for kind, label in (("missing", "没有去处"), ("bad", "格式或类别不对"), ("stale", "已不在清单里")):
+            for item in report[kind]:
+                print(f"{label}: {item}")
+        return 1 if any(report.values()) else 0
     if args.json:
         print(json.dumps(data, ensure_ascii=False, indent=1))
         return 0

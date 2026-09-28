@@ -291,7 +291,7 @@ python scripts/check_assessment_freshness.py
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |
 | 旧 WS 路径 `/ws/ufo3` 未退役 | 路线图 C6 | 需要安卓侧先确认老客户端已迁走 |
 | 自我改进总闸默认关闭 | `GALAXY_META_RSI=off` | 由仓库所有者决定 |
-| 未接线 / 不可达：删还是接 | 755 条 + 3 个模块。**按用途说它们是干什么的**见 `docs/UNWIRED_CODE_INVENTORY.md` 第 2 节，逐个函数的原文说明在文末 | 所有者要求先弄清楚再动；清单已给。所有者 2026-09-28：后面和 G002 放一块儿做 |
+| 未接线 / 不可达：删还是接 | 755 条 + 3 个模块。**按用途说它们是干什么的**见 `docs/UNWIRED_CODE_INVENTORY.md` 第 2 节；**安卓以外 672 条每条该放在哪里**见第 7 节（接上 215、挂出来 134、删掉 170、随对象走 91、测试钩子 50、框架回调 4、产品决定 8；数据在 `config/unwired_placement.json`，`tests/test_unwired_placement.py` 守着它与清单对账）。逐条核对时新确认两处「看得见但不生效」：`PUT /api/v1/security/policy` 改的零信任规则表没有执行方；系统资源表有人读、没人登记 | 所有者要求先弄清楚再动；清单与去处已给，**没按它删或接任何一行**。所有者 2026-09-28：后面和 G002 放一块儿做 |
 | 大文件 | core 有 133 个文件超过 1000 行 | 已有复杂度基线守着，只许拆、不许涨 |
 | 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；复现一次要 4 分钟，这次没有定位到创建点 |
 | 文档漂移 | 286 份 Markdown 中，2026-08-05 之后只改过 9 份 | 本次给 41 份状态/审计类文档加了快照说明，指向本文；正文保留原样 |
@@ -354,7 +354,7 @@ python -m pytest -q -p no:cacheprovider --timeout=300 tests/
 - `RENDER_CONTRACT_DIRECTION.md`、`PANEL_SURFACE_CONVERGENCE.md`：前端契约与面板
 - `architecture/DEVICE_ONBOARDING_PLANE_V1.md`：设备接入
 - `NODE_HTTP_SECURITY_CONTRACT.md`：节点安全
-- `UNWIRED_CODE_INVENTORY.md`：未接线与不可达代码逐类清单（等所有者定删还是接）
+- `UNWIRED_CODE_INVENTORY.md`：未接线与不可达代码逐类清单，以及安卓以外每个函数的去处（等所有者定删还是接）
 - `config/assessment_claims.json`：可机械复验的结论清单（`python scripts/check_assessment_freshness.py`）
 - `core.canonical_capability_status`：运行时对自身能力的登记
 

@@ -1,0 +1,2699 @@
+{
+ "_comment": "未接线函数（安卓部分除外）各自该放在哪里。由人逐条核对后写下，scripts/unwired_inventory.py 渲染进 docs/UNWIRED_CODE_INVENTORY.md，tests/test_unwired_placement.py 守着：清单里每条非安卓函数都要有去处，这里写的每个名字都必须仍在清单里（接上或删掉之后要把这里的条目一起删）。键是「类名.方法名」或模块函数名；「*」表示该文件其余各条同一去处。值是 [去处类别, 放在哪里]。这是去处，不是已执行的处置 —— 删与接都等所有者定。",
+ "placement": {
+  "core/acl.py": {
+   "AntiCorruptionLayer.validate_mcp_call": [
+    "wire",
+    "core/mcp_gateway.py 执行 LLM 发起的工具调用前（它已用 acl 校验 MCP 注册，调用这一半没接）"
+   ],
+   "AntiCorruptionLayer.validate_worker_registration": [
+    "wire",
+    "core/master_brain.py worker 首次接入处（它已持有 acl）"
+   ]
+  },
+  "core/adapters/ble_adapter.py": {
+   "BLEAdapter.list_connected": [
+    "surface",
+    "传输诊断：与 AIPTransport.transport_stats 一起进 core/routes/diagnostics.py（BLEAdapter 已在 galaxy_gateway/bootstrap/lifecycle.py 第 500 行注册）"
+   ]
+  },
+  "core/adapters/tailscale_p2p_adapter.py": {
+   "TailscaleP2PAdapter.list_registered_devices": [
+    "surface",
+    "core/routes/pairing.py 的 Tailscale 状态里列出 device_id → 100.x 地址（适配器已在 lifecycle.py 第 482 行注册）"
+   ]
+  },
+  "core/adapters/tcp_adapter.py": {
+   "TCPAdapter.connect_to_peer": [
+    "wire",
+    "core/lan_discovery.py 发现到局域网对端后主动建 TCP 直连；TCP 服务端已在 lifecycle.py 第 509 行起、入站帧已接进 message_handler"
+   ],
+   "TCPAdapter.discover_peers": [
+    "delete",
+    "与 core/lan_discovery.py（zeroconf，已由 core/startup.py 启动）重复的第二条 mDNS 发现路径"
+   ]
+  },
+  "core/agent/intent_router.py": {
+   "IntentResult.is_execution": [
+    "wire",
+    "core/agent/kernel.py 拿到 intent 之后判断是否进执行链的地方（现在是就地比较 intent 字符串）"
+   ]
+  },
+  "core/agent/policy_loader.py": {
+   "reload_policies": [
+    "wire",
+    "策略文件被改动后（core/routes/config.py 写配置之后）热重载；kernel.py 目前只在启动时加载一次"
+   ]
+  },
+  "core/agent_factory.py": {
+   "AgentMessageBus.notify_ack": [
+    "wire",
+    "core/agent_team.py 成员处理完总线消息处回 ack（请求方现在只能等超时）"
+   ]
+  },
+  "core/agent_identity_memory.py": {
+   "*": [
+    "surface",
+    "身份记忆的目标/价值增删：挂到 core/routes/ai.py（或面板「智能体」页）；现在只能读不能改"
+   ]
+  },
+  "core/agent_manifest.py": {
+   "AgentManifest.create_multi_step_agent": [
+    "object",
+    "随 core/routes/nodes.py 创建 Agent 的端点：需要多步顺序 Agent 时从那里调"
+   ]
+  },
+  "core/agent_team.py": {
+   "AgentTeam.couple_member": [
+    "object",
+    "耦合模式切换随团队对象：core/control_plane/swarm_scaler.py 扩缩容时用"
+   ],
+   "AgentTeam.decouple_member": [
+    "object",
+    "耦合模式切换随团队对象：core/control_plane/swarm_scaler.py 扩缩容时用"
+   ],
+   "TeamManager.list_teams": [
+    "surface",
+    "core/routes/ai.py 列出团队"
+   ]
+  },
+  "core/agentic/workflow.py": {
+   "*": [
+    "delete",
+    "整个模块零导入；三种执行入口（单 agent / 团队 / 分形）各自已有直接调用"
+   ]
+  },
+  "core/ai_intent.py": {
+   "SemanticSearch.index_document_vector": [
+    "delete",
+    "向量后端已收口到 core/memory/vector_backend_provider.py；这是向后兼容的旧入口"
+   ],
+   "SemanticSearch.initialize_qdrant": [
+    "delete",
+    "向量后端已收口到 core/memory/vector_backend_provider.py；这是向后兼容的旧入口"
+   ]
+  },
+  "core/aip_transport.py": {
+   "AIPTransport.probe_best_transport": [
+    "wire",
+    "AIPTransport 发送选路处（同文件 send 路径）在首选链路失败时先探测再切换；目前切换只靠静态优先级"
+   ],
+   "AIPTransport.transport_stats": [
+    "surface",
+    "core/routes/diagnostics.py：链路统计（docstring 自己写着供面板/诊断查看选路依据）"
+   ],
+   "AIPTransport.unregister_adapter": [
+    "wire",
+    "galaxy_gateway/bootstrap/lifecycle.py 关停阶段对称地卸下注册过的适配器"
+   ],
+   "register_transport_adapter": [
+    "delete",
+    "只是 get_aip_transport().register_adapter 的一行转发；lifecycle.py 全部直接调 register_adapter"
+   ]
+  },
+  "core/ascii_art.py": {
+   "print_galaxy": [
+    "delete",
+    "docstring：旧版接口，新代码用 print_banner()"
+   ]
+  },
+  "core/audit_event_semantics.py": {
+   "audit_failure_domain": [
+    "wire",
+    "core/failure_domains.py 给失败定域的地方（command_router 捕获派发失败、归类 failure domain 之后）"
+   ],
+   "audit_policy_decision": [
+    "wire",
+    "core/runtime/execution_target_policy_engine.py 的 apply_failure_handling_policy / apply_degraded_readiness_policy 得出结论处（这两处本身也还没接，见「接上」里的 execution_target_policy_engine；接上时一起记审计）"
+   ],
+   "audit_route_decision": [
+    "wire",
+    "core/command_router.py 的 CommandRouter.route_envelope 选定目标之后（与第 2562 行 emit_dispatch_decision_event 同处）；同文件的 audit_fallback_triggered / audit_retry_triggered 已在第 4056 / 4289 行这样接着"
+   ]
+  },
+  "core/audit_layer/fresh_dual_repo_code_audit.py": {
+   "*": [
+    "testhook",
+    "legacy 审计的不变量断言，只在测试里跑"
+   ]
+  },
+  "core/authority_conflict_elimination.py": {
+   "*": [
+    "testhook",
+    "不变量断言（assert_*），用于测试 / 审计"
+   ]
+  },
+  "core/bounded_subject_platform_boundary.py": {
+   "*": [
+    "testhook",
+    "不变量断言"
+   ]
+  },
+  "core/cache.py": {
+   "*": [
+    "delete",
+    "command_router 自己缓存节点状态 / 会话；这两个 Redis 缓存写入没有对应的读取方"
+   ]
+  },
+  "core/canonical_ownership_truth_bridge.py": {
+   "*": [
+    "object",
+    "唯一导入方是 core/android_participant_truth_ingress.py：安卓参与方真相那一侧，按所有者安排暂缓"
+   ]
+  },
+  "core/canonical_session_axis.py": {
+   "*": [
+    "surface",
+    "core/routes/projection.py（已 import）给出会话轴快照"
+   ]
+  },
+  "core/canonical_task_dispatch_chain.py": {
+   "*": [
+    "surface",
+    "core/routes/projection.py（已 import 本模块）给出派发链快照 / 路径分类"
+   ]
+  },
+  "core/capabilities/canonical_dispatcher.py": {
+   "CanonicalDispatcher.bus_catalog": [
+    "surface",
+    "诊断端点列出 CapabilityBus 快照；与 core/routes/protocols.py 的技能/MCP 列表放在一起"
+   ]
+  },
+  "core/capability_assimilation.py": {
+   "CapabilityAssimilationLayer.mark_stale_if_expired": [
+    "wire",
+    "与 NodeFabricRegistry.mark_offline_if_stale 放进同一个周期清扫（launcher/node_startup.py）"
+   ],
+   "assimilate_node": [
+    "delete",
+    "便捷包装；core/participant_admission.py 等直接调 CapabilityAssimilationLayer"
+   ],
+   "reset_capability_assimilation_layer": [
+    "testhook",
+    "测试用单例重置"
+   ]
+  },
+  "core/capability_aware_routing_default.py": {
+   "apply_capability_aware_default": [
+    "delete",
+    "command_router / openclawd 只用本模块的 infer_dispatch_capabilities；「能力感知为默认主路径」已在 command_router 里成立"
+   ]
+  },
+  "core/capability_bus.py": {
+   "CapabilityBus.register_engineering_capability": [
+    "wire",
+    "core/engineering_verification.py 或工程循环启动处登记"
+   ],
+   "CapabilityBus.register_mcp_tool": [
+    "wire",
+    "core/mcp_loader.py 装载 MCP 服务器后逐个工具登记进总线（现在总线里只有技能）"
+   ],
+   "CapabilityBus.register_resource_capability": [
+    "wire",
+    "系统资源治理能力登记处（core/concurrency_manager.py / compute_scheduler 初始化）"
+   ],
+   "CapabilityBus.seed_from_node_registry": [
+    "delete",
+    "从 node_registry.json 种总线；节点能力已由 NodeFabricRegistry → CapabilityRegistry 提供"
+   ],
+   "CapabilityBusRole.from_tool_name": [
+    "object",
+    "随下面的 register_* 一起：登记时按工具名推断角色"
+   ]
+  },
+  "core/capability_graph_selection.py": {
+   "explain_selection": [
+    "surface",
+    "与 mesh 组的 explain_joint_selection 一起进 core/routes/operator.py 选路解释"
+   ]
+  },
+  "core/capability_manager.py": {
+   "CapabilityManager.find_capability_by_keyword": [
+    "delete",
+    "旧能力管理器；能力查询走 core/unified/capability_resolver.py"
+   ]
+  },
+  "core/capability_network_bridge.py": {
+   "explain_joint_selection": [
+    "surface",
+    "选路解释：core/routes/operator.py /api/v1/operator/inspect/route/{task_id} 一并给出人话解释"
+   ],
+   "fallback_joint_select": [
+    "wire",
+    "core/command_router.py 联合选择（能力 + 网络路径）主选失败时（该文件已在用本模块的主选）"
+   ]
+  },
+  "core/capability_network_runtime_policy.py": {
+   "absorb_capability_change_event": [
+    "wire",
+    "能力变化处：参与方接入时声明的能力（core/participant_admission.py），以及 MCP/技能装卸（core/mcp_loader.py、core/skill_loader.py）"
+   ],
+   "absorb_device_presence_event": [
+    "wire",
+    "设备上下线处：core/udm_registration_hook.py 注册 / 注销时，与参与方断开（core/participant_admission.py）。同模块的 absorb_gateway_connectivity_event 已在 galaxy_gateway/gateway_nats_adapter.py 第 693 行这样接着"
+   ],
+   "absorb_heartbeat_event": [
+    "wire",
+    "心跳处：core/participant_admission.py 参与方心跳、core/nats_heartbeat.py 节点心跳"
+   ],
+   "absorb_path_change_event": [
+    "wire",
+    "core/aip_transport.py 第 446 行附近选路 / 切换传输处（该处已在读拓扑运行时）"
+   ],
+   "query_capable_device_executors": [
+    "object",
+    "与已接线的 query_routable_executors（device_pool_manager 在用）重复的窄化版；要么删，要么在需要「只要设备型执行者」的地方替换调用"
+   ],
+   "snapshot_canonical_runtime": [
+    "surface",
+    "core/routes/projection.py 或诊断端点：能力 + 网络的统一快照"
+   ]
+  },
+  "core/capability_orchestrator.py": {
+   "CapabilityOrchestrator.disable_capability": [
+    "surface",
+    "core/routes/protocols.py 加能力启停；或整模块随旧能力层退役（legacy）"
+   ],
+   "CapabilityOrchestrator.enable_capability": [
+    "surface",
+    "core/routes/protocols.py 加能力启停；或整模块随旧能力层退役（legacy）"
+   ],
+   "CapabilityOrchestrator.list_capabilities": [
+    "surface",
+    "core/routes/protocols.py 加能力启停；或整模块随旧能力层退役（legacy）"
+   ],
+   "CapabilityOrchestrator.reinitialize": [
+    "wire",
+    "docstring：MCP/Skill 变更后调用 —— core/routes/protocols.py 的 load/reload/unload 之后"
+   ]
+  },
+  "core/capability_runtime/capability_constraint.py": {
+   "*": [
+    "object",
+    "值对象上的判断方法，随 capability_runtime 这一对象被消费时一起用"
+   ]
+  },
+  "core/capability_runtime/capability_preference.py": {
+   "*": [
+    "object",
+    "值对象上的判断方法，随 capability_runtime 这一对象被消费时一起用"
+   ]
+  },
+  "core/capability_tier.py": {
+   "list_capabilities_by_tier": [
+    "surface",
+    "core/routes/diagnostics.py 按层级列能力"
+   ],
+   "require_main_chain_capability": [
+    "testhook",
+    "断言包装"
+   ]
+  },
+  "core/channel_plugins.py": {
+   "ChannelPluginLoader.unload_plugin": [
+    "surface",
+    "core/routes/channels.py 加卸载渠道插件（已有加载）"
+   ],
+   "ConsoleChannelAdapter.inject": [
+    "testhook",
+    "docstring：供测试使用"
+   ]
+  },
+  "core/cognitive/cognitive_activation_budget.py": {
+   "apply_candidate_narrowing": [
+    "wire",
+    "core/agent/execution_planner.py _pick_strategy 消费预算后收窄候选（AGENTS.md 里的三层制导之一，目前只用了广度判定）"
+   ],
+   "*": [
+    "object",
+    "值对象判定方法，随 kernel/execution_planner 读预算时用"
+   ]
+  },
+  "core/cognitive/cognitive_execution_policy.py": {
+   "*": [
+    "object",
+    "值对象判定方法（is_liminal / is_manifest / is_passive），调用方目前直接比枚举"
+   ]
+  },
+  "core/cognitive/cognitive_field_engine.py": {
+   "*": [
+    "wire",
+    "core/desktop_existence_surface.py 订阅场引擎 tick（它已持有引擎，现在是轮询）"
+   ]
+  },
+  "core/cognitive/liminal_dynamics.py": {
+   "*": [
+    "wire",
+    "core/cognitive/state_interpreter.py 判定 liminal→manifest 迁移处用驻留时长守卫"
+   ]
+  },
+  "core/cognitive/long_term_memory.py": {
+   "LongTermMemory.forget_namespace": [
+    "surface",
+    "记忆管理：「忘掉这一类」端点（与 core/routes/sessions.py 的会话删除同层）"
+   ],
+   "LongTermMemory.retrieve_entry": [
+    "object",
+    "单条取回，随长期记忆被按 id 读取时用"
+   ]
+  },
+  "core/cognitive/memory_bias_layer.py": {
+   "build_memory_bias_active_scope_diagnostics": [
+    "surface",
+    "core/routes/projection.py（已 import）给出记忆偏置作用域诊断"
+   ],
+   "*": [
+    "object",
+    "值对象判定方法，随 execution_planner 消费偏置时用"
+   ]
+  },
+  "core/cognitive/pattern_miner.py": {
+   "PatternMiner.mine_full": [
+    "wire",
+    "元层 / 夜间维护的周期任务里跑全量挖掘（增量挖掘已在用）；与 experience_guidance 的边界见 EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY"
+   ]
+  },
+  "core/cognitive/state_interpreter.py": {
+   "*": [
+    "object",
+    "解释器的只读方法，随 cognitive_execution_policy 读状态时用"
+   ]
+  },
+  "core/command_router.py": {
+   "CommandRouter.normalize_legacy_ingress": [
+    "delete",
+    "非信封载荷已在各入口（android_bridge、app.py）各自转信封；这是第二套归一化"
+   ]
+  },
+  "core/compat_fallback_authority_guard.py": {
+   "assert_canonical_is_decision_authority": [
+    "testhook",
+    "断言"
+   ],
+   "block_compat_influence_at_decision_site": [
+    "wire",
+    "兼容 / 旧路径影响决策处的阻断门（PR-8 写好了门，决策点没调用）；具体决策点以 core/orchestration_authority/legacy_paths.py 登记的为准"
+   ],
+   "build_authority_hardening_snapshot": [
+    "surface",
+    "core/routes/projection.py 给出权威加固态势"
+   ]
+  },
+  "core/compat_legacy_path_blocking_canonicalization.py": {
+   "*": [
+    "object",
+    "legacy 记录上的判定方法，随 block_compat_influence_at_decision_site 一起"
+   ]
+  },
+  "core/compute_scheduler.py": {
+   "ComputeScheduler.estimate_quantized_size": [
+    "wire",
+    "core/local_model_backends.py 选量化档位前估大小"
+   ],
+   "ComputeScheduler.is_monitoring": [
+    "surface",
+    "core/routes/models.py /status 里带上算力监控是否在跑、已加载模型数"
+   ],
+   "ComputeScheduler.loaded_model_count": [
+    "surface",
+    "core/routes/models.py /status 里带上算力监控是否在跑、已加载模型数"
+   ],
+   "ModelAllocation.is_offloaded": [
+    "surface",
+    "core/routes/models.py /status 里带上算力监控是否在跑、已加载模型数；逐个分配标出是否被卸到 CPU"
+   ]
+  },
+  "core/concurrency_manager.py": {
+   "ConcurrencyManager.run_with_concurrency": [
+    "object",
+    "API 形状的便利方法；调用方都直接用信号量/锁。有新调用需求时才用，否则删"
+   ],
+   "ConcurrencyManager.run_with_lock": [
+    "object",
+    "API 形状的便利方法；调用方都直接用信号量/锁。有新调用需求时才用，否则删"
+   ],
+   "ConcurrencyManager.track_task": [
+    "wire",
+    "裸 asyncio.create_task 的后台任务处（core/truth_chain_recovery 等）登记，防泄漏"
+   ],
+   "LockManager.release_all": [
+    "wire",
+    "持有者（任务/会话）结束时释放它持有的全部锁；目前锁只能逐个释放"
+   ]
+  },
+  "core/config_hot_reload.py": {
+   "HotReloadConfigManager.save_to_file": [
+    "delete",
+    "生产里唯一在写配置的是 POST /api/config（SYSTEM_STATUS §6.4 复核结论）；第二个写入口不该接"
+   ]
+  },
+  "core/config_preflight.py": {
+   "require_env": [
+    "delete",
+    "预检用 validate 汇总报缺，不逐个抛错；无调用方"
+   ]
+  },
+  "core/config_service.py": {
+   "ConfigService.describe_missing": [
+    "surface",
+    "core/routes/config.py 的配置状态里给出人话缺项（它已持有 ConfigService）"
+   ],
+   "ConfigService.is_provider_ready": [
+    "object",
+    "随 describe_missing 一起用"
+   ],
+   "ConfigService.set_android_inference_mode": [
+    "delete",
+    "写 runtime/config.json 的 provider 开关，运行时没有读者（结论 config-json-provider-dims-have-no-runtime-reader）；所有者答复不要这项新能力；（安卓部分本就暂缓）"
+   ],
+   "ConfigService.set_native_mm_policy": [
+    "delete",
+    "写 runtime/config.json 的 provider 开关，运行时没有读者（结论 config-json-provider-dims-have-no-runtime-reader）；所有者答复不要这项新能力；native_multimodal_policy 没有运行时读者"
+   ],
+   "ConfigService.set_network_url": [
+    "delete",
+    "写 runtime/config.json 的 provider 开关，运行时没有读者（结论 config-json-provider-dims-have-no-runtime-reader）；所有者答复不要这项新能力"
+   ],
+   "ConfigService.set_oneapi": [
+    "delete",
+    "写 runtime/config.json 的 provider 开关，运行时没有读者（结论 config-json-provider-dims-have-no-runtime-reader）；所有者答复不要这项新能力"
+   ],
+   "ConfigService.set_provider_api_key": [
+    "delete",
+    "密钥写入已经走 ConfigService.set_secret（POST /api/config 在用）；这是重复入口"
+   ],
+   "ConfigService.set_toggle": [
+    "delete",
+    "写 runtime/config.json 的 provider 开关，运行时没有读者（结论 config-json-provider-dims-have-no-runtime-reader）；所有者答复不要这项新能力"
+   ]
+  },
+  "core/config_store.py": {
+   "ConfigStore.write_secrets": [
+    "delete",
+    "批量写密钥；生产走 set_secret 逐条写"
+   ]
+  },
+  "core/connection_manager.py": {
+   "ConnectionManager.on_connected": [
+    "wire",
+    "launcher/services.py 第 967 行 / launcher/nodes.py 第 360 行取到 get_connection_manager() 后登记回调，把上线写进 core/capability_network_runtime_policy.absorb_device_presence_event"
+   ],
+   "ConnectionManager.on_disconnected": [
+    "wire",
+    "launcher/services.py 第 967 行 / launcher/nodes.py 第 360 行取到 get_connection_manager() 后登记回调，把上线写进 core/capability_network_runtime_policy.absorb_device_presence_event；下线时写 absorb_device_presence_event（与 mesh 组那条放置配对）"
+   ]
+  },
+  "core/constellation_runtime.py": {
+   "warn_legacy_path": [
+    "delete",
+    "为旧编排器路径打弃用告警用；旧路径已登记在 legacy_paths，有统一的 emit_legacy_guardrail"
+   ]
+  },
+  "core/container_runtime.py": {
+   "*": [
+    "surface",
+    "core/routes/system.py 加「选容器运行时（docker/podman）/ 试一下」；launcher/services.py 已用本模块做探测"
+   ]
+  },
+  "core/continuation_rebind_registry.py": {
+   "ContinuationRebindRegistry.register_new_waiter": [
+    "wire",
+    "core/runtime_restart_recovery.py 重启后重新派发、登记新的等待方处（该文件已在用这个注册表记「待重绑」，但从不记「已重绑」，于是闭环永远判不成）"
+   ],
+   "*": [
+    "surface",
+    "core/routes/operator.py /api/v1/operator/inspect/recovery/{task_id} 一并返回「待重绑 / 已重绑 / 闭环」"
+   ]
+  },
+  "core/continuum/return_engine.py": {
+   "ReturnEngine.force_return": [
+    "surface",
+    "操作者「立即回到静默」控制：core/routes/operator.py"
+   ]
+  },
+  "core/continuum/temporal_engine.py": {
+   "*": [
+    "object",
+    "只读快照 / 剩余驻留时长，随 continuum orchestrator 投影时用"
+   ]
+  },
+  "core/control_plane/audit_ledger.py": {
+   "*": [
+    "surface",
+    "core/routes/audit.py：/api/v1/audit/snapshot 旁加「账本完整性」与 DAG 导出（账本本身已被 31 个模块写入）"
+   ]
+  },
+  "core/control_plane/security_interceptor.py": {
+   "SecurityInterceptor.check_and_intercept": [
+    "wire",
+    "工具真正执行之前（openclawd ReAct 循环调工具处）。PUT /api/v1/security/policy 改的那张零信任规则表，唯一的读者就是它，而它在生产里没人调 —— 现在改那张表对任何执行都不起作用，只有 /evaluate 端点会回显"
+   ]
+  },
+  "core/control_plane/smart_scheduler.py": {
+   "DeviceScoringEngine.rank_devices": [
+    "wire",
+    "galaxy_gateway/wake_router.py 选唤醒设备处要全排名（现在只取最佳）；或诊断里展示排名"
+   ]
+  },
+  "core/control_plane/swarm_manifest.py": {
+   "*": [
+    "object",
+    "清单对象的转换；core/swarm_coordinator.py 派发蜂群任务时用（它已持有这个对象）"
+   ]
+  },
+  "core/control_plane/swarm_scaler.py": {
+   "SwarmScaler.autoscale": [
+    "product",
+    "core/master_brain.py 已持有 SwarmScaler 但没驱动；要蜂群自动扩缩就放在 master_brain 的周期循环里 —— 这是产品决定"
+   ],
+   "SwarmScaler.managed_workers": [
+    "object",
+    "随 autoscale 一起"
+   ]
+  },
+  "core/critical_path_harness.py": {
+   "record_execution_dispatch": [
+    "wire",
+    "openclawd 执行派发处（openclawd 已在同一模块调 record_provider_switch / record_route_selection）"
+   ],
+   "record_ingress_path": [
+    "wire",
+    "openclawd 多模态入口处（它已在同一模块调 record_provider_switch / record_route_selection）"
+   ],
+   "snapshot_critical_path": [
+    "surface",
+    "core/routes/diagnostics.py 关键路径快照"
+   ]
+  },
+  "core/cross_device_dispatch_boundary.py": {
+   "*": [
+    "delete",
+    "legacy 的跨设备派发边界分类；派发的规范路径已由 command_router 决定，分类器没有决策点在读"
+   ]
+  },
+  "core/cross_device_policy/routing_policy.py": {
+   "*": [
+    "object",
+    "策略对象自带查询；读 RoutingPolicy 的地方（model_topology、routing_explanation）按需调用"
+   ]
+  },
+  "core/cross_device_sync.py": {
+   "push_task_state_to_device": [
+    "wire",
+    "安卓相关（推任务状态到手机），先放着；非安卓参与方要这个能力时，放在 core/participant_admission.py 的任务状态更新处"
+   ]
+  },
+  "core/dag_evolver.py": {
+   "DAGEvolver.on_missing_capability": [
+    "wire",
+    "core/constellation_runtime.py 执行 DAG 时遇到能力缺口的分支（它已持有 DAGEvolver）"
+   ]
+  },
+  "core/decision_diff_telemetry.py": {
+   "clear_diff_store": [
+    "testhook",
+    "测试清空用"
+   ],
+   "record_candidate_diff": [
+    "delete",
+    "迁移期的新旧选路差异遥测（模块自标 legacy）。唯一还在用的是 entrypoint_router 的 record_entry_mode_diff；跨设备候选选择已只剩新路径，没有「旧的」可比"
+   ]
+  },
+  "core/decision_timeline.py": {
+   "record_source_switch_event": [
+    "wire",
+    "core/desktop_presence_runtime.py 感知源切换处（该文件第 2742 行已在往 decision_timeline 记别的事件）"
+   ]
+  },
+  "core/degraded_operation_envelope.py": {
+   "envelope_summary": [
+    "surface",
+    "openclawd 已构造降级信封；投影时用它出紧凑摘要进 core/routes/projection.py"
+   ]
+  },
+  "core/delegated_flow_decision_history.py": {
+   "record_delegated_flow_event": [
+    "wire",
+    "安卓委托流状态变化处（安卓相关，按你的意思先放着）"
+   ],
+   "*": [
+    "object",
+    "证据状态自带判定；读这份历史的验收面（system_final_acceptance_verdict 等）按需调用"
+   ]
+  },
+  "core/delegated_flow_persistence.py": {
+   "DelegatedFlowPersistenceBundle.persist_all": [
+    "wire",
+    "launcher/shutdown.py 关闭前落一次，外加委托流实体状态变化后落盘；恢复协调器第 1101 行 _has_durable_persistence 读的正是这里写的东西"
+   ],
+   "persist_binding_snapshot": [
+    "wire",
+    "随 persist_all 一起（它的一部分）"
+   ],
+   "persist_contract_snapshot": [
+    "wire",
+    "随 persist_all 一起"
+   ],
+   "persist_flow_entity_snapshot": [
+    "wire",
+    "随 persist_all 一起"
+   ],
+   "persist_session_snapshot": [
+    "wire",
+    "随 persist_all 一起"
+   ],
+   "restore_bindings": [
+    "wire",
+    "core/runtime_restart_recovery.py run_startup_recovery 加一步：启动时读回委托流四类对象"
+   ],
+   "restore_contracts": [
+    "wire",
+    "core/runtime_restart_recovery.py run_startup_recovery 加一步：启动时读回委托流四类对象"
+   ],
+   "restore_flow_entities": [
+    "wire",
+    "core/runtime_restart_recovery.py run_startup_recovery 加一步：启动时读回委托流四类对象"
+   ],
+   "restore_sessions": [
+    "wire",
+    "core/runtime_restart_recovery.py run_startup_recovery 加一步：启动时读回委托流四类对象"
+   ]
+  },
+  "core/delegated_flow_recovery_coordinator.py": {
+   "DelegatedFlowRecoveryCoordinator.list_recent_attempts": [
+    "surface",
+    "core/routes/operator.py 恢复检查端点一并返回"
+   ],
+   "*": [
+    "wire",
+    "安卓设备带着在途委托流重连时（galaxy_gateway/android/handlers/registration.py 的重连分支）：先 decide_recovery，再 begin / complete。整个协调器在生产里没有驱动方；安卓相关，按你的意思先放着"
+   ]
+  },
+  "core/desktop_consumption_adapter.py": {
+   "*": [
+    "delete",
+    "legacy 的桌面视图模型；面板只认 WS payload.render（docs/RENDER_CONTRACT_DIRECTION.md）"
+   ]
+  },
+  "core/desktop_presence_runtime.py": {
+   "DesktopPresenceRuntime.decision_timeline_replay": [
+    "surface",
+    "core/routes/operator.py 加决策时间线回放（PR-34 写好了，没有端点）"
+   ],
+   "DesktopPresenceRuntime.operator_override_summary": [
+    "surface",
+    "core/routes/operator.py 读当前操作者覆盖（core/routes 与网关路由里都没有 operator_override 端点）"
+   ],
+   "DesktopPresenceRuntime.permission_safety_summary": [
+    "surface",
+    "core/routes/operator.py 或面板「全部设置」给出权限 / 信任 / 安全摘要"
+   ],
+   "DesktopPresenceRuntime.set_operator_override": [
+    "surface",
+    "core/routes/operator.py 写操作者覆盖（core/routes 与网关路由里都没有 operator_override 端点；PR-33 只做了运行时一半）"
+   ],
+   "DesktopPresenceRuntime.snapshot_continuous_perception": [
+    "surface",
+    "core/routes/perception.py 连续感知最新快照"
+   ]
+  },
+  "core/desktop_presence_system.py": {
+   "*": [
+    "testhook",
+    "docstring 自称测试 / schema 检查用"
+   ]
+  },
+  "core/device_activation_registry.py": {
+   "DeviceActivationRegistry.export_json": [
+    "surface",
+    "core/routes/diagnostics.py 加一个只读端点（注册表由 udm_registration_hook / launcher 写入，没人能读出来）"
+   ]
+  },
+  "core/device_agent_manager.py": {
+   "DeviceAgentManager.connect_all": [
+    "wire",
+    "launcher/core_services.py 第 32 行创建 DeviceAgentManager 之后调用一次"
+   ],
+   "DeviceAgentManager.register_agent_type": [
+    "object",
+    "扩展点：新的设备 Agent 类型需要时由插件/启动配置调用；目前没有第二种类型，留着不接"
+   ],
+   "create_device_api": [
+    "delete",
+    "旧的内嵌设备 API 工厂；设备端点已由 core/routes/devices.py 提供并由 core/api_routes.py 挂载"
+   ]
+  },
+  "core/device_communication.py": {
+   "DeviceCommunication.list_connected_devices": [
+    "surface",
+    "core/routes/twin.py 已持有 DeviceCommunication，可在设备孪生视图里列出当前连接"
+   ],
+   "DeviceCommunication.on_device_message": [
+    "wire",
+    "core/startup.py 第 539 行创建 DeviceCommunication 之后，把设备消息接到 core/event_bridge.py（event_bridge 已在读同一对象）"
+   ],
+   "DeviceMessage.to_aip_v3_dict": [
+    "delete",
+    "DeviceMessage 在本模块之外没有任何使用者；AIP v3 序列化由 galaxy_gateway/protocol 提供"
+   ]
+  },
+  "core/device_execution_profile.py": {
+   "*": [
+    "testhook",
+    "三个便捷工厂只在测试里构造画像；生产由 core/remote_execution_mode_resolver.py 从能力推导画像"
+   ]
+  },
+  "core/device_formation/formation_auto_enrollment.py": {
+   "FormationAutoEnrollmentManager.list_active_device_ids": [
+    "surface",
+    "诊断 / 面板：编组里当前有哪些设备"
+   ],
+   "FormationAutoEnrollmentManager.update_device_readiness": [
+    "wire",
+    "core/mesh/mesh_auto_enrollment.py（已持有该管理器）收到就绪确认时"
+   ]
+  },
+  "core/device_formation/formation_runtime_coordinator.py": {
+   "*": [
+    "object",
+    "参与者状态自带判定；编组调度选参与者时用"
+   ]
+  },
+  "core/device_node_domain_governance.py": {
+   "*": [
+    "surface",
+    "core/routes/projection.py（已 import）按模块路径查注册面分类"
+   ]
+  },
+  "core/device_node_resolver.py": {
+   "*": [
+    "surface",
+    "core/routes/diagnostics.py：列出解析器支持的设备类型 / 传输（resolver 已被 launcher/launcher_adapter.py、launcher/services.py 使用）"
+   ]
+  },
+  "core/device_orchestrator.py": {
+   "DeviceOrchestrator.parallel_commands": [
+    "surface",
+    "core/routes/devices.py（已用 get_device_orchestrator）加「对多台设备并行下发」端点；或由 command_router 多设备分支调用"
+   ],
+   "DeviceOrchestrator.register_device_in_pool": [
+    "wire",
+    "core/udm_registration_hook.py 设备注册处同步进 DevicePoolManager（否则池里只有 command_router 自己放进去的设备）"
+   ],
+   "DeviceOrchestrator.sync_clipboard": [
+    "product",
+    "跨设备剪贴板是产品功能：要不要做由所有者决定；做就挂 core/routes/devices.py"
+   ]
+  },
+  "core/device_registry.py": {
+   "DeviceRegistry.add_tag": [
+    "delete",
+    "旧注册表的分组/标签；规范的设备真相在 UnifiedDeviceManager（galaxy_gateway/ssot.py 写入），没有任何读取方用标签"
+   ],
+   "DeviceRegistry.add_to_group": [
+    "delete",
+    "旧注册表的分组/标签；规范的设备真相在 UnifiedDeviceManager（galaxy_gateway/ssot.py 写入），没有任何读取方用标签"
+   ],
+   "DeviceRegistry.check_offline_devices": [
+    "delete",
+    "兼容缓存的离线扫描；离线判定已由 NodeFabricRegistry.mark_offline_if_stale / UDM 心跳承担"
+   ],
+   "DeviceRegistry.negotiate_capability": [
+    "delete",
+    "能力协商已由注册时的能力上报 + core/capability_network_runtime_policy 取代"
+   ],
+   "DeviceRegistry.project_to_contract": [
+    "object",
+    "把旧记录投影成规范 RegisteredRuntime：留到旧注册表整体退役时一起删，退役前是迁移工具"
+   ],
+   "DeviceRegistry.remove_from_group": [
+    "delete",
+    "旧注册表的分组/标签；规范的设备真相在 UnifiedDeviceManager（galaxy_gateway/ssot.py 写入），没有任何读取方用标签"
+   ],
+   "DeviceRegistry.remove_tag": [
+    "delete",
+    "旧注册表的分组/标签；规范的设备真相在 UnifiedDeviceManager（galaxy_gateway/ssot.py 写入），没有任何读取方用标签"
+   ]
+  },
+  "core/device_types.py": {
+   "device_type_to_platform": [
+    "delete",
+    "简化 DeviceType → AIP 平台的映射，生产无人调用，只有测试"
+   ]
+  },
+  "core/device_worker_convergence.py": {
+   "DeviceWorkerConvergence.is_worker_registered": [
+    "object",
+    "core/unified/device_manager.py（已用这个类）派发前判断设备是否已作为 NATS Worker 在线时用"
+   ]
+  },
+  "core/digital_twin_engine.py": {
+   "DigitalTwin.push_to_physical": [
+    "product",
+    "从孪生侧向真实设备下发命令：涉及安全边界，做不做由所有者定"
+   ],
+   "DigitalTwin.register_physics_model": [
+    "product",
+    "物理模型预测（无人机 / 3D 打印机示例）是产品方向，无设备接入前不接"
+   ],
+   "DigitalTwinEngine.couple_all": [
+    "surface",
+    "core/routes/twin.py 批量耦合 / 解耦"
+   ],
+   "DigitalTwinEngine.decouple_all": [
+    "surface",
+    "core/routes/twin.py 批量耦合 / 解耦"
+   ],
+   "drone_flight_model": [
+    "product",
+    "物理模型预测（无人机 / 3D 打印机示例）是产品方向，无设备接入前不接"
+   ],
+   "printer_3d_model": [
+    "product",
+    "物理模型预测（无人机 / 3D 打印机示例）是产品方向，无设备接入前不接"
+   ]
+  },
+  "core/duplex_presence_bridge.py": {
+   "*": [
+    "object",
+    "只读属性，随 voice_loop / conversation_mainline 需要在场句柄时读"
+   ]
+  },
+  "core/e2e_orchestrator.py": {
+   "process_user_input": [
+    "delete",
+    "「统一用户输入入口」已由 openclawd / command_router 承担；本模块只有 process_wake_event 被 galaxy_gateway/websocket_handler.py 调用"
+   ],
+   "run_multi_device_via_task_graph": [
+    "delete",
+    "多设备扇出已由 core/command_router.py 的 _route_parallel_fanout_envelope 承担，并登记进 TaskGraphRuntime"
+   ]
+  },
+  "core/error_framework.py": {
+   "ErrorTracker.is_error_spike": [
+    "wire",
+    "core/health_integration.py（已持有 ErrorTracker）健康判定里加错误峰值"
+   ],
+   "error_boundary": [
+    "delete",
+    "装饰器从未被用；各处已有显式 try/except + 日志"
+   ]
+  },
+  "core/execution/decision_executor.py": {
+   "PolicyGate.check_action_level": [
+    "object",
+    "随 PolicyGate 一起：openclawd 已用 PolicyGate 的其它判定"
+   ]
+  },
+  "core/execution_observability/event_schema.py": {
+   "*": [
+    "object",
+    "ExecutionEvent 自带的摘要；/api/v1/observability/execution/* 返回事件时按需调用"
+   ]
+  },
+  "core/execution_observability/executor_level.py": {
+   "*": [
+    "object",
+    "枚举换算；构造执行事件时用"
+   ]
+  },
+  "core/execution_observability/normalizers.py": {
+   "normalize_arbiter_attempt": [
+    "wire",
+    "core/orchestration/global_arbiter.py 仲裁记一次尝试处"
+   ],
+   "normalize_e2e_context": [
+    "delete",
+    "产出源是 core/e2e_orchestrator.process_user_input，它本身无人调用、判为该删（见「删掉」）；e2e_orchestrator 里真正被用的只有 process_wake_event"
+   ],
+   "normalize_task_envelope": [
+    "wire",
+    "core/command_router.py route_envelope 收到信封时产出执行事件（现在执行事件只有部分来源）"
+   ],
+   "normalize_task_graph_result": [
+    "wire",
+    "core/task_graph_runtime.py 任务图跑完处"
+   ]
+  },
+  "core/execution_observability/trace_schema.py": {
+   "*": [
+    "object",
+    "TraceCorrelation 的构造器；从任务图出事件时用（随 normalize_task_graph_result 一起接）"
+   ]
+  },
+  "core/execution_spine.py": {
+   "route_via_spine": [
+    "delete",
+    "legacy：CommandRouter.route_envelope 是唯一入口"
+   ]
+  },
+  "core/failure_domains.py": {
+   "map_to_pr_b_domain": [
+    "wire",
+    "core/schemas/execution_failure.py 生成失败记录时归到 PR-B 规范词表（两套词表现在各说各的）"
+   ]
+  },
+  "core/fast_loop.py": {
+   "active_loop_name": [
+    "surface",
+    "docstring：供自检展示 —— main.py --check-only 输出与 core/routes/diagnostics.py"
+   ]
+  },
+  "core/feedback_loop.py": {
+   "FeedbackLoop.record_user_evaluation": [
+    "surface",
+    "对话回答上的「好 / 不好」反馈端点（面板已有对话流，可加按钮）"
+   ],
+   "FeedbackLoop.should_use_local": [
+    "wire",
+    "本地 / 云端选择处（core/agent_supply.py 供给决策）作为建议输入"
+   ]
+  },
+  "core/flow_continuity_coordinator.py": {
+   "*": [
+    "wire",
+    "安卓附着 / 重附着 / 重复信号 / 部分结果 / 重启恢复各自的处理点（galaxy_gateway/android/handlers/*）。便捷包装，底下的协调器方法才是本体；安卓相关，先放着"
+   ]
+  },
+  "core/focus_stack.py": {
+   "FocusStack.drop_current": [
+    "wire",
+    "会话结束 / 用户明确切走话题处（core/session_memory_facade.py 已持有 FocusStack）"
+   ]
+  },
+  "core/fusion_entry_adapter.py": {
+   "check_fusion_entry_compliance": [
+    "testhook",
+    "合规检查只对测试 / 审计有意义"
+   ]
+  },
+  "core/galaxy_main_loop_l4_enhanced.py": {
+   "*": [
+    "delete",
+    "launcher/services.py 第 2297 行注释已查明：主启动链不拉它，真正的自主性由 ambient_attention_loop → OpenClawd 承担"
+   ]
+  },
+  "core/gateway_capability_default_enforcement.py": {
+   "audit_gateway_override": [
+    "wire",
+    "网关能力门禁被显式绕过处（galaxy_gateway/routing/device_selection.py 的 override 分支）记审计"
+   ]
+  },
+  "core/generative_ui/runtime.py": {
+   "*": [
+    "delete",
+    "to_dict 的便利包装"
+   ]
+  },
+  "core/github_installer.py": {
+   "GitHubInstaller.install_dry_run": [
+    "surface",
+    "core/routes/github.py 加「装之前先检查」"
+   ]
+  },
+  "core/governance/budget_enforcer.py": {
+   "BudgetEnforcer.all_session_ids": [
+    "surface",
+    "core/routes/governance.py 列出被计费的会话"
+   ],
+   "BudgetEnforcer.enforce_pre_call": [
+    "wire",
+    "core/unified/llm_router.py 每次调模型前（超了按策略 deny 或降级到备用模型）。现在治理策略里的会话 / 每日 / 租户预算只能经 GET /api/v1/governance/budget/{session_id} 看、经 POST .../budget/record 由外部记，没有一次模型调用会因它被拦或降级；UnifiedLLMRouter 自己的 cost_budget 只按单价重排提供商，不是这套预算"
+   ],
+   "BudgetEnforcer.reset_session": [
+    "wire",
+    "会话结束处（core/session_manager.py 关闭会话）"
+   ]
+  },
+  "core/governance/tool_governor.py": {
+   "ToolGovernor.clear_audit_log": [
+    "surface",
+    "core/routes/governance.py 清审计日志（运维操作）"
+   ],
+   "ToolGovernor.reset_bucket": [
+    "testhook",
+    "docstring：测试用"
+   ]
+  },
+  "core/governance_validation_gate.py": {
+   "*": [
+    "delete",
+    "模块级便利函数；调用方都直接用类"
+   ]
+  },
+  "core/grounded_planner.py": {
+   "to_task_assign": [
+    "wire",
+    "core/routes/ui_act.py 已调 plan()，把规划出的动作落成 TASK_ASSIGN 下发设备时用它（现在规划完只返回）"
+   ]
+  },
+  "core/hardware_aware_multimodal_router.py": {
+   "*": [
+    "delete",
+    "三个便捷包装都只是 route(...) 换参数；openclawd 用的是 get_ha_router().route / route_hint_sync"
+   ]
+  },
+  "core/health_evidence_policy.py": {
+   "has_health_evidence": [
+    "wire",
+    "core/device_pool_manager.py 第 237 行已用 no_evidence_score，判「有没有证据」时用它，别再各自手判"
+   ]
+  },
+  "core/hf_endpoint.py": {
+   "endpoint_reachable": [
+    "delete",
+    "ASR/TTS 引擎都直接用 pick_endpoint；布尔版无人需要"
+   ]
+  },
+  "core/huggingface_model_manager.py": {
+   "*": [
+    "surface",
+    "core/routes/models.py 加「下载模型」端点（后台下载 + 进度）；launcher/services.py 目前只在提示文字里教用户手敲 python -c"
+   ]
+  },
+  "core/hybrid_execution_policy.py": {
+   "HybridExecutionMode.is_concurrent": [
+    "object",
+    "枚举上的判定；core/hybrid_executor.py 分支判断处替换手写比较"
+   ],
+   "HybridExecutionMode.is_degrade_chain": [
+    "object",
+    "枚举上的判定；core/hybrid_executor.py 分支判断处替换手写比较"
+   ],
+   "HybridExecutionPolicy.describe_mode": [
+    "surface",
+    "混合执行状态接口里给出人话模式说明（core/routes/hybrid.py）"
+   ]
+  },
+  "core/hybrid_orchestration_continuity.py": {
+   "HybridOrchestrationContinuityRegistry.clear_terminal": [
+    "wire",
+    "周期清理：与 run_startup_recovery 同处或一个定时任务，否则终态记录只增不减"
+   ],
+   "HybridOrchestrationContinuityRegistry.list_interrupted": [
+    "surface",
+    "core/operator_surface.py（已在读这个注册表）一并给出"
+   ],
+   "HybridOrchestrationContinuityRegistry.list_non_terminal": [
+    "surface",
+    "core/operator_surface.py（已在读这个注册表）一并给出"
+   ],
+   "HybridOrchestrationContinuityRegistry.list_terminal": [
+    "surface",
+    "core/operator_surface.py（已在读这个注册表）一并给出"
+   ],
+   "load_hybrid_execution": [
+    "delete",
+    "run_startup_recovery 第 4 步已直接用 store 读回；这个便捷包装是重复入口"
+   ],
+   "recover_hybrid_executions": [
+    "delete",
+    "run_startup_recovery 第 4 步已直接用 store 读回；这个便捷包装是重复入口"
+   ],
+   "save_hybrid_execution": [
+    "wire",
+    "core/hybrid_executor.py 每次 registry.transition 之后（第 521 行起共 8 处），或直接放进 HybridOrchestrationContinuityRegistry.transition 里：现在状态只在内存里变，从不落盘，重启恢复第 4 步读到的永远是空"
+   ]
+  },
+  "core/interaction/pending_decision_registry.py": {
+   "PendingDecisionRegistry.sweep_expired": [
+    "wire",
+    "待决项的周期清扫（与 truth_chain_recovery 同类后台任务）；现在超时的待决项只在被读到时才发现"
+   ]
+  },
+  "core/interruptibility_registry.py": {
+   "InterruptibilityRegistry.snapshot_all": [
+    "surface",
+    "docstring：给面板 / 诊断看 —— core/routes/diagnostics.py"
+   ]
+  },
+  "core/lan_discovery.py": {
+   "*": [
+    "framework",
+    "zeroconf ServiceListener 的回调（add/update/remove_service），由 zeroconf 调用，不是死代码"
+   ]
+  },
+  "core/local_brain_manager.py": {
+   "LocalBrainManager.remove_model": [
+    "surface",
+    "core/routes/models.py 加「删除本地模型」"
+   ],
+   "LocalBrainManager.switch_brain": [
+    "surface",
+    "core/routes/models.py 加「切换本地主脑模型」（面板模型页）"
+   ],
+   "check_local_brain": [
+    "delete",
+    "便捷包装；launcher/services.py 直接用 LocalBrainManager"
+   ]
+  },
+  "core/log_redaction.py": {
+   "redact_secret": [
+    "wire",
+    "core/routes/config.py 与 core/config_service.py 记日志涉及密钥值的地方（同模块别的函数已被节点用上）"
+   ]
+  },
+  "core/mainline_convergence.py": {
+   "*": [
+    "delete",
+    "legacy 的主线收敛登记；openclawd 只读了 trace 的三个属性，登记 / 断言侧无人调用"
+   ]
+  },
+  "core/mcp_addon_contract.py": {
+   "build_mcp_addon_contract_summary": [
+    "wire",
+    "core/github_installer.py 安装 MCP 插件后记日志 / 审计"
+   ],
+   "is_valid_mcp_addon_contract": [
+    "delete",
+    "validate_mcp_addon_contract 的布尔包装"
+   ]
+  },
+  "core/mcp_gateway.py": {
+   "MCPDynamicGateway.hot_reload_tool": [
+    "wire",
+    "core/routes/protocols.py 的 MCP reload 端点（现在只重载 loader，网关侧工具不刷新）"
+   ],
+   "MCPDynamicGateway.list_github_tools": [
+    "surface",
+    "core/routes/github.py 列出经 GitHub 装入的工具"
+   ],
+   "MCPDynamicGateway.sync_tool_registry": [
+    "wire",
+    "MCP 装卸之后经 NATS 广播工具清单（多节点时才有意义）"
+   ]
+  },
+  "core/mcp_loader.py": {
+   "MCPLoader.list_resources": [
+    "surface",
+    "core/routes/protocols.py 加 GET /api/v1/protocols/mcp/{name}/resources"
+   ],
+   "MCPLoader.load_from_config": [
+    "wire",
+    "core/startup.py 启动时按配置装 MCP 服务器（owner 已被 startup 使用，本方法没有）"
+   ],
+   "MCPLoader.notify_tools_list_changed": [
+    "wire",
+    "技能 / 工具变动后通知 MCP 服务器（core/github_installer.py 安装后）"
+   ],
+   "MCPLoader.read_resource": [
+    "surface",
+    "core/routes/protocols.py 加 GET /api/v1/protocols/mcp/{name}/resources；读单个资源"
+   ]
+  },
+  "core/mesh/body_mesh_registry.py": {
+   "BodyEntry.has_role": [
+    "object",
+    "条目自带判定；core/routes/panel.py 等读 BodyEntry 的地方按角色筛选时用"
+   ]
+  },
+  "core/mesh/device_role_allocator.py": {
+   "*": [
+    "wire",
+    "core/mesh/body_mesh_registry.py 设备上线 / 能力变化后给在线设备分配角色（allocate_all）；自定义规则在启动时登记。整个分配器目前只被 core/mesh/__init__ 导出"
+   ]
+  },
+  "core/mesh/live_mesh_session_coordinator.py": {
+   "*": [
+    "wire",
+    "安卓 Mesh 参与信号的入口，安卓相关，先放着"
+   ]
+  },
+  "core/mesh/mesh_auto_enrollment.py": {
+   "MeshAutoEnrollmentService.list_enrolled_device_ids": [
+    "surface",
+    "诊断端点 /api/v1/mesh/participation-summary 一并返回"
+   ],
+   "notify_device_lost": [
+    "wire",
+    "设备失联处：core/udm_registration_hook.py 注销 / 心跳超时标离线时"
+   ],
+   "notify_readiness_confirmed": [
+    "wire",
+    "设备就绪确认处：core/device_readiness.py 判定就绪后（同模块的 notify_device_registered / notify_capability_reported 已在注册、能力上报处接着）"
+   ]
+  },
+  "core/mesh/mesh_runtime_center_state.py": {
+   "*": [
+    "object",
+    "状态机的判定函数；推进中心侧 Mesh 状态时用"
+   ]
+  },
+  "core/mesh/mesh_session_coordinator.py": {
+   "*": [
+    "wire",
+    "core/mesh/live_mesh_runtime_engine.py 拿到派发结果 / 接管结果 / 合并结果时更新协调器（现在协调器状态只在投影读取时用，没人往里写结果）"
+   ]
+  },
+  "core/mesh/mesh_session_lifecycle.py": {
+   "associate_resumed_execution_with_session": [
+    "wire",
+    "core/runtime_restart_recovery.py 恢复出 RESUMABLE 任务、且它属于某个 Mesh 会话时"
+   ],
+   "*": [
+    "surface",
+    "core/routes/diagnostics.py /api/v1/mesh/participation-summary 一并返回活跃 / 可恢复会话"
+   ]
+  },
+  "core/mesh_coordinator.py": {
+   "inject_mesh_senders": [
+    "wire",
+    "galaxy_gateway/bootstrap/lifecycle.py 启动时把网关的发送函数注入 Mesh 协调器（不注入时协调器发不出消息）"
+   ]
+  },
+  "core/mesh_nats_fusion.py": {
+   "*": [
+    "wire",
+    "core/mesh/live_mesh_runtime_engine.py（已持有 MeshNATSConvergence）：会话开始订阅、参与方结果回来提交、会话结束退订"
+   ]
+  },
+  "core/message_interop.py": {
+   "*": [
+    "delete",
+    "legacy 结果归一；ResultEnvelope 已在各入口直接构造"
+   ]
+  },
+  "core/microsoft_ufo_integration.py": {
+   "create_ufo_api": [
+    "delete",
+    "launcher/core_services.py 用的是 GalaxyIntegrationService；内嵌 API 工厂无人挂载"
+   ]
+  },
+  "core/modality_bridge.py": {
+   "resolve_audio_in": [
+    "delete",
+    "ambient_attention_loop 的注释记录了它原先的短路用法已被撤掉；判定在 core/modality_capability 里"
+   ]
+  },
+  "core/model_catalog.py": {
+   "clear_ephemeral_specs": [
+    "testhook",
+    "docstring：测试收尾用"
+   ],
+   "register_ephemeral_spec": [
+    "testhook",
+    "只在本进程临时登记，不进目录；只有测试用"
+   ]
+  },
+  "core/model_openness.py": {
+   "audit_registry": [
+    "surface",
+    "docstring：诊断用 —— core/routes/models.py 加开放性审计视图"
+   ]
+  },
+  "core/model_topology/canonical_model_supply_state.py": {
+   "*": [
+    "object",
+    "登记能力记录的批量版，随 NativeMultimodalCapabilityRegistry 被批量填充时用"
+   ]
+  },
+  "core/model_topology/config_bridge.py": {
+   "*": [
+    "delete",
+    "legacy：从 dashboard 时代输入建库存；dashboard 已退役"
+   ]
+  },
+  "core/model_topology/model_supply_graph.py": {
+   "*": [
+    "object",
+    "图的查询方法：随 core/model_topology/routing_policy.py 需要按类别/供应商筛选时用"
+   ]
+  },
+  "core/model_topology/provider_inventory.py": {
+   "*": [
+    "surface",
+    "core/routes/projection.py（已读 ProviderInventory）给出按质量/速度/综合排序与不可用条目"
+   ]
+  },
+  "core/model_topology/topology_router.py": {
+   "*": [
+    "delete",
+    "legacy：投影用单相 route()，三相一起算无人调用"
+   ]
+  },
+  "core/multi_device_canonical_governance.py": {
+   "*": [
+    "object",
+    "裁决对象上的判定，随 core/system_final_acceptance_verdict.py 读裁决时用"
+   ]
+  },
+  "core/multi_device_control_integrity.py": {
+   "*": [
+    "delete",
+    "legacy 多设备完整性审计的构造器 / 查询"
+   ]
+  },
+  "core/multi_device_coordination_authority.py": {
+   "*": [
+    "surface",
+    "角色的人话说明：随多设备状态投影一起输出"
+   ]
+  },
+  "core/multi_device_runtime_harness.py": {
+   "*": [
+    "surface",
+    "core/routes/projection.py 给出多设备一致性 harness 的读侧投影（docstring：anti-drift 锚定）"
+   ]
+  },
+  "core/multi_llm_router.py": {
+   "MultiLLMRouter.chat_cascade": [
+    "product",
+    "FrugalGPT 级联（便宜→贵升级）是否作为默认对话路径，由所有者定；定了就在 openclawd 对话入口切换"
+   ],
+   "MultiLLMRouter.route_local_brain_first": [
+    "delete",
+    "本地优先已由 hardware_aware 路由 + 供给层（core/agent_supply.py）决定"
+   ]
+  },
+  "core/multi_subject_closure_machine.py": {
+   "*": [
+    "object",
+    "枚举分族判定，随 galaxy_gateway/multi_subject_closure_surface.py 需要时用"
+   ]
+  },
+  "core/multimodal/perception_source_registry.py": {
+   "PerceptionSourceRegistry.degraded_sources": [
+    "wire",
+    "core/multimodal/source_recovery_policy.py 选恢复对象时"
+   ],
+   "PerceptionSourceRegistry.sources_by_type": [
+    "object",
+    "按类型查询，随调用方需要时用"
+   ],
+   "PerceptionSourceRegistry.update_quality": [
+    "wire",
+    "core/multimodal/ingest_runtime.py 每次摄入测到时延 / 质量时回写（它已持有注册表）"
+   ]
+  },
+  "core/native_modal.py": {
+   "is_native_active": [
+    "delete",
+    "modality_bridge 按档位自己判定；布尔包装无人用"
+   ]
+  },
+  "core/nats_bus.py": {
+   "NATSBus.publish_capability_event": [
+    "wire",
+    "能力变化处（core/mcp_loader.py、core/skill_loader.py 装卸）发 galaxy.capability.*"
+   ],
+   "NATSBus.publish_device_event": [
+    "wire",
+    "core/udm_registration_hook.py 注册/注销处发 galaxy.device.*"
+   ],
+   "NATSBus.publish_legacy_task_result": [
+    "delete",
+    "[Legacy] 旧 TaskResult 发布；AIP v3 TASK_RESULT 是规范路径"
+   ],
+   "NATSBus.publish_task_event": [
+    "wire",
+    "任务生命周期写点（core/canonical_task.py 状态迁移处）发 galaxy.task.*"
+   ]
+  },
+  "core/network_graph_runtime.py": {
+   "reset_network_graph_runtime": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/network_topology_runtime.py": {
+   "NetworkTopologyRuntime.update_edge_state": [
+    "wire",
+    "core/aip_transport.py 探测到链路质量变化时"
+   ],
+   "assimilate_device_connectivity": [
+    "wire",
+    "设备连接状态变化：core/udm_registration_hook.py 与参与方心跳"
+   ],
+   "assimilate_gateway_state": [
+    "wire",
+    "galaxy_gateway/bootstrap/lifecycle.py 网关起停时"
+   ],
+   "assimilate_nats_state": [
+    "wire",
+    "core/nats_bus.py 连上 / 断开 NATS 时"
+   ],
+   "reset_network_topology_runtime": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/node_capability_loader.py": {
+   "NodeCapabilityLoader.list_node_actions": [
+    "surface",
+    "core/routes/diagnostics.py：列某节点提供的动作（加载器已在 lifecycle.py 使用）"
+   ]
+  },
+  "core/node_cognition_activation.py": {
+   "*": [
+    "object",
+    "节点激活资格判定 + 状态迁移：随「节点按角色激活」这一对象一起接；core/routes/projection.py 已读本模块其余部分"
+   ]
+  },
+  "core/node_communication.py": {
+   "NodeRegistry.detect_partitions": [
+    "surface",
+    "core/routes/projection.py（已读 NodeRegistry）给出网络分区检测结果"
+   ],
+   "UniversalCommunicator.activate_self": [
+    "delete",
+    "节点自激活，无任何调用；节点激活已由 launcher/node_startup.py 统一处理"
+   ]
+  },
+  "core/node_discovery.py": {
+   "NodeDiscoveryService.deregister_node": [
+    "wire",
+    "launcher/node_startup.py 节点停止 / 健康检查失败处（那里已调 announce_node_to_discovery 做上线），对称地注销"
+   ],
+   "NodeDiscoveryService.on_node_joined": [
+    "wire",
+    "现在没人订阅节点加入/离开/更新。订阅方放在 core/node_discovery_runtime.py（它已负责把 fabric 节点种进发现服务），转给 core/capability_network_runtime_policy.absorb_device_presence_event"
+   ],
+   "NodeDiscoveryService.on_node_left": [
+    "wire",
+    "现在没人订阅节点加入/离开/更新。订阅方放在 core/node_discovery_runtime.py（它已负责把 fabric 节点种进发现服务），转给 core/capability_network_runtime_policy.absorb_device_presence_event"
+   ],
+   "NodeDiscoveryService.on_node_updated": [
+    "wire",
+    "现在没人订阅节点加入/离开/更新。订阅方放在 core/node_discovery_runtime.py（它已负责把 fabric 节点种进发现服务），转给 core/capability_network_runtime_policy.absorb_device_presence_event"
+   ],
+   "NodeDiscoveryService.seed_from_registry": [
+    "delete",
+    "从 node_registry.json 预填充；实际启动走 core/node_discovery_runtime.seed_fabric_nodes_into_discovery（从 NodeFabricRegistry 种），这条被取代"
+   ],
+   "_DiscoveryProtocol.error_received": [
+    "framework",
+    "asyncio.DatagramProtocol 回调，由事件循环调用"
+   ],
+   "safe_scan_nodes_dir": [
+    "delete",
+    "扫本地 nodes/ 目录；节点清单已由 node_registry.json + seed_from_registry 提供"
+   ]
+  },
+  "core/node_governance_runtime.py": {
+   "*": [
+    "testhook",
+    "空操作的测试重置钩子"
+   ]
+  },
+  "core/node_lifecycle_governor.py": {
+   "*": [
+    "delete",
+    "legacy 的便利包装"
+   ]
+  },
+  "core/node_protocol.py": {
+   "*": [
+    "delete",
+    "旧节点协议的 ProtocolAdapter / MessageRouter；AIP v3（galaxy_gateway/protocol）是规范协议。core/voice_duplex_adapters.py 只引用了类名"
+   ]
+  },
+  "core/node_registry.py": {
+   "NodeRegistry.load_all_nodes": [
+    "object",
+    "随 NodeRegistry 这一对象：若保留则由 launcher/node_startup.py 调用；与 NodeFabricRegistry 职责重叠，二选一时一起定"
+   ],
+   "NodeRegistry.register_node_class": [
+    "object",
+    "随 NodeRegistry 这一对象：若保留则由 launcher/node_startup.py 调用；与 NodeFabricRegistry 职责重叠，二选一时一起定"
+   ],
+   "NodeRegistry.start_health_monitor": [
+    "object",
+    "随 NodeRegistry 这一对象：若保留则由 launcher/node_startup.py 调用；与 NodeFabricRegistry 职责重叠，二选一时一起定；健康监控目前由 NodeFabricRegistry 心跳超时承担"
+   ],
+   "NodeRegistry.stop_health_monitor": [
+    "object",
+    "随 NodeRegistry 这一对象：若保留则由 launcher/node_startup.py 调用；与 NodeFabricRegistry 职责重叠，二选一时一起定"
+   ]
+  },
+  "core/nodes/node_fabric_registry.py": {
+   "NodeFabricRegistry.expire_stale_capabilities": [
+    "wire",
+    "launcher/node_startup.py 的周期清扫里，与 mark_offline_if_stale 一起跑"
+   ],
+   "NodeFabricRegistry.list_by_capability": [
+    "wire",
+    "按能力选节点处（core/command_router.py 能力选路）；或 core/routes/projection.py 查询"
+   ],
+   "NodeFabricRegistry.mark_offline_if_stale": [
+    "wire",
+    "launcher/node_startup.py 加一个周期清扫（该文件已持有 NodeFabricRegistry）"
+   ],
+   "reset_node_fabric_registry": [
+    "testhook",
+    "测试用单例重置"
+   ]
+  },
+  "core/openclawd.py": {
+   "OpenClawd.handle_device_command": [
+    "delete",
+    "设备操控已走 command_router → DeviceOrchestrator；这是 openclawd 上的旧直达口"
+   ]
+  },
+  "core/openclawd_memory_backflow.py": {
+   "store_result_envelope": [
+    "wire",
+    "openclawd / desktop_presence_runtime 目前用 store_task_result；拿到 ResultEnvelope 的地方（结果真相链收口处）改用规范入口"
+   ]
+  },
+  "core/operational_registration_path.py": {
+   "*": [
+    "testhook",
+    "不变量断言，只在测试 / 审计里跑"
+   ]
+  },
+  "core/operational_slo_metrics.py": {
+   "OperationalSLOMetrics.record_audit_persist_failure": [
+    "wire",
+    "core/replay_audit_persistence.py ReplayAuditStore.append 返回 True 时；返回 False / 抛错时"
+   ],
+   "OperationalSLOMetrics.record_audit_persist_success": [
+    "wire",
+    "core/replay_audit_persistence.py ReplayAuditStore.append 返回 True 时"
+   ],
+   "OperationalSLOMetrics.record_dispatch_attempt": [
+    "wire",
+    "core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）"
+   ],
+   "OperationalSLOMetrics.record_dispatch_failure": [
+    "wire",
+    "core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）；派发结果失败时"
+   ],
+   "OperationalSLOMetrics.record_dispatch_success": [
+    "wire",
+    "core/command_router.py route_envelope 派发前（第 2562 行 emit_dispatch_decision_event 同处）；派发结果成功时"
+   ],
+   "OperationalSLOMetrics.record_fallback_triggered": [
+    "wire",
+    "core/command_router.py 第 2077 行「capability-mismatch/fallback」分支与第 4056 行 audit_fallback_triggered 同处"
+   ],
+   "OperationalSLOMetrics.record_recovery_attempt": [
+    "wire",
+    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时"
+   ],
+   "OperationalSLOMetrics.record_recovery_failed": [
+    "wire",
+    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；恢复失败 / 放弃时"
+   ],
+   "OperationalSLOMetrics.record_recovery_reissued": [
+    "wire",
+    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；重新派发时"
+   ],
+   "OperationalSLOMetrics.record_recovery_replayed": [
+    "wire",
+    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；处置为 REPLAY_ONLY 时"
+   ],
+   "OperationalSLOMetrics.record_recovery_resumed": [
+    "wire",
+    "core/runtime_restart_recovery.py 恢复协调器对每个在途任务定处置时；处置为 RESUMABLE 并续上时"
+   ],
+   "OperationalSLOMetrics.record_route_rejection": [
+    "wire",
+    "core/command_router.py 第 2099 / 2139 行「capability-mismatch/reject」分支"
+   ],
+   "OperationalSLOMetrics.record_startup_recovery_scan": [
+    "wire",
+    "core/runtime_restart_recovery.py run_startup_recovery 得出报告后（报告里已有扫描数与动作数）"
+   ]
+  },
+  "core/operator_execution_observability_surface.py": {
+   "*": [
+    "object",
+    "证据条目自带判定；operator 面汇总「需要人看」时用"
+   ]
+  },
+  "core/orchestration/execution.py": {
+   "*": [
+    "delete",
+    "PR-7 拆 openclawd 留下的门面，全部委托回 openclawd 私有方法且无人调用；真要拆 openclawd 是另一件大事"
+   ]
+  },
+  "core/orchestration/global_arbiter.py": {
+   "GlobalArbiter.suggest_device": [
+    "wire",
+    "core/request_admission.py（已持有仲裁器）请求未指定设备时给建议"
+   ],
+   "reset_global_arbiter": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/orchestration/helpers.py": {
+   "*": [
+    "delete",
+    "PR-7 拆 openclawd 留下的门面，全部委托回 openclawd 私有方法且无人调用；真要拆 openclawd 是另一件大事"
+   ]
+  },
+  "core/orchestration/lifecycle.py": {
+   "*": [
+    "object",
+    "LifecycleManager 已被 openclawd 使用；这两个方法是薄委托，调用方直接用内部实现"
+   ]
+  },
+  "core/orchestration/planning.py": {
+   "*": [
+    "delete",
+    "PR-7 拆 openclawd 留下的门面，全部委托回 openclawd 私有方法且无人调用；真要拆 openclawd 是另一件大事"
+   ]
+  },
+  "core/orchestration/reflection.py": {
+   "*": [
+    "delete",
+    "PR-7 拆 openclawd 留下的门面，全部委托回 openclawd 私有方法且无人调用；真要拆 openclawd 是另一件大事"
+   ]
+  },
+  "core/orchestration/state.py": {
+   "ContinuumStateAdapter.run_continuum": [
+    "delete",
+    "PR-7 拆 openclawd 留下的门面，全部委托回 openclawd 私有方法且无人调用；真要拆 openclawd 是另一件大事"
+   ],
+   "SessionMemoryManager.record_turn": [
+    "object",
+    "openclawd 已持有 SessionMemoryManager；对话轮次写入目前走 session_manager，二者重叠，定一个"
+   ]
+  },
+  "core/orchestration_review_surface.py": {
+   "increment_legacy_dispatch_counter": [
+    "delete",
+    "已被网关的 galaxy_legacy_dispatch_total 指标（galaxy_gateway/observability.py，含告警规则）取代，两套计数重复"
+   ]
+  },
+  "core/output/voice_channel.py": {
+   "VoiceChannel.build_with_synthesis": [
+    "delete",
+    "「说」的权威是 core/speech_output.py（AGENTS.md）；输出编排里另一条合成路径不该接"
+   ]
+  },
+  "core/outward_runtime_truth.py": {
+   "*": [
+    "delete",
+    "legacy：对外真相由 core/routes/projection.py 的编译器产出，这几个分类 / 计数无人读"
+   ]
+  },
+  "core/outward_truth_source_registry.py": {
+   "assert_source_for_field": [
+    "testhook",
+    "断言"
+   ],
+   "enforce_surface_contract": [
+    "wire",
+    "core/unified_panel_aggregation.py 组装面板字段时强制来源登记（它已 import 本模块）"
+   ]
+  },
+  "core/peer_trust.py": {
+   "PeerTrustBook.set_trust": [
+    "surface",
+    "core/routes/pairing.py（已读 PeerTrustBook）加「设为信任 / 取消信任」端点"
+   ],
+   "trust_rank": [
+    "wire",
+    "core/execution/readiness_gate.py 比较信任级别处（它已 import peer_trust）"
+   ]
+  },
+  "core/perception/desktop_perception_store.py": {
+   "DesktopPerceptionStore.has_fresh_frame": [
+    "wire",
+    "core/multimodal/ingest_runtime.py 取帧前先判新鲜度（隐私暂停时恒 False，正好当门）"
+   ],
+   "DesktopPerceptionStore.take_fresh_system_audio_for_autoinject": [
+    "wire",
+    "core/multimodal/system_audio_ingest.py 自动注入系统播放声处"
+   ]
+  },
+  "core/perception/perception_fact_boundary.py": {
+   "*": [
+    "testhook",
+    "分类目录查询，只在基线 / 测试里有意义"
+   ]
+  },
+  "core/peripheral_capability_boundary.py": {
+   "*": [
+    "testhook",
+    "分类目录查询，只在基线 / 测试里有意义"
+   ]
+  },
+  "core/persona/state_store.py": {
+   "StateStore.reset_state": [
+    "surface",
+    "「重置情绪状态」：core/routes/sessions.py 会话重置时一并调用"
+   ]
+  },
+  "core/phase_contract.py": {
+   "tri_state_of": [
+    "wire",
+    "四相 → 三态投影的调用方（core/lumiv_websocket_bridge.py、liminal_activity）目前各自手写映射，换成它"
+   ]
+  },
+  "core/presence/presence_director.py": {
+   "*": [
+    "wire",
+    "core/desktop_presence_runtime.py 相位切换时通知 PresenceDirector 把在场投射到其它设备 —— 这是跨设备在场，按「只有电脑发起的进三态」的规则，只在电脑发起的跨设备任务里触发"
+   ]
+  },
+  "core/presence/presence_projection.py": {
+   "*": [
+    "surface",
+    "诊断：最近的在场投射事件"
+   ]
+  },
+  "core/production_baseline.py": {
+   "*": [
+    "testhook",
+    "legacy 基线登记的查询，只在基线测试里用"
+   ]
+  },
+  "core/protocol_drift_registry.py": {
+   "drift_entries": [
+    "surface",
+    "core/routes/diagnostics.py 加只读端点（漂移由安卓消息解析时 coerce_protocol_enum 登记，现在只进不出）"
+   ],
+   "drift_summary": [
+    "surface",
+    "core/routes/diagnostics.py 加只读端点（漂移由安卓消息解析时 coerce_protocol_enum 登记，现在只进不出）；也可进 /api/v1/readiness"
+   ],
+   "has_unrecognized_drift": [
+    "surface",
+    "core/routes/diagnostics.py 加只读端点（漂移由安卓消息解析时 coerce_protocol_enum 登记，现在只进不出）；就绪判定里作为一个告警项"
+   ],
+   "reset_protocol_drift_registry": [
+    "testhook",
+    "文档写明只给测试用"
+   ]
+  },
+  "core/proxy_relay.py": {
+   "ProxyRelay.relay_agent_manifest": [
+    "product",
+    "把 Agent 从一台设备迁到另一台 —— 依赖端侧执行沙盒（不可达模块 local_agent_runtime），要做就和它一起定"
+   ],
+   "ProxyRelay.relay_envelope": [
+    "wire",
+    "core/scheduler.py（已持有 ProxyRelay）目标设备不可直达、需要经中继转发任务信封时"
+   ]
+  },
+  "core/queueing/async_queue.py": {
+   "AsyncTaskQueue.force_stop": [
+    "wire",
+    "进程关停时（launcher 关停阶段）在排空超时后强停"
+   ]
+  },
+  "core/react_progress.py": {
+   "ToolOutcome.retriable": [
+    "wire",
+    "openclawd ReAct 循环判断是否原样重试工具处"
+   ]
+  },
+  "core/recovery_truth_surface.py": {
+   "*": [
+    "object",
+    "报告对象自带判定；读恢复真相的验收面按需调用"
+   ]
+  },
+  "core/release_governance_taxonomy.py": {
+   "*": [
+    "testhook",
+    "legacy 发布术语分类，只在审计测试里用"
+   ]
+  },
+  "core/reliability_contract/retry_policy.py": {
+   "*": [
+    "object",
+    "值对象判定，随重试策略被消费时用"
+   ]
+  },
+  "core/remote_execution_mode_resolver.py": {
+   "*": [
+    "object",
+    "结果对象上的转换方法，调用方需要枚举时用"
+   ]
+  },
+  "core/replay_audit_persistence.py": {
+   "load_audit_records": [
+    "surface",
+    "core/routes/operator.py /api/v1/operator/inspect/audit-evidence/{task_id}（审计记录一直在写，接口读不回落盘的那部分）"
+   ]
+  },
+  "core/replay_foundation.py": {
+   "ReplayFoundation.replay_task_timeline": [
+    "surface",
+    "core/routes/tasks.py（已在用 ReplayFoundation）加 /api/v1/tasks/{id}/timeline"
+   ]
+  },
+  "core/repo_layout_registry.py": {
+   "*": [
+    "delete",
+    "legacy、零导入"
+   ]
+  },
+  "core/request_admission.py": {
+   "admission_snapshot": [
+    "surface",
+    "docstring：供诊断接口取用 —— core/routes/diagnostics.py"
+   ]
+  },
+  "core/resilience/circuit_breaker.py": {
+   "*": [
+    "testhook",
+    "docstring：测试用强制断开"
+   ]
+  },
+  "core/resilience/metrics.py": {
+   "ResilienceMetrics.record_circuit_open": [
+    "wire",
+    "core/resilience/circuit_breaker.py 第 214 / 245 行状态切到 OPEN 时"
+   ],
+   "ResilienceMetrics.rejection_rate_per_minute": [
+    "surface",
+    "core/routes/resilience.py（该路由已读同一个指标对象）"
+   ]
+  },
+  "core/routing_explanation/live_decision.py": {
+   "LiveRoutingDecisionBuilder.record_policy_band": [
+    "wire",
+    "core/command_router.py 里用 LiveRoutingDecisionBuilder 组装选路解释的地方（已在用这个类），把当时的执行策略档一并记上"
+   ]
+  },
+  "core/routing_observability.py": {
+   "ControlLoopMetrics.record_projection_mismatch": [
+    "wire",
+    "core/routes/projection.py 投影与控制面对账不一致处（现只统计不记数）"
+   ],
+   "build_fallback_decision_event": [
+    "wire",
+    "core/openclawd.py 第 1992 行 record_routing_decision 同处，决策是回退时"
+   ],
+   "build_routing_analytics_snapshot": [
+    "surface",
+    "core/routes/observability.py /api/v1/observability/model-route 一并返回"
+   ],
+   "reset_routing_metrics": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/runtime/execution_target_policy_engine.py": {
+   "apply_degraded_readiness_policy": [
+    "wire",
+    "core/command_router.py 第 2749 行已调 apply_target_selection_policy，就绪度降级时再过这一条"
+   ],
+   "apply_failure_handling_policy": [
+    "wire",
+    "command_router 派发失败分支"
+   ]
+  },
+  "core/runtime/runtime_observability_sink.py": {
+   "*": [
+    "surface",
+    "core/routes/observability.py 加只读端点：事件由安卓桥、Mesh、命令路由、参与方接入写入，现在只有 build_observability_snapshot 汇总读得到明细"
+   ]
+  },
+  "core/runtime/source_dispatch_orchestrator.py": {
+   "*": [
+    "testhook",
+    "测试用计数器重置"
+   ]
+  },
+  "core/runtime_closure_audit.py": {
+   "persist_conflict_artifacts": [
+    "object",
+    "随 run_closure_audit 一起：审计发现冲突时落盘"
+   ],
+   "run_closure_audit": [
+    "surface",
+    "core/api_routes.py 已 import 本模块（只取了哨兵常量）；做成诊断端点，或 scripts/ 下的离线审计"
+   ]
+  },
+  "core/runtime_invariant_enforcement.py": {
+   "*": [
+    "delete",
+    "零导入；不变量检查已由 scripts/check_* 守卫承担"
+   ]
+  },
+  "core/runtime_readiness_matrix.py": {
+   "is_release_blocked": [
+    "object",
+    "core/routes/operator.py 已读就绪矩阵；需要布尔时用"
+   ]
+  },
+  "core/safe_executor.py": {
+   "SafeExecutor.as_tool_definition": [
+    "wire",
+    "把安全执行器作为工具登记进 LLM 工具列表（core/routes/config_schema_registry.py 已引用 SafeExecutor）"
+   ]
+  },
+  "core/scheduling_truth_harness.py": {
+   "*": [
+    "delete",
+    "便利包装；query_routable_executors 已被 device_pool_manager 直接调用"
+   ]
+  },
+  "core/security_policy_loader.py": {
+   "SecurityPolicy.is_category_allowed": [
+    "delete",
+    "按设备类型判命令类别，是 PR-SECURITY-V1 的残留：V2 有意去掉了设备类型能力边界（core/openclawd.py 第 10150 行注释：所有设备同权，危险命令清单是唯一的门，那里调的是 check_command_permission）"
+   ],
+   "SecurityPolicy.is_scene_allowed": [
+    "delete",
+    "按设备类型判场景触发，同 is_category_allowed：PR-SECURITY-V1 的残留，V2 有意去掉了设备类型能力边界（core/openclawd.py 第 10150 行注释：所有设备同权，危险命令清单是唯一的门）"
+   ],
+   "check_policy_file_changed": [
+    "wire",
+    "一个定时任务里：文件变了就 reload_security_policy()。openclawd 只在初始化时 load_security_policy() 一次，改策略文件现在要重启才生效"
+   ],
+   "reload_security_policy": [
+    "wire",
+    "一个定时任务里：check_policy_file_changed() 为真就调它。openclawd 只在初始化时 load_security_policy() 一次，改策略文件现在要重启才生效。注意 core/routes/security_policy.py 管的是另一张零信任规则表，不是这份文件"
+   ]
+  },
+  "core/session_execution_lane.py": {
+   "SessionExecutionLaneManager.list_lanes": [
+    "surface",
+    "GET /api/v1/agent/activity 一并列出会话执行通道（desktop_presence_runtime 已持有管理器）"
+   ]
+  },
+  "core/session_manager.py": {
+   "SessionManager.export_jsonl": [
+    "surface",
+    "core/routes/sessions.py 加「导出会话证据」下载"
+   ],
+   "SessionManager.record_verdict": [
+    "wire",
+    "裁决产生处（core/meta 裁决 / engineering_verification 结论）写进会话证据链"
+   ]
+  },
+  "core/skill_contract.py": {
+   "validate_skill_response": [
+    "wire",
+    "core/skill_registry.py 执行技能拿到响应后校验"
+   ]
+  },
+  "core/skill_loader.py": {
+   "SkillLoader.load_package": [
+    "wire",
+    "core/github_installer.py 装技能包处（现在逐个 load_skill）"
+   ]
+  },
+  "core/skill_package_contract.py": {
+   "*": [
+    "delete",
+    "validate_* 的布尔包装"
+   ]
+  },
+  "core/skill_registry.py": {
+   "SkillRegistry.unregister_skill": [
+    "wire",
+    "core/routes/protocols.py DELETE /skills/{name} 卸载时同步移出注册表（现在只卸 loader）"
+   ]
+  },
+  "core/slo_metrics.py": {
+   "SLOMetrics.startup_duration_ms": [
+    "surface",
+    "core/routes/monitoring.py /api/v1/slo/metrics（已读同一对象）"
+   ]
+  },
+  "core/speech_output.py": {
+   "native_speech_backend_registered": [
+    "surface",
+    "core/routes/openai_audio.py /v1/audio/capabilities 报告原生说通路是否登记"
+   ]
+  },
+  "core/state_event_bus.py": {
+   "StateEventBus.subscriber_count": [
+    "surface",
+    "core/routes/diagnostics.py 列出每类事件的订阅数（没订阅者的事件一眼可见）"
+   ]
+  },
+  "core/streaming_speech.py": {
+   "*": [
+    "object",
+    "只读属性，core/routes/chat.py 判断是否已边生成边念时用"
+   ]
+  },
+  "core/subject_facing_foreground.py": {
+   "*": [
+    "object",
+    "对象判定，core/routes/chat.py 已持有该对象"
+   ]
+  },
+  "core/swarm_coordinator.py": {
+   "*": [
+    "wire",
+    "galaxy_gateway/wake_router.py / core/remote_execution_mode_resolver.py（已持有 SwarmCoordinator）需要多设备执行计划时"
+   ]
+  },
+  "core/system_mode.py": {
+   "*": [
+    "delete",
+    "legacy；桌面本地判定由 core/presence_line.py 负责"
+   ]
+  },
+  "core/system_orchestrator.py": {
+   "SystemOrchestrator.register_hook": [
+    "object",
+    "启动编排的扩展点：插件要挂启动阶段钩子时用"
+   ]
+  },
+  "core/system_resource.py": {
+   "*": [
+    "wire",
+    "core/startup.py 启动时把 GitHub / 学术检索 / 工程循环 / 本地工具 / 设备登记进系统资源注册表（projection 在读这张表，但从没人写）"
+   ]
+  },
+  "core/tailscale_manager.py": {
+   "*": [
+    "surface",
+    "core/routes/pairing.py 的 Tailscale 状态（是否安装、是否 Headscale）；launcher/services.py 已持有 TailscaleManager"
+   ]
+  },
+  "core/target_device_validator.py": {
+   "CanonicalValidationInput.from_legacy": [
+    "object",
+    "随 validate_target_device_from_canonical 一起：旧调用方数据 → 规范输入"
+   ],
+   "validate_target_device_from_canonical": [
+    "wire",
+    "core/command_router.py / galaxy_gateway/routing/device_selection.py 已 import 本模块，把它们的校验换成规范入口"
+   ]
+  },
+  "core/task_cost_ledger.py": {
+   "current_task_bill": [
+    "surface",
+    "core/routes/cost.py 加「当前任务账单」（账单由 desktop_presence_runtime 开/关、openclawd 与路由器记账）"
+   ]
+  },
+  "core/task_envelope_lifecycle_registry.py": {
+   "TaskEnvelopeLifecycleRegistry.all_pending_task_ids": [
+    "surface",
+    "launcher/shutdown.py 关闭时报告还有多少待办；或诊断端点"
+   ],
+   "TaskEnvelopeLifecycleRegistry.cancel_timed_out": [
+    "wire",
+    "周期任务：galaxy_gateway/gateway_nats_adapter.py 已持有这个注册表，放它的清扫循环里；否则超时的待办信封永远挂着"
+   ],
+   "TaskEnvelopeLifecycleRegistry.resume_for_device": [
+    "wire",
+    "设备重连处：galaxy_gateway/android/handlers/registration.py 的 handle_device_reconnect / 参与方心跳恢复（core/participant_admission.py）—— 让重连设备续上待办"
+   ]
+  },
+  "core/task_graph_runtime.py": {
+   "TaskGraphRuntime.register_fanin": [
+    "wire",
+    "core/command_router.py 的 _route_parallel_fanout_envelope 扇出子信封后，为汇总节点登记汇合边（该文件第 2462 行已把每个信封登记进 TaskGraphRuntime，只有扇出没有汇合）"
+   ],
+   "project_workflow_to_graph": [
+    "delete",
+    "投影的是 core/agentic/workflow.py 的工作流记录；那个模块零导入、判为该删（见「删掉」里的 core/agentic/workflow.py），随它一起删"
+   ],
+   "result_envelope_to_node_update": [
+    "wire",
+    "core/unified_result_ingress.py 结果进来更新任务图节点处（现用自己的更新逻辑，可改为调这个）"
+   ]
+  },
+  "core/task_lifecycle.py": {
+   "TaskLifecycleManager.mark_interrupted": [
+    "wire",
+    "叫停处：core/routes 的 /api/v1/presence/stop 与 launcher/shutdown.py 关闭时，把在途信封标为 interrupted"
+   ],
+   "TaskLifecycleManager.run_with_lifecycle": [
+    "wire",
+    "core/command_router.py 第 1767 / 2944 行已在用 get_lifecycle_manager 手动 mark_*；本地执行那段可改为用它包起来"
+   ]
+  },
+  "core/task_memory.py": {
+   "TaskMemory.evict_expired": [
+    "wire",
+    "core/task_lifecycle.py 周期维护里清热区（TTL 已配置但从未执行清理）"
+   ]
+  },
+  "core/task_result_canonical_truth_chain.py": {
+   "IncompleteResultLedger.all_incomplete": [
+    "delete",
+    "账本原始视图；对外读面已是本轮的 GET /api/v1/results/isolated（只出类型化字段）"
+   ]
+  },
+  "core/tool_guardian.py": {
+   "guarded_mcp_call": [
+    "delete",
+    "core/mcp_loader.py 已直接用 call_with_guardian（第 58 行）"
+   ]
+  },
+  "core/tool_permissions.py": {
+   "ToolPermissionChecker.add_policy": [
+    "surface",
+    "core/routes/security_policy.py 加工具权限策略"
+   ],
+   "ToolPermissionChecker.reset_counters": [
+    "testhook",
+    "频率计数器重置"
+   ]
+  },
+  "core/truth_conflict_enforcement.py": {
+   "*": [
+    "delete",
+    "legacy、零导入"
+   ]
+  },
+  "core/truth_integration_layer.py": {
+   "is_device_available_canonical": [
+    "wire",
+    "选设备前的可用性判定（smart_scheduler.select_best_device 过滤候选）"
+   ]
+  },
+  "core/truth_projection_boundary.py": {
+   "*": [
+    "surface",
+    "core/routes/projection.py（已 import）按路径查真相边界分类"
+   ]
+  },
+  "core/tts/edge_tts_engine.py": {
+   "*": [
+    "delete",
+    "speech_output 按每次调用传 voice 构造引擎；运行时改默认值的 setter 与之冲突"
+   ]
+  },
+  "core/ui_surface_authority.py": {
+   "*": [
+    "delete",
+    "legacy、零导入"
+   ]
+  },
+  "core/unified/capability_resolver.py": {
+   "*": [
+    "object",
+    "按标签查契约；随 CapabilityResolver 被按标签查询时用"
+   ]
+  },
+  "core/unified/command_envelope.py": {
+   "*": [
+    "wire",
+    "取消 / 中断任务处（core/routes/tasks.py cancel、presence_stop）构造 CANCEL / INTERRUPT 信封"
+   ]
+  },
+  "core/unified/device_health.py": {
+   "*": [
+    "wire",
+    "设备重连时（core/udm_registration_hook.py 注册）清掉旧健康样本"
+   ]
+  },
+  "core/unified/error_mapper.py": {
+   "*": [
+    "delete",
+    "legacy 错误串映射；新错误已按规范载荷产出"
+   ]
+  },
+  "core/unified/idempotency.py": {
+   "IdempotencyStore.record_failed": [
+    "object",
+    "整个 IdempotencyStore 在生产里没有使用者（get_idempotency_store 只被 core/unified/__init__.py 再导出）；投递路径真接入幂等存储时，失败分支一并调它"
+   ]
+  },
+  "core/unified/llm_router.py": {
+   "UnifiedLLMRouter.reload_policy": [
+    "wire",
+    "config/llm_routing_policy.yaml 被改动时（core/routes/config.py 写配置之后）热重载"
+   ],
+   "reset_routing_telemetry": [
+    "testhook",
+    "测试用"
+   ]
+  },
+  "core/unified/release_gate.py": {
+   "ReleaseGate.clear_all_overrides": [
+    "testhook",
+    "测试用"
+   ],
+   "ReleaseGate.clear_override": [
+    "testhook",
+    "测试用"
+   ],
+   "ReleaseGate.list_flags": [
+    "surface",
+    "core/routes/diagnostics.py 列出发布闸门当前状态"
+   ]
+  },
+  "core/unified/state_schema.py": {
+   "*": [
+    "object",
+    "TaskState 的 JudgeLoop 字段写入：core/task_lifecycle.py 已持有 TaskState，JudgeLoop 真跑起来时一起用"
+   ]
+  },
+  "core/unified_action_lifecycle_surface.py": {
+   "apply_blocker": [
+    "delete",
+    "core/desktop_presence_runtime.py 第 1515–1594 行已从执行结果就地拼出这张面（阶段、阻断、确认、收口全在），在跑的是那一份；这几个构造器是重复实现"
+   ],
+   "apply_confirmation": [
+    "delete",
+    "core/desktop_presence_runtime.py 第 1515–1594 行已从执行结果就地拼出这张面（阶段、阻断、确认、收口全在），在跑的是那一份；这几个构造器是重复实现"
+   ],
+   "build_from_dispatch": [
+    "delete",
+    "core/desktop_presence_runtime.py 第 1515–1594 行已从执行结果就地拼出这张面（阶段、阻断、确认、收口全在），在跑的是那一份；这几个构造器是重复实现"
+   ],
+   "build_from_normalizer_outcome": [
+    "object",
+    "输入是 AndroidResultNormalizerOutcome：安卓结果那一侧，按所有者安排暂缓"
+   ],
+   "close_surface": [
+    "delete",
+    "core/desktop_presence_runtime.py 第 1515–1594 行已从执行结果就地拼出这张面（阶段、阻断、确认、收口全在），在跑的是那一份；这几个构造器是重复实现"
+   ],
+   "*": [
+    "object",
+    "对象上的判定方法，desktop_presence_runtime 拼出的那张面被读时用"
+   ]
+  },
+  "core/unified_config.py": {
+   "UnifiedConfig.on_change": [
+    "delete",
+    "legacy 配置对象；配置变化的规范通知在 POST /api/config 写入之后"
+   ]
+  },
+  "core/unified_dispatch_readiness_gate.py": {
+   "*": [
+    "delete",
+    "空操作，docstring 自称只为 API 对称"
+   ]
+  },
+  "core/unified_execution_governance.py": {
+   "*": [
+    "wire",
+    "两种执行类型冲突处（hybrid_executor 同时起本地 / 远端时）求规范解"
+   ]
+  },
+  "core/unified_result_ingress.py": {
+   "*": [
+    "testhook",
+    "docstring：测试隔离用"
+   ]
+  },
+  "core/user_preference_memory.py": {
+   "UserPreferenceMemory.suggest_device_for_task": [
+    "wire",
+    "选设备处（smart_scheduler.select_best_device）作为建议输入"
+   ]
+  },
+  "core/vector_backend.py": {
+   "_QdrantBackend.add_document_vector": [
+    "object",
+    "Qdrant 专用带向量索引，随 Node_105 知识库需要外部向量时用"
+   ]
+  },
+  "core/vision_pipeline.py": {
+   "*": [
+    "wire",
+    "core/vision_ui_projection.py（已持有 VisionResult）按坐标 / 类型找元素，替换手写遍历"
+   ]
+  },
+  "core/voice_duplex_session.py": {
+   "*": [
+    "object",
+    "同步取事件的便利方法，异步迭代是规范用法"
+   ]
+  },
+  "core/voice_echo_guard.py": {
+   "is_self_echo": [
+    "delete",
+    "调用方都用 classify_asr_text 拿完整裁决；布尔包装无人用"
+   ]
+  },
+  "core/voice_loop.py": {
+   "VoiceLoop.process_once": [
+    "surface",
+    "非流式单次处理：core/routes/openai_audio.py 语音转写→回答的一次性端点；否则删"
+   ]
+  },
+  "galaxy_gateway/agent_bridge.py": {
+   "AgentBridge.build_envelope_v2": [
+    "delete",
+    "旧 HandoffContract → Envelope v2 的转换；只被 legacy_paths 登记引用"
+   ],
+   "AgentBridge.handoff_from_envelope": [
+    "wire",
+    "galaxy_gateway/device_router.py 第 1244 行现在先手工拼 HandoffContract 再调 bridge.handoff；手里本来就是 TaskEnvelope，改走这个 PR-2 规范入口"
+   ]
+  },
+  "galaxy_gateway/cross_device_switch.py": {
+   "guard_cross_device": [
+    "wire",
+    "跨设备入口（galaxy_gateway/routes/chat.py、device_router 跨设备分支）；这些文件已 import 本模块但用的是 is_cross_device_enabled 手判"
+   ]
+  },
+  "galaxy_gateway/daemon_notifier.py": {
+   "*": [
+    "delete",
+    "整个模块零导入；守护进程重启 / 压力通知已由 launcher 与 core/observability 负责"
+   ]
+  },
+  "galaxy_gateway/device_router.py": {
+   "DeviceRouter.aggregate_results": [
+    "wire",
+    "多设备任务收口处：galaxy_gateway/orchestrator/parallel_tracker.py finalize 之后汇总"
+   ]
+  },
+  "galaxy_gateway/enhanced_nlu_v2.py": {
+   "*": [
+    "delete",
+    "零导入的旧 NLU 模块"
+   ]
+  },
+  "galaxy_gateway/gateway_nats_adapter.py": {
+   "GatewayNATSAdapter.resolve_task": [
+    "wire",
+    "本适配器订阅 galaxy.task.result 的回调里按 task_id 解开等待中的 future"
+   ]
+  },
+  "galaxy_gateway/handlers/device_manager.py": {
+   "DeviceManager.find_best_device_for_task": [
+    "delete",
+    "选设备的规范入口是 core/control_plane/smart_scheduler.select_best_device（command_router、openclawd、swarm 都在用）"
+   ]
+  },
+  "galaxy_gateway/multimodal_transfer.py": {
+   "*": [
+    "delete",
+    "整个模块零导入；文件传输走 galaxy_gateway/android/handlers/file_transfer.py"
+   ]
+  },
+  "galaxy_gateway/observability.py": {
+   "TraceContext.child_span": [
+    "wire",
+    "galaxy_gateway/device_router.py 一个任务扇出到多台设备时给每路一个子 span（该文件已在用 TraceContext）"
+   ]
+  },
+  "galaxy_gateway/orchestrator/parallel_tracker.py": {
+   "ParallelGroupTracker.expire_timeouts": [
+    "wire",
+    "网关周期任务（galaxy_gateway/bootstrap/lifecycle.py）定时清扫超时并行组"
+   ],
+   "ParallelGroupTracker.finalize_if_complete": [
+    "wire",
+    "record_parallel_fields 记录每个子结果之后调用"
+   ]
+  },
+  "galaxy_gateway/orchestrator/task_orchestrator.py": {
+   "MultiDeviceOrchestrator.submit_multi_device_task": [
+    "delete",
+    "PR-2 后多设备任务强制经 TaskGraph；本入口只被 legacy_paths 登记"
+   ],
+   "TaskOrchestrator.reset_device_counts": [
+    "testhook",
+    "docstring 自称拓扑剧变时手动用；无生产调用"
+   ]
+  },
+  "galaxy_gateway/protocol/compat.py": {
+   "extract_parallel_result_payload": [
+    "delete",
+    "兼容层；并行字段由 websocket_handler 直接取 results[0]"
+   ]
+  },
+  "galaxy_gateway/resumable_transfer.py": {
+   "*": [
+    "delete",
+    "整个模块零导入；与 file_transfer handler 重复"
+   ]
+  },
+  "galaxy_gateway/routing/router.py": {
+   "*": [
+    "delete",
+    "RoutingOrchestrator 零导入；选设备 / 构造消息由同目录 device_selection.py、dispatch.py 承担"
+   ]
+  },
+  "galaxy_gateway/session_roaming.py": {
+   "SessionRoamingManager.auto_migrate_on_attention_shift": [
+    "wire",
+    "注意力焦点变化处（唤醒事件 galaxy_gateway/wake_router.py 判定出新设备后）经 core/session_migration.migrate_session 迁移"
+   ],
+   "SessionRoamingManager.close_session": [
+    "surface",
+    "galaxy_gateway/routes/sessions.py 加关闭漫游会话"
+   ],
+   "SessionRoamingManager.load_snapshot": [
+    "wire",
+    "漫游管理器初始化时从 GALAXY_DATA_DIR 读快照（本轮已让持久化目录跟随 GALAXY_DATA_DIR）"
+   ],
+   "SessionRoamingManager.update_task_state": [
+    "wire",
+    "任务状态迁移处同步到漫游会话（会话里带着任务时）"
+   ]
+  },
+  "galaxy_gateway/ssot.py": {
+   "udm_write_upsert": [
+    "wire",
+    "设备状态增量更新处（handle_status / 感知上报）经 SSOT 写 UDM；register/heartbeat/unregister 已这样接"
+   ]
+  },
+  "galaxy_gateway/task_decomposer.py": {
+   "*": [
+    "delete",
+    "已登记在 core/legacy_purge_registry.py 的旧任务分解器"
+   ]
+  },
+  "galaxy_gateway/transport/websocket_server.py": {
+   "WebSocketManager.handle_connection": [
+    "delete",
+    "规范设备 WS 入口是 galaxy_gateway/routes/websocket.py → websocket_handler.handle_websocket"
+   ]
+  },
+  "galaxy_gateway/wake_event_bus.py": {
+   "WakeEventBus.clear_dedup_buffer": [
+    "testhook",
+    "手动清去重缓冲；无生产调用"
+   ]
+  },
+  "galaxy_gateway/wake_router.py": {
+   "WakeRouter.clear_dedup_cache": [
+    "testhook",
+    "docstring：用于测试或手动重置"
+   ],
+   "WakeRouter.inject_device_info": [
+    "testhook",
+    "docstring：主要用于测试"
+   ],
+   "WakeRouter.set_decision_callback": [
+    "wire",
+    "唤醒路由判定后的回调：接 SessionRoamingManager.auto_migrate_on_attention_shift（见上）"
+   ]
+  },
+  "galaxy_gateway/webrtc_proxy.py": {
+   "clear_webrtc_task_session": [
+    "wire",
+    "core/command_router.py 第 1937 行附近 teardown_binding_on_task_terminal 处（任务终态时），与 register_webrtc_task_session 配对"
+   ],
+   "order_ice_candidates": [
+    "wire",
+    "proxy_webrtc_signaling 转发 ICE 候选前排序去重（get_webrtc_endpoint_info 已宣称按此顺序）"
+   ]
+  },
+  "galaxy_gateway/websocket_handler.py": {
+   "handle_response": [
+    "delete",
+    "TASK_RESULT 在 handle_message 里已整体转给 android_bridge（_ANDROID_DOMAIN_KINDS），本函数没有分派入口"
+   ]
+  },
+  "launcher/bootstrap.py": {
+   "SystemConfig.has_llm_api": [
+    "wire",
+    "launcher/doctor.py 体检里报「没有可用 LLM API」"
+   ]
+  },
+  "launcher/dependency_resolver.py": {
+   "*": [
+    "delete",
+    "legacy：节点启动顺序已由 launcher/node_startup.py 决定"
+   ]
+  },
+  "launcher/gateway.py": {
+   "*": [
+    "delete",
+    "模块零导入；launcher/services.py 起网关时自己轮询"
+   ]
+  },
+  "launcher/nodes.py": {
+   "equivalent_legacy_command": [
+    "wire",
+    "launcher/doctor.py 提示老命令写法时用"
+   ]
+  },
+  "launcher/ui.py": {
+   "*": [
+    "delete",
+    "main.py 直接调 ascii_art.print_banner；这层包装没用上"
+   ]
+  },
+  "nodes/Node_04_Router/qwen_think_logic.py": {
+   "*": [
+    "delete",
+    "文件零导入；节点路由由 Node_04 的 main.py 承担"
+   ]
+  },
+  "nodes/Node_05_Auth/main.py": {
+   "AuthManager.delete_user": [
+    "surface",
+    "本节点 app 加 DELETE /users/{id}（已有 /register /login）"
+   ],
+   "AuthManager.has_permission": [
+    "surface",
+    "本节点 app 加 POST /check-permission；或在本节点受保护端点里用作门"
+   ]
+  },
+  "nodes/Node_106_GitHubFlow/main.py": {
+   "GitHubClient.create_pull_request": [
+    "surface",
+    "本节点 /workflow/issue_to_pr 流程的最后一步（现在停在生成代码）；或加 POST /create_pr"
+   ]
+  },
+  "nodes/Node_108_MetaCognition/main.py": {
+   "MetaCognitionEngine.comprehend": [
+    "wire",
+    "本节点感知→理解→决策流程里的理解一步（core/metacognition_engine.py 是它的副本）"
+   ]
+  },
+  "nodes/Node_109_ProactiveSensing/main.py": {
+   "*": [
+    "surface",
+    "本节点 app 加移除规则 / 注销传感器（已有登记）"
+   ]
+  },
+  "nodes/Node_110_SmartOrchestrator/main_enhanced.py": {
+   "*": [
+    "delete",
+    "文件零导入；节点入口是 main.py"
+   ]
+  },
+  "nodes/Node_112_SelfHealing/main.py": {
+   "SelfHealingEngine.register_recovery_handler": [
+    "surface",
+    "本节点 app 加恢复处理器登记"
+   ],
+   "SelfHealingEngine.run_once": [
+    "wire",
+    "本节点的自愈循环（server.py 起的周期任务）"
+   ],
+   "SelfHealingEngine.unregister_health_check": [
+    "surface",
+    "本节点 app 加注销健康检查"
+   ]
+  },
+  "nodes/Node_116_ExternalToolWrapper/main.py": {
+   "ExternalToolWrapper.execute_custom": [
+    "surface",
+    "本节点 app 执行自定义工具"
+   ],
+   "ExternalToolWrapper.register_custom_handler": [
+    "object",
+    "扩展点：随 execute_custom 一起"
+   ],
+   "ExternalToolWrapper.unregister_tool": [
+    "surface",
+    "本节点 app 加 DELETE /tools/{tool_id}（已有 POST /tools、GET /tools/{tool_id}）"
+   ]
+  },
+  "nodes/Node_127_BambuLab/enhanced_bambu_controller.py": {
+   "*": [
+    "delete",
+    "文件零导入"
+   ]
+  },
+  "nodes/Node_14_FFmpeg/main.py": {
+   "FFmpegManager.merge_videos": [
+    "surface",
+    "本节点 app 加 POST /merge（已有 /convert /clip /extract-audio /screenshot）"
+   ]
+  },
+  "nodes/Node_33_ADB/cluster_manager.py": {
+   "*": [
+    "delete",
+    "文件零导入（ADB 多设备也属安卓侧）"
+   ]
+  },
+  "nodes/Node_43_MAVLink/universal_drone_controller.py": {
+   "*": [
+    "delete",
+    "文件零导入；无人机无真实设备接入"
+   ]
+  },
+  "nodes/Node_50_Transformer/enhanced_nlu_engine.py": {
+   "*": [
+    "delete",
+    "文件零导入"
+   ]
+  },
+  "nodes/Node_54_SymbolicMath/main.py": {
+   "*": [
+    "surface",
+    "本节点 /verify 按学科分派时调用（现在只做通用验证）"
+   ]
+  },
+  "nodes/Node_58_ModelRouter/main.py": {
+   "DatabaseManager.save_session_turn": [
+    "wire",
+    "本节点路由一次对话后记轮次（表已建，从没写过）"
+   ]
+  },
+  "nodes/Node_70_AutonomousLearning/core/autonomous_learning_engine.py": {
+   "*": [
+    "wire",
+    "本节点 fusion_entry.py 的学习循环（launcher/services.py 已起引擎，但观察→经验→泛化这几步没人调）"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/core/canonical_device_view_adapter.py": {
+   "*": [
+    "wire",
+    "本节点 multi_device_coordinator_engine.py 分配 / 释放任务处"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/core/device_discovery.py": {
+   "*": [
+    "wire",
+    "本节点 coordinator engine 启动时发现 / 登记设备"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/core/fault_tolerance.py": {
+   "*": [
+    "wire",
+    "本节点 coordinator engine 设置主备设备与健康检查"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/core/state_synchronizer.py": {
+   "*": [
+    "wire",
+    "本节点收到 gossip 消息的入口"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/main.py": {
+   "*": [
+    "object",
+    "统一 DeviceModel 与节点 Device 的互转，随 Node_71 对接网关设备模型时用"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/models/device.py": {
+   "*": [
+    "surface",
+    "本节点 /status 按状态统计设备"
+   ]
+  },
+  "nodes/Node_71_MultiDeviceCoordination/models/task.py": {
+   "*": [
+    "wire",
+    "本节点 task_scheduler.py 取任务 / 报进度处"
+   ]
+  },
+  "nodes/Node_72_KnowledgeBase/knowledge_base_system.py": {
+   "*": [
+    "surface",
+    "本节点 app 加导出 / 导入知识库（core/rag_memory.py 已持有该对象）"
+   ]
+  },
+  "nodes/Node_74_DigitalTwin/main.py": {
+   "*": [
+    "wire",
+    "孪生设备登记时投影成规范 RegisteredRuntimeDevice 写入设备真相（docstring：anti-drift 锚定）"
+   ]
+  },
+  "nodes/Node_89_APIGateway/main.py": {
+   "*": [
+    "wire",
+    "本节点代理请求处按路由表转发"
+   ]
+  }
+ }
+}

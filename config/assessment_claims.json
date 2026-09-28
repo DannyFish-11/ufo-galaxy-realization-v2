@@ -518,6 +518,84 @@
           "expected": true
         }
       ]
+    },
+    {
+      "id": "unwired-functions-have-a-placement",
+      "source": "docs/UNWIRED_CODE_INVENTORY.md(第七节)",
+      "recorded_on": "2026-09-28",
+      "statement": "安卓以外的每个未接线函数都在 config/unwired_placement.json 里写了去处(接上/挂出来/删掉/随对象走/测试钩子/框架回调/产品决定),scripts/unwired_inventory.py --check 与 tests/test_unwired_placement.py 核对它与清单一一对得上。这是去处,不是已执行的处置。",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "config/unwired_placement.json",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "check_placement",
+          "scope": "scripts",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "tests/test_unwired_placement.py",
+          "scope": "",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "zero-trust-security-policy-has-no-enforcer",
+      "source": "docs/UNWIRED_CODE_INVENTORY.md(第七节 7.1 第 1 条)",
+      "recorded_on": "2026-09-28",
+      "statement": "PUT /api/v1/security/policy 改的零信任规则表,唯一的执行方 SecurityInterceptor.check_and_intercept 在生产里没有调用方:改那张表只有 /evaluate 端点会回显,任何真实执行都不经过它。",
+      "predicates": [
+        {
+          "kind": "symbol_exists",
+          "target": "check_and_intercept",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "check_and_intercept",
+          "scope": "core",
+          "expected": false
+        }
+      ]
+    },
+    {
+      "id": "system-resource-registry-never-seeded",
+      "source": "docs/UNWIRED_CODE_INVENTORY.md(第七节 7.1 第 3 条)",
+      "recorded_on": "2026-09-28",
+      "statement": "OpenClawd 的系统资源工具与投影编译器都在读 get_system_resource_registry(),但往表里登记资源的 seed_*_resource 在生产里一个都没被调用,表永远是空的。",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "get_system_resource_registry",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "seed_github_resource",
+          "scope": "core",
+          "expected": false
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "seed_device_resource",
+          "scope": "core",
+          "expected": false
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "seed_local_tool_resource",
+          "scope": "core",
+          "expected": false
+        }
+      ]
     }
   ]
 }
