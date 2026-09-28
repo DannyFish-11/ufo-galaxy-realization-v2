@@ -135,7 +135,8 @@ def test_still_failing_goes_to_isolation_and_survives_restart(recovery: TruthCha
 
     assert settled["state"] == STATE_ISOLATED
     assert settled["failed_steps"] == ["truth_ingress"]
-    assert "RuntimeError: transient" in settled["step_errors"]["truth_ingress"]
+    assert settled["raised_steps"] == ["truth_ingress"] and settled["retry_raised"] is False
+    assert "transient" not in json.dumps(settled, ensure_ascii=False), "异常原文不进记录（会经接口外露），只进日志"
     assert settled["attempts"] == 2
 
     rows = recovery.isolated()

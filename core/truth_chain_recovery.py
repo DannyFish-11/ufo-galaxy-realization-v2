@@ -76,15 +76,17 @@ def _device_id(message: Dict[str, Any]) -> str:
     return str(message.get("device_id") or payload.get("device_id") or "")
 
 
-def _step_errors(outcome: Any) -> Dict[str, str]:
+def _raised_steps(outcome: Any) -> List[str]:
+    """哪几步是**抛了异常**（而不是模块缺席）没走通。
+
+    只记步骤名，不记异常原文：记录会经接口外露，异常文本可能带内部细节（CodeQL
+    py/stack-trace-exposure）。原文由各步骤自己的 ``logger.warning`` 写进日志，排障看日志。
+    """
     from core.task_result_canonical_truth_chain import TRUTH_CHAIN_STEPS
 
-    errors: Dict[str, str] = {}
-    for name, (_attr, exc_attr) in TRUTH_CHAIN_STEPS.items():
-        exc = getattr(outcome, exc_attr, None)
-        if exc is not None:
-            errors[name] = f"{type(exc).__name__}: {exc}"[:500]
-    return errors
+    return [
+        name for name, (_attr, exc_attr) in TRUTH_CHAIN_STEPS.items() if getattr(outcome, exc_attr, None) is not None
+    ]
 
 
 class TruthChainRecovery:
@@ -160,10 +162,10 @@ class TruthChainRecovery:
         try:
             retried = rerun_failed_steps(outcome, message)
         except Exception as exc:  # noqa: BLE001 — 补跑自己炸了也要落到隔离里，不能丢
-            logger.warning("truth_chain_recovery: retry raised key=%r exc=%s", key, exc)
-            retried, raised = outcome, f"{type(exc).__name__}: {exc}"[:500]
+            logger.warning("truth_chain_recovery: retry raised key=%r exc=%s", key, exc)  # 原文只进日志
+            retried, raised = outcome, True
         else:
-            raised = ""
+            raised = False
 
         if retried.is_truth_chain_complete and not raised:
             if outcome.task_id:
@@ -186,9 +188,6 @@ class TruthChainRecovery:
             logger.info("truth_chain_recovery: recovered key=%r steps=%s", key, before)
             return record
 
-        errors = _step_errors(retried)
-        if raised:
-            errors["retry"] = raised
         record = {
             "key": key,
             "task_id": outcome.task_id,
@@ -200,7 +199,8 @@ class TruthChainRecovery:
             "incomplete_reason": retried.incomplete_reason or outcome.incomplete_reason,
             "failed_steps": failed_steps(retried) or before,
             "step_status": {attr: getattr(retried, attr) for attr, _exc in TRUTH_CHAIN_STEPS.values()},
-            "step_errors": errors,
+            "raised_steps": _raised_steps(retried),
+            "retry_raised": raised,
             "first_seen_at": first_seen_at,
             "settled_at": _now(),
             "attempts": attempts,
