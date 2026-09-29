@@ -413,7 +413,7 @@ class ComputeScheduler:
             return alloc
 
         # 2. VRAM moderate -> Q8 quantized GPU
-        q8_size = int(resident_mb * cfg.q8_factor)
+        q8_size = self.estimate_quantized_size(resident_mb, "q8", cfg)
         if free_vram > q8_size * cfg.margin_quantized and vram_ratio < cfg.vram_warning:
             alloc = ModelAllocation(
                 model_id=model_id,
@@ -427,7 +427,7 @@ class ComputeScheduler:
             return alloc
 
         # 3. VRAM tight -> Q4 quantized + partial layer offloading
-        q4_size = int(resident_mb * cfg.q4_factor)
+        q4_size = self.estimate_quantized_size(resident_mb, "q4", cfg)
         if free_vram > q4_size * cfg.margin_hybrid:
             n_layers = self._estimate_gpu_layers(resident_mb, free_vram, cfg)
             alloc = ModelAllocation(

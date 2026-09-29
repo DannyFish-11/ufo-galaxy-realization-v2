@@ -111,6 +111,14 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   locus_constraint，只能是枚举，不点名供应商 —— G13）→ `SupplyDecision` 绑在 Agent 上；
   供不上就报（G14）。`GALAXY_AGENT_SUPPLY=off|shadow|on`，默认 on（没声明需求的 Agent 什么都不算、行为照旧）
 
+### 结果真相与会话迁移
+- `core/truth_chain_recovery.py` - task_result 真相链没收口时：后台**只重跑失败的步骤**一次，仍不收口就进隔离队列
+  （落盘 `$GALAXY_DATA_DIR/isolated_results.json`，`GET /api/v1/results/isolated`，面板「全部设置」最上面）。
+  回答不受影响 —— 所有者的决定是「自动重试，失败再隔离」，**不拒收**
+- `core/session_migration.py` - 会话迁移的**唯一**入口（D3）。核心 REST、网关 REST/WS、安卓桥都调它；它先找会话在哪个
+  存储（核心 `core.session_manager` / 唤醒建的漫游 `SessionRoamingManager`），**两个存储不合并**。
+  `core/routes/sessions.py::migrate_session_via_canonical_manager` 只是旧名转发
+
 ### 入口分流与参与方
 - `core/presence_line.py` - **只有电脑这边发起的请求进桌面三态**（本机感官、桌面控制面、桌面外壳声明
   `client_surface=desktop_shell` 的对话、带本机标识或不带设备号且连接来自本机的请求；电脑发起的跨设备/混合任务
@@ -142,6 +150,8 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### UI 层
 - `electron/` + `electron/renderer/panel/src/` - 桌面外壳与面板（纯 TS，只认 WS 的 `payload.render`，见 `docs/RENDER_CONTRACT_DIRECTION.md`）
 - `core/desktop_presence_runtime.py` - 桌面三态运行时（silent / liminal / manifest）
+- `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
+  （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - `enhancements/clients/windows_client/run_ui.py` 是**硬禁用的桩**，只会发一条弃用警告；原先写在这里的
   `scroll_paper_geek_ui.py` 不存在
 
@@ -207,6 +217,10 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `POST /api/v1/participants/{id}/heartbeat` / `.../disconnect` - 保活与主动离开（写安卓心跳/断连写的同一批模块）
 - `GET /api/v1/participants` - 列表（需 API 鉴权）
 
+### 没收口的结果（真相链隔离队列）
+- `GET /api/v1/results/isolated` - 补跑后仍没收口的结果（只有类型化字段，原始结果不外露）
+- `POST /api/v1/results/isolated/{key}/retry` / `.../dismiss` - 再试一次（只重跑失败步骤）/ 知悉
+
 ### 智能体活动
 - `GET /api/v1/agent/activity` - 智能体正在处理的全部请求：发起方、是否在桌面三态里、相位（需 API 鉴权）
 
@@ -231,6 +245,8 @@ python main.py                # 启动系统（权威入口）
 python -m pytest tests/                                   # 全量（CI 用 Python 3.11）
 python scripts/select_affected_tests.py <改过的文件…>      # 只跑受影响的
 python main.py --check-only                               # 不起服务，只查依赖/配置/核心模块/节点导入
+python scripts/unwired_inventory.py --write               # 刷新 docs/UNWIRED_CODE_INVENTORY.md（未接线/不可达代码逐类清单）
+python scripts/unwired_inventory.py --check               # 核对 config/unwired_placement.json（安卓以外每个未接线函数的去处）与清单对得上
 ```
 原先写在这里的 `test_system_real.py` 不存在。
 

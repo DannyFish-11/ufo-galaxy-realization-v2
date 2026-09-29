@@ -1173,13 +1173,13 @@ class OperatorSurface:
                     from core.replay_foundation import get_replay_foundation
 
                     rf = get_replay_foundation()
-                    replay_events = rf.get_task_lineage(task_id)
-                    for ev in replay_events:
-                        ev_kind = getattr(ev, "kind", None) or (ev.get("kind") if isinstance(ev, dict) else None)
-                        ev_payload = getattr(ev, "payload", {}) or (
-                            ev.get("payload", {}) if isinstance(ev, dict) else {}
-                        )
-                        ev_ts = getattr(ev, "timestamp", 0) or (ev.get("timestamp", 0) if isinstance(ev, dict) else 0)
+                    # 此前这里是 ``for ev in rf.get_task_lineage(task_id)`` —— 那返回的是
+                    # TaskLineage 数据类，不可迭代，TypeError 被下面的 except 以 debug 吞掉，
+                    # 回放事件从未进过这条时间线；时间戳字段也读错了（记录上叫 recorded_at）。
+                    for ev in rf.replay_task_timeline(task_id):
+                        ev_kind = ev.get("kind")
+                        ev_payload = ev.get("payload") or {}
+                        ev_ts = ev.get("recorded_at") or 0
                         if ev_kind == "CONTINUUM_TICK":
                             c = ev_payload.get("continuum", {}) if isinstance(ev_payload, dict) else {}
                             timeline.append(

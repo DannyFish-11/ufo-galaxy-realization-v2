@@ -7,7 +7,7 @@ lifting back to the OpenClawd instance so that behaviour is fully preserved.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger("Galaxy.Orchestration.Planning")
 
@@ -69,19 +69,3 @@ class PlanningPipeline:
         except Exception as exc:
             logger.warning("PlanningPipeline: determine_execution_path failed: %s", exc)
             return "none"
-
-    @staticmethod
-    def build_intent_profile(
-        openclawd_instance: Any,
-        **kwargs: Any,
-    ) -> Optional[Dict]:
-        """Delegate to ``openclawd_instance._build_intent_profile()``."""
-        method = getattr(openclawd_instance, "_build_intent_profile", None)
-        if method is None:
-            logger.warning("PlanningPipeline: _build_intent_profile not found")
-            return None
-        try:
-            return method(**kwargs)
-        except Exception as exc:
-            logger.warning("PlanningPipeline: build_intent_profile failed: %s", exc)
-            return None

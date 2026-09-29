@@ -565,18 +565,6 @@ class HardwareAwareMultimodalRouter:
 
     # ── 快捷方法 ──
 
-    async def route_vision(self, messages: List[Dict]) -> HARoutingDecision:
-        """视觉任务路由"""
-        return await self.route("vision", messages, has_multimodal_input=True)
-
-    async def route_asr(self, audio_path: str) -> HARoutingDecision:
-        """语音识别路由"""
-        return await self.route("asr", [], has_multimodal_input=True)
-
-    async def route_with_image(self, messages: List[Dict], image_data: Any) -> HARoutingDecision:
-        """带图片输入的路由"""
-        return await self.route("vision", messages, has_multimodal_input=True)
-
 
 # ── 全局单例 ──
 

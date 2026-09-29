@@ -52,6 +52,7 @@ import collections  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import logging  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import threading  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 import time  # noqa: E402  哨兵权威声明置顶是本仓设计习语
+import uuid  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from dataclasses import dataclass, field  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from pathlib import Path  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from typing import Any, Dict, List, Optional, Tuple  # noqa: E402  哨兵权威声明置顶是本仓设计习语
@@ -858,6 +859,11 @@ class UnifiedLLMRouter:
 
         # 策略：获取提供商优先顺序（保留既有 SLO / fallback 语义）
         provider_order, slo = self._get_provider_order(task_type_str, effective_preferred)
+        _session_id = str((request.metadata or {}).get("session_id") or "")
+        _budget_key = _session_id or f"request:{request.request_id}"
+        _budget_provider = await self._budget_gate(_budget_key)
+        if _budget_provider:
+            provider_order = [_budget_provider]
 
         start = time.monotonic()
         result = None
@@ -950,6 +956,9 @@ class UnifiedLLMRouter:
             latency_ms=latency_ms,
             cost_usd=estimated_cost,
             is_fallback=is_fallback,
+        )
+        await self._budget_record(
+            _budget_key, str(model), int(total_tokens or 0), estimated_cost, attributed=bool(_session_id)
         )
 
         logger.info(
@@ -1188,6 +1197,11 @@ class UnifiedLLMRouter:
         _candidates: List[Optional[str]] = (
             list(_provider_order) if _provider_order else ([effective_provider] if effective_provider else [None])
         )
+        _session_id = str(kwargs.get("session_id") or "")
+        _budget_key = _session_id or f"request:{uuid.uuid4().hex}"
+        _budget_provider = await self._budget_gate(_budget_key)
+        if _budget_provider:
+            _candidates = [_budget_provider]
 
         def _is_soft_failure(res: Any) -> bool:
             if res is None:
@@ -1225,6 +1239,19 @@ class UnifiedLLMRouter:
                     latency_ms=latency_ms,
                     is_fallback=is_fallback,
                 )
+                _usage = getattr(result, "usage", None) or {}
+                _tokens = int(
+                    (_usage.get("total_tokens") if isinstance(_usage, dict) else getattr(_usage, "total_tokens", 0))
+                    or 0
+                )
+                _per_1k = self._estimate_cost_per_1k(_actual_provider, task_type_str)
+                await self._budget_record(
+                    _budget_key,
+                    str(getattr(result, "model", "unknown")),
+                    _tokens,
+                    (_tokens / 1000.0) * _per_1k if _per_1k is not None else 0.0,
+                    attributed=bool(_session_id),
+                )
                 logger.info(
                     "chat_with_tools completed",
                     extra={
@@ -1251,6 +1278,56 @@ class UnifiedLLMRouter:
         if last_result is not None:
             return last_result
         raise last_exc if last_exc is not None else NoAvailableProviderError(task_type=task_type)
+
+    # ------------------------------------------------------------------
+    # 治理预算（config/governance_policy.json 的 budget_policy）
+    # ------------------------------------------------------------------
+    # 此前预算执行器只挂在 /api/v1/governance/budget 上：没人在调模型前问它，也没人把真实
+    # 花费记给它，读出来的永远是 0。现在每次调用前问一次、调用后记一笔。
+    # 没有会话号的调用只计入每日 / 租户总额（用一个一次性的键，记完即清），不占任何会话的额度。
+
+    async def _budget_gate(self, budget_key: str) -> Optional[str]:
+        """没超预算返回 None；超了且策略是降级、降级模型在本机确有提供商时返回那个提供商。
+
+        策略是拒绝时抛 ``BudgetExceededError`` —— 这是所有者配置的硬上限，不吞。
+        """
+        from core.governance.budget_enforcer import BudgetExceededError, get_budget_enforcer
+
+        try:
+            fallback = await get_budget_enforcer().enforce_pre_call(
+                budget_key, "default", requested_model="", estimated_cost_usd=0.0
+            )
+        except BudgetExceededError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — 预算模块坏了不能拖垮对话
+            logger.debug("budget gate unavailable: %s", exc)
+            return None
+        if not fallback:
+            return None
+        provider = self._provider_for_model(fallback)
+        if provider is None:
+            logger.warning("预算已超：降级模型 %s 在本机没有对应的提供商，本次仍按原路由", fallback)
+        return provider
+
+    def _provider_for_model(self, model_name: str) -> Optional[str]:
+        for name, cfg in dict(getattr(self._backend, "providers", {}) or {}).items():
+            models = [getattr(cfg, "model", None), *list(getattr(cfg, "models", None) or [])]
+            if model_name == name or model_name in models:
+                return name
+        return None
+
+    async def _budget_record(
+        self, budget_key: str, model: str, tokens: int, cost_usd: float, *, attributed: bool
+    ) -> None:
+        try:
+            from core.governance.budget_enforcer import get_budget_enforcer
+
+            enforcer = get_budget_enforcer()
+            await enforcer.record_usage(budget_key, "default", model, tokens, cost_usd)
+            if not attributed:
+                enforcer.reset_session(budget_key)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("budget usage record skipped: %s", exc)
 
     def compute_complexity_vector(
         self,

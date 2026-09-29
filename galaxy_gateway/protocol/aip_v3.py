@@ -787,22 +787,6 @@ class ParallelResultPayload(BaseModel):
     failed: int = 0
     total: int = 0
 
-    @classmethod
-    def from_tracker_dict(cls, data: Dict[str, Any]) -> "ParallelResultPayload":
-        """
-        从 ``ParallelGroupTracker.aggregate().to_dict()`` 转换而来的工厂方法。
-        兼容 compat 层直接传入已规范化字典。
-        """
-        items = [ParallelSubtaskItem(**item) for item in data.get("device_results", [])]
-        return cls(
-            group_id=data.get("group_id", ""),
-            subtask_results=items,
-            summary_status=data.get("summary_status", "unknown"),
-            succeeded=data.get("succeeded", 0),
-            failed=data.get("failed", 0),
-            total=data.get("total", len(items)),
-        )
-
 
 def parse_message(data: Union[str, dict]) -> AIPMessage:
     """解析 AIP 消息"""

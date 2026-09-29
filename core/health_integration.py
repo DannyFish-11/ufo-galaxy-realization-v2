@@ -206,11 +206,13 @@ class UnifiedHealthManager:
             summary = self._error_tracker.get_summary()
             rate = summary.get("error_rate_1m", 0)
             total = summary.get("total_errors", 0)
+            # 总错误率只说明「多」，说不出「哪一类在冒」：LLM 全挂和设备全挂要找的是两拨人
+            spiking = [c for c in (summary.get("by_category") or {}) if self._error_tracker.is_error_spike(c)]
             if rate > 1.0:
-                return {"status": "unhealthy", "error_rate": rate, "total": total}
+                return {"status": "unhealthy", "error_rate": rate, "total": total, "spiking_categories": spiking}
             elif rate > 0.5:
-                return {"status": "degraded", "error_rate": rate, "total": total}
-            return {"status": "healthy", "error_rate": round(rate, 3), "total": total}
+                return {"status": "degraded", "error_rate": rate, "total": total, "spiking_categories": spiking}
+            return {"status": "healthy", "error_rate": round(rate, 3), "total": total, "spiking_categories": spiking}
         except Exception as e:
             return {"status": "unhealthy", "error": str(e)}
 

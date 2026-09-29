@@ -402,6 +402,28 @@ def _assimilate(descriptor: ParticipantDescriptor) -> None:
     )
 
 
+def _enroll_in_mesh(descriptor: ParticipantDescriptor, admission: "ParticipantAdmission") -> None:
+    """注册 → 能力 → 就绪，三个事件依次交给 Mesh 自动编组。
+
+    安卓走的是分开的三条消息（注册、能力上报、就绪）；通用参与方在一次接入里就声明完了，
+    所以接入走完、前面各步都没缺口时，这里一并确认就绪。此前通用参与方从不进编组。
+    """
+    from core.mesh.body_mesh_registry import DeviceRole
+    from core.mesh.mesh_auto_enrollment import (
+        notify_capability_reported,
+        notify_device_registered,
+        notify_readiness_confirmed,
+    )
+
+    roles = [DeviceRole(r) for r in admission.roles]
+    session_id = admission.mesh_session_id or None
+    metadata = {"registration_trigger": ADMISSION_SOURCE, "platform": descriptor.device_type}
+    notify_device_registered(descriptor.device_id, roles=roles, session_id=session_id, metadata=metadata)
+    notify_capability_reported(descriptor.device_id, roles=roles, session_id=session_id, metadata=metadata)
+    if not admission.gaps:
+        notify_readiness_confirmed(descriptor.device_id, session_id=session_id, metadata=metadata)
+
+
 def _emit_attach_event(descriptor: ParticipantDescriptor) -> None:
     from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
 
@@ -470,6 +492,9 @@ def admit_participant(
     _step(admission, "body_mesh", _register_body_mesh, descriptor, admission.roles)
     _step(admission, "capability_assimilation", _assimilate, descriptor)
     _step(admission, "lifecycle_event", _emit_attach_event, descriptor)
+    if not should_gate_unapproved(admission.auth):
+        # 与安卓注册 / 能力上报同一套 Mesh 自动编组；未批准的设备不进编组成员表（同安卓准入闸）
+        _step(admission, "mesh_enrollment", _enroll_in_mesh, descriptor, admission)
     logger.info(
         "参与方接入 | device_id=%s type=%s posture=%s roles=%s gaps=%s",
         descriptor.device_id,
@@ -508,14 +533,36 @@ def participant_heartbeat(device_id: str, *, credentials: Optional[Dict[str, Any
         return refused
     from core.unified.device_manager import get_unified_device_manager
 
-    get_unified_device_manager().heartbeat(device_id)
+    udm = get_unified_device_manager()
+    was_active = _is_active(getattr(udm.get_device(device_id), "status", None))
+    udm.heartbeat(device_id)
     try:
         from core.unified.connection_manager import get_unified_connection_manager
 
         get_unified_connection_manager().update_heartbeat(device_id)
     except Exception as exc:  # noqa: BLE001 — 与安卓路径同：UCM 失败不致命
         logger.debug("participant heartbeat: UCM update failed: device_id=%s err=%s", device_id, exc)
-    return {"success": True, "device_id": device_id}
+    reply: Dict[str, Any] = {"success": True, "device_id": device_id}
+    if not was_active:
+        # 离线后又回来了：发给它、还挂着的信封交回设备派发方（与安卓重连同一个恢复点）
+        reply["resumed_task_ids"] = _resume_pending(device_id)
+    return reply
+
+
+def _is_active(status: Any) -> bool:
+    from core.unified.device_manager import UnifiedDeviceStatus
+
+    return status in (UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.BUSY) or status in ("online", "busy")
+
+
+def _resume_pending(device_id: str) -> List[str]:
+    try:
+        from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+
+        return get_lifecycle_registry().resume_for_device(device_id)
+    except Exception as exc:  # noqa: BLE001 — 恢复失败不影响心跳本身
+        logger.debug("participant heartbeat: resume_for_device failed: device_id=%s err=%s", device_id, exc)
+        return []
 
 
 def _mark_disconnected(device_id: str) -> None:

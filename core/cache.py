@@ -245,9 +245,6 @@ class CacheManager:
 
     # --- 节点状态缓存 ---
 
-    async def cache_node_status(self, node_id: str, status: Dict[str, Any]):
-        await self.set_json(f"node:{node_id}:status", status, ttl=300)
-
     async def get_node_status(self, node_id: str) -> Optional[Dict]:
         return await self.get_json(f"node:{node_id}:status")
 
@@ -262,9 +259,6 @@ class CacheManager:
         return result
 
     # --- 会话缓存 ---
-
-    async def cache_session(self, session_id: str, data: Dict[str, Any], ttl: int = 3600):
-        await self.set_json(f"session:{session_id}", data, ttl)
 
     async def get_session(self, session_id: str) -> Optional[Dict]:
         return await self.get_json(f"session:{session_id}")

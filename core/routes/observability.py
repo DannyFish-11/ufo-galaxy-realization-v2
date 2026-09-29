@@ -40,6 +40,7 @@ Routes:
   GET /api/v1/observability/recent-calls             - 近期工具 / 设备调用（最多 50 条）
   GET /api/v1/observability/trace/{id}               - 按 task_id 或 command_id 查 trace
   GET /api/v1/observability/stats                    - trace 存储统计
+  GET /api/v1/observability/maintenance              - 周期维护：各项清扫的周期、次数、最近结果与错误
   GET /health/nats                                   - NATS bus 连接状态与统计 (Phase E)
   GET /api/v1/observability/nats                     - NATS bus + MasterBrain 拓扑 (Phase E)
   GET /api/v1/observability/bus-events               - 最近 NATS 总线事件 (Phase E)
@@ -47,6 +48,7 @@ Routes:
   GET /api/v1/observability/execution/recent-events  - 最近统一执行事件 (PR-7)
   GET /api/v1/observability/execution/trace/{id}     - 统一 trace 上下文查询 (PR-7)
   GET /api/v1/observability/context-layer            - ACI 命中统计 + 焦点栈快照
+  GET/POST /api/v1/results/isolated[...]             - 真相链补跑后仍没收口的结果（见 core/routes/result_recovery.py）
 """
 
 import logging
@@ -65,6 +67,10 @@ _startup_time = _time.time()
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create observability routes router."""
     router = APIRouter()
+    # 真相链隔离队列：运行面的待处理项，与本组同样免鉴权（面板直接读）。
+    from core.routes import result_recovery as _result_recovery
+
+    _result_recovery.register(router)
 
     # ── 活跃 LLM 路由 + Fallback ─────────────────────────────────────────
 
@@ -92,6 +98,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             # 构建 fallback 列表：把非 primary 的、可用的 provider 标为 fallback
             fallbacks = [p for p in providers if not p.get("is_primary", False) and p.get("available", False)]
+            from core.routing_observability import build_routing_analytics_snapshot, recent_fallback_decisions
 
             return JSONResponse(
                 {
@@ -101,6 +108,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     "fallbacks": fallbacks,
                     "router_stats": status,
                     "uptime_seconds": round(_time.time() - _startup_time, 1),
+                    # OpenClawd 每次多模态选路的累计分布，以及最近几次真实发生的回退明细
+                    "routing_analytics": build_routing_analytics_snapshot().to_dict(),
+                    "recent_fallbacks": recent_fallback_decisions(20),
                 }
             )
         except Exception as exc:
@@ -286,6 +296,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:
             logger.warning("observability/stats error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    @router.get("/api/v1/observability/maintenance")
+    async def observability_maintenance():
+        """周期维护循环的状态：每项清扫的周期、跑了几次、最近一次的结果与错误。
+
+        清扫都是静默生效的（没过期就什么也不发生），循环停了或某项一直报错从外面看不出来，
+        所以把它们的计数摆在这里。
+        """
+        from core.periodic_maintenance import get_periodic_maintenance
+
+        return JSONResponse(get_periodic_maintenance().status())
 
     # ── 上下文层:预判式注入(ACI)与焦点栈 ────────────────────────────────
     #
@@ -532,6 +553,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.command_router import get_gateway_trace_store
+            from core.execution_observability.event_log import recent_execution_events
             from core.execution_observability.normalizers import normalize_observability_payload
 
             store = get_gateway_trace_store()
@@ -544,12 +566,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 except Exception as inner_exc:
                     logger.debug("execution/recent-events: normalise error: %s", inner_exc)
                     events.append({"raw": entry, "normalise_error": str(inner_exc)})
+            # 各层在真实发生处规范化后追加的事件：派发信封、任务图收尾、Windows 仲裁尝试。
+            layered = recent_execution_events(limit)
 
             return JSONResponse(
                 {
                     "count": len(events),
                     "schema_version": "pr7-v1",
                     "events": events,
+                    "layered_count": len(layered),
+                    "layered_events": layered,
                 }
             )
         except Exception as exc:

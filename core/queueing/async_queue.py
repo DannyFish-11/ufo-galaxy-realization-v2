@@ -217,17 +217,6 @@ class AsyncTaskQueue:
         self._started = False
         logger.info("AsyncTaskQueue stopped.")
 
-    async def force_stop(self) -> None:
-        """Cancel all workers immediately without draining the queue.
-
-        Intended for test cleanup or emergency shutdown scenarios.
-        """
-        self._stopping = True
-        for w in self._workers:
-            w.cancel()
-        self._workers.clear()
-        self._started = False
-
     # ------------------------------------------------------------------
     # Submission
     # ------------------------------------------------------------------

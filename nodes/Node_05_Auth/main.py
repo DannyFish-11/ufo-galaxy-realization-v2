@@ -398,6 +398,23 @@ async def verify_token_endpoint(current_user: TokenData = Depends(get_current_us
     """验证令牌"""
     return {"valid": True, "username": current_user.username, "role": current_user.role}
 
+class PermissionCheckRequest(BaseModel):
+    permission: str
+
+@app.post("/check-permission")
+async def check_permission(request: PermissionCheckRequest, current_user: TokenData = Depends(get_current_user)):
+    """当前令牌有没有某项权限（"*" 视为全部）"""
+    return {"permission": request.permission, "allowed": auth_manager.has_permission(current_user, request.permission)}
+
+@app.delete("/users/{username}")
+async def delete_user(username: str, current_user: TokenData = Depends(get_current_user)):
+    """删除用户：本人，或持有 users:delete 权限的令牌"""
+    if username != current_user.username and not auth_manager.has_permission(current_user, "users:delete"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    if not auth_manager.delete_user(username):
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"success": True, "deleted": username}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8005)

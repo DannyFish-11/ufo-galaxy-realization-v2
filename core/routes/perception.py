@@ -220,6 +220,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}
 
+    @router.get("/continuous")
+    async def perception_continuous_snapshot():
+        """连续感知最新一帧（无 base64 载荷）；多模态入口关着时为 null。"""
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+        return {"success": True, "frame": get_desktop_presence_runtime().snapshot_continuous_perception()}
+
     # ── 隐私急停 ──────────────────────────────────────────────────────────
     #
     # 一个调用立刻切断全部桌面感知,不经配置文件、不需重启。对应桌宠"双击暂停"

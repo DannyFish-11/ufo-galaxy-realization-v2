@@ -269,28 +269,21 @@ def test_c04_both_devices_are_told_on_success(device):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# D. 会话迁移**没有规范面** —— 所以"合并两个 store"不是现在该做的事
+# D. 会话迁移的规范面（D3）—— 两个存储不合并，入口只有一个
 # ══════════════════════════════════════════════════════════════════════════
 
 
-class TestMigrationHasNoCanonicalHome:
-    """``session_roaming`` 已在 ``core/orchestration_authority/legacy_paths.py`` 里
-    登记为 LEGACY_COMPATIBILITY,声明的规范替代是
-    ``core.canonical_session_axis`` + ``core.attached_runtime_session``。
+class TestMigrationCanonicalHome:
+    """``session_roaming`` 在 ``core/orchestration_authority/legacy_paths.py`` 里登记为 LEGACY_COMPATIBILITY。
 
-    问题是**那两处都不提供迁移能力**:
+    2026-09-27 这组判据钉的是「会话迁移没有规范面」：点名的规范替代
+    ``core.canonical_session_axis`` + ``core.attached_runtime_session`` 一个是分类学、一个是挂载生命周期，
+    都不迁移；迁移实现放在路由文件里，网关与安卓桥从路由模块 import 它；网关列出来的漫游会话，
+    拿网关的迁移端点去迁会 404。
 
-    * ``canonical_session_axis`` 是**分类学** —— 会话族、标识符角色、快照。
-      它回答"这个 id 是什么身份",不回答"把会话搬到那台设备上"。
-    * ``attached_runtime_session`` 是**挂载生命周期** —— attach/detach 状态机。
-
-    两个模块里 ``def migrate_*`` 命中为 0。全仓真正的迁移实现只有三处
-    (REST 的 canonical manager、session_roaming、以及网关路由那层委托),
-    **一处也不在规范面上**。
-
-    所以那条退役路径当前走不通,而 recommendation 读起来像"去用规范面就行了"。
-    这一组把这件事钉成判据 —— 它比"合并两个 store"更要紧:在没有目标形态的情况下
-    合并,合出来的东西仍然不是规范面,只是第三个。
+    2026-09-28 建了规范面 :mod:`core.session_migration`（D3）：一个入口，先找会话在哪个存储、
+    两个存储过同一道作用域判据、各走各的两阶段提交。**两个存储不合并**（合出来的只是第三个）。
+    这组判据现在钉的是这个新事实。
     """
 
     def test_d01_the_legacy_registration_names_a_replacement(self):
@@ -299,12 +292,12 @@ class TestMigrationHasNoCanonicalHome:
         src = legacy_paths.__file__
         body = open(src, encoding="utf-8").read()
         assert "session_roaming" in body
-        assert "canonical_session_axis" in body
+        assert "core.session_migration" in body, "退役登记要点名迁移的规范面"
 
-    def test_d02_the_named_replacement_does_not_migrate(self):
-        """规范替代里没有迁移能力 —— 这是整条退役路径走不通的原因。
+    def test_d02_taxonomy_and_lifecycle_still_do_not_migrate(self):
+        """分类学与挂载生命周期**本来就不该**迁移 —— 迁移的规范面是 core.session_migration。
 
-        这条会在有人真的把迁移建到规范面上的那天变红,那正是它该响的时候。
+        有人往这两个模块里加 migrate_* 时这条会红：那是在开第二个规范面。
         """
         import inspect
 
@@ -312,14 +305,14 @@ class TestMigrationHasNoCanonicalHome:
 
         for mod in (canonical_session_axis, attached_runtime_session):
             names = [n for n in dir(mod) if n.startswith("migrate")]
-            assert not names, f"{mod.__name__} 现在有迁移能力了 —— 退役路径可以往前走了,请更新这条判据"
+            assert not names, f"{mod.__name__} 里出现了迁移 —— 迁移的规范面是 core.session_migration"
             assert "def migrate_" not in inspect.getsource(mod)
 
-    def test_d03_the_only_migration_implementations_are_the_two_known_ones(self):
-        """全仓的迁移实现就这两个真实现(第三处是网关路由层的委托)。
+    def test_d03_migration_implementations_are_the_known_ones(self):
+        """引擎只有两个（核心存储：core/session_migration.py；漫游存储：session_roaming.py，只经规范面调到），
+        另两处是路由层的转发（core/routes/sessions.py 的旧名与 REST 端点、网关路由）。
 
-        多出第三个真实现时这条会红 —— 那意味着又有人在别处开了一条迁移路,
-        而这正是 Q3 当初要防的。
+        多出一个文件时这条会红 —— 那意味着又有人在别处开了一条迁移路，而这正是 Q3 当初要防的。
         """
         import subprocess
         from pathlib import Path
@@ -333,7 +326,22 @@ class TestMigrationHasNoCanonicalHome:
         ).stdout
         files = {line.split(":")[0] for line in out.splitlines() if line.strip()}
         assert files == {
+            "core/session_migration.py",
             "core/routes/sessions.py",
             "galaxy_gateway/session_roaming.py",
             "galaxy_gateway/routes/sessions.py",
         }, f"迁移实现的分布变了: {sorted(files)}"
+
+    def test_d04_every_external_entry_goes_through_the_canonical_surface(self):
+        """四个外部入口：核心 REST（经旧名转发）、网关 REST、网关 WS、安卓桥 —— 都落到 core.session_migration。"""
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        for rel in (
+            "galaxy_gateway/routes/sessions.py",
+            "galaxy_gateway/websocket_handler.py",
+            "galaxy_gateway/android/handlers/session_flow.py",
+            "core/routes/sessions.py",
+        ):
+            body = (root / rel).read_text(encoding="utf-8")
+            assert "from core.session_migration import migrate_session" in body, rel

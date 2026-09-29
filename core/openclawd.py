@@ -4491,9 +4491,16 @@ class OpenClawd:
         # not only through ContinuumState / TopologyRoutePlan projections.
         # Per HARNESS_NON_BLOCKING_POLICY, this block never aborts the primary path.
         try:
+            from core.critical_path_harness import record_ingress_path as _harness_record_ingress
             from core.critical_path_harness import record_provider_switch as _harness_record_switch
             from core.critical_path_harness import record_route_selection as _harness_record_route
 
+            _harness_record_ingress(
+                trace_id=trace_id or "",
+                active_modalities=list(_multimodal_route.get("active_modalities") or []),
+                requires_native_multimodal=bool((_canonical_perception or {}).get("requires_native_multimodal")),
+                source="OpenClawd._resolve_multimodal_ingress_decision",
+            )
             _harness_record_route(
                 trace_id=trace_id or "",
                 route_type=_multimodal_route.get("route_type", ""),
@@ -8827,7 +8834,7 @@ class OpenClawd:
                     layer = ToolCallRecord.classify_layer(tc_name)
                     # 结果分类(取代旧的 `result.get("success", True)` 二元判定;
                     # 为什么必须分类、为什么不能默认判成功,见 core/react_progress.py)
-                    from core.react_progress import ToolOutcome, classify_tool_outcome
+                    from core.react_progress import ToolOutcome, classify_tool_outcome, outcome_hint
 
                     _outcome = classify_tool_outcome(result)
                     if _outcome is ToolOutcome.CONTRACT_VIOLATION:
@@ -8877,7 +8884,7 @@ class OpenClawd:
                         {
                             "role": "tool",
                             "tool_call_id": tc_id,
-                            "content": _clipped + self._fuel_gauge_suffix(messages),
+                            "content": _clipped + outcome_hint(_outcome) + self._fuel_gauge_suffix(messages),
                         }
                     )
 
@@ -9200,77 +9207,6 @@ class OpenClawd:
     # ========================================================================
     # handle_device_command — 设备操控
     # ========================================================================
-
-    async def handle_device_command(self, intent, device_id: str) -> dict:
-        """设备操控 — 通过 DeviceOrchestrator 执行设备命令
-
-        Args:
-            intent: 解析后的意图 (ParsedIntent)
-            device_id: 目标设备 ID
-
-        Returns:
-            执行结果 dict
-        """
-        command = intent.command if intent else "device_control"
-        params = intent.params if intent else {}
-
-        # 尝试使用 DeviceOrchestrator
-        try:
-            from core.device_orchestrator import get_device_orchestrator
-
-            orchestrator = get_device_orchestrator()
-            result = await orchestrator.execute_command(
-                device_id=device_id,
-                command=command,
-                params=params,
-            )
-
-            success = result.get("success", False) if isinstance(result, dict) else bool(result)
-            response_text = result.get("message", "设备命令已执行") if isinstance(result, dict) else str(result)
-
-            return {
-                "success": success,
-                "response": response_text,
-                "metadata": {
-                    "device_id": device_id,
-                    "command": command,
-                    "result": result if isinstance(result, dict) else {"output": str(result)},
-                },
-            }
-
-        except ImportError:
-            logger.warning("DeviceOrchestrator 不可用，尝试直接设备通信")
-        except Exception as e:
-            logger.warning(f"DeviceOrchestrator 执行失败: {e}")
-
-        # 降级: 尝试通过 WebSocket 直接发送命令
-        try:
-            from core.routes._shared import connection_manager
-
-            sent = await connection_manager.send_to_device(
-                device_id,
-                {
-                    "type": "task",
-                    "task_type": command,
-                    "payload": params,
-                },
-            )
-
-            if sent:
-                return {
-                    "success": True,
-                    "response": f"设备命令已通过 WebSocket 发送到 {device_id}",
-                    "metadata": {"device_id": device_id, "command": command, "via": "websocket"},
-                }
-
-        except Exception as e:
-            logger.debug(f"WebSocket 发送失败: {e}")
-
-        return {
-            "success": False,
-            "response": f"无法向设备 {device_id} 发送命令 '{command}'，设备可能未连接。",
-            "metadata": {"device_id": device_id, "command": command},
-        }
 
     # ========================================================================
     # handle_agent_task — 复杂任务 (Agent 协作)

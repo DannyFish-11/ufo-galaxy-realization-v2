@@ -46,6 +46,9 @@ logger = logging.getLogger("Galaxy.Cognitive.Evolution")
 # ── Constants ────────────────────────────────────────────────────────────
 
 _DECAY_INTERVAL_SECONDS = 3600.0  # decay activation scores every hour
+# 全量模式挖掘每隔这么多个衰减周期跑一次（默认一天）。增量挖掘随任务事件实时进行，
+# 但只看新记录；全量一遍才能把跨越整个 TaskMemory 的模式重新算出来。
+_FULL_MINE_EVERY_TICKS = 24
 _MAINTENANCE_TASK_NAME = "cognitive_evolution_maintenance"
 
 # ── Module-level state ────────────────────────────────────────────────────
@@ -229,6 +232,7 @@ async def _maintenance_loop() -> None:
 
     logger.debug("Cognitive maintenance loop started (interval=%.0fs)", _DECAY_INTERVAL_SECONDS)
 
+    ticks = 0
     while not _shutdown_event.is_set():
         try:
             # Wait for interval or shutdown signal
@@ -264,6 +268,10 @@ async def _maintenance_loop() -> None:
             pruned = miner.decay_all(days=1.0)
             if pruned > 0:
                 logger.debug("PatternMiner pruned %d dead patterns", pruned)
+            ticks += 1
+            if ticks % _FULL_MINE_EVERY_TICKS == 0:
+                found = miner.mine_full()
+                logger.debug("PatternMiner full mining found %d new patterns", found)
         except Exception as exc:
             logger.debug("Pattern decay failed (non-fatal): %s", exc)
 

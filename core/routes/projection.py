@@ -5081,9 +5081,10 @@ def _get_route_plan(continuum_state):
     """Return the current TopologyRoutePlan, or None if topology is not ready."""
     try:
         from core.continuum.types import RuntimeDomain
-        from core.model_topology import ProviderInventory, TopologyRouter
+        from core.model_topology import TopologyRouter, build_inventory_from_config_authority
 
-        inventory = ProviderInventory.from_config()
+        # ProviderInventory 没有 from_config（此前这里调它、异常被吞，路由计划恒为 None）
+        inventory = build_inventory_from_config_authority()
         router = TopologyRouter(inventory)
         domain = continuum_state.runtime_domain or RuntimeDomain.LOCAL
         return router.route(continuum_state.tri_state_phase, domain)
@@ -5191,9 +5192,9 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
 
         model_supply: Optional[Any] = None
         try:
-            from core.model_topology import ProviderInventory
+            from core.model_topology import build_inventory_from_config_authority
 
-            inventory = ProviderInventory.from_config()
+            inventory = build_inventory_from_config_authority()
             # Build a minimal model_supply dict from the inventory if possible.
             if hasattr(inventory, "to_dict"):
                 model_supply = inventory.to_dict()

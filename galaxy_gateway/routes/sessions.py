@@ -5,6 +5,7 @@ Routes:
   GET  /api/v1/sessions                          - List sessions (optional state filter)
   GET  /api/v1/sessions/{session_id}             - Get session details
   POST /api/v1/sessions/{session_id}/migrate     - Trigger session migration
+  POST /api/v1/sessions/{session_id}/close       - Close a roaming session (frees its device mapping)
   GET  /api/v1/sessions/stats                    - Session statistics
 """
 
@@ -82,6 +83,17 @@ async def get_session(session_id: str, auth: dict = Depends(_require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/v1/sessions/{session_id}/close")
+async def close_session(session_id: str, auth: dict = Depends(_require_auth)):
+    """Close a roaming session: state → closed, device mapping released, persisted."""
+    from galaxy_gateway.session_roaming import session_roaming
+
+    if not session_roaming.get_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    session_roaming.close_session(session_id)
+    return session_roaming.get_session(session_id).to_dict()
+
+
 @router.post("/api/v1/sessions/{session_id}/migrate")
 async def migrate_session(
     session_id: str,
@@ -90,9 +102,9 @@ async def migrate_session(
 ):
     """Trigger session migration to a target device."""
     try:
-        from core.routes.sessions import migrate_session_via_canonical_manager
+        from core.session_migration import migrate_session as migrate_via_canonical_surface
 
-        result = await migrate_session_via_canonical_manager(
+        result = await migrate_via_canonical_surface(
             session_id=session_id,
             target_device=request.target_device_id,
         )

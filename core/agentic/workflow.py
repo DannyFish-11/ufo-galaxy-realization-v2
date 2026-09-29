@@ -227,45 +227,6 @@ class Agent(Workflow):
 # ── 三个真实形状的构造器（在 invoke 闭包里接线，Phase B/C 用） ──
 
 
-def from_task_agent(factory: Any, agent_id: str, *, name: str = "", description: str = "") -> Agent:
-    """单 agent：``factory.execute_agent_task(agent_id, {"task": task})``。"""
-
-    async def _invoke(task: str) -> Any:
-        return await factory.execute_agent_task(agent_id, {"task": task, "description": task})
-
-    return Agent(_invoke, name=name or f"agent:{agent_id}", description=description)
-
-
-def from_team(
-    team_manager: Any,
-    strategy: Any = "specialized",
-    *,
-    member_count: int = 3,
-    providers: Optional[List[str]] = None,
-    name: str = "team",
-    description: str = "",
-) -> Agent:
-    """团队（一站式）：``team_manager.execute_team_task(task, strategy, ...)``。"""
-
-    async def _invoke(task: str) -> Any:
-        return await team_manager.execute_team_task(task, strategy, member_count=member_count, providers=providers)
-
-    return Agent(_invoke, name=name, description=description)
-
-
-def from_fractal(fractal: Any, *, name: str = "fractal", description: str = "") -> Agent:
-    """分形 agent：``fractal.execute(FractalTask(...))``。"""
-
-    async def _invoke(task: str) -> Any:
-        import uuid as _uuid
-
-        from core.fractal_agent import FractalTask
-
-        return await fractal.execute(FractalTask(id=f"ft_{_uuid.uuid4().hex[:8]}", description=task))
-
-    return Agent(_invoke, name=name, description=description)
-
-
 def from_fractal_executor(
     executor: Any, *, name: str = "fractal", description: str = "递归分解复杂任务并并行执行"
 ) -> Agent:

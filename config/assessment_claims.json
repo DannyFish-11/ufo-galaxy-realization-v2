@@ -253,22 +253,28 @@
       ]
     },
     {
-      "id": "session-migration-has-no-canonical-home",
-      "source": "core/orchestration_authority/legacy_paths.py(session_roaming 条目)",
-      "recorded_on": "2026-09-27",
-      "statement": "会话迁移没有规范面。session_roaming 已登记为 LEGACY_COMPATIBILITY,声明的规范替代是 core.canonical_session_axis + core.attached_runtime_session —— 但那两处都**不提供迁移能力**:前者是分类学(会话族/标识符角色/快照),后者是挂载生命周期(attach/detach),两个模块里 def migrate_* 命中为 0。全仓真正的迁移实现只有三处,一处也不在规范面上。",
-      "supersedes": "legacy_paths 的 recommendation 读起来像「去用规范面就行了」,而规范面没有这个能力。所以这条退役路径当前走不通 —— 要么先把规范的迁移面建出来,要么如实改那段 recommendation。在那之前不该做「两个 store 合并」:合出来的东西仍然不是规范面,只是第三个。 〔2026-09-27 已改源文档:legacy_paths 的 recommendation 已如实改为「规范面尚无迁移能力,SessionRoamingManager 仍是可用路径,不要合并 store」;规范迁移面本身仍未建〕",
+      "id": "session-migration-canonical-surface",
+      "source": "core/session_migration.py;docs/FOLLOWUP_IMPLEMENTATION_ROADMAP.md(D3);core/orchestration_authority/legacy_paths.py(session_roaming 条目)",
+      "recorded_on": "2026-09-28",
+      "statement": "会话迁移有了规范面 core.session_migration.migrate_session。核心 REST、网关 REST、网关 WS、安卓桥四个入口都调它;它先找会话在哪个存储 —— 核心会话走原来的两阶段提交,唤醒事件建的漫游会话交给 SessionRoamingManager 自己的两阶段提交。两个存储过同一道作用域判据,不合并。",
+      "supersedes": "2026-09-27 的 session-migration-has-no-canonical-home:legacy_paths 点名的规范替代(canonical_session_axis + attached_runtime_session)都不迁移,迁移实现放在路由文件里,网关列出的漫游会话用网关迁移端点去迁会 404。〔2026-09-28 已改源文档:legacy_paths 的 recommendation 改为点名 core.session_migration;路线图 D3 改为已落地、Q3 已由代码回答〕",
       "predicates": [
         {
           "kind": "path_exists",
-          "target": "core/canonical_session_axis.py",
+          "target": "core/session_migration.py",
           "scope": "",
           "expected": true
         },
         {
           "kind": "symbol_exists",
-          "target": "migrate_session_via_canonical_manager",
+          "target": "_migrate_roaming_session",
           "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "migrate_via_canonical_surface",
+          "scope": "galaxy_gateway",
           "expected": true
         },
         {
@@ -428,6 +434,172 @@
           "kind": "path_exists",
           "target": "config/prometheus_alerts.yml",
           "scope": ".",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "truth-chain-incomplete-retried-then-isolated",
+      "source": "docs/SYSTEM_STATUS.md(第 5.2 节 G001、第 6.4 节)",
+      "recorded_on": "2026-09-28",
+      "statement": "task_result 真相链不完整时:后台只重跑失败的步骤一次;收口了就从 IncompleteResultLedger 撤掉,仍不收口就进隔离队列(落盘、GET /api/v1/results/isolated、面板可见、可再试/知悉)。回答不受影响:回退路径上 1–3 步失败抛的 TruthChainStepError 在处理器里接住,等待方照常拿到结果。",
+      "supersedes": "2026-09-27 的 G001 复核结论『由静默变为可观测,但仍不阻断;没有硬失败、重试或死信』。所有者 2026-09-28 选了『自动重试,失败再隔离』。〔已改源文档 SYSTEM_STATUS 第 5.2、6.4、7 节〕",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "get_truth_chain_recovery",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "rerun_failed_steps",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "core/routes/result_recovery.py",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "_TruthChainStepError",
+          "scope": "galaxy_gateway",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "config-json-provider-dims-have-no-runtime-reader",
+      "source": "docs/PANEL_SURFACE_CONVERGENCE.md(复核一节);core/operational_enablement_audit.py(DESKTOP_BOARD_IS_CONTROL_SURFACE)",
+      "recorded_on": "2026-09-28",
+      "statement": "ConfigService 写进 runtime/config.json 的 provider 开关、native_multimodal_policy、网络地址、安卓推理模式,在生产代码里既没有写入方也没有读取方;生效的配置写入链路只有 POST /api/config 一条(密钥经 ConfigService.set_secret 落 secrets.env)。所以『两套写入链路合并』前提不成立,把这几维接到面板只会是摆设。行为层判据见 tests/test_config_json_dims_have_no_runtime_reader.py。",
+      "supersedes": "PANEL_SURFACE_CONVERGENCE『未做』里的『两套配置写入链路没有合并,provider/routing 维度的写能力要补回来』。〔已改源文档:该条划掉并加复核一节;operational_enablement_audit 的说明同步改写,行数不变〕",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "tests/test_config_json_dims_have_no_runtime_reader.py",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "set_toggle",
+          "scope": "galaxy_gateway",
+          "expected": false
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "set_toggle",
+          "scope": "launcher",
+          "expected": false
+        }
+      ]
+    },
+    {
+      "id": "rehearsal-steps-reach-the-panel",
+      "source": "docs/RENDER_CONTRACT_DIRECTION.md(第五节、第七节)",
+      "recorded_on": "2026-09-28",
+      "statement": "阈限态推演的每一步经 WS type=rehearsal 帧推到面板(core/rehearsal_panel_push.py,只推类型化字段),面板在对话区与输入条之间画出来,每一行写明模拟还是真查了。",
+      "supersedes": "RENDER_CONTRACT_DIRECTION 第七节『skill.invoked(kind=rehearsal)全仓零消费方』。〔已改源文档〕",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "push_rehearsal_step",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "electron/renderer/panel/src/ui/rehearsal.ts",
+          "scope": "",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "unwired-functions-have-a-placement",
+      "source": "docs/UNWIRED_CODE_INVENTORY.md(第七节)",
+      "recorded_on": "2026-09-28",
+      "statement": "安卓以外的每个未接线函数都在 config/unwired_placement.json 里写了去处(接上/挂出来/删掉/随对象走/测试钩子/框架回调/产品决定),scripts/unwired_inventory.py --check 与 tests/test_unwired_placement.py 核对它与清单一一对得上。这是去处,不是已执行的处置。",
+      "predicates": [
+        {
+          "kind": "path_exists",
+          "target": "config/unwired_placement.json",
+          "scope": "",
+          "expected": true
+        },
+        {
+          "kind": "symbol_exists",
+          "target": "check_placement",
+          "scope": "scripts",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "tests/test_unwired_placement.py",
+          "scope": "",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "zero-trust-table-adds-confirmation-at-dispatch",
+      "source": "core/command_router.py(_is_high_risk_command / _zero_trust_requires_hitl)",
+      "recorded_on": "2026-09-29",
+      "statement": "PUT /api/v1/security/policy 改的零信任规则表进了派发门:CommandRouter._is_high_risk_command 是「内置高危词表 或 规则表要求人工确认」,表只能加确认、不能把内置高危命令改成免确认;只因规则表命中的命令,审批走 SecurityInterceptor.check_and_intercept(带表里的风险级别与命中规则)。",
+      "predicates": [
+        {
+          "kind": "symbol_exists",
+          "target": "_zero_trust_requires_hitl",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "check_and_intercept",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "path_exists",
+          "target": "tests/test_governance_is_enforced.py",
+          "scope": "",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "system-resource-registry-is-seeded",
+      "source": "core/startup.py(第 9d 步);core/system_resource.py(seed_builtin_system_resources / track_device_resource);core/unified/presence_fanout.py",
+      "recorded_on": "2026-09-29",
+      "statement": "系统资源表有登记方了:启动时 seed_builtin_system_resources() 登记 GitHub / 学术检索 / 工程循环 / 代码沙箱四项内置资源,并把 engineer__* 与 resource__* 两类能力登记进能力总线;设备随 UDM 在线翻转由 track_device_resource 登记、标为可用或不可用(离线保留记录)。OpenClawd 的 resource__* 工具与投影编译器读到的不再是空表。",
+      "supersedes": "2026-09-28 的 system-resource-registry-never-seeded:读取方都在,往表里登记的 seed_*_resource 在生产里零调用,表永远是空的。〔2026-09-29 已改源文档:UNWIRED_CODE_INVENTORY 7.1 第 3 条已标已接〕",
+      "predicates": [
+        {
+          "kind": "has_production_caller",
+          "target": "seed_builtin_system_resources",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "track_device_resource",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "seed_github_resource",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "seed_device_resource",
+          "scope": "core",
           "expected": true
         }
       ]

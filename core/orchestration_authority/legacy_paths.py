@@ -1639,8 +1639,8 @@ _register(
 #                                            (via DeviceRouter.route_task)
 #   galaxy_gateway.enhanced_nlu_v2        → core.e2e_orchestrator.process_user_input
 #                                            (OpenClawd → CommandRouter pipeline)
-#   galaxy_gateway.session_roaming        → core.canonical_session_axis
-#                                            + core.attached_runtime_session
+#   galaxy_gateway.session_roaming        → core.session_migration (迁移的规范面)
+#                                            + core.canonical_session_axis (会话分类)
 #
 # Each class __init__ emits a LEGACY PATH GUARDRAIL via emit_legacy_guardrail()
 # so live invocations are observable in log-aggregation pipelines.
@@ -1699,10 +1699,10 @@ _register(
             "(a legacy fallback coordinator, PR-S3) and core.device_communication.send_command "
             "outside the canonical CanonicalTask → TaskEnvelope → CommandRouter.route_envelope() "
             "spine.  "
-            "Session taxonomy / attachment live in core.canonical_session_axis + "
-            "core.attached_runtime_session, but NEITHER provides migration yet.  "
-            "SessionRoamingManager stays the working migration path until one does; "
-            "do not merge its store with another (claim session-migration-*)."
+            "Migration's canonical surface is core.session_migration.migrate_session (D3): every entry "
+            "(core REST, gateway REST/WS, Android bridge) calls it; it finds which store owns the session "
+            "and hands wake-created roaming sessions to SessionRoamingManager.migrate_session.  "
+            "Do not merge the two stores (claim session-migration-*); do not call this class directly."
         ),
         pr_guardrail_added="PR-M",
         notes=(

@@ -395,7 +395,17 @@ class MeshAutoEnrollmentService:
                 record.metadata.update(metadata)
             record.last_updated_at = time.time()
 
-        return self._maybe_enroll(device_id)
+        record = self._maybe_enroll(device_id)
+        # 编组里这台设备的就绪度随之更新（编组协调器按它排主备）；不在编组里时是空操作
+        try:
+            from core.device_formation.formation_auto_enrollment import get_formation_auto_enrollment_manager
+
+            get_formation_auto_enrollment_manager().update_device_readiness(
+                device_id, is_ready=True, reason="readiness_confirmed"
+            )
+        except Exception as exc:
+            logger.debug("auto_enrollment: formation readiness update non-fatal: device_id=%s error=%s", device_id, exc)
+        return record
 
     def on_device_lost(
         self,

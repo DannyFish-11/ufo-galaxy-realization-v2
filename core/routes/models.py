@@ -19,8 +19,10 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from core.auth import require_auth
 
 logger = logging.getLogger("Galaxy.Routes.Models")
 
@@ -885,3 +887,76 @@ async def latency_probe() -> Dict[str, Any]:
             else:
                 out["verdicts"].append(f"预填速度 {prefill_tps:.0f} tok/s:满配代理回合首字约 {est:.1f}s。")
     return out
+
+
+# ---------------------------------------------------------------------------
+# 本地模型管理：算力占用、下载（后台 + 进度）、切换主脑、删除
+# 此前下载只在启动器提示文字里教用户手敲 python -c，切换 / 删除没有入口。
+# ---------------------------------------------------------------------------
+
+
+@router.get("/compute")
+async def compute_status() -> Dict[str, Any]:
+    """算力调度：监控是否在跑、已加载几个模型、每个分配是否被卸到了 CPU。"""
+    from core.compute_scheduler import get_compute_scheduler
+    from core.diagnostics_internals import jsonable
+
+    scheduler = get_compute_scheduler()
+    allocations = []
+    for alloc in scheduler.list_allocations():
+        row = jsonable(alloc)
+        row = row if isinstance(row, dict) else {"model": row}
+        row["offloaded"] = alloc.is_offloaded
+        allocations.append(row)
+    return {
+        "monitoring": scheduler.is_monitoring,
+        "loaded_models": scheduler.loaded_model_count,
+        "allocations": allocations,
+    }
+
+
+class ModelDownloadRequest(BaseModel):
+    model_id: str
+    family: str = "llm"  # llm / vlm / asr / embedding
+    quantization: str = "q4"
+
+
+@router.post("/download", dependencies=[Depends(require_auth)])
+async def download_model(req: ModelDownloadRequest) -> Dict[str, Any]:
+    """后台下载一个 HuggingFace 模型；立即返回，进度看 GET /api/v1/models/downloads。"""
+    from core.huggingface_model_manager import ModelFamily, ModelFormat, get_download_status, get_hf_model_manager
+
+    try:
+        family = ModelFamily(req.family)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"未知的模型类别：{req.family}")
+    fmt = ModelFormat.GGUF if family in (ModelFamily.LLM, ModelFamily.VLM) else ModelFormat.TRANSFORMERS
+    get_hf_model_manager().download_background(req.model_id, family=family, fmt=fmt, quantization=req.quantization)
+    return get_download_status(req.model_id)
+
+
+@router.get("/downloads")
+async def download_progress() -> Dict[str, Any]:
+    from core.huggingface_model_manager import get_download_status
+
+    return {"downloads": get_download_status()}
+
+
+class LocalBrainSwitchRequest(BaseModel):
+    model: str
+
+
+@router.post("/local-brain/switch", dependencies=[Depends(require_auth)])
+async def switch_local_brain(req: LocalBrainSwitchRequest) -> Dict[str, Any]:
+    """切换本地主脑（没装的会先拉取）。"""
+    from core.local_brain_manager import get_local_brain_manager
+
+    ok = await get_local_brain_manager().switch_brain(req.model)
+    return {"success": ok, "model": req.model}
+
+
+@router.delete("/local/{model_name:path}", dependencies=[Depends(require_auth)])
+async def remove_local_model(model_name: str) -> Dict[str, Any]:
+    from core.local_brain_manager import get_local_brain_manager
+
+    return {"success": await get_local_brain_manager().remove_model(model_name), "model": model_name}

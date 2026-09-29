@@ -27,6 +27,12 @@ POST /api/v1/governance/tools/check
 GET  /api/v1/governance/tools/audit
     Return recent tool governance audit log.
 
+DELETE /api/v1/governance/tools/audit
+    Clear the in-memory tool audit log.
+
+POST /api/v1/governance/tools/{tool_name}/reset-bucket
+    Refill one tool's rate-limit bucket.
+
 GET  /api/v1/governance/queue/stats
     Return current task-queue metrics (depth, latency, backpressure).
 """
@@ -62,12 +68,12 @@ def _get_policy():
 
 
 def _get_budget_enforcer():
+    # 与模型路由同一个实例：这里读到的花费就是真实调用记下的花费
     global _budget_enforcer
     if _budget_enforcer is None:
-        from core.governance.budget_enforcer import BudgetEnforcer
+        from core.governance.budget_enforcer import get_budget_enforcer
 
-        p = _get_policy()
-        _budget_enforcer = BudgetEnforcer(p.budget_policy, p.model_policy)
+        _budget_enforcer = get_budget_enforcer()
     return _budget_enforcer
 
 
@@ -190,6 +196,20 @@ def create_router() -> APIRouter:
             limit=limit,
         )
         return JSONResponse([e.to_dict() for e in entries])
+
+    @router.delete("/api/v1/governance/tools/audit")
+    async def clear_tool_audit() -> JSONResponse:
+        """Clear the in-memory tool audit log (ops action; the durable ledger is untouched)."""
+        governor = _get_tool_governor()
+        governor.clear_audit_log()
+        return JSONResponse({"ok": True})
+
+    @router.post("/api/v1/governance/tools/{tool_name}/reset-bucket")
+    async def reset_tool_bucket(tool_name: str) -> JSONResponse:
+        """Refill *tool_name*'s rate-limit bucket, e.g. after a misfire drained it."""
+        governor = _get_tool_governor()
+        governor.reset_bucket(tool_name)
+        return JSONResponse({"ok": True, "tool_name": tool_name})
 
     # ------------------------------------------------------------------
     # Queue metrics

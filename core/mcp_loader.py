@@ -423,7 +423,10 @@ class MCPLoader:
             server = self.servers.get(server_id)
             if not server:
                 return
+            from core.capability_bus import get_capability_bus
+
             reg = CapabilityRegistry.get_instance()
+            bus = get_capability_bus()
             for tool in getattr(server, "tools", []):
                 reg.inject_mcp_tool(
                     server_id=server_id,
@@ -432,6 +435,8 @@ class MCPLoader:
                     parameters=tool.inputSchema or {},
                     server_name=server.name,
                 )
+                # 统一能力总线里同样登记（此前那里只有技能与设备，MCP 工具缺席）
+                bus.register_mcp_tool(server_id, tool.name, tool.description, schema=tool.inputSchema or {})
             logger.info(
                 "MCP 服务器 %s (%s) 的 %d 个工具已注入能力总线",
                 server.name,
@@ -445,10 +450,13 @@ class MCPLoader:
         """从能力总线移除 MCP 服务器的所有工具。"""
         try:
             from core.agent.capability_registry import CapabilityRegistry
+            from core.capability_bus import get_capability_bus
 
             reg = CapabilityRegistry.get_instance()
+            bus = get_capability_bus()
             for tool in getattr(server, "tools", []):
                 reg.eject(f"mcp__{server_id}__{tool.name}")
+                bus.unregister(f"mcp__{server_id}__{tool.name}")
             logger.info("MCP 服务器 %s 的工具已从能力总线移除", server_id)
         except Exception as exc:
             logger.debug("MCP 工具从能力总线移除失败: %s", exc)
@@ -989,7 +997,7 @@ class MCPLoader:
                     name=sd["name"],
                     command=sd["command"],
                     args=sd["args"],
-                    env=sd["env"],
+                    env=_resolve_env_refs(sd["env"]),
                     cwd=sd["cwd"],
                     auto_start=sd["auto_start"],
                 )
@@ -1002,24 +1010,15 @@ class MCPLoader:
 
         return {"loaded": loaded, "errors": errors}
 
-    # ========================================================================
-    # MCP 标准通知
-    # ========================================================================
 
-    async def notify_tools_list_changed(self, server_id: str):
-        """
-        向 MCP 服务器发送 tools/list_changed 通知。
-
-        当工具列表变更（如 Self-Tool-Making 注册新工具后）调用此方法，
-        通知所有连接的客户端刷新工具列表。
-        """
-        await self._send_notification(
-            server_id,
-            "notifications/tools/list_changed",
-        )
-        # 同时刷新本地缓存
-        await self._refresh_tools(server_id)
-        logger.info(f"已发送 tools/list_changed 通知: {server_id}")
+def _resolve_env_refs(env: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """``"${VAR}"`` 形式的值换成本进程环境变量（配置里不写明文密钥）；其余原样。"""
+    if not env:
+        return None
+    return {
+        k: (os.environ.get(v[2:-1], "") if isinstance(v, str) and v.startswith("${") and v.endswith("}") else v)
+        for k, v in env.items()
+    }
 
 
 # ============================================================================

@@ -16,7 +16,7 @@
 | 主脑选型（候选/硬件/理由） | `unified_launcher` Phase 5 | `model_selection` |
 | 执行路径决策（本地/跨设备/混合/none） | `openclawd._determine_execution_path` 两处分支 | `dispatch` |
 | 工具调用（入参/结果/状态） | `tool_wrapper_engine.use_tool`（context 带 `session_id` 时） | `tool_call` |
-| 校验/审查（通过/否决+理由） | 调用 `record_verdict` | `verdict` |
+| 校验/审查（通过/否决+理由） | 目前没有会话级的裁决产生方；要记就 `record_evidence(sid, EvidenceKind.VERDICT, …)`（原先的 `record_verdict` 包装从没被调用过，已删） | `verdict` |
 | 分叉 / 子会话起点 | `fork_session`（自动双向留痕） | `fork` / `branch_root` |
 
 ## 怎么用

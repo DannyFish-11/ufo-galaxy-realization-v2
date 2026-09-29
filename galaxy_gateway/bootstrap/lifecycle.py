@@ -24,6 +24,38 @@ logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set = set()
 
 
+def _register_gateway_sweeps() -> None:
+    """把网关自己的清扫挂进 core 的周期维护循环（core 不能 import 网关，只能由这边挂）。
+
+    超时的并行组此前没人收：子任务永远等不齐的组一直挂在跟踪器里，发起方拿不到收口结果。
+    """
+    import time as _time
+
+    from core.periodic_maintenance import register_sweep
+    from galaxy_gateway.orchestrator.parallel_tracker import get_tracker
+
+    register_sweep(
+        "gateway.parallel_groups.expire_timeouts", lambda: get_tracker().expire_timeouts(_time.time()), every_s=10
+    )
+
+
+def _follow_attention_with_roaming_sessions() -> None:
+    """唤醒路由选中了另一台设备 = 用户的注意力转过去了：唤醒建的漫游会话跟过去。
+
+    唤醒路由的决策回调口与漫游管理器的「注意力转移自动迁移」此前都没人接，会话永远留在
+    最初那台设备上。迁移经 core.session_migration 这一个入口。
+    """
+    from galaxy_gateway.session_roaming import session_roaming
+    from galaxy_gateway.wake_router import wake_router
+
+    async def _on_decision(decision) -> None:
+        target = getattr(decision, "selected_device_id", None)
+        if target:
+            await session_roaming.auto_migrate_on_attention_shift({target: True})
+
+    wake_router.set_decision_callback(_on_decision)
+
+
 async def init_gateway_core_services(app: FastAPI):
     """创建并启动 Gateway 的【必需】核心服务并写入 ``app.state``。
 
@@ -88,6 +120,8 @@ async def init_gateway_core_services(app: FastAPI):
 
     await websocket_manager.start()
     await task_orchestrator.start()
+    _register_gateway_sweeps()
+    _follow_attention_with_roaming_sessions()
 
     # Store required services on app.state
     app.state.device_manager = device_manager

@@ -145,16 +145,6 @@ class SecurityPolicy:
         """
         return {}
 
-    def is_category_allowed(self, device_type: str, category: str) -> bool:
-        """检查设备是否有权限执行某命令类别。
-
-        PR-SECURITY-V2: capability_boundaries removed from config.
-        All devices share the same category access; command-level
-        dangerous_commands control is the sole enforcement mechanism.
-        This method always returns True for backward compatibility.
-        """
-        return True
-
     def get_confirmation_level(self, command: str) -> CommandCheckResult:
         """查询命令的确认等级和安全配置。"""
         rule = self._dangerous.get(command)
@@ -246,14 +236,6 @@ class SecurityPolicy:
         which causes is_scene_allowed to default-allow all scenes.
         """
         return set()
-
-    def is_scene_allowed(self, device_type: str, scene_name: str) -> bool:
-        """检查设备是否有权限触发指定场景。
-
-        PR-SECURITY-V2: All scenes allowed. Scene-level control is via
-        dangerous_commands if a specific scene is deemed risky.
-        """
-        return True
 
     def get_emergency_triggers(self) -> Dict[str, Any]:
         """获取紧急制动触发配置。"""

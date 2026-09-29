@@ -322,27 +322,6 @@ class ToolGuardianBlockedError(Exception):
 # ============================================================================
 
 
-async def guarded_mcp_call(
-    mcp_loader_instance: Any,
-    server_id: str,
-    tool_name: str,
-    arguments: Dict[str, Any] = None,
-    config: Optional[GuardedCallConfig] = None,
-) -> Dict[str, Any]:
-    """对 MCPLoader.call_tool 的守护包装（可选启用）。
-
-    等价于 mcp_loader.call_tool(server_id, tool_name, arguments)，
-    但当 config.enabled=True 时会先进行风险评分和失败重试/回滚。
-    """
-    return await call_with_guardian(
-        fn=mcp_loader_instance.call_tool,
-        fn_args=(server_id, tool_name),
-        fn_kwargs={"arguments": arguments or {}},
-        tool_name=tool_name,
-        config=config,
-    )
-
-
 # ============================================================================
 # 生产路径上的默认姿态
 # ============================================================================

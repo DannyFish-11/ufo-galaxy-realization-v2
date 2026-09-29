@@ -114,8 +114,16 @@ class HealthScore:
             "jitter_score": round(self.jitter_score, 4),
             "heartbeat_score": round(self.heartbeat_score, 4),
             "sample_count": self.sample_count,
+            "evidence_available": self.evidence_available,
             "computed_at": self.computed_at,
         }
+
+    @property
+    def evidence_available(self) -> bool:
+        """有没有健康证据 —— 与分数是两件事（判据同源于 core.health_evidence_policy）。"""
+        from core.health_evidence_policy import has_health_evidence
+
+        return has_health_evidence(self.sample_count)
 
 
 @dataclass

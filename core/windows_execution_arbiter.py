@@ -1071,6 +1071,24 @@ def _emit_attempt_log(
     error: str,
 ) -> None:
     """Emit a structured log line for each execution attempt."""
+    try:
+        from core.execution_observability.event_log import record_execution_event
+        from core.execution_observability.normalizers import normalize_arbiter_attempt
+
+        record_execution_event(
+            normalize_arbiter_attempt(
+                {
+                    "executor_level": level.value,
+                    "fallback_reason": fallback_reason,
+                    "action_summary": action_summary,
+                    "status": status.value,
+                    "device_id": device_id,
+                }
+            ),
+            origin="windows_execution_arbiter",
+        )
+    except Exception as exc:  # noqa: BLE001 — 记账不拖垮仲裁
+        logger.debug("windows_arbiter | execution event skipped: %s", exc)
     if status == WinExecStatus.SUCCESS:
         logger.info(
             "windows_arbiter | executor_level=%s | status=success | action=%s | device=%s",

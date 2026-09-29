@@ -219,9 +219,9 @@ def test_d05_handovers_reach_the_report():
 def test_e01_the_migration_entrypoint_asks_the_judgement():
     import inspect
 
-    from core.routes.sessions import migrate_session_via_canonical_manager
+    import core.session_migration as migration  # 迁移的规范面(D3);旧名 migrate_session_via_canonical_manager 只转过来
 
-    body = inspect.getsource(migrate_session_via_canonical_manager)
+    body = inspect.getsource(migration)
     # 要的是 require_migration(会抛)而不是"取判定再自己看一眼"(返回值会被忽略)。
     assert "require_migration" in body
     assert "roaming" in body, "迁移入口没有按语义分支,那作用域判了也没用"

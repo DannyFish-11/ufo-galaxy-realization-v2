@@ -59,12 +59,10 @@ class MeshNATSConvergence:
     # NATS subject patterns
     SUBJ_MESH_BARRIER_REQUEST = "galaxy.mesh.barrier.request.{session_id}.{device_id}"
     SUBJ_MESH_BARRIER_REPLY = "galaxy.mesh.barrier.reply.{session_id}.{device_id}"
-    SUBJ_MESH_PARTICIPANT_RESULT = "galaxy.mesh.participant.result.{session_id}"
 
     def __init__(self, nats_bus: Optional[Any] = None) -> None:
         self._nats = nats_bus
         self._local_device_cache: Dict[str, bool] = {}
-        self._session_subscriptions: Dict[str, Any] = {}
 
     # -- public API ------------------------------------------------------------
 
@@ -162,72 +160,6 @@ class MeshNATSConvergence:
         except Exception as exc:
             logger.error("[MeshNATS] Remote request failed: %s", exc)
             return None
-
-    async def submit_participant_result(
-        self,
-        *,
-        session_id: str,
-        device_id: str,
-        result: Dict[str, Any],
-    ) -> None:
-        """Submit a participant result back to the Mesh session.
-
-        Called by the remote device after executing the action.
-        """
-        if not self.is_available():
-            return
-
-        subject = self.SUBJ_MESH_PARTICIPANT_RESULT.format(session_id=session_id)
-        payload = {
-            "session_id": session_id,
-            "device_id": device_id,
-            "result": result,
-            "timestamp": time.time(),
-        }
-
-        try:
-            await self._nats.publish(subject, payload)
-            logger.debug(
-                "[MeshNATS] Result submitted | session=%s device=%s",
-                session_id,
-                device_id,
-            )
-        except Exception as exc:
-            logger.error("[MeshNATS] Result submission failed: %s", exc)
-
-    async def subscribe_session(self, session_id: str, callback: Any) -> None:
-        """Subscribe to all participant results for a Mesh session.
-
-        The Mesh engine calls this at session start.  When remote
-        participants submit results, they are delivered to the callback
-        which fills the participant_results dict.
-        """
-        if not self.is_available():
-            return
-
-        subject = self.SUBJ_MESH_PARTICIPANT_RESULT.format(session_id=session_id)
-
-        def _on_result(msg: Dict[str, Any]) -> None:
-            device_id = msg.get("device_id")
-            result = msg.get("result")
-            if device_id and result:
-                callback(device_id, result)
-
-        try:
-            sub = await self._nats.subscribe(subject, cb=_on_result)
-            self._session_subscriptions[session_id] = sub
-            logger.info("[MeshNATS] Subscribed to session %s", session_id)
-        except Exception as exc:
-            logger.error("[MeshNATS] Subscribe failed: %s", exc)
-
-    async def unsubscribe_session(self, session_id: str) -> None:
-        """Unsubscribe from a session."""
-        sub = self._session_subscriptions.pop(session_id, None)
-        if sub and self.is_available():
-            try:
-                await self._nats.unsubscribe(sub)
-            except Exception as exc:
-                logger.warning("Exception suppressed: %s", exc)
 
     # -- internal --------------------------------------------------------------
 

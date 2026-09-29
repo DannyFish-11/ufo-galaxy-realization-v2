@@ -648,3 +648,43 @@ def seed_local_tool_resource(
     )
     get_system_resource_registry().register(record)
     return record
+
+
+#: resource__* 动作 —— 与 OpenClawd 暴露给模型的系统资源工具（_RESOURCE_BUILTIN_TOOLS）一一对应，
+#: tests/test_resources_and_extensions_are_registered.py 守着两边不漂移。
+RESOURCE_CAPABILITY_ACTIONS = ("list", "status", "health", "lookup")
+
+
+def seed_builtin_system_resources() -> Dict[str, Any]:
+    """启动时把内置资源登记进系统资源表，并把工程 / 资源两类能力登记进能力总线。
+
+    此前 OpenClawd 的资源工具与投影编译器都在读这张表，登记方却一个都没被调用 —— 表永远是空的，
+    模型问「有哪些资源」永远得到零条。设备资源随设备上下线登记（core/unified/presence_fanout.py）。
+    """
+    records = [
+        seed_github_resource(),
+        seed_academic_resource(),
+        seed_engineering_resource(),
+        seed_local_tool_resource("code_sandbox", capabilities=["execute_code"]),
+    ]
+    from core.capability_bus import get_capability_bus
+
+    bus = get_capability_bus()
+    engineering = [c.split("__", 1)[1] for c in records[2].capabilities if "__" in c]
+    for action in engineering:
+        bus.register_engineering_capability(action)
+    for action in RESOURCE_CAPABILITY_ACTIONS:
+        bus.register_resource_capability(action)
+    return {"resources": len(records), "engineering_capabilities": len(engineering)}
+
+
+def track_device_resource(device_id: str, *, online: bool, capabilities: Optional[List[str]] = None) -> None:
+    """设备上线登记 / 刷新为可用；离线保留记录但标为不可用（资源表也是「曾经见过哪些设备」的账）。"""
+    registry = get_system_resource_registry()
+    resource_id = f"device__{device_id}"
+    if online:
+        if registry.lookup(resource_id) is None:
+            seed_device_resource(device_id, capabilities=capabilities)
+        registry.set_health(resource_id, SystemResourceHealth.HEALTHY, SystemResourceAvailability.AVAILABLE)
+    else:
+        registry.set_health(resource_id, SystemResourceHealth.UNAVAILABLE, SystemResourceAvailability.UNAVAILABLE)

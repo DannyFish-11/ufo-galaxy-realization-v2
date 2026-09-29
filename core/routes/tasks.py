@@ -277,6 +277,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(task_queue[task_id])
         raise HTTPException(status_code=404, detail="任务未找到")
 
+    @router.get("/api/v1/tasks/{task_id}/timeline")
+    async def get_task_timeline(task_id: str):
+        """按记录时间排好的回放事件（ReplayFoundation），供时间线回看。没有记录时为空列表。"""
+        from core.replay_foundation import get_replay_foundation
+
+        return JSONResponse({"task_id": task_id, "events": get_replay_foundation().replay_task_timeline(task_id)})
+
     @router.get("/api/v1/tasks")
     async def list_tasks(status: str = None, limit: int = 50):
         """列出任务"""

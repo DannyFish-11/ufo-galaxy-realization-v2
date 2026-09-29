@@ -130,25 +130,6 @@ class DeviceManager:
         """获取在线设备"""
         return [d for d in self.devices.values() if self.device_status.get(d.device_id) == "online"]
 
-    def find_best_device_for_task(
-        self, required_capabilities: DeviceCapability, preferred_platform: Optional[DevicePlatform] = None
-    ) -> Optional[DeviceInfo]:
-        """为任务找到最佳设备"""
-        candidates = self.get_devices_with_capability(required_capabilities)
-        candidates = [d for d in candidates if self.device_status.get(d.device_id) == "online"]
-
-        if not candidates:
-            return None
-
-        # 优先选择指定平台
-        if preferred_platform:
-            platform_matches = [d for d in candidates if d.platform == preferred_platform]
-            if platform_matches:
-                candidates = platform_matches
-
-        # 返回第一个匹配的设备（可以扩展为更复杂的选择逻辑）
-        return candidates[0] if candidates else None
-
     def handle_register_message(self, message: AIPMessage) -> AIPMessage:
         """处理设备注册消息
 

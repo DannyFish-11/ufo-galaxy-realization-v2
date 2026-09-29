@@ -4,17 +4,20 @@ Galaxy - Channel Plugin Routes
 
 Routes:
   GET  /api/v1/channels                      - 列出渠道插件
-  POST /api/v1/channels/load                 - 加载渠道插件
-  POST /api/v1/channels/auto_load            - 自动扫描加载
-  POST /api/v1/channels/{plugin_id}/send     - 发送消息
+  POST /api/v1/channels/load                 - 加载渠道插件（API 鉴权）
+  POST /api/v1/channels/auto_load            - 自动扫描加载（API 鉴权）
+  DELETE /api/v1/channels/{plugin_id}        - 卸载渠道插件（API 鉴权）
+  POST /api/v1/channels/{plugin_id}/send     - 发送消息（API 鉴权）
   GET  /api/v1/channels/health               - 健康检查
   GET  /api/v1/channels/{plugin_id}/schema   - 插件配置 schema
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+
+from core.auth import require_auth
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -42,7 +45,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/api/v1/channels/load")
+    @router.post("/api/v1/channels/load", dependencies=[Depends(require_auth)])
     async def channel_load_plugin(request: Request):
         """加载渠道插件（内置或外部路径）"""
         body = await request.json()
@@ -63,7 +66,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/api/v1/channels/auto_load")
+    @router.post("/api/v1/channels/auto_load", dependencies=[Depends(require_auth)])
     async def channel_auto_load(request: Request):
         """自动扫描并加载渠道插件目录（默认 external/channels/）"""
         try:
@@ -80,7 +83,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/api/v1/channels/{plugin_id}/send")
+    @router.post("/api/v1/channels/{plugin_id}/send", dependencies=[Depends(require_auth)])
     async def channel_send_message(plugin_id: str, request: Request):
         """通过指定渠道插件发送消息"""
         if _channel_send_limiter is not None:
@@ -100,6 +103,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(result)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    @router.delete("/api/v1/channels/{plugin_id}", dependencies=[Depends(require_auth)])
+    async def channel_unload_plugin(plugin_id: str):
+        """卸载渠道插件（与 /load 对称）"""
+        from core.channel_plugins import get_channel_loader
+
+        result = await get_channel_loader().unload_plugin(plugin_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=404, detail=result.get("error", "unload failed"))
+        return JSONResponse(result)
 
     @router.get("/api/v1/channels/health")
     async def channel_health_check():

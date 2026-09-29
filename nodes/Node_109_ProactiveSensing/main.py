@@ -524,6 +524,12 @@ async def register_sensor(request: RegisterSensorRequest):
     success = sensing_engine.register_sensor(sensor)
     return {"success": success}
 
+@app.delete("/sensors/{sensor_id}")
+async def unregister_sensor(sensor_id: str):
+    if not sensing_engine.unregister_sensor(sensor_id):
+        raise HTTPException(status_code=404, detail="Sensor not found")
+    return {"success": True}
+
 @app.get("/sensors/{sensor_id}/read")
 async def read_sensor(sensor_id: str):
     reading = await sensing_engine.read_sensor(sensor_id)
@@ -542,6 +548,12 @@ async def add_rule(request: AddRuleRequest):
     )
     success = sensing_engine.add_rule(rule)
     return {"success": success}
+
+@app.delete("/rules/{rule_id}")
+async def remove_rule(rule_id: str):
+    if not sensing_engine.remove_rule(rule_id):
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"success": True}
 
 @app.get("/rules")
 async def list_rules():

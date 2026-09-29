@@ -61,6 +61,16 @@ class CircuitOpenError(Exception):
         super().__init__(f"Circuit breaker OPEN for target '{target}'; " f"retry in {remaining:.1f}s")
 
 
+def _count_circuit_open() -> None:
+    """熔断切到 OPEN 时记一次（/metrics 的 resilience 计数此前恒为 0）。"""
+    try:
+        from core.resilience.metrics import get_resilience_metrics
+
+        get_resilience_metrics().record_circuit_open()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CircuitBreaker: resilience metric skipped: %s", exc)
+
+
 class CircuitBreaker:
     """Per-target circuit breaker.
 
@@ -214,6 +224,7 @@ class CircuitBreaker:
                 self._state = CircuitState.OPEN
                 self._opened_at = time.monotonic()
                 self._total_circuit_opens += 1
+                _count_circuit_open()
                 logger.warning(
                     "CircuitBreaker[%s] → OPEN (%d failures in last %d calls)",
                     self.target,

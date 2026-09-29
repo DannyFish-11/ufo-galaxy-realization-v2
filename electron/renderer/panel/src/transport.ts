@@ -9,7 +9,7 @@
  * 另外两个当不存在。同一个事实读两处,迟早会出现两处不一致而没人发现。
  */
 import type { RenderPosture } from './types';
-import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, MemoryCard, ModelTier, Phase, TierView, Turn } from './types';
+import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, MemoryCard, ModelTier, Phase, RehearsalStep, RehearsalStepKind, TierView, Turn } from './types';
 
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
@@ -52,6 +52,37 @@ export interface PresenceHandlers {
   onTurn?(role: 'user' | 'agent', text: string, final: boolean): void;
   /** 设备清单变了。来自 WS 的 `panel_feed` 帧。 */
   onDevices?(rows: readonly DeviceRow[]): void;
+  /** 阈限态预演走了一步。来自 WS 的 `rehearsal` 帧(见 types.ts 的 RehearsalStep)。 */
+  onRehearsal?(step: RehearsalStep): void;
+}
+
+const REHEARSAL_KINDS: readonly RehearsalStepKind[] = [
+  'attempt_start',
+  'validation_reject',
+  'tool_simulated',
+  'attempt_success',
+  'attempt_failed',
+];
+
+/**
+ * 读一帧预演。认不出的步骤**丢掉**,不猜成别的 —— 猜错一步,人看到的就是一段
+ * 没发生过的推演。
+ */
+export function readRehearsal(raw: unknown): RehearsalStep | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const step = REHEARSAL_KINDS.find((k) => k === o['step']);
+  if (!step) return null;
+  return {
+    step,
+    attempt: typeof o['attempt'] === 'number' ? o['attempt'] : 0,
+    tool: typeof o['tool'] === 'string' ? o['tool'] : '',
+    // 缺省按「模拟」算:把一次模拟画成真查,比反过来更误导。
+    simulated: o['simulated'] !== false,
+    steps: typeof o['steps'] === 'number' ? o['steps'] : 0,
+    feedback: typeof o['feedback'] === 'string' ? o['feedback'] : '',
+    task: typeof o['task'] === 'string' ? o['task'] : '',
+  };
 }
 
 /**
@@ -132,6 +163,11 @@ export class PresenceSocket {
     if (m['type'] === 'state_event') {
       const frame = readPosture(payload['render']);
       if (frame) this.#h.onPosture?.(frame);
+      return;
+    }
+    if (m['type'] === 'rehearsal') {
+      const step = readRehearsal(payload);
+      if (step) this.#h.onRehearsal?.(step);
       return;
     }
     if (m['type'] === 'panel_feed') {
@@ -1061,6 +1097,110 @@ export async function deleteUserProvider(base: string, id: string): Promise<bool
     return resp.ok;
   } catch (err) {
     console.error('[hud] 删除端点失败:', err);
+    return false;
+  }
+}
+
+// ── 没收口的结果(真相链隔离队列) ─────────────────────────────────────────────
+//
+// 后端:core/truth_chain_recovery.py + core/routes/result_recovery.py。设备交回的结果要走
+// 四步才算「写进了任务的真相」;没走完时后端已在后台**自动补跑过一次**(只补失败的那几步),
+// 这里列的是补跑之后仍没收口的。回答当时已经交给用户了,这一段管的是「账对不上」的那部分。
+// 原始结果内容不经接口外露,这里只有类型化字段。
+
+export interface IsolatedResult {
+  readonly key: string;
+  readonly taskId: string;
+  readonly resultStatus: string;
+  readonly deviceId: string;
+  /** 哪几步没走通:truth_ingress / reconcile / authority_update / completion_linkage */
+  readonly failedSteps: readonly string[];
+  readonly reason: string;
+  /** 一共试了几次(第一次 + 后台补跑 + 人工重试) */
+  readonly attempts: number;
+  readonly settledAt: string;
+  /** 后端留没留原始消息。没留(太大)就**不能**再试 —— 按钮不画,别让人点一个注定失败的东西 */
+  readonly retryable: boolean;
+  readonly dismissed: boolean;
+}
+
+export interface IsolatedPage {
+  readonly items: readonly IsolatedResult[];
+  /** 还排着队、没到补跑时间的条数 */
+  readonly pendingRetry: number;
+}
+
+function readIsolatedResult(raw: unknown): IsolatedResult | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const key = typeof o['key'] === 'string' ? o['key'] : '';
+  if (!key) return null;
+  const steps = Array.isArray(o['failed_steps'])
+    ? (o['failed_steps'] as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+  return {
+    key,
+    taskId: typeof o['task_id'] === 'string' ? o['task_id'] : '',
+    resultStatus: typeof o['result_status'] === 'string' ? o['result_status'] : '',
+    deviceId: typeof o['device_id'] === 'string' ? o['device_id'] : '',
+    failedSteps: steps,
+    reason: typeof o['incomplete_reason'] === 'string' ? o['incomplete_reason'] : '',
+    attempts: typeof o['attempts'] === 'number' ? o['attempts'] : 0,
+    settledAt: typeof o['settled_at'] === 'string' ? o['settled_at'] : '',
+    retryable: o['message_retained'] === true,
+    dismissed: o['state'] === 'dismissed',
+  };
+}
+
+/** 拉隔离队列(不含已知悉的)。拉不到返回 null —— 与「一条都没有」是两件事。 */
+export async function fetchIsolatedResults(base: string): Promise<IsolatedPage | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/results/isolated', { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      console.error('[hud] 拉隔离队列失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    const rows = Array.isArray(body['items']) ? (body['items'] as unknown[]) : [];
+    const summary = (body['summary'] ?? {}) as Record<string, unknown>;
+    return {
+      items: rows.map(readIsolatedResult).filter((x): x is IsolatedResult => x !== null),
+      pendingRetry: typeof summary['pending_retry'] === 'number' ? summary['pending_retry'] : 0,
+    };
+  } catch (err) {
+    console.error('[hud] 拉隔离队列失败:', err);
+    return null;
+  }
+}
+
+/**
+ * 再试一次(后端同样只重跑失败的步骤)。返回后端给的**结论**:
+ * `recovered` = 这回收口了;`isolated` = 还是不行;null = 请求本身没成。
+ */
+export async function retryIsolatedResult(base: string, key: string): Promise<'recovered' | 'isolated' | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/retry', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as Record<string, unknown>;
+    return body['state'] === 'recovered' ? 'recovered' : 'isolated';
+  } catch (err) {
+    console.error('[hud] 重试隔离项失败:', err);
+    return null;
+  }
+}
+
+/** 知悉:标记为已看过,记录保留(审计用)。 */
+export async function dismissIsolatedResult(base: string, key: string): Promise<boolean> {
+  try {
+    const resp = await fetch(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/dismiss', {
+      method: 'POST',
+    });
+    return resp.ok;
+  } catch (err) {
+    console.error('[hud] 标记隔离项失败:', err);
     return false;
   }
 }

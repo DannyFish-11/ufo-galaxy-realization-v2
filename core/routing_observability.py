@@ -74,12 +74,16 @@ bool, list, dict) so that ``json.dumps(obj.to_dict())`` always succeeds.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Route / Fallback Kind Enums
@@ -702,7 +706,32 @@ def record_routing_decision(
         runtime_session_id=runtime_session_id,
     )
     get_control_loop_metrics().record(event)
+    _record_fallback(event)
     return event
+
+
+_RECENT_FALLBACKS: Deque[Dict[str, Any]] = deque(maxlen=50)
+
+
+def _record_fallback(event: RoutingDecisionEvent) -> None:
+    """这次选路是回退 → 记进运行 SLO 的回退计数，并留一条明细供 model-route 接口返回。"""
+    fb = build_fallback_decision_event(event)
+    if fb is None:
+        return
+    _RECENT_FALLBACKS.append(fb.to_dict())
+    try:
+        from core.operational_slo_metrics import get_operational_slo_metrics
+
+        get_operational_slo_metrics().record_fallback_triggered(
+            task_id=str(event.trace_id or ""), fallback_kind=str(fb.fallback_kind)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("routing_observability: SLO fallback count skipped: %s", exc)
+
+
+def recent_fallback_decisions(limit: int = 20) -> List[Dict[str, Any]]:
+    """最近的模型选路回退明细，新的在前。"""
+    return list(reversed(list(_RECENT_FALLBACKS)))[: max(0, int(limit))]
 
 
 def build_routing_analytics_snapshot() -> RoutingAnalyticsSnapshot:

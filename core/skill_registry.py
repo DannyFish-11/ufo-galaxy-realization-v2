@@ -425,6 +425,17 @@ class SkillRegistry:
         * ``device_id`` / ``executor``
         * ``status`` and ``duration_ms``
         """
+        # 每一次技能调用的结果都过一遍契约（成功不带错、失败必带错、名字非空）；违约记一条告警，
+        # 不改结果 —— 这是观测口，拦截不在这里做
+        try:
+            from core.skill_contract import validate_skill_response
+
+            validate_skill_response(resp)
+        except ValueError as exc:
+            logger.warning(
+                "[skill_call] contract violation | skill=%s trace_id=%s: %s", req.skill_name, req.trace_id, exc
+            )
+
         status = resp.status.value
         duration_ms = round(resp.metrics.duration_ms, 3)
         executor = resp.metrics.executor

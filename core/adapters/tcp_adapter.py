@@ -265,45 +265,6 @@ class TCPAdapter(TransportAdapter):
 
     # -- mDNS 服务发现 -----------------------------------------------------
 
-    async def discover_peers(self, timeout: float = 5.0) -> Dict[str, str]:
-        """通过 mDNS 发现同一局域网内的 Galaxy 设备。"""
-        if not ZEROCONF_AVAILABLE:
-            logger.debug("zeroconf not installed, skipping mDNS discovery")
-            return {}
-
-        found = {}
-        zc = zeroconf.Zeroconf()
-
-        try:
-            # 浏览器方式发现。
-            # 修复(双重死):① zeroconf 以【关键字】(zeroconf/service_type/name/
-            # state_change) 调用 handler,原位置参数 lambda 每次事件都 TypeError;
-            # ② 第四参是 ServiceStateChange 枚举而非 ServiceInfo,原代码
-            # hasattr(state,"addresses") 恒 False → 即便回调能跑也只存空串。
-            # 正确做法:Added 事件时用 get_service_info 拉取真实地址。
-            def _on_change(zeroconf_obj, service_type, name, state_change):  # noqa: ANN001
-                try:
-                    if getattr(state_change, "name", "") not in ("Added", "Updated"):
-                        return
-                    info = zeroconf_obj.get_service_info(service_type, name, timeout=2000)
-                    if info is None:
-                        return
-                    addrs = info.parsed_addresses() if hasattr(info, "parsed_addresses") else []
-                    if addrs:
-                        found[name] = addrs[0]
-                except Exception as cb_exc:  # noqa: BLE001
-                    logger.debug("mDNS handler error: %s", cb_exc)
-
-            browser = zeroconf.ServiceBrowser(zc, GALAXY_SERVICE_TYPE, handlers=[_on_change])
-            await asyncio.sleep(timeout)
-            browser.cancel()
-        except Exception as e:
-            logger.debug("mDNS discovery error: %s", e)
-        finally:
-            zc.close()
-
-        return found
-
     def register_local_service(self, device_id: str, port: Optional[int] = None) -> None:
         """注册本机 mDNS 服务，让其他设备发现。"""
         if not ZEROCONF_AVAILABLE:

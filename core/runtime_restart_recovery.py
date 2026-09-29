@@ -376,6 +376,9 @@ class RuntimeRecoveryReport:
         after failing stale waiters.  Each rebind record tracks the second
         half of the closed-loop semantic: re-dispatch → new waiter →
         result delivery.  (PR-2)
+    delegated_flow_entities_restored
+        Delegated flow entities put back into the in-process runtime from
+        their durable snapshot (production path only).
     durable_truth_converged
         True if the DurableTruthAuthorityChain convergence check passed —
         all three durable legs (session truth, task lifecycle, result
@@ -422,6 +425,7 @@ class RuntimeRecoveryReport:
     continuation_waiters_reconciled: int = 0
     # PR-2 fields
     continuation_rebinds_registered: int = 0
+    delegated_flow_entities_restored: int = 0
     durable_truth_converged: bool = False
     participants_consolidated: Dict[str, int] = field(default_factory=dict)
     result_continuity_guard_active: bool = False
@@ -466,6 +470,7 @@ class RuntimeRecoveryReport:
             "continuation_waiters_reconciled": self.continuation_waiters_reconciled,
             # PR-2 fields
             "continuation_rebinds_registered": self.continuation_rebinds_registered,
+            "delegated_flow_entities_restored": self.delegated_flow_entities_restored,
             "durable_truth_converged": self.durable_truth_converged,
             "participants_consolidated": dict(self.participants_consolidated),
             "result_continuity_guard_active": self.result_continuity_guard_active,
@@ -1726,6 +1731,11 @@ def run_startup_recovery(
             "startup recovery 本进程已执行过(recovery_id=%s),复用首次报告", _startup_recovery_report.recovery_id
         )
         return _startup_recovery_report
+    if not _explicit:
+        # 生产路径也要读回混合执行的落盘记录：第 4b 步只在给了 store 时才跑
+        from core.hybrid_orchestration_continuity import get_hybrid_persistence_store
+
+        hybrid_continuity_store = get_hybrid_persistence_store()
     coordinator = RuntimeRestartRecoveryCoordinator(
         mesh_session_store=mesh_session_store,
         body_mesh_store=body_mesh_store,
@@ -1735,6 +1745,12 @@ def run_startup_recovery(
         task_lifecycle_store=task_lifecycle_store,
     )
     report = coordinator.run_recovery()
+    from core.recovery_telemetry import record_recovery_outcome
+
+    record_recovery_outcome(report)
     if not _explicit:
+        from core.delegated_flow_persistence import rehydrate_flow_entity_runtime
+
+        report.delegated_flow_entities_restored = rehydrate_flow_entity_runtime()
         _startup_recovery_report = report
     return report

@@ -32,8 +32,11 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import time
+import weakref
 from typing import Any, Callable, Coroutine, Dict, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.TaskLifecycle")
@@ -133,6 +136,57 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 叫停 → interrupted
+# ---------------------------------------------------------------------------
+# 进入 running 的信封登记在这里（task_id → 所在的 asyncio 任务与信封），走到任何终态就出表。
+# 所在任务被取消 —— 「停」取消在跑的请求（core.presence_stop）、关机取消在途任务、客户端
+# 断开 —— 而信封还在表里，说明它没走到终态就被叫停了：标 interrupted。此前 mark_interrupted
+# 写好了却没有调用方，被叫停的任务在生命周期里永远停在 running。
+
+_RUNNING: Dict[str, Tuple[Any, Any]] = {}
+_RUNNING_LOCK = threading.Lock()
+_WATCHED_TASKS: "weakref.WeakSet[asyncio.Task]" = weakref.WeakSet()
+
+
+def _watch_running(envelope: Any) -> None:
+    task_id = getattr(envelope, "task_id", "") or ""
+    if not task_id:
+        return
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        return  # 同步上下文：没有可被取消的任务，也就不会被叫停
+    if task is None:
+        return
+    with _RUNNING_LOCK:
+        _RUNNING[task_id] = (task, envelope)
+        first = task not in _WATCHED_TASKS
+        if first:
+            _WATCHED_TASKS.add(task)
+    if first:
+        task.add_done_callback(_on_watched_task_done)
+
+
+def _settle(envelope: Any) -> None:
+    with _RUNNING_LOCK:
+        _RUNNING.pop(getattr(envelope, "task_id", "") or "", None)
+
+
+def _on_watched_task_done(task: "asyncio.Task") -> None:
+    with _RUNNING_LOCK:
+        left = [tid for tid, (owner, _env) in _RUNNING.items() if owner is task]
+        envelopes = [_RUNNING.pop(tid)[1] for tid in left]
+    if not envelopes or not task.cancelled():
+        return  # 正常结束或抛异常结束：不是「被叫停」，不归这里判
+    manager = get_lifecycle_manager()
+    for envelope in envelopes:
+        try:
+            manager.mark_interrupted(envelope, reason="cancelled before reaching a terminal state")
+        except Exception as exc:  # noqa: BLE001 — 记账不影响取消本身
+            logger.debug("mark_interrupted on cancel skipped: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # TaskLifecycleManager
 # ---------------------------------------------------------------------------
 
@@ -157,6 +211,7 @@ class TaskLifecycleManager:
             updated.tool_name,
         )
         _emit_lifecycle_event(updated, "running")
+        _watch_running(updated)
         return updated
 
     def mark_done(
@@ -177,6 +232,7 @@ class TaskLifecycleManager:
             updated.tool_name,
             result_summary[:120] if result_summary else "",
         )
+        _settle(updated)
         _emit_lifecycle_event(updated, "done")
         self._write_memory(updated, result_summary=result_summary, success=True)
         return updated
@@ -199,6 +255,7 @@ class TaskLifecycleManager:
             updated.tool_name,
             error[:200] if error else "",
         )
+        _settle(updated)
         _emit_lifecycle_event(updated, "failed")
         self._write_memory(updated, result_summary=f"FAILED: {error}", success=False)
         return updated
@@ -231,6 +288,7 @@ class TaskLifecycleManager:
             getattr(updated, "tool_name", ""),
             reason[:200] if reason else "",
         )
+        _settle(updated)
         _emit_lifecycle_event(updated, "cancelled")
         self._write_memory(updated, result_summary=f"CANCELLED: {reason}", success=False)
         return updated
@@ -261,6 +319,7 @@ class TaskLifecycleManager:
             getattr(updated, "tool_name", ""),
             reason[:200] if reason else "",
         )
+        _settle(updated)
         _emit_lifecycle_event(updated, "interrupted")
         self._write_memory(updated, result_summary=f"INTERRUPTED: {reason}", success=False)
         return updated

@@ -12,7 +12,6 @@
 
 import asyncio
 import logging
-import math
 import time
 import uuid
 from collections import deque
@@ -249,41 +248,6 @@ class DigitalTwin:
             self.status = TwinStatus.OFFLINE
             self.digital_state.confidence *= 0.9  # 降低置信度
 
-    async def push_to_physical(self, command: str, params: Dict) -> Dict:
-        """
-        从数字侧向物理设备推送命令
-
-        在 HYBRID 模式下，先模拟验证再执行
-        """
-        if self.coupling_mode == CouplingMode.DECOUPLED:
-            # 解耦模式：只在虚拟侧执行
-            sim_result = await self.simulate_action(command, params)
-            return {"mode": "simulated", "result": sim_result.__dict__}
-
-        if self.coupling_mode == CouplingMode.HYBRID:
-            # 混合模式：先模拟验证
-            sim = await self.simulate_action(command, params)
-            if sim.success_probability < 0.5:
-                return {
-                    "mode": "blocked",
-                    "reason": f"模拟成功率过低: {sim.success_probability:.1%}",
-                    "risks": sim.risks,
-                }
-
-        # 执行
-        if not self._command_sender:
-            return {"mode": "error", "reason": "未配置命令发送器"}
-
-        try:
-            result = await self._command_sender(command, params)
-            # 执行后同步状态
-            await self._sync_from_physical()
-            return {"mode": "executed", "result": result}
-        except Exception as e:
-            logger.debug("Fallback triggered: %s", e)
-            self.status = TwinStatus.ERROR
-            return {"mode": "error", "reason": str(e)}
-
     def _start_sync_loop(self):
         """启动同步循环"""
         self._stop_sync_loop()
@@ -372,10 +336,6 @@ class DigitalTwin:
         return None
 
     # ─────── 模拟预测 ─────────
-
-    def register_physics_model(self, action: str, model: Callable[[Dict, Dict], Dict]):
-        """注册物理模型用于预测"""
-        self._physics_models[action] = model
 
     async def simulate_action(self, action: str, params: Dict) -> SimulationResult:
         """
@@ -625,70 +585,6 @@ class DigitalTwinEngine:
 
 
 # ───────────────── 预置物理模型 ──────────────────
-
-
-def drone_flight_model(state: Dict, params: Dict) -> Dict:
-    """无人机飞行物理模型"""
-    predicted = state.copy()
-    target_alt = params.get("altitude", state.get("altitude", 0))
-    target_lat = params.get("latitude", state.get("latitude", 0))
-    target_lon = params.get("longitude", state.get("longitude", 0))
-    params.get("speed", 5.0)  # m/s
-
-    # 位置更新
-    predicted["altitude"] = target_alt
-    predicted["latitude"] = target_lat
-    predicted["longitude"] = target_lon
-
-    # 电量消耗估算
-    distance = (
-        math.sqrt((target_lat - state.get("latitude", 0)) ** 2 + (target_lon - state.get("longitude", 0)) ** 2) * 111000
-    )  # 度 → 米（粗略）
-    alt_delta = abs(target_alt - state.get("altitude", 0))
-    battery_drain = (distance / 1000 + alt_delta / 100) * 2  # 粗略消耗模型
-    predicted["battery"] = max(0, state.get("battery", 100) - battery_drain)
-
-    # 风险
-    risks = []
-    if predicted["battery"] < 15:
-        risks.append("电量不足以返航")
-    if target_alt > 120:
-        risks.append("超出法定飞行高度")
-
-    predicted["_success_probability"] = 0.95 if predicted["battery"] > 20 else 0.4
-    predicted["_risks"] = risks
-    predicted["_side_effects"] = [f"电量从 {state.get('battery', 100):.0f}% 降至 {predicted['battery']:.0f}%"]
-    return predicted
-
-
-def printer_3d_model(state: Dict, params: Dict) -> Dict:
-    """3D 打印机物理模型"""
-    predicted = state.copy()
-    file_size_mb = params.get("file_size_mb", 10)
-    material = params.get("material", "PLA")
-
-    # 打印时间估算
-    print_time_min = file_size_mb * 12  # 粗略
-    predicted["printing"] = True
-    predicted["progress"] = 0
-    predicted["estimated_time_min"] = print_time_min
-
-    # 耗材消耗
-    filament_used_g = file_size_mb * 5
-    predicted["filament_remaining_g"] = max(0, state.get("filament_remaining_g", 1000) - filament_used_g)
-
-    risks = []
-    if predicted["filament_remaining_g"] < filament_used_g:
-        risks.append("耗材不足")
-
-    nozzle_temp = state.get("nozzle_temp", 200)
-    if material == "ABS" and nozzle_temp < 230:
-        risks.append("喷嘴温度过低，ABS 需要 230°C+")
-
-    predicted["_success_probability"] = 0.9 if not risks else 0.5
-    predicted["_risks"] = risks
-    predicted["_side_effects"] = [f"预计耗时 {print_time_min} 分钟"]
-    return predicted
 
 
 # ───────────────────── 单例 ─────────────────────

@@ -332,41 +332,26 @@ class EventBridge:
         try:
             from core.device_communication import device_comm
 
-            _orig_on_connected = getattr(device_comm, "_on_device_connected", None)
-            _orig_on_disconnected = getattr(device_comm, "_on_device_disconnected", None)
-
-            async def _comm_device_connected(device_id: str, device_info: dict = None):
+            # 经 DeviceCommunication 自己的登记口挂回调。此前这里把 ``_on_device_connected`` /
+            # ``_on_device_disconnected`` 两个**回调列表**整个换成了一个函数 —— 之后每次设备连上 /
+            # 断开，``_emit_event`` 里 ``list(函数)`` 抛 TypeError，已登记的回调一个也不跑，异常
+            # 还顺着连接流程往上冒。
+            def _comm_device_connected(device_id: str) -> None:
                 event_bus.publish_sync(
                     EventType.DEVICE_CONNECTED,
                     source="device_communication",
-                    data={"device_id": device_id, **(device_info or {})},
+                    data={"device_id": device_id},
                 )
-                if _orig_on_connected:
-                    try:
-                        if asyncio.iscoroutinefunction(_orig_on_connected):
-                            await _orig_on_connected(device_id, device_info)
-                        else:
-                            _orig_on_connected(device_id, device_info)
-                    except Exception as exc:
-                        logger.warning("Exception suppressed: %s", exc)
 
-            async def _comm_device_disconnected(device_id: str):
+            def _comm_device_disconnected(device_id: str) -> None:
                 event_bus.publish_sync(
                     EventType.DEVICE_DISCONNECTED,
                     source="device_communication",
                     data={"device_id": device_id},
                 )
-                if _orig_on_disconnected:
-                    try:
-                        if asyncio.iscoroutinefunction(_orig_on_disconnected):
-                            await _orig_on_disconnected(device_id)
-                        else:
-                            _orig_on_disconnected(device_id)
-                    except Exception as exc:
-                        logger.warning("Exception suppressed: %s", exc)
 
-            device_comm._on_device_connected = _comm_device_connected
-            device_comm._on_device_disconnected = _comm_device_disconnected
+            device_comm.on_device_connected(_comm_device_connected)
+            device_comm.on_device_disconnected(_comm_device_disconnected)
             _wired_count += 1
             logger.info("EventBridge: DeviceCommunication → EventBus 已连接")
         except Exception as e:
@@ -378,7 +363,9 @@ class EventBridge:
         try:
             session_roaming = upper_ports.resolve("gateway.session_roaming.session_roaming")
 
-            _orig_on_migrate = getattr(session_roaming, "_on_session_migrated", None)
+            # 回调属性叫 _on_migrated、入口是 set_migration_callback。此前这里读写的是不存在的
+            # _on_session_migrated —— 日志说"已连接"，SESSION_MIGRATED 却从没发出过。
+            _orig_on_migrate = getattr(session_roaming, "_on_migrated", None)
 
             async def _session_migrated_handler(session_id: str, from_device: str, to_device: str):
                 event_bus.publish_sync(
@@ -395,7 +382,7 @@ class EventBridge:
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
 
-            session_roaming._on_session_migrated = _session_migrated_handler
+            session_roaming.set_migration_callback(_session_migrated_handler)
             _wired_count += 1
             logger.info("EventBridge: SessionRoaming → EventBus 已连接")
         except Exception as e:

@@ -34,7 +34,6 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -154,21 +153,6 @@ class DeviceMessage:
             }
         )
 
-    def to_aip_v3_dict(self) -> dict:
-        """转换为 AIP v3.0 格式的字典"""
-        return {
-            "version": "3.0",
-            "message_id": self.message_id,
-            "type": self.type.to_aip_v3(),
-            "device_id": self.device_id,
-            "timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
-            "correlation_id": self.correlation_id,
-            "payload": {
-                "action": self.action,
-                **self.payload,
-            },
-        }
-
     @classmethod
     def from_json(cls, data: str) -> "DeviceMessage":
         obj = json.loads(data)
@@ -237,7 +221,6 @@ class DeviceCommunication:
         # 事件回调
         self._on_device_connected: List[Callable] = []
         self._on_device_disconnected: List[Callable] = []
-        self._on_device_message: List[Callable] = []
 
         # 配置
         self.heartbeat_interval = 30.0
@@ -834,16 +817,6 @@ class DeviceCommunication:
                 except Exception as e:
                     logger.error(f"事件回调失败: {e}")
 
-        elif event_type == "message":
-            for callback in list(self._on_device_message):
-                try:
-                    if asyncio.iscoroutinefunction(callback):
-                        await callback(device_id, message)
-                    else:
-                        callback(device_id, message)
-                except Exception as e:
-                    logger.error(f"事件回调失败: {e}")
-
     def on_device_connected(self, callback: Callable):
         """注册设备连接事件回调"""
         self._on_device_connected.append(callback)
@@ -851,10 +824,6 @@ class DeviceCommunication:
     def on_device_disconnected(self, callback: Callable):
         """注册设备断开事件回调"""
         self._on_device_disconnected.append(callback)
-
-    def on_device_message(self, callback: Callable):
-        """注册设备消息事件回调"""
-        self._on_device_message.append(callback)
 
     # ========================================================================
     # 统计

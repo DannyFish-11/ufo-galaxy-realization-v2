@@ -173,3 +173,33 @@ export interface TierView {
   /** 感知位/推理位当前各是哪个型号,从当前档的 slots 里取,只读展示 */
   readonly slots: readonly { readonly role: string; readonly model: string }[];
 }
+
+/**
+ * 阈限态预演的一步(WS `type="rehearsal"`,后端 core/rehearsal_panel_push.py)。
+ *
+ * 预演是**落手之前**的推演:写状态的工具一律模拟,只读工具直通真实派发(那一步
+ * `simulated` 为 false)。所以这里画出来的每一步,除了标明「真查了」的,都**没有
+ * 碰过真实世界** —— 界面上必须把这句话说出来,否则人会以为它已经动手了。
+ */
+export type RehearsalStepKind =
+  | 'attempt_start'
+  | 'validation_reject'
+  | 'tool_simulated'
+  | 'attempt_success'
+  | 'attempt_failed';
+
+export interface RehearsalStep {
+  readonly step: RehearsalStepKind;
+  /** 第几轮推演(从 1 起) */
+  readonly attempt: number;
+  /** 这一步涉及的工具名;轮次级的步骤是空串 */
+  readonly tool: string;
+  /** true = 模拟;false = 只读工具真查了一次 */
+  readonly simulated: boolean;
+  /** 这一轮走了几步(只在 attempt_success 上有) */
+  readonly steps: number;
+  /** 这一轮为什么没通过(只在 attempt_failed 上有,后端已截断) */
+  readonly feedback: string;
+  /** 推演的是哪件事(只在 attempt_start 上有,后端已截断) */
+  readonly task: string;
+}

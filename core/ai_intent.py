@@ -643,36 +643,6 @@ class SemanticSearch:
                 logger.warning(f"vector_backend 加载失败: {exc}，使用内置本地索引")
         return self._vb
 
-    async def initialize_qdrant(self):
-        """尝试连接 Qdrant 向量数据库（保持向后兼容）"""
-        if not self._qdrant_url:
-            return False
-        try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Distance, VectorParams
-
-            self._qdrant_client = QdrantClient(url=self._qdrant_url, timeout=5)
-            # 检查连接
-            self._qdrant_client.get_collections()
-
-            # 确保 collection 存在
-            collections = [c.name for c in self._qdrant_client.get_collections().collections]
-            if self._collection_name not in collections:
-                self._qdrant_client.create_collection(
-                    collection_name=self._collection_name,
-                    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-                )
-
-            self._qdrant_ready = True
-            logger.info(f"Qdrant 已连接: {self._qdrant_url}")
-            return True
-        except ImportError:
-            logger.info("qdrant-client 未安装，使用本地搜索模式")
-            return False
-        except Exception as e:
-            logger.info(f"Qdrant 不可用: {e}，使用本地搜索模式")
-            return False
-
     def index_document(self, doc_id: str, content: str, metadata: Optional[Dict] = None):
         """索引文档（优先使用统一向量后端，降级到内置本地索引）"""
         vb = self._get_vector_backend()
@@ -690,31 +660,6 @@ class SemanticSearch:
             "metadata": metadata or {},
             "indexed_at": time.time(),
         }
-
-    async def index_document_vector(
-        self, doc_id: str, content: str, vector: List[float], metadata: Optional[Dict] = None
-    ):
-        """索引文档到 Qdrant（向量模式）"""
-        if not self._qdrant_ready or not self._qdrant_client:
-            self.index_document(doc_id, content, metadata)
-            return
-
-        try:
-            from qdrant_client.models import PointStruct
-
-            self._qdrant_client.upsert(
-                collection_name=self._collection_name,
-                points=[
-                    PointStruct(
-                        id=hash(doc_id) & 0x7FFFFFFFFFFFFFFF,  # 正整数
-                        vector=vector,
-                        payload={"doc_id": doc_id, "content": content, **(metadata or {})},
-                    )
-                ],
-            )
-        except Exception as e:
-            logger.warning(f"Qdrant 索引失败: {e}")
-            self.index_document(doc_id, content, metadata)
 
     async def search_vector(self, query_vector: List[float], top_k: int = 5) -> List[Dict]:
         """向量搜索（Qdrant 模式）"""

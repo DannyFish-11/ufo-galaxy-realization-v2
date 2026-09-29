@@ -40,6 +40,7 @@ from typing import Any, Deque, Dict, Tuple
 __all__ = [
     "ToolOutcome",
     "classify_tool_outcome",
+    "outcome_hint",
     "ProgressTracker",
     "ProgressVerdict",
 ]
@@ -160,6 +161,21 @@ def classify_tool_outcome(result: Any) -> ToolOutcome:
     if _TRANSIENT_RE.search(error_text):
         return ToolOutcome.TRANSIENT
     return ToolOutcome.FAILED
+
+
+def outcome_hint(outcome: ToolOutcome) -> str:
+    """失败性质的一行提示，附在回喂给模型的工具结果后面；成功或普通业务失败返回空串。
+
+    分类此前只进了状态与无进展检测，模型本身看不见 —— 于是超时的它不敢再试，参数错的
+    它原样再试。**不自动重放**：超时的有副作用工具可能其实已经做成了，重不重来由模型定。
+    """
+    if outcome.retriable:
+        return "\n[瞬时故障：可以原样重试一次]"
+    if outcome is ToolOutcome.PERMANENT:
+        return "\n[确定性失败：原样重试必然再失败，请换工具或换参数]"
+    if outcome is ToolOutcome.DENIED:
+        return "\n[被拒或需要确认：不要重试，交给用户决定]"
+    return ""
 
 
 # ---------------------------------------------------------------------------

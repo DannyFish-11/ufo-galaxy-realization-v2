@@ -789,7 +789,19 @@ class ModelRouter:
                 estimated_tokens,
                 response_time_ms
             )
-        
+            # 这一轮也记进会话历史：include_history 读的正是这张表，此前从没人写，历史长度恒为 0
+            last_turn = self.db.get_session_history(request.session_id, limit=1)
+            background_tasks.add_task(
+                self.db.save_session_turn,
+                request.session_id,
+                (last_turn[0]["turn_number"] + 1) if last_turn else 1,
+                "user",
+                request.prompt,
+                selected_model,
+                estimated_tokens,
+                cost_estimate["total_cost_usd"],
+            )
+
         return RouteResponse(
             selected_model=selected_model,
             model_tier=model_config["tier"],

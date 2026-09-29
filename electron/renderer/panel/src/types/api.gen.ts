@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 423 条 · 组件 schema 111 个
+// 路径 469 条 · 组件 schema 118 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -18,6 +18,7 @@ export type ApiPath =
   | "/api/perception/desktop/analyze"
   | "/api/perception/desktop/audio"
   | "/api/perception/desktop/audio/echo_cancellation"
+  | "/api/perception/desktop/continuous"
   | "/api/perception/desktop/frame"
   | "/api/perception/desktop/listen"
   | "/api/perception/desktop/privacy"
@@ -35,6 +36,9 @@ export type ApiPath =
   | "/api/v1/agent/autonomous"
   | "/api/v1/agent/create"
   | "/api/v1/agent/deploy"
+  | "/api/v1/agent/identity"
+  | "/api/v1/agent/identity/goals"
+  | "/api/v1/agent/identity/values"
   | "/api/v1/agent/status"
   | "/api/v1/agent/templates"
   | "/api/v1/agents/debate"
@@ -61,6 +65,8 @@ export type ApiPath =
   | "/api/v1/approval-grants/{grant_key}"
   | "/api/v1/approvals"
   | "/api/v1/approvals/{request_id}"
+  | "/api/v1/audit/dag"
+  | "/api/v1/audit/integrity"
   | "/api/v1/audit/snapshot"
   | "/api/v1/audit/traces"
   | "/api/v1/audit/traces/{trace_id}"
@@ -73,6 +79,7 @@ export type ApiPath =
   | "/api/v1/channels/auto_load"
   | "/api/v1/channels/health"
   | "/api/v1/channels/load"
+  | "/api/v1/channels/{plugin_id}"
   | "/api/v1/channels/{plugin_id}/schema"
   | "/api/v1/channels/{plugin_id}/send"
   | "/api/v1/chat"
@@ -102,6 +109,7 @@ export type ApiPath =
   | "/api/v1/cost/health"
   | "/api/v1/cost/records"
   | "/api/v1/cost/summary"
+  | "/api/v1/cost/tasks"
   | "/api/v1/devices"
   | "/api/v1/devices/cross-device"
   | "/api/v1/devices/cross-device-ready"
@@ -125,6 +133,8 @@ export type ApiPath =
   | "/api/v1/devices/{device_id}/runtime-host"
   | "/api/v1/devices/{device_id}/telemetry"
   | "/api/v1/devices/{device_id}/unquarantine"
+  | "/api/v1/diagnostics/internals"
+  | "/api/v1/diagnostics/internals/{name}"
   | "/api/v1/diagnostics/startup-timing"
   | "/api/v1/diagnostics/url-sentinel"
   | "/api/v1/discovery/status"
@@ -143,8 +153,10 @@ export type ApiPath =
   | "/api/v1/github/context"
   | "/api/v1/github/ingest"
   | "/api/v1/github/install"
+  | "/api/v1/github/install/check"
   | "/api/v1/github/list"
   | "/api/v1/github/status"
+  | "/api/v1/github/tools"
   | "/api/v1/github/uninstall"
   | "/api/v1/governance/budget/record"
   | "/api/v1/governance/budget/{session_id}"
@@ -153,10 +165,12 @@ export type ApiPath =
   | "/api/v1/governance/tools/audit"
   | "/api/v1/governance/tools/check"
   | "/api/v1/governance/tools/policy"
+  | "/api/v1/governance/tools/{tool_name}/reset-bucket"
   | "/api/v1/guardian/audit"
   | "/api/v1/health/quick"
   | "/api/v1/health/unified"
   | "/api/v1/hybrid/execute"
+  | "/api/v1/hybrid/modes"
   | "/api/v1/hybrid/registry"
   | "/api/v1/hybrid/stats"
   | "/api/v1/memory/cards"
@@ -164,6 +178,7 @@ export type ApiPath =
   | "/api/v1/memory/cold"
   | "/api/v1/memory/drift/check"
   | "/api/v1/memory/drift/config"
+  | "/api/v1/memory/long-term/{namespace}"
   | "/api/v1/memory/query"
   | "/api/v1/memory/stats"
   | "/api/v1/memory/store"
@@ -189,7 +204,12 @@ export type ApiPath =
   | "/api/v1/modality/plan"
   | "/api/v1/modality/providers"
   | "/api/v1/models/catalog"
+  | "/api/v1/models/compute"
+  | "/api/v1/models/download"
+  | "/api/v1/models/downloads"
   | "/api/v1/models/latency-probe"
+  | "/api/v1/models/local-brain/switch"
+  | "/api/v1/models/local/{model_name}"
   | "/api/v1/models/routing-stats"
   | "/api/v1/models/slot"
   | "/api/v1/models/status"
@@ -218,6 +238,7 @@ export type ApiPath =
   | "/api/v1/observability/execution/schema"
   | "/api/v1/observability/execution/trace/{trace_id}"
   | "/api/v1/observability/gateway"
+  | "/api/v1/observability/maintenance"
   | "/api/v1/observability/model-route"
   | "/api/v1/observability/nats"
   | "/api/v1/observability/orchestration-review"
@@ -238,7 +259,9 @@ export type ApiPath =
   | "/api/v1/operator/actions/android-directed/{dispatch_id}/ack"
   | "/api/v1/operator/actions/audit"
   | "/api/v1/operator/actions/availability"
+  | "/api/v1/operator/audit-records"
   | "/api/v1/operator/board/operable-truth"
+  | "/api/v1/operator/decision-timeline"
   | "/api/v1/operator/devices/dispatch-readiness"
   | "/api/v1/operator/devices/ecosystem"
   | "/api/v1/operator/devices/ecosystem/{device_id}"
@@ -260,9 +283,12 @@ export type ApiPath =
   | "/api/v1/operator/inspect/task/{task_id}"
   | "/api/v1/operator/llm"
   | "/api/v1/operator/nats"
+  | "/api/v1/operator/override"
+  | "/api/v1/operator/permission-safety"
   | "/api/v1/operator/pr4/snapshot"
   | "/api/v1/operator/presence/ambient"
   | "/api/v1/operator/presence/ambient/halt"
+  | "/api/v1/operator/recovery/continuation/{task_id}"
   | "/api/v1/operator/review/{task_id}"
   | "/api/v1/operator/snapshot"
   | "/api/v1/pair/card"
@@ -304,12 +330,17 @@ export type ApiPath =
   | "/api/v1/projection/runtime/session-snapshot"
   | "/api/v1/projection/server-canonicalization-status"
   | "/api/v1/projection/task_semantics"
+  | "/api/v1/protocols/capabilities"
+  | "/api/v1/protocols/capabilities/{capability_id}/disable"
+  | "/api/v1/protocols/capabilities/{capability_id}/enable"
   | "/api/v1/protocols/load-status"
   | "/api/v1/protocols/mcp"
   | "/api/v1/protocols/mcp/load"
   | "/api/v1/protocols/mcp/{name}"
   | "/api/v1/protocols/mcp/{name}/call"
   | "/api/v1/protocols/mcp/{name}/reload"
+  | "/api/v1/protocols/mcp/{name}/resources"
+  | "/api/v1/protocols/mcp/{name}/resources/read"
   | "/api/v1/protocols/mcp/{name}/tools"
   | "/api/v1/protocols/reload-all"
   | "/api/v1/protocols/skills"
@@ -321,6 +352,8 @@ export type ApiPath =
   | "/api/v1/providers/user"
   | "/api/v1/providers/user/{pid}"
   | "/api/v1/providers/user/{pid}/verify"
+  | "/api/v1/rag/knowledge-base/export"
+  | "/api/v1/rag/knowledge-base/import"
   | "/api/v1/rag/patterns"
   | "/api/v1/rag/query"
   | "/api/v1/rag/stats"
@@ -333,6 +366,10 @@ export type ApiPath =
   | "/api/v1/resilience/circuit-breakers/{target}/reset"
   | "/api/v1/resilience/metrics"
   | "/api/v1/resilience/metrics/prom"
+  | "/api/v1/results/isolated"
+  | "/api/v1/results/isolated/{key}"
+  | "/api/v1/results/isolated/{key}/dismiss"
+  | "/api/v1/results/isolated/{key}/retry"
   | "/api/v1/runtime/domain"
   | "/api/v1/runtime/phase-ledger"
   | "/api/v1/runtime/result-merge-summary"
@@ -347,6 +384,7 @@ export type ApiPath =
   | "/api/v1/security/policy"
   | "/api/v1/security/policy/evaluate"
   | "/api/v1/security/stats"
+  | "/api/v1/security/tool-permissions"
   | "/api/v1/security/weights-admission"
   | "/api/v1/sessions"
   | "/api/v1/sessions/ingest_turns"
@@ -354,8 +392,10 @@ export type ApiPath =
   | "/api/v1/sessions/primary"
   | "/api/v1/sessions/reconcile"
   | "/api/v1/sessions/{session_id}"
+  | "/api/v1/sessions/{session_id}/evidence/export"
   | "/api/v1/sessions/{session_id}/history"
   | "/api/v1/sessions/{session_id}/join"
+  | "/api/v1/sessions/{session_id}/persona/reset"
   | "/api/v1/sessions/{session_id}/sync"
   | "/api/v1/slo/metrics"
   | "/api/v1/slo/operational"
@@ -363,6 +403,9 @@ export type ApiPath =
   | "/api/v1/stream"
   | "/api/v1/system/completion-status"
   | "/api/v1/system/config"
+  | "/api/v1/system/container-runtime"
+  | "/api/v1/system/container-runtime/choice"
+  | "/api/v1/system/container-runtime/test"
   | "/api/v1/system/dual-repo-progress"
   | "/api/v1/system/health"
   | "/api/v1/system/mcp"
@@ -378,7 +421,10 @@ export type ApiPath =
   | "/api/v1/tasks/{task_id}"
   | "/api/v1/tasks/{task_id}/cancel"
   | "/api/v1/tasks/{task_id}/result"
+  | "/api/v1/tasks/{task_id}/timeline"
+  | "/api/v1/twin/couple-all"
   | "/api/v1/twin/create"
+  | "/api/v1/twin/decouple-all"
   | "/api/v1/twin/scenario"
   | "/api/v1/twin/status"
   | "/api/v1/twin/{twin_id}"
@@ -445,6 +491,7 @@ export const API_METHODS = {
   "/api/perception/desktop/analyze": ["post"],
   "/api/perception/desktop/audio": ["post"],
   "/api/perception/desktop/audio/echo_cancellation": ["get"],
+  "/api/perception/desktop/continuous": ["get"],
   "/api/perception/desktop/frame": ["post"],
   "/api/perception/desktop/listen": ["post"],
   "/api/perception/desktop/privacy": ["get"],
@@ -462,6 +509,9 @@ export const API_METHODS = {
   "/api/v1/agent/autonomous": ["post"],
   "/api/v1/agent/create": ["post"],
   "/api/v1/agent/deploy": ["post"],
+  "/api/v1/agent/identity": ["get"],
+  "/api/v1/agent/identity/goals": ["delete", "post"],
+  "/api/v1/agent/identity/values": ["post"],
   "/api/v1/agent/status": ["get"],
   "/api/v1/agent/templates": ["get"],
   "/api/v1/agents/debate": ["post"],
@@ -488,6 +538,8 @@ export const API_METHODS = {
   "/api/v1/approval-grants/{grant_key}": ["delete"],
   "/api/v1/approvals": ["get"],
   "/api/v1/approvals/{request_id}": ["get", "post"],
+  "/api/v1/audit/dag": ["get"],
+  "/api/v1/audit/integrity": ["get"],
   "/api/v1/audit/snapshot": ["get"],
   "/api/v1/audit/traces": ["get"],
   "/api/v1/audit/traces/{trace_id}": ["get"],
@@ -500,6 +552,7 @@ export const API_METHODS = {
   "/api/v1/channels/auto_load": ["post"],
   "/api/v1/channels/health": ["get"],
   "/api/v1/channels/load": ["post"],
+  "/api/v1/channels/{plugin_id}": ["delete"],
   "/api/v1/channels/{plugin_id}/schema": ["get"],
   "/api/v1/channels/{plugin_id}/send": ["post"],
   "/api/v1/chat": ["post"],
@@ -529,6 +582,7 @@ export const API_METHODS = {
   "/api/v1/cost/health": ["get"],
   "/api/v1/cost/records": ["get"],
   "/api/v1/cost/summary": ["get"],
+  "/api/v1/cost/tasks": ["get"],
   "/api/v1/devices": ["get"],
   "/api/v1/devices/cross-device": ["post"],
   "/api/v1/devices/cross-device-ready": ["get"],
@@ -552,6 +606,8 @@ export const API_METHODS = {
   "/api/v1/devices/{device_id}/runtime-host": ["get"],
   "/api/v1/devices/{device_id}/telemetry": ["get"],
   "/api/v1/devices/{device_id}/unquarantine": ["post"],
+  "/api/v1/diagnostics/internals": ["get"],
+  "/api/v1/diagnostics/internals/{name}": ["get"],
   "/api/v1/diagnostics/startup-timing": ["get"],
   "/api/v1/diagnostics/url-sentinel": ["get"],
   "/api/v1/discovery/status": ["get"],
@@ -570,20 +626,24 @@ export const API_METHODS = {
   "/api/v1/github/context": ["post"],
   "/api/v1/github/ingest": ["post"],
   "/api/v1/github/install": ["post"],
+  "/api/v1/github/install/check": ["get"],
   "/api/v1/github/list": ["get"],
   "/api/v1/github/status": ["get"],
+  "/api/v1/github/tools": ["get"],
   "/api/v1/github/uninstall": ["post"],
   "/api/v1/governance/budget/record": ["post"],
   "/api/v1/governance/budget/{session_id}": ["get"],
   "/api/v1/governance/policy": ["get"],
   "/api/v1/governance/queue/stats": ["get"],
-  "/api/v1/governance/tools/audit": ["get"],
+  "/api/v1/governance/tools/audit": ["delete", "get"],
   "/api/v1/governance/tools/check": ["post"],
   "/api/v1/governance/tools/policy": ["get"],
+  "/api/v1/governance/tools/{tool_name}/reset-bucket": ["post"],
   "/api/v1/guardian/audit": ["get"],
   "/api/v1/health/quick": ["get"],
   "/api/v1/health/unified": ["get"],
   "/api/v1/hybrid/execute": ["post"],
+  "/api/v1/hybrid/modes": ["get"],
   "/api/v1/hybrid/registry": ["get"],
   "/api/v1/hybrid/stats": ["get"],
   "/api/v1/memory/cards": ["get"],
@@ -591,6 +651,7 @@ export const API_METHODS = {
   "/api/v1/memory/cold": ["get"],
   "/api/v1/memory/drift/check": ["post"],
   "/api/v1/memory/drift/config": ["get", "put"],
+  "/api/v1/memory/long-term/{namespace}": ["delete"],
   "/api/v1/memory/query": ["get"],
   "/api/v1/memory/stats": ["get"],
   "/api/v1/memory/store": ["post"],
@@ -616,7 +677,12 @@ export const API_METHODS = {
   "/api/v1/modality/plan": ["get"],
   "/api/v1/modality/providers": ["get"],
   "/api/v1/models/catalog": ["get"],
+  "/api/v1/models/compute": ["get"],
+  "/api/v1/models/download": ["post"],
+  "/api/v1/models/downloads": ["get"],
   "/api/v1/models/latency-probe": ["post"],
+  "/api/v1/models/local-brain/switch": ["post"],
+  "/api/v1/models/local/{model_name}": ["delete"],
   "/api/v1/models/routing-stats": ["get"],
   "/api/v1/models/slot": ["post"],
   "/api/v1/models/status": ["get"],
@@ -645,6 +711,7 @@ export const API_METHODS = {
   "/api/v1/observability/execution/schema": ["get"],
   "/api/v1/observability/execution/trace/{trace_id}": ["get"],
   "/api/v1/observability/gateway": ["get"],
+  "/api/v1/observability/maintenance": ["get"],
   "/api/v1/observability/model-route": ["get"],
   "/api/v1/observability/nats": ["get"],
   "/api/v1/observability/orchestration-review": ["get"],
@@ -665,7 +732,9 @@ export const API_METHODS = {
   "/api/v1/operator/actions/android-directed/{dispatch_id}/ack": ["post"],
   "/api/v1/operator/actions/audit": ["get"],
   "/api/v1/operator/actions/availability": ["get"],
+  "/api/v1/operator/audit-records": ["get"],
   "/api/v1/operator/board/operable-truth": ["get"],
+  "/api/v1/operator/decision-timeline": ["get"],
   "/api/v1/operator/devices/dispatch-readiness": ["get"],
   "/api/v1/operator/devices/ecosystem": ["get"],
   "/api/v1/operator/devices/ecosystem/{device_id}": ["get"],
@@ -687,9 +756,12 @@ export const API_METHODS = {
   "/api/v1/operator/inspect/task/{task_id}": ["get"],
   "/api/v1/operator/llm": ["get"],
   "/api/v1/operator/nats": ["get"],
+  "/api/v1/operator/override": ["delete", "get", "put"],
+  "/api/v1/operator/permission-safety": ["get"],
   "/api/v1/operator/pr4/snapshot": ["get"],
   "/api/v1/operator/presence/ambient": ["get"],
   "/api/v1/operator/presence/ambient/halt": ["post"],
+  "/api/v1/operator/recovery/continuation/{task_id}": ["get"],
   "/api/v1/operator/review/{task_id}": ["get"],
   "/api/v1/operator/snapshot": ["get"],
   "/api/v1/pair/card": ["get"],
@@ -731,12 +803,17 @@ export const API_METHODS = {
   "/api/v1/projection/runtime/session-snapshot": ["get"],
   "/api/v1/projection/server-canonicalization-status": ["get"],
   "/api/v1/projection/task_semantics": ["get"],
+  "/api/v1/protocols/capabilities": ["get"],
+  "/api/v1/protocols/capabilities/{capability_id}/disable": ["post"],
+  "/api/v1/protocols/capabilities/{capability_id}/enable": ["post"],
   "/api/v1/protocols/load-status": ["get"],
   "/api/v1/protocols/mcp": ["get"],
   "/api/v1/protocols/mcp/load": ["post"],
   "/api/v1/protocols/mcp/{name}": ["delete"],
   "/api/v1/protocols/mcp/{name}/call": ["post"],
   "/api/v1/protocols/mcp/{name}/reload": ["post"],
+  "/api/v1/protocols/mcp/{name}/resources": ["get"],
+  "/api/v1/protocols/mcp/{name}/resources/read": ["get"],
   "/api/v1/protocols/mcp/{name}/tools": ["get"],
   "/api/v1/protocols/reload-all": ["post"],
   "/api/v1/protocols/skills": ["get"],
@@ -748,6 +825,8 @@ export const API_METHODS = {
   "/api/v1/providers/user": ["get", "post"],
   "/api/v1/providers/user/{pid}": ["delete"],
   "/api/v1/providers/user/{pid}/verify": ["post"],
+  "/api/v1/rag/knowledge-base/export": ["get"],
+  "/api/v1/rag/knowledge-base/import": ["post"],
   "/api/v1/rag/patterns": ["get"],
   "/api/v1/rag/query": ["post"],
   "/api/v1/rag/stats": ["get"],
@@ -760,6 +839,10 @@ export const API_METHODS = {
   "/api/v1/resilience/circuit-breakers/{target}/reset": ["post"],
   "/api/v1/resilience/metrics": ["get"],
   "/api/v1/resilience/metrics/prom": ["get"],
+  "/api/v1/results/isolated": ["get"],
+  "/api/v1/results/isolated/{key}": ["get"],
+  "/api/v1/results/isolated/{key}/dismiss": ["post"],
+  "/api/v1/results/isolated/{key}/retry": ["post"],
   "/api/v1/runtime/domain": ["get"],
   "/api/v1/runtime/phase-ledger": ["get"],
   "/api/v1/runtime/result-merge-summary": ["get"],
@@ -774,6 +857,7 @@ export const API_METHODS = {
   "/api/v1/security/policy": ["get", "put"],
   "/api/v1/security/policy/evaluate": ["post"],
   "/api/v1/security/stats": ["get"],
+  "/api/v1/security/tool-permissions": ["get", "post"],
   "/api/v1/security/weights-admission": ["get"],
   "/api/v1/sessions": ["get", "post"],
   "/api/v1/sessions/ingest_turns": ["post"],
@@ -781,8 +865,10 @@ export const API_METHODS = {
   "/api/v1/sessions/primary": ["get"],
   "/api/v1/sessions/reconcile": ["post"],
   "/api/v1/sessions/{session_id}": ["get"],
+  "/api/v1/sessions/{session_id}/evidence/export": ["get"],
   "/api/v1/sessions/{session_id}/history": ["get"],
   "/api/v1/sessions/{session_id}/join": ["post"],
+  "/api/v1/sessions/{session_id}/persona/reset": ["post"],
   "/api/v1/sessions/{session_id}/sync": ["post"],
   "/api/v1/slo/metrics": ["get"],
   "/api/v1/slo/operational": ["get"],
@@ -790,6 +876,9 @@ export const API_METHODS = {
   "/api/v1/stream": ["get"],
   "/api/v1/system/completion-status": ["get"],
   "/api/v1/system/config": ["get"],
+  "/api/v1/system/container-runtime": ["get"],
+  "/api/v1/system/container-runtime/choice": ["post"],
+  "/api/v1/system/container-runtime/test": ["post"],
   "/api/v1/system/dual-repo-progress": ["get"],
   "/api/v1/system/health": ["get"],
   "/api/v1/system/mcp": ["get"],
@@ -805,7 +894,10 @@ export const API_METHODS = {
   "/api/v1/tasks/{task_id}": ["get"],
   "/api/v1/tasks/{task_id}/cancel": ["delete", "post"],
   "/api/v1/tasks/{task_id}/result": ["post"],
+  "/api/v1/tasks/{task_id}/timeline": ["get"],
+  "/api/v1/twin/couple-all": ["post"],
   "/api/v1/twin/create": ["post"],
+  "/api/v1/twin/decouple-all": ["post"],
   "/api/v1/twin/scenario": ["post"],
   "/api/v1/twin/status": ["get"],
   "/api/v1/twin/{twin_id}": ["delete", "get"],
@@ -911,11 +1003,31 @@ export interface AutonomousRequest {
   "model_alias"?: string | null;
 }
 
+export interface Body_agent_identity_add_goal_api_v1_agent_identity_goals_post {
+  "text": string;
+}
+
+export interface Body_agent_identity_add_value_api_v1_agent_identity_values_post {
+  "text": string;
+}
+
+export interface Body_container_runtime_choose_api_v1_system_container_runtime_choice_post {
+  "runtime": string;
+}
+
+export interface Body_container_runtime_test_api_v1_system_container_runtime_test_post {
+  "runtime": string;
+}
+
 export interface Body_create_transcription_v1_audio_transcriptions_post {
   "file": string;
   "language"?: string;
   "model"?: string;
   "response_format"?: string;
+}
+
+export interface Body_rag_kb_import_api_v1_rag_knowledge_base_import_post {
+  "entries": Array<Record<string, unknown>>;
 }
 
 export interface BudgetRecordRequest {
@@ -1203,6 +1315,10 @@ export interface LearnFromExperienceRequest {
   "success": boolean;
 }
 
+export interface LocalBrainSwitchRequest {
+  "model": string;
+}
+
 export interface MCPLoadRequest {
   "args"?: Array<string>;
   "auto_start"?: boolean;
@@ -1226,6 +1342,12 @@ export interface MeshSendRequest {
 
 export interface MeshWorkerToggleRequest {
   "enable": boolean;
+}
+
+export interface ModelDownloadRequest {
+  "family"?: string;
+  "model_id": string;
+  "quantization"?: string;
 }
 
 export interface ModelSyncRequest {

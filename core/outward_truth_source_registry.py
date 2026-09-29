@@ -662,16 +662,6 @@ def validate_surface_contract(
     }
 
 
-def enforce_surface_contract(
-    surface_name: str,
-    observed_registry_fields: Optional[Iterable[str]] = None,
-) -> None:
-    """Raise when a surface violates registry governance constraints."""
-    report = validate_surface_contract(surface_name, observed_registry_fields)
-    if not report["is_valid"]:
-        raise AssertionError(f"Truth-source registry contract violation for {surface_name}: " f"{report['violations']}")
-
-
 def build_registry_snapshot() -> Dict[str, Any]:
     """Return a full JSON-serialisable snapshot of the registry for operator surfaces."""
     governance = validate_registry_governance()

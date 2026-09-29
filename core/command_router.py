@@ -96,6 +96,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
+from core import dispatch_telemetry as _dispatch_telemetry
 from core import upper_ports
 from core.schemas.task_envelope import TaskEnvelope
 
@@ -818,9 +819,27 @@ class CommandRouter:
     # ------------------------------------------------------------------
 
     def _is_high_risk_command(self, command: str) -> bool:
-        """Return True when *command* matches a known high-risk pattern."""
+        """Return True when *command* matches a known high-risk pattern.
+
+        内置高危词表命中，或零信任规则表（``PUT /api/v1/security/policy`` 改的那张）要求人工确认。
+        此前那张表只被 ``/evaluate`` 端点读，改它对任何执行都不起作用。表只能在内置词表之上
+        **加**确认，不能把内置的高危命令改成免确认。
+        """
+        return self._is_builtin_high_risk(command) or self._zero_trust_requires_hitl(command)
+
+    def _is_builtin_high_risk(self, command: str) -> bool:
         cmd_lower = command.lower()
         return any(kw in cmd_lower for kw in self._HIGH_RISK_COMMANDS)
+
+    @staticmethod
+    def _zero_trust_requires_hitl(command: str) -> bool:
+        try:
+            from core.routes.security_policy import evaluate_policy
+
+            return bool(evaluate_policy(action=command, tool=command).get("require_hitl"))
+        except Exception as exc:  # noqa: BLE001 — 表不可用时退回内置词表，不放大也不放行
+            logger.debug("zero-trust policy evaluation unavailable: %s", exc)
+            return False
 
     async def _await_high_risk_confirmation(
         self, command: str, device_id: str, task_id: str, trace_id: str
@@ -1352,6 +1371,7 @@ class CommandRouter:
                 agent_capabilities=_meta.get("agent_capabilities"),
             )
             if not acl_result.allowed:
+                _dispatch_telemetry.on_route_rejected(envelope, "ACL_DENIED")
                 return {
                     "request_id": envelope.task_id,
                     "task_id": envelope.task_id,
@@ -1403,6 +1423,7 @@ class CommandRouter:
                     )
                 except Exception as _audit_exc:  # noqa: BLE001
                     logger.debug("route_envelope HITL audit emit skipped: %s", _audit_exc)
+                _dispatch_telemetry.on_route_rejected(envelope, "HITL_APPROVAL_REQUIRED")
                 return {
                     "success": False,
                     "result": None,
@@ -1507,6 +1528,16 @@ class CommandRouter:
                         _cap_graph_fallbacks = [
                             getattr(r, "node_id", None) for r in _cgraph_fb_records if getattr(r, "node_id", None)
                         ]
+                        # 第一个重试目标也按「能力 + 网络路径」联合挑：能力面给的串只看能力，
+                        # 路不通的候选排在前面时，首次重试照样白跑一趟
+                        from core.capability_network_bridge import fallback_joint_select as _joint_fallback
+
+                        _joint_fb = _joint_fallback(
+                            required_capabilities=_caps_for_pool,
+                            exclude_ids=[_cap_graph_selected] if _cap_graph_selected else [],
+                        ).selected_provider_id
+                        if _joint_fb:
+                            _cap_graph_fallbacks = [_joint_fb] + [f for f in _cap_graph_fallbacks if f != _joint_fb]
                     except Exception as _bridge_exc:
                         logger.warning(
                             "PR-CC: capability_network_bridge 不可用，联合选择降级为纯能力选择"
@@ -1570,6 +1601,7 @@ class CommandRouter:
                         _update["metadata"] = _merged_meta
                     envelope = envelope.model_copy(update=_update)
                 else:
+                    _dispatch_telemetry.on_route_rejected(envelope, "INVALID_ENVELOPE")
                     return {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
@@ -1770,6 +1802,10 @@ class CommandRouter:
             envelope = _lcm.mark_running(envelope)
         except Exception as _lc_exc:
             logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
+        if getattr(envelope, "continuity_context", None):
+            from core.dispatch_continuity_gate import associate_resumed_mesh_execution
+
+            associate_resumed_mesh_execution(envelope)
 
         # ── PR-WEBRTC-TASK-LIFECYCLE: WebRTC signaling handshake ──────────────
         # When the envelope declares that it requires a WebRTC video stream,
@@ -1803,6 +1839,7 @@ class CommandRouter:
                     "requires_webrtc=True but no device resolved task_id=%s",
                     envelope.task_id,
                 )
+                _dispatch_telemetry.on_route_rejected(envelope, "INVALID_ENVELOPE")
                 return {
                     "request_id": envelope.task_id,
                     "task_id": envelope.task_id,
@@ -1861,6 +1898,7 @@ class CommandRouter:
                             envelope.task_id,
                             _wrtc_ready_result.message,
                         )
+                        _dispatch_telemetry.on_route_rejected(envelope, "WEBRTC_TASK_INIT_FAILED")
                         return {
                             "request_id": envelope.task_id,
                             "task_id": envelope.task_id,
@@ -2083,6 +2121,9 @@ class CommandRouter:
                         )
                         _cap_confirmed_targets = _fallback_targets
                         _cap_unconfirmed_targets = _current_targets
+                        _dispatch_telemetry.on_fallback(
+                            envelope, "capability_mismatch", f"{_current_targets}→{_fallback_targets}"
+                        )
                         envelope = envelope.model_copy(update={"targets": _fallback_targets})
                         envelope = envelope.model_copy(
                             update={
@@ -2104,6 +2145,7 @@ class CommandRouter:
                             _cap_query_caps,
                         )
                         _cap_unconfirmed_targets = _current_targets
+                        _dispatch_telemetry.on_route_rejected(envelope, "capability_mismatch")
                         _t0_val = locals().get("_t0_val") or 0.0
                         return {
                             "request_id": envelope.task_id,
@@ -2144,6 +2186,7 @@ class CommandRouter:
                         _current_targets_for_empty,
                     )
                     _cap_unconfirmed_targets = _current_targets_for_empty
+                    _dispatch_telemetry.on_route_rejected(envelope, "capability_mismatch_no_executor")
                     return {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
@@ -2391,6 +2434,7 @@ class CommandRouter:
                     _constraint_chain_trace["v3_slot_gate_applied"] = True
                     _constraint_chain_trace["v3_blocked_targets"] = list(_v3_blocked_targets)
                     _v3_blocked_result["_constraint_chain_trace"] = dict(_constraint_chain_trace)
+                    _dispatch_telemetry.on_route_rejected(envelope, "V3_SLOT_BLOCKED")
                     return _v3_blocked_result
 
             except Exception as _v3_exc:
@@ -2410,6 +2454,7 @@ class CommandRouter:
                         "route_envelope [V3-slot-gate]: strict mode blocks dispatch on authority error: %s",
                         _v3_exc,
                     )
+                    _dispatch_telemetry.on_route_rejected(envelope, "V3_SLOT_BLOCKED")
                     return {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
@@ -2544,6 +2589,7 @@ class CommandRouter:
                 "route_envelope: ReplayFoundation route writes skipped: %s",
                 _replay_pre_exc,
             )
+        _dispatch_telemetry.on_dispatch_planned(envelope, _pre_dispatch_expl_str, _live_expl_builder)
 
         # ── PR-G: Emit dispatch decision event for observability sink ─────────
         # Emit before executing so the event is recorded even if dispatch fails.
@@ -2956,6 +3002,7 @@ class CommandRouter:
                 )
         except Exception as _lc_exc:
             logger.debug("Lifecycle terminal transition skipped: %s", _lc_exc)
+        _dispatch_telemetry.on_dispatch_finished(envelope, result)
 
         # ── PR-5 RemoteExecutionMode: propagate through result ───────────────
         if envelope.remote_execution_mode is not None:
@@ -3573,6 +3620,19 @@ class CommandRouter:
             *(self.route_envelope(_subtask.envelope) for _subtask in _subtasks),
             return_exceptions=True,
         )
+        # 任务图里补上汇合边：每个子信封已由各自的 route_envelope 登记成节点，父信封是收口节点；
+        # 此前图里只有散出去的子节点，看不出它们在哪里汇合
+        try:
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK_fanin
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_fanin
+
+            _get_tgr_fanin().register_fanin(
+                [_subtask.envelope.task_id for _subtask in _subtasks],
+                envelope.task_id,
+                contributor=_WCK_fanin.COMMAND_ROUTER,
+            )
+        except Exception as _fanin_exc:
+            logger.debug("parallel fan-in registration skipped: %s", _fanin_exc)
 
         for _subtask, _result in zip(_subtasks, _results):
             _idx = _subtask.index
@@ -3922,13 +3982,24 @@ class CommandRouter:
 
                 interceptor = get_security_interceptor()
                 try:
-                    ack_token = await interceptor.require_approval(
-                        action=command,
-                        task_id=task_id,
-                        risk_level=RiskLevel.HIGH,
-                        requestor="command_router",
-                        context={"device_id": device_id, "command": command, "payload": payload},
-                    )
+                    if self._is_builtin_high_risk(command):
+                        ack_token = await interceptor.require_approval(
+                            action=command,
+                            task_id=task_id,
+                            risk_level=RiskLevel.HIGH,
+                            requestor="command_router",
+                            context={"device_id": device_id, "command": command, "payload": payload},
+                        )
+                    else:
+                        # 只因零信任规则表才进来的：审批单带上表给的风险级别与命中的规则
+                        _decision = await interceptor.check_and_intercept(
+                            command,
+                            tool=command,
+                            task_id=task_id,
+                            requestor="command_router",
+                            context={"device_id": device_id, "command": command, "payload": payload},
+                        )
+                        ack_token = _decision["ack_token"]
                     self._emit_audit(
                         _EvHITL.APPROVAL_GRANTED,
                         trace_id=trace_id,

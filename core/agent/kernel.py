@@ -526,10 +526,7 @@ class AgentKernel:
 
         # task_execute 或 hybrid：加载 SOUL（仅此时注入）
         # 显式断言：确保此代码路径只在执行模式下被触发
-        assert intent.mode in (
-            IntentMode.TASK_EXECUTE,
-            IntentMode.HYBRID,
-        ), f"SOUL 只能在 task_execute/hybrid 模式加载，当前 mode={intent.mode}"
+        assert intent.is_execution(), f"SOUL 只能在 task_execute/hybrid 模式加载，当前 mode={intent.mode}"
         # PR-006: record the phase at which SOUL is injected so KernelResponse
         # carries an auditable soul_injection_phase field (None for chat_only).
         soul_injection_phase = intent.mode

@@ -21,6 +21,9 @@ import {
   fetchGitHubAddons,
   installGitHubAddon,
   uninstallGitHubAddon,
+  fetchIsolatedResults,
+  retryIsolatedResult,
+  dismissIsolatedResult,
   fetchBundles,
   fetchCardTurns,
   fetchCards,
@@ -43,6 +46,8 @@ import { createLine } from './ui/line';
 import type { LineTrust } from './ui/line';
 import { createIsland } from './ui/island';
 import { createThread } from './ui/thread';
+import { createRehearsal, mergeStep } from './ui/rehearsal';
+import { createIsolatedResults } from './ui/isolated_results';
 import { createDock } from './ui/dock';
 import { createWired, deriveWired } from './ui/wired';
 import { createSettings } from './ui/settings';
@@ -142,6 +147,7 @@ function mount(host: HTMLElement): void {
     onPrivacy: (paused) => void flipPrivacy(paused),
   });
   const thread = createThread();
+  const rehearsal = createRehearsal();
   const dock = createDock({
     onSend: (text) => void send(text),
     onStop: () => void stop(),
@@ -166,15 +172,21 @@ function mount(host: HTMLElement): void {
     onUninstall: (name) => void uninstallAddon(name),
   });
 
+  const isolatedResults = createIsolatedResults({
+    onRetry: (key) => void retryIsolated(key),
+    onDismiss: (key) => void dismissIsolated(key),
+  });
+
   const settings = createSettings({
     onClose: () => store.patch({ settingsOpen: false }),
     onSave: (changes) => void applyConfig(changes),
-    // 顺序:先模型服务,再 GitHub 项目。两者都是"接一个外面的东西进来",
-    // 而模型服务是更多人来这一页要办的那件事。
-    topSections: [userProviders.root, githubAddons.root],
+    // 顺序:没收口的结果最前 —— 它只在出事时出现(一条都没有时整段不占位置),
+    // 出现了就是要人看的。然后是模型服务、GitHub 项目:两者都是"接一个外面的
+    // 东西进来",而模型服务是更多人来这一页要办的那件事。
+    topSections: [isolatedResults.root, userProviders.root, githubAddons.root],
   });
 
-  main.append(island.root, thread.root, dock.root, settings.root);
+  main.append(island.root, thread.root, rehearsal.root, dock.root, settings.root);
   panel.append(deck.root, main);
   shell.append(panel);
   host.replaceChildren(shell);
@@ -217,6 +229,7 @@ function mount(host: HTMLElement): void {
       s.slim,
     );
     thread.render(s.turns, s.lockstep, s.lockstepReason);
+    rehearsal.render(s.rehearsal);
     // 停止键:面板自己发起的那一轮在跑,或者它此刻正在动手(可能是一句语音让它动的)。
     dock.render(s.bundles, s.tiers, s.tierGaps, s.popover, s.chatBusy || Boolean(s.posture?.acting));
     settings.render(s.config, s.settingsOpen, s.configBusy);
@@ -232,6 +245,7 @@ function mount(host: HTMLElement): void {
       s.githubAddonsBusy,
       s.githubAddonNotice,
     );
+    isolatedResults.render(s.isolated, s.isolatedPending, s.isolatedBusy, s.isolatedNotice);
   }
 
   store.subscribe(render);
@@ -269,7 +283,42 @@ function mount(host: HTMLElement): void {
     // 端点和插件各走各的路,和那 335 个键一起重新拉 —— 同样的理由:别拿缓存
     // 让人对着过期的状态做决定(Key 会过期、网关会挂、插件会被别处卸掉)。
     // 安装策略也在这一趟里:GITHUB_ALLOWLIST 可能刚刚就在上面那批键里被改了。
-    await Promise.all([loadEndpoints(), loadAddons()]);
+    await Promise.all([loadEndpoints(), loadAddons(), loadIsolated()]);
+  }
+
+  // ── 没收口的结果 ───────────────────────────────────────────────────────────
+
+  /** 拉一次隔离队列。拉不到就**留 null**,让那一段说「后端没接上」而不是「没有问题」。 */
+  async function loadIsolated(): Promise<void> {
+    const page = await fetchIsolatedResults(BASE);
+    store.patch({
+      isolated: page ? page.items : null,
+      isolatedPending: page ? page.pendingRetry : store.state.isolatedPending,
+    });
+  }
+  // 开机就拉一次:隔离项落盘在后端,重启后还在 —— 设置页没打开过不代表没有。
+  void loadIsolated();
+
+  /** 再试一次。结论照后端说的写,不自己推断。 */
+  async function retryIsolated(key: string): Promise<void> {
+    store.patch({ isolatedBusy: true, isolatedNotice: '' });
+    const verdict = await retryIsolatedResult(BASE, key);
+    const notice =
+      verdict === 'recovered'
+        ? '这条补上了，已从清单里移出'
+        : verdict === 'isolated'
+          ? '又试了一次，还是没补上 —— 原因见卡片'
+          : '这次重试没发出去（后端没接上）';
+    await loadIsolated();
+    store.patch({ isolatedBusy: false, isolatedNotice: notice });
+  }
+
+  /** 知道了:标记已看过。记录后端保留着,只是不再列出来。 */
+  async function dismissIsolated(key: string): Promise<void> {
+    store.patch({ isolatedBusy: true, isolatedNotice: '' });
+    const ok = await dismissIsolatedResult(BASE, key);
+    await loadIsolated();
+    store.patch({ isolatedBusy: false, isolatedNotice: ok ? '' : '没标记上（后端没接上）' });
   }
 
   /**
@@ -673,6 +722,7 @@ function mount(host: HTMLElement): void {
     },
     onTurn: (role, text, final) => appendTurn(role, text, final),
     onDevices: (rows) => store.patch({ devices: rows }),
+    onRehearsal: (step) => store.patch({ rehearsal: mergeStep(store.state.rehearsal, step) }),
   }, clientId);
   socket.start();
 
@@ -729,7 +779,8 @@ function mount(host: HTMLElement): void {
     });
     const ctrl = new AbortController();
     inflight = ctrl;
-    store.patch({ turns, lockstep: 'off', lockstepReason: '', chatBusy: true });
+    // 上一件事的推演不挂在这一件旁边 —— 见 store.ts 的 rehearsal。
+    store.patch({ turns, lockstep: 'off', lockstepReason: '', chatBusy: true, rehearsal: [] });
 
     const idx = turns.length - 1;
     const patchAgent = (fn: (t: Turn) => Turn): void => {

@@ -624,33 +624,6 @@ class DeviceOrchestrator:
             logger.warning("DevicePoolManager.select_device 失败: %s", exc)
             return None
 
-    def register_device_in_pool(
-        self,
-        device_id: str,
-        capabilities: Optional[List[str]] = None,
-        device_type: str = "",
-        weight: float = 1.0,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        """Register a device in the unified DevicePoolManager.
-
-        This method ensures that devices registered via the orchestrator are
-        also visible to the pool scheduler.
-        """
-        try:
-            from core.device_pool_manager import get_device_pool_manager
-
-            pool = get_device_pool_manager()
-            pool.register_device(
-                device_id,
-                capabilities=capabilities,
-                device_type=device_type,
-                weight=weight,
-                metadata=metadata,
-            )
-        except Exception as exc:
-            logger.warning("DevicePoolManager.register_device 失败: %s", exc)
-
 
 # ===========================================================================
 # 全局单例

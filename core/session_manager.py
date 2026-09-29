@@ -788,24 +788,6 @@ class SessionManager:
             trace_id=trace_id,
         )
 
-    def record_verdict(
-        self,
-        session_id: str,
-        approved: bool,
-        *,
-        reason: str = "",
-        reviewer: str = "reviewer",
-        trace_id: str = "",
-    ) -> str:
-        """记录一次校验/审查（通过或否决 + 理由）。"""
-        return self.record_evidence(
-            session_id,
-            EvidenceKind.VERDICT,
-            actor=reviewer,
-            payload={"approved": bool(approved), "reason": reason},
-            trace_id=trace_id,
-        )
-
     def get_evidence(self, session_id: str, kind: Optional[str] = None, limit: int = 0) -> List[Dict]:
         """读取会话证据链（可按 kind 过滤、limit 取最近 N 条）。"""
         session = self._sessions.get(session_id)

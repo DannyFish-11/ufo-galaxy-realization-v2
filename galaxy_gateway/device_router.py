@@ -1904,7 +1904,15 @@ class DeviceRouter:
             _limit = int(os.environ.get("GALAXY_MULTI_DEVICE_DISPATCH_LIMIT", "8"))
             _dispatch_sem = asyncio.Semaphore(max(1, _limit))
 
+            # 每一路子任务一个子 span：同一个 trace_id、各自的 span_id，网关日志里能分清是哪一路。
+            _parent_trace = TraceContext.from_message(task)
+
             async def _bounded_dispatch(subtask: Dict, device: "Device") -> Dict:
+                _child = _parent_trace.child_span()
+                subtask.setdefault("trace_id", _child.trace_id)
+                subtask["span_id"] = _child.span_id
+                subtask["parent_span_id"] = _parent_trace.span_id
+                emit_gateway_log("subtask_dispatch", trace_ctx=_child, device_id=getattr(device, "device_id", ""))
                 async with _dispatch_sem:
                     return await self.dispatch_task(subtask, device)
 
@@ -1957,6 +1965,8 @@ class DeviceRouter:
             _result: dict = {
                 "success": success,
                 "subtask_results": results,
+                # 按设备归拢的成败计数（成功 / 失败 / 每台设备最后一次结果），调用方不用再自己数
+                "aggregate": self.aggregate_results([r for r in results if isinstance(r, dict)]),
                 "message": (
                     "跨设备任务执行完成"
                     if success
@@ -2049,6 +2059,17 @@ class DeviceRouter:
             event = self._task_events.get(task_id)
             if event:
                 event.set()
+
+            # 经 NATS 转来、由网关转发给设备的任务，等待方挂在 GatewayNATSAdapter 上；此前设备回的
+            # 结果只唤醒上面这个本地事件，NATS 那边的等待永远等到超时。
+            try:
+                from galaxy_gateway.gateway_nats_adapter import get_gateway_nats_adapter
+
+                _nats_adapter = get_gateway_nats_adapter()
+                if _nats_adapter is not None and task_id in getattr(_nats_adapter, "_pending", {}):
+                    _nats_adapter.resolve_task(task_id, result)
+            except Exception as _nats_exc:  # noqa: BLE001
+                logger.debug("device_router: NATS adapter resolve skipped: %s", _nats_exc)
 
             if task_id in self.task_queue:
                 task = self.task_queue[task_id]

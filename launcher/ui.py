@@ -44,8 +44,6 @@ from typing import Any, Dict, List, Optional
 
 from core.ascii_art import (
     GALAXY_VERSION,
-    ansi_supported,
-    print_banner,
 )
 from launcher.record import (
     EXIT_MEANING,
@@ -330,11 +328,6 @@ def rule() -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_banner() -> None:
-    """横幅。原样走 ``ascii_art.print_banner``，一个像素不改。"""
-    print_banner()
-
-
 def render_tui(rec: Optional[StartupRecord] = None, *, verbose: bool = False) -> None:
     """把整份记录渲染成栏目式概览 + 总结卡。
 
@@ -479,8 +472,3 @@ def finish(exit_code: int = 0, *, verbose: bool = False, tui: bool = True) -> St
     render_json(rec)
     render_log(rec)
     return rec
-
-
-def color_enabled() -> bool:
-    """当前是否会输出颜色。供调用方决定要不要走带色的分支。"""
-    return ansi_supported()

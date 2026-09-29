@@ -65,14 +65,60 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         return get_digital_twin_engine()
 
+    def _state_fetcher_for(device_id: str):
+        """单个与批量耦合共用的状态拉取器。"""
+
+        async def state_fetcher():
+            # 修复契约漂移:DeviceCommunication 无 get_connection 方法、存的是
+            # DeviceConnection 对象(非 dict)。原代码 AttributeError 直接崩掉
+            # 孪生耦合的状态拉取。用真实 API 取连接;device_comm 不持有设备
+            # 状态快照,故连接在线时返回空状态(如实,不臆造),否则 {}。
+            from core.device_communication import device_comm
+
+            conn = device_comm.connections.get(device_id)
+            if conn is not None:
+                return getattr(conn, "last_state", {}) or {}
+            return {}
+
+        return state_fetcher
+
+    def _connected_devices():
+        try:
+            from core.device_communication import device_comm
+
+            return device_comm.list_connected_devices()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读当前连接的设备失败: %s", exc)
+            return []
+
     @router.get("/api/v1/twin/status")
     async def twin_global_status():
         """全局孪生引擎状态"""
         try:
             engine = _get_engine()
-            return JSONResponse(engine.get_global_state())
+            state = dict(engine.get_global_state())
+            # 孪生体只能耦合到在线的物理设备 —— 把当前连着的设备一起给出，
+            # 面板/调用方不用另查就知道哪些孪生体耦合得上。
+            state["connected_devices"] = _connected_devices()
+            return JSONResponse(state)
         except Exception as e:
             return JSONResponse({"error": str(e), "twins": {}})
+
+    @router.post("/api/v1/twin/couple-all")
+    async def twin_couple_all(auth: dict = Depends(require_auth)):
+        """把全部孪生体各自耦合到自己的物理设备。"""
+        from core.digital_twin_engine import CouplingMode
+
+        engine = _get_engine()
+        await engine.couple_all(_state_fetcher_for, mode=CouplingMode.COUPLED)
+        return JSONResponse({"success": True, "coupled": sorted(engine.twins.keys())})
+
+    @router.post("/api/v1/twin/decouple-all")
+    async def twin_decouple_all(auth: dict = Depends(require_auth)):
+        """全部孪生体解耦。"""
+        engine = _get_engine()
+        await engine.decouple_all()
+        return JSONResponse({"success": True, "decoupled": sorted(engine.twins.keys())})
 
     @router.post("/api/v1/twin/create")
     async def twin_create(req: TwinCreateRequest, auth: dict = Depends(require_auth)):
@@ -140,21 +186,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"孪生体不存在: {twin_id}")
 
         try:
-            from core.device_communication import device_comm
-
-            async def state_fetcher():
-                # 修复契约漂移:DeviceCommunication 无 get_connection 方法、存的是
-                # DeviceConnection 对象(非 dict)。原代码 AttributeError 直接崩掉
-                # 孪生耦合的状态拉取。用真实 API 取连接;device_comm 不持有设备
-                # 状态快照,故连接在线时返回空状态(如实,不臆造),否则 {}。
-                conn = device_comm.connections.get(twin.device_id)
-                if conn is not None:
-                    return getattr(conn, "last_state", {}) or {}
-                return {}
-
             from core.digital_twin_engine import CouplingMode
 
-            await twin.couple(state_fetcher, mode=CouplingMode.COUPLED)
+            await twin.couple(_state_fetcher_for(twin.device_id), mode=CouplingMode.COUPLED)
             return JSONResponse(
                 {
                     "success": True,

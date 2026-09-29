@@ -352,23 +352,5 @@ class EdgeTTSEngine:
         """
         return cls.CHINESE_VOICES.copy()
 
-    def set_voice(self, voice: str) -> None:
-        """设置默认声音。
-
-        Args:
-            voice: 声音ID。
-        """
-        self.voice = voice
-        logger.debug("TTS voice set to: %s", voice)
-
-    def set_rate(self, rate: str) -> None:
-        """设置语速。
-
-        Args:
-            rate: 语速调整 (如 "+0%", "-25%", "+25%")。
-        """
-        self.rate = rate
-        logger.debug("TTS rate set to: %s", rate)
-
     def __repr__(self) -> str:
         return f"EdgeTTSEngine(voice={self.voice}, " f"rate={self.rate}, volume={self.volume})"

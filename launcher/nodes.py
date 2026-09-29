@@ -489,6 +489,15 @@ class SystemManager:
             )
 
             await self.connection_manager.register_connection(connection_id, url, conn_config)
+            # 连上 / 断开同步进能力同化层里这个节点的在场（此前连接管理器的回调口没有订阅方，
+            # 节点断了，路由仍把它当在线的执行者）
+            from core.node_discovery_runtime import mark_node_gone, mark_node_seen
+
+            node_key = f"Node_{config.id}_{config.name}"  # 与节点表、织物注册表同一个节点名
+            self.connection_manager.on_connected(connection_id, lambda _cid: mark_node_seen(node_key))
+            self.connection_manager.on_disconnected(
+                connection_id, lambda _cid: mark_node_gone(node_key, reason="connection_lost")
+            )
 
             # 尝试建立连接
             await self.connection_manager.connect(connection_id)

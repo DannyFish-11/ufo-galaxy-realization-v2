@@ -53,8 +53,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("UFO-Galaxy.SessionRoaming")
 
-# 持久化存储目录（JSON 文件）
-PERSISTENCE_DIR = Path(os.path.expanduser("~")) / ".galaxy" / "session_roaming"
+# 持久化存储目录（JSON 文件）。跟随 GALAXY_DATA_DIR —— 本仓所有持久化状态都认它，tests/conftest.py 靠它把
+# 测试状态隔离到临时目录；此前这里写死在家目录，测试跑一次就往真实的 ~/.galaxy 里写一批会话快照。
+# 没设这个变量时仍是原来的 ~/.galaxy/session_roaming。设了而新位置还没有会话文件时，读一次旧位置（只读），
+# 已有的漫游会话不会因为设了变量就"丢了"。
+_LEGACY_PERSISTENCE_DIR = Path(os.path.expanduser("~")) / ".galaxy" / "session_roaming"
+_DATA_DIR = os.environ.get("GALAXY_DATA_DIR", "").strip()
+PERSISTENCE_DIR = Path(_DATA_DIR) / "session_roaming" if _DATA_DIR else _LEGACY_PERSISTENCE_DIR
 PERSISTENCE_FILE = PERSISTENCE_DIR / "sessions.json"
 
 
@@ -212,14 +217,20 @@ class SessionRoamingManager:
 
         # 从磁盘加载持久化会话
         self._load_sessions_from_disk()
+        # 上次进程在迁移中途退出的会话：按迁移开始时落盘的快照回到原设备
+        self._recover_interrupted_migrations()
 
         logger.info("SessionRoamingManager initialized")
 
     def _load_sessions_from_disk(self):
         """从磁盘 JSON 文件加载会话数据。"""
         try:
-            if PERSISTENCE_FILE.exists():
-                data = json.loads(PERSISTENCE_FILE.read_text(encoding="utf-8"))
+            source = PERSISTENCE_FILE
+            legacy = _LEGACY_PERSISTENCE_DIR / "sessions.json"
+            if not source.exists() and source == PERSISTENCE_DIR / "sessions.json" and legacy.exists():
+                source = legacy
+            if source.exists():
+                data = json.loads(source.read_text(encoding="utf-8"))
                 for sid, sdict in data.get("sessions", {}).items():
                     try:
                         session = Session(
@@ -312,15 +323,6 @@ class SessionRoamingManager:
         session.last_active = time.time()
         self._save_sessions_to_disk()
 
-    def update_task_state(self, session_id: str, task_state: Dict):
-        """更新会话的任务状态"""
-        session = self._sessions.get(session_id)
-        if not session:
-            return
-        session.context.task_state.update(task_state)
-        session.last_active = time.time()
-        self._save_sessions_to_disk()
-
     def close_session(self, session_id: str):
         """关闭会话"""
         session = self._sessions.get(session_id)
@@ -375,8 +377,10 @@ class SessionRoamingManager:
             # 步骤 1：序列化上下文
             context_snapshot = session.context.to_dict()
 
-            # 步骤 2：持久化快照到磁盘
+            # 步骤 2：持久化快照到磁盘，再把「迁移中」写盘 —— 进程在这之后任何一刻退出，
+            #         重启时都能认出这是一次没做完的迁移，并用快照回到原设备
             self._persist_snapshot(session_id, context_snapshot)
+            self._save_sessions_to_disk()
 
             # 步骤 3：推送到目标设备（必须成功，否则回滚）
             push_ok = await self._push_context_to_device(target_device_id, session_id, context_snapshot)
@@ -387,6 +391,8 @@ class SessionRoamingManager:
                 )
                 session.device_id = original_device_id
                 session.state = SessionState.ACTIVE
+                self._save_sessions_to_disk()
+                self._discard_snapshot(session_id)
                 return False
 
             # 步骤 4：推送成功，提交状态变更（两阶段提交）
@@ -397,6 +403,7 @@ class SessionRoamingManager:
             session.state = SessionState.ACTIVE
             session.last_active = time.time()
             self._save_sessions_to_disk()
+            self._discard_snapshot(session_id)
 
             logger.info(f"[SessionRoaming] 迁移成功: session_id={session_id} " f"-> device={target_device_id}")
 
@@ -417,6 +424,7 @@ class SessionRoamingManager:
             session.device_id = original_device_id
             session.state = SessionState.ACTIVE
             self._save_sessions_to_disk()
+            self._discard_snapshot(session_id)
             return False
 
     async def auto_migrate_on_attention_shift(
@@ -444,7 +452,12 @@ class SessionRoamingManager:
                 target = focused_devices[0]
                 if target != device_id:
                     logger.info(f"[SessionRoaming] 检测到注意力转移，自动迁移: " f"{device_id} -> {target}")
-                    await self.migrate_session(session_id, target)
+                    # 会话迁移只有一个入口（D3）：先认会话在哪个存储，再迁
+                    from core.session_migration import migrate_session as _migrate
+
+                    await _migrate(
+                        session_id=session_id, target_device=target, source_device=device_id, roaming_manager=self
+                    )
 
     def set_migration_callback(self, callback: Callable[[str, str, str], Any]):
         """
@@ -481,6 +494,39 @@ class SessionRoamingManager:
         except Exception as e:
             logger.warning(f"[SessionRoaming] 加载快照失败: {e}")
             return None
+
+    def _discard_snapshot(self, session_id: str) -> None:
+        """迁移收口（成功或回滚）后删掉快照：留着的快照只代表没做完的迁移。"""
+        try:
+            (PERSISTENCE_DIR / f"snapshot_{session_id}.json").unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 删除快照失败: {e}")
+
+    def _recover_interrupted_migrations(self) -> None:
+        """重启时处理上次停在「迁移中」的会话。
+
+        设备映射与 device_id 只在推送成功后才改，所以盘上还是原设备；迁移开始时的上下文在快照里。
+        按快照恢复上下文、回到原设备、标回 active —— 不替用户去重做那次迁移。
+        """
+        recovered = []
+        for sid, session in self._sessions.items():
+            if session.state != SessionState.MIGRATING:
+                continue
+            snapshot = self.load_snapshot(sid)
+            if snapshot is not None:
+                try:
+                    session.context = SessionContext.from_dict(snapshot)
+                except Exception as e:
+                    logger.warning(f"[SessionRoaming] 快照解析失败，保留盘上的上下文: session_id={sid} {e}")
+            session.state = SessionState.ACTIVE
+            self._device_session_map.setdefault(session.device_id, sid)
+            recovered.append(sid)
+        if not recovered:
+            return
+        self._save_sessions_to_disk()
+        for sid in recovered:
+            self._discard_snapshot(sid)
+        logger.warning(f"[SessionRoaming] 上次迁移中途中断的 {len(recovered)} 个会话已按快照回到原设备: {recovered}")
 
     # ------------------------------------------------------------------
     # 推送上下文到目标设备

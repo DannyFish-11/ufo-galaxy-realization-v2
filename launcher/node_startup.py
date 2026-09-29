@@ -908,6 +908,14 @@ class NodeSystemLauncher:
         """
         # Mark OFFLINE in canonical registry first.
         self._register_node_in_canonical_registry(node_name, None, "offline")
+        # 发现服务里对称地注销（上线时 _announce_node_to_discovery 登记过）；
+        # 否则按能力找节点时还会找到这个已经停掉的节点
+        try:
+            from core.node_discovery import get_node_discovery
+
+            get_node_discovery().deregister_node(node_name)
+        except Exception as exc:
+            logger.debug("stop_node: discovery deregister %s skipped: %s", node_name, exc)
         # Stop the underlying process via ServiceManager.
         stopped = self.service_manager.stop_service(node_name)
         if stopped:

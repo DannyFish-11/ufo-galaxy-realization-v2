@@ -22,9 +22,10 @@ Routes:
 
 import json
 import logging
-from typing import Any, Dict, Optional
+import os
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -75,6 +76,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """混合执行统计"""
         return JSONResponse(hybrid_arbiter.get_stats())
 
+    @router.get("/api/v1/hybrid/modes")
+    async def hybrid_modes():
+        """混合执行策略能选的每种模式：人话说明、是否并发、是否降级链。"""
+        from core.hybrid_execution_policy import HybridExecutionMode, get_hybrid_execution_policy
+
+        policy = get_hybrid_execution_policy()
+        return JSONResponse(
+            {
+                "modes": [
+                    {
+                        "mode": m.value,
+                        "description": policy.describe_mode(m),
+                        "concurrent": m.is_concurrent,
+                        "degrade_chain": m.is_degrade_chain,
+                    }
+                    for m in HybridExecutionMode
+                ]
+            }
+        )
+
     @router.get("/api/v1/hybrid/registry")
     async def hybrid_registry():
         """应用能力注册表"""
@@ -123,6 +144,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             }
         )
 
+    # ── Node_72 兼容知识库（rag_memory 的回退后端）：整库导出 / 导入 ──
+    # 导出会带出全部条目原文、导入会改检索结果，两个都要 API 鉴权。
+
+    @router.get("/api/v1/rag/knowledge-base/export", dependencies=[Depends(require_auth)])
+    async def rag_kb_export():
+        import tempfile
+
+        from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "knowledge.json")
+            KnowledgeBaseSystem().export_knowledge(path)
+            with open(path, encoding="utf-8") as fh:
+                return JSONResponse(json.load(fh))
+
+    @router.post("/api/v1/rag/knowledge-base/import", dependencies=[Depends(require_auth)])
+    async def rag_kb_import(entries: List[Dict[str, Any]] = Body(..., embed=True)):
+        import tempfile
+
+        from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
+        required = {"id", "content", "metadata", "timestamp"}
+        bad = [i for i, e in enumerate(entries) if not required.issubset(e)]
+        if bad:
+            raise HTTPException(status_code=422, detail=f"entries missing id/content/metadata/timestamp: {bad[:10]}")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "knowledge.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"entries": entries}, fh, ensure_ascii=False)
+            kb = KnowledgeBaseSystem()
+            kb.import_knowledge(path)
+        return JSONResponse({"imported": len(entries), "total": len(kb.knowledge_entries)})
+
     @router.get("/api/v1/rag/stats")
     async def rag_stats():
         """RAG 记忆统计"""
@@ -151,14 +205,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # ── Phase 5: P2P Mesh Overlay ──────────────────────────────────────────
 
-    from core.mesh_coordinator import get_mesh_coordinator
+    from core.mesh_coordinator import get_mesh_coordinator, inject_mesh_senders
     from core.proxy_relay import RelayRequest as ProxyRelayRequest
     from core.proxy_relay import get_proxy_relay
 
     mesh_coordinator = get_mesh_coordinator()
     proxy_relay = get_proxy_relay()
-
-    mesh_coordinator._ws_send = connection_manager.send_to_device
 
     async def _mesh_p2p_send(target_device: str, msg_bytes: bytes) -> bool:
         """Use device-scoped point-to-point delivery as runtime direct-send surface."""
@@ -183,8 +235,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.warning("mesh direct p2p-equivalent send failed: %s", exc)
             return False
 
-    mesh_coordinator._p2p_send = _mesh_p2p_send
-
     async def _mesh_relay_send(source, target, payload_type, payload):
         result = await proxy_relay.relay(
             ProxyRelayRequest(
@@ -196,7 +246,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         )
         return result.to_dict()
 
-    mesh_coordinator._relay_send = _mesh_relay_send
+    # 经协调器自己的注入口装发送函数（此前在这里直接改它的私有属性）
+    inject_mesh_senders(
+        p2p_sender=_mesh_p2p_send, relay_sender=_mesh_relay_send, ws_sender=connection_manager.send_to_device
+    )
 
     class MeshSendRequest(BaseModel):
         """Mesh 发送请求"""

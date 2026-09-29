@@ -1,0 +1,289 @@
+{
+ "_comment": "scripts/check_wiring.py 的「按文件 + 函数名」精确豁免。只收两类：testhook（只为测试或断言存在：复位、注入、不变量断言，生产路径上就不该有人调）与 framework（由第三方框架按名字回调，静态分析找不到调用方）。每条必须写理由；tests/test_wiring_exemptions.py 核对每条仍指向真实存在的定义、类别合法、理由非空。与 _EXEMPT_NAMES 的区别：那边按名字全仓豁免，这里只豁免这一个文件里的这一个定义，同名的别处函数照样检查。",
+ "exemptions": {
+  "core/audit_layer/fresh_dual_repo_code_audit.py": {
+   "assert_fresh_audit_invariants": [
+    "testhook",
+    "legacy 审计的不变量断言，只在测试里跑"
+   ]
+  },
+  "core/authority_conflict_elimination.py": {
+   "assert_no_competing_authority": [
+    "testhook",
+    "不变量断言（assert_*），用于测试 / 审计"
+   ]
+  },
+  "core/bounded_subject_platform_boundary.py": {
+   "assert_quasi_platform_state_intact": [
+    "testhook",
+    "不变量断言"
+   ]
+  },
+  "core/capability_assimilation.py": {
+   "reset_capability_assimilation_layer": [
+    "testhook",
+    "测试用单例重置"
+   ]
+  },
+  "core/capability_tier.py": {
+   "require_main_chain_capability": [
+    "testhook",
+    "断言包装"
+   ]
+  },
+  "core/channel_plugins.py": {
+   "inject": [
+    "testhook",
+    "docstring：供测试使用"
+   ]
+  },
+  "core/compat_fallback_authority_guard.py": {
+   "assert_canonical_is_decision_authority": [
+    "testhook",
+    "断言"
+   ]
+  },
+  "core/decision_diff_telemetry.py": {
+   "clear_diff_store": [
+    "testhook",
+    "测试清空用"
+   ]
+  },
+  "core/desktop_presence_system.py": {
+   "iter_presence_transition_targets": [
+    "testhook",
+    "docstring 自称测试 / schema 检查用"
+   ],
+   "list_presence_mode_names": [
+    "testhook",
+    "docstring 自称测试 / schema 检查用"
+   ],
+   "simulate_elapsed_time_for_testing": [
+    "testhook",
+    "docstring 自称测试 / schema 检查用"
+   ]
+  },
+  "core/device_execution_profile.py": {
+   "build_rich_profile": [
+    "testhook",
+    "三个便捷工厂只在测试里构造画像；生产由 core/remote_execution_mode_resolver.py 从能力推导画像"
+   ],
+   "build_thin_profile": [
+    "testhook",
+    "三个便捷工厂只在测试里构造画像；生产由 core/remote_execution_mode_resolver.py 从能力推导画像"
+   ],
+   "build_unknown_profile": [
+    "testhook",
+    "三个便捷工厂只在测试里构造画像；生产由 core/remote_execution_mode_resolver.py 从能力推导画像"
+   ]
+  },
+  "core/fusion_entry_adapter.py": {
+   "check_fusion_entry_compliance": [
+    "testhook",
+    "合规检查只对测试 / 审计有意义"
+   ]
+  },
+  "core/lan_discovery.py": {
+   "add_service": [
+    "framework",
+    "zeroconf ServiceListener 的回调（add/update/remove_service），由 zeroconf 调用，不是死代码"
+   ],
+   "remove_service": [
+    "framework",
+    "zeroconf ServiceListener 的回调（add/update/remove_service），由 zeroconf 调用，不是死代码"
+   ],
+   "update_service": [
+    "framework",
+    "zeroconf ServiceListener 的回调（add/update/remove_service），由 zeroconf 调用，不是死代码"
+   ]
+  },
+  "core/model_catalog.py": {
+   "clear_ephemeral_specs": [
+    "testhook",
+    "docstring：测试收尾用"
+   ],
+   "register_ephemeral_spec": [
+    "testhook",
+    "只在本进程临时登记，不进目录；只有测试用"
+   ]
+  },
+  "core/network_graph_runtime.py": {
+   "reset_network_graph_runtime": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/network_topology_runtime.py": {
+   "reset_network_topology_runtime": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/node_discovery.py": {
+   "error_received": [
+    "framework",
+    "asyncio.DatagramProtocol 回调，由事件循环调用"
+   ]
+  },
+  "core/node_governance_runtime.py": {
+   "reset_governance_runtime_cache": [
+    "testhook",
+    "空操作的测试重置钩子"
+   ]
+  },
+  "core/nodes/node_fabric_registry.py": {
+   "reset_node_fabric_registry": [
+    "testhook",
+    "测试用单例重置"
+   ]
+  },
+  "core/operational_registration_path.py": {
+   "assert_operational_registration_path_invariants": [
+    "testhook",
+    "不变量断言，只在测试 / 审计里跑"
+   ]
+  },
+  "core/orchestration/global_arbiter.py": {
+   "reset_global_arbiter": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/outward_truth_source_registry.py": {
+   "assert_source_for_field": [
+    "testhook",
+    "断言"
+   ]
+  },
+  "core/perception/perception_fact_boundary.py": {
+   "classify_perception_surface": [
+    "testhook",
+    "分类目录查询，只在基线 / 测试里有意义"
+   ]
+  },
+  "core/peripheral_capability_boundary.py": {
+   "classify_peripheral_capability_surface": [
+    "testhook",
+    "分类目录查询，只在基线 / 测试里有意义"
+   ]
+  },
+  "core/production_baseline.py": {
+   "is_canonical_primary": [
+    "testhook",
+    "legacy 基线登记的查询，只在基线测试里用"
+   ],
+   "is_derived_only": [
+    "testhook",
+    "legacy 基线登记的查询，只在基线测试里用"
+   ],
+   "is_legacy_secondary": [
+    "testhook",
+    "legacy 基线登记的查询，只在基线测试里用"
+   ],
+   "openclawd_owned_artifacts": [
+    "testhook",
+    "legacy 基线登记的查询，只在基线测试里用"
+   ],
+   "shell_owned_artifacts": [
+    "testhook",
+    "legacy 基线登记的查询，只在基线测试里用"
+   ]
+  },
+  "core/protocol_drift_registry.py": {
+   "reset_protocol_drift_registry": [
+    "testhook",
+    "文档写明只给测试用"
+   ]
+  },
+  "core/release_governance_taxonomy.py": {
+   "advisory_only_terms": [
+    "testhook",
+    "legacy 发布术语分类，只在审计测试里用"
+   ],
+   "blocking_terms": [
+    "testhook",
+    "legacy 发布术语分类，只在审计测试里用"
+   ],
+   "blocks_release": [
+    "testhook",
+    "legacy 发布术语分类，只在审计测试里用"
+   ],
+   "classify_issue": [
+    "testhook",
+    "legacy 发布术语分类，只在审计测试里用"
+   ],
+   "is_blocking_classification": [
+    "testhook",
+    "legacy 发布术语分类，只在审计测试里用"
+   ]
+  },
+  "core/resilience/circuit_breaker.py": {
+   "trip": [
+    "testhook",
+    "docstring：测试用强制断开"
+   ]
+  },
+  "core/routing_observability.py": {
+   "reset_routing_metrics": [
+    "testhook",
+    "测试复位"
+   ]
+  },
+  "core/runtime/source_dispatch_orchestrator.py": {
+   "reset_live_mesh_runtime_proof_snapshot": [
+    "testhook",
+    "测试用计数器重置"
+   ]
+  },
+  "core/tool_permissions.py": {
+   "reset_counters": [
+    "testhook",
+    "频率计数器重置"
+   ]
+  },
+  "core/unified/llm_router.py": {
+   "reset_routing_telemetry": [
+    "testhook",
+    "测试用"
+   ]
+  },
+  "core/unified/release_gate.py": {
+   "clear_all_overrides": [
+    "testhook",
+    "测试用"
+   ],
+   "clear_override": [
+    "testhook",
+    "测试用"
+   ]
+  },
+  "core/unified_result_ingress.py": {
+   "reset_replay_session_state": [
+    "testhook",
+    "docstring：测试隔离用"
+   ]
+  },
+  "galaxy_gateway/orchestrator/task_orchestrator.py": {
+   "reset_device_counts": [
+    "testhook",
+    "docstring 自称拓扑剧变时手动用；无生产调用"
+   ]
+  },
+  "galaxy_gateway/wake_event_bus.py": {
+   "clear_dedup_buffer": [
+    "testhook",
+    "手动清去重缓冲；无生产调用"
+   ]
+  },
+  "galaxy_gateway/wake_router.py": {
+   "clear_dedup_cache": [
+    "testhook",
+    "docstring：用于测试或手动重置"
+   ],
+   "inject_device_info": [
+    "testhook",
+    "docstring：主要用于测试"
+   ]
+  }
+ }
+}

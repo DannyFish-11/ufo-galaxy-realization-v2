@@ -488,23 +488,6 @@ class CapabilityManager:
         """按分类获取能力"""
         return self.discover_capabilities(category=category)
 
-    def find_capability_by_keyword(self, keyword: str) -> List[Capability]:
-        """
-        通过关键字搜索能力
-
-        Args:
-            keyword: 搜索关键字（匹配名称或描述）
-
-        Returns:
-            匹配的能力列表
-        """
-        keyword_lower = keyword.lower()
-        return [
-            cap
-            for cap in self.capabilities.values()
-            if keyword_lower in cap.name.lower() or keyword_lower in cap.description.lower()
-        ]
-
     # ========================================================================
     # 统计和状态
     # ========================================================================

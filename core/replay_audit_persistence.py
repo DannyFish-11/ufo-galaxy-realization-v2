@@ -438,6 +438,7 @@ class DurableAuditStore:
                 record.kind,
                 record.audit_id,
             )
+            _count_audit_persist(ok=True)
             return True
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -445,6 +446,7 @@ class DurableAuditStore:
                 record.kind,
                 exc,
             )
+            _count_audit_persist(ok=False, reason=type(exc).__name__)
             return False
 
     # ── Read ──────────────────────────────────────────────────────────────
@@ -652,3 +654,17 @@ def load_audit_records(
     """
     _store = store or get_replay_audit_store()
     return _store.load_all(kind_filter=kind_filter)
+
+
+def _count_audit_persist(*, ok: bool, reason: str = "") -> None:
+    """审计落盘成败计入运行 SLO（此前 /metrics 上这两个计数恒为 0）。"""
+    try:
+        from core.operational_slo_metrics import get_operational_slo_metrics
+
+        metrics = get_operational_slo_metrics()
+        if ok:
+            metrics.record_audit_persist_success()
+        else:
+            metrics.record_audit_persist_failure(reason=reason)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("DurableAuditStore: SLO count skipped: %s", exc)

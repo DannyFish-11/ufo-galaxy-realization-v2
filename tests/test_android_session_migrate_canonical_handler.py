@@ -13,7 +13,7 @@ async def test_android_session_migrate_handler_uses_canonical_helper():
         return {"success": True, "session_id": kwargs["session_id"]}
 
     with patch(
-        "core.routes.sessions.migrate_session_via_canonical_manager",
+        "core.session_migration.migrate_session",  # 迁移的规范面(D3)
         _fake_migrate_session_via_canonical_manager,
     ):
         result = await handle_session_migrate(

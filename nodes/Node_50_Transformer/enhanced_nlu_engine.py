@@ -373,54 +373,6 @@ class EnhancedNLUEngine:
         
         return steps
     
-    def generate_software_command(self, software_id: str, action: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        生成软件操作命令
-        
-        Args:
-            software_id: 软件 ID
-            action: 动作
-            parameters: 参数
-        
-        Returns:
-            软件操作命令（符合微软 UFO 的格式）
-        """
-        command = {
-            "type": "ui_automation",
-            "software": software_id,
-            "action": action,
-            "parameters": parameters
-        }
-        
-        # 根据不同软件生成具体的操作步骤
-        if software_id == "wechat":
-            if action == "open":
-                command["steps"] = [
-                    {"type": "click", "target": "wechat_icon"},
-                    {"type": "wait", "duration": 2}
-                ]
-            elif action == "send":
-                command["steps"] = [
-                    {"type": "click", "target": "search_box"},
-                    {"type": "input", "text": parameters.get("contact", "")},
-                    {"type": "click", "target": "first_result"},
-                    {"type": "input", "text": parameters.get("message", "")},
-                    {"type": "press_key", "key": "Enter"}
-                ]
-        
-        elif software_id == "browser":
-            if action == "open":
-                command["steps"] = [
-                    {"type": "click", "target": "browser_icon"}
-                ]
-            elif action == "search":
-                command["steps"] = [
-                    {"type": "click", "target": "address_bar"},
-                    {"type": "input", "text": parameters.get("keyword", "")},
-                    {"type": "press_key", "key": "Enter"}
-                ]
-        
-        return command
 
 # 使用示例
 if __name__ == "__main__":

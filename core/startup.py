@@ -712,35 +712,16 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 9b. MCP 工具加载（从 config/mcp_servers.json 读取并加载）
     # ====================================================================
     try:
-        import json as _json
-
         from core.mcp_loader import mcp_loader
 
+        # 经加载器自己的配置入口（同时认 Galaxy 与 Claude Desktop 两种格式、${VAR} 取环境变量）；
+        # 此前这里手写了一份只认 Galaxy 格式的解析，auto_start=false 的服务器连列表里都看不到
         mcp_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "mcp_servers.json")
-        auto_started = 0
         if os.path.exists(mcp_config_path):
-            with open(mcp_config_path, "r", encoding="utf-8") as f:
-                mcp_config = _json.load(f)
-            for srv in mcp_config.get("servers", []):
-                if not srv.get("auto_start", False):
-                    continue
-                try:
-                    # 解析环境变量引用 (${VAR_NAME} → os.environ)
-                    env = {}
-                    for k, v in (srv.get("env") or {}).items():
-                        if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
-                            env[k] = os.environ.get(v[2:-1], "")
-                        else:
-                            env[k] = v
-                    await mcp_loader.load(
-                        name=srv["name"],
-                        command=srv["command"],
-                        env=env if env else None,
-                        auto_start=True,
-                    )
-                    auto_started += 1
-                except Exception as e:
-                    logger.debug(f"MCP server '{srv['name']}' 跳过: {e}")
+            _mcp_result = await mcp_loader.load_from_config(mcp_config_path)
+            for _err in _mcp_result.get("errors", []):
+                logger.debug(f"MCP server 跳过: {_err}")
+        auto_started = sum(1 for _srv in mcp_loader.list_servers() if _srv.get("status") == "running")
 
         results["mcp_loader"] = {
             "status": "ok",
@@ -770,6 +751,17 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.debug("Fallback triggered: %s", e)
         results["capability_orchestrator"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"能力编排器初始化失败: {e}")
+
+    # ====================================================================
+    # 9d. 系统资源表 —— OpenClawd 的资源工具与投影编译器一直在读，登记方从没被调用
+    # ====================================================================
+    try:
+        from core.system_resource import seed_builtin_system_resources
+
+        results["system_resources"] = {"status": "ok", **seed_builtin_system_resources()}
+    except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
+        results["system_resources"] = {"status": "degraded", "error": str(_exc)}
 
     # ====================================================================
     # 10. 数字孪生引擎
@@ -1241,6 +1233,22 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning("持久化结果幂等性存储初始化失败（降级）: %s", _exc)
 
     # ====================================================================
+    # 21b. 周期维护 —— 各注册表写好了「清扫过期项」却没人按时调（节点心跳超时、
+    # 超时信封、待决项、任务记忆 TTL、安全策略热重载、委托流落盘……）。一个循环按
+    # 各项自己的周期调它们；网关的清扫在第 16 步已经挂进同一个循环。
+    # ====================================================================
+    try:
+        from core.periodic_maintenance import register_core_sweeps
+
+        _maintenance = register_core_sweeps()
+        _maintenance.start()
+        results["periodic_maintenance"] = {"status": "ok", "sweeps": len(_maintenance.status()["sweeps"])}
+    except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
+        results["periodic_maintenance"] = {"status": "degraded", "error": str(_exc)}
+        logger.warning("周期维护未启动（降级）: %s", _exc)
+
+    # ====================================================================
     # 汇总
     # ====================================================================
     elapsed = time.monotonic() - t0
@@ -1323,6 +1331,15 @@ async def shutdown_subsystems():
             logger.warning("任务生命周期快照持久化失败（关闭前）")
     except Exception as e:
         logger.warning(f"任务生命周期快照持久化失败: {e}")
+
+    # 0-maint. 周期维护循环（bootstrap 21b 里启动）；停的时候再落一次委托流，恢复协调器
+    # 下次启动读的就是这一份
+    try:
+        from core.periodic_maintenance import get_periodic_maintenance
+
+        await _shutdown_with_timeout("周期维护循环", get_periodic_maintenance().stop())
+    except Exception as e:
+        logger.warning(f"周期维护循环停止失败: {e}")
 
     # 0-worker. Worker 消费循环(融合·域7:此前 start_worker_runtime 在 bootstrap
     # 里启动却从未被本函数停止——NATS 订阅/后台任务在关机时泄漏,循环生命周期

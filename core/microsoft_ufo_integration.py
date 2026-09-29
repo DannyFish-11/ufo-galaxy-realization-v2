@@ -158,39 +158,32 @@ class BaseUIAutomator(ABC):
     @abstractmethod
     async def initialize(self) -> bool:
         """初始化自动化引擎"""
-        pass
 
     @abstractmethod
     async def get_active_window(self) -> Optional[UIElement]:
         """获取当前活动窗口"""
-        pass
 
     @abstractmethod
     async def find_element(self, selector: Dict[str, Any]) -> Optional[UIElement]:
         """查找 UI 元素"""
-        pass
 
     @abstractmethod
     async def find_elements(self, selector: Dict[str, Any]) -> List[UIElement]:
         """查找多个 UI 元素"""
-        pass
 
     @abstractmethod
     async def execute_action(
         self, action: UIAction, element_id: Optional[str], params: Dict[str, Any]
     ) -> UIActionResult:
         """执行 UI 动作"""
-        pass
 
     @abstractmethod
     async def capture_screen(self, region: Optional[Tuple[int, int, int, int]] = None) -> Optional[str]:
         """截取屏幕"""
-        pass
 
     @abstractmethod
     async def get_element_tree(self, root_id: Optional[str] = None) -> Dict[str, Any]:
         """获取 UI 元素树"""
-        pass
 
 
 # ============================================================================
@@ -633,71 +626,6 @@ ufo_integration = GalaxyIntegrationService()
 # ============================================================================
 # FastAPI 路由
 # ============================================================================
-
-
-def create_ufo_api():
-    """创建 UFO 集成 API"""
-    from fastapi import FastAPI
-    from pydantic import BaseModel
-
-    app = FastAPI(title="Galaxy - Microsoft UFO Integration", version="2.0")
-
-    # 同 create_device_api:当前没有调用方,但它开的是点鼠标、敲键盘的接口。
-    from nodes.common.node_auth import install_node_auth  # noqa: PLC0415
-
-    install_node_auth(app, "core.microsoft_ufo_integration")
-
-    class ClickRequest(BaseModel):
-        x: int
-        y: int
-
-    class TypeRequest(BaseModel):
-        text: str
-
-    class HotkeyRequest(BaseModel):
-        keys: List[str]
-
-    class FindAndClickRequest(BaseModel):
-        name: Optional[str] = None
-        automation_id: Optional[str] = None
-        class_name: Optional[str] = None
-        control_type: Optional[str] = None
-
-    class TaskRequest(BaseModel):
-        task: str
-        app_name: Optional[str] = None
-
-    @app.post("/ufo/initialize")
-    async def initialize():
-        success = await ufo_integration.initialize()
-        return {"success": success}
-
-    @app.post("/ufo/click")
-    async def click(request: ClickRequest):
-        return await ufo_integration.click(request.x, request.y)
-
-    @app.post("/ufo/type")
-    async def type_text(request: TypeRequest):
-        return await ufo_integration.type_text(request.text)
-
-    @app.post("/ufo/hotkey")
-    async def hotkey(request: HotkeyRequest):
-        return await ufo_integration.hotkey(*request.keys)
-
-    @app.post("/ufo/find_and_click")
-    async def find_and_click(request: FindAndClickRequest):
-        selector = request.dict(exclude_none=True)
-        return await ufo_integration.find_and_click(selector)
-
-    @app.get("/ufo/screen")
-    async def get_screen():
-        return await ufo_integration.get_screen_info()
-
-    @app.post("/ufo/task")
-    async def execute_task(request: TaskRequest):
-        return await ufo_integration.execute_task(request.task, request.app_name)
-
-    return app
 
 
 # ============================================================================

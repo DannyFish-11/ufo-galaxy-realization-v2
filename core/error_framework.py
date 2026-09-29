@@ -16,7 +16,6 @@ import traceback
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
-from functools import wraps
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ErrorFramework")
@@ -312,65 +311,6 @@ class ErrorTracker:
 
 
 # ───────────────────── 装饰器 ─────────────────────
-
-
-def error_boundary(
-    category: ErrorCategory = ErrorCategory.INTERNAL,
-    recovery: RecoveryStrategy = RecoveryStrategy.ABORT,
-    default_return=None,
-):
-    """
-    错误边界装饰器
-
-    将未处理的异常包装为 GalaxyError 并记录。
-    """
-
-    def decorator(func):
-        @wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            try:
-                return await func(*args, **kwargs)
-            except GalaxyError:
-                raise  # 已经是 GalaxyError，直接抛出
-            except Exception as e:
-                logger.debug("Fallback triggered: %s", e)
-                ufo_err = GalaxyError(
-                    message=f"{func.__name__} 执行失败: {e}",
-                    category=category,
-                    recovery=recovery,
-                    cause=e,
-                )
-                _global_tracker.record(ufo_err)
-                if recovery == RecoveryStrategy.ABORT:
-                    raise ufo_err from e
-                return default_return
-
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except GalaxyError:
-                raise
-            except Exception as e:
-                logger.debug("Fallback triggered: %s", e)
-                ufo_err = GalaxyError(
-                    message=f"{func.__name__} 执行失败: {e}",
-                    category=category,
-                    recovery=recovery,
-                    cause=e,
-                )
-                _global_tracker.record(ufo_err)
-                if recovery == RecoveryStrategy.ABORT:
-                    raise ufo_err from e
-                return default_return
-
-        import asyncio
-
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
-
-    return decorator
 
 
 # ───────────────────── 客户端断开识别 ─────────────────────

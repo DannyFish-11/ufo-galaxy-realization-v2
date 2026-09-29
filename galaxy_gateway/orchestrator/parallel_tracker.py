@@ -343,6 +343,8 @@ async def record_parallel_fields(payload: Dict[str, Any]) -> None:
             errors=errors,
             outputs=outputs,
         )
+        # 子结果到齐就当场收口；此前没人调 finalize_if_complete，到齐的组也要等超时清扫才收
+        await get_tracker().finalize_if_complete(str(group_id))
         logger.debug(
             "parallel_tracker: recorded group=%s idx=%d status=%s",
             group_id,

@@ -236,7 +236,9 @@ class WakeRouter:
                 )
 
             _engine = DeviceScoringEngine(require_all_capabilities=False)
-            _best = _engine.select_best_device(_candidates, _required_caps or None)
+            # 全排名而不是只取最佳：第二名进决策理由，事后能看出「为什么是它、差多少」
+            _ranked = [s for s in _engine.rank_devices(_candidates, _required_caps or None) if s.eligible]
+            _best = _ranked[0] if _ranked else None
             if _best is not None:
                 best_device_id = _best.device_id
                 best_score = _best.total
@@ -246,6 +248,8 @@ class WakeRouter:
                     f"load={_best.load_score:.2f} "
                     f"health={_best.health_score:.2f}"
                 )
+                if len(_ranked) > 1:
+                    best_reason += f" runner_up={_ranked[1].device_id}:{_ranked[1].total:.2f}"
                 _canonical_scoring_used = True
                 logger.debug(
                     "[WakeRouter] canonical DeviceScoringEngine selected device=%s score=%.3f",

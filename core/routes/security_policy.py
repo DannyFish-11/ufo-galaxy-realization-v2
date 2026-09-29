@@ -12,11 +12,17 @@ GET  /api/v1/security/policy
     Return the active policy table (JSON).
 
 PUT  /api/v1/security/policy
-    Replace the active policy table with a new one (JSON body).
+    Replace the active policy table with a new one (JSON body). API auth.
 
 POST /api/v1/security/policy/evaluate
     Evaluate an action/tool against the active policy and return the
     computed RiskLevel + whether HITL is required.
+
+GET  /api/v1/security/tool-permissions
+    Tool permission policies the ReAct loop and skill registry check against.
+
+POST /api/v1/security/tool-permissions
+    Add one tool permission policy (in-process; restart restores defaults). API auth.
 
 Policy format
 -------------
@@ -54,8 +60,10 @@ import logging
 import re
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+
+from core.auth import require_auth
 
 logger = logging.getLogger("Galaxy.API.SecurityPolicy")
 
@@ -180,7 +188,8 @@ def create_router() -> APIRouter:
                 content={"ok": False, "error": str(exc)},
             )
 
-    @router.put("/api/v1/security/policy")
+    # 整张安全策略表可被这一个调用替换 —— 此前挂载时没有任何鉴权。
+    @router.put("/api/v1/security/policy", dependencies=[Depends(require_auth)])
     async def update_security_policy(body: dict):
         """Replace the active security policy with the supplied JSON body.
 
@@ -228,5 +237,27 @@ def create_router() -> APIRouter:
                 status_code=500,
                 content={"ok": False, "error": str(exc)},
             )
+
+    @router.get("/api/v1/security/tool-permissions")
+    async def list_tool_permissions():
+        from core.tool_permissions import get_tool_permission_checker
+
+        return JSONResponse(content={"ok": True, "policies": get_tool_permission_checker().list_policies()})
+
+    @router.post("/api/v1/security/tool-permissions", dependencies=[Depends(require_auth)])
+    async def add_tool_permission(body: dict):
+        """追加一条工具权限策略。匹配时取最严格的一条，所以追加只会收紧、不会放宽已有策略。"""
+        from pydantic import ValidationError
+
+        from core.tool_permissions import ToolPermissionPolicy, get_tool_permission_checker
+
+        try:
+            policy = ToolPermissionPolicy(**body)
+        except ValidationError as exc:
+            return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)})
+        checker = get_tool_permission_checker()
+        checker.add_policy(policy)
+        logger.info("Tool permission policy added: %s", policy.tool_pattern)
+        return JSONResponse(content={"ok": True, "policies": checker.list_policies()})
 
     return router

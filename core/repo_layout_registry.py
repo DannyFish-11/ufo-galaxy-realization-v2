@@ -306,14 +306,6 @@ class RepoLayoutRegistry:
         """Return all active (runtime + desktop status) entries."""
         return [e for e in self._registry.values() if e.is_active()]
 
-    def legacy_entries(self) -> List[RepoLayoutEntry]:
-        """Return all legacy/transitional entries."""
-        return [e for e in self._registry.values() if e.is_legacy()]
-
-    def entries_by_zone(self, zone: LayoutZone) -> List[RepoLayoutEntry]:
-        """Return all entries belonging to *zone*."""
-        return [e for e in self._registry.values() if e.zone == zone]
-
     def summary(self) -> Dict:
         """Return a structured summary of the layout registry.
 

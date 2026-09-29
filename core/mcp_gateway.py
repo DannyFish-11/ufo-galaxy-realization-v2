@@ -39,7 +39,6 @@ from core.schemas.contracts import (
     EventDomain,
     EventSeverity,
     MCPToolDescriptorModel,
-    MCPToolRegistrationModel,
     TimestampModel,
 )
 
@@ -196,49 +195,6 @@ class MCPDynamicGateway:
             "server_id": register_result.get("server_id", ""),
             "script_path": str(script_path),
         }
-
-    async def hot_reload_tool(self, registration: MCPToolRegistrationModel) -> dict:
-        """Hot-reload a tool without restarting the gateway.
-
-        Stops the existing MCP server, updates the script, restarts.
-        """
-        tool_name = registration.tool.name if registration.tool else ""
-        if not tool_name:
-            return {"success": False, "error": "No tool name in registration"}
-
-        try:
-            from core.mcp_loader import MCPLoader
-
-            loader = MCPLoader.get_instance()
-
-            # Find existing server
-            server_id = registration.server_command or f"generated_{tool_name}"
-            existing = loader.get_server(server_id)
-
-            if existing:
-                await loader.stop(server_id)
-                logger.info(f"MCPGateway: stopped existing server {server_id} for hot-reload")
-
-            # Save new script
-            if registration.script_content:
-                script_path = self._save_tool_script(tool_name, registration.script_content)
-            else:
-                return {"success": False, "error": "No script_content for hot-reload"}
-
-            # Restart
-            await loader.load(
-                name=f"generated_{tool_name}",
-                command=["python", str(script_path)],
-                auto_start=True,
-            )
-
-            _try_emit_event("MCP_TOOL_RELOADED", {"tool_name": tool_name, "server_id": server_id})
-            logger.info(f"MCPGateway: hot-reloaded tool '{tool_name}'")
-            return {"success": True, "server_id": server_id}
-
-        except Exception as exc:
-            logger.error(f"MCPGateway: hot-reload failed for '{tool_name}' — {exc}")
-            return {"success": False, "error": str(exc)}
 
     async def sync_tool_registry(self) -> dict:
         """Broadcast current tool manifest to all connected workers via NATS."""
@@ -555,7 +511,17 @@ class MCPDynamicGateway:
         request_id = str((data or {}).get("request_id") or "")
         tool_name = str((data or {}).get("tool_name") or "")
         try:
-            raw_args = (data or {}).get("arguments_json") or "{}"
+            # 网格上别的大脑发来的调用是外部输入：与注册同一道防腐层（尺寸、幻觉字段、逐字段兜底）
+            validated = await self._acl.validate_mcp_call(dict(data or {}))
+            if not validated["success"]:
+                await self._publish_call_response(
+                    request_id, error=f"invalid MCPCallRequest: {validated.get('error')}", started=started
+                )
+                return
+            call = validated["data"]
+            request_id = call.request_id or request_id
+            tool_name = call.tool_name or tool_name
+            raw_args = call.arguments_json or "{}"
             try:
                 arguments = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args or {})
             except (TypeError, ValueError) as exc:
