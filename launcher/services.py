@@ -2415,7 +2415,10 @@ class GalaxyUnified:
             state_ok=ok_n,
             state_degraded=len(degraded_items),
             rows=[
-                ("面板", f"http://localhost:{port}"),
+                # 这个地址上**没有网页面板**(GET / 是 404):面板只在桌面窗口里,
+                # 网页表层早已删除(见上文步骤 5)。以前写"面板 http://localhost:9000",
+                # 照着在浏览器里打开的人只会看到 {"detail":"Not Found"}。
+                ("接口", f"http://localhost:{port}(只有 API;面板在桌面窗口里)"),
                 ("文档", f"http://localhost:{port}/docs"),
                 ("唤醒", "Ctrl+Alt+Space    隐藏 Ctrl+Alt+H"),
                 # 指路必须指向**真实存在的东西**。

@@ -662,6 +662,7 @@ class GalaxyTray:
                 # 这一句是这次修复的核心:以前它只会消失在线程里。
                 failure.append(f"{type(exc).__name__}: {exc}")
                 logger.warning("托盘起不来 / tray failed to start: %s", exc, exc_info=True)
+                self._discard_half_started_icon()
                 started.set()
 
         thread = threading.Thread(target=_body, name="GalaxyTray", daemon=True)
@@ -673,6 +674,23 @@ class GalaxyTray:
             return failure[0]
         logger.info("托盘图标已出现 / tray icon is visible")
         return ""
+
+    def _discard_half_started_icon(self) -> None:
+        """``icon.run()`` 中途抛了:把半初始化的图标安静地丢掉。
+
+        pystray 的 Windows 后端在 ``_mark_ready()`` 里构造菜单,之后才给 ``_thread``
+        赋值;``_mark_ready()`` 一抛,图标就停在"``_running`` 为真、``_thread`` 不存在"。
+        进程退出时它的 ``__del__`` 于是再抛一次(真机:``Exception ignored in
+        Icon.__del__ … AttributeError: 'Icon' object has no attribute '_thread'``)——
+        托盘失败本身已经如实报过,退出时不该再冒一段吓人的回溯。
+        """
+        icon, self._icon = self._icon, None
+        if icon is None:
+            return
+        try:
+            icon._running = False  # __del__ 只在"还在跑"时去碰 _thread
+        except Exception:  # noqa: BLE001 —— 各后端属性不一,尽力而为
+            pass
 
     def stop(self) -> None:
         """停掉托盘 / Stop the tray.
