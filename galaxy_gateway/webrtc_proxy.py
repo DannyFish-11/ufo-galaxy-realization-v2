@@ -280,6 +280,10 @@ def enrich_signaling_message(raw: str) -> str:
         if candidate_str:
             msg["candidate_type"] = _candidate_type_from_str(candidate_str)
 
+    elif msg_type == "ice_candidates" and isinstance(msg.get("candidates"), list):
+        # 成批发来的候选按端点信息里宣称的次序（relay → srflx → prflx → host）排好并去重再转
+        msg["candidates"] = order_ice_candidates([c for c in msg["candidates"] if isinstance(c, dict)])
+
     return json.dumps(msg)
 
 

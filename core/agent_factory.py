@@ -79,14 +79,12 @@ class AgentMessageBus:
     - 点对点消息发送（send）
     - 带超时的接收（receive）
     - 广播消息（broadcast）
-    - 请求-回复模式（request / reply）
     """
 
     MAX_QUEUE_SIZE = 1000  # 每个 Agent 队列的最大消息数
 
     def __init__(self):
         self._queues: Dict[str, asyncio.Queue] = {}
-        self._pending_acks: Dict[str, asyncio.Event] = {}
         logger.info("AgentMessageBus 初始化")
 
     def register(self, agent_id: str):
@@ -99,12 +97,18 @@ class AgentMessageBus:
             del self._queues[agent_id]
 
     async def send(self, msg: AgentMessage) -> bool:
-        """发送消息到目标 Agent 的队列"""
+        """发送消息到目标 Agent 的队列。
+
+        队列满了丢最旧的一条：分裂执行给父 Agent 回的 task_result 没人按时取，
+        原先 ``await q.put`` 在长期存活的父 Agent 攒满 1000 条后会永远卡住发送方。
+        """
         q = self._queues.get(msg.receiver_id)
         if q is None:
             logger.warning(f"目标 Agent {msg.receiver_id} 不存在")
             return False
-        await q.put(msg)
+        if q.full():
+            q.get_nowait()
+        q.put_nowait(msg)
         return True
 
     async def receive(self, agent_id: str, timeout: float = 5.0) -> Optional[AgentMessage]:
@@ -130,27 +134,6 @@ class AgentMessageBus:
                 payload=payload,
             )
             await self.send(msg)
-
-    async def request(self, msg: AgentMessage, timeout: float = 10.0) -> Optional[AgentMessage]:
-        """请求-回复模式：发送请求并等待回复"""
-        reply_event = asyncio.Event()
-        self._pending_acks[msg.id] = reply_event
-        await self.send(msg)
-        try:
-            await asyncio.wait_for(reply_event.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning(f"请求超时: {msg.id}")
-            self._pending_acks.pop(msg.id, None)
-            return None
-        self._pending_acks.pop(msg.id, None)
-        # 从接收方队列中取回复（按 convention 回复 msg_type = 'reply_{original_id}'）
-        return await self.receive(msg.sender_id, timeout=1.0)
-
-    def notify_ack(self, original_msg_id: str):
-        """通知请求方消息已被处理"""
-        ev = self._pending_acks.get(original_msg_id)
-        if ev:
-            ev.set()
 
 
 # 全局消息总线单例

@@ -764,7 +764,7 @@ class DeviceDiscovery:
             if event.device:
                 device_id = event.device.device_id
                 if device_id not in self._devices:
-                    self._devices[device_id] = event.device
+                    self.add_device(event.device)  # 登记走规范写口，不直接下标赋值
                     self._emit_event(event)
                 else:
                     # 更新心跳

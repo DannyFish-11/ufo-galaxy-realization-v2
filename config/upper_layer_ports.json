@@ -55,6 +55,7 @@
     "gateway.task_decomposer.TaskDecomposer": "galaxy_gateway.task_decomposer:TaskDecomposer",
     "gateway.wake_event_bus.RawWakeEvent": "galaxy_gateway.wake_event_bus:RawWakeEvent",
     "gateway.wake_event_bus.wake_event_bus": "galaxy_gateway.wake_event_bus:wake_event_bus",
+    "gateway.webrtc_proxy.clear_webrtc_task_session": "galaxy_gateway.webrtc_proxy:clear_webrtc_task_session",
     "gateway.webrtc_proxy.initiate_webrtc_for_task": "galaxy_gateway.webrtc_proxy:initiate_webrtc_for_task",
     "gateway.webrtc_proxy.is_webrtc_ready_for_device": "galaxy_gateway.webrtc_proxy:is_webrtc_ready_for_device",
     "gateway.websocket_handler.connection_manager": "galaxy_gateway.websocket_handler:connection_manager"

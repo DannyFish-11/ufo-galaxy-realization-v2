@@ -160,7 +160,7 @@ async def compile_and_run_dag(
         context=context or {},
         continue_on_failure=continue_on_failure,
     )
-    return {
+    outcome = {
         "success": result.success,
         "graph_id": result.graph_id,
         "trace_id": result.trace_id,
@@ -171,6 +171,21 @@ async def compile_and_run_dag(
         "node_statuses": result.node_statuses,
         "error": result.error,
     }
+    # 跑完的 DAG 各节点投到任务图（此前 DAG 路径的子任务在任务图里一个都看不见）
+    try:
+        from core.task_graph_runtime import WorkflowContributorKind, get_task_graph_runtime, project_workflow_to_graph
+
+        project_workflow_to_graph(
+            {
+                **outcome,
+                "session_id": runtime_session_id,
+                "contributor": WorkflowContributorKind.E2E_ORCHESTRATOR.value,
+            },
+            get_task_graph_runtime(),
+        )
+    except Exception as exc:  # noqa: BLE001 — 投影失败不影响执行结果
+        logger.debug("compile_and_run_dag: task graph projection skipped: %s", exc)
+    return outcome
 
 
 # ---------------------------------------------------------------------------

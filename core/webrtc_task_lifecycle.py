@@ -992,6 +992,15 @@ def teardown_binding_on_task_terminal(
     )
     # PR-AIPV3-WEBRTC: Emit WEBRTC_UNBIND AIP v3 message
     _emit_aip_v3_webrtc_unbind(binding)
+    # 网关按设备记的「这台设备正为任务开着 WebRTC」一并清掉（与发起时的 register 成对）；
+    # 此前绑定拆了、那条记录还留着，下一个任务会以为会话还在
+    try:
+        from core import upper_ports
+
+        clear_webrtc_task_session = upper_ports.resolve("gateway.webrtc_proxy.clear_webrtc_task_session")
+        clear_webrtc_task_session(binding.device_id)
+    except Exception as exc:  # noqa: BLE001 — 网关不在时没有这张表可清
+        logger.debug("teardown_binding_on_task_terminal: gateway session clear skipped: %s", exc)
     return True
 
 

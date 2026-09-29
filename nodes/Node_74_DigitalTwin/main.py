@@ -424,7 +424,12 @@ def list_devices():
     """列出所有已注册设备"""
     _require("list_devices")
     devs = _svc.list_devices()
-    return {"devices": [asdict(d) for d in devs], "count": len(devs)}
+    return {
+        "devices": [asdict(d) for d in devs],
+        "count": len(devs),
+        # 对外读投影锚定到规范单设备读契约（本地登记记录不是规范契约，见 TwinDeviceRegistration）
+        "canonical_devices": [d.to_registered_runtime_device().model_dump(mode="json") for d in devs],
+    }
 
 
 @app.post("/device/register", status_code=201)

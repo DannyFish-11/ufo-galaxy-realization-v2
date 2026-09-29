@@ -7,7 +7,8 @@ UDM 是设备状态的唯一写入口（SSOT）。此前它只把状态写给自
   ``query_routable_executors`` 读到的网络状态恒为 unknown；
 - 能力同化层的在场状态：只知道设备「注册过」，不知道它掉线了、也收不到它的心跳；
 - 健康评分（``DeviceHealthScorer.reset_device``）：重连的设备带着掉线前的失败样本被打低分；
-- Mesh 编组（``notify_device_lost``）：掉线的设备仍挂在编组里。
+- Mesh 编组（``notify_device_lost``）：掉线的设备仍挂在编组里；
+- 系统资源表：模型问「有哪些设备资源」时一条也没有。
 
 UDM 在「是否在线」翻转时调 :func:`presence_changed`、每次心跳调 :func:`heartbeat_seen`。每个下游
 独立吞异常，绝不影响 UDM 写入本身。
@@ -46,6 +47,17 @@ def presence_changed(device: Any, *, online: bool, reconnected: bool = False, re
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("presence fan-out: topology/assimilation skipped for %s: %s", device_id, exc)
+
+    try:
+        from core.system_resource import track_device_resource
+
+        track_device_resource(
+            device_id,
+            online=online,
+            capabilities=[str(c) for c in (getattr(device, "capabilities", None) or [])],
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("presence fan-out: system resource skipped for %s: %s", device_id, exc)
 
     if online and reconnected:
         try:

@@ -11,9 +11,6 @@ Galaxy - 标准 Skill 加载器
     # 加载技能 (用户自己下载的)
     await skill_loader.load("/path/to/skill")
 
-    # 加载技能包 (包含多个技能)
-    await skill_loader.load_package("/path/to/skills")
-
     # 列出已加载的技能
     skills = skill_loader.list_skills()
 
@@ -349,40 +346,6 @@ class SkillLoader:
         except Exception as e:
             logger.error(f"加载技能失败: {path} - {e}")
             return {"success": False, "error": str(e)}
-
-    async def load_package(
-        self,
-        path: str,
-    ) -> Dict[str, Any]:
-        """
-        加载技能包 (包含多个技能)
-
-        Args:
-            path: 技能包路径
-
-        Returns:
-            加载结果
-        """
-        package_path = Path(path)
-
-        if not package_path.exists():
-            return {"success": False, "error": f"路径不存在: {path}"}
-
-        results = []
-
-        # 查找所有 skill.json
-        for skill_file in package_path.rglob("skill.json"):
-            result = await self.load(str(skill_file.parent))
-            results.append(result)
-
-        success_count = sum(1 for r in results if r.get("success"))
-
-        return {
-            "success": success_count > 0,
-            "total": len(results),
-            "loaded": success_count,
-            "results": results,
-        }
 
     async def unload(self, skill_id: str) -> Dict[str, Any]:
         """

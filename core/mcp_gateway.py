@@ -39,7 +39,6 @@ from core.schemas.contracts import (
     EventDomain,
     EventSeverity,
     MCPToolDescriptorModel,
-    MCPToolRegistrationModel,
     TimestampModel,
 )
 
@@ -196,49 +195,6 @@ class MCPDynamicGateway:
             "server_id": register_result.get("server_id", ""),
             "script_path": str(script_path),
         }
-
-    async def hot_reload_tool(self, registration: MCPToolRegistrationModel) -> dict:
-        """Hot-reload a tool without restarting the gateway.
-
-        Stops the existing MCP server, updates the script, restarts.
-        """
-        tool_name = registration.tool.name if registration.tool else ""
-        if not tool_name:
-            return {"success": False, "error": "No tool name in registration"}
-
-        try:
-            from core.mcp_loader import MCPLoader
-
-            loader = MCPLoader.get_instance()
-
-            # Find existing server
-            server_id = registration.server_command or f"generated_{tool_name}"
-            existing = loader.get_server(server_id)
-
-            if existing:
-                await loader.stop(server_id)
-                logger.info(f"MCPGateway: stopped existing server {server_id} for hot-reload")
-
-            # Save new script
-            if registration.script_content:
-                script_path = self._save_tool_script(tool_name, registration.script_content)
-            else:
-                return {"success": False, "error": "No script_content for hot-reload"}
-
-            # Restart
-            await loader.load(
-                name=f"generated_{tool_name}",
-                command=["python", str(script_path)],
-                auto_start=True,
-            )
-
-            _try_emit_event("MCP_TOOL_RELOADED", {"tool_name": tool_name, "server_id": server_id})
-            logger.info(f"MCPGateway: hot-reloaded tool '{tool_name}'")
-            return {"success": True, "server_id": server_id}
-
-        except Exception as exc:
-            logger.error(f"MCPGateway: hot-reload failed for '{tool_name}' — {exc}")
-            return {"success": False, "error": str(exc)}
 
     async def sync_tool_registry(self) -> dict:
         """Broadcast current tool manifest to all connected workers via NATS."""

@@ -601,6 +601,12 @@ async def perceive(request: PerceiveRequest):
     result = await metacognition_engine.perceive(request.input_data)
     return result
 
+@app.post("/comprehend")
+async def comprehend(request: PerceiveRequest):
+    """感知 → 理解两层连着走：理解层此前没有入口，/perceive 之后就断了"""
+    perception = await metacognition_engine.perceive(request.input_data)
+    return {"perception": perception, "comprehension": await metacognition_engine.comprehend(perception)}
+
 @app.post("/assess")
 async def assess(request: AssessRequest):
     assessment = await metacognition_engine.self_assess(request.task_id, request.metrics)

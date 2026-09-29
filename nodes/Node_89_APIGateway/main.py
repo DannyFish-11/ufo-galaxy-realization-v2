@@ -519,6 +519,12 @@ async def proxy_to_node(node_id: str, path: str, request: Request):
     return await gateway.proxy_to_node(node_id, path, request)
 
 
+@app.api_route("/gw/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def proxy_via_route(path: str, request: Request):
+    """按 /route/register 登记的路由表转发（此前路由能登记、能列出，却没有按它转发的入口）。"""
+    return await gateway.proxy_via_route("/" + path, request)
+
+
 @app.post("/mcp/call")
 async def mcp_call(req: MCPCallRequest):
     tool = req.tool

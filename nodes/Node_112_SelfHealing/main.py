@@ -1142,6 +1142,16 @@ async def stop_engine():
     healing_engine.stop()
     return {"status": "stopped"}
 
+@app.post("/run_once")
+async def run_once():
+    """手动跑一轮「采集 → 检测 → 诊断 → 修复 → 验证」。
+
+    故意不挂进 /start 的常驻循环：这一轮会真的执行修复动作（重启、清缓存），
+    由人或上层按需触发，而不是 CPU 一过线就自己动手。
+    """
+    report = await asyncio.to_thread(healing_engine.run_once)
+    return {"anomalous": report is not None, "report": asdict(report) if report is not None else None}
+
 
 
 

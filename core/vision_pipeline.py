@@ -259,18 +259,6 @@ class VisionResult:
                     return elem
         return None
 
-    def find_elements_by_type(self, element_type: ElementType) -> List[GUIElement]:
-        """通过类型查找 GUI 元素"""
-        return [e for e in self.gui_elements if e.element_type == element_type]
-
-    def find_element_at(self, x: int, y: int) -> Optional[GUIElement]:
-        """通过坐标查找 GUI 元素"""
-        candidates = [e for e in self.gui_elements if e.bbox.contains(x, y)]
-        if not candidates:
-            return None
-        # 返回面积最小的（最精确的）
-        return min(candidates, key=lambda e: e.bbox.area)
-
     def to_dict(self) -> Dict:
         return {
             "success": self.success,

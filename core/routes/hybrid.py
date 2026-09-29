@@ -151,14 +151,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # ── Phase 5: P2P Mesh Overlay ──────────────────────────────────────────
 
-    from core.mesh_coordinator import get_mesh_coordinator
+    from core.mesh_coordinator import get_mesh_coordinator, inject_mesh_senders
     from core.proxy_relay import RelayRequest as ProxyRelayRequest
     from core.proxy_relay import get_proxy_relay
 
     mesh_coordinator = get_mesh_coordinator()
     proxy_relay = get_proxy_relay()
-
-    mesh_coordinator._ws_send = connection_manager.send_to_device
 
     async def _mesh_p2p_send(target_device: str, msg_bytes: bytes) -> bool:
         """Use device-scoped point-to-point delivery as runtime direct-send surface."""
@@ -183,8 +181,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.warning("mesh direct p2p-equivalent send failed: %s", exc)
             return False
 
-    mesh_coordinator._p2p_send = _mesh_p2p_send
-
     async def _mesh_relay_send(source, target, payload_type, payload):
         result = await proxy_relay.relay(
             ProxyRelayRequest(
@@ -196,7 +192,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         )
         return result.to_dict()
 
-    mesh_coordinator._relay_send = _mesh_relay_send
+    # 经协调器自己的注入口装发送函数（此前在这里直接改它的私有属性）
+    inject_mesh_senders(
+        p2p_sender=_mesh_p2p_send, relay_sender=_mesh_relay_send, ws_sender=connection_manager.send_to_device
+    )
 
     class MeshSendRequest(BaseModel):
         """Mesh 发送请求"""

@@ -188,18 +188,19 @@ class TestWakeRouterCanonicalScoring(unittest.TestCase):
             },
         )
 
-        # Track whether DeviceScoringEngine.select_best_device was called
+        # Track whether the DeviceScoringEngine ranking was used (the router takes the full
+        # ranking so the runner-up can go into the decision reason; rank[0] is the best device)
         _called = {}
         try:
             from core.control_plane.smart_scheduler import DeviceScoringEngine as _Engine
 
-            original_select = _Engine.select_best_device
+            original_rank = _Engine.rank_devices
 
-            def _patched_select(self_inner, candidates, required_caps=None):
+            def _patched_rank(self_inner, candidates, required_caps=None):
                 _called["invoked"] = True
-                return original_select(self_inner, candidates, required_caps)
+                return original_rank(self_inner, candidates, required_caps)
 
-            with patch.object(_Engine, "select_best_device", _patched_select):
+            with patch.object(_Engine, "rank_devices", _patched_rank):
                 decision = _run(router.route(event))
         except ImportError:
             self.skipTest("DeviceScoringEngine not available")
@@ -207,7 +208,7 @@ class TestWakeRouterCanonicalScoring(unittest.TestCase):
         # The routing decision should prefer dev_a (more active, more capabilities)
         self.assertIsNotNone(decision)
         self.assertEqual(decision.selected_device_id, "dev_a")
-        self.assertTrue(_called.get("invoked"), "DeviceScoringEngine.select_best_device was not called")
+        self.assertTrue(_called.get("invoked"), "DeviceScoringEngine.rank_devices was not called")
 
     def test_wake_router_falls_back_to_local_scoring_on_engine_failure(self):
         """WakeRouter falls back gracefully when DeviceScoringEngine is unavailable."""

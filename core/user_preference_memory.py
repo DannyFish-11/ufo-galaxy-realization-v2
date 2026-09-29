@@ -201,10 +201,6 @@ class UserPreferenceMemory:
 
     # ── Query ──
 
-    def suggest_device_for_task(self, task_type: str) -> Optional[str]:
-        """Suggest the best device for a task type based on history."""
-        return self._prefs.device_preferences.get(task_type)
-
     def get_preferred_device(self, device_id: str) -> bool:
         """Check if a device is marked as preferred."""
         du = self._prefs.device_usage.get(device_id)

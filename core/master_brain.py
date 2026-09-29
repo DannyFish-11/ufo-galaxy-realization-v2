@@ -942,8 +942,20 @@ class MasterBrain:
         self._reevaluate_scaling_state(trigger="worker_registered", reason="topology_change")
         self._persist_state()
         _try_emit_event("WORKER_REGISTERED", {"worker_id": wid, "device_type": registration.device_type})
+        self._sync_tools_to_new_worker()
         logger.info(f"MasterBrain: worker registered — {wid} ({registration.device_type})")
         return {"success": True, "worker_id": wid}
+
+    @staticmethod
+    def _sync_tools_to_new_worker() -> None:
+        """新 worker 进来时把完整工具清单广播一遍；此前只在生成新工具时单条广播，后来的 worker 看不到之前的工具。"""
+        try:
+            from core.mcp_gateway import get_mcp_gateway
+            from core.task_utils import create_tracked_task
+
+            create_tracked_task(get_mcp_gateway().sync_tool_registry(), name="mcp_tool_registry_sync")
+        except Exception as exc:  # noqa: BLE001 — 没有事件循环 / 网关不可用时跳过
+            logger.debug("MasterBrain: tool registry sync skipped — %s", exc)
 
     async def handle_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
         """Reflect an explicit worker shutdown into topology state."""

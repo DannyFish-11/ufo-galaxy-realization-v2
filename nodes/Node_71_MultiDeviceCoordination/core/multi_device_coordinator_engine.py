@@ -33,7 +33,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional, Any, Callable, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from datetime import datetime
@@ -531,6 +531,7 @@ class MultiDeviceCoordinatorEngine:
     
     def _handle_scheduler_event(self, event: SchedulerEvent) -> None:
         """处理调度器事件"""
+        self._track_view_occupancy(event)
         if event.event_type == SchedulerEventType.TASK_COMPLETED:
             self._stats["tasks_completed"] += 1
             if event.task:
@@ -546,6 +547,25 @@ class MultiDeviceCoordinatorEngine:
                     "error": event.task.error
                 })
     
+    def _track_view_occupancy(self, event: SchedulerEvent) -> None:
+        """分配 / 完成 / 失败同步到规范设备视图的协调本地占用（不回写 UDM）。
+
+        此前视图的 BUSY / AVAILABLE 只在摄取时定一次，任务派出去了视图仍说它空闲。
+        """
+        task = event.task
+        if task is None:
+            return
+        if event.event_type == SchedulerEventType.TASK_ASSIGNED:
+            mark = "mark_task_assigned"
+        elif event.event_type in (SchedulerEventType.TASK_COMPLETED, SchedulerEventType.TASK_FAILED):
+            mark = "mark_task_released"
+        else:
+            return
+        for device_id in list(getattr(task, "assigned_devices", None) or []):
+            view = self._canonical_views.get(device_id)
+            if view is not None:
+                getattr(view, mark)(task.task_id)
+
     # ==================== 规范设备摄取（Canonical Device Intake — PR-7）====================
 
     def ingest_canonical_device_view(self, rrd: Any) -> bool:
@@ -1100,6 +1120,39 @@ class MultiDeviceCoordinatorEngine:
                 "discovered_count": self._discovery.count()
             }
         return {}
+
+    async def discover_now(self) -> List[Dict[str, Any]]:
+        """立即发起一轮发现（不等周期），返回发现表里的设备。"""
+        if not self._discovery:
+            return []
+        return [d.to_dict() for d in await self._discovery.discover_now()]
+
+    async def receive_gossip(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """对端节点推来的 gossip 消息：交给状态同步器（已见 / 超跳数的丢弃）。"""
+        if not self._synchronizer:
+            return None
+        event = await self._synchronizer.handle_gossip_message(message)
+        return event.to_dict() if event is not None else None
+
+    def configure_failover(self, primary: str, secondaries: List[str]) -> Dict[str, Any]:
+        """设定主设备与备用设备；每台的健康检查按它在本节点注册表里的心跳判。"""
+        failover = self._fault_tolerance.failover
+        for device_id in [primary, *secondaries]:
+            failover.register_health_checker(device_id, self._heartbeat_checker(device_id))
+        for stale in [d for d in failover.get_status()["secondaries"] if d not in secondaries]:
+            failover.remove_secondary(stale)
+        for device_id in secondaries:
+            if device_id != primary:
+                failover.add_secondary(device_id)
+        failover.set_primary(primary)
+        return failover.get_status()
+
+    def _heartbeat_checker(self, device_id: str) -> Callable[[], Awaitable[bool]]:
+        async def _healthy() -> bool:
+            device = self._registry.get(device_id)
+            return device is not None and device.is_healthy(self.config.heartbeat_timeout)
+
+        return _healthy
 
 
 # 便捷函数

@@ -712,35 +712,16 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 9b. MCP 工具加载（从 config/mcp_servers.json 读取并加载）
     # ====================================================================
     try:
-        import json as _json
-
         from core.mcp_loader import mcp_loader
 
+        # 经加载器自己的配置入口（同时认 Galaxy 与 Claude Desktop 两种格式、${VAR} 取环境变量）；
+        # 此前这里手写了一份只认 Galaxy 格式的解析，auto_start=false 的服务器连列表里都看不到
         mcp_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "mcp_servers.json")
-        auto_started = 0
         if os.path.exists(mcp_config_path):
-            with open(mcp_config_path, "r", encoding="utf-8") as f:
-                mcp_config = _json.load(f)
-            for srv in mcp_config.get("servers", []):
-                if not srv.get("auto_start", False):
-                    continue
-                try:
-                    # 解析环境变量引用 (${VAR_NAME} → os.environ)
-                    env = {}
-                    for k, v in (srv.get("env") or {}).items():
-                        if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
-                            env[k] = os.environ.get(v[2:-1], "")
-                        else:
-                            env[k] = v
-                    await mcp_loader.load(
-                        name=srv["name"],
-                        command=srv["command"],
-                        env=env if env else None,
-                        auto_start=True,
-                    )
-                    auto_started += 1
-                except Exception as e:
-                    logger.debug(f"MCP server '{srv['name']}' 跳过: {e}")
+            _mcp_result = await mcp_loader.load_from_config(mcp_config_path)
+            for _err in _mcp_result.get("errors", []):
+                logger.debug(f"MCP server 跳过: {_err}")
+        auto_started = sum(1 for _srv in mcp_loader.list_servers() if _srv.get("status") == "running")
 
         results["mcp_loader"] = {
             "status": "ok",
@@ -770,6 +751,17 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.debug("Fallback triggered: %s", e)
         results["capability_orchestrator"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"能力编排器初始化失败: {e}")
+
+    # ====================================================================
+    # 9d. 系统资源表 —— OpenClawd 的资源工具与投影编译器一直在读，登记方从没被调用
+    # ====================================================================
+    try:
+        from core.system_resource import seed_builtin_system_resources
+
+        results["system_resources"] = {"status": "ok", **seed_builtin_system_resources()}
+    except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
+        results["system_resources"] = {"status": "degraded", "error": str(_exc)}
 
     # ====================================================================
     # 10. 数字孪生引擎

@@ -70,6 +70,12 @@ class UpdateDeviceStateRequest(BaseModel):
     state: str = Field(..., description="新的设备状态")
 
 
+class ConfigureFailoverRequest(BaseModel):
+    """主备设备设定"""
+    primary: str = Field(..., description="主设备 ID")
+    secondaries: List[str] = Field(default_factory=list, description="备用设备 ID，按切换优先级排列")
+
+
 class CreateTaskRequest(BaseModel):
     """创建任务请求"""
     name: str = Field(..., description="任务名称")
@@ -212,6 +218,21 @@ def create_router(engine: MultiDeviceCoordinatorEngine) -> APIRouter:
     async def get_fault_tolerance_status():
         """获取容错层状态"""
         return engine._fault_tolerance.get_status()
+
+    @router.put("/fault-tolerance/failover", tags=["System"])
+    async def configure_failover(request: ConfigureFailoverRequest):
+        """设定主设备与备用设备（主设备心跳断了自动切到第一台健康的备用）"""
+        return engine.configure_failover(request.primary, request.secondaries)
+
+    @router.post("/discovery/scan", tags=["System"])
+    async def discover_now():
+        """立即发起一轮设备发现"""
+        return {"devices": await engine.discover_now()}
+
+    @router.post("/sync/gossip", tags=["System"])
+    async def receive_gossip(message: Dict[str, Any]):
+        """对端协调节点推来的 gossip 状态消息"""
+        return {"event": await engine.receive_gossip(message)}
 
     # ==================== 设备端点 ====================
 

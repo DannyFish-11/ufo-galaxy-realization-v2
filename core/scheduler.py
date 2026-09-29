@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from core.safe_executor import SafeExecutor
+
 logger = logging.getLogger("scheduler")
 
 # PR-2: Affirms that this scheduler delegates correlation-field stamping to
@@ -195,29 +197,8 @@ _BUILTIN_TOOLS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "execute_code",
-            "description": (
-                "Execute code in a secure sandbox. Supports Python, JavaScript, "
-                "and Bash. Use when you need to compute, process data, verify logic, "
-                "generate scripts, or perform calculations programmatically."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string", "description": "Source code to execute"},
-                    "language": {
-                        "type": "string",
-                        "enum": ["python", "javascript", "bash"],
-                        "description": "Programming language",
-                    },
-                },
-                "required": ["code", "language"],
-            },
-        },
-    },
+    # 沙箱执行工具的定义只写一份：由执行它的 SafeExecutor 给出
+    SafeExecutor.as_tool_definition(),
     {
         "type": "function",
         "function": {

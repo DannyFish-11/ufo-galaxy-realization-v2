@@ -477,22 +477,22 @@ class SafeExecutor:
     # Agent 集成: 作为 ReAct 工具
     # ================================================================
 
-    def as_tool_definition(self) -> Dict:
-        """返回 OpenAI function calling 格式的工具定义"""
+    @staticmethod
+    def as_tool_definition() -> Dict:
+        """返回 OpenAI function calling 格式的工具定义（调度器工具表里的 execute_code 就取这一份）"""
         return {
             "type": "function",
             "function": {
                 "name": "execute_code",
                 "description": (
-                    "Execute code in a secure sandbox. "
-                    "Supports Python, JavaScript, and Bash. "
-                    "Use this when you need to compute, process data, "
-                    "or verify logic programmatically."
+                    "Execute code in a secure sandbox. Supports Python, JavaScript, "
+                    "and Bash. Use when you need to compute, process data, verify logic, "
+                    "generate scripts, or perform calculations programmatically."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "code": {"type": "string", "description": "The source code to execute"},
+                        "code": {"type": "string", "description": "Source code to execute"},
                         "language": {
                             "type": "string",
                             "enum": ["python", "javascript", "bash"],

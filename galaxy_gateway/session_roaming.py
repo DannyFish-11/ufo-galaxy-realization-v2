@@ -321,15 +321,6 @@ class SessionRoamingManager:
         session.last_active = time.time()
         self._save_sessions_to_disk()
 
-    def update_task_state(self, session_id: str, task_state: Dict):
-        """更新会话的任务状态"""
-        session = self._sessions.get(session_id)
-        if not session:
-            return
-        session.context.task_state.update(task_state)
-        session.last_active = time.time()
-        self._save_sessions_to_disk()
-
     def close_session(self, session_id: str):
         """关闭会话"""
         session = self._sessions.get(session_id)
@@ -453,7 +444,12 @@ class SessionRoamingManager:
                 target = focused_devices[0]
                 if target != device_id:
                     logger.info(f"[SessionRoaming] 检测到注意力转移，自动迁移: " f"{device_id} -> {target}")
-                    await self.migrate_session(session_id, target)
+                    # 会话迁移只有一个入口（D3）：先认会话在哪个存储，再迁
+                    from core.session_migration import migrate_session as _migrate
+
+                    await _migrate(
+                        session_id=session_id, target_device=target, source_device=device_id, roaming_manager=self
+                    )
 
     def set_migration_callback(self, callback: Callable[[str, str, str], Any]):
         """
@@ -479,17 +475,6 @@ class SessionRoamingManager:
             logger.debug(f"[SessionRoaming] 快照持久化到磁盘: {snapshot_file}")
         except Exception as e:
             logger.warning(f"[SessionRoaming] 快照持久化失败: {e}")
-
-    def load_snapshot(self, session_id: str) -> Optional[Dict]:
-        """从磁盘加载会话快照。"""
-        try:
-            snapshot_file = PERSISTENCE_DIR / f"snapshot_{session_id}.json"
-            if snapshot_file.exists():
-                return json.loads(snapshot_file.read_text(encoding="utf-8"))
-            return None
-        except Exception as e:
-            logger.warning(f"[SessionRoaming] 加载快照失败: {e}")
-            return None
 
     # ------------------------------------------------------------------
     # 推送上下文到目标设备

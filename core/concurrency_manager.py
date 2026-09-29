@@ -534,20 +534,6 @@ class ConcurrencyManager:
                         logger.debug(f"已取消跟踪任务: {tid}")
                 self._tracked_tasks.clear()
 
-    async def track_task(self, task_id: str, task: asyncio.Task):
-        """注册一个后台任务到跟踪器，防止泄漏"""
-        if self._tracked_mu is None:
-            self._tracked_mu = asyncio.Lock()
-        async with self._tracked_mu:
-            if len(self._tracked_tasks) >= self._max_tracked_tasks:
-                # 清理已完成的任务腾出空间
-                self._tracked_tasks = {k: v for k, v in self._tracked_tasks.items() if not v.done()}
-                if len(self._tracked_tasks) >= self._max_tracked_tasks:
-                    logger.warning(f"跟踪任务已达上限 ({self._max_tracked_tasks})，拒绝新任务")
-                    task.cancel()
-                    return
-            self._tracked_tasks[task_id] = task
-
     async def _cleanup_loop(self):
         """定期清理过期锁、槽位和已完成的跟踪任务"""
         while True:

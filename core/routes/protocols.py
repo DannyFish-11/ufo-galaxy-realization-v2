@@ -94,6 +94,24 @@ class SkillExecuteRequest(BaseModel):
 # ============================================================================
 
 
+async def _capabilities_changed(*, removed_skill: str = "") -> None:
+    """MCP / 技能装卸或重载之后：能力编排器按规范能力重新投影（它的 docstring 写着该在这时调，
+    此前没人调，装了新工具编排器也看不见）；卸下的技能同步移出技能注册表（此前只卸 loader）。"""
+    if removed_skill:
+        try:
+            from core.skill_registry import get_skill_registry
+
+            get_skill_registry().unregister_skill(removed_skill)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("skill registry unregister skipped for %s: %s", removed_skill, exc)
+    try:
+        from core.capability_orchestrator import capability_orchestrator
+
+        await capability_orchestrator.reinitialize()
+    except Exception as exc:  # noqa: BLE001 — 编排器刷新失败不影响装卸结果
+        logger.debug("capability orchestrator refresh skipped: %s", exc)
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create protocol management routes router."""
     router = APIRouter()
@@ -150,6 +168,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
 
             logger.info(f"MCP 服务器加载: {req.name} -> {result.get('server_id', 'N/A')}")
+            if result.get("success"):
+                await _capabilities_changed()
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
 
@@ -181,6 +201,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             result = await mcp_loader.unload(server_id)
             logger.info(f"MCP 服务器卸载: {name} ({server_id})")
+            if result.get("success"):
+                await _capabilities_changed()
             return JSONResponse(result)
 
         except ImportError:
@@ -345,6 +367,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
 
             logger.info(f"技能加载: {req.name or req.path} -> " f"success={result.get('success', False)}")
+            if result.get("success"):
+                await _capabilities_changed()
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
 
@@ -412,6 +436,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             result = await skill_loader.unload(skill_id)
             logger.info(f"技能卸载: {name} ({skill_id})")
+            if result.get("success"):
+                await _capabilities_changed(removed_skill=name)
             return JSONResponse(result)
 
         except ImportError:
@@ -449,6 +475,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 result.get("validated"),
                 result.get("tool_count", 0),
             )
+            if result.get("loaded"):
+                await _capabilities_changed()
             status_code = 200 if result.get("loaded") else 500
             return JSONResponse(result, status_code=status_code)
         except Exception as e:
@@ -473,6 +501,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 result.get("loaded"),
                 result.get("validated"),
             )
+            if result.get("loaded"):
+                await _capabilities_changed()
             status_code = 200 if result.get("loaded") else 500
             return JSONResponse(result, status_code=status_code)
         except Exception as e:

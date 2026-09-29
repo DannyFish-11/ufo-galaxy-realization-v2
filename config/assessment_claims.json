@@ -572,14 +572,21 @@
       ]
     },
     {
-      "id": "system-resource-registry-never-seeded",
-      "source": "docs/UNWIRED_CODE_INVENTORY.md(第七节 7.1 第 3 条)",
-      "recorded_on": "2026-09-28",
-      "statement": "OpenClawd 的系统资源工具与投影编译器都在读 get_system_resource_registry(),但往表里登记资源的 seed_*_resource 在生产里一个都没被调用,表永远是空的。",
+      "id": "system-resource-registry-is-seeded",
+      "source": "core/startup.py(第 9d 步);core/system_resource.py(seed_builtin_system_resources / track_device_resource);core/unified/presence_fanout.py",
+      "recorded_on": "2026-09-29",
+      "statement": "系统资源表有登记方了:启动时 seed_builtin_system_resources() 登记 GitHub / 学术检索 / 工程循环 / 代码沙箱四项内置资源,并把 engineer__* 与 resource__* 两类能力登记进能力总线;设备随 UDM 在线翻转由 track_device_resource 登记、标为可用或不可用(离线保留记录)。OpenClawd 的 resource__* 工具与投影编译器读到的不再是空表。",
+      "supersedes": "2026-09-28 的 system-resource-registry-never-seeded:读取方都在,往表里登记的 seed_*_resource 在生产里零调用,表永远是空的。〔2026-09-29 已改源文档:UNWIRED_CODE_INVENTORY 7.1 第 3 条已标已接〕",
       "predicates": [
         {
           "kind": "has_production_caller",
-          "target": "get_system_resource_registry",
+          "target": "seed_builtin_system_resources",
+          "scope": "core",
+          "expected": true
+        },
+        {
+          "kind": "has_production_caller",
+          "target": "track_device_resource",
           "scope": "core",
           "expected": true
         },
@@ -587,19 +594,13 @@
           "kind": "has_production_caller",
           "target": "seed_github_resource",
           "scope": "core",
-          "expected": false
+          "expected": true
         },
         {
           "kind": "has_production_caller",
           "target": "seed_device_resource",
           "scope": "core",
-          "expected": false
-        },
-        {
-          "kind": "has_production_caller",
-          "target": "seed_local_tool_resource",
-          "scope": "core",
-          "expected": false
+          "expected": true
         }
       ]
     }

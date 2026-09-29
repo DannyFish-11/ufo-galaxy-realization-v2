@@ -499,9 +499,15 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
     """
     # ── Contract validation ──────────────────────────────────────────────────
     try:
-        from core.mcp_addon_contract import MCPAddonContractError, validate_mcp_addon_contract  # noqa: F401
+        from core.mcp_addon_contract import (  # noqa: F401
+            MCPAddonContractError,
+            build_mcp_addon_contract_summary,
+            validate_mcp_addon_contract,
+        )
 
         contract = validate_mcp_addon_contract(tool_manifest)
+        # 与技能包那一侧对称：校验通过的契约摘要进日志，装了什么、权限与入口是什么可追
+        logger.debug("mcp_tool.json contract validated: %s", build_mcp_addon_contract_summary(contract))
     except ImportError:
         # Graceful degradation: fall back to minimal field checks if the
         # contract module is unavailable (should never happen in production).

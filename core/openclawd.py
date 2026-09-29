@@ -8834,7 +8834,7 @@ class OpenClawd:
                     layer = ToolCallRecord.classify_layer(tc_name)
                     # 结果分类(取代旧的 `result.get("success", True)` 二元判定;
                     # 为什么必须分类、为什么不能默认判成功,见 core/react_progress.py)
-                    from core.react_progress import ToolOutcome, classify_tool_outcome
+                    from core.react_progress import ToolOutcome, classify_tool_outcome, outcome_hint
 
                     _outcome = classify_tool_outcome(result)
                     if _outcome is ToolOutcome.CONTRACT_VIOLATION:
@@ -8884,7 +8884,7 @@ class OpenClawd:
                         {
                             "role": "tool",
                             "tool_call_id": tc_id,
-                            "content": _clipped + self._fuel_gauge_suffix(messages),
+                            "content": _clipped + outcome_hint(_outcome) + self._fuel_gauge_suffix(messages),
                         }
                     )
 

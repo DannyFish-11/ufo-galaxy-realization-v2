@@ -21,7 +21,6 @@ import logging
 try:
     from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
     from sklearn.preprocessing import StandardScaler
-    from sklearn.metrics.pairwise import cosine_similarity
     from sklearn.decomposition import PCA
     SKLEARN_AVAILABLE = True
 except ImportError:
@@ -399,123 +398,9 @@ class AutonomousLearningEngine:
                     })
         return patterns
     
-    def generalize_skill(self, pattern_id: str) -> Dict[str, Any]:
-        """从模式中泛化技能
-        
-        Args:
-            pattern_id: 模式ID
-            
-        Returns:
-            泛化后的技能
-        """
-        if pattern_id not in self.patterns:
-            return {"status": "error", "message": "Pattern not found"}
-        
-        pattern = self.patterns[pattern_id]
-        
-        # 获取相关经验
-        experiences = [self.experiences[eid] for eid in pattern.experiences if eid in self.experiences]
-        
-        if not experiences:
-            return {"status": "error", "message": "No experiences found for pattern"}
-        
-        # 分析动作模式
-        actions = [exp.action for exp in experiences]
-        action_patterns = self._analyze_action_patterns(actions)
-        
-        # 生成泛化动作模板
-        generalized_action = self._generate_generalized_action(action_patterns, experiences)
-        pattern.generalized_action = generalized_action
-        
-        # 计算泛化置信度
-        consistency_score = self._calculate_action_consistency(actions)
-        pattern.confidence = pattern.confidence * consistency_score
-        
-        result = {
-            "status": "success",
-            "pattern_id": pattern_id,
-            "skill_type": pattern.skill_type,
-            "generalized_action": generalized_action,
-            "confidence": pattern.confidence,
-            "avg_reward": pattern.avg_reward,
-            "action_patterns": action_patterns,
-            "consistency_score": consistency_score,
-            "based_on_experiences": len(experiences)
-        }
-        
-        logger.info(f"Generalized skill for pattern {pattern_id}: {generalized_action}")
-        return result
     
-    def _analyze_action_patterns(self, actions: List[str]) -> Dict[str, Any]:
-        """分析动作模式"""
-        patterns = {
-            "action_types": defaultdict(int),
-            "common_coords": [],
-            "common_texts": []
-        }
-        
-        for action in actions:
-            # 统计动作类型
-            if "click" in action.lower():
-                patterns["action_types"]["click"] += 1
-            elif "swipe" in action.lower():
-                patterns["action_types"]["swipe"] += 1
-            elif "input" in action.lower():
-                patterns["action_types"]["input"] += 1
-            else:
-                patterns["action_types"]["other"] += 1
-        
-        return patterns
     
-    def _generate_generalized_action(self, patterns: Dict, experiences: List[Experience]) -> str:
-        """生成泛化动作"""
-        # 选择最常见的动作类型
-        most_common = max(patterns["action_types"].items(), key=lambda x: x[1])
-        action_type = most_common[0]
-        
-        # 基于经验生成泛化动作
-        if action_type == "click":
-            # 计算平均点击位置
-            coords = []
-            for exp in experiences:
-                c = self._extract_action_coords(exp.action)
-                if c != [0.0, 0.0]:
-                    coords.append(c)
-            if coords:
-                avg_x = int(np.mean([c[0] for c in coords]) * 1000)
-                avg_y = int(np.mean([c[1] for c in coords]) * 1000)
-                return f"click({avg_x}, {avg_y})"
-            return "click(x, y)"
-        elif action_type == "swipe":
-            return "swipe(start_x, start_y, end_x, end_y)"
-        elif action_type == "input":
-            return "input(text)"
-        else:
-            return "action()"
     
-    def _calculate_action_consistency(self, actions: List[str]) -> float:
-        """计算动作一致性分数"""
-        if not actions:
-            return 0.0
-        
-        # 基于动作类型的一致性
-        action_types = []
-        for action in actions:
-            if "click" in action.lower():
-                action_types.append("click")
-            elif "swipe" in action.lower():
-                action_types.append("swipe")
-            elif "input" in action.lower():
-                action_types.append("input")
-            else:
-                action_types.append("other")
-        
-        if not action_types:
-            return 0.0
-        
-        most_common = max(set(action_types), key=action_types.count)
-        consistency = action_types.count(most_common) / len(action_types)
-        return consistency
     
     def replay_experiences(self, skill_type: str, limit: int = 10) -> List[Dict[str, Any]]:
         """回放相关经验用于强化学习
@@ -575,143 +460,10 @@ class AutonomousLearningEngine:
         logger.info(f"Replayed {len(result)} experiences for skill type: {skill_type}")
         return result
     
-    def find_similar_skills(self, query_exp_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """基于相似度查找相关技能
-        
-        Args:
-            query_exp_id: 查询经验ID
-            top_k: 返回最相似的K个
-            
-        Returns:
-            相似技能列表
-        """
-        if query_exp_id not in self.experiences:
-            return []
-        
-        if not SKLEARN_AVAILABLE:
-            return self._fallback_similarity(query_exp_id, top_k)
-        
-        query_exp = self.experiences[query_exp_id]
-        query_features = self._extract_features(query_exp).reshape(1, -1)
-        
-        # 计算与所有经验的相似度
-        similarities = []
-        for exp_id, exp in self.experiences.items():
-            if exp_id != query_exp_id:
-                exp_features = self._extract_features(exp).reshape(1, -1)
-                sim = cosine_similarity(query_features, exp_features)[0][0]
-                similarities.append((exp_id, sim, exp))
-        
-        # 排序并返回前K个
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        top_similar = similarities[:top_k]
-        
-        return [
-            {
-                "experience_id": exp_id,
-                "similarity": float(sim),
-                "skill_type": exp.skill_type,
-                "action": exp.action,
-                "reward": exp.reward
-            }
-            for exp_id, sim, exp in top_similar
-        ]
     
-    def _fallback_similarity(self, query_exp_id: str, top_k: int) -> List[Dict[str, Any]]:
-        """当sklearn不可用时使用的简单相似度"""
-        query_exp = self.experiences[query_exp_id]
-        
-        similar = []
-        for exp_id, exp in self.experiences.items():
-            if exp_id != query_exp_id:
-                # 简单匹配：相同技能类型得高分
-                sim = 1.0 if exp.skill_type == query_exp.skill_type else 0.0
-                similar.append((exp_id, sim, exp))
-        
-        similar.sort(key=lambda x: x[1], reverse=True)
-        return [
-            {
-                "experience_id": exp_id,
-                "similarity": float(sim),
-                "skill_type": exp.skill_type,
-                "action": exp.action,
-                "reward": exp.reward
-            }
-            for exp_id, sim, exp in similar[:top_k]
-        ]
     
     # ==================== 原有方法增强 ====================
     
-    async def process_observation(self, device_id: str, ui_tree: Dict[str, Any], 
-                                   task_context: Dict[str, Any]) -> Dict[str, Any]:
-        """处理 VLM 观察结果，生成下一步行动计划（增强版）"""
-        
-        # 1. 检查是否有相似的历史经验
-        similar_skills = []
-        if self.experiences:
-            # 创建临时经验用于查找相似
-            temp_exp = Experience(
-                experience_id="temp",
-                device_id=device_id,
-                ui_tree=ui_tree,
-                task_context=task_context,
-                action="",
-                outcome={},
-                skill_type=task_context.get("skill_type", "general")
-            )
-            temp_features = self._extract_features(temp_exp).reshape(1, -1)
-            
-            # 查找相似经验
-            for exp_id, exp in list(self.experiences.items())[:50]:  # 限制搜索范围
-                exp_features = self._extract_features(exp).reshape(1, -1)
-                if SKLEARN_AVAILABLE:
-                    sim = cosine_similarity(temp_features, exp_features)[0][0]
-                else:
-                    sim = 1.0 if exp.skill_type == temp_exp.skill_type else 0.0
-                
-                if sim > 0.7:  # 相似度阈值
-                    similar_skills.append({
-                        "experience_id": exp_id,
-                        "similarity": float(sim),
-                        "action": exp.action,
-                        "success": exp.success
-                    })
-        
-        # 2. 如果有高置信度的相似经验，优先使用
-        if similar_skills:
-            similar_skills.sort(key=lambda x: x["similarity"], reverse=True)
-            best_match = similar_skills[0]
-            if best_match["success"] and best_match["similarity"] > 0.8:
-                logger.info(f"Using similar experience {best_match['experience_id']} with similarity {best_match['similarity']}")
-                return {
-                    "status": "plan_generated_from_memory",
-                    "commands": [best_match["action"]],
-                    "similarity": best_match["similarity"],
-                    "source_experience": best_match["experience_id"]
-                }
-        
-        # 3. 否则调用 Qwen-Think-Max 进行推理
-        prompt = self._build_qwen_prompt(device_id, ui_tree, task_context)
-        plan_response = await self._call_qwen_think(prompt)
-        adb_commands = self._parse_plan_to_adb(plan_response)
-        
-        # 4. 存储新经验
-        new_exp = Experience(
-            experience_id=None,
-            device_id=device_id,
-            ui_tree=ui_tree,
-            task_context=task_context,
-            action=adb_commands[0] if adb_commands else "",
-            outcome={"pending": True},
-            skill_type=task_context.get("skill_type", "general")
-        )
-        self._store_experience(new_exp)
-        
-        return {
-            "status": "plan_generated",
-            "commands": adb_commands,
-            "similar_experiences": similar_skills[:3]
-        }
     
     def _store_experience(self, experience: Experience):
         """存储经验到缓冲区"""
@@ -726,16 +478,6 @@ class AutonomousLearningEngine:
         
         logger.debug(f"Stored experience {experience.experience_id}, buffer size: {len(self.experience_buffer)}")
     
-    def update_experience_outcome(self, experience_id: str, outcome: Dict[str, Any]):
-        """更新经验结果（用于强化学习反馈）"""
-        if experience_id in self.experiences:
-            exp = self.experiences[experience_id]
-            exp.outcome = outcome
-            exp.reward = outcome.get("reward", 0.0)
-            exp.success = outcome.get("success", False)
-            logger.info(f"Updated experience {experience_id} with outcome: success={exp.success}, reward={exp.reward}")
-            return True
-        return False
     
     def get_learning_stats(self) -> Dict[str, Any]:
         """获取学习统计信息"""
@@ -762,22 +504,9 @@ class AutonomousLearningEngine:
     
     # ==================== 内部方法 ====================
     
-    async def _call_qwen_think(self, prompt: str) -> Dict:
-        """调用 Qwen-Think-Max (Node 04) 进行推理"""
-        # 实际应调用 Node 04 (Router)
-        return {"plan": "click(100, 200)", "reason": "Identified 'Next' button."}
     
-    def _build_qwen_prompt(self, device_id: str, ui_tree: Dict, context: Dict) -> str:
-        """构建Qwen提示"""
-        return f"Device: {device_id}. UI Tree: {json.dumps(ui_tree)}. Context: {json.dumps(context)}. Generate next action."
     
-    def _parse_plan_to_adb(self, plan_response: Dict) -> List[str]:
-        """解析计划为ADB命令"""
-        return [plan_response.get("plan", "")]
     
-    async def _update_knowledge_graph(self, device_id: str, context: Dict, commands: List[str]):
-        """更新知识图谱"""
-        logger.info(f"Updating KG for {device_id} with new knowledge.")
 
 
 # ==================== 便捷函数 ====================

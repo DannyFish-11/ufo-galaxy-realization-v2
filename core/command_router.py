@@ -1528,6 +1528,16 @@ class CommandRouter:
                         _cap_graph_fallbacks = [
                             getattr(r, "node_id", None) for r in _cgraph_fb_records if getattr(r, "node_id", None)
                         ]
+                        # 第一个重试目标也按「能力 + 网络路径」联合挑：能力面给的串只看能力，
+                        # 路不通的候选排在前面时，首次重试照样白跑一趟
+                        from core.capability_network_bridge import fallback_joint_select as _joint_fallback
+
+                        _joint_fb = _joint_fallback(
+                            required_capabilities=_caps_for_pool,
+                            exclude_ids=[_cap_graph_selected] if _cap_graph_selected else [],
+                        ).selected_provider_id
+                        if _joint_fb:
+                            _cap_graph_fallbacks = [_joint_fb] + [f for f in _cap_graph_fallbacks if f != _joint_fb]
                     except Exception as _bridge_exc:
                         logger.warning(
                             "PR-CC: capability_network_bridge 不可用，联合选择降级为纯能力选择"
@@ -3610,6 +3620,19 @@ class CommandRouter:
             *(self.route_envelope(_subtask.envelope) for _subtask in _subtasks),
             return_exceptions=True,
         )
+        # 任务图里补上汇合边：每个子信封已由各自的 route_envelope 登记成节点，父信封是收口节点；
+        # 此前图里只有散出去的子节点，看不出它们在哪里汇合
+        try:
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK_fanin
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_fanin
+
+            _get_tgr_fanin().register_fanin(
+                [_subtask.envelope.task_id for _subtask in _subtasks],
+                envelope.task_id,
+                contributor=_WCK_fanin.COMMAND_ROUTER,
+            )
+        except Exception as _fanin_exc:
+            logger.debug("parallel fan-in registration skipped: %s", _fanin_exc)
 
         for _subtask, _result in zip(_subtasks, _results):
             _idx = _subtask.index

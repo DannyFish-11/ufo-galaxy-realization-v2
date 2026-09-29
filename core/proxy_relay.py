@@ -27,10 +27,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
-
-if TYPE_CHECKING:
-    from core.schemas.task_envelope import TaskEnvelope
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ProxyRelay")
 
@@ -420,41 +417,6 @@ class ProxyRelay:
             "pending": len(self._pending_relays),
             "awaiting_reply": len(self._reply_futures),
         }
-
-    async def relay_envelope(self, envelope: "TaskEnvelope") -> "RelayResult":
-        """Relay a :class:`~core.schemas.task_envelope.TaskEnvelope`.
-
-        Converts the canonical envelope back into a :class:`RelayRequest` and
-        delegates to :meth:`relay`.  The ``trace_id`` is preserved in
-        ``RelayRequest.payload`` under the ``_trace_id`` key so that the
-        receiving device can propagate it further.
-        """
-        target = envelope.target or ""
-        chain = list(envelope.targets[1:]) if len(envelope.targets) > 1 else []
-        payload = dict(envelope.args)
-        payload.setdefault("_trace_id", envelope.trace_id)
-        payload.setdefault("_task_id", envelope.task_id)
-
-        relay_req = RelayRequest(
-            relay_id=envelope.task_id,
-            source_device=envelope.source,
-            target_device=target,
-            payload_type=envelope.tool_name or "task",
-            payload=payload,
-            expect_reply=envelope.metadata.get("expect_reply", False),
-            timeout_seconds=envelope.timeout,
-            priority=envelope.priority,
-            chain=chain,
-        )
-        logger.info(
-            "ProxyRelay.relay_envelope | trace_id=%s task_id=%s %s → %s [%s]",
-            envelope.trace_id,
-            envelope.task_id,
-            envelope.source,
-            target,
-            envelope.tool_name,
-        )
-        return await self.relay(relay_req)
 
     def get_history(self, limit: int = 50) -> List[Dict]:
         return self._relay_history[-limit:]
