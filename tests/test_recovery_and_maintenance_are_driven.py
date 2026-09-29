@@ -430,7 +430,10 @@ class TestResumedWorkFindsItsContext:
         monkeypatch.setattr(telr, "get_lifecycle_registry", lambda: _Registry())
         assert pa.participant_heartbeat("p1")["resumed_task_ids"] == ["p1-task"]
 
-        _Device.status = "online"
+        class _OnlineDevice:
+            status = "online"
+
+        monkeypatch.setattr(udm, "get_device", lambda _id: _OnlineDevice())
         assert "resumed_task_ids" not in pa.participant_heartbeat("p1")
 
 
