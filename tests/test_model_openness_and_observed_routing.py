@@ -244,7 +244,7 @@ class TestObservedPerformanceReachesBrainSelection:
 
         from core.multi_llm_router import MultiLLMRouter
 
-        src = inspect.getsource(MultiLLMRouter.select_brain_for_task)
+        src = inspect.getsource(MultiLLMRouter._fit_scorer)
         assert "_bandit_score" in src, "选脑打分没有读 bandit —— 实测表现没接进来"
         # 取历史统计走 _bandit_stats(它内部才调 _provider_stats)。第一版这里断言的是
         # _provider_stats,把"抄了一遍回退逻辑"那个写法钉死了 —— 后来把重复逻辑提成
@@ -263,7 +263,7 @@ class TestObservedPerformanceReachesBrainSelection:
 
         from core.multi_llm_router import MultiLLMRouter
 
-        raw = inspect.getsource(MultiLLMRouter.select_brain_for_task)
+        raw = inspect.getsource(MultiLLMRouter._fit_scorer)
         code = _re.sub(r"#.*$", "", raw, flags=_re.M)
         assert "_treat_as_open_source" in code, "打分仍按 provider 猜开源,没有按模型判"
         assert "name in OPEN_SOURCE_PROVIDERS" not in code, "旧的 provider 粒度判定还在"
@@ -275,7 +275,7 @@ class TestObservedPerformanceReachesBrainSelection:
 
         from core.multi_llm_router import MultiLLMRouter
 
-        src = inspect.getsource(MultiLLMRouter.select_brain_for_task)
+        src = inspect.getsource(MultiLLMRouter._fit_scorer)
         assert 'b != float("inf")' in src, "没有排除未试过的 provider(+inf)"
 
     def test_observed_weight_is_configurable_and_defaults_to_one(self, monkeypatch):
@@ -284,7 +284,7 @@ class TestObservedPerformanceReachesBrainSelection:
 
         from core.multi_llm_router import MultiLLMRouter
 
-        src = inspect.getsource(MultiLLMRouter.select_brain_for_task)
+        src = inspect.getsource(MultiLLMRouter._fit_scorer)
         assert "GALAXY_ROUTE_OBSERVED_WEIGHT" in src
         assert '"1.0"' in src, "默认权重不是 1.0"
 

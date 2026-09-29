@@ -2118,59 +2118,23 @@ class MultiLLMRouter:
 
     # ───────── 做任务：按实际情况选模型（fit-based） ─────────
 
-    def select_brain_for_task(
+    def _fit_scorer(
         self,
+        candidates: List[str],
         task_type: TaskType,
-        complexity_score: float = 0.5,
+        complexity_score: float,
         *,
-        has_multimodal: bool = False,
         needs_timely: bool = False,
         prefer_local: bool = False,
-        only_providers: Optional[List[str]] = None,
-    ) -> RoutingDecision:
-        """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
+        bandit: Tuple[Dict[str, Any], int],
+    ):
+        """给一批候选 provider 造"按实际情况"的打分函数：质量 × 复杂度为主，成本、延迟、实测表现为辅。
 
-        用户规则（优先级）：
-          1. 主    — 完成质量/能力最强优先（quality tier × 复杂度）
-          2. 次    — 适度看 token 成本（同档次内便宜优先）
-          3. 条件  — 仅当任务需要及时响应(needs_timely)才把延迟纳入
-        硬约束：
-          - 只在【已填 key 且健康】的提供商里选（没填的不在 self.providers）
-          - 有多模态输入 → 只在多模态可用的提供商里选
-          - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
-
-        Returns:
-            RoutingDecision(provider, model, reason)；无候选时 provider="none"。
+        ``select_brain_for_task``（选一个）与 ``rank_cloud_providers``（云端排序）共用这一份，
+        免得两处各写一套权重、日后只改了一处。``bandit`` 是 ``_bandit_stats`` 的结果，由调用方取，
+        这样样本阈值的判定仍只有 ``_bandit_stats`` 那一处。
         """
         import os as _os
-
-        # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
-        candidates = [
-            name for name, cfg in self.providers.items() if cfg.is_available() and self.adapters.get(name) is not None
-        ]
-        # 把候选面收窄到调用方指定的那一批（把关角色用它只在云端里选）。
-        # 收窄到空时**不**悄悄放开 —— 交回 provider="none"，由调用方决定怎么回落；
-        # 在这里自作主张放开，等于把"只在云端选"变成一句没有效力的话。
-        if only_providers is not None:
-            allow = set(only_providers)
-            candidates = [n for n in candidates if n in allow]
-        # ── 模态硬过滤:按**这一轮会选中的那个型号**判,不按厂商判 ──
-        #
-        # 以前这里读的是 provider 级的 multimodal 旗标。"这家有能看图的型号"
-        # 不等于"这一轮选中的型号能看图":同一家里 gpt-5.3-codex 是纯代码档、
-        # sonar 系是检索问答,选中它们再把图发过去,上游多半**不报错**,忽略图像
-        # 照常作答 —— 于是没有任何人会发现模型其实没看见那张图。
-        if has_multimodal:
-            mm = [n for n in candidates if self._can_see(n, task_type, complexity_score)]
-            if mm:
-                candidates = mm
-            else:
-                logger.warning(
-                    "这一轮带着图像,但已配置的提供商里没有一个会选中能看图的型号 —— "
-                    "图会在发出前被压成文字。判据见 core.modality.input_modalities。"
-                )
-        if not candidates:
-            return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
 
         # 权重（可经 env 微调）
         try:
@@ -2193,7 +2157,7 @@ class MultiLLMRouter:
         # 拿不到任何真实成功率/延迟/成本反馈,全凭手写档位。所有者原话:「这玩意不应该
         # 交给智能路由自己选吗」——接上之后,手写档位退化为【冷启动先验】,有实测数据时
         # 由实测修正它。
-        _bstats, _btotal = self._bandit_stats(task_type)
+        _bstats, _btotal = bandit
         try:
             observed_weight = float(_os.environ.get("GALAXY_ROUTE_OBSERVED_WEIGHT", "1.0"))
         except ValueError:
@@ -2239,6 +2203,72 @@ class MultiLLMRouter:
             if prefer_local and name in ("ollama", "hf_local"):
                 score += 0.5
             return score
+
+        return _score
+
+    def select_brain_for_task(
+        self,
+        task_type: TaskType,
+        complexity_score: float = 0.5,
+        *,
+        has_multimodal: bool = False,
+        needs_timely: bool = False,
+        prefer_local: bool = False,
+        only_providers: Optional[List[str]] = None,
+    ) -> RoutingDecision:
+        """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
+
+        用户规则（优先级）：
+          1. 主    — 完成质量/能力最强优先（quality tier × 复杂度）
+          2. 次    — 适度看 token 成本（同档次内便宜优先）
+          3. 条件  — 仅当任务需要及时响应(needs_timely)才把延迟纳入
+        硬约束：
+          - 只在【已填 key 且健康】的提供商里选（没填的不在 self.providers）
+          - 有多模态输入 → 只在多模态可用的提供商里选
+          - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
+
+        Returns:
+            RoutingDecision(provider, model, reason)；无候选时 provider="none"。
+        """
+
+        # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
+        candidates = [
+            name for name, cfg in self.providers.items() if cfg.is_available() and self.adapters.get(name) is not None
+        ]
+        # 把候选面收窄到调用方指定的那一批（把关角色用它只在云端里选）。
+        # 收窄到空时**不**悄悄放开 —— 交回 provider="none"，由调用方决定怎么回落；
+        # 在这里自作主张放开，等于把"只在云端选"变成一句没有效力的话。
+        if only_providers is not None:
+            allow = set(only_providers)
+            candidates = [n for n in candidates if n in allow]
+        # ── 模态硬过滤:按**这一轮会选中的那个型号**判,不按厂商判 ──
+        #
+        # 以前这里读的是 provider 级的 multimodal 旗标。"这家有能看图的型号"
+        # 不等于"这一轮选中的型号能看图":同一家里 gpt-5.3-codex 是纯代码档、
+        # sonar 系是检索问答,选中它们再把图发过去,上游多半**不报错**,忽略图像
+        # 照常作答 —— 于是没有任何人会发现模型其实没看见那张图。
+        if has_multimodal:
+            mm = [n for n in candidates if self._can_see(n, task_type, complexity_score)]
+            if mm:
+                candidates = mm
+            else:
+                logger.warning(
+                    "这一轮带着图像,但已配置的提供商里没有一个会选中能看图的型号 —— "
+                    "图会在发出前被压成文字。判据见 core.modality.input_modalities。"
+                )
+        if not candidates:
+            return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
+
+        # 实测表现(L3 bandit)；样本不足时 _bandit_stats 返回 total=0，打分完全按静态先验走
+        _bstats, _btotal = self._bandit_stats(task_type)
+        _score = self._fit_scorer(
+            candidates,
+            task_type,
+            complexity_score,
+            needs_timely=needs_timely,
+            prefer_local=prefer_local,
+            bandit=(_bstats, _btotal),
+        )
 
         best = max(candidates, key=_score)
         model = self.select_model_by_complexity(best, task_type, complexity_score)
