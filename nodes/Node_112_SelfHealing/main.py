@@ -1080,6 +1080,12 @@ async def register_check(request: RegisterHealthCheckRequest):
 async def list_checks():
     return {cid: asdict(c) for cid, c in healing_engine.health_checks.items()}
 
+@app.delete("/checks/{check_id}")
+async def unregister_check(check_id: str):
+    if not healing_engine.unregister_health_check(check_id):
+        raise HTTPException(status_code=404, detail="Health check not found")
+    return {"success": True}
+
 @app.post("/checks/{check_id}/run")
 async def run_check(check_id: str):
     status = await healing_engine.run_health_check(check_id)
@@ -1120,6 +1126,31 @@ async def add_plan(request: AddRecoveryPlanRequest):
     )
     healing_engine.add_recovery_plan(plan)
     return {"success": True}
+
+class RegisterRecoveryHandlerRequest(BaseModel):
+    action: str
+    webhook_url: str
+    timeout: float = 30.0
+
+@app.post("/handlers")
+async def register_recovery_handler(request: RegisterRecoveryHandlerRequest):
+    """给某个恢复动作挂外部处理器：执行该动作时把故障 POST 到 webhook，2xx 视为恢复成功。
+
+    RECONFIGURE / FAILOVER / ROLLBACK 没有内置实现，只能靠这里接进来。
+    """
+    action = RecoveryAction(request.action)
+    if not request.webhook_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="webhook_url must be http(s)")
+
+    async def _webhook_handler(fault: Fault) -> bool:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=request.timeout) as client:
+            resp = await client.post(request.webhook_url, json={"action": action.value, "fault": json.loads(json.dumps(asdict(fault), default=str))})
+        return 200 <= resp.status_code < 300
+
+    healing_engine.register_recovery_handler(action, _webhook_handler)
+    return {"success": True, "action": action.value}
 
 @app.get("/plans")
 async def list_plans():

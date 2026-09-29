@@ -218,3 +218,94 @@ class TestVoiceLoopActuallyGoesThroughTheChokepoint:
         import core.voice_loop as mod
 
         assert "modality_bridge" in inspect.getsource(mod)
+
+
+class TestLiveCaptureLoopListensNatively:
+    """主语音循环真正走的那一路：``AudioCaptureService.add_whisper_callback`` 注册的回调。
+
+    上面的用例只证明了 ``transcribe_pcm`` 本身原生优先。但它此前唯一的调用方是
+    ``VoiceLoop.process_once`` —— 一个从没被调用过的一次性方法；``VoiceLoop.start()``
+    实际挂的是 ``add_whisper_callback``，转写线程里直连 ``whisper_asr.transcribe``。
+    所以 B 档切过去以后，你对着电脑说的每一句话仍然只进 Whisper。这里钉住真实路径。
+    """
+
+    @staticmethod
+    def _drive(svc, pcm):
+        from core.multimodal.audio_features import AudioState
+        from core.multimodal.signal_quality import SignalQuality
+
+        def _state(speaking, samples):
+            return AudioState(
+                energy=0.5 if speaking else 0.0,
+                speaking_ratio=0.6 if speaking else 0.0,
+                pause_density=0.1,
+                noise_level=0.1,
+                audio_freshness_ms=50.0,
+                is_speaking=speaking,
+                samples=samples,
+                sample_rate=16000,
+            )
+
+        cb = svc._asr_callbacks[-1]
+        quality = SignalQuality.ok(freshness_ms=10.0)
+        cb(_state(True, pcm), quality)
+        cb(_state(False, np.zeros(1, dtype=np.float32)), quality)
+
+    @staticmethod
+    async def _collect(svc):
+        import asyncio
+
+        received = []
+
+        async def _on_voice_input(text):
+            received.append(text)
+
+        svc.on_voice_input = _on_voice_input
+        svc._loop = asyncio.get_running_loop()
+        return received
+
+    @pytest.mark.asyncio
+    async def test_live_loop_sends_speech_to_the_native_backend(self, pcm, monkeypatch):
+        import asyncio
+
+        import core.native_modal as nm
+        from core.multimodal.audio_capture_service import AudioCaptureService
+
+        class _Backend:
+            def understand_audio(self, audio_b64, **kw):
+                return "原生听到的"
+
+        class _Whisper:
+            def transcribe(self, *a, **k):
+                raise AssertionError("原生在线时主循环不该再进 Whisper")
+
+        monkeypatch.setattr(nm, "_active_backend", _Backend())
+        svc = AudioCaptureService()
+        received = await self._collect(svc)
+        svc.add_whisper_callback(_Whisper(), language="zh")
+        self._drive(svc, pcm)
+        for _ in range(40):
+            if received:
+                break
+            await asyncio.sleep(0.05)
+        assert received == ["原生听到的"]
+
+    @pytest.mark.asyncio
+    async def test_live_loop_still_uses_whisper_without_native(self, pcm):
+        import asyncio
+
+        from core.multimodal.audio_capture_service import AudioCaptureService
+
+        class _Whisper:
+            def transcribe(self, audio_np, sample_rate=16000, language="zh"):
+                return "whisper 的文字"
+
+        svc = AudioCaptureService()
+        received = await self._collect(svc)
+        svc.add_whisper_callback(_Whisper(), language="zh")
+        self._drive(svc, pcm)
+        for _ in range(40):
+            if received:
+                break
+            await asyncio.sleep(0.05)
+        assert received == ["whisper 的文字"]

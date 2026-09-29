@@ -218,7 +218,17 @@ class AudioCaptureService:
                 # 不影响后续音频块的正确累积。
                 def _transcribe_in_thread(_audio=audio_np, _sr=state.sample_rate) -> None:
                     try:
-                        text = whisper_asr.transcribe(_audio, sample_rate=_sr, language=language)
+                        # 听走 modality_bridge 的收口:B 档原生后端在线时先让全模态模型自己听,
+                        # 拿不到再回落这里传进来的 Whisper。此前这一路直连 Whisper —— 主语音
+                        # 循环的每一句话都绕过了原生听,只有从没被调用过的 process_once 接了收口。
+                        from core.modality_bridge import transcribe_pcm
+
+                        text = transcribe_pcm(
+                            _audio,
+                            sample_rate=_sr,
+                            language=language,
+                            fallback=lambda pcm, sr, lang: whisper_asr.transcribe(pcm, sample_rate=sr, language=lang),
+                        )
                         if text:
                             self._transcripts += 1  # 诊断:成功转写出文字
                             logger.info("ASR result: %s", text)

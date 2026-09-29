@@ -383,6 +383,9 @@ class ExternalToolWrapper:
         """注册自定义处理器"""
         self._custom_handlers[tool_id] = handler
 
+    def has_custom_handler(self, tool_id: str) -> bool:
+        return tool_id in self._custom_handlers
+
     async def execute_custom(self, tool_id: str, **kwargs) -> Any:
         """执行自定义工具"""
         if tool_id not in self._custom_handlers:
@@ -521,8 +524,21 @@ async def install_tool(tool_id: str):
     return {"success": success}
 
 
+@app.delete("/tools/{tool_id}")
+async def unregister_tool(tool_id: str):
+    if not tool_wrapper.unregister_tool(tool_id):
+        raise HTTPException(status_code=404, detail="Tool not found")
+    return {"success": True}
+
+
 @app.post("/execute")
 async def execute_tool(request: ExecuteToolRequest):
+    # 进程内登记过自定义处理器的工具走处理器，不起子进程
+    if tool_wrapper.has_custom_handler(request.tool_id):
+        result = await tool_wrapper.execute_custom(
+            request.tool_id, arguments=request.arguments, input_data=request.input_data
+        )
+        return {"tool_id": request.tool_id, "success": True, "custom": True, "result": result}
     try:
         execution = await tool_wrapper.execute(
             request.tool_id, request.arguments, request.input_data, request.timeout, request.working_dir

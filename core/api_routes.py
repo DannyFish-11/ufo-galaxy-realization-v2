@@ -438,6 +438,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # Batch PR-4: health and diagnostics domain modules (extracted from monitoring)
     router.include_router(health_routes.create_router(service_manager=service_manager, config=config))
     router.include_router(diagnostics_routes.create_router(service_manager=service_manager, config=config))
+    # 内部诊断索引：各子系统写好了却读不出来的快照（只读，需鉴权，面板不画）
+    from core.routes import internals as internals_routes
+
+    router.include_router(internals_routes.create_router(), dependencies=_auth_deps)
     router.include_router(hybrid.create_router(service_manager=service_manager, config=config))
     router.include_router(cost.create_router(service_manager=service_manager, config=config))
     router.include_router(channels.create_router(service_manager=service_manager, config=config))

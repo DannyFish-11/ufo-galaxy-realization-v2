@@ -46,6 +46,10 @@ class ClipRequest(BaseModel):
     start_time: str  # HH:MM:SS or seconds
     duration: str
 
+class MergeRequest(BaseModel):
+    input_paths: List[str]
+    output_path: str
+
 class ExtractAudioRequest(BaseModel):
     input_path: str
     output_path: str
@@ -141,11 +145,15 @@ class FFmpegManager:
 
     def merge_videos(self, input_paths: List[str], output_path: str) -> Dict:
         """合并视频"""
-        # 创建临时文件列表
-        list_file = self.work_dir / "merge_list.txt"
+        # 每次合并一个独立的列表文件(原来固定叫 merge_list.txt,并发合并会互相覆盖);
+        # concat 列表里单引号要按 ffmpeg 的规则转义成 '\'' ,否则带引号的路径能改写列表本身。
+        import uuid
+
+        list_file = self.work_dir / f"merge_list_{uuid.uuid4().hex}.txt"
         with open(list_file, 'w', encoding='utf-8') as f:
             for path in input_paths:
-                f.write(f"file '{path}'\n")
+                escaped = str(path).replace("'", "'\\''")
+                f.write(f"file '{escaped}'\n")
 
         args = [
             "-f", "concat",
@@ -154,9 +162,10 @@ class FFmpegManager:
             "-c", "copy",
             output_path
         ]
-        result = self._run_ffmpeg(args)
-        list_file.unlink()
-        return result
+        try:
+            return self._run_ffmpeg(args)
+        finally:
+            list_file.unlink(missing_ok=True)
 
 # 全局FFmpeg管理器
 ffmpeg_manager = FFmpegManager()
@@ -217,6 +226,16 @@ async def clip_video(request: ClipRequest):
             request.duration,
         )
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/merge")
+async def merge_videos(request: MergeRequest):
+    """按顺序拼接多段视频(流拷贝,不重新编码)"""
+    if len(request.input_paths) < 2:
+        raise HTTPException(status_code=400, detail="need at least two input_paths")
+    try:
+        return await asyncio.to_thread(ffmpeg_manager.merge_videos, request.input_paths, request.output_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

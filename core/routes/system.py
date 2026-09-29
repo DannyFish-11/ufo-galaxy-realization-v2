@@ -25,6 +25,9 @@ Routes in this module:
   GET  /api/v1/system/health       - 健康检查
   GET  /api/v1/system/config       - 系统配置(脱敏)
   GET  /api/v1/system/mode-status  - 系统模式状态（本地 vs 跨设备，接管能力可用性）
+  GET  /api/v1/system/container-runtime         - docker / podman 安装、守护进程、compose 就绪
+  POST /api/v1/system/container-runtime/test    - 试一下某个运行时能不能用
+  POST /api/v1/system/container-runtime/choice  - 选定运行时（写选择记录）
   GET  /api/v1/agents/status       - 所有活跃 Agent 状态
   GET  /api/v1/nodes/status        - 所有节点注册状态
   GET  /api/config                 - 前端配置
@@ -38,7 +41,7 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
 from core import upper_ports
@@ -396,6 +399,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # 实现 + 两份互不同步的键白名单(这份 ALLOWED_CONFIG_KEYS vs config.py 的
     # CONFIG_SCHEMA)正是之前"填了 Key 保存失败"一类配置漂移 bug 的温床。已删除
     # 本冗余端点,写配置收口到 core/routes/config.py 这一处唯一实现。
+
+    # ── 容器运行时（docker / podman）：看、试、选 ──
+    # launcher 启动时用同一个模块探测；这里让面板/运维不重启就能看状态、先试后选。
+    # 本组整组挂 require_auth，选择会写 runtime 选择记录。
+
+    @router.get("/api/v1/system/container-runtime")
+    async def container_runtime_state():
+        from core.container_runtime import inspect_runtime_state
+
+        return JSONResponse(inspect_runtime_state())
+
+    @router.post("/api/v1/system/container-runtime/test")
+    async def container_runtime_test(runtime: str = Body(..., embed=True, max_length=16)):
+        from core.container_runtime import test_runtime
+
+        return JSONResponse(test_runtime(runtime))
+
+    @router.post("/api/v1/system/container-runtime/choice")
+    async def container_runtime_choose(runtime: str = Body(..., embed=True, max_length=16)):
+        from core.container_runtime import set_runtime_choice
+
+        result = set_runtime_choice(runtime, source="api")
+        return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
     @router.get("/api/v1/system/mode-status")
     async def system_mode_status():

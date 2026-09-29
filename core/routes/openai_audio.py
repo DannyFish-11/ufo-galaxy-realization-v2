@@ -217,10 +217,12 @@ async def audio_capabilities() -> Dict[str, Any]:
     """
     out: Dict[str, Any] = {"tts": {}, "asr": {}}
     try:
-        from core.speech_output import current_engine_name, get_tts_degraded_reason
+        from core.speech_output import current_engine_name, get_tts_degraded_reason, native_speech_backend_registered
 
         out["tts"]["active_engine"] = current_engine_name()
         out["tts"]["degraded_reason"] = get_tts_degraded_reason()
+        # 全模态模型"自己说"的通路有没有登记。没登记时即使档位判成原生也会回落 TTS。
+        out["tts"]["native_backend_registered"] = native_speech_backend_registered()
     except Exception as exc:  # noqa: BLE001
         logger.warning("TTS 能力探测失败", exc_info=True)
         out["tts"]["error"] = type(exc).__name__

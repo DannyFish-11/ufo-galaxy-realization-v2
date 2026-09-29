@@ -297,9 +297,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             from core.config_hot_reload import get_config_manager
 
             mgr = get_config_manager()
-            return JSONResponse(mgr.get_status())
+            status = dict(mgr.get_status())
         except Exception:
             return _failed("config manager status")
+        # 人话缺项（缺哪些密钥、哪些值不合法、哪些提供方开着却没 key）。单独兜底：
+        # 这一项读不出来不该让整个状态接口失败。
+        try:
+            from core.config_service import get_config_service
+
+            status["missing_summary"] = get_config_service().describe_missing()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("describe_missing 失败: %s", exc)
+            status["missing_summary"] = None
+        return JSONResponse(status)
 
     @router.get("/api/v1/config/versions")
     async def config_version_history():

@@ -22,9 +22,10 @@ Routes:
 
 import json
 import logging
-from typing import Any, Dict, Optional
+import os
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -75,6 +76,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """混合执行统计"""
         return JSONResponse(hybrid_arbiter.get_stats())
 
+    @router.get("/api/v1/hybrid/modes")
+    async def hybrid_modes():
+        """混合执行策略能选的每种模式：人话说明、是否并发、是否降级链。"""
+        from core.hybrid_execution_policy import HybridExecutionMode, get_hybrid_execution_policy
+
+        policy = get_hybrid_execution_policy()
+        return JSONResponse(
+            {
+                "modes": [
+                    {
+                        "mode": m.value,
+                        "description": policy.describe_mode(m),
+                        "concurrent": m.is_concurrent,
+                        "degrade_chain": m.is_degrade_chain,
+                    }
+                    for m in HybridExecutionMode
+                ]
+            }
+        )
+
     @router.get("/api/v1/hybrid/registry")
     async def hybrid_registry():
         """应用能力注册表"""
@@ -122,6 +143,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "patterns": rag_memory.get_learned_patterns(),
             }
         )
+
+    # ── Node_72 兼容知识库（rag_memory 的回退后端）：整库导出 / 导入 ──
+    # 导出会带出全部条目原文、导入会改检索结果，两个都要 API 鉴权。
+
+    @router.get("/api/v1/rag/knowledge-base/export", dependencies=[Depends(require_auth)])
+    async def rag_kb_export():
+        import tempfile
+
+        from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "knowledge.json")
+            KnowledgeBaseSystem().export_knowledge(path)
+            with open(path, encoding="utf-8") as fh:
+                return JSONResponse(json.load(fh))
+
+    @router.post("/api/v1/rag/knowledge-base/import", dependencies=[Depends(require_auth)])
+    async def rag_kb_import(entries: List[Dict[str, Any]] = Body(..., embed=True)):
+        import tempfile
+
+        from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
+        required = {"id", "content", "metadata", "timestamp"}
+        bad = [i for i, e in enumerate(entries) if not required.issubset(e)]
+        if bad:
+            raise HTTPException(status_code=422, detail=f"entries missing id/content/metadata/timestamp: {bad[:10]}")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "knowledge.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"entries": entries}, fh, ensure_ascii=False)
+            kb = KnowledgeBaseSystem()
+            kb.import_knowledge(path)
+        return JSONResponse({"imported": len(entries), "total": len(kb.knowledge_entries)})
 
     @router.get("/api/v1/rag/stats")
     async def rag_stats():

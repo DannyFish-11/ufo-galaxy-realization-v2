@@ -24,6 +24,12 @@ GET  /api/v1/audit/traces/{trace_id}/graph
 
 GET  /api/v1/audit/snapshot
     Return a full ledger snapshot (all events, all traces).
+
+GET  /api/v1/audit/integrity
+    Verify the hash chain; reports the first broken position.
+
+GET  /api/v1/audit/dag
+    Export the whole ledger's causal DAG as an adjacency list.
 """
 
 from __future__ import annotations
@@ -304,5 +310,15 @@ def create_router() -> APIRouter:
                 status_code=500,
                 content={"ok": False, "error": str(exc)},
             )
+
+    @router.get("/api/v1/audit/integrity")
+    async def get_ledger_integrity():
+        """哈希链完整性：任何一条被改 / 删 / 插都会在首个断裂处报出来。"""
+        return JSONResponse(content={"ok": True, **_ledger().verify_chain()})
+
+    @router.get("/api/v1/audit/dag")
+    async def get_ledger_dag():
+        """整本账的因果 DAG（邻接表）；单条 trace 的见 /traces/{trace_id}/dag。"""
+        return JSONResponse(content={"ok": True, "dag": _ledger().to_dag()})
 
     return router

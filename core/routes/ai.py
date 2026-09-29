@@ -19,10 +19,11 @@ import uuid
 from typing import List
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from core.auth import require_auth
 from core.routes._models import AIIntentRequest, ConversationRequest
 from core.routes._shared import registered_devices, task_queue
 
@@ -346,5 +347,38 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             logger.error(f"Agent 辩论推理失败: {e}")
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+    # ── 智能体身份：长期目标与核心价值（每次推理前拼进系统提示词）──
+    # 写操作改的是模型每轮看到的"我是谁"，因此一律要 API 鉴权。
+
+    def _identity_view():
+        from core.agent_identity_memory import get_identity_memory
+
+        return get_identity_memory().get_identity().to_dict()
+
+    @router.get("/api/v1/agent/identity")
+    async def agent_identity():
+        return _identity_view()
+
+    @router.post("/api/v1/agent/identity/goals", dependencies=[Depends(require_auth)])
+    async def agent_identity_add_goal(text: str = Body(..., embed=True, min_length=1, max_length=500)):
+        from core.agent_identity_memory import get_identity_memory
+
+        get_identity_memory().add_goal(text.strip())
+        return _identity_view()
+
+    @router.delete("/api/v1/agent/identity/goals", dependencies=[Depends(require_auth)])
+    async def agent_identity_remove_goal(text: str = Query(..., min_length=1, max_length=500)):
+        from core.agent_identity_memory import get_identity_memory
+
+        get_identity_memory().remove_goal(text)
+        return _identity_view()
+
+    @router.post("/api/v1/agent/identity/values", dependencies=[Depends(require_auth)])
+    async def agent_identity_add_value(text: str = Body(..., embed=True, min_length=1, max_length=200)):
+        from core.agent_identity_memory import get_identity_memory
+
+        get_identity_memory().add_value(text.strip())
+        return _identity_view()
 
     return router

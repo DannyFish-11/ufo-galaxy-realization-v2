@@ -197,9 +197,10 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
 
+from core.auth import require_auth
 from core.authority_source_fingerprint import (
     SOURCE_KIND_CANONICAL_TRUTH,
     SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
@@ -2015,5 +2016,73 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,
             )
+
+    # ------------------------------------------------------------------
+    # 操作者覆盖（PR-33 此前只有运行时一半：设不进去，读覆盖的逻辑永远读到空）
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/override")
+    async def get_operator_override() -> Dict[str, Any]:
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+        return get_desktop_presence_runtime().operator_override_summary()
+
+    @router.put("/api/v1/operator/override", dependencies=[Depends(require_auth)])
+    async def put_operator_override(body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+        """提交一组覆盖（指定供应商 / 模型、多模态模式、执行位置、远程模式、主音视频源）。"""
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+        from core.operator_override import OperatorOverrideSet
+
+        return get_desktop_presence_runtime().set_operator_override(
+            OperatorOverrideSet.from_dict(body), applied_by="api"
+        )
+
+    @router.delete("/api/v1/operator/override", dependencies=[Depends(require_auth)])
+    async def clear_operator_override() -> Dict[str, Any]:
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+        return get_desktop_presence_runtime().clear_operator_override(applied_by="api")
+
+    @router.get("/api/v1/operator/decision-timeline")
+    async def decision_timeline() -> Dict[str, Any]:
+        """决策时间线回放（PR-34）：最近一轮从感知到落手，每一步选了什么、为什么。"""
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+        return get_desktop_presence_runtime().decision_timeline_replay()
+
+    @router.get("/api/v1/operator/permission-safety")
+    async def permission_safety() -> Dict[str, Any]:
+        """权限 / 信任 / 安全摘要。"""
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
+
+        return get_desktop_presence_runtime().permission_safety_summary()
+
+    @router.get("/api/v1/operator/recovery/continuation/{task_id}")
+    async def continuation_recovery(task_id: str) -> Dict[str, Any]:
+        """重启后这个任务的续接状态：待重绑 / 已闭环，以及委托流最近的恢复尝试。"""
+        from core.continuation_rebind_registry import get_continuation_rebind_registry
+        from core.delegated_flow_recovery_coordinator import get_delegated_flow_recovery_coordinator
+        from core.diagnostics_internals import jsonable
+
+        rebind = get_continuation_rebind_registry()
+        return {
+            "task_id": task_id,
+            "pending_rebind": rebind.is_pending_rebind(task_id),
+            "loop_closed": rebind.is_loop_closed(task_id),
+            "recent_delegated_flow_attempts": jsonable(
+                get_delegated_flow_recovery_coordinator().list_recent_attempts(10)
+            ),
+        }
+
+    @router.get("/api/v1/operator/audit-records")
+    async def audit_records(
+        kind: str = Query("", max_length=64), limit: int = Query(50, ge=1, le=500)
+    ) -> Dict[str, Any]:
+        """落盘的审计记录（审计一直在写，此前接口读不回落盘的那部分）。"""
+        from core.diagnostics_internals import jsonable
+        from core.replay_audit_persistence import load_audit_records
+
+        records = load_audit_records(kind_filter=kind or None)
+        return {"count": len(records), "records": jsonable(records[-limit:])}
 
     return router

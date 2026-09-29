@@ -428,6 +428,24 @@ async def generate_code(request: GenerateCodeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class CreatePRRequest(BaseModel):
+    repo: str
+    title: str
+    body: str = ""
+    head: str
+    base: str = "main"
+
+@app.post("/create_pr")
+async def create_pr(request: CreatePRRequest):
+    """分支推上去之后开 PR（issue_to_pr 流程的第 3 步）"""
+    try:
+        pr = await flow.github.create_pull_request(
+            request.repo, request.title, request.body, request.head, request.base
+        )
+        return {"success": True, "pr_number": pr.get("number"), "pr_url": pr.get("html_url"), "mock": flow.github.use_mock}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/review_pr")
 async def review_pr(request: ReviewPRRequest):
     """审查 Pull Request"""
@@ -468,7 +486,7 @@ async def workflow_issue_to_pr(repo: str, issue_number: int):
             "next_steps": [
                 f"1. 创建分支: {code_result['branch']}",
                 "2. 提交代码",
-                "3. 创建 Pull Request",
+                f"3. 创建 Pull Request: POST /create_pr (head={code_result['branch']})",
                 "4. 调用 /review_pr 进行自动审查"
             ]
         }

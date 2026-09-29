@@ -16,10 +16,11 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from core.auth import require_auth
 from core.routes._shared import connection_manager
 from core.session_manager import get_session_manager
 
@@ -451,5 +452,33 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         )
         status_code = int(result.pop("status_code", 200))
         return JSONResponse(result, status_code=status_code)
+
+    # ------------------------------------------------------------------
+    # 会话证据导出、记忆管理、情绪状态重置（写好了没有入口的三件）
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/sessions/{session_id}/evidence/export", dependencies=[Depends(require_auth)])
+    async def export_session_evidence(session_id: str, include_lineage: bool = True):
+        """会话证据链导出成 JSONL 下载（含血缘祖先的合并视图）。"""
+        path = await asyncio.to_thread(get_session_manager().export_jsonl, session_id, include_lineage=include_lineage)
+        if not path:
+            return JSONResponse({"success": False, "error": f"会话不存在：{session_id}"}, status_code=404)
+        return FileResponse(path, media_type="application/x-ndjson", filename=f"{session_id}.evidence.jsonl")
+
+    @router.delete("/api/v1/memory/long-term/{namespace}", dependencies=[Depends(require_auth)])
+    async def forget_memory_namespace(namespace: str):
+        """忘掉长期记忆里的这一类（整个命名空间）。"""
+        from core.cognitive.long_term_memory import get_long_term_memory
+
+        removed = get_long_term_memory().forget_namespace(namespace=namespace)
+        return {"success": True, "namespace": namespace, "removed": removed}
+
+    @router.post("/api/v1/sessions/{session_id}/persona/reset", dependencies=[Depends(require_auth)])
+    async def reset_session_persona(session_id: str):
+        """把这个会话的情绪状态复位到平静基线。"""
+        from core.diagnostics_internals import jsonable
+        from core.persona.state_store import get_state_store
+
+        return {"success": True, "state": jsonable(get_state_store().reset_state(session_id))}
 
     return router

@@ -1091,6 +1091,8 @@ class MultiDeviceCoordinatorEngine:
             "busy_devices": sum(1 for d in devices if d.state == DeviceState.BUSY),
             "idle_devices": sum(1 for d in devices if d.state == DeviceState.IDLE),
             "offline_devices": sum(1 for d in devices if d.state == DeviceState.OFFLINE),
+            # Every state, including ERROR / MAINTENANCE that the counters above miss
+            "devices_by_state": {state.value: self._registry.count_by_state(state) for state in DeviceState},
             # Canonical view stats (PR-7)
             "canonical_views_total": len(canonical_views),
             "canonical_views_available": sum(

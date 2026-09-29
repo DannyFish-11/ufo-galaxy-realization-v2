@@ -1457,10 +1457,6 @@ class TeamManager:
         finally:
             self.disband_team(team.team_id)
 
-    def list_teams(self) -> List[Dict]:
-        """列出所有团队"""
-        return [team.to_dict() for team in self.teams.values()]
-
     def get_team(self, team_id: str) -> Optional[AgentTeam]:
         return self.teams.get(team_id)
 

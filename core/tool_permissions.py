@@ -24,7 +24,7 @@ import logging
 import time
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -238,6 +238,10 @@ class ToolPermissionChecker:
     def add_policy(self, policy: ToolPermissionPolicy):
         """动态添加策略"""
         self._policies.append(policy)
+
+    def list_policies(self) -> List[Dict[str, Any]]:
+        """当前生效的策略表（只读副本）。"""
+        return [p.model_dump(mode="json") for p in self._policies]
 
     def reset_counters(self):
         """重置频率计数器"""

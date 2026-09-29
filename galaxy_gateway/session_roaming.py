@@ -217,6 +217,8 @@ class SessionRoamingManager:
 
         # 从磁盘加载持久化会话
         self._load_sessions_from_disk()
+        # 上次进程在迁移中途退出的会话：按迁移开始时落盘的快照回到原设备
+        self._recover_interrupted_migrations()
 
         logger.info("SessionRoamingManager initialized")
 
@@ -375,8 +377,10 @@ class SessionRoamingManager:
             # 步骤 1：序列化上下文
             context_snapshot = session.context.to_dict()
 
-            # 步骤 2：持久化快照到磁盘
+            # 步骤 2：持久化快照到磁盘，再把「迁移中」写盘 —— 进程在这之后任何一刻退出，
+            #         重启时都能认出这是一次没做完的迁移，并用快照回到原设备
             self._persist_snapshot(session_id, context_snapshot)
+            self._save_sessions_to_disk()
 
             # 步骤 3：推送到目标设备（必须成功，否则回滚）
             push_ok = await self._push_context_to_device(target_device_id, session_id, context_snapshot)
@@ -387,6 +391,8 @@ class SessionRoamingManager:
                 )
                 session.device_id = original_device_id
                 session.state = SessionState.ACTIVE
+                self._save_sessions_to_disk()
+                self._discard_snapshot(session_id)
                 return False
 
             # 步骤 4：推送成功，提交状态变更（两阶段提交）
@@ -397,6 +403,7 @@ class SessionRoamingManager:
             session.state = SessionState.ACTIVE
             session.last_active = time.time()
             self._save_sessions_to_disk()
+            self._discard_snapshot(session_id)
 
             logger.info(f"[SessionRoaming] 迁移成功: session_id={session_id} " f"-> device={target_device_id}")
 
@@ -417,6 +424,7 @@ class SessionRoamingManager:
             session.device_id = original_device_id
             session.state = SessionState.ACTIVE
             self._save_sessions_to_disk()
+            self._discard_snapshot(session_id)
             return False
 
     async def auto_migrate_on_attention_shift(
@@ -475,6 +483,50 @@ class SessionRoamingManager:
             logger.debug(f"[SessionRoaming] 快照持久化到磁盘: {snapshot_file}")
         except Exception as e:
             logger.warning(f"[SessionRoaming] 快照持久化失败: {e}")
+
+    def load_snapshot(self, session_id: str) -> Optional[Dict]:
+        """从磁盘加载会话快照。"""
+        try:
+            snapshot_file = PERSISTENCE_DIR / f"snapshot_{session_id}.json"
+            if snapshot_file.exists():
+                return json.loads(snapshot_file.read_text(encoding="utf-8"))
+            return None
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 加载快照失败: {e}")
+            return None
+
+    def _discard_snapshot(self, session_id: str) -> None:
+        """迁移收口（成功或回滚）后删掉快照：留着的快照只代表没做完的迁移。"""
+        try:
+            (PERSISTENCE_DIR / f"snapshot_{session_id}.json").unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"[SessionRoaming] 删除快照失败: {e}")
+
+    def _recover_interrupted_migrations(self) -> None:
+        """重启时处理上次停在「迁移中」的会话。
+
+        设备映射与 device_id 只在推送成功后才改，所以盘上还是原设备；迁移开始时的上下文在快照里。
+        按快照恢复上下文、回到原设备、标回 active —— 不替用户去重做那次迁移。
+        """
+        recovered = []
+        for sid, session in self._sessions.items():
+            if session.state != SessionState.MIGRATING:
+                continue
+            snapshot = self.load_snapshot(sid)
+            if snapshot is not None:
+                try:
+                    session.context = SessionContext.from_dict(snapshot)
+                except Exception as e:
+                    logger.warning(f"[SessionRoaming] 快照解析失败，保留盘上的上下文: session_id={sid} {e}")
+            session.state = SessionState.ACTIVE
+            self._device_session_map.setdefault(session.device_id, sid)
+            recovered.append(sid)
+        if not recovered:
+            return
+        self._save_sessions_to_disk()
+        for sid in recovered:
+            self._discard_snapshot(sid)
+        logger.warning(f"[SessionRoaming] 上次迁移中途中断的 {len(recovered)} 个会话已按快照回到原设备: {recovered}")
 
     # ------------------------------------------------------------------
     # 推送上下文到目标设备

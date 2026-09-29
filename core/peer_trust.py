@@ -234,9 +234,6 @@ class PeerTrustBook:
         logger.info("对端信任已更新:device_id=%s trust=%s auto_accept=%s", did, out.trust, out.auto_accept)
         return out
 
-    def set_trust(self, device_id: str, trust: Any) -> PeerRecord:
-        return self.upsert(device_id, trust=trust)
-
     def touch(self, device_id: str) -> None:
         """记录一次活动时间(不存在则不创建,避免陌生设备被隐式登记)。"""
         with self._lock:

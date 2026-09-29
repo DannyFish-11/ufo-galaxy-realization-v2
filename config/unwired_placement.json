@@ -1,18 +1,6 @@
 {
  "_comment": "未接线函数（安卓部分除外）各自该放在哪里。由人逐条核对后写下，scripts/unwired_inventory.py 渲染进 docs/UNWIRED_CODE_INVENTORY.md，tests/test_unwired_placement.py 守着：清单里每条非安卓函数都要有去处，这里写的每个名字都必须仍在清单里（接上或删掉之后要把这里的条目一起删）。键是「类名.方法名」或模块函数名；「*」表示该文件其余各条同一去处。值是 [去处类别, 放在哪里]。这是去处，不是已执行的处置 —— 删与接都等所有者定。",
  "placement": {
-  "core/adapters/ble_adapter.py": {
-   "BLEAdapter.list_connected": [
-    "surface",
-    "传输诊断：与 AIPTransport.transport_stats 一起进 core/routes/diagnostics.py（BLEAdapter 已在 galaxy_gateway/bootstrap/lifecycle.py 第 500 行注册）"
-   ]
-  },
-  "core/adapters/tailscale_p2p_adapter.py": {
-   "TailscaleP2PAdapter.list_registered_devices": [
-    "surface",
-    "core/routes/pairing.py 的 Tailscale 状态里列出 device_id → 100.x 地址（适配器已在 lifecycle.py 第 482 行注册）"
-   ]
-  },
   "core/adapters/tcp_adapter.py": {
    "TCPAdapter.connect_to_peer": [
     "object",
@@ -23,12 +11,6 @@
    "reload_policies": [
     "object",
     "策略文件缓存本身带 60 秒 TTL，改了会自己读到；进程里没有任何地方写这几个 .md，显式重载只给手工改文件后想立即生效的人用"
-   ]
-  },
-  "core/agent_identity_memory.py": {
-   "*": [
-    "surface",
-    "身份记忆的目标/价值增删：挂到 core/routes/ai.py（或面板「智能体」页）；现在只能读不能改"
    ]
   },
   "core/agent_manifest.py": {
@@ -45,10 +27,6 @@
    "AgentTeam.decouple_member": [
     "object",
     "耦合模式切换随团队对象：core/control_plane/swarm_scaler.py 扩缩容时用"
-   ],
-   "TeamManager.list_teams": [
-    "surface",
-    "core/routes/ai.py 列出团队"
    ]
   },
   "core/ai_intent.py": {
@@ -58,10 +36,6 @@
    ]
   },
   "core/aip_transport.py": {
-   "AIPTransport.transport_stats": [
-    "surface",
-    "core/routes/diagnostics.py：链路统计（docstring 自己写着供面板/诊断查看选路依据）"
-   ],
    "AIPTransport.unregister_adapter": [
     "object",
     "注册 / 注销成对的适配器 API；关停走 close_all()，没有「运行中卸下某个传输」的场景"
@@ -77,24 +51,6 @@
    "*": [
     "object",
     "唯一导入方是 core/android_participant_truth_ingress.py：安卓参与方真相那一侧，按所有者安排暂缓"
-   ]
-  },
-  "core/canonical_session_axis.py": {
-   "*": [
-    "surface",
-    "core/routes/projection.py（已 import）给出会话轴快照"
-   ]
-  },
-  "core/canonical_task_dispatch_chain.py": {
-   "*": [
-    "surface",
-    "core/routes/projection.py（已 import 本模块）给出派发链快照 / 路径分类"
-   ]
-  },
-  "core/capabilities/canonical_dispatcher.py": {
-   "CanonicalDispatcher.bus_catalog": [
-    "surface",
-    "诊断端点列出 CapabilityBus 快照；与 core/routes/protocols.py 的技能/MCP 列表放在一起"
    ]
   },
   "core/capability_assimilation.py": {
@@ -125,14 +81,14 @@
   },
   "core/capability_graph_selection.py": {
    "explain_selection": [
-    "surface",
-    "与 mesh 组的 explain_joint_selection 一起进 core/routes/operator.py 选路解释"
+    "object",
+    "选路解释的人话生成器，操作者检查端点目前只给结构化选路结果；要人话时由调用方直接调它（有测试钉住输出）"
    ]
   },
   "core/capability_network_bridge.py": {
    "explain_joint_selection": [
-    "surface",
-    "选路解释：core/routes/operator.py /api/v1/operator/inspect/route/{task_id} 一并给出人话解释"
+    "object",
+    "同 explain_selection：联合选路的人话解释，对象方法，按需调用"
    ]
   },
   "core/capability_network_runtime_policy.py": {
@@ -143,24 +99,6 @@
    "query_capable_device_executors": [
     "object",
     "与已接线的 query_routable_executors（device_pool_manager 在用）重复的窄化版；要么删，要么在需要「只要设备型执行者」的地方替换调用"
-   ],
-   "snapshot_canonical_runtime": [
-    "surface",
-    "core/routes/projection.py 或诊断端点：能力 + 网络的统一快照"
-   ]
-  },
-  "core/capability_orchestrator.py": {
-   "CapabilityOrchestrator.disable_capability": [
-    "surface",
-    "core/routes/protocols.py 加能力启停；或整模块随旧能力层退役（legacy）"
-   ],
-   "CapabilityOrchestrator.enable_capability": [
-    "surface",
-    "core/routes/protocols.py 加能力启停；或整模块随旧能力层退役（legacy）"
-   ],
-   "CapabilityOrchestrator.list_capabilities": [
-    "surface",
-    "core/routes/protocols.py 加能力启停；或整模块随旧能力层退役（legacy）"
    ]
   },
   "core/capability_runtime/capability_constraint.py": {
@@ -173,18 +111,6 @@
    "*": [
     "object",
     "值对象上的判断方法，随 capability_runtime 这一对象被消费时一起用"
-   ]
-  },
-  "core/capability_tier.py": {
-   "list_capabilities_by_tier": [
-    "surface",
-    "core/routes/diagnostics.py 按层级列能力"
-   ]
-  },
-  "core/channel_plugins.py": {
-   "ChannelPluginLoader.unload_plugin": [
-    "surface",
-    "core/routes/channels.py 加卸载渠道插件（已有加载）"
    ]
   },
   "core/cognitive/cognitive_activation_budget.py": {
@@ -216,10 +142,6 @@
    ]
   },
   "core/cognitive/long_term_memory.py": {
-   "LongTermMemory.forget_namespace": [
-    "surface",
-    "记忆管理：「忘掉这一类」端点（与 core/routes/sessions.py 的会话删除同层）"
-   ],
    "LongTermMemory.retrieve_entry": [
     "object",
     "单条取回，随长期记忆被按 id 读取时用"
@@ -229,10 +151,6 @@
    "*": [
     "object",
     "值对象判定方法，随 execution_planner 消费偏置时用"
-   ],
-   "build_memory_bias_active_scope_diagnostics": [
-    "surface",
-    "core/routes/projection.py（已 import）给出记忆偏置作用域诊断"
    ]
   },
   "core/cognitive/state_interpreter.py": {
@@ -251,30 +169,12 @@
    "block_compat_influence_at_decision_site": [
     "delete",
     "登记册里的兼容影响点在生产里没有一个决策点调用 PR-9 的检查（check_canonical_authority_at_decision_site 只被本模块自己调）；门写好了、门后没有路"
-   ],
-   "build_authority_hardening_snapshot": [
-    "surface",
-    "core/routes/projection.py 给出权威加固态势"
    ]
   },
   "core/compat_legacy_path_blocking_canonicalization.py": {
    "*": [
     "object",
     "legacy 记录上的判定方法，随 block_compat_influence_at_decision_site 一起"
-   ]
-  },
-  "core/compute_scheduler.py": {
-   "ComputeScheduler.is_monitoring": [
-    "surface",
-    "core/routes/models.py /status 里带上算力监控是否在跑、已加载模型数"
-   ],
-   "ComputeScheduler.loaded_model_count": [
-    "surface",
-    "core/routes/models.py /status 里带上算力监控是否在跑、已加载模型数"
-   ],
-   "ModelAllocation.is_offloaded": [
-    "surface",
-    "core/routes/models.py /status 里带上算力监控是否在跑、已加载模型数；逐个分配标出是否被卸到 CPU"
    ]
   },
   "core/concurrency_manager.py": {
@@ -304,10 +204,6 @@
    ]
   },
   "core/config_service.py": {
-   "ConfigService.describe_missing": [
-    "surface",
-    "core/routes/config.py 的配置状态里给出人话缺项（它已持有 ConfigService）"
-   ],
    "ConfigService.is_provider_ready": [
     "object",
     "随 describe_missing 一起用"
@@ -349,34 +245,16 @@
     "为旧编排器路径打弃用告警用；旧路径已登记在 legacy_paths，有统一的 emit_legacy_guardrail"
    ]
   },
-  "core/container_runtime.py": {
-   "*": [
-    "surface",
-    "core/routes/system.py 加「选容器运行时（docker/podman）/ 试一下」；launcher/services.py 已用本模块做探测"
-   ]
-  },
-  "core/continuation_rebind_registry.py": {
-   "*": [
-    "surface",
-    "core/routes/operator.py /api/v1/operator/inspect/recovery/{task_id} 一并返回「待重绑 / 已重绑 / 闭环」"
-   ]
-  },
   "core/continuum/return_engine.py": {
    "ReturnEngine.force_return": [
-    "surface",
-    "操作者「立即回到静默」控制：core/routes/operator.py"
+    "object",
+    "强制回到静默由 PresenceDirector / 操作者覆盖（PUT /api/v1/operator/override）承担；ReturnEngine 自己的这个入口留作对象方法"
    ]
   },
   "core/continuum/temporal_engine.py": {
    "*": [
     "object",
     "只读快照 / 剩余驻留时长，随 continuum orchestrator 投影时用"
-   ]
-  },
-  "core/control_plane/audit_ledger.py": {
-   "*": [
-    "surface",
-    "core/routes/audit.py：/api/v1/audit/snapshot 旁加「账本完整性」与 DAG 导出（账本本身已被 31 个模块写入）"
    ]
   },
   "core/control_plane/swarm_manifest.py": {
@@ -393,12 +271,6 @@
    "SwarmScaler.managed_workers": [
     "object",
     "随 autoscale 一起"
-   ]
-  },
-  "core/critical_path_harness.py": {
-   "snapshot_critical_path": [
-    "surface",
-    "core/routes/diagnostics.py 关键路径快照"
    ]
   },
   "core/cross_device_dispatch_boundary.py": {
@@ -433,8 +305,8 @@
   },
   "core/degraded_operation_envelope.py": {
    "envelope_summary": [
-    "surface",
-    "openclawd 已构造降级信封；投影时用它出紧凑摘要进 core/routes/projection.py"
+    "object",
+    "降级信封的紧凑摘要，openclawd 构造信封后按需调用；投影端点已直接给出完整信封"
    ]
   },
   "core/delegated_flow_decision_history.py": {
@@ -481,44 +353,12 @@
    "*": [
     "wire",
     "安卓设备带着在途委托流重连时（galaxy_gateway/android/handlers/registration.py 的重连分支）：先 decide_recovery，再 begin / complete。整个协调器在生产里没有驱动方；安卓相关，按你的意思先放着"
-   ],
-   "DelegatedFlowRecoveryCoordinator.list_recent_attempts": [
-    "surface",
-    "core/routes/operator.py 恢复检查端点一并返回"
    ]
   },
   "core/desktop_consumption_adapter.py": {
    "*": [
     "delete",
     "legacy 的桌面视图模型；面板只认 WS payload.render（docs/RENDER_CONTRACT_DIRECTION.md）"
-   ]
-  },
-  "core/desktop_presence_runtime.py": {
-   "DesktopPresenceRuntime.decision_timeline_replay": [
-    "surface",
-    "core/routes/operator.py 加决策时间线回放（PR-34 写好了，没有端点）"
-   ],
-   "DesktopPresenceRuntime.operator_override_summary": [
-    "surface",
-    "core/routes/operator.py 读当前操作者覆盖（core/routes 与网关路由里都没有 operator_override 端点）"
-   ],
-   "DesktopPresenceRuntime.permission_safety_summary": [
-    "surface",
-    "core/routes/operator.py 或面板「全部设置」给出权限 / 信任 / 安全摘要"
-   ],
-   "DesktopPresenceRuntime.set_operator_override": [
-    "surface",
-    "core/routes/operator.py 写操作者覆盖（core/routes 与网关路由里都没有 operator_override 端点；PR-33 只做了运行时一半）"
-   ],
-   "DesktopPresenceRuntime.snapshot_continuous_perception": [
-    "surface",
-    "core/routes/perception.py 连续感知最新快照"
-   ]
-  },
-  "core/device_activation_registry.py": {
-   "DeviceActivationRegistry.export_json": [
-    "surface",
-    "core/routes/diagnostics.py 加一个只读端点（注册表由 udm_registration_hook / launcher 写入，没人能读出来）"
    ]
   },
   "core/device_agent_manager.py": {
@@ -531,40 +371,16 @@
     "扩展点：新的设备 Agent 类型需要时由插件/启动配置调用；目前没有第二种类型，留着不接"
    ]
   },
-  "core/device_communication.py": {
-   "DeviceCommunication.list_connected_devices": [
-    "surface",
-    "core/routes/twin.py 已持有 DeviceCommunication，可在设备孪生视图里列出当前连接"
-   ]
-  },
-  "core/device_formation/formation_auto_enrollment.py": {
-   "FormationAutoEnrollmentManager.list_active_device_ids": [
-    "surface",
-    "诊断 / 面板：编组里当前有哪些设备"
-   ]
-  },
   "core/device_formation/formation_runtime_coordinator.py": {
    "*": [
     "object",
     "参与者状态自带判定；编组调度选参与者时用"
    ]
   },
-  "core/device_node_domain_governance.py": {
-   "*": [
-    "surface",
-    "core/routes/projection.py（已 import）按模块路径查注册面分类"
-   ]
-  },
-  "core/device_node_resolver.py": {
-   "*": [
-    "surface",
-    "core/routes/diagnostics.py：列出解析器支持的设备类型 / 传输（resolver 已被 launcher/launcher_adapter.py、launcher/services.py 使用）"
-   ]
-  },
   "core/device_orchestrator.py": {
    "DeviceOrchestrator.parallel_commands": [
-    "surface",
-    "core/routes/devices.py（已用 get_device_orchestrator）加「对多台设备并行下发」端点；或由 command_router 多设备分支调用"
+    "object",
+    "已被 POST /api/v1/devices/parallel 取代：那条路走 CommandRouter.route_envelope() 规范入口；这个方法直发各设备、绕过规范准入，不再挂出来"
    ],
    "DeviceOrchestrator.sync_clipboard": [
     "product",
@@ -595,16 +411,6 @@
    "DeviceWorkerConvergence.is_worker_registered": [
     "object",
     "core/unified/device_manager.py（已用这个类）派发前判断设备是否已作为 NATS Worker 在线时用"
-   ]
-  },
-  "core/digital_twin_engine.py": {
-   "DigitalTwinEngine.couple_all": [
-    "surface",
-    "core/routes/twin.py 批量耦合 / 解耦"
-   ],
-   "DigitalTwinEngine.decouple_all": [
-    "surface",
-    "core/routes/twin.py 批量耦合 / 解耦"
    ]
   },
   "core/duplex_presence_bridge.py": {
@@ -665,18 +471,6 @@
     "对外的失败域（CanonicalTask、operator 面）用的是 canonical_task.FailureDomain 另一套词表；core.failure_domains 的细分域只进本模块的记录，没有要消费 PR-B 归并结果的读取方。有测试引用，删除待授权"
    ]
   },
-  "core/fast_loop.py": {
-   "active_loop_name": [
-    "surface",
-    "docstring：供自检展示 —— main.py --check-only 输出与 core/routes/diagnostics.py"
-   ]
-  },
-  "core/feedback_loop.py": {
-   "FeedbackLoop.record_user_evaluation": [
-    "surface",
-    "对话回答上的「好 / 不好」反馈端点（面板已有对话流，可加按钮）"
-   ]
-  },
   "core/flow_continuity_coordinator.py": {
    "*": [
     "wire",
@@ -707,28 +501,6 @@
     "to_dict 的便利包装"
    ]
   },
-  "core/github_installer.py": {
-   "GitHubInstaller.install_dry_run": [
-    "surface",
-    "core/routes/github.py 加「装之前先检查」"
-   ]
-  },
-  "core/governance/budget_enforcer.py": {
-   "BudgetEnforcer.all_session_ids": [
-    "surface",
-    "core/routes/governance.py 列出被计费的会话"
-   ]
-  },
-  "core/governance/tool_governor.py": {
-   "ToolGovernor.clear_audit_log": [
-    "surface",
-    "core/routes/governance.py 清审计日志（运维操作）"
-   ],
-   "ToolGovernor.reset_bucket": [
-    "surface",
-    "core/routes/governance.py 加「复位某工具的限流桶」运维端点（check_wiring 的说明里明确点名它是真实的运行时操作，不是测试钩子）"
-   ]
-  },
   "core/governance_validation_gate.py": {
    "*": [
     "delete",
@@ -741,35 +513,7 @@
     "core/routes/ui_act.py 的设计是本机经仲裁器执行，跨设备明确拒绝并指向 agent_deploy + agent_execute；把规划动作以 TASK_ASSIGN 直接下发设备正是它刻意不走的路。有测试引用，删除待授权"
    ]
   },
-  "core/huggingface_model_manager.py": {
-   "*": [
-    "surface",
-    "core/routes/models.py 加「下载模型」端点（后台下载 + 进度）；launcher/services.py 目前只在提示文字里教用户手敲 python -c"
-   ]
-  },
-  "core/hybrid_execution_policy.py": {
-   "HybridExecutionMode.is_concurrent": [
-    "object",
-    "枚举上的判定；core/hybrid_executor.py 分支判断处替换手写比较"
-   ],
-   "HybridExecutionMode.is_degrade_chain": [
-    "object",
-    "枚举上的判定；core/hybrid_executor.py 分支判断处替换手写比较"
-   ],
-   "HybridExecutionPolicy.describe_mode": [
-    "surface",
-    "混合执行状态接口里给出人话模式说明（core/routes/hybrid.py）"
-   ]
-  },
   "core/hybrid_orchestration_continuity.py": {
-   "HybridOrchestrationContinuityRegistry.list_interrupted": [
-    "surface",
-    "core/operator_surface.py（已在读这个注册表）一并给出"
-   ],
-   "HybridOrchestrationContinuityRegistry.list_non_terminal": [
-    "surface",
-    "core/operator_surface.py（已在读这个注册表）一并给出"
-   ],
    "load_hybrid_execution": [
     "delete",
     "run_startup_recovery 第 4 步已直接用 store 读回；这个便捷包装是重复入口"
@@ -777,22 +521,6 @@
    "recover_hybrid_executions": [
     "delete",
     "run_startup_recovery 第 4 步已直接用 store 读回；这个便捷包装是重复入口"
-   ]
-  },
-  "core/interruptibility_registry.py": {
-   "InterruptibilityRegistry.snapshot_all": [
-    "surface",
-    "docstring：给面板 / 诊断看 —— core/routes/diagnostics.py"
-   ]
-  },
-  "core/local_brain_manager.py": {
-   "LocalBrainManager.remove_model": [
-    "surface",
-    "core/routes/models.py 加「删除本地模型」"
-   ],
-   "LocalBrainManager.switch_brain": [
-    "surface",
-    "core/routes/models.py 加「切换本地主脑模型」（面板模型页）"
    ]
   },
   "core/mainline_convergence.py": {
@@ -805,22 +533,6 @@
    "is_valid_mcp_addon_contract": [
     "delete",
     "validate_mcp_addon_contract 的布尔包装"
-   ]
-  },
-  "core/mcp_gateway.py": {
-   "MCPDynamicGateway.list_github_tools": [
-    "surface",
-    "core/routes/github.py 列出经 GitHub 装入的工具"
-   ]
-  },
-  "core/mcp_loader.py": {
-   "MCPLoader.list_resources": [
-    "surface",
-    "core/routes/protocols.py 加 GET /api/v1/protocols/mcp/{name}/resources"
-   ],
-   "MCPLoader.read_resource": [
-    "surface",
-    "core/routes/protocols.py 加 GET /api/v1/protocols/mcp/{name}/resources；读单个资源"
    ]
   },
   "core/mesh/body_mesh_registry.py": {
@@ -845,12 +557,6 @@
     "安卓 Mesh 参与信号的入口，安卓相关，先放着"
    ]
   },
-  "core/mesh/mesh_auto_enrollment.py": {
-   "MeshAutoEnrollmentService.list_enrolled_device_ids": [
-    "surface",
-    "诊断端点 /api/v1/mesh/participation-summary 一并返回"
-   ]
-  },
   "core/mesh/mesh_runtime_center_state.py": {
    "*": [
     "object",
@@ -871,12 +577,6 @@
     "MeshSessionCoordinator 类是模块函数 coordinate_mesh_session 的无状态重复包装：实跑的 staged_mesh 路径（core/runtime/source_dispatch_orchestrator.py）用 coordinate_mesh_session 建状态、由 core/mesh/live_mesh_runtime_engine.run_live_mesh_session 推进参与方结果与合并；这个类全仓没有实例化。有测试引用，删除待授权"
    ]
   },
-  "core/mesh/mesh_session_lifecycle.py": {
-   "*": [
-    "surface",
-    "core/routes/diagnostics.py /api/v1/mesh/participation-summary 一并返回活跃 / 可恢复会话"
-   ]
-  },
   "core/message_interop.py": {
    "*": [
     "delete",
@@ -887,12 +587,6 @@
    "resolve_audio_in": [
     "delete",
     "ambient_attention_loop 的注释记录了它原先的短路用法已被撤掉；判定在 core/modality_capability 里"
-   ]
-  },
-  "core/model_openness.py": {
-   "audit_registry": [
-    "surface",
-    "docstring：诊断用 —— core/routes/models.py 加开放性审计视图"
    ]
   },
   "core/model_topology/canonical_model_supply_state.py": {
@@ -913,12 +607,6 @@
     "图的查询方法：随 core/model_topology/routing_policy.py 需要按类别/供应商筛选时用"
    ]
   },
-  "core/model_topology/provider_inventory.py": {
-   "*": [
-    "surface",
-    "core/routes/projection.py（已读 ProviderInventory）给出按质量/速度/综合排序与不可用条目"
-   ]
-  },
   "core/model_topology/topology_router.py": {
    "*": [
     "delete",
@@ -937,22 +625,10 @@
     "legacy 多设备完整性审计的构造器 / 查询"
    ]
   },
-  "core/multi_device_coordination_authority.py": {
-   "*": [
-    "surface",
-    "角色的人话说明：随多设备状态投影一起输出"
-   ]
-  },
-  "core/multi_device_runtime_harness.py": {
-   "*": [
-    "surface",
-    "core/routes/projection.py 给出多设备一致性 harness 的读侧投影（docstring：anti-drift 锚定）"
-   ]
-  },
   "core/multi_llm_router.py": {
    "MultiLLMRouter.chat_cascade": [
-    "product",
-    "FrugalGPT 级联（便宜→贵升级）是否作为默认对话路径，由所有者定；定了就在 openclawd 对话入口切换"
+    "delete",
+    "所有者决定：第 2/3/4 项不做，对应函数删除（有测试引用，删除待授权）"
    ]
   },
   "core/multi_subject_closure_machine.py": {
@@ -1013,22 +689,10 @@
     "与 core/capability_network_runtime_policy 的 absorb_* 重复（absorb_* 直接调运行时同名方法，NATS / 网关两处早已接上）；本包装没有独立用途"
    ]
   },
-  "core/node_capability_loader.py": {
-   "NodeCapabilityLoader.list_node_actions": [
-    "surface",
-    "core/routes/diagnostics.py：列某节点提供的动作（加载器已在 lifecycle.py 使用）"
-   ]
-  },
   "core/node_cognition_activation.py": {
    "*": [
     "object",
     "节点激活资格判定 + 状态迁移：随「节点按角色激活」这一对象一起接；core/routes/projection.py 已读本模块其余部分"
-   ]
-  },
-  "core/node_communication.py": {
-   "NodeRegistry.detect_partitions": [
-    "surface",
-    "core/routes/projection.py（已读 NodeRegistry）给出网络分区检测结果"
    ]
   },
   "core/node_discovery.py": {
@@ -1129,12 +793,6 @@
     "legacy：对外真相由 core/routes/projection.py 的编译器产出，这几个分类 / 计数无人读"
    ]
   },
-  "core/peer_trust.py": {
-   "PeerTrustBook.set_trust": [
-    "surface",
-    "core/routes/pairing.py（已读 PeerTrustBook）加「设为信任 / 取消信任」端点"
-   ]
-  },
   "core/perception/desktop_perception_store.py": {
    "DesktopPerceptionStore.has_fresh_frame": [
     "delete",
@@ -1143,12 +801,6 @@
    "DesktopPerceptionStore.take_fresh_system_audio_for_autoinject": [
     "object",
     "系统播放声已经经 build_multimodal_context 作为原生模态注入请求；转写式注入目前只给麦克风开（GALAXY_DESKTOP_AUDIO_AUTOINJECT，默认关）。系统播放声比麦克风更敏感（会议、私信语音），要不要另开一道转写注入由所有者决定，不替你打开"
-   ]
-  },
-  "core/persona/state_store.py": {
-   "StateStore.reset_state": [
-    "surface",
-    "「重置情绪状态」：core/routes/sessions.py 会话重置时一并调用"
    ]
   },
   "core/phase_contract.py": {
@@ -1161,26 +813,6 @@
    "*": [
     "object",
     "跨设备在场投射只产出 PRESENCE_PROJECTED 事件，全仓没有把这类事件送到设备的传输 —— 唯一的通配订阅方是本机面板桥（只会触发本机面板重推）。接上只会在每次相位切换时产生没人收的事件。等设备侧有在场渲染通道再接（按「只有电脑发起的进三态」，也只在电脑发起的跨设备任务里触发）"
-   ]
-  },
-  "core/presence/presence_projection.py": {
-   "*": [
-    "surface",
-    "诊断：最近的在场投射事件"
-   ]
-  },
-  "core/protocol_drift_registry.py": {
-   "drift_entries": [
-    "surface",
-    "core/routes/diagnostics.py 加只读端点（漂移由安卓消息解析时 coerce_protocol_enum 登记，现在只进不出）"
-   ],
-   "drift_summary": [
-    "surface",
-    "core/routes/diagnostics.py 加只读端点（漂移由安卓消息解析时 coerce_protocol_enum 登记，现在只进不出）；也可进 /api/v1/readiness"
-   ],
-   "has_unrecognized_drift": [
-    "surface",
-    "core/routes/diagnostics.py 加只读端点（漂移由安卓消息解析时 coerce_protocol_enum 登记，现在只进不出）；就绪判定里作为一个告警项"
    ]
   },
   "core/proxy_relay.py": {
@@ -1207,50 +839,16 @@
     "结果对象上的转换方法，调用方需要枚举时用"
    ]
   },
-  "core/replay_audit_persistence.py": {
-   "load_audit_records": [
-    "surface",
-    "core/routes/operator.py /api/v1/operator/inspect/audit-evidence/{task_id}（审计记录一直在写，接口读不回落盘的那部分）"
-   ]
-  },
-  "core/replay_foundation.py": {
-   "ReplayFoundation.replay_task_timeline": [
-    "surface",
-    "core/routes/tasks.py（已在用 ReplayFoundation）加 /api/v1/tasks/{id}/timeline"
-   ]
-  },
   "core/repo_layout_registry.py": {
    "*": [
     "delete",
     "legacy、零导入"
    ]
   },
-  "core/request_admission.py": {
-   "admission_snapshot": [
-    "surface",
-    "docstring：供诊断接口取用 —— core/routes/diagnostics.py"
-   ]
-  },
-  "core/resilience/metrics.py": {
-   "ResilienceMetrics.rejection_rate_per_minute": [
-    "surface",
-    "core/routes/resilience.py（该路由已读同一个指标对象）"
-   ]
-  },
-  "core/runtime/runtime_observability_sink.py": {
-   "*": [
-    "surface",
-    "core/routes/observability.py 加只读端点：事件由安卓桥、Mesh、命令路由、参与方接入写入，现在只有 build_observability_snapshot 汇总读得到明细"
-   ]
-  },
   "core/runtime_closure_audit.py": {
    "persist_conflict_artifacts": [
     "object",
     "随 run_closure_audit 一起：审计发现冲突时落盘"
-   ],
-   "run_closure_audit": [
-    "surface",
-    "core/api_routes.py 已 import 本模块（只取了哨兵常量）；做成诊断端点，或 scripts/ 下的离线审计"
    ]
   },
   "core/runtime_invariant_enforcement.py": {
@@ -1271,18 +869,6 @@
     "便利包装；query_routable_executors 已被 device_pool_manager 直接调用"
    ]
   },
-  "core/session_execution_lane.py": {
-   "SessionExecutionLaneManager.list_lanes": [
-    "surface",
-    "GET /api/v1/agent/activity 一并列出会话执行通道（desktop_presence_runtime 已持有管理器）"
-   ]
-  },
-  "core/session_manager.py": {
-   "SessionManager.export_jsonl": [
-    "surface",
-    "core/routes/sessions.py 加「导出会话证据」下载"
-   ]
-  },
   "core/skill_package_contract.py": {
    "*": [
     "delete",
@@ -1291,20 +877,8 @@
   },
   "core/slo_metrics.py": {
    "SLOMetrics.startup_duration_ms": [
-    "surface",
-    "core/routes/monitoring.py /api/v1/slo/metrics（已读同一对象）"
-   ]
-  },
-  "core/speech_output.py": {
-   "native_speech_backend_registered": [
-    "surface",
-    "core/routes/openai_audio.py /v1/audio/capabilities 报告原生说通路是否登记"
-   ]
-  },
-  "core/state_event_bus.py": {
-   "StateEventBus.subscriber_count": [
-    "surface",
-    "core/routes/diagnostics.py 列出每类事件的订阅数（没订阅者的事件一眼可见）"
+    "object",
+    "启动耗时已在 snapshot() 的 startup.duration_ms 里经 GET /api/v1/slo/metrics 给出；属性本身只是对象访问器"
    ]
   },
   "core/streaming_speech.py": {
@@ -1337,12 +911,6 @@
     "启动编排的扩展点：插件要挂启动阶段钩子时用"
    ]
   },
-  "core/tailscale_manager.py": {
-   "*": [
-    "surface",
-    "core/routes/pairing.py 的 Tailscale 状态（是否安装、是否 Headscale）；launcher/services.py 已持有 TailscaleManager"
-   ]
-  },
   "core/target_device_validator.py": {
    "CanonicalValidationInput.from_legacy": [
     "object",
@@ -1355,14 +923,8 @@
   },
   "core/task_cost_ledger.py": {
    "current_task_bill": [
-    "surface",
-    "core/routes/cost.py 加「当前任务账单」（账单由 desktop_presence_runtime 开/关、openclawd 与路由器记账）"
-   ]
-  },
-  "core/task_envelope_lifecycle_registry.py": {
-   "TaskEnvelopeLifecycleRegistry.all_pending_task_ids": [
-    "surface",
-    "launcher/shutdown.py 关闭时报告还有多少待办；或诊断端点"
+    "object",
+    "上下文变量访问器：HTTP 请求自己的上下文里永远没有在途账单，挂成端点恒为 null；结清的账单已由 GET /api/v1/cost/tasks 给出"
    ]
   },
   "core/task_graph_runtime.py": {
@@ -1383,12 +945,6 @@
     "账本原始视图；对外读面已是本轮的 GET /api/v1/results/isolated（只出类型化字段）"
    ]
   },
-  "core/tool_permissions.py": {
-   "ToolPermissionChecker.add_policy": [
-    "surface",
-    "core/routes/security_policy.py 加工具权限策略"
-   ]
-  },
   "core/truth_conflict_enforcement.py": {
    "*": [
     "delete",
@@ -1399,12 +955,6 @@
    "is_device_available_canonical": [
     "delete",
     "resolve_device_truth(...).is_available 的一行包装；选设备的各调用方已各自按在线过滤，塞进 select_best_device 会把 UDM 里查不到的候选一律否决（池子的判据是「UDM 明确说不行才不行」）"
-   ]
-  },
-  "core/truth_projection_boundary.py": {
-   "*": [
-    "surface",
-    "core/routes/projection.py（已 import）按路径查真相边界分类"
    ]
   },
   "core/ui_surface_authority.py": {
@@ -1435,12 +985,6 @@
    "IdempotencyStore.record_failed": [
     "object",
     "整个 IdempotencyStore 在生产里没有使用者（get_idempotency_store 只被 core/unified/__init__.py 再导出）；投递路径真接入幂等存储时，失败分支一并调它"
-   ]
-  },
-  "core/unified/release_gate.py": {
-   "ReleaseGate.list_flags": [
-    "surface",
-    "core/routes/diagnostics.py 列出发布闸门当前状态"
    ]
   },
   "core/unified/state_schema.py": {
@@ -1499,12 +1043,6 @@
     "同步取事件的便利方法，异步迭代是规范用法"
    ]
   },
-  "core/voice_loop.py": {
-   "VoiceLoop.process_once": [
-    "surface",
-    "非流式单次处理：core/routes/openai_audio.py 语音转写→回答的一次性端点；否则删"
-   ]
-  },
   "galaxy_gateway/agent_bridge.py": {
    "AgentBridge.build_envelope_v2": [
     "delete",
@@ -1551,12 +1089,6 @@
     "RoutingOrchestrator 零导入；选设备 / 构造消息由同目录 device_selection.py、dispatch.py 承担"
    ]
   },
-  "galaxy_gateway/session_roaming.py": {
-   "SessionRoamingManager.close_session": [
-    "surface",
-    "galaxy_gateway/routes/sessions.py 加关闭漫游会话"
-   ]
-  },
   "galaxy_gateway/ssot.py": {
    "udm_write_upsert": [
     "wire",
@@ -1599,62 +1131,10 @@
     "存在只为让「每种老用法都有新写法」可测（docstring 写明，tests/test_launcher_nodes.py 在用）；旧 system_manager.py 已退役，运行期不该再提示老写法"
    ]
   },
-  "nodes/Node_05_Auth/main.py": {
-   "AuthManager.delete_user": [
-    "surface",
-    "本节点 app 加 DELETE /users/{id}（已有 /register /login）"
-   ],
-   "AuthManager.has_permission": [
-    "surface",
-    "本节点 app 加 POST /check-permission；或在本节点受保护端点里用作门"
-   ]
-  },
-  "nodes/Node_106_GitHubFlow/main.py": {
-   "GitHubClient.create_pull_request": [
-    "surface",
-    "本节点 /workflow/issue_to_pr 流程的最后一步（现在停在生成代码）；或加 POST /create_pr"
-   ]
-  },
-  "nodes/Node_109_ProactiveSensing/main.py": {
-   "*": [
-    "surface",
-    "本节点 app 加移除规则 / 注销传感器（已有登记）"
-   ]
-  },
-  "nodes/Node_112_SelfHealing/main.py": {
-   "SelfHealingEngine.register_recovery_handler": [
-    "surface",
-    "本节点 app 加恢复处理器登记"
-   ],
-   "SelfHealingEngine.unregister_health_check": [
-    "surface",
-    "本节点 app 加注销健康检查"
-   ]
-  },
   "nodes/Node_116_ExternalToolWrapper/main.py": {
-   "ExternalToolWrapper.execute_custom": [
-    "surface",
-    "本节点 app 执行自定义工具"
-   ],
    "ExternalToolWrapper.register_custom_handler": [
     "object",
     "扩展点：随 execute_custom 一起"
-   ],
-   "ExternalToolWrapper.unregister_tool": [
-    "surface",
-    "本节点 app 加 DELETE /tools/{tool_id}（已有 POST /tools、GET /tools/{tool_id}）"
-   ]
-  },
-  "nodes/Node_14_FFmpeg/main.py": {
-   "FFmpegManager.merge_videos": [
-    "surface",
-    "本节点 app 加 POST /merge（已有 /convert /clip /extract-audio /screenshot）"
-   ]
-  },
-  "nodes/Node_54_SymbolicMath/main.py": {
-   "*": [
-    "surface",
-    "本节点 /verify 按学科分派时调用（现在只做通用验证）"
    ]
   },
   "nodes/Node_71_MultiDeviceCoordination/main.py": {
@@ -1663,22 +1143,64 @@
     "统一 DeviceModel 与节点 Device 的互转，随 Node_71 对接网关设备模型时用"
    ]
   },
-  "nodes/Node_71_MultiDeviceCoordination/models/device.py": {
-   "*": [
-    "surface",
-    "本节点 /status 按状态统计设备"
-   ]
-  },
   "nodes/Node_71_MultiDeviceCoordination/models/task.py": {
    "*": [
     "delete",
     "Task.update_progress / TaskQueue.dequeue / TaskQueue.is_empty：调度器（core/task_scheduler.py）按优先级 + 依赖从 TaskQueue.snapshot() 挑任务再 remove，不走 FIFO 出队；进度在 _complete_task 直接置 1.0，调度器不追踪子任务完成数，没有要逐个更新进度的地方。有测试引用（本节点 tests/test_models.py），删除待授权"
    ]
   },
-  "nodes/Node_72_KnowledgeBase/knowledge_base_system.py": {
+  "core/voice_loop.py": {
+   "VoiceLoop.process_once": [
+    "object",
+    "所有者决定保留：VoiceLoop 的非流式一次性处理入口（预录音频）。实时路径 VoiceLoop.start() → AudioCaptureService.add_whisper_callback 已改走 modality_bridge.transcribe_pcm（原生听优先、回落 Whisper）；一次性转写的 HTTP 面是 /v1/audio/transcriptions"
+   ]
+  },
+  "core/huggingface_model_manager.py": {
+   "HuggingFaceModelManager.download_llm": [
+    "object",
+    "按类别的便捷下载，带默认模型（ASR 默认 faster-whisper-medium、向量默认 bge-large-zh-v1.5）；所有者复核后保留。HTTP 下载接口 POST /api/v1/models/download 走同一个 download()，经 download_background 带进度与去重"
+   ],
+   "HuggingFaceModelManager.download_vlm": [
+    "object",
+    "按类别的便捷下载，带默认模型（ASR 默认 faster-whisper-medium、向量默认 bge-large-zh-v1.5）；所有者复核后保留。HTTP 下载接口 POST /api/v1/models/download 走同一个 download()，经 download_background 带进度与去重"
+   ],
+   "HuggingFaceModelManager.download_asr": [
+    "object",
+    "按类别的便捷下载，带默认模型（ASR 默认 faster-whisper-medium、向量默认 bge-large-zh-v1.5）；所有者复核后保留。HTTP 下载接口 POST /api/v1/models/download 走同一个 download()，经 download_background 带进度与去重"
+   ],
+   "HuggingFaceModelManager.download_embedding": [
+    "object",
+    "按类别的便捷下载，带默认模型（ASR 默认 faster-whisper-medium、向量默认 bge-large-zh-v1.5）；所有者复核后保留。HTTP 下载接口 POST /api/v1/models/download 走同一个 download()，经 download_background 带进度与去重"
+   ]
+  },
+  "nodes/Node_33_ADB/cluster_manager.py": {
    "*": [
-    "surface",
-    "本节点 app 加导出 / 导入知识库（core/rag_memory.py 已持有该对象）"
+    "wire",
+    "安卓侧（ADB 多台手机并行执行），按所有者的意思先放着；误删后已恢复"
+   ]
+  },
+  "core/node_protocol.py": {
+   "*": [
+    "wire",
+    "安卓 / WebSocket 旧格式互转与节点请求，安卓相关，按所有者的意思先放着；误删后已恢复"
+   ]
+  },
+  "nodes/Node_70_AutonomousLearning/core/autonomous_learning_engine.py": {
+   "*": [
+    "wire",
+    "观察 → 泛化技能 → 生成 ADB 命令的学习流程，安卓相关，先放着。注意这份引擎副本目前没有任何进程加载（节点在跑的是 main.py 里的引擎）；误删后已恢复"
+   ]
+  },
+  "nodes/Node_43_MAVLink/universal_drone_controller.py": {
+   "*": [
+    "object",
+    "无人机航点任务与录像：设备能力，等有真实无人机接入时由节点 app 挂出；误删后已恢复"
+   ]
+  },
+  "nodes/Node_127_BambuLab/enhanced_bambu_controller.py": {
+   "*": [
+    "object",
+    "拓竹打印机增强控制（错误检查、温度 / 进度报告）：设备能力，等有真实打印机接入时接进 Node_127 main.py；误删后已恢复"
    ]
   }
  }

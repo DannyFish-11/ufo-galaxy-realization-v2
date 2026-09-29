@@ -595,8 +595,24 @@ async def health_check():
 
 @app.post("/verify", response_model=VerificationResult)
 async def verify_formula(request: VerificationRequest):
-    """Verify a mathematical formula."""
-    return pipeline.verify(request)
+    """Verify a mathematical formula.
+
+    Physics / engineering formulas additionally go through the domain verifier;
+    its checks become one more step and its warnings are merged in.
+    """
+    result = pipeline.verify(request)
+    domain_check = None
+    if cross_verifier is not None:
+        if request.domain == MathDomain.PHYSICS:
+            domain_check = cross_verifier.verify_physics(request.formula, request.context)
+        elif request.domain == MathDomain.ENGINEERING:
+            domain_check = cross_verifier.verify_engineering(request.formula, request.context)
+    if domain_check is not None:
+        result.verification_steps.append({"name": "Domain Rules", **domain_check})
+        result.warnings.extend(domain_check.get("warnings", []))
+        if not domain_check.get("passed", True):
+            result.valid = False
+    return result
 
 @app.post("/simplify")
 async def simplify_formula(formula: str):

@@ -3,11 +3,13 @@ Galaxy — GitHub System Resource REST Routes
 ============================================
 
 Routes:
-  POST /api/v1/github/install     — Install MCP tool or Skill from GitHub
-  POST /api/v1/github/uninstall   — Uninstall an addon by name
+  POST /api/v1/github/install     — Install MCP tool or Skill from GitHub (API auth)
+  GET  /api/v1/github/install/check — Validate URL / allowlist / ref without installing
+  POST /api/v1/github/uninstall   — Uninstall an addon by name (API auth)
+  GET  /api/v1/github/tools       — Tools the MCP gateway generated from GitHub installs
   GET  /api/v1/github/list        — List all installed GitHub addons
   GET  /api/v1/github/status      — Installer status (token, counts, dirs)
-  POST /api/v1/github/ingest      — Ingest a GitHub repo into the Knowledge Core
+  POST /api/v1/github/ingest      — Ingest a GitHub repo into the Knowledge Core (API auth)
   POST /api/v1/github/context     — Retrieve engineering context from a GitHub repo
 
 Token configuration:
@@ -20,9 +22,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from core.auth import require_auth
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -72,7 +76,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── POST /api/v1/github/install ─────────────────────────────────────────
 
-    @router.post("/api/v1/github/install")
+    @router.post("/api/v1/github/install", dependencies=[Depends(require_auth)])
     async def github_install(req: GitHubInstallRequest):
         """Install an MCP tool or Skill from a GitHub repository.
 
@@ -98,9 +102,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.exception("github/install error")
             return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
+    # ── GET /api/v1/github/install/check ────────────────────────────────────
+
+    @router.get("/api/v1/github/install/check")
+    async def github_install_check(url: str = Query(..., max_length=512), ref: Optional[str] = None):
+        """装之前先检查：只校验 URL / 白名单 / ref，不下载、不写盘。"""
+        from core.github_installer import get_github_installer
+
+        result = await get_github_installer().install_dry_run(url, ref=ref)
+        return JSONResponse(result, status_code=200 if result.get("success") else 400)
+
     # ── POST /api/v1/github/uninstall ───────────────────────────────────────
 
-    @router.post("/api/v1/github/uninstall")
+    @router.post("/api/v1/github/uninstall", dependencies=[Depends(require_auth)])
     async def github_uninstall(req: GitHubUninstallRequest):
         """Uninstall a previously installed GitHub addon by name."""
         try:
@@ -128,6 +142,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.warning("github/list error: %s", exc)
             return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
+    # ── GET /api/v1/github/tools ────────────────────────────────────────────
+
+    @router.get("/api/v1/github/tools")
+    async def github_tools():
+        """经 GitHub 装进 MCP 网关、已生成的工具。"""
+        from core.mcp_gateway import get_mcp_gateway
+
+        return JSONResponse({"tools": get_mcp_gateway().list_github_tools()})
+
     # ── GET /api/v1/github/status ───────────────────────────────────────────
 
     @router.get("/api/v1/github/status")
@@ -148,7 +171,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── POST /api/v1/github/ingest ──────────────────────────────────────────
 
-    @router.post("/api/v1/github/ingest")
+    @router.post("/api/v1/github/ingest", dependencies=[Depends(require_auth)])
     async def github_ingest(req: GitHubIngestRequest):
         """Ingest a GitHub repository into the unified Knowledge Core.
 

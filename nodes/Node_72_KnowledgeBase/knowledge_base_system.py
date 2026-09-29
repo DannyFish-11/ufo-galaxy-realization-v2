@@ -280,4 +280,6 @@ class KnowledgeBaseSystem:
                     self._backend.add_document(entry.id, entry.content, entry.metadata)
                 except Exception as exc:
                     logger.warning(f"向量后端导入失败: {exc}")
+        # 此前导入只进内存:core/rag_memory 每次查询都新建实例、从盘上重载,导入的条目随即丢失。
+        self._save_to_disk()
 

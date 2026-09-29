@@ -5,6 +5,7 @@ Galaxy - Cost Tracking Routes
 Routes:
   GET /api/v1/cost/records  - LLM 调用成本记录
   GET /api/v1/cost/summary  - 成本汇总统计
+  GET /api/v1/cost/tasks    - 按任务结清的账单 + 近期平均
   GET /api/v1/cost/health   - 成本追踪器健康状态
 """
 
@@ -48,6 +49,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(get_cost_tracker().get_summary())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/cost/tasks")
+    async def cost_task_bills(limit: int = 20):
+        """按任务结清的账单（一次请求里全部 LLM / 工具 / 轮次 / 墙钟）与近期平均。
+
+        上面两个端点是逐次 LLM 调用；这里是"一件事总共花了多少"。
+        """
+        from core.task_cost_ledger import get_task_cost_ledger
+
+        ledger = get_task_cost_ledger()
+        return JSONResponse({"bills": ledger.recent(max(1, min(limit, 200))), "summary": ledger.summary()})
 
     @router.get("/api/v1/cost/health")
     async def cost_health():

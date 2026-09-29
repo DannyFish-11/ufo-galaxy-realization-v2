@@ -19,7 +19,7 @@
 
 import asyncio
 import json
-from typing import Dict, Any
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -218,8 +218,57 @@ class UniversalDroneController:
             "photo_path": f"/drone_photos/photo_{int(asyncio.get_running_loop().time())}.jpg"
         }
     
+    async def start_recording(self) -> Dict[str, Any]:
+        """开始录像"""
+        if not self.connected:
+            return {"status": "error", "message": "无人机未连接"}
+        
+        print("开始录像...")
+        
+        return {
+            "status": "success",
+            "message": "录像已开始"
+        }
     
+    async def stop_recording(self) -> Dict[str, Any]:
+        """停止录像"""
+        if not self.connected:
+            return {"status": "error", "message": "无人机未连接"}
+        
+        print("停止录像...")
+        
+        return {
+            "status": "success",
+            "message": "录像已停止",
+            "video_path": f"/drone_videos/video_{int(asyncio.get_running_loop().time())}.mp4"
+        }
     
+    async def execute_waypoint_mission(self, waypoints: List[Dict[str, float]]) -> Dict[str, Any]:
+        """
+        执行航点任务
+        
+        Args:
+            waypoints: 航点列表，每个航点包含 latitude, longitude, altitude
+        
+        Returns:
+            执行结果
+        """
+        if not self.connected:
+            return {"status": "error", "message": "无人机未连接"}
+        
+        print(f"开始执行航点任务，共 {len(waypoints)} 个航点...")
+        
+        for i, waypoint in enumerate(waypoints, 1):
+            print(f"飞往航点 {i}: {waypoint}")
+            self.current_state.latitude = waypoint.get("latitude", 0)
+            self.current_state.longitude = waypoint.get("longitude", 0)
+            self.current_state.altitude = waypoint.get("altitude", 10)
+            await asyncio.sleep(2)
+        
+        return {
+            "status": "success",
+            "message": f"航点任务完成，共飞行 {len(waypoints)} 个航点"
+        }
     
     def get_state(self) -> Dict[str, Any]:
         """获取当前状态"""

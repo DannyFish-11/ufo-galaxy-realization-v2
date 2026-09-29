@@ -26,10 +26,11 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from core.auth import require_auth
 from core.schemas.task_envelope import envelope_from_mcp_call
 
 logger = logging.getLogger("Galaxy.API")
@@ -152,7 +153,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
-    @router.post("/api/v1/protocols/mcp/load")
+    @router.post("/api/v1/protocols/mcp/load", dependencies=[Depends(require_auth)])
     async def load_mcp_server(req: MCPLoadRequest):
         """加载并启动一个 MCP 服务器"""
         try:
@@ -185,7 +186,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
-    @router.delete("/api/v1/protocols/mcp/{name}")
+    @router.delete("/api/v1/protocols/mcp/{name}", dependencies=[Depends(require_auth)])
     async def unload_mcp_server(name: str):
         """卸载/停止一个 MCP 服务器"""
         try:
@@ -253,7 +254,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
-    @router.post("/api/v1/protocols/mcp/{name}/call")
+    @router.post("/api/v1/protocols/mcp/{name}/call", dependencies=[Depends(require_auth)])
     async def call_mcp_tool(name: str, req: MCPToolCallRequest):
         """调用指定 MCP 服务器上的工具"""
         # Build TaskEnvelope for unified trace_id/task_id logging
@@ -349,7 +350,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
-    @router.post("/api/v1/protocols/skills/load")
+    @router.post("/api/v1/protocols/skills/load", dependencies=[Depends(require_auth)])
     async def load_skill(req: SkillLoadRequest):
         """加载一个技能"""
         try:
@@ -384,7 +385,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
-    @router.post("/api/v1/protocols/skills/{name}/execute")
+    @router.post("/api/v1/protocols/skills/{name}/execute", dependencies=[Depends(require_auth)])
     async def execute_skill(name: str, req: SkillExecuteRequest):
         """执行指定技能"""
         try:
@@ -421,7 +422,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
-    @router.delete("/api/v1/protocols/skills/{name}")
+    @router.delete("/api/v1/protocols/skills/{name}", dependencies=[Depends(require_auth)])
     async def unload_skill(name: str):
         """卸载一个技能"""
         try:
@@ -456,7 +457,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # 热重载端点（PR88: MCP/Skill hot-reload + 协议校验）
     # ========================================================================
 
-    @router.post("/api/v1/protocols/mcp/{name}/reload")
+    @router.post("/api/v1/protocols/mcp/{name}/reload", dependencies=[Depends(require_auth)])
     async def reload_mcp_server(name: str):
         """热重载指定 MCP 服务器，执行协议握手 + 工具 schema 校验。
 
@@ -483,7 +484,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.error("MCP 热重载异常: %s: %s", name, e)
             return JSONResponse({"success": False, "server_id": server_id, "error": str(e)}, status_code=500)
 
-    @router.post("/api/v1/protocols/skills/{name}/reload")
+    @router.post("/api/v1/protocols/skills/{name}/reload", dependencies=[Depends(require_auth)])
     async def reload_skill_handler(name: str):
         """热重载指定 Skill，执行 manifest/schema/entrypoint 校验。
 
@@ -509,7 +510,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             logger.error("Skill 热重载异常: %s: %s", name, e)
             return JSONResponse({"success": False, "skill_id": skill_id, "error": str(e)}, status_code=500)
 
-    @router.post("/api/v1/protocols/reload-all")
+    @router.post("/api/v1/protocols/reload-all", dependencies=[Depends(require_auth)])
     async def reload_all_handler():
         """热重载所有 MCP 服务器 + Skill，返回逐项状态。
 
@@ -611,6 +612,53 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             status["success"] = False
 
         return JSONResponse(status)
+
+    # ------------------------------------------------------------------
+    # 能力编排器的能力启停（启停会作用在编排器选能力时的 enabled 过滤上）
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/protocols/capabilities")
+    async def list_orchestrator_capabilities():
+        from core.capability_orchestrator import capability_orchestrator
+
+        return {"capabilities": capability_orchestrator.list_capabilities()}
+
+    @router.post("/api/v1/protocols/capabilities/{capability_id}/enable", dependencies=[Depends(require_auth)])
+    async def enable_orchestrator_capability(capability_id: str):
+        from core.capability_orchestrator import capability_orchestrator
+
+        ok = capability_orchestrator.enable_capability(capability_id)
+        return JSONResponse({"success": ok, "id": capability_id}, status_code=200 if ok else 404)
+
+    @router.post("/api/v1/protocols/capabilities/{capability_id}/disable", dependencies=[Depends(require_auth)])
+    async def disable_orchestrator_capability(capability_id: str):
+        from core.capability_orchestrator import capability_orchestrator
+
+        ok = capability_orchestrator.disable_capability(capability_id)
+        return JSONResponse({"success": ok, "id": capability_id}, status_code=200 if ok else 404)
+
+    # ------------------------------------------------------------------
+    # MCP 资源（resources/list、resources/read；此前只有工具那一半有端点）
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/protocols/mcp/{name}/resources")
+    async def list_mcp_resources(name: str):
+        from core.mcp_loader import mcp_loader
+
+        server_id = _find_mcp_server_id(name)
+        if not server_id:
+            return JSONResponse({"success": False, "error": f"MCP 服务器 '{name}' 不存在"}, status_code=404)
+        resources = await mcp_loader.list_resources(server_id)
+        return {"success": True, "server_id": server_id, "resources": resources, "total": len(resources)}
+
+    @router.get("/api/v1/protocols/mcp/{name}/resources/read", dependencies=[Depends(require_auth)])
+    async def read_mcp_resource(name: str, uri: str = Query(..., max_length=2048)):
+        from core.mcp_loader import mcp_loader
+
+        server_id = _find_mcp_server_id(name)
+        if not server_id:
+            return JSONResponse({"success": False, "error": f"MCP 服务器 '{name}' 不存在"}, status_code=404)
+        return await mcp_loader.read_resource(server_id, uri)
 
     return router
 

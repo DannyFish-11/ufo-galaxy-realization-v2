@@ -27,7 +27,7 @@ import ssl
 import threading
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -391,35 +391,6 @@ class NodeRegistry:
     def get_subscribers(self, event_type: str) -> Set[str]:
         """Get subscribers for event type"""
         return self._subscribers.get(event_type, set())
-
-    async def detect_partitions(self) -> List[Set[str]]:
-        """检测网络分区"""
-        async with self._lock:
-            online_nodes = {nid for nid, n in self._nodes.items() if n.is_online}
-            if not online_nodes:
-                return []
-
-            # 使用并查集检测分区
-            parent = {nid: nid for nid in online_nodes}
-
-            def find(x):
-                if parent[x] != x:
-                    parent[x] = find(parent[x])
-                return parent[x]
-
-            def union(x, y):
-                px, py = find(x), find(y)
-                if px != py:
-                    parent[px] = py
-
-            # 这里简化处理，实际应该根据路由表连接关系
-            # 将所有节点视为一个分区（假设全连接）
-            partitions = defaultdict(set)
-            for nid in online_nodes:
-                partitions[find(nid)].add(nid)
-
-            self._partitions = list(partitions.values())
-            return self._partitions
 
 
 class UniversalCommunicator:

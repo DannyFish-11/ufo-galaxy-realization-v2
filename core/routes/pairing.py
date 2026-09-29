@@ -46,6 +46,22 @@ _TRUST_SCOPES: Dict[str, List[str]] = {
 }
 
 
+def _tailscale_client_facts() -> Dict[str, object]:
+    """本机 tailscale 客户端的事实：装没装、连的是不是 Headscale，以及直连通道登记了哪些设备地址。"""
+    from core.aip_transport import get_aip_transport
+    from core.tailscale_manager import TailscaleManager
+
+    facts: Dict[str, object] = {"installed": TailscaleManager.is_tailscale_installed()}
+    try:
+        facts["headscale_mode"] = TailscaleManager().is_headscale_mode()
+    except Exception as exc:  # noqa: BLE001
+        facts["headscale_mode"] = None
+        facts["headscale_mode_error"] = str(exc)[:160]
+    p2p = get_aip_transport().get_adapter("tailscale_p2p")
+    facts["p2p_devices"] = p2p.list_registered_devices() if p2p is not None else {}
+    return facts
+
+
 def _scopes_for_trust(trust: str) -> List[str]:
     return list(_TRUST_SCOPES.get(str(trust).lower(), _TRUST_SCOPES["unknown"]))
 
@@ -520,6 +536,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             out: Dict[str, object] = {"success": True, **{k: v for k, v in st.items() if k != "user"}}
             out["autojoin"] = autojoin_enabled()
             out["this_computer"] = await asyncio.to_thread(current_state)
+            out["tailscale_client"] = await asyncio.to_thread(_tailscale_client_facts)
             if st["configured"]:
                 try:
                     nodes = await asyncio.to_thread(list_nodes)

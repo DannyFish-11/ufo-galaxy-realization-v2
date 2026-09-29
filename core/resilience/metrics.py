@@ -94,14 +94,21 @@ class ResilienceMetrics:
 
     @property
     def rejection_rate_per_minute(self) -> float:
-        """Rejections in the last 60 s (rolling window)."""
+        """Rejections in the last 60 s (rolling window).
+
+        The window is pruned on read as well: pruning only in record_rejected()
+        froze the rate at its last value once rejections stopped, so a spike an
+        hour ago still read as the current rate.
+        """
+        cutoff = time.time() - 60.0
         with self._lock:
+            self._rejection_timestamps = [t for t in self._rejection_timestamps if t >= cutoff]
             return float(len(self._rejection_timestamps))
 
     def snapshot(self) -> Dict[str, Any]:
         """JSON-serialisable metrics snapshot (G2-compatible format)."""
+        rate = self.rejection_rate_per_minute
         with self._lock:
-            rate = float(len(self._rejection_timestamps))
             total = max(self._total_accepted + self._total_rejected, 1)
             return {
                 "queue_depth": self._queue_depth,

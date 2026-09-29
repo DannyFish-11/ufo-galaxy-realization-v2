@@ -210,16 +210,6 @@ class FeedbackLoop:
             duration_ms,
         )
 
-    def record_user_evaluation(self, task_id: str, evaluation: str) -> None:
-        """Record explicit user feedback (good/bad/etc)."""
-        for entry in reversed(self._history):
-            if entry.task_id == task_id:
-                entry.evaluation = evaluation
-                self._save()
-                logger.info("User evaluation for %s: %s", task_id, evaluation)
-                return
-        logger.debug("Task %s not found for user evaluation", task_id)
-
     # ── Learning ──
 
     def _update_preferences(self, entry: FeedbackEntry) -> None:
