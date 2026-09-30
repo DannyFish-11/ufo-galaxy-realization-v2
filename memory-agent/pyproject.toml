@@ -1,0 +1,54 @@
+[project]
+name = "memory-agent"
+version = "0.1.0"
+description = "Multimodal memory agent: Gemma 4 (vLLM) + jina-embeddings-v5-omni + Omni-SimpleMem/Qdrant + Omnigent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "httpx>=0.27",
+    "qdrant-client>=1.9",
+    "mcp>=1.0",
+    "pyyaml>=6.0",
+    "pillow>=10.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Heavy deps for running jina-embeddings-v5-omni locally (target machine only).
+local-embed = [
+    "torch>=2.3",
+    "transformers>=4.45",
+    "sentence-transformers>=3.0",
+    "soundfile>=0.12",
+]
+# Extra deps required by the Omni-SimpleMem backend (upstream package).
+simplemem = [
+    "openai>=1.0",
+    "tiktoken>=0.5",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires live L0/L1/L2 services (skipped automatically when unreachable)",
+]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["adapters", "core", "services"]

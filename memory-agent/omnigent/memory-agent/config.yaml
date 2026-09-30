@@ -1,0 +1,50 @@
+# Omnigent 自定义 agent bundle:memory-agent(BUILD_SPEC M4)。
+#
+# 依据 omnigent 0.4.0 实际源码的 bundle 布局编写(spec_version: 1 判别;
+# MCP 工具置于 tools/mcp/*.yaml —— 见 omnigent/cli.py 的 bundle 解析),
+# 而非 BUILD_SPEC §1 猜测的单文件 memory-agent.yaml。
+#
+# 运行前提(目标机器):
+#   1. omnigent setup 中配置一个 openai-compatible provider,
+#      base_url 指向 M1 的 vLLM 端点 http://localhost:8000/v1(model: gemma-4)。
+#   2. M3 服务栈可用(qdrant + L1 嵌入服务),tools/mcp/memory.yaml 会以
+#      stdio 方式拉起本项目的 MCP server。
+# 启动:omnigent run omnigent/memory-agent
+
+spec_version: 1
+name: memory-agent
+description: >-
+  拥有终身多模态记忆的对话 agent:推理走本地 vLLM(Gemma 4),
+  记忆读写经 MCP 调用 memory-agent 的 L2/L3 服务。
+
+# codex harness 直接消费 OpenAI 兼容 provider(vLLM);
+# 不 pin 模型,解析 provider 默认模型(即 vLLM --served-model-name gemma-4)。
+executor:
+  type: omnigent
+  config:
+    harness: codex
+
+prompt: |
+  你是拥有长期记忆的助手。行为准则:
+  1. 每轮回答前,先用 `memory_search` 检索与用户问题相关的记忆,并利用命中的
+     记忆作答;记忆与问题无关时忽略。
+  2. 用户告知任何值得长期记住的事实(身份、偏好、事件、承诺)时,立即用
+     `memory_store` 存入,再继续作答。
+  3. 用户明确要求"整理/合并记忆"时调用 `memory_consolidate`。
+  4. 引用记忆时如实转述,不要编造记忆中不存在的内容。
+
+async: false
+cancellable: true
+
+# 成本策略(BUILD_SPEC M4:内置 max_cost_usd 上限)。
+# omnigent 0.4.0 的 guardrails 为 function policy 机制,此处挂本仓库自带的
+# 预算策略函数;验收 M4-③ 时把 max_cost_usd 临时调低即可触发确认。
+guardrails:
+  policies:
+    cost_limit:
+      type: function
+      on: [tool_call]
+      function:
+        path: omnigent_policies.cost_limit.enforce
+        arguments:
+          max_cost_usd: 5.0

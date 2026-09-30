@@ -1,0 +1,62 @@
+# memory-agent 唯一配置源。所有键可用环境变量覆盖:前缀 MEMORY_AGENT_,嵌套用 __。
+# 例:MEMORY_AGENT_LLM__BASE_URL=http://gpu-box:8000/v1
+
+hardware:
+  # 档位 A/B/C,见 BUILD_SPEC §0.3。由 scripts/detect_hardware.py --write 写入,
+  # 且必须经人类确认。"unset" 时 download_models.py 拒绝执行。
+  # 本容器检测结果:无 GPU / 15GB RAM → 低于任何档位,模型服务须在目标机器上运行。
+  tier: unset
+
+llm:  # L0 — vLLM OpenAI 兼容端点
+  base_url: http://localhost:8000/v1
+  model: gemma-4
+  # 各档位实际拉起的 HF 模型名(download_models.py / docker-compose 使用):
+  model_by_tier:
+    A: google/gemma-4-26b-a4b-it-qat-q4_0
+    B: google/gemma-4-12b-it
+    C: google/gemma-4-e4b-it-qat-q4_0
+  api_key: EMPTY
+  timeout_s: 120
+
+embedder:  # L1 — jina-embeddings-v5-omni
+  # backend: local(在嵌入服务进程内加载 HF 模型) | remote(HTTP 调 :8001,L3 使用)
+  #          | jina_api(云 API,需人类提供 key) | fake(确定性哈希嵌入,仅测试/CI,绝不用于生产)
+  backend: local
+  model_name: jinaai/jina-embeddings-v5-omni-small
+  model_by_tier:
+    A: jinaai/jina-embeddings-v5-omni-small
+    B: jinaai/jina-embeddings-v5-omni-small
+    C: jinaai/jina-embeddings-v5-omni-nano
+  dim: 1024            # small=1024, nano=768
+  matryoshka_dim: null # 设为整数则截断到该维度并重新归一化
+  base_url: http://localhost:8001  # backend=remote 时使用
+  device: auto
+
+vectordb:  # Qdrant(L2 兜底存储)
+  mode: server          # memory | local | server
+  url: http://localhost:6333
+  path: ./data/qdrant   # mode=local 时使用
+  collection: memories
+
+memory:  # L2
+  backend: qdrant          # qdrant | simplemem
+  extraction: llm          # llm(用 L0 抽取记忆要点) | verbatim(原文入库,测试用)
+  consolidation:
+    similarity_threshold: 0.92
+  simplemem:
+    data_dir: ./data/simplemem
+    # SimpleMem 的 LLM+文本嵌入共用一个 OpenAI 兼容 base_url,
+    # 指向本项目 L1 服务的网关路由(chat→L0, embeddings→L1),见 services/embed_service.py
+    gateway_base_url: http://localhost:8001/v1
+
+services:
+  embed_host: 0.0.0.0
+  embed_port: 8001
+  api_host: 0.0.0.0
+  api_port: 8002
+
+agent:
+  top_k: 5
+  system_prompt: |
+    你是一个拥有长期记忆的助手。下面的「相关记忆」是你从过往交互中检索到的内容,
+    回答时优先利用这些记忆;若记忆与问题无关则忽略。

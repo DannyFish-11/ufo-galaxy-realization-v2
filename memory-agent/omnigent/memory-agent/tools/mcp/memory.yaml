@@ -1,0 +1,8 @@
+# M3 MCP server 挂载(stdio 传输)。
+# omnigent 解析 tools/mcp/*.yaml 时对 env 做环境变量展开(见 omnigent/cli.py)。
+name: memory
+transport: stdio
+command: uv
+args: ["run", "--project", "${MEMORY_AGENT_ROOT:-.}", "python", "-m", "services.mcp_server"]
+env:
+  MEMORY_AGENT_CONFIG: "${MEMORY_AGENT_CONFIG:-config.yaml}"

@@ -1,0 +1,48 @@
+# Docker Compose v2。qdrant 常驻;vllm 需 GPU,归入 gpu profile:
+#   make up            -> 只起 qdrant
+#   make up-gpu        -> qdrant + vllm(目标机器,档位经人类确认后)
+# vLLM 模型经环境变量 VLLM_MODEL 传入(取 config.yaml llm.model_by_tier 对应档位值)。
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    profiles: ["gpu"]
+    ports:
+      - "8000:8000"
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    command: >
+      --model ${VLLM_MODEL:?set VLLM_MODEL from config.yaml llm.model_by_tier}
+      --served-model-name gemma-4
+      --enable-chunked-prefill
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/v1/models')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 60
+
+volumes:
+  qdrant_data:
+  hf_cache:
