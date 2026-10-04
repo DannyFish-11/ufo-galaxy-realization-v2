@@ -157,14 +157,18 @@ class TestNewFlagshipModels:
 
         opus 是重档,按任务映射只在 reasoning/creative/analysis/planning 用;默认留
         sonnet 是成本/质量的取舍。把默认换成 opus 会让每一次普通调用都走最贵的档。
+
+        这条规矩不变，变的是"哪一代 sonnet"：2026-09-29 默认已随 sonnet-5-5 上抬，
+        判据见 TestClaude55。这里钉的是规矩本身 —— 默认是 sonnet 档、不是 opus 档。
         """
-        assert _REGISTRY["anthropic"]["default_model"] == "claude-sonnet-5"
+        assert "sonnet" in _REGISTRY["anthropic"]["default_model"]
+        assert "opus" not in _REGISTRY["anthropic"]["default_model"]
 
     @pytest.mark.parametrize(
         "provider,task,model",
         [
-            ("anthropic", "reasoning", "claude-opus-5"),
-            ("anthropic", "planning", "claude-opus-5"),
+            # anthropic 的槽位已于 2026-09-29 上抬到 opus-5-5 / sonnet-5-5，判据搬去 TestClaude55 ——
+            # 在这里就地改值会让本类 docstring（记的是那一轮的结论）变成假话。
             ("moonshot", "general", "kimi-k3"),
             ("moonshot", "coding", "kimi-k3"),
             # zhipu 的槽位已上抬到 glm-5.3,理由同上 —— 判据搬去
@@ -215,6 +219,42 @@ class TestNewFlagshipModels:
             for task, model in task_map.items():
                 name = getattr(task, "value", task)
                 assert model in declared, f"{provider}.{name} 指向未登记型号 {model!r}"
+
+
+class TestClaude55:
+    """2026-09-29：claude-opus-5-5 与 claude-sonnet-5-5 接进来。
+
+    一手来源：platform.claude.com/docs/en/models/{opus-5-5,sonnet-5-5}/overview。
+    判据是"真的会被选到"，不是"名字出现在目录里" —— 选型号只读 PROVIDER_MODEL_MAP。
+    """
+
+    def test_both_are_declared_and_the_default_moved_with_the_same_price(self):
+        assert "claude-opus-5-5" in _REGISTRY["anthropic"]["models"]
+        assert "claude-sonnet-5-5" in _REGISTRY["anthropic"]["models"]
+        # sonnet-5-5 与 sonnet-5 同价（$2/$10），默认直接升级，cost 不动
+        assert _REGISTRY["anthropic"]["default_model"] == "claude-sonnet-5-5"
+
+    @pytest.mark.parametrize(
+        "task,model",
+        [
+            ("reasoning", "claude-opus-5-5"),
+            ("planning", "claude-opus-5-5"),
+            ("creative", "claude-opus-5-5"),
+            ("analysis", "claude-opus-5-5"),
+            ("coding", "claude-sonnet-5-5"),
+            ("agent_control", "claude-sonnet-5-5"),
+            ("general", "claude-sonnet-5-5"),
+        ],
+    )
+    def test_task_map_points_at_the_55_models(self, task, model):
+        per_task = {getattr(tt, "value", tt): m for tt, m in PROVIDER_MODEL_MAP["anthropic"].items()}
+        assert per_task[task] == model
+
+    def test_previous_generation_is_kept_only_as_a_catalogued_fallback(self):
+        assert "claude-opus-5" in _REGISTRY["anthropic"]["models"]
+        assert "claude-sonnet-5" in _REGISTRY["anthropic"]["models"]
+        assert "claude-opus-5" not in PROVIDER_MODEL_MAP["anthropic"].values()
+        assert "claude-sonnet-5" not in PROVIDER_MODEL_MAP["anthropic"].values()
 
 
 class TestGrok46Upgrade:

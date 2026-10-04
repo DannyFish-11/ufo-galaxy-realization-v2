@@ -2334,18 +2334,24 @@ class MultiLLMRouter:
 
         偏好表只决定"谁有资格进候选"，云端谁先谁后由智能路由按实际情况与模型性能定。
         本地优先是既有语义，不碰。
+
+        这是对话热路径上的"锦上添花"：排序本身出任何问题都**退回偏好表原序**，绝不能把路由弄坏。
         """
-        avail = [n for n in order if n in self.providers and self.providers[n].is_available()]
-        local = [n for n in avail if is_local_provider(n, self.providers[n])]
-        cloud = [n for n in avail if n not in local and self.adapters.get(n) is not None]
-        if len(cloud) < 2:
+        try:
+            avail = [n for n in order if n in self.providers and self.providers[n].is_available()]
+            local = [n for n in avail if is_local_provider(n, self.providers[n])]
+            cloud = [n for n in avail if n not in local]
+            if len(cloud) < 2:
+                return order
+            score = self._fit_scorer(
+                cloud, task_type, complexity_score, bandit=self._bandit_stats(task_type), purpose=purpose
+            )
+            ranked = sorted(cloud, key=score, reverse=True)
+            rest = [n for n in order if n not in local and n not in ranked]
+            return local + ranked + rest
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("云端排序失败，按偏好表原序: %s", exc)
             return order
-        score = self._fit_scorer(
-            cloud, task_type, complexity_score, bandit=self._bandit_stats(task_type), purpose=purpose
-        )
-        ranked = sorted(cloud, key=score, reverse=True)
-        rest = [n for n in order if n not in local and n not in ranked]
-        return local + ranked + rest
 
     def select_brain_for_task(
         self,
