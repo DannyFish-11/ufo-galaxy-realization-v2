@@ -30,6 +30,7 @@ import {
   fetchHistory,
   fetchPrimarySession,
   fetchTiers,
+  fetchUnresolvedActions,
   nextBundleValue,
   saveConfig,
   ingestFiles,
@@ -697,6 +698,13 @@ function mount(host: HTMLElement): void {
 
   void restoreSession();
 
+  // 上次进程中断时没记上结果的操作:提示一次。「可能已经执行了」不是「失败」。
+  void fetchUnresolvedActions(BASE).then((actions) => {
+    if (actions && actions.length) {
+      pushNotice(`上次中断时有操作结果不确定:${actions.join('、')} —— 先看一眼屏幕再让它继续`);
+    }
+  });
+
   /** 拉一次档位目录。拉不到**保持 null**,浮层那一行会说「读不到」而不是空着。 */
   async function loadTiers(): Promise<void> {
     const view = await fetchTiers(BASE);
@@ -825,13 +833,18 @@ function mount(host: HTMLElement): void {
         onReset: () => patchAgent((t) => ({ ...t, text: '', pending: '' })),
         onLockstep: (state, reason) =>
           store.patch({ lockstep: state, lockstepReason: reason }),
-        onDone: (response, stopped) => {
+        onDone: (response, stopped, unknownActions) => {
           if (stopped) {
             // 人叫停的。回复本来就是空的 —— 说「停下了」,别说成「后端什么都没给」。
+            // 叫停那一刻正在飞的操作**可能已经执行了**:说「不确定」,不说「失败」,也不说
+            // 「成功」—— 人会据此先看一眼屏幕,而不是让它重来一遍、重复点一次。
+            const caveat = unknownActions.length
+              ? `。最后这几步是否已经执行不确定:${unknownActions.join('、')} —— 先看一眼屏幕,再决定要不要让它继续`
+              : '';
             patchAgent((t) => ({
               ...t,
               streaming: false,
-              text: t.text ? `${t.text}\n\n（停在这里 —— 你叫停的）` : '停下了 —— 你叫停的',
+              text: t.text ? `${t.text}\n\n（停在这里 —— 你叫停的${caveat}）` : `停下了 —— 你叫停的${caveat}`,
             }));
             void loadCards();
             return;

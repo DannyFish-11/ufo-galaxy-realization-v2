@@ -645,6 +645,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.exception("presence stop failed")
             return JSONResponse(content={"success": False, "error": "停止失败,详见后端日志"}, status_code=500)
 
+    @router.get("/api/v1/presence/unresolved-actions")
+    async def get_unresolved_actions(
+        window_s: float = Query(default=900.0, ge=1.0, le=86400.0, description="只看最近多久(秒)"),
+    ) -> JSONResponse:
+        """最近一段时间里「结果不明」的操作 —— 被叫停时正在飞的、上次进程中断时没记上结果的。
+
+        不是失败：它们**可能已经执行了**。面板打开时问一次，非空就提示人先看一眼屏幕，
+        别让它盲目重试（见 core/action_journal.py）。不含人输入过的文字，只有动作和坐标。
+        """
+        from core.action_journal import get_action_journal
+
+        journal = get_action_journal()
+        return JSONResponse(
+            content={
+                "success": True,
+                "actions": [
+                    {k: r[k] for k in ("summary", "outcome", "source", "t_end")}
+                    for r in journal.recent_unknown(window_s)
+                ],
+                "journal_degraded": bool(journal.status()["degraded"]),
+            }
+        )
+
     @router.get("/api/v1/panel/feed")
     async def get_panel_feed():
         """面板实时数据(桌面 Electron 面板的 IPC 契约 snake_case 字段)。

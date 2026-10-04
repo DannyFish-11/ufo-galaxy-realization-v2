@@ -59,6 +59,7 @@ data/peer_trust.json
 # 首次启动自签的本机 API 令牌(0600,见 core/auth.py::ensure_local_token)。
 # 它等价于这台机器的钥匙 —— 入库就是把钥匙发给所有人。绝不入库。
 data/api_token.json
+data/action_journal.jsonl
 
 # Logs
 *.log

@@ -249,3 +249,34 @@ degrade_reason: string | null
 叫停本身走 `POST /api/v1/presence/stop`（面板的停止键也是这条）：取消在跑的请求（调用方拿到
 `stopped=True` 的正常返回值，不会把整条自发注意力循环一起停掉）、掐断在念的话、打断双工里正在说
 的那一句（会话留着）。
+
+---
+
+## 十一、被叫停 / 被中断时，正在飞的那一步：「不确定」，不是「失败」
+
+电脑操作的点击是发给另一个节点的 HTTP 请求。叫停只能取消本端的等待 —— 请求可能已经到了、
+点击可能已经发生；进程在两步之间崩了也一样：步骤记录在内存里，重启后没有任何痕迹。
+这两种时刻，对「这一步执行了没有」的正确回答都是**不确定**：说「失败」，人会让它重来、重复点一次；
+说「成功」是在编。借自 AFK-surf/Comma 的运行时（副作用先落盘再执行；写入结果不明返回
+`commit_indeterminate` 且**不授予重放的权力**；明说「不承诺外部操作恰好执行一次」）。
+
+`core/action_journal.py` 就是那一笔账：
+
+| 时机 | 记什么 |
+|---|---|
+| 派发**之前** | `begin`：意图（动作、坐标、目标设备）先落盘、fsync，再动手 |
+| 派发之后 | `end`：`ok` / `failed` / `unknown_after_cancel`（被取消时正在飞） |
+| 进程重启 | 回放日志：只有 `begin` 没有 `end` 的，补记 `unknown_after_restart` 并报出来 —— **绝不自动重放** |
+
+三个出口，都在场景里：
+
+* **叫停的结果**：`stopped_result` 带 `unknown_actions`（`/chat/stream` 的 `done` 帧原样带上），
+  面板说「最后这几步是否已经执行不确定：click(x=320, y=180) —— 先看一眼屏幕，再决定要不要让它继续」；
+* **面板打开时**：`GET /api/v1/presence/unresolved-actions`（最近 15 分钟，再久屏幕早已不是当时的样子），
+  非空就提示一次；
+* **所有目标都记**（操作手机被取消同样不确定），但「正在操作 · Esc 停止」只对本机报
+  （`core.presence_stop.operating`）。
+
+记账的边界：`type` 的文字、密码类字段**只记长度**；磁盘写不了时降级为只在内存里记并**留痕**
+（只说一次的告警 + 接口里的 `journal_degraded`），记账失败不拦动作；与
+`core.unified.idempotency` / `core.durable_result_idempotency`（按 id 去重）是两件事，不互相替代。

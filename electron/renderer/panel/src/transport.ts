@@ -213,8 +213,11 @@ export interface ChatHandlers {
    *
    * ``stopped`` = 这一轮是被人叫停的(/api/v1/presence/stop)。那时回复本来就是空的,
    * 得说「停下了」,不能说成「后端什么都没给」—— 两件事的下一步完全不同。
+   *
+   * ``unknownActions`` = 叫停那一刻正在飞的操作(如 ``click(x=320, y=180)``)。**它们可能已经
+   * 执行了** —— 不是失败,所以要说「不确定」,让人先看一眼屏幕、别盲目重试。
    */
-  onDone?(response: string, stopped: boolean): void;
+  onDone?(response: string, stopped: boolean, unknownActions: readonly string[]): void;
   onError?(message: string): void;
 }
 
@@ -283,7 +286,11 @@ export async function streamChat(
           );
           break;
         case 'done':
-          h.onDone?.(typeof ev['response'] === 'string' ? ev['response'] : '', ev['stopped'] === true);
+          h.onDone?.(
+            typeof ev['response'] === 'string' ? ev['response'] : '',
+            ev['stopped'] === true,
+            readActionSummaries(ev['unknown_actions']),
+          );
           break;
         case 'error':
           h.onError?.(String(ev['error'] ?? ''));
@@ -808,6 +815,35 @@ export async function setPrivacy(base: string, paused: boolean): Promise<boolean
 // **「怎么切」不在这里。** 三天这个粒度、边界锚在哪、weight 相对谁归一,全部在
 // 后端 core/memory_cards.py 一处。面板照着切好的片画,自己不做任何分段判断 ——
 // 否则同一条线在这里切五张、在别的界面切六张,两边都以为自己是对的。
+
+/** 后端给的「结果不明的操作」→ 只取给人看的那一句。认不出的条目丢掉,不猜。 */
+function readActionSummaries(raw: unknown): readonly string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((r) => (r && typeof r === 'object' ? (r as Record<string, unknown>)['summary'] : null))
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+}
+
+/**
+ * 最近「结果不明」的操作:被叫停时正在飞的、上次进程中断时没记上结果的。
+ *
+ * ``null`` = 没问到(后端没接上);``[]`` = 问到了,没有。两者不能混 —— 前者不该提示任何东西,
+ * 后者才是「放心」。
+ */
+export async function fetchUnresolvedActions(base: string): Promise<readonly string[] | null> {
+  try {
+    const resp = await fetch(`${base}/api/v1/presence/unresolved-actions`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['success'] !== true) return null;
+    return readActionSummaries(body['actions']);
+  } catch (err) {
+    console.error('[hud] 问结果不明的操作失败:', err);
+    return null;
+  }
+}
 
 /**
  * 让它现在住手:取消在跑的请求、掐断在念的话、打断双工里正在说的那一句。
