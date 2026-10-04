@@ -54,7 +54,7 @@ class TestItCanBeStopped:
 
     def test_a_stopped_turn_says_so(self) -> None:
         main = _code("main.ts")
-        assert "onDone: (response, stopped)" in main
+        assert "onDone: (response, stopped, unknownActions)" in main
         assert "你叫停的" in main, "被叫停的那一轮说成了「后端什么都没给」"
 
 
@@ -80,3 +80,19 @@ class TestTheContextIsWhole:
         assert "wsLive" in main
         body = main[main.index("function appendTurn(") :][:900]
         assert "last.streaming" not in body, "又回到了「最后一个在流的同角色气泡就续」"
+
+
+class TestUncertainStepsAreSaidAsUncertain:
+    """叫停那一刻正在飞的操作可能已经执行了 —— 「不确定」，不是「失败」，也不是「成功」。"""
+
+    def test_a_stop_names_the_steps_whose_outcome_is_unknown(self) -> None:
+        main = _code("main.ts")
+        assert "不确定" in main and "unknownActions.join(" in main
+        assert "先看一眼屏幕" in main, "没告诉人该做什么 —— 只说不确定等于把问题丢给他"
+
+    def test_the_panel_asks_at_open_what_the_last_run_left_unresolved(self) -> None:
+        main = _code("main.ts")
+        assert "fetchUnresolvedActions(BASE)" in main
+        transport = _code("transport.ts")
+        body = transport[transport.index("export async function fetchUnresolvedActions") :][:900]
+        assert "return null" in body, "没问到(null)和问到了没有([])必须分开"

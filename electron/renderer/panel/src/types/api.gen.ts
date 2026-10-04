@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 470 条 · 组件 schema 118 个
+// 路径 472 条 · 组件 schema 118 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -307,7 +307,9 @@ export type ApiPath =
   | "/api/v1/participants/{device_id}/heartbeat"
   | "/api/v1/participants/{device_id}/tasks"
   | "/api/v1/ports"
+  | "/api/v1/presence/ambient-status"
   | "/api/v1/presence/stop"
+  | "/api/v1/presence/unresolved-actions"
   | "/api/v1/projection/agent-dispatch"
   | "/api/v1/projection/canonical-routing"
   | "/api/v1/projection/clone-to-use-acceptance"
@@ -781,7 +783,9 @@ export const API_METHODS = {
   "/api/v1/participants/{device_id}/heartbeat": ["post"],
   "/api/v1/participants/{device_id}/tasks": ["post"],
   "/api/v1/ports": ["get"],
+  "/api/v1/presence/ambient-status": ["get"],
   "/api/v1/presence/stop": ["post"],
+  "/api/v1/presence/unresolved-actions": ["get"],
   "/api/v1/projection/agent-dispatch": ["get"],
   "/api/v1/projection/canonical-routing": ["get"],
   "/api/v1/projection/clone-to-use-acceptance": ["get"],

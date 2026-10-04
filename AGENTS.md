@@ -135,6 +135,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   也算）。其余——任何别的设备、别的机器、智能体自己的定时心跳——都不进：直接交给智能体，不在电脑上朗读或
   边生成边念；真在本机落手时才交还桌面（回答仍归发起方）。这是架构，**没有开关**。自主工作用
   `DesktopPresenceRuntime.autonomous_session(kind)`；`GET /api/v1/agent/activity` 列出全部请求（含不进三态的）
+- `core/ambient_governance.py` - **常驻注意力循环的治理**（借自 Comma 对后台循环的约束）：自发开口 / 委托每小时额度（`GALAXY_AMBIENT_SPEAK_PER_HOUR` / `GALAXY_AMBIENT_DELEGATE_PER_HOUR`）、决策 / 转写 / 委托各有期限、失败留痕（≤32 条）。超额与超时**一律说得出原因**，不静默、不自动重试；只有 SPEAK 出声、进对话。`GET /api/v1/presence/ambient-status`，面板打开时提示「后台任务没做完」。并发上限 / 按来源配额不在这里，那是 `core/request_admission.py`
 - `core/participant_admission.py` - 非安卓设备的通用接入（注册 → 进 mesh → 提交任务），
   全程不经安卓命名模块。`core/participant_truth_ingress.py` - 参与方真相的通用入口（P3）
 - `core/runtime/__init__.py` 是 PEP 562 **惰性**再导出：导入 `core.runtime.*` 子模块不会装进安卓运行时

@@ -266,9 +266,36 @@ def test_actuation_entry_points_announce_themselves():
 
     assert "note_local_actuation(reason)" in inspect.getsource(liminal_activity.acting)
     assert '_acting("computer_use")' in inspect.getsource(computer_use_loop.ComputerUseLoop.run)
-    assert '_acting("hybrid_executor") if on_this_machine' in inspect.getsource(
-        hybrid_executor.HybridExecutionArbiter.execute
-    )
+
+
+@pytest.mark.parametrize(("device_id", "enters"), [("local", True), ("phone-3", False)])
+def test_hybrid_execution_hands_the_desktop_back_only_when_it_acts_here(device_id, enters):
+    """混合执行的入口只在目标是本机时进 ``acting()``。
+
+    这条原先读 ``execute`` 的源码、找一行特定的写法；那一行现在收进了
+    ``core.presence_stop.operating``（它同时给动作记账，见 core/action_journal.py）。
+    换成行为断言：真的调一次，看 ``acting`` 进没进 —— 比读源码更能证明「本机进、手机不进」。
+    """
+    import asyncio
+    from contextlib import contextmanager
+
+    from core.hybrid_executor import HybridExecutionArbiter
+
+    entered: List[str] = []
+
+    @contextmanager
+    def fake_acting(reason=""):
+        entered.append(reason)
+        yield True
+
+    async def body(*_a, **_k):
+        return "done"
+
+    arbiter = HybridExecutionArbiter.__new__(HybridExecutionArbiter)
+    arbiter._execute_body = body
+    with patch("core.liminal_activity.acting", fake_acting):
+        assert asyncio.run(arbiter.execute(device_id, "wechat", "send")) == "done"
+    assert entered == (["hybrid_executor"] if enters else [])
 
 
 def test_acting_hands_a_detached_request_to_the_desktop_before_marking_it(seb_events, phase_pushes, ledger):

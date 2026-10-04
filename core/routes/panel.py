@@ -688,6 +688,49 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.exception("presence stop failed")
             return JSONResponse(content={"success": False, "error": "停止失败,详见后端日志"}, status_code=500)
 
+    @router.get("/api/v1/presence/unresolved-actions")
+    async def get_unresolved_actions(
+        window_s: float = Query(default=900.0, ge=1.0, le=86400.0, description="只看最近多久(秒)"),
+    ) -> JSONResponse:
+        """最近一段时间里「结果不明」的操作 —— 被叫停时正在飞的、上次进程中断时没记上结果的。
+
+        不是失败：它们**可能已经执行了**。面板打开时问一次，非空就提示人先看一眼屏幕，
+        别让它盲目重试（见 core/action_journal.py）。不含人输入过的文字，只有动作和坐标。
+        """
+        from core.action_journal import get_action_journal
+
+        journal = get_action_journal()
+        return JSONResponse(
+            content={
+                "success": True,
+                "actions": [
+                    {k: r[k] for k in ("summary", "outcome", "source", "t_end")}
+                    for r in journal.recent_unknown(window_s)
+                ],
+                "journal_degraded": bool(journal.status()["degraded"]),
+            }
+        )
+
+    @router.get("/api/v1/presence/ambient-status")
+    async def get_ambient_status(
+        since: float = Query(default=0.0, ge=0.0, description="只看这个时刻（墙钟秒）之后还在发生的留痕"),
+        window_s: float = Query(default=21600.0, ge=60.0, le=604800.0, description="最多回看多久(秒)"),
+    ) -> JSONResponse:
+        """自发在场（常驻注意力循环）的自述：额度用了多少、哪些事没有顺利了结。
+
+        留痕里最要紧的是**后台委托没做完**（超时 / 失败）：那是循环自己悄悄派的活，人未必知道它曾经在做，
+        所以面板打开时问一次、提示一次。额度用完是正常的治理，不是故障，面板不为它打扰人
+        （降级当下已经写在决策的理由里）。见 core/ambient_governance.py。
+        """
+        import time
+
+        from core.ambient_attention_loop import ambient_loop_enabled, get_ambient_loop
+
+        status = get_ambient_loop().status()
+        floor = max(since, time.time() - window_s)
+        status["incidents"] = [i for i in status["incidents"] if i["t_last"] > floor]
+        return JSONResponse(content={"success": True, "enabled": ambient_loop_enabled(), **status})
+
     @router.get("/api/v1/panel/feed")
     async def get_panel_feed():
         """面板实时数据(桌面 Electron 面板的 IPC 契约 snake_case 字段)。

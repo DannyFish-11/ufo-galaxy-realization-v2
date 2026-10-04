@@ -571,6 +571,20 @@ class ComputerUseLoop:
                 text = m.group(1).strip()
         return text
 
+    async def _journaled_act(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """派发一个动作 —— 先记意图再动手，动完记结果（见 core.action_journal）。
+
+        两种模式（逐步 / 脚本）都从这一个口子出去，所以「被叫停时正在飞的那一步结果
+        不明」只在这里记一遍。
+        """
+        from core.action_journal import OUTCOME_FAILED, journaled  # noqa: PLC0415
+
+        with journaled("computer_use", action, params) as entry:
+            out = await self._act(action, params, self._node_id)
+            if not out.get("success"):
+                entry.outcome, entry.error = OUTCOME_FAILED, str(out.get("error", ""))
+            return out
+
     async def _run_one_script(
         self,
         instruction: str,
@@ -612,7 +626,7 @@ class ComputerUseLoop:
                 logger.debug("坐标: %s", why)
             call_params = {k: v for k, v in mapped.items() if k != "action"}
             dispatched.append(action)
-            return await self._act(action, call_params, self._node_id)
+            return await self._journaled_act(action, call_params)
 
         result = await run_script(source, _dispatch)
         rec = StepRecord(
@@ -857,7 +871,7 @@ class ComputerUseLoop:
                 rec.dispatched = True
                 rec.success = True
             else:
-                out = await self._act(action, params, self._node_id)
+                out = await self._journaled_act(action, params)
                 rec.dispatched = True
                 rec.success = bool(out.get("success"))
                 rec.error = str(out.get("error", ""))

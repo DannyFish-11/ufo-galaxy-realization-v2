@@ -1,0 +1,12 @@
+{
+  "name": "galaxy-browser-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "覆盖层与面板的浏览器行为测试(真的开一个 Chromium 看屏幕上发生了什么)。与 panel/ 分开装:面板的产物里不该带上测试依赖。",
+  "scripts": {
+    "test": "node --test *.test.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
