@@ -12,7 +12,11 @@
 * 一部分是**开发 / 运维 / 打包 / 测试**用的逃生口 —— ``GALAXY_DEV_MODE``、Tauri 自动构建、
   「本机回环也封禁」（打开它，桌面应用会把自己锁在自己的后端门外，这件事真发生过）。
 
-``panel`` / ``builtin`` / ``ops`` 就是这三种去处。后两种**不在面板上列出**，但仍在 ``CONFIG_SCHEMA`` 里：
+* 最后一部分是**和某个整档按钮同一件事的另一面** —— 「跨设备」关掉了，局域网发现、mDNS 宣告、设备接入平面、
+  消息总线再单独开着没有意义。它们并进那个按钮（``core/routes/config_bundles.py`` 的 ``members``），
+  翻按钮时一起写，不再各占一行。
+
+``panel`` / ``builtin`` / ``ops`` / ``member`` 就是这四种去处。后三种**不在面板上列出**，但仍在 ``CONFIG_SCHEMA`` 里：
 ``POST /api/config`` 照收、``.env`` 照写、环境变量照读 —— 藏起来不等于没接上
 （见 ``tests/test_panel_hidden_config_keys.py``）。
 
@@ -34,8 +38,11 @@ PANEL = "panel"
 BUILTIN = "builtin"
 #: 开发 / 运维 / 打包 / 测试用的逃生口。面板不列；默认值照实写，不要求在「开」的一侧。
 OPS = "ops"
+#: 并进某个整档按钮：和那一档的主键是同一件事的另一面（判据与写入语义见 config_bundles 模块说明）。
+#: 面板不列；清单里写「并进了哪一档」，并与 CONFIG_BUNDLES 的 ``members`` 互相核对。
+MEMBER = "member"
 
-DISPOSITIONS = (PANEL, BUILTIN, OPS)
+DISPOSITIONS = (PANEL, BUILTIN, OPS, MEMBER)
 
 
 class SwitchPolicy(NamedTuple):
@@ -56,13 +63,21 @@ def _o(group: str, reason: str) -> SwitchPolicy:
     return SwitchPolicy(OPS, group, reason)
 
 
+def _m(group: str, reason: str) -> SwitchPolicy:
+    return SwitchPolicy(MEMBER, group, reason)
+
+
 SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     # ── 声音 ────────────────────────────────────────────────────────────
     "GALAXY_VOICE": _p("声音", "语音总闸：关掉后启动时不起语音循环，麦克风也不占用"),
     "GALAXY_SPEAK": _p("声音", "朗读回复：有人想只要文字"),
     "GALAXY_LOCAL_AUDIO": _p("声音", "本机出不出声：可以朗读给别的设备、但不想电脑外放"),
     "GALAXY_AEC": _p("声音", "回声消除：没有回环设备的机器上等于旁通，有人想整个关掉"),
-    "GALAXY_NATIVE_AUDIO": _p("声音", "让模型直接听音频（需全模态服务）还是先转文字：花费与能力的取舍"),
+    "GALAXY_NATIVE_AUDIO": _o(
+        "声音",
+        "「服务现实」门控：本机有没有原生听/说的后端。由本机模型档位（B 档激活时 core/native_modal.py 自动开、"
+        "离开时自动关）管着，不是用户的取舍；用户的取舍是选哪一档，以及 GALAXY_NATIVE_AUDIO_CHAT",
+    ),
     "GALAXY_KOKORO_AUTOFETCH": _p("声音", "首次使用时后台下载约 310MB 模型：流量与磁盘的取舍"),
     "GALAXY_INDEXTTS_AUTOFETCH": _p("声音", "首次使用时后台下载 IndexTTS 模型（体积很大）：流量与磁盘的取舍"),
     "GALAXY_AEC_COMFORT_NOISE": _b("声音", "回声消除的子参数：把压掉的部分填回极低底噪，消除呼吸感；没有理由单独关"),
@@ -79,7 +94,9 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     "GALAXY_INDEXTTS_USE_EMO_TEXT": _o("声音", "IndexTTS 由台词推断情绪：引擎专属调参"),
     # ── 感知与在场（面板「全模态」整档管其中几项）─────────────────────────
     "GALAXY_AMBIENT_LOOP": _p("感知与在场", "自发在场（持续看/听、自己判断何时开口）：整档「全模态」的主键"),
-    "GALAXY_AMBIENT_SHARE_SESSION": _p("感知与在场", "主动开口续在当前对话上，还是另起一条不打断你的会话：偏好"),
+    "GALAXY_AMBIENT_SHARE_SESSION": _m(
+        "感知与在场", "并进「全模态」：主动开口续在哪条对话上；自发在场关着时没有主动开口可续"
+    ),
     "GALAXY_ACTIVE_PERCEPTION": _p("感知与在场", "主动感知（不等你开口自己找事做）：默认关，开了会多花算力与注意力"),
     "GALAXY_PROACTIVE_SCREEN": _p("感知与在场", "屏幕变化也触发主动开口：默认关，屏幕一直在变会话会很多"),
     "GALAXY_SYSTEM_AUDIO_CAPTURE": _p("感知与在场", "采集本机播放声：隐私 —— AI 能听见电脑在放什么"),
@@ -122,10 +139,10 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
         "多设备与网络",
         "主脑编排 + worker/NATS 分布式：默认关=单机。与「跨设备」的关系见 docs/PANEL_SWITCHES.md 的合并建议",
     ),
-    "GALAXY_NATS_ENABLED": _p("多设备与网络", "NATS 消息总线：单机自用可以关，省一个常驻进程"),
-    "GALAXY_ONBOARDING_ENABLED": _p("多设备与网络", "设备接入平面（发现附近设备、候选/成员）：总闸"),
-    "GALAXY_LAN_DISCOVERY": _p("多设备与网络", "局域网自动发现设备：会在局域网里探测，有人不想"),
-    "GALAXY_MDNS": _p("多设备与网络", "mDNS 广播网关，手机/手表免输 IP：会在局域网里宣告自己"),
+    "GALAXY_NATS_ENABLED": _m("多设备与网络", "并进「跨设备」：NATS 消息总线；只用本机时白占一个常驻进程"),
+    "GALAXY_ONBOARDING_ENABLED": _m("多设备与网络", "并进「跨设备」：设备接入平面（发现附近设备、候选/成员）的总闸"),
+    "GALAXY_LAN_DISCOVERY": _m("多设备与网络", "并进「跨设备」：局域网自动发现设备；只用本机时没有对象可发现"),
+    "GALAXY_MDNS": _m("多设备与网络", "并进「跨设备」：mDNS 广播网关，手机/手表免输 IP；只用本机时没有人需要它"),
     "GALAXY_HA_BRIDGE": _p("多设备与网络", "接入 Home Assistant：有 HA 的人可能不想让 AI 去控智能家居"),
     "GALAXY_REMOTE_DESKTOP": _p("多设备与网络", "远程桌面接入：默认关，打开就是对外开一个口"),
     "FEDERATION_ENABLED": _p("多设备与网络", "联邦（把多套 Galaxy 连成一片）：默认关的 opt-in"),
@@ -192,11 +209,12 @@ def keys_with(disposition: str) -> frozenset:
 
 
 #: 登记在 CONFIG_SCHEMA 里、但面板不列的开关（内置 + 运维）。
-PANEL_HIDDEN_SWITCH_KEYS = keys_with(BUILTIN) | keys_with(OPS)
+PANEL_HIDDEN_SWITCH_KEYS = keys_with(BUILTIN) | keys_with(OPS) | keys_with(MEMBER)
 
 __all__ = [
     "BUILTIN",
     "DISPOSITIONS",
+    "MEMBER",
     "OPS",
     "PANEL",
     "PANEL_HIDDEN_SWITCH_KEYS",

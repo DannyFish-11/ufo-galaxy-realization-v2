@@ -25,7 +25,7 @@ documents are **authoritative and current** vs historical or superseded.
 | Document | Purpose |
 |----------|---------|
 | [SYSTEM_STATUS.md](SYSTEM_STATUS.md) | **当前系统状态（权威，2026-09-27 复测）** —— 完成度 / 完善度 / 设计完成度，每条附复测命令 |
-| [PANEL_SWITCHES.md](PANEL_SWITCHES.md) | **面板开关清单（由 `core/routes/panel_switch_policy.py` 生成）** —— 96 个布尔开关逐个说去处：留在面板 / 内置 / 开发运维，附合并建议 |
+| [PANEL_SWITCHES.md](PANEL_SWITCHES.md) | **面板开关清单（由 `core/routes/panel_switch_policy.py` 生成）** —— 96 个布尔开关逐个说去处：留在面板 / 内置 / 开发运维 / 并进整档按钮，附没并的理由 |
 | [CLONE_TO_USE_REALITY.md](CLONE_TO_USE_REALITY.md) | **Authoritative quick-start** — canonical clone-to-use runtime truth |
 | [UNIFIED_SUBJECT_ARCHITECTURE.md](UNIFIED_SUBJECT_ARCHITECTURE.md) | Unified subject architecture (DesktopPresenceRuntime + OpenClawd) |
 | [LOCAL_EXECUTION_CHAIN.md](LOCAL_EXECUTION_CHAIN.md) | Local execution chain step-by-step |

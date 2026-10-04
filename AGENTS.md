@@ -163,7 +163,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
-- **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
+- **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
 - `core/ambient_yield.py` - 自发注意力循环给用户让路：用户请求在跑不碰模型、调用进行中用户来了就取消（Ollama 随之停掉生成）、用时 T 秒后歇 3T 秒。判「人在等」用 `core.presence_line.foreground_request_active`（后台自发来源与常驻在场不算）
 - 面板窗口只能有它自己的圆角：桌面外壳里 `html[data-shell='desktop']` 的画布底是透明的（`index.html` 同步脚本设置），否则 `body` 的渐变会铺满窗口矩形、圆角外多出四个方角。`dist/` 是提交进仓库的产物，改样式后要 `npm run build`
 - `enhancements/clients/windows_client/run_ui.py` 是**硬禁用的桩**，只会发一条弃用警告；原先写在这里的

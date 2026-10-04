@@ -314,22 +314,28 @@ python scripts/check_assessment_freshness.py
 
 | 去处 | 个数 | 做了什么 |
 |---|---|---|
-| 留在面板 | 45 | 用户真有取舍（隐私、花费、硬件与网络、安全姿态），按「声音 / 感知与在场 / 记忆与隐私 / 桌面操作与自治 / 模型与花费 / 多设备与网络 / 安全姿态」分组 |
+| 留在面板 | 39 | 用户真有取舍（隐私、花费、硬件与网络、安全姿态），按「声音 / 感知与在场 / 记忆与隐私 / 桌面操作与自治 / 模型与花费 / 多设备与网络 / 安全姿态」分组 |
 | 内置 | 33 | 不再列在面板上：熔断器、派发幂等、回声消除子参数、自回声闸门等不该有人去关的机制，默认开 |
-| 开发 / 运维 | 18 | 不再列在面板上：`GALAXY_DEV_MODE`、Tauri 打包、「本机回环也封禁」等 |
+| 开发 / 运维 | 19 | 不再列在面板上：`GALAXY_DEV_MODE`、Tauri 打包、「本机回环也封禁」、`GALAXY_NATIVE_AUDIO`（由本机模型档位自动开关的门控）等 |
+| 并进整档按钮 | 5 | 不再单列，翻按钮时和主键一起写：「跨设备」带局域网发现 / mDNS / 设备接入平面 / NATS（只用本机时它们没有意义），「全模态」带主动开口续在哪条对话上 |
 
 不列 ≠ 没接上：键仍在 `CONFIG_SCHEMA`，`POST /api/config` 照收、`.env` 照写、环境变量照读。
 
-**清点时顺带查出的三处真问题**（都已修）：
+**清点时顺带查出的真问题**（都已修）：
 
 | 问题 | 修复 | 验证 |
 |---|---|---|
 | 「保存设置」会把登记表里每个键的默认值整体写进 `.env`。`GALAXY_MEMORY_MEDIA` 登记成「默认开」而代码三处默认都是关 —— 保存一次，截图和录音就在没人点过的情况下开始落盘；另有 `GALAXY_ENTRYMODE_USE_READINESS`、`GALAXY_PREFLIGHT_FAIL_FAST` 与代码相反 | 登记表默认值对齐到代码；就绪度开关改为认 `true`/`1`/`on`（面板写的是 `true`，代码以前只认 `"1"`） | `tests/test_every_switch_has_a_disposition.py` |
 | 设置页只认字面量 `"true"` 为开：`.env` 里手写的 `=1` / `=on`、登记表里写成 `1` 的默认值（`GALAXY_CONSENSUS_ROUND`）代码认作开，面板显示成关，点一下还会把它「关」成 `false` | `GET /api/config/all` 把布尔值统一规整成 `true` / `false`；登记表布尔默认值全部是字面量 | 同上 |
 | `GALAXY_COMPUTER_USE_NATIVE_TOOL` 的类型登记成 `bool`，设置页把它画成文本框 | 归一为 `boolean` | 同上 |
+| `GALAXY_CROSS_DEVICE_ENABLED` 登记成「默认开」，代码与 `.env.example` 都是关（opt-in）—— 保存一次设置，跨设备编排就在没人点过的情况下开了 | 登记表默认改为关 | 同上（`test_cross_device_is_off_in_the_registry_because_it_is_off_in_the_code`） |
+| `GALAXY_NATIVE_AUDIO` 在面板上是个开关，但切到 B 档时 `core/native_modal.py` 会自动开它、离开时自动关 —— 同一个事实两处各存 | 改为运维项；用户的取舍是选哪一档，以及「每轮发不发录音」`GALAXY_NATIVE_AUDIO_CHAT` | 同上 |
 
 新增布尔开关必须先在清单里说清是哪一种、为什么（同一个测试盯着）—— 这是「不要乱加开关」的可执行形式。
-**没有动**的合并（多设备四处总闸、出声两个、原生听两个、安全姿态做成一个档位）会改变行为，列在 PANEL_SWITCHES.md 末尾等你定。
+**「同一能力合并成一个按钮」**：`core/routes/config_bundles.py` 的 `members` 说哪些键和主键是同一件事的另一面。判据只有一条 ——
+**（主键关、这个键开）这个组合有没有意义**；没有才并。写入语义：主键关 → 成员全写 `false`；主键开 → 成员回到登记表默认
+（opt-in 不替人打开）；一次落盘（`POST /api/config/bundles`）。成员相对主键偏离时按钮显示「有偏离」。验证：`tests/test_bundle_members_follow_the_primary.py`。
+**没有并**的（各有隐私/花费/暴露面的理由，列在 PANEL_SWITCHES.md 末尾）：系统声送进模型、听/朗读/本机外放、每轮发不发录音、主脑/联邦/WebRTC/Funnel 这些默认关的 opt-in、主动感知 —— 并了会替用户悄悄改一个选择。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

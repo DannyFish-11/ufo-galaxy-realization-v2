@@ -26,6 +26,26 @@ keyCount 都是手抄的数字),点一下只翻一个本地变量、不发任何
 **不是所有档都是两态的**:GALAXY_AUTONOMY 是 safe / guided / autonomous 三档,
 渲染成推拉开关会把中间那档吞掉 —— 这个仓库为「三态开关被当成布尔」栽过一次,见
 tests/test_voice_switches_reach_the_panel.py 里那条。
+
+## ``members`` —— 并进这个按钮的子开关
+
+``owns`` 说「这一档管哪些键」,``members`` 是其中**不配单独成为开关**的那几个:
+它们和主键是同一件事的两个侧面,拆成两处各存一份,迟早出现「主键关了、子键还开着」
+(启动日志里真出现过 ``cross_device=False`` 与 ``nats_enabled=True`` 并排)。
+
+**判据只有一条:(主键关、这个键开) 这个组合有没有意义。** 没有 → 成员;有 → 不是。
+下面这些**看着像、其实不是**成员,每一个都有代码里写明的理由:
+
+* ``GALAXY_SYSTEM_AUDIO_TO_PERCEPTION`` —— 「只要回声消除、不想让模型听见自己在放什么」是
+  ``system_audio_capture_service.feed_perception_enabled`` 的文档里**特意**拆开的隐私选择;
+* ``GALAXY_VOICE`` / ``GALAXY_SPEAK`` / ``GALAXY_LOCAL_AUDIO`` —— 听、朗读、本机外放是三个
+  方向,「只要听写不要朗读」「朗读给别的设备、电脑不外放」都是有意义的组合;
+* 默认关的 opt-in(主脑、联邦、WebRTC、Funnel、主动感知……)—— 按钮「开」不能替用户
+  把一个有花费或对外暴露面的选项打开,所以它们留在「全部设置」里。
+
+写入语义(``bundle_writes``):主键写成 ``false`` → 全部成员写成 ``false``;主键写成
+``true`` → 成员**回到登记表的默认值**(不是一律 ``true``:不替用户打开 opt-in)。
+只有布尔主键可以有成员 —— 三档的 GALAXY_AUTONOMY 没有「关」。
 """
 
 from __future__ import annotations
@@ -57,6 +77,8 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
             "GALAXY_SYSTEM_AUDIO_*",
             "GALAXY_PERCEPTION_KEYFRAMES",
         ),
+        # 主动开口续在哪条对话上:环境在场关着的时候没有「主动开口」可续。
+        "members": ("GALAXY_AMBIENT_SHARE_SESSION",),
     },
     {
         "key": "cross_device",
@@ -78,6 +100,7 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
         #     而它俩讲的是同一件事(手表/手机怎么连回来)。
         "owns": (
             "GALAXY_CROSS_DEVICE_ENABLED",
+            "GALAXY_ONBOARDING_ENABLED",
             "GALAXY_MASTER_BRAIN_*",
             "GALAXY_NATS_*",
             "GALAXY_FABRIC_STRICT",
@@ -94,6 +117,15 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
             "ANDROID_DEVICE_*",
             "FEDERATION_*",
             "NODE_*_URL",
+        ),
+        # 发现附近设备 / 向手机手表宣告自己 / 设备接入平面 / 消息总线:
+        # 只用本机时,这四样要么没有对象可发现,要么白占一个常驻进程。
+        # 主脑、联邦、WebRTC、Funnel、远程桌面是默认关的 opt-in —— 不在此列(见模块说明)。
+        "members": (
+            "GALAXY_ONBOARDING_ENABLED",
+            "GALAXY_LAN_DISCOVERY",
+            "GALAXY_MDNS",
+            "GALAXY_NATS_ENABLED",
         ),
     },
     {
@@ -167,3 +199,30 @@ def owned_keys(bundle: Dict[str, Any], schema_keys: Iterable[str]) -> List[str]:
     for pattern in bundle.get("owns", ()):
         out.update(fnmatch.filter(keys, pattern))
     return sorted(out)
+
+
+def member_keys(bundle: Dict[str, Any]) -> Tuple[str, ...]:
+    """这一档并进来的子开关(没有则为空)。"""
+    return tuple(bundle.get("members", ()))
+
+
+def expected_member_value(bundle_value: str, schema_default: str) -> str:
+    """主键处于 ``bundle_value`` 时,一个成员**应当**是什么值。唯一定义处。
+
+    关 → ``false``;开 → 登记表默认值(opt-in 的成员默认就是 ``false``,按钮不替人打开)。
+    ``bundle_writes`` 写的和 ``_bundle_state`` 拿来比「有没有偏离」的是同一个答案。
+    """
+    return "false" if bundle_value == "false" else schema_default
+
+
+def bundle_writes(bundle: Dict[str, Any], value: str, schema: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+    """翻这一档要写哪些键:主键 + 全部成员,**一次写完**(同一次落盘)。
+
+    成员只对布尔主键有意义;非布尔主键(三档的自主)直接只写主键。
+    """
+    writes: Dict[str, str] = {bundle["primary"]: value}
+    if schema.get(bundle["primary"], {}).get("type") != "boolean":
+        return writes
+    for key in member_keys(bundle):
+        writes[key] = expected_member_value(value, str(schema[key]["default"]))
+    return writes

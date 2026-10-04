@@ -20,7 +20,13 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 # 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
 # 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
-from core.routes.config_bundles import CONFIG_BUNDLES, owned_keys  # noqa: E402
+from core.routes.config_bundles import (  # noqa: E402
+    CONFIG_BUNDLES,
+    bundle_writes,
+    expected_member_value,
+    member_keys,
+    owned_keys,
+)
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS  # noqa: E402
 
@@ -571,8 +577,18 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     owned = owned_keys(bundle, CONFIG_SCHEMA.keys())
+    current = os.environ.get(primary, meta["default"])
+    members = set(member_keys(bundle)) if meta["type"] == "boolean" else set()
+    # 成员的「该是什么」跟着主键走(关→false,开→默认);其余键与自己的默认比。
     overrides = sum(
-        1 for k in owned if k != primary and k in os.environ and os.environ[k] != CONFIG_SCHEMA[k]["default"]
+        1
+        for k in owned
+        if k != primary
+        and k in os.environ
+        and os.environ[k]
+        != (
+            expected_member_value(current, CONFIG_SCHEMA[k]["default"]) if k in members else CONFIG_SCHEMA[k]["default"]
+        )
     )
 
     state: Dict[str, Any] = {
@@ -630,5 +646,5 @@ async def set_bundle(req: BundleUpdateRequest):
             detail=f"{primary} 是布尔,只接受 'true' / 'false',收到 {req.value!r}",
         )
 
-    await update_config(ConfigUpdateRequest(config={primary: req.value}))
+    await update_config(ConfigUpdateRequest(config=bundle_writes(bundle, req.value, CONFIG_SCHEMA)))
     return {"bundle": _bundle_state(bundle)}

@@ -1,4 +1,4 @@
-"""每个布尔开关都有一个去处：留在面板 / 内置 / 开发运维。新增开关必须先在清单里说清楚。
+"""每个布尔开关都有一个去处：留在面板 / 内置 / 开发运维 / 并进整档按钮。新增开关必须先在清单里说清楚。
 
 背景见 ``core/routes/panel_switch_policy.py`` 与 ``docs/PANEL_SWITCHES.md``。仓库所有者的要求是「不要乱加开关」，
 这是它的可执行形式：``CONFIG_SCHEMA`` 里多一个布尔键而清单里没有，这里就红。
@@ -14,7 +14,14 @@ import sys
 from pathlib import Path
 
 from core.routes.config import CONFIG_SCHEMA, PANEL_HIDDEN_KEYS, _bool_text, get_config
-from core.routes.panel_switch_policy import BUILTIN, DISPOSITIONS, OPS, PANEL, PANEL_HIDDEN_SWITCH_KEYS, SWITCH_POLICY
+from core.routes.panel_switch_policy import (
+    BUILTIN,
+    DISPOSITIONS,
+    OPS,
+    PANEL,
+    PANEL_HIDDEN_SWITCH_KEYS,
+    SWITCH_POLICY,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -62,8 +69,8 @@ def test_builtin_switches_default_on_because_nobody_should_be_turning_them_off()
             assert CONFIG_SCHEMA[key]["default"] == "true", f"{key} 说是不该有人去关的内置机制，默认却是关"
 
 
-def test_the_panel_hides_exactly_the_builtin_and_ops_switches_and_lists_the_panel_ones():
-    assert PANEL_HIDDEN_SWITCH_KEYS == {k for k, p in SWITCH_POLICY.items() if p.disposition in (BUILTIN, OPS)}
+def test_the_panel_hides_everything_but_the_panel_switches_and_lists_the_panel_ones():
+    assert PANEL_HIDDEN_SWITCH_KEYS == {k for k, p in SWITCH_POLICY.items() if p.disposition != PANEL}
     assert PANEL_HIDDEN_SWITCH_KEYS <= PANEL_HIDDEN_KEYS
     listed = asyncio.run(get_config())
     for key, pol in SWITCH_POLICY.items():
@@ -100,6 +107,20 @@ def test_registry_defaults_match_what_the_code_does_when_nothing_is_set():
     assert CONFIG_SCHEMA["GALAXY_MEMORY_MEDIA"]["default"] == "false", "截图/录音落盘在代码里默认关"
     assert CONFIG_SCHEMA["GALAXY_ENTRYMODE_USE_READINESS"]["default"] == "false", "就绪度判定在代码里默认关"
     assert CONFIG_SCHEMA["GALAXY_PREFLIGHT_FAIL_FAST"]["default"] == "true", "预检命令行默认失败就停"
+
+
+def test_cross_device_is_off_in_the_registry_because_it_is_off_in_the_code():
+    """跨设备是 opt-in(``.env.example`` 与 ``system_orchestrator`` 都是缺省关)。登记成「开」的话,
+    「保存设置」把 ``GALAXY_CROSS_DEVICE_ENABLED=true`` 整体写进 .env —— 没人点过就开了跨设备编排。"""
+    assert CONFIG_SCHEMA["GALAXY_CROSS_DEVICE_ENABLED"]["default"] == "false"
+    example = (REPO / ".env.example").read_text(encoding="utf-8")
+    assert "GALAXY_CROSS_DEVICE_ENABLED=false" in example
+
+
+def test_native_audio_is_the_tiers_gate_not_a_choice_the_user_makes_on_the_panel():
+    """切到 B 档时 core/native_modal.py 自动开它、离开时自动关 —— 面板上再放一个,就是同一个事实两处各存。"""
+    assert SWITCH_POLICY["GALAXY_NATIVE_AUDIO"].disposition == OPS
+    assert SWITCH_POLICY["GALAXY_NATIVE_AUDIO_CHAT"].disposition == PANEL, "每轮发不发录音是花费决定,仍归用户"
 
 
 def test_the_readiness_flag_accepts_what_the_panel_writes(monkeypatch):

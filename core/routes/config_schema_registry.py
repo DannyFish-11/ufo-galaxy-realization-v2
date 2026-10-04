@@ -412,10 +412,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "options": ["sync", "async", "reject"],
     },
     "GALAXY_CROSS_DEVICE_ENABLED": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "跨设备编排（让手机/手表/别的电脑也能承接任务;关掉则只在本机跑 · 默认开）",
+        "description": "跨设备编排（让手机/手表/别的电脑也能承接任务;关掉则只在本机跑 · 默认关，出厂只用本机）",
     },
     "GALAXY_MASTER_BRAIN_ENABLED": {
         "default": "false",
