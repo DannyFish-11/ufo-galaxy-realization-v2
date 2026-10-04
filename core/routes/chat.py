@@ -74,6 +74,7 @@ from core.android_boundary_visibility_router import (
 )
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
 from core.presence_line import desktop_conversation_mirror, desktop_incremental_speech, desktop_request, request_origin
+from core.presence_stop import stop_fields
 from core.routes._models import ChatRequest
 from core.subject_facing_foreground import (
     build_subject_facing_foreground,
@@ -624,8 +625,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(resp.to_json_response())
 
     # ── SSE streaming surface (真流式: token 边生成边到) ────────────────────
-    # POST /api/v1/chat/stream — same compatibility-adapter role as /api/v1/chat,
-    # but emits the result as a Server-Sent Events stream.
+    # POST /api/v1/chat/stream — same compatibility-adapter role as /api/v1/chat, but emits SSE.
     #
     # 真流式链路:本端点在请求上下文挂 TokenStream(core.llm_stream)→ openclawd
     # 的答案生成点(_react_loop)把它显式传给路由层 → 适配器(Ollama NDJSON /
@@ -1068,7 +1068,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "model": model,
                         "runtime_session_id": runtime_session_id,
                         "visible_action_surface": visible_action_surface,
-                        "stopped": bool(result.get("stopped")),  # 被人叫停的:前端说「你叫停的」,不说「没拿到」
+                        **stop_fields(result),  # 被人叫停的:前端说「你叫停的」(含结果不明的那一步)
                     }
                 )
                 # 回到待机态。

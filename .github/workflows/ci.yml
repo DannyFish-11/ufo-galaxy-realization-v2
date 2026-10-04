@@ -56,6 +56,40 @@ jobs:
           echo "dist/ 与源码一致。"
 
   # ---------------------------------------------------------------------------
+  # 覆盖层与面板的浏览器行为测试
+  # ---------------------------------------------------------------------------
+  # 覆盖层的坏法全是"不报错、画面不对"：边光的呼吸曾是 CSS 关键帧，关键帧里的 opacity 压过
+  # 普通声明，隐私急停把 --rim 写成 0 也没用，屏幕上照样一明一暗地亮着。读源码、读 CSS 文本
+  # 都看不出来 —— 要真开一个 Chromium，问「算出来的 opacity 到底是多少」。
+  #
+  # 单开一个作业而不塞进 panel-dist-consistency：装 Chromium 要几十秒，那个作业是每次必过的
+  # 快门，不该被它拖慢。设 GALAXY_REQUIRE_BROWSER=1：CI 里缺浏览器就是红的 —— 本地没装时
+  # 测试会显式跳过，而一条永远被跳过的绿线等于没有这条测试。
+  #
+  # Playwright 版本在 browser-tests/package.json 里钉死（不带 ^），依赖走 npm ci 读 lock。
+  browser-behavior:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser-test deps (locked)
+        working-directory: electron/renderer/browser-tests
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: electron/renderer/browser-tests
+        run: npx playwright install --with-deps chromium
+      - name: 覆盖层与面板的浏览器行为测试
+        working-directory: electron/renderer/browser-tests
+        env:
+          GALAXY_REQUIRE_BROWSER: "1"
+        run: npm test
+
+  # ---------------------------------------------------------------------------
   # Windows 冒烟（新-10 / P20）
   # ---------------------------------------------------------------------------
   # 审查发现:全仓 56 个 CI 作业**全部** runs-on: ubuntu-latest,零 Windows、零 macOS。

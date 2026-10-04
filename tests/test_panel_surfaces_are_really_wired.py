@@ -70,6 +70,8 @@ class TestEveryNewlyWiredEndpointIsInTheBuiltBundle:
             ("/api/v1/presence/stop", "停止"),
             # 打开面板先问对话主线:面板关着时用嘴说的、它自己开口说的,都记在那一条上。
             ("/api/v1/sessions/primary", "对话主线"),
+            # 上次中断时没记上结果的操作:提示「可能已经执行了」,别让人盲目重来。
+            ("/api/v1/presence/unresolved-actions", "结果不明的操作"),
         ],
     )
     def test_the_endpoint_is_reachable_from_the_built_page(self, bundle: str, endpoint: str, what: str):
@@ -112,7 +114,7 @@ class TestDegradationIsVisibleNotSilent:
         code = _code_only(PANEL_SRC / "main.ts")
         # 第二个参数是「这一轮是不是被人叫停的」(done 帧的 stopped)—— 那种时候回复本来
         # 就是空的,得说「停下了」;没被叫停时照旧拿 response 兜底,这条判据不变。
-        assert re.search(r"onDone:\s*\(response(?:,\s*\w+)?\)", code), (
+        assert re.search(r"onDone:\s*\(response(?:,\s*\w+)*\)", code), (
             "onDone 不再接 done 帧里的 response —— 锁步吞掉 delta 的那种情况下," "整轮答复会丢掉,面板画出一个空气泡"
         )
         assert "response ||" in code or "|| response" in code, "接了 response 却没拿它兜底"

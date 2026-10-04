@@ -51,6 +51,7 @@ __all__ = [
     "note_hybrid_execution",
     "note_local_actuation",
     "acting",
+    "current_runtime_session_id",
     "in_deliberation_window",
     "commit_to_manifest",
 ]
@@ -85,6 +86,12 @@ def bind_runtime_session(session: Any) -> "contextvars.Token":
 
     note_bound_session(session)
     return _current_runtime_session.set(session)
+
+
+def current_runtime_session_id() -> str:
+    """当前这一件事的运行时会话 id；不在一次请求里时是空串。"""
+    session = _current_runtime_session.get()
+    return str(getattr(session, "runtime_session_id", "") or "") if session is not None else ""
 
 
 def unbind_runtime_session(token: "contextvars.Token") -> None:

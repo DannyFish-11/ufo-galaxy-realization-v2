@@ -742,6 +742,18 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "perception",
         "description": "开口/委托后冷却(秒,防话痨)",
     },
+    "GALAXY_AMBIENT_SPEAK_PER_HOUR": {
+        "default": "12",
+        "type": "number",
+        "category": "perception",
+        "description": "自发开口每小时上限（用完就沉默到额度恢复，并说明原因 · 默认 12；想放开就填大数）",
+    },
+    "GALAXY_AMBIENT_DELEGATE_PER_HOUR": {
+        "default": "6",
+        "type": "number",
+        "category": "perception",
+        "description": "自发委托（后台派活，每次是一轮完整认知）每小时上限（默认 6；想放开就填大数）",
+    },
     # --- 边说边听(自回声抑制 / 打断策略 / 系统播放声 / 双工)---
     #
     # 这一组开关此前【只存在于代码里】:功能真做了也真在跑,但既不在本 schema 里、

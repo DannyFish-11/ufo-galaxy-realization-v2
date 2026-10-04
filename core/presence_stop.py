@@ -23,18 +23,19 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import dataclasses
 import functools
 import inspect
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from core import stop_key as _stop_key
 
 logger = logging.getLogger("Galaxy.PresenceStop")
 
-__all__ = ["ActingMixin", "StopMixin", "note_bound_session", "stoppable", "stopped_result"]
+__all__ = ["ActingMixin", "StopMixin", "note_bound_session", "operating", "stop_fields", "stoppable", "stopped_result"]
 
 # RUF006：发出去就不管的任务要留引用，免得被事件循环的弱引用回收到一半。
 _BACKGROUND_TASKS: set = set()
@@ -79,11 +80,29 @@ def stopped_result(handle: _InflightRequest) -> Dict[str, Any]:
         "response": "",
         "stopped": True,
         "stop_reason": handle.stop_reason or "user_stop",
+        # 叫停那一刻正在飞的操作：可能已经执行了。「不确定」不是「失败」—— 调用方据此
+        # 先看一眼屏幕、别盲目重试（见 core.action_journal）。
+        "unknown_actions": _unknown_actions(handle.runtime_session_id),
         "runtime_session_id": handle.runtime_session_id,
         "trace_id": handle.runtime_session_id,
         "tristate": "silent",
         "entrypoint_source": handle.source,
     }
+
+
+def _unknown_actions(runtime_session_id: str) -> List[Dict[str, Any]]:
+    try:
+        from core.action_journal import get_action_journal
+
+        return get_action_journal().unknown_for(runtime_session_id)
+    except Exception:  # noqa: BLE001 — 记账出问题不该让「停」本身失败
+        logger.debug("取结果不明的操作失败(非致命)", exc_info=True)
+        return []
+
+
+def stop_fields(result: Dict[str, Any]) -> Dict[str, Any]:
+    """一轮请求的结果里与「停」有关的字段，给 /chat/stream 的 done 帧原样带上。"""
+    return {"stopped": bool(result.get("stopped")), "unknown_actions": list(result.get("unknown_actions") or [])}
 
 
 def stoppable(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -206,6 +225,35 @@ class StopMixin:
             "presences_failed": failed,
             "reason": reason,
         }
+
+
+def _targets_this_machine(device_id: str) -> bool:
+    """目标是不是这台机器。判不出来按「不是」—— 可见性绝不该拖垮执行，也不替它说句不知真假的话。"""
+    try:
+        from core.orchestration import _is_local_device
+
+        return bool(_is_local_device(device_id))
+    except Exception:  # noqa: BLE001
+        logger.debug("判不出目标是不是本机，本轮不报「在动手」", exc_info=True)
+        return False
+
+
+@contextlib.contextmanager
+def operating(source: str, device_id: str, action: str, params: Optional[Dict[str, Any]] = None) -> Iterator[None]:
+    """一次动手的总入口：先记意图（被叫停时记「结果不明」），目标是本机时再报「在动手」。
+
+    * 日志对**所有**目标都记 —— 操作手机时被取消，那一步照样可能已经执行；
+    * 「正在操作 · Esc 停止」只在目标是本机时才报：它说的是你眼前这块屏幕、这副键鼠，
+      操作手机时这台机器没人动，这么说就是一句假话（要停照样能从面板停）。
+    """
+    from core.action_journal import journaled
+    from core.liminal_activity import acting
+
+    with contextlib.ExitStack() as stack:
+        if _targets_this_machine(device_id):
+            stack.enter_context(acting(source))
+        stack.enter_context(journaled(source, action, {"device_id": device_id, **(params or {})}))
+        yield
 
 
 def _stop_key_callback() -> Optional[Callable[[], None]]:

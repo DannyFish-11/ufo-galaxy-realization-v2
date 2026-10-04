@@ -391,26 +391,11 @@ class HybridExecutionArbiter:
             session_id: Optional session identifier for continuity tracking.
             task_id: Optional canonical task identifier for continuity tracking.
         """
-        # 这一整段它在动手 —— 告诉在场层（岛上写「正在操作」，人按 Esc 能停）。
-        # 包在最外层而不是每个 return 前各报一次：本方法有七个出口，逐个补必漏。
-        #
-        # **只在目标是这台机器时才算。**「正在操作」说的是你眼前这块屏幕、这副键鼠；
-        # 它在操作手机时这台机器没人动，这么说就是一句假话（要停照样能从面板停）。
-        # 本地判定用编排层那一份（core.orchestration._is_local_device），不另写一套。
-        # 判不出来就不报 —— 可见性绝不该拖垮执行，也不替它说一句不知道真假的话。
-        from contextlib import nullcontext
+        # 这一整段它在动手：先记意图（被叫停时那一步记「结果不明」），目标是本机时再报
+        # 「正在操作」。包在最外层而不是每个 return 前各报一次 —— 本方法有七个出口。
+        from core.presence_stop import operating
 
-        from core.liminal_activity import acting as _acting
-
-        try:
-            from core.orchestration import _is_local_device
-
-            on_this_machine = bool(_is_local_device(device_id))
-        except Exception:  # noqa: BLE001
-            logger.debug("hybrid_executor: 判不出目标是不是本机，本轮不报「在动手」", exc_info=True)
-            on_this_machine = False
-
-        with _acting("hybrid_executor") if on_this_machine else nullcontext():
+        with operating("hybrid_executor", device_id, action, {"app_id": app_id}):
             return await self._execute_body(
                 device_id,
                 app_id,

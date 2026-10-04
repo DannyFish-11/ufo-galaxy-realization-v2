@@ -36,8 +36,10 @@
 2. 不新建记忆层,只接线已有 ``WorkingMemory`` / ``UnifiedMemory``。
 3. SILENT = 无请求进门；SPEAK 用 canonical TTS；DELEGATE 走 ``handle_request`` 正门。
 4. 循环不选模型,决策脑走系统统一路由。
-5. 默认关闭(``GALAXY_AMBIENT_LOOP``),隐私跟随现有感知授权,不破坏既有行为。
+5. 默认开启(``GALAXY_AMBIENT_LOOP=0`` 显式关闭),隐私跟随现有感知授权 —— 没授权就没有帧,门控在零模型开销处跳过。
 6. 冷却 + 场景去重兜住"话痨";全路径优雅降级,任何子步失败都不影响主流程。
+7. 治理(:mod:`core.ambient_governance`):每小时的自发开口 / 委托额度、决策 / 转写 / 委托的期限、
+   失败留痕。超额与超时都**说得出原因**,不静默;只有 SPEAK 会出声、进对话 —— 其余一概不会。
 """
 
 from __future__ import annotations
@@ -47,10 +49,15 @@ import hashlib
 import logging
 import os
 import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional
 
+# 数据类型（三选一决策 / 一拍观察 / 决策脑协议）与默认决策脑原先写在本文件里；本文件逼近体量线，
+# 而治理层（core.ambient_governance）要接进来，所以搬到了叶子模块。这里原样再导出，既有的
+# ``from core.ambient_attention_loop import AmbientAction, LLMRouterDecider, parse_decision`` 不用改。
+from core.ambient_decider import _DECISION_FORMAT, LLMRouterDecider, parse_decision  # noqa: F401
+from core.ambient_governance import OUTCOME_OK, AmbientGovernor
+from core.ambient_types import RECENT_MEMORY_N as _RECENT_MEMORY_N
+from core.ambient_types import AmbientAction, AmbientDecider, AmbientDecision, AmbientObservation
 from core.ambient_yield import AmbientYieldMixin
 
 logger = logging.getLogger("Galaxy.Ambient")
@@ -60,271 +67,6 @@ _DEFAULT_INTERVAL_S = 2.0  # 循环节拍
 _DEFAULT_COOLDOWN_S = 20.0  # 开口/委托后的冷却
 _DEFAULT_DIFF_THRESHOLD = 0.06  # 帧差阈值（0..1，归一化平均像素差）
 _AMBIENT_SESSION = "ambient"  # 工作记忆专用会话
-
-#: 模态协商层不可用时只告警一次(循环 2 秒一拍,每拍刷一条就成噪音)。
-_VISION_NEGOTIATION_WARNED = False
-_RECENT_MEMORY_N = 5  # 每次决策带上的最近记忆条数
-
-
-# ---------------------------------------------------------------------------
-# 三选一决策
-# ---------------------------------------------------------------------------
-class AmbientAction(str, Enum):
-    """注意力头的三选一——即"这一拍主体该处于哪个存在状态"的具象化。"""
-
-    SPEAK = "speak"  # 值得主动开口 → MANIFEST
-    SILENT = "silent"  # 看到了但不打扰 → 留在 SILENT（应是绝大多数情况）
-    DELEGATE = "delegate"  # 该派活儿而非嘴上说 → LIMINAL 执行分支
-
-
-@dataclass
-class AmbientDecision:
-    """一次注意力决策的结构化结果。"""
-
-    action: AmbientAction
-    rationale: str = ""  # 为什么这么决定（记录 + 面板显示）
-    utterance: str = ""  # SPEAK 时要说的话
-    task: str = ""  # DELEGATE 时要委托的任务
-    salient: bool = False  # 是否值得写入终身记忆
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "action": self.action.value,
-            "rationale": self.rationale,
-            "utterance": self.utterance,
-            "task": self.task,
-            "salient": self.salient,
-        }
-
-
-@dataclass
-class AmbientObservation:
-    """一拍观察的输入快照。
-
-    frame_b64 是【主帧】(屏幕优先、否则摄像头)——供门控/记忆/路由沿用,保持兼容。
-    screen_b64 / camera_b64 是【分路】原始帧:决策脑同时把两路都发给模型(融合看),
-    修复"在场循环每拍只看一路视觉"的缺陷。两者可同时存在(屏幕+摄像头都在采)。
-    """
-
-    frame_b64: Optional[str] = None
-    frame_mime: str = "image/jpeg"
-    frame_source: str = ""
-    screen_b64: Optional[str] = None
-    screen_mime: str = "image/jpeg"
-    camera_b64: Optional[str] = None
-    camera_mime: str = "image/jpeg"
-    audio_b64: Optional[str] = None
-    audio_mime: str = "audio/webm"
-    audio_transcript: Optional[str] = None  # 听:能力驱动桥接转写(asr_bridge)后的文字
-    screen_meta: Optional[Dict[str, Any]] = None
-    recent_memory: List[str] = field(default_factory=list)
-    #: 手表报上来的「现在能不能打扰他」(见 core/interruptibility_registry)。
-    #: 空串 = 没有可用证据 —— 注意「没有证据」既不构成放行、也不构成阻拦,
-    #: 此时循环的行为与接手表之前完全一致。
-    interruptibility_note: str = ""
-
-
-# ---------------------------------------------------------------------------
-# 决策脑接口（可插拔：档位 A 用 Gemma 系主脑；档位 B 换 MiniCPM-o 全模态，循环不改）
-# ---------------------------------------------------------------------------
-class AmbientDecider(Protocol):
-    async def decide(self, obs: AmbientObservation) -> AmbientDecision:  # pragma: no cover - 协议
-        ...
-
-
-# 严格三选一输出格式：第一行必须是三个动作词之一，后续行给理由/内容。
-_DECISION_FORMAT = (
-    "你是一个桌面 AI 的『注意力头』。你持续在场地看着用户的摄像头/屏幕、听着麦克风，"
-    "但你的唯一任务不是描述画面，而是判断【此刻该不该主动介入】。\n"
-    "严格从以下三选一，且第一行只能是这三个词之一：\n"
-    "SPEAK   —— 此刻确实值得你主动开口（如用户明显卡住、出现你被托付留意的事、用户回到座位）。\n"
-    "SILENT  —— 看到了但不值得打扰（用户在正常操作、只是光线/无关变化）。这应是绝大多数情况的答案。\n"
-    "DELEGATE—— 不该嘴上说，而该派一个后台任务（如反复报错需查日志、需要 OCR 提取屏幕文字）。\n"
-    "输出格式（严格）：\n"
-    "第一行：SPEAK 或 SILENT 或 DELEGATE\n"
-    "第二行起：理由（一句话）。若为 SPEAK，另起一行以『说：』开头写出你要说的话；"
-    "若为 DELEGATE，另起一行以『派：』开头写出要委托的任务。\n"
-    "克制是美德——拿不准就选 SILENT。"
-)
-
-
-class LLMRouterDecider:
-    """默认决策脑：走系统统一 LLM 路由（与面板/克隆界面选好的主脑一致）。
-
-    多模态:构造 OpenAI 风格的 image_url content part;路由的 Ollama 适配器会
-    自动转成 Ollama 的 images 字段(见 multi_llm_router._to_ollama_messages),
-    因此对 OpenAI 兼容后端与本地 Ollama 后端都成立——真正模型无关。
-    图像发送失败时优雅降级为纯文本(带上屏幕结构化上下文)。
-    """
-
-    def __init__(self, router: Optional[Any] = None) -> None:
-        self._router = router
-
-    def _get_router(self):
-        if self._router is None:
-            from core.multi_llm_router import get_llm_router
-
-            self._router = get_llm_router()
-        return self._router
-
-    @staticmethod
-    def _image_part(image_b64: str, mime: str) -> Dict[str, Any]:
-        url = image_b64 if image_b64.startswith("data:") else f"data:{mime or 'image/jpeg'};base64,{image_b64}"
-        return {"type": "image_url", "image_url": {"url": url}}
-
-    def _build_messages(self, obs: AmbientObservation) -> List[Dict[str, Any]]:
-        text_lines = [_DECISION_FORMAT, ""]
-        if obs.recent_memory:
-            text_lines.append("最近你注意到的（供连续性参考）：")
-            text_lines.extend(f"- {m}" for m in obs.recent_memory[-_RECENT_MEMORY_N:])
-            text_lines.append("")
-        if obs.screen_meta:
-            title = obs.screen_meta.get("window_title") or obs.screen_meta.get("title")
-            if title:
-                text_lines.append(f"当前活动窗口：{title}")
-        # 听:asr_bridge 已转写出文字 → 直接把用户说的话交给模型判断；
-        # 未转写(native 待服务/转写失败)则只提示"有声音"。
-        if obs.audio_transcript:
-            text_lines.append(f"（麦克风此刻听到：「{obs.audio_transcript}」）")
-        elif obs.audio_b64:
-            text_lines.append("（麦克风此刻有新的声音输入。）")
-
-        # 可打扰性:把「克制是美德」从祈使句变成可测量的输入。
-        # 没有可用证据时是空串 —— 不写模棱两可的话进提示词。
-        if obs.interruptibility_note:
-            text_lines.append(obs.interruptibility_note)
-
-        # 融合看:屏幕 + 摄像头两路都发给模型(此前只发一路)。仅当统一模态协商层
-        # 判定当前模型【看得见】(vision 可用)时才附图——换到无视觉模型自动省掉图像,
-        # 不给瞎子发图、不白烧 token。协商层不可用时保守按"能看"处理,不回退视觉。
-        images: List[tuple] = []
-        if self._vision_usable():
-            if obs.screen_b64:
-                images.append(("屏幕截图", obs.screen_b64, obs.screen_mime))
-            if obs.camera_b64:
-                images.append(("摄像头画面", obs.camera_b64, obs.camera_mime))
-            # 兼容:调用方只塞了 frame_b64(未分路)时,仍发主帧。
-            if not images and obs.frame_b64:
-                images.append(("画面", obs.frame_b64, obs.frame_mime))
-
-        if len(images) > 1:
-            text_lines.append("（以下依次是：" + "、".join(lbl for lbl, _, _ in images) + "）")
-        text_lines.append("现在，请判断此刻该 SPEAK / SILENT / DELEGATE。")
-        text = "\n".join(text_lines)
-
-        if images:
-            content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
-            for _lbl, b64, mime in images:
-                content.append(self._image_part(b64, mime))
-            return [{"role": "user", "content": content}]
-        return [{"role": "user", "content": text}]
-
-    @staticmethod
-    def _vision_usable() -> bool:
-        """当前模型是否看得见(经统一模态协商层)。
-
-        协商层不可用时**仍然返回 True**(继续附图) —— 方向是刻意的:
-        反过来(协商一挂就不发图)会在模型明明有视觉时,把这条循环悄悄变成瞎的,
-        而且没有任何迹象;多发一次图的代价小得多,``decide()`` 本来就有一条纯文本
-        重试兜底接得住后端不认图的情况。
-
-        改掉的是**静默**这一点。降级可以发生,但不许没人知道 —— 循环 2 秒一拍,
-        所以只在**第一次**说一句,不刷屏。
-        """
-        try:
-            from core.modality_capability import negotiate
-
-            return negotiate().vision_in.usable
-        except Exception as exc:  # noqa: BLE001
-            global _VISION_NEGOTIATION_WARNED
-            if not _VISION_NEGOTIATION_WARNED:
-                _VISION_NEGOTIATION_WARNED = True
-                logger.warning(
-                    "模态协商层不可用(%s):注意力循环继续按【看得见】处理并附图 —— "
-                    "若当前模型其实没有视觉,后端可能拒收,届时会走纯文本重试兜底。"
-                    "本条只说一次。",
-                    type(exc).__name__,
-                )
-            return True
-
-    async def decide(self, obs: AmbientObservation) -> AmbientDecision:
-        router = self._get_router()
-        messages = self._build_messages(obs)
-        try:
-            resp = await router.chat(messages, temperature=0.2, max_tokens=200)
-            text = (resp.content or "").strip()
-        except Exception as exc:  # noqa: BLE001 — 多模态发送失败等
-            # 纯文本降级重试一次
-            logger.debug("Ambient decider 多模态调用失败,降级纯文本: %s", exc)
-            try:
-                fallback = [
-                    {
-                        "role": "user",
-                        "content": (
-                            messages[0]["content"][0]["text"]
-                            if isinstance(messages[0]["content"], list)
-                            else messages[0]["content"]
-                        ),
-                    }
-                ]
-                resp = await router.chat(fallback, temperature=0.2, max_tokens=200)
-                text = (resp.content or "").strip()
-            except Exception as exc2:  # noqa: BLE001
-                logger.debug("Ambient decider 纯文本降级也失败: %s", exc2)
-                return AmbientDecision(action=AmbientAction.SILENT, rationale=f"决策不可用: {exc2}")
-        return parse_decision(text)
-
-
-def parse_decision(text: str) -> AmbientDecision:
-    """把主脑的自由文本解析成严格三选一。
-
-    第一行的第一个可辨识词决定 action;拿不准一律 SILENT(克制优先)。
-    """
-    if not text:
-        return AmbientDecision(action=AmbientAction.SILENT, rationale="空响应")
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    head = lines[0].upper() if lines else "SILENT"
-
-    if head.startswith("SPEAK"):
-        action = AmbientAction.SPEAK
-    elif head.startswith("DELEGATE"):
-        action = AmbientAction.DELEGATE
-    elif head.startswith("SILENT"):
-        action = AmbientAction.SILENT
-    else:
-        # 首行不规范：在全文里找线索，否则保守 SILENT
-        upper = text.upper()
-        if "DELEGATE" in upper:
-            action = AmbientAction.DELEGATE
-        elif "SPEAK" in upper:
-            action = AmbientAction.SPEAK
-        else:
-            action = AmbientAction.SILENT
-
-    rationale = ""
-    utterance = ""
-    task = ""
-    for ln in lines[1:]:
-        if ln.startswith("说：") or ln.startswith("说:"):
-            utterance = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
-        elif ln.startswith("派：") or ln.startswith("派:"):
-            task = ln.split("：", 1)[-1].split(":", 1)[-1].strip()
-        elif not rationale:
-            rationale = ln
-
-    # SPEAK 但没给出要说的话 → 用理由兜底；仍为空则降级 SILENT（不空口说白话）
-    if action == AmbientAction.SPEAK and not utterance:
-        utterance = rationale
-        if not utterance:
-            return AmbientDecision(action=AmbientAction.SILENT, rationale="SPEAK 无内容,降级沉默")
-    # DELEGATE 但没给出任务 → 用理由兜底；仍为空则降级 SILENT
-    if action == AmbientAction.DELEGATE and not task:
-        task = rationale
-        if not task:
-            return AmbientDecision(action=AmbientAction.SILENT, rationale="DELEGATE 无任务,降级沉默")
-
-    salient = action in (AmbientAction.SPEAK, AmbientAction.DELEGATE)
-    return AmbientDecision(action=action, rationale=rationale, utterance=utterance, task=task, salient=salient)
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +198,9 @@ class AmbientAttentionLoop(AmbientYieldMixin):
         cooldown_s: Optional[float] = None,
         diff_threshold: Optional[float] = None,
         session_id: str = _AMBIENT_SESSION,
+        governor: Optional[AmbientGovernor] = None,
     ) -> None:
+        self.governor = governor if governor is not None else AmbientGovernor()
         self._decider = decider
         self._store = perception_store
         self._wm = working_memory
@@ -698,8 +442,8 @@ class AmbientAttentionLoop(AmbientYieldMixin):
 
         if self._should_yield_now():  # 用户的请求在跑 / 刚占了模型很久 → 让路（core/ambient_yield.py）
             return None
-        # 听（转写）离线到线程池，不卡事件循环。
-        await self._transcribe_async(obs)
+        # 听（转写）离线到线程池，不卡事件循环；带期限 —— 转写卡住只是这一拍不带声音内容。
+        await self.governor.bounded("listen", self._transcribe_async(obs))
 
         self._emit(
             "ambient.observed",
@@ -711,15 +455,13 @@ class AmbientAttentionLoop(AmbientYieldMixin):
             },
         )
 
-        try:
-            decision = await self._decide_yielding(obs)
-        except Exception as exc:  # noqa: BLE001 — 决策不可致命
-            logger.debug("Ambient decide 异常,视为 SILENT: %s", exc)
-            decision = AmbientDecision(action=AmbientAction.SILENT, rationale=f"决策异常: {exc}")
+        # 让路（调用进行中用户的请求到了就放弃，返回 None）+ 期限（超时 / 出错都落成 SILENT 并写明原因）。
+        decision = await self.governor.decide(self._decide_yielding, obs)
         if decision is None:  # 调用进行中用户的请求到了，已放弃
             return None
 
-        decision = _apply_interruptibility_gate(decision)
+        # 先过手表的「别打扰」硬闸，再过额度：被手表压下的不算额度用完。
+        decision = self.governor.gate(_apply_interruptibility_gate(decision))
 
         self.decisions += 1
         await self._route(decision, obs)
@@ -738,6 +480,7 @@ class AmbientAttentionLoop(AmbientYieldMixin):
                     return
             except Exception:  # noqa: BLE001 — 政策不可用不拦自发开口
                 pass
+            self.governor.charge(decision.action)  # 动手的这一刻才记额度：被 hold 压下的不扣
             self._last_action_ts = time.time()
             try:
                 from core.speech_output import speak_response
@@ -754,7 +497,12 @@ class AmbientAttentionLoop(AmbientYieldMixin):
             # 几十秒后返回,20 秒冷却早已过期 → 场景持续变化时(如屏幕在放视频)下
             # 一拍立刻又委托 → 背靠背全认知委托风暴。故冷却时间戳必须在委托
             # 【返回后】再打,保证两次委托之间真有冷却间隔。
-            await self._delegate(decision, obs)
+            #
+            # 委托带确认期限:到点叫停的是**这一次委托**(经 @stoppable 的取消通道),不是整条循环。
+            # 没做完的写进下一拍的「最近注意到」,让决策脑知道上一次没成,而不是当它成了。
+            outcome = await self.governor.run_delegate(self._delegate(decision, obs), decision)
+            if outcome != OUTCOME_OK:
+                self._recent_rationales.append(f"[delegate] 上一次委托没做完（{outcome}）：{decision.task[:60]}")
             self._last_action_ts = time.time()
         # SILENT：无请求进门，主体留在 SILENT，仅记录（在 _record 里做）。
 
@@ -793,11 +541,14 @@ class AmbientAttentionLoop(AmbientYieldMixin):
         except Exception as exc:  # noqa: BLE001
             logger.debug("自发开口记进对话主线失败(非致命): %s", exc)
 
-    async def _delegate(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
+    async def _delegate(self, decision: AmbientDecision, obs: AmbientObservation) -> bool:
         """DELEGATE → handle_request 正门（source="ambient"）→ LIMINAL 执行分支。
 
         携带当前帧作为 multimodal_context,让主体带着"它看到的东西"去执行,
         OpenClawd 内部可自主调用 Node_107 工具链完成委托。
+
+        返回 ``True`` = 走完了；``False`` = 出了异常（已吞掉、记日志）。治理层靠这一位分清
+        「做完了」和「根本没做成」。期限由 :meth:`AmbientGovernor.run_delegate` 在外面加。
         """
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
@@ -856,8 +607,10 @@ class AmbientAttentionLoop(AmbientYieldMixin):
                 multimodal_context=mm_context,
                 entry_mode="local",
             )
+            return True
         except Exception as exc:  # noqa: BLE001 — 委托失败不影响循环
             logger.debug("Ambient DELEGATE 经正门失败(非致命): %s", exc)
+            return False  # 异常照旧吞掉，但让治理层分得出「做完了」和「根本没做成」
 
     def _record(self, decision: AmbientDecision, obs: AmbientObservation) -> None:
         """写回记忆:工作记忆(滚动,喂面板/下次决策/对话注入) + 终身记忆(仅 salient)。"""
@@ -939,7 +692,8 @@ class AmbientAttentionLoop(AmbientYieldMixin):
                 raise
 
     async def start(self) -> None:
-        if self._running:
+        # 光看 _running 不够：任务若已经意外结束，标志还是 True，这里就永远起不来了。
+        if self._running and self._task is not None and not self._task.done():
             return
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
@@ -957,7 +711,12 @@ class AmbientAttentionLoop(AmbientYieldMixin):
 
     @property
     def running(self) -> bool:
-        return self._running
+        """循环此刻**真的在跑**：标志位开着、任务还活着。任务死了而标志还开着，不能说「在跑」。"""
+        return self._running and self._task is not None and not self._task.done()
+
+    def status(self) -> Dict[str, Any]:
+        """循环的自述：在不在跑、额度用了多少、哪些事没有顺利了结（见 :mod:`core.ambient_governance`）。"""
+        return {"running": self.running, "ticks": self.ticks, "decisions": self.decisions, **self.governor.status()}
 
 
 # ---------------------------------------------------------------------------
