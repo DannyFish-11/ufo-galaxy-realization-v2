@@ -7,7 +7,8 @@
  *   · 叫停那一刻正在飞的操作说「不确定」，不说「失败」；
  *   · 自己发起的那一轮不会在对话里出现两遍（后端也会把它推到 WS 上）；别的界面（语音）说的会出现；
  *   · 面板关着时说过的话，重开就在 —— 打开时读的是后端的对话主线；
- *   · 此刻在哪一相只认 WS —— SSE 的 phase 帧不能把线和岛带偏。
+ *   · 此刻在哪一相只认 WS —— SSE 的 phase 帧不能把线和岛带偏；
+ *   · 后台自发的委托没做完，打开时提示一次、并说「不会自动重试」；额度用完这类正常治理不打扰人。
  */
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -198,5 +199,46 @@ test('打开时：上次中断留下的「结果不明」提示一次；没有�
     assert.equal((await turns(none.page, 'agent')).length, 0, '没有结果不明的操作，就不该冒出任何提示');
   } finally {
     await none.ctx.close();
+  }
+});
+
+test('打开时：后台自发的委托没做完，提示一次并说「不会自动重试」；额度用完这类不打扰；提示过不重复', async (t) => {
+  if (skipped) return;
+  const incidents = [
+    { kind: 'budget_exhausted', action: 'speak', explanation: '本小时自发开口已用完（12/12）', task: '', t_last: 1700000300 },
+    {
+      kind: 'delegate_timeout',
+      action: 'delegate',
+      explanation: '后台任务 15 分钟没有回应，已叫停；已经发出的操作是否落地不确定；不会自动重试',
+      task: '整理下载文件夹',
+      t_last: 1700000200,
+    },
+  ];
+  const asked = [];
+  const { ctx, page } = await openPanel(browser, {
+    'GET /api/v1/sessions/primary': () => ({ json: { success: true, session_id: '' } }),
+    // 像真的后端一样按 since 过滤
+    'GET /api/v1/presence/ambient-status': ({ url }) => {
+      const since = Number(url.searchParams.get('since'));
+      asked.push(url.searchParams.get('since'));
+      return { json: { success: true, enabled: true, incidents: incidents.filter((i) => i.t_last > since) } };
+    },
+  });
+  try {
+    await until(page, () => document.body.textContent.includes('后台自发的任务没做完'));
+    const notice = (await turns(page, 'agent')).join('\n');
+    assert.match(notice, /整理下载文件夹/);
+    assert.match(notice, /不会自动重试/);
+    assert.doesNotMatch(notice, /已用完/, '额度用完是正常的治理，不是故障，不该为它打扰人');
+    assert.equal(asked[0], '0', '第一次打开：还没有提示过的时刻');
+
+    // 同一个浏览器上下文里重开：问的是「提示过的那个时刻之后」，同一件事不再提示第二遍
+    await page.reload();
+    await page.waitForSelector('.shell');
+    await page.waitForTimeout(600);
+    assert.equal(asked[1], '1700000200', '提示过的时刻要记住');
+    assert.equal((await turns(page, 'agent')).length, 0, '同一件没做完的事不该每次打开都提示');
+  } finally {
+    await ctx.close();
   }
 });

@@ -30,6 +30,7 @@ import {
   fetchHistory,
   fetchPrimarySession,
   fetchTiers,
+  fetchAmbientIncidents,
   fetchUnresolvedActions,
   nextBundleValue,
   saveConfig,
@@ -702,6 +703,32 @@ function mount(host: HTMLElement): void {
   void fetchUnresolvedActions(BASE).then((actions) => {
     if (actions && actions.length) {
       pushNotice(`上次中断时有操作结果不确定:${actions.join('、')} —— 先看一眼屏幕再让它继续`);
+    }
+  });
+
+  // 循环自己悄悄派的后台活没做完（到点叫停 / 出错）：打开时提示一次。人未必知道它曾经在做，
+  // 而「不会自动重试」这句要让人听见 —— 是否重来由人决定。提示过的记下来，不每次打开都重复。
+  const INCIDENT_SEEN_KEY = 'galaxy.ambient_incident_seen';
+
+  function recallIncidentSeen(): number {
+    try {
+      const n = Number(window.localStorage.getItem(INCIDENT_SEEN_KEY));
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  void fetchAmbientIncidents(BASE, recallIncidentSeen()).then((rows) => {
+    if (!rows || !rows.length) return;
+    const newest = rows[0]!;
+    const task = newest.task ? `「${newest.task.slice(0, 30)}」` : '';
+    const more = rows.length > 1 ? `（另有 ${rows.length - 1} 件）` : '';
+    pushNotice(`后台自发的任务没做完${task}：${newest.explanation}${more}`);
+    try {
+      window.localStorage.setItem(INCIDENT_SEEN_KEY, String(Math.max(...rows.map((r) => r.tLast))));
+    } catch {
+      // 记不住只是下次打开可能再提示一次，不该炸。
     }
   });
 

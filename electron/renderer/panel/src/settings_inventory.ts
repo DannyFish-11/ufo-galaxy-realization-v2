@@ -5,7 +5,7 @@
  *
  * 旧的 React 面板被这一版 HUD 整个替换掉了。旧面板里有两处手写的键清单:
  *
- * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(304 个键,10 类)。
+ * - `SettingsTab.tsx` 的 `KEY_ORDER_HINT` —— 每一类里的显示顺序(306 个键,10 类)。
  *   搬过来那天是 303 个、9 类 —— 中间进过一个又挪去了 llm 类,而 llm 不在这份
  *   顺序提示里(那一类按字母序排),所以数目又回到了原点;2026-09-25 加了
  *   「自我改进」一类,只有自我改进循环一个开关(同组其余四个键默认即生效,
@@ -87,6 +87,7 @@ export const KEY_ORDER_HINT: Record<string, string[]> = {
   ],
   perception: [
     'GALAXY_AMBIENT_LOOP', 'GALAXY_AMBIENT_INTERVAL_S', 'GALAXY_AMBIENT_COOLDOWN_S',
+    'GALAXY_AMBIENT_SPEAK_PER_HOUR', 'GALAXY_AMBIENT_DELEGATE_PER_HOUR',
     'GALAXY_SYSTEM_AUDIO_CAPTURE', 'GALAXY_SYSTEM_AUDIO_TO_PERCEPTION',
     'GALAXY_NATIVE_REALTIME_PATH', 'GALAXY_NATIVE_MODAL_AUTO', 'GALAXY_VIDEO_FPS_NATIVE',
     'GALAXY_VIDEO_FPS_BRIDGE', 'GALAXY_PERCEPTION_MODEL', 'GALAXY_DESKTOP_PERCEPTION_TTL',

@@ -845,6 +845,59 @@ export async function fetchUnresolvedActions(base: string): Promise<readonly str
   }
 }
 
+/** 后台自发委托没做完的一件事（超时 / 失败）。 */
+export interface AmbientIncident {
+  readonly task: string;
+  readonly explanation: string;
+  readonly tLast: number;
+}
+
+/**
+ * 只认「后台委托没做完」这两类 —— 那是循环自己悄悄派的活，人未必知道它曾经在做。
+ * 额度用完、决策脑慢了这类是正常的治理，不值得打扰人（降级当下已经写在决策的理由里）。
+ * 认不出的条目丢掉，不猜。
+ */
+function readAmbientIncidents(raw: unknown): readonly AmbientIncident[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AmbientIncident[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const o = r as Record<string, unknown>;
+    if (o['kind'] !== 'delegate_timeout' && o['kind'] !== 'delegate_failed') continue;
+    if (typeof o['explanation'] !== 'string' || typeof o['t_last'] !== 'number') continue;
+    out.push({
+      task: typeof o['task'] === 'string' ? o['task'] : '',
+      explanation: o['explanation'],
+      tLast: o['t_last'],
+    });
+  }
+  return out;
+}
+
+/**
+ * ``since`` 之后还在发生的、没做完的后台委托。新的在前。
+ *
+ * ``null`` = 没问到(后端没接上);``[]`` = 问到了,没有。两者不能混 —— 前者不该提示任何东西。
+ */
+export async function fetchAmbientIncidents(
+  base: string,
+  since: number,
+): Promise<readonly AmbientIncident[] | null> {
+  try {
+    const resp = await fetch(
+      `${base}/api/v1/presence/ambient-status?since=${encodeURIComponent(String(since))}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['success'] !== true) return null;
+    return readAmbientIncidents(body['incidents']);
+  } catch (err) {
+    console.error('[hud] 问后台委托的留痕失败:', err);
+    return null;
+  }
+}
+
 /**
  * 让它现在住手:取消在跑的请求、掐断在念的话、打断双工里正在说的那一句。
  *

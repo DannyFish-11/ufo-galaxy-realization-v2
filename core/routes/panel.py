@@ -668,6 +668,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         )
 
+    @router.get("/api/v1/presence/ambient-status")
+    async def get_ambient_status(
+        since: float = Query(default=0.0, ge=0.0, description="只看这个时刻（墙钟秒）之后还在发生的留痕"),
+        window_s: float = Query(default=21600.0, ge=60.0, le=604800.0, description="最多回看多久(秒)"),
+    ) -> JSONResponse:
+        """自发在场（常驻注意力循环）的自述：额度用了多少、哪些事没有顺利了结。
+
+        留痕里最要紧的是**后台委托没做完**（超时 / 失败）：那是循环自己悄悄派的活，人未必知道它曾经在做，
+        所以面板打开时问一次、提示一次。额度用完是正常的治理，不是故障，面板不为它打扰人
+        （降级当下已经写在决策的理由里）。见 core/ambient_governance.py。
+        """
+        import time
+
+        from core.ambient_attention_loop import ambient_loop_enabled, get_ambient_loop
+
+        status = get_ambient_loop().status()
+        floor = max(since, time.time() - window_s)
+        status["incidents"] = [i for i in status["incidents"] if i["t_last"] > floor]
+        return JSONResponse(content={"success": True, "enabled": ambient_loop_enabled(), **status})
+
     @router.get("/api/v1/panel/feed")
     async def get_panel_feed():
         """面板实时数据(桌面 Electron 面板的 IPC 契约 snake_case 字段)。
