@@ -440,6 +440,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         status_code = int(result.pop("status_code", 200))
         return JSONResponse(result, status_code=status_code)
 
+    @router.post("/api/v1/sessions/{session_id}/close", dependencies=[Depends(require_auth)])
+    async def close_roaming_session_route(session_id: str):
+        """关闭一个漫游会话（唤醒事件建出来的那类）：设备映射释放、状态落盘。
+
+        核心会话没有「关闭」状态，这里只认漫游存储 —— 见 :mod:`core.session_migration`。
+        """
+        from core.session_migration import close_roaming_session
+
+        result = close_roaming_session(session_id)
+        status_code = int(result.pop("status_code", 200))
+        return JSONResponse(result, status_code=status_code)
+
     @router.post("/api/v1/sessions/ingest_turns")
     async def ingest_turns(req: IngestTurnsRequest):
         """补录手机离线期间记录的对话轮次到统一主线(先经别名解析)。"""
