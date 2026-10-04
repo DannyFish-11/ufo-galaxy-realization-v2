@@ -86,10 +86,10 @@ def test_hidden_switches_are_still_registered_so_they_can_be_saved_and_read():
 
 def test_the_panel_only_ever_receives_true_or_false_for_a_switch(monkeypatch):
     """设置页只认字面量 "true" 为开。.env 里手写的 =1 / =on 代码都认作开，面板却显示成关。"""
-    monkeypatch.setenv("GALAXY_AEC", "1")
+    monkeypatch.setenv("GALAXY_LOCAL_AUDIO", "1")
     monkeypatch.setenv("GALAXY_SPEAK", "OFF")
     listed = asyncio.run(get_config())
-    assert listed["GALAXY_AEC"]["value"] == "true"
+    assert listed["GALAXY_LOCAL_AUDIO"]["value"] == "true"
     assert listed["GALAXY_SPEAK"]["value"] == "false"
     for key, item in listed.items():
         if item["type"] == "boolean":
@@ -145,3 +145,36 @@ def test_the_switches_document_is_generated_from_the_list_and_not_stale():
         cwd=REPO,
     )
     assert r.returncode == 0, r.stderr or r.stdout
+
+
+def test_security_posture_is_not_a_row_of_switches_on_the_panel():
+    """安全姿态要么是系统自己的保护（默认开、关掉只会出事）、要么是危险逃生口、要么是对外部署的加固 —— 都不该是面板上
+    一点就改的开关。面板上只剩「高危命令要不要你批准」这一个对 AI 行为的偏好。"""
+    protections = (
+        "GALAXY_AUTH_ENABLED",
+        "GALAXY_ALLOW_ENDPOINT_OVERRIDE",
+        "GALAXY_EGRESS_ALLOW_PRIVATE",
+        "GALAXY_STOP_KEY",
+    )
+    hatches_and_hardening = (
+        "GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT",
+        "GALAXY_WEIGHTS_ALLOW_PICKLE",
+        "GALAXY_REQUIRE_API_TOKEN",
+        "GALAXY_REQUIRE_DEVICE_APPROVAL",
+        "GALAXY_PERM_STRICT",
+        "GALAXY_STRICT_AUTHORITY_CHECK",
+        "GALAXY_SSH_STRICT_HOST_KEYS",
+    )
+    for key in protections:
+        assert SWITCH_POLICY[key].disposition == BUILTIN, key
+        assert CONFIG_SCHEMA[key]["default"] == "true", f"{key} 是系统自己的保护，默认必须开"
+    for key in hatches_and_hardening:
+        assert SWITCH_POLICY[key].disposition == OPS, key
+        assert (
+            CONFIG_SCHEMA[key]["default"] == "false"
+        ), f"{key} 默认必须是「拦着 / 不加严」，面板上一点就放开不是它该有的样子"
+    on_panel = [k for k, p in SWITCH_POLICY.items() if p.disposition == PANEL and p.group == "安全姿态"]
+    assert on_panel == ["GALAXY_HITL_CONFIRM_GATE"]
+    assert (
+        "高危" in CONFIG_SCHEMA["GALAXY_HITL_CONFIRM_GATE"]["description"]
+    ), "说明要写它真正拦的是高危命令，不是「一切执行」"

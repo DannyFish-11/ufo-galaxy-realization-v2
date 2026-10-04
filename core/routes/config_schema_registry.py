@@ -2144,7 +2144,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "false",
         "type": "boolean",
         "category": "security",
-        "description": "执行前都要你点确认（最稳但最慢 · 默认关，只有高危动作才问）",
+        "description": "命令路由处的一道额外闸：命中高危词表或零信任规则的命令，要你批准才执行（超时按拒绝）· 默认关",
     },
     "GALAXY_HITL_CONFIRM_TIMEOUT_S": {
         "default": "60",

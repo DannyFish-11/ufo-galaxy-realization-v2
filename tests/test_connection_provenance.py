@@ -382,7 +382,8 @@ def test_e01_switches_are_registered(key):
     assert key in CONFIG_SCHEMA
 
 
-@pytest.mark.parametrize("key", ["GALAXY_ALLOW_ENDPOINT_OVERRIDE", "GALAXY_MCP_PIN_MODE", "GALAXY_TOOL_GUARDIAN"])
+# GALAXY_ALLOW_ENDPOINT_OVERRIDE 是系统自己的保护 / 危险逃生口，已不再列在面板上（core/routes/panel_switch_policy.py）；它仍在 CONFIG_SCHEMA 里、可存可读，上一个用例钉着。
+@pytest.mark.parametrize("key", ["GALAXY_MCP_PIN_MODE", "GALAXY_TOOL_GUARDIAN"])
 def test_e02_switches_reach_the_panel(key):
     from pathlib import Path
 

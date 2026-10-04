@@ -72,7 +72,10 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     "GALAXY_VOICE": _p("声音", "语音总闸：关掉后启动时不起语音循环，麦克风也不占用"),
     "GALAXY_SPEAK": _p("声音", "朗读回复：有人想只要文字"),
     "GALAXY_LOCAL_AUDIO": _p("声音", "本机出不出声：可以朗读给别的设备、但不想电脑外放"),
-    "GALAXY_AEC": _p("声音", "回声消除：没有回环设备的机器上等于旁通，有人想整个关掉"),
+    "GALAXY_AEC": _b(
+        "声音",
+        "回声消除：把喇叭放出去的声音从麦克风里减掉；关掉 AI 会听见自己说话。没有回环设备的机器上它自己旁通，不需要人去管",
+    ),
     "GALAXY_NATIVE_AUDIO": _o(
         "声音",
         "「服务现实」门控：本机有没有原生听/说的后端。由本机模型档位（B 档激活时 core/native_modal.py 自动开、"
@@ -99,7 +102,10 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     ),
     "GALAXY_ACTIVE_PERCEPTION": _p("感知与在场", "主动感知（不等你开口自己找事做）：默认关，开了会多花算力与注意力"),
     "GALAXY_PROACTIVE_SCREEN": _p("感知与在场", "屏幕变化也触发主动开口：默认关，屏幕一直在变会话会很多"),
-    "GALAXY_SYSTEM_AUDIO_CAPTURE": _p("感知与在场", "采集本机播放声：隐私 —— AI 能听见电脑在放什么"),
+    "GALAXY_SYSTEM_AUDIO_CAPTURE": _b(
+        "感知与在场",
+        "回环采集的电源：回声消除的参考信号来源，只在进程内做减法、不出网、不进上下文；真正的隐私取舍是「播放声送不送进模型」（GALAXY_SYSTEM_AUDIO_TO_PERCEPTION）",
+    ),
     "GALAXY_SYSTEM_AUDIO_TO_PERCEPTION": _p("感知与在场", "播放声送不送进模型（关掉则只用于回声消除）：隐私"),
     "GALAXY_NATIVE_AUDIO_CHAT": _p("感知与在场", "把录音原样发给模型（默认走转文字）：隐私与 token 的取舍"),
     "GALAXY_NATIVE_MM_CHAT": _b("感知与在场", "图片按模型原生格式发：关掉只会退回文字摘要，看不见图"),
@@ -107,14 +113,18 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     # ── 记忆 ────────────────────────────────────────────────────────────
     "GALAXY_MEMORY_MEDIA": _p("记忆与隐私", "把记忆里的截图/录音真的存盘：隐私。代码里默认关"),
     "GALAXY_MEMORY_REPLAY_MEDIA": _p("记忆与隐私", "召回时把过往截图/录音也发给模型：很费 token、也是隐私"),
-    "GALAXY_EXPERIENCE_STRATEGY": _p(
-        "记忆与隐私", "用历史经验调整策略：面板上这是它唯一的开关（模式档 GALAXY_EXPERIENCE_GUIDANCE 没登记进面板）"
+    "GALAXY_EXPERIENCE_STRATEGY": _b(
+        "记忆与隐私",
+        "历史遗留的总闸：设计上的控制是 GALAXY_EXPERIENCE_GUIDANCE 的 off / shadow / on 三档，这个只是向后兼容的 kill switch；从自己做过的事里学，不出本机",
     ),
     "GALAXY_ACI_ENABLED": _b("记忆与隐私", "预取上下文：纯加速，没有理由关"),
     "GALAXY_FOCUS_STACK_ENABLED": _b("记忆与隐私", "注意力栈（记住刚才在聊什么）：关掉被打断后接不回去"),
     # ── 桌面操作与自治（面板「自主」整档管其中几项）──────────────────────
     "GALAXY_COMPUTER_USE": _p("桌面操作与自治", "桌面操作闭环（AI 自己点鼠标敲键盘）：整档「自主」管的键，安全相关"),
-    "GALAXY_STOP_KEY": _p("桌面操作与自治", "动手时按 Esc 叫停：个别人的 Esc 另有用途"),
+    "GALAXY_STOP_KEY": _b(
+        "桌面操作与自治",
+        "动手时按 Esc 叫停：是安全能力，关掉只会少一道刹车。唯一的例外是个别安全软件把键盘钩子当键盘记录器，那时改 .env 关掉，停止改走面板按钮",
+    ),
     "GALAXY_DURABLE_EXEC": _p("桌面操作与自治", "任务状态落盘、重启接着跑：默认关，开了有写盘开销"),
     "GALAXY_CU_MEMORY": _b("桌面操作与自治", "桌面操作记住失败经验：纯正向，没有理由关"),
     "GALAXY_COMPUTER_USE_NATIVE_TOOL": _o(
@@ -143,7 +153,10 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     "GALAXY_ONBOARDING_ENABLED": _m("多设备与网络", "并进「跨设备」：设备接入平面（发现附近设备、候选/成员）的总闸"),
     "GALAXY_LAN_DISCOVERY": _m("多设备与网络", "并进「跨设备」：局域网自动发现设备；只用本机时没有对象可发现"),
     "GALAXY_MDNS": _m("多设备与网络", "并进「跨设备」：mDNS 广播网关，手机/手表免输 IP；只用本机时没有人需要它"),
-    "GALAXY_HA_BRIDGE": _p("多设备与网络", "接入 Home Assistant：有 HA 的人可能不想让 AI 去控智能家居"),
+    "GALAXY_HA_BRIDGE": _b(
+        "多设备与网络",
+        "接入 Home Assistant：URL 与令牌都配齐才会启动，没配时完全不动；配齐本身就是人的授权，不需要再有一个开关",
+    ),
     "GALAXY_REMOTE_DESKTOP": _p("多设备与网络", "远程桌面接入：默认关，打开就是对外开一个口"),
     "FEDERATION_ENABLED": _p("多设备与网络", "联邦（把多套 Galaxy 连成一片）：默认关的 opt-in"),
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": _p(
@@ -166,19 +179,46 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     ),
     "GALAXY_FABRIC_STRICT": _o("多设备与网络", "NATS 不可达即视为致命：严格部署用，桌面用不到"),
     # ── 安全姿态（都是「更严」的选项，默认放行；要不要更严是用户的事）──────────
-    "GALAXY_AUTH_ENABLED": _p("安全姿态", "鉴权：默认开（本机自动签令牌）。关掉等于谁都能调接口"),
-    "GALAXY_REQUIRE_API_TOKEN": _p("安全姿态", "强制要求令牌：没带令牌的请求一律拒绝"),
-    "GALAXY_REQUIRE_DEVICE_APPROVAL": _p("安全姿态", "未配对批准的设备只能连接、不作为派发目标"),
-    "GALAXY_PERM_STRICT": _p("安全姿态", "节点权限从严：没显式授权的动作一律拒绝"),
-    "GALAXY_STRICT_AUTHORITY_CHECK": _p("安全姿态", "权威校验从严：来源存疑的指令一律拒绝"),
-    "GALAXY_HITL_CONFIRM_GATE": _p("安全姿态", "执行前都要你点确认：最稳但最慢"),
-    "GALAXY_SSH_STRICT_HOST_KEYS": _p("安全姿态", "严格核对远程机器指纹：第一次见的机器也拒"),
-    "GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT": _p("安全姿态", "允许执行远程安装脚本：有供应链风险"),
-    "GALAXY_WEIGHTS_ALLOW_PICKLE": _p("安全姿态", "允许加载 pickle 格式权重：反序列化即执行代码"),
-    "GALAXY_ALLOW_ENDPOINT_OVERRIDE": _p(
-        "安全姿态", "允许覆盖 provider 的 base_url：中转/relay 要用，也是一个可被滥用的口"
+    "GALAXY_AUTH_ENABLED": _b(
+        "安全姿态", "鉴权：默认开（本机自动签令牌、其他设备走配对）。关掉等于谁都能调接口，不该有人在面板上一点就关"
     ),
-    "GALAXY_EGRESS_ALLOW_PRIVATE": _p("安全姿态", "允许连内网地址：跨设备编队走的就是内网"),
+    "GALAXY_REQUIRE_API_TOKEN": _o(
+        "安全姿态",
+        "部署加固：没带令牌的请求一律拒绝。本机桌面靠自签令牌，打开它要有共享口令，是对外暴露的部署才需要的决定",
+    ),
+    "GALAXY_REQUIRE_DEVICE_APPROVAL": _o(
+        "安全姿态",
+        "部署加固：未配对批准的设备只能连接、不作为派发目标。打开后手机要先被批准才接得到任务，是部署的人的决定",
+    ),
+    "GALAXY_PERM_STRICT": _o(
+        "安全姿态", "部署加固：没显式授权的节点动作一律拒绝。白名单还没全量普及，打开会拒掉未声明的节点"
+    ),
+    "GALAXY_STRICT_AUTHORITY_CHECK": _o(
+        "安全姿态", "部署加固：来源存疑的指令一律拒绝（启动时的权威边界校验失败即中止）。是部署的人的决定"
+    ),
+    "GALAXY_HITL_CONFIRM_GATE": _p(
+        "安全姿态",
+        "命令路由处的额外闸：高危命令（高危词表或零信任规则命中）要你批准才执行，超时按拒绝；是对 AI 行为的偏好，不是部署加固",
+    ),
+    "GALAXY_SSH_STRICT_HOST_KEYS": _o(
+        "安全姿态",
+        "部署加固：连第一次见的远程机器也拒（指纹要事先录进来）。默认是第一次连时记下指纹并告诉你、之后对不上就拒",
+    ),
+    "GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT": _o(
+        "安全姿态",
+        "危险逃生口：允许执行未经校验的远程安装脚本（供应链风险，装本地模型时才可能用到）。默认拦着，不该让人在面板上一点就放开",
+    ),
+    "GALAXY_WEIGHTS_ALLOW_PICKLE": _o(
+        "安全姿态",
+        "危险逃生口：允许加载 pickle 格式权重（反序列化即执行代码，历次模型投毒的载体）。默认拦着，不该让人在面板上一点就放开",
+    ),
+    "GALAXY_ALLOW_ENDPOINT_OVERRIDE": _b(
+        "安全姿态",
+        "允许覆盖 provider 的 base_url：中转 / relay 要用，关掉会让这些部署断掉；要「绝不走中转」的部署由运维改 .env",
+    ),
+    "GALAXY_EGRESS_ALLOW_PRIVATE": _b(
+        "安全姿态", "允许连内网地址：跨设备编队走的就是内网，关掉会把多设备打死；要锁死的是部署的人，改 .env"
+    ),
     "GALAXY_MANIFEST_ON_FIRST_TOKEN": _b(
         "安全姿态", "首个字一出就显形：界面时序，不是安全选项（登记在 security 类是历史遗留）"
     ),

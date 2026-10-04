@@ -9,9 +9,9 @@
 
 | 去处 | 个数 | 含义 |
 |---|---|---|
-| **留在面板** | 39 | 用户真有取舍：隐私（录音存不存）、花费（多模型协作）、硬件与网络（下不下 310MB 模型）、安全姿态（要不要强制令牌） |
-| **内置**（面板不列） | 33 | 不该有人去关的内部机制：熔断器、派发幂等、回声消除的子参数、自回声闸门……默认开，关掉只会变差或出事 |
-| **开发 / 运维**（面板不列） | 19 | 开发、运维、打包、测试用的逃生口。其中「本机回环也封禁」打开后，桌面会把自己锁在自己的后端门外 |
+| **留在面板** | 24 | 用户真有取舍：隐私（录音存不存）、花费（多模型协作）、硬件与网络（下不下 310MB 模型）、对 AI 行为的偏好（高危命令要不要你批准） |
+| **内置**（面板不列） | 41 | 不该有人去关的内部机制和系统自己的保护：熔断器、派发幂等、回声消除、鉴权、Esc 叫停、自回声闸门……默认开，关掉只会变差或出事 |
+| **开发 / 运维**（面板不列） | 26 | 开发、运维、打包、测试用的逃生口，以及对外部署的加固选项（强制令牌、设备准入、权限从严……）和危险逃生口（远程安装脚本、pickle 权重）。「本机回环也封禁」打开后，桌面会把自己锁在自己的后端门外 |
 | **并进整档按钮**（面板不列） | 5 | 和某个整档按钮同一件事的另一面：翻按钮时一起写，不再各占一行（见下面「并进整档按钮的」） |
 
 面板不列 ≠ 没接上：这些键仍在 `CONFIG_SCHEMA` 里，`POST /api/config` 照收、`.env` 照写、环境变量照读，只是 `GET /api/config/all` 不列。
@@ -28,22 +28,21 @@
 | 整档「自主」 | 浮层 | 三档牌，主键 `GALAXY_AUTONOMY` |
 | 本机模型档位 A / B / C / D | 浮层 | 四选一，写 `GALAXY_MODEL_TIER` |
 | 感知隐私暂停 | 浮层 | `POST /api/perception/desktop/privacy/pause` 与 `…/resume`，不是配置键 |
-| 全部设置 | 浮层「全部设置」按钮 | 下面按分组列出的 39 个开关 + 其余数值/文本/选择项 |
+| 全部设置 | 浮层「全部设置」按钮 | 下面按分组列出的 24 个开关 + 其余数值/文本/选择项 |
 
 ## 留在面板上的开关
 
-### 声音（6）
+### 声音（5）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
-| `GALAXY_AEC` | 开 | 回声消除：没有回环设备的机器上等于旁通，有人想整个关掉 |
 | `GALAXY_INDEXTTS_AUTOFETCH` | 关 | 首次使用时后台下载 IndexTTS 模型（体积很大）：流量与磁盘的取舍 |
 | `GALAXY_KOKORO_AUTOFETCH` | 开 | 首次使用时后台下载约 310MB 模型：流量与磁盘的取舍 |
 | `GALAXY_LOCAL_AUDIO` | 开 | 本机出不出声：可以朗读给别的设备、但不想电脑外放 |
 | `GALAXY_SPEAK` | 开 | 朗读回复：有人想只要文字 |
 | `GALAXY_VOICE` | 开 | 语音总闸：关掉后启动时不起语音循环，麦克风也不占用 |
 
-### 感知与在场（6）
+### 感知与在场（5）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
@@ -51,24 +50,21 @@
 | `GALAXY_AMBIENT_LOOP` | 开 | 自发在场（持续看/听、自己判断何时开口）：整档「全模态」的主键 |
 | `GALAXY_NATIVE_AUDIO_CHAT` | 关 | 把录音原样发给模型（默认走转文字）：隐私与 token 的取舍 |
 | `GALAXY_PROACTIVE_SCREEN` | 关 | 屏幕变化也触发主动开口：默认关，屏幕一直在变会话会很多 |
-| `GALAXY_SYSTEM_AUDIO_CAPTURE` | 开 | 采集本机播放声：隐私 —— AI 能听见电脑在放什么 |
 | `GALAXY_SYSTEM_AUDIO_TO_PERCEPTION` | 开 | 播放声送不送进模型（关掉则只用于回声消除）：隐私 |
 
-### 记忆与隐私（3）
+### 记忆与隐私（2）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
-| `GALAXY_EXPERIENCE_STRATEGY` | 开 | 用历史经验调整策略：面板上这是它唯一的开关（模式档 GALAXY_EXPERIENCE_GUIDANCE 没登记进面板） |
 | `GALAXY_MEMORY_MEDIA` | 关 | 把记忆里的截图/录音真的存盘：隐私。代码里默认关 |
 | `GALAXY_MEMORY_REPLAY_MEDIA` | 关 | 召回时把过往截图/录音也发给模型：很费 token、也是隐私 |
 
-### 桌面操作与自治（3）
+### 桌面操作与自治（2）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `GALAXY_COMPUTER_USE` | 开 | 桌面操作闭环（AI 自己点鼠标敲键盘）：整档「自主」管的键，安全相关 |
 | `GALAXY_DURABLE_EXEC` | 关 | 任务状态落盘、重启接着跑：默认关，开了有写盘开销 |
-| `GALAXY_STOP_KEY` | 开 | 动手时按 Esc 叫停：个别人的 Esc 另有用途 |
 
 ### 模型与花费（2）
 
@@ -77,41 +73,31 @@
 | `GALAXY_MOA_ENABLED` | 开 | 难题让几个模型各出方案再汇总：质量与花费的取舍 |
 | `GALAXY_OPENSOURCE_FIRST` | 开 | 同等能力下先用本地/开源：省钱、不出网 |
 
-### 多设备与网络（8）
+### 多设备与网络（7）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `FEDERATION_ENABLED` | 关 | 联邦（把多套 Galaxy 连成一片）：默认关的 opt-in |
 | `GALAXY_CROSS_DEVICE_ENABLED` | 关 | 跨设备编排：整档「跨设备」的主键。关掉则只在本机跑 |
 | `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | WebRTC 数据通道（浏览器/手机把摄像头麦克风直接推给感知层）：opt-in |
-| `GALAXY_HA_BRIDGE` | 开 | 接入 Home Assistant：有 HA 的人可能不想让 AI 去控智能家居 |
 | `GALAXY_HF_MIRROR` | 开 | 模型下载走国内镜像：按所在网络选 |
 | `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 主脑编排 + worker/NATS 分布式：默认关=单机。与「跨设备」的关系见 docs/PANEL_SWITCHES.md 的合并建议 |
 | `GALAXY_REMOTE_DESKTOP` | 关 | 远程桌面接入：默认关，打开就是对外开一个口 |
 | `GALAXY_TS_FUNNEL` | 关 | 把网关经 Tailscale Funnel 暴露到公网：必须让人看见 |
 
-### 安全姿态（11）
+### 安全姿态（1）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
-| `GALAXY_ALLOW_ENDPOINT_OVERRIDE` | 开 | 允许覆盖 provider 的 base_url：中转/relay 要用，也是一个可被滥用的口 |
-| `GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT` | 关 | 允许执行远程安装脚本：有供应链风险 |
-| `GALAXY_AUTH_ENABLED` | 开 | 鉴权：默认开（本机自动签令牌）。关掉等于谁都能调接口 |
-| `GALAXY_EGRESS_ALLOW_PRIVATE` | 开 | 允许连内网地址：跨设备编队走的就是内网 |
-| `GALAXY_HITL_CONFIRM_GATE` | 关 | 执行前都要你点确认：最稳但最慢 |
-| `GALAXY_PERM_STRICT` | 关 | 节点权限从严：没显式授权的动作一律拒绝 |
-| `GALAXY_REQUIRE_API_TOKEN` | 关 | 强制要求令牌：没带令牌的请求一律拒绝 |
-| `GALAXY_REQUIRE_DEVICE_APPROVAL` | 关 | 未配对批准的设备只能连接、不作为派发目标 |
-| `GALAXY_SSH_STRICT_HOST_KEYS` | 关 | 严格核对远程机器指纹：第一次见的机器也拒 |
-| `GALAXY_STRICT_AUTHORITY_CHECK` | 关 | 权威校验从严：来源存疑的指令一律拒绝 |
-| `GALAXY_WEIGHTS_ALLOW_PICKLE` | 关 | 允许加载 pickle 格式权重：反序列化即执行代码 |
+| `GALAXY_HITL_CONFIRM_GATE` | 关 | 命令路由处的额外闸：高危命令（高危词表或零信任规则命中）要你批准才执行，超时按拒绝；是对 AI 行为的偏好，不是部署加固 |
 
 ## 内置：不再列在面板上，默认开
 
-### 声音（8）
+### 声音（9）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
+| `GALAXY_AEC` | 开 | 回声消除：把喇叭放出去的声音从麦克风里减掉；关掉 AI 会听见自己说话。没有回环设备的机器上它自己旁通，不需要人去管 |
 | `GALAXY_AEC_COMFORT_NOISE` | 开 | 回声消除的子参数：把压掉的部分填回极低底噪，消除呼吸感；没有理由单独关 |
 | `GALAXY_AEC_RES` | 开 | 回声消除的子参数：线性对消后再压一层非线性残余；没有理由单独关 |
 | `GALAXY_TTS_STREAMING` | 开 | 分句流式朗读（边生成边说）：关掉只会更慢 |
@@ -121,25 +107,28 @@
 | `GALAXY_VOICE_DUCKING` | 开 | 用户开口先压低音量再判断是不是真打断：关掉只会更突兀 |
 | `GALAXY_VOICE_ECHO_GUARD` | 开 | 自回声文字闸门：识别结果与刚念过的话高度重合就不当用户输入；关掉 AI 会对自己说话起反应 |
 
-### 感知与在场（2）
+### 感知与在场（3）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `GALAXY_NATIVE_MM_CHAT` | 开 | 图片按模型原生格式发：关掉只会退回文字摘要，看不见图 |
 | `GALAXY_NATIVE_MODAL_AUTO` | 开 | 切到 B 档时自动激活原生后端：关掉只是多一步手动 |
+| `GALAXY_SYSTEM_AUDIO_CAPTURE` | 开 | 回环采集的电源：回声消除的参考信号来源，只在进程内做减法、不出网、不进上下文；真正的隐私取舍是「播放声送不送进模型」（GALAXY_SYSTEM_AUDIO_TO_PERCEPTION） |
 
-### 记忆与隐私（2）
+### 记忆与隐私（3）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `GALAXY_ACI_ENABLED` | 开 | 预取上下文：纯加速，没有理由关 |
+| `GALAXY_EXPERIENCE_STRATEGY` | 开 | 历史遗留的总闸：设计上的控制是 GALAXY_EXPERIENCE_GUIDANCE 的 off / shadow / on 三档，这个只是向后兼容的 kill switch；从自己做过的事里学，不出本机 |
 | `GALAXY_FOCUS_STACK_ENABLED` | 开 | 注意力栈（记住刚才在聊什么）：关掉被打断后接不回去 |
 
-### 桌面操作与自治（1）
+### 桌面操作与自治（2）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `GALAXY_CU_MEMORY` | 开 | 桌面操作记住失败经验：纯正向，没有理由关 |
+| `GALAXY_STOP_KEY` | 开 | 动手时按 Esc 叫停：是安全能力，关掉只会少一道刹车。唯一的例外是个别安全软件把键盘钩子当键盘记录器，那时改 .env 关掉，停止改走面板按钮 |
 
 ### 模型与花费（6）
 
@@ -152,11 +141,12 @@
 | `GALAXY_ROUTER_ADAPTIVE_CONCURRENCY` | 开 | 按实测延迟自动调并发：内部调节 |
 | `GALAXY_ROUTER_CB_ENABLED` | 开 | 熔断器：后端连续出错就暂停用它。关掉会一直撞墙 |
 
-### 多设备与网络（8）
+### 多设备与网络（9）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `GALAXY_CONSENSUS_ROUND` | 开 | 多候选设备时派发前先收敛一轮：内部机制，关掉与加入这一轮之前逐字相同 |
+| `GALAXY_HA_BRIDGE` | 开 | 接入 Home Assistant：URL 与令牌都配齐才会启动，没配时完全不动；配齐本身就是人的授权，不需要再有一个开关 |
 | `GALAXY_HEADSCALE_AUTOJOIN` | 开 | 配好 Headscale 后自动加入：没配时什么都不做 |
 | `GALAXY_ONBOARDING_BLUETOOTH` | 开 | 接入平面的蓝牙扫描：受「设备接入平面」总闸管，没有理由单独关 |
 | `GALAXY_ONBOARDING_CAN` | 开 | 接入平面的 CAN 总线扫描：同上 |
@@ -165,10 +155,13 @@
 | `GALAXY_TRANSPORT_ADAPTIVE` | 开 | 传输方式自适应：内部调节 |
 | `GALAXY_TS_ADVERTISE_RELAY` | 开 | 把本机登记为 Tailscale 中继：Tailscale 的内部细节 |
 
-### 安全姿态（1）
+### 安全姿态（4）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
+| `GALAXY_ALLOW_ENDPOINT_OVERRIDE` | 开 | 允许覆盖 provider 的 base_url：中转 / relay 要用，关掉会让这些部署断掉；要「绝不走中转」的部署由运维改 .env |
+| `GALAXY_AUTH_ENABLED` | 开 | 鉴权：默认开（本机自动签令牌、其他设备走配对）。关掉等于谁都能调接口，不该有人在面板上一点就关 |
+| `GALAXY_EGRESS_ALLOW_PRIVATE` | 开 | 允许连内网地址：跨设备编队走的就是内网，关掉会把多设备打死；要锁死的是部署的人，改 .env |
 | `GALAXY_MANIFEST_ON_FIRST_TOKEN` | 开 | 首个字一出就显形：界面时序，不是安全选项（登记在 security 类是历史遗留） |
 
 ### 启动与诊断（5）
@@ -211,14 +204,21 @@
 | `GALAXY_ANDROID_WS_ENABLED` | 关 | 安卓 WS 接入面：鉴权默认开，开鉴权时它会连带打开 —— 实际上没有可选的 |
 | `GALAXY_FABRIC_STRICT` | 关 | NATS 不可达即视为致命：严格部署用，桌面用不到 |
 
-### 安全姿态（4）
+### 安全姿态（11）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK` | 关 | 回落旧调度器：迁移期兜底，默认关 |
+| `GALAXY_ALLOW_REMOTE_INSTALL_SCRIPT` | 关 | 危险逃生口：允许执行未经校验的远程安装脚本（供应链风险，装本地模型时才可能用到）。默认拦着，不该让人在面板上一点就放开 |
 | `GALAXY_INPUT_VALIDATION_LOOPBACK` | 关 | 本机回环也做输入校验：测试用；本机来的请求本来就是桌面自己 |
 | `GALAXY_IP_BLOCK_LOOPBACK` | 关 | 本机回环也会因连续失败被封：打开它，桌面会把自己锁在自己的后端门外（真发生过） |
+| `GALAXY_PERM_STRICT` | 关 | 部署加固：没显式授权的节点动作一律拒绝。白名单还没全量普及，打开会拒掉未声明的节点 |
 | `GALAXY_RATE_LIMIT_LOOPBACK` | 关 | 本机回环也限流：测试用 |
+| `GALAXY_REQUIRE_API_TOKEN` | 关 | 部署加固：没带令牌的请求一律拒绝。本机桌面靠自签令牌，打开它要有共享口令，是对外暴露的部署才需要的决定 |
+| `GALAXY_REQUIRE_DEVICE_APPROVAL` | 关 | 部署加固：未配对批准的设备只能连接、不作为派发目标。打开后手机要先被批准才接得到任务，是部署的人的决定 |
+| `GALAXY_SSH_STRICT_HOST_KEYS` | 关 | 部署加固：连第一次见的远程机器也拒（指纹要事先录进来）。默认是第一次连时记下指纹并告诉你、之后对不上就拒 |
+| `GALAXY_STRICT_AUTHORITY_CHECK` | 关 | 部署加固：来源存疑的指令一律拒绝（启动时的权威边界校验失败即中止）。是部署的人的决定 |
+| `GALAXY_WEIGHTS_ALLOW_PICKLE` | 关 | 危险逃生口：允许加载 pickle 格式权重（反序列化即执行代码，历次模型投毒的载体）。默认拦着，不该让人在面板上一点就放开 |
 
 ### 启动与诊断（7）
 
@@ -271,3 +271,16 @@
    这条路：保存一次，跨设备编排就在没人点过的情况下开了。已改成默认关。
 5. `GALAXY_NATIVE_AUDIO` 以前列在面板上，但它是「服务现实」门控：切到 B 档时 `core/native_modal.py` 自动打开、离开时自动关掉。
    面板上的开关会被档位切换悄悄覆盖，是同一个事实两处各存一份；用户的取舍是选哪一档，已改为运维项。
+6. **安全姿态不该是一排开关。** 它们要么是系统自己的保护（鉴权、Esc 叫停、允许覆盖地址、允许连内网），默认开、关掉只会出事或断功能；
+   要么是危险逃生口（远程安装脚本、pickle 权重），一点就放开等于给人制造出事的机会；要么是对外部署才需要的加固（强制令牌、设备准入、权限从严、
+   权威校验从严、SSH 严格指纹），普通用户看不懂也用不上。这 15 个（连同回声消除、采集本机播放声、历史经验总闸、Home Assistant 接入）已不再列在面板上，
+   面板上只剩「高危命令要不要你批准」这一个对 AI 行为的偏好。
+7. `GALAXY_HITL_CONFIRM_GATE` 原先写成「执行前都要你点确认」，实际只拦命中高危词表或零信任规则的命令；说明已改成它真正做的事。
+
+## 已知、没有动的
+
+- **面板没有任何「要重启才生效」的提示。** 从读取位置看，语音循环、本机外放、自发在场、跨设备、主脑、远程桌面、联邦、WebRTC、Tailscale Funnel、模型镜像、
+  任务状态落盘都是启动（或导入）时才读；面板上点了、界面显示已保存，要等下次启动才起作用。
+- `GALAXY_MEMORY_MEDIA` 有四处读取：三处（入口）默认关，存储层 `core/memory/media_store.py` 默认开。所有入口都先过那三道门，所以实际默认是不存盘；
+  边角情况是单独打开了环境注意力存帧、却没开这个键，此时存储层默认开会存下来，而「保存设置」写入的「关」会让它存不下来。
+- `GALAXY_MASTER_BRAIN_ENABLED` 与 `GALAXY_CROSS_DEVICE_ENABLED` 在代码里互相独立（一个起主脑与 worker，一个决定运行模式），含义重叠，是否合并是产品决定。
