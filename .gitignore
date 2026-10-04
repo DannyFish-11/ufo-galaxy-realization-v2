@@ -162,6 +162,7 @@ learning_data.db
 audit/wiring_report_*.json
 electron/node_modules/
 electron/renderer/panel/node_modules/
+electron/renderer/browser-tests/node_modules/
 
 # npm lockfiles —— 现在必须入库（B10）
 #
