@@ -513,6 +513,12 @@ class AnthropicAdapter(BaseProviderAdapter):
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
+        # 有的型号对采样参数传非默认值直接 400(claude-sonnet-5-5)。哪些型号、哪些参数是
+        # registry 里 MODEL_QUIRKS 的事,这里只按它去掉 —— 与 OpenAI 兼容面同一套机制。
+        from core.provider_registry import quirks_for
+
+        for _param in quirks_for(model).get("omit_params", ()):
+            body.pop(_param, None)
         if system_text.strip():
             body["system"] = system_text.strip()
         if tools:

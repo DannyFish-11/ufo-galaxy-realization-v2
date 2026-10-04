@@ -5078,18 +5078,17 @@ def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str,
 
 
 def _get_route_plan(continuum_state):
-    """Return the current TopologyRoutePlan, or None if topology is not ready."""
-    try:
-        from core.continuum.types import RuntimeDomain
-        from core.model_topology import TopologyRouter, build_inventory_from_config_authority
+    """Return the current TopologyRoutePlan, or None if topology is not ready.
 
-        # ProviderInventory 没有 from_config（此前这里调它、异常被吞，路由计划恒为 None）
-        inventory = build_inventory_from_config_authority()
-        router = TopologyRouter(inventory)
-        domain = continuum_state.runtime_domain or RuntimeDomain.LOCAL
-        return router.route(continuum_state.tri_state_phase, domain)
-    except Exception:
-        return None
+    目前恒为 None。此前这里调 ``ProviderInventory.from_config()``，那个方法不存在、异常被吞，结果同样恒为
+    None —— 现在把这件事写明，不再留一个必然抛错的调用。
+
+    **刻意没有改去调 ``build_inventory_from_config_authority()``**：它读的是 ``runtime/config.json`` 的
+    provider 维度，而那几维在运行时没有读取方、是座孤岛（``tests/test_config_json_dims_have_no_runtime_reader.py``
+    钉着这个事实）。把它接进只读视图，等于让面板拿一份没有任何运行时遵守的数据当事实。
+    要有路由计划，得先有"从运行中的路由器构造清单"的来源。
+    """
+    return None
 
 
 def _get_execution_summary() -> Optional[Any]:
@@ -5185,39 +5184,10 @@ def _assemble_canonical_routing_payload() -> Dict[str, Any]:
             exc,
         )
 
-    # --- Derive provider_status_summary ----------------------------------
+    # --- provider_status_summary ------------------------------------------
+    # 同 _get_route_plan：此前这里靠 ProviderInventory.from_config()（不存在、异常被吞）取清单，恒为 None。
+    # 没有"从运行中的路由器构造清单"的来源之前，保持 None；不去读 config.json 那座孤岛。
     provider_status_summary: Optional[Any] = None
-    try:
-        from core.projection.projection_helpers import extract_provider_status_summary
-
-        model_supply: Optional[Any] = None
-        try:
-            from core.model_topology import build_inventory_from_config_authority
-
-            inventory = build_inventory_from_config_authority()
-            # Build a minimal model_supply dict from the inventory if possible.
-            if hasattr(inventory, "to_dict"):
-                model_supply = inventory.to_dict()
-            elif hasattr(inventory, "providers"):
-                model_supply = {
-                    "providers": [
-                        {
-                            "provider_id": p.provider_id,
-                            "health_status": getattr(p, "health_status", "healthy"),
-                        }
-                        for p in (inventory.providers or [])
-                    ]
-                }
-        except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
-
-        if model_supply:
-            provider_status_summary = extract_provider_status_summary(model_supply)
-    except Exception as exc:
-        logger.debug(
-            "_assemble_canonical_routing_payload: provider_status_summary skipped: %s",
-            exc,
-        )
 
     # --- Build projection -------------------------------------------------
     try:

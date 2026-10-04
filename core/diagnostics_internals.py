@@ -268,15 +268,15 @@ def _multi_device_harness(_q: str) -> Any:
 
 
 def _provider_inventory(_q: str) -> Any:
-    from core.model_topology import build_inventory_from_config_authority
+    """运行中的路由器眼里每个厂商的状态与可用性（含各自型号名单）。
 
-    inventory = build_inventory_from_config_authority()
-    return {
-        "top_by_quality": inventory.top_by_quality(),
-        "top_by_speed": inventory.top_by_speed(),
-        "top_by_composite": inventory.top_by_composite(),
-        "unavailable": inventory.unavailable_entries(),
-    }
+    读的是**路由器自己**，不是 ``runtime/config.json`` 的 provider 维度 —— 后者没有运行时读取方
+    （``tests/test_config_json_dims_have_no_runtime_reader.py``），拿它当事实会误导。
+    """
+    from core.llm.route_authority import get_llm_route_authority
+
+    router = get_llm_route_authority().execution_router
+    return {"default_model": router.get_default_model(), "providers": router.get_provider_status()}
 
 
 def _transports(_q: str) -> Any:
@@ -375,7 +375,7 @@ SECTIONS: Dict[str, "tuple[Callable[[str], Any], str]"] = {
     "pending_envelopes": (_pending_envelopes, "还在等结果的任务信封"),
     "presence_projection": (_presence_projection, "最近的在场投射事件"),
     "protocol_drift": (_protocol_drift, "协议漂移：设备发来的认不出的枚举值"),
-    "provider_inventory": (_provider_inventory, "模型供应清单按质量 / 速度 / 综合排序与不可用项"),
+    "provider_inventory": (_provider_inventory, "运行中的路由器眼里的厂商状态、可用性与各自型号名单"),
     "registry_surface": (_registry_surface, "模块在注册面的分类（?q=模块路径）"),
     "release_flags": (_release_flags, "发布闸门各开关当前状态"),
     "session_axis": (_session_axis, "会话轴快照（?q=标识字段 查所属会话类）"),

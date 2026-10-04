@@ -31,6 +31,21 @@ class TaskType(Enum):
     GENERAL = "general"
 
 
+class RoutingPurpose(str, Enum):
+    """这次选脑是**为了什么**：智能路由打分时并列的又一个评定维度。
+
+    不是另开一条路径 —— 同一个打分函数（质量 × 复杂度、成本、延迟、实测表现），只是按用途
+    调这两处：
+
+    * ``DIALOGUE``：对话推理。人在等着看，延迟直接是体感，所以把延迟计入。
+    * ``AGENT``：Agent 生成 / 协作（特种部队等）。要的是最强的组合，质量第一，
+      成本降权、延迟不计（除非调用方明说需要及时）。
+    """
+
+    DIALOGUE = "dialogue"
+    AGENT = "agent"
+
+
 class ProviderStatus(Enum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"

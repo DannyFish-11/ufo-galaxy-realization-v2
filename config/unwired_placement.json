@@ -1202,6 +1202,18 @@
     "object",
     "拓竹打印机增强控制（错误检查、温度 / 进度报告）：设备能力，等有真实打印机接入时接进 Node_127 main.py；误删后已恢复"
    ]
+  },
+  "core/model_topology/provider_inventory.py": {
+   "*": [
+    "object",
+    "清单只能由 runtime/config.json 的 provider 维度（没有运行时读取方、是座孤岛，tests/test_config_json_dims_have_no_runtime_reader.py 钉着）或已退役的 dashboard 快照构造，接进只读视图会让面板拿没人遵守的数据当事实。要用它，先要有从运行中的路由器构造清单的来源；诊断面现在直接读路由器（/api/v1/diagnostics/internals/provider_inventory）"
+   ]
+  },
+  "core/projection/projection_helpers.py": {
+   "extract_provider_status_summary": [
+    "object",
+    "唯一的调用方在 projection 路由里，靠 ProviderInventory.from_config()（不存在、恒失败）取清单。要接它，得先有从运行中的路由器构造清单的来源；不去读 config.json 的 provider 维度（没有运行时读取方的孤岛，见 tests/test_config_json_dims_have_no_runtime_reader.py）"
+   ]
   }
  }
 }
