@@ -117,17 +117,35 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         # 4.6 代起,无日期 ID 本身就是一个固定快照,官方明说不会改动既有 ID 的权重
         # 与配置,要换版就发新 ID。所以钉死没有"悄悄换模型"的风险,反而拿到了可复现。
         #
+        # 2026-09-29 联网复核(一手:platform.claude.com/docs/en/models/{opus-5-5,sonnet-5-5}/overview):
+        #
+        # · 补 claude-opus-5-5(2026-09-22 发布):1M 上下文 / 128K 输出 / $4 入 $20 出
+        #   —— 比 opus-5($5/$25)更新也更便宜。thinking 不可关(自适应常开);强制 tool 使用会
+        #   报错(本仓适配器不发 tool_choice,不受影响)。
+        # · 补 claude-sonnet-5-5(2026-09-28 发布):1M / 128K / $2 入 $10 出,与 sonnet-5 同价的
+        #   直接升级,所以 default 换成它,cost_in/cost_out 不用动。**它对 temperature / top_p /
+        #   top_k 传非默认值直接 400**(同一页 Good to know),见文件末尾 MODEL_QUIRKS;
+        #   适配器每次都发 temperature=0.7,不处理就每一轮都炸。
+        # · opus-5 / sonnet-5 留作上一代旧档回退(见 FALLBACK_ONLY_MODELS)。
+        #
         # 四档的取舍(免得下次有人按"越贵越好"改 default):
-        #   fable-5-1  最强,2 倍 opus 价,给硬推理/长时程
-        #   opus-5     复杂 agentic 编码
-        #   sonnet-5   速度与智力的平衡 ← 默认
+        #   fable-5-1  最强,2.5 倍 opus-5-5 价,给硬推理/长时程
+        #   opus-5-5   复杂 agentic 编码与长时程知识工作
+        #   sonnet-5-5 速度与智力的平衡 ← 默认
         #   haiku-4-5  最快,近前沿(200K 上下文,注意比上面三个小 5 倍)
         "name": "anthropic",
         "env_key": "ANTHROPIC_API_KEY",
         "protocol": "anthropic",
         "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-fable-5-1", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
-        "default_model": "claude-sonnet-5",
+        "models": [
+            "claude-fable-5-1",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "claude-haiku-4-5-20251001",
+        ],
+        "default_model": "claude-sonnet-5-5",
         "cost_in": 0.002,
         "cost_out": 0.010,
         "extra": {"multimodal": True},
@@ -443,7 +461,16 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "name": "step",
         "env_key": "STEP_API_KEY",
         "base_url": "https://api.stepfun.com/v1",
-        "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
+        # 2026-09-29 补 step-5-preview(2026-09-20 起按量付费开放):600B 总参 / 27B 激活的稀疏 MoE,
+        # 1M 上下文、文本+图像+视频输入,工具调用与结构化输出、reasoning_effort 三档。
+        # 价格 $1.00 入 / $2.70 出(输出含推理轨迹),都不超过下面的 cost_in/cost_out(那两个数
+        # 跟着 default 走,按"往贵了登记"的规矩不下调)。
+        #
+        # **核实程度如实标注**:platform.stepfun.com / .ai 在本环境被出网代理挡住,没能直接读
+        # 官方文档页;型号串 ``step-5-preview`` 与价格取自搜索结果里官方文档页的摘要,并与
+        # models.dev、Vercel AI Gateway、AIHubMix 等多处一致。连不上或 404 时先查这一个串。
+        # 不设为 default:仍是 preview,且价格与 flash 档不同量级。
+        "models": ["step-5-preview", "step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
         "default_model": "step-3.7-flash",
         # 全双工(Realtime WebSocket)型号,与上面的文本型号分开维护 —— 和 openai /
         # google 两家同一个理由:它们走的是完全不同的接口,上游下线节奏也不同。
@@ -559,6 +586,14 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
 #:                    它的工具不工作。传输的选择在 _pick_adapter() 里,判据在这。
 #:   why           —— 出处与原因。没有它,过两年没人知道这条还成不成立。
 MODEL_QUIRKS: Dict[str, Dict[str, Any]] = {
+    "claude-sonnet-5-5": {
+        "omit_params": ("temperature", "top_p", "top_k"),
+        "why": (
+            "platform.claude.com/docs/en/models/sonnet-5-5/overview(Good to know):"
+            "Setting temperature, top_p, or top_k to a non-default value returns a 400 error。"
+            "AnthropicAdapter 每次都发 temperature,所以必须在发出前去掉。"
+        ),
+    },
     "gpt-6-astra": {
         "omit_params": ("temperature", "top_p", "logprobs"),
         # 这一轮**要用工具**时必须换到 Responses 传输。

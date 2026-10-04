@@ -33,11 +33,74 @@ import uuid
 from dataclasses import dataclass
 from dataclasses import replace as _dc_replace
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 from core import upper_ports
 
 logger = logging.getLogger("Galaxy.AgentTeam")
+
+
+class _Specialist(NamedTuple):
+    """特种部队里的一个角色：用哪个 Agent 模板、叫什么、它的活属于哪类任务（选脑按这个）。"""
+
+    template: str
+    name: str
+    task_type: str
+
+
+#: 拆完任务、知道每个子任务要什么之后，才按这张表**现场生成** Agent —— 角色跟着子任务走，
+#: 不是先固定造好一队再去凑。
+_SPECIALIST_ROLES: Dict[str, _Specialist] = {
+    "analyst": _Specialist("data_analyst", "分析专家", "analysis"),
+    "coder": _Specialist("code_executor", "编码专家", "coding"),
+    "planner": _Specialist("planner", "规划专家", "planning"),
+    "researcher": _Specialist("research", "研究专家", "reasoning"),
+}
+
+#: LLM 没标角色（或标得不在表里）时，按路由分类出的任务类型推断。
+_TASK_TYPE_TO_ROLE: Dict[str, str] = {
+    "coding": "coder",
+    "planning": "planner",
+    "agent_control": "planner",
+    "analysis": "analyst",
+    "reasoning": "analyst",
+}
+
+
+def _rank_cloud_brains(router: Any, task_type: Any, complexity: float, limit: int = 3) -> List[Any]:
+    """给 Agent 生成选脑：智能路由按"Agent 用途"打分，**优先最优的云端 API**，返回前 ``limit`` 名。
+
+    最优在前，后面的是失败时的备选。一个云端厂商都没配时，退回在全部厂商里选一个（含本地），
+    不报错；连这也选不出来（或路由器不具备这些能力）返回空列表，由调用方沿用名册。
+    """
+    try:
+        from core.multi_llm_router import RoutingPurpose, TaskType
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("智能路由不可用，沿用名册: %s", exc)
+        return []
+    try:
+        tt = task_type if isinstance(task_type, TaskType) else TaskType(str(getattr(task_type, "value", task_type)))
+    except ValueError:  # 分类结果不认识就按通用
+        tt = TaskType.GENERAL
+
+    try:
+        if hasattr(router, "rank_brains_for_task") and hasattr(router, "cloud_provider_names"):
+            cloud = router.cloud_provider_names()
+            if cloud:
+                ranked = router.rank_brains_for_task(
+                    tt, complexity, purpose=RoutingPurpose.AGENT, only_providers=cloud, limit=limit
+                )
+                if ranked:
+                    return ranked
+        if hasattr(router, "select_brain_for_task"):
+            decision = router.select_brain_for_task(tt, complexity_score=complexity, purpose=RoutingPurpose.AGENT)
+            if decision.provider != "none":
+                return [decision]
+        decision = router.route(tt)
+        return [decision] if decision.provider != "none" else []
+    except Exception as exc:  # noqa: BLE001 —— 选脑失败不该拖垮整队
+        logger.debug("选脑失败，沿用名册: %s", exc)
+        return []
 
 
 def _soul_prefix(soul: str) -> str:
@@ -200,6 +263,8 @@ class AgentTeam:
         self.team_id = team_id
         self.strategy = strategy
         self.members = members
+        #: 建队时估出的任务复杂度（特种部队按它给子任务选脑；create_team 会覆盖）
+        self.complexity_score: float = 0.5
         self.status = TeamStatus.IDLE
         self._factory = agent_factory
         self._router = llm_router
@@ -522,81 +587,117 @@ class AgentTeam:
 
     # ─────── 策略 2: SPECIALIZED (特种部队分工) ───────
 
+    def _specialist_role(self, subtask: Dict, task_type: Any) -> str:
+        """这个子任务该派哪个角色：LLM 标的优先，标不出来按任务类型推断。"""
+        role = str(subtask.get("role", "")).strip().lower()
+        if role in _SPECIALIST_ROLES:
+            return role
+        key = str(getattr(task_type, "value", task_type) or "").lower()
+        return _TASK_TYPE_TO_ROLE.get(key, "researcher")
+
+    def _spawn_specialist(self, role: str, index: int) -> tuple:
+        """按角色从模板**生成**一个 Agent，返回 ``(TeamMember 骨架, agent, 模板系统提示词)``。
+
+        没有工厂（或生成失败）时 agent 为 None、提示词为空 —— 调用方退回一句通用角色提示。
+        """
+        spec = _SPECIALIST_ROLES[role]
+        agent = None
+        if self._factory:
+            try:
+                agent = self._factory.create_from_template(spec.template)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("特种部队生成 Agent 失败（模板 %s）: %s", spec.template, exc)
+        member = TeamMember(
+            agent_id=agent.id if agent else f"agent_{uuid.uuid4().hex[:8]}",
+            agent_name=f"{spec.name}-{index + 1}",
+            provider="none",
+            model="none",
+            role_in_team=role,
+            template=spec.template,
+        )
+        prompt = getattr(getattr(agent, "config", None), "system_prompt", "") if agent else ""
+        return member, agent, prompt or ""
+
     async def _execute_specialized(self, task: str, context: Optional[Dict], mm: Any = None) -> TeamResult:
-        """LLM 分解子任务 → 每个子任务匹配最优 Agent+LLM → 并行执行 → 综合"""
+        """LLM 分解子任务 → 每个子任务按角色生成 Agent、配最优云端 API → 并行执行 → 最强云端综合。
+
+        与其它策略的分工：这一支要的是"最强的组合"，选脑走智能路由的 Agent 用途
+        （质量第一），且优先云端；team / swarm / parallel / critic 不受影响。
+        """
         soul_pfx = _soul_prefix((context or {}).get("soul", ""))
 
-        # Step 1: 用 LLM 分解任务
+        # Step 1: 用 LLM 分解任务（同时标出每个子任务该派的角色）
         subtasks = await self._decompose_task(task, context, mm)
 
         if not subtasks:
             # 分解失败，退回 parallel（mm 必须带上：回退路径丢图 = 只有分解失败时才看不见屏幕）
             return await self._execute_parallel(task, context, mm)
 
-        # Step 2: 为每个子任务分配最优成员
-        assignments = []
-        available_members = list(self.members)
-
-        for st in subtasks:
-            # 分类子任务
+        # Step 2: 每个子任务定角色、按角色的活排出最优云端 API（含备选）
+        complexity = max(0.6, self.complexity_score)
+        plans = []
+        for i, st in enumerate(subtasks):
             task_type = self._router.classify_task([{"role": "user", "content": st["description"]}])
-            # 特种部队核心：按"实际情况"给每个子任务配最优模型（质量优先+适度token，
-            # 只在已填key里选）。fit-based 选不出时退回通用 route()。
-            decision = None
-            if hasattr(self._router, "select_brain_for_task"):
-                try:
-                    from core.multi_llm_router import TaskType as _TT
+            role = self._specialist_role(st, task_type)
+            # 任务类型按**角色的活**定（编码专家就按编码选脑），分类结果只用来兜底推断角色
+            brains = _rank_cloud_brains(self._router, _SPECIALIST_ROLES[role].task_type, complexity)
+            plans.append((i, st, role, brains))
 
-                    _tt = task_type if isinstance(task_type, _TT) else _TT.GENERAL
-                    decision = self._router.select_brain_for_task(_tt, complexity_score=0.6)
-                    if decision.provider == "none":
-                        decision = None
-                except Exception as exc:
-                    logger.debug("select_brain_for_task 失败，退回 route(): %s", exc)
-            if decision is None:
-                try:
-                    decision = self._router.route(task_type)
-                except RuntimeError:
-                    decision = None
+        spawned: List[str] = []
 
-            # 匹配成员：优先用现有成员，但把该子任务的最优 provider:model 绑上去
-            # （真正的"系统组合搭配"——不同子任务配不同最优模型）
-            member = None
-            if available_members:
-                member = available_members[0]
-                for m in available_members:
-                    if decision and m.provider == decision.provider:
-                        member = m
-                        break
-                if decision and decision.provider != "none":
-                    # 用副本绑定最优 provider:model，不污染原成员
-                    member = _dc_replace(member, provider=decision.provider, model=decision.model)
+        async def _exec_subtask(i: int, subtask: Dict, role: str, brains: List[Any]) -> MemberResult:
+            member, agent, agent_prompt = self._spawn_specialist(role, i)
+            if agent is not None:
+                spawned.append(agent.id)
+            title = subtask["title"]
 
-            if member:
-                assignments.append((st, member))
+            # 候选 = 最优云端在前、备选在后；智能路由给不出脑时沿用名册里的成员
+            candidates = [_dc_replace(member, provider=b.provider, model=b.model) for b in brains]
+            if not candidates and self.members:
+                roster = self.members[i % len(self.members)]
+                candidates = [_dc_replace(member, provider=roster.provider, model=roster.model)]
 
-        # Step 3: 并行执行 (带工具)
-        async def _exec_subtask(subtask: Dict, member: TeamMember) -> MemberResult:
+            role_line = (
+                f"{agent_prompt}\n\n本次子任务: {title}。你的产出会交给总协调综合，请把结论写清楚。"
+                if agent_prompt
+                else f"你是 {member.agent_name}。你的任务是: {title}"
+            )
             messages = [
-                {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}。你的任务是: {subtask['title']}"},
+                {"role": "system", "content": soul_pfx + role_line},
                 # 子任务是原始任务的一部分，面对的是同一块屏幕 —— 照样要看得见
                 {"role": "user", "content": _seeing(subtask["description"], mm)},
             ]
-            result = await self._call_member_with_tools(member, messages)
+            result = MemberResult(member=member, result="", success=False, error="没有可用的脑")
+            for bound in candidates:
+                result = await self._call_member_with_tools(bound, list(messages))
+                if result.success and result.result:
+                    break
+                logger.info("特种部队子任务[%s] 在 %s:%s 失败，换备选", title, bound.provider, bound.model)
             # 前缀子任务标题
-            if result.success and result.result:
-                result.result = f"[{subtask['title']}]\n{result.result}"
-            else:
-                result.result = f"[{subtask['title']}] 失败"
+            ok = result.success and bool(result.result)
+            result.result = f"[{title}]\n{result.result}" if ok else f"[{title}] 失败"
             return result
 
-        member_results = await asyncio.gather(*[_exec_subtask(st, m) for st, m in assignments])
-        member_results = list(member_results)
+        try:
+            # Step 3: 并行执行 (带工具)
+            member_results = list(await asyncio.gather(*[_exec_subtask(i, st, role, b) for i, st, role, b in plans]))
 
-        # Step 4: 综合
-        synthesized = await self._synthesize_results(
-            task, member_results, "整合以上各专家团队的子任务结果，给出完整的综合回答。"
-        )
+            # Step 4: 综合 —— 用推理档最强的云端
+            top = _rank_cloud_brains(self._router, "reasoning", complexity, limit=1)
+            synthesized = await self._synthesize_results(
+                task,
+                member_results,
+                "整合以上各专家团队的子任务结果，给出完整的综合回答。",
+                brain=top[0] if top else None,
+            )
+        finally:
+            # 这次现场生成的 Agent 用完即收：不留在单例工厂里占名额
+            if self._factory:
+                for agent_id in spawned:
+                    try:
+                        self._factory.terminate_agent(agent_id, recursive=False)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug("回收特种部队 Agent 失败 %s: %s", agent_id, exc)
 
         return TeamResult(
             team_id=self.team_id,
@@ -982,8 +1083,10 @@ class AgentTeam:
 
 任务: {task}
 
-以 JSON 数组格式返回，每个子任务包含 "title" 和 "description" 字段。
-例: [{{"title": "数据收集", "description": "..."}}, {{"title": "分析", "description": "..."}}]
+以 JSON 数组格式返回，每个子任务包含 "title"、"description" 和 "role" 字段。
+"role" 是该子任务最适合的专家，只能取 analyst(分析)、coder(编码)、planner(规划)、researcher(研究) 之一。
+例: [{{"title": "数据收集", "description": "...", "role": "researcher"}},
+     {{"title": "分析", "description": "...", "role": "analyst"}}]
 
 只返回 JSON，不要其他内容。"""
 
@@ -1011,7 +1114,9 @@ class AgentTeam:
             logger.warning(f"任务分解失败: {e}")
         return []
 
-    async def _synthesize_results(self, task: str, member_results: List[MemberResult], instruction: str) -> str:
+    async def _synthesize_results(
+        self, task: str, member_results: List[MemberResult], instruction: str, brain: Any = None
+    ) -> str:
         """用 coordinator LLM 综合所有成员结果"""
         successful = [mr for mr in member_results if mr.success and mr.result]
         if not successful:
@@ -1032,6 +1137,7 @@ class AgentTeam:
                 ],
                 task_type="reasoning",
                 max_tokens=4096,
+                **({"provider": brain.provider, "model": brain.model} if brain is not None else {}),
             )
             return response.content
         except Exception as e:
@@ -1078,9 +1184,19 @@ class TeamManager:
             twin_manager=self._twin_manager,
         )
 
+        team.complexity_score = complexity_score
         self.teams[team_id] = team
         logger.info(f"Team {team_id} 已创建，策略={strategy}，成员数={len(members)}")
         return team
+
+    def _best_cloud_for(self, task_type_value: str, complexity_score: float, providers: List[Any]) -> tuple:
+        """名册里一个角色配哪个 provider:model：智能路由 Agent 用途下的最优云端；
+        选不出来（没配云端 / 路由器没这个能力）退回第一个可用 provider 的默认型号。"""
+        ranked = _rank_cloud_brains(self._router, task_type_value, max(0.6, complexity_score), limit=1)
+        if ranked:
+            return ranked[0].provider, ranked[0].model
+        prov_name, prov_cfg = providers[0]
+        return prov_name, prov_cfg.default_model
 
     def _create_members(
         self, strategy: TeamStrategy, task_hint: str, complexity_score: float = 0.5
@@ -1145,49 +1261,29 @@ class TeamManager:
                 )
 
         elif strategy == TeamStrategy.SPECIALIZED:
-            # 创建不同角色的成员，分配到不同提供商
-            roles = [
-                ("analyst", "data_analyst", "分析专家"),
-                ("coder", "code_executor", "编码专家"),
-                ("planner", "planner", "规划专家"),
-                ("researcher", "research", "研究专家"),
-            ]
-            for i, (role, template, name) in enumerate(roles):
-                prov_name, prov_cfg = providers[i % len(providers)]
-                agent_id = f"agent_{uuid.uuid4().hex[:8]}"
-                if self._factory:
-                    try:
-                        agent = self._factory.create_from_template(template)
-                        agent_id = agent.id
-                    except Exception as exc:
-                        logger.warning("Exception suppressed: %s", exc)
-
+            # 名册只记"有哪些角色、各配哪个最优云端"，**不在这里注册 Agent**：
+            # 真正的 Agent 等任务拆完、知道每个子任务要什么，才在 _execute_specialized 里按角色
+            # 现场生成并用完回收。此前这里一次性造 5 个注册进单例工厂，执行时又一个都没用上，
+            # 每次请求白占 5 个名额。
+            for role, spec in _SPECIALIST_ROLES.items():
+                prov_name, model = self._best_cloud_for(spec.task_type, complexity_score, providers)
                 members.append(
                     TeamMember(
-                        agent_id=agent_id,
-                        agent_name=name,
+                        agent_id=f"slot_{role}_{uuid.uuid4().hex[:6]}",
+                        agent_name=spec.name,
                         provider=prov_name,
-                        model=_pick_model(prov_name, prov_cfg),
+                        model=model,
                         role_in_team=role,
-                        template=template,
+                        template=spec.template,
                     )
                 )
-
-            # 加一个 coordinator
-            prov_name, prov_cfg = providers[0]
-            agent_id = f"agent_{uuid.uuid4().hex[:8]}"
-            if self._factory:
-                try:
-                    agent = self._factory.create_from_template("coordinator")
-                    agent_id = agent.id
-                except Exception as exc:
-                    logger.warning("Exception suppressed: %s", exc)
+            prov_name, model = self._best_cloud_for("reasoning", complexity_score, providers)
             members.append(
                 TeamMember(
-                    agent_id=agent_id,
+                    agent_id=f"slot_coordinator_{uuid.uuid4().hex[:6]}",
                     agent_name="总协调",
                     provider=prov_name,
-                    model=_pick_model(prov_name, prov_cfg),
+                    model=model,
                     role_in_team="coordinator",
                     template="coordinator",
                 )

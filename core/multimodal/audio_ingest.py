@@ -9,6 +9,7 @@ system unaffected.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures as _futures
 import logging
 import threading as _threading
 import time
@@ -126,6 +127,7 @@ class AudioIngestPipeline:
         # 新的等待结束就返回了 —— **流从此再也没开，日志里一个字都没有**。
         # 代次让每一轮驱动只清自己那一代的认领，与 core/native_modal.py 的 _gen 同款。
         self._run_session = 0
+        self._dsp_executor: Optional[_futures.ThreadPoolExecutor] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -347,14 +349,39 @@ class AudioIngestPipeline:
             self._aec_db = 0.0
             return chunk
 
-    async def _process_chunk(self, chunk: np.ndarray) -> None:
-        """Update VAD + features and invoke registered callbacks."""
-        now = time.monotonic()
+    def _dsp_pool(self) -> _futures.ThreadPoolExecutor:
+        """这条管线专用的单线程池。**单线程**是有意的：AEC / VAD 都是带状态的，块序不能乱。"""
+        pool = getattr(self, "_dsp_executor", None)
+        if pool is None:
+            with self._run_claim_lock:
+                pool = getattr(self, "_dsp_executor", None)
+                if pool is None:
+                    pool = self._dsp_executor = _futures.ThreadPoolExecutor(
+                        max_workers=1, thread_name_prefix="audio-dsp"
+                    )
+        return pool
+
+    def _analyze_chunk(self, chunk: np.ndarray, prev_ts: Optional[float]) -> AudioState:
+        """一块音频的信号处理：回声消除 → VAD → 特征。有状态，只在 DSP 线程里跑。"""
         chunk = self._cancel_echo(chunk)
         vad_state = self._vad.process_frame(chunk)
-        state = extract_audio_features(chunk, vad_state, self._last_update_ts, self.config.sample_rate)
+        state = extract_audio_features(chunk, vad_state, prev_ts, self.config.sample_rate)
         state.echo_cancelled = self._aec_cancelled
         state.echo_suppression_db = self._aec_db
+        return state
+
+    async def _process_chunk(self, chunk: np.ndarray) -> None:
+        """Update VAD + features and invoke registered callbacks.
+
+        信号处理放进专用线程，**不在事件循环里算**：这条循环每 100ms 来一块，而事件循环同时在
+        服务面板 / 感知帧 / 对话流。AEC 首块要现 import numpy/scipy 并建频域滤波器（真机 3.3 秒，
+        同一时刻到达的请求全部跟着慢），之后每块的 FFT 与 VAD 也都在抢同一个线程。
+        回调仍回到事件循环里调 —— 订阅方（语音循环、常驻感知）都假定自己在循环线程上。
+        """
+        now = time.monotonic()
+        state = await asyncio.get_running_loop().run_in_executor(
+            self._dsp_pool(), self._analyze_chunk, chunk, self._last_update_ts
+        )
         self._last_update_ts = now
         self._latest_state = state
         self._quality = SignalQuality.ok(freshness_ms=(time.monotonic() - now) * 1000.0)

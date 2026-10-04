@@ -93,6 +93,9 @@ REMOTE_SOURCES: FrozenSet[str] = frozenset(
 #: 智能体自己发起的工作 —— 没有发起设备，也没有人在电脑前等它。
 AGENT_AUTONOMOUS_SOURCES: FrozenSet[str] = frozenset({"heartbeat"})
 
+#: 后台自发工作的来源 —— 没有人在等它们的结果。它们给「人在等」的请求让路，不是反过来。
+BACKGROUND_SOURCES: FrozenSet[str] = AGENT_AUTONOMOUS_SOURCES | frozenset({"ambient", "active_perception"})
+
 #: 桌面外壳（Electron）在请求里声明自己时用的值。
 DESKTOP_SHELL_SURFACE = "desktop_shell"
 
@@ -336,6 +339,21 @@ async def autonomous_session(
             unbind_runtime_session(token)
 
 
+def foreground_request_active(sessions: Iterable[Any], persistent_handles: Iterable[str] = ()) -> bool:
+    """有没有「人在等」的请求正在处理。
+
+    后台自发工作（自发注意力、主动感知、定时心跳）不算；常驻在场（``open_ambient_presence`` 开的
+    语音双工之类，一开就是几个小时）也不算 —— 它们是"在场"，不是"在等一句回答"。
+    自发注意力循环靠这个判断要不要把本地模型让给用户：Ollama 一次只算一个，它的一次决策调用
+    占着模型的几十秒里，用户的对话请求只能排队，真机上 90 秒超时。
+    """
+    persistent = set(persistent_handles)
+    return any(
+        getattr(s, "source", "") not in BACKGROUND_SOURCES and getattr(s, "runtime_session_id", "") not in persistent
+        for s in list(sessions)
+    )
+
+
 def activity_snapshot(sessions: Iterable[Any]) -> Dict[str, Any]:
     """智能体此刻在处理的全部请求 —— 进三态的与不进的都在，一眼看出智能体没被桌面拴住。"""
     now = time.monotonic()
@@ -404,9 +422,17 @@ class RuntimeOriginMixin:
         """智能体此刻在处理的全部请求，含不进三态的 —— ``presence_summary`` 只数进三态的。"""
         return activity_snapshot(self._active_sessions.values())  # type: ignore[attr-defined]
 
+    def foreground_request_active(self) -> bool:
+        """此刻有没有人在等的请求（见 :func:`foreground_request_active`）。"""
+        return foreground_request_active(
+            self._active_sessions.values(),  # type: ignore[attr-defined]
+            self._ambient_registry().keys(),  # type: ignore[attr-defined]
+        )
+
 
 __all__ = [
     "AGENT_AUTONOMOUS_SOURCES",
+    "BACKGROUND_SOURCES",
     "DESKTOP_CONTROL_SOURCES",
     "DESKTOP_SHELL_SURFACE",
     "HOST_SOURCES",
@@ -424,6 +450,7 @@ __all__ = [
     "desktop_conversation_mirror",
     "desktop_incremental_speech",
     "desktop_request",
+    "foreground_request_active",
     "is_local_address",
     "is_local_body",
     "register_local_identity",

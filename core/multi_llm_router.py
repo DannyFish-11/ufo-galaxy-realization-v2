@@ -35,6 +35,7 @@ from core.llm_types import (  # noqa: E402,F401  —— 重新导出,给既有 i
     ProviderConfig,
     ProviderStatus,
     RoutingDecision,
+    RoutingPurpose,
     TaskType,
 )
 
@@ -385,6 +386,8 @@ FALLBACK_ONLY_MODELS: Dict[str, Dict[str, str]] = {
     },
     "anthropic": {
         "claude-fable-5-1": "这一档的定位与 opus/sonnet 的分工没有一手依据,不凭感觉给它安排任务槽",
+        "claude-opus-5": "上一代 opus($5/$25),2026-09-22 被 opus-5-5($4/$20)顶替,留作旧档回退",
+        "claude-sonnet-5": "上一代 sonnet,2026-09-28 被同价的 sonnet-5-5 顶替,留作旧档回退",
     },
     "google": {
         "gemini-3.7-flash": "上一代 flash,3.8 顶替之后留作旧档回退",
@@ -453,16 +456,18 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "gpt-5.6-terra",
     },
     "anthropic": {
-        TaskType.REASONING: "claude-opus-5",
+        # 2026-09-29:opus-5 → opus-5-5、sonnet-5 → sonnet-5-5。**选型号只读这张表**,
+        # 只改登记表的 models 目录,运行时等于没加。
+        TaskType.REASONING: "claude-opus-5-5",
         # FAST_RESPONSE 用 haiku:它本来就是这一档的型号,而在此之前它只躺在
         # 目录里、一格也没占,等于登记了却永远选不到。
         TaskType.FAST_RESPONSE: "claude-haiku-4-5-20251001",
-        TaskType.CODING: "claude-sonnet-5",
-        TaskType.CREATIVE: "claude-opus-5",
-        TaskType.ANALYSIS: "claude-opus-5",
-        TaskType.PLANNING: "claude-opus-5",
-        TaskType.AGENT_CONTROL: "claude-sonnet-5",
-        TaskType.GENERAL: "claude-sonnet-5",
+        TaskType.CODING: "claude-sonnet-5-5",
+        TaskType.CREATIVE: "claude-opus-5-5",
+        TaskType.ANALYSIS: "claude-opus-5-5",
+        TaskType.PLANNING: "claude-opus-5-5",
+        TaskType.AGENT_CONTROL: "claude-sonnet-5-5",
+        TaskType.GENERAL: "claude-sonnet-5-5",
     },
     "google": {
         # 2026-09-06:全部从 gemini-3.5-flash 抬到 gemini-3.8-flash。
@@ -598,13 +603,15 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "MiniMax-M2.7",
     },
     "step": {
-        TaskType.REASONING: "step-3.7-flash",
+        # 2026-09-29:step-5-preview(旗舰 agentic 推理,1M 上下文)接进推理、分析、规划、
+        # 智能体这四格 —— 都是"越强越值"的活;日常与编码仍用便宜的 flash。
+        TaskType.REASONING: "step-5-preview",
         TaskType.FAST_RESPONSE: "step-3.7-turbo",
         TaskType.CODING: "step-3.7-flash",
         TaskType.CREATIVE: "step-3.7-flash",
-        TaskType.ANALYSIS: "step-3.7-flash",
-        TaskType.PLANNING: "step-3.7-flash",
-        TaskType.AGENT_CONTROL: "step-3.7-flash",
+        TaskType.ANALYSIS: "step-5-preview",
+        TaskType.PLANNING: "step-5-preview",
+        TaskType.AGENT_CONTROL: "step-5-preview",
         TaskType.GENERAL: "step-3.7-flash",
     },
     "mimo": {
@@ -2006,7 +2013,11 @@ class MultiLLMRouter:
         return can_receive(IMAGE, model, provider, cfg)
 
     def route(
-        self, task_type: TaskType, preferred_provider: Optional[str] = None, complexity_score: float = 0.5
+        self,
+        task_type: TaskType,
+        preferred_provider: Optional[str] = None,
+        complexity_score: float = 0.5,
+        purpose: RoutingPurpose = RoutingPurpose.DIALOGUE,
     ) -> RoutingDecision:
         """
         根据任务类型 + 复杂度评分做出路由决策
@@ -2017,6 +2028,8 @@ class MultiLLMRouter:
         3. 任意可用提供商
 
         complexity_score: 0.0-1.0，影响模型等级选择
+        purpose: 这次选脑为了什么（对话推理 / Agent 生成）。云端厂商按智能路由的打分排序，
+            本地厂商仍排在最前；用途只调打分里的延迟与成本权重，见 ``RoutingPurpose``。
 
         LOCAL-BRAIN-FIRST: 当环境变量 USE_LOCAL_BRAIN_FIRST=true 时，
         优先检查本地 Ollama 是否可用，若可用则路由到本地主脑。
@@ -2035,7 +2048,9 @@ class MultiLLMRouter:
                         reason=f"本地主脑优先: Ollama 可用，任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                         alternatives=[
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
-                            for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                            for name in self._order_cloud_by_fit(
+                                TASK_ROUTING_PREFERENCES.get(task_type, []), task_type, complexity_score, purpose
+                            )
                             if name in self.providers and name != "ollama" and self.providers[name].is_available()
                         ],
                     )
@@ -2053,7 +2068,9 @@ class MultiLLMRouter:
                         f"任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                         alternatives=[
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
-                            for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                            for name in self._order_cloud_by_fit(
+                                TASK_ROUTING_PREFERENCES.get(task_type, []), task_type, complexity_score, purpose
+                            )
                             if name in self.providers and name != "hf_local" and self.providers[name].is_available()
                         ],
                     )
@@ -2077,6 +2094,9 @@ class MultiLLMRouter:
         # L3 bandit:按历史表现(成功率/延迟/成本)自适应重排候选;样本不足自动退回
         # 原序(冷启动零行为变化),因此不影响本地/开源优先的既有精排。
         preferred_order = self._bandit_reorder(list(preferred_order), task_type)
+        # 云端厂商之间谁先谁后：按智能路由的打分（质量 × 复杂度、成本、延迟、实测表现），
+        # 不再照偏好表的写死顺序。本地厂商原位不动、仍在最前 —— 本地优先是既有语义。
+        preferred_order = self._order_cloud_by_fit(preferred_order, task_type, complexity_score, purpose)
         alternatives = []
 
         for provider_name in preferred_order:
@@ -2118,59 +2138,24 @@ class MultiLLMRouter:
 
     # ───────── 做任务：按实际情况选模型（fit-based） ─────────
 
-    def select_brain_for_task(
+    def _fit_scorer(
         self,
+        candidates: List[str],
         task_type: TaskType,
-        complexity_score: float = 0.5,
+        complexity_score: float,
         *,
-        has_multimodal: bool = False,
         needs_timely: bool = False,
         prefer_local: bool = False,
-        only_providers: Optional[List[str]] = None,
-    ) -> RoutingDecision:
-        """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
+        bandit: Tuple[Dict[str, Any], int],
+        purpose: RoutingPurpose = RoutingPurpose.AGENT,
+    ):
+        """给一批候选 provider 造"按实际情况"的打分函数：质量 × 复杂度为主，成本、延迟、实测表现为辅。
 
-        用户规则（优先级）：
-          1. 主    — 完成质量/能力最强优先（quality tier × 复杂度）
-          2. 次    — 适度看 token 成本（同档次内便宜优先）
-          3. 条件  — 仅当任务需要及时响应(needs_timely)才把延迟纳入
-        硬约束：
-          - 只在【已填 key 且健康】的提供商里选（没填的不在 self.providers）
-          - 有多模态输入 → 只在多模态可用的提供商里选
-          - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
-
-        Returns:
-            RoutingDecision(provider, model, reason)；无候选时 provider="none"。
+        ``select_brain_for_task``（选一个）与 ``rank_cloud_providers``（云端排序）共用这一份，
+        免得两处各写一套权重、日后只改了一处。``bandit`` 是 ``_bandit_stats`` 的结果，由调用方取，
+        这样样本阈值的判定仍只有 ``_bandit_stats`` 那一处。
         """
         import os as _os
-
-        # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
-        candidates = [
-            name for name, cfg in self.providers.items() if cfg.is_available() and self.adapters.get(name) is not None
-        ]
-        # 把候选面收窄到调用方指定的那一批（把关角色用它只在云端里选）。
-        # 收窄到空时**不**悄悄放开 —— 交回 provider="none"，由调用方决定怎么回落；
-        # 在这里自作主张放开，等于把"只在云端选"变成一句没有效力的话。
-        if only_providers is not None:
-            allow = set(only_providers)
-            candidates = [n for n in candidates if n in allow]
-        # ── 模态硬过滤:按**这一轮会选中的那个型号**判,不按厂商判 ──
-        #
-        # 以前这里读的是 provider 级的 multimodal 旗标。"这家有能看图的型号"
-        # 不等于"这一轮选中的型号能看图":同一家里 gpt-5.3-codex 是纯代码档、
-        # sonar 系是检索问答,选中它们再把图发过去,上游多半**不报错**,忽略图像
-        # 照常作答 —— 于是没有任何人会发现模型其实没看见那张图。
-        if has_multimodal:
-            mm = [n for n in candidates if self._can_see(n, task_type, complexity_score)]
-            if mm:
-                candidates = mm
-            else:
-                logger.warning(
-                    "这一轮带着图像,但已配置的提供商里没有一个会选中能看图的型号 —— "
-                    "图会在发出前被压成文字。判据见 core.modality.input_modalities。"
-                )
-        if not candidates:
-            return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
 
         # 权重（可经 env 微调）
         try:
@@ -2181,6 +2166,14 @@ class MultiLLMRouter:
             latency_weight = float(_os.environ.get("GALAXY_ROUTE_LATENCY_WEIGHT", "0.5"))
         except ValueError:
             latency_weight = 0.5
+
+        # 用途维度(RoutingPurpose)：同一个打分函数，只在这两处按用途调。
+        #   对话 —— 人在等着看，延迟就是体感，无条件计入；
+        #   Agent —— 要最强的组合，质量第一：成本降权，延迟仍只在调用方明说需要及时时才计。
+        if purpose is RoutingPurpose.DIALOGUE:
+            needs_timely = True
+        elif purpose is RoutingPurpose.AGENT:
+            token_weight *= 0.5
 
         task_pref = TASK_ROUTING_PREFERENCES.get(task_type, [])
         # 成本/延迟归一化基准（避免量纲压过质量）
@@ -2193,7 +2186,7 @@ class MultiLLMRouter:
         # 拿不到任何真实成功率/延迟/成本反馈,全凭手写档位。所有者原话:「这玩意不应该
         # 交给智能路由自己选吗」——接上之后,手写档位退化为【冷启动先验】,有实测数据时
         # 由实测修正它。
-        _bstats, _btotal = self._bandit_stats(task_type)
+        _bstats, _btotal = bandit
         try:
             observed_weight = float(_os.environ.get("GALAXY_ROUTE_OBSERVED_WEIGHT", "1.0"))
         except ValueError:
@@ -2239,6 +2232,172 @@ class MultiLLMRouter:
             if prefer_local and name in ("ollama", "hf_local"):
                 score += 0.5
             return score
+
+        return _score
+
+    def _brain_candidates(
+        self,
+        task_type: TaskType,
+        complexity_score: float,
+        *,
+        has_multimodal: bool = False,
+        only_providers: Optional[List[str]] = None,
+    ) -> List[str]:
+        """选脑的候选面：已填 key + 健康 + 有 adapter，再按调用方收窄、按模态过滤。
+
+        ``select_brain_for_task``（选一个）与 ``rank_brains_for_task``（排名）共用，
+        两处不各写一份过滤。
+        """
+        # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
+        candidates = [
+            name for name, cfg in self.providers.items() if cfg.is_available() and self.adapters.get(name) is not None
+        ]
+        # 把候选面收窄到调用方指定的那一批（把关角色用它只在云端里选）。
+        # 收窄到空时**不**悄悄放开 —— 交回 provider="none"，由调用方决定怎么回落；
+        # 在这里自作主张放开，等于把"只在云端选"变成一句没有效力的话。
+        if only_providers is not None:
+            allow = set(only_providers)
+            candidates = [n for n in candidates if n in allow]
+        # ── 模态硬过滤:按**这一轮会选中的那个型号**判,不按厂商判 ──
+        #
+        # 以前这里读的是 provider 级的 multimodal 旗标。"这家有能看图的型号"
+        # 不等于"这一轮选中的型号能看图":同一家里 gpt-5.3-codex 是纯代码档、
+        # sonar 系是检索问答,选中它们再把图发过去,上游多半**不报错**,忽略图像
+        # 照常作答 —— 于是没有任何人会发现模型其实没看见那张图。
+        if has_multimodal:
+            mm = [n for n in candidates if self._can_see(n, task_type, complexity_score)]
+            if mm:
+                candidates = mm
+            else:
+                logger.warning(
+                    "这一轮带着图像,但已配置的提供商里没有一个会选中能看图的型号 —— "
+                    "图会在发出前被压成文字。判据见 core.modality.input_modalities。"
+                )
+        return candidates
+
+    def cloud_provider_names(self) -> List[str]:
+        """当前可用的云端厂商（非本地、已填 key、健康、有 adapter）。"""
+        return [
+            name
+            for name, cfg in self.providers.items()
+            if not is_local_provider(name, cfg) and cfg.is_available() and self.adapters.get(name) is not None
+        ]
+
+    def rank_brains_for_task(
+        self,
+        task_type: TaskType,
+        complexity_score: float = 0.5,
+        *,
+        purpose: RoutingPurpose = RoutingPurpose.AGENT,
+        has_multimodal: bool = False,
+        needs_timely: bool = False,
+        only_providers: Optional[List[str]] = None,
+        limit: int = 3,
+    ) -> List[RoutingDecision]:
+        """按同一套打分给候选**排名**，返回前 ``limit`` 个决策（最优在前）。
+
+        给要"最优组合 + 失败换备选"的调用方用（特种部队）。云端厂商的型号按
+        ``select_model_by_complexity`` 解析；本地厂商不走这里（本地型号要按槽位解析，
+        见 ``select_brain_for_task``）。无候选返回空列表。
+        """
+        candidates = self._brain_candidates(
+            task_type, complexity_score, has_multimodal=has_multimodal, only_providers=only_providers
+        )
+        candidates = [n for n in candidates if not is_local_provider(n, self.providers.get(n))]
+        if not candidates:
+            return []
+        score = self._fit_scorer(
+            candidates,
+            task_type,
+            complexity_score,
+            needs_timely=needs_timely,
+            bandit=self._bandit_stats(task_type),
+            purpose=purpose,
+        )
+        ranked = sorted(candidates, key=score, reverse=True)[: max(1, limit)]
+        return [
+            RoutingDecision(
+                provider=name,
+                model=self.select_model_by_complexity(name, task_type, complexity_score),
+                reason=(
+                    f"fit 排名第{i + 1}: {name} purpose={purpose.value} task={task_type.value} "
+                    f"complexity={complexity_score:.2f} score={score(name):.2f}"
+                ),
+            )
+            for i, name in enumerate(ranked)
+        ]
+
+    def _order_cloud_by_fit(
+        self, order: List[str], task_type: TaskType, complexity_score: float, purpose: RoutingPurpose
+    ) -> List[str]:
+        """把偏好表里的**云端**厂商按打分重排；本地厂商原位不动、仍排在最前。
+
+        偏好表只决定"谁有资格进候选"，云端谁先谁后由智能路由按实际情况与模型性能定。
+        本地优先是既有语义，不碰。
+
+        这是对话热路径上的"锦上添花"：排序本身出任何问题都**退回偏好表原序**，绝不能把路由弄坏。
+        """
+        try:
+            avail = [n for n in order if n in self.providers and self.providers[n].is_available()]
+            local = [n for n in avail if is_local_provider(n, self.providers[n])]
+            cloud = [n for n in avail if n not in local]
+            if len(cloud) < 2:
+                return order
+            score = self._fit_scorer(
+                cloud, task_type, complexity_score, bandit=self._bandit_stats(task_type), purpose=purpose
+            )
+            ranked = sorted(cloud, key=score, reverse=True)
+            rest = [n for n in order if n not in local and n not in ranked]
+            return local + ranked + rest
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("云端排序失败，按偏好表原序: %s", exc)
+            return order
+
+    def select_brain_for_task(
+        self,
+        task_type: TaskType,
+        complexity_score: float = 0.5,
+        *,
+        has_multimodal: bool = False,
+        needs_timely: bool = False,
+        prefer_local: bool = False,
+        only_providers: Optional[List[str]] = None,
+        purpose: RoutingPurpose = RoutingPurpose.AGENT,
+    ) -> RoutingDecision:
+        """做任务时的"按实际情况"选模型（区别于交流基座的开源/本地优先）。
+
+        用户规则（优先级）：
+          1. 主    — 完成质量/能力最强优先（quality tier × 复杂度）
+          2. 次    — 适度看 token 成本（同档次内便宜优先）
+          3. 条件  — 仅当任务需要及时响应(needs_timely)才把延迟纳入
+        硬约束：
+          - 只在【已填 key 且健康】的提供商里选（没填的不在 self.providers）
+          - 有多模态输入 → 只在多模态可用的提供商里选
+          - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
+
+        ``purpose`` 是打分里并列的一个评定维度（见 :class:`RoutingPurpose`）：默认 ``AGENT``
+        （Agent 生成 / 协作，质量第一、成本降权）；对话推理走 :meth:`route`，那边默认 ``DIALOGUE``。
+
+        Returns:
+            RoutingDecision(provider, model, reason)；无候选时 provider="none"。
+        """
+        candidates = self._brain_candidates(
+            task_type, complexity_score, has_multimodal=has_multimodal, only_providers=only_providers
+        )
+        if not candidates:
+            return RoutingDecision(provider="none", model="none", reason="无已配置可用提供商")
+
+        # 实测表现(L3 bandit)；样本不足时 _bandit_stats 返回 total=0，打分完全按静态先验走
+        _bstats, _btotal = self._bandit_stats(task_type)
+        _score = self._fit_scorer(
+            candidates,
+            task_type,
+            complexity_score,
+            needs_timely=needs_timely,
+            prefer_local=prefer_local,
+            bandit=(_bstats, _btotal),
+            purpose=purpose,
+        )
 
         best = max(candidates, key=_score)
         model = self.select_model_by_complexity(best, task_type, complexity_score)
@@ -2521,8 +2680,8 @@ class MultiLLMRouter:
             decision.reason = f"角色[{role}] {role_kind} → {decision.reason}"
             return decision
 
-        # 无候选 → 退回通用 route()
-        return self.route(eff_task, complexity_score=eff_complexity)
+        # 无候选 → 退回通用 route()（这是给 Agent 角色选脑，用途按 Agent 算）
+        return self.route(eff_task, complexity_score=eff_complexity, purpose=RoutingPurpose.AGENT)
 
     # ───────── 本地主脑优先路由 ─────────
 

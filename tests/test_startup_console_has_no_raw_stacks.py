@@ -26,6 +26,8 @@ import ast
 import logging
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -158,3 +160,50 @@ class TestItActuallyLandsWhereWeSay:
         """把库摘掉的同时不许把自己也摘掉 —— 反向那一半。"""
         console, _disk = self._run(tmp_path)
         assert "这一行是我们自己的结论" in console, console[:400]
+
+
+class TestNatsServerOutlivesTheConsoleCtrlC:
+    """控制台 Ctrl+C 不能先于我们自己的停机流程把 nats-server 杀掉，否则客户端先读到 EOF，
+    nats-py 在我们静音它的日志之前就把 ERROR 裸栈打出来。"""
+
+    def test_windows_child_gets_its_own_process_group(self, monkeypatch):
+        import subprocess
+
+        from core import nats_server
+
+        monkeypatch.setattr(nats_server.os, "name", "nt")
+        kw = nats_server._child_detach_kwargs()
+        assert kw["creationflags"] & getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
+
+    def test_posix_spawn_is_unchanged(self, monkeypatch):
+        from core import nats_server
+
+        monkeypatch.setattr(nats_server.os, "name", "posix")
+        assert nats_server._child_detach_kwargs() == {}
+
+
+class TestSelfTestRejectIsNotAnError:
+    """就绪矩阵故意造一次能力不匹配来验证严格门禁；真机启动日志里那行 ERROR 是它自己造的。"""
+
+    def _reject(self, site):
+        from core.capability_enforcement_hardener import (
+            CapabilityHardRejectError,
+            EnforcementMode,
+            enforce_mainline_capability_gate,
+        )
+
+        with pytest.raises(CapabilityHardRejectError):
+            enforce_mainline_capability_gate(
+                "d1", ["screenshot"], ["tap"], mode=EnforcementMode.STRICT, calling_site=site
+            )
+
+    def test_readiness_matrix_smoke_reject_is_logged_below_error(self, caplog):
+        caplog.set_level(logging.DEBUG, logger="Galaxy.CapabilityEnforcementHardener")
+        self._reject("readiness_matrix")
+        levels = {r.levelno for r in caplog.records if "HARD REJECT" in r.getMessage()}
+        assert levels and max(levels) < logging.ERROR
+
+    def test_real_call_sites_still_log_error(self, caplog):
+        caplog.set_level(logging.DEBUG, logger="Galaxy.CapabilityEnforcementHardener")
+        self._reject("openclawd")
+        assert any(r.levelno == logging.ERROR and "HARD REJECT" in r.getMessage() for r in caplog.records)

@@ -132,6 +132,19 @@ def _linux_asset_name() -> str | None:
     return f"nats-server-{NATS_RELEASE_TAG}-linux-{arch}.tar.gz"
 
 
+def _child_detach_kwargs() -> dict:
+    """Windows 上让 nats-server 自成一个进程组，不吃控制台的 Ctrl+C。
+
+    控制台 Ctrl+C 会同时发给前台进程组里的所有进程：nats-server 子进程先于我们自己的停机流程
+    死掉，NATS 客户端立刻读到 EOF / 连接被拒，nats-py 就按 ERROR 把裸栈打进日志（真机停机时
+    ``nats: encountered error`` + ``ConnectionRefusedError`` 在"系统已停止"之前出现）。
+    子进程由 :meth:`stop` 显式收，不靠控制台信号顺带收。
+    """
+    if os.name == "nt":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)}
+    return {}
+
+
 class EmbeddedNATSServer:
     """内置NATS服务器"""
 
@@ -191,6 +204,7 @@ class EmbeddedNATSServer:
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                **_child_detach_kwargs(),
             )
 
             # 等待启动

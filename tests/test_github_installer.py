@@ -708,6 +708,15 @@ class TestOpenClawdToolSchema:
 
 
 class TestGitHubRoutes:
+    #: 安装 / 卸载 / 入库会把外部代码或内容落到本机，这几个写端点现在要 API 鉴权
+    #: （匿名被拒的断言在 tests/test_surfaced_endpoints.py），本类测的是端点本身的行为，所以带令牌。
+    _TOKEN = "github-routes-test-token"
+
+    @pytest.fixture(autouse=True)
+    def _api_auth(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+        monkeypatch.setenv("GALAXY_API_TOKEN", self._TOKEN)
+
     def _make_app(self):
         try:
             from fastapi import FastAPI
@@ -717,7 +726,7 @@ class TestGitHubRoutes:
 
             app = FastAPI()
             app.include_router(create_router())
-            return TestClient(app)
+            return TestClient(app, headers={"Authorization": f"Bearer {self._TOKEN}"})
         except ImportError:
             return None
 

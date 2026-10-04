@@ -9,7 +9,7 @@
     },
     "anthropic": {
       "enabled": false,
-      "model": "claude-opus-5"
+      "model": "claude-opus-5-5"
     },
     "gemini": {
       "enabled": false,
