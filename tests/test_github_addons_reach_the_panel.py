@@ -54,9 +54,15 @@ def client(tmp_path, monkeypatch):
 
     from core.routes import github as route
 
+    # 安装会把外部代码落到本机，这个写端点要 API 鉴权（匿名被拒的断言在 tests/test_surfaced_endpoints.py）；
+    # 这里测的是端点本身的行为，所以带令牌。
+    token = "github-addons-panel-test-token"
+    monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+    monkeypatch.setenv("GALAXY_API_TOKEN", token)
+
     app = FastAPI()
     app.include_router(route.create_router())
-    with TestClient(app) as c:
+    with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as c:
         yield c
 
 

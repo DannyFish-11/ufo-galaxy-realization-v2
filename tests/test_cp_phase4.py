@@ -736,15 +736,21 @@ class TestSecurityPolicyRoutes:
     """Smoke-test the security policy REST endpoints."""
 
     @pytest.fixture
-    def policy_client(self):
+    def policy_client(self, monkeypatch):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         from core.routes.security_policy import create_router
 
+        # 整张安全策略表替换（PUT）要 API 鉴权（匿名被拒的断言在 tests/test_surfaced_endpoints.py）；
+        # 这里测的是端点本身的行为，所以带令牌。
+        token = "security-policy-test-token"
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+        monkeypatch.setenv("GALAXY_API_TOKEN", token)
+
         app = FastAPI()
         app.include_router(create_router())
-        return TestClient(app)
+        return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
     def test_get_policy_returns_rules(self, policy_client):
         resp = policy_client.get("/api/v1/security/policy")
