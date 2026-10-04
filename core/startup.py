@@ -868,7 +868,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             _ambient = get_ambient_loop()
             await _ambient.start()
             results["ambient_attention_loop"] = {"status": "ok"}
-            logger.info("常驻注意力循环已启动（自发在场）")
+            logger.info("常驻注意力循环已启动（自发在场）| %s", _ambient.governor.summary())
         else:
             results["ambient_attention_loop"] = {"status": "disabled"}
             logger.info("常驻注意力循环已被显式关闭（GALAXY_AMBIENT_LOOP=0）")

@@ -158,6 +158,7 @@ def test_resets_at_is_when_the_oldest_charge_leaves_the_window():
 
 
 def test_a_bad_limit_in_the_environment_falls_back_and_says_so(monkeypatch, caplog):
+    monkeypatch.setattr("core.ambient_governance._WARNED", set())
     monkeypatch.setenv("GALAXY_AMBIENT_SPEAK_PER_HOUR", "lots")
     monkeypatch.setenv("GALAXY_AMBIENT_DELEGATE_PER_HOUR", "0")
     with caplog.at_level(logging.WARNING, logger="Galaxy.Ambient"):
@@ -165,6 +166,37 @@ def test_a_bad_limit_in_the_environment_falls_back_and_says_so(monkeypatch, capl
     assert (limits.speak_per_hour, limits.delegate_per_hour) == (12, 6)
     said = " ".join(r.getMessage() for r in caplog.records)
     assert "GALAXY_AMBIENT_SPEAK_PER_HOUR" in said and "GALAXY_AMBIENT_DELEGATE_PER_HOUR" in said
+
+
+def test_a_saved_budget_takes_effect_on_the_running_governor_without_a_restart(monkeypatch):
+    """面板「全部设置」里改了额度，保存完就该生效 —— 不能要重启，更不能不说。"""
+    monkeypatch.setenv("GALAXY_AMBIENT_SPEAK_PER_HOUR", "1")
+    g = AmbientGovernor()  # 没传额度：跟着环境走
+    g.charge(AmbientAction.SPEAK)
+    assert g.gate(_speak()).action == AmbientAction.SILENT
+
+    monkeypatch.setenv("GALAXY_AMBIENT_SPEAK_PER_HOUR", "5")  # 用户在面板里调大了
+    assert g.gate(_speak()).action == AmbientAction.SPEAK, "改了额度，同一个运行中的循环要当场用上新的"
+    assert g.status()["budget"]["speak"]["limit"] == 5
+
+
+def test_a_bad_value_is_said_once_not_every_beat(monkeypatch, caplog):
+    """额度每次取用都重新读，循环两秒一拍 —— 同一个坏值不能每拍刷一条告警。"""
+    monkeypatch.setattr("core.ambient_governance._WARNED", set())
+    monkeypatch.setenv("GALAXY_AMBIENT_SPEAK_PER_HOUR", "nope")
+    g = AmbientGovernor()
+    with caplog.at_level(logging.WARNING, logger="Galaxy.Ambient"):
+        for _ in range(50):
+            g.gate(_speak())
+    warned = [r for r in caplog.records if "GALAXY_AMBIENT_SPEAK_PER_HOUR" in r.getMessage()]
+    assert len(warned) == 1
+    assert g.status()["budget"]["speak"]["limit"] == 12, "坏值回到默认"
+
+
+def test_limits_handed_in_explicitly_stay_pinned(monkeypatch):
+    monkeypatch.setenv("GALAXY_AMBIENT_SPEAK_PER_HOUR", "99")
+    g = _gov(speak_per_hour=2)
+    assert g.status()["budget"]["speak"]["limit"] == 2, "显式传入的额度不被环境改写（测试 / 嵌入方靠它）"
 
 
 def test_limits_can_be_raised_from_the_environment(monkeypatch):
@@ -440,6 +472,10 @@ def test_incidents_can_be_asked_for_since_a_moment():
     g._note("delegate_timeout", "delegate", "新的")
     assert [i["explanation"] for i in g.incidents(since=clock.wall() - 60)] == ["新的"]
     assert [i["explanation"] for i in g.incidents(kinds=["delegate_failed"])] == ["旧的"]
+
+
+def test_the_startup_line_says_what_the_budget_is():
+    assert _gov(speak_per_hour=3, delegate_per_hour=2).summary() == "每小时自发开口 ≤3、委托 ≤2"
 
 
 def test_status_has_the_shape_the_panel_and_the_route_rely_on():

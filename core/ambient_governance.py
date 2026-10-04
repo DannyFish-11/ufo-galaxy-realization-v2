@@ -34,7 +34,8 @@ Comma 的规矩               这里对应的东西                         此�
 已经发出去的那一步是否落地不知道 —— 记账（:mod:`core.action_journal`）会把它标成「不确定」，
 面板打开时会提示。这里**不**自动重试：说「没做完」，不说「失败了再来一遍」，更不说「成功」。
 
-诚实的边界：额度的计数在内存里，进程重启就清零 —— 它防的是「一直开着时的失控」，不是崩溃循环。
+额度键在面板里改了**当场生效**（每次取用都重新读环境）；计数在内存里，进程重启就清零 ——
+它防的是「一直开着时的失控」，不是崩溃循环。
 """
 
 from __future__ import annotations
@@ -79,8 +80,12 @@ OUTCOME_TIMEOUT = "timeout"
 OUTCOME_BUSY = "busy"
 
 
+#: 说过的坏值。额度是**每次取用都重新读**的（见 AmbientGovernor.limits），同一个坏值不能每拍刷一条。
+_WARNED: set = set()
+
+
 def _int_env(name: str, default: int) -> int:
-    """非法 / 非正的值回到默认，并**说一句** —— 配置写错了不许静默当成没写。"""
+    """非法 / 非正的值回到默认，并**说一句**（同一个坏值只说一次）—— 配置写错了不许静默当成没写。"""
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return default
@@ -89,7 +94,9 @@ def _int_env(name: str, default: int) -> int:
     except (TypeError, ValueError):
         value = 0
     if value <= 0:
-        logger.warning("%s=%r 不是正整数，按默认值 %d 处理（想放开就填一个大数）", name, raw, default)
+        if (name, raw) not in _WARNED:
+            _WARNED.add((name, raw))
+            logger.warning("%s=%r 不是正整数，按默认值 %d 处理（想放开就填一个大数）", name, raw, default)
         return default
     return value
 
@@ -160,7 +167,7 @@ class AmbientGovernor:
         clock: Callable[[], float] = time.monotonic,
         wall: Callable[[], float] = time.time,
     ) -> None:
-        self.limits = limits if limits is not None else AmbientLimits.from_env()
+        self._pinned_limits = limits  # 传了就固定（测试 / 嵌入方）；没传就跟着环境走
         self._clock = clock  # 额度窗口用单调时钟：墙钟被校时 / 夏令时拨动不该放走或多扣额度
         self._wall = wall  # 只用来给人看「到几点恢复」
         self._stamps: Dict[str, Deque[float]] = {"speak": deque(), "delegate": deque()}
@@ -168,6 +175,13 @@ class AmbientGovernor:
         self._exhausted_noted: Dict[str, bool] = {"speak": False, "delegate": False}
         self._incidents: Deque[Incident] = deque(maxlen=INCIDENT_MAX)
         self.delegate_in_flight = False
+
+    @property
+    def limits(self) -> AmbientLimits:
+        """额度**每次取用都重新读环境**：在面板「全部设置」里改了就当场生效，不必重启 ——
+        设置页保存之后「该生效的必须当场生效」是本仓对设置的硬要求（见
+        tests/test_saving_a_setting_really_takes_effect.py）。读两个环境变量的开销可以忽略。"""
+        return self._pinned_limits if self._pinned_limits is not None else AmbientLimits.from_env()
 
     # ── 额度 ──
     def _used(self, kind: str) -> int:
@@ -347,6 +361,11 @@ class AmbientGovernor:
             if (i.t_last or i.t) > since and (kinds is None or i.kind in kinds)
         ]
         return rows
+
+    def summary(self) -> str:
+        """一句话讲清此刻的额度（启动日志用）：人看日志就知道它被允许做多少，不必去翻配置。"""
+        lim = self.limits
+        return f"每小时自发开口 ≤{lim.speak_per_hour}、委托 ≤{lim.delegate_per_hour}"
 
     def status(self) -> Dict[str, Any]:
         budget: Dict[str, Any] = {}
