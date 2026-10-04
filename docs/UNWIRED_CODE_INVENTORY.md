@@ -254,13 +254,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 <!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->
 
-未接线公开能力 **382** 条，分布在 **205** 个文件。
+未接线公开能力 **387** 条，分布在 **207** 个文件。
 
 | 维度 | 数 |
 |---|---|
-| 类方法 / 模块函数 | 225 / 157 |
-| 只有测试在引用（写了、测了、没接） | 314 |
-| 全仓连测试都没引用 | 68 |
+| 类方法 / 模块函数 | 229 / 158 |
+| 只有测试在引用（写了、测了、没接） | 318 |
+| 全仓连测试都没引用 | 69 |
 | 所在模块本身从入口不可达 | 4 |
 
 ### 按名字表明的角色
@@ -271,7 +271,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 序列化/转换 | 19 | 13 | 6 |
 | 事件回调 | 4 | 4 | 0 |
 | 判定谓词 | 78 | 70 | 8 |
-| 只读查询 | 49 | 44 | 5 |
+| 只读查询 | 54 | 48 | 6 |
 | 计算/构造 | 69 | 65 | 4 |
 | 动作/变更 | 156 | 111 | 45 |
 
@@ -286,10 +286,10 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 架构治理：权威声明、边界断言与自检 | 56 | 55 | 1 | 25 |
 | 多设备编组、协同网络与拓扑 | 30 | 24 | 6 | 19 |
 | 设备与节点：注册、发现、连接、通信、传输 | 50 | 28 | 22 | 24 |
-| 能力、模型与执行路由 | 31 | 26 | 5 | 22 |
+| 能力、模型与执行路由 | 35 | 29 | 6 | 23 |
 | 智能体、认知与记忆 | 38 | 32 | 6 | 25 |
 | 语音、桌面在场与感知 | 11 | 11 | 0 | 8 |
-| 配置、启动、安全、扩展与通用基础件 | 32 | 26 | 6 | 18 |
+| 配置、启动、安全、扩展与通用基础件 | 33 | 27 | 6 | 19 |
 
 ### 每个函数放在哪里（安卓部分按所有者安排暂缓，不在其列）
 
@@ -300,11 +300,11 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 接上（`wire`） | 27 | 该有人调它：写明调用点（文件、第几行附近、在做什么的时候） |
 | 挂出来（`surface`） | 0 | 该有人读它：写明挂到哪个端点 / 面板 / 诊断输出 |
 | 删掉（`delete`） | 148 | 已被别的实现取代或根本没有用途：写明被什么取代 |
-| 随对象走（`object`） | 121 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
+| 随对象走（`object`） | 126 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
 | 测试钩子（`testhook`） | 0 | 只为测试或断言存在（复位、注入、不变量断言），不该进生产路径 |
 | 框架回调（`framework`） | 0 | 由第三方框架按名字回调（zeroconf、asyncio），清单误报 |
 | 产品决定（`product`） | 3 | 接不接是功能取舍，不是技术问题：等所有者定 |
-| 合计 | 299 | |
+| 合计 | 304 | |
 
 按用途 × 去处：
 
@@ -316,10 +316,10 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 架构治理：权威声明、边界断言与自检 | 0 | 0 | 42 | 14 | 0 | 0 | 0 | 56 |
 | 多设备编组、协同网络与拓扑 | 4 | 0 | 11 | 13 | 0 | 0 | 2 | 30 |
 | 设备与节点：注册、发现、连接、通信、传输 | 6 | 0 | 27 | 16 | 0 | 0 | 1 | 50 |
-| 能力、模型与执行路由 | 0 | 0 | 12 | 19 | 0 | 0 | 0 | 31 |
+| 能力、模型与执行路由 | 0 | 0 | 12 | 23 | 0 | 0 | 0 | 35 |
 | 智能体、认知与记忆 | 0 | 0 | 14 | 24 | 0 | 0 | 0 | 38 |
 | 语音、桌面在场与感知 | 0 | 0 | 5 | 6 | 0 | 0 | 0 | 11 |
-| 配置、启动、安全、扩展与通用基础件 | 0 | 0 | 20 | 12 | 0 | 0 | 0 | 32 |
+| 配置、启动、安全、扩展与通用基础件 | 0 | 0 | 20 | 13 | 0 | 0 | 0 | 33 |
 
 <details><summary>接上（wire）— 27 条</summary>
 
@@ -515,7 +515,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>随对象走（object）— 121 条</summary>
+<details><summary>随对象走（object）— 126 条</summary>
 
 - `core/adapters/tcp_adapter.py`
   - `TCPAdapter.connect_to_peer`：send() 已按需临时建连；长连接没有读循环，主动连局域网里所有 _galaxy 广播方也不是该默认做的事
@@ -593,6 +593,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `core/model_topology/canonical_model_supply_state.py`
   - `NativeMultimodalCapabilityRegistry.register_many`：登记能力记录的批量版，随 NativeMultimodalCapabilityRegistry 被批量填充时用
 - `core/model_topology/model_supply_graph.py` — `ModelSupplyGraph.edges_of_kind`、`ModelSupplyGraph.nodes_by_category`、`ModelSupplyGraph.nodes_by_provider`：图的查询方法：随 core/model_topology/routing_policy.py 需要按类别/供应商筛选时用
+- `core/model_topology/provider_inventory.py` — `ProviderInventory.unavailable_entries`、`ProviderInventory.top_by_quality`、`ProviderInventory.top_by_speed`、`ProviderInventory.top_by_composite`：清单只能由 runtime/config.json 的 provider 维度（没有运行时读取方、是座孤岛，tests/test_config_json_dims_have_no_runtime_reader.py 钉着）或已退役的 dashboard 快照构造，接进只读视图会让面板拿没人遵守的数据当事实。要用它，先要有从运行中的路由器构造清单的来源；诊断面现在直接读路由器（/api/v1/diagnostics/internals/provider_inventory）
 - `core/multi_device_canonical_governance.py`
   - `MultiDeviceGovernanceVerdict.is_single_device`：裁决对象上的判定，随 core/system_final_acceptance_verdict.py 读裁决时用
 - `core/multi_subject_closure_machine.py` — `ClosureTerminalKind.is_success_family`、`ClosureTerminalKind.is_partial_family`、`ClosureTerminalKind.is_failure_family`：枚举分族判定，随 galaxy_gateway/multi_subject_closure_surface.py 需要时用
@@ -616,6 +617,8 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `core/perception/desktop_perception_store.py`
   - `DesktopPerceptionStore.take_fresh_system_audio_for_autoinject`：系统播放声已经经 build_multimodal_context 作为原生模态注入请求；转写式注入目前只给麦克风开（GALAXY_DESKTOP_AUDIO_AUTOINJECT，默认关）。系统播放声比麦克风更敏感（会议、私信语音），要不要另开一道转写注入由所有者决定，不替你打开
 - `core/presence/presence_director.py` — `PresenceDirector.on_phase_transition`、`PresenceDirector.refresh_presence`：跨设备在场投射只产出 PRESENCE_PROJECTED 事件，全仓没有把这类事件送到设备的传输 —— 唯一的通配订阅方是本机面板桥（只会触发本机面板重推）。接上只会在每次相位切换时产生没人收的事件。等设备侧有在场渲染通道再接（按「只有电脑发起的进三态」，也只在电脑发起的跨设备任务里触发）
+- `core/projection/projection_helpers.py`
+  - `extract_provider_status_summary`：唯一的调用方在 projection 路由里，靠 ProviderInventory.from_config()（不存在、恒失败）取清单。要接它，得先有从运行中的路由器构造清单的来源；不去读 config.json 的 provider 维度（没有运行时读取方的孤岛，见 tests/test_config_json_dims_have_no_runtime_reader.py）
 - `core/recovery_truth_surface.py` — `RecoveryLevel.all_levels`、`RecoveryTruthReport.has_deferred`：报告对象自带判定；读恢复真相的验收面按需调用
 - `core/reliability_contract/retry_policy.py`
   - `RetryPolicy.has_retries`：值对象判定，随重试策略被消费时用
@@ -689,12 +692,12 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | `core/unified/` | 13 | 5 |
 | `core/mesh/` | 12 | 6 |
 | `core/attached_runtime_*` | 10 | 5 |
+| `core/model_topology/` | 10 | 5 |
 | `core/capability_*` | 9 | 6 |
 | `core/device_*` | 9 | 5 |
 | `core/v2_*` | 8 | 2 |
 | `core/cross_*` | 7 | 3 |
 | `core/flow_*` | 6 | 1 |
-| `core/model_topology/` | 6 | 4 |
 | `core/orchestration/` | 6 | 5 |
 | `core/truth_*` | 5 | 2 |
 | `nodes/Node_71_MultiDeviceCoordination/` | 5 | 2 |
@@ -723,6 +726,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | `core/generative_ui/` | 1 | 1 |
 | `core/operator_*` | 1 | 1 |
 | `core/orchestration*` | 1 | 1 |
+| `core/projection/` | 1 | 1 |
 | `core/reliability_contract/` | 1 | 1 |
 | `nodes/Node_116_ExternalToolWrapper/` | 1 | 1 |
 | `nodes/Node_127_BambuLab/` | 1 | 1 |
@@ -1178,7 +1182,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>能力、模型与执行路由 — 31 条</summary>
+<details><summary>能力、模型与执行路由 — 35 条</summary>
 
 - `core/capability_assimilation.py`
   - `CapabilityAssimilationLayer.mark_stale_if_expired` T — Mark all nodes whose heartbeat is older than *heartbeat_ttl_secs* as STALE.
@@ -1223,6 +1227,11 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `ModelSupplyGraph.edges_of_kind` T — 无说明
   - `ModelSupplyGraph.nodes_by_category` T — 无说明
   - `ModelSupplyGraph.nodes_by_provider` — — 无说明
+- `core/model_topology/provider_inventory.py`
+  - `ProviderInventory.unavailable_entries` T — 无说明
+  - `ProviderInventory.top_by_quality` T — 无说明
+  - `ProviderInventory.top_by_speed` T — 无说明
+  - `ProviderInventory.top_by_composite` — — 无说明
 - `core/model_topology/topology_router.py`
   - `TopologyRouter.route_all_phases` T — Produce plans for all three public tri-state phases.
 - `core/multi_llm_router.py`
@@ -1328,7 +1337,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>配置、启动、安全、扩展与通用基础件 — 32 条</summary>
+<details><summary>配置、启动、安全、扩展与通用基础件 — 33 条</summary>
 
 - `core/cache.py`
   - `CacheManager.set_json` — — 无说明
@@ -1352,6 +1361,8 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `is_valid_mcp_addon_contract` T — Return ``True`` if *raw* passes :func:`validate_mcp_addon_contract`.
 - `core/message_interop.py`
   - `normalize_to_result_envelope` T — Convert a raw result dict to a canonical ``ResultEnvelope``.
+- `core/projection/projection_helpers.py`
+  - `extract_provider_status_summary` T — Build a compact provider health/availability summary.
 - `core/reliability_contract/retry_policy.py`
   - `RetryPolicy.has_retries` T — Return ``True`` if this policy defines more than one attempt.
 - `core/skill_package_contract.py`

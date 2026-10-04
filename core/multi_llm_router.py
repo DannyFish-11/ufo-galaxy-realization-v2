@@ -2369,10 +2369,12 @@ class MultiLLMRouter:
           - 有多模态输入 → 只在多模态可用的提供商里选
           - 同档次平局：开源/本地优先（平局打破，而非无脑前移）
 
+        ``purpose`` 是打分里并列的一个评定维度（见 :class:`RoutingPurpose`）：默认 ``AGENT``
+        （Agent 生成 / 协作，质量第一、成本降权）；对话推理走 :meth:`route`，那边默认 ``DIALOGUE``。
+
         Returns:
             RoutingDecision(provider, model, reason)；无候选时 provider="none"。
         """
-
         candidates = self._brain_candidates(
             task_type, complexity_score, has_multimodal=has_multimodal, only_providers=only_providers
         )

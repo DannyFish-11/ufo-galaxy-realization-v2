@@ -73,6 +73,16 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 > 与 `pattern_miner` 的策略模式挖掘存在职责重叠，边界见
 > `EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY` 哨兵。
 
+### 模型选择：智能路由多一个「用途」维度
+`core/multi_llm_router.py` 的打分（质量 × 复杂度、成本、延迟、实测表现）是**一个**函数 `_fit_scorer`，
+`core/llm_types.py::RoutingPurpose` 是其中并列的又一个评定维度，不是另开路径：
+- **对话推理**（`MultiLLMRouter.route()` → `chat()`）：本地优先照旧；云端厂商之间按打分排序（延迟计入），
+  不再照 `TASK_ROUTING_PREFERENCES` 的写死顺序 —— 偏好表只决定谁有资格；故障转移顺序随之就是排名。
+- **Agent 生成**（特种部队 `SPECIALIZED`、`select_brain_for_role/_task`）：质量第一（成本降权、延迟不计），
+  优先最优云端 API，`rank_brains_for_task()` 给排名与备选。team / swarm / parallel / critic / pipeline 不变。
+- 选型号**只读** `PROVIDER_MODEL_MAP`，`core/provider_registry.py` 的 `models` 只是目录 —— 新增型号两处都要改
+  （`tests/test_every_catalogued_model_has_a_home.py` 守着）。没有一手来源的型号串不登记。
+
 ### 对象层（决策该去哪儿拿事实）
 - `core/canonical_task.py` - CanonicalTask 任务本体 + 进程内运行时（权威）
 - `core/canonical_task_store.py` - 任务对象的**持久可查询投影**。ring buffer 只有
