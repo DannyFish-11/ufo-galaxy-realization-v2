@@ -260,6 +260,52 @@ async def test_a_stuck_decider_costs_one_beat_not_the_loop(spoken):
     assert [i["kind"] for i in loop.status()["incidents"]] == ["decide_timeout"]
 
 
+class _SlowDecider:
+    """决策调用一直不返回；被取消时记下 —— 到点 / 让路都得**真的**把这次调用取消掉，不是放着它占着模型。"""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cancelled = False
+
+    async def decide(self, obs):
+        self.started.set()
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+
+
+async def test_a_stuck_decision_is_cut_at_the_deadline_and_the_call_is_really_cancelled(spoken):
+    """治理（期限）与让路（core/ambient_yield.py）叠在同一拍里：期限到点时，让路层正在等的那次模型调用要被取消。"""
+    slow = _SlowDecider()
+    loop = _loop(slow, governor=AmbientGovernor(_limits(decide_deadline_s=0.1)))
+    with patch("core.ambient_yield._foreground_busy", lambda: False):
+        decision = await asyncio.wait_for(loop.tick(), 5)
+
+    assert decision.action == AmbientAction.SILENT and "没有回应" in decision.rationale
+    assert slow.cancelled, "期限到了，那次模型调用没被取消 —— 它会一直占着模型"
+    assert [i["kind"] for i in loop.status()["incidents"]] == ["decide_timeout"]
+
+
+async def test_the_user_arriving_mid_decision_abandons_the_call_and_nothing_is_charged(spoken):
+    """让路放弃的那一拍：调用被取消、tick 返回 None，不出声、不进主线、不扣额度、不留「故障」痕迹 —— 那不是失败。"""
+    busy = {"now": False}
+    slow = _SlowDecider()
+    loop = _loop(slow, governor=AmbientGovernor(_limits(speak_per_hour=1)))
+    with patch("core.ambient_yield._foreground_busy", lambda: busy["now"]):
+        ticking = asyncio.create_task(loop.tick())
+        await asyncio.wait_for(slow.started.wait(), 2)
+        busy["now"] = True  # 用户的请求到了
+        result = await asyncio.wait_for(ticking, 5)
+
+    assert result is None and slow.cancelled
+    assert spoken == {"tts": [], "panel": [], "mainline": []}
+    status = loop.status()
+    assert status["budget"]["speak"]["used"] == 0 and status["incidents"] == []
+    assert loop.decisions == 0
+
+
 async def test_a_stuck_transcription_costs_the_beat_its_voice_not_the_loop(spoken):
     class WithAudio(FakeStore):
         def snapshot_media(self) -> Dict[str, Any]:
@@ -363,11 +409,14 @@ async def test_quiet_beats_touch_nothing_the_user_can_see(spoken):
     bus = FakeBus()
     loop = _loop(Scripted(*[_silent() for _ in range(5)]), bus=bus)
     with patch("core.desktop_presence_runtime.get_desktop_presence_runtime") as runtime:
+        # 「用户的请求在不在跑」是只读的查询（循环给用户让路用，core/ambient_yield.py），不算「碰」运行时 ——
+        # 要钉的是沉默的一拍不往运行时里**派活**。
+        runtime.return_value.foreground_request_active.return_value = False
         for _ in range(5):
             await loop.tick()
 
     assert spoken == {"tts": [], "panel": [], "mainline": []}
-    runtime.assert_not_called()
+    runtime.return_value.handle_request.assert_not_called()
     assert set(bus.events) == {"ambient.observed", "ambient.decision"}
 
 

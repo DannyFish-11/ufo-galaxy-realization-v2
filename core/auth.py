@@ -567,6 +567,7 @@ async def require_auth(
     if x_device_id and not verify_device_id(x_device_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Device ID")
 
-    logger.info(f"认证成功: device_id={x_device_id}")
+    # 每个受保护请求都会走到这里（面板轮询一分钟几十次）：INFO 会把真正的启动/运行信息淹掉。
+    logger.debug("认证成功: device_id=%s", x_device_id)
 
     return {"authenticated": True, "device_id": x_device_id, "dev_mode": False}

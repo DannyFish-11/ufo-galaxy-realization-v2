@@ -73,6 +73,16 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 > 与 `pattern_miner` 的策略模式挖掘存在职责重叠，边界见
 > `EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY` 哨兵。
 
+### 模型选择：智能路由多一个「用途」维度
+`core/multi_llm_router.py` 的打分（质量 × 复杂度、成本、延迟、实测表现）是**一个**函数 `_fit_scorer`，
+`core/llm_types.py::RoutingPurpose` 是其中并列的又一个评定维度，不是另开路径：
+- **对话推理**（`MultiLLMRouter.route()` → `chat()`）：本地优先照旧；云端厂商之间按打分排序（延迟计入），
+  不再照 `TASK_ROUTING_PREFERENCES` 的写死顺序 —— 偏好表只决定谁有资格；故障转移顺序随之就是排名。
+- **Agent 生成**（特种部队 `SPECIALIZED`、`select_brain_for_role/_task`）：质量第一（成本降权、延迟不计），
+  优先最优云端 API，`rank_brains_for_task()` 给排名与备选。team / swarm / parallel / critic / pipeline 不变。
+- 选型号**只读** `PROVIDER_MODEL_MAP`，`core/provider_registry.py` 的 `models` 只是目录 —— 新增型号两处都要改
+  （`tests/test_every_catalogued_model_has_a_home.py` 守着）。没有一手来源的型号串不登记。
+
 ### 对象层（决策该去哪儿拿事实）
 - `core/canonical_task.py` - CanonicalTask 任务本体 + 进程内运行时（权威）
 - `core/canonical_task_store.py` - 任务对象的**持久可查询投影**。ring buffer 只有
@@ -153,6 +163,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/desktop_presence_runtime.py` - 桌面三态运行时（silent / liminal / manifest）
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
+- **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
+- `core/ambient_yield.py` - 自发注意力循环给用户让路：用户请求在跑不碰模型、调用进行中用户来了就取消（Ollama 随之停掉生成）、用时 T 秒后歇 3T 秒。判「人在等」用 `core.presence_line.foreground_request_active`（后台自发来源与常驻在场不算）
+- 面板窗口只能有它自己的圆角：桌面外壳里 `html[data-shell='desktop']` 的画布底是透明的（`index.html` 同步脚本设置），否则 `body` 的渐变会铺满窗口矩形、圆角外多出四个方角。`dist/` 是提交进仓库的产物，改样式后要 `npm run build`
 - `enhancements/clients/windows_client/run_ui.py` 是**硬禁用的桩**，只会发一条弃用警告；原先写在这里的
   `scroll_paper_geek_ui.py` 不存在
 

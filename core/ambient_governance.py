@@ -245,12 +245,17 @@ class AmbientGovernor:
         return dataclasses.replace(decision, rationale=rationale, utterance=utterance, task=task)
 
     # ── 期限 ──
-    async def decide(self, decider: Any, obs: Any) -> AmbientDecision:
-        """一拍决策，带期限。超时 / 出错都落成 SILENT 并写明原因 —— 决策不可致命。"""
+    async def decide(self, decider: Any, obs: Any) -> Optional[AmbientDecision]:
+        """一拍决策，带期限。超时 / 出错都落成 SILENT 并写明原因 —— 决策不可致命。
+
+        ``decider`` 是带 ``.decide(obs)`` 的对象，或直接是一个 ``async def (obs)``（循环传的是自己的
+        ``_decide_yielding``：它在调用进行中用户的请求到了时放弃、返回 ``None``，``None`` 原样交还）。
+        """
         deadline = self.limits.decide_deadline_s
+        decide_fn = getattr(decider, "decide", decider)
         try:
             async with asyncio.timeout(deadline) as scope:
-                return await decider.decide(obs)
+                return await decide_fn(obs)
         except TimeoutError:
             if not scope.expired():  # 决策脑自己内部抛出的超时，不是我们的期限
                 return self._decide_failed(TimeoutError("decider"))

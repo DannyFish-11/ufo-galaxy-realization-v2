@@ -269,6 +269,16 @@ async def test_a_timeout_from_inside_the_decider_is_not_mislabelled_as_our_deadl
     assert incident["kind"] == "decide_error", incident
 
 
+async def test_decide_takes_a_plain_async_callable_and_hands_none_back_untouched():
+    """循环传的是自己的 _decide_yielding（用户的请求到了就放弃、返回 None）—— None 是「这一拍作罢」，不是决策，
+    治理层不能把它改写成 SILENT。"""
+
+    async def abandoned(obs):
+        return None
+
+    assert await _gov().decide(abandoned, None) is None
+
+
 async def test_a_good_decision_comes_back_as_is():
     class Ok:
         async def decide(self, obs):

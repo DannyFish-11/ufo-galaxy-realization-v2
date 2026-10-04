@@ -282,6 +282,30 @@ python scripts/check_assessment_freshness.py
 | 面板显示推演过程 | `skill.invoked`（`kind="rehearsal"`）到面板只触发一次设备清单推送，步骤内容从没到过面板。新增 WS `type="rehearsal"` 帧（`core/rehearsal_panel_push.py`，只推类型化字段，工具参数与模拟响应不推），面板在对话区与输入条之间画出最近一次推演，每一行写明「模拟」还是「真查了（只读）」；发下一句话时清空。面板 dist 已重建 | `tests/test_rehearsal_panel_push.py`；`npm run build`（含 `tsc --noEmit`）通过 |
 | 死代码 | **只清点，没删、没接。** 755 条未接线、3 个不可达模块逐类查清，写在 `docs/UNWIRED_CODE_INVENTORY.md`（可用 `python scripts/unwired_inventory.py --write` 重新生成）。其中「看得见但不生效」的几簇最值得先定：运行 SLO 指标的 13 个 `record_*` 没有生产调用方（`/metrics` 上那些计数恒为 0）；委托流持久化只接了读、没人写（重启后「从检查点恢复」走不到）。基线重记 760 → 755（4 条早已接上的过期条目 + 本轮接上的 `set_migration_callback`） | 同左 |
 
+### 6.5 2026-10-04：所有者贴的两份真机启动日志里查出的
+
+日志来自 Windows 真机（desktop-local 与 desktop-cross-device 各一次）。下面每一行都对着日志里的原句：
+
+| 日志里的现象 | 根因 | 修复 | 验证 |
+|---|---|---|---|
+| `'PreflightReport' object has no attribute 'critical_findings'` | `system_orchestrator` 读的属性名写错了（实际叫 `criticals`），异常被泛化的 `except` 吞成一句「环境有欠缺」 | 改名 | `tests/test_preflight_sees_the_local_token.py` |
+| 预检先红一行阻断「缺 `GALAXY_API_TOKEN`」，随后鉴权其实一切正常（`data/api_token.json` 已自签） | ① 预检在「签本机令牌」**之前**跑；② 鉴权开着时本机自签令牌就是身份，预检却把「没配共享口令」判成阻断 | Phase 3 先签令牌再预检；本机令牌已在时不再报阻断。`GALAXY_REQUIRE_API_TOKEN=true` 要的是共享口令，仍然阻断 | 同上（含「有本机令牌 / 没有 / 要求共享口令」三种） |
+| 启动时约 100 条 `续跑重派失败 task=executor__Node_xx … resume payload unavailable` | 能力吸收把每个节点「能执行」投影进任务图成 `executor__<节点>` 节点，没有工具名也没有载荷、永远停在排队态；重启续跑把它们当待派发任务 | 投影节点不算可续跑任务（`resumable_nodes` / `resume_snapshot` 都跳过） | `tests/test_task_graph_durable_resume.py` 新增一条 |
+| 每个请求一行 `认证成功: device_id=None`（604 行） | 按请求打 INFO | 降为 DEBUG | — |
+| 停机时 `nats: encountered error` + `ConnectionRefusedError` 裸栈出现在「系统已停止」**之前** | Windows 控制台 Ctrl+C 同时发给 `nats-server` 子进程，它先于我们的停机流程死掉，客户端读到 EOF，nats-py 在我们静音它的日志之前就打了 ERROR | Windows 上让 `nats-server` 自成一个进程组，由 `stop()` 显式收 | `tests/test_startup_console_has_no_raw_stacks.py` |
+| 就绪矩阵自检打一行 `capability gate HARD REJECT … smoke-device`（ERROR） | 自检故意造一次能力不匹配来验证严格模式会拒 | 自检调用点降到 INFO；真实调用点仍是 ERROR | 同上 |
+| **面板卡顿**：`/api/perception/desktop/frame`、`/audio` 成批变慢（0.5~5 秒，同一时刻一批请求的耗时几乎相同），首次 `/api/v1/panel/feed` 11.5 秒，之后约每 30 秒一次 1~3 秒 | 事件循环被同步工作占住，同一进程里排队的请求一起变慢。三处：① `build_panel_feed` 是 async 函数，整份同步聚合直接在循环里跑，而且每次都**全量构建 18 段统一面板**（含系统现实检查点：一次构建里读盘恢复 mesh 会话 7 次、重算模型拓扑），只为取 3 个字段；Electron 每 30 秒一次的兜底对账就是日志里的 30 秒节拍。② 常驻麦克风采集每 100ms 一块的回声消除 / VAD / 特征提取在事件循环里算，AEC 首块还要现 import numpy 并建滤波器（日志里 3.3 秒，与 7 个请求的 3.33 秒吻合）。③ `OpenClawd.get_status()` 声明成 async 却一个 await 也没有，冷启动时在循环里做一串惰性 import | ① 聚合放工作线程，并发读取共用同一次计算；面板只取 3 个字段，走新增的 `build_presence_slice()`，不再跑全量。`/api/v1/panel/unified` 同样放线程。② 信号处理放专用单线程（块序不能乱），回调仍回到事件循环。③ 在工作线程里取 | `tests/test_panel_feed_does_not_block_the_loop.py`（聚合睡 0.4 秒时循环心跳不出现空洞）、`tests/test_audio_ingest.py` 新增两条。**在本沙箱按 Electron 的节拍（摄像头 + 屏幕每 2 秒、音频、面板轮询）回放负载：各接口 p50 15~27ms**；Windows 真机上的效果还没有实测 |
+| 本地 gemma 一次决策 38~48 秒，用户发的「你好」排在后面，90 秒 `chat_stream 超时` | 自发注意力循环的 SILENT 决策不打冷却，场景一直在变就是一个调用接一个调用；Ollama 一次只算一个。整台机器的 CPU 也被占满，面板跟着卡 | 自发注意力给用户让路（`core/ambient_yield.py`）：用户请求在跑时不碰模型；调用进行中用户来了就取消这次调用（断开连接，Ollama 随之停掉生成）；一次调用用了 T 秒，之后至少歇 3T 秒。被挡下的那一拍记成「延后」，让路结束后补看一次 | `tests/test_ambient_yields_to_the_user.py`（10 条） |
+| 面板窗口除了自己的圆角，四角还多出方形的角 | 窗口是透明的，但 `body` 的渐变背景（`html` 自己没有底）被当成画布底色铺满整个窗口矩形，圆角之外的四个角是方的、不透明的；另外透明窗口开着 `hasShadow`，系统阴影按窗口矩形画 | 在桌面外壳里把画布底去掉（`html[data-shell='desktop']`，由 `index.html` 里同步的内联脚本设置，避免闪一下）；面板窗口 `hasShadow: false`；`dist/` 已重建 | 用 Chromium 实测：修复前四角像素 alpha=255，修复后 alpha=0，圆角内侧仍不透明；`tests/test_panel_window_has_only_its_own_rounded_corners.py` |
+
+**日志里有、但这次没有改的**（各自原因）：
+
+- 系统托盘 8 秒内没出现在托盘区：启动阶段会等图标**真的**出现再报告，这是有意的诚实检查；等待本身是非致命的。没在 Windows 真机上不改。
+- `系统播放声采集不可用（no_wasapi_loopback_backend）`：需要在那台机器上 `pip install PyAudioWPatch`，不是代码问题。
+- `这一轮带着 audio，但型号 gemma4:e2b 不接收它`：音频只有在 `GALAXY_NATIVE_AUDIO_CHAT=1`（默认关）时才会随对话发出，说明那台机器上这一项是开着的；本地 gemma 收不了音频，系统摘掉并在正文里写明，这是 `tests/test_audio_reaches_the_model_or_says_it_did_not.py` 钉住的行为，没改。
+- 启动 3 分钟（Phase 0 探测 13.6 秒、语音依赖导入 15 秒、API 网关 48 秒、AI 大脑 38.8 秒、Podman 21.7 秒）：探测本身已经并发；其余是 Windows 上冷导入与子进程的实际耗时，需要真机逐段抓 profile。
+- 一句「你好」被判 `heavy 0.692`：复杂度打分是对**整批消息**（系统提示词 + 随请求带上的上下文 + 用户这句）算的；单独一句「你好」加身份提示词只有 0.154，那一轮多出来的分数来自随请求带上的内容（日志里消息长 339 字符），没有逐项查清是哪一块。改打分口径会牵动全部路由测试，这次没动。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |

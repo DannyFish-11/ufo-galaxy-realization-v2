@@ -471,11 +471,28 @@ def _groups_for_mode(mode: str) -> List[str]:
     return [mode, "core"]
 
 
+def _local_token_in_place() -> bool:
+    """本机已经签过令牌（``data/api_token.json``）—— 鉴权开着也有身份可用，不缺口令。"""
+    try:
+        from core.auth import read_local_token
+
+        return bool(read_local_token())
+    except Exception:  # noqa: BLE001 — 取不到就按"没有"算，保守地维持原判
+        return False
+
+
 def _api_token_missing_is_critical() -> bool:
-    """CRITICAL only when Bearer auth is enforced or explicitly required."""
-    auth = os.environ.get("GALAXY_AUTH_ENABLED", "").lower() in ("true", "1", "yes")
+    """CRITICAL only when Bearer auth is enforced or explicitly required.
+
+    ``GALAXY_REQUIRE_API_TOKEN=true`` 要的是共享口令，本机自签令牌顶不了它；
+    只是 ``GALAXY_AUTH_ENABLED=true`` 的话，本机已有自签令牌就是有身份 —— 不该再把
+    "没配共享口令"报成阻断（真机：每次启动都先红一行阻断，随后鉴权其实一切正常）。
+    """
     require = os.environ.get("GALAXY_REQUIRE_API_TOKEN", "").lower() in ("true", "1", "yes")
-    return auth or require
+    if require:
+        return True
+    auth = os.environ.get("GALAXY_AUTH_ENABLED", "").lower() in ("true", "1", "yes")
+    return auth and not _local_token_in_place()
 
 
 def _auth_explicitly_off() -> bool:

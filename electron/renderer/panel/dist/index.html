@@ -3,6 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- 在桌面外壳里（只有 Electron 的 preload 会挂 galaxyShell）把画布底去掉，窗口形状才由面板自己的
+         圆角决定。必须在样式生效前同步做完：等模块脚本跑起来再设，会闪一下方形的渐变底。 -->
+    <script>
+      if (window.galaxyShell) document.documentElement.dataset.shell = 'desktop';
+    </script>
     <!-- 后端在哪。留空 = 同源。外壳(Electron / Tauri)按需改写这一行。 -->
     <meta name="galaxy-base" content="" />
     <!-- 演示数据。**生产必须是 off。**
@@ -14,7 +19,7 @@
          留 favicon.ico 就是一条恒定 404。定义处 core/brand_icon.py。 -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%2211%22%20fill%3D%22none%22%20stroke%3D%22%23e8b464%22%20stroke-width%3D%224%22%2F%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%223.5%22%20fill%3D%22%23e8b464%22%2F%3E%3C%2Fsvg%3E" />
     <title>Galaxy</title>
-    <script defer src="./assets/index-Dhj8smpm.js"></script>
+    <script defer src="./assets/index-B7LsqnO7.js"></script>
   </head>
   <body>
     <div id="hud"></div>

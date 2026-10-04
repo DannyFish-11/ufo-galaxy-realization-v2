@@ -308,3 +308,54 @@ class TestResolveInputDevice:
         # 全打不开 → 返回 configured(None),维持原行为让 InputStream 抛错+打诊断
         sd = _FakeSd(self._devs(), openable=set())
         assert _resolve_input_device(sd, None, 16000, 1) is None
+
+
+class TestDspStaysOffTheEventLoop:
+    """每 100ms 一块的回声消除 / VAD / 特征提取不在事件循环里算。
+
+    真机启动日志：语音采集起来的那一刻，AEC 首块现 import + 建滤波器，事件循环被占住 3.3 秒，
+    同一时刻到达的面板 / 感知帧 / 音频请求全部一起变慢（日志里 7 个请求都是 3.3xx 秒）。
+    """
+
+    @pytest.mark.asyncio
+    async def test_analysis_runs_in_a_worker_thread_and_the_loop_keeps_ticking(self):
+        import threading
+        import time
+
+        pipeline = AudioIngestPipeline()
+        seen = {}
+        real = pipeline._analyze_chunk
+
+        def slow(chunk, prev_ts):
+            seen["thread"] = threading.current_thread()
+            time.sleep(0.3)
+            return real(chunk, prev_ts)
+
+        pipeline._analyze_chunk = slow
+        ticks = []
+
+        async def heartbeat():
+            while True:
+                ticks.append(time.monotonic())
+                await asyncio.sleep(0.02)
+
+        hb = asyncio.create_task(heartbeat())
+        await pipeline._process_chunk(_make_loud())
+        hb.cancel()
+
+        assert seen["thread"] is not threading.main_thread()
+        gaps = [b - a for a, b in zip(ticks, ticks[1:])]
+        assert len(ticks) > 5 and max(gaps) < 0.15, f"事件循环被占住: {max(gaps):.2f}s"
+
+    @pytest.mark.asyncio
+    async def test_callbacks_still_run_on_the_event_loop_thread_and_in_chunk_order(self):
+        import threading
+
+        pipeline = AudioIngestPipeline()
+        loop_thread = threading.current_thread()
+        calls = []
+        pipeline.add_callback(lambda state, q: calls.append((threading.current_thread(), state)))
+        for _ in range(3):
+            await pipeline._process_chunk(_make_loud())
+        assert len(calls) == 3
+        assert all(t is loop_thread for t, _ in calls)

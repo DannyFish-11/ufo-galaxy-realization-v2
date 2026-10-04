@@ -106,6 +106,24 @@ async def migrate_session(
     )
 
 
+def close_roaming_session(session_id: str) -> Dict[str, Any]:
+    """关闭一个**漫游会话**：状态 → closed，设备映射释放，落盘。核心 REST 与网关 REST 都调它。
+
+    只有漫游存储有「关闭」这个状态；核心会话（``core.session_manager``）是对话主线，不关闭，
+    只归档 / 导出。所以这里不会去碰核心会话 —— 找不到漫游会话就是 404，不是"关了个寂寞"。
+    """
+    roaming = _roaming_store()
+    if roaming is None or not roaming.get_session(session_id):
+        return {"success": False, "status_code": 404, "error": f"Roaming session not found: {session_id}"}
+    roaming.close_session(session_id)
+    return {
+        "success": True,
+        "status_code": 200,
+        "store": STORE_ROAMING,
+        "session": roaming.get_session(session_id).to_dict(),
+    }
+
+
 def _roaming_store() -> Any:
     try:
         from core import upper_ports

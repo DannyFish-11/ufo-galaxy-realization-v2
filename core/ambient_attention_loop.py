@@ -58,6 +58,7 @@ from core.ambient_decider import _DECISION_FORMAT, LLMRouterDecider, parse_decis
 from core.ambient_governance import OUTCOME_OK, AmbientGovernor
 from core.ambient_types import RECENT_MEMORY_N as _RECENT_MEMORY_N
 from core.ambient_types import AmbientAction, AmbientDecider, AmbientDecision, AmbientObservation
+from core.ambient_yield import AmbientYieldMixin
 
 logger = logging.getLogger("Galaxy.Ambient")
 
@@ -182,7 +183,7 @@ def _float_env(name: str, default: float) -> float:
         return default
 
 
-class AmbientAttentionLoop:
+class AmbientAttentionLoop(AmbientYieldMixin):
     """自发注意力循环。所有协作者可注入，便于单测。"""
 
     def __init__(
@@ -235,6 +236,7 @@ class AmbientAttentionLoop:
         self._recent_rationales: List[str] = []
         self.ticks = 0
         self.decisions = 0
+        self._init_yield_state()
 
     # ── 懒加载协作者（避免导入期副作用）──
     def _get_store(self):
@@ -382,7 +384,7 @@ class AmbientAttentionLoop:
         if time.time() - self._last_action_ts < self.cooldown_s:
             return None
 
-        if not frame_changed and not audio_new:
+        if not frame_changed and not audio_new and not self._deferred:
             return None  # 什么都没变 → 这一拍免费跳过
 
         # 注意:转写(ASR)是 CPU 密集的同步调用,绝不能在这里(会在 async tick 内
@@ -390,6 +392,7 @@ class AmbientAttentionLoop:
         # 流式播放推进、barge-in、其它请求全部停摆。故此处只做【快速门控】,把
         # 音频原样带出,转写移到 tick() 里用 asyncio.to_thread 离线到线程池。
         audio_for_obs = audio_b64 if audio_new else None
+        self._deferred = False
         return AmbientObservation(
             frame_b64=frame_b64,
             frame_mime=frame_mime or "image/jpeg",
@@ -437,6 +440,8 @@ class AmbientAttentionLoop:
         if obs is None:
             return None
 
+        if self._should_yield_now():  # 用户的请求在跑 / 刚占了模型很久 → 让路（core/ambient_yield.py）
+            return None
         # 听（转写）离线到线程池，不卡事件循环；带期限 —— 转写卡住只是这一拍不带声音内容。
         await self.governor.bounded("listen", self._transcribe_async(obs))
 
@@ -450,8 +455,10 @@ class AmbientAttentionLoop:
             },
         )
 
-        # 带期限；超时 / 出错都落成 SILENT 并写明原因（决策不可致命）。
-        decision = await self.governor.decide(self._get_decider(), obs)
+        # 让路（调用进行中用户的请求到了就放弃，返回 None）+ 期限（超时 / 出错都落成 SILENT 并写明原因）。
+        decision = await self.governor.decide(self._decide_yielding, obs)
+        if decision is None:  # 调用进行中用户的请求到了，已放弃
+            return None
 
         # 先过手表的「别打扰」硬闸，再过额度：被手表压下的不算额度用完。
         decision = self.governor.gate(_apply_interruptibility_gate(decision))

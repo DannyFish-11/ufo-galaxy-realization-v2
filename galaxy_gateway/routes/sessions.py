@@ -86,12 +86,12 @@ async def get_session(session_id: str, auth: dict = Depends(_require_auth)):
 @router.post("/api/v1/sessions/{session_id}/close")
 async def close_session(session_id: str, auth: dict = Depends(_require_auth)):
     """Close a roaming session: state → closed, device mapping released, persisted."""
-    from galaxy_gateway.session_roaming import session_roaming
+    from core.session_migration import close_roaming_session
 
-    if not session_roaming.get_session(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    session_roaming.close_session(session_id)
-    return session_roaming.get_session(session_id).to_dict()
+    result = close_roaming_session(session_id)
+    if not result["success"]:
+        raise HTTPException(status_code=int(result["status_code"]), detail="Session not found")
+    return result["session"]
 
 
 @router.post("/api/v1/sessions/{session_id}/migrate")

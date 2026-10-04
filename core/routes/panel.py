@@ -42,6 +42,7 @@ Design constraints
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -104,23 +105,67 @@ def _mesh_participant_status(entry: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: 正在算的那一次 feed —— 并发读取（WS 推送 + HTTP 兜底轮询 + 多个面板窗口）共用它，不各算各的。
+#: 只共用「正在进行」的这一次；算完之后的读取一律重新算，不留结果、不引入新的陈旧窗口
+#: （feed 是被状态事件推着刷新的，读到比事件更早的结果会让面板漏掉这次变化）。
+_panel_feed_task: "asyncio.Task | None" = None
+
+
+def reset_panel_feed_cache() -> None:
+    """丢掉正在进行的那一次计算的引用 —— 测试用（每个用例一个事件循环）。"""
+    global _panel_feed_task
+    _panel_feed_task = None
+
+
 async def build_panel_feed() -> dict:
     """聚合面板实时数据(可复用:HTTP 路由与 WS 推送桥共用同一构建器)。
 
     把真实后端数据(MCP/Skills 来自 CapabilityRegistry、OpenClawd 运行状态、
     LLM 路由 providers、统一记忆后端)聚合成 usePanelData 直接消费的形状。
     每个来源都 best-effort：取不到就略过该字段，前端用其默认值兜底。
+
+    **不占事件循环**：聚合本身是同步的（冷启动要现 import 一批大模块、热路径要读设备/会话表），
+    此前直接在事件循环里跑 —— 真机首次 panel/feed 11.5 秒、之后每 30 秒一次的兜底对账 1~3 秒，
+    这段时间里同一进程的感知帧 / 音频 / 对话流请求全部排队、一起变慢，面板因此卡顿。
+    现在放进工作线程算，并发读取共用同一次正在进行的计算（单飞）。
     """
+    global _panel_feed_task
+    task = _panel_feed_task
+    # 别的事件循环留下的任务（测试里一个用例一个循环）不能拿来用
+    if task is not None and not task.done() and task.get_loop() is not asyncio.get_running_loop():
+        task = None
+    if task is None or task.done():
+        task = _panel_feed_task = asyncio.ensure_future(_compute_panel_feed())
+    # shield：某一个调用方被取消（面板关了、请求断了）不能把大家共用的这次计算一起取消
+    return await asyncio.shield(task)
+
+
+def _openclawd_status() -> Any:
+    """取 OpenClawd 状态。首次要 import 一个很大的模块、``get_status`` 里还有一串惰性 import，
+    它声明成 async 却一个 await 都没有 —— 在事件循环里跑就是白占循环，放工作线程里自成一个循环跑完。"""
+    from core.openclawd import get_openclawd
+
+    return asyncio.run(get_openclawd().get_status())
+
+
+async def _compute_panel_feed() -> dict:
+    st: Any = None
+    try:
+        st = await asyncio.to_thread(_openclawd_status)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("panel feed: OpenClawd 状态聚合失败: %s", exc)
+    return await asyncio.to_thread(_assemble_panel_feed, st)
+
+
+def _assemble_panel_feed(st: Any) -> dict:
+    """同步聚合（在工作线程里跑）。``st`` 是 OpenClawd 状态（已在事件循环里取好，取不到为 None）。"""
     feed: dict = {}
 
-    # 相位 / presence(复用统一面板聚合)
+    # 相位 / presence —— 只要三个字段，走轻量切片，不跑完整的统一面板聚合
     try:
-        from core.unified_panel_aggregation import build_unified_panel_payload
+        from core.unified_panel_aggregation import build_presence_slice
 
-        p = build_unified_panel_payload(mode="chat").to_dict()
-        for k in ("tri_state_phase", "presence_intensity", "coherence"):
-            if k in p:
-                feed[k] = p[k]
+        feed.update(build_presence_slice())
     except Exception as exc:  # noqa: BLE001
         logger.debug("panel feed: 相位/presence 聚合失败: %s", exc)
 
@@ -206,9 +251,6 @@ async def build_panel_feed() -> dict:
     # RUNNING、"任务"永远是 0 活跃、诊断抽屉 uptime 永远是 0s——看起来像实时遥测,
     # 实际是写死的默认值。这里改成从真实嵌套字段取。
     try:
-        from core.openclawd import get_openclawd
-
-        st = await get_openclawd().get_status()
         if isinstance(st, dict):
             oc = st.get("openclawd", {}) or {}
             by_state = (st.get("agent_factory", {}) or {}).get("by_state", {}) or {}
@@ -613,7 +655,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.unified_panel_aggregation import build_unified_panel_payload
 
-            payload = build_unified_panel_payload(mode=mode)
+            # 18 段聚合是同步的、冷启动要几秒：放工作线程，别占事件循环
+            payload = await asyncio.to_thread(build_unified_panel_payload, mode=mode)
             return JSONResponse(content=payload.to_dict())
         except Exception as exc:
             logger.error("get_unified_panel endpoint error: %s", exc)
