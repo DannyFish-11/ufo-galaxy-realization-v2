@@ -51,6 +51,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol
 
+from core.ambient_yield import AmbientYieldMixin
+
 logger = logging.getLogger("Galaxy.Ambient")
 
 # 默认参数（均可由环境变量覆盖）
@@ -439,7 +441,7 @@ def _float_env(name: str, default: float) -> float:
         return default
 
 
-class AmbientAttentionLoop:
+class AmbientAttentionLoop(AmbientYieldMixin):
     """自发注意力循环。所有协作者可注入，便于单测。"""
 
     def __init__(
@@ -490,6 +492,7 @@ class AmbientAttentionLoop:
         self._recent_rationales: List[str] = []
         self.ticks = 0
         self.decisions = 0
+        self._init_yield_state()
 
     # ── 懒加载协作者（避免导入期副作用）──
     def _get_store(self):
@@ -637,7 +640,7 @@ class AmbientAttentionLoop:
         if time.time() - self._last_action_ts < self.cooldown_s:
             return None
 
-        if not frame_changed and not audio_new:
+        if not frame_changed and not audio_new and not self._deferred:
             return None  # 什么都没变 → 这一拍免费跳过
 
         # 注意:转写(ASR)是 CPU 密集的同步调用,绝不能在这里(会在 async tick 内
@@ -645,6 +648,7 @@ class AmbientAttentionLoop:
         # 流式播放推进、barge-in、其它请求全部停摆。故此处只做【快速门控】,把
         # 音频原样带出,转写移到 tick() 里用 asyncio.to_thread 离线到线程池。
         audio_for_obs = audio_b64 if audio_new else None
+        self._deferred = False
         return AmbientObservation(
             frame_b64=frame_b64,
             frame_mime=frame_mime or "image/jpeg",
@@ -692,6 +696,8 @@ class AmbientAttentionLoop:
         if obs is None:
             return None
 
+        if self._should_yield_now():  # 用户的请求在跑 / 刚占了模型很久 → 让路（core/ambient_yield.py）
+            return None
         # 听（转写）离线到线程池，不卡事件循环。
         await self._transcribe_async(obs)
 
@@ -706,10 +712,12 @@ class AmbientAttentionLoop:
         )
 
         try:
-            decision = await self._get_decider().decide(obs)
+            decision = await self._decide_yielding(obs)
         except Exception as exc:  # noqa: BLE001 — 决策不可致命
             logger.debug("Ambient decide 异常,视为 SILENT: %s", exc)
             decision = AmbientDecision(action=AmbientAction.SILENT, rationale=f"决策异常: {exc}")
+        if decision is None:  # 调用进行中用户的请求到了，已放弃
+            return None
 
         decision = _apply_interruptibility_gate(decision)
 

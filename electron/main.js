@@ -894,7 +894,10 @@ function createPanelWindow() {
         alwaysOnTop: true,
         fullscreen: false,
         skipTaskbar: false,
-        hasShadow: true,
+        // 透明窗口的系统阴影按**窗口矩形**画，不跟着面板的圆角走 —— 圆角外面就多出四个方角。
+        // 面板自己的圆角在 hud.css 的 .shell 上；canvas 底在桌面外壳里已改成透明
+        // （index.html 的 data-shell），窗口的形状完全由 .shell 决定。
+        hasShadow: false,
         resizable: true,
         movable: true,
         closable: true,

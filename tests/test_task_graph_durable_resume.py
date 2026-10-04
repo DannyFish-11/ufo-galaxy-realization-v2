@@ -156,3 +156,28 @@ def test_resume_pending_dispatch_isolates_failures(tmp_path, monkeypatch):
     out = asyncio.run(rt.resume_pending_dispatch(_dispatch))
     assert "ok" in out["resumed"]
     assert any(f[0] == "bad" for f in out["failed"])  # 单个失败被隔离
+
+
+def test_assimilation_projection_nodes_are_not_resumable_work(tmp_path, monkeypatch, caplog):
+    """能力吸收投影进任务图的"执行参与者"节点不是待派发任务：重启续跑不碰、也不报"重派失败"。
+
+    真机：每个 Node 一个 executor__<Node> 投影节点，没有工具名也没有载荷，一次启动刷 ~100 条警告。
+    """
+    import logging
+
+    monkeypatch.setenv("GALAXY_DURABLE_EXEC", "1")
+    monkeypatch.setenv("GALAXY_TASK_GRAPH_STATE_PATH", str(tmp_path / "g.json"))
+    rt = TaskGraphRuntime()
+    rt.register_node(GraphNode(task_id="executor__Node_01_OneAPI", metadata={"assimilation_projection": True}))
+    rt.register_node(_node("real-task"))
+
+    rt2 = TaskGraphRuntime()  # 重启
+    assert [n.task_id for n in rt2.resumable_nodes()] == ["real-task"]
+    snap = rt2.resume_snapshot()
+    assert "executor__Node_01_OneAPI" not in snap["resumable"] + snap["blocked"]
+
+    seen = []
+    caplog.set_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime")
+    result = asyncio.run(rt2.resume_pending_dispatch(lambda n: seen.append(n.task_id)))
+    assert seen == ["real-task"] and result["failed"] == []
+    assert not [r for r in caplog.records if "续跑重派失败" in r.getMessage()]

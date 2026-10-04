@@ -385,18 +385,20 @@ class SystemOrchestrator:
         logger.info("[启动·环境检查] Running environment / bootstrap checks …")
         issues: List[str] = []
         has_critical_failure = False
+        # 先把本机令牌签好、再做预检：预检看到"本机已有令牌"就不会把鉴权开着的正常状态报成阻断
+        auth_said, auth_failed = self._ensure_auth_ready()
         try:
             from core.config_preflight import ConfigPreflightError, run_preflight  # noqa: F401
 
             report = run_preflight(dry_run=True)  # collect findings without raising
             if not report.ok:
-                issues.append(f"preflight: {len(report.critical_findings)} CRITICAL finding(s)")
+                issues.append(f"preflight: {len(report.criticals)} CRITICAL finding(s)")
                 if self.strict_preflight:
                     has_critical_failure = True
                     logger.error(
                         "[Phase 3] STRICT preflight: %d CRITICAL finding(s) — "
                         "aborting startup (GALAXY_STRICT_PREFLIGHT=1)",
-                        len(report.critical_findings),
+                        len(report.criticals),
                     )
         except ImportError:
             pass  # preflight module optional at this phase
@@ -405,7 +407,6 @@ class SystemOrchestrator:
             if self.strict_preflight:
                 has_critical_failure = True
 
-        auth_said, auth_failed = self._ensure_auth_ready()
         if auth_failed:
             issues.append(auth_said)
             has_critical_failure = True

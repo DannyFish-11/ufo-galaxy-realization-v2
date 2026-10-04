@@ -589,6 +589,27 @@ class UnifiedPanelAggregationService:
         self._annotate_authority_source_fingerprint(payload)
         return payload
 
+    def build_presence_slice(self) -> Dict[str, Any]:
+        """只取「相位 / 在场强度 / 一致性」三个字段 —— 不跑完整的 18 段聚合。
+
+        面板 feed 每次构建（WS 推送、HTTP 轮询）都只用这三个值；此前它每次都调
+        :meth:`build_payload` 全量构建（含系统现实检查点：同一次构建里多次读盘恢复 mesh 会话、
+        重算模型拓扑……），真机上每 30 秒的面板对账轮询因此卡住事件循环 1~3 秒，
+        同一时刻到达的感知帧 / 音频请求全部跟着慢。
+
+        这三个字段只由 :meth:`_fill_from_runtime_projection` 写入，所以只跑这一段与全量构建的结果一致。
+        """
+        payload = UnifiedPanelPayload()
+        try:
+            self._fill_from_runtime_projection(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_presence_slice: runtime projection fill failed: %s", exc)
+        return {
+            "tri_state_phase": payload.tri_state_phase,
+            "presence_intensity": payload.presence_intensity,
+            "coherence": payload.coherence,
+        }
+
     # ------------------------------------------------------------------
     # Source fill methods (each isolated so one failure does not cascade)
     # ------------------------------------------------------------------
@@ -1493,6 +1514,11 @@ def build_unified_panel_payload(*, mode: str = "chat") -> UnifiedPanelPayload:
 
 _service_instance: Optional[UnifiedPanelAggregationService] = None
 _service_lock = threading.Lock()
+
+
+def build_presence_slice() -> Dict[str, Any]:
+    """面板 feed 用的轻量切片（相位 / 在场强度 / 一致性），见 :meth:`UnifiedPanelAggregationService.build_presence_slice`。"""
+    return get_unified_panel_aggregation_service().build_presence_slice()
 
 
 def get_unified_panel_aggregation_service() -> UnifiedPanelAggregationService:

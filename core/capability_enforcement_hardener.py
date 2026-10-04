@@ -80,6 +80,9 @@ from typing import List, Sequence
 
 logger = logging.getLogger("Galaxy.CapabilityEnforcementHardener")
 
+#: 自检调用点：这些调用方是故意造不匹配来验证门禁会拒的，被拒不算事故（日志降到 INFO）。
+SELF_TEST_CALLING_SITES = frozenset({"readiness_matrix"})
+
 __all__ = [
     # Sentinels
     "CAPABILITY_ENFORCEMENT_HARDENER_AUTHORITY",
@@ -434,7 +437,9 @@ def enforce_mainline_capability_gate(
     )
 
     if mode == EnforcementMode.STRICT:
-        logger.error(
+        # 就绪矩阵的自检会故意造一次不匹配来验证"严格模式真的会拒"——那不是事故，别按 ERROR 刷屏。
+        logger.log(
+            logging.INFO if calling_site in SELF_TEST_CALLING_SITES else logging.ERROR,
             "[%s] capability gate HARD REJECT: device=%s missing caps=%s " "required=%s audit_id=%s",
             calling_site,
             device_id,

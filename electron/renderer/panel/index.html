@@ -3,6 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- 在桌面外壳里（只有 Electron 的 preload 会挂 galaxyShell）把画布底去掉，窗口形状才由面板自己的
+         圆角决定。必须在样式生效前同步做完：等模块脚本跑起来再设，会闪一下方形的渐变底。 -->
+    <script>
+      if (window.galaxyShell) document.documentElement.dataset.shell = 'desktop';
+    </script>
     <!-- 后端在哪。留空 = 同源。外壳(Electron / Tauri)按需改写这一行。 -->
     <meta name="galaxy-base" content="" />
     <!-- 演示数据。**生产必须是 off。**

@@ -377,6 +377,17 @@ def _no_leaked_node_activation_executor():
         mod.set_activation_executor(before)
 
 
+# 面板 feed 在 1 秒内被多路读取时共用同一份结果(core.routes.panel.build_panel_feed)。
+# 它是进程级的:上一个测试算出的 feed 不能漏给下一个 —— 两次读取之间改过状态的用例会读到旧值。
+@pytest.fixture(autouse=True)
+def _reset_panel_feed_share():
+    """Auto-use: 每个测试前清掉面板 feed 的共享结果。"""
+    mod = sys.modules.get("core.routes.panel")
+    if mod is not None:
+        mod.reset_panel_feed_cache()
+    yield
+
+
 # 真相链没收口时会排一次【延迟数秒】的后台补跑(core.truth_chain_recovery)。不撤掉的话,
 # 这个测试里排的补跑会在后面某个测试运行时到点,改写那时的全局账本 —— 又一个离污染源很远的
 # 顺序依赖。这里逐测试取消未到点的补跑、清空内存状态(盘上的隔离文件在临时数据目录里)。

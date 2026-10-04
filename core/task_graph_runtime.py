@@ -296,6 +296,17 @@ _TERMINAL_GRAPH_STATES = frozenset(
     }
 )
 _EXECUTED_GRAPH_STATES = frozenset({GraphNodeState.RESULT, GraphNodeState.PARTIAL_RESULT})
+
+
+def _is_projection_only(node: "GraphNode") -> bool:
+    """能力吸收（capability_assimilation）只是把"某节点能执行"投影进任务图 —— 它不是一次待派发的任务。
+
+    这类节点没有工具名、也没有可重放的载荷，永远停在 QUEUED；重启续跑若把它们当待派发节点，
+    每个节点启动时都会报一条"续跑重派失败"（真机一次启动 ~100 条），还把真正悬着的任务淹没在里面。
+    """
+    return bool((getattr(node, "metadata", None) or {}).get("assimilation_projection"))
+
+
 _PENDING_GRAPH_STATES = frozenset(
     {
         GraphNodeState.QUEUED,
@@ -958,7 +969,7 @@ class TaskGraphRuntime:
         completed = {tid for tid, n in self._nodes.items() if n.state == GraphNodeState.COMPLETED}
         out: List[GraphNode] = []
         for node in self._nodes.values():
-            if node.state not in _PENDING_GRAPH_STATES:
+            if node.state not in _PENDING_GRAPH_STATES or _is_projection_only(node):
                 continue
             if all(dep in completed for dep in (node.depends_on or [])):
                 out.append(node)
@@ -974,7 +985,7 @@ class TaskGraphRuntime:
         blocked = [
             n.task_id
             for n in self._nodes.values()
-            if n.state in _PENDING_GRAPH_STATES and n.task_id not in resumable_set
+            if n.state in _PENDING_GRAPH_STATES and n.task_id not in resumable_set and not _is_projection_only(n)
         ]
         executed_pending = [n.task_id for n in self._nodes.values() if n.state in _EXECUTED_GRAPH_STATES]
         terminal_failed = [
