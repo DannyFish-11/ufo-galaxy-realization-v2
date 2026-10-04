@@ -2348,10 +2348,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "这台设备的类型（留空=unknown；如 desktop/laptop/server）",
     },
     "GALAXY_DURABLE_EXEC": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "agent",
-        "description": "持久化执行（任务状态落盘，进程重启能接着跑 · 默认关）",
+        "description": "持久化执行（任务状态落盘，进程重启能接着跑 · 默认开）",
     },
     "GALAXY_DISPATCH_IDEMPOTENCY": {
         "default": "true",

@@ -228,6 +228,12 @@ _TMP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 # 确需验证开关本身的用例（test_clone_to_use_startup_hardening 等）自己 monkeypatch 覆盖。
 os.environ["GALAXY_NATS_ENABLED"] = "false"
 
+# 任务状态落盘(GALAXY_DURABLE_EXEC)产品默认是开的,测试里一律关掉:它会把"这个进程里所有任务图节点"写进检查点,
+# 而 TaskGraphRuntime 构造时又从同一份检查点重建 —— 同一个进程里前面用例留下的节点会被后面新建的实例读到,
+# 和上面那几条是同一种"上一个用例改变下一个用例判定"的病。要验证落盘的用例(test_task_graph_durable_resume 等)
+# 自己 monkeypatch 打开,并把 GALAXY_TASK_GRAPH_STATE_PATH 指到自己的临时目录。
+os.environ["GALAXY_DURABLE_EXEC"] = "false"
+
 # 以上几个都是硬设而非 setdefault：隔离不能被外部环境里一个残留的变量悄悄取消掉。
 os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
 os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")

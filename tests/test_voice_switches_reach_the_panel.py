@@ -699,14 +699,22 @@ class TestPanelCanActuallySaveThem:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         items = body.get("config", body)
-        for key in ("GALAXY_SPEAK", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN", "GALAXY_LOCAL_AUDIO"):
+        for key in ("GALAXY_VOICE", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN"):
             assert key in items, f"/api/config/all 没返回 {key}"
             # string 也在内:三态开关(auto/1/0)本来就不是布尔,渲染成推拉开关会丢掉 auto 档。
             assert items[key]["type"] in ("boolean", "number", "string")
             assert items[key]["description"]
-        # 回声消除整体（总闸 + 两个子参数）是内置机制（core/routes/panel_switch_policy.py），面板不列；
-        # 但它们仍可存、可读（上面的 test_saving_the_voice_switches_succeeds 钉着存）。
-        for hidden in ("GALAXY_AEC", "GALAXY_AEC_RES", "GALAXY_AEC_COMFORT_NOISE"):
+        # 声音那一组只有语音总闸留在面板上：朗读 / 本机外放 / 回声消除是内置机制，两个模型自动下载是替补引擎的按需下载
+        # （core/routes/panel_switch_policy.py），面板不列；但它们仍可存、可读（上面的 test_saving_the_voice_switches_succeeds 钉着存）。
+        for hidden in (
+            "GALAXY_SPEAK",
+            "GALAXY_LOCAL_AUDIO",
+            "GALAXY_AEC",
+            "GALAXY_AEC_RES",
+            "GALAXY_AEC_COMFORT_NOISE",
+            "GALAXY_KOKORO_AUTOFETCH",
+            "GALAXY_INDEXTTS_AUTOFETCH",
+        ):
             assert hidden not in items
 
 

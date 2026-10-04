@@ -18,8 +18,6 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 
 # .env 文件路径
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
-# 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
-# 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
 from core.routes.config_bundles import (  # noqa: E402
     CONFIG_BUNDLES,
     bundle_writes,
@@ -27,8 +25,12 @@ from core.routes.config_bundles import (  # noqa: E402
     member_keys,
     owned_keys,
 )
+from core.routes.config_restart import any_requires_restart, restart_reason  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS  # noqa: E402
+
+# 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
+# 上面的 CONFIG_SCHEMA 就是 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
 
 __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 
@@ -193,6 +195,9 @@ async def get_config():
             "category": meta["category"],
             "description": meta["description"],
         }
+        reason = restart_reason(key)
+        if reason:
+            result[key]["restart_required"] = reason
         if key in dynamic_options and dynamic_options[key]:
             result[key]["options"] = dynamic_options[key]
         elif "options" in meta:
@@ -603,6 +608,8 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
         "type": meta["type"],
         "key_count": len(owned),
         "overrides": overrides,
+        # 翻这一档会写的键(主键 + 成员)里,有没有「改了要重启才生效」的 —— 面板据此在这一档旁边说出来。
+        "restart_required": any_requires_restart([primary, *sorted(members)]),
     }
     if "options" in meta:
         state["options"] = meta["options"]

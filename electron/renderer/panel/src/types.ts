@@ -129,6 +129,11 @@ export interface Bundle {
    * 否则界面上是一个永远关着、点了也没反应的开关。
    */
   readonly unwired: boolean;
+  /**
+   * 翻这一档会写的键里,有的**改了要重启才生效**(读取点在启动时)。
+   * 后端从 `core/routes/config_restart.py` 现算;面板只负责在这一档旁边说出来,不另存一份。
+   */
+  readonly restartRequired?: boolean;
 }
 
 

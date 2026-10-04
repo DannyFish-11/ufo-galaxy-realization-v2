@@ -70,8 +70,13 @@ def _m(group: str, reason: str) -> SwitchPolicy:
 SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     # ── 声音 ────────────────────────────────────────────────────────────
     "GALAXY_VOICE": _p("声音", "语音总闸：关掉后启动时不起语音循环，麦克风也不占用"),
-    "GALAXY_SPEAK": _p("声音", "朗读回复：有人想只要文字"),
-    "GALAXY_LOCAL_AUDIO": _p("声音", "本机出不出声：可以朗读给别的设备、但不想电脑外放"),
+    "GALAXY_SPEAK": _b(
+        "声音",
+        "朗读回复：默认开，是系统的一项基本能力。想关用面板上「声字同文」那个整档按钮（它的主键就是这个键），不再单列一行",
+    ),
+    "GALAXY_LOCAL_AUDIO": _b(
+        "声音", "本机外放：默认开，是系统的基本能力；「朗读给别的设备、电脑不外放」这种少见组合改 .env"
+    ),
     "GALAXY_AEC": _b(
         "声音",
         "回声消除：把喇叭放出去的声音从麦克风里减掉；关掉 AI 会听见自己说话。没有回环设备的机器上它自己旁通，不需要人去管",
@@ -81,8 +86,12 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
         "「服务现实」门控：本机有没有原生听/说的后端。由本机模型档位（B 档激活时 core/native_modal.py 自动开、"
         "离开时自动关）管着，不是用户的取舍；用户的取舍是选哪一档，以及 GALAXY_NATIVE_AUDIO_CHAT",
     ),
-    "GALAXY_KOKORO_AUTOFETCH": _p("声音", "首次使用时后台下载约 310MB 模型：流量与磁盘的取舍"),
-    "GALAXY_INDEXTTS_AUTOFETCH": _p("声音", "首次使用时后台下载 IndexTTS 模型（体积很大）：流量与磁盘的取舍"),
+    "GALAXY_KOKORO_AUTOFETCH": _o(
+        "声音", "替补引擎 Kokoro 的按需下载：用到它时才在后台拉模型（约 310MB），默认开；不是用户每天要碰的开关"
+    ),
+    "GALAXY_INDEXTTS_AUTOFETCH": _o(
+        "声音", "替补引擎 IndexTTS 的按需下载：体积很大，默认关；要用时先选这个引擎，再改 .env 打开"
+    ),
     "GALAXY_AEC_COMFORT_NOISE": _b("声音", "回声消除的子参数：把压掉的部分填回极低底噪，消除呼吸感；没有理由单独关"),
     "GALAXY_AEC_RES": _b("声音", "回声消除的子参数：线性对消后再压一层非线性残余；没有理由单独关"),
     "GALAXY_TTS_STREAMING": _b("声音", "分句流式朗读（边生成边说）：关掉只会更慢"),
@@ -120,12 +129,18 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     "GALAXY_ACI_ENABLED": _b("记忆与隐私", "预取上下文：纯加速，没有理由关"),
     "GALAXY_FOCUS_STACK_ENABLED": _b("记忆与隐私", "注意力栈（记住刚才在聊什么）：关掉被打断后接不回去"),
     # ── 桌面操作与自治（面板「自主」整档管其中几项）──────────────────────
-    "GALAXY_COMPUTER_USE": _p("桌面操作与自治", "桌面操作闭环（AI 自己点鼠标敲键盘）：整档「自主」管的键，安全相关"),
+    "GALAXY_COMPUTER_USE": _b(
+        "桌面操作与自治",
+        "桌面操作闭环（AI 自己点鼠标敲键盘）：默认开，是系统的基本能力。要不要放手由「自主」那一档（safe / guided / autonomous）决定，不另设开关",
+    ),
     "GALAXY_STOP_KEY": _b(
         "桌面操作与自治",
         "动手时按 Esc 叫停：是安全能力，关掉只会少一道刹车。唯一的例外是个别安全软件把键盘钩子当键盘记录器，那时改 .env 关掉，停止改走面板按钮",
     ),
-    "GALAXY_DURABLE_EXEC": _p("桌面操作与自治", "任务状态落盘、重启接着跑：默认关，开了有写盘开销"),
+    "GALAXY_DURABLE_EXEC": _b(
+        "桌面操作与自治",
+        "任务状态落盘、重启接着跑：默认开，是系统的基本能力（任务不该因为一次重启就丢）。落盘有保留上限，只留要续跑的和它们依赖的",
+    ),
     "GALAXY_CU_MEMORY": _b("桌面操作与自治", "桌面操作记住失败经验：纯正向，没有理由关"),
     "GALAXY_COMPUTER_USE_NATIVE_TOOL": _o(
         "桌面操作与自治", "声明厂商原生 computer 工具：实验特性，要求路由落到特定型号"

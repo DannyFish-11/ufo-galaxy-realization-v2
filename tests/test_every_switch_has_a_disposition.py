@@ -86,11 +86,11 @@ def test_hidden_switches_are_still_registered_so_they_can_be_saved_and_read():
 
 def test_the_panel_only_ever_receives_true_or_false_for_a_switch(monkeypatch):
     """设置页只认字面量 "true" 为开。.env 里手写的 =1 / =on 代码都认作开，面板却显示成关。"""
-    monkeypatch.setenv("GALAXY_LOCAL_AUDIO", "1")
-    monkeypatch.setenv("GALAXY_SPEAK", "OFF")
+    monkeypatch.setenv("GALAXY_VOICE", "1")
+    monkeypatch.setenv("GALAXY_ACTIVE_PERCEPTION", "OFF")
     listed = asyncio.run(get_config())
-    assert listed["GALAXY_LOCAL_AUDIO"]["value"] == "true"
-    assert listed["GALAXY_SPEAK"]["value"] == "false"
+    assert listed["GALAXY_VOICE"]["value"] == "true"
+    assert listed["GALAXY_ACTIVE_PERCEPTION"]["value"] == "false"
     for key, item in listed.items():
         if item["type"] == "boolean":
             assert item["default"] in ("true", "false"), key
@@ -178,3 +178,30 @@ def test_security_posture_is_not_a_row_of_switches_on_the_panel():
     assert (
         "高危" in CONFIG_SCHEMA["GALAXY_HITL_CONFIRM_GATE"]["description"]
     ), "说明要写它真正拦的是高危命令，不是「一切执行」"
+
+
+def test_sound_keeps_only_the_voice_master_and_the_desktop_pair_are_built_in():
+    """所有者的决定：声音只留语音总闸；朗读 / 本机外放内置；两个模型自动下载是替补引擎的按需下载。
+    桌面操作与任务状态落盘都是系统的基本能力，内置、默认开。"""
+    on_panel = [k for k, p in SWITCH_POLICY.items() if p.disposition == PANEL and p.group in ("声音", "桌面操作与自治")]
+    assert on_panel == ["GALAXY_VOICE"]
+    for key in ("GALAXY_SPEAK", "GALAXY_LOCAL_AUDIO", "GALAXY_COMPUTER_USE", "GALAXY_DURABLE_EXEC"):
+        assert SWITCH_POLICY[key].disposition == BUILTIN, key
+        assert CONFIG_SCHEMA[key]["default"] == "true", key
+    for key in ("GALAXY_KOKORO_AUTOFETCH", "GALAXY_INDEXTTS_AUTOFETCH"):
+        assert SWITCH_POLICY[key].disposition == OPS, key
+
+
+def test_durable_exec_registry_default_matches_the_code():
+    """任务状态落盘默认开：登记表与代码一致，「保存设置」才不会把相反的值写进 .env。"""
+    from core.task_graph_checkpoint import durable_exec_enabled
+
+    assert CONFIG_SCHEMA["GALAXY_DURABLE_EXEC"]["default"] == "true"
+    import os
+
+    saved = os.environ.pop("GALAXY_DURABLE_EXEC", None)
+    try:
+        assert durable_exec_enabled() is True
+    finally:
+        if saved is not None:
+            os.environ["GALAXY_DURABLE_EXEC"] = saved

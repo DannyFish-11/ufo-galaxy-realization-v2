@@ -1180,7 +1180,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 20b. 可持久化 DAG 续跑重派（Feature ① 闭环）
     # Step 20 的恢复协调器只产出续跑视图（resume_snapshot）；真正的重派入口
     # TaskGraphRuntime.resume_pending_dispatch 由这里接线。仅在
-    # GALAXY_DURABLE_EXEC 开启时执行（默认关 = 零行为变化）；重派统一走
+    # GALAXY_DURABLE_EXEC 开启时执行（默认开；写 0/false 关）；重派统一走
     # canonical 路径 CommandRouter.route_envelope，且逐节点先过 ② 派发幂等
     # 守卫——崩溃前已派发过的节点绝不二次触发副作用。
     # ====================================================================

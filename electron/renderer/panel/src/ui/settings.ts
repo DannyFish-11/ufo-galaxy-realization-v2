@@ -247,6 +247,11 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
     desc.textContent = item.overridden
       ? `${item.description}（已改过，默认 ${item.defaultValue || '空'}）`
       : item.description;
+    // 改了要重启才生效的**说出来**。没有这句,保存后界面显示已保存、实际要等下次启动才起作用。
+    if (item.restartRequired) {
+      desc.textContent += ' · 重启后生效';
+      desc.title = item.restartRequired;
+    }
     text.append(name, desc);
 
     r.append(text, control(item));

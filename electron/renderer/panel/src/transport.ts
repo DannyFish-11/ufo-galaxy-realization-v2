@@ -377,6 +377,7 @@ function readBundle(raw: unknown): Bundle | null {
     ...(opts && opts.length ? { options: opts } : {}),
     overrides: typeof o['overrides'] === 'number' ? o['overrides'] : 0,
     unwired,
+    ...(o['restart_required'] === true ? { restartRequired: true } : {}),
   };
 }
 
@@ -459,6 +460,11 @@ export interface ConfigItem {
   readonly options?: readonly string[];
   /** 当前值偏离了默认。**这是留痕**,不是装饰。 */
   readonly overridden: boolean;
+  /**
+   * 改了这个键要重启才生效 —— 值是原因(后端 `core/routes/config_restart.py` 给的)。
+   * 没有这条提示时,面板显示「已保存」、实际却要等下次启动才起作用。
+   */
+  readonly restartRequired?: string;
 }
 
 function readConfigItem(key: string, raw: unknown): ConfigItem | null {
@@ -481,6 +487,9 @@ function readConfigItem(key: string, raw: unknown): ConfigItem | null {
     description: str('description'),
     ...(opts && opts.length ? { options: opts } : {}),
     overridden: value !== defaultValue,
+    ...(typeof o['restart_required'] === 'string' && o['restart_required']
+      ? { restartRequired: o['restart_required'] as string }
+      : {}),
   };
 }
 
