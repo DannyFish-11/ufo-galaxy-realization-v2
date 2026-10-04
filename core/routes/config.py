@@ -22,6 +22,7 @@ ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 # 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
 from core.routes.config_bundles import CONFIG_BUNDLES, owned_keys  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
+from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS  # noqa: E402
 
 __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 
@@ -35,14 +36,39 @@ __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 #: 环境变量照读,只是 GET /api/config/all 不列。tests/test_panel_hidden_config_keys.py
 #: 钉住两条:隐藏的开关默认必须在「开」的一侧(否则就是一个用户找不到、又默认关着的
 #: 功能);GALAXY_META_RSI 永远不许隐藏 —— 它是自我改进循环的总闸。
-PANEL_HIDDEN_KEYS = frozenset(
-    {
-        "GALAXY_AGENT_SUPPLY",  # 默认 on:声明了需求的 Agent 按需求选脑
-        "GALAXY_GENOME",  # 留空 = 元层指针或 default
-        "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
-        "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
-    }
+#:
+#: 布尔开关里哪些该列、哪些不该，唯一清单在 core/routes/panel_switch_policy.py：``builtin``（不该有人去关的
+#: 内部机制）与 ``ops``（开发 / 运维 / 打包 / 测试用的逃生口）都不列，``panel``（用户真有取舍）才列。
+PANEL_HIDDEN_KEYS = (
+    frozenset(
+        {
+            "GALAXY_AGENT_SUPPLY",  # 默认 on:声明了需求的 Agent 按需求选脑
+            "GALAXY_GENOME",  # 留空 = 元层指针或 default
+            "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
+            "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
+        }
+    )
+    | PANEL_HIDDEN_SWITCH_KEYS
 )
+
+
+_TRUE_TEXT = frozenset({"1", "true", "yes", "on"})
+_FALSE_TEXT = frozenset({"0", "false", "no", "off", ""})
+
+
+def _bool_text(value: object) -> str:
+    """布尔开关在面板上的取值一律写成 ``true`` / ``false``。
+
+    设置页只认字面量 ``"true"`` 为开 —— 而 .env 里手写的 ``=1`` / ``=on`` / ``=yes``、或登记表里写成
+    ``1`` 的默认值，代码都认作开。于是实际开着的开关在面板上显示成关，点一下还会被"关"成 ``false``。
+    认不出的值原样返回，不替人猜。
+    """
+    text = str(value).strip().lower()
+    if text in _TRUE_TEXT:
+        return "true"
+    if text in _FALSE_TEXT:
+        return "false"
+    return str(value)
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -152,9 +178,11 @@ async def get_config():
     for key, meta in CONFIG_SCHEMA.items():
         if key in PANEL_HIDDEN_KEYS:
             continue  # 登记了、能存能读,只是不列在面板上(见 PANEL_HIDDEN_KEYS)
+        is_bool = meta["type"] == "boolean"
+        value = os.environ.get(key, meta["default"])
         result[key] = {
-            "value": os.environ.get(key, meta["default"]),
-            "default": meta["default"],
+            "value": _bool_text(value) if is_bool else value,
+            "default": _bool_text(meta["default"]) if is_bool else meta["default"],
             "type": meta["type"],
             "category": meta["category"],
             "description": meta["description"],

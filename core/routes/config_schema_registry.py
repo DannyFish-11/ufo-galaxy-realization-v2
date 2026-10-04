@@ -227,7 +227,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         ),
     },
     "GALAXY_CONSENSUS_ROUND": {
-        "default": "1",
+        "default": "true",
         "type": "boolean",
         "category": "advanced",
         "description": (
@@ -623,10 +623,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "options": ["normal", "strict", "skip"],
     },
     "GALAXY_PREFLIGHT_FAIL_FAST": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "advanced",
-        "description": "启动前检查一失败就停（默认关=能降级就继续起）",
+        "description": "预检命令行：检查一失败就以非零退出（默认开；关掉相当于 --dry-run）。不影响正常启动",
     },
     "GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK": {
         "default": "false",
@@ -635,10 +635,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "允许回落旧调度器（迁移期兜底 · 默认关）",
     },
     "GALAXY_ENTRYMODE_USE_READINESS": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "advanced",
-        "description": "入口按「就绪度」判定（而不是只看进程在不在 · 默认开）",
+        "description": "入口按「就绪度」判定的实验路径（而不是只看进程在不在 · 默认关）",
     },
     "CMD_MAX_CONCURRENT": {
         "default": "50",
@@ -1175,8 +1175,8 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         ),
     },
     "GALAXY_COMPUTER_USE_NATIVE_TOOL": {
-        "default": "0",
-        "type": "bool",
+        "default": "false",
+        "type": "boolean",
         "category": "agent",
         "description": (
             "规划下一步动作时,是否向厂商声明**原生 computer 工具**(Anthropic 内建工具)。"
@@ -1796,7 +1796,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         ),
     },
     "GALAXY_IGNORE_CONTEXT_MEASUREMENTS": {
-        "default": "",
+        "default": "false",
         "type": "boolean",
         "category": "agent",
         "description": ("忽略本机实测的 KV 单价(排障用 · 打开后上下文只按目录声明算，" "不再按实测放开)"),
@@ -2099,10 +2099,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 所以一句话能召回它们 —— 但字节在摄入完就被删了(metadata 里那个 media_path
     # 指向一个保证已不存在的临时文件),召回之后没有任何东西能把画面拿回来。
     "GALAXY_MEMORY_MEDIA": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "memory",
-        "description": "把记忆里的截图/录音真的存下来（关掉=只留向量，能搜到但看不到原件 · 默认开）",
+        "description": "把记忆里的截图/录音真的存下来（关掉=只留向量，能搜到但看不到原件 · 默认关）",
     },
     "GALAXY_MEMORY_MEDIA_MB": {
         "default": "512",
