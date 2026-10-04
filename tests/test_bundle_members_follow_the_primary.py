@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 
@@ -117,12 +118,18 @@ class TestWhatFlippingTheButtonWrites:
 
 @pytest.fixture
 def isolated_env(monkeypatch, tmp_path):
+    """``update_config`` 直接写 ``os.environ``(当次即时生效),所以这里必须整个还原 ——
+    只靠 ``monkeypatch.delenv`` 不够:键本来不在环境里时它什么都不记,写进去的值就会一直留着,
+    把同一个进程里后面的测试(比如设备接入平面认 ``GALAXY_ONBOARDING_ENABLED``)带红。"""
+    saved = dict(os.environ)
     monkeypatch.setattr(cfg, "ENV_FILE", tmp_path / ".env")
     for bundle in CONFIG_BUNDLES:
         # 整个 owns 都清掉:别的测试/conftest 留在环境里的键会被数成「手改过」。
         for key in owned_keys(bundle, CONFIG_SCHEMA.keys()):
-            monkeypatch.delenv(key, raising=False)
-    return tmp_path / ".env"
+            os.environ.pop(key, None)
+    yield tmp_path / ".env"
+    os.environ.clear()
+    os.environ.update(saved)
 
 
 class TestTheEndpointWritesThemTogether:
@@ -135,7 +142,7 @@ class TestTheEndpointWritesThemTogether:
             "GALAXY_MDNS",
             "GALAXY_NATS_ENABLED",
         ):
-            assert cfg.os.environ[key] == "false", key
+            assert os.environ[key] == "false", key
         written = isolated_env.read_text(encoding="utf-8")
         assert "GALAXY_NATS_ENABLED=false" in written and "GALAXY_MDNS=false" in written
         assert state["value"] == "false"
@@ -144,19 +151,19 @@ class TestTheEndpointWritesThemTogether:
     def test_turning_it_back_on_restores_defaults_without_enabling_opt_ins(self, isolated_env) -> None:
         asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="false")))
         state = asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="true")))["bundle"]
-        assert cfg.os.environ["GALAXY_CROSS_DEVICE_ENABLED"] == "true"
-        assert cfg.os.environ["GALAXY_NATS_ENABLED"] == "true"
-        assert cfg.os.environ["GALAXY_LAN_DISCOVERY"] == "true"
-        assert "GALAXY_MASTER_BRAIN_ENABLED" not in cfg.os.environ, "主脑是 opt-in,按钮不碰"
-        assert "FEDERATION_ENABLED" not in cfg.os.environ
+        assert os.environ["GALAXY_CROSS_DEVICE_ENABLED"] == "true"
+        assert os.environ["GALAXY_NATS_ENABLED"] == "true"
+        assert os.environ["GALAXY_LAN_DISCOVERY"] == "true"
+        assert "GALAXY_MASTER_BRAIN_ENABLED" not in os.environ, "主脑是 opt-in,按钮不碰"
+        assert "FEDERATION_ENABLED" not in os.environ
         assert state["overrides"] == 0
 
     def test_the_omnimodal_button_carries_the_ambient_session_preference(self, isolated_env) -> None:
         asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="omnimodal", value="false")))
-        assert cfg.os.environ["GALAXY_AMBIENT_LOOP"] == "false"
-        assert cfg.os.environ["GALAXY_AMBIENT_SHARE_SESSION"] == "false"
+        assert os.environ["GALAXY_AMBIENT_LOOP"] == "false"
+        assert os.environ["GALAXY_AMBIENT_SHARE_SESSION"] == "false"
         asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="omnimodal", value="true")))
-        assert cfg.os.environ["GALAXY_AMBIENT_SHARE_SESSION"] == "true"
+        assert os.environ["GALAXY_AMBIENT_SHARE_SESSION"] == "true"
 
     def test_a_member_hand_edited_against_the_primary_shows_up_as_a_deviation(self, isolated_env, monkeypatch) -> None:
         asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="false")))
