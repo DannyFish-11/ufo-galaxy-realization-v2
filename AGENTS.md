@@ -46,6 +46,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/device_registry.py` - 设备注册和发现
 - `core/device_communication.py` - 设备通信协议
 - `core/device_control_service.py` - 设备控制服务
+- **多机模式**（跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent）是**一个模块**，四层 + 共用 NATS 底座，定义见 `docs/MULTI_MACHINE_MODE.md`：
+  派发走 `CommandRouter.route_envelope()` 按 `executor_target_type` 分三条路（`local` / `android_device`·`node_service` → 网关 `DeviceRouter` / `go_worker` → `MasterBrain` → NATS → worker）。
+  `GALAXY_MASTER_BRAIN_ENABLED` 默认关，一开启动序列拉起主脑、worker 消费循环、MCP over NATS。文档第六节记着已查出但**没动**的不一致（保存设置会改变多机行为的两条、核心入口没查跨设备开关等）
 
 ### 扩展系统
 - `core/mcp_loader.py` - MCP 服务器加载器

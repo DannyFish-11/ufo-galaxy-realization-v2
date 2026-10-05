@@ -342,6 +342,13 @@ python scripts/check_assessment_freshness.py
 （opt-in 不替人打开）；一次落盘（`POST /api/config/bundles`）。成员相对主键偏离时按钮显示「有偏离」。验证：`tests/test_bundle_members_follow_the_primary.py`。
 **没有并**的（各有隐私/花费/暴露面的理由，列在 PANEL_SWITCHES.md 末尾）：系统声送进模型、听/朗读/本机外放、每轮发不发录音、主脑/联邦/WebRTC/Funnel 这些默认关的 opt-in、主动感知 —— 并了会替用户悄悄改一个选择。
 
+### 6.7 2026-10-05：多机模式整体定义（只记录，没有动代码）
+
+所有者要求把「跨设备 + 多设备并行 + 建立在两者之上的 NATS Agent 与任务派发分配」作为**一个模块**处理。定义、四层模型、一个任务怎么走完、各层配置键
+（含 18 个只在代码里读、没登记的环境变量）/ 模块 / 接口、查出的不一致，都在 **[MULTI_MACHINE_MODE.md](MULTI_MACHINE_MODE.md)**（键表由 `scripts/gen_multi_machine_map.py` 生成）。
+**没有合并任何开关、没有改任何行为。** 其中两条会让「保存设置」悄悄改变多机行为，等所有者定要不要修：
+`GALAXY_NATS_URL` 登记默认非空而 `.env.example` 特意留空（保存后运行模式会被推成跨设备）；7 个数字 / 取值的登记默认与代码默认不一致（主脑缩放复评间隔 300 vs 15 等）。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
