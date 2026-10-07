@@ -26,6 +26,9 @@
 面板上切换模式的只有「跨设备」这一个按钮，它同时写这两个键（`config_bundles.py` 的 `mirrors`），「运行模式」下拉框不再列在面板上。
 `GALAXY_NATS_URL` **不参与**：它只说总线在哪；本地模式下把它指向别的机器，启动会说一句「要用别的设备请打开跨设备」，不替人切模式。
 
+**本地模式不往别的设备下发**：每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、网关的单设备下发、智能体的 `devices__invoke`）
+在本地模式下一律返回 `cross_device_disabled`，并告诉人 / 模型怎么办（打开「跨设备」；智能体可调 `devices__request_cross_device` 请用户同意）；设备仍可以配对、连上、出现在名册里。
+
 **主脑只在跨设备模式里起**（`core.system_mode.master_brain_requested`）：主脑开关开着、却在本地模式 → 主脑与 worker 不起，启动日志说出原因；
 `CommandRouter` 的 `go_worker` 路径此时返回 `WORKER_DISPATCH_UNAVAILABLE`，设备路径被网关 `DeviceRouter` 的两处入口拒绝（`cross_device_disabled`）。
 
@@ -307,8 +310,14 @@ Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocke
    | `GALAXY_TAILSCALE_CHECK_INTERVAL` | 60 | 30 |
 
    `tests/test_multi_machine_registry_defaults_match_the_code.py` 从读取点的源码里读默认值，与登记表逐个核对。
-3. ~~核心的 `/devices/parallel`、`/devices/cross-device` 与 `CommandRouter` 没查跨设备开关。~~ 核对：它们不需要自己查 —— 设备路径在网关 `DeviceRouter` 的两处入口被同一个开关（同一条模式规则）拒绝，
-   `go_worker` 路径在主脑没起时返回 `WORKER_DISPATCH_UNAVAILABLE`（现在主脑只在跨设备模式里起）。`tests/test_master_brain_runs_only_in_cross_device_mode.py` 钉住。
+3. ~~核心的 `/devices/parallel`、`/devices/cross-device` 与 `CommandRouter` 没查跨设备开关。~~ **这一条曾被我误判成「下层已经拦了、不需要查」，真机实测推翻了它**：
+   起真服务器、用真的设备客户端（`device_client`，真 WebSocket，真配对）连上两台设备，本地模式下 `/devices/parallel` 把命令送到了两台设备并执行 ——
+   并行拆出的每台设备走命令路由的设备执行桥（`_command_node_executor`），直接 `send_to_device`；网关 `DeviceRouter` 只在「分析出要跨设备」与多设备协同两处查开关，
+   显式指定一台目标的单设备下发（`dispatch_task`）也不查。现在 **五处入口统一拒绝**（`core.system_mode.cross_device_refusal`，错误码与网关同为 `cross_device_disabled`，并告诉人 / 模型怎么办）：
+   `DeviceRouter.dispatch_task`、命令路由的设备执行桥、`POST /api/v1/devices/{id}/command`、智能体的 `devices__invoke`（讲 AIP 的设备；桥接的智能家居与驱动节点不在此列）、
+   以及它们的上游 `/devices/parallel`、`/devices/cross-device`（经前两处）。`go_worker` 路径在主脑没起时返回 `WORKER_DISPATCH_UNAVAILABLE`。
+   按钮一翻，下一条命令即放行（网关路由随时读开关，不用重启）。`tests/test_local_mode_does_not_reach_other_devices.py`、`test_local_mode_never_sends_commands_to_other_devices.py`、
+   `test_master_brain_runs_only_in_cross_device_mode.py` 钉住。
 4. ~~`galaxy_gateway/cross_device_switch.py` 文件开头的说明过期（写「默认开」）。~~ 已改成实际行为（缺省关、读 `cross_device_requested`）。
 5. ~~「多设备总开关」叫法不一、主脑不检查跨设备开关。~~ 主脑现在要在跨设备模式里才起；面板上叫「跨设备」的就是模式的切换点。
 6. ~~`GALAXY_NATS_EXECUTOR_FALLBACK` 登记成 `sync / async / reject` 三选一，代码只把它当开关读（选 `reject` 实际是开着回退）。~~ 现在 `reject`（以及 `false` / `0`）真的不退回、`sync`（以及 `true` / 空）退回本机执行；
