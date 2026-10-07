@@ -319,6 +319,9 @@ def cross_device_refusal(trace_id: Optional[str] = None) -> Optional[dict]:
         "message": "当前是本地模式(只用本机),没有向别的设备下发。要用别的设备,请先打开「跨设备」。",
         "how_to_fix": "面板「跨设备」按钮打开(要重启才完全生效);智能体可调 devices__request_cross_device 请用户同意。",
     }
+    out["result"] = (
+        f"{out['message']} {out['how_to_fix']}"  # 工具循环只把 result / error 交给模型:让它读到下一步该怎么办
+    )
     if trace_id:
         out["trace_id"] = trace_id
     return out

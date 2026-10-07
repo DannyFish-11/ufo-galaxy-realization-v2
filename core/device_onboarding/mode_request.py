@@ -38,9 +38,11 @@ MODE_BUILTIN_TOOLS: List[Dict[str, Any]] = [
             "description": (
                 "The system is in local mode: it only uses this computer, so the user's phone, watch and other "
                 "computers cannot be used yet. Call this to ASK the user whether to turn on cross-device mode. "
-                "You cannot turn it on yourself — the user decides: relay the question this returns (ask_user) "
-                "word for word, and when they have answered call this again with no arguments. It takes effect "
-                "after a restart; say so. Only call it when the user actually wants another device used."
+                "You cannot turn it on yourself — only the user decides. The first call returns the question to "
+                "put to the user: ask it (in the user's language) and stop; do NOT call again in the same turn. "
+                "When the user has answered yes in a later message, call it again with no arguments. It takes "
+                "effect after a restart; tell the user so. Only call it when the user actually wants another "
+                "device used."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -71,11 +73,8 @@ async def _request_cross_device(session_id: str) -> Dict[str, Any]:
     from core.system_mode import cross_device_requested
 
     if cross_device_requested():
-        return {
-            "success": True,
-            "already": True,
-            "message": "已经是跨设备模式(如果刚打开,要重启才完全生效)。",
-        }
+        text = "已经是跨设备模式(如果刚打开,要重启才完全生效)。"
+        return {"success": True, "already": True, "message": text, "result": text}
 
     turn_id, source, _text = _current_turn()
     if not turn_id or source not in HUMAN_REQUEST_SOURCES:
@@ -87,17 +86,20 @@ async def _request_cross_device(session_id: str) -> Dict[str, Any]:
 
     stop = await _ask(WHAT, session_id)
     if stop:
-        return stop
+        # 工具循环只把 result / error 交给模型:把要问的话放进 error,否则模型只看到「需要确认」四个字,不知道确认什么。
+        return {**stop, "error": stop.get("error") or stop.get("ask_user", "")}
 
     from core.routes.config import BundleUpdateRequest, set_bundle
 
     out = await set_bundle(BundleUpdateRequest(key="cross_device", value="true"))
     bundle = out.get("bundle", {})
     logger.info("[AUDIT] 跨设备模式已打开 | 批准=用户(对话/手表确认) | 回合=%s 来源=%s", turn_id, source)
+    tell_user = "已打开跨设备模式。要重启一次才完全生效(消息总线、桌面在场要重启才按跨设备模式起);我不会替你重启。"
     return {
         "success": True,
         "enabled": True,
         "restart_required": True,
         "bundle": {k: bundle.get(k) for k in ("key", "value", "overrides", "restart_required")},
-        "tell_user": "已打开跨设备模式。要重启一次才完全生效(消息总线、桌面在场要重启才按跨设备模式起);我不会替你重启。",
+        "tell_user": tell_user,
+        "result": tell_user,
     }

@@ -286,3 +286,27 @@ def test_the_request_tool_survives_the_tool_table_being_trimmed():
     kept = {t["function"]["name"] for t in slim_tools(tools, "用我的手机拍一张照", max_tools=24)}
     assert TOOL in kept
     assert len(kept) == 24
+
+
+def test_what_the_tool_loop_shows_the_model_is_enough_to_act_on(env):
+    """真机实测：工具循环只把 ``result`` / ``error`` 交给模型。需要确认时只剩一句「不要重试，交给用户决定」，
+    要问什么、批准后发生了什么、被拒后怎么办，都得写进这两个字段。"""
+
+    def shown(out: dict) -> str:  # 与 OpenClawd._react_loop 同一个取法
+        return str(out.get("result", out.get("error", "")))
+
+    asked = _ask(_turn("用我的手机拍一张照"))
+    assert "跨设备模式" in shown(asked) and "好" in shown(asked), "模型得知道要问用户什么"
+    approved = _ask(_turn("好"))
+    assert "重启" in shown(approved), "批准之后模型要能告诉用户「要重启」"
+    again = _ask(_turn("再来"))
+    assert "已经是跨设备模式" in shown(again)
+
+
+def test_the_refusal_tells_the_model_the_next_step():
+    from core.system_mode import cross_device_refusal
+
+    out = cross_device_refusal()
+    shown = str(out.get("result", out.get("error", "")))
+    assert "devices__request_cross_device" in shown and "本地模式" in shown
+    assert out["error"] == "cross_device_disabled", "REST / 网关消费的仍是稳定的错误码"
