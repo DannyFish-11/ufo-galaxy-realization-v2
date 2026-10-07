@@ -31,7 +31,11 @@ logger = logging.getLogger("Galaxy.ContextTrim")
 #
 # ``context__`` 在列是有讲究的:``slim_tools`` 在**工具表过大**时才裁,而工具表过大
 # 恰恰是最需要上下文管理的时刻。把它裁掉等于"窗口越紧,模型越没法自救"——方向反了。
-_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__")
+#
+# ``devices__request_cross_device`` 同理:本地模式下它是模型「想用别的设备却用不了」时唯一的出路(请求人打开
+# 跨设备模式)。工具表一超 24 个、请求又是中文,它在按词法相关性裁时得 0 分被裁掉 —— 真机实测:模型一直
+# 看不到它。它只在本地模式出现、只有一个,常驻的代价可以忽略。
+_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__", "devices__request_cross_device")
 
 
 def _env_int(name: str, default: int) -> int:

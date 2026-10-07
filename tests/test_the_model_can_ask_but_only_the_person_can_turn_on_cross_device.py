@@ -270,3 +270,19 @@ def test_there_is_no_way_to_turn_it_off_or_change_anything_else_through_it(env):
     _ask(_turn("好"), {"GALAXY_MASTER_BRAIN_ENABLED": "true", "GALAXY_NATS_URL": "nats://evil:4222"})
     assert os.environ.get("GALAXY_MASTER_BRAIN_ENABLED") != "true"
     assert not os.environ.get("GALAXY_NATS_URL")
+
+
+def test_the_request_tool_survives_the_tool_table_being_trimmed():
+    """真机实测：工具表超过 24 个时，按词法相关性裁，中文请求对英文描述的这个工具得 0 分 —— 模型看不到它。
+    它是本地模式下「想用别的设备却用不了」的唯一出路，列入核心工具永不裁。"""
+    from core.context_trim import slim_tools
+    from core.device_onboarding.mode_request import MODE_BUILTIN_TOOLS
+
+    filler = [
+        {"type": "function", "function": {"name": f"filler__{i}", "description": f"unrelated tool number {i}"}}
+        for i in range(40)
+    ]
+    tools = filler + list(MODE_BUILTIN_TOOLS)
+    kept = {t["function"]["name"] for t in slim_tools(tools, "用我的手机拍一张照", max_tools=24)}
+    assert TOOL in kept
+    assert len(kept) == 24
