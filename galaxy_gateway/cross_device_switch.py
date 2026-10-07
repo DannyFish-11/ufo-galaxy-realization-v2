@@ -4,21 +4,18 @@ Cross-Device Switch — Feature Flag Module
 
 Provides the single, authoritative cross-device switch for the Galaxy Gateway.
 
-When the switch is **OFF** all cross-device routing paths (task routing,
-WS/WebRTC signaling) are rejected immediately with structured error responses
-and log entries that include the ``trace_id`` so operators can correlate
-failures across the system.
+When the switch is **OFF** (the factory default — local mode) all cross-device
+routing paths (task routing, WS/WebRTC signaling) are rejected immediately with
+structured error responses and log entries that include the ``trace_id`` so
+operators can correlate failures across the system.
 
-When the switch is **ON** (the default) all cross-device paths operate
-normally, respecting AIP v3 + trace/route_mode and capability-registry flows
-introduced in prior rounds.
+When the switch is **ON** all cross-device paths operate normally, respecting
+AIP v3 + trace/route_mode and capability-registry flows introduced in prior rounds.
 
-Environment variable
---------------------
-GALAXY_CROSS_DEVICE_ENABLED
-    Set to ``0``, ``false``, or ``no`` (case-insensitive) to disable
-    cross-device routing.  Any other value (or absence of the variable) is
-    treated as **enabled**.
+What "ON" means is decided in exactly one place:
+:func:`core.system_mode.cross_device_requested` — ``GALAXY_CROSS_DEVICE_ENABLED``
+true *or* ``GALAXY_SYSTEM_MODE=desktop-cross-device``.  This module does not
+derive it again.
 
 Error codes / messages (switch OFF)
 ------------------------------------
@@ -37,7 +34,6 @@ one place per entry-point, not scattered across callers.
 """
 
 import logging
-import os
 import uuid
 from typing import Any, Dict, Optional
 
@@ -68,17 +64,17 @@ ERROR_MSG_CROSS_DEVICE_DISABLED: str = "Cross-device routing is disabled by serv
 def is_cross_device_enabled() -> bool:
     """Return ``True`` when cross-device routing is **enabled**.
 
-    Reads ``GALAXY_CROSS_DEVICE_ENABLED`` at call-time so the switch can be
-    toggled without restarting the process (useful for tests).
+    Reads the environment at call-time so the switch can be toggled without
+    restarting the process (useful for tests).
 
-    Default: **disabled** (opt-in). Cross-device routing is only enabled on an
-    explicit ``1 / true / yes``. This matches the mode/presence/health layers
-    (system_mode, desktop_presence_runtime, system_orchestrator), which all
-    treat the variable as opt-in — previously this guard defaulted *enabled*,
-    admitting requests the rest of the system considered disabled (fail-open).
+    Default: **disabled** (opt-in; local mode).  The answer comes from
+    :func:`core.system_mode.cross_device_requested` — the same one the startup
+    orchestrator, the desktop presence runtime and the health check use, so the
+    layers can no longer disagree about which mode the system is in.
     """
-    raw = os.getenv("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower()
-    return raw in ("1", "true", "yes")
+    from core.system_mode import cross_device_requested
+
+    return cross_device_requested()
 
 
 def guard_cross_device(trace_id: Optional[str] = None) -> None:

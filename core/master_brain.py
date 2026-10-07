@@ -21,7 +21,6 @@ import asyncio
 import json
 import logging
 import os
-import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -29,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from core.acl import AntiCorruptionLayer, acl
+from core.master_brain_state import default_state_path
 from core.nats_bus import NATSBus, nats_bus
 from core.schemas.contracts import (
     TaskDispatchModel,
@@ -38,6 +38,10 @@ from core.schemas.contracts import (
     WorkerRegistrationModel,
     WorkerShutdownModel,
 )
+
+# 主脑开关开着且在跨设备模式里才算启用(跨设备是多设备的前提);同一个判据,见 core/system_mode.py
+from core.system_mode import master_brain_idle_status  # noqa: E402,F401
+from core.system_mode import master_brain_requested as master_brain_enabled  # noqa: E402,F401
 
 logger = logging.getLogger("master_brain")
 
@@ -69,16 +73,6 @@ _SCALING_REEVAL_INTERVAL_S = max(
     5.0,
     float(os.environ.get("GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S", "15.0") or 15.0),
 )
-
-
-def _env_flag(name: str) -> bool:
-    """Parse common truthy environment values consistently across entry points."""
-    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def master_brain_enabled() -> bool:
-    """Return whether the distributed MasterBrain runtime is explicitly enabled."""
-    return _env_flag("GALAXY_MASTER_BRAIN_ENABLED")
 
 
 class MasterBrain:
@@ -117,11 +111,7 @@ class MasterBrain:
             "action": "no_change",
             "reason": "not_evaluated",
         }
-        self._state_path = Path(
-            state_path
-            or os.environ.get("GALAXY_MASTER_BRAIN_STATE_PATH")
-            or (Path(tempfile.gettempdir()) / "galaxy_master_brain_state.json")
-        )
+        self._state_path = Path(state_path) if state_path else default_state_path()
         self._load_state()
         self._recover_incomplete_state()
 

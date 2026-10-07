@@ -1461,7 +1461,11 @@ class TestNATSConnected:
         old_master_brain = master_brain_module._master_brain
         old_instance = master_brain_module.MasterBrain._instance
         try:
-            with patch.dict(os.environ, {"GALAXY_MASTER_BRAIN_ENABLED": flag_value}, clear=False):
+            with patch.dict(
+                os.environ,
+                {"GALAXY_MASTER_BRAIN_ENABLED": flag_value, "GALAXY_CROSS_DEVICE_ENABLED": "true"},
+                clear=False,
+            ):
                 master_brain_module._master_brain = None
                 master_brain_module.MasterBrain._instance = None
                 assert master_brain_module.master_brain_enabled() is True

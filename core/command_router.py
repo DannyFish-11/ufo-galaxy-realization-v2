@@ -5432,7 +5432,7 @@ class NATSExecutor:
         command_router.set_executor(nats_exec)  # register as executor
 
     Env vars:
-        GALAXY_NATS_EXECUTOR_FALLBACK  — "true"/"false" (default "true")
+        GALAXY_NATS_EXECUTOR_FALLBACK  — "sync"/"true" (default): fall back locally; "reject"/"false"/"0": refuse
         GALAXY_NATS_EXECUTOR_TIMEOUT   — per-task NATS timeout in seconds (default 30)
     """
 
@@ -5444,10 +5444,8 @@ class NATSExecutor:
     ) -> None:
         self._fallback = fallback_executor
         if fallback_enabled is None:
-            self._fallback_enabled = os.environ.get("GALAXY_NATS_EXECUTOR_FALLBACK", "true").lower() not in (
-                "false",
-                "0",
-            )
+            _mode = os.environ.get("GALAXY_NATS_EXECUTOR_FALLBACK", "sync").strip().lower()
+            self._fallback_enabled = _mode not in ("false", "0", "reject")
         else:
             self._fallback_enabled = fallback_enabled
         self._timeout_s = timeout_s

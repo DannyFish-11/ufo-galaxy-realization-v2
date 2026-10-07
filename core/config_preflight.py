@@ -223,10 +223,10 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_CROSS_DEVICE_ENABLED",
         severity=Severity.INFO,
-        description="要不要把任务路由到别的设备上(默认跟着 GALAXY_SYSTEM_MODE 走)。",
+        description="要不要把任务路由到别的设备上(跨设备模式开关;面板「跨设备」按钮写的就是它)。",
         hint=(
-            "填 true/false 可以强行指定(false = 只用本机,最保险的默认);"
-            "设了 GALAXY_SYSTEM_MODE 的话会自动跟着它推导。"
+            "true = 跨设备模式,false/不填 = 本地模式(只用本机,最保险的默认);"
+            "GALAXY_SYSTEM_MODE=desktop-cross-device 也算跨设备,任一处明确选了跨设备就是跨设备。"
         ),
         groups=["gateway", "all"],
     ),

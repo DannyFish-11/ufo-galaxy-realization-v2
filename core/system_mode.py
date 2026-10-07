@@ -52,11 +52,19 @@ Environment Variables (canonical config contract)
     Default: ``local``.
 
 ``GALAXY_CROSS_DEVICE_ENABLED``
-    ``false`` | ``true`` (or ``0``/``1``).  Alias understood by the legacy
-    gateway switch.  When the explicit ``GALAXY_SYSTEM_MODE`` is absent this
-    variable participates in mode derivation: ``true``/``1`` implies
-    ``desktop-cross-device``.
+    ``false`` | ``true`` (or ``0``/``1``).  The panel's "跨设备" button writes
+    this key (and ``GALAXY_SYSTEM_MODE`` with it, so the two never disagree).
     Default: derived from ``GALAXY_SYSTEM_MODE``.
+
+**One rule decides the mode** (:func:`cross_device_requested`): the system is in
+``desktop-cross-device`` when *either* ``GALAXY_SYSTEM_MODE`` says
+``desktop-cross-device`` *or* ``GALAXY_CROSS_DEVICE_ENABLED`` is true.  "Local" is the
+factory default, so seeing it in a file (``.env.example`` ships it, "save settings"
+writes it) is not a choice and never overrides an explicit opt-in anywhere else.
+The startup orchestrator, the gateway switch, the desktop presence runtime and the
+startup health check all call that one function instead of deriving the answer again.
+``GALAXY_NATS_URL`` does **not** take part: it says *where* the bus is, not *which
+mode* the system runs in.
 
 ``GALAXY_TAILSCALE_ENABLED``
     ``false`` | ``true``.  Marks that the host has Tailscale available.
@@ -239,27 +247,106 @@ def _parse_bool(value: str, default: bool) -> bool:
 def _resolve_mode(env: Optional[str], cross_device_env: Optional[str]) -> SystemMode:
     """Derive the canonical :class:`SystemMode` from raw env strings.
 
-    ``GALAXY_SYSTEM_MODE`` takes priority.  When absent,
-    ``GALAXY_CROSS_DEVICE_ENABLED=1/true/yes`` implies
-    ``desktop-cross-device``; all other values default to
-    ``desktop-local``.
+    Cross-device when *either* ``GALAXY_SYSTEM_MODE=desktop-cross-device`` *or*
+    ``GALAXY_CROSS_DEVICE_ENABLED=1/true/yes/on``; otherwise local.  An explicit
+    ``desktop-local`` is the factory default and does not override the other key.
     """
     if env:
         normalized = env.strip().lower()
         if normalized == SystemMode.DESKTOP_CROSS_DEVICE.value:
             return SystemMode.DESKTOP_CROSS_DEVICE
-        if normalized == SystemMode.DESKTOP_LOCAL.value:
-            return SystemMode.DESKTOP_LOCAL
-        logger.warning("Unknown GALAXY_SYSTEM_MODE=%r; falling back to 'desktop-local'", env)
+        if normalized != SystemMode.DESKTOP_LOCAL.value:
+            logger.warning("Unknown GALAXY_SYSTEM_MODE=%r; falling back to 'desktop-local'", env)
 
-    # Fallback: infer from legacy GALAXY_CROSS_DEVICE_ENABLED
-    if cross_device_env is not None:
-        if cross_device_env.strip().lower() in _TRUTHY:
-            return SystemMode.DESKTOP_CROSS_DEVICE
-        if cross_device_env.strip().lower() in _FALSY:
-            return SystemMode.DESKTOP_LOCAL
+    if cross_device_env is not None and cross_device_env.strip().lower() in _TRUTHY:
+        return SystemMode.DESKTOP_CROSS_DEVICE
 
     return SystemMode.DESKTOP_LOCAL
+
+
+def cross_device_requested(environ: Optional[dict] = None) -> bool:
+    """Is this system in cross-device mode?  **The** answer — nobody derives it again.
+
+    Reads the environment at call time (the gateway switch is toggled live and
+    tests monkeypatch it), using the same rule as :func:`resolve_fabric_config`.
+    """
+    env = environ if environ is not None else os.environ
+    mode = _resolve_mode(env.get("GALAXY_SYSTEM_MODE") or None, env.get("GALAXY_CROSS_DEVICE_ENABLED"))
+    return mode == SystemMode.DESKTOP_CROSS_DEVICE
+
+
+def master_brain_wanted(environ: Optional[dict] = None) -> bool:
+    """``GALAXY_MASTER_BRAIN_ENABLED`` 写成了开 —— 不管当前是什么模式。"""
+    env = environ if environ is not None else os.environ
+    return str(env.get("GALAXY_MASTER_BRAIN_ENABLED", "")).strip().lower() in _TRUTHY
+
+
+def master_brain_requested(environ: Optional[dict] = None) -> bool:
+    """主脑 / worker 该不该起：主脑开关开着，**并且**在跨设备模式里。
+
+    跨设备是多设备的前提：本地模式下没有别的设备可调度，主脑与 worker 不起。
+    开关开着却在本地模式 —— 那是一个没生效的配置，不是悄悄忽略：``master_brain_waiting_for_mode``
+    让启动序列把它说出来。
+    """
+    return master_brain_wanted(environ) and cross_device_requested(environ)
+
+
+def master_brain_waiting_for_mode(environ: Optional[dict] = None) -> bool:
+    """主脑开关开着、但当前是本地模式，所以没起。"""
+    return master_brain_wanted(environ) and not cross_device_requested(environ)
+
+
+def master_brain_idle_status(log: logging.Logger) -> str:
+    """主脑没起时启动序列要记的状态；开关开着却在本地模式 → 说出来（不悄悄忽略一个写了的配置）。"""
+    if master_brain_waiting_for_mode():
+        log.warning("主脑开关已开,但当前是本地模式(只用本机)—— 主脑与 worker 不起;要用请先打开「跨设备」")
+        return "waiting_for_cross_device_mode"
+    return "disabled"
+
+
+def cross_device_refusal(trace_id: Optional[str] = None) -> Optional[dict]:
+    """本地模式下，往别的设备下发命令的统一拒绝；跨设备模式下返回 ``None``（放行）。
+
+    本地模式只用这台电脑。每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、
+    智能体的 ``devices__invoke``、网关的单设备下发）都调它，说法一致：``error == "cross_device_disabled"``
+    （与网关 ``galaxy_gateway.cross_device_switch`` 同一个错误码），并告诉人 / 模型怎么办。
+    """
+    if cross_device_requested():
+        return None
+    out = {
+        "success": False,
+        "error": "cross_device_disabled",
+        "message": "当前是本地模式(只用本机),没有向别的设备下发。要用别的设备,请先打开「跨设备」。",
+        "how_to_fix": "面板「跨设备」按钮打开(要重启才完全生效);智能体可调 devices__request_cross_device 请用户同意。",
+    }
+    out["result"] = (
+        f"{out['message']} {out['how_to_fix']}"  # 工具循环只把 result / error 交给模型:让它读到下一步该怎么办
+    )
+    if trace_id:
+        out["trace_id"] = trace_id
+    return out
+
+
+_LOCAL_HOSTS = frozenset({"", "localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"})
+
+
+def nats_url_points_elsewhere(url: str) -> bool:
+    """``GALAXY_NATS_URL`` names another machine (not this one).
+
+    Used only to *say* something at startup: a bus pointed at another machine while
+    the system is in local mode is a configuration the owner probably did not mean.
+    It never changes the mode.
+    """
+    from urllib.parse import urlsplit
+
+    raw = (url or "").strip()
+    if not raw:
+        return False
+    try:
+        host = (urlsplit(raw if "://" in raw else f"nats://{raw}").hostname or "").lower()
+    except ValueError:
+        return False
+    return host not in _LOCAL_HOSTS
 
 
 def _resolve_network_mode(env: Optional[str]) -> NetworkMode:
@@ -337,11 +424,8 @@ def resolve_fabric_config(environ: Optional[dict] = None) -> FabricConfig:
     # Network mode
     network_mode = _resolve_network_mode(env.get("GALAXY_NETWORK_MODE"))
 
-    # Cross-device (normalise back from derived mode if not explicitly set)
-    if raw_cross_device is not None:
-        cross_device_enabled = _parse_bool(raw_cross_device, default=False)
-    else:
-        cross_device_enabled = mode == SystemMode.DESKTOP_CROSS_DEVICE
+    # Cross-device routing is on exactly when the mode is cross-device (one rule).
+    cross_device_enabled = mode == SystemMode.DESKTOP_CROSS_DEVICE
 
     # Tailscale
     raw_tailscale = env.get("GALAXY_TAILSCALE_ENABLED", "")
@@ -397,6 +481,13 @@ __all__ = [
     "SystemMode",
     "NetworkMode",
     "FabricConfig",
+    "cross_device_refusal",
+    "cross_device_requested",
+    "master_brain_idle_status",
+    "master_brain_requested",
+    "master_brain_wanted",
+    "master_brain_waiting_for_mode",
+    "nats_url_points_elsewhere",
     "resolve_fabric_config",
     "FABRIC_CONFIG",
 ]

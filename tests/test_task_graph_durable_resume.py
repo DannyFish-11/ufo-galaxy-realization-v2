@@ -1,16 +1,19 @@
 """tests/test_task_graph_durable_resume.py
 =============================================
 Feature ① — task graph 的【步级检查点 + 断点续跑】。
-默认关(GALAXY_DURABLE_EXEC 未设)→ 不落盘、零行为变化。开启后:每步 transition 原子
+默认开(GALAXY_DURABLE_EXEC 未设);只有显式写 0/false/no/off 才关 → 不落盘。开启时:每步 transition 原子
 落盘;新实例(模拟进程重启)从盘上重建;已完成步被跳过、依赖满足的待执行步可续跑。
+落盘位置跟 GALAXY_DATA_DIR,且有保留上限(只留续跑要的 + 最近结束的一小批)。
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
+import core.task_graph_checkpoint as ck
 import core.task_graph_runtime as tg
 from core.task_graph_runtime import GraphNode, GraphNodeState, TaskGraphRuntime
 
@@ -28,14 +31,66 @@ def _node(task_id, state=GraphNodeState.QUEUED, depends_on=None):
     return GraphNode(task_id=task_id, state=state, depends_on=list(depends_on or []))
 
 
-def test_disabled_by_default_writes_nothing(tmp_path, monkeypatch):
+def test_enabled_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("GALAXY_TASK_GRAPH_STATE_PATH", str(tmp_path / "g.json"))
-    # 未设 GALAXY_DURABLE_EXEC → durable 关
+    # 未设 GALAXY_DURABLE_EXEC → durable 开(产品默认)
+    assert ck.durable_exec_enabled() is True
+    rt = TaskGraphRuntime()
+    assert rt._durable is True
+    rt.register_node(_node("t1"))
+    assert (tmp_path / "g.json").exists()
+
+
+@pytest.mark.parametrize("off", ["0", "false", "No", "OFF"])
+def test_explicitly_off_writes_nothing(tmp_path, monkeypatch, off):
+    monkeypatch.setenv("GALAXY_DURABLE_EXEC", off)
+    monkeypatch.setenv("GALAXY_TASK_GRAPH_STATE_PATH", str(tmp_path / "g.json"))
     rt = TaskGraphRuntime()
     assert rt._durable is False
     rt.register_node(_node("t1"))
     rt.transition("t1", GraphNodeState.COMPLETED)
     assert not (tmp_path / "g.json").exists()  # 零落盘
+
+
+def test_the_checkpoint_lives_under_the_data_dir_not_the_repo(tmp_path, monkeypatch):
+    """默认开之后,检查点不能再落在仓库的 runtime/ 下 —— 测试与别的数据目录会读到同一份。"""
+    monkeypatch.delenv("GALAXY_TASK_GRAPH_STATE_PATH", raising=False)
+    monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+    assert ck.task_graph_state_path() == str(tmp_path / "task_graph_state.json")
+
+
+def test_a_checkpoint_already_at_the_old_location_is_still_found(tmp_path, monkeypatch):
+    monkeypatch.delenv("GALAXY_TASK_GRAPH_STATE_PATH", raising=False)
+    monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path / "data"))
+    legacy_root = tmp_path / "repo"
+    (legacy_root / "runtime").mkdir(parents=True)
+    legacy = legacy_root / "runtime" / "task_graph_state.json"
+    legacy.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(ck, "_REPO_ROOT", str(legacy_root))
+    assert ck.task_graph_state_path() == str(legacy), "旧位置上已有检查点、新位置还没有:沿用旧的,不丢"
+
+
+def test_the_checkpoint_is_bounded_but_keeps_what_resume_needs(tmp_path, monkeypatch):
+    """每次状态变更都整份重写检查点;不设上限就是「有史以来所有节点」。续跑要的必须留:没结束的、它们依赖的。"""
+    monkeypatch.setattr(ck, "KEEP_FINISHED", 3)
+    p = tmp_path / "g.json"
+    monkeypatch.setenv("GALAXY_TASK_GRAPH_STATE_PATH", str(p))
+    rt = TaskGraphRuntime()
+    rt.register_node(_node("dep"))
+    rt.transition("dep", GraphNodeState.COMPLETED)
+    rt.register_node(_node("waiting", depends_on=["dep"]))  # 没结束,依赖 dep
+    for i in range(10):  # 十个已经结束、也没人依赖的
+        rt.register_node(_node(f"old{i}"))
+        rt.transition(f"old{i}", GraphNodeState.COMPLETED)
+    rt.register_node(GraphNode(task_id="proj", metadata={"assimilation_projection": True}))  # 能力吸收投影,不落盘
+
+    kept = {n["task_id"] for n in json.loads(p.read_text(encoding="utf-8"))["nodes"]}
+    assert {"waiting", "dep"} <= kept, "还要续跑的节点和它依赖的节点必须留"
+    assert "proj" not in kept
+    assert len(kept - {"waiting", "dep"}) == 3, "已结束且没人依赖的只留最近 3 个"
+
+    rt2 = TaskGraphRuntime()  # 重启:依赖还在,waiting 仍可续跑
+    assert [n.task_id for n in rt2.resumable_nodes()] == ["waiting"]
 
 
 def test_checkpoint_and_resume_across_restart(tmp_path, monkeypatch):

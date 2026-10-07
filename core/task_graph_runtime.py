@@ -127,24 +127,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
+from core.task_graph_checkpoint import durable_exec_enabled, select_retained, task_graph_state_path
+
 logger = logging.getLogger("Galaxy.TaskGraphRuntime")
-
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-def durable_exec_enabled() -> bool:
-    """Feature ①: 是否启用【DAG 步级检查点 + 断点续跑】的可持久化。默认关。
-
-    仅在跨设备分布式编排(本就 opt-in)下才有意义;开启后 task graph 的每步状态变更
-    会原子落盘,进程重启即从盘上重建、跳过已完成步、把未完成步交给恢复协调器重派。
-    单机默认关 → 零行为变化、零额外 IO。
-    """
-    return str(os.getenv("GALAXY_DURABLE_EXEC", "")).strip().lower() in ("1", "true", "yes", "on")
-
-
-def _task_graph_state_path() -> str:
-    p = str(os.getenv("GALAXY_TASK_GRAPH_STATE_PATH", "")).strip()
-    return p or os.path.join(_REPO_ROOT, "runtime", "task_graph_state.json")
 
 
 __all__ = [
@@ -863,7 +848,7 @@ class TaskGraphRuntime:
         # Feature ①: DAG 步级检查点(默认关)。开启则每次 register/transition 后原子落盘,
         # 构造时从盘上重建 → 支持"重启即续跑"。持久化只在 durable-exec 开时发生。
         self._durable: bool = durable_exec_enabled()
-        self._state_path: str = _task_graph_state_path()
+        self._state_path: str = task_graph_state_path()
         self._persist_lock = threading.Lock()
         if self._durable:
             try:
@@ -880,12 +865,18 @@ class TaskGraphRuntime:
             return
         with self._persist_lock:
             try:
+                nodes, edges = select_retained(
+                    self._nodes.values(),
+                    self._edges.values(),
+                    terminal_states=_TERMINAL_GRAPH_STATES,
+                    is_projection_only=_is_projection_only,
+                )
                 payload = json.dumps(
                     {
                         "schema": "task_graph_state_v1",
                         "saved_at": time.time(),
-                        "nodes": [n.to_dict() for n in self._nodes.values()],
-                        "edges": [e.to_dict() for e in self._edges.values()],
+                        "nodes": [n.to_dict() for n in nodes],
+                        "edges": [e.to_dict() for e in edges],
                     },
                     ensure_ascii=False,
                 )

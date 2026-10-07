@@ -344,32 +344,32 @@ class SystemOrchestrator:
         import os
 
         logger.info("[启动·模式] Resolving system mode …")
-        mode = os.environ.get("GALAXY_SYSTEM_MODE", "desktop-local").strip() or "desktop-local"
+        from core.system_mode import cross_device_requested, nats_url_points_elsewhere
+
+        # 模式只有一条规则、一个出处(core/system_mode.py):按钮开 / 手写跨设备模式 = 跨设备,否则本地。
+        # 这里不再自己推导。以前 GALAXY_NATS_URL 非空也算跨设备 —— 「保存设置」把登记默认
+        # nats://localhost:4222 写进 .env、内嵌 NATS 起来后进程自己也会设它,于是只想用本机的人被悄悄切成跨设备。
+        cross_device = cross_device_requested()
+        mode = "desktop-cross-device" if cross_device else "desktop-local"
         # 与真正拉起总线的那一处同一判据(launcher/services.py:GalaxyUnified.start_nats):
         # 没写 false 就会去拉 nats-server。以前这里要"显式 true"才算开,于是屏幕上
         # 先"不用消息总线",几十秒后又"✓ 消息总线 nats://localhost:4222"。
         nats_explicitly_off = os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off")
         nats_enabled = not nats_explicitly_off
-        cross_device = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").lower() in ("true", "1")
-        # Cross-device inference: an explicitly set GALAXY_NATS_URL is treated as
-        # a signal that cross-device mode is intended, even if
-        # GALAXY_CROSS_DEVICE_ENABLED is not explicitly set.  NATS is the
-        # control-plane transport for multi-device operation; if the operator
-        # has pointed the system at a remote NATS server, cross-device mode is
-        # the expected operating context.
-        if not cross_device and os.environ.get("GALAXY_NATS_URL", "").strip():
-            cross_device = True
-        if cross_device:
-            mode = "desktop-cross-device"
         detail = f"mode={mode}, nats_enabled={nats_enabled}, cross_device={cross_device}"
         logger.info("[启动·模式] %s", detail)
         _scope = "可用其他设备" if cross_device else "只用本机"
         _bus = "消息总线稍后拉起(起不来就用进程内总线)" if nats_enabled else "不用消息总线(GALAXY_NATS_ENABLED=false)"
+        said = f"按 {mode} 跑 —— {_scope},{_bus}"
+        if not cross_device and nats_url_points_elsewhere(os.environ.get("GALAXY_NATS_URL", "")):
+            # 配成了连别的机器、却没打开跨设备:说出来,不悄悄替人切模式。
+            said += "。注意:GALAXY_NATS_URL 指向别的机器,但当前是本地模式 —— 要用别的设备请打开「跨设备」"
+            logger.warning("[启动·模式] GALAXY_NATS_URL 指向别的机器,但当前是本地模式(没有打开跨设备)")
         return PhaseResult(
             phase=StartupPhase.RESOLVE_MODE,
             status=PhaseStatus.OK,
             detail=detail,
-            said=f"按 {mode} 跑 —— {_scope},{_bus}",
+            said=said,
             data={"system_mode": mode, "nats_enabled": nats_enabled, "cross_device": cross_device},
         )
 

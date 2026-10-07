@@ -25,6 +25,8 @@ documents are **authoritative and current** vs historical or superseded.
 | Document | Purpose |
 |----------|---------|
 | [SYSTEM_STATUS.md](SYSTEM_STATUS.md) | **当前系统状态（权威，2026-09-27 复测）** —— 完成度 / 完善度 / 设计完成度，每条附复测命令 |
+| [PANEL_SWITCHES.md](PANEL_SWITCHES.md) | **面板开关清单（由 `core/routes/panel_switch_policy.py` 生成）** —— 96 个布尔开关逐个说去处：留在面板 / 内置 / 开发运维 / 并进整档按钮，附没并的理由 |
+| [MULTI_MACHINE_MODE.md](MULTI_MACHINE_MODE.md) | **多机模式模块定义（2026-10-05）** —— 跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent（主脑 / worker）四层怎么叠、一个任务怎么走完、各层配置键（含未登记的环境变量）/ 模块 / 接口、查出的不一致，以及两种组成一个按钮的组法（先记录，未合并；键表由 `scripts/gen_multi_machine_map.py` 生成） |
 | [CLONE_TO_USE_REALITY.md](CLONE_TO_USE_REALITY.md) | **Authoritative quick-start** — canonical clone-to-use runtime truth |
 | [UNIFIED_SUBJECT_ARCHITECTURE.md](UNIFIED_SUBJECT_ARCHITECTURE.md) | Unified subject architecture (DesktopPresenceRuntime + OpenClawd) |
 | [LOCAL_EXECUTION_CHAIN.md](LOCAL_EXECUTION_CHAIN.md) | Local execution chain step-by-step |

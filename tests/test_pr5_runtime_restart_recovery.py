@@ -518,11 +518,11 @@ class TestDurableTaskGraphResumeStep:
         tg.reset_task_graph_runtime()
 
     def test_resume_snapshot_none_when_durable_disabled(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("GALAXY_DURABLE_EXEC", raising=False)
+        monkeypatch.setenv("GALAXY_DURABLE_EXEC", "false")  # 默认是开的,只有显式关才不接入
         coord = RuntimeRestartRecoveryCoordinator(
             mesh_session_store=_make_mesh_session_store(str(tmp_path)),
             body_mesh_store=_make_body_mesh_store(str(tmp_path)),
             body_mesh_registry=FakeRegistry(),
         )
         report = coord.run_recovery()
-        assert report.task_graph_resume is None  # 默认关 → 不接入,零影响
+        assert report.task_graph_resume is None  # 显式关 → 不接入,零影响

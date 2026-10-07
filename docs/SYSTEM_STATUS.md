@@ -306,6 +306,63 @@ python scripts/check_assessment_freshness.py
 - 启动 3 分钟（Phase 0 探测 13.6 秒、语音依赖导入 15 秒、API 网关 48 秒、AI 大脑 38.8 秒、Podman 21.7 秒）：探测本身已经并发；其余是 Windows 上冷导入与子进程的实际耗时，需要真机逐段抓 profile。
 - 一句「你好」被判 `heavy 0.692`：复杂度打分是对**整批消息**（系统提示词 + 随请求带上的上下文 + 用户这句）算的；单独一句「你好」加身份提示词只有 0.154，那一轮多出来的分数来自随请求带上的内容（日志里消息长 339 字符），没有逐项查清是哪一块。改打分口径会牵动全部路由测试，这次没动。
 
+### 6.6 2026-10-04：面板开关整理
+
+所有者要求：把面板上所有开关整理、分类，看哪些根本不需要开关。设置页 390 个键里有 96 个布尔开关，逐个对着生产代码核过
+（每个都有真实的环境变量读取点，没有死键）。**完整清单与理由见 [PANEL_SWITCHES.md](PANEL_SWITCHES.md)**（由
+`core/routes/panel_switch_policy.py` 生成，不手写）。
+
+| 去处 | 个数 | 做了什么 |
+|---|---|---|
+| 留在面板 | 18 | 用户真有取舍（隐私、花费、对外暴露、对 AI 行为的偏好），按「声音 / 感知与在场 / 记忆与隐私 / 桌面操作与自治 / 模型与花费 / 多设备与网络 / 安全姿态」分组 |
+| 内置 | 45 | 不再列在面板上：熔断器、派发幂等、回声消除、朗读回复、本机外放、桌面操作、任务状态落盘、鉴权、Esc 叫停、自回声闸门等不该有人去关的机制和系统自己的基本能力，默认开 |
+| 开发 / 运维 | 28 | 不再列在面板上：`GALAXY_DEV_MODE`、Tauri 打包、「本机回环也封禁」、`GALAXY_NATIVE_AUDIO`（由本机模型档位自动开关的门控），对外部署的加固选项和危险逃生口（强制令牌、设备准入、权限从严、远程安装脚本、pickle 权重等），以及替补引擎（Kokoro / IndexTTS）的按需下载 |
+| 并进整档按钮 | 5 | 不再单列，翻按钮时和主键一起写：「跨设备」带局域网发现 / mDNS / 设备接入平面 / NATS（只用本机时它们没有意义），「全模态」带主动开口续在哪条对话上 |
+
+不列 ≠ 没接上：键仍在 `CONFIG_SCHEMA`，`POST /api/config` 照收、`.env` 照写、环境变量照读。
+
+**清点时顺带查出的真问题**（都已修）：
+
+| 问题 | 修复 | 验证 |
+|---|---|---|
+| 「保存设置」会把登记表里每个键的默认值整体写进 `.env`。`GALAXY_MEMORY_MEDIA` 登记成「默认开」而代码三处默认都是关 —— 保存一次，截图和录音就在没人点过的情况下开始落盘；另有 `GALAXY_ENTRYMODE_USE_READINESS`、`GALAXY_PREFLIGHT_FAIL_FAST` 与代码相反 | 登记表默认值对齐到代码；就绪度开关改为认 `true`/`1`/`on`（面板写的是 `true`，代码以前只认 `"1"`） | `tests/test_every_switch_has_a_disposition.py` |
+| 设置页只认字面量 `"true"` 为开：`.env` 里手写的 `=1` / `=on`、登记表里写成 `1` 的默认值（`GALAXY_CONSENSUS_ROUND`）代码认作开，面板显示成关，点一下还会把它「关」成 `false` | `GET /api/config/all` 把布尔值统一规整成 `true` / `false`；登记表布尔默认值全部是字面量 | 同上 |
+| `GALAXY_COMPUTER_USE_NATIVE_TOOL` 的类型登记成 `bool`，设置页把它画成文本框 | 归一为 `boolean` | 同上 |
+| `GALAXY_CROSS_DEVICE_ENABLED` 登记成「默认开」，代码与 `.env.example` 都是关（opt-in）—— 保存一次设置，跨设备编排就在没人点过的情况下开了 | 登记表默认改为关 | 同上（`test_cross_device_is_off_in_the_registry_because_it_is_off_in_the_code`） |
+| `GALAXY_NATIVE_AUDIO` 在面板上是个开关，但切到 B 档时 `core/native_modal.py` 会自动开它、离开时自动关 —— 同一个事实两处各存 | 改为运维项；用户的取舍是选哪一档，以及「每轮发不发录音」`GALAXY_NATIVE_AUDIO_CHAT` | 同上 |
+
+新增布尔开关必须先在清单里说清是哪一种、为什么（同一个测试盯着）—— 这是「不要乱加开关」的可执行形式。
+**安全姿态不再是一排开关**：11 个里 10 个不再列在面板上（系统自己的保护 → 内置；危险逃生口与部署加固 → 运维），只留「高危命令要不要你批准」这一个对 AI 行为的偏好；`GALAXY_HITL_CONFIRM_GATE` 的说明改成它真正做的事（只拦命中高危词表或零信任规则的命令）。
+**声音只留语音总闸**（朗读回复、本机外放内置；两个模型自动下载是替补引擎的按需下载）；**桌面操作与任务状态落盘内置、默认开**。任务状态落盘以前默认关、检查点落在仓库 `runtime/` 且每次变更整份重写所有节点；默认开之前已改成落 `GALAXY_DATA_DIR`、有保留上限（`core/task_graph_checkpoint.py`），测试里一律关。后果：重启后自动重派没做完的任务（先过派发幂等守卫），想关写 `GALAXY_DURABLE_EXEC=false`。
+**面板现在会说「重启后生效」**：`core/routes/config_restart.py` 是唯一清单（只登记从读取位置核实过的键），`/api/config/all` 与 `/api/config/bundles` 带 `restart_required`，验证 `tests/test_config_says_what_needs_a_restart.py`。
+**已知、没有动的**：`GALAXY_MEMORY_MEDIA` 存储层默认开而入口默认关的边角；主脑与跨设备含义重叠但代码里互相独立。详见 PANEL_SWITCHES.md 末尾。
+
+**「同一能力合并成一个按钮」**：`core/routes/config_bundles.py` 的 `members` 说哪些键和主键是同一件事的另一面。判据只有一条 ——
+**（主键关、这个键开）这个组合有没有意义**；没有才并。写入语义：主键关 → 成员全写 `false`；主键开 → 成员回到登记表默认
+（opt-in 不替人打开）；一次落盘（`POST /api/config/bundles`）。成员相对主键偏离时按钮显示「有偏离」。验证：`tests/test_bundle_members_follow_the_primary.py`。
+**没有并**的（各有隐私/花费/暴露面的理由，列在 PANEL_SWITCHES.md 末尾）：系统声送进模型、听/朗读/本机外放、每轮发不发录音、主脑/联邦/WebRTC/Funnel 这些默认关的 opt-in、主动感知 —— 并了会替用户悄悄改一个选择。
+
+### 6.7 2026-10-05 / 10-07：多机模式 = 跨设备模式的整体内容；模式只有一条规则
+
+所有者要求把「跨设备 + 多设备并行 + 建立在两者之上的 NATS Agent 与任务派发分配」作为**一个模块**处理。定义、四层模型、一个任务怎么走完、各层配置键
+（含 18 个只在代码里读、没登记的环境变量）/ 模块 / 接口，都在 **[MULTI_MACHINE_MODE.md](MULTI_MACHINE_MODE.md)**（键表由 `scripts/gen_multi_machine_map.py` 生成）。
+2026-10-07 按所有者的决定收口：
+
+- **系统只有两个模式**（本地 / 跨设备），**「现在是哪个」只有一条规则、一个出处**（`core.system_mode.cross_device_requested`：按钮开或手写跨设备模式，任一即是）。
+  此前同一件事有三个各自推导的答案（网关只看按钮；启动流程另把「NATS 地址非空」当跨设备；`system_mode.py` 让写着 `desktop-local` 的模式键盖过按钮），
+  于是面板按钮开着、`.env` 里躺着 `desktop-local` 时三处各说各话，「保存设置」写入的 `nats://localhost:4222` 还会把只想用本机的人悄悄切成跨设备。
+  现在网关开关、启动流程、桌面在场、启动自检、模式接口都调那一个函数；NATS 地址不参与判模式；面板「跨设备」按钮同时写主键与模式名，「运行模式」下拉框不再列在面板上。
+- **主脑与 worker 只在跨设备模式里起**；开着却在本地模式 → 不起，启动日志说出原因。
+- **模型只能请求、不能决定**：本地模式下的 `devices__request_cross_device` 只会问人，批准走设备接入已有的人在环（`GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合不能提出）。
+- 另两处遗留真问题已修：主脑状态文件缺省落 `$GALAXY_DATA_DIR`（不再落系统临时目录）；`GALAXY_NATS_EXECUTOR_FALLBACK` 的 `reject` 真的不退回（登记只留 `sync` / `reject`）。
+- 6 个数字 / 取值的登记默认对齐到代码（主脑缩放复评间隔、节点心跳、安卓快照保鲜、联邦心跳、SLO 心跳窗口、Tailscale 检查间隔）；清点时记的第 7 个（`GALAXY_HEADSCALE_USER`）核对后本来就一致。
+- **本地模式不往别的设备下发**（真机实测查出）：起真服务器、两台真配对的设备客户端，本地模式下 `/devices/parallel` 曾把命令送到设备并执行 —— 命令路由的设备执行桥直接发，网关开关只在两处查。
+  现在并行 / 单设备命令 REST、设备执行桥、网关单设备下发、智能体 `devices__invoke` 五处统一拒绝（`cross_device_disabled`，并说明怎么办），按钮一翻即放行。
+- 真机实测还查出并已修的三处：模型看不到「请求打开跨设备」工具（工具表超 24 个时被按词法相关性裁掉，现列入核心工具永不裁）；工具循环只把 `result` / `error` 交给模型，
+  需要确认时模型不知道问什么、批准后不知道要重启（结果文案现在写进这两个字段）；POSIX 上端口预检不设 `SO_REUSEADDR`，设备连着时停掉服务再立刻起，会把旧连接的 TIME_WAIT
+  误报成「端口被占」、API 网关起不来（横幅却照常报「就绪」）。
+- 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_the_model_can_ask_but_only_the_person_can_turn_on_cross_device.py`、`test_master_brain_runs_only_in_cross_device_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |

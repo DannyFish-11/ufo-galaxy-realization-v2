@@ -664,7 +664,8 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOri
         """Auto-detect cross-device mode and register to UDM/UCM.
 
         Cross-device mode is enabled when any of the following is true:
-        - Environment variable GALAXY_CROSS_DEVICE_ENABLED is set
+        - The system is in cross-device mode (core.system_mode.cross_device_requested:
+          GALAXY_CROSS_DEVICE_ENABLED true or GALAXY_SYSTEM_MODE=desktop-cross-device)
         - Config file has cross_device.enabled = true
         - A mesh/nats endpoint is configured
 
@@ -675,12 +676,9 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOri
         import socket
 
         # Detection logic
-        _env_enabled = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        from core.system_mode import cross_device_requested  # 模式只有一个出处
+
+        _env_enabled = cross_device_requested()
         _config_enabled = False
         try:
             import tomllib

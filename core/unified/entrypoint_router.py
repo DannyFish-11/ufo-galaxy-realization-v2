@@ -68,6 +68,14 @@ from core import upper_ports
 logger = logging.getLogger("Galaxy.Unified.EntrypointRouter")
 
 
+def readiness_path_enabled() -> bool:
+    """入口是否走「就绪度」判定的实验路径。默认关。
+
+    面板写的是 ``true`` / ``false``，此前这里只认字面量 ``"1"`` —— 面板上打开了，实际没生效。
+    """
+    return os.environ.get("GALAXY_ENTRYMODE_USE_READINESS", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 # ---------------------------------------------------------------------------
 # EntrypointRouter
 # ---------------------------------------------------------------------------
@@ -333,7 +341,7 @@ def resolve_entry_mode(
         _explicit_target = bool(target_device and target_device.strip())
 
         # Step 2: decide between readiness-based path and legacy path
-        _use_readiness = os.environ.get("GALAXY_ENTRYMODE_USE_READINESS", "0") == "1"
+        _use_readiness = readiness_path_enabled()
 
         if _cross_device_on and _use_readiness:
             # ----------------------------------------------------------

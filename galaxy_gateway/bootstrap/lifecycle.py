@@ -460,7 +460,15 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         except Exception as _mb_err:
             logger.warning("MasterBrain startup failed (non-fatal): %s", _mb_err, exc_info=True)  # H4 fixed
     else:
-        logger.info("MasterBrain: disabled (set GALAXY_MASTER_BRAIN_ENABLED=true to enable)")
+        from core.system_mode import master_brain_waiting_for_mode
+
+        if master_brain_waiting_for_mode():
+            logger.warning(
+                "MasterBrain: GALAXY_MASTER_BRAIN_ENABLED is on but the system is in local mode — "
+                "not started; turn on cross-device mode to use it"
+            )
+        else:
+            logger.info("MasterBrain: disabled (set GALAXY_MASTER_BRAIN_ENABLED=true to enable)")
 
     # ── Security posture logging ──
     from core.auth import ensure_auth_config_validated, get_active_tokens, is_auth_enabled

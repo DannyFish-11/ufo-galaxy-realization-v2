@@ -38,13 +38,11 @@ authority model and endpoint directory.
 """
 
 import logging
-import os
 from datetime import datetime
 
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
-from core import upper_ports
 from core.routes._shared import (
     connection_manager,
     node_status_cache,
@@ -438,8 +436,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         mode
             当前系统模式字符串（``"desktop-local"`` 或 ``"desktop-cross-device"``）。
         cross_device_enabled
-            跨设备路由是否启用（由 ``GALAXY_CROSS_DEVICE_ENABLED`` 或
-            ``GALAXY_SYSTEM_MODE`` 派生）。
+            跨设备路由是否启用（``GALAXY_CROSS_DEVICE_ENABLED`` 为真，或
+            ``GALAXY_SYSTEM_MODE=desktop-cross-device``，任一即是）。
         takeover_available
             接管（takeover）能力是否可用（仅在 cross_device_enabled=true 时为 true）。
         android_devices_online
@@ -466,21 +464,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             nats_enabled = False
             fabric_strict = False
 
-        # Cross-device switch may override the fabric config at runtime — but
-        # only when GALAXY_CROSS_DEVICE_ENABLED is *explicitly* set.  The
-        # switch module became opt-in (unset → disabled); applying it
-        # unconditionally would clobber the mode-derived value from
-        # resolve_fabric_config (GALAXY_SYSTEM_MODE=desktop-cross-device
-        # implies enabled when the variable is absent), contradicting this
-        # endpoint's documented derivation ("GALAXY_CROSS_DEVICE_ENABLED 或
-        # GALAXY_SYSTEM_MODE 派生") and system_mode's own precedence.
-        try:
-            if os.getenv("GALAXY_CROSS_DEVICE_ENABLED") is not None:
-                is_cross_device_enabled = upper_ports.resolve("gateway.cross_device_switch.is_cross_device_enabled")
-
-                cross_device_on = is_cross_device_enabled()
-        except Exception as exc:
-            logger.debug("Suppressed: %s", exc)
+        # 跨设备开没开只有一个出处(core.system_mode.cross_device_requested),网关开关读的是同一个,
+        # 这里不再用网关开关去覆盖 fabric 的结果。
 
         # Count connected Android devices from the active connection manager
         android_online = 0

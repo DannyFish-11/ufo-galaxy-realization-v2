@@ -46,6 +46,15 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/device_registry.py` - 设备注册和发现
 - `core/device_communication.py` - 设备通信协议
 - `core/device_control_service.py` - 设备控制服务
+- **系统只有两个模式**：**本地模式**（`desktop-local`，默认，只用这台电脑）与**跨设备模式**（`desktop-cross-device`）。**「现在是哪个」只有一条规则、一个出处**：
+  `core.system_mode.cross_device_requested()` —— `GALAXY_CROSS_DEVICE_ENABLED` 为真**或** `GALAXY_SYSTEM_MODE=desktop-cross-device`，任一即是，否则本地。
+  网关开关、启动流程、桌面在场、启动自检、模式接口都调它，**别再自己推导**；`GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（同时写两个键）。
+  「混合」不是模式，是一个请求的走法（`local` / `cross_device` / `hybrid`，跨设备模式里系统自动判）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
+- **多机模式** = 跨设备模式的整体内容（跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent），四层 + 共用 NATS 底座，定义见 `docs/MULTI_MACHINE_MODE.md`：
+  派发走 `CommandRouter.route_envelope()` 按 `executor_target_type` 分三条路（`local` / `android_device`·`node_service` → 网关 `DeviceRouter` / `go_worker` → `MasterBrain` → NATS → worker）。
+  `GALAXY_MASTER_BRAIN_ENABLED` 默认关，且**只在跨设备模式里才起**（`master_brain_requested()`）：开了却在本地模式，启动日志说出原因；开了才拉起主脑、worker 消费循环、MCP over NATS。
+- **模型只能请求、不能决定**打开跨设备模式：本地模式下的工具 `devices__request_cross_device`（`core/device_onboarding/mode_request.py`）只会问人；批准走设备接入已有的人在环，
+  `GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合连提出都不行；批准后走面板按钮同一个写入函数，要重启才完全生效
 
 ### 扩展系统
 - `core/mcp_loader.py` - MCP 服务器加载器
@@ -164,6 +173,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
+- **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
 - `core/ambient_yield.py` - 自发注意力循环给用户让路：用户请求在跑不碰模型、调用进行中用户来了就取消（Ollama 随之停掉生成）、用时 T 秒后歇 3T 秒。判「人在等」用 `core.presence_line.foreground_request_active`（后台自发来源与常驻在场不算）
 - 面板窗口只能有它自己的圆角：桌面外壳里 `html[data-shell='desktop']` 的画布底是透明的（`index.html` 同步脚本设置），否则 `body` 的渐变会铺满窗口矩形、圆角外多出四个方角。`dist/` 是提交进仓库的产物，改样式后要 `npm run build`
 - `enhancements/clients/windows_client/run_ui.py` 是**硬禁用的桩**，只会发一条弃用警告；原先写在这里的

@@ -50,6 +50,7 @@ from core.routes._shared import (
     connection_manager,
 )
 from core.schemas.task_envelope import envelope_from_command_request
+from core.system_mode import cross_device_refusal
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -416,6 +417,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     break
             if not found_as_node:
                 if connection_manager.is_online(target):
+                    if (refused := cross_device_refusal()) is not None:  # 本地模式不往别的设备下发
+                        return refused
                     sent = await connection_manager.send_to_device(
                         target,
                         {

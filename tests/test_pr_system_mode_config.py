@@ -207,13 +207,14 @@ class TestModeInference:
         cfg = _cfg(GALAXY_CROSS_DEVICE_ENABLED="0")
         assert cfg.mode == SystemMode.DESKTOP_LOCAL
 
-    def test_system_mode_wins_over_cross_device_enabled(self):
-        # GALAXY_SYSTEM_MODE takes priority
+    def test_an_explicit_local_does_not_override_the_button(self):
+        # 「local」是出厂默认(.env.example 带着它、保存设置也会写它),不是一次选择;
+        # 面板的「跨设备」按钮开着(CROSS_DEVICE_ENABLED=true)就是跨设备模式。
         cfg = _cfg(
             GALAXY_SYSTEM_MODE="desktop-local",
             GALAXY_CROSS_DEVICE_ENABLED="true",
         )
-        assert cfg.mode == SystemMode.DESKTOP_LOCAL
+        assert cfg.mode == SystemMode.DESKTOP_CROSS_DEVICE
 
 
 # ===========================================================================
@@ -451,22 +452,30 @@ class TestCrossDeviceEnabledDerivation:
         cfg = _cfg(GALAXY_SYSTEM_MODE="desktop-cross-device")
         assert cfg.cross_device_enabled is True
 
-    def test_explicit_override_false_in_cross_device_mode(self):
+    def test_cross_device_mode_written_by_hand_beats_a_default_false(self):
+        # 「false」是 .env.example / 保存设置写下的默认值，不是一次选择;
+        # 手写 desktop-cross-device 的人要的就是跨设备。网关与模式不再各说各话。
         cfg = _cfg(
             GALAXY_SYSTEM_MODE="desktop-cross-device",
             GALAXY_CROSS_DEVICE_ENABLED="false",
         )
-        assert cfg.cross_device_enabled is False
+        assert cfg.cross_device_enabled is True
+        assert cfg.mode == SystemMode.DESKTOP_CROSS_DEVICE
 
-    def test_explicit_override_true_in_local_mode(self):
+    def test_the_button_on_beats_a_default_local_mode(self):
         cfg = _cfg(
             GALAXY_SYSTEM_MODE="desktop-local",
             GALAXY_CROSS_DEVICE_ENABLED="true",
         )
-        # Note: mode is still desktop-local because GALAXY_SYSTEM_MODE wins,
-        # but cross_device_enabled reflects the explicit env var.
         assert cfg.cross_device_enabled is True
-        assert cfg.mode == SystemMode.DESKTOP_LOCAL
+        assert cfg.mode == SystemMode.DESKTOP_CROSS_DEVICE
+
+    def test_cross_device_enabled_always_agrees_with_the_mode(self):
+        for mode in ("", "desktop-local", "desktop-cross-device", "nonsense"):
+            for cd in (None, "true", "false", "0", "1"):
+                env = {k: v for k, v in (("GALAXY_SYSTEM_MODE", mode), ("GALAXY_CROSS_DEVICE_ENABLED", cd)) if v}
+                cfg = _cfg(**env)
+                assert cfg.cross_device_enabled is cfg.is_cross_device, env
 
 
 # ===========================================================================

@@ -18,10 +18,21 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 
 # .env 文件路径
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
-# 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
-# 这里 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
-from core.routes.config_bundles import CONFIG_BUNDLES, owned_keys  # noqa: E402
+from core.routes.config_bundles import (  # noqa: E402
+    CONFIG_BUNDLES,
+    bundle_writes,
+    expected_member_value,
+    expected_mirror_value,
+    member_keys,
+    mirror_keys,
+    owned_keys,
+)
+from core.routes.config_restart import any_requires_restart, restart_reason  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
+from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS  # noqa: E402
+
+# 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
+# 上面的 CONFIG_SCHEMA 就是 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
 
 __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 
@@ -35,14 +46,40 @@ __all__ = ["CONFIG_BUNDLES", "CONFIG_SCHEMA", "PANEL_HIDDEN_KEYS"]
 #: 环境变量照读,只是 GET /api/config/all 不列。tests/test_panel_hidden_config_keys.py
 #: 钉住两条:隐藏的开关默认必须在「开」的一侧(否则就是一个用户找不到、又默认关着的
 #: 功能);GALAXY_META_RSI 永远不许隐藏 —— 它是自我改进循环的总闸。
-PANEL_HIDDEN_KEYS = frozenset(
-    {
-        "GALAXY_AGENT_SUPPLY",  # 默认 on:声明了需求的 Agent 按需求选脑
-        "GALAXY_GENOME",  # 留空 = 元层指针或 default
-        "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
-        "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
-    }
+#:
+#: 布尔开关里哪些该列、哪些不该，唯一清单在 core/routes/panel_switch_policy.py：``builtin``（不该有人去关的
+#: 内部机制）与 ``ops``（开发 / 运维 / 打包 / 测试用的逃生口）都不列，``panel``（用户真有取舍）才列。
+PANEL_HIDDEN_KEYS = (
+    frozenset(
+        {
+            "GALAXY_AGENT_SUPPLY",  # 默认 on:声明了需求的 Agent 按需求选脑
+            "GALAXY_GENOME",  # 留空 = 元层指针或 default
+            "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
+            "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
+            "GALAXY_SYSTEM_MODE",  # 面板上切模式的只有「跨设备」那一个按钮,它一并写这个键(见 config_bundles.mirrors)
+        }
+    )
+    | PANEL_HIDDEN_SWITCH_KEYS
 )
+
+
+_TRUE_TEXT = frozenset({"1", "true", "yes", "on"})
+_FALSE_TEXT = frozenset({"0", "false", "no", "off", ""})
+
+
+def _bool_text(value: object) -> str:
+    """布尔开关在面板上的取值一律写成 ``true`` / ``false``。
+
+    设置页只认字面量 ``"true"`` 为开 —— 而 .env 里手写的 ``=1`` / ``=on`` / ``=yes``、或登记表里写成
+    ``1`` 的默认值，代码都认作开。于是实际开着的开关在面板上显示成关，点一下还会被"关"成 ``false``。
+    认不出的值原样返回，不替人猜。
+    """
+    text = str(value).strip().lower()
+    if text in _TRUE_TEXT:
+        return "true"
+    if text in _FALSE_TEXT:
+        return "false"
+    return str(value)
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -152,13 +189,18 @@ async def get_config():
     for key, meta in CONFIG_SCHEMA.items():
         if key in PANEL_HIDDEN_KEYS:
             continue  # 登记了、能存能读,只是不列在面板上(见 PANEL_HIDDEN_KEYS)
+        is_bool = meta["type"] == "boolean"
+        value = os.environ.get(key, meta["default"])
         result[key] = {
-            "value": os.environ.get(key, meta["default"]),
-            "default": meta["default"],
+            "value": _bool_text(value) if is_bool else value,
+            "default": _bool_text(meta["default"]) if is_bool else meta["default"],
             "type": meta["type"],
             "category": meta["category"],
             "description": meta["description"],
         }
+        reason = restart_reason(key)
+        if reason:
+            result[key]["restart_required"] = reason
         if key in dynamic_options and dynamic_options[key]:
             result[key]["options"] = dynamic_options[key]
         elif "options" in meta:
@@ -543,9 +585,21 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     owned = owned_keys(bundle, CONFIG_SCHEMA.keys())
-    overrides = sum(
-        1 for k in owned if k != primary and k in os.environ and os.environ[k] != CONFIG_SCHEMA[k]["default"]
-    )
+    current = os.environ.get(primary, meta["default"])
+    is_bool = meta["type"] == "boolean"
+    members = set(member_keys(bundle)) if is_bool else set()
+    mirrors = set(mirror_keys(bundle)) if is_bool else set()
+
+    def _expected(k: str) -> str:
+        # 成员/镜像的「该是什么」跟着主键走(成员:关→false,开→默认;镜像:关→第一个值,开→第二个值);
+        # 其余键与自己的默认比。
+        if k in members:
+            return expected_member_value(current, CONFIG_SCHEMA[k]["default"])
+        if k in mirrors:
+            return expected_mirror_value(bundle, k, current)
+        return CONFIG_SCHEMA[k]["default"]
+
+    overrides = sum(1 for k in owned if k != primary and k in os.environ and os.environ[k] != _expected(k))
 
     state: Dict[str, Any] = {
         "key": bundle["key"],
@@ -559,6 +613,8 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
         "type": meta["type"],
         "key_count": len(owned),
         "overrides": overrides,
+        # 翻这一档会写的键(主键 + 成员)里,有没有「改了要重启才生效」的 —— 面板据此在这一档旁边说出来。
+        "restart_required": any_requires_restart([primary, *sorted(members), *sorted(mirrors)]),
     }
     if "options" in meta:
         state["options"] = meta["options"]
@@ -602,5 +658,5 @@ async def set_bundle(req: BundleUpdateRequest):
             detail=f"{primary} 是布尔,只接受 'true' / 'false',收到 {req.value!r}",
         )
 
-    await update_config(ConfigUpdateRequest(config={primary: req.value}))
+    await update_config(ConfigUpdateRequest(config=bundle_writes(bundle, req.value, CONFIG_SCHEMA)))
     return {"bundle": _bundle_state(bundle)}

@@ -311,9 +311,10 @@ def test_g01_switches_are_registered_in_the_schema(key):
     assert key in CONFIG_SCHEMA
 
 
+# GALAXY_WEIGHTS_ALLOW_PICKLE 是系统自己的保护 / 危险逃生口，已不再列在面板上（core/routes/panel_switch_policy.py）；它仍在 CONFIG_SCHEMA 里、可存可读，上一个用例钉着。
 @pytest.mark.parametrize(
     "key",
-    ["GALAXY_TRUST_REMOTE_CODE", "GALAXY_WEIGHTS_HOSTS", "GALAXY_WEIGHTS_ALLOW_PICKLE"],
+    ["GALAXY_TRUST_REMOTE_CODE", "GALAXY_WEIGHTS_HOSTS"],
 )
 def test_g02_switches_reach_the_panel(key):
     from pathlib import Path

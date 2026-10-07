@@ -227,7 +227,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         ),
     },
     "GALAXY_CONSENSUS_ROUND": {
-        "default": "1",
+        "default": "true",
         "type": "boolean",
         "category": "advanced",
         "description": (
@@ -393,10 +393,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "启用 NATS 消息总线（多设备协同的传输底座;单机自用可以关 · 默认开）",
     },
     "GALAXY_NATS_URL": {
-        "default": "nats://localhost:4222",
+        "default": "",  # 留空 = 内置总线;登记成非空,「保存设置」就替人填了一个地址
         "type": "url",
         "category": "devices",
-        "description": "NATS 消息总线的地址（默认本机;接到别的机器上才需要改）",
+        "description": "NATS 消息总线的地址（留空 = 用内置总线;接到别的机器上才需要填。只管连哪里，不决定是不是跨设备模式）",
     },
     "GALAXY_NATS_EXECUTOR_TIMEOUT": {
         "default": "30",
@@ -408,20 +408,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "sync",
         "type": "select",
         "category": "devices",
-        "description": "NATS 不可用时怎么办（sync=退回本机同步执行 · 默认 sync）",
-        "options": ["sync", "async", "reject"],
+        "description": "NATS 不可用时怎么办（sync=退回本机执行 · reject=不退回、直接拒绝 · 默认 sync）",
+        "options": ["sync", "reject"],
     },
     "GALAXY_CROSS_DEVICE_ENABLED": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "跨设备编排（让手机/手表/别的电脑也能承接任务;关掉则只在本机跑 · 默认开）",
+        "description": "跨设备模式（开=让手机/手表/别的电脑也能承接任务，多设备并行、任务派发都在这个模式里;关=本地模式，只在本机跑 · 默认关）。要重启才完全生效",
     },
     "GALAXY_MASTER_BRAIN_ENABLED": {
         "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "启用主脑编排 + worker/NATS 分布式(多设备总开关 · 默认关=单机)",
+        "description": "启用主脑编排 + worker/NATS 分布式(默认关=单机)。主脑在「跨设备模式」里才起:先打开「跨设备」，本地模式下开了也不起",
     },
     "GALAXY_FABRIC_STRICT": {
         "default": "false",
@@ -430,10 +430,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "严格织网:NATS 不可达即视为致命(默认关=优雅降级单机)",
     },
     "GALAXY_HEARTBEAT_INTERVAL": {
-        "default": "5",
+        "default": "10",
         "type": "number",
         "category": "devices",
-        "description": "设备心跳间隔(秒 · 默认 5；调大省电，掉线发现得慢)",
+        "description": "节点心跳间隔(秒 · 默认 10；调大省电，掉线发现得慢)",
     },
     "FEDERATION_ENABLED": {
         "default": "false",
@@ -454,10 +454,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "联邦对端地址（逗号分隔）",
     },
     "FEDERATION_HEARTBEAT_INTERVAL": {
-        "default": "10",
+        "default": "15",
         "type": "number",
         "category": "devices",
-        "description": "联邦心跳间隔(秒 · 默认 10)",
+        "description": "联邦心跳间隔(秒 · 默认 15)",
     },
     "GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE": {
         "default": "strict",
@@ -589,10 +589,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "安卓设备状态库路径（留空=用内置默认位置）",
     },
     "ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS": {
-        "default": "300",
+        "default": "90",
         "type": "number",
         "category": "devices",
-        "description": "安卓设备快照的保鲜时长(秒 · 默认 300)",
+        "description": "安卓设备快照的保鲜时长(秒 · 默认 90)",
     },
     # --- Development ---
     "GALAXY_DEV_MODE": {
@@ -612,7 +612,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "desktop-local",
         "type": "select",
         "category": "devices",
-        "description": "运行模式（desktop-local=单机 · desktop-cross-device=跨设备织网）",
+        "description": "运行模式（desktop-local=本地模式，只用本机 · desktop-cross-device=跨设备模式）。面板的「跨设备」按钮一并写它;任一处明确选了跨设备就是跨设备",
         "options": ["desktop-local", "desktop-cross-device"],
     },
     "GALAXY_PREFLIGHT_MODE": {
@@ -623,10 +623,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "options": ["normal", "strict", "skip"],
     },
     "GALAXY_PREFLIGHT_FAIL_FAST": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "advanced",
-        "description": "启动前检查一失败就停（默认关=能降级就继续起）",
+        "description": "预检命令行：检查一失败就以非零退出（默认开；关掉相当于 --dry-run）。不影响正常启动",
     },
     "GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK": {
         "default": "false",
@@ -635,10 +635,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "允许回落旧调度器（迁移期兜底 · 默认关）",
     },
     "GALAXY_ENTRYMODE_USE_READINESS": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "advanced",
-        "description": "入口按「就绪度」判定（而不是只看进程在不在 · 默认开）",
+        "description": "入口按「就绪度」判定的实验路径（而不是只看进程在不在 · 默认关）",
     },
     "CMD_MAX_CONCURRENT": {
         "default": "50",
@@ -1187,8 +1187,8 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         ),
     },
     "GALAXY_COMPUTER_USE_NATIVE_TOOL": {
-        "default": "0",
-        "type": "bool",
+        "default": "false",
+        "type": "boolean",
         "category": "agent",
         "description": (
             "规划下一步动作时,是否向厂商声明**原生 computer 工具**(Anthropic 内建工具)。"
@@ -1808,7 +1808,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         ),
     },
     "GALAXY_IGNORE_CONTEXT_MEASUREMENTS": {
-        "default": "",
+        "default": "false",
         "type": "boolean",
         "category": "agent",
         "description": ("忽略本机实测的 KV 单价(排障用 · 打开后上下文只按目录声明算，" "不再按实测放开)"),
@@ -2111,10 +2111,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # 所以一句话能召回它们 —— 但字节在摄入完就被删了(metadata 里那个 media_path
     # 指向一个保证已不存在的临时文件),召回之后没有任何东西能把画面拿回来。
     "GALAXY_MEMORY_MEDIA": {
-        "default": "true",
+        "default": "false",
         "type": "boolean",
         "category": "memory",
-        "description": "把记忆里的截图/录音真的存下来（关掉=只留向量，能搜到但看不到原件 · 默认开）",
+        "description": "把记忆里的截图/录音真的存下来（关掉=只留向量，能搜到但看不到原件 · 默认关）",
     },
     "GALAXY_MEMORY_MEDIA_MB": {
         "default": "512",
@@ -2156,7 +2156,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "false",
         "type": "boolean",
         "category": "security",
-        "description": "执行前都要你点确认（最稳但最慢 · 默认关，只有高危动作才问）",
+        "description": "命令路由处的一道额外闸：命中高危词表或零信任规则的命令，要你批准才执行（超时按拒绝）· 默认关",
     },
     "GALAXY_HITL_CONFIRM_TIMEOUT_S": {
         "default": "60",
@@ -2360,10 +2360,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "这台设备的类型（留空=unknown；如 desktop/laptop/server）",
     },
     "GALAXY_DURABLE_EXEC": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "agent",
-        "description": "持久化执行（任务状态落盘，进程重启能接着跑 · 默认关）",
+        "description": "持久化执行（任务状态落盘，进程重启能接着跑 · 默认开）",
     },
     "GALAXY_DISPATCH_IDEMPOTENCY": {
         "default": "true",
@@ -2594,10 +2594,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "手表登记到 Headscale 的哪个用户下（默认 galaxy，与 deploy/headscale/init.sh 一致）",
     },
     "GALAXY_TAILSCALE_CHECK_INTERVAL": {
-        "default": "60",
+        "default": "30",
         "type": "number",
         "category": "network",
-        "description": "Tailscale 状态检查间隔(秒 · 默认 60)",
+        "description": "Tailscale 状态检查间隔(秒 · 默认 30)",
     },
     "CORS_ALLOWED_ORIGINS": {
         "default": "*",
@@ -2625,10 +2625,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "延迟统计窗口(秒 · 默认 300)",
     },
     "GALAXY_SLO_HEARTBEAT_WINDOW": {
-        "default": "60",
+        "default": "200",
         "type": "number",
         "category": "advanced",
-        "description": "心跳统计窗口(秒 · 默认 60)",
+        "description": "心跳统计窗口(保留最近多少条心跳结果算丢失率 · 默认 200)",
     },
     "GALAXY_RESULT_INGRESS_CONTINUITY_MODE": {
         "default": "strict",
@@ -2645,10 +2645,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "options": ["strict", "best-effort", "disabled"],
     },
     "GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S": {
-        "default": "300",
+        "default": "15",
         "type": "number",
         "category": "devices",
-        "description": "主脑扩缩容重评估间隔(秒 · 默认 300)",
+        "description": "主脑扩缩容重评估间隔(秒 · 默认 15，最小 5)",
     },
     "GALAXY_TEMPORAL_URL": {
         "default": "",

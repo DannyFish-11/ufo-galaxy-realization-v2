@@ -436,7 +436,8 @@ export function createDock(cb: DockCallbacks): DockHandles {
         : b.overrides > 0
           ? `有 ${b.overrides} 项手改过`
           : '';
-      note.textContent = tail ? (b.note ? `${b.note} · ${tail}` : tail) : b.note;
+      // 要重启才生效的也说出来:点了开关、界面翻过去,而后端有一部分要等下次启动才起作用。
+      note.textContent = [b.note, tail, b.restartRequired ? '重启后生效' : ''].filter((x) => x !== '').join(' · ');
       // 什么都没有就别占位 —— 空的 note 仍是 display:block,会给行凭空撑出一截。
       note.hidden = note.textContent === '';
       if (b.overrides > 0) note.dataset['drift'] = 'true';

@@ -36,6 +36,7 @@ def env(tmp_path, monkeypatch):
     for k in ("GALAXY_ONBOARDING_AUTO", "HOME_ASSISTANT_URL", "HOME_ASSISTANT_TOKEN", "GALAXY_HEADSCALE_URL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GALAXY_AUTONOMY", "guided")
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")  # 操作别的设备 = 跨设备;本地模式只用本机
     monkeypatch.setattr(autonomy_policy, "_grants_path", lambda: str(tmp_path / "grants.json"))
     autonomy_policy.reset_grant_store()
     for r in (
@@ -116,7 +117,7 @@ def test_the_agent_is_offered_the_device_tools():
     assert {"devices__list", "devices__join", "devices__invoke", "devices__remove", "devices__invite"} <= names
     [invite] = [t for t in DEVICES_BUILTIN_TOOLS if t["function"]["name"] == "devices__invite"]
     assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == ["phone", "watch", "laptop", "worker"]
-    assert "tools.extend(DEVICES_BUILTIN_TOOLS)" in inspect.getsource(OpenClawd._collect_tools)
+    assert "tools.extend(devices_tools_for_agent())" in inspect.getsource(OpenClawd._collect_tools)
     assert '"devices__",' in inspect.getsource(OpenClawd._dispatch_tool_call)
 
 

@@ -8,8 +8,10 @@
 
 * 藏起来的键仍在 ``CONFIG_SCHEMA`` 里:POST /api/config 照收、.env 照写;
 * 只是 GET /api/config/all 不列,面板的顺序提示里也不写它们;
-* 藏起来的**开关**默认必须在「开」的一侧,且与代码里的默认值一致 —— 否则就是一个
-  用户找不到、又默认关着的功能;
+* 藏起来的**功能开关**（元层那一组 + 清单里的 ``builtin``）默认必须在「开」的一侧,且与代码里的
+  默认值一致 —— 否则就是一个用户找不到、又默认关着的功能;
+* 开发 / 运维 / 打包 / 测试用的逃生口（清单里的 ``ops``）不是功能，不要求默认在「开」的一侧 ——
+  它们藏起来的理由正是「没有人会因为性格不同而选不同的值」（见 core/routes/panel_switch_policy.py）;
 * ``GALAXY_META_RSI`` 永远不许藏 —— 它是自我改进循环的总闸。
 """
 
@@ -53,8 +55,13 @@ def test_the_self_improvement_switch_is_never_hidden():
 
 def test_hidden_switches_default_to_on_and_match_the_code():
     from core.agent_supply import DEFAULT_SUPPLY_MODE
+    from core.routes.config_bundles import CONFIG_BUNDLES, mirror_keys
+    from core.routes.panel_switch_policy import OPS, SWITCH_POLICY
 
-    for key in PANEL_HIDDEN_KEYS:
+    ops = {k for k, p in SWITCH_POLICY.items() if p.disposition == OPS}
+    # 整档按钮的 mirror(运行模式)由按钮写、不是「藏起来的开关」:默认是本地模式,不是 on。
+    mirrors = {k for b in CONFIG_BUNDLES for k in mirror_keys(b)}
+    for key in PANEL_HIDDEN_KEYS - ops - mirrors:
         meta = CONFIG_SCHEMA[key]
         if meta["type"] == "boolean":
             assert meta["default"] == "true", f"{key} 藏起来了却默认关 —— 用户找不到它,也就永远打不开"

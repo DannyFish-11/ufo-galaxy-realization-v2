@@ -31,9 +31,9 @@ def _nats_tcp_failure_is_critical() -> bool:
 
     if os.environ.get("GALAXY_FABRIC_STRICT", "").lower() in ("true", "1", "yes"):
         return True
-    cross = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").lower() in ("true", "1", "yes")
-    mode = os.environ.get("GALAXY_SYSTEM_MODE", "").strip().lower()
-    if cross or "cross_device" in mode:
+    from core.system_mode import cross_device_requested  # 模式只有一个出处
+
+    if cross_device_requested():
         return True
     nats_on = os.environ.get("GALAXY_NATS_ENABLED", "").lower() in ("true", "1", "yes")
     if nats_on:

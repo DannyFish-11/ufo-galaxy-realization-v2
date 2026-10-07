@@ -644,15 +644,40 @@ class TestSystemModeResolution:
         result = orch._run_phase_2_resolve_mode()
         assert result.data.get("system_mode") == "desktop-cross-device"
 
-    def test_cross_device_inferred_from_nats_url(self, monkeypatch):
+    def test_a_nats_url_alone_does_not_switch_the_mode(self, monkeypatch):
+        """NATS 地址只说总线在哪、不决定模式。以前「地址非空 = 跨设备」,于是保存设置写进去的
+        nats://localhost:4222 把只想用本机的人悄悄切成了跨设备。"""
         monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
         monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
-        monkeypatch.setenv("GALAXY_NATS_URL", "nats://192.168.1.50:4222")
+        for url in ("nats://localhost:4222", "nats://192.168.1.50:4222"):
+            monkeypatch.setenv("GALAXY_NATS_URL", url)
+            from core.system_orchestrator import SystemOrchestrator
+
+            result = SystemOrchestrator()._run_phase_2_resolve_mode()
+            assert result.data.get("system_mode") == "desktop-local", url
+            assert result.data.get("cross_device") is False, url
+
+    def test_a_nats_url_pointing_elsewhere_in_local_mode_is_said_out_loud(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
+        monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
         from core.system_orchestrator import SystemOrchestrator
 
-        orch = SystemOrchestrator()
-        result = orch._run_phase_2_resolve_mode()
-        assert result.data.get("system_mode") == "desktop-cross-device"
+        monkeypatch.setenv("GALAXY_NATS_URL", "nats://192.168.1.50:4222")
+        assert "跨设备" in SystemOrchestrator()._run_phase_2_resolve_mode().said
+        assert "指向别的机器" in SystemOrchestrator()._run_phase_2_resolve_mode().said
+        monkeypatch.setenv("GALAXY_NATS_URL", "nats://localhost:4222")
+        assert "指向别的机器" not in SystemOrchestrator()._run_phase_2_resolve_mode().said
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+        monkeypatch.setenv("GALAXY_NATS_URL", "nats://192.168.1.50:4222")
+        assert "指向别的机器" not in SystemOrchestrator()._run_phase_2_resolve_mode().said
+
+    def test_the_button_on_wins_over_a_default_local_mode(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_NATS_URL", raising=False)
+        monkeypatch.setenv("GALAXY_SYSTEM_MODE", "desktop-local")
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+        from core.system_orchestrator import SystemOrchestrator
+
+        assert SystemOrchestrator()._run_phase_2_resolve_mode().data.get("system_mode") == "desktop-cross-device"
 
     def test_explicit_system_mode_env_respected(self, monkeypatch):
         monkeypatch.delenv("GALAXY_NATS_URL", raising=False)

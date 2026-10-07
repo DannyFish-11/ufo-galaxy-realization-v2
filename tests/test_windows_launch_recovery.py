@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import socket
 import subprocess
@@ -413,3 +414,36 @@ def test_ready_banner_points_at_existing_tray_entries():
 
     # 反向自证:横幅得**真的给出**日志去处,否则上面那条在「什么都不指」时也绿。
     assert _re.search(r"logs|日志", joined), "横幅没有给出任何日志去处"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows 的 SO_REUSEADDR 语义不同,探测在 Windows 上刻意不设")
+def test_probe_port_does_not_mistake_time_wait_leftovers_for_an_occupied_port():
+    """重启过快（真机实测：按下「跨设备」要重启，设备连着时停掉服务再立刻起）：旧服务留下的连接处于 TIME_WAIT，
+    不设 SO_REUSEADDR 的探测会把端口误报成「被占」，API 网关就起不来 —— 而 uvicorn 自己绑端口是设了的，本来能绑上。"""
+    from launcher.services import _probe_port_bindable
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    client = socket.create_connection(("127.0.0.1", port))
+    accepted, _ = server.accept()
+    accepted.close()  # 服务端先关 → 服务端这一侧进 TIME_WAIT
+    client.close()
+    server.close()
+    # 此刻端口上没有任何监听者,只有 TIME_WAIT 残留
+    assert _probe_port_bindable(port) == ""
+
+
+def test_probe_port_still_refuses_a_port_someone_is_listening_on():
+    from launcher.services import _probe_port_bindable
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # uvicorn 的形态:开了 REUSEADDR 且在监听
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    try:
+        assert _probe_port_bindable(server.getsockname()[1]), "正在监听的端口必须仍被判为不可绑"
+    finally:
+        server.close()
