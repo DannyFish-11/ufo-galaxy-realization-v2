@@ -159,7 +159,7 @@ async def speech_engine_ready() -> Optional[Any]:
     在循环线程上同步跑完，面板与对话一起冻了 7 秒。
     """
     if _engine is not None or _engine_failed:
-        return _engine
+        return _get_engine()  # 已选好：这一步立即返回（不拿锁、不做事），仍走 _get_engine 以便被替换
     return await asyncio.to_thread(_get_engine)
 
 

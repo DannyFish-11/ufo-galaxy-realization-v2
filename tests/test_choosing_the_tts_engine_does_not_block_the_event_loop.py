@@ -136,3 +136,12 @@ def test_a_request_that_does_not_come_from_the_desktop_never_touches_the_engine(
 
     monkeypatch.setattr(so, "_select_engine", lambda: (_ for _ in ()).throw(AssertionError("不该选")))
     assert asyncio.run(pl.desktop_incremental_speech(False, source="chat")) is None
+
+
+def test_a_replaced_selector_is_honoured_even_when_an_engine_is_already_cached(fresh_engine_state, monkeypatch):
+    """别的测试可能在模块里留下一个已缓存的引擎；换掉 ``_get_engine`` 的测试仍要拿到它换上的那个。
+    （CI 的分片顺序下 test_tts_speaking_overlay_sync 因此红过：已缓存就绕过了被替换的选择函数。）"""
+    leftover, wanted = _Engine(), _Engine()
+    monkeypatch.setattr(so, "_engine", leftover)
+    monkeypatch.setattr(so, "_get_engine", lambda: wanted)
+    assert asyncio.run(so.speech_engine_ready()) is wanted
