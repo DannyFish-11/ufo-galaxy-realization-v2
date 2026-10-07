@@ -1199,6 +1199,164 @@ export async function deleteUserProvider(base: string, id: string): Promise<bool
   }
 }
 
+// ── 模型服务商目录 ─────────────────────────────────────────────────────────────
+//
+// 每家厂商一张卡:填 Key、配没配、通没通、有哪些型号、参与哪些任务的选路。
+// 事实全在后端 core/provider_catalog.py(读 PROVIDER_REGISTRY 与偏好表),这里只搬运。
+// **没有「密钥值」这个字段** —— 后端只给「这个 Key 名配没配」。写 Key 走 saveConfig
+// (POST /api/config,落 runtime/secrets.env),验证走 /api/v1/models/verify-provider。
+
+export interface VendorUrl {
+  /** 这个地址对应的配置键,例如 OPENAI_API_BASE */
+  readonly env: string;
+  /** 当前生效的值(地址不是密钥,明文给)。空 = 用 default */
+  readonly value: string;
+  readonly default: string;
+}
+
+export interface Vendor {
+  readonly id: string;
+  readonly label: string;
+  readonly group: string;
+  readonly note: string;
+  /** registry = 路由器里的直连厂商;extra = 聚合 / 自建 / 识屏这类「也要填一个东西」的入口 */
+  readonly kind: string;
+  /** 这家认哪几个 Key 名(第一个是规范名,其余是别名) */
+  readonly keyEnvs: readonly string[];
+  /** 每个 Key 名各自配没配 */
+  readonly keyState: Readonly<Record<string, boolean>>;
+  readonly configured: boolean;
+  readonly urlEnvs: readonly VendorUrl[];
+  readonly defaultModel: string;
+  readonly models: readonly string[];
+  readonly realtimeModels: readonly string[];
+  /** 有资格参与哪些任务类型的选路(后端偏好表) */
+  readonly roles: readonly string[];
+  /** true = 不自动参与选路(有意如此,如智谱编码套餐),不是漏配 */
+  readonly optIn: boolean;
+  /** 路由器里有没有这家;null = 不是路由厂商/没问到 —— 与 false 是两件事 */
+  readonly registered: boolean | null;
+  readonly available: boolean | null;
+}
+
+export interface VendorPage {
+  readonly groups: readonly { readonly id: string; readonly label: string }[];
+  readonly vendors: readonly Vendor[];
+  /** 卡片已认领的配置键:细调页据此不再重复列一遍 */
+  readonly ownedKeys: readonly string[];
+}
+
+function readVendor(v: unknown): Vendor | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o['id'] !== 'string') return null;
+  const strs = (k: string): string[] =>
+    Array.isArray(o[k]) ? (o[k] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+  const str = (k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  const state: Record<string, boolean> = {};
+  const rawState = o['key_state'];
+  if (rawState && typeof rawState === 'object') {
+    for (const [k, val] of Object.entries(rawState as Record<string, unknown>)) state[k] = val === true;
+  }
+  const urls: VendorUrl[] = [];
+  if (Array.isArray(o['url_envs'])) {
+    for (const u of o['url_envs'] as unknown[]) {
+      if (u && typeof u === 'object' && typeof (u as Record<string, unknown>)['env'] === 'string') {
+        const r = u as Record<string, unknown>;
+        urls.push({
+          env: r['env'] as string,
+          value: typeof r['value'] === 'string' ? r['value'] : '',
+          default: typeof r['default'] === 'string' ? r['default'] : '',
+        });
+      }
+    }
+  }
+  const live = (o['live'] && typeof o['live'] === 'object' ? o['live'] : {}) as Record<string, unknown>;
+  const tri = (x: unknown): boolean | null => (typeof x === 'boolean' ? x : null);
+  return {
+    id: o['id'],
+    label: str('label') || o['id'],
+    group: str('group'),
+    note: str('note'),
+    kind: str('kind'),
+    keyEnvs: strs('key_envs'),
+    keyState: state,
+    configured: o['configured'] === true,
+    urlEnvs: urls,
+    defaultModel: str('default_model'),
+    models: strs('models'),
+    realtimeModels: strs('realtime_models'),
+    roles: strs('roles'),
+    optIn: o['opt_in'] === true,
+    registered: tri(live['registered']),
+    available: tri(live['available']),
+  };
+}
+
+/** 拉厂商目录。拉不到返回 null —— 与「一家都没有」是两件事。 */
+export async function fetchVendors(base: string): Promise<VendorPage | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/models/providers', { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      console.error('[hud] 拉厂商目录失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    const rows = Array.isArray(body['vendors']) ? (body['vendors'] as unknown[]) : [];
+    const groups = Array.isArray(body['groups']) ? (body['groups'] as unknown[]) : [];
+    return {
+      groups: groups
+        .filter((g): g is Record<string, unknown> => !!g && typeof g === 'object')
+        .map((g) => ({ id: String(g['id'] ?? ''), label: String(g['label'] ?? '') }))
+        .filter((g) => g.id !== ''),
+      vendors: rows.map(readVendor).filter((x): x is Vendor => x !== null),
+      ownedKeys: Array.isArray(body['owned_keys'])
+        ? (body['owned_keys'] as unknown[]).filter((x): x is string => typeof x === 'string')
+        : [],
+    };
+  } catch (err) {
+    console.error('[hud] 拉厂商目录失败:', err);
+    return null;
+  }
+}
+
+/** 一次真实试调的结论。ok=false 时 text 是后端给的那句人话(已脱敏)。 */
+export interface VendorCheck {
+  readonly ok: boolean;
+  readonly text: string;
+}
+
+/**
+ * 真发一次 1 token 的试调。**没通过也是一个结论,不是请求错误** —— 结论在返回值里;
+ * 只有后端根本没接上才返回 null。
+ */
+export async function verifyVendor(base: string, id: string): Promise<VendorCheck | null> {
+  const ctl = new AbortController();
+  // 后端自己最多等路由刷新 8s + 试调 15s;给 30s,超了就说超了,别让按钮转一辈子。
+  const timer = setTimeout(() => ctl.abort(), 30000);
+  try {
+    const resp = await fetch(base + '/api/v1/models/verify-provider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: id }),
+      signal: ctl.signal,
+    });
+    if (!resp.ok) return null;
+    const o = (await resp.json()) as Record<string, unknown>;
+    if (o['ok'] === true) {
+      const ms = typeof o['latency_ms'] === 'number' ? ` · ${Math.round(o['latency_ms'])} ms` : '';
+      const model = typeof o['model'] === 'string' && o['model'] ? ` · ${o['model']}` : '';
+      return { ok: true, text: `通了${model}${ms}` };
+    }
+    return { ok: false, text: typeof o['error'] === 'string' ? o['error'] : '没通(后端没说原因)' };
+  } catch (err) {
+    console.error('[hud] 验证厂商失败:', err);
+    return { ok: false, text: '验证超时或没连上后端' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── 没收口的结果(真相链隔离队列) ─────────────────────────────────────────────
 //
 // 后端:core/truth_chain_recovery.py + core/routes/result_recovery.py。设备交回的结果要走

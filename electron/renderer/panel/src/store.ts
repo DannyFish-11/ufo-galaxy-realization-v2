@@ -17,7 +17,15 @@ import type {
   TierView,
   Turn,
 } from './types';
-import type { ConfigItem, GitHubAddon, GitHubAddonStatus, IsolatedResult, UserProvider } from './transport';
+import type {
+  ConfigItem,
+  GitHubAddon,
+  GitHubAddonStatus,
+  IsolatedResult,
+  UserProvider,
+  VendorCheck,
+  VendorPage,
+} from './transport';
 
 export interface HudState {
   /** 连上后端了没有。false 时下面的东西全是上一次的残值或空态 */
@@ -105,6 +113,18 @@ export interface HudState {
    */
   readonly githubAddons: readonly GitHubAddon[] | null;
   /**
+   * 各家模型服务商的目录(配没配 / 型号 / 选路)。null = **还没拉到**,与「一家都没有」是两件事 ——
+   * 前者要说「后端没接上」。拉不到时细调页照旧列出全部裸键,不让任何键因此无处可填。
+   */
+  readonly vendors: VendorPage | null;
+  readonly vendorsBusy: boolean;
+  /** 上一次保存/清除的结论(后端拒绝的那句人话)。空 = 没有要说的。 */
+  readonly vendorNotice: string;
+  /** 本次面板会话里各家试调的结论。只记结论,不记密钥。 */
+  readonly vendorChecks: Readonly<Record<string, VendorCheck>>;
+  /** 正在试调的那一家的 id。空串 = 没有。 */
+  readonly vendorChecking: string;
+  /**
    * 安装策略(会不会先问人、名单是什么、token 配没配)。null = 还没拉到。
    *
    * **这份只能由后端给。** 面板自己按环境变量推会成为第二处权威,判定规则改一次
@@ -167,6 +187,11 @@ export const initialState: HudState = {
   userProviderProtocols: [],
   userProvidersBusy: false,
   userProviderNotice: '',
+  vendors: null,
+  vendorsBusy: false,
+  vendorNotice: '',
+  vendorChecks: {},
+  vendorChecking: '',
   githubAddons: null,
   githubAddonStatus: null,
   githubAddonsBusy: false,

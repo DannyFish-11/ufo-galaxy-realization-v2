@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 472 条 · 组件 schema 118 个
+// 路径 473 条 · 组件 schema 118 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -210,6 +210,7 @@ export type ApiPath =
   | "/api/v1/models/latency-probe"
   | "/api/v1/models/local-brain/switch"
   | "/api/v1/models/local/{model_name}"
+  | "/api/v1/models/providers"
   | "/api/v1/models/routing-stats"
   | "/api/v1/models/slot"
   | "/api/v1/models/status"
@@ -686,6 +687,7 @@ export const API_METHODS = {
   "/api/v1/models/latency-probe": ["post"],
   "/api/v1/models/local-brain/switch": ["post"],
   "/api/v1/models/local/{model_name}": ["delete"],
+  "/api/v1/models/providers": ["get"],
   "/api/v1/models/routing-stats": ["get"],
   "/api/v1/models/slot": ["post"],
   "/api/v1/models/status": ["get"],

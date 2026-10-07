@@ -2,6 +2,9 @@
 
 * { box-sizing: border-box; }
 
+/* 窗口(外壳)的圆角半径:壳的圆角与桌面外壳里整个文档的裁剪共用这一个数。 */
+:root { --shell-r: 34px; }
+
 html, body, #hud { height: 100%; }
 body {
   margin: 0;
@@ -36,12 +39,17 @@ html[data-shell='desktop'],
 html[data-shell='desktop'] body {
   background: transparent;
 }
+/* 再兜一层:整个文档按窗口圆角裁一次(去掉画布底只解决了圆角外方角的一个来源;
+   软件合成下 backdrop-filter 子层、系统描边、焦点框都可能漏到圆角外)。只在桌面外壳里生效。 */
+html[data-shell='desktop'] {
+  clip-path: inset(0 round var(--shell-r));
+}
 
 /* ══ 壳 ══════════════════════════════════════════════════════════════ */
 .shell {
   height: 100%;
   padding: 20px;
-  border-radius: 34px;
+  border-radius: var(--shell-r);
   overflow: hidden;
   /* ── 整面 = 一道竖坡,深在上、化进白在下 ──────────────────────────
      跟壁纸同一个走法:一支色相,明度一路走到近白,彩度跟着降。
@@ -1433,6 +1441,35 @@ html[data-shell='desktop'] body {
 .up-proto { justify-content: flex-end; }
 
 .up-sec[data-busy='true'] { opacity: 0.55; pointer-events: none; }
+
+/* ── 模型服务商 ─────────────────────────────────────────────────────────────
+   卡片骨架直接用上面 .up-card / .up-top / .up-dot / .up-models / .up-btn —— 它们是
+   同一类东西(一个外面的服务 + 状态 + 动作),画法不该有第二套。
+   这里只补两件事:分组小标题,和「Key 名 + 输入框 + 保存」那一行。 */
+.vd-sec [hidden] { display: none !important; }
+.vd-body { display: flex; flex-direction: column; gap: 10px; }
+.vd-group {
+  margin-top: 8px; font-size: var(--t-mini); letter-spacing: 0.04em; color: var(--ink-3);
+}
+.vd-group:first-child { margin-top: 0; }
+.vd-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 10px; }
+/* Key 名独占一行,输入框和保存键在它下面 —— 设置浮层窄的时候(左栏展开时只有 260 来宽)
+   并排放三样东西,输入框会被挤成一条缝。 */
+.vd-env {
+  flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--t-micro); color: var(--ink-3);
+}
+.vd-input { flex: 1; min-width: 0; width: auto; }
+.vd-verdict { color: var(--ink-2); }
+.up-card[data-state='unverified'] .vd-verdict { color: var(--warn); }
+.up-card[data-state='live'] .vd-verdict { color: #4f9d69; }
+.vd-key .sf-save { flex: none; margin: 0; }
+.vd-urls .vd-key:first-child { margin-top: 0; }
+.vd-detail { margin-top: 6px; }
+.vd-detail .up-meta { margin-top: 6px; }
+.vd-more { margin-left: auto; }
+.up-card[data-state='off'] .up-state { color: var(--ink-3); }
 
 /* 协议那一排档位牌。用与设置页同一套 .sf-stages —— 全面板只有一种"选一个"的
    画法,多一种就等于让人重新学一次。 */

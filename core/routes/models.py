@@ -539,6 +539,24 @@ async def get_status() -> Dict[str, Any]:
         return {"models": installed}
 
 
+@router.get("/providers")
+async def provider_catalog() -> Dict[str, Any]:
+    """面板「模型服务商」目录：每家一张卡的事实（配没配 / 型号 / 参与哪些任务 / 在线与否）。
+
+    只读、不下发密钥。填 Key 走 ``POST /api/config``，验证走下面的 ``/verify-provider``。
+    """
+    from core.provider_catalog import build_catalog
+
+    try:
+        from core.multi_llm_router import get_llm_router
+
+        live_router = get_llm_router()
+    except Exception as exc:  # noqa: BLE001 — 路由器没起来也要能列目录，只是不报在线状态
+        logger.debug("目录取路由器失败(在线状态留空): %s", exc)
+        live_router = None
+    return build_catalog(router=live_router)
+
+
 class ProviderVerifyRequest(BaseModel):
     provider: Optional[str] = None  # 提供商名(如 "deepseek");与 env_key 二选一
     env_key: Optional[str] = None  # 或环境变量键(如 "DEEPSEEK_API_KEY"),后端反查

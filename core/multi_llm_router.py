@@ -19,6 +19,7 @@ import httpx
 from core.credential_vault import PLACEHOLDER_PREFIXES
 from core.model_catalog import SLOT_REASONING
 from core.model_openness import treat_as_open_source as _treat_as_open_source
+from core.routing_tail import last_resort, unlisted_available
 
 logger = logging.getLogger("Galaxy.LLMRouter")
 
@@ -2087,15 +2088,12 @@ class MultiLLMRouter:
 
         # 按任务偏好排序
         preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
-        # 开源优先（默认开启）：把开源提供商整体提到专有之前，保持原相对顺序。
-        # 本地 ollama/hf_local 本就在偏好表最前，因此本地优先不受影响。
+        # 开源优先（默认开启）：开源提供商整体提到专有之前，保持原相对顺序；本地本就在最前。
         if os.environ.get("GALAXY_OPENSOURCE_FIRST", "true").lower() != "false":
             preferred_order = reorder_open_source_first(list(preferred_order))
-        # L3 bandit:按历史表现(成功率/延迟/成本)自适应重排候选;样本不足自动退回
-        # 原序(冷启动零行为变化),因此不影响本地/开源优先的既有精排。
+        # L3 bandit:按历史表现(成功率/延迟/成本)重排候选;样本不足自动退回原序(冷启动零行为变化)。
         preferred_order = self._bandit_reorder(list(preferred_order), task_type)
-        # 云端厂商之间谁先谁后：按智能路由的打分（质量 × 复杂度、成本、延迟、实测表现），
-        # 不再照偏好表的写死顺序。本地厂商原位不动、仍在最前 —— 本地优先是既有语义。
+        # 云端谁先谁后按智能路由打分（质量×复杂度、成本、延迟、实测），不照偏好表写死顺序；本地仍在最前。
         preferred_order = self._order_cloud_by_fit(preferred_order, task_type, complexity_score, purpose)
         alternatives = []
 
@@ -2115,18 +2113,20 @@ class MultiLLMRouter:
                 )
             alternatives.append(f"{provider_name}:{model}")
 
+        # 偏好表没列、但已配好可用的(用户端点 / OneAPI 等)接在后面作失败转移,见 core/routing_tail.py
+        tail = unlisted_available(self, preferred_order, task_type, complexity_score, purpose)
+        pool = [f"{n}:{self.select_model_by_complexity(n, task_type, complexity_score)}" for n in tail]
         if alternatives:
-            selected.alternatives = alternatives[1:]  # 排除已选的第一个
+            selected.alternatives = alternatives[1:] + pool  # 排除已选的第一个
             return selected
 
-        # fallback: 选择任意可用提供商
-        for name, prov in self.providers.items():
-            if prov.is_available():
-                return RoutingDecision(
-                    provider=name,
-                    model=prov.default_model,
-                    reason=f"Fallback: 唯一可用提供商 {name}",
-                )
+        # fallback: 列出来的都不可用 —— 没列的在前,有意不自动参与的(编码套餐)垫底
+        pool += [f"{n}:{self.providers[n].default_model}" for n in last_resort(self, preferred_order)]
+        if pool:
+            first, _, model = pool[0].partition(":")
+            return RoutingDecision(
+                provider=first, model=model, reason=f"Fallback: 偏好表里没有可用的，改用 {first}", alternatives=pool[1:]
+            )
 
         # 无可用提供商 — 返回指向 none 的降级路由决策
         logger.error("没有可用的 LLM 提供商")

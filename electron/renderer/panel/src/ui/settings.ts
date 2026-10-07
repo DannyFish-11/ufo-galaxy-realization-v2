@@ -79,7 +79,11 @@ export function groupByCategory(
 
 export interface SettingsHandles {
   readonly root: HTMLElement;
-  render(items: readonly ConfigItem[] | null, open: boolean, busy: boolean): void;
+  /**
+   * hidden:别处(模型服务商卡片)已经认领的键,这里不再列第二遍。
+   * 空数组 = 全列 —— 认领方没拉到时,不能让任何键因此无处可填。
+   */
+  render(items: readonly ConfigItem[] | null, open: boolean, busy: boolean, hidden?: readonly string[]): void;
 }
 
 export interface SettingsCallbacks {
@@ -258,10 +262,18 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
     return r;
   }
 
-  function render(items: readonly ConfigItem[] | null, open: boolean, busy: boolean): void {
+  function render(
+    allItems: readonly ConfigItem[] | null,
+    open: boolean,
+    busy: boolean,
+    hidden: readonly string[] = [],
+  ): void {
     root.dataset['open'] = String(open);
     root.dataset['busy'] = String(busy);
     if (!open) return;
+
+    const skip = new Set(hidden);
+    const items = allItems === null ? null : allItems.filter((i) => !skip.has(i.key));
 
     // 拿到后端新返回的一批值,就意味着上一批待写的已经落地(或者被拒了、后端给回
     // 了它自己认下的值)。两种情况下队列都该归零 —— 留着的话,界面显示的是后端的
