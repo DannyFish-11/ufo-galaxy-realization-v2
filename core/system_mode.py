@@ -304,6 +304,26 @@ def master_brain_idle_status(log: logging.Logger) -> str:
     return "disabled"
 
 
+def cross_device_refusal(trace_id: Optional[str] = None) -> Optional[dict]:
+    """本地模式下，往别的设备下发命令的统一拒绝；跨设备模式下返回 ``None``（放行）。
+
+    本地模式只用这台电脑。每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、
+    智能体的 ``devices__invoke``、网关的单设备下发）都调它，说法一致：``error == "cross_device_disabled"``
+    （与网关 ``galaxy_gateway.cross_device_switch`` 同一个错误码），并告诉人 / 模型怎么办。
+    """
+    if cross_device_requested():
+        return None
+    out = {
+        "success": False,
+        "error": "cross_device_disabled",
+        "message": "当前是本地模式(只用本机),没有向别的设备下发。要用别的设备,请先打开「跨设备」。",
+        "how_to_fix": "面板「跨设备」按钮打开(要重启才完全生效);智能体可调 devices__request_cross_device 请用户同意。",
+    }
+    if trace_id:
+        out["trace_id"] = trace_id
+    return out
+
+
 _LOCAL_HOSTS = frozenset({"", "localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"})
 
 
@@ -458,6 +478,7 @@ __all__ = [
     "SystemMode",
     "NetworkMode",
     "FabricConfig",
+    "cross_device_refusal",
     "cross_device_requested",
     "master_brain_idle_status",
     "master_brain_requested",

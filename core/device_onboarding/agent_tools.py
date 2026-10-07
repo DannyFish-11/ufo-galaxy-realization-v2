@@ -309,8 +309,12 @@ async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         if d.bridge_id.startswith(prefix):
             return await invoker(d, action, params, session_id)
     if is_native_transport(d.transport) or not d.transport:
-        # 讲 AIP 的设备:走规范派发链(权限门在里面)
+        # 讲 AIP 的设备:走规范派发链(权限门在里面)。本地模式只用本机,先拒(并告诉模型怎么办)。
         from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
+        from core.system_mode import cross_device_refusal
+
+        if (refused := cross_device_refusal()) is not None:
+            return refused
 
         r = await get_canonical_dispatcher().dispatch(f"device__{did}__{action}", params, session_id=session_id)
         return r.as_legacy_dict()
