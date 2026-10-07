@@ -1522,14 +1522,14 @@ class DeviceRouter:
         the TaskEnvelope so that both ``command_only`` and ``agent_runtime``
         dispatches traverse the same substrate path with the mode label intact.
         """
+        # 本地模式只用本机:往一台别的设备下发就是跨设备。此前显式指定一台目标的单设备下发不查开关(真机实测漏过)。
+        if not is_cross_device_enabled():
+            return make_disabled_response(trace_id=task.get("trace_id"))
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
 
-            # PR-AIP-UNIFIED: 这里原有一个 try 块，导入 get_command_router 和
-            # TaskEnvelope 之后直接 pass，异常还被全部吞掉 —— 是移除「DeviceRouter
-            # 回调 CommandRouter」这条环形调用之后留下的空壳，两个导入都没有任何
-            # 使用者。留着只会让人以为此处还有一条兜底路径。
-            # DeviceRouter 是基质层，不应回调编排层；传输一律走 AIPTransport。
+            # PR-AIP-UNIFIED: 原有的 try 块（导入 get_command_router / TaskEnvelope 后直接 pass、异常全吞）是移除
+            # 「DeviceRouter 回调 CommandRouter」环形调用后的空壳，已删。基质层不回调编排层；传输一律走 AIPTransport。
 
             # PR-AIP-UNIFIED: Route through AIPTransport instead of direct WS.
             # Remove circular call to cmd_router.route_envelope (P2 fix).
