@@ -71,6 +71,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
 
+from core.data_paths import data_path
+from core.persist_batch import PersistBatcher
 from core.runtime_truth_governance import (
     RECOVERY_STATUS_DEGRADED,
     RECOVERY_STATUS_LIVE,
@@ -121,7 +123,7 @@ NETWORK_GRAPH_CONTRACT_VERSION: str = "v1"
 _NETWORK_GRAPH_STATE_PATH_ENV: str = "GALAXY_NETWORK_GRAPH_RUNTIME_STATE_PATH"
 _DEFAULT_NETWORK_GRAPH_STATE_PATH: str = os.getenv(
     _NETWORK_GRAPH_STATE_PATH_ENV,
-    "data/runtime/network_graph_runtime_state.json",
+    data_path("runtime", "network_graph_runtime_state.json"),
 )
 
 # ---------------------------------------------------------------------------
@@ -382,6 +384,7 @@ class NetworkGraphRuntime:
         self._log: Deque[NetworkGraphRecord] = deque(maxlen=_RING_BUFFER_SIZE)
         self._rw_lock: threading.Lock = threading.Lock()
         self._state_path = _DEFAULT_NETWORK_GRAPH_STATE_PATH
+        self._persist = PersistBatcher(self._persist_now)
         self._last_recovered_at: Optional[float] = None
         self._recovered_node_ids: set[str] = set()
         self._recovered_edge_ids: set[str] = set()
@@ -408,6 +411,7 @@ class NetworkGraphRuntime:
 
         with self._rw_lock:
             is_update = node.node_id in self._nodes
+            before = self._persisted_view(self._nodes[node.node_id]) if is_update else None
             if is_update:
                 existing = self._nodes[node.node_id]
                 node.registered_at = existing.registered_at
@@ -442,8 +446,17 @@ class NetworkGraphRuntime:
             node.role,
             extra={"event": event_kind, "node_id": node.node_id},
         )
-        self.persist_durable_state()
+        if before is None or before != self._persisted_view(node):  # 同样的内容再登记一遍：不重写整份文件
+            self.persist_durable_state()
         return node
+
+    @staticmethod
+    def _persisted_view(node: NetworkNode) -> Dict[str, Any]:
+        """落盘内容里去掉两个时间戳：它们每次登记都变，不代表图变了。"""
+        view = node.to_dict()
+        view.pop("last_updated_at", None)
+        view.pop("registered_at", None)
+        return view
 
     def remove_node(self, node_id: str) -> bool:
         """Remove a :class:`NetworkNode` from the graph.
@@ -625,6 +638,13 @@ class NetworkGraphRuntime:
         self._log.append(record)
 
     def persist_durable_state(self) -> None:
+        self._persist.request()
+
+    def batched_persistence(self):
+        """``with graph.batched_persistence():`` 里的一连串改动，结束时只落盘一次（见 core/persist_batch.py）。"""
+        return self._persist.batch()
+
+    def _persist_now(self) -> None:
         with self._rw_lock:
             payload = {
                 "contract_version": "network_graph_runtime_durable_v1",

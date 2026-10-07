@@ -172,6 +172,64 @@ def _get_asr():
     return _asr_singleton
 
 
+_asr_warming = False
+_asr_warm_logged = False
+
+
+def asr_state() -> str:
+    """听写引擎此刻的状态（不会触发加载）：``ready`` / ``warming`` / ``failed`` / ``cold``。"""
+    if _asr_singleton is not None:
+        return "ready"
+    if _asr_failed:
+        return "failed"
+    return "warming" if _asr_warming else "cold"
+
+
+def warm_asr_in_background() -> None:
+    """在后台线程里把听写引擎加载一次（首次要下载模型，可能几分钟）。已就绪 / 已在加载就什么也不做。"""
+    global _asr_warming
+    if asr_state() != "cold":
+        return
+    _asr_warming = True
+
+    def _warm() -> None:
+        global _asr_warming
+        try:
+            _get_asr()
+        finally:
+            _asr_warming = False
+
+    threading.Thread(target=_warm, daemon=True, name="asr-warmup").start()
+
+
+def can_listen_now() -> bool:
+    """这一拍能不能**马上**转写：原生听的后端在线，或听写引擎已就绪。
+
+    引擎还在准备（首次要下载约百兆的模型）时返回 ``False``，并保证它在后台加载。调用方据此直接放弃这一拍的转写，
+    而不是丢一个线程进去等：常驻注意力循环以前每拍都 ``to_thread(transcribe_b64)``，下载那几分钟里每一拍
+    都在线程池里多占一个线程（等同一把锁），到期限（45 秒）才被取消 —— 屏幕上是「转写 45 秒没有回应」，
+    线程池却被一直占着，别的 ``to_thread`` 调用跟着变慢。
+    """
+    global _asr_warm_logged
+    try:
+        from core.native_modal import get_active_backend
+
+        if get_active_backend() is not None:
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    state = asr_state()
+    if state == "ready":
+        return True
+    if state == "failed":
+        return False  # 引擎起不来：转写本来就返回 None，别再丢线程进去
+    warm_asr_in_background()
+    if not _asr_warm_logged:
+        _asr_warm_logged = True
+        logger.info("听写引擎还在准备（首次使用要下载模型，需要几分钟）—— 这几拍不带声音内容，准备好后自动恢复。")
+    return False
+
+
 def _decode_audio_to_pcm(audio_bytes: bytes):
     """任意容器(webm/opus/wav…)的音频字节 → float32 单声道 16kHz numpy 数组。
 

@@ -394,8 +394,11 @@ class CapabilityOrchestrator:
         if self._initialized:
             return
 
-        self._seed_builtin_contracts()
-        await self._seed_static_node_contracts()
+        from core.network_graph_runtime import get_network_graph_runtime
+
+        with get_network_graph_runtime().batched_persistence():  # 一百多次登记，拓扑图只落盘一次
+            self._seed_builtin_contracts()
+            await self._seed_static_node_contracts()
         self._refresh_capability_projection()
         self._initialized = True
         logger.info(f"已加载 {len(self.capabilities)} 个能力")

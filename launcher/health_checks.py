@@ -31,12 +31,9 @@ def _nats_tcp_failure_is_critical() -> bool:
 
     if os.environ.get("GALAXY_FABRIC_STRICT", "").lower() in ("true", "1", "yes"):
         return True
-    from core.system_mode import cross_device_requested  # 模式只有一个出处
+    from core.system_mode import cross_device_requested, nats_wanted  # 模式、总线各只有一个出处
 
-    if cross_device_requested():
-        return True
-    nats_on = os.environ.get("GALAXY_NATS_ENABLED", "").lower() in ("true", "1", "yes")
-    if nats_on:
+    if cross_device_requested() or nats_wanted():
         return True
     try:
         from core.nats_bus import nats_bus

@@ -57,6 +57,17 @@ PANEL_HIDDEN_KEYS = (
             "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
             "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
             "GALAXY_SYSTEM_MODE",  # 面板上切模式的只有「跨设备」那一个按钮,它一并写这个键(见 config_bundles.mirrors)
+            # 多机模式的内部调参(见 config_schema_multimachine):登记了、能存能读,不占面板的行
+            "FEDERATION_INSTANCE_ID",
+            "FEDERATION_MIN_HEARTBEAT_INTERVAL",
+            "FEDERATION_OFFLINE_THRESHOLD",
+            "GALAXY_WEBRTC_TASK_READY_TIMEOUT_S",
+            "GALAXY_HOLE_PUNCH_TIMEOUT_S",
+            "GALAXY_MESH_NODE_ID",
+            "GALAXY_MESH_PORT",
+            "GALAXY_MULTI_DEVICE_DISPATCH_LIMIT",
+            "GALAXY_WORKER_ID",
+            "GALAXY_WORKER_VERSION",
         }
     )
     | PANEL_HIDDEN_SWITCH_KEYS
@@ -452,6 +463,35 @@ async def probe_config_urls(req: ProbeRequest):
     return {"results": results}
 
 
+def _is_hidden_switch_at_default(key: str, meta: Dict[str, Any], value: Any, explicit: bool) -> bool:
+    """面板不列的开关（内置 / 运维 / 并进整档），且没人动过 —— 它在 .env 里只是噪音。
+
+    此前「保存设置」会把全部登记键的默认值整体钉进 .env，其中七十多个是不该有人碰的内部开关：
+    .env 成了一份几百行的清单，真正被改过的几行淹在里面；而钉死的默认值还会盖住以后代码里默认值的修正。
+    **有人改过的照旧写**（值与默认不同，例如手写 GALAXY_DEV_MODE=true）。并进整档的成员是例外：它的
+    「默认」只是按钮开着时该有的值，没写这个键时代码按模式判，所以**只要不是人写进环境的就不钉**，
+    写了的（哪怕等于默认，如本地模式强行 GALAXY_NATS_ENABLED=true）要留着。
+    """
+    from core.routes.panel_switch_policy import MEMBER, PANEL, SWITCH_POLICY
+
+    if _is_data_dir_default(meta, value):
+        return True
+    policy = SWITCH_POLICY.get(key)
+    if policy is None or policy.disposition == PANEL:
+        return False
+    if policy.disposition == MEMBER:
+        return not explicit
+    if meta["type"] == "boolean":
+        return _bool_text(value) == _bool_text(meta["default"])
+    return str(value) == str(meta["default"])
+
+
+def _is_data_dir_default(meta: Dict[str, Any], value: Any) -> bool:
+    """默认位置在数据目录下（``data/...``）且没改 —— 它该随 ``GALAXY_DATA_DIR`` 走，钉成相对路径就把它冻死了。"""
+    default = str(meta["default"]).replace("\\", "/")
+    return default.startswith(("data/", "./data")) and str(value) == str(meta["default"])
+
+
 def _write_env_file(exclude=None):
     """将所有【非空】配置写入 .env 文件(读 os.environ 现值)。"""
     return _write_env_file_with(None, exclude=exclude)
@@ -510,6 +550,8 @@ def _write_env_file_with(overrides=None, exclude=None):
         value = _overrides.get(key, os.environ.get(key, meta["default"]))
         if not str(value).strip():
             continue  # 空值不落盘——否则会把代码默认值顶掉
+        if _is_hidden_switch_at_default(key, meta, value, key in _overrides or key in os.environ):
+            continue  # 内置/运维/已并进整档的开关：没人动过就不往 .env 里钉默认值
         if meta["category"] != current_category:
             current_category = meta["category"]
             lines.append(f"\n# --- {current_category.upper()} ---\n")
@@ -517,6 +559,10 @@ def _write_env_file_with(overrides=None, exclude=None):
         desc = meta["description"]
         lines.append(f"# {desc}\n{key}={value}\n")
 
+    # 登记表之外的行（compose 口令、端口、镜像站……）原样带回，不能因为点了一次保存就丢
+    from core.routes.config_env_preserve import foreign_env_lines
+
+    lines.extend(foreign_env_lines(ENV_FILE, CONFIG_SCHEMA, _exclude))
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 

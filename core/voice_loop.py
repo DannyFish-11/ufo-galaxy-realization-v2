@@ -128,6 +128,11 @@ class VoiceLoop:
 
         logger.info("Starting VoiceLoop...")
 
+        # 回复要念出来：引擎在旁边的线程里先选好（import 一串库、探测算力），第一句话到时已经在手上
+        from core.speech_output import warm_speech_engine
+
+        warm_speech_engine()
+
         # 0. 双工优先:开关打开且会话建得起来 → 走持续上下行链路,不再初始化
         #    ASR/TTS(那是回合制的部件)。建不起来则如实退回回合制,原因已在
         #    open_duplex_session 里记过日志。

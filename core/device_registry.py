@@ -59,6 +59,7 @@ Usage::
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -145,8 +146,7 @@ class DeviceRegistry:
         # 能力索引
         self.capability_index: Dict[str, List[str]] = {}  # capability -> [device_ids]
 
-        # 持久化路径
-        self.storage_path = Path("data/devices.json")
+        self.storage_path = Path(os.environ.get("GALAXY_DATA_DIR") or "data") / "devices.json"  # 持久化路径
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
 
         # 事件回调

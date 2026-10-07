@@ -9864,6 +9864,7 @@ class OpenClawd:
         count = 0
         try:
             from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+            from core.network_graph_runtime import get_network_graph_runtime
 
             reg = CapabilityRegistry.get_instance()
 
@@ -9895,57 +9896,58 @@ class OpenClawd:
             if not devices:
                 return 0
 
-            for device in devices:
-                # Accept both object attributes and dict keys
-                if isinstance(device, dict):
-                    device_id = device.get("device_id", "")
-                    d_name = device.get("device_name", device_id)
-                    d_type = str(device.get("device_type", "unknown"))
-                    caps = device.get("capabilities", [])
-                    meta: Dict[str, Any] = device.get("metadata", {}) or {}
-                else:
-                    device_id = getattr(device, "device_id", "")
-                    d_name = getattr(device, "device_name", None) or device_id
-                    d_type = str(getattr(device, "device_type", "unknown"))
-                    caps = getattr(device, "capabilities", []) or []
-                    meta = getattr(device, "metadata", {}) or {}
+            with get_network_graph_runtime().batched_persistence():  # 每次对话都重登记全部设备能力：拓扑图只落盘一次
+                for device in devices:
+                    # Accept both object attributes and dict keys
+                    if isinstance(device, dict):
+                        device_id = device.get("device_id", "")
+                        d_name = device.get("device_name", device_id)
+                        d_type = str(device.get("device_type", "unknown"))
+                        caps = device.get("capabilities", [])
+                        meta: Dict[str, Any] = device.get("metadata", {}) or {}
+                    else:
+                        device_id = getattr(device, "device_id", "")
+                        d_name = getattr(device, "device_name", None) or device_id
+                        d_type = str(getattr(device, "device_type", "unknown"))
+                        caps = getattr(device, "capabilities", []) or []
+                        meta = getattr(device, "metadata", {}) or {}
 
-                # 低层设备能力
-                for cap in caps:
-                    cap_name = cap if isinstance(cap, str) else str(cap)
-                    key = f"gateway__{device_id}__{cap_name}"
-                    reg.register(
-                        CapabilityItem(
-                            name=key,
-                            description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
-                            source="gateway",
-                            source_id=device_id,
-                            available=True,
-                            metadata={"device_name": d_name, "device_type": d_type},
-                        )
-                    )
-                    count += 1
-
-                # Priority C: 高层自治能力（从 metadata 声明）
-                for cap_key in _AUTONOMOUS_CAPABILITY_KEYS:
-                    if meta.get(cap_key):
-                        key = f"autonomous__{device_id}__{cap_key}"
+                    # 低层设备能力
+                    for cap in caps:
+                        cap_name = cap if isinstance(cap, str) else str(cap)
+                        key = f"gateway__{device_id}__{cap_name}"
                         reg.register(
                             CapabilityItem(
                                 name=key,
-                                description=f"[Autonomous:{d_name}] {cap_key}",
-                                source="autonomous",
+                                description=f"[Gateway:{d_name}({d_type})] 设备能力: {cap_name}",
+                                source="gateway",
                                 source_id=device_id,
                                 available=True,
-                                metadata={
-                                    "device_id": device_id,
-                                    "device_name": d_name,
-                                    "device_type": d_type,
-                                    "capability_key": cap_key,
-                                },
+                                metadata={"device_name": d_name, "device_type": d_type},
                             )
                         )
                         count += 1
+
+                    # Priority C: 高层自治能力（从 metadata 声明）
+                    for cap_key in _AUTONOMOUS_CAPABILITY_KEYS:
+                        if meta.get(cap_key):
+                            key = f"autonomous__{device_id}__{cap_key}"
+                            reg.register(
+                                CapabilityItem(
+                                    name=key,
+                                    description=f"[Autonomous:{d_name}] {cap_key}",
+                                    source="autonomous",
+                                    source_id=device_id,
+                                    available=True,
+                                    metadata={
+                                        "device_id": device_id,
+                                        "device_name": d_name,
+                                        "device_type": d_type,
+                                        "capability_key": cap_key,
+                                    },
+                                )
+                            )
+                            count += 1
 
             if count:
                 logger.info(

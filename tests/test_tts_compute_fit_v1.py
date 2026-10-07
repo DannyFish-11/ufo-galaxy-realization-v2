@@ -116,7 +116,7 @@ class TestGroupBTable:
         """The table must not quietly omit an engine speech_output can pick."""
         import core.speech_output as mod
 
-        src = inspect.getsource(mod._get_engine)
+        src = inspect.getsource(mod._select_engine)
         selectable = {"edge", "kokoro", "melo", "piper", "sapi", "indextts"}
         for name in selectable:
             assert f'"{name}"' in src or f"_try_{name}" in src, f"{name} not selectable?"
@@ -251,14 +251,14 @@ class TestGroupEWiring:
     def test_e01_speech_output_preflights(self):
         import core.speech_output as mod
 
-        src = inspect.getsource(mod._get_engine)
+        src = inspect.getsource(mod._select_engine)
         assert "assess_engine_fit" in src
 
     def test_e02_preflight_warns_but_does_not_reassign_choice(self):
         """POLICY_2 in code, not just in prose: the pre-check must not pick for you."""
         import core.speech_output as mod
 
-        src = inspect.getsource(mod._get_engine)
+        src = inspect.getsource(mod._select_engine)
         # The pre-flight region runs from where compute_fit is first imported to
         # where the chain filter begins — the filter is allowed to drop unfit
         # engines from the *fallback* part, the pre-flight is not allowed to
@@ -278,7 +278,7 @@ class TestGroupEWiring:
         """
         import core.speech_output as mod
 
-        src = inspect.getsource(mod._get_engine)
+        src = inspect.getsource(mod._select_engine)
         assert "filter_fallback_chain" in src
         assert "_FALLBACK_CHAINS" in src, "回退链必须是那张表,否则过滤器无处下手"
 
@@ -290,7 +290,7 @@ class TestGroupEWiring:
         """
         import core.speech_output as mod
 
-        src = inspect.getsource(mod._get_engine)
+        src = inspect.getsource(mod._select_engine)
         assert 'os.getenv("GALAXY_TTS_ENGINE", "").strip()' in src
 
     def test_e06_every_chain_ends_in_a_guaranteed_voice(self):

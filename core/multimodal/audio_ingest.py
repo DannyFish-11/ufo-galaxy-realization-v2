@@ -204,7 +204,18 @@ class AudioIngestPipeline:
 
         # 默认录音设备可能被改/被拔/被独占 → device=None 直接打不开(经典"之前能录现在
         # 不行")。这里先挑一个实测能打开的输入设备,默认可用就原样用,不可用才回退。
-        _device = _resolve_input_device(sd, self.config.device, self.config.sample_rate, self.config.channels)
+        # 枚举并实测输入设备、打开 PortAudio 流都是会阻塞的系统调用(Windows 上每个候选可能上百毫秒、
+        # 开流可能数秒)—— 放在事件循环线程上，面板 / 对话 / 感知上传会一起停住。全部丢到工作线程。
+        # 「在跑」从这里就算：线程里的等待会让出循环，第二个 run() 此时进来若看到 _running 还是 False，
+        # 会以为没人驱动、再开一路流（共享管线的可重入闸就是靠它判断）。
+        self._running = True
+        try:
+            _device = await asyncio.to_thread(
+                _resolve_input_device, sd, self.config.device, self.config.sample_rate, self.config.channels
+            )
+        except BaseException:
+            self._running = False
+            raise
         if _device != self.config.device:
             logger.warning(
                 "默认录音设备不可用,已回退到输入设备 index=%s(原 device=%s)。"
@@ -228,6 +239,7 @@ class AudioIngestPipeline:
                 "audio capture cannot start.  Call capture() from an async context."
             )
             self._quality = SignalQuality.device_unavailable()
+            self._running = False  # 上面为了让出循环提前置了「在跑」
             return
         queue: asyncio.Queue = asyncio.Queue(maxsize=30)
 
@@ -263,14 +275,17 @@ class AudioIngestPipeline:
             logger.debug("回环采集自启跳过(麦克风链路不受影响): %s", exc)
 
         try:
-            with sd.InputStream(
+            stream = await asyncio.to_thread(
+                sd.InputStream,
                 samplerate=self.config.sample_rate,
                 channels=self.config.channels,
                 dtype="float32",
                 blocksize=chunk_size,
                 device=_device,
                 callback=_sd_callback,
-            ):
+            )
+            await asyncio.to_thread(stream.__enter__)  # 与 `with` 同一件事(启动流)，只是不在循环线程上做
+            try:
                 logger.info(
                     "Audio ingest started (sr=%d, chunk_ms=%d)",
                     self.config.sample_rate,
@@ -282,6 +297,8 @@ class AudioIngestPipeline:
                         await self._process_chunk(chunk)
                     except asyncio.TimeoutError:
                         pass
+            finally:
+                await asyncio.to_thread(stream.__exit__, None, None, None)
 
         except PermissionError:
             self._quality = SignalQuality.permission_denied()

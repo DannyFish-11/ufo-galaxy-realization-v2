@@ -19,6 +19,7 @@ import asyncio
 import contextvars
 import logging
 import os
+import threading
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -134,7 +135,42 @@ _FALLBACK_CHAINS: Dict[str, Tuple[str, ...]] = {
 }
 
 
+_engine_lock = threading.RLock()
+
+
 def _get_engine() -> Optional[Any]:
+    """当前引擎；还没选就选（**会阻塞**：要 import 一串库、探测算力，Windows 上可能是好几秒）。
+
+    选择过程上锁：预热线程与第一次请求同时到，只有一方真正去选，另一方等着拿结果，不会选两遍。
+    在事件循环里用 :func:`speech_engine_ready`，别直接调它。
+    """
+    if _engine is not None or _engine_failed:
+        return _engine
+    with _engine_lock:
+        if _engine is not None or _engine_failed:  # 等锁的这段时间，别人已经选好了
+            return _engine
+        return _select_engine()
+
+
+async def speech_engine_ready() -> Optional[Any]:
+    """引擎已选好就直接给；还没选好就放到工作线程里选 —— 不压在事件循环上。
+
+    真机日志：第一次对话的请求里，选引擎（import edge_tts / onnxruntime / torch、探测算力、检查模型）
+    在循环线程上同步跑完，面板与对话一起冻了 7 秒。
+    """
+    if _engine is not None or _engine_failed:
+        return _engine
+    return await asyncio.to_thread(_get_engine)
+
+
+def warm_speech_engine() -> None:
+    """后台线程里把引擎先选好，第一次请求来时已经在手上。朗读没开就什么都不做。"""
+    if _engine is not None or _engine_failed or not speak_enabled():
+        return
+    threading.Thread(target=_get_engine, name="warm-tts", daemon=True).start()
+
+
+def _select_engine() -> Optional[Any]:
     global _engine, _engine_failed
     if _engine is not None or _engine_failed:
         return _engine
@@ -360,7 +396,7 @@ async def synthesize_to_file(
     复用 ``_speak_via_tts_engine`` 同一套降级语义:合成运行期失败 → demote 换引擎 →
     重试一次。失败返回 ``None``(不抛),调用方按"合成不可用"处理。
     """
-    engine = _get_engine()
+    engine = await speech_engine_ready()
     if engine is None:
         return None
     used = engine
@@ -433,7 +469,7 @@ async def _speak_via_tts_engine(spoken: str, source: str = "") -> None:
     这是"说"的桥接实现,也是【原生说失败后的兜底】:原生后端返回 False / 抛异常时
     由 :func:`_run_native_speech` 回落到这里,确保绝不因原生失败而彻底哑火。
     """
-    engine = _get_engine()
+    engine = await speech_engine_ready()
     if engine is None:
         return
 

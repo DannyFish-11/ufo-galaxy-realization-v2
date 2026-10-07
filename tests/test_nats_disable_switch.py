@@ -42,11 +42,25 @@ class TestDisableSwitchPredicate:
         monkeypatch.setenv("GALAXY_NATS_ENABLED", raw)
         assert nats_disabled_by_config() is False
 
-    def test_unset_does_not_disable(self, monkeypatch):
-        """未设 = 保持既有默认(尝试启用),关闭必须是**显式**的。"""
+    def test_unset_follows_the_mode(self, monkeypatch):
+        """没写 = 跟着模式走(core.system_mode.nats_wanted 唯一一处判定):跨设备模式要总线,本地模式用不到。
+        想在本地模式单独起它,显式写 true —— 见下一条。"""
         from core.nats_server import nats_disabled_by_config
 
         monkeypatch.delenv("GALAXY_NATS_ENABLED", raising=False)
+        monkeypatch.delenv("GALAXY_NATS_URL", raising=False)
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
+        monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
+        assert nats_disabled_by_config() is True  # 本地模式
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+        assert nats_disabled_by_config() is False  # 跨设备模式
+
+    def test_explicit_true_beats_the_local_mode(self, monkeypatch):
+        from core.nats_server import nats_disabled_by_config
+
+        monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
+        monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
         assert nats_disabled_by_config() is False
 
 

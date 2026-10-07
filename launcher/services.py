@@ -1714,13 +1714,13 @@ class GalaxyUnified:
         """
         from core.nats_bus import get_nats_bus
         from core.nats_server import EmbeddedNATSServer
+        from core.system_mode import nats_off_reason
 
-        # 显式关闭(用户在 .env 写 GALAXY_NATS_ENABLED=false 时才走这里;默认已改回
-        # 开启——所有者明确指令:默认路径是"尝试启动→成功",不许拿关闭当回避)。
-        # 关闭时同样切进程内总线:单机语义完整,只是不再尝试拉起 nats-server。
-        if os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off"):
-            get_nats_bus().enable_local_fallback("GALAXY_NATS_ENABLED=false(按配置显式关闭)")
-            return {"ok": False, "url": "", "error": "", "hint": "", "disabled": True}
+        # 不该起(写了 false,或没写且是本地模式,见 nats_wanted):切进程内总线;要起的走下面的尝试启动,不拿关闭当回避。
+        _off = nats_off_reason()
+        if _off:
+            get_nats_bus().enable_local_fallback(_off)
+            return {"ok": False, "url": "", "error": "", "hint": "", "disabled": True, "reason": _off}
         nats_url = os.environ.get("GALAXY_NATS_URL")
         embedded_error = ""
         embedded_hint = ""
@@ -2123,10 +2123,10 @@ class GalaxyUnified:
         elif _nats_res.get("disabled"):
             # 按配置显式关闭 —— 是配置意图而非故障;单机模式正常,如实标注影响。
             nats_ok = False
-            bus_value = "单机模式正常(进程内总线)· NATS 按配置关闭,跨设备分发不可用"
-            bus_details.append(("NATS Bus", "按配置未启用(GALAXY_NATS_ENABLED=false)", "warn"))
+            bus_value = "单机模式正常(进程内总线)· 没起 NATS,跨设备分发不可用"
+            bus_details.append(("NATS Bus", f"未启用:{_nats_res.get('reason') or '按配置关闭'}", "info"))
             bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内总线正常工作", "info"))
-            bus_hint = "如需跨设备:设 GALAXY_NATS_ENABLED=true 并确保 nats-server 可运行"
+            bus_hint = "如需跨设备:面板打开「跨设备」(会一并开总线)并确保 nats-server 可运行"
         else:
             # 诚实降级但语气为"单机模式正常"(所有者指令):NATS 起不来不是单机
             # 故障——进程内总线已自动接管全部单机语义,失败原因与放行指引照展示。

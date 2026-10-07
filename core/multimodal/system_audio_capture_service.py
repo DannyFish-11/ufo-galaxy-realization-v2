@@ -151,6 +151,12 @@ class SystemAudioCaptureService:
         with self._lock:
             if self._running:
                 return True
+        # 探测设备、开流都是会阻塞的系统调用(Windows 上枚举设备 / 打开 WASAPI 可能是好几秒):
+        # 压在事件循环上，面板、对话、感知上传就一起停住 —— 真机日志里「系统播放声采集不可用」之后
+        # 紧跟着一个 5 秒的整体冻结。放到工作线程里做。
+        return await asyncio.to_thread(self._start_blocking)
+
+    def _start_blocking(self) -> bool:
         try:
             from core.multimodal.system_audio_ingest import (
                 choose_loopback_target,

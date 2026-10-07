@@ -242,6 +242,7 @@ class TestAmbientHearing:
         import core.modality_bridge as mb
 
         monkeypatch.setattr(mb, "transcribe_b64", lambda b64, mime="audio/webm", language="zh": "用户说了话")
+        monkeypatch.setattr(mb, "can_listen_now", lambda: True)  # 听写引擎「已就绪」
         store = FakeStore({"camera_b64": _BLACK, "audio_b64": "AAAA", "audio_mime": "audio/webm"})
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)

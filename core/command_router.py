@@ -5425,11 +5425,9 @@ class NATSExecutor:
     - Falls back to *fallback_executor* when NATS is not connected and
       *fallback_enabled* is True (default True).
 
-    Usage::
-
-        nats_exec = NATSExecutor(fallback_executor=existing_local_executor)
-        await nats_exec.start()                 # subscribe to results
-        command_router.set_executor(nats_exec)  # register as executor
+    Wiring: not installed *as* the router's executor (that would put every command behind a NATS
+    round trip). ``core.nats_dispatch_bridge.dispatch_to_nats_worker`` calls it for targets that are
+    alive NATS workers and nothing else — see that module for why.
 
     Env vars:
         GALAXY_NATS_EXECUTOR_FALLBACK  — "sync"/"true" (default): fall back locally; "reject"/"false"/"0": refuse

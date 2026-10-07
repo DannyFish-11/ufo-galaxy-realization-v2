@@ -328,7 +328,12 @@ async def test_a_stuck_transcription_costs_the_beat_its_voice_not_the_loop(spoke
         governor=AmbientGovernor(_limits(listen_deadline_s=0.1)),
     )
     try:
-        with patch("core.modality_bridge.transcribe_b64", stuck):
+        # 听写引擎「已就绪」：测的是已就绪但一次转写卡住的情形（引擎还在下载的情形见
+        # test_ambient_listening_does_not_park_threads_while_the_asr_downloads.py）
+        with (
+            patch("core.modality_bridge.transcribe_b64", stuck),
+            patch("core.modality_bridge.can_listen_now", lambda: True),
+        ):
             decision = await asyncio.wait_for(loop.tick(), 3)
     finally:
         release.set()

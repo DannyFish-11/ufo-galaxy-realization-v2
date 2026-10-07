@@ -126,7 +126,8 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
             "GALAXY_ANDROID_WS_ENABLED",
             "ANDROID_DEVICE_*",
             "FEDERATION_*",
-            "NODE_*_URL",
+            # NODE_*_URL 不在这里:它们是**本机**上各节点微服务的地址(adb / scrcpy / mqtt / webrtc 的 localhost 端口),
+            # 只用本机时一样要用 —— 算跨设备的,「跨设备」按钮的「n 项改过」就会因为改了一个本机端口而亮起来。
         ),
         # 发现附近设备 / 向手机手表宣告自己 / 设备接入平面 / 消息总线:
         # 只用本机时,这四样要么没有对象可发现,要么白占一个常驻进程。

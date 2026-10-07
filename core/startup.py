@@ -481,42 +481,9 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # 3. 性能中间件链
     # ====================================================================
     try:
-        from core.performance import (
-            CachingMiddleware,
-            ClientDisconnectGuardMiddleware,
-            RateLimitMiddleware,
-            RequestTimerMiddleware,
-            ResponseCompressor,
-        )
+        from core.performance import install_performance_middlewares
 
-        # 中间件按添加的逆序执行（最后添加的最先执行）
-        # 执行顺序：DisconnectGuard → Timer → RateLimit → Compress → Cache → Handler
-
-        if cache:
-            default_ttl = int(os.environ.get("REDIS_HTTP_CACHE_TTL", "30"))
-            app.add_middleware(CachingMiddleware, cache_backend=cache, default_ttl=default_ttl)
-            logger.info("API 缓存中间件已加载")
-
-        min_size = int(os.environ.get("GZIP_MIN_SIZE", "1024"))
-        app.add_middleware(ResponseCompressor, min_size=min_size)
-        logger.info("gzip 压缩中间件已加载")
-
-        max_req = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "200"))
-        window = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
-        app.add_middleware(RateLimitMiddleware, max_requests=max_req, window_seconds=window)
-        logger.info(f"限流中间件已加载: {max_req} req / {window}s")
-
-        slow_threshold = float(os.environ.get("SLOW_REQUEST_THRESHOLD_MS", "500"))
-        app.add_middleware(RequestTimerMiddleware, slow_threshold_ms=slow_threshold)
-        logger.info("请求计时中间件已加载")
-
-        # 最后添加 = 最外层执行:客户端断开写保护必须包住整条 BaseHTTPMiddleware
-        # 链(压缩/缓存/计时都会向 transport 写响应体),否则客户端提前断开后
-        # winloop 的 "Cannot call write() when UVStream is closing" 会作为未处理
-        # 异常刷屏(Windows 真机日志实证,详见 ClientDisconnectGuardMiddleware)。
-        app.add_middleware(ClientDisconnectGuardMiddleware)
-        logger.info("客户端断开写保护中间件已加载(最外层)")
-
+        install_performance_middlewares(app, cache)  # 链的顺序与每层为什么这样放见该函数
         results["performance"] = {"status": "ok", "middlewares": 5 if cache else 4}
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)

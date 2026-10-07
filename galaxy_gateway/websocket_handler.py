@@ -1225,10 +1225,10 @@ async def handle_device_perception_emission(connection_id: str, aip_msg):
         if content and len(content) > len(head) + 2:
             await asyncio.to_thread(um.remember, content, metadata=meta)
 
-        # 可选：截图入跨模态记忆（CLIP），仅当 GALAXY_MEMORY_MEDIA 开启且有 base64 图像
-        screenshot = payload.get("screenshot") or {}
-        img_b64 = _g(screenshot, "data")
-        if img_b64 and os.getenv("GALAXY_MEMORY_MEDIA", "0").strip().lower() in ("1", "true", "yes", "on"):
+        from core.memory.media_store import enabled as _media_enabled  # 截图入跨模态记忆(CLIP):开关只在这一处判
+
+        img_b64 = _g(payload.get("screenshot") or {}, "data")
+        if img_b64 and _media_enabled():
             try:
                 await asyncio.to_thread(
                     lambda: um.remember_media(

@@ -16,6 +16,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from core.data_paths import data_path
 from core.memory.base import MemoryHit, MemoryProvider
 
 logger = logging.getLogger("Galaxy.Memory.SimpleMem")
@@ -52,7 +53,7 @@ class OmniSimpleMemProvider(MemoryProvider):
         if self._mem is None:
             from simplemem import SimpleMemSystem
 
-            db_dir = os.getenv("GALAXY_OMNIMEM_DIR", "./data/omni_simplemem")
+            db_dir = os.getenv("GALAXY_OMNIMEM_DIR", data_path("omni_simplemem"))
             try:
                 os.makedirs(db_dir, exist_ok=True)
             except Exception:  # noqa: BLE001

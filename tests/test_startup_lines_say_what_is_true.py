@@ -222,7 +222,7 @@ class TestPreflight:
 
 
 class TestBusLine:
-    def _said(self, monkeypatch, value):
+    def _said(self, monkeypatch, value, cross_device=False):
         from core.system_orchestrator import SystemOrchestrator
 
         if value is None:
@@ -230,17 +230,37 @@ class TestBusLine:
         else:
             monkeypatch.setenv("GALAXY_NATS_ENABLED", value)
         monkeypatch.delenv("GALAXY_NATS_URL", raising=False)
-        monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
+        if cross_device:
+            monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+        else:
+            monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
         orch = SystemOrchestrator.__new__(SystemOrchestrator)
         return orch._run_phase_2_resolve_mode().said
 
-    def test_unset_means_the_bus_will_be_started(self, monkeypatch):
-        """真机首启:``只用本机,不用消息总线`` → 后面 ``✓ 消息总线 nats://localhost:4222``。"""
-        said = self._said(monkeypatch, None)
+    def test_unset_in_cross_device_mode_means_the_bus_will_be_started(self, monkeypatch):
+        """没写 GALAXY_NATS_ENABLED 就跟着模式走：跨设备模式要总线，屏幕上就说「稍后拉起」。"""
+        said = self._said(monkeypatch, None, cross_device=True)
         assert "不用消息总线" not in said and "拉起" in said
+
+    def test_unset_in_local_mode_says_no_bus_and_the_launcher_agrees(self, monkeypatch):
+        """真机首启曾是：屏幕说「只用本机,不用消息总线」，几十秒后又出「✓ 消息总线 nats://localhost:4222」。
+        两处现在是同一个判据：本地模式没写就不起，且说得出原因。"""
+        from core.system_mode import nats_wanted
+
+        said = self._said(monkeypatch, None)
+        assert "不用消息总线" in said and "本地模式" in said
+        assert nats_wanted() is False
 
     def test_explicit_false_means_no_bus(self, monkeypatch):
         assert "不用消息总线" in self._said(monkeypatch, "false")
+
+    def test_explicit_true_overrides_the_mode(self, monkeypatch):
+        """想在本地模式单独起总线：显式写 true，两处都听它的。"""
+        from core.system_mode import nats_wanted
+
+        said = self._said(monkeypatch, "true")
+        assert "不用消息总线" not in said and nats_wanted() is True
 
 
 # ── .env 在加载配置之前就生成 ────────────────────────────────────────────────

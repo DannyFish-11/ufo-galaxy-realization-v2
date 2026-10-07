@@ -139,8 +139,8 @@
 | `GALAXY_ONBOARDING_SCAN_INTERVAL_S` | 60 | 是 | 全部设置 | — |  |
 | `GALAXY_ONBOARDING_STATE_DIR` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_MESH_DISCOVERY_TIMEOUT` | 2.0 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_MESH_NODE_ID` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_MESH_PORT` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_MESH_NODE_ID` | gateway | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_MESH_PORT` | 19422 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_DEVICE_NAME` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_DEVICE_TYPE` | 空 | 是 | 全部设置 | 跨设备 |  |
 
@@ -163,24 +163,24 @@
 | `GALAXY_TS_FUNNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `GALAXY_TS_ADVERTISE_RELAY` | 开 | 是 | 内置 | 跨设备 |  |
 | `GALAXY_TAILSCALE_CHECK_INTERVAL` | 30 | 是 | 全部设置 | — |  |
-| `GALAXY_TAILSCALE_ENABLED` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_TAILSCALE_HOST` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_TAILSCALE_TAG` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_TAILSCALE_ENABLED` | 关 | 是 | 运维 | — |  |
+| `GALAXY_TAILSCALE_HOST` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_TAILSCALE_TAG` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_HEADSCALE_URL` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_HEADSCALE_API_KEY` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_HEADSCALE_USER` | galaxy | 是 | 全部设置 | — |  |
 | `GALAXY_HEADSCALE_AUTOJOIN` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TURN_URLS` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_TURN_USERNAME` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_TURN_CREDENTIAL` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_TURN_USERNAME` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_TURN_CREDENTIAL` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_SIGNALING_TIMEOUT_S` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
-| `GALAXY_ENABLE_WEBRTC` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_WEBRTC_TASK_READY_TIMEOUT_S` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_USE_GATEWAY_FOR_WEBRTC` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_ENABLE_WEBRTC` | 关 | 是 | 运维 | — |  |
+| `GALAXY_WEBRTC_TASK_READY_TIMEOUT_S` | 15 | 是 | 全部设置 | — |  |
+| `GALAXY_USE_GATEWAY_FOR_WEBRTC` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TRANSPORT_ADAPTIVE` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TRANSPORT_BULK_BYTES` | 65536 | 是 | 全部设置 | — |  |
-| `GALAXY_TRANSPORT_PRIORITY` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_TRANSPORT_PRIORITY` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_ANDROID_WS_ENABLED` | 关 | 是 | 运维 | 跨设备 |  |
 | `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 全部设置 | 跨设备 |  |
 | `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 全部设置 | 跨设备 |  |
@@ -196,9 +196,9 @@
 | `FEDERATION_PEERS` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `FEDERATION_LOCAL_HOST` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `FEDERATION_HEARTBEAT_INTERVAL` | 15 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_INSTANCE_ID` | — | **未登记**（只能改 .env） | — | — | — |
-| `FEDERATION_MIN_HEARTBEAT_INTERVAL` | — | **未登记**（只能改 .env） | — | — | — |
-| `FEDERATION_OFFLINE_THRESHOLD` | — | **未登记**（只能改 .env） | — | — | — |
+| `FEDERATION_INSTANCE_ID` | 空 | 是 | 全部设置 | 跨设备 |  |
+| `FEDERATION_MIN_HEARTBEAT_INTERVAL` | 5 | 是 | 全部设置 | 跨设备 |  |
+| `FEDERATION_OFFLINE_THRESHOLD` | 3 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_HA_BRIDGE` | 开 | 是 | 内置 | — |  |
 | `HOME_ASSISTANT_URL` | 空 | 是 | 全部设置 | — |  |
 | `HOME_ASSISTANT_TOKEN` | 空 | 是 | 全部设置 | — |  |
@@ -210,10 +210,10 @@
 
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
-| `GALAXY_MULTI_DEVICE_DISPATCH_LIMIT` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_MULTI_DEVICE_DISPATCH_LIMIT` | 8 | 是 | 全部设置 | — |  |
 | `GALAXY_NODE_HEALTH_RETRIES` | 空 | 是 | 全部设置 | — |  |
 | `GALAXY_SLO_HEARTBEAT_WINDOW` | 200 | 是 | 全部设置 | — |  |
-| `GALAXY_ENABLE_LEGACY_MULTIDEVICE` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_ENABLE_LEGACY_MULTIDEVICE` | 关 | 是 | 运维 | — |  |
 
 
 ### 共用底座 NATS 消息总线（第一层的设备 / 在场 / 能力平面，第四层的任务 / worker 平面都走它）
@@ -249,11 +249,11 @@
 | `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `GALAXY_MASTER_BRAIN_STATE_PATH` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 15 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_WORKER_ID` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_WORKER_VERSION` | — | **未登记**（只能改 .env） | — | — | — |
+| `GALAXY_WORKER_ID` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_WORKER_VERSION` | 1.0.0 | 是 | 全部设置 | — |  |
 | `GALAXY_HEARTBEAT_INTERVAL` | 10 | 是 | 全部设置 | 跨设备 |  |
 
-共 81 个键，其中 **18** 个未登记。
+共 81 个键，其中 **0** 个未登记。
 <!-- tables:end -->
 
 ## 五、模块、接口、面板入口
@@ -326,16 +326,34 @@ Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocke
    旧位置（系统临时目录）的文件不再读取。
    `tests/test_the_two_leftover_multi_machine_defects_stay_fixed.py` 钉住这两条。
 
+**这一轮（真机日志之后）也修掉的**
+
+8. ~~**「NATS 缺省开不开」三处各说各话**。~~ 现在只有一个判据 `core.system_mode.nats_wanted()`：`GALAXY_NATS_ENABLED` 写了就听它的，
+   没写就跟着模式走（跨设备模式起、本地模式不起；显式写了 `GALAXY_NATS_URL` 也算要用）。启动流程第 2 阶段、启动器的 `start_nats`、
+   `nats_server.nats_disabled_by_config`、总线 `connect`、启动自检都调它；登记表里的 `true` 只是「跨设备按钮开着时它该是什么」，
+   「保存设置」与 `.env.example` 都不再把它钉进 `.env`（有人手写的照旧保留）。本地模式启动横幅不再先说「不用总线」又在几十秒后冒出「✓ 消息总线」。
+   `tests/test_pr_system_mode_config.py`、`test_nats_control_plane.py`、`test_env_file_carries_no_untouched_hidden_switches.py` 钉住。
+9. ~~`CROSS_DEVICE_CONTROL_PLANE_ARCHITECTURE.md` 第 6 层写的 `core/cross_device_candidates.py` 全仓不存在。~~ 文档已改成实际的
+   `core/device_selection/canonical_device_selector.py`（`select_cross_device_candidates` / `select_orchestration_candidates`）。
+   （`docs/DUAL_REPO_*` 与 `FOLLOWUP_IMPLEMENTATION_ROADMAP.md` 里还留着同一个旧名字，它们是历史审计快照，不改。）
+10. ~~18 个相关环境变量只在代码里读、没登记。~~ 现在登记在 `core/routes/config_schema_multimachine.py`（默认都抄自代码实际用的值）：
+    联邦 3、TURN / STUN 3、Tailscale 3、传输优先级、WebRTC 与可选传输通道 6、mesh 节点号与端口 2、`GALAXY_MULTI_DEVICE_DISPATCH_LIMIT`、
+    `GALAXY_ENABLE_LEGACY_MULTIDEVICE`、worker 的 id 与版本。用户真要为「连不上」去填的（TURN 账号与凭据、STUN、Tailscale 主机与标签、传输优先级）列在面板「网络与端口」，
+    内部调参与逃生口式的开关只登记不列。`GALAXY_TURN_CREDENTIAL` 以前不会被当成密钥（`classify_key` 不认 `_CREDENTIAL` 后缀），现在认，走本机密钥库、不明文进 `.env`。
+11. ~~「跨设备」整档按钮的 `owns` 里有 `NODE_*_URL`。~~ 已去掉：它们是**本机**各节点微服务的 localhost 地址，只用本机时一样要用；
+    算跨设备的话，改个本机端口会让「跨设备」按钮亮起「n 项改过」。
+12. ~~`NATSExecutor` 没有被装成命令路由的执行器。~~ 仍然**不**把它装成**通用**执行器（那会让每条命令先绕 NATS 一圈）；但「目标是主脑名下一台活着的、只挂在 NATS 上的 worker」
+    这种目标，命令路由的设备执行桥此前回「Target … not found」，现在经 `core/nats_dispatch_bridge.py` 交给 `NATSExecutor`（跨设备模式里才问；worker 心跳超时的照旧按没找到处理，不等 30 秒超时）。
+    `GALAXY_NATS_EXECUTOR_FALLBACK` / `_TIMEOUT` 两个键于是有了真读者。`tests/test_a_nats_only_worker_can_be_commanded.py` 钉住。
+13. ~~`POST /api/v1/devices/{id}/command` 回「命令已发送」，设备却什么也没做。~~ 真机式实测里查到的：REST 发的是 AIP v3 的 `CONTROL_COMMAND`，
+    而 `device_client` 只认命令路由那种 `type=command` —— 前者被当成「未处理的消息类型」丢掉。现在两种形状都执行、都回 `command_result`，
+    命令路由发出的消息也带上 `command_id`（设备回的结果靠它对上号）。`tests/test_device_client_plugins.py` 钉住。
+
 **还在、没有动的**
 
-8. **「NATS 缺省开不开」三处各说各话**：`core/system_mode.py`（`GALAXY_NATS_ENABLED` 没写时：有显式 URL 或跨设备模式才开，本机模式关）；
-   `core/nats_server.py` 与启动序列（没写 `false` 就拉 `nats-server`，缺省开）；登记表（`true`）。默认状态下「跨设备关、总线开」并存，启动日志里
-   `cross_device=False nats_enabled=True` 并排出现就是它。它不再影响模式，只影响「本地模式下要不要白起一个进程内总线」。
-9. **`CROSS_DEVICE_CONTROL_PLANE_ARCHITECTURE.md` 的第 6 层写的 `core/cross_device_candidates.py` 与 `resolve_cross_device_candidates()` 全仓不存在。**
-10. **18 个相关环境变量只在代码里读、没登记**（上表标「未登记」）：联邦 3、TURN 凭据 2、Tailscale 3、WebRTC 3、传输优先级 1、网状网络节点号与端口 2、`GALAXY_MULTI_DEVICE_DISPATCH_LIMIT`、
-   `GALAXY_ENABLE_LEGACY_MULTIDEVICE`（旧的多设备层，默认禁用）、worker 的 id 与版本。
-11. **「跨设备」整档按钮的 `owns` 里有 `NODE_*_URL`**（内部服务节点地址），不是设备，归属存疑。
-12. **`GALAXY_DURABLE_EXEC` 的代码说明写着「只在跨设备分布式编排下才有意义」**，现在已默认开（所有者的决定）；它在这个模块里属于第三层（重启后重派没做完的任务）。
+14. **`GALAXY_DURABLE_EXEC` 的代码说明写着「只在跨设备分布式编排下才有意义」**，现在已默认开（所有者的决定）；它在这个模块里属于第三层（重启后重派没做完的任务）。
+15. **网关给客户端报的传输顺序用的词是 `tailscale / intranet / internet`**（`galaxy_gateway/api/config.py`，与模式无关），而本机的传输顺序用 `lan / internet`
+    （`core/system_mode.py`，随模式变）。两边的词和默认都不同；动网关那份会牵动安卓端读到的字段，需要先对齐客户端，所以没有动，只在这里记下。
 
 ## 七、怎么组成一个按钮（所有者的决定）
 

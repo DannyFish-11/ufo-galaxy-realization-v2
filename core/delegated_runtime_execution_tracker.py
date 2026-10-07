@@ -324,7 +324,6 @@ _POSTURE_CONTROL_ONLY: str = "control_only"
 _RING_BUFFER_CAPACITY: int = 128
 _TRACKER_STATE_PATH_ENV: str = "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_STATE_PATH"
 _TRACKER_ACTIVE_RECOVERY_TTL_ENV: str = "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_ACTIVE_RECOVERY_TTL_SECONDS"
-_DEFAULT_TRACKER_STATE_PATH: str = "data/runtime/delegated_runtime_execution_tracker.json"
 _ACTIVE_RECOVERY_TTL_SECONDS: float = float(os.getenv(_TRACKER_ACTIVE_RECOVERY_TTL_ENV, "900"))
 _RECOVERY_STATUS_LIVE: str = "live"
 _RECOVERY_STATUS_REVALIDATED: str = "revalidated_live"
@@ -987,8 +986,9 @@ def reset_execution_tracking_runtime(*, clear_durable_state: bool = True) -> Non
 
 
 def _resolve_runtime_state_path() -> str:
-    raw = str(os.getenv(_TRACKER_STATE_PATH_ENV, _DEFAULT_TRACKER_STATE_PATH) or "").strip()
-    return raw or _DEFAULT_TRACKER_STATE_PATH
+    from core.data_paths import data_path as _dp
+
+    return os.getenv(_TRACKER_STATE_PATH_ENV, "").strip() or _dp("runtime/delegated_runtime_execution_tracker.json")
 
 
 def _mark_restored_tracking_record(

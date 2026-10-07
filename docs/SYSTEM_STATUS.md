@@ -363,6 +363,35 @@ python scripts/check_assessment_freshness.py
   误报成「端口被占」、API 网关起不来（横幅却照常报「就绪」）。
 - 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_the_model_can_ask_but_only_the_person_can_turn_on_cross_device.py`、`test_master_brain_runs_only_in_cross_device_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`。
 
+### 6.8 2026-10-07：所有者第三份真机日志（代码版本 9dd1d9c2）+ 面板 / 厂商 / 开关
+
+这一轮把日志里的问题和所有者列的几件事一起处理。**凡是能在本机复现的都起真服务器测过**（带卡顿探针：`scratchpad` 里的 `run_stall.py` 在事件循环线程每次连续跑超过 0.12 秒时记下它的调用栈）。
+
+**面板与路由**
+- **各家厂商 API Key 逐家有地方填**：此前面板只有「我的模型服务」（自定义端点），各家的 Key 退化成「全部设置」第 12 段里 35 行裸环境变量名。现在「模型服务商」按分组列出每一家：中文名、该填哪几个键、已配 / 未配、路由器里可用 / 不可用、验证、清除。
+  目录由后端给（`core/provider_catalog.py`，`GET /api/v1/models/providers`），**不下发密钥值，只有布尔**；`PROVIDER_REGISTRY` 多一家而没写展示信息、或「供应商与密钥」类里有键没人认领，测试会红。
+- **路由补全**：偏好表只列我们核实过的直连厂商，所以用户自加的端点、OneAPI、只配了 Groq 的人做推理任务，在失败转移链里「不存在」（面板上写着「通了才让它参与选路」，实际只有所有列出来的都不可用时才被碰到）。
+  现在它们排在已列厂商**后面**，按同一个打分排序（`core/routing_tail.py`）；有意不自动参与的（智谱编码套餐）仍不进这一档。
+- **中间态不再依赖壁纸深浅**：四面墙后面垫一层不透明的深色底（一整块，不是四块拼的 —— 拼的那种在对角线上有 1 像素缝），壁纸再亮也透不进来；灵动岛由 248×33 改成 216×40（更窄更高，下沿圆角取高度的一半成药丸），尺寸常量在 `electron/renderer/app.js` 的 `ISLE_*`，一处可调。
+- **面板窗口圆角**：桌面外壳里 `html` 按 `--shell-r` 裁圆角，圆角外一个像素也不画。（Windows 上的实际观感我这里无法复现，只验证了 Chromium 里四角像素全透明。）
+
+**开关**
+- 已经收好的开关（内置 / 运维 / 并进整档的）**不再被「保存设置」钉进 `.env`**：此前点一次保存，七十多个没人该碰的内部开关连同默认值整体写进去，既淹没真改过的几行，也会盖住以后代码里默认值的修正。改过的（值与默认不同）照旧写。
+  默认位置在 `data/` 下的路径类键（账本、声音记忆库……）同理，免得把它们冻成相对路径、不再跟 `GALAXY_DATA_DIR` 走。
+- **保存设置不再吞手写行**：写 `.env` 的函数只遍历登记表，而 `.env.example` 里一百个键不在登记表里（compose 必填的数据库口令、端口、`HF_ENDPOINT` 镜像站、`PICKLE_SECRET_KEY`、`BRAVE_API_KEY`、`TURN_*`……）—— 点一次保存它们整行消失，下次启动悄悄回到默认值。这很可能就是 `--docker-full` 报 `TEMPORAL_DB_PASSWORD is missing` 的原因。现在原样带回（`core/routes/config_env_preserve.py`）。
+- **NATS 缺省只有一个答案**：显式写了 `GALAXY_NATS_ENABLED` 听它的，没写就**跟着模式走**（跨设备模式起、本地模式不起），三处不再各说各话（`core.system_mode.nats_wanted`）。**这反转了此前「没写就尝试启动」的注释**：本地模式默认不再起总线；想单独起设 `GALAXY_NATS_ENABLED=true`。
+- `GALAXY_MEMORY_MEDIA` 缺省统一为关（此前登记表、网关、会话记忆各有各的默认）；多机模式 22 个只在代码里读的键补登记（密钥类走密钥库）；`NODE_*_URL` 不再误属于某个整档按钮。
+
+**真机日志里的问题**
+- **「节点启动失败（详情见日志 DEBUG）」**：慢的（进程活着、只是这台机器忙）→ 后台继续等，起来了自动登记；真起不来的 → 屏幕上带一句原因（取输出最后一行有信息的）；端口绑不上（占用 / Windows 保留端口段）单独说，并给出 `netsh int ipv4 show excludedportrange` 去哪看。
+- **节点输出不再接管道**：`ServiceManager.start_service` 用 `stdout=PIPE, stderr=PIPE` 起节点，而启动器只在节点起不来时才读一次。没人读的管道写满，子进程就卡死在 `write()` 里 —— Windows 匿名管道默认缓冲只有 4KB，一个节点的启动日志加几十条访问日志就够了，表现是进程活着、端口开着、什么都不回应。现在写 `logs/nodes/<名字>.log`（人也能直接去看），失败原因读文件末尾。同一处把创建进程放进工作线程（Windows 上 `CreateProcess` 要上百毫秒，13 个节点串着在事件循环上做）。
+- **事件循环被同步的事占住**（日志里「一堆请求在同一毫秒一起完成、各自显示 5–7 秒」）。挪出循环的：开麦克风 / 枚举并实测输入设备 / 探测回环设备（`语音交互 已开启` 之后紧跟着的 5 秒冻结）；第一次选 TTS 引擎（import 一串库 + 探测算力，是第一轮对话的 7 秒）；每个 httpx 客户端各载一遍 CA 证书（实测一次 40–80 毫秒，仓库里五十来处在循环线程上现建现用，现在进程内共用一份，`core/shared_tls.py`）；
+  启动时一百多次能力登记各自把整张拓扑图序列化落盘（实测 106 次、最大 93KB，现在合成一次，`core/persist_batch.py`）；每轮对话都把所有设备所有能力重新登记一遍并整份落盘（现在批内合一，内容没变的节点不再重写文件）。
+- **感知上传洪水**（前几轮已修，这轮补上 Electron 侧在途上限与纯 ASGI 的计时中间件）：真服务器上 40 帧 + 40 段音频同时压上来，循环上没有任何一次超过 0.12 秒的停顿，其余接口 ≤ 320 毫秒应答。
+- **持久化路径认 `GALAXY_DATA_DIR`**：网络图 / 拓扑 / 节点注册表 / 委托执行追踪 / 成本账本 / Agent 状态 / 设备注册快照 / 三个记忆提供方，此前写死 `data/...`（容器里 `GALAXY_DATA_DIR` 指到别处时被劈成两处）。新加的持久化点用 `core.data_paths.data_path()`。
+- 其余：FastAPI 的 `ORJSONResponse` 弃用警告每个请求刷一次（改用自己的响应子类）；常驻注意力循环在听写引擎下载期间不再每拍往线程池里塞一个空等的线程（屏幕上的「转写 45 秒没有回应」）。
+- 验证：`tests/test_provider_catalog_covers_every_key.py`、`test_unlisted_providers_join_routing.py`、`test_saving_settings_keeps_env_lines_the_panel_does_not_own.py`、`test_env_file_carries_no_untouched_hidden_switches.py`、`test_node_output_never_fills_a_pipe.py`、`test_slow_nodes_are_waited_for_and_failures_say_why.py`、`test_microphone_open_does_not_run_on_the_event_loop.py`、`test_choosing_the_tts_engine_does_not_block_the_event_loop.py`、`test_httpx_clients_share_one_tls_context.py`、`test_startup_registration_writes_the_graph_once.py`、`test_ingest_admission_and_loopback_bypass.py`、`test_ambient_listening_does_not_park_threads_while_the_asr_downloads.py`。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
@@ -373,6 +402,8 @@ python scripts/check_assessment_freshness.py
 | 旧 WS 路径 `/ws/ufo3` 未退役 | 路线图 C6 | 需要安卓侧先确认老客户端已迁走 |
 | 自我改进总闸默认关闭 | `GALAXY_META_RSI=off` | 由仓库所有者决定 |
 | 未接线 / 不可达：删还是接 | 755 条 + 3 个模块。**按用途说它们是干什么的**见 `docs/UNWIRED_CODE_INVENTORY.md` 第 2 节；**安卓以外 672 条每条该放在哪里**见第 7 节（接上 215、挂出来 134、删掉 170、随对象走 91、测试钩子 50、框架回调 4、产品决定 8；数据在 `config/unwired_placement.json`，`tests/test_unwired_placement.py` 守着它与清单对账）。逐条核对时新确认两处「看得见但不生效」：`PUT /api/v1/security/policy` 改的零信任规则表没有执行方；系统资源表有人读、没人登记 | 所有者要求先弄清楚再动；清单与去处已给，**没按它删或接任何一行**。所有者 2026-09-28：后面和 G002 放一块儿做 |
+| 只在 Windows 上出现的几项 | 系统托盘「8 秒内没出现在托盘区」；Podman 已装但虚机没起来（`podman machine start`）；`PyAudioWPatch` 没装（已在 `requirements-windows.txt`，没装 Windows 档依赖就没有）；麦克风增益极低时的 VAD 提醒；首次启动 Ollama 冷起时 Phase 0 的「这次没查完」（已如实说「不等于没装」并在依赖阶段重查）；面板窗口圆角在 Windows 上的实际观感 | 这里是 Linux，复现不了；每一项屏幕上都已经说出原因和怎么办，没有静默 |
+| 第一次对话仍要现 import 一百多个模块 | Linux 上约 0.3 秒，Windows 杀软逐个扫时会更长 | 启动时预热的收益有限，且要维护一份模块清单；没做 |
 | 大文件 | core 有 133 个文件超过 1000 行 | 已有复杂度基线守着，只许拆、不许涨 |
 | 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；复现一次要 4 分钟，这次没有定位到创建点 |
 | 文档漂移 | 286 份 Markdown 中，2026-08-05 之后只改过 9 份 | 本次给 41 份状态/审计类文档加了快照说明，指向本文；正文保留原样 |

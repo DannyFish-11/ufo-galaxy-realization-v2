@@ -23,6 +23,13 @@ READ_SITES = {
     "FEDERATION_HEARTBEAT_INTERVAL": "core/galaxy_federation.py",
     "GALAXY_SLO_HEARTBEAT_WINDOW": "core/slo_metrics.py",
     "GALAXY_TAILSCALE_CHECK_INTERVAL": "core/tailscale_manager.py",
+    # 这一轮才登记的那批（core/routes/config_schema_multimachine.py）：默认同样抄自读取点
+    "FEDERATION_MIN_HEARTBEAT_INTERVAL": "core/galaxy_federation.py",
+    "FEDERATION_OFFLINE_THRESHOLD": "core/galaxy_federation.py",
+    "GALAXY_WEBRTC_TASK_READY_TIMEOUT_S": "galaxy_gateway/webrtc_proxy.py",
+    "GALAXY_HOLE_PUNCH_TIMEOUT_S": "galaxy_gateway/webrtc_proxy.py",
+    "GALAXY_MESH_PORT": "galaxy_gateway/bootstrap/lifecycle.py",
+    "GALAXY_MULTI_DEVICE_DISPATCH_LIMIT": "galaxy_gateway/device_router.py",
 }
 
 

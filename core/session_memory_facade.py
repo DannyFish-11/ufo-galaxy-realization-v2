@@ -163,9 +163,9 @@ async def record_session_turn(
     # （GALAXY_MEMORY_MEDIA=1 开启；媒体摄入较重，尤其 Omni-SimpleMem）。失败即跳过。
     if role == "user":
         try:
-            import os as _os_mm
+            from core.memory.media_store import enabled as _media_enabled
 
-            if _os_mm.getenv("GALAXY_MEMORY_MEDIA", "0").strip().lower() in ("1", "true", "yes", "on"):
+            if _media_enabled():
                 import asyncio as _aio_mm
 
                 from core.memory import get_unified_memory as _gum
