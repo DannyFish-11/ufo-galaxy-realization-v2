@@ -89,12 +89,21 @@ def test_a_device_task_in_local_mode_is_refused_by_the_gateway_router_not_just_b
     assert src.count("if not is_cross_device_enabled():") >= 2
 
 
-def test_the_startup_sequence_says_so_when_the_brain_is_on_but_the_mode_is_local(clean):
+def test_the_startup_sequence_says_so_when_the_brain_is_on_but_the_mode_is_local(clean, caplog):
     import inspect
+    import logging
 
     import core.startup as startup
+    from core.system_mode import master_brain_idle_status
 
-    clean.setenv("GALAXY_MASTER_BRAIN_ENABLED", "true")
-    assert master_brain_waiting_for_mode() is True
-    src = inspect.getsource(startup)
-    assert "master_brain_waiting_for_mode()" in src and "当前是本地模式" in src
+    log = logging.getLogger("test.master_brain_idle")
+    with caplog.at_level(logging.WARNING, logger=log.name):
+        assert master_brain_idle_status(log) == "disabled"
+        assert not caplog.records, "开关没开:什么都不说"
+
+        clean.setenv("GALAXY_MASTER_BRAIN_ENABLED", "true")
+        assert master_brain_idle_status(log) == "waiting_for_cross_device_mode"
+        assert any("本地模式" in r.getMessage() and "跨设备" in r.getMessage() for r in caplog.records)
+
+    # 启动序列在主脑没起的那一支里用的就是它
+    assert "master_brain_idle_status(logger)" in inspect.getsource(startup)
