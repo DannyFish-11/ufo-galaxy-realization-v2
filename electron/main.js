@@ -1175,11 +1175,19 @@ let _perceptionFailLogAt = 0;
 let _perceptionConsecutiveFails = 0;
 let _perceptionCircuitTrips = 0;
 let _perceptionCircuitOpenUntil = 0;
+// 同时在送的上限。感知帧是**周期快照**,只有最新的有用:后端忙的时候上一份还没送完,这一份直接丢 ——
+// 不丢的话,几秒的卡顿会积出几十份,卡顿一过全部同时压向后端(Windows 真机日志里「几十个请求同一毫秒完成、
+// 各自耗时 5.4 秒」),连面板的轻量接口也被拖慢。音频是连续的录音片段,留得宽一点。
+const _PERCEPTION_MAX_IN_FLIGHT = { frame: 2, audio: 3 };
+const _perceptionInFlight = { frame: 0, audio: 0 };
 ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
     if (!perceptionEnabled || !payload) return;
     if (typeof payload !== 'object') return;
     const now = Date.now();
     if (_perceptionCircuitOpenUntil > now) return;
+    const kind = payload.type === 'frame' || payload.type === 'audio' ? payload.type : null;
+    if (kind && _perceptionInFlight[kind] >= _PERCEPTION_MAX_IN_FLIGHT[kind]) return;
+    if (kind) _perceptionInFlight[kind]++;
     try {
         if (payload.type === 'frame' && payload.image_base64) {
             if (!_isValidPerceptionBase64(payload.image_base64)) return;
@@ -1233,6 +1241,8 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
                 `请确认后端网关在 ${GATEWAY_BASE} 正常监听。`);
             _perceptionFailLogAt = _now;
         }
+    } finally {
+        if (kind) _perceptionInFlight[kind]--;
     }
 });
 
