@@ -36,6 +36,7 @@ def env(tmp_path, monkeypatch):
     for k in ("GALAXY_ONBOARDING_AUTO", "HOME_ASSISTANT_URL", "HOME_ASSISTANT_TOKEN", "GALAXY_HEADSCALE_URL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GALAXY_AUTONOMY", "guided")
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")  # 操作别的设备 = 跨设备;本地模式只用本机
     monkeypatch.setattr(autonomy_policy, "_grants_path", lambda: str(tmp_path / "grants.json"))
     autonomy_policy.reset_grant_store()
     for r in (

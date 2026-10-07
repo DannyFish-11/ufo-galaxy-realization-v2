@@ -47,6 +47,7 @@ def gateway(tmp_path, monkeypatch):
 
     for k, v in {
         "GALAXY_NATS_ENABLED": "false",
+        "GALAXY_CROSS_DEVICE_ENABLED": "true",  # 笔记本被智能体操作 = 跨设备;本地模式只用本机,不往别的设备下发
         "GALAXY_AUTH_ENABLED": "true",
         "GALAXY_API_TOKEN": "owner-secret",
         "GALAXY_ONBOARDING_STATE_DIR": str(tmp_path / "ob"),

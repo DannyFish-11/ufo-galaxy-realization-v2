@@ -273,8 +273,9 @@ class TestDeviceRouterDispatchTaskEnvelope:
     """
 
     @pytest.mark.asyncio
-    async def test_dispatch_task_routes_via_aip_transport(self):
+    async def test_dispatch_task_routes_via_aip_transport(self, monkeypatch):
         """dispatch_task sends through AIPTransport, not route_envelope."""
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")  # 往别的设备下发 = 跨设备;本地模式拒绝
         from unittest.mock import AsyncMock, MagicMock
         from unittest.mock import patch as _patch
 

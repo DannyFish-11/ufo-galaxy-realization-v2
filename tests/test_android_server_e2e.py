@@ -342,7 +342,7 @@ class TestFullE2EPipeline:
     """Full E2E pipeline: registration → capability sync → NL dispatch → device."""
 
     @pytest.mark.asyncio
-    async def test_e2e_nl_to_device_dispatch(self, bridge, fresh_registry):
+    async def test_e2e_nl_to_device_dispatch(self, bridge, fresh_registry, monkeypatch):
         """
         Simulates the complete Android↔Server coordination path:
             1. device_register
@@ -351,6 +351,7 @@ class TestFullE2EPipeline:
             4. Mock LLM produces a tool_call for 'gateway__<id>__screenshot'
             5. tool_call is dispatched to the device via AndroidBridge.assign_task()
         """
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")  # 往设备下发 = 跨设备;本地模式只用本机
         ws = _make_ws()
         device_id = "e2e-full-001"
 
