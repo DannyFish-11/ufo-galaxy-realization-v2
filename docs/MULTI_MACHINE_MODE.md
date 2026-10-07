@@ -311,15 +311,17 @@ Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocke
    `go_worker` 路径在主脑没起时返回 `WORKER_DISPATCH_UNAVAILABLE`（现在主脑只在跨设备模式里起）。`tests/test_master_brain_runs_only_in_cross_device_mode.py` 钉住。
 4. ~~`galaxy_gateway/cross_device_switch.py` 文件开头的说明过期（写「默认开」）。~~ 已改成实际行为（缺省关、读 `cross_device_requested`）。
 5. ~~「多设备总开关」叫法不一、主脑不检查跨设备开关。~~ 主脑现在要在跨设备模式里才起；面板上叫「跨设备」的就是模式的切换点。
+6. ~~`GALAXY_NATS_EXECUTOR_FALLBACK` 登记成 `sync / async / reject` 三选一，代码只把它当开关读（选 `reject` 实际是开着回退）。~~ 现在 `reject`（以及 `false` / `0`）真的不退回、`sync`（以及 `true` / 空）退回本机执行；
+   登记表只留代码分得清的两项（`sync`、`reject`）。`NATSExecutor` 本身仍没有被装成命令路由的执行器（只有可观测接口会读它的统计），这是产品决定，没有动。
+7. ~~主脑状态文件缺省落在系统临时目录。~~ 现在缺省落 `$GALAXY_DATA_DIR/galaxy_master_brain_state.json`（`core/master_brain_state.py`；显式的 `GALAXY_MASTER_BRAIN_STATE_PATH` 仍优先）。
+   旧位置（系统临时目录）的文件不再读取。
+   `tests/test_the_two_leftover_multi_machine_defects_stay_fixed.py` 钉住这两条。
 
 **还在、没有动的**
 
-6. **「NATS 缺省开不开」三处各说各话**：`core/system_mode.py`（`GALAXY_NATS_ENABLED` 没写时：有显式 URL 或跨设备模式才开，本机模式关）；
+8. **「NATS 缺省开不开」三处各说各话**：`core/system_mode.py`（`GALAXY_NATS_ENABLED` 没写时：有显式 URL 或跨设备模式才开，本机模式关）；
    `core/nats_server.py` 与启动序列（没写 `false` 就拉 `nats-server`，缺省开）；登记表（`true`）。默认状态下「跨设备关、总线开」并存，启动日志里
    `cross_device=False nats_enabled=True` 并排出现就是它。它不再影响模式，只影响「本地模式下要不要白起一个进程内总线」。
-7. **`GALAXY_NATS_EXECUTOR_FALLBACK` 登记成 `sync / async / reject` 三选一，代码只把它当开关读**（不是 `false` / `0` 就算开）：选 `reject` 实际是开着回退，选项的意思相反；
-   而读它的 `NATSExecutor` 我没有搜到被装成执行器（见第三节）。
-8. **主脑状态文件缺省落在系统临时目录**（`GALAXY_MASTER_BRAIN_STATE_PATH` 没设时 `tempfile.gettempdir()`），不认 `GALAXY_DATA_DIR`（本仓所有持久化点的约定）；重启后可能读不到。
 9. **`CROSS_DEVICE_CONTROL_PLANE_ARCHITECTURE.md` 的第 6 层写的 `core/cross_device_candidates.py` 与 `resolve_cross_device_candidates()` 全仓不存在。**
 10. **18 个相关环境变量只在代码里读、没登记**（上表标「未登记」）：联邦 3、TURN 凭据 2、Tailscale 3、WebRTC 3、传输优先级 1、网状网络节点号与端口 2、`GALAXY_MULTI_DEVICE_DISPATCH_LIMIT`、
    `GALAXY_ENABLE_LEGACY_MULTIDEVICE`（旧的多设备层，默认禁用）、worker 的 id 与版本。

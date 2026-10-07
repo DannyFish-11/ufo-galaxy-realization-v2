@@ -408,8 +408,8 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "sync",
         "type": "select",
         "category": "devices",
-        "description": "NATS 不可用时怎么办（sync=退回本机同步执行 · 默认 sync）",
-        "options": ["sync", "async", "reject"],
+        "description": "NATS 不可用时怎么办（sync=退回本机执行 · reject=不退回、直接拒绝 · 默认 sync）",
+        "options": ["sync", "reject"],
     },
     "GALAXY_CROSS_DEVICE_ENABLED": {
         "default": "false",

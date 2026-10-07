@@ -21,7 +21,6 @@ import asyncio
 import json
 import logging
 import os
-import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -29,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from core.acl import AntiCorruptionLayer, acl
+from core.master_brain_state import default_state_path
 from core.nats_bus import NATSBus, nats_bus
 from core.schemas.contracts import (
     TaskDispatchModel,
@@ -111,11 +111,7 @@ class MasterBrain:
             "action": "no_change",
             "reason": "not_evaluated",
         }
-        self._state_path = Path(
-            state_path
-            or os.environ.get("GALAXY_MASTER_BRAIN_STATE_PATH")
-            or (Path(tempfile.gettempdir()) / "galaxy_master_brain_state.json")
-        )
+        self._state_path = Path(state_path) if state_path else default_state_path()
         self._load_state()
         self._recover_incomplete_state()
 
