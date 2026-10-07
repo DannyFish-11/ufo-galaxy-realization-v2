@@ -78,7 +78,11 @@ class TestWorkerStatusEndpoint:
         assert "nats_connected" in body
 
     def test_enabled_by_env_reflects_master_switch(self, client, monkeypatch):
+        monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
         monkeypatch.setenv("GALAXY_MASTER_BRAIN_ENABLED", "1")
+        # 主脑开着、但在本地模式 → 不起(跨设备是多设备的前提)
+        assert client.get("/api/v1/mesh/worker").json()["enabled_by_env"] is False
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
         assert client.get("/api/v1/mesh/worker").json()["enabled_by_env"] is True
         monkeypatch.delenv("GALAXY_MASTER_BRAIN_ENABLED")
         assert client.get("/api/v1/mesh/worker").json()["enabled_by_env"] is False

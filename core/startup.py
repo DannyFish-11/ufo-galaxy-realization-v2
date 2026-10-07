@@ -1023,7 +1023,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ② 起 worker 消费循环(订阅派发 → 规范执行器执行 → 回传结果)。全 best-effort,
     # 任何失败都不阻断启动。默认关时整段跳过,桌面单机行为一字未变。
     try:
-        from core.master_brain import get_master_brain, master_brain_enabled
+        from core.master_brain import get_master_brain, master_brain_enabled, master_brain_idle_status
 
         if master_brain_enabled():
             brain = get_master_brain()
@@ -1052,8 +1052,8 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             results["mcp_nats_listener"] = _mcp
             if _mcp.get("success"):
                 logger.info("MCP 网关已订阅 galaxy.mcp.calls")
-        else:
-            results["master_brain"] = {"status": "disabled"}
+        else:  # 开着却在本地模式 → 状态是 waiting_for_cross_device_mode,并说出来
+            results["master_brain"] = {"status": master_brain_idle_status(logger)}
     except Exception as _mbe:  # noqa: BLE001 — 启用失败不阻断单机启动
         logger.warning("多设备/Mesh 启用失败(单机不受影响): %s", _mbe)
         results["master_brain"] = {"status": "error", "error": str(_mbe)}

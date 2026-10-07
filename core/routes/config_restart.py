@@ -22,6 +22,7 @@ RESTART_REQUIRED: Dict[str, str] = {
     "GALAXY_AMBIENT_LOOP": "常驻注意力循环在启动时决定起不起",
     # ── 多设备与网络 ──
     "GALAXY_CROSS_DEVICE_ENABLED": "网关的跨设备路由即时生效；系统运行模式、桌面在场的跨设备模式、消息总线等启动时才解析",
+    "GALAXY_SYSTEM_MODE": "运行模式在启动时解析一次（网关的跨设备路由随时读，但消息总线、桌面在场、启动自检按启动时的模式）",
     "GALAXY_MASTER_BRAIN_ENABLED": "主脑与 worker 在启动时才拉起",
     "GALAXY_NATS_ENABLED": "内置消息总线在启动时才起",
     "GALAXY_LAN_DISCOVERY": "局域网发现在启动时才起",

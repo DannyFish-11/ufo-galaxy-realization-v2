@@ -13,10 +13,9 @@ import asyncio
 from pathlib import Path
 
 from core.routes import config as cfg
-from core.routes.config_bundles import CONFIG_BUNDLES, member_keys
+from core.routes.config_bundles import CONFIG_BUNDLES, member_keys, mirror_keys
 from core.routes.config_restart import RESTART_REQUIRED, any_requires_restart, restart_reason
 from core.routes.config_schema_registry import CONFIG_SCHEMA
-from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS
 
 PANEL_SRC = Path(__file__).resolve().parent.parent / "electron" / "renderer" / "panel" / "src"
 
@@ -46,7 +45,7 @@ def test_the_reader_sites_that_are_known_to_be_startup_only_are_listed():
 def test_all_config_carries_the_hint_for_listed_keys_the_panel_shows():
     listed = asyncio.run(cfg.get_config())
     for key in RESTART_REQUIRED:
-        if key in PANEL_HIDDEN_SWITCH_KEYS:
+        if key in cfg.PANEL_HIDDEN_KEYS:
             assert key not in listed
             continue
         assert listed[key]["restart_required"] == RESTART_REQUIRED[key], key
@@ -59,7 +58,7 @@ def test_a_bundle_says_so_when_what_it_writes_needs_a_restart():
     assert states["omnimodal"]["restart_required"] is True
     assert states["voice"]["restart_required"] is False, "朗读回复每次开口时才读，即时生效"
     for bundle in CONFIG_BUNDLES:
-        written = [bundle["primary"], *member_keys(bundle)]
+        written = [bundle["primary"], *member_keys(bundle), *mirror_keys(bundle)]
         assert states[bundle["key"]]["restart_required"] is any_requires_restart(written)
 
 

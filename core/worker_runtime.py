@@ -27,8 +27,10 @@ logger = logging.getLogger("Galaxy.WorkerRuntime")
 
 
 def worker_enabled() -> bool:
-    """worker 消费循环是否启用(跟随多设备总开关)。"""
-    return str(os.getenv("GALAXY_MASTER_BRAIN_ENABLED", "")).strip().lower() in ("1", "true", "yes", "on")
+    """worker 消费循环是否启用(跟随主脑开关,并且要在跨设备模式里 —— 与 ``master_brain_enabled`` 同一判据)。"""
+    from core.system_mode import master_brain_requested
+
+    return master_brain_requested()
 
 
 def default_worker_id() -> str:

@@ -1065,7 +1065,7 @@ function seedDemo(store: Store): void {
   const bundles: Bundle[] = [
     { key: 'omnimodal', name: '全模态', note: '屏 摄 麦 系统声', primary: 'GALAXY_AMBIENT_LOOP',
       value: 'true', type: 'boolean', overrides: 1, unwired: false },
-    { key: 'cross_device', name: '跨设备', note: '发现 配对 主脑 手机 手表', primary: 'GALAXY_CROSS_DEVICE_ENABLED',
+    { key: 'cross_device', name: '跨设备', note: '关=本地模式(只用本机) · 开=跨设备模式', primary: 'GALAXY_CROSS_DEVICE_ENABLED',
       value: 'true', type: 'boolean', overrides: 0, unwired: false },
     { key: 'voice', name: '声音', note: '跟文字锁步', primary: 'GALAXY_SPEAK',
       value: 'true', type: 'boolean', overrides: 0, unwired: false },

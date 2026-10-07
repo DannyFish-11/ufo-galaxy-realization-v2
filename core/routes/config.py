@@ -22,7 +22,9 @@ from core.routes.config_bundles import (  # noqa: E402
     CONFIG_BUNDLES,
     bundle_writes,
     expected_member_value,
+    expected_mirror_value,
     member_keys,
+    mirror_keys,
     owned_keys,
 )
 from core.routes.config_restart import any_requires_restart, restart_reason  # noqa: E402
@@ -54,6 +56,7 @@ PANEL_HIDDEN_KEYS = (
             "GALAXY_GENOME",  # 留空 = 元层指针或 default
             "GALAXY_SYSTEM_PROMPT",  # 留空 = 用 Genome
             "GALAXY_ENGINEERING_VERIFY_TIMEOUT_S",  # 默认 600 秒
+            "GALAXY_SYSTEM_MODE",  # 面板上切模式的只有「跨设备」那一个按钮,它一并写这个键(见 config_bundles.mirrors)
         }
     )
     | PANEL_HIDDEN_SWITCH_KEYS
@@ -583,18 +586,20 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
 
     owned = owned_keys(bundle, CONFIG_SCHEMA.keys())
     current = os.environ.get(primary, meta["default"])
-    members = set(member_keys(bundle)) if meta["type"] == "boolean" else set()
-    # 成员的「该是什么」跟着主键走(关→false,开→默认);其余键与自己的默认比。
-    overrides = sum(
-        1
-        for k in owned
-        if k != primary
-        and k in os.environ
-        and os.environ[k]
-        != (
-            expected_member_value(current, CONFIG_SCHEMA[k]["default"]) if k in members else CONFIG_SCHEMA[k]["default"]
-        )
-    )
+    is_bool = meta["type"] == "boolean"
+    members = set(member_keys(bundle)) if is_bool else set()
+    mirrors = set(mirror_keys(bundle)) if is_bool else set()
+
+    def _expected(k: str) -> str:
+        # 成员/镜像的「该是什么」跟着主键走(成员:关→false,开→默认;镜像:关→第一个值,开→第二个值);
+        # 其余键与自己的默认比。
+        if k in members:
+            return expected_member_value(current, CONFIG_SCHEMA[k]["default"])
+        if k in mirrors:
+            return expected_mirror_value(bundle, k, current)
+        return CONFIG_SCHEMA[k]["default"]
+
+    overrides = sum(1 for k in owned if k != primary and k in os.environ and os.environ[k] != _expected(k))
 
     state: Dict[str, Any] = {
         "key": bundle["key"],
@@ -609,7 +614,7 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
         "key_count": len(owned),
         "overrides": overrides,
         # 翻这一档会写的键(主键 + 成员)里,有没有「改了要重启才生效」的 —— 面板据此在这一档旁边说出来。
-        "restart_required": any_requires_restart([primary, *sorted(members)]),
+        "restart_required": any_requires_restart([primary, *sorted(members), *sorted(mirrors)]),
     }
     if "options" in meta:
         state["options"] = meta["options"]

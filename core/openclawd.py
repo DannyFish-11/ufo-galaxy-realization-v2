@@ -96,8 +96,7 @@ logger = logging.getLogger("Galaxy.OpenClawd")
 OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
 """Entrypoint role contract (PR-01): subject-core internal stage entry, not startup main entry."""
 
-from core.device_onboarding.agent_tools import DEVICES_BUILTIN_TOOLS, dispatch_devices_tool  # noqa: E402
-from core.device_onboarding.service import onboarding_enabled  # noqa: E402
+from core.device_onboarding.agent_tools import devices_tools_for_agent, dispatch_devices_tool  # noqa: E402
 
 # ============================================================================
 # Helper: local-device detection + Parallel-group state machine
@@ -7262,8 +7261,7 @@ class OpenClawd:
         tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
         if home_tools_enabled():  # 智能家居:配了 Home Assistant 才出现 —— 见 core/smart_home_tools.py
             tools.extend(HOME_BUILTIN_TOOLS)
-        if onboarding_enabled():  # 设备:看、接入、调用 —— 见 core/device_onboarding/agent_tools.py
-            tools.extend(DEVICES_BUILTIN_TOOLS)
+        tools.extend(devices_tools_for_agent())  # 设备:看、接入、调用;本地模式下可请求打开跨设备 —— 见 agent_tools.py
 
         # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────
         try:

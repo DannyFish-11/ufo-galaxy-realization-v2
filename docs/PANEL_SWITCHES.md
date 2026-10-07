@@ -67,7 +67,7 @@
 | 键 | 默认 | 为什么 |
 |---|---|---|
 | `FEDERATION_ENABLED` | 关 | 联邦（把多套 Galaxy 连成一片）：默认关的 opt-in |
-| `GALAXY_CROSS_DEVICE_ENABLED` | 关 | 跨设备编排：整档「跨设备」的主键。关掉则只在本机跑 |
+| `GALAXY_CROSS_DEVICE_ENABLED` | 关 | 跨设备模式：整档「跨设备」的主键。关=本地模式(只在本机跑)，开=跨设备模式 |
 | `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | WebRTC 数据通道（浏览器/手机把摄像头麦克风直接推给感知层）：opt-in |
 | `GALAXY_HF_MIRROR` | 开 | 模型下载走国内镜像：按所在网络选 |
 | `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 主脑编排 + worker/NATS 分布式：默认关=单机。与「跨设备」的关系见 docs/PANEL_SWITCHES.md 的合并建议 |
@@ -264,6 +264,8 @@
 3. `GALAXY_COMPUTER_USE_NATIVE_TOOL` 的类型登记成 `bool`（不是 `boolean`），设置页会把它画成一个文本框；已归一。
 4. **`GALAXY_CROSS_DEVICE_ENABLED` 登记成「默认开」，而代码与 `.env.example` 都是关（出厂只用本机、opt-in）。** 同样走「保存设置整体写进 `.env`」
    这条路：保存一次，跨设备编排就在没人点过的情况下开了。已改成默认关。
+   同一类还有 `GALAXY_NATS_URL`（登记默认非空，保存后启动流程把它当跨设备信号）与 6 个数字 / 取值的默认值（主脑缩放复评间隔 300 vs 15 等）：
+   NATS 地址不再参与判模式、登记默认改空，6 个数字对齐到代码（见 `docs/MULTI_MACHINE_MODE.md` 第六节）。
 5. `GALAXY_NATIVE_AUDIO` 以前列在面板上，但它是「服务现实」门控：切到 B 档时 `core/native_modal.py` 自动打开、离开时自动关掉。
    面板上的开关会被档位切换悄悄覆盖，是同一个事实两处各存一份；用户的取舍是选哪一档，已改为运维项。
 6. **安全姿态不该是一排开关。** 它们要么是系统自己的保护（鉴权、Esc 叫停、允许覆盖地址、允许连内网），默认开、关掉只会出事或断功能；
@@ -284,4 +286,4 @@
 
 - `GALAXY_MEMORY_MEDIA` 有四处读取：三处（入口）默认关，存储层 `core/memory/media_store.py` 默认开。所有入口都先过那三道门，所以实际默认是不存盘；
   边角情况是单独打开了环境注意力存帧、却没开这个键，此时存储层默认开会存下来，而「保存设置」写入的「关」会让它存不下来。
-- `GALAXY_MASTER_BRAIN_ENABLED` 与 `GALAXY_CROSS_DEVICE_ENABLED` 在代码里互相独立（一个起主脑与 worker，一个决定运行模式），含义重叠，是否合并是产品决定。
+- `GALAXY_MASTER_BRAIN_ENABLED` 仍是独立的、默认关的 opt-in（拉起常驻的主脑与 worker 有花费，按钮「开」不替人打开），但它**只在跨设备模式里才起**：开了却在本地模式，启动日志说出原因。

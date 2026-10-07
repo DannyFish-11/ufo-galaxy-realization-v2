@@ -46,6 +46,13 @@ tests/test_voice_switches_reach_the_panel.py 里那条。
 写入语义(``bundle_writes``):主键写成 ``false`` → 全部成员写成 ``false``;主键写成
 ``true`` → 成员**回到登记表的默认值**(不是一律 ``true``:不替用户打开 opt-in)。
 只有布尔主键可以有成员 —— 三档的 GALAXY_AUTONOMY 没有「关」。
+
+## ``mirrors`` —— 跟着主键走、但取值不是 true/false 的键
+
+「跨设备」按钮切的就是「本地模式 ↔ 跨设备模式」,而系统另有一个 ``GALAXY_SYSTEM_MODE``(取值
+``desktop-local`` / ``desktop-cross-device``)说的是同一件事。两处各存会再出现「按钮开、模式写着
+local」(见 ``core/system_mode.py`` 开头的那一条规则)。所以按钮一并写它:关 → 第一个值,开 → 第二个值。
+它不是布尔成员 —— 取值是模式名 —— 所以另开 ``mirrors``:``{键: (关时的值, 开时的值)}``。
 """
 
 from __future__ import annotations
@@ -85,7 +92,7 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
     {
         "key": "cross_device",
         "name": "跨设备",
-        "note": "发现 配对 主脑 NATS 手机 手表",
+        "note": "关=本地模式(只用本机) · 开=跨设备模式",
         "category": "devices",
         "primary": "GALAXY_CROSS_DEVICE_ENABLED",
         # 2026-09-03 归口:NATS 四键原在 network、主脑那两个旋钮原在 advanced、
@@ -102,6 +109,7 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
         #     而它俩讲的是同一件事(手表/手机怎么连回来)。
         "owns": (
             "GALAXY_CROSS_DEVICE_ENABLED",
+            "GALAXY_SYSTEM_MODE",
             "GALAXY_ONBOARDING_ENABLED",
             "GALAXY_MASTER_BRAIN_*",
             "GALAXY_NATS_*",
@@ -129,6 +137,8 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
             "GALAXY_MDNS",
             "GALAXY_NATS_ENABLED",
         ),
+        # 运行模式:按钮关 = 本地模式,开 = 跨设备模式。
+        "mirrors": {"GALAXY_SYSTEM_MODE": ("desktop-local", "desktop-cross-device")},
     },
     {
         "key": "voice",
@@ -208,6 +218,11 @@ def member_keys(bundle: Dict[str, Any]) -> Tuple[str, ...]:
     return tuple(bundle.get("members", ()))
 
 
+def mirror_keys(bundle: Dict[str, Any]) -> Tuple[str, ...]:
+    """跟着主键走、但取值不是 true/false 的键(没有则为空)。"""
+    return tuple(bundle.get("mirrors", {}))
+
+
 def expected_member_value(bundle_value: str, schema_default: str) -> str:
     """主键处于 ``bundle_value`` 时,一个成员**应当**是什么值。唯一定义处。
 
@@ -217,14 +232,22 @@ def expected_member_value(bundle_value: str, schema_default: str) -> str:
     return "false" if bundle_value == "false" else schema_default
 
 
-def bundle_writes(bundle: Dict[str, Any], value: str, schema: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
-    """翻这一档要写哪些键:主键 + 全部成员,**一次写完**(同一次落盘)。
+def expected_mirror_value(bundle: Dict[str, Any], key: str, bundle_value: str) -> str:
+    """主键处于 ``bundle_value`` 时,一个 ``mirrors`` 键应当是什么值(关 → 第一个,开 → 第二个)。"""
+    off_value, on_value = bundle["mirrors"][key]
+    return off_value if bundle_value == "false" else on_value
 
-    成员只对布尔主键有意义;非布尔主键(三档的自主)直接只写主键。
+
+def bundle_writes(bundle: Dict[str, Any], value: str, schema: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+    """翻这一档要写哪些键:主键 + 全部成员 + 全部 mirrors,**一次写完**(同一次落盘)。
+
+    成员与 mirrors 只对布尔主键有意义;非布尔主键(三档的自主)直接只写主键。
     """
     writes: Dict[str, str] = {bundle["primary"]: value}
     if schema.get(bundle["primary"], {}).get("type") != "boolean":
         return writes
     for key in member_keys(bundle):
         writes[key] = expected_member_value(value, str(schema[key]["default"]))
+    for key in mirror_keys(bundle):
+        writes[key] = expected_mirror_value(bundle, key, value)
     return writes

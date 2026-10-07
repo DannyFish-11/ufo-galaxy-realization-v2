@@ -46,9 +46,15 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/device_registry.py` - 设备注册和发现
 - `core/device_communication.py` - 设备通信协议
 - `core/device_control_service.py` - 设备控制服务
-- **多机模式**（跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent）是**一个模块**，四层 + 共用 NATS 底座，定义见 `docs/MULTI_MACHINE_MODE.md`：
+- **系统只有两个模式**：**本地模式**（`desktop-local`，默认，只用这台电脑）与**跨设备模式**（`desktop-cross-device`）。**「现在是哪个」只有一条规则、一个出处**：
+  `core.system_mode.cross_device_requested()` —— `GALAXY_CROSS_DEVICE_ENABLED` 为真**或** `GALAXY_SYSTEM_MODE=desktop-cross-device`，任一即是，否则本地。
+  网关开关、启动流程、桌面在场、启动自检、模式接口都调它，**别再自己推导**；`GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（同时写两个键）。
+  「混合」不是模式，是一个请求的走法（`local` / `cross_device` / `hybrid`，跨设备模式里系统自动判）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
+- **多机模式** = 跨设备模式的整体内容（跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent），四层 + 共用 NATS 底座，定义见 `docs/MULTI_MACHINE_MODE.md`：
   派发走 `CommandRouter.route_envelope()` 按 `executor_target_type` 分三条路（`local` / `android_device`·`node_service` → 网关 `DeviceRouter` / `go_worker` → `MasterBrain` → NATS → worker）。
-  `GALAXY_MASTER_BRAIN_ENABLED` 默认关，一开启动序列拉起主脑、worker 消费循环、MCP over NATS。文档第六节记着已查出但**没动**的不一致（保存设置会改变多机行为的两条、核心入口没查跨设备开关等）
+  `GALAXY_MASTER_BRAIN_ENABLED` 默认关，且**只在跨设备模式里才起**（`master_brain_requested()`）：开了却在本地模式，启动日志说出原因；开了才拉起主脑、worker 消费循环、MCP over NATS。
+- **模型只能请求、不能决定**打开跨设备模式：本地模式下的工具 `devices__request_cross_device`（`core/device_onboarding/mode_request.py`）只会问人；批准走设备接入已有的人在环，
+  `GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合连提出都不行；批准后走面板按钮同一个写入函数，要重启才完全生效
 
 ### 扩展系统
 - `core/mcp_loader.py` - MCP 服务器加载器

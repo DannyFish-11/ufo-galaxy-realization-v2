@@ -342,12 +342,20 @@ python scripts/check_assessment_freshness.py
 （opt-in 不替人打开）；一次落盘（`POST /api/config/bundles`）。成员相对主键偏离时按钮显示「有偏离」。验证：`tests/test_bundle_members_follow_the_primary.py`。
 **没有并**的（各有隐私/花费/暴露面的理由，列在 PANEL_SWITCHES.md 末尾）：系统声送进模型、听/朗读/本机外放、每轮发不发录音、主脑/联邦/WebRTC/Funnel 这些默认关的 opt-in、主动感知 —— 并了会替用户悄悄改一个选择。
 
-### 6.7 2026-10-05：多机模式整体定义（只记录，没有动代码）
+### 6.7 2026-10-05 / 10-07：多机模式 = 跨设备模式的整体内容；模式只有一条规则
 
 所有者要求把「跨设备 + 多设备并行 + 建立在两者之上的 NATS Agent 与任务派发分配」作为**一个模块**处理。定义、四层模型、一个任务怎么走完、各层配置键
-（含 18 个只在代码里读、没登记的环境变量）/ 模块 / 接口、查出的不一致，都在 **[MULTI_MACHINE_MODE.md](MULTI_MACHINE_MODE.md)**（键表由 `scripts/gen_multi_machine_map.py` 生成）。
-**没有合并任何开关、没有改任何行为。** 其中两条会让「保存设置」悄悄改变多机行为，等所有者定要不要修：
-`GALAXY_NATS_URL` 登记默认非空而 `.env.example` 特意留空（保存后运行模式会被推成跨设备）；7 个数字 / 取值的登记默认与代码默认不一致（主脑缩放复评间隔 300 vs 15 等）。
+（含 18 个只在代码里读、没登记的环境变量）/ 模块 / 接口，都在 **[MULTI_MACHINE_MODE.md](MULTI_MACHINE_MODE.md)**（键表由 `scripts/gen_multi_machine_map.py` 生成）。
+2026-10-07 按所有者的决定收口：
+
+- **系统只有两个模式**（本地 / 跨设备），**「现在是哪个」只有一条规则、一个出处**（`core.system_mode.cross_device_requested`：按钮开或手写跨设备模式，任一即是）。
+  此前同一件事有三个各自推导的答案（网关只看按钮；启动流程另把「NATS 地址非空」当跨设备；`system_mode.py` 让写着 `desktop-local` 的模式键盖过按钮），
+  于是面板按钮开着、`.env` 里躺着 `desktop-local` 时三处各说各话，「保存设置」写入的 `nats://localhost:4222` 还会把只想用本机的人悄悄切成跨设备。
+  现在网关开关、启动流程、桌面在场、启动自检、模式接口都调那一个函数；NATS 地址不参与判模式；面板「跨设备」按钮同时写主键与模式名，「运行模式」下拉框不再列在面板上。
+- **主脑与 worker 只在跨设备模式里起**；开着却在本地模式 → 不起，启动日志说出原因。
+- **模型只能请求、不能决定**：本地模式下的 `devices__request_cross_device` 只会问人，批准走设备接入已有的人在环（`GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合不能提出）。
+- 6 个数字 / 取值的登记默认对齐到代码（主脑缩放复评间隔、节点心跳、安卓快照保鲜、联邦心跳、SLO 心跳窗口、Tailscale 检查间隔）；清点时记的第 7 个（`GALAXY_HEADSCALE_USER`）核对后本来就一致。
+- 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_the_model_can_ask_but_only_the_person_can_turn_on_cross_device.py`、`test_master_brain_runs_only_in_cross_device_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

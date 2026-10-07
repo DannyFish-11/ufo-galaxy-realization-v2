@@ -1,11 +1,37 @@
 # 多机模式（跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent）
 
-> **状态：2026-10-05 定义并记录。没有合并任何开关、没有改任何行为。**
+> **状态：2026-10-05 定义并记录；2026-10-07 按所有者的决定收口：模式只有一条规则、一个出处（见「零、两个模式」），第六节里
+> 会悄悄改变行为的几条已修。**
 > 所有者的设计：把「让这台电脑加上别的设备 / 别的机器像一个整体干活」这一整块，作为**一个模块**来看 ——
 > 跨设备是前提，多设备并行建立在它之上，再往上是 NATS 上的 Agent（主脑与 worker）和任务的派发与分配。
 > 这份文档回答：这个模块**由哪几层组成、一个任务怎么走完、每一层有哪些配置键 / 模块 / 接口、现在哪里不一致**。
 > 配置键表由 `python scripts/gen_multi_machine_map.py --write` 从实时登记表生成；其余是 2026-10-05 对着代码查的快照，
 > 没有查到的地方明说，没有实测过的地方写「按代码读」。
+
+## 零、两个模式（先看这一节）
+
+系统只有两个模式（`core/system_mode.py`，设置里的 `GALAXY_SYSTEM_MODE`）：
+
+- **本地模式**（`desktop-local`，默认）：只用这台电脑。
+- **跨设备模式**（`desktop-cross-device`）：这台电脑加上别的设备一起干活。**本文说的整个多机模式 —— 多设备并行、任务派发与分配、
+  主脑、NATS Agent —— 都是跨设备模式里面的功能，不是另一个模式。**
+
+「混合」**不是模式**，是一个请求的走法：请求只在本机做（`local`）、只交给别的设备（`cross_device`）、或本机做一部分同时别的设备也做
+（`hybrid`）。这是跨设备模式开了之后系统自动判断的（`resolve_entry_mode`），不用设置；本地模式下一律是 `local`。
+另有 `core/hybrid_executor.py` 的「混合执行」（A2A → GUI → VLM 三级降级，在**一台设备内部**），与多设备无关，别混。
+
+**「现在是哪个模式」只有一条规则**（`core.system_mode.cross_device_requested`）：`GALAXY_CROSS_DEVICE_ENABLED` 为真，**或**
+`GALAXY_SYSTEM_MODE=desktop-cross-device`，任一即是跨设备模式，否则本地模式。`local` / `false` 是出厂默认（`.env.example` 带着、「保存设置」会写），
+不是一次选择，盖不过别处明确的选择。网关开关、启动流程、桌面在场、启动自检、`/api/v1/system/mode-status` 都调这一个函数，不再各自推导。
+面板上切换模式的只有「跨设备」这一个按钮，它同时写这两个键（`config_bundles.py` 的 `mirrors`），「运行模式」下拉框不再列在面板上。
+`GALAXY_NATS_URL` **不参与**：它只说总线在哪；本地模式下把它指向别的机器，启动会说一句「要用别的设备请打开跨设备」，不替人切模式。
+
+**主脑只在跨设备模式里起**（`core.system_mode.master_brain_requested`）：主脑开关开着、却在本地模式 → 主脑与 worker 不起，启动日志说出原因；
+`CommandRouter` 的 `go_worker` 路径此时返回 `WORKER_DISPATCH_UNAVAILABLE`，设备路径被网关 `DeviceRouter` 的两处入口拒绝（`cross_device_disabled`）。
+
+**模型只能请求、不能决定**：本地模式下模型有一个工具 `devices__request_cross_device`，只会问人「要不要打开跨设备模式」；批准走设备接入已有的
+人在环（问的那一回合不算数、只认人发起的回合、看人的原话、手表连着在手表上问），`GALAXY_ONBOARDING_AUTO=approve` 对它无效；批准后走面板按钮同一个写入函数，
+要**重启**才完全生效。见 `core/device_onboarding/mode_request.py`。
 
 ## 一、四层，外加一个共用底座
 
@@ -32,7 +58,7 @@
 | 第二层 多设备并行 | 有哪些设备（各种列表）、怎么编队、怎么同时下发 | **几乎没有开关**：只有 1 个并发上限（默认 8，未登记）；其余是代码里一直在的机制 |
 | 共用底座 NATS | 消息总线 | `GALAXY_NATS_ENABLED`、`GALAXY_NATS_URL` |
 | 第三层 任务派发与分配 | 一个任务交给谁、走哪条路、怎么防重、重启怎么续 | 几个已内置的保护 + 任务状态落盘（默认开） |
-| 第四层 NATS Agent | 主脑选 worker、worker 执行并回传 | `GALAXY_MASTER_BRAIN_ENABLED`（代码里自称「多设备总开关」，默认关） |
+| 第四层 NATS Agent | 主脑选 worker、worker 执行并回传 | `GALAXY_MASTER_BRAIN_ENABLED`（默认关；要在跨设备模式里才起） |
 
 ## 二、一个任务怎么走完
 
@@ -91,7 +117,7 @@
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_CROSS_DEVICE_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
-| `GALAXY_SYSTEM_MODE` | desktop-local | 是 | 全部设置 | — |  |
+| `GALAXY_SYSTEM_MODE` | desktop-local | 是 | 全部设置 | 跨设备 | 重启 |
 
 **发现与接入**
 
@@ -133,7 +159,7 @@
 |---|---|---|---|---|---|
 | `GALAXY_TS_FUNNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `GALAXY_TS_ADVERTISE_RELAY` | 开 | 是 | 内置 | 跨设备 |  |
-| `GALAXY_TAILSCALE_CHECK_INTERVAL` | 60 | 是 | 全部设置 | — |  |
+| `GALAXY_TAILSCALE_CHECK_INTERVAL` | 30 | 是 | 全部设置 | — |  |
 | `GALAXY_TAILSCALE_ENABLED` | — | **未登记**（只能改 .env） | — | — | — |
 | `GALAXY_TAILSCALE_HOST` | — | **未登记**（只能改 .env） | — | — | — |
 | `GALAXY_TAILSCALE_TAG` | — | **未登记**（只能改 .env） | — | — | — |
@@ -153,7 +179,7 @@
 | `GALAXY_TRANSPORT_BULK_BYTES` | 65536 | 是 | 全部设置 | — |  |
 | `GALAXY_TRANSPORT_PRIORITY` | — | **未登记**（只能改 .env） | — | — | — |
 | `GALAXY_ANDROID_WS_ENABLED` | 关 | 是 | 运维 | 跨设备 |  |
-| `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 300 | 是 | 全部设置 | 跨设备 |  |
+| `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 全部设置 | 跨设备 |  |
 | `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 全部设置 | 跨设备 |  |
 
 **别的设备 / 实例 / 家居接入**
@@ -166,7 +192,7 @@
 | `FEDERATION_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `FEDERATION_PEERS` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `FEDERATION_LOCAL_HOST` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_HEARTBEAT_INTERVAL` | 10 | 是 | 全部设置 | 跨设备 |  |
+| `FEDERATION_HEARTBEAT_INTERVAL` | 15 | 是 | 全部设置 | 跨设备 |  |
 | `FEDERATION_INSTANCE_ID` | — | **未登记**（只能改 .env） | — | — | — |
 | `FEDERATION_MIN_HEARTBEAT_INTERVAL` | — | **未登记**（只能改 .env） | — | — | — |
 | `FEDERATION_OFFLINE_THRESHOLD` | — | **未登记**（只能改 .env） | — | — | — |
@@ -183,7 +209,7 @@
 |---|---|---|---|---|---|
 | `GALAXY_MULTI_DEVICE_DISPATCH_LIMIT` | — | **未登记**（只能改 .env） | — | — | — |
 | `GALAXY_NODE_HEALTH_RETRIES` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_SLO_HEARTBEAT_WINDOW` | 60 | 是 | 全部设置 | — |  |
+| `GALAXY_SLO_HEARTBEAT_WINDOW` | 200 | 是 | 全部设置 | — |  |
 | `GALAXY_ENABLE_LEGACY_MULTIDEVICE` | — | **未登记**（只能改 .env） | — | — | — |
 
 
@@ -194,7 +220,7 @@
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_NATS_ENABLED` | 开 | 是 | 并进按钮 | 跨设备（成员） | 重启 |
-| `GALAXY_NATS_URL` | nats://localho | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_NATS_URL` | 空 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_FABRIC_STRICT` | 关 | 是 | 运维 | 跨设备 |  |
 
 
@@ -219,10 +245,10 @@
 |---|---|---|---|---|---|
 | `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `GALAXY_MASTER_BRAIN_STATE_PATH` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 300 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 15 | 是 | 全部设置 | 跨设备 |  |
 | `GALAXY_WORKER_ID` | — | **未登记**（只能改 .env） | — | — | — |
 | `GALAXY_WORKER_VERSION` | — | **未登记**（只能改 .env） | — | — | — |
-| `GALAXY_HEARTBEAT_INTERVAL` | 5 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_HEARTBEAT_INTERVAL` | 10 | 是 | 全部设置 | 跨设备 |  |
 
 共 81 个键，其中 **18** 个未登记。
 <!-- tables:end -->
@@ -261,64 +287,50 @@ Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocke
 **已有的相关文档**：`CROSS_DEVICE_CONTROL_PLANE_ARCHITECTURE.md`（第一、二层的九层控制面）、`CROSS_DEVICE_EXECUTION_CHAIN.md`、`CROSS_DEVICE_ROLE_ROUTING_POLICY.md`、
 `DEVICE_FORMATION_AND_MULTI_DEVICE_GROUPS.md`、`NATS_CONTROL_PLANE.md`、`MESH_MEMBERSHIP_CONTRACT.md`、`MULTI_DEVICE_ARCHITECTURE_ANALYSIS.md`、`MULTI_DEVICE_RUNTIME_MATURITY.md`。
 
-## 六、查出来的不一致和风险（没有动）
+## 六、查出来的不一致和风险
 
-**会悄悄改变行为的**
+**已修（2026-10-07）**
 
-1. **点一次「保存设置」，下次启动运行模式会被推成跨设备。** 「保存设置」会把登记表里每个**非空**默认值整体写进 `.env`；`GALAXY_NATS_URL` 登记的默认是
-   `nats://localhost:4222`（非空），而 `.env.example` 特意写成空（`GALAXY_NATS_URL=`）。启动序列第 2 阶段（`core/system_orchestrator.py`）把「`GALAXY_NATS_URL` 非空」
-   当成跨设备的信号，**即使 `GALAXY_CROSS_DEVICE_ENABLED=false` 也一样**；`core/system_mode.py` 也把它当成「NATS 显式启用」。（按代码读，没有实测。）
-   修法很小：登记默认改成空、说明里写「缺省 `nats://localhost:4222`」。
-2. **7 个数字 / 取值的登记默认与代码默认不一致**，保存设置会用登记值覆盖代码默认：
+1. ~~点一次「保存设置」，下次启动运行模式会被推成跨设备。~~ 原因：`GALAXY_NATS_URL` 登记默认非空（`nats://localhost:4222`），保存写进 `.env`，启动序列又把
+   「该地址非空」当成跨设备信号；而且就算登记默认改空，内嵌 NATS 起来后进程自己也会设这个变量，下次保存又写回。现在：登记默认改空，**启动流程不再用地址判模式**
+   （模式只看 `cross_device_requested`），地址指向别的机器而没开跨设备时只是说出来。
+2. ~~7 个数字 / 取值的登记默认与代码默认不一致。~~ 实际核对是 **6 个**（`GALAXY_HEADSCALE_USER` 代码写的是 `getenv(…, "").strip() or "galaxy"`，有效默认就是 `galaxy`，与登记一致，是清点时记错）。
+   已对齐到代码：
 
-   | 键 | 登记 | 代码 | 位置 |
-   |---|---|---|---|
-   | `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 300 | 15 | `core/master_brain.py` |
-   | `GALAXY_HEARTBEAT_INTERVAL` | 5 | 10（该文件的说明里也写 10） | `core/nats_heartbeat.py` |
-   | `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 300 | 90 | `core/android_device_state_store.py` |
-   | `FEDERATION_HEARTBEAT_INTERVAL` | 10 | 15 | `core/galaxy_federation.py` |
-   | `GALAXY_SLO_HEARTBEAT_WINDOW` | 60 | 200 | `core/slo_metrics.py` |
-   | `GALAXY_TAILSCALE_CHECK_INTERVAL` | 60 | 30 | `core/tailscale_manager.py` |
-   | `GALAXY_HEADSCALE_USER` | galaxy | 空 | `core/headscale_join.py` |
+   | 键 | 登记（原） | 登记（现）= 代码 |
+   |---|---|---|
+   | `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 300 | 15 |
+   | `GALAXY_HEARTBEAT_INTERVAL` | 5 | 10 |
+   | `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 300 | 90 |
+   | `FEDERATION_HEARTBEAT_INTERVAL` | 10 | 15 |
+   | `GALAXY_SLO_HEARTBEAT_WINDOW`（单位是「条」，不是秒） | 60 | 200 |
+   | `GALAXY_TAILSCALE_CHECK_INTERVAL` | 60 | 30 |
 
-3. **「NATS 缺省开不开」三处各说各话**：`core/system_mode.py`（`GALAXY_NATS_ENABLED` 没写时：有显式 URL 或跨设备模式才开，本机模式关）；
+   `tests/test_multi_machine_registry_defaults_match_the_code.py` 从读取点的源码里读默认值，与登记表逐个核对。
+3. ~~核心的 `/devices/parallel`、`/devices/cross-device` 与 `CommandRouter` 没查跨设备开关。~~ 核对：它们不需要自己查 —— 设备路径在网关 `DeviceRouter` 的两处入口被同一个开关（同一条模式规则）拒绝，
+   `go_worker` 路径在主脑没起时返回 `WORKER_DISPATCH_UNAVAILABLE`（现在主脑只在跨设备模式里起）。`tests/test_master_brain_runs_only_in_cross_device_mode.py` 钉住。
+4. ~~`galaxy_gateway/cross_device_switch.py` 文件开头的说明过期（写「默认开」）。~~ 已改成实际行为（缺省关、读 `cross_device_requested`）。
+5. ~~「多设备总开关」叫法不一、主脑不检查跨设备开关。~~ 主脑现在要在跨设备模式里才起；面板上叫「跨设备」的就是模式的切换点。
+
+**还在、没有动的**
+
+6. **「NATS 缺省开不开」三处各说各话**：`core/system_mode.py`（`GALAXY_NATS_ENABLED` 没写时：有显式 URL 或跨设备模式才开，本机模式关）；
    `core/nats_server.py` 与启动序列（没写 `false` 就拉 `nats-server`，缺省开）；登记表（`true`）。默认状态下「跨设备关、总线开」并存，启动日志里
-   `cross_device=False nats_enabled=True` 并排出现就是它。
-
-**文档 / 代码对不上的**
-
-4. **`GALAXY_NATS_EXECUTOR_FALLBACK` 登记成 `sync / async / reject` 三选一，代码只把它当开关读**（不是 `false` / `0` 就算开）：选 `reject` 实际是开着回退，选项的意思相反；
+   `cross_device=False nats_enabled=True` 并排出现就是它。它不再影响模式，只影响「本地模式下要不要白起一个进程内总线」。
+7. **`GALAXY_NATS_EXECUTOR_FALLBACK` 登记成 `sync / async / reject` 三选一，代码只把它当开关读**（不是 `false` / `0` 就算开）：选 `reject` 实际是开着回退，选项的意思相反；
    而读它的 `NATSExecutor` 我没有搜到被装成执行器（见第三节）。
-5. **主脑状态文件缺省落在系统临时目录**（`GALAXY_MASTER_BRAIN_STATE_PATH` 没设时 `tempfile.gettempdir()`），不认 `GALAXY_DATA_DIR`（本仓所有持久化点的约定）；重启后可能读不到。
-6. **核心的 `/devices/parallel`、`/devices/cross-device` 与 `core/command_router.py` 里没搜到对跨设备开关的检查**；开关只被网关的 `DeviceRouter`（两处）、`AgentBridge`、入口分流、安卓模式闸门、
-   运行模式解析、桌面在场的跨设备模式查。开关关着时核心这两个入口是否照收请求，需要实测，不能只看开关。
-7. **`galaxy_gateway/cross_device_switch.py` 文件开头的说明过期**：写着「默认开、缺省视为开」，函数实际缺省关、只认 `1/true/yes`。
-8. **`CROSS_DEVICE_CONTROL_PLANE_ARCHITECTURE.md` 的第 6 层写的 `core/cross_device_candidates.py` 与 `resolve_cross_device_candidates()` 全仓不存在。**
-
-**范围与口径**
-
-9. **18 个相关环境变量只在代码里读、没登记**（上表标「未登记」）：联邦 3、TURN 凭据 2、Tailscale 3、WebRTC 3、传输优先级 1、网状网络节点号与端口 2、`GALAXY_MULTI_DEVICE_DISPATCH_LIMIT`、
+8. **主脑状态文件缺省落在系统临时目录**（`GALAXY_MASTER_BRAIN_STATE_PATH` 没设时 `tempfile.gettempdir()`），不认 `GALAXY_DATA_DIR`（本仓所有持久化点的约定）；重启后可能读不到。
+9. **`CROSS_DEVICE_CONTROL_PLANE_ARCHITECTURE.md` 的第 6 层写的 `core/cross_device_candidates.py` 与 `resolve_cross_device_candidates()` 全仓不存在。**
+10. **18 个相关环境变量只在代码里读、没登记**（上表标「未登记」）：联邦 3、TURN 凭据 2、Tailscale 3、WebRTC 3、传输优先级 1、网状网络节点号与端口 2、`GALAXY_MULTI_DEVICE_DISPATCH_LIMIT`、
    `GALAXY_ENABLE_LEGACY_MULTIDEVICE`（旧的多设备层，默认禁用）、worker 的 id 与版本。
-10. **「多设备总开关」叫法不一**：`startup.py`、`worker_runtime.py` 的注释把 `GALAXY_MASTER_BRAIN_ENABLED` 叫「多设备总开关」，而面板上叫「跨设备」的是 `GALAXY_CROSS_DEVICE_ENABLED`；
-    两者在代码里互相独立（主脑不检查跨设备开关）。
 11. **「跨设备」整档按钮的 `owns` 里有 `NODE_*_URL`**（内部服务节点地址），不是设备，归属存疑。
 12. **`GALAXY_DURABLE_EXEC` 的代码说明写着「只在跨设备分布式编排下才有意义」**，现在已默认开（所有者的决定）；它在这个模块里属于第三层（重启后重派没做完的任务）。
 
-## 七、先放在这儿的：怎么组成一个按钮（等所有者定）
+## 七、怎么组成一个按钮（所有者的决定）
 
-**组法 A — 用现有机制，不新增任何键**：「跨设备」按钮保持（主键 `GALAXY_CROSS_DEVICE_ENABLED`，成员就是现在这 4 个）；第二、三层本来就没有开关，跟着第一层走；
-第四层主脑是默认关的 opt-in，按钮「开」不能替人打开（会拉起常驻的主脑与 worker、耗资源），所以仍是「全部设置」里一个独立开关，旁边写明「需要消息总线」。
-优点：零新增、零行为变化；缺点：主脑没有并进来。
+所有者的口径：**系统是两个模式，多机模式 = 跨设备模式的整体内容，「混合」是请求的走法。** 因此没有新增「多机模式四档牌」（原组法 B），也没有把主脑并进按钮（原组法 A 的口径）：
 
-**组法 B — 一个「多机模式」四档牌（像「自主」那样，新增 1 个选择型键）**：`GALAXY_MULTI_MACHINE = off | cross_device | multi_device | master_brain`，逐级包含，每一档写哪些现有键由登记表一处定义：
-
-| 档 | 写什么（现有键） | 备注 |
-|---|---|---|
-| off | 跨设备 false，4 个成员 false，主脑 false | 只在本机跑 |
-| cross_device | 跨设备 true，4 个成员回默认；主脑 false | 设备能被发现、配对、收任务 |
-| multi_device | 同上；第二层没有现成的键 | 要让这一档与上一档**真的不同**，得给并行 / 分发加一个闸（新增代码）；需要所有者说这一档要管住什么 |
-| master_brain | 在上一档基础上主脑 true | 需要消息总线；开了拉起主脑、worker 与 MCP over NATS |
-
-**无论选哪种，先要定的两件事**：
-1. 总开关关着时，核心的 `/devices/parallel`、`/devices/cross-device` 要不要直接拒绝（现在没搜到检查，见第六节 6）；
-2. 第六节 1 和 2（保存设置会改变行为的）要不要先修 —— 它们和「怎么组」无关，但都会让「保存设置」悄悄改变多机行为。
+- 面板上切换的只有「跨设备」这一个按钮：关 = 本地模式，开 = 跨设备模式；它写主键、成员（发现 / mDNS / 设备接入 / NATS 总线）和模式名；
+- 主脑仍是默认关的 opt-in（拉起常驻的主脑与 worker 有花费），独立一个开关，但要在跨设备模式里才起；
+- 第二、三层（多设备并行、任务派发与分配）本来就没有开关，跟着跨设备模式走；
+- 模型可以请求打开跨设备模式，批准只归人（见「零」）。

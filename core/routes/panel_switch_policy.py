@@ -159,7 +159,9 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     "GALAXY_HF_OLLAMA_FALLBACK": _b("模型与花费", "HuggingFace 拉不到时回落 Ollama：只在兜底时起作用"),
     "GALAXY_IGNORE_CONTEXT_MEASUREMENTS": _o("模型与花费", "忽略本机实测的 KV 单价：排障用"),
     # ── 多设备与网络 ────────────────────────────────────────────────────
-    "GALAXY_CROSS_DEVICE_ENABLED": _p("多设备与网络", "跨设备编排：整档「跨设备」的主键。关掉则只在本机跑"),
+    "GALAXY_CROSS_DEVICE_ENABLED": _p(
+        "多设备与网络", "跨设备模式：整档「跨设备」的主键。关=本地模式(只在本机跑)，开=跨设备模式"
+    ),
     "GALAXY_MASTER_BRAIN_ENABLED": _p(
         "多设备与网络",
         "主脑编排 + worker/NATS 分布式：默认关=单机。与「跨设备」的关系见 docs/PANEL_SWITCHES.md 的合并建议",

@@ -19,9 +19,9 @@ for cross-device operation.
 
 | Variable | Default | Values | Description |
 |---|---|---|---|
-| `GALAXY_SYSTEM_MODE` | `desktop-local` | `desktop-local` \| `desktop-cross-device` | Primary mode selector. All other fabric config is derived from this. |
+| `GALAXY_SYSTEM_MODE` | `desktop-local` | `desktop-local` \| `desktop-cross-device` | Mode selector. The panel's 「跨设备」 button writes it together with `GALAXY_CROSS_DEVICE_ENABLED`. See *Config Precedence* — one rule decides the mode. |
 | `GALAXY_NATS_ENABLED` | derived | `false` \| `true` | Override NATS activation. Defaults to `false` in `desktop-local`, `true` in `desktop-cross-device`. |
-| `GALAXY_NATS_URL` | `nats://localhost:4222` | any URL | NATS server URL. Setting this also implicitly enables NATS. |
+| `GALAXY_NATS_URL` | _(empty)_ → `nats://localhost:4222` | any URL | NATS server URL. Setting this also implicitly enables NATS. It says *where* the bus is — it never changes the mode. |
 | `GALAXY_FABRIC_STRICT` | `false` | `false` \| `true` | When `true`, missing fabric deps (e.g. NATS unreachable) cause hard startup failure. |
 | `GALAXY_NETWORK_MODE` | `local` | `local` \| `lan` \| `tailscale` \| `relay` | Intended network topology. |
 | `GALAXY_CROSS_DEVICE_ENABLED` | derived | `false` \| `true` | Cross-device routing switch. Derived from `GALAXY_SYSTEM_MODE` when not set. |
@@ -85,13 +85,28 @@ assert cfg.nats_required is True
 
 ## Config Precedence for Mode Derivation
 
-When `GALAXY_SYSTEM_MODE` is **not** set:
+There are exactly two modes, and **one rule** (`core.system_mode.cross_device_requested`) decides which one the
+system is in. The gateway switch, the startup orchestrator, the desktop presence runtime, the startup health check and
+`/api/v1/system/mode-status` all call it; none derives the answer again.
 
-1. `GALAXY_CROSS_DEVICE_ENABLED=true/1/yes` → inferred mode = `desktop-cross-device`
-2. `GALAXY_CROSS_DEVICE_ENABLED=false/0/no` → inferred mode = `desktop-local`
-3. _(absent)_ → default = `desktop-local`
+The system is in `desktop-cross-device` when **either**
 
-`GALAXY_SYSTEM_MODE` always wins when it is explicitly provided.
+1. `GALAXY_SYSTEM_MODE=desktop-cross-device`, **or**
+2. `GALAXY_CROSS_DEVICE_ENABLED=true/1/yes/on`
+
+— otherwise `desktop-local`. "Local" and "false" are the factory defaults (`.env.example` ships them and "save
+settings" writes them), so seeing one of them in a file is not a choice and never overrides an explicit opt-in on the
+other key. The panel's 「跨设备」 button writes both keys together (`mirrors` in `core/routes/config_bundles.py`), so
+turning it off really turns both off.
+
+`GALAXY_NATS_URL` does **not** take part: pointing the bus at another machine while in local mode makes startup say so
+("当前是本地模式，要用别的设备请打开跨设备"), but never switches the mode.
+
+The master brain (`GALAXY_MASTER_BRAIN_ENABLED`) and its worker only start in cross-device mode
+(`core.system_mode.master_brain_requested`); switched on in local mode they stay off and startup says why.
+
+An agent may *ask* the user to turn cross-device mode on (`devices__request_cross_device`, local mode only); only the user can
+approve it — see `core/device_onboarding/mode_request.py`.
 
 ---
 

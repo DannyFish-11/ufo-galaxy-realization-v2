@@ -97,7 +97,11 @@ class TestWhatFlippingTheButtonWrites:
     def test_off_writes_false_to_the_primary_and_every_member(self) -> None:
         bundle = _bundle("cross_device")
         writes = bundle_writes(bundle, "false", CONFIG_SCHEMA)
-        assert writes == {k: "false" for k in (bundle["primary"], *member_keys(bundle))}
+        # 主键 + 成员都是 "false";另有一个取值是模式名的 mirror(见 test_one_rule_decides_the_system_mode)。
+        assert writes == {
+            **{k: "false" for k in (bundle["primary"], *member_keys(bundle))},
+            "GALAXY_SYSTEM_MODE": "desktop-local",
+        }
 
     def test_on_returns_members_to_their_registry_default_and_never_opts_anyone_in(self) -> None:
         for bundle in CONFIG_BUNDLES:

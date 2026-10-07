@@ -201,4 +201,5 @@ class TestGate:
     def test_worker_enabled_follows_flag(self, monkeypatch):
         assert not wr.worker_enabled()
         monkeypatch.setenv("GALAXY_MASTER_BRAIN_ENABLED", "true")
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")  # 主脑要在跨设备模式里才起
         assert wr.worker_enabled()

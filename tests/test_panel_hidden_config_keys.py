@@ -55,10 +55,13 @@ def test_the_self_improvement_switch_is_never_hidden():
 
 def test_hidden_switches_default_to_on_and_match_the_code():
     from core.agent_supply import DEFAULT_SUPPLY_MODE
+    from core.routes.config_bundles import CONFIG_BUNDLES, mirror_keys
     from core.routes.panel_switch_policy import OPS, SWITCH_POLICY
 
     ops = {k for k, p in SWITCH_POLICY.items() if p.disposition == OPS}
-    for key in PANEL_HIDDEN_KEYS - ops:
+    # 整档按钮的 mirror(运行模式)由按钮写、不是「藏起来的开关」:默认是本地模式,不是 on。
+    mirrors = {k for b in CONFIG_BUNDLES for k in mirror_keys(b)}
+    for key in PANEL_HIDDEN_KEYS - ops - mirrors:
         meta = CONFIG_SCHEMA[key]
         if meta["type"] == "boolean":
             assert meta["default"] == "true", f"{key} 藏起来了却默认关 —— 用户找不到它,也就永远打不开"
