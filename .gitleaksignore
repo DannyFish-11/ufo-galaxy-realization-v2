@@ -1,0 +1,4 @@
+# 已核对的假阳性（gitleaks 指纹 = 提交:文件:规则:行号）。
+# tests/test_provider_catalog_covers_every_key.py 第 92 行当时写的是一个假的 Gemini 样式密钥，用来测"别名键也算已配置"；
+# 后一个提交已改成 FAKE_ 开头（.gitleaks.toml 对 tests/ 里 FAKE_ 前缀的假值有豁免）。这条指纹只是让扫描历史提交时不再重复报它。
+787d9424cea617290c30d0490aa8b800801aa7ca:tests/test_provider_catalog_covers_every_key.py:generic-api-key:92

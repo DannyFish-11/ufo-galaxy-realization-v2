@@ -89,7 +89,7 @@ class TestEveryKeyHasAHome:
 
     def test_aliases_are_part_of_the_card(self):
         """GEMINI_API_KEY / DASHSCOPE_API_KEY / SONAR_API_KEY 是别名：填过也认，且「清除」要能找到它。"""
-        cards = _by_id(build_catalog({"GEMINI_API_KEY": "AIzaSy-test-0123456789"}))
+        cards = _by_id(build_catalog({"GEMINI_API_KEY": "FAKE_gemini_key_0123456789"}))
         google = cards["google"]
         assert google["configured"] is True
         assert google["key_state"] == {"GOOGLE_API_KEY": False, "GEMINI_API_KEY": True}
