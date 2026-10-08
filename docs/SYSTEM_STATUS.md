@@ -300,7 +300,7 @@ python scripts/check_assessment_freshness.py
 
 **日志里有、但这次没有改的**（各自原因）：
 
-- 系统托盘 8 秒内没出现在托盘区：启动阶段会等图标**真的**出现再报告，这是有意的诚实检查；等待本身是非致命的。没在 Windows 真机上不改。
+- 系统托盘 8 秒内没出现在托盘区：启动阶段会等图标**真的**出现再报告，这是有意的诚实检查。（后续已查出图标在等菜单里的数，见 6.9。）
 - `系统播放声采集不可用（no_wasapi_loopback_backend）`：需要在那台机器上 `pip install PyAudioWPatch`，不是代码问题。
 - `这一轮带着 audio，但型号 gemma4:e2b 不接收它`：音频只有在 `GALAXY_NATIVE_AUDIO_CHAT=1`（默认关）时才会随对话发出，说明那台机器上这一项是开着的；本地 gemma 收不了音频，系统摘掉并在正文里写明，这是 `tests/test_audio_reaches_the_model_or_says_it_did_not.py` 钉住的行为，没改。
 - 启动 3 分钟（Phase 0 探测 13.6 秒、语音依赖导入 15 秒、API 网关 48 秒、AI 大脑 38.8 秒、Podman 21.7 秒）：探测本身已经并发；其余是 Windows 上冷导入与子进程的实际耗时，需要真机逐段抓 profile。
@@ -373,7 +373,7 @@ python scripts/check_assessment_freshness.py
 - **路由补全**：偏好表只列我们核实过的直连厂商，所以用户自加的端点、OneAPI、只配了 Groq 的人做推理任务，在失败转移链里「不存在」（面板上写着「通了才让它参与选路」，实际只有所有列出来的都不可用时才被碰到）。
   现在它们排在已列厂商**后面**，按同一个打分排序（`core/routing_tail.py`）；有意不自动参与的（智谱编码套餐）仍不进这一档。
 - **中间态不再依赖壁纸深浅**：每面墙自己带一层深色底，**近端不透明**、沿同一条衰减曲线化回桌面，淡紫叠在这块底上 —— 浅壁纸与深壁纸上看到的是同一堵墙（实心的深紫近端、清楚的墙/天花/地板轮廓，往里按 (1-t)² 变淡）。浓度 `--n` 改乘进淡紫那层的 alpha，不再乘整面墙的 opacity（那会把底也压成半透明）。四条对角棱上能看到一道很淡的细线（相邻两面在棱上各自抗锯齿），与原来的设计稿一致，没有再去遮。灵动岛由 248×33 改成 216×40（更窄更高，下沿圆角取高度的一半成药丸），尺寸常量在 `electron/renderer/app.js` 的 `ISLE_*`，一处可调。
-- **面板窗口圆角**：桌面外壳里 `html` 按 `--shell-r` 裁圆角，圆角外一个像素也不画。（Windows 上的实际观感我这里无法复现，只验证了 Chromium 里四角像素全透明。）
+- **面板窗口圆角**：桌面外壳里 `html` 按 `--shell-r` 裁圆角，圆角外一个像素也不画。（Windows 上的实际观感这里无法复现，只验证了 Chromium 里四角像素全透明；Electron 在 Windows 上不会给透明窗口加框和阴影的依据见 6.9。）
 
 **开关**
 - 已经收好的开关（内置 / 运维 / 并进整档的）**不再被「保存设置」钉进 `.env`**：此前点一次保存，七十多个没人该碰的内部开关连同默认值整体写进去，既淹没真改过的几行，也会盖住以后代码里默认值的修正。改过的（值与默认不同）照旧写。
@@ -393,6 +393,21 @@ python scripts/check_assessment_freshness.py
 - 其余：FastAPI 的 `ORJSONResponse` 弃用警告每个请求刷一次（改用自己的响应子类）；常驻注意力循环在听写引擎下载期间不再每拍往线程池里塞一个空等的线程（屏幕上的「转写 45 秒没有回应」）。
 - 验证：`tests/test_provider_catalog_covers_every_key.py`、`test_unlisted_providers_join_routing.py`、`test_saving_settings_keeps_env_lines_the_panel_does_not_own.py`、`test_env_file_carries_no_untouched_hidden_switches.py`、`test_node_output_never_fills_a_pipe.py`、`test_slow_nodes_are_waited_for_and_failures_say_why.py`、`test_microphone_open_does_not_run_on_the_event_loop.py`、`test_choosing_the_tts_engine_does_not_block_the_event_loop.py`、`test_httpx_clients_share_one_tls_context.py`、`test_startup_registration_writes_the_graph_once.py`、`test_ingest_admission_and_loopback_bypass.py`、`test_ambient_listening_does_not_park_threads_while_the_asr_downloads.py`、`test_one_turn_is_recorded_once_and_without_machine_annotations.py`、`test_the_walls_look_the_same_on_any_wallpaper.py`。
 
+### 6.9 2026-10-08：只在 Windows 上出现的几项，逐项查证
+
+没有 Windows 机器，所以只认两种证据：**第三方源码里读到的**（Electron 28.3.3 的 `native_window_views.cc`、pystray 0.19.5）和**在这里能复现的模型**。每一项下面写了哪些是证实的、哪些仍是推断。
+
+| 现象 | 查到的 | 处置 |
+|---|---|---|
+| 系统托盘「8 秒内没出现在托盘区」 | **机制证实，耗时推断。** pystray 的 `setup` 回调（我们在里面置 `icon.visible` 并判「图标出现了」）要等 `_mark_ready()` 跑完才被调用；`_mark_ready()` 先 `update_menu()`，Windows 后端把**整棵菜单含惰性子菜单**建一遍。「本机模型实测」子菜单一求值就算整份实测账：探硬件、问 Ollama（2 秒超时）、第一次 import 路由模块。图标于是在等一张菜单上的数。用真 pystray + 一个 Windows 形状的后端 + 一份慢 3 秒的实测账复现，报出的正是真机上那句话。冷机器上到底慢多少，这里量不了 | 建菜单只读缓存，算数放后台线程，图标就绪后才起第一遍、算完刷新菜单。`tests/test_the_tray_shows_up_without_waiting_for_the_menu_numbers.py` |
+| Podman「虚机没起来，试 `podman machine start` 后重跑」 | **证实。** `_bring_up` 对 Docker 会拉起 Docker Desktop 并等 60 秒；对 Podman 只在「引擎已通、API socket 没起来」时才 `machine start`，而虚机没跑时 `podman info` 就不通，直接放弃、叫人自己敲命令 | Windows / macOS 上 Podman 引擎不通时先查有没有虚机：有就 `machine start` 并等（同一个 `GALAXY_AUTO_DOCKER_DAEMON_WAIT`）；**一台都没建过**就不替人做（建虚机要下载镜像），直接说「先 `podman machine init`」。`tests/test_podman_is_not_docker.py` |
+| `PyAudioWPatch` 没装 | **设计如此，不是缺陷。** 它在 Windows 档（`requirements-windows.txt`），只有 `python main.py install --all` / `install_windows.ps1` 会装；启动期自愈只装核心清单，语音类依赖**故意**不在启动期装（`launcher/deps.py` 模块头）。屏幕上已给出 `pip install PyAudioWPatch` | 不改 |
+| 「VAD 从未判定为说话」 | **措辞误导。** 启动后 20 秒一次性诊断，「收到音频但没判过说话」既可能是麦克风坏了，也可能只是这 20 秒没人开口，原文却写「语音输入无效」 | 改成「麦克风在收音，但……没人说话就属正常；说了话还是这样才是增益 / 设备问题」。判据与阈值不变 |
+| 首次启动 Ollama 的 Phase 0「这次没查完」 | **已经是诚实的。** 先问 HTTP（不依赖 PATH、不起子进程），问不到再 `ollama list`（8 秒），整项 12 秒到点放弃并记成「没等到」而不是「未安装」，依赖阶段重查 | 不改。冷启动的真实耗时需要在那台机器上抓 profile |
+| 面板四个边角 | **Electron 28.3.3 源码里读到：透明窗口的构造函数里 `if (transparent()) thick_frame_ = false;`**，于是 Windows 上不加 `WS_THICKFRAME` / `WS_CAPTION`，系统不会给它画框或阴影；`hasShadow` 在 Windows 上只是存了个值（官方文档也没有 Windows 标注）。所以 Electron 这条路上，方角只可能来自页面本身（已验证：圆角外像素全透明）或渲染降级。**Tauri 壳**的面板窗口却漏了 `.shadow(false)`（覆盖层有）——无边框窗口在 Windows 上默认带按矩形画的系统阴影 | Tauri 面板补上 `.shadow(false)`。Electron 不改：没有证据支持再动 `thickFrame` / `roundedCorners`（后者在 28 里只有 macOS） |
+
+要定位 Windows 上「圆角外仍有方角」，最省事的是看两样：`logs/electron.log` 开头有没有 `已禁用硬件加速`（软件渲染 / basic 降级下透明窗口行为不同），以及方角是**深色实心**（页面或降级）还是**一圈浅色细边**（系统）—— 两种的修法不同。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
@@ -403,7 +418,7 @@ python scripts/check_assessment_freshness.py
 | 旧 WS 路径 `/ws/ufo3` 未退役 | 路线图 C6 | 需要安卓侧先确认老客户端已迁走 |
 | 自我改进总闸默认关闭 | `GALAXY_META_RSI=off` | 由仓库所有者决定 |
 | 未接线 / 不可达：删还是接 | 755 条 + 3 个模块。**按用途说它们是干什么的**见 `docs/UNWIRED_CODE_INVENTORY.md` 第 2 节；**安卓以外 672 条每条该放在哪里**见第 7 节（接上 215、挂出来 134、删掉 170、随对象走 91、测试钩子 50、框架回调 4、产品决定 8；数据在 `config/unwired_placement.json`，`tests/test_unwired_placement.py` 守着它与清单对账）。逐条核对时新确认两处「看得见但不生效」：`PUT /api/v1/security/policy` 改的零信任规则表没有执行方；系统资源表有人读、没人登记 | 所有者要求先弄清楚再动；清单与去处已给，**没按它删或接任何一行**。所有者 2026-09-28：后面和 G002 放一块儿做 |
-| 只在 Windows 上出现的几项 | 系统托盘「8 秒内没出现在托盘区」；Podman 已装但虚机没起来（`podman machine start`）；`PyAudioWPatch` 没装（已在 `requirements-windows.txt`，没装 Windows 档依赖就没有）；麦克风增益极低时的 VAD 提醒；首次启动 Ollama 冷起时 Phase 0 的「这次没查完」（已如实说「不等于没装」并在依赖阶段重查）；面板窗口圆角在 Windows 上的实际观感 | 这里是 Linux，复现不了；每一项屏幕上都已经说出原因和怎么办，没有静默 |
+| 只在 Windows 上出现的几项 | 逐项查证见 6.9。托盘（图标等菜单数）和 Podman（引擎不通时不拉虚机）已修；`PyAudioWPatch`、Ollama 冷启动 Phase 0 是设计如此；仍需要真机的是：托盘 / 启动各段**到底慢多少**、面板圆角在 Windows 上的实际观感 | 这里是 Linux，复现不了；每一项屏幕上都已经说出原因和怎么办，没有静默 |
 | 第一次对话仍要现 import 一百多个模块 | Linux 上约 0.3 秒，Windows 杀软逐个扫时会更长 | 启动时预热的收益有限，且要维护一份模块清单；没做 |
 | 大文件 | core 有 133 个文件超过 1000 行 | 已有复杂度基线守着，只许拆、不许涨 |
 | 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；复现一次要 4 分钟，这次没有定位到创建点 |

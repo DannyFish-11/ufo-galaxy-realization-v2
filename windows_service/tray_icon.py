@@ -277,6 +277,11 @@ class GalaxyTray:
         self._icon: pystray.Icon | None = None
         self._current_status = "offline"
         self._status_lock = threading.Lock()
+        # 「本机模型实测」子菜单的缓存：None=还没算过，False=算失败，list=算好的行。
+        self._measure_rows: "list | bool | None" = None
+        self._measure_at = 0.0
+        self._measure_busy = False
+        self._icon_ready = False
 
     # ── 属性 / Properties ──
 
@@ -487,15 +492,22 @@ class GalaxyTray:
         还没量到的那些永远不会更新。这一条与「日志」那个子菜单同理。
 
         算数不在这儿。托盘只负责显示 —— 两边各算一遍，迟早给出不同答案。
-        """
-        items: List = []
-        try:
-            from core.model_measurements_report import UNKNOWN, measurement_rows
 
-            rows = measurement_rows(*self._hardware_budget())
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("读不到模型实测账: %s", exc)
+        **建菜单时也不算。** pystray 的 Windows 后端在「图标就绪」之前就把整棵菜单（含这个
+        惰性子菜单）建一遍，而 ``setup`` 回调——我们判「图标真的出现了」、也是在里面才把
+        ``icon.visible`` 置真的那一下——要等它建完才被调用。实测账里探硬件画像、问 Ollama、
+        第一次 import 路由模块，冷机器上这几样排在一起，图标就迟迟不出现（真机：
+        「8 秒内没出现在托盘区」）。所以这里只读缓存；没有或过期就丢给后台线程算，
+        算完刷新一次菜单。
+        """
+        self._refresh_measurements_in_background()
+        rows = self._measure_rows
+        if rows is None:
+            return [pystray.MenuItem("正在读取… / reading…", None, enabled=False)]
+        if rows is False:
             return [pystray.MenuItem("读不到实测账 / measurements unavailable", None, enabled=False)]
+        items: List = []
+        from core.model_measurements_report import UNKNOWN
 
         for row in rows:
             kv = f"KV {row.kv_per_1k_mb} MB/1K" if row.kv_per_1k_mb > 0 else f"KV {UNKNOWN}"
@@ -507,6 +519,49 @@ class GalaxyTray:
             items.append(pystray.Menu.SEPARATOR)
         items.append(pystray.MenuItem("导出成日志文件 / Export as log", self._export_measurements))
         return items
+
+    _MEASURE_TTL_S = 30.0
+
+    def _refresh_measurements_in_background(self) -> None:
+        """缓存没有或过期了，就在后台线程里重算一遍（同一时刻只算一遍）。
+
+        图标就绪之前一律不启动：就绪前建菜单发生在 ``_mark_ready`` 里，那时起线程、
+        算完又 ``update_menu`` 会与它同时重建菜单（Windows 后端的 ``_menu_handle`` 会被
+        两个线程各销毁一次）。就绪后由 :meth:`_on_icon_ready` 起第一遍。
+        """
+        if not self._icon_ready or self._measure_busy:
+            return
+        if self._measure_rows is not None and time.monotonic() - self._measure_at < self._MEASURE_TTL_S:
+            return
+        self._measure_busy = True
+        threading.Thread(target=self._compute_measurements, name="TrayMeasure", daemon=True).start()
+
+    def _compute_measurements(self) -> None:
+        try:
+            from core.model_measurements_report import measurement_rows
+
+            self._measure_rows = measurement_rows(*self._hardware_budget())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读不到模型实测账: %s", exc)
+            self._measure_rows = False
+        finally:
+            self._measure_at = time.monotonic()
+            self._measure_busy = False
+        icon = self._icon
+        if icon is not None:
+            try:
+                icon.update_menu()
+            except Exception:  # noqa: BLE001 —— 菜单刷新失败不影响托盘本身
+                pass
+
+    def _on_icon_ready(self, icon) -> None:
+        """pystray 的 ``setup`` 回调：图标已就绪。置可见、标记就绪、起第一遍实测账。"""
+        try:
+            icon.visible = True
+        except Exception:  # noqa: BLE001 —— 有的后端不认这个属性,不影响"已就绪"
+            pass
+        self._icon_ready = True
+        self._refresh_measurements_in_background()
 
     def _hardware_budget(self) -> tuple:
         """(显存预算, 有没有显卡)。探不到就是 ``(None, None)`` —— **不是 (0, False)**。
@@ -615,7 +670,7 @@ class GalaxyTray:
             self.create()
         if self._icon:
             logger.info("托盘启动中 / starting system tray ...")
-            self._icon.run()
+            self._icon.run(setup=self._on_icon_ready)
 
     def run_detached(self, *, wait_s: float = 8.0) -> str:
         """在后台线程里跑,并**等到图标真的出现**再回来。
@@ -642,10 +697,7 @@ class GalaxyTray:
         failure: List[str] = []
 
         def _on_ready(icon) -> None:
-            try:
-                icon.visible = True
-            except Exception:  # noqa: BLE001 —— 有的后端不认这个属性,不影响"已就绪"
-                pass
+            self._on_icon_ready(icon)
             started.set()
 
         def _body() -> None:

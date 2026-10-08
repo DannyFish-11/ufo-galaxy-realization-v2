@@ -70,7 +70,7 @@ class TestTheKernelRecordsTheCleanText:
     def test_the_user_turn_it_stores_has_no_annotations_and_keeps_its_origin_tag(self, recorder):
         from core.agent.kernel import AgentKernel
 
-        k = AgentKernel.__new__(AgentKernel)
+        k = object.__new__(AgentKernel)
         asyncio.run(k._record_session("s1", f"你好\n\n{MM}\n\n{STRAT}", "收到"))
         user = [c for c in recorder.calls if c["role"] == "user"]
         assert [c["content"] for c in user] == ["你好"]

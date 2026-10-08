@@ -110,6 +110,16 @@ def _limits(**kw) -> AmbientLimits:
     return AmbientLimits(**kw)
 
 
+@pytest.fixture(autouse=True)
+def _no_rest_between_ticks(monkeypatch):
+    """这里测的是额度与期限，不是「用时 T 秒歇 3T 秒」（那一条在 ``test_ambient_yields_to_the_user`` 里）。
+
+    歇息按第一拍**实际用时**算：冷启动慢的机器上（第一拍里要把桌面在场运行时现建起来），
+    第二拍会被歇息挡下、返回 ``None``，断言就在 ``second.action`` 上炸 —— 与额度无关。
+    """
+    monkeypatch.setattr("core.ambient_yield._REST_FACTOR", 0.0)
+
+
 @pytest.fixture
 def spoken():
     """替掉朗读与「说给面板」「记进主线」—— 谁被调用了，一目了然。"""

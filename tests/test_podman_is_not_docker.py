@@ -155,3 +155,70 @@ class TestTheBringUpIsWired:
 
         assert get_log("podman") is not None
         assert "logs/podman.log" in log_hint("podman")
+
+
+class TestThePodmanMachineIsStartedWhenTheEngineIsDown:
+    """Windows / macOS：``podman info`` 不通 = 虚机没在跑。
+
+    真机日志：``Podman → 虚机没起来,试 podman machine start 后重跑``。启动器对 Docker 会拉起
+    Docker Desktop 并等着，对 Podman 却只在「引擎已通、socket 没起来」时才 ``machine start``；
+    引擎本身不通就直接放弃，叫人自己敲命令。
+    """
+
+    @staticmethod
+    def _run(machines_json, returncode=0):
+        import subprocess
+        from unittest.mock import MagicMock
+
+        calls = {"run": [], "popen": []}
+
+        def _fake_run(cmd, **kw):
+            calls["run"].append(cmd)
+            return MagicMock(returncode=returncode, stdout=machines_json)
+
+        def _fake_popen(cmd, **kw):
+            calls["popen"].append(cmd)
+            return MagicMock()
+
+        with patch.object(subprocess, "run", _fake_run), patch.object(subprocess, "Popen", _fake_popen):
+            result = cr.try_start_podman_machine("podman")
+        return result, calls
+
+    def test_a_stopped_machine_is_started(self):
+        result, calls = self._run('[{"Name":"podman-machine-default","Running":false}]')
+        assert result == "starting"
+        assert calls["popen"] == [["podman", "machine", "start"]]
+
+    def test_no_machine_at_all_is_not_started_and_says_so(self):
+        """没建过虚机，``machine start`` 必然失败；建虚机要下载镜像，不替人做。"""
+        result, calls = self._run("[]")
+        assert result == "none"
+        assert calls["popen"] == []
+
+    def test_a_running_machine_is_not_started_again(self):
+        result, calls = self._run('[{"Name":"m","Running":true}]')
+        assert result == "running"
+        assert calls["popen"] == []
+
+    def test_not_being_able_to_list_still_tries_to_start(self):
+        """问不到不等于没有 —— 老版本 podman 不认 --format json。"""
+        result, calls = self._run("", returncode=125)
+        assert result == "starting"
+        assert calls["popen"] == [["podman", "machine", "start"]]
+
+    def test_the_bring_up_uses_it_on_windows_and_macos_only(self):
+        import inspect
+
+        src = inspect.getsource(svc.GalaxyUnified.ensure_docker_infra)
+        assert "cr.try_start_podman_machine(" in src
+        assert 'sys.platform in ("win32", "darwin")' in src
+
+    def test_no_machine_gets_its_own_hint(self):
+        with patch.object(svc.sys, "platform", "win32"):
+            hint = svc._podman_engine_hint(no_machine=True)
+            assert "machine init" in hint
+            assert "machine init" not in svc._podman_engine_hint()
+
+    def test_linux_never_hears_about_machines_even_with_the_flag(self):
+        with patch.object(svc.sys, "platform", "linux"):
+            assert "machine" not in svc._podman_engine_hint(no_machine=True)
