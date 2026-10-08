@@ -92,13 +92,21 @@ def test_a_computer_that_has_not_logged_in_is_stopped_with_a_next_step(configure
 def test_a_computer_without_the_client_is_stopped_and_told_where_to_get_it(configured, monkeypatch):
     monkeypatch.setattr(sj.shutil, "which", lambda _: None)
     out = sj.desktop_gate(run=lambda c: pytest.fail("没装就不该执行任何命令"))
-    assert out["reason"] == "desktop_not_on_tailnet" and "tailscale.com/download" in out["how_to_fix"]
+    assert out["reason"] == "desktop_not_on_tailnet"
+    link = out["how_to_fix"].partition("客户端:")[2].split()[0]
+    assert link == "https://tailscale.com/download", out["how_to_fix"]
 
 
 def test_a_computer_in_somebody_elses_network_is_stopped(configured, has_tailscale):
-    out = sj.desktop_gate(run=FakeTailscale("Running", "https://controlplane.tailscale.com"))
+    other = "https://controlplane.tailscale.com"
+    out = sj.desktop_gate(run=FakeTailscale("Running", other))
     assert out["reason"] == "desktop_not_on_tailnet"
-    assert "controlplane.tailscale.com" in out["how_to_fix"] and f"--login-server={URL}" in out["how_to_fix"]
+    # 话里要点名电脑现在登在哪(括号里),并给出换回自建服务器的命令。用相等比较而不是子串判断:
+    # 要钉的是「原样回显」,不是「某处出现过这串字」。
+    shown = out["how_to_fix"].split("(", 1)[1].split(")", 1)[0]
+    assert shown == other
+    command = out["how_to_fix"].rsplit(" ", 1)[-1]
+    assert command == f"--login-server={URL}"
 
 
 def test_when_it_cannot_tell_it_does_not_refuse(configured, has_tailscale):
