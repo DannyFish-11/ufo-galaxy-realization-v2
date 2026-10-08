@@ -455,3 +455,29 @@ def test_a_second_connection_cannot_borrow_the_first_ones_authentication(gateway
             r = _recv(impostor)
     assert r["success"] is False
     assert agent.calls == []
+
+
+# ---------------------------------------------------------------------------
+# 七、三态是电脑上的东西：手表不上报，网关也不往手表推
+# ---------------------------------------------------------------------------
+
+
+def test_a_phase_report_from_an_old_watch_is_ignored_not_routed_as_a_device_command(gateway, watch_id):
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        ws.send_json(
+            _watch_command_frame(watch_id, "phase_report", {"phase": "manifest", "device": "wear_os"}, "cmd_11", 11)
+        )
+        r = _recv(ws)
+    assert r.get("type") == "command_result", r
+    assert r.get("correlation_id") == "cmd_11"
+    assert r["data"].get("ignored") == "phase_report is retired"
+
+
+def test_the_gateway_has_no_path_that_pushes_the_tri_state_to_a_watch():
+    import importlib.util
+
+    from core import cross_device_sync
+
+    assert not hasattr(cross_device_sync, "_push_phase_to_wearos_devices")
+    assert importlib.util.find_spec("galaxy_gateway.android.handlers.wearos_sync") is None

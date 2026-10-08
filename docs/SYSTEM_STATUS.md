@@ -443,6 +443,18 @@ python scripts/check_assessment_freshness.py
 - 机制：`core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`）只管**说法**，不管列不列、默认、生效与否；`tests/test_every_listed_setting_has_a_chinese_name.py` 钉住：`/api/config/all` 列出的每个键都有 2–20 字、含汉字、全表不重名的中文名；每个下拉取值都有中文名；表里没有过期的键；说明不重复名字、下拉说明不带原始取值；`GALAXY_MODE` / `GALAXY_PREFLIGHT_MODE` 的取值与代码读到的一致。**新增一个会列在面板上的配置，不补这张表测试会红。**
 - 验证：真服务器 + Chromium 逐段看过（说话与听 / 安全与权限 / 进阶），281 行行首无一行英文键名、三个主键已不在；`panel/dist/` 已重建。
 
+### 6.12 2026-10-08：手表（galaxy-wearos）接中心智能体——规范入口上此前一条都没通
+
+设计（`docs/architecture/DEVICE_ONBOARDING_PLANE_V1.md` §2）：手表是「成员」（只响应），与中心智能体之间只有：人说的话交给智能体、智能体的提问送到手表、登记与回应、通话。三态是电脑上的东西，手表既不上报、网关也不往手表推。实测（真网关 + 手表真实帧形状，`probe` 见本节测试）发现这几件在规范入口 `/ws/device/{id}` 上**一件也没通**，各自的单元测试都是绿的：
+
+- **认证**：手表的 AuthMessage 编进 `payload.token`，`handle_auth` 只读顶层的环境令牌；配对时拿到的令牌（`/api/v1/pair/claim`）也过不了。现与 `device_register` 共用 `evaluate_ingress_authentication`，认证结果绑到连接对象，断开作废。
+- **命令**：`command` 帧（`voice_query` / `human_input` / `query_devices` / `interruptibility`）在规范入口没有处理器，只回通用 ack；真处理挂在没有挂载的旧入口。现接到同一份 `websocket_handler.handle_command`（`handlers/device_command.py`），处理前过 `sender_is_trusted`（`voice_query` 进智能体主链、`human_input` 能批准高风险操作，不能让没认证过的连接做；另开一条连接自报同一个 device_id 借不到别人的认证）。
+- **通话**：`voice_call_*` 同样只被 ack，现转给 `voice_call_route`，通话路由按连接建、连接断开即收。
+- **智能体找手表**：`_discover_target_devices` 只读旧管理器本地表和 REST 登记表，规范入口的手表两处都不在，「在手表上问人」永远找不到手表、一律退回「在对话里问」——而旧测试正是把它替换掉的。现以 UCM 为准。
+- **回复认领**：`command_result.correlation_id` 填的是网关临时生成的 `message_id`，手表按自己发的 `cmd_N` 认领回复，所以语音回复从不进会话记录。现回复带发送方给这次请求起的名字（`galaxy_gateway/command_reply.py`）。
+- **退役**：`phase_report` 命令（手表不再上报三态）回「已忽略」；`core/cross_device_sync._push_phase_to_wearos_devices` 与 `galaxy_gateway/android/handlers/wearos_sync.py`（往手表推三态）已删，手机的相位回推不变。
+- 测试：`tests/test_watch_reaches_the_central_agent.py`（21 条，**不替换发现函数**；先红 13 条后绿；把信任门拿掉后 3 条变红）。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
