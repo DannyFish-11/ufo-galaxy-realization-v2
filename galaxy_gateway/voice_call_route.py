@@ -284,6 +284,14 @@ class VoiceCallRoute:
 _ROUTES: Dict[str, VoiceCallRoute] = {}
 
 
+def voice_route_key(websocket: Any) -> str:
+    """规范入口上的连接号：一条 WebSocket 一个通话端点。
+
+    不用 device_id 当键：设备重连时新旧两条连接会短暂并存，旧连接的收尾不能误关新连接上的通话。
+    """
+    return f"ws#{id(websocket)}"
+
+
 def get_voice_route(connection_id: str, device_id: str, send_json: Any) -> VoiceCallRoute:
     """取(或建)这条连接的通话端点。"""
     route = _ROUTES.get(connection_id)

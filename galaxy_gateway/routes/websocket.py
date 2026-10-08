@@ -170,6 +170,13 @@ async def _handle_android_ws(
     except Exception as exc:
         logger.warning("device ws error for %s: %s", device_id, exc)
     finally:
+        # 通话是连接级资源：连接没了，PeerConnection 和 provider 会话必须跟着收掉。
+        try:
+            from galaxy_gateway.voice_call_route import close_voice_route, voice_route_key
+
+            await close_voice_route(voice_route_key(websocket))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("device ws voice route cleanup failed: %s", exc)
         if device_id:
             try:
                 await android_bridge.disconnect_device(device_id, websocket=websocket)
