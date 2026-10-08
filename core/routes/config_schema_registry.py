@@ -480,10 +480,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "熔断器（后端连续出错就暂时停用它，别一直撞墙 · 默认开）",
     },
     "GALAXY_ROUTER_MAX_QUEUE_DEPTH": {
-        "default": "1000",
+        "default": "200",
         "type": "number",
         "category": "agent",
-        "description": "请求排队上限（超了直接拒绝，防止堆积雪崩 · 默认 1000）",
+        "description": "请求排队上限（超了直接拒绝，防止堆积雪崩 · 默认 200）",
     },
     "GALAXY_CB_FAILURE_THRESHOLD": {
         "default": "5",
@@ -498,28 +498,28 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "熔断后隔多久试探恢复(秒 · 默认 30)",
     },
     "GALAXY_CB_HALF_OPEN_PROBES": {
-        "default": "3",
+        "default": "1",
         "type": "number",
         "category": "advanced",
-        "description": "试探恢复时先放几个请求进去（默认 3）",
+        "description": "试探恢复时先放几个请求进去（默认 1）",
     },
     "GALAXY_CB_WINDOW_SIZE": {
-        "default": "60",
+        "default": "10",
         "type": "number",
         "category": "advanced",
-        "description": "熔断统计窗口(秒 · 默认 60)",
+        "description": "熔断统计窗口(看最近几次调用 · 默认 10)",
     },
     "GALAXY_AS_TARGET_LATENCY_MS": {
-        "default": "2000",
+        "default": "500",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的目标延迟(毫秒 · 默认 2000；超了就减并发)",
+        "description": "自适应并发的目标延迟(毫秒 · 默认 500；超了就减并发)",
     },
     "GALAXY_AS_ERROR_THRESHOLD": {
-        "default": "0.1",
+        "default": "0.2",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的错误率阈值（0~1 · 默认 0.1）",
+        "description": "自适应并发的错误率阈值（0~1 · 默认 0.2）",
     },
     "GALAXY_AS_INIT_LIMIT": {
         "default": "10",
@@ -528,28 +528,28 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "自适应并发的起始并发数（默认 10）",
     },
     "GALAXY_AS_MAX_LIMIT": {
-        "default": "200",
+        "default": "50",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的上限（默认 200）",
+        "description": "自适应并发的上限（默认 50）",
     },
     "GALAXY_AS_MIN_LIMIT": {
-        "default": "1",
+        "default": "2",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的下限（默认 1，保证不会降到零）",
+        "description": "自适应并发的下限（默认 2，保证不会降到零）",
     },
     "GALAXY_AS_SAMPLE_WINDOW": {
-        "default": "60",
+        "default": "100",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的采样窗口(秒 · 默认 60)",
+        "description": "自适应并发的采样窗口(看最近几次调用 · 默认 100)",
     },
     "GALAXY_AS_PROBE_INTERVAL_S": {
-        "default": "5",
+        "default": "10",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的探测间隔(秒 · 默认 5)",
+        "description": "自适应并发的探测间隔(秒 · 默认 10)",
     },
     # --- Storage ---
     "GALAXY_DATA_DIR": {
@@ -641,16 +641,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "入口按「就绪度」判定的实验路径（而不是只看进程在不在 · 默认关）",
     },
     "CMD_MAX_CONCURRENT": {
+        "default": "20",
+        "type": "number",
+        "category": "advanced",
+        "description": "单类命令的最大并发数（默认 20）",
+    },
+    "CONCURRENCY_GLOBAL_MAX": {
         "default": "50",
         "type": "number",
         "category": "advanced",
-        "description": "单类命令的最大并发数（默认 50）",
-    },
-    "CONCURRENCY_GLOBAL_MAX": {
-        "default": "100",
-        "type": "number",
-        "category": "advanced",
-        "description": "全局最大并发数（默认 100）",
+        "description": "全局最大并发数（默认 50）",
     },
     "GALAXY_MAX_CONTEXT_TOKENS": {
         "default": "100000",
@@ -1984,10 +1984,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "空闲预演（闲时提前想可能被问到的事 · auto=自动 / 1 / 0 · 默认 auto）",
     },
     "GALAXY_REHEARSAL_CANDIDATES": {
-        "default": "1",
+        "default": "2",
         "type": "number",
         "category": "agent",
-        "description": "每次预演准备几个候选（默认 1）",
+        "description": "每次预演准备几个候选（默认 2；1 退回单方案）",
     },
     "GALAXY_REHEARSAL_COMPLEXITY_FLOOR": {
         "default": "0.55",
@@ -2617,10 +2617,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     },
     # --- SLO & Continuity ---
     "GALAXY_SLO_LATENCY_WINDOW": {
-        "default": "300",
+        "default": "1000",
         "type": "number",
         "category": "advanced",
-        "description": "延迟统计窗口(秒 · 默认 300)",
+        "description": "延迟统计窗口(留最近几次样本 · 默认 1000)",
     },
     "GALAXY_SLO_HEARTBEAT_WINDOW": {
         "default": "200",
