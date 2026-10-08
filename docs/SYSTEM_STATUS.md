@@ -372,7 +372,7 @@ python scripts/check_assessment_freshness.py
   目录由后端给（`core/provider_catalog.py`，`GET /api/v1/models/providers`），**不下发密钥值，只有布尔**；`PROVIDER_REGISTRY` 多一家而没写展示信息、或「供应商与密钥」类里有键没人认领，测试会红。
 - **路由补全**：偏好表只列我们核实过的直连厂商，所以用户自加的端点、OneAPI、只配了 Groq 的人做推理任务，在失败转移链里「不存在」（面板上写着「通了才让它参与选路」，实际只有所有列出来的都不可用时才被碰到）。
   现在它们排在已列厂商**后面**，按同一个打分排序（`core/routing_tail.py`）；有意不自动参与的（智谱编码套餐）仍不进这一档。
-- **中间态不再依赖壁纸深浅**：四面墙后面垫一层不透明的深色底（一整块，不是四块拼的 —— 拼的那种在对角线上有 1 像素缝），壁纸再亮也透不进来；灵动岛由 248×33 改成 216×40（更窄更高，下沿圆角取高度的一半成药丸），尺寸常量在 `electron/renderer/app.js` 的 `ISLE_*`，一处可调。
+- **中间态不再依赖壁纸深浅**：每面墙自己带一层深色底，**近端不透明**、沿同一条衰减曲线化回桌面，淡紫叠在这块底上 —— 浅壁纸与深壁纸上看到的是同一堵墙（实心的深紫近端、清楚的墙/天花/地板轮廓，往里按 (1-t)² 变淡）。浓度 `--n` 改乘进淡紫那层的 alpha，不再乘整面墙的 opacity（那会把底也压成半透明）。四条对角棱上能看到一道很淡的细线（相邻两面在棱上各自抗锯齿），与原来的设计稿一致，没有再去遮。灵动岛由 248×33 改成 216×40（更窄更高，下沿圆角取高度的一半成药丸），尺寸常量在 `electron/renderer/app.js` 的 `ISLE_*`，一处可调。
 - **面板窗口圆角**：桌面外壳里 `html` 按 `--shell-r` 裁圆角，圆角外一个像素也不画。（Windows 上的实际观感我这里无法复现，只验证了 Chromium 里四角像素全透明。）
 
 **开关**
@@ -389,8 +389,9 @@ python scripts/check_assessment_freshness.py
   启动时一百多次能力登记各自把整张拓扑图序列化落盘（实测 106 次、最大 93KB，现在合成一次，`core/persist_batch.py`）；每轮对话都把所有设备所有能力重新登记一遍并整份落盘（现在批内合一，内容没变的节点不再重写文件）。
 - **感知上传洪水**（前几轮已修，这轮补上 Electron 侧在途上限与纯 ASGI 的计时中间件）：真服务器上 40 帧 + 40 段音频同时压上来，循环上没有任何一次超过 0.12 秒的停顿，其余接口 ≤ 320 毫秒应答。
 - **持久化路径认 `GALAXY_DATA_DIR`**：网络图 / 拓扑 / 节点注册表 / 委托执行追踪 / 成本账本 / Agent 状态 / 设备注册快照 / 三个记忆提供方，此前写死 `data/...`（容器里 `GALAXY_DATA_DIR` 指到别处时被劈成两处）。新加的持久化点用 `core.data_paths.data_path()`。
+- **对话历史同一轮记两遍、且一份带内部注解**（截图时发现，面板上看得见）：走内核的请求，`AgentKernel._record_session`（带模态信息，用户那句却是追加过 `[Multimodal context: …]` / `[desktop_context_strategy …]` 的版本）与 `OpenClawd._record_turn`（干净版本）各记一遍。现在内核入库前只剥**追加在末尾**的机器注解（`strip_appended_annotations`，其余一个字不动），OpenClawd 在内核路径上只记进程内那份。真服务器上 2 次请求 → 历史 4 条（user/assistant × 2），文本干净、换行保留。
 - 其余：FastAPI 的 `ORJSONResponse` 弃用警告每个请求刷一次（改用自己的响应子类）；常驻注意力循环在听写引擎下载期间不再每拍往线程池里塞一个空等的线程（屏幕上的「转写 45 秒没有回应」）。
-- 验证：`tests/test_provider_catalog_covers_every_key.py`、`test_unlisted_providers_join_routing.py`、`test_saving_settings_keeps_env_lines_the_panel_does_not_own.py`、`test_env_file_carries_no_untouched_hidden_switches.py`、`test_node_output_never_fills_a_pipe.py`、`test_slow_nodes_are_waited_for_and_failures_say_why.py`、`test_microphone_open_does_not_run_on_the_event_loop.py`、`test_choosing_the_tts_engine_does_not_block_the_event_loop.py`、`test_httpx_clients_share_one_tls_context.py`、`test_startup_registration_writes_the_graph_once.py`、`test_ingest_admission_and_loopback_bypass.py`、`test_ambient_listening_does_not_park_threads_while_the_asr_downloads.py`。
+- 验证：`tests/test_provider_catalog_covers_every_key.py`、`test_unlisted_providers_join_routing.py`、`test_saving_settings_keeps_env_lines_the_panel_does_not_own.py`、`test_env_file_carries_no_untouched_hidden_switches.py`、`test_node_output_never_fills_a_pipe.py`、`test_slow_nodes_are_waited_for_and_failures_say_why.py`、`test_microphone_open_does_not_run_on_the_event_loop.py`、`test_choosing_the_tts_engine_does_not_block_the_event_loop.py`、`test_httpx_clients_share_one_tls_context.py`、`test_startup_registration_writes_the_graph_once.py`、`test_ingest_admission_and_loopback_bypass.py`、`test_ambient_listening_does_not_park_threads_while_the_asr_downloads.py`、`test_one_turn_is_recorded_once_and_without_machine_annotations.py`、`test_the_walls_look_the_same_on_any_wallpaper.py`。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

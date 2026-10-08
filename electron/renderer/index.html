@@ -144,20 +144,21 @@ body {
 .box { position: absolute; inset: 0; transform-style: preserve-3d; }
 :root[data-space='off'] .stage { visibility: hidden; }
 
-/* ── 墙自己带底：深色的遮光垫在整面墙下面 ──────────────────────────────
+/* ── 墙自己带底：深色的遮光垫在淡紫下面 ──────────────────────────────
    覆盖层的窗口是透明的，桌面在窗口背后，CSS 混合触不到 OS 合成那一层（见 app.js 开头
    「关于 mix-blend-mode」）—— 所以四壁那层淡紫（整体 alpha ≤ .52）叠在深色壁纸上是一圈
    亮紫，叠在浅色壁纸上就几乎看不见（淡紫 ≈ 浅灰）。这是平台约束，不能靠混合模式绕过去，
-   那就**自己把壁纸挡住**：先垫一圈深色，再把淡紫叠上去 —— 两种壁纸上看到的是同一堵墙。
+   那就**自己把壁纸挡住**：先垫一层深色，再把淡紫叠上去 —— 两种壁纸上看到的是同一堵墙。
    遮光色取岛的那一档深紫（#14111d），与岛是同一块材料。
 
-   做成 .stage 的一个平面伪元素，**不是挂在四面墙上**：墙是 3D 的，相邻两面在棱上各自
-   抗锯齿，一旦墙底下是近乎不透明的深色，棱上漏出的那 1px 壁纸色就成了一道最显眼的
-   发丝线（试过让相邻两面各多出 1px 互相压住：漏光的亮线变成了叠加的暗线，只是换了个
-   颜色）。平面的遮光没有接缝。
+   两层各管一头：
+   · 每面墙自己的第二层背景（--wall-base，见下）= 近端不透明、按与淡紫同一条曲线化回桌面，
+     墙面本身因此是实的，棱线与透视收敛清楚；
+   · 这里的 .stage 平面伪元素 = 贴屏幕四边的一圈柔和遮光，平面的，没有接缝；
+     只靠它而墙本身只剩一层淡紫的话，浅壁纸上墙面与棱线都看不清（上一版就是这样）。
 
-   浓度只跟 --wop（墙长出来多少），所以空间出现 / 收回时它与墙同进同退；远端仍然化回
-   桌面 —— 阴影向中间衰减，「望不到底的那一头恰好是桌面本身」不变。 */
+   浓度都只跟 --wop（墙长出来多少），所以空间出现 / 收回时它与墙同进同退；远端仍然化回
+   桌面 —— 「望不到底的那一头恰好是桌面本身」不变。 */
 .stage::before {
   content: ''; position: absolute; inset: 0;
   box-shadow: inset 0 0 150px 40px rgb(20 17 29 / .94);
@@ -167,7 +168,7 @@ body {
 /* ⚠ .box 这一层不能挂 opacity / filter / mask / mix-blend-mode ——
       它们都会让 preserve-3d 失效，四面墙会被拍扁。浓度写在每面墙自己身上
       （叶子节点，不影响 3D 上下文）。栽过两次，都是这一类。 */
-.wall { position: absolute; opacity: calc(var(--wop) * var(--n));
+.wall { position: absolute; opacity: var(--wop);
         filter: saturate(var(--trust-sat, 1)) brightness(var(--trust-bri, 1)); }
 .wall-t { top: 0;    left: 0; right: 0; height: var(--D);
           transform-origin: 50% 0%;   transform: rotateX(-90deg); }
@@ -188,22 +189,38 @@ body {
    于是"越远越淡"和"越远越冷"是同一件事在发生。 */
 .wall {
   --wall-grad:
-    rgba(163,135,152,1.000) 0%,
-    rgba(171,143,162,0.922) 4%,
-    rgba(182,154,174,0.828) 9%,
-    rgba(194,166,189,0.722) 15%,
-    rgba(203,176,200,0.608) 22%,
-    rgba(193,170,197,0.476) 31%,
-    rgba(182,166,196,0.336) 42%,
-    rgba(179,171,206,0.202) 55%,
-    rgba(169,167,209,0.090) 70%,
-    rgba(156,158,204,0.023) 85%,
+    rgba(163,135,152,calc(1.000 * var(--n))) 0%,
+    rgba(171,143,162,calc(0.922 * var(--n))) 4%,
+    rgba(182,154,174,calc(0.828 * var(--n))) 9%,
+    rgba(194,166,189,calc(0.722 * var(--n))) 15%,
+    rgba(203,176,200,calc(0.608 * var(--n))) 22%,
+    rgba(193,170,197,calc(0.476 * var(--n))) 31%,
+    rgba(182,166,196,calc(0.336 * var(--n))) 42%,
+    rgba(179,171,206,calc(0.202 * var(--n))) 55%,
+    rgba(169,167,209,calc(0.090 * var(--n))) 70%,
+    rgba(156,158,204,calc(0.023 * var(--n))) 85%,
     rgba(146,149,193,0.000) 100%;
+  /* 墙自己带的深色底：同一条衰减曲线，近端**不透明**。叠在上面的淡紫（整体浓度 --n）因此在任何壁纸上
+     都落在同一块深色上 —— 浅壁纸上看到的墙与深壁纸上是同一堵：近端是实的深紫，往里按 (1-t)² 化回桌面。
+     底做在**墙自己的第二层背景**里，不另起元素：相邻两面的棱上没有多出一层要对齐的东西。
+     浓度 --n 因此不能再乘在整面墙的 opacity 上（那会把底也压成半透明），改乘进淡紫那一层的 alpha。 */
+  --wall-base:
+    rgba(20,17,29,1.000) 0%,
+    rgba(20,17,29,0.922) 4%,
+    rgba(20,17,29,0.828) 9%,
+    rgba(20,17,29,0.722) 15%,
+    rgba(20,17,29,0.608) 22%,
+    rgba(20,17,29,0.476) 31%,
+    rgba(20,17,29,0.336) 42%,
+    rgba(20,17,29,0.202) 55%,
+    rgba(20,17,29,0.090) 70%,
+    rgba(20,17,29,0.023) 85%,
+    rgba(20,17,29,0.000) 100%;
 }
-.wall-t { background: linear-gradient(to bottom, var(--wall-grad)); }
-.wall-b { background: linear-gradient(to top,    var(--wall-grad)); }
-.wall-l { background: linear-gradient(to right,  var(--wall-grad)); }
-.wall-r { background: linear-gradient(to left,   var(--wall-grad)); }
+.wall-t { background: linear-gradient(to bottom, var(--wall-grad)), linear-gradient(to bottom, var(--wall-base)); }
+.wall-b { background: linear-gradient(to top, var(--wall-grad)), linear-gradient(to top, var(--wall-base)); }
+.wall-l { background: linear-gradient(to right, var(--wall-grad)), linear-gradient(to right, var(--wall-base)); }
+.wall-r { background: linear-gradient(to left, var(--wall-grad)), linear-gradient(to left, var(--wall-base)); }
 
 /* 远端那一点余光 —— 把墙的远端化掉，让人看不出空间在哪儿结束。
    两头都收进透明、铺得比画面大一圈：只要它自己有边，那条边就是一道痕迹。

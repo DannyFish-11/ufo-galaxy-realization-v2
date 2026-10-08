@@ -4792,8 +4792,9 @@ class OpenClawd:
                     except Exception as _rp_k_err:
                         logger.debug("model_role_policy log (kernel) skipped: %s", _rp_k_err)
                     latency_ms = (time.monotonic() - t0) * 1000
-                    await self._record_turn(session_id, "user", message)
-                    await self._record_turn(session_id, "assistant", kernel_result.reply)
+                    # 统一会话库里这一轮内核已经记过（带模态信息、去过注解）；这里只记进程内那份，别再记一遍
+                    await self._record_turn(session_id, "user", message, unified=False)
+                    await self._record_turn(session_id, "assistant", kernel_result.reply, unified=False)
                     # ── Audit ledger: TASK_COMPLETED ──────────────────────────
                     try:
                         from core.control_plane.audit_ledger import EventType as _EvType3
@@ -9770,8 +9771,8 @@ class OpenClawd:
     # 会话记忆管理
     # ========================================================================
 
-    async def _record_turn(self, session_id: str, role: str, content: str):
-        """记录对话轮次到内部会话记忆"""
+    async def _record_turn(self, session_id: str, role: str, content: str, unified: bool = True):
+        """记录对话轮次到内部会话记忆。``unified=False``：统一会话库里已经有这一轮（内核记过），只记进程内这份。"""
         if session_id not in self._session_memory:
             self._session_memory[session_id] = []
 
@@ -9786,6 +9787,8 @@ class OpenClawd:
         if len(self._session_memory[session_id]) > 40:
             self._session_memory[session_id] = self._session_memory[session_id][-20:]
 
+        if not unified:
+            return
         try:
             from core.session_memory_facade import record_session_turn
 
@@ -9798,12 +9801,7 @@ class OpenClawd:
                 trace_id=trace_id,
                 metadata={
                     "control_session_id": getattr(self, "_current_control_session_id", "") or "",
-                    "runtime_attachment_session_id": getattr(
-                        self,
-                        "_current_runtime_attachment_session_id",
-                        "",
-                    )
-                    or "",
+                    "runtime_attachment_session_id": getattr(self, "_current_runtime_attachment_session_id", "") or "",
                     "record_origin": "openclawd",
                 },
             )
