@@ -49,6 +49,7 @@ from galaxy_gateway.android.handlers.acceptance_report import handle_device_acce
 from galaxy_gateway.android.handlers.auth import handle_auth
 from galaxy_gateway.android.handlers.capability_report import handle_capability_report
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.device_command import register_device_command_handlers
 from galaxy_gateway.android.handlers.device_state_snapshot import (
     handle_device_execution_event,
     handle_device_state_snapshot,
@@ -91,6 +92,7 @@ from galaxy_gateway.android.handlers.task_lifecycle import (
 )
 from galaxy_gateway.android.handlers.task_submit import handle_task_execute, handle_task_submit
 from galaxy_gateway.android.handlers.vision import handle_vision_request
+from galaxy_gateway.android.ingress_trust import forget_connection_auth
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice, Rect, UIElement  # noqa: F401
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
@@ -1060,6 +1062,7 @@ class AndroidBridge:
         # PR-AUTH-UNIFIED:客户端 onOpen 首帧 auth 的服务端应答者
         # (auth_ok/auth_failed)。此前该类型无处理者,状态机两端空转。
         self._message_handlers[MessageType.AUTH] = _wrap(handle_auth)
+        register_device_command_handlers(self._message_handlers, _wrap)  # 命令与通话信令(此前规范入口只回通用 ack)
         self._message_handlers[MessageType.DEVICE_REGISTER] = _wrap(handle_device_register)
         self._message_handlers[MessageType.DEVICE_HEARTBEAT] = _wrap(handle_heartbeat)
         self._message_handlers[MessageType.TASK_RESULT] = _wrap(handle_task_result)
@@ -1777,6 +1780,7 @@ class AndroidBridge:
         常常先连上新的、旧的才慢慢关掉;旧连接的收尾若照样执行,会把刚连上的新连接
         在本缓存、UDM、UCM 里一并判成离线 —— 设备明明连着,却再也派不到活。
         """
+        forget_connection_auth(self, device_id, websocket)
         if websocket is not None:
             async with self._lock:
                 current = self._devices.get(device_id)

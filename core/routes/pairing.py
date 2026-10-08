@@ -84,8 +84,17 @@ async def _tailnet_join_for(device_type: str, device_id: str = "") -> Dict[str, 
     """配对响应里关于"进 tailnet"的那两个字段。签不出来不影响配对本身。"""
     if str(device_type).lower() not in _TAILNET_AT_PAIRING_DEVICE_TYPES:
         return {}
-    from core.headscale_join import JoinUnavailable, issue_join_key
+    from core.headscale_join import JoinUnavailable, issue_join_key, join_status
 
+    # 钥匙只管进网。电脑自己不在网里时发了也是一张空网,不发,并说清原因
+    # (headscale 没配时照旧走下面 issue_join_key 的原因码)。
+    if join_status()["configured"]:
+        from core.tailnet_self_join import desktop_gate
+
+        blocked = await asyncio.to_thread(desktop_gate)
+        if blocked:
+            logger.warning("配对成功,但没给 %s 签发 tailnet 钥匙:%s", device_type, blocked["how_to_fix"])
+            return {"tailnet_join": None, "tailnet_join_unavailable": blocked}
     try:
         grant = await asyncio.to_thread(issue_join_key)
     except JoinUnavailable as exc:

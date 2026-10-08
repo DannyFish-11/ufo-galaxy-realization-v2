@@ -141,7 +141,6 @@
     "handle_connection",
     "handle_device_reconnect",
     "handle_response",
-    "handle_wearos_state_sync",
     "handoff_from_envelope",
     "has_any_constraint",
     "has_blocker",

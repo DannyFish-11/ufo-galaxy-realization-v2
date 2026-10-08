@@ -25,7 +25,6 @@
     "gateway.android.handlers.mesh_mirror.mirror_capability_query": "galaxy_gateway.android.handlers.mesh_mirror:mirror_capability_query",
     "gateway.android.handlers.registration.get_all_devices_with_registration_gaps": "galaxy_gateway.android.handlers.registration:get_all_devices_with_registration_gaps",
     "gateway.android.handlers.registration.get_registration_gaps": "galaxy_gateway.android.handlers.registration:get_registration_gaps",
-    "gateway.android.handlers.wearos_sync.is_wearos_device": "galaxy_gateway.android.handlers.wearos_sync:is_wearos_device",
     "gateway.android.message_builder.MessageBuilder": "galaxy_gateway.android.message_builder:MessageBuilder",
     "gateway.android_bridge": "galaxy_gateway.android_bridge",
     "gateway.android_bridge.AndroidBridge": "galaxy_gateway.android_bridge:AndroidBridge",

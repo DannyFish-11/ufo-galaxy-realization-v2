@@ -517,6 +517,7 @@ from launcher.health_checks import run_startup_health_check
 from launcher.node_startup import NodeSystemLauncher
 from launcher.service_manager import ServiceInfo, ServiceManager
 from launcher.shutdown import async_shutdown
+from launcher.tailnet_startup import TailnetStartup
 
 # ============================================================================
 # L4 增强模块启动器
@@ -934,6 +935,7 @@ class GalaxyUnified:
         self.l4_launcher = L4EnhancementLauncher(self.service_manager, self.config)
         self.web_ui = UnifiedWebUI(self.service_manager, self.config)
         self.running = False
+        self.tailnet = TailnetStartup(self.config.web_ui_port)
         # 这两个以前**只在启动路径上才存在**。start_tauri() 在 already_running()
         # 时直接 return True 而不设 _desktop_shell,于是调用方读它就是 AttributeError
         # —— 一条只在"壳已经跑着"时才触发的崩溃。显式初始化,把这类判空写法从
@@ -1773,6 +1775,8 @@ class GalaxyUnified:
             ts.on_state_change(lambda _action, _details: self._write_entrypoint_json())
         except Exception:  # noqa: BLE001
             pass
+        # 桌面版不跑网关 lifespan,自动入网在这做(见 launcher/tailnet_startup.py),要先于 initialize()
+        await self.tailnet.autojoin()
         ts_ip = await ts.initialize()
         if not ts_ip:
             raise RuntimeError("Tailscale not installed")
@@ -2163,7 +2167,8 @@ class GalaxyUnified:
             except Exception:
                 pass
         except Exception:
-            bus_details.append(("Tailscale", "未安装 (LAN 直连模式)", "warn"))
+            bus_details.extend(self.tailnet.not_on_tailnet_details())
+        bus_details.append(self.tailnet.start_lan_discovery())
         # 降级时把该项【专属】修复指引挂到总结卡(hint),不再无提示地一笔带过。
         _emit(
             "消息总线",
@@ -2497,6 +2502,7 @@ class GalaxyUnified:
         except Exception:
             pass
 
+        self.tailnet.stop()
         self.service_manager.stop_all()
         self.service_manager.state = SystemState.STOPPED
         print_status("系统已停止", "success")
