@@ -117,6 +117,10 @@ git ls-files -z 'core/*.py' | xargs -0 cat | wc -l
 流式响应的帧序列是 `phase, lockstep, meta, phase, delta, delta…`，锁步帧存在。
 行为由 `tests/test_presence_line.py`、`tests/test_agent_runs_apart_from_the_desktop.py` 钉住。
 
+2026-10-08 复查补了一处漏网的：**预演推演帧**（`core/rehearsal_panel_push.py`，面板阈限态里画的那一行行「模拟…」）此前不看请求从哪来，手机发起的请求只要走到预演，电脑面板上就会演它的推演。现在预演照常进行（认知不受分流影响），只在**电脑发起的请求**里才推给桌面面板；别的设备发起、中途在本机落手的请求，落手后交还桌面，之后的步骤照常推（与相位同一条规则）。`tests/test_rehearsal_panel_push.py` 钉住，去掉这处判断后该测试变红。
+
+**还没动、需要所有者决定的一处**：对话主线（`core/conversation_mainline.py` → `SessionManager.get_primary_session_id`，语音回合 / 自发开口 / 自发委托 / 面板重开读的那一条）取的是「所有设备里最近活跃的真实对话」，不看发起方。手机发了一句话，电脑上的主线就切到手机那段对话：之后电脑上说的话记进手机的会话。这与「跨设备统一上下文」（手机本地会话经 `/api/v1/sessions/reconcile` 认领到桌面主线）是同一套机制的两面，不是笔误 —— 是要「各设备各有各的主线」，还是「所有设备共用一条」，需要定。
+
 ### 2.4 容器镜像
 
 见第 6 节。修复前，三个镜像一个都产不出来；修复后，主镜像的全部 COPY 步骤都在真实 docker 里构建通过，
