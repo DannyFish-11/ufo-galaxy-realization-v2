@@ -60,6 +60,7 @@
 * :func:`decide_presence_line` / :func:`bind_presence_line` —— 判定与写入会话；
 * :func:`attach_to_host` —— 有需要时进三态（由 ``note_local_actuation`` 调）；
 * :func:`autonomous_session` —— 智能体自主工作的会话；
+* :func:`session_is_desktop_thread` —— 一段对话是不是电脑这边的（对话主线只在这样的对话里选）；
 * :func:`activity_snapshot` —— 智能体此刻在处理的全部请求，含不进三态的（``GET /api/v1/agent/activity``）。
 
 没有开关
@@ -207,6 +208,24 @@ def desktop_request(request: Any, body: Any, source: str = "chat") -> Tuple[Dict
     """HTTP 入口一次取齐：分流要的来源参数（原样传给 ``handle_request``），以及这次是不是电脑发起的。"""
     origin = request_origin(request, getattr(body, "client_surface", None))
     return origin, decide_presence_line(source, getattr(body, "device_id", None), **origin).host_bound
+
+
+def session_is_desktop_thread(session: Any) -> bool:
+    """一段**对话**是不是电脑这边的 —— 对话主线只在这样的对话里选。
+
+    与上面「请求进不进三态」是同一条分界的另一面：三态管**表达**（相位、朗读、推演），这里管**上下文**
+    （电脑上说的话记进哪条会话）。别的设备发起的对话，不因为它刚说过话就成了电脑的主线。
+
+    判据是建会话时记下的 ``metadata["origin_device"]``（建它的设备，电脑上起头是空串）：
+    * 电脑起头 → 是。之后别的设备接着往里写（``devices`` 里多出手机），它仍是电脑起头的那条；
+    * 别的设备起头 → 不是，**除非电脑自己也进过这条会话**（``devices`` 里有本机标识）；
+    * 没记过起头（这条改动之前落盘的会话）→ 是，保持原样。
+    """
+    meta = getattr(session, "metadata", None) or {}
+    origin = meta.get("origin_device") if isinstance(meta, dict) else None
+    if origin is None or is_local_body(origin):
+        return True
+    return any(is_local_body(d) for d in (getattr(session, "devices", None) or []) if d)
 
 
 def _silent(*_args: Any, **_kwargs: Any) -> None:

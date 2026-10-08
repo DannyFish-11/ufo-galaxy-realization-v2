@@ -119,7 +119,15 @@ git ls-files -z 'core/*.py' | xargs -0 cat | wc -l
 
 2026-10-08 复查补了一处漏网的：**预演推演帧**（`core/rehearsal_panel_push.py`，面板阈限态里画的那一行行「模拟…」）此前不看请求从哪来，手机发起的请求只要走到预演，电脑面板上就会演它的推演。现在预演照常进行（认知不受分流影响），只在**电脑发起的请求**里才推给桌面面板；别的设备发起、中途在本机落手的请求，落手后交还桌面，之后的步骤照常推（与相位同一条规则）。`tests/test_rehearsal_panel_push.py` 钉住，去掉这处判断后该测试变红。
 
-**还没动、需要所有者决定的一处**：对话主线（`core/conversation_mainline.py` → `SessionManager.get_primary_session_id`，语音回合 / 自发开口 / 自发委托 / 面板重开读的那一条）取的是「所有设备里最近活跃的真实对话」，不看发起方。手机发了一句话，电脑上的主线就切到手机那段对话：之后电脑上说的话记进手机的会话。这与「跨设备统一上下文」（手机本地会话经 `/api/v1/sessions/reconcile` 认领到桌面主线）是同一套机制的两面，不是笔误 —— 是要「各设备各有各的主线」，还是「所有设备共用一条」，需要定。
+**对话主线也按设备分开了（所有者选的 A：各设备各有各的主线）**：对话主线（`core/conversation_mainline.py` → `SessionManager.get_primary_session_id`，语音回合 / 自发开口 / 自发委托 / 面板重开读的那一条）原先取「所有设备里最近活跃的真实对话」，手机发一句话电脑的主线就切到手机那段。现在建会话时记下**谁起的头**（`metadata["origin_device"]`，电脑上起头是空串，四个构造点共用的 `_apply_thread` 里记），主线只在电脑这边的对话里选（`core.presence_line.session_is_desktop_thread`）：
+
+- 手机、手表（`wear_voice` 不带 session_id，按 `device::<手表id>` 另起并跨句复用）各有各的对话，说话不改电脑的主线；
+- 别的设备要接电脑这条主线：显式带它的 session_id（`GET /api/v1/sessions/primary`），或经 `/api/v1/sessions/reconcile` 认领 —— 接进来后（`devices` 里多出手机 / 手表）它仍是电脑起头的那条，**所以判据看起头记录，不看 `devices`**；
+- 手机起头、电脑后来也进了的会话，算电脑的；没记过起头的老会话（这条改动之前落盘的）判不出来，按原样算电脑的；
+- 手表的另外两条路不受影响：回答一个**待决事项**（`human_input` → `pending_decision_registry.resolve`）本来就不产生对话轮次；`interruptibility` 是**信号**不是对话，照样喂给常驻注意力循环。
+- 判据只看设备号：没带设备号的别的机器（浏览器直连）会话属主是 `device::default`，与电脑面板同一个属主，这一条这次没有动。
+
+`tests/test_each_device_has_its_own_conversation_mainline.py` 8 条（把 `session_manager.py` 的改动去掉后 6 条变红）。
 
 ### 2.4 容器镜像
 

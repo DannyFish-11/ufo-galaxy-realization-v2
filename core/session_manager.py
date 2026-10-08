@@ -317,6 +317,10 @@ class SessionManager:
             self._user_thread_root[owner] = session.root_id
         # 留痕:这条线是怎么连起来的、或者为什么没连上。事后可查,不用靠猜。
         session.metadata.update(decision.to_metadata())
+        # 记下这条对话是**谁起的头**(建它的那个设备,电脑上起的是空串)。四个构造点都走这里,所以只在这儿记。
+        # 不能事后从 ``devices`` 推:别的设备往一条会话里写话,会被 append 进 ``devices``(见 get_or_create_session),
+        # 一条电脑起头、手机后来接着聊的会话,不该因此被当成手机的。
+        session.metadata.setdefault("origin_device", session.active_device or "")
 
     def thread_root_of(self, session_id: str) -> str:
         """这条会话属于哪条记忆。查不到返回空串(**不是**返回它自己)。"""
@@ -558,14 +562,25 @@ class SessionManager:
         *,
         exclude_prefixes: tuple = ("ambient", "control", "worker", "session::"),
     ) -> str:
-        """最近活跃的**真实对话**会话 id(排除 ambient/control/worker 等系统桶)。
+        """电脑这边最近活跃的**真实对话**会话 id(排除 ambient/control/worker 等系统桶)。
 
-        供 ambient 自发委托「续到用户正在进行的对话主线」上用——让自发动作共享真实
-        上下文,而非跑在一次性隔离会话里。没有任何真实会话时返回 ""。
+        供 ambient 自发委托「续到用户正在进行的对话主线」、语音 / 自发开口记话、面板重开读上下文
+        用——让这些动作共享真实上下文,而非跑在一次性隔离会话里。没有任何真实会话时返回 ""。
+
+        **只在电脑这边的对话里选**(``core.presence_line.session_is_desktop_thread``):手机、手表、
+        平板各有各的对话,不因为它们刚说过话就成了电脑的主线。别的设备要接电脑这条主线,显式带上
+        它的 session_id(``GET /api/v1/sessions/primary``)或经 reconcile 认领 —— 接进来之后它仍是
+        电脑起头的那条。
         """
+        try:
+            from core.presence_line import session_is_desktop_thread
+        except Exception:  # noqa: BLE001 — 判据拿不到就退回「全设备最近活跃」，不让说话没处记
+            session_is_desktop_thread = None  # type: ignore[assignment]
         best_id, best_ts = "", -1.0
         for sid, s in self._sessions.items():
             if any(sid.startswith(p) for p in exclude_prefixes):
+                continue
+            if session_is_desktop_thread is not None and not session_is_desktop_thread(s):
                 continue
             ts = getattr(s, "updated_at", 0.0) or 0.0
             if ts > best_ts:
