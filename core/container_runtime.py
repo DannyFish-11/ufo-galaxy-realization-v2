@@ -558,7 +558,7 @@ def try_start_podman_machine(podman_path: str) -> str:
     if isinstance(machines, list) and any(isinstance(m, dict) and m.get("Running") for m in machines):
         return "running"
     try:
-        subprocess.Popen([podman_path, "machine", "start"], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+        subprocess.Popen([podman_path, "machine", "start"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:  # noqa: BLE001
         pass
     return "starting"
