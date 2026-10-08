@@ -235,8 +235,8 @@ def test_not_configured_does_nothing(unconfigured):
 def test_gateway_startup_joins_before_probing_tailscale():
     """顺序:先加入,再让 TailscaleManager 探测 —— 反过来的话刚拿到的 100.x 要等下一轮才被看见。"""
     src = (ROOT / "galaxy_gateway/bootstrap/lifecycle.py").read_text(encoding="utf-8")
-    assert "ensure_joined" in src
-    assert src.index("ensure_joined") < src.index("await _ts_mgr.initialize()")
+    assert "autojoin_at_startup" in src
+    assert src.index("autojoin_at_startup") < src.index("await _ts_mgr.initialize()")
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +290,9 @@ def test_pairing_records_the_grant(configured, monkeypatch):
     from core.routes import pairing
 
     monkeypatch.setattr(hj, "issue_join_key", lambda *a, **k: _grant())
+    monkeypatch.setattr(
+        sj, "desktop_gate", lambda **_: None
+    )  # 电脑已在网里(不在时的行为见 test_tailnet_key_needs_the_computer_in_the_network.py)
     out = asyncio.run(pairing._tailnet_join_for("wearos", "watch-7"))
     assert out["tailnet_join"]["auth_key"] == "hskey-auth-1"
     assert "key_id" not in out["tailnet_join"], "key_id 是网关自己留的,不交给设备"
