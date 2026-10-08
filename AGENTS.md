@@ -85,6 +85,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### 面板上的「模型服务商」
 - `core/provider_catalog.py` - 面板逐厂商填 Key 的目录（`GET /api/v1/models/providers`）：厂商中文名 / 分组 / 该填哪几个键 / 是否已配 / 路由器里是否可用。**不下发密钥值**，只有布尔。
   `PROVIDER_REGISTRY` 多一家而没写展示信息，`tests/test_provider_catalog_covers_every_key.py` 会红。
+  画法是**内嵌的行**（`.vd-card` 左栏说明 + 右栏输入，与设置页 `.sf-row` 同一个节奏），不是凸起的卡片 —— `tests/test_the_api_entry_is_inline_rows_not_cards.py` 钉着。
 - `core/routing_tail.py` - 偏好表没列、但已配好可用的厂商（用户自加端点、OneAPI、只配了 Groq 的人做推理任务）排在失败转移链的最后几档；有意不自动参与的（智谱编码套餐）不进这一档
 
 ### 事件循环里不跑阻塞的事
