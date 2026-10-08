@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -30,7 +31,7 @@ import re
 import shutil
 import socket
 import subprocess
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from core.headscale_join import JoinUnavailable, issue_join_key, join_status
 
@@ -139,6 +140,62 @@ def ensure_joined(*, run: Runner = _run, issue: Callable[..., Any] = issue_join_
             "how_to_fix": f"用管理员身份执行(钥匙 10 分钟内有效,一次性):sudo {manual}",
         }
     return {"state": "failed", "detail": f"tailscale up 失败:{err[:300]}", "how_to_fix": f"手动执行:{manual}"}
+
+
+async def autojoin_at_startup(
+    *, run: Runner = _run, issue: Callable[..., Any] = issue_join_key
+) -> Optional[Dict[str, Any]]:
+    """启动时让这台电脑自己入网。网关 lifespan 与桌面启动器共用这一处。
+
+    为什么要两个入口都调
+    ====================
+    桌面版由启动器自己建 FastAPI 应用并挂上 ``/ws/device/{id}``,**不跑**网关的 lifespan
+    —— 只写在 lifespan 里的自动入网,桌面版永远等不到。结果是「钥匙发了、手表进网了、
+    电脑不在网里」。
+
+    返回 ``ensure_joined`` 的结果;开关关着(``GALAXY_HEADSCALE_AUTOJOIN=0``)返回 ``None``。
+    没入成不抛异常、不挡启动,只留一条带处置的告警。
+    """
+    if not autojoin_enabled():
+        return None
+    result = await asyncio.to_thread(ensure_joined, run=run, issue=issue)
+    if result["state"] not in ("joined", "not_configured"):
+        logger.warning("这台电脑没能加入自建 tailnet:%s 处置:%s", result["detail"], result["how_to_fix"])
+    return result
+
+
+def desktop_gate(*, run: Runner = _run) -> Optional[Dict[str, str]]:
+    """配对要给设备发 tailnet 钥匙之前:这台电脑自己在不在那张网里。
+
+    在 → 返回 ``None``(放行)。不在 → 返回 ``{reason, how_to_fix}``,形状与
+    ``JoinUnavailable.to_dict()`` 相同,配对响应原样放进 ``tailnet_join_unavailable``。
+
+    为什么要拦
+    ==========
+    钥匙只管「进网」。电脑自己不在网里时,手表拿着钥匙进了一张**空网**:headscale 里多了一个
+    节点,手表却出门连不上中心 —— 而配对界面还显示成功。不发钥匙、直接说清「电脑还没入网」,
+    比发一把没用的钥匙诚实,也少留一个没人用却能进网的凭证。
+
+    查不出来(``tailscale status`` 没给出可解析的结果)时**放行**:拿不准就不替人拒绝,
+    钥匙是一次性、10 分钟内有效的。
+    """
+    cur = current_state(run)
+    state = cur["state"]
+    if state == "unknown":
+        return None
+    url = join_status().get("control_url", "")
+    if state == "running":
+        if _norm(cur.get("control_url", "")) in ("", _norm(url)):
+            return None
+        why = f"这台电脑登录在另一个控制服务器({cur.get('control_url')}),不是手表要加入的那张网"
+        fix = f"在电脑上换到自建的:tailscale logout 后重启网关,或 tailscale up --login-server={url}"
+    elif state == "no_tailscale":
+        why = "这台电脑没装 Tailscale 客户端"
+        fix = "安装 Tailscale 客户端:https://tailscale.com/download ,装完重启网关即可自动加入"
+    else:
+        why = "这台电脑还没登录到自建 tailnet"
+        fix = "网关启动时会自动加入(GALAXY_HEADSCALE_AUTOJOIN=1);现在可调 POST /api/v1/tailnet/join-this-computer 立刻加入"
+    return {"reason": "desktop_not_on_tailnet", "how_to_fix": f"{why}。{fix}"}
 
 
 def join_command_for(device_kind: str, grant: Any) -> Dict[str, str]:

@@ -10,6 +10,7 @@ where ``bridge`` is the AndroidBridge instance providing state and UDM helpers.
 from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
 from galaxy_gateway.android.handlers.capability_report import handle_capability_report
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.device_command import handle_device_command, handle_voice_call
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
 from galaxy_gateway.android.handlers.evaluator_artifact_report import handle_evaluator_artifact_report
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
@@ -44,6 +45,8 @@ from galaxy_gateway.android.handlers.task_submit import handle_task_execute, han
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 
 __all__ = [
+    "handle_device_command",
+    "handle_voice_call",
     "handle_device_register",
     "handle_unregistered",
     "handle_heartbeat",

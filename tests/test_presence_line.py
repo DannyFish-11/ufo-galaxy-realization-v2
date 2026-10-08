@@ -399,7 +399,8 @@ def test_presence_summary_counts_only_desktop_sessions():
 # ---------------------------------------------------------------------------
 
 
-def test_targeted_phase_push_reaches_only_the_origin(monkeypatch):
+def test_targeted_phase_push_reaches_only_the_origin_and_never_the_watch(monkeypatch):
+    """三态是电脑这具身体的表达：手机发起的请求，相位只回推给那台手机；手表不收三态，无论是否带目标。"""
     from core import cross_device_sync
 
     sent: List[str] = []
@@ -422,7 +423,6 @@ def test_targeted_phase_push_reaches_only_the_origin(monkeypatch):
     resolved = {
         "gateway.android_bridge.android_bridge": bridge,
         "gateway.websocket_handler.connection_manager": conn,
-        "gateway.android.handlers.wearos_sync.is_wearos_device": lambda kind: kind == "wear_os",
     }
     monkeypatch.setattr(cross_device_sync.upper_ports, "resolve", lambda name: resolved[name])
     monkeypatch.setattr(cross_device_sync, "_push_to_one_device", _one)
@@ -445,11 +445,10 @@ def test_targeted_phase_push_reaches_only_the_origin(monkeypatch):
             "silent", "liminal", "s", "wear_voice", "t", target_device_id="watch-1"
         )
     )
-    assert sent == [] and wear_sent == ["watch-1"]
+    assert sent == [] and wear_sent == [], "目标是手表也不推：手表不收三态"
 
-    wear_sent.clear()
     asyncio.run(cross_device_sync._async_push_phase_to_all_devices("silent", "liminal", "s", "chat", "t"))
-    assert sorted(sent) == ["phone-1", "phone-2"] and wear_sent == ["watch-1"], "不带目标时照旧全量广播"
+    assert sorted(sent) == ["phone-1", "phone-2"] and wear_sent == [], "不带目标时手机照旧全量广播，手表仍不收"
 
 
 # ---------------------------------------------------------------------------

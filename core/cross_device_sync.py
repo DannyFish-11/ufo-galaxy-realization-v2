@@ -274,16 +274,6 @@ async def _async_push_phase_to_all_devices(
         trace_id=trace_id,
     )
 
-    # PR-WEAR-PHASE-SYNC: also push to WearOS gateway connections.
-    # WearOS registers via websocket_handler.handle_register → connection_manager
-    # (NOT android_bridge._devices), so the android-only loop below misses it.
-    # The same state_event msg is reused; the watch parses payload.to_phase.
-    # Done first so it runs even when there are zero android_bridge devices.
-    try:
-        await _push_phase_to_wearos_devices(msg, target_device_id=target_device_id)
-    except Exception as _wear_err:  # noqa: BLE001
-        logger.debug("CrossDeviceSync: wearos phase push failed: %s", _wear_err)
-
     # Collect connected devices
     connected: List[Tuple[str, Any]] = []
     for device_id, device in _bridge._devices.items():
@@ -328,47 +318,6 @@ async def _async_push_phase_to_all_devices(
         sent,
         len(connected),
         total_ms,
-    )
-
-
-async def _push_phase_to_wearos_devices(msg: Dict[str, Any], *, target_device_id: str = "") -> None:
-    """PR-WEAR-PHASE-SYNC: push the phase state_event to connected WearOS watches.
-
-    WearOS connections live in the gateway ``connection_manager`` (registered via
-    ``handle_register``), not in ``android_bridge._devices``.  We identify watches
-    by their raw registered device_type (``wear_os``/``wearos``/``watch``/...) and
-    deliver via ``connection_manager.send_to_device`` (which has its own UCM
-    fallback).  Reuses the same ``state_event`` message Android receives.
-    """
-    is_wearos_device = upper_ports.resolve("gateway.android.handlers.wearos_sync.is_wearos_device")
-    connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
-
-    try:
-        from core.routes._shared import registered_devices  # noqa: PLC0415
-    except Exception:  # noqa: BLE001
-        registered_devices = {}
-
-    device_ids = await connection_manager.get_connected_devices()
-    if target_device_id:
-        device_ids = [did for did in device_ids if did == target_device_id]
-    wear_ids = [
-        did for did in device_ids if is_wearos_device(str((registered_devices.get(did) or {}).get("device_type", "")))
-    ]
-    if not wear_ids:
-        return
-
-    sent = 0
-    for did in wear_ids:
-        try:
-            await connection_manager.send_to_device(did, msg)
-            sent += 1
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("CrossDeviceSync: wear push to %s failed: %s", did, exc)
-    logger.info(
-        "CrossDeviceSync: phase %s pushed to %d/%d WearOS device(s)",
-        msg.get("event_action", ""),
-        sent,
-        len(wear_ids),
     )
 
 

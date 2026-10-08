@@ -71,10 +71,11 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, FrozenSet
+from typing import Any, Dict, FrozenSet, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from galaxy_gateway.command_reply import REPLY_TO_KEY, reply_id, request_name
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
 from galaxy_gateway.protocol.aip_v3 import MessageType
 from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
@@ -199,11 +200,13 @@ def _command_result(aip_msg, result: Dict[str, Any]) -> Dict[str, Any]:
 
     ``data`` 和 ``payload`` 都要给:手表的 AIPClient 读 ``json["data"]``,
     其余客户端读 ``payload``,两边都是既成事实。
+
+    ``correlation_id`` 填发送方管这次请求叫什么(见 :mod:`galaxy_gateway.command_reply`)。
     """
     return {
         "version": "3.0",
         "message_id": str(uuid.uuid4()),
-        "correlation_id": aip_msg.message_id,
+        "correlation_id": reply_id(aip_msg),
         "type": MessageType.COMMAND_RESULT.value,
         "device_id": aip_msg.device_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -498,6 +501,7 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
         # continues to work without modification.
         aip_msg.payload.setdefault("trace_id", event.trace_id)
         aip_msg.payload.setdefault("route_mode", event.route_mode)
+        aip_msg.payload.setdefault(REPLY_TO_KEY, request_name(message, aip_msg.message_id))  # 回复认领用
         if event.correlation_id:
             aip_msg.payload.setdefault("correlation_id", event.correlation_id)
         if event.task_id:
@@ -778,13 +782,24 @@ async def handle_response(connection_id: str, aip_msg):
         logger.error(f"❌ 处理响应失败: {e}")
 
 
-async def handle_command(connection_id: str, aip_msg):
+async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
     """处理命令（设备发起的命令，接受 AIPMessage 对象）
 
     PR-OPENCLAWD-ROUTING-AUTHORITY: 所有设备命令统一经过 OpenClawd 路由决策。
     链路: OpenClawd → CommandRouter → DeviceRouter → device → ResultEnvelope
     禁止直接调用 device_router.route_task() —— 那是遗留 compat 路径。
+
+    ``send``：回包的发送函数 ``async (response_dict) -> None``。不传时按旧方式经
+    ``connection_manager`` 发给 ``connection_id``；规范入口（``/ws/device/{id}``）没有这个
+    连接号，传一个收集函数，把回包作为 ``handle_message`` 的返回值写回 socket。
     """
+
+    async def _send(response: Dict[str, Any]) -> None:
+        if send is not None:
+            await send(response)
+        else:
+            await _send(response)
+
     try:
         command_text = aip_msg.payload.get("command", "")
         _payload = aip_msg.payload.get("payload", {})
@@ -802,13 +817,13 @@ async def handle_command(connection_id: str, aip_msg):
             response = {
                 "version": "3.0",
                 "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
+                "correlation_id": reply_id(aip_msg),
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "payload": result,
             }
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
         elif command_text == "query_device_status":
             try:
@@ -821,20 +836,17 @@ async def handle_command(connection_id: str, aip_msg):
             response = {
                 "version": "3.0",
                 "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
+                "correlation_id": reply_id(aip_msg),
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "payload": result,
             }
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
         elif command_text == "voice_query":
-            # 三仓打通：WearOS/手表语音 (sendVoiceQuery → command="voice_query"
-            # {text:<转写>}) 是自然语言查询，应进 AI 母体走 agent 主链——而非被当成
-            # 设备命令路由(那样转写文本永远到不了大脑)。经 canonical 运行时入口
-            # DesktopPresenceRuntime.handle_request(source="wear_voice") 处理，顺带
-            # 推进三态(手表据此显示 SILENT/LIMINAL/MANIFEST)。
+            # 手表语音是自然语言查询，进智能体主链（而非被当成设备命令路由）。经
+            # handle_request(source="wear_voice") 处理；该来源不进电脑三态（见 core/presence_line.py）。
             transcript = str(_payload.get("text") or _payload.get("transcript") or "").strip()
             if not transcript:
                 result = {"success": False, "error": "empty voice transcript"}
@@ -861,26 +873,15 @@ async def handle_command(connection_id: str, aip_msg):
                     logger.error("voice_query routing failed: %s", _vq_err)
                     result = {"success": False, "error": "voice query routing failed"}
             response = _command_result(aip_msg, result)
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
         elif command_text == "phase_report":
-            # WearOS sendPhaseReport → command="phase_report" {phase, device}.
-            # 手表上报自身三态相位。v2 暂无 canonical 设备相位库,故记入
-            # registered_devices 镜像条目(供 operator 面板观测)并 ack;关键是不再被
-            # 误当设备命令路由(那样会进 send_gateway_command 当作设备动作失败)。
-            reported_phase = str(_payload.get("phase") or "").strip()
-            try:
-                from core.routes._shared import registered_devices as _reg
-
-                if device_id in _reg and reported_phase:
-                    _reg[device_id]["reported_phase"] = reported_phase  # COMPAT_MIRROR_WRITE
-                    _reg[device_id]["reported_phase_at"] = datetime.now(timezone.utc).isoformat()
-            except Exception as _pr_err:
-                logger.debug("phase_report record skipped: %s", _pr_err)
-            logger.info("📲 设备相位上报: device=%s phase=%s", device_id, reported_phase)
-            result = {"success": bool(reported_phase), "phase": reported_phase}
+            # 已退役：三态是电脑这具身体的表达，不是手表要上报、也不是网关要登记的东西
+            # （见 core/presence_line.py）。老版本手表可能还在发，如实回一个"已忽略"，
+            # 不记账、不当设备命令路由（那样会进 send_gateway_command 当成设备动作失败）。
+            result = {"success": True, "ignored": "phase_report is retired"}
             response = _command_result(aip_msg, result)
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
         elif command_text == "interruptibility":
             # WearOS sendInterruptibility → command="interruptibility"
@@ -911,7 +912,7 @@ async def handle_command(connection_id: str, aip_msg):
                 )
                 result = {"success": True, "band": snapshot.band}
             response = _command_result(aip_msg, result)
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
         elif command_text == "execution_commitment":
             # 设备对 execution_proposal 的表态：{proposal_id, accepted, valid_until_ms,
@@ -937,7 +938,7 @@ async def handle_command(connection_id: str, aip_msg):
                 _accepted_round = False
             result = {"success": True, "proposal_id": _pid, "resolved": _accepted_round}
             response = _command_result(aip_msg, result)
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
         elif command_text == "human_input":
             # WearOS sendHumanInput → command="human_input"
@@ -1010,7 +1011,7 @@ async def handle_command(connection_id: str, aip_msg):
                     logger.error("human_input routing failed: %s", _hi_err)
                     result = {"success": False, "error": "human input routing failed", "decision_id": decision_id}
             response = _command_result(aip_msg, result)
-            await connection_manager.send_message(connection_id, response)
+            await _send(response)
             return
 
         # PR-OPENCLAWD-ROUTING-AUTHORITY: route through OpenClawd instead of
@@ -1029,14 +1030,14 @@ async def handle_command(connection_id: str, aip_msg):
         response = {
             "version": "3.0",
             "message_id": str(uuid.uuid4()),
-            "correlation_id": aip_msg.message_id,
+            "correlation_id": reply_id(aip_msg),
             "type": MessageType.COMMAND_RESULT.value,
             "device_id": aip_msg.device_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": result,
         }
 
-        await connection_manager.send_message(connection_id, response)
+        await _send(response)
 
     except Exception as e:
         logger.error(f"❌ 处理命令失败: {e}")

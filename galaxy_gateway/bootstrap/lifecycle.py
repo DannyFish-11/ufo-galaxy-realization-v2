@@ -260,13 +260,11 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         # 网关都在这台机器上,它是整个 tailnet 的中心(core/tailnet_self_join.py)。
         # 放在 initialize() 之前,这样紧接着的探测就能看到刚拿到的 100.x。
         try:
-            from core.tailnet_self_join import autojoin_enabled, ensure_joined  # noqa: PLC0415
+            from core.tailnet_self_join import autojoin_at_startup  # noqa: PLC0415
 
-            if autojoin_enabled():
-                _join = await asyncio.to_thread(ensure_joined)
+            _join = await autojoin_at_startup()
+            if _join is not None:
                 app.state.tailnet_self_join = _join
-                if _join["state"] not in ("joined", "not_configured"):
-                    logger.warning("这台电脑没能加入自建 tailnet:%s 处置:%s", _join["detail"], _join["how_to_fix"])
         except Exception as _sj_err:
             logger.debug("tailnet self-join skipped (non-fatal): %s", _sj_err, exc_info=True)
         await _ts_mgr.initialize()
@@ -293,11 +291,10 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # 但从未被启动)。发布 _galaxy._tcp,手机/手表同 Wi-Fi 免手输 IP 自动发现网关;
     # zeroconf 未装/GALAXY_MDNS=0 时优雅跳过;离网场景由上面的 Tailscale 兜底。
     try:
-        if os.getenv("GALAXY_MDNS", "1").strip().lower() not in ("0", "false", "no", "off"):
-            from galaxy_gateway.mdns_announcer import MdnsAnnouncer  # noqa: PLC0415
+        from galaxy_gateway.mdns_announcer import start_lan_announcer  # noqa: PLC0415
 
-            _mdns = MdnsAnnouncer(port=int(os.getenv("GALAXY_GATEWAY_PORT", "9000") or 9000))
-            _mdns.start()
+        _mdns = start_lan_announcer(int(os.getenv("GALAXY_GATEWAY_PORT", "9000") or 9000))
+        if _mdns is not None:
             app.state.mdns_announcer = _mdns
             logger.info("mDNS: _galaxy._tcp 已发布(局域网零配置发现)")
     except Exception as _mdns_err:

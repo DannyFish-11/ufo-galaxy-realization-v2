@@ -16,6 +16,7 @@ Usage:
 """
 
 import logging
+import os
 import socket
 from typing import Any, Optional
 
@@ -154,3 +155,16 @@ class MdnsAnnouncer:
 
     def __del__(self):
         self.stop()
+
+
+def start_lan_announcer(port: int) -> Optional["MdnsAnnouncer"]:
+    """按 ``GALAXY_MDNS`` 开关发布 ``_galaxy._tcp``;关着、或没起来返回 ``None``。
+
+    网关 lifespan 与桌面启动器共用:桌面版由启动器自己建应用、不跑网关的 lifespan,
+    只写在 lifespan 里的广播,桌面版永远发不出去 —— 同一 Wi-Fi 下的手机/手表也就
+    找不到电脑。调用方负责在停机时 ``stop()`` 返回的对象。
+    """
+    if os.getenv("GALAXY_MDNS", "1").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    announcer = MdnsAnnouncer(port=port)
+    return announcer if announcer.start() else None

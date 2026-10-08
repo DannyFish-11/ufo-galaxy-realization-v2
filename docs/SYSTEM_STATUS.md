@@ -443,7 +443,29 @@ python scripts/check_assessment_freshness.py
 - 机制：`core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`）只管**说法**，不管列不列、默认、生效与否；`tests/test_every_listed_setting_has_a_chinese_name.py` 钉住：`/api/config/all` 列出的每个键都有 2–20 字、含汉字、全表不重名的中文名；每个下拉取值都有中文名；表里没有过期的键；说明不重复名字、下拉说明不带原始取值；`GALAXY_MODE` / `GALAXY_PREFLIGHT_MODE` 的取值与代码读到的一致。**新增一个会列在面板上的配置，不补这张表测试会红。**
 - 验证：真服务器 + Chromium 逐段看过（说话与听 / 安全与权限 / 进阶），281 行行首无一行英文键名、三个主键已不在；`panel/dist/` 已重建。
 
-### 6.12 2026-10-08：「调数据方式」的开关撤出面板，改由智能体按人的话调
+### 6.12 2026-10-08：手表（galaxy-wearos）接中心智能体——规范入口上此前一条都没通
+
+设计（`docs/architecture/DEVICE_ONBOARDING_PLANE_V1.md` §2）：手表是「成员」（只响应），与中心智能体之间只有：人说的话交给智能体、智能体的提问送到手表、登记与回应、通话。三态是电脑上的东西，手表既不上报、网关也不往手表推。实测（真网关 + 手表真实帧形状，`probe` 见本节测试）发现这几件在规范入口 `/ws/device/{id}` 上**一件也没通**，各自的单元测试都是绿的：
+
+- **认证**：手表的 AuthMessage 编进 `payload.token`，`handle_auth` 只读顶层的环境令牌；配对时拿到的令牌（`/api/v1/pair/claim`）也过不了。现与 `device_register` 共用 `evaluate_ingress_authentication`，认证结果绑到连接对象，断开作废。
+- **命令**：`command` 帧（`voice_query` / `human_input` / `query_devices` / `interruptibility`）在规范入口没有处理器，只回通用 ack；真处理挂在没有挂载的旧入口。现接到同一份 `websocket_handler.handle_command`（`handlers/device_command.py`），处理前过 `sender_is_trusted`（`voice_query` 进智能体主链、`human_input` 能批准高风险操作，不能让没认证过的连接做；另开一条连接自报同一个 device_id 借不到别人的认证）。
+- **通话**：`voice_call_*` 同样只被 ack，现转给 `voice_call_route`，通话路由按连接建、连接断开即收。
+- **智能体找手表**：`_discover_target_devices` 只读旧管理器本地表和 REST 登记表，规范入口的手表两处都不在，「在手表上问人」永远找不到手表、一律退回「在对话里问」——而旧测试正是把它替换掉的。现以 UCM 为准。
+- **回复认领**：`command_result.correlation_id` 填的是网关临时生成的 `message_id`，手表按自己发的 `cmd_N` 认领回复，所以语音回复从不进会话记录。现回复带发送方给这次请求起的名字（`galaxy_gateway/command_reply.py`）。
+- **退役**：`phase_report` 命令（手表不再上报三态）回「已忽略」；`core/cross_device_sync._push_phase_to_wearos_devices` 与 `galaxy_gateway/android/handlers/wearos_sync.py`（往手表推三态）已删，手机的相位回推不变。
+- **手表对智能体动作的回话（`command_result`）到不了等它的那个调用**：手表自己造的几种帧（登记、报能力、回话）不经共享协议的信封，没带 `version`，网关把它们当成 AIP/1.0；1.0 里的 `command_result` 是「任务结果」（`task_result`），被跨仓 schema 闸门以 `missing_schema_version_metadata` 拒收。结果是 `devices__invoke` 打到手表，手表执行了、回话也发了，调用方却每次都等满 30 秒超时。已在手表侧补上 `version: "3.0"`（V2 侧的测试用真实入口证明：带 version 通、不带不通）。
+- 测试：`tests/test_watch_reaches_the_central_agent.py`（38 条，**不替换发现函数**，帧形状与手表 `WatchMember` 一致；含「智能体让手表做事并拿到回话 / 手表报失败带原因」「手表上说一句要放开跨设备 → 在手表上问戴表的人 → 批准才做、拒绝不做、后台自发回合连问都不问」）。
+
+### 6.13 2026-10-08：手表出门直连——电脑自己不在网里时，别给手表发进网钥匙
+
+手表配对时拿到一把一次性进网钥匙（`headscale`），为的是出门后还能直连这台电脑。查出两处让这条路"看着通、实际不通"：
+
+- **桌面版从来没让电脑自己入网。** 自动入网（`core/tailnet_self_join.py`）和局域网广播（`_galaxy._tcp`）只写在网关 lifespan 里；桌面版由启动器自己建应用、只挂 `/ws/device/{id}`，不跑那个 lifespan。结果是钥匙发了、手表进了网，电脑不在里面。现在两处共用 `autojoin_at_startup` / `start_lan_announcer`，桌面启动器里由 `launcher/tailnet_startup.py` 在 `TailscaleManager.initialize()` **之前**入网、发布广播、停机时收掉；横幅区分"装了但没入成"（带处置）与"没装"，广播没发出去不再写成"已发布"。
+- **配对不管电脑在不在网里都发钥匙。** 现在 `/api/v1/pair/claim` 先问 `desktop_gate`：电脑没装客户端、没登录、或登录在别的控制服务器时，配对照样成功、令牌照发，但**不发钥匙**，`tailnet_join_unavailable.reason = "desktop_not_on_tailnet"` 并带下一步；查不出来时放行；headscale 没配时仍报原来的原因码。手表侧把这个码翻成人话（"电脑还没加入 tailnet"）并在配对完成后展示。
+- 测试：`tests/test_tailnet_key_needs_the_computer_in_the_network.py`（19 条；把门拿掉 3 条变红、把入网挪到探测之后 1 条变红）。
+- 仍需真机：真 headscale + 真 tailscaled 上"电脑未入网 → 配对不发钥匙 → 入网后重新配对发钥匙"的整条路。
+
+### 6.14 2026-10-08：「调数据方式」的开关撤出面板，改由智能体按人的话调
 
 所有者：「面板上有很多调数据方式的开关，能不能全部设置成自适应的？如果不行，能通过对话让他自己调，这些开关其实也挺多余的。」
 
@@ -470,6 +492,7 @@ python scripts/check_assessment_freshness.py
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
 |---|---|---|
+| **手表「通话」不能让智能体做事**：通话走 `voice_call_route` → provider 的实时语音会话（`DuplexSessionConfig`），那是一个独立的实时模型对话，**没有接智能体的工具、也不进智能体的会话**（通话的转写只回给手表，不进 `handle_request`）。手表要「让智能体做事」只能走 `voice_query`（语音一问一答），它走真正的智能体主链、人发起的回合、危险操作在手表上问人 | `galaxy_gateway/voice_call_route.py`、`core/voice_duplex_session.py`（无 function-call 处理） | 要做就得把 provider 的函数调用桥到 `handle_request(source="wear_call")`、把该来源登记为人发起的回合；OpenAI realtime 与 Gemini live 的函数调用协议不同，且真 provider 在这里验证不了，需要你定做不做、先接哪家 |
 | 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
 | 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者 2026-09-28 答复：**后面做**，和未接线代码的处置放在一块儿 |
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |
