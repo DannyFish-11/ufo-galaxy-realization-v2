@@ -605,8 +605,8 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "standard",
         "type": "select",
         "category": "advanced",
-        "description": "运行模式（standard=常规 · 默认 standard）",
-        "options": ["standard", "distributed", "federated", "standalone"],
+        "description": "运行模式（standard=常规 · production=生产：强制开启鉴权，要求 API 访问令牌至少 32 位，否则启动失败 · 默认 standard）",
+        "options": ["standard", "production"],
     },
     "GALAXY_SYSTEM_MODE": {
         "default": "desktop-local",
@@ -616,11 +616,11 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "options": ["desktop-local", "desktop-cross-device"],
     },
     "GALAXY_PREFLIGHT_MODE": {
-        "default": "normal",
+        "default": "all",
         "type": "select",
         "category": "advanced",
-        "description": "启动前检查的模式（normal=常规 · 默认 normal）",
-        "options": ["normal", "strict", "skip"],
+        "description": "手动跑配置预检（python -m core.config_preflight）时查哪一组（all=全部 · 默认 all）",
+        "options": ["auto", "all", "core", "gateway", "android", "ws", "vault"],
     },
     "GALAXY_PREFLIGHT_FAIL_FAST": {
         "default": "true",

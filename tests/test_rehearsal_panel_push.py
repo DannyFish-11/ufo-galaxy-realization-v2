@@ -64,6 +64,57 @@ def test_emit_pushes_a_frame_on_the_running_loop() -> None:
     )
 
 
+def _frames_pushed_for(source: str, device_id, *, attach_before_emit: bool = False) -> int:
+    """在一个真的 RuntimeSession（按入口分流判过）里推一步预演，数推到桌面面板的帧。"""
+    from core.desktop_presence_runtime import RuntimeSession, TriState
+    from core.liminal_activity import bind_runtime_session, unbind_runtime_session
+    from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+    from core.presence_line import attach_to_host, bind_presence_line
+
+    bridge = GalaxyPresenceBridge.get_instance()
+    sent = AsyncMock()
+
+    async def _main() -> None:
+        session = RuntimeSession(source=source)
+        bind_presence_line(session, source, device_id)
+        with patch("core.cross_device_sync.emit_cross_device_phase_sync"):
+            session.advance(TriState.LIMINAL)
+        if attach_before_emit:
+            assert attach_to_host(session, "computer_use", "local")
+        token = bind_runtime_session(session)
+        try:
+            liminal_rehearsal._emit_rehearsal_event("attempt_start", {"attempt": 1, "task": "关灯"})
+            await asyncio.sleep(0.01)
+        finally:
+            unbind_runtime_session(token)
+
+    with patch.object(bridge, "_ws_broadcast", sent):
+        asyncio.run(_main())
+    return sent.await_count
+
+
+def test_a_request_from_another_device_is_deliberated_but_not_drawn_on_the_desktop(monkeypatch) -> None:
+    """预演是阈限态的表达，只属于电脑发起的请求。手机说一句话，电脑面板上不该演它的推演。"""
+    monkeypatch.setenv("GALAXY_DEVICE_ID", "desk-host")
+    assert _frames_pushed_for("android_goal_execution", "phone-1") == 0
+    assert _frames_pushed_for("wear_voice", "watch-1") == 0
+    assert _frames_pushed_for("chat", "tablet-9") == 0  # 带了别的设备号的普通对话
+    assert _frames_pushed_for("participant_task", "ipad-1") == 0
+
+
+def test_a_request_from_the_computer_is_still_drawn(monkeypatch) -> None:
+    monkeypatch.setenv("GALAXY_DEVICE_ID", "desk-host")
+    assert _frames_pushed_for("chat", None) == 1
+    assert _frames_pushed_for("voice", None) == 1
+    assert _frames_pushed_for("operator", "phone-1") == 1  # 操作员面板带的是目标设备号，发起方仍是桌面
+
+
+def test_a_request_that_starts_acting_here_comes_back_to_the_desktop(monkeypatch) -> None:
+    """别的设备发起、中途在本机落手 —— 桌面成了在做事的那具身体（与相位同一条规则），之后的步骤照常推。"""
+    monkeypatch.setenv("GALAXY_DEVICE_ID", "desk-host")
+    assert _frames_pushed_for("android_goal_execution", "phone-1", attach_before_emit=True) == 1
+
+
 def test_no_loop_means_no_push_and_no_error() -> None:
     from core.lumiv_websocket_bridge import GalaxyPresenceBridge
 

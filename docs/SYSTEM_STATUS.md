@@ -117,6 +117,18 @@ git ls-files -z 'core/*.py' | xargs -0 cat | wc -l
 流式响应的帧序列是 `phase, lockstep, meta, phase, delta, delta…`，锁步帧存在。
 行为由 `tests/test_presence_line.py`、`tests/test_agent_runs_apart_from_the_desktop.py` 钉住。
 
+2026-10-08 复查补了一处漏网的：**预演推演帧**（`core/rehearsal_panel_push.py`，面板阈限态里画的那一行行「模拟…」）此前不看请求从哪来，手机发起的请求只要走到预演，电脑面板上就会演它的推演。现在预演照常进行（认知不受分流影响），只在**电脑发起的请求**里才推给桌面面板；别的设备发起、中途在本机落手的请求，落手后交还桌面，之后的步骤照常推（与相位同一条规则）。`tests/test_rehearsal_panel_push.py` 钉住，去掉这处判断后该测试变红。
+
+**对话主线也按设备分开了（所有者选的 A：各设备各有各的主线）**：对话主线（`core/conversation_mainline.py` → `SessionManager.get_primary_session_id`，语音回合 / 自发开口 / 自发委托 / 面板重开读的那一条）原先取「所有设备里最近活跃的真实对话」，手机发一句话电脑的主线就切到手机那段。现在建会话时记下**谁起的头**（`metadata["origin_device"]`，电脑上起头是空串，四个构造点共用的 `_apply_thread` 里记），主线只在电脑这边的对话里选（`core.presence_line.session_is_desktop_thread`）：
+
+- 手机、手表（`wear_voice` 不带 session_id，按 `device::<手表id>` 另起并跨句复用）各有各的对话，说话不改电脑的主线；
+- 别的设备要接电脑这条主线：显式带它的 session_id（`GET /api/v1/sessions/primary`），或经 `/api/v1/sessions/reconcile` 认领 —— 接进来后（`devices` 里多出手机 / 手表）它仍是电脑起头的那条，**所以判据看起头记录，不看 `devices`**；
+- 手机起头、电脑后来也进了的会话，算电脑的；没记过起头的老会话（这条改动之前落盘的）判不出来，按原样算电脑的；
+- 手表的另外两条路不受影响：回答一个**待决事项**（`human_input` → `pending_decision_registry.resolve`）本来就不产生对话轮次；`interruptibility` 是**信号**不是对话，照样喂给常驻注意力循环。
+- 判据只看设备号：没带设备号的别的机器（浏览器直连）会话属主是 `device::default`，与电脑面板同一个属主，这一条这次没有动。
+
+`tests/test_each_device_has_its_own_conversation_mainline.py` 8 条（把 `session_manager.py` 的改动去掉后 6 条变红）。
+
 ### 2.4 容器镜像
 
 见第 6 节。修复前，三个镜像一个都产不出来；修复后，主镜像的全部 COPY 步骤都在真实 docker 里构建通过，
@@ -407,6 +419,29 @@ python scripts/check_assessment_freshness.py
 | 面板四个边角 | **Electron 28.3.3 源码里读到：透明窗口的构造函数里 `if (transparent()) thick_frame_ = false;`**，于是 Windows 上不加 `WS_THICKFRAME` / `WS_CAPTION`，系统不会给它画框或阴影；`hasShadow` 在 Windows 上只是存了个值（官方文档也没有 Windows 标注）。所以 Electron 这条路上，方角只可能来自页面本身（已验证：圆角外像素全透明）或渲染降级。**Tauri 壳**的面板窗口却漏了 `.shadow(false)`（覆盖层有）——无边框窗口在 Windows 上默认带按矩形画的系统阴影 | Tauri 面板补上 `.shadow(false)`。Electron 不改：没有证据支持再动 `thickFrame` / `roundedCorners`（后者在 28 里只有 macOS） |
 
 要定位 Windows 上「圆角外仍有方角」，最省事的是看两样：`logs/electron.log` 开头有没有 `已禁用硬件加速`（软件渲染 / basic 降级下透明窗口行为不同），以及方角是**深色实心**（页面或降级）还是**一圈浅色细边**（系统）—— 两种的修法不同。
+
+### 6.10 2026-10-08：面板上填 API 的那些，改成内嵌的行
+
+所有者：「面板上 API 填入那些做成与面板一致的样式，内嵌的那种，融为一整体。」
+
+- **之前**：「模型服务商」每家一块凸起的小卡（渐变底 + 内高光 + 投影，卡与卡之间 10px 缝），叠在「全部设置」那一页上像从别处贴来的 —— 那一页别的项全是平铺的行。
+- **现在**：和 `.sf-row` 同一个节奏，**没有底、没有影**，只在悬停 / 正在填的那一行淡淡亮一下。每家一行两栏：**左**是谁、通没通、说明、Key 名 + 验证 / 型号与选路（小字）；**右**只剩输入框和保存键，一行高。有几把 Key 的（识屏 OCR 两把）每把仍各带自己的 Key 名站在输入框上面。详情就地展开。窄栏（设置浮层、小窗口）按**容器宽度**塌成一列，输入框占满整行。
+- 范围：`.up-card` 本身改平，所以「我的模型服务」里自己加的端点、「没收口的结果」同样内嵌；它们的内容结构没动。
+- 交互没动：填 Key 保存后立刻 1 token 试调、输入不被每秒的重画清掉、清除密钥、型号与选路的就地展开，都用真服务器 + Chromium 走了一遍。
+- **动效**（所有者：给这些白块加上动效）：输入框 / 保存键 / 型号药丸 / 档位牌悬停浮起、按下沉回去；设置页一打开每一行按序浮起来（按 `data-open` 触发，每次打开都能看见）；详情展开、试调结论出现各自淡入；状态变了（没配 → 已配 → 通了 / 没通）那颗点扩一圈光。**全是一次性的**，没有一条在转的循环，不碰 0.17–0.25 Hz 那道门；`prefers-reduced-motion` 下 animation 全停、位移类一步到位（用真浏览器切换核对过）。
+- 验证：`tests/test_the_api_entry_is_inline_rows_not_cards.py`（在旧的卡片样式上四条全红）、`tests/test_panel_motion_stops_when_asked.py`；`panel/dist/` 已重建；面板相关 65 个测试文件 1815 条通过。
+- 截图里圆角外的「四个白角」是我渲染时没开透明背景（Chromium 截图默认白底），产品里窗口圆角外本来就是透明的（四角像素 alpha=0）；之后的截图一律透明背景 + 合成到壁纸上。
+
+### 6.11 2026-10-08：面板「全部设置」——已并进整体的删掉，其余全部翻成中文
+
+所有者：「所有面板多余的开关，该删的都删了，就是已经整合成一个整体的，该删的都删。如果不是的话，就把那些全部翻译成相关的中文。」
+
+- **删掉（设置页不再摆）**：整档按钮的三个主键 —— `GALAXY_CROSS_DEVICE_ENABLED`（跨设备）、`GALAXY_AMBIENT_LOOP`（全模态）、`GALAXY_AUTONOMY`（自主）。底部那排按钮已经是它们的开关，设置页里又摆一行 = 同一件事两处能拨。后端 `/api/config/all` 给这三个键标 `bundle`（取自 `CONFIG_BUNDLES`，唯一来源），前端据此跳过；值照给、`POST /api/config` 照收。随主键走的成员开关与「内置 / 运维」开关此前就已经不列了。其余 `owns` 里的开关（主脑、联邦、Tailscale Funnel、WebRTC 数据通道、主动感知、屏幕变化触发开口、系统声进感知）**没有**删：它们是各自独立的取舍，不是「主键开它就该开」，理由写在 `config_bundles.py` 里。
+- **翻译**：设置页 315 个键里 281 个列出（另 31 个是厂商卡认领的，卡拉不到时才会全列，也都有名字）。每行行首原先是环境变量名（`GALAXY_AEC_RES_FLOOR_DB`），现在是**短中文名**（`远端单讲的抑制下限`），环境变量名退到悬停提示；名字下面的说明去掉与名字重复的开头。每个下拉的每一档也有中文名（`best-effort`→「尽力而为」、`shadow`→「只在隔离区验证」、`ask`→「每次问我」……），下拉键的说明改用中文档名重写，不再夹 `env=` / `strict=` 这类原始取值。「已改过，默认 X」里的 X 也是中文档名。
+- **取值其实只有几个的字符串键**（`auto / 1 / 0`：全双工、声字同文、自动拉容器、精简工具集、保留上轮工具、空闲预演、投机解码草稿；`enforce / warn / off`：MCP 清单复验、出站管控；`auto / container / builtin`：自写代码的隔离方式；`off / on`：按需加载工具）原先是一个让人敲字的文本框，现在按档位牌画；登记表里它们仍是 string（只改了展示层），默认值必须是其中一档（测试核对）。
+- **顺带查出两个名实不符的登记**：`GALAXY_MODE` 登记的 `distributed / federated / standalone` 三档**没有任何读者**，代码里只有 `production` 有读者（强制开鉴权、要求令牌 ≥32 位）—— 改成 `standard / production`，说明里写明后果；`GALAXY_PREFLIGHT_MODE` 登记的 `normal / strict / skip` 命令行根本不认（`argparse choices` 是 `auto/all/core/gateway/android/ws/vault`），而「保存设置」会把默认值写进 `.env`，等于手动跑预检就报错 —— 改成它真正接受的取值，默认 `all`。
+- 机制：`core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`）只管**说法**，不管列不列、默认、生效与否；`tests/test_every_listed_setting_has_a_chinese_name.py` 钉住：`/api/config/all` 列出的每个键都有 2–20 字、含汉字、全表不重名的中文名；每个下拉取值都有中文名；表里没有过期的键；说明不重复名字、下拉说明不带原始取值；`GALAXY_MODE` / `GALAXY_PREFLIGHT_MODE` 的取值与代码读到的一致。**新增一个会列在面板上的配置，不补这张表测试会红。**
+- 验证：真服务器 + Chromium 逐段看过（说话与听 / 安全与权限 / 进阶），281 行行首无一行英文键名、三个主键已不在；`panel/dist/` 已重建。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

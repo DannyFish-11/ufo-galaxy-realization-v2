@@ -62,6 +62,7 @@ interface CardRefs {
   /** 这张卡当前对应的厂商。按钮回调读它而不是建卡那一刻的闭包 —— 后者会过期(配了 Key 之后「清除」还以为没配)。 */
   readonly box: { v: Vendor };
   readonly el: HTMLElement;
+  readonly dot: HTMLElement;
   readonly state: HTMLElement;
   readonly meta: HTMLElement;
   readonly verdict: HTMLElement;
@@ -136,8 +137,16 @@ export function createVendors(cb: VendorCallbacks): VendorHandles {
   function build(first: Vendor): CardRefs {
     const box = { v: first };
     const v = first; // 只用来决定「建哪些行」(结构随厂商种类定,不随状态变)
+    // 一行两栏,和「全部设置」里别的项同一个节奏:左边说它是谁、通没通,右边是填的地方。
+    // 窄栏(设置浮层 / 小窗口)由 CSS 按容器宽度塌成一列。
     const el = document.createElement('div');
     el.className = 'up-card vd-card';
+    // 打开设置页时每一行按序浮起来的序号（封顶，免得最后一行等一秒）。动画本身在 CSS 里。
+    el.style.setProperty('--vd-i', String(Math.min(cards.size, 14)));
+    const text = document.createElement('div');
+    text.className = 'vd-text';
+    const ctl = document.createElement('div');
+    ctl.className = 'vd-ctl';
 
     const top = document.createElement('div');
     top.className = 'up-top';
@@ -156,12 +165,15 @@ export function createVendors(cb: VendorCallbacks): VendorHandles {
     const verdict = document.createElement('span');
     verdict.className = 'up-meta vd-verdict';
 
-    el.append(top, meta, verdict);
+    text.append(top, meta, verdict);
 
     // 密钥输入。registry 厂商只写规范名(第一个);别名只是「填过也认」。
     // extra 入口(识屏 OCR 有两把 Key)每把一行 —— 各写各的,不替人决定填哪把。
     const keyRows = new Map<string, { input: HTMLInputElement; save: HTMLButtonElement }>();
     const inputEnvs = v.kind === 'registry' ? v.keyEnvs.slice(0, 1) : v.keyEnvs;
+    // 只有一把 Key 的：Key 名跟着左栏的动作排成一行小字，右栏就只剩输入框和保存键，一行高。
+    // 有几把的（识屏 OCR 有两把）：每把各带自己的 Key 名站在输入框上面，否则分不清哪个框填哪把。
+    let soloEnv: HTMLElement | null = null;
     for (const env of inputEnvs) {
       const row = document.createElement('div');
       row.className = 'vd-key';
@@ -184,8 +196,13 @@ export function createVendors(cb: VendorCallbacks): VendorHandles {
       const label = document.createElement('code');
       label.className = 'vd-env';
       label.textContent = env;
-      row.append(label, input, save);
-      el.append(row);
+      if (inputEnvs.length === 1) {
+        soloEnv = label;
+        row.append(input, save);
+      } else {
+        row.append(label, input, save);
+      }
+      ctl.append(row);
       keyRows.set(env, { input, save });
     }
 
@@ -222,7 +239,9 @@ export function createVendors(cb: VendorCallbacks): VendorHandles {
       else opened.add(first.id);
       applyOpen(first.id);
     });
+    if (soloEnv) acts.append(soloEnv);
     acts.append(verify, clear, more);
+    text.append(acts);
 
     const detail = document.createElement('div');
     detail.className = 'vd-detail';
@@ -232,11 +251,11 @@ export function createVendors(cb: VendorCallbacks): VendorHandles {
       // 直连厂商:地址属于「高级」(多数人不用换),跟详情一起收着。
       detail.append(urlHost);
     } else {
-      el.append(urlHost);
+      ctl.append(urlHost);
     }
-    el.append(acts, detail);
+    el.append(text, ctl, detail);
 
-    const refs: CardRefs = { box, el, state, meta, verdict, keyRows, verify, clear, detail, more, urlInputs };
+    const refs: CardRefs = { box, el, dot, state, meta, verdict, keyRows, verify, clear, detail, more, urlInputs };
     fillDetail(v, refs);
     return refs;
   }
@@ -298,6 +317,14 @@ export function createVendors(cb: VendorCallbacks): VendorHandles {
     } else if (v.configured) {
       state = 'declared';
       text = v.kind === 'registry' ? '已配置 · 还没验证' : '已填';
+    }
+    // 状态变了才闪一下那颗点（第一次画不闪：那时候还没有「变」）。
+    const before = r.el.dataset['state'];
+    if (before !== undefined && before !== state) {
+      r.dot.classList.remove('vd-flash');
+      void r.dot.offsetWidth; // 重新计一次样式，同一个类才能再放一遍
+      r.dot.classList.add('vd-flash');
+      r.dot.addEventListener('animationend', () => r.dot.classList.remove('vd-flash'), { once: true });
     }
     r.el.dataset['state'] = state;
     r.state.textContent = text;

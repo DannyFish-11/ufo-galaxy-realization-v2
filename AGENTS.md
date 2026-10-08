@@ -85,6 +85,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### 面板上的「模型服务商」
 - `core/provider_catalog.py` - 面板逐厂商填 Key 的目录（`GET /api/v1/models/providers`）：厂商中文名 / 分组 / 该填哪几个键 / 是否已配 / 路由器里是否可用。**不下发密钥值**，只有布尔。
   `PROVIDER_REGISTRY` 多一家而没写展示信息，`tests/test_provider_catalog_covers_every_key.py` 会红。
+  画法是**内嵌的行**（`.vd-card` 左栏说明 + 右栏输入，与设置页 `.sf-row` 同一个节奏），不是凸起的卡片 —— `tests/test_the_api_entry_is_inline_rows_not_cards.py` 钉着。
 - `core/routing_tail.py` - 偏好表没列、但已配好可用的厂商（用户自加端点、OneAPI、只配了 Groq 的人做推理任务）排在失败转移链的最后几档；有意不自动参与的（智谱编码套餐）不进这一档
 
 ### 事件循环里不跑阻塞的事
@@ -156,6 +157,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
   边生成边念；真在本机落手时才交还桌面（回答仍归发起方）。这是架构，**没有开关**。自主工作用
   `DesktopPresenceRuntime.autonomous_session(kind)`；`GET /api/v1/agent/activity` 列出全部请求（含不进三态的）
 - `core/ambient_governance.py` - **常驻注意力循环的治理**（借自 Comma 对后台循环的约束）：自发开口 / 委托每小时额度（`GALAXY_AMBIENT_SPEAK_PER_HOUR` / `GALAXY_AMBIENT_DELEGATE_PER_HOUR`）、决策 / 转写 / 委托各有期限、失败留痕（≤32 条）。超额与超时**一律说得出原因**，不静默、不自动重试；只有 SPEAK 出声、进对话。`GET /api/v1/presence/ambient-status`，面板打开时提示「后台任务没做完」。并发上限 / 按来源配额不在这里，那是 `core/request_admission.py`
+- **对话主线只在电脑这边的对话里选**（语音 / 自发开口 / 自发委托 / 面板重开读的那一条，`SessionManager.get_primary_session_id`）：建会话时记 `metadata["origin_device"]`（谁起的头），判据 `core.presence_line.session_is_desktop_thread` —— 不看 `devices`（别的设备往里写话会被 append 进去）。手机 / 手表各有各的对话；要接电脑这条主线就显式带它的 session_id 或经 reconcile 认领，接进来仍是电脑的。是入口分流的另一面：三态管表达，这里管上下文
 - `core/participant_admission.py` - 非安卓设备的通用接入（注册 → 进 mesh → 提交任务），
   全程不经安卓命名模块。`core/participant_truth_ingress.py` - 参与方真相的通用入口（P3）
 - `core/runtime/__init__.py` 是 PEP 562 **惰性**再导出：导入 `core.runtime.*` 子模块不会装进安卓运行时
@@ -184,6 +186,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
+- **设置页每一行的中文名、下拉每一档的中文名**在 `core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`），由 `/api/config/all` 带给面板；行首画中文名、环境变量名在悬停提示里。**新增一个会列在面板上的配置，不补这张表 `tests/test_every_listed_setting_has_a_chinese_name.py` 会红**。整档按钮的主键（`CONFIG_BUNDLES[*].primary`）在 `/all` 里标 `bundle`，设置页不再摆第二个开关；取值有限的字符串键（`auto/1/0`）在表里登记档位后按下拉画
 - **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
 - `core/ambient_yield.py` - 自发注意力循环给用户让路：用户请求在跑不碰模型、调用进行中用户来了就取消（Ollama 随之停掉生成）、用时 T 秒后歇 3T 秒。判「人在等」用 `core.presence_line.foreground_request_active`（后台自发来源与常驻在场不算）
 - 面板窗口只能有它自己的圆角：桌面外壳里 `html[data-shell='desktop']` 的画布底是透明的（`index.html` 同步脚本设置），否则 `body` 的渐变会铺满窗口矩形、圆角外多出四个方角。`dist/` 是提交进仓库的产物，改样式后要 `npm run build`

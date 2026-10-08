@@ -1284,7 +1284,12 @@ html[data-shell='desktop'] {
   font: inherit; font-size: var(--t-small); color: #fff;
   background: var(--a-mid);
   box-shadow: 0 1px 3px var(--shade-3);
+  transition: transform 0.2s var(--ease), box-shadow 0.26s var(--ease), filter 0.26s var(--ease),
+    opacity 0.26s var(--ease);
 }
+/* 悬停亮一点、浮起一点；按下沉回去。回应都是一次性的 —— 没有一条在转。 */
+.sf-save:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 3px 8px var(--shade-3); }
+.sf-save:active:not(:disabled) { transform: translateY(0) scale(0.97); box-shadow: 0 1px 2px var(--shade-3); }
 .sf-save:disabled { opacity: 0.4; cursor: default; }
 .sf-close {
   flex: none; width: 26px; height: 26px; border: 0; border-radius: 50%;
@@ -1328,9 +1333,8 @@ html[data-shell='desktop'] {
   background: linear-gradient(90deg, color-mix(in srgb, var(--a-mid) 16%, transparent), transparent 38%);
 }
 .sf-text { min-width: 0; }
-.sf-key {
-  display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--t-mini); color: var(--ink); letter-spacing: 0.01em;
+.sf-name {
+  display: block; font-size: var(--t-small); color: var(--ink); letter-spacing: 0.01em;
 }
 .sf-desc {
   display: block; margin-top: 2px; font-size: var(--t-mini); line-height: 1.4; color: var(--ink-3);
@@ -1340,17 +1344,21 @@ html[data-shell='desktop'] {
   border: 0; border-radius: 8px; font: inherit; font-size: var(--t-small); color: var(--ink);
   background: linear-gradient(166deg, rgba(252, 251, 255, 0.72), rgba(240, 236, 246, 0.6));
   box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+  transition: box-shadow 0.26s var(--ease), transform 0.26s var(--ease);
 }
+.sf-input:hover:not(:focus) { transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--lite), 0 3px 7px var(--shade-2); }
 /* 聚焦不用 2px 硬框(那是网页表单的样子),用一圈化开的光。 */
 .sf-input:focus {
-  outline: none;
+  outline: none; transform: translateY(-1px);
   background: linear-gradient(166deg, rgba(253, 252, 255, 0.9), rgba(244, 241, 250, 0.75));
   box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.8),
     0 0 0 3px color-mix(in srgb, var(--a-mid) 18%, transparent),
     0 1px 3px var(--shade-2);
 }
 .sf-stages { display: flex; gap: 5px; }
-.sf-stages .stage { cursor: pointer; border: 0; font: inherit; }
+.sf-stages .stage { cursor: pointer; border: 0; font: inherit; transition: background 0.28s var(--ease), color 0.28s var(--ease), transform 0.22s var(--ease); }
+.sf-stages .stage:hover, .up-proto .stage:hover { transform: translateY(-1px); }
+.sf-stages .stage:active, .up-proto .stage:active { transform: translateY(0) scale(0.96); }
 .sf-stages .stage[data-picked='true'] {
   color: #fff; background: var(--a-mid);
   box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.22);
@@ -1372,19 +1380,25 @@ html[data-shell='desktop'] {
   background: linear-gradient(166deg, rgba(255, 246, 233, 0.72), rgba(252, 240, 226, 0.5));
   box-shadow: inset 0 1px 0 rgba(255, 252, 247, 0.6);
 }
-.up-list { display: flex; flex-direction: column; gap: 10px; }
+.up-list { display: flex; flex-direction: column; gap: 2px; }
 
+/* 内嵌的行，不是凸起的卡。
+   原先每条端点 / 每家厂商一块小卡（渐变底 + 内高光 + 投影），叠在「全部设置」那一页上像从别处
+   贴过来的：上下左右都是平铺的行，唯独这里一摞浮起来的白块。所有者要的是「与面板一致、内嵌、
+   融为一整体」—— 所以和 .sf-row 同一个内边距、同一个圆角，**没有底、没有影**；只在悬停 /
+   正在填的那一行淡淡亮一下，让人知道现在落在哪一条上。 */
 .up-card {
-  padding: 12px 13px; border-radius: 13px;
-  background: linear-gradient(166deg, rgba(252, 251, 255, 0.52), rgba(238, 234, 245, 0.34));
-  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px var(--shade-1);
+  padding: 9px 10px; border-radius: 10px;
+  background: transparent; box-shadow: none;
+  transition: background 0.22s var(--ease);
 }
+.up-card:hover, .up-card:focus-within { background: rgba(252, 251, 255, 0.34); }
 .up-top { display: flex; align-items: center; gap: 8px; }
 .up-top b { font-weight: 500; font-size: var(--t-small); color: var(--ink); }
 
 /* 三态三个颜色。**live 与 declared 不共用一个绿点** —— 把「网关自己报的型号」
    和「你自己敲的型号」画成同一件事,敲错一个字时人会以为是系统坏了。 */
-.up-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.up-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); transition: background 0.4s var(--ease); }
 .up-card[data-state='live'] .up-dot { background: #4f9d69; }
 .up-card[data-state='declared'] .up-dot { background: var(--a-mid); }
 .up-card[data-state='unverified'] .up-dot { background: var(--warn); }
@@ -1406,6 +1420,11 @@ html[data-shell='desktop'] {
   font-size: var(--t-micro); color: var(--ink-2);
   background: rgba(252, 251, 255, 0.62);
   box-shadow: inset 0 1px 0 var(--lite-soft);
+  transition: transform 0.24s var(--ease), background 0.24s var(--ease), box-shadow 0.24s var(--ease);
+}
+.up-models code:hover {
+  transform: translateY(-1px); background: rgba(253, 252, 255, 0.9);
+  box-shadow: inset 0 1px 0 var(--lite-soft), 0 2px 5px var(--shade-1);
 }
 .up-more { align-self: center; font-size: var(--t-micro); color: var(--ink-3); }
 
@@ -1447,29 +1466,75 @@ html[data-shell='desktop'] {
    同一类东西(一个外面的服务 + 状态 + 动作),画法不该有第二套。
    这里只补两件事:分组小标题,和「Key 名 + 输入框 + 保存」那一行。 */
 .vd-sec [hidden] { display: none !important; }
-.vd-body { display: flex; flex-direction: column; gap: 10px; }
+.vd-body { display: flex; flex-direction: column; gap: 2px; }
 .vd-group {
-  margin-top: 8px; font-size: var(--t-mini); letter-spacing: 0.04em; color: var(--ink-3);
+  margin-top: 16px; padding: 0 10px 4px; font-size: var(--t-mini); letter-spacing: 0.04em; color: var(--ink-3);
 }
 .vd-group:first-child { margin-top: 0; }
-.vd-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 10px; }
-/* Key 名独占一行,输入框和保存键在它下面 —— 设置浮层窄的时候(左栏展开时只有 260 来宽)
-   并排放三样东西,输入框会被挤成一条缝。 */
+
+/* 一行两栏：左边是谁、通没通、能做什么；右边是填的地方 —— 和 .sf-row「左边一句话、右边一个控件」
+   同一个节奏。右栏只给输入框和保存键要的宽度，剩下的都归左边。 */
+.vd-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 14px;
+  min-height: 42px;
+}
+.vd-text { min-width: 0; }
+.vd-ctl { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.vd-card > .vd-detail { grid-column: 1 / -1; }
+/* Key 名是输入框上面的一行小字，输入框和保存键并排在它下面。 */
+.vd-key { display: grid; grid-template-columns: auto auto; justify-content: end; align-items: center; gap: 3px 8px; }
 .vd-env {
-  flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--t-micro); color: var(--ink-3);
 }
-.vd-input { flex: 1; min-width: 0; width: auto; }
+/* 左栏动作那一行最前面的 Key 名（只有一把 Key 的厂商）：小字等宽，和下面的文字按钮同一条基线。 */
+.up-acts .vd-env { flex: 0 1 auto; min-width: 0; padding: 0 12px 0 9px; text-align: left; }
+.vd-sec .up-hint { padding: 0 10px; }
+.vd-input { width: 190px; min-width: 0; }
+.vd-urls .vd-input { width: 268px; }
 .vd-verdict { color: var(--ink-2); }
 .up-card[data-state='unverified'] .vd-verdict { color: var(--warn); }
 .up-card[data-state='live'] .vd-verdict { color: #4f9d69; }
 .vd-key .sf-save { flex: none; margin: 0; }
-.vd-urls .vd-key:first-child { margin-top: 0; }
 .vd-detail { margin-top: 6px; }
 .vd-detail .up-meta { margin-top: 6px; }
-.vd-more { margin-left: auto; }
+/* 三个动作都是左边那栏里的小字，挨着说明 —— 不再把「型号与选路」推到最右边去。 */
+.vd-card .up-acts { margin-top: 1px; }
+.vd-card .up-btn { padding-top: 3px; padding-bottom: 3px; }
+/* 这一栏窄了（设置浮层、小窗口）：右栏塌到左栏下面，输入框占满整行。
+   按**这一栏的宽度**判，不按窗口 —— 设置页是个浮层，窗口宽不代表这一栏宽（见 .sf-body）。 */
+@container (max-width: 560px) {
+  .vd-card { grid-template-columns: minmax(0, 1fr); }
+  .vd-ctl { align-items: stretch; }
+  .vd-key { grid-template-columns: minmax(0, 1fr) auto; }
+  .vd-env { text-align: left; }
+  .vd-input, .vd-urls .vd-input { width: auto; }
+}
 .up-card[data-state='off'] .up-state { color: var(--ink-3); }
+
+/* ── 白块的动效 ───────────────────────────────────────────────────────────
+   这些白块（输入框、药丸、保存键、一条一条的条目）原先落地就是静的：悬停没有回应、填写没有回应、
+   出现是硬出。现在每一件都有一个回应，而且**全是一次性的** —— 没有一条在转的循环
+   （循环要过 0.17–0.25 Hz 那道门，见 src/motion.ts）。
+   关了动效照样成立：tokens.css 末尾那条通配规则把 animation 全停、把位移类过渡一步到位，
+   只留颜色 / 阴影 / 透明度的淡入淡出。 */
+@keyframes vd-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@keyframes vd-open { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+@keyframes vd-fade { from { opacity: 0; } to { opacity: 1; } }
+/* 状态变了（没配 → 已配 → 通了 / 没通）那颗点扩出一圈光，只一次。 */
+@keyframes vd-flash {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--a-mid) 46%, transparent); }
+  to { box-shadow: 0 0 0 9px color-mix(in srgb, var(--a-mid) 0%, transparent); }
+}
+/* 设置页一打开，每一行按序浮起来。挂在 [data-open='true'] 上：规则一匹配动画才开始，
+   所以每次打开都能看见；关着的时候不白跑。序号 --vd-i 由 vendors.ts 建行时写（封顶，免得最后一行等一秒）。 */
+.settings-full[data-open='true'] .vd-card {
+  animation: vd-in 440ms var(--ease) both; animation-delay: calc(var(--vd-i, 0) * 34ms);
+}
+.vd-detail:not([hidden]) { animation: vd-open 360ms var(--ease); }
+.vd-verdict:not([hidden]) { animation: vd-fade 320ms var(--ease); }
+.up-dot.vd-flash { animation: vd-flash 720ms var(--ease); }
 
 /* 协议那一排档位牌。用与设置页同一套 .sf-stages —— 全面板只有一种"选一个"的
    画法,多一种就等于让人重新学一次。 */

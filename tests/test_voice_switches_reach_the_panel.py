@@ -701,8 +701,11 @@ class TestPanelCanActuallySaveThem:
         items = body.get("config", body)
         for key in ("GALAXY_VOICE", "GALAXY_VOICE_DUPLEX", "GALAXY_VOICE_DUCK_GAIN"):
             assert key in items, f"/api/config/all 没返回 {key}"
-            # string 也在内:三态开关(auto/1/0)本来就不是布尔,渲染成推拉开关会丢掉 auto 档。
-            assert items[key]["type"] in ("boolean", "number", "string")
+            # 三态开关(auto/1/0)本来就不是布尔,渲染成推拉开关会丢掉 auto 档:现在按下拉(档位牌)画,
+            # 一个档位都不能少(select 必须带 auto);老的 string 也认。
+            assert items[key]["type"] in ("boolean", "number", "string", "select")
+            if items[key]["type"] == "select":
+                assert "auto" in items[key]["options"], key
             assert items[key]["description"]
         # 声音那一组只有语音总闸留在面板上：朗读 / 本机外放 / 回声消除是内置机制，两个模型自动下载是替补引擎的按需下载
         # （core/routes/panel_switch_policy.py），面板不列；但它们仍可存、可读（上面的 test_saving_the_voice_switches_succeeds 钉着存）。

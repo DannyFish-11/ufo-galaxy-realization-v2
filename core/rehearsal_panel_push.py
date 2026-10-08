@@ -47,10 +47,24 @@ def rehearsal_frame(step: str, payload: Dict[str, Any]) -> Optional[Dict[str, An
     return {"type": "rehearsal", "payload": body}
 
 
+def _belongs_on_the_desktop() -> bool:
+    """这一步预演是不是桌面三态的内容。
+
+    预演是阈限态的表达，**只属于电脑发起的请求**（见 :mod:`core.presence_line`）。别的设备发起的请求，
+    推演照常进行（认知不受分流影响），只是不外显到桌面面板 —— 否则手机说一句话，电脑面板上就在演
+    它的推演。不在任何一次请求里（直接调预演器、测试裸跑）按桌面处理，与相位闸门同一条口径。
+    落手后交还桌面的请求 ``host_bound`` 会变真，之后的步骤照常推。
+    """
+    from core.liminal_activity import current_runtime_session
+
+    session = current_runtime_session()
+    return session is None or bool(getattr(session, "host_bound", True))
+
+
 def push_rehearsal_step(step: str, payload: Dict[str, Any]) -> None:
     """在当前事件循环里排一次广播。不在循环里（同步调用方）就不推 —— 不为一行显示去阻塞调用方。"""
     frame = rehearsal_frame(step, payload)
-    if frame is None:
+    if frame is None or not _belongs_on_the_desktop():
         return
     try:
         loop = asyncio.get_running_loop()

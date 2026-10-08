@@ -191,16 +191,17 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
         const chip = document.createElement('button');
         chip.className = 'stage';
         chip.type = 'button';
+        // 中文名由后端给(config_labels.OPTION_LABELS);没给的取值原样画(比如型号串)。
         // 空串是一个真选项(「不钉死」),但它画不出字 —— 给它一个说得出口的名字。
-        chip.textContent = opt === '' ? '自动' : opt;
+        chip.textContent = item.optionLabels?.[opt] ?? (opt === '' ? '自动' : opt);
+        if (opt !== '') chip.title = opt;
+        chip.dataset['value'] = opt;
         chip.dataset['picked'] = String(opt === picked);
         chip.addEventListener('click', (e) => {
           e.stopPropagation();
           picked = opt;
           for (const sib of row.children) {
-            (sib as HTMLElement).dataset['picked'] = String(
-              (sib as HTMLElement).textContent === (opt === '' ? '自动' : opt),
-            );
+            (sib as HTMLElement).dataset['picked'] = String((sib as HTMLElement).dataset['value'] === opt);
           }
           stage(item.key, opt, item.value);
         });
@@ -241,21 +242,24 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
 
     const text = document.createElement('span');
     text.className = 'sf-text';
-    const name = document.createElement('code');
-    name.className = 'sf-key';
-    name.textContent = item.key;
+    // 行首是中文名;环境变量名退到悬停提示里(排障、写 .env 的人要用,但不该占行首)。
+    const name = document.createElement('span');
+    name.className = 'sf-name';
+    name.textContent = item.label || item.key;
+    name.title = item.key;
     const desc = document.createElement('span');
     desc.className = 'sf-desc';
     // 改过默认的**说出来**。只显示当前值的话,「这是默认」和「有人改过」看不出
     // 区别 —— 而排障时那正是第一个要问的问题。
-    desc.textContent = item.overridden
-      ? `${item.description}（已改过，默认 ${item.defaultValue || '空'}）`
-      : item.description;
+    const said = item.hint ?? item.description;
+    const dflt = item.optionLabels?.[item.defaultValue] ?? (item.defaultValue || '空');
+    desc.textContent = item.overridden ? `${said}${said ? ' ' : ''}（已改过，默认 ${dflt}）` : said;
     // 改了要重启才生效的**说出来**。没有这句,保存后界面显示已保存、实际要等下次启动才起作用。
     if (item.restartRequired) {
-      desc.textContent += ' · 重启后生效';
+      desc.textContent += `${desc.textContent ? ' · ' : ''}重启后生效`;
       desc.title = item.restartRequired;
     }
+    desc.hidden = desc.textContent === '';
     text.append(name, desc);
 
     r.append(text, control(item));
@@ -273,7 +277,8 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
     if (!open) return;
 
     const skip = new Set(hidden);
-    const items = allItems === null ? null : allItems.filter((i) => !skip.has(i.key));
+    // 整档按钮的主键不再摆第二份(按钮就是它的开关);厂商卡认领的键同理。
+    const items = allItems === null ? null : allItems.filter((i) => !skip.has(i.key) && !i.bundle);
 
     // 拿到后端新返回的一批值,就意味着上一批待写的已经落地(或者被拒了、后端给回
     // 了它自己认下的值)。两种情况下队列都该归零 —— 留着的话,界面显示的是后端的

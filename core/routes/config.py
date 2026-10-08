@@ -27,6 +27,7 @@ from core.routes.config_bundles import (  # noqa: E402
     mirror_keys,
     owned_keys,
 )
+from core.routes.config_labels import hint_for, label_for, option_labels_for  # noqa: E402
 from core.routes.config_restart import any_requires_restart, restart_reason  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS  # noqa: E402
@@ -196,6 +197,7 @@ async def get_config():
     except Exception:  # noqa: BLE001
         pass
 
+    bundle_of = {b["primary"]: b["key"] for b in CONFIG_BUNDLES}
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
         if key in PANEL_HIDDEN_KEYS:
@@ -208,7 +210,19 @@ async def get_config():
             "type": meta["type"],
             "category": meta["category"],
             "description": meta["description"],
+            "label": label_for(key),
+            "hint": hint_for(key, meta["description"]),
         }
+        # 整档按钮的主键:值照给(别的消费者要读),但标出它属于哪一档 —— 设置页据此不再
+        # 重复摆一行,开关只有按钮那一处(见 config_bundles.py)。
+        if key in bundle_of:
+            result[key]["bundle"] = bundle_of[key]
+        option_labels = option_labels_for(key)
+        if option_labels:
+            result[key]["option_labels"] = option_labels
+            if meta["type"] == "string":  # 取值只有几个的字符串键(auto / 1 / 0):面板按档位牌画,不让人敲原始值
+                result[key]["type"] = "select"
+                result[key]["options"] = list(option_labels)
         reason = restart_reason(key)
         if reason:
             result[key]["restart_required"] = reason

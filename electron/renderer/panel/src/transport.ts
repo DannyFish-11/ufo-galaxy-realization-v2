@@ -464,7 +464,21 @@ export interface ConfigItem {
   readonly type: string;
   readonly category: string;
   readonly description: string;
+  /** 中文名(后端 `core/routes/config_labels.py` 给的)。空 = 后端没登记,画键名本身。 */
+  readonly label: string;
   readonly options?: readonly string[];
+  /**
+   * 名字下面那一句(后端 `hint_for` 给的:描述里与名字重复的开头已去掉,下拉键用中文重写)。
+   * 缺省(旧后端)时画 `description`;空串 = 名字已经把话说完,不画这一行。
+   */
+  readonly hint?: string;
+  /** 取值 → 中文名,只给下拉键;没列的取值原样画。 */
+  readonly optionLabels?: Readonly<Record<string, string>>;
+  /**
+   * 这个键是某个整档按钮的**主键**(值是那一档的名字)。按钮已经管着它,
+   * 设置页不再摆第二个开关 —— 同一件事只有一个地方能拨。
+   */
+  readonly bundle?: string;
   /** 当前值偏离了默认。**这是留痕**,不是装饰。 */
   readonly overridden: boolean;
   /**
@@ -483,6 +497,13 @@ function readConfigItem(key: string, raw: unknown): ConfigItem | null {
   const opts = Array.isArray(o['options'])
     ? (o['options'] as unknown[]).map((v) => String(v))
     : undefined;
+  const ol = o['option_labels'];
+  const optionLabels: Record<string, string> = {};
+  if (ol && typeof ol === 'object' && !Array.isArray(ol)) {
+    for (const [v, name] of Object.entries(ol as Record<string, unknown>)) {
+      if (typeof name === 'string' && name) optionLabels[v] = name;
+    }
+  }
   return {
     key,
     value,
@@ -492,7 +513,11 @@ function readConfigItem(key: string, raw: unknown): ConfigItem | null {
     // 消失了,而它在后端明明存在。
     category: str('category') || 'other',
     description: str('description'),
+    label: str('label'),
+    ...(typeof o['hint'] === 'string' ? { hint: o['hint'] as string } : {}),
     ...(opts && opts.length ? { options: opts } : {}),
+    ...(Object.keys(optionLabels).length ? { optionLabels } : {}),
+    ...(typeof o['bundle'] === 'string' && o['bundle'] ? { bundle: o['bundle'] as string } : {}),
     overridden: value !== defaultValue,
     ...(typeof o['restart_required'] === 'string' && o['restart_required']
       ? { restartRequired: o['restart_required'] as string }
