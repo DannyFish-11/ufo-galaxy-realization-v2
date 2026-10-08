@@ -668,13 +668,15 @@ def seed_builtin_system_resources() -> Dict[str, Any]:
         seed_local_tool_resource("code_sandbox", capabilities=["execute_code"]),
     ]
     from core.capability_bus import get_capability_bus
+    from core.network_graph_runtime import get_network_graph_runtime
 
     bus = get_capability_bus()
     engineering = [c.split("__", 1)[1] for c in records[2].capabilities if "__" in c]
-    for action in engineering:
-        bus.register_engineering_capability(action)
-    for action in RESOURCE_CAPABILITY_ACTIONS:
-        bus.register_resource_capability(action)
+    with get_network_graph_runtime().batched_persistence():  # 一连串登记，拓扑图只落盘一次
+        for action in engineering:
+            bus.register_engineering_capability(action)
+        for action in RESOURCE_CAPABILITY_ACTIONS:
+            bus.register_resource_capability(action)
     return {"resources": len(records), "engineering_capabilities": len(engineering)}
 
 

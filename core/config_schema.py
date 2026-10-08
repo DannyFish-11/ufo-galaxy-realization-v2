@@ -76,6 +76,7 @@ SECRET_KEYS: FrozenSet[str] = frozenset(
         "ONEAPI_API_KEY",
         "GALAXY_API_TOKEN",
         "SECRETVAULT_MASTER_KEY",
+        "GALAXY_TURN_CREDENTIAL",  # 后缀不是 _KEY/_TOKEN,按后缀认不出来 —— 显式列
     }
 )
 

@@ -351,15 +351,15 @@ class SystemOrchestrator:
         # nats://localhost:4222 写进 .env、内嵌 NATS 起来后进程自己也会设它,于是只想用本机的人被悄悄切成跨设备。
         cross_device = cross_device_requested()
         mode = "desktop-cross-device" if cross_device else "desktop-local"
-        # 与真正拉起总线的那一处同一判据(launcher/services.py:GalaxyUnified.start_nats):
-        # 没写 false 就会去拉 nats-server。以前这里要"显式 true"才算开,于是屏幕上
-        # 先"不用消息总线",几十秒后又"✓ 消息总线 nats://localhost:4222"。
-        nats_explicitly_off = os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off")
-        nats_enabled = not nats_explicitly_off
+        # 与真正拉起总线的那一处同一判据(core.system_mode.nats_wanted):写了 GALAXY_NATS_ENABLED 听它的,
+        # 没写就跟着模式走。以前这里与启动器各判各的,屏幕上先"不用消息总线"、几十秒后又"✓ 消息总线"。
+        from core.system_mode import nats_off_reason, nats_wanted
+
+        nats_enabled = nats_wanted()
         detail = f"mode={mode}, nats_enabled={nats_enabled}, cross_device={cross_device}"
         logger.info("[启动·模式] %s", detail)
         _scope = "可用其他设备" if cross_device else "只用本机"
-        _bus = "消息总线稍后拉起(起不来就用进程内总线)" if nats_enabled else "不用消息总线(GALAXY_NATS_ENABLED=false)"
+        _bus = "消息总线稍后拉起(起不来就用进程内总线)" if nats_enabled else f"不用消息总线:{nats_off_reason()}"
         said = f"按 {mode} 跑 —— {_scope},{_bus}"
         if not cross_device and nats_url_points_elsewhere(os.environ.get("GALAXY_NATS_URL", "")):
             # 配成了连别的机器、却没打开跨设备:说出来,不悄悄替人切模式。

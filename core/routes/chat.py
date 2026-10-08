@@ -684,10 +684,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             # 文字/语音锁步:句子【被念出的那一刻】起,该句文字才开始上屏,文字与语音同刻。
             #
-            # 历史上锁步默认【关】,原因是真机反馈"一大段蹦一段又一段"——那不是锁步本身
-            # 的错,而是旧实现把整句一次性砸屏。现在改为【按节奏平滑露出】(_ls_take:句子
-            # 开口即起步,字符按速率流出,积压自适应加速),于是"与语音同刻"与"逐字平滑"
-            # 两者兼得,旧的取舍不再成立。
+            # 历史上锁步默认【关】,原因是真机反馈"一大段蹦一段又一段"——那不是锁步本身的错,而是旧实现把整句
+            # 一次性砸屏。现在改为【按节奏平滑露出】(_ls_take:句子开口即起步,字符按速率流出,积压自适应加速),
+            # 于是"与语音同刻"与"逐字平滑"两者兼得,旧的取舍不再成立。
             #
             # 开关三态(GALAXY_TEXT_VOICE_LOCKSTEP):
             #   未设/auto → 本次响应走 TTS 就锁步,纯文字会话逐字直出(默认,不需要配置);
@@ -700,7 +699,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.speech_output import suppress_final_speak_in_context
 
-                speaker = desktop_incremental_speech(_on_desktop, source="chat", on_sentence_start=reveal_q.put_nowait)
+                _say = desktop_incremental_speech(_on_desktop, source="chat", on_sentence_start=reveal_q.put_nowait)
+                speaker = await _say
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
 

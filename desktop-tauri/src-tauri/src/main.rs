@@ -119,6 +119,9 @@ fn build_panel(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .inner_size(1200.0, 700.0)
         .decorations(false)
         .transparent(true)
+        // 无边框窗口在 Windows 上默认带系统阴影：按窗口矩形画，不跟面板的圆角走，
+        // 圆角外就多出四个方角。覆盖层那边早就关了，面板这边漏了。
+        .shadow(false)
         .always_on_top(true)
         .resizable(true)
         .focused(true)

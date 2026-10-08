@@ -174,6 +174,19 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
         "多设备与网络",
         "接入 Home Assistant：URL 与令牌都配齐才会启动，没配时完全不动；配齐本身就是人的授权，不需要再有一个开关",
     ),
+    "GALAXY_TAILSCALE_ENABLED": _o(
+        "多设备与网络", "显式走 Tailscale 通道：跨设备模式的传输顺序里本来就把它排第一，这个键只是手动强指定，改 .env"
+    ),
+    "GALAXY_ENABLE_WEBRTC": _o(
+        "多设备与网络",
+        "把 WebRTC 直连当可选传输通道：需要的是下面「数据通道」那个真取舍的开关，这个是网关内部的通道登记",
+    ),
+    "GALAXY_ENABLE_SCRCPY": _o("多设备与网络", "把 scrcpy 投屏当可选传输通道：调试 / 特殊场景，改 .env"),
+    "GALAXY_ENABLE_MQTT": _o("多设备与网络", "把 MQTT 当可选传输通道：只有接了 MQTT 设备的人需要，改 .env"),
+    "GALAXY_USE_GATEWAY_FOR_WEBRTC": _b("多设备与网络", "WebRTC 信令走网关：关掉客户端要自己找信令地址，只会更麻烦"),
+    "GALAXY_ENABLE_LEGACY_MULTIDEVICE": _o(
+        "多设备与网络", "旧版多设备兼容层：规范实现在 galaxy_gateway，默认关，只有迁移期的老调用方需要"
+    ),
     "GALAXY_REMOTE_DESKTOP": _p("多设备与网络", "远程桌面接入：默认关，打开就是对外开一个口"),
     "FEDERATION_ENABLED": _p("多设备与网络", "联邦（把多套 Galaxy 连成一片）：默认关的 opt-in"),
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": _p(

@@ -26,6 +26,7 @@ from core.agent_supply import (
     unmet_refusal,
 )
 from core.atomic_json import atomic_write_json
+from core.data_paths import data_path
 from core.genome import agent_template_prompt
 
 try:
@@ -428,11 +429,10 @@ class AgentFactory:
     3. split_agent() - 现有 Agent 根据负载分裂为多个子 Agent
     """
 
-    # 生产可用性配置
-    MAX_AGENTS = 500  # 最大 Agent 数
+    MAX_AGENTS = 500  # 生产可用性配置:最大 Agent 数
     CLEANUP_INTERVAL = 60  # TTL 清理间隔（秒）
     MAX_CREATES_PER_MINUTE = 50  # 每分钟最大创建数
-    STATE_FILE = "data/agent_state.json"
+    STATE_FILE = data_path("agent_state.json")
 
     def __init__(self, llm_router=None):
         self.llm_router = llm_router

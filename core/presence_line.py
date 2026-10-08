@@ -222,12 +222,16 @@ def desktop_conversation_mirror(on_desktop: bool) -> Callable[..., Any]:
     return emit_conversation
 
 
-def desktop_incremental_speech(on_desktop: bool, **kwargs: Any) -> Any:
-    """在电脑上边生成边念；不是电脑发起的请求不念，返回 ``None``（与「没建成」同义）。"""
+async def desktop_incremental_speech(on_desktop: bool, **kwargs: Any) -> Any:
+    """在电脑上边生成边念；不是电脑发起的请求不念，返回 ``None``（与「没建成」同义）。
+
+    第一次要选 TTS 引擎（import 一串库、探测算力），在工作线程里等它选完，不压在事件循环上。
+    """
     if not on_desktop:
         return None
-    from core.speech_output import begin_incremental_speech
+    from core.speech_output import begin_incremental_speech, speech_engine_ready
 
+    await speech_engine_ready()
     return begin_incremental_speech(**kwargs)
 
 

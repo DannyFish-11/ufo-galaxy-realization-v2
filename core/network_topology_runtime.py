@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
+from core.data_paths import data_path
 from core.runtime_truth_governance import (
     RECOVERY_STATUS_DEGRADED,
     RECOVERY_STATUS_LIVE,
@@ -120,8 +121,7 @@ TRANSPORT_HIERARCHY_ASSIMILATION_POLICY: str = (
 
 _NETWORK_TOPOLOGY_STATE_PATH_ENV: str = "GALAXY_NETWORK_TOPOLOGY_RUNTIME_STATE_PATH"
 _DEFAULT_NETWORK_TOPOLOGY_STATE_PATH: str = os.getenv(
-    _NETWORK_TOPOLOGY_STATE_PATH_ENV,
-    "data/runtime/network_topology_runtime_state.json",
+    _NETWORK_TOPOLOGY_STATE_PATH_ENV, data_path("runtime", "network_topology_runtime_state.json")
 )
 
 #: Canonical runtime-host identity used as the implicit edge source for

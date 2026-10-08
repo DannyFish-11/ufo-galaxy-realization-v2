@@ -50,9 +50,23 @@ from typing import Any, Dict, List, Optional
 # Previous: from .bootstrap import ... (failed with "attempted relative import with no known parent package")
 try:
     from launcher.bootstrap import PROJECT_ROOT, ServiceType, SystemConfig, print_status
+    from launcher.node_failure_report import (
+        adopt_slow_nodes,
+        is_port_failure,
+        last_informative_line,
+        read_node_output,
+        report_node_failures,
+    )
     from launcher.service_manager import ServiceManager
 except ImportError:
     from .bootstrap import PROJECT_ROOT, ServiceType, SystemConfig, print_status
+    from .node_failure_report import (
+        adopt_slow_nodes,
+        is_port_failure,
+        last_informative_line,
+        read_node_output,
+        report_node_failures,
+    )
     from .service_manager import ServiceManager
 
 logger = logging.getLogger("Galaxy")
@@ -135,6 +149,8 @@ class NodeSystemLauncher:
         # 用于在 start_all 汇总时把「缺少基础设施(需 Docker)」与真实错误区分开，
         # 避免 desktop-local 单机模式下满屏超时告警噪音。
         self._node_failure_reasons: Dict[str, str] = {}
+        self._node_failure_details: Dict[str, str] = {}  # node_name -> stderr 里最后一行有信息的
+        self._slow_watchers: List[Any] = []  # 慢启动节点的后台等待任务(留引用,免得被回收)
 
     @staticmethod
     def _classify_node_failure(stderr_text: str) -> str:
@@ -153,6 +169,8 @@ class NodeSystemLauncher:
         # 客户端库(如 qdrant_client)，也应归到 import，给用户可执行的正确指引。
         if "modulenotfounderror" in low or "importerror" in low or "no module named" in low:
             return "import"
+        if is_port_failure(stderr_text):
+            return "port"
         infra_signals = (
             "connection refused",
             "errno 111",
@@ -641,7 +659,7 @@ class NodeSystemLauncher:
                     pass
                 logger.debug("节点 %s 健康检查等待 (尝试 %d/%d)", node_name, attempt, _retries)
 
-            # 读取子进程 stderr 并对失败原因归类（infra/import/other）。
+            # 读取子进程输出（logs/nodes/<名字>.log）并对失败原因归类（infra/import/other）。
             # 关键降噪：不再对每个失败节点 logger.error 整段 stderr + logger.warning 超时
             # （desktop-local 下会满屏刷屏）。改为 debug 记录细节、把分类结果存起来，
             # 由 start_all 汇总成一行清晰摘要。
@@ -649,17 +667,10 @@ class NodeSystemLauncher:
             svc = self.service_manager.services.get(node_name)
             proc = svc.process if svc else None
             proc_alive = bool(proc) and proc.poll() is None
-            # 只有进程已退出才读 stderr:select.select 对管道在 Windows 上
-            # 不支持(只支持 socket),此前这里必抛 OSError 被吞 —— Windows
-            # 用户的失败原因永远是空,日志里查不到任何东西。进程已死时
-            # 直接 read(EOF 立返,不会阻塞);进程存活时无需读。
-            if proc and not proc_alive and proc.stderr:
-                try:
-                    stderr_out = proc.stderr.read()
-                    if stderr_out:
-                        stderr_text = stderr_out[-4096:].decode(errors="replace")
-                except Exception:  # noqa: BLE001
-                    pass
+            # 只有进程已退出才读:管道上 select 在 Windows 不支持(此前必抛 OSError 被吞,
+            # 失败原因永远是空);现在输出在文件里，读文件末尾即可，不会阻塞。
+            if proc and not proc_alive:
+                stderr_text = read_node_output(svc)
             if proc_alive:
                 # 进程存活、只是健康未及时就绪 —— 慢机上的常见情形,不是死亡。
                 # 如实归类,后续 UDP/HTTP 健康探测转正(启动摘要不再误导为"失败")。
@@ -667,6 +678,7 @@ class NodeSystemLauncher:
             else:
                 reason = self._classify_node_failure(stderr_text)
             self._node_failure_reasons[node_name] = reason
+            self._node_failure_details[node_name] = last_informative_line(stderr_text)
             if stderr_text:
                 logger.debug("节点 %s 启动失败(%s)，stderr:\n%s", node_name, reason, stderr_text)
             logger.debug(
@@ -986,34 +998,13 @@ class NodeSystemLauncher:
         results = await self.start_nodes(nodes, parallel=True)
 
         success_nodes = [n for n, ok in results.items() if ok]
+
+        # 按原因分桶打印(慢的 / 缺基础设施 / 缺依赖 / 端口 / 真失败带原因),细节见 launcher/node_failure_report.py。
         failed_nodes = [n for n, ok in results.items() if not ok]
-
-        # 把失败节点按原因分桶：infra(缺基础设施/需 Docker) vs import(缺依赖) vs other。
-        # desktop-local 单机模式下 infra 类属预期 —— 用一行可执行的摘要替代满屏告警。
-        infra_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) == "infra"]
-        import_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) == "import"]
-        other_failed = [n for n in failed_nodes if self._node_failure_reasons.get(n) not in ("infra", "import")]
-
         logger.info("节点启动完成: %d 就绪 / %d 未就绪", len(success_nodes), len(failed_nodes))
-        if infra_failed:
-            print_status(
-                f"{len(infra_failed)} 个节点因缺少基础设施跳过（单机模式属正常；"
-                f"如需启用：docker compose up -d）: {infra_failed}",
-                "warning",
-            )
-        if import_failed:
-            print_status(
-                f"{len(import_failed)} 个节点因缺 Python 依赖未启动"
-                f"（pip install -r requirements.txt 可修）: {import_failed}",
-                "warning",
-            )
-        if other_failed:
-            print_status(
-                f"{len(other_failed)} 个节点启动失败（详情见日志 DEBUG）: {other_failed}",
-                "warning" if not success_nodes else "info",
-            )
-        if not failed_nodes:
-            print_status(f"全部 {len(success_nodes)} 个节点就绪", "success")
+        slow = report_node_failures(results, self._node_failure_reasons, self._node_failure_details, print_status)
+        if slow:  # 进程还活着、只是慢:后台继续等,起来了自动登记
+            self._slow_watchers.append(asyncio.create_task(adopt_slow_nodes(self, slow)))
 
         # PR-12: Bulk-seed all healthy fabric-registry nodes into
         # NodeDiscoveryService now that the startup batch has completed.

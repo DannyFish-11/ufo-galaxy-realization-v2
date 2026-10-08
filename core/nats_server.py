@@ -28,25 +28,16 @@ _NATS_MIRRORS = (
 
 
 def nats_disabled_by_config() -> bool:
-    """``GALAXY_NATS_ENABLED`` 是否被显式关掉。
+    """总线是否**不该起**（显式写了 false，或没写且当前是本地模式）。判定在 ``core.system_mode.nats_wanted``。
 
-    这个开关此前是**只写不认**的:``unified_launcher`` 会读它,而
-    :meth:`EmbeddedNATSServer.start` 与 :meth:`core.nats_bus.NATSBus.connect`
-    都不读 —— 于是任何绕过启动器直接用总线的调用方(HTTP 端点、后台任务、测试)
-    仍然会走完"自动下载 nats-server → 拉起监听 0.0.0.0:4222 的常驻进程"这条链路。
-    本文件里两处提示文案却明写着"设 GALAXY_NATS_ENABLED=false 显式关闭此尝试",
-    是**承诺了但没实现**的开关。
-
-    这不只是配置洁癖。``EmbeddedNATSServer`` 装出来的二进制落在 ``~/.lumiv/bin``、
-    拉起的进程**脱离调用进程长期存活**、还占着整机的 4222 端口 —— 也就是说它是一个
-    **整机级、跨进程、跨会话的持久副作用**。测试套件里只要有任何一条用例碰到总线,
-    第一次跑就会把它装上并常驻;此后每个新进程连得上 NATS,凡是断言"本机没有 NATS"
-    的用例就**永久变红**,重跑、换分支都不自愈(tests/test_mesh_worker_panel_toggle.py
-    的 test_enable_returns_immediately_with_starting_true 就是这么红的)。
-
-    所以把开关补成真的:关掉时既不装也不拉,由调用方降级到进程内总线。
+    :meth:`EmbeddedNATSServer.start` 与 :meth:`core.nats_bus.NATSBus.connect` 都问它 —— 绕过启动器直接用总线的
+    调用方（HTTP 端点、后台任务、测试）也不会再自动下载 nats-server、拉起监听 4222 的常驻进程。
+    那个进程装在 ``~/.lumiv/bin``、脱离调用进程长期存活、占整机端口：是跨进程、跨会话的持久副作用，
+    所以「不该起」时既不装也不拉，由调用方降级到进程内总线。
     """
-    return str(os.getenv("GALAXY_NATS_ENABLED", "")).strip().lower() in ("false", "0", "no", "off")
+    from core.system_mode import nats_wanted
+
+    return not nats_wanted()
 
 
 def _http_get(url: str, timeout: int = 20) -> bytes:

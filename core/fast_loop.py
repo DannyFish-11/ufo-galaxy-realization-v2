@@ -56,6 +56,12 @@ def _probe_subprocess_support() -> bool:
 def install_fast_loop() -> str:
     """尽量换上高性能事件循环。返回生效名;任何失败都安全退回默认策略。"""
     global _installed_name
+    try:  # 与事件循环无关、无条件装：httpx 每建一个客户端就重载一遍 CA 证书，常常是在循环线程上（见 shared_tls）
+        from core.shared_tls import install_shared_tls_context
+
+        install_shared_tls_context()
+    except Exception:  # noqa: BLE001
+        pass
     if os.environ.get("GALAXY_FAST_LOOP", "1").strip().lower() in (
         "0",
         "false",

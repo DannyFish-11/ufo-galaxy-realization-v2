@@ -281,6 +281,28 @@ def master_brain_wanted(environ: Optional[dict] = None) -> bool:
     return str(env.get("GALAXY_MASTER_BRAIN_ENABLED", "")).strip().lower() in _TRUTHY
 
 
+def nats_wanted(environ: Optional[dict] = None) -> bool:
+    """要不要起 NATS 消息总线 —— **唯一一处判定**，启动流程 / 启动器 / 内置服务器 / 总线连接都调它。
+
+    ``GALAXY_NATS_ENABLED`` 写了就听它的（两个方向都算）；没写就**跟着模式走**：跨设备模式起，本地模式不起
+    （本地模式只用这一台电脑，用不到总线，起了只是白占一个常驻进程和 4222 端口）。``GALAXY_NATS_URL``
+    明确写了（指向某条总线）也算要用。以前三处各判各的：本模块说「本地模式关」，启动流程与启动器说
+    「没写 false 就起」，登记表又写默认 true —— 于是本地模式屏幕上先说「不用消息总线」，几十秒后又
+    「✓ 消息总线 nats://localhost:4222」。
+    """
+    return resolve_fabric_config(environ).nats_enabled
+
+
+def nats_off_reason(environ: Optional[dict] = None) -> str:
+    """总线没起的原因，说给人听；要起则返回空串。"""
+    env = environ if environ is not None else os.environ
+    if nats_wanted(env):
+        return ""
+    if str(env.get("GALAXY_NATS_ENABLED", "")).strip():
+        return "GALAXY_NATS_ENABLED=false(按配置显式关闭)"
+    return "本地模式用不到消息总线(打开「跨设备」才会起;只想单独起它就设 GALAXY_NATS_ENABLED=true)"
+
+
 def master_brain_requested(environ: Optional[dict] = None) -> bool:
     """主脑 / worker 该不该起：主脑开关开着，**并且**在跨设备模式里。
 
@@ -487,7 +509,9 @@ __all__ = [
     "master_brain_requested",
     "master_brain_wanted",
     "master_brain_waiting_for_mode",
+    "nats_off_reason",
     "nats_url_points_elsewhere",
+    "nats_wanted",
     "resolve_fabric_config",
     "FABRIC_CONFIG",
 ]

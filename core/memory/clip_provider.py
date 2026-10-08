@@ -21,6 +21,7 @@ import os
 import uuid
 from typing import Any, Dict, List, Optional
 
+from core.data_paths import data_path
 from core.memory.base import MemoryHit, MemoryProvider
 
 logger = logging.getLogger("Galaxy.Memory.CLIP")
@@ -63,7 +64,9 @@ class ClipMemoryProvider(MemoryProvider):
         if self._col is None:
             import chromadb
 
-            persist = os.getenv("GALAXY_CLIP_DIR", os.path.join(os.getenv("CHROMA_PERSIST_DIR", "./data/clip_memory")))
+            persist = os.getenv(
+                "GALAXY_CLIP_DIR", os.path.join(os.getenv("CHROMA_PERSIST_DIR", data_path("clip_memory")))
+            )
             try:
                 os.makedirs(persist, exist_ok=True)
             except Exception:  # noqa: BLE001

@@ -15,6 +15,8 @@ import {
   PresenceSocket,
   fetchAllConfig,
   fetchUserProviders,
+  fetchVendors,
+  verifyVendor,
   saveUserProvider,
   verifyUserProvider,
   deleteUserProvider,
@@ -53,10 +55,12 @@ import { createIsolatedResults } from './ui/isolated_results';
 import { createDock } from './ui/dock';
 import { createWired, deriveWired } from './ui/wired';
 import { createSettings } from './ui/settings';
+import { createVendors } from './ui/vendors';
 import { createUserProviders } from './ui/user_providers';
 import type { UserProviderDraft } from './ui/user_providers';
 import { createGitHubAddons } from './ui/github_addons';
 import type { GitHubAddonDraft } from './ui/github_addons';
+import type { Vendor } from './transport';
 import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
 
 /**
@@ -161,6 +165,13 @@ function mount(host: HTMLElement): void {
     onPickTier: (key) => void pickTier(key),
   });
 
+  const vendors = createVendors({
+    onSaveKey: (v, env, value) => void saveVendorKey(v, env, value),
+    onClearKey: (v) => void clearVendorKey(v),
+    onSaveUrl: (v, env, value) => void saveVendorUrl(v, env, value),
+    onVerify: (v) => void verifyVendorNow(v),
+  });
+
   const userProviders = createUserProviders({
     onSave: (draft) => void saveEndpoint(draft),
     onEdit: (row) => userProviders.fillForm(row),
@@ -183,10 +194,23 @@ function mount(host: HTMLElement): void {
     onClose: () => store.patch({ settingsOpen: false }),
     onSave: (changes) => void applyConfig(changes),
     // 顺序:没收口的结果最前 —— 它只在出事时出现(一条都没有时整段不占位置),
-    // 出现了就是要人看的。然后是模型服务、GitHub 项目:两者都是"接一个外面的
-    // 东西进来",而模型服务是更多人来这一页要办的那件事。
-    topSections: [isolatedResults.root, userProviders.root, githubAddons.root],
+    // 出现了就是要人看的。然后是模型服务商(各家 Key)、我的模型服务(自定义端点)、
+    // GitHub 项目:后三者都是"接一个外面的东西进来",而填各家的 Key 是更多人来这一页
+    // 要办的那件事 —— 所以它在自定义端点前面。
+    topSections: [isolatedResults.root, vendors.root, userProviders.root, githubAddons.root],
   });
+
+  // 姿态帧一秒来好几次,每一帧都会走到下面的 render()。这几块的输入(轮次、配置、端点…)
+  // 绝大多数帧里一个字都没变 —— 没变就不重画。不这么做的代价是:设置页打开着时,
+  // 三百多行 DOM 每一帧被整个推倒重建,正在输入的内容被清空,CPU 弱的机器上整个面板发卡。
+  const NO_KEYS: readonly string[] = [];
+  const renderThread = memoRender(thread.render);
+  const renderRehearsal = memoRender(rehearsal.render);
+  const renderDock = memoRender(dock.render);
+  const renderSettings = memoRender(settings.render);
+  const renderEndpoints = memoRender(userProviders.render);
+  const renderAddons = memoRender(githubAddons.render);
+  const renderIsolated = memoRender(isolatedResults.render);
 
   main.append(island.root, thread.root, rehearsal.root, dock.root, settings.root);
   panel.append(deck.root, main);
@@ -230,24 +254,26 @@ function mount(host: HTMLElement): void {
       }),
       s.slim,
     );
-    thread.render(s.turns, s.lockstep, s.lockstepReason);
-    rehearsal.render(s.rehearsal);
+    renderThread(s.turns, s.lockstep, s.lockstepReason);
+    renderRehearsal(s.rehearsal);
     // 停止键:面板自己发起的那一轮在跑,或者它此刻正在动手(可能是一句语音让它动的)。
-    dock.render(s.bundles, s.tiers, s.tierGaps, s.popover, s.chatBusy || Boolean(s.posture?.acting));
-    settings.render(s.config, s.settingsOpen, s.configBusy);
-    userProviders.render(
+    renderDock(s.bundles, s.tiers, s.tierGaps, s.popover, s.chatBusy || Boolean(s.posture?.acting));
+    // 目录拉到了,细调页就不再重复列卡片已认领的那些键;没拉到则全列 —— 不让任何键因此无处可填。
+    renderSettings(s.config, s.settingsOpen, s.configBusy, s.vendors ? s.vendors.ownedKeys : NO_KEYS);
+    vendors.render(s.vendors, s.vendorsBusy, s.vendorNotice, s.vendorChecks, s.vendorChecking);
+    renderEndpoints(
       s.userProviders,
       s.userProviderProtocols,
       s.userProvidersBusy,
       s.userProviderNotice,
     );
-    githubAddons.render(
+    renderAddons(
       s.githubAddons,
       s.githubAddonStatus,
       s.githubAddonsBusy,
       s.githubAddonNotice,
     );
-    isolatedResults.render(s.isolated, s.isolatedPending, s.isolatedBusy, s.isolatedNotice);
+    renderIsolated(s.isolated, s.isolatedPending, s.isolatedBusy, s.isolatedNotice);
   }
 
   store.subscribe(render);
@@ -285,7 +311,82 @@ function mount(host: HTMLElement): void {
     // 端点和插件各走各的路,和那 335 个键一起重新拉 —— 同样的理由:别拿缓存
     // 让人对着过期的状态做决定(Key 会过期、网关会挂、插件会被别处卸掉)。
     // 安装策略也在这一趟里:GITHUB_ALLOWLIST 可能刚刚就在上面那批键里被改了。
-    await Promise.all([loadEndpoints(), loadAddons(), loadIsolated()]);
+    await Promise.all([loadEndpoints(), loadVendors(), loadAddons(), loadIsolated()]);
+  }
+
+  // ── 模型服务商(各家 Key) ──────────────────────────────────────────────────
+
+  /** 拉一次厂商目录。拉不到就**留 null**(细调页随之把全部裸键照旧列出来)。 */
+  async function loadVendors(): Promise<void> {
+    const page = await fetchVendors(BASE);
+    // 拉不到时不覆盖已有的那份:一次网络抖动不该让整排厂商卡消失。
+    if (page) store.patch({ vendors: page });
+    else if (store.state.vendors === null) store.patch({ vendors: null });
+  }
+  void loadVendors();
+
+  /** 真发一次试调,把结论记下来。 */
+  async function runVendorCheck(id: string): Promise<void> {
+    store.patch({ vendorChecking: id });
+    const res = await verifyVendor(BASE, id);
+    store.patch({
+      vendorChecking: '',
+      vendorChecks: {
+        ...store.state.vendorChecks,
+        [id]: res ?? { ok: false, text: '后端没接上，没能验证' },
+      },
+    });
+  }
+
+  /**
+   * 写 Key(或地址)。**先问后端,再改界面;存了就验。**
+   * 写失败就把原因摆出来、不去验 —— 对着没存进去的 Key 做试调,得到的是上一把 Key 的结论。
+   */
+  async function writeVendorKeys(
+    v: Vendor,
+    changes: Readonly<Record<string, string>>,
+    verify: boolean,
+    failNote: string,
+  ): Promise<void> {
+    store.patch({ vendorsBusy: true, vendorNotice: '' });
+    const ok = await saveConfig(BASE, changes);
+    if (!ok) {
+      store.patch({ vendorsBusy: false, vendorNotice: failNote });
+      return;
+    }
+    // 保存后以后端为准重新拉:配置表(键值)与目录各拉一次。
+    const [items] = await Promise.all([fetchAllConfig(BASE), loadVendors()]);
+    store.patch({ config: items, vendorsBusy: false });
+    if (verify) await runVendorCheck(v.id);
+    else {
+      // 换了 Key / 清了 Key:旧结论作废,别让上一把的「通了」挂在新状态上。
+      const { [v.id]: _drop, ...rest } = store.state.vendorChecks;
+      store.patch({ vendorChecks: rest });
+    }
+  }
+
+  async function saveVendorKey(v: Vendor, env: string, value: string): Promise<void> {
+    await writeVendorKeys(v, { [env]: value }, true, `${v.label} 的 Key 没存上 —— 后端拒绝了这次保存`);
+  }
+
+  async function clearVendorKey(v: Vendor): Promise<void> {
+    // 别名(GEMINI_API_KEY 等)填过的也一起清,否则「清除」之后它还显示已配置。
+    const changes: Record<string, string> = {};
+    for (const [env, set] of Object.entries(v.keyState)) if (set) changes[env] = '';
+    if (!Object.keys(changes).length) return;
+    await writeVendorKeys(v, changes, false, `${v.label} 的 Key 没清掉 —— 后端拒绝了这次请求`);
+  }
+
+  async function saveVendorUrl(v: Vendor, env: string, value: string): Promise<void> {
+    // 地址换了,试调才有意义;但只有配了 Key(或本身不需要 Key)的才验。
+    const needsKey = v.keyEnvs.length > 0;
+    const verify = !needsKey || v.configured;
+    await writeVendorKeys(v, { [env]: value }, verify && v.kind === 'registry', `${v.label} 的地址没存上`);
+  }
+
+  async function verifyVendorNow(v: Vendor): Promise<void> {
+    store.patch({ vendorNotice: '' });
+    await runVendorCheck(v.id);
   }
 
   // ── 没收口的结果 ───────────────────────────────────────────────────────────
@@ -954,6 +1055,19 @@ function mount(host: HTMLElement): void {
   window.addEventListener('resize', render);
 
   render();
+}
+
+/**
+ * 参数和上一次一模一样(逐个 Object.is)就不调。用于「纯函数式地由状态画出来」的那几块;
+ * 状态是不可变替换的(见 store.ts),所以引用没变就等于内容没变。
+ */
+function memoRender<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => void {
+  let prev: A | null = null;
+  return (...args: A) => {
+    if (prev && prev.length === args.length && prev.every((x, i) => Object.is(x, args[i]))) return;
+    prev = args;
+    fn(...args);
+  };
 }
 
 /**

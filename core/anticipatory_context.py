@@ -201,6 +201,24 @@ _MACHINE_ANNOTATION_RE = re.compile(
 )
 
 
+#: 机器追加在消息末尾的另一种注解：桌面上下文策略（见 ``OpenClawd._apply_multimodal_context_strategy``）。
+#: 形态 ``[desktop_context_strategy presence_transition=...; sampling_intensity=...]``，体内没有嵌套方括号。
+_STRATEGY_ANNOTATION_RE = re.compile(r"\[\s*desktop_context_strategy\b[^\[\]]*\]", re.IGNORECASE)
+_APPENDED_ANNOTATIONS_RE = re.compile(
+    r"(?:\s*(?:" + _MACHINE_ANNOTATION_RE.pattern + r"|" + _STRATEGY_ANNOTATION_RE.pattern + r"))+\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_appended_annotations(text: str) -> str:
+    """去掉机器**追加在消息末尾**的注解块，其余一个字不动（换行、方括号、用户自己写的都原样）。
+
+    给**入库**用：会话历史里存的该是用户说的话。``strip_machine_annotations`` 是给词法比较用的，
+    它会把所有空白压成一个空格、也会删掉中间位置的注解 —— 拿来改写要存的原文就是在篡改用户输入。
+    """
+    return _APPENDED_ANNOTATIONS_RE.sub("", text) if text else text
+
+
 def strip_machine_annotations(text: str) -> str:
     """剥掉机器追加的注解块,返回用户真正说的那部分。
 

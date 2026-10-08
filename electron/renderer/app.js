@@ -89,6 +89,13 @@ const HIDE_SECONDS = 0.9;
 const SPREAD_SECONDS = 1 / 0.85;
 // 动手期间那座岛自己长出来 / 收回去（表达期空间是收着的，岛不能跟着空间走）。
 const ISLE_SECONDS = 0.45;
+// 岛长成之后的尺寸（px）：一条**瘦长**的药丸，约 10:1（280 × 28）。
+// 历史：248 × 33（7.5:1）→ 上一版 216 × 40（5.4:1，更窄更高）—— 那一版方向反了，
+// 越改越像一块墩子；所有者要的是 Windows 灵动岛（wisland）那种又薄又长的一条。
+// 宽度只是下限：文字多了（模式、叫停提示）会自己撑开，见 islandInner 的量法。
+const ISLE_MIN_W = 280;
+const ISLE_H = 26;   // 展开后高度 = 2 + ISLE_H
+const ISLE_R = 14;   // 下沿圆角 = 2 + ISLE_R（略大于高度的一半，下沿圆润成药丸）
 
 // ── 时间怎么走 ──
 //
@@ -199,7 +206,7 @@ class GalaxyOverlay {
     // 动手期间那座岛的大小（与空间编排里长出来的那座取大）。
     this.isleAct = 0;
     // 岛展开到最大时多宽 —— 按岛上此刻那几个字量出来，不写死（见 _paintIsland）。
-    this.isleMax = 248;
+    this.isleMax = ISLE_MIN_W;
 
     // 边光的呼吸。周期读 index.html 的 --c-rim（判据在那边，这里不另写一份数）。
     this.breathT = 0;
@@ -480,11 +487,11 @@ class GalaxyOverlay {
     // **急停那道线就是岛本身**，不是另加一个元素：有线＝我在但我闭着，
     // 没线＝这台机器根本没有感知可用。契约把 privacy_paused 单独给一位，
     // 正是因为"用户按停了"是一个整体姿态，不是"恰好四条都闭着"。
-    const h = paused ? 2 : 2 + isle * 31;
+    const h = paused ? 2 : 2 + isle * ISLE_H;
     const w = paused ? 68 : 66 + isle * (this.isleMax - 66);
     s.setProperty('--ih', h.toFixed(1) + 'px');
     s.setProperty('--iw', w.toFixed(1) + 'px');
-    s.setProperty('--ir', (paused ? 2 : 2 + isle * 15).toFixed(1) + 'px');
+    s.setProperty('--ir', (paused ? 2 : 2 + isle * ISLE_R).toFixed(1) + 'px');
     s.setProperty('--iop', paused ? '0.85' : (isle > 0.001 ? '1' : '0'));
     s.setProperty('--itx', Math.max(0, (isle - 0.55) / 0.45).toFixed(3));
 
@@ -542,7 +549,7 @@ class GalaxyOverlay {
     // 岛上的字变了，展开到最大时的宽度跟着量一次（字多了原来那 248px 装不下）。
     if (changed && this.islandInner) {
       const need = Math.ceil(this.islandInner.scrollWidth || 0) + 34;
-      this.isleMax = Math.max(248, need);
+      this.isleMax = Math.max(ISLE_MIN_W, need);
     }
   }
 

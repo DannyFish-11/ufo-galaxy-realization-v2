@@ -103,6 +103,105 @@ class ClientDisconnectGuardMiddleware:
 
 
 # ============================================================================
+# 0.5 本机请求绕过 BaseHTTPMiddleware 层(纯 ASGI)
+# ============================================================================
+
+_LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+
+
+class LoopbackBypass:
+    """本机(回环)请求直接走内层应用，不经过某个 ``BaseHTTPMiddleware`` 层；其余请求照旧经过它。
+
+    ``BaseHTTPMiddleware`` 每多一层，每个请求（尤其是带几百 KB 图像的感知帧）就多一次「把请求体 / 响应体
+    搬过一遍内存流」的开销。实测（带 400KB 请求体）：0 层约 2ms CPU，每多一层约 +1.2ms，
+    线上那条链有 4 层 —— 一个感知帧合计约 17ms 全占在事件循环上，面板、对话与它抢同一条线程。
+    而这些层对**本机自己的流量**本来就没用：压缩（同一台机器上压缩只是烧 CPU）、限流（本机回环默认放行，
+    见各自的说明）。所以本机请求不进这一层；非本机请求行为一字不变。
+
+    ``keep_if(scope)`` 为真的本机请求仍然走这一层（例如显式带 ``x-api-key``、或用环境变量要求对回环也限流）。
+    """
+
+    def __init__(self, app: ASGIApp, middleware_cls=None, keep_if=None, **kwargs):
+        self._plain = app
+        self._wrapped = middleware_cls(app, **kwargs)
+        self._keep_if = keep_if
+
+    async def __call__(self, scope, receive, send):
+        client = scope.get("client")
+        if (
+            scope["type"] == "http"
+            and client
+            and client[0] in _LOOPBACK_HOSTS
+            and not (self._keep_if and self._keep_if(scope))
+        ):
+            await self._plain(scope, receive, send)
+        else:
+            await self._wrapped(scope, receive, send)
+
+
+def rate_limit_keeps_loopback(scope) -> bool:
+    """本机请求里仍要走限流层的：显式带 ``x-api-key``，或环境变量要求对回环也限流。"""
+    if os.environ.get("GALAXY_RATE_LIMIT_LOOPBACK", "0").strip().lower() in ("1", "true", "yes", "on"):
+        return True
+    return any(name == b"x-api-key" for name, _ in scope.get("headers", ()))
+
+
+#: 感知帧 / 音频是**周期快照**：只有最新的有用，一份来不及处理就丢掉下一份也不亏。
+_INGEST_PATHS = frozenset(
+    {"/api/perception/desktop/frame", "/api/perception/desktop/audio", "/api/perception/desktop/system_audio"}
+)
+
+
+class IngestAdmissionMiddleware:
+    """感知帧 / 音频的入口准入：同时在处理的超过上限，多出来的**直接回 429、不解析请求体**。
+
+    被修的问题（Windows 真机日志）：CPU 吃紧时事件循环卡了几秒，期间采集端积压的几十份感知帧同时压进来，
+    每份几百 KB 的请求体都要走一遍解析 + 中间件链，于是「几十个请求同一毫秒完成、各自耗时 5.4 秒」，
+    连带面板的轻量接口（``/results/isolated``、``/providers/user`` ……）也被拖到 5 秒。
+    积压的帧本来就没人要（只留最新一帧），不该占着事件循环。
+
+    被拒的请求仍把请求体**读空**再回 —— 不读空就回的话，连接会被掐断，采集端看到的是网络异常而不是 429，
+    会误触它自己的「连续失败退避」。读空只是收字节（毫秒级），不解析。
+    """
+
+    MAX_IN_FLIGHT = 2
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+        self._in_flight = 0
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") != "POST" or scope.get("path") not in _INGEST_PATHS:
+            await self.app(scope, receive, send)
+            return
+        if self._in_flight >= self.MAX_IN_FLIGHT:
+            while True:  # 把请求体收空
+                message = await receive()
+                if message["type"] != "http.request" or not message.get("more_body"):
+                    break
+            body = '{"success":false,"stored":null,"busy":true,"reason":"后端正忙，这一帧没有接收（感知帧是周期快照，下一帧再来）"}'
+            raw = body.encode("utf-8")
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 429,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(raw)).encode()),
+                        (b"retry-after", b"1"),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": raw})
+            return
+        self._in_flight += 1
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self._in_flight -= 1
+
+
+# ============================================================================
 # 1. 响应压缩中间件
 # ============================================================================
 
@@ -431,37 +530,94 @@ class CachingMiddleware(BaseHTTPMiddleware):
 # ============================================================================
 
 
-class RequestTimerMiddleware(BaseHTTPMiddleware):
-    """请求耗时追踪 - 在响应头中添加 X-Response-Time"""
+class RequestTimerMiddleware:
+    """请求耗时追踪 - 在响应头中添加 X-Response-Time（纯 ASGI：不多搬一遍请求体 / 响应体）。
+
+    耗时算到**响应开始**（``http.response.start``）那一刻，与原先 ``call_next`` 返回的时刻一致。
+    """
 
     def __init__(self, app: ASGIApp, slow_threshold_ms: float = 500):
-        super().__init__(app)
+        self.app = app
         self.slow_threshold_ms = slow_threshold_ms
         self.monitor = PerformanceMonitor.instance()
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
         start = time.time()
-        response = await call_next(request)
-        elapsed_ms = (time.time() - start) * 1000
+        done = False
 
-        response.headers["X-Response-Time"] = f"{elapsed_ms:.1f}ms"
+        def finish(status: int) -> float:
+            nonlocal done
+            elapsed_ms = (time.time() - start) * 1000
+            if not done:
+                done = True
+                path = scope.get("path", "")
+                self.monitor.record_request(
+                    path=path, method=scope.get("method", ""), status=status, latency_ms=elapsed_ms
+                )
+                # 慢请求告警
+                if elapsed_ms > self.slow_threshold_ms:
+                    logger.warning(
+                        f"Slow request: {scope.get('method', '')} {path} "
+                        f"took {elapsed_ms:.0f}ms (threshold: {self.slow_threshold_ms}ms)"
+                    )
+            return elapsed_ms
 
-        # 记录指标
-        self.monitor.record_request(
-            path=request.url.path,
-            method=request.method,
-            status=response.status_code,
-            latency_ms=elapsed_ms,
-        )
+        async def timed_send(message):
+            if message["type"] == "http.response.start" and not done:
+                elapsed_ms = finish(message.get("status", 0))
+                headers = list(message.get("headers", ()))
+                headers.append((b"x-response-time", f"{elapsed_ms:.1f}ms".encode()))
+                message = {**message, "headers": headers}
+            await send(message)
 
-        # 慢请求告警
-        if elapsed_ms > self.slow_threshold_ms:
-            logger.warning(
-                f"Slow request: {request.method} {request.url.path} "
-                f"took {elapsed_ms:.0f}ms (threshold: {self.slow_threshold_ms}ms)"
-            )
+        try:
+            await self.app(scope, receive, timed_send)
+        except BaseException:
+            finish(500)  # 没来得及发响应就出错了:也要留痕
+            raise
 
-        return response
+
+def install_performance_middlewares(app, cache=None) -> None:
+    """装性能中间件链（``core/startup.py`` 的启动引导调它）。
+
+    中间件按添加的逆序执行（最后添加的最先执行）：
+    ``DisconnectGuard → IngestAdmission → Timer → RateLimit → Compress → Cache → Handler``。
+
+    压缩 / 限流两层是 ``BaseHTTPMiddleware``，每层给每个请求多搬一遍请求体 / 响应体 —— 本机自己的流量不需要它们
+    （同机压缩只烧 CPU、回环限流默认放行），用 :class:`LoopbackBypass` 让本机请求不进这两层。
+    """
+    if cache:
+        default_ttl = int(os.environ.get("REDIS_HTTP_CACHE_TTL", "30"))
+        app.add_middleware(CachingMiddleware, cache_backend=cache, default_ttl=default_ttl)
+        logger.info("API 缓存中间件已加载")
+
+    min_size = int(os.environ.get("GZIP_MIN_SIZE", "1024"))
+    app.add_middleware(LoopbackBypass, middleware_cls=ResponseCompressor, min_size=min_size)
+    logger.info("gzip 压缩中间件已加载")
+
+    max_req = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "200"))
+    window = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+    app.add_middleware(
+        LoopbackBypass,
+        middleware_cls=RateLimitMiddleware,
+        keep_if=rate_limit_keeps_loopback,
+        max_requests=max_req,
+        window_seconds=window,
+    )
+    logger.info(f"限流中间件已加载: {max_req} req / {window}s")
+
+    slow_threshold = float(os.environ.get("SLOW_REQUEST_THRESHOLD_MS", "500"))
+    app.add_middleware(RequestTimerMiddleware, slow_threshold_ms=slow_threshold)
+    logger.info("请求计时中间件已加载")
+
+    app.add_middleware(IngestAdmissionMiddleware)  # 感知帧积压时多出来的直接回 429，不解析请求体
+    # 最后添加 = 最外层执行：客户端断开写保护必须包住整条中间件链，否则客户端提前断开后 winloop 的
+    # "Cannot call write() when UVStream is closing" 会作为未处理异常刷屏（详见 ClientDisconnectGuardMiddleware）。
+    app.add_middleware(ClientDisconnectGuardMiddleware)
+    logger.info("客户端断开写保护中间件已加载(最外层)")
 
 
 # ============================================================================

@@ -209,10 +209,11 @@ def _linux_has_systemd() -> bool:
     return os.path.isdir("/run/systemd/system")
 
 
-def _podman_engine_hint() -> str:
-    """Podman 引擎起不来时该干什么 —— 按平台说。"""
+def _podman_engine_hint(no_machine: bool = False) -> str:
+    """Podman 引擎起不来时该干什么 —— 按平台说。``no_machine``：这台机器一台虚机都没建过。"""
     if sys.platform in ("win32", "darwin"):
-        return "虚机没起来,试 `podman machine start` 后重跑"
+        _init = "还没建过 Podman 虚机 — 先 `podman machine init`(会下载虚机镜像),再 `podman machine start`,然后重跑"
+        return _init if no_machine else "虚机没起来,试 `podman machine start` 后重跑"
     # Linux 上 podman 是无守护的,压根没有 machine。info 都不通多半是
     # rootless 没配好(subuid/subgid)或存储驱动的问题。
     return "Podman 引擎未就绪 — Linux 上它无守护,`podman info` 都不通多半是 rootless 未配好(subuid/subgid)"
@@ -1122,10 +1123,13 @@ class GalaxyUnified:
 
         def _bring_up():
             if not _daemon_up():
-                # Podman 无守护进程(rootless),info 不通多半是配置问题,不尝试"启动守护";
-                # 仅 Docker 尝试拉起 Docker Desktop/daemon 并轮询等待。
-                if runtime == "docker":
-                    _try_start_docker_daemon(rt_bin)
+                # Linux 上 Podman 无守护(info 不通多半是配置问题),不尝试启动;Docker 拉起守护、Win/macOS 的 Podman 拉起虚机,都轮询等待。
+                _has_vm = runtime != "docker" and sys.platform in ("win32", "darwin")
+                if _has_vm and cr.try_start_podman_machine(rt_bin) == "none":
+                    return ("daemon_down", "no_machine")
+                if runtime == "docker" or _has_vm:
+                    if runtime == "docker":
+                        _try_start_docker_daemon(rt_bin)
                     deadline = _time.time() + float(os.environ.get("GALAXY_AUTO_DOCKER_DAEMON_WAIT", "60"))
                     while _time.time() < deadline:
                         if _daemon_up():
@@ -1180,12 +1184,9 @@ class GalaxyUnified:
             # 连不上它的 API。说成"未就绪"会让人去查引擎,而引擎根本没问题。
             return ("warn", f"{rt_name} 引擎在,但 compose 连不上它 — {rc}", _podman_api_hint())
         if status == "daemon_down":
-            # 按**这台机器**说话。"启动 Docker Desktop"是 Windows/macOS 的说法,
-            # 在 Linux 上根本没有那个东西 —— 照着它做的人会去找一个不存在的程序。
-            # Podman 同理:Linux 上没有 machine 这个东西,叫人 `podman machine start`
-            # 跟叫人在 Linux 上启动 Docker Desktop 是同一种错。
+            # 按**这台机器**说话:"启动 Docker Desktop"、`podman machine start` 是 Windows/macOS 的说法,Linux 上没有。
             if runtime != "docker":
-                _hint = _podman_engine_hint()
+                _hint = _podman_engine_hint(no_machine=(rc == "no_machine"))
             elif sys.platform in ("win32", "darwin"):
                 _hint = "手动启动 Docker Desktop 后重跑"
             elif _linux_has_systemd():
@@ -1714,13 +1715,13 @@ class GalaxyUnified:
         """
         from core.nats_bus import get_nats_bus
         from core.nats_server import EmbeddedNATSServer
+        from core.system_mode import nats_off_reason
 
-        # 显式关闭(用户在 .env 写 GALAXY_NATS_ENABLED=false 时才走这里;默认已改回
-        # 开启——所有者明确指令:默认路径是"尝试启动→成功",不许拿关闭当回避)。
-        # 关闭时同样切进程内总线:单机语义完整,只是不再尝试拉起 nats-server。
-        if os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off"):
-            get_nats_bus().enable_local_fallback("GALAXY_NATS_ENABLED=false(按配置显式关闭)")
-            return {"ok": False, "url": "", "error": "", "hint": "", "disabled": True}
+        # 不该起(写了 false,或没写且是本地模式,见 nats_wanted):切进程内总线;要起的走下面的尝试启动,不拿关闭当回避。
+        _off = nats_off_reason()
+        if _off:
+            get_nats_bus().enable_local_fallback(_off)
+            return {"ok": False, "url": "", "error": "", "hint": "", "disabled": True, "reason": _off}
         nats_url = os.environ.get("GALAXY_NATS_URL")
         embedded_error = ""
         embedded_hint = ""
@@ -2123,10 +2124,10 @@ class GalaxyUnified:
         elif _nats_res.get("disabled"):
             # 按配置显式关闭 —— 是配置意图而非故障;单机模式正常,如实标注影响。
             nats_ok = False
-            bus_value = "单机模式正常(进程内总线)· NATS 按配置关闭,跨设备分发不可用"
-            bus_details.append(("NATS Bus", "按配置未启用(GALAXY_NATS_ENABLED=false)", "warn"))
+            bus_value = "单机模式正常(进程内总线)· 没起 NATS,跨设备分发不可用"
+            bus_details.append(("NATS Bus", f"未启用:{_nats_res.get('reason') or '按配置关闭'}", "info"))
             bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内总线正常工作", "info"))
-            bus_hint = "如需跨设备:设 GALAXY_NATS_ENABLED=true 并确保 nats-server 可运行"
+            bus_hint = "如需跨设备:面板打开「跨设备」(会一并开总线)并确保 nats-server 可运行"
         else:
             # 诚实降级但语气为"单机模式正常"(所有者指令):NATS 起不来不是单机
             # 故障——进程内总线已自动接管全部单机语义,失败原因与放行指引照展示。

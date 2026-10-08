@@ -14,6 +14,8 @@
 
 from typing import Any, Dict
 
+from core.routes.config_schema_multimachine import MULTI_MACHINE_SCHEMA
+
 # 所有支持的配置项（键 → {默认值, 类型, 类别, 描述}）
 CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # --- LLM Providers (API Keys) ---
@@ -384,13 +386,11 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "devices",
         "description": "局域网零配置发现(mDNS · 手机/手表免输 IP 自动发现网关)",
     },
-    # 这三条的说明原先只有一句英文,面板上照原样显示,中文用户看不懂开了会发生什么。
-    # 是这一轮把守卫范围扩到 launcher/ 之后,启动器读到它们才连带扫出来的。
     "GALAXY_NATS_ENABLED": {
-        "default": "true",
+        "default": "true",  # 跨设备按钮开着时它该是什么(并进整档的成员);没写时代码按模式判(nats_wanted),不钉进 .env
         "type": "boolean",
         "category": "devices",
-        "description": "启用 NATS 消息总线（多设备协同的传输底座;单机自用可以关 · 默认开）",
+        "description": "NATS 消息总线（多设备协同的传输底座 · 没写就跟着运行模式:本地模式不起、跨设备模式才起;写 true/false 可强行指定）",
     },
     "GALAXY_NATS_URL": {
         "default": "",  # 留空 = 内置总线;登记成非空,「保存设置」就替人填了一个地址
@@ -2105,11 +2105,9 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
     # core/agent/multimodal_messages.native_audio_wanted() 里:图像不发原生就是
     # 什么都没有,而音频已经有 ASR 把"他说了什么"转成文字了,原生多出来的只有
     # 语气/环境声那一部分 —— 不是每轮都值那个 token 钱。
-    # ── 记忆里的媒体:留存与回放 ──────────────────────────────────────
-    #
-    # 在这几个键之前,记忆是"找得到、看不见":CLIP/CLAP 把截图和录音编成向量,
-    # 所以一句话能召回它们 —— 但字节在摄入完就被删了(metadata 里那个 media_path
-    # 指向一个保证已不存在的临时文件),召回之后没有任何东西能把画面拿回来。
+    # ── 记忆里的媒体:留存与回放 ──
+    # 在这几个键之前记忆是"找得到、看不见":CLIP/CLAP 把截图和录音编成向量,一句话能召回它们,
+    # 但字节摄入完就被删了(media_path 指向保证已不存在的临时文件),召回后没有东西能把画面拿回来。
     "GALAXY_MEMORY_MEDIA": {
         "default": "false",
         "type": "boolean",
@@ -2663,3 +2661,5 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "网关适配器死信队列的主题名（处理不了的消息扔这儿）",
     },
 }
+
+CONFIG_SCHEMA.update(MULTI_MACHINE_SCHEMA)  # 多机模式那批键(行数基线已满,另放一个文件)

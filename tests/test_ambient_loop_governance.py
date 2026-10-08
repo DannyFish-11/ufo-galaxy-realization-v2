@@ -110,6 +110,16 @@ def _limits(**kw) -> AmbientLimits:
     return AmbientLimits(**kw)
 
 
+@pytest.fixture(autouse=True)
+def _no_rest_between_ticks(monkeypatch):
+    """这里测的是额度与期限，不是「用时 T 秒歇 3T 秒」（那一条在 ``test_ambient_yields_to_the_user`` 里）。
+
+    歇息按第一拍**实际用时**算：冷启动慢的机器上（第一拍里要把桌面在场运行时现建起来），
+    第二拍会被歇息挡下、返回 ``None``，断言就在 ``second.action`` 上炸 —— 与额度无关。
+    """
+    monkeypatch.setattr("core.ambient_yield._REST_FACTOR", 0.0)
+
+
 @pytest.fixture
 def spoken():
     """替掉朗读与「说给面板」「记进主线」—— 谁被调用了，一目了然。"""
@@ -328,7 +338,12 @@ async def test_a_stuck_transcription_costs_the_beat_its_voice_not_the_loop(spoke
         governor=AmbientGovernor(_limits(listen_deadline_s=0.1)),
     )
     try:
-        with patch("core.modality_bridge.transcribe_b64", stuck):
+        # 听写引擎「已就绪」：测的是已就绪但一次转写卡住的情形（引擎还在下载的情形见
+        # test_ambient_listening_does_not_park_threads_while_the_asr_downloads.py）
+        with (
+            patch("core.modality_bridge.transcribe_b64", stuck),
+            patch("core.modality_bridge.can_listen_now", lambda: True),
+        ):
             decision = await asyncio.wait_for(loop.tick(), 3)
     finally:
         release.set()

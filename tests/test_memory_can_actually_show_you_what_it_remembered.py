@@ -283,3 +283,33 @@ class TestTheChainIsWiredEndToEnd:
 
         assert key in CONFIG_SCHEMA, f"{key} 只认环境变量,面板上配不了 —— 等于没有开关"
         assert CONFIG_SCHEMA[key]["category"] == "memory"
+
+
+class TestOneAnswerForTheMediaSwitch:
+    """「截图/录音存不存盘」只有一个答案：入口与存储层问的是同一个函数，默认都是关。
+
+    被修的问题：入口按「没写 = 关」、存储层按「没写 = 开」—— 不经入口直接调 ``remember_media()`` 的路径
+    （桌面闭环每一步的截图）在没人打开开关时照样落盘，而面板上写着「默认关」。
+    """
+
+    def test_default_is_off_in_the_store_layer(self, monkeypatch):
+        from core.memory import media_store
+
+        monkeypatch.delenv("GALAXY_MEMORY_MEDIA", raising=False)
+        assert media_store.enabled() is False
+
+    @pytest.mark.parametrize("raw,expected", [("1", True), ("true", True), ("on", True), ("0", False), ("", False)])
+    def test_the_store_layer_reads_the_switch(self, monkeypatch, raw, expected):
+        from core.memory import media_store
+
+        monkeypatch.setenv("GALAXY_MEMORY_MEDIA", raw)
+        assert media_store.enabled() is expected
+
+    def test_entry_points_ask_the_same_function_not_their_own_default(self):
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parent.parent
+        for rel in ("core/session_memory_facade.py", "galaxy_gateway/websocket_handler.py"):
+            src = (root / rel).read_text(encoding="utf-8")
+            assert 'getenv("GALAXY_MEMORY_MEDIA"' not in src, f"{rel} 又自己判了一遍 GALAXY_MEMORY_MEDIA 的默认"
+            assert "media_store import enabled" in src, f"{rel} 没有问 media_store.enabled()"

@@ -49,8 +49,18 @@ def test_the_built_page_carries_the_same_marker():
 
 
 def test_the_shell_still_rounds_its_own_corners():
-    m = re.search(r"\.shell\s*\{[^}]*border-radius:\s*(\d+)px", _css())
-    assert m and int(m.group(1)) >= 16
+    css = _css()
+    radius = re.search(r":root\s*\{\s*--shell-r:\s*(\d+)px", css)
+    assert radius and int(radius.group(1)) >= 16
+    assert re.search(r"\.shell\s*\{[^}]*border-radius:\s*var\(--shell-r\)", css), ".shell 的圆角要取同一个半径"
+
+
+def test_the_desktop_window_itself_is_clipped_to_that_same_radius():
+    """透明窗口里，圆角之外任何一层漏出来的内容（滚动条、阴影、子层）都会画成方角。
+    把整个 html 按同一个半径裁掉，圆角外就一个像素也不会有。"""
+    css = _css()
+    m = re.search(r"html\[data-shell='desktop'\]\s*\{[^}]*clip-path:\s*inset\(0 round var\(--shell-r\)\)", css)
+    assert m, "桌面外壳的 html 要按 --shell-r 裁圆角"
 
 
 def test_the_transparent_panel_window_does_not_ask_the_os_for_a_rectangular_shadow():

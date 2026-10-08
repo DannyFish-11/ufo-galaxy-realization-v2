@@ -401,6 +401,7 @@ class TestHealthCheckTimeout:
 
             launcher = NodeSystemLauncher.__new__(NodeSystemLauncher)
             launcher._node_failure_reasons = {}  # __new__ 绕过 __init__,补齐分类容器
+            launcher._node_failure_details = {}
             launcher.service_manager = MagicMock()
             launcher.service_manager.register_service = MagicMock()
             launcher.service_manager.start_service = AsyncMock(return_value=True)

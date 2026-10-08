@@ -31,7 +31,7 @@ sits between raw device state and actual task dispatch.
 │  Layer 3 — Formation/Mesh     core/mesh_participation_summary│
 │  Layer 4 — Capability         core/capability_registry.py    │
 │  Layer 5 — Target Validation  core/target_device_validator   │
-│  Layer 6 — Candidate Res.     core/cross_device_candidates   │
+│  Layer 6 — Candidate Res.     core/device_selection          │
 │  Layer 7 — Constellation Gate core/constellation_runtime     │
 │  Layer 8 — Cross-Device Policy core/cross_device_policy/     │
 │  Layer 9 — Failure Domains    core/failure_domains.py        │
@@ -186,31 +186,30 @@ and Layer 2 (participation), then combines into a single validation result.
 
 ---
 
-### Layer 6 — Cross-Device Candidate Resolution (`core/cross_device_candidates.py`)
+### Layer 6 — Cross-Device Candidate Resolution (`core/device_selection/canonical_device_selector.py`)
 
-**Authority sentinel**: `CROSS_DEVICE_CANDIDATES_AUTHORITY`
+> 这一节原先写的是 `core/cross_device_candidates.py` 与 `resolve_cross_device_candidates()` —— **全仓不存在**
+> （文档先于代码写成，代码后来落在了别处，文档没跟着改）。下面是实际存在的东西。
 
 **Question answered**: For an open cross-device execution request (no explicit
 target or multiple targets needed), which devices are selected?
 
-**Source of truth**: Combines Layers 1 + 2 + 4 in order:
-1. Readiness gate (Layer 1)
-2. Orchestration eligibility gate (Layer 2, optional)
-3. Capability gate (Layer 4)
+**Source of truth**: ``assess_device_participation(device, router_liveness)`` 给每台设备一份
+``DeviceParticipationStatus``（已注册 / 运行时在场 / 可路由 / 跨设备可参与 / 编排可参与，各自带原因串）；
+候选集由下面两个选择函数从中筛出，**设备清单只认规范的 ``RegisteredRuntimeDevice`` 投影，不另建设备表**。
 
 **Key types**:
-- `CrossDeviceCandidate` — per-device eligibility record
-- `CrossDeviceCandidateResolution` — full resolution result with selected/eligible sets
+- `DeviceParticipationStatus` — 一台设备此刻能不能参与、为什么
+- `CanonicalDeviceSelectionEntry` — 被选中的设备 + 它的参与状态
 
 **Key helpers**:
-- `resolve_cross_device_candidates(required_capabilities, requested_target_device, require_orchestration_eligible)`
-- `get_selected_cross_device_candidates(...)` — convenience wrapper
+- `select_cross_device_candidates(devices, router_liveness=None)` — 跨设备可参与的
+- `select_orchestration_candidates(devices, router_liveness=None, required_capabilities=None)` — 更严：编排可参与，
+  并可按设备声明的能力再收窄
 
 **Design constraints**:
-- When `requested_target_device` is provided, only that device is evaluated
-  (effectively a single-candidate pass of Layer 5 logic).
-- When no target is specified, all known devices are evaluated.
-- Every exclusion decision is logged with a structured reason string.
+- 路由器的存活信息只**补充** `routable`，不能顶替规范的身份与注册事实；
+- 出任何错返回空列表、不抛异常；每次排除都有结构化原因串。
 
 ---
 

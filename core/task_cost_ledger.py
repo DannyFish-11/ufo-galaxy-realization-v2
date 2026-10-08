@@ -33,9 +33,11 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.data_paths import data_path
+
 logger = logging.getLogger("Galaxy.TaskCostLedger")
 
-_LEDGER_PATH_DEFAULT = "data/task_cost_ledger.jsonl"
+_LEDGER_PATH_DEFAULT = data_path("task_cost_ledger.jsonl")
 
 
 @dataclass

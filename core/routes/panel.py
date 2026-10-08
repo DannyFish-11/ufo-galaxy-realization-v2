@@ -589,9 +589,17 @@ def _assemble_panel_feed(st: Any) -> dict:
 
 # 大 payload 序列化提速:orjson(requirements 已有)比标准 json 快数倍;
 # 环境缺 orjson 时静默退回默认 JSONResponse,不新增硬依赖。
+#
+# 不用 fastapi.responses.ORJSONResponse:新版 FastAPI 把它标成弃用,每次调用都在控制台刷一条
+# FastAPIDeprecationWarning(Windows 真机日志里整屏都是)。自己继承 JSONResponse、只换 render,
+# 序列化选项与原来一致。
 try:
-    import orjson as _orjson  # noqa: F401
-    from fastapi.responses import ORJSONResponse as _FeedResponse  # type: ignore
+    import orjson as _orjson
+
+    class _FeedResponse(JSONResponse):  # type: ignore[no-redef]
+        def render(self, content: Any) -> bytes:
+            return _orjson.dumps(content, option=_orjson.OPT_NON_STR_KEYS | _orjson.OPT_SERIALIZE_NUMPY)
+
 except Exception:  # noqa: BLE001
     _FeedResponse = JSONResponse  # type: ignore
 

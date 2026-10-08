@@ -354,3 +354,65 @@ def test_real_x_mouse_clipboard_and_screenshot(xvfb):
     shot = ex.execute("screenshot", {})
     assert base64.b64decode(shot["image_base64"])[:8] == b"\x89PNG\r\n\x1a\n"
     assert ex.execute("screen_size", {}) == {"success": True, "width": 800, "height": 600}
+
+
+# ── 两种命令形状都要能执行 ──────────────────────────────────────────────────────
+
+
+def _client_that_records(monkeypatch):
+    """一台不连网的客户端：动作交给一个替身执行，回出去的消息收进列表。"""
+    import asyncio
+
+    from device_client.client import DeviceClient
+    from device_client.executors import DesktopExecutor
+
+    class Echo(DesktopExecutor):
+        name = "echo"
+        platform = "linux"
+
+        def available(self):
+            return True, ""
+
+        def supported_actions(self):
+            return ["ping"]
+
+        def execute(self, action, params):
+            return {"success": True, "action": action, "params": params}
+
+    client = DeviceClient(Echo(), state={"device_id": "lap-1"})
+    sent = []
+
+    async def _send(msg):
+        sent.append(msg)
+
+    monkeypatch.setattr(client, "_send", _send)
+    return client, sent, asyncio
+
+
+def test_the_command_router_shape_is_executed_and_answered(monkeypatch):
+    client, sent, asyncio = _client_that_records(monkeypatch)
+    asyncio.run(client._handle_message({"type": "command", "command": "ping", "params": {"a": 1}, "command_id": "c1"}))
+    assert [m["type"] for m in sent] == ["command_result"]
+    assert sent[0]["command_id"] == "c1" and sent[0]["payload"]["action"] == "ping"
+
+
+def test_the_rest_aip_v3_shape_is_executed_and_answered_too(monkeypatch):
+    """``POST /api/v1/devices/{id}/command`` 发的是 AIP v3 的 CONTROL_COMMAND。
+
+    此前客户端只认 ``type=command``：REST 回「命令已发送」，设备把它当成「未处理的消息类型」丢掉，什么也没做。
+    """
+    client, sent, asyncio = _client_that_records(monkeypatch)
+    asyncio.run(
+        client._handle_message(
+            {
+                "version": "3.0",
+                "type": "CONTROL_COMMAND",
+                "message_id": "m9",
+                "device_id": "lap-1",
+                "payload": {"command": "ping", "params": {"b": 2}},
+            }
+        )
+    )
+    assert [m["type"] for m in sent] == ["command_result"], "CONTROL_COMMAND 没有被执行/回应"
+    assert sent[0]["command_id"] == "m9"
+    assert sent[0]["payload"]["action"] == "ping" and sent[0]["payload"]["params"] == {"b": 2}

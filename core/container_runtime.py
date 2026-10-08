@@ -528,6 +528,42 @@ def daemon_up(rt: str) -> bool:
         return False
 
 
+def try_start_podman_machine(podman_path: str) -> str:
+    """Windows / macOS：Podman 跑在虚机里，``podman info`` 不通 = 虚机没在跑 —— 把它拉起来。永不抛出。
+
+    和 Docker 那边拉 Docker Desktop 是同一类动作。以前只有「引擎已通、API socket 没起来」时才会
+    ``machine start``（见 :func:`launcher.services._try_start_podman_api`）；引擎本身不通就直接放弃，只叫人自己去敲
+    命令（真机：``虚机没起来,试 podman machine start 后重跑``）。
+
+    返回 ``"none"``（一台虚机都没建过，``machine start`` 必然失败；建虚机要下载镜像，不替人做）、
+    ``"running"``（虚机在跑，info 不通是别的原因，不重复启动）或 ``"starting"``（已发出启动，
+    不等 —— 虚机启动很慢，上层有轮询）。
+    """
+    machines = None
+    try:
+        r = subprocess.run(
+            [podman_path, "machine", "list", "--format", "json"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+        )
+        if r.returncode == 0:
+            machines = json.loads(r.stdout or "[]")
+    except Exception:  # noqa: BLE001 — 问不到就当不知道，照样试着启动
+        machines = None
+    if machines == []:
+        return "none"
+    if isinstance(machines, list) and any(isinstance(m, dict) and m.get("Running") for m in machines):
+        return "running"
+    try:
+        subprocess.Popen([podman_path, "machine", "start"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:  # noqa: BLE001
+        pass
+    return "starting"
+
+
 def podman_api_socket() -> Tuple[str, bool]:
     """Podman 的 API socket 路径,以及它此刻在不在。返回 ``(路径, 存在)``。
 

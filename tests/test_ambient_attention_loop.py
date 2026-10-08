@@ -100,6 +100,16 @@ class FakeDecider:
         return self.decision
 
 
+@pytest.fixture(autouse=True)
+def _no_rest_between_ticks(monkeypatch):
+    """这里测的是门控，不是「用时 T 秒歇 3T 秒」（那一条在 ``test_ambient_yields_to_the_user`` 里）。
+
+    歇息按第一拍**实际用时**算，而桩决策本身是瞬时的：算进去的是事件循环里别的任务（桌面在场运行时
+    冷启动时排在前面的那几个）占的时间。慢一点的机器上第二拍会被歇息挡成 ``None``。
+    """
+    monkeypatch.setattr("core.ambient_yield._REST_FACTOR", 0.0)
+
+
 def _loop(store, decider, **kw):
     return AmbientAttentionLoop(
         decider=decider,
@@ -242,6 +252,7 @@ class TestAmbientHearing:
         import core.modality_bridge as mb
 
         monkeypatch.setattr(mb, "transcribe_b64", lambda b64, mime="audio/webm", language="zh": "用户说了话")
+        monkeypatch.setattr(mb, "can_listen_now", lambda: True)  # 听写引擎「已就绪」
         store = FakeStore({"camera_b64": _BLACK, "audio_b64": "AAAA", "audio_mime": "audio/webm"})
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)

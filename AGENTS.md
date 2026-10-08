@@ -40,7 +40,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/unified_config.py` - 统一配置管理器
 - `config.json` - 主配置文件
 - `.env` - 环境变量（API Key）
-- `GALAXY_DATA_DIR` - 运行时数据目录（缺省仓库 `data/`）。**所有**持久化状态都认它，设备注册表也不例外 —— 新加的持久化点别写死路径，`tests/conftest.py` 靠它把测试状态隔离到临时目录
+- `GALAXY_DATA_DIR` - 运行时数据目录（缺省仓库 `data/`）。**所有**持久化状态都认它，设备注册表也不例外 —— 新加的持久化点用 `core.data_paths.data_path(...)`，别写死 `"data/..."`，`tests/conftest.py` 靠它把测试状态隔离到临时目录。面板「保存设置」重写 `.env` 时，登记表之外的手写行（compose 口令、端口、镜像站……）原样带回（`core/routes/config_env_preserve.py`）
 
 ### 设备管理
 - `core/device_registry.py` - 设备注册和发现
@@ -81,6 +81,17 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 > **决策路径不得从检索到的文本里反解结构。**
 > 与 `pattern_miner` 的策略模式挖掘存在职责重叠，边界见
 > `EXPERIENCE_GUIDANCE_PATTERN_MINER_BOUNDARY` 哨兵。
+
+### 面板上的「模型服务商」
+- `core/provider_catalog.py` - 面板逐厂商填 Key 的目录（`GET /api/v1/models/providers`）：厂商中文名 / 分组 / 该填哪几个键 / 是否已配 / 路由器里是否可用。**不下发密钥值**，只有布尔。
+  `PROVIDER_REGISTRY` 多一家而没写展示信息，`tests/test_provider_catalog_covers_every_key.py` 会红。
+- `core/routing_tail.py` - 偏好表没列、但已配好可用的厂商（用户自加端点、OneAPI、只配了 Groq 的人做推理任务）排在失败转移链的最后几档；有意不自动参与的（智谱编码套餐）不进这一档
+
+### 事件循环里不跑阻塞的事
+Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示 5–7 秒」= 循环被一件同步的事占住了。已经挪出循环的：开麦克风 / 枚举音频设备
+（`core/multimodal/audio_ingest.py`、`system_audio_capture_service.py`）、第一次选 TTS 引擎（`core.speech_output.speech_engine_ready()`）、创建节点进程
+（`launcher/service_manager.py`）、拓扑图整份落盘（启动时的一百多次登记合成一次，`core/persist_batch.py`）、每个 httpx 客户端各载一遍 CA 证书
+（`core/shared_tls.py`）。**节点子进程的输出写 `logs/nodes/<名字>.log`，不接管道**（没人读的管道写满，子进程卡死在 write() 里；Windows 管道缓冲只有 4KB）。
 
 ### 模型选择：智能路由多一个「用途」维度
 `core/multi_llm_router.py` 的打分（质量 × 复杂度、成本、延迟、实测表现）是**一个**函数 `_fit_scorer`，

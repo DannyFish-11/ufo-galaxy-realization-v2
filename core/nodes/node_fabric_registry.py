@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
+from core.data_paths import data_path
 from core.runtime_truth_governance import (
     RECOVERY_STATUS_LIVE,
     RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
@@ -52,8 +53,7 @@ _DEFAULT_HEARTBEAT_TTL: float = 60.0  # 节点心跳超时（秒）
 _DEFAULT_STALE_CAP_TTL: float = 300.0  # 能力条目过期（秒）；0 = 永不过期
 _NODE_FABRIC_STATE_PATH_ENV: str = "GALAXY_NODE_FABRIC_REGISTRY_STATE_PATH"
 _DEFAULT_NODE_FABRIC_STATE_PATH: str = os.getenv(
-    _NODE_FABRIC_STATE_PATH_ENV,
-    "data/runtime/node_fabric_registry_state.json",
+    _NODE_FABRIC_STATE_PATH_ENV, data_path("runtime", "node_fabric_registry_state.json")
 )
 
 

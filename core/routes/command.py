@@ -38,6 +38,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
+from core.nats_dispatch_bridge import dispatch_to_nats_worker
 from core.node_invocation import InvocationSource, invoke_node
 from core.routes._helpers import nodes_root
 from core.routes._models import (
@@ -425,9 +426,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             "type": "command",
                             "command": command,
                             "params": params,
+                            "command_id": params.get("_galaxy_task_id", ""),  # 设备回的结果靠它对上号
                         },
                     )
                     return {"sent_to_device": target, "success": sent}
+                # 既不是节点、也没通过 WebSocket 连上:可能是只挂在 NATS 上的 worker(多机模式第三条路)
+                if (via_nats := await dispatch_to_nats_worker(target, command, params)) is not None:
+                    return via_nats
                 return {"error": f"Target {target} not found"}
 
         result = await invoke_node(

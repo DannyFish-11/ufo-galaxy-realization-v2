@@ -423,8 +423,10 @@ class AmbientAttentionLoop(AmbientYieldMixin):
         if not obs.audio_b64:
             return
         try:
-            from core.modality_bridge import transcribe_b64
+            from core.modality_bridge import can_listen_now, transcribe_b64
 
+            if not can_listen_now():  # 听写引擎还在准备:这一拍不带声音内容,不去线程池里空等
+                return
             obs.audio_transcript = await asyncio.to_thread(
                 transcribe_b64,
                 obs.audio_b64,

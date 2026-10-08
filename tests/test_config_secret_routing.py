@@ -72,7 +72,7 @@ def test_persist_failure_leaves_os_environ_untouched(monkeypatch):
     monkeypatch.setattr(cfg, "_write_env_file_with", _boom)
     assert "GALAXY_SPEAK" not in os.environ
     with pytest.raises(HTTPException) as ei:
-        _run({"GALAXY_SPEAK": "1"})
+        _run({"GALAXY_SPEAK": "0"})
     assert ei.value.status_code == 500
     assert "未改动任何配置" in str(ei.value.detail)
     # 关键:未改动 os.environ → "已配置"如实保持 false,不与"保存失败"矛盾
@@ -80,7 +80,7 @@ def test_persist_failure_leaves_os_environ_untouched(monkeypatch):
 
 
 def test_secret_goes_to_canonical_store_not_plaintext_dotenv():
-    _run({"DEEPSEEK_API_KEY": "sk-secret-xyz", "GALAXY_SPEAK": "1"})
+    _run({"DEEPSEEK_API_KEY": "sk-secret-xyz", "GALAXY_SPEAK": "0"})
     # 密钥进 canonical 密钥库
     assert _FakeCS.store.get("DEEPSEEK_API_KEY") == "sk-secret-xyz"
     env_text = cfg.ENV_FILE.read_text(encoding="utf-8")
@@ -88,7 +88,7 @@ def test_secret_goes_to_canonical_store_not_plaintext_dotenv():
     assert "sk-secret-xyz" not in env_text
     assert "DEEPSEEK_API_KEY" not in env_text
     # 非密钥的运行时开关仍走 .env
-    assert "GALAXY_SPEAK=1" in env_text
+    assert "GALAXY_SPEAK=0" in env_text
     # os.environ 当次即时生效
     assert os.environ["DEEPSEEK_API_KEY"] == "sk-secret-xyz"
 
@@ -107,11 +107,11 @@ def test_secret_falls_back_to_dotenv_when_store_unavailable(monkeypatch):
 def test_write_env_file_excludes_given_keys(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "ENV_FILE", tmp_path / ".env")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-in-env")
-    monkeypatch.setenv("GALAXY_SPEAK", "1")
+    monkeypatch.setenv("GALAXY_SPEAK", "0")
     cfg._write_env_file(exclude={"DEEPSEEK_API_KEY"})
     text = cfg.ENV_FILE.read_text(encoding="utf-8")
     assert "DEEPSEEK_API_KEY" not in text  # 被排除
-    assert "GALAXY_SPEAK=1" in text
+    assert "GALAXY_SPEAK=0" in text
 
 
 # ---------------------------------------------------------------------------
@@ -134,11 +134,11 @@ def test_previously_persisted_secret_not_leaked_by_unrelated_save(monkeypatch):
     # 模拟:该密钥早已安全存好,当前进程里也在 os.environ(preflight 加载/上次
     # 请求 os.environ.update 的结果)——但本次请求根本没提交它。
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-already-persisted")
-    _run({"GALAXY_SPEAK": "1"})  # 只改一个完全无关的开关
+    _run({"GALAXY_SPEAK": "0"})  # 只改一个完全无关的开关
     env_text = cfg.ENV_FILE.read_text(encoding="utf-8")
     assert "ANTHROPIC_API_KEY" not in env_text
     assert "sk-ant-already-persisted" not in env_text
-    assert "GALAXY_SPEAK=1" in env_text
+    assert "GALAXY_SPEAK=0" in env_text
 
 
 def test_save_endpoint_does_not_leak_all_secrets(monkeypatch):
@@ -163,6 +163,6 @@ def test_read_secrets_failure_does_not_block_write(monkeypatch):
         raise OSError("secrets.env corrupted")
 
     monkeypatch.setattr("core.config_store.get_config_store", _boom)
-    _run({"GALAXY_SPEAK": "1"})
+    _run({"GALAXY_SPEAK": "0"})
     env_text = cfg.ENV_FILE.read_text(encoding="utf-8")
-    assert "GALAXY_SPEAK=1" in env_text
+    assert "GALAXY_SPEAK=0" in env_text

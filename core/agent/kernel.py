@@ -823,10 +823,12 @@ class AgentKernel:
             mods = modalities_of(multimodal_context)
             if mods:
                 metadata["modalities"] = mods
+            from core.anticipatory_context import strip_appended_annotations
+
             await record_session_turn(
                 conversation_session_id=session_id,
                 role="user",
-                content=user_msg,
+                content=strip_appended_annotations(user_msg),  # 面板读的就是它：不能带机器注解
                 device_id=device_id,
                 metadata=metadata,
             )

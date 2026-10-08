@@ -193,10 +193,16 @@ class DeviceClient:
             await self._send(self._task_result_msg(task_id, result))
             return
 
-        if msg_type == "command":
-            cmd_id = data.get("command_id", "")
-            command = data.get("command", "")
-            params = data.get("params", {})
+        if msg_type in ("command", "CONTROL_COMMAND"):
+            # 两种形状：命令路由推来的 {type:"command", command, params, command_id}，
+            # 和 REST /api/v1/devices/{id}/command 发的 AIP v3 {type:"CONTROL_COMMAND", message_id, payload:{command, params}}。
+            # 此前只认前一种 —— 后一种落进「未处理的消息类型」，接口回「命令已发送」，设备却什么也没做。
+            body = (
+                data.get("payload") if msg_type == "CONTROL_COMMAND" and isinstance(data.get("payload"), dict) else data
+            )
+            cmd_id = data.get("command_id") or data.get("message_id", "")
+            command = body.get("command", "")
+            params = body.get("params", {})
             if command == "agent_execute":
                 agent_payload = params if isinstance(params, dict) else {}
                 for field in ("agent_id", "task_id", "trace_id", "session_id"):
