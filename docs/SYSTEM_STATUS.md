@@ -420,6 +420,17 @@ python scripts/check_assessment_freshness.py
 - 验证：`tests/test_the_api_entry_is_inline_rows_not_cards.py`（在旧的卡片样式上四条全红）、`tests/test_panel_motion_stops_when_asked.py`；`panel/dist/` 已重建；面板相关 65 个测试文件 1815 条通过。
 - 截图里圆角外的「四个白角」是我渲染时没开透明背景（Chromium 截图默认白底），产品里窗口圆角外本来就是透明的（四角像素 alpha=0）；之后的截图一律透明背景 + 合成到壁纸上。
 
+### 6.11 2026-10-08：面板「全部设置」——已并进整体的删掉，其余全部翻成中文
+
+所有者：「所有面板多余的开关，该删的都删了，就是已经整合成一个整体的，该删的都删。如果不是的话，就把那些全部翻译成相关的中文。」
+
+- **删掉（设置页不再摆）**：整档按钮的三个主键 —— `GALAXY_CROSS_DEVICE_ENABLED`（跨设备）、`GALAXY_AMBIENT_LOOP`（全模态）、`GALAXY_AUTONOMY`（自主）。底部那排按钮已经是它们的开关，设置页里又摆一行 = 同一件事两处能拨。后端 `/api/config/all` 给这三个键标 `bundle`（取自 `CONFIG_BUNDLES`，唯一来源），前端据此跳过；值照给、`POST /api/config` 照收。随主键走的成员开关与「内置 / 运维」开关此前就已经不列了。其余 `owns` 里的开关（主脑、联邦、Tailscale Funnel、WebRTC 数据通道、主动感知、屏幕变化触发开口、系统声进感知）**没有**删：它们是各自独立的取舍，不是「主键开它就该开」，理由写在 `config_bundles.py` 里。
+- **翻译**：设置页 315 个键里 281 个列出（另 31 个是厂商卡认领的，卡拉不到时才会全列，也都有名字）。每行行首原先是环境变量名（`GALAXY_AEC_RES_FLOOR_DB`），现在是**短中文名**（`远端单讲的抑制下限`），环境变量名退到悬停提示；名字下面的说明去掉与名字重复的开头。每个下拉的每一档也有中文名（`best-effort`→「尽力而为」、`shadow`→「只在隔离区验证」、`ask`→「每次问我」……），下拉键的说明改用中文档名重写，不再夹 `env=` / `strict=` 这类原始取值。「已改过，默认 X」里的 X 也是中文档名。
+- **取值其实只有几个的字符串键**（`auto / 1 / 0`：全双工、声字同文、自动拉容器、精简工具集、保留上轮工具、空闲预演、投机解码草稿；`enforce / warn / off`：MCP 清单复验、出站管控；`auto / container / builtin`：自写代码的隔离方式；`off / on`：按需加载工具）原先是一个让人敲字的文本框，现在按档位牌画；登记表里它们仍是 string（只改了展示层），默认值必须是其中一档（测试核对）。
+- **顺带查出两个名实不符的登记**：`GALAXY_MODE` 登记的 `distributed / federated / standalone` 三档**没有任何读者**，代码里只有 `production` 有读者（强制开鉴权、要求令牌 ≥32 位）—— 改成 `standard / production`，说明里写明后果；`GALAXY_PREFLIGHT_MODE` 登记的 `normal / strict / skip` 命令行根本不认（`argparse choices` 是 `auto/all/core/gateway/android/ws/vault`），而「保存设置」会把默认值写进 `.env`，等于手动跑预检就报错 —— 改成它真正接受的取值，默认 `all`。
+- 机制：`core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`）只管**说法**，不管列不列、默认、生效与否；`tests/test_every_listed_setting_has_a_chinese_name.py` 钉住：`/api/config/all` 列出的每个键都有 2–20 字、含汉字、全表不重名的中文名；每个下拉取值都有中文名；表里没有过期的键；说明不重复名字、下拉说明不带原始取值；`GALAXY_MODE` / `GALAXY_PREFLIGHT_MODE` 的取值与代码读到的一致。**新增一个会列在面板上的配置，不补这张表测试会红。**
+- 验证：真服务器 + Chromium 逐段看过（说话与听 / 安全与权限 / 进阶），281 行行首无一行英文键名、三个主键已不在；`panel/dist/` 已重建。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
