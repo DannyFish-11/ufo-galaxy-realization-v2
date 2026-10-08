@@ -31,6 +31,7 @@ from core.routes.config_labels import hint_for, label_for, option_labels_for  # 
 from core.routes.config_restart import any_requires_restart, restart_reason  # noqa: E402
 from core.routes.config_schema_registry import CONFIG_SCHEMA  # noqa: E402
 from core.routes.panel_switch_policy import PANEL_HIDDEN_SWITCH_KEYS  # noqa: E402
+from core.tuning import knob_keys  # noqa: E402
 
 # 配置项总表已拆到 core/routes/config_schema_registry.py(纯声明表,1900+ 行)。
 # 上面的 CONFIG_SCHEMA 就是 re-export,既有的 `from core.routes.config import CONFIG_SCHEMA` 不受影响。
@@ -74,6 +75,9 @@ PANEL_HIDDEN_KEYS = (
     | PANEL_HIDDEN_SWITCH_KEYS
 )
 
+
+#: 「调数据方式」的参数：不上面板，由智能体按人的话调（core/tuning.py）。
+_TUNING = knob_keys()
 
 _TRUE_TEXT = frozenset({"1", "true", "yes", "on"})
 _FALSE_TEXT = frozenset({"0", "false", "no", "off", ""})
@@ -200,8 +204,8 @@ async def get_config():
     bundle_of = {b["primary"]: b["key"] for b in CONFIG_BUNDLES}
     result = {}
     for key, meta in CONFIG_SCHEMA.items():
-        if key in PANEL_HIDDEN_KEYS:
-            continue  # 登记了、能存能读,只是不列在面板上(见 PANEL_HIDDEN_KEYS)
+        if key in PANEL_HIDDEN_KEYS or key in _TUNING:
+            continue  # 登记了、能存能读,只是不列在面板上(见 PANEL_HIDDEN_KEYS;调参键见 core/tuning.py)
         is_bool = meta["type"] == "boolean"
         value = os.environ.get(key, meta["default"])
         result[key] = {
@@ -564,6 +568,8 @@ def _write_env_file_with(overrides=None, exclude=None):
         value = _overrides.get(key, os.environ.get(key, meta["default"]))
         if not str(value).strip():
             continue  # 空值不落盘——否则会把代码默认值顶掉
+        if key in _TUNING and key not in _overrides and key not in os.environ:
+            continue  # 调参键没人动过就不钉出厂值进 .env：钉了，以后代码里的自适应常数再调也不会生效
         if _is_hidden_switch_at_default(key, meta, value, key in _overrides or key in os.environ):
             continue  # 内置/运维/已并进整档的开关：没人动过就不往 .env 里钉默认值
         if meta["category"] != current_category:

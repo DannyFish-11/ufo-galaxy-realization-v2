@@ -45,9 +45,14 @@ def test_chinese_names_are_unique():
 
 def test_the_name_table_has_no_stale_keys():
     """键删了、改名了、藏起来了，这里的名字就是一条没人读的死记录。"""
-    stale = sorted(set(config_labels.LABELS) - set(_listed()))
-    assert not stale, f"LABELS 里有设置页不再列出的键: {stale}"
+    from core.tuning import knob_keys
+
+    # 调参键不在面板上，但智能体报出来给人看时也说中文名，所以这里留着它们的名字
+    stale = sorted(set(config_labels.LABELS) - set(_listed()) - knob_keys())
+    assert not stale, f"LABELS 里有设置页不再列出、也不是调参键的: {stale}"
     assert not set(config_labels.LABELS) & PANEL_HIDDEN_KEYS
+    missing = sorted(k for k in knob_keys() if k not in config_labels.LABELS)
+    assert not missing, f"调参键没有中文名，智能体只能报英文键名给人看: {missing}"
 
 
 def test_every_dropdown_value_has_a_chinese_name():
@@ -58,7 +63,11 @@ def test_every_dropdown_value_has_a_chinese_name():
         names = meta.get("option_labels") or {}
         assert set(names) == set(meta["options"]), f"{key}: 档位 {meta['options']} 与中文名 {sorted(names)} 对不上"
         assert all(names.values()), key
-    stale = sorted(set(config_labels.OPTION_LABELS) - {k for k, v in listed.items() if v["type"] == "select"})
+    from core.tuning import knob_keys
+
+    stale = sorted(
+        set(config_labels.OPTION_LABELS) - {k for k, v in listed.items() if v["type"] == "select"} - knob_keys()
+    )
     assert not stale, f"OPTION_LABELS 里有不是下拉键的: {stale}"
 
 
@@ -138,9 +147,12 @@ def test_hint_strips_only_a_real_leading_name():
 
 def test_finite_string_keys_are_drawn_as_dropdowns_and_keep_their_default_choosable():
     """auto / 1 / 0 这类取值有限的字符串键：面板按档位牌画；登记的默认值必须是其中一档。"""
+    from core.tuning import knob_keys
+
     listed = _listed()
-    finite = [k for k in config_labels.OPTION_LABELS if CONFIG_SCHEMA[k]["type"] == "string"]
-    assert {"GALAXY_VOICE_DUPLEX", "GALAXY_MCP_PIN_MODE", "GALAXY_EGRESS_MODE"} <= set(finite)
+    # 调参键（如全双工的 auto/1/0）已不在面板上；留在面板上的取值有限的字符串键仍按档位牌画
+    finite = [k for k in config_labels.OPTION_LABELS if CONFIG_SCHEMA[k]["type"] == "string" and k not in knob_keys()]
+    assert {"GALAXY_MCP_PIN_MODE", "GALAXY_EGRESS_MODE", "GALAXY_EXECUTION_ISOLATION"} <= set(finite)
     for key in finite:
         assert listed[key]["type"] == "select", key
         assert listed[key]["options"] == list(config_labels.OPTION_LABELS[key]), key
