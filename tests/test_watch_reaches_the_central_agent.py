@@ -95,16 +95,31 @@ def _watch_auth_frame(device_id, token):
 
 
 def _watch_register_frame(device_id, token=""):
-    caps = ["notification", "voice_input", "haptic", "interruptibility_telemetry"]
+    """与 galaxy-wearos ``WatchMember.registerFrame`` 同形:令牌在顶层,自报 AIP v3,
+    不报 capabilities 位图(动作清单走 capability_report)。"""
     return {
+        "version": "3.0",
         "type": "device_register",
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
         "token": token,
         "device_type": "wearos",
         "platform": "wearos",
-        "capabilities": caps,
-        "payload": {"device_type": "wearos", "platform": "wearos", "capabilities": caps},
+        "device_name": "OPPO Watch 3",
+        "app_version": "2.0.1",
+        "payload": {"device_type": "wearos", "platform": "wearos", "device_name": "OPPO Watch 3"},
+    }
+
+
+def _watch_capability_report_frame(device_id):
+    """与 ``WatchMember.capabilityReportFrame`` 同形:supported_actions 在顶层。"""
+    return {
+        "version": "3.0",
+        "type": "capability_report",
+        "device_id": device_id,
+        "timestamp": int(time.time() * 1000),
+        "platform": "wearos",
+        "supported_actions": ["notify", "haptic", "get_status"],
     }
 
 
@@ -511,3 +526,193 @@ def test_devices_that_are_not_a_wrist_or_a_phone_are_not_asked(dtype):
     from core.interaction.pending_decision_registry import _is_askable_type
 
     assert not _is_askable_type(dtype)
+
+
+# ---------------------------------------------------------------------------
+# 六、智能体用手表做事,以及「人在手表上说一句 → 智能体要做的事先问手表上的人」
+# ---------------------------------------------------------------------------
+
+
+def _watch_command_result_frame(watch_id, command_id, success, data, error=None):
+    """手表对智能体下发动作的回话 —— 与 galaxy-wearos ``WatchMember.commandResultFrame`` 同形:
+    ``command_id`` 在顶层(网关按它唤醒等待中的调用),结果在 ``payload``。"""
+    payload = {"success": success, **data}
+    if not success:
+        payload["error"] = error or "unknown error"
+    return {
+        # 必须自报 AIP v3:缺 version 的帧被当成 AIP/1.0,而 1.0 里的 command_result 是
+        # 「任务结果」(task_result),会被跨仓 schema 闸门以 missing_schema_version_metadata 拒收 ——
+        # 手表的回话到不了 UCM,智能体的每一次 devices__invoke 都只能等到超时。
+        "version": "3.0",
+        "type": "command_result",
+        "device_id": watch_id,
+        "command_id": command_id,
+        "correlation_id": command_id,
+        "timestamp": int(time.time() * 1000),
+        "success": success,
+        "payload": payload,
+    }
+
+
+def test_the_agent_makes_the_watch_do_something_and_hears_back(gateway, watch_id):
+    """``devices__invoke`` 的下半段:规范派发 → UCM → 手表收到 ``command`` → 手表回 ``command_result`` → 智能体拿到。"""
+    from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
+
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        assert _eventually(lambda: _online(watch_id))
+
+        async def invoke():
+            return await get_canonical_dispatcher().dispatch(
+                f"device__{watch_id}__notify", {"text": "水开了", "title": "厨房"}, session_id="s-1"
+            )
+
+        pending = gateway.portal.start_task_soon(invoke)
+        frame = _recv(ws)
+        assert frame.get("type") == "command", frame
+        assert frame.get("command") == "notify" and frame.get("params") == {"text": "水开了", "title": "厨房"}, frame
+        assert frame.get("command_id"), "没有 command_id,手表无法回话,智能体只会等到超时"
+
+        ws.send_json(_watch_command_result_frame(watch_id, frame["command_id"], True, {"shown": True}))
+        result = pending.result(timeout=10)
+
+    assert result.success is True, result
+    assert result.result.get("shown") is True
+
+
+def test_a_failure_the_watch_reports_reaches_the_agent_with_its_reason(gateway, watch_id):
+    """手表说「做不了」(比如通知权限被拒)时,智能体要拿到失败和原因,而不是「已送达」。"""
+    from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
+
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        assert _eventually(lambda: _online(watch_id))
+
+        async def invoke():
+            return await get_canonical_dispatcher().dispatch(
+                f"device__{watch_id}__notify", {"text": "x"}, session_id="s-2"
+            )
+
+        pending = gateway.portal.start_task_soon(invoke)
+        frame = _recv(ws)
+        ws.send_json(
+            _watch_command_result_frame(watch_id, frame["command_id"], False, {}, error="通知权限被拒,通知不会被看到")
+        )
+        result = pending.result(timeout=10)
+
+    assert result.success is False
+    assert "通知权限被拒" in str(result.error)
+
+
+def _online(device_id):
+    """连接权威(UCM)认不认这台设备在线 —— 智能体的 devices__invoke 看的是它。"""
+    from core.unified.connection_manager import get_unified_connection_manager
+
+    return get_unified_connection_manager().is_device_connected(device_id)
+
+
+@pytest.fixture
+def local_mode(monkeypatch):
+    for k in ("GALAXY_SYSTEM_MODE", "GALAXY_CROSS_DEVICE_ENABLED"):
+        monkeypatch.delenv(k, raising=False)
+
+
+@pytest.fixture
+def bundle_writes(monkeypatch):
+    """批准后真正会去改配置;这里记下它被调用了没有,不让测试去改真实配置。"""
+    writes = []
+
+    async def set_bundle(req):
+        writes.append((req.key, req.value))
+        return {"bundle": {"key": req.key, "value": req.value, "overrides": {}, "restart_required": True}}
+
+    import core.routes.config as cfg
+
+    monkeypatch.setattr(cfg, "set_bundle", set_bundle)
+    return writes
+
+
+def _spoken_turn(source="wear_voice", text="把跨设备打开"):
+    return SimpleNamespace(runtime_session_id="rs-wear-1", source=source, request_text=text)
+
+
+def _request_cross_device_in_a_spoken_turn(gateway, source="wear_voice"):
+    from core.device_onboarding.mode_request import _request_cross_device
+    from core.liminal_activity import bind_runtime_session
+
+    async def run():
+        bind_runtime_session(_spoken_turn(source))
+        return await _request_cross_device("sess-wear-1")
+
+    return gateway.portal.start_task_soon(run)
+
+
+def test_what_the_wearer_asks_for_is_confirmed_on_the_watch_and_then_done(gateway, watch_id, local_mode, bundle_writes):
+    """手表上说「把跨设备打开」→ 智能体要做的是「放开整台电脑能碰哪些设备」这种大权限 →
+    问的是**戴表的人**,在手表上点批准才做。模型只能提,批准只归人。"""
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        assert _eventually(lambda: _online(watch_id))
+        pending = _request_cross_device_in_a_spoken_turn(gateway)
+
+        asked = _recv(ws)
+        assert asked.get("type") == "decision_request", asked
+        assert {o["id"] for o in asked["payload"]["options"]} == {"approve", "deny"}
+        assert bundle_writes == [], "问都没问完就已经改了配置"
+
+        ws.send_json(
+            _watch_command_frame(
+                watch_id,
+                "human_input",
+                {"decision_id": asked["payload"]["decision_id"], "selected_option": "approve", "device": "wear_os"},
+                "cmd_21",
+                21,
+            )
+        )
+        assert _recv(ws).get("type") == "command_result"
+        outcome = pending.result(timeout=15)
+
+    assert outcome.get("success") is True and outcome.get("enabled") is True, outcome
+    assert bundle_writes == [("cross_device", "true")]
+
+
+def test_a_no_on_the_watch_means_nothing_is_done(gateway, watch_id, local_mode, bundle_writes):
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        assert _eventually(lambda: _online(watch_id))
+        pending = _request_cross_device_in_a_spoken_turn(gateway)
+        asked = _recv(ws)
+        ws.send_json(
+            _watch_command_frame(
+                watch_id,
+                "human_input",
+                {"decision_id": asked["payload"]["decision_id"], "selected_option": "deny", "device": "wear_os"},
+                "cmd_22",
+                22,
+            )
+        )
+        _recv(ws)
+        outcome = pending.result(timeout=15)
+
+    assert outcome.get("success") is False, outcome
+    assert bundle_writes == [], "人说了不要,配置还是被改了"
+
+
+def test_a_turn_nobody_spoke_cannot_even_ask(gateway, watch_id, local_mode, bundle_writes):
+    """后台自发的回合(心跳、环境注意力)不是人在说话:连提出都不行,更不会去打扰手腕。"""
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        assert _eventually(lambda: _online(watch_id))
+        outcome = _request_cross_device_in_a_spoken_turn(gateway, source="heartbeat").result(timeout=10)
+    assert outcome.get("success") is False
+    assert bundle_writes == []
+
+
+def test_the_watch_tells_the_agent_what_it_can_do_and_is_not_turned_away(gateway, watch_id):
+    """登记之后的 capability_report 不能被协议闸门拒收 —— 拒收的话智能体不知道这块表能做什么。"""
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        ws.send_json(_watch_capability_report_frame(watch_id))
+        reply = _recv(ws, timeout=3.0)
+        # 成功时网关可以回 ack 也可以不回;唯独不能是 error
+        assert reply.get("type") != "error", reply

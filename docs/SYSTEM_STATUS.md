@@ -453,7 +453,8 @@ python scripts/check_assessment_freshness.py
 - **智能体找手表**：`_discover_target_devices` 只读旧管理器本地表和 REST 登记表，规范入口的手表两处都不在，「在手表上问人」永远找不到手表、一律退回「在对话里问」——而旧测试正是把它替换掉的。现以 UCM 为准。
 - **回复认领**：`command_result.correlation_id` 填的是网关临时生成的 `message_id`，手表按自己发的 `cmd_N` 认领回复，所以语音回复从不进会话记录。现回复带发送方给这次请求起的名字（`galaxy_gateway/command_reply.py`）。
 - **退役**：`phase_report` 命令（手表不再上报三态）回「已忽略」；`core/cross_device_sync._push_phase_to_wearos_devices` 与 `galaxy_gateway/android/handlers/wearos_sync.py`（往手表推三态）已删，手机的相位回推不变。
-- 测试：`tests/test_watch_reaches_the_central_agent.py`（21 条，**不替换发现函数**；先红 13 条后绿；把信任门拿掉后 3 条变红）。
+- **手表对智能体动作的回话（`command_result`）到不了等它的那个调用**：手表自己造的几种帧（登记、报能力、回话）不经共享协议的信封，没带 `version`，网关把它们当成 AIP/1.0；1.0 里的 `command_result` 是「任务结果」（`task_result`），被跨仓 schema 闸门以 `missing_schema_version_metadata` 拒收。结果是 `devices__invoke` 打到手表，手表执行了、回话也发了，调用方却每次都等满 30 秒超时。已在手表侧补上 `version: "3.0"`（V2 侧的测试用真实入口证明：带 version 通、不带不通）。
+- 测试：`tests/test_watch_reaches_the_central_agent.py`（38 条，**不替换发现函数**，帧形状与手表 `WatchMember` 一致；含「智能体让手表做事并拿到回话 / 手表报失败带原因」「手表上说一句要放开跨设备 → 在手表上问戴表的人 → 批准才做、拒绝不做、后台自发回合连问都不问」）。
 
 ### 6.13 2026-10-08：手表出门直连——电脑自己不在网里时，别给手表发进网钥匙
 
@@ -468,6 +469,7 @@ python scripts/check_assessment_freshness.py
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
 |---|---|---|
+| **手表「通话」不能让智能体做事**：通话走 `voice_call_route` → provider 的实时语音会话（`DuplexSessionConfig`），那是一个独立的实时模型对话，**没有接智能体的工具、也不进智能体的会话**（通话的转写只回给手表，不进 `handle_request`）。手表要「让智能体做事」只能走 `voice_query`（语音一问一答），它走真正的智能体主链、人发起的回合、危险操作在手表上问人 | `galaxy_gateway/voice_call_route.py`、`core/voice_duplex_session.py`（无 function-call 处理） | 要做就得把 provider 的函数调用桥到 `handle_request(source="wear_call")`、把该来源登记为人发起的回合；OpenAI realtime 与 Gemini live 的函数调用协议不同，且真 provider 在这里验证不了，需要你定做不做、先接哪家 |
 | 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
 | 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者 2026-09-28 答复：**后面做**，和未接线代码的处置放在一块儿 |
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |
