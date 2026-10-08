@@ -494,7 +494,7 @@ async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
 
 
 #: 能被"问一句"的设备类型。手表是主通道；手机是备选（同一条决策分叉到两处，先答的算数）。
-_ASKABLE_WATCH_TYPES = ("wear_os", "wearos", "watch", "galaxy_watch")
+_ASKABLE_WATCH_TYPES = ("wear_os", "wearos", "android_wear", "watch", "galaxy_watch")
 _ASKABLE_PHONE_TYPES = ("android", "phone", "android_phone")
 
 

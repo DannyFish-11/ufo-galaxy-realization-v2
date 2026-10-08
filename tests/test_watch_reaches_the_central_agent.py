@@ -182,16 +182,26 @@ def test_no_token_or_a_wrong_token_is_still_refused(gateway, watch_id, token, re
 # ---------------------------------------------------------------------------
 
 
+def _eventually(predicate, timeout=4.0, step=0.05):
+    """等一个条件成立。注册 ack 发出和「连接登记进 UCM」不在同一个瞬间，冷启动的机器上差得出来；
+    断言「立刻」成立会把一次慢机器上的调度抖动当成缺陷。"""
+    deadline = time.monotonic() + timeout
+    while True:
+        value = predicate()
+        if value or time.monotonic() >= deadline:
+            return value
+        time.sleep(step)
+
+
 def test_the_agent_finds_a_registered_watch_when_it_looks_for_someone_to_ask(gateway, watch_id):
     from core.interaction.pending_decision_registry import _discover_target_devices
 
+    async def look():
+        return await _discover_target_devices()
+
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
-
-        async def look():
-            return await _discover_target_devices()
-
-        assert watch_id in gateway.portal.call(look)
+        assert _eventually(lambda: watch_id in gateway.portal.call(look))
 
 
 def test_a_watch_that_left_is_no_longer_asked(gateway, watch_id):
@@ -202,9 +212,9 @@ def test_a_watch_that_left_is_no_longer_asked(gateway, watch_id):
 
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
-        assert watch_id in gateway.portal.call(look)  # 先证明在线时找得到，下面的"找不到"才有意义
-    time.sleep(0.5)  # 让服务端处理断开
-    assert watch_id not in gateway.portal.call(look)
+        # 先证明在线时找得到，下面的"找不到"才有意义
+        assert _eventually(lambda: watch_id in gateway.portal.call(look))
+    assert _eventually(lambda: watch_id not in gateway.portal.call(look))
 
 
 # ---------------------------------------------------------------------------
@@ -213,10 +223,15 @@ def test_a_watch_that_left_is_no_longer_asked(gateway, watch_id):
 
 
 def test_the_agent_asks_on_the_watch_and_the_answer_comes_back(gateway, watch_id):
-    from core.interaction.pending_decision_registry import request_human_decision
+    from core.interaction.pending_decision_registry import _discover_target_devices, request_human_decision
+
+    async def look():
+        return await _discover_target_devices()
 
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
+        # 注册 ack 和「登记进 UCM」不在同一瞬间；等到找得到手表再问，否则慢机器上会退回「在对话里问」
+        assert _eventually(lambda: watch_id in gateway.portal.call(look))
 
         async def ask():
             return await request_human_decision(
@@ -481,3 +496,18 @@ def test_the_gateway_has_no_path_that_pushes_the_tri_state_to_a_watch():
 
     assert not hasattr(cross_device_sync, "_push_phase_to_wearos_devices")
     assert importlib.util.find_spec("galaxy_gateway.android.handlers.wearos_sync") is None
+
+
+@pytest.mark.parametrize("dtype", ["wearos", "wear_os", "android_wear", "WearOS", "galaxy_watch", "watch"])
+def test_every_name_a_watch_may_register_under_can_be_asked(dtype):
+    """手表登记时报的类型、UDM 里记的类型（android_wear）都得认得出是手表，否则「在手表上问人」找不到它。"""
+    from core.interaction.pending_decision_registry import _is_askable_type
+
+    assert _is_askable_type(dtype)
+
+
+@pytest.mark.parametrize("dtype", ["", "windows_desktop", "linux_desktop", "mi_band", "tv"])
+def test_devices_that_are_not_a_wrist_or_a_phone_are_not_asked(dtype):
+    from core.interaction.pending_decision_registry import _is_askable_type
+
+    assert not _is_askable_type(dtype)
