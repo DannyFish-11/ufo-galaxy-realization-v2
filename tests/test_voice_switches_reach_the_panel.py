@@ -283,7 +283,8 @@ class TestExtractionItself:
 
     def test_settings_tab_keys_are_parsed(self):
         keys = _extract_settings_tab_keys()
-        assert len(keys) >= 100, f"只解析出 {len(keys)} 个,SettingsTab 的结构可能变了"
+        # 调参键 / 内置键撤出面板之后，顺序清单只剩留在面板上的那些（63 个，2026-10）；门槛按此下调一档留余量
+        assert len(keys) >= 50, f"只解析出 {len(keys)} 个,SettingsTab 的结构可能变了"
 
 
 class TestEveryVoiceSwitchIsRegisteredBackend:

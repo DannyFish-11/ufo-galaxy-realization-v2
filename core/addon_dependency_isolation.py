@@ -41,6 +41,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.data_paths import data_path_or_legacy
+
 logger = logging.getLogger("Galaxy.AddonDeps")
 
 __all__ = [
@@ -78,12 +80,22 @@ def _host_deps_allowed() -> bool:
 #: 和 ``github_installer._get_install_dir()`` 读同一个环境变量,而且那边改成从这里取,
 #: 不留第二份定义 —— 两份会漂移,而漂移的那一刻这道校验就失效了。
 _ENV_INSTALL_DIR = "GITHUB_INSTALL_DIR"
-_DEFAULT_ADDON_ROOT = Path(__file__).resolve().parent.parent / "data" / "github_addons"
+#: 旧的默认位置：源码树里的 ``data/github_addons``，不管 ``GALAXY_DATA_DIR`` 指到哪。已经装在这里的项目继续认它。
+_LEGACY_ADDON_ROOT = Path(__file__).resolve().parent.parent / "data" / "github_addons"
 
 
 def addon_root() -> Path:
+    """显式指定 > ``$GALAXY_DATA_DIR/github_addons`` > 源码树里的 ``data/github_addons``。
+
+    数据总目录没设时就是旧位置（行为不变）；设了的话装进数据目录下 —— 容器里数据卷之外的源码树重建一次，
+    装进来的项目就没了。数据目录下还没有、旧位置已经有东西时继续认旧位置，不把已装的项目甩在后面。
+    """
     raw = os.environ.get(_ENV_INSTALL_DIR, "").strip()
-    return (Path(raw) if raw else _DEFAULT_ADDON_ROOT).resolve()
+    if raw:
+        return Path(raw).resolve()
+    if not (os.environ.get("GALAXY_DATA_DIR") or "").strip():
+        return _LEGACY_ADDON_ROOT.resolve()
+    return Path(data_path_or_legacy("github_addons", str(_LEGACY_ADDON_ROOT))).resolve()
 
 
 class AddonPathError(ValueError):

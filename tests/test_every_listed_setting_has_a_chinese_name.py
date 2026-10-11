@@ -26,6 +26,26 @@ def _listed() -> dict:
     return asyncio.run(get_config())
 
 
+def _unlisted() -> frozenset:
+    """不上面板的键：调参键（对话里调）、内置键、跨设备专属键（本地模式下不列，跨设备模式才列）。名字照留 ——
+    智能体、日志、文档提到它们时说中文。"""
+    from core.routes.panel_builtin import CROSS_DEVICE_ONLY_KEYS, PANEL_BUILTIN_KEYS
+    from core.tuning import knob_keys
+
+    return knob_keys() | PANEL_BUILTIN_KEYS | CROSS_DEVICE_ONLY_KEYS
+
+
+def test_the_cross_device_rows_have_names_too_when_the_mode_is_on(monkeypatch):
+    """本地模式下不列的 15 行，一切到跨设备模式就出现 —— 那时它们也得有中文名。"""
+    from core.routes.panel_builtin import CROSS_DEVICE_ONLY_KEYS
+
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+    listed = _listed()
+    assert CROSS_DEVICE_ONLY_KEYS <= set(listed)
+    bad = {k: listed[k].get("label") for k in CROSS_DEVICE_ONLY_KEYS if not _CJK.search(listed[k].get("label") or "")}
+    assert not bad, bad
+
+
 def test_every_listed_key_has_a_short_chinese_name():
     listed = _listed()
     missing = sorted(k for k, v in listed.items() if not v.get("label"))
@@ -47,12 +67,15 @@ def test_the_name_table_has_no_stale_keys():
     """键删了、改名了、藏起来了，这里的名字就是一条没人读的死记录。"""
     from core.tuning import knob_keys
 
-    # 调参键不在面板上，但智能体报出来给人看时也说中文名，所以这里留着它们的名字
-    stale = sorted(set(config_labels.LABELS) - set(_listed()) - knob_keys())
-    assert not stale, f"LABELS 里有设置页不再列出、也不是调参键的: {stale}"
-    assert not set(config_labels.LABELS) & PANEL_HIDDEN_KEYS
-    missing = sorted(k for k in knob_keys() if k not in config_labels.LABELS)
-    assert not missing, f"调参键没有中文名，智能体只能报英文键名给人看: {missing}"
+    # 调参键 / 内置键 / 跨设备专属键不在（本地模式的）面板上，但智能体、日志报出来给人看时也说中文名，所以名字留着
+    stale = sorted(set(config_labels.LABELS) - set(_listed()) - _unlisted())
+    assert not stale, f"LABELS 里有设置页不再列出、也不是调参 / 内置 / 跨设备专属键的: {stale}"
+    assert (
+        not (set(config_labels.LABELS) & PANEL_HIDDEN_KEYS) - knob_keys()
+    ), "藏起来的开关不留名字（调参键除外：智能体要说中文）"
+    missing = sorted(k for k in _unlisted() if k not in config_labels.LABELS)
+    assert not missing, f"调参 / 内置 / 跨设备专属键没有中文名，智能体只能报英文键名给人看: {missing}"
+    assert set(knob_keys()) <= set(config_labels.LABELS)
 
 
 def test_every_dropdown_value_has_a_chinese_name():
@@ -63,10 +86,8 @@ def test_every_dropdown_value_has_a_chinese_name():
         names = meta.get("option_labels") or {}
         assert set(names) == set(meta["options"]), f"{key}: 档位 {meta['options']} 与中文名 {sorted(names)} 对不上"
         assert all(names.values()), key
-    from core.tuning import knob_keys
-
     stale = sorted(
-        set(config_labels.OPTION_LABELS) - {k for k, v in listed.items() if v["type"] == "select"} - knob_keys()
+        set(config_labels.OPTION_LABELS) - {k for k, v in listed.items() if v["type"] == "select"} - _unlisted()
     )
     assert not stale, f"OPTION_LABELS 里有不是下拉键的: {stale}"
 
@@ -147,11 +168,9 @@ def test_hint_strips_only_a_real_leading_name():
 
 def test_finite_string_keys_are_drawn_as_dropdowns_and_keep_their_default_choosable():
     """auto / 1 / 0 这类取值有限的字符串键：面板按档位牌画；登记的默认值必须是其中一档。"""
-    from core.tuning import knob_keys
-
     listed = _listed()
-    # 调参键（如全双工的 auto/1/0）已不在面板上；留在面板上的取值有限的字符串键仍按档位牌画
-    finite = [k for k in config_labels.OPTION_LABELS if CONFIG_SCHEMA[k]["type"] == "string" and k not in knob_keys()]
+    # 调参键（如全双工的 auto/1/0）与内置键已不在面板上；留在面板上的取值有限的字符串键仍按档位牌画
+    finite = [k for k in config_labels.OPTION_LABELS if CONFIG_SCHEMA[k]["type"] == "string" and k not in _unlisted()]
     assert {"GALAXY_MCP_PIN_MODE", "GALAXY_EGRESS_MODE", "GALAXY_EXECUTION_ISOLATION"} <= set(finite)
     for key in finite:
         assert listed[key]["type"] == "select", key

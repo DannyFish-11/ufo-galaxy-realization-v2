@@ -95,6 +95,7 @@ from core.authority_source_fingerprint import (
     SOURCE_KIND_RUNTIME_VISIBLE_STATE,
     build_authority_source_fingerprint,
 )
+from core.data_paths import runtime_file
 
 logger = logging.getLogger("Galaxy.UnifiedPanelAggregation")
 
@@ -1348,9 +1349,8 @@ class UnifiedPanelAggregationService:
 
 _LAST_OPERATOR_ACTION_RESULT: Optional[Any] = None
 _OPERATOR_ACTION_RESULT_LOCK = threading.Lock()
-_LAST_OPERATOR_ACTION_STATE_PATH = os.environ.get(
-    "GALAXY_LAST_OPERATOR_ACTION_STATE_PATH",
-    os.path.join(os.getcwd(), "runtime", "panel_last_operator_action.json"),
+_LAST_OPERATOR_ACTION_STATE_PATH = os.environ.get("GALAXY_LAST_OPERATOR_ACTION_STATE_PATH") or runtime_file(
+    "panel_last_operator_action.json"
 )
 
 

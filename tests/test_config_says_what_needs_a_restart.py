@@ -43,13 +43,18 @@ def test_the_reader_sites_that_are_known_to_be_startup_only_are_listed():
 
 
 def test_all_config_carries_the_hint_for_listed_keys_the_panel_shows():
+    from core.routes.panel_builtin import CROSS_DEVICE_ONLY_KEYS, PANEL_BUILTIN_KEYS
+
     listed = asyncio.run(cfg.get_config())
     for key in RESTART_REQUIRED:
-        if key in cfg.PANEL_HIDDEN_KEYS:
+        # 不列在面板上的（元层内部、调参、内置、本地模式下的跨设备专属）：不列，也就没有这个提示可核对
+        if key in cfg.PANEL_HIDDEN_KEYS or key in cfg._TUNING or key in PANEL_BUILTIN_KEYS:
             assert key not in listed
             continue
+        if key in CROSS_DEVICE_ONLY_KEYS and key not in listed:
+            continue
         assert listed[key]["restart_required"] == RESTART_REQUIRED[key], key
-    assert "restart_required" not in listed["GALAXY_MOA_ENABLED"]
+    assert "GALAXY_MOA_ENABLED" not in listed, "多模型协作是偏好，改由对话里调（core/tuning.py），不再列在面板上"
 
 
 def test_a_bundle_says_so_when_what_it_writes_needs_a_restart():

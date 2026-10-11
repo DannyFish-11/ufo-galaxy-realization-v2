@@ -13,8 +13,8 @@
 
 调参的边界（这是安全的一部分，不是实现细节）
 ------------------------------------------
-* **只调白名单里的键**（本模块的 ``_NUMERIC`` / ``_CHOICES``），**每个键有硬范围**，越界不写。密钥、地址、路径、端口、
-  安全类、模式类一个都不在里面 —— 它们不是「调参」，是配置与权限。
+* **只调白名单里的键**（本模块的 ``_NUMERIC`` / ``_CHOICES`` / ``_NAMES``），**每个键有硬范围**（数字有上下限、档位只收登记的那几档、
+  名字只收一小段字母数字），越界不写。密钥、地址、路径、端口、安全类、模式类一个都不在里面 —— 它们不是「调参」，是配置与权限。
 * **只在人发起的回合里调**（文字 / 语音 / 手表），后台自发的回合（环境注意力、心跳）连调都不行；
   一个回合最多改 ``MAX_CHANGES_PER_TURN`` 个，防止一段注入的文字让它连改一串。
 * **会放大智能体自己自主度的方向要人点头**：自发开口 / 委托的额度调大、节拍调密、桌面操作步数调多
@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
@@ -52,7 +53,7 @@ class Knob:
     topic: str
     lo: Optional[float] = None
     hi: Optional[float] = None
-    kind: str = "f"  # "i" 整数 / "f" 小数 / "c" 档位（取值见 config_labels.OPTION_LABELS）
+    kind: str = "f"  # "i" 整数 / "f" 小数 / "c" 档位（取值见 config_labels.OPTION_LABELS）/ "s" 名字（音色名）
     #: 往哪个方向调会放大智能体自己的自主度（"up" / "down" / ""）—— 那个方向要人点头。
     expands: str = ""
 
@@ -166,7 +167,20 @@ _CHOICES: List[Tuple[str, str]] = [
     ("GALAXY_TOOLS_SLIM", "模型与规划"),
     ("GALAXY_TOOLS_STICKY", "模型与规划"),
     ("GALAXY_TOOLS_JIT", "模型与规划"),
+    # 偏好型：人会说「尽量用本地的」「别每次都让几个模型合议」「模型别老占着显存」「听写再准一点」，而不是去找一行设置。
+    ("GALAXY_OPENSOURCE_FIRST", "模型与规划"),
+    ("GALAXY_MOA_ENABLED", "模型与规划"),
+    ("GALAXY_OLLAMA_KEEP_ALIVE", "模型与规划"),
+    ("GALAXY_WHISPER_MODEL", "听写"),
+    ("GALAXY_AMBIENT_ASR_SIZE", "听写"),
 ]
+
+# 名字类：只收一小段字母数字与 ._-（音色名），长度有限；换了之后说一句话试听，不对就一句话撤销。
+_NAMES: List[Tuple[str, str]] = [
+    ("GALAXY_TTS_VOICE", "说话与节奏"),
+    ("GALAXY_KOKORO_VOICE", "说话与节奏"),
+]
+_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
 
 #: 读取点在**导入时**的键 —— 改了要重启才生效。tests/test_tuning_knobs.py 逐个核对「确实是模块级读取」。
 _AT_IMPORT: FrozenSet[str] = frozenset(
@@ -202,6 +216,7 @@ _ORDER: List[Tuple[str, str]] = [
 KNOBS: Dict[str, Knob] = {
     **{k: Knob(k, topic, lo, hi, kind, expands) for k, topic, lo, hi, kind, expands in _NUMERIC},
     **{k: Knob(k, topic, kind="c") for k, topic in _CHOICES},
+    **{k: Knob(k, topic, kind="s") for k, topic in _NAMES},
 }
 
 TOPICS: Tuple[str, ...] = tuple(dict.fromkeys(kb.topic for kb in KNOBS.values()))
@@ -256,6 +271,8 @@ def describe(key: str) -> Dict[str, Any]:
     }
     if kb.kind == "c":
         row["choices"] = {v: n for v, n in OPTION_LABELS.get(key, {}).items()}
+    elif kb.kind == "s":
+        row["format"] = "字母、数字、._- 组成的名字，最长 64 个字符"
     else:
         row["range"] = [_fmt(kb, kb.lo or 0), _fmt(kb, kb.hi or 0)]
     if kb.expands:
@@ -294,6 +311,13 @@ def _parse(kb: Knob, raw: Any) -> Tuple[Optional[str], Optional[str]]:
         v = str(raw).strip()
         ok = choices_of(kb.key)
         return (v, None) if v in ok else (None, f"可选的档位是 {ok}，不是 {v!r}")
+    if kb.kind == "s":
+        v = str(raw).strip()
+        return (
+            (v, None)
+            if _NAME_PATTERN.match(v)
+            else (None, f"名字只能由字母、数字和 ._- 组成（最长 64 个字符），不是 {v!r}")
+        )
     try:
         x = float(str(raw).strip())
     except ValueError:
@@ -394,7 +418,7 @@ async def apply(key: str, value: Optional[str], *, reason: str = "", session_id:
         bad = _order_violation(key, new)
         if bad:
             return {"success": False, "error": bad}
-        if new != old and kb.kind != "c":
+        if new != old and kb.expands:
             try:
                 if _moves_toward_more_autonomy(kb, float(old), float(new)):
                     from core.device_onboarding.agent_tools import _ask
@@ -411,8 +435,9 @@ async def apply(key: str, value: Optional[str], *, reason: str = "", session_id:
 
     await _write(key, new, default)
     shown = (OPTION_LABELS.get(key, {}).get(new) if kb.kind == "c" else None) or (new or "自动")
+    old_shown = (OPTION_LABELS.get(key, {}).get(old) if kb.kind == "c" else None) or (old or "自动")
     _audit(key=key, old=old, new=new, reset=value is None, reason=(reason or "")[:200], turn=turn_id, source=source)
-    verb = "已恢复成出厂调校（系统自己适应）" if value is None else f"已从 {old or '自动'} 调到 {shown}"
+    verb = "已恢复成出厂默认" if value is None else f"已从 {old_shown} 调到 {shown}"
     tell = f"「{name}」{verb}。{_after_note(key)}。想撤销随时说，我会恢复默认。"
     return {"success": True, "key": key, "old": old, "new": new, "tell_user": tell, "result": tell}
 
@@ -446,9 +471,10 @@ TUNING_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         LIST_TOOL,
         "The system's behaviour tuning knobs (echo cancellation and interruption, speech pace, how often it speaks up "
-        "by itself, timeouts, concurrency, model/planning) are NOT in the settings panel; you adjust them when the "
-        "user asks. Call with no query to see topics; with a query (topic or words like 回声/打断/超时/主动) to get the "
-        "matching knobs with current value, default and allowed range.",
+        "by itself, timeouts, concurrency, model/planning, speech voice, speech-recognition size, whether to prefer "
+        "local/open models, how long a local model stays loaded) are NOT in the settings panel; you adjust them when "
+        "the user asks. Call with no query to see topics; with a query (topic or words like 回声/打断/超时/主动/音色/"
+        "听写/本地模型) to get the matching knobs with current value, default and allowed range or choices.",
         {"query": {"type": "string"}},
         [],
     ),
@@ -462,7 +488,10 @@ TUNING_BUILTIN_TOOLS: List[Dict[str, Any]] = [
         "(reset=true restores the factory tuning, which is the system's own adaptive default).",
         {
             "key": {"type": "string", "description": "knob key from tuning__list"},
-            "value": {"type": "string", "description": "new value (a number, or one of the listed choices)"},
+            "value": {
+                "type": "string",
+                "description": "new value: a number, one of the listed choices, or a voice name",
+            },
             "reset": {"type": "boolean", "description": "true = undo, back to the factory tuning"},
             "reason": {"type": "string", "description": "what the user said / why"},
         },

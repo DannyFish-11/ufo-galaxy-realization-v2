@@ -273,7 +273,7 @@ GITHUB_BLOCKLIST=untrusted-user/*,suspicious/repo
 
 ### Install Directory
 
-Override the default `data/github_addons/` directory:
+By default add-ons are installed under `$GALAXY_DATA_DIR/github_addons/` (or `data/github_addons/` in the source tree when no data directory is configured; an existing `data/github_addons/` keeps being used until the data-directory one exists). Override it with:
 
 ```env
 GITHUB_INSTALL_DIR=/secure/path/to/addons

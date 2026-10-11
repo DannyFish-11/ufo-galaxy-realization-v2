@@ -13,7 +13,7 @@ Galaxy - 统一向量后端
 环境变量：
   KB_VECTOR_BACKEND   向量引擎选择：chroma | qdrant | local（默认 local）
   QDRANT_URL          Qdrant 服务器地址，例如 http://localhost:6333
-  CHROMA_PERSIST_DIR  ChromaDB 持久化目录（默认 ./chroma_db）
+  CHROMA_PERSIST_DIR  ChromaDB 持久化目录（默认数据总目录下的 chroma_db；已有旧目录 ./chroma_db 则继续用它）
   KB_COLLECTION       向量集合名称（默认 galaxy_knowledge）
   KB_VECTOR_SIZE      向量维度（默认 384）
 
@@ -31,6 +31,8 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from core.data_paths import data_path_or_legacy
 
 logger = logging.getLogger("Galaxy.VectorBackend")
 
@@ -418,7 +420,7 @@ def create_vector_backend(
     Args:
         backend: 后端类型 chroma|qdrant|local（默认读 KB_VECTOR_BACKEND，fallback local）
         qdrant_url: Qdrant 服务器地址（默认读 QDRANT_URL）
-        chroma_persist_dir: ChromaDB 持久化目录（默认读 CHROMA_PERSIST_DIR，fallback ./chroma_db）
+        chroma_persist_dir: ChromaDB 持久化目录（默认读 CHROMA_PERSIST_DIR，没设就是数据总目录下的 chroma_db；已有旧目录 ./chroma_db 则继续用它）
         collection_name: 集合/索引名（默认读 KB_COLLECTION，fallback galaxy_knowledge）
         vector_size: 向量维度（默认读 KB_VECTOR_SIZE，fallback 384）
 
@@ -427,7 +429,11 @@ def create_vector_backend(
     """
     _backend = (backend or os.environ.get("KB_VECTOR_BACKEND", "local")).strip().lower()
     _qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "")
-    _chroma_dir = chroma_persist_dir or os.environ.get("CHROMA_PERSIST_DIR", "./chroma_db")
+    _chroma_dir = (
+        chroma_persist_dir
+        or os.environ.get("CHROMA_PERSIST_DIR", "").strip()
+        or data_path_or_legacy("chroma_db", "./chroma_db")
+    )
     _collection = collection_name or os.environ.get("KB_COLLECTION", "galaxy_knowledge")
     _vsize = int(vector_size or os.environ.get("KB_VECTOR_SIZE", "384"))
 

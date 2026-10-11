@@ -95,6 +95,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
 
+from core.data_paths import runtime_file
+
 logger = logging.getLogger("Galaxy.CanonicalTask")
 
 __all__ = [
@@ -788,10 +790,7 @@ class CanonicalTaskRuntime:
         self._ring: Deque[CanonicalTaskRecord] = deque(maxlen=self._MAX_RING)
         self._allocation_truth: Dict[str, TaskAllocationRecord] = {}
         self._allocation_lock = threading.Lock()
-        self._allocation_state_path = os.getenv(
-            "GALAXY_TASK_ALLOCATION_STATE_PATH",
-            os.path.join(os.getcwd(), "runtime", "task_allocation_truth.json"),
-        )
+        self._allocation_state_path = runtime_file("task_allocation_truth.json", "GALAXY_TASK_ALLOCATION_STATE_PATH")
         self._load_allocation_truth()
 
     # ── Registration ─────────────────────────────────────────────────────

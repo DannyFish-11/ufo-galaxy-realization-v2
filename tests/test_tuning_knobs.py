@@ -49,7 +49,9 @@ def test_the_whitelist_never_reaches_secrets_addresses_paths_or_security():
     for key in tuning.KNOBS:
         sch = CONFIG_SCHEMA[key]
         assert sch["category"] != "security", f"{key} 是安全类，不许让模型调"
-        assert sch["type"] in ("number", "string", "select"), f"{key} 是 {sch['type']} 类"
+        assert sch["type"] in ("number", "string", "select", "boolean"), f"{key} 是 {sch['type']} 类"
+        if sch["type"] == "boolean":
+            assert tuning.KNOBS[key].kind == "c", f"{key} 是开关：只能按两档（OPTION_LABELS）调，不能当数字调"
         if key in llm_tokens:
             continue
         assert not bad_words & set(key.split("_")), f"{key} 的名字像密钥/地址/路径/权限，不该在调参白名单里"
@@ -66,19 +68,16 @@ def test_keys_that_delete_data_stay_with_the_human():
         "GALAXY_OPS_AUDIT_FAILURE_REASONS_MAX",
         "GALAXY_OPS_REJECTION_REASONS_MAX",
         "GALAXY_OPS_FALLBACK_KINDS_MAX",
-        "GALAXY_DEVICE_TOKEN_RETENTION_DAYS",
-        "GALAXY_DEVICE_TOKEN_MAX_RECORDS",
         "GALAXY_HITL_CONFIRM_TIMEOUT_S",
         "GALAXY_HIGH_RISK_CONFIRM_TIMEOUT_S",
         "GALAXY_MAX_MESSAGE_SIZE",
-        "GALAXY_MAX_CONTEXT_TOKENS",
     }
     assert not deleters & set(tuning.KNOBS), sorted(deleters & set(tuning.KNOBS))
 
 
 def test_every_numeric_knob_has_a_range_and_the_factory_value_is_inside_it():
     for key, kb in tuning.KNOBS.items():
-        if kb.kind == "c":
+        if kb.kind in ("c", "s"):
             continue
         assert kb.lo is not None and kb.hi is not None and kb.lo < kb.hi, key
         default = CONFIG_SCHEMA[key]["default"]
@@ -90,6 +89,19 @@ def test_every_choice_knob_offers_its_factory_value():
     for key, kb in tuning.KNOBS.items():
         if kb.kind == "c":
             assert CONFIG_SCHEMA[key]["default"] in tuning.choices_of(key), key
+
+
+def test_every_name_knob_accepts_its_factory_value_and_refuses_anything_that_is_not_a_plain_name():
+    names = [k for k, kb in tuning.KNOBS.items() if kb.kind == "s"]
+    assert {"GALAXY_TTS_VOICE", "GALAXY_KOKORO_VOICE"} <= set(names)
+    for key in names:
+        kb = tuning.KNOBS[key]
+        default = CONFIG_SCHEMA[key]["default"]
+        if default:
+            assert tuning._parse(kb, default) == (default, None), key
+        for bad in ("", "a b", "../x", "a;b", "x" * 65, "语音", "a/b", "$(id)"):
+            value, err = tuning._parse(kb, bad)
+            assert value is None and err, (key, bad)
 
 
 def test_knobs_are_not_listed_on_the_panel_but_can_still_be_saved():
@@ -135,7 +147,7 @@ def test_registered_factory_values_equal_the_defaults_the_code_really_uses():
     bad = {}
     for key, kb in tuning.KNOBS.items():
         default = CONFIG_SCHEMA[key]["default"]
-        if kb.kind == "c" or default == "":
+        if kb.kind in ("c", "s") or default == "":
             continue
         pat = re.compile(r"""["']""" + re.escape(key) + r"""["']\s*,\s*([^,)\n]+)""")
         in_code = set()
@@ -309,6 +321,45 @@ def test_saving_one_knob_does_not_pin_the_factory_value_of_all_the_others(env):
     text = (env["tmp"] / ".env.test").read_text(encoding="utf-8")
     pinned = [k for k in tuning.KNOBS if k != "GALAXY_AEC_RES_OVER" and re.search(rf"^{k}=", text, re.M)]
     assert not pinned, f"这些没人动过的调参键被钉进了 .env: {pinned}"
+
+
+def test_preferences_can_be_changed_by_talking_and_every_value_is_checked(env):
+    """偏好型（开源优先 / 多模型合议 / 模型驻留 / 听写大小 / 音色）：不上面板，对话里调；值照样有边界。"""
+    out = _set("GALAXY_OPENSOURCE_FIRST", "false")
+    assert out["success"] and os.environ["GALAXY_OPENSOURCE_FIRST"] == "false"
+    assert "开源 / 本地优先" in out["tell_user"] and "只看能力与花费" in out["tell_user"], out["tell_user"]
+    assert not _set("GALAXY_OPENSOURCE_FIRST", "maybe")["success"]
+    assert os.environ["GALAXY_OPENSOURCE_FIRST"] == "false"
+
+    env["turn"]["id"] = "turn-2"  # 一个回合最多改几个，所以分回合
+    assert _set("GALAXY_MOA_ENABLED", "false")["success"]
+    assert _set("GALAXY_OLLAMA_KEEP_ALIVE", "30m")["success"] and os.environ["GALAXY_OLLAMA_KEEP_ALIVE"] == "30m"
+    assert not _set("GALAXY_OLLAMA_KEEP_ALIVE", "forever")["success"]
+    env["turn"]["id"] = "turn-3"
+    assert _set("GALAXY_WHISPER_MODEL", "small")["success"] and os.environ["GALAXY_WHISPER_MODEL"] == "small"
+    assert not _set("GALAXY_WHISPER_MODEL", "gigantic")["success"]
+    assert _set("GALAXY_AMBIENT_ASR_SIZE", "tiny")["success"]
+
+
+def test_a_voice_name_is_a_plain_name_and_resets_with_one_sentence(env):
+    out = _set("GALAXY_TTS_VOICE", "zh-CN-YunxiNeural")
+    assert out["success"] and os.environ["GALAXY_TTS_VOICE"] == "zh-CN-YunxiNeural"
+    assert "GALAXY_TTS_VOICE=zh-CN-YunxiNeural" in (env["tmp"] / ".env.test").read_text(encoding="utf-8")
+    for bad in ("a b", "../../etc/passwd", "x;rm", "$(id)"):
+        assert not _set("GALAXY_TTS_VOICE", bad)["success"], bad
+    assert os.environ["GALAXY_TTS_VOICE"] == "zh-CN-YunxiNeural"
+    env["turn"]["id"] = "turn-2"
+    assert _set("GALAXY_KOKORO_VOICE", "zf_xiaobei")["success"]
+    back = asyncio.run(tuning.apply("GALAXY_TTS_VOICE", None, reason="换回去"))
+    assert back["success"] and "GALAXY_TTS_VOICE" not in os.environ
+    assert "GALAXY_TTS_VOICE" not in (env["tmp"] / ".env.test").read_text(encoding="utf-8")
+
+
+def test_the_preference_switches_are_not_pinned_into_env_when_nobody_touched_them(env):
+    _set("GALAXY_AEC_RES_OVER", "2.5")
+    text = (env["tmp"] / ".env.test").read_text(encoding="utf-8")
+    for key in ("GALAXY_OPENSOURCE_FIRST", "GALAXY_MOA_ENABLED", "GALAXY_OLLAMA_KEEP_ALIVE", "GALAXY_TTS_VOICE"):
+        assert not re.search(rf"^{key}=", text, re.M), key
 
 
 def test_every_change_leaves_a_trace(env):

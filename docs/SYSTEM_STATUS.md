@@ -488,6 +488,37 @@ python scripts/check_assessment_freshness.py
 
 `tests/test_tuning_knobs.py`（30 条）；`tests/test_every_listed_setting_has_a_chinese_name.py`、`test_voice_switches_reach_the_panel.py`、`test_speculative_draft.py`、`test_context_length_follows_reality.py` 里原先把这些键钉在面板上的断言，改成钉「在调参白名单里」。
 
+### 6.15 2026-10-11：面板「全部设置」186 行 → 67 行：该删的删、该内置的内置、该对话里调的挪走、该留的留着
+
+所有者：「完整再罗列一下，分个类，看还能把哪些直接内置装进去，不然这么多按钮谁调得过来」；看过分类后：「按照你的建议走，该内置的内置，该保留的保留，该删的删，该修的问题全部修了。」
+
+**结果（真启动 `main.py`、用真面板数的）**：本地模式 **67 行**；切到跨设备模式 **82 行**（多出来的 15 行是跨设备专属）。没有一行是英文名。
+
+| 去向 | 数量 | 在哪 |
+|---|---|---|
+| **删**（没有任何代码在读，面板上有一行、改了没有任何效果） | 7 | `UFO_NODE_HOST`、`MAIN_REPO_URL`、`GALAXY_MARKET_STORE_DIR`（技能市场 `core/api_market.py` 早已删除；技能走 `skills/` + `/api/v1/protocols/skills`，与它无关）、`GALAXY_MAX_CONTEXT_TOKENS`，以及每设备令牌注册表被删之后留下的 `GALAXY_DEVICE_TOKEN_STORE` / `_RETENTION_DAYS` / `_MAX_RECORDS` |
+| **内置**（有一个对的默认，人填错只会弄坏） | 90 | `core/routes/panel_builtin.py`：路径、内部服务地址与端口、型号与规格、固定的严格默认、运维逃生口；连带 `GALAXY_HF_MIRROR` 在开关清单里登记为内置（下载源由 `core/hf_endpoint.py` 探测择优） |
+| **对话里调**（人会说的是效果，不是去找一行设置） | +7 | 并进 `core/tuning.py`：开源优先、多模型合议、模型驻留时长、两个听写模型大小、两个音色名（共 102 个：86 数字 / 14 档位 / 2 名字）。音色名只收字母数字 `._-`，开关与档位只收登记的几档 |
+| **只在跨设备模式下才列** | 15 | 总线 / 联邦 / 打洞与中继 / 设备名 / 网格口令……判模式只认 `core.system_mode.cross_device_requested()` |
+| **留着**（账号与令牌、你自己的地址与位置、权限与安全、隐私取舍、会删数据的保留类） | 其余 | 面板 |
+
+内置的键**仍登记**：`POST /api/config`、`.env`、环境变量照旧能用；只是 `GET /api/config/all` 不列、「保存设置」不再把它们的默认值钉进 `.env`（钉了，以后代码里的默认修正就永远盖不住）。有人明确写过的值照旧保留。
+
+**对着代码核到的真问题（都修了）**
+
+- **`CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_HEADERS` 登记默认是 `*`，代码的安全默认是「本机端口 + 显式请求头」。** 网关带 `allow_credentials=True` 挂这两个值：只要点过一次「保存设置」，`*` 就被钉进 `.env`，等于任何网页都能带着凭据跨站调本机接口。登记默认改为空（= 代码默认）；**已经被旧版本钉进 `.env` 的 `*` 会在下一次「保存设置」时清掉，重启后生效 —— 在那之前它仍然生效**，不会悄悄变。分不出旧版本钉的 `*` 与手写的 `*`，所以手写的也会被清；真要开放就写成明确的来源列表，或通过 API 明确写 `*`（明确写的照写）。
+- **`CHROMA_PERSIST_DIR` 登记 `./chroma`，代码读的是 `./chroma_db`** —— 保存一次，向量库就换成一个空目录。登记默认改为空 = 数据总目录下的 `chroma_db`；已有旧目录 `./chroma_db` 继续用它。没有清理旧 `.env` 里钉着的 `./chroma`：那个目录里可能已经写了新数据。
+- **「路径都跟着数据总目录走」只有一半是真的**：任务成本账本 / SimpleMem / 声音记忆库在登记表里写成 `data/…` `./data/…`（`GALAXY_DATA_DIR` 一改就劈成两处）；任务分配账、面板上一次操作结果落在 `runtime/`；安卓设备状态快照默认落**系统临时目录**（被清理就丢）；装进来的 GitHub 项目写死在源码树 `data/github_addons`，且 `GITHUB_INSTALL_DIR` 根本没登记。全部改成随 `GALAXY_DATA_DIR`，**数据目录下还没有、旧位置已经有东西时继续认旧位置**（`core/data_paths.py::data_path_or_legacy`），不把已有数据甩在后面；没配数据总目录时装进来的项目位置不变。
+- 新增一道测试**扫全仓**：登记的默认值必须等于代码里的字面默认值；每个登记的键必须有代码在读（`tests/test_panel_builtin_keys.py`，22 条）。
+
+**有意没动的（如实说）**
+
+- `GALAXY_MEMORY_MEDIA_DIR` 仍是 `runtime/memory_media`：媒体库模块注释写明是有意「不进 git、不进备份」，且该功能默认关；`GALAXY_LOG_DIR` 仍是 `logs/`（日志不是状态）；`GALAXY_KOKORO_DIR` / `GALAXY_INDEXTTS_DIR` 仍在 `models/`（大权重不放数据目录）；`GALAXY_FEATURE_FLAGS_PATH` 是仓库里的配置文件 `config/feature_flags.yaml`，不是运行时状态。它们都只是不再上面板。
+- 听写模型大小**没有**做硬件自动挑：`WhisperASR` 虽有按显存挑的逻辑，但默认值现在是 `base`，改成自动会让大显存机器悄悄去下载更大的模型。所以交给对话里调，而不是硬塞一个「自动」。
+- 我没替人把存在旧 `.env` 里的其它内置键清掉，只清了上面已经证实有害的 `*`。
+
+**验证**：受影响测试全跑（约 4.6 万条）：除两条 `test_pr4v2_android_evaluator_artifact_governance_flow.py::TestGroupJ_*`（与前面的测试同批跑时失败，**在干净的 HEAD 上同样失败**，单独跑通过，是既有的顺序依赖，与本次无关）外全部通过；另有一条 `test_the_wiring_gate_actually_blocks` 在我并行开多路测试时撞上别路测试临时建的文件，单独跑通过。守卫（import 边界 / 文件复杂度 / 可达性 / 接线 / 裁决独立 / 未接线清单 …）、black / isort / CI 的 flake8 全绿；`docs/PANEL_SWITCHES.md`、`docs/MULTI_MACHINE_MODE.md` 的键表重新生成；面板 `dist/` 重新构建。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |

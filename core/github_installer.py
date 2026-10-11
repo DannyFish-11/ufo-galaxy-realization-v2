@@ -42,7 +42,9 @@ Environment Variables
 ``GITHUB_TOKEN``         — GitHub personal access token (optional, raises
                            rate-limit to 5000 req/h).
 ``GITHUB_INSTALL_DIR``   — Override default install root (default:
-                           ``<project_root>/data/github_addons``).
+                           ``$GALAXY_DATA_DIR/github_addons``, or
+                           ``<project_root>/data/github_addons`` when no data
+                           dir is configured).
 ``GITHUB_ALLOWLIST``     — Comma-separated owner/repo patterns that are
                            allowed (e.g. ``myorg/*,trusteduser/mcp-*``).
                            Empty means all allowed.
@@ -84,8 +86,6 @@ logger = logging.getLogger("Galaxy.GitHubInstaller")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-_PROJECT_ROOT = Path(__file__).parent.parent.resolve()
-_DEFAULT_INSTALL_DIR = _PROJECT_ROOT / "data" / "github_addons"
 _MANIFEST_FILENAME = "manifest.json"
 # 契约文件名与接入形态判定都在 core/github_addon_integration.py —— 拆分理由见那边的
 # docstring。这里留旧名做别名,别处按旧名引用的地方不用跟着改。

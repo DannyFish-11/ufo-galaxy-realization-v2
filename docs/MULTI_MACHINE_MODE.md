@@ -120,14 +120,14 @@
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_CROSS_DEVICE_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
-| `GALAXY_SYSTEM_MODE` | desktop-local | 是 | 全部设置 | 跨设备 | 重启 |
+| `GALAXY_SYSTEM_MODE` | desktop-local | 是 | 不列（内部调参） | 跨设备 | 重启 |
 
 **发现与接入**
 
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_LAN_DISCOVERY` | 开 | 是 | 并进按钮 | 跨设备（成员） | 重启 |
-| `GALAXY_LAN_DISCOVERY_TYPES` | 空 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_LAN_DISCOVERY_TYPES` | 空 | 是 | 内置 | 跨设备 |  |
 | `GALAXY_MDNS` | 开 | 是 | 并进按钮 | 跨设备（成员） | 重启 |
 | `GALAXY_ONBOARDING_ENABLED` | 开 | 是 | 并进按钮 | 跨设备（成员） |  |
 | `GALAXY_ONBOARDING_AUTO` | none | 是 | 全部设置 | — |  |
@@ -135,14 +135,14 @@
 | `GALAXY_ONBOARDING_BLUETOOTH` | 开 | 是 | 内置 | — |  |
 | `GALAXY_ONBOARDING_CAN` | 开 | 是 | 内置 | — |  |
 | `GALAXY_ONBOARDING_SERIAL` | 开 | 是 | 内置 | — |  |
-| `GALAXY_ONBOARDING_CAN_LISTEN_S` | 1.0 | 是 | 全部设置 | — |  |
-| `GALAXY_ONBOARDING_SCAN_INTERVAL_S` | 60 | 是 | 全部设置 | — |  |
-| `GALAXY_ONBOARDING_STATE_DIR` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_MESH_DISCOVERY_TIMEOUT` | 2.0 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_MESH_NODE_ID` | gateway | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_MESH_PORT` | 19422 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_DEVICE_NAME` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_DEVICE_TYPE` | 空 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_ONBOARDING_CAN_LISTEN_S` | 1.0 | 是 | 对话里调 | — |  |
+| `GALAXY_ONBOARDING_SCAN_INTERVAL_S` | 60 | 是 | 对话里调 | — |  |
+| `GALAXY_ONBOARDING_STATE_DIR` | 空 | 是 | 内置 | — |  |
+| `GALAXY_MESH_DISCOVERY_TIMEOUT` | 2.0 | 是 | 对话里调 | 跨设备 |  |
+| `GALAXY_MESH_NODE_ID` | gateway | 是 | 不列（内部调参） | 跨设备 |  |
+| `GALAXY_MESH_PORT` | 19422 | 是 | 不列（内部调参） | 跨设备 |  |
+| `GALAXY_DEVICE_NAME` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
+| `GALAXY_DEVICE_TYPE` | 空 | 是 | 内置 | 跨设备 |  |
 
 **信任与准入**
 
@@ -150,11 +150,8 @@
 |---|---|---|---|---|---|
 | `GALAXY_REQUIRE_DEVICE_APPROVAL` | 关 | 是 | 运维 | — |  |
 | `GALAXY_PEER_DEFAULT_TRUST` | ask | 是 | 全部设置 | — |  |
-| `GALAXY_PEER_TRUST_PATH` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_MESH_SECRET` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_DEVICE_TOKEN_STORE` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_DEVICE_TOKEN_RETENTION_DAYS` | 30 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_DEVICE_TOKEN_MAX_RECORDS` | 512 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_PEER_TRUST_PATH` | 空 | 是 | 内置 | — |  |
+| `GALAXY_MESH_SECRET` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
 
 **传输通道（不含 NATS）**
 
@@ -162,43 +159,43 @@
 |---|---|---|---|---|---|
 | `GALAXY_TS_FUNNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `GALAXY_TS_ADVERTISE_RELAY` | 开 | 是 | 内置 | 跨设备 |  |
-| `GALAXY_TAILSCALE_CHECK_INTERVAL` | 30 | 是 | 全部设置 | — |  |
+| `GALAXY_TAILSCALE_CHECK_INTERVAL` | 30 | 是 | 对话里调 | — |  |
 | `GALAXY_TAILSCALE_ENABLED` | 关 | 是 | 运维 | — |  |
-| `GALAXY_TAILSCALE_HOST` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_TAILSCALE_TAG` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_HEADSCALE_URL` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_HEADSCALE_API_KEY` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_HEADSCALE_USER` | galaxy | 是 | 全部设置 | — |  |
+| `GALAXY_TAILSCALE_HOST` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_TAILSCALE_TAG` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_HEADSCALE_URL` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_HEADSCALE_API_KEY` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_HEADSCALE_USER` | galaxy | 是 | 跨设备模式下才列 | — |  |
 | `GALAXY_HEADSCALE_AUTOJOIN` | 开 | 是 | 内置 | — |  |
-| `GALAXY_TURN_URLS` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_TURN_USERNAME` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_TURN_CREDENTIAL` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_SIGNALING_TIMEOUT_S` | 空 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_TURN_URLS` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
+| `GALAXY_TURN_USERNAME` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_TURN_CREDENTIAL` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_SIGNALING_TIMEOUT_S` | 空 | 是 | 对话里调 | 跨设备 |  |
 | `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
 | `GALAXY_ENABLE_WEBRTC` | 关 | 是 | 运维 | — |  |
-| `GALAXY_WEBRTC_TASK_READY_TIMEOUT_S` | 15 | 是 | 全部设置 | — |  |
+| `GALAXY_WEBRTC_TASK_READY_TIMEOUT_S` | 15 | 是 | 不列（内部调参） | — |  |
 | `GALAXY_USE_GATEWAY_FOR_WEBRTC` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TRANSPORT_ADAPTIVE` | 开 | 是 | 内置 | — |  |
-| `GALAXY_TRANSPORT_BULK_BYTES` | 65536 | 是 | 全部设置 | — |  |
-| `GALAXY_TRANSPORT_PRIORITY` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_TRANSPORT_BULK_BYTES` | 65536 | 是 | 对话里调 | — |  |
+| `GALAXY_TRANSPORT_PRIORITY` | 空 | 是 | 跨设备模式下才列 | — |  |
 | `GALAXY_ANDROID_WS_ENABLED` | 关 | 是 | 运维 | 跨设备 |  |
-| `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 全部设置 | 跨设备 |  |
-| `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 全部设置 | 跨设备 |  |
+| `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 对话里调 | 跨设备 |  |
+| `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 内置 | 跨设备 |  |
 
 **别的设备 / 实例 / 家居接入**
 
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_REMOTE_DESKTOP` | 关 | 是 | 留在面板 | — | 重启 |
-| `GALAXY_VNC_PORT` | 5900 | 是 | 全部设置 | — |  |
-| `GALAXY_VNC_CMD` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_VNC_PORT` | 5900 | 是 | 内置 | — |  |
+| `GALAXY_VNC_CMD` | 空 | 是 | 内置 | — |  |
 | `FEDERATION_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
-| `FEDERATION_PEERS` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_LOCAL_HOST` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_HEARTBEAT_INTERVAL` | 15 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_INSTANCE_ID` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_MIN_HEARTBEAT_INTERVAL` | 5 | 是 | 全部设置 | 跨设备 |  |
-| `FEDERATION_OFFLINE_THRESHOLD` | 3 | 是 | 全部设置 | 跨设备 |  |
+| `FEDERATION_PEERS` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
+| `FEDERATION_LOCAL_HOST` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
+| `FEDERATION_HEARTBEAT_INTERVAL` | 15 | 是 | 对话里调 | 跨设备 |  |
+| `FEDERATION_INSTANCE_ID` | 空 | 是 | 不列（内部调参） | 跨设备 |  |
+| `FEDERATION_MIN_HEARTBEAT_INTERVAL` | 5 | 是 | 不列（内部调参） | 跨设备 |  |
+| `FEDERATION_OFFLINE_THRESHOLD` | 3 | 是 | 不列（内部调参） | 跨设备 |  |
 | `GALAXY_HA_BRIDGE` | 开 | 是 | 内置 | — |  |
 | `HOME_ASSISTANT_URL` | 空 | 是 | 全部设置 | — |  |
 | `HOME_ASSISTANT_TOKEN` | 空 | 是 | 全部设置 | — |  |
@@ -210,9 +207,9 @@
 
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
-| `GALAXY_MULTI_DEVICE_DISPATCH_LIMIT` | 8 | 是 | 全部设置 | — |  |
-| `GALAXY_NODE_HEALTH_RETRIES` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_SLO_HEARTBEAT_WINDOW` | 200 | 是 | 全部设置 | — |  |
+| `GALAXY_MULTI_DEVICE_DISPATCH_LIMIT` | 8 | 是 | 不列（内部调参） | — |  |
+| `GALAXY_NODE_HEALTH_RETRIES` | 空 | 是 | 对话里调 | — |  |
+| `GALAXY_SLO_HEARTBEAT_WINDOW` | 200 | 是 | 对话里调 | — |  |
 | `GALAXY_ENABLE_LEGACY_MULTIDEVICE` | 关 | 是 | 运维 | — |  |
 
 
@@ -223,7 +220,7 @@
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_NATS_ENABLED` | 开 | 是 | 并进按钮 | 跨设备（成员） | 重启 |
-| `GALAXY_NATS_URL` | 空 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_NATS_URL` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
 | `GALAXY_FABRIC_STRICT` | 关 | 是 | 运维 | 跨设备 |  |
 
 
@@ -234,9 +231,9 @@
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_DISPATCH_IDEMPOTENCY` | 开 | 是 | 内置 | — |  |
-| `GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE` | strict | 是 | 全部设置 | — |  |
-| `GALAXY_NATS_EXECUTOR_FALLBACK` | sync | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_NATS_EXECUTOR_TIMEOUT` | 30 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE` | strict | 是 | 内置 | — |  |
+| `GALAXY_NATS_EXECUTOR_FALLBACK` | sync | 是 | 内置 | 跨设备 |  |
+| `GALAXY_NATS_EXECUTOR_TIMEOUT` | 30 | 是 | 对话里调 | 跨设备 |  |
 | `GALAXY_DURABLE_EXEC` | 开 | 是 | 内置 | — | 重启 |
 
 
@@ -247,13 +244,13 @@
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
 | `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
-| `GALAXY_MASTER_BRAIN_STATE_PATH` | 空 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 15 | 是 | 全部设置 | 跨设备 |  |
-| `GALAXY_WORKER_ID` | 空 | 是 | 全部设置 | — |  |
-| `GALAXY_WORKER_VERSION` | 1.0.0 | 是 | 全部设置 | — |  |
-| `GALAXY_HEARTBEAT_INTERVAL` | 10 | 是 | 全部设置 | 跨设备 |  |
+| `GALAXY_MASTER_BRAIN_STATE_PATH` | 空 | 是 | 内置 | 跨设备 |  |
+| `GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S` | 15 | 是 | 对话里调 | 跨设备 |  |
+| `GALAXY_WORKER_ID` | 空 | 是 | 不列（内部调参） | — |  |
+| `GALAXY_WORKER_VERSION` | 1.0.0 | 是 | 不列（内部调参） | — |  |
+| `GALAXY_HEARTBEAT_INTERVAL` | 10 | 是 | 对话里调 | 跨设备 |  |
 
-共 81 个键，其中 **0** 个未登记。
+共 78 个键，其中 **0** 个未登记。
 <!-- tables:end -->
 
 ## 五、模块、接口、面板入口
