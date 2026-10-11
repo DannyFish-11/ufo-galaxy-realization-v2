@@ -262,7 +262,13 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
     desc.hidden = desc.textContent === '';
     text.append(name, desc);
 
-    r.append(text, control(item));
+    const ctl = control(item);
+    // 档位多(或字长)的行一行放不下:名字会被挤成竖着的窄条。叠放,档位自己换行(见 hud.css .sf-row[data-stack])。
+    if (ctl.classList.contains('sf-stages')) {
+      const chars = [...ctl.children].reduce((n, c) => n + (c.textContent ?? '').length, 0);
+      if (ctl.children.length > 4 || chars > 34) r.dataset['stack'] = 'true';
+    }
+    r.append(text, ctl);
     return r;
   }
 

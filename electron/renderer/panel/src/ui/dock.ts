@@ -321,10 +321,11 @@ export function createDock(cb: DockCallbacks): DockHandles {
     // 当前档的两位(感知位 / 推理位)如实报出来 —— 「C 档」三个字说不出实际在跑
     // 哪两个型号,而那才是人想确认的东西。
     const slots = view.slots.filter((s) => s.model).map((s) => `${s.role} ${s.model}`);
+    const unfit = cur && (cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram') ? ' · 这台机器装不下' : '';
     note.textContent = cur
       ? slots.length
-        ? `${cur.label} · ${slots.join(' + ')}`
-        : cur.label
+        ? `${cur.label} · ${slots.join(' + ')}${unfit}`
+        : `${cur.label}${unfit}`
       : view.current
         ? `当前 ${view.current} 档（目录里没有这一档）`
         : '还没选定档位';
