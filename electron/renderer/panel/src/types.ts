@@ -134,6 +134,8 @@ export interface Bundle {
    * 后端从 `core/routes/config_restart.py` 现算;面板只负责在这一档旁边说出来,不另存一份。
    */
   readonly restartRequired?: boolean;
+  /** 多态那枚小牌子的中文档名(取值 → 中文),来自 core/routes/config_labels.py;没有就原样画取值 */
+  readonly optionLabels?: Readonly<Record<string, string>>;
 }
 
 

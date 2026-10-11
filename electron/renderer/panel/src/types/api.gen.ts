@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 473 条 · 组件 schema 118 个
+// 路径 474 条 · 组件 schema 118 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -301,6 +301,7 @@ export type ApiPath =
   | "/api/v1/pair/renew"
   | "/api/v1/pair/trust"
   | "/api/v1/panel/feed"
+  | "/api/v1/panel/self"
   | "/api/v1/panel/unified"
   | "/api/v1/participants"
   | "/api/v1/participants/register"
@@ -778,6 +779,7 @@ export const API_METHODS = {
   "/api/v1/pair/renew": ["post"],
   "/api/v1/pair/trust": ["post"],
   "/api/v1/panel/feed": ["get"],
+  "/api/v1/panel/self": ["get"],
   "/api/v1/panel/unified": ["get"],
   "/api/v1/participants": ["get"],
   "/api/v1/participants/register": ["post"],

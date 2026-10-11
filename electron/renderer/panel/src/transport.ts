@@ -371,6 +371,15 @@ function readBundle(raw: unknown): Bundle | null {
   const opts = Array.isArray(o['options'])
     ? (o['options'] as unknown[]).filter((v): v is string => typeof v === 'string')
     : undefined;
+  const rawLabels = o['option_labels'];
+  const labels =
+    rawLabels && typeof rawLabels === 'object'
+      ? Object.fromEntries(
+          Object.entries(rawLabels as Record<string, unknown>).filter(
+            (e): e is [string, string] => typeof e[1] === 'string',
+          ),
+        )
+      : undefined;
 
   return {
     key,
@@ -385,6 +394,7 @@ function readBundle(raw: unknown): Bundle | null {
     overrides: typeof o['overrides'] === 'number' ? o['overrides'] : 0,
     unwired,
     ...(o['restart_required'] === true ? { restartRequired: true } : {}),
+    ...(labels && Object.keys(labels).length ? { optionLabels: labels } : {}),
   };
 }
 
@@ -434,13 +444,17 @@ export async function setBundle(
   }
 }
 
-/** 这一档下一步该是什么值。布尔翻面;select 在自己的档位里循环。 */
+/**
+ * 这一档下一步该是什么值。布尔翻面;多态的那一档(自主)在浮层上也是一个推拉开关:
+ * 开着(在最放手那一档)→ 退到次一档;关着(其余任何一档)→ 最放手那一档。三档的细调在「全部设置」。
+ */
 export function nextBundleValue(b: Bundle): string | null {
   if (b.unwired || !b.type) return null;
   if (b.type === 'boolean') return b.value === 'true' ? 'false' : 'true';
-  if (b.options && b.options.length > 0) {
-    const i = b.options.indexOf(b.value);
-    return b.options[(i + 1) % b.options.length] ?? b.options[0] ?? null;
+  const opts = b.options ?? [];
+  if (opts.length > 0) {
+    const top = opts[opts.length - 1] ?? null;
+    return b.value === top ? (opts[opts.length - 2] ?? opts[0] ?? null) : top;
   }
   return null;
 }
@@ -646,6 +660,33 @@ export async function fetchTiers(base: string): Promise<TierView | null> {
     return { current, tiers, slots };
   } catch (err) {
     console.error('[hud] 拉档位目录失败:', err);
+    return null;
+  }
+}
+
+/** 本体自己是谁、用的哪个容器运行时(``GET /api/v1/panel/self``)。空串 = 没有。 */
+export interface PanelSelf {
+  /** 正在答话的那个 Agent 的名字(后端实例的类名,比如 OpenClawd) */
+  readonly agent: string;
+  /** docker / podman;一个都没有就是空串 */
+  readonly containerRuntime: string;
+}
+
+/** 拉一次。拉不到就是 null —— 左下那两行说「没问到」,而不是编一个名字出来。 */
+export async function fetchPanelSelf(base: string): Promise<PanelSelf | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/panel/self', { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      console.error('[hud] 拉本体信息失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    return {
+      agent: typeof body['agent'] === 'string' ? body['agent'] : '',
+      containerRuntime: typeof body['container_runtime'] === 'string' ? body['container_runtime'] : '',
+    };
+  } catch (err) {
+    console.error('[hud] 拉本体信息失败:', err);
     return null;
   }
 }

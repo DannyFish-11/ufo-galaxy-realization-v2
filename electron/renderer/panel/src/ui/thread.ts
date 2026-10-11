@@ -25,6 +25,9 @@ export interface ThreadHandles {
 export function createThread(): ThreadHandles {
   const root = document.createElement('div');
   root.className = 'thread';
+  // 上一次画了几句。**只有比它多出来的才播进场** —— 这里每次都整组重画(流式时每来一个字就画一遍),
+  // 旧的也跟着重放的话,每个字都会让整屏闪一次。第一次(载入历史)也不播:那不是「新来的」。
+  let drawn = -1;
 
   function render(
     turns: readonly Turn[],
@@ -33,10 +36,12 @@ export function createThread(): ThreadHandles {
   ): void {
     root.replaceChildren();
 
-    for (const t of turns) {
+    turns.forEach((t, i) => {
       const node = document.createElement('div');
       node.className = 'turn';
       node.dataset['role'] = t.role === 'user' ? 'user' : 'agent';
+      if (drawn >= 0 && i >= drawn) node.dataset['new'] = 'true';
+      if (t.streaming && t.role !== 'user') node.dataset['streaming'] = 'true';
 
       if (t.text) node.append(document.createTextNode(t.text));
       if (t.pending) {
@@ -68,7 +73,8 @@ export function createThread(): ThreadHandles {
         box.append(thumb, text);
         root.append(box);
       }
-    }
+    });
+    drawn = turns.length;
 
     // 降级必须留痕。只在真脱钩时出现,平时不占位。
     if (lockstep === 'degraded') {

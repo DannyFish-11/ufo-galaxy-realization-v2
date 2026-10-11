@@ -352,8 +352,8 @@ class TestABundleActuallyOwnsWhatItClaimsToOwn:
 class TestASubtitleIsOptionalButTheTraceIsNot:
     """副标题可以不要;**留痕不能跟着一起没**。
 
-    「声字同文」的名字已经把这一档管什么说完了,「自主」右边那枚牌子已经把当前档
-    写出来了 —— 这两行都不需要副标题。但 ``overrides`` / ``unwired`` 那两句是
+    「声字同文」的名字已经把这一档管什么说完了 —— 这一行不需要副标题(「自主」的副标题
+    是当前档名,由面板现写)。但 ``overrides`` / ``unwired`` 那两句是
     留痕,它们此前是拼在副标题后面的(``${b.note} · 有 N 项手改过``):副标题一空,
     拼出来就成了以「 · 」开头的半句话。
     """
@@ -372,15 +372,27 @@ class TestASubtitleIsOptionalButTheTraceIsNot:
         ), "留痕又被拼回副标题后面了 —— 副标题为空时会打出以「 · 」开头的半句话"
         assert "note.hidden" in src, "空副标题的 note 元素没藏起来,会给行凭空撑出一截"
 
-    def test_the_pill_sits_in_the_same_column_as_the_toggles(self) -> None:
-        """多态那枚牌子要和上面几行的开关落在同一列。
+    def test_every_row_is_the_same_toggle_in_the_same_column(self) -> None:
+        """每一档都是同一个推拉开关,落在同一列。
 
-        ``.knob`` 一直有 ``margin-left:auto``,``.stage`` 没有 —— 于是牌子紧跟在
-        文字后面,文字一短就整个往左跑。去掉副标题之后这个错位一眼就能看见
-        (实测右边缘 1066.8 vs 开关的 1238.0)。
+        「自主」原先是一枚写着档位名的牌子,和上面几行的开关不是一个样子、也曾不在同一列
+        (实测右边缘 1066.8 vs 开关的 1238.0)。所有者要求它改成和上面一样的开关:开 = 最放手那一档,
+        关 = 次一档,当前到底是哪一档写在副标题里,三档的细调在「全部设置」。
         """
+        src = (self.PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        loop = src[src.index("bundleHost.replaceChildren()") : src.index("renderTiers(tiers, tierGaps)")]
+        assert "control.className = 'knob'" in loop and "'stage'" not in loop, "整档那几行又出现了不是开关的控件"
         css = (self.PANEL_SRC / "styles" / "hud.css").read_text(encoding="utf-8")
-        assert ".bundle > .stage" in css and "margin-left: auto" in css, "牌子没有和开关对齐"
+        knob = css[css.index(".knob {") : css.index("}", css.index(".knob {"))]
+        assert "margin-left: auto" in knob, "开关没有顶到右边缘 —— 文字一短就整个往左跑"
+
+    def test_the_three_level_toggle_says_which_level_and_flips_between_the_top_two(self) -> None:
+        src = (self.PANEL_SRC / "ui" / "dock.ts").read_text(encoding="utf-8")
+        assert "optionLabels?.[b.value]" in src, "开关看不出现在是哪一档 —— 副标题里要写中文档名"
+        ts = (self.PANEL_SRC / "transport.ts").read_text(encoding="utf-8")
+        fn = ts[ts.index("export function nextBundleValue") :]
+        fn = fn[: fn.index("\n}\n") + 3]
+        assert "opts.length - 1" in fn and "opts.length - 2" in fn, "开 / 关应在最放手那一档与次一档之间翻"
 
     def test_the_abcd_chips_are_not_dragged_right_by_that_rule(self) -> None:
         """对齐规则只能管 bundle 行里的牌子 —— ABCD 那一排是并排的四个。"""
@@ -393,5 +405,5 @@ class TestASubtitleIsOptionalButTheTraceIsNot:
     def test_the_built_bundle_carries_both(self) -> None:
         js = sorted(self.PANEL_DIST.glob("assets/*.js"))
         assert js, "dist/assets 里没有构建产物"
-        blob = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in js)
-        assert ".bundle>.stage{margin-left:auto}" in blob.replace(" ", ""), "dist 里没有对齐规则 —— 改了 src 但没重建"
+        blob = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in js).replace(" ", "")
+        assert ".bundle>span:first-child{flex:1;min-width:0}" in blob, "dist 里没有这一行的排法 —— 改了 src 但没重建"

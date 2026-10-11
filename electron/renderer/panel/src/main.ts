@@ -14,6 +14,7 @@ import { Store, VISIBLE_CARDS, clampStart, initialState } from './store';
 import {
   PresenceSocket,
   fetchAllConfig,
+  fetchPanelSelf,
   fetchUserProviders,
   fetchVendors,
   verifyVendor,
@@ -251,6 +252,7 @@ function mount(host: HTMLElement): void {
         devices: s.devices,
         perception: s.posture?.perception ?? null,
         connected: s.connected,
+        self: s.self,
       }),
       s.slim,
     );
@@ -840,9 +842,19 @@ function mount(host: HTMLElement): void {
   }
   void loadTiers();
 
+  /** 本体是谁、容器用的哪个。开机问一次,每次重新连上再问一次(后端可能换了一个进程)。 */
+  async function loadSelf(): Promise<void> {
+    const who = await fetchPanelSelf(BASE);
+    if (who) store.patch({ self: who });
+  }
+  void loadSelf();
+
   // ── 后端:实时那条 ───────────────────────────────────────────────
   const socket = new PresenceSocket(BASE, {
-    onOpen: () => store.patch({ connected: true }),
+    onOpen: () => {
+      store.patch({ connected: true });
+      void loadSelf();
+    },
     onClose: () => store.patch({ connected: false }),
     onPosture: ({ posture, missing }) => {
       store.patch({

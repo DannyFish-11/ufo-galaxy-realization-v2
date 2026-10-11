@@ -229,7 +229,9 @@ async def get_config():
         }
         # 整档按钮的主键:值照给(别的消费者要读),但标出它属于哪一档 —— 设置页据此不再
         # 重复摆一行,开关只有按钮那一处(见 config_bundles.py)。
-        if key in bundle_of:
+        # 多态的主键(自主:safe / guided / autonomous)不标 —— 浮层上那个推拉开关只在最放手的两档之间翻,
+        # 三档的细调得在设置页留着一行,否则「敏感操作全问」那一档在面板上就选不到了。
+        if key in bundle_of and meta["type"] == "boolean":
             result[key]["bundle"] = bundle_of[key]
         option_labels = option_labels_for(key)
         if option_labels:
@@ -696,6 +698,9 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
     }
     if "options" in meta:
         state["options"] = meta["options"]
+    labels = option_labels_for(primary)
+    if labels:
+        state["option_labels"] = labels  # 多态那枚小牌子写中文档名(「读放行·写审批」),不写 guided
     return state
 
 

@@ -95,11 +95,18 @@ def test_every_dropdown_value_has_a_chinese_name():
 def test_bundle_primaries_are_marked_so_the_settings_page_skips_them():
     listed = _listed()
     marked = {k: v["bundle"] for k, v in listed.items() if v.get("bundle")}
-    # 主键要么已经整个藏起来了（GALAXY_SPEAK），要么列出来并带着档名；不许有「列着却没标」的
-    expected = {b["primary"]: b["key"] for b in CONFIG_BUNDLES if b["primary"] in listed}
+    # 两态的主键要么已经整个藏起来了（GALAXY_SPEAK），要么列出来并带着档名；不许有「列着却没标」的
+    expected = {
+        b["primary"]: b["key"]
+        for b in CONFIG_BUNDLES
+        if b["primary"] in listed and CONFIG_SCHEMA[b["primary"]]["type"] == "boolean"
+    }
     assert marked == expected
     assert {b["primary"] for b in CONFIG_BUNDLES if b["primary"] not in listed} <= PANEL_HIDDEN_KEYS
-    assert {"GALAXY_AMBIENT_LOOP", "GALAXY_AUTONOMY", "GALAXY_CROSS_DEVICE_ENABLED"} <= set(marked)
+    assert {"GALAXY_AMBIENT_LOOP", "GALAXY_CROSS_DEVICE_ENABLED"} <= set(marked)
+    # 「自主」在浮层上是一个只在最放手两档之间翻的开关 —— 三档细调必须在设置页留着一行
+    assert "GALAXY_AUTONOMY" in listed and "bundle" not in listed["GALAXY_AUTONOMY"]
+    assert listed["GALAXY_AUTONOMY"]["options"] == ["safe", "guided", "autonomous"]
     # 值仍然照给 —— 按钮、别的消费者要读；只是设置页不再摆第二个开关
     assert all("value" in listed[k] for k in marked)
 

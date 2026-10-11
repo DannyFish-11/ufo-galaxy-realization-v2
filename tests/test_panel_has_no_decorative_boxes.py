@@ -22,8 +22,6 @@
 
 **不是所有 1px 都要删。** 有几处线是**带信息**的，删了就等于抹掉一个判据：
 
-* 档位牌上那圈警示色 = "这一档你的显卡装不下"
-* 那圈虚线 = "这一档**没被评估过**"（与"能跑"是两件事）
 * ``.blk[data-unknown]`` 的空心 = "这三天不可知"（与"这三天是空的"是两件事）
 
 所以这道门不数总量，而是钉住**哪些选择器有权带 1px**。要给新东西加边框，
@@ -46,14 +44,7 @@ _RING_IS_ALLOWED_BECAUSE = {
     ".card-nfc": "卡面上那枚芯片图案本身就是这么画的，不是给谁镶边",
     ".blk[data-unknown='true']": "空心 = 这几天不可知。「空」与「不知道」必须分得开",
     ".blk[data-unknown='true'][data-drawn='true']": "同上，被抽出的那块",
-    ".tier-stages .stage[data-fit='no_gpu']": "警示色的圈 = 这一档你的显卡装不下",
-    ".tier-stages .stage[data-fit='insufficient_vram']": "同上",
-    ".tier-stages .stage[data-fit='unknown']": "虚线 = 这一档没被评估过，与「能跑」是两件事",
     ".privacy-btn[data-unknown='true']": "虚线 = 问不到后端，停没停不知道。与「正在采」是两件事",
-    ".wired-row[data-state='unknown'] .wired-dot": (
-        "空心 = 这一条**没问到**。填实了（哪怕调暗）会被读成「不通」，"
-        "而「不通」是一个问过了的结论 —— 那正是这张清单要治的那类假话"
-    ),
     ".ga-policy[data-mode='unknown'] .ga-dot": (
         "空心 = 装插件之前**会不会先问你**这件事没问到（后端没答）。"
         "填实了会被读成「不会问」，而那是一个问过了的结论 —— 两者差着一次"

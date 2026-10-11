@@ -70,6 +70,22 @@ def _env_choice() -> str:
     return os.environ.get("GALAXY_CONTAINER_RUNTIME", "").strip().lower()
 
 
+def current_runtime() -> str:
+    """**只读**:此刻会用哪个运行时(docker / podman);没有、或两个都装却还没选过,返回 ""。
+
+    与 ``resolve_runtime`` 同一个先后(环境 > 已保存且已装 > 唯一已装),但**不写选择记录、不弹交互、
+    不跑 ``info``**(那几条命令一次要好几秒)—— 面板左下那一行每次打开都要问一遍,只能是 ``which`` 级别的开销。
+    """
+    env = _env_choice()
+    if env in _RUNTIMES and shutil.which(env):
+        return env
+    saved = load_choice()
+    if saved in _RUNTIMES and shutil.which(saved):
+        return saved
+    avail = available_runtimes()
+    return avail[0] if len(avail) == 1 else ""
+
+
 def load_choice() -> str:
     try:
         if _CHOICE_FILE.exists():

@@ -28,6 +28,10 @@
  */
 import type { ConfigItem } from '../transport';
 import { CATEGORIES, KEY_ORDER_HINT } from '../settings_inventory';
+import { modelLabel } from './model_name';
+
+/** 取值是型号串的键 —— 档位牌按型号的显示名画(首字母大写)。 */
+const MODEL_KEYS: ReadonlySet<string> = new Set(['OLLAMA_MODEL']);
 
 /** 哪些键的值不该以明文出现在界面上。 */
 const SECRET_RE = /(_KEY|_TOKEN|_SECRET|PASSWORD|_CREDENTIAL)$/;
@@ -193,7 +197,9 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
         chip.type = 'button';
         // 中文名由后端给(config_labels.OPTION_LABELS);没给的取值原样画(比如型号串)。
         // 空串是一个真选项(「不钉死」),但它画不出字 —— 给它一个说得出口的名字。
-        chip.textContent = item.optionLabels?.[opt] ?? (opt === '' ? '自动' : opt);
+        // 型号串首字母大写(所有者要求)只是显示:data-value 与 title 仍是原串,存的也是原串。
+        chip.textContent =
+          item.optionLabels?.[opt] ?? (opt === '' ? '自动' : MODEL_KEYS.has(item.key) ? modelLabel(opt) : opt);
         if (opt !== '') chip.title = opt;
         chip.dataset['value'] = opt;
         chip.dataset['picked'] = String(opt === picked);
@@ -262,7 +268,13 @@ export function createSettings(cb: SettingsCallbacks): SettingsHandles {
     desc.hidden = desc.textContent === '';
     text.append(name, desc);
 
-    r.append(text, control(item));
+    const ctl = control(item);
+    // 档位多(或字长)的行一行放不下:名字会被挤成竖着的窄条。叠放,档位自己换行(见 hud.css .sf-row[data-stack])。
+    if (ctl.classList.contains('sf-stages')) {
+      const chars = [...ctl.children].reduce((n, c) => n + (c.textContent ?? '').length, 0);
+      if (ctl.children.length > 4 || chars > 34) r.dataset['stack'] = 'true';
+    }
+    r.append(text, ctl);
     return r;
   }
 

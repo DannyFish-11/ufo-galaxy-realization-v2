@@ -15,10 +15,11 @@
 1. **四态,不是布尔。** 通 / 降级 / 不通 / **不知道**。后端没拉到(`null`)与
    后端说"一个都没有"(空数组)是两件事;画成同一个样子,就是把"不知道"说成
    了"没有"。
-2. **不知道要长得不一样。** 空心,不是"暗一点的实心" —— 暗一点只会被当成
-   "不通",而"不通"是一个**问过了**的结论。
-3. **缺的那条也得列出来。** 容器运行时现在没有面板能问的接口。省掉它,这张
-   清单看起来就是完整的,而它不是。
+2. **不知道要说得出来。** 曾经是靠一颗空心圈 —— 所有者两次指出最后那颗空心圈与其它点不一致、
+   要对齐,所以点改成与「不通」同一个样子;「不知道」靠右边那几个字(没拉到 / 没收到)和悬停整句说。
+3. **写实际的那个东西。** 容器写 docker / podman,本体写正在答话的 Agent 的名字 —— 都由
+   ``GET /api/v1/panel/self`` 给(以前容器这一行没有接口,只能写「没接口」);没有就写「无」,
+   没问到就写「没拉到」,两件事不并成一个。
 4. **开机就得去问。** 端点列表只在打开设置时才拉的话,这一行会一直写着
    「端点列表没拉到」,而后端好好的 —— 那正好是这张清单要治的毛病本身。
 5. **喂入口那块没接上的格子不许能点。** 写着"点了不会有反应"却还能点,
@@ -106,23 +107,30 @@ class TestTheListCanSayItDoesNotKnow:
         src = _read(_WIRED)
         assert "p.state === 'live'" in src, "端点这一行不是按 live 筛的 —— 填了地址没验过也会被算成「通」"
 
-    def test_the_gap_we_cannot_ask_about_is_still_listed(self) -> None:
-        """容器运行时:面板问不到,但必须出现在清单里,且标成 unknown。"""
+    def test_the_container_row_names_the_actual_runtime(self) -> None:
+        """容器:写实际用的那个(docker / podman),没有写「无」,没问到写 unknown。行名按所有者要求短写成「容器」。"""
         src = _read(_WIRED)
-        assert "容器运行时" in src, "容器运行时被从清单里省掉了 —— 省掉之后这张清单看起来是完整的,而它不是"
-        # 头注释里也提了这四个字 —— 要找的是**代码里**那一处 rows.push。
-        m = re.search(r"rows\.push\(\{[^}]*name:\s*'容器运行时'[^}]*\}\)", src, re.S)
-        assert m, "容器运行时只在注释里说了,代码没真的往清单里推这一行"
-        assert "'unknown'" in m.group(0), "容器运行时被标成了一个结论,可面板根本没问到过它"
+        block = src[src.index("// ── 容器") :]
+        block = block[: block.index("return rows;")]
+        assert "detail: input.self.containerRuntime" in block, "容器那一行没写实际的运行时"
+        assert "input.self === null" in block and "'unknown'" in block, "没问到被说成了一个结论"
+        assert "detail: '无'" in block, "一个运行时都没有时要写「无」"
 
 
 class TestUnknownLooksDifferentFromNo:
-    def test_the_unknown_dot_is_hollow_not_a_dim_solid(self) -> None:
+    def test_the_unknown_dot_matches_its_neighbours_and_the_words_say_unknown(self) -> None:
+        """所有者的决定:点与「不通」同一个样子(两次指出那颗空心圈「不对、要与其它对齐」)。
+        「不知道」不能因此消失 —— 它得由右边那几个字说出来,所以这里核的是那几个字还在。"""
         css = _read(_HUD)
-        m = re.search(r"\.wired-row\[data-state='unknown'\]\s+\.wired-dot\s*\{([^}]*)\}", css)
-        assert m, "unknown 那颗点没有自己的样子 —— 它会跟别的态混成一样"
-        body = m.group(1)
-        assert "inset" in body, "unknown 用的不是空心。暗一点的实心会被读成「不通」," "而「不通」是一个问过了的结论"
+        m = re.search(
+            r"\.wired-row\[data-state='off'\] \.wired-dot,\s*\.wired-row\[data-state='unknown'\] \.wired-dot\s*\{", css
+        )
+        assert m, "「不知道」的点又长得和相邻的点不一样了"
+        src = _read(_WIRED)
+        assert (
+            "LABEL" in src and "unknown: '不知道'" in src
+        ), "「不知道」这三个字没了 —— 点一样了,字就是唯一说得出它的地方"
+        assert "name: '容器'" in src and "detail: '没拉到'" in src
 
     def test_each_state_is_visually_distinct(self) -> None:
         """四态四种画法,不许两态共用一条规则。"""
@@ -142,12 +150,19 @@ class TestItAsksBeforeItClaimsItDoesNotKnow:
             "loadEndpoints 只在打开设置时才调 —— 那么后端明明通着," "清单上却一直写「端点列表没拉到」,说的和现实相反"
         )
 
+    def test_who_the_agent_is_and_which_runtime_are_asked_at_boot_and_on_every_reconnect(self) -> None:
+        """后端换了一个进程(重启)名字和运行时可能都变了 —— 开机问一次,每次重新连上再问一次。"""
+        src = _read(_MAIN)
+        assert re.search(r"^\s{2}void loadSelf\(\);", src, re.M), "开机没问本体是谁"
+        on_open = src[src.index("onOpen: () => {") :][:200]
+        assert "void loadSelf()" in on_open, "重新连上后没再问 —— 左下写的还是上一个进程的样子"
+
     def test_the_list_is_fed_from_the_store_not_its_own_copy(self) -> None:
         """一处权威:每一行都从 store 推出来,不许自己存一份。"""
         src = _read(_MAIN)
         assert "deriveWired(" in src, "清单没有接上 deriveWired"
         block = src[src.index("deriveWired(") :][:500]
-        for field in ("providers:", "devices:", "perception:", "connected:"):
+        for field in ("providers:", "devices:", "perception:", "connected:", "self:"):
             assert field in block, f"{field} 没喂进去 —— 那一行会凭空说话"
 
 

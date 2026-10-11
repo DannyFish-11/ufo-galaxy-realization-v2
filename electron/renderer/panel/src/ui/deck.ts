@@ -129,11 +129,12 @@ export function createDeck(store: Store, onDraw?: (index: number) => void): Deck
 
     if (card.profile.length > 0) {
       const plot = el('span', 'card-plot');
-      for (const v of card.profile) {
+      card.profile.forEach((v, k) => {
         const bar = el('i');
         bar.style.height = `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`;
+        bar.style.setProperty('--i', String(k)); // 抽出这张卡时依次长出来的延迟
         plot.append(bar);
-      }
+      });
       node.append(plot);
     }
 
