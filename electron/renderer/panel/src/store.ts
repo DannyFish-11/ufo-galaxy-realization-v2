@@ -22,6 +22,7 @@ import type {
   GitHubAddon,
   GitHubAddonStatus,
   IsolatedResult,
+  PanelSelf,
   UserProvider,
   VendorCheck,
   VendorPage,
@@ -98,6 +99,8 @@ export interface HudState {
    * 会以为自己加过的东西丢了。
    */
   readonly userProviders: readonly UserProvider[] | null;
+  /** 本体自己是谁、用的哪个容器运行时。null = 还没问到(与「没有容器运行时」是两件事) */
+  readonly self: PanelSelf | null;
   /**
    * 后端认哪些协议。空数组 = 还没拉到 —— 那时协议牌一个都不画,而不是画一个
    * 猜出来的 openai。猜出来的那一颗会让人以为「只支持这一种」。
@@ -184,6 +187,7 @@ export const initialState: HudState = {
   tierGaps: [],
   config: null,
   userProviders: null,
+  self: null,
   userProviderProtocols: [],
   userProvidersBusy: false,
   userProviderNotice: '',

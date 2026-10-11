@@ -20,12 +20,13 @@
  * 2. **四态,不是布尔。** 通 / 降级 / 不通 / **不知道**。第四种最要紧:后端没拉到
  *    (`null`)和后端说"一个都没有"(空数组)是两件事,画成同一个样子就是把"不知道"
  *    说成了"没有"。
- * 3. **缺的那条也列出来。** 容器运行时现在**没有**面板能问的接口 —— 那就如实写成
- *    "面板还没接这条",而不是从清单里省掉。省掉的话,这张清单看起来就是完整的,
- *    而它并不完整。
+ * 3. **写实际的那个东西,不写一个形容词。** 本体写正在答话的 Agent 叫什么,容器写是 docker 还是
+ *    podman,服务写验过几个 / 一共几个,感知写此刻是不是正在感知 —— 都是后端说的,面板不编。
+ *    没有就写「无」(所有者要求),原委进悬停那一句。
  */
 import type { DeviceRow, PerceptionView, TierView } from '../types';
-import type { UserProvider } from '../transport';
+import type { PanelSelf, UserProvider } from '../transport';
+import { modelLabel } from './model_name';
 
 /**
  * 一行的状态。**四态**,理由见文件头第 2 条。
@@ -77,6 +78,8 @@ export function deriveWired(input: {
   readonly devices: readonly DeviceRow[];
   readonly perception: PerceptionView | null;
   readonly connected: boolean;
+  /** 本体是谁、容器用的哪个(``/api/v1/panel/self``)。null = 还没问到 */
+  readonly self: PanelSelf | null;
 }): readonly WiredRow[] {
   const rows: WiredRow[] = [];
 
@@ -93,9 +96,20 @@ export function deriveWired(input: {
     }
     return rows;
   }
-  rows.push({ name: '本体', state: 'on', detail: '连着' });
 
-  // ── 本机模型:看**实际加载的型号**,不看选了哪一档 ─────────────────────
+  // ── 本体:写**正在答话的那个 Agent 的名字**(后端实例的类名,比如 OpenClawd),不写「连着」 ──
+  if (input.self === null) {
+    rows.push({ name: '本体', state: 'unknown', detail: '没拉到', why: '连上了，但还没问到在答话的是哪个 Agent' });
+  } else {
+    rows.push({
+      name: '本体',
+      state: input.self.agent ? 'on' : 'off',
+      detail: input.self.agent || '无',
+      why: '后端连着，答话的是这个 Agent',
+    });
+  }
+
+  // ── 本机模型:看**实际加载的型号**,不看选了哪一档。型号首字母大写只是显示 ──
   if (input.tiers === null) {
     rows.push({
       name: '模型',
@@ -109,7 +123,8 @@ export function deriveWired(input: {
       rows.push({
         name: '模型',
         state: 'on',
-        detail: models.map((s) => s.model).join(' + '),
+        detail: models.map((s) => modelLabel(s.model)).join(' + '),
+        why: `标签原文 ${models.map((s) => s.model).join(' + ')}`,
       });
     } else if (input.tiers.current) {
       // 选了档,但这一档没报出在跑哪个型号 —— 不是"没有模型",是"没报"。
@@ -120,11 +135,11 @@ export function deriveWired(input: {
         why: `选了 ${input.tiers.current} 档，但这一档没报出在跑哪个型号`,
       });
     } else {
-      rows.push({ name: '模型', state: 'off', detail: '未选档' });
+      rows.push({ name: '模型', state: 'off', detail: '无', why: '还没选档' });
     }
   }
 
-  // ── 我的模型服务:`live` 才算通。**没验过的不算** ──────────────────────
+  // ── 我的模型服务:写「验过的 / 一共」(比如 1/1)。`live` 才算通,**没验过的不算** ──
   if (input.providers === null) {
     rows.push({
       name: '服务',
@@ -133,18 +148,18 @@ export function deriveWired(input: {
       why: '端点列表没拉到 —— 不是一个都没加，是这次没问到',
     });
   } else if (input.providers.length === 0) {
-    rows.push({ name: '服务', state: 'off', detail: '没加过' });
+    rows.push({ name: '服务', state: 'off', detail: '无', why: '一个端点都没加过' });
   } else {
     const live = input.providers.filter((p) => p.state === 'live');
     const rest = input.providers.length - live.length;
     rows.push({
       name: '服务',
       state: live.length === 0 ? 'off' : rest === 0 ? 'on' : 'part',
-      detail: `${live.length}/${input.providers.length} 验过`,
+      detail: `${live.length}/${input.providers.length}`,
       why:
         live.length === 0
           ? `加了 ${input.providers.length} 个端点，一个都还没验过 —— 没验过的不参与选路`
-          : `${input.providers.length} 个端点里 ${live.length} 个验过了，${rest} 个还没验`,
+          : `${input.providers.length} 个端点里 ${live.length} 个验过了` + (rest ? `，${rest} 个还没验` : ''),
     });
   }
 
@@ -162,48 +177,50 @@ export function deriveWired(input: {
         : `这台电脑 + ${online} 台在线` + (degraded ? `，另有 ${degraded} 台降级` : ''),
   });
 
-  // ── 感知:四条模态。`source === 'unwired'` = 进程里根本没有感知库 ────────
+  // ── 感知:**实时的** —— 此刻正在感知就写「正在感知」,否则写「无」(所有者要求)。
+  //    「正在」= 后端契约里的 `is_sensing`(任一模态此刻 live),隐私暂停时一律不算。为什么不在,进悬停那一句。──
   if (input.perception === null) {
     rows.push({ name: '感知', state: 'unknown', detail: '没收到', why: '还没收到感知状态' });
-  } else if (input.perception.source === 'unwired') {
+  } else if (input.perception.is_sensing && !input.perception.privacy_paused) {
+    const live = input.perception.modalities.filter((m) => m.state === 'live').length;
+    rows.push({
+      name: '感知',
+      state: 'on',
+      detail: '正在感知',
+      why: `${input.perception.modalities.length} 条模态里 ${live} 条正在收`,
+    });
+  } else {
     rows.push({
       name: '感知',
       state: 'off',
-      detail: '没装',
-      why: '这个进程里没有感知库 —— 看、听这几条都不在',
-    });
-  } else if (input.perception.privacy_paused) {
-    // 按了隐私暂停 —— 这是**你要的**,不是故障。单独说。
-    rows.push({
-      name: '感知',
-      state: 'part',
-      detail: '已暂停',
-      why: '你按了隐私暂停 —— 这是你要的，不是故障',
-    });
-  } else {
-    const on = input.perception.modalities.filter(
-      (m) => m.state === 'live' || m.state === 'idle',
-    ).length;
-    const total = input.perception.modalities.length;
-    rows.push({
-      name: '感知',
-      state: on === 0 ? 'off' : on === total ? 'on' : 'part',
-      detail: `${on}/${total}`,
-      why: `${total} 条模态里 ${on} 条在`,
+      detail: '无',
+      why:
+        input.perception.source === 'unwired'
+          ? '这个进程里没有感知库 —— 看、听这几条都不在'
+          : input.perception.privacy_paused
+            ? '你按了隐私暂停 —— 这是你要的，不是故障'
+            : '此刻没有一条模态在收',
     });
   }
 
-  // ── 容器运行时:**面板问不到。** ───────────────────────────────────────
-  //
-  // 启动器那边是知道的(屏幕上会打「基础设施 · Podman」),但那条事实没有任何
-  // 面板能调的接口。省掉这一行的话,这张清单看起来就是完整的 —— 而它不是。
-  // 写成 unknown 并说明为什么,既不撒谎,也把下一步指出来了。
-  rows.push({
-    name: '容器',
-    state: 'unknown',
-    detail: '没接口',
-    why: '面板还没接这条 —— 启动器屏幕上有（「基础设施 · Podman」那一行），但没有面板能调的接口',
-  });
+  // ── 容器:写**实际用的那个运行时**(docker / podman),一个都没有就写「无」 ──────
+  if (input.self === null) {
+    rows.push({ name: '容器', state: 'unknown', detail: '没拉到', why: '还没问到用的是哪个容器运行时' });
+  } else if (input.self.containerRuntime) {
+    rows.push({
+      name: '容器',
+      state: 'on',
+      detail: input.self.containerRuntime,
+      why: `容器运行时是 ${input.self.containerRuntime}`,
+    });
+  } else {
+    rows.push({
+      name: '容器',
+      state: 'off',
+      detail: '无',
+      why: '这台机器上没找到 docker 或 podman（两个都装了而还没选过的，也先算没有）',
+    });
+  }
 
   return rows;
 }

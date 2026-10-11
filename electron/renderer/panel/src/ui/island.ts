@@ -25,6 +25,7 @@ import type { AmbientAction, DeviceRow, ModalityView, PerceptionView, TierView }
 import { LIT_CAPACITY, createGalaxy } from './galaxy';
 import { POSE_WORD, createPet } from './pet';
 import type { PetLive } from './pet';
+import { modelLabel } from './model_name';
 
 /** 双模型档里那两位的中文名。后端给的是 perception / reasoning / both。 */
 const ROLE_LABEL: Record<string, string> = {
@@ -386,7 +387,9 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
       // 型号名一行摆完,摆不下就省略 —— 全称在 title 里,也在设置浮层那一行里
       // 完整写着。**岛是余光扫一眼的地方**,不该为两个型号 id 吃掉设备列表三分之一
       // 的高度(它先前正是这么干的:设备列表从 123px 缩到 73px,四台只露两台)。
-      const slots = tiers.slots.filter((x) => x.model).map((x) => `${ROLE_LABEL[x.role] ?? x.role} ${x.model}`);
+      const slots = tiers.slots
+        .filter((x) => x.model)
+        .map((x) => `${ROLE_LABEL[x.role] ?? x.role} ${modelLabel(x.model)}`);
       const detail = cur
         ? slots.length
           ? slots.join(' · ')

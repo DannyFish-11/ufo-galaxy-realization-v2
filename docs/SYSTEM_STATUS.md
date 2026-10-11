@@ -519,7 +519,7 @@ python scripts/check_assessment_freshness.py
 
 **验证**：受影响测试全跑（约 4.6 万条）：除两条 `test_pr4v2_android_evaluator_artifact_governance_flow.py::TestGroupJ_*`（与前面的测试同批跑时失败，**在干净的 HEAD 上同样失败**，单独跑通过，是既有的顺序依赖，与本次无关）外全部通过；另有一条 `test_the_wiring_gate_actually_blocks` 在我并行开多路测试时撞上别路测试临时建的文件，单独跑通过。守卫（import 边界 / 文件复杂度 / 可达性 / 接线 / 裁决独立 / 未接线清单 …）、black / isort / CI 的 flake8 全绿；`docs/PANEL_SWITCHES.md`、`docs/MULTI_MACHINE_MODE.md` 的键表重新生成；面板 `dist/` 重新构建。
 
-### 6.16 2026-10-11：面板版式——模型说的话加紫底、左栏多余紫块、B 档颜色、左下对齐、本地主脑模型行
+### 6.16 2026-10-11：面板版式——模型说的话加紫底、左栏多余紫块、B 档颜色、左下对齐与实际值、本地主脑模型行
 
 所有者对着真界面指出的几处（真服务器 + 真浏览器逐处对过改前改后）：
 
@@ -530,8 +530,11 @@ python scripts/check_assessment_freshness.py
 - **右下设置浮层（第三轮）**：每一行同一条左边（整档那几行、「本机模型」与 ABCD、「全部设置」此前差 10px），名字那一行与开关同一条中线（名字行高 = 开关高，多行副标题不再把开关拽到两行字中间），字块与开关之间 16px、名字与副标题之间 6px；副标题只在「 · 」处换行（此前「开= / 跨设备模式」被拆开）。**「自主」改成和上面一样的推拉开关**：开 = 「不逐步问人」，关 = 「读放行·写审批」，当前档名写在副标题里；三档的细调（含「敏感操作全问」）在「全部设置」里留着一行 —— 多态主键不再在 `/api/config/all` 里标 `bundle`。
 - **左下清单改名**：后端 → 本体；本机模型 / 模型服务 / 其他设备 → 模型 / 服务 / 设备；容器运行时 → 容器。设备那一行只写实时台数（这台电脑也算一台，「1 台」）。**本体没连上时六行全部写「无」**（原委在悬停那一句）。
 - **设置页「本地主脑模型」那一行**：7 个型号一行放不下，名字被挤成竖着的窄条。档位多（或字长）的行改成叠放，档位自己换行。
+- **左下清单写实际的那个东西（第四轮）**：本体写正在答话的 Agent 的名字（`OpenClawd`）；服务写「验过的 / 一共」（`1/1`）；感知此刻正在感知（契约里的 `is_sensing`，隐私暂停时不算）写「正在感知」，否则写「无」；容器写实际用的运行时（`docker` / `podman`），一个都没有写「无」。本体与容器这两条由新的 `GET /api/v1/panel/self` 给：Agent 名只读模块里那个单例（不为报个名字把智能体建出来），运行时由 `core.container_runtime.current_runtime()` 只读探测 —— 与启动器同一个先后，但不写选择记录、不弹交互、不跑 `docker info`。面板开机问一次、每次重新连上再问一次。还没问到的写「没拉到」，与「无」分开。
+- **型号显示首字母大写**：`gemma4:e2b` → `Gemma4:e2b`、`openbmb/minicpm-o4.5` → `Openbmb/Minicpm-o4.5`（`ui/model_name.ts`，左下清单、设置页本地主脑模型那一排、右下档位说明、灵动岛都过这一道）。**只改显示**：档位牌的 `data-value`、悬停提示、存进设置的仍是原串 —— Ollama 按原样认标签。
 
-`tests/test_panel_thread_blocks_and_left_column.py`（11 条）钉这几处的源码形状；`test_config_bundles_are_real_switches.py` 改成核「整档那几行都是同一个开关、同一列」；`test_panel_has_no_decorative_boxes.py` 的「有权带 1px 线」名单去掉了档位牌的三条和「不知道」那颗点（都不再是线）；`test_panel_says_what_is_actually_wired.py` 改成核「不知道」由文字说出来。
+`tests/test_panel_self_reports_the_real_agent_and_runtime.py`（11 条）钉 `/api/v1/panel/self` 与只读探测（不建智能体、不写选择记录、两个都装又没选过时不替启动器挑）；
+`tests/test_panel_thread_blocks_and_left_column.py`（13 条）钉这几处的源码形状；`test_config_bundles_are_real_switches.py` 改成核「整档那几行都是同一个开关、同一列」；`test_panel_has_no_decorative_boxes.py` 的「有权带 1px 线」名单去掉了档位牌的三条和「不知道」那颗点（都不再是线）；`test_panel_says_what_is_actually_wired.py` 改成核「不知道」由文字说出来。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

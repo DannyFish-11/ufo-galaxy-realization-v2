@@ -149,6 +149,42 @@ def test_the_status_list_uses_the_short_names_and_says_none_when_nothing_is_conn
     assert "detail: `${online + 1} 台`" in ts, "设备那一行只写实时的台数(这台电脑也算一台)"
 
 
+def _between(ts: str, start: str, end: str) -> str:
+    block = ts[ts.index(start) :]
+    return block[: block.index(end, len(start))]
+
+
+def test_each_row_says_the_actual_thing():
+    """所有者第四轮:服务写「1/1」;容器写 docker / podman;感知正在感知就写「正在感知」、不在就写「无」;
+    本体写后端实际的 Agent 名字(OpenClawd)。"""
+    ts = _code(_SRC / "ui/wired.ts")
+    service = _between(ts, "if (input.providers === null)", "const online")
+    assert "detail: `${live.length}/${input.providers.length}`" in service, "服务那一行要写成「验过的/一共」"
+    assert "验过`" not in service and "detail: '无'" in service
+    sense = _between(ts, "if (input.perception === null)", "if (input.self === null)")
+    assert "input.perception.is_sensing && !input.perception.privacy_paused" in sense
+    assert "detail: '正在感知'" in sense and "detail: '无'" in sense
+    agent = _between(ts, "if (input.self === null)", "if (input.tiers === null)")
+    assert "detail: input.self.agent" in agent, "本体那一行要写后端实际的 Agent 名字"
+    assert "'连着'" not in ts
+
+
+# ── 型号：显示时首字母大写 ───────────────────────────────────────────────────
+
+
+def test_model_names_are_shown_capitalised_but_sent_as_is():
+    """所有者:显示的型号首字母都大写。只改显示 —— 存进设置、发给后端的仍是原串(Ollama 的标签按原样认)。"""
+    helper = _code(_SRC / "ui/model_name.ts")
+    assert "tag.replace(/(^|\\/)([a-z])/g" in helper, helper
+    for f in ("ui/wired.ts", "ui/settings.ts", "ui/dock.ts", "ui/island.ts"):
+        assert "modelLabel(" in _code(_SRC / f), f"{f} 画型号时没过 modelLabel"
+    settings = _code(_SRC / "ui/settings.ts")
+    assert "MODEL_KEYS.has(item.key) ? modelLabel(opt) : opt" in settings
+    assert (
+        "chip.dataset['value'] = opt;" in settings and "stage(item.key, opt, item.value)" in settings
+    ), "存的必须是原串"
+
+
 # ── 设置页：档位多的行叠放 ───────────────────────────────────────────────────
 
 

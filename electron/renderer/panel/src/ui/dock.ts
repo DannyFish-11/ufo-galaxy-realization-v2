@@ -14,6 +14,7 @@
  */
 import type { Bundle, TierView } from '../types';
 import { platform } from '../platform';
+import { modelLabel } from './model_name';
 
 const ICONS = {
   plus: 'M12 5v14M5 12h14',
@@ -320,7 +321,7 @@ export function createDock(cb: DockCallbacks): DockHandles {
     const cur = view.tiers.find((t) => t.key === view.current);
     // 当前档的两位(感知位 / 推理位)如实报出来 —— 「C 档」三个字说不出实际在跑
     // 哪两个型号,而那才是人想确认的东西。
-    const slots = view.slots.filter((s) => s.model).map((s) => `${s.role} ${s.model}`);
+    const slots = view.slots.filter((s) => s.model).map((s) => `${s.role} ${modelLabel(s.model)}`);
     // 档位牌长得都一样(所有者:B 要与其它对齐),所以「装不下 / 没评估过」只在这行字里说。
     const unfit =
       cur && (cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram')

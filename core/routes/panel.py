@@ -739,6 +739,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         status["incidents"] = [i for i in status["incidents"] if i["t_last"] > floor]
         return JSONResponse(content={"success": True, "enabled": ambient_loop_enabled(), **status})
 
+    @router.get("/api/v1/panel/self")
+    async def get_panel_self() -> JSONResponse:
+        """面板左下「接上了什么」里本体与容器那两行的**实际**值:哪个 Agent 在答话、用的是哪个容器运行时。
+
+        Agent 名取**正在跑的那个实例**的类名(还没建出来就是它的类);容器运行时只读探测(装没装、选过哪个),
+        不跑 ``docker info`` 这类要好几秒的命令。没有就是空串 —— 面板据此写「无」。
+        """
+        import core.openclawd as _oc
+        from core.container_runtime import current_runtime
+
+        # 只读模块里那个单例,**不调** get_openclawd() —— 那会为了报个名字把整个智能体建出来。
+        agent = _oc._openclawd_instance
+        try:
+            runtime = current_runtime()
+        except Exception as exc:  # noqa: BLE001 — 探不出来就是没有,不让这一行把整个接口拖垮
+            logger.debug("容器运行时只读探测失败: %s", exc)
+            runtime = ""
+        return JSONResponse(
+            content={
+                "success": True,
+                "agent": type(agent).__name__ if agent is not None else _oc.OpenClawd.__name__,
+                "agent_running": agent is not None,
+                "container_runtime": runtime,
+            }
+        )
+
     @router.get("/api/v1/panel/feed")
     async def get_panel_feed():
         """面板实时数据(桌面 Electron 面板的 IPC 契约 snake_case 字段)。

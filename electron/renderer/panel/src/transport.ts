@@ -664,6 +664,33 @@ export async function fetchTiers(base: string): Promise<TierView | null> {
   }
 }
 
+/** 本体自己是谁、用的哪个容器运行时(``GET /api/v1/panel/self``)。空串 = 没有。 */
+export interface PanelSelf {
+  /** 正在答话的那个 Agent 的名字(后端实例的类名,比如 OpenClawd) */
+  readonly agent: string;
+  /** docker / podman;一个都没有就是空串 */
+  readonly containerRuntime: string;
+}
+
+/** 拉一次。拉不到就是 null —— 左下那两行说「没问到」,而不是编一个名字出来。 */
+export async function fetchPanelSelf(base: string): Promise<PanelSelf | null> {
+  try {
+    const resp = await fetch(base + '/api/v1/panel/self', { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      console.error('[hud] 拉本体信息失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    return {
+      agent: typeof body['agent'] === 'string' ? body['agent'] : '',
+      containerRuntime: typeof body['container_runtime'] === 'string' ? body['container_runtime'] : '',
+    };
+  } catch (err) {
+    console.error('[hud] 拉本体信息失败:', err);
+    return null;
+  }
+}
+
 /**
  * 换档。**不在前端先乐观切一下** —— 换档要驱逐旧模型、拉新模型,失败的可能性
  * 比翻一个开关大得多;先切了再对账的话,界面会停在一个后端并不认同的档位上。
