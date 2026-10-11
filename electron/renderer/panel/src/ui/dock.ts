@@ -321,7 +321,13 @@ export function createDock(cb: DockCallbacks): DockHandles {
     // 当前档的两位(感知位 / 推理位)如实报出来 —— 「C 档」三个字说不出实际在跑
     // 哪两个型号,而那才是人想确认的东西。
     const slots = view.slots.filter((s) => s.model).map((s) => `${s.role} ${s.model}`);
-    const unfit = cur && (cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram') ? ' · 这台机器装不下' : '';
+    // 档位牌长得都一样(所有者:B 要与其它对齐),所以「装不下 / 没评估过」只在这行字里说。
+    const unfit =
+      cur && (cur.fit === 'no_gpu' || cur.fit === 'insufficient_vram')
+        ? ' · 这台机器装不下'
+        : cur && cur.fit === 'unknown'
+          ? ' · 硬件没探到，没评估过'
+          : '';
     note.textContent = cur
       ? slots.length
         ? `${cur.label} · ${slots.join(' + ')}${unfit}`
@@ -451,7 +457,9 @@ export function createDock(cb: DockCallbacks): DockHandles {
         control.className = 'knob';
       } else {
         control.className = 'stage';
-        control.textContent = b.value;
+        // 写中文档名(「读放行·写审批」),原始取值退到悬停提示里 —— 整个浮层只有它一处还在写英文。
+        control.textContent = b.optionLabels?.[b.value] ?? b.value;
+        control.title = b.value;
       }
       row.append(text, control);
       row.addEventListener('click', (e) => {

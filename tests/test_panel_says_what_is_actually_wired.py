@@ -15,8 +15,8 @@
 1. **四态,不是布尔。** 通 / 降级 / 不通 / **不知道**。后端没拉到(`null`)与
    后端说"一个都没有"(空数组)是两件事;画成同一个样子,就是把"不知道"说成
    了"没有"。
-2. **不知道要长得不一样。** 空心,不是"暗一点的实心" —— 暗一点只会被当成
-   "不通",而"不通"是一个**问过了**的结论。
+2. **不知道要说得出来。** 曾经是靠一颗空心圈 —— 所有者两次指出最后那颗空心圈与其它点不一致、
+   要对齐,所以点改成与「不通」同一个样子;「不知道」靠右边那几个字(没接口 / 没拉到……)和悬停整句说。
 3. **缺的那条也得列出来。** 容器运行时现在没有面板能问的接口。省掉它,这张
    清单看起来就是完整的,而它不是。
 4. **开机就得去问。** 端点列表只在打开设置时才拉的话,这一行会一直写着
@@ -117,12 +117,19 @@ class TestTheListCanSayItDoesNotKnow:
 
 
 class TestUnknownLooksDifferentFromNo:
-    def test_the_unknown_dot_is_hollow_not_a_dim_solid(self) -> None:
+    def test_the_unknown_dot_matches_its_neighbours_and_the_words_say_unknown(self) -> None:
+        """所有者的决定:点与「不通」同一个样子(两次指出那颗空心圈「不对、要与其它对齐」)。
+        「不知道」不能因此消失 —— 它得由右边那几个字说出来,所以这里核的是那几个字还在。"""
         css = _read(_HUD)
-        m = re.search(r"\.wired-row\[data-state='unknown'\]\s+\.wired-dot\s*\{([^}]*)\}", css)
-        assert m, "unknown 那颗点没有自己的样子 —— 它会跟别的态混成一样"
-        body = m.group(1)
-        assert "inset" in body, "unknown 用的不是空心。暗一点的实心会被读成「不通」," "而「不通」是一个问过了的结论"
+        m = re.search(
+            r"\.wired-row\[data-state='off'\] \.wired-dot,\s*\.wired-row\[data-state='unknown'\] \.wired-dot\s*\{", css
+        )
+        assert m, "「不知道」的点又长得和相邻的点不一样了"
+        src = _read(_WIRED)
+        assert (
+            "LABEL" in src and "unknown: '不知道'" in src
+        ), "「不知道」这三个字没了 —— 点一样了,字就是唯一说得出它的地方"
+        assert "容器运行时" in src and "没接口" in src
 
     def test_each_state_is_visually_distinct(self) -> None:
         """四态四种画法,不许两态共用一条规则。"""

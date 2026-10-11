@@ -371,6 +371,15 @@ function readBundle(raw: unknown): Bundle | null {
   const opts = Array.isArray(o['options'])
     ? (o['options'] as unknown[]).filter((v): v is string => typeof v === 'string')
     : undefined;
+  const rawLabels = o['option_labels'];
+  const labels =
+    rawLabels && typeof rawLabels === 'object'
+      ? Object.fromEntries(
+          Object.entries(rawLabels as Record<string, unknown>).filter(
+            (e): e is [string, string] => typeof e[1] === 'string',
+          ),
+        )
+      : undefined;
 
   return {
     key,
@@ -385,6 +394,7 @@ function readBundle(raw: unknown): Bundle | null {
     overrides: typeof o['overrides'] === 'number' ? o['overrides'] : 0,
     unwired,
     ...(o['restart_required'] === true ? { restartRequired: true } : {}),
+    ...(labels && Object.keys(labels).length ? { optionLabels: labels } : {}),
   };
 }
 

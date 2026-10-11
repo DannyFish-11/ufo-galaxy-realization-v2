@@ -31,14 +31,26 @@ def _code(path: Path) -> str:
 
 
 def _rule(css: str, selector: str) -> str:
-    """取一条规则的声明体（选择器可以在逗号分隔的一组里）；找不到就返回空串。"""
-    for sel_list, body in re.findall(r"([^{}]+)\{([^}]*)\}", css):
-        if selector in [x.strip() for x in sel_list.split(",")]:
-            return body
-    return ""
+    """这个选择器的全部声明（它可能出现在几条规则里，也可能在逗号分隔的一组里），拼成一段；找不到就是空串。"""
+    bodies = [
+        body
+        for sel_list, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)
+        if selector in [x.strip() for x in sel_list.split(",")]
+    ]
+    return " ".join(bodies)
 
 
 # ── 对话：人是白块，模型是紫块 ───────────────────────────────────────────────
+
+
+def test_the_purple_block_is_see_through_and_shaped_like_the_white_one():
+    """所有者:紫的字块要更透、形状优化。紫只兑进透明里(不兑进白里),两边同一个圆角与尾巴。"""
+    css = _code(_CSS)
+    agent = _rule(css, ".turn[data-role='agent']")
+    assert "transparent" in agent and "var(--veil" not in agent, "紫底又兑进白里了 —— 那是一块板,不是一层纱"
+    assert "18px 18px 18px 6px" in agent
+    assert "18px 18px 6px 18px" in _rule(css, ".turn[data-role='user']")
+    assert "margin-top" in _rule(css, ".turn[data-role='agent'] + .turn[data-role='agent']"), "连着的几句合成一组"
 
 
 def test_the_models_words_sit_on_a_purple_block_that_mirrors_the_persons_white_one():
@@ -86,25 +98,16 @@ def test_the_activity_bars_are_only_drawn_when_the_card_is_pulled_out_and_every_
 # ── 档位牌：不用黄色 ─────────────────────────────────────────────────────────
 
 
-def test_a_tier_that_does_not_fit_is_shown_by_depth_not_by_the_one_yellow_on_the_surface():
+def test_every_tier_chip_looks_the_same_whether_or_not_it_fits():
+    """所有者两次指出 B 与其它档不一致(先是黄字黄圈,后来是沉下去)—— 档位牌一律同一个样子。"""
     css = _code(_CSS)
-    for sel in (
-        ".tier-stages .stage[data-fit='no_gpu']",
-        ".tier-stages .stage[data-fit='insufficient_vram']",
-        ".tier-stages .stage[data-picked='true'][data-fit='no_gpu']",
-        ".tier-stages .stage[data-picked='true'][data-fit='insufficient_vram']",
-    ):
-        body = _rule(css, sel)
-        assert body, sel
-        assert "--warn" not in body, f"{sel} 又用了黄色"
-        assert not re.search(r"inset 0 0 0 1(\.\d+)?px", body), f"{sel} 又套了一圈线"
-    picked = _rule(css, ".tier-stages .stage[data-picked='true'][data-fit='no_gpu']")
-    assert "var(--a-mid)" in picked, "选中的装不下的那一档也是同一块紫"
+    assert "data-fit" not in css, "档位牌又按装不装得下画成不一样的了"
+    assert "var(--a-mid)" in _rule(css, ".tier-stages .stage[data-picked='true']")
 
 
 def test_the_note_says_so_when_the_current_tier_does_not_fit_since_colour_no_longer_does():
     dock = _code(_SRC / "ui/dock.ts")
-    assert "这台机器装不下" in dock
+    assert "这台机器装不下" in dock and "没评估过" in dock
 
 
 # ── 左栏：与卡片同一条左右边 ─────────────────────────────────────────────────
@@ -125,11 +128,12 @@ def test_the_status_list_and_the_line_under_it_share_the_edges_of_the_card_above
     assert "padding: 3px 0" in _rule(css, ".wired-row"), "每行左右不再各缩 2px，点才落在卡片左缘上"
 
 
-def test_the_unknown_dot_is_as_light_as_its_neighbours_not_the_darkest_thing_in_the_column():
+def test_the_last_dot_in_the_status_list_looks_like_its_neighbours():
     css = _code(_CSS)
     body = _rule(css, ".wired-row[data-state='unknown'] .wired-dot")
-    assert "background: none" in body, "仍是空心 —— 「没问到」与「问过了没有」是两件事"
-    assert "rgba(93, 84, 102, 0.3)" not in body, "那圈深灰把最后一行画得比整列都重"
+    assert body and body == _rule(css, ".wired-row[data-state='off'] .wired-dot"), "最后那颗又和相邻的点不一样了"
+    m = re.search(r"background:\s*rgba\(255, 255, 255, ([\d.]+)\)", body)
+    assert m and float(m.group(1)) >= 0.35, "暗点要看得见 —— 0.18 的白在浅底上一列里像缺了三颗"
 
 
 # ── 设置页：档位多的行叠放 ───────────────────────────────────────────────────

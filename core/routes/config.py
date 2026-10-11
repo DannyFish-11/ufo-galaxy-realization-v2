@@ -696,6 +696,9 @@ def _bundle_state(bundle: Dict[str, Any]) -> Dict[str, Any]:
     }
     if "options" in meta:
         state["options"] = meta["options"]
+    labels = option_labels_for(primary)
+    if labels:
+        state["option_labels"] = labels  # 多态那枚小牌子写中文档名(「读放行·写审批」),不写 guided
     return state
 
 

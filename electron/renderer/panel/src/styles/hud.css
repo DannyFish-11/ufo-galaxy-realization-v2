@@ -843,11 +843,14 @@ html[data-shell='desktop'] {
   display: flex; flex-direction: column; gap: 22px;
   padding: 52px 8px 18px 4px;   /* 顶上让开那块岛 */
 }
-.turn { max-width: 34rem; font-size: var(--t-body); line-height: 1.8; }
+.turn { max-width: min(34rem, 84%); font-size: var(--t-body); line-height: 1.8; }
+/* 两边的字块同一个形:圆角 18、朝说话人那一侧的下角收成 6 的「尾巴」;块里行距比正文略紧
+   (1.8 是给大段散文的,放进一块底里显得松垮、块被撑得又高又方)。 */
+.turn[data-role='user'],
+.turn[data-role='agent'] { padding: 9px 16px 10px; line-height: 1.65; }
 .turn[data-role='user'] {
   align-self: flex-end;
-  padding: 11px 18px;
-  border-radius: 20px 20px 7px 20px;
+  border-radius: 18px 18px 6px 18px;
   background: linear-gradient(166deg, var(--veil-1), var(--veil-2));
   box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.08);
 }
@@ -856,13 +859,21 @@ html[data-shell='desktop'] {
    它都跟着底色走。字仍用正文墨色:底只是淡淡一层,不压字。 */
 .turn[data-role='agent'] {
   align-self: flex-start;
-  padding: 11px 18px;
-  border-radius: 20px 20px 20px 7px;
+  border-radius: 18px 18px 18px 6px;
+  /* **透**:紫只兑进透明里,不兑进白里 —— 底下的面透得上来,块是浮在面上的一层紫纱,不是一块贴上去的板。 */
   background: linear-gradient(166deg,
-    color-mix(in srgb, var(--a-mid) 42%, var(--veil-1)),
-    color-mix(in srgb, var(--a-mid) 30%, var(--veil-2)));
-  box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.1);
+    color-mix(in srgb, var(--a-mid) 22%, transparent),
+    color-mix(in srgb, var(--a-mid) 13%, transparent));
+  box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.32), 0 1px 2px rgba(93, 84, 102, 0.05);
 }
+/* 同一方连着说的几句合成一组:间距收紧,只有组里最后一句带尾巴角,组内相邻那一侧的角收小 ——
+   读起来是「一段话」,不是一摞各自独立的方块。 */
+.turn[data-role='agent'] + .turn[data-role='agent'],
+.turn[data-role='user'] + .turn[data-role='user'] { margin-top: -15px; }
+.turn[data-role='agent']:has(+ .turn[data-role='agent']) { border-bottom-left-radius: 18px; }
+.turn[data-role='agent'] + .turn[data-role='agent'] { border-top-left-radius: 6px; }
+.turn[data-role='user']:has(+ .turn[data-role='user']) { border-bottom-right-radius: 18px; }
+.turn[data-role='user'] + .turn[data-role='user'] { border-top-right-radius: 6px; }
 /* 新来的一句从下面浮上来、紫底同时由淡转实 —— 只对**新增**的那一句生效
    (thread.ts 只给新增的打 data-new;整组重绘时旧的不能重放,否则每来一个字全体闪一次)。 */
 .turn[data-new='true'] { animation: turn-in var(--t-card) var(--ease) both; }
@@ -873,8 +884,8 @@ html[data-shell='desktop'] {
 /* 还在生成时,紫底的投影随脉冲慢慢起伏 —— 周期用 --c-pulse(3.4s,已核过不在 0.17–0.25 Hz 带里) */
 .turn[data-role='agent'][data-streaming='true'] { animation: turn-glow var(--c-pulse) ease-in-out infinite; }
 @keyframes turn-glow {
-  0%, 100% { box-shadow: inset 0 1px 0 var(--lite), 0 1px 2px rgba(93, 84, 102, 0.1); }
-  50% { box-shadow: inset 0 1px 0 var(--lite), 0 2px 12px -2px color-mix(in srgb, var(--a-mid) 60%, transparent); }
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.32), 0 1px 2px rgba(93, 84, 102, 0.05); }
+  50% { box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.32), 0 2px 12px -2px color-mix(in srgb, var(--a-mid) 45%, transparent); }
 }
 /* 还没被念出来、因此还没上屏的那一截。锁步生效时它是灰的;
    一旦脱钩,它会被一次性放开 —— 那一刻由 .lockstep-mark 说明。 */
@@ -1063,18 +1074,16 @@ html[data-shell='desktop'] {
     0 0 4px rgba(255, 255, 255, 0.5);
 }
 
-/* 不通:沉进面里。没有光,也没有向外的影 —— 它不浮 */
-.wired-row[data-state='off'] .wired-dot {
-  background: rgba(255, 255, 255, 0.18);
-  box-shadow:
-    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.3),
-    inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
-}
-
-/* 不知道 = 空心。**不是浅一点的实心** —— 那会被读成「弱的通」。 */
+/* 不通 / 不知道:沉进面里的一颗暗点 —— 没有光,也没有向外的影,但**看得见**(此前 0.18 的白在
+   浅底上几乎没了,一列里像缺了三颗)。
+   两态**同一个样子**是所有者的决定:最后那颗空心圈两次被指出「不对、要与其它对齐」。
+   「不通」与「不知道」的区别不靠点,靠右边那几个字(没装 / 没接口 / 没拉到……)和悬停时的整句。 */
+.wired-row[data-state='off'] .wired-dot,
 .wired-row[data-state='unknown'] .wired-dot {
-  background: none;
-  box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.78), 0 0.5px 1.5px rgba(93, 84, 102, 0.22);
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow:
+    inset 0 0.5px 1.5px rgba(93, 84, 102, 0.32),
+    inset 0 -0.5px 0 rgba(255, 255, 255, 0.6);
 }
 
 @keyframes dot-breathe {
@@ -1219,26 +1228,10 @@ html[data-shell='desktop'] {
 .tier-stages { padding: 0 4px; }
 .tier-stages .stage { min-width: 30px; text-align: center; }
 
-/* 装不下:留着能点(人可能就是知道自己机器行),但**沉下去**,别让它看着和能跑的一样 ——
-   用深度说,不用颜色(整面只有一支色相,黄色的 B 是唯一跳出来的东西;与左下那列点
-   「不通 = 沉进面里」同一套话)。原因在 title 里说全,当前档装不下时上面那行字也会写明。 */
-.tier-stages .stage[data-fit='no_gpu'],
-.tier-stages .stage[data-fit='insufficient_vram'] {
-  color: var(--ink-3);
-  background: rgba(252, 251, 255, 0.16);
-  box-shadow: inset 0 1px 2px rgba(93, 84, 102, 0.22), inset 0 -0.5px 0 rgba(255, 255, 255, 0.5);
-}
-/* 硬件没探到 —— **不是「能跑」**。虚线边:一眼看出这一档没被评估过。 */
-.tier-stages .stage[data-fit='unknown'] {
-  box-shadow: none;
-  outline: 1px dashed rgba(93, 84, 102, 0.3); outline-offset: -1px;
-}
-/* 选中的那一档压过 fit 的着色:先说清楚"现在在哪一档",再说"跑不跑得动"。 */
+/* 装不下 / 硬件没探到的那几档:**长得和别的档一样**(所有者:B 的颜色不对、要与其它对齐 —— 先是黄字黄圈,
+   后来改成沉下去,两次都是「整排里只有它不一样」)。它们照样能点;装不下哪几个型号、后端的原话在悬停提示里,
+   当前档装不下时上面那行字写「这台机器装不下」。 */
 .tier-stages .stage[data-picked='true'] {
-  color: #fff; background: var(--a-mid);
-}
-.tier-stages .stage[data-picked='true'][data-fit='no_gpu'],
-.tier-stages .stage[data-picked='true'][data-fit='insufficient_vram'] {
   color: #fff; background: var(--a-mid);
   box-shadow: inset 0 1px 0 rgba(252, 251, 255, 0.22);
 }
