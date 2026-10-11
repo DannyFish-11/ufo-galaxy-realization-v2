@@ -17,7 +17,7 @@
    了"没有"。
 2. **不知道要说得出来。** 曾经是靠一颗空心圈 —— 所有者两次指出最后那颗空心圈与其它点不一致、
    要对齐,所以点改成与「不通」同一个样子;「不知道」靠右边那几个字(没接口 / 没拉到……)和悬停整句说。
-3. **缺的那条也得列出来。** 容器运行时现在没有面板能问的接口。省掉它,这张
+3. **缺的那条也得列出来。** 容器(运行时)现在没有面板能问的接口。省掉它,这张
    清单看起来就是完整的,而它不是。
 4. **开机就得去问。** 端点列表只在打开设置时才拉的话,这一行会一直写着
    「端点列表没拉到」,而后端好好的 —— 那正好是这张清单要治的毛病本身。
@@ -107,13 +107,12 @@ class TestTheListCanSayItDoesNotKnow:
         assert "p.state === 'live'" in src, "端点这一行不是按 live 筛的 —— 填了地址没验过也会被算成「通」"
 
     def test_the_gap_we_cannot_ask_about_is_still_listed(self) -> None:
-        """容器运行时:面板问不到,但必须出现在清单里,且标成 unknown。"""
+        """容器(运行时):面板问不到,但必须出现在清单里,且标成 unknown。行名按所有者要求短写成「容器」。"""
         src = _read(_WIRED)
-        assert "容器运行时" in src, "容器运行时被从清单里省掉了 —— 省掉之后这张清单看起来是完整的,而它不是"
-        # 头注释里也提了这四个字 —— 要找的是**代码里**那一处 rows.push。
-        m = re.search(r"rows\.push\(\{[^}]*name:\s*'容器运行时'[^}]*\}\)", src, re.S)
-        assert m, "容器运行时只在注释里说了,代码没真的往清单里推这一行"
-        assert "'unknown'" in m.group(0), "容器运行时被标成了一个结论,可面板根本没问到过它"
+        # 头注释里也提了这几个字 —— 要找的是**代码里**那一处 rows.push。
+        m = re.search(r"rows\.push\(\{[^}]*name:\s*'容器'[^}]*\}\)", src, re.S)
+        assert m, "容器那一行被从清单里省掉了(或只在注释里说了) —— 省掉之后这张清单看起来是完整的,而它不是"
+        assert "'unknown'" in m.group(0), "容器被标成了一个结论,可面板根本没问到过它"
 
 
 class TestUnknownLooksDifferentFromNo:
@@ -129,7 +128,7 @@ class TestUnknownLooksDifferentFromNo:
         assert (
             "LABEL" in src and "unknown: '不知道'" in src
         ), "「不知道」这三个字没了 —— 点一样了,字就是唯一说得出它的地方"
-        assert "容器运行时" in src and "没接口" in src
+        assert "name: '容器'" in src and "没接口" in src
 
     def test_each_state_is_visually_distinct(self) -> None:
         """四态四种画法,不许两态共用一条规则。"""

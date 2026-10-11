@@ -1173,17 +1173,24 @@ html[data-shell='desktop'] {
 .pop-item svg { flex: none; color: var(--ink-2); }
 
 /* 整档开关:一个开关管一整片配置键,不是一个键 */
+/* 一行 = 左边一块字(名字 + 副标题)、右边一个开关。**名字那一行与开关同一条中线**(名字行高 = 开关高),
+   副标题在名字下面另起;多行的副标题不会把开关拽到两行字中间去。字块与开关之间留 16px。 */
 .bundle {
-  display: flex; align-items: center; gap: 12px; width: 100%;
+  display: flex; align-items: flex-start; gap: 16px; width: 100%;
   border: 0; background: none; cursor: pointer;
-  padding: 11px 14px; border-radius: 19px;
+  padding: 10px 14px 11px; border-radius: 19px;
   font: inherit; text-align: left;
   transition: background 0.3s var(--ease);
 }
+.bundle > span:first-child { flex: 1; min-width: 0; }
 .bundle:hover { background: rgba(252, 251, 255, 0.34); }
 .bundle:focus-visible { outline: 2px solid var(--a-mid); outline-offset: -2px; }
-.bundle-name { display: block; font-size: var(--t-ui); }
-.bundle-note { display: block; margin-top: 1px; font-size: var(--t-mini); color: var(--ink-3); }
+.bundle-name { display: block; font-size: var(--t-ui); line-height: 23px; }
+/* 副标题按「 · 」断行,不在一个词中间断开(此前「跨设备模 / 式」) */
+.bundle-note {
+  display: block; margin-top: 2px; font-size: var(--t-mini); line-height: 1.5; color: var(--ink-3);
+}
+.bundle-note .seg { white-space: nowrap; }
 /* 有键被手改得偏离了这一档 —— 档位显示为「开 · 有偏离」,不能只显示"开" */
 .bundle-note[data-drift='true'] { color: var(--warn); }
 .knob {
@@ -1220,12 +1227,14 @@ html[data-shell='desktop'] {
 /* 分组用一道**两端化开**的浅痕,不用横贯到底的实线 —— 实线会把浮层切成
    两个盒子,而这五行本来就是一件事的五个方面。 */
 .tier-row::before {
-  content: ''; position: absolute; top: 0; left: 4px; right: 4px; height: 1px;
+  content: ''; position: absolute; top: 0; left: 14px; right: 14px; height: 1px;
   background: linear-gradient(90deg, transparent, rgba(93, 84, 102, 0.14) 22%,
     rgba(93, 84, 102, 0.14) 78%, transparent);
 }
-.tier-head { padding: 2px 4px 7px; }
-.tier-stages { padding: 0 4px; }
+/* 与上面几行同一条左边(行的内边距 14px) */
+.tier-head { padding: 2px 14px 7px; }
+.tier-head .bundle-name { line-height: 1.5; }
+.tier-stages { padding: 0 14px; }
 .tier-stages .stage { min-width: 30px; text-align: center; }
 
 /* 装不下 / 硬件没探到的那几档:**长得和别的档一样**(所有者:B 的颜色不对、要与其它对齐 —— 先是黄字黄圈,
@@ -1250,12 +1259,6 @@ html[data-shell='desktop'] {
   transition: background 0.28s var(--ease), color 0.28s var(--ease);
 }
 
-/* 那枚牌子要和上面几行的推拉开关**落在同一列**。``.knob`` 用 margin-left:auto
-   顶到右边缘,``.stage`` 此前没有 —— 于是它紧跟在文字后面,文字一短就整个往左跑。
-   去掉副标题之后这个错位一眼就能看见。
-   只对 bundle 行里的牌子生效:ABCD 那一排(``.tier-stages .stage``)是并排的四个,
-   给它们 auto 会把它们全推到右边挤成一堆。 */
-.bundle > .stage { margin-left: auto; }
 
 /* 没接上的那一档:主键在后端不存在。压平、去掉指针,并且**点不动** ——
    一个永远关着、点了也没反应的开关,比一条说明更容易骗到人。 */

@@ -136,6 +136,19 @@ def test_the_last_dot_in_the_status_list_looks_like_its_neighbours():
     assert m and float(m.group(1)) >= 0.35, "暗点要看得见 —— 0.18 的白在浅底上一列里像缺了三颗"
 
 
+def test_the_status_list_uses_the_short_names_and_says_none_when_nothing_is_connected():
+    """所有者:后端改成「本体」;第 2–4 行改成模型 / 服务 / 设备;容器运行时改成「容器」;
+    设备只写实时的台数;本体没连上时六行全部写「无」。"""
+    ts = _code(_SRC / "ui/wired.ts")
+    assert "const NAMES = ['本体', '模型', '服务', '设备', '感知', '容器'] as const" in ts
+    for old in ("'后端'", "'本机模型'", "'模型服务'", "'其他设备'", "'容器运行时'"):
+        assert f"name: {old}" not in ts, f"{old} 这个旧名字又回来了"
+    block = ts[ts.index("if (!input.connected)") :]
+    block = block[: block.index("return rows;")]
+    assert "for (const name of NAMES)" in block and "detail: '无'" in block, "没连上时六行要全部写「无」"
+    assert "detail: `${online + 1} 台`" in ts, "设备那一行只写实时的台数(这台电脑也算一台)"
+
+
 # ── 设置页：档位多的行叠放 ───────────────────────────────────────────────────
 
 

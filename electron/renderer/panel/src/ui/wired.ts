@@ -57,6 +57,9 @@ export interface WiredRow {
   readonly why?: string;
 }
 
+/** 六行的名字,自上而下。名字短:这一列窄,所有者要的是一眼扫完。 */
+const NAMES = ['本体', '模型', '服务', '设备', '感知', '容器'] as const;
+
 const LABEL: Record<WiredState, string> = {
   on: '通',
   part: '部分',
@@ -77,22 +80,25 @@ export function deriveWired(input: {
 }): readonly WiredRow[] {
   const rows: WiredRow[] = [];
 
-  // ── 后端本身。它不通的话,底下几行全是"不知道",得先说清这一条 ──────────
-  rows.push(
-    input.connected
-      ? { name: '后端', state: 'on', detail: '连着' }
-      : {
-          name: '后端',
-          state: 'off',
-          detail: '没连上',
-          why: '后端没连上 —— 底下几行都问不到，它们显示的是上一次的样子',
-        },
-  );
+  // ── 本体(后端)没连上:六行**全部写「无」**(所有者要求)。底下几行本来就问不到,
+  //    与其显示上一次的样子,不如一眼看出「现在什么都没有」。原委进悬停那一句。──
+  if (!input.connected) {
+    for (const name of NAMES) {
+      rows.push({
+        name,
+        state: 'off',
+        detail: '无',
+        why: name === '本体' ? '本体（后端）没连上' : '本体（后端）没连上 —— 这一条问不到',
+      });
+    }
+    return rows;
+  }
+  rows.push({ name: '本体', state: 'on', detail: '连着' });
 
   // ── 本机模型:看**实际加载的型号**,不看选了哪一档 ─────────────────────
   if (input.tiers === null) {
     rows.push({
-      name: '本机模型',
+      name: '模型',
       state: 'unknown',
       detail: '没拉到',
       why: '档位目录没拉到 —— 不是没有档位，是这次没问到',
@@ -101,38 +107,38 @@ export function deriveWired(input: {
     const models = input.tiers.slots.filter((s) => s.model);
     if (models.length) {
       rows.push({
-        name: '本机模型',
+        name: '模型',
         state: 'on',
         detail: models.map((s) => s.model).join(' + '),
       });
     } else if (input.tiers.current) {
       // 选了档,但这一档没报出在跑哪个型号 —— 不是"没有模型",是"没报"。
       rows.push({
-        name: '本机模型',
+        name: '模型',
         state: 'part',
         detail: `${input.tiers.current} 档`,
         why: `选了 ${input.tiers.current} 档，但这一档没报出在跑哪个型号`,
       });
     } else {
-      rows.push({ name: '本机模型', state: 'off', detail: '未选档' });
+      rows.push({ name: '模型', state: 'off', detail: '未选档' });
     }
   }
 
   // ── 我的模型服务:`live` 才算通。**没验过的不算** ──────────────────────
   if (input.providers === null) {
     rows.push({
-      name: '模型服务',
+      name: '服务',
       state: 'unknown',
       detail: '没拉到',
       why: '端点列表没拉到 —— 不是一个都没加，是这次没问到',
     });
   } else if (input.providers.length === 0) {
-    rows.push({ name: '模型服务', state: 'off', detail: '没加过' });
+    rows.push({ name: '服务', state: 'off', detail: '没加过' });
   } else {
     const live = input.providers.filter((p) => p.state === 'live');
     const rest = input.providers.length - live.length;
     rows.push({
-      name: '模型服务',
+      name: '服务',
       state: live.length === 0 ? 'off' : rest === 0 ? 'on' : 'part',
       detail: `${live.length}/${input.providers.length} 验过`,
       why:
@@ -142,27 +148,19 @@ export function deriveWired(input: {
     });
   }
 
-  // ── 设备:在线才算。降级和离线是两件事,别并成一个数 ────────────────────
+  // ── 设备:**只写实时的设备数**(所有者要求)。这台电脑自己不进名册,但它也是一台,所以 +1;
+  //    在线才算,降级的单独记进悬停那一句 —— 降级和离线是两件事,别并成一个数。────────
   const online = input.devices.filter((d) => d.state === 'online').length;
   const degraded = input.devices.filter((d) => d.state === 'degraded').length;
-  if (input.devices.length === 0) {
-    // 名册是空的。这台机器自己不进名册,所以空是正常的 —— 但也别说成"通"。
-    rows.push({
-      name: '其他设备',
-      state: 'off',
-      detail: '就这一台',
-      why: '名册上没有别的设备 —— 这台机器自己不进名册，所以空是正常的',
-    });
-  } else {
-    rows.push({
-      name: '其他设备',
-      state: online === 0 ? 'off' : degraded ? 'part' : 'on',
-      detail: degraded ? `${online} 在线 · ${degraded} 降级` : `${online} 在线`,
-      why: degraded
-        ? `${online} 台在线，另有 ${degraded} 台降级 —— 降级和离线是两件事`
-        : `${online} 台在线`,
-    });
-  }
+  rows.push({
+    name: '设备',
+    state: degraded ? 'part' : 'on',
+    detail: `${online + 1} 台`,
+    why:
+      input.devices.length === 0
+        ? '只有这台电脑 —— 名册上没有别的设备（这台机器自己不进名册）'
+        : `这台电脑 + ${online} 台在线` + (degraded ? `，另有 ${degraded} 台降级` : ''),
+  });
 
   // ── 感知:四条模态。`source === 'unwired'` = 进程里根本没有感知库 ────────
   if (input.perception === null) {
@@ -201,7 +199,7 @@ export function deriveWired(input: {
   // 面板能调的接口。省掉这一行的话,这张清单看起来就是完整的 —— 而它不是。
   // 写成 unknown 并说明为什么,既不撒谎,也把下一步指出来了。
   rows.push({
-    name: '容器运行时',
+    name: '容器',
     state: 'unknown',
     detail: '没接口',
     why: '面板还没接这条 —— 启动器屏幕上有（「基础设施 · Podman」那一行），但没有面板能调的接口',

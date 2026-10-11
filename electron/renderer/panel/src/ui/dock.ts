@@ -415,15 +415,21 @@ export function createDock(cb: DockCallbacks): DockHandles {
       // 三档,压成 aria-pressed 的真假会把中间那档吞掉 —— 这个仓库为「三态被当成
       // 布尔」栽过一次。两态的用 aria-pressed,多态的用 data-state 出档位名。
       const twoState = b.type === 'boolean';
-      const on = b.value === 'true';
+      // 多态的那一档(自主:safe / guided / autonomous)也画成和上面一样的推拉开关(所有者要求)。
+      // 开 = 最放手的那一档,关 = 次一档;**当前到底是哪一档写在副标题里**,三档的细调在「全部设置」。
+      const opts = b.options ?? [];
+      const on = twoState ? b.value === 'true' : opts.length > 0 && b.value === opts[opts.length - 1];
+      const level = !twoState ? (b.optionLabels?.[b.value] ?? b.value) : '';
       if (b.unwired) {
         row.dataset['unwired'] = 'true';
         row.disabled = true;
-      } else if (twoState) {
-        row.setAttribute('aria-pressed', String(on));
       } else {
-        row.dataset['state'] = b.value;
-        row.setAttribute('aria-label', `${b.name}:${b.value}`);
+        row.setAttribute('aria-pressed', String(on));
+        if (!twoState) {
+          row.dataset['state'] = b.value;
+          row.setAttribute('aria-label', `${b.name}:${level}`);
+          row.title = `当前：${level}（${b.value}）· 三档细调在「全部设置」`;
+        }
       }
       const text = document.createElement('span');
       const name = document.createElement('span');
@@ -444,23 +450,28 @@ export function createDock(cb: DockCallbacks): DockHandles {
           ? `有 ${b.overrides} 项手改过`
           : '';
       // 要重启才生效的也说出来:点了开关、界面翻过去,而后端有一部分要等下次启动才起作用。
-      note.textContent = [b.note, tail, b.restartRequired ? '重启后生效' : ''].filter((x) => x !== '').join(' · ');
+      // 按「 · 」分段,每段不在中间断行 —— 换行只落在两段之间(此前「开= / 跨设备模式」被拆在两行)。
+      const joined = [level, b.note, tail, b.restartRequired ? '重启后生效' : '']
+        .filter((x) => x !== '')
+        .join(' · ');
+      const segs = joined ? joined.split(' · ') : [];
+      note.replaceChildren();
+      segs.forEach((seg, i) => {
+        if (i > 0) note.append(' · ');
+        const piece = document.createElement('span');
+        piece.className = 'seg';
+        piece.textContent = seg;
+        note.append(piece);
+      });
       // 什么都没有就别占位 —— 空的 note 仍是 display:block,会给行凭空撑出一截。
-      note.hidden = note.textContent === '';
+      note.hidden = segs.length === 0;
       if (b.overrides > 0) note.dataset['drift'] = 'true';
       if (b.unwired) note.dataset['unwired'] = 'true';
       text.append(name, note);
 
-      // 两态给推拉开关;多态给一枚写着当前档位的小牌子 —— 一个开关表达不了三档。
+      // 每一档都是同一个推拉开关 —— 整块浮层只有一种「开不开」的样子。
       const control = document.createElement('span');
-      if (twoState || b.unwired) {
-        control.className = 'knob';
-      } else {
-        control.className = 'stage';
-        // 写中文档名(「读放行·写审批」),原始取值退到悬停提示里 —— 整个浮层只有它一处还在写英文。
-        control.textContent = b.optionLabels?.[b.value] ?? b.value;
-        control.title = b.value;
-      }
+      control.className = 'knob';
       row.append(text, control);
       row.addEventListener('click', (e) => {
         e.stopPropagation();

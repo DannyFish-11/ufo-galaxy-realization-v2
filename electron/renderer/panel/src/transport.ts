@@ -444,13 +444,17 @@ export async function setBundle(
   }
 }
 
-/** 这一档下一步该是什么值。布尔翻面;select 在自己的档位里循环。 */
+/**
+ * 这一档下一步该是什么值。布尔翻面;多态的那一档(自主)在浮层上也是一个推拉开关:
+ * 开着(在最放手那一档)→ 退到次一档;关着(其余任何一档)→ 最放手那一档。三档的细调在「全部设置」。
+ */
 export function nextBundleValue(b: Bundle): string | null {
   if (b.unwired || !b.type) return null;
   if (b.type === 'boolean') return b.value === 'true' ? 'false' : 'true';
-  if (b.options && b.options.length > 0) {
-    const i = b.options.indexOf(b.value);
-    return b.options[(i + 1) % b.options.length] ?? b.options[0] ?? null;
+  const opts = b.options ?? [];
+  if (opts.length > 0) {
+    const top = opts[opts.length - 1] ?? null;
+    return b.value === top ? (opts[opts.length - 2] ?? opts[0] ?? null) : top;
   }
   return null;
 }
