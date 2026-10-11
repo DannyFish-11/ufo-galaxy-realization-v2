@@ -212,12 +212,15 @@ class TestBothLoadPathsAskTheSameAuthority:
         assert CONFIG_SCHEMA["GALAXY_LLAMA_CTX"]["default"] == ""
 
     def test_both_context_keys_are_reachable_from_the_panel(self):
-        """判据接上了但用户改不了，等于没接 —— 面板上要有它们的位置。"""
-        import pathlib
+        """判据接上了但用户改不了，等于没接 —— 改的路要通。
 
-        tsx = pathlib.Path("electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
-        assert "GALAXY_LLAMA_CTX" in tsx
-        assert "GALAXY_OLLAMA_NUM_CTX" in tsx
+        这两个键属于「调数据方式」的参数，已从面板撤下、改由智能体按人的话调（core/tuning.py）；
+        所以这里钉的是：它们在调参白名单里（人说「上下文开大一点」就能改），而不是在面板的顺序清单里。
+        """
+        from core.tuning import KNOBS
+
+        for key in ("GALAXY_LLAMA_CTX", "GALAXY_OLLAMA_NUM_CTX"):
+            assert key in KNOBS, f"{key} 既不在面板上也不在调参白名单里 —— 用户改不了它"
 
 
 class TestTheGapIsSaidOutLoud:

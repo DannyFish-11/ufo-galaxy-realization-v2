@@ -35,7 +35,7 @@ logger = logging.getLogger("Galaxy.ContextTrim")
 # ``devices__request_cross_device`` 同理:本地模式下它是模型「想用别的设备却用不了」时唯一的出路(请求人打开
 # 跨设备模式)。工具表一超 24 个、请求又是中文,它在按词法相关性裁时得 0 分被裁掉 —— 真机实测:模型一直
 # 看不到它。它只在本地模式出现、只有一个,常驻的代价可以忽略。
-_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__", "devices__request_cross_device")
+_CORE_TOOL_MARKERS = ("memory__", "ask_human__", "context__", "devices__request_cross_device", "tuning__")
 
 
 def _env_int(name: str, default: int) -> int:

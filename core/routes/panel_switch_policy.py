@@ -147,8 +147,12 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
     ),
     "GALAXY_UNIFIED_WORKFLOW": _o("桌面操作与自治", "统一工作流引擎：实验特性，默认关"),
     # ── 模型与花费 ──────────────────────────────────────────────────────
-    "GALAXY_OPENSOURCE_FIRST": _p("模型与花费", "同等能力下先用本地/开源：省钱、不出网"),
-    "GALAXY_MOA_ENABLED": _p("模型与花费", "难题让几个模型各出方案再汇总：质量与花费的取舍"),
+    "GALAXY_OPENSOURCE_FIRST": _b(
+        "模型与花费", "同等能力下先用本地/开源：偏好型，不上面板，对智能体说「尽量用本地的」即可（core/tuning.py）"
+    ),
+    "GALAXY_MOA_ENABLED": _b(
+        "模型与花费", "难题让几个模型各出方案再汇总：偏好型，不上面板，对智能体说「别老合议」即可（core/tuning.py）"
+    ),
     "GALAXY_BANDIT_ROUTING": _b("模型与花费", "按实测表现挑模型：路由的内部学习，关掉退回固定顺序"),
     "GALAXY_ROUTER_ADAPTIVE_CONCURRENCY": _b("模型与花费", "按实测延迟自动调并发：内部调节"),
     "GALAXY_ROUTER_CB_ENABLED": _b("模型与花费", "熔断器：后端连续出错就暂停用它。关掉会一直撞墙"),
@@ -193,7 +197,10 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
         "多设备与网络", "WebRTC 数据通道（浏览器/手机把摄像头麦克风直接推给感知层）：opt-in"
     ),
     "GALAXY_TS_FUNNEL": _p("多设备与网络", "把网关经 Tailscale Funnel 暴露到公网：必须让人看见"),
-    "GALAXY_HF_MIRROR": _p("多设备与网络", "模型下载走国内镜像：按所在网络选"),
+    "GALAXY_HF_MIRROR": _b(
+        "多设备与网络",
+        "模型下载先试国内镜像：下载源由 core.hf_endpoint 探测择优（不通就换官方域名），不该有人替它选；允许哪些主机仍是 GALAXY_WEIGHTS_HOSTS",
+    ),
     "GALAXY_ONBOARDING_BLUETOOTH": _b("多设备与网络", "接入平面的蓝牙扫描：受「设备接入平面」总闸管，没有理由单独关"),
     "GALAXY_ONBOARDING_CAN": _b("多设备与网络", "接入平面的 CAN 总线扫描：同上"),
     "GALAXY_ONBOARDING_SERIAL": _b("多设备与网络", "接入平面的串口扫描：同上"),

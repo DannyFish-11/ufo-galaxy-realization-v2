@@ -59,7 +59,6 @@ LABELS: Dict[str, str] = {
     # ── network ──
     "GATEWAY_PORT": "网关端口",
     # ── devices ──
-    "UFO_NODE_HOST": "节点主机名",
     "NODE_92_URL": "设备控制服务的地址",
     "NODE_45_URL": "桌面端点的地址",
     "NODE_33_URL": "安卓 ADB 控制的地址",
@@ -78,7 +77,6 @@ LABELS: Dict[str, str] = {
     # ── security ──
     "SECRETVAULT_URL": "密钥保险库的地址",
     # ── advanced ──
-    "MAIN_REPO_URL": "主仓库服务的地址",
     # ── network ──
     "MQTT_PORT": "MQTT 消息代理的端口",
     # ── security ──
@@ -95,6 +93,7 @@ LABELS: Dict[str, str] = {
     "GALAXY_ADDON_UNATTENDED": "插件安装免确认（无人值守）",
     "GALAXY_ADDON_HOST_DEPS": "插件依赖装进主环境",
     # ── security ──
+    "GITHUB_INSTALL_DIR": "从 GitHub 装进来的项目放哪",
     "GITHUB_TOKEN": "GitHub 访问令牌",
     # ── devices ──
     "GALAXY_MESH_SECRET": "Mesh 签名密钥",
@@ -124,7 +123,6 @@ LABELS: Dict[str, str] = {
     "GALAXY_AS_SAMPLE_WINDOW": "自适应并发的采样窗口",
     "GALAXY_AS_PROBE_INTERVAL_S": "自适应并发的探测间隔",
     "GALAXY_DATA_DIR": "数据总目录",
-    "GALAXY_MARKET_STORE_DIR": "技能市场的本地目录",
     "GALAXY_FEATURE_FLAGS_PATH": "功能开关文件路径",
     # ── devices ──
     "GALAXY_MASTER_BRAIN_STATE_PATH": "主脑状态文件路径",
@@ -139,7 +137,6 @@ LABELS: Dict[str, str] = {
     "CMD_MAX_CONCURRENT": "单类命令的最大并发数",
     "CONCURRENCY_GLOBAL_MAX": "全局最大并发数",
     # ── security ──
-    "GALAXY_MAX_CONTEXT_TOKENS": "上下文 token 上限",
     # ── advanced ──
     "GALAXY_MAX_MESSAGE_SIZE": "单条消息大小上限",
     # ── voice ──
@@ -273,7 +270,6 @@ LABELS: Dict[str, str] = {
     "GALAXY_NODE_HEALTH_RETRIES": "节点健康检查的重试次数",
     # ── network ──
     "GALAXY_PIP_INDEX": "pip 下载源",
-    "GALAXY_HF_MIRROR": "模型下载走国内镜像",
     # ── agent ──
     "GALAXY_OPENSOURCE_FIRST": "开源模型优先",
     "GALAXY_ROUTE_OBSERVED_WEIGHT": "选模型时「实测表现」的权重",
@@ -334,8 +330,6 @@ LABELS: Dict[str, str] = {
     "GALAXY_HITL_CONFIRM_TIMEOUT_S": "等你确认的超时",
     "GALAXY_HIGH_RISK_CONFIRM_TIMEOUT_S": "高危动作等确认的超时",
     # ── devices ──
-    "GALAXY_DEVICE_TOKEN_RETENTION_DAYS": "已吊销的设备凭证保留多少天",
-    "GALAXY_DEVICE_TOKEN_MAX_RECORDS": "设备凭证记录总条数上限",
     # ── security ──
     "GALAXY_PEER_DEFAULT_TRUST": "新设备的默认信任级别",
     # ── devices ──
@@ -380,7 +374,6 @@ LABELS: Dict[str, str] = {
     # ── advanced ──
     "GALAXY_TAILNET_MEMBERSHIP_PATH": "设备与 tailnet 对账记录",
     # ── devices ──
-    "GALAXY_DEVICE_TOKEN_STORE": "设备凭证库位置",
     # ── network ──
     "GALAXY_OTEL_EXPORTER": "链路数据发到哪",
     # ── advanced ──
@@ -444,6 +437,16 @@ OPTION_LABELS: Dict[str, Dict[str, str]] = {
     "GALAXY_AUTO_DOCKER": {"auto": "自动", "1": "强制", "0": "关闭"},
     "GALAXY_TOOLS_SLIM": {"auto": "自动", "1": "总是裁", "0": "从不裁"},
     "GALAXY_TOOLS_JIT": {"off": "全部预载", "on": "用到才载"},
+    "GALAXY_OPENSOURCE_FIRST": {"true": "开源 / 本地优先", "false": "只看能力与花费"},
+    "GALAXY_MOA_ENABLED": {"true": "难题多模型合议", "false": "一律单模型"},
+    "GALAXY_OLLAMA_KEEP_ALIVE": {
+        "-1": "一直驻留",
+        "30m": "空闲 30 分钟后卸载",
+        "5m": "空闲 5 分钟后卸载",
+        "0": "用完立刻卸载",
+    },
+    "GALAXY_WHISPER_MODEL": {"tiny": "最小·最快", "base": "小", "small": "中", "medium": "大·最准"},
+    "GALAXY_AMBIENT_ASR_SIZE": {"tiny": "最小·最快", "base": "小", "small": "中", "medium": "大·最准"},
     "GALAXY_TOOLS_STICKY": {"auto": "自动", "1": "保留", "0": "不保留"},
     "GALAXY_LIMINAL_REHEARSAL": {"auto": "自动", "1": "强制", "0": "关闭"},
     "GALAXY_SECRET_BACKEND": {"env": "本地加密文件", "vault": "独立保险库", "kms": "云密钥服务"},
@@ -506,6 +509,11 @@ HINTS: Dict[str, str] = {
     "GALAXY_AUTO_DOCKER": "自动＝装了就用；强制；关闭。默认自动。",
     "GALAXY_TOOLS_SLIM": "自动＝按上下文压力自动裁；总是裁；从不裁。默认自动。",
     "GALAXY_TOOLS_JIT": "全部预载＝一次发全；用到才载＝省上下文，但多一次往返。默认全部预载。",
+    "GALAXY_OPENSOURCE_FIRST": "同等能力下先用本地 / 开源模型（省钱、数据不出本机）；换成只看能力与花费，则不论开源与否。默认开源 / 本地优先。",
+    "GALAXY_MOA_ENABLED": "特别难的任务让几个模型各出方案再汇总，质量更高但更费钱、更慢；一律单模型＝不这么做。默认开。",
+    "GALAXY_OLLAMA_KEEP_ALIVE": "本地模型加载后在内存 / 显存里留多久。一直驻留＝响应快、占着显存；卸载得越早越省显存，下一次要重新加载。默认一直驻留。",
+    "GALAXY_WHISPER_MODEL": "语音对话的听写模型大小。越大越准、越慢、占得越多，第一次用要下载。默认「小」。",
+    "GALAXY_AMBIENT_ASR_SIZE": "后台环境聆听的听写模型大小。它一直在跑，宜小不宜大。默认「小」。",
     "GALAXY_TOOLS_STICKY": "自动＝已选本地主脑时保留，否则按相关性挑；保留；不保留。默认自动。",
     "GALAXY_LIMINAL_REHEARSAL": (
         "闲时提前想可能被问到的事。自动＝按复杂度门槛、且有工具可调才做；强制＝凡有工具就做"

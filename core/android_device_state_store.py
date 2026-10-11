@@ -1194,13 +1194,12 @@ def _normalize_capability_report_semantics(
 
 
 def _resolve_store_state_path() -> Optional[str]:
+    from core.data_paths import state_file
+
     configured = os.getenv("ANDROID_DEVICE_STATE_STORE_PATH")
-    if configured is not None:
-        configured = configured.strip()
-        if configured == "":
-            return None
-        return configured
-    return os.path.join(tempfile.gettempdir(), "galaxy_android_device_state_store.json")
+    if configured is None:  # 没配：落数据目录（此前落系统临时目录，被清理就丢）；临时目录里已有的继续用
+        return state_file("galaxy_android_device_state_store.json", tempfile.gettempdir())
+    return configured.strip() or None  # 显式配成空 = 不落盘
 
 
 def _dataclass_from_dict(cls: Type[T], payload: Dict[str, Any]) -> T:

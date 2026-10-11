@@ -209,13 +209,16 @@ def test_c09_state_path_is_not_an_env_knob():
 
 
 def test_c10_the_kill_switch_is_registered_everywhere():
-    """开关登记不全 = 功能没接到面板上:后端缺 → /api/config/all 不返回它;
-    前端缺 → 设置页上没有它的位置;而 POST /api/config 还会把它当 unknown_keys 拒掉。"""
+    """开关登记不全 = 用户关不掉它:没登记 → POST /api/config 会把它当 unknown_keys 拒掉;
+    不在调参白名单 → 人说「别用投机解码」时智能体没处下手（它是「调数据方式」的参数，已不在面板上，见 core/tuning.py）。"""
     from core.routes.config import CONFIG_SCHEMA
+    from core.tuning import KNOBS
 
     assert "GALAXY_SPECULATIVE_DRAFT" in CONFIG_SCHEMA
-    panel = (sd.PROJECT_ROOT / "electron/renderer/panel/src/settings_inventory.ts").read_text(encoding="utf-8")
-    assert "'GALAXY_SPECULATIVE_DRAFT'" in panel
+    assert "GALAXY_SPECULATIVE_DRAFT" in KNOBS
+    from core.routes.config_labels import OPTION_LABELS
+
+    assert "0" in OPTION_LABELS["GALAXY_SPECULATIVE_DRAFT"], "「关」这一档必须在：它是那个强制关的开关"
 
 
 def test_c08_labelled_runs_live_under_a_reserved_key():

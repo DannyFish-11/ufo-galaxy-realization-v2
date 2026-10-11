@@ -160,12 +160,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "network",
         "description": "网关端口（对外的统一入口 · 默认 9000）",
     },
-    "UFO_NODE_HOST": {
-        "default": "localhost",
-        "type": "string",
-        "category": "devices",
-        "description": "节点主机名（默认 localhost；跨机部署才需要改）",
-    },
     "NODE_92_URL": {
         "default": "http://localhost:8092",
         "type": "url",
@@ -265,12 +259,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "密钥保险库的地址（GALAXY_SECRET_BACKEND=vault 时才用）",
     },
-    "MAIN_REPO_URL": {
-        "default": "http://localhost:8080",
-        "type": "url",
-        "category": "advanced",
-        "description": "主仓库服务的地址（默认 localhost:8080）",
-    },
     "MQTT_PORT": {
         "default": "",
         "type": "number",
@@ -344,6 +332,12 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "string",
         "category": "agent",
         "description": "允许安装的 GitHub 仓库（逗号分隔，支持 myorg/*）。名单内免确认；留空=每次安装都要人确认",
+    },
+    "GITHUB_INSTALL_DIR": {
+        "default": "",
+        "type": "string",
+        "category": "agent",
+        "description": "从 GitHub 装进来的项目放哪（留空=数据总目录下的 github_addons；已有旧目录就继续用它）",
     },
     "GITHUB_BLOCKLIST": {
         "default": "",
@@ -480,10 +474,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "熔断器（后端连续出错就暂时停用它，别一直撞墙 · 默认开）",
     },
     "GALAXY_ROUTER_MAX_QUEUE_DEPTH": {
-        "default": "1000",
+        "default": "200",
         "type": "number",
         "category": "agent",
-        "description": "请求排队上限（超了直接拒绝，防止堆积雪崩 · 默认 1000）",
+        "description": "请求排队上限（超了直接拒绝，防止堆积雪崩 · 默认 200）",
     },
     "GALAXY_CB_FAILURE_THRESHOLD": {
         "default": "5",
@@ -498,28 +492,28 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "熔断后隔多久试探恢复(秒 · 默认 30)",
     },
     "GALAXY_CB_HALF_OPEN_PROBES": {
-        "default": "3",
+        "default": "1",
         "type": "number",
         "category": "advanced",
-        "description": "试探恢复时先放几个请求进去（默认 3）",
+        "description": "试探恢复时先放几个请求进去（默认 1）",
     },
     "GALAXY_CB_WINDOW_SIZE": {
-        "default": "60",
+        "default": "10",
         "type": "number",
         "category": "advanced",
-        "description": "熔断统计窗口(秒 · 默认 60)",
+        "description": "熔断统计窗口(看最近几次调用 · 默认 10)",
     },
     "GALAXY_AS_TARGET_LATENCY_MS": {
-        "default": "2000",
+        "default": "500",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的目标延迟(毫秒 · 默认 2000；超了就减并发)",
+        "description": "自适应并发的目标延迟(毫秒 · 默认 500；超了就减并发)",
     },
     "GALAXY_AS_ERROR_THRESHOLD": {
-        "default": "0.1",
+        "default": "0.2",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的错误率阈值（0~1 · 默认 0.1）",
+        "description": "自适应并发的错误率阈值（0~1 · 默认 0.2）",
     },
     "GALAXY_AS_INIT_LIMIT": {
         "default": "10",
@@ -528,28 +522,28 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "自适应并发的起始并发数（默认 10）",
     },
     "GALAXY_AS_MAX_LIMIT": {
-        "default": "200",
+        "default": "50",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的上限（默认 200）",
+        "description": "自适应并发的上限（默认 50）",
     },
     "GALAXY_AS_MIN_LIMIT": {
-        "default": "1",
+        "default": "2",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的下限（默认 1，保证不会降到零）",
+        "description": "自适应并发的下限（默认 2，保证不会降到零）",
     },
     "GALAXY_AS_SAMPLE_WINDOW": {
-        "default": "60",
+        "default": "100",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的采样窗口(秒 · 默认 60)",
+        "description": "自适应并发的采样窗口(看最近几次调用 · 默认 100)",
     },
     "GALAXY_AS_PROBE_INTERVAL_S": {
-        "default": "5",
+        "default": "10",
         "type": "number",
         "category": "advanced",
-        "description": "自适应并发的探测间隔(秒 · 默认 5)",
+        "description": "自适应并发的探测间隔(秒 · 默认 10)",
     },
     # --- Storage ---
     "GALAXY_DATA_DIR": {
@@ -557,12 +551,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "string",
         "category": "advanced",
         "description": "数据总目录（记忆库/账本等都放这儿 · 默认 ./data）",
-    },
-    "GALAXY_MARKET_STORE_DIR": {
-        "default": "./market",
-        "type": "string",
-        "category": "advanced",
-        "description": "技能市场的本地目录（默认 ./market）",
     },
     "GALAXY_FEATURE_FLAGS_PATH": {
         "default": "",
@@ -577,10 +565,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "主脑状态文件路径（留空=用内置默认位置）",
     },
     "CHROMA_PERSIST_DIR": {
-        "default": "./chroma",
+        "default": "",
         "type": "string",
         "category": "memory",
-        "description": "Chroma 向量库目录（默认 ./chroma；换目录等于换一套记忆）",
+        "description": "Chroma 向量库目录（留空=数据总目录下的 chroma_db；已有旧目录 ./chroma_db 就继续用它。换目录等于换一套记忆）",
     },
     "ANDROID_DEVICE_STATE_STORE_PATH": {
         "default": "",
@@ -641,22 +629,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "入口按「就绪度」判定的实验路径（而不是只看进程在不在 · 默认关）",
     },
     "CMD_MAX_CONCURRENT": {
+        "default": "20",
+        "type": "number",
+        "category": "advanced",
+        "description": "单类命令的最大并发数（默认 20）",
+    },
+    "CONCURRENCY_GLOBAL_MAX": {
         "default": "50",
         "type": "number",
         "category": "advanced",
-        "description": "单类命令的最大并发数（默认 50）",
-    },
-    "CONCURRENCY_GLOBAL_MAX": {
-        "default": "100",
-        "type": "number",
-        "category": "advanced",
-        "description": "全局最大并发数（默认 100）",
-    },
-    "GALAXY_MAX_CONTEXT_TOKENS": {
-        "default": "100000",
-        "type": "number",
-        "category": "security",
-        "description": "上下文 token 上限（超了会裁剪历史 · 默认 100000）",
+        "description": "全局最大并发数（默认 50）",
     },
     "GALAXY_MAX_MESSAGE_SIZE": {
         "default": "10485760",
@@ -1984,10 +1966,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "空闲预演（闲时提前想可能被问到的事 · auto=自动 / 1 / 0 · 默认 auto）",
     },
     "GALAXY_REHEARSAL_CANDIDATES": {
-        "default": "1",
+        "default": "2",
         "type": "number",
         "category": "agent",
-        "description": "每次预演准备几个候选（默认 1）",
+        "description": "每次预演准备几个候选（默认 2；1 退回单方案）",
     },
     "GALAXY_REHEARSAL_COMPLEXITY_FLOOR": {
         "default": "0.55",
@@ -2198,18 +2180,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "security",
         "description": "本机回环也会因连续失败被封禁（默认关=本机不封，免得桌面应用把自己锁在门外）",
     },
-    "GALAXY_DEVICE_TOKEN_RETENTION_DAYS": {
-        "default": "30",
-        "type": "number",
-        "category": "devices",
-        "description": "已吊销的设备凭证保留多少天（默认 30）",
-    },
-    "GALAXY_DEVICE_TOKEN_MAX_RECORDS": {
-        "default": "512",
-        "type": "number",
-        "category": "devices",
-        "description": "设备凭证记录总条数上限（只淘汰已吊销的，绝不删还在用的 · 默认 512）",
-    },
     "GALAXY_PEER_DEFAULT_TRUST": {
         "default": "ask",
         "type": "select",
@@ -2382,22 +2352,22 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "图片记忆库目录（留空=跟随 CHROMA_PERSIST_DIR，再空则 ./data/clip_memory）",
     },
     "GALAXY_CLAP_DIR": {
-        "default": "./data/clap_memory",
+        "default": "",
         "type": "string",
         "category": "perception",
-        "description": "声音记忆库目录（默认 ./data/clap_memory）",
+        "description": "声音记忆库目录（留空=数据总目录下的 clap_memory）",
     },
     "GALAXY_OMNIMEM_DIR": {
-        "default": "./data/omni_simplemem",
+        "default": "",
         "type": "string",
         "category": "memory",
-        "description": "SimpleMem 记忆目录（默认 ./data/omni_simplemem）",
+        "description": "SimpleMem 记忆目录（留空=数据总目录下的 omni_simplemem）",
     },
     "GALAXY_TASK_LEDGER_PATH": {
-        "default": "data/task_cost_ledger.jsonl",
+        "default": "",
         "type": "string",
         "category": "advanced",
-        "description": "任务成本账本路径（默认 data/task_cost_ledger.jsonl）",
+        "description": "任务成本账本路径（留空=数据总目录下的 task_cost_ledger.jsonl）",
     },
     "GALAXY_TASK_ALLOCATION_STATE_PATH": {
         "default": "",
@@ -2428,12 +2398,6 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "string",
         "category": "advanced",
         "description": "设备↔tailnet 节点对账记录文件（留空=数据目录下 tailnet_membership.json）",
-    },
-    "GALAXY_DEVICE_TOKEN_STORE": {
-        "default": "",
-        "type": "string",
-        "category": "devices",
-        "description": "设备凭证库位置（留空=用内置默认位置）",
     },
     "GALAXY_OTEL_ENABLED": {
         "default": "true",
@@ -2598,10 +2562,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "Tailscale 状态检查间隔(秒 · 默认 30)",
     },
     "CORS_ALLOWED_ORIGINS": {
-        "default": "*",
+        "default": "",
         "type": "string",
         "category": "security",
-        "description": "允许跨域访问的来源（* = 全允许；对外开放时务必收紧）",
+        "description": "允许跨域访问的来源（留空=本机面板与本机端口；写 * 等于任何网页都能带凭据调本机接口，不要写）",
     },
     "CORS_ALLOWED_METHODS": {
         "default": "GET,POST,PUT,DELETE",
@@ -2610,17 +2574,17 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "允许跨域的 HTTP 方法（默认 GET,POST,PUT,DELETE）",
     },
     "CORS_ALLOWED_HEADERS": {
-        "default": "*",
+        "default": "",
         "type": "string",
         "category": "security",
-        "description": "允许跨域的请求头（* = 全允许）",
+        "description": "允许跨域的请求头（留空=Authorization,Content-Type,X-Request-ID）",
     },
     # --- SLO & Continuity ---
     "GALAXY_SLO_LATENCY_WINDOW": {
-        "default": "300",
+        "default": "1000",
         "type": "number",
         "category": "advanced",
-        "description": "延迟统计窗口(秒 · 默认 300)",
+        "description": "延迟统计窗口(留最近几次样本 · 默认 1000)",
     },
     "GALAXY_SLO_HEARTBEAT_WINDOW": {
         "default": "200",

@@ -19,7 +19,7 @@ KB_VECTOR_BACKEND=local   →  直接使用 Jaccard 关键词搜索（默认，�
 |--------|------|--------|
 | `KB_VECTOR_BACKEND` | 向量引擎选择：`chroma` \| `qdrant` \| `local` | `local` |
 | `QDRANT_URL` | Qdrant 服务器地址（仅 `qdrant` 模式使用） | 空（不启用） |
-| `CHROMA_PERSIST_DIR` | ChromaDB 持久化目录（仅 `chroma` 模式使用） | `./chroma_db` |
+| `CHROMA_PERSIST_DIR` | ChromaDB 持久化目录（仅 `chroma` 模式使用） | 数据总目录下的 `chroma_db`；已有旧目录 `./chroma_db` 则继续用它 |
 | `KB_COLLECTION` | 向量集合 / 索引名称 | `galaxy_knowledge` |
 | `KB_VECTOR_SIZE` | 向量维度，需与 Embedding 模型匹配 | `384` |
 

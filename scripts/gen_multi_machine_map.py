@@ -33,8 +33,7 @@ PARTS = {
             "GALAXY_MESH_DISCOVERY_TIMEOUT GALAXY_MESH_NODE_ID GALAXY_MESH_PORT GALAXY_DEVICE_NAME GALAXY_DEVICE_TYPE"
         ),
         "信任与准入": (
-            "GALAXY_REQUIRE_DEVICE_APPROVAL GALAXY_PEER_DEFAULT_TRUST GALAXY_PEER_TRUST_PATH GALAXY_MESH_SECRET "
-            "GALAXY_DEVICE_TOKEN_STORE GALAXY_DEVICE_TOKEN_RETENTION_DAYS GALAXY_DEVICE_TOKEN_MAX_RECORDS"
+            "GALAXY_REQUIRE_DEVICE_APPROVAL GALAXY_PEER_DEFAULT_TRUST GALAXY_PEER_TRUST_PATH GALAXY_MESH_SECRET"
         ),
         "传输通道（不含 NATS）": (
             "GALAXY_TS_FUNNEL GALAXY_TS_ADVERTISE_RELAY GALAXY_TAILSCALE_CHECK_INTERVAL GALAXY_TAILSCALE_ENABLED "
@@ -78,10 +77,13 @@ _DISP = {"panel": "留在面板", "builtin": "内置", "ops": "运维", "member"
 
 def tables() -> str:
     logging.disable(logging.CRITICAL)
+    from core.routes.config import PANEL_HIDDEN_KEYS
     from core.routes.config_bundles import CONFIG_BUNDLES, member_keys, owned_keys
     from core.routes.config_restart import RESTART_REQUIRED
     from core.routes.config_schema_registry import CONFIG_SCHEMA
+    from core.routes.panel_builtin import CROSS_DEVICE_ONLY_KEYS, PANEL_BUILTIN_KEYS
     from core.routes.panel_switch_policy import SWITCH_POLICY
+    from core.tuning import knob_keys
 
     bundle_of = {k: b["name"] for b in CONFIG_BUNDLES for k in owned_keys(b, CONFIG_SCHEMA.keys())}
     member_of = {k: b["name"] for b in CONFIG_BUNDLES for k in member_keys(b)}
@@ -99,6 +101,20 @@ def tables() -> str:
                     continue
                 pol = SWITCH_POLICY.get(key)
                 disp = _DISP.get(pol.disposition, "") if pol else ""
+                if not disp:
+                    disp = (
+                        "内置"
+                        if key in PANEL_BUILTIN_KEYS
+                        else (
+                            "跨设备模式下才列"
+                            if key in CROSS_DEVICE_ONLY_KEYS
+                            else (
+                                "对话里调"
+                                if key in knob_keys()
+                                else "不列（内部调参）" if key in PANEL_HIDDEN_KEYS else ""
+                            )
+                        )
+                    )
                 default = str(meta["default"])
                 default = "开" if default == "true" else "关" if default == "false" else (default[:14] or "空")
                 bundle = f"{member_of[key]}（成员）" if key in member_of else bundle_of.get(key, "—")

@@ -122,6 +122,7 @@ from core.orchestration.lifecycle import (  # noqa: E402
     _SubtaskEntry,
 )
 from core.smart_home_tools import HOME_BUILTIN_TOOLS, dispatch_home_tool, home_tools_enabled  # noqa: E402
+from core.tuning import dispatch_tuning_tool, tuning_tools_for_agent  # noqa: E402
 
 # 当能力总线和直接加载路径均无法提供 Skill 参数 schema 时使用的默认值
 _DEFAULT_SKILL_SCHEMA: Dict = {
@@ -7263,6 +7264,7 @@ class OpenClawd:
         if home_tools_enabled():  # 智能家居:配了 Home Assistant 才出现 —— 见 core/smart_home_tools.py
             tools.extend(HOME_BUILTIN_TOOLS)
         tools.extend(devices_tools_for_agent())  # 设备:看、接入、调用;本地模式下可请求打开跨设备 —— 见 agent_tools.py
+        tools.extend(tuning_tools_for_agent())  # 按人的话调「调数据方式」的参数(不上面板)—— 见 core/tuning.py
 
         # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────
         try:
@@ -7325,6 +7327,7 @@ class OpenClawd:
             "context__",
             "home__",
             "devices__",
+            "tuning__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
 
@@ -7585,14 +7588,11 @@ class OpenClawd:
                 action = tool_name[len("ask_human__") :]
                 return await self._dispatch_ask_human_tool(action, arguments)
 
-            elif tool_name.startswith("devices__"):
-                return await dispatch_devices_tool(
-                    tool_name[len("devices__") :], arguments, session_id=getattr(self, "_current_session_id", "") or ""
-                )
-
-            elif tool_name.startswith("home__"):
-                return await dispatch_home_tool(
-                    tool_name[len("home__") :], arguments, session_id=getattr(self, "_current_session_id", "") or ""
+            elif tool_name.startswith(("devices__", "tuning__", "home__")):  # 同形的三族：(动作, 参数, 会话)
+                _family, _, _action = tool_name.partition("__")
+                _fam = {"devices": dispatch_devices_tool, "tuning": dispatch_tuning_tool, "home": dispatch_home_tool}
+                return await _fam[_family](
+                    _action, arguments, session_id=getattr(self, "_current_session_id", "") or ""
                 )
 
             elif tool_name.startswith("computer_use__"):

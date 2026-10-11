@@ -141,7 +141,8 @@ def test_openclawd_offers_the_tools_and_routes_the_prefix():
     assert "if home_tools_enabled():" in collect and "tools.extend(HOME_BUILTIN_TOOLS)" in collect
     dispatch = inspect.getsource(OpenClawd._dispatch_tool_call)
     # 必须走内联:CanonicalDispatcher 不认 home__ 前缀,委派过去就是"未知工具前缀"。
-    assert '"home__",' in dispatch and 'tool_name.startswith("home__")' in dispatch
+    # devices__ / tuning__ / home__ 三族同形，合在一个分支里（按前缀查表），所以认「前缀登记了 + 表里有它」。
+    assert '"home__",' in dispatch and '"home__")' in dispatch and "dispatch_home_tool" in dispatch
 
 
 # ── 整条链路 ──────────────────────────────────────────────────────────────
