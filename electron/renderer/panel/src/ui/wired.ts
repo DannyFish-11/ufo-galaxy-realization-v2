@@ -61,6 +61,9 @@ export interface WiredRow {
 /** 六行的名字,自上而下。名字短:这一列窄,所有者要的是一眼扫完。 */
 const NAMES = ['本体', '模型', '服务', '设备', '感知', '容器'] as const;
 
+/** 后端设备名册里这台电脑自己那一条的编号(core/routes/panel.py::build_panel_feed 总会插这一条)。 */
+const LOCAL_DEVICE_ID = 'desktop_local';
+
 const LABEL: Record<WiredState, string> = {
   on: '通',
   part: '部分',
@@ -163,17 +166,21 @@ export function deriveWired(input: {
     });
   }
 
-  // ── 设备:**只写实时的设备数**(所有者要求)。这台电脑自己不进名册,但它也是一台,所以 +1;
-  //    在线才算,降级的单独记进悬停那一句 —— 降级和离线是两件事,别并成一个数。────────
-  const online = input.devices.filter((d) => d.state === 'online').length;
-  const degraded = input.devices.filter((d) => d.state === 'degraded').length;
+  // ── 设备:**只写实时的设备数**(所有者要求)= 这台电脑 + 别的在线设备;
+  //    在线才算,降级的单独记进悬停那一句 —— 降级和离线是两件事,别并成一个数。
+  //    名册里**有**这台电脑自己那一条(后端 build_panel_feed 总会插一条 `desktop_local`「本机 Desktop」)——
+  //    以前这里当它不在、再 +1,只有一台电脑时写成「2 台」(所有者:「为啥只有一个设备会显示两个」)。
+  //    所以先把本机那条剔掉,再 +1:名册里有没有它,数都对。────────
+  const others = input.devices.filter((d) => d.id !== LOCAL_DEVICE_ID);
+  const online = others.filter((d) => d.state === 'online').length;
+  const degraded = others.filter((d) => d.state === 'degraded').length;
   rows.push({
     name: '设备',
     state: degraded ? 'part' : 'on',
     detail: `${online + 1} 台`,
     why:
-      input.devices.length === 0
-        ? '只有这台电脑 —— 名册上没有别的设备（这台机器自己不进名册）'
+      others.length === 0
+        ? '只有这台电脑 —— 名册上没有别的设备'
         : `这台电脑 + ${online} 台在线` + (degraded ? `，另有 ${degraded} 台降级` : ''),
   });
 

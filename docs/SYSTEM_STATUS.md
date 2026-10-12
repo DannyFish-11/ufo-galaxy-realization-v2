@@ -566,6 +566,8 @@ python scripts/check_assessment_freshness.py
 - **四角白边**：页面这边四角早就是透明的（Chromium 实测 alpha=0）；剩下那一圈是 Windows 给带粗边框（WS_THICKFRAME / WS_CAPTION）的窗口沿**窗口矩形**描的系统边。面板窗口改成 `thickFrame: false` —— 系统不再描边，也不再替它拉伸，所以拉伸改由上面那套手柄做。Windows 上的观感需要真机看一眼。
 - **任务栏图标**：旧的星云图换成同一只桌宠，由 `scripts/render_app_icons.py` 从托盘那套画法逐尺寸现画（.ico 九个尺寸、Electron / Tauri 两套），`tests/test_every_pet_is_the_same_pet.py` 核对文件就是现画的。
 
+- **左下角「设备」只有一台电脑却写「2 台」**：后端名册里总有本机那一条（`desktop_local`「本机 Desktop」），面板那一行当它不在、再 +1，于是算了两遍。现在先剔掉本机那条再 +1（灵动岛上的「x / y 在线」本来就按名册原样数，两处口径一致）。
+
 **启动前配置检查**：OPENAI / ANTHROPIC 两条只留「键名 — 谁的密钥」（所有者原话），不再出「怎么办」。
 
 **Windows 启动日志逐条：**
