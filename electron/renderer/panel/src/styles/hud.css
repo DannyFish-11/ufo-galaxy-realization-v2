@@ -754,8 +754,10 @@ html[data-shell='desktop'] {
   fill: var(--m-2);
   transition: fill 0.6s var(--ease);
 }
+/* 眼睛是面板的墨色:三只桌宠(面板 / 覆盖层 / 托盘)同一双眼睛 —— 托盘只有 16 像素,
+   近白的眼睛落在浅紫的身子上几乎看不见。颜色与几何量由 tests/test_every_pet_is_the_same_pet.py 三处核对。 */
 .pet-eye {
-  fill: var(--m-6);
+  fill: var(--ink);
   transition: y 0.34s var(--ease), height 0.34s var(--ease),
     opacity 0.34s var(--ease), fill 0.6s var(--ease);
 }

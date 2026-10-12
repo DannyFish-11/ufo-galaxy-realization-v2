@@ -183,6 +183,8 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 ### UI 层
 - `electron/` + `electron/renderer/panel/src/` - 桌面外壳与面板（纯 TS，只认 WS 的 `payload.render`，见 `docs/RENDER_CONTRACT_DIRECTION.md`）
 - `core/desktop_presence_runtime.py` - 桌面三态运行时（silent / liminal / manifest）
+- **三只桌宠是同一只**（面板 `panel/src/ui/pet.ts`、覆盖层 `renderer/app.js`、右下角托盘 `windows_service/pet_icon.py`）：推导只有一份 `electron/renderer/pet_state.js`（托盘是 Python，跑同一张用例表 `pet_state.cases.json`），样子三处逐个相等（`tests/test_every_pet_is_the_same_pet.py`）。托盘与后端同进程，经 `core/presence_fanout.py` 直接收在场桥广播的同一份 `payload.render`；感知那几位（隐私暂停、在不在收）变了，桥每秒核一次、变了就广播
+- **面板与覆盖层的长连接只有一份** `electron/renderer/live_socket.js`（保活 ping/pong、半开连接认得出来、连接超时、退避加抖动、网回来立刻重连），别再各写一份重连；面板的 HTTP 请求一律过 `transport.ts` 的 `fetchT`（读有期限且重试一次，写不重试，本来就慢的不设期限）
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢

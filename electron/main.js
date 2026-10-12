@@ -488,7 +488,11 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             webSecurity: true,
             allowRunningInsecureContent: false,
-            experimentalFeatures: false
+            experimentalFeatures: false,
+            // 覆盖层也直连网关的 /ws/desktop-presence(连上即有一份快照、断了自己回来),
+            // 地址与面板窗口同一个出处(GATEWAY_BASE),由 preload 转交成 window.galaxyShell.base。
+            // 以前覆盖层只靠 IPC 推送:那条路没有快照,端口一被占就整条是死的。
+            additionalArguments: [`--galaxy-base=${GATEWAY_BASE}`],
         }
     });
 

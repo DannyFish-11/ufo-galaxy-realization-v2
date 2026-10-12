@@ -110,33 +110,10 @@ const MAX_GAP = 0.25;
 const BREATH_LO = 0.62;
 const BREATH_HI = 1.0;
 
-// 阈限态越往后使劲，桌宠喘得越快。**这四个数就是面板那只桌宠的那四个数**
-// （panel/src/ui/pet.ts 的 BREATH），一字不差 —— 两只是同一只东西，不能一只
-// 喘 6 秒另一只喘 9 秒。判据钉在 tests/test_overlay_reads_the_two_axis_contract.py。
-//
-// 要躲开的那一带是 **0.17–0.25 Hz**，唯一权威在 panel/src/motion.ts 的
-// AVOID_LO / AVOID_HI，**不在这段注释里**。这里原先写的是 0.18–0.22，
-// 而 understanding 档原先取 4.3s = 0.233 Hz —— 按真带子它在里面，按注释
-// 自己写的窄带子它在外面。这条弯路 motion.ts 的开头已经记过两回：
-// line.ts 的 5.1s、pet.ts 的 5.2s，两回都是"判据写在注释里"。这是第三回，
-// 而且是照着那份注释又走了一遍。所以数字不再自己定，照抄权威那一份。
-//
-//   none          9.0s = 0.111 Hz
-//   understanding 6.5s = 0.154 Hz
-//   thinking      3.6s = 0.278 Hz
-//   rehearsing    2.6s = 0.385 Hz
-//
-// 0.17–0.25 Hz 对应 4.0–5.9 秒，这一整段不能用，四档必须从它上面跳到下面。
-// 跳的那一步放在 understanding → thinking（"在读"到"在想"），因为那一步
-// 本来就该是最明显的一档变化。
-const PET_RATE = { none: '9s', understanding: '6.5s', thinking: '3.6s', rehearsing: '2.6s' };
-
-// 上一拍的决策 → 演哪一种反应。**与面板那只同一张表**（panel/src/ui/pet.ts 的 POSE）。
-// 四档各一种，少一种那一档就没演。
-const POSE = { none: 'rest', speak: 'lean', silent: 'tuck', delegate: 'aside' };
-
-//: 反应演多久（毫秒）。与面板那只一致。
-const REACT_MS = 1600;
+// 桌宠此刻该是哪一档（相位、睁闭眼、在不在收、呼吸快慢、上一拍演哪种反应）：**三只桌宠共用的那一份**
+// 推导在 pet_state.js（全局 PetState，index.html 里先于本文件加载）。以前这里抄了一份面板那边的表、
+// 又自己写了一份推导 —— 两份在「进程里没有感知库」那一件事上讲岔了（这只眼睛虚着、面板那只睁着）。
+// 呼吸四档要躲开的那一带（0.17–0.25 Hz）判据在 panel/src/motion.ts。
 
 // ── 这一拍的姿态算不算数 ──
 //
@@ -244,35 +221,45 @@ class GalaxyOverlay {
   // ── 后端接线 ──
 
   _connectBackend() {
+    // 两条路，一主一备，到的是同一份帧：
+    //
+    //   * **WS（主）** /ws/desktop-presence —— 连上即推一份当前状态（快照），之后每一拍都到；
+    //     保活、半开连接、断线重连交给与面板共用的那一份 live_socket.js。
+    //   * **IPC（备）** 后端 POST 到 Electron 主进程、主进程转给这扇窗。它只在后端有事广播时才来：
+    //     没有快照（覆盖层比后端先起来时，静息相位里可能很久都等不到第一帧）、断了也不知道；
+    //     主进程那个端口被占（EADDRINUSE）时整条路是死的 —— 以前覆盖层只有这一条，于是会冻在
+    //     启动时的样子一直不动。
+    //
+    // WS 连着时只认 WS：同一拍从两条路各到一次、先后不定，后到的那份旧帧会把画面拽回上一拍。
+    const base = (window.galaxyShell && window.galaxyShell.base) || this._fallbackBase();
+    this._ws = new LiveSocket(base.replace(/^http/, 'ws') + '/ws/desktop-presence', {
+      onOpen: () => console.log('[Galaxy] WebSocket connected'),
+      onClose: () => {
+        console.log('[Galaxy] WebSocket lost — reconnecting');
+        // 断开时感知那一份是上一个进程的样子，不是现在的 —— 当成「还没收到」画（桌宠眼睛虚着）。
+        // IPC 那条后备路要是还活着，它下一帧就会把感知带回来。
+        if (this.render) this.render = Object.assign({}, this.render, { perception: null });
+      },
+      onMessage: (msg) => {
+        if (msg && msg.type === 'state_event' && msg.payload) this._onStateEvent(msg.payload);
+      },
+    });
+    this._ws.start();
     if (window.galaxyAPI && window.galaxyAPI.onBackendState) {
-      window.galaxyAPI.onBackendState((payload) => this._onStateEvent(payload));
-      console.log('[Galaxy] IPC backend connected');
-    } else {
-      const gwPort = (typeof window !== 'undefined' && window.GALAXY_GATEWAY_PORT)
-        || new URLSearchParams(location.search).get('gwport')
-        || 9000;
-      this._wsConnect(`ws://localhost:${gwPort}/ws/desktop-presence`);
+      window.galaxyAPI.onBackendState((payload) => {
+        if (this._ws && this._ws.connected) return;
+        this._onStateEvent(payload);
+      });
     }
   }
 
-  _wsConnect(url) {
-    try {
-      const ws = new WebSocket(url);
-      ws.onopen = () => {
-        console.log('[Galaxy] WebSocket connected');
-        ws.send(JSON.stringify({ type: 'register', client: 'desktop-presence', version: '2.0.0' }));
-      };
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data);
-          if (msg.type === 'state_event' && msg.payload) this._onStateEvent(msg.payload);
-        } catch (e) { /* 坏帧不该拖垮渲染循环 */ }
-      };
-      ws.onclose = () => setTimeout(() => this._wsConnect(url), 3000);
-      ws.onerror = () => {};
-    } catch (e) {
-      console.error('[Galaxy] WebSocket failed:', e);
-    }
+  // 浏览器里直接打开（没有 Electron 外壳给地址）时的兜底。用 127.0.0.1 而不是 localhost：
+  // 网关只监听 IPv4，Windows 上 localhost 先解析到 ::1，连过去只会被拒（electron/main.js 同一条理由）。
+  _fallbackBase() {
+    const gwPort = (typeof window !== 'undefined' && window.GALAXY_GATEWAY_PORT)
+      || new URLSearchParams(location.search).get('gwport')
+      || 9000;
+    return `http://127.0.0.1:${gwPort}`;
   }
 
   _onStateEvent(payload) {
@@ -504,7 +491,7 @@ class GalaxyOverlay {
     if (this.root.dataset.trust !== trust) this.root.dataset.trust = trust;
 
     this._paintIsland(paused);
-    this._paintPet(p, paused);
+    this._paintPet(p);
   }
 
   _flag(name, value) {
@@ -553,32 +540,25 @@ class GalaxyOverlay {
     }
   }
 
-  _paintPet(p, paused) {
+  _paintPet(p) {
+    // 推导用三只桌宠共用的那一份（pet_state.js）：同一份帧，面板、托盘那两只推出来的是同一档。
+    const life = (this.render && this.render.lifecycle) || this.phase;
+    const d = PetState.derive({
+      lifecycle: life,
+      liminal_activity: (this.render && this.render.liminal_activity) || 'none',
+      perception: p,
+    });
     // 眼睛**三档，不是布尔**：还没收到过感知帧时既不能画成睁着（等于替后端说
     // "它正看着"），也不能画成闭着（等于说"已经停了"）。
-    let eyes = 'unknown';
-    if (paused) eyes = 'shut';
-    else if (p && p.source !== 'unwired') eyes = 'open';
-    if (this.pet.dataset.eyes !== eyes) this.pet.dataset.eyes = eyes;
-
+    if (this.pet.dataset.eyes !== d.eyes) this.pet.dataset.eyes = d.eyes;
     // 在收的时候眼睛睁得开一点。**不知道就不动它** —— 那不是"没在收"。
-    // 与 data-eyes 分开两位：睁没睁是三档事实，收没收是另一件事，
-    // 压成一位就会出现"没在收"被画成"闭着"。
-    const sensing = (p && p.source !== 'unwired') ? String(!!p.is_sensing) : 'unknown';
-    if (this.pet.dataset.sensing !== sensing) this.pet.dataset.sensing = sensing;
-
-    // 主轴此刻在哪一相：静的时候小而沉，显形时立起来。与面板那只同一套。
-    const life = (this.render && this.render.lifecycle) || this.phase;
-    const ph = (life === 'liminal' || life === 'manifest') ? life : 'silent';
-    if (this.pet.dataset.phase !== ph) this.pet.dataset.phase = ph;
-
-    const act = (this.render && this.render.liminal_activity) || 'none';
-    const rate = PET_RATE[act] || PET_RATE.none;
-    if (this.pet.style.getPropertyValue('--pet-rate') !== rate) {
-      this.pet.style.setProperty('--pet-rate', rate);
+    if (this.pet.dataset.sensing !== d.sensing) this.pet.dataset.sensing = d.sensing;
+    // 主轴此刻在哪一相：静的时候小而沉，显形时立起来。
+    if (this.pet.dataset.phase !== d.phase) this.pet.dataset.phase = d.phase;
+    if (this.pet.style.getPropertyValue('--pet-rate') !== d.rate) {
+      this.pet.style.setProperty('--pet-rate', d.rate);
     }
-
-    this._petReact(p);
+    this._petReact(d.act);
   }
 
   // ── 上面叠一次性的反应：上一拍决定了什么 ──
@@ -590,22 +570,20 @@ class GalaxyOverlay {
   // 而且它是**驻留位**：同一个决策会跟着之后每一帧一遍遍发回来。照帧演的话
   // 它每一帧抽一下 —— 既刺眼，又把"刚才"说成了"一直"。所以只在它变了时演。
   //
-  // 这一整段是照着面板那只搬的（panel/src/ui/pet.ts 末尾那段），逐条对齐：
-  // 同一张 POSE 表、同样只认变化、同样 1.6 秒撤回。两只桌宠读的是同一位数据，
-  // 行为就不能是两样。
-  _petReact(p) {
-    const act = (p && p.source !== 'unwired') ? (p.ambient_action || 'none') : null;
+  // 演哪一种、演多久都在 pet_state.js（三只桌宠同一张表）；这里只管「只认变化、演完就撤」。
+  _petReact(act) {
     const key = act === null ? '' : act;
     if (key === this._lastAct) return;
     this._lastAct = key;
 
     if (this._reactTimer) { clearTimeout(this._reactTimer); this._reactTimer = 0; }
-    if (act && act !== 'none') {
-      this.pet.dataset.react = POSE[act] || 'rest';
+    const pose = PetState.reactionFor(act);
+    if (pose) {
+      this.pet.dataset.react = pose;
       this._reactTimer = setTimeout(() => {
         delete this.pet.dataset.react;
         this._reactTimer = 0;
-      }, REACT_MS);
+      }, PetState.REACT_MS);
     } else {
       delete this.pet.dataset.react;
     }

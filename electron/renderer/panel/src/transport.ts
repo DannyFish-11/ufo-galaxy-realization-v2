@@ -11,6 +11,44 @@
 import type { RenderPosture } from './types';
 import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, MemoryCard, ModelTier, Phase, RehearsalStep, RehearsalStepKind, TierView, Turn } from './types';
 
+import '../../live_socket.js';
+
+// ── 每一条 HTTP 请求都有期限 ─────────────────────────────────────────────────
+//
+// 以前这里的 fetch 一条期限都没有。后端事件循环被一件同步的事占住时(真机日志里见过一批请求
+// 同一毫秒一起完成、各自 5–7 秒),或者后端被硬杀、连接没断干净,请求就一直挂着 —— 面板上那一块
+// 永远停在「正在拉」,设置里的按钮永远是压下去的。现在:
+//
+//   * 读(GET):20 秒没回音就放弃;网络抖一下(后端正在重启、连接被复位)**再试一次**。
+//     读是幂等的,多问一次没有代价。
+//   * 写:60 秒。**不重试** —— 不知道上一次到没到,重发可能就是做两遍。
+//   * 本来就慢的那几样(换档要驱逐 / 拉模型、装 GitHub 项目、喂文件、重跑没收口的步骤、
+//     对话流):不设期限,由它们自己的「停」和进度说话。
+const READ_MS = 20_000;
+const WRITE_MS = 60_000;
+const NO_LIMIT = 0;
+const RETRY_GAP_MS = 600;
+
+async function fetchT(url: string, init: RequestInit = {}, ms: number = READ_MS): Promise<Response> {
+  const once = async (): Promise<Response> => {
+    if (ms <= 0) return fetch(url, init);
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), ms);
+    try {
+      return await fetch(url, { ...init, signal: ctrl.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
+  };
+  try {
+    return await once();
+  } catch (err) {
+    if ((init.method ?? 'GET').toUpperCase() !== 'GET') throw err;
+    await new Promise((r) => window.setTimeout(r, RETRY_GAP_MS));
+    return once();
+  }
+}
+
 /** RenderPosture 该有的字段。少一个就是**契约漂移**,不是正常降级。 */
 const POSTURE_FIELDS = [
   'lifecycle', 'previous_lifecycle', 'transition_kind', 'transition_seq',
@@ -86,73 +124,43 @@ export function readRehearsal(raw: unknown): RehearsalStep | null {
 }
 
 /**
- * `/ws/desktop-presence` 的连接。断了自己退避重连。
+ * `/ws/desktop-presence` 的连接。**断了会自己回来,死了看得出来** —— 连接本身交给面板与覆盖层
+ * 共用的那一份 `electron/renderer/live_socket.js`(保活 ping/pong、半开连接认得出来、连接超时、
+ * 退避加抖动、收到第一帧才清零、网回来 / 窗口切回来立刻重连);这里只管把收到的帧分到各处。
  *
- * 退避是**有上限的指数**:断线时不该把后端打穿,也不该久到人以为它死了。
+ * 以前这里自己写重连:没有保活(合盖再打开之后连接在浏览器这边仍是「开着的」,静息时后端本来
+ * 就很少说话,于是面板看着正常、实际早就聋了),连上就清零退避(后端接下又立刻关掉时一秒撞好几次)。
  *
  * `clientId` 是这个面板实例的身份(每次打开随机生成一个)。它自己发起的那一轮,
  * 后端也会同步推到这条通道上给**别的**界面看 —— 而这里已经从 /chat/stream 的 SSE
  * 拿到了同样的字。认出自己的回声、不画第二遍,见 `#dispatch`。
  */
 export class PresenceSocket {
-  #url: string;
   #h: PresenceHandlers;
   #clientId: string;
-  #sock: WebSocket | null = null;
-  #retry = 0;
-  #timer = 0;
-  #stopped = false;
+  #live: LiveSocketInstance;
 
   constructor(base: string, handlers: PresenceHandlers, clientId = '') {
-    this.#url = base.replace(/^http/, 'ws') + '/ws/desktop-presence';
     this.#h = handlers;
     this.#clientId = clientId;
+    this.#live = new globalThis.LiveSocket(base.replace(/^http/, 'ws') + '/ws/desktop-presence', {
+      onOpen: () => this.#h.onOpen?.(),
+      onClose: () => this.#h.onClose?.(),
+      onMessage: (msg) => this.#dispatch(msg),
+    });
   }
 
   start(): void {
-    this.#stopped = false;
-    this.#open();
+    this.#live.start();
   }
 
   stop(): void {
-    this.#stopped = true;
-    window.clearTimeout(this.#timer);
-    this.#sock?.close();
-    this.#sock = null;
+    this.#live.stop();
   }
 
-  #open(): void {
-    if (this.#stopped) return;
-    let sock: WebSocket;
-    try {
-      sock = new WebSocket(this.#url);
-    } catch {
-      this.#scheduleRetry();
-      return;
-    }
-    this.#sock = sock;
-
-    sock.addEventListener('open', () => {
-      this.#retry = 0;
-      this.#h.onOpen?.();
-    });
-
-    sock.addEventListener('close', () => {
-      this.#h.onClose?.();
-      this.#scheduleRetry();
-    });
-
-    sock.addEventListener('error', () => sock.close());
-
-    sock.addEventListener('message', (ev) => {
-      let msg: unknown;
-      try {
-        msg = JSON.parse(String(ev.data));
-      } catch {
-        return; // 收到不是 JSON 的东西 —— 丢掉,不猜
-      }
-      this.#dispatch(msg);
-    });
+  /** 没连着就立刻重连(不等退避);连着就探一下活着没有。 */
+  kick(): void {
+    this.#live.kick();
   }
 
   #dispatch(msg: unknown): void {
@@ -181,14 +189,6 @@ export class PresenceSocket {
       const role = payload['role'] === 'user' ? 'user' : 'agent';
       this.#h.onTurn?.(role, String(payload['text'] ?? ''), Boolean(payload['final']));
     }
-  }
-
-  #scheduleRetry(): void {
-    if (this.#stopped) return;
-    const wait = Math.min(8000, 400 * 2 ** this.#retry);
-    this.#retry += 1;
-    window.clearTimeout(this.#timer);
-    this.#timer = window.setTimeout(() => this.#open(), wait);
   }
 }
 
@@ -237,12 +237,12 @@ export async function streamChat(
   h: ChatHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const resp = await fetch(base + '/api/v1/chat/stream', {
+  const resp = await fetchT(base + '/api/v1/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
-  });
+  }, NO_LIMIT);
   if (!resp.ok || !resp.body) {
     h.onError?.(`chat/stream ${resp.status}`);
     return;
@@ -401,7 +401,7 @@ function readBundle(raw: unknown): Bundle | null {
 /** 拉一次档位。拉不到就返回 null —— **不返回空数组**:「没接上」和「一档都没有」是两件事。 */
 export async function fetchBundles(base: string): Promise<readonly Bundle[] | null> {
   try {
-    const resp = await fetch(base + '/api/config/bundles', { headers: { Accept: 'application/json' } });
+    const resp = await fetchT(base + '/api/config/bundles', { headers: { Accept: 'application/json' } }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉档位失败:', resp.status);
       return null;
@@ -427,11 +427,11 @@ export async function setBundle(
   value: string,
 ): Promise<Bundle | null> {
   try {
-    const resp = await fetch(base + '/api/config/bundles', {
+    const resp = await fetchT(base + '/api/config/bundles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value }),
-    });
+    }, WRITE_MS);
     if (!resp.ok) {
       console.error('[hud] 改档位被拒:', resp.status, await resp.text().catch(() => ''));
       return null;
@@ -542,7 +542,7 @@ function readConfigItem(key: string, raw: unknown): ConfigItem | null {
 /** 拉全部配置。拉不到返回 null —— **不返回空对象**:「没接上」与「一个键都没有」是两件事。 */
 export async function fetchAllConfig(base: string): Promise<readonly ConfigItem[] | null> {
   try {
-    const resp = await fetch(base + '/api/config/all', { headers: { Accept: 'application/json' } });
+    const resp = await fetchT(base + '/api/config/all', { headers: { Accept: 'application/json' } }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉配置失败:', resp.status);
       return null;
@@ -571,11 +571,11 @@ export async function saveConfig(
   changes: Readonly<Record<string, string>>,
 ): Promise<boolean> {
   try {
-    const resp = await fetch(base + '/api/config', {
+    const resp = await fetchT(base + '/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config: changes }),
-    });
+    }, WRITE_MS);
     if (!resp.ok) {
       console.error('[hud] 保存配置被拒:', resp.status, await resp.text().catch(() => ''));
       return false;
@@ -627,9 +627,9 @@ function readTier(raw: unknown, fitMap: Record<string, unknown>): ModelTier | nu
 /** 拉一次档位目录。拉不到返回 null —— 与「一档都没有」是两件事。 */
 export async function fetchTiers(base: string): Promise<TierView | null> {
   try {
-    const resp = await fetch(base + '/api/v1/models/catalog', {
+    const resp = await fetchT(base + '/api/v1/models/catalog', {
       headers: { Accept: 'application/json' },
-    });
+    }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉档位目录失败:', resp.status);
       return null;
@@ -675,7 +675,7 @@ export interface PanelSelf {
 /** 拉一次。拉不到就是 null —— 左下那两行说「没问到」,而不是编一个名字出来。 */
 export async function fetchPanelSelf(base: string): Promise<PanelSelf | null> {
   try {
-    const resp = await fetch(base + '/api/v1/panel/self', { headers: { Accept: 'application/json' } });
+    const resp = await fetchT(base + '/api/v1/panel/self', { headers: { Accept: 'application/json' } }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉本体信息失败:', resp.status);
       return null;
@@ -703,11 +703,11 @@ export async function setTier(
   key: string,
 ): Promise<{ ok: boolean; gaps: readonly string[] }> {
   try {
-    const resp = await fetch(base + '/api/v1/models/tier', {
+    const resp = await fetchT(base + '/api/v1/models/tier', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tier: key }),
-    });
+    }, NO_LIMIT);
     if (!resp.ok) {
       console.error('[hud] 换档被拒:', resp.status, await resp.text().catch(() => ''));
       return { ok: false, gaps: [] };
@@ -731,27 +731,33 @@ export async function setTier(
 // ---------------------------------------------------------------------------
 
 /**
- * 把一条会话的历史读回来。
+ * 把一条会话的历史读回来。**三种结果,三件事:**
  *
- * 拉不到返回 null,**不返回空数组** —— 「后端没接上」和「这条会话确实没说过话」
- * 是两件事,画成一样的话,一次连不上的启动看起来就跟失忆一模一样。
+ *   * 数组      —— 读到了(可能是空的:这条会话确实没说过话)
+ *   * null      —— 后端**说**它不认识这条会话(404 / success:false),通常是本地记的 id 过期了
+ *   * undefined —— **没问到**:后端没起来、连接断了、超时、5xx
+ *
+ * 后两种以前都是 null,于是一次「面板比后端先起来」的启动就被当成「会话过期」—— 调用方当场
+ * 把本地记的会话 id 删了,对话就这样被忘掉了。没问到不是答案,不能据此丢东西。
  */
 export async function fetchHistory(
   base: string,
   sessionId: string,
   maxTurns = 50,
-): Promise<readonly Turn[] | null> {
+): Promise<readonly Turn[] | null | undefined> {
   if (!sessionId) return null;
   try {
-    const resp = await fetch(
+    const resp = await fetchT(
       `${base}/api/v1/sessions/${encodeURIComponent(sessionId)}/history?max_turns=${maxTurns}`,
       { headers: { Accept: 'application/json' } },
+      READ_MS,
     );
     if (!resp.ok) {
       // 404 = 后端不认识这条会话(通常是本地存的 id 过期了)。这不是错误,
       // 但也不是「没有历史」—— 交给调用方决定要不要重开一条。
+      // 别的状态码(5xx、网关还在起)是**没问到**,不是答案。
       console.error('[hud] 拉历史失败:', resp.status);
-      return null;
+      return resp.status === 404 ? null : undefined;
     }
     const body = (await resp.json()) as { success?: boolean; history?: unknown };
     if (body.success === false || !Array.isArray(body.history)) return null;
@@ -760,7 +766,7 @@ export async function fetchHistory(
       .filter((t): t is Turn => t !== null);
   } catch (err) {
     console.error('[hud] 拉历史失败:', err);
-    return null;
+    return undefined;
   }
 }
 
@@ -810,7 +816,7 @@ export async function ingestFiles(
 ): Promise<number | null> {
   if (!sessionId || !files.length) return null;
   try {
-    const resp = await fetch(base + '/api/v1/sessions/ingest_turns', {
+    const resp = await fetchT(base + '/api/v1/sessions/ingest_turns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -824,7 +830,7 @@ export async function ingestFiles(
           metadata: { source: 'panel_ingest', ingested_files: [f.name] },
         })),
       }),
-    });
+    }, NO_LIMIT);
     if (!resp.ok) {
       console.error('[hud] 喂文件被拒:', resp.status, await resp.text().catch(() => ''));
       return null;
@@ -865,7 +871,7 @@ export async function setPrivacy(base: string, paused: boolean): Promise<boolean
     ? '/api/perception/desktop/privacy/pause'
     : '/api/perception/desktop/privacy/resume';
   try {
-    const resp = await fetch(base + path + '?reason=panel', { method: 'POST' });
+    const resp = await fetchT(base + path + '?reason=panel', { method: 'POST' }, WRITE_MS);
     if (!resp.ok) {
       console.error('[hud] 切隐私状态被拒:', resp.status);
       return false;
@@ -907,9 +913,9 @@ function readActionSummaries(raw: unknown): readonly string[] {
  */
 export async function fetchUnresolvedActions(base: string): Promise<readonly string[] | null> {
   try {
-    const resp = await fetch(`${base}/api/v1/presence/unresolved-actions`, {
+    const resp = await fetchT(`${base}/api/v1/presence/unresolved-actions`, {
       headers: { Accept: 'application/json' },
-    });
+    }, READ_MS);
     if (!resp.ok) return null;
     const body = (await resp.json()) as Record<string, unknown>;
     if (body['success'] !== true) return null;
@@ -959,9 +965,10 @@ export async function fetchAmbientIncidents(
   since: number,
 ): Promise<readonly AmbientIncident[] | null> {
   try {
-    const resp = await fetch(
+    const resp = await fetchT(
       `${base}/api/v1/presence/ambient-status?since=${encodeURIComponent(String(since))}`,
       { headers: { Accept: 'application/json' } },
+      READ_MS,
     );
     if (!resp.ok) return null;
     const body = (await resp.json()) as Record<string, unknown>;
@@ -983,9 +990,10 @@ export async function fetchAmbientIncidents(
  */
 export async function stopActivity(base: string, reason: string): Promise<boolean> {
   try {
-    const resp = await fetch(
+    const resp = await fetchT(
       `${base}/api/v1/presence/stop?reason=${encodeURIComponent(reason)}`,
       { method: 'POST' },
+      WRITE_MS,
     );
     if (!resp.ok) {
       console.error('[hud] 停止被拒:', resp.status);
@@ -1011,9 +1019,9 @@ export async function stopActivity(base: string, reason: string): Promise<boolea
  */
 export async function fetchPrimarySession(base: string): Promise<string | null> {
   try {
-    const resp = await fetch(`${base}/api/v1/sessions/primary`, {
+    const resp = await fetchT(`${base}/api/v1/sessions/primary`, {
       headers: { Accept: 'application/json' },
-    });
+    }, READ_MS);
     if (!resp.ok) return null;
     const body = (await resp.json()) as Record<string, unknown>;
     if (body['success'] !== true) return null;
@@ -1054,9 +1062,10 @@ export async function fetchCards(
 ): Promise<readonly MemoryCard[] | null> {
   if (!sessionId) return null;
   try {
-    const resp = await fetch(
+    const resp = await fetchT(
       base + '/api/v1/memory/cards?session_id=' + encodeURIComponent(sessionId),
       { headers: { Accept: 'application/json' } },
+      READ_MS,
     );
     if (!resp.ok) {
       console.error('[hud] 拉记忆卡片失败:', resp.status);
@@ -1092,10 +1101,11 @@ export async function fetchCardTurns(
 ): Promise<{ turns: readonly Turn[]; total: number; truncated: boolean } | null> {
   if (!sessionId || !cardId) return null;
   try {
-    const resp = await fetch(
+    const resp = await fetchT(
       `${base}/api/v1/memory/cards/${encodeURIComponent(cardId)}/turns` +
         `?session_id=${encodeURIComponent(sessionId)}`,
       { headers: { Accept: 'application/json' } },
+      READ_MS,
     );
     if (!resp.ok) {
       console.error('[hud] 拉卡片内容失败:', resp.status);
@@ -1179,9 +1189,9 @@ export interface UserProviderPage {
 /** 拉这台机器上声明过的端点。拉不到返回 null —— 与「一条都没有」是两件事。 */
 export async function fetchUserProviders(base: string): Promise<UserProviderPage | null> {
   try {
-    const resp = await fetch(base + '/api/v1/providers/user', {
+    const resp = await fetchT(base + '/api/v1/providers/user', {
       headers: { Accept: 'application/json' },
-    });
+    }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉用户端点失败:', resp.status);
       return null;
@@ -1214,11 +1224,11 @@ export async function saveUserProvider(
   },
 ): Promise<{ ok: true; row: UserProvider } | { ok: false; reason: string }> {
   try {
-    const resp = await fetch(base + '/api/v1/providers/user', {
+    const resp = await fetchT(base + '/api/v1/providers/user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, WRITE_MS);
     const json = (await resp.json()) as Record<string, unknown>;
     if (!resp.ok) {
       const detail = typeof json['detail'] === 'string' ? json['detail'] : `后端拒绝了（HTTP ${resp.status}）`;
@@ -1240,10 +1250,10 @@ export async function verifyUserProvider(
   id: string,
 ): Promise<UserProvider | null> {
   try {
-    const resp = await fetch(base + '/api/v1/providers/user/' + encodeURIComponent(id) + '/verify', {
+    const resp = await fetchT(base + '/api/v1/providers/user/' + encodeURIComponent(id) + '/verify', {
       method: 'POST',
       headers: { Accept: 'application/json' },
-    });
+    }, WRITE_MS);
     if (!resp.ok) return null;
     return readUserProvider(await resp.json());
   } catch (err) {
@@ -1255,9 +1265,9 @@ export async function verifyUserProvider(
 /** 删掉一条（连同它在 vault 里的密钥）。 */
 export async function deleteUserProvider(base: string, id: string): Promise<boolean> {
   try {
-    const resp = await fetch(base + '/api/v1/providers/user/' + encodeURIComponent(id), {
+    const resp = await fetchT(base + '/api/v1/providers/user/' + encodeURIComponent(id), {
       method: 'DELETE',
-    });
+    }, WRITE_MS);
     return resp.ok;
   } catch (err) {
     console.error('[hud] 删除端点失败:', err);
@@ -1362,7 +1372,7 @@ function readVendor(v: unknown): Vendor | null {
 /** 拉厂商目录。拉不到返回 null —— 与「一家都没有」是两件事。 */
 export async function fetchVendors(base: string): Promise<VendorPage | null> {
   try {
-    const resp = await fetch(base + '/api/v1/models/providers', { headers: { Accept: 'application/json' } });
+    const resp = await fetchT(base + '/api/v1/models/providers', { headers: { Accept: 'application/json' } }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉厂商目录失败:', resp.status);
       return null;
@@ -1401,12 +1411,12 @@ export async function verifyVendor(base: string, id: string): Promise<VendorChec
   // 后端自己最多等路由刷新 8s + 试调 15s;给 30s,超了就说超了,别让按钮转一辈子。
   const timer = setTimeout(() => ctl.abort(), 30000);
   try {
-    const resp = await fetch(base + '/api/v1/models/verify-provider', {
+    const resp = await fetchT(base + '/api/v1/models/verify-provider', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: id }),
       signal: ctl.signal,
-    });
+    }, WRITE_MS);
     if (!resp.ok) return null;
     const o = (await resp.json()) as Record<string, unknown>;
     if (o['ok'] === true) {
@@ -1477,7 +1487,7 @@ function readIsolatedResult(raw: unknown): IsolatedResult | null {
 /** 拉隔离队列(不含已知悉的)。拉不到返回 null —— 与「一条都没有」是两件事。 */
 export async function fetchIsolatedResults(base: string): Promise<IsolatedPage | null> {
   try {
-    const resp = await fetch(base + '/api/v1/results/isolated', { headers: { Accept: 'application/json' } });
+    const resp = await fetchT(base + '/api/v1/results/isolated', { headers: { Accept: 'application/json' } }, READ_MS);
     if (!resp.ok) {
       console.error('[hud] 拉隔离队列失败:', resp.status);
       return null;
@@ -1501,10 +1511,10 @@ export async function fetchIsolatedResults(base: string): Promise<IsolatedPage |
  */
 export async function retryIsolatedResult(base: string, key: string): Promise<'recovered' | 'isolated' | null> {
   try {
-    const resp = await fetch(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/retry', {
+    const resp = await fetchT(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/retry', {
       method: 'POST',
       headers: { Accept: 'application/json' },
-    });
+    }, NO_LIMIT);
     if (!resp.ok) return null;
     const body = (await resp.json()) as Record<string, unknown>;
     return body['state'] === 'recovered' ? 'recovered' : 'isolated';
@@ -1517,9 +1527,9 @@ export async function retryIsolatedResult(base: string, key: string): Promise<'r
 /** 知悉:标记为已看过,记录保留(审计用)。 */
 export async function dismissIsolatedResult(base: string, key: string): Promise<boolean> {
   try {
-    const resp = await fetch(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/dismiss', {
+    const resp = await fetchT(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/dismiss', {
       method: 'POST',
-    });
+    }, WRITE_MS);
     return resp.ok;
   } catch (err) {
     console.error('[hud] 标记隔离项失败:', err);
@@ -1687,8 +1697,8 @@ export interface GitHubAddonPage {
 export async function fetchGitHubAddons(base: string): Promise<GitHubAddonPage | null> {
   try {
     const [listResp, statusResp] = await Promise.all([
-      fetch(base + '/api/v1/github/list', { headers: { Accept: 'application/json' } }),
-      fetch(base + '/api/v1/github/status', { headers: { Accept: 'application/json' } }),
+      fetchT(base + '/api/v1/github/list', { headers: { Accept: 'application/json' } }, READ_MS),
+      fetchT(base + '/api/v1/github/status', { headers: { Accept: 'application/json' } }, READ_MS),
     ]);
     if (!listResp.ok) {
       console.error('[hud] 拉 GitHub 插件失败:', listResp.status);
@@ -1738,11 +1748,11 @@ export async function installGitHubAddon(
   body: { url: string; ref?: string; type?: string; dry_run?: boolean },
 ): Promise<{ ok: true; name: string; dryRun: boolean; message: string } | { ok: false; reason: string }> {
   try {
-    const resp = await fetch(base + '/api/v1/github/install', {
+    const resp = await fetchT(base + '/api/v1/github/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, NO_LIMIT);
     const json = (await resp.json()) as Record<string, unknown>;
     const pick = (k: string): string => (typeof json[k] === 'string' ? (json[k] as string) : '');
     if (!resp.ok || json['success'] !== true) {
@@ -1766,11 +1776,11 @@ export async function installGitHubAddon(
 /** 卸一个（连同它装在 data/github_addons 下的那份副本）。 */
 export async function uninstallGitHubAddon(base: string, name: string): Promise<boolean> {
   try {
-    const resp = await fetch(base + '/api/v1/github/uninstall', {
+    const resp = await fetchT(base + '/api/v1/github/uninstall', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
-    });
+    }, WRITE_MS);
     if (!resp.ok) return false;
     const json = (await resp.json()) as Record<string, unknown>;
     return json['success'] === true;

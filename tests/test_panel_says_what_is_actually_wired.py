@@ -155,15 +155,18 @@ class TestItAsksBeforeItClaimsItDoesNotKnow:
         src = _read(_MAIN)
         assert re.search(r"^\s{2}void loadSelf\(\);", src, re.M), "开机没问本体是谁"
         on_open = src[src.index("onOpen: () => {") :][:200]
-        assert "void loadSelf()" in on_open, "重新连上后没再问 —— 左下写的还是上一个进程的样子"
+        assert "resyncAfterOpen()" in on_open, "重新连上后没再问 —— 左下写的还是上一个进程的样子"
+        resync = src[src.index("function resyncAfterOpen(): void {") :][:400]
+        assert "void loadSelf();" in resync, "连上之后补拉的那一遍里没有问本体是谁"
 
     def test_the_list_is_fed_from_the_store_not_its_own_copy(self) -> None:
         """一处权威:每一行都从 store 推出来,不许自己存一份。"""
         src = _read(_MAIN)
         assert "deriveWired(" in src, "清单没有接上 deriveWired"
         block = src[src.index("deriveWired(") :][:500]
-        for field in ("providers:", "devices:", "perception:", "connected:", "self:"):
-            assert field in block, f"{field} 没喂进去 —— 那一行会凭空说话"
+        for field in ("providers", "devices", "perception", "connected", "self"):
+            # `perception,` 是简写(变量同名):断开时它是 null,见 main.ts 里那一句
+            assert f"{field}:" in block or f"{field}," in block, f"{field} 没喂进去 —— 那一行会凭空说话"
 
 
 class TestDeadEntriesCannotBeClicked:
