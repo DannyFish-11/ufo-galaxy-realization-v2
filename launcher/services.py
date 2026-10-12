@@ -2278,12 +2278,12 @@ class GalaxyUnified:
         if electron_ok:
             _emit(
                 "桌面前端 · 三态覆盖层",
-                f"已启动（暖金边缘氛围光） · {shell_name}",
+                f"已启动（紫调边缘氛围光） · {shell_name}",
                 "ok",
                 details=[
                     ("壳层", shell_name, "ok"),
                     ("三态覆盖层", "已启动", "ok"),
-                    ("第一态", "暖金边缘氛围光（待机即显示）", "ok"),
+                    ("第一态", "左·右·上三条边的紫调氛围光（待机即显示）", "ok"),
                     ("三态切换", "AI 实际活动驱动 silent → liminal → manifest", "ok"),
                     ("快捷键", "Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏", "ok"),
                 ],

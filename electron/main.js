@@ -1023,7 +1023,7 @@ ipcMain.on('panel:resize-end', (event) => {
 });
 
 // ── 三态覆盖层手动唤醒/隐藏 ──
-// 「唤醒」= 把 AI 这一整套三态外壳显示出来，停在【第一态(silent 暖金边缘氛围光)】。
+// 「唤醒」= 把 AI 这一整套三态外壳显示出来，停在【第一态(silent 三条边的紫调氛围光)】。
 // 三态(silent→liminal→manifest)之间的切换由后端 DesktopPresenceRuntime 按 AI 的【实际
 // 活动】自行驱动(待机=silent / 思考=liminal / 执行=manifest)，唤醒不强制跳到某个具体态。
 // 早期错误：曾把唤醒强制设成 0.92(manifest 透明执行) → 一按唤醒几乎全透明，像「换不醒」；
@@ -1037,7 +1037,7 @@ function setOverlayPhase(awake) {
         // 始终保持鼠标穿透(forward)：覆盖层是全屏透明窗口，绝不接管鼠标，保证随时能操作桌面。
         mainWindow.setIgnoreMouseEvents(true, { forward: true });
         if (awake) {
-            // 停在第一态(暖金辉光)；不强制后续态，交给后端按 AI 实际活动驱动 1→2→3。
+            // 停在第一态(边缘氛围光)；不强制后续态，交给后端按 AI 实际活动驱动 1→2→3。
             try {
                 mainWindow.webContents.send('presence-state', {
                     phase: 'silent', depth_factor: 0.05, intent: 'manual_wake',
@@ -1060,7 +1060,7 @@ function setOverlayPhase(awake) {
         }
     } catch (e) { /* ignore */ }
     console.log('[Overlay] ' + (awake
-        ? '已唤醒(第一态 暖金辉光；三态随 AI 实际活动自行切换)'
+        ? '已唤醒(第一态 边缘氛围光；三态随 AI 实际活动自行切换)'
         : '已隐藏(收起外壳)'));
 }
 function toggleOverlayWake() {

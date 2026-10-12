@@ -567,6 +567,7 @@ python scripts/check_assessment_freshness.py
 - **任务栏图标**：旧的星云图换成同一只桌宠，由 `scripts/render_app_icons.py` 从托盘那套画法逐尺寸现画（.ico 九个尺寸、Electron / Tauri 两套），`tests/test_every_pet_is_the_same_pet.py` 核对文件就是现画的。
 
 - **左下角「设备」只有一台电脑却写「2 台」**：后端名册里总有本机那一条（`desktop_local`「本机 Desktop」），面板那一行当它不在、再 +1，于是算了两遍。现在先剔掉本机那条再 +1（灵动岛上的「x / y 在线」本来就按名册原样数，两处口径一致）。
+- **启动横幅还写「暖金边缘氛围光」**：覆盖层第一态早就是左·右·上三条边的紫调氛围光，横幅、外壳日志、网页图标（`core/brand_icon.py`，一圈暖金圆环）都没跟上。横幅与日志改成如实的说法；网页图标换成同一只桌宠（外形、眼缝、颜色与`windows_service/pet_icon.py` 逐项相等，`tests/test_the_panel_has_an_icon_instead_of_a_404.py` 核对，也守着这几处不再出现「暖金」）。
 
 **启动前配置检查**：OPENAI / ANTHROPIC 两条只留「键名 — 谁的密钥」（所有者原话），不再出「怎么办」。
 
