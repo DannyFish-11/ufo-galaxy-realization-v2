@@ -4,6 +4,7 @@
  *
  *   pet_state.js    三只桌宠（面板 / 覆盖层 / 托盘）共用的那一份推导
  *   live_socket.js  面板与覆盖层共用的那条长连接（保活、断线重连）
+ *   panel_stage.js  面板画布的尺寸与等比缩放（主进程锁窗口宽高比用的也是它）
  */
 export {};
 
@@ -58,8 +59,19 @@ declare global {
     new (url: string, handlers: LiveSocketHandlers, options?: LiveSocketOptions): LiveSocketInstance;
   }
 
+  interface PanelStageApi {
+    readonly STAGE: { readonly width: number; readonly height: number };
+    readonly MIN_SCALE: number;
+    /** 能拖的八个方位：四条边、四个角。 */
+    readonly EDGES: readonly string[];
+    ratio(): number;
+    fit(view: { readonly width: number; readonly height: number }): { k: number; dx: number; dy: number };
+  }
+
   // eslint-disable-next-line no-var
   var PetState: PetStateApi;
+  // eslint-disable-next-line no-var
+  var PanelStage: PanelStageApi;
   // eslint-disable-next-line no-var
   var LiveSocket: LiveSocketCtor;
 }

@@ -201,7 +201,7 @@ def test_mdns_refuses_to_broadcast_a_loopback_address(monkeypatch):
     registered = []
 
     class _FakeZc:
-        def register_service(self, info):
+        def register_service(self, info, **kw):
             registered.append(info)
 
         def close(self):
@@ -225,7 +225,7 @@ def test_mdns_broadcasts_when_the_address_is_real(monkeypatch):
     registered = []
 
     class _FakeZc:
-        def register_service(self, info):
+        def register_service(self, info, **kw):
             registered.append(info)
 
         def close(self):

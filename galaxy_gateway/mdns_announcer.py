@@ -120,7 +120,9 @@ class MdnsAnnouncer:
                 server="galaxy-gateway.local.",
             )
             self._zc = _Zeroconf()
-            self._zc.register_service(self._info)
+            # 同一网段里另一台 Galaxy、或上一次没来得及注销的广播还占着这个名字时,zeroconf 抛
+            # NonUniqueNameException —— 换一个名字(后面加序号)照样发布,设备按服务类型找,不认名字。
+            self._zc.register_service(self._info, allow_name_change=True)
             self._started = True
             logger.info(
                 "mDNS: broadcasting _galaxy._tcp on %s:%d (LAN IP=%s)",
@@ -130,7 +132,9 @@ class MdnsAnnouncer:
             )
             return True
         except Exception as e:
-            logger.warning("mDNS: failed to start: %s", e)
+            # 有的异常(zeroconf 的 NonUniqueNameException 之类)没有消息文本,只写 %s 时日志里
+            # 冒号后面什么都没有(所有者真机日志)—— 连类型一起说。
+            logger.warning("mDNS: failed to start: %s: %s", type(e).__name__, e or "(没有附带说明)")
             return False
 
     def stop(self) -> None:

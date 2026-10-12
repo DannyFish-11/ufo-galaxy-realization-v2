@@ -206,13 +206,19 @@ class AcademicRetriever:
 
         papers: List[Dict] = []
 
+        # ── 本机 arXiv 文献库(建好了的话):离线、全库,排在最前 ──────────────
+        local = await self._search_local_arxiv(query, source, max_results)
+
         # ── Try Node_97 first (full-featured search) ─────────────────────
         papers = await self._search_via_node97(query, source, max_results)
 
         # ── Fall back to direct arXiv if Node_97 is unavailable ──────────
-        if not papers:
+        if not papers and not local:
             logger.debug("Node_97 unavailable — falling back to direct arXiv search")
             papers = await self._search_arxiv_direct(query, max_results)
+
+        seen = {p.get("paper_id") for p in local}
+        papers = local + [p for p in papers if p.get("paper_id") not in seen]
 
         # ── Optional: ingest into Knowledge Core ─────────────────────────
         entry_ids: List[str] = []
@@ -370,53 +376,26 @@ class AcademicRetriever:
             logger.debug("Node_97 /search unavailable (%s)", exc)
             return []
 
-    async def _search_arxiv_direct(self, query: str, max_results: int) -> List[Dict]:
-        """Minimal direct arXiv fallback (no external deps beyond stdlib)."""
-        try:
-            import xml.etree.ElementTree as ET
-
-            import httpx
-
-            params = {
-                "search_query": f"all:{query}",
-                "start": 0,
-                "max_results": min(max_results, 10),
-                "sortBy": "relevance",
-                "sortOrder": "descending",
-            }
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get("http://export.arxiv.org/api/query", params=params)
-                resp.raise_for_status()
-
-            ns = {"atom": "http://www.w3.org/2005/Atom"}
-            root = ET.fromstring(resp.text)
-            papers: List[Dict] = []
-            for entry in root.findall("atom:entry", ns):
-                pid = (entry.find("atom:id", ns).text or "").split("/")[-1]
-                title_el = entry.find("atom:title", ns)
-                summary_el = entry.find("atom:summary", ns)
-                published_el = entry.find("atom:published", ns)
-                tags = ["arXiv"]
-                for cat in entry.findall("atom:category", ns):
-                    term = cat.get("term")
-                    if term:
-                        tags.append(term)
-                papers.append(
-                    {
-                        "paper_id": pid,
-                        "title": (title_el.text or "").strip() if title_el is not None else "",
-                        "authors": [(a.find("atom:name", ns).text or "") for a in entry.findall("atom:author", ns)],
-                        "abstract": (summary_el.text or "").strip() if summary_el is not None else "",
-                        "published_date": (published_el.text or "")[:10] if published_el is not None else "",
-                        "url": (entry.find("atom:id", ns).text or ""),
-                        "source": "arXiv",
-                        "tags": tags,
-                    }
-                )
-            return papers
-        except Exception as exc:
-            logger.debug("Direct arXiv search failed: %s", exc)
+    async def _search_local_arxiv(self, query: str, source: str, max_results: int) -> List[Dict]:
+        """本机 arXiv 文献库(``core/arxiv_library.py``)。没建好、或问的不是 arXiv,返回空。"""
+        if source not in ("all", "arxiv"):
             return []
+        try:
+            from core.arxiv_library import get_library
+
+            lib = get_library()
+            if not lib.ready():
+                return []
+            return await asyncio.to_thread(lib.search, query, limit=max_results)
+        except Exception as exc:  # noqa: BLE001 — 本机库出问题就照旧走在线
+            logger.debug("本机 arXiv 文献库检索失败: %s", exc)
+            return []
+
+    async def _search_arxiv_direct(self, query: str, max_results: int) -> List[Dict]:
+        """直连 arXiv 的兜底 —— 走唯一出口 ``core/arxiv_client.py``(https、每 3 秒最多一次)。"""
+        from core.arxiv_client import search as arxiv_search
+
+        return await asyncio.to_thread(arxiv_search, query, min(max_results, 10))
 
     @staticmethod
     def _run_maybe_async(coro):

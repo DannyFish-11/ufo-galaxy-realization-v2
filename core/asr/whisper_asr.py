@@ -57,6 +57,17 @@ def _to_simplified(text: str) -> str:
     return text
 
 
+def _cached(size: str, root: Optional[str]) -> bool:
+    """这个模型本机已经有了吗(不联网,只看缓存)。"""
+    try:
+        from faster_whisper.utils import download_model
+
+        download_model(size, local_files_only=True, cache_dir=root)
+        return True
+    except Exception:  # noqa: BLE001 — 没缓存 / 版本不同:当成「要下载」,只是多说一句
+        return False
+
+
 class WhisperASR:
     """本地ASR引擎（faster-whisper）
 
@@ -164,6 +175,10 @@ class WhisperASR:
             # 源不可达时只用本地缓存(见上):有缓存正常加载;无缓存快速报错降级。
             load_kwargs["local_files_only"] = not _hf_ok
 
+        if not load_kwargs.get("local_files_only") and not _cached(self.model_size, self.model_dir):
+            from core.hf_endpoint import announce_first_download
+
+            announce_first_download(f"语音识别模型 Whisper {self.model_size}")
         self.model = WhisperModel(self.model_size, **load_kwargs)
         self._device = device
         self._compute_type = compute_type

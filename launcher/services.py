@@ -517,6 +517,7 @@ from launcher.health_checks import run_startup_health_check
 from launcher.node_startup import NodeSystemLauncher
 from launcher.service_manager import ServiceInfo, ServiceManager
 from launcher.shutdown import async_shutdown
+from launcher.bus_phase import bus_phase
 from launcher.tailnet_startup import TailnetStartup
 
 # ============================================================================
@@ -855,6 +856,10 @@ class UnifiedWebUI:
             # banner) instead of blocking here.
             self._server = server
             self._serve_task = asyncio.create_task(server.serve())
+            # 事件循环被同步工作卡住时,说出卡在哪几行(只读;见 core/loop_stall_watch.py)。
+            from core import loop_stall_watch
+
+            loop_stall_watch.start()
             # serve() 若在我们取回结果前就异常收场(端口竞态、ASGI 启动失败…),
             # asyncio 会在任务被回收时打印 "Task exception was never retrieved"
             # 加一段裸 traceback —— 真机日志里那条噪声就是这么来的。
@@ -2109,74 +2114,9 @@ class GalaxyUnified:
             hint=infra_summary_hint(d_value, d_note) if d_status != "ok" else None,
         )
 
-        # ── 消息总线 ──
-        # 诚实性修复(所有者 Windows 真机日志实证):旧代码"try: await start_nats()
-        # 不抛异常 == 成功"—— 但 NATSBus.connect() 按 C7 约定失败时返回
-        # {"success": False} 而非抛异常,EmbeddedNATSServer.start() 失败也只
-        # return False,于是 nats-server.exe 被 WDAC([WinError 4551])拦截、
-        # 根本没起来时,横幅仍打 "✓ 消息总线 nats://localhost:4222"(假绿)。
-        # 现在按 start_nats() 的结构化真实结果降级展示:原因 + 影响 + 专属修复指引。
-        bus_details: List[Tuple[str, str, str]] = []
-        bus_hint: Optional[str] = None
-        try:
-            _nats_res = await self.start_nats()
-        except Exception as exc:  # noqa: BLE001
-            _nats_res = {"ok": False, "url": "", "error": str(exc), "hint": "", "disabled": False}
-        if _nats_res.get("ok"):
-            nats_ok, bus_value = True, _nats_res.get("url") or "已连接"
-            bus_details.append(("NATS Bus", bus_value, "ok"))
-        elif _nats_res.get("disabled"):
-            # 按配置显式关闭 —— 是配置意图而非故障;单机模式正常,如实标注影响。
-            nats_ok = False
-            bus_value = "单机模式正常(进程内总线)· 没起 NATS,跨设备分发不可用"
-            bus_details.append(("NATS Bus", f"未启用:{_nats_res.get('reason') or '按配置关闭'}", "info"))
-            bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内总线正常工作", "info"))
-            bus_hint = "如需跨设备:面板打开「跨设备」(会一并开总线)并确保 nats-server 可运行"
-        else:
-            # 诚实降级但语气为"单机模式正常"(所有者指令):NATS 起不来不是单机
-            # 故障——进程内总线已自动接管全部单机语义,失败原因与放行指引照展示。
-            nats_ok = False
-            _err = _nats_res.get("error") or "未知原因"
-            bus_value = f"单机模式正常(进程内总线)· NATS 未启动:{_err[:60]},仅跨设备分发不可用"
-            bus_details.append(("NATS Bus", f"未启动:{_err}", "warn"))
-            bus_details.append(
-                ("降级", "已自动切换进程内总线 —— 单机功能全部正常;仅跨设备任务分发/集群 mesh 不可用", "info")
-            )
-            bus_hint = _nats_res.get("hint") or (
-                "检查 nats-server 是否可运行(手动执行 nats-server -v 验证);"
-                "单机使用可设 GALAXY_NATS_ENABLED=false 明确关闭此项"
-            )
-            bus_details.append(("修复", bus_hint, "info"))
-        try:
-            ts_ip = await self.start_tailscale()
-            bus_details.append(("Tailscale", ts_ip or "已连接", "ok"))
-            # PR-PEER-RELAY: 显示对等中继态（本机已宣告 / 各 peer 经哪条中继）。
-            try:
-                from core.tailscale_manager import TailscaleManager
-
-                _rs = TailscaleManager().get_relay_status()
-                if _rs.get("advertise_relay_enabled"):
-                    _via = _rs.get("self_relay")
-                    bus_details.append(
-                        (
-                            "对等中继",
-                            ("已宣告（本机充当私有中继）" if not _via else f"经 {_via}"),
-                            "ok",
-                        )
-                    )
-            except Exception:
-                pass
-        except Exception:
-            bus_details.extend(self.tailnet.not_on_tailnet_details())
-        bus_details.append(self.tailnet.start_lan_discovery())
-        # 降级时把该项【专属】修复指引挂到总结卡(hint),不再无提示地一笔带过。
-        _emit(
-            "消息总线",
-            bus_value,
-            "ok" if nats_ok else "warn",
-            details=bus_details,
-            hint=bus_hint if not nats_ok else None,
-        )
+        # ── 消息总线(总线 / tailnet / 局域网发现,本地模式与跨设备模式各说各的;见 launcher/bus_phase.py)──
+        bus_value, bus_status, bus_details, bus_hint = await bus_phase(self)
+        _emit("消息总线", bus_value, bus_status, details=bus_details, hint=bus_hint)
 
         # ── AI 大脑（含主脑模型选择）──
         try:
@@ -2269,12 +2209,21 @@ class GalaxyUnified:
             total = len(result) if isinstance(result, dict) else 0
             ready = sum(1 for v in result.values() if v) if isinstance(result, dict) else 0
             st = "ok" if (ready > 0 or total == 0) else "warn"
+            # 没就绪的全是「进程活着、只是慢」(后台在等,起来自动登记):那不是降级,只说一句(所有者真机日志 0/13)。
+            slow_n = sum(1 for n in (result or {}) if nl._node_failure_reasons.get(n) == "slow_start")
+            if slow_n and ready + slow_n == total:
+                st = "info"
             details = (
                 [(n, "就绪" if v else "未就绪", "ok" if v else "warn") for n, v in result.items()]
                 if isinstance(result, dict) and result
                 else None
             )
-            _emit("节点系统", f"{ready}/{total} 就绪", st, details=details)
+            _emit(
+                "节点系统",
+                f"{ready}/{total} 就绪" + (f" · {slow_n} 个还在起来(起来后自动接上)" if st == "info" else ""),
+                st,
+                details=details,
+            )
         except Exception as exc:
             _emit("节点系统", "启动失败", "fail")
             logger.error(f"Node system: {exc}")
@@ -2313,7 +2262,8 @@ class GalaxyUnified:
                         if result
                         else "未启用（可选）"
                     ),
-                    "warn",
+                    # 按设计如此,不是毛病:不画 ⚠、不算进「降级」(所有者真机日志里它每次开机都被当成降级报一遍)。
+                    "info",
                 )
         except Exception as exc:
             _emit("L4 增强模块", "启动失败", "fail")
@@ -2328,12 +2278,12 @@ class GalaxyUnified:
         if electron_ok:
             _emit(
                 "桌面前端 · 三态覆盖层",
-                f"已启动（暖金边缘氛围光） · {shell_name}",
+                f"已启动（紫调边缘氛围光） · {shell_name}",
                 "ok",
                 details=[
                     ("壳层", shell_name, "ok"),
                     ("三态覆盖层", "已启动", "ok"),
-                    ("第一态", "暖金边缘氛围光（待机即显示）", "ok"),
+                    ("第一态", "左·右·上三条边的紫调氛围光（待机即显示）", "ok"),
                     ("三态切换", "AI 实际活动驱动 silent → liminal → manifest", "ok"),
                     ("快捷键", "Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏", "ok"),
                 ],

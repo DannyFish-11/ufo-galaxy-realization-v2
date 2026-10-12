@@ -53,3 +53,25 @@ def test_the_gateway_serves_the_same_icon_without_a_token():
     assert '@self.app.get("/favicon.ico"' in src
     assert "include_in_schema=False" in src
     assert "FAVICON_SVG" in src and "FAVICON_MEDIA_TYPE" in src
+
+
+def test_the_icon_is_the_same_pet_as_the_tray_and_the_taskbar():
+    """网页图标也是那只桌宠:外形、眼缝、颜色与 windows_service/pet_icon.py 逐项相等。
+
+    原先是一圈暖金圆环,说是「取自覆盖层第一态的暖金氛围光」—— 那圈光早换成紫调了,图标没跟上。
+    """
+    from windows_service import pet_icon as p
+
+    assert f'd="{p.PATH_D}"' in FAVICON_SVG
+    assert f'fill="{p.SKIN}"' in FAVICON_SVG
+    y, h, _ = p.EYE_STATES["open"]
+    for x in p.EYE_X:
+        eye = f'<rect x="{x}" y="{y}" width="{p.EYE_W:g}" height="{h}" rx="{p.EYE_RX:g}" fill="{p.EYE}"/>'
+        assert eye in FAVICON_SVG, eye
+
+
+def test_nothing_on_screen_still_calls_the_first_state_warm_gold():
+    """覆盖层第一态是三条边的紫调氛围光;启动横幅、外壳日志不能再写「暖金」。"""
+    for rel in ("launcher/services.py", "electron/main.js", "electron/renderer/app.js"):
+        src = open(os.path.join(ROOT, rel), encoding="utf-8").read()
+        assert "暖金" not in src, f"{rel} 还在说暖金氛围光"

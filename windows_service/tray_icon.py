@@ -102,8 +102,8 @@ _STATUS_COLORS = {
 }
 
 
-# 定稿品牌图标(分形星云环)。托盘现在画的是**桌宠**(见 windows_service/pet_icon.py);
-# 这张图只在桌宠画不出来时兜底 —— 托盘区宁可是一张品牌图,也不能是空的。
+# 应用图标(scripts/render_app_icons.py 由桌宠画出来的那几张)。托盘平时现画桌宠
+# (见 windows_service/pet_icon.py);这几张只在现画失败时兜底 —— 托盘区宁可是一张静止的桌宠,也不能是空的。
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BRAND_ICON_CANDIDATES = (
     _REPO_ROOT / "electron" / "assets" / "icon-256.png",  # 高分辨率，缩放质量最好
@@ -113,7 +113,7 @@ _BRAND_ICON_CANDIDATES = (
 
 
 def _load_brand_icon() -> "Image.Image | None":
-    """加载定稿星云品牌图（RGBA）。全部候选都不可用时返回 None。"""
+    """加载应用图标（RGBA，同一只桌宠的静止图）。全部候选都不可用时返回 None。"""
     for path in _BRAND_ICON_CANDIDATES:
         try:
             if path.exists():
@@ -136,7 +136,7 @@ def create_icon_image(
     ``pet`` 是 :func:`windows_service.pet_icon.derive` 推出来的那一档;省略 = 还没收到过帧(眼睛虚着)。
     ``react`` 是此刻正在演的一次性反应(lean / tuck / aside)。``status`` 非 running 时右下角叠一颗状态点。
 
-    桌宠画不出来(理论上不会:它只用 Pillow)时退回品牌星云图,并记一条警告 —— 不静默。
+    桌宠画不出来(理论上不会:它只用 Pillow)时退回应用图标(同一只桌宠的静止图),并记一条警告 —— 不静默。
     """
     if not _HAVE_TRAY:
         return None

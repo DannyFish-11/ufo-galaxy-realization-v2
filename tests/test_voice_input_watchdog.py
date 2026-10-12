@@ -18,6 +18,7 @@ def _run_watchdog(caplog, monkeypatch, **counters):
     svc._chunks_seen = counters.get("chunks_seen", 0)
     svc._speech_chunks = counters.get("speech_chunks", 0)
     svc._transcripts = counters.get("transcripts", 0)
+    svc._loud_unspoken = counters.get("loud_unspoken", 0)
     with caplog.at_level(logging.WARNING):
         asyncio.run(svc._voice_input_watchdog())
     return caplog.text
@@ -28,9 +29,16 @@ def test_no_audio(caplog, monkeypatch):
     assert "麦克风一个音频块都没收到" in txt
 
 
-def test_audio_but_no_speech(caplog, monkeypatch):
-    txt = _run_watchdog(caplog, monkeypatch, chunks_seen=200, speech_chunks=0)
+def test_loud_audio_but_no_speech(caplog, monkeypatch):
+    """有人声那么响的块、VAD 却一块都没判成说话 —— 多半是选错设备 / 增益太低,要说。"""
+    txt = _run_watchdog(caplog, monkeypatch, chunks_seen=200, speech_chunks=0, loud_unspoken=12)
     assert "VAD 从未判定为说话" in txt
+
+
+def test_a_quiet_room_is_not_lectured(caplog, monkeypatch):
+    """20 秒一直很安静 = 这段时间没人说话,正常 —— 不在控制台上念 WARNING(所有者真机日志)。"""
+    txt = _run_watchdog(caplog, monkeypatch, chunks_seen=200, speech_chunks=0, loud_unspoken=0)
+    assert "VAD" not in txt and "语音输入" not in txt
 
 
 def test_speech_but_no_text(caplog, monkeypatch):

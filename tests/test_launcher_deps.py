@@ -596,3 +596,11 @@ def test_install_command_uses_shared_deps_layer():
     #  "pip 源候选" 文案里。）
     assert "subprocess" not in body, "install 子命令不该自己起子进程"
     assert "sys.executable" not in body, "install 子命令不该自己拼解释器命令行"
+
+
+def test_windows_also_gets_the_system_audio_loopback_wheel(monkeypatch):
+    """回声消除的参考信号在 Windows 上只能靠 PyAudioWPatch —— 随启动补装,不是只在日志里教人装。"""
+    monkeypatch.setattr(deps.os, "name", "nt")
+    assert deps.platform_core_modules().get("pyaudiowpatch") == "PyAudioWPatch"
+    monkeypatch.setattr(deps.os, "name", "posix")
+    assert "pyaudiowpatch" not in deps.platform_core_modules()

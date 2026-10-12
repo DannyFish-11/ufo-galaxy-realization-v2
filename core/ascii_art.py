@@ -402,6 +402,30 @@ def _console_code_page() -> Optional[int]:
         return None
 
 
+def _switch_console_to_utf8(original: int) -> bool:
+    """把这个控制台切到 UTF-8(等同于 ``chcp 65001``),退出时切回原来的代码页。切成了返回 True。
+
+    所有者真机日志里每次启动都先被教一遍「请先运行 chcp 65001 再启动 Galaxy」—— 能自己切的事
+    不该让人去敲命令。切的是**这个控制台窗口**(子进程 npm / podman / ollama 的输出也跟着对了),
+    Galaxy 退出时还给它原来的代码页,不改用户的系统设置。
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import atexit
+        import ctypes
+
+        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        in_cp = int(k32.GetConsoleCP())
+        if not k32.SetConsoleOutputCP(_UTF8_CODE_PAGE):
+            return False
+        k32.SetConsoleCP(_UTF8_CODE_PAGE)
+        atexit.register(lambda: (k32.SetConsoleOutputCP(original), k32.SetConsoleCP(in_cp)))
+        return int(k32.GetConsoleOutputCP()) == _UTF8_CODE_PAGE
+    except Exception:  # noqa: BLE001 —— 切不了就照旧提醒
+        return False
+
+
 def _console_columns() -> Optional[int]:
     """返回控制台列宽；问不到（或输出被重定向）返回 ``None``。"""
     try:
@@ -423,7 +447,7 @@ def print_powershell_hint() -> None:
     以前这里是 **无条件打四行**：哪怕用户已经 ``chcp 65001``、窗口也拉到 160 列，
     每次启动依旧被教一遍。现在改成按事实说话：
 
-    - 代码页不是 65001 → 才提 UTF-8；
+    - 代码页不是 65001 → 先自己切过去（:func:`_switch_console_to_utf8`），切不了才提 UTF-8；
     - 列宽 < ``_MIN_CONSOLE_COLUMNS`` → 才提列宽；
     - 字体**探不到**（没有可靠的公开接口），所以不单独拿它当理由开口，
       只在已经探到别的毛病时顺带——那基本就说明这个窗口没被配置过。
@@ -438,11 +462,11 @@ def print_powershell_hint() -> None:
     columns = _console_columns()
     if columns is not None and columns < _MIN_CONSOLE_COLUMNS:
         tips.append(f"  • 列宽:   当前 {columns} 列，建议 ≥ {_MIN_CONSOLE_COLUMNS} 列 (属性 → 布局 → 宽度 120)")
-    if code_page is not None and code_page != _UTF8_CODE_PAGE:
+    if code_page is not None and code_page != _UTF8_CODE_PAGE and not _switch_console_to_utf8(code_page):
         tips.append(f"  • UTF-8:  当前代码页 {code_page}，请先运行 chcp 65001 再启动 Galaxy")
     if not tips:
         return
-    tips.append("  • 字体:   Consolas (右键标题栏 → 属性 → 字体)——字体探不到，顺带一句")
+    tips.append("  • 字体:   Consolas (右键标题栏 → 属性 → 字体)")
     print("\n[Galaxy Tip] PowerShell 显示建议:\n" + "\n".join(tips) + "\n")
 
 

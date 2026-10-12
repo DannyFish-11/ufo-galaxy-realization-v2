@@ -1,10 +1,13 @@
 """面板窗口只有它自己的圆角：圆角之外不能再有方的、不透明的角。
 
 真机：面板窗口是透明的，``.shell`` 有 34px 圆角，可窗口四角却多出方形的角。
-根因有两处：
+根因有三处：
 1. ``body`` 的渐变背景（``html`` 自己没有底）被当成画布底色，铺满整个窗口矩形 —— 圆角之外的四个角
    是方的、不透明的（用 Chromium 实测过：四角像素 alpha=255）；
-2. 透明窗口开着 ``hasShadow``，系统阴影按窗口矩形画，不跟着圆角走。
+2. 透明窗口开着 ``hasShadow``，系统阴影按窗口矩形画，不跟着圆角走；
+3. 前两处修完，所有者还是看到「4 个角还是有那种矩形的白边」：窗口带着 Windows 的粗边框
+   （WS_THICKFRAME / WS_CAPTION），Windows 11 沿**窗口矩形**描一圈 1 像素的系统边 —— 页面这边
+   四角早就是透明的了，这一圈是系统画的，只有去掉粗边框（``thickFrame: false``）才没有。
 """
 
 from __future__ import annotations
@@ -59,8 +62,11 @@ def test_the_desktop_window_itself_is_clipped_to_that_same_radius():
     """透明窗口里，圆角之外任何一层漏出来的内容（滚动条、阴影、子层）都会画成方角。
     把整个 html 按同一个半径裁掉，圆角外就一个像素也不会有。"""
     css = _css()
-    m = re.search(r"html\[data-shell='desktop'\]\s*\{[^}]*clip-path:\s*inset\(0 round var\(--shell-r\)\)", css)
-    assert m, "桌面外壳的 html 要按 --shell-r 裁圆角"
+    m = re.search(
+        r"html\[data-shell='desktop'\]\s*\{[^}]*clip-path:\s*inset\(0 round calc\(var\(--shell-r\) \* var\(--stage-k, 1\)\)\)",
+        css,
+    )
+    assert m, "桌面外壳的 html 要按 --shell-r 裁圆角(随画布一起缩放)"
 
 
 def test_the_transparent_panel_window_does_not_ask_the_os_for_a_rectangular_shadow():
@@ -69,3 +75,11 @@ def test_the_transparent_panel_window_does_not_ask_the_os_for_a_rectangular_shad
     block = src[start : src.index("panelWindow.loadFile(panelPath)", start)]
     assert "transparent: true" in block
     assert re.search(r"hasShadow:\s*false", block), "透明窗口的系统阴影按窗口矩形画，会多出四个方角"
+
+
+def test_the_panel_window_has_no_thick_frame_for_windows_to_outline():
+    """Windows 给带粗边框的窗口沿窗口矩形描边、倒系统圆角 —— 面板的圆角外就多一圈方的白边。"""
+    src = (ROOT / "electron" / "main.js").read_text(encoding="utf-8")
+    start = src.index("function createPanelWindow()")
+    block = src[start : src.index("panelWindow.loadFile(panelPath)", start)]
+    assert re.search(r"thickFrame:\s*false", block), "面板窗口又带上了系统粗边框"

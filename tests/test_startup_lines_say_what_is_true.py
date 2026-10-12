@@ -207,8 +207,9 @@ class TestPreflight:
         """真机:本机 gemma4 大脑好好的,配置检查说"至少要有一家大模型的密钥,智能体才跑得起来"。"""
         cp = clean_preflight_env
         text = cp.run_preflight(dry_run=True, fail_fast=False, verbose=True).format()
-        assert "智能体才跑得起来" not in text.replace("都能让智能体跑起来", "")
-        assert "Ollama" in text
+        assert "智能体才跑得起来" not in text
+        # 所有者后来要这两条只留「键名 — 谁的密钥」:不再解释,也就更不会说"没它跑不起来"。
+        assert "必须" not in "".join(ln for ln in text.splitlines() if "_API_KEY" in ln)
 
     def test_another_providers_key_quiets_openai_and_anthropic(self, clean_preflight_env, monkeypatch):
         cp = clean_preflight_env

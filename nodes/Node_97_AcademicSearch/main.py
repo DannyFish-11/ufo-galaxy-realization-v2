@@ -23,7 +23,6 @@ from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import httpx
-import xml.etree.ElementTree as ET
 
 # 配置日志
 logging.basicConfig(
@@ -42,7 +41,6 @@ app = FastAPI(title="Academic Search Node", version="1.1.0")
 install_node_auth(app, "Node_97_AcademicSearch")
 
 # 配置
-ARXIV_API = "http://export.arxiv.org/api/query"
 SEMANTIC_SCHOLAR_API = "https://api.semanticscholar.org/graph/v1"
 PUBMED_API = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 IEEE_XPLORE_API = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
@@ -70,54 +68,15 @@ class PaperNote(BaseModel):
     notes: Optional[str] = None
     tags: List[str] = []
 
-# arXiv 搜索
+# arXiv 搜索 —— 走唯一出口 core/arxiv_client.py:https、每 3 秒最多一次、只开一条连接
+# (arXiv 的接口使用条款)。这里原先自己直连 http://export.arxiv.org、不限速,问多了会被封。
 async def search_arxiv(query: str, max_results: int = 10) -> List[Dict]:
     """搜索 arXiv 论文"""
-    try:
-        params = {
-            "search_query": f"all:{query}",
-            "start": 0,
-            "max_results": max_results,
-            "sortBy": "relevance",
-            "sortOrder": "descending"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(ARXIV_API, params=params)
-            response.raise_for_status()
-        
-        # 解析 XML
-        root = ET.fromstring(response.text)
-        ns = {'atom': 'http://www.w3.org/2005/Atom'}
-        
-        papers = []
-        for entry in root.findall('atom:entry', ns):
-            paper = {
-                "paper_id": entry.find('atom:id', ns).text.split('/')[-1],
-                "title": entry.find('atom:title', ns).text.strip(),
-                "authors": [author.find('atom:name', ns).text for author in entry.findall('atom:author', ns)],
-                "abstract": entry.find('atom:summary', ns).text.strip(),
-                "published_date": entry.find('atom:published', ns).text[:10],
-                "url": entry.find('atom:id', ns).text,
-                "source": "arXiv",
-                "tags": ["arXiv"]
-            }
-            
-            # 提取分类
-            categories = entry.findall('atom:category', ns)
-            for cat in categories:
-                term = cat.get('term')
-                if term:
-                    paper["tags"].append(term)
-            
-            papers.append(paper)
-        
-        logger.info(f"arXiv 搜索完成: 找到 {len(papers)} 篇论文")
-        return papers
-    
-    except Exception as e:
-        logger.error(f"arXiv 搜索失败: {e}")
-        return []
+    from core.arxiv_client import search as _arxiv_search
+
+    papers = await asyncio.to_thread(_arxiv_search, query, max_results)
+    logger.info(f"arXiv 搜索完成: 找到 {len(papers)} 篇论文")
+    return papers
 
 # Semantic Scholar 搜索
 async def search_semantic_scholar(query: str, max_results: int = 10) -> List[Dict]:

@@ -139,8 +139,10 @@ class VoiceLoop:
         if await self._try_start_duplex(AudioCaptureConfig, AudioCaptureService):
             return
 
-        # 1. 初始化 ASR
-        self.asr = WhisperASR(model_size=self.model_size)
+        # 1. 初始化 ASR —— 在工作线程里。它要探下载源、import torch、首次还要下 145MB 的模型再载入:
+        #    放在事件循环里做的话,这几秒到几十秒里所有接口一起停住(所有者真机日志:一批请求同时
+        #    以 3 秒 / 5 秒完成,感知帧一条 9.8 秒)。
+        self.asr = await asyncio.to_thread(WhisperASR, model_size=self.model_size)
         logger.info("ASR initialized: %s", self.asr)
 
         # 2. 初始化 TTS

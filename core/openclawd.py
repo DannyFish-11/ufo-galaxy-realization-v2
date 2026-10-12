@@ -260,93 +260,8 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
     },
 ]
 
-# Academic 内置工具定义（供 LLM function calling 使用）
-_ACADEMIC_BUILTIN_TOOLS: List[Dict] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "academic__search",
-            "description": (
-                "在学术数据库（arXiv、Semantic Scholar、PubMed、IEEE Xplore）中搜索论文。"
-                "默认将搜索结果摄取到统一知识库（Knowledge Core），以便后续回检与推理引用。"
-                "返回论文元数据列表，包括标题、作者、摘要、来源、标签和摘取的条目 ID。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "搜索关键词或自然语言问题",
-                    },
-                    "source": {
-                        "type": "string",
-                        "enum": ["all", "arxiv", "semantic_scholar", "pubmed", "ieee"],
-                        "description": "数据源，默认为 all（全部来源）",
-                    },
-                    "max_results": {
-                        "type": "integer",
-                        "description": "每个数据源最多返回的论文数量（默认 10）",
-                    },
-                    "ingest": {
-                        "type": "boolean",
-                        "description": "是否将搜索结果摄取到统一知识库（默认 true）",
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "academic__ingest",
-            "description": (
-                "将单篇论文的元数据和摘要摄取到统一知识库（Knowledge Core）。"
-                "来源标注为 academic://{source}/{paper_id}，source_type 为 'academic'。"
-                "用于把已检索到的论文持久化为可回检的知识片段。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "paper": {
-                        "type": "object",
-                        "description": (
-                            "论文元数据对象，至少包含 paper_id、title、abstract、source 字段。"
-                            "其他可选字段：authors、published_date、url、tags、notes、doi、citation_count。"
-                        ),
-                    },
-                },
-                "required": ["paper"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "academic__recall",
-            "description": (
-                "从统一知识库（Knowledge Core）中回检之前摄取的学术知识片段。"
-                "仅返回 source_type='academic' 或 source 以 academic:// 开头的知识条目。"
-                "可与 academic__search 配合使用：先搜索并摄取，后续对话中通过此工具回检。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "回检查询（自然语言）",
-                    },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "最多返回的知识片段数量（默认 5）",
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-    },
-]
-
+# Academic 内置工具定义在 core/academic_tools.py(本文件有行数预算)。
+from core.academic_tools import ACADEMIC_BUILTIN_TOOLS as _ACADEMIC_BUILTIN_TOOLS  # noqa: E402
 
 # Engineering loop built-in tools (mediated self-healing, PR-6)
 _ENGINEER_BUILTIN_TOOLS: List[Dict] = [
@@ -7895,11 +7810,10 @@ class OpenClawd:
                     top_k=top_k,
                 )
 
-            else:
-                return {
-                    "success": False,
-                    "error": (f"Unknown academic action: '{action}'. " "Valid actions: search, ingest, recall."),
-                }
+            else:  # 本机 arXiv 文献库那三个(检索 / 读全文 / 维护),见 core/academic_tools.py
+                from core.academic_tools import dispatch_arxiv_tool
+
+                return await dispatch_arxiv_tool(action, arguments)
         except Exception as exc:
             logger.warning("_dispatch_academic_tool '%s' failed: %s", action, exc)
             return {"success": False, "error": str(exc)}

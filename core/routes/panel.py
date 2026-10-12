@@ -175,7 +175,7 @@ def _assemble_panel_feed(st: Any) -> dict:
     # 被静默吞掉)这条死路径,结果这个字段【永远是 "silent"】——WS 断线重连
     # 期间(App.tsx 会退回到 IPC feed)面板因此被错误拉回"待机",跟桌面
     # 覆盖层实际显示的相位完全脱节。这里改用 GalaxyPresenceBridge 的真实
-    # 实时状态(同一份驱动覆盖层"暖金氛围光"的状态)覆盖掉上面这个死值，
+    # 实时状态(同一份驱动覆盖层边缘氛围光的状态)覆盖掉上面这个死值，
     # 让面板与覆盖层从同一个真相来源读数据。
     try:
         from core.lumiv_websocket_bridge import get_current_phase

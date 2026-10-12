@@ -42,7 +42,7 @@ html[data-shell='desktop'] body {
 /* 再兜一层:整个文档按窗口圆角裁一次(去掉画布底只解决了圆角外方角的一个来源;
    软件合成下 backdrop-filter 子层、系统描边、焦点框都可能漏到圆角外)。只在桌面外壳里生效。 */
 html[data-shell='desktop'] {
-  clip-path: inset(0 round var(--shell-r));
+  clip-path: inset(0 round calc(var(--shell-r) * var(--stage-k, 1)));
 }
 
 /* ══ 壳 ══════════════════════════════════════════════════════════════ */
@@ -1829,3 +1829,37 @@ html[data-shell='desktop'] {
     mask-image: none;
   }
 }
+
+/* ══ 桌面外壳:整张画布与拉伸手柄 ═══════════════════════════════════════ */
+/* 桌面外壳里面板是一整张固定尺寸的画布(src/stage.ts 设宽高与 transform),窗口多大只决定把它
+   放多大 —— 不再随窗口重新排版。文档本身不滚、不留滚动条。 */
+html[data-stage='fixed'],
+html[data-stage='fixed'] body {
+  overflow: hidden;
+}
+html[data-stage='fixed'] #hud {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+/* 拉伸手柄(src/stage.ts):看不见,只有光标形状。按窗口像素量,不跟画布缩放 ——
+   边上一条细的,角上一小块;角上那块有一部分落在圆角外(被文档的圆角裁掉,点不到),
+   里面那部分照样能抓。 */
+.grip {
+  position: fixed;
+  z-index: 2147483000;
+  touch-action: none;
+}
+.grip[data-edge='n'], .grip[data-edge='s'] { left: 18px; right: 18px; height: 5px; cursor: ns-resize; }
+.grip[data-edge='e'], .grip[data-edge='w'] { top: 18px; bottom: 18px; width: 5px; cursor: ew-resize; }
+.grip[data-edge='n'] { top: 0; }
+.grip[data-edge='s'] { bottom: 0; }
+.grip[data-edge='e'] { right: 0; }
+.grip[data-edge='w'] { left: 0; }
+.grip[data-edge='ne'], .grip[data-edge='nw'], .grip[data-edge='se'], .grip[data-edge='sw'] { width: 18px; height: 18px; }
+.grip[data-edge='nw'] { left: 0; top: 0; cursor: nwse-resize; }
+.grip[data-edge='se'] { right: 0; bottom: 0; cursor: nwse-resize; }
+.grip[data-edge='ne'] { right: 0; top: 0; cursor: nesw-resize; }
+.grip[data-edge='sw'] { left: 0; bottom: 0; cursor: nesw-resize; }

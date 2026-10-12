@@ -51,6 +51,19 @@ _BACKGROUND_TASKS: set = set()
 
 logger = logging.getLogger(__name__)
 
+#: 人声的大致响度(浮点样本的均方根)。安静房间的底噪在 0.001–0.005,说话在 0.02 以上。
+_VOICE_LEVEL_RMS = 0.02
+#: 这么多块(约半秒)人声级别的响动都没被判成说话,才值得告诉人「说了没听见」。
+_LOUD_CHUNKS_TO_WARN = 5
+
+
+def _rms(samples) -> float:
+    try:
+        return float(np.sqrt(np.mean(np.square(samples, dtype=np.float64))))
+    except Exception:  # noqa: BLE001 — 诊断用,算不出来就当安静
+        return 0.0
+
+
 # Latency threshold above which a quality-degraded event is emitted (ms)
 _LATENCY_WARNING_MS: float = 200.0
 
@@ -120,6 +133,8 @@ class AudioCaptureService:
         self._chunks_seen: int = 0
         self._speech_chunks: int = 0
         self._transcripts: int = 0
+        #: 有人声那么响、VAD 却没判成「说话」的块 —— 区分「这 20 秒没人说话」和「说了没听见」。
+        self._loud_unspoken: int = 0
         self._diag_task: Optional[asyncio.Task] = None
 
         # Voice input callback — invoked when ASR produces text
@@ -194,6 +209,8 @@ class AudioCaptureService:
                 return
 
             self._chunks_seen += 1  # 诊断:确有音频块流进来(麦克风采集在工作)
+            if not state.is_speaking and _rms(state.samples) >= _VOICE_LEVEL_RMS:
+                self._loud_unspoken += 1  # 诊断:有人声那么响,VAD 却没判成说话
 
             # Only buffer when speech is detected
             if state.is_speaking:
@@ -302,6 +319,7 @@ class AudioCaptureService:
         self._chunks_seen = 0
         self._speech_chunks = 0
         self._transcripts = 0
+        self._loud_unspoken = 0
 
         if not self.is_available:
             logger.warning("AudioCaptureService: sounddevice unavailable; skipping start")
@@ -361,13 +379,16 @@ class AudioCaptureService:
                 "或授予麦克风权限后重启。",
                 delay,
             )
+        elif self._speech_chunks == 0 and self._loud_unspoken < _LOUD_CHUNKS_TO_WARN:
+            # 一直很安静 —— 这 20 秒没人说话,是正常的,不在控制台上念一遍(所有者真机日志里每次开机一条 WARNING)。
+            logger.info("🎙️ 麦克风在收音,%.0fs 内(%d 块)都很安静,没人说话。", delay, self._chunks_seen)
         elif self._speech_chunks == 0:
             logger.warning(
-                "🎙️ 麦克风在收音,但 %.0fs 内(%d 块)【VAD 从未判定为说话】——"
-                "这段时间没人说话就属正常;说了话还是这样,则是麦克风增益极低/选错了输入设备。VAD 已自适应噪声底,若仍不触发,"
+                "🎙️ 麦克风收到了人声那么响的声音(%d 块),但 %.0fs 内【VAD 从未判定为说话】——"
+                "多半是选错了输入设备或增益太低。VAD 已自适应噪声底,若仍不触发,"
                 "请在系统里调高该麦克风输入音量,或设 GALAXY_VAD_MIN_FLOOR=0.001(更灵敏)后重跑。",
+                self._loud_unspoken,
                 delay,
-                self._chunks_seen,
             )
         else:
             logger.warning(

@@ -46,6 +46,7 @@ import {
   toPhase,
 } from './transport';
 import { WAKE_CANDIDATES, platform } from './platform';
+import { fitStage } from './stage';
 import { createDeck } from './ui/deck';
 import { createLine } from './ui/line';
 import type { LineTrust } from './ui/line';
@@ -1286,6 +1287,7 @@ function demoEnabled(): boolean {
 function boot(): void {
   const host = document.getElementById('hud');
   if (host) {
+    fitStage(host, IN_DESKTOP_SHELL);
     mount(host);
     return;
   }

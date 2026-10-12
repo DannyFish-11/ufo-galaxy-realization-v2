@@ -355,6 +355,16 @@ def render_pet(
     return canvas.resize((size, size), Image.LANCZOS)
 
 
+#: 应用图标(任务栏 / 窗口 / 快捷方式)上那只:立着、睁着眼、身子不透明 —— 不跟任何一帧,
+#: 是它「在」的那个样子。画图标的是 scripts/render_app_icons.py。
+APP_ICON_STATE: Mapping[str, Any] = {"phase": "manifest", "eyes": "open", "sensing": "false"}
+
+
+def render_app_icon(size: int) -> Any:
+    """应用图标的一张(RGBA,``size``×``size``)。与托盘同一只、同一套画法。"""
+    return render_pet(APP_ICON_STATE, size)
+
+
 def _scale_of(phase: str, react: Optional[str]) -> float:
     if react in REACTS:
         return REACTS[react][2]
