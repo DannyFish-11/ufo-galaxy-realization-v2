@@ -38,7 +38,6 @@ REPEAT_S = 600.0
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _started = False
-_beat = [0.0]
 
 
 def where(frame) -> str:
@@ -58,26 +57,28 @@ def where(frame) -> str:
     return " ← ".join(ours) if ours else innermost
 
 
-def _tick(loop: asyncio.AbstractEventLoop) -> None:
-    _beat[0] = time.monotonic()
+def _tick(loop: asyncio.AbstractEventLoop, beat: List[float]) -> None:
+    beat[0] = time.monotonic()
     if not loop.is_closed():
-        loop.call_later(BEAT_S, _tick, loop)
+        loop.call_later(BEAT_S, _tick, loop, beat)
 
 
-def _monitor(loop: asyncio.AbstractEventLoop, loop_thread: int) -> None:
-    said: Dict[str, Tuple[float, int]] = {}
+def _monitor(loop: asyncio.AbstractEventLoop, loop_thread: int, beat: List[float]) -> None:
+    said: Dict[str, Tuple[Optional[float], int]] = {}
     while not loop.is_closed() and loop.is_running():
         time.sleep(BEAT_S)
-        stalled_since = _beat[0]
+        stalled_since = beat[0]
         if time.monotonic() - stalled_since < STALL_S:
             continue
         spot = where(sys._current_frames().get(loop_thread))
-        while _beat[0] == stalled_since and not loop.is_closed():
+        while beat[0] == stalled_since and not loop.is_closed():
             time.sleep(BEAT_S / 2)
-        took = _beat[0] - stalled_since - BEAT_S
-        last, quiet = said.get(spot, (0.0, 0))
+        took = beat[0] - stalled_since - BEAT_S
         now = time.monotonic()
-        if now - last < REPEAT_S:
+        # 没说过就说。不能拿 0 当「上次说的时刻」:monotonic 从开机算起,刚开机不到 10 分钟的机器上
+        # 第一次卡顿会被当成「刚说过」吞掉(CI 的新虚机上就是这么漏的)。
+        last, quiet = said.get(spot, (None, 0))
+        if last is not None and now - last < REPEAT_S:
             said[spot] = (last, quiet + 1)
             continue
         more = f"(此前 10 分钟里同一处又卡了 {quiet} 次)" if quiet else ""
@@ -95,6 +96,10 @@ def start(loop: Optional[asyncio.AbstractEventLoop] = None) -> bool:
     except RuntimeError:
         return False
     _started = True
-    _tick(loop)
-    threading.Thread(target=_monitor, args=(loop, threading.get_ident()), name="loop-stall-watch", daemon=True).start()
+    # 心跳归这一个循环所有:进程里另有一个循环在跑(测试、嵌入式用法)时,它的心跳不能把这边的卡顿盖住。
+    beat = [time.monotonic()]
+    _tick(loop, beat)
+    threading.Thread(
+        target=_monitor, args=(loop, threading.get_ident(), beat), name="loop-stall-watch", daemon=True
+    ).start()
     return True
