@@ -532,6 +532,10 @@ def seed_academic_resource(
             "academic__search",
             "academic__ingest",
             "academic__recall",
+            # 本机 arXiv 文献库(core/arxiv_library.py):检索 / 读全文 / 维护
+            "academic__arxiv_search",
+            "academic__arxiv_read",
+            "academic__arxiv_library",
         ],
         tags=["academic", "knowledge", "search"],
         metadata=dict(metadata or {}),
