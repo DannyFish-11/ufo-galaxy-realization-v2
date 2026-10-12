@@ -645,9 +645,14 @@ function mount(host: HTMLElement): void {
   async function restoreSession(): Promise<void> {
     const primary = await fetchPrimarySession(BASE);
     const sid = primary || recallSession();
-    if (!sid) return;
+    if (!sid) {
+      // 后端答了「没有主线」、本地也没记过 —— 这就是答案(primary 为 null 才是没问到)。
+      historySettled = primary !== null;
+      return;
+    }
     if (primary) rememberSession(primary);
     const turns = await fetchHistory(BASE, sid);
+    historySettled = turns !== undefined;
     if (turns === undefined) {
       // **没问到**(后端还没起来、断着、超时)。不是答案,**不能**据此丢掉本地记的那条 ——
       // 先认下它(接下来说的话还接在这条上),连上之后 resyncAfterOpen 会再读一遍历史。
@@ -810,7 +815,20 @@ function mount(host: HTMLElement): void {
     }
   }
 
-  void restoreSession();
+  /**
+   * 历史这件事有没有过一个**确定的答案**(读到了 / 本来就没有会话 / 后端说不认识)。
+   * 没问到(后端还没起来)不算 —— 连上之后要再读一遍。
+   */
+  let historySettled = false;
+  /** 正在读的那一次。开机那次还没回来时连上了,别再并发读第二遍(同一份历史画两次、多问一次)。 */
+  let restoring: Promise<void> | null = null;
+  function restoreOnce(): Promise<void> {
+    restoring ??= restoreSession().finally(() => {
+      restoring = null;
+    });
+    return restoring;
+  }
+  void restoreOnce();
 
   // 上次进程中断时没记上结果的操作:提示一次。「可能已经执行了」不是「失败」。
   void fetchUnresolvedActions(BASE).then((actions) => {
@@ -882,8 +900,7 @@ function mount(host: HTMLElement): void {
     if (again || s.vendors === null) void loadVendors();
     if (again || s.githubAddons === null) void loadAddons();
     if (again) void loadIsolated();
-    const historyMissing = !s.sessionId || s.turns.length === 0;
-    if ((again || historyMissing) && !s.chatBusy && s.drawn < 0) void restoreSession();
+    if ((again || !historySettled) && !s.chatBusy && s.drawn < 0) void restoreOnce();
   }
 
   // ── 后端:实时那条 ───────────────────────────────────────────────

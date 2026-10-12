@@ -150,11 +150,14 @@ def test_reconnecting_pulls_again_what_was_missed():
         "loadBundles",
         "loadVendors",
         "loadAddons",
-        "restoreSession",
+        "restoreOnce",
     ):
         assert f"void {loader}()" in resync, f"连上之后没有补拉 {loader}"
     # 正在出字、正在看某张卡的时候不动历史 —— 那会把人眼前的东西换掉
     assert "!s.chatBusy && s.drawn < 0" in resync
+    # 开机那次还没回来时就连上了:共用那一次,不并发读第二遍(浏览器测试抓到过:同一份历史问了两次)
+    once = main[main.index("function restoreOnce(): Promise<void> {") :][:200]
+    assert "restoring ??= restoreSession()" in once
 
 
 class _FakeWS:
