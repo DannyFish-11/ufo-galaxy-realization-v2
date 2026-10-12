@@ -62,6 +62,8 @@ declare global {
   interface PanelStageApi {
     readonly STAGE: { readonly width: number; readonly height: number };
     readonly MIN_SCALE: number;
+    /** 画布的圆角半径（画布像素），与 hud.css 的 --shell-r 同一个数。 */
+    readonly RADIUS: number;
     /** 能拖的八个方位：四条边、四个角。 */
     readonly EDGES: readonly string[];
     ratio(): number;

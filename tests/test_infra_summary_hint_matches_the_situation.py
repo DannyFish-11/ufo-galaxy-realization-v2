@@ -54,3 +54,12 @@ def test_the_summary_line_is_wired_to_the_situational_hint():
     src = inspect.getsource(svc)
     assert 'hint="装 Docker/Podman 后重跑即恢复"' not in src
     assert "infra_summary_hint(d_value, d_note)" in src
+
+
+def test_the_first_pull_is_in_progress_not_degraded():
+    """第一次拉镜像是「还在做」:不算进降级项(总结卡「降级」栏里不该有它)。"""
+    import inspect
+
+    src = inspect.getsource(svc.GalaxyUnified.ensure_docker_infra)
+    branch = src[src.index('if status == "pulling":') :][:400]
+    assert '"info"' in branch and '"warn"' not in branch

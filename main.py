@@ -349,6 +349,8 @@ ELECTRON_DIR = Path("electron")
 
 from logging.handlers import RotatingFileHandler
 
+from core import console_log as _console_log
+
 
 class SafeStreamHandler(logging.StreamHandler):
     """Windows-safe StreamHandler with UTF-8 encoding for CJK characters.
@@ -416,13 +418,12 @@ if not logging.getLogger().handlers:
         encoding="utf-8",
     )
     _console = SafeStreamHandler()
-    _console.setLevel(logging.WARNING)  # console只显示警告/错误；详情在 logs/lumiv.log
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=[handler, _console],
-    )
+    _console.setLevel(logging.WARNING)  # 控制台只上错误(-v 加警告),不在调用方线程写:见 core/console_log.py
+    _console.addFilter(_console_log.ConsoleGate())
+    _fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S")
+    for _h in (handler, _console):
+        _h.setFormatter(_fmt)
+    logging.basicConfig(level=logging.INFO, handlers=[_console_log.off_the_loop(handler, _console)])
     # 修 logging 双写(所有者 Windows 真机日志:HF 下载重试等每条日志打印两遍)。
     # 根因:huggingface_hub 在 import 时给自己的库根 logger("huggingface_hub")
     # 挂了一个裸 StreamHandler,却不关 propagate —— 同一条 WARNING 先经它自己的
@@ -704,13 +705,12 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     #     镜像证书链不受信时会卡在这一步);
     #   · 结果是 InstallResult 而不是裸 bool,能说清"用哪个源成功的/试了几次"。
     from launcher import deps as _deps
+    from launcher import ui as _ui
 
     def _run_pip_install(pkgs: list, timeout: int = 900) -> bool:
-        """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。"""
-        result = _deps.pip_install(pkgs, timeout=timeout)
+        """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。pip 的输出不上屏,失败才带出原因。"""
+        result = _deps.pip_install(pkgs, timeout=timeout, stream=False)
         if result.ok:
-            if result.attempts > 1:
-                print_item("经镜像回退后安装成功", "warn", result.index_used or "默认源")
             return True
         print_item(f"pip 安装失败(试了 {result.attempts} 个源)", "warn", result.stderr_tail[:120])
         return False
@@ -782,11 +782,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     if not core_deps_missing:
         print_item("Python 核心依赖", "ok")
-    else:
-        print_item(f"缺失 {len(core_deps_missing)} 个包", "warn", f"{', '.join(core_deps_missing)}")
-        print_item("自动安装缺失的核心依赖", "info")
-        if _run_pip_install(core_deps_missing):
-            print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
+    else:  # 缺的自动补上:下载过程不上屏,装好就是一个对勾(所有者:「这个下载本身应该隐藏」)
+        with _ui.transient(f"补装缺的依赖 {', '.join(core_deps_missing)} …"):
+            installed = _run_pip_install(core_deps_missing)
+        if installed:
+            print_item("Python 核心依赖", "ok", f"已补装 {', '.join(core_deps_missing)}")
         else:
             print_item("pip install 失败(默认源+国内镜像均不通)", "error")
             all_ok = False

@@ -943,6 +943,12 @@ function createPanelWindow() {
         }
     });
 
+    // 窗口的外形交给系统裁：画布的圆角矩形以外不是窗口的一部分（不画、不接鼠标）。
+    // 所有者在 Windows 上拍到窗口矩形是白的、方角，面板圆角落在里面、上沿还露一条白带 —— 那台机器上
+    // 透明没生效，页面这边把圆角外弄得再透明也没用。外形跟着每一次改大小重算（PanelStage.shapeRects）。
+    shapePanel();
+    panelWindow.on('resize', shapePanel);
+
     panelWindow.loadFile(panelPath);
 
     // ── 面板加载诊断 + 可见兜底 ──
@@ -991,6 +997,18 @@ function createPanelWindow() {
     panelWindow.on('hide', endPanelResize);
 
     return panelWindow;
+}
+
+// 窗口外形 = 画布的圆角矩形（见 createPanelWindow 里的说明）。macOS 没有这个接口，那边透明窗口一向可靠。
+function shapePanel() {
+    if (!panelWindow || panelWindow.isDestroyed() || typeof panelWindow.setShape !== 'function') return;
+    if (process.platform === 'darwin') return;
+    const [width, height] = panelWindow.getContentSize();
+    try {
+        panelWindow.setShape(PanelStage.shapeRects({ width, height }));
+    } catch (e) {
+        console.error('[Panel] setShape failed:', e && e.message);
+    }
 }
 
 // ── 面板拉伸：按住边角时开始，松手时结束，中间每一帧按光标位置等比改窗口大小 ──

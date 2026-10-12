@@ -41,15 +41,22 @@ _started = False
 
 
 def where(frame) -> str:
-    """这根线程此刻卡在哪:最里面的几层**仓库里的**帧(库代码略过);一层都没有就给最里面那层。"""
+    """这根线程此刻卡在哪:最里面的几层**仓库里的**帧(库代码略过);一层都没有就给最里面那层。
+
+    ``<frozen importlib._bootstrap>`` 这类不是文件的帧不算仓库里的 —— 原先拿 ``abspath`` 一拼,
+    当前目录正好是仓库根,它们就成了「仓库里的」,所有者日志里卡顿全报在
+    ``<frozen importlib._bootstrap_external>:991 exec_module`` 上,看不出是谁在 import。
+    """
     ours: List[str] = []
     innermost = ""
     while frame is not None:
-        path = os.path.abspath(frame.f_code.co_filename)
-        shown = os.path.relpath(path, _REPO) if path.startswith(_REPO) else os.path.basename(path)
+        name = frame.f_code.co_filename
+        real = not name.startswith("<")
+        path = os.path.abspath(name) if real else name
+        shown = os.path.relpath(path, _REPO) if real and path.startswith(_REPO) else os.path.basename(path)
         spot = f"{shown}:{frame.f_lineno} {frame.f_code.co_name}"
         innermost = innermost or spot
-        if path.startswith(_REPO) and "site-packages" not in path and os.sep + "external" + os.sep not in path:
+        if real and path.startswith(_REPO) and "site-packages" not in path and os.sep + "external" + os.sep not in path:
             ours.append(spot)
             if len(ours) == 3:
                 break
