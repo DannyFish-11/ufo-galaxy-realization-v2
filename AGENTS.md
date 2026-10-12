@@ -175,6 +175,16 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - `core/routes/openai_audio.py` - OpenAI 兼容端点 `/v1/audio/{speech,transcriptions,capabilities}`。
   说走 speech_output、听走 modality_bridge，**不另起一套引擎选择**
 
+### 论文检索：本机 arXiv 文献库
+- `core/arxiv_library.py` - 元数据整份在本机（HF `secemp9/arxiv-complete` 的 `metadata`，1.6 GB，固定版本），SQLite FTS5（BM25）+ 分类 / 日期字段过滤；全文按需取一篇缓存一篇（2 GB 封顶）。导入 / 每天 OAI-PMH 增量在 `core/arxiv_sync.py`（后台线程，可问进度）
+- `core/arxiv_client.py` - arXiv 的**唯一**出口：https、全进程每 3 秒最多一次、单连接（arXiv 使用条款）。**别再直连 export.arxiv.org**（`tests/test_arxiv_local_library.py` 守着）
+- 工具在 `core/academic_tools.py`（`academic__arxiv_search / arxiv_read / arxiv_library`，以及原来的 search / ingest / recall 的定义）；会下东西的只在人发起的回合里，70 GB 全文分片要 `confirm`
+
+### 启动横幅与卡顿
+- 本地模式不起 NATS、不入 tailnet、不往局域网广播 —— 这些是对的状态，不算降级（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
+- `core/loop_stall_watch.py` - 事件循环停跳 1 秒以上时记下卡在仓库哪几行。日志里「一批请求同一毫秒一起慢」先看它那一行
+- 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
+
 ### API 层
 - `core/api_routes.py` - REST API 和 WebSocket 路由（挂 `core/routes/*`）
 - `galaxy_gateway/app.py` - 设备网关；规范的设备 WebSocket 入口 `/ws/device/{device_id}` 在 `galaxy_gateway/routes/websocket.py`
@@ -193,6 +203,8 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - **面板上不列的另两类设置**（`core/routes/panel_builtin.py`，`GET /api/config/all` 不下发、「保存设置」不往 `.env` 里钉默认值，但仍登记、`POST /api/config` / `.env` / 环境变量照旧能用）：**内置键 90 个**（路径、内部服务地址与端口、型号与规格、固定的严格默认、运维逃生口——有一个对的默认，人填错只会弄坏），**跨设备专属键 15 个**（总线 / 联邦 / 打洞与中继 / 设备名 / 网格口令……只在 `core.system_mode.cross_device_requested()` 为真时才列，本地模式是纯噪音）。**新增一个键，先回答它属于哪一类**：留在面板（用户真有取舍）/ 对话里调（`core/tuning.py`）/ 内置（加进 `BUILTIN_GROUPS`）/ 跨设备专属。**登记表的默认值必须等于代码里的默认值**（`tests/test_panel_builtin_keys.py` 逐个扫描核对；曾抓到 `CORS_ALLOWED_ORIGINS` 登记成 `*`，点一次保存就写成「任何网页都能带凭据调本机接口」），**路径默认一律随数据总目录走**（`core.data_paths.data_path_or_legacy` / `runtime_file`：数据目录下没有、旧位置有数据时继续认旧位置，不把已有的记忆 / 账本 / 装进来的项目甩在后面）；**没有任何代码在读的键不许登记**（同一份测试扫描）
 - **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
 - `core/ambient_yield.py` - 自发注意力循环给用户让路：用户请求在跑不碰模型、调用进行中用户来了就取消（Ollama 随之停掉生成）、用时 T 秒后歇 3T 秒。判「人在等」用 `core.presence_line.foreground_request_active`（后台自发来源与常驻在场不算）
+- **面板是一整张画布**：桌面外壳里按 `electron/renderer/panel_stage.js` 的 1200×700 排一次版，窗口只决定整张放多大（`panel/src/stage.ts`）；面板窗口 `thickFrame: false`（带粗边框时 Windows 沿窗口矩形描一圈方白边），拉伸由四边四角的手柄发起、主进程锁宽高比改大小。**别再写按视口重新排版的样式**（`tests/test_the_panel_scales_as_one_piece.py`）
+- 任务栏 / 窗口 / 快捷方式的应用图标由桌宠现画：改了桌宠的样子或颜色，跑 `python scripts/render_app_icons.py`
 - 面板窗口只能有它自己的圆角：桌面外壳里 `html[data-shell='desktop']` 的画布底是透明的（`index.html` 同步脚本设置），否则 `body` 的渐变会铺满窗口矩形、圆角外多出四个方角。`dist/` 是提交进仓库的产物，改样式后要 `npm run build`
 - `enhancements/clients/windows_client/run_ui.py` 是**硬禁用的桩**，只会发一条弃用警告；原先写在这里的
   `scroll_paper_geek_ui.py` 不存在
