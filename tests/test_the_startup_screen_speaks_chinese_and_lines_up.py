@@ -163,5 +163,21 @@ class TestThePreflightBlockIsInChinese:
     def test_every_check_speaks_chinese(self):
         from core.config_preflight import _CHECKS
 
-        mute = [c.var for c in _CHECKS if not (_CJK.search(c.description) and _CJK.search(c.hint))]
+        # 提示可以是空的(两条密钥只留「键名 — 谁的密钥」,不出「怎么办」);写了就得是中文。
+        mute = [c.var for c in _CHECKS if not (_CJK.search(c.description) and (not c.hint or _CJK.search(c.hint)))]
         assert not mute, f"这些判据的说明/提示还是英文: {mute}"
+
+    def test_the_two_key_reminders_are_one_line_each(self, monkeypatch):
+        """所有者:「只剩下这两个 OpenAI API key 和 Anthropic API key,以及后续分别接的 OpenAI 的密钥和
+        Anthropic Claude 的密钥,把剩下的内容都给它删了」。"""
+        from core.config_preflight import run_preflight
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        text = run_preflight(dry_run=True, mode="core", verbose=True).format(verbose=True)
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", text)
+        rows = [ln.strip() for ln in plain.splitlines()]
+        assert "• OPENAI_API_KEY — OpenAI 的密钥" in rows
+        assert "• ANTHROPIC_API_KEY — Anthropic Claude 的密钥" in rows
+        for gone in ("只有要用", "怎么办: 要用就在", "DeepSeek / Gemini", "sk-ant-"):
+            assert gone not in plain, f"又多出了说明: {gone!r}"

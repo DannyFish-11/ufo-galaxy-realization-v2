@@ -75,6 +75,10 @@ const _baseArg = process.argv.find((a) => a.startsWith('--galaxy-base='));
 contextBridge.exposeInMainWorld('galaxyShell', {
   base: _baseArg ? _baseArg.slice('--galaxy-base='.length) : '',
   name: 'electron',
+  // 面板拉伸：面板窗口没有系统粗边框（带着它四角会多一圈方的白边），系统不替它拉伸 ——
+  // 面板边角上的手柄按下时说一声，主进程跟着光标等比改大小，松手再说一声。
+  beginResize: (edge) => ipcRenderer.send('panel:resize-begin', String(edge)),
+  endResize: () => ipcRenderer.send('panel:resize-end'),
 });
 
 console.log('[Preload] galaxyAPI IPC bridge ready');

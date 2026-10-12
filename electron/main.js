@@ -1,4 +1,6 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, dialog, screen } = require('electron');
+// 面板画布的尺寸与缩放 —— 面板（打包进去）和这里共用同一份。
+const PanelStage = require('./renderer/panel_stage.js');
 const path = require('path');
 const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
@@ -889,20 +891,38 @@ function createPanelWindow() {
 
     if (panelWindow) return panelWindow;
 
+    // 面板是一整张固定尺寸的画布（renderer/panel_stage.js），窗口只决定把它放多大 ——
+    // 宽高比锁死，拖哪条边、哪个角都是整张等比变，里面不重新排版（所有者：「像面团一样」）。
+    const workArea = screen.getPrimaryDisplay().workAreaSize;
+    const first = PanelStage.initialSize(workArea);
+    const lim = PanelStage.limits(workArea);
     panelWindow = new BrowserWindow({
-        width: 1200,
-        height: 700,
+        width: first.width,
+        height: first.height,
+        minWidth: lim.minWidth,
+        minHeight: lim.minHeight,
+        maxWidth: lim.maxWidth,
+        maxHeight: lim.maxHeight,
         icon: ICON_PATH,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
         fullscreen: false,
+        fullscreenable: false,
+        maximizable: false,
         skipTaskbar: false,
         // 透明窗口的系统阴影按**窗口矩形**画，不跟着面板的圆角走 —— 圆角外面就多出四个方角。
         // 面板自己的圆角在 hud.css 的 .shell 上；canvas 底在桌面外壳里已改成透明
         // （index.html 的 data-shell），窗口的形状完全由 .shell 决定。
         hasShadow: false,
-        resizable: true,
+        // 不要 Windows 的粗边框（WS_THICKFRAME / WS_CAPTION）。带着它，Windows 11 会沿**窗口矩形**
+        // 描一圈 1 像素的系统边、再按矩形倒系统圆角 —— 面板自己的圆角外面就露出一圈方的白边，
+        // 四个角上最明显（所有者：「4 个角还是有那种矩形的白边」）。页面这边早已透明、按圆角裁过，
+        // 剩下的就是这一圈系统画的边。
+        thickFrame: false,
+        // 没有粗边框，系统也就不替它拉伸；拉伸由面板边角上的手柄发起、这里按光标等比改大小
+        // （见下面的 panel:resize-*）。平时锁着，拖的那一会儿才放开。
+        resizable: false,
         movable: true,
         closable: true,
         focusable: true,
@@ -962,12 +982,45 @@ function createPanelWindow() {
         console.log(`[Panel:renderer] ${message} (${sourceId}:${line})`));
 
     panelWindow.on('closed', () => {
+        endPanelResize();
         panelWindow = null;
         isPanelVisible = false;
     });
+    // 拖着拖着窗口没了焦点 / 被收起（松手那一下没传回来）—— 不能让它一直跟着光标变。
+    panelWindow.on('blur', endPanelResize);
+    panelWindow.on('hide', endPanelResize);
 
     return panelWindow;
 }
+
+// ── 面板拉伸：按住边角时开始，松手时结束，中间每一帧按光标位置等比改窗口大小 ──
+// 光标位置在这里读（屏幕坐标），不用渲染层传过来的 —— 页面是缩放过的，它那边的坐标跟着在变。
+let _panelResize = null;
+function endPanelResize() {
+    if (!_panelResize) return;
+    clearInterval(_panelResize.timer);
+    _panelResize = null;
+    if (panelWindow && !panelWindow.isDestroyed()) panelWindow.setResizable(false);
+}
+ipcMain.on('panel:resize-begin', (event, edge) => {
+    if (!panelWindow || panelWindow.isDestroyed() || event.sender !== panelWindow.webContents) return;
+    if (!PanelStage.EDGES.includes(edge)) return;
+    endPanelResize();
+    const start = panelWindow.getBounds();
+    // 锁着（resizable: false）时窗口大小被钉在当前尺寸上，setBounds 改不动 —— 拖的这一会儿放开。
+    panelWindow.setResizable(true);
+    const lim = PanelStage.limits(screen.getDisplayMatching(start).workArea);
+    const p0 = screen.getCursorScreenPoint();
+    const timer = setInterval(() => {
+        if (!panelWindow || panelWindow.isDestroyed()) return endPanelResize();
+        const p = screen.getCursorScreenPoint();
+        panelWindow.setBounds(PanelStage.resizeBounds(start, edge, p.x - p0.x, p.y - p0.y, lim));
+    }, 16);
+    _panelResize = { timer };
+});
+ipcMain.on('panel:resize-end', (event) => {
+    if (panelWindow && !panelWindow.isDestroyed() && event.sender === panelWindow.webContents) endPanelResize();
+});
 
 // ── 三态覆盖层手动唤醒/隐藏 ──
 // 「唤醒」= 把 AI 这一整套三态外壳显示出来，停在【第一态(silent 暖金边缘氛围光)】。

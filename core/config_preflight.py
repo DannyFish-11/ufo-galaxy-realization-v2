@@ -150,21 +150,16 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="OPENAI_API_KEY",
         severity=Severity.WARNING,
-        description="OpenAI 的密钥(只有要用 OpenAI 家的模型才需要)。",
-        hint=(
-            "要用就在 .env 里写 OPENAI_API_KEY=sk-…。不填也行:本机 Ollama 大脑、"
-            "或任何一家别的云端密钥(DeepSeek / Gemini / 通义…)都能让智能体跑起来。"
-        ),
+        # 所有者:这两条只留「键名 — 谁的密钥」,其余说明与「怎么办」全删 —— 空提示就不出「怎么办」那一行。
+        description="OpenAI 的密钥",
+        hint="",
         groups=["core", "all"],
     ),
     EnvCheck(
         var="ANTHROPIC_API_KEY",
         severity=Severity.WARNING,
-        description="Anthropic Claude 的密钥(只有要用 Claude 才需要)。",
-        hint=(
-            "要用就在 .env 里写 ANTHROPIC_API_KEY=sk-ant-…(GALAXY_LLM_PROVIDER=anthropic 时必须有);"
-            "用本机 Ollama 或别家密钥的话可以不填。"
-        ),
+        description="Anthropic Claude 的密钥",
+        hint="",
         groups=["core", "all"],
     ),
     # ── Core: auth / security ────────────────────────────────────────────

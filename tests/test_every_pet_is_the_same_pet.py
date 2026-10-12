@@ -276,6 +276,32 @@ def test_a_reaction_and_a_status_change_the_icon():
     assert P.render_pet(st, 64, status="error").tobytes() != base, "出错时托盘上没有那颗状态点"
 
 
+def test_the_taskbar_icon_is_the_same_pet_not_the_old_nebula():
+    """所有者:「桌面最下面一行应用图标显示的还是星云图片,那个也同样改成一样的桌宠」。
+
+    任务栏 / 窗口 / 快捷方式 / 安装包用的那几张,必须就是 ``render_app_icon`` 现画的 ——
+    桌宠的样子、颜色一改,``python scripts/render_app_icons.py`` 重画一遍,这里就会对上。"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("render_app_icons", _ROOT / "scripts" / "render_app_icons.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    stale = [str(path.relative_to(_ROOT)) for path, data in mod.expected().items() if path.read_bytes() != data]
+    assert not stale, f"这些应用图标不是现画的桌宠(跑一次 python scripts/render_app_icons.py): {stale}"
+
+    from PIL import Image
+
+    ico = Image.open(_ROOT / "electron" / "assets" / "icon.ico")
+    assert {(16, 16), (32, 32), (48, 48), (256, 256)} <= set(ico.ico.sizes()), "任务栏常用的几个尺寸要各有一张"
+    big = Image.open(_ROOT / "electron" / "assets" / "icon.png").convert("RGBA")
+    assert big.getpixel((0, 0))[3] == 0, "四角要透明 —— 任务栏上只有那只桌宠,没有底板"
+    sr, sg, sb = P._rgb(P.SKIN)
+    r, g, b, a = big.getpixel((256, 380))
+    assert a > 240 and abs(r - sr) < 10 and abs(g - sg) < 10 and abs(b - sb) < 10, "身子不是桌宠那支紫"
+    main_js = (_ROOT / "electron" / "main.js").read_text(encoding="utf-8")
+    assert "'icon.ico' : 'icon.png'" in main_js, "窗口图标不再取这几张了"
+
+
 def test_the_svg_path_flattens_into_the_pebble():
     """折线的外框要与路径本身的几何对得上(按路径里的数算出来,不是量截图量出来的):
 
