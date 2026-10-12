@@ -50,6 +50,7 @@ class TestItSaysExactlyWhatIsWrong:
     def test_only_the_code_page_line_when_only_the_code_page_is_wrong(self, monkeypatch, capsys):
         _windows_powershell(monkeypatch)
         monkeypatch.setattr(art, "_console_code_page", lambda: 936)
+        monkeypatch.setattr(art, "_switch_console_to_utf8", lambda _cp: False)  # 切不了才提
         monkeypatch.setattr(art, "_console_columns", lambda: 160)
         art.print_powershell_hint()
         out = capsys.readouterr().out
@@ -87,3 +88,20 @@ class TestTheProbesThemselvesNeverThrow:
         # 输出被重定向（管道/日志）时列宽无意义，必须是"不知道"。
         monkeypatch.setattr(art.sys.stdout, "isatty", lambda: False, raising=False)
         assert art._console_columns() is None
+
+
+class TestItFixesWhatItCanInsteadOfLecturing:
+    def test_a_wrong_code_page_is_switched_not_lectured(self, monkeypatch, capsys):
+        """所有者真机:每次启动先被教一遍「请先运行 chcp 65001」—— 能自己切就自己切。"""
+        _windows_powershell(monkeypatch)
+        switched = []
+        monkeypatch.setattr(art, "_console_code_page", lambda: 437)
+        monkeypatch.setattr(art, "_console_columns", lambda: 160)
+        monkeypatch.setattr(art, "_switch_console_to_utf8", lambda cp: switched.append(cp) or True)
+        art.print_powershell_hint()
+        assert switched == [437]
+        assert capsys.readouterr().out == "", "已经替人切好了,还在教人敲 chcp"
+
+    def test_switching_is_a_no_op_off_windows(self, monkeypatch):
+        monkeypatch.setattr(art.os, "name", "posix")
+        assert art._switch_console_to_utf8(437) is False

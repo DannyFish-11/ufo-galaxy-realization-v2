@@ -157,6 +157,11 @@ def platform_core_modules() -> Dict[str, str]:
     """
     mods = dict(CORE_MODULES)
     mods["winloop" if os.name == "nt" else "uvloop"] = "winloop" if os.name == "nt" else "uvloop"
+    if os.name == "nt":
+        # Windows 上抓系统播放声(回声消除的参考信号)只能靠它:官方 sounddevice 没有 WASAPI 回环。
+        # 一个现成轮子(几百 KB),不像语音那几个要拉几百 MB —— 所以随启动补装,不再只在日志里
+        # 教人 `pip install PyAudioWPatch`(所有者真机日志:每次开机两遍「系统播放声采集不可用」)。
+        mods["pyaudiowpatch"] = "PyAudioWPatch"
     return mods
 
 

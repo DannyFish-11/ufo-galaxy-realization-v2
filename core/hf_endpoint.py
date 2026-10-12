@@ -66,6 +66,35 @@ def _candidates() -> list:
     return [current] + [e for e in _PUBLIC_ENDPOINTS if e != current]
 
 
+def quiet_progress_bars() -> None:
+    """关掉 huggingface_hub 的下载进度条(所有者真机日志:首次下载 Whisper 时 config.json /
+    tokenizer.json / vocabulary.txt / model.bin 四条 tqdm 进度条直接刷进启动界面,和启动行搅在一起)。
+
+    下载这件事由调用方用一句话说(``announce_first_download``)。用户自己设了
+    ``HF_HUB_DISABLE_PROGRESS_BARS`` 的照他的来。
+    """
+    if os.environ.get("HF_HUB_DISABLE_PROGRESS_BARS", "").strip():
+        return
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    try:
+        # 已经 import 过的话,环境变量不再生效(库在 import 时就读了)—— 直接关。
+        from huggingface_hub.utils import disable_progress_bars
+
+        disable_progress_bars()
+    except Exception:  # noqa: BLE001 — 没装 / 版本不同:进度条照旧,不影响下载
+        pass
+
+
+def announce_first_download(what: str) -> None:
+    """要下载一个本机还没有的模型时,在启动界面上说一句(代替进度条)。"""
+    try:
+        from core import cli_render
+
+        cli_render.phase(what, "首次下载,只这一次(下完自动接上)", "info")
+    except Exception:  # noqa: BLE001
+        logger.info("%s: 首次下载", what)
+
+
 def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
     """返回一个**探测可达**的 HF 下载端点;全不可达返回 ""。
 
@@ -74,6 +103,7 @@ def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
     选中的端点会写回 ``os.environ["HF_ENDPOINT"]``,让 huggingface_hub /
     faster-whisper 等所有下游库统一生效。
     """
+    quiet_progress_bars()
     with _lock:
         cached = _cache["endpoint"]
         if not force and cached is not None:

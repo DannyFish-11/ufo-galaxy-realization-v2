@@ -281,9 +281,12 @@ class EnvReport:
         )
         if "ollama" in self.probes_timed_out:
             # 没等到 ≠ 没装。给出的是"这次没查完",而不是一个假的结论。
-            ollama_status = Status.DEGRADED
-            ollama_value = f"这次没查完（超过 {PROBE_DEADLINE_S['ollama']:.0f} 秒）"
-            hint = "首次启动常见（缓存冷 / 杀软逐个扫）。已装的话下次就能认出来；也可先跑 `ollama list` 预热"
+            # 也不画 ⚠:Ollama 服务没在跑时,`ollama list` 会先把它拉起来再等它(首启十几秒),
+            # 依赖阶段与 AI 大脑那一步都会再问 —— 这一刻没等到不是毛病(所有者真机日志里
+            # 它在这里报了 ⚠,几十秒后「✓ Ollama 模型: 1 个」)。
+            ollama_status = Status.SKIPPED
+            ollama_value = f"这次没查完（超过 {PROBE_DEADLINE_S['ollama']:.0f} 秒，多半是它正在起来；后面会再确认）"
+            hint = None
         elif self.ollama_running:
             ollama_status, ollama_value, hint = Status.OK, "运行中", None
         elif self.ollama_installed:
@@ -692,7 +695,12 @@ def _collect_probe(handle, started_at: float, on_event=None):
             on_event(name, PROBE_DONE, "")
         return box["value"], True
     if on_event:
-        on_event(name, PROBE_TIMEOUT, f"{deadline:.0f}s 没有回应")
+        # Ollama 没在跑时 `ollama list` 会先把它拉起来再等 —— 那不是「没回应」,是「还在起来」。
+        on_event(
+            name,
+            PROBE_TIMEOUT,
+            f"{deadline:.0f}s " + ("内没答完(多半是它正在起来)" if name == "ollama" else "没有回应"),
+        )
     return fallback, False
 
 

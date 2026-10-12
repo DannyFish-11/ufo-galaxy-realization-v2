@@ -326,8 +326,10 @@ def test_lan_discovery_says_so_when_it_could_not_start(monkeypatch):
 def test_launcher_wires_discovery_into_banner_and_shutdown():
     src = (ROOT / "launcher/services.py").read_text(encoding="utf-8")
     assert "self.tailnet = TailnetStartup(self.config.web_ui_port)" in src
-    assert "bus_details.extend(self.tailnet.not_on_tailnet_details())" in src
-    assert "bus_details.append(self.tailnet.start_lan_discovery())" in src
+    assert "await bus_phase(self)" in src
+    phase = (ROOT / "launcher/bus_phase.py").read_text(encoding="utf-8")
+    assert "bus_details.extend(svc.tailnet.not_on_tailnet_details())" in phase
+    assert "bus_details.append(svc.tailnet.start_lan_discovery())" in phase
     stop = src[src.index("    def stop(self):") :]
     assert stop.index("self.tailnet.stop()") < stop.index("self.service_manager.stop_all()")
 

@@ -307,9 +307,9 @@ def probe() -> Dict[str, Any]:
 
     target, reason = choose_loopback_target(sd, devices, hostapis, os_name=os_name)
     if target is None:
-        # WARNING 而非 debug:这条链路不通的症状是"模型不知道你在看什么",
-        # 在 debug 级别下用户永远查不到原因。
-        logger.warning("系统播放声采集不可用(%s):%s", reason, _reason_text(reason))
+        # 不在这里告警:真正要开流的那一方(SystemAudioCaptureService)会带着原因和影响说**一次**。
+        # 两处各说一遍,同一件事每次开机打两行(所有者真机日志)。
+        logger.debug("系统播放声采集不可用(%s):%s", reason, _reason_text(reason))
     else:
         logger.info("系统播放声采集目标:%s", target.describe())
     return {

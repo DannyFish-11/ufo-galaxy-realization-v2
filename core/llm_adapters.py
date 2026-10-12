@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from core.llm_types import LLMResponse, ProviderConfig
+from core.local_llm_policy import LocalModelTimeouts
 
 logger = logging.getLogger("Galaxy.LLMRouter")
 
@@ -37,6 +38,7 @@ class BaseProviderAdapter:
     DEFAULT_TIMEOUT = 30.0  # 默认请求超时
     MAX_RETRIES = 2  # 最大重试次数
     RETRY_BASE_DELAY = 1.0  # 重试基础延迟
+    RETRY_ON_TIMEOUT = True  # 本机模型关掉:慢不是故障,重发只会从头再算一遍(core/local_llm_policy.py)
 
     # HTTP status codes that are safe to retry (transient errors)
     _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
@@ -90,7 +92,7 @@ class BaseProviderAdapter:
                 return resp
             except httpx.TimeoutException as e:
                 last_exc = e
-                if attempt < self.MAX_RETRIES:
+                if attempt < self.MAX_RETRIES and self.RETRY_ON_TIMEOUT:
                     delay = self.RETRY_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "Timeout from %s (attempt %d/%d), retrying in %.1fs",
@@ -105,10 +107,7 @@ class BaseProviderAdapter:
             except httpx.HTTPStatusError:
                 # Non-retryable HTTP error, raise immediately
                 raise
-        # Should not reach here, but just in case
-        if last_exc:
-            raise last_exc
-        raise RuntimeError(f"Exhausted retries for {self.config.name}")
+        raise last_exc if last_exc else RuntimeError(f"Exhausted retries for {self.config.name}")
 
     async def chat(
         self,
@@ -600,7 +599,7 @@ class AnthropicAdapter(BaseProviderAdapter):
         return anthropic_tools
 
 
-class OllamaAdapter(BaseProviderAdapter):
+class OllamaAdapter(LocalModelTimeouts, BaseProviderAdapter):
     """Ollama local model adapter
 
     工具调用双协议:
@@ -854,9 +853,8 @@ class OllamaAdapter(BaseProviderAdapter):
                 sink=kwargs.get("stream"),
             )
 
-        # 真流式:消费端挂了 TokenStream 时走 NDJSON 流(CPU 慢速生成下体感差异
-        # 最大的一段——首句几秒就能上屏,不用等整段几十秒)。失败作废已流出内容,
-        # 退回下面的非流式老路径。
+        # 真流式:消费端挂了 TokenStream 时走 NDJSON 流(CPU 慢速生成下首句几秒就能上屏,不用等整段
+        # 几十秒)。失败作废已流出内容,退回下面的非流式老路径 —— 超时除外(见下)。
         _sink = kwargs.get("stream")
         if _sink is not None:
             try:
@@ -887,6 +885,8 @@ class OllamaAdapter(BaseProviderAdapter):
                         keep_alive=_keep_alive,
                         sink=_sink,
                     )
+                if isinstance(exc, httpx.TimeoutException):
+                    raise  # 它还在算:换非流式再发一遍 = 同一段提示从头再算一遍(core/local_llm_policy.py)
                 logger.info("Ollama 流式失败,退回非流式: %s", exc)
                 try:
                     _sink.reset()
