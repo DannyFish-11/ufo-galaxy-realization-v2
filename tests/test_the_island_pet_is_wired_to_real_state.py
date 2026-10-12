@@ -30,6 +30,8 @@ _PANEL = Path(__file__).resolve().parents[1] / "electron/renderer/panel/src"
 _PET = _PANEL / "ui" / "pet.ts"
 _ISLAND = _PANEL / "ui" / "island.ts"
 _CSS = _PANEL / "styles" / "hud.css"
+#: 三只桌宠(面板 / 覆盖层 / 托盘)共用的那一份推导 —— 表与「哪一档」的判据都在这里。
+_SHARED = _PANEL.parents[1] / "pet_state.js"
 
 
 def _code(path: Path) -> str:
@@ -127,16 +129,22 @@ class TestTheEyesReallyClose:
         assert a < b, f"「不知道」({a})跟「在采」({b})长得一样 —— 面板此刻根本不知道，不能画成正看着"
 
     def test_the_eyes_are_driven_by_the_privacy_flag(self) -> None:
+        # 画:眼睛那一位直接取推导的结果。
         code = _code(_PET)
-        m = re.search(r"svg\.dataset\['eyes'\]\s*=\s*([^;]+);", code)
-        assert m, "眼睛不再由数据决定了"
+        assert re.search(r"svg\.dataset\['eyes'\]\s*=\s*live\.eyes;", code), "眼睛不再由数据决定了"
+        # 推导(三只共用):按了「别看了」就闭;不知道就虚着 —— 三档,不是布尔。
+        shared = _code(_SHARED)
+        m = re.search(r"var eyes = ([^;]+);", shared)
+        assert m, "pet_state.js 里找不到眼睛那一档的推导"
         expr = m.group(1)
-        assert "paused" in expr and "null" in expr, f"眼睛这一位不是三态：{expr.strip()}"
+        assert (
+            "privacy_paused === true" in expr and "'shut'" in expr and "'unknown'" in expr
+        ), f"眼睛这一位不是三态，或者不再由隐私急停决定：{expr.strip()}"
+        # 喂法是**一整份实时帧**:岛把 perception(里面带着停没停)原样交给推导。
         island = _code(_ISLAND)
-        # 喂法是**一整份实时帧**，不是两个参数了。查的是那份帧里有没有带上「停没停」。
-        m2 = re.search(r"pet\.render\(\{(.*?)\}\);", island, re.S)
-        assert m2, "岛不再喂它了"
-        assert "paused," in m2.group(1), "岛不再把「停没停」喂给它 —— 脸就会跟那行字讲岔"
+        m2 = re.search(r"pet\.render\(\s*globalThis\.PetState\.derive\(\{(.*?)\}\)", island, re.S)
+        assert m2, "岛不再按共用的推导喂它了"
+        assert "perception" in m2.group(1), "岛不再把感知那一份(停没停)喂给它 —— 脸就会跟那行字讲岔"
 
 
 class TestTheLiveLayerAndTheOneOffReaction:
@@ -198,8 +206,9 @@ class TestTheLiveLayerAndTheOneOffReaction:
         code = _code(_PET)
         for field, what in (("phase", "主轴此刻在哪一相"), ("activity", "阈限态里它在干嘛"), ("sensing", "在不在收")):
             assert re.search(rf"svg\.dataset\['{field}'\]", code), f"底子里没有「{what}」了"
-        # 阈限内容是有序递进的，节奏也该是递进的
-        rates = re.findall(r"(none|understanding|thinking|rehearsing): '([\d.]+)s'", code)
+        assert "svg.style.setProperty('--pet-rate', live.rate)" in code, "呼吸快慢不再跟着这一帧走"
+        # 阈限内容是有序递进的，节奏也该是递进的(表在三只共用的 pet_state.js)
+        rates = re.findall(r"(none|understanding|thinking|rehearsing): '([\d.]+)s'", _code(_SHARED))
         assert len(rates) == 4, f"呼吸节奏不再按阈限内容分四档：{rates}"
         order = {k: float(v) for k, v in rates}
         assert (
@@ -220,14 +229,17 @@ class TestTheLiveLayerAndTheOneOffReaction:
 
     def test_the_reaction_comes_from_the_backend_decision(self) -> None:
         code = _code(_PET)
-        m = re.search(r"svg\.dataset\['react'\]\s*=\s*([^;]+);", code)
-        assert m, "反应不再由数据决定了"
-        expr = " ".join(m.group(1).split())
-        assert expr == "POSE[live.act] ?? 'rest'", (
-            f"反应的来路变了：{expr}。它必须直接按 ambient_action 查表 —— "
-            "中间插任何一个恒真分支，四档就全塌成一档，而屏幕上因为还在呼吸，看着像活的。"
-        )
-        assert re.search(r"POSE: Record<AmbientAction", code), "四档没有各自的反应"
+        assert re.search(r"const pose = PS\.reactionFor\(live\.act\);", code), "反应不再由数据决定了"
+        assert re.search(r"svg\.dataset\['react'\]\s*=\s*pose;", code)
+        # 推导里:直接按 ambient_action 查表。中间插任何一个恒真分支,四档就全塌成一档,
+        # 而屏幕上因为还在呼吸,看着像活的。
+        shared = _code(_SHARED)
+        m = re.search(r"function reactionFor\(act\) \{(.*?)\n  \}", shared, re.S)
+        assert m, "pet_state.js 里找不到 reactionFor"
+        body = " ".join(m.group(1).split())
+        assert "POSE[act]" in body and "'rest'" in body, f"反应的来路变了：{body}"
+        pose = re.search(r"var POSE = \{(.*?)\};", shared, re.S)
+        assert pose and len(re.findall(r"(\w+):", pose.group(1))) == 4, "四档没有各自的反应"
 
     def test_the_four_reactions_are_actually_different(self) -> None:
         css = _css()

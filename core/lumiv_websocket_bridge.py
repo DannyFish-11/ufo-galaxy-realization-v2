@@ -63,6 +63,9 @@ _ELECTRON_IPC_URL = f"http://127.0.0.1:{_ELECTRON_PORT}/ipc/presence-state"
 _WS_SEND_TIMEOUT_S: float = 2.0
 
 
+# 叫停键（它在动手时人按 Esc 能停）占没占到。键盘监听与本桥同一进程，直接读。
+from core import presence_fanout  # noqa: E402 — 进程内订阅 / 感知监视 / 新客户端补发
+
 # ── DesktopPresenceMode → depth_factor 映射 ──
 # STATIC(休息)    → 0.00-0.05  (Silent 呼吸光环)
 # LIMINAL(认知)   → 0.15-0.85  (Liminal 透视空间展开)
@@ -75,8 +78,6 @@ _WS_SEND_TIMEOUT_S: float = 2.0
 # 锚点的唯一事实源是 core.phase_contract.PHASE_ANCHORS —— 这里只做别名，
 # 避免同一组数字在两处各写一份、改一处忘另一处。
 from core.phase_contract import PHASE_ANCHORS as MODE_DEPTH_MAP  # noqa: E402
-
-# 叫停键（它在动手时人按 Esc 能停）占没占到。键盘监听与本桥同一进程，直接读。
 from core.stop_key import label as _stop_key_label  # noqa: E402
 
 
@@ -224,6 +225,7 @@ class GalaxyPresenceBridge:
             logger.info("GalaxyPresenceBridge started — subscribed to StateEventBus (IPC HTTP + WS fallback)")
         except Exception as exc:
             logger.warning("StateEventBus subscription failed (non-fatal): %s", exc)
+        presence_fanout.start_perception_watch(self)  # 感知那几位变了也要广播(静息时没有别的事件)
 
     # ── StateEventBus 回调 ──
 
@@ -683,8 +685,9 @@ class GalaxyPresenceBridge:
         async with self._lock:
             self._clients.add(websocket)
         logger.info("Desktop presence client registered | total=%d", len(self._clients))
-        # 立即推送当前状态
+        # 立即推送当前状态,再补一份设备名册
         await self._send_to(websocket)
+        presence_fanout.welcome(websocket, _WS_SEND_TIMEOUT_S)
 
     async def unregister_client(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -713,6 +716,7 @@ class GalaxyPresenceBridge:
         WS 广播对空 clients 集合是纯本地 no-op),改成【总是两条都推】,不再依赖谁先成功。
         """
         msg = self._build_message(speaking_override=speaking_override)
+        presence_fanout.publish(msg)  # 进程内的订阅者(托盘桌宠)先拿到同一份,不等 IPC 那 1 秒的探测
         # 两条通道【并发】推,互不阻塞:IPC 探测最长 1s(对着可能不存在的 Electron),
         # 绝不能挡在 WS 广播前面——否则面板/覆盖层那条直连 WS 要等 IPC 超时才更新,
         # "说话中=True"这类瞬时脉冲会被拖过消费端时间窗(全量 CI 里 tts 覆盖层偶发
@@ -848,14 +852,8 @@ class GalaxyPresenceBridge:
                     self._clients.discard(ws)
 
     async def _send_to(self, websocket: WebSocket) -> None:
-        """向单个客户端发送当前状态(封顶超时:注册时若客户端卡死不阻塞调用方)。"""
-        try:
-            # 快照只发给这一个客户端 —— 不许把本该广播给所有人的那一拍转移用掉。
-            await asyncio.wait_for(
-                websocket.send_json(self._build_message(consume_edge=False)), timeout=_WS_SEND_TIMEOUT_S
-            )
-        except Exception as exc:  # noqa: BLE001 — 含 TimeoutError
-            logger.debug("Send to single client failed: %s", exc)
+        """向单个客户端发送当前状态(快照,封顶超时;见 core.presence_fanout.snapshot_to)。"""
+        await presence_fanout.snapshot_to(self, websocket, _WS_SEND_TIMEOUT_S)
 
     def _build_message(self, speaking_override: Optional[bool] = None, *, consume_edge: bool = True) -> Dict[str, Any]:
         """构建与前端兼容的 state_event 消息。

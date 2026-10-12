@@ -27,74 +27,40 @@
  * 再加眨眼。眨眼不接任何数据 —— 它不声称任何事,只是**活的东西会眨眼**;
  * 没有它,上面那些状态再准,看着也像一张贴纸。
  *
+ * ## 三只是同一只
+ *
+ * 面板里这只、覆盖层灵动岛上那只(app.js)、右下角托盘那只(windows_service/pet_icon.py)
+ * 读同一份帧,**推导也只有一份**:electron/renderer/pet_state.js(托盘那只是 Python,照同一张
+ * 用例表核对)。样子也是同一个:同一条外形、同一双眼缝、同样的身子与眼睛颜色、各档同样的几何量 ——
+ * tests/test_every_pet_is_the_same_pet.py 逐个核对三处。
+ *
+ * 以前这里自己推导,于是在一件事上和覆盖层讲岔了:进程里没有感知库时,这只眼睛是睁着的
+ * (等于替后端说「它正看着」),覆盖层那只是虚的。
+ *
  * ## 颜色与呼吸
  *
- * 身子用面板自己那支紫(`--m-2`),眼睛用近白那一档(`--m-6`),不引第二种色相。
- * 平时极慢地呼吸一下,周期 5.2 秒 —— 刻意避开 0.2 Hz 那一带(那一带最容易被
- * 余光当成"有事发生"而反复拽走注意力)。
+ * 身子用面板自己那支紫(`--m-2`),眼睛用面板的墨色(`--ink`)—— 一支色相,深浅两档。
+ * 眼睛原先是近白那一档,在面板上看着像两道挖穿的缝;可托盘只有 16 像素,白眼睛落在浅紫的身子上
+ * 几乎看不见,三只要一样,就统一成深的那一档。
+ * 平时极慢地呼吸一下 —— 周期按阈限内容分四档,都避开 0.17–0.25 Hz 那一带(那一带最容易被
+ * 余光当成"有事发生"而反复拽走注意力);判据在 ../motion.ts。
  */
+import '../../../pet_state.js';
 import { checkPeriods } from '../motion';
 import type { AmbientAction } from '../types';
 
 const svgNS = 'http://www.w3.org/2000/svg';
 
-/** 上一拍的决策 → 演哪一种反应。**四档各一种**,少一种那一档就没演。 */
-const POSE: Record<AmbientAction, string> = {
-  none: 'rest',
-  speak: 'lean',
-  silent: 'tuck',
-  delegate: 'aside',
-};
+/** 三只桌宠共用的那一份(electron/renderer/pet_state.js),挂在全局上。 */
+const PS = globalThis.PetState;
 
-/**
- * 阈限态里它在干嘛 → 呼吸多快。
- *
- * 后端这一位是**有序递进**的(none → understanding → thinking → rehearsing),
- * 所以节奏也该是递进的:越往后越快。这不是装饰 —— 它让「它在使劲」这件事
- * 在余光里看得见,而不用去读那一行字。
- *
- *   none          9.0s = 0.111 Hz
- *   understanding 6.5s = 0.154 Hz
- *   thinking      3.6s = 0.278 Hz
- *   rehearsing    2.6s = 0.385 Hz
- *
- * 要躲开的那一带是 0.17–0.25 Hz,判据在 ../motion.ts —— **不在这段注释里**。
- * 这四个数被改过两回,两回都是因为注释自己写了一份判据:
- *   · 最慢那一档原先 5.2s = 0.192 Hz,正在带里,而注释写着「都避开」;
- *   · 改完之后注释给自己定了条更窄的带子(0.18–0.22),于是 understanding 档
- *     4.3s = 0.233 Hz 放行了 —— 那个值在真正的带子里。
- * 第二回是这次量出来的。所以现在没有第二份数字,只有 checkPeriods。
- *
- * 顺带:0.17–0.25 Hz 对应 4.0–5.9 秒,这一段整个不能用,四档必须从它上面
- * 跳到下面。跳的那一步放在 understanding → thinking(「在读」到「在想」),
- * 因为那一步本来就该是最明显的一档变化。若硬要四档都挤在带子下面(<4s),
- * 相邻两档只差零点几秒,余光里根本分不出来 —— 那等于这四档白分。
- */
-const BREATH: Record<string, string> = {
-  none: '9s',
-  understanding: '6.5s',
-  thinking: '3.6s',
-  rehearsing: '2.6s',
-};
-
-// 载入即跑。改表改越界了,当场说出来。
+// 载入即跑。呼吸表改越界了,当场说出来(表本身在 pet_state.js,四档的取舍写在那边)。
 checkPeriods(
   'pet',
-  Object.entries(BREATH).map(([k, v]) => [k, Number.parseFloat(v)] as const),
+  Object.entries(PS.BREATH).map(([k, v]) => [k, Number.parseFloat(v)] as const),
 );
-/** 此刻这只东西周围正在发生什么。**全部来自同一帧。** */
-export interface PetLive {
-  /** 主轴:静 / 阈限 / 显形 */
-  readonly phase: 'silent' | 'liminal' | 'manifest';
-  /** 阈限态里正在干嘛。非阈限态时后端给 none */
-  readonly activity: string;
-  /** 此刻在不在收。null = 还没收到过帧 */
-  readonly sensing: boolean | null;
-  /** 你按没按「别看了」。**三态** —— null = 还没收到过帧,不能塌进 false */
-  readonly paused: boolean | null;
-  /** 上一拍的决策。变了就演一遍 */
-  readonly act: AmbientAction | null;
-}
+/** 此刻这只东西该是哪一档 —— PetState.derive 推出来的,**全部来自同一帧**。 */
+export type PetLive = PetDerived;
 
 /** 展开态那一行仍然要写话 —— 脸讲得出情绪,讲不出「为什么」。 */
 export const POSE_WORD: Record<AmbientAction, string> = {
@@ -169,13 +135,12 @@ export function createPet(): PetHandles {
     // ── 底子:实时 ────────────────────────────────────────────────
     svg.dataset['phase'] = live.phase;
     // 非阈限态时后端给 none,节奏就回到最慢那一档。
-    svg.style.setProperty('--pet-rate', BREATH[live.activity] ?? BREATH['none']!);
+    svg.style.setProperty('--pet-rate', live.rate);
     svg.dataset['activity'] = live.activity;
-    // 眼睛:闭 / 睁 / 虚。**三档**,不是布尔。
-    svg.dataset['eyes'] =
-      live.paused === null ? 'unknown' : live.paused ? 'shut' : 'open';
+    // 眼睛:闭 / 睁 / 虚。**三档**,不是布尔 —— 推导在 pet_state.js。
+    svg.dataset['eyes'] = live.eyes;
     // 在收的时候睁得开一点。不知道就不动它 —— 那不是「没在收」。
-    svg.dataset['sensing'] = live.sensing === null ? 'unknown' : String(live.sensing);
+    svg.dataset['sensing'] = live.sensing;
 
     // ── 上面叠一次性的反应 ───────────────────────────────────────
     // 演完就撤,回到实时那一层。一个已经过去的决策不该留成一个永久的姿势。
@@ -183,11 +148,12 @@ export function createPet(): PetHandles {
     if (key !== lastAct) {
       lastAct = key;
       window.clearTimeout(reactTimer);
-      if (live.act && live.act !== 'none') {
-        svg.dataset['react'] = POSE[live.act] ?? 'rest';
+      const pose = PS.reactionFor(live.act);
+      if (pose) {
+        svg.dataset['react'] = pose;
         reactTimer = window.setTimeout(() => {
           delete svg.dataset['react'];
-        }, 1600);
+        }, PS.REACT_MS);
       } else {
         delete svg.dataset['react'];
       }

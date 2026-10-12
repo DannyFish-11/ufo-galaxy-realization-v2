@@ -10,8 +10,9 @@ windows_service.tray_icon — Galaxy 系统托盘 / Galaxy System Tray
 
 于是这个模块现在只做两件事:
 
-1. **在托盘上显示这台机器的状态** —— 定稿星云图标,非 running 时右下角叠一颗
-   状态色圆点。图标那一段原样保留:它是视觉身份,和被移除的那九个入口无关。
+1. **在托盘上显示这台机器的状态** —— 图标是**桌宠**(``windows_service/pet_icon.py``),
+   与面板、覆盖层灵动岛上那两只同一个样子、读同一份帧:相位、睁闭眼、在不在收、
+   上一拍的反应都跟着变(``on_render``);非 running 时右下角再叠一颗状态色圆点。
 2. **点它打开面板** —— 左键 / 双击。这是唯一保留的功能。
 
 菜单为空但仍要能点开面板,靠的是一个 ``visible=False`` 的默认项:pystray 用
@@ -77,7 +78,7 @@ TRAY_UNAVAILABLE_REASON = ""
 
 try:
     import pystray
-    from PIL import Image, ImageDraw, ImageFilter
+    from PIL import Image
 
     _HAVE_TRAY = True
 except ImportError as _exc:
@@ -92,63 +93,17 @@ except Exception as _exc:  # noqa: BLE001 —— 装了但这台机器上起不�
 # 图标生成 / Icon rendering
 # ---------------------------------------------------------------------------
 
+#: 托盘认的几种进程状态。running 之外的几种在桌宠右下角叠一颗状态点(画法在 pet_icon)。
 _STATUS_COLORS = {
-    "running": (0, 200, 100),  # 鲜绿 — 正常运行
+    "running": (0, 200, 100),  # 正常运行 —— 不叠点
     "warning": (255, 200, 0),  # 琥珀黄 — 警告/降级
     "error": (255, 60, 60),  # 红色 — 错误/停止
     "offline": (128, 128, 128),  # 灰色 — 离线
 }
 
-# Galaxy ASCII 横幅渐变锚点（极光青 → 科技蓝 → 靛蓝 → 霓虹紫 → 赛博粉）。
-# 与 core/ascii_art.py 的 _ANCHOR_COLORS 保持一致；优先复用其 _interp_rgb 作为
-# 单一真相来源，导入失败时用此本地副本兜底，保证托盘渐变与横幅色调精确一致。
-_BANNER_ANCHORS = [
-    (0, 225, 253),  # aurora cyan
-    (41, 156, 255),  # tech blue
-    (109, 92, 255),  # indigo
-    (184, 61, 245),  # neon purple
-    (255, 46, 147),  # cyber pink
-]
 
-
-def _banner_gradient_rgb(t: float) -> tuple:
-    """返回横幅渐变在位置 t∈[0,1] 处的 RGB（左→右与启动横幅一致）。
-
-    优先复用 core.ascii_art._interp_rgb（单一真相来源），导入失败时本地插值。
-    """
-    try:
-        from core.ascii_art import _interp_rgb
-
-        return _interp_rgb(t)
-    except Exception:
-        anchors = _BANNER_ANCHORS
-        n = len(anchors) - 1
-        scaled = max(0.0, min(1.0, t)) * n
-        i = int(scaled)
-        if i >= n:
-            return anchors[-1]
-        frac = scaled - i
-        r1, g1, b1 = anchors[i]
-        r2, g2, b2 = anchors[i + 1]
-        return (
-            int(r1 + (r2 - r1) * frac),
-            int(g1 + (g2 - g1) * frac),
-            int(b1 + (b2 - b1) * frac),
-        )
-
-
-# 状态 -> 提示文本
-_STATUS_TOOLTIPS = {
-    "running": "Galaxy V2 AI -- Running",
-    "warning": "Galaxy V2 AI -- Degraded",
-    "error": "Galaxy V2 AI -- Error",
-    "offline": "Galaxy V2 AI -- Offline",
-}
-
-
-# 定稿品牌图标（分形星云环 seed-19）——托盘图标的【单一真相来源】，
-# 与应用/窗口/通知图标像素一致。托盘不再自绘一颗球，而是加载这张定稿图，
-# 只在其上叠加状态圆点。文件缺失时才回退到本地自绘（诚实降级，不静默）。
+# 定稿品牌图标(分形星云环)。托盘现在画的是**桌宠**(见 windows_service/pet_icon.py);
+# 这张图只在桌宠画不出来时兜底 —— 托盘区宁可是一张品牌图,也不能是空的。
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BRAND_ICON_CANDIDATES = (
     _REPO_ROOT / "electron" / "assets" / "icon-256.png",  # 高分辨率，缩放质量最好
@@ -158,7 +113,7 @@ _BRAND_ICON_CANDIDATES = (
 
 
 def _load_brand_icon() -> "Image.Image | None":
-    """加载定稿星云品牌图（RGBA）。全部候选都不可用时返回 None → 触发自绘兜底。"""
+    """加载定稿星云品牌图（RGBA）。全部候选都不可用时返回 None。"""
     for path in _BRAND_ICON_CANDIDATES:
         try:
             if path.exists():
@@ -168,74 +123,34 @@ def _load_brand_icon() -> "Image.Image | None":
     return None
 
 
-def _overlay_status_pip(canvas: "Image.Image", status: str, S: int) -> None:
-    """在 SxS 画布右下角叠加状态色圆点（仅非 running）；带白色描边保证对比度。"""
-    if status == "running":
-        return
-    pip = _STATUS_COLORS.get(status, (128, 128, 128))
-    R = int(S * 0.40)
-    cx = cy = S // 2
-    pr = int(S * 0.135)
-    px = cx + int(R * 0.66)
-    py = cy + int(R * 0.66)
-    pd = ImageDraw.Draw(canvas)
-    ring = int(pr * 0.28)
-    pd.ellipse(
-        [px - pr - ring, py - pr - ring, px + pr + ring, py + pr + ring],
-        fill=(255, 255, 255, 235),
-    )
-    pd.ellipse([px - pr, py - pr, px + pr, py + pr], fill=(pip[0], pip[1], pip[2], 255))
-
-
-def _draw_orb_fallback(status: str, S: int) -> "Image.Image":
-    """兜底自绘：定稿星云图缺失时用的横幅渐变球（原实现，去掉白色高光）。"""
-    cx = cy = S // 2
-    R = int(S * 0.40)
-
-    row = Image.new("RGBA", (S, 1))
-    rpx = row.load()
-    for x in range(S):
-        r, g, b = _banner_gradient_rgb(x / (S - 1))
-        rpx[x, 0] = (r, g, b, 255)
-    grad = row.resize((S, S), Image.LANCZOS)
-
-    mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).ellipse([cx - R, cy - R, cx + R, cy + R], fill=255)
-    orb = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    orb.paste(grad, (0, 0), mask)
-
-    canvas = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    glow = orb.filter(ImageFilter.GaussianBlur(S * 0.075))
-    canvas = Image.alpha_composite(canvas, glow)
-    canvas = Image.alpha_composite(canvas, orb)
-    return canvas
-
-
 def create_icon_image(
     status: str = "running",
     width: int = 64,
     height: int = 64,
+    *,
+    pet: "dict | None" = None,
+    react: "str | None" = None,
 ) -> Image.Image | None:
-    """为系统托盘生成图标 —— 优先用定稿星云品牌图，缺失时自绘兜底。
+    """托盘图标 = **桌宠**,与面板、覆盖层那两只同一个样子、读同一份帧。
 
-    托盘图标此前是运行时自绘的一颗渐变球，和应用/窗口图标（分形星云环）不一致，
-    也带着已被否决的白色高光。现在加载定稿 electron/assets/icon-256.png，保证托盘与
-    其它所有位置像素一致；warning/error/offline 时在右下角叠加状态色圆点。4x 超采样。
+    ``pet`` 是 :func:`windows_service.pet_icon.derive` 推出来的那一档;省略 = 还没收到过帧(眼睛虚着)。
+    ``react`` 是此刻正在演的一次性反应(lean / tuck / aside)。``status`` 非 running 时右下角叠一颗状态点。
+
+    桌宠画不出来(理论上不会:它只用 Pillow)时退回品牌星云图,并记一条警告 —— 不静默。
     """
     if not _HAVE_TRAY:
         return None
+    size = max(width, height)
+    try:
+        from windows_service.pet_icon import derive, render_pet
 
-    S = max(width, height) * 4
-
+        return render_pet(pet if pet is not None else derive(None), size, react=react, status=status)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("托盘桌宠画不出来，退回品牌图: %s", exc)
     brand = _load_brand_icon()
-    if brand is not None:
-        canvas = brand.resize((S, S), Image.LANCZOS)
-    else:
-        logger.warning("定稿星云图标不可用，托盘回退到自绘渐变球")
-        canvas = _draw_orb_fallback(status, S)
-
-    _overlay_status_pip(canvas, status, S)
-    return canvas.resize((width, height), Image.LANCZOS)
+    if brand is None:
+        return None
+    return brand.resize((width, height), Image.LANCZOS)
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +197,15 @@ class GalaxyTray:
         self._measure_at = 0.0
         self._measure_busy = False
         self._icon_ready = False
+        # 桌宠此刻的样子(与面板、覆盖层同一份推导)。还没收到帧 = 眼睛虚着。
+        from windows_service.pet_icon import derive
+
+        self._pet: dict = derive(None)
+        self._react: "str | None" = None
+        self._react_timer: "threading.Timer | None" = None
+        self._last_act = ""
+        self._drawn_key: "tuple | None" = None
+        self._pet_lock = threading.Lock()
 
     # ── 属性 / Properties ──
 
@@ -301,17 +225,88 @@ class GalaxyTray:
                 return
             self._current_status = status
 
-        if self._icon is not None and _HAVE_TRAY:
-            try:
-                new_image = create_icon_image(status)
-                if new_image:
-                    self._icon.icon = new_image
-                    self._icon.title = _STATUS_TOOLTIPS.get(status, "Galaxy V2")
-            except Exception as exc:  # noqa: BLE001 — 状态更新失败不该拖垮托盘
-                logger.debug("状态更新失败 / status update failed: %s", exc)
+        self._redraw()
 
         if self.on_status_change:
             self.on_status_change(status)
+
+    # ── 桌宠 / The pet ──
+
+    def on_render(self, render: dict) -> None:
+        """在场桥每次广播都调一次(``core.lumiv_websocket_bridge.add_render_listener``,事件循环线程)。
+
+        与面板、覆盖层那两只读**同一份** ``payload.render``,推导也是同一套(pet_icon.derive)。
+        反应只在「上一拍的决策」**变了**时演一遍、演 1.6 秒就撤 —— 同一个决策会跟着之后每一帧
+        一遍遍发回来,照帧演就成了一直抽。只比几位、变了才重画:托盘图标重画在 Windows 上会闪。
+        """
+        from windows_service.pet_icon import REACT_MS, derive, reaction_for
+
+        state = derive(render)
+        with self._pet_lock:
+            self._pet = state
+            key = state["act"] or ""
+            if key != self._last_act:
+                self._last_act = key
+                if self._react_timer is not None:
+                    self._react_timer.cancel()
+                    self._react_timer = None
+                self._react = reaction_for(state["act"])
+                if self._react:
+                    timer = threading.Timer(REACT_MS / 1000.0, self._end_react)
+                    timer.daemon = True
+                    self._react_timer = timer
+                    timer.start()
+        self._redraw()
+
+    def follow_presence(self) -> None:
+        """订阅在场桥广播出去的同一份帧(托盘与后端同进程,直接收)。
+
+        单独跑托盘(``python -m windows_service.tray_icon``)时进程里没有桥:订阅照样成立,只是永远收不到,
+        桌宠就停在「不知道」那一档(眼睛虚着)—— 那正是此刻的实情。
+        """
+        try:
+            from core.presence_fanout import add_render_listener
+
+            add_render_listener(self.on_render)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("托盘桌宠没接上在场状态(它会一直是「不知道」的样子): %s", exc)
+
+    def _end_react(self) -> None:
+        with self._pet_lock:
+            self._react = None
+            self._react_timer = None
+        self._redraw()
+
+    def _tooltip(self, status: str, pet: dict) -> str:
+        """悬停那一句:进程状态 + 桌宠此刻在干嘛(与它的样子说同一件事)。"""
+        base = _STATUS_TOOLTIPS.get(status, "Galaxy V2")
+        if pet.get("eyes") == "shut":
+            return base + " · 感知已暂停 / Perception paused"
+        if pet.get("sensing") == "true":
+            return base + " · 正在感知 / Sensing"
+        return base
+
+    def _redraw(self) -> None:
+        """按此刻的桌宠 + 进程状态重画图标;跟上一次画的一样就不动。"""
+        if self._icon is None or not _HAVE_TRAY:
+            return
+        from windows_service.pet_icon import state_key
+
+        with self._pet_lock:
+            pet, react, status = self._pet, self._react, self._current_status
+            key = state_key(pet, react, status)
+            if key == self._drawn_key:
+                return
+            self._drawn_key = key
+        try:
+            image = create_icon_image(status, pet=pet, react=react)
+            if image is not None:
+                self._icon.icon = image
+                self._icon.title = self._tooltip(status, pet)
+        except Exception as exc:  # noqa: BLE001 — 重画失败不该拖垮托盘
+            logger.debug("托盘重画失败 / tray redraw failed: %s", exc)
+            with self._pet_lock:
+                self._drawn_key = None
 
     # ── 唯一保留的动作:打开面板 / The one action that stays ──
 
@@ -647,14 +642,17 @@ class GalaxyTray:
             logger.error("系统托盘需要 pystray 与 Pillow / pystray and Pillow are required for the tray")
             return None
 
-        icon_image = create_icon_image(self._current_status)
+        icon_image = create_icon_image(self._current_status, pet=self._pet, react=self._react)
         if icon_image is None:
             return None
+        from windows_service.pet_icon import state_key
+
+        self._drawn_key = state_key(self._pet, self._react, self._current_status)
 
         self._icon = pystray.Icon(
             name="GalaxyV2",
             icon=icon_image,
-            title=_STATUS_TOOLTIPS[self._current_status],
+            title=self._tooltip(self._current_status, self._pet),
             menu=self._build_menu(),
         )
 
@@ -797,6 +795,8 @@ def start_tray_in_thread(
     if why:
         return why
     tray.set_status("running")
+    # 桌宠跟着在场状态变 —— 与面板、覆盖层那两只读同一份帧。
+    tray.follow_presence()
     return tray
 
 

@@ -177,9 +177,9 @@ class TestNoPeriodSitsInTheBand:
 
     def test_no_pet_breath_rate_is_in_the_band(self) -> None:
         rates = _pet_breath()
-        assert rates, "pet.ts 的 BREATH 表没读到 —— 这道门在空转"
+        assert rates, "pet_state.js 的 BREATH 表没读到 —— 这道门在空转"
         bad = {k: v for k, v in rates.items() if _in_band(v)}
-        assert not bad, "pet.ts 的呼吸档落在带里：" + ", ".join(f"{k}={v}s={1 / v:.3f}Hz" for k, v in bad.items())
+        assert not bad, "桌宠的呼吸档落在带里：" + ", ".join(f"{k}={v}s={1 / v:.3f}Hz" for k, v in bad.items())
 
     def test_no_line_cadence_is_in_the_band(self) -> None:
         cad = _line_cadence()
@@ -195,8 +195,9 @@ def _code_ts(path: pathlib.Path) -> str:
 
 
 def _pet_breath() -> dict[str, float]:
-    code = _code_ts(_PANEL / "ui" / "pet.ts")
-    body = re.search(r"const BREATH[^=]*=\s*\{(.*?)\}", code, re.S)
+    # 表在三只桌宠(面板 / 覆盖层 / 托盘)共用的 pet_state.js 里,pet.ts 不再自己抄一份。
+    code = _code_ts(_PANEL.parents[1] / "pet_state.js")
+    body = re.search(r"var BREATH[^=]*=\s*\{(.*?)\}", code, re.S)
     if not body:
         return {}
     return {k: float(v) for k, v in re.findall(r"(\w+)\s*:\s*'(\d*\.?\d+)s'", body.group(1))}

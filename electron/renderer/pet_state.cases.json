@@ -1,0 +1,76 @@
+{
+  "_doc": "三只桌宠共用的推导用例。node(pet_state.test.js 跑 pet_state.js)与 pytest(跑 windows_service/pet_icon.derive)各跑一遍同一张表 —— 两边任何一边推导漂了,这张表就红。",
+  "cases": [
+    {
+      "name": "还没收到过帧：眼睛虚着、不知道在不在收、不知道上一拍",
+      "input": {"lifecycle": "static", "liminal_activity": "none", "perception": null},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "unknown", "sensing": "unknown", "act": null}
+    },
+    {
+      "name": "进程里没有感知库：不能画成睁着(以前面板那只就画成了睁着)",
+      "input": {"lifecycle": "static", "liminal_activity": "none",
+                "perception": {"source": "unwired", "is_sensing": false, "privacy_paused": false, "ambient_action": "none"}},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "unknown", "sensing": "unknown", "act": null}
+    },
+    {
+      "name": "没有感知库但按了别看了：闭眼是确定的",
+      "input": {"lifecycle": "static", "liminal_activity": "none",
+                "perception": {"source": "unwired", "is_sensing": false, "privacy_paused": true, "ambient_action": "none"}},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "shut", "sensing": "unknown", "act": null}
+    },
+    {
+      "name": "有感知库、此刻正在收",
+      "input": {"lifecycle": "static", "liminal_activity": "none",
+                "perception": {"source": "live", "is_sensing": true, "privacy_paused": false, "ambient_action": "none"}},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "open", "sensing": "true", "act": "none"}
+    },
+    {
+      "name": "有感知库、此刻没在收：眼睛睁着，只是不睁大",
+      "input": {"lifecycle": "static", "liminal_activity": "none",
+                "perception": {"source": "live", "is_sensing": false, "privacy_paused": false, "ambient_action": "none"}},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "open", "sensing": "false", "act": "none"}
+    },
+    {
+      "name": "按了隐私暂停",
+      "input": {"lifecycle": "static", "liminal_activity": "none",
+                "perception": {"source": "live", "is_sensing": false, "privacy_paused": true, "ambient_action": "silent"}},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "shut", "sensing": "false", "act": "silent"}
+    },
+    {
+      "name": "阈限态在想：喘得快",
+      "input": {"lifecycle": "liminal", "liminal_activity": "thinking",
+                "perception": {"source": "live", "is_sensing": true, "privacy_paused": false, "ambient_action": "speak"}},
+      "expect": {"phase": "liminal", "activity": "thinking", "rate": "3.6s", "eyes": "open", "sensing": "true", "act": "speak"}
+    },
+    {
+      "name": "阈限态在排演",
+      "input": {"lifecycle": "liminal", "liminal_activity": "rehearsing", "perception": null},
+      "expect": {"phase": "liminal", "activity": "rehearsing", "rate": "2.6s", "eyes": "unknown", "sensing": "unknown", "act": null}
+    },
+    {
+      "name": "显形态",
+      "input": {"lifecycle": "manifest", "liminal_activity": "none",
+                "perception": {"source": "live", "is_sensing": true, "privacy_paused": false, "ambient_action": "delegate"}},
+      "expect": {"phase": "manifest", "activity": "none", "rate": "9s", "eyes": "open", "sensing": "true", "act": "delegate"}
+    },
+    {
+      "name": "不认得的相位与活动：按最安静的那一档",
+      "input": {"lifecycle": "something-new", "liminal_activity": "dreaming", "perception": null},
+      "expect": {"phase": "silent", "activity": "none", "rate": "9s", "eyes": "unknown", "sensing": "unknown", "act": null}
+    },
+    {
+      "name": "缺 ambient_action 当作还没决策过",
+      "input": {"lifecycle": "liminal", "liminal_activity": "understanding",
+                "perception": {"source": "live", "is_sensing": false, "privacy_paused": false}},
+      "expect": {"phase": "liminal", "activity": "understanding", "rate": "6.5s", "eyes": "open", "sensing": "false", "act": "none"}
+    }
+  ],
+  "reactions": [
+    {"act": null, "expect": null},
+    {"act": "none", "expect": null},
+    {"act": "speak", "expect": "lean"},
+    {"act": "silent", "expect": "tuck"},
+    {"act": "delegate", "expect": "aside"},
+    {"act": "unheard-of", "expect": "rest"}
+  ]
+}

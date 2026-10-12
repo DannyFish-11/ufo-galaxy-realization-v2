@@ -278,18 +278,22 @@ body {
               animation: pet-breathe var(--pet-rate, 9s) ease-in-out infinite; }
 .pet-blink  { transform-box: fill-box; transform-origin: 50% 50%;
               animation: pet-blink 7.4s ease-in-out infinite; }
-.pet-skin   { fill: var(--c-warm); transition: opacity .6s cubic-bezier(.32,.72,0,1); }
-/* 眼睛取岛自己的底色：深色岛上身子是亮的那块，眼睛就该是挖穿的两道缝。
-   几何属性在 SVG 上**必须带单位** —— y: 13.6 是非法长度，整条声明会被静默丢弃。 */
-.pet-eye    { fill: #0c0b11; y: 13.6px; height: 11px;
+/* **三只桌宠是同一只**（面板 panel/src/ui/pet.ts、这里、右下角托盘 windows_service/pet_icon.py）：
+   同一条外形、同一双眼缝、同样的颜色与各档几何量，tests/test_every_pet_is_the_same_pet.py 逐个核对。
+   身子是面板那支紫（--m-2），眼睛是面板的墨色（--ink）；还没收到过帧时身子换成更淡的 --m-4。 */
+:root { --pet-skin: #b7adbd; --pet-skin-unknown: #d7d1d9; --pet-eye: #3d3745; }
+.pet-skin   { fill: var(--pet-skin); transition: opacity .6s cubic-bezier(.32,.72,0,1); }
+/* 几何属性在 SVG 上**必须带单位** —— y: 14.4 是非法长度，整条声明会被静默丢弃。 */
+.pet-eye    { fill: var(--pet-eye); y: 14.4px; height: 9.6px;
               transition: y .34s cubic-bezier(.32,.72,0,1),
                           height .34s cubic-bezier(.32,.72,0,1),
                           opacity .34s cubic-bezier(.32,.72,0,1); }
+#pet[data-eyes='open'] .pet-eye { y: 14.4px; height: 9.6px; opacity: 1; }
 #pet[data-eyes='shut'] .pet-eye { y: 18.6px; height: 2.4px; opacity: .9; }
-#pet[data-eyes='unknown'] .pet-eye { opacity: .4; }
+#pet[data-eyes='unknown'] .pet-eye { y: 14.4px; height: 9.6px; opacity: .4; }
 /* 在收的时候睁得开一点。data-sensing 与 data-eyes 分开两位 —— 睁没睁是三档事实，
    收没收是另一件事，压成一位就会把"没在收"画成"闭着"。 */
-#pet[data-sensing='true'][data-eyes='open'] .pet-eye { y: 13px; height: 12px; }
+#pet[data-sensing='true'][data-eyes='open'] .pet-eye { y: 14px; height: 10.4px; }
 /* 眼睛本来就闭着 / 还不知道睁没睁的时候不眨 —— 那会变成抽搐。 */
 #pet[data-eyes='shut'] .pet-blink,
 #pet[data-eyes='unknown'] .pet-blink { animation: none; }
@@ -300,7 +304,7 @@ body {
 #pet[data-phase='manifest'] .pet-skin { opacity: 1; }
 #pet[data-phase='manifest'] .pet-body { transform: scale(1.04) translate(0, -.8px); }
 /* 还没收到过帧：身子淡下去 —— 不知道就不摆样子。 */
-#pet[data-eyes='unknown'] .pet-skin { opacity: .6; }
+#pet[data-eyes='unknown'] .pet-skin { fill: var(--pet-skin-unknown); opacity: .6; }
 /* ── 上面叠的一次性反应：上一拍决定了什么 ──
    **必须排在 data-phase 那几条后面**：两边特指度相同（都是 #pet[attr] .pet-body），
    谁在后面谁赢。调过来的话"忍住没说"那一下会被静息的 scale(.94) 吃掉。
@@ -380,6 +384,9 @@ body {
      它是 depth 的运动学（编排带匀速穿越 + 弹簧，倾向接速度、稳定度接阻尼），
      与渲染方式无关，所以换掉 WebGL 之后原样保留，presence_motion.test.js 照旧。 -->
 <script src="presence_motion.js"></script>
+<!-- pet_state.js / live_socket.js：与面板共用（桌宠的推导、那条长连接），app.js 直接调它们，必须先加载。 -->
+<script src="pet_state.js"></script>
+<script src="live_socket.js"></script>
 <script src="app.js"></script>
 <script src="perception-capture.js"></script>
 

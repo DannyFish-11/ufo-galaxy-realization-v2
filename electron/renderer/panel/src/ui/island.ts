@@ -284,15 +284,11 @@ export function createIsland(cb: IslandCallbacks): IslandHandles {
     wakeLine.title = wakeLine.textContent;
     // 理由是空串时那行写的是替代话,不是后端原文 —— 降级留痕。
     wakeLine.dataset['unwired'] = String(act === null || (act !== 'none' && !why));
-    // 脸和话同一帧喂,两处不会讲岔。
-    pet.render({
-      phase: now.phase,
-      activity: now.activity,
-      // 「在不在收」有三态:还没收到过帧时是**不知道**,不是「没在收」。
-      sensing: perception === null ? null : perception.is_sensing,
-      paused,
-      act,
-    });
+    // 脸和话同一帧喂,两处不会讲岔。推导用三只桌宠共用的那一份(pet_state.js),
+    // 与覆盖层、托盘那两只一模一样 —— 「在不在收」「睁没睁」都是三态,不知道就是不知道。
+    pet.render(
+      globalThis.PetState.derive({ lifecycle: now.phase, liminal_activity: now.activity, perception }),
+    );
 
     // 星海只按名册亮暗,不在这里挑谁进得去 —— 挑法在 galaxy.ts,而且是定死的:
     // 第 n 台设备永远是同一颗星,掉线就是那一颗淡回去。

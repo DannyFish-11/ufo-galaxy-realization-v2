@@ -234,20 +234,16 @@ def _avoid_band() -> tuple[float, float]:
     return float(lo.group(1)), float(hi.group(1))
 
 
-def _panel_breath() -> dict[str, str]:
-    """面板那只桌宠的四档呼吸周期（panel/src/ui/pet.ts 的 BREATH）。"""
-    ts = (_RENDERER / "panel" / "src" / "ui" / "pet.ts").read_text(encoding="utf-8")
-    block = re.search(r"const BREATH:[^=]*=\s*\{(.*?)\}", ts, re.S)
-    assert block, "panel/src/ui/pet.ts 里找不到 BREATH 表"
-    return dict(re.findall(r"(\w+):\s*'([^']+)'", block.group(1)))
+def _pet_state() -> str:
+    """三只桌宠共用的那一份推导（electron/renderer/pet_state.js）。"""
+    return (_RENDERER / "pet_state.js").read_text(encoding="utf-8")
 
 
-def _panel_pose() -> dict[str, str]:
-    """面板那只桌宠的反应表（panel/src/ui/pet.ts 的 POSE）。"""
-    ts = (_RENDERER / "panel" / "src" / "ui" / "pet.ts").read_text(encoding="utf-8")
-    block = re.search(r"const POSE:[^=]*=\s*\{(.*?)\}", ts, re.S)
-    assert block, "panel/src/ui/pet.ts 里找不到 POSE 表"
-    return dict(re.findall(r"(\w+):\s*'([^']+)'", block.group(1)))
+def _pet_table(name: str) -> dict[str, str]:
+    """pet_state.js 里的一张表（``var NAME = { k: 'v' };``）。"""
+    m = re.search(r"var\s+" + name + r"\s*=\s*\{(.*?)\};", _pet_state(), re.S)
+    assert m, f"pet_state.js 里找不到 {name}"
+    return dict(re.findall(r"(\w+):\s*'([^']+)'", m.group(1)))
 
 
 def _js_table(name: str) -> dict[str, str]:
@@ -290,33 +286,37 @@ class TestTheRhythmAvoidsTheBand:
 
 
 class TestTheTwoPetsAreTheSameCreature:
-    """岛上那只和面板那只是**同一只东西**，不是两只长得像的。
+    """岛上那只和面板那只（还有右下角托盘那只）是**同一只东西**，不是几只长得像的。
 
     它们读的是同一位数据（``render.perception`` 与 ``render.liminal_activity``），
     所以同一份数据必须演出同一个样子。一只喘 6 秒另一只喘 9 秒、一只会对上一拍的
     决策有反应另一只没有 —— 那不是两种风格，那是其中一只在说假话。
 
-    权威放在面板那边（``panel/src/ui/pet.ts``）：那只先有、四档周期在那儿被
-    量过两回、要躲的频段也在它隔壁。覆盖层是纯 JS，import 不进 TS，所以表得抄
-    一份；抄一份就会漂，于是这里逐条核对两边没漂。同一套做法在
-    ``tests/test_tauri_frontend_staging.py::test_denylist_matches_build_rs``。
+    以前是两份表、两份推导，靠这里逐条对账；对账挡住了表漂，没挡住**推导**漂：进程里没有
+    感知库时，岛上这只眼睛虚着、面板那只睁着。现在表和推导只有一份 —— ``pet_state.js`` ——
+    覆盖层用 <script> 加载、面板 import 进来打包；托盘那只是 Python，照同一张用例表核对
+    （``tests/test_every_pet_is_the_same_pet.py``）。这里钉的是「两边都用它、谁也不再自己抄一份」。
     """
 
-    def test_the_breath_table_matches_the_panel(self) -> None:
-        ours, theirs = _js_table("PET_RATE"), _panel_breath()
-        assert ours == theirs, (
-            f"两只桌宠的呼吸表漂了：只在一边的是 {set(ours.items()) ^ set(theirs.items())}。"
-            "同一个 liminal_activity 必须喘成同一个样子。"
-        )
+    def test_neither_pet_keeps_its_own_copy_of_the_tables(self) -> None:
+        js = _js()
+        pet_ts = (_RENDERER / "panel" / "src" / "ui" / "pet.ts").read_text(encoding="utf-8")
+        for name in ("PET_RATE", "POSE", "REACT_MS", "BREATH"):
+            assert not re.search(rf"const\s+{name}\b", js), f"app.js 又自己抄了一份 {name}"
+            assert not re.search(rf"const\s+{name}\b", pet_ts), f"pet.ts 又自己抄了一份 {name}"
+        assert "PetState.derive(" in js and "PetState.reactionFor(" in js, "覆盖层的桌宠不走共用的推导"
+        assert "PS.reactionFor(" in pet_ts and "PetState" in pet_ts, "面板的桌宠不走共用的推导"
+        assert set(_pet_table("BREATH")) and set(_pet_table("POSE")), "pet_state.js 里的表空了"
 
-    def test_the_reaction_table_matches_the_panel(self) -> None:
-        ours, theirs = _js_table("POSE"), _panel_pose()
-        assert ours == theirs, f"两只桌宠的反应表漂了：只在一边的是 {set(ours.items()) ^ set(theirs.items())}"
+    def test_the_overlay_loads_the_shared_derivation_before_it_is_used(self) -> None:
+        html = _html()
+        a, b = html.index('<script src="pet_state.js">'), html.index('<script src="app.js">')
+        assert a < b, "pet_state.js 必须先于 app.js 加载 —— app.js 一画桌宠就要调它"
 
     def test_every_pose_has_somewhere_to_land(self) -> None:
         """表里每一档都得有对应的样式 —— 少一条那一档就是"演了但看不见"。"""
         css = _css()
-        missing = [v for v in _js_table("POSE").values() if v != "rest" and f"data-react='{v}'" not in css]
+        missing = [v for v in _pet_table("POSE").values() if v != "rest" and f"data-react='{v}'" not in css]
         assert not missing, f"这几档反应没有对应的 CSS：{missing} —— 它们会被演一遍然后什么也没发生"
 
     def test_the_reaction_is_one_shot_and_edge_triggered(self) -> None:
@@ -327,12 +327,14 @@ class TestTheTwoPetsAreTheSameCreature:
         看着像死了。所以两件事都要：只认变化、演完撤回。
         """
         js = _js()
-        assert "ambient_action" in js, "覆盖层的桌宠不读 ambient_action —— 面板那只读了，两只就不是同一只了"
+        assert "ambient_action" in _pet_state(), "桌宠的推导不读 ambient_action —— 反应就没有来路"
         assert re.search(
             r"if\s*\(\s*key\s*===\s*this\._lastAct\s*\)\s*return", js
         ), "反应没有边沿判定 —— ambient_action 每一帧都会回来，照帧演它就一直在抽"
         assert re.search(r"delete\s+this\.pet\.dataset\.react", js), "反应演完不撤 —— 一个过去的决策会变成永久姿势"
-        assert re.search(r"setTimeout\((?:.|\n)*?REACT_MS\)", js), "撤回不是定时的 —— 那就没有「演一遍」这回事"
+        assert re.search(
+            r"setTimeout\((?:.|\n)*?PetState\.REACT_MS\)", js
+        ), "撤回不是定时的 —— 那就没有「演一遍」这回事"
 
     def test_the_reaction_outranks_the_resting_pose(self) -> None:
         """``data-react`` 与 ``data-phase`` 两边特指度相同，谁在后面谁赢。
@@ -420,26 +422,38 @@ class TestEveryVocabularyMatchesTheContract:
         return [
             ("SENSE_GLOW", MODALITY_STATES, "模态状态", ()),
             ("ACTIVITY_WORD", LIMINAL_ACTIVITIES, "阈限内容", ()),
-            ("PET_RATE", LIMINAL_ACTIVITIES, "阈限内容（桌宠呼吸）", ()),
+            ("pet_state.BREATH", LIMINAL_ACTIVITIES, "阈限内容（桌宠呼吸）", ()),
             ("MODE_WORD", HYBRID_EXECUTION_MODES, "混合执行手法", ()),
-            ("POSE", AMBIENT_ACTIONS, "自发注意力决策", ()),
+            ("pet_state.POSE", AMBIENT_ACTIONS, "自发注意力决策", ()),
             # 'static' 是遗留 payload.phase 用的名字，契约里没有这一档 ——
             # 旧后端不发 render 时覆盖层要逐位退回读 payload.phase，那条兜底路
             # 靠它。所以它是**允许多出来**的一档，写在这里而不是默默放过。
             ("OPEN_BY_LIFECYCLE", LIFECYCLE_STATES, "主轴生命周期", ("static",)),
         ]
 
+    @staticmethod
+    def _keys(name: str) -> set:
+        # 桌宠的两张表在三只共用的 pet_state.js 里（``var``），其余在 app.js（``const``）。
+        if name.startswith("pet_state."):
+            return set(_pet_table(name.split(".", 1)[1]))
+        return _js_table_keys(name)
+
+    @staticmethod
+    def _used(name: str) -> bool:
+        if name.startswith("pet_state."):
+            return _pet_state().count(name.split(".", 1)[1]) >= 2
+        return _js().count(name) >= 2
+
     def test_no_state_is_missing_a_rendering(self) -> None:
-        js = _js()
         for name, vocab, label, _extra in self._pairs():
-            keys = _js_table_keys(name)
+            keys = self._keys(name)
             missing = [v for v in vocab if v not in keys]
             assert not missing, f"{label} {missing} 在 {name} 里没有画法 —— 那几档会被画成别的档"
-            assert js.count(name) >= 2, f"{name} 定义了但没人用 —— 一张没人读的表挡不住任何事"
+            assert self._used(name), f"{name} 定义了但没人用 —— 一张没人读的表挡不住任何事"
 
     def test_no_table_invents_a_state(self) -> None:
         for name, vocab, label, extra in self._pairs():
-            surplus = sorted(_js_table_keys(name) - set(vocab) - set(extra))
+            surplus = sorted(self._keys(name) - set(vocab) - set(extra))
             assert not surplus, (
                 f"{name} 里多出 {surplus}，契约的 {label} 没有这几档 —— "
                 "一条永远走不到的分支会让人以为那种情况被处理过"

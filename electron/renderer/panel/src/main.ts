@@ -240,7 +240,10 @@ function mount(host: HTMLElement): void {
     // 最后那一位是**实时的**:主轴此刻在哪一相、阈限态里它在干嘛。
     // 那只小东西的底子靠这两位每帧动起来 —— 只喂 ambient_action 的话它会卡在
     // 上一次决策的姿势上不动,下一次决策可能是几分钟以后。
-    island.render(s.posture?.perception ?? null, s.devices, s.tiers, s.privacyBusy, s.islandOpen, {
+    // 断开时感知那一份是**上一个进程的样子**,不是现在的 —— 当成「还没收到」画(桌宠眼睛虚着、
+    // 那几条通路写「未接」),与左下清单全写「无」同一条规矩;连上的第一帧就会把它换回来。
+    const perception = s.connected ? s.posture?.perception ?? null : null;
+    island.render(perception, s.devices, s.tiers, s.privacyBusy, s.islandOpen, {
       phase: s.phase,
       activity: s.posture?.liminal_activity ?? 'none',
     });
@@ -250,7 +253,7 @@ function mount(host: HTMLElement): void {
         tiers: s.tiers,
         providers: s.userProviders,
         devices: s.devices,
-        perception: s.posture?.perception ?? null,
+        perception,
         connected: s.connected,
         self: s.self,
       }),
@@ -642,9 +645,20 @@ function mount(host: HTMLElement): void {
   async function restoreSession(): Promise<void> {
     const primary = await fetchPrimarySession(BASE);
     const sid = primary || recallSession();
-    if (!sid) return;
+    if (!sid) {
+      // 后端答了「没有主线」、本地也没记过 —— 这就是答案(primary 为 null 才是没问到)。
+      historySettled = primary !== null;
+      return;
+    }
     if (primary) rememberSession(primary);
     const turns = await fetchHistory(BASE, sid);
+    historySettled = turns !== undefined;
+    if (turns === undefined) {
+      // **没问到**(后端还没起来、断着、超时)。不是答案,**不能**据此丢掉本地记的那条 ——
+      // 先认下它(接下来说的话还接在这条上),连上之后 resyncAfterOpen 会再读一遍历史。
+      store.patch({ sessionId: sid });
+      return;
+    }
     if (turns === null) {
       // 后端不认识这条 id(通常是它过期了)。**丢掉本地那条**,否则接下来每一次
       // 拉历史、拉卡片都会对着一个不存在的会话问,而且永远拿不到东西。
@@ -674,7 +688,7 @@ function mount(host: HTMLElement): void {
     if (!sid) return;
     if (index < 0) {
       const turns = await fetchHistory(BASE, sid);
-      if (turns !== null) store.patch({ turns });
+      if (turns) store.patch({ turns });
       return;
     }
     const card = (store.state.cards ?? [])[index];
@@ -763,7 +777,7 @@ function mount(host: HTMLElement): void {
     // **先把历史读回来,再报数。** 反过来的话,那句提示刚挂上去就被整条历史
     // 覆盖掉了 —— 实测过一次:后端确实收下了文件,而界面上什么话都没说。
     const turns = await fetchHistory(BASE, sid);
-    if (turns !== null) store.patch({ turns });
+    if (turns) store.patch({ turns });
     // 以后端**实际录进去的条数**为准。前端按选中数量报数的话,后端拒掉几条
     // 就没人知道了。
     pushNotice(n === readable.length ? `喂进去 ${n} 个文件` : `${readable.length} 个里后端只收下 ${n} 个`);
@@ -784,8 +798,9 @@ function mount(host: HTMLElement): void {
    * 按停 / 恢复桌面感知。
    *
    * **写完不在这里存结果。** 停没停的唯一权威是 posture 帧里的
-   * `perception.privacy_paused`,下一帧(最快 0.4 秒)就会带着新状态回来,界面
-   * 跟着它变。这里只管把按钮压住免得连点写两遍。
+   * `perception.privacy_paused`,最迟约 1 秒就会带着新状态回来(在场桥每秒核一次感知那几位,
+   * 变了就广播 —— 以前静息相位里没有下一帧,桌宠的眼睛闭不上),界面跟着它变。
+   * 这里只管把按钮压住免得连点写两遍。
    *
    * 曾经这里 `store.patch({ privacyPaused: st.paused })` —— 那就是同一个事实
    * 两处各存:别处(托盘、命令行、另一台设备)按停之后帧里说停了,而面板这份
@@ -800,7 +815,20 @@ function mount(host: HTMLElement): void {
     }
   }
 
-  void restoreSession();
+  /**
+   * 历史这件事有没有过一个**确定的答案**(读到了 / 本来就没有会话 / 后端说不认识)。
+   * 没问到(后端还没起来)不算 —— 连上之后要再读一遍。
+   */
+  let historySettled = false;
+  /** 正在读的那一次。开机那次还没回来时连上了,别再并发读第二遍(同一份历史画两次、多问一次)。 */
+  let restoring: Promise<void> | null = null;
+  function restoreOnce(): Promise<void> {
+    restoring ??= restoreSession().finally(() => {
+      restoring = null;
+    });
+    return restoring;
+  }
+  void restoreOnce();
 
   // 上次进程中断时没记上结果的操作:提示一次。「可能已经执行了」不是「失败」。
   void fetchUnresolvedActions(BASE).then((actions) => {
@@ -849,11 +877,37 @@ function mount(host: HTMLElement): void {
   }
   void loadSelf();
 
+  /**
+   * 连上(或重新连上)后端之后补一遍。
+   *
+   * 开机那一拨请求可能赶在后端起来之前 —— 面板和后端谁先起来不一定(启动器先拉起桌面壳、
+   * 后端重启、换档后重载)。那时拿到的全是「没拉到」,而以前没有任何东西会再去拉:档位、
+   * 端点、设置、历史就一直空着,直到人去点开对应的那一块。断过再连上,后端可能已经换了一个
+   * 进程,这期间用嘴说过的话、别处改过的设置都可能变了。
+   *
+   * 所以:**第一次连上只补没拉到的,再连上就全部重拉。** 历史例外 —— 正在出字、或者正在看
+   * 某张卡的时候不动它,那会把人眼前的东西换掉。
+   */
+  let everOpened = false;
+  function resyncAfterOpen(): void {
+    const again = everOpened;
+    everOpened = true;
+    const s = store.state;
+    void loadSelf();
+    if (again || s.tiers === null) void loadTiers();
+    if (again || s.userProviders === null) void loadEndpoints();
+    if (again || s.bundles.length === 0) void loadBundles();
+    if (again || s.vendors === null) void loadVendors();
+    if (again || s.githubAddons === null) void loadAddons();
+    if (again) void loadIsolated();
+    if ((again || !historySettled) && !s.chatBusy && s.drawn < 0) void restoreOnce();
+  }
+
   // ── 后端:实时那条 ───────────────────────────────────────────────
   const socket = new PresenceSocket(BASE, {
     onOpen: () => {
       store.patch({ connected: true });
-      void loadSelf();
+      resyncAfterOpen();
     },
     onClose: () => store.patch({ connected: false }),
     onPosture: ({ posture, missing }) => {
