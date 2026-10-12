@@ -50,8 +50,8 @@ EYE_STATES: Dict[str, Tuple[float, float, float]] = {
 
 #: 三相:(身子不透明度, 缩放, 竖直位移)。静的时候小而沉,显形时立起来。
 PHASES: Dict[str, Tuple[float, float, float]] = {
-    "silent": (0.72, 0.94, 0.0),
-    "liminal": (0.88, 1.0, 0.0),
+    "silent": (0.86, 0.94, 0.0),
+    "liminal": (0.94, 1.0, 0.0),
     "manifest": (1.0, 1.04, -0.8),
 }
 
@@ -63,11 +63,13 @@ REACTS: Dict[str, Tuple[float, float, float, float]] = {
     "aside": (3.4, 0.0, 1.0, 8.0),
 }
 
-#: 身子(面板那支紫 --m-2)、还没收到过帧时的身子(--m-4,再淡到 0.6)、眼睛(面板的墨色 --ink)。
-SKIN = "#b7adbd"
-SKIN_UNKNOWN = "#d7d1d9"
+#: 身子 / 还没收到过帧时的身子(再淡到 0.6)/ 眼睛 —— 面板 tokens.css 的 --pet-* 同一套。
+#: 眼睛与皮肤是对调过的(所有者:「眼睛和皮肤的颜色调换一下,整体更明亮」):身子取面板那一支紫
+#: (色相 312°)提亮,眼睛近白。只对调不提亮的话身子是墨色,在深色任务栏上几乎看不见。
+SKIN = "#a58bb5"
+SKIN_UNKNOWN = "#d3c8dc"
 SKIN_UNKNOWN_OPACITY = 0.6
-EYE = "#3d3745"
+EYE = "#fcf9fe"
 
 #: 姿势与呼吸的变换原点:身子包围盒的 (50%, 82%)(CSS 的 ``transform-origin: 50% 82%`` + ``fill-box``)。
 ORIGIN_FRACTION = (0.5, 0.82)

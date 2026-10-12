@@ -280,8 +280,8 @@ body {
               animation: pet-blink 7.4s ease-in-out infinite; }
 /* **三只桌宠是同一只**（面板 panel/src/ui/pet.ts、这里、右下角托盘 windows_service/pet_icon.py）：
    同一条外形、同一双眼缝、同样的颜色与各档几何量，tests/test_every_pet_is_the_same_pet.py 逐个核对。
-   身子是面板那支紫（--m-2），眼睛是面板的墨色（--ink）；还没收到过帧时身子换成更淡的 --m-4。 */
-:root { --pet-skin: #b7adbd; --pet-skin-unknown: #d7d1d9; --pet-eye: #3d3745; }
+   颜色与面板 tokens.css 的 --pet-* 同一套：身子是同一支紫提亮，眼睛近白（所有者要眼睛与皮肤对调、更明亮）。 */
+:root { --pet-skin: #a58bb5; --pet-skin-unknown: #d3c8dc; --pet-eye: #fcf9fe; }
 .pet-skin   { fill: var(--pet-skin); transition: opacity .6s cubic-bezier(.32,.72,0,1); }
 /* 几何属性在 SVG 上**必须带单位** —— y: 14.4 是非法长度，整条声明会被静默丢弃。 */
 .pet-eye    { fill: var(--pet-eye); y: 14.4px; height: 9.6px;
@@ -298,9 +298,9 @@ body {
 #pet[data-eyes='shut'] .pet-blink,
 #pet[data-eyes='unknown'] .pet-blink { animation: none; }
 /* ── 底子：实时。主轴此刻在哪一相 —— 静的时候小而沉，显形时立起来。 ── */
-#pet[data-phase='silent']   .pet-skin { opacity: .72; }
+#pet[data-phase='silent']   .pet-skin { opacity: .86; }
 #pet[data-phase='silent']   .pet-body { transform: scale(.94); }
-#pet[data-phase='liminal']  .pet-skin { opacity: .88; }
+#pet[data-phase='liminal']  .pet-skin { opacity: .94; }
 #pet[data-phase='manifest'] .pet-skin { opacity: 1; }
 #pet[data-phase='manifest'] .pet-body { transform: scale(1.04) translate(0, -.8px); }
 /* 还没收到过帧：身子淡下去 —— 不知道就不摆样子。 */

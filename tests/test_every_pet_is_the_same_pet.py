@@ -243,7 +243,7 @@ def _pixels(img):
     return [tuple(raw[i : i + 4]) for i in range(0, len(raw), 4)]
 
 
-def _dark_pixels(img) -> int:
+def _eye_pixels(img) -> int:
     er, eg, eb = P._rgb(P.EYE)
     return sum(
         1 for r, g, b, a in _pixels(img) if a > 200 and abs(r - er) < 24 and abs(g - eg) < 24 and abs(b - eb) < 24
@@ -257,12 +257,12 @@ def test_the_tray_icon_is_the_pet_body_and_eyes():
     sr, sg, sb = P._rgb(P.SKIN)
     r, g, b, a = img.getpixel((32, 46))
     assert a > 230 and abs(r - sr) < 10 and abs(g - sg) < 10 and abs(b - sb) < 10, "身子不是面板那支紫"
-    assert _dark_pixels(img) > 40, "眼睛没画出来"
+    assert _eye_pixels(img) > 40, "眼睛没画出来"
 
 
 def test_shut_eyes_are_a_thin_line_and_unknown_is_faded():
-    open_ = _dark_pixels(P.render_pet(P.derive(_frame()), 64))
-    shut = _dark_pixels(P.render_pet(P.derive(_frame(privacy_paused=True)), 64))
+    open_ = _eye_pixels(P.render_pet(P.derive(_frame()), 64))
+    shut = _eye_pixels(P.render_pet(P.derive(_frame(privacy_paused=True)), 64))
     assert 0 < shut < open_ / 2, "按了隐私暂停,托盘那只的眼睛没压成一横"
     unknown = P.render_pet(P.derive(None), 64)
     assert max(px[3] for px in _pixels(unknown)) < 200, "还没收到帧时身子要淡下去(不知道就不摆样子)"

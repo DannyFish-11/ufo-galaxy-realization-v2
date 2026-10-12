@@ -751,13 +751,12 @@ html[data-shell='desktop'] {
   overflow: visible;
 }
 .pet-skin {
-  fill: var(--m-2);
+  fill: var(--pet-skin);
   transition: fill 0.6s var(--ease);
 }
-/* 眼睛是面板的墨色:三只桌宠(面板 / 覆盖层 / 托盘)同一双眼睛 —— 托盘只有 16 像素,
-   近白的眼睛落在浅紫的身子上几乎看不见。颜色与几何量由 tests/test_every_pet_is_the_same_pet.py 三处核对。 */
+/* 颜色在 tokens.css 的 --pet-*(三只桌宠同一套,tests/test_every_pet_is_the_same_pet.py 三处核对)。 */
 .pet-eye {
-  fill: var(--ink);
+  fill: var(--pet-eye);
   transition: y 0.34s var(--ease), height 0.34s var(--ease),
     opacity 0.34s var(--ease), fill 0.6s var(--ease);
 }
@@ -798,9 +797,9 @@ html[data-shell='desktop'] {
 }
 /* ── 底子:实时 ───────────────────────────────────────────────────
    主轴此刻在哪一相。静的时候小而沉,显形时立起来。 */
-.pet[data-phase='silent'] .pet-skin { opacity: 0.72; }
+.pet[data-phase='silent'] .pet-skin { opacity: 0.86; }
 .pet[data-phase='silent'] .pet-body { transform: scale(0.94); }
-.pet[data-phase='liminal'] .pet-skin { opacity: 0.88; }
+.pet[data-phase='liminal'] .pet-skin { opacity: 0.94; }
 .pet[data-phase='manifest'] .pet-skin { opacity: 1; }
 .pet[data-phase='manifest'] .pet-body { transform: scale(1.04) translate(0, -0.8px); }
 /* 在收的时候眼睛睁得开一点。**不知道就不动它** —— 那不是「没在收」。 */
@@ -832,7 +831,7 @@ html[data-shell='desktop'] {
 .pet[data-react='tuck'] .pet-body { transform: translate(0, 1.6px) scale(0.9); }
 .pet[data-react='aside'] .pet-body { transform: translate(3.4px, 0) rotate(8deg); }
 /* 还没收到过帧:身子淡下去 —— 不知道就不摆样子 */
-.pet[data-eyes='unknown'] .pet-skin { fill: var(--m-4); opacity: 0.6; }
+.pet[data-eyes='unknown'] .pet-skin { fill: var(--pet-skin-unknown); opacity: 0.6; }
 
 /* 呼吸和眨眼在 prefers-reduced-motion 下会停,但**姿势和眼睛的开合都留着**
    —— 那两样是事实,不是动效:它们是 transform / y / height,不是 animation,
