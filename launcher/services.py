@@ -856,6 +856,10 @@ class UnifiedWebUI:
             # banner) instead of blocking here.
             self._server = server
             self._serve_task = asyncio.create_task(server.serve())
+            # 事件循环被同步工作卡住时,说出卡在哪几行(只读;见 core/loop_stall_watch.py)。
+            from core import loop_stall_watch
+
+            loop_stall_watch.start()
             # serve() 若在我们取回结果前就异常收场(端口竞态、ASGI 启动失败…),
             # asyncio 会在任务被回收时打印 "Task exception was never retrieved"
             # 加一段裸 traceback —— 真机日志里那条噪声就是这么来的。
