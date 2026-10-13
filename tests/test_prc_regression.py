@@ -16,6 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:读设备与运行细节要令牌
+
 
 @pytest.fixture(autouse=True)
 def _neutralize_capability_inference(monkeypatch):
@@ -493,7 +497,7 @@ class TestObservabilityEndpointSchemas:
 
         app = FastAPI()
         app.include_router(create_router())
-        return TestClient(app)
+        return TestClient(app, headers=_AUTH_HEADERS)
 
     def test_model_route_endpoint_schema(self):
         """GET /api/v1/observability/model-route 必须返回规定字段。"""

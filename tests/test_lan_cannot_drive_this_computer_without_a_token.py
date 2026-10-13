@@ -170,6 +170,63 @@ def test_every_write_needs_a_token_unless_listed():
     assert not open_, f"这些写接口不带令牌就能调:{open_}"
 
 
+#: 不带令牌也得读得到的 —— 健康检查(容器健康检查、运维脚本)、指标抓取、客户端配置发现、OAuth 登录(浏览器跳转带不了头)。
+PUBLIC_READS = {
+    "/health/metrics",
+    "/metrics",
+    "/api/v1/health/unified",
+    "/api/v1/health/quick",
+    "/health/nats",
+    "/api/v1/config",
+    "/api/v1/connectors/{service}/authorize",
+    "/api/v1/connectors/{service}/callback",
+    "/auth/oauth/providers",
+    "/auth/oauth/{provider}/authorize",
+    "/auth/oauth/callback",
+    "/auth/oauth/health",
+    "/auth/oauth/me",  # 自己核验 OAuth 登录令牌(HTTPBearer + get_current_oauth_user)
+}
+
+
+def test_every_read_needs_a_token_unless_listed():
+    """第 4 轮真跑:不带令牌能读的 106 条里,``/api/v1/audit/traces``、``/api/v1/audit/snapshot``、
+    ``/api/v1/observability/context-layer?session_id=…`` 原样带出对话原文,另有约 30 条带出设备号与设备名。"""
+    from core.api_routes import create_api_routes
+
+    def guarded(ds):
+        return any(
+            (getattr(d, "__module__", ""), getattr(d, "__name__", "")) == ("core.auth", "require_auth") for d in ds
+        )
+
+    reads = [(p, ds) for m, p, ds in _walk(create_api_routes().routes) if m == "GET"]
+    assert len(reads) > 100, "没走到路由树里(FastAPI 换了包法?)"
+    open_ = sorted({p for p, ds in reads if not guarded(ds)} - PUBLIC_READS)
+    assert not open_, f"这些读接口不带令牌就能读:{open_}"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/audit/traces",
+        "/api/v1/audit/snapshot",
+        "/api/v1/observability/context-layer?session_id=x",
+        "/api/v1/devices",
+        "/api/devices/list",
+        "/api/v1/stream",
+    ],
+)
+def test_the_reads_that_carried_conversations_and_devices_need_a_token(client, path, monkeypatch):
+    monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+    assert client.get(path).status_code == 401
+
+
+def test_health_checks_stay_public(client, monkeypatch):
+    """容器健康检查打 /health、运维脚本打 /health/nats:它们不带令牌。"""
+    monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+    for path in ("/health/nats", "/api/v1/health/quick", "/metrics"):
+        assert client.get(path).status_code != 401, path
+
+
 def test_client_discovery_stays_public(client, monkeypatch):
     """从网关并过来的那几组里,只有客户端配置发现本来就公开(网关中间件的豁免表)。"""
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")

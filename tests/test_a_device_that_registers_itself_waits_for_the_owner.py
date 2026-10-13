@@ -138,3 +138,26 @@ def test_the_first_sighting_says_where_to_click(api, monkeypatch):
     monkeypatch.setattr(conversation, "note_new_candidate", lambda name, how: said.append((name, how)))
     api.post("/api/v1/devices/register", json={"device_id": _new_id(), "device_name": "客厅平板"})
     assert said and said[0][0] == "客厅平板" and "全部设置" in said[0][1], said
+
+
+def test_a_borrowed_device_id_cannot_rewrite_what_the_device_is(api, auth_headers):
+    """设备号就写在请求体里,谁都能冒用。成员不带凭据来重新登记:只认已登记的名字 / 类型 / 能力。"""
+    from core.unified.device_manager import get_unified_device_manager
+
+    dev = _new_id()
+    api.post(
+        "/api/v1/devices/register",
+        json={"device_id": dev, "device_name": "妈妈的手机", "capabilities": ["notification"]},
+        headers=auth_headers,
+    )
+    spoof = {"device_id": dev, "device_name": "冒用的", "capabilities": ["camera", "shell"]}
+    assert api.post("/api/v1/devices/register", json=spoof).status_code == 200  # 报到照收
+    d = get_unified_device_manager().get_device(dev)
+    assert d.device_name == "妈妈的手机" and "shell" not in d.capabilities, "冒用设备号改掉了它的资料"
+
+    assert api.post("/api/devices/register", json={**spoof, "device_type": "android"}).status_code == 200
+    d = get_unified_device_manager().get_device(dev)
+    assert d.device_name == "妈妈的手机" and "shell" not in d.capabilities, "旧登记口照样不许改"
+
+    api.post("/api/v1/devices/register", json={**spoof, "device_name": "妈妈的新手机"}, headers=auth_headers)
+    assert get_unified_device_manager().get_device(dev).device_name == "妈妈的新手机", "主人的令牌照旧能改"

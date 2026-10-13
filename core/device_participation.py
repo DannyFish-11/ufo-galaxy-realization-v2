@@ -191,12 +191,7 @@ def _get_canonical_readiness(device_id: str) -> Any:
 
 def _get_udm() -> Any:
     """Return the UnifiedDeviceManager singleton, or None on failure."""
-    try:
-        from core.unified_device_manager import UnifiedDeviceManager
-
-        return UnifiedDeviceManager.get_instance()
-    except Exception as exc:
-        logger.debug("_get_udm: UnifiedDeviceManager unavailable: %s", exc)
+    # 设备注册表本身就委托给 UDM;原先先试的 core.unified_device_manager 模块不存在,每次白走一遍。
     try:
         from core.device_registry import get_device_registry
 
@@ -250,19 +245,19 @@ def _get_mesh_membership(device_id: str) -> Optional[Any]:
     try:
         from contracts.mesh_membership import MeshMembership  # noqa: F401 – existence check
 
-        # Try body mesh registry first
+        # Try body mesh registry first. 进程里的注册表是 get_body_mesh_registry() 那一个单例 ——
+        # 原先调的 BodyMeshRegistry.get_instance() 并不存在,每次都抛、每次记一条 WARNING
+        # (真跑一轮 200 多条),这一层从没生效过,永远落到下面的编队摘要。
         try:
-            from core.mesh.body_mesh_registry import BodyMeshRegistry
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
 
-            registry = BodyMeshRegistry.get_instance()
-            if registry is not None:
-                entry = registry.get(device_id)
-                if entry is not None:
-                    from contracts.mesh_membership import from_body_mesh_entry
+            entry = get_body_mesh_registry().get(device_id)
+            if entry is not None:
+                from contracts.mesh_membership import from_body_mesh_entry
 
-                    return from_body_mesh_entry(entry)
+                return from_body_mesh_entry(entry)
         except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
+            logger.debug("_get_mesh_membership(%s): body mesh: %s", device_id, exc)
 
         # Try device formation summary
         try:
@@ -285,29 +280,22 @@ def _get_mesh_membership(device_id: str) -> Optional[Any]:
 
 def _get_mesh_session(device_id: str) -> Optional[Any]:
     """Return the active MeshSession that the device participates in, or None."""
+    # 「正在进行的会话」的权威是 mesh 会话生命周期协调器里状态为 active 的那些。原先这里调的
+    # contracts.mesh_session_coordinator.get_active_session_for_device 与
+    # source_dispatch_orchestrator.get_active_mesh_session 都不存在,每次各记一条 WARNING,
+    # 设备在不在会话里从来答不出来。
     try:
-        # Try mesh session coordinator
-        try:
-            from contracts.mesh_session_coordinator import get_active_session_for_device
+        from contracts.mesh_session import MeshSession
+        from core.mesh.mesh_session_lifecycle import get_lifecycle_coordinator
 
-            return get_active_session_for_device(device_id)
-        except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
-
-        try:
-            from core.runtime.source_dispatch_orchestrator import (
-                get_active_mesh_session,
-            )
-
-            session = get_active_mesh_session()
-            if session is not None:
-                participants = getattr(session, "participants", []) or []
-                for p in participants:
-                    if str(getattr(p, "device_id", "")) == device_id:
-                        return session
-        except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
-
+        coordinator = get_lifecycle_coordinator()
+        for sid in coordinator.list_active_session_ids():
+            record = coordinator.get_record(sid)
+            sd = dict(getattr(record, "session_dict", None) or {})
+            ids = {str(p.get("device_id", "")) for p in sd.get("participants") or [] if isinstance(p, dict)}
+            ids.update(str(sd.get(k) or "") for k in ("source_device_id", "primary_device_id"))
+            if device_id in ids:
+                return MeshSession.from_dict(sd)
     except Exception as exc:
         logger.debug("_get_mesh_session(%s): %s", device_id, exc)
 

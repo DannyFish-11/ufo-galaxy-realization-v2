@@ -78,26 +78,13 @@ def atomic_write_json(
     :param fsync: 替换前把临时文件刷到磁盘。默认开启;仅在明确不在乎断电丢失、且写入
         极其频繁的路径上才值得关掉。
     """
-    # 先整份编成字符串再写:``json.dump`` 不论缩进与否都走纯 Python 的分块编码器;``json.dumps`` 在
-    # ``indent=None`` 时走 C 实现,快几倍,且一口气编完、中途不让出 GIL(别的线程同时改着字典也撞不上
-    # 「迭代中改变大小」)。两者产出逐字节相同。
-    text = json.dumps(payload, indent=indent, ensure_ascii=ensure_ascii, sort_keys=sort_keys, default=default)
-    atomic_write_text(path, text + ("\n" if trailing_newline else ""), fsync=fsync, suffix=".json")
-
-
-def atomic_write_text(path: str | os.PathLike, text: str, *, fsync: bool = True, suffix: str = "") -> None:
-    """把一段文本原子地写到 ``path``:同目录临时文件 → fsync → ``os.replace``,权限 0600。
-
-    与 :func:`atomic_write_json` 同一套保证(它就是走这里写的)。``secrets.env`` 这类不是 JSON、却同样
-    「写到一半就全没了」的文件也用它。
-    """
     path = os.fspath(path)
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, exist_ok=True)
 
     # 临时文件必须和目标【同目录】:os.replace 跨文件系统会失败,而 /tmp 与目标
     # 往往不在同一个挂载点上。
-    fd, tmp_path = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=suffix, dir=directory)
+    fd, tmp_path = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=".json", dir=directory)
     try:
         # 显式设定权限（B13）。
         #
@@ -124,8 +111,14 @@ def atomic_write_text(path: str | os.PathLike, text: str, *, fsync: bool = True,
         # 与之对应，tests/test_atomic_json_permissions.py 的权限断言也只在 POSIX 跑。
         if hasattr(os, "fchmod"):
             os.fchmod(fd, 0o600)
+        # 先整份编成字符串再写:``json.dump`` 不论缩进与否都走纯 Python 的分块编码器;``json.dumps`` 在
+        # ``indent=None`` 时走 C 实现,快几倍,且一口气编完、中途不让出 GIL(别的线程同时改着字典也撞不上
+        # 「迭代中改变大小」)。两者产出逐字节相同。
+        text = json.dumps(payload, indent=indent, ensure_ascii=ensure_ascii, sort_keys=sort_keys, default=default)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
+            if trailing_newline:
+                handle.write("\n")
             handle.flush()
             if fsync:
                 os.fsync(handle.fileno())
@@ -135,5 +128,31 @@ def atomic_write_text(path: str | os.PathLike, text: str, *, fsync: bool = True,
         if os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+def atomic_write_text(path: str | os.PathLike, text: str) -> None:
+    """把一段文本原子地写到 ``path``(同目录临时文件 → fsync → ``os.replace``),权限 0600。
+
+    给 ``secrets.env`` 这类不是 JSON、却同样「写到一半就全没了」的文件用(``core/config_store.py``);
+    保证与 :func:`atomic_write_json` 相同。路径由调用方给定(数据目录下的固定文件名),不来自请求。
+    """
+    target = os.fspath(path)
+    folder = os.path.dirname(target) or "."
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=".txt", dir=folder)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
             except OSError:
                 pass

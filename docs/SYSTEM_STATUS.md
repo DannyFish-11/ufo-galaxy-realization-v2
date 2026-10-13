@@ -737,9 +737,43 @@ python scripts/check_assessment_freshness.py
   也被拒（403）。`GALAXY_ONBOARDING_AUTO=approve` 不放行这一类（不带凭据，除了人没有依据）。鉴权关着、带主人令牌、本来就是成员的
   照旧直接登记；心跳 / 状态对陌生设备本来就 404，不会顺手建出一台。对话里第一次见到时说一声去哪儿点。
 
+**第 4 轮（2026-10-13）：** 接第 3 轮的待办；独立数据目录真跑，把不带令牌能读的接口逐条看完，再把运行日志里刷屏的那几条追到根上，
+顺着同一种缺陷签名把全仓扫了一遍。修了：
+
+- **不带令牌能读的接口（约 100 条）**：后端这个 app 没有网关那层全局 Bearer 中间件，读接口里有审计轨迹（带对话原文）、上下文层、
+  设备列表与设备细节、运行时投影、隔离队列、SSE 事件流、可观测与监控两组。现在不带令牌能读的只剩健康检查、`/metrics`、客户端
+  配置发现（`GET /api/v1/config`）、OAuth 登录那几条；`test_every_read_needs_a_token_unless_listed` 逐条扫，新加的读接口忘了挂鉴权
+  会红。启动横幅里那条「状态面板」链接（指向投影接口，浏览器直接打开会 401）一并去掉。真跑：局域网地址不带令牌全部 401。
+- **冒用设备号改资料**：设备号就写在请求体里。成员不带凭据来重新登记，原先拿请求里报的名字 / 类型 / 能力覆盖 UDM 与能力表 ——
+  冒用一台手机的设备号就能改它的名字、给它添上没有的能力。现在只认已登记的（报到照收），改资料要主人的令牌。新旧两个登记口同一条规则。
+- **PR 上 CodeQL 两条高危**：密钥库改走原子写时把写入点挪进了新函数（被识别成新的路径注入点）、`secrets.env` 的路径进了日志。
+  `atomic_write_json` 恢复原结构、`atomic_write_text` 单独成函数；那几条日志不再带路径。
+- **运行日志每 3 秒 24 条 WARNING**：设备参与度对每台设备各调三个**不存在的**入口（`BodyMeshRegistry.get_instance`、
+  `get_active_session_for_device`、`get_active_mesh_session`），一轮真跑 600 多条 `Exception suppressed: cannot import name …`，
+  而「这台设备在不在 mesh 里、在不在哪段会话里」从来答不出来。现在读进程里真有的两份：Body Mesh 注册表单例、mesh 会话生命周期
+  协调器里状态为 active 的会话（还没开始的会话不算）。
+- **同一种缺陷签名全仓扫一遍**（函数体里 `from 仓库模块 import 名字`，名字不存在，包在 `try` 里一声不响地退成「不可用」），19 处：
+  - `/api/v1/vision/understand` **每次 500**：把协程方法丢进线程池，拿回没 await 的协程对象，序列化时炸 —— 这个接口从来没成功过；
+    设备 WS 的 `ocr_request` 同一个错。`/api/v1/vision/ocr` **永远回失败**：`DeepSeekOCR2Adapter` / `process_image` 都不存在。
+    现在 await 视觉管线（它自己按登记表逐档降级）；OCR 按模式调适配器上真有的方法，没配 Key 就说该配哪个。
+  - 调度真相 harness 永远答「能力策略不可用」、永远判不收敛 —— 那两份真相是模块级函数，没有它调的单例。
+  - 会话连续性权威快照里「恢复加固未加载」是假的（常量名写错）；多设备治理的附着会话从没算进去（函数名写错）；叙事层每次往 trace
+    里记一条假的 `android_recovery_failed`；草稿基准数 token 永远走粗估。
+  - 网关 `create_device_websocket_routes`：没人调用，一调就注册一个连上即关的 `/ws/device/{id}`；它和它依赖的 5 个不存在的名字删掉
+    （规范入口是 `register_websocket_routes`，不受影响）。
+  - 运维动作「挂起参与方 / 隔离设备 / 重开·确认·驳回闭环」里调的本地写入口从来不存在 —— 删掉死调用，行为不变（照旧只下发给设备 /
+    记「已请求」）。
+  - 守卫：`tests/test_lazy_imports_name_things_that_exist.py`（只核对本仓自己的模块；`external/` 与微软 UFO 的 `agents.*` 是外部代码）。
+- **没模型时日志把原因说错**：一个模型都没配时，`chat_json` 拿给人看的降级说明去 `json.loads`，记一条「chat_json 解析失败」，
+  Agent 工厂再记一条「schema 校验失败、回退模板」、任务分解记「LLM 返回非法 JSON」。现在 `chat_json` 认得出「没调通」，直接回
+  `{"error": …, "unavailable": True}`，两个调用方按「没有模型」处理（Agent 用模板、任务按单任务），不再报解析 / 校验失败。
+
 **下一轮待办：**
 
-- 不带令牌能读的接口还有约 100 条（可观测组的上下文层、设备列表、运行时投影……）：逐条看哪些带对话内容或设备细节。
+- `core/device_agent_manager.py` 的微软 UFO 分支永远不生效：引用的 `external.microsoft_ufo.automator.puppeteer.Puppeteer` 不存在，
+  真有的 `AppPuppeteer` 要构造参数、接口也不是 `click` / `type_text`。要接得重写适配层；日志照实写「未装（可选依赖）」，行为是降级。
+- 运维动作「重开 / 确认 / 驳回闭环」回 success，但闭环治理只有只读视图、没有写入口 —— 要不要做写入口，或者把结论改成「已记下、
+  未生效」，需要定。
 - 照片里那次 11.5 秒卡顿的真凶：等更新后的卡顿记录（会带上同一时刻别的线程在 import 什么）。
 - 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`（旧模板生成）：写了就听它的，删掉那一行即可回到「本地模式不起 NATS」。
 

@@ -153,8 +153,8 @@ class TestSmallReads:
         assert r.json()["ok"] is False
 
     def test_audit_integrity_and_dag(self, client):
-        assert client.get("/api/v1/audit/integrity").json()["intact"] is True
-        assert isinstance(client.get("/api/v1/audit/dag").json()["dag"], dict)
+        assert client.get("/api/v1/audit/integrity", headers=AUTH).json()["intact"] is True
+        assert isinstance(client.get("/api/v1/audit/dag", headers=AUTH).json()["dag"], dict)
 
     def test_perception_continuous(self, client):
         assert client.get("/api/perception/desktop/continuous", headers=AUTH).json()["success"] is True
@@ -170,7 +170,7 @@ class TestSmallReads:
         assert r == {"task_id": "nope", "events": []}
 
     def test_cost_task_bills(self, client):
-        body = client.get("/api/v1/cost/tasks").json()
+        body = client.get("/api/v1/cost/tasks", headers=AUTH).json()
         assert "bills" in body and "summary" in body
 
 

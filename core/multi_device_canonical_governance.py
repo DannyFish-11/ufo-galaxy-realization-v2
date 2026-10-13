@@ -798,7 +798,7 @@ except Exception as exc:
 # AttachedRuntimeSessionRegistry — live attached sessions
 try:
     from core.attached_runtime_session_registry import (
-        list_attached_sessions as _list_attached_sessions,  # type: ignore[import]
+        list_active_sessions as _list_attached_sessions,  # 原先 import 的 list_attached_sessions 不存在
     )
 
     _SESSION_REGISTRY_AVAILABLE = True

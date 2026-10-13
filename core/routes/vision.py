@@ -8,7 +8,6 @@ Routes:
   POST /api/v1/vision/observe     - 视觉采样会话 (Node_95 → OpenClawd → command_router)
 """
 
-import asyncio
 import base64
 import logging
 from typing import Optional
@@ -37,6 +36,29 @@ class ObserveRequest(BaseModel):
     mode: Optional[str] = Field(default=None, description="Optional mode hint for OpenClawd.")
 
 
+#: OCRRequest.mode → 适配器上的方法。原先调的 DeepSeekOCR2Adapter.process_image 不存在,这个接口从来只回失败。
+_OCR_MODES = {
+    "free_ocr": "extract_text",
+    "markdown": "document_to_markdown",
+    "tables": "extract_tables",
+    "handwriting": "recognize_handwriting",
+    "ui": "analyze_ui",
+}
+
+
+async def _deepseek_ocr(image_data: bytes, mode: str) -> dict:
+    from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCRAdapter
+
+    adapter = DeepSeekOCRAdapter()
+    try:
+        if not await adapter.initialize():
+            return {"error": "DeepSeek OCR 2 没配:NOVITA_API_KEY / DEEPSEEK_OCR_API_KEY 或本机 DEEPSEEK_OCR2_LOCAL_URL"}
+        method = getattr(adapter, _OCR_MODES.get(mode, "extract_text"))
+        return await method(base64.b64encode(image_data).decode("ascii"))
+    finally:
+        await adapter.close()
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create vision routes router."""
     router = APIRouter()
@@ -59,35 +81,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             if not req.image_base64:
                 raise HTTPException(status_code=400, detail="Image or video chunk required")
 
-            image_data = base64.b64decode(req.image_base64)
+            base64.b64decode(req.image_base64)  # 先确认是张图,坏数据在这里就报
 
-            try:
-                from core.vision_pipeline import VisionPipeline
+            # understand() 是协程,原先丢进线程池跑、返回的是没 await 的协程对象 —— 序列化时炸成 500,
+            # 这个接口从来没成功过;退路调的 DeepSeekOCR2Adapter / process_image 也都不存在。
+            # 管线自己按登记表逐档降级(DeepSeek OCR 2 就是其中一档),这里不再另起一条。
+            from core.vision_pipeline import get_vision_pipeline
 
-                pipeline = VisionPipeline()
-                result = await asyncio.get_running_loop().run_in_executor(
-                    None, pipeline.understand, image_data, req.mode, req.instruction
-                )
-                return JSONResponse({"success": True, "engine": "vision_pipeline", "result": result})
-            except ImportError:
-                pass
-
-            try:
-                from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCR2Adapter
-
-                adapter = DeepSeekOCR2Adapter()
-                result = await asyncio.get_running_loop().run_in_executor(
-                    None, adapter.process_image, image_data, req.mode
-                )
-                return JSONResponse({"success": True, "engine": "deepseek_ocr2", "result": result})
-            except Exception as e:
-                logger.warning(f"DeepSeek OCR 2 调用失败: {e}")
+            result = await get_vision_pipeline().understand(
+                image_base64=req.image_base64, mode=req.mode, task_context=req.instruction
+            )
+            if result.success:
+                return JSONResponse({"success": True, "engine": result.engine_used, "result": result.to_dict()})
 
             return JSONResponse(
                 {
                     "success": False,
                     "engine": "none",
-                    "error": "无可用的视觉理解引擎",
+                    "error": result.error or "无可用的视觉理解引擎",
                     "result": {
                         "raw_text": "",
                         "text_blocks": [],
@@ -109,24 +120,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             image_data = base64.b64decode(req.image_base64)
 
             try:
-                from nodes.Node_15_OCR.core.deepseek_ocr_adapter import DeepSeekOCR2Adapter
-
-                adapter = DeepSeekOCR2Adapter()
-                result = await asyncio.get_running_loop().run_in_executor(
-                    None, adapter.process_image, image_data, req.mode
-                )
-                return JSONResponse(
-                    {
-                        "success": True,
-                        "engine": "deepseek_ocr2",
-                        "text": result.get("text", ""),
-                        "blocks": result.get("blocks", []),
-                        "confidence": result.get("confidence", 0.0),
-                    }
-                )
+                result = await _deepseek_ocr(image_data, req.mode)
             except Exception as e:
                 logger.warning(f"DeepSeek OCR 2 调用失败: {e}")
-                return JSONResponse({"success": False, "error": str(e), "text": "", "blocks": []})
+                result = {"error": str(e)}
+            if result.get("error"):
+                return JSONResponse({"success": False, "error": result["error"], "text": "", "blocks": []})
+            return JSONResponse(
+                {
+                    "success": True,
+                    "engine": "deepseek_ocr2",
+                    "text": result.get("text", ""),
+                    "blocks": result.get("blocks", []),
+                    "confidence": result.get("confidence", 0.0),
+                }
+            )
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

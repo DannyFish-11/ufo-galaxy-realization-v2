@@ -1642,18 +1642,8 @@ def execute_governed_operator_action(
                 outcome = OperatorActionOrchestrationOutcome.failed.value
             else:
                 affected_entity_ids.append(device_id)
-                try:
-                    from core.android_participant_session_state import (
-                        get_participant_session_state,
-                    )
-
-                    state = get_participant_session_state(device_id)
-                    if state and hasattr(state, "suspend"):
-                        state.suspend()
-                        downstream_effects.append(f"participant_session_suspended:device_id={device_id}")
-                except Exception as exc:
-                    logger.debug("suspend_participant: session state unavailable: %s", exc)
-
+                # 中心这边没有可挂起 / 隔离的本地状态(原先调的 get_participant_session_state、
+                # android_device_state_store.isolate_device 都不存在,从没生效过):只下发给设备。
                 spec = build_android_directed_action_spec(
                     action_kind=AndroidDirectedActionKind.suspend_device.value,
                     device_id=device_id,
@@ -1672,15 +1662,8 @@ def execute_governed_operator_action(
                 outcome = OperatorActionOrchestrationOutcome.failed.value
             else:
                 affected_entity_ids.append(device_id)
-                try:
-                    from core.android_device_state_store import isolate_device
-
-                    if callable(isolate_device):
-                        isolate_device(device_id)
-                        downstream_effects.append(f"device_isolated_in_state_store:device_id={device_id}")
-                except Exception as exc:
-                    logger.debug("isolate_device: state store unavailable: %s", exc)
-
+                # 中心这边没有可挂起 / 隔离的本地状态(原先调的 get_participant_session_state、
+                # android_device_state_store.isolate_device 都不存在,从没生效过):只下发给设备。
                 spec = build_android_directed_action_spec(
                     action_kind=AndroidDirectedActionKind.isolate_device.value,
                     device_id=device_id,
@@ -1721,18 +1704,8 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(task_id)
             if flow_id:
                 affected_entity_ids.append(flow_id)
-            try:
-                from core.closed_loop_governance_consolidation import (
-                    get_closed_loop_governance,
-                )
-
-                gov = get_closed_loop_governance()
-                if hasattr(gov, "reopen_closure"):
-                    gov.reopen_closure(task_id or flow_id or "")
-                    downstream_effects.append(f"closure_reopened:entity={task_id or flow_id or 'unknown'}")
-            except Exception as exc:
-                logger.debug("reopen_closure: governance unavailable: %s", exc)
-                downstream_effects.append("closure_reopen_requested:governance_unavailable")
+            # 闭环治理只有只读视图,没有能 reopen 的写入口(原先调的 get_closed_loop_governance 不存在)
+            downstream_effects.append("closure_reopen_requested:governance_unavailable")
             outcome = OperatorActionOrchestrationOutcome.success.value
 
         # ── finalize_closure ──────────────────────────────────────────────
@@ -1741,18 +1714,8 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(task_id)
             if flow_id:
                 affected_entity_ids.append(flow_id)
-            try:
-                from core.closed_loop_governance_consolidation import (
-                    get_closed_loop_governance,
-                )
-
-                gov = get_closed_loop_governance()
-                if hasattr(gov, "finalize_closure"):
-                    gov.finalize_closure(task_id or flow_id or "")
-                    downstream_effects.append(f"closure_finalized:entity={task_id or flow_id or 'unknown'}")
-            except Exception as exc:
-                logger.debug("finalize_closure: governance unavailable: %s", exc)
-                downstream_effects.append("closure_finalize_requested:governance_unavailable")
+            # 闭环治理只有只读视图,没有能 finalize 的写入口(原先调的 get_closed_loop_governance 不存在)
+            downstream_effects.append("closure_finalize_requested:governance_unavailable")
             outcome = OperatorActionOrchestrationOutcome.success.value
 
         # ── reject_closure ────────────────────────────────────────────────
@@ -1761,18 +1724,8 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(task_id)
             if flow_id:
                 affected_entity_ids.append(flow_id)
-            try:
-                from core.closed_loop_governance_consolidation import (
-                    get_closed_loop_governance,
-                )
-
-                gov = get_closed_loop_governance()
-                if hasattr(gov, "reject_closure"):
-                    gov.reject_closure(task_id or flow_id or "")
-                    downstream_effects.append(f"closure_rejected:entity={task_id or flow_id or 'unknown'}")
-            except Exception as exc:
-                logger.debug("reject_closure: governance unavailable: %s", exc)
-                downstream_effects.append("closure_reject_requested:governance_unavailable")
+            # 闭环治理只有只读视图,没有能 reject 的写入口(原先调的 get_closed_loop_governance 不存在)
+            downstream_effects.append("closure_reject_requested:governance_unavailable")
             outcome = OperatorActionOrchestrationOutcome.success.value
 
         # ── acknowledge_blocker ───────────────────────────────────────────

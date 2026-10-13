@@ -34,7 +34,7 @@ def register(router: APIRouter) -> None:
     没有 ``.path`` 的条目，遍历 ``router.routes`` 读 ``.path`` 的既有调用方会因此出错。
     """
 
-    @router.get("/api/v1/results/isolated")
+    @router.get("/api/v1/results/isolated", dependencies=[Depends(require_auth)])
     async def list_isolated(include_dismissed: bool = False) -> Dict[str, Any]:
         from core.truth_chain_recovery import get_truth_chain_recovery
 
@@ -45,7 +45,7 @@ def register(router: APIRouter) -> None:
             "recovered_recent": recovery.recent_recovered()[:20],
         }
 
-    @router.get("/api/v1/results/isolated/{key}")
+    @router.get("/api/v1/results/isolated/{key}", dependencies=[Depends(require_auth)])
     async def get_isolated(key: str) -> Dict[str, Any]:
         from core.truth_chain_recovery import get_truth_chain_recovery
 

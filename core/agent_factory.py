@@ -566,11 +566,11 @@ class AgentFactory:
                 task_type="planning",
             )
 
-            # 后置校验：对 LLM 生成配置做结构校验（2C 第二层）
-            if not self._validate_agent_config(result):
-                logger.warning("LLM 生成的 Agent 配置未通过 schema 校验，回退到模板兜底")
-                template = self._match_template(task_description)
-                return self.create_from_template(template, parent_id)
+            # 后置校验：对 LLM 生成配置做结构校验（2C 第二层）；没有模型可用（unavailable）不算校验失败，直接用模板
+            if result.get("unavailable") or not self._validate_agent_config(result):
+                if not result.get("unavailable"):
+                    logger.warning("LLM 生成的 Agent 配置未通过 schema 校验，回退到模板兜底")
+                return self.create_from_template(self._match_template(task_description), parent_id)
 
             # 从 LLM 响应构建 AgentConfig
             role_str = result.get("role", "executor")

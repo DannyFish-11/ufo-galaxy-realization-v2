@@ -56,7 +56,7 @@ import os
 import time as _time
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.API")
@@ -66,7 +66,11 @@ _startup_time = _time.time()
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create observability routes router."""
+    from core.auth import require_auth
+
     router = APIRouter()
+    # 健康检查(/health/nats)不带令牌也能读;其余带着对话上下文、调用记录、执行事件,要令牌
+    _AUTH = [Depends(require_auth)]
     # 真相链隔离队列：运行面的待处理项，与本组同样免鉴权（面板直接读）。
     from core.routes import result_recovery as _result_recovery
 
@@ -74,7 +78,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── 活跃 LLM 路由 + Fallback ─────────────────────────────────────────
 
-    @router.get("/api/v1/observability/model-route")
+    @router.get("/api/v1/observability/model-route", dependencies=_AUTH)
     async def model_route_status():
         """
         活跃模型路由及 Fallback 状态（兼容性诊断端点）。
@@ -122,7 +126,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── 网关 / 设备在线状态 ───────────────────────────────────────────────
 
-    @router.get("/api/v1/observability/gateway")
+    @router.get("/api/v1/observability/gateway", dependencies=_AUTH)
     async def gateway_status():
         """
         网关及设备在线状态汇总。
@@ -193,7 +197,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── 近期工具 / 设备调用 ───────────────────────────────────────────────
 
-    @router.get("/api/v1/observability/recent-calls")
+    @router.get("/api/v1/observability/recent-calls", dependencies=_AUTH)
     async def recent_calls(
         limit: int = Query(default=50, ge=1, le=200, description="返回条数"),
     ):
@@ -219,7 +223,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── Trace 查询（按 task_id 或 command_id）────────────────────────────
 
-    @router.get("/api/v1/observability/trace/{trace_id}")
+    @router.get("/api/v1/observability/trace/{trace_id}", dependencies=_AUTH)
     async def trace_lookup(
         trace_id: str,
         id_type: Optional[str] = Query(
@@ -280,7 +284,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── Trace 统计 ────────────────────────────────────────────────────────
 
-    @router.get("/api/v1/observability/stats")
+    @router.get("/api/v1/observability/stats", dependencies=_AUTH)
     async def observability_stats():
         """
         GatewayTraceStore 整体统计信息。
@@ -297,7 +301,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.warning("observability/stats error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
 
-    @router.get("/api/v1/observability/maintenance")
+    @router.get("/api/v1/observability/maintenance", dependencies=_AUTH)
     async def observability_maintenance():
         """周期维护循环的状态：每项清扫的周期、跑了几次、最近一次的结果与错误。
 
@@ -316,7 +320,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     # 谁也不会去查。真跑一遍就发现了这个盲区:轮次确实进了服务端,但从外面无法
     # 判断这两条链路到底有没有在工作。
 
-    @router.get("/api/v1/observability/context-layer")
+    @router.get("/api/v1/observability/context-layer", dependencies=_AUTH)
     async def observability_context_layer(session_id: str = ""):
         """预判式上下文注入(ACI)命中统计 + 指定会话的焦点栈快照。
 
@@ -430,7 +434,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         )
 
-    @router.get("/api/v1/observability/nats")
+    @router.get("/api/v1/observability/nats", dependencies=_AUTH)
     async def nats_observability():
         """NATS Bus + MasterBrain topology and statistics (Phase E).
 
@@ -471,7 +475,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
         return JSONResponse(result)
 
-    @router.get("/api/v1/observability/bus-events")
+    @router.get("/api/v1/observability/bus-events", dependencies=_AUTH)
     async def bus_events(limit: int = Query(default=50, le=200)):
         """Recent NATS bus events from the EventBus (Phase E).
 
@@ -494,7 +498,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── PR-7: Unified Execution Observability (read-only, additive) ──────
 
-    @router.get("/api/v1/observability/execution/schema")
+    @router.get("/api/v1/observability/execution/schema", dependencies=_AUTH)
     async def execution_schema_meta():
         """Return metadata describing the unified execution observability schema.
 
@@ -540,7 +544,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.warning("execution/schema error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
 
-    @router.get("/api/v1/observability/execution/recent-events")
+    @router.get("/api/v1/observability/execution/recent-events", dependencies=_AUTH)
     async def execution_recent_events(
         limit: int = Query(default=20, ge=1, le=100, description="返回条数"),
     ):
@@ -582,7 +586,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.warning("execution/recent-events error: %s", exc)
             return JSONResponse({"error": str(exc), "count": 0, "events": []})
 
-    @router.get("/api/v1/observability/execution/trace/{trace_id}")
+    @router.get("/api/v1/observability/execution/trace/{trace_id}", dependencies=_AUTH)
     async def execution_trace_lookup(
         trace_id: str,
     ):
@@ -657,7 +661,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── PR-10: Orchestration Review Surface ───────────────────────────────
 
-    @router.get("/api/v1/observability/orchestration-review")
+    @router.get("/api/v1/observability/orchestration-review", dependencies=_AUTH)
     async def orchestration_review():
         """Return the V2 orchestration operator review snapshot (PR-10).
 
@@ -710,7 +714,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=200,
             )
 
-    @router.get("/api/v1/observability/execution-legibility")
+    @router.get("/api/v1/observability/execution-legibility", dependencies=_AUTH)
     async def execution_legibility():
         """Return a compact legibility summary for the current execution state (PR-10).
 
@@ -794,7 +798,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
     # ── PR-4: Execution evidence state (canonical truth observability) ──────
 
-    @router.get("/api/v1/observability/execution/evidence-state")
+    @router.get("/api/v1/observability/execution/evidence-state", dependencies=_AUTH)
     async def execution_evidence_state(
         device_id: Optional[str] = Query(default=None, description="Filter by device_id"),
         max_entries: int = Query(default=50, ge=1, le=200, description="Max entries to return"),
@@ -839,7 +843,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=200,
             )
 
-    @router.get("/api/v1/observability/execution/evidence-state/{task_id}")
+    @router.get("/api/v1/observability/execution/evidence-state/{task_id}", dependencies=_AUTH)
     async def execution_evidence_state_for_task(task_id: str):
         """
         Canonical execution evidence state for a specific task_id (PR-4).

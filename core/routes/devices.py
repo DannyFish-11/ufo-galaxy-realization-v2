@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 from core.auth import require_auth
 from core.command_router import get_command_router
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
-from core.routes._self_register import await_owner, register_directly
+from core.routes._self_register import await_owner, from_owner, register_directly, stored_identity
 from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
 from core.routes._shared import (
     _save_registered_devices,
@@ -126,7 +126,7 @@ def _is_device_registered_canonical(device_id: str) -> bool:
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create device management routes router."""
     router = APIRouter()
-    # 自注册 / 状态 / 心跳免 API 鉴权(设备手里没有共享令牌);给设备下命令、删设备、传文件、扫局域网是主人的操作,要令牌。
+    # 自注册 / 状态 / 心跳免 API 鉴权(设备手里没有共享令牌);读设备清单与细节、下命令、删设备、传文件、扫局域网要令牌。
     _OPERATOR = [Depends(require_auth)]
     # 通用参与方接入（非安卓设备注册 / 提交任务 / 进 mesh）与设备注册同属免 API 鉴权组，自带入口令牌校验。
     from core.routes import participants as _participants
@@ -160,10 +160,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "last_seen": datetime.now().isoformat(),
             "status": "registered",
         }
-        # 陌生设备不带凭据来登记:先记成候选,等主人在面板上同意(见 core/routes/_self_register.py)
+        # 陌生设备不带凭据来登记:先记成候选,等主人在面板上同意;成员不带凭据来重新登记:只认已登记的资料
+        # (名字 / 类型 / 能力),请求里报的不改它 —— 设备号谁都能冒用(见 core/routes/_self_register.py)
         known = _is_device_registered_canonical(req.device_id)
         if not register_directly(req.device_id, authorization, known=known):
             return await_owner(device_info)
+        if not from_owner(authorization):
+            device_info = stored_identity(req.device_id, device_info)
 
         # ── SSOT: 写入 UnifiedDeviceManager ──────────────────────────────
         try:
@@ -207,8 +210,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "action": "register",
                     "device_id": req.device_id,
                     "device_name": device_info["device_name"],
-                    "device_type": req.device_type,
-                    "capabilities": req.capabilities,
+                    "device_type": device_info["device_type"],
+                    "capabilities": device_info["capabilities"],
                 },
             )
             if synced_caps:
@@ -279,7 +282,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         return {"success": True}
 
-    @router.get("/api/v1/devices")
+    @router.get("/api/v1/devices", dependencies=_OPERATOR)
     async def list_devices():
         """列出所有设备（SSOT: UDM，兼容缓存补充遗留条目）"""
         try:
@@ -322,7 +325,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             tailnet = {"configured": False, "reason": "error", "tailnet_only": []}
         return JSONResponse({"devices": devices, "total": len(devices), "tailnet": tailnet})
 
-    @router.get("/api/v1/devices/discover")
+    @router.get("/api/v1/devices/discover", dependencies=_OPERATOR)
     async def discover_devices(
         device_type: Optional[str] = Query(None, description="按设备类型过滤（如 android_phone）"),
         capability: Optional[str] = Query(None, description="按能力过滤（如 GUI_SCREENSHOT）"),
@@ -390,7 +393,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # ─────── PR-30: Local Runtime Host summaries (must be before {device_id}) ─────────
 
-    @router.get("/api/v1/devices/runtime-hosts")
+    @router.get("/api/v1/devices/runtime-hosts", dependencies=_OPERATOR)
     async def list_runtime_hosts():
         """PR-30: Return Local Runtime Host summaries for all known devices.
 
@@ -448,7 +451,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         return JSONResponse({"runtime_hosts": results, "count": len(results)})
 
-    @router.get("/api/v1/devices/{device_id}")
+    @router.get("/api/v1/devices/{device_id}", dependencies=_OPERATOR)
     async def get_device(device_id: str):
         """获取设备详情（优先从 UDM 读取）"""
         # 优先从 UDM (SSOT) 读取
@@ -478,7 +481,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         raise HTTPException(status_code=404, detail="设备未找到")
 
-    @router.get("/api/v1/devices/{device_id}/runtime-contract")
+    @router.get("/api/v1/devices/{device_id}/runtime-contract", dependencies=_OPERATOR)
     async def get_device_runtime_contract(device_id: str):
         """PR-29: Return the canonical Registered Runtime Device contract.
 
@@ -851,7 +854,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # ─────── 设备遥测 ─────────
 
-    @router.get("/api/v1/devices/{device_id}/telemetry")
+    @router.get("/api/v1/devices/{device_id}/telemetry", dependencies=_OPERATOR)
     async def get_device_telemetry(device_id: str):
         """获取设备遥测数据（CPU、内存、电量等）
 
@@ -944,7 +947,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             }
         )
 
-    @router.get("/api/v1/devices/{device_id}/runtime-host")
+    @router.get("/api/v1/devices/{device_id}/runtime-host", dependencies=_OPERATOR)
     async def get_device_runtime_host(device_id: str):
         """PR-30: Return the Local Runtime Host contract for a single device.
 

@@ -412,7 +412,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception as _e:  # noqa: BLE001 — 音频依赖缺失时不应拖垮整个 API 层
         logger.warning("OpenAI 兼容音频路由加载失败（可选）: %s", _e)
 
-    # Exempt routes: no auth required (health, docs, observability, device registration)
+    # 不带令牌能读的只有健康检查、/metrics、客户端配置发现、OAuth 登录(逐条见 tests/test_lan_cannot_drive_*)
     # 修复路由遮蔽:devices 路由含 catch-all GET /api/v1/devices/{device_id}
     # (正则 ^/api/v1/devices/[^/]+$),而 Starlette 按注册顺序、无特异性排序匹配。
     # 若单段字面量端点(/devices/health、/readiness、/cross-device-ready、
@@ -421,13 +421,13 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes.device_health import router as _device_health_router
 
-        router.include_router(_device_health_router)
+        router.include_router(_device_health_router, dependencies=_auth_deps)
     except Exception as _e:  # noqa: BLE001
         logger.warning("设备健康路由加载失败（可选）: %s", _e)
     try:
         from core.routes import device_readiness as _device_readiness_routes
 
-        router.include_router(_device_readiness_routes.create_router())
+        router.include_router(_device_readiness_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:  # noqa: BLE001
         logger.warning("设备就绪路由加载失败（可选）: %s", _e)
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
@@ -438,14 +438,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(monitoring.create_router(service_manager=service_manager, config=config))
     # Batch PR-4: health and diagnostics domain modules (extracted from monitoring)
     router.include_router(health_routes.create_router(service_manager=service_manager, config=config))
-    router.include_router(diagnostics_routes.create_router(service_manager=service_manager, config=config))
+    router.include_router(diagnostics_routes.create_router(service_manager, config), dependencies=_auth_deps)
     # 内部诊断索引：各子系统写好了却读不出来的快照（只读，需鉴权，面板不画）
     from core.routes import internals as internals_routes
 
     router.include_router(internals_routes.create_router(), dependencies=_auth_deps)
     router.include_router(hybrid.create_router(service_manager, config), dependencies=_auth_deps)
-    router.include_router(cost.create_router(service_manager=service_manager, config=config))
-    router.include_router(channels.create_router(service_manager=service_manager, config=config))
+    router.include_router(cost.create_router(service_manager, config), dependencies=_auth_deps)
+    router.include_router(channels.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(compat.create_router(service_manager=service_manager, config=config))
     router.include_router(twin.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(sessions.create_router(service_manager, config), dependencies=_auth_deps)
@@ -457,9 +457,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(user_providers_route.router, dependencies=_auth_deps)  # 「我的模型服务」(用户自加的端点)
     router.include_router(ui_act_route.router, dependencies=_auth_deps)
     router.include_router(computer_use_route.router, dependencies=_auth_deps)
-    router.include_router(modality_route.router)
+    router.include_router(modality_route.router, dependencies=_auth_deps)
     if protocols:
-        router.include_router(protocols.create_router(service_manager=service_manager, config=config))
+        router.include_router(protocols.create_router(service_manager, config), dependencies=_auth_deps)
     if observability:
         router.include_router(observability.create_router(service_manager=service_manager, config=config))
     if c_stage:
@@ -487,7 +487,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import audit as audit_routes
 
-        router.include_router(audit_routes.create_router())
+        router.include_router(audit_routes.create_router(), dependencies=_auth_deps)  # 审计轨迹里有对话原文
     except Exception as _e:
         logger.warning("审计路由加载失败（可选）: %s", _e)
     try:
@@ -516,7 +516,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import operational_readiness as operational_readiness_routes
 
-        router.include_router(operational_readiness_routes.create_router())
+        router.include_router(operational_readiness_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("可操作就绪面路由加载失败（可选）: %s", _e)
 
@@ -526,7 +526,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import contracts as contracts_routes
 
-        router.include_router(contracts_routes.create_router())
+        router.include_router(contracts_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("合约路由加载失败（可选）: %s", _e)
 
@@ -536,7 +536,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import capabilities_runtime as cap_runtime_routes
 
-        router.include_router(cap_runtime_routes.create_router())
+        router.include_router(cap_runtime_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("能力运行时路由加载失败（可选）: %s", _e)
 
@@ -568,7 +568,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import existence as existence_routes
 
-        router.include_router(existence_routes.create_router())
+        router.include_router(existence_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("存在面路由加载失败（可选）: %s", _e)
 
@@ -600,7 +600,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # Both must stay in sync; see windows_client/main.py StatusPoller.run().
     _SSE_KEEPALIVE_SECS = 30.0
 
-    @router.get("/api/v1/stream")
+    @router.get("/api/v1/stream", dependencies=_auth_deps)  # 推的是设备 / 能力的实时变化
     async def sse_stream(request: Request):
         """SSE 实时事件流 — 推送 capability_update / device_update / agent_update / mcp_update / skill_update。
 
@@ -1156,12 +1156,12 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             raise ValueError(
                                 f"Image too large: {len(image_data)} bytes exceeds {MAX_IMAGE_SIZE} bytes limit"
                             )
-                        from core.vision_pipeline import VisionPipeline
+                        from core.vision_pipeline import get_vision_pipeline
 
-                        pipeline = VisionPipeline()
+                        # understand() 是协程:原先丢进线程池拿回来的是没 await 的协程对象,发不出去
                         result = await asyncio.wait_for(
-                            asyncio.get_running_loop().run_in_executor(
-                                None, pipeline.understand, image_data, mode, instruction
+                            get_vision_pipeline().understand(
+                                image_base64=image_b64, mode=mode, task_context=instruction
                             ),
                             timeout=30.0,
                         )
@@ -1169,8 +1169,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             {
                                 "type": "ocr_result",
                                 "request_id": data.get("request_id", ""),
-                                "success": True,
-                                "result": result,
+                                "success": result.success,
+                                "result": result.to_dict(),
                             }
                         )
                     except (ValueError, binascii.Error) as e:

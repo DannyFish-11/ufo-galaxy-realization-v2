@@ -2105,7 +2105,6 @@ class GalaxyUnified:
                     ("WebSocket", f"ws://localhost:{port}/ws", "ok"),
                     ("API 文档", f"http://localhost:{port}/docs", "ok"),
                     ("健康检查", "/health", "ok"),
-                    ("状态面板", f"http://localhost:{port}/api/v1/projection/operability-contract", "ok"),
                 ],
             )
         except Exception as exc:

@@ -208,13 +208,13 @@ class ConfigStore:
         """
         with self._lock:
             if not self._secrets_path.exists():
-                logger.debug("%s not found. Copy runtime/secrets.example.env there to configure.", self._secrets_path)
+                logger.debug("secrets.env not found. Copy runtime/secrets.example.env to the data dir to configure.")
                 return {}
             try:
                 with open(self._secrets_path, encoding="utf-8") as fh:
                     return self._parse_dotenv(fh.read())
             except OSError as exc:
-                logger.error("Cannot read %s: %s", self._secrets_path, exc)
+                logger.error("Cannot read secrets.env: %s", exc)
                 return {}
 
     # ------------------------------------------------------------------
@@ -284,7 +284,7 @@ class ConfigStore:
             try:
                 # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
                 atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
-                logger.info("%s updated (key: %s)", self._secrets_path, key)
+                logger.info("secrets.env updated (key: %s)", key)
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
 
@@ -315,7 +315,7 @@ class ConfigStore:
             try:
                 # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
                 atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
-                logger.info("%s updated (key removed: %s)", self._secrets_path, key)
+                logger.info("secrets.env updated (key removed: %s)", key)
                 return True
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
@@ -347,7 +347,7 @@ class ConfigStore:
             try:
                 # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
                 atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
-                logger.info("%s written (%d keys total)", self._secrets_path, len(existing))
+                logger.info("secrets.env written (%d keys total)", len(existing))
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
 

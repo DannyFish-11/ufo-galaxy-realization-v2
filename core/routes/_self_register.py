@@ -21,14 +21,43 @@ logger = logging.getLogger("Galaxy.API.SelfRegister")
 
 def register_directly(device_id: str, authorization: Optional[str], *, known: bool) -> bool:
     """这次登记能不能直接进 UDM。"""
-    if known:
-        return True
+    return known or from_owner(authorization)
+
+
+def from_owner(authorization: Optional[str]) -> bool:
+    """请求是不是主人发的:鉴权关着(主人选择信任局域网),或带着主人的令牌(面板、脚本)。"""
     from core.auth import is_auth_enabled, verify_api_token
 
     if not is_auth_enabled():
         return True
     parts = (authorization or "").split()
     return len(parts) == 2 and parts[0].lower() == "bearer" and verify_api_token(parts[1])
+
+
+def stored_identity(device_id: str, fallback: Dict[str, Any]) -> Dict[str, Any]:
+    """成员不带凭据来重新登记时用的资料:**已登记的**名字 / 类型 / 能力,不是请求里报的。
+
+    设备号就写在请求体里,谁都能冒用:原先重新登记会拿请求里报的覆盖 UDM 与能力表 —— 冒用一台手机的设备号就能
+    改它的名字、给它添上没有的能力。改资料要主人的令牌(或在面板上移除后重新接入)。"""
+    from core.unified.device_manager import get_unified_device_manager
+
+    keep: Dict[str, Any] = {}
+    try:
+        d = get_unified_device_manager().get_device(device_id)
+    except Exception:  # noqa: BLE001 — 查不到就按兼容缓存
+        d = None
+    if d is not None:
+        keep = {
+            "device_name": d.device_name,
+            "device_type": d.aip_device_type or getattr(d.device_type, "value", str(d.device_type)),
+            "capabilities": list(d.capabilities or []),
+        }
+    else:
+        from core.routes._shared import registered_devices
+
+        old = registered_devices.get(device_id) or {}
+        keep = {k: old[k] for k in ("device_name", "device_type", "capabilities") if k in old}
+    return {**fallback, **keep}
 
 
 def await_owner(device_info: Dict[str, Any]) -> JSONResponse:

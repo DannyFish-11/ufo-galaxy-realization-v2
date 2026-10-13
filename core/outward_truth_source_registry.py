@@ -444,7 +444,7 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
         is_durable=False,
         is_projection=False,
         requires_revalidation_after_restart=True,
-        evidence_chain=("core.android_continuity_recovery_state_router.get_recovery_state_router",),
+        evidence_chain=("core.android_continuity_recovery_state_router.route_android_recovery_state",),
         explanation=(
             "Android continuity recovery state tracks whether the Android session "
             "is in a live, recovering, or degraded state. Recovery is partial when "

@@ -3504,14 +3504,13 @@ class MultiLLMRouter:
             )
 
         resp = await self.chat(messages, **kwargs)
+        if getattr(resp, "provider", "") == "none":
+            # 一个模型都没调通:content 是给人看的降级说明,不是模型的回答。原先拿它去 json.loads,
+            # 每次记一条「chat_json 解析失败」,调用方再记一条「schema 校验失败」—— 两条都把原因说错了。
+            # 没模型这件事 chat() 已经说过(每 10 分钟一次)。
+            return {"error": resp.content, "unavailable": True}
         # 尝试从响应中提取 JSON
-        text = resp.content.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
+        text = resp.content.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
         try:
             return json.loads(text.strip())
         except (json.JSONDecodeError, ValueError) as e:
