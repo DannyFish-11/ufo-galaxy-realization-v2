@@ -103,3 +103,23 @@ def test_serialization_failure_leaves_target_untouched(tmp_path):
     assert target.read_text(encoding="utf-8") == before, "失败写入污染了目标文件"
     leftovers = [p.name for p in tmp_path.iterdir() if p.name != "keep.json"]
     assert leftovers == [], f"失败路径残留临时文件: {leftovers}"
+
+
+def test_serialization_fails_before_any_temp_file_exists(tmp_path, monkeypatch):
+    """序列化在建临时文件**之前**做完。
+
+    反过来的话,描述符还没交给 ``fdopen`` 就抛了、一直开着;POSIX 删得掉开着的文件,Windows 删不掉 ——
+    上一条用例只在 Windows 上红(windows-smoke)。这一条在哪个平台都能把这个顺序钉住。
+    """
+    import tempfile
+
+    made = []
+    real = tempfile.mkstemp
+    monkeypatch.setattr(tempfile, "mkstemp", lambda *a, **k: made.append(1) or real(*a, **k))
+
+    class Unserializable:
+        pass
+
+    with pytest.raises(TypeError):
+        atomic_write_json(tmp_path / "x.json", {"bad": Unserializable()})
+    assert made == [], "序列化失败之前就建了临时文件"
