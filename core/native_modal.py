@@ -30,6 +30,8 @@ import os
 import threading
 from typing import Any, Callable, List, Optional
 
+from core.derived_env import export as export_env
+
 logger = logging.getLogger("Galaxy.NativeModal")
 
 # MiniCPM-o 官方 server 客户端侧所需依赖(pip 名)。模型权重与重型推理栈由 server
@@ -227,7 +229,7 @@ def activate(backend: Optional[MiniCPMNativeBackend] = None, *, background: bool
                     register_native_speech_backend(lambda text, source="": be.speak(text, source))
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("注册原生说后端失败(仍可只用原生听): %s", exc)
-                os.environ["GALAXY_NATIVE_AUDIO"] = "1"
+                export_env("GALAXY_NATIVE_AUDIO", "1")  # 本次在线,不是人配的(不进 .env)
                 _active_backend = be
                 committed = True
             if committed:

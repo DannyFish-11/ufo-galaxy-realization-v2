@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 
 # .env 文件路径
 ENV_FILE = Path(__file__).parent.parent.parent / ".env"
+from core.derived_env import value_to_save  # noqa: E402
 from core.routes.config_bundles import (  # noqa: E402
     CONFIG_BUNDLES,
     bundle_writes,
@@ -600,6 +601,8 @@ def _write_env_file_with(overrides=None, exclude=None):
         if key in _exclude:
             continue  # 已入 canonical 密钥库,不再明文写 .env
         value = _overrides.get(key, os.environ.get(key, meta["default"]))
+        if key not in _overrides:  # 进程这一次自己推出来的值(--backend、内置总线地址、临时降档……)不钉进 .env
+            value = value_to_save(key, str(value))
         if not str(value).strip():
             continue  # 空值不落盘——否则会把代码默认值顶掉
         if key in _TUNING and key not in _overrides and key not in os.environ:

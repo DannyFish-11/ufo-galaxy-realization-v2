@@ -24,8 +24,10 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+
+from core.auth import require_auth
 
 logger = logging.getLogger("Galaxy.API.DeviceHealth")
 
@@ -131,7 +133,7 @@ async def get_device_health(device_id: str) -> DeviceHealthResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/{device_id}/unquarantine", response_model=UnquarantineResponse)
+@router.post("/{device_id}/unquarantine", response_model=UnquarantineResponse, dependencies=[Depends(require_auth)])
 async def unquarantine_device(device_id: str) -> UnquarantineResponse:
     """Lift quarantine on *device_id*.
 

@@ -367,9 +367,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
     router = APIRouter()
 
-    # 敏感的几组挂这道鉴权(require_auth 自己看 is_auth_enabled)。对话、设置、自加模型、操作电脑、记忆、会话、代码生成
-    # 以前没挂,后端又听 0.0.0.0:同一局域网不带令牌就能改 .env(含关鉴权)、点这台电脑的界面;网关自己的 /api/v1/chat 本来
-    # 就要鉴权,只是同路径这条先注册先命中。面板与主进程每个请求都带本机令牌(electron/main.js),不受影响。
+    # 除健康检查 / 文档 / 可观测 / 设备自注册外都挂这道鉴权(require_auth 自己看 is_auth_enabled):后端听 0.0.0.0,原先对话、
+    # 设置、操作电脑、批准、给设备下命令、记忆卡片都没挂,同一局域网不带令牌就能用(网关 app 有全局 Bearer 中间件,这个 app 没有)。
+    # 面板与主进程每个请求都带本机令牌(electron/main.js),不受影响。各组为什么挂、没挂的为什么不挂:tests/test_lan_cannot_*。
     _auth_deps = [Depends(require_auth)]
 
     # 按原始顺序 include 各子路由，确保行为与重构前完全一致
@@ -431,10 +431,10 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception as _e:  # noqa: BLE001
         logger.warning("设备就绪路由加载失败（可选）: %s", _e)
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
-    router.include_router(vision.create_router(service_manager=service_manager, config=config))
+    router.include_router(vision.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(perception_routes.create_router(service_manager=service_manager, config=config))
     router.include_router(chat.create_router(service_manager, config), dependencies=_auth_deps)
-    router.include_router(ai.create_router(service_manager=service_manager, config=config))
+    router.include_router(ai.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(monitoring.create_router(service_manager=service_manager, config=config))
     # Batch PR-4: health and diagnostics domain modules (extracted from monitoring)
     router.include_router(health_routes.create_router(service_manager=service_manager, config=config))
@@ -443,17 +443,17 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import internals as internals_routes
 
     router.include_router(internals_routes.create_router(), dependencies=_auth_deps)
-    router.include_router(hybrid.create_router(service_manager=service_manager, config=config))
+    router.include_router(hybrid.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(cost.create_router(service_manager=service_manager, config=config))
     router.include_router(channels.create_router(service_manager=service_manager, config=config))
     router.include_router(compat.create_router(service_manager=service_manager, config=config))
-    router.include_router(twin.create_router(service_manager=service_manager, config=config))
+    router.include_router(twin.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(sessions.create_router(service_manager, config), dependencies=_auth_deps)
     # OAuth 连接器的浏览器导航端点(authorize 弹窗 / IdP 回调)——不可能携带
     # Bearer 头,必须免鉴权,否则生产模式下授权流程结构性死锁。见 nodes.py。
     router.include_router(nodes.create_oauth_router())
     router.include_router(config_route.router, dependencies=_auth_deps)
-    router.include_router(models_route.router)
+    router.include_router(models_route.router, dependencies=_auth_deps)
     router.include_router(user_providers_route.router, dependencies=_auth_deps)  # 「我的模型服务」(用户自加的端点)
     router.include_router(ui_act_route.router, dependencies=_auth_deps)
     router.include_router(computer_use_route.router, dependencies=_auth_deps)
@@ -465,7 +465,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     if c_stage:
         router.include_router(c_stage.create_router(service_manager, config), dependencies=_auth_deps)
     if github_routes:
-        router.include_router(github_routes.create_router(service_manager=service_manager, config=config))
+        router.include_router(github_routes.create_router(service_manager, config), dependencies=_auth_deps)
     if opencode_routes:
         router.include_router(opencode_routes.create_router(service_manager, config), dependencies=_auth_deps)
 
@@ -493,14 +493,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import approvals as approvals_routes
 
-        router.include_router(approvals_routes.create_router())
+        router.include_router(approvals_routes.create_router(), dependencies=_auth_deps)  # 人在环的批准本身
     except Exception as _e:
         logger.warning("审批路由加载失败（可选）: %s", _e)
     # Control Plane Phase 4: security policy routes
     try:
         from core.routes import security_policy as security_policy_routes
 
-        router.include_router(security_policy_routes.create_router())
+        router.include_router(security_policy_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("安全策略路由加载失败（可选）: %s", _e)
     # Control Plane Phase 5 设备健康 & PR 设备就绪/参与路由已【提前】在 devices
@@ -509,7 +509,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import projection as projection_routes
 
-        router.include_router(projection_routes.create_router())
+        router.include_router(projection_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("投影路由加载失败（可选）: %s", _e)
     # PR1114 follow-up: unified operational readiness / clone-to-use acceptance surfaces
@@ -550,7 +550,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import operator as operator_routes
 
-        router.include_router(operator_routes.create_router())
+        router.include_router(operator_routes.create_router(), dependencies=_auth_deps)
     except Exception as _e:
         logger.warning("算子路由加载失败（可选）: %s", _e)
 
@@ -559,7 +559,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     try:
         from core.routes import panel as panel_routes
 
-        router.include_router(panel_routes.create_router())
+        router.include_router(panel_routes.create_router(), dependencies=_auth_deps)  # 含记忆卡片、对话主线
     except Exception as _e:
         logger.warning("统一面板路由加载失败（可选）: %s", _e)
 

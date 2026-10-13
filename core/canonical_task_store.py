@@ -138,8 +138,25 @@ def get_canonical_task_store_mode() -> str:
 # Tunables
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+_REPO_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _STORE_FILE = "canonical_tasks.jsonl"
+
+
+def _default_data_dir() -> str:
+    """随数据目录走(``GALAXY_DATA_DIR``);仓库 ``data/`` 下已有这份文件的(老装法)继续用。
+
+    原先写死仓库 ``data/``:容器里只有数据目录是卷,重建一次任务投影就没了;测试的数据目录指到临时目录也绕不开,
+    仓库里那份被测试写到了 16 MB。"""
+    from core.data_paths import data_path_or_legacy
+
+    return os.path.dirname(data_path_or_legacy(_STORE_FILE, os.path.join(_REPO_DATA_DIR, _STORE_FILE))) or "."
+
+
+_LOAD_TAIL_BYTES = 4 * 1024 * 1024
+"""启动填热层只读文件末尾这么多字节(约三千行,远多于 ``_DEFAULT_HOT_LIMIT``)。
+
+文件只追加,最新的投影都在末尾;热层本来就只留最新的那几百条。原先整份读(上限 32 MB):第一次建这个单例是在
+事件循环里(第一个任务登记时),真跑 16 MB 卡了循环 0.6 秒。更早的投影仍在冷层,``_scan_cold`` 照旧整份扫。"""
 _DEFAULT_HOT_LIMIT = 500
 """Records kept resident in memory.  Larger than task_memory's 200 because a
 CanonicalTask projection is the unit decisions ask about, not a summary line."""
@@ -327,7 +344,7 @@ class CanonicalTaskStore:
         hot_limit: int = _DEFAULT_HOT_LIMIT,
         ttl_seconds: float = 0.0,
     ) -> None:
-        self._data_dir = data_dir or _DEFAULT_DATA_DIR
+        self._data_dir = data_dir or _default_data_dir()
         try:
             os.makedirs(self._data_dir, exist_ok=True)
         except Exception as exc:  # noqa: BLE001 — an unwritable dir must not break startup
@@ -601,14 +618,17 @@ class CanonicalTaskStore:
         except Exception as exc:  # noqa: BLE001 — compaction failure must not break writes
             logger.debug("CanonicalTaskStore compaction skipped: %s", exc)
 
-    def _iter_file_records(self):
-        """Yield records from the file oldest-first, skipping malformed lines."""
+    def _iter_file_records(self, tail_bytes: int = 0):
+        """Yield records from the file oldest-first, skipping malformed lines (only the last ``tail_bytes`` if set)."""
         if not os.path.exists(self._file):
             return
         try:
-            with open(self._file, "r", encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
+            with open(self._file, "rb") as fh:
+                if tail_bytes and os.path.getsize(self._file) > tail_bytes:
+                    fh.seek(-tail_bytes, os.SEEK_END)
+                    fh.readline()  # 落在半行里:丢掉这半行
+                for raw in fh:
+                    line = raw.decode("utf-8", errors="replace").strip()
                     if not line:
                         continue
                     try:
@@ -627,7 +647,7 @@ class CanonicalTaskStore:
         """
         now = time.time()
         latest: Dict[str, PersistedTaskRecord] = {}
-        for rec in self._iter_file_records():
+        for rec in self._iter_file_records(tail_bytes=_LOAD_TAIL_BYTES):
             if not rec.task_id:
                 continue
             if self._ttl_seconds > 0 and (now - rec.updated_at) > self._ttl_seconds:

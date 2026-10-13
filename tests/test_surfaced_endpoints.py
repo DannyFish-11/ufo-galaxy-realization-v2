@@ -100,7 +100,7 @@ def test_write_endpoints_reject_anonymous_callers(client, method, path, body):
 
 class TestAgentIdentity:
     def test_goals_and_values_round_trip(self, client):
-        base = client.get("/api/v1/agent/identity").json()
+        base = client.get("/api/v1/agent/identity", headers=AUTH).json()
         r = client.post("/api/v1/agent/identity/goals", json={"text": "学会新设备"}, headers=AUTH)
         assert "学会新设备" in r.json()["long_term_goals"]
         r = client.delete("/api/v1/agent/identity/goals", params={"text": "学会新设备"}, headers=AUTH)
@@ -112,7 +112,7 @@ class TestAgentIdentity:
 
 class TestTwin:
     def test_status_lists_connected_devices_and_batch_ops_work(self, client):
-        assert "connected_devices" in client.get("/api/v1/twin/status").json()
+        assert "connected_devices" in client.get("/api/v1/twin/status", headers=AUTH).json()
         assert client.post("/api/v1/twin/couple-all", headers=AUTH).json()["success"] is True
         assert client.post("/api/v1/twin/decouple-all", headers=AUTH).json()["success"] is True
 
@@ -126,15 +126,15 @@ class TestGovernanceOps:
 
 class TestGithub:
     def test_install_check_rejects_bad_url_without_installing(self, client):
-        r = client.get("/api/v1/github/install/check", params={"url": "not-a-url"})
+        r = client.get("/api/v1/github/install/check", params={"url": "not-a-url"}, headers=AUTH)
         assert r.status_code == 400 and r.json()["success"] is False
 
     def test_install_check_accepts_valid_url(self, client):
-        r = client.get("/api/v1/github/install/check", params={"url": "https://github.com/owner/repo"})
+        r = client.get("/api/v1/github/install/check", params={"url": "https://github.com/owner/repo"}, headers=AUTH)
         assert r.json().get("dry_run") is True or r.status_code == 400  # allowlist may refuse; never installs
 
     def test_tools_listing(self, client):
-        assert isinstance(client.get("/api/v1/github/tools").json()["tools"], list)
+        assert isinstance(client.get("/api/v1/github/tools", headers=AUTH).json()["tools"], list)
 
 
 class TestSmallReads:
@@ -160,7 +160,7 @@ class TestSmallReads:
         assert client.get("/api/perception/desktop/continuous", headers=AUTH).json()["success"] is True
 
     def test_hybrid_modes(self, client):
-        modes = {m["mode"]: m for m in client.get("/api/v1/hybrid/modes").json()["modes"]}
+        modes = {m["mode"]: m for m in client.get("/api/v1/hybrid/modes", headers=AUTH).json()["modes"]}
         assert modes["parallel_race"]["concurrent"] is True
         assert modes["sequential_degrade"]["degrade_chain"] is True
         assert all(m["description"] for m in modes.values())
@@ -176,7 +176,7 @@ class TestSmallReads:
 
 class TestToolPermissions:
     def test_add_policy_shows_up_and_bad_body_is_422(self, client):
-        before = client.get("/api/v1/security/tool-permissions").json()["policies"]
+        before = client.get("/api/v1/security/tool-permissions", headers=AUTH).json()["policies"]
         r = client.post(
             "/api/v1/security/tool-permissions",
             json={"tool_pattern": "mcp__x__*", "risk_level": "dangerous", "requires_confirmation": True},

@@ -21,6 +21,10 @@ def data_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("GALAXY_API_TOKENS", raising=False)
     monkeypatch.delenv("GALAXY_REQUIRE_API_TOKEN", raising=False)
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+    # 鉴权配置一个进程只核验一次(那一次顺带签本机令牌);前面的用例核验过,这里就不会再往新的数据目录里签
+    from core import auth
+
+    monkeypatch.setattr(auth, "_auth_config_validated", False)
     return tmp_path
 
 

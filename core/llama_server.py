@@ -61,6 +61,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from core.derived_env import export as export_env
+
 logger = logging.getLogger("Galaxy.LlamaServer")
 
 #: 二进制名。自建的 llama.cpp 与各发行版包主要用第一个;后两个是历史/裁剪构建的
@@ -491,10 +493,10 @@ class LlamaServerProcess:
         据此把推理位落到它身上(见 ``_local_by_slot``)。
         """
         exported: List[str] = []
-        os.environ["GALAXY_LOCAL_OPENAI_URL"] = f"http://127.0.0.1:{self.port}/v1"
+        export_env("GALAXY_LOCAL_OPENAI_URL", f"http://127.0.0.1:{self.port}/v1")  # 这次起在哪,不进 .env
         exported.append("GALAXY_LOCAL_OPENAI_URL")
         if served_tag:
-            os.environ["GALAXY_LOCAL_OPENAI_SERVES"] = served_tag
+            export_env("GALAXY_LOCAL_OPENAI_SERVES", served_tag)
             exported.append("GALAXY_LOCAL_OPENAI_SERVES")
         self._env_exported = tuple(exported)
 

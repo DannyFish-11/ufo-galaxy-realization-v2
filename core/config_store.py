@@ -2,10 +2,12 @@
 core/config_store.py — Galaxy Unified Local Configuration Store  (PR-3)
 ========================================================================
 
-Low-level I/O layer for the two canonical local persistence targets:
+Low-level I/O layer for the two canonical local persistence targets
+(both under the data directory, see :func:`default_config_path`; an install that
+already has them under ``runtime/`` keeps using those):
 
-- ``runtime/config.json``  — non-secret system configuration
-- ``runtime/secrets.env``  — secret values (API keys, tokens)
+- ``config.json``  — non-secret system configuration
+- ``secrets.env``  — secret values (API keys, tokens)
 
 Public API
 ----------
@@ -47,12 +49,13 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from core.atomic_json import atomic_write_json
+from core.atomic_json import atomic_write_json, atomic_write_text
 from core.config_schema import (
     SECRET_KEYS,
     ConfigDefaults,
     classify_key,
 )
+from core.data_paths import state_file
 
 logger = logging.getLogger("Galaxy.ConfigStore")
 
@@ -67,8 +70,21 @@ CONFIG_STORE_AUTHORITY: str = "ConfigStore"
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).parent.parent
-_DEFAULT_CONFIG_PATH = _REPO_ROOT / "runtime" / "config.json"
-_DEFAULT_SECRETS_PATH = _REPO_ROOT / "runtime" / "secrets.env"
+
+
+# 两份文件随数据目录(``GALAXY_DATA_DIR``)走:容器里只有数据目录是卷,写在源码树 ``runtime/`` 下的 Key
+# 重建镜像就没了。``runtime/`` 里已经有的(老装法)继续用 —— 旧位置的 Key 一个都不能丢。
+# ``main.py::load_env_files_into_environ`` 在 import 任何 core 之前就要读密钥库,它照抄同一条规则,
+# 两边由 ``tests/test_config_and_secrets_follow_the_data_dir.py`` 核对。
+def default_config_path(root: Optional[Path] = None) -> Path:
+    """``config.json``:数据目录下的;数据目录下没有、``<仓库>/runtime/`` 下有时用旧的。"""
+    return Path(state_file("config.json", str(Path(root or _REPO_ROOT) / "runtime")))
+
+
+def default_secrets_path(root: Optional[Path] = None) -> Path:
+    """``secrets.env``:同 :func:`default_config_path`。"""
+    return Path(state_file("secrets.env", str(Path(root or _REPO_ROOT) / "runtime")))
+
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -99,9 +115,9 @@ class ConfigStore:
     Parameters
     ----------
     config_path:
-        Path to ``runtime/config.json``.  Defaults to the canonical path.
+        Path to ``config.json``.  Defaults to :func:`default_config_path`.
     secrets_path:
-        Path to ``runtime/secrets.env``.  Defaults to the canonical path.
+        Path to ``secrets.env``.  Defaults to :func:`default_secrets_path`.
     """
 
     def __init__(
@@ -109,8 +125,8 @@ class ConfigStore:
         config_path: Optional[Path] = None,
         secrets_path: Optional[Path] = None,
     ) -> None:
-        self._config_path = Path(config_path) if config_path else _DEFAULT_CONFIG_PATH
-        self._secrets_path = Path(secrets_path) if secrets_path else _DEFAULT_SECRETS_PATH
+        self._config_path = Path(config_path) if config_path else default_config_path()
+        self._secrets_path = Path(secrets_path) if secrets_path else default_secrets_path()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -165,23 +181,23 @@ class ConfigStore:
         with self._lock:
             if not self._config_path.exists():
                 logger.debug(
-                    "runtime/config.json not found; returning defaults. "
-                    "Copy runtime/config.example.json to runtime/config.json to customise."
+                    "%s not found; returning defaults. Copy runtime/config.example.json there to customise.",
+                    self._config_path,
                 )
                 return ConfigDefaults.as_dict()
             try:
                 with open(self._config_path, encoding="utf-8") as fh:
                     data = json.load(fh)
                 if not isinstance(data, dict):
-                    logger.warning("runtime/config.json is not a JSON object; returning defaults.")
+                    logger.warning("%s is not a JSON object; returning defaults.", self._config_path)
                     return ConfigDefaults.as_dict()
                 # Strip any internal comment keys that start with "_"
                 return {k: v for k, v in data.items() if not k.startswith("_")}
             except json.JSONDecodeError as exc:
-                logger.error("runtime/config.json is malformed JSON: %s", exc)
+                logger.error("%s is malformed JSON: %s", self._config_path, exc)
                 return ConfigDefaults.as_dict()
             except OSError as exc:
-                logger.error("Cannot read runtime/config.json: %s", exc)
+                logger.error("Cannot read %s: %s", self._config_path, exc)
                 return {}
 
     def read_secrets(self) -> Dict[str, str]:
@@ -192,16 +208,13 @@ class ConfigStore:
         """
         with self._lock:
             if not self._secrets_path.exists():
-                logger.debug(
-                    "runtime/secrets.env not found. "
-                    "Copy runtime/secrets.example.env to runtime/secrets.env to configure."
-                )
+                logger.debug("%s not found. Copy runtime/secrets.example.env there to configure.", self._secrets_path)
                 return {}
             try:
                 with open(self._secrets_path, encoding="utf-8") as fh:
                     return self._parse_dotenv(fh.read())
             except OSError as exc:
-                logger.error("Cannot read runtime/secrets.env: %s", exc)
+                logger.error("Cannot read %s: %s", self._secrets_path, exc)
                 return {}
 
     # ------------------------------------------------------------------
@@ -232,9 +245,9 @@ class ConfigStore:
                 # 原子写。trailing_newline 保留原本 fh.write("\n") 的行为,
                 # 使落盘内容字节级不变 —— 改造持久化不该顺手改文件内容。
                 atomic_write_json(self._config_path, data, trailing_newline=True)
-                logger.info("runtime/config.json written (%d top-level keys)", len(data))
+                logger.info("%s written (%d top-level keys)", self._config_path, len(data))
             except OSError as exc:
-                raise ConfigStoreError(f"Cannot write runtime/config.json: {exc}") from exc
+                raise ConfigStoreError(f"Cannot write {self._config_path}: {exc}") from exc
 
     def write_secret(self, key: str, value: str) -> None:
         """
@@ -266,15 +279,14 @@ class ConfigStore:
                     pass
             existing[key] = value
             header = (
-                "runtime/secrets.env — Galaxy secret configuration.\n"
-                "DO NOT commit this file. Managed by core.config_store."
+                "secrets.env — Galaxy secret configuration.\n" "DO NOT commit this file. Managed by core.config_store."
             )
             try:
-                with open(self._secrets_path, "w", encoding="utf-8") as fh:
-                    fh.write(self._render_dotenv(existing, header=header))
-                logger.info("runtime/secrets.env updated (key: %s)", key)
+                # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
+                atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
+                logger.info("%s updated (key: %s)", self._secrets_path, key)
             except OSError as exc:
-                raise ConfigStoreError(f"Cannot write runtime/secrets.env: {exc}") from exc
+                raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
 
     def delete_secret(self, key: str) -> bool:
         """从 ``runtime/secrets.env`` 中【删除】一个键,返回是否确实删掉了。
@@ -298,16 +310,15 @@ class ConfigStore:
                 return False
             existing.pop(key, None)
             header = (
-                "runtime/secrets.env — Galaxy secret configuration.\n"
-                "DO NOT commit this file. Managed by core.config_store."
+                "secrets.env — Galaxy secret configuration.\n" "DO NOT commit this file. Managed by core.config_store."
             )
             try:
-                with open(self._secrets_path, "w", encoding="utf-8") as fh:
-                    fh.write(self._render_dotenv(existing, header=header))
-                logger.info("runtime/secrets.env updated (key removed: %s)", key)
+                # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
+                atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
+                logger.info("%s updated (key removed: %s)", self._secrets_path, key)
                 return True
             except OSError as exc:
-                raise ConfigStoreError(f"Cannot write runtime/secrets.env: {exc}") from exc
+                raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
 
     def write_secrets(self, data: Dict[str, str]) -> None:
         """
@@ -331,15 +342,14 @@ class ConfigStore:
                     pass
             existing.update(data)
             header = (
-                "runtime/secrets.env — Galaxy secret configuration.\n"
-                "DO NOT commit this file. Managed by core.config_store."
+                "secrets.env — Galaxy secret configuration.\n" "DO NOT commit this file. Managed by core.config_store."
             )
             try:
-                with open(self._secrets_path, "w", encoding="utf-8") as fh:
-                    fh.write(self._render_dotenv(existing, header=header))
-                logger.info("runtime/secrets.env written (%d keys total)", len(existing))
+                # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
+                atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
+                logger.info("%s written (%d keys total)", self._secrets_path, len(existing))
             except OSError as exc:
-                raise ConfigStoreError(f"Cannot write runtime/secrets.env: {exc}") from exc
+                raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Effective merged view

@@ -606,11 +606,13 @@ class L4EnhancementLauncher:
 
 
 def _warm_routes(app) -> None:
-    """旁边线程里先生成一遍 OpenAPI:FastAPI 0.14x 在**第一个请求**时才在事件循环里给每条路由建校验
-    模型(连带一串 import)—— 所有者日志里启动时「事件循环被卡住 3.8 秒 —— 卡在 <frozen importlib…>」。
-    预热后第一个请求 0.7 秒 → 0.01 秒。失败不影响服务(第一个请求时照旧现建)。"""
+    """旁边线程里先生成一遍 OpenAPI(FastAPI 0.14x 在第一个请求时才在循环里给每条路由建校验模型,所有者日志卡 3.8 秒;
+    预热后第一个请求 0.7 → 0.01 秒),并先建好任务投影库(第一次建要读文件)。失败不影响服务。"""
     try:
         app.openapi()
+        from core.canonical_task_store import get_canonical_task_store
+
+        get_canonical_task_store()
     except Exception as exc:  # noqa: BLE001
         logger.debug("路由预热没做成(不影响服务): %s", exc)
 

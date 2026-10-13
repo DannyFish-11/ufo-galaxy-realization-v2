@@ -30,11 +30,12 @@ import logging
 import warnings
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core import upper_ports
+from core.auth import require_auth
 from core.routes._shared import connection_manager, node_status_cache, registered_devices
 
 logger = logging.getLogger("Galaxy.API")
@@ -257,7 +258,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         return _legacy("/api/devices/heartbeat", {"success": True, "device_id": req.device_id})
 
-    @router.post("/api/devices/unregister")
+    @router.post("/api/devices/unregister", dependencies=[Depends(require_auth)])  # 注销别的设备要令牌
     async def legacy_unregister_device(req: _LegacyUnregisterRequest):
         """
         Legacy unregister shim — marks device offline (safe no-op if unknown).

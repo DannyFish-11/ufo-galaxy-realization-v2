@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.auth import require_auth
 
 
 def create_router() -> APIRouter:
@@ -52,7 +54,7 @@ def register(router: APIRouter) -> None:
             raise HTTPException(status_code=404, detail=f"隔离队列里没有 {key}")
         return row
 
-    @router.post("/api/v1/results/isolated/{key}/retry")
+    @router.post("/api/v1/results/isolated/{key}/retry", dependencies=[Depends(require_auth)])
     async def retry_isolated(key: str) -> Dict[str, Any]:
         from core.truth_chain_recovery import get_truth_chain_recovery
 
@@ -61,7 +63,7 @@ def register(router: APIRouter) -> None:
             raise HTTPException(status_code=404, detail=f"隔离队列里没有 {key}")
         return row
 
-    @router.post("/api/v1/results/isolated/{key}/dismiss")
+    @router.post("/api/v1/results/isolated/{key}/dismiss", dependencies=[Depends(require_auth)])
     async def dismiss_isolated(key: str) -> Dict[str, Any]:
         from core.truth_chain_recovery import get_truth_chain_recovery
 

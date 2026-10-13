@@ -698,15 +698,49 @@ python scripts/check_assessment_freshness.py
   入库前剥掉（用已有的 `strip_appended_annotations`，用户自己写的方括号不动）。
 - **启动卡 0.5 秒**：新的卡顿记录当场说出是 uvicorn 在循环里 `import uvicorn.protocols.http.auto` —— `config.load()` 挪到线程里先做。
 
+**第 3 轮（2026-10-13）：** 接第 2 轮的待办；独立数据目录真跑两遍（改之前、改之后），从容器的局域网地址不带令牌把整个
+权威 API 层逐条走一遍。修了：
+
+- **面板存的 Key 随数据目录走**：`config.json` / `secrets.env` 原先写死源码树 `runtime/` —— 容器里只有数据目录是卷，重建一次
+  面板上填的各家 Key 就没了。四处读者一起改（`ConfigStore`、`config_preflight`、`launcher/env_check`、`main.py` 启动第一步），
+  `runtime/` 下已有的继续用（一个 Key 都不丢）；`main.py` 那一步跑在 import core 之前，只能照抄规则，测试逐个场景核对两边指向同一份
+  （只有老位置 / 两处都有 / 数据目录只写在 `.env` 里 / `.env` 里写成注释或留空）。自建 tailnet 的 `deploy/headscale/init.sh` 往
+  密钥库里写网关 Key，也按同一条规则。`data/.gitignore` 挡住 `*.env`。顺带两处：
+  - 启动自检「`.env` 比模板少了哪些键」一直没把密钥库算进去 —— `from core.unified.config_store import …`，没有这个模块，异常被吞。
+  - 真跑：`secrets.env` 建出来是 **0644**（同机任何账户都能读各家 Key），而且 `open(..., "w")` 先清空再写，写到一半进程被杀就全没了。
+    改成与 JSON 状态文件同一个原子写（`atomic_write_text`，0600）。
+- **同一局域网不带令牌还能调的写接口（74 条）**：把权威 API 层 499 条路由逐条展开看依赖，没挂鉴权的写接口 74 条，里面有
+  `POST /api/v1/agents/linux/servers/{id}/execute`（在登记过的服务器上跑命令）与 `/api/v1/agents/sandbox/execute` —— 这两组是
+  从网关并过来的，在网关 app 上它们在全局 Bearer 中间件后面，而后端这个 app 没有那层中间件；还有人在环的「批准」本身、给手机
+  下命令、派发任务、对话记忆卡片（读）。现在除健康检查 / 文档 / 可观测 / 设备自注册外都要令牌，不带令牌能调的写接口只剩
+  设备自注册与心跳、参与方（端点自己核验入口令牌）、配对、OAuth 登录；`test_every_write_needs_a_token_unless_listed` 逐条扫，
+  新加的写接口忘了挂鉴权会红。真跑：局域网地址不带令牌全部 401，带本机令牌照常；面板与 Electron 主进程每个请求本来就带令牌。
+- **「保存设置」把进程这一次推出来的值钉进 `.env`**：真跑（`--backend -v`）在面板上存一个 Key，`.env` 里多出
+  `GALAXY_SKIP_ELECTRON=1`（之后正常启动也不开桌面窗口）、`GALAXY_VERBOSE=1`、`GALAXY_NATS_URL=nats://localhost:4222`（非空就算
+  「要用总线」，本地模式也起 NATS —— 第 2 轮待办里「本地模式 `nats_enabled: true`」也有这一份）。保存是把 `os.environ` 整份写回，
+  分不清人配的和进程运行中写进去的。现在后者经 `core.derived_env.export` 写，保存时换回人配的（没配过就不写）：`--backend` /
+  `-v` / `--model`、内置总线地址、本机推理服务地址、B 档原生在线、按硬件临时降的档（注释写着只影响本进程，钉进去就是永久降档）。
+- **每条消息整份重写 `sessions.json`，在事件循环里**：本机 20 个会话 11 ms 一次，30 个满会话 2.6 MB 76 ms 一次，一轮对话三次
+  （`ensure_session` 每轮都写一次）。现在在工作线程里写、调用方照旧等写完；快照与写入同一把锁（后来的一定写后来的状态）；
+  不缩进，`atomic_write_json` 改成先 `json.dumps` 再写 —— `json.dump` 不论缩进都走纯 Python 编码器，`dumps` 在不缩进时走 C 实现，
+  快几倍，产出逐字节相同。
+- **任务投影库写死仓库 `data/`、第一次建卡循环 0.6 秒**：`canonical_tasks.jsonl` 用 `os.path.join(…, "data")` 拼路径，上一轮那条
+  「core 里不许写死 data/」的扫描没认出来 —— 容器重建就丢，测试也绕不开（仓库里那份被测试写到了 16 MB）。改为随数据目录走（已有的
+  继续用）；热层只要最新的五百条，启动只读文件末尾 4 MB，并在启动时旁边线程里先建好。
+- **测试隔离**：预检用例在别的用例核验过鉴权配置之后就不再签本机令牌、资源表用例撞上别的用例留在拓扑图单例里的 MagicMock、
+  卡顿记录用例在机器忙时采到调用间隙 —— 三条只在特定顺序 / 负载下红，各自修掉。
+
+**要所有者定的（第 3 轮）：**
+
+- `POST /api/v1/devices/register` / `status` / `{id}/heartbeat` 与旧的 `/api/devices/register|heartbeat` **不带任何凭据**就能登记
+  一台设备（`api_routes` 里写明「设备自注册免鉴权」）：同一局域网谁都能登记一台假设备、接到派过去的任务。要不要改成参与方那套
+  入口令牌校验？改了，直接走 REST 注册、手里没有令牌的旧客户端会注册不上（安卓走 WS，有带内认证，不受影响）。
+
 **下一轮待办：**
 
-- `runtime/config.json` 与 `runtime/secrets.env` 随数据目录走（`main.py` 启动第一行、`launcher/env_check`、`config_preflight`、
-  `ConfigStore` 四处读者要一起改，并且旧位置的 Key 一个都不能丢）。
-- 每条对话消息整份重写 `sessions.json`（本机 33 个会话、201 条消息约 10 ms 一次，一轮对话写两三次，在事件循环里）。
-- 剩下没挂鉴权、但看起来只读的几组（设备、视觉、AI、监控、诊断、混合执行、孪生、成本、渠道）逐个核对。
+- 不带令牌能读的接口还有约 100 条（可观测组的上下文层、设备列表、运行时投影……）：逐条看哪些带对话内容或设备细节。
 - 照片里那次 11.5 秒卡顿的真凶：等更新后的卡顿记录（会带上同一时刻别的线程在 import 什么）。
-- `mode-status` 在本地模式下 `nats_enabled: true`：查实是旧模板生成的 `.env` 明写了 `GALAXY_NATS_ENABLED=true`（写了就听它的），不是代码问题；
-  早先生成的 `.env` 删掉那一行即可。
+- 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`（旧模板生成）：写了就听它的，删掉那一行即可回到「本地模式不起 NATS」。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
