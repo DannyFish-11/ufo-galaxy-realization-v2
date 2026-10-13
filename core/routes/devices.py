@@ -26,13 +26,14 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core.auth import require_auth
 from core.command_router import get_command_router
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
+from core.routes._self_register import await_owner, register_directly
 from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
 from core.routes._shared import (
     _save_registered_devices,
@@ -133,7 +134,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router.include_router(_participants.create_router())
 
     @router.post("/api/v1/devices/register")
-    async def register_device(req: DeviceRegisterRequest):
+    async def register_device(req: DeviceRegisterRequest, authorization: Optional[str] = Header(None)):
         """注册设备
 
         事实源（SSOT）: UnifiedDeviceManager (UDM)。
@@ -159,6 +160,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "last_seen": datetime.now().isoformat(),
             "status": "registered",
         }
+        # 陌生设备不带凭据来登记:先记成候选,等主人在面板上同意(见 core/routes/_self_register.py)
+        known = _is_device_registered_canonical(req.device_id)
+        if not register_directly(req.device_id, authorization, known=known):
+            return await_owner(device_info)
 
         # ── SSOT: 写入 UnifiedDeviceManager ──────────────────────────────
         try:

@@ -25,6 +25,8 @@ import {
   installGitHubAddon,
   uninstallGitHubAddon,
   fetchIsolatedResults,
+  fetchPendingDevices,
+  decidePendingDevice,
   retryIsolatedResult,
   dismissIsolatedResult,
   fetchBundles,
@@ -54,6 +56,7 @@ import { createIsland } from './ui/island';
 import { createThread } from './ui/thread';
 import { createRehearsal, mergeStep } from './ui/rehearsal';
 import { createIsolatedResults } from './ui/isolated_results';
+import { createPendingDevices } from './ui/pending_devices';
 import { createDock } from './ui/dock';
 import { createWired, deriveWired } from './ui/wired';
 import { createSettings } from './ui/settings';
@@ -192,6 +195,10 @@ function mount(host: HTMLElement): void {
     onDismiss: (key) => void dismissIsolated(key),
   });
 
+  const pendingDevices = createPendingDevices({
+    onDecide: (id, accept) => void decidePending(id, accept),
+  });
+
   const settings = createSettings({
     onClose: () => store.patch({ settingsOpen: false }),
     onSave: (changes) => void applyConfig(changes),
@@ -199,7 +206,8 @@ function mount(host: HTMLElement): void {
     // 出现了就是要人看的。然后是模型服务商(各家 Key)、我的模型服务(自定义端点)、
     // GitHub 项目:后三者都是"接一个外面的东西进来",而填各家的 Key 是更多人来这一页
     // 要办的那件事 —— 所以它在自定义端点前面。
-    topSections: [isolatedResults.root, vendors.root, userProviders.root, githubAddons.root],
+    // 等你同意的设备排最前:有设备在门口等着,同样是只在有事时才出现。
+    topSections: [pendingDevices.root, isolatedResults.root, vendors.root, userProviders.root, githubAddons.root],
   });
 
   // 姿态帧一秒来好几次,每一帧都会走到下面的 render()。这几块的输入(轮次、配置、端点…)
@@ -213,6 +221,7 @@ function mount(host: HTMLElement): void {
   const renderEndpoints = memoRender(userProviders.render);
   const renderAddons = memoRender(githubAddons.render);
   const renderIsolated = memoRender(isolatedResults.render);
+  const renderPendingDevices = memoRender(pendingDevices.render);
 
   main.append(island.root, thread.root, rehearsal.root, dock.root, settings.root);
   panel.append(deck.root, main);
@@ -280,6 +289,7 @@ function mount(host: HTMLElement): void {
       s.githubAddonNotice,
     );
     renderIsolated(s.isolated, s.isolatedPending, s.isolatedBusy, s.isolatedNotice);
+    renderPendingDevices(s.pendingDevices, s.pendingDevicesBusy, s.pendingDevicesNotice);
   }
 
   store.subscribe(render);
@@ -317,7 +327,7 @@ function mount(host: HTMLElement): void {
     // 端点和插件各走各的路,和那 335 个键一起重新拉 —— 同样的理由:别拿缓存
     // 让人对着过期的状态做决定(Key 会过期、网关会挂、插件会被别处卸掉)。
     // 安装策略也在这一趟里:GITHUB_ALLOWLIST 可能刚刚就在上面那批键里被改了。
-    await Promise.all([loadEndpoints(), loadVendors(), loadAddons(), loadIsolated()]);
+    await Promise.all([loadEndpoints(), loadVendors(), loadAddons(), loadIsolated(), loadPendingDevices()]);
   }
 
   // ── 模型服务商(各家 Key) ──────────────────────────────────────────────────
@@ -420,6 +430,35 @@ function mount(host: HTMLElement): void {
           : '这次重试没发出去（后端没接上）';
     await loadIsolated();
     store.patch({ isolatedBusy: false, isolatedNotice: notice });
+  }
+
+  // ── 等你同意的设备 ─────────────────────────────────────────────────────────
+
+  /** 拉一次。拉不到就**留 null**,别把「后端没接上」说成「没有设备在等」。 */
+  async function loadPendingDevices(): Promise<void> {
+    const rows = await fetchPendingDevices(BASE);
+    store.patch({ pendingDevices: rows });
+  }
+  // 开机就拉一次:候选落盘在后端,设置页没打开过不代表门口没人。
+  void loadPendingDevices();
+
+  /** 接入 / 不接入。结论照后端说的写,不先把卡片抹掉。 */
+  async function decidePending(candidateId: string, accept: boolean): Promise<void> {
+    const who = store.state.pendingDevices?.find((d) => d.candidateId === candidateId)?.name ?? '这台设备';
+    store.patch({ pendingDevicesBusy: true, pendingDevicesNotice: '' });
+    const ok = await decidePendingDevice(BASE, candidateId, accept);
+    const notice =
+      ok === true
+        ? accept
+          ? `「${who}」接进来了；它下次来登记时就能用`
+          : `「${who}」不接入；它以后再来登记也会被拒`
+        : ok === false
+          ? accept
+            ? `「${who}」没接成 —— 原因见卡片`
+            : '没标记上'
+          : '这次没发出去（后端没接上）';
+    await loadPendingDevices();
+    store.patch({ pendingDevicesBusy: false, pendingDevicesNotice: notice });
   }
 
   /** 知道了:标记已看过。记录后端保留着,只是不再列出来。 */
@@ -901,6 +940,7 @@ function mount(host: HTMLElement): void {
     if (again || s.vendors === null) void loadVendors();
     if (again || s.githubAddons === null) void loadAddons();
     if (again) void loadIsolated();
+    void loadPendingDevices(); // 面板每次重新出现都拉:设备可能刚在门口登记过
     if ((again || !historySettled) && !s.chatBusy && s.drawn < 0) void restoreOnce();
   }
 

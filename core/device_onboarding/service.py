@@ -223,14 +223,17 @@ class OnboardingService:
         self.candidates.put(cid, cand)
 
         if existing is None and cand.present and cand.status == CandidateStatus.NEW.value:
-            if cand.join_path and _auto_allows(cand.human_step):
+            path_obj = get_join_path(cand.join_path) if cand.join_path else None
+            if path_obj is not None and not path_obj.never_auto and _auto_allows(cand.human_step):
                 self._schedule(self.join(cid))
             else:
                 # 第一次见到、又不会自动接入的:在对话里说一声,不等人来问。
                 from core.device_onboarding.conversation import note_new_candidate
 
                 note_new_candidate(
-                    cand.name, _HUMAN_STEP_WORDS.get(cand.human_step if cand.join_path else "", "还没有现成的接入方式")
+                    cand.name,
+                    getattr(path_obj, "announce", "")
+                    or _HUMAN_STEP_WORDS.get(cand.human_step if cand.join_path else "", "还没有现成的接入方式"),
                 )
         return cand
 

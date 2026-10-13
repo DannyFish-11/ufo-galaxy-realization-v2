@@ -244,7 +244,9 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 ## API 端点索引
 
 ### 设备管理
-- `POST /api/v1/devices/register` - 注册设备
+- `POST /api/v1/devices/register` - 注册设备。**陌生设备不带凭据来登记不直接进 UDM**：记成接入候选（`core/routes/_self_register.py` →
+  `core/device_onboarding/join_paths.py::SelfRegisteredPath`，回 202），主人在面板「全部设置」最上面「等你同意的设备」点「接入」才写进去；
+  鉴权关着、带主人令牌、本来就是成员的照旧直接登记。旧的 `/api/devices/register` 同一条规则
 - `GET /api/v1/devices` - 列出设备
 - `GET /api/v1/devices/discover` - 发现设备
 - `DELETE /api/v1/devices/{id}` - 注销设备

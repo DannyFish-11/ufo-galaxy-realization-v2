@@ -29,8 +29,9 @@ Routes added
 import logging
 import warnings
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -105,7 +106,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(payload, headers=headers)
 
     @router.post("/api/devices/register")
-    async def legacy_register_device(req: _LegacyRegisterRequest):
+    async def legacy_register_device(req: _LegacyRegisterRequest, authorization: Optional[str] = Header(None)):
         """
         Legacy registration shim — delegates to /api/v1/devices/register logic.
 
@@ -125,6 +126,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "last_seen": datetime.now().isoformat(),
             "status": "registered",
         }
+        # 陌生设备不带凭据来登记:先记成候选,等主人在面板上同意(与新登记口同一条规则,见 _self_register.py)
+        from core.routes._self_register import await_owner, register_directly
+        from core.routes.devices import _is_device_registered_canonical
+
+        if not register_directly(req.device_id, authorization, known=_is_device_registered_canonical(req.device_id)):
+            return await_owner(device_info)
 
         # PR5: SSOT write-through — legacy endpoint now delegates to UDM
         try:

@@ -1537,6 +1537,88 @@ export async function dismissIsolatedResult(base: string, key: string): Promise<
   }
 }
 
+// ── 等你同意的设备(自己从 REST 来登记的) ─────────────────────────────────────
+//
+// 后端:core/routes/_self_register.py + core/device_onboarding/join_paths.py::SelfRegisteredPath。
+// 陌生设备不带凭据来登记,后端不写设备表,只记成接入候选;这里点「接入」就是那一下确认。
+// 读的是接入平面的总览,只挑这一类 —— 要配网码、凭据的那几类候选在对话里办。
+
+export interface PendingDevice {
+  readonly candidateId: string;
+  readonly deviceId: string;
+  readonly name: string;
+  readonly deviceType: string;
+  readonly address: string;
+  readonly firstSeen: number;
+  /** 上一次接入没成的原因(空 = 没试过或没出错) */
+  readonly error: string;
+}
+
+/** 接入路径名,与 SelfRegisteredPath.name 一致 */
+const SELF_REGISTERED = 'self_registered';
+
+function readPendingDevice(raw: unknown): PendingDevice | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o['join_path'] !== SELF_REGISTERED) return null;
+  if (o['status'] === 'joined' || o['status'] === 'ignored') return null;
+  const id = typeof o['candidate_id'] === 'string' ? o['candidate_id'] : '';
+  if (!id) return null;
+  const props = (o['properties'] ?? {}) as Record<string, unknown>;
+  const reg = (props['registration'] ?? {}) as Record<string, unknown>;
+  const ident = (o['identity'] ?? {}) as Record<string, unknown>;
+  const addrs = Array.isArray(o['addresses']) ? (o['addresses'] as unknown[]) : [];
+  return {
+    candidateId: id,
+    deviceId: typeof ident['device_id'] === 'string' ? ident['device_id'] : String(o['key'] ?? ''),
+    name: typeof o['name'] === 'string' ? o['name'] : id,
+    deviceType: typeof reg['device_type'] === 'string' ? reg['device_type'] : '',
+    address: typeof addrs[0] === 'string' ? addrs[0] : '',
+    firstSeen: typeof o['first_seen'] === 'number' ? o['first_seen'] : 0,
+    error: typeof o['error'] === 'string' ? o['error'] : '',
+  };
+}
+
+/** 拉等你同意的设备。拉不到返回 null —— 与「一台都没有」是两件事。 */
+export async function fetchPendingDevices(base: string): Promise<readonly PendingDevice[] | null> {
+  try {
+    const resp = await fetchT(base + '/api/v1/onboarding/overview', { headers: { Accept: 'application/json' } }, READ_MS);
+    if (!resp.ok) {
+      console.error('[hud] 拉等待接入的设备失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['enabled'] === false) return [];
+    const rows = Array.isArray(body['candidates']) ? (body['candidates'] as unknown[]) : [];
+    return rows.map(readPendingDevice).filter((x): x is PendingDevice => x !== null);
+  } catch (err) {
+    console.error('[hud] 拉等待接入的设备失败:', err);
+    return null;
+  }
+}
+
+/** 接入 / 不接入。返回后端给的结论:true = 办成了;false = 后端说没成;null = 请求本身没发出去。 */
+export async function decidePendingDevice(
+  base: string,
+  candidateId: string,
+  accept: boolean,
+): Promise<boolean | null> {
+  try {
+    const url = base + '/api/v1/onboarding/candidates/' + encodeURIComponent(candidateId) + (accept ? '/join' : '/ignore');
+    const resp = await fetchT(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: accept ? JSON.stringify({ inputs: {} }) : undefined,
+    }, WRITE_MS);
+    if (!resp.ok) return resp.status >= 500 ? null : false;
+    const body = (await resp.json()) as Record<string, unknown>;
+    return body['success'] === true;
+  } catch (err) {
+    console.error('[hud] 处理等待接入的设备失败:', err);
+    return null;
+  }
+}
+
 // ── GitHub 插件 ───────────────────────────────────────────────────────────────
 
 /**

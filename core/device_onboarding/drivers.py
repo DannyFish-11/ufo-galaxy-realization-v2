@@ -25,7 +25,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
-from core.device_onboarding.join_paths import JoinPath, register_join_path
+from core.device_onboarding.join_paths import SELF_REGISTER_SOURCE, JoinPath, register_join_path
 from core.device_onboarding.models import Candidate, HumanStep, JoinOutcome, MemberRecord
 from core.device_onboarding.store import JsonRecordStore
 from core.device_onboarding.taxonomy import classify_type
@@ -146,7 +146,8 @@ class KnownDriverPath(JoinPath):
     description = "这种设备以前接过,用同一个驱动"
 
     def can_handle(self, cand: Candidate) -> bool:
-        return get_driver_book().lookup(cand) is not None
+        # 自己找上门来登记的不归这里:这条可被 AUTO=approve 放行,那类只能等人(见 join_paths.SelfRegisteredPath)
+        return cand.source != SELF_REGISTER_SOURCE and get_driver_book().lookup(cand) is not None
 
     async def join(self, cand: Candidate, inputs: Dict[str, Any]) -> JoinOutcome:
         rec = get_driver_book().lookup(cand)

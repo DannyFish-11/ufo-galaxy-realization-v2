@@ -22,6 +22,7 @@ import type {
   GitHubAddon,
   GitHubAddonStatus,
   IsolatedResult,
+  PendingDevice,
   PanelSelf,
   UserProvider,
   VendorCheck,
@@ -157,6 +158,11 @@ export interface HudState {
   readonly isolatedBusy: boolean;
   /** 上一次「再试一次 / 知道了」的结论。空 = 没有要说的。 */
   readonly isolatedNotice: string;
+  /** 自己从 REST 来登记、等主人同意的设备。null = **还没拉到**(要说「后端没接上」),[] = 一台都没有(整段不画)。 */
+  readonly pendingDevices: readonly PendingDevice[] | null;
+  readonly pendingDevicesBusy: boolean;
+  /** 上一次「接入 / 不接入」的结论。空 = 没有要说的。 */
+  readonly pendingDevicesNotice: string;
 
   /** 右上那块岛展开了没有 */
   readonly islandOpen: boolean;
@@ -207,6 +213,9 @@ export const initialState: HudState = {
   isolatedPending: 0,
   isolatedBusy: false,
   isolatedNotice: '',
+  pendingDevices: null,
+  pendingDevicesBusy: false,
+  pendingDevicesNotice: '',
   islandOpen: false,
   popover: null,
 };

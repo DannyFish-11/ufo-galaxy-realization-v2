@@ -30,6 +30,10 @@ class JoinPath:
     name = "base"
     human_step = HumanStep.NONE
     description = ""
+    #: True = 不论 ``GALAXY_ONBOARDING_AUTO`` 怎么设,都等人(没有任何别的依据能替人点头时)
+    never_auto = False
+    #: 第一次见到这类候选时在对话里怎么说「要人做什么」;空 = 按 ``human_step`` 的通用说法
+    announce = ""
 
     def can_handle(self, cand: Candidate) -> bool:  # pragma: no cover - 抽象
         raise NotImplementedError
@@ -72,6 +76,48 @@ class GalaxyPeerPath(JoinPath):
             code=code,
             link=link,
             expires_at=expires_at,
+        )
+
+
+# ── 设备自己找上门来登记的(REST,不带任何凭据) ──────────────────────────────────
+
+#: 这类候选的来源名。``core/routes/devices.py`` 与 ``core/routes/compat.py`` 的登记口用它。
+SELF_REGISTER_SOURCE = "self_register"
+
+
+class SelfRegisteredPath(JoinPath):
+    """设备自己发 ``POST /api/v1/devices/register``(或旧的 ``/api/devices/register``)来登记,不带任何凭据。
+
+    原先这一步直接写进 UDM:同一局域网谁都能登记一台假设备,接到派过去的任务。所有者定:**在面板上确认**。
+    登记口只把它记成候选;人在面板上点「接入」就是那一下确认,接入服务按统一口径写 UDM、花名册、Mesh。
+    不受 ``GALAXY_ONBOARDING_AUTO=approve`` 放行 —— 来的请求没带任何凭据,除了人没有别的依据。
+    设备之后再来登记时已是成员,登记口走原来那条完整路径(能力表、兼容缓存、广播)。
+    """
+
+    name = "self_registered"
+    human_step = HumanStep.APPROVE
+    never_auto = True
+    announce = "它自己找上门来登记的;在面板「全部设置」最上面点「接入」就行,或者跟我说一声"
+    description = "设备自己来登记的,你同意了才接入"
+
+    def can_handle(self, cand: Candidate) -> bool:
+        return cand.source == SELF_REGISTER_SOURCE
+
+    async def join(self, cand: Candidate, inputs: Dict[str, Any]) -> JoinOutcome:
+        reg = dict(cand.properties.get("registration") or {})
+        device_id = str(cand.identity.get("device_id") or cand.key)
+        kept = ("device_id", "device_name", "device_type", "capabilities", "status", "registered_at", "last_seen")
+        return JoinOutcome.joined(
+            MemberRecord(
+                device_id=device_id,
+                device_name=str(reg.get("device_name") or cand.name or device_id),
+                device_type=str(reg.get("device_type") or "unknown"),
+                aip_device_type=cand.aip_device_type,
+                capabilities=list(reg.get("capabilities") or cand.capabilities),
+                metadata={k: v for k, v in reg.items() if k not in kept},
+                join_path=self.name,
+                candidate_id=cand.candidate_id,
+            )
         )
 
 
@@ -410,6 +456,7 @@ def list_join_paths() -> List[Dict[str, str]]:
 
 # 顺序即优先级:专门的在前,"经 HA"这条兜底在最后。
 for _p in (
+    SelfRegisteredPath(),
     MatterViaHAPath(),
     GalaxyPeerPath(),
     LocalBusPath(),
