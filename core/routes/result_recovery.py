@@ -5,7 +5,11 @@
   GET  /api/v1/results/isolated                  列出隔离项（``?include_dismissed=true`` 连已知悉的一起）
   GET  /api/v1/results/isolated/{key}            单条
   POST /api/v1/results/isolated/{key}/retry      再试一次（只重跑失败步骤；补齐了就移出队列）
-  POST /api/v1/results/isolated/{key}/dismiss    知悉（标 dismissed，记录保留）
+  POST /api/v1/results/isolated/{key}/dismiss    知悉（标 dismissed，记录保留）—— 判它没做成
+  POST /api/v1/results/isolated/{key}/accept     认可（标 accepted，记录保留）—— 人看过、认它做完了
+
+条目不止 ``task_result`` 一种（``kind`` 字段）：Computer Use「说做完了、独立核对没通过」的也在这里，
+它的「再试一次」在后台把没做完的部分交给闭环再做一次（回 ``state="retrying"``，做完更新这一条）。
 
 语义与存储全在 :mod:`core.truth_chain_recovery`，这里只搬运。只返回类型化字段，
 原始结果消息不经接口外露。挂在可观测性路由下（与面板用的那组一样免鉴权），面板
@@ -68,6 +72,15 @@ def register(router: APIRouter) -> None:
         from core.truth_chain_recovery import get_truth_chain_recovery
 
         row = get_truth_chain_recovery().dismiss(key)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"隔离队列里没有 {key}")
+        return row
+
+    @router.post("/api/v1/results/isolated/{key}/accept", dependencies=[Depends(require_auth)])
+    async def accept_isolated(key: str) -> Dict[str, Any]:
+        from core.truth_chain_recovery import get_truth_chain_recovery
+
+        row = get_truth_chain_recovery().accept(key)
         if row is None:
             raise HTTPException(status_code=404, detail=f"隔离队列里没有 {key}")
         return row

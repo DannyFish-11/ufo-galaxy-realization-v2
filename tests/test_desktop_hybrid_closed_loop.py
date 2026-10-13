@@ -55,6 +55,10 @@ class _RecordingDeviceControl(DeviceControlService):
         super().__init__()
         self.calls: List[str] = []
 
+    def get_device(self, device_id):  # type: ignore[override]
+        # 自动控制节点那条路只认登记过的设备(core.desktop_automation._make_pyautogui);这里扮一台登记过的
+        return object()
+
     async def click(self, device_id, x, y, clicks=1):  # type: ignore[override]
         self.calls.append(f"click:{x},{y},{clicks}")
         return {"success": True}
@@ -232,8 +236,11 @@ def test_computer_use_actions_go_through_the_arbiter(monkeypatch) -> None:
     assert out["success"] is True
 
 
-def test_computer_use_falls_back_to_node_dispatch_when_arbiter_cannot_act(monkeypatch) -> None:
-    """仲裁器结构级都不行时，既有节点派发必须仍然生效 —— 今天能跑的不得跑不了。"""
+def test_when_the_whole_desktop_chain_fails_the_step_is_not_dispatched_again(monkeypatch) -> None:
+    """桌面操作节点 Node_36 现在是整体里坐标级的一个后端:整体都没做成就是没做成,闭环不再另派一次节点。
+
+    原先仲裁器失败后会再单独调一次 Node_36 —— 同一步可能被做两遍(节点那次往往已经在坐标级试过)。
+    """
     dispatched: List[str] = []
 
     class _Arb:
@@ -241,8 +248,37 @@ def test_computer_use_falls_back_to_node_dispatch_when_arbiter_cannot_act(monkey
             class _R:
                 success = False
                 final_level = WinExecLevel.GUI
+                result = {"error": "坐标级两个后端都没做成", "backend": "desktop_node"}
 
             return _R()
+
+    async def _fake_invoke(node_id, action, params, **kw):
+        dispatched.append(f"{node_id}:{action}")
+
+    monkeypatch.setattr("core.windows_execution_arbiter.get_windows_arbiter", lambda: _Arb())
+    monkeypatch.setattr("core.node_invocation.invoke_node", _fake_invoke)
+
+    from core.computer_use_loop import _default_act
+
+    out = asyncio.run(_default_act("click", {"x": 1, "y": 2}, "Node_36_UIAWindows"))
+    assert dispatched == [], "整体失败后又单独派了一次节点"
+    assert out["success"] is False and "都没做成" in out["error"]
+    assert out["via"] == "arbiter:gui/desktop_node"
+
+
+def test_the_desktop_node_is_part_of_the_coordinate_level() -> None:
+    """「今天能跑的不得跑不了」:节点派发没有丢,只是挪进了整体的坐标级。"""
+    from core.desktop_automation import BACKENDS, DESKTOP_NODE, LEVEL_GUI
+
+    assert [b.name for b in BACKENDS if b.level == LEVEL_GUI] == ["pyautogui", "desktop_node"]
+    assert DESKTOP_NODE == "Node_36_UIAWindows"
+
+
+def test_only_an_unusable_arbiter_falls_back_to_node_dispatch(monkeypatch) -> None:
+    dispatched: List[str] = []
+
+    def _broken():
+        raise RuntimeError("仲裁器起不来")
 
     async def _fake_invoke(node_id, action, params, **kw):
         dispatched.append(f"{node_id}:{action}")
@@ -253,13 +289,13 @@ def test_computer_use_falls_back_to_node_dispatch_when_arbiter_cannot_act(monkey
 
         return _R()
 
-    monkeypatch.setattr("core.windows_execution_arbiter.get_windows_arbiter", lambda: _Arb())
+    monkeypatch.setattr("core.windows_execution_arbiter.get_windows_arbiter", _broken)
     monkeypatch.setattr("core.node_invocation.invoke_node", _fake_invoke)
 
     from core.computer_use_loop import _default_act
 
     out = asyncio.run(_default_act("click", {"x": 1, "y": 2}, "Node_36_UIAWindows"))
-    assert dispatched == ["Node_36_UIAWindows:click"], "仲裁器失败后没有回落既有派发路径"
+    assert dispatched == ["Node_36_UIAWindows:click"]
     assert out["success"] is True
 
 

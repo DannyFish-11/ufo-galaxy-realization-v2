@@ -17,7 +17,6 @@ Galaxy - 统一设备 Agent 管理器
 import asyncio
 import json
 import logging
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -290,104 +289,69 @@ class AndroidDeviceAgent(BaseDeviceAgent):
 
 
 # ============================================================================
-# Windows 设备 Agent（集成微软 UFO）
+# Windows 设备 Agent(动手经桌面自动化整体,含微软 UFO)
 # ============================================================================
+
+#: 视为「就是这台电脑」的主机写法。
+_LOCAL_HOSTS = frozenset({"", "localhost", "127.0.0.1", "::1"})
 
 
 class WindowsDeviceAgent(BaseDeviceAgent):
-    """Windows 设备 Agent - 深度集成微软 UFO"""
+    """Windows 设备 Agent —— 动手交给桌面自动化整体(:mod:`core.desktop_automation`,经 Windows 执行仲裁器)。
+
+    原先这里自己 ``import external.microsoft_ufo.automator.puppeteer.Puppeteer``(那个类不存在,从没导进来过),
+    导不进来就自己用 pyautogui 点 —— 与坐标级重复的第二份,而且**不管设备在哪儿都点在这台电脑上**。
+
+    现在:只对**这台电脑**动手(设备号是本机,或 ``metadata`` 里 ``host`` 写的是本机);别的 Windows 由对端用它
+    自己的这条链执行(``agent_deploy`` + ``agent_execute``),这里不隔着网络替它点,照实回原因。
+    """
 
     def __init__(self, device_info: DeviceInfo, ufo_path: str = None):
         super().__init__(device_info)
-        self.ufo_path = ufo_path
+        self.ufo_path = ufo_path  # 旧参数,不再用:微软 UFO 认的是装好的 ufo 包(见 core.desktop_automation)
         self.ufo_available = False
-        self.puppeteer = None
 
     async def connect(self) -> bool:
-        try:
-            # 尝试加载微软 UFO
-            await self._load_microsoft_ufo()
-            self.is_connected = True
-            self.device_info.apply_status(DeviceStatus.ONLINE)
-            logger.info(f"Windows device {self.device_id} connected")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to connect Windows device: {e}")
-            self.device_info.apply_status(DeviceStatus.ERROR)
-            return False
+        from core.desktop_automation import ufo_installed
 
-    async def _load_microsoft_ufo(self):
-        """加载微软 UFO 模块"""
-        try:
-            import sys
-
-            if self.ufo_path and os.path.isdir(self.ufo_path):
-                sys.path.insert(0, self.ufo_path)
-
-            # 尝试导入微软 UFO 的 Puppeteer
-            from external.microsoft_ufo.automator.puppeteer import Puppeteer
-
-            self.puppeteer = Puppeteer()
-            self.ufo_available = True
-            logger.info("Microsoft UFO loaded successfully")
-        except ImportError as e:
-            # 可选重量级依赖,缺失属预期(见 microsoft_ufo_integration 说明);
-            # 设备代理无 UFO 时按 ufo_available=False 正常降级,不是故障。
-            logger.info(
-                "Microsoft UFO 未安装(可选依赖,缺失属正常),设备代理降级运行。 [%s]",
-                e,
-            )
-            self.ufo_available = False
+        self.ufo_available = not ufo_installed()
+        self.is_connected = True
+        self.device_info.apply_status(DeviceStatus.ONLINE)
+        logger.info(f"Windows device {self.device_id} connected")
+        return True
 
     async def disconnect(self) -> bool:
         self.is_connected = False
         self.device_info.apply_status(DeviceStatus.OFFLINE)
         return True
 
+    def _is_this_machine(self) -> bool:
+        from core.routes.ui_act import targets_this_machine
+
+        host = str((self.device_info.metadata or {}).get("host", "")).strip().lower()
+        return targets_this_machine(self.device_id) or (bool(host) and host in _LOCAL_HOSTS)
+
     async def execute_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if not self.is_connected:
             return {"error": "Device not connected"}
+        if not self._is_this_machine():
+            return {
+                "success": False,
+                "error": "这台 Windows 不是本机:要由它自己执行(agent_deploy + agent_execute),这里不隔着网络替它点",
+            }
+        from core.windows_execution_arbiter import get_windows_arbiter
 
-        # 优先使用微软 UFO
-        if self.ufo_available and self.puppeteer:
-            return await self._execute_with_ufo(command, params)
-        else:
-            return await self._execute_with_fallback(command, params)
-
-    async def _execute_with_ufo(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """使用微软 UFO 执行命令"""
-        try:
-            if command == "click":
-                # 使用 UFO 的点击功能
-                result = self.puppeteer.click(params.get("x"), params.get("y"))
-                return {"success": True, "method": "microsoft_ufo", "result": result}
-            elif command == "type":
-                result = self.puppeteer.type_text(params.get("text"))
-                return {"success": True, "method": "microsoft_ufo", "result": result}
-            elif command == "find_element":
-                # 使用 UFO 的元素查找
-                result = self.puppeteer.find_element(params.get("selector"))
-                return {"success": True, "method": "microsoft_ufo", "result": result}
-            else:
-                return {"error": f"Unknown command: {command}"}
-        except Exception as e:
-            return {"error": str(e), "method": "microsoft_ufo"}
-
-    async def _execute_with_fallback(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """降级执行（不使用微软 UFO）"""
-        try:
-            import pyautogui
-
-            if command == "click":
-                pyautogui.click(params.get("x"), params.get("y"))
-                return {"success": True, "method": "pyautogui"}
-            elif command == "type":
-                pyautogui.typewrite(params.get("text", ""), interval=0.02)
-                return {"success": True, "method": "pyautogui"}
-            else:
-                return {"error": f"Unknown command: {command}"}
-        except Exception as e:
-            return {"error": str(e), "method": "fallback"}
+        res = await get_windows_arbiter().execute(
+            action=command, params=dict(params or {}), device_id="local", structural_only=True
+        )
+        detail = res.result or {}
+        out: Dict[str, Any] = {
+            "success": bool(res.success),
+            "method": f"{res.final_level.value}/{detail.get('backend', '')}".rstrip("/"),
+        }
+        if not res.success:
+            out["error"] = str(detail.get("error") or "桌面自动化各级都没做成")
+        return out
 
     async def get_status(self) -> Dict[str, Any]:
         return {

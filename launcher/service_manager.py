@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .bootstrap import PROJECT_ROOT, ServiceType, SystemConfig, SystemState
 
@@ -78,27 +78,34 @@ class ServiceManager:
                 env.update(extra_env)
             # 输出写文件，**不要**接管道：没人读的管道写满就把子进程卡死在 write() 里 —— Windows 上管道缓冲
             # 只有 4KB，一个节点的启动日志加上几十条访问日志就够了，表现是「节点无声无息地不响应了」。
-            # 创建进程在 Windows 上要上百毫秒（杀软逐个扫），放工作线程里做，不占事件循环。
-            log_path = PROJECT_ROOT / "logs" / "nodes" / f"{name}.log"
-            try:
-                log_path.parent.mkdir(parents=True, exist_ok=True)
-                out: Any = open(log_path, "wb")
-            except OSError as exc:
-                logger.debug("节点日志文件打不开，输出丢弃（%s）: %s", log_path, exc)
-                out, log_path = subprocess.DEVNULL, None
-            try:
-                process = await asyncio.to_thread(
-                    subprocess.Popen,
-                    command,
-                    cwd=str(cwd) if cwd else str(PROJECT_ROOT),
-                    stdout=out,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
-                    env=env,
-                )
-            finally:
-                if out is not subprocess.DEVNULL:
-                    out.close()  # 子进程已继承自己的句柄；父端不关会每次启动泄漏一个
+            # 创建进程在 Windows 上要上百毫秒（杀软逐个扫）；建日志目录、打开日志文件也是磁盘 I/O（真跑里机器忙时
+            # 这一步在循环里卡过 0.9 秒）—— 三样一起放工作线程里做，不占事件循环。
+
+            def _spawn() -> Tuple[subprocess.Popen, Optional[Path]]:
+                log_path: Optional[Path] = PROJECT_ROOT / "logs" / "nodes" / f"{name}.log"
+                try:
+                    log_path.parent.mkdir(parents=True, exist_ok=True)
+                    out: Any = open(log_path, "wb")
+                except OSError as exc:
+                    logger.debug("节点日志文件打不开，输出丢弃（%s）: %s", log_path, exc)
+                    out, log_path = subprocess.DEVNULL, None
+                try:
+                    return (
+                        subprocess.Popen(
+                            command,
+                            cwd=str(cwd) if cwd else str(PROJECT_ROOT),
+                            stdout=out,
+                            stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL,
+                            env=env,
+                        ),
+                        log_path,
+                    )
+                finally:
+                    if out is not subprocess.DEVNULL:
+                        out.close()  # 子进程已继承自己的句柄；父端不关会每次启动泄漏一个
+
+            process, log_path = await asyncio.to_thread(_spawn)
 
             service.log_path = log_path
             service.process = process

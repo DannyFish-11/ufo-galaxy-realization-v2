@@ -28,7 +28,7 @@ import {
   fetchPendingDevices,
   decidePendingDevice,
   retryIsolatedResult,
-  dismissIsolatedResult,
+  closeIsolatedResult,
   fetchBundles,
   fetchCardTurns,
   fetchCards,
@@ -106,6 +106,9 @@ function backendBase(): string {
   return location.origin;
 }
 const BASE = backendBase();
+
+/** 「没收口的结果」里有条目正在后台再做时,隔多久再拉一次清单(桌面操作再做一次一般几十秒) */
+const ISOLATED_RECHECK_MS = 5000;
 
 /**
  * 是不是跑在电脑上的桌面外壳里。**只有 Electron 的 preload 会挂 `galaxyShell`**,在浏览器里
@@ -192,7 +195,8 @@ function mount(host: HTMLElement): void {
 
   const isolatedResults = createIsolatedResults({
     onRetry: (key) => void retryIsolated(key),
-    onDismiss: (key) => void dismissIsolated(key),
+    onAccept: (key) => void closeIsolated(key, 'accept'),
+    onDismiss: (key) => void closeIsolated(key, 'dismiss'),
   });
 
   const pendingDevices = createPendingDevices({
@@ -407,6 +411,9 @@ function mount(host: HTMLElement): void {
 
   // ── 没收口的结果 ───────────────────────────────────────────────────────────
 
+  /** 有条目在后台再做(或还排着队等补跑)时,隔一会儿再拉一次,做完了卡片自己更新。只挂一个。 */
+  let isolatedRecheck: number | undefined;
+
   /** 拉一次隔离队列。拉不到就**留 null**,让那一段说「后端没接上」而不是「没有问题」。 */
   async function loadIsolated(): Promise<void> {
     const page = await fetchIsolatedResults(BASE);
@@ -414,6 +421,13 @@ function mount(host: HTMLElement): void {
       isolated: page ? page.items : null,
       isolatedPending: page ? page.pendingRetry : store.state.isolatedPending,
     });
+    const working = page !== null && (page.pendingRetry > 0 || page.items.some((r) => r.retrying));
+    if (working && isolatedRecheck === undefined) {
+      isolatedRecheck = window.setTimeout(() => {
+        isolatedRecheck = undefined;
+        void loadIsolated();
+      }, ISOLATED_RECHECK_MS);
+    }
   }
   // 开机就拉一次:隔离项落盘在后端,重启后还在 —— 设置页没打开过不代表没有。
   void loadIsolated();
@@ -425,9 +439,11 @@ function mount(host: HTMLElement): void {
     const notice =
       verdict === 'recovered'
         ? '这条补上了，已从清单里移出'
-        : verdict === 'isolated'
-          ? '又试了一次，还是没补上 —— 原因见卡片'
-          : '这次重试没发出去（后端没接上）';
+        : verdict === 'retrying'
+          ? '已在后台把没做完的部分再做一次，做完这里会更新'
+          : verdict === 'isolated'
+            ? '又试了一次，还是没补上 —— 原因见卡片'
+            : '这次重试没发出去（后端没接上）';
     await loadIsolated();
     store.patch({ isolatedBusy: false, isolatedNotice: notice });
   }
@@ -461,12 +477,13 @@ function mount(host: HTMLElement): void {
     store.patch({ pendingDevicesBusy: false, pendingDevicesNotice: notice });
   }
 
-  /** 知道了:标记已看过。记录后端保留着,只是不再列出来。 */
-  async function dismissIsolated(key: string): Promise<void> {
+  /** 认可(人认它做完了)/ 知道了(判它没做成)。记录后端保留着,只是不再列出来。 */
+  async function closeIsolated(key: string, how: 'accept' | 'dismiss'): Promise<void> {
     store.patch({ isolatedBusy: true, isolatedNotice: '' });
-    const ok = await dismissIsolatedResult(BASE, key);
+    const ok = await closeIsolatedResult(BASE, key, how);
     await loadIsolated();
-    store.patch({ isolatedBusy: false, isolatedNotice: ok ? '' : '没标记上（后端没接上）' });
+    const notice = !ok ? '没标记上（后端没接上）' : how === 'accept' ? '已认可：记下了「你看过、它做完了」' : '';
+    store.patch({ isolatedBusy: false, isolatedNotice: notice });
   }
 
   /**

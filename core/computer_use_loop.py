@@ -5,7 +5,7 @@
   - 感知(看屏幕):DesktopPerceptionStore 的屏幕帧已注入每次请求 ✅
   - 执行(动手):Node_36/45 的 pyautogui/UIA 动作节点真实可用 ✅
   - 【循环】(截屏 → 决策 → 动作 → 再截屏 → 直到完成):不存在——
-    grounded_planner 只规划一步,microsoft_ufo_integration.execute_task 是桩,
+    grounded_planner 只规划一步,microsoft_ufo_integration.execute_task 原先是桩(现在转交本闭环),
     多步执行全靠前端反复调 /api/v1/ui/act。本模块补上这个内部自主循环。
 
 循环形状(每步):
@@ -13,8 +13,9 @@
   2. 规划:把「任务 + 已执行步骤史 + 当前屏幕截图」交给视觉模型(经
      multi_llm_router,本地 Ollama VLM / 云端多模态均可),要求返回单步动作 JSON;
   3. 安全门:动作必须在白名单内;连续 3 次重复同一动作视为死循环,中止;
-  4. 执行:经规范执行器 invoke_node 派发到桌面操作节点(缺省 Node_36_UIAWindows,
-     动作别名复用 core.routes.ui_act 的 _ACTION_ALIAS,不另起一套);
+  4. 执行:交给桌面自动化整体(core.desktop_automation,经 Windows 执行仲裁器)——按现场挑方式:
+     系统接口 → 控件(本仓 UIA、微软 UFO)→ 坐标(自动控制节点 Node_92、桌面操作节点 Node_36);
+     别的节点(如安卓)经 invoke_node 直接派,动作别名复用 core.routes.ui_act 的 _ACTION_ALIAS;
   5. 静置:等 GALAXY_CU_SETTLE_S(默认 1s)让界面反应,回到 1。
 终止:模型宣布 done/fail、步数达 GALAXY_CU_MAX_STEPS(默认 15)、循环检测命中、
 或感知不可用(如实报错,绝不闭眼乱点)。
@@ -35,11 +36,13 @@ import json
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from core.computer_use_dialects import map_action_to_screen, measure_screenshot
 from core.computer_use_memory import ComputerUseEpisodicMemory
+from core.desktop_automation import DESKTOP_NODE, NODE_ACTIONS
 
 logger = logging.getLogger("Galaxy.ComputerUse")
 
@@ -70,29 +73,11 @@ ALLOWED_ACTIONS = {
     "zoom",
 }
 
-# 规范动作 → Node_36_UIAWindows 的动作名(执行节点缺省;其它节点的别名映射
+# 规范动作 → Node_36_UIAWindows 的动作名:只有一份,在桌面自动化登记表里(其它节点的别名映射
 # 复用 core.routes.ui_act._ACTION_ALIAS,不另起一套)。
-_N36_ACTION = {
-    "click": "click",
-    "double_click": "double_click",
-    "right_click": "right_click",
-    "type": "type_text",
-    "press_key": "press_key",
-    "hotkey": "hotkey",
-    "scroll": "scroll",
-    "move": "move_mouse",
-    "drag": "drag",
-    "middle_click": "middle_click",
-    "triple_click": "triple_click",
-    "hold_key": "hold_key",
-    "mouse_down": "mouse_down",
-    "mouse_up": "mouse_up",
-    # 节点那边这个动作早就有,只是名字不一样 —— 复用,不新开一个。
-    "cursor_position": "get_mouse_position",
-    "zoom": "zoom",
-}
+_N36_ACTION = NODE_ACTIONS
 
-_DEFAULT_NODE = "Node_36_UIAWindows"
+_DEFAULT_NODE = DESKTOP_NODE
 
 
 def _script_system_prompt() -> str:
@@ -349,18 +334,17 @@ async def _default_perceive() -> Optional[str]:
         return None
 
 
-async def _try_arbiter_first(action: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """先走 Windows 执行仲裁器的结构化降级链（System API → UIA → GUI）。
+async def _act_on_this_desktop(action: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """这一步交给桌面自动化整体(:mod:`core.desktop_automation`,经 Windows 执行仲裁器)做。
 
-    此前每一步动作都直奔 ``invoke_node(Node_36)`` 的坐标级 GUI 派发,把仲裁器整条
-    降级链跳过了 —— 「打开记事本」本来一个 Win32 调用就够,却被规划成点坐标,又慢又脆。
+    整体按现场挑方式:系统接口 → 控件(本仓 UIA、微软 UFO)→ 坐标(自动控制节点 Node_92、桌面操作节点 Node_36),顺序随这一步
+    带的信息与前台程序上的战绩调整。Node_36 已经是坐标级里的一个后端 —— 整体都没做成就是没做成,这里**不再**
+    另派一次节点(原先仲裁器失败后会再单独调一次 Node_36,同一步可能被做两遍)。
 
-    成功则返回结果；结构级都不行时返回 ``None``,由调用方回落既有节点派发路径 ——
-    今天能跑的东西不得因此跑不了。
+    只有仲裁器本身用不了(载不进来 / 抛异常)才返回 ``None``,由调用方走节点派发,今天能跑的不至于跑不了。
 
-    第 4 级(VLM)靠**递归保护**排除,不靠这里传空 instruction:仲裁器会把空 instruction
-    替换成动作摘要(``instruction or action_summary``),所以传空拦不住它。真正的不变式是
-    ``ComputerUseLoop.run()`` 全程置位的那个标记。
+    第 4 级(视觉)靠**递归保护**排除:``ComputerUseLoop.run()`` 全程置位的那个标记,而不是这里传空 instruction
+    (仲裁器会把空 instruction 换成动作摘要,传空拦不住它)。
     """
     try:
         from core.windows_execution_arbiter import get_windows_arbiter
@@ -377,21 +361,24 @@ async def _try_arbiter_first(action: str, params: Dict[str, Any]) -> Optional[Di
     except Exception as exc:  # noqa: BLE001
         logger.debug("computer_use 仲裁器执行异常,回落节点派发: %s", exc)
         return None
+    detail = getattr(result, "result", None) or {}
+    via = f"arbiter:{getattr(getattr(result, 'final_level', None), 'value', '')}"
+    if detail.get("backend"):
+        via += f"/{detail['backend']}"
     if getattr(result, "success", False):
-        return {"success": True, "error": "", "via": f"arbiter:{getattr(result.final_level, 'value', '')}"}
-    return None
+        return {"success": True, "error": "", "via": via}
+    return {"success": False, "error": str(detail.get("error") or "桌面自动化各级都没做成"), "via": via}
 
 
 async def _default_act(action: str, params: Dict[str, Any], node_id: str) -> Dict[str, Any]:
-    """经规范执行器派发一步动作到桌面操作节点。"""
+    """派发一步动作:本机桌面交给桌面自动化整体;别的节点(如安卓)经规范执行器直接派。"""
     from core.node_invocation import InvocationSource, invoke_node
 
     if node_id == _DEFAULT_NODE:
-        # 只对本机 Windows 桌面节点走仲裁器：仲裁器的降级链是 Windows 专用的，
-        # 派到别的节点（如安卓）上没有意义。
-        arbitrated = await _try_arbiter_first(action, params)
-        if arbitrated is not None:
-            return arbitrated
+        # 只对本机桌面走整体:它的降级链是本机专用的,派到别的节点(如安卓)上没有意义。
+        done = await _act_on_this_desktop(action, params)
+        if done is not None:
+            return done
 
     node_action = _N36_ACTION.get(action, action)
     if node_id != _DEFAULT_NODE:
@@ -436,6 +423,7 @@ class ComputerUseLoop:
         self._perceive = perceive_fn or _default_perceive
         self._act = act_fn or _default_act
         self._node_id = node_id
+        self._island_id = ""  # 这一轮在灵动岛上那张卡的 id(run() 里起名,dry_run 不上岛)
         # 情景记忆:失败的步骤(带截图)与任务结局写进跨模态记忆,开跑前召回一次。
         # 没配记忆后端时整体是 no-op —— 见 core/computer_use_memory 的说明。
         self._memory = memory if memory is not None else ComputerUseEpisodicMemory()
@@ -679,6 +667,9 @@ class ComputerUseLoop:
 
         from core.liminal_activity import acting as _acting
 
+        # 灵动岛上那张「桌面操作 第 k/N 步」的卡(core.island_cards):每一步原地更新,跑完由结论那张接替。
+        # dry_run 不上岛:它没动这台机器。
+        self._island_id = "" if dry_run else f"cu:{uuid.uuid4().hex[:12]}"
         try:
             with nullcontext() if dry_run else _acting("computer_use"):
                 result = await self._run_guarded(instruction, max_steps=max_steps, dry_run=dry_run)
@@ -687,6 +678,9 @@ class ComputerUseLoop:
                 from core.windows_execution_arbiter import _in_computer_use_loop as _cv
 
                 _cv.reset(_guard_token)
+        if self._island_id:
+            result["run_id"] = self._island_id
+            _island_finished(self._island_id, result)
 
         # 结局写在这一层,而不是 _run_guarded 里:那个函数有六个 return 点
         # (disabled / bad_request / no_perception / plan_failed / action_rejected /
@@ -761,6 +755,8 @@ class ComputerUseLoop:
             logger.info("computer_use 这一轮带回了 %d 项过往画面/声音", len(experience_media))
 
         for i in range(1, limit + 1):
+            if self._island_id:
+                _island_step(self._island_id, i, limit, steps[-1].action if steps else "")
             # ── 1. 感知 ────────────────────────────────────────────────
             screen = await self._perceive()
             if not screen:
@@ -913,21 +909,83 @@ class ComputerUseLoop:
         }
 
 
+#: 岛上那一句里动作怎么说(没列的照原名写)
+_ACTION_WORD = {
+    "click": "点击",
+    "double_click": "双击",
+    "right_click": "右键",
+    "type": "输入",
+    "press_key": "按键",
+    "hotkey": "组合键",
+    "scroll": "滚动",
+    "move": "移动",
+    "drag": "拖动",
+    "wait": "等一下",
+}
+
+
+def _island_step(card_id: str, step: int, limit: int, last_action: str) -> None:
+    """灵动岛:走到第几步(带进度)。进行中的卡不过期,岛上画「停下」。"""
+    from core.island_cards import post_card
+
+    last = _ACTION_WORD.get(last_action, last_action)
+    post_card(
+        card_id,
+        kind="computer_use",
+        title="正在操作电脑",
+        subtitle=f"第 {step}/{limit} 步" + (f" · 刚{last}" if last else ""),
+        progress=(step - 1) / max(1, limit),
+        priority="high",
+        ttl_s=None,
+        action="stop",
+    )
+
+
+def _island_finished(card_id: str, result: Dict[str, Any]) -> None:
+    """灵动岛:跑完了。说做完了的先写「核对中」,核对的结论(core.computer_use_verdict)接着原地换上;
+    没做完的直接写没做成 —— 那本来就没说做完,不进核对。"""
+    from core.island_cards import post_card
+
+    if result.get("stop_reason") == "done":
+        post_card(card_id, kind="computer_use", title="做完了", subtitle="对着屏幕核对中…", progress=1.0, ttl_s=30)
+        return
+    post_card(
+        card_id,
+        kind="computer_use",
+        title="没做成",
+        subtitle=str(result.get("message") or result.get("stop_reason") or ""),
+        body=str(result.get("message") or ""),
+        tone="error",
+        ttl_s=12,
+    )
+
+
 async def run_computer_use_task(
     instruction: str,
     *,
     max_steps: Optional[int] = None,
     dry_run: bool = False,
     node_id: str = _DEFAULT_NODE,
+    verify: bool = True,
 ) -> Dict[str, Any]:
-    """模块级便捷入口(REST 路由与 openclawd 工具都调这里)。"""
+    """模块级便捷入口(REST 路由、openclawd 工具、仲裁器视觉级、旧 UFO 入口都调这里)。
+
+    模型说「做完了」只是自报:跑完之后交给 :mod:`core.computer_use_verdict` 独立核对、定四值裁决,没收口的
+    后台再做一次、仍不行进隔离队列。``verify=False`` 只给那次后台重做自己用(它自己会再核对一次)。
+    """
     loop = ComputerUseLoop(node_id=node_id)
-    return await loop.run(instruction, max_steps=max_steps, dry_run=dry_run)
+    result = await loop.run(instruction, max_steps=max_steps, dry_run=dry_run)
+    if not verify or dry_run:
+        return result
+    from core.computer_use_verdict import settle
+
+    return await settle(instruction, result)
 
 
 COMPUTER_USE_LOOP_AUTHORITY: str = (
     "COMPUTER_USE_LOOP_V1: core/computer_use_loop.py | "
     "感知(DesktopPerceptionStore 屏幕帧)→规划(视觉模型经统一路由器)→安全门(动作白名单+"
-    "循环检测)→执行(invoke_node→Node_36/45)→静置再感知 的自主闭环. "
+    "循环检测)→执行(本机经桌面执行仲裁器按现场挑后端,core.desktop_automation;仲裁器不可用才派节点)"
+    "→静置再感知 的自主闭环;模型说做完了只是自报,裁决由 core.computer_use_verdict 独立核对后给. "
     "入口: run_computer_use_task() / POST /api/v1/computer-use/task / computer_use__run 工具."
 )

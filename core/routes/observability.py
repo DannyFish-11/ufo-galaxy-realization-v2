@@ -49,6 +49,7 @@ Routes:
   GET /api/v1/observability/execution/trace/{id}     - 统一 trace 上下文查询 (PR-7)
   GET /api/v1/observability/context-layer            - ACI 命中统计 + 焦点栈快照
   GET/POST /api/v1/results/isolated[...]             - 真相链补跑后仍没收口的结果（见 core/routes/result_recovery.py）
+  GET/DELETE /api/v1/presence/island[...]            - 灵动岛上的卡片（见 core/routes/island.py）
 """
 
 import logging
@@ -71,10 +72,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     router = APIRouter()
     # 健康检查(/health/nats)不带令牌也能读;其余带着对话上下文、调用记录、执行事件,要令牌
     _AUTH = [Depends(require_auth)]
-    # 真相链隔离队列：运行面的待处理项，与本组同样免鉴权（面板直接读）。
+    # 真相链隔离队列、灵动岛上的卡片：运行面的待处理项（各自挂鉴权，面板 / 覆盖层带本机令牌读）。
+    from core.routes import island as _island
     from core.routes import result_recovery as _result_recovery
 
     _result_recovery.register(router)
+    _island.register(router)
 
     # ── 活跃 LLM 路由 + Fallback ─────────────────────────────────────────
 

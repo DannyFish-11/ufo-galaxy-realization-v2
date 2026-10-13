@@ -58,6 +58,16 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - **模型只能请求、不能决定**打开跨设备模式：本地模式下的工具 `devices__request_cross_device`（`core/device_onboarding/mode_request.py`）只会问人；批准走设备接入已有的人在环，
   `GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合连提出都不行；批准后走面板按钮同一个写入函数，要重启才完全生效
 
+### 桌面自动化（一个整体，按现场挑）
+- `core/windows_execution_arbiter.py` - 桌面落手的**唯一入口**：系统接口 → 控件 → 坐标 → 视觉（Computer Use）四级降级链
+- `core/desktop_automation.py` - 每一级下面的后端登记表（Win32 / 本仓 UIA / 微软 UFO / 自动控制节点 Node_92 / 桌面操作节点 Node_36）：谁能用（说得出原因）、
+  这一步先试谁（动作本身 + 当前前台应用上的战绩 `desktop_backend_record.json` + 现场探测）。**只重排不删兜底，视觉永远最后**。
+  Computer Use 在本机落手、Windows Agent 在本机都走它（后者只用结构化三级）；别再各写一份「直接调 pyautogui / 直接派节点」。
+  微软 UFO 要装了 `ufo` 包才算可用（仓库里的 `external/microsoft_ufo` 是不全的源码），`core/microsoft_ufo_integration.py` 只是门面
+- `core/computer_use_verdict.py` - Computer Use 模型说「做完了」只是自报（`claimed_done`）：另取一张当前屏幕交给只看任务与屏幕的核对请求，
+  四值裁决由 `classify_execution_evidence()` 给；核对没通过 → 后台把没做完的部分再做一次 → 仍不行进「没收口的结果」（`kind="computer_use"`）。
+  人正在用电脑时不在后台动键鼠；仲裁器视觉级只核对、不排后台重做
+
 ### 扩展系统
 - `core/mcp_loader.py` - MCP 服务器加载器
 - `core/skill_loader.py` - 技能加载器
@@ -147,7 +157,9 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 ### 结果真相与会话迁移
 - `core/truth_chain_recovery.py` - task_result 真相链没收口时：后台**只重跑失败的步骤**一次，仍不收口就进隔离队列
   （落盘 `$GALAXY_DATA_DIR/isolated_results.json`，`GET /api/v1/results/isolated`，面板「全部设置」最上面）。
-  回答不受影响 —— 所有者的决定是「自动重试，失败再隔离」，**不拒收**
+  回答不受影响 —— 所有者的决定是「自动重试，失败再隔离」，**不拒收**。条目不止一类（`kind`：`task_result` / `computer_use`，
+  别的类登记重跑器 `register_rerunner`）。人的三个动作：再试一次 / 认可（`.../accept`）/ 知悉；运维的「重开 / 确认 / 驳回闭环」
+  落的就是这三个（`core/pr4_operator_action_governance.py::_settle_closure_in_queue`），队列里没有这条就照实回 failed
 - `core/session_migration.py` - 会话迁移的**唯一**入口（D3）。核心 REST、网关 REST/WS、安卓桥都调它；它先找会话在哪个
   存储（核心 `core.session_manager` / 唤醒建的漫游 `SessionRoamingManager`），**两个存储不合并**。
   `core/routes/sessions.py::migrate_session_via_canonical_manager` 只是旧名转发
@@ -201,6 +213,10 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - `core/desktop_presence_runtime.py` - 桌面三态运行时（silent / liminal / manifest）
 - **三只桌宠是同一只**（面板 `panel/src/ui/pet.ts`、覆盖层 `renderer/app.js`、右下角托盘 `windows_service/pet_icon.py`）：推导只有一份 `electron/renderer/pet_state.js`（托盘是 Python，跑同一张用例表 `pet_state.cases.json`），样子三处逐个相等（`tests/test_every_pet_is_the_same_pet.py`）。托盘与后端同进程，经 `core/presence_fanout.py` 直接收在场桥广播的同一份 `payload.render`；感知那几位（隐私暂停、在不在收）变了，桥每秒核一次、变了就广播
 - **面板与覆盖层的长连接只有一份** `electron/renderer/live_socket.js`（保活 ping/pong、半开连接认得出来、连接超时、退避加抖动、网回来立刻重连），别再各写一份重连；面板的 HTTP 请求一律过 `transport.ts` 的 `fetchT`（读有期限且重试一次，写不重试，本来就慢的不设期限）
+- `core/island_cards.py` - **灵动岛上的卡**（借 WinIslands 的上岛推送）：这台电脑上刚发生、人该余光知道的事（桌面操作第几步 / 核对结论 /
+  有结果没收口 / 有设备在等你同意）。一张卡一个 id 原地更新、分先后、会过期、只放类型化短字段、不改岛的长短；推 WS `type="island"`
+  整份队列，覆盖层刚连上补发（`core/presence_fanout.py`）。覆盖层 `renderer/app.js` 点一下岛才展开（停下 / 打开面板 / 知道了），指针在岛上
+  时窗口才接鼠标。推卡用 `post_card` / `remove_card`（永不抛出）；**别往岛上放原始结果、截图、参数**。桌宠不归卡片管
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
@@ -282,7 +298,11 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 
 ### 没收口的结果（真相链隔离队列）
 - `GET /api/v1/results/isolated` - 补跑后仍没收口的结果（只有类型化字段，原始结果不外露）
-- `POST /api/v1/results/isolated/{key}/retry` / `.../dismiss` - 再试一次（只重跑失败步骤）/ 知悉
+- `POST /api/v1/results/isolated/{key}/retry` / `.../accept` / `.../dismiss` - 再试一次（只重跑失败步骤；Computer Use 那类在后台做，先回 `retrying`）/ 认可（人认它做完了）/ 知悉（判它没做成）
+
+### 灵动岛
+- `GET /api/v1/presence/island` - 岛上此刻的卡（排好先后；覆盖层平时走 WS `type="island"` 帧）
+- `DELETE /api/v1/presence/island/{id}` - 撤掉一张（岛上点「知道了」）
 
 ### 智能体活动
 - `GET /api/v1/agent/activity` - 智能体正在处理的全部请求：发起方、是否在桌面三态里、相位（需 API 鉴权）

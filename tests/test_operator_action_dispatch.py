@@ -361,7 +361,16 @@ class TestOperatorActionEndpoint:
         import unittest.mock as mock
 
         from core.operator_surface import OperatorSurface
+        from core.truth_chain_recovery import get_truth_chain_recovery
 
+        # 结案动作落在「没收口的结果」队列上:先有一条这个任务号的没收口结果
+        get_truth_chain_recovery().isolate(
+            "task_operator_surface_duplicate_001",
+            "task_result",
+            {"task_id": "task_operator_surface_duplicate_001"},
+            {},
+            "证据链没收口",
+        )
         surface = OperatorSurface()
         req = OperatorActionRequest(
             action_kind=OperatorActionKind.finalize_closure.value,

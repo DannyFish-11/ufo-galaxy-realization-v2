@@ -94,6 +94,19 @@ def await_owner(device_info: Dict[str, Any]) -> JSONResponse:
             {"success": False, "status": "rejected", "error": "主人选了不接入这台设备"}, status_code=403
         )
     logger.info("设备 %s 自己来登记,不带凭据:记成候选,等主人在面板上同意", device_id)
+    from core.island_cards import post_card
+
+    # 灵动岛上提一句(core.island_cards):有设备在门口等着,人不一定正开着面板。名字是设备自己报的,只当文字画。
+    post_card(
+        f"device:pending:{cand.candidate_id}",
+        kind="device",
+        title="有设备在等你同意",
+        subtitle=str(device_info.get("device_name") or device_id),
+        body="它自己来登记、没带凭据;在面板「全部设置」最上面点「接入」或「不接入」。",
+        priority="high",
+        ttl_s=20,
+        action="panel",
+    )
     return JSONResponse(
         {
             "success": False,

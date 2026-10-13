@@ -19,6 +19,19 @@
 
 对外接口只给类型化字段（任务号、状态、失败步骤、原因、时间）。原始结果消息只留在本机存储里
 供补跑使用，**不经接口返回**。
+
+不止 ``task_result`` 一种（所有者 2026-10-13 选 A）
+------------------------------------------------
+Computer Use 的结果也走这条真相链：模型说「做完了」只是它的自报，独立核对没通过就是**没收口**
+（:mod:`core.computer_use_verdict`）。这类条目带 ``kind``（如 ``"computer_use"``），补跑不是「重跑失败的
+真相链步骤」，而是交给按 ``kind`` 登记的重跑器（:func:`register_rerunner`）—— 同样后台一次、仍不行进隔离队列、
+人可以「再试一次」或「知悉」。
+
+人对一条没收口的结果有三种处置（运维的「重开 / 驳回 / 确认闭环」就落在这三个上）：
+
+* **再试一次**（重开）：``task_result`` 只重跑失败步骤；其它 ``kind`` 交给它的重跑器，在后台做；
+* **知悉**（驳回）：标 ``dismissed`` —— 判它没做成，记录保留；
+* **认可**（确认）：标 ``accepted`` —— 人看过了，认它做完了，记录保留。
 """
 
 from __future__ import annotations
@@ -32,7 +45,7 @@ import threading
 from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +63,34 @@ _RECENT_RECOVERED: int = 200
 STATE_ISOLATED = "isolated"
 STATE_DISMISSED = "dismissed"
 STATE_RECOVERED = "recovered"
+STATE_ACCEPTED = "accepted"
+
+KIND_TASK_RESULT = "task_result"
+
+#: ``kind`` → 重跑器:拿着留存的那份 ``message`` 再做一次,回 ``(收口没有, 原因)``。第二个参数说这次是不是人点的
+#: (人点「再试一次」时不该因为「有人在用电脑」而不做 —— 点的就是那个人)。
+Rerunner = Callable[[Dict[str, Any], bool], Awaitable[Tuple[bool, str]]]
+_RERUNNERS: Dict[str, Rerunner] = {}
+
+#: 重启之后队列里还留着某类条目、而它的重跑器还没被登记时,去哪儿找(按需 import、调它的 ``register()``)。
+_RERUNNER_HOMES: Dict[str, str] = {"computer_use": "core.computer_use_verdict"}
+
+
+def register_rerunner(kind: str, fn: Rerunner) -> None:
+    """登记一种结果的重跑器(``task_result`` 之外的 kind 用)。"""
+    _RERUNNERS[kind] = fn
+
+
+def _rerunner(kind: str) -> Optional[Rerunner]:
+    if kind not in _RERUNNERS and kind in _RERUNNER_HOMES:
+        try:
+            import importlib
+
+            importlib.import_module(_RERUNNER_HOMES[kind]).register()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("truth_chain_recovery: %s 的重跑器登记不上: %s", kind, exc)
+    return _RERUNNERS.get(kind)
+
 
 _STORE_FILENAME = "isolated_results.json"
 
@@ -99,11 +140,15 @@ class TruthChainRecovery:
         self.delay_s = delay_s
         # 排着队等补跑的：key → {"outcome", "message", "first_seen_at"}
         self._pending: Dict[str, Dict[str, Any]] = {}
+        # 别的 kind 排着队等重跑的：key → {"kind", "record", "message", "first_seen_at"}
+        self._pending_reruns: Dict[str, Dict[str, Any]] = {}
         self._timers: Dict[str, Any] = {}
         self._isolated: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         self._recovered: Deque[Dict[str, Any]] = deque(maxlen=_RECENT_RECOVERED)
         self._loaded = False
         self._anon = 0
+        # 后台重跑的协程:事件循环只弱引用 task,不留一份会被回收掉、跑到一半没了
+        self._tasks: Set["asyncio.Task[Any]"] = set()
 
     # ------------------------------------------------------------------ 排期
 
@@ -218,7 +263,201 @@ class TruthChainRecovery:
             record["failed_steps"],
             record["incomplete_reason"],
         )
+        self._tell_the_island()
         return record
+
+    # ------------------------------------------------------------------ 别的 kind(如 Computer Use)
+
+    def schedule_rerun(self, key: str, kind: str, record: Dict[str, Any], message: Dict[str, Any]) -> str:
+        """登记一条 ``kind`` 类的没收口结果,``delay_s`` 秒后交给它的重跑器在后台再做一次;仍不收口进隔离队列。
+
+        必须在事件循环里调用(重跑器是协程)。
+        """
+        with self._lock:
+            if key in self._timers:
+                return key
+            self._pending_reruns[key] = {
+                "kind": kind,
+                "record": dict(record),
+                "message": _snapshot(message),
+                "first_seen_at": _now(),
+            }
+            loop = asyncio.get_running_loop()
+            self._timers[key] = loop.call_later(
+                self.delay_s, lambda: self._keep(loop.create_task(self.run_pending_rerun(key)))
+            )
+        return key
+
+    def _keep(self, task: "asyncio.Task[Any]") -> None:
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def run_pending_rerun(self, key: str) -> Optional[Dict[str, Any]]:
+        """到点重跑 *key*(计时器调用;测试可直接 await)。"""
+        with self._lock:
+            self._timers.pop(key, None)
+            entry = self._pending_reruns.pop(key, None)
+        if entry is None:
+            return None
+        return await self._rerun_and_settle(
+            key, entry["kind"], entry["record"], entry["message"], entry["first_seen_at"], attempts=2
+        )
+
+    async def _rerun_and_settle(
+        self,
+        key: str,
+        kind: str,
+        record: Dict[str, Any],
+        message: Dict[str, Any],
+        first_seen_at: str,
+        *,
+        attempts: int,
+        by_human: bool = False,
+    ) -> Dict[str, Any]:
+        fn = _rerunner(kind)
+        if fn is None:
+            closed, reason = False, f"没有登记 {kind} 的重跑器"
+        else:
+            try:
+                closed, reason = await fn(message, by_human)
+            except Exception as exc:  # noqa: BLE001 — 重跑自己炸了也要落到隔离里,不能丢
+                logger.warning("truth_chain_recovery: rerun raised key=%r kind=%s exc=%s", key, kind, exc)
+                closed, reason = False, f"重跑出错: {type(exc).__name__}"
+        if closed:
+            done = {
+                "key": key,
+                "kind": kind,
+                "task_id": record.get("task_id", ""),
+                "state": STATE_RECOVERED,
+                "first_seen_at": first_seen_at,
+                "settled_at": _now(),
+                "attempts": attempts,
+                "recovered_reason": reason,
+            }
+            with self._lock:
+                self._recovered.append(done)
+                self._ensure_loaded()
+                if self._isolated.pop(key, None) is not None:
+                    self._save()
+            logger.info("truth_chain_recovery: recovered key=%r kind=%s", key, kind)
+            if kind == "computer_use":
+                from core.island_cards import post_card
+
+                post_card(
+                    f"truth_chain:recovered:{key}",
+                    kind="result",
+                    title="补做完了",
+                    subtitle="后台把没做完的部分做完了,核对通过",
+                    tone="success",
+                )
+            return done
+        return self.isolate(key, kind, record, message, reason, first_seen_at=first_seen_at, attempts=attempts)
+
+    def isolate(
+        self,
+        key: str,
+        kind: str,
+        record: Dict[str, Any],
+        message: Dict[str, Any],
+        reason: str,
+        *,
+        first_seen_at: str = "",
+        attempts: int = 1,
+    ) -> Dict[str, Any]:
+        """直接把一条 ``kind`` 类结果放进隔离队列(不排后台重跑),比如人正在用电脑、不该在后台动键鼠时。"""
+        row = {
+            **record,
+            "key": key,
+            "kind": kind,
+            "state": STATE_ISOLATED,
+            "first_incomplete_reason": record.get("first_incomplete_reason") or record.get("incomplete_reason", ""),
+            "incomplete_reason": reason,
+            "first_seen_at": first_seen_at or _now(),
+            "settled_at": _now(),
+            "attempts": attempts,
+        }
+        row.pop("retrying", None)
+        retained = self._retainable(message)
+        with self._lock:
+            self._ensure_loaded()
+            self._isolated.pop(key, None)
+            self._isolated[key] = dict(row, message=retained)
+            self._evict()
+            self._save()
+        logger.warning("truth_chain_recovery: isolated key=%r kind=%s reason=%r", key, kind, reason)
+        self._tell_the_island()
+        return row
+
+    def _tell_the_island(self) -> None:
+        """灵动岛上提一句「有结果没收口」(core.island_cards):一张汇总卡,不是一条一张。只有条数,不带内容。"""
+        with self._lock:
+            n = sum(1 for r in self._isolated.values() if r.get("state") == STATE_ISOLATED)
+        if not n:
+            return
+        from core.island_cards import post_card
+
+        post_card(
+            "truth_chain:isolated",
+            kind="result",
+            title="有结果没收口",
+            subtitle=f"{n} 条等你看 · 面板「全部设置」最上面",
+            body="回答当时已经交出去了;这些结果后台补过一次仍没核实,要你看一眼:再试一次、认可,或知道了。",
+            tone="warning",
+            ttl_s=15,
+            action="panel",
+        )
+
+    def _retry_kind(self, key: str, row: Dict[str, Any]) -> Dict[str, Any]:
+        """人工「再试一次」—— 非 ``task_result`` 的条目:交给它的重跑器在后台做(可能要几十秒,不让请求干等)。"""
+        message = row.get("message")
+        if not isinstance(message, dict):
+            return dict(self._public(row), retry_refused="message_not_retained")
+        with self._lock:
+            live = self._isolated.get(key)
+            if live is not None and live.get("retrying"):
+                return dict(self._public(live), state="retrying")
+            if live is not None:
+                live["retrying"] = True
+                self._save()
+        base = {k: v for k, v in row.items() if k != "message"}
+        run = self._rerun_and_settle(
+            key,
+            str(row.get("kind")),
+            base,
+            message,
+            row.get("first_seen_at") or _now(),
+            attempts=int(row.get("attempts") or 2) + 1,
+            by_human=True,
+        )
+        try:
+            self._keep(asyncio.get_running_loop().create_task(run))
+        except RuntimeError:  # 不在事件循环里(脚本 / 测试):就地跑完
+            return asyncio.run(run)
+        return dict(self._public(row), state="retrying")
+
+    def accept(self, key: str) -> Optional[Dict[str, Any]]:
+        """人工「认可」:人看过了、认它做完了。标 ``accepted``,记录保留。没有这条返回 ``None``。"""
+        with self._lock:
+            self._ensure_loaded()
+            row = self._isolated.get(key)
+            if row is None:
+                return None
+            row["state"] = STATE_ACCEPTED
+            row["accepted_at"] = _now()
+            row.pop("retrying", None)
+            self._save()
+            return self._public(row)
+
+    def find_by_task_id(self, task_id: str) -> Optional[str]:
+        """按任务号找它在队列里**还没收口**的那条(运维动作按任务号来);已认可 / 已知悉的不算,找不到返回 ``None``。"""
+        if not task_id:
+            return None
+        with self._lock:
+            self._ensure_loaded()
+            for key, row in reversed(self._isolated.items()):
+                if row.get("state") == STATE_ISOLATED and task_id in (key, row.get("task_id")):
+                    return key
+        return None
 
     @staticmethod
     def _retainable(message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -238,7 +477,7 @@ class TruthChainRecovery:
             self._ensure_loaded()
             rows = [self._public(r) for r in self._isolated.values()]
         if not include_dismissed:
-            rows = [r for r in rows if r["state"] == STATE_ISOLATED]
+            rows = [r for r in rows if r["state"] == STATE_ISOLATED]  # 已知悉 / 已认可的只在要求时列出
         rows.reverse()
         return rows
 
@@ -258,6 +497,8 @@ class TruthChainRecovery:
             if row is None:
                 return None
             row = dict(row)
+        if row.get("kind", KIND_TASK_RESULT) != KIND_TASK_RESULT:
+            return self._retry_kind(key, row)
         message = row.get("message")
         if not isinstance(message, dict):
             return dict(self._public(row), retry_refused="message_not_retained")
@@ -301,9 +542,10 @@ class TruthChainRecovery:
             self._ensure_loaded()
             states = [r.get("state") for r in self._isolated.values()]
             return {
-                "pending_retry": len(self._pending),
+                "pending_retry": len(self._pending) + len(self._pending_reruns),
                 "isolated": states.count(STATE_ISOLATED),
                 "dismissed": states.count(STATE_DISMISSED),
+                "accepted": states.count(STATE_ACCEPTED),
                 "recovered_recent": len(self._recovered),
                 "retry_delay_s": self.delay_s,
             }
@@ -311,6 +553,7 @@ class TruthChainRecovery:
     @staticmethod
     def _public(row: Dict[str, Any]) -> Dict[str, Any]:
         out = {k: v for k, v in row.items() if k != "message"}
+        out.setdefault("kind", KIND_TASK_RESULT)
         out["message_retained"] = isinstance(row.get("message"), dict)
         return out
 
@@ -363,7 +606,11 @@ class TruthChainRecovery:
                 except Exception:  # noqa: BLE001
                     pass
             self._timers.clear()
+            for task in list(self._tasks):
+                task.cancel()
+            self._tasks.clear()
             self._pending.clear()
+            self._pending_reruns.clear()
             self._isolated.clear()
             self._recovered.clear()
             self._loaded = False
@@ -384,11 +631,14 @@ def get_truth_chain_recovery() -> TruthChainRecovery:
 
 
 __all__ = [
+    "KIND_TASK_RESULT",
     "MAX_ISOLATED",
     "RETRY_DELAY_S",
+    "STATE_ACCEPTED",
     "STATE_DISMISSED",
     "STATE_ISOLATED",
     "STATE_RECOVERED",
     "TruthChainRecovery",
     "get_truth_chain_recovery",
+    "register_rerunner",
 ]

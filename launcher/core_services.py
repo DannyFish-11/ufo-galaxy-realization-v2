@@ -3,13 +3,13 @@ launcher/core_services.py — Core service startup.
 
 Responsibilities:
 - CoreServiceLauncher: start Device Agent Manager, Device Status API,
-  and Microsoft UFO integration.
+  and desktop automation (System API / UIA incl. Microsoft UFO / GUI).
 """
 
 import asyncio
 import logging
 import sys
-from typing import Dict
+from typing import Any, Dict, List, Tuple
 
 from .bootstrap import ServiceType, SystemConfig, print_status
 from .service_manager import ServiceManager
@@ -65,36 +65,61 @@ class CoreServiceLauncher:
         )
 
     async def start_microsoft_ufo_integration(self) -> bool:
-        """启动微软 UFO 集成"""
+        """启动桌面自动化(含微软 UFO):说清这台机器上系统接口 / 控件 / 坐标各能用什么(core.desktop_automation)。
+
+        服务键名沿用旧的 ``microsoft_ufo_integration``(别处按它取状态);显示名见 ``SERVICE_LABELS``。
+        """
         self.service_manager.register_service("microsoft_ufo_integration", ServiceType.CORE)
 
         try:
+            from core.desktop_automation import summary_line
             from core.microsoft_ufo_integration import GalaxyIntegrationService
 
-            integration = GalaxyIntegrationService()
-            result = await integration.initialize()
-            result = {
-                "success": result,
-                "message": "Galaxy Integration initialized" if result else "Galaxy Integration failed",
-            }
-
-            if result.get("success"):
-                logger.info("微软 UFO 集成已初始化")
-                self.service_manager.services["microsoft_ufo_integration"].status = "running"
-                return True
+            await GalaxyIntegrationService().initialize()
+            # 探测要载 comtypes / 建 UIA 管理器:放到旁边线程,不占事件循环
+            state, line = await asyncio.to_thread(summary_line)
+            if state == "partial":
+                logger.warning("桌面自动化动不了手(%s)", line)
             else:
-                logger.warning("微软 UFO 集成部分可用: %s", result.get("message"))
-                self.service_manager.services["microsoft_ufo_integration"].status = "partial"
-                return True
+                logger.info("桌面自动化:%s", line)
+            # running = 能动手;partial = Windows 上却一条路都没有;info = 这台没有 Windows 桌面(不算降级)
+            self.service_manager.services["microsoft_ufo_integration"].status = state
+            self.desktop_automation_line = line
+            return True
         except Exception as e:
-            logger.error("微软 UFO 集成启动失败: %s", e)
+            logger.error("桌面自动化启动失败: %s", e)
             return False
+
+    @staticmethod
+    def banner(results: Any) -> Tuple[str, str, List[Tuple[str, str, str]]]:
+        """启动横幅「核心服务」那一段:(一句话, 状态, 逐行明细)。
+
+        数的是**真实状态**,不是 ``start_*`` 的返回值 —— 原先「部分可用」也返回 True,数出来是「3/3 就绪」,而日志里
+        同时写着「部分可用」。``info`` = 不适用(桌面自动化在没有 Windows 桌面的机器上):不算进分母、不算降级。
+        """
+        r = results if isinstance(results, dict) else {}
+        items = [
+            ("Device Agent 管理器", r.get("device_agent_manager", "failed")),
+            ("设备状态 API :8766", r.get("device_status_api", "failed")),
+            ("桌面自动化", r.get("microsoft_ufo_integration", "failed")),
+        ]
+        word = {
+            "running": ("就绪", "ok"),
+            "failed": ("未起来", "warn"),
+            "info": ("不适用(这台没有 Windows 桌面)", "info"),
+        }
+        scored = [v for _, v in items if v != "info"]
+        up = sum(1 for v in scored if v == "running")
+        part = sum(1 for v in scored if v not in ("running", "failed"))
+        status = "ok" if up == len(scored) else ("warn" if up or part else "fail")
+        summary = f"{up}/{len(scored)} 就绪" + (f" · {part} 个部分可用" if part else "")
+        return summary, status, [(n, *word.get(v, (f"部分可用({v})", "warn"))) for n, v in items]
 
     #: 三个核心服务的显示名。名字只此一处,调用方不另抄。
     SERVICE_LABELS = {
         "device_agent_manager": "Device Agent 管理器",
         "device_status_api": "设备状态 API",
-        "microsoft_ufo_integration": "Microsoft UFO 集成",
+        "microsoft_ufo_integration": "桌面自动化",
     }
 
     def _recorded_status(self, key: str, started: bool) -> str:
@@ -115,7 +140,8 @@ class CoreServiceLauncher:
     async def start_all(self) -> Dict[str, str]:
         """启动所有核心服务，**每一个都给出结果**。
 
-        返回 ``{服务名: "running" / "partial" / "failed"}``。
+        返回 ``{服务名: "running" / "partial" / "failed" / "info"}``。
+        ``info`` = 不适用(比如桌面自动化在没有 Windows 桌面的机器上),不算降级。
 
         此前这里是三行 ``print_status("启动 X...", "step")`` **只报开始、不报结果** ——
         真跑实测,屏幕上就是三行 `▶ 启动 …` 挂在那儿,成没成一个字都没有。
@@ -158,6 +184,8 @@ class CoreServiceLauncher:
                 print_status(f"{label} 就绪", "success")
             elif status == "failed":
                 print_status(f"{label} 未起来", "error")
+            elif status == "info":  # 桌面自动化:这台没有 Windows 桌面 —— 不适用,不是降级
+                print_status(f"{label} 不适用(这台没有 Windows 桌面)", "info")
             else:
                 print_status(f"{label} 部分可用({status})", "warning")
 
