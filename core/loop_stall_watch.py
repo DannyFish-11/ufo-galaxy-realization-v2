@@ -11,7 +11,8 @@
 拓扑落盘……)。这里直接看:
 
 * 事件循环上每 0.2 秒跳一下心跳(``call_later``,不占任务);
-* 一根守护线程盯着心跳,超过 ``STALL_S`` 没跳,就当场取**事件循环那根线程此刻的调用栈**;
+* 一根守护线程盯着心跳,超过 ``STALL_S`` 没跳,就当场取**事件循环那根线程此刻的调用栈**
+  (连同最里面卡在库的哪一行、同一时刻别的线程在 import 什么 —— 循环线程可能只是在等 GIL);
 * 等心跳恢复,记一行:卡了几秒、卡在仓库里哪几行。同一个位置 10 分钟内只说一次(之后计数)。
 
 只读、不改任何行为;开销是每 0.2 秒一次回调 + 一根睡觉的线程。
@@ -31,8 +32,9 @@ logger = logging.getLogger("Galaxy.LoopStall")
 
 #: 心跳间隔。
 BEAT_S = 0.2
-#: 心跳停了这么久才算「卡住」。
-STALL_S = 1.0
+#: 心跳停了这么久才算「卡住」。与慢请求的门槛(500 ms)一致:所有者日志里一串感知帧各慢 0.5–1.2 秒,
+#: 原先 1 秒的门槛下一条卡顿记录都没有,凶手没露面。这一行只进日志文件,不上控制台。
+STALL_S = 0.5
 #: 同一个位置多久之内只说一次。
 REPEAT_S = 600.0
 
@@ -64,6 +66,45 @@ def where(frame) -> str:
     return " ← ".join(ours) if ours else innermost
 
 
+def _innermost(frame) -> str:
+    """最里面那一层(库里的也算):卡在仓库哪行之外,还要知道卡在那行调用的哪个库里。"""
+    if frame is None:
+        return ""
+    return f"{os.path.basename(frame.f_code.co_filename)}:{frame.f_lineno} {frame.f_code.co_name}"
+
+
+def _importing(frame) -> str:
+    """这根线程是否正在 import;是的话给出仓库代码要的那个模块(最外层的 ``_find_and_load``)。"""
+    name = ""
+    while frame is not None:
+        if frame.f_code.co_name == "_find_and_load" and frame.f_code.co_filename.startswith("<frozen importlib"):
+            wanted = frame.f_locals.get("name")
+            if isinstance(wanted, str):
+                name = wanted
+        frame = frame.f_back
+    return name
+
+
+def bystanders(loop_thread: int) -> str:
+    """同一时刻别的线程里正在进行的 import。
+
+    事件循环那根线程「卡在」一行本不该慢的代码上(所有者日志:11.5 秒卡在 ``_try_ipc_http`` 的
+    ``session.post(...)``,连接是异步的、超时 1 秒),多半不是它自己在干活,而是在等 GIL ——
+    另一根线程在 import 一个大的原生库(Windows 上 torch 这类一次就是好几秒),初始化期间一直攥着 GIL。
+    只看循环那根线程的栈,这种卡顿永远指错人。
+    """
+    names = {t.ident: t.name for t in threading.enumerate()}
+    me = threading.get_ident()
+    seen: List[str] = []
+    for ident, frame in sys._current_frames().items():
+        if ident in (loop_thread, me):
+            continue
+        wanted = _importing(frame)
+        if wanted:
+            seen.append(f"线程「{names.get(ident, ident)}」正在 import {wanted}({where(frame)})")
+    return ";".join(seen[:2])
+
+
 def _tick(loop: asyncio.AbstractEventLoop, beat: List[float]) -> None:
     beat[0] = time.monotonic()
     if not loop.is_closed():
@@ -77,7 +118,15 @@ def _monitor(loop: asyncio.AbstractEventLoop, loop_thread: int, beat: List[float
         stalled_since = beat[0]
         if time.monotonic() - stalled_since < STALL_S:
             continue
-        spot = where(sys._current_frames().get(loop_thread))
+        frame = sys._current_frames().get(loop_thread)
+        spot = where(frame)
+        deepest = _innermost(frame)
+        detail = f"〔最里面:{deepest}〕" if deepest and os.path.basename(spot.split(" ← ")[0]) != deepest else ""
+        own = _importing(frame)
+        detail += f"〔正在 import {own}〕" if own else ""
+        others = bystanders(loop_thread)
+        detail += f";同一时刻{others}" if others else ""
+        frame = None  # 不攥着别的线程的帧
         while beat[0] == stalled_since and not loop.is_closed():
             time.sleep(BEAT_S / 2)
         took = beat[0] - stalled_since - BEAT_S
@@ -89,7 +138,7 @@ def _monitor(loop: asyncio.AbstractEventLoop, loop_thread: int, beat: List[float
             said[spot] = (last, quiet + 1)
             continue
         more = f"(此前 10 分钟里同一处又卡了 {quiet} 次)" if quiet else ""
-        logger.warning("事件循环被卡住 %.1f 秒 —— 卡在 %s%s", took, spot, more)
+        logger.warning("事件循环被卡住 %.1f 秒 —— 卡在 %s%s%s", took, spot, detail, more)
         said[spot] = (now, 0)
 
 

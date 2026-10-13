@@ -24,6 +24,7 @@ import logging
 import logging.handlers
 import os
 import queue
+import sys
 from typing import List
 
 __all__ = ["ConsoleGate", "off_the_loop"]
@@ -43,6 +44,16 @@ class ConsoleGate(logging.Filter):
         return bool(os.environ.get("GALAXY_VERBOSE"))
 
 
+class _QueueHandler(logging.handlers.QueueHandler):
+    """解释器正在退出时(还有对象的 ``__del__`` 在记日志,比如没关的 aiohttp 会话),``prepare`` 里的
+    ``copy`` 已经不能用 —— 那一刻不再打一整段「--- Logging error ---」栈。"""
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        if sys.meta_path is None:
+            return
+        super().handleError(record)
+
+
 def off_the_loop(*handlers: logging.Handler) -> logging.Handler:
     """把这些 handler 挪到一根专门的线程上写;返回挂到 logger 上的那个(只往队列里放)。
 
@@ -53,7 +64,7 @@ def off_the_loop(*handlers: logging.Handler) -> logging.Handler:
     listener.start()
     _listeners.append(listener)
     atexit.register(listener.stop)
-    qh = logging.handlers.QueueHandler(q)
+    qh = _QueueHandler(q)
     # 放进队列前只把消息(连同异常栈)拼好;时间、级别那一套由各 handler 自己的格式加。
     qh.setFormatter(logging.Formatter("%(message)s"))
     return qh

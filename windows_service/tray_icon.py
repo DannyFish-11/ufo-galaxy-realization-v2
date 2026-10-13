@@ -206,6 +206,8 @@ class GalaxyTray:
         self._last_act = ""
         self._drawn_key: "tuple | None" = None
         self._pet_lock = threading.Lock()
+        self._painter = None  # 事件循环里来的重画交给它(一根线程,按顺序画)
+        self._paint_lock = threading.Lock()  # 两条路(就地 / 画图线程)同一时刻只有一个在画
 
     # ── 属性 / Properties ──
 
@@ -287,7 +289,12 @@ class GalaxyTray:
         return base
 
     def _redraw(self) -> None:
-        """按此刻的桌宠 + 进程状态重画图标;跟上一次画的一样就不动。"""
+        """按此刻的桌宠 + 进程状态重画图标;跟上一次画的一样就不动。
+
+        ``on_render`` 是在事件循环线程里被调的。画一张桌宠 + 改托盘图标(Windows 上是一次
+        ``Shell_NotifyIcon``)在真机上卡过循环 1.3 秒(所有者日志:「卡在 tray_icon.py _redraw ←
+        on_render ← presence_fanout _call」)。所以循环里只比一下变没变,真画交给一根专门的线程。
+        """
         if self._icon is None or not _HAVE_TRAY:
             return
         from windows_service.pet_icon import state_key
@@ -299,14 +306,35 @@ class GalaxyTray:
                 return
             self._drawn_key = key
         try:
-            image = create_icon_image(status, pet=pet, react=react)
-            if image is not None:
-                self._icon.icon = image
-                self._icon.title = self._tooltip(status, pet)
-        except Exception as exc:  # noqa: BLE001 — 重画失败不该拖垮托盘
-            logger.debug("托盘重画失败 / tray redraw failed: %s", exc)
+            import asyncio
+
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self._paint()  # 不在事件循环里(托盘自己的线程、计时器、测试):就地画
+            return
+        if self._painter is None:
+            from concurrent.futures import ThreadPoolExecutor
+
+            self._painter = ThreadPoolExecutor(max_workers=1, thread_name_prefix="TrayPaint")
+        self._painter.submit(self._paint)
+
+    def _paint(self) -> None:
+        """画**此刻**的样子(不是排队时的):两条路先后到,最后画的那一次一定是最新的。"""
+        icon = self._icon
+        if icon is None:
+            return  # 托盘已经停了
+        with self._paint_lock:
             with self._pet_lock:
-                self._drawn_key = None
+                pet, react, status = self._pet, self._react, self._current_status
+            try:
+                image = create_icon_image(status, pet=pet, react=react)
+                if image is not None:
+                    icon.icon = image
+                    icon.title = self._tooltip(status, pet)
+            except Exception as exc:  # noqa: BLE001 — 重画失败不该拖垮托盘
+                logger.debug("托盘重画失败 / tray redraw failed: %s", exc)
+                with self._pet_lock:
+                    self._drawn_key = None
 
     # ── 唯一保留的动作:打开面板 / The one action that stays ──
 
@@ -750,6 +778,8 @@ class GalaxyTray:
         if self._icon:
             self._icon.stop()
             self._icon = None
+        if self._painter is not None:
+            self._painter.shutdown(wait=False, cancel_futures=True)
 
 
 # ---------------------------------------------------------------------------

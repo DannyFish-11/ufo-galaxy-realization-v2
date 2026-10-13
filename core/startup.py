@@ -1369,6 +1369,14 @@ async def shutdown_subsystems():
     except Exception as e:
         logger.warning(f"LAN mDNS 发现停止失败: {e}")
 
+    # 0a-5. 在场桥共享的 IPC HTTP 会话(不关的话退出时 aiohttp 报 ERROR「Unclosed client session」)
+    try:
+        from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+
+        await _shutdown_with_timeout("在场桥 IPC 会话", GalaxyPresenceBridge.close_ipc_session())
+    except Exception as e:
+        logger.warning(f"在场桥 IPC 会话关闭失败: {e}")
+
     # 0b. 节点发现服务
     try:
         from core.node_discovery import get_node_discovery

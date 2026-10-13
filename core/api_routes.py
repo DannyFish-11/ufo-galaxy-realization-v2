@@ -367,8 +367,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 
     router = APIRouter()
 
-    # Auth dependency for sensitive route groups.
-    # require_auth internally checks is_auth_enabled(), so non-auth deployments are unaffected.
+    # 敏感的几组挂这道鉴权(require_auth 自己看 is_auth_enabled)。对话、设置、自加模型、操作电脑、记忆、会话、代码生成
+    # 以前没挂,后端又听 0.0.0.0:同一局域网不带令牌就能改 .env(含关鉴权)、点这台电脑的界面;网关自己的 /api/v1/chat 本来
+    # 就要鉴权,只是同路径这条先注册先命中。面板与主进程每个请求都带本机令牌(electron/main.js),不受影响。
     _auth_deps = [Depends(require_auth)]
 
     # 按原始顺序 include 各子路由，确保行为与重构前完全一致
@@ -432,7 +433,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
     router.include_router(vision.create_router(service_manager=service_manager, config=config))
     router.include_router(perception_routes.create_router(service_manager=service_manager, config=config))
-    router.include_router(chat.create_router(service_manager=service_manager, config=config))
+    router.include_router(chat.create_router(service_manager, config), dependencies=_auth_deps)
     router.include_router(ai.create_router(service_manager=service_manager, config=config))
     router.include_router(monitoring.create_router(service_manager=service_manager, config=config))
     # Batch PR-4: health and diagnostics domain modules (extracted from monitoring)
@@ -447,27 +448,26 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(channels.create_router(service_manager=service_manager, config=config))
     router.include_router(compat.create_router(service_manager=service_manager, config=config))
     router.include_router(twin.create_router(service_manager=service_manager, config=config))
-    router.include_router(sessions.create_router(service_manager=service_manager, config=config))
+    router.include_router(sessions.create_router(service_manager, config), dependencies=_auth_deps)
     # OAuth 连接器的浏览器导航端点(authorize 弹窗 / IdP 回调)——不可能携带
     # Bearer 头,必须免鉴权,否则生产模式下授权流程结构性死锁。见 nodes.py。
     router.include_router(nodes.create_oauth_router())
-    router.include_router(config_route.router)
+    router.include_router(config_route.router, dependencies=_auth_deps)
     router.include_router(models_route.router)
-    # 「我的模型服务」：用户/agent 声明的端点，与 PROVIDER_REGISTRY 那层分开。
-    router.include_router(user_providers_route.router)
-    router.include_router(ui_act_route.router)
-    router.include_router(computer_use_route.router)
+    router.include_router(user_providers_route.router, dependencies=_auth_deps)  # 「我的模型服务」(用户自加的端点)
+    router.include_router(ui_act_route.router, dependencies=_auth_deps)
+    router.include_router(computer_use_route.router, dependencies=_auth_deps)
     router.include_router(modality_route.router)
     if protocols:
         router.include_router(protocols.create_router(service_manager=service_manager, config=config))
     if observability:
         router.include_router(observability.create_router(service_manager=service_manager, config=config))
     if c_stage:
-        router.include_router(c_stage.create_router(service_manager=service_manager, config=config))
+        router.include_router(c_stage.create_router(service_manager, config), dependencies=_auth_deps)
     if github_routes:
         router.include_router(github_routes.create_router(service_manager=service_manager, config=config))
     if opencode_routes:
-        router.include_router(opencode_routes.create_router(service_manager=service_manager, config=config))
+        router.include_router(opencode_routes.create_router(service_manager, config), dependencies=_auth_deps)
 
     # 网关侧独有能力并入权威层;为什么这么做见 core/gateway_surface_merge.py。
     try:

@@ -645,3 +645,16 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert question_by_id[10]["status"] == "partial"
     assert question_by_id[11]["status"] == "partial"
     assert question_by_id[12]["status"] == "open"
+
+
+def test_readiness_routes_build_the_report_off_the_event_loop():
+    """真跑:``GET /api/v1/projection/operability-contract`` 在事件循环里汇总报告,卡了 1.1 秒
+    (卡顿探测抓到 ``system_final_acceptance_verdict`` 的 import)。四条路由都改在工作线程里汇总。"""
+    import inspect
+
+    import core.routes.operational_readiness as routes
+
+    src = inspect.getsource(routes)
+    assert src.count("await _build_report(route_paths)") == 4
+    assert "= build_operational_readiness_report(route_paths=route_paths)" not in src
+    assert "asyncio.to_thread(build_operational_readiness_report" in inspect.getsource(routes._build_report)

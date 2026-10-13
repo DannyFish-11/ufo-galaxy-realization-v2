@@ -239,6 +239,23 @@ os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
 os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")
 os.environ["GALAXY_DATA_DIR"] = str(_TMP_DATA_DIR)
 
+# 上面把数据目录指到了临时目录,可「旧位置兜底」(``core.data_paths.data_path_or_legacy``)会把它绕回去:
+# 临时目录里还什么都没有,仓库里的 ``data/sessions.json``、``runtime/*.json`` 却在 —— 于是会话、
+# 会话证据链、面板最近一次操作、任务分配真相……照旧读写**开发者自己的**数据(真跑核对过:
+# 仓库 data/sessions/ 下留着 s6、sess_role_test 这些测试会话)。兜底是给真机迁移用的,测试里
+# 仓库自己的旧位置一律不算;测试自己在临时目录里摆的旧位置(验证兜底本身的用例)照旧生效。
+import core.data_paths as _data_paths  # noqa: E402
+
+_REAL_OR_LEGACY = _data_paths.data_path_or_legacy
+
+
+def _no_repo_legacy(name, *legacy):
+    outside = [old for old in legacy if not Path(old).resolve().is_relative_to(PROJECT_ROOT)]
+    return _REAL_OR_LEGACY(name, *outside)
+
+
+_data_paths.data_path_or_legacy = _no_repo_legacy
+
 # ── 鉴权：整套测试跑在**生产形态**下 ──
 #
 # ``GALAXY_AUTH_ENABLED`` 的默认已翻成 true（见 core/auth.py：只要存在一条公网

@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 from core import upper_ports
+from core.agent.agent_receipt import read_agent_receipt
 from core.agent.intent_router import IntentResult
 from core.agent.multimodal_messages import MULTIMODAL_TASK_KEY
 
@@ -1215,13 +1216,14 @@ class ExecutionPlanner:
             if plan.multimodal_context is not None:
                 task_dict[MULTIMODAL_TASK_KEY] = plan.multimodal_context
             exec_result = await factory.execute_agent_task(agent.id, task_dict)
+            receipt = read_agent_receipt(exec_result)  # 回答、成败、工具调用、厂商都在 results[*] 里,不在顶层
             exec_step.duration_ms = (time.monotonic() - t1) * 1000
-            exec_step.success = exec_result.get("success", True)
+            exec_step.success = receipt.success
             exec_step.output = exec_result
             steps.append(exec_step)
 
             # 收集工具调用记录
-            for tc in exec_result.get("tool_calls", []):
+            for tc in receipt.tool_calls:
                 tool_calls.append(
                     ToolCallRecord(
                         tool=tc.get("tool", ""),
@@ -1234,19 +1236,17 @@ class ExecutionPlanner:
 
             step.duration_ms = (time.monotonic() - t0) * 1000
 
-            # 收集使用的 provider 信息
             chosen_providers: Optional[List[str]] = None
-            _prov = exec_result.get("provider")
-            _mdl = exec_result.get("model")
+            _prov, _mdl = receipt.provider, receipt.model
             if _prov or _mdl:
                 chosen_providers = [f"{_prov or ''}:{_mdl or ''}".strip(":")]
 
             return ExecutionResult(
-                success=exec_result.get("success", True),
+                success=receipt.success,
                 mode="single_agent",
-                reply=exec_result.get("reply") or exec_result.get("result") or "任务已完成",
+                reply=receipt.reply,
                 task_result=exec_result,
-                model=exec_result.get("model", ""),
+                model=receipt.model,
                 auto_agent_id=agent.id,
                 auto_agent_template=selected_template or None,
                 chosen_strategy="single_agent",

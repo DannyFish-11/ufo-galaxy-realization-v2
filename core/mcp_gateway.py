@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from core.acl import AntiCorruptionLayer, acl
+from core.data_paths import data_path_or_legacy
 from core.nats_bus import NATSBus, nats_bus
 from core.schemas.contracts import (
     AgentEventModel,
@@ -44,11 +45,10 @@ from core.schemas.contracts import (
 
 logger = logging.getLogger("mcp_gateway")
 
-# Generated tools directory
-_TOOLS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
+# Generated tools directory(随数据总目录走;仓库 data/ 下已有的继续用)
+_TOOLS_DIR = data_path_or_legacy(
     "generated_tools",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "generated_tools"),
 )
 
 

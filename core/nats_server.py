@@ -151,6 +151,31 @@ class EmbeddedNATSServer:
         self.last_error: str = ""
         self.last_error_hint: str = ""
 
+    async def _port_taken(self) -> bool:
+        try:
+            _r, w = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", self.port), timeout=0.5)
+        except (OSError, asyncio.TimeoutError):
+            return False
+        w.close()
+        return True
+
+    async def _already_served(self) -> bool:
+        """端口上应答的是不是 NATS:连上后服务器先发一行 ``INFO {...}``。
+
+        连接期限 0.5 秒:同机的 NATS 几毫秒就应答;Windows 上连一个没人听的本机端口要等约 2 秒才被拒。
+        """
+        try:
+            r, w = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", self.port), timeout=0.5)
+        except (OSError, asyncio.TimeoutError):
+            return False
+        try:
+            head = await asyncio.wait_for(r.read(4), timeout=1.0)
+        except (OSError, asyncio.TimeoutError):
+            head = b""
+        finally:
+            w.close()
+        return head == b"INFO"
+
     async def start(self) -> bool:
         """启动内置NATS服务器"""
         # 显式关闭时连 data_dir 都不建 —— 这条路径的每一步(建目录、装二进制、
@@ -160,6 +185,14 @@ class EmbeddedNATSServer:
             self.last_error_hint = "已按配置跳过内置 NATS;如需跨设备请设 GALAXY_NATS_ENABLED=true"
             logger.info("内置 NATS 按配置关闭(GALAXY_NATS_ENABLED=false),不安装也不启动")
             return False
+
+        # 端口上已经有一个 NATS 在应答(容器基础设施拉起的那个,或上一次留下的):直接用它。
+        # 原先照样再起一个 —— 端口被占,新起的立刻退出,控制台一条原因为空的 ERROR「NATS server exited:」,
+        # 随后连接又连上了那个已有的,横幅照打 ✓。
+        if await self._already_served():
+            os.environ.setdefault("GALAXY_NATS_URL", f"nats://localhost:{self.port}")
+            logger.info("端口 %d 上已有 NATS 在应答,直接用它,不再另起一个", self.port)
+            return True
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -202,9 +235,12 @@ class EmbeddedNATSServer:
             for _ in range(30):
                 await asyncio.sleep(0.5)
                 if self.process.poll() is not None:
-                    stderr = self.process.stderr.read().decode() if self.process.stderr else ""
-                    logger.error("NATS server exited: %s", stderr[:200])
-                    self.last_error = f"nats-server 进程启动后立即退出 {stderr[:200]}".strip()
+                    # 输出接的是 DEVNULL(防管道写满卡死),读不到 stderr;说退出码,以及端口是不是被占了。
+                    why = f"退出码 {self.process.returncode}"
+                    if await self._port_taken():
+                        why += f",端口 {self.port} 已被别的程序占用"
+                    logger.error("NATS server exited: %s", why)
+                    self.last_error = f"nats-server 进程启动后立即退出({why})"
                     return False
                 # 测试连接
                 try:

@@ -60,6 +60,8 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from core.data_paths import data_path_or_legacy
+
 logger = logging.getLogger("Galaxy.SessionTruthSnapshot")
 
 # ---------------------------------------------------------------------------
@@ -115,7 +117,11 @@ class SessionTruthSnapshotStore:
         *,
         max_records: int = _DEFAULT_MAX,
     ) -> None:
-        self._store_path = store_path or _DEFAULT_SESSION_TRUTH_SNAPSHOT_PATH
+        # 随数据总目录走(GALAXY_DATA_DIR);仓库 data/ 下已有的快照继续用。原先写死仓库 data/:
+        # 真跑时设了独立数据目录,启动仍从仓库里读回了 200 条别处留下的会话真相。
+        self._store_path = store_path or data_path_or_legacy(
+            "session_truth_snapshot.json", _DEFAULT_SESSION_TRUTH_SNAPSHOT_PATH
+        )
         self._max_records = max_records
         self._lock = threading.Lock()
         try:

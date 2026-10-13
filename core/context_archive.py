@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.atomic_json import atomic_write_json
+from core.data_paths import data_path_or_legacy
 
 logger = logging.getLogger("Galaxy.ContextArchive")
 
@@ -56,7 +57,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 #: 归档根目录。与 ``runtime/`` 下其它"这台机器的运行时事实"同级。
 #:
 #: **不是缓存**:这里存的是被压掉那段对话的唯一原文，删了就真没了。
-_ROOT = PROJECT_ROOT / "runtime" / "context_archive"
+#: 随数据目录走(容器里 runtime/ 不在持久卷上,这里又是唯一原文);runtime/ 里已有的继续用。
+_ROOT = Path(data_path_or_legacy("context_archive", str(PROJECT_ROOT / "runtime" / "context_archive")))
 
 #: 目录名的长度（十六进制字符数）。
 #:

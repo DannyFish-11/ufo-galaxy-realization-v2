@@ -675,12 +675,39 @@ class AmbientAttentionLoop(AmbientYieldMixin):
             logger.debug("Ambient 事件发布失败(非致命): %s", exc)
 
     # ── 生命周期 ──
+    #: 每一拍要用到、但懒加载的模块。第一拍之前先在旁边线程里 import 好 —— 全面排查真跑:第一拍在事件循环里
+    #: import 感知存储(还要等别的线程手里的 import 锁),卡了 0.6–1 秒,同一时刻面板的请求全部排队。
+    _TICK_MODULES = (
+        "core.perception.desktop_perception_store",
+        "core.multimodal.ingest_runtime",
+        "core.cognitive.working_memory",
+        "core.memory.unified",
+        "core.speech_output",
+        "core.voice_echo_guard",
+        "core.interruptibility_registry",
+        "core.modality_bridge",
+        "core.conversation_mainline",
+        "core.session_memory_facade",
+        "core.desktop_presence_runtime",
+    )
+
+    @classmethod
+    def _import_tick_modules(cls) -> None:
+        import importlib
+
+        for name in cls._TICK_MODULES:
+            try:
+                importlib.import_module(name)
+            except Exception as exc:  # noqa: BLE001 — 缺哪个,那一拍里照旧现取、照旧降级
+                logger.debug("Ambient 预载 %s 跳过: %s", name, exc)
+
     async def _run_loop(self) -> None:
         logger.info(
             "AmbientAttentionLoop 启动 | interval=%.1fs cooldown=%.1fs",
             self.interval_s,
             self.cooldown_s,
         )
+        await asyncio.to_thread(self._import_tick_modules)
         while self._running:
             try:
                 await self.tick()

@@ -191,3 +191,76 @@ def test_fastapi_builds_its_routes_beside_the_loop_not_on_the_first_request():
     t0 = time.perf_counter()
     assert TestClient(app).get("/health").status_code == 200
     assert time.perf_counter() - t0 < 0.15, "预热之后第一个请求还在现建路由"
+
+
+def test_a_stall_names_the_thread_that_is_importing_at_the_same_time():
+    """所有者日志:11.5 秒「卡在」``_try_ipc_http`` 的 ``session.post(...)`` —— 一行本不该慢的代码。
+    事件循环那根线程多半是在等 GIL:另一根线程正 import 一个大的原生库。卡顿那一行要把它也说出来。"""
+    import sys
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+
+    class _SlowFinder:
+        def find_spec(self, name, path=None, target=None):
+            if name != "galaxy_pretend_big_native_lib":
+                return None
+            entered.set()
+            release.wait(5)
+            return None
+
+    finder = _SlowFinder()
+    sys.meta_path.insert(0, finder)
+
+    def load_it():
+        try:
+            __import__("galaxy_pretend_big_native_lib")
+        except ImportError:
+            pass
+
+    t = threading.Thread(target=load_it, name="voice-model-loader", daemon=True)
+    t.start()
+    try:
+        assert entered.wait(5)
+        said = w.bystanders(threading.get_ident())
+    finally:
+        release.set()
+        t.join(5)
+        sys.meta_path.remove(finder)
+    assert "voice-model-loader" in said and "galaxy_pretend_big_native_lib" in said, said
+
+
+def test_the_report_names_the_library_line_under_the_repo_line(monkeypatch, said):
+    """仓库那行调了库、卡在库里:除了仓库那几行,还要说出最里面卡在库的哪一行。"""
+    import json
+
+    monkeypatch.setattr(w, "_started", False)
+    monkeypatch.setattr(w, "STALL_S", 0.3)
+    big = [{"k": list(range(50))} for _ in range(4000)]
+
+    def _hog_in_a_library():
+        end = time.monotonic() + 0.9
+        while time.monotonic() < end:
+            json.dumps(big, default=str, indent=1)  # indent 走纯 Python 编码器,最里面那层在 json 里
+
+    async def run():
+        assert w.start()
+        await asyncio.sleep(0.3)
+        _hog_in_a_library()
+        await asyncio.sleep(0.6)
+
+    asyncio.run(run())
+    line = next(m for m in said if "_hog_in_a_library" in m)
+    assert "〔最里面:" in line and "encoder.py" in line, line
+
+
+def test_uvicorn_loads_its_protocol_classes_beside_the_loop():
+    """真跑启动:「事件循环被卡住 0.5 秒 ……〔正在 import uvicorn.protocols.http.auto〕」——
+    ``server.serve()`` 一进去在循环里 ``config.load()``(import httptools / h11、websockets)。先在线程里 load,
+    serve() 见 ``config.loaded`` 就跳过。"""
+    import inspect
+
+    import launcher.services as svc
+
+    src = inspect.getsource(svc.UnifiedWebUI.start)
+    assert src.index("await asyncio.to_thread(_uvi_config.load)") < src.index("asyncio.create_task(server.serve())")

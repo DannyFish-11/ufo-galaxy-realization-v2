@@ -1066,9 +1066,9 @@ def _apply_model_cli_args(args) -> None:
         if getattr(args, "model", None):
             os.environ["OLLAMA_MODEL"] = args.model
         if getattr(args, "select_model", False):
-            # 清除已保存选择以触发重新选择。主脑现收敛在 model_catalog 的统一记录
-            # (runtime/model_state.json);连旧的 .galaxy_model 一并清掉(迁移期兼容)。
-            for _p in (PROJECT_ROOT / "runtime" / "model_state.json", PROJECT_ROOT / ".galaxy_model"):
+            from core.model_catalog import _STATE_FILE as _saved  # 档位 + 主脑的统一记录(连旧 .galaxy_model 一并清)
+
+            for _p in (_saved, PROJECT_ROOT / ".galaxy_model"):
                 try:
                     _p.unlink()
                 except Exception:

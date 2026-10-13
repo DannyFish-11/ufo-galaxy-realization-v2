@@ -70,10 +70,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
+from core.data_paths import state_file
+
 logger = logging.getLogger("Galaxy.UserProviders")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-STORE_FILE = PROJECT_ROOT / "runtime" / "user_providers.json"
+# 随数据目录走(容器里 runtime/ 不在持久卷上,重建一次就丢);runtime/ 里已有的继续用。
+STORE_FILE = Path(state_file("user_providers.json", str(PROJECT_ROOT / "runtime")))
 
 #: id 的形状。限死成小写短标识符有两个理由:它会成为路由里的 provider 名(要能
 #: 当字典键、当日志字段),而且要能安全地拼进 vault 键名 —— 允许斜杠或 ``..``

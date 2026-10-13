@@ -19,10 +19,11 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 from core.atomic_json import atomic_write_json
+from core.data_paths import data_path_or_legacy
 from core.meta.artifacts import ARTIFACT_TYPES, Artifact, ArtifactError, verify_integrity
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_STORE_ROOT = REPO_ROOT / "runtime" / "meta"
+DEFAULT_STORE_ROOT = Path(data_path_or_legacy("meta", str(REPO_ROOT / "runtime" / "meta")))  # 随数据目录走;旧的继续用
 
 
 class ArtifactStore:

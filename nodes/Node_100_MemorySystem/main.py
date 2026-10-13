@@ -53,11 +53,37 @@ install_node_auth(app, "Node_100_MemorySystem")
 # ============================================================================
 
 # PR-PERSISTENT-PATH: 默认持久化到 /app/data/（docker-compose 已挂 volume）
-# 本地开发时自动回退到项目根目录的 data/ 文件夹
+# 本机运行时落数据总目录（GALAXY_DATA_DIR，缺省项目根目录的 data/）
 default_db_path = "/app/data/galaxy_memory.db"
 if not os.path.isdir("/app/data"):
-    default_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "galaxy_memory.db")
-DB_PATH = os.getenv("MEMORY_DB_PATH", default_db_path)
+    default_db_path = os.path.join(
+        (os.environ.get("GALAXY_DATA_DIR") or "").strip()
+        or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data"),
+        "galaxy_memory.db",
+    )
+
+
+def _usable_db_path(configured: str, fallback: str) -> str:
+    """``MEMORY_DB_PATH`` 指的目录建不出来就用默认位置。
+
+    全面排查:``.env.example`` 里曾写着 ``MEMORY_DB_PATH=/app/data/galaxy_memory.db``(容器路径),
+    启动时自动从模板生成的 ``.env`` 把它带到了本机 —— Windows 上 ``/app/data`` 不存在,建库报
+    「unable to open database file」,记忆节点整个用不了。
+    """
+    if not configured:
+        return fallback
+    if configured.replace("\\", "/").startswith("/app/") and not os.path.isdir("/app/data"):
+        return fallback  # 容器路径,而这里不是容器:别在本机根目录下凭空建 /app
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(configured)) or ".", exist_ok=True)
+        return configured
+    except OSError as exc:
+        logging.getLogger(__name__).warning("MEMORY_DB_PATH=%s 用不了(%s),改用 %s", configured, exc, fallback)
+        return fallback
+
+
+DB_PATH = _usable_db_path((os.getenv("MEMORY_DB_PATH") or "").strip(), default_db_path)
+os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 MAX_SHORT_TERM_SIZE = 100  # 短期记忆最大条目数（每会话）
 MAX_SHORT_TERM_SESSIONS = 1000  # 短期记忆最大会话数（LRU 淘汰，防止无界增长）
 

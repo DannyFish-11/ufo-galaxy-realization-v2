@@ -54,6 +54,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+from core.data_paths import state_file as _data_state_file
+
 logger = logging.getLogger("Galaxy.SpeculativeDraft")
 
 #: 仓库根 —— 与 ``core/model_catalog.py`` 取法一致(本文件在 ``core/`` 下)。
@@ -302,7 +304,8 @@ class DraftMeasurement:
 # 何况让配置接口指定任意写入路径本身也不是好主意)。
 #
 # 测试要隔离就直接改这个模块级常量 —— 隔壁 ``model_catalog`` 从来就是这么做的。
-_STATE_FILE = PROJECT_ROOT / "runtime" / "speculative_draft.json"
+# 随数据目录走(容器里 runtime/ 不在持久卷上);runtime/ 里已有的继续用。
+_STATE_FILE = Path(_data_state_file("speculative_draft.json", str(PROJECT_ROOT / "runtime")))
 
 _lock = threading.Lock()
 

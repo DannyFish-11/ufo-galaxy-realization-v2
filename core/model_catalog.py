@@ -61,15 +61,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
+from core.data_paths import state_file
 from core.speculative_draft import DraftSpec
 
 logger = logging.getLogger("Galaxy.ModelCatalog")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# 统一状态记录:档位 + 主脑 合成【一条】记录(此前 .galaxy_tier 与 .galaxy_model
-# 分裂两存点 + OLLAMA_MODEL env 三写易漂移)。运行时 env(GALAXY_MODEL_TIER /
-# OLLAMA_MODEL)从本记录派生导出。旧的两个文件仅做一次性迁移读入。
-_STATE_FILE = PROJECT_ROOT / "runtime" / "model_state.json"
+# 档位 + 主脑合成一条记录(运行时 env GALAXY_MODEL_TIER / OLLAMA_MODEL 由它导出;旧 .galaxy_tier / .galaxy_model
+# 只做一次性迁移读入)。随数据目录走(容器里 runtime/ 不在卷上);runtime/ 里已有的继续用。
+_STATE_FILE = Path(state_file("model_state.json", str(PROJECT_ROOT / "runtime")))
 _LEGACY_TIER_FILE = PROJECT_ROOT / ".galaxy_tier"
 _LEGACY_MODEL_FILE = PROJECT_ROOT / ".galaxy_model"
 

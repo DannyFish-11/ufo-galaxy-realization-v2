@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import httpx
 
 from core.credential_vault import PLACEHOLDER_PREFIXES
+from core.llm_unavailable_reply import note_nothing_configured
 from core.model_catalog import SLOT_REASONING
 from core.model_openness import treat_as_open_source as _treat_as_open_source
 from core.routing_tail import last_resort, unlisted_available
@@ -2128,8 +2129,7 @@ class MultiLLMRouter:
                 provider=first, model=model, reason=f"Fallback: 偏好表里没有可用的，改用 {first}", alternatives=pool[1:]
             )
 
-        # 无可用提供商 — 返回指向 none 的降级路由决策
-        logger.error("没有可用的 LLM 提供商")
+        note_nothing_configured()  # 无可用提供商是一种状态,不是每次都报错(每 10 分钟提醒一次);返回指向 none 的降级决策
         return RoutingDecision(
             provider="none",
             model="none",

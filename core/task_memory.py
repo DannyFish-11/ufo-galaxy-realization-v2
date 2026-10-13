@@ -246,7 +246,15 @@ class TaskMemory:
         extra: Optional[Dict[str, Any]] = None,
         task_type: str = "",  # G6: 新增，向后兼容（默认为空字符串）
     ) -> TaskSummary:
-        """记录一条任务摘要，持久化到本地文件。"""
+        """记录一条任务摘要，持久化到本地文件。
+
+        存的是**用户说的话**:openclawd 交给内核前在消息末尾追加的机器注解
+        (``[Multimodal context: …]``、``[desktop_context_strategy …]``)在这里剥掉。真跑里每条摘要都挂着
+        这两段,经验制导按 BM25 拿 ``task`` 排相似任务,面板也会把它当「做过什么」列出来。
+        """
+        from core.anticipatory_context import strip_appended_annotations
+
+        task = strip_appended_annotations(task or "")
         entry = TaskSummary(
             task=task[:_MAX_TASK_LENGTH],
             result_summary=result_summary[:_MAX_SUMMARY_LENGTH],
