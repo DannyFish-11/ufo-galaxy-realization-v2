@@ -34,7 +34,7 @@ import { modelLabel } from './model_name';
 const MODEL_KEYS: ReadonlySet<string> = new Set(['OLLAMA_MODEL']);
 
 /** 哪些键的值不该以明文出现在界面上。 */
-const SECRET_RE = /(_KEY|_TOKEN|_SECRET|PASSWORD|_CREDENTIAL)$/;
+const SECRET_RE = /(_KEY|_TOKENS?|_SECRET|PASSWORD|_CREDENTIAL)$/;
 
 function isSecret(item: ConfigItem): boolean {
   return item.type === 'password' || SECRET_RE.test(item.key);

@@ -420,3 +420,20 @@ class TestLLMRouterDecider:
         out = asyncio.run(d.decide(AmbientObservation(frame_b64=_BLACK)))
         assert out.action == AmbientAction.SILENT
         assert r.n == 2  # 确实降级重试了
+
+
+def test_tick_modules_are_imported_beside_the_loop_before_the_first_tick():
+    """全面排查真跑:第一拍在事件循环里 import 感知存储,卡了 0.6–1 秒。每一拍懒加载的模块,
+    第一拍之前先在旁边线程里 import 好(清单里的每一个都要真能 import,不然预载形同虚设)。"""
+    import importlib
+    import inspect
+
+    from core.ambient_attention_loop import AmbientAttentionLoop
+
+    run = inspect.getsource(AmbientAttentionLoop._run_loop)
+    assert run.index("asyncio.to_thread(self._import_tick_modules)") < run.index("while self._running")
+    for name in AmbientAttentionLoop._TICK_MODULES:
+        importlib.import_module(name)
+    src = inspect.getsource(AmbientAttentionLoop)
+    for lazy in ("core.perception.desktop_perception_store", "core.cognitive.working_memory"):
+        assert lazy in src and lazy in AmbientAttentionLoop._TICK_MODULES

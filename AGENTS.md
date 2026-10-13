@@ -182,11 +182,12 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 
 ### 启动横幅与卡顿
 - 本地模式不起 NATS、不入 tailnet、不往局域网广播 —— 这些是对的状态，不算降级（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
-- `core/loop_stall_watch.py` - 事件循环停跳 1 秒以上时记下卡在仓库哪几行。日志里「一批请求同一毫秒一起慢」先看它那一行
+- `core/loop_stall_watch.py` - 事件循环停跳 0.5 秒以上时记下卡在仓库哪几行、最里面卡在库的哪一行、同一时刻别的线程在 import 什么（循环线程可能只是在等 GIL）。日志里「一批请求同一毫秒一起慢」先看它那一行
 - 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
 - **控制台只上结论和错误**（`core/console_log.py`）：WARNING 是过程诊断，进 `logs/lumiv.log`，`-v` 才上屏；写控制台在专门的线程里（Windows 控制台被选中文字时挂起写入，曾卡住事件循环 13.8 秒）。别再往控制台 `print` 诊断
 - 事件循环里不 import、不跑子进程：周期清扫不替没人加载过的模块 import（`core/periodic_maintenance.py::_loaded`）；FastAPI 的路由校验模型在网关起来前由旁边线程先建（`launcher/services.py::_warm_routes`）
 - HF 下载源探测（`core/hf_endpoint.py`）并发、每个 6 秒、两轮；语音识别模型没下下来时后台重试、下好自动开启
+- 「一个模型都没配」是状态不是故障：`core/llm_unavailable_reply.py::note_nothing_configured` 每 10 分钟提醒一次；全面排查每一轮的结果与待办在 `docs/SYSTEM_STATUS.md` 6.20
 
 ### API 层
 - `core/api_routes.py` - REST API 和 WebSocket 路由（挂 `core/routes/*`）
@@ -201,7 +202,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
-- **设置页每一行的中文名、下拉每一档的中文名**在 `core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`），由 `/api/config/all` 带给面板；行首画中文名、环境变量名在悬停提示里。**新增一个会列在面板上的配置，不补这张表 `tests/test_every_listed_setting_has_a_chinese_name.py` 会红**。整档按钮的主键（`CONFIG_BUNDLES[*].primary`）在 `/all` 里标 `bundle`，设置页不再摆第二个开关；取值有限的字符串键（`auto/1/0`）在表里登记档位后按下拉画
+- **设置页每一行的中文名、下拉每一档的中文名**在 `core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`），由 `/api/config/all` 带给面板；行首画中文名、环境变量名在悬停提示里。**新增一个会列在面板上的配置，不补这张表 `tests/test_every_listed_setting_has_a_chinese_name.py` 会红**。整档按钮的主键（`CONFIG_BUNDLES[*].primary`）在 `/all` 里标 `bundle`，设置页不再摆第二个开关；取值有限的字符串键（`auto/1/0`）在表里登记档位后按下拉画。**`/api/config/all` 不下发密钥的值**（后端默认听 `0.0.0.0`、鉴权默认关）：密钥类只给掩码 / 空串，写回的掩码当没改；「什么算密钥」与面板 `ui/settings.ts` 的 `SECRET_RE` 是同一条（`tests/test_settings_never_send_secret_values.py`）
 - **「调数据方式」的参数（回声消除、并发 / 熔断常数、各种超时与窗口、`auto/1/0` 档位……共 102 个：86 个数字、14 个档位、2 个音色名）不上面板**：它们多半是自适应算法自己的常数，人会说的是效果。登记在 `core/tuning.py` 的白名单里（每个键有硬范围），由智能体的 `tuning__list` / `tuning__set` 按人的话调：只在人发起的回合、放大自主度的方向要人点头、不碰会删数据的键、留痕（`tuning_log.jsonl`）、可 `reset` 一句话撤销。**新增这类参数：登记进 `_NUMERIC` / `_CHOICES`（档位，开关也按两档）/ `_NAMES`（音色名这类一小段名字），别往面板上摆一行**；登记的出厂值必须等于代码里的默认值（`tests/test_tuning_knobs.py` 核对）；读取点在导入时的要登记进 `_AT_IMPORT`（改了要重启）
 - **面板上不列的另两类设置**（`core/routes/panel_builtin.py`，`GET /api/config/all` 不下发、「保存设置」不往 `.env` 里钉默认值，但仍登记、`POST /api/config` / `.env` / 环境变量照旧能用）：**内置键 90 个**（路径、内部服务地址与端口、型号与规格、固定的严格默认、运维逃生口——有一个对的默认，人填错只会弄坏），**跨设备专属键 15 个**（总线 / 联邦 / 打洞与中继 / 设备名 / 网格口令……只在 `core.system_mode.cross_device_requested()` 为真时才列，本地模式是纯噪音）。**新增一个键，先回答它属于哪一类**：留在面板（用户真有取舍）/ 对话里调（`core/tuning.py`）/ 内置（加进 `BUILTIN_GROUPS`）/ 跨设备专属。**登记表的默认值必须等于代码里的默认值**（`tests/test_panel_builtin_keys.py` 逐个扫描核对；曾抓到 `CORS_ALLOWED_ORIGINS` 登记成 `*`，点一次保存就写成「任何网页都能带凭据调本机接口」），**路径默认一律随数据总目录走**（`core.data_paths.data_path_or_legacy` / `runtime_file`：数据目录下没有、旧位置有数据时继续认旧位置，不把已有的记忆 / 账本 / 装进来的项目甩在后面）；**没有任何代码在读的键不许登记**（同一份测试扫描）
 - **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致

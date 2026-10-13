@@ -322,3 +322,16 @@ def test_the_summary_card_does_not_send_people_to_a_404_panel():
     if root == 404:
         assert '("面板", f"http://localhost:{port}")' not in src, "根路径没有页面,却在总结卡里叫它'面板'"
         assert "面板在桌面窗口里" in src
+
+
+def test_backend_only_says_it_skipped_the_desktop_shell_instead_of_blaming_node():
+    """``--backend`` 是主动不起桌面壳;真跑里横幅却写「未启动」、算进降级,日志还猜「缺 Node.js」。"""
+    import inspect
+
+    import launcher.services as svc
+
+    shell = inspect.getsource(svc.GalaxyUnified.start_desktop_shell)
+    assert "self._desktop_shell_skipped = True" in shell
+    start = inspect.getsource(svc.GalaxyUnified.start)
+    branch = start[start.index('getattr(self, "_desktop_shell_skipped", False)') :][:200]
+    assert "按 --backend 跳过" in branch and '"info"' in branch

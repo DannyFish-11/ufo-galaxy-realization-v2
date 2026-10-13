@@ -38,22 +38,16 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from core.atomic_json import atomic_write_json
+from core.data_paths import data_path_or_legacy
 from core.memory_thread import is_identifying_owner, resolve_thread
 
 logger = logging.getLogger("Galaxy.SessionManager")
 
-# 持久化路径
-_SESSION_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "sessions.json",
-)
+# 持久化路径:随数据总目录(GALAXY_DATA_DIR)走;仓库 data/ 下已有的会话继续用(不把已有的对话甩在后面)
+_REPO_DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+_SESSION_FILE = data_path_or_legacy("sessions.json", os.path.join(_REPO_DATA, "sessions.json"))
 # 每个会话的证据链(evidence chain)以 append-only JSONL 落在此目录下，<session_id>.evidence.jsonl
-_EVIDENCE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "sessions",
-)
+_EVIDENCE_DIR = data_path_or_legacy("sessions", os.path.join(_REPO_DATA, "sessions"))
 
 
 # ─────────────────────────── 证据链 / 血缘 ───────────────────────────

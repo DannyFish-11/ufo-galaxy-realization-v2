@@ -27,8 +27,10 @@ core.hardware_aware_multimodal_router — 硬件感知多模态优先路由器
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -161,21 +163,19 @@ class HardwareAwareMultimodalRouter:
 
     def __init__(self):
         self.strategy = RoutingStrategy.MULTIMODAL_LOCAL_FIRST
+        # 构造在事件循环里(openclawd 懒加载单例):这里不做任何 I/O —— 原先同步探一次 Ollama(2 秒超时)
+        # 并 import huggingface_hub。Ollama 在不在由第一次扫描来定(异步路径放线程,同步路径见下)。
         self._hf_available = self._check_hf_hub()
-        self._ollama_available = self._check_ollama()
+        self._ollama_available = False
         self._local_models: Dict[str, Any] = {}
         self._last_refresh = 0.0
+        self._refreshing = threading.Lock()
 
     # ── 可用性检查 ──
 
     @staticmethod
     def _check_hf_hub() -> bool:
-        try:
-            import huggingface_hub  # noqa: F401
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("huggingface_hub") is not None  # 只看装没装,不 import
 
     @staticmethod
     def _check_ollama() -> bool:
@@ -449,11 +449,42 @@ class HardwareAwareMultimodalRouter:
     # ── 同步接口（供 OpenClawd._select_multimodal_route 调用）──
 
     def _scan_local_models_sync(self) -> Dict[str, List[Dict]]:
-        """同步扫描本地模型，优先使用缓存（60s TTL）。"""
+        """同步扫描本地模型，优先使用缓存（60s TTL）。
+
+        在事件循环线程里被调(``OpenClawd._select_multimodal_route`` 是同步的)时**不做 I/O**:
+        照用手上的缓存(第一次是空的 = 本机这一层先不给建议,交给 MultiLLMRouter),过期了让一根
+        后台线程去刷。所有者真机日志:「事件循环被卡住 2.2 秒 —— 卡在 _scan_local_models_sync」。
+        """
         now = time.time()
         if now - self._last_refresh < 60 and self._local_models:
             return self._local_models
+        if _on_event_loop():
+            self._refresh_in_background()
+            return self._local_models
+        return self._scan_now()
 
+    def _refresh_in_background(self) -> None:
+        if self._refreshing.locked():
+            return
+
+        def _run() -> None:
+            if not self._refreshing.acquire(blocking=False):
+                return
+            try:
+                self._scan_now()
+                from core.hardware_compute_profiler import get_compute_profile_sync
+
+                get_compute_profile_sync()  # 顺手把硬件画像算好(首次会 import torch,几秒)
+            except Exception:  # noqa: BLE001 — 刷不出来下次再刷
+                logger.debug("本机模型后台刷新失败", exc_info=True)
+            finally:
+                self._refreshing.release()
+
+        threading.Thread(target=_run, name="ha-router-refresh", daemon=True).start()
+
+    def _scan_now(self) -> Dict[str, List[Dict]]:
+        now = time.time()
+        self._ollama_available = self._check_ollama()  # 与异步路径一样每个缓存周期重探,Ollama 晚起也认得出
         models: Dict[str, List[Dict]] = {"llm": [], "vlm": [], "asr": [], "embedding": []}
 
         if self._ollama_available:
@@ -543,9 +574,10 @@ class HardwareAwareMultimodalRouter:
         否则返回 None，让 MultiLLMRouter 继续完成 API 路由。
         """
         try:
-            from core.hardware_compute_profiler import get_compute_profile_sync
+            from core.hardware_compute_profiler import get_compute_profile_sync, get_hardware_profiler
 
-            profile = get_compute_profile_sync()
+            # 事件循环里只读算好的画像(首次算要 import torch、问显卡);没有就由后台刷新顺手算
+            profile = get_hardware_profiler().latest if _on_event_loop() else get_compute_profile_sync()
         except Exception:
             profile = None
 
@@ -564,6 +596,14 @@ class HardwareAwareMultimodalRouter:
         return None
 
     # ── 快捷方法 ──
+
+
+def _on_event_loop() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
 
 
 # ── 全局单例 ──

@@ -6,6 +6,7 @@ Read-only operational readiness and clone-to-use acceptance routes.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Request
@@ -32,6 +33,13 @@ def _build_ingress_surface_context() -> dict:
         return {"error": str(exc)}
 
 
+async def _build_report(route_paths):
+    """在工作线程里汇总:这份报告要读十几张登记表、头一次还要 import 验收判定那一大块 ——
+    真跑里 ``GET /api/v1/projection/operability-contract`` 在事件循环里卡了 1.1 秒(卡顿探测抓到的
+    就是 ``system_final_acceptance_verdict`` 的 import),同一时刻面板与感知的请求全部排队。"""
+    return await asyncio.to_thread(build_operational_readiness_report, route_paths=route_paths)
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create the read-only operational readiness router.
 
@@ -44,7 +52,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     @router.get("/api/v1/projection/operational-readiness")
     async def get_operational_readiness(request: Request) -> JSONResponse:
         route_paths = collect_app_route_paths(request.app)
-        report = build_operational_readiness_report(route_paths=route_paths)
+        report = await _build_report(route_paths)
         payload = report.to_dict()
         payload["route_surface_authority"] = OPERATIONAL_READINESS_SURFACE_AUTHORITY
         payload["device_ingress_surfaces"] = _build_ingress_surface_context()
@@ -53,7 +61,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     @router.get("/api/v1/projection/clone-to-use-acceptance")
     async def get_clone_to_use_acceptance(request: Request) -> JSONResponse:
         route_paths = collect_app_route_paths(request.app)
-        report = build_operational_readiness_report(route_paths=route_paths)
+        report = await _build_report(route_paths)
         payload = {
             "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
             "contract_version": report.contract_version,
@@ -69,7 +77,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     @router.get("/api/v1/projection/operability-contract")
     async def get_operability_contract(request: Request) -> JSONResponse:
         route_paths = collect_app_route_paths(request.app)
-        report = build_operational_readiness_report(route_paths=route_paths)
+        report = await _build_report(route_paths)
         payload = {
             "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
             "contract_version": report.contract_version,
@@ -83,7 +91,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     @router.get(DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE)
     async def get_dual_repo_integrated_system_contract(request: Request) -> JSONResponse:
         route_paths = collect_app_route_paths(request.app)
-        report = build_operational_readiness_report(route_paths=route_paths)
+        report = await _build_report(route_paths)
         payload = build_dual_repo_integrated_system_contract(report)
         payload["route_surface_authority"] = OPERATIONAL_READINESS_SURFACE_AUTHORITY
         return JSONResponse(content=payload)

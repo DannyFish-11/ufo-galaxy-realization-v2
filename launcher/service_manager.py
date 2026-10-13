@@ -11,6 +11,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -133,9 +134,28 @@ class ServiceManager:
         return True
 
     def stop_all(self) -> None:
-        """停止所有服务"""
-        for name in list(self.services.keys()):
-            self.stop_service(name)
+        """停止所有服务:先一起 terminate,再一起等(共 5 秒),到点没退的 kill。
+
+        原先逐个 terminate + wait(5):停机时间是各节点之和(真跑停机时卡在这里 2.6 秒)。
+        """
+        running = [s for s in self.services.values() if s.process]
+        for service in running:
+            try:
+                service.process.terminate()
+            except OSError:
+                pass
+        deadline = time.monotonic() + 5
+        for service in running:
+            try:
+                service.process.wait(timeout=max(0.0, deadline - time.monotonic()))
+            except (subprocess.TimeoutExpired, OSError):
+                try:
+                    service.process.kill()
+                except OSError:
+                    pass
+            service.process = None
+        for service in self.services.values():
+            service.status = "stopped"
 
     def get_status(self) -> Dict[str, Any]:
         """获取所有服务状态"""

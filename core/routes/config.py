@@ -5,6 +5,7 @@ Galaxy Configuration API
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict
 
@@ -107,6 +108,28 @@ class ConfigUpdateRequest(BaseModel):
     config: Dict[str, str]
 
 
+#: ``GET /api/config/all`` 里密钥类的值一律给这个(配了)或空串(没配),**不下发真值**。
+#: 后端默认监听 0.0.0.0、鉴权默认关:原先同一局域网里任何一台机器 GET 一下就拿走全部 API Key
+#: 与 ``GALAXY_API_TOKEN`` 本身。面板本来就不回填密钥(``ui/settings.ts``:只看有没有值,
+#: 输入框留空=不改),要的只是「配没配」。收到原样写回的掩码当没改。
+SECRET_MASK = "********"
+#: 与面板 ``ui/settings.ts`` 的 ``SECRET_RE`` 同一条:面板当密钥画(不回填)的,这里也不下发真值。
+_SECRET_NAME = re.compile(r"(_KEY|_TOKENS?|_SECRET|PASSWORD|_CREDENTIAL)$")
+
+
+def _masked(key: str) -> bool:
+    from core.config_schema import classify_key
+
+    return classify_key(key) == "secret" or bool(_SECRET_NAME.search(key))
+
+
+def _secret_is_set(key_name: str) -> bool:
+    from core.credential_vault import PLACEHOLDER_PREFIXES
+
+    val = os.getenv(key_name, "")
+    return bool(val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and not val.startswith("sk-YOUR"))
+
+
 # 面板角标读端点(自 core/routes/system.py 迁入)。迁移原因 —— 鉴权对称性:
 # 它原先挂在 system 路由组(整组 Depends(require_auth)),而同路径的写端点
 # POST /api/config 在本开放路由组 —— 生产模式(GALAXY_MODE=production 强制
@@ -157,11 +180,7 @@ async def get_frontend_config(request: Request = None):
         host = request.url.hostname or "localhost"
         port = str(request.url.port or 9000)
 
-    def _is_configured(key_name: str) -> bool:
-        from core.credential_vault import PLACEHOLDER_PREFIXES
-
-        val = os.getenv(key_name, "")
-        return bool(val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and not val.startswith("sk-YOUR"))
+    _is_configured = _secret_is_set
 
     return JSONResponse(
         {
@@ -218,6 +237,8 @@ async def get_config():
             continue  # 只在跨设备模式下才有意义;本地模式下是纯噪音
         is_bool = meta["type"] == "boolean"
         value = os.environ.get(key, meta["default"])
+        if _masked(key) and meta["type"] not in ("boolean", "number") and value != meta["default"]:
+            value = SECRET_MASK if _secret_is_set(key) else ""
         result[key] = {
             "value": _bool_text(value) if is_bool else value,
             "default": _bool_text(meta["default"]) if is_bool else meta["default"],
@@ -258,6 +279,7 @@ async def update_config(req: ConfigUpdateRequest):
     # 前端只看到笼统的 400。这里先做一遍完整性校验,全部合法才动手写,
     # 避免"部分生效、部分丢失"的诡异中间态。
     unknown_keys = [k for k in req.config if k not in CONFIG_SCHEMA]
+    req.config = {k: v for k, v in req.config.items() if str(v) != SECRET_MASK}  # 写回来的掩码 = 没改
     if unknown_keys:
         raise HTTPException(
             status_code=400,

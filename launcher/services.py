@@ -1459,18 +1459,13 @@ class GalaxyUnified:
     async def start_desktop_shell(self) -> bool:
         """统一桌面壳入口：优先 Tauri（轻量），未构建/失败则回退 Electron。
 
-        ``GALAXY_SKIP_ELECTRON=1`` 在这里生效 —— 这是全仓**唯一**的桌面壳入口
-        （``start_tauri`` / ``start_electron`` 都只从这里进），所以闸设在这一处
-        就够，不用两边各写一遍。
-
-        为什么现在才接：这个开关在 ``flags.py`` 里登记着（``status="stable"``、
-        purpose 白纸黑字写着 "skip starting the Electron three-state GUI"），但
-        **全仓零个读取点** —— 也就是设了它没有任何效果。删 ``launch_desktop.py``
-        时要给 ``--backend``（只起网关、不拉壳）一个等价新命令，正好落在它身上：
-        与其为 ``--backend`` 另造一套判断，不如把这个本来就该生效的开关接上。
+        ``GALAXY_SKIP_ELECTRON=1``（``--backend``）在这里生效 —— 这是全仓**唯一**的桌面壳入口
+        （``start_tauri`` / ``start_electron`` 都只从这里进），闸设在这一处就够。主动跳过记在
+        ``_desktop_shell_skipped`` 上：横幅照实说「按 --backend 跳过」，不算降级、不猜「缺 Node.js」。
         """
         if os.environ.get("GALAXY_SKIP_ELECTRON", "").strip() == "1":
             logger.info("GALAXY_SKIP_ELECTRON=1，跳过桌面壳启动（无头模式）")
+            self._desktop_shell_skipped = True
             return False
         if await self.start_tauri():
             return True
@@ -2338,6 +2333,8 @@ class GalaxyUnified:
                     ("快捷键", "Ctrl+Alt+Space 唤醒 / Ctrl+Alt+H 隐藏", "ok"),
                 ],
             )
+        elif getattr(self, "_desktop_shell_skipped", False):
+            _emit("桌面前端 · 三态覆盖层", "按 --backend 跳过(只起后端与 API)", "info")
         else:
             _emit("桌面前端 · 三态覆盖层", "未启动 — 后端/API 仍完全可用", "warn")
             logger.warning(

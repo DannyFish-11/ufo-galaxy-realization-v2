@@ -779,16 +779,10 @@ class GalaxyPresenceBridge:
 
         为什么要共享
         ------------
-        这条 POST 不是偶发的：阈限期由 200ms 的 continuum tick 发 ``intent.update``
-        驱动广播，也就是**每秒 5 次**。原先每次都 ``async with
-        aiohttp.ClientSession()``，等于每 200ms 新建一个连接器 + 一条到
-        127.0.0.1 的 TCP 连接再拆掉。同机实测（200 次 POST 到真实本地服务端）：
-
-            每次新建 Session   中位 0.83 ms   p95 1.15 ms
-            复用 Session       中位 0.28 ms   p95 0.41 ms
-
-        省下的是**事件循环上的时间**，而那条循环同时在服务正在处理的那个请求 ——
-        阈限期恰恰是循环最忙的时候。
+        这条 POST 不是偶发的：阈限期由 200ms 的 continuum tick 驱动，**每秒 5 次**。原先每次都新建
+        ``aiohttp.ClientSession()``（新连接器 + 一条 TCP 连接再拆掉）。同机实测 200 次 POST：
+        每次新建中位 0.83 ms / p95 1.15 ms，复用 0.28 ms / 0.41 ms —— 省下的是**事件循环上的时间**，
+        而阈限期恰恰是循环最忙的时候。
 
         为什么按事件循环缓存
         --------------------
@@ -797,8 +791,7 @@ class GalaxyPresenceBridge:
         调用方吞异常返回 ``False``，症状会是「IPC 从某个时刻起永远失败、WS 兜底
         默默顶上」——指不回这里。所以循环一换就丢弃重建。
 
-        旧 Session 不 ``await close()``：循环都没了，close 也没处 await。直接丢引用，
-        随旧循环一起被回收。
+        循环换了的旧 Session 直接丢引用（循环没了，close 没处 await）；停机时由 ``close_ipc_session`` 关掉。
         """
         loop = asyncio.get_running_loop()
         session = cls._ipc_http_session
@@ -809,6 +802,13 @@ class GalaxyPresenceBridge:
             cls._ipc_http_session = session
             cls._ipc_http_loop = loop
         return session
+
+    @classmethod
+    async def close_ipc_session(cls) -> None:
+        """停机时关掉共享的 IPC 会话 —— 不关的话退出时 aiohttp 记一条 ERROR「Unclosed client session」。"""
+        session, cls._ipc_http_session = cls._ipc_http_session, None
+        if session is not None and not session.closed and cls._ipc_http_loop is asyncio.get_running_loop():
+            await session.close()
 
     async def _try_ipc_http(self, msg: Dict[str, Any]) -> bool:
         """尝试 HTTP POST 到 Electron。返回是否成功。"""
