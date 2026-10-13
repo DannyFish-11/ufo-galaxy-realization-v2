@@ -128,11 +128,24 @@ async def _send_feed(websocket: Any, timeout: float) -> None:
         logger.debug("给新客户端补发 panel feed 失败(非致命): %s", exc)
 
 
+async def _send_island(websocket: Any, timeout: float) -> None:
+    """灵动岛上此刻有卡就补发一份(core.island_cards):覆盖层中途才连上,也看得到正在跑的桌面操作。"""
+    try:
+        from core.island_cards import get_island_cards
+
+        frame = get_island_cards().frame()
+        if frame["payload"]["cards"]:
+            await asyncio.wait_for(websocket.send_json(frame), timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("给新客户端补发灵动岛卡片失败(非致命): %s", exc)
+
+
 def welcome(websocket: Any, timeout: float) -> None:
-    """给刚连上的这一个客户端补一份设备名册(后台发,不拖住注册)。"""
-    task = asyncio.create_task(_send_feed(websocket, timeout))
-    _TASKS.add(task)
-    task.add_done_callback(_TASKS.discard)
+    """给刚连上的这一个客户端补一份设备名册、灵动岛上的卡(后台发,不拖住注册)。"""
+    for send in (_send_feed, _send_island):
+        task = asyncio.create_task(send(websocket, timeout))
+        _TASKS.add(task)
+        task.add_done_callback(_TASKS.discard)
 
 
 __all__ = [

@@ -14,6 +14,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
+
 
 def _reset_udm():
     """重置 UnifiedDeviceManager 单例，确保测试隔离。"""
@@ -582,7 +586,7 @@ class TestRESTRegistrationWritesToUDM:
         app = FastAPI()
         app.include_router(create_router())
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_AUTH_HEADERS) as client:
             resp = client.post(
                 "/api/v1/devices/register",
                 json={
@@ -667,7 +671,7 @@ class TestRESTRegistrationWritesToUDM:
         app = FastAPI()
         app.include_router(create_router())
 
-        with TestClient(app) as client:
+        with TestClient(app, headers=_AUTH_HEADERS) as client:
             resp = client.delete("/api/v1/devices/del_test_01")
             assert resp.status_code == 200
 

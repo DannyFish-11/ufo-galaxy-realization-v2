@@ -53,7 +53,6 @@ import sys
 import textwrap
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from pathlib import Path
 from typing import List, Optional, Sequence
 
 logger = logging.getLogger("Galaxy.ConfigPreflight")
@@ -66,7 +65,7 @@ logger = logging.getLogger("Galaxy.ConfigPreflight")
 
 def _load_runtime_secrets_into_env() -> List[str]:
     """
-    Load ``runtime/secrets.env`` into ``os.environ`` (without overwriting).
+    Load the secrets store (``core.config_store.default_secrets_path()``) into ``os.environ`` (without overwriting).
 
     Returns the list of key names that were loaded from the file so that the
     preflight report can indicate their source.
@@ -75,7 +74,9 @@ def _load_runtime_secrets_into_env() -> List[str]:
     idempotent and never raises — errors are logged/printed but do not block
     startup.
     """
-    _secrets_path = Path(__file__).parent.parent / "runtime" / "secrets.env"
+    from core.config_store import default_secrets_path  # 与 ConfigStore 同一个位置(随数据目录走)
+
+    _secrets_path = default_secrets_path()
     loaded: List[str] = []
     if not _secrets_path.exists():
         return loaded

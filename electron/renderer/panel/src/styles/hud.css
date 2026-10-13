@@ -1442,6 +1442,11 @@ html[data-shell='desktop'] {
 .up-card[data-state='unverified'] .up-dot { background: var(--warn); }
 .up-state { font-size: var(--t-mini); color: var(--ink-3); }
 .up-card[data-state='unverified'] .up-state { color: var(--warn); }
+/* 「没收口的结果」里人点了「再试一次」、后台还在做:点用强调色、慢慢呼吸,不是警告色。
+   呼吸用左下那几个点同一条(dot-breathe / --c-dot,周期避开余光最敏感的那一带;「减少动效」由 tokens.css 那条通配规则统一关) */
+.up-card[data-state='retrying'] .up-dot { background: var(--a-mid); animation: dot-breathe var(--c-dot) ease-in-out infinite; }
+/* 哪一类条目(设备结果 / 桌面操作):小字,不抢任务号 */
+.up-kind { font-size: var(--t-micro); color: var(--ink-3); }
 
 .up-addr {
   display: block; margin-top: 5px;

@@ -18,6 +18,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -53,7 +57,7 @@ class TestA_ParallelRestIngress(unittest.TestCase):
 
         app = FastAPI()
         app.include_router(devices_mod.create_router())
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
 
         fake_router = MagicMock()
         fake_router.route_envelope = AsyncMock(

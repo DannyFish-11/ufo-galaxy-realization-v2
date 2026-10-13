@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   // ── 窗口控制 ─
   getWindowSize: () => ipcRenderer.invoke('get-window-size'),
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+  // 灵动岛上的「打开面板」：只开不关（已经开着就拉到前面），与 F12 的开关不同
+  openPanel: () => ipcRenderer.send('galaxy:open-panel'),
 
   // ── 桌面连续感知（摄像头/麦克风/屏幕）─
   // 配置（默认关闭，隐私优先）由 main.js 经环境变量决定。

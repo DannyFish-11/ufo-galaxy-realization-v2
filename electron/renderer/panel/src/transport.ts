@@ -1439,21 +1439,31 @@ export async function verifyVendor(base: string, id: string): Promise<VendorChec
 // 四步才算「写进了任务的真相」;没走完时后端已在后台**自动补跑过一次**(只补失败的那几步),
 // 这里列的是补跑之后仍没收口的。回答当时已经交给用户了,这一段管的是「账对不上」的那部分。
 // 原始结果内容不经接口外露,这里只有类型化字段。
+//
+// 不止设备交回的结果(`kind="task_result"`):Computer Use「说做完了、对着屏幕独立核对没通过」的
+// 也在这里(`kind="computer_use"`,core/computer_use_verdict.py)—— 它的「再试一次」在后台把没做完的
+// 部分再做一次,接口先回 `retrying`,做完这一条会更新。
 
 export interface IsolatedResult {
   readonly key: string;
+  /** `task_result`(设备交回的结果没写回任务记录)/ `computer_use`(桌面操作说做完了、核对没通过) */
+  readonly kind: string;
   readonly taskId: string;
   readonly resultStatus: string;
   readonly deviceId: string;
   /** 哪几步没走通:truth_ingress / reconcile / authority_update / completion_linkage */
   readonly failedSteps: readonly string[];
   readonly reason: string;
+  /** 第一次没收口时的原因(之后每试一次 `reason` 会换成最新那次的) */
+  readonly firstReason: string;
   /** 一共试了几次(第一次 + 后台补跑 + 人工重试) */
   readonly attempts: number;
   readonly settledAt: string;
   /** 后端留没留原始消息。没留(太大)就**不能**再试 —— 按钮不画,别让人点一个注定失败的东西 */
   readonly retryable: boolean;
   readonly dismissed: boolean;
+  /** 人点过「再试一次」、后台还在做 —— 这时不再画「再试一次」 */
+  readonly retrying: boolean;
 }
 
 export interface IsolatedPage {
@@ -1472,15 +1482,18 @@ function readIsolatedResult(raw: unknown): IsolatedResult | null {
     : [];
   return {
     key,
+    kind: typeof o['kind'] === 'string' && o['kind'] ? o['kind'] : 'task_result',
     taskId: typeof o['task_id'] === 'string' ? o['task_id'] : '',
     resultStatus: typeof o['result_status'] === 'string' ? o['result_status'] : '',
     deviceId: typeof o['device_id'] === 'string' ? o['device_id'] : '',
     failedSteps: steps,
     reason: typeof o['incomplete_reason'] === 'string' ? o['incomplete_reason'] : '',
+    firstReason: typeof o['first_incomplete_reason'] === 'string' ? o['first_incomplete_reason'] : '',
     attempts: typeof o['attempts'] === 'number' ? o['attempts'] : 0,
     settledAt: typeof o['settled_at'] === 'string' ? o['settled_at'] : '',
     retryable: o['message_retained'] === true,
     dismissed: o['state'] === 'dismissed',
+    retrying: o['retrying'] === true || o['state'] === 'retrying',
   };
 }
 
@@ -1507,9 +1520,13 @@ export async function fetchIsolatedResults(base: string): Promise<IsolatedPage |
 
 /**
  * 再试一次(后端同样只重跑失败的步骤)。返回后端给的**结论**:
- * `recovered` = 这回收口了;`isolated` = 还是不行;null = 请求本身没成。
+ * `recovered` = 这回收口了;`isolated` = 还是不行;`retrying` = 后台在做(Computer Use 那类,
+ * 要几十秒,接口不让人干等);null = 请求本身没成。
  */
-export async function retryIsolatedResult(base: string, key: string): Promise<'recovered' | 'isolated' | null> {
+export async function retryIsolatedResult(
+  base: string,
+  key: string,
+): Promise<'recovered' | 'isolated' | 'retrying' | null> {
   try {
     const resp = await fetchT(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/retry', {
       method: 'POST',
@@ -1517,23 +1534,109 @@ export async function retryIsolatedResult(base: string, key: string): Promise<'r
     }, NO_LIMIT);
     if (!resp.ok) return null;
     const body = (await resp.json()) as Record<string, unknown>;
-    return body['state'] === 'recovered' ? 'recovered' : 'isolated';
+    if (body['state'] === 'recovered') return 'recovered';
+    return body['state'] === 'retrying' ? 'retrying' : 'isolated';
   } catch (err) {
     console.error('[hud] 重试隔离项失败:', err);
     return null;
   }
 }
 
-/** 知悉:标记为已看过,记录保留(审计用)。 */
-export async function dismissIsolatedResult(base: string, key: string): Promise<boolean> {
+/**
+ * 知悉 / 认可:两种结案,记录都保留(审计用)。
+ * `dismiss` = 知道了,判它没做成;`accept` = 人看过、认它确实做完了。运维的「驳回 / 确认」落的是同一处。
+ */
+export async function closeIsolatedResult(base: string, key: string, how: 'dismiss' | 'accept'): Promise<boolean> {
   try {
-    const resp = await fetchT(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/dismiss', {
+    const resp = await fetchT(base + '/api/v1/results/isolated/' + encodeURIComponent(key) + '/' + how, {
       method: 'POST',
     }, WRITE_MS);
     return resp.ok;
   } catch (err) {
     console.error('[hud] 标记隔离项失败:', err);
     return false;
+  }
+}
+
+// ── 等你同意的设备(自己从 REST 来登记的) ─────────────────────────────────────
+//
+// 后端:core/routes/_self_register.py + core/device_onboarding/join_paths.py::SelfRegisteredPath。
+// 陌生设备不带凭据来登记,后端不写设备表,只记成接入候选;这里点「接入」就是那一下确认。
+// 读的是接入平面的总览,只挑这一类 —— 要配网码、凭据的那几类候选在对话里办。
+
+export interface PendingDevice {
+  readonly candidateId: string;
+  readonly deviceId: string;
+  readonly name: string;
+  readonly deviceType: string;
+  readonly address: string;
+  readonly firstSeen: number;
+  /** 上一次接入没成的原因(空 = 没试过或没出错) */
+  readonly error: string;
+}
+
+/** 接入路径名,与 SelfRegisteredPath.name 一致 */
+const SELF_REGISTERED = 'self_registered';
+
+function readPendingDevice(raw: unknown): PendingDevice | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o['join_path'] !== SELF_REGISTERED) return null;
+  if (o['status'] === 'joined' || o['status'] === 'ignored') return null;
+  const id = typeof o['candidate_id'] === 'string' ? o['candidate_id'] : '';
+  if (!id) return null;
+  const props = (o['properties'] ?? {}) as Record<string, unknown>;
+  const reg = (props['registration'] ?? {}) as Record<string, unknown>;
+  const ident = (o['identity'] ?? {}) as Record<string, unknown>;
+  const addrs = Array.isArray(o['addresses']) ? (o['addresses'] as unknown[]) : [];
+  return {
+    candidateId: id,
+    deviceId: typeof ident['device_id'] === 'string' ? ident['device_id'] : String(o['key'] ?? ''),
+    name: typeof o['name'] === 'string' ? o['name'] : id,
+    deviceType: typeof reg['device_type'] === 'string' ? reg['device_type'] : '',
+    address: typeof addrs[0] === 'string' ? addrs[0] : '',
+    firstSeen: typeof o['first_seen'] === 'number' ? o['first_seen'] : 0,
+    error: typeof o['error'] === 'string' ? o['error'] : '',
+  };
+}
+
+/** 拉等你同意的设备。拉不到返回 null —— 与「一台都没有」是两件事。 */
+export async function fetchPendingDevices(base: string): Promise<readonly PendingDevice[] | null> {
+  try {
+    const resp = await fetchT(base + '/api/v1/onboarding/overview', { headers: { Accept: 'application/json' } }, READ_MS);
+    if (!resp.ok) {
+      console.error('[hud] 拉等待接入的设备失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    if (body['enabled'] === false) return [];
+    const rows = Array.isArray(body['candidates']) ? (body['candidates'] as unknown[]) : [];
+    return rows.map(readPendingDevice).filter((x): x is PendingDevice => x !== null);
+  } catch (err) {
+    console.error('[hud] 拉等待接入的设备失败:', err);
+    return null;
+  }
+}
+
+/** 接入 / 不接入。返回后端给的结论:true = 办成了;false = 后端说没成;null = 请求本身没发出去。 */
+export async function decidePendingDevice(
+  base: string,
+  candidateId: string,
+  accept: boolean,
+): Promise<boolean | null> {
+  try {
+    const url = base + '/api/v1/onboarding/candidates/' + encodeURIComponent(candidateId) + (accept ? '/join' : '/ignore');
+    const resp = await fetchT(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: accept ? JSON.stringify({ inputs: {} }) : undefined,
+    }, WRITE_MS);
+    if (!resp.ok) return resp.status >= 500 ? null : false;
+    const body = (await resp.json()) as Record<string, unknown>;
+    return body['success'] === true;
+  } catch (err) {
+    console.error('[hud] 处理等待接入的设备失败:', err);
+    return null;
   }
 }
 

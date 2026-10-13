@@ -21,6 +21,10 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -374,7 +378,7 @@ class TestRESTRoutesCheckUDM:
         app = FastAPI()
         router = self._make_router()
         app.include_router(router)
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
 
         resp = client.post("/api/v1/devices/udm_hb_001/heartbeat")
         assert (
@@ -397,7 +401,7 @@ class TestRESTRoutesCheckUDM:
         app = FastAPI()
         router = self._make_router()
         app.include_router(router)
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
 
         resp = client.delete("/api/v1/devices/udm_del_001")
         assert (
@@ -419,7 +423,7 @@ class TestRESTRoutesCheckUDM:
         app = FastAPI()
         router = self._make_router()
         app.include_router(router)
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
 
         resp = client.post("/api/v1/devices/ghost_device_xyz/heartbeat")
         assert resp.status_code == 404

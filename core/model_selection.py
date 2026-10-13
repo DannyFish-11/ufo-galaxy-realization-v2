@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from core.console_prompt import ask, timed_out_notice
+from core.derived_env import export as export_env
 
 logger = logging.getLogger("Galaxy.ModelSelection")
 
@@ -429,14 +430,14 @@ def apply_effective_tier(*, prefix: str = "  ") -> str:
     if not eff or eff == want:
         return ""
 
-    os.environ["GALAXY_MODEL_TIER"] = eff
+    export_env("GALAXY_MODEL_TIER", eff)  # 降档只影响本进程:保存设置时不钉进 .env(钉了就是永久降档)
     try:
         current = main_brain()
         # 只动"目录里认识、但不属于生效档"的那种；目录外的自定义模型不碰。
         if current and exact_model(current) is not None and current not in {s.tag for s in tier_models(eff)}:
             derived = default_main_brain_for_tier(eff)
             if derived:
-                os.environ["OLLAMA_MODEL"] = derived
+                export_env("OLLAMA_MODEL", derived)
     except Exception as exc:  # noqa: BLE001
         logger.debug("降档后主脑重派生跳过(档位已降): %s", exc)
 

@@ -12,6 +12,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from core.derived_env import export as export_env
+
 logger = logging.getLogger("Galaxy.NATSServer")
 
 # 固定已知可用版本，避免 API 调用。Windows / Linux 共用同一 tag。
@@ -190,7 +192,7 @@ class EmbeddedNATSServer:
         # 原先照样再起一个 —— 端口被占,新起的立刻退出,控制台一条原因为空的 ERROR「NATS server exited:」,
         # 随后连接又连上了那个已有的,横幅照打 ✓。
         if await self._already_served():
-            os.environ.setdefault("GALAXY_NATS_URL", f"nats://localhost:{self.port}")
+            export_env("GALAXY_NATS_URL", f"nats://localhost:{self.port}", keep_existing=True)
             logger.info("端口 %d 上已有 NATS 在应答,直接用它,不再另起一个", self.port)
             return True
 
@@ -255,7 +257,7 @@ class EmbeddedNATSServer:
                 self.last_error = "nats-server 15 秒内未就绪(端口未接受连接)"
                 return False
 
-            os.environ["GALAXY_NATS_URL"] = f"nats://localhost:{self.port}"
+            export_env("GALAXY_NATS_URL", f"nats://localhost:{self.port}")  # 这次起在哪,不是人配的(不进 .env)
             logger.info("Embedded NATS server started on %s:%d", self.host, self.port)
             return True
 

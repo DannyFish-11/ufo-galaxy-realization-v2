@@ -406,7 +406,9 @@ def enrich_multi_device_projection(
         tgr_snap = tgr.snapshot(max_records=max_graph_records)
         enrichment.graph_available = True
         enrichment.graph_node_count = len(tgr_snap.nodes)
-        enrichment.recent_graph_records = [r.to_dict() for r in tgr_snap.recent_records]
+        # 图快照里的 recent_records 本来就是 dict(core.task_graph_runtime 建快照时已 to_dict 过)。原先这里再调一次
+        # .to_dict(),每次都抛 AttributeError,这一路源从来没接上过 —— 投影永远报「TaskGraphRuntime unavailable」。
+        enrichment.recent_graph_records = [r if isinstance(r, dict) else r.to_dict() for r in tgr_snap.recent_records]
         enrichment.graph_snapshot = {
             "node_count": enrichment.graph_node_count,
             "recent_record_count": len(tgr_snap.recent_records),

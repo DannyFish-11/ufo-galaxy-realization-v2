@@ -28,10 +28,10 @@ completes the convergence by providing:
 
    * :class:`~core.task_graph_runtime.TaskGraphRuntime` — task registration
      and lifecycle truth.
-   * :class:`~core.capability_network_runtime_policy.CapabilityNetworkRuntimePolicy`
-     — routable-executor / network-path truth.
-   * :class:`~core.canonical_capability_scheduling_basis.CanonicalCapabilitySchedulingBasis`
-     — device/host capability and scheduling-basis truth.
+   * :mod:`core.capability_network_runtime_policy` — routable-executor /
+     network-path truth (module-level query functions).
+   * :mod:`core.canonical_capability_scheduling_basis` — device/host
+     capability and scheduling-basis truth (module-level builders).
 
 2. :func:`ensure_task_registered` — ensure a task is registered in
    ``TaskGraphRuntime`` before dispatch (closes GAP-512-002 for any
@@ -239,15 +239,16 @@ class SchedulingTruthHarness:
             logger.debug("SchedulingTruthHarness: TaskGraphRuntime unavailable: %s", exc)
             return None
 
+    # 两份真相都是**模块级函数**,没有单例对象。原先调的 get_capability_network_runtime_policy()
+    # 与 CanonicalCapabilitySchedulingBasis 都不存在 —— 这个 harness 永远答「不可用」,
+    # assert_convergence 永远判不收敛,与那两份真相的实际状态无关。
     def _get_capability_policy(self) -> Optional[Any]:
         if self._capability_policy is not None:
             return self._capability_policy
         try:
-            from core.capability_network_runtime_policy import (
-                get_capability_network_runtime_policy,
-            )
+            import core.capability_network_runtime_policy as policy
 
-            self._capability_policy = get_capability_network_runtime_policy()
+            self._capability_policy = policy
             return self._capability_policy
         except Exception as exc:
             logger.debug("SchedulingTruthHarness: CapabilityNetworkRuntimePolicy unavailable: %s", exc)
@@ -257,11 +258,9 @@ class SchedulingTruthHarness:
         if self._scheduling_basis is not None:
             return self._scheduling_basis
         try:
-            from core.canonical_capability_scheduling_basis import (
-                CanonicalCapabilitySchedulingBasis,
-            )
+            import core.canonical_capability_scheduling_basis as basis
 
-            self._scheduling_basis = CanonicalCapabilitySchedulingBasis()
+            self._scheduling_basis = basis
             return self._scheduling_basis
         except Exception as exc:
             logger.debug("SchedulingTruthHarness: CanonicalCapabilitySchedulingBasis unavailable: %s", exc)
@@ -378,35 +377,16 @@ class SchedulingTruthHarness:
                 )
                 return []
 
-            # Try calling query_routable_executors on the policy
-            try:
-                result = policy.query_routable_executors(
-                    canonical_task,
-                    candidate_ids=candidate_device_ids or [],
-                )
-                if isinstance(result, (list, tuple)):
-                    return list(result)
-                # Some implementations return a summary object
-                if hasattr(result, "routable_executor_ids"):
-                    return list(result.routable_executor_ids)
-                if isinstance(result, dict):
-                    return list(result.get("routable_executor_ids", []))
-                return []
-            except AttributeError:
-                # Try query_network_path variant
-                try:
-                    result = policy.query_network_path(canonical_task)
-                    if isinstance(result, dict):
-                        return list(result.get("routable_ids", []))
-                    return []
-                except Exception as exc:
-                    # 两条查询路径都失败时返回 [] 等于"一台可路由执行器都没有",
-                    # 与真实的空结果无法区分,静默会让调度看起来只是"没设备"。
-                    logger.warning(
-                        "query_routable_executors: 两种查询变体均失败(%s);按空结果返回",
-                        exc,
-                    )
-                    return []
+            if isinstance(canonical_task, dict):
+                required = canonical_task.get("required_capabilities")
+            else:
+                required = getattr(canonical_task, "required_capabilities", None)
+            executors = policy.query_routable_executors(required_capabilities=list(required or []) or None)
+            ids = [str(getattr(e, "node_id", e)) for e in executors or []]
+            if candidate_device_ids:
+                wanted = set(candidate_device_ids)
+                ids = [i for i in ids if i in wanted]
+            return ids
 
         except Exception as exc:
             logger.warning("query_routable_executors: 查询失败(%s);按空结果返回", exc)

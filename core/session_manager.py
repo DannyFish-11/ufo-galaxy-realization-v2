@@ -46,6 +46,7 @@ logger = logging.getLogger("Galaxy.SessionManager")
 # 持久化路径:随数据总目录(GALAXY_DATA_DIR)走;仓库 data/ 下已有的会话继续用(不把已有的对话甩在后面)
 _REPO_DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _SESSION_FILE = data_path_or_legacy("sessions.json", os.path.join(_REPO_DATA, "sessions.json"))
+_PERSIST_LOCK = threading.Lock()
 # 每个会话的证据链(evidence chain)以 append-only JSONL 落在此目录下，<session_id>.evidence.jsonl
 _EVIDENCE_DIR = data_path_or_legacy("sessions", os.path.join(_REPO_DATA, "sessions"))
 
@@ -382,7 +383,7 @@ class SessionManager:
                 self._sessions[session_id] = session
                 if owner:
                     self._user_active_session[owner] = session_id
-                self._persist_state()
+                await self._persist_off_loop()
                 logger.info(
                     "会话已确保存在: %s (user=%s, device=%s)",
                     session_id,
@@ -398,7 +399,7 @@ class SessionManager:
             if device_id:
                 session.active_device = device_id
             session.updated_at = time.time()
-            self._persist_state()
+            await self._persist_off_loop()
             return session
 
     async def get_or_create_session(self, user_id: str, device_id: str = "") -> Session:
@@ -616,7 +617,7 @@ class SessionManager:
             if len(session.history) > self.MAX_HISTORY:
                 session.history = session.history[-self.MAX_HISTORY :]
 
-            self._persist_state()
+            await self._persist_off_loop()
 
             # 通知所有关联设备
             if self._on_update_callback:
@@ -945,19 +946,28 @@ class SessionManager:
 
     # ═══════════════════ 持久化 ═══════════════════
 
-    def _persist_state(self):
-        """持久化会话到 JSON 文件"""
+    async def _persist_off_loop(self) -> None:
+        """工作线程里整份落盘,调用方照旧等写完。每条消息都整份重写(30 个满会话 2.6 MB、一次 76 ms,一轮三次),
+        在事件循环里写,感知帧、音频、面板都跟着停。停机途中执行器已关时当场写。"""
         try:
-            os.makedirs(os.path.dirname(_SESSION_FILE), exist_ok=True)
-            data = {
-                "sessions": {sid: s.to_dict() for sid, s in self._sessions.items()},
-                "user_active_session": self._user_active_session,
-                "user_thread_root": getattr(self, "_user_thread_root", None) or {},
-                "session_aliases": self._session_aliases,
-            }
-            atomic_write_json(_SESSION_FILE, data, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.debug(f"会话持久化失败: {e}")
+            await asyncio.to_thread(self._persist_state)
+        except RuntimeError:  # cannot schedule new futures after shutdown
+            self._persist_state()
+
+    def _persist_state(self):
+        """持久化会话到 JSON 文件(任何线程都可调)。快照与写入同在一把锁里:后来的那次一定写后来的状态。
+        不缩进 = C 编码器:快几倍、一口气编完不让出 GIL(循环线程同时改元数据也撞不上「迭代中改变大小」)。"""
+        with _PERSIST_LOCK:
+            try:
+                data = {
+                    "sessions": {sid: s.to_dict() for sid, s in list(self._sessions.items())},
+                    "user_active_session": dict(self._user_active_session),
+                    "user_thread_root": dict(getattr(self, "_user_thread_root", None) or {}),
+                    "session_aliases": dict(self._session_aliases),
+                }
+                atomic_write_json(_SESSION_FILE, data, ensure_ascii=False, indent=None)
+            except Exception as e:
+                logger.debug(f"会话持久化失败: {e}")
 
     def _load_state(self):
         """从 JSON 文件恢复会话"""

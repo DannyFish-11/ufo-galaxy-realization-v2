@@ -246,12 +246,59 @@ body {
   border-radius: 0 0 var(--ir) var(--ir);
   background: linear-gradient(180deg, rgba(12,11,17,.95) 0%, rgba(20,18,28,.97) 100%);
   box-shadow: 0 0 0 1px rgba(183,165,194,.26), 0 0 18px -4px rgba(183,165,194,.4);
-  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; display: flex; flex-direction: column; align-items: center;
   opacity: var(--iop);
 }
-.isl-in { display: flex; align-items: center; gap: 9px; opacity: var(--itx);
+/* 指针在岛上时岛才接鼠标（app.js 那时才让窗口不再穿透），别处照旧点到桌面上 */
+#island[data-hover='true'] { pointer-events: auto; cursor: pointer; }
+/* 第一行：收起时整座岛就是这一行（2px 贴边 + ISLE_H）。展开时它留在最上面，下面长出 .isl-full */
+.isl-in { flex: none; height: 26px; margin-top: 2px; max-width: calc(100% - 28px);
+          display: flex; align-items: center; gap: 9px; opacity: var(--itx);
           white-space: nowrap; }
-#islandText { font-size: 12px; color: #d0c9d8; }
+#islandText { font-size: 12px; color: #d0c9d8; flex: none; }
+/* 卡片的副标题：字放不下就截断 —— 卡片不改岛的长短（借 WinIslands 的那条规矩） */
+#islandSub { font-size: 11px; color: rgba(208,201,216,.62); min-width: 0;
+             overflow: hidden; text-overflow: ellipsis; }
+/* 队列里还有几张：「+2」 */
+#islandMore { font-size: 10px; color: rgba(208,201,216,.7); padding: 0 6px; border-radius: 999px;
+              background: rgba(255,255,255,.07); flex: none; }
+
+/* ── 卡片的语气：只染一个小点和进度线，不把整座岛染色（莫兰迪四色，深底上都压得住） ── */
+#island { --tone: var(--c-cool); }
+#island[data-tone='success'] { --tone: #9fb5a0; }
+#island[data-tone='warning'] { --tone: #cdb38f; }
+#island[data-tone='error']   { --tone: #c4939a; }
+#islandDot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tone); }
+/* 进度：贴着岛的下沿的一道细线，走到哪儿亮到哪儿（「第 3/15 步」那张卡带着它） */
+#islandBar { position: absolute; left: 14px; right: 14px; top: calc(2px + 26px - 3px); height: 2px;
+             border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden;
+             opacity: calc(var(--itx) * var(--ibar-on, 0)); pointer-events: none; }
+#islandBar::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--ibar, 0%);
+                    background: var(--tone); border-radius: 2px; transition: width .45s cubic-bezier(.32,.72,0,1); }
+
+/* ── 展开：同一座岛自己长高，不是另弹一个窗 ──
+   点一下岛才展开（指针停上去不展开 —— 余光扫过时它不该跳出来）。上面那一行还在，下面是排在第一的那张卡的
+   全文、队列里其余的卡，以及能按的几个键：停下（它在动手、后端能停时）、打开面板（要你去面板上点的）、知道了。 */
+.isl-full { flex: none; width: 100%; box-sizing: border-box; padding: 6px 16px 12px;
+            opacity: var(--ifx, 0); display: flex; flex-direction: column; gap: 8px; }
+.isl-full[hidden] { display: none; }
+#islandBody { font-size: 11.5px; line-height: 1.5; color: rgba(208,201,216,.86); white-space: normal; }
+#islandBody:empty, #islandList:empty { display: none; }
+#islandList { display: flex; flex-direction: column; gap: 4px; }
+#islandList .row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: rgba(208,201,216,.7);
+                   white-space: nowrap; overflow: hidden; }
+#islandList .row i { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--c-cool); }
+#islandList .row[data-tone='success'] i { background: #9fb5a0; }
+#islandList .row[data-tone='warning'] i { background: #cdb38f; }
+#islandList .row[data-tone='error'] i   { background: #c4939a; }
+#islandList .row span { overflow: hidden; text-overflow: ellipsis; }
+.isl-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.isl-acts button { font: inherit; font-size: 11px; color: #d0c9d8; border: 0; cursor: pointer;
+                   padding: 4px 11px; border-radius: 999px; background: rgba(255,255,255,.08);
+                   transition: background .2s ease; }
+.isl-acts button:hover { background: rgba(255,255,255,.16); }
+.isl-acts button[data-act='stop'] { color: var(--c-hot); box-shadow: inset 0 0 0 1px rgba(236,223,235,.3); }
+.isl-acts button[hidden] { display: none; }
 #islandMode { font-family: ui-monospace, Consolas, monospace; font-size: 10px;
               color: var(--c-cool); padding: 1px 6px; border-radius: 999px;
               background: rgba(255,255,255,.08); }
@@ -373,10 +420,23 @@ body {
         </g>
       </g></g>
     </svg>
+    <span id="islandDot" hidden></span>
     <span id="islandText">Galaxy</span>
+    <span id="islandSub" hidden></span>
     <span id="islandMode" hidden></span>
     <span id="islandHint" hidden></span>
+    <span id="islandMore" hidden></span>
   </span>
+  <span id="islandBar" aria-hidden="true"></span>
+  <div class="isl-full" hidden>
+    <div id="islandBody"></div>
+    <div id="islandList"></div>
+    <div class="isl-acts">
+      <button type="button" data-act="stop" hidden>停下</button>
+      <button type="button" data-act="panel" hidden>打开面板</button>
+      <button type="button" data-act="dismiss" hidden>知道了</button>
+    </div>
+  </div>
 </div>
 
 <!-- 模块加载。

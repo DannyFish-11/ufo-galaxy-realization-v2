@@ -115,7 +115,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("Galaxy.PR4.OperatorActionGovernance")
 
@@ -1369,6 +1369,36 @@ def get_android_directed_action_pending_state(android_dispatch_id: str) -> Dict[
 # ---------------------------------------------------------------------------
 
 
+def _settle_closure_in_queue(action_kind: str, entity_id: str, effects: List[str]) -> Tuple[str, Optional[str]]:
+    """把运维的结案动作落到「没收口的结果」队列上。回 ``(outcome, error)``。"""
+    from core.truth_chain_recovery import STATE_RECOVERED, get_truth_chain_recovery
+
+    recovery = get_truth_chain_recovery()
+    key = recovery.find_by_task_id(entity_id)
+    if key is None:
+        effects.append("closure_not_in_queue")
+        return (
+            OperatorActionOrchestrationOutcome.failed.value,
+            f"「没收口的结果」里没有 {entity_id or '(没给任务号)'}:结案动作只对没收口的结果有效",
+        )
+    if action_kind == "reopen_closure":
+        row = recovery.retry_isolated(key) or {}
+        state = str(row.get("state") or "")
+        effects.append(f"closure_reopened:retry:{state or 'unknown'}")
+        if state == STATE_RECOVERED:
+            return OperatorActionOrchestrationOutcome.success.value, None
+        if state == "retrying":
+            return OperatorActionOrchestrationOutcome.accepted_pending.value, None
+        return OperatorActionOrchestrationOutcome.partial_success.value, "又试了一次,还是没收口"
+    if action_kind == "finalize_closure":
+        recovery.accept(key)
+        effects.append("closure_finalized:accepted")
+    else:
+        recovery.dismiss(key)
+        effects.append("closure_rejected:dismissed")
+    return OperatorActionOrchestrationOutcome.success.value, None
+
+
 def execute_governed_operator_action(
     *,
     action_kind: str,
@@ -1642,18 +1672,8 @@ def execute_governed_operator_action(
                 outcome = OperatorActionOrchestrationOutcome.failed.value
             else:
                 affected_entity_ids.append(device_id)
-                try:
-                    from core.android_participant_session_state import (
-                        get_participant_session_state,
-                    )
-
-                    state = get_participant_session_state(device_id)
-                    if state and hasattr(state, "suspend"):
-                        state.suspend()
-                        downstream_effects.append(f"participant_session_suspended:device_id={device_id}")
-                except Exception as exc:
-                    logger.debug("suspend_participant: session state unavailable: %s", exc)
-
+                # 中心这边没有可挂起 / 隔离的本地状态(原先调的 get_participant_session_state、
+                # android_device_state_store.isolate_device 都不存在,从没生效过):只下发给设备。
                 spec = build_android_directed_action_spec(
                     action_kind=AndroidDirectedActionKind.suspend_device.value,
                     device_id=device_id,
@@ -1672,15 +1692,8 @@ def execute_governed_operator_action(
                 outcome = OperatorActionOrchestrationOutcome.failed.value
             else:
                 affected_entity_ids.append(device_id)
-                try:
-                    from core.android_device_state_store import isolate_device
-
-                    if callable(isolate_device):
-                        isolate_device(device_id)
-                        downstream_effects.append(f"device_isolated_in_state_store:device_id={device_id}")
-                except Exception as exc:
-                    logger.debug("isolate_device: state store unavailable: %s", exc)
-
+                # 中心这边没有可挂起 / 隔离的本地状态(原先调的 get_participant_session_state、
+                # android_device_state_store.isolate_device 都不存在,从没生效过):只下发给设备。
                 spec = build_android_directed_action_spec(
                     action_kind=AndroidDirectedActionKind.isolate_device.value,
                     device_id=device_id,
@@ -1715,65 +1728,20 @@ def execute_governed_operator_action(
                 logger.debug("path_selection: governance unavailable: %s", exc)
             outcome = OperatorActionOrchestrationOutcome.success.value
 
-        # ── reopen_closure ────────────────────────────────────────────────
-        elif action_kind == OperatorActionKind.reopen_closure.value:
+        # ── reopen / finalize / reject closure ────────────────────────────
+        # 结案落在「没收口的结果」队列上(core.truth_chain_recovery,所有者 2026-10-13 选 A):
+        # 重开 = 再试一次、确认 = 认可(人认它做完了)、驳回 = 知悉(判它没做成)。原先这三个动作调的写入口
+        # 根本不存在,却一律回 success —— 现在找不到这条就照实回 failed。
+        elif action_kind in (
+            OperatorActionKind.reopen_closure.value,
+            OperatorActionKind.finalize_closure.value,
+            OperatorActionKind.reject_closure.value,
+        ):
             if task_id:
                 affected_entity_ids.append(task_id)
             if flow_id:
                 affected_entity_ids.append(flow_id)
-            try:
-                from core.closed_loop_governance_consolidation import (
-                    get_closed_loop_governance,
-                )
-
-                gov = get_closed_loop_governance()
-                if hasattr(gov, "reopen_closure"):
-                    gov.reopen_closure(task_id or flow_id or "")
-                    downstream_effects.append(f"closure_reopened:entity={task_id or flow_id or 'unknown'}")
-            except Exception as exc:
-                logger.debug("reopen_closure: governance unavailable: %s", exc)
-                downstream_effects.append("closure_reopen_requested:governance_unavailable")
-            outcome = OperatorActionOrchestrationOutcome.success.value
-
-        # ── finalize_closure ──────────────────────────────────────────────
-        elif action_kind == OperatorActionKind.finalize_closure.value:
-            if task_id:
-                affected_entity_ids.append(task_id)
-            if flow_id:
-                affected_entity_ids.append(flow_id)
-            try:
-                from core.closed_loop_governance_consolidation import (
-                    get_closed_loop_governance,
-                )
-
-                gov = get_closed_loop_governance()
-                if hasattr(gov, "finalize_closure"):
-                    gov.finalize_closure(task_id or flow_id or "")
-                    downstream_effects.append(f"closure_finalized:entity={task_id or flow_id or 'unknown'}")
-            except Exception as exc:
-                logger.debug("finalize_closure: governance unavailable: %s", exc)
-                downstream_effects.append("closure_finalize_requested:governance_unavailable")
-            outcome = OperatorActionOrchestrationOutcome.success.value
-
-        # ── reject_closure ────────────────────────────────────────────────
-        elif action_kind == OperatorActionKind.reject_closure.value:
-            if task_id:
-                affected_entity_ids.append(task_id)
-            if flow_id:
-                affected_entity_ids.append(flow_id)
-            try:
-                from core.closed_loop_governance_consolidation import (
-                    get_closed_loop_governance,
-                )
-
-                gov = get_closed_loop_governance()
-                if hasattr(gov, "reject_closure"):
-                    gov.reject_closure(task_id or flow_id or "")
-                    downstream_effects.append(f"closure_rejected:entity={task_id or flow_id or 'unknown'}")
-            except Exception as exc:
-                logger.debug("reject_closure: governance unavailable: %s", exc)
-                downstream_effects.append("closure_reject_requested:governance_unavailable")
-            outcome = OperatorActionOrchestrationOutcome.success.value
+            outcome, error = _settle_closure_in_queue(action_kind, task_id or flow_id or "", downstream_effects)
 
         # ── acknowledge_blocker ───────────────────────────────────────────
         elif action_kind == OperatorActionKind.acknowledge_blocker.value:

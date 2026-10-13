@@ -9,8 +9,11 @@
       "node_id": "Node_36_UIAWindows"           # 可选:桌面操作节点(白名单校验)
     }
     resp: { success, stop_reason, message, steps: [...] }
+      模型说做完了(stop_reason="done")时另有 claimed_done / check / verdict / verdict_reason / task_id:
+      success 跟的是独立核对后的四值裁决(core.computer_use_verdict),不是模型的自报;核对没通过时
+      还有 follow_up(后台再做一次,仍不行进「没收口的结果」)。
 
-  GET /api/v1/computer-use/status → 闭环是否可用(开关 + 感知新鲜度)。
+  GET /api/v1/computer-use/status → 闭环是否可用(开关 + 感知新鲜度)+ 桌面自动化各级各后端能不能用。
 
 循环本体见 core.computer_use_loop(感知→规划→安全门→执行→再感知)。
 """
@@ -68,10 +71,21 @@ async def computer_use_status() -> Dict[str, Any]:
         logger.debug("computer-use status 感知探测失败: %s", exc)
 
     enabled = computer_use_enabled()
+    # 桌面自动化整体:每一级、每个后端在这台机器上能不能用(不能用是为什么)、当前前台程序上的战绩。
+    # 探测要载 comtypes / 建 UIA 管理器,放旁边线程。
+    import asyncio
+
+    from core.desktop_automation import describe
+
+    try:
+        desktop = await asyncio.to_thread(describe)
+    except Exception as exc:  # noqa: BLE001
+        desktop = {"error": f"{type(exc).__name__}: {exc}"}
     return {
         "enabled": enabled,
         "screen_perception_fresh": screen_fresh,
         "ready": enabled and screen_fresh,
+        "desktop": desktop,
         "hint": (
             ""
             if (enabled and screen_fresh)

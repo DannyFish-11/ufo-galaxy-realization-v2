@@ -17,6 +17,10 @@ import time
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:读设备与运行细节要令牌
+
 # ---------------------------------------------------------------------------
 # 周期维护循环本身
 # ---------------------------------------------------------------------------
@@ -97,7 +101,7 @@ class TestPeriodicMaintenanceLoop:
 
         app = FastAPI()
         app.include_router(create_router())
-        body = TestClient(app).get("/api/v1/observability/maintenance").json()
+        body = TestClient(app, headers=_AUTH_HEADERS).get("/api/v1/observability/maintenance").json()
         assert set(body) == {"running", "tick_s", "sweeps"}
 
 

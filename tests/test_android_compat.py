@@ -28,6 +28,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
+
 # ============================================================================
 # 1. HTTP Device API Compatibility Shim
 # ============================================================================
@@ -41,7 +45,7 @@ def compat_client():
     app = FastAPI()
     router = create_api_routes()
     app.include_router(router)
-    with TestClient(app) as c:
+    with TestClient(app, headers=_AUTH_HEADERS) as c:
         yield c
 
 
@@ -411,7 +415,7 @@ class TestDeviceEndpoints:
         app.include_router(router)
         from fastapi.testclient import TestClient
 
-        request.cls.client = TestClient(app)
+        request.cls.client = TestClient(app, headers=_AUTH_HEADERS)
 
     def test_delete_device(self):
         """DELETE /api/v1/devices/{device_id} should unregister a device."""

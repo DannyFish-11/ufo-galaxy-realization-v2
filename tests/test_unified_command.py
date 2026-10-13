@@ -302,6 +302,7 @@ class TestUnifiedCommandEndpointWithAuth(unittest.TestCase):
         """设置测试环境"""
         # 鉴权是显式开启制(GALAXY_AUTH_ENABLED,production 强制开);
         # 测 401 语义必须显式开启并配置 Token。
+        self._prev_env = {k: os.environ.get(k) for k in ("GALAXY_API_TOKEN", "GALAXY_AUTH_ENABLED")}
         os.environ["GALAXY_AUTH_ENABLED"] = "1"
         os.environ["GALAXY_API_TOKEN"] = "test-token-12345"
 
@@ -312,10 +313,12 @@ class TestUnifiedCommandEndpointWithAuth(unittest.TestCase):
         self.client = TestClient(self.app)
 
     def tearDown(self):
-        """清理测试环境"""
-        for key in ("GALAXY_API_TOKEN", "GALAXY_AUTH_ENABLED"):
-            if key in os.environ:
-                del os.environ[key]
+        """还原测试环境:恢复原值,而不是删掉 —— conftest 给整个会话设的令牌被删掉,后面所有扮演主人的用例都会 401"""
+        for key, prev in self._prev_env.items():
+            if prev is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = prev
 
     def test_command_without_auth(self):
         """测试未提供鉴权信息"""

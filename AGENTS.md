@@ -40,7 +40,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/unified_config.py` - 统一配置管理器
 - `config.json` - 主配置文件
 - `.env` - 环境变量（API Key）
-- `GALAXY_DATA_DIR` - 运行时数据目录（缺省仓库 `data/`）。**所有**持久化状态都认它，设备注册表也不例外 —— 新加的持久化点用 `core.data_paths.data_path(...)`，别写死 `"data/..."`，`tests/conftest.py` 靠它把测试状态隔离到临时目录。面板「保存设置」重写 `.env` 时，登记表之外的手写行（compose 口令、端口、镜像站……）原样带回（`core/routes/config_env_preserve.py`）
+- `GALAXY_DATA_DIR` - 运行时数据目录（缺省仓库 `data/`）。**所有**持久化状态都认它，设备注册表也不例外 —— 新加的持久化点用 `core.data_paths.data_path(...)`，别写死 `"data/..."`，`tests/conftest.py` 靠它把测试状态隔离到临时目录。面板「保存设置」重写 `.env` 时，登记表之外的手写行（compose 口令、端口、镜像站……）原样带回（`core/routes/config_env_preserve.py`）。
+  面板存的密钥库 `secrets.env` 与 `config.json` 也在数据目录（`core.config_store.default_secrets_path`；`runtime/` 下已有的继续用；`main.py` 启动第一步在 import core 之前照抄同一条规则，测试核对两边）。
+  进程这一次运行自己写进环境变量的值（`--backend` / `-v` / `--model`、内置总线地址、本机推理服务地址、临时降档）经 `core.derived_env.export` 写 —— 「保存设置」把 `os.environ` 整份写回 `.env`，裸写会被钉成「人配过」
 
 ### 设备管理
 - `core/device_registry.py` - 设备注册和发现
@@ -55,6 +57,16 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   `GALAXY_MASTER_BRAIN_ENABLED` 默认关，且**只在跨设备模式里才起**（`master_brain_requested()`）：开了却在本地模式，启动日志说出原因；开了才拉起主脑、worker 消费循环、MCP over NATS。
 - **模型只能请求、不能决定**打开跨设备模式：本地模式下的工具 `devices__request_cross_device`（`core/device_onboarding/mode_request.py`）只会问人；批准走设备接入已有的人在环，
   `GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合连提出都不行；批准后走面板按钮同一个写入函数，要重启才完全生效
+
+### 桌面自动化（一个整体，按现场挑）
+- `core/windows_execution_arbiter.py` - 桌面落手的**唯一入口**：系统接口 → 控件 → 坐标 → 视觉（Computer Use）四级降级链
+- `core/desktop_automation.py` - 每一级下面的后端登记表（Win32 / 本仓 UIA / 微软 UFO / 自动控制节点 Node_92 / 桌面操作节点 Node_36）：谁能用（说得出原因）、
+  这一步先试谁（动作本身 + 当前前台应用上的战绩 `desktop_backend_record.json` + 现场探测）。**只重排不删兜底，视觉永远最后**。
+  Computer Use 在本机落手、Windows Agent 在本机都走它（后者只用结构化三级）；别再各写一份「直接调 pyautogui / 直接派节点」。
+  微软 UFO 要装了 `ufo` 包才算可用（仓库里的 `external/microsoft_ufo` 是不全的源码），`core/microsoft_ufo_integration.py` 只是门面
+- `core/computer_use_verdict.py` - Computer Use 模型说「做完了」只是自报（`claimed_done`）：另取一张当前屏幕交给只看任务与屏幕的核对请求，
+  四值裁决由 `classify_execution_evidence()` 给；核对没通过 → 后台把没做完的部分再做一次 → 仍不行进「没收口的结果」（`kind="computer_use"`）。
+  人正在用电脑时不在后台动键鼠；仲裁器视觉级只核对、不排后台重做
 
 ### 扩展系统
 - `core/mcp_loader.py` - MCP 服务器加载器
@@ -145,7 +157,9 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 ### 结果真相与会话迁移
 - `core/truth_chain_recovery.py` - task_result 真相链没收口时：后台**只重跑失败的步骤**一次，仍不收口就进隔离队列
   （落盘 `$GALAXY_DATA_DIR/isolated_results.json`，`GET /api/v1/results/isolated`，面板「全部设置」最上面）。
-  回答不受影响 —— 所有者的决定是「自动重试，失败再隔离」，**不拒收**
+  回答不受影响 —— 所有者的决定是「自动重试，失败再隔离」，**不拒收**。条目不止一类（`kind`：`task_result` / `computer_use`，
+  别的类登记重跑器 `register_rerunner`）。人的三个动作：再试一次 / 认可（`.../accept`）/ 知悉；运维的「重开 / 确认 / 驳回闭环」
+  落的就是这三个（`core/pr4_operator_action_governance.py::_settle_closure_in_queue`），队列里没有这条就照实回 failed
 - `core/session_migration.py` - 会话迁移的**唯一**入口（D3）。核心 REST、网关 REST/WS、安卓桥都调它；它先找会话在哪个
   存储（核心 `core.session_manager` / 唤醒建的漫游 `SessionRoamingManager`），**两个存储不合并**。
   `core/routes/sessions.py::migrate_session_via_canonical_manager` 只是旧名转发
@@ -199,10 +213,14 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - `core/desktop_presence_runtime.py` - 桌面三态运行时（silent / liminal / manifest）
 - **三只桌宠是同一只**（面板 `panel/src/ui/pet.ts`、覆盖层 `renderer/app.js`、右下角托盘 `windows_service/pet_icon.py`）：推导只有一份 `electron/renderer/pet_state.js`（托盘是 Python，跑同一张用例表 `pet_state.cases.json`），样子三处逐个相等（`tests/test_every_pet_is_the_same_pet.py`）。托盘与后端同进程，经 `core/presence_fanout.py` 直接收在场桥广播的同一份 `payload.render`；感知那几位（隐私暂停、在不在收）变了，桥每秒核一次、变了就广播
 - **面板与覆盖层的长连接只有一份** `electron/renderer/live_socket.js`（保活 ping/pong、半开连接认得出来、连接超时、退避加抖动、网回来立刻重连），别再各写一份重连；面板的 HTTP 请求一律过 `transport.ts` 的 `fetchT`（读有期限且重试一次，写不重试，本来就慢的不设期限）
+- `core/island_cards.py` - **灵动岛上的卡**（借 WinIslands 的上岛推送）：这台电脑上刚发生、人该余光知道的事（桌面操作第几步 / 核对结论 /
+  有结果没收口 / 有设备在等你同意）。一张卡一个 id 原地更新、分先后、会过期、只放类型化短字段、不改岛的长短；推 WS `type="island"`
+  整份队列，覆盖层刚连上补发（`core/presence_fanout.py`）。覆盖层 `renderer/app.js` 点一下岛才展开（停下 / 打开面板 / 知道了），指针在岛上
+  时窗口才接鼠标。推卡用 `post_card` / `remove_card`（永不抛出）；**别往岛上放原始结果、截图、参数**。桌宠不归卡片管
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
-- **设置页每一行的中文名、下拉每一档的中文名**在 `core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`），由 `/api/config/all` 带给面板；行首画中文名、环境变量名在悬停提示里。**新增一个会列在面板上的配置，不补这张表 `tests/test_every_listed_setting_has_a_chinese_name.py` 会红**。整档按钮的主键（`CONFIG_BUNDLES[*].primary`）在 `/all` 里标 `bundle`，设置页不再摆第二个开关；取值有限的字符串键（`auto/1/0`）在表里登记档位后按下拉画。**`/api/config/all` 不下发密钥的值**（设置这组原先没挂鉴权，后端又听 `0.0.0.0`；现在与对话、操作电脑那几组一起挂 `_auth_deps`）：密钥类只给掩码 / 空串，写回的掩码当没改；「什么算密钥」与面板 `ui/settings.ts` 的 `SECRET_RE` 是同一条（`tests/test_settings_never_send_secret_values.py`）
+- **设置页每一行的中文名、下拉每一档的中文名**在 `core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`），由 `/api/config/all` 带给面板；行首画中文名、环境变量名在悬停提示里。**新增一个会列在面板上的配置，不补这张表 `tests/test_every_listed_setting_has_a_chinese_name.py` 会红**。整档按钮的主键（`CONFIG_BUNDLES[*].primary`）在 `/all` 里标 `bundle`，设置页不再摆第二个开关；取值有限的字符串键（`auto/1/0`）在表里登记档位后按下拉画。**`/api/config/all` 不下发密钥的值**（后端听 `0.0.0.0`，这个 app 没有网关那层全局 Bearer 中间件：路由组都挂 `_auth_deps`，不带令牌能调的写接口只剩 `tests/test_lan_cannot_drive_this_computer_without_a_token.py` 的 `OPEN_BY_DESIGN`、能读的只剩同一文件的 `PUBLIC_READS`（健康检查 / `/metrics` / 客户端配置发现 / OAuth 登录），新加接口忘了挂鉴权那两条测试会红）：密钥类只给掩码 / 空串，写回的掩码当没改；「什么算密钥」与面板 `ui/settings.ts` 的 `SECRET_RE` 是同一条（`tests/test_settings_never_send_secret_values.py`）
 - **「调数据方式」的参数（回声消除、并发 / 熔断常数、各种超时与窗口、`auto/1/0` 档位……共 102 个：86 个数字、14 个档位、2 个音色名）不上面板**：它们多半是自适应算法自己的常数，人会说的是效果。登记在 `core/tuning.py` 的白名单里（每个键有硬范围），由智能体的 `tuning__list` / `tuning__set` 按人的话调：只在人发起的回合、放大自主度的方向要人点头、不碰会删数据的键、留痕（`tuning_log.jsonl`）、可 `reset` 一句话撤销。**新增这类参数：登记进 `_NUMERIC` / `_CHOICES`（档位，开关也按两档）/ `_NAMES`（音色名这类一小段名字），别往面板上摆一行**；登记的出厂值必须等于代码里的默认值（`tests/test_tuning_knobs.py` 核对）；读取点在导入时的要登记进 `_AT_IMPORT`（改了要重启）
 - **面板上不列的另两类设置**（`core/routes/panel_builtin.py`，`GET /api/config/all` 不下发、「保存设置」不往 `.env` 里钉默认值，但仍登记、`POST /api/config` / `.env` / 环境变量照旧能用）：**内置键 90 个**（路径、内部服务地址与端口、型号与规格、固定的严格默认、运维逃生口——有一个对的默认，人填错只会弄坏），**跨设备专属键 15 个**（总线 / 联邦 / 打洞与中继 / 设备名 / 网格口令……只在 `core.system_mode.cross_device_requested()` 为真时才列，本地模式是纯噪音）。**新增一个键，先回答它属于哪一类**：留在面板（用户真有取舍）/ 对话里调（`core/tuning.py`）/ 内置（加进 `BUILTIN_GROUPS`）/ 跨设备专属。**登记表的默认值必须等于代码里的默认值**（`tests/test_panel_builtin_keys.py` 逐个扫描核对；曾抓到 `CORS_ALLOWED_ORIGINS` 登记成 `*`，点一次保存就写成「任何网页都能带凭据调本机接口」），**路径默认一律随数据总目录走**（`core.data_paths.data_path_or_legacy` / `runtime_file`：数据目录下没有、旧位置有数据时继续认旧位置，不把已有的记忆 / 账本 / 装进来的项目甩在后面）；**没有任何代码在读的键不许登记**（同一份测试扫描）
 - **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
@@ -242,7 +260,9 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 ## API 端点索引
 
 ### 设备管理
-- `POST /api/v1/devices/register` - 注册设备
+- `POST /api/v1/devices/register` - 注册设备。**陌生设备不带凭据来登记不直接进 UDM**：记成接入候选（`core/routes/_self_register.py` →
+  `core/device_onboarding/join_paths.py::SelfRegisteredPath`，回 202），主人在面板「全部设置」最上面「等你同意的设备」点「接入」才写进去；
+  鉴权关着、带主人令牌、本来就是成员的照旧直接登记。旧的 `/api/devices/register` 同一条规则
 - `GET /api/v1/devices` - 列出设备
 - `GET /api/v1/devices/discover` - 发现设备
 - `DELETE /api/v1/devices/{id}` - 注销设备
@@ -278,7 +298,11 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 
 ### 没收口的结果（真相链隔离队列）
 - `GET /api/v1/results/isolated` - 补跑后仍没收口的结果（只有类型化字段，原始结果不外露）
-- `POST /api/v1/results/isolated/{key}/retry` / `.../dismiss` - 再试一次（只重跑失败步骤）/ 知悉
+- `POST /api/v1/results/isolated/{key}/retry` / `.../accept` / `.../dismiss` - 再试一次（只重跑失败步骤；Computer Use 那类在后台做，先回 `retrying`）/ 认可（人认它做完了）/ 知悉（判它没做成）
+
+### 灵动岛
+- `GET /api/v1/presence/island` - 岛上此刻的卡（排好先后；覆盖层平时走 WS `type="island"` 帧）
+- `DELETE /api/v1/presence/island/{id}` - 撤掉一张（岛上点「知道了」）
 
 ### 智能体活动
 - `GET /api/v1/agent/activity` - 智能体正在处理的全部请求：发起方、是否在桌面三态里、相位（需 API 鉴权）
@@ -308,6 +332,8 @@ python scripts/unwired_inventory.py --write               # 刷新 docs/UNWIRED_
 python scripts/unwired_inventory.py --check               # 核对 config/unwired_placement.json（安卓以外每个未接线函数的去处）与清单对得上
 ```
 原先写在这里的 `test_system_real.py` 不存在。
+包在 `try` 里的 `from 仓库模块 import 名字`，名字不存在不会报错，只会一声不响地退成「不可用」（第 4 轮扫出 19 处，含两个从没成功过的视觉接口）——
+`tests/test_lazy_imports_name_things_that_exist.py` 全仓核对。
 
 ### 配置 API Key
 ```bash

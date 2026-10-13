@@ -29,12 +29,14 @@ Routes added
 import logging
 import warnings
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core import upper_ports
+from core.auth import require_auth
 from core.routes._shared import connection_manager, node_status_cache, registered_devices
 
 logger = logging.getLogger("Galaxy.API")
@@ -104,7 +106,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(payload, headers=headers)
 
     @router.post("/api/devices/register")
-    async def legacy_register_device(req: _LegacyRegisterRequest):
+    async def legacy_register_device(req: _LegacyRegisterRequest, authorization: Optional[str] = Header(None)):
         """
         Legacy registration shim — delegates to /api/v1/devices/register logic.
 
@@ -124,6 +126,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "last_seen": datetime.now().isoformat(),
             "status": "registered",
         }
+        # 陌生设备不带凭据来登记:先记成候选,等主人在面板上同意(与新登记口同一条规则,见 _self_register.py)
+        from core.routes._self_register import await_owner, from_owner, register_directly, stored_identity
+        from core.routes.devices import _is_device_registered_canonical
+
+        if not register_directly(req.device_id, authorization, known=_is_device_registered_canonical(req.device_id)):
+            return await_owner(device_info)
+        if not from_owner(authorization):  # 成员不带凭据来重新登记:只认已登记的资料,请求里报的不改它
+            device_info = stored_identity(req.device_id, device_info)
 
         # PR5: SSOT write-through — legacy endpoint now delegates to UDM
         try:
@@ -132,8 +142,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             ok = udm_write_register(
                 device_id=req.device_id,
                 device_name=device_info["device_name"],
-                device_type_raw=req.device_type,
-                capabilities=req.capabilities,
+                device_type_raw=device_info["device_type"],
+                capabilities=device_info["capabilities"],
                 metadata={"os_version": req.os_version, "app_version": req.app_version},
                 source="compat_legacy",
             )
@@ -175,8 +185,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "action": "register",
                     "device_id": req.device_id,
                     "device_name": device_info["device_name"],
-                    "device_type": req.device_type,
-                    "capabilities": req.capabilities,
+                    "device_type": device_info["device_type"],
+                    "capabilities": device_info["capabilities"],
                     "source": "legacy",
                 },
             )
@@ -206,7 +216,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             client_hint=f"{req.device_type}/{req.app_version}".strip("/"),
         )
 
-    @router.get("/api/devices/list")
+    @router.get("/api/devices/list", dependencies=[Depends(require_auth)])  # 设备清单要令牌
     async def legacy_list_devices():
         """
         Legacy device-list shim — returns same payload as /api/v1/devices.
@@ -257,7 +267,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         return _legacy("/api/devices/heartbeat", {"success": True, "device_id": req.device_id})
 
-    @router.post("/api/devices/unregister")
+    @router.post("/api/devices/unregister", dependencies=[Depends(require_auth)])  # 注销别的设备要令牌
     async def legacy_unregister_device(req: _LegacyUnregisterRequest):
         """
         Legacy unregister shim — marks device offline (safe no-op if unknown).

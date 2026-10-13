@@ -14,6 +14,16 @@
  *
  * 一条都没有时整段不占地方:这是一个只在出事时才该出现的东西。拉不到时说拉不到,
  * 不说「一切正常」—— 那是两件事。
+ *
+ * 两类条目(`kind`):
+ *
+ * - `task_result` —— 设备交回的结果没走完上面那四步。
+ * - `computer_use` —— 桌面操作「说做完了」,但另起一张屏幕、交给只看任务与屏幕的核对员,核对没通过
+ *   (core/computer_use_verdict.py)。后台已经把没做完的部分再做过一次,仍不行才在这里。它的「再试一次」
+ *   要几十秒,后端先回「在做」,卡片显示「正在再做一次」、不再画按钮,做完这一条自己更新。
+ *
+ * 三个动作,与运维面板的结案动作是同一处:「再试一次」= 重开、「认可」= 确认(人看过、认它做完了)、
+ * 「知道了」= 驳回(判它没做成)。后两种记录都保留,只是不再列出来。
  */
 import type { IsolatedResult } from '../transport';
 
@@ -25,8 +35,17 @@ const STEP_TEXT: Record<string, string> = {
   completion_linkage: '唤醒等待方',
 };
 
+/** 每类条目的称呼与「没成在哪」的说法 */
+const KIND_TEXT: Record<string, string> = {
+  task_result: '设备结果',
+  computer_use: '桌面操作',
+};
+
 export interface IsolatedResultsCallbacks {
   onRetry(key: string): void;
+  /** 认可:人看过了,它确实做完了 */
+  onAccept(key: string): void;
+  /** 知道了:判它没做成 */
   onDismiss(key: string): void;
 }
 
@@ -49,7 +68,7 @@ export function createIsolatedResults(cb: IsolatedResultsCallbacks): IsolatedRes
   const hint = document.createElement('p');
   hint.className = 'up-hint';
   hint.textContent =
-    '回答当时已经交给你了；这里是结果没能完整写回任务记录的那几条。后台已经自动补过一次，仍没补上的才在这儿。';
+    '回答当时已经交给你了；这里是结果没能核实的那几条 —— 设备交回的结果没写回任务记录，或桌面操作说做完了、对着屏幕核对没通过。后台已经自动补过一次，仍不行的才在这儿。';
 
   const notice = document.createElement('div');
   notice.className = 'up-notice';
@@ -60,10 +79,33 @@ export function createIsolatedResults(cb: IsolatedResultsCallbacks): IsolatedRes
 
   root.append(head, hint, notice, list);
 
+  function button(text: string, tip: string, busy: boolean, onClick: () => void): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'up-btn';
+    b.textContent = text;
+    b.title = tip;
+    b.disabled = busy;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  /** 「没成在哪」那一行。设备结果说哪几步没走通;桌面操作说核对员看到了什么。 */
+  function whatWentWrong(r: IsolatedResult): string {
+    if (r.kind === 'computer_use') {
+      const now = r.reason || '（后端没说核对员看到了什么）';
+      const first = r.firstReason && r.firstReason !== r.reason ? ` · 第一次：${r.firstReason}` : '';
+      return `说做完了，对着屏幕核对没通过：${now}${first}`;
+    }
+    const steps = r.failedSteps.map((s) => STEP_TEXT[s] ?? s).join('、') || '（后端没说是哪一步）';
+    return r.deviceId ? `没走通：${steps} · 来自 ${r.deviceId}` : `没走通：${steps}`;
+  }
+
   function card(r: IsolatedResult, busy: boolean): HTMLElement {
     const el = document.createElement('div');
     el.className = 'up-card';
-    el.dataset['state'] = 'unverified';
+    el.dataset['state'] = r.retrying ? 'retrying' : 'unverified';
+    el.dataset['kind'] = r.kind;
 
     const top = document.createElement('div');
     top.className = 'up-top';
@@ -71,39 +113,39 @@ export function createIsolatedResults(cb: IsolatedResultsCallbacks): IsolatedRes
     dot.className = 'up-dot';
     const name = document.createElement('b');
     name.textContent = r.taskId || r.key;
+    const kind = document.createElement('span');
+    kind.className = 'up-kind';
+    kind.textContent = KIND_TEXT[r.kind] ?? r.kind;
     const state = document.createElement('span');
     state.className = 'up-state';
-    state.textContent = r.resultStatus ? `结果 ${r.resultStatus} · 试了 ${r.attempts} 次` : `试了 ${r.attempts} 次`;
-    top.append(dot, name, state);
+    const tries = r.retrying ? `试了 ${r.attempts} 次 · 正在再做一次` : `试了 ${r.attempts} 次`;
+    state.textContent = r.kind === 'task_result' && r.resultStatus ? `结果 ${r.resultStatus} · ${tries}` : tries;
+    top.append(dot, name, kind, state);
 
     const meta = document.createElement('span');
     meta.className = 'up-meta';
-    const steps = r.failedSteps.map((s) => STEP_TEXT[s] ?? s).join('、') || '（后端没说是哪一步）';
-    meta.textContent = r.deviceId ? `没走通：${steps} · 来自 ${r.deviceId}` : `没走通：${steps}`;
+    meta.textContent = whatWentWrong(r);
 
     const acts = document.createElement('div');
     acts.className = 'up-acts';
-    if (r.retryable) {
-      const retry = document.createElement('button');
-      retry.type = 'button';
-      retry.className = 'up-btn';
-      retry.textContent = '再试一次';
-      retry.disabled = busy;
-      retry.addEventListener('click', () => cb.onRetry(r.key));
-      acts.append(retry);
+    if (r.retrying) {
+      const why = document.createElement('span');
+      why.className = 'up-nokey';
+      why.textContent = '后台正在再做一次，做完这里会更新';
+      acts.append(why);
+    } else if (r.retryable) {
+      const tip = r.kind === 'computer_use' ? '把没做完的部分交给桌面操作再做一次，做完再核对一次' : '只重跑没走通的那几步';
+      acts.append(button('再试一次', tip, busy, () => cb.onRetry(r.key)));
     } else {
       const why = document.createElement('span');
       why.className = 'up-nokey';
       why.textContent = '原始结果太大没留存，不能再试';
       acts.append(why);
     }
-    const dismiss = document.createElement('button');
-    dismiss.type = 'button';
-    dismiss.className = 'up-btn';
-    dismiss.textContent = '知道了';
-    dismiss.disabled = busy;
-    dismiss.addEventListener('click', () => cb.onDismiss(r.key));
-    acts.append(dismiss);
+    acts.append(
+      button('认可', '我看过了，它确实做完了（记录保留）', busy || r.retrying, () => cb.onAccept(r.key)),
+      button('知道了', '它没做成，我知道了（记录保留）', busy || r.retrying, () => cb.onDismiss(r.key)),
+    );
 
     el.append(top, meta, acts);
     return el;

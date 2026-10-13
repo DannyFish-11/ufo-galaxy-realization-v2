@@ -185,9 +185,10 @@ def measure_endpoint(
 
 def _count_tokens(tag: str, text: str) -> int:
     try:
-        from core.local_model_backends import count_tokens_with_loaded_model  # noqa: PLC0415
+        # 按这个型号的只读词表数(不占显存);原先调的 count_tokens_with_loaded_model 不存在,永远走粗估
+        from core.local_model_backends import tokenize_with_vocab_only  # noqa: PLC0415
 
-        n = int(count_tokens_with_loaded_model(tag, text) or 0)
+        n = int(tokenize_with_vocab_only(text, tag) or 0)
         if n > 0:
             return n
     except Exception as exc:  # noqa: BLE001 — 数不出来不该让整次基准失败

@@ -53,8 +53,18 @@ def _iter_path_methods(routes, prefix: str = ""):
 iter_path_methods = _iter_path_methods
 
 
+#: 并过来之后照旧公开的 (路径, 方法)。其余一律要令牌 —— 在网关 app 上它们本来就在全局 Bearer 中间件
+#: (``galaxy_gateway/middleware.py``)后面,而权威层的 app 没有那层中间件:原先并过来就成了**不设防**的
+#: (局域网不带令牌就能 ``POST /api/v1/agents/linux/servers/{id}/execute`` 在登记过的服务器上跑命令)。
+#: 公开的只有中间件豁免表里本来就公开的那条:客户端配置发现。
+_PUBLIC = {("/api/v1/config", "GET"), ("/api/v1/config", "HEAD")}
+
+
 def merge_gateway_only_routers(router) -> None:
     """把 ``galaxy_gateway`` 侧独有的 router 并进 ``router``(权威 API 层)。"""
+    from fastapi import APIRouter, Depends
+
+    from core.auth import require_auth
 
     # ── 网关侧独有能力:并入权威 API 层 ────────────────────────────────────
     #
@@ -95,16 +105,19 @@ def merge_gateway_only_routers(router) -> None:
         """
         existing = set(_iter_path_methods(getattr(target, "routes", [])))
         added, skipped = [], []
+        guarded = APIRouter()
         for route in list(getattr(incoming, "routes", [])):
             path = getattr(route, "path", None)
             methods = getattr(route, "methods", None) or {None}
             if any((path, m) in existing for m in methods):
                 skipped.append(path)
                 continue
-            target.routes.append(route)
+            (target if all((path, m) in _PUBLIC for m in methods) else guarded).routes.append(route)
             for m in methods:
                 existing.add((path, m))
             added.append(path)
+        if guarded.routes:
+            target.include_router(guarded, dependencies=[Depends(require_auth)])
         logger.info(
             "并入权威 API 层 %s:新增 %d 条%s",
             label,

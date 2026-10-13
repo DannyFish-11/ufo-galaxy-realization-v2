@@ -184,12 +184,14 @@ def test_entrypoint_still_configures_console_when_run_as_script(entry: str) -> N
 
 
 @pytest.fixture
-def clean_environ():
+def clean_environ(tmp_path):
     """快照 / 还原 os.environ。
 
-    被测函数直接写 os.environ,monkeypatch 追踪不到,必须自己兜。
+    被测函数直接写 os.environ,monkeypatch 追踪不到,必须自己兜。数据目录指到一个空处:
+    密钥库先认数据目录下的 ``secrets.env``,整套测试共用的那个数据目录里可能已有别的用例存进去的。
     """
     snapshot = dict(os.environ)
+    os.environ["GALAXY_DATA_DIR"] = str(tmp_path / "no-data-dir-yet")
     try:
         yield
     finally:

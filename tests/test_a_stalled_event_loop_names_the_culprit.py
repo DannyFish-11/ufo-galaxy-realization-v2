@@ -236,7 +236,8 @@ def test_the_report_names_the_library_line_under_the_repo_line(monkeypatch, said
 
     monkeypatch.setattr(w, "_started", False)
     monkeypatch.setattr(w, "STALL_S", 0.3)
-    big = [{"k": list(range(50))} for _ in range(4000)]
+    # 每次调用要够长(零点几秒):调用之间那一瞬落在本文件的 while 行上,机器一忙就会被采到(全量跑时出现过)
+    big = [{"k": list(range(50))} for _ in range(40000)]
 
     def _hog_in_a_library():
         end = time.monotonic() + 0.9

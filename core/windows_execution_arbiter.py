@@ -9,14 +9,18 @@ strict four-level fallback chain:
       Best for app launch, window focus, hotkey, and tray actions.
 
   Level 2 – UIAutomation (UIA)
-      COM-based accessibility-tree control via
-      :mod:`windows_client.autonomy.autonomy_manager`.
+      Element-level control: :mod:`windows_client.autonomy.autonomy_manager`
+      (comtypes) and Microsoft UFO's ``ControlReceiver`` (when installed).
       Best for element-level interactions (click by name, type into field).
 
   Level 3 – GUI automation
-      Coordinate-based input simulation.
-      Falls back to :mod:`core.device_control_service` or the
-      Node_36_UIAWindows HTTP API.
+      Coordinate-based input simulation: in-process
+      :mod:`core.device_control_service` and the Node_36_UIAWindows node.
+
+The backends of each level, and the order levels/backends are tried in for a
+given step (by what the step carries, the foreground app's track record and
+the live situation), live in :mod:`core.desktop_automation` — the one desktop
+automation whole.  This class is its single execution entry.
 
   Level 4 – VLM (vision-language model)
       Screenshot + VLM reasoning as a last resort when all structural
@@ -233,91 +237,27 @@ ScreenshotGetter = Callable[[str], Awaitable[Optional[str]]]
 
 
 def _make_default_system_api_executor() -> Optional[SystemAPIExecutor]:
-    """Return an async adapter over the :class:`~core.system_api.windows_system_api.WindowsSystemAPI`
-    facade or *None* when the facade is disabled / unavailable.
+    """第 1 级(系统接口)的执行器,由桌面自动化登记表 :mod:`core.desktop_automation` 组装(``win32``)。"""
+    from core.desktop_automation import LEVEL_SYSTEM_API, level_executor
 
-    The facade is the preferred entry-point for all System API actions because
-    it provides a consistent request/response model, structured logging, and
-    in-process metrics.  It routes to the lower-level
-    :class:`~core.system_api.platform_api.SystemAPI` adapter internally.
-    """
-
-    try:
-        from core.system_api.windows_system_api import (  # type: ignore[import]
-            get_windows_system_api,
-        )
-
-        facade = get_windows_system_api()
-        if not facade.is_available:
-            return None
-
-        async def _system_api_exec(action: str, params: Dict[str, Any], device_id: str) -> Dict[str, Any]:
-            resp = facade.dispatch(action, params, device_id=device_id)
-            if not resp.handled:
-                # Facade explicitly says it cannot handle this action.
-                return {
-                    "success": False,
-                    "error": resp.fallback_reason or f"system_api: unsupported action '{action}'",
-                }
-            return {
-                "success": resp.success,
-                "error": resp.error or "",
-                **resp.data,
-            }
-
-        return _system_api_exec
-    except Exception:
-        return None
+    return level_executor(LEVEL_SYSTEM_API)
 
 
 def _make_default_uia_executor() -> Optional[UIAExecutor]:
-    """Return an async adapter over :class:`windows_client.autonomy.autonomy_manager.WindowsAutonomyManager` or *None*.
+    """第 2 级(控件)的执行器:本仓 Windows UIA 与微软 UFO,按现场排序(:mod:`core.desktop_automation`)。
 
-    This adapter requires the ``windows_client`` package and COM/UIAutomation
-    support — both of which are only available on Windows.  On other platforms
-    the import silently fails and the UIA level is skipped.
+    两个都建不出来(不是 Windows、comtypes / UFO 都不在)时返回 ``None`` —— ``uia_available`` 据此照实回答。
     """
+    from core.desktop_automation import LEVEL_UIA, level_executor
 
-    try:
-        from windows_client.autonomy.autonomy_manager import (  # type: ignore[import]
-            WindowsAutonomyManager,
-        )
-
-        manager = WindowsAutonomyManager()
-
-        async def _uia_exec(action: str, params: Dict[str, Any], device_id: str) -> Dict[str, Any]:
-            try:
-                uia_action = {"type": action, "params": params}
-                result = manager.execute_action(uia_action)
-                return result if isinstance(result, dict) else {"success": bool(result)}
-            except Exception as exc:
-                return {"success": False, "error": str(exc)}
-
-        return _uia_exec
-    except Exception:
-        return None
+    return level_executor(LEVEL_UIA)
 
 
 def _make_default_gui_executor() -> Optional[GUIExecutor]:
-    """Return an async adapter over :mod:`core.device_control_service` or *None*."""
+    """第 3 级(坐标)的执行器:自动控制节点 Node_92(pyautogui)与桌面操作节点 Node_36,按现场排序(:mod:`core.desktop_automation`)。"""
+    from core.desktop_automation import LEVEL_GUI, level_executor
 
-    try:
-        from core.device_control_service import device_control  # type: ignore[import]
-
-        async def _gui_exec(action: str, params: Dict[str, Any], device_id: str) -> Dict[str, Any]:
-            try:
-                result = await device_control.execute_action(
-                    device_id=device_id,
-                    action=action,
-                    params=params,
-                )
-                return result if isinstance(result, dict) else {"success": bool(result)}
-            except Exception as exc:
-                return {"success": False, "error": str(exc)}
-
-        return _gui_exec
-    except Exception:
-        return None
+    return level_executor(LEVEL_GUI)
 
 
 #: 「computer-use 闭环正在跑」的进程内标记（按任务隔离）。
@@ -360,7 +300,11 @@ def _make_default_vlm_executor() -> Optional[VLMExecutor]:
         if not (instruction or "").strip():
             return {"success": False, "error": "VLM 级需要自然语言 instruction,本次请求没有给"}
         try:
-            out = await run_computer_use_task(instruction)
+            # 独立核对照做(模型说做完了只是自报),但不排后台重做:这一级只是调用方任务里的一步,
+            # 没核对通过就照实回失败,由调用方自己处置 —— 后台再做一遍会和调用方的处置撞车、重复动手。
+            from core.computer_use_verdict import settle
+
+            out = await settle(instruction, await run_computer_use_task(instruction, verify=False), schedule=False)
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": f"computer-use 闭环异常: {exc}"}
         return {
@@ -368,6 +312,7 @@ def _make_default_vlm_executor() -> Optional[VLMExecutor]:
             "error": "" if out.get("success") else str(out.get("message", "") or out.get("stop_reason", "")),
             "stop_reason": out.get("stop_reason"),
             "steps": out.get("steps", []),
+            "verdict": out.get("verdict"),
         }
 
     return _vlm_exec
@@ -483,6 +428,7 @@ class WindowsExecutionArbiter:
         force_level: Optional[WinExecLevel] = None,
         context: Optional[Dict[str, Any]] = None,
         policy: Optional[Any] = None,
+        structural_only: bool = False,
     ) -> WinExecResult:
         """Execute a Windows action through the strict fallback chain.
 
@@ -514,6 +460,10 @@ class WindowsExecutionArbiter:
               from the fallback chain.
 
             When ``None`` no enforcement is applied (backward compatible).
+        structural_only:
+            只走结构化的三级(系统接口 / 控件 / 坐标),不进视觉级。给「做一个确定的动作」的旧入口用
+            (``microsoft_ufo_integration`` / ``DeviceAgentManager``):一次点击没点成,不该就此起一整个
+            Computer Use 闭环 —— 那是模型要做的决定,不是这一下点击的降级。
 
         Returns
         -------
@@ -558,11 +508,33 @@ class WindowsExecutionArbiter:
                 WinExecLevel.VLM,
             ]
 
+        # ── 按现场排级序(core.desktop_automation)───────────────────────────
+        # 这一步本级没人接的跳过(写清原因),在当前前台程序上全军覆没的往后挪;视觉级永远最后。
+        # 只换顺序、不去兜底;显式 force_level 不动。
+        skipped_attempts: List[WinExecAttempt] = []
+        if force_level is None:
+            from core.desktop_automation import arrange_levels
+
+            executors = {
+                WinExecLevel.SYSTEM_API.value: self._system_api,
+                WinExecLevel.UIA.value: self._uia,
+                WinExecLevel.GUI.value: self._gui,
+                WinExecLevel.VLM.value: self._vlm,
+            }
+            arranged, level_skips = arrange_levels([lv.value for lv in levels], executors, action, params)
+            levels = [WinExecLevel(v) for v in arranged]
+            skipped_attempts = [
+                WinExecAttempt(level=WinExecLevel(sk["level"]), status=WinExecStatus.SKIPPED, error=sk["why"])
+                for sk in level_skips
+            ]
+
         # ── 递归保护 ──────────────────────────────────────────────────────────
         # computer-use 闭环正在跑时,这次调用就是它某一步动作打回来的。第 4 级会再
         # 委托给同一个闭环 —— 放行就是无限递归。降级链在此处到 GUI 为止,原因写进
         # 结果里(而不是安静砍掉一级,那样现场只会看到"莫名其妙少了一级")。
         _recursion_guarded = False
+        if structural_only and force_level is None:
+            levels = [lv for lv in levels if lv is not WinExecLevel.VLM]
         if computer_use_recursion_guard_active() and WinExecLevel.VLM in levels:
             levels = [lv for lv in levels if lv is not WinExecLevel.VLM]
             _recursion_guarded = True
@@ -597,7 +569,7 @@ class WindowsExecutionArbiter:
                 self._record(win_result)
                 return win_result
 
-        attempts: List[WinExecAttempt] = []
+        attempts: List[WinExecAttempt] = list(skipped_attempts)
         last_failure_reason = ""
 
         for level in levels:
@@ -1042,13 +1014,15 @@ def _sync_dispatch_budget_s() -> float:
 
     原来写死 30 秒，而第 4 级委托的 ``run_computer_use_task`` 上界是
     ``max_steps × (规划超时 + 静置)`` ≈ 915 秒，差一个数量级。改成从
-    computer_use_loop 的常量算，``GALAXY_CU_*`` 一调这边自动跟着走。
+    computer_use_loop 的常量算，``GALAXY_CU_*`` 一调这边自动跟着走。跑完还有一次独立核对
+    （:mod:`core.computer_use_verdict`，期限与一次规划相同），按多一步算。
     """
     try:
         from core.computer_use_loop import _max_steps, _settle_s  # noqa: PLC0415
+        from core.computer_use_verdict import CHECK_TIMEOUT_S  # noqa: PLC0415
 
         per_step_s = 60.0 + _settle_s()  # 60.0 = 规划调用的 wait_for 超时
-        return _max_steps() * per_step_s * _SYNC_DISPATCH_HEADROOM
+        return (_max_steps() * per_step_s + CHECK_TIMEOUT_S) * _SYNC_DISPATCH_HEADROOM
     except Exception:  # noqa: BLE001 — computer_use 不可用时第 4 级本就跑不起来
         return _SYNC_DISPATCH_FALLBACK_S
 

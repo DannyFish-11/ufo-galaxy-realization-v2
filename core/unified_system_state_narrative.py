@@ -977,20 +977,9 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
         logger.debug("recovery_degradation: delegated flow recovery failed: %s", exc)
         trace.append(f"delegated_flow_recovery_failed:{exc}")
 
-    # Android continuity recovery router
-    try:
-        from core.android_continuity_recovery_state_router import (
-            get_recovery_state_router,
-        )
-
-        router = get_recovery_state_router()
-        android_recovery = router.get_current_recovery_state() if hasattr(router, "get_current_recovery_state") else {}
-        if android_recovery:
-            evidence["android_recovery_state"] = dict(android_recovery)
-            trace.append(f"android_recovery_state: {android_recovery}")
-    except Exception as exc:
-        logger.debug("recovery_degradation: android recovery router failed: %s", exc)
-        trace.append(f"android_recovery_failed:{exc}")
+    # 安卓连续性恢复路由(core.android_continuity_recovery_state_router)是对一份设备上报的纯函数路由,
+    # 没有「当前恢复状态」可读。原先这里调的 get_recovery_state_router() 不存在,每次往 trace 里
+    # 记一条 android_recovery_failed —— 一条假的失败。
 
     # Runtime restart recovery
     try:

@@ -1232,6 +1232,15 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
     }
 });
 
+// 灵动岛上点「打开面板」：只开不关。已经开着就拉到前面 —— 走 togglePanel 的话正开着的面板会被它关掉。
+ipcMain.on('galaxy:open-panel', () => {
+    if (panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible()) {
+        panelWindow.focus();
+        return;
+    }
+    togglePanel();
+});
+
 // ═══════════════════════════════════════════
 // Desktop Perception — 摄像头/麦克风/屏幕连续感知
 // ═══════════════════════════════════════════
