@@ -53,6 +53,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.data_paths import data_path_or_legacy
+
 logger = logging.getLogger("Galaxy.AgentSupply")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -77,7 +79,12 @@ ROLE_TO_BRAIN_ROLE: Dict[str, str] = {
 #: 显式声明的偏好压过角色映射：偏好说的是「这一格要哪一类脑」。
 PREFERENCE_TO_BRAIN_ROLE: Dict[str, str] = {"dispatch": "executor", "produce": "writer", "gatekeep": "reviewer"}
 
-DIVERGENCE_LOG = REPO_ROOT / "runtime" / "agent_supply" / "divergences.jsonl"
+DIVERGENCE_LOG = Path(  # 随数据目录走;runtime/ 里已有的继续用
+    data_path_or_legacy(
+        os.path.join("agent_supply", "divergences.jsonl"),
+        str(REPO_ROOT / "runtime" / "agent_supply" / "divergences.jsonl"),
+    )
+)
 
 
 def agent_supply_mode() -> str:

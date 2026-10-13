@@ -52,12 +52,13 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from core.atomic_json import atomic_write_json
+from core.data_paths import state_file
 
 logger = logging.getLogger("Galaxy.ContextMeasurements")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 #: 与 model_state.json 同一个目录 —— 都是"这台机器的运行时事实"。
-_FILE = PROJECT_ROOT / "runtime" / "context_measurements.json"
+_FILE = Path(state_file("context_measurements.json", str(PROJECT_ROOT / "runtime")))  # 随数据目录走;旧的继续用
 
 #: 低于这个值的 KV 单价一律不信。
 #:

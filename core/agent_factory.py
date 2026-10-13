@@ -1153,6 +1153,7 @@ class AgentFactory:
                 "task": _task_echo(task),
                 "output": (resp.content if resp else None) or "Agent 达到最大迭代次数",
                 "provider": getattr(resp, "provider", "") if resp else "",
+                "model": getattr(resp, "model", "") if resp else "",  # 真正写出回答的型号(回执里要说实话)
                 "tool_calls": [r.model_dump() for r in tool_records],
                 "iterations": loop.iterations,
                 "reflection_rounds": loop.reflection_rounds,
@@ -1160,7 +1161,6 @@ class AgentFactory:
             }
 
         else:
-            # 无 LLM，模拟执行
             return {
                 "task": _task_echo(task),
                 "output": f"Agent {agent.config.name} 已处理任务（无 LLM 模式）",

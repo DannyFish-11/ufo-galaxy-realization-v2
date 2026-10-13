@@ -109,7 +109,7 @@ class ConfigUpdateRequest(BaseModel):
 
 
 #: ``GET /api/config/all`` 里密钥类的值一律给这个(配了)或空串(没配),**不下发真值**。
-#: 后端默认监听 0.0.0.0、鉴权默认关:原先同一局域网里任何一台机器 GET 一下就拿走全部 API Key
+#: 后端监听 0.0.0.0,而设置这组原先挂载时没带鉴权:同一局域网里任何一台机器 GET 一下就拿走全部 API Key
 #: 与 ``GALAXY_API_TOKEN`` 本身。面板本来就不回填密钥(``ui/settings.ts``:只看有没有值,
 #: 输入框留空=不改),要的只是「配没配」。收到原样写回的掩码当没改。
 SECRET_MASK = "********"
@@ -134,7 +134,7 @@ def _secret_is_set(key_name: str) -> bool:
 # 它原先挂在 system 路由组(整组 Depends(require_auth)),而同路径的写端点
 # POST /api/config 在本开放路由组 —— 生产模式(GALAXY_MODE=production 强制
 # 开鉴权)下变成"写得进、读不出":Key 保存成功,面板角标读取却 401,永远显示
-# "未配置"。读的是掩码状态(布尔 + 非敏感地址),密级不高于写端点,读写必须同权。
+# "未配置"。读写必须同权 —— 现在是两个一起挂鉴权(core/api_routes.py 的 _auth_deps),不是两个一起敞着。
 _SECRET_MODEL_KEYS = [
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",

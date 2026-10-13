@@ -867,6 +867,7 @@ class UnifiedWebUI:
             # banner) instead of blocking here.
             self._server = server
             threading.Thread(target=_warm_routes, args=(self.app,), name="route-warmup", daemon=True).start()
+            await asyncio.to_thread(_uvi_config.load)  # serve() 见已 load 就跳过:协议类的 import 不在循环里做(真跑卡 0.5 秒)
             self._serve_task = asyncio.create_task(server.serve())
             # 事件循环被同步工作卡住时,说出卡在哪几行(只读;见 core/loop_stall_watch.py)。
             from core import loop_stall_watch

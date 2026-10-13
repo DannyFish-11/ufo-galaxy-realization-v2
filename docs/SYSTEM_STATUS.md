@@ -651,7 +651,7 @@ python scripts/check_assessment_freshness.py
 - **停机不安静**：Ctrl+C 后控制台冒出一段「--- Logging error ---」栈 + aiohttp ERROR「Unclosed client session」。在场桥共享的
   IPC 会话停机时关掉；解释器退出阶段的日志不再打栈（上一轮引入的日志队列在那一刻不能 `copy`）。
 - **`--backend` 说错原因**：主动不起桌面壳，横幅却写「未启动」算进降级、日志猜「缺 Node.js」→ 照实写「按 --backend 跳过」（·，不算降级）。
-- **设置明细把密钥原值发给任何人**：后端默认监听 `0.0.0.0`、鉴权默认关，`GET /api/config/all` 却把 30 个密钥类键的**原值**
+- **设置明细把密钥原值发给任何人**：后端监听 `0.0.0.0`，设置这组又没挂鉴权，`GET /api/config/all` 却把 30 个密钥类键的**原值**
   整份返回（各家 API Key，连同鉴权令牌 `GALAXY_API_TOKEN` 本身）——同一局域网里任何一台机器 GET 一下就全拿走。面板本来就不回填
   密钥，只要「配没配」：现在密钥类给掩码 / 空串，写回来的掩码当没改；「什么算密钥」后端与面板 `ui/settings.ts` 用同一条规则
   （`_TOKENS` 也算，`tests/test_settings_never_send_secret_values.py` 核对两边一致）。
@@ -677,15 +677,36 @@ python scripts/check_assessment_freshness.py
 （这次沙箱里的 `.env` 是旧模板生成的，里面明写着 `GALAXY_NATS_ENABLED=true`，所以本地模式也起了总线 —— 「写了就听它的」。
 现在的模板已经把这一行注释掉；早先生成的 `.env` 里若还有它，删掉那一行即可回到「本地模式不起 NATS」。）
 
+**第 2 轮（2026-10-13）：** 本机起一个假的 OpenAI 兼容模型（含流式），`OPENAI_API_BASE` 指过去，把对话全链路真跑一遍；
+再从容器的局域网地址不带令牌把接口挨个打一遍。修了：
+
+- **单 Agent 执行完，回答永远是「任务已完成」**：`ExecutionPlanner` 单 Agent 路径只读回执顶层的 `reply` / `result` /
+  `success` / `tool_calls` / `provider`，而 `AgentFactory._run_agent` 的回执把它们都放在 `results[*]` 里 —— 模型说的话被丢掉，
+  失败也算成功，工具调用与厂商记录全空（真跑：让它讲个笑话，回答「任务已完成」）。改由 `core/agent/agent_receipt.py` 读整棵回执
+  （含分裂的子 Agent 与串行重跑）；执行失败就说没做成、没有模型就说没真正执行。单个任务的结果还带上了真正写出回答的**型号**
+  —— 原先回答里报的是路由器默认型号（`gpt-5.6`），实际写回答的是 `gpt-6-astra`。
+- **同一局域网不带令牌就能操作这台电脑**：鉴权默认是开的，但对话、设置（含 `POST /api/config` 改 `.env`、能把鉴权本身关掉）、
+  自加模型、`/api/v1/ui/act`（点界面）、`/api/v1/computer-use/task`、记忆、会话、代码生成这几组挂载时没带 `_auth_deps`，
+  后端又听 `0.0.0.0`。真测：不带令牌从局域网 `POST /api/v1/ui/act` 回 200。网关自己的 `/api/v1/chat` 本来就要鉴权，只是同路径这条
+  先注册先命中。现在一起挂上鉴权；面板与 Electron 主进程每个请求都带本机令牌，不受影响（`tests/test_lan_cannot_drive_this_computer_without_a_token.py`）。
+- **容器里重建一次就丢的状态**：自加的模型服务、OAuth 连接、档位与主脑、上下文归档（被压掉那段对话的唯一原文）、上下文实测、
+  推测解码实测、Agent 供给偏差日志、元层 artifact 存储都写在仓库 `runtime/` 下 —— 容器里只有 `/app/data` 在持久卷上。改为随数据目录走，
+  `runtime/` 里已有的继续用。`runtime/config.json` 与 `secrets.env` 有好几处读者、启动第一行就要读，留到下一轮单独做（动错会丢 Key）。
+- **测试写进开发者自己的数据**：conftest 把数据目录指到临时目录，旧位置兜底又把它绕回仓库 `data/` / `runtime/`（仓库里留着
+  `s6`、`sess_role_test` 这些测试会话）。测试里仓库自己的旧位置一律不算。
+- **任务记忆存的不是用户说的话**：每条摘要后面挂着 `[Multimodal context: …]` 与 `[desktop_context_strategy …]`，经验制导拿它做 BM25。
+  入库前剥掉（用已有的 `strip_appended_annotations`，用户自己写的方括号不动）。
+- **启动卡 0.5 秒**：新的卡顿记录当场说出是 uvicorn 在循环里 `import uvicorn.protocols.http.auto` —— `config.load()` 挪到线程里先做。
+
 **下一轮待办：**
 
-- 有模型时的对话全链路（沙箱里没有 Ollama / API Key，这一轮只验了「没配模型」的降级说明）。
-- 启动时剩下 0.1–0.4 秒级的循环占用（算力探测 `cpu_percent`、节点拓扑落盘）——在 1 秒告警线以下，看能否顺手挪出。
-- `mode-status` 在本地模式下 `nats_enabled: true`（容器基础设施把 NATS 拉起来时）—— 与「本地模式不用 NATS」的说法核对。
-- 后端默认监听 `0.0.0.0` 且鉴权默认关：本地模式（「只用这台电脑」）下同一局域网仍能调全部接口（包括操作电脑的那几组）。
-  密钥不再外泄（见上），但「本地模式只听本机」要动监听地址，而容器里必须听 `0.0.0.0` —— 需要所有者定。
+- `runtime/config.json` 与 `runtime/secrets.env` 随数据目录走（`main.py` 启动第一行、`launcher/env_check`、`config_preflight`、
+  `ConfigStore` 四处读者要一起改，并且旧位置的 Key 一个都不能丢）。
+- 每条对话消息整份重写 `sessions.json`（本机 33 个会话、201 条消息约 10 ms 一次，一轮对话写两三次，在事件循环里）。
+- 剩下没挂鉴权、但看起来只读的几组（设备、视觉、AI、监控、诊断、混合执行、孪生、成本、渠道）逐个核对。
 - 照片里那次 11.5 秒卡顿的真凶：等更新后的卡顿记录（会带上同一时刻别的线程在 import 什么）。
-- 测试在本机留有旧 `runtime/` 文件时仍会写进仓库 `runtime/`（`runtime_file` 的旧位置兜底）—— 测试隔离。
+- `mode-status` 在本地模式下 `nats_enabled: true`：查实是旧模板生成的 `.env` 明写了 `GALAXY_NATS_ENABLED=true`（写了就听它的），不是代码问题；
+  早先生成的 `.env` 删掉那一行即可。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

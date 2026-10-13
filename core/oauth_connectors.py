@@ -33,11 +33,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
+from core.data_paths import state_file
 
 logger = logging.getLogger("Galaxy.OAuthConnectors")
 
 _ROOT = Path(__file__).resolve().parent.parent
-_STORE = _ROOT / "runtime" / "oauth_connectors.json"
+_STORE = Path(state_file("oauth_connectors.json", str(_ROOT / "runtime")))  # 随数据目录走;runtime/ 里已有的继续用
 
 # 每个服务的 OAuth 端点 + scope + 自建 App 的文档链接(前端首次没配时提示用)。
 CONNECTORS: Dict[str, Dict[str, Any]] = {

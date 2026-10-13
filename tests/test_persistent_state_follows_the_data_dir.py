@@ -42,3 +42,37 @@ def test_the_session_truth_snapshot_lands_in_the_data_dir(tmp_path, monkeypatch)
     monkeypatch.setattr(sts, "_DEFAULT_SESSION_TRUTH_SNAPSHOT_PATH", str(tmp_path / "nowhere" / "legacy.json"))
     store = sts.SessionTruthSnapshotStore()
     assert Path(store._store_path) == tmp_path / "session_truth_snapshot.json"
+
+
+#: 原先写死在仓库 ``runtime/`` 下的状态 —— 容器里只有 ``/app/data`` 在持久卷上,重建一次就丢。
+_RUNTIME_STATE = {
+    "core.user_providers": "STORE_FILE",
+    "core.oauth_connectors": "_STORE",
+    "core.model_catalog": "_STATE_FILE",
+    "core.speculative_draft": "_STATE_FILE",
+    "core.context_measurements": "_FILE",
+    "core.context_archive": "_ROOT",
+    "core.agent_supply": "DIVERGENCE_LOG",
+    "core.meta.store": "DEFAULT_STORE_ROOT",
+}
+
+
+def test_machine_state_that_used_to_live_in_runtime_follows_the_data_dir():
+    """测试会话里数据目录是 conftest 的临时目录,仓库自己的旧位置不算 —— 这些路径都该落进去。"""
+    import importlib
+    import os
+
+    data_dir = Path(os.environ["GALAXY_DATA_DIR"]).resolve()
+    stray = {}
+    for module, attr in _RUNTIME_STATE.items():
+        where = Path(getattr(importlib.import_module(module), attr)).resolve()
+        if not where.is_relative_to(data_dir):
+            stray[f"{module}.{attr}"] = str(where)
+    assert not stray, f"这些状态没跟数据目录走: {stray}"
+
+
+def test_select_model_clears_the_same_record_the_catalog_reads():
+    """``--select-model`` 清的那份记录,得是 model_catalog 真正读写的那份(原先 main.py 自己拼了 runtime/ 路径)。"""
+    src = (ROOT / "main.py").read_text(encoding="utf-8")
+    assert '"runtime" / "model_state.json"' not in src
+    assert "from core.model_catalog import _STATE_FILE" in src

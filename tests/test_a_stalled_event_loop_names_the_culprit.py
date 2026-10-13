@@ -252,3 +252,15 @@ def test_the_report_names_the_library_line_under_the_repo_line(monkeypatch, said
     asyncio.run(run())
     line = next(m for m in said if "_hog_in_a_library" in m)
     assert "〔最里面:" in line and "encoder.py" in line, line
+
+
+def test_uvicorn_loads_its_protocol_classes_beside_the_loop():
+    """真跑启动:「事件循环被卡住 0.5 秒 ……〔正在 import uvicorn.protocols.http.auto〕」——
+    ``server.serve()`` 一进去在循环里 ``config.load()``(import httptools / h11、websockets)。先在线程里 load,
+    serve() 见 ``config.loaded`` 就跳过。"""
+    import inspect
+
+    import launcher.services as svc
+
+    src = inspect.getsource(svc.UnifiedWebUI.start)
+    assert src.index("await asyncio.to_thread(_uvi_config.load)") < src.index("asyncio.create_task(server.serve())")

@@ -375,8 +375,10 @@ class TestChatRouteOpenClawdOnly:
         app.include_router(router)
         return TestClient(app, raise_server_exceptions=False)
 
-    def test_api_routes_chat_endpoint_routes_to_openclawd(self):
-        """create_api_routes() 注册的 /api/v1/chat 应调用 OpenClawd.process()，不走旧路径。"""
+    def test_api_routes_chat_endpoint_routes_to_openclawd(self, auth_headers):
+        """create_api_routes() 注册的 /api/v1/chat 应调用 OpenClawd.process()，不走旧路径。
+
+        对话要鉴权(与网关自己那条 /api/v1/chat 一致),所以带上测试令牌。"""
         mock_result = {
             "success": True,
             "response": "OpenClawd 回复",
@@ -390,7 +392,7 @@ class TestChatRouteOpenClawdOnly:
             mock_get.return_value = mock_clawd
 
             client = self._make_test_client()
-            resp = client.post("/api/v1/chat", json={"message": "你好"})
+            resp = client.post("/api/v1/chat", json={"message": "你好"}, headers=auth_headers)
 
         assert resp.status_code == 200
         body = resp.json()
