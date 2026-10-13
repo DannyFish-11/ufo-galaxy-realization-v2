@@ -284,7 +284,7 @@ class ConfigStore:
             try:
                 # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
                 atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
-                logger.info("secrets.env updated (key: %s)", key)
+                logger.info("secrets.env updated")  # 不记键名:密钥库的任何字段都不进日志
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc
 
@@ -315,7 +315,7 @@ class ConfigStore:
             try:
                 # 原子写、权限 0600:原先 open(..., "w") 建出来 0644,写到一半还先把旧的 Key 全清掉
                 atomic_write_text(self._secrets_path, self._render_dotenv(existing, header=header))
-                logger.info("secrets.env updated (key removed: %s)", key)
+                logger.info("secrets.env updated (one key removed)")
                 return True
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write {self._secrets_path}: {exc}") from exc

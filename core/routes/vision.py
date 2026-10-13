@@ -121,9 +121,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             try:
                 result = await _deepseek_ocr(image_data, req.mode)
-            except Exception as e:
-                logger.warning(f"DeepSeek OCR 2 调用失败: {e}")
-                result = {"error": str(e)}
+            except Exception as e:  # 详情只进服务端日志,不把异常原文回给调用方
+                logger.warning("DeepSeek OCR 2 调用失败: %s", e)
+                result = {"error": "OCR 调用失败(详情见服务端日志)"}
             if result.get("error"):
                 return JSONResponse({"success": False, "error": result["error"], "text": "", "blocks": []})
             return JSONResponse(
