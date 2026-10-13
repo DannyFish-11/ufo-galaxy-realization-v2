@@ -60,13 +60,36 @@ def test_the_shell_still_rounds_its_own_corners():
 
 def test_the_desktop_window_itself_is_clipped_to_that_same_radius():
     """透明窗口里，圆角之外任何一层漏出来的内容（滚动条、阴影、子层）都会画成方角。
-    把整个 html 按同一个半径裁掉，圆角外就一个像素也不会有。"""
+    把整个 html 按同一个半径、按画布那一块裁掉（窗口比例没对上时画布外那一条也裁），圆角外就一个像素也不会有。"""
     css = _css()
     m = re.search(
-        r"html\[data-shell='desktop'\]\s*\{[^}]*clip-path:\s*inset\(0 round calc\(var\(--shell-r\) \* var\(--stage-k, 1\)\)\)",
+        r"html\[data-shell='desktop'\]\s*\{[^}]*clip-path:\s*inset\(var\(--stage-dy, 0px\) var\(--stage-dx, 0px\) "
+        r"round calc\(var\(--shell-r\) \* var\(--stage-k, 1\)\)\)",
         css,
     )
-    assert m, "桌面外壳的 html 要按 --shell-r 裁圆角(随画布一起缩放)"
+    assert m, "桌面外壳的 html 要按 --shell-r 裁圆角(随画布一起缩放、跟着画布的位置)"
+
+
+def test_the_os_cuts_the_window_to_the_panel_shape():
+    """所有者在 Windows 上拍到：窗口矩形是白的、方角，面板圆角落在里面，上沿还露一条白带 —— 那台机器上
+    透明窗口没有透明，页面这边做什么都没用。窗口外形交给系统裁（setShape = 窗口区域），
+    圆角外、画布外就不是窗口的一部分：不画、不接鼠标。真 Electron（xvfb，无合成器）里核过：
+    圆角外与多出来的那条透出的是下层窗口。"""
+    main = (ROOT / "electron" / "main.js").read_text(encoding="utf-8")
+    start = main.index("function createPanelWindow()")
+    block = main[start : main.index("panelWindow.loadFile(panelPath)", start)]
+    assert "shapePanel();" in block and "panelWindow.on('resize', shapePanel)" in block
+    fn = main[main.index("function shapePanel()") :][:600]
+    assert "panelWindow.setShape(PanelStage.shapeRects(" in fn, "外形不是按画布算的"
+
+
+def test_the_window_shape_and_the_page_use_one_radius():
+    stage = (ROOT / "electron" / "renderer" / "panel_stage.js").read_text(encoding="utf-8")
+    radius = re.search(r"var RADIUS = (\d+);", stage)
+    css = re.search(r":root\s*\{\s*--shell-r:\s*(\d+)px", _css())
+    assert radius and css and radius.group(1) == css.group(1), "窗口外形的圆角与页面的圆角不是同一个半径"
+    stage_ts = (ROOT / "electron" / "renderer" / "panel" / "src" / "stage.ts").read_text(encoding="utf-8")
+    assert "setProperty('--shell-r', `${PS.RADIUS}px`)" in stage_ts
 
 
 def test_the_transparent_panel_window_does_not_ask_the_os_for_a_rectangular_shadow():

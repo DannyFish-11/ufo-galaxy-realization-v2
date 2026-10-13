@@ -450,3 +450,33 @@ class TestGatewaySweepIsRegistered:
         await m.run_due(now=time.monotonic() + 10**6)
         sweep = {s["name"]: s for s in m.status()["sweeps"]}["gateway.parallel_groups.expire_timeouts"]
         assert sweep["errors"] == 0 and sweep["runs"] >= 1
+
+
+def test_sweeps_never_import_on_the_event_loop(monkeypatch):
+    """清扫在事件循环里跑,所以不替没人加载过的模块 import —— 真跑复现:启动时第一次清扫在循环里
+    import 安全策略加载器,还要等别的线程手里的 import 锁,事件循环被卡住 2.8 秒。"""
+    import sys
+
+    import core.periodic_maintenance as pm
+
+    modules = [
+        "core.task_envelope_lifecycle_registry",
+        "core.interaction.pending_decision_registry",
+        "core.task_memory",
+        "core.security_policy_loader",
+        "core.unified.llm_router",
+        "core.attached_runtime_session_registry",
+        "core.delegated_runtime_handoff_contract",
+        "core.android_runtime_dispatch_binding",
+        "core.delegated_flow_entity",
+    ]
+    for name in modules:
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    assert pm._envelopes_timed_out() == []
+    assert pm._pending_decisions_expired() == []
+    assert pm._task_memory_expired() == 0
+    assert pm._security_policy_hot_reload() is False
+    assert pm.LLMRoutingPolicyHotReload()() is False
+    assert pm.DelegatedFlowCheckpoint()() == {}
+    leaked = [name for name in modules if name in sys.modules]
+    assert not leaked, f"清扫在循环里 import 了: {leaked}"

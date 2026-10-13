@@ -7,7 +7,7 @@
 "Retrying in Ns [Retry x/5]" 刷屏、启动被拖住数分钟——而这一切只为了一个
 "源根本不通"的事实。
 
-本模块把"源通不通"收敛为**一次**进程级探测(≤2s/候选):
+本模块把"源通不通"收敛为**一次**进程级探测(候选并发探、每个 ≤6s,全不通再补探一轮):
 
 - 候选仅限两个公共端点 hf-mirror.com / huggingface.co,按当前 HF_ENDPOINT
   偏好排序,谁先通用谁(择优);探测结果写回 os.environ["HF_ENDPOINT"]。
@@ -31,6 +31,12 @@ logger = logging.getLogger("Galaxy.HFEndpoint")
 # 两个公共端点:允许互为备选(择优);其余端点视为用户自建镜像,尊重不切换。
 _PUBLIC_ENDPOINTS = ("https://hf-mirror.com", "https://huggingface.co")
 _NEG_CACHE_TTL = 300.0  # 全不可达的负缓存(秒):5 分钟内不再重复探测/刷日志
+#: 单个端点一次探测的期限。原先 2 秒、两个端点挨个探:所有者 Windows 真机日志里两边一起被判
+#: 「均不可达」,Whisper 因此只认本地缓存、语音交互整场没开 —— 而同一台机器此前下过 Whisper。
+#: 启动那一阵机器被 Podman 拉镜像、节点进程、本地模型压满,一次 TLS 握手(连同载入系统证书)
+#: 两秒内没完成是常事。现在每个 6 秒、并发探(总时长不随候选数叠加),全不通隔一秒再补探一轮。
+_PROBE_TIMEOUT_S = 6.0
+_PROBE_ROUNDS = 2
 
 _lock = threading.Lock()
 _cache: dict = {"ts": 0.0, "endpoint": None}  # endpoint: str(可达) / ""(全不可达) / None(未探测)
@@ -95,7 +101,18 @@ def announce_first_download(what: str) -> None:
         logger.info("%s: 首次下载", what)
 
 
-def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
+def _probe_all(cands: list, timeout: float) -> list:
+    """并发探测全部候选,返回可达的那些(保持偏好顺序)。"""
+    if len(cands) == 1:
+        return cands if _probe(cands[0], timeout) else []
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(cands), thread_name_prefix="hf-probe") as pool:
+        ok = list(pool.map(lambda ep: _probe(ep, timeout), cands))
+    return [ep for ep, good in zip(cands, ok) if good]
+
+
+def pick_endpoint(timeout: float = _PROBE_TIMEOUT_S, force: bool = False) -> str:
     """返回一个**探测可达**的 HF 下载端点;全不可达返回 ""。
 
     进程级缓存:可达结果缓存整个进程生命周期(下载源在一次启动内不抖动);
@@ -112,18 +129,25 @@ def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
             if time.monotonic() - _cache["ts"] < _NEG_CACHE_TTL:  # 负缓存未过期
                 return ""
         cands = _candidates()
-        for ep in cands:
-            if _probe(ep, timeout):
-                if ep != cands[0]:
-                    logger.warning(
-                        "HF 下载源 %s 不可达,已自动切换到 %s(%.0fs 内探测择优)",
-                        cands[0],
-                        ep,
-                        timeout,
-                    )
-                os.environ["HF_ENDPOINT"] = ep
-                _cache.update(ts=time.monotonic(), endpoint=ep)
-                return ep
+        reachable: list = []
+        for attempt in range(_PROBE_ROUNDS):
+            if attempt:
+                time.sleep(1.0)
+            reachable = _probe_all(cands, timeout)
+            if reachable:
+                break
+        if reachable:
+            ep = reachable[0]
+            if ep != cands[0]:
+                logger.warning(
+                    "HF 下载源 %s 不可达,已自动切换到 %s(%.0fs 内探测择优)",
+                    cands[0],
+                    ep,
+                    timeout,
+                )
+            os.environ["HF_ENDPOINT"] = ep
+            _cache.update(ts=time.monotonic(), endpoint=ep)
+            return ep
         # 全不可达:一次性告警 + 负缓存,调用方据此跳过预取/走本地缓存,
         # 绝不再让 huggingface_hub 的 5 次指数重试 × N 个文件刷屏。
         logger.warning(

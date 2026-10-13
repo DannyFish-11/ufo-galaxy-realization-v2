@@ -40,6 +40,7 @@ import logging
 import os
 import socket
 import sys
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -604,6 +605,16 @@ class L4EnhancementLauncher:
 # ============================================================================
 
 
+def _warm_routes(app) -> None:
+    """旁边线程里先生成一遍 OpenAPI:FastAPI 0.14x 在**第一个请求**时才在事件循环里给每条路由建校验
+    模型(连带一串 import)—— 所有者日志里启动时「事件循环被卡住 3.8 秒 —— 卡在 <frozen importlib…>」。
+    预热后第一个请求 0.7 秒 → 0.01 秒。失败不影响服务(第一个请求时照旧现建)。"""
+    try:
+        app.openapi()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("路由预热没做成(不影响服务): %s", exc)
+
+
 class UnifiedWebUI:
     """统一 Web UI 服务器"""
 
@@ -855,6 +866,7 @@ class UnifiedWebUI:
             # background so the launcher proceeds to later phases (Electron / ready
             # banner) instead of blocking here.
             self._server = server
+            threading.Thread(target=_warm_routes, args=(self.app,), name="route-warmup", daemon=True).start()
             self._serve_task = asyncio.create_task(server.serve())
             # 事件循环被同步工作卡住时,说出卡在哪几行(只读;见 core/loop_stall_watch.py)。
             from core import loop_stall_watch
@@ -1181,8 +1193,10 @@ class GalaxyUnified:
         if status == "up" and rc == 0:
             return ("ok", f"nats / redis / qdrant / neo4j / mongodb 已就绪 · via {rt_name}", "")
         if status == "pulling":
+            # 第一次拉镜像是「还在做」,不是降级(所有者:「其他东西好了以后都是打对勾」):
+            # 与节点「还在起来」同一档 —— 说清楚在做什么、什么时候生效,不算进降级项。
             return (
-                "warn",
+                "info",
                 f"首次镜像下载中（{rt_name} 后台静默拉取）",
                 f"{log_hint('docker')}；本轮先跳过依赖节点，下次启动即生效",
             )
@@ -1485,7 +1499,9 @@ class GalaxyUnified:
             # 后者取的是**父包上的属性**,绕过 sys.modules —— 于是把模块替成桩件的
             # 调用方(测试、打包裁剪)换不掉它,拿到的还是真模块。这不是测试的问题,
             # 是"从哪儿取这个模块"这件事上两种写法语义不同,而我们要的是可替换的那种。
-            _tray_mod = importlib.import_module("windows_service.tray_icon")
+            # import 也放到线程里:它带进 pystray / Pillow / win32 一串库,Windows 上一两秒 ——
+            # 所有者日志里「事件循环被卡住 1.6 秒」就卡在这里(紧跟「桌面前端」那一行)。
+            _tray_mod = await asyncio.to_thread(importlib.import_module, "windows_service.tray_icon")
 
             start_tray_in_thread = _tray_mod.start_tray_in_thread
             TRAY_UNAVAILABLE_REASON = getattr(_tray_mod, "TRAY_UNAVAILABLE_REASON", "")
@@ -1873,12 +1889,44 @@ class GalaxyUnified:
         except Exception as exc:  # noqa: BLE001
             _exc_s = str(exc)
             if any(k in _exc_s for k in ("Hub", "locate the files", "snapshot folder", "internet")):
-                self._voice_input_disabled_reason = f"Whisper 模型下载失败(检查网络/代理):{exc}"
+                self._voice_input_disabled_reason = "识别模型这次没下下来(下载源连不上),后台隔几分钟再试,下好自动开启"
                 logger.warning("语音交互未启动(Whisper 模型下载失败，检查网络或设置代理): %s", exc)
+                self._retry_voice_later()
             else:
                 self._voice_input_disabled_reason = f"运行时错误:{exc}"
                 logger.warning("语音交互未启动(运行时错误，GALAXY_VOICE=0 可关闭): %s", exc)
             return False
+
+    def _retry_voice_later(self, every_s: float = 180.0, tries: int = 10) -> None:
+        """识别模型没下下来时,后台隔几分钟再试,下好就把语音交互开起来 —— 不用重启。
+
+        所有者真机日志:下载源一次探测没通,语音交互整场「未启用」,只能重启才有第二次机会。
+        每次先强制重探下载源(``pick_endpoint(force=True)``,不吃 5 分钟的负缓存),通了才去加载。
+        """
+        if getattr(self, "_voice_retry_task", None) is not None:
+            return
+
+        async def _again() -> None:
+            import asyncio as _aio
+
+            from core.hf_endpoint import pick_endpoint
+
+            start_again = self.start_voice_interaction
+            for _ in range(tries):
+                await _aio.sleep(every_s)
+                if not await _aio.to_thread(pick_endpoint, force=True):
+                    continue
+                if await start_again():
+                    logger.info("语音交互已开启(识别模型下好了,直接对它说话即可)")
+                    return
+            logger.warning("语音交互:识别模型 %d 次都没下下来,这次运行不再自动重试", tries)
+
+        try:
+            import asyncio as _aio
+
+            self._voice_retry_task = _aio.get_running_loop().create_task(_again())
+        except RuntimeError:  # 没有正在跑的事件循环(同步调用的测试):不排
+            self._voice_retry_task = None
 
     async def select_and_start_brain(self):
         """Phase 5：先选主脑（硬件推荐 + 手动选，放第 5 步而非开头），
@@ -2047,7 +2095,9 @@ class GalaxyUnified:
             # 端口发现文件同步提前:Electron 在 GALAXY_GATEWAY_PORT/PORT 未设时
             # 读 runtime/entrypoint.json 定位后端 —— 此前它在启动序列末尾才写,
             # 面板整个启动期都读不到;绑定成功即写(幂等,末尾照写覆盖)。
-            self._write_entrypoint_json()
+            # 在线程里写:要问 `tailscale ip -4`,Windows 上一两秒 —— 所有者日志里「事件循环被卡住
+            # 2.1 秒 —— 卡在 core\proc_text.py run_text」就紧跟在「API 网关」这一行后面。
+            await asyncio.to_thread(self._write_entrypoint_json)
             _emit(
                 "API 网关",
                 f"http://localhost:{port}",
@@ -2168,7 +2218,7 @@ class GalaxyUnified:
         # 关键信息放在折叠行里(默认可见);-v 展开逐条明细 + 取证值(代码版本/
         # 环境变量/解析后地址)。抓到告警时进末尾总结卡并附操作建议。
         try:
-            _ver, _env_repr, _resolved, _catches = _url_sentinel_audit()
+            _ver, _env_repr, _resolved, _catches = await asyncio.to_thread(_url_sentinel_audit)  # 跑 git,不占循环
             _audit_details: List[Tuple[str, str, str]] = [
                 ("代码版本", _ver, "ok" if _ver != "unknown" else "warn"),
                 ("OLLAMA_URL(env)", _env_repr, "ok"),
@@ -2389,8 +2439,8 @@ class GalaxyUnified:
             hints=[("停止", "Ctrl+C"), ("详细", "python main.py -v")],
         )
 
-        # Write entrypoint.json
-        self._write_entrypoint_json()
+        # Write entrypoint.json(线程里写:见上面绑定成功那一次的说明)
+        await asyncio.to_thread(self._write_entrypoint_json)
 
         # Start process watchdog
         await self.watch_processes()

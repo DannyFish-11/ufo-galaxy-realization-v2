@@ -252,6 +252,45 @@ def _print_step(result: StepResult) -> None:
             pass
 
 
+class transient:  # noqa: N801 — 用法像语句:with ui.transient("…"):
+    """一件要等一会儿的事:进行时在终端里留一行「· …」,做完把这一行擦掉,只留结果那一行。
+
+    所有者:「其他的好了以后都是打对勾,这个下载本身应该隐藏」—— 补装依赖时 pip 的
+    ``Looking in indexes / Collecting / Downloading / Installing`` 整段直接上屏。
+    现在 pip 的输出不上屏;等的那几秒有这一行说明在做什么(不像卡住),做完它就消失。
+    不是终端(重定向进文件)时什么都不打 —— 文件里留下的只有结果那一行。
+    """
+
+    def __init__(self, text: str) -> None:
+        self.text = f"  · {text}"
+        self.shown = False
+
+    def __enter__(self) -> "transient":
+        import sys
+
+        try:
+            if sys.stdout.isatty():
+                sys.stdout.write(self.text)
+                sys.stdout.flush()
+                self.shown = True
+        except Exception:  # noqa: BLE001 — 打不出来也不能挡启动
+            pass
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        if not self.shown:
+            return
+        import sys
+        import unicodedata
+
+        width = sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in self.text)
+        try:
+            sys.stdout.write("\r" + " " * width + "\r")
+            sys.stdout.flush()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def section(title: str) -> None:
     """栏目小标题（``-v`` 展开时用）。走 ``cli_render.section``。"""
     try:

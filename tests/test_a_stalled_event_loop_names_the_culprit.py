@@ -111,3 +111,83 @@ def test_another_loop_in_the_same_process_does_not_hide_a_stall(monkeypatch, sai
     t.join(2)
     other.close()
     assert any("事件循环被卡住" in m and "_hog_the_loop_for" in m for m in said), said
+
+
+def test_frozen_import_frames_are_not_mistaken_for_repo_code(monkeypatch):
+    """所有者日志:卡顿全报在 ``<frozen importlib._bootstrap_external>:991 exec_module`` 上。
+    不是文件的帧(当前目录又正好是仓库根)被当成了仓库代码 —— 真正在 import 的那行反而没露面。"""
+    import os
+    import types
+
+    monkeypatch.chdir(w._REPO)
+
+    def frame(filename, lineno, name, back=None):
+        return types.SimpleNamespace(
+            f_code=types.SimpleNamespace(co_filename=filename, co_name=name), f_lineno=lineno, f_back=back
+        )
+
+    ours = frame(os.path.join(w._REPO, "launcher", "services.py"), 2300, "start_tray")
+    stack = frame(
+        "<frozen importlib._bootstrap_external>",
+        991,
+        "exec_module",
+        frame("<frozen importlib._bootstrap>", 690, "_load_unlocked", ours),
+    )
+    said = w.where(stack)
+    assert said.startswith(os.path.join("launcher", "services.py") + ":2300 start_tray"), said
+    assert "frozen" not in said
+
+
+def test_the_three_stalls_from_the_owners_startup_log_are_off_the_loop():
+    """所有者那次启动里卡住事件循环的三处,都挪到线程里了:
+
+    * 「API 网关」一起来就写 entrypoint.json —— 里面同步跑 ``tailscale ip -4``(2.1 秒,run_text);
+    * 「启动自检」跑 ``git log`` 取代码版本;
+    * 「系统托盘」import pystray / Pillow / win32(1.6 秒,importlib)。
+    """
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "launcher" / "services.py").read_text(encoding="utf-8")
+    assert src.count("await asyncio.to_thread(self._write_entrypoint_json)") == 2
+    assert "self._write_entrypoint_json()\n" not in src.replace(
+        "lambda _action, _details: self._write_entrypoint_json())", ""
+    ), "还有在事件循环里同步写 entrypoint.json 的地方"
+    assert "await asyncio.to_thread(_url_sentinel_audit)" in src
+    assert 'await asyncio.to_thread(importlib.import_module, "windows_service.tray_icon")' in src
+
+
+def test_fastapi_builds_its_routes_beside_the_loop_not_on_the_first_request():
+    """FastAPI 0.14x 在第一个请求时才在事件循环里给全部路由建校验模型(所有者日志:启动时卡 3.8 秒)。
+    网关起来前在旁边线程里先生成一遍 OpenAPI,第一个请求就不用现建了。"""
+    import inspect
+    import time
+
+    from fastapi import APIRouter, FastAPI
+    from pydantic import BaseModel
+    from starlette.testclient import TestClient
+
+    import launcher.services as svc
+
+    src = inspect.getsource(svc.UnifiedWebUI.start)
+    assert src.index("target=_warm_routes") < src.index("asyncio.create_task(server.serve())")
+
+    app = FastAPI()
+    for r in range(8):
+        router = APIRouter(prefix=f"/r{r}")
+        for i in range(25):
+            model = type(f"M{r}_{i}", (BaseModel,), {"__annotations__": {"a": int, "b": str}})
+
+            def ep(body: model, _i=i):  # noqa: B008
+                return {"ok": _i}
+
+            router.add_api_route(f"/x{i}", ep, methods=["POST"])
+        app.include_router(router)
+
+    @app.get("/health")
+    def health():
+        return {"ok": True}
+
+    svc._warm_routes(app)
+    t0 = time.perf_counter()
+    assert TestClient(app).get("/health").status_code == 200
+    assert time.perf_counter() - t0 < 0.15, "预热之后第一个请求还在现建路由"

@@ -70,3 +70,64 @@ test('第一次打开：放得下就 1 倍，小屏缩到工作区里', () => {
   assert.ok(small.height <= 728 && small.width <= 1366);
   assert.ok(near(small.width / small.height, PS.ratio(), 0.01));
 });
+
+// ── 窗口外形：画布的圆角矩形，由系统裁窗口（透明在那台机器上不生效也不露白） ──
+
+/** 这一点在不在 rects 并起来的那块里。 */
+const inside = (rects, x, y) => rects.some((r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height);
+
+test('外形就是画布那一块：画布外（比例没对上留出来的那条）不在窗口里', () => {
+  const view = { width: 1200, height: 760 };
+  const f = PS.fit(view);
+  const rects = PS.shapeRects(view);
+  assert.ok(f.dy > 0);
+  assert.ok(!inside(rects, 600, 10), '上面那条空出来的不该是窗口的一部分');
+  assert.ok(!inside(rects, 600, 750), '下面那条也不该');
+  assert.ok(inside(rects, 600, 380) && inside(rects, 600, Math.ceil(f.dy)) && inside(rects, 2, 380));
+});
+
+test('四个角是圆的：角上那一点不在、往里一个半径就在', () => {
+  for (const k of [0.6, 1, 1.4]) {
+    const view = { width: Math.round(PS.STAGE.width * k), height: Math.round(PS.STAGE.height * k) };
+    const rects = PS.shapeRects(view);
+    const r = Math.round(PS.RADIUS * k);
+    const W = view.width;
+    const H = view.height;
+    for (const [x, y] of [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]]) {
+      assert.ok(!inside(rects, x, y), `k=${k} 角 ${x},${y} 还在窗口里 —— 方角`);
+    }
+    for (const [x, y] of [[r, r], [W - 1 - r, r], [r, H - 1 - r], [W - 1 - r, H - 1 - r]]) {
+      assert.ok(inside(rects, x, y), `k=${k} 圆心 ${x},${y} 被裁掉了`);
+    }
+    // 边的中点贴边在内：只有角是圆的，四条边是直的、到头。
+    assert.ok(inside(rects, Math.floor(W / 2), 0) && inside(rects, 0, Math.floor(H / 2)));
+  }
+});
+
+test('像素中心在圆弧以内 EDGE_IN 才算在内（与页面的圆角同一条弧）', () => {
+  const view = { width: PS.STAGE.width, height: PS.STAGE.height };
+  const rects = PS.shapeRects(view);
+  const r = PS.RADIUS;
+  for (let y = 0; y < r; y++) {
+    for (let x = 0; x < r; x++) {
+      const d = Math.hypot(r - (x + 0.5), r - (y + 0.5));
+      const edge = r - PS.EDGE_IN;
+      if (Math.abs(d - edge) < 0.02) continue; // 正好压在线上的不判
+      assert.strictEqual(inside(rects, x, y), d < edge, `${x},${y} 距圆心 ${d.toFixed(2)}`);
+    }
+  }
+});
+
+test('外形的矩形不重叠、不出窗口', () => {
+  const view = { width: 1000, height: 640 };
+  const rects = PS.shapeRects(view);
+  let area = 0;
+  for (const r of rects) {
+    assert.ok(r.width > 0 && r.height > 0 && r.x >= 0 && r.y >= 0);
+    assert.ok(r.x + r.width <= view.width && r.y + r.height <= view.height);
+    area += r.width * r.height;
+  }
+  let count = 0;
+  for (let y = 0; y < view.height; y++) for (let x = 0; x < view.width; x += 7) if (inside(rects, x, y)) count++;
+  assert.ok(Math.abs(count * 7 - area) / area < 0.01, '有矩形叠在一起');
+});

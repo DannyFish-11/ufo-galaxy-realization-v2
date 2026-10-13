@@ -18,6 +18,9 @@
 
 ``core.startup.bootstrap_subsystems`` 启动它，``shutdown_subsystems`` 停它（停之前再落一次委托流）。
 清扫在事件循环里同步执行 —— 被清的注册表大多不是线程安全的，挪到线程里反而会和写入方抢。
+也因此**清扫不在循环里 import**：要清的模块本进程还没人加载过，就说明那张表是空的、那份策略
+没人在用，直接跳过（:func:`_loaded`）。所有者 Windows 真机日志里启动时事件循环被卡住几秒，
+真跑复现出来就是这里 —— 第一次 import 一串模块，还要等别的线程手里的 import 锁。
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -177,23 +181,25 @@ def register_sweep(name: str, fn: Callable[[], Any], *, every_s: float, run_firs
 _ENVELOPE_TIMEOUT_GRACE_S = 5.0
 
 
-def _envelopes_timed_out() -> List[str]:
-    from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+def _loaded(name: str) -> Any:
+    """这个模块本进程已经有人加载过了吗 —— 有就给它，没有就是 ``None``（清扫不替它 import）。"""
+    return sys.modules.get(name)
 
-    return get_lifecycle_registry().cancel_timed_out(grace_s=_ENVELOPE_TIMEOUT_GRACE_S)
+
+def _envelopes_timed_out() -> List[str]:
+    mod = _loaded("core.task_envelope_lifecycle_registry")
+    return mod.get_lifecycle_registry().cancel_timed_out(grace_s=_ENVELOPE_TIMEOUT_GRACE_S) if mod else []
 
 
 def _pending_decisions_expired() -> List[str]:
-    from core.interaction.pending_decision_registry import get_pending_decision_registry
-
-    return get_pending_decision_registry().sweep_expired()
+    mod = _loaded("core.interaction.pending_decision_registry")
+    return mod.get_pending_decision_registry().sweep_expired() if mod else []
 
 
 def _task_memory_expired() -> int:
-    import core.task_memory as task_memory
-
+    task_memory = _loaded("core.task_memory")
     # 只清已经在用的那一个；没人建过就不替它建（建的时候要读盘、定数据目录）
-    memory = task_memory._instance
+    memory = getattr(task_memory, "_instance", None)
     return memory.evict_expired() if memory is not None else 0
 
 
@@ -211,12 +217,11 @@ def _hybrid_executions() -> Dict[str, int]:
 
 
 def _security_policy_hot_reload() -> bool:
-    from core.security_policy_loader import check_policy_file_changed, get_security_policy, reload_security_policy
-
     # 只重载已经加载过的那份；从没人加载过就不替它加载（openclawd 初始化时才加载）
-    if get_security_policy() is None or not check_policy_file_changed():
+    loader = _loaded("core.security_policy_loader")
+    if loader is None or loader.get_security_policy() is None or not loader.check_policy_file_changed():
         return False
-    reload_security_policy()
+    loader.reload_security_policy()
     return True
 
 
@@ -232,8 +237,9 @@ class LLMRoutingPolicyHotReload:
     def __call__(self) -> bool:
         import os
 
-        from core.unified import llm_router
-
+        llm_router = _loaded("core.unified.llm_router")
+        if llm_router is None:  # 路由还没人建过:没有要重读的(建的时候读的就是当时的文件)
+            return False
         try:
             mtime = os.path.getmtime(llm_router._POLICY_PATH)
         except OSError:
@@ -256,22 +262,24 @@ class DelegatedFlowCheckpoint:
     def __init__(self) -> None:
         self._seen: Set[str] = set()
 
-    def __call__(self) -> Dict[str, bool]:
-        from core.android_runtime_dispatch_binding import get_dispatch_binding_runtime
-        from core.attached_runtime_session_registry import get_session_registry
-        from core.delegated_flow_entity import get_delegated_flow_entity_runtime
-        from core.delegated_flow_persistence import get_delegated_flow_persistence_bundle
-        from core.delegated_runtime_handoff_contract import get_handoff_contract_runtime
+    #: 每类对象:(模块, 取运行时单例的函数名)。模块本进程没人加载过 = 这类对象一个都没有。
+    _SOURCES = {
+        "session": ("core.attached_runtime_session_registry", "get_session_registry"),
+        "contract": ("core.delegated_runtime_handoff_contract", "get_handoff_contract_runtime"),
+        "binding": ("core.android_runtime_dispatch_binding", "get_dispatch_binding_runtime"),
+        "flow_entity": ("core.delegated_flow_entity", "get_delegated_flow_entity_runtime"),
+    }
 
-        current = {
-            "session": get_session_registry().list_all(),
-            "contract": get_handoff_contract_runtime().list_all(),
-            "binding": get_dispatch_binding_runtime().list_all(),
-            "flow_entity": get_delegated_flow_entity_runtime().list_all(),
-        }
+    def __call__(self) -> Dict[str, bool]:
+        current = {}
+        for name, (module, getter) in self._SOURCES.items():
+            mod = _loaded(module)
+            current[name] = getattr(mod, getter)().list_all() if mod is not None else []
         self._seen.update(name for name, objects in current.items() if objects)
         if not self._seen:
             return {}
+        from core.delegated_flow_persistence import get_delegated_flow_persistence_bundle
+
         return get_delegated_flow_persistence_bundle().persist_all(
             sessions=current["session"],
             contracts=current["contract"],
