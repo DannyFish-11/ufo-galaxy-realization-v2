@@ -189,9 +189,10 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_SYSTEM_MODE",
         severity=Severity.INFO,
-        description="系统运行模式(默认 desktop-local:只在这一台机器上跑)。",
+        description="系统运行模式(默认 desktop-local:这台电脑自己一套闭环,不加入设备网络)。",
         hint=(
-            "desktop-local = 单机(默认);desktop-cross-device = 打开跨设备编织层。" "细节见 docs/SYSTEM_MODE_CONFIG.md。"
+            "desktop-local = 本地模式(默认,说的是设备:智能体照常用云端模型、联网);"
+            "desktop-cross-device = 这台电脑加入多设备网络。细节见 docs/SYSTEM_MODE_CONFIG.md。"
         ),
         groups=["core", "gateway", "all"],
     ),
@@ -199,7 +200,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_NATS_ENABLED",
         severity=Severity.INFO,
         description="要不要开 NATS 消息总线(默认跟着 GALAXY_SYSTEM_MODE 走)。",
-        hint="填 true 可以不管模式强行打开(默认:单机关、跨设备开)。",
+        hint="填 true 可以不管模式强行打开(默认:本地模式关、跨设备开)。",
         groups=["gateway", "all"],
     ),
     EnvCheck(
@@ -221,7 +222,7 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.INFO,
         description="要不要把任务路由到别的设备上(跨设备模式开关;面板「跨设备」按钮写的就是它)。",
         hint=(
-            "true = 跨设备模式,false/不填 = 本地模式(只用本机,最保险的默认);"
+            "true = 跨设备模式(这台电脑加入多设备网络),false/不填 = 本地模式(电脑不加入设备网络,最保险的默认);"
             "GALAXY_SYSTEM_MODE=desktop-cross-device 也算跨设备,任一处明确选了跨设备就是跨设备。"
         ),
         groups=["gateway", "all"],

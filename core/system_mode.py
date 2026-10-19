@@ -285,7 +285,7 @@ def nats_wanted(environ: Optional[dict] = None) -> bool:
     """要不要起 NATS 消息总线 —— **唯一一处判定**，启动流程 / 启动器 / 内置服务器 / 总线连接都调它。
 
     ``GALAXY_NATS_ENABLED`` 写了就听它的（两个方向都算）；没写就**跟着模式走**：跨设备模式起，本地模式不起
-    （本地模式只用这一台电脑，用不到总线，起了只是白占一个常驻进程和 4222 端口）。``GALAXY_NATS_URL``
+    （本地模式下这台电脑不加入设备网络，用不到总线，起了只是白占一个常驻进程和 4222 端口）。``GALAXY_NATS_URL``
     明确写了（指向某条总线）也算要用。以前三处各判各的：本模块说「本地模式关」，启动流程与启动器说
     「没写 false 就起」，登记表又写默认 true —— 于是本地模式屏幕上先说「不用消息总线」，几十秒后又
     「✓ 消息总线 nats://localhost:4222」。
@@ -321,7 +321,7 @@ def master_brain_waiting_for_mode(environ: Optional[dict] = None) -> bool:
 def master_brain_idle_status(log: logging.Logger) -> str:
     """主脑没起时启动序列要记的状态；开关开着却在本地模式 → 说出来（不悄悄忽略一个写了的配置）。"""
     if master_brain_waiting_for_mode():
-        log.warning("主脑开关已开,但当前是本地模式(只用本机)—— 主脑与 worker 不起;要用请先打开「跨设备」")
+        log.warning("主脑开关已开,但当前是本地模式(这台电脑没加入设备网络)—— 主脑与 worker 不起;要用请先打开「跨设备」")
         return "waiting_for_cross_device_mode"
     return "disabled"
 
@@ -329,7 +329,8 @@ def master_brain_idle_status(log: logging.Logger) -> str:
 def cross_device_refusal(trace_id: Optional[str] = None) -> Optional[dict]:
     """本地模式下，往别的设备下发命令的统一拒绝；跨设备模式下返回 ``None``（放行）。
 
-    本地模式只用这台电脑。每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、
+    本地模式 = 这台电脑自己一套闭环、没加入设备网络（说的是设备，不是智能体：云端模型、联网、MCP 照常）。
+    每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、
     智能体的 ``devices__invoke``、网关的单设备下发）都调它，说法一致：``error == "cross_device_disabled"``
     （与网关 ``galaxy_gateway.cross_device_switch`` 同一个错误码），并告诉人 / 模型怎么办。
     """
@@ -338,7 +339,7 @@ def cross_device_refusal(trace_id: Optional[str] = None) -> Optional[dict]:
     out = {
         "success": False,
         "error": "cross_device_disabled",
-        "message": "当前是本地模式(只用本机),没有向别的设备下发。要用别的设备,请先打开「跨设备」。",
+        "message": "当前是本地模式(这台电脑没加入设备网络),没有向别的设备下发。要用别的设备,请先打开「跨设备」。",
         "how_to_fix": "面板「跨设备」按钮打开(要重启才完全生效);智能体可调 devices__request_cross_device 请用户同意。",
     }
     out["result"] = (
