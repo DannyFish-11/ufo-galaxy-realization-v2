@@ -25,7 +25,15 @@ import re
 import pytest
 
 #: 节点间/对节点的 URL 长这样。
-_URL_MARK = re.compile(r"STATE_MACHINE_URL|NODE_\d+_URL|node_urls|node_url|localhost:8\d{3}|http://node-")
+_URL_MARK = re.compile(
+    r"STATE_MACHINE_URL|NODE_\d+_URL|node_urls|node_url|localhost:8\d{3}|http://node-|get_node_url\("
+)
+
+#: 同一个文件里由端口表算出来的 URL 常量（``MODEL_ROUTER_URL = f"http://localhost:{get_node_port(...)}"``）。
+#: 全面排查第 7 轮：Node_126 打 Node_58 的 ``/chat`` 不带身份，而 ``MODEL_ROUTER_URL`` 这个名字上面那条认不出来。
+_PORT_TABLE_URL = re.compile(
+    r"^\s*([A-Z_][A-Z0-9_]*_URL)\s*=.*\b(?:get_node_port|get_node_url|get_service_port)\(", re.M
+)
 _VERBS = {"post", "get", "put", "delete"}
 
 #: 存活探针 —— 认证豁免,所以调用它不需要带身份。
@@ -90,7 +98,9 @@ def _internal_calls_without_auth():
                     tree = ast.parse(src)
                 except Exception:  # noqa: BLE001 — 读不了/语法不对的文件不在本条职责内
                     continue
-                if not _URL_MARK.search(src):
+                names = _PORT_TABLE_URL.findall(src)
+                mark = re.compile("|".join([_URL_MARK.pattern, *map(re.escape, names)]))
+                if not mark.search(src):
                     continue
                 has_auth = "internal_headers_for" in src or "internal_auth_headers" in src
                 for n in ast.walk(tree):
@@ -103,7 +113,7 @@ def _internal_calls_without_auth():
                     if "environ" in recv or "getenv" in recv or recv.endswith("config"):
                         continue
                     seg = ast.get_source_segment(src, n.args[0]) or ""
-                    if not _URL_MARK.search(seg):
+                    if not mark.search(seg):
                         continue
                     if any(e in seg for e in _EXEMPT_PATHS):
                         continue

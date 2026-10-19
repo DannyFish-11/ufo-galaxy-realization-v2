@@ -148,12 +148,21 @@ class ReasoningAgent(ABC):
 
 async def _llm_complete(prompt: str, max_tokens: int = 700) -> str:
     """Real LLM call via Node_58_ModelRouter's /chat, used by every reasoning agent."""
+    from core.internal_auth import internal_headers_for  # noqa: PLC0415
+
+    # Node_58 的 HTTP 面有鉴权：不带身份，每一位辩手的每一步都是 401（全面排查第 7 轮）
     async with httpx.AsyncClient(timeout=DEBATE_TIMEOUT) as client:
         resp = await client.post(
             f"{MODEL_ROUTER_URL}/chat",
+            headers=internal_headers_for(MODEL_ROUTER_URL),
             json={"prompt": prompt, "max_tokens": max_tokens, "temperature": 0.7},
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:  # 原样把原因交回去(比如一个模型都没配 → 503),不让它在辩论里变成一句 500
+            try:
+                detail = resp.json().get("detail") or resp.text
+            except ValueError:
+                detail = resp.text
+            raise HTTPException(status_code=503 if resp.status_code == 503 else 502, detail=f"Node_58: {detail}")
         return resp.json()["response"]
 
 

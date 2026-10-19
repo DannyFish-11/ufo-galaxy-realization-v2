@@ -176,8 +176,10 @@ services:
     image: neo4j:5.15-community
     container_name: neo4j
     ports:
-      - "7474:7474"  # HTTP Browser
-      - "7687:7687"  # Bolt Protocol
+      # 本机的库只给这台电脑用：端口只绑 127.0.0.1（容器之间走服务名，不受影响）。原先绑 0.0.0.0，
+      # 同一 Wi-Fi 下谁都能连 —— redis 还不带口令（全面排查第 7 轮）。
+      - "127.0.0.1:7474:7474"  # HTTP Browser
+      - "127.0.0.1:7687:7687"  # Bolt Protocol
     environment:
       - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?NEO4J_PASSWORD 必须设置（见 .env.example）}
       - NEO4J_PLUGINS=["apoc", "graph-data-science"]  # APOC 和 Graph Data Science 插件
@@ -207,8 +209,8 @@ services:
     image: qdrant/qdrant:v1.7.4
     container_name: qdrant
     ports:
-      - "6333:6333"       # REST API
-      - "6334:6334"       # gRPC
+      - "127.0.0.1:6333:6333"       # REST API（只绑本机，见 neo4j 那段）
+      - "127.0.0.1:6334:6334"       # gRPC
     environment:
       - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
       - QDRANT__SERVICE__ENABLE_CORS=true
@@ -464,7 +466,7 @@ services:
     image: redis:7-alpine
     container_name: redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # 只绑本机，见 neo4j 那段
     volumes:
       - redis-data:/data
     networks:
@@ -481,7 +483,7 @@ services:
     image: mongo:7
     container_name: mongodb
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"  # 只绑本机，见 neo4j 那段
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER:-mongoadmin}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD:?MONGODB_PASSWORD 必须设置（见 .env.example）}

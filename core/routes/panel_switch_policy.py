@@ -170,10 +170,10 @@ SWITCH_POLICY: Dict[str, SwitchPolicy] = {
         "多设备与网络",
         "主脑编排 + worker/NATS 分布式：默认关=单机。与「跨设备」的关系见 docs/PANEL_SWITCHES.md 的合并建议",
     ),
-    "GALAXY_NATS_ENABLED": _m("多设备与网络", "并进「跨设备」：NATS 消息总线；只用本机时白占一个常驻进程"),
+    "GALAXY_NATS_ENABLED": _m("多设备与网络", "并进「跨设备」：NATS 消息总线；本地模式下白占一个常驻进程"),
     "GALAXY_ONBOARDING_ENABLED": _m("多设备与网络", "并进「跨设备」：设备接入平面（发现附近设备、候选/成员）的总闸"),
-    "GALAXY_LAN_DISCOVERY": _m("多设备与网络", "并进「跨设备」：局域网自动发现设备；只用本机时没有对象可发现"),
-    "GALAXY_MDNS": _m("多设备与网络", "并进「跨设备」：mDNS 广播网关，手机/手表免输 IP；只用本机时没有人需要它"),
+    "GALAXY_LAN_DISCOVERY": _m("多设备与网络", "并进「跨设备」：局域网自动发现设备；本地模式下没有对象可发现"),
+    "GALAXY_MDNS": _m("多设备与网络", "并进「跨设备」：mDNS 广播网关，手机/手表免输 IP；本地模式下没有人需要它"),
     "GALAXY_HA_BRIDGE": _b(
         "多设备与网络",
         "接入 Home Assistant：URL 与令牌都配齐才会启动，没配时完全不动；配齐本身就是人的授权，不需要再有一个开关",

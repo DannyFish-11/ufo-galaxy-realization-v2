@@ -885,6 +885,55 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
 - 桌面自动化的「按现场挑」与灵动岛的「已复制」只在沙箱里验证过：Win32 / UIA / 微软 UFO 三个后端、Electron 在 Windows 上报的剪贴板格式名，
   要在 Windows 真机上看一遍。
 
+**第 7 轮（2026-10-19）：** 这一轮多做了两件以前没做过的事：199 条写接口（POST / PUT / DELETE）各用空请求体、再用按 schema
+填好的请求体打一遍（282 次调用）；真跑三次 —— 用沙箱里那份旧模板生成的 `.env` 原样跑（鉴权关、`GALAXY_NATS_ENABLED=true`），
+按出厂默认跑（鉴权开、总线跟着模式走），修完再用旧 `.env` 跑一次。启动时给每个 aiohttp 会话记下创建位置，盯第 7 节那条
+「Unclosed client session」。
+
+- **多智能体辩论接口从没通过过**（`POST /api/v1/agents/debate` 回 500「服务 'agent_swarm' 端口未配置」）：端口按「服务」查，
+  而端口表里只有节点 `Node_126_AgentSwarm`，一查就抛；就算连上，字段名（question / rounds 对 problem / max_rounds）、策略名
+  （COT 对 chain_of_thought）都对不上，不带身份（节点 HTTP 面有鉴权），节点是 lazy 档也没人拉它起来。现在按节点端口表找它、
+  字段与策略名照节点的模型发、带身份、第一次用到时把它和它依赖的 Node_58 一起拉起来；起不来回 503 说清楚。
+- **模型路由节点 Node_58 编回答**：接通辩论之后回来的是每位辩手都答「[Mock Response] Processed by llama2」、结论「达成共识」。
+  Node_58 的云端那一档是桩（从不调用模型，回「[Mock Cloud Response] Processed by gpt-4」），本地 Ollama 调不通也回一句 Mock。
+  现在两档都走 `core.multi_llm_router`（与对话主链同一个路由器，人在面板上配的那几家）；一个模型都没有就 503，原因一路带回到
+  辩论接口（真跑：「还没有可用的 AI 服务……请在面板「全部设置」里填一个 API Key」）。
+- **三个节点缺东西时「模拟执行」并回成功**：ADB（没连手机：点屏、滑动都回 `success: true`）、OctoPrint（没配 Key：开始打印回成功）、
+  GitHubFlow（没配 Token：回一个 `github.com/mock/repo/pull/1` 的新 PR；配了 Token 却没配 `GEMINI_API_KEY`：把一段写死的
+  「✅ 代码审查通过……建议合并」**当评论发到真的 PR 上**）。没有调用方读 `mock` 那一位。现在缺什么就照实失败、说缺什么，
+  模拟只在显式 `USE_MOCK_DRIVERS=true`（启动器本来就传给每个节点）时才有（`nodes/common/mock_drivers.py`）。
+- **技能热重载从没重载过**：`reload_skill` 探测 `unload_skill` / `reload_skill` / `load_skill`，`SkillLoader` 一个都没有，整段空转
+  却回「已加载、校验通过」—— 连根本不存在的技能也是（MCP 那一半早先修过）；「全部重载」与加载状态读 `list_skills()` 每项的
+  `skill_id`，键其实是 `id`，一个技能也没重载过、状态里一个也没有。现在从技能当初的目录按同一个 id 再 load（读坏了旧的照旧在）；
+  没登记过的名字（技能与 MCP）回 404。
+- **调用方传错了东西回 500**：`/api/v1/vision/understand` 不带图（里面的 400 被外层改写成 500）、`/vision/understand` 与
+  `/vision/ocr` 的图不是合法 base64、`/auth/oauth/device/poll` 一个没配的提供商 —— 都改成 400 并说错在哪。
+- **同一个节点被并发激活会起两个进程**：真跑里两台安卓同一秒登记，`Node_33_ADB` 被起了两次；`register_service` 换掉条目，
+  前一个进程没人记着，**后端停了它还活着**。现在 `start_service` 见已在跑 / 正在起就不再建进程，`register_service` 不换已有条目。
+  修后真跑：两台同时登记只起一个，两次停机都没有留下子进程（修前那次留下了一个）。
+- **节点登记在事件循环里整份落盘**（卡顿记录抓到启动时卡 0.3 秒）：每个节点健康检查通过登记一次、经 HTTP 再通知一次，每次把整张
+  节点表（18KB）重新序列化写盘。现在启动那一批只落盘一次（与拓扑图同一个 `core/persist_batch.py`）；修后真跑启动卡顿记录为零。
+- **本地模式下 Docker 照样起 nats；本机四个库对局域网开着**：基础设施那一步不看模式，nats 容器照起（4222 对局域网开着、不带认证）；
+  redis / qdrant / neo4j / mongodb 的端口都绑 0.0.0.0，同一 Wi-Fi 下谁都能连，redis 还不带口令。现在 nats 只在要总线时起
+  （与 `nats_wanted()` 同一判据），四个库只绑 127.0.0.1（容器之间走服务名，不受影响）。真跑：出厂默认下 nats 不起、四个库重建后只听本机。
+- **启动那一行还在说「只用本机」**，旧 `.env` 让本地模式起了总线也不说为什么：改成「这台电脑不加入设备网络 / 加入设备网络」；
+  写了 `GALAXY_NATS_ENABLED=true` 时说「消息总线照起:配置里写了 GALAXY_NATS_ENABLED(本地模式本用不到它;不要就删掉 .env 里那一行)」。
+- 内部调用身份的守卫补了盲区：它认不出 `MODEL_ROUTER_URL = …get_node_port(...)` 这种名字（Node_126 打 Node_58 不带身份就是这么漏的），
+  现在同一文件里由端口表算出来的 URL 常量、`get_node_url(...)` 都算。
+
+接口复查：245 条 GET（鉴权关、鉴权开各一遍）全部非 5xx、没有一条超过 1 秒；写接口 282 次调用，修前 5 条 500，修后 0 条 ——
+剩下 4 条 503 都是该有的「用不了」（没配模型的代码生成、没配 Google 登录、没有 TTS 引擎、没有视频源），各自说了原因。
+三次真跑都没有出现「Unclosed client session」（已给每个会话记下创建位置，下次出现会带出处）。全量测试见下一段。
+
+全量测试（4 个分片，同一台机器上并行）：11612 / 11335 / 11729 / 11881 通过，分片二、三各红 1 条 —— `test_stop_script_pid_ownership::test_stale_pid_file_is_cleaned_not_killed`（`stop.sh` 被一个 SIGTERM 打断，来源没查到；四个分片同机并行时，`stop.sh` 里按命令行模式的 `pkill` 有误伤别的进程的可能）与 `test_stop_while_it_acts::test_stop_cancels_the_request_but_the_caller_keeps_running`（4 核吃满时一个 5 秒的等待超时）。两条单独重跑 36 条全过，CI 上同一提交的 4 个分片全绿；`test_launcher_doctor` 单独 26 条全过。
+
+**下一轮待办：**
+
+- 照片里那次 11.5 秒卡顿的真凶：等更新后的卡顿记录（会带上同一时刻别的线程在 import 什么）。
+- 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`：启动那一行现在会点名，删掉那一行即可回到「本地模式不起 NATS」。
+- GitHubFlow（Node_106）生成 / 审查代码写死 Gemini，没走系统路由器：只配了别家 Key 的人这一步用不了（现在照实说没配 `GEMINI_API_KEY`，不再编）。
+- 桌面自动化的「按现场挑」与灵动岛的「已复制」要在 Windows 真机上看一遍（Win32 / UIA / 微软 UFO、Electron 报的剪贴板格式名）。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
@@ -899,7 +948,7 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
 | 只在 Windows 上出现的几项 | 逐项查证见 6.9。托盘（图标等菜单数）和 Podman（引擎不通时不拉虚机）已修；`PyAudioWPatch`、Ollama 冷启动 Phase 0 是设计如此；仍需要真机的是：托盘 / 启动各段**到底慢多少**、面板圆角在 Windows 上的实际观感 | 这里是 Linux，复现不了；每一项屏幕上都已经说出原因和怎么办，没有静默 |
 | 第一次对话仍要现 import 一百多个模块 | Linux 上约 0.3 秒，Windows 杀软逐个扫时会更长 | 启动时预热的收益有限，且要维护一份模块清单；没做 |
 | 大文件 | core 有 133 个文件超过 1000 行 | 已有复杂度基线守着，只许拆、不许涨 |
-| 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；复现一次要 4 分钟，这次没有定位到创建点 |
+| 进程退出时偶发 `Unclosed client session` | 某处 aiohttp 会话没关（复测时在 `tests/integration/test_android_nl_semantic_chain_e2e.py` 结尾出现过一次，复现不稳定） | 只影响退出时的一行日志；第 7 轮三次真跑都给每个会话记下了创建位置，一次也没出现 |
 | 文档漂移 | 286 份 Markdown 中，2026-08-05 之后只改过 9 份 | 本次给 41 份状态/审计类文档加了快照说明，指向本文；正文保留原样 |
 
 本地跑过测试的工作树里，旧位置的 `data/registered_devices.json` 可能已经混进了测试设备（修复前的测试写进去的）。

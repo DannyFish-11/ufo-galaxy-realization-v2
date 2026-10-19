@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.mock_drivers import NotConfigured, mock_drivers_enabled
 
 # 本模块原本用 print() 直接往 stdout 喊话(还带 ✅/⚠️ 这种 2 显示格的 emoji)。
 # 真跑 `python main.py --check-only` 时,这几行会插进"节点导入检查"那一段中间,
@@ -89,7 +90,10 @@ class GitHubClient:
     async def _request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
         """发送 HTTP 请求"""
         if self.use_mock:
-            # Mock 模式：返回模拟数据
+            # 没配 Token：只有显式打开模拟驱动才回模拟数据(nodes/common/mock_drivers.py)；原先回一个
+            # github.com/mock/repo/pull/1 的「新 PR」，success: True
+            if not mock_drivers_enabled():
+                raise NotConfigured("没配 GITHUB_TOKEN,连不上 GitHub——这一步没执行")
             return self._mock_response(endpoint, data)
         
         url = f"{self.base_url}{endpoint}"
@@ -222,7 +226,7 @@ class GitHubFlow:
         issue_title = issue.get("title")
         issue_body = issue.get("body")
         
-        # Mock 模式：生成简单的代码
+        # Mock 模式：生成简单的代码（到这里说明模拟驱动开着 —— 没开时上面 get_issue 已经报「没配 GITHUB_TOKEN」）
         if self.use_mock:
             code = self._mock_generate_code(issue_title, issue_body)
         else:
@@ -279,11 +283,16 @@ if __name__ == "__main__":
                     contents=prompt
                 )
                 return response.text
-            else:
+            if mock_drivers_enabled():
                 return self._mock_generate_code(title, body)
+            raise NotConfigured("没配 GEMINI_API_KEY,没法生成代码——这一步没执行")
+        except NotConfigured:
+            raise
         except Exception as e:
-            logger.warning("LLM 代码生成失败,退回 Mock 模式: %s", e)
-            return self._mock_generate_code(title, body)
+            if mock_drivers_enabled():
+                return self._mock_generate_code(title, body)
+            # 原先这里退回一段写死的代码
+            raise NotConfigured(f"生成代码没成: {e}——这一步没执行") from e
     
     async def review_pull_request(self, repo: str, pr_number: int) -> Dict:
         """审查 Pull Request"""
@@ -349,11 +358,16 @@ PR 说明：{body}
                     contents=prompt
                 )
                 return response.text
-            else:
+            if mock_drivers_enabled():
                 return self._mock_review_code(title, body)
+            raise NotConfigured("没配 GEMINI_API_KEY,没法审查代码——这一步没执行")
+        except NotConfigured:
+            raise
         except Exception as e:
-            logger.warning("LLM 代码审查失败,退回 Mock 模式: %s", e)
-            return self._mock_review_code(title, body)
+            if mock_drivers_enabled():
+                return self._mock_review_code(title, body)
+            # 原先这里退回一段写死的「✅ 代码审查通过……建议合并」,还当评论发到真的 PR 上
+            raise NotConfigured(f"审查代码没成: {e}——这一步没执行") from e
     
     async def index_repo_to_kb(self, repo_url: str) -> Dict:
         """将 GitHub 仓库索引到知识库"""
@@ -412,6 +426,8 @@ async def create_issue(request: CreateIssueRequest):
             request.labels
         )
         return result
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -425,6 +441,8 @@ async def generate_code(request: GenerateCodeRequest):
             request.branch_name
         )
         return result
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -443,6 +461,8 @@ async def create_pr(request: CreatePRRequest):
             request.repo, request.title, request.body, request.head, request.base
         )
         return {"success": True, "pr_number": pr.get("number"), "pr_url": pr.get("html_url"), "mock": flow.github.use_mock}
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -452,6 +472,8 @@ async def review_pr(request: ReviewPRRequest):
     try:
         result = await flow.review_pull_request(request.repo, request.pr_number)
         return result
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -465,6 +487,8 @@ async def index_repo(request: IndexRepoRequest, background_tasks: BackgroundTask
             "success": True,
             "message": "仓库正在后台索引到知识库"
         }
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -490,6 +514,8 @@ async def workflow_issue_to_pr(repo: str, issue_number: int):
                 "4. 调用 /review_pr 进行自动审查"
             ]
         }
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
