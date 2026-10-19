@@ -48,7 +48,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/device_registry.py` - 设备注册和发现
 - `core/device_communication.py` - 设备通信协议
 - `core/device_control_service.py` - 设备控制服务
-- **系统只有两个模式**：**本地模式**（`desktop-local`，默认，只用这台电脑）与**跨设备模式**（`desktop-cross-device`）。**「现在是哪个」只有一条规则、一个出处**：
+- **系统只有两个模式**：**本地模式**（`desktop-local`，默认：这台电脑自己这一整套循环在本机闭环，电脑不加入设备网络）与**跨设备模式**
+  （`desktop-cross-device`：这台电脑加入跨设备 / 多设备网络）。**模式说的是设备，不是智能体** —— 本地模式下智能体照常用云端模型、联网、MCP，
+  别把「本地模式」写成或做成「只用本机模型」。**「现在是哪个」只有一条规则、一个出处**：
   `core.system_mode.cross_device_requested()` —— `GALAXY_CROSS_DEVICE_ENABLED` 为真**或** `GALAXY_SYSTEM_MODE=desktop-cross-device`，任一即是，否则本地。
   网关开关、启动流程、桌面在场、启动自检、模式接口都调它，**别再自己推导**；`GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（同时写两个键）。
   「混合」不是模式，是一个请求的走法（`local` / `cross_device` / `hybrid`，跨设备模式里系统自动判）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
