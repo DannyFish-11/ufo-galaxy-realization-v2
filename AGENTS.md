@@ -108,6 +108,13 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 （`launcher/service_manager.py`）、拓扑图整份落盘（启动时的一百多次登记合成一次，`core/persist_batch.py`）、每个 httpx 客户端各载一遍 CA 证书
 （`core/shared_tls.py`）。**节点子进程的输出写 `logs/nodes/<名字>.log`，不接管道**（没人读的管道写满，子进程卡死在 write() 里；Windows 管道缓冲只有 4KB）。
 
+### 节点（各自一个进程的微服务）
+- **缺东西就照实失败，不模拟成功**：没连设备 / 没配 Key / 没有命令时，节点回 `success: false` 并说缺什么（`nodes/common/mock_drivers.py`）；
+  模拟只在显式 `USE_MOCK_DRIVERS=true` 时才有。没有调用方读 `mock` 那一位，看的都是 `success`。Node_58 的 `/chat` 走 `core.multi_llm_router`（与对话主链同一个），没模型就 503
+- core / 别的节点打节点端点要带身份：`core.internal_auth.internal_headers_for(url)`（节点 HTTP 面默认有鉴权）；`tests/test_all_node_http_surfaces_require_auth.py` 扫描调用点
+- 同一个节点只起一份：`ServiceManager.start_service` 见已在跑 / 正在起就不再建进程，`register_service` 不换掉已有条目（并发激活曾起两份、前一个停机后还活着）；
+  启动那一批节点的登记，节点表只落盘一次（`NodeFabricRegistry.batched_persistence()`）
+
 ### 模型选择：智能路由多一个「用途」维度
 `core/multi_llm_router.py` 的打分（质量 × 复杂度、成本、延迟、实测表现）是**一个**函数 `_fit_scorer`，
 `core/llm_types.py::RoutingPurpose` 是其中并列的又一个评定维度，不是另开路径：
@@ -200,7 +207,8 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - 本地模式不起 NATS、不入 tailnet、不往局域网广播 —— 这些是对的状态，不算降级（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
 - `core/loop_stall_watch.py` - 事件循环停跳 0.5 秒以上时记下卡在仓库哪几行、最里面卡在库的哪一行、同一时刻别的线程在 import 什么（循环线程可能只是在等 GIL）。日志里「一批请求同一毫秒一起慢」先看它那一行
 - 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
-- 基础设施那一行（Docker / Podman）按各服务此刻的状态说（`launcher/compose_health.py`）：`compose up -d` 退出码 0 不等于已就绪；起不来的点名
+- 基础设施那一行（Docker / Podman）按各服务此刻的状态说（`launcher/compose_health.py`）：`compose up -d` 退出码 0 不等于已就绪；起不来的点名。
+  起哪几个也在这里定（`infra_services()`）：本地模式不起 nats 容器（与 `nats_wanted()` 同一判据）；redis / qdrant / neo4j / mongodb 的端口只绑 127.0.0.1
 - **控制台只上结论和错误**（`core/console_log.py`）：WARNING 是过程诊断，进 `logs/lumiv.log`，`-v` 才上屏；写控制台在专门的线程里（Windows 控制台被选中文字时挂起写入，曾卡住事件循环 13.8 秒）。别再往控制台 `print` 诊断
 - 事件循环里不 import、不跑子进程：周期清扫不替没人加载过的模块 import（`core/periodic_maintenance.py::_loaded`）；FastAPI 的路由校验模型在网关起来前由旁边线程先建（`launcher/services.py::_warm_routes`）
 - HF 下载源探测（`core/hf_endpoint.py`）并发、每个 6 秒、两轮；语音识别模型没下下来时后台重试、下好自动开启

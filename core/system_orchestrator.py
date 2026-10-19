@@ -344,24 +344,23 @@ class SystemOrchestrator:
         import os
 
         logger.info("[启动·模式] Resolving system mode …")
-        from core.system_mode import cross_device_requested, nats_url_points_elsewhere
+        from core import system_mode as _sm
 
         # 模式只有一条规则、一个出处(core/system_mode.py):按钮开 / 手写跨设备模式 = 跨设备,否则本地。
         # 这里不再自己推导。以前 GALAXY_NATS_URL 非空也算跨设备 —— 「保存设置」把登记默认
         # nats://localhost:4222 写进 .env、内嵌 NATS 起来后进程自己也会设它,于是只想用本机的人被悄悄切成跨设备。
-        cross_device = cross_device_requested()
+        cross_device = _sm.cross_device_requested()
         mode = "desktop-cross-device" if cross_device else "desktop-local"
         # 与真正拉起总线的那一处同一判据(core.system_mode.nats_wanted):写了 GALAXY_NATS_ENABLED 听它的,
         # 没写就跟着模式走。以前这里与启动器各判各的,屏幕上先"不用消息总线"、几十秒后又"✓ 消息总线"。
-        from core.system_mode import nats_off_reason, nats_wanted
-
-        nats_enabled = nats_wanted()
+        nats_enabled = _sm.nats_wanted()
         detail = f"mode={mode}, nats_enabled={nats_enabled}, cross_device={cross_device}"
         logger.info("[启动·模式] %s", detail)
-        _scope = "可用其他设备" if cross_device else "只用本机"
-        _bus = "消息总线稍后拉起(起不来就用进程内总线)" if nats_enabled else f"不用消息总线:{nats_off_reason()}"
+        _scope = "这台电脑加入设备网络" if cross_device else "这台电脑不加入设备网络"  # 说的是电脑,不是智能体
+        _bus = f"消息总线照起:{_f}" if (_f := _sm.nats_forced_on_reason()) else "消息总线稍后拉起(起不来就用进程内总线)"
+        _bus = _bus if nats_enabled else f"不用消息总线:{_sm.nats_off_reason()}"
         said = f"按 {mode} 跑 —— {_scope},{_bus}"
-        if not cross_device and nats_url_points_elsewhere(os.environ.get("GALAXY_NATS_URL", "")):
+        if not cross_device and _sm.nats_url_points_elsewhere(os.environ.get("GALAXY_NATS_URL", "")):
             # 配成了连别的机器、却没打开跨设备:说出来,不悄悄替人切模式。
             said += "。注意:GALAXY_NATS_URL 指向别的机器,但当前是本地模式 —— 要用别的设备请打开「跨设备」"
             logger.warning("[启动·模式] GALAXY_NATS_URL 指向别的机器,但当前是本地模式(没有打开跨设备)")

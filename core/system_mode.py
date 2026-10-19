@@ -303,6 +303,19 @@ def nats_off_reason(environ: Optional[dict] = None) -> str:
     return "本地模式用不到消息总线(打开「跨设备」才会起;只想单独起它就设 GALAXY_NATS_ENABLED=true)"
 
 
+def nats_forced_on_reason(environ: Optional[dict] = None) -> str:
+    """本地模式下总线照样要起 —— 因为配置里写了。说给人听；不是这种情况返回空串。
+
+    全面排查第 7 轮：旧模板生成的 ``.env`` 里有一行 ``GALAXY_NATS_ENABLED=true``（那时默认开），
+    本地模式下总线于是照起，屏幕上只说「消息总线稍后拉起」，人看不出为什么。
+    """
+    env = environ if environ is not None else os.environ
+    if not nats_wanted(env) or cross_device_requested(env):
+        return ""
+    key = "GALAXY_NATS_ENABLED" if str(env.get("GALAXY_NATS_ENABLED", "")).strip() else "GALAXY_NATS_URL"
+    return f"配置里写了 {key}(本地模式本用不到它;不要就删掉 .env 里那一行)"
+
+
 def master_brain_requested(environ: Optional[dict] = None) -> bool:
     """主脑 / worker 该不该起：主脑开关开着，**并且**在跨设备模式里。
 
@@ -510,6 +523,7 @@ __all__ = [
     "master_brain_requested",
     "master_brain_wanted",
     "master_brain_waiting_for_mode",
+    "nats_forced_on_reason",
     "nats_off_reason",
     "nats_url_points_elsewhere",
     "nats_wanted",

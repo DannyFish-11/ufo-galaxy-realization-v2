@@ -317,36 +317,71 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         )
         rounds: int = Field(default=3, ge=1, le=10, description="辩论轮次")
 
+    # 辩论跑在 Node_126_AgentSwarm 上，它每一步推理再去调 Node_58_ModelRouter 的 /chat。两个都是 lazy 档：
+    # 第一次用到才拉起来（core.node_activation_policy）。
+    _DEBATE_NODE = "Node_126_AgentSwarm"
+    _DEBATE_NEEDS = ("Node_58_ModelRouter", _DEBATE_NODE)
+    #: 这里收的缩写 → 节点认的策略名（Node_126 的 ReasoningStrategy）
+    _DEBATE_STRATEGIES = {
+        "COT": "chain_of_thought",
+        "TOT": "tree_of_thought",
+        "PAL": "program_aided",
+        "CRITIQUE": "self_critique",
+        "RETRIEVAL": "knowledge_retrieval",
+    }
+
+    async def _start_debate_nodes() -> bool:
+        from core.activation_policy import ActivationPolicyEngine
+        from core.node_activation_policy import ensure_node_started
+
+        started = [
+            await ensure_node_started(n, ActivationPolicyEngine.TRIGGER_CAPABILITY_REQUEST) for n in _DEBATE_NEEDS
+        ]
+        return started[-1] is not None
+
     @router.post("/api/v1/agents/debate")
     async def run_agent_debate(req: DebateRequest):
-        """多 Agent 辩论式推理 — 调用 Node_126_AgentSwarm 的锦标赛辩论引擎"""
-        try:
-            from core.port_config import get_service_port
+        """多 Agent 辩论式推理 — 调用 Node_126_AgentSwarm 的锦标赛辩论引擎。
 
-            port = get_service_port("agent_swarm")
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(
-                    f"http://localhost:{port}/debate",
-                    json={
-                        "question": req.question,
-                        "strategies": req.strategies,
-                        "rounds": req.rounds,
-                    },
-                )
-                if resp.status_code == 200:
-                    return resp.json()
-                return JSONResponse(
-                    {"success": False, "error": f"Node_126 返回 HTTP {resp.status_code}"},
-                    status_code=resp.status_code,
-                )
-        except httpx.ConnectError:
+        全面排查第 7 轮：这个接口从没通过过 —— 端口按「服务」查 ``agent_swarm``（只登记了节点
+        Node_126_AgentSwarm，一查就抛，回 500）；就算连上，字段名（question / rounds）与节点认的
+        （problem / max_rounds）对不上、策略传缩写而节点认全名，也是 422；节点是 lazy 档，没人拉它起来。
+        """
+        unknown = [s for s in req.strategies if s.upper() not in _DEBATE_STRATEGIES]
+        if unknown:
             raise HTTPException(
-                status_code=503,
-                detail="Node_126_AgentSwarm 服务不可达，请确认已启动",
+                status_code=422, detail=f"不认识的辩论策略 {unknown}，可选 {sorted(_DEBATE_STRATEGIES)}"
             )
-        except Exception as e:
-            logger.error(f"Agent 辩论推理失败: {e}")
-            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+        from core.internal_auth import internal_headers_for
+        from core.port_config import get_node_url
+
+        body = {
+            "problem": req.question,
+            "strategies": [_DEBATE_STRATEGIES[s.upper()] for s in req.strategies],
+            "max_rounds": req.rounds,
+        }
+        for attempt in (1, 2):
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(
+                        f"{get_node_url(_DEBATE_NODE)}/debate",
+                        headers=internal_headers_for(get_node_url(_DEBATE_NODE)),  # 节点的 HTTP 面有鉴权
+                        json=body,
+                    )
+                break
+            except httpx.ConnectError:
+                if attempt == 2 or not await _start_debate_nodes():
+                    raise HTTPException(status_code=503, detail=f"{_DEBATE_NODE} 没起来，辩论这次用不了")
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=504, detail=f"{_DEBATE_NODE} 没在时限内答完: {e!r}")
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning("Agent 辩论推理失败: %s HTTP %s %s", _DEBATE_NODE, resp.status_code, resp.text[:300])
+        return JSONResponse(
+            {"success": False, "error": f"{_DEBATE_NODE} 返回 HTTP {resp.status_code}: {resp.text[:300]}"},
+            # 节点那头坏了是网关错误（502），不是这个接口自己崩了；暂时用不了（503，比如一个模型都没配）与 4xx 照原样
+            status_code=502 if resp.status_code >= 500 and resp.status_code != 503 else resp.status_code,
+        )
 
     # ── 智能体身份：长期目标与核心价值（每次推理前拼进系统提示词）──
     # 写操作改的是模型每轮看到的"我是谁"，因此一律要 API 鉴权。

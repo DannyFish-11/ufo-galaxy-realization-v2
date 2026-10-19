@@ -995,7 +995,10 @@ class NodeSystemLauncher:
         logger.info("即将启动 %d 个节点: %s", len(nodes), nodes)
         print_status(f"启动 {len(nodes)} 个节点...", "step")
         self._node_failure_reasons.clear()
-        results = await self.start_nodes(nodes, parallel=True)
+        from core.nodes.node_fabric_registry import get_node_fabric_registry
+
+        with get_node_fabric_registry().batched_persistence():  # 这一批节点各登记一两次，节点表只落盘一次
+            results = await self.start_nodes(nodes, parallel=True)
 
         success_nodes = [n for n, ok in results.items() if ok]
 

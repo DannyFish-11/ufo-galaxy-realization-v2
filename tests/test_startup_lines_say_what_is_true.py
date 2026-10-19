@@ -263,6 +263,19 @@ class TestBusLine:
         said = self._said(monkeypatch, "true")
         assert "不用消息总线" not in said and nats_wanted() is True
 
+    def test_a_bus_forced_on_in_local_mode_says_which_line_did_it(self, monkeypatch):
+        """全面排查第 7 轮：旧模板生成的 .env 里写着 GALAXY_NATS_ENABLED=true，本地模式下总线照起，
+        屏幕上只说「消息总线稍后拉起」—— 看不出为什么、也不知道怎么回到默认。"""
+        said = self._said(monkeypatch, "true")
+        assert "GALAXY_NATS_ENABLED" in said and ".env" in said
+        assert "GALAXY_NATS_ENABLED" not in self._said(monkeypatch, "true", cross_device=True), "跨设备模式本来就要总线"
+
+    def test_the_mode_line_is_about_the_computer_not_the_agent(self, monkeypatch):
+        """所有者的定义：本地模式只是这台电脑不加入设备网络，智能体照常用云端模型、联网。"""
+        local, cross = self._said(monkeypatch, None), self._said(monkeypatch, None, cross_device=True)
+        assert "这台电脑不加入设备网络" in local and "这台电脑加入设备网络" in cross
+        assert "只用本机" not in local + cross
+
 
 # ── .env 在加载配置之前就生成 ────────────────────────────────────────────────
 

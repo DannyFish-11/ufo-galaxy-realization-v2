@@ -189,3 +189,43 @@ def test_qdrant_healthcheck_uses_only_what_its_image_has(rel):
     for tool in ("curl", "wget", " nc "):
         assert tool not in f" {probe} ", f"{rel}: qdrant 的健康检查调了镜像里没有的 {tool.strip()}"
     assert "/dev/tcp/" in probe and "/readyz" in probe
+
+
+# ── 本地模式这台电脑不加入设备网络：不起 NATS，本机的库不对局域网开着（第 7 轮）──────────
+
+
+@pytest.mark.parametrize(
+    "env, wants_nats",
+    [
+        ({}, False),  # 本地模式、没写：不起
+        ({"GALAXY_CROSS_DEVICE_ENABLED": "true"}, True),
+        ({"GALAXY_NATS_ENABLED": "true"}, True),  # 写了就听它的（启动那一行会说是哪一行写的）
+        ({"GALAXY_CROSS_DEVICE_ENABLED": "true", "GALAXY_NATS_ENABLED": "false"}, False),
+    ],
+)
+def test_the_nats_container_follows_the_one_bus_rule(monkeypatch, env, wants_nats):
+    for key in ("GALAXY_CROSS_DEVICE_ENABLED", "GALAXY_SYSTEM_MODE", "GALAXY_NATS_ENABLED", "GALAXY_NATS_URL"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    services = ch.infra_services()
+    assert ("nats" in services) is wants_nats
+    assert services[-4:] == list(ch.LOCAL_STORES)
+
+
+def test_the_launcher_brings_up_what_infra_services_says():
+    src = (REPO_ROOT / "launcher" / "services.py").read_text(encoding="utf-8")
+    assert "services = infra_services()" in src
+    assert '["nats", "redis"' not in src, "又把 nats 写死进了每次都起的那张单子"
+
+
+def test_the_local_stores_listen_on_this_machine_only():
+    """redis / qdrant / neo4j / mongodb 只给这台电脑上的后端和节点用；原先绑 0.0.0.0，redis 还不带口令。"""
+    services = _services("docker-compose.yml")
+    open_to_lan = [
+        f"{name}: {mapping}"
+        for name in ch.LOCAL_STORES
+        for mapping in services[name].get("ports") or []
+        if not str(mapping).startswith("127.0.0.1:")
+    ]
+    assert not open_to_lan, "这些端口对局域网开着:\n" + "\n".join(open_to_lan)

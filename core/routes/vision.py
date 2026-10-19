@@ -9,6 +9,7 @@ Routes:
 """
 
 import base64
+import binascii
 import logging
 from typing import Optional
 
@@ -59,6 +60,14 @@ async def _deepseek_ocr(image_data: bytes, mode: str) -> dict:
         await adapter.close()
 
 
+def _decode_image(image_base64: str) -> bytes:
+    """图是调用方给的：不是合法的 base64 就是调用方的错（400），不是这边崩了（原先两个接口都回 500）。"""
+    try:
+        return base64.b64decode(image_base64)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="image_base64 不是合法的 base64")
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create vision routes router."""
     router = APIRouter()
@@ -81,7 +90,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             if not req.image_base64:
                 raise HTTPException(status_code=400, detail="Image or video chunk required")
 
-            base64.b64decode(req.image_base64)  # 先确认是张图,坏数据在这里就报
+            _decode_image(req.image_base64)  # 先确认是张图,坏数据在这里就报
 
             # understand() 是协程,原先丢进线程池跑、返回的是没 await 的协程对象 —— 序列化时炸成 500,
             # 这个接口从来没成功过;退路调的 DeepSeekOCR2Adapter / process_image 也都不存在。
@@ -109,6 +118,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 }
             )
 
+        except HTTPException:
+            raise  # 上面那两个 400 原先被这里接住、改写成 500(「500: 400: Image or video chunk required」)
         except Exception as e:
             logger.error(f"视觉理解失败: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -116,9 +127,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/vision/ocr")
     async def vision_ocr(req: OCRRequest):
         """独立 OCR 接口"""
+        image_data = _decode_image(req.image_base64)
         try:
-            image_data = base64.b64decode(req.image_base64)
-
             try:
                 result = await _deepseek_ocr(image_data, req.mode)
             except Exception as e:  # 详情只进服务端日志,不把异常原文回给调用方

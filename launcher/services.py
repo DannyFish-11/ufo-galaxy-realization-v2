@@ -1142,8 +1142,10 @@ class GalaxyUnified:
         if not compose_file.exists():
             return ("warn", f"docker-compose.yml 缺失 — 跳过 {rt_name} 基础设施", "")
 
-        # 仅基础设施后端；排除 galaxy/galaxy-gateway(应用本身) 与 ollama(避免与本地 Ollama 冲突)。
-        services = ["nats", "redis", "qdrant", "neo4j", "mongodb"]
+        # 仅基础设施后端；排除 galaxy/galaxy-gateway(应用本身) 与 ollama(避免与本地 Ollama 冲突)；NATS 只在要总线时起。
+        from launcher.compose_health import infra_services
+
+        services = infra_services()
 
         def _daemon_up() -> bool:
             return cr.daemon_up(runtime)

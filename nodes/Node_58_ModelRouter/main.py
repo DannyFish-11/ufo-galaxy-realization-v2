@@ -880,7 +880,7 @@ class ModelRouter:
             if model_config["provider"] == "ollama":
                 response, tokens = await self._call_ollama(model, request)
             else:
-                response, tokens = await self._call_cloud(model, model_config, request)
+                response, tokens, model = await self._call_cloud(model, model_config, request)
             
             cost = (tokens / 1000) * model_config["cost_per_1k_tokens"]
             
@@ -902,6 +902,9 @@ class ModelRouter:
                 latency_ms=latency
             )
             
+        except ModelUnavailable as e:  # 没有模型可用:说出来(503),而不是编一句回答
+            logger.warning(f"Chat: no model available: {e}")
+            raise HTTPException(status_code=503, detail=str(e))
         except Exception as e:
             logger.error(f"Chat error: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -931,13 +934,27 @@ class ModelRouter:
             else:
                 raise Exception(f"Ollama error: {response.status_code}")
         except Exception as e:
-            logger.warning(f"Ollama call failed: {e}, returning mock response")
-            return f"[Mock Response] Processed by {model}", 50
+            logger.warning(f"Ollama call failed: {e}, falling back to the system router")
+            response, tokens, _ = await self._call_system_router(request)
+            return response, tokens
     
     async def _call_cloud(self, model: str, config: Dict, request: ChatRequest) -> tuple:
-        """Call cloud API (OpenAI/Anthropic)."""
-        logger.info(f"Would call cloud model {model} (mock mode)")
-        return f"[Mock Cloud Response] Processed by {model}", 100
+        return await self._call_system_router(request)  # 云端那一档:人在面板上配的那几家
+
+    async def _call_system_router(self, request: ChatRequest) -> tuple:
+        """真的去问一个模型(core.multi_llm_router,与对话主链同一个)→ (回答, token 数, 模型)。全面排查第 7 轮:原先这两档
+        是桩,回「[Mock Cloud Response] Processed by gpt-4」/「[Mock Response] …」,辩论拿它当回答;现在没模型就 503。"""
+        from core.multi_llm_router import get_llm_router  # noqa: PLC0415
+
+        msgs = [{"role": "user", "content": request.prompt}]
+        resp = await get_llm_router().chat(messages=msgs, temperature=request.temperature, max_tokens=request.max_tokens)
+        if not resp.provider or resp.provider == "none":
+            raise ModelUnavailable(resp.content or "没有可用的模型")
+        return resp.content, (resp.input_tokens + resp.output_tokens) or 1, f"{resp.provider}/{resp.model}"
+
+
+class ModelUnavailable(RuntimeError):
+    """一个能用的模型都没有(没配 Key、本地模型也没起)。"""
 
 # =============================================================================
 # FastAPI Application

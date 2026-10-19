@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 import httpx
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.mock_drivers import mock_drivers_enabled, unavailable
 from nodes.common.node_port import resolve_node_port
 
 # =============================================================================
@@ -274,7 +275,9 @@ class OctoPrintController:
         }
     
     async def _mock_execute(self, action: str, params: Dict) -> Dict:
-        """Mock execution for testing."""
+        """没配 Key 时走这里：只有显式打开模拟驱动才模拟，否则照实回失败（nodes/common/mock_drivers.py）。"""
+        if not mock_drivers_enabled():
+            return unavailable(action, "没配 OCTOPRINT_API_KEY,连不上打印机——这一步没执行")
         logger.info(f"Mock executing: {action}")
         await asyncio.sleep(0.1)
         
