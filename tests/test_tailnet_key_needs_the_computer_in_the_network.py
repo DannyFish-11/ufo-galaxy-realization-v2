@@ -85,8 +85,25 @@ def test_a_computer_inside_our_network_passes(configured, has_tailscale):
 def test_a_computer_that_has_not_logged_in_is_stopped_with_a_next_step(configured, has_tailscale):
     out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
     assert out["reason"] == "desktop_not_on_tailnet"
-    assert "join-this-computer" in out["how_to_fix"] and "GALAXY_HEADSCALE_AUTOJOIN" in out["how_to_fix"]
+    # 立刻加入的那条路与模式无关;「什么时候会自己加入」跟模式走,由下面两条分别钉
+    assert "join-this-computer" in out["how_to_fix"]
     assert set(out) == {"reason", "how_to_fix"}, "形状要和 JoinUnavailable.to_dict() 一致,客户端只认这两个键"
+
+
+def test_in_local_mode_it_does_not_promise_that_a_restart_will_join(configured, has_tailscale, monkeypatch):
+    """本地模式下启动器不入 tailnet:「重启就自动加入」是句假话,要说清先打开跨设备。"""
+    for k in ("GALAXY_SYSTEM_MODE", "GALAXY_CROSS_DEVICE_ENABLED"):
+        monkeypatch.delenv(k, raising=False)
+    out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
+    assert "本地模式" in out["how_to_fix"] and "跨设备" in out["how_to_fix"]
+    assert "重启网关即可自动加入" not in out["how_to_fix"]
+    assert "join-this-computer" in out["how_to_fix"], "立刻加入的那条路本地模式下照样可用"
+
+
+def test_in_cross_device_mode_a_restart_does_join(configured, has_tailscale, monkeypatch):
+    monkeypatch.setenv("GALAXY_SYSTEM_MODE", "desktop-cross-device")
+    out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
+    assert "重启网关即可自动加入" in out["how_to_fix"] and "本地模式" not in out["how_to_fix"]
 
 
 def test_a_computer_without_the_client_is_stopped_and_told_where_to_get_it(configured, monkeypatch):
