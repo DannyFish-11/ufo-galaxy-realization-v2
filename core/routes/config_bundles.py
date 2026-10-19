@@ -92,7 +92,7 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
     {
         "key": "cross_device",
         "name": "跨设备",
-        "note": "关=本地模式(只用本机) · 开=跨设备模式",
+        "note": "关=本地模式(电脑自己一套闭环) · 开=跨设备模式(电脑加入多设备网络)",
         "category": "devices",
         "primary": "GALAXY_CROSS_DEVICE_ENABLED",
         # 2026-09-03 归口:NATS 四键原在 network、主脑那两个旋钮原在 advanced、
@@ -127,10 +127,10 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
             "ANDROID_DEVICE_*",
             "FEDERATION_*",
             # NODE_*_URL 不在这里:它们是**本机**上各节点微服务的地址(adb / scrcpy / mqtt / webrtc 的 localhost 端口),
-            # 只用本机时一样要用 —— 算跨设备的,「跨设备」按钮的「n 项改过」就会因为改了一个本机端口而亮起来。
+            # 本地模式下一样要用 —— 算跨设备的,「跨设备」按钮的「n 项改过」就会因为改了一个本机端口而亮起来。
         ),
         # 发现附近设备 / 向手机手表宣告自己 / 设备接入平面 / 消息总线:
-        # 只用本机时,这四样要么没有对象可发现,要么白占一个常驻进程。
+        # 本地模式下,这四样要么没有对象可发现,要么白占一个常驻进程。
         # 主脑、联邦、WebRTC、Funnel、远程桌面是默认关的 opt-in —— 不在此列(见模块说明)。
         "members": (
             "GALAXY_ONBOARDING_ENABLED",

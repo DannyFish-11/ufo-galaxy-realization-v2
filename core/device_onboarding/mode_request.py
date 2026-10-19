@@ -1,6 +1,7 @@
 """core/device_onboarding/mode_request.py — 智能体**请求**打开跨设备模式；批准只归人。
 
-系统只有两个模式：本地模式（默认，只用这台电脑）与跨设备模式（见 ``core/system_mode.py``）。
+系统只有两个模式（见 ``core/system_mode.py``）：本地模式（默认：这台电脑自己一整套循环在本机闭环，不加入设备网络）
+与跨设备模式（这台电脑加入多设备网络）。说的是**设备**，不是智能体 —— 两种模式下智能体都照常用云端模型、联网、MCP。
 「能不能去碰你的手机、手表、别的电脑」是权限本身，不是一次任务里的选择 —— 所以模型可以**提**，
 不可以**批**。这里的一个工具 ``devices__request_cross_device`` 只做一件事：本地模式下，问人要不要打开。
 
@@ -36,8 +37,11 @@ MODE_BUILTIN_TOOLS: List[Dict[str, Any]] = [
         "function": {
             "name": REQUEST_TOOL,
             "description": (
-                "The system is in local mode: it only uses this computer, so the user's phone, watch and other "
-                "computers cannot be used yet. Call this to ASK the user whether to turn on cross-device mode. "
+                "The system is in local mode: this computer runs its own loop and has not joined the user's "
+                "device network, so the user's phone, watch and other computers cannot be reached yet. (This is "
+                "only about other devices — your models, cloud APIs, web access and MCP tools work as usual.) "
+                "Call this to ASK the user whether to turn on cross-device mode (this computer joins the device "
+                "network). "
                 "You cannot turn it on yourself — only the user decides. The first call returns the question to "
                 "put to the user: ask it (in the user's language) and stop; do NOT call again in the same turn. "
                 "When the user has answered yes in a later message, call it again with no arguments. It takes "
