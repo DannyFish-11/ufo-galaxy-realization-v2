@@ -6,7 +6,7 @@
 #   1. 在 headscale 上建用户 galaxy(已存在就跳过);
 #   2. 生成一把给网关用的 API key;
 #   3. 把 headscale 地址与 API key 写进网关配置
-#      (.env 与 runtime/secrets.env —— 网关启动时读这两个文件,面板设置页也是存到这里)。
+#      (.env 与密钥库 secrets.env —— 网关启动时读这两个文件,面板设置页也是存到这里)。
 #
 # 之后重启网关:这台电脑会自动加入 tailnet;手表配对时会自动拿到一次性进网钥匙。
 # 不需要再给任何设备手工发钥匙。
@@ -72,8 +72,11 @@ MSG
   exit 0
 fi
 
-# 写进网关配置:地址进 .env,密钥进 runtime/secrets.env(与面板保存的去处一致)。
+# 写进网关配置:地址进 .env,密钥进密钥库(与面板保存的去处一致)。
 # 已有同名项就替换,不重复追加。
+# 密钥库在哪与网关同一条规则(core/config_store.py::default_secrets_path):数据目录
+# (GALAXY_DATA_DIR,可以只写在 .env 里;缺省仓库 data/)下的 secrets.env;那里没有而
+# runtime/secrets.env 有(老装法)就继续用旧的。
 upsert() {  # $1=文件 $2=键 $3=值
   local f="$1" k="$2" v="$3"
   mkdir -p "$(dirname "$f")"; touch "$f"
@@ -85,14 +88,30 @@ upsert() {  # $1=文件 $2=键 $3=值
 }
 upsert "$REPO_ROOT/.env" GALAXY_HEADSCALE_URL "$SERVER_URL"
 upsert "$REPO_ROOT/.env" GALAXY_HEADSCALE_USER "$USER_NAME"
-upsert "$REPO_ROOT/runtime/secrets.env" GALAXY_HEADSCALE_API_KEY "$API_KEY"
-chmod 600 "$REPO_ROOT/runtime/secrets.env"
+if [ -n "${GALAXY_DATA_DIR+set}" ]; then
+  DATA_DIR="$GALAXY_DATA_DIR"
+else
+  # 与 main.py 加载 .env 的纪律一致:空的、# 开头的都不算;去掉引号与行尾注释
+  DATA_DIR="$({ sed -n 's/^GALAXY_DATA_DIR=//p' "$REPO_ROOT/.env" 2>/dev/null || true; } | tail -1 \
+    | tr -d '"'"'"'\r' | sed 's/^[[:space:]]*//;s/[[:space:]]#.*$//')"
+  case "$DATA_DIR" in "#"*) DATA_DIR="" ;; esac
+fi
+DATA_DIR="$(printf '%s' "$DATA_DIR" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+DATA_DIR="${DATA_DIR:-data}"
+case "$DATA_DIR" in /*) ;; *) DATA_DIR="$REPO_ROOT/$DATA_DIR" ;; esac
+SECRETS="$DATA_DIR/secrets.env"
+if [ ! -f "$SECRETS" ] && [ -f "$REPO_ROOT/runtime/secrets.env" ]; then
+  SECRETS="$REPO_ROOT/runtime/secrets.env"
+fi
+upsert "$SECRETS" GALAXY_HEADSCALE_API_KEY "$API_KEY"
+chmod 600 "$SECRETS"
 
 cat <<MSG
 
 ✓ 已写入网关配置:
     .env                  GALAXY_HEADSCALE_URL=$SERVER_URL
-    runtime/secrets.env   GALAXY_HEADSCALE_API_KEY=(已保存,不回显)
+    $SECRETS
+                          GALAXY_HEADSCALE_API_KEY=(已保存,不回显)
 
 下一步:
   1. 这台电脑装好 Tailscale 客户端(https://tailscale.com/download),然后重启网关

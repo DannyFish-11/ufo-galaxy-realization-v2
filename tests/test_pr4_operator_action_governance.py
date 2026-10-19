@@ -283,6 +283,19 @@ class TestExecuteGovernedOperatorAction:
 
         return execute_governed_operator_action(**kwargs)
 
+    @staticmethod
+    def _still_open(task_id: str) -> None:
+        """结案动作落在「没收口的结果」队列上:先放一条这个任务号的没收口结果(重跑一次就收口)。"""
+        from core.truth_chain_recovery import get_truth_chain_recovery, register_rerunner
+
+        async def closes(message, by_human):
+            return True, "补做完了"
+
+        register_rerunner("closure_test", closes)
+        get_truth_chain_recovery().isolate(
+            task_id, "closure_test", {"task_id": task_id}, {"instruction": "x"}, "核对没通过"
+        )
+
     def test_retry_admission_produces_success(self):
         result = self._run(
             action_kind="retry_admission",
@@ -384,6 +397,7 @@ class TestExecuteGovernedOperatorAction:
         assert "rejected by continuity adjudication gate" in result.get("error", "")
 
     def test_duplicate_manual_completion_is_ignored(self):
+        self._still_open("task_duplicate_manual_001")
         first = self._run(
             action_kind="finalize_closure",
             action_id="act_finalize_first",
@@ -420,6 +434,7 @@ class TestExecuteGovernedOperatorAction:
         task.identity.session_id = "sess_reopen"
         task.advance_lifecycle(TaskLifecycle.COMPLETED)
         runtime.register(task)
+        self._still_open("task_sanctioned_reopen_001")
 
         result = self._run(
             action_kind="reopen_closure",

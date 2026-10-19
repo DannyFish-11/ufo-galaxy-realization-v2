@@ -423,6 +423,17 @@ def _no_leaked_truth_chain_retries():
         mod.get_truth_chain_recovery().reset()
 
 
+# 灵动岛上的卡(core.island_cards)是进程单例,桌面操作、隔离队列、设备自登记的用例都会往上推。
+# 不清掉的话,后面某个测「刚连上补发一份卡」的用例会读到前面留下的卡。
+@pytest.fixture(autouse=True)
+def _no_leaked_island_cards():
+    """Auto-use: 测试里推上岛的卡,测试结束就清掉。"""
+    yield
+    mod = sys.modules.get("core.island_cards")
+    if mod is not None:
+        mod.get_island_cards().reset()
+
+
 # 反自激励门是带【时间状态】的进程单例:任何测试只要走过一次朗读路径
 # (speak_response / IncrementalSpeaker),就会往门里登记一段"刚说过的话",而它在留存
 # 窗口内(默认 6 秒 + 按文本长度估算的朗读耗时)会让所有以 recently_spoke() 为条件的

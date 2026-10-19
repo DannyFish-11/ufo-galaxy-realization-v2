@@ -223,14 +223,17 @@ class OnboardingService:
         self.candidates.put(cid, cand)
 
         if existing is None and cand.present and cand.status == CandidateStatus.NEW.value:
-            if cand.join_path and _auto_allows(cand.human_step):
+            path_obj = get_join_path(cand.join_path) if cand.join_path else None
+            if path_obj is not None and not path_obj.never_auto and _auto_allows(cand.human_step):
                 self._schedule(self.join(cid))
             else:
                 # 第一次见到、又不会自动接入的:在对话里说一声,不等人来问。
                 from core.device_onboarding.conversation import note_new_candidate
 
                 note_new_candidate(
-                    cand.name, _HUMAN_STEP_WORDS.get(cand.human_step if cand.join_path else "", "还没有现成的接入方式")
+                    cand.name,
+                    getattr(path_obj, "announce", "")
+                    or _HUMAN_STEP_WORDS.get(cand.human_step if cand.join_path else "", "还没有现成的接入方式"),
                 )
         return cand
 
@@ -292,6 +295,8 @@ class OnboardingService:
             cand.error = outcome.error
         self.candidates.put(candidate_id, cand)
         logger.info("接入 %s 经 %s → %s", cand.name, path.name, outcome.kind)
+        if outcome.kind == "joined":
+            _off_the_island(candidate_id)
         return {"success": outcome.kind != "failed", "candidate": cand.to_dict(), "outcome": outcome.to_dict()}
 
     def ignore(self, candidate_id: str) -> Dict[str, Any]:
@@ -300,6 +305,7 @@ class OnboardingService:
             return {"success": False, "error": f"没有这个候选:{candidate_id}"}
         cand.status = CandidateStatus.IGNORED.value
         self.candidates.put(candidate_id, cand)
+        _off_the_island(candidate_id)
         return {"success": True, "candidate": cand.to_dict()}
 
     def admit(self, member: MemberRecord, *, persist: bool = True) -> Any:
@@ -454,3 +460,10 @@ def reset_onboarding_service() -> None:
     """测试用。"""
     global _service
     _service = None
+
+
+def _off_the_island(candidate_id: str) -> None:
+    """人已经在面板上定了(接入 / 不接入):灵动岛上「有设备在等你同意」那张卡撤掉(core.routes._self_register 推的)。"""
+    from core.island_cards import remove_card
+
+    remove_card(f"device:pending:{candidate_id}")

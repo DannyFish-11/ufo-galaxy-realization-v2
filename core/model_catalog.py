@@ -62,6 +62,7 @@ from typing import Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
 from core.data_paths import state_file
+from core.derived_env import export as export_env
 from core.speculative_draft import DraftSpec
 
 logger = logging.getLogger("Galaxy.ModelCatalog")
@@ -1084,7 +1085,7 @@ def _read_state() -> Dict[str, str]:
 
 
 def _write_state(tier: str, main_brain: str, perception_brain: Optional[str] = None) -> None:
-    """写【一条】统一记录,并派生导出运行时 env。
+    """写【一条】统一记录,并派生导出运行时 env —— 经 derived_env:「保存设置」不钉进 .env(钉了就成强制档位,换档一重启就被打回)。
 
     ``perception_brain`` 为 ``None`` 表示"这次不动它" —— 保留记录里的现值。
     换主脑不该顺手把感知位的选择抹掉,那是两个独立的位。
@@ -1101,11 +1102,11 @@ def _write_state(tier: str, main_brain: str, perception_brain: Optional[str] = N
     except Exception as exc:  # noqa: BLE001
         logger.debug("保存模型状态失败(非致命): %s", exc)
     if rec["tier"]:
-        os.environ["GALAXY_MODEL_TIER"] = rec["tier"]
+        export_env("GALAXY_MODEL_TIER", rec["tier"])
     if rec["main_brain"]:
-        os.environ["OLLAMA_MODEL"] = rec["main_brain"]  # 运行时主脑:派生导出
+        export_env("OLLAMA_MODEL", rec["main_brain"])
     if rec["perception_brain"]:
-        os.environ["GALAXY_PERCEPTION_MODEL"] = rec["perception_brain"]
+        export_env("GALAXY_PERCEPTION_MODEL", rec["perception_brain"])
 
 
 def load_tier() -> str:

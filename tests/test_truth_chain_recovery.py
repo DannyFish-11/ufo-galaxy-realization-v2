@@ -22,6 +22,9 @@ from fastapi.testclient import TestClient
 
 import core.task_result_canonical_truth_chain as ttc
 from core.truth_chain_recovery import STATE_DISMISSED, STATE_ISOLATED, TruthChainRecovery
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
 
 _MSG: Dict[str, Any] = {"type": "task_result", "task_id": "t-rec", "device_id": "dev-rec", "status": "completed"}
 
@@ -299,7 +302,7 @@ def test_isolated_results_api(recovery: TruthChainRecovery) -> None:
     app = FastAPI()
     app.include_router(result_recovery.create_router())
     with patch("core.truth_chain_recovery.get_truth_chain_recovery", lambda: recovery):
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
         body = client.get("/api/v1/results/isolated").json()
         assert body["summary"]["isolated"] == 1
         assert body["items"][0]["task_id"] == "t-api" and "message" not in body["items"][0]
@@ -316,6 +319,6 @@ def test_isolated_results_route_is_mounted_on_the_real_api(recovery: TruthChainR
     app = FastAPI()
     app.include_router(observability.create_router())
     with patch("core.truth_chain_recovery.get_truth_chain_recovery", lambda: recovery):
-        client = TestClient(app)
+        client = TestClient(app, headers=_AUTH_HEADERS)
         assert client.get("/api/v1/results/isolated").json()["items"] == []
         assert client.post("/api/v1/results/isolated/none/retry").status_code == 404

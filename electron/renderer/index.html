@@ -246,12 +246,98 @@ body {
   border-radius: 0 0 var(--ir) var(--ir);
   background: linear-gradient(180deg, rgba(12,11,17,.95) 0%, rgba(20,18,28,.97) 100%);
   box-shadow: 0 0 0 1px rgba(183,165,194,.26), 0 0 18px -4px rgba(183,165,194,.4);
-  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; display: flex; flex-direction: column; align-items: center;
   opacity: var(--iop);
 }
-.isl-in { display: flex; align-items: center; gap: 9px; opacity: var(--itx);
-          white-space: nowrap; }
-#islandText { font-size: 12px; color: #d0c9d8; }
+/* 指针在岛上时岛才接鼠标（app.js 那时才让窗口不再穿透），别处照旧点到桌面上 */
+#island[data-hover='true'] { pointer-events: auto; cursor: pointer; }
+/* 第一行：收起时整座岛就是这一行（2px 贴边 + ISLE_H）。展开时它留在最上面，下面长出 .isl-full。
+   排法照 winsland 的药丸（封面贴左端、声波贴右端）：桌宠贴左端、字居中、尾巴（声波 /「+N」）贴右端。
+   尾巴至少与桌宠一样宽 —— 两头对称，字才真在正中；岛的宽度跟着这一行走（island.js 的 _needWidth，
+   留白与间距是同一组数：左 10、右 12、段间 8）。原先是一簇东西居中摆在一条宽药丸里，两边空着一大截，
+   桌宠和字显得又小又挤（所有者：比例与文字和桌宠不协调）。 */
+.isl-in { flex: none; height: 26px; margin-top: 2px; width: 100%; box-sizing: border-box;
+          padding: 0 12px 0 10px; display: flex; align-items: center; gap: 8px;
+          opacity: var(--itx); white-space: nowrap; }
+.isl-mid { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.isl-end { flex: none; min-width: 19px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+#islandText { font-size: 12px; font-weight: 500; letter-spacing: .02em; color: #e3dcea; flex: none; }
+/* 卡片的副标题：字放不下就截断 —— 卡片不改岛的长短（借 WinIslands 的那条规矩） */
+#islandSub { font-size: 11px; color: rgba(208,201,216,.62); min-width: 0;
+             overflow: hidden; text-overflow: ellipsis; }
+/* 队列里还有几张：「+2」 */
+#islandMore { font-size: 10px; color: rgba(208,201,216,.7); padding: 0 6px; border-radius: 999px;
+              background: rgba(255,255,255,.07); flex: none; }
+
+/* ── 岛上的颜色只有面板那一套 ──
+   进度线、声波、下沿那道光都取面板那根轴上的淡紫（panel tokens.css 的 --a-pale）；只有出错取面板的 --bad。
+   不用绿 / 橙 / 黄给状态上色 —— 面板说状态靠光和深度（.wired-dot），岛上同一套（所有者：不要拿黄点表示在线）。 */
+#island { --tone: #b3aabb; }
+#island[data-tone='error'] { --tone: #a06a6a; }
+/* 下沿那一道淡光（winsland 贴边模式只在下沿发光）。收成一道线时没有（--itx 为 0）。 */
+#island::after { content: ''; position: absolute; left: 14%; right: 14%; bottom: 0; height: 1px;
+                 background: linear-gradient(90deg, transparent, var(--tone), transparent);
+                 opacity: calc(var(--itx) * .7); pointer-events: none; }
+/* 进度：贴着岛的下沿的一道细线，走到哪儿亮到哪儿（「第 3/15 步」那张卡带着它） */
+#islandBar { position: absolute; left: 14px; right: 14px; top: calc(2px + 26px - 3px); height: 2px;
+             border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden;
+             opacity: calc(var(--itx) * var(--ibar-on, 0)); pointer-events: none; }
+#islandBar::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--ibar, 0%);
+                    background: var(--tone); border-radius: 2px; transition: width .45s cubic-bezier(.32,.72,0,1); }
+
+/* ── 它在说话：一排声波（winsland 音乐药丸里那排） ──
+   五根各走各的（时长与起跳错开，取它那一组），贴在右端，颜色是 --tone。指针停上来就换成一句提示（island.js）。 */
+#islandWave { display: inline-flex; align-items: center; gap: 2px; height: 12px; flex: none; }
+#islandWave[hidden] { display: none; }
+#islandWave i { width: 2px; height: 100%; border-radius: 1px; background: var(--tone);
+                transform: scaleY(var(--wh)); transform-origin: 50% 50%;
+                animation: isl-wave var(--wd) ease-in-out var(--wl) infinite alternate; }
+#islandWave i:nth-child(1) { --wh: .35; --wd: .45s; --wl: 0s; }
+#islandWave i:nth-child(2) { --wh: .65; --wd: .55s; --wl: .12s; }
+#islandWave i:nth-child(3) { --wh: .45; --wd: .4s;  --wl: .24s; }
+#islandWave i:nth-child(4) { --wh: .85; --wd: .5s;  --wl: .08s; }
+#islandWave i:nth-child(5) { --wh: .55; --wd: .42s; --wl: .18s; }
+@keyframes isl-wave { from { transform: scaleY(.22); } to { transform: scaleY(var(--wh)); } }
+
+
+/* ── 展开：同一座岛自己长高，不是另弹一个窗 ──
+   点一下岛才展开（指针停上去不展开 —— 余光扫过时它不该跳出来）。上面那一行还在，下面是排在第一的那张卡的
+   全文、队列里其余的卡，以及能按的几个键：停下（它在动手、后端能停时）、打开面板（要你去面板上点的）、知道了。 */
+.isl-full { flex: none; width: 100%; box-sizing: border-box; padding: 6px 16px 12px;
+            opacity: var(--ifx, 0); display: flex; flex-direction: column; gap: 8px; }
+.isl-full[hidden] { display: none; }
+#islandBody { font-size: 11.5px; line-height: 1.5; color: rgba(208,201,216,.86); white-space: normal; }
+#islandBody:empty, #islandList:empty { display: none; }
+#islandList { display: flex; flex-direction: column; gap: 4px; }
+/* 行本身不裁（那颗点的柔光会被裁成一块方形暗影），放不下的字由行里那段自己截断 */
+#islandList .row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: rgba(208,201,216,.7);
+                   white-space: nowrap; padding-left: 2px; }
+/* 行前那颗点：与面板 .wired-dot 同一套话 —— **用光和深度，不用颜色**。深底上反过来画：
+     on    白芯 + 一圈柔光（这件事此刻在 / 这一路此刻在收）
+     part  只亮半边（通着，但这一拍没信号）
+     off   沉进去的一颗暗点（暂停了 / 没有这条通路） */
+#islandList .row i { width: 6px; height: 6px; border-radius: 50%; flex: none;
+                     background: rgba(255,255,255,.14); box-shadow: inset 0 .5px 1.5px rgba(0,0,0,.55); }
+#islandList .row[data-light='on'] i {
+  background: #fcf9fe;
+  box-shadow: 0 0 0 1.5px rgba(252,249,254,.16), 0 0 6px 1px rgba(252,249,254,.42);
+}
+#islandList .row[data-light='part'] i {
+  background: linear-gradient(118deg, #fcf9fe 0 46%, rgba(255,255,255,.16) 54% 100%);
+  box-shadow: 0 0 4px rgba(252,249,254,.22);
+}
+#islandList .row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.isl-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.isl-acts button { font: inherit; font-size: 11px; color: #d0c9d8; border: 0; cursor: pointer;
+                   padding: 4px 11px; border-radius: 999px; background: rgba(255,255,255,.08);
+                   transition: background .2s ease; }
+.isl-acts button:hover { background: rgba(255,255,255,.16); }
+.isl-acts button[data-act='stop'] { color: var(--c-hot); box-shadow: inset 0 0 0 1px rgba(236,223,235,.3); }
+/* 点开后换页（winsland 右上角那个切换：音乐 / 日历 / 隐私）→ 这里两页：动态 / 感知。排在最左，样子轻一档 */
+.isl-acts button.isl-view { margin-right: auto; background: none; color: rgba(208,201,216,.62);
+                            box-shadow: inset 0 0 0 1px rgba(208,201,216,.18); }
+.isl-acts button.isl-view:hover { background: rgba(255,255,255,.08); }
+.isl-acts button[hidden] { display: none; }
 #islandMode { font-family: ui-monospace, Consolas, monospace; font-size: 10px;
               color: var(--c-cool); padding: 1px 6px; border-radius: 999px;
               background: rgba(255,255,255,.08); }
@@ -342,6 +428,8 @@ body {
      （它们是 transform / y / height，不是 animation）。所以这里不能图省事
      写成把 #pet 整个冻住。面板那边同理。 */
   .pet-breath, .pet-blink { animation: none; }
+  /* 声波停在各自的高度：「在说话」是事实，跳动是动效 */
+  #islandWave i { animation: none; }
 }
 </style>
 </head>
@@ -373,10 +461,29 @@ body {
         </g>
       </g></g>
     </svg>
-    <span id="islandText">Galaxy</span>
-    <span id="islandMode" hidden></span>
-    <span id="islandHint" hidden></span>
+    <span class="isl-mid">
+      <span id="islandText">Galaxy</span>
+      <span id="islandSub" hidden></span>
+      <span id="islandMode" hidden></span>
+      <span id="islandHint" hidden></span>
+    </span>
+    <span class="isl-end">
+      <span id="islandWave" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <span id="islandMore" hidden></span>
+    </span>
   </span>
+  <span id="islandBar" aria-hidden="true"></span>
+  <div class="isl-full" hidden>
+    <div id="islandBody"></div>
+    <div id="islandList"></div>
+    <div class="isl-acts">
+      <button type="button" class="isl-view" data-act="view">感知</button>
+      <button type="button" data-act="stop" hidden>停下</button>
+      <button type="button" data-act="panel" hidden>打开面板</button>
+      <button type="button" data-act="dismiss" hidden>知道了</button>
+      <button type="button" data-act="pause" hidden>暂停感知</button>
+    </div>
+  </div>
 </div>
 
 <!-- 模块加载。
@@ -387,6 +494,8 @@ body {
 <!-- pet_state.js / live_socket.js：与面板共用（桌宠的推导、那条长连接），app.js 直接调它们，必须先加载。 -->
 <script src="pet_state.js"></script>
 <script src="live_socket.js"></script>
+<!-- island.js：灵动岛上写什么、什么时候长出来、点了做什么（IslandView）。app.js 构造时就要它。 -->
+<script src="island.js"></script>
 <script src="app.js"></script>
 <script src="perception-capture.js"></script>
 

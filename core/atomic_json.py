@@ -78,6 +78,11 @@ def atomic_write_json(
     :param fsync: 替换前把临时文件刷到磁盘。默认开启;仅在明确不在乎断电丢失、且写入
         极其频繁的路径上才值得关掉。
     """
+    # 先整份编成字符串、再建临时文件:``json.dump`` 不论缩进与否都走纯 Python 的分块编码器;``json.dumps``
+    # 在 ``indent=None`` 时走 C 实现,快几倍,且一口气编完、中途不让出 GIL(别的线程同时改着字典也撞不上
+    # 「迭代中改变大小」),产出逐字节相同。放在 mkstemp 之前:序列化失败时磁盘上什么都没建 —— 放在之后,
+    # 文件描述符还没交给 fdopen 就抛了,Windows 上删不掉一个还开着的文件,临时文件就留下了。
+    text = json.dumps(payload, indent=indent, ensure_ascii=ensure_ascii, sort_keys=sort_keys, default=default)
     path = os.fspath(path)
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, exist_ok=True)
@@ -112,14 +117,7 @@ def atomic_write_json(
         if hasattr(os, "fchmod"):
             os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(
-                payload,
-                handle,
-                indent=indent,
-                ensure_ascii=ensure_ascii,
-                sort_keys=sort_keys,
-                default=default,
-            )
+            handle.write(text)
             if trailing_newline:
                 handle.write("\n")
             handle.flush()
@@ -131,5 +129,31 @@ def atomic_write_json(
         if os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+def atomic_write_text(path: str | os.PathLike, text: str) -> None:
+    """把一段文本原子地写到 ``path``(同目录临时文件 → fsync → ``os.replace``),权限 0600。
+
+    给 ``secrets.env`` 这类不是 JSON、却同样「写到一半就全没了」的文件用(``core/config_store.py``);
+    保证与 :func:`atomic_write_json` 相同。路径由调用方给定(数据目录下的固定文件名),不来自请求。
+    """
+    target = os.fspath(path)
+    folder = os.path.dirname(target) or "."
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=".txt", dir=folder)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
             except OSError:
                 pass

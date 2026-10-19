@@ -18,29 +18,12 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY 保持一致):
 与入口记账不会随路由分叉。本模块只主张设备【入口】权威,不主张编排
 (orchestration)或就绪(readiness)权威。
 
-PR-GATEWAY-FIX: 同时提供 core/api_routes.py 所需的兼容导出,
-实际连接管理委托给 galaxy_gateway.websocket_handler。
+PR-GATEWAY-FIX: 同时提供 core/api_routes.py 所需的兼容导出(入口权威声明与入口登记表)。
 """
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-try:
-    from galaxy_gateway.websocket_handler import (
-        GatewayWSManager,
-        handle_device_message,
-        parse_message_strict,
-        register_device_ws,
-        unregister_device_ws,
-    )
-except ImportError:
-    # Fallback stubs if websocket_handler is not available
-    GatewayWSManager = None
-    parse_message_strict = None
-    handle_device_message = None
-    register_device_ws = None
-    unregister_device_ws = None
 
 # ── Constants required by core/api_routes.py ──
 
@@ -270,20 +253,3 @@ def _resolve_android_ws_handler():
     import galaxy_gateway.routes.websocket as _self
 
     return _self._handle_android_ws
-
-
-# ── WebSocket endpoint factory (for FastAPI) ──
-
-
-def create_device_websocket_routes(app, service_manager=None):
-    """Register WebSocket endpoints on the FastAPI app."""
-    from fastapi import WebSocket
-
-    @app.websocket("/ws/device/{device_id}")
-    async def device_ws_endpoint(websocket: WebSocket, device_id: str):
-        await websocket.accept()
-        if GatewayWSManager is not None:
-            manager = GatewayWSManager()
-            await manager.handle_device_connection(websocket, device_id)
-        else:
-            await websocket.close(code=1011, reason="GatewayWSManager not available")

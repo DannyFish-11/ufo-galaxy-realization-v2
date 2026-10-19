@@ -67,9 +67,12 @@ def _is_data_channel_bridge_enabled() -> bool:
     try:
         import json
         from pathlib import Path
+        _repo = Path(__file__).parent.parent.parent
+        _data = Path((os.getenv("GALAXY_DATA_DIR") or "").strip() or "data")
         config_paths = [
-            Path(__file__).parent.parent.parent / "runtime" / "config.json",
-            Path(__file__).parent.parent.parent / "config.json",
+            (_data if _data.is_absolute() else _repo / _data) / "config.json",  # 本机配置随数据目录走(core.config_store)
+            _repo / "runtime" / "config.json",  # 老装法
+            _repo / "config.json",
         ]
         for cp in config_paths:
             if cp.exists():

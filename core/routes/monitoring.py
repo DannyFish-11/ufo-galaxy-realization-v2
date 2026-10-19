@@ -27,7 +27,7 @@ Routes owned by this module:
 import logging
 import time as _time
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
@@ -38,7 +38,11 @@ logger = logging.getLogger("Galaxy.API")
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create monitoring and infrastructure routes router."""
+    from core.auth import require_auth
+
     router = APIRouter()
+    # /metrics 给抓取器(不带令牌);其余带设备与运行细节,要令牌
+    _AUTH = [Depends(require_auth)]
 
     from core.monitoring import get_monitoring_manager
 
@@ -53,7 +57,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         },
     )
 
-    @router.get("/api/v1/monitoring/dashboard")
+    @router.get("/api/v1/monitoring/dashboard", dependencies=_AUTH)
     async def monitoring_dashboard():
         """完整监控仪表盘"""
         from core.command_router import get_command_router
@@ -66,12 +70,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         dashboard["command_router"] = get_command_router().get_stats()
         return JSONResponse(dashboard)
 
-    @router.get("/api/v1/monitoring/health")
+    @router.get("/api/v1/monitoring/health", dependencies=_AUTH)
     async def monitoring_health():
         """健康检查聚合"""
         return JSONResponse(monitoring.health.get_status())
 
-    @router.get("/api/v1/monitoring/alerts")
+    @router.get("/api/v1/monitoring/alerts", dependencies=_AUTH)
     async def monitoring_alerts():
         """告警列表"""
         return JSONResponse(
@@ -81,7 +85,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             }
         )
 
-    @router.get("/api/v1/monitoring/metrics")
+    @router.get("/api/v1/monitoring/metrics", dependencies=_AUTH)
     async def monitoring_metrics():
         """系统指标"""
         return JSONResponse(monitoring.metrics.get_dashboard())
@@ -138,7 +142,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         return Response(content="\n".join(lines) + "\n", media_type="text/plain; charset=utf-8")
 
-    @router.get("/api/v1/monitoring/performance")
+    @router.get("/api/v1/monitoring/performance", dependencies=_AUTH)
     async def monitoring_performance():
         """性能指标仪表盘"""
         from core.performance import PerformanceMonitor
@@ -147,7 +151,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(perf.get_dashboard())
 
     # PR-G2: SLO metrics JSON endpoint
-    @router.get("/api/v1/slo/metrics")
+    @router.get("/api/v1/slo/metrics", dependencies=_AUTH)
     async def slo_metrics():
         """SLO metrics JSON endpoint (PR-G2).
 
@@ -160,7 +164,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(get_slo_metrics().snapshot())
 
     # PR-I: Operational SLO metrics JSON endpoint
-    @router.get("/api/v1/slo/operational")
+    @router.get("/api/v1/slo/operational", dependencies=_AUTH)
     async def operational_slo_metrics(request: Request):
         """Operational SLO metrics JSON endpoint (PR-I).
 

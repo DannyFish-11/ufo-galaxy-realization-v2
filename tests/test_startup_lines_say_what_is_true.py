@@ -272,6 +272,7 @@ def test_env_file_exists_before_config_is_loaded(tmp_path, monkeypatch):
 
     (tmp_path / ".env.example").write_text("GALAXY__PROBE_FROM_TEMPLATE=yes\n", encoding="utf-8")
     monkeypatch.delenv("GALAXY__PROBE_FROM_TEMPLATE", raising=False)
+    monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path / "data"))  # 密钥库也只看这份临时目录
 
     assert main.bootstrap_env_file(str(tmp_path)) is True
     assert (tmp_path / ".env").exists()

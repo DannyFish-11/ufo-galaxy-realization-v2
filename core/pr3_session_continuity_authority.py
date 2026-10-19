@@ -1005,11 +1005,11 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
     # ── Recovery continuity hardening ─────────────────────────────────────
     try:
         from core.v2_android_recovery_continuity_hardening import (
-            V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_AUTHORITY,
+            V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL,
         )
 
         snap.recovery_hardening_loaded = True
-        policies_affirmed.append(V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_AUTHORITY[:80])
+        policies_affirmed.append(V2_ANDROID_RECOVERY_CONTINUITY_HARDENING_SENTINEL[:80])
     except Exception as exc:
         errors.append(f"v2_android_recovery_continuity_hardening unavailable: {exc}")
 

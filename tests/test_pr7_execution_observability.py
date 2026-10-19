@@ -31,6 +31,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:读执行记录要令牌
+
 # ===========================================================================
 # 1. ExecutorLevel
 # ===========================================================================
@@ -555,7 +559,7 @@ class TestObservabilityRoutes:
 
         app = FastAPI()
         app.include_router(create_router())
-        return TestClient(app, raise_server_exceptions=False)
+        return TestClient(app, raise_server_exceptions=False, headers=_AUTH_HEADERS)
 
     def test_execution_schema_endpoint(self, client):
         resp = client.get("/api/v1/observability/execution/schema")

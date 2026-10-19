@@ -25,6 +25,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:读设备与运行细节要令牌
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -879,7 +883,7 @@ class TestRuntimeHostEndpoints:
         app = FastAPI()
         router = create_router()
         app.include_router(router)
-        with TestClient(app, raise_server_exceptions=False) as c:
+        with TestClient(app, raise_server_exceptions=False, headers=_AUTH_HEADERS) as c:
             yield c
 
     def test_list_runtime_hosts_returns_200(self, app_client):

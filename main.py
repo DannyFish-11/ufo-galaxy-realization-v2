@@ -4,62 +4,54 @@ import os
 import sys
 
 # ── .env 加载:必须在任何读取 os.environ 的代码之前完成 ──────────────────
-# python-dotenv 早就在 requirements 里锁了版本,但全仓库范围内从未被真正调用
-# 过——.env 文件从来没有被加载进 os.environ。真机复现过:「模型」tab 存的任何
-# API Key(不止 DeepSeek，OpenAI/Anthropic/Gemini/Groq/... 全部受影响)在保存
-# 当次生效(setConfig 会同步写 os.environ),但重启新进程后——凡是代码直接读
-# os.environ(而不是全部经过 core.unified_config 的间接路径)——统统读不到，
-# 表现为"存了，重启后又没了"。这里在进程最早期加载 .env，且 override=False
-# (不覆盖已存在的真实 shell/系统环境变量，尊重用户显式导出的优先级更高)。
+# python-dotenv 早就锁了版本却从未被调用,.env 从来没进过 os.environ:「模型」tab 存的
+# API Key 保存当次生效(setConfig 同步写 os.environ),重启后凡直读 os.environ 的路径
+# 统统读不到 —— "存了,重启后又没了"。这里在进程最早期加载,不覆盖 shell/系统已导出的值。
 
 
 def load_env_files_into_environ(root: str = "") -> None:
-    """把 runtime/secrets.env 与 .env 的【非空、非毒值】键注入 os.environ。
+    """把密钥库 ``secrets.env`` 与 ``.env`` 的【非空、非毒值】键注入 os.environ。
 
     只在 main.py **作为脚本运行**时调用(见下方 ``__name__`` 守卫),不在
-    ``import main`` 时执行 —— 这是刻意的:
-
-    进程级 ``os.environ`` 是全局可变状态。一旦"import 这个模块"本身就带来
-    全局副作用,任何 ``import main`` 的地方(测试里有 4 处只为读一个常量)
-    都会把开发者本机 .env 里的真实值灌满整个进程,并且**再也退不回去**
-    ——后续所有代码看到的都是被污染的环境。实测后果:跟着 INSTALL.md 走完
-    (bootstrap 会生成 .env)再跑 pytest,会多出 8 条与本次改动毫无关系的
-    失败(MEMORY_DB_PATH 指向容器路径导致建库失败 2 条;各家 API_KEY 凭空
-    出现导致"缺 key 时不应入候选池"类断言失败 6 条),且顺序依赖、难复现。
-    CI 上没有 .env 所以永远看不到 —— 只砸本机开发者。
+    ``import main`` 时执行 —— 进程级 ``os.environ`` 是全局可变状态,"import 即
+    副作用"会让任何 ``import main`` 的地方(测试里有 4 处只为读一个常量)把开发者
+    本机 .env 的真实值灌满整个进程且退不回去。实测:跟着 INSTALL.md 走完再跑
+    pytest,多出 8 条无关失败(MEMORY_DB_PATH 指向容器路径 2 条;各家 API_KEY
+    凭空出现 6 条),顺序依赖、难复现,CI 上没有 .env 所以永远看不到。
 
     加载纪律(三条,都是真机复现过的坑,不能放松):
-    1. **只加载非空值**。设置面板自动生成的 .env 会把【全部】schema 键写成
-       ``KEY=``(空值)。空字符串一旦进 os.environ 就会顶掉代码默认值:
-       ``os.environ.get("OLLAMA_URL", "http://localhost:11434")`` 在
-       ``OLLAMA_URL=""`` 存在时返回 ``""`` 而不是默认值。真机症状一整串都源于
-       此 —— LocalBrainManager 拿空 URL ping Ollama(报 "Request URL is missing
-       an 'http://' or 'https://' protocol"、Ollama 明明在跑却判"服务未响应/
-       模型未就绪")、Redis "must specify scheme"、NATS "invalid hostname"。
-       所以这里不能用 ``load_dotenv()`` 整个灌进去。
-    2. **值以 # 开头一律视同未配置**。python-dotenv 会把「KEY=   # 注释」这种
-       【空值 + 行内注释】整段注释当成值(实测 1.2.2:``OLLAMA_URL= # e.g.
-       http://...`` → ``'# e.g. http://...'``),经 normalize 补协议头后变成
-       ``http://#...`` 的怪 URL,骗过全部 startswith 检查。合法配置值不可能
-       以 # 开头。
-    3. **不覆盖已存在的键**。shell/系统显式导出的优先级最高;secrets.env 先于
-       .env 加载(面板保存的最新真值先到先得)。
+    1. **只加载非空值**。设置面板生成的 .env 会把全部 schema 键写成 ``KEY=``。
+       空串进 os.environ 会顶掉代码默认值(``os.environ.get("OLLAMA_URL", 默认)``
+       返回 ``""``)—— LocalBrainManager 拿空 URL ping Ollama("Request URL is
+       missing an 'http://'…"、Ollama 明明在跑却判未就绪)、Redis "must specify
+       scheme"、NATS "invalid hostname"。所以不能用 ``load_dotenv()`` 整个灌。
+    2. **值以 # 开头一律视同未配置**。python-dotenv 会把「KEY=   # 注释」整段注释
+       当成值(实测 1.2.2),补协议头后变成 ``http://#...``,骗过全部 startswith 检查。
+    3. **不覆盖已存在的键**。shell/系统显式导出的优先级最高;密钥库先于 .env
+       加载(面板保存的最新真值先到先得)。
 
-    密钥库(runtime/secrets.env)必须一起加载:设置面板把 API Key 这类 secret
-    写进它而非 .env(见 core/config_store.py),此前重启后无人把它注回
-    os.environ —— 直读 os.getenv 的路径(含面板"已配置"角标)统统看不到,
-    表现为"Key 存了,重启后又显示未配置"。
+    密钥库必须一起加载:面板把 API Key 写进它而非 .env(``core/config_store.py``),
+    此前重启后无人把它注回 os.environ —— "Key 存了,重启后又显示未配置"。它的位置
+    与 ``core.config_store.default_secrets_path`` 同一条规则:数据目录(``GALAXY_DATA_DIR``,
+    可以只写在 .env 里)下的 ``secrets.env``;那里没有而 ``runtime/secrets.env`` 有时用旧的。
+    这里还不能 import core(core 的模块在 import 时读环境变量),所以照抄,两边由
+    ``tests/test_config_and_secrets_follow_the_data_dir.py`` 核对。
 
-    ``root`` 只为测试留的注入点(默认= main.py 所在目录,即仓库根)。生产路径
-    永远用默认值 —— 没有它就只能靠"在仓库根真造一个 .env"来验证这三条纪律,
-    那会踩到开发者自己的 .env。
+    ``root`` 只为测试留的注入点(默认= main.py 所在目录,即仓库根)。
     """
     try:
         from dotenv import dotenv_values
 
         _root = root or os.path.dirname(os.path.abspath(__file__))
-        for _rel in ("runtime/secrets.env", ".env"):
-            for _k, _v in (dotenv_values(os.path.join(_root, _rel)) or {}).items():
+        _dotenv = dotenv_values(os.path.join(_root, ".env")) or {}
+        _data = os.environ.get("GALAXY_DATA_DIR")
+        if _data is None:  # 与下面的加载纪律一致:.env 里空的、# 开头的都不算
+            _data = "" if (_dotenv.get("GALAXY_DATA_DIR") or "#").lstrip().startswith("#") else _dotenv["GALAXY_DATA_DIR"]
+        _store = os.path.join(_data.strip() or "data", "secrets.env")
+        if not os.path.exists(_store) and os.path.exists(os.path.join(_root, "runtime", "secrets.env")):
+            _store = os.path.join(_root, "runtime", "secrets.env")
+        for _vals in (dotenv_values(_store) if os.path.exists(_store) else {}, _dotenv):
+            for _k, _v in (_vals or {}).items():
                 if _v and not _v.lstrip().startswith("#") and _k not in os.environ:
                     os.environ[_k] = _v
     except Exception:
@@ -564,7 +556,7 @@ def phase0_env_check() -> dict:
       ``sys.executable -m pip``（问的才是"我这个 Python 能不能装包"）；
     - Electron：这边用 ``electron_package_intact``（识别残缺安装），那边只看
       ``node_modules/electron`` 目录在不在；
-    - API Key：这边读 ``.env`` + ``runtime/secrets.env``（面板保存后密钥收敛到
+    - API Key：这边读 ``.env`` + 密钥库 ``secrets.env``（面板保存后密钥收敛到
       后者），那边只读 ``os.environ`` —— 密钥存对了也一直报"未配置"；
     - Ollama：这边只查装没装，那边还查在不在跑、有哪些模型。
 
@@ -1064,7 +1056,9 @@ def _apply_model_cli_args(args) -> None:
     （不在开头打断）。--select-model 清除已保存选择以触发重新选择。"""
     try:
         if getattr(args, "model", None):
-            os.environ["OLLAMA_MODEL"] = args.model
+            from core.derived_env import export as _export  # 只管这一次:「保存设置」不把它钉进 .env
+
+            _export("OLLAMA_MODEL", args.model)
         if getattr(args, "select_model", False):
             from core.model_catalog import _STATE_FILE as _saved  # 档位 + 主脑的统一记录(连旧 .galaxy_model 一并清)
 
@@ -1681,12 +1675,14 @@ def main() -> int:
     # --backend 不是"另一条启动路径"，只是把桌面壳这一步关掉 —— 用的是仓库
     # 本来就有的开关（launcher/flags.py 登记的 GALAXY_SKIP_ELECTRON），
     # 不新造第二套判断。之后照常走完整启动序列。
-    if args.backend:
-        os.environ["GALAXY_SKIP_ELECTRON"] = "1"
+    # 两个都只管这一次:经 core.derived_env 写,「保存设置」不把它们钉进 .env(真跑:钉进去之后正常启动也不开桌面窗口)。
+    from core.derived_env import export as _export_env
 
+    if args.backend:
+        _export_env("GALAXY_SKIP_ELECTRON", "1")
     # -v 同时落到环境变量：子模块（launcher.services 等）无需逐层透传即可读到。
     if args.verbose:
-        os.environ["GALAXY_VERBOSE"] = "1"
+        _export_env("GALAXY_VERBOSE", "1")
 
     # 开机自启一键设置：让电脑(被 WOL 盒子)开机进系统后自动拉起整套 Galaxy + 托盘，
     # 配合 entrypoint.json 写出的 Tailscale/LAN 地址，三端无需手填 IP 即可发现网关秒连。

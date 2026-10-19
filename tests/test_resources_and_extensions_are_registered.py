@@ -27,10 +27,12 @@ import pytest
 @pytest.fixture
 def _fresh_resources():
     import core.capability_bus as cb
+    import core.network_graph_runtime as ngr
     import core.system_resource as sr
 
     sr.reset_system_resource_registry()
     cb.reset_capability_bus()
+    ngr.reset_network_graph_runtime()  # 拓扑图是进程单例:前面的用例往里登记过 MagicMock 的话,这里落盘就会炸
     yield sr, cb
     sr.reset_system_resource_registry()
     cb.reset_capability_bus()

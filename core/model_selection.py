@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from core.console_prompt import ask, timed_out_notice
+from core.derived_env import export as export_env
 
 logger = logging.getLogger("Galaxy.ModelSelection")
 
@@ -218,7 +219,7 @@ def save_choice(tag: str) -> None:
 
         save_main_brain(tag)
     except Exception:  # noqa: BLE001 — catalog 不可用时至少把运行时 env 设上
-        os.environ["OLLAMA_MODEL"] = tag
+        export_env("OLLAMA_MODEL", tag)
 
 
 #: 推荐档位要留的余量比例。
@@ -429,14 +430,14 @@ def apply_effective_tier(*, prefix: str = "  ") -> str:
     if not eff or eff == want:
         return ""
 
-    os.environ["GALAXY_MODEL_TIER"] = eff
+    export_env("GALAXY_MODEL_TIER", eff)  # 降档只影响本进程:保存设置时不钉进 .env(钉了就是永久降档)
     try:
         current = main_brain()
         # 只动"目录里认识、但不属于生效档"的那种；目录外的自定义模型不碰。
         if current and exact_model(current) is not None and current not in {s.tag for s in tier_models(eff)}:
             derived = default_main_brain_for_tier(eff)
             if derived:
-                os.environ["OLLAMA_MODEL"] = derived
+                export_env("OLLAMA_MODEL", derived)
     except Exception as exc:  # noqa: BLE001
         logger.debug("降档后主脑重派生跳过(档位已降): %s", exc)
 
@@ -733,7 +734,7 @@ def resolve_main_brain(interactive: bool = True) -> str:
         return env_model
     saved = load_choice()
     if saved:
-        os.environ["OLLAMA_MODEL"] = saved
+        export_env("OLLAMA_MODEL", saved)  # 从记录读回来的:保存设置不把它钉进 .env
         _tier = _current_tier()
         print_runtime_gaps(_tier)
         print_context_budget(_tier)

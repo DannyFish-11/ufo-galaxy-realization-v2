@@ -24,8 +24,11 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(mc, "_LEGACY_TIER_FILE", tmp_path / ".galaxy_tier")
     monkeypatch.setattr(mc, "_LEGACY_MODEL_FILE", tmp_path / ".galaxy_model")
     monkeypatch.setattr(ms, "_CHOICE_FILE", tmp_path / ".galaxy_model")
-    monkeypatch.delenv("GALAXY_MODEL_TIER", raising=False)
-    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    # save_tier 会把派生值写进 os.environ。只 delenv 一个本来就没有的键,monkeypatch 什么都不记 —— 写进去的值就漏给
+    # 后面的用例(第 6 轮全量测试里曾让 tier D 的驻留量从 18000 掉到 8800)。先 setenv 记下原样,收尾时才还原得回去。
+    for key in ("GALAXY_MODEL_TIER", "OLLAMA_MODEL", "GALAXY_PERCEPTION_MODEL"):
+        monkeypatch.setenv(key, "")
+        monkeypatch.delenv(key)
     yield
 
 

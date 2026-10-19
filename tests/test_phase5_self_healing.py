@@ -26,6 +26,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
+
 # ===========================================================================
 # A) DeviceHealthRegistry — circuit breaker transitions + quarantine
 # ===========================================================================
@@ -662,7 +666,7 @@ class TestDeviceHealthAPI:
             reg = _g.get_health_registry()
             reg.record_heartbeat("api_dev", latency_ms=50.0)
 
-            client = TestClient(self._app())
+            client = TestClient(self._app(), headers=_AUTH_HEADERS)
             resp = client.get("/api/v1/devices/health")
             assert resp.status_code == 200
             data = resp.json()
@@ -683,7 +687,7 @@ class TestDeviceHealthAPI:
             reg = _g.get_health_registry()
             reg.record_heartbeat("mydev", latency_ms=100.0)
 
-            client = TestClient(self._app())
+            client = TestClient(self._app(), headers=_AUTH_HEADERS)
             resp = client.get("/api/v1/devices/mydev/health")
             assert resp.status_code == 200
             data = resp.json()
@@ -701,7 +705,7 @@ class TestDeviceHealthAPI:
         old_hr = _g._health_registry
         _g._health_registry = None
         try:
-            client = TestClient(self._app())
+            client = TestClient(self._app(), headers=_AUTH_HEADERS)
             resp = client.get("/api/v1/devices/ghost_device/health")
             assert resp.status_code == 404
         finally:
@@ -723,7 +727,7 @@ class TestDeviceHealthAPI:
                 reg.record_failure("qdev")
             assert not reg.is_eligible("qdev")
 
-            client = TestClient(self._app())
+            client = TestClient(self._app(), headers=_AUTH_HEADERS)
             resp = client.post("/api/v1/devices/qdev/unquarantine")
             assert resp.status_code == 200
             data = resp.json()
@@ -746,7 +750,7 @@ class TestDeviceHealthAPI:
             reg = _g.get_health_registry()
             reg.record_heartbeat("healthy_dev")
 
-            client = TestClient(self._app())
+            client = TestClient(self._app(), headers=_AUTH_HEADERS)
             resp = client.post("/api/v1/devices/healthy_dev/unquarantine")
             assert resp.status_code == 200
             data = resp.json()

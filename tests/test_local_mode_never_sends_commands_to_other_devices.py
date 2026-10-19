@@ -18,6 +18,9 @@ import asyncio
 import pytest
 
 from core.system_mode import cross_device_refusal
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:写接口要令牌
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +61,7 @@ def devices_client(monkeypatch):
     monkeypatch.setattr(devices_mod.connection_manager, "send_to_device", send_to_device)
     app = FastAPI()
     app.include_router(devices_mod.create_router() if hasattr(devices_mod, "create_router") else devices_mod.router)
-    return TestClient(app), sent
+    return TestClient(app, headers=_AUTH_HEADERS), sent
 
 
 def test_the_single_device_command_route_refuses_in_local_mode(devices_client):

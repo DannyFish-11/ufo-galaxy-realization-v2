@@ -63,15 +63,17 @@ class TestPhase1ImportProtection:
 class TestPhase2DeviceSubsystem:
     """Device subsystem fixes are in place."""
 
-    def test_pyautogui_typewrite_used(self):
-        """Verify pyautogui.write was replaced with typewrite."""
+    def test_windows_agent_acts_through_the_one_desktop_chain(self):
+        """Windows 设备 Agent 不再自己调 pyautogui(那是坐标级的第二份):动手交给桌面自动化整体(仲裁器),
+        而且只对这台电脑动手。"""
         import inspect
 
         from core.device_agent_manager import WindowsDeviceAgent
 
-        source = inspect.getsource(WindowsDeviceAgent._execute_with_fallback)
-        assert "typewrite" in source
-        assert "pyautogui.write(" not in source
+        source = inspect.getsource(WindowsDeviceAgent.execute_command)
+        assert "get_windows_arbiter" in source and "structural_only=True" in source
+        assert "import pyautogui" not in inspect.getsource(WindowsDeviceAgent)
+        assert "_is_this_machine" in source
 
     def test_node08_fetch_uses_httpx_client(self):
         # Node_08_Fetch 从 aiohttp mock 改成了 httpx 异步客户端。

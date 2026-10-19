@@ -10,6 +10,11 @@
  *   第三态  空间收回，屏幕是干净的 —— 它在出字、出声、或动手。
  *           **它在动你的鼠标键盘时**，岛从上边框长出来说一句「正在操作」，
  *           以及（后端确实占到了叫停键的话）怎么叫停。
+ *   灵动岛  有事就从上边框长出来（任何一态里）：上岛的卡（桌面操作第几步、核对结论、有结果没收口、
+ *           有设备在等你同意，core/island_cards.py）、它在说话（声波）、刚复制了东西；旁边几颗小点说
+ *           它此刻在收哪几路感知。点一下往下长：动态 / 感知两页，停下 / 打开面板 / 知道了 / 暂停感知。
+ *           对齐所有者指的 winsland（adityasrivastava5098/WinIsland）。岛上写什么、什么时候长、点了
+ *           做什么都在 island.js；这里只管它在三态编排里长多大（尺寸常量 ISLE_* 在下面）。
  *   收场    光从顶部中间铺回三条边 —— 不是把收回倒着放。
  *   急停    同一个收拢手势，但没有岛滑出，顶上只留一道贴边细线。
  *
@@ -87,15 +92,20 @@ const SEG = {
 const HIDE_SECONDS = 0.9;
 // 光从顶部中间铺回三条边。原先是 spread += 0.85 * dt，约 1.18 秒，不改。
 const SPREAD_SECONDS = 1 / 0.85;
-// 动手期间那座岛自己长出来 / 收回去（表达期空间是收着的，岛不能跟着空间走）。
-const ISLE_SECONDS = 0.45;
+// 岛因为「有事」自己长出来 / 收回去怎么动（winsland 那组弹簧）、点开后指针离开多久收回 —— 在 island.js。
 // 岛长成之后的尺寸（px）：一条**瘦长**的药丸，约 10:1（280 × 28）。
 // 历史：248 × 33（7.5:1）→ 上一版 216 × 40（5.4:1，更窄更高）—— 那一版方向反了，
 // 越改越像一块墩子；所有者要的是 Windows 灵动岛（wisland）那种又薄又长的一条。
-// 宽度只是下限：文字多了（模式、叫停提示）会自己撑开，见 islandInner 的量法。
-const ISLE_MIN_W = 280;
+// 宽度只是下限：文字多了（模式、叫停提示）会自己撑开，见 island.js 的 _needWidth。
+// 下限 280 → 224（8:1 正好守住「瘦长」）：原先一句「在说话」也是 280 宽，桌宠和字缩在中间、两边空着一大截，
+// 所有者说比例与文字和桌宠不协调。现在宽度跟着内容走，下限只防它短成一颗豆。
+const ISLE_MIN_W = 224;
 const ISLE_H = 26;   // 展开后高度 = 2 + ISLE_H
 const ISLE_R = 14;   // 下沿圆角 = 2 + ISLE_R（略大于高度的一半，下沿圆润成药丸）
+// 上限：卡片不改岛的长短（winsland / WinIslands 同一条规矩）—— 字再多，收起时也只到这么宽，放不下就截断；
+// 点开之后也是这个宽，只往下长。
+const ISLE_MAX_W = 440;
+const ISLE_OPEN_R = 18;  // 点开之后的下沿圆角
 
 // ── 时间怎么走 ──
 //
@@ -155,12 +165,13 @@ function easeOut(x) { return 1 - Math.pow(1 - x, 2.2); }
 class GalaxyOverlay {
   constructor() {
     this.root = document.documentElement;
-    this.island = document.getElementById('island');
-    this.islandInner = this.island ? this.island.querySelector('.isl-in') : null;
-    this.islandText = document.getElementById('islandText');
-    this.islandMode = document.getElementById('islandMode');
-    this.islandHint = document.getElementById('islandHint');
     this.pet = document.getElementById('pet');
+    // 灵动岛（island.js）：岛上写什么、什么时候长出来、点了做什么。三张词表还在这边（契约核对读的是 app.js）。
+    this.isle = new IslandView(document, {
+      words: { acting: ACTING_WORD, activity: ACTIVITY_WORD, mode: MODE_WORD },
+      minW: ISLE_MIN_W,
+      maxW: ISLE_MAX_W,
+    });
 
     // 后端每一拍给的东西。拿不到就保持 null —— 绝不构造，也绝不假装知道。
     this.phase = 'static';
@@ -180,10 +191,6 @@ class GalaxyOverlay {
     this.spreading = false;
     this.spread = 0;
 
-    // 动手期间那座岛的大小（与空间编排里长出来的那座取大）。
-    this.isleAct = 0;
-    // 岛展开到最大时多宽 —— 按岛上此刻那几个字量出来，不写死（见 _paintIsland）。
-    this.isleMax = ISLE_MIN_W;
 
     // 边光的呼吸。周期读 index.html 的 --c-rim（判据在那边，这里不另写一份数）。
     this.breathT = 0;
@@ -202,6 +209,11 @@ class GalaxyOverlay {
   init() {
     this._readRhythm();
     this._connectBackend();
+    this.isle.bind(window);
+    // 剪贴板一变，主进程说一声是哪一类（内容不出主进程，见 electron/main.js 的 watchClipboard）
+    if (window.galaxyAPI && window.galaxyAPI.onClipboard) {
+      window.galaxyAPI.onClipboard((d) => this.isle.copiedNow(d && d.type));
+    }
     this._apply();
     requestAnimationFrame((t) => this._loop(t));
   }
@@ -214,7 +226,10 @@ class GalaxyOverlay {
     try {
       const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
       this.reducedMotion = !!mq.matches;
-      if (mq.addEventListener) mq.addEventListener('change', (e) => { this.reducedMotion = !!e.matches; });
+      this.isle.calm = this.reducedMotion;
+      if (mq.addEventListener) {
+        mq.addEventListener('change', (e) => { this.reducedMotion = !!e.matches; this.isle.calm = this.reducedMotion; });
+      }
     } catch (e) { /* 没有 matchMedia 的环境：按不减动效处理 */ }
   }
 
@@ -232,6 +247,8 @@ class GalaxyOverlay {
     //
     // WS 连着时只认 WS：同一拍从两条路各到一次、先后不定，后到的那份旧帧会把画面拽回上一拍。
     const base = (window.galaxyShell && window.galaxyShell.base) || this._fallbackBase();
+    this._base = base;   // 岛上「停下」「知道了」「暂停感知」打 HTTP 用（令牌由外壳注入，见 electron/main.js）
+    this.isle.base = base;
     this._ws = new LiveSocket(base.replace(/^http/, 'ws') + '/ws/desktop-presence', {
       onOpen: () => console.log('[Galaxy] WebSocket connected'),
       onClose: () => {
@@ -242,6 +259,7 @@ class GalaxyOverlay {
       },
       onMessage: (msg) => {
         if (msg && msg.type === 'state_event' && msg.payload) this._onStateEvent(msg.payload);
+        else if (msg && msg.type === 'island' && msg.payload) this.isle.setCards(msg.payload);
       },
     });
     this._ws.start();
@@ -264,6 +282,8 @@ class GalaxyOverlay {
 
   _onStateEvent(payload) {
     if (payload.intent !== undefined) this.intent = payload.intent;
+    // 它在不在出声（属主 core.speech_output.set_ai_speaking）—— 岛上那排声波跟着它
+    if (payload.speaking !== undefined) this.isle.setSpeaking(!!payload.speaking);
     if (payload.phase !== undefined) this.phase = payload.phase;
     if (payload.posture !== undefined) this.posture = payload.posture;
     if (payload.render !== undefined) this.render = payload.render;
@@ -360,16 +380,6 @@ class GalaxyOverlay {
     }
   }
 
-  // ── 岛：动手期间自己长出来 ──
-  _stepIsle(dt) {
-    const acting = !!(this.render && this.render.acting);
-    const target = acting ? 1 : 0;
-    const step = dt / ISLE_SECONDS;
-    this.isleAct = target > this.isleAct
-      ? Math.min(target, this.isleAct + step)
-      : Math.max(target, this.isleAct - step);
-  }
-
   // ── 运动学：只决定"怎么走"，不决定"走到哪儿" ──
   //
   // 落点由主轴给（OPEN_BY_LIFECYCLE），过程交给 presence_motion：编排带里匀速
@@ -407,7 +417,7 @@ class GalaxyOverlay {
       || Math.abs(this.open - (OPEN_BY_LIFECYCLE[life] || 0)) > 0.01
       || this.spreading
       || (this.hide > 0.001 && this.hide < 0.999)
-      || (this.isleAct > 0.001 && this.isleAct < 0.999);
+      || this.isle.moving();
     const minFrameMs = 1000 / (this.open > 0.02 || moving ? 30 : 12);
     if (now - this.lastFrame < minFrameMs) return;
 
@@ -416,7 +426,7 @@ class GalaxyOverlay {
     this.lastFrame = now;
     for (let left = gap; left > 1e-6; left -= STEP) this._advance(Math.min(STEP, left));
     this._stepRim(gap);
-    this._stepIsle(gap);
+    this.isle.step(gap, this.render);
     this.breathT += gap;
     this._apply();
   }
@@ -426,7 +436,7 @@ class GalaxyOverlay {
     const s = this.root.style;
     const open = this.open;
     const grow = easeOut(seg(open, 'grow'));
-    const isle = Math.max(ease(seg(open, 'isle')), ease(this.isleAct));
+    const isle = Math.max(ease(seg(open, 'isle')), this.isle.grow());
 
     const p = (this.render && this.render.perception) || null;
     const paused = !!(p && p.privacy_paused);
@@ -474,13 +484,17 @@ class GalaxyOverlay {
     // **急停那道线就是岛本身**，不是另加一个元素：有线＝我在但我闭着，
     // 没线＝这台机器根本没有感知可用。契约把 privacy_paused 单独给一位，
     // 正是因为"用户按停了"是一个整体姿态，不是"恰好四条都闭着"。
-    const h = paused ? 2 : 2 + isle * ISLE_H;
-    const w = paused ? 68 : 66 + isle * (this.isleMax - 66);
+    // 点开：同一座岛往下长（宽到上限、下面长出 .isl-full 那么高），不是另弹一个窗。
+    const full = paused ? 0 : this.isle.unfold() * isle;
+    const isleW = this.isle.width;
+    const h = paused ? 2 : 2 + isle * ISLE_H + full * this.isle.fullH;
+    const w = paused ? 68 : 66 + isle * (isleW - 66) + full * Math.max(0, ISLE_MAX_W - isleW);
     s.setProperty('--ih', h.toFixed(1) + 'px');
     s.setProperty('--iw', w.toFixed(1) + 'px');
-    s.setProperty('--ir', (paused ? 2 : 2 + isle * ISLE_R).toFixed(1) + 'px');
+    s.setProperty('--ir', (paused ? 2 : 2 + isle * ISLE_R + full * (ISLE_OPEN_R - ISLE_R)).toFixed(1) + 'px');
     s.setProperty('--iop', paused ? '0.85' : (isle > 0.001 ? '1' : '0'));
     s.setProperty('--itx', Math.max(0, (isle - 0.55) / 0.45).toFixed(3));
+    s.setProperty('--ifx', Math.max(0, (full - 0.5) / 0.5).toFixed(3));
 
     // ── 降级留痕：只落在**空间**上，不落在边光和桌宠上 ──
     //
@@ -490,7 +504,8 @@ class GalaxyOverlay {
     const trust = trustOf(this.render);
     if (this.root.dataset.trust !== trust) this.root.dataset.trust = trust;
 
-    this._paintIsland(paused);
+    this.isle.paint(this.render, paused, isle, s);
+    this.isle.releaseIfGone(window);
     this._paintPet(p);
   }
 
@@ -506,38 +521,6 @@ class GalaxyOverlay {
       if (v !== undefined && v > g) g = v;
     }
     return g;
-  }
-
-  _paintIsland(paused) {
-    if (paused) {
-      this.islandMode.hidden = true;
-      if (this.islandHint) this.islandHint.hidden = true;
-      return;
-    }
-    const r = this.render || {};
-    const acting = !!r.acting;
-    const act = r.liminal_activity || 'none';
-    const mode = (r.hybrid_execution && r.hybrid_execution.mode) || 'none';
-    // 动手期间先说它在动手；否则说阈限态里它在干嘛。
-    const word = acting ? ACTING_WORD : (ACTIVITY_WORD[act] || 'Galaxy');
-    let changed = false;
-    if (this.islandText.textContent !== word) { this.islandText.textContent = word; changed = true; }
-    const m = MODE_WORD[mode] || '';
-    if (this.islandMode.hidden !== !m) { this.islandMode.hidden = !m; changed = true; }
-    if (m && this.islandMode.textContent !== m) { this.islandMode.textContent = m; changed = true; }
-    // 怎么叫停：只照 `render.stop_key` 写 —— 后端的键盘监听确实占到了才有值
-    // （core/stop_key.py）。不能从 acting 推出来：分不清人按的和它自己注入的键的
-    // 平台上，动手期间也是空的。写着「Esc 停止」而按了没用，比不写更糟。
-    if (this.islandHint) {
-      const hint = acting && r.stop_key ? `${r.stop_key} 停止` : '';
-      if (this.islandHint.hidden !== !hint) { this.islandHint.hidden = !hint; changed = true; }
-      if (hint && this.islandHint.textContent !== hint) { this.islandHint.textContent = hint; changed = true; }
-    }
-    // 岛上的字变了，展开到最大时的宽度跟着量一次（字多了原来那 248px 装不下）。
-    if (changed && this.islandInner) {
-      const need = Math.ceil(this.islandInner.scrollWidth || 0) + 34;
-      this.isleMax = Math.max(ISLE_MIN_W, need);
-    }
   }
 
   _paintPet(p) {

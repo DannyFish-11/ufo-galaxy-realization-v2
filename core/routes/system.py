@@ -37,6 +37,7 @@ See ``docs/PROJECTION_OUTPUT_AUTHORITY.md`` for the full canonical output
 authority model and endpoint directory.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -218,8 +219,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.system_completion_status import get_system_completion_status
 
-            report = get_system_completion_status(force_rebuild=True)
-            return JSONResponse(report.to_dict())
+            # 整份完成度报告是同步聚合：在工作线程里算，不占事件循环
+            return JSONResponse(
+                await asyncio.to_thread(lambda: get_system_completion_status(force_rebuild=True).to_dict())
+            )
         except Exception as e:
             logger.exception("system completion status build failed: %s", e)
             return JSONResponse(
@@ -406,19 +409,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def container_runtime_state():
         from core.container_runtime import inspect_runtime_state
 
-        return JSONResponse(inspect_runtime_state())
+        # 要跑 docker / podman 子进程（Windows 上 Podman 虚机没起来时一次就是几秒）：事件循环里不跑子进程
+        return JSONResponse(await asyncio.to_thread(inspect_runtime_state))
 
     @router.post("/api/v1/system/container-runtime/test")
     async def container_runtime_test(runtime: str = Body(..., embed=True, max_length=16)):
         from core.container_runtime import test_runtime
 
-        return JSONResponse(test_runtime(runtime))
+        return JSONResponse(await asyncio.to_thread(test_runtime, runtime))
 
     @router.post("/api/v1/system/container-runtime/choice")
     async def container_runtime_choose(runtime: str = Body(..., embed=True, max_length=16)):
         from core.container_runtime import set_runtime_choice
 
-        result = set_runtime_choice(runtime, source="api")
+        result = await asyncio.to_thread(set_runtime_choice, runtime, source="api")
         return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
     @router.get("/api/v1/system/mode-status")

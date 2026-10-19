@@ -690,59 +690,28 @@ class TestConfigServiceSingleton(unittest.TestCase):
 
 class TestPreflightRuntimeSecretsIntegration(unittest.TestCase):
     def test_secrets_env_loaded_before_check(self):
-        """Secrets from runtime/secrets.env are visible to preflight."""
+        """Secrets from the secrets store are visible to preflight (same location ConfigStore uses)."""
         from core.config_preflight import _load_runtime_secrets_into_env
 
         d = tempfile.mkdtemp()
         secrets_path = Path(d) / "secrets.env"
         secrets_path.write_text("__GALAXY_TEST_PREFLIGHT_SECRET__=test-value\n")
-
         os.environ.pop("__GALAXY_TEST_PREFLIGHT_SECRET__", None)
-        # Monkey-patch the path used by the loader
-        import core.config_preflight as _pf
-
-        _orig = Path(_pf.__file__).parent.parent / "runtime" / "secrets.env"
-
-        # We use patch to redirect the path lookup
-        with patch("core.config_preflight.Path") as mock_path_cls:
-            # Make Path(__file__).parent.parent / "runtime" / "secrets.env" → our temp file
-            import core.config_preflight as cpf_module
-
-            original_fn = cpf_module._load_runtime_secrets_into_env
-
-            # Call directly using the real file
-            real_secrets = Path(d) / "secrets.env"
-            # Simulate: load the file's contents into env
-            import core.config_store as cs_module
-
-            store_tmp = cs_module.ConfigStore(
-                config_path=Path(d) / "config.json",
-                secrets_path=real_secrets,
-            )
-            s = store_tmp.read_secrets()
-            for k, v in s.items():
-                if k not in os.environ:
-                    os.environ[k] = v
-
+        try:
+            with patch("core.config_store.default_secrets_path", return_value=secrets_path):
+                loaded = _load_runtime_secrets_into_env()
+            self.assertIn("__GALAXY_TEST_PREFLIGHT_SECRET__", loaded)
             self.assertEqual(os.environ.get("__GALAXY_TEST_PREFLIGHT_SECRET__"), "test-value")
+        finally:
             os.environ.pop("__GALAXY_TEST_PREFLIGHT_SECRET__", None)
 
     def test_absent_secrets_env_no_crash(self):
         """_load_runtime_secrets_into_env is safe when no file exists."""
         from core.config_preflight import _load_runtime_secrets_into_env
 
-        # Should not raise even if runtime/secrets.env doesn't exist
-        with patch("core.config_preflight.Path") as mock_path_cls:
-            # Let it run with a non-existent path by testing it through ConfigStore
-            d = tempfile.mkdtemp()
-            from core.config_store import ConfigStore
-
-            store = ConfigStore(
-                config_path=Path(d) / "config.json",
-                secrets_path=Path(d) / "nonexistent.env",
-            )
-            # read_secrets returns {} gracefully
-            self.assertEqual(store.read_secrets(), {})
+        d = tempfile.mkdtemp()
+        with patch("core.config_store.default_secrets_path", return_value=Path(d) / "nonexistent.env"):
+            self.assertEqual(_load_runtime_secrets_into_env(), [])
 
     def test_runtime_secrets_do_not_override_env(self):
         """Existing env vars win over runtime/secrets.env."""

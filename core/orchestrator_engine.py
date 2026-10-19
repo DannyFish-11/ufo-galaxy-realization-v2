@@ -389,6 +389,9 @@ class SmartOrchestrator:
             logger.error("LLM 任务分解调用失败: %s", e)
             return TaskDecomposition(goal=task_description)
 
+        if raw.get("unavailable"):
+            logger.info("没有可用的模型来分解任务,按单任务执行")
+            return TaskDecomposition(goal=task_description)
         if "error" in raw and not raw.get("subtasks"):
             logger.warning("LLM 返回非法 JSON，降级为单任务: %s", raw.get("error"))
             return TaskDecomposition(goal=task_description)

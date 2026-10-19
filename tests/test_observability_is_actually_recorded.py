@@ -14,6 +14,9 @@ from __future__ import annotations
 import pytest
 
 from core.schemas.task_envelope import TaskEnvelope
+from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
+
+_AUTH_HEADERS = {"Authorization": f"Bearer {GALAXY_TEST_API_TOKEN}"}  # 这些用例扮演面板 / 主人:读执行记录要令牌
 
 
 @pytest.fixture(autouse=True)
@@ -276,6 +279,6 @@ class TestReadSurface:
         record_execution_event(normalize_task_envelope(_envelope("t-read")), origin="command_router")
         app = FastAPI()
         app.include_router(create_router())
-        body = TestClient(app).get("/api/v1/observability/execution/recent-events").json()
+        body = TestClient(app, headers=_AUTH_HEADERS).get("/api/v1/observability/execution/recent-events").json()
         assert body["layered_count"] >= 1
         assert body["layered_events"][0]["origin"] == "command_router"

@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.atomic_json import atomic_write_json
 from core.console_prompt import ask, timed_out_notice
+from core.derived_env import export as export_env
 
 logger = logging.getLogger("Galaxy.ContainerRuntime")
 
@@ -155,7 +156,7 @@ def save_choice(rt: str, source: str = "unknown") -> None:
             _CHOICE_FILE,
             exc,
         )
-    os.environ["GALAXY_CONTAINER_RUNTIME"] = rt
+    export_env("GALAXY_CONTAINER_RUNTIME", rt)  # 选择记在 .galaxy_runtime;环境变量只是派生,不钉进 .env
 
 
 def interactive_select(avail: List[str]) -> str:
@@ -482,7 +483,7 @@ def resolve_runtime(interactive: bool = True) -> str:
 
     saved = load_choice()
     if saved in _RUNTIMES and shutil.which(saved):
-        os.environ["GALAXY_CONTAINER_RUNTIME"] = saved
+        export_env("GALAXY_CONTAINER_RUNTIME", saved)
         return saved
     if saved in _RUNTIMES and not shutil.which(saved):
         logger.warning("已保存运行时 %s 当前不可用，尝试回退到其它可用运行时", saved)

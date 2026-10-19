@@ -70,6 +70,7 @@ __all__ = [
     "register",
     "resolve",
     "unregister",
+    "warm",
 ]
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,19 @@ def resolve(port: str) -> Any:
         return getattr(module, attr)
     except AttributeError as exc:
         raise PortUnavailable(f"端口 '{port}' 的绑定 '{target}' 里没有 '{attr}'") from exc
+
+
+def warm(ports: "tuple[str, ...]") -> None:
+    """在旁边线程里先把这几个端口取一遍(第一次取会 import 上层模块)。
+
+    给启动时的预热线程用:端口第一次被请求时才 import,而请求跑在事件循环上 —— 面板轮询的设备列表那条在循环里
+    卡过 0.4 秒。取不到的(上层组件没装)照常跳过,真用到时再照实报。
+    """
+    for port in ports:
+        try:
+            resolve(port)
+        except PortUnavailable as exc:
+            logger.debug("预热端口 %s 没取到: %s", port, exc)
 
 
 def is_available(port: str) -> bool:

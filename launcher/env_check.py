@@ -17,7 +17,7 @@
 Python 版本   只报版本，**没有下限门**                    要求 ``>= 3.10``，不满足直接 return
 pip           ``which("pip") or which("pip3")``           ``sys.executable -m pip --version``
 .env          存在 + 文件大小                             只看存在
-API Key       ``.env`` **+ runtime/secrets.env**，         只读 ``os.environ``，用
+API Key       ``.env`` **+ 密钥库 secrets.env**，          只读 ``os.environ``，用
               按 ``PLACEHOLDER_PREFIXES`` 过占位符        ``"your_"``/``"example"`` 子串过滤
 npm           ``which`` 出**绝对路径**再取版本            只 ``which("npm")``
 Node.js       查                                          **不查**
@@ -31,7 +31,7 @@ Ollama        只查装没装                                  装没装 + **在
 * **pip**：``which("pip")`` 找到的可能是**另一个解释器**的 pip（venv 没激活、
   或系统 pip 排在前面），它存在并不代表当前解释器装得上包。
   ``sys.executable -m pip`` 问的才是"**我这个** Python 能不能装东西"。
-* **API Key**：密钥经面板保存后会被收敛进 ``runtime/secrets.env``（见
+* **API Key**：密钥经面板保存后会被收敛进密钥库 ``secrets.env``（随数据目录走，见
   ``core/config_store.py``），**不再明文留在 .env**。只读 ``os.environ`` 的那份
   在密钥已正确保存的情况下会一直报"没有 Key" —— 这正是 ``main.py`` 那侧修过的
   真 bug，而 ``launch_desktop`` 从来没跟上。
@@ -354,7 +354,7 @@ def _probe_env_staleness(
 
     判据上的两个细节
     ----------------
-    1. **要并上 runtime/secrets.env 与 os.environ**。密钥经设置面板保存后会收敛进
+    1. **要并上密钥库 secrets.env 与 os.environ**。密钥经设置面板保存后会收敛进
        secrets.env（见模块头 API Key 那一条），只比 ``.env`` 会把它们全报成缺失。
     2. **只报键名，不碰值**。键名本来就写在提交进仓库的 ``.env.example`` 里；
        值一个字都不读、不打 —— 与 ``scripts/verify_provider_apis.py`` 同一条约束。
@@ -385,7 +385,7 @@ def _probe_env_staleness(
     have = {k.upper() for k in _keys_of(env_path)}
     have |= {k.upper() for k in os.environ}
     try:
-        from core.unified.config_store import get_config_store
+        from core.config_store import get_config_store  # 原先写成不存在的 core.unified.config_store,一直没数上
 
         have |= {k.upper() for k in get_config_store().read_secrets()}
     except Exception:  # noqa: BLE001
@@ -410,7 +410,7 @@ def _llm_provider_key_names() -> frozenset:
 
 
 def _probe_api_keys(env_file: Optional[Path] = None) -> int:
-    """.env **与** runtime/secrets.env 合起来数，并过滤占位符。
+    """.env **与**密钥库 secrets.env 合起来数，并过滤占位符。
 
     取 ``main.py`` 的判据。见模块头 API Key 那一条。
 

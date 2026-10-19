@@ -1,6 +1,8 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, dialog, screen, clipboard } = require('electron');
 // 面板画布的尺寸与缩放 —— 面板（打包进去）和这里共用同一份。
 const PanelStage = require('./renderer/panel_stage.js');
+const { watchClipboard } = require('./clipboard_watch.js');
+let stopClipboardWatch = null;   // 剪贴板提示的停止函数（app 就绪后才开始看）
 const path = require('path');
 const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
@@ -672,6 +674,10 @@ app.whenReady().then(async () => {
     // 没看见它)就永远卡在这儿,三态覆盖层一个窗口都建不出来。
     // 网关没就绪是**可降级**状态,不该连壳都不给。
     createWindow();
+    // 灵动岛的「已复制」：剪贴板一变，只告诉覆盖层是哪一类（原文不出主进程，见 clipboard_watch.js）
+    stopClipboardWatch = watchClipboard(clipboard, (msg) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('galaxy:clipboard', msg);
+    });
 
     if (!gatewayReady.ok) {
         console.error('[Main] 网关不可达:', gatewayReady.error || `${GATEWAY_BASE} not ready`);
@@ -1130,6 +1136,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+    if (stopClipboardWatch) stopClipboardWatch();
     // 关闭 IPC HTTP 服务器
     if (ipcHttpServer) {
         ipcHttpServer.close();
@@ -1230,6 +1237,15 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
     if (mainWindow) {
         mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
     }
+});
+
+// 灵动岛上点「打开面板」：只开不关。已经开着就拉到前面 —— 走 togglePanel 的话正开着的面板会被它关掉。
+ipcMain.on('galaxy:open-panel', () => {
+    if (panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible()) {
+        panelWindow.focus();
+        return;
+    }
+    togglePanel();
 });
 
 // ═══════════════════════════════════════════

@@ -535,7 +535,11 @@ class L4EnhancementLauncher:
         self.l4_modules = {}
 
     async def start_all(self) -> Dict[str, bool]:
-        """启动所有 L4 增强模块"""
+        """启动所有 L4 增强模块。全是同步的 import 与构造(第一次 import 要读一串模块,真跑里在循环上卡过 0.8 秒),
+        整段放到工作线程里做,不占事件循环。"""
+        return await asyncio.to_thread(self._start_all_sync)
+
+    def _start_all_sync(self) -> Dict[str, bool]:
         results = {}
 
         # 感知模块
@@ -606,11 +610,17 @@ class L4EnhancementLauncher:
 
 
 def _warm_routes(app) -> None:
-    """旁边线程里先生成一遍 OpenAPI:FastAPI 0.14x 在**第一个请求**时才在事件循环里给每条路由建校验
-    模型(连带一串 import)—— 所有者日志里启动时「事件循环被卡住 3.8 秒 —— 卡在 <frozen importlib…>」。
-    预热后第一个请求 0.7 秒 → 0.01 秒。失败不影响服务(第一个请求时照旧现建)。"""
+    """旁边线程里先生成一遍 OpenAPI(FastAPI 0.14x 在第一个请求时才在循环里给每条路由建校验模型,所有者日志卡 3.8 秒;
+    预热后第一个请求 0.7 → 0.01 秒),并先建好任务投影库(第一次建要读文件)。失败不影响服务。"""
     try:
         app.openapi()
+        from core.canonical_task_store import get_canonical_task_store
+
+        get_canonical_task_store()
+        # 上层端口(core/upper_ports.py)第一次被请求时才 import 绑定的模块 —— 设备列表那条在循环上卡过 0.4 秒,先取一遍
+        from core.upper_ports import warm as _warm_ports
+
+        _warm_ports(("gateway.device_router.device_router",))
     except Exception as exc:  # noqa: BLE001
         logger.debug("路由预热没做成(不影响服务): %s", exc)
 
@@ -1191,8 +1201,12 @@ class GalaxyUnified:
                 return ("pulling", None)  # 首次拉镜像，留后台继续
 
         status, rc = await asyncio.to_thread(_bring_up)
-        if status == "up" and rc == 0:
-            return ("ok", f"nats / redis / qdrant / neo4j / mongodb 已就绪 · via {rt_name}", "")
+        if status == "up" and rc == 0:  # up -d 只说明容器启动过了;「已就绪」看各服务此刻的状态
+            from launcher.compose_health import infra_summary
+
+            return await asyncio.to_thread(
+                infra_summary, _compose_base() + ["-f", str(compose_file)], services, rt_name, str(PROJECT_ROOT)
+            )
         if status == "pulling":
             # 第一次拉镜像是「还在做」,不是降级(所有者:「其他东西好了以后都是打对勾」):
             # 与节点「还在起来」同一档 —— 说清楚在做什么、什么时候生效,不算进降级项。
@@ -1947,8 +1961,10 @@ class GalaxyUnified:
         # 选择主脑：交互 input 放线程，避免阻塞事件循环。env(OLLAMA_MODEL)/已保存优先，
         # 否则按硬件推荐 + 让用户手动选（见 core.model_selection）。
         try:
-            from core import model_selection as ms
+            import importlib as _importlib
 
+            # 连 import 一起放到线程里:第一次 import 这一块要读一串模块,真跑里在循环上卡过 0.5 秒
+            ms = await _asyncio.to_thread(_importlib.import_module, "core.model_selection")
             chosen = await _asyncio.to_thread(ms.resolve_main_brain, True)
             if chosen:
                 # 证据链：把主脑选型（最终模型 + 硬件 + 候选 + 推荐理由）落进启动会话，
@@ -2103,7 +2119,6 @@ class GalaxyUnified:
                     ("WebSocket", f"ws://localhost:{port}/ws", "ok"),
                     ("API 文档", f"http://localhost:{port}/docs", "ok"),
                     ("健康检查", "/health", "ok"),
-                    ("状态面板", f"http://localhost:{port}/api/v1/projection/operability-contract", "ok"),
                 ],
             )
         except Exception as exc:
@@ -2115,27 +2130,9 @@ class GalaxyUnified:
             from launcher.core_services import CoreServiceLauncher
 
             cs = CoreServiceLauncher(self.service_manager, self.config)
-            results = await cs.start_all()
-            # start_all 现在返回**真实状态**("running" / "partial" / "failed"),
-            # 不再是 bool —— UFO 在"部分可用"时也返回 True,拿 bool 数就会数出
-            # 「3/3 就绪」,而日志里同时写着「部分可用」。两处说的必须是同一件事。
-            _r = results if isinstance(results, dict) else {}
-            items = [
-                ("Device Agent 管理器", _r.get("device_agent_manager", "failed")),
-                ("设备状态 API :8766", _r.get("device_status_api", "failed")),
-                ("Microsoft UFO 集成", _r.get("microsoft_ufo_integration", "failed")),
-            ]
-            _word = {"running": ("就绪", "ok"), "failed": ("未起来", "warn")}
-            up = sum(1 for _, v in items if v == "running")
-            part = sum(1 for _, v in items if v not in ("running", "failed"))
-            st = "ok" if up == len(items) else ("warn" if up or part else "fail")
-            _summary = f"{up}/{len(items)} 就绪" + (f" · {part} 个部分可用" if part else "")
-            _emit(
-                "核心服务",
-                _summary,
-                st,
-                details=[(n, *_word.get(v, (f"部分可用({v})", "warn"))) for n, v in items],
-            )
+            # start_all 返回**真实状态**(running / partial / failed / info),横幅怎么数、每行写什么在 banner() 里一处定
+            _summary, st, details = CoreServiceLauncher.banner(await cs.start_all())
+            _emit("核心服务", _summary, st, details=details)
         except Exception as exc:
             _emit("核心服务", "启动失败", "fail")
             logger.error(f"Core services: {exc}")

@@ -422,6 +422,21 @@ class TestE_GraphEnrichment(unittest.TestCase):
         e = self._enrich()
         self.assertTrue(e.graph_available)
 
+    def test_E1b_graph_with_real_transitions_is_still_available(self):
+        """图里真有转移记录时也接得上。快照里的 recent_records 已经是 dict,原先这里再调一次 .to_dict() ——
+        空图时不出事(上面那条照样绿),一有记录就抛 AttributeError,投影永远报「TaskGraphRuntime unavailable」(真跑抓到)。"""
+        from core.task_graph_runtime import GraphNodeState, get_task_graph_runtime
+
+        tgr = get_task_graph_runtime()
+        tgr.register_node_raw("t-e1b", tool_name="probe")
+        tgr.transition("t-e1b", GraphNodeState.DISPATCH, reason="probe")
+        self.assertTrue(tgr.snapshot(max_records=5).recent_records, "前提:图里要真有记录")
+        e = self._enrich()
+        self.assertTrue(e.graph_available)
+        self.assertTrue(e.recent_graph_records)
+        self.assertTrue(all(isinstance(r, dict) for r in e.recent_graph_records))
+        self.assertFalse(any("GAP-517-008" in r for r in e.surfacing_gap_reasons))
+
     def test_E2_graph_node_count_is_int(self):
         e = self._enrich()
         self.assertIsInstance(e.graph_node_count, int)
