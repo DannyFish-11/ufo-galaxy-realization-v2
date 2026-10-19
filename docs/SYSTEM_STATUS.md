@@ -861,8 +861,16 @@ python scripts/check_assessment_freshness.py
   （`core/arxiv_client.py::search_or_why`；多源汇总的旧调用方仍用 `search()`，一个源没连上只是少几条）。
 - **状态接口把自动控制节点那条路写成「pyautogui 可用」**，而启动日志同时说「pyautogui 没装」：那条路是 HTTP 打设备那头的 Node_92，
   能不能动手看那台设备登记了没有，本机装没装 pyautogui 无关 —— 现在照这个写原因。
+- **选过的档位会被「保存设置」钉成强制档位**（全量测试里一条串味的测试顺藤摸出：tier D 的驻留量从 18000 掉到 8800）：`core/model_catalog.py`
+  把档位 / 主脑 / 感知位直接写进 `os.environ`，`core/model_selection.py`、`core/container_runtime.py` 也有几处这样写。这几个键都在登记表里，
+  而 `load_tier()` 让环境变量压过记录 —— 在面板上选过一次档位，之后随手点一次「保存设置」（保存任何一项），`GALAXY_MODEL_TIER` 就被写进
+  `.env`，下次再换的档位一重启就被打回去；容器运行时同理。现在都经 `core.derived_env.export` 写（这一次运行照样生效，「保存设置」不钉；
+  人在 `.env` 里强制过的照旧原样写回），并加了守卫：登记表里的键不许在 core / launcher / main.py 里直接赋给 `os.environ`。那条串味的测试本身也修了
+  （夹具只 `delenv` 一个本来就没有的键时 monkeypatch 什么都不记，写进去的值漏给后面的用例）。
 - **测试的顺序依赖**（前面 winsland 那次提交里一并修了）：自注册测试的夹具另换数据目录，`core.user_providers` 等在 import 时定下的落盘路径
   若恰好在它里面第一次 import，就钉在它的临时目录上，「状态随数据目录走」的核对随之变红。
+
+全量测试（4 个分片）：11480 / 11586 / 11448 / 11972 通过（第二片第一次那 2 条就是上面那条串味，修后整片重跑全过）；`test_launcher_doctor`（会临时挪开 `launcher/shell.py`，不与别的分片同跑）单独 26 条全过。
 
 接口复查（鉴权开着）：245 条不带路径参数的 GET 全打一遍，240 条 200，其余 5 条是该有的拒绝（同第 5 轮）；没有 5xx，没有一条超过 1 秒；
 Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「没做成」；陌生设备登记 → 岛上一张卡 → 「不接入」→ 卡撤掉；新连上的覆盖层马上
