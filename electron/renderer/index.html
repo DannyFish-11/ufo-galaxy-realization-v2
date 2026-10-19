@@ -251,11 +251,17 @@ body {
 }
 /* 指针在岛上时岛才接鼠标（app.js 那时才让窗口不再穿透），别处照旧点到桌面上 */
 #island[data-hover='true'] { pointer-events: auto; cursor: pointer; }
-/* 第一行：收起时整座岛就是这一行（2px 贴边 + ISLE_H）。展开时它留在最上面，下面长出 .isl-full */
-.isl-in { flex: none; height: 26px; margin-top: 2px; max-width: calc(100% - 28px);
-          display: flex; align-items: center; gap: 9px; opacity: var(--itx);
-          white-space: nowrap; }
-#islandText { font-size: 12px; color: #d0c9d8; flex: none; }
+/* 第一行：收起时整座岛就是这一行（2px 贴边 + ISLE_H）。展开时它留在最上面，下面长出 .isl-full。
+   排法照 winsland 的药丸（封面贴左端、声波贴右端）：桌宠贴左端、字居中、尾巴（声波 /「+N」）贴右端。
+   尾巴至少与桌宠一样宽 —— 两头对称，字才真在正中；岛的宽度跟着这一行走（island.js 的 _needWidth，
+   留白与间距是同一组数：左 10、右 12、段间 8）。原先是一簇东西居中摆在一条宽药丸里，两边空着一大截，
+   桌宠和字显得又小又挤（所有者：比例与文字和桌宠不协调）。 */
+.isl-in { flex: none; height: 26px; margin-top: 2px; width: 100%; box-sizing: border-box;
+          padding: 0 12px 0 10px; display: flex; align-items: center; gap: 8px;
+          opacity: var(--itx); white-space: nowrap; }
+.isl-mid { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.isl-end { flex: none; min-width: 19px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+#islandText { font-size: 12px; font-weight: 500; letter-spacing: .02em; color: #e3dcea; flex: none; }
 /* 卡片的副标题：字放不下就截断 —— 卡片不改岛的长短（借 WinIslands 的那条规矩） */
 #islandSub { font-size: 11px; color: rgba(208,201,216,.62); min-width: 0;
              overflow: hidden; text-overflow: ellipsis; }
@@ -263,18 +269,15 @@ body {
 #islandMore { font-size: 10px; color: rgba(208,201,216,.7); padding: 0 6px; border-radius: 999px;
               background: rgba(255,255,255,.07); flex: none; }
 
-/* ── 卡片的语气：只染一个小点和进度线，不把整座岛染色（莫兰迪四色，深底上都压得住） ── */
-#island { --tone: var(--c-cool); }
-#island[data-tone='success'] { --tone: #9fb5a0; }
-#island[data-tone='warning'] { --tone: #cdb38f; }
-#island[data-tone='error']   { --tone: #c4939a; }
-#island[data-tone='voice']   { --tone: #aaa3cb; }
-/* 下沿那一道光跟着内容走（winsland 贴边模式只在下沿发光、颜色随封面）：卡片的语气、说话时声波那一色。
-   收成一道线时没有（--itx 为 0）。 */
+/* ── 岛上的颜色只有面板那一套 ──
+   进度线、声波、下沿那道光都取面板那根轴上的淡紫（panel tokens.css 的 --a-pale）；只有出错取面板的 --bad。
+   不用绿 / 橙 / 黄给状态上色 —— 面板说状态靠光和深度（.wired-dot），岛上同一套（所有者：不要拿黄点表示在线）。 */
+#island { --tone: #b3aabb; }
+#island[data-tone='error'] { --tone: #a06a6a; }
+/* 下沿那一道淡光（winsland 贴边模式只在下沿发光）。收成一道线时没有（--itx 为 0）。 */
 #island::after { content: ''; position: absolute; left: 14%; right: 14%; bottom: 0; height: 1px;
                  background: linear-gradient(90deg, transparent, var(--tone), transparent);
                  opacity: calc(var(--itx) * .7); pointer-events: none; }
-#islandDot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tone); }
 /* 进度：贴着岛的下沿的一道细线，走到哪儿亮到哪儿（「第 3/15 步」那张卡带着它） */
 #islandBar { position: absolute; left: 14px; right: 14px; top: calc(2px + 26px - 3px); height: 2px;
              border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden;
@@ -283,7 +286,7 @@ body {
                     background: var(--tone); border-radius: 2px; transition: width .45s cubic-bezier(.32,.72,0,1); }
 
 /* ── 它在说话：一排声波（winsland 音乐药丸里那排） ──
-   五根各走各的（时长与起跳错开，取它那一组），颜色跟着 --tone。指针停上来就换成一句提示（island.js）。 */
+   五根各走各的（时长与起跳错开，取它那一组），贴在右端，颜色是 --tone。指针停上来就换成一句提示（island.js）。 */
 #islandWave { display: inline-flex; align-items: center; gap: 2px; height: 12px; flex: none; }
 #islandWave[hidden] { display: none; }
 #islandWave i { width: 2px; height: 100%; border-radius: 1px; background: var(--tone);
@@ -296,30 +299,6 @@ body {
 #islandWave i:nth-child(5) { --wh: .55; --wd: .42s; --wl: .18s; }
 @keyframes isl-wave { from { transform: scaleY(.22); } to { transform: scaleY(var(--wh)); } }
 
-/* ── 它此刻在收的感知：岛旁边几颗小点（winsland 的隐私指示点） ──
-   只在那一路真在收（live）时亮；急停时一颗都没有。岛收着时它们自己居中挂在上沿（一小截黑边），
-   岛长出来就挪到岛右边 —— 挪的那一段跟着岛一起走（--isa 由 island.js 给），不跳。
-   颜色是莫兰迪化的 iOS 惯例：绿 = 摄像头、橙 = 麦克风；屏幕淡紫、系统声雾蓝。 */
-:root { --sense-camera: #93b39a; --sense-microphone: #d1a585; --sense-screen: #ab9fc8; --sense-system_audio: #8fa7c2; }
-#islandSenses {
-  position: fixed; top: 0; z-index: 10001; pointer-events: none; box-sizing: border-box;
-  left: calc(50% + (var(--iw) / 2 + 8px) * var(--isa, 0));
-  transform: translateX(calc(-50% * (1 - var(--isa, 0))));
-  height: calc(14px + 14px * var(--isa, 0)); padding: 0 6px;
-  display: flex; align-items: center; gap: 3px;
-  border-radius: 0 0 calc(7px + 7px * var(--isa, 0)) calc(7px + 7px * var(--isa, 0));
-  background: linear-gradient(180deg, rgba(12,11,17,.95) 0%, rgba(20,18,28,.97) 100%);
-  box-shadow: 0 0 0 1px rgba(183,165,194,.26);
-}
-#islandSenses:empty { display: none; }
-#islandSenses[data-hover='true'] { pointer-events: auto; cursor: pointer; }
-#islandSenses .sense { border: 0; padding: 0; margin: 0; background: none; cursor: inherit;
-                       width: 10px; height: 14px; display: grid; place-items: center; }
-#islandSenses .sense i { width: 6px; height: 6px; border-radius: 50%; background: var(--sc); box-shadow: 0 0 5px var(--sc); }
-.sense[data-sense='camera'],       .row[data-tone='sense-camera']       { --sc: var(--sense-camera); }
-.sense[data-sense='microphone'],   .row[data-tone='sense-microphone']   { --sc: var(--sense-microphone); }
-.sense[data-sense='screen'],       .row[data-tone='sense-screen']       { --sc: var(--sense-screen); }
-.sense[data-sense='system_audio'], .row[data-tone='sense-system_audio'] { --sc: var(--sense-system_audio); }
 
 /* ── 展开：同一座岛自己长高，不是另弹一个窗 ──
    点一下岛才展开（指针停上去不展开 —— 余光扫过时它不该跳出来）。上面那一行还在，下面是排在第一的那张卡的
@@ -330,15 +309,24 @@ body {
 #islandBody { font-size: 11.5px; line-height: 1.5; color: rgba(208,201,216,.86); white-space: normal; }
 #islandBody:empty, #islandList:empty { display: none; }
 #islandList { display: flex; flex-direction: column; gap: 4px; }
-#islandList .row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: rgba(208,201,216,.7);
-                   white-space: nowrap; overflow: hidden; }
-#islandList .row i { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--c-cool); }
-#islandList .row[data-tone='success'] i { background: #9fb5a0; }
-#islandList .row[data-tone='warning'] i { background: #cdb38f; }
-#islandList .row[data-tone='error'] i   { background: #c4939a; }
-#islandList .row[data-tone^='sense-'] i { background: var(--sc); }
-#islandList .row[data-tone='off'] i     { background: rgba(208,201,216,.22); }
-#islandList .row span { overflow: hidden; text-overflow: ellipsis; }
+/* 行本身不裁（那颗点的柔光会被裁成一块方形暗影），放不下的字由行里那段自己截断 */
+#islandList .row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: rgba(208,201,216,.7);
+                   white-space: nowrap; padding-left: 2px; }
+/* 行前那颗点：与面板 .wired-dot 同一套话 —— **用光和深度，不用颜色**。深底上反过来画：
+     on    白芯 + 一圈柔光（这件事此刻在 / 这一路此刻在收）
+     part  只亮半边（通着，但这一拍没信号）
+     off   沉进去的一颗暗点（暂停了 / 没有这条通路） */
+#islandList .row i { width: 6px; height: 6px; border-radius: 50%; flex: none;
+                     background: rgba(255,255,255,.14); box-shadow: inset 0 .5px 1.5px rgba(0,0,0,.55); }
+#islandList .row[data-light='on'] i {
+  background: #fcf9fe;
+  box-shadow: 0 0 0 1.5px rgba(252,249,254,.16), 0 0 6px 1px rgba(252,249,254,.42);
+}
+#islandList .row[data-light='part'] i {
+  background: linear-gradient(118deg, #fcf9fe 0 46%, rgba(255,255,255,.16) 54% 100%);
+  box-shadow: 0 0 4px rgba(252,249,254,.22);
+}
+#islandList .row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .isl-acts { display: flex; gap: 6px; justify-content: flex-end; }
 .isl-acts button { font: inherit; font-size: 11px; color: #d0c9d8; border: 0; cursor: pointer;
                    padding: 4px 11px; border-radius: 999px; background: rgba(255,255,255,.08);
@@ -473,13 +461,16 @@ body {
         </g>
       </g></g>
     </svg>
-    <span id="islandDot" hidden></span>
-    <span id="islandText">Galaxy</span>
-    <span id="islandWave" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-    <span id="islandSub" hidden></span>
-    <span id="islandMode" hidden></span>
-    <span id="islandHint" hidden></span>
-    <span id="islandMore" hidden></span>
+    <span class="isl-mid">
+      <span id="islandText">Galaxy</span>
+      <span id="islandSub" hidden></span>
+      <span id="islandMode" hidden></span>
+      <span id="islandHint" hidden></span>
+    </span>
+    <span class="isl-end">
+      <span id="islandWave" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <span id="islandMore" hidden></span>
+    </span>
   </span>
   <span id="islandBar" aria-hidden="true"></span>
   <div class="isl-full" hidden>
@@ -494,8 +485,6 @@ body {
     </div>
   </div>
 </div>
-<!-- 它此刻在收的感知（island.js 按 render.perception 画），岛旁边那几颗点 -->
-<div id="islandSenses" aria-label="它此刻在收的感知"></div>
 
 <!-- 模块加载。
      presence_motion.js 必须早于 app.js —— 渲染循环直接调它。

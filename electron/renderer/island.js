@@ -5,24 +5,27 @@
  * 对齐的是所有者指的 winsland（github.com/adityasrivastava5098/WinIsland，启动脚本就叫 winsland.bat）：
  * 一座贴着屏幕上沿的黑岛，平时收着，有事长成一条药丸，点一下往下长成一块。从它那里借的、在这里落成什么：
  *
- *   · 音乐药丸（封面 + 跟着封面取色的声波，悬停换成歌名，暂停后还留一会儿）
- *       → **它在说话时**：桌宠 +「在说话」+ 一排声波；悬停换成「点一下可以叫它停下」；说完留一会儿再收
- *         （两句之间不闪）。点开有「停下」（POST /api/v1/presence/stop，掐断在念的话）。
- *   · 隐私指示点（岛旁边两颗小黑圆，绿 = 有程序在用摄像头，橙 = 在用麦克风；点一下看是谁、用了多久）
- *       → **它自己此刻在收的感知**：摄像头 / 麦克风 / 屏幕 / 系统声各一颗，只在那一路真在收（live）时亮；
- *         点一下展开「感知」那一页：每一路什么状态、一个「暂停感知」。急停时一颗都没有（岛就是那道细线）。
+ *   · 音乐药丸（封面贴左端、声波贴右端，悬停换成歌名，暂停后还留一会儿）
+ *       → **它在说话时**：桌宠贴左端 +「在说话」居中 + 一排声波贴右端；悬停换成「点一下可以叫它停下」；
+ *         说完留一会儿再收（两句之间不闪）。点开有「停下」（POST /api/v1/presence/stop，掐断在念的话）。
+ *         药丸的排法整座岛都照它：桌宠在左端、字居中、尾巴（声波 /「+N」）在右端，宽度跟着内容走。
+ *   · 隐私指示点 → **没借成岛旁边的小点**（所有者：不要右边那个小岛、不要拿黄点表示在线）。「它此刻在不在收」
+ *     桌宠的眼睛本来就在说（与面板那只同一套）；要看每一路，点开岛换到「感知」那一页，有「暂停感知」。
  *   · 「已复制」小药丸（剪贴板一变就亮 1.5 秒：文字 / 图片 / 文件）→ 原样借来（主进程只看格式和摘要，
  *     内容不离开这台电脑，见 electron/main.js 的 watchClipboard）。
  *   · 弹簧式的伸缩（它用 stiffness 380 / damping 28）→ 同一组数：长出来略过冲约 4% 再落定，半路掉头接着当前
  *     速度走、不跳；收回去碰到上沿就停（不往边框里过冲）。关了动效的人用临界阻尼（不过冲）。
- *   · 贴边模式只在下沿发光、光的颜色跟着内容走 → 岛的下沿那一圈光跟着卡片语气 / 声波的颜色。
+ *   · 贴边模式只在下沿发光 → 岛的下沿一道淡光；颜色取面板那根轴上的淡紫（出错时取面板的 --bad），不另起一套色。
  *   · 点开后右上角切换页面（音乐 / 日历 / 隐私）→ 「动态」（卡片、在做什么）与「感知」两页。
- *   · 悬停才接鼠标、点外面收起 → 指针在岛上（或那几颗点上）时窗口才接鼠标，离开一会儿收回去。
+ *   · 悬停才接鼠标、点外面收起 → 指针在岛上时窗口才接鼠标，离开一会儿收回去。
  *
  * 没借的：日历（这边没有日历来源）、多显示器各一座岛（覆盖层是一整块全屏窗口，另是一件事）。
- * 桌宠还是那一只：它坐在岛的最左边，样子与推导都不归这里管（app.js 的 _paintPet / pet_state.js）。
+ * 桌宠还是那一只：它坐在岛的左端，样子与推导都不归这里管（app.js 的 _paintPet / pet_state.js）。
  *
  * 卡片（core/island_cards.py，WS type="island"）的规矩照旧：一张卡一个 id 原地更新、分先后、会过期、不改岛的长短。
+ *
+ * 岛上的点（点开后那几行前面）与面板同一套说法：**状态用光和深度，不用颜色**（面板 hud.css 的 .wired-dot）——
+ * 亮着 = 白芯带一圈柔光，部分 = 只亮半边，没有 = 沉进去的一颗暗点。岛上不出现绿 / 橙 / 黄这些色点。
  *
  * 几何（多宽多高、圆角、跟着三态长出来的那一段）在 app.js 的 _apply 里算 —— 尺寸常量 ISLE_* 也在那边。
  * 这里只给两个量：grow()（岛因为「有事」该长出来多少）与 unfold()（人点开了多少），以及量出来的宽和高。
@@ -33,8 +36,6 @@
   var COPY_SECONDS = 1.5;     // 「已复制」停多久（winsland 同一个数）
 
   var COPY_WORD = { text: '文字', image: '图片', file: '文件', generic: '内容' };
-  // 岛旁边那几颗点，按这个顺序排；颜色在 index.html（莫兰迪化的 iOS 惯例：绿摄像头、橙麦克风）
-  var SENSES = ['camera', 'microphone', 'screen', 'system_audio'];
   var SENSE_LABEL = { screen: '屏幕', camera: '摄像头', microphone: '麦克风', system_audio: '系统声' };
 
   // winsland 的弹簧（Framer Motion：stiffness 380 / damping 28，质量 1）。阻尼比约 0.72：过冲约 4%，0.3 秒上下停稳。
@@ -53,6 +54,12 @@
       if (target === 0 && s.x <= 0) { s.x = 0; s.v = 0; }
     }
     if (Math.abs(s.x - target) < 1e-4 && Math.abs(s.v) < 1e-3) { s.x = target; s.v = 0; }
+  }
+
+  /** 一路感知点亮几分：与面板同一套光（on 亮着 / part 只亮半边 / off 沉下去）。 */
+  function senseLight(m) {
+    var st = m && m.state;
+    return st === 'live' ? 'on' : st === 'idle' || st === 'suppressed' ? 'part' : 'off';
   }
 
   /** 一路感知此刻怎么说。与面板「感知与设备」那一栏同一套说法（panel/src/ui/island.ts 的 modalityNote）。 */
@@ -76,14 +83,15 @@
     this.text = doc.getElementById('islandText');
     this.mode = doc.getElementById('islandMode');
     this.hint = doc.getElementById('islandHint');
-    this.dot = doc.getElementById('islandDot');
     this.sub = doc.getElementById('islandSub');
+    this.pet = doc.getElementById('pet');
+    this.mid = this.el ? this.el.querySelector('.isl-mid') : null;
+    this.end = this.el ? this.el.querySelector('.isl-end') : null;
     this.more = doc.getElementById('islandMore');
     this.wave = doc.getElementById('islandWave');
     this.full = this.el ? this.el.querySelector('.isl-full') : null;
     this.body = doc.getElementById('islandBody');
     this.list = doc.getElementById('islandList');
-    this.senses = doc.getElementById('islandSenses');
     this.words = opts.words || { acting: '正在操作', activity: {}, mode: {} };
     this.minW = opts.minW || 280;
     this.maxW = opts.maxW || 440;
@@ -108,8 +116,6 @@
     this.shown = 0;           // 此刻岛实际长出来多少（app.js 每帧告诉这里，用来判鼠标）
     this._render = null;
     this._paused = false;
-    this._sensesSig = '';
-    this._pt = null;          // 指针最后在哪儿（岛收回去时拿它判还在不在那几颗点上）
   }
 
   // ── 输入 ─────────────────────────────────────────────────────────────
@@ -160,15 +166,6 @@
     return !!(this.copied && this.copied.until > this.clock());
   };
 
-  /** 此刻在收的那几路（只算真在收的 live；急停、没接上都一颗不亮）。 */
-  IslandView.prototype.liveSenses = function (render) {
-    var p = render && render.perception;
-    if (!p || p.privacy_paused || p.source !== 'live' || !Array.isArray(p.modalities)) return [];
-    var live = {};
-    p.modalities.forEach(function (m) { if (m && m.state === 'live') live[m.modality] = true; });
-    return SENSES.filter(function (s) { return live[s]; });
-  };
-
   /** 岛上有没有能点的东西：有，指针停上来时窗口才接鼠标。只是阈限态那一句话不算（平白挡住屏幕顶上那一块桌面）。 */
   IslandView.prototype.clickable = function (render) {
     return this.liveCards().length > 0 || !!(render && render.acting) || this.speakingShown() || this.expanded;
@@ -214,31 +211,19 @@
   // ── 鼠标 ─────────────────────────────────────────────────────────────
   //
   // 覆盖层是全屏透明窗口，平时整个穿透（electron/main.js 的 setIgnoreMouseEvents(true, {forward:true})）。
-  // forward 让鼠标移动照样送到这里：指针进了岛（或那几颗点）的范围就让窗口接鼠标，出去就交还桌面。
+  // forward 让鼠标移动照样送到这里：指针进了岛的范围就让窗口接鼠标，出去就交还桌面。
 
   IslandView.prototype.bind = function (win) {
     var self = this;
     if (!this.el) return;
     this.doc.addEventListener('mousemove', function (e) {
-      self._pt = { clientX: e.clientX, clientY: e.clientY };
-      var inIsland = self.shown > 0.6 && self.clickable(self._render) && inside(self.el, e);
-      self._setHover(inIsland || self._onDots(e), win);
+      self._setHover(self.shown > 0.6 && self.clickable(self._render) && inside(self.el, e), win);
     });
     this.el.addEventListener('click', function (e) {
       var b = e.target && e.target.closest ? e.target.closest('button[data-act]') : null;
       if (b) { self.act_(b.dataset.act, win); return; }
       if (self.clickable(self._render)) self.expanded = !self.expanded;
     });
-    if (this.senses) {
-      this.senses.addEventListener('click', function () {
-        self.view = 'senses';
-        self.expanded = true;
-      });
-    }
-  };
-
-  IslandView.prototype._onDots = function (pt) {
-    return !!(pt && this.senses && this.senses.childElementCount > 0 && inside(this.senses, pt));
   };
 
   function inside(el, e) {
@@ -250,7 +235,6 @@
     if (on === this.hover) return;
     this.hover = on;
     this.el.dataset.hover = String(on);
-    if (this.senses) this.senses.dataset.hover = String(on);
     var api = win && win.galaxyAPI;
     if (api && api.setIgnoreMouse) api.setIgnoreMouse(!on);
     this._collapseAt = !on && this.expanded ? this.clock() + LINGER : 0;
@@ -258,7 +242,7 @@
 
   /** 岛收回去了（或按了急停）而指针还「在岛上」：把鼠标交还桌面，不然那一块会一直挡着点不下去。 */
   IslandView.prototype.releaseIfGone = function (win) {
-    if (this.hover && this.shown <= 0.6 && !this._onDots(this._pt)) this._setHover(false, win);
+    if (this.hover && this.shown <= 0.6) this._setHover(false, win);
   };
 
   /** 岛上那几个键。都不等回音：停没停、卡撤没撤、感知停没停，下一帧会照实画出来。 */
@@ -283,14 +267,13 @@
   // ── 画 ───────────────────────────────────────────────────────────────
 
   /**
-   * 画岛上的字、声波、那几颗点、点开后的那一块。``shown`` 是 app.js 算出来的此刻岛实际长出来多少
+   * 画岛上的字、声波、点开后的那一块。``shown`` 是 app.js 算出来的此刻岛实际长出来多少
    * （与三态里长出来的那一段取大）。返回这一行字要多宽（夹在 minW..maxW），app.js 拿它定岛的宽。
    */
   IslandView.prototype.paint = function (render, paused, shown, style) {
     this._render = render;
     this._paused = paused;
     this.shown = paused ? 0 : shown;
-    this._paintSenses(render, paused, style);
     if (paused) {
       // 急停：岛就是那道细线，什么都不上（卡还在队列里，没过期的恢复后照常出来）
       this.mode.hidden = true;
@@ -298,7 +281,6 @@
       show(this.sub, '');
       show(this.more, '');
       if (this.wave) this.wave.hidden = true;
-      if (this.dot) this.dot.hidden = true;
       style.setProperty('--ibar-on', '0');
       return this.width;
     }
@@ -327,8 +309,6 @@
     if (this.text.textContent !== word) { this.text.textContent = word; changed = true; }
     changed = show(this.sub, subText) || changed;
     changed = show(this.more, kind === 'card' && cards.length > 1 ? '+' + (cards.length - 1) : '') || changed;
-    var dotOn = kind === 'card' || kind === 'copied';
-    if (this.dot && this.dot.hidden !== !dotOn) { this.dot.hidden = !dotOn; changed = true; }
     // 声波：在说话、指针没停在上面（停上来就换成那句提示 —— winsland 悬停换歌名的同一个手势）
     var waveOn = kind === 'speaking' && !this.hover;
     if (this.wave && this.wave.hidden !== !waveOn) { this.wave.hidden = !waveOn; changed = true; }
@@ -354,41 +334,26 @@
     return this.width;
   };
 
-  /** 第一行要多宽：各段按自己的宽算（副标题能收窄，量整行会量成当前的宽、永远长不开），加上间距与两头留白。 */
+  /**
+   * 第一行要多宽：桌宠 + 中间那段字 + 尾巴（声波 /「+N」），加上两头留白。各段按自己的宽算（副标题能收窄，
+   * 量整行会量成当前的宽、永远长不开）。尾巴至少与桌宠一样宽 —— 两头对称，字才真在正中。
+   * 间距与留白与 index.html 的 .isl-in / .isl-mid / .isl-end 同一组数。
+   */
   IslandView.prototype._needWidth = function () {
-    var sum = 0;
-    var n = 0;
     var self = this;
-    Array.prototype.forEach.call(this.inner.children, function (el) {
-      if (el.hidden) return;
-      sum += el === self.sub ? el.scrollWidth : el.getBoundingClientRect().width;
-      n += 1;
-    });
-    return Math.ceil(sum + Math.max(0, n - 1) * 9 + 34);
-  };
-
-  /** 岛旁边那几颗点：只在那一路真在收时亮。岛收着时它们自己居中挂在上沿。 */
-  IslandView.prototype._paintSenses = function (render, paused, style) {
-    if (!this.senses) return;
-    var live = paused ? [] : this.liveSenses(render);
-    var sig = live.join(',');
-    if (sig !== this._sensesSig) {
-      this._sensesSig = sig;
-      var doc = this.doc;
-      this.senses.replaceChildren.apply(this.senses, live.map(function (s) {
-        var b = doc.createElement('button');
-        b.type = 'button';
-        b.className = 'sense';
-        b.dataset.sense = s;
-        b.title = '它此刻在收' + SENSE_LABEL[s] + ' · 点一下看看';
-        b.setAttribute('aria-label', '它此刻在收' + SENSE_LABEL[s]);
-        b.appendChild(doc.createElement('i'));
-        return b;
-      }));
-    }
-    // 0 = 岛收着、点自己居中挂在上沿；1 = 岛长出来了、点挂在岛右边。中间跟着岛一起挪，不跳
-    var beside = Math.min(1, Math.max(0, (this.shown - 0.05) / 0.3));
-    style.setProperty('--isa', beside.toFixed(3));
+    var row = function (box, gap) {
+      var sum = 0;
+      var n = 0;
+      if (!box) return 0;
+      Array.prototype.forEach.call(box.children, function (el) {
+        if (el.hidden) return;
+        sum += el === self.sub ? el.scrollWidth : el.getBoundingClientRect().width;
+        n += 1;
+      });
+      return sum + Math.max(0, n - 1) * gap;
+    };
+    var pet = this.pet ? this.pet.getBoundingClientRect().width : 19;
+    return Math.ceil(10 + pet + 8 + row(this.mid, 8) + 8 + Math.max(pet, row(this.end, 6)) + 12);
   };
 
   /** 点开之后下面那块。两页：动态（卡片、在做什么）/ 感知（每一路什么状态）。没点开就不画、不占高度。 */
@@ -411,7 +376,7 @@
         : on.length ? '它此刻在收：' + on.join('、')
         : '它此刻什么都没在收';
       rows = mods.map(function (m) {
-        return { key: 'm:' + m.modality + m.state, tone: m.state === 'live' ? 'sense-' + m.modality : 'off',
+        return { key: 'm:' + m.modality + m.state, light: senseLight(m),
           text: (SENSE_LABEL[m.modality] || m.modality) + ' · ' + senseNote(m) };
       });
     } else {
@@ -420,8 +385,9 @@
         : acting ? '它正在动你的鼠标键盘；按「停下」让它住手。'
         : speaking ? '它正在说话；按「停下」让它别念了。'
         : '';
+      // 队列里的卡都是「此刻有这件事」：亮着那一档
       rows = cards.slice(1).map(function (c) {
-        return { key: c.id + c.title + c.subtitle + c.tone, tone: c.tone || 'info',
+        return { key: c.id + c.title + c.subtitle, light: 'on',
           text: c.subtitle ? c.title + ' · ' + c.subtitle : c.title };
       });
     }
@@ -432,7 +398,7 @@
       this.list.replaceChildren.apply(this.list, rows.map(function (x) {
         var row = doc.createElement('div');
         row.className = 'row';
-        row.dataset.tone = x.tone;
+        row.dataset.light = x.light;
         var span = doc.createElement('span');
         span.textContent = x.text;
         row.append(doc.createElement('i'), span);
@@ -464,9 +430,9 @@
     return changed;
   }
 
-  IslandView.SENSES = SENSES;
   IslandView.COPY_WORD = COPY_WORD;
   IslandView.senseNote = senseNote;
+  IslandView.senseLight = senseLight;
   root.IslandView = IslandView;
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = IslandView;

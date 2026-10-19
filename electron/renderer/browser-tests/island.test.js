@@ -6,10 +6,11 @@
  * 钉的是：
  *   · 静息里来一张卡，岛自己长出来，写标题 / 副标题 / 「+N」，进度那道线走到对应的位置；过期了自己收回去；
  *   · 卡片不改岛的长短 —— 字再多，收起时也不超过上限，放不下就截断；
- *   · 急停时卡不上岛（岛就是那道细线），旁边那几颗点一颗都没有；
+ *   · 急停时卡不上岛（岛就是那道细线）；
  *   · 指针停在岛上时窗口才接鼠标，离开就交还桌面；点一下才展开，展开后「停下」「打开面板」「知道了」各打各的；
  *   · 它在说话：岛上一排声波，悬停换成一句提示，点开能叫它停下；说完留一会儿再收；
- *   · 它此刻在收的感知：岛旁边一路一颗点，点一下展开「感知」那一页，能「暂停感知」；
+ *   · 排法照 winsland 的药丸：桌宠贴左端、字居中、尾巴贴右端，宽度跟着内容走；岛旁边没有另一座小岛；
+ *   · 点开后换到「感知」那一页：每一路一行，点用面板那套光（不是绿 / 橙 / 黄），能「暂停感知」；
  *   · 剪贴板一变：「已复制 · 图片」亮一下，不接鼠标；
  *   · 桌宠还是那一只 —— 来什么、去什么，它一直坐在岛上。
  */
@@ -82,7 +83,6 @@ async function open() {
       more: q('#islandMore').hidden ? null : q('#islandMore').textContent,
       tone: isl.dataset.tone || '',
       wave: !q('#islandWave').hidden,
-      senses: [...document.querySelectorAll('#islandSenses .sense')].map((b) => b.dataset.sense),
       width: r.width,
       height: r.height,
       opacity: parseFloat(getComputedStyle(isl).opacity),
@@ -143,7 +143,7 @@ test('卡片不改岛的长短：字再多，收起时也不超过上限，副�
     await page.waitForTimeout(100);
     const v = await look();
     assert.ok(v.width <= 441, `收起态宽 ${v.width}px，超过上限 440`);
-    assert.ok(v.width >= 279, `收起态宽 ${v.width}px，比下限还窄`);
+    assert.ok(v.width >= 223, `收起态宽 ${v.width}px，比下限还窄`);
     const clipped = await page.evaluate(() => {
       const el = document.querySelector('#islandSub');
       return el.scrollWidth > el.clientWidth;
@@ -165,7 +165,6 @@ test('急停时卡不上岛：岛就是那道细线', async () => {
     assert.ok(v.height <= 2.5, `急停时岛只该剩一道线，实际高 ${v.height}`);
     assert.equal(v.sub, null);
     assert.equal(v.barOn, '0');
-    assert.deepEqual(v.senses, [], '急停时旁边那几颗点一颗都不该有');
   } finally {
     await ctx.close();
   }
@@ -307,44 +306,62 @@ test('它在说话：一排声波，悬停换成提示、点开能叫它停下�
   }
 });
 
-test('它此刻在收的感知：一路一颗点；岛收着时居中挂在上沿，点一下看「感知」那一页、能暂停', async () => {
+test('药丸的排法：桌宠贴左端、字居中、声波贴右端；宽度跟着内容走；岛旁边没有另一座小岛', async () => {
   if (skipped) return;
-  const { ctx, page, send, look, calls } = await open();
+  const { ctx, page, send } = await open();
+  try {
+    await send({ ...frame(), speaking: true });
+    await until(page, () => window.lumivRenderer.isle.act >= 0.999 && !window.lumivRenderer.isle.moving());
+    await page.waitForTimeout(100);
+    const g = await page.evaluate(() => {
+      const box = (s) => document.querySelector(s).getBoundingClientRect();
+      const isl = box('#island');
+      const pet = box('#pet');
+      const text = box('#islandText');
+      const wave = box('#islandWave');
+      return { isl: { l: isl.left, r: isl.right, w: isl.width, c: isl.left + isl.width / 2 },
+        petL: pet.left, textC: text.left + text.width / 2, waveR: wave.right,
+        extra: document.querySelectorAll('#islandSenses, .sense').length };
+    });
+    assert.ok(g.petL - g.isl.l <= 14, `桌宠该贴着左端，离左沿 ${g.petL - g.isl.l}px`);
+    assert.ok(g.isl.r - g.waveR <= 16, `声波该贴着右端，离右沿 ${g.isl.r - g.waveR}px`);
+    assert.ok(Math.abs(g.textC - g.isl.c) <= 3, `字该在正中，偏了 ${g.textC - g.isl.c}px`);
+    assert.ok(g.isl.w <= 250, `一句「在说话」岛就 ${g.isl.w}px 宽 —— 两边空着一大截，桌宠和字显得又小又挤`);
+    assert.equal(g.extra, 0, '岛旁边不该再有一座放点的小岛');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('「感知」那一页：每一路一行，点用面板那套光（白芯 / 半边 / 沉下去），不用颜色；能暂停感知', async () => {
+  if (skipped) return;
+  const { ctx, page, send, cards, calls } = await open();
   try {
     await send(frame({ perception: percept({ modalities: [
       { modality: 'screen', state: 'idle', signal_age_s: 3 },
       { modality: 'microphone', state: 'live', signal_age_s: 0.2 },
-      { modality: 'camera', state: 'live', signal_age_s: 0.1 },
+      { modality: 'camera', state: 'paused' },
     ] }) }));
-    await until(page, () => document.querySelectorAll('#islandSenses .sense').length === 2);
-    const v = await look();
-    assert.deepEqual(v.senses, ['camera', 'microphone'], '只亮真在收的，按摄像头 / 麦克风 / 屏幕 / 系统声排');
-    const dots = await center(page, '#islandSenses');
-    assert.ok(Math.abs(dots.x - 720) < 2, `岛收着时点该居中挂在上沿，实际中心 x=${dots.x}`);
-    const colors = await page.evaluate(() => [...document.querySelectorAll('#islandSenses .sense i')]
-      .map((i) => getComputedStyle(i).backgroundColor));
-    assert.notEqual(colors[0], colors[1], '摄像头与麦克风两颗点该是两种颜色');
-
-    // 点一下：接鼠标、展开感知那一页
-    await page.mouse.move(20, 600);
-    await page.mouse.move(dots.x, dots.y);
-    await until(page, () => document.querySelector('#islandSenses').dataset.hover === 'true');
-    assert.deepEqual(await page.evaluate(() => window.__shell.ignore), [false]);
-    await page.mouse.click(dots.x, dots.y);
+    await cards([card({ action: 'panel' })]);
+    await until(page, () => window.lumivRenderer.isle.act >= 0.999);
+    await page.evaluate(() => { window.lumivRenderer.isle.expanded = true; });
+    await until(page, () => !document.querySelector('.isl-full').hidden);
+    await page.evaluate(() => document.querySelector("button[data-act='view']").click());
+    await until(page, () => document.querySelector('.isl-full').dataset.view === 'senses');
     await until(page, () => window.lumivRenderer.isle.open >= 0.999);
-    const rows = await page.evaluate(() => [...document.querySelectorAll('#islandList .row')].map((r) => r.textContent));
-    assert.deepEqual(rows, ['屏幕 · 静了 3 秒', '麦克风 · 在收', '摄像头 · 在收']);
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#islandList .row')].map((r) => {
+      const c = getComputedStyle(r.querySelector('i')).backgroundColor.match(/[\d.]+/g).map(Number);
+      return { text: r.textContent, light: r.dataset.light, rgb: c.slice(0, 3) };
+    }));
+    assert.deepEqual(rows.map((r) => [r.text, r.light]), [
+      ['屏幕 · 静了 3 秒', 'part'], ['麦克风 · 在收', 'on'], ['摄像头 · 你按了暂停', 'off']]);
+    for (const r of rows) {
+      const spread = Math.max(...r.rgb) - Math.min(...r.rgb);
+      assert.ok(spread <= 12, `「${r.text}」那颗点带了颜色 rgb(${r.rgb})—— 面板说状态靠光和深度，不靠绿 / 橙 / 黄`);
+    }
     const body = await page.evaluate(() => document.querySelector('#islandBody').textContent);
-    assert.equal(body, '它此刻在收：麦克风、摄像头');
-    const shown = (await look()).buttons.sort();
-    assert.deepEqual(shown, ['panel', 'pause', 'view']);
-
-    // 岛长出来之后，点挪到岛的右边
-    const isl = await center(page, '#island');
-    const moved = await center(page, '#islandSenses');
-    assert.ok(moved.x > isl.right, `岛长出来了，点该挂在岛右边（岛右沿 ${isl.right}，点中心 ${moved.x}）`);
-
-    await page.click("button[data-act='pause']");
+    assert.equal(body, '它此刻在收：麦克风');
+    await page.evaluate(() => document.querySelector("button[data-act='pause']").click());
     await page.waitForTimeout(150);
     assert.ok(calls.includes('POST /api/perception/desktop/privacy/pause'), `实际 ${calls}`);
   } finally {

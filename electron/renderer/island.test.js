@@ -105,19 +105,14 @@ test('「已复制」亮 1.5 秒；认不得的类别算「内容」；它不让
   assert.equal(v.copiedShown(), false);
 });
 
-test('那几颗点：只亮真在收的；急停、没接上一颗都不亮', () => {
-  const v = view();
-  const mods = [
-    { modality: 'screen', state: 'live' },
-    { modality: 'microphone', state: 'live' },
-    { modality: 'camera', state: 'idle' },
-    { modality: 'system_audio', state: 'paused' },
-  ];
-  const p = (over) => ({ perception: { source: 'live', privacy_paused: false, modalities: mods, ...over } });
-  assert.deepEqual(v.liveSenses(p({})), ['microphone', 'screen'], '按摄像头 / 麦克风 / 屏幕 / 系统声的顺序');
-  assert.deepEqual(v.liveSenses(p({ privacy_paused: true })), []);
-  assert.deepEqual(v.liveSenses(p({ source: 'unavailable' })), []);
-  assert.deepEqual(v.liveSenses({}), []);
+test('「感知」那一页的点用面板那套光：在收 = 亮着，通着没信号 = 半边，暂停 / 没通路 = 沉下去', () => {
+  const light = (state) => IslandView.senseLight({ modality: 'screen', state });
+  assert.equal(light('live'), 'on');
+  assert.equal(light('idle'), 'part');
+  assert.equal(light('suppressed'), 'part');
+  assert.equal(light('paused'), 'off');
+  assert.equal(light('unavailable'), 'off');
+  assert.equal(IslandView.senseLight(null), 'off');
 });
 
 test('卡片过期了自己走；没 id 没标题的不收', () => {

@@ -378,7 +378,28 @@ def test_the_clipboard_only_ever_crosses_as_a_kind():
 
 
 def test_the_pet_is_not_owned_by_the_island_view():
-    """桌宠还是那一只：island.js 只管岛上的字和交互，不碰桌宠的样子与推导。"""
+    """桌宠还是那一只：island.js 只管岛上的字和交互，不碰桌宠的样子与推导（量一下它多宽来排版可以）。"""
     isle = (_RENDERER / "island.js").read_text(encoding="utf-8")
     code = re.sub(r"/\*(?:.|\n)*?\*/|//[^\n]*", " ", isle)
-    assert "PetState" not in code and "#pet" not in code and "'pet'" not in code
+    assert "PetState" not in code, "岛视图自己推导桌宠了"
+    for touch in ("pet.dataset", "pet.setAttribute", "pet.style", "pet.classList"):
+        assert touch not in code, f"岛视图在改桌宠（{touch}）—— 它的样子归 app.js 的 _paintPet"
+
+
+def test_one_island_and_its_dots_speak_with_light_like_the_panel():
+    """所有者：不要右边那个小岛、不要拿黄点表示在线、点要与面板同一套色彩。
+
+    面板说状态靠光和深度（hud.css 的 .wired-dot：白芯带柔光 / 只亮半边 / 沉进去），不靠颜色。
+    岛上的点照这一套：行上带 data-light（on / part / off），样式里没有给状态上色的色点。
+    """
+    html = (_RENDERER / "index.html").read_text(encoding="utf-8")
+    isle = (_RENDERER / "island.js").read_text(encoding="utf-8")
+    assert "islandSenses" not in html and "islandSenses" not in isle, "岛旁边又多出一座放点的小岛"
+    assert "islandDot" not in html and "islandDot" not in isle, "第一行又挂回了表示「在」的色点"
+    css = html[html.index("<style>") : html.index("</style>")]
+    for light in ("on", "part"):
+        assert f"#islandList .row[data-light='{light}'] i" in css
+    assert "row.dataset.light" in isle
+    # 原先给状态上色的那几个色值（绿 / 橙 / 黄）一个都不许回来
+    for colour in ("#93b39a", "#d1a585", "#cdb38f", "#9fb5a0"):
+        assert colour not in css, f"岛的样式里又出现了状态色 {colour}"
