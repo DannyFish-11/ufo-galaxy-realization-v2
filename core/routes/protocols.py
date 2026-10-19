@@ -478,8 +478,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             if result.get("loaded"):
                 await _capabilities_changed()
-            status_code = 200 if result.get("loaded") else 500
-            return JSONResponse(result, status_code=status_code)
+            return JSONResponse(result, status_code=_reload_status(result))
         except Exception as e:
             logger.error("MCP 热重载异常: %s: %s", name, e)
             return JSONResponse({"success": False, "server_id": server_id, "error": str(e)}, status_code=500)
@@ -504,8 +503,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             if result.get("loaded"):
                 await _capabilities_changed()
-            status_code = 200 if result.get("loaded") else 500
-            return JSONResponse(result, status_code=status_code)
+            return JSONResponse(result, status_code=_reload_status(result))
         except Exception as e:
             logger.error("Skill 热重载异常: %s: %s", name, e)
             return JSONResponse({"success": False, "skill_id": skill_id, "error": str(e)}, status_code=500)
@@ -666,6 +664,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 # ============================================================================
 # 辅助函数
 # ============================================================================
+
+
+def _reload_status(result: Dict[str, Any]) -> int:
+    """热重载结果 → HTTP 状态：重载上了 200；没登记过这个名字是调用方的事（404）；其余是这边没重载成（500）。"""
+    if result.get("loaded"):
+        return 200
+    return 404 if result.get("not_found") else 500
 
 
 def _find_mcp_server_id(name: str) -> Optional[str]:

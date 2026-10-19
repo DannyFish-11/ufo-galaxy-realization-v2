@@ -77,7 +77,7 @@
     "core/network_topology_runtime.py": 1539,
     "core/node_cognition_activation.py": 1194,
     "core/node_communication.py": 1010,
-    "core/nodes/node_fabric_registry.py": 1079,
+    "core/nodes/node_fabric_registry.py": 1088,
     "core/offline_replay_ordering_contract.py": 1040,
     "core/openclawd.py": 10266,
     "core/operational_enablement_audit.py": 1017,
@@ -147,7 +147,7 @@
     "launcher/services.py": 2681,
     "main.py": 1940,
     "nodes/Node_112_SelfHealing/main.py": 1207,
-    "nodes/Node_58_ModelRouter/main.py": 1100,
+    "nodes/Node_58_ModelRouter/main.py": 1117,
     "nodes/Node_71_MultiDeviceCoordination/core/multi_device_coordinator_engine.py": 1170,
     "nodes/Node_80_MemorySystem/main.py": 1047
   }

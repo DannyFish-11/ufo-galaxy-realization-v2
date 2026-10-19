@@ -131,6 +131,11 @@ def _validate_skill(skill: Any) -> Dict[str, Any]:
     if handler is not None and not callable(handler):
         errors.append("Skill.handler 不可调用")
 
+    # 读进来了但处理函数没装上（SkillLoader 把它标成 error）
+    status = _get(skill, "status")
+    if getattr(status, "value", status) == "error":
+        errors.append(f"Skill 状态为 error: {_get(skill, 'error') or '未知原因'}")
+
     # 版本字段
     version = _get(skill, "version", "")
     if version is not None and not isinstance(version, str):
@@ -173,7 +178,7 @@ async def reload_mcp(server_id: str) -> Dict[str, Any]:
             error = f"MCP 服务器未注册,无法热重载: {server_id}"
             _set_status(key, loaded=False, error=error)
             logger.warning(error)
-            return {"server_id": server_id, "loaded": False, "error": error}
+            return {"server_id": server_id, "loaded": False, "error": error, "not_found": True}
         await loader.stop(server_id)
         started = await loader.start(server_id)
         if not started:
@@ -246,42 +251,33 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
         _set_status(key, loaded=False, error=error)
         return {"skill_id": skill_id, "loaded": False, "error": error}
 
-    # 重新加载
-    try:
-        if hasattr(loader, "unload_skill"):
-            loader.unload_skill(skill_id)
-        if hasattr(loader, "reload_skill"):
-            skill = await loader.reload_skill(skill_id)
-        elif hasattr(loader, "load_skill"):
-            skill = loader.load_skill(skill_id)
-        else:
-            skill = None
-    except Exception as e:
-        logger.debug("Fallback triggered: %s", e)
-        error = f"Skill 加载失败: {e}"
+    # 重新加载：从它当初装进来的目录按同一个 skill_id 再 load 一遍（load 成功才原地替换；读坏了旧的照旧在）。
+    # SkillLoader 的真实 API 是 load(path, skill_id) / unload(skill_id) —— 此前探测的 unload_skill /
+    # reload_skill / load_skill 都不存在，在 hasattr 守卫下整段空转，却照样回 loaded=True：全面排查第 7 轮
+    # 连一个不存在的技能也「热重载成功、校验通过」（MCP 那一半早先修过，见 reload_mcp）。
+    current = (getattr(loader, "skills", None) or {}).get(skill_id)
+    if current is None:
+        error = f"Skill 未注册,无法热重载: {skill_id}"
         _set_status(key, loaded=False, error=error)
-        logger.warning("Skill 热重载失败 %s: %s", skill_id, e)
+        logger.warning(error)
+        return {"skill_id": skill_id, "loaded": False, "error": error, "not_found": True}
+    source = getattr(current, "source_path", "")
+    if not source:
+        error = f"Skill {skill_id} 没有记下来源目录,没有可重读的东西"
+        _set_status(key, loaded=False, error=error)
+        return {"skill_id": skill_id, "loaded": False, "error": error}
+    try:
+        outcome = await loader.load(source, skill_id=skill_id)
+    except Exception as e:
+        outcome = {"success": False, "error": str(e)}
+    if not outcome.get("success"):
+        error = f"Skill 重新加载失败: {outcome.get('error')}"
+        _set_status(key, loaded=False, error=error)
+        logger.warning("Skill 热重载失败 %s: %s", skill_id, error)
         return {"skill_id": skill_id, "loaded": False, "error": error}
 
-    # 校验
-    if skill is not None:
-        validation = _validate_skill(skill)
-    else:
-        # 加载成功但无返回值，尝试从 loader 获取
-        try:
-            skills = loader.list_skills() if hasattr(loader, "list_skills") else []
-            matched = next(
-                (
-                    s
-                    for s in skills
-                    if ((s.get("skill_id") if isinstance(s, dict) else getattr(s, "skill_id", "")) == skill_id)
-                ),
-                None,
-            )
-            validation = _validate_skill(matched) if matched else {"valid": True, "errors": []}
-        except Exception as exc:
-            logger.debug("Fallback triggered: %s", exc)
-            validation = {"valid": True, "errors": []}
+    # 校验刚读进来的那一份（SkillInstance 本身：handler / handler_path / 状态都在它身上）
+    validation = _validate_skill(loader.skills.get(skill_id))
 
     valid = validation["valid"]
     errors = validation["errors"]
@@ -315,6 +311,14 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
         "validated": valid,
         "errors": errors,
     }
+
+
+def _skill_id(entry: Any) -> Optional[str]:
+    """``SkillLoader.list_skills()`` 每一项的 id。键是 ``id`` —— 这里原先读 ``skill_id``（不存在），
+    于是「全部重载」一个技能也没重载、加载状态里一个技能也没有。"""
+    if isinstance(entry, dict):
+        return entry.get("id") or entry.get("skill_id")
+    return getattr(entry, "id", None) or getattr(entry, "skill_id", None)
 
 
 async def reload_all() -> Dict[str, Any]:
@@ -355,7 +359,7 @@ async def reload_all() -> Dict[str, Any]:
         loader = SkillLoader.get_instance()
         skills = loader.list_skills() if hasattr(loader, "list_skills") else []
         for skill in skills:
-            sid = skill.get("skill_id") if isinstance(skill, dict) else getattr(skill, "skill_id", None)
+            sid = _skill_id(skill)
             if sid:
                 r = await reload_skill(sid)
                 skill_results[sid] = r
@@ -422,7 +426,7 @@ def get_load_status() -> Dict[str, Any]:
         loader = SkillLoader.get_instance()
         skill_list = loader.list_skills() if hasattr(loader, "list_skills") else []
         for skill in skill_list:
-            sid = skill.get("skill_id") if isinstance(skill, dict) else getattr(skill, "skill_id", None)
+            sid = _skill_id(skill)
             if sid and sid not in skills:
                 skills[sid] = {
                     "loaded": True,

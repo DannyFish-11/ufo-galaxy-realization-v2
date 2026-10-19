@@ -21,6 +21,21 @@ import subprocess
 import time
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+#: 本机的四个库：只给这台电脑上的后端与节点用（docker-compose.yml 里端口只绑 127.0.0.1）
+LOCAL_STORES = ("redis", "qdrant", "neo4j", "mongodb")
+
+
+def infra_services() -> List[str]:
+    """``compose up -d`` 起哪几个基础设施容器。
+
+    NATS 只在要总线时起 —— 与真正连总线的那一处同一判据（``core.system_mode.nats_wanted``）。全面排查第 7 轮：
+    本地模式（这台电脑不加入设备网络）下照样起了一个 nats 容器，4222 对整个局域网开着、不带认证。
+    """
+    from core.system_mode import nats_wanted
+
+    return (["nats"] if nats_wanted() else []) + list(LOCAL_STORES)
+
+
 GOOD = "good"
 STARTING = "starting"
 BAD = "bad"

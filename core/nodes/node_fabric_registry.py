@@ -30,6 +30,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
 from core.data_paths import data_path
+from core.persist_batch import PersistBatcher
 from core.runtime_truth_governance import (
     RECOVERY_STATUS_LIVE,
     RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
@@ -342,6 +343,7 @@ class NodeFabricRegistry:
         self._state_path = _DEFAULT_NODE_FABRIC_STATE_PATH
         self._last_recovered_at: Optional[float] = None
         self._revalidation_pending: Set[str] = set()
+        self._persist = PersistBatcher(self._write_durable_state)
         self._initialized = True
 
         logger.info(
@@ -789,8 +791,15 @@ class NodeFabricRegistry:
         }
 
     def persist_durable_state(self) -> None:
-        payload = self._build_durable_payload()
-        write_json_atomically(self._state_path, payload)
+        self._persist.request()  # 批内只记一笔、批结束写一次；批外立刻写（core/persist_batch.py）
+
+    def batched_persistence(self):
+        """``with registry.batched_persistence():`` 里的一连串登记只落盘一次。启动时十几个节点各登记一两次，
+        每次都在事件循环里把整张表重新序列化落盘 —— 第 7 轮真跑卡顿记录抓到 0.3 秒。"""
+        return self._persist.batch()
+
+    def _write_durable_state(self) -> None:
+        write_json_atomically(self._state_path, self._build_durable_payload())
 
     def restore_durable_state(self) -> int:
         payload = load_json_payload(self._state_path)

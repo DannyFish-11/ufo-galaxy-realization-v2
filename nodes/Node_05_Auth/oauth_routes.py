@@ -589,6 +589,13 @@ def register_oauth_routes(app: FastAPI):
         provider = request_data.provider.lower()
         device_code = request_data.device_code
 
+        # 与 /device/start 同一道判断：没配（或不支持）的提供商是调用方的事，回 400 —— 原先一路抛到最后、回 500
+        if not device_flow_manager.is_provider_configured(provider):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Device Flow for {provider} is not configured",
+            )
+
         try:
             token_data = await device_flow_manager.poll_device_token(provider, device_code)
             access_token = token_data.get("access_token")
@@ -635,6 +642,9 @@ def register_oauth_routes(app: FastAPI):
         except DeviceFlowError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
+            if HAS_HTTPX and isinstance(e, httpx.HTTPError):  # 提供商的授权服务连不上:网关错误,不是这边崩了
+                logger.warning(f"Device poll upstream failed: {e}")
+                raise HTTPException(status_code=502, detail=f"连不上 {provider} 的授权服务")
             logger.error(f"Device poll failed: {e}")
             raise HTTPException(status_code=500, detail="Token polling failed")
 

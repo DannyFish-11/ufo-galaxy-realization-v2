@@ -51,7 +51,12 @@ class ServiceManager:
         service_type: ServiceType,
         port: Optional[int] = None,
     ) -> None:
-        """注册服务"""
+        """注册服务。已登记过的不换新条目 —— 换了，旧条目上那个还在跑的进程就没人记着了(停机时停不到它)。"""
+        existing = self.services.get(name)
+        if existing is not None:
+            existing.service_type = service_type
+            existing.port = port if port is not None else existing.port
+            return
         self.services[name] = ServiceInfo(
             name=name,
             service_type=service_type,
@@ -71,6 +76,12 @@ class ServiceManager:
             return False
 
         service = self.services[name]
+        # 同一个服务只起一份：已经在跑、或另一个调用正在起它(还在等创建进程)，就不再起第二个进程。全面排查第 7 轮
+        # 真跑：两台安卓同一秒登记，Node_33_ADB 被并发激活两次、起了两个进程，前一个没人记着，停机后还活着。
+        if service.status == "starting" or (service.process is not None and service.process.poll() is None):
+            logger.debug("服务 %s 已在运行或正在启动，不再起第二个进程", name)
+            return True
+        service.status = "starting"
 
         try:
             env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT)}

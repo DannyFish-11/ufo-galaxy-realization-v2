@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.mock_drivers import mock_drivers_enabled, unavailable
 
 # =============================================================================
 # Configuration
@@ -413,7 +414,9 @@ class ADBController:
         }
     
     async def _mock_execute(self, action: str, params: Dict) -> Dict:
-        """Mock execution for testing."""
+        """没设备 / 没 adb 时走这里：只有显式打开模拟驱动才模拟，否则照实回失败（nodes/common/mock_drivers.py）。"""
+        if not mock_drivers_enabled():
+            return unavailable(action, self.degrade_reason or "没有连上的安卓设备(adb devices 是空的)——这一步没执行")
         logger.info(f"Mock executing: {action}")
         await asyncio.sleep(0.1)
         

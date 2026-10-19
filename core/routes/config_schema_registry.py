@@ -600,7 +600,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "desktop-local",
         "type": "select",
         "category": "devices",
-        "description": "运行模式（desktop-local=本地模式，只用本机 · desktop-cross-device=跨设备模式）。面板的「跨设备」按钮一并写它;任一处明确选了跨设备就是跨设备",
+        "description": (
+            "运行模式（desktop-local=本地模式，这台电脑不加入设备网络 · desktop-cross-device=跨设备模式，"
+            "这台电脑加入设备网络）。面板的「跨设备」按钮一并写它;任一处明确选了跨设备就是跨设备"
+        ),
         "options": ["desktop-local", "desktop-cross-device"],
     },
     "GALAXY_PREFLIGHT_MODE": {
