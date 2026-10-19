@@ -215,8 +215,10 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - **面板与覆盖层的长连接只有一份** `electron/renderer/live_socket.js`（保活 ping/pong、半开连接认得出来、连接超时、退避加抖动、网回来立刻重连），别再各写一份重连；面板的 HTTP 请求一律过 `transport.ts` 的 `fetchT`（读有期限且重试一次，写不重试，本来就慢的不设期限）
 - `core/island_cards.py` - **灵动岛上的卡**（借 WinIslands 的上岛推送）：这台电脑上刚发生、人该余光知道的事（桌面操作第几步 / 核对结论 /
   有结果没收口 / 有设备在等你同意）。一张卡一个 id 原地更新、分先后、会过期、只放类型化短字段、不改岛的长短；推 WS `type="island"`
-  整份队列，覆盖层刚连上补发（`core/presence_fanout.py`）。覆盖层 `renderer/app.js` 点一下岛才展开（停下 / 打开面板 / 知道了），指针在岛上
-  时窗口才接鼠标。推卡用 `post_card` / `remove_card`（永不抛出）；**别往岛上放原始结果、截图、参数**。桌宠不归卡片管
+  整份队列，覆盖层刚连上补发（`core/presence_fanout.py`）。推卡用 `post_card` / `remove_card`（永不抛出）；**别往岛上放原始结果、截图、参数**。
+  岛本身对齐 winsland（adityasrivastava5098/WinIsland）：岛上写什么、点了做什么在 `electron/renderer/island.js`（`IslandView`：卡片 / 在说话的声波 /
+  此刻在收的感知那几颗点 / 「已复制」/ 动态↔感知两页 / 那组弹簧），`app.js` 只管它在三态里多大；剪贴板提示在 `electron/clipboard_watch.js`（只发类别，
+  原文不出主进程）。指针在岛上（或那几颗点上）时窗口才接鼠标。桌宠不归岛管
 - `core/rehearsal_panel_push.py` - 阈限态推演每一步推 WS `type="rehearsal"` 帧，面板 `ui/rehearsal.ts` 画出来
   （StateEventBus 的 `skill.*` 到面板只触发设备清单推送，步骤内容走的是这一帧）
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢

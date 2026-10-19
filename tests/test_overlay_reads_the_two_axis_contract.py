@@ -38,12 +38,12 @@ def _html() -> str:
     return (_RENDERER / "index.html").read_text(encoding="utf-8")
 
 
-def _js() -> str:
-    """app.js 去掉注释 —— 判据钉的是代码，不是文档里提过这几个词。
+def _js(name: str = "app.js") -> str:
+    """app.js（或同目录另一个脚本）去掉注释 —— 判据钉的是代码，不是文档里提过这几个词。
 
     本仓库为"钉在注释上"栽过不止一次。
     """
-    src = (_RENDERER / "app.js").read_text(encoding="utf-8")
+    src = (_RENDERER / name).read_text(encoding="utf-8")
     src = re.sub(r"/\*(?:.|\n)*?\*/", " ", src)
     src = re.sub(r"(?<![:'\"])//[^\n]*", " ", src)
     return src
@@ -275,7 +275,7 @@ class TestTheRhythmAvoidsTheBand:
         抓到我在注释里写了一句假话（"5.2 秒 ≈ 0.19 Hz，刻意不落在带内"）。
         """
         lo, hi = _avoid_band()
-        blob = _css() + _js()
+        blob = _css() + _js() + _js("island.js")
         # ``.5s`` 这种省掉整数位的写法要认全：原先的 ``\d+\.?\d*`` 会把它读成
         # 5s = 0.2 Hz，凭空造出一个带内的假阳性。
         periods = {float(x) for x in re.findall(r"(?<![\w.])(\d*\.?\d+)s\b", blob)}
@@ -561,15 +561,17 @@ class TestTheIslandSaysHowToStop:
     """它在动你的鼠标键盘时，岛上说一句「正在操作」，以及按哪个键能停。"""
 
     def test_the_hint_reads_the_contract(self) -> None:
-        js = _js()
-        assert "r.stop_key" in js, "岛上那句「Esc 停止」不再照 render.stop_key 写"
+        # 岛上写什么在 island.js（IslandView），app.js 只管几何 —— 两边都不许写死键名
+        isle = _js("island.js")
+        assert "r.stop_key" in isle, "岛上那句「Esc 停止」不再照 render.stop_key 写"
         # 不能从 acting 推出一个键名来：分不清人按的和注入的键的平台上，动手期间也没有键。
-        assert not re.search(r"['\"]Esc['\"]", js), "app.js 里写死了键名 —— 那是替后端承诺它占到了"
+        for name in ("app.js", "island.js"):
+            assert not re.search(r"['\"]Esc['\"]", _js(name)), f"{name} 里写死了键名 —— 那是替后端承诺它占到了"
 
     def test_acting_has_its_own_word(self) -> None:
-        js = _js()
-        assert re.search(r"ACTING_WORD\s*=\s*'正在操作'", js)
-        assert "r.acting" in js or "render.acting" in js
+        assert re.search(r"ACTING_WORD\s*=\s*'正在操作'", _js())
+        isle = _js("island.js")
+        assert "r.acting" in isle or "render.acting" in isle
 
 
 class TestInvisibleLayersAreNotComposited:

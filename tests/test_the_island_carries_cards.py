@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import threading
 import time
 from pathlib import Path
@@ -344,3 +345,40 @@ def test_the_pet_still_sits_on_the_island_unchanged():
     assert 'class="pet-skin" d="M20 4.6c8 0 13.6 4.2 15 11' in island
     app_js = (REPO / "electron" / "renderer" / "app.js").read_text(encoding="utf-8")
     assert "PetState.derive(" in app_js, "桌宠的推导还是三只共用的那一份"
+
+
+# ── winsland 借来的那几样：静态接线 ───────────────────────────────────────────
+#
+# 行为（声波、感知点、已复制、换页）在 electron/renderer/browser-tests/island.test.js 里问真浏览器，
+# 弹簧与状态在 electron/renderer/island.test.js，剪贴板提示在 electron/clipboard_watch.test.js。
+# 这里只钉那几条读源码就能看出来、而浏览器测试替身看不出来的接线。
+
+_RENDERER = REPO / "electron" / "renderer"
+
+
+def test_island_js_loads_before_app_js():
+    """app.js 构造时就 new IslandView —— 晚一步加载，覆盖层整个起不来（而浏览器测试会一起红，CI 能抓到；这里给一句人话）。"""
+    html = (_RENDERER / "index.html").read_text(encoding="utf-8")
+    assert '<script src="island.js"></script>' in html
+    assert html.index('<script src="island.js">') < html.index('<script src="app.js">')
+
+
+def test_the_clipboard_only_ever_crosses_as_a_kind():
+    """剪贴板的原文不出主进程：主进程发给覆盖层的只有 watchClipboard 给的 {type}，预加载只转发这一条。"""
+    main = (REPO / "electron" / "main.js").read_text(encoding="utf-8")
+    watch = (REPO / "electron" / "clipboard_watch.js").read_text(encoding="utf-8")
+    preload = (REPO / "electron" / "preload.js").read_text(encoding="utf-8")
+    assert "watchClipboard(clipboard," in main
+    assert "webContents.send('galaxy:clipboard', msg)" in main
+    # 主进程里除了交给 watchClipboard，别处不读剪贴板
+    assert "clipboard.read" not in main, "main.js 自己读剪贴板了 —— 内容会不会顺手发出去，就没人能一眼看清"
+    sends = re.findall(r"send\(\{([^}]*)\}\)", watch)
+    assert sends == [" type: kindOf(now.formats) "], f"发出去的不只是类别：{sends}"
+    assert "onClipboard" in preload and "'galaxy:clipboard'" in preload
+
+
+def test_the_pet_is_not_owned_by_the_island_view():
+    """桌宠还是那一只：island.js 只管岛上的字和交互，不碰桌宠的样子与推导。"""
+    isle = (_RENDERER / "island.js").read_text(encoding="utf-8")
+    code = re.sub(r"/\*(?:.|\n)*?\*/|//[^\n]*", " ", isle)
+    assert "PetState" not in code and "#pet" not in code and "'pet'" not in code

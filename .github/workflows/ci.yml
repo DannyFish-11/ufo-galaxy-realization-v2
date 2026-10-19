@@ -38,18 +38,21 @@ jobs:
         run: npm run build
       # 覆盖层的深度运动（electron/renderer/presence_motion.js）、三只桌宠共用的推导（pet_state.js，
       # 用例表与 pytest 那边的托盘共用）、面板与覆盖层共用的长连接（live_socket.js）都用 node 内置
-      # 的 node:test 跑，零依赖（面板画布的等比缩放 panel_stage.js 也在这里）。放在本作业里是因为这里已经装好了 node ——
+      # 的 node:test 跑，零依赖（面板画布的等比缩放 panel_stage.js、灵动岛的弹簧与状态 island.js、
+      # 主进程的剪贴板提示 clipboard_watch.js 也在这里）。放在本作业里是因为这里已经装好了 node ——
       # 单开一个作业只为跑几十条纯函数测试不值当。
       #
       # 它不能只放在 pytest 里：那些分片作业没有 setup-node，靠"有 node 才跑"
       # 的跳过守卫会变成一条永远不执行的绿线。
-      - name: 覆盖层深度运动 / 桌宠推导 / 长连接 / 面板画布测试
+      - name: 覆盖层深度运动 / 桌宠推导 / 长连接 / 面板画布 / 灵动岛 / 剪贴板提示测试
         run: >-
           node --test
           electron/renderer/presence_motion.test.js
           electron/renderer/pet_state.test.js
           electron/renderer/live_socket.test.js
           electron/renderer/panel_stage.test.js
+          electron/renderer/island.test.js
+          electron/clipboard_watch.test.js
 
       - name: dist/ 必须与源码一致
         run: |

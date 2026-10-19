@@ -798,6 +798,17 @@ python scripts/check_assessment_freshness.py
   可点时不接。急停时卡不上岛（岛就是那道细线）。到岛上走 `/ws/desktop-presence` 一帧 `type="island"`，覆盖层刚连上补发一份；
   `GET / DELETE /api/v1/presence/island` 要令牌。**桌宠还是那一只**：外形、颜色、推导一处没动（三只同一只的核对照旧）。浏览器测试
   `electron/renderer/browser-tests/island.test.js` 真开 Chromium 看画面与请求。
+- **灵动岛对齐 winsland（所有者确认指的是 [adityasrivastava5098/WinIsland](https://github.com/adityasrivastava5098/WinIsland)，启动脚本叫
+  `winsland.bat`）**：岛上写什么、什么时候长出来、点了做什么从 `app.js` 拆进 `electron/renderer/island.js`（`IslandView`；`app.js` 只管它在
+  三态编排里多大）。从它那里借的、在这里落成什么：音乐药丸 → **它在说话**时岛上「在说话」+ 一排声波（五根各走各的，取它那一组时长与错开），
+  悬停换成「点一下可以叫它停下」，说完留 1.2 秒再收（两句之间不闪），点开有「停下」；隐私指示点 → **它自己此刻在收的感知**（摄像头 / 麦克风 /
+  屏幕 / 系统声，只在真在收时亮一颗；岛收着时居中挂在上沿，岛长出来就挪到右边），点一下展开「感知」那一页（每一路什么状态 + 「暂停感知」）；
+  「已复制」→ 原样借来，剪贴板一变亮 1.5 秒（主进程每 500 毫秒看一眼格式与文字摘要，**发给覆盖层的只有类别**，原文不出主进程，
+  `electron/clipboard_watch.js`）；弹簧（stiffness 380 / damping 28）→ 同一组数，长出来过冲约 3%、半路掉头不跳、收回去碰到上沿就停，
+  关了动效的人用临界阻尼；贴边模式下沿那道光 → 岛下沿一道光跟着卡片语气 / 声波色；点开后右上角换页 → 「动态 ↔ 感知」。没借的：日历
+  （这边没有日历来源）、多显示器各一座岛。桌宠还是那一只（外形、颜色、推导一处没动；`island.js` 里不碰桌宠，测试钉着）。测试：弹簧与状态
+  `electron/renderer/island.test.js`、剪贴板 `electron/clipboard_watch.test.js`（都进了 CI 的 node 那一步），浏览器里看画面与请求
+  `browser-tests/island.test.js`（11 条）。
 - **补跑的后台协程没留引用**：`truth_chain_recovery` 排在事件循环上的重跑任务原先只有循环自己的弱引用，可能跑到一半被回收 —— 留引用、`reset()` 时取消。
 
 真跑（独立数据目录 `python main.py --backend -v`，改前改后各一遍）又抓出四样，一并修了：
@@ -822,6 +833,7 @@ python scripts/check_assessment_freshness.py
 - 照片里那次 11.5 秒卡顿的真凶：等更新后的卡顿记录（会带上同一时刻别的线程在 import 什么）。
 - 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`（旧模板生成）：写了就听它的，删掉那一行即可回到「本地模式不起 NATS」。
 - 桌面自动化的「按现场挑」只在沙箱里用桩验证过：Win32 / UIA / 微软 UFO 三个后端要在 Windows 真机上跑一遍（沙箱没有 Windows）。
+- 灵动岛的「已复制」在 Windows 真机上看一眼：Electron 在 Windows 上报的剪贴板格式名（图片 / 文件）要和 `clipboard_watch.js` 的判法对得上（沙箱里只用假剪贴板验证过）。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

@@ -268,6 +268,12 @@ body {
 #island[data-tone='success'] { --tone: #9fb5a0; }
 #island[data-tone='warning'] { --tone: #cdb38f; }
 #island[data-tone='error']   { --tone: #c4939a; }
+#island[data-tone='voice']   { --tone: #aaa3cb; }
+/* 下沿那一道光跟着内容走（winsland 贴边模式只在下沿发光、颜色随封面）：卡片的语气、说话时声波那一色。
+   收成一道线时没有（--itx 为 0）。 */
+#island::after { content: ''; position: absolute; left: 14%; right: 14%; bottom: 0; height: 1px;
+                 background: linear-gradient(90deg, transparent, var(--tone), transparent);
+                 opacity: calc(var(--itx) * .7); pointer-events: none; }
 #islandDot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tone); }
 /* 进度：贴着岛的下沿的一道细线，走到哪儿亮到哪儿（「第 3/15 步」那张卡带着它） */
 #islandBar { position: absolute; left: 14px; right: 14px; top: calc(2px + 26px - 3px); height: 2px;
@@ -275,6 +281,45 @@ body {
              opacity: calc(var(--itx) * var(--ibar-on, 0)); pointer-events: none; }
 #islandBar::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--ibar, 0%);
                     background: var(--tone); border-radius: 2px; transition: width .45s cubic-bezier(.32,.72,0,1); }
+
+/* ── 它在说话：一排声波（winsland 音乐药丸里那排） ──
+   五根各走各的（时长与起跳错开，取它那一组），颜色跟着 --tone。指针停上来就换成一句提示（island.js）。 */
+#islandWave { display: inline-flex; align-items: center; gap: 2px; height: 12px; flex: none; }
+#islandWave[hidden] { display: none; }
+#islandWave i { width: 2px; height: 100%; border-radius: 1px; background: var(--tone);
+                transform: scaleY(var(--wh)); transform-origin: 50% 50%;
+                animation: isl-wave var(--wd) ease-in-out var(--wl) infinite alternate; }
+#islandWave i:nth-child(1) { --wh: .35; --wd: .45s; --wl: 0s; }
+#islandWave i:nth-child(2) { --wh: .65; --wd: .55s; --wl: .12s; }
+#islandWave i:nth-child(3) { --wh: .45; --wd: .4s;  --wl: .24s; }
+#islandWave i:nth-child(4) { --wh: .85; --wd: .5s;  --wl: .08s; }
+#islandWave i:nth-child(5) { --wh: .55; --wd: .42s; --wl: .18s; }
+@keyframes isl-wave { from { transform: scaleY(.22); } to { transform: scaleY(var(--wh)); } }
+
+/* ── 它此刻在收的感知：岛旁边几颗小点（winsland 的隐私指示点） ──
+   只在那一路真在收（live）时亮；急停时一颗都没有。岛收着时它们自己居中挂在上沿（一小截黑边），
+   岛长出来就挪到岛右边 —— 挪的那一段跟着岛一起走（--isa 由 island.js 给），不跳。
+   颜色是莫兰迪化的 iOS 惯例：绿 = 摄像头、橙 = 麦克风；屏幕淡紫、系统声雾蓝。 */
+:root { --sense-camera: #93b39a; --sense-microphone: #d1a585; --sense-screen: #ab9fc8; --sense-system_audio: #8fa7c2; }
+#islandSenses {
+  position: fixed; top: 0; z-index: 10001; pointer-events: none; box-sizing: border-box;
+  left: calc(50% + (var(--iw) / 2 + 8px) * var(--isa, 0));
+  transform: translateX(calc(-50% * (1 - var(--isa, 0))));
+  height: calc(14px + 14px * var(--isa, 0)); padding: 0 6px;
+  display: flex; align-items: center; gap: 3px;
+  border-radius: 0 0 calc(7px + 7px * var(--isa, 0)) calc(7px + 7px * var(--isa, 0));
+  background: linear-gradient(180deg, rgba(12,11,17,.95) 0%, rgba(20,18,28,.97) 100%);
+  box-shadow: 0 0 0 1px rgba(183,165,194,.26);
+}
+#islandSenses:empty { display: none; }
+#islandSenses[data-hover='true'] { pointer-events: auto; cursor: pointer; }
+#islandSenses .sense { border: 0; padding: 0; margin: 0; background: none; cursor: inherit;
+                       width: 10px; height: 14px; display: grid; place-items: center; }
+#islandSenses .sense i { width: 6px; height: 6px; border-radius: 50%; background: var(--sc); box-shadow: 0 0 5px var(--sc); }
+.sense[data-sense='camera'],       .row[data-tone='sense-camera']       { --sc: var(--sense-camera); }
+.sense[data-sense='microphone'],   .row[data-tone='sense-microphone']   { --sc: var(--sense-microphone); }
+.sense[data-sense='screen'],       .row[data-tone='sense-screen']       { --sc: var(--sense-screen); }
+.sense[data-sense='system_audio'], .row[data-tone='sense-system_audio'] { --sc: var(--sense-system_audio); }
 
 /* ── 展开：同一座岛自己长高，不是另弹一个窗 ──
    点一下岛才展开（指针停上去不展开 —— 余光扫过时它不该跳出来）。上面那一行还在，下面是排在第一的那张卡的
@@ -291,6 +336,8 @@ body {
 #islandList .row[data-tone='success'] i { background: #9fb5a0; }
 #islandList .row[data-tone='warning'] i { background: #cdb38f; }
 #islandList .row[data-tone='error'] i   { background: #c4939a; }
+#islandList .row[data-tone^='sense-'] i { background: var(--sc); }
+#islandList .row[data-tone='off'] i     { background: rgba(208,201,216,.22); }
 #islandList .row span { overflow: hidden; text-overflow: ellipsis; }
 .isl-acts { display: flex; gap: 6px; justify-content: flex-end; }
 .isl-acts button { font: inherit; font-size: 11px; color: #d0c9d8; border: 0; cursor: pointer;
@@ -298,6 +345,10 @@ body {
                    transition: background .2s ease; }
 .isl-acts button:hover { background: rgba(255,255,255,.16); }
 .isl-acts button[data-act='stop'] { color: var(--c-hot); box-shadow: inset 0 0 0 1px rgba(236,223,235,.3); }
+/* 点开后换页（winsland 右上角那个切换：音乐 / 日历 / 隐私）→ 这里两页：动态 / 感知。排在最左，样子轻一档 */
+.isl-acts button.isl-view { margin-right: auto; background: none; color: rgba(208,201,216,.62);
+                            box-shadow: inset 0 0 0 1px rgba(208,201,216,.18); }
+.isl-acts button.isl-view:hover { background: rgba(255,255,255,.08); }
 .isl-acts button[hidden] { display: none; }
 #islandMode { font-family: ui-monospace, Consolas, monospace; font-size: 10px;
               color: var(--c-cool); padding: 1px 6px; border-radius: 999px;
@@ -389,6 +440,8 @@ body {
      （它们是 transform / y / height，不是 animation）。所以这里不能图省事
      写成把 #pet 整个冻住。面板那边同理。 */
   .pet-breath, .pet-blink { animation: none; }
+  /* 声波停在各自的高度：「在说话」是事实，跳动是动效 */
+  #islandWave i { animation: none; }
 }
 </style>
 </head>
@@ -422,6 +475,7 @@ body {
     </svg>
     <span id="islandDot" hidden></span>
     <span id="islandText">Galaxy</span>
+    <span id="islandWave" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
     <span id="islandSub" hidden></span>
     <span id="islandMode" hidden></span>
     <span id="islandHint" hidden></span>
@@ -432,12 +486,16 @@ body {
     <div id="islandBody"></div>
     <div id="islandList"></div>
     <div class="isl-acts">
+      <button type="button" class="isl-view" data-act="view">感知</button>
       <button type="button" data-act="stop" hidden>停下</button>
       <button type="button" data-act="panel" hidden>打开面板</button>
       <button type="button" data-act="dismiss" hidden>知道了</button>
+      <button type="button" data-act="pause" hidden>暂停感知</button>
     </div>
   </div>
 </div>
+<!-- 它此刻在收的感知（island.js 按 render.perception 画），岛旁边那几颗点 -->
+<div id="islandSenses" aria-label="它此刻在收的感知"></div>
 
 <!-- 模块加载。
      presence_motion.js 必须早于 app.js —— 渲染循环直接调它。
@@ -447,6 +505,8 @@ body {
 <!-- pet_state.js / live_socket.js：与面板共用（桌宠的推导、那条长连接），app.js 直接调它们，必须先加载。 -->
 <script src="pet_state.js"></script>
 <script src="live_socket.js"></script>
+<!-- island.js：灵动岛上写什么、什么时候长出来、点了做什么（IslandView）。app.js 构造时就要它。 -->
+<script src="island.js"></script>
 <script src="app.js"></script>
 <script src="perception-capture.js"></script>
 

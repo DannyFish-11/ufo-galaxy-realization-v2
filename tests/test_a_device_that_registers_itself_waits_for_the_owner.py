@@ -19,8 +19,10 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture()
-def api(tmp_path, monkeypatch):
-    monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+def api(monkeypatch):
+    # 数据目录用 conftest 给整个会话的那个临时目录，**不在这里另换**：有些模块的落盘路径在 import 时定下
+    # （core.user_providers 等），要是第一次 import 恰好发生在这里，路径就钉在这条用例的临时目录上，
+    # 后面「状态随数据目录走」的核对就红了。设备号每条用例各取一个，彼此不撞。
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
     monkeypatch.delenv("GALAXY_ONBOARDING_AUTO", raising=False)
     monkeypatch.delenv("GALAXY_ONBOARDING_ENABLED", raising=False)

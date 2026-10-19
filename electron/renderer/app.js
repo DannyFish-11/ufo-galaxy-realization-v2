@@ -10,10 +10,11 @@
  *   第三态  空间收回，屏幕是干净的 —— 它在出字、出声、或动手。
  *           **它在动你的鼠标键盘时**，岛从上边框长出来说一句「正在操作」，
  *           以及（后端确实占到了叫停键的话）怎么叫停。
- *   卡片    这台电脑上刚发生、人该余光知道的事（桌面操作走到第几步、核对的结论、有结果没收口、
- *           有设备在等你同意），任何一态里都会让岛长出来一会儿（借 WinIslands 的上岛推送：一张卡
- *           一个 id 原地更新、分先后、会过期、带进度、不改岛的长短）。点一下岛才展开：全文、
- *           队列里其余的卡、停下 / 打开面板 / 知道了。后端见 core/island_cards.py。
+ *   灵动岛  有事就从上边框长出来（任何一态里）：上岛的卡（桌面操作第几步、核对结论、有结果没收口、
+ *           有设备在等你同意，core/island_cards.py）、它在说话（声波）、刚复制了东西；旁边几颗小点说
+ *           它此刻在收哪几路感知。点一下往下长：动态 / 感知两页，停下 / 打开面板 / 知道了 / 暂停感知。
+ *           对齐所有者指的 winsland（adityasrivastava5098/WinIsland）。岛上写什么、什么时候长、点了
+ *           做什么都在 island.js；这里只管它在三态编排里长多大（尺寸常量 ISLE_* 在下面）。
  *   收场    光从顶部中间铺回三条边 —— 不是把收回倒着放。
  *   急停    同一个收拢手势，但没有岛滑出，顶上只留一道贴边细线。
  *
@@ -91,21 +92,18 @@ const SEG = {
 const HIDE_SECONDS = 0.9;
 // 光从顶部中间铺回三条边。原先是 spread += 0.85 * dt，约 1.18 秒，不改。
 const SPREAD_SECONDS = 1 / 0.85;
-// 动手期间那座岛自己长出来 / 收回去（表达期空间是收着的，岛不能跟着空间走）。
-const ISLE_SECONDS = 0.45;
+// 岛因为「有事」自己长出来 / 收回去怎么动（winsland 那组弹簧）、点开后指针离开多久收回 —— 在 island.js。
 // 岛长成之后的尺寸（px）：一条**瘦长**的药丸，约 10:1（280 × 28）。
 // 历史：248 × 33（7.5:1）→ 上一版 216 × 40（5.4:1，更窄更高）—— 那一版方向反了，
 // 越改越像一块墩子；所有者要的是 Windows 灵动岛（wisland）那种又薄又长的一条。
-// 宽度只是下限：文字多了（模式、叫停提示）会自己撑开，见 islandInner 的量法。
+// 宽度只是下限：文字多了（模式、叫停提示）会自己撑开，见 island.js 的 _needWidth。
 const ISLE_MIN_W = 280;
 const ISLE_H = 26;   // 展开后高度 = 2 + ISLE_H
 const ISLE_R = 14;   // 下沿圆角 = 2 + ISLE_R（略大于高度的一半，下沿圆润成药丸）
-// 上限：卡片不改岛的长短（WinIslands 的规矩）—— 字再多，收起时也只到这么宽，放不下就截断；
+// 上限：卡片不改岛的长短（winsland / WinIslands 同一条规矩）—— 字再多，收起时也只到这么宽，放不下就截断；
 // 点开之后也是这个宽，只往下长。
 const ISLE_MAX_W = 440;
 const ISLE_OPEN_R = 18;  // 点开之后的下沿圆角
-// 指针离开点开的岛多久收回去（秒）。马上收的话，从岛上移去按钮时蹭出边一点就关了。
-const ISLE_LINGER = 1.5;
 
 // ── 时间怎么走 ──
 //
@@ -165,18 +163,13 @@ function easeOut(x) { return 1 - Math.pow(1 - x, 2.2); }
 class GalaxyOverlay {
   constructor() {
     this.root = document.documentElement;
-    this.island = document.getElementById('island');
-    this.islandInner = this.island ? this.island.querySelector('.isl-in') : null;
-    this.islandText = document.getElementById('islandText');
-    this.islandMode = document.getElementById('islandMode');
-    this.islandHint = document.getElementById('islandHint');
-    this.islandDot = document.getElementById('islandDot');
-    this.islandSub = document.getElementById('islandSub');
-    this.islandMore = document.getElementById('islandMore');
-    this.islandFull = this.island ? this.island.querySelector('.isl-full') : null;
-    this.islandBody = document.getElementById('islandBody');
-    this.islandList = document.getElementById('islandList');
     this.pet = document.getElementById('pet');
+    // 灵动岛（island.js）：岛上写什么、什么时候长出来、点了做什么。三张词表还在这边（契约核对读的是 app.js）。
+    this.isle = new IslandView(document, {
+      words: { acting: ACTING_WORD, activity: ACTIVITY_WORD, mode: MODE_WORD },
+      minW: ISLE_MIN_W,
+      maxW: ISLE_MAX_W,
+    });
 
     // 后端每一拍给的东西。拿不到就保持 null —— 绝不构造，也绝不假装知道。
     this.phase = 'static';
@@ -196,21 +189,6 @@ class GalaxyOverlay {
     this.spreading = false;
     this.spread = 0;
 
-    // 动手期间那座岛的大小（与空间编排里长出来的那座取大）。
-    this.isleAct = 0;
-    // 岛展开到最大时多宽 —— 按岛上此刻那几个字量出来，不写死（见 _paintIsland）。
-    this.isleMax = ISLE_MIN_W;
-    // 灵动岛上的卡（WS type="island"，core/island_cards.py）。各带一个本地到期时刻（秒，null = 不过期）：
-    // 后端给的是「还剩几秒」，这里自己数，不跟后端对表。
-    this.cards = [];
-    // 点开了没有（人点的）、点开的程度（动画）、点开后下面那块多高（量出来的）。
-    this.expanded = false;
-    this.isleOpen = 0;
-    this.fullH = 0;
-    // 指针在不在岛上：在的时候窗口才接鼠标（覆盖层平时整个穿透，点到桌面上）。
-    this.hover = false;
-    this._collapseAt = 0;
-    this._isleNow = 0;
 
     // 边光的呼吸。周期读 index.html 的 --c-rim（判据在那边，这里不另写一份数）。
     this.breathT = 0;
@@ -229,7 +207,11 @@ class GalaxyOverlay {
   init() {
     this._readRhythm();
     this._connectBackend();
-    this._bindIsland();
+    this.isle.bind(window);
+    // 剪贴板一变，主进程说一声是哪一类（内容不出主进程，见 electron/main.js 的 watchClipboard）
+    if (window.galaxyAPI && window.galaxyAPI.onClipboard) {
+      window.galaxyAPI.onClipboard((d) => this.isle.copiedNow(d && d.type));
+    }
     this._apply();
     requestAnimationFrame((t) => this._loop(t));
   }
@@ -242,7 +224,10 @@ class GalaxyOverlay {
     try {
       const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
       this.reducedMotion = !!mq.matches;
-      if (mq.addEventListener) mq.addEventListener('change', (e) => { this.reducedMotion = !!e.matches; });
+      this.isle.calm = this.reducedMotion;
+      if (mq.addEventListener) {
+        mq.addEventListener('change', (e) => { this.reducedMotion = !!e.matches; this.isle.calm = this.reducedMotion; });
+      }
     } catch (e) { /* 没有 matchMedia 的环境：按不减动效处理 */ }
   }
 
@@ -260,7 +245,8 @@ class GalaxyOverlay {
     //
     // WS 连着时只认 WS：同一拍从两条路各到一次、先后不定，后到的那份旧帧会把画面拽回上一拍。
     const base = (window.galaxyShell && window.galaxyShell.base) || this._fallbackBase();
-    this._base = base;   // 岛上「停下」「知道了」打 HTTP 用（令牌由外壳注入，见 electron/main.js）
+    this._base = base;   // 岛上「停下」「知道了」「暂停感知」打 HTTP 用（令牌由外壳注入，见 electron/main.js）
+    this.isle.base = base;
     this._ws = new LiveSocket(base.replace(/^http/, 'ws') + '/ws/desktop-presence', {
       onOpen: () => console.log('[Galaxy] WebSocket connected'),
       onClose: () => {
@@ -271,7 +257,7 @@ class GalaxyOverlay {
       },
       onMessage: (msg) => {
         if (msg && msg.type === 'state_event' && msg.payload) this._onStateEvent(msg.payload);
-        else if (msg && msg.type === 'island' && msg.payload) this._onIsland(msg.payload);
+        else if (msg && msg.type === 'island' && msg.payload) this.isle.setCards(msg.payload);
       },
     });
     this._ws.start();
@@ -294,6 +280,8 @@ class GalaxyOverlay {
 
   _onStateEvent(payload) {
     if (payload.intent !== undefined) this.intent = payload.intent;
+    // 它在不在出声（属主 core.speech_output.set_ai_speaking）—— 岛上那排声波跟着它
+    if (payload.speaking !== undefined) this.isle.setSpeaking(!!payload.speaking);
     if (payload.phase !== undefined) this.phase = payload.phase;
     if (payload.posture !== undefined) this.posture = payload.posture;
     if (payload.render !== undefined) this.render = payload.render;
@@ -339,73 +327,6 @@ class GalaxyOverlay {
         this.spread = 0;
       }
       this._lastReturning = returning;
-    }
-  }
-
-  // ── 灵动岛上的卡：每次有变化后端推整份（卡很少，整份比增量简单，也不怕丢一帧） ──
-  _onIsland(payload) {
-    const now = performance.now() / 1000;
-    const list = Array.isArray(payload.cards) ? payload.cards : [];
-    this.cards = list
-      .filter((c) => c && typeof c.id === 'string' && typeof c.title === 'string' && c.title)
-      .map((c) => Object.assign({}, c, {
-        _until: typeof c.expires_in_s === 'number' ? now + c.expires_in_s : null,
-      }));
-    if (!this.cards.length) this.expanded = false;
-  }
-
-  // 过期的自己走（后端不必为一张卡到点再推一次）。
-  _liveCards() {
-    const now = performance.now() / 1000;
-    if (this.cards.some((c) => c._until !== null && c._until <= now)) {
-      this.cards = this.cards.filter((c) => c._until === null || c._until > now);
-      if (!this.cards.length) this.expanded = false;
-    }
-    return this.cards;
-  }
-
-  // ── 岛接鼠标：只在指针停在岛上时 ──
-  //
-  // 覆盖层是全屏透明窗口，平时整个穿透（electron/main.js 的 setIgnoreMouseEvents(true, {forward:true})）。
-  // forward 让鼠标移动照样送到这里：指针进了岛的范围就让窗口接鼠标，出去就交还桌面。点一下展开 / 收起；
-  // 展开后指针离开 ISLE_LINGER 秒收回。岛没长出来时（静息、急停那道细线）一律不接。
-  _bindIsland() {
-    if (!this.island) return;
-    document.addEventListener('mousemove', (e) => {
-      // 岛上没东西可点（只是阈限态里那句「正在规划」）就不接 —— 平白挡住屏幕顶上那一小块桌面。
-      const r = this.island.getBoundingClientRect();
-      const something = this.cards.length > 0 || !!(this.render && this.render.acting);
-      const inside = something && this._isleNow > 0.6
-        && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-      this._setHover(inside);
-    });
-    this.island.addEventListener('click', (e) => {
-      const b = e.target && e.target.closest ? e.target.closest('button[data-act]') : null;
-      if (b) { this._islandAct(b.dataset.act); return; }
-      if (this.cards.length || (this.render && this.render.acting)) this.expanded = !this.expanded;
-    });
-  }
-
-  _setHover(inside) {
-    if (inside === this.hover) return;
-    this.hover = inside;
-    this.island.dataset.hover = String(inside);
-    if (window.galaxyAPI && window.galaxyAPI.setIgnoreMouse) window.galaxyAPI.setIgnoreMouse(!inside);
-    this._collapseAt = !inside && this.expanded ? performance.now() / 1000 + ISLE_LINGER : 0;
-  }
-
-  // 岛上那三个键。都不等回音：停没停、卡撤没撤，下一帧会照实画出来。
-  _islandAct(act) {
-    const top = this._liveCards()[0] || null;
-    if (act === 'stop') {
-      fetch(this._base + '/api/v1/presence/stop?reason=island', { method: 'POST' }).catch(() => {});
-    } else if (act === 'panel') {
-      if (window.galaxyAPI && window.galaxyAPI.openPanel) window.galaxyAPI.openPanel();
-    } else if (act === 'dismiss' && top) {
-      this.cards = this.cards.filter((c) => c.id !== top.id);
-      fetch(this._base + '/api/v1/presence/island/' + encodeURIComponent(top.id), { method: 'DELETE' })
-        .catch(() => {});
-      if (!this.cards.length) this.expanded = false;
     }
   }
 
@@ -457,24 +378,6 @@ class GalaxyOverlay {
     }
   }
 
-  // ── 岛：动手期间、岛上有卡的时候自己长出来；人点开时往下长 ──
-  _stepIsle(dt) {
-    const acting = !!(this.render && this.render.acting);
-    const target = acting || this._liveCards().length ? 1 : 0;
-    const step = dt / ISLE_SECONDS;
-    this.isleAct = target > this.isleAct
-      ? Math.min(target, this.isleAct + step)
-      : Math.max(target, this.isleAct - step);
-    if (this._collapseAt && performance.now() / 1000 >= this._collapseAt) {
-      this._collapseAt = 0;
-      if (!this.hover) this.expanded = false;
-    }
-    const openTarget = this.expanded ? 1 : 0;
-    this.isleOpen = openTarget > this.isleOpen
-      ? Math.min(openTarget, this.isleOpen + step)
-      : Math.max(openTarget, this.isleOpen - step);
-  }
-
   // ── 运动学：只决定"怎么走"，不决定"走到哪儿" ──
   //
   // 落点由主轴给（OPEN_BY_LIFECYCLE），过程交给 presence_motion：编排带里匀速
@@ -512,8 +415,7 @@ class GalaxyOverlay {
       || Math.abs(this.open - (OPEN_BY_LIFECYCLE[life] || 0)) > 0.01
       || this.spreading
       || (this.hide > 0.001 && this.hide < 0.999)
-      || (this.isleAct > 0.001 && this.isleAct < 0.999)
-      || (this.isleOpen > 0.001 && this.isleOpen < 0.999);
+      || this.isle.moving();
     const minFrameMs = 1000 / (this.open > 0.02 || moving ? 30 : 12);
     if (now - this.lastFrame < minFrameMs) return;
 
@@ -522,7 +424,7 @@ class GalaxyOverlay {
     this.lastFrame = now;
     for (let left = gap; left > 1e-6; left -= STEP) this._advance(Math.min(STEP, left));
     this._stepRim(gap);
-    this._stepIsle(gap);
+    this.isle.step(gap, this.render);
     this.breathT += gap;
     this._apply();
   }
@@ -532,7 +434,7 @@ class GalaxyOverlay {
     const s = this.root.style;
     const open = this.open;
     const grow = easeOut(seg(open, 'grow'));
-    const isle = Math.max(ease(seg(open, 'isle')), ease(this.isleAct));
+    const isle = Math.max(ease(seg(open, 'isle')), this.isle.grow());
 
     const p = (this.render && this.render.perception) || null;
     const paused = !!(p && p.privacy_paused);
@@ -581,18 +483,16 @@ class GalaxyOverlay {
     // 没线＝这台机器根本没有感知可用。契约把 privacy_paused 单独给一位，
     // 正是因为"用户按停了"是一个整体姿态，不是"恰好四条都闭着"。
     // 点开：同一座岛往下长（宽到上限、下面长出 .isl-full 那么高），不是另弹一个窗。
-    const full = paused ? 0 : ease(this.isleOpen) * isle;
-    const h = paused ? 2 : 2 + isle * ISLE_H + full * this.fullH;
-    const w = paused ? 68 : 66 + isle * (this.isleMax - 66) + full * Math.max(0, ISLE_MAX_W - this.isleMax);
+    const full = paused ? 0 : this.isle.unfold() * isle;
+    const isleW = this.isle.width;
+    const h = paused ? 2 : 2 + isle * ISLE_H + full * this.isle.fullH;
+    const w = paused ? 68 : 66 + isle * (isleW - 66) + full * Math.max(0, ISLE_MAX_W - isleW);
     s.setProperty('--ih', h.toFixed(1) + 'px');
     s.setProperty('--iw', w.toFixed(1) + 'px');
     s.setProperty('--ir', (paused ? 2 : 2 + isle * ISLE_R + full * (ISLE_OPEN_R - ISLE_R)).toFixed(1) + 'px');
     s.setProperty('--iop', paused ? '0.85' : (isle > 0.001 ? '1' : '0'));
     s.setProperty('--itx', Math.max(0, (isle - 0.55) / 0.45).toFixed(3));
     s.setProperty('--ifx', Math.max(0, (full - 0.5) / 0.5).toFixed(3));
-    this._isleNow = paused ? 0 : isle;
-    // 岛收回去了（或按了急停）而指针还「在岛上」：把鼠标交还桌面，不然那一块会一直挡着点不下去。
-    if (this.hover && this._isleNow <= 0.6) this._setHover(false);
 
     // ── 降级留痕：只落在**空间**上，不落在边光和桌宠上 ──
     //
@@ -602,7 +502,8 @@ class GalaxyOverlay {
     const trust = trustOf(this.render);
     if (this.root.dataset.trust !== trust) this.root.dataset.trust = trust;
 
-    this._paintIsland(paused);
+    this.isle.paint(this.render, paused, isle, s);
+    this.isle.releaseIfGone(window);
     this._paintPet(p);
   }
 
@@ -618,108 +519,6 @@ class GalaxyOverlay {
       if (v !== undefined && v > g) g = v;
     }
     return g;
-  }
-
-  _paintIsland(paused) {
-    const s = this.root.style;
-    if (paused) {
-      // 急停：岛就是那道细线，卡片不上（还在队列里，没过期的恢复后照常出来）。
-      this.islandMode.hidden = true;
-      if (this.islandHint) this.islandHint.hidden = true;
-      this._show(this.islandSub, '');
-      this._show(this.islandMore, '');
-      if (this.islandDot) this.islandDot.hidden = true;
-      s.setProperty('--ibar-on', '0');
-      return;
-    }
-    const r = this.render || {};
-    const acting = !!r.acting;
-    const act = r.liminal_activity || 'none';
-    const mode = (r.hybrid_execution && r.hybrid_execution.mode) || 'none';
-    const cards = this._liveCards();
-    const top = cards[0] || null;
-    // 有卡先说卡（它是刚发生的事）；否则动手期间说它在动手，再否则说阈限态里它在干嘛。
-    const word = top ? top.title : acting ? ACTING_WORD : (ACTIVITY_WORD[act] || 'Galaxy');
-    let changed = false;
-    if (this.islandText.textContent !== word) { this.islandText.textContent = word; changed = true; }
-    changed = this._show(this.islandSub, top ? top.subtitle || '' : '') || changed;
-    changed = this._show(this.islandMore, cards.length > 1 ? `+${cards.length - 1}` : '') || changed;
-    if (this.islandDot && this.islandDot.hidden !== !top) { this.islandDot.hidden = !top; changed = true; }
-    const tone = top ? top.tone || 'info' : '';
-    if ((this.island.dataset.tone || '') !== tone) this.island.dataset.tone = tone;
-    const m = top ? '' : MODE_WORD[mode] || '';
-    if (this.islandMode.hidden !== !m) { this.islandMode.hidden = !m; changed = true; }
-    if (m && this.islandMode.textContent !== m) { this.islandMode.textContent = m; changed = true; }
-    // 怎么叫停：只照 `render.stop_key` 写 —— 后端的键盘监听确实占到了才有值
-    // （core/stop_key.py）。不能从 acting 推出来：分不清人按的和它自己注入的键的
-    // 平台上，动手期间也是空的。写着「Esc 停止」而按了没用，比不写更糟。
-    if (this.islandHint) {
-      const hint = acting && r.stop_key ? `${r.stop_key} 停止` : '';
-      if (this.islandHint.hidden !== !hint) { this.islandHint.hidden = !hint; changed = true; }
-      if (hint && this.islandHint.textContent !== hint) { this.islandHint.textContent = hint; changed = true; }
-    }
-    // 进度：排第一的那张卡带着就画那道线（「第 3/15 步」）。
-    const p = top && typeof top.progress === 'number' ? top.progress : null;
-    s.setProperty('--ibar-on', p === null ? '0' : '1');
-    if (p !== null) s.setProperty('--ibar', (p * 100).toFixed(1) + '%');
-    // 岛上的字变了，收起时多宽跟着量一次 —— 但到 ISLE_MAX_W 为止，再多就截断（副标题那一段收窄）。
-    if (changed && this.islandInner) this.isleMax = Math.min(ISLE_MAX_W, Math.max(ISLE_MIN_W, this._needWidth()));
-    this._paintFull(cards, top, acting && !!r.stop_key, acting);
-  }
-
-  // 显示 / 藏一段字；返回变没变。
-  _show(el, text) {
-    if (!el) return false;
-    let changed = false;
-    if (el.hidden !== !text) { el.hidden = !text; changed = true; }
-    if (text && el.textContent !== text) { el.textContent = text; changed = true; }
-    return changed;
-  }
-
-  // 第一行要多宽：各段按**自己的**宽算（副标题能收窄，量整行会量成当前的宽、永远长不开），加上间距与两头留白。
-  _needWidth() {
-    let sum = 0;
-    let n = 0;
-    for (const el of this.islandInner.children) {
-      if (el.hidden) continue;
-      sum += el === this.islandSub ? el.scrollWidth : el.getBoundingClientRect().width;
-      n += 1;
-    }
-    return Math.ceil(sum + Math.max(0, n - 1) * 9 + 34);
-  }
-
-  // 点开之后下面那块：排第一那张卡的全文、其余的卡、能按的键。没点开就不画（也不占高度）。
-  _paintFull(cards, top, canStop, acting) {
-    if (!this.islandFull) return;
-    const open = this.expanded || this.isleOpen > 0.001;
-    if (this.islandFull.hidden !== !open) this.islandFull.hidden = !open;
-    if (!open) return;
-    // 全文只放卡上的 body —— 没有就不写（不把上面那行副标题再抄一遍）；它在动手时说一句怎么让它住手。
-    const body = top && top.body ? top.body : acting ? '它正在动你的鼠标键盘；按「停下」让它住手。' : '';
-    if (this.islandBody.textContent !== body) this.islandBody.textContent = body;
-    const rows = cards.slice(1).map((c) => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.dataset.tone = c.tone || 'info';
-      const dot = document.createElement('i');
-      const text = document.createElement('span');
-      text.textContent = c.subtitle ? `${c.title} · ${c.subtitle}` : c.title;
-      row.append(dot, text);
-      return row;
-    });
-    const sig = cards.slice(1).map((c) => c.id + c.title + c.subtitle + c.tone).join('|');
-    if (this.islandList.dataset.sig !== sig) {
-      this.islandList.dataset.sig = sig;
-      this.islandList.replaceChildren(...rows);
-    }
-    const btn = (act) => this.island.querySelector(`button[data-act='${act}']`);
-    // 「停下」：它在动手（或这张卡就是它正在做的事）时才有。不要求叫停键 —— 这一下走的是 HTTP，不靠键盘监听。
-    btn('stop').hidden = !(acting || canStop || (top && top.action === 'stop'));
-    btn('panel').hidden = !cards.some((c) => c.action === 'panel');
-    // 「知道了」撤的是排第一的那张；进行中的那张（桌面操作走到第几步）撤了下一步又会推上来，不给。
-    btn('dismiss').hidden = !top || top.action === 'stop';
-    const h = Math.ceil(this.islandFull.scrollHeight || 0);
-    if (h > 0) this.fullH = h;
   }
 
   _paintPet(p) {

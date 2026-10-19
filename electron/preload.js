@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
   // 灵动岛上的「打开面板」：只开不关（已经开着就拉到前面），与 F12 的开关不同
   openPanel: () => ipcRenderer.send('galaxy:open-panel'),
+  // 剪贴板刚变过：只带类别 { type: 'text'|'image'|'file'|'generic' }，内容不过来（electron/clipboard_watch.js）
+  onClipboard: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('galaxy:clipboard', handler);
+    return () => ipcRenderer.removeListener('galaxy:clipboard', handler);
+  },
 
   // ── 桌面连续感知（摄像头/麦克风/屏幕）─
   // 配置（默认关闭，隐私优先）由 main.js 经环境变量决定。
