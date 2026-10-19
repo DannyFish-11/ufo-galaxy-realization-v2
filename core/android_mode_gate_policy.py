@@ -7,8 +7,7 @@ Background
 Prior to this module the three Android-side execution gates
 (``crossDeviceEnabled``, ``goalExecutionEnabled``,
 ``parallelExecutionEnabled``) were only enforced in the Android-side
-``AutonomousExecutionPipeline`` and partially reflected in V2 routing via
-``galaxy_gateway.cross_device_switch``.  The V2 side had no single,
+``AutonomousExecutionPipeline``.  The V2 side had no single,
 authoritative surface that:
 
 * Described the **current** Android device mode (local vs cross_device).
@@ -29,7 +28,8 @@ Design principles
    authorities:
    - ``core.android_device_state_store`` for runtime readiness truth.
    - ``core.attached_runtime_session_registry`` for session state.
-   - ``galaxy_gateway.cross_device_switch`` for V2-side cross-device flag.
+   (This computer's 「跨设备」 switch is not consulted: it only says whether the
+   computer joins the device network; a phone that is connected joined by its own switch.)
 3. **Unified gate evaluation** — :func:`evaluate_android_mode_readiness`
    evaluates all three gates (runtime mode, goal execution, parallel
    execution) in one call and returns a single, typed verdict.
@@ -81,8 +81,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from core import upper_ports
-
 logger = logging.getLogger("Galaxy.AndroidModeGatePolicy")
 
 # ---------------------------------------------------------------------------
@@ -121,11 +119,11 @@ MODE_SWITCH_SESSION_CONSISTENCY_POLICY: str = (
 CROSS_DEVICE_READINESS_GATE_POLICY: str = (
     "POLICY::CROSS_DEVICE_READINESS_GATE: "
     "A device is cross-device ready only when ALL of the following hold: "
-    "(1) V2-side cross_device_enabled switch is ON, "
-    "(2) DeviceStateSnapshot.local_loop_ready is True (or no snapshot exists "
+    "(1) DeviceStateSnapshot.local_loop_ready is True (or no snapshot exists "
     "    and the device has an active session with join_runtime posture), "
-    "(3) the device has an active session in AttachedRuntimeSessionRegistry, "
-    "(4) that session's posture is join_runtime."
+    "(2) the device has an active session in AttachedRuntimeSessionRegistry, "
+    "(3) that session's posture is join_runtime. "
+    "This computer's cross-device switch is not a gate."
 )
 
 CANONICAL_ANDROID_EXECUTION_GATE_POLICY: str = (
@@ -185,8 +183,8 @@ class AndroidDeviceMode(str, Enum):
     cross_device
         Device participates in the V2-driven cross-device execution protocol.
         All three gates (crossDeviceEnabled, goalExecutionEnabled,
-        parallelExecutionEnabled) are enabled on the Android side and the
-        V2 cross-device switch is ON.
+        parallelExecutionEnabled) are enabled on the Android side (this
+        computer's cross-device switch is not part of it).
     transitioning
         Mode change is in progress; no dispatch or takeover should be
         attempted until the device reaches a stable mode.
@@ -524,7 +522,6 @@ def resolve_android_execution_gate_decision(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_V2_CROSS_DEVICE_SWITCH_GATE = "v2_cross_device_switch"
 _ANDROID_CROSS_DEVICE_GATE = "android_cross_device_enabled"
 _ANDROID_GOAL_EXEC_GATE = "android_goal_execution_enabled"
 _ANDROID_PARALLEL_GATE = "android_parallel_execution_enabled"
@@ -565,28 +562,6 @@ def _read_explicit_gate_bool(config: Dict[str, Any], *keys: str) -> Optional[boo
         if key in config:
             return _coerce_optional_bool(config.get(key))
     return None
-
-
-def _check_v2_cross_device_switch() -> GateEvalResult:
-    """Check whether the V2-side cross-device switch is ON."""
-    try:
-        is_cross_device_enabled = upper_ports.resolve("gateway.cross_device_switch.is_cross_device_enabled")
-
-        enabled = is_cross_device_enabled()
-        return GateEvalResult(
-            gate_name=_V2_CROSS_DEVICE_SWITCH_GATE,
-            passed=enabled,
-            reason="V2 cross-device switch is ON" if enabled else "V2 cross-device switch is OFF",
-            source="galaxy_gateway.cross_device_switch.is_cross_device_enabled",
-        )
-    except Exception as exc:
-        logger.debug("_check_v2_cross_device_switch: unavailable: %s", exc)
-        return GateEvalResult(
-            gate_name=_V2_CROSS_DEVICE_SWITCH_GATE,
-            passed=False,
-            reason=f"V2 cross-device switch module unavailable: {exc}",
-            source="unavailable",
-        )
 
 
 def _check_session_gate(device_id: str) -> tuple:
@@ -1003,13 +978,11 @@ def _evaluate_readiness_impl(
     gates: List[GateEvalResult] = []
     blocking: List[str] = []
 
-    # Gate 1: V2-side cross-device switch
-    v2_switch = _check_v2_cross_device_switch()
-    gates.append(v2_switch)
-    if not v2_switch.passed:
-        blocking.append(v2_switch.gate_name)
+    # This computer's 「跨设备」 switch is deliberately NOT a gate: it says whether the
+    # computer joins the device network as a device.  A phone that is connected turned on
+    # its own cross-device switch (the snapshot gate below), and that is what makes it a member.
 
-    # Gate 2: session active + posture
+    # Gate 1: session active + posture
     session_active_r, session_posture_r, session_id = _check_session_gate(device_id)
     gates.extend([session_active_r, session_posture_r])
     if not session_active_r.passed:
@@ -1017,7 +990,7 @@ def _evaluate_readiness_impl(
     if not session_posture_r.passed:
         blocking.append(session_posture_r.gate_name)
 
-    # Gate 3: Android-side snapshot gates + readiness
+    # Gate 2: Android-side snapshot gates + readiness
     (
         android_cross_device_r,
         android_goal_exec_r,
@@ -1045,10 +1018,9 @@ def _evaluate_readiness_impl(
             blocking.append(local_loop_r.gate_name)
 
     # Derive mode
-    cross_device_v2_on = v2_switch.passed
     android_cross_on = android_cross_device_r.passed
     posture_join = session_posture_r.passed
-    if cross_device_v2_on and android_cross_on and session_active_r.passed and posture_join:
+    if android_cross_on and session_active_r.passed and posture_join:
         inferred_mode = AndroidDeviceMode.cross_device
     elif session_active_r.passed:
         inferred_mode = AndroidDeviceMode.local
@@ -1060,8 +1032,7 @@ def _evaluate_readiness_impl(
     # dispatch eligibility: cross_device_ready AND (goal_execution gate passes
     # when required)
     is_dispatch_eligible = (
-        v2_switch.passed
-        and session_active_r.passed
+        session_active_r.passed
         and session_posture_r.passed
         and android_cross_device_r.passed
         and (android_goal_exec_r.passed if require_goal_execution else True)

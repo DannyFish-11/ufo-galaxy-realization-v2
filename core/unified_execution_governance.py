@@ -605,7 +605,6 @@ _GOAL_EXECUTION_POLICY = ExecutionTypePolicy(
     execution_type=ExecutionType.goal_execution,
     priority=ExecutionPriority.PRIORITY_2_GOAL,
     required_gates=[
-        "v2_cross_device_switch",
         "session_active",
         "session_posture_join_runtime",
         "android_cross_device_enabled",
@@ -625,7 +624,6 @@ _PARALLEL_SUBTASK_POLICY = ExecutionTypePolicy(
     execution_type=ExecutionType.parallel_subtask,
     priority=ExecutionPriority.PRIORITY_2_PARALLEL,
     required_gates=[
-        "v2_cross_device_switch",
         "session_active",
         "session_posture_join_runtime",
         "android_cross_device_enabled",
@@ -645,7 +643,6 @@ _TAKEOVER_REQUEST_POLICY = ExecutionTypePolicy(
     execution_type=ExecutionType.takeover_request,
     priority=ExecutionPriority.PRIORITY_1_TAKEOVER,
     required_gates=[
-        "v2_cross_device_switch",
         "session_active",
         "session_posture_join_runtime",
         "android_cross_device_enabled",
@@ -665,7 +662,6 @@ _DELEGATED_EXECUTION_POLICY = ExecutionTypePolicy(
     execution_type=ExecutionType.delegated_execution,
     priority=ExecutionPriority.PRIORITY_2_DELEGATED,
     required_gates=[
-        "v2_cross_device_switch",
         "session_active",
         "session_posture_join_runtime",
         "android_cross_device_enabled",

@@ -205,12 +205,12 @@ class TestGateEvalResult:
         assert g.passed is True
 
     def test_C2_to_dict_contains_required_keys(self):
-        g = GateEvalResult(gate_name="v2_cross_device_switch", passed=False, reason="OFF", source="env")
+        g = GateEvalResult(gate_name="android_cross_device_enabled", passed=False, reason="OFF", source="snapshot")
         d = g.to_dict()
-        assert d["gate_name"] == "v2_cross_device_switch"
+        assert d["gate_name"] == "android_cross_device_enabled"
         assert d["passed"] is False
         assert d["reason"] == "OFF"
-        assert d["source"] == "env"
+        assert d["source"] == "snapshot"
 
     def test_C3_failed_gate_has_reason(self):
         g = GateEvalResult(gate_name="session_active", passed=False, reason="no session")
@@ -372,10 +372,7 @@ class TestEvaluateReadinessAllGatesPass:
     def test_F1_all_gates_pass_is_cross_device_ready(self):
         register_session("dev_full", posture="join_runtime")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_full")
 
         assert verdict.is_cross_device_ready is True
@@ -384,10 +381,7 @@ class TestEvaluateReadinessAllGatesPass:
     def test_F2_mode_inferred_as_cross_device(self):
         register_session("dev_mode", posture="join_runtime")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_mode")
 
         assert verdict.mode == AndroidDeviceMode.cross_device
@@ -395,10 +389,7 @@ class TestEvaluateReadinessAllGatesPass:
     def test_F3_is_dispatch_eligible_when_all_pass(self):
         register_session("dev_disp", posture="join_runtime")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_disp")
 
         assert verdict.is_dispatch_eligible is True
@@ -406,10 +397,7 @@ class TestEvaluateReadinessAllGatesPass:
     def test_F4_is_takeover_eligible_when_local_loop_ready(self):
         register_session("dev_takeover", posture="join_runtime")
         snap = _make_snapshot(local_loop_ready=True)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_takeover")
 
         assert verdict.is_takeover_eligible is True
@@ -420,7 +408,11 @@ class TestEvaluateReadinessAllGatesPass:
 # ---------------------------------------------------------------------------
 
 
-class TestEvaluateReadinessV2SwitchOff:
+class TestEvaluateReadinessIgnoresThisComputersSwitch:
+    """手机就绪只看手机自己(它的跨设备开关、会话、能力快照),不看这台电脑的「跨设备」开关。
+
+    电脑那个开关只说电脑自己进不进设备网络;以前它是这里的一道门(v2_cross_device_switch),
+    电脑在本地模式时,一台已加入、已就绪的手机也永远「未就绪」。"""
 
     def setup_method(self):
         reset_session_registry()
@@ -428,40 +420,38 @@ class TestEvaluateReadinessV2SwitchOff:
     def teardown_method(self):
         reset_session_registry()
 
-    def test_G1_v2_switch_off_blocks_cross_device_ready(self):
+    def test_G1_computer_in_local_mode_phone_ready(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
         register_session("dev_off", posture="join_runtime")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=False),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap):
             verdict = evaluate_android_mode_readiness("dev_off")
 
-        assert verdict.is_cross_device_ready is False
-        assert "v2_cross_device_switch" in verdict.blocking_gates
+        assert verdict.is_cross_device_ready is True
+        assert verdict.is_dispatch_eligible is True
+        assert verdict.blocking_gates == []
 
-    def test_G2_v2_switch_off_blocks_dispatch_eligible(self):
-        register_session("dev_off2", posture="join_runtime")
-        snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=False),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
-            verdict = evaluate_android_mode_readiness("dev_off2")
-
-        assert verdict.is_dispatch_eligible is False
-
-    def test_G3_gate_results_include_v2_switch(self):
+    def test_G2_no_gate_named_after_the_computers_switch(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
         register_session("dev_off3", posture="join_runtime")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=False),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap):
             verdict = evaluate_android_mode_readiness("dev_off3")
 
         gate_names = [g.gate_name for g in verdict.gate_results]
-        assert "v2_cross_device_switch" in gate_names
+        assert "v2_cross_device_switch" not in gate_names
+        assert "android_cross_device_enabled" in gate_names
+
+    def test_G3_the_phones_own_switch_still_counts(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+        register_session("dev_off4", posture="join_runtime")
+        snap = _make_snapshot(cross_device_enabled=False)
+        with patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap):
+            verdict = evaluate_android_mode_readiness("dev_off4")
+
+        assert verdict.is_cross_device_ready is False
+        assert "android_cross_device_enabled" in verdict.blocking_gates
 
 
 # ---------------------------------------------------------------------------
@@ -480,10 +470,7 @@ class TestEvaluateReadinessNoSession:
     def test_H1_no_session_blocks_cross_device_ready(self):
         # No register_session call
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_nosession")
 
         assert verdict.is_cross_device_ready is False
@@ -491,10 +478,7 @@ class TestEvaluateReadinessNoSession:
 
     def test_H2_mode_inferred_as_unknown_when_no_session(self):
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_nosession2")
 
         assert verdict.mode == AndroidDeviceMode.unknown
@@ -516,10 +500,7 @@ class TestEvaluateReadinessControlOnlyPosture:
     def test_I1_control_only_posture_blocks_cross_device(self):
         register_session("dev_co", posture="control_only")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_co")
 
         assert verdict.is_cross_device_ready is False
@@ -528,10 +509,7 @@ class TestEvaluateReadinessControlOnlyPosture:
     def test_I2_mode_inferred_as_local_when_control_only(self):
         register_session("dev_co2", posture="control_only")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_co2")
 
         # Session is active but posture is not join_runtime → local mode
@@ -554,10 +532,7 @@ class TestEvaluateReadinessAndroidGateOff:
     def test_J1_android_gate_off_blocks_cross_device(self):
         register_session("dev_agoff", posture="join_runtime")
         snap = _make_snapshot(cross_device_enabled=False)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_agoff")
 
         assert verdict.is_cross_device_ready is False
@@ -566,10 +541,7 @@ class TestEvaluateReadinessAndroidGateOff:
     def test_J2_goal_execution_gate_off_blocks_dispatch_eligible(self):
         register_session("dev_geoff", posture="join_runtime")
         snap = _make_snapshot(goal_execution_enabled=False)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_geoff", require_goal_execution=True)
 
         assert verdict.is_dispatch_eligible is False
@@ -578,10 +550,7 @@ class TestEvaluateReadinessAndroidGateOff:
     def test_J3_parallel_gate_off_not_blocking_when_not_required(self):
         register_session("dev_paroff", posture="join_runtime")
         snap = _make_snapshot(parallel_execution_enabled=False)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_paroff", require_parallel_execution=False)
 
         # parallel is not required, so its gate should not be blocking
@@ -624,7 +593,6 @@ class TestEvaluateReadinessAndroidGateOff:
             "malformed_canonical_gate_metadata_keys": [],
         }
         with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
             patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
             patch(
                 "core.android_device_state_store.get_device_capability_report_semantics",
@@ -653,7 +621,6 @@ class TestEvaluateReadinessAndroidGateOff:
             "malformed_canonical_gate_metadata_keys": [],
         }
         with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
             patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
             patch(
                 "core.android_device_state_store.get_device_capability_report_semantics",
@@ -688,7 +655,6 @@ class TestEvaluateReadinessAndroidGateOff:
             "canonical_gate_contract_diagnosis": "unknown field extra_capability_flag",
         }
         with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
             patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
             patch(
                 "core.android_device_state_store.get_device_capability_report_semantics",
@@ -719,10 +685,7 @@ class TestEvaluateReadinessLocalLoopNotReady:
     def test_K1_local_loop_not_ready_blocks_takeover(self):
         register_session("dev_lloff", posture="join_runtime")
         snap = _make_snapshot(local_loop_ready=False)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_lloff", require_local_loop_ready=True)
 
         assert verdict.is_takeover_eligible is False
@@ -731,10 +694,7 @@ class TestEvaluateReadinessLocalLoopNotReady:
     def test_K2_dispatch_may_still_be_eligible_when_local_loop_not_required(self):
         register_session("dev_lloff2", posture="join_runtime")
         snap = _make_snapshot(local_loop_ready=False)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict = evaluate_android_mode_readiness("dev_lloff2", require_local_loop_ready=False)
 
         # When local_loop is not required, the takeover gate may not be explicitly
@@ -757,10 +717,7 @@ class TestEvaluateReadinessGracefulDegradation:
 
     def test_L1_no_snapshot_returns_verdict_not_cross_device_ready(self):
         register_session("dev_nosnap", posture="join_runtime")
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=None),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=None),):
             verdict = evaluate_android_mode_readiness("dev_nosnap")
 
         assert verdict.is_cross_device_ready is False
@@ -768,7 +725,6 @@ class TestEvaluateReadinessGracefulDegradation:
     def test_L2_missing_store_returns_verdict_not_cross_device_ready(self):
         register_session("dev_nostore", posture="join_runtime")
         with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
             patch(
                 "core.android_device_state_store.get_device_state_snapshot",
                 side_effect=ImportError("store unavailable"),
@@ -780,13 +736,13 @@ class TestEvaluateReadinessGracefulDegradation:
         # Must never raise
         assert verdict is not None
 
-    def test_L3_entirely_missing_cross_device_switch_returns_not_ready(self):
+    def test_L3_a_gate_check_that_blows_up_returns_not_ready(self):
         register_session("dev_noswitch", posture="join_runtime")
         snap = _make_snapshot()
         with (
             patch(
-                "core.android_mode_gate_policy._check_v2_cross_device_switch",
-                side_effect=Exception("switch module unavailable"),
+                "core.android_mode_gate_policy._check_session_gate",
+                side_effect=Exception("session registry unavailable"),
             ),
             patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
         ):
@@ -1175,10 +1131,7 @@ class TestBuildCrossDeviceReadinessPanelDict:
     def test_U3_per_device_dicts_include_mode_and_readiness(self):
         register_session("dev_panel", posture="join_runtime")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             result = build_cross_device_readiness_panel_dict(["dev_panel"])
 
         assert result["total_devices"] == 1
@@ -1210,10 +1163,7 @@ class TestDispatchEligibilityAfterModeSwitch:
         # Start as local (control_only posture)
         register_session("dev_disp_v", posture="control_only")
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict_before = evaluate_android_mode_readiness("dev_disp_v")
 
         assert verdict_before.is_dispatch_eligible is False
@@ -1230,10 +1180,7 @@ class TestDispatchEligibilityAfterModeSwitch:
         )
 
         snap = _make_snapshot()
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict_after = evaluate_android_mode_readiness("dev_disp_v2")
 
         assert verdict_after.is_dispatch_eligible is True
@@ -1255,10 +1202,7 @@ class TestTakeoverEligibilityAfterModeSwitch:
     def test_W1_takeover_eligible_before_cross_device_to_local_switch(self):
         register_session("dev_tko", posture="join_runtime")
         snap = _make_snapshot(local_loop_ready=True)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict_before = evaluate_android_mode_readiness("dev_tko")
 
         assert verdict_before.is_takeover_eligible is True
@@ -1274,10 +1218,7 @@ class TestTakeoverEligibilityAfterModeSwitch:
         )
 
         snap = _make_snapshot(local_loop_ready=True)
-        with (
-            patch("galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True),
-            patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),
-        ):
+        with (patch("core.android_device_state_store.get_device_state_snapshot", return_value=snap),):
             verdict_after = evaluate_android_mode_readiness("dev_tko2")
 
         assert verdict_after.is_takeover_eligible is False

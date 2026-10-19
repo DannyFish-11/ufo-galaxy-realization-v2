@@ -57,11 +57,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from core.internal_auth import ws_auth_kwargs_for
 from core.port_config import get_node_port, get_service_port
-from galaxy_gateway.cross_device_switch import (
-    ERROR_CODE_CROSS_DEVICE_DISABLED,
-    WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
-    is_cross_device_enabled,
-)
 from galaxy_gateway.observability import TraceContext, emit_gateway_log, get_gateway_metrics
 
 logger = logging.getLogger(__name__)
@@ -319,10 +314,10 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
     included under ``ice_servers`` and ``tailscale`` keys respectively so
     that clients can immediately apply the correct ICE configuration.
 
-    The ``cross_device_enabled`` field reflects the current state of the
-    ``GALAXY_CROSS_DEVICE_ENABLED`` feature flag (Round 4).  When ``False``
-    the signaling WS path will be rejected with close code
-    ``WS_CLOSE_CODE_CROSS_DEVICE_DISABLED`` (4001).
+    The signaling WS path takes a member's token (query ``token=`` or an
+    ``Authorization: Bearer`` header): the owner's API token or the pairing
+    token issued to that device.  It is not gated by this computer's
+    「跨设备」 switch.
 
     **Round 6 additions**
 
@@ -341,7 +336,7 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
         "ws_signaling_path": "/signaling/{device_id}",
         "gateway_ws_url": gateway_url,
         "gateway_ws_path": "/ws/webrtc/{device_id}",
-        "cross_device_enabled": is_cross_device_enabled(),
+        "requires_member_token": True,
         # Round 6
         "trickle_ice_supported": True,
         "candidate_ordering": list(_CANDIDATE_TYPE_PRIORITY.keys()),
@@ -376,6 +371,30 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
     return info
 
 
+#: Close code when the signaling caller is not an authenticated member.
+WS_CLOSE_CODE_UNAUTHORIZED: int = 4401
+
+
+def _member_may_signal(ws: WebSocket, device_id: str) -> bool:
+    """The caller is a member: the owner's API token, or the pairing token issued to *device_id*.
+
+    Token from ``?token=`` or ``Authorization: Bearer``.  When gateway auth is turned off
+    (``GALAXY_AUTH_ENABLED=false``) everyone may signal, as for every other route.
+    """
+    from core.auth import is_auth_enabled, verify_api_token
+    from core.participant_admission import verify_pairing_capability_token
+
+    if not is_auth_enabled():
+        return True
+    token = (ws.query_params.get("token") or "").strip()
+    if not token:
+        header = (ws.headers.get("authorization") or "").strip()
+        token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+    if not token:
+        return False
+    return verify_api_token(token) or verify_pairing_capability_token(token, device_id)
+
+
 async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
     """
     Proxy WebRTC signaling between an Android client and Node_95.
@@ -401,11 +420,12 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
     * If Node_95 is unreachable the connection is closed with code 1011
       (analogous to HTTP 503).
 
-    **Round 4 — cross-device switch**: When ``GALAXY_CROSS_DEVICE_ENABLED`` is
-    OFF the connection is accepted and immediately closed with code
-    ``WS_CLOSE_CODE_CROSS_DEVICE_DISABLED`` (4001) and reason
-    ``"cross-device routing disabled"``.  A structured log entry is emitted
-    at WARNING level.
+    **Members only**: the caller must present a member's token (query
+    ``token=`` or ``Authorization: Bearer``) — the owner's API token or the
+    pairing token issued to *device_id*.  Otherwise the connection is closed
+    with code ``WS_CLOSE_CODE_UNAUTHORIZED`` (4401).  (This used to be gated by
+    the computer's 「跨设备」 switch instead, which left the path open to any LAN
+    client whenever the switch was on and shut joined phones out when it was off.)
 
     **Round 7 — observability**: trace_id is extracted from the first
     incoming message when present, or generated at the gateway.  A fresh
@@ -416,28 +436,18 @@ async def proxy_webrtc_signaling(client_ws: WebSocket, device_id: str) -> None:
     """
     await client_ws.accept()
 
-    # --- Round 4: hard constraint — reject signaling when switch is OFF ---
-    if not is_cross_device_enabled():
+    # --- members only: a pairing token issued to this device, or the owner's token ---
+    if not _member_may_signal(client_ws, device_id):
         trace_ctx = TraceContext.new()
         emit_gateway_log(
-            "cross_device_blocked",
+            "webrtc_signaling_rejected",
             trace_ctx=trace_ctx,
             level="warning",
             event_subtype="webrtc_signaling",
             device_id=device_id,
-            reason=ERROR_CODE_CROSS_DEVICE_DISABLED,
-            route_mode="cross_device",
+            reason="unauthorized",
         )
-        logger.warning(
-            "cross_device_blocked event=webrtc_signaling device_id=%s trace_id=%s reason=%s",
-            device_id,
-            trace_ctx.trace_id,
-            ERROR_CODE_CROSS_DEVICE_DISABLED,
-        )
-        await client_ws.close(
-            code=WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
-            reason="cross-device routing disabled",
-        )
+        await client_ws.close(code=WS_CLOSE_CODE_UNAUTHORIZED, reason="not a member: pair first and send its token")
         return
 
     # --- Round 7: per-session TraceContext (trace_id + span_id) ---

@@ -359,13 +359,10 @@ class AndroidParticipationTransitionSignal(str, Enum):
         One or more readiness or dispatch-gate conditions failed.  Forces
         tier back to at most ``fully_attached``.
 
-    cross_device_switch_enabled
-        The V2-side cross-device switch was turned ON.  Required for
-        ``dispatch_eligible`` and above.
-
-    cross_device_switch_disabled
-        The V2-side cross-device switch was turned OFF.  Forces tier back to
-        at most ``fully_attached``.
+    cross_device_switch_enabled / cross_device_switch_disabled
+        Retired: nothing emits them any more.  The computer's 「跨设备」 switch
+        says whether the computer joins the device network; it never gates a
+        phone that joined by its own switch (``cross_device_gate_*`` below).
 
     cross_device_gate_enabled
         Android-side ``cross_device_enabled`` flag turned ON.  Required for
@@ -771,7 +768,7 @@ def derive_android_network_participation_tier(
     if not readiness_satisfied:
         blocking.append("readiness_satisfied=False: model/accessibility/local-loop readiness not met")
     if not dispatch_gate_passed:
-        blocking.append("dispatch_gate_passed=False: mode-gate or V2 cross-device switch check failed")
+        blocking.append("dispatch_gate_passed=False: phone mode-gate check failed")
 
     if not readiness_satisfied or not dispatch_gate_passed:
         notes.append(

@@ -19,14 +19,26 @@ def _build_goal_execution_message(*, goal: str = "打开微信", task_id: str = 
     }
 
 
-def test_goal_execution_blocked_when_cross_device_disabled() -> None:
+def test_goal_execution_blocked_when_the_phone_is_not_ready() -> None:
+    """拦下手机发起的,只能是**手机自己**没就绪(它的跨设备开关、目标执行、会话)。"""
     msg = _build_goal_execution_message()
-    with patch.object(ge, "_is_cross_device_enabled", lambda: False):
+    not_ready = SimpleNamespace(is_dispatch_eligible=False, blocking_gates=["android_cross_device_enabled"])
+    with patch.object(ge, "_evaluate_android_mode_readiness", lambda **_: not_ready):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
     assert result["error_code"] == "ANDROID_NL_INITIATION_BLOCKED"
-    assert result["details"]["lineage"]["dispatch_lineage"] == "blocked_by_cross_device_gate"
+    assert result["details"]["lineage"]["dispatch_lineage"] == "blocked_by_phone_readiness_gate"
     assert result["details"]["lineage"]["policy_admitted"] is False
-    assert "v2_cross_device_switch" in result["details"]["blocking_gates"]
+    assert result["details"]["blocking_gates"] == ["android_cross_device_enabled"]
+
+
+def test_this_computers_switch_is_not_a_gate_on_a_phone_that_joined(monkeypatch) -> None:
+    """电脑在本地模式,手机自己加入了 → 手机发起的目标照样被受理(这台电脑的开关不在门里)。"""
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    ready = SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[])
+    with patch.object(ge, "_evaluate_android_mode_readiness", lambda **_: ready):
+        ok, gates, reason = ge._evaluate_android_nl_initiation_gate(device_id="android-device-1")
+    assert ok is True and gates == [] and reason == "dispatch_eligible"
+    assert not hasattr(ge, "_is_cross_device_enabled")
 
 
 def test_goal_execution_task_assign_contains_canonical_lineage() -> None:
@@ -47,7 +59,6 @@ def test_goal_execution_task_assign_contains_canonical_lineage() -> None:
         )
     )
     with (
-        patch.object(ge, "_is_cross_device_enabled", lambda: True),
         patch.object(
             ge,
             "_evaluate_android_mode_readiness",
@@ -126,7 +137,6 @@ def test_goal_execution_blocked_when_main_chain_ingress_not_accepted() -> None:
         )
     )
     with (
-        patch.object(ge, "_is_cross_device_enabled", lambda: True),
         patch.object(
             ge,
             "_evaluate_android_mode_readiness",
@@ -155,7 +165,6 @@ def test_goal_execution_blocked_when_main_chain_ingress_not_accepted() -> None:
 def test_goal_execution_governance_reject_stamps_blocked_lineage() -> None:
     msg = _build_goal_execution_message(task_id="task-3")
     with (
-        patch.object(ge, "_is_cross_device_enabled", lambda: True),
         patch.object(
             ge,
             "_evaluate_android_mode_readiness",
@@ -192,10 +201,7 @@ def test_participation_boundary_model_never_allows_authority_override() -> None:
 
 def test_goal_execution_blocked_when_mode_gate_unavailable() -> None:
     msg = _build_goal_execution_message(task_id="task-3b")
-    with (
-        patch.object(ge, "_is_cross_device_enabled", lambda: True),
-        patch.object(ge, "_evaluate_android_mode_readiness", None),
-    ):
+    with (patch.object(ge, "_evaluate_android_mode_readiness", None),):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
     assert result["error_code"] == "ANDROID_NL_INITIATION_BLOCKED"
     assert "mode_gate_unavailable" in result["details"]["blocking_gates"]
@@ -278,7 +284,6 @@ def test_parallel_subtask_blocked_when_main_chain_ingress_unavailable() -> None:
         )
     )
     with (
-        patch.object(ge, "_is_cross_device_enabled", lambda: True),
         patch.object(
             ge,
             "_evaluate_android_mode_readiness",
@@ -325,7 +330,6 @@ def test_goal_execution_blocked_when_main_chain_context_builder_unavailable() ->
         )
     )
     with (
-        patch.object(ge, "_is_cross_device_enabled", lambda: True),
         patch.object(
             ge,
             "_evaluate_android_mode_readiness",

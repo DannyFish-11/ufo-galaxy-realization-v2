@@ -125,7 +125,7 @@ def _default_tag() -> str:
     except Exception as exc:  # noqa: BLE001
         # 这个字面量是唯一真相源 default_model() 的副本,只在真相源读不到时兜底。
         # 副本迟早会和真相源漂移(改了目录却忘了改这里),静默退回等于悄悄换了主脑。
-        logger.warning("读取默认主脑失败(%s):退回内置副本 gemma4:12b,可能与模型目录不一致", exc)
+        logger.warning("读取默认模型失败(%s):退回内置副本 gemma4:12b,可能与模型目录不一致", exc)
         return "gemma4:12b"
 
 
@@ -529,7 +529,7 @@ def interactive_select() -> str:
     print()
     print(
         "  "
-        + _c("选择 AI 主脑档位", Colors.BOLD + Colors.CYAN)
+        + _c("选择 AI 模型档位", Colors.BOLD + Colors.CYAN)
         + _c(f"  ({len(tiers)} 档 · 本地原生多模态)", Colors.DIM)
     )
     r.rule()
@@ -559,7 +559,7 @@ def interactive_select() -> str:
         if answered is None:
             # 没人在。用推荐档继续,并且把"这不是你选的"说出来。
             print()
-            print("  " + _c(timed_out_notice("主脑档位", f"{rec_tier} 档(推荐)"), Colors.DIM))
+            print("  " + _c(timed_out_notice("模型档位", f"{rec_tier} 档(推荐)"), Colors.DIM))
             print("  " + _c("想改:面板里设 GALAXY_MODEL_TIER。", Colors.DIM))
             return _commit(rec_tier)
         choice = answered.strip().lower()
@@ -592,7 +592,7 @@ def background_pull(tag: str) -> None:
         # 也一起被跳过,但控制台【什么提示都没有】,用户只会觉得"什么都没发生"。
         # 这里改成至少打印一句清楚的原因,不再彻底沉默。
         print(
-            "     未检测到 ollama 命令,跳过本地主脑模型拉取与 HuggingFace 回退"
+            "     未检测到 ollama 命令,跳过本地模型拉取与 HuggingFace 回退"
             "(两者都需要 ollama 命令来导入/运行模型)。"
             "可先在「模型」tab 填一个云端 API Key 作为主力兜底，"
             "或安装 Ollama: https://ollama.com/download"
@@ -636,7 +636,7 @@ def background_pull(tag: str) -> None:
                     )
                 except Exception as exc:
                     print(f"  ⚠ Ollama 列表里有 {matched}，但核实可用性失败({exc})——当作未安装，重新拉取。")
-            print(f"  ▶ 正在后台拉取本地主脑模型 ollama pull {tag} …(不阻塞启动)")
+            print(f"  ▶ 正在后台拉取本地模型 ollama pull {tag} …(不阻塞启动)")
             proc = subprocess.run(
                 ["ollama", "pull", tag],
                 capture_output=True,
@@ -646,7 +646,7 @@ def background_pull(tag: str) -> None:
                 timeout=3600,
             )
             if proc.returncode == 0:
-                print(f"  ✓ 本地主脑模型已就绪:{tag}")
+                print(f"  ✓ 本地模型已就绪:{tag}")
                 return
             # 关键:不要静默吞掉失败。联网核实过(open-webui issue #23471 等多个
             # 独立来源一致印证):gemma4 系列需要较新 Ollama 客户端才能解析其
@@ -696,14 +696,14 @@ def background_pull(tag: str) -> None:
                     logger.debug("HF 回退导入异常(非致命): %s", exc)
                 if local_tag:
                     save_choice(local_tag)
-                    print(f"  ✓ 本地主脑模型已就绪(HuggingFace 回退导入):{local_tag}")
+                    print(f"  ✓ 本地模型已就绪(HuggingFace 回退导入):{local_tag}")
                     return
                 print("     HuggingFace 回退候选也都试过,未能导入成功。")
 
             print("     可先在「模型」tab 填一个云端 API Key(DeepSeek/通义/Claude…)作为主力兜底,")
             print(f"     或手动确认版本、升级 Ollama 后重试 `ollama pull {tag}`。")
         except Exception as exc:  # noqa: BLE001
-            print(f"  ⚠ 本地主脑模型拉取异常:{tag} — {exc}")
+            print(f"  ⚠ 本地模型拉取异常:{tag} — {exc}")
 
     threading.Thread(target=_pull, name="GalaxyModelPull", daemon=True).start()
 

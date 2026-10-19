@@ -39,7 +39,7 @@ from core.schemas.contracts import (
     WorkerShutdownModel,
 )
 
-# 主脑开关开着且在跨设备模式里才算启用(跨设备是多设备的前提);同一个判据,见 core/system_mode.py
+# 任务派发(MasterBrain)只看它自己的开关,不受电脑「跨设备」管;同一个判据,见 core/system_mode.py
 from core.system_mode import master_brain_idle_status  # noqa: E402,F401
 from core.system_mode import master_brain_requested as master_brain_enabled  # noqa: E402,F401
 

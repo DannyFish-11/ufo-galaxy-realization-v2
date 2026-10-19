@@ -384,7 +384,6 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
 
     def test_D2_no_substrate_caller_logs_legacy_warning(self):
         """D2. _dispatch_cross_device_task() with no _substrate_caller logs LEGACY_DISPATCH."""
-        from galaxy_gateway.cross_device_switch import is_cross_device_enabled
         from galaxy_gateway.device_router import Device, DeviceRouter
 
         router = DeviceRouter()
@@ -394,7 +393,7 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
         task = {"task_id": "t1", "trace_id": "tr1", "command": "test_cmd", "payload": {}}
 
         with (
-            patch("galaxy_gateway.device_router.is_cross_device_enabled", return_value=True),
+            patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}),  # 电脑的开关已不是路由门,取值不影响结果
             patch.object(router, "_decompose_task", return_value=[task]),
             patch.object(
                 router,
@@ -419,7 +418,7 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
         task = {"task_id": "t2", "trace_id": "tr2", "command": "test_cmd", "payload": {}}
 
         with (
-            patch("galaxy_gateway.device_router.is_cross_device_enabled", return_value=True),
+            patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}),  # 电脑的开关已不是路由门,取值不影响结果
             patch.object(router, "_decompose_task", return_value=[task]),
             patch.object(
                 router,
@@ -464,7 +463,7 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
         before = metrics.legacy_dispatch_total
 
         with (
-            patch("galaxy_gateway.device_router.is_cross_device_enabled", return_value=True),
+            patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}),  # 电脑的开关已不是路由门,取值不影响结果
             patch.object(router, "_decompose_task", return_value=[task]),
             patch.object(
                 router,

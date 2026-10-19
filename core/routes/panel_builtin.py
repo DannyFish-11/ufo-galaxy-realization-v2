@@ -152,21 +152,17 @@ BUILTIN_GROUPS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
 #: 内置键的并集：``GET /api/config/all`` 不列、「保存设置」不钉默认值。
 PANEL_BUILTIN_KEYS: FrozenSet[str] = frozenset(k for _reason, keys in BUILTIN_GROUPS.values() for k in keys)
 
-#: 只在跨设备模式下才列（本地模式是纯噪音）。判模式的唯一出处是 ``core.system_mode.cross_device_requested()``。
+#: 只在跨设备模式下才列 —— 只有「这台电脑作为设备加入网络」时才有意义的键(总线地址、联邦、
+#: 本机作为设备的名字、mesh 口令、本机传输顺序)。判模式的唯一出处是 ``core.system_mode.cross_device_requested()``。
+#:
+#: **不在这里的**:自建内网(``GALAXY_HEADSCALE_*``、``GALAXY_TAILSCALE_HOST`` / ``_TAG``)与 TURN / STUN。
+#: 它们管的是手表、手机怎么找到并连上智能体(出门直连、WebRTC 打洞),电脑在本地模式时一样要配 ——
+#: 以前藏在跨设备模式后面,本地模式下手表出门直连连配置的地方都没有。
 CROSS_DEVICE_ONLY_KEYS: FrozenSet[str] = frozenset(
     {
         "GALAXY_NATS_URL",
         "FEDERATION_LOCAL_HOST",
         "FEDERATION_PEERS",
-        "GALAXY_HEADSCALE_URL",
-        "GALAXY_HEADSCALE_API_KEY",
-        "GALAXY_HEADSCALE_USER",
-        "GALAXY_STUN_URLS",
-        "GALAXY_TURN_URLS",
-        "GALAXY_TURN_USERNAME",
-        "GALAXY_TURN_CREDENTIAL",
-        "GALAXY_TAILSCALE_HOST",
-        "GALAXY_TAILSCALE_TAG",
         "GALAXY_TRANSPORT_PRIORITY",
         "GALAXY_DEVICE_NAME",
         "GALAXY_MESH_SECRET",

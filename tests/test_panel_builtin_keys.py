@@ -81,7 +81,7 @@ def test_the_groups_do_not_overlap_each_other_or_the_other_ways_of_leaving_the_p
 def test_the_counts_the_docs_state_are_the_counts_the_lists_have():
     """AGENTS.md 与 docs/SYSTEM_STATUS.md 写的数目；清单变了数目要跟着改。"""
     assert len(PANEL_BUILTIN_KEYS) == 90
-    assert len(CROSS_DEVICE_ONLY_KEYS) == 15
+    assert len(CROSS_DEVICE_ONLY_KEYS) == 6  # 自建内网 / TURN / STUN 移出:手表手机连智能体要用,不分模式
 
 
 # ── 面板上到底列不列 ─────────────────────────────────────────────────────────

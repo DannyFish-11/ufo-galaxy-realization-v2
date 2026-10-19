@@ -86,6 +86,7 @@ OPEN_BY_DESIGN = {
     # 配对:凭一次性配对码 / 旧令牌换新(core.auth.SELF_AUTHENTICATING_ENDPOINTS)
     ("POST", "/api/v1/pair/claim"),
     ("POST", "/api/v1/pair/renew"),
+    ("POST", "/api/v1/pair/leave"),
     # OAuth 登录面:登录本身就是拿令牌的地方
     ("POST", "/auth/oauth/google"),
     ("POST", "/auth/oauth/github"),

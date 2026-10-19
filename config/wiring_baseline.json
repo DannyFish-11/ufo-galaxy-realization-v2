@@ -137,7 +137,6 @@
     "gaps_by_area",
     "generalize_skill",
     "govern_takeover_decision",
-    "guard_cross_device",
     "handle_connection",
     "handle_device_reconnect",
     "handle_response",

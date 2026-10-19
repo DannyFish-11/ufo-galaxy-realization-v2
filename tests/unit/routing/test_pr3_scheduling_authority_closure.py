@@ -24,6 +24,7 @@ Covers:
 
 from __future__ import annotations
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -330,10 +331,7 @@ class TestDeviceRouterPreAnalysisPassthrough:
                 "_select_devices",
                 return_value=[],
             ),
-            patch(
-                "galaxy_gateway.device_router.is_cross_device_enabled",
-                return_value=False,
-            ),
+            patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "0"}),  # 电脑的开关已不是路由门,取值不影响结果
         ):
             try:
                 await router.route_task("open gallery", context)
@@ -367,10 +365,7 @@ class TestDeviceRouterPreAnalysisPassthrough:
         with (
             patch.object(router, "_analyze_command", analyze_mock),
             patch.object(router, "_select_devices", return_value=[]),
-            patch(
-                "galaxy_gateway.device_router.is_cross_device_enabled",
-                return_value=False,
-            ),
+            patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "0"}),  # 电脑的开关已不是路由门,取值不影响结果
         ):
             try:
                 await router.route_task("test query", context)

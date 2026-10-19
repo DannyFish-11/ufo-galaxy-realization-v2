@@ -640,15 +640,20 @@ class TestModeStatusEndpoint:
         )
         assert result["cross_device_enabled"] is False
 
-    def test_26_08_takeover_not_available_when_cross_device_off(self):
-        """takeover_available=False when cross-device is disabled."""
-        result = self._call_mode_status_with_env(
-            {
-                "GALAXY_SYSTEM_MODE": "desktop-local",
-                "GALAXY_CROSS_DEVICE_ENABLED": "0",
-            }
-        )
-        assert result["takeover_available"] is False
+    def test_26_08_takeover_follows_android_members_not_the_computers_switch(self):
+        """takeover_available 只看有没有在线的安卓成员;电脑的「跨设备」开关不再是接管的门。"""
+        from unittest.mock import patch
+
+        import core.routes.system as system_routes
+
+        for env in ({"GALAXY_CROSS_DEVICE_ENABLED": "0"}, {"GALAXY_SYSTEM_MODE": "desktop-cross-device"}):
+            assert self._call_mode_status_with_env(env)["takeover_available"] is False, env  # 没有手机
+            with (
+                patch.object(system_routes.connection_manager, "online_device_ids", return_value=["phone-1"]),
+                patch.dict(system_routes.registered_devices, {"phone-1": {"device_type": "android_phone"}}),
+            ):
+                result = self._call_mode_status_with_env(env)
+            assert result["android_devices_online"] == 1 and result["takeover_available"] is True, env
 
     def test_26_09_cross_device_mode_reflected(self):
         """desktop-cross-device mode is reflected in mode and cross_device_enabled."""
@@ -659,15 +664,6 @@ class TestModeStatusEndpoint:
         )
         assert result["mode"] == "desktop-cross-device"
         assert result["cross_device_enabled"] is True
-
-    def test_26_10_takeover_available_in_cross_device_mode(self):
-        """takeover_available=True when system is in cross-device mode."""
-        result = self._call_mode_status_with_env(
-            {
-                "GALAXY_SYSTEM_MODE": "desktop-cross-device",
-            }
-        )
-        assert result["takeover_available"] is True
 
     def test_26_11_android_devices_online_field_present(self):
         """Response includes 'android_devices_online' count field."""

@@ -5,6 +5,7 @@
   GET    /api/v1/pair/card              本机名片(链接 + 短码,可扫码或口述)
   POST   /api/v1/pair/claim             凭链接或短码接纳一台对端,并签发能力令牌
   POST   /api/v1/pair/renew             凭还有效的配对令牌换一枚新的(常驻设备用)
+  POST   /api/v1/pair/leave             设备凭自己的配对令牌退出:令牌作废、移出名册与 tailnet
   GET    /api/v1/pair/peers             已登记对端列表
   GET    /api/v1/pair/peers/{device_id} 单个对端档案
   POST   /api/v1/pair/trust             调整对端信任级别 / 自动放行模式
@@ -165,6 +166,12 @@ class RenewRequest(BaseModel):
     #: 手里这枚还没过期的配对令牌
     token: str
     token_ttl_s: float = 24 * 3600.0
+
+
+class LeaveRequest(BaseModel):
+    device_id: str
+    #: 这台设备手里还有效的配对令牌
+    token: str
 
 
 class TrustRequest(BaseModel):
@@ -375,6 +382,39 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse({"success": True, "capability_token": token, "token_scopes": scopes})
         except Exception as exc:  # noqa: BLE001
             return _server_error("pair_renew", exc)
+
+    @router.post("/api/v1/pair/leave")
+    async def leave(req: LeaveRequest):
+        """设备自己退出:凭发给它的配对令牌,作废令牌、移出对端名册、设备名册与 tailnet。
+
+        「加入」是设备自己的事(打开它的跨设备 / 手表配对),「退出」也该是:手表上点
+        「解除配对」时,手里只有配对令牌,没有 API 令牌 —— 和 claim / renew 一样对鉴权
+        豁免,端点自己核验:令牌要签名对、没过期、没撤销,并且签给的就是这台设备
+        (``subject == device_id``)—— 否则一枚泄露的旧令牌就能把别的设备踢出去。
+        令牌已过期的设备,由人在面板上移除(``DELETE /api/v1/pair/peers/{device_id}``)。
+        """
+        try:
+            from core.capability_token import revoke, verify_token
+            from core.peer_trust import get_peer_trust_book
+            from core.tailnet_membership import forget_device
+            from core.unified.device_manager import get_unified_device_manager
+
+            device_id = req.device_id.strip()
+            verdict = verify_token(req.token)
+            if not verdict.valid or not device_id or verdict.subject != device_id:
+                return JSONResponse(
+                    {"success": False, "error": "令牌无效、已过期、已撤销或不属于这台设备(过期的请在面板上移除)"},
+                    status_code=401,
+                )
+            if verdict.jti:
+                revoke(verdict.jti)
+            removed = get_peer_trust_book().remove(device_id)
+            get_unified_device_manager().unregister_device(device_id)
+            tailnet = await asyncio.to_thread(forget_device, device_id)
+            logger.info("device left by itself: device_id=%s peer_removed=%s", device_id, removed)
+            return JSONResponse({"success": True, "device_id": device_id, "removed": removed, **tailnet})
+        except Exception as exc:  # noqa: BLE001
+            return _server_error("pair_leave", exc)
 
     @router.get("/api/v1/pair/paths")
     async def get_path_status():

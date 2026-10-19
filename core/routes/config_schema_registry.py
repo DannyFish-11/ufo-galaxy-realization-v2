@@ -150,7 +150,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "select",
         "category": "llm",
-        "description": "本地主脑模型（原生多模态）",
+        "description": "本地模型（原生多模态）",
         "options": [],
     },
     # --- Service Ports & Nodes ---
@@ -409,13 +409,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "跨设备模式（开=让手机/手表/别的电脑也能承接任务，多设备并行、任务派发都在这个模式里;关=本地模式，只在本机跑 · 默认关）。要重启才完全生效",
+        "description": (
+            "跨设备模式（开=这台电脑作为设备加入多设备网络:登记成成员,别的设备和智能体可以用它;"
+            "关=本地模式,电脑自己一套闭环 · 默认关）。只管电脑自己,不限制智能体协调已加入的手机、手表、别的电脑。"
+            "要重启才完全生效"
+        ),
     },
     "GALAXY_MASTER_BRAIN_ENABLED": {
         "default": "false",
         "type": "boolean",
         "category": "devices",
-        "description": "启用主脑编排 + worker/NATS 分布式(默认关=单机)。主脑在「跨设备模式」里才起:先打开「跨设备」，本地模式下开了也不起",
+        "description": (
+            "启用任务派发:智能体经 NATS 把任务派给 worker(默认关)。"
+            "只看这个开关,开了会把消息总线一起拉起;与电脑的「跨设备」无关"
+        ),
     },
     "GALAXY_FABRIC_STRICT": {
         "default": "false",
@@ -562,7 +569,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "string",
         "category": "devices",
-        "description": "主脑状态文件路径（留空=用内置默认位置）",
+        "description": "任务派发状态文件路径（留空=用内置默认位置）",
     },
     "CHROMA_PERSIST_DIR": {
         "default": "",
@@ -977,7 +984,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "perception",
         "description": (
             "双模型档里**感知位**(看/听/说那一位)选哪个型号。留空=用该档候选表第一个。"
-            "与 OLLAMA_MODEL(文本主脑/推理位)是两个独立的位,换一个不影响另一个"
+            "与 OLLAMA_MODEL(文本模型/推理位)是两个独立的位,换一个不影响另一个"
         ),
     },
     # ── 本地 OpenAI 兼容推理服务(core/multi_llm_router._register_local_openai)──
@@ -2047,7 +2054,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "",
         "type": "string",
         "category": "advanced",
-        "description": "蓝牙服务所在的系统总线地址(留空 = 本机系统总线;主脑跑在容器里、要读宿主蓝牙时才填)",
+        "description": "蓝牙服务所在的系统总线地址(留空 = 本机系统总线;智能体跑在容器里、要读宿主蓝牙时才填)",
     },
     "GALAXY_ONBOARDING_STATE_DIR": {
         "default": "",
@@ -2613,7 +2620,7 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": "15",
         "type": "number",
         "category": "devices",
-        "description": "主脑扩缩容重评估间隔(秒 · 默认 15，最小 5)",
+        "description": "任务派发扩缩容重评估间隔(秒 · 默认 15，最小 5)",
     },
     "GALAXY_TEMPORAL_URL": {
         "default": "",

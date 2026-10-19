@@ -30,12 +30,14 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from starlette.testclient import TestClient
 
 STATIC_TOKEN = "static-api-token-for-watch-tests-0123456789"
+REPO = Path(__file__).resolve().parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -617,95 +619,42 @@ def local_mode(monkeypatch):
         monkeypatch.delenv(k, raising=False)
 
 
-@pytest.fixture
-def bundle_writes(monkeypatch):
-    """批准后真正会去改配置;这里记下它被调用了没有,不让测试去改真实配置。"""
-    writes = []
+def test_in_local_mode_the_agent_still_makes_the_watch_do_something(gateway, watch_id, local_mode):
+    """电脑在本地模式(这台电脑自己没加入设备网络)—— 手表靠配对自己加入了,智能体照样协调它。
 
-    async def set_bundle(req):
-        writes.append((req.key, req.value))
-        return {"bundle": {"key": req.key, "value": req.value, "overrides": {}, "restart_required": True}}
+    「跨设备」说的是**这台设备**加入,从来不是给智能体上锁:此前本地模式下 ``devices__invoke``
+    一律回 ``cross_device_disabled``,配上了的手表智能体却用不了。走的是智能体真正调的工具入口。"""
+    from core.device_onboarding.agent_tools import dispatch_devices_tool
 
-    import core.routes.config as cfg
-
-    monkeypatch.setattr(cfg, "set_bundle", set_bundle)
-    return writes
-
-
-def _spoken_turn(source="wear_voice", text="把跨设备打开"):
-    return SimpleNamespace(runtime_session_id="rs-wear-1", source=source, request_text=text)
-
-
-def _request_cross_device_in_a_spoken_turn(gateway, source="wear_voice"):
-    from core.device_onboarding.mode_request import _request_cross_device
-    from core.liminal_activity import bind_runtime_session
-
-    async def run():
-        bind_runtime_session(_spoken_turn(source))
-        return await _request_cross_device("sess-wear-1")
-
-    return gateway.portal.start_task_soon(run)
-
-
-def test_what_the_wearer_asks_for_is_confirmed_on_the_watch_and_then_done(gateway, watch_id, local_mode, bundle_writes):
-    """手表上说「把跨设备打开」→ 智能体要做的是「放开整台电脑能碰哪些设备」这种大权限 →
-    问的是**戴表的人**,在手表上点批准才做。模型只能提,批准只归人。"""
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
         assert _eventually(lambda: _online(watch_id))
-        pending = _request_cross_device_in_a_spoken_turn(gateway)
 
-        asked = _recv(ws)
-        assert asked.get("type") == "decision_request", asked
-        assert {o["id"] for o in asked["payload"]["options"]} == {"approve", "deny"}
-        assert bundle_writes == [], "问都没问完就已经改了配置"
-
-        ws.send_json(
-            _watch_command_frame(
-                watch_id,
-                "human_input",
-                {"decision_id": asked["payload"]["decision_id"], "selected_option": "approve", "device": "wear_os"},
-                "cmd_21",
-                21,
+        async def invoke():
+            return await dispatch_devices_tool(
+                "invoke",
+                {"device_id": watch_id, "action": "notify", "params": {"text": "水开了"}},
+                session_id="s-local",
             )
-        )
-        assert _recv(ws).get("type") == "command_result"
-        outcome = pending.result(timeout=15)
 
-    assert outcome.get("success") is True and outcome.get("enabled") is True, outcome
-    assert bundle_writes == [("cross_device", "true")]
+        pending = gateway.portal.start_task_soon(invoke)
+        frame = _recv(ws)
+        assert frame.get("type") == "command" and frame.get("command") == "notify", frame
+        ws.send_json(_watch_command_result_frame(watch_id, frame["command_id"], True, {"shown": True}))
+        out = pending.result(timeout=10)
 
-
-def test_a_no_on_the_watch_means_nothing_is_done(gateway, watch_id, local_mode, bundle_writes):
-    with _connect(gateway, watch_id) as ws:
-        _register(ws, watch_id)
-        assert _eventually(lambda: _online(watch_id))
-        pending = _request_cross_device_in_a_spoken_turn(gateway)
-        asked = _recv(ws)
-        ws.send_json(
-            _watch_command_frame(
-                watch_id,
-                "human_input",
-                {"decision_id": asked["payload"]["decision_id"], "selected_option": "deny", "device": "wear_os"},
-                "cmd_22",
-                22,
-            )
-        )
-        _recv(ws)
-        outcome = pending.result(timeout=15)
-
-    assert outcome.get("success") is False, outcome
-    assert bundle_writes == [], "人说了不要,配置还是被改了"
+    assert out.get("success") is True, out
+    assert out.get("error") != "cross_device_disabled"
 
 
-def test_a_turn_nobody_spoke_cannot_even_ask(gateway, watch_id, local_mode, bundle_writes):
-    """后台自发的回合(心跳、环境注意力)不是人在说话:连提出都不行,更不会去打扰手腕。"""
-    with _connect(gateway, watch_id) as ws:
-        _register(ws, watch_id)
-        assert _eventually(lambda: _online(watch_id))
-        outcome = _request_cross_device_in_a_spoken_turn(gateway, source="heartbeat").result(timeout=10)
-    assert outcome.get("success") is False
-    assert bundle_writes == []
+def test_nothing_asks_the_wearer_to_turn_on_the_computers_cross_device():
+    """以前本地模式下有个 ``devices__request_cross_device``,在手表上问人要不要打开电脑的「跨设备」——
+    因为智能体被那个开关锁着。锁拆了,这个工具也没了:电脑进不进网络是电脑自己的事,不是智能体用设备的前提。"""
+    from core.device_onboarding.agent_tools import DEVICES_BUILTIN_TOOLS
+
+    names = {t["function"]["name"] for t in DEVICES_BUILTIN_TOOLS}
+    assert "devices__request_cross_device" not in names
+    assert not (REPO / "core" / "device_onboarding" / "mode_request.py").exists()
 
 
 def test_the_watch_tells_the_agent_what_it_can_do_and_is_not_turned_away(gateway, watch_id):

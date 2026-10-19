@@ -48,17 +48,20 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/device_registry.py` - 设备注册和发现
 - `core/device_communication.py` - 设备通信协议
 - `core/device_control_service.py` - 设备控制服务
-- **系统只有两个模式**：**本地模式**（`desktop-local`，默认：这台电脑自己这一整套循环在本机闭环，电脑不加入设备网络）与**跨设备模式**
-  （`desktop-cross-device`：这台电脑加入跨设备 / 多设备网络）。**模式说的是设备，不是智能体** —— 本地模式下智能体照常用云端模型、联网、MCP，
-  别把「本地模式」写成或做成「只用本机模型」。**「现在是哪个」只有一条规则、一个出处**：
-  `core.system_mode.cross_device_requested()` —— `GALAXY_CROSS_DEVICE_ENABLED` 为真**或** `GALAXY_SYSTEM_MODE=desktop-cross-device`，任一即是，否则本地。
-  网关开关、启动流程、桌面在场、启动自检、模式接口都调它，**别再自己推导**；`GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（同时写两个键）。
-  「混合」不是模式，是一个请求的走法（`local` / `cross_device` / `hybrid`，跨设备模式里系统自动判）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
-- **多机模式** = 跨设备模式的整体内容（跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent），四层 + 共用 NATS 底座，定义见 `docs/MULTI_MACHINE_MODE.md`：
-  派发走 `CommandRouter.route_envelope()` 按 `executor_target_type` 分三条路（`local` / `android_device`·`node_service` → 网关 `DeviceRouter` / `go_worker` → `MasterBrain` → NATS → worker）。
-  `GALAXY_MASTER_BRAIN_ENABLED` 默认关，且**只在跨设备模式里才起**（`master_brain_requested()`）：开了却在本地模式，启动日志说出原因；开了才拉起主脑、worker 消费循环、MCP over NATS。
-- **模型只能请求、不能决定**打开跨设备模式：本地模式下的工具 `devices__request_cross_device`（`core/device_onboarding/mode_request.py`）只会问人；批准走设备接入已有的人在环，
-  `GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合连提出都不行；批准后走面板按钮同一个写入函数，要重启才完全生效
+- **中心智能体 + 相对主体**：智能体是唯一做决定、做协调的地方；它跑在哪台设备上，哪台就是**主脑**（一个角色，不是一个模块）。
+  手机、手表、别的电脑、Linux / 云载体都是**成员**：先登录登记进 UDM / UCM（配对码或网络连接），再由智能体经 mesh 协调、经 AIP v3 / NATS 通信。
+  整体设计见 `docs/CROSS_DEVICE_OVERALL_PLAN.md`。
+- **「跨设备」开关只说这台设备自己进不进网络，从不限制智能体**：电脑上的开关 = 这台电脑作为设备加入（桌面登记成成员、电脑自己的请求可交给别的设备）；
+  手机的开关 = 手机加入；手表配对即加入。**智能体协调已加入的设备不看任何模式** —— 能不能下发由成员资格（名册、连接、权限门）决定。
+  **别再给「往别的设备下发」加模式判断**（以前的统一拒绝 `cross_device_refusal` 与「请求打开跨设备」工具都已删除，`tests/test_the_agent_coordinates_members_in_any_mode.py` 守着）。
+  「现在是哪个模式」只有一条规则、一个出处：`core.system_mode.cross_device_requested()` —— `GALAXY_CROSS_DEVICE_ENABLED` 为真**或** `GALAXY_SYSTEM_MODE=desktop-cross-device`。
+  `GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（写主键、`GALAXY_SYSTEM_MODE` 与唯一成员 `GALAXY_NATS_ENABLED`）。
+  「混合」不是模式，是一个请求的走法（入口判定 `resolve_entry_mode`，跟着电脑的开关走）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
+- **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
+  局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
+- **任务派发**（`GALAXY_MASTER_BRAIN_ENABLED`，类名 `MasterBrain`：经 NATS 把任务派给 worker）是智能体的工具，**只看它自己的开关**，开了就把 NATS 拉起来；
+  派发走 `CommandRouter.route_envelope()` 按 `executor_target_type` 分三条路（`local` / `android_device`·`node_service` → 网关 `DeviceRouter` / `go_worker` → 任务派发 → NATS → worker）。
+  「主脑」一词只指智能体所在的设备；选模型那块叫「模型」。
 
 ### 桌面自动化（一个整体，按现场挑）
 - `core/windows_execution_arbiter.py` - 桌面落手的**唯一入口**：系统接口 → 控件 → 坐标 → 视觉（Computer Use）四级降级链
@@ -204,7 +207,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - 工具在 `core/academic_tools.py`（`academic__arxiv_search / arxiv_read / arxiv_library`，以及原来的 search / ingest / recall 的定义）；会下东西的只在人发起的回合里，70 GB 全文分片要 `confirm`
 
 ### 启动横幅与卡顿
-- 本地模式不起 NATS、不入 tailnet、不往局域网广播 —— 这些是对的状态，不算降级（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
+- 电脑没加入网络、也没开任务派发时不起 NATS —— 这是对的状态，不算降级；mDNS 广播不分模式，没配 headscale 时不入 tailnet 只给一行说明（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
 - `core/loop_stall_watch.py` - 事件循环停跳 0.5 秒以上时记下卡在仓库哪几行、最里面卡在库的哪一行、同一时刻别的线程在 import 什么（循环线程可能只是在等 GIL）。日志里「一批请求同一毫秒一起慢」先看它那一行
 - 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
 - 基础设施那一行（Docker / Podman）按各服务此刻的状态说（`launcher/compose_health.py`）：`compose up -d` 退出码 0 不等于已就绪；起不来的点名。
@@ -236,7 +239,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - **事件循环里不跑同步聚合**：`core/routes/panel.py::build_panel_feed` 在工作线程里算、并发读取共用一次计算；面板只要「相位/在场强度/一致性」三个字段，走 `build_presence_slice()`，**不要**为了它去跑 18 段的 `build_unified_panel_payload`。麦克风采集的 AEC/VAD 在 `AudioIngestPipeline` 的专用单线程里算（回调仍回到事件循环）。真机上这两处曾让感知帧、音频、对话流请求成批变慢
 - **设置页每一行的中文名、下拉每一档的中文名**在 `core/routes/config_labels.py`（`LABELS` / `OPTION_LABELS` / `HINTS`），由 `/api/config/all` 带给面板；行首画中文名、环境变量名在悬停提示里。**新增一个会列在面板上的配置，不补这张表 `tests/test_every_listed_setting_has_a_chinese_name.py` 会红**。整档按钮的主键（`CONFIG_BUNDLES[*].primary`）在 `/all` 里标 `bundle`，设置页不再摆第二个开关；取值有限的字符串键（`auto/1/0`）在表里登记档位后按下拉画。**`/api/config/all` 不下发密钥的值**（后端听 `0.0.0.0`，这个 app 没有网关那层全局 Bearer 中间件：路由组都挂 `_auth_deps`，不带令牌能调的写接口只剩 `tests/test_lan_cannot_drive_this_computer_without_a_token.py` 的 `OPEN_BY_DESIGN`、能读的只剩同一文件的 `PUBLIC_READS`（健康检查 / `/metrics` / 客户端配置发现 / OAuth 登录），新加接口忘了挂鉴权那两条测试会红）：密钥类只给掩码 / 空串，写回的掩码当没改；「什么算密钥」与面板 `ui/settings.ts` 的 `SECRET_RE` 是同一条（`tests/test_settings_never_send_secret_values.py`）
 - **「调数据方式」的参数（回声消除、并发 / 熔断常数、各种超时与窗口、`auto/1/0` 档位……共 102 个：86 个数字、14 个档位、2 个音色名）不上面板**：它们多半是自适应算法自己的常数，人会说的是效果。登记在 `core/tuning.py` 的白名单里（每个键有硬范围），由智能体的 `tuning__list` / `tuning__set` 按人的话调：只在人发起的回合、放大自主度的方向要人点头、不碰会删数据的键、留痕（`tuning_log.jsonl`）、可 `reset` 一句话撤销。**新增这类参数：登记进 `_NUMERIC` / `_CHOICES`（档位，开关也按两档）/ `_NAMES`（音色名这类一小段名字），别往面板上摆一行**；登记的出厂值必须等于代码里的默认值（`tests/test_tuning_knobs.py` 核对）；读取点在导入时的要登记进 `_AT_IMPORT`（改了要重启）
-- **面板上不列的另两类设置**（`core/routes/panel_builtin.py`，`GET /api/config/all` 不下发、「保存设置」不往 `.env` 里钉默认值，但仍登记、`POST /api/config` / `.env` / 环境变量照旧能用）：**内置键 90 个**（路径、内部服务地址与端口、型号与规格、固定的严格默认、运维逃生口——有一个对的默认，人填错只会弄坏），**跨设备专属键 15 个**（总线 / 联邦 / 打洞与中继 / 设备名 / 网格口令……只在 `core.system_mode.cross_device_requested()` 为真时才列，本地模式是纯噪音）。**新增一个键，先回答它属于哪一类**：留在面板（用户真有取舍）/ 对话里调（`core/tuning.py`）/ 内置（加进 `BUILTIN_GROUPS`）/ 跨设备专属。**登记表的默认值必须等于代码里的默认值**（`tests/test_panel_builtin_keys.py` 逐个扫描核对；曾抓到 `CORS_ALLOWED_ORIGINS` 登记成 `*`，点一次保存就写成「任何网页都能带凭据调本机接口」），**路径默认一律随数据总目录走**（`core.data_paths.data_path_or_legacy` / `runtime_file`：数据目录下没有、旧位置有数据时继续认旧位置，不把已有的记忆 / 账本 / 装进来的项目甩在后面）；**没有任何代码在读的键不许登记**（同一份测试扫描）
+- **面板上不列的另两类设置**（`core/routes/panel_builtin.py`，`GET /api/config/all` 不下发、「保存设置」不往 `.env` 里钉默认值，但仍登记、`POST /api/config` / `.env` / 环境变量照旧能用）：**内置键 90 个**（路径、内部服务地址与端口、型号与规格、固定的严格默认、运维逃生口——有一个对的默认，人填错只会弄坏），**跨设备专属键 6 个**（总线地址 / 联邦 / 本机设备名 / 网格口令 / 本机传输顺序……只在 `core.system_mode.cross_device_requested()` 为真时才列；自建内网与 TURN / STUN 不在此列，手表手机连智能体要用）。**新增一个键，先回答它属于哪一类**：留在面板（用户真有取舍）/ 对话里调（`core/tuning.py`）/ 内置（加进 `BUILTIN_GROUPS`）/ 跨设备专属。**登记表的默认值必须等于代码里的默认值**（`tests/test_panel_builtin_keys.py` 逐个扫描核对；曾抓到 `CORS_ALLOWED_ORIGINS` 登记成 `*`，点一次保存就写成「任何网页都能带凭据调本机接口」），**路径默认一律随数据总目录走**（`core.data_paths.data_path_or_legacy` / `runtime_file`：数据目录下没有、旧位置有数据时继续认旧位置，不把已有的记忆 / 账本 / 装进来的项目甩在后面）；**没有任何代码在读的键不许登记**（同一份测试扫描）
 - **新增布尔开关要先回答「用户真有取舍吗」**：`core/routes/panel_switch_policy.py` 给每个布尔开关一个去处（`panel` 留在面板 / `builtin` 内置、默认开、不该有人关 / `ops` 开发运维逃生口 / `member` 并进某个整档按钮，随主键一起写，见 `core/routes/config_bundles.py` 的 `members`：判据是「主键关、它开」有没有意义），`tests/test_every_switch_has_a_disposition.py` 盯着；清单见 `docs/PANEL_SWITCHES.md`（脚本生成）。注意「保存设置」会把登记表的默认值整体写进 `.env` —— 登记表默认值必须与代码默认一致
 - `core/ambient_yield.py` - 自发注意力循环给用户让路：用户请求在跑不碰模型、调用进行中用户来了就取消（Ollama 随之停掉生成）、用时 T 秒后歇 3T 秒。判「人在等」用 `core.presence_line.foreground_request_active`（后台自发来源与常驻在场不算）
 - **面板窗口的外形由系统裁**（`PanelStage.shapeRects` → `setShape`）：Windows 上面板窗口的透明不一定生效，画布外、圆角外不能靠页面透明

@@ -100,13 +100,16 @@ other key. The panel's 「跨设备」 button writes both keys together (`mirror
 turning it off really turns both off.
 
 `GALAXY_NATS_URL` does **not** take part: pointing the bus at another machine while in local mode makes startup say so
-("当前是本地模式，要用别的设备请打开跨设备"), but never switches the mode.
+("要让这台电脑接入那条总线，请打开「跨设备」"), but never switches the mode.
 
-The master brain (`GALAXY_MASTER_BRAIN_ENABLED`) and its worker only start in cross-device mode
-(`core.system_mode.master_brain_requested`); switched on in local mode they stay off and startup says why.
+**The mode is about this computer, never about the agent.**  It says whether this computer joins the device network as a
+device (the desktop registers itself as a member; the computer's own requests may be handed to other devices).  Every other
+device decides for itself whether it joins (a phone's own switch, a watch's pairing), and the central agent coordinates every
+device that joined whatever mode the computer it runs on is in: dispatch to another device is gated by membership (registry,
+connection, permission gate), never by this mode.  There is no tool for the agent to request a mode either.
 
-An agent may *ask* the user to turn cross-device mode on (`devices__request_cross_device`, local mode only); only the user can
-approve it — see `core/device_onboarding/mode_request.py`.
+Task dispatch (`GALAXY_MASTER_BRAIN_ENABLED`, class `MasterBrain`: the agent sends tasks to NATS workers) follows its own
+switch only (`core.system_mode.master_brain_requested`) and brings the NATS bus up with it.
 
 ---
 

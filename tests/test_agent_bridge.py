@@ -212,35 +212,31 @@ class TestBridgeDisabled:
 
 
 # ===========================================================================
-# 5. Cross-device switch OFF
+# 5. The computer's 「跨设备」 switch does not gate the bridge
 # ===========================================================================
 
 
-class TestCrossDeviceSwitchOff:
+class TestTheComputersSwitchDoesNotGateTheBridge:
+    """那个开关只说这台电脑进不进设备网络;协调已加入的设备是智能体的事,桥照常交接。"""
+
     @pytest.mark.asyncio
-    async def test_returns_disabled_response(self, monkeypatch):
+    async def test_runtime_is_called_with_the_switch_off(self, monkeypatch):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
         bridge = _fresh_bridge()
         trace_id = str(uuid.uuid4())
+        bridge._call_runtime = AsyncMock(return_value={"success": True, "result": "from_runtime"})
         result = await bridge.handoff(contract=_contract(trace_id=trace_id))
-        assert result["success"] is False
-        assert result["error"] == "cross_device_disabled"
-        assert result["trace_id"] == trace_id
+        assert result["success"] is True and result["bridge_source"] == "runtime"
+        assert result.get("error") != "cross_device_disabled"
+        bridge._call_runtime.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_no_runtime_call_when_switch_off(self, monkeypatch):
+    async def test_metrics_count_the_attempt_with_the_switch_off(self, monkeypatch):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
         bridge = _fresh_bridge()
-        bridge._call_runtime = AsyncMock()
+        bridge._call_runtime = AsyncMock(return_value={"success": True})
         await bridge.handoff(contract=_contract())
-        bridge._call_runtime.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_metrics_not_incremented_when_switch_off(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        bridge = _fresh_bridge()
-        await bridge.handoff(contract=_contract())
-        assert bridge.metrics.handoff_attempts == 0
+        assert bridge.metrics.handoff_attempts == 1
 
 
 # ===========================================================================
@@ -453,11 +449,11 @@ class TestDeviceRouterBridgeIntegration:
         assert contract.route_mode == "cross_device"
 
     @pytest.mark.asyncio
-    async def test_route_task_blocked_when_cross_device_off(self, monkeypatch):
+    async def test_route_task_hands_off_with_the_switch_off(self, monkeypatch):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
 
         mock_bridge = MagicMock()
-        mock_bridge.handoff = AsyncMock()
+        mock_bridge.handoff = AsyncMock(return_value={"success": True, "bridge_source": "runtime"})
 
         with patch("galaxy_gateway.agent_bridge.get_agent_bridge", return_value=mock_bridge):
             from galaxy_gateway.device_router import DeviceRouter
@@ -479,9 +475,9 @@ class TestDeviceRouterBridgeIntegration:
 
             result = await router.route_task("test", context={})
 
-        assert result["success"] is False
-        assert result["error"] == "cross_device_disabled"
-        mock_bridge.handoff.assert_not_awaited()
+        # 电脑没加入网络,智能体照样把跨设备任务交给运行时 —— 不再回 cross_device_disabled
+        assert result["success"] is True
+        mock_bridge.handoff.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_route_task_marks_controlled_coordinator_fallback(self, monkeypatch):

@@ -17,7 +17,6 @@ Routes:
 """
 
 import logging
-import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,12 +27,6 @@ try:
 except ImportError:  # pragma: no cover - pydantic v1 fallback
     from pydantic import validator as _field_validator  # type: ignore
 
-from galaxy_gateway.cross_device_switch import (
-    ERROR_CODE_CROSS_DEVICE_DISABLED,
-    ERROR_MSG_CROSS_DEVICE_DISABLED,
-    HTTP_STATUS_CROSS_DEVICE_DISABLED,
-    is_cross_device_enabled,
-)
 from galaxy_gateway.webrtc_proxy import check_node95_reachable, get_webrtc_endpoint_info
 
 try:
@@ -227,24 +220,9 @@ async def chat_endpoint(
 async def webrtc_endpoint_info():
     """Return WebRTC signaling endpoint metadata.
 
-    Returns HTTP 403 when cross-device routing is disabled (Round 4 switch).
-    Returns HTTP 503 when Node_95 is not reachable.
+    Returns HTTP 503 when Node_95 is not reachable.  Not gated by this computer's
+    「跨设备」 switch: a phone that joined uses WebRTC whatever mode the computer is in.
     """
-    if not is_cross_device_enabled():
-        trace_id = str(uuid.uuid4())
-        logger.warning(
-            "cross_device_blocked event=webrtc_endpoint trace_id=%s reason=%s",
-            trace_id,
-            ERROR_CODE_CROSS_DEVICE_DISABLED,
-        )
-        raise HTTPException(
-            status_code=HTTP_STATUS_CROSS_DEVICE_DISABLED,
-            detail={
-                "error": ERROR_CODE_CROSS_DEVICE_DISABLED,
-                "message": ERROR_MSG_CROSS_DEVICE_DISABLED,
-                "trace_id": trace_id,
-            },
-        )
     if not await check_node95_reachable():
         raise HTTPException(
             status_code=503,

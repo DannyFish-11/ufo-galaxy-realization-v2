@@ -156,32 +156,6 @@ except ImportError:  # pragma: no cover
 # Pending-delivery buffer — re-delivers buffered messages to devices that
 # reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
 
-# =============================================================================
-# Axis-1 + Axis-7: Cross-device mode gate — takeover is only permitted when
-# the system is running in ``desktop-cross-device`` mode.  The switch helper
-# is imported at module level so tests can patch it without reloading the
-# entire bridge.
-# =============================================================================
-# 这里原本是 `_is_cross_device_enabled = lambda: True`（E731）。把它改成 except 块
-# 里的 def 会触发另一条治理规则 —— scripts/check_debt_freeze.py 的 CHECK-3 禁止
-# 「在 except ImportError 里定义函数/类」，要求改用显式的可选依赖标志
-# （docs/migration/DEPRECATION_POLICY.md §4）。所以按该策略写：except 里只设标志，
-# 真正的函数定义放在模块级。行为与原 lambda 完全一致（开关模块不可用时视为开启）。
-try:
-    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _cross_device_switch_is_enabled
-
-    _CROSS_DEVICE_SWITCH_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _cross_device_switch_is_enabled = None
-    _CROSS_DEVICE_SWITCH_AVAILABLE = False
-
-
-def _is_cross_device_enabled() -> bool:
-    """跨设备开关是否开启；开关模块不可用时视为开启。"""
-    if not _CROSS_DEVICE_SWITCH_AVAILABLE or _cross_device_switch_is_enabled is None:
-        return True
-    return bool(_cross_device_switch_is_enabled())
-
 
 logger = logging.getLogger(__name__)
 
@@ -1652,33 +1626,11 @@ class AndroidBridge:
         Returns
         -------
         dict or None
-            ``{"success": True}`` on successful send, or a structured error
-            dict when the system mode prevents takeover (e.g. not in
-            ``desktop-cross-device`` mode), or ``None`` when the device is not
-            connected / send fails.
+            ``{"success": True}`` on successful send, or ``None`` when the
+            device is not connected / send fails.  Not gated by this
+            computer's 「跨设备」 switch: a phone that is connected has turned on
+            its own cross-device switch, which is what makes it a member.
         """
-        # Axis-1 + Axis-7: Takeover is mode-gated.  It must not be initiated
-        # unless the system is running in cross-device mode.  In local mode,
-        # Android acts as a standalone device and takeover semantics are not
-        # applicable.  Return a structured error so callers can surface the
-        # refusal without raising.
-        if not _is_cross_device_enabled():
-            _tid = trace_id or str(uuid.uuid4())
-            logger.warning(
-                "send_takeover_request blocked: cross-device mode is disabled "
-                "takeover_id=%s device_id=%s trace_id=%s",
-                takeover_id,
-                device_id,
-                _tid,
-            )
-            return {
-                "success": False,
-                "blocked": True,
-                "reason": "cross_device_mode_disabled",
-                "takeover_id": takeover_id,
-                "device_id": device_id,
-                "trace_id": _tid,
-            }
         msg = MessageBuilder.takeover_request(
             device_id=device_id,
             takeover_id=takeover_id,

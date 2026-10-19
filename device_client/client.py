@@ -195,7 +195,7 @@ class DeviceClient:
 
         if msg_type in ("command", "CONTROL_COMMAND"):
             # 两种形状：命令路由推来的 {type:"command", command, params, command_id}，
-            # 和 REST /api/v1/devices/{id}/command 发的 AIP v3 {type:"CONTROL_COMMAND", message_id, payload:{command, params}}。
+            # 和旧版网关 REST /api/v1/devices/{id}/command 发的 {type:"CONTROL_COMMAND", message_id, payload:{command, params}}(现在那条也发 command)。
             # 此前只认前一种 —— 后一种落进「未处理的消息类型」，接口回「命令已发送」，设备却什么也没做。
             body = (
                 data.get("payload") if msg_type == "CONTROL_COMMAND" and isinstance(data.get("payload"), dict) else data

@@ -1019,7 +1019,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             results["mcp_nats_listener"] = _mcp
             if _mcp.get("success"):
                 logger.info("MCP 网关已订阅 galaxy.mcp.calls")
-        else:  # 开着却在本地模式 → 状态是 waiting_for_cross_device_mode,并说出来
+        else:  # 任务派发开关关着
             results["master_brain"] = {"status": master_brain_idle_status(logger)}
     except Exception as _mbe:  # noqa: BLE001 — 启用失败不阻断单机启动
         logger.warning("多设备/Mesh 启用失败(单机不受影响): %s", _mbe)

@@ -13,15 +13,21 @@ etc.) should consume :func:`resolve_fabric_config` instead.
 System Modes
 ------------
 ``desktop-local`` (default)
-    Clone-first / single-machine startup.  Cross-device fabric is not
-    assumed.  NATS is not implicitly required.  Startup proceeds even when
-    NATS is unavailable.
+    This computer runs its own loop and does not join the device network as a
+    device.  NATS is not implicitly required.  Startup proceeds even when NATS
+    is unavailable.
 
 ``desktop-cross-device``
-    Explicit opt-in mode for the cross-device fabric.  NATS and
-    control-plane dependencies may be treated as required by startup logic.
-    Components can branch on :attr:`FabricConfig.nats_required` to enforce
-    strict startup behaviour.
+    This computer joins the device network as a device (the panel's 「跨设备」
+    button).  NATS and control-plane dependencies may be treated as required
+    by startup logic.  Components can branch on
+    :attr:`FabricConfig.nats_required` to enforce strict startup behaviour.
+
+**The mode is about this computer, never about the agent.**  Every device
+decides for itself whether it joins (its own switch, or pairing for the
+watch); the central agent coordinates every device that joined, whatever
+mode the computer it runs on is in.  Nothing here gates dispatch to another
+device — membership (registry, connection, permission gate) does.
 
 Environment Variables (canonical config contract)
 -------------------------------------------------
@@ -169,7 +175,7 @@ class FabricConfig:
     network_mode:
         The intended network topology.
     cross_device_enabled:
-        Whether cross-device routing is active.
+        Whether this computer has joined the device network as a device.
     tailscale_enabled:
         Whether Tailscale networking is available on this host.
     tailscale_host:
@@ -284,9 +290,10 @@ def master_brain_wanted(environ: Optional[dict] = None) -> bool:
 def nats_wanted(environ: Optional[dict] = None) -> bool:
     """要不要起 NATS 消息总线 —— **唯一一处判定**，启动流程 / 启动器 / 内置服务器 / 总线连接都调它。
 
-    ``GALAXY_NATS_ENABLED`` 写了就听它的（两个方向都算）；没写就**跟着模式走**：跨设备模式起，本地模式不起
-    （本地模式下这台电脑不加入设备网络，用不到总线，起了只是白占一个常驻进程和 4222 端口）。``GALAXY_NATS_URL``
-    明确写了（指向某条总线）也算要用。以前三处各判各的：本模块说「本地模式关」，启动流程与启动器说
+    ``GALAXY_NATS_ENABLED`` 写了就听它的（两个方向都算）；没写时，这台电脑加入了设备网络（跨设备模式）、
+    或者任务派发（``GALAXY_MASTER_BRAIN_ENABLED``，智能体经 NATS 给 worker 派任务）开着，就起；两样都没有
+    就不起（用不到总线，起了只是白占一个常驻进程和 4222 端口）。``GALAXY_NATS_URL`` 明确写了（指向某条总线）
+    也算要用。以前三处各判各的：本模块说「本地模式关」，启动流程与启动器说
     「没写 false 就起」，登记表又写默认 true —— 于是本地模式屏幕上先说「不用消息总线」，几十秒后又
     「✓ 消息总线 nats://localhost:4222」。
     """
@@ -300,7 +307,10 @@ def nats_off_reason(environ: Optional[dict] = None) -> str:
         return ""
     if str(env.get("GALAXY_NATS_ENABLED", "")).strip():
         return "GALAXY_NATS_ENABLED=false(按配置显式关闭)"
-    return "本地模式用不到消息总线(打开「跨设备」才会起;只想单独起它就设 GALAXY_NATS_ENABLED=true)"
+    return (
+        "这台电脑没加入设备网络、也没开任务派发,用不到消息总线"
+        "(打开「跨设备」或「任务派发」才会起;只想单独起它就设 GALAXY_NATS_ENABLED=true)"
+    )
 
 
 def nats_forced_on_reason(environ: Optional[dict] = None) -> str:
@@ -310,57 +320,24 @@ def nats_forced_on_reason(environ: Optional[dict] = None) -> str:
     本地模式下总线于是照起，屏幕上只说「消息总线稍后拉起」，人看不出为什么。
     """
     env = environ if environ is not None else os.environ
-    if not nats_wanted(env) or cross_device_requested(env):
+    if not nats_wanted(env) or cross_device_requested(env) or master_brain_wanted(env):
         return ""
     key = "GALAXY_NATS_ENABLED" if str(env.get("GALAXY_NATS_ENABLED", "")).strip() else "GALAXY_NATS_URL"
-    return f"配置里写了 {key}(本地模式本用不到它;不要就删掉 .env 里那一行)"
+    return f"配置里写了 {key}(没加入设备网络、也没开任务派发时本用不到它;不要就删掉 .env 里那一行)"
 
 
 def master_brain_requested(environ: Optional[dict] = None) -> bool:
-    """主脑 / worker 该不该起：主脑开关开着，**并且**在跨设备模式里。
+    """任务派发（``MasterBrain`` + worker 消费循环）该不该起：只看它自己的开关。
 
-    跨设备是多设备的前提：本地模式下没有别的设备可调度，主脑与 worker 不起。
-    开关开着却在本地模式 —— 那是一个没生效的配置，不是悄悄忽略：``master_brain_waiting_for_mode``
-    让启动序列把它说出来。
+    它是智能体的工具 —— 经 NATS 把任务派给 worker —— 不受这台电脑的「跨设备」开关管：那个开关只说
+    这台电脑作为设备进不进网络，从不限制智能体。开了它，``nats_wanted`` 也会把总线拉起来。
     """
-    return master_brain_wanted(environ) and cross_device_requested(environ)
-
-
-def master_brain_waiting_for_mode(environ: Optional[dict] = None) -> bool:
-    """主脑开关开着、但当前是本地模式，所以没起。"""
-    return master_brain_wanted(environ) and not cross_device_requested(environ)
+    return master_brain_wanted(environ)
 
 
 def master_brain_idle_status(log: logging.Logger) -> str:
-    """主脑没起时启动序列要记的状态；开关开着却在本地模式 → 说出来（不悄悄忽略一个写了的配置）。"""
-    if master_brain_waiting_for_mode():
-        log.warning("主脑开关已开,但当前是本地模式(这台电脑没加入设备网络)—— 主脑与 worker 不起;要用请先打开「跨设备」")
-        return "waiting_for_cross_device_mode"
+    """任务派发没起时启动序列要记的状态（开关关着）。"""
     return "disabled"
-
-
-def cross_device_refusal(trace_id: Optional[str] = None) -> Optional[dict]:
-    """本地模式下，往别的设备下发命令的统一拒绝；跨设备模式下返回 ``None``（放行）。
-
-    本地模式 = 这台电脑自己一套闭环、没加入设备网络（说的是设备，不是智能体：云端模型、联网、MCP 照常）。
-    每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、
-    智能体的 ``devices__invoke``、网关的单设备下发）都调它，说法一致：``error == "cross_device_disabled"``
-    （与网关 ``galaxy_gateway.cross_device_switch`` 同一个错误码），并告诉人 / 模型怎么办。
-    """
-    if cross_device_requested():
-        return None
-    out = {
-        "success": False,
-        "error": "cross_device_disabled",
-        "message": "当前是本地模式(这台电脑没加入设备网络),没有向别的设备下发。要用别的设备,请先打开「跨设备」。",
-        "how_to_fix": "面板「跨设备」按钮打开(要重启才完全生效);智能体可调 devices__request_cross_device 请用户同意。",
-    }
-    out["result"] = (
-        f"{out['message']} {out['how_to_fix']}"  # 工具循环只把 result / error 交给模型:让它读到下一步该怎么办
-    )
-    if trace_id:
-        out["trace_id"] = trace_id
-    return out
 
 
 _LOCAL_HOSTS = frozenset({"", "localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"})
@@ -446,8 +423,10 @@ def resolve_fabric_config(environ: Optional[dict] = None) -> FabricConfig:
     if raw_nats_enabled.strip():
         nats_enabled = _parse_bool(raw_nats_enabled, default=False)
     else:
-        # Derive: explicitly set URL or cross-device mode → enabled
-        nats_enabled = nats_url_explicitly_set or (mode == SystemMode.DESKTOP_CROSS_DEVICE)
+        # Derive: explicitly set URL, this computer joined the device network, or the
+        # task-dispatch (NATS worker) switch is on → enabled.  The dispatcher is the agent's
+        # own tool: it needs the bus whatever mode this computer is in.
+        nats_enabled = nats_url_explicitly_set or (mode == SystemMode.DESKTOP_CROSS_DEVICE) or master_brain_wanted(env)
 
     # Fabric strict
     raw_strict = env.get("GALAXY_FABRIC_STRICT", "")
@@ -460,7 +439,8 @@ def resolve_fabric_config(environ: Optional[dict] = None) -> FabricConfig:
     # Network mode
     network_mode = _resolve_network_mode(env.get("GALAXY_NETWORK_MODE"))
 
-    # Cross-device routing is on exactly when the mode is cross-device (one rule).
+    # This computer has joined the device network exactly when the mode is cross-device (one rule).
+    # It says nothing about whether the agent may coordinate devices that joined on their own.
     cross_device_enabled = mode == SystemMode.DESKTOP_CROSS_DEVICE
 
     # Tailscale
@@ -517,12 +497,10 @@ __all__ = [
     "SystemMode",
     "NetworkMode",
     "FabricConfig",
-    "cross_device_refusal",
     "cross_device_requested",
     "master_brain_idle_status",
     "master_brain_requested",
     "master_brain_wanted",
-    "master_brain_waiting_for_mode",
     "nats_forced_on_reason",
     "nats_off_reason",
     "nats_url_points_elsewhere",

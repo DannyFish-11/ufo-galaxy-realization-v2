@@ -364,16 +364,16 @@ python scripts/check_assessment_freshness.py
   此前同一件事有三个各自推导的答案（网关只看按钮；启动流程另把「NATS 地址非空」当跨设备；`system_mode.py` 让写着 `desktop-local` 的模式键盖过按钮），
   于是面板按钮开着、`.env` 里躺着 `desktop-local` 时三处各说各话，「保存设置」写入的 `nats://localhost:4222` 还会把只想用本机的人悄悄切成跨设备。
   现在网关开关、启动流程、桌面在场、启动自检、模式接口都调那一个函数；NATS 地址不参与判模式；面板「跨设备」按钮同时写主键与模式名，「运行模式」下拉框不再列在面板上。
-- **主脑与 worker 只在跨设备模式里起**；开着却在本地模式 → 不起，启动日志说出原因。
-- **模型只能请求、不能决定**：本地模式下的 `devices__request_cross_device` 只会问人，批准走设备接入已有的人在环（`GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合不能提出）。
+- ~~**主脑与 worker 只在跨设备模式里起**~~（2026-10-19 推翻，见 6.21：任务派发只看它自己的开关）。
+- ~~**模型只能请求、不能决定**打开跨设备~~（2026-10-19 删除，见 6.21：模式不限制智能体，也就没有可请求的东西）。
 - 另两处遗留真问题已修：主脑状态文件缺省落 `$GALAXY_DATA_DIR`（不再落系统临时目录）；`GALAXY_NATS_EXECUTOR_FALLBACK` 的 `reject` 真的不退回（登记只留 `sync` / `reject`）。
 - 6 个数字 / 取值的登记默认对齐到代码（主脑缩放复评间隔、节点心跳、安卓快照保鲜、联邦心跳、SLO 心跳窗口、Tailscale 检查间隔）；清点时记的第 7 个（`GALAXY_HEADSCALE_USER`）核对后本来就一致。
-- **本地模式不往别的设备下发**（真机实测查出）：起真服务器、两台真配对的设备客户端，本地模式下 `/devices/parallel` 曾把命令送到设备并执行 —— 命令路由的设备执行桥直接发，网关开关只在两处查。
+- ~~**本地模式不往别的设备下发**~~（2026-10-19 推翻，见 6.21：那是把「电脑加入」误当成「智能体可以协调」；下面是当时的记录）（真机实测查出）：起真服务器、两台真配对的设备客户端，本地模式下 `/devices/parallel` 曾把命令送到设备并执行 —— 命令路由的设备执行桥直接发，网关开关只在两处查。
   现在并行 / 单设备命令 REST、设备执行桥、网关单设备下发、智能体 `devices__invoke` 五处统一拒绝（`cross_device_disabled`，并说明怎么办），按钮一翻即放行。
 - 真机实测还查出并已修的三处：模型看不到「请求打开跨设备」工具（工具表超 24 个时被按词法相关性裁掉，现列入核心工具永不裁）；工具循环只把 `result` / `error` 交给模型，
   需要确认时模型不知道问什么、批准后不知道要重启（结果文案现在写进这两个字段）；POSIX 上端口预检不设 `SO_REUSEADDR`，设备连着时停掉服务再立刻起，会把旧连接的 TIME_WAIT
   误报成「端口被占」、API 网关起不来（横幅却照常报「就绪」）。
-- 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_the_model_can_ask_but_only_the_person_can_turn_on_cross_device.py`、`test_master_brain_runs_only_in_cross_device_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`。
+- 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`（当时另两份钉住旧闸的测试已随 6.21 删除）。
 
 ### 6.8 2026-10-07：所有者第三份真机日志（代码版本 9dd1d9c2）+ 面板 / 厂商 / 开关
 
@@ -933,6 +933,31 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
 - 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`：启动那一行现在会点名，删掉那一行即可回到「本地模式不起 NATS」。
 - GitHubFlow（Node_106）生成 / 审查代码写死 Gemini，没走系统路由器：只配了别家 Key 的人这一步用不了（现在照实说没配 `GEMINI_API_KEY`，不再编）。
 - 桌面自动化的「按现场挑」与灵动岛的「已复制」要在 Windows 真机上看一遍（Win32 / UIA / 微软 UFO、Electron 报的剪贴板格式名）。
+
+### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
+
+所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，
+手表配对即加入；**「跨设备」说的是这台设备加入，从不限制智能体**。整体设计见 **[CROSS_DEVICE_OVERALL_PLAN.md](CROSS_DEVICE_OVERALL_PLAN.md)**（7 个阶段），这一轮做阶段 0。
+
+真机探针查出的现状：手表在本地模式下照样登记进 UDM / UCM、拿到 mesh 会话，可智能体的 `devices__invoke` 一律回 `cross_device_disabled`；按钮一关还把设备接入平面、
+局域网发现、mDNS 一起写成 false，智能体的设备工具从 9 个只剩「请求打开跨设备」1 个。电脑的开关在 9 类地方拦着智能体，全部拆掉：
+
+- **下发入口**：`devices__invoke`、单设备命令 REST、命令路由的设备执行桥、网关 `DeviceRouter` 三处与 `agent_bridge`、NATS 派发桥 —— 不再看模式，能不能下发由成员资格（名册、连接、权限门）决定。
+- **手机那批**：就绪判定里的「V2 跨设备开关」门（`v2_cross_device_switch`）、手机发起的目标、接管请求 —— 只看手机自己的开关与就绪状态。
+- **WebRTC 信令**：原先用电脑开关当门（开着时任何局域网客户端都能连、关着时已加入的手机也连不上），改成**凭成员令牌**：主人的 API 令牌，或发给这台设备的配对令牌，否则 4401。
+- **删掉** `devices__request_cross_device` 与统一拒绝 `cross_device_refusal`（智能体不去开模式）。
+- **按钮成员只留 `GALAXY_NATS_ENABLED`**；设备接入、局域网发现、mDNS 移出按钮。旧按钮留在 `.env` 里的三个 false（指纹：主键也是 false 且三项同时 false）启动时清回默认并说一声（`main.migrate_former_cross_device_members`）。
+- **找得到、连得上不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了 headscale 就入 tailnet，没配只给一行说明；headscale / TURN / STUN 配置项面板上一直显示（跨设备专属键 15 → 6）。
+- **任务派发**（`MasterBrain` + worker）只看它自己的开关，开了就把 NATS 拉起来；面向人的叫法改成「任务派发」，选模型那块的「AI 主脑」改叫「模型」，「主脑」只指智能体所在的设备。
+- 继续跟电脑开关走的（电脑作为设备加入）：桌面把自己登记进 UDM / mesh、入口判定（电脑自己的请求要不要整件交给别的设备）、NATS 默认开关、联邦、设备名、mesh 口令。
+- **设备自己退出**：新增 `POST /api/v1/pair/leave`（凭签给本设备、还有效的配对令牌；免 API 令牌，端点自己核验）：令牌作废、移出对端名册 / 设备名册 / tailnet。手表加了「解除配对」。
+- **真机实测查出并已修**（真后端 `main.py --backend` + 真 HTTP / WebSocket 客户端，本地模式）：
+  - `POST /api/v1/devices/{id}/command` 发的是 `{type:"CONTROL_COMMAND", payload:{...}}` —— 手表、手机、AIP v3 都不认，接口却回「已发送」。改成设备认的唯一一种下发帧
+    `{type:"command", command_id, command, params}`（与规范派发、`/devices/parallel` 同形）；
+  - `/api/v1/system/mode-status` 的 `takeover_available` 原先等于电脑的开关，改成「有在线的安卓成员」。
+- 验证：`tests/test_the_agent_coordinates_members_in_any_mode.py`（新）、`tests/test_cross_device_switch.py`（重写）、手表端到端 `tests/test_watch_reaches_the_central_agent.py`
+  （本地模式下智能体让手表做事，走智能体真正调的工具入口）。真机探针 13 项全过：配对领令牌 → 规范入口登记 → 本地模式下单设备命令真送到手表 →
+  WebRTC 信令陌生人 4401、配对过的手表放行、别人的令牌 4401 → 手表凭令牌自己退出、令牌失效、名册里没了、再登记被拒；启动时旧按钮留下的三个 false 被迁移掉。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

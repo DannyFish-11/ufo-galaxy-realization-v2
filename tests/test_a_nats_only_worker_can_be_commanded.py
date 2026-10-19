@@ -68,11 +68,13 @@ def test_an_unknown_target_is_left_to_the_caller(wired):
     assert _run("nobody") is None
 
 
-def test_local_mode_never_dispatches_to_another_machine(wired, monkeypatch):
+def test_the_computers_mode_does_not_decide_whether_a_worker_is_used(wired, monkeypatch):
+    """只看 worker 在不在线:这台电脑在本地模式(自己没加入设备网络)也照样派给在线的 worker ——
+    「跨设备」说的是电脑自己加不加入,从不限制智能体用已加入的成员。"""
     monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
     monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
-    assert _run("w1") is None
-    assert wired.calls == []
+    assert _run("w1") == {"success": True, "via": "nats", "target": "w1"}
+    assert _run("w2") is None, "不在线的照样是「没有」"
 
 
 def test_no_master_brain_means_no_workers(monkeypatch):

@@ -42,6 +42,9 @@ tests/test_voice_switches_reach_the_panel.py 里那条。
   方向,「只要听写不要朗读」「朗读给别的设备、电脑不外放」都是有意义的组合;
 * 默认关的 opt-in(主脑、联邦、WebRTC、Funnel、主动感知……)—— 按钮「开」不能替用户
   把一个有花费或对外暴露面的选项打开,所以它们留在「全部设置」里。
+* ``GALAXY_ONBOARDING_ENABLED`` / ``GALAXY_LAN_DISCOVERY`` / ``GALAXY_MDNS`` —— (「跨设备」关、它开)
+  正是默认该有的组合:电脑自己不进网络,手表照样要能发现智能体,智能体照样要能看见、接入、协调
+  自己加入的设备。它们曾是「跨设备」的成员,按钮一关就被写成 false(迁移见 ``main.py`` 的 ``migrate_former_cross_device_members``)。
 
 写入语义(``bundle_writes``):主键写成 ``false`` → 全部成员写成 ``false``;主键写成
 ``true`` → 成员**回到登记表的默认值**(不是一律 ``true``:不替用户打开 opt-in)。
@@ -95,49 +98,33 @@ CONFIG_BUNDLES: Tuple[Dict[str, Any], ...] = (
         "note": "关=本地模式(电脑自己一套闭环) · 开=跨设备模式(电脑加入多设备网络)",
         "category": "devices",
         "primary": "GALAXY_CROSS_DEVICE_ENABLED",
-        # 2026-09-03 归口:NATS 四键原在 network、主脑那两个旋钮原在 advanced、
-        # WebRTC 数据通道连同 TURN/信令超时原在 network。
+        # 这个按钮只管**这台电脑**作为设备进不进网络,从不限制智能体。
         #
         # 判据是**关掉它失去的是哪项能力,而不是它用什么技术实现**:
-        #   · 关掉 NATS,失去的是主脑/worker 分布式 —— 而 GALAXY_MASTER_BRAIN_ENABLED
-        #     的描述里就写着「启用主脑编排 + worker/NATS 分布式」。开关在 devices、
-        #     它的总线在 network,是同一个事实两处各存。
-        #   · 关掉 WebRTC 数据通道,失去的是**手机/浏览器那端**的摄像头与麦克风,
-        #     本机的不受影响 —— 那是「手机」,不是「网络」。TURN 与信令超时是它的
-        #     配套机件,一起走;开关一处、旋钮另一处正是这次要治的病。
-        #   · GALAXY_TS_FUNNEL 本来就在这儿,GALAXY_TS_ADVERTISE_RELAY 却在 network,
-        #     而它俩讲的是同一件事(手表/手机怎么连回来)。
+        #   · 关掉 NATS,失去的是电脑接入多机底座(mesh / 联邦 / 总线)。
+        #   · 主脑那几个旋钮(GALAXY_MASTER_BRAIN_*)仍归在这里显示,但任务派发**只看它自己的开关**
+        #     (core.system_mode.master_brain_requested),开了就把总线拉起 —— 它是智能体的工具。
+        #
+        # **不在这里的**:设备接入平面(GALAXY_ONBOARDING_ENABLED)、局域网发现(GALAXY_LAN_DISCOVERY*)、
+        # mDNS 广播(GALAXY_MDNS)、Tailscale 中继 / Funnel(GALAXY_TS_*)、WebRTC 数据通道与 TURN、
+        # 手机入口(GALAXY_ANDROID_WS_ENABLED / ANDROID_DEVICE_*)。它们是「成员找得到、连得上智能体」
+        # 和「智能体协调已加入的设备」—— 与电脑自己进不进网络无关。以前按钮一关就把前三个写成 false,
+        # 智能体的设备工具从 9 个只剩 1 个,手表也发现不了网关(迁移见 main.py 的 migrate_former_cross_device_members)。
         "owns": (
             "GALAXY_CROSS_DEVICE_ENABLED",
             "GALAXY_SYSTEM_MODE",
-            "GALAXY_ONBOARDING_ENABLED",
             "GALAXY_MASTER_BRAIN_*",
             "GALAXY_NATS_*",
             "GALAXY_FABRIC_STRICT",
             "GALAXY_MESH_*",
-            "GALAXY_LAN_DISCOVERY*",
-            "GALAXY_MDNS",
             "GALAXY_HEARTBEAT_INTERVAL",
-            "GALAXY_TS_*",
-            "GALAXY_TURN_URLS",
-            "GALAXY_SIGNALING_TIMEOUT_S",
-            "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL",
             "GALAXY_DEVICE_*",
-            "GALAXY_ANDROID_WS_ENABLED",
-            "ANDROID_DEVICE_*",
             "FEDERATION_*",
             # NODE_*_URL 不在这里:它们是**本机**上各节点微服务的地址(adb / scrcpy / mqtt / webrtc 的 localhost 端口),
             # 本地模式下一样要用 —— 算跨设备的,「跨设备」按钮的「n 项改过」就会因为改了一个本机端口而亮起来。
         ),
-        # 发现附近设备 / 向手机手表宣告自己 / 设备接入平面 / 消息总线:
-        # 本地模式下,这四样要么没有对象可发现,要么白占一个常驻进程。
-        # 主脑、联邦、WebRTC、Funnel、远程桌面是默认关的 opt-in —— 不在此列(见模块说明)。
-        "members": (
-            "GALAXY_ONBOARDING_ENABLED",
-            "GALAXY_LAN_DISCOVERY",
-            "GALAXY_MDNS",
-            "GALAXY_NATS_ENABLED",
-        ),
+        # 消息总线:电脑不进网络、任务派发又关着时,它只白占一个常驻进程。
+        "members": ("GALAXY_NATS_ENABLED",),
         # 运行模式:按钮关 = 本地模式,开 = 跨设备模式。
         "mirrors": {"GALAXY_SYSTEM_MODE": ("desktop-local", "desktop-cross-device")},
     },

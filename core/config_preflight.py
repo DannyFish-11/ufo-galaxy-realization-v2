@@ -199,8 +199,8 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_NATS_ENABLED",
         severity=Severity.INFO,
-        description="要不要开 NATS 消息总线(默认跟着 GALAXY_SYSTEM_MODE 走)。",
-        hint="填 true 可以不管模式强行打开(默认:本地模式关、跨设备开)。",
+        description="要不要开 NATS 消息总线(默认:电脑加入设备网络或开了任务派发才开)。",
+        hint="填 true 可以强行打开(默认:本地模式且任务派发关着时不开)。",
         groups=["gateway", "all"],
     ),
     EnvCheck(
@@ -220,7 +220,7 @@ _CHECKS: List[EnvCheck] = [
     EnvCheck(
         var="GALAXY_CROSS_DEVICE_ENABLED",
         severity=Severity.INFO,
-        description="要不要把任务路由到别的设备上(跨设备模式开关;面板「跨设备」按钮写的就是它)。",
+        description="这台电脑要不要作为设备加入多设备网络(面板「跨设备」按钮写的就是它;不限制智能体协调已加入的设备)。",
         hint=(
             "true = 跨设备模式(这台电脑加入多设备网络),false/不填 = 本地模式(电脑不加入设备网络,最保险的默认);"
             "GALAXY_SYSTEM_MODE=desktop-cross-device 也算跨设备,任一处明确选了跨设备就是跨设备。"

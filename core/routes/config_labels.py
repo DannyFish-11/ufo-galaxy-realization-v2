@@ -55,7 +55,7 @@ LABELS: Dict[str, str] = {
     "OPENAI_API_BASE": "OpenAI 接口地址（代理/中转）",
     "SONAR_API_KEY": "Perplexity Sonar 密钥",
     "LOCAL_VLLM_URL": "本机 vLLM 服务地址",
-    "OLLAMA_MODEL": "本地主脑模型",
+    "OLLAMA_MODEL": "本地模型",
     # ── network ──
     "GATEWAY_PORT": "网关端口",
     # ── devices ──
@@ -100,7 +100,7 @@ LABELS: Dict[str, str] = {
     "GALAXY_NATS_URL": "NATS 消息总线的地址",
     "GALAXY_NATS_EXECUTOR_TIMEOUT": "NATS 执行器超时",
     "GALAXY_NATS_EXECUTOR_FALLBACK": "NATS 不可用时怎么办",
-    "GALAXY_MASTER_BRAIN_ENABLED": "主脑编排与分布式执行",
+    "GALAXY_MASTER_BRAIN_ENABLED": "任务派发(NATS worker)",
     "GALAXY_HEARTBEAT_INTERVAL": "节点心跳间隔",
     "FEDERATION_ENABLED": "启用联邦",
     "FEDERATION_LOCAL_HOST": "联邦里本机对外的主机名",
@@ -125,7 +125,7 @@ LABELS: Dict[str, str] = {
     "GALAXY_DATA_DIR": "数据总目录",
     "GALAXY_FEATURE_FLAGS_PATH": "功能开关文件路径",
     # ── devices ──
-    "GALAXY_MASTER_BRAIN_STATE_PATH": "主脑状态文件路径",
+    "GALAXY_MASTER_BRAIN_STATE_PATH": "任务派发状态文件路径",
     # ── memory ──
     "CHROMA_PERSIST_DIR": "Chroma 向量库目录",
     # ── devices ──
@@ -411,7 +411,7 @@ LABELS: Dict[str, str] = {
     "GALAXY_RESULT_INGRESS_CONTINUITY_MODE": "结果回流连续性模式",
     "GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE": "运行时真相连续性模式",
     # ── devices ──
-    "GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S": "主脑扩缩容重评估间隔",
+    "GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S": "任务派发扩缩容重评估间隔",
     # ── advanced ──
     "GALAXY_TEMPORAL_URL": "Temporal 工作流地址",
     "GALAXY_GW_ADAPTER_DLQ_SUBJECT": "网关适配器死信队列的主题名",
@@ -514,7 +514,7 @@ HINTS: Dict[str, str] = {
     "GALAXY_OLLAMA_KEEP_ALIVE": "本地模型加载后在内存 / 显存里留多久。一直驻留＝响应快、占着显存；卸载得越早越省显存，下一次要重新加载。默认一直驻留。",
     "GALAXY_WHISPER_MODEL": "语音对话的听写模型大小。越大越准、越慢、占得越多，第一次用要下载。默认「小」。",
     "GALAXY_AMBIENT_ASR_SIZE": "后台环境聆听的听写模型大小。它一直在跑，宜小不宜大。默认「小」。",
-    "GALAXY_TOOLS_STICKY": "自动＝已选本地主脑时保留，否则按相关性挑；保留；不保留。默认自动。",
+    "GALAXY_TOOLS_STICKY": "自动＝已选本地模型时保留，否则按相关性挑；保留；不保留。默认自动。",
     "GALAXY_LIMINAL_REHEARSAL": (
         "闲时提前想可能被问到的事。自动＝按复杂度门槛、且有工具可调才做；强制＝凡有工具就做"
         "（时机已过时仍不做）；关闭。默认自动。"

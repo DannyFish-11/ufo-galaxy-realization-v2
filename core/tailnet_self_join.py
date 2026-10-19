@@ -191,25 +191,11 @@ def desktop_gate(*, run: Runner = _run) -> Optional[Dict[str, str]]:
         fix = f"在电脑上换到自建的:tailscale logout 后重启网关,或 tailscale up --login-server={url}"
     elif state == "no_tailscale":
         why = "智能体所在的电脑没装 Tailscale 客户端"
-        fix = f"安装 Tailscale 客户端:https://tailscale.com/download ,装完{_when_it_joins()}"
+        fix = "安装 Tailscale 客户端:https://tailscale.com/download ,装完重启网关即可自动加入(GALAXY_HEADSCALE_AUTOJOIN=1)"
     else:
         why = "智能体所在的电脑还没登录到自建 tailnet"
-        fix = f"{_when_it_joins()};现在可调 POST /api/v1/tailnet/join-this-computer 立刻加入"
+        fix = "网关启动时会自动加入(GALAXY_HEADSCALE_AUTOJOIN=1);现在可调 POST /api/v1/tailnet/join-this-computer 立刻加入"
     return {"reason": "desktop_not_on_tailnet", "how_to_fix": f"{why}。{fix}"}
-
-
-def _when_it_joins() -> str:
-    """这台电脑什么时候会自己入网 —— 跟着系统模式走,说成现在真实的样子。
-
-    桌面启动器只在**跨设备模式**入 tailnet、广播 ``_galaxy._tcp``(本地模式「只用这台电脑」,
-    没有别的设备要来找它,广播只会把它暴露给同一 Wi-Fi 下的人;见 ``launcher/bus_phase.py``)。
-    所以本地模式下说「重启就自动加入」是错的:重启后照样不会入网。
-    """
-    from core.system_mode import cross_device_requested
-
-    if cross_device_requested():
-        return "重启网关即可自动加入(GALAXY_HEADSCALE_AUTOJOIN=1)"
-    return "还要在面板打开「跨设备」并重启(现在是本地模式:只用这台电脑,启动时不入 tailnet、也不广播)"
 
 
 def join_command_for(device_kind: str, grant: Any) -> Dict[str, str]:

@@ -146,8 +146,9 @@ def merge_gateway_only_routers(router) -> None:
         # 不会多出一条永远命不中的死路由。
         #
         # 可搬性照例是实测的,不是推断:挂到只有 core.api_routes 的 app 上真调一次,
-        # GET /api/v1/webrtc/endpoint → **403** cross_device_disabled ——
-        # 那是这条路由自己的策略应答(跨设备开关没开),说明它跑起来了。
+        # GET /api/v1/webrtc/endpoint → 200,返回信令/ICE 配置 —— 说明它跑起来了
+        # (当年实测时这里还是 403「跨设备未开」,那也是它自己的策略应答;
+        # 那道「跨设备」闸现已拆掉,信令口改成凭成员令牌进)。
         # 对照组是 llm / health 那两个:同样的挂法得到 503 "Service not ready",
         # 那才是"依赖 gateway 的 app.state、在权威层跑不起来"的样子。
         #

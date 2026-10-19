@@ -244,11 +244,6 @@ DEVICE_ROUTER_HANDOFF_AUTHORITY_PROPAGATION = (
 
 logger = logging.getLogger(__name__)
 
-# Cross-device feature-flag (Round 4) — checked before any cross-device path.
-from galaxy_gateway.cross_device_switch import (  # noqa: E402
-    is_cross_device_enabled,
-    make_disabled_response,
-)
 from galaxy_gateway.multi_subject_closure_surface import build_closure_view  # noqa: E402
 from galaxy_gateway.observability import (  # noqa: E402
     TraceContext,
@@ -1134,20 +1129,8 @@ class DeviceRouter:
                 ctx["route_mode"] = route_mode
                 ctx.setdefault("dispatch_path", DISPATCH_PATH_CANONICAL)
 
-                # --- Round 4: hard constraint — check cross-device switch ---
-                if not is_cross_device_enabled():
-                    emit_gateway_log(
-                        "cross_device_blocked",
-                        trace_ctx=trace_ctx,
-                        level="warning",
-                        reason="switch_disabled",
-                        route_mode=route_mode,
-                        exec_mode=exec_mode,
-                        capability=capability,
-                        device_id=device_id,
-                    )
-                    metrics.inc("routing_failure")
-                    return make_disabled_response(trace_id=trace_ctx.trace_id)
+                # 不看这台电脑的「跨设备」开关:那个开关只说电脑自己进不进设备网络,
+                # 协调已加入的设备是中心智能体的事,能不能下发由成员资格与权限门决定。
 
                 if source_runtime_posture is not None:
                     try:
@@ -1522,9 +1505,6 @@ class DeviceRouter:
         the TaskEnvelope so that both ``command_only`` and ``agent_runtime``
         dispatches traverse the same substrate path with the mode label intact.
         """
-        # 本地模式只用本机:往一台别的设备下发就是跨设备。此前显式指定一台目标的单设备下发不查开关(真机实测漏过)。
-        if not is_cross_device_enabled():
-            return make_disabled_response(trace_id=task.get("trace_id"))
         try:
             logger.info(f"📤 分发任务到设备: {device.device_id}")
 
@@ -1696,7 +1676,7 @@ class DeviceRouter:
         *,
         _substrate_caller: str = "",
     ) -> Dict:
-        """分发跨设备协同任务 (gated by cross-device switch — Round 4).
+        """分发跨设备协同任务(只对已加入的成员下发;不看这台电脑的「跨设备」开关)。
 
         PR-2：将任务字典转换为 TaskEnvelope 进行子任务分解和结果汇总，
         确保内部唯一任务格式。
@@ -1735,10 +1715,6 @@ class DeviceRouter:
             except Exception:
                 pass  # integrity recording is advisory
 
-        # --- Round 4: hard constraint — single dispatcher guard ---
-        if not is_cross_device_enabled():
-            trace_id = task.get("trace_id")
-            return make_disabled_response(trace_id=trace_id)
         try:
             logger.info(f"🔄 分发跨设备任务到 {len(devices)} 个设备")
 

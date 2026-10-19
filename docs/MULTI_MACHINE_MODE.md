@@ -2,6 +2,8 @@
 
 > **状态：2026-10-05 定义并记录；2026-10-07 按所有者的决定收口：模式只有一条规则、一个出处（见「零、两个模式」），第六节里
 > 会悄悄改变行为的几条已修。**
+> **2026-10-19 所有者纠正：「跨设备」只说这台设备自己进不进网络，从不限制智能体。** 本地模式不再拒绝往别的设备下发，
+> 「请求打开跨设备」工具删除，任务派发（主脑）只看自己的开关。整体设计见 `docs/CROSS_DEVICE_OVERALL_PLAN.md`。
 > 所有者的设计：把「让这台电脑加上别的设备 / 别的机器像一个整体干活」这一整块，作为**一个模块**来看 ——
 > 跨设备是前提，多设备并行建立在它之上，再往上是 NATS 上的 Agent（主脑与 worker）和任务的派发与分配。
 > 这份文档回答：这个模块**由哪几层组成、一个任务怎么走完、每一层有哪些配置键 / 模块 / 接口、现在哪里不一致**。
@@ -27,15 +29,17 @@
 面板上切换模式的只有「跨设备」这一个按钮，它同时写这两个键（`config_bundles.py` 的 `mirrors`），「运行模式」下拉框不再列在面板上。
 `GALAXY_NATS_URL` **不参与**：它只说总线在哪；本地模式下把它指向别的机器，启动会说一句「要用别的设备请打开跨设备」，不替人切模式。
 
-**本地模式不往别的设备下发**：每一个「把命令送到另一台设备」的入口（并行 / 单设备命令 REST、命令路由的设备执行桥、网关的单设备下发、智能体的 `devices__invoke`）
-在本地模式下一律返回 `cross_device_disabled`，并告诉人 / 模型怎么办（打开「跨设备」；智能体可调 `devices__request_cross_device` 请用户同意）；设备仍可以配对、连上、出现在名册里。
+**模式说的是这台电脑，从不限制智能体**：中心智能体协调每一台自己加入的设备（手机打开自己的跨设备、手表配对、别的电脑配对），
+不看它所在电脑的模式。往别的设备下发的每一个入口（并行 / 单设备命令 REST、命令路由的设备执行桥、网关的 `DeviceRouter`、智能体的 `devices__invoke`、
+手机的接管与目标、WebRTC 信令）只看成员资格：在不在名册、在不在线、过不过权限门。以前这些入口在本地模式下一律返回 `cross_device_disabled`，
+并教模型去「请求打开跨设备」—— 那把「电脑进不进网络」和「智能体能不能协调」混成了一件事，已全部拆掉
+（`tests/test_the_agent_coordinates_members_in_any_mode.py`）。
 
-**主脑只在跨设备模式里起**（`core.system_mode.master_brain_requested`）：主脑开关开着、却在本地模式 → 主脑与 worker 不起，启动日志说出原因；
-`CommandRouter` 的 `go_worker` 路径此时返回 `WORKER_DISPATCH_UNAVAILABLE`，设备路径被网关 `DeviceRouter` 的两处入口拒绝（`cross_device_disabled`）。
+**电脑的开关还管的**：桌面把自己登记成成员（别的设备与智能体才能用这台电脑）；电脑自己收到的请求要不要整件交给别的设备做（入口判定
+`resolve_entry_mode`）；NATS 总线默认、mesh、联邦，以及只对「电脑作为设备」有意义的几个配置项。
 
-**模型只能请求、不能决定**：本地模式下模型有一个工具 `devices__request_cross_device`，只会问人「要不要打开跨设备模式」；批准走设备接入已有的
-人在环（问的那一回合不算数、只认人发起的回合、看人的原话、手表连着在手表上问），`GALAXY_ONBOARDING_AUTO=approve` 对它无效；批准后走面板按钮同一个写入函数，
-要**重启**才完全生效。见 `core/device_onboarding/mode_request.py`。
+**任务派发（`MasterBrain`，原称「主脑」）只看自己的开关**：开了就拉起 NATS、任务派发器、worker 消费循环与 MCP over NATS，与电脑的模式无关。
+「主脑」一词只指中心智能体所在的那台设备。
 
 ## 一、四层，外加一个共用底座
 
@@ -62,7 +66,7 @@
 | 第二层 多设备并行 | 有哪些设备（各种列表）、怎么编队、怎么同时下发 | **几乎没有开关**：只有 1 个并发上限（默认 8，未登记）；其余是代码里一直在的机制 |
 | 共用底座 NATS | 消息总线 | `GALAXY_NATS_ENABLED`、`GALAXY_NATS_URL` |
 | 第三层 任务派发与分配 | 一个任务交给谁、走哪条路、怎么防重、重启怎么续 | 几个已内置的保护 + 任务状态落盘（默认开） |
-| 第四层 NATS Agent | 主脑选 worker、worker 执行并回传 | `GALAXY_MASTER_BRAIN_ENABLED`（默认关；要在跨设备模式里才起） |
+| 第四层 NATS Agent | 任务派发器选 worker、worker 执行并回传 | `GALAXY_MASTER_BRAIN_ENABLED`（默认关；只看它自己，开了拉起 NATS） |
 
 ## 二、一个任务怎么走完
 
@@ -127,10 +131,10 @@
 
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
-| `GALAXY_LAN_DISCOVERY` | 开 | 是 | 并进按钮 | 跨设备（成员） | 重启 |
-| `GALAXY_LAN_DISCOVERY_TYPES` | 空 | 是 | 内置 | 跨设备 |  |
-| `GALAXY_MDNS` | 开 | 是 | 并进按钮 | 跨设备（成员） | 重启 |
-| `GALAXY_ONBOARDING_ENABLED` | 开 | 是 | 并进按钮 | 跨设备（成员） |  |
+| `GALAXY_LAN_DISCOVERY` | 开 | 是 | 内置 | — | 重启 |
+| `GALAXY_LAN_DISCOVERY_TYPES` | 空 | 是 | 内置 | — |  |
+| `GALAXY_MDNS` | 开 | 是 | 内置 | — | 重启 |
+| `GALAXY_ONBOARDING_ENABLED` | 开 | 是 | 内置 | — |  |
 | `GALAXY_ONBOARDING_AUTO` | none | 是 | 全部设置 | — |  |
 | `GALAXY_ONBOARDING_SSDP` | 开 | 是 | 内置 | — |  |
 | `GALAXY_ONBOARDING_BLUETOOTH` | 开 | 是 | 内置 | — |  |
@@ -158,30 +162,30 @@
 
 | 键 | 默认 | 登记 | 面板 | 整档按钮 | 生效 |
 |---|---|---|---|---|---|
-| `GALAXY_TS_FUNNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
-| `GALAXY_TS_ADVERTISE_RELAY` | 开 | 是 | 内置 | 跨设备 |  |
+| `GALAXY_TS_FUNNEL` | 关 | 是 | 留在面板 | — | 重启 |
+| `GALAXY_TS_ADVERTISE_RELAY` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TAILSCALE_CHECK_INTERVAL` | 30 | 是 | 对话里调 | — |  |
 | `GALAXY_TAILSCALE_ENABLED` | 关 | 是 | 运维 | — |  |
-| `GALAXY_TAILSCALE_HOST` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_TAILSCALE_TAG` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_HEADSCALE_URL` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_HEADSCALE_API_KEY` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_HEADSCALE_USER` | galaxy | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_TAILSCALE_HOST` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_TAILSCALE_TAG` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_HEADSCALE_URL` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_HEADSCALE_API_KEY` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_HEADSCALE_USER` | galaxy | 是 | 全部设置 | — |  |
 | `GALAXY_HEADSCALE_AUTOJOIN` | 开 | 是 | 内置 | — |  |
-| `GALAXY_TURN_URLS` | 空 | 是 | 跨设备模式下才列 | 跨设备 |  |
-| `GALAXY_TURN_USERNAME` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_TURN_CREDENTIAL` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_SIGNALING_TIMEOUT_S` | 空 | 是 | 对话里调 | 跨设备 |  |
-| `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | 是 | 留在面板 | 跨设备 | 重启 |
+| `GALAXY_TURN_URLS` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_TURN_USERNAME` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_TURN_CREDENTIAL` | 空 | 是 | 全部设置 | — |  |
+| `GALAXY_SIGNALING_TIMEOUT_S` | 空 | 是 | 对话里调 | — |  |
+| `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | 是 | 留在面板 | — | 重启 |
 | `GALAXY_ENABLE_WEBRTC` | 关 | 是 | 运维 | — |  |
 | `GALAXY_WEBRTC_TASK_READY_TIMEOUT_S` | 15 | 是 | 不列（内部调参） | — |  |
 | `GALAXY_USE_GATEWAY_FOR_WEBRTC` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TRANSPORT_ADAPTIVE` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TRANSPORT_BULK_BYTES` | 65536 | 是 | 对话里调 | — |  |
 | `GALAXY_TRANSPORT_PRIORITY` | 空 | 是 | 跨设备模式下才列 | — |  |
-| `GALAXY_ANDROID_WS_ENABLED` | 关 | 是 | 运维 | 跨设备 |  |
-| `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 对话里调 | 跨设备 |  |
-| `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 内置 | 跨设备 |  |
+| `GALAXY_ANDROID_WS_ENABLED` | 关 | 是 | 运维 | — |  |
+| `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 对话里调 | — |  |
+| `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 内置 | — |  |
 
 **别的设备 / 实例 / 家居接入**
 
@@ -281,7 +285,7 @@
 | 第三层 | `/api/v1/devices/{id}/command`、`/devices/cross-device`、`/devices/parallel`、`/api/v1/results/isolated` |
 | 第四层 | `/api/v1/mesh/worker`、`/api/v1/mesh/worker/toggle`、可观测接口里的主脑 / worker 拓扑 |
 
-**面板入口**：底部「跨设备」整档按钮（主键 `GALAXY_CROSS_DEVICE_ENABLED`，连带局域网发现 / mDNS / 设备接入平面 / 消息总线 4 个成员）；
+**面板入口**：底部「跨设备」整档按钮（主键 `GALAXY_CROSS_DEVICE_ENABLED`，唯一成员是消息总线；局域网发现 / mDNS / 设备接入平面不再跟着它）；
 「全部设置」里单列的有主脑、联邦、WebRTC 数据通道、Tailscale Funnel、远程桌面、模型下载镜像，加一批数值 / 文本键；
 Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocket 推送）。
 
@@ -316,8 +320,10 @@ Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocke
    以及它们的上游 `/devices/parallel`、`/devices/cross-device`（经前两处）。`go_worker` 路径在主脑没起时返回 `WORKER_DISPATCH_UNAVAILABLE`。
    按钮一翻，下一条命令即放行（网关路由随时读开关，不用重启）。`tests/test_local_mode_does_not_reach_other_devices.py`、`test_local_mode_never_sends_commands_to_other_devices.py`、
    `test_master_brain_runs_only_in_cross_device_mode.py` 钉住。
+   **2026-10-19 推翻**：所有者纠正 —— 电脑的「跨设备」只管电脑自己，这五处拒绝本身就是错的（把已经自己加入的手机、手表、电脑也挡在外面），
+   已全部拆掉，改由成员资格把关；上面三个测试文件随之删除 / 改写为 `tests/test_the_agent_coordinates_members_in_any_mode.py`。
 4. ~~`galaxy_gateway/cross_device_switch.py` 文件开头的说明过期（写「默认开」）。~~ 已改成实际行为（缺省关、读 `cross_device_requested`）。
-5. ~~「多设备总开关」叫法不一、主脑不检查跨设备开关。~~ 主脑现在要在跨设备模式里才起；面板上叫「跨设备」的就是模式的切换点。
+5. ~~「多设备总开关」叫法不一、主脑不检查跨设备开关。~~ 曾改成「主脑要在跨设备模式里才起」；**2026-10-19 推翻**：任务派发（原称主脑）是智能体的工具，只看它自己的开关。
 6. ~~`GALAXY_NATS_EXECUTOR_FALLBACK` 登记成 `sync / async / reject` 三选一，代码只把它当开关读（选 `reject` 实际是开着回退）。~~ 现在 `reject`（以及 `false` / `0`）真的不退回、`sync`（以及 `true` / 空）退回本机执行；
    登记表只留代码分得清的两项（`sync`、`reject`）。`NATSExecutor` 本身仍没有被装成命令路由的执行器（只有可观测接口会读它的统计），这是产品决定，没有动。
 7. ~~主脑状态文件缺省落在系统临时目录。~~ 现在缺省落 `$GALAXY_DATA_DIR/galaxy_master_brain_state.json`（`core/master_brain_state.py`；显式的 `GALAXY_MASTER_BRAIN_STATE_PATH` 仍优先）。
@@ -355,9 +361,9 @@ Mesh 区的 worker 启停与对端清单；设备清单走面板 feed（WebSocke
 
 ## 七、怎么组成一个按钮（所有者的决定）
 
-所有者的口径：**系统是两个模式，多机模式 = 跨设备模式的整体内容，「混合」是请求的走法。** 因此没有新增「多机模式四档牌」（原组法 B），也没有把主脑并进按钮（原组法 A 的口径）：
+所有者的口径（2026-10-19 起）：**「跨设备」只说这台设备自己进不进网络；智能体协调所有已加入的设备，不看任何模式。**
 
-- 面板上切换的只有「跨设备」这一个按钮：关 = 本地模式，开 = 跨设备模式；它写主键、成员（发现 / mDNS / 设备接入 / NATS 总线）和模式名；
-- 主脑仍是默认关的 opt-in（拉起常驻的主脑与 worker 有花费），独立一个开关，但要在跨设备模式里才起；
-- 第二、三层（多设备并行、任务派发与分配）本来就没有开关，跟着跨设备模式走；
-- 模型可以请求打开跨设备模式，批准只归人（见「零」）。
+- 面板上切换的只有「跨设备」这一个按钮：关 = 本地模式，开 = 跨设备模式；它写主键、唯一成员（NATS 总线）和模式名；
+- 任务派发（原称主脑）是默认关的 opt-in（拉起常驻的派发器与 worker 有花费），独立一个开关，**只看它自己**；
+- 第二、三层（多设备并行、任务派发与分配）本来就没有开关，也**不跟着**电脑的模式走 —— 看成员资格；
+- 不再有「模型请求打开跨设备」：智能体不去开模式。

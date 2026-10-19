@@ -10,7 +10,7 @@
 
 ## 规则
 
-* 只在**跨设备模式**里问（本地模式不往别的机器派发，见 ``core.system_mode.cross_device_refusal``）；
+* 不看这台电脑的「跨设备」开关：worker 是自己连上来的成员，任务派发开着（主脑在）就能派；
 * 只认主脑**确认还活着**的 worker（心跳没超时）—— 死了的 worker 照旧是「没找到」，不是挂着等 30 秒超时；
 * 不是它的目标返回 ``None``，调用方按原来的路径处理。不替执行器已有的两条路做决定。
 """
@@ -35,10 +35,6 @@ def _alive_worker(target: str) -> bool:
 
 async def dispatch_to_nats_worker(target: str, command: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """目标是一台活着的 NATS worker：经 NATSExecutor 派发并返回结果；否则返回 ``None``。"""
-    from core.system_mode import cross_device_requested
-
-    if not cross_device_requested():
-        return None
     try:
         if not _alive_worker(target):
             return None

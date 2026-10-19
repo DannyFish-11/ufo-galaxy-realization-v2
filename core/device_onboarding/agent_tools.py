@@ -27,7 +27,6 @@ import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from core.device_onboarding.gateway_address import gateway_http_base
-from core.device_onboarding.mode_request import REQUEST_ACTION, dispatch_mode_tool, mode_request_tools
 from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
 from core.device_onboarding.taxonomy import is_native_transport
@@ -120,9 +119,11 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
 
 
 def devices_tools_for_agent() -> List[Dict[str, Any]]:
-    """要给智能体的设备工具：设备接入平面开着才有 ``devices__list`` 等；本地模式下另有「请求打开跨设备模式」
-    （它**不挂在**接入开关底下 —— 那个开关是跨设备按钮的成员，按钮关着它也关着，见 mode_request.py）。"""
-    return (list(DEVICES_BUILTIN_TOOLS) if onboarding_enabled() else []) + mode_request_tools()
+    """要给智能体的设备工具：设备接入平面开着才有 ``devices__list`` 等。
+
+    和这台电脑的「跨设备」开关无关：那个开关只说电脑自己进不进设备网络，不限制智能体协调已加入的设备，
+    所以也没有「请求打开跨设备」这种工具 —— 智能体不去开模式。"""
+    return list(DEVICES_BUILTIN_TOOLS) if onboarding_enabled() else []
 
 
 # ── 人在环 ───────────────────────────────────────────────────────────────────────
@@ -309,12 +310,9 @@ async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         if d.bridge_id.startswith(prefix):
             return await invoker(d, action, params, session_id)
     if is_native_transport(d.transport) or not d.transport:
-        # 讲 AIP 的设备:走规范派发链(权限门在里面)。本地模式只用本机,先拒(并告诉模型怎么办)。
+        # 讲 AIP 的设备:走规范派发链(权限门在里面)。它在名册里就是自己加入的成员 ——
+        # 不看这台电脑的「跨设备」开关(那个开关只管电脑自己进不进网络)。
         from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
-        from core.system_mode import cross_device_refusal
-
-        if (refused := cross_device_refusal()) is not None:
-            return refused
 
         r = await get_canonical_dispatcher().dispatch(f"device__{did}__{action}", params, session_id=session_id)
         return r.as_legacy_dict()
@@ -483,8 +481,6 @@ async def _bind_driver(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, session_id: str = "") -> Dict[str, Any]:
-    if action == REQUEST_ACTION:  # 不受设备接入开关管
-        return await dispatch_mode_tool(action, arguments, session_id=session_id)
     if not onboarding_enabled():
         return {"success": False, "error": "设备接入平面已关闭(GALAXY_ONBOARDING_ENABLED=false)"}
     args = dict(arguments or {})

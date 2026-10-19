@@ -111,11 +111,6 @@ class TestBridgeActuallyDrivesThePhaseMachine:
 
     async def test_send_takeover_request_leaves_the_session_in_takeover_pending(self, monkeypatch):
         bridge_mod = pytest.importorskip("galaxy_gateway.android_bridge")
-        # takeover 是**模式门控**的:本地模式下 send_takeover_request 会在发消息之前
-        # 直接返回拒绝(android_bridge.py 的 Axis-1 + Axis-7 守卫)。
-        # 打桩打在 android_bridge 自己的模块级别名上 —— 它在 import 时就绑定了,
-        # 去 patch cross_device_switch.is_cross_device_enabled 对它没有作用。
-        monkeypatch.setattr(bridge_mod, "_is_cross_device_enabled", lambda: True)
         bridge = bridge_mod.AndroidBridge()
         session_id = _sid()
 
@@ -147,11 +142,6 @@ class TestBridgeActuallyDrivesThePhaseMachine:
     async def test_two_takeovers_on_one_session_keep_the_later_phase(self, monkeypatch):
         """派发两次不该把会话打回起点 —— 与幂等那条对应,但走的是真实路径。"""
         bridge_mod = pytest.importorskip("galaxy_gateway.android_bridge")
-        # takeover 是**模式门控**的:本地模式下 send_takeover_request 会在发消息之前
-        # 直接返回拒绝(android_bridge.py 的 Axis-1 + Axis-7 守卫)。
-        # 打桩打在 android_bridge 自己的模块级别名上 —— 它在 import 时就绑定了,
-        # 去 patch cross_device_switch.is_cross_device_enabled 对它没有作用。
-        monkeypatch.setattr(bridge_mod, "_is_cross_device_enabled", lambda: True)
         bridge = bridge_mod.AndroidBridge()
         session_id = _sid()
 

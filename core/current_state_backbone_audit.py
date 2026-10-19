@@ -186,7 +186,7 @@ class ModeId(str, Enum):
     """本地模式：Android 独立运行，不依赖 V2 中心。"""
 
     CROSS_DEVICE = "cross_device_mode"
-    """跨设备模式：Android 连接 V2，cross_device_switch 开启，V2 可派遣。"""
+    """跨设备模式：Android 自己打开跨设备、连上 V2，成为成员，中心智能体可派遣（不看电脑的开关）。"""
 
     MULTI_DEVICE = "multi_device_participation"
     """多设备参与：多个 Android 节点连接 V2，各自上报 readiness/tier。"""
@@ -741,20 +741,19 @@ def build_mode_map() -> ModeMap:
         ModeEntry(
             mode_id=ModeId.CROSS_DEVICE,
             description_zh=(
-                "跨设备模式：Android 已连接 V2 中心，"
-                "cross_device_switch 开启后 V2 可向 Android 派遣任务。"
+                "跨设备模式：Android 自己打开跨设备并连上 V2 中心，成为成员，"
+                "中心智能体即可向它派遣任务（电脑的「跨设备」开关只管电脑自己，不参与）。"
                 "Android 参与 tier 至少为 cross_device_enabled。"
             ),
             v2_code_anchor=(
                 "core.android_network_participation :: "
                 "AndroidNetworkParticipationTier.cross_device_enabled ; "
-                "galaxy_gateway.cross_device_switch :: is_cross_device_enabled"
+                "core.android_mode_gate_policy :: evaluate_android_mode_readiness"
             ),
             android_code_anchor=ANDROID_ANCHOR_WS_CLIENT + " ; " + ANDROID_ANCHOR_CONNECTION_SERVICE,
             closure_state=ClosureState.ESTABLISHED,
             conditions_zh=(
                 "Android App 已安装并连接 V2 gateway（WebSocket）；"
-                "V2 cross_device_switch 开启；"
                 "Android 侧 cross_device_enabled 门控通过；"
                 "设备 session 存在。"
             ),

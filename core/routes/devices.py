@@ -43,7 +43,6 @@ from core.routes._shared import (
     registered_devices,
 )
 from core.schemas.task_envelope import TaskEnvelope
-from core.system_mode import cross_device_refusal
 from core.unified.device_manager import get_unified_device_manager
 
 logger = logging.getLogger("Galaxy.API")
@@ -705,19 +704,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         if not _is_device_registered_canonical(device_id):
             raise HTTPException(status_code=404, detail="设备未注册")
-        if (refused := cross_device_refusal()) is not None:  # 本地模式不往别的设备下发
-            return JSONResponse(refused, status_code=403)
 
         command_id = str(uuid.uuid4())[:8]
+        # 设备认的下发帧只有这一种(与规范派发、/devices/parallel 同形);原先的 CONTROL_COMMAND 手表手机都不认
         message = {
             "version": "3.0",
             "message_id": command_id,
-            "type": "CONTROL_COMMAND",
+            "type": "command",
+            "command_id": command_id,
+            "command": req.command,
+            "params": req.params,
             "device_id": device_id,
-            "payload": {
-                "command": req.command,
-                "params": req.params,
-            },
             "timestamp": datetime.now().isoformat(),
         }
 

@@ -85,25 +85,24 @@ def test_a_computer_inside_our_network_passes(configured, has_tailscale):
 def test_a_computer_that_has_not_logged_in_is_stopped_with_a_next_step(configured, has_tailscale):
     out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
     assert out["reason"] == "desktop_not_on_tailnet"
-    # 立刻加入的那条路与模式无关;「什么时候会自己加入」跟模式走,由下面两条分别钉
     assert "join-this-computer" in out["how_to_fix"]
     assert set(out) == {"reason", "how_to_fix"}, "形状要和 JoinUnavailable.to_dict() 一致,客户端只认这两个键"
 
 
-def test_in_local_mode_it_does_not_promise_that_a_restart_will_join(configured, has_tailscale, monkeypatch):
-    """本地模式下启动器不入 tailnet:「重启就自动加入」是句假话,要说清先打开跨设备。"""
-    for k in ("GALAXY_SYSTEM_MODE", "GALAXY_CROSS_DEVICE_ENABLED"):
-        monkeypatch.delenv(k, raising=False)
-    out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
-    assert "本地模式" in out["how_to_fix"] and "跨设备" in out["how_to_fix"]
-    assert "重启网关即可自动加入" not in out["how_to_fix"]
-    assert "join-this-computer" in out["how_to_fix"], "立刻加入的那条路本地模式下照样可用"
+def test_the_restart_promise_does_not_depend_on_the_cross_device_switch(configured, has_tailscale, monkeypatch):
+    """「跨设备」只管这台电脑作为设备进不进网络;配了自建 headscale,启动时两种模式都会自己入网。
 
-
-def test_in_cross_device_mode_a_restart_does_join(configured, has_tailscale, monkeypatch):
-    monkeypatch.setenv("GALAXY_SYSTEM_MODE", "desktop-cross-device")
-    out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
-    assert "重启网关即可自动加入" in out["how_to_fix"] and "本地模式" not in out["how_to_fix"]
+    所以两种模式下提示一样:重启网关会自动加入,也可以现在就调 join-this-computer。
+    """
+    for mode in (None, "desktop-cross-device"):
+        for k in ("GALAXY_SYSTEM_MODE", "GALAXY_CROSS_DEVICE_ENABLED"):
+            monkeypatch.delenv(k, raising=False)
+        if mode:
+            monkeypatch.setenv("GALAXY_SYSTEM_MODE", mode)
+        out = sj.desktop_gate(run=FakeTailscale("NeedsLogin"))
+        assert "自动加入" in out["how_to_fix"], mode
+        assert "跨设备" not in out["how_to_fix"] and "本地模式" not in out["how_to_fix"], mode
+        assert "join-this-computer" in out["how_to_fix"], mode
 
 
 def test_a_computer_without_the_client_is_stopped_and_told_where_to_get_it(configured, monkeypatch):
@@ -314,7 +313,11 @@ def test_lan_discovery_is_published_and_stopped(monkeypatch):
     monkeypatch.setattr(m, "MdnsAnnouncer", Fake)
     monkeypatch.delenv("GALAXY_MDNS", raising=False)
     t = TailnetStartup(9100)
-    assert t.start_lan_discovery() == ("局域网发现", "已发布 _galaxy._tcp", "ok")
+    assert t.start_lan_discovery() == (
+        "局域网发现",
+        "已发布 _galaxy._tcp(同一 Wi-Fi 下手表、手机能自动找到智能体)",
+        "ok",
+    )
     assert started == [9100], "应当用桌面版实际监听的端口,而不是写死的 9000"
     t.stop()
     t.stop()  # 重复停机无害
