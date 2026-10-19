@@ -924,7 +924,7 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
 剩下 4 条 503 都是该有的「用不了」（没配模型的代码生成、没配 Google 登录、没有 TTS 引擎、没有视频源），各自说了原因。
 三次真跑都没有出现「Unclosed client session」（已给每个会话记下创建位置，下次出现会带出处）。全量测试见下一段。
 
-全量测试（4 个分片）在本地跑着，跑完补记在这里。
+全量测试（4 个分片，同一台机器上并行）：11612 / 11335 / 11729 / 11881 通过，分片二、三各红 1 条 —— `test_stop_script_pid_ownership::test_stale_pid_file_is_cleaned_not_killed`（`stop.sh` 被一个 SIGTERM 打断，来源没查到；四个分片同机并行时，`stop.sh` 里按命令行模式的 `pkill` 有误伤别的进程的可能）与 `test_stop_while_it_acts::test_stop_cancels_the_request_but_the_caller_keeps_running`（4 核吃满时一个 5 秒的等待超时）。两条单独重跑 36 条全过，CI 上同一提交的 4 个分片全绿；`test_launcher_doctor` 单独 26 条全过。
 
 **下一轮待办：**
 
