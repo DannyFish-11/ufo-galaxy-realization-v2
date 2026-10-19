@@ -463,6 +463,7 @@ python scripts/check_assessment_freshness.py
 - **桌面版从来没让电脑自己入网。** 自动入网（`core/tailnet_self_join.py`）和局域网广播（`_galaxy._tcp`）只写在网关 lifespan 里；桌面版由启动器自己建应用、只挂 `/ws/device/{id}`，不跑那个 lifespan。结果是钥匙发了、手表进了网，电脑不在里面。现在两处共用 `autojoin_at_startup` / `start_lan_announcer`，桌面启动器里由 `launcher/tailnet_startup.py` 在 `TailscaleManager.initialize()` **之前**入网、发布广播、停机时收掉；横幅区分"装了但没入成"（带处置）与"没装"，广播没发出去不再写成"已发布"。
 - **配对不管电脑在不在网里都发钥匙。** 现在 `/api/v1/pair/claim` 先问 `desktop_gate`：电脑没装客户端、没登录、或登录在别的控制服务器时，配对照样成功、令牌照发，但**不发钥匙**，`tailnet_join_unavailable.reason = "desktop_not_on_tailnet"` 并带下一步；查不出来时放行；headscale 没配时仍报原来的原因码。手表侧把这个码翻成人话（"电脑还没加入 tailnet"）并在配对完成后展示。
 - 测试：`tests/test_tailnet_key_needs_the_computer_in_the_network.py`（19 条；把门拿掉 3 条变红、把入网挪到探测之后 1 条变红）。
+- **提示语跟系统模式走（2026-10-19 对着最新 main 复核）。** 桌面启动器现在只在**跨设备模式**入 tailnet、发布 `_galaxy._tcp`（见 `launcher/bus_phase.py`；默认是本地模式）。所以本地模式下 `desktop_gate` 不再说「重启就自动加入」——那是句假话，重启后照样不会入网——而是说「现在是本地模式，先在面板打开『跨设备』并重启」；立刻加入的 `POST /api/v1/tailnet/join-this-computer` 两种模式都可用。手表侧同步：配对完成页，以及「自动发现网关」没找到时给出两条出路（手填地址 / 打开跨设备）。
 - 仍需真机：真 headscale + 真 tailscaled 上"电脑未入网 → 配对不发钥匙 → 入网后重新配对发钥匙"的整条路。
 
 ### 6.14 2026-10-08：「调数据方式」的开关撤出面板，改由智能体按人的话调
