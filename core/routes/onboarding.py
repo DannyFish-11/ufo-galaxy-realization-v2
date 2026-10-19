@@ -1,6 +1,7 @@
 """core/routes/onboarding.py — 设备接入平面的对外接口(面板用;智能体用 devices__* 工具)。
 
   GET    /api/v1/onboarding/overview                    成员(按角色分组)+ 候选 + 汇总
+  GET    /api/v1/onboarding/cards                       模型看到的那份:每台成员一张整体卡(devices__list 原样)
   POST   /api/v1/onboarding/candidates/{id}/join        接入一个候选(body: {"inputs": {...}})
   POST   /api/v1/onboarding/candidates/{id}/ignore      不再提示
   DELETE /api/v1/onboarding/members/{device_id}         移除成员(该收回的都收回)
@@ -52,6 +53,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         except Exception as exc:  # noqa: BLE001
             return _error("onboarding_overview", exc)
+
+    @router.get("/api/v1/onboarding/cards")
+    async def cards(include_ignored: bool = False):
+        """与智能体 ``devices__list`` 同一份结果 —— 人能看到模型眼里每台设备是什么样(排障、面板)。"""
+        try:
+            from core.device_onboarding.agent_tools import dispatch_devices_tool
+            from core.device_onboarding.service import onboarding_enabled
+
+            if not onboarding_enabled():
+                return JSONResponse({"success": True, "enabled": False})
+            return JSONResponse(await dispatch_devices_tool("list", {"include_ignored": include_ignored}))
+        except Exception as exc:  # noqa: BLE001
+            return _error("onboarding_cards", exc)
 
     @router.post("/api/v1/onboarding/candidates/{candidate_id}/join")
     async def join(candidate_id: str, body: JoinBody):

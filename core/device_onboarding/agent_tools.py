@@ -4,7 +4,7 @@
 MCP/技能/节点;资源表里从没放进过设备。这里不把几百个 ``device__<id>__<cap>``
 灌进上下文,而是给一组元工具,对着同一份总览(``OnboardingService.overview``)工作:
 
-    devices__list            成员(按角色)+ 候选
+    devices__list            每台成员一张整体卡(device_card)+ 候选
     devices__join            接入一个候选(需要人时返回要做什么)
     devices__ignore          不再提示某个候选
     devices__remove          移除成员(该收回的都收回)
@@ -48,9 +48,13 @@ def _fn(name: str, description: str, properties: Dict[str, Any], required: Optio
 DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         "devices__list",
-        "List this system's devices: members grouped by role (subjects that can initiate, members, bridged "
-        "devices such as smart-home entities, observers) with online status, capability classes and driver; "
-        "plus candidates discovered nearby that are NOT members yet and what joining each would take.",
+        "List this system's devices. Each member comes as one card: what it is (name, type, form: watch / phone / "
+        "computer / carrier / home), what it can do (each action it reported, with a one-line 'does'), how it is now "
+        "(online, battery, network path, busy, and for a watch whether the wearer can be interrupted), whether it can "
+        "take a dispatched agent (can_take_agent: phones and agent carriers yes; watches and hands-and-eyes computers "
+        "no), and what it did recently with what result. You decide which device does what; only members that are "
+        "online can be given work. Also lists candidates discovered nearby that are NOT members yet and what joining "
+        "each would take.",
         {"include_ignored": {"type": "boolean", "description": "Also list candidates the user ignored."}},
     ),
     _fn(
@@ -172,23 +176,6 @@ async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
 # ── list ─────────────────────────────────────────────────────────────────────────
 
 
-def _brief_member(v: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        k: v[k]
-        for k in (
-            "device_id",
-            "name",
-            "type",
-            "role_label",
-            "can_initiate",
-            "online",
-            "capability_classes",
-            "capabilities",
-        )
-        if k in v
-    } | {"attached_via": v.get("bridge_id") or v.get("transport") or "", "driver": v.get("driver")}
-
-
 def _brief_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "candidate_id": c["candidate_id"],
@@ -204,11 +191,21 @@ def _brief_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _list(args: Dict[str, Any]) -> Dict[str, Any]:
+    """每台成员一张整体卡(``device_card``),在线的排前;不按固定角色分组 —— 谁做什么由模型定。"""
+    from core.device_onboarding.device_card import build_device_card
+    from core.unified.device_manager import get_unified_device_manager
+
     ov = get_onboarding_service().overview(include_ignored=bool(args.get("include_ignored")))
+    udm = get_unified_device_manager()
+    views = sorted((v for vs in ov["groups"].values() for v in vs), key=lambda v: (not v["online"], v["name"]))
+    cards = []
+    for v in views:
+        d = udm.get_device(v["device_id"])
+        cards.append(build_device_card(v, dict(getattr(d, "metadata", None) or {})))
     return {
         "success": True,
         "summary": ov["summary"],
-        "members": {g: [_brief_member(v) for v in vs] for g, vs in ov["groups"].items() if vs},
+        "members": cards,
         "candidates": [_brief_candidate(c) for c in ov["candidates"]],
     }
 

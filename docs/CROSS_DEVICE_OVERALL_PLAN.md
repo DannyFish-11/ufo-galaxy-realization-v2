@@ -376,7 +376,7 @@
 | 阶段 | 状态 | 验证 |
 | --- | --- | --- |
 | 0 拆闸与正名 | 已完成(V2 拆闸与正名、`/api/v1/pair/leave`;手表提示与「解除配对」;安卓信令带配对令牌) | V2:`tests/test_the_agent_coordinates_members_in_any_mode.py`、`tests/test_cross_device_switch.py`、手表端到端 `tests/test_watch_reaches_the_central_agent.py`;手表 `PairLeaveTest`;安卓 `SignalingRequestAuthTest`;真后端 + 真设备帧探针 13 项全过(见 SYSTEM_STATUS 6.21) |
-| 1 设备整体卡 | 未开始 | — |
+| 1 设备整体卡 | 已完成(`devices__list` 整体卡 + `GET /api/v1/onboarding/cards`;手表、手机报动作说明;下发进任务流程图;固定角色退出派发;登记名修正)。意图路由里的「目标执行」「并行目标」并进主循环工具,随阶段 3 的 `devices__delegate` 与阶段 4 的 `tasks__plan` 一起做 | `tests/test_the_model_sees_each_device_as_a_whole.py`;手表 `WatchMemberFramesTest`;安卓 `PhoneActionDescriptionsTest`;真机探针 12 项全过(见 SYSTEM_STATUS 6.22) |
 | 2 对外 A2A | 未开始 | — |
 | 3 手机接管与对话桥接 | 未开始 | — |
 | 4 多步计划 | 未开始 | — |

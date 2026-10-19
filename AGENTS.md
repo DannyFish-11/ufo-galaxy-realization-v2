@@ -57,6 +57,10 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   「现在是哪个模式」只有一条规则、一个出处：`core.system_mode.cross_device_requested()` —— `GALAXY_CROSS_DEVICE_ENABLED` 为真**或** `GALAXY_SYSTEM_MODE=desktop-cross-device`。
   `GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（写主键、`GALAXY_SYSTEM_MODE` 与唯一成员 `GALAXY_NATS_ENABLED`）。
   「混合」不是模式，是一个请求的走法（入口判定 `resolve_entry_mode`，跟着电脑的开关走）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
+- **模型看的是每台设备的「整体卡」，不是固定角色**（`core/device_onboarding/device_card.py`，`devices__list` 与 `GET /api/v1/onboarding/cards` 同一份）：
+  是什么 / 能做什么（设备自己报的动作 + 一句说明：`capability_report` 的 `capability_schemas[].description` 或 `action_descriptions`）/ 现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/
+  能否接派来的 Agent（`can_take_agent`）/ 最近做过什么（任务流程图）。谁做什么由模型定，规则只过滤；「感知 / 动作 / 在场」（`core/mesh/device_role_allocator.py`）只是观测标签，
+  **别让派发路径读它**（`tests/test_the_model_sees_each_device_as_a_whole.py` 守着）。每次单动作下发都记进任务流程图（`device_card.record_dispatch`）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
 - **任务派发**（`GALAXY_MASTER_BRAIN_ENABLED`，类名 `MasterBrain`：经 NATS 把任务派给 worker）是智能体的工具，**只看它自己的开关**，开了就把 NATS 拉起来；

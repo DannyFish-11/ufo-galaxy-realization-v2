@@ -486,6 +486,7 @@ class AndroidBridge:
             from core.device_onboarding.taxonomy import classify_type
             from core.unified.device_manager import UnifiedDeviceManager
             from core.unified.models import UnifiedDevice, UnifiedDeviceType
+            from galaxy_gateway.android.device_naming import registration_name
 
             udm = UnifiedDeviceManager()
 
@@ -529,9 +530,7 @@ class AndroidBridge:
 
             device = UnifiedDevice(
                 device_id=device_id,
-                device_name=str(
-                    message.get("name") or ("Android Device" if utype == UnifiedDeviceType.ANDROID else device_id)
-                ),
+                device_name=registration_name(message, device_id, utype),
                 device_type=utype,
                 # 细分类型(android_phone / android_wear…)另存,UDM 入口据此解析驱动。
                 aip_device_type=type_info.aip_device_type,

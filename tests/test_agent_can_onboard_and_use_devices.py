@@ -121,13 +121,14 @@ def test_the_agent_is_offered_the_device_tools():
     assert '"devices__",' in inspect.getsource(OpenClawd._dispatch_tool_call)
 
 
-def test_list_shows_members_by_role_and_candidates(env):
+def test_list_shows_each_member_as_a_whole_card_and_candidates(env):
     _udm().register_device_from_dict("phone-1", {"device_type": "Android_Agent", "transport": "websocket"})
     _serial_candidate()
     out = _agent("devices__list", {})
     assert out["success"]
-    assert [m["device_id"] for m in out["members"]["subjects"]] == ["phone-1"]
-    assert out["members"]["subjects"][0]["can_initiate"] is True
+    [m] = out["members"]
+    assert m["device_id"] == "phone-1" and m["can_initiate"] is True
+    assert {"form", "status", "actions", "can_take_agent", "recent"} <= set(m)
     [c] = out["candidates"]
     assert (c["name"], c["join_path"], c["human_step"]) == (_SERIAL_NAME, "local_bus", "approve")
 
