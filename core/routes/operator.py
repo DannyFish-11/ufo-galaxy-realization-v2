@@ -193,6 +193,7 @@ Design constraints
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from typing import Any, Dict, Optional
@@ -1601,15 +1602,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
           board/operator consumers do not need to reconcile separate
           explanation schemas.
 
-        Action availability is policy-derived — not hard-coded.
+        Action availability is policy-derived — not hard-coded. Built in a worker thread (a ~0.45 s sync aggregation).
         """
         try:
             from core.pr4_operator_action_governance import build_operator_board_projection
 
-            proj = build_operator_board_projection()
+            board = await asyncio.to_thread(lambda: build_operator_board_projection().to_dict())
             return JSONResponse(
                 content={
-                    **proj.to_dict(),
+                    **board,
                     "authority": "OPERATOR_ROUTES_V1",
                     "consumption_contract_boundary": _operator_consumption_contract_boundary(),
                     "authority_source_fingerprint": build_authority_source_fingerprint(

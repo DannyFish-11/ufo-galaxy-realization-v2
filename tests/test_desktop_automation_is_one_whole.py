@@ -367,3 +367,15 @@ def test_the_core_services_banner_does_not_count_not_applicable_as_degraded():
         {"device_agent_manager": "running", "device_status_api": "running", "microsoft_ufo_integration": "partial"}
     )
     assert (summary, status) == ("2/3 就绪 · 1 个部分可用", "warn")
+
+
+def test_the_node_92_row_says_it_depends_on_the_device(tmp_path, monkeypatch):
+    """第 6 轮真跑：状态接口把 Node_92 那条（名字叫 pyautogui）写成「能用」、原因空着，而启动日志同时说「pyautogui 没装」。
+
+    这条路是 HTTP 打设备那头的自动控制节点，本机装没装 pyautogui 与它无关；能不能动手看那台设备登记了没有 —— 照这个说。
+    """
+    monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+    rows = {r["name"]: r for lv in da.describe(app="notepad.exe")["levels"] for r in lv["backends"]}
+    row = rows["pyautogui"]
+    if row["available"]:
+        assert "按设备" in row["reason"] and "Node_92" in row["reason"], row

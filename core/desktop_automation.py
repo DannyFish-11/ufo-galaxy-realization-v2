@@ -682,6 +682,9 @@ def describe(*, backends: Tuple[Backend, ...] = BACKENDS, app: Optional[str] = N
             if b.level != level:
                 continue
             runner, why = b.make()
+            if runner is not None and b.name in _REMOTE_ONLY:
+                # 「能用」只是这条路接得上：动不动得了手看那台设备 —— 别让它读成「这台本机装了 pyautogui」
+                why = "按设备：只对在设备控制服务里登记过的设备走得通（键鼠在那台的自动控制节点 Node_92 上）"
             ok, fail, ms = record.stats(app, b.name)
             rows.append(
                 {

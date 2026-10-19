@@ -198,6 +198,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - 本地模式不起 NATS、不入 tailnet、不往局域网广播 —— 这些是对的状态，不算降级（`launcher/bus_phase.py`）；节点进程活着只是慢，说「还在起来」不算降级
 - `core/loop_stall_watch.py` - 事件循环停跳 0.5 秒以上时记下卡在仓库哪几行、最里面卡在库的哪一行、同一时刻别的线程在 import 什么（循环线程可能只是在等 GIL）。日志里「一批请求同一毫秒一起慢」先看它那一行
 - 本机 Ollama 超时不重发（`core/local_llm_policy.py`）：慢不是故障，重发等于从头再算
+- 基础设施那一行（Docker / Podman）按各服务此刻的状态说（`launcher/compose_health.py`）：`compose up -d` 退出码 0 不等于已就绪；起不来的点名
 - **控制台只上结论和错误**（`core/console_log.py`）：WARNING 是过程诊断，进 `logs/lumiv.log`，`-v` 才上屏；写控制台在专门的线程里（Windows 控制台被选中文字时挂起写入，曾卡住事件循环 13.8 秒）。别再往控制台 `print` 诊断
 - 事件循环里不 import、不跑子进程：周期清扫不替没人加载过的模块 import（`core/periodic_maintenance.py::_loaded`）；FastAPI 的路由校验模型在网关起来前由旁边线程先建（`launcher/services.py::_warm_routes`）
 - HF 下载源探测（`core/hf_endpoint.py`）并发、每个 6 秒、两轮；语音识别模型没下下来时后台重试、下好自动开启

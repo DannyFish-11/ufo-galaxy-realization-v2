@@ -1201,8 +1201,12 @@ class GalaxyUnified:
                 return ("pulling", None)  # 首次拉镜像，留后台继续
 
         status, rc = await asyncio.to_thread(_bring_up)
-        if status == "up" and rc == 0:
-            return ("ok", f"nats / redis / qdrant / neo4j / mongodb 已就绪 · via {rt_name}", "")
+        if status == "up" and rc == 0:  # up -d 只说明容器启动过了;「已就绪」看各服务此刻的状态
+            from launcher.compose_health import infra_summary
+
+            return await asyncio.to_thread(
+                infra_summary, _compose_base() + ["-f", str(compose_file)], services, rt_name, str(PROJECT_ROOT)
+            )
         if status == "pulling":
             # 第一次拉镜像是「还在做」,不是降级(所有者:「其他东西好了以后都是打对勾」):
             # 与节点「还在起来」同一档 —— 说清楚在做什么、什么时候生效,不算进降级项。

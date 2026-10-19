@@ -218,9 +218,12 @@ def _search(args: Dict[str, Any]) -> Dict[str, Any]:
             limit=limit,
         )
         return {"success": True, "origin": "local", "papers": [_trim(p) for p in papers], "total": len(papers)}
-    from core.arxiv_client import search as online
+    from core.arxiv_client import search_or_why
 
-    papers = online(query, limit)
+    papers, why = search_or_why(query, limit)
+    if why:
+        # 没连上 ≠ 没搜到:照实说没查成,别让模型据此告诉人「没有相关论文」
+        return {"success": False, "origin": "online", "papers": [], "total": 0, "error": why, "note": describe()}
     return {
         "success": True,
         "origin": "online",

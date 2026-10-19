@@ -335,9 +335,28 @@ def test_search_falls_back_to_online_and_says_the_library_is_not_built(tmp_path,
     empty = ArxivLibrary(str(tmp_path / "none.sqlite3"))
     monkeypatch.setattr(arxiv_library, "get_library", lambda: empty)
     monkeypatch.setattr(arxiv_sync, "get_library", lambda: empty)
-    monkeypatch.setattr(arxiv_client, "search", lambda q, n: [{"paper_id": "x", "abstract": "y"}])
+    monkeypatch.setattr(arxiv_client, "search_or_why", lambda q, n: ([{"paper_id": "x", "abstract": "y"}], ""))
     out = _tool("arxiv_search", query="anything")
     assert out["origin"] == "online" and out["total"] == 1 and "1.6 GB" in out["note"]
+
+
+def test_online_search_that_could_not_connect_says_so_instead_of_finding_nothing(tmp_path, monkeypatch):
+    """第 6 轮真跑：代理不放行 export.arxiv.org，工具原先照样回 ``success: True, papers: []`` —— 模型据此告诉人
+    「没有相关论文」，而事实是一篇都没查成。没连上和没搜到是两件事。"""
+    import httpx
+
+    empty = ArxivLibrary(str(tmp_path / "none.sqlite3"))
+    monkeypatch.setattr(arxiv_library, "get_library", lambda: empty)
+    monkeypatch.setattr(arxiv_sync, "get_library", lambda: empty)
+
+    def refused(*a, **kw):
+        raise httpx.ConnectError("CONNECT tunnel failed, response 403")
+
+    monkeypatch.setattr(arxiv_client, "_get", refused)
+    out = _tool("arxiv_search", query="transformer")
+    assert out["success"] is False and out["papers"] == []
+    assert "没连上 arXiv" in out["error"] and "不是没有相关论文" in out["error"]
+    assert arxiv_client.search("transformer") == [], "旧的 search() 照旧只回空列表（多源汇总的调用方靠它）"
 
 
 def test_reading_returns_a_window_and_where_to_continue(lib, monkeypatch):

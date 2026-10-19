@@ -838,6 +838,44 @@ python scripts/check_assessment_freshness.py
 - 桌面自动化的「按现场挑」只在沙箱里用桩验证过：Win32 / UIA / 微软 UFO 三个后端要在 Windows 真机上跑一遍（沙箱没有 Windows）。
 - 灵动岛的「已复制」在 Windows 真机上看一眼：Electron 在 Windows 上报的剪贴板格式名（图片 / 文件）要和 `clipboard_watch.js` 的判法对得上（沙箱里只用假剪贴板验证过）。
 
+**第 6 轮（2026-10-19）：** 这一轮的沙箱第一次装了 Docker，基础设施（NATS / Redis / Qdrant / Neo4j / MongoDB）真的被拉起来了，
+于是抓到几样以前看不见的。另外所有者看了第 5 轮的灵动岛后提了三点（比例与桌宠和字不协调、不要右边那座小岛、点要用面板那套色），已改完单独提交
+（见上面「灵动岛对齐 winsland」一条）。
+
+- **横幅说「nats / redis / qdrant / neo4j / mongodb 已就绪」，而 neo4j 在反复重启、qdrant 永远 unhealthy**：横幅只看 `compose up -d` 的
+  退出码。现在 `up -d` 之后读一遍 `compose ps`，最多等几秒让还在起来的落定（`launcher/compose_health.py`）：全在跑且健康才说已就绪；
+  反复重启 / 退出了 / 健康检查不过 / 没建出来就点名、算降级、给出 `docker compose logs <服务>`；到点还在起来说「还在起来」（不算降级）；
+  读不到状态只说「已拉起」。一次轮询里见过坏的就记成坏（起不来的容器在「重启中」和「刚起来」之间来回切）。真跑核对过：停掉 qdrant →
+  「qdrant 退出了，其余已就绪」；再起来 → 已就绪。
+- **neo4j 起不来**：`NEO4J_PLUGINS=["apoc", "gds"]`，5.x 认的名字是 `graph-data-science`，写 `gds` 它直接退出（`docker-compose.yml` 与
+  `deploy/compose/kimi.yml`；`full.yml` 本来就对）。内存三项也换成 5.x 的 `server.memory.*`（原先每次启动报弃用）。GDS 插件要联网下，
+  这台下不到时 neo4j 照常起、只是不带 GDS（全仓没有代码调 `gds.*`）。
+- **qdrant 永远 unhealthy**：健康检查调 `curl`，qdrant 镜像里没有 curl / wget / nc，只有 bash —— 三份 compose 都改成用 bash 的
+  `/dev/tcp` 问 `/readyz`。真跑：两个容器 40 秒内都 healthy。
+- **三个状态接口占着事件循环**：卡顿记录抓到循环被卡 0.4 秒。`/api/v1/operator/board/operable-truth` 在循环里同步聚合整块看板（约 0.45 秒）、
+  `/api/v1/system/container-runtime`（及 `/test`、`/choice`）在循环里跑 docker / podman 子进程（这里 0.27 秒，Windows 上 Podman 虚机没起来时
+  一次就是几秒）、`/api/v1/system/completion-status` 同步重建整份报告 —— 都挪进工作线程。改后再真跑：卡顿记录一条都没有。
+  看板那份聚合查过：稳定下来每次 16–31 毫秒，0.4 秒是第一次调用顺带 import 一串惰性模块的钱 —— 正是不该在循环里付的那种。
+- **arXiv 在线检索连不上时说成「没搜到」**：这台的代理不放行 export.arxiv.org，`academic__arxiv_search` 照样回 `success: true, papers: []`，
+  模型会据此告诉人「没有相关论文」。现在没连上就回 `success: false` 和一句「没连上 arXiv……这次没查成 —— 不是没有相关论文」
+  （`core/arxiv_client.py::search_or_why`；多源汇总的旧调用方仍用 `search()`，一个源没连上只是少几条）。
+- **状态接口把自动控制节点那条路写成「pyautogui 可用」**，而启动日志同时说「pyautogui 没装」：那条路是 HTTP 打设备那头的 Node_92，
+  能不能动手看那台设备登记了没有，本机装没装 pyautogui 无关 —— 现在照这个写原因。
+- **测试的顺序依赖**（前面 winsland 那次提交里一并修了）：自注册测试的夹具另换数据目录，`core.user_providers` 等在 import 时定下的落盘路径
+  若恰好在它里面第一次 import，就钉在它的临时目录上，「状态随数据目录走」的核对随之变红。
+
+接口复查（鉴权开着）：245 条不带路径参数的 GET 全打一遍，240 条 200，其余 5 条是该有的拒绝（同第 5 轮）；没有 5xx，没有一条超过 1 秒；
+Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「没做成」；陌生设备登记 → 岛上一张卡 → 「不接入」→ 卡撤掉；新连上的覆盖层马上
+收到 `type="island"`；不带令牌读卡片 401；对话在一个模型都没配时 0.15 秒回「还没有可用的 AI 服务……」。停机干净：14 个子进程没有留下
+（基础设施容器有意常驻，不随后端停）。
+
+**下一轮待办：**
+
+- 照片里那次 11.5 秒卡顿的真凶：等更新后的卡顿记录（会带上同一时刻别的线程在 import 什么）。
+- 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`（旧模板生成）：写了就听它的，删掉那一行即可回到「本地模式不起 NATS」（这一轮沙箱的 `.env` 也是这样）。
+- 桌面自动化的「按现场挑」与灵动岛的「已复制」只在沙箱里验证过：Win32 / UIA / 微软 UFO 三个后端、Electron 在 Windows 上报的剪贴板格式名，
+  要在 Windows 真机上看一遍。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |

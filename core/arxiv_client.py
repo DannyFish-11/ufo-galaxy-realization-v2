@@ -120,7 +120,16 @@ def parse_atom(xml_text: str) -> List[Dict[str, Any]]:
 
 
 def search(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-    """在线检索。失败返回空列表(调用方会说「在线也没搜到」,不会把异常抛到对话里)。"""
+    """在线检索。失败返回空列表(不把异常抛到对话里)。要分清「没搜到」和「没连上」,用 :func:`search_or_why`。"""
+    return search_or_why(query, max_results)[0]
+
+
+def search_or_why(query: str, max_results: int = 10) -> Tuple[List[Dict[str, Any]], str]:
+    """在线检索 → ``(论文, 没成的原因)``;成了原因是空串。
+
+    全面排查第 6 轮真跑:连不上 arXiv(代理不放行)时这里原先只回空列表,工具照样回 ``success: True, papers: []``
+    —— 模型据此告诉人「没有相关论文」,而事实是一篇都没查成。没连上和没搜到是两件事,得说出来。
+    """
     params = {
         "search_query": f"all:{query}",
         "start": 0,
@@ -131,10 +140,13 @@ def search(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
     try:
         resp = _get(API_URL, params, timeout=30.0)
         resp.raise_for_status()
-        return parse_atom(resp.text)
+        return parse_atom(resp.text), ""
     except Exception as exc:  # noqa: BLE001
         logger.info("arXiv 在线检索失败: %s", exc)
-        return []
+        code = getattr(getattr(exc, "response", None), "status_code", None)
+        if code:
+            return [], f"arXiv 回了 HTTP {code},这次没查成"
+        return [], f"没连上 arXiv(export.arxiv.org,{type(exc).__name__}),这次没查成 —— 不是没有相关论文"
 
 
 # ── 增量元数据(OAI-PMH) ────────────────────────────────────────────────────
