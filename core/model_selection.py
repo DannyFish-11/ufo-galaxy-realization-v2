@@ -219,7 +219,7 @@ def save_choice(tag: str) -> None:
 
         save_main_brain(tag)
     except Exception:  # noqa: BLE001 — catalog 不可用时至少把运行时 env 设上
-        os.environ["OLLAMA_MODEL"] = tag
+        export_env("OLLAMA_MODEL", tag)
 
 
 #: 推荐档位要留的余量比例。
@@ -734,7 +734,7 @@ def resolve_main_brain(interactive: bool = True) -> str:
         return env_model
     saved = load_choice()
     if saved:
-        os.environ["OLLAMA_MODEL"] = saved
+        export_env("OLLAMA_MODEL", saved)  # 从记录读回来的:保存设置不把它钉进 .env
         _tier = _current_tier()
         print_runtime_gaps(_tier)
         print_context_budget(_tier)
