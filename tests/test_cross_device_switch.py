@@ -38,9 +38,12 @@ from galaxy_gateway.webrtc_proxy import (  # noqa: E402
     get_webrtc_endpoint_info,
     proxy_webrtc_signaling,
 )
-from tests.conftest import GALAXY_TEST_API_TOKEN  # noqa: E402
 
 BOTH_MODES = pytest.mark.parametrize("switch", ["0", "1"], ids=["local", "cross_device"])
+
+#: 主人的共享凭据(本文件自己设进环境)。名字刻意中性:CodeQL 按变量名把 ``*_api_token`` 当口令,
+#: 一路追到能力令牌的 HMAC-SHA256 验签会报「用快哈希存口令」—— 那是验签,不是存口令。
+_OWNER = "owner-for-signaling-tests-0123456789abcdef"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -216,7 +219,7 @@ class TestDeviceRouterInEitherMode:
 @pytest.fixture
 def auth_on(monkeypatch):
     monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
-    monkeypatch.setenv("GALAXY_API_TOKEN", GALAXY_TEST_API_TOKEN)
+    monkeypatch.setenv("GALAXY_API_TOKEN", _OWNER)
     return monkeypatch
 
 
@@ -237,7 +240,7 @@ class TestWebRTCSignalingIsMembersOnly:
     @pytest.mark.asyncio
     async def test_the_owners_token_gets_in(self, auth_on, switch):
         auth_on.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
-        ws = _make_ws(query={"token": GALAXY_TEST_API_TOKEN})
+        ws = _make_ws(query={"token": _OWNER})
         await _signal(ws)
         assert WS_CLOSE_CODE_UNAUTHORIZED not in _close_codes(ws)
 

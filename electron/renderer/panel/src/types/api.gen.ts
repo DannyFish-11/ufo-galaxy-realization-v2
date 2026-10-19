@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 477 条 · 组件 schema 118 个
+// 路径 479 条 · 组件 schema 119 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -248,6 +248,7 @@ export type ApiPath =
   | "/api/v1/observability/trace/{trace_id}"
   | "/api/v1/onboarding/candidates/{candidate_id}/ignore"
   | "/api/v1/onboarding/candidates/{candidate_id}/join"
+  | "/api/v1/onboarding/cards"
   | "/api/v1/onboarding/invite"
   | "/api/v1/onboarding/members/{device_id}"
   | "/api/v1/onboarding/overview"
@@ -295,6 +296,7 @@ export type ApiPath =
   | "/api/v1/pair/card"
   | "/api/v1/pair/check"
   | "/api/v1/pair/claim"
+  | "/api/v1/pair/leave"
   | "/api/v1/pair/paths"
   | "/api/v1/pair/peers"
   | "/api/v1/pair/peers/{device_id}"
@@ -729,6 +731,7 @@ export const API_METHODS = {
   "/api/v1/observability/trace/{trace_id}": ["get"],
   "/api/v1/onboarding/candidates/{candidate_id}/ignore": ["post"],
   "/api/v1/onboarding/candidates/{candidate_id}/join": ["post"],
+  "/api/v1/onboarding/cards": ["get"],
   "/api/v1/onboarding/invite": ["post"],
   "/api/v1/onboarding/members/{device_id}": ["delete"],
   "/api/v1/onboarding/overview": ["get"],
@@ -776,6 +779,7 @@ export const API_METHODS = {
   "/api/v1/pair/card": ["get"],
   "/api/v1/pair/check": ["post"],
   "/api/v1/pair/claim": ["post"],
+  "/api/v1/pair/leave": ["post"],
   "/api/v1/pair/paths": ["get"],
   "/api/v1/pair/peers": ["get"],
   "/api/v1/pair/peers/{device_id}": ["delete", "get"],
@@ -1329,6 +1333,11 @@ export interface LearnFromExperienceRequest {
   "context": Record<string, unknown>;
   "result": Record<string, unknown>;
   "success": boolean;
+}
+
+export interface LeaveRequest {
+  "device_id": string;
+  "token": string;
 }
 
 export interface LocalBrainSwitchRequest {

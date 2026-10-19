@@ -1053,12 +1053,6 @@
     "device_router 的跨设备分支手里没有 TaskEnvelope（只有 command / analysis / ctx），契约的 task 形状也不同（command+analysis+context vs tool_name+args）—— 换成它会丢掉 analysis 与上下文；全仓没有持 TaskEnvelope 去做 agent 交接的调用点。有测试引用，删除待授权（handoff_contract_from_envelope 随之一起）"
    ]
   },
-  "galaxy_gateway/cross_device_switch.py": {
-   "guard_cross_device": [
-    "delete",
-    "抛异常版的开关检查；所有跨设备入口（device_router 两处、agent_bridge、webrtc_proxy）都用返回 dict 的 make_disabled_response 写法，没有需要抛异常的调用方"
-   ]
-  },
   "galaxy_gateway/enhanced_nlu_v2.py": {
    "*": [
     "delete",
