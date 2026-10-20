@@ -192,11 +192,11 @@ def _frame_token(message: dict) -> str:
 
 
 async def _push_current_phase(device_id: str) -> None:
-    """电脑此刻的三态推给刚登记的设备 —— 在登记确认写回之后,设备先看到「登记成功」。"""
+    """电脑此刻的三态告诉刚登记的设备(电脑不在静默时)—— 在登记确认写回之后,设备先看到「登记成功」。"""
     try:
-        from core.cross_device_sync import push_current_phase_to_device
+        from core.cross_device_sync import tell_new_device_the_phase
 
-        await push_current_phase_to_device(device_id)
+        await tell_new_device_the_phase(device_id)
     except Exception as exc:  # noqa: BLE001 — 推不到不打断连接;下一次相位变化照样广播
         logger.debug("initial phase push to %s failed: %s", device_id, exc)
 

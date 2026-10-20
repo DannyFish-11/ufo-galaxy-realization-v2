@@ -167,7 +167,7 @@ def test_the_initial_phase_is_pushed_only_after_the_register_ack():
     reg = (REPO_ROOT / "galaxy_gateway/android/handlers/registration.py").read_text(encoding="utf-8")
     ingress = (REPO_ROOT / "galaxy_gateway/routes/websocket.py").read_text(encoding="utf-8")
     assert "build_phase_state_event" not in reg, "登记处理器又自己推三态了(会抢在登记确认前面)"
-    assert "push_current_phase_to_device" in ingress
+    assert "tell_new_device_the_phase" in ingress
     loop = ingress[ingress.index("response = await android_bridge.handle_message") :]
     assert loop.index("await websocket.send_json(response)") < loop.index(
         "await _push_current_phase("

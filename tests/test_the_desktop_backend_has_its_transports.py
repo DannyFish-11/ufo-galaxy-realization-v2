@@ -234,13 +234,20 @@ def test_with_a_working_transport_a_vision_request_gets_one_answer_not_two(ports
     assert len(got) == 1, f"收到 {len(got)} 份视觉结果"
 
 
-def test_a_device_sees_its_register_ack_first_and_then_the_desktops_current_phase(ports, monkeypatch, tmp_path):
-    """传输接通后,登记时推的「电脑当前三态」第一次真的送到了;它必须排在登记确认后面。"""
+@pytest.mark.parametrize("desktop", ["manifest", "silent"])
+def test_a_device_sees_its_register_ack_first_and_then_the_desktops_current_phase(
+    desktop, ports, monkeypatch, tmp_path
+):
+    """传输接通后,登记时推的「电脑当前三态」第一次真的送到了:它排在登记确认后面;电脑静默时不推
+    (设备没被告知时本来就显示静默)。"""
     pytest.importorskip("uvicorn")
     import httpx
     import websockets
 
+    import core.lumiv_websocket_bridge as presence
     from tests.test_a_laptop_joins_by_pairing import gateway as gateway_fixture
+
+    monkeypatch.setattr(presence, "get_current_phase", lambda: desktop)
 
     gen = gateway_fixture.__wrapped__(tmp_path, monkeypatch)
     gw = next(gen)
@@ -286,7 +293,11 @@ def test_a_device_sees_its_register_ack_first_and_then_the_desktops_current_phas
     types = [f.get("type") for f in frames]
     assert types and types[0] == "device_register_ack", types
     phase = [f for f in frames if f.get("type") == "state_event"]
-    assert phase and phase[0]["payload"]["sync_type"] == "cross_device_initial_sync", types
+    if desktop == "silent":
+        assert not phase, "电脑静默时不推(登记确认后面不多塞一帧)"
+    else:
+        assert phase and phase[0]["payload"]["sync_type"] == "cross_device_initial_sync", types
+        assert phase[0]["payload"]["to_phase"] == desktop
 
 
 def test_both_startup_paths_use_the_same_registration():

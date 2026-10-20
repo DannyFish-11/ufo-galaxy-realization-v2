@@ -706,9 +706,9 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
         # 注册路径早有这一步,走这里的 WearOS 一直漏着(详见被调函数的文档)。
         if success:
             try:
-                from core.cross_device_sync import push_current_phase_to_device
+                from core.cross_device_sync import tell_new_device_the_phase
 
-                await push_current_phase_to_device(device_id)
+                await tell_new_device_the_phase(device_id)
             except Exception as _phase_err:  # noqa: BLE001
                 logger.debug("注册后补推相位失败(非致命): %s", _phase_err)
 

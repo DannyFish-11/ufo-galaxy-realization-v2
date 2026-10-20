@@ -369,6 +369,27 @@ async def push_current_phase_to_device(device_id: str, *, sync_type: str = "cros
     return True
 
 
+async def tell_new_device_the_phase(device_id: str) -> bool:
+    """刚(重新)接进来的设备:电脑**不在静默**时才告诉它此刻的三态。
+
+    设备没被告知时本来就显示静默(见 :func:`push_current_phase_to_device`)—— 电脑静默时再推一条「静默」
+    不带任何信息,只是在登记确认后面多塞一帧。电脑正在思考 / 执行时才必须推:不推,新连上的手机会一直显示
+    静默,直到下一次相位变化。两个设备入口(规范入口、兼容入口)写完登记确认之后都调它。
+
+    Returns:
+        ``True`` 已推送;``False`` 电脑静默(不需要推)、拿不到相位或没推出去。
+    """
+    try:
+        from core.lumiv_websocket_bridge import get_current_phase  # noqa: PLC0415
+
+        if get_current_phase() == "silent":
+            return False
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CrossDeviceSync: presence runtime unavailable: %s", exc)
+        return False
+    return await push_current_phase_to_device(device_id)
+
+
 async def _push_to_one_device(
     device_id: str,
     device: Any,

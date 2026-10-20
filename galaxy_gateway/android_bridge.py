@@ -1824,7 +1824,7 @@ class AndroidBridge:
 
             # 此前读 DesktopPresenceRuntime.get_current_phase —— 不存在,永远推「silent」
             current_phase = get_current_phase()
-            if current_phase and websocket is not None:
+            if current_phase not in ("", "silent") and websocket is not None:  # 静默不用推(设备默认就显示静默)
                 # PR-AIP-UNIFIED: Route phase sync through AIPTransport
                 from core.aip_transport import get_aip_transport
                 from core.cross_device_sync import build_phase_state_event

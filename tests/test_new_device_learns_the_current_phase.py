@@ -160,4 +160,20 @@ def test_the_wearos_register_path_calls_it():
     src = (Path(__file__).resolve().parent.parent / "galaxy_gateway" / "websocket_handler.py").read_text(
         encoding="utf-8"
     )
-    assert "push_current_phase_to_device" in src, "WearOS 注册路径没有补推当前相位"
+    assert "tell_new_device_the_phase" in src, "WearOS 注册路径没有补推当前相位"
+
+
+@pytest.mark.asyncio
+async def test_a_silent_desktop_is_not_announced_to_a_new_device(wired):
+    """设备没被告知时本来就显示静默:电脑静默时再推一条「静默」不带信息,只会在登记确认后面多塞一帧。"""
+    cm = wired("silent")
+    assert await cds.tell_new_device_the_phase("watch-1") is False
+    assert cm.sent == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["liminal", "manifest"])
+async def test_a_busy_desktop_is_announced_so_the_new_device_does_not_show_silent(wired, phase):
+    cm = wired(phase)
+    assert await cds.tell_new_device_the_phase("watch-1") is True
+    assert cm.sent and cm.sent[0][1]["payload"]["to_phase"] == phase

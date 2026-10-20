@@ -68,13 +68,22 @@ def watch_id():
     return f"wear-{uuid.uuid4().hex[:12]}"
 
 
+def _is_desktop_phase(frame) -> bool:
+    """电脑的三态(没有给人看的内容的 state_event):手表按设计忽略(GalaxyWearApplication),这里同样跳过。
+    登记确认写回之后网关会推一条电脑当前的三态。"""
+    return frame.get("type") == "state_event" and frame.get("event_category") == "phase" and not frame.get("content")
+
+
 def _recv(ws, timeout=6.0):
-    """带超时的接收:没有回应就是缺陷,不能让测试挂死。"""
+    """带超时的接收:没有回应就是缺陷,不能让测试挂死。跳过电脑的三态(手表也不收)。"""
     box = {}
 
     def run():
         try:
-            box["m"] = ws.receive_json()
+            m = ws.receive_json()
+            while _is_desktop_phase(m):
+                m = ws.receive_json()
+            box["m"] = m
         except Exception as exc:  # noqa: BLE001
             box["e"] = repr(exc)
 
