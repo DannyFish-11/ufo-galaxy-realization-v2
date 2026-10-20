@@ -125,7 +125,7 @@ def test_a_tcp_frame_reaches_the_gateways_message_handler(ports):
 def test_a_busy_port_leaves_that_transport_send_only_and_the_rest_comes_up(ports):
     """同一台机器上另一个 Galaxy 进程已经占着 TCP 端口:这边只发不收,不让启动失败。"""
     blocker = socket.socket()
-    blocker.bind(("0.0.0.0", ports["GALAXY_AIP_TCP_PORT"]))
+    blocker.bind(("127.0.0.1", ports["GALAXY_AIP_TCP_PORT"]))  # 占着环回地址也让通配地址绑不上
     blocker.listen(1)
     try:
 
