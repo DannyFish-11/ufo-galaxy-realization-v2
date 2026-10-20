@@ -1820,10 +1820,10 @@ class AndroidBridge:
 
         # PR-CROSS-DEVICE-SYNC: push current phase to reconnected device
         try:
-            from core.desktop_presence_runtime import get_desktop_presence_runtime
+            from core.lumiv_websocket_bridge import get_current_phase  # 真实的实时三态(在场桥)
 
-            dpr = get_desktop_presence_runtime()
-            current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
+            # 此前读 DesktopPresenceRuntime.get_current_phase —— 不存在,永远推「silent」
+            current_phase = get_current_phase()
             if current_phase and websocket is not None:
                 # PR-AIP-UNIFIED: Route phase sync through AIPTransport
                 from core.aip_transport import get_aip_transport

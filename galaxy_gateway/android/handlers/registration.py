@@ -1081,41 +1081,8 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             inbound_attachment_id,
         )
 
-        # PR-CROSS-DEVICE-SYNC: Push current desktop phase to newly registered device
-        # so Android immediately knows the current state without waiting for next transition.
-        try:
-            from core.desktop_presence_runtime import get_desktop_presence_runtime
-
-            dpr = get_desktop_presence_runtime()
-            current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
-            if current_phase and device.websocket is not None:
-                # PR-AIP-UNIFIED: Route through AIPTransport
-                from core.aip_transport import get_aip_transport
-                from core.cross_device_sync import build_phase_state_event
-
-                # 两条路径发**同一份**报文。此前 AIPTransport 那条是手写的、不带
-                # payload,而手表只读 payload.to_phase —— 于是正常路径下刚注册完的
-                # 手表收到报文却解析出空,静默丢弃;只有 AIPTransport 抛异常、走到
-                # 兜底 send_json 时手表才拿得到相位。
-                _phase_msg = build_phase_state_event(
-                    new_phase=current_phase,
-                    sync_type="cross_device_initial_sync",
-                )
-                try:
-                    await get_aip_transport().send(dict(_phase_msg, _transport="auto"), device_id)
-                except Exception:
-                    await device.websocket.send_json(_phase_msg)
-                logger.info(
-                    "CrossDeviceSync: initial phase=%s pushed to newly registered device=%s",
-                    current_phase,
-                    device_id,
-                )
-        except Exception as _phase_exc:
-            logger.debug(
-                "CrossDeviceSync: initial phase push non-fatal: device_id=%s error=%s",
-                device_id,
-                _phase_exc,
-            )
+        # 电脑当前三态推给刚登记的设备:放到设备入口写完登记确认之后(galaxy_gateway/routes/websocket.py),
+        # 设备先看到「登记成功」;在这里推会抢在确认前面到(此前没送到过,传输接通后才暴露)。
 
         _gaps = get_registration_gaps(device_id)
         if _gaps:

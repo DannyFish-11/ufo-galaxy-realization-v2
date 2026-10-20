@@ -234,6 +234,61 @@ def test_with_a_working_transport_a_vision_request_gets_one_answer_not_two(ports
     assert len(got) == 1, f"收到 {len(got)} 份视觉结果"
 
 
+def test_a_device_sees_its_register_ack_first_and_then_the_desktops_current_phase(ports, monkeypatch, tmp_path):
+    """传输接通后,登记时推的「电脑当前三态」第一次真的送到了;它必须排在登记确认后面。"""
+    pytest.importorskip("uvicorn")
+    import httpx
+    import websockets
+
+    from tests.test_a_laptop_joins_by_pairing import gateway as gateway_fixture
+
+    gen = gateway_fixture.__wrapped__(tmp_path, monkeypatch)
+    gw = next(gen)
+    try:
+        from galaxy_gateway.bootstrap.transports import close_transport_adapters, register_transport_adapters
+
+        gw.run(register_transport_adapters())
+        owner = {"Authorization": "Bearer owner-secret"}
+        card = httpx.get(f"{gw.url}/api/v1/pair/card", headers=owner).json()
+        dev = "phone-order-1"
+        token = httpx.post(
+            f"{gw.url}/api/v1/pair/claim",
+            json={
+                "code": card["code"],
+                "device_id": dev,
+                "name": dev,
+                "device_type": "android_phone",
+                "trust": "friend",
+            },
+        ).json()["capability_token"]
+
+        async def phone():
+            frames = []
+            async with websockets.connect(gw.url.replace("http", "ws") + f"/ws/device/{dev}") as ws:
+                await ws.send(
+                    json.dumps(
+                        {"version": "3.0", "type": "device_register", "device_id": dev, "timestamp": 1, "token": token,
+                         "device_type": "android_phone", "platform": "android"}
+                    )
+                )  # fmt: skip
+                end = asyncio.get_running_loop().time() + 3
+                while asyncio.get_running_loop().time() < end:
+                    try:
+                        frames.append(json.loads(await asyncio.wait_for(ws.recv(), 0.5)))
+                    except asyncio.TimeoutError:
+                        continue
+            return frames
+
+        frames = asyncio.run(phone())
+        gw.run(close_transport_adapters())
+    finally:
+        next(gen, None)
+    types = [f.get("type") for f in frames]
+    assert types and types[0] == "device_register_ack", types
+    phase = [f for f in frames if f.get("type") == "state_event"]
+    assert phase and phase[0]["payload"]["sync_type"] == "cross_device_initial_sync", types
+
+
 def test_both_startup_paths_use_the_same_registration():
     """独立网关的 lifespan 和桌面版(主 app 挂载网关)都调同一个函数,不再各写一份。"""
     lifecycle = (ROOT / "galaxy_gateway/bootstrap/lifecycle.py").read_text(encoding="utf-8")

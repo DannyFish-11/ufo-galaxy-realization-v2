@@ -30,11 +30,11 @@ from core.cross_device_sync import build_phase_state_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: 三个发送点。它们必须都经由 build_phase_state_event,而不是各自手写字典。
+#: 发送点。它们必须都经由 build_phase_state_event,而不是各自手写字典。(登记时的那一推已挪进
+#: core/cross_device_sync.push_current_phase_to_device,由设备入口在写完登记确认之后调。)
 _EMITTER_FILES = (
     "core/cross_device_sync.py",
     "galaxy_gateway/android_bridge.py",
-    "galaxy_gateway/android/handlers/registration.py",
 )
 
 
@@ -154,8 +154,21 @@ def test_no_emitter_hand_writes_the_phase_message(rel):
         assert not lines, f"{rel} 又手写了一份相位报文(行 {lines}) —— 请改用 build_phase_state_event"
 
 
-@pytest.mark.parametrize("rel", ("galaxy_gateway/android_bridge.py", "galaxy_gateway/android/handlers/registration.py"))
+@pytest.mark.parametrize("rel", ("galaxy_gateway/android_bridge.py",))
 def test_push_sites_import_the_builder(rel):
     """光是"没手写"不够 —— 还得证明它们真的取用了那一处。"""
     src = (REPO_ROOT / rel).read_text(encoding="utf-8")
     assert "build_phase_state_event" in src, f"{rel} 没有用统一构造器"
+
+
+def test_the_initial_phase_is_pushed_only_after_the_register_ack():
+    """登记时的那一推放在设备入口写完登记确认之后,设备先看到「登记成功」(此前在登记处理器里推,
+    会抢在确认前面到;传输接通后才暴露)。"""
+    reg = (REPO_ROOT / "galaxy_gateway/android/handlers/registration.py").read_text(encoding="utf-8")
+    ingress = (REPO_ROOT / "galaxy_gateway/routes/websocket.py").read_text(encoding="utf-8")
+    assert "build_phase_state_event" not in reg, "登记处理器又自己推三态了(会抢在登记确认前面)"
+    assert "push_current_phase_to_device" in ingress
+    loop = ingress[ingress.index("response = await android_bridge.handle_message") :]
+    assert loop.index("await websocket.send_json(response)") < loop.index(
+        "await _push_current_phase("
+    ), "得先写回确认再推"

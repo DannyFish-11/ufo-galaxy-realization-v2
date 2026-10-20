@@ -20,6 +20,8 @@ Android 的注册路径一直有这一步,WearOS 走的是另一条(``websocket_
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import core.cross_device_sync as cds
@@ -43,16 +45,13 @@ def wired(monkeypatch):
     def _wire(phase, *, fail=False):
         cm = _FakeConnectionManager(fail=fail)
 
-        class _DPR:
-            def get_current_phase(self):
-                return phase
-
         import sys
         import types
 
-        fake_rt = types.ModuleType("core.desktop_presence_runtime")
-        fake_rt.get_desktop_presence_runtime = lambda: _DPR()  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "core.desktop_presence_runtime", fake_rt)
+        # 真实的实时三态来源是在场桥(core.lumiv_websocket_bridge.get_current_phase,面板读的也是它)
+        fake_bridge = types.ModuleType("core.lumiv_websocket_bridge")
+        fake_bridge.get_current_phase = lambda: phase  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "core.lumiv_websocket_bridge", fake_bridge)
 
         fake_ws = types.ModuleType("galaxy_gateway.websocket_handler")
         fake_ws.connection_manager = cm  # type: ignore[attr-defined]
@@ -131,8 +130,22 @@ async def test_presence_runtime_missing_is_non_fatal(monkeypatch):
     """相位来源不可用不该把设备注册整条拖垮 —— 注册成功比相位准确更要紧。"""
     import sys
 
-    monkeypatch.setitem(sys.modules, "core.desktop_presence_runtime", None)
+    monkeypatch.setitem(sys.modules, "core.lumiv_websocket_bridge", None)
     assert await cds.push_current_phase_to_device("watch-1") is False
+
+
+def test_the_phase_comes_from_the_live_presence_bridge_not_a_method_that_does_not_exist():
+    """此前读 ``DesktopPresenceRuntime.get_current_phase`` —— 那个方法不存在:这里永远推不出去,
+    安卓登记 / 重连那两处则永远推「silent」,不管电脑此刻在做什么。"""
+    from core.desktop_presence_runtime import DesktopPresenceRuntime
+
+    assert not hasattr(DesktopPresenceRuntime, "get_current_phase")
+    src = (Path(__file__).resolve().parent.parent / "core" / "cross_device_sync.py").read_text(encoding="utf-8")
+    assert "from core.lumiv_websocket_bridge import get_current_phase" in src
+    bridge = (Path(__file__).resolve().parent.parent / "galaxy_gateway" / "android_bridge.py").read_text(
+        encoding="utf-8"
+    )
+    assert "dpr.get_current_phase()" not in bridge
 
 
 # ---------------------------------------------------------------------------

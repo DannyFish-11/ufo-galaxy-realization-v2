@@ -330,19 +330,19 @@ async def push_current_phase_to_device(device_id: str, *, sync_type: str = "cros
     它手里就什么都没有 —— 而"什么都没有"在设备上会被渲染成 SILENT。桌面明明正在
     执行,新连上的手表却显示静默,并且要等到下一次相位变化才纠正。
 
-    Android 那条注册路径早就有这一步(见 handlers/registration.py),WearOS 走的是
-    ``websocket_handler.handle_register → connection_manager``,一直漏了。此前没暴露
-    出来,是因为手表自己拿连接态凑了个相位(鉴权成功即 MANIFEST)—— 那个凑出来的值
-    与桌面无关,现在撤掉了,这一步就必须补上。
+    两个设备入口在写完登记确认之后都调它:规范入口(``routes/websocket.py``,手机、手表、电脑、载体)
+    与兼容入口(``websocket_handler.handle_register``)。确认之后才推,设备先看到「登记成功」。
+    手表按设计忽略没有内容的 ``state_event``(三态是电脑上的东西);手机的 ``PhaseStateMachine`` 用它。
 
     Returns:
         ``True`` 已推送;``False`` 拿不到相位、设备不在线或发送失败(非致命)。
     """
     try:
-        from core.desktop_presence_runtime import get_desktop_presence_runtime  # noqa: PLC0415
+        # 真实的实时三态在在场桥上(面板读的也是它)。此前读的是 DesktopPresenceRuntime.get_current_phase ——
+        # 那个方法不存在:这里永远推不出去,登记处理器里那份则永远推「silent」,不管电脑在做什么。
+        from core.lumiv_websocket_bridge import get_current_phase  # noqa: PLC0415
 
-        dpr = get_desktop_presence_runtime()
-        current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else ""
+        current_phase = get_current_phase()
     except Exception as exc:  # noqa: BLE001
         logger.debug("CrossDeviceSync: presence runtime unavailable: %s", exc)
         return False
@@ -352,9 +352,15 @@ async def push_current_phase_to_device(device_id: str, *, sync_type: str = "cros
 
     msg = build_phase_state_event(new_phase=current_phase, sync_type=sync_type)
     try:
-        connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
+        from core.unified.connection_manager import get_unified_connection_manager  # noqa: PLC0415
 
-        await connection_manager.send_to_device(device_id, msg)
+        ucm = get_unified_connection_manager()
+        if ucm.is_device_connected(device_id):  # 规范设备入口上的连接
+            if not await ucm.send_to_device(device_id, msg):
+                return False
+        else:  # 兼容入口(websocket_handler)上的连接
+            connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
+            await connection_manager.send_to_device(device_id, msg)
     except Exception as exc:  # noqa: BLE001
         logger.debug("CrossDeviceSync: initial phase push to %s failed: %s", device_id, exc)
         return False
