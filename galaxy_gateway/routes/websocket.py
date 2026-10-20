@@ -192,10 +192,14 @@ def _frame_token(message: dict) -> str:
 async def _resend_a2a(device_id: str) -> None:
     """设备(重新)登记上了,登记确认也已经写回去:中心发给它、还没确认的 A2A 消息按序补发。
 
-    放在写完登记确认之后,设备先看到「登记成功」再看到补发的消息。
+    放在写完登记确认之后,设备先看到「登记成功」再看到补发的消息。它那边的桥接 Agent 在不在,
+    要等它回了这次派遣才算数(``phone_bridge.note_registered``)。
     """
     try:
         from core.a2a_link import resend_unacked
+        from core.phone_bridge import note_registered
+
+        note_registered(device_id)
 
         n = await resend_unacked(device_id)
         if n:

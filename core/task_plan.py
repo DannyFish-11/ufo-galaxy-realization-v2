@@ -81,6 +81,8 @@ def parse_plan(args: Dict[str, Any], session_id: str = "") -> Tuple[Optional[Dic
                 "params": dict(s.get("params") or {}) if action else {},
                 "goal": goal,
                 "constraints": [str(c) for c in (s.get("constraints") or [])] if goal else [],
+                # 委派的那一步可以直接给一串动作(载体照着顺序做,不用它的模型)
+                "steps": [x for x in (s.get("steps") or []) if isinstance(x, dict)] if goal else [],
                 "depends_on": deps,
                 "timeout_s": max(5.0, min(timeout, 600.0)),
                 "status": PENDING,
@@ -253,6 +255,7 @@ class _StepRunner:
                 constraints=constraints,
                 timeout=step["timeout_s"],
                 session_id=session_id,
+                steps=step.get("steps") or None,
             )
         return await agent_tools._invoke(
             {"device_id": step["device_id"], "action": step["action"], "params": step["params"]}, session_id

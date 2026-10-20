@@ -172,14 +172,14 @@ def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[
     return status
 
 
-def _agent_installed(device_id: str) -> bool:
-    """中心派来的桥接 Agent 装上了没有(装上了才能 ``devices__delegate`` 整段目标)。"""
+def _bridge(device_id: str) -> Dict[str, Any]:
+    """中心派来的桥接 Agent 在这台设备上的状态(装上了才能 ``devices__delegate`` 整段目标)。"""
     try:
         from core.phone_bridge import bridge_state
 
-        return bool(bridge_state(device_id).get("installed"))
+        return bridge_state(device_id)
     except Exception:  # noqa: BLE001
-        return False
+        return {}
 
 
 def _recent(device_id: str, now: float) -> List[Dict[str, Any]]:
@@ -211,6 +211,7 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
     """一台成员的整体卡。``view`` 是 ``OnboardingService.member_view`` 的结果。"""
     now = time.time()
     meta = dict(metadata or {})
+    bridge = _bridge(view["device_id"])
     raw_caps = [str(c) for c in (view.get("capabilities") or [])]
     card: Dict[str, Any] = {
         "device_id": view["device_id"],
@@ -220,8 +221,8 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
         "can_initiate": bool(view.get("can_initiate")),
         "status": _status(view, meta, now),
         "actions": _actions(view["device_id"], raw_caps),
-        "can_take_agent": can_take_agent(view, meta),
-        "agent_installed": _agent_installed(view["device_id"]),
+        "can_take_agent": can_take_agent(view, meta) or bool(bridge.get("hosted")),
+        "agent_installed": bool(bridge.get("installed")),
         "recent": _recent(view["device_id"], now),
         "attached_via": view.get("bridge_id") or view.get("transport") or "",
     }

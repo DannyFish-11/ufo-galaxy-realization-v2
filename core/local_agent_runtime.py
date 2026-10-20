@@ -281,6 +281,9 @@ class LocalAgentRuntime:
 
         steps = []
         final_reply = ""
+        # 没做成的原因(没有模型、模型调不通、原地打转、轮数用完)。此前这些情况一律报 success=True,
+        # 拿结果的一方(载体上的 Agent → 中心)会以为目标做完了。
+        failure = ""
         _sig_history: List[str] = []
 
         for turn in range(max_turns):
@@ -288,7 +291,7 @@ class LocalAgentRuntime:
 
             # 调用 LLM
             if not self._llm_chat:
-                step.thought = "No LLM available — cannot run ReAct mode"
+                step.thought = failure = "No LLM available — cannot run ReAct mode"
                 step.success = False
                 steps.append(step.to_dict())
                 break
@@ -297,7 +300,7 @@ class LocalAgentRuntime:
                 llm_result = await self._llm_chat(messages, tool_defs)
             except Exception as e:
                 logger.debug("Fallback triggered: %s", e)
-                step.thought = f"LLM call failed: {e}"
+                step.thought = failure = f"LLM call failed: {e}"
                 step.success = False
                 steps.append(step.to_dict())
                 break
@@ -320,6 +323,7 @@ class LocalAgentRuntime:
             if is_repeating(_sig_history, _cfg.loop_detection_window):
                 logger.info("ReAct(manifest) loop-detection triggered at turn=%d", turn + 1)
                 final_reply = content or "Detected repeating tool calls; stopping."
+                failure = "Detected repeating tool calls; stopped before the task was done"
                 steps.append(step.to_dict())
                 await self._report_status(manifest_id, step)
                 break
@@ -358,12 +362,15 @@ class LocalAgentRuntime:
 
             steps.append(step.to_dict())
             await self._report_status(manifest_id, step)
+        else:
+            failure = f"Ran out of turns ({max_turns}) before the task was done"
 
         return RuntimeResult(
             manifest_id=manifest_id,
-            success=True,
+            success=not failure,
             steps=steps,
-            final_output=final_reply or "ReAct loop completed",
+            final_output=final_reply or ("ReAct loop completed" if not failure else ""),
+            error=failure,
             total_steps=len(steps),
         )
 

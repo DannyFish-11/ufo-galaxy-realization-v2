@@ -7,7 +7,7 @@
   POST   /api/v1/onboarding/candidates/{id}/join        接入一个候选(body: {"inputs": {...}})
   POST   /api/v1/onboarding/candidates/{id}/ignore      不再提示
   DELETE /api/v1/onboarding/members/{device_id}         移除成员(该收回的都收回)
-  POST   /api/v1/onboarding/invite                      邀请新设备(body: {"kind": "phone|watch|computer"})
+  POST   /api/v1/onboarding/invite                      邀请新设备(body: {"kind": "phone|watch|laptop|carrier|worker"})
   POST   /api/v1/onboarding/scan                        立即把轮询型来源跑一遍
 
 面板上人点「接入」「移除」本身就是人的确认,所以这里不再二次询问手表

@@ -15,13 +15,19 @@
    ``delegate_progress`` / ``delegate_result``);
 4. **交还**:手机要关跨设备时发 ``context_return``(``body.request = true``)→ 中心交还摘要与没做完的事。
 
-手机上那一半在 ufo-galaxy-android ``app/.../bridge/BridgeAgentRuntime.kt``。
+Agent 载体(阶段 5:别的电脑、Linux 服务器、云主机上的 ``python -m device_client --carrier``)走同一套:
+报能力时声明 ``bridge_agent`` → 派过去 → ``devices__delegate`` 交整段目标。载体上的推理加行动循环要模型时
+发 ``tool_call``(``llm.chat``),中心用自己的模型答(钥匙只在中心)。载体的会话叫 ``carrier:<设备号>``。
+
+手机上那一半在 ufo-galaxy-android ``app/.../bridge/BridgeAgentRuntime.kt``;载体那一半在
+``device_client/carrier_agent.py``。
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import time
 import uuid
@@ -40,13 +46,26 @@ CONFIRM_ACTIONS = ("sms", "phone_call", "payment", "send_message", "delete")
 MAX_RETURN_TURNS = 8
 DEFAULT_DELEGATE_TIMEOUT_S = 180.0
 MAX_DELEGATE_TIMEOUT_S = 600.0
+#: 一次 llm.chat 带上来的消息总长上限(字符);载体的推理加行动循环每轮都会带上之前的轮次。
+MAX_LLM_CHARS = 60000
+#: 设备刚(重新)登记、还没报能力时,委派最多等它报能力多久(秒;登记后约半秒就报)。
+REPORT_WAIT_S = 3.0
+#: 声明过 / 装过桥接 Agent 的设备还没(重新)装上时,委派最多等它装上多久(秒)。
+REINSTALL_WAIT_S = 15.0
 
 # 事件循环只持后台任务的弱引用,不留强引用会被 GC 掉
 _tasks: Set["asyncio.Task[Any]"] = set()
 
 
 def bridge_session_id(device_id: str) -> str:
-    """这台手机的对话在中心归到哪个会话(也是 A2A 链路的会话号)。"""
+    """这台设备的对话在中心归到哪个会话(也是 A2A 链路的会话号):手机 ``phone:<设备号>``,
+    别的能接 Agent 的设备(载体)``carrier:<设备号>``。"""
+    m = _member(device_id)
+    if m is not None:
+        from core.device_onboarding.device_card import _form
+
+        if _form(m["view"]) != "phone":
+            return f"carrier:{device_id}"
     return f"phone:{device_id}"
 
 
@@ -66,6 +85,8 @@ class _Bridge:
 
 
 _bridges: Dict[str, _Bridge] = {}
+#: 设备(重新)登记的时刻,报完能力就删:这段时间里它能不能接 Agent 还不知道(登记会换掉元数据)。
+_registered_at: Dict[str, float] = {}
 
 
 def _bridge(device_id: str) -> _Bridge:
@@ -82,6 +103,8 @@ def bridge_state(device_id: str) -> Dict[str, Any]:
         return {"installed": False}
     return {
         "installed": b.installed,
+        # 这次进程里装上过:刚重连、还没重新装上的那几百毫秒里,它照样是能接 Agent 的设备
+        "hosted": b.installed_at > 0,
         "session_id": b.session_id,
         "handoff_turns": b.handoff_turns,
         "open_delegations": sorted(b.delegations),
@@ -91,6 +114,7 @@ def bridge_state(device_id: str) -> Dict[str, Any]:
 def reset_bridges() -> None:
     """测试用。"""
     _bridges.clear()
+    _registered_at.clear()
 
 
 def _member(device_id: str) -> Optional[Dict[str, Any]]:
@@ -111,6 +135,9 @@ def _member(device_id: str) -> Optional[Dict[str, Any]]:
 def _can_take_agent(device_id: str) -> bool:
     from core.device_onboarding.device_card import can_take_agent
 
+    b = _bridges.get(device_id)
+    if b is not None and b.installed_at > 0:
+        return True  # 装上过;重新登记会先换掉元数据,报能力那一帧还没到
     m = _member(device_id)
     return bool(m) and can_take_agent(m["view"], m["metadata"])
 
@@ -165,6 +192,44 @@ def declares_bridge_support(capability_report: Dict[str, Any]) -> bool:
     payload = capability_report.get("payload") if isinstance(capability_report.get("payload"), dict) else {}
     declared = capability_report.get("bridge_agent") or payload.get("bridge_agent") or ""
     return str(declared).split("/")[0] == BRIDGE_VERSION.split("/")[0]
+
+
+def note_registered(device_id: str) -> None:
+    """设备(重新)登记上了:它那边的 Agent 是不是还在,要等它回了这次的派遣才算数。
+
+    不重置的话,重连后、报能力之前的那一小段里,中心会以为 Agent 还装着(载体进程可能已经换了一个)。
+    """
+    _registered_at[device_id] = time.monotonic()
+    b = _bridges.get(device_id)
+    if b is not None:
+        b.installed = False
+
+
+def note_reported(device_id: str) -> None:
+    """设备报完能力了(能不能接 Agent 此刻已知)。"""
+    _registered_at.pop(device_id, None)
+
+
+def _declared(device_id: str) -> bool:
+    m = _member(device_id)
+    return bool(m) and m["metadata"].get("can_host_agent") is True
+
+
+async def _settle(device_id: str) -> None:
+    """委派前等设备说清楚:刚登记、还没报能力的等它报;声明过或装过桥接 Agent、还没(重新)装上的等它装上。
+
+    真后端实测查出:后端重启或设备重连后的那半秒里,交整段目标会被当场拒成「不能接整段目标」。
+    从没声明过的设备(「手和眼」式电脑、旧版 App)不等,照样当场说明。
+    """
+    since = _registered_at.get(device_id)
+    while device_id in _registered_at and since is not None and time.monotonic() - since < REPORT_WAIT_S:
+        await asyncio.sleep(0.1)
+    b = _bridges.get(device_id)
+    if (b is not None and b.installed) or not ((b is not None and b.installed_at > 0) or _declared(device_id)):
+        return
+    deadline = time.monotonic() + REINSTALL_WAIT_S
+    while time.monotonic() < deadline and not (device_id in _bridges and _bridges[device_id].installed):
+        await asyncio.sleep(0.2)
 
 
 def schedule_dispatch(device_id: str) -> None:
@@ -338,12 +403,109 @@ async def _on_context_return(device_id: str, env: a2a.Envelope) -> None:
     logger.info("phone bridge: context returned to %s", device_id)
 
 
+# ── 派出去的 Agent 向中心要东西(阶段 5:载体的模型经中心) ───────────────────────
+
+
+def _portable_messages(raw: Any) -> List[Dict[str, str]]:
+    """载体那边推理加行动循环用的消息,换成各家模型都认的形状(不依赖 tool_call_id)。"""
+    out: List[Dict[str, str]] = []
+    for m in raw if isinstance(raw, list) else []:
+        if not isinstance(m, dict):
+            continue
+        role = str(m.get("role") or "user")
+        content = str(m.get("content") or "")
+        if role == "assistant" and m.get("tool_calls_raw"):
+            calls = "; ".join(
+                f"{c.get('name', '')}({json.dumps(c.get('arguments', {}), ensure_ascii=False)})"
+                for c in m["tool_calls_raw"]
+                if isinstance(c, dict)
+            )
+            content = (content + "\n" if content else "") + f"[调用工具] {calls}"
+        elif role == "tool":
+            role, content = "user", f"[工具 {m.get('name', '')} 的结果] {content}"
+        elif role not in ("system", "user", "assistant"):
+            role = "user"
+        out.append({"role": role, "content": content})
+    return out
+
+
+def _portable_tool_calls(raw: Any) -> Optional[List[Dict[str, Any]]]:
+    """模型回的工具调用(OpenAI 形状或扁平形状)→ ``[{name, arguments: dict}]``。"""
+    calls = []
+    for tc in raw or []:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+        name = tc.get("name") or fn.get("name") or ""
+        args = tc.get("arguments", fn.get("arguments", {}))
+        if isinstance(args, str):
+            try:
+                args = json.loads(args or "{}")
+            except ValueError:
+                args = {}
+        if name:
+            calls.append({"name": str(name), "arguments": args if isinstance(args, dict) else {}})
+    return calls or None
+
+
+async def _llm_chat_for(device_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    messages = _portable_messages(body.get("messages"))
+    if not messages:
+        return {"success": False, "error": "需要 messages"}
+    if sum(len(m["content"]) for m in messages) > MAX_LLM_CHARS:
+        return {"success": False, "error": f"带上来的对话太长(上限 {MAX_LLM_CHARS} 字)"}
+    tools = body.get("tools") if isinstance(body.get("tools"), list) else None
+    try:
+        from core.multi_llm_router import get_llm_router
+
+        resp = await get_llm_router().chat(messages=messages, tools=tools or None)
+    except Exception as exc:  # noqa: BLE001 — 模型调不通作为结果回给载体
+        logger.info("bridge: llm.chat for %s failed: %s", device_id, exc)
+        return {"success": False, "error": str(exc)}
+    if getattr(resp, "provider", "") == "none":
+        # 路由一个模型都调不通时不抛异常,回一句说明(给人看的降级);对载体那是失败,不是答案 ——
+        # 当成答案的话,载体会把「还没有可用的 AI 服务」当作做完了的总结报回来(真后端实测查出)
+        return {"success": False, "error": str(getattr(resp, "content", "") or "中心没有可用的模型")}
+    return {
+        "success": True,
+        "content": str(getattr(resp, "content", "") or ""),
+        "tool_calls": _portable_tool_calls(getattr(resp, "tool_calls", None)),
+    }
+
+
+async def _answer_tool_call(device_id: str, env: a2a.Envelope) -> None:
+    b = _bridge(device_id)
+    tool = str(env.body.get("tool") or "")
+    if not b.installed:
+        res: Dict[str, Any] = {"success": False, "error": "这台设备上没有装桥接 Agent"}
+    elif tool == "llm.chat":
+        res = await _llm_chat_for(device_id, env.body)
+    else:
+        res = {"success": False, "error": f"中心不提供 {tool!r}(可用:llm.chat)"}
+    await a2a.send(
+        device_id,
+        a2a.Kind.TOOL_RESULT,
+        {"call_id": str(env.body.get("call_id") or env.msg_id), **res},
+        session_id=b.session_id,
+        task_id=env.task_id,
+        trace_id=env.trace_id,
+    )
+
+
+async def _on_tool_call(device_id: str, env: a2a.Envelope) -> None:
+    """派出去的 Agent 调中心的能力(现在只有 ``llm.chat``)。在后台答,不挡这台设备后面的帧。"""
+    task = asyncio.get_running_loop().create_task(_answer_tool_call(device_id, env))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+
+
 a2a.register_handler(a2a.Kind.AGENT_INSTALLED, _on_installed)
 a2a.register_handler(a2a.Kind.CONTEXT_HANDOFF, _on_context_handoff)
 a2a.register_handler(a2a.Kind.CONVERSATION, _on_conversation)
 a2a.register_handler(a2a.Kind.DELEGATE_PROGRESS, _on_delegate_progress)
 a2a.register_handler(a2a.Kind.DELEGATE_RESULT, _on_delegate_result)
 a2a.register_handler(a2a.Kind.CONTEXT_RETURN, _on_context_return)
+a2a.register_handler(a2a.Kind.TOOL_CALL, _on_tool_call)
 
 
 # ── 中心要手机做一整段事 ──────────────────────────────────────────────────────
@@ -356,13 +518,18 @@ async def delegate(
     constraints: Optional[List[str]] = None,
     timeout: float = DEFAULT_DELEGATE_TIMEOUT_S,
     session_id: str = "",
+    steps: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """把一整段目标交给装了桥接 Agent 的设备(手机本地循环),等它的结果。"""
+    """把一整段目标交给装了桥接 Agent 的设备(手机本地循环、载体),等它的结果。
+
+    ``steps``(``[{action, params}]``)给了就照这串动作按顺序做,不用对方的模型;不给就由对方自己规划。
+    """
     from core.device_onboarding.device_card import record_dispatch, record_result
 
     goal = (goal or "").strip()
-    if not goal:
-        return {"success": False, "error": "需要 goal"}
+    if not goal and not steps:
+        return {"success": False, "error": "需要 goal(或 steps)"}
+    await _settle(device_id)
     if not _can_take_agent(device_id):
         return {
             "success": False,
@@ -382,7 +549,11 @@ async def delegate(
     _env, sent = await a2a.send(
         device_id,
         a2a.Kind.DELEGATE_GOAL,
-        {"goal": goal, "constraints": [str(c) for c in (constraints or [])]},
+        {
+            "goal": goal,
+            "constraints": [str(c) for c in (constraints or [])],
+            **({"steps": [s for s in steps if isinstance(s, dict)]} if steps else {}),
+        },
         session_id=b.session_id,
         task_id=task_id,
     )

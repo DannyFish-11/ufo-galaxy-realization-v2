@@ -314,11 +314,19 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
             )
         # 跨设备整体方案阶段 3:声明了能装桥接 Agent 的设备(新版手机、Agent 载体)报完能力,中心派一个过去
         # (后台,不挡这条连接)。没声明的(旧版 App)不派 —— 它不会回确认,派了只会每次重连都补发一遍。
+        # 声明了就是能接 Agent(阶段 5:载体靠这一条在设备卡上显示 can_take_agent);每次登记会换掉
+        # 元数据,所以每次报能力都记一遍。
         try:
-            from core.phone_bridge import declares_bridge_support, schedule_dispatch  # noqa: PLC0415
+            from core.phone_bridge import declares_bridge_support, note_reported, schedule_dispatch  # noqa: PLC0415
 
             if declares_bridge_support(message):
+                from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
+
+                get_unified_device_manager().upsert_device_state(
+                    device_id, {"metadata": {"can_host_agent": True}}, source="capability_report"
+                )
                 schedule_dispatch(device_id)
+            note_reported(device_id)
         except Exception as bridge_exc:  # noqa: BLE001
             logger.debug("capability_report: bridge dispatch non-fatal: device_id=%s error=%s", device_id, bridge_exc)
     return ack

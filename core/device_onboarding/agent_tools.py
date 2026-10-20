@@ -94,18 +94,28 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     ),
     _fn(
         "devices__delegate",
-        "Hand a whole goal to a device that runs its own agent (can_take_agent and agent_installed on its card, "
-        "e.g. a phone): it plans and carries it out locally with its own screen and apps, reports progress, and "
-        "returns the result. Use this for multi-step work on that device; use devices__invoke for a single action. "
-        "Constraints are passed along as-is (e.g. 'do not pay'); the device still asks its user before sending "
-        "messages, calling or paying.",
+        "Hand a whole goal to a device that runs its own agent (can_take_agent and agent_installed on its card: a "
+        "phone, or an agent carrier on another computer / server): it plans and carries it out locally, reports "
+        "progress, and returns the result. Use this for multi-step work on that device; use devices__invoke for a "
+        "single action. Constraints are passed along as-is (e.g. 'do not pay'); a phone still asks its user before "
+        "sending messages, calling or paying. If you already know the exact actions, give them as steps and the "
+        "device runs them in order without planning.",
         {
             "device_id": {"type": "string"},
             "goal": {"type": "string", "description": "What to get done, in plain words"},
             "constraints": {"type": "array", "items": {"type": "string"}},
+            "steps": {
+                "type": "array",
+                "description": "Optional: exact actions to run in order, from the device's own action list",
+                "items": {
+                    "type": "object",
+                    "properties": {"action": {"type": "string"}, "params": {"type": "object"}},
+                    "required": ["action"],
+                },
+            },
             "timeout_s": {"type": "number", "description": "How long to wait for the result (default 180, max 600)"},
         },
-        ["device_id", "goal"],
+        ["device_id"],
     ),
     _fn(
         "devices__plan",
@@ -129,6 +139,11 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
                         "params": {"type": "object"},
                         "goal": {"type": "string"},
                         "constraints": {"type": "array", "items": {"type": "string"}},
+                        "steps": {
+                            "type": "array",
+                            "description": "Optional, for a goal step: exact actions as in devices__delegate",
+                            "items": {"type": "object"},
+                        },
                         "depends_on": {"type": "array", "items": {"type": "string"}},
                         "timeout_s": {"type": "number"},
                     },
@@ -143,10 +158,12 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
         "Invite a new device the user wants to add. phone/watch: returns a one-time pairing code to enter in the "
         "Galaxy app. laptop: a Windows, macOS or Linux computer the user wants you to operate (screen, mouse, "
         "keyboard) — returns one command with a pairing code to run on it; it finds this system on the LAN, joins the "
-        "private network, starts on login, and you will be told in the conversation when it connects. worker: a "
-        "headless machine that only runs code jobs — it joins the message bus and starts taking jobs on its own, "
-        "so it needs no onboarding and does not appear in the device list.",
-        {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "worker"]}},
+        "private network, starts on login, and you will be told in the conversation when it connects. carrier: "
+        "another computer, Linux server or cloud host that takes an agent from you and carries out whole goals there "
+        "(files in its own work folder, code only in a sandbox) — returns a pairing command; once it connects you "
+        "can devices__delegate to it. worker: a headless machine that only runs code jobs — it joins the message "
+        "bus and starts taking jobs on its own, so it needs no onboarding and does not appear in the device list.",
+        {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "carrier", "worker"]}},
         ["kind"],
     ),
     _fn(
@@ -424,6 +441,31 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
                 "之后它开机会自己连上,连上时我会在这里告诉你。"
             ),
         }
+    if kind == "carrier":
+        # Agent 载体:同一个 device_client,换成载体插件;和电脑同一条配对链。服务器上多半不在同一个局域网,
+        # 所以命令带上主脑地址;也可以用 deploy/carrier 里的镜像跑在容器里。
+        card = build_local_card()
+        code, expires_at = get_pairing_code_registry().issue(to_link(card))
+        gateway = gateway_http_base(card)
+        native = f"python -m device_client --carrier --pair {code} --gateway {gateway}"
+        # 先配对、再常驻:配对码只能用一次,带着它常驻的话容器一重启就配对失败、反复重启
+        container = (
+            "docker build -f deploy/carrier/Dockerfile -t galaxy-carrier . && "
+            f"docker run --rm -v galaxy-carrier:/data galaxy-carrier --pair {code} --gateway {gateway} --no-run && "
+            "docker run -d --restart unless-stopped --name galaxy-carrier -v galaxy-carrier:/data galaxy-carrier"
+        )
+        return {
+            "success": True,
+            "human_step": HumanStep.RUN_COMMAND.value,
+            "code": code,
+            "expires_at": expires_at,
+            "commands": [native, container],
+            "tell_user": (
+                f"在那台机器上的本仓库目录里执行:{native} 。想让它跑在容器里,改用:{container} 。"
+                f"配对码 {code} 10 分钟内有效、只能用一次。装了 Docker 的,代码会在不联网的沙箱里跑;"
+                "开机自启见 deploy/carrier/galaxy-carrier.service。连上时我会在这里告诉你。"
+            ),
+        }
     if kind == "worker":
         try:
             grant = issue_join_key()
@@ -447,7 +489,7 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "再在它上面的本仓库副本里执行第二条(启动执行 worker)。起来之后它自己上消息总线、"
             "开始领计算任务 —— 不用再接入一次。它是干活的机器,不进设备列表",
         }
-    return {"success": False, "error": "kind 只能是 phone / watch / laptop / worker"}
+    return {"success": False, "error": "kind 只能是 phone / watch / laptop / carrier / worker"}
 
 
 # ── 驱动:获取与绑定 ─────────────────────────────────────────────────────────────
@@ -555,6 +597,7 @@ async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, sessi
                     constraints=list(args.get("constraints") or []),
                     timeout=timeout,
                     session_id=session_id,
+                    steps=list(args.get("steps") or []),
                 ),
                 timeout=timeout + 10,
             )

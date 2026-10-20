@@ -68,6 +68,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - **多步、多设备的事写成计划**：`devices__plan`（`core/task_plan.py`，方案里叫 `tasks__plan`）接现成的 ConstellationRuntime 分层执行；挑设备、失败后怎么办都听模型的，不开自动重排。
   给设备下发一律经 `core/device_queue.run_on_device`（每台设备串行）；计划在 `task_plans.json` 写盘，重启只做排着没做的步骤，崩溃时在做的那一步「结果不明」不重做。
   只为观测记进任务图的节点要标 `observation_only`，否则重启续跑会拿它去重派。
+- **Agent 载体**＝`python -m device_client --carrier`（`device_client/carrier_agent.py` + `executors/carrier.py`）：和手机走同一套桥接（`core/phone_bridge.py`），
+  报能力时声明 `bridge_agent` 才算能接 Agent。载体的模型经中心（`tool_call` `llm.chat`），载体上不放钥匙；代码只在 Docker 沙箱里跑，文件只在它的工作目录里。
+  路由在没有模型时回的是一句说明（`provider == "none"`），别把它当答案。委派前先 `_settle`：刚登记还没报能力、或装过还没重新装上的设备要等一下再判。
   规范设备入口把连接自己的凭证（握手 Bearer / 回过 `auth_ok` 的令牌）带给不带令牌的帧 —— 安卓的 `device_register` 就不带令牌（`tests/test_phone_joins_through_its_bridge_agent.py` 守着）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。

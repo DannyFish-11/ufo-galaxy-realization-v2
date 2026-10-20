@@ -144,7 +144,7 @@ def test_a_goal_step_is_delegated_with_what_the_earlier_steps_found(monkeypatch)
 
     seen = {}
 
-    async def fake_delegate(device_id, goal, *, constraints=None, timeout=0, session_id=""):
+    async def fake_delegate(device_id, goal, *, constraints=None, timeout=0, session_id="", steps=None):
         seen.update(device_id=device_id, goal=goal, constraints=constraints)
         return {"success": True, "summary": "已叫车"}
 

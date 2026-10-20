@@ -10,6 +10,9 @@
 
 执行插件在这台机器上不可用(比如 Linux 没装 xdotool)时照样连上 —— 主脑能看到它在线、
 看到原因(``executor_status``),但动作清单为空,智能体不会去调注定失败的动作。
+
+``carrier=True`` 是 Agent 载体(跨设备整体方案阶段 5):报能力时声明 ``bridge_agent``,中心派一个 Agent
+过来,整段目标经对外 A2A(``type="a2a"`` 帧)交给本机的 :class:`device_client.carrier_agent.CarrierAgent`。
 """
 
 from __future__ import annotations
@@ -41,6 +44,7 @@ class DeviceClient:
         device_id: Optional[str] = None,
         state: Optional[Dict[str, Any]] = None,
         state_file: Optional[str] = None,
+        carrier: bool = False,
     ):
         self.executor = executor
         self.host = host
@@ -51,7 +55,16 @@ class DeviceClient:
         if device_id:
             self.state["device_id"] = device_id
         self.device_id = _dp.stable_device_id(self.state)
-        self.device_type = str(self.state.get("device_type") or "") or _dp.detect_device_type(executor.platform)
+        if carrier:
+            from device_client.carrier_agent import CarrierAgent
+            from device_client.executors.carrier import carrier_device_type
+
+            default_type = carrier_device_type(executor.platform)
+        else:
+            default_type = _dp.detect_device_type(executor.platform)
+        self.device_type = str(self.state.get("device_type") or "") or default_type
+        #: 载体上接中心派来的 Agent(不是载体时为 None)
+        self.agent = CarrierAgent(executor, lambda: self.device_id, self._send) if carrier else None
         self._ws = None
         self._running = False
         self._on_event_stream = None
@@ -107,6 +120,14 @@ class DeviceClient:
                 "supported_actions": self.supported_actions(),
             }
         )
+        schemas = getattr(self.executor, "capability_schemas", None)
+        if callable(schemas) and self.supported_actions():
+            msg["capability_schemas"] = schemas()
+        if self.agent is not None:
+            # 声明能装中心派来的 Agent:中心报完能力就派(core/phone_bridge.py)
+            from device_client.carrier_agent import BRIDGE_VERSION
+
+            msg["bridge_agent"] = BRIDGE_VERSION
         return msg
 
     def _heartbeat_msg(self) -> Dict[str, Any]:
@@ -183,8 +204,17 @@ class DeviceClient:
                 logger.error("注册失败:%s", why)
             return
 
+        if msg_type == "device_register_ack" and self.agent is not None:
+            await self.agent.resend_unacked()  # 断线时没确认的,登记上就补
+            return
+
         if msg_type in ("device_register_ack", "heartbeat_ack", "capability_report_ack"):
             logger.debug("收到 ACK: %s", msg_type)
+            return
+
+        if msg_type == "a2a":
+            if self.agent is not None:
+                await self.agent.on_frame(data)
             return
 
         if msg_type in ("task_assign", "task_execute"):

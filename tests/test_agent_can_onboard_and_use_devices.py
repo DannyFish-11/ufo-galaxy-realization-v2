@@ -116,7 +116,13 @@ def test_the_agent_is_offered_the_device_tools():
     names = {t["function"]["name"] for t in DEVICES_BUILTIN_TOOLS}
     assert {"devices__list", "devices__join", "devices__invoke", "devices__remove", "devices__invite"} <= names
     [invite] = [t for t in DEVICES_BUILTIN_TOOLS if t["function"]["name"] == "devices__invite"]
-    assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == ["phone", "watch", "laptop", "worker"]
+    assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == [
+        "phone",
+        "watch",
+        "laptop",
+        "carrier",
+        "worker",
+    ]
     assert "tools.extend(devices_tools_for_agent())" in inspect.getsource(OpenClawd._collect_tools)
     assert '"devices__",' in inspect.getsource(OpenClawd._dispatch_tool_call)
 

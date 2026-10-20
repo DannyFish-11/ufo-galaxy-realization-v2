@@ -23,7 +23,7 @@
 | 分布在多少个文件 | 359 |
 | 只有测试在引用（写了、测了、没接） | 500 |
 | 全仓连测试都没引用 | 255 |
-| 所在模块本身从入口不可达 | 4（都在下面三个不可达模块里） |
+| 所在模块本身从入口不可达 | 4（都在下面两个不可达模块里） |
 
 按**名字表明的角色**分（脚本用前缀/后缀做的初筛，不是逐条人工判定）：
 
@@ -164,14 +164,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
    `NodeDiscoveryService.on_node_joined`/`on_node_updated`、`DeviceCommunication.on_device_message`：
    注册回调的入口存在，但没有任何生产代码去注册。
 
-## 4. 三个从真实入口不可达的模块（共 1733 行）
+## 4. 两个从真实入口不可达的模块（共 1310 行）
 
 「不可达」＝ 从顶层启动器、网关 app、OpenClawd、API 路由、`nodes/` 等真实入口出发，沿 import 边走不到
 （`scripts/check_reachability.py`；**测试不是入口**）。
 
 | 模块 | 行数 | 它是什么（取自它自己的说明） | 谁提到了它 | 为什么说它不生效 |
 |---|---|---|---|---|
-| `core.local_agent_runtime` | 423 | **端侧** Agent 执行沙盒：收 `AgentManifest`，在本地跑 ReAct / 顺序 / 自主三种循环，逐步回报 | 4 个测试；`orchestration_authority/legacy_paths.py` 把它登记为 `LEGACY_COMPATIBILITY`；`runtime_invariant_enforcement` 的 INV-008 与几处注释 | 设计上它跑在设备端，而设备端是安卓 App（另一仓，Kotlin）；本仓服务端按 PR-S5 明令不得用它做规划。本仓没有任何进程加载它 |
 | `core.posture_contract_canonicalization` | 331 | `source_runtime_posture` 字段的契约校验层：规范化、边界断言、从 payload 取 posture，外加 5 个策略哨兵 | `core/runtime/__init__.py` 惰性再导出表里的**字符串**；3 个模块文档字符串里的「PR-1」 | 全仓没有任何生产代码取用它导出的任何一个名字 —— 校验层存在，但 posture 的产生/写入处没有调用它 |
 | `core.truth_conflict_enforcement` | 979 | 设备/任务/会话三个真相面的写权威登记 + 写顺序守卫（`assert_canonical_write_precedes_compat_write` 等）+ 健康快照 | `compat_fallback_authority_guard`、`runtime_invariant_enforcement` 在**描述字符串**里提到它；1 个测试文件 | 没有任何写入点调用这些守卫 —— 它声称的「兼容写之前必先写规范源」在运行时从未被检查过 |
 
@@ -194,7 +193,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 对象 | 选项 | 我的建议 |
 |---|---|---|
 | 「看得见但不生效」的几簇（第 3 节 1、2） | 接上写入端 / 撤掉读取面 | **接**。读取面已经对外，恒为 0 或恒读不到比没有更误导 |
-| `core.local_agent_runtime` | 删 / 保留 | **删**（连同 `legacy_paths.py` 的登记与 4 个测试）。设备端不是 Python，服务端又明令不用 |
+| `core.local_agent_runtime` | 删 / 保留 | **已接上**（跨设备整体方案阶段 5）：Agent 载体 `device_client --carrier` 在载体端用它跑中心委派的整段目标，正是它「端侧执行沙盒」的本义；服务端仍不用它（INV-008） |
 | `core.posture_contract_canonicalization` | 接到 posture 写入处 / 删 | 先看 posture 实际在哪几处产生；只有一两处就接，否则删 |
 | `core.truth_conflict_enforcement` | 接到真相写入点 / 删 / 冻结 | 接线要改 UDM / CanonicalTask / 会话真相的**热路径**，风险最高；倾向删或明确标为冻结 |
 | 无测试的动作类与事件回调（159 条） | 逐条删 / 接 | 已逐条过（安卓以外），每条的去处见第 7 节 |
@@ -254,13 +253,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 <!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->
 
-未接线公开能力 **387** 条，分布在 **207** 个文件。
+未接线公开能力 **385** 条，分布在 **205** 个文件。
 
 | 维度 | 数 |
 |---|---|
-| 类方法 / 模块函数 | 229 / 158 |
-| 只有测试在引用（写了、测了、没接） | 318 |
-| 全仓连测试都没引用 | 69 |
+| 类方法 / 模块函数 | 229 / 156 |
+| 只有测试在引用（写了、测了、没接） | 317 |
+| 全仓连测试都没引用 | 68 |
 | 所在模块本身从入口不可达 | 4 |
 
 ### 按名字表明的角色
@@ -272,20 +271,20 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 事件回调 | 4 | 4 | 0 |
 | 判定谓词 | 78 | 70 | 8 |
 | 只读查询 | 54 | 48 | 6 |
-| 计算/构造 | 69 | 65 | 4 |
-| 动作/变更 | 156 | 111 | 45 |
+| 计算/构造 | 68 | 64 | 4 |
+| 动作/变更 | 155 | 111 | 44 |
 
 ### 按用途
 
 | 用途 | 条数 | 其中只有测试引用 | 其中连测试都没有 | 文件数 |
 |---|---|---|---|---|
 | 节点服务里的方法 | 15 | 0 | 15 | 7 |
-| 安卓协作的契约、治理与对账层 | 83 | 76 | 7 | 40 |
+| 安卓协作的契约、治理与对账层 | 82 | 76 | 6 | 39 |
 | 持久化、重启恢复与断点续跑 | 27 | 27 | 0 | 8 |
 | 指标、可观测与审计记录 | 9 | 9 | 0 | 9 |
 | 架构治理：权威声明、边界断言与自检 | 56 | 55 | 1 | 25 |
 | 多设备编组、协同网络与拓扑 | 30 | 24 | 6 | 19 |
-| 设备与节点：注册、发现、连接、通信、传输 | 50 | 28 | 22 | 24 |
+| 设备与节点：注册、发现、连接、通信、传输 | 49 | 27 | 22 | 23 |
 | 能力、模型与执行路由 | 35 | 29 | 6 | 23 |
 | 智能体、认知与记忆 | 38 | 32 | 6 | 25 |
 | 语音、桌面在场与感知 | 11 | 11 | 0 | 8 |
@@ -299,12 +298,12 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 |---|---|---|
 | 接上（`wire`） | 27 | 该有人调它：写明调用点（文件、第几行附近、在做什么的时候） |
 | 挂出来（`surface`） | 0 | 该有人读它：写明挂到哪个端点 / 面板 / 诊断输出 |
-| 删掉（`delete`） | 148 | 已被别的实现取代或根本没有用途：写明被什么取代 |
+| 删掉（`delete`） | 147 | 已被别的实现取代或根本没有用途：写明被什么取代 |
 | 随对象走（`object`） | 126 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
 | 测试钩子（`testhook`） | 0 | 只为测试或断言存在（复位、注入、不变量断言），不该进生产路径 |
 | 框架回调（`framework`） | 0 | 由第三方框架按名字回调（zeroconf、asyncio），清单误报 |
 | 产品决定（`product`） | 3 | 接不接是功能取舍，不是技术问题：等所有者定 |
-| 合计 | 304 | |
+| 合计 | 303 | |
 
 按用途 × 去处：
 
@@ -315,7 +314,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 指标、可观测与审计记录 | 0 | 0 | 3 | 6 | 0 | 0 | 0 | 9 |
 | 架构治理：权威声明、边界断言与自检 | 0 | 0 | 42 | 14 | 0 | 0 | 0 | 56 |
 | 多设备编组、协同网络与拓扑 | 4 | 0 | 11 | 13 | 0 | 0 | 2 | 30 |
-| 设备与节点：注册、发现、连接、通信、传输 | 6 | 0 | 27 | 16 | 0 | 0 | 1 | 50 |
+| 设备与节点：注册、发现、连接、通信、传输 | 6 | 0 | 26 | 16 | 0 | 0 | 1 | 49 |
 | 能力、模型与执行路由 | 0 | 0 | 12 | 23 | 0 | 0 | 0 | 35 |
 | 智能体、认知与记忆 | 0 | 0 | 14 | 24 | 0 | 0 | 0 | 38 |
 | 语音、桌面在场与感知 | 0 | 0 | 5 | 6 | 0 | 0 | 0 | 11 |
@@ -341,7 +340,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>删掉（delete）— 148 条</summary>
+<details><summary>删掉（delete）— 147 条</summary>
 
 - `core/ai_intent.py`
   - `SemanticSearch.index_document`：SemanticSearch 整个类在生产里没人实例化（原唯一调用方是已删的 index_document_vector）；知识检索走 core/rag_memory.py → 知识库节点
@@ -493,8 +492,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `galaxy_gateway/agent_bridge.py`
   - `AgentBridge.handoff_from_envelope`：device_router 的跨设备分支手里没有 TaskEnvelope（只有 command / analysis / ctx），契约的 task 形状也不同（command+analysis+context vs tool_name+args）—— 换成它会丢掉 analysis 与上下文；全仓没有持 TaskEnvelope 去做 agent 交接的调用点。有测试引用，删除待授权（handoff_contract_from_envelope 随之一起）
   - `AgentBridge.build_envelope_v2`：旧 HandoffContract → Envelope v2 的转换；只被 legacy_paths 登记引用
-- `galaxy_gateway/cross_device_switch.py`
-  - `guard_cross_device`：抛异常版的开关检查；所有跨设备入口（device_router 两处、agent_bridge、webrtc_proxy）都用返回 dict 的 make_disabled_response 写法，没有需要抛异常的调用方
 - `galaxy_gateway/enhanced_nlu_v2.py`
   - `DeviceRegistry.find_device_by_name`：零导入的旧 NLU 模块
 - `galaxy_gateway/multimodal_transfer.py` — `MultimodalTransferManager.receive_image`、`MultimodalTransferManager.send_video`、`MultimodalTransferManager.send_file_chunk`、`MultimodalTransferManager.receive_file_chunk`、`MultimodalTransferManager.send_screenshot`：整个模块零导入；文件传输走 galaxy_gateway/android/handlers/file_transfer.py
@@ -683,7 +680,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 子系统 | 条数 | 文件数 |
 |---|---|---|
 | `core/（其余单文件）` | 114 | 68 |
-| `galaxy_gateway/` | 32 | 16 |
+| `galaxy_gateway/` | 30 | 14 |
 | `core/android_*` | 20 | 13 |
 | `core/delegated_*` | 17 | 5 |
 | `core/cognitive/` | 16 | 7 |
@@ -736,7 +733,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 | 模块 | 行数 |
 |---|---|
-| `core.local_agent_runtime` | 423 |
 | `core.posture_contract_canonicalization` | 331 |
 | `core.truth_conflict_enforcement` | 979 |
 
@@ -772,7 +768,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>安卓协作的契约、治理与对账层 — 83 条</summary>
+<details><summary>安卓协作的契约、治理与对账层 — 82 条</summary>
 
 - `core/android_acceptance_evidence_store.py`
   - `clear_device_acceptance_evidence` T — 清理 acceptance 证据（测试辅助）。
@@ -885,8 +881,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `galaxy_gateway/android/handlers/registration.py`
   - `clear_registration_gaps` T — Remove registration gap records.
   - `handle_device_reconnect` — — Handle an explicit ``device_reconnect`` wire message.
-- `galaxy_gateway/android/handlers/wearos_sync.py`
-  - `handle_wearos_state_sync` — — Send state sync to Wear OS device.
 - `galaxy_gateway/android_bridge.py`
   - `AndroidBridge.route_liquid_message` — — 灵动岛式消息路由。
   - `AndroidBridge.route_phase_change` — — Phase 变化的灵动岛式路由。
@@ -1103,7 +1097,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>设备与节点：注册、发现、连接、通信、传输 — 50 条</summary>
+<details><summary>设备与节点：注册、发现、连接、通信、传输 — 49 条</summary>
 
 - `core/adapters/tcp_adapter.py`
   - `TCPAdapter.connect_to_peer` — — 主动连接到 P2P 对等端。
@@ -1152,8 +1146,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `galaxy_gateway/agent_bridge.py`
   - `AgentBridge.handoff_from_envelope` T — PR-2 primary entry point: delegate a TaskEnvelope to the agent runtime.
   - `AgentBridge.build_envelope_v2` T — PR-31: Build a Handoff Envelope v2 from a legacy :class:`HandoffContract`.
-- `galaxy_gateway/cross_device_switch.py`
-  - `guard_cross_device` T — Raise :class:`CrossDeviceDisabledError` when the switch is OFF.
 - `galaxy_gateway/enhanced_nlu_v2.py`
   - `DeviceRegistry.find_device_by_name` — — 通过名称或别名查找设备
 - `galaxy_gateway/multimodal_transfer.py`
