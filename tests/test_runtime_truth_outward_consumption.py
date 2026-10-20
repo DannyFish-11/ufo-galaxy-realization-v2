@@ -129,6 +129,7 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
             "device_state_snapshot",
             "device_execution_event",
             "device_acceptance_report",
+            "a2a",
         ],
         runtime_truth_payload=payload,
     )

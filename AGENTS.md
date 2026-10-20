@@ -61,6 +61,8 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   是什么 / 能做什么（设备自己报的动作 + 一句说明：`capability_report` 的 `capability_schemas[].description` 或 `action_descriptions`）/ 现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/
   能否接派来的 Agent（`can_take_agent`）/ 最近做过什么（任务流程图）。谁做什么由模型定，规则只过滤；「感知 / 动作 / 在场」（`core/mesh/device_role_allocator.py`）只是观测标签，
   **别让派发路径读它**（`tests/test_the_model_sees_each_device_as_a_whole.py` 守着）。每次单动作下发都记进任务流程图（`device_card.record_dispatch`）。
+- **对外 A2A**（中心智能体 ↔ 派出去的 Agent：手机上的桥接 Agent、载体上的 Agent）：AIP v3 `a2a` 帧，信封与「必达」链路在 `core/a2a_link.py`，与安卓 `shared-protocol/.../A2A.kt` 线格式逐字一致（改一边必须改另一边，`tests/test_external_a2a_link.py` 对照）。
+  发消息用 `a2a_link.send(device_id, kind, body)`（设备不在线也留着，登记后补发）；各类消息到了做什么用 `register_handler`（处理器要快，久的事自己起后台任务）。混合执行里「直接调 API」那一级叫「API 直调」，别再叫 A2A。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
 - **任务派发**（`GALAXY_MASTER_BRAIN_ENABLED`，类名 `MasterBrain`：经 NATS 把任务派给 worker）是智能体的工具，**只看它自己的开关**，开了就把 NATS 拉起来；

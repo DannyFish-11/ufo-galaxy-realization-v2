@@ -135,6 +135,9 @@ def test_the_exempt_set_is_exactly_these():
     blocked 的对端是硬拒绝;把提议广播到网格,等于让一个被拉黑的对端看见我们正要
     做什么,那道过滤就白做了。
 
+    ``a2a``(中心智能体 ↔ 派出去的 Agent)两条理由都占:载的是对话与上下文交接,收件人恰好一个 Agent;
+    它的必达靠信封自己的消息号、序号与确认,不靠网格。
+
     三类理由分别是「内容不该广播」「收件人不是所有人」「广播会绕过一道安全过滤」。
     结论一样:都不上网格。但理由必须各自说得出口 —— 说不出口的豁免就是没人管过。
     """
@@ -150,6 +153,7 @@ def test_the_exempt_set_is_exactly_these():
         "execution_proposal",
         "execution_commitment",
         "execution_commit",
+        "a2a",
     }
 
 
@@ -161,7 +165,7 @@ def test_conversation_content_is_never_mirrored_to_the_mesh():
     会红,但红的理由看不出来是"私人内容被广播了"。
     """
     exempt = set(mesh_exempt_message_types())
-    for carries_conversation in ("agent_message", "voice_event"):
+    for carries_conversation in ("agent_message", "voice_event", "a2a"):
         assert (
             carries_conversation in exempt
         ), f"{carries_conversation} 承载对话内容,却没有被豁免 —— 镜像到网格就是把一段私人对话广播给每一个节点。"

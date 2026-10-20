@@ -21,7 +21,7 @@
 
 「混合」**不是模式**，是一个请求的走法：请求只在本机做（`local`）、只交给别的设备（`cross_device`）、或本机做一部分同时别的设备也做
 （`hybrid`）。这是跨设备模式开了之后系统自动判断的（`resolve_entry_mode`），不用设置；本地模式下一律是 `local`。
-另有 `core/hybrid_executor.py` 的「混合执行」（A2A → GUI → VLM 三级降级，在**一台设备内部**），与多设备无关，别混。
+另有 `core/hybrid_executor.py` 的「混合执行」（API 直调 → GUI → VLM 三级降级，在**一台设备内部**），与多设备无关，别混。
 
 **「现在是哪个模式」只有一条规则**（`core.system_mode.cross_device_requested`）：`GALAXY_CROSS_DEVICE_ENABLED` 为真，**或**
 `GALAXY_SYSTEM_MODE=desktop-cross-device`，任一即是跨设备模式，否则本地模式。`local` / `false` 是出厂默认（`.env.example` 带着、「保存设置」会写），

@@ -3,7 +3,7 @@ Galaxy - Hybrid, RAG, Code & Mesh Routes (Phases 3-5)
 ===========================================================
 
 Routes:
-  POST /api/v1/hybrid/execute        - 混合执行 (A2A → GUI → VLM)
+  POST /api/v1/hybrid/execute        - 混合执行 (API 直调 → GUI → VLM)
   GET  /api/v1/hybrid/stats          - 混合执行统计
   GET  /api/v1/hybrid/registry       - 应用能力注册表
   POST /api/v1/rag/query             - RAG 综合检索
@@ -53,12 +53,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         action: str = ""
         params: Dict[str, Any] = {}
         instruction: str = ""
-        force_level: Optional[str] = None  # a2a / gui / vlm
+        force_level: Optional[str] = None  # api_direct / gui / vlm(旧值 a2a 照旧认)
 
     @router.post("/api/v1/hybrid/execute")
     async def hybrid_execute(req: HybridExecuteRequest):
         """
-        混合执行 — 三级降级: A2A → GUI → VLM
+        混合执行 — 三级降级: API 直调 → GUI → VLM
         """
         force = ExecutionLevel(req.force_level) if req.force_level else None
         result = await hybrid_arbiter.execute(

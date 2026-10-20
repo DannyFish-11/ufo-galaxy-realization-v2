@@ -4,7 +4,7 @@ Phase 2/3/4 综合测试
 
 测试覆盖:
 1. ProxyRelay: 设备间中继转发
-2. HybridExecutionArbiter: A2A → GUI → VLM 降级链
+2. HybridExecutionArbiter: API 直调 → GUI → VLM 降级链
 3. RAGMemory: 经验记录/检索/Pattern检测
 4. SafeExecutor: 安全代码执行 + 安全检查
 5. AIP v2 协议扩展消息类型
@@ -162,10 +162,10 @@ async def test_4_hybrid_arbiter_degradation():
 
     call_log = []
 
-    # A2A 执行器 — 模拟失败
-    async def mock_a2a(app_id, action, params, device_id):
-        call_log.append(("a2a", app_id, action))
-        return {"success": False, "error": "No A2A API available"}
+    # API 直调 执行器 — 模拟失败
+    async def mock_api_direct(app_id, action, params, device_id):
+        call_log.append(("api_direct", app_id, action))
+        return {"success": False, "error": "No API 直调 API available"}
 
     # GUI 执行器 — 模拟成功
     async def mock_gui(device_id, action, params):
@@ -178,7 +178,7 @@ async def test_4_hybrid_arbiter_degradation():
         return {"success": True, "via": "vlm"}
 
     arbiter = HybridExecutionArbiter(
-        a2a_executor=mock_a2a,
+        api_executor=mock_api_direct,
         gui_executor=mock_gui,
         vlm_executor=mock_vlm,
     )
@@ -190,11 +190,11 @@ async def test_4_hybrid_arbiter_degradation():
         params={"text": "hello"},
     )
 
-    # A2A 失败 → GUI 成功
+    # API 直调 失败 → GUI 成功
     assert result.success is True
     assert result.final_level == ExecutionLevel.GUI
-    assert len(result.attempts) == 2  # A2A(fail) + GUI(success)
-    assert call_log[0][0] == "a2a"
+    assert len(result.attempts) == 2  # API 直调(fail) + GUI(success)
+    assert call_log[0][0] == "api_direct"
     assert call_log[1][0] == "gui"
 
     # 统计
@@ -537,25 +537,25 @@ def test_13_capability_registry():
     apps = registry.list_apps()
     assert len(apps) >= 3
 
-    # shell 应有 A2A 首选
+    # shell 应有 API 直调 首选
     levels = registry.get_preferred_levels("system_shell")
-    assert levels[0] == ExecutionLevel.A2A
+    assert levels[0] == ExecutionLevel.API_DIRECT
 
     # 未注册的应用使用默认三级链
     levels = registry.get_preferred_levels("com.unknown.app")
-    assert levels == [ExecutionLevel.A2A, ExecutionLevel.GUI, ExecutionLevel.VLM]
+    assert levels == [ExecutionLevel.API_DIRECT, ExecutionLevel.GUI, ExecutionLevel.VLM]
 
     # 注册新应用
     registry.register(
         AppCapability(
             app_id="com.custom.app",
-            a2a_endpoint="http://localhost:9999",
-            a2a_actions=["do_thing"],
+            api_endpoint="http://localhost:9999",
+            api_actions=["do_thing"],
         )
     )
     assert registry.get("com.custom.app") is not None
     levels = registry.get_preferred_levels("com.custom.app")
-    assert ExecutionLevel.A2A in levels
+    assert ExecutionLevel.API_DIRECT in levels
 
     print("✓ Test 13: CapabilityRegistry passed")
 

@@ -21,11 +21,11 @@ K  — HybridExecutionDecision.from_dict: non-dict raises ValueError.
 L  — HybridExecutionDecision.to_json produces valid JSON.
 M  — HybridExecutionPolicy.evaluate: force_mode overrides all rules.
 N  — HybridExecutionPolicy.evaluate: staged_actions → staged_hybrid.
-O  — HybridExecutionPolicy.evaluate: latency_sensitive + A2A + GUI → parallel_race.
+O  — HybridExecutionPolicy.evaluate: latency_sensitive + API 直调 + GUI → parallel_race.
 P  — HybridExecutionPolicy.evaluate: prefer_local → local_preferred.
 Q  — HybridExecutionPolicy.evaluate: prefer_remote → remote_preferred.
 R  — HybridExecutionPolicy.evaluate: default → sequential_degrade.
-S  — HybridExecutionPolicy.evaluate: latency_sensitive but no A2A → not parallel_race.
+S  — HybridExecutionPolicy.evaluate: latency_sensitive but no API 直调 → not parallel_race.
 T  — HybridExecutionPolicy.evaluate: latency_sensitive but no GUI → not parallel_race.
 U  — HybridExecutionPolicy.evaluate: force_mode takes priority over staged_actions.
 V  — HybridExecutionPolicy.evaluate: force_mode takes priority over latency_sensitive.
@@ -212,7 +212,7 @@ class TestHybridExecutionPolicyEvaluate:
         ctx = {
             "force_mode": "staged_hybrid",
             "latency_sensitive": True,
-            "has_a2a": True,
+            "has_api_direct": True,
             "has_gui": True,
         }
         dec = self.policy.evaluate(ctx)
@@ -224,8 +224,8 @@ class TestHybridExecutionPolicyEvaluate:
         dec = self.policy.evaluate(ctx)
         assert dec.mode == HybridExecutionMode.staged_hybrid
 
-    def test_latency_sensitive_with_a2a_and_gui_gives_parallel_race(self):
-        ctx = {"latency_sensitive": True, "has_a2a": True, "has_gui": True}
+    def test_latency_sensitive_with_api_direct_and_gui_gives_parallel_race(self):
+        ctx = {"latency_sensitive": True, "has_api_direct": True, "has_gui": True}
         dec = self.policy.evaluate(ctx)
         assert dec.mode == HybridExecutionMode.parallel_race
 
@@ -248,13 +248,13 @@ class TestHybridExecutionPolicyEvaluate:
         dec = self.policy.evaluate(None)
         assert dec.mode == HybridExecutionMode.sequential_degrade
 
-    def test_latency_sensitive_no_a2a_does_not_give_parallel_race(self):
-        ctx = {"latency_sensitive": True, "has_a2a": False, "has_gui": True}
+    def test_latency_sensitive_no_api_direct_does_not_give_parallel_race(self):
+        ctx = {"latency_sensitive": True, "has_api_direct": False, "has_gui": True}
         dec = self.policy.evaluate(ctx)
         assert dec.mode != HybridExecutionMode.parallel_race
 
     def test_latency_sensitive_no_gui_does_not_give_parallel_race(self):
-        ctx = {"latency_sensitive": True, "has_a2a": True, "has_gui": False}
+        ctx = {"latency_sensitive": True, "has_api_direct": True, "has_gui": False}
         dec = self.policy.evaluate(ctx)
         assert dec.mode != HybridExecutionMode.parallel_race
 
@@ -270,7 +270,7 @@ class TestHybridExecutionPolicyEvaluate:
         ctx = {
             "force_mode": "remote_preferred",
             "latency_sensitive": True,
-            "has_a2a": True,
+            "has_api_direct": True,
             "has_gui": True,
         }
         dec = self.policy.evaluate(ctx)
@@ -334,20 +334,20 @@ class TestMiscellaneous:
         class _NonSerializable:
             pass
 
-        ctx = {"app_id": "com.test", "bad_key": _NonSerializable(), "has_a2a": True}
+        ctx = {"app_id": "com.test", "bad_key": _NonSerializable(), "has_api_direct": True}
         dec = evaluate_hybrid_execution_mode(ctx)
         assert "bad_key" not in dec.context_snapshot
         assert dec.context_snapshot.get("app_id") == "com.test"
 
     def test_context_snapshot_captures_fields(self):
-        ctx = {"app_id": "com.test", "has_a2a": True, "has_gui": False}
+        ctx = {"app_id": "com.test", "has_api_direct": True, "has_gui": False}
         dec = evaluate_hybrid_execution_mode(ctx)
-        assert "app_id" in dec.context_snapshot or dec.context_snapshot.get("has_a2a") is True
+        assert "app_id" in dec.context_snapshot or dec.context_snapshot.get("has_api_direct") is True
 
     def test_parallel_race_higher_confidence_than_default(self):
         policy = HybridExecutionPolicy()
         default_dec = policy.evaluate({})
-        race_dec = policy.evaluate({"latency_sensitive": True, "has_a2a": True, "has_gui": True})
+        race_dec = policy.evaluate({"latency_sensitive": True, "has_api_direct": True, "has_gui": True})
         assert race_dec.confidence > default_dec.confidence
 
     def test_staged_hybrid_high_confidence(self):

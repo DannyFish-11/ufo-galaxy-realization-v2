@@ -240,6 +240,7 @@
 - 可以直接用的零件：V2 的委派交接契约（版本、身份、载荷）；手机的委派信号（确认 / 进度 / 结果，带信号号和序号，可重放）；手机的离线队列。
 - 每条消息带：协议版本、消息号、序号、会话号、收发双方的 Agent 号、任务号、追踪号、要不要确认。
 - 必达：发送方留着没收到确认的消息；接收方按消息号去重；重连后补发未确认的；同一会话按序号排序。
+- 哪一端重启都不卡、不吞：每条消息还带发送方链路这一次的身份（`epoch`）和它手里还没确认的最小序号（`floor`）；对端换了身份就从 `floor` 重新数，丢了又不要确认的消息留下的缺口不再等。
 - 载体：设备经现有连接（WebSocket 走自建内网或局域网）；worker 经 NATS（JetStream 持久队列）。
 
 | 消息 | 方向 | 用途 | 现有对应 |
@@ -251,7 +252,7 @@
 | 工具调用 / 结果 | 双向 | 中心调载体的本地能力；载体向中心要知识或工具 | `command` / `command_result`（一半） |
 | 上下文交还 / 召回 | 中心 → 载体 | 关闭跨设备或中心收回 Agent | 控制权交还（一半） |
 
-命名：代码里现在叫「A2A」的，是混合执行里「直接调应用的 API / MCP」那一级（`core/hybrid_executor.py`），和这里的 A2A 不是一回事，改叫「API 直调」，免得混。
+命名：代码里原先叫「A2A」的，是混合执行里「直接调应用的 API / MCP」那一级（`core/hybrid_executor.py`），和这里的 A2A 不是一回事，已改叫「API 直调」（`ExecutionLevel.API_DIRECT`，旧值 `a2a` 照旧认）。
 
 ## 任务执行：流程图、DAG、顺序与续跑
 
@@ -377,7 +378,7 @@
 | --- | --- | --- |
 | 0 拆闸与正名 | 已完成(V2 拆闸与正名、`/api/v1/pair/leave`;手表提示与「解除配对」;安卓信令带配对令牌) | V2:`tests/test_the_agent_coordinates_members_in_any_mode.py`、`tests/test_cross_device_switch.py`、手表端到端 `tests/test_watch_reaches_the_central_agent.py`;手表 `PairLeaveTest`;安卓 `SignalingRequestAuthTest`;真后端 + 真设备帧探针 13 项全过(见 SYSTEM_STATUS 6.21) |
 | 1 设备整体卡 | 已完成(`devices__list` 整体卡 + `GET /api/v1/onboarding/cards`;手表、手机报动作说明;下发进任务流程图;固定角色退出派发;登记名修正)。意图路由里的「目标执行」「并行目标」并进主循环工具,随阶段 3 的 `devices__delegate` 与阶段 4 的 `tasks__plan` 一起做 | `tests/test_the_model_sees_each_device_as_a_whole.py`;手表 `WatchMemberFramesTest`;安卓 `PhoneActionDescriptionsTest`;真机探针 12 项全过(见 SYSTEM_STATUS 6.22) |
-| 2 对外 A2A | 未开始 | — |
+| 2 对外 A2A | 已完成(AIP v3 新增 `a2a` 帧;信封、确认、去重、补发、排序,两端同语义;哪一端重启都不卡不吞;规范设备入口收发、认证、冒充拒收;登记后补发;跨仓闸门 1.1.0;混合执行那一级改名「API 直调」) | V2:`tests/test_external_a2a_link.py`(链路语义 + 真实入口 + 与安卓线格式逐字对照);安卓 `A2ALinkTest` 14 项;真后端 + 真设备帧探针 13 项全过,含中心重启(见 SYSTEM_STATUS 6.23) |
 | 3 手机接管与对话桥接 | 未开始 | — |
 | 4 多步计划 | 未开始 | — |
 | 5 Agent 载体 | 未开始 | — |

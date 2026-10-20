@@ -295,7 +295,7 @@ CommandRouter.route_envelope()
 
 **Governing modules**: `DecisionExecutor`, `HybridExecutionArbiter` (`core/hybrid_executor.py`)
 
-`HybridExecutionArbiter` is a fallback execution helper (A2A → GUI → VLM). It is not a parallel authority. It does not hold dispatch authority. It is local execution substrate.
+`HybridExecutionArbiter` is a fallback execution helper (API 直调 → GUI → VLM). It is not a parallel authority. It does not hold dispatch authority. It is local execution substrate.
 
 #### 4b — Distributed Participant Execution Domain
 

@@ -516,6 +516,13 @@ class MessageType(str, Enum):
     # 落选的那台 —— 而落选的那台必须知道,否则它会一直占着为这次提议留的资源。
     EXECUTION_COMMIT = "execution_commit"
 
+    # ── 对外 A2A:中心智能体 ↔ 派出去的 Agent ──
+    #
+    # 中心把一个桥接 Agent 派到手机上(或 Linux / 云载体上的 Agent 来接活)之后,两个 Agent 之间
+    # 说话走这一条:接入握手、上下文交接、对话、委派整段目标、能力调用、交还。信封在 payload 里,
+    # 必达(去重、按序、补发)由信封自己保证 —— 见 core/a2a_link.py 与安卓 shared-protocol A2A.kt。
+    A2A = "a2a"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

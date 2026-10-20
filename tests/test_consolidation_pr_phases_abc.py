@@ -102,14 +102,14 @@ class TestPhaseA_HybridExecutorRename:
         reg = AppExecutionCapabilityRegistry()
         cap = AppCapability(
             app_id="test.app.roundtrip",
-            a2a_endpoint="http://localhost:9999",
-            a2a_actions=["ping"],
+            api_endpoint="http://localhost:9999",
+            api_actions=["ping"],
         )
         reg.register(cap)
         fetched = reg.get("test.app.roundtrip")
         assert fetched is not None
-        assert fetched.a2a_endpoint == "http://localhost:9999"
-        assert "ping" in fetched.a2a_actions
+        assert fetched.api_endpoint == "http://localhost:9999"
+        assert "ping" in fetched.api_actions
 
 
 class TestPhaseA_OpenClawdToolCollection:

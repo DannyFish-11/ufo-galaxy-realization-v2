@@ -148,6 +148,8 @@ async def _handle_android_ws(
             response = await android_bridge.handle_message(websocket, message)
             if response is not None:
                 await websocket.send_json(response)
+            if message.get("type") == "device_register" and (response or {}).get("success") is True:
+                await _resend_a2a(str(message.get("device_id") or device_id))
     except WebSocketDisconnect:
         logger.info("device ws disconnected: device_id=%s", device_id)
     except Exception as exc:
@@ -165,6 +167,21 @@ async def _handle_android_ws(
                 await android_bridge.disconnect_device(device_id, websocket=websocket)
             except Exception as exc:
                 logger.debug("device ws disconnect cleanup failed: %s", exc)
+
+
+async def _resend_a2a(device_id: str) -> None:
+    """设备(重新)登记上了,登记确认也已经写回去:中心发给它、还没确认的 A2A 消息按序补发。
+
+    放在写完登记确认之后,设备先看到「登记成功」再看到补发的消息。
+    """
+    try:
+        from core.a2a_link import resend_unacked
+
+        n = await resend_unacked(device_id)
+        if n:
+            logger.info("a2a: resent %d unacknowledged message(s) to %s", n, device_id)
+    except Exception as exc:  # noqa: BLE001 — 补发失败不打断连接;下次重连再补
+        logger.debug("a2a resend to %s failed: %s", device_id, exc)
 
 
 def register_websocket_routes(app) -> None:

@@ -142,7 +142,9 @@ def _connect(client, device_id):
 
 def _register(ws, device_id, token=STATIC_TOKEN):
     ws.send_json(_watch_register_frame(device_id, token))
-    ack = _recv(ws)
+    # 进程里第一次登记要把登记链路上的模块全 import 一遍(CI 上没有 .pyc 缓存),冷启动能过 6 秒;
+    # 这里的期限只为不挂死,给足。
+    ack = _recv(ws, timeout=30.0)
     assert ack.get("type") == "device_register_ack" and ack.get("success") is True, ack
     return ack
 

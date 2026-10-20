@@ -22,6 +22,9 @@
 
 两者都先过 :func:`~galaxy_gateway.android.ingress_trust.sender_is_trusted`：``voice_query``
 会进智能体主链，``human_input`` 能批准一次高风险操作 —— 都不能让一条没认证过的连接去做。
+
+同一张表上还挂着对外 A2A（``a2a`` 帧，中心智能体与派到这台设备上的 Agent 之间的通话）：
+:func:`handle_a2a` 过同一道认证，再交给 ``core.a2a_link``（去重、按序、回确认、按类交给处理器）。
 """
 
 from __future__ import annotations
@@ -99,11 +102,30 @@ async def handle_voice_call(
     return None
 
 
+async def handle_a2a(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """处理对外 A2A 帧。确认由 ``core.a2a_link`` 经这台设备的连接直接发回,所以收下时返回 ``None``。
+
+    派到设备上的 Agent 会交接上下文、转人说的话、回委派的结果 —— 没认证过的连接不能冒充它。
+    """
+    from core import a2a_link
+    from galaxy_gateway.android.message_builder import MessageBuilder
+
+    device_id, _ = _frame_parts(message)
+    if not sender_is_trusted(bridge, websocket, device_id):
+        logger.warning("a2a from an unauthenticated connection refused: device_id=%s", device_id)
+        return MessageBuilder.error(device_id or "unknown", "UNAUTHENTICATED", "a2a needs an authenticated connection")
+    result = await a2a_link.receive(device_id, message)
+    if result.get("accepted"):
+        return None
+    return MessageBuilder.error(device_id, "A2A_REJECTED", str(result.get("reason") or "rejected"))
+
+
 def register_device_command_handlers(handlers: Dict[Any, Any], wrap: Any) -> None:
-    """把命令与通话信令挂到规范入口的处理表上（``AndroidBridge._register_default_handlers`` 调）。"""
+    """把命令、通话信令与对外 A2A 挂到规范入口的处理表上（``AndroidBridge._register_default_handlers`` 调）。"""
     from galaxy_gateway.protocol.aip_v3 import MessageType
 
     handlers[MessageType.COMMAND] = wrap(handle_device_command)
+    handlers[MessageType.A2A] = wrap(handle_a2a)
     for voice_type in (
         MessageType.VOICE_CALL_START,
         MessageType.VOICE_CALL_END,

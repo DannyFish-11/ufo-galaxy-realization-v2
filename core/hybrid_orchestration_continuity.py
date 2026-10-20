@@ -9,7 +9,7 @@ Background
 ----------
 Prior to this module, hybrid execution in the Galaxy runtime was largely
 represented as a *degrade-only edge* — the ``HybridExecutionArbiter`` ran a
-three-level fallback chain (A2A → GUI → VLM) but did not carry canonical
+three-level fallback chain (API 直调 → GUI → VLM) but did not carry canonical
 orchestration lifecycle semantics.  Specifically:
 
 * Hybrid executions had no explicit lifecycle state (created → running →
@@ -20,7 +20,7 @@ orchestration lifecycle semantics.  Specifically:
   of hybrid executions, so in-flight hybrid work was silently lost with no
   observable interruption signal.
 * The boundary between *durable* hybrid state (lifecycle stage, mode
-  selection, execution identity) and *ephemeral* hybrid state (live A2A
+  selection, execution identity) and *ephemeral* hybrid state (live API 直调
   connections, active GUI handles, VLM screenshot context) was undeclared.
 
 This module closes the gap by introducing:
@@ -66,7 +66,7 @@ Durability boundaries
 - Resume count (how many times this execution has been resumed)
 
 **Ephemeral (intentionally not recovered)**:
-- Live A2A transport handles / MCP call state
+- Live API 直调 transport handles / MCP call state
 - Active GUI automation handles (accessibility trees, ADB connections)
 - VLM screenshot buffers and inference context
 - Pending async futures for in-flight API calls
@@ -89,7 +89,7 @@ Sentinels
     Affirms that terminal states (completed, failed, cancelled) MUST NOT be
     further transitioned.
 :data:`HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY`
-    Affirms that live transport handles (A2A, GUI, VLM context) are
+    Affirms that live transport handles (API 直调, GUI, VLM context) are
     intentionally ephemeral and are NOT recovered across restarts.
 :data:`HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL`
     Monotonic sentinel string for PR-59 feature identification.
@@ -196,7 +196,7 @@ HYBRID_TERMINAL_STATE_IS_IMMUTABLE_POLICY: str = (
 
 HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY: str = (
     "POLICY::HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL: live transport handles "
-    "(A2A MCP connections, GUI automation handles, VLM screenshot buffers) are "
+    "(API 直调 MCP connections, GUI automation handles, VLM screenshot buffers) are "
     "INTENTIONALLY ephemeral and are NOT recovered across process restarts.  "
     "Only execution identity, lifecycle state, selected mode, and timestamps "
     "are considered durable.  New transport handles are created when executions "
@@ -216,7 +216,7 @@ HYBRID_PARTIAL_RESULT_MERGE_POLICY: str = (
     "results are classified as PRESERVED (available for resume/merge) because "
     "the local execution context may still be valid.  Partial remote results "
     "are classified as INVALIDATED by the recovery coordinator because the "
-    "underlying transport (A2A, GUI, VLM) is gone after a restart and the "
+    "underlying transport (API 直调, GUI, VLM) is gone after a restart and the "
     "partial remote data can no longer be trusted.  A MERGED disposition is "
     "recorded when local and remote partial results are combined under V2 "
     "canonical orchestration authority before interruption completes.  A "
@@ -234,7 +234,7 @@ HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE_POLICY: str = (
     "the live HybridOrchestrationContinuityRegistry for continued tracking. "
     "Terminal records (completed, failed, cancelled) are saved for audit "
     "purposes but are NOT restored into the live registry by default. "
-    "Live transport handles (A2A connections, GUI handles, VLM context) are "
+    "Live transport handles (API 直调 connections, GUI handles, VLM context) are "
     "NEVER persisted — only execution identity, lifecycle state, mode, "
     "timestamps, resume_count, and partial result snapshots are written."
 )
@@ -381,7 +381,7 @@ class HybridPartialResultDisposition(str, Enum):
         may still be valid.
     invalidated
         The partial result is from a remote execution leg.  It is dropped
-        because the underlying transport (A2A connection, GUI handle, VLM
+        because the underlying transport (API 直调 connection, GUI handle, VLM
         session) is gone after a restart and the partial remote data can no
         longer be trusted without re-verification.
     merged
@@ -868,7 +868,7 @@ class HybridOrchestrationContinuityRegistry:
 
         Called by the recovery coordinator at process startup to classify
         any partial results whose origin is ``"remote"`` as ``invalidated``.
-        Remote transport (A2A connections, GUI handles, VLM context) is gone
+        Remote transport (API 直调 connections, GUI handles, VLM context) is gone
         after a restart so remote partial data can no longer be trusted.
 
         Local partial results (``partial_result_origin`` == ``"local"``) are

@@ -15,7 +15,7 @@ CROSS_REPO_SCHEMA_GATE_AUTHORITY: str = (
     "CROSS_REPO_SCHEMA_GATE_AUTHORITY::contracts.cross_repo_schema_version_gate::"
     "minimal critical gate for AIP message types + projection/closure truth contract"
 )
-CROSS_REPO_SCHEMA_GATE_VERSION: str = "1.0.0"
+CROSS_REPO_SCHEMA_GATE_VERSION: str = "1.1.0"
 
 CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_POLICY: str = (
     "CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_V1: "
@@ -51,6 +51,8 @@ REQUIRED_AIP_MESSAGE_TYPES: FrozenSet[str] = frozenset(
         "device_state_snapshot",
         "device_execution_event",
         "device_acceptance_report",
+        # 1.1.0:对外 A2A(中心智能体 ↔ 派出去的 Agent)。两仓线值一致才能「必达」。
+        "a2a",
     }
 )
 

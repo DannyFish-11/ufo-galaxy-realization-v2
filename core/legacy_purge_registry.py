@@ -398,7 +398,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "The class ``CapabilityRegistry`` in core/hybrid_executor.py was "
             "ambiguously named — it appeared to be a capability registry but was "
             "only a local per-app execution-level preference store "
-            "(A2A/GUI/VLM priority order per app_id), completely unrelated to the "
+            "(API 直调/GUI/VLM priority order per app_id), completely unrelated to the "
             "system-wide capability bus.  Phase-A renames it to "
             "``AppExecutionCapabilityRegistry`` to eliminate the naming "
             "conflict and adds the ``APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED`` "
