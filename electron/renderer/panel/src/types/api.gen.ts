@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 479 条 · 组件 schema 119 个
+// 路径 481 条 · 组件 schema 120 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -252,6 +252,8 @@ export type ApiPath =
   | "/api/v1/onboarding/invite"
   | "/api/v1/onboarding/members/{device_id}"
   | "/api/v1/onboarding/overview"
+  | "/api/v1/onboarding/plans"
+  | "/api/v1/onboarding/plans/{plan_id}"
   | "/api/v1/onboarding/scan"
   | "/api/v1/opencode/configure"
   | "/api/v1/opencode/generate"
@@ -735,6 +737,8 @@ export const API_METHODS = {
   "/api/v1/onboarding/invite": ["post"],
   "/api/v1/onboarding/members/{device_id}": ["delete"],
   "/api/v1/onboarding/overview": ["get"],
+  "/api/v1/onboarding/plans": ["post"],
+  "/api/v1/onboarding/plans/{plan_id}": ["get"],
   "/api/v1/onboarding/scan": ["post"],
   "/api/v1/opencode/configure": ["post"],
   "/api/v1/opencode/generate": ["post"],
@@ -1471,6 +1475,11 @@ export interface PeerAnnounceRequest {
   "metadata"?: Record<string, unknown>;
   "public_ip"?: string;
   "public_port"?: number;
+}
+
+export interface PlanBody {
+  "goal"?: string;
+  "steps"?: Array<Record<string, unknown>>;
 }
 
 export interface ProbeRequest {

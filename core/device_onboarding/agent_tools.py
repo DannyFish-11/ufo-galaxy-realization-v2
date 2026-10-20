@@ -10,6 +10,7 @@ MCP/技能/节点;资源表里从没放进过设备。这里不把几百个 ``de
     devices__remove          移除成员(该收回的都收回)
     devices__invoke          调某台设备的一个动作(按它是原生/桥接/驱动节点/MCP 驱动分别路由)
     devices__delegate        把一整段目标交给装了桥接 Agent 的设备(手机本地循环)去做,等它的结果
+    devices__plan            多步计划:每步用哪台设备、依赖哪几步 → 分层执行(同层并行、同一台设备串行)
     devices__invite          邀请一台新设备(手机/手表:配对码;笔记本:配对码 + 一条命令;worker:进网 + 启动命令)
     devices__acquire_driver  没有接入路径的候选:装一个 MCP 驱动(GitHub),或让模型写一个
     devices__bind_driver     把某个 MCP 工具认作这个候选的驱动,接入为成员
@@ -31,6 +32,7 @@ from core.device_onboarding.gateway_address import gateway_http_base
 from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
 from core.device_onboarding.taxonomy import is_native_transport
+from core.device_queue import run_on_device
 
 logger = logging.getLogger("Galaxy.Onboarding.AgentTools")
 
@@ -104,6 +106,37 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
             "timeout_s": {"type": "number", "description": "How long to wait for the result (default 180, max 600)"},
         },
         ["device_id", "goal"],
+    ),
+    _fn(
+        "devices__plan",
+        "Run a multi-step plan across devices. You write the steps: each step uses one device and either one "
+        "action (like devices__invoke) or a whole goal (like devices__delegate), and may depend on earlier steps. "
+        "Steps whose dependencies are done run together; one device does one thing at a time. Returns each step's "
+        "result or why it failed; steps that depend on a failed one are not run. If something failed, decide "
+        "yourself: send a new plan with just the remaining steps, use another device, or ask the user. "
+        "Plans are kept on disk and resumed after a restart; call with just plan_id to see where one stands.",
+        {
+            "plan_id": {"type": "string", "description": "Only to look up an existing plan (no steps)"},
+            "goal": {"type": "string", "description": "What the whole plan is for"},
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "device_id": {"type": "string"},
+                        "action": {"type": "string"},
+                        "params": {"type": "object"},
+                        "goal": {"type": "string"},
+                        "constraints": {"type": "array", "items": {"type": "string"}},
+                        "depends_on": {"type": "array", "items": {"type": "string"}},
+                        "timeout_s": {"type": "number"},
+                    },
+                    "required": ["id", "device_id"],
+                },
+            },
+        },
+        [],
     ),
     _fn(
         "devices__invite",
@@ -507,17 +540,28 @@ async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, sessi
         if action == "remove":
             return await _remove(args, session_id)
         if action == "invoke":
-            return await _invoke(args, session_id)
+            # 同一台设备一次只做一件事(每台设备一个队列),不同设备照样并行
+            return await run_on_device(str(args.get("device_id") or ""), lambda: _invoke(args, session_id))
         if action == "delegate":
             from core.phone_bridge import DEFAULT_DELEGATE_TIMEOUT_S, delegate
 
-            return await delegate(
-                str(args.get("device_id") or ""),
-                str(args.get("goal") or ""),
-                constraints=list(args.get("constraints") or []),
-                timeout=float(args.get("timeout_s") or DEFAULT_DELEGATE_TIMEOUT_S),
-                session_id=session_id,
+            device_id = str(args.get("device_id") or "")
+            timeout = float(args.get("timeout_s") or DEFAULT_DELEGATE_TIMEOUT_S)
+            return await run_on_device(
+                device_id,
+                lambda: delegate(
+                    device_id,
+                    str(args.get("goal") or ""),
+                    constraints=list(args.get("constraints") or []),
+                    timeout=timeout,
+                    session_id=session_id,
+                ),
+                timeout=timeout + 10,
             )
+        if action == "plan":
+            from core.task_plan import run_plan
+
+            return await run_plan(args, session_id)
         if action == "invite":
             return _invite(args)
         if action == "acquire_driver":

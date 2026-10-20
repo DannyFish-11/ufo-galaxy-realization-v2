@@ -117,6 +117,13 @@ async def resume_durable_task_graph() -> Dict[str, Any]:
 
     result = await tgr.resume_pending_dispatch(_dispatch)
     result["deduplicated"] = deduplicated
+    # 多步计划(devices__plan)自己续跑:只接着做没做完、且依赖都成功了的步骤;崩溃时在做的那一步结果不明,不重做
+    try:
+        from core.task_plan import resume_unfinished_plans
+
+        result.update(await resume_unfinished_plans())
+    except Exception as exc:  # noqa: BLE001 — 计划续跑失败不挡启动
+        logger.warning("resume: 多步计划续跑没起来: %s", exc)
     return result
 
 

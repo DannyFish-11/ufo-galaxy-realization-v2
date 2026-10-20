@@ -2,6 +2,8 @@
 
   GET    /api/v1/onboarding/overview                    成员(按角色分组)+ 候选 + 汇总
   GET    /api/v1/onboarding/cards                       模型看到的那份:每台成员一张整体卡(devices__list 原样)
+  POST   /api/v1/onboarding/plans                       交一份多步计划,等它做完(devices__plan 原样)
+  GET    /api/v1/onboarding/plans/{plan_id}             一份计划此刻怎么样(进行中 / 重启后接着做 / 最近做完)
   POST   /api/v1/onboarding/candidates/{id}/join        接入一个候选(body: {"inputs": {...}})
   POST   /api/v1/onboarding/candidates/{id}/ignore      不再提示
   DELETE /api/v1/onboarding/members/{device_id}         移除成员(该收回的都收回)
@@ -15,7 +17,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -30,6 +32,11 @@ class JoinBody(BaseModel):
 
 class InviteBody(BaseModel):
     kind: str
+
+
+class PlanBody(BaseModel):
+    goal: str = ""
+    steps: List[Dict[str, Any]] = []
 
 
 def _error(where: str, exc: Exception) -> JSONResponse:
@@ -66,6 +73,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(await dispatch_devices_tool("list", {"include_ignored": include_ignored}))
         except Exception as exc:  # noqa: BLE001
             return _error("onboarding_cards", exc)
+
+    @router.post("/api/v1/onboarding/plans")
+    async def run_plan(body: PlanBody):
+        """与智能体 ``devices__plan`` 同一份:人(面板、运维)交一份多步计划,做完拿到每一步的结果或没成的原因。"""
+        try:
+            from core.device_onboarding.agent_tools import dispatch_devices_tool
+
+            out = await dispatch_devices_tool("plan", body.model_dump())
+            return JSONResponse(out, status_code=200 if out.get("plan_id") else 400)
+        except Exception as exc:  # noqa: BLE001
+            return _error("onboarding_plan", exc)
+
+    @router.get("/api/v1/onboarding/plans/{plan_id}")
+    async def plan_status(plan_id: str):
+        try:
+            from core.device_onboarding.agent_tools import dispatch_devices_tool
+
+            out = await dispatch_devices_tool("plan", {"plan_id": plan_id})
+            return JSONResponse(out, status_code=200 if out.get("plan_id") else 404)
+        except Exception as exc:  # noqa: BLE001
+            return _error("onboarding_plan_status", exc)
 
     @router.post("/api/v1/onboarding/candidates/{candidate_id}/join")
     async def join(candidate_id: str, body: JoinBody):

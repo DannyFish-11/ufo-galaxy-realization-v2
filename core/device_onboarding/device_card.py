@@ -240,8 +240,14 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
 # ── 每次单动作下发都进任务流程图 ────────────────────────────────────────────────
 
 
-def record_dispatch(device_id: str, action: str, session_id: str = "") -> str:
-    """登记一次给设备的下发,返回 task_id;登记不了返回空串(只是观测,不挡下发)。"""
+def record_dispatch(
+    device_id: str, action: str, session_id: str = "", metadata: Optional[Dict[str, Any]] = None
+) -> str:
+    """登记一次给设备的下发,返回 task_id;登记不了返回空串(只是观测,不挡下发)。
+
+    节点标 ``observation_only``:下发是在等结果的调用方做的,进程重启后调用方不在了,
+    重启续跑不该拿一个没有载荷的节点去重派(多步计划自己续跑,见 core/task_plan.py)。
+    """
     try:
         from core.task_graph_runtime import GraphNodeState, WorkflowContributorKind, get_task_graph_runtime
 
@@ -253,7 +259,7 @@ def record_dispatch(device_id: str, action: str, session_id: str = "") -> str:
             session_id=session_id,
             device_id=device_id,
             contributor=WorkflowContributorKind.UNKNOWN,
-            metadata={"kind": "device_action"},
+            metadata={"kind": "device_action", "observation_only": True, **(metadata or {})},
         )
         rt.transition(task_id, GraphNodeState.DISPATCH, reason="device_action_dispatch")
         return task_id

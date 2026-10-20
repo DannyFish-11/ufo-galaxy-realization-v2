@@ -65,6 +65,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   发消息用 `a2a_link.send(device_id, kind, body)`（设备不在线也留着，登记后补发）；各类消息到了做什么用 `register_handler`（处理器要快，久的事自己起后台任务）。混合执行里「直接调 API」那一级叫「API 直调」，别再叫 A2A。
 - **手机加入 = 中心派一个桥接 Agent 过去**（`core/phone_bridge.py`，手机那一半在安卓 `bridge/BridgeAgentRuntime.kt`）：报能力时声明了 `bridge_agent` 的才派；手机的本地对话 / 进度交接进会话 `phone:<设备号>`；手机上说的话来源是 `phone_chat`（人发起、不进三态），
   回答回手机；整段目标用 `devices__delegate` 交给手机本地循环；关跨设备时交还。来源分类只有一处：`core/presence_line.py`（`REMOTE_SOURCES`、主循环认的 `AGENT_LOOP_SOURCES`）。
+- **多步、多设备的事写成计划**：`devices__plan`（`core/task_plan.py`，方案里叫 `tasks__plan`）接现成的 ConstellationRuntime 分层执行；挑设备、失败后怎么办都听模型的，不开自动重排。
+  给设备下发一律经 `core/device_queue.run_on_device`（每台设备串行）；计划在 `task_plans.json` 写盘，重启只做排着没做的步骤，崩溃时在做的那一步「结果不明」不重做。
+  只为观测记进任务图的节点要标 `observation_only`，否则重启续跑会拿它去重派。
   规范设备入口把连接自己的凭证（握手 Bearer / 回过 `auth_ok` 的令牌）带给不带令牌的帧 —— 安卓的 `device_register` 就不带令牌（`tests/test_phone_joins_through_its_bridge_agent.py` 守着）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
