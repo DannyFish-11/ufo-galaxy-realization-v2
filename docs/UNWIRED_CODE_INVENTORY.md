@@ -253,13 +253,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 <!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->
 
-未接线公开能力 **385** 条，分布在 **205** 个文件。
+未接线公开能力 **384** 条，分布在 **204** 个文件。
 
 | 维度 | 数 |
 |---|---|
-| 类方法 / 模块函数 | 229 / 156 |
+| 类方法 / 模块函数 | 228 / 156 |
 | 只有测试在引用（写了、测了、没接） | 317 |
-| 全仓连测试都没引用 | 68 |
+| 全仓连测试都没引用 | 67 |
 | 所在模块本身从入口不可达 | 4 |
 
 ### 按名字表明的角色
@@ -272,7 +272,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 判定谓词 | 78 | 70 | 8 |
 | 只读查询 | 54 | 48 | 6 |
 | 计算/构造 | 68 | 64 | 4 |
-| 动作/变更 | 155 | 111 | 44 |
+| 动作/变更 | 154 | 111 | 43 |
 
 ### 按用途
 
@@ -284,7 +284,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 指标、可观测与审计记录 | 9 | 9 | 0 | 9 |
 | 架构治理：权威声明、边界断言与自检 | 56 | 55 | 1 | 25 |
 | 多设备编组、协同网络与拓扑 | 30 | 24 | 6 | 19 |
-| 设备与节点：注册、发现、连接、通信、传输 | 49 | 27 | 22 | 23 |
+| 设备与节点：注册、发现、连接、通信、传输 | 48 | 27 | 21 | 22 |
 | 能力、模型与执行路由 | 35 | 29 | 6 | 23 |
 | 智能体、认知与记忆 | 38 | 32 | 6 | 25 |
 | 语音、桌面在场与感知 | 11 | 11 | 0 | 8 |
@@ -299,11 +299,11 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 接上（`wire`） | 27 | 该有人调它：写明调用点（文件、第几行附近、在做什么的时候） |
 | 挂出来（`surface`） | 0 | 该有人读它：写明挂到哪个端点 / 面板 / 诊断输出 |
 | 删掉（`delete`） | 147 | 已被别的实现取代或根本没有用途：写明被什么取代 |
-| 随对象走（`object`） | 126 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
+| 随对象走（`object`） | 125 | 对象上的判定 / 查询 / 扩展点：对象被用到那一处时自然会用，单独接没有意义 |
 | 测试钩子（`testhook`） | 0 | 只为测试或断言存在（复位、注入、不变量断言），不该进生产路径 |
 | 框架回调（`framework`） | 0 | 由第三方框架按名字回调（zeroconf、asyncio），清单误报 |
 | 产品决定（`product`） | 3 | 接不接是功能取舍，不是技术问题：等所有者定 |
-| 合计 | 303 | |
+| 合计 | 302 | |
 
 按用途 × 去处：
 
@@ -314,7 +314,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 指标、可观测与审计记录 | 0 | 0 | 3 | 6 | 0 | 0 | 0 | 9 |
 | 架构治理：权威声明、边界断言与自检 | 0 | 0 | 42 | 14 | 0 | 0 | 0 | 56 |
 | 多设备编组、协同网络与拓扑 | 4 | 0 | 11 | 13 | 0 | 0 | 2 | 30 |
-| 设备与节点：注册、发现、连接、通信、传输 | 6 | 0 | 26 | 16 | 0 | 0 | 1 | 49 |
+| 设备与节点：注册、发现、连接、通信、传输 | 6 | 0 | 26 | 15 | 0 | 0 | 1 | 48 |
 | 能力、模型与执行路由 | 0 | 0 | 12 | 23 | 0 | 0 | 0 | 35 |
 | 智能体、认知与记忆 | 0 | 0 | 14 | 24 | 0 | 0 | 0 | 38 |
 | 语音、桌面在场与感知 | 0 | 0 | 5 | 6 | 0 | 0 | 0 | 11 |
@@ -512,7 +512,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>随对象走（object）— 126 条</summary>
+<details><summary>随对象走（object）— 125 条</summary>
 
 - `core/adapters/tcp_adapter.py`
   - `TCPAdapter.connect_to_peer`：send() 已按需临时建连；长连接没有读循环，主动连局域网里所有 _galaxy 广播方也不是该默认做的事
@@ -521,8 +521,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 - `core/agent_manifest.py`
   - `AgentManifest.create_multi_step_agent`：随 core/routes/nodes.py 创建 Agent 的端点：需要多步顺序 Agent 时从那里调
 - `core/agent_team.py` — `AgentTeam.couple_member`、`AgentTeam.decouple_member`：耦合模式切换随团队对象：core/control_plane/swarm_scaler.py 扩缩容时用
-- `core/aip_transport.py`
-  - `AIPTransport.unregister_adapter`：注册 / 注销成对的适配器 API；关停走 close_all()，没有「运行中卸下某个传输」的场景
 - `core/canonical_ownership_truth_bridge.py` — `is_recovery_eligible`、`build_ownership_aware_replay_execution_record`：唯一导入方是 core/android_participant_truth_ingress.py：安卓参与方真相那一侧，按所有者安排暂缓
 - `core/capability_assimilation.py`
   - `CapabilityAssimilationLayer.mark_stale_if_expired`：按心跳年龄判 STALE 需要真实的心跳来源：本机 MCP / 技能提供方、启动器节点从不往同化层发心跳，直接按时扫会在 60 秒后把它们全判 STALE（query_routable_executors 只认 ONLINE，路由随之失效）。设备的离线已经经 UDM 的在线翻转写进同化层（core/unified/presence_fanout.py）。等这些提供方有了心跳再挂进 core/periodic_maintenance.py
@@ -679,7 +677,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 | 子系统 | 条数 | 文件数 |
 |---|---|---|
-| `core/（其余单文件）` | 114 | 68 |
+| `core/（其余单文件）` | 113 | 67 |
 | `galaxy_gateway/` | 30 | 14 |
 | `core/android_*` | 20 | 13 |
 | `core/delegated_*` | 17 | 5 |
@@ -1097,12 +1095,10 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>设备与节点：注册、发现、连接、通信、传输 — 49 条</summary>
+<details><summary>设备与节点：注册、发现、连接、通信、传输 — 48 条</summary>
 
 - `core/adapters/tcp_adapter.py`
   - `TCPAdapter.connect_to_peer` — — 主动连接到 P2P 对等端。
-- `core/aip_transport.py`
-  - `AIPTransport.unregister_adapter` — — 无说明
 - `core/device_agent_manager.py`
   - `DeviceAgentManager.register_agent_type` — — 注册新的设备 Agent 类型
   - `DeviceAgentManager.connect_all` — — 连接所有设备

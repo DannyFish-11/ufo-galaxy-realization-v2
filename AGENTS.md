@@ -71,6 +71,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - **Agent 载体**＝`python -m device_client --carrier`（`device_client/carrier_agent.py` + `executors/carrier.py`）：和手机走同一套桥接（`core/phone_bridge.py`），
   报能力时声明 `bridge_agent` 才算能接 Agent。载体的模型经中心（`tool_call` `llm.chat`），载体上不放钥匙；代码只在 Docker 沙箱里跑，文件只在它的工作目录里。
   路由在没有模型时回的是一句说明（`provider == "none"`），别把它当答案。委派前先 `_settle`：刚登记还没报能力、或装过还没重新装上的设备要等一下再判。
+- **传输适配器只在一处装**：`galaxy_gateway/bootstrap/transports.register_transport_adapters`（独立网关 lifespan 与桌面版 `core/startup.py` 共用，同一进程只装一次）。
+  「websocket」传输走规范入口的 `UnifiedConnectionManager`。`get_aip_transport().send` 失败是**返回** `{"success": False}`、不抛异常 —— 调用方要看返回值再兜底；
+  处理器的返回值已经由设备入口写回，别再经 AIPTransport 另推一份同样的帧。
   规范设备入口把连接自己的凭证（握手 Bearer / 回过 `auth_ok` 的令牌）带给不带令牌的帧 —— 安卓的 `device_register` 就不带令牌（`tests/test_phone_joins_through_its_bridge_agent.py` 守着）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。

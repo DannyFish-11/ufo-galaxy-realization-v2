@@ -28,7 +28,9 @@ READ_SITES = {
     "FEDERATION_OFFLINE_THRESHOLD": "core/galaxy_federation.py",
     "GALAXY_WEBRTC_TASK_READY_TIMEOUT_S": "galaxy_gateway/webrtc_proxy.py",
     "GALAXY_HOLE_PUNCH_TIMEOUT_S": "galaxy_gateway/webrtc_proxy.py",
-    "GALAXY_MESH_PORT": "galaxy_gateway/bootstrap/lifecycle.py",
+    "GALAXY_MESH_PORT": "galaxy_gateway/bootstrap/transports.py",
+    "GALAXY_AIP_TCP_PORT": "galaxy_gateway/bootstrap/transports.py",
+    "GALAXY_AIP_UDP_PORT": "galaxy_gateway/bootstrap/transports.py",
     "GALAXY_MULTI_DEVICE_DISPATCH_LIMIT": "galaxy_gateway/device_router.py",
 }
 

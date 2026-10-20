@@ -486,129 +486,14 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         logger.info("\U0001f513 TLS: DISABLED (set GALAXY_TLS_CERT + GALAXY_TLS_KEY to enable)")
 
     # ── Phase 8: AIPTransport adapter registration ──
-    # PR-AIP-UNIFIED: Register physical transport adapters.
-    # NOTE: NATS is NOT here — NATS is a task distribution layer,
-    # parallel to AIP Transport, not a transport adapter.
-    # Migrated from nodes/: MQTT(Node_41), BLE(Node_38), Serial(Node_48)
+    # 和桌面版(主 app 挂载网关、不跑这段 lifespan)共用同一个函数:同一进程只装一次,端口被占只发不收。
+    # NATS 不在这里 —— 它是任务分发总线,和传输并列。
     try:
-        from core.adapters import (
-            BLEAdapter,
-            CANBusAdapter,
-            DBusAdapter,
-            MQTTAdapter,
-            SerialAdapter,
-            TCPAdapter,
-            UDPAdapter,
-            WebSocketAdapter,
-        )
         from core.aip_transport import get_aip_transport
+        from galaxy_gateway.bootstrap.transports import register_transport_adapters
 
-        aip_transport = get_aip_transport()
-        aip_transport.register_adapter(WebSocketAdapter(websocket_manager))
-        # PR-28: Tailscale P2P — register before others so it gets priority
-        ts_adapter = None
-        try:
-            from core.adapters.tailscale_p2p_adapter import TailscaleP2PAdapter
-
-            ts_adapter = TailscaleP2PAdapter()
-            if await ts_adapter.initialize():
-                aip_transport.register_adapter(ts_adapter)
-                logger.info("PR-28: TailscaleP2PAdapter registered and active")
-                # PR-28: Start P2P inbound server for direct connections
-                try:
-                    await ts_adapter.start_server()
-                    logger.info("PR-28: Tailscale P2P inbound server started")
-                except Exception as srv_exc:
-                    logger.warning("PR-28: P2P server start failed (non-fatal): %s", srv_exc)
-            else:
-                logger.debug("PR-28: Tailscale not available, P2P adapter skipped")
-        except Exception as exc:
-            logger.debug("PR-28: TailscaleP2PAdapter registration skipped: %s", exc)
-
-        aip_transport.register_adapter(MQTTAdapter())
-        aip_transport.register_adapter(TCPAdapter())
-        aip_transport.register_adapter(UDPAdapter())
-        aip_transport.register_adapter(BLEAdapter())
-        aip_transport.register_adapter(SerialAdapter())
-        aip_transport.register_adapter(DBusAdapter())
-        aip_transport.register_adapter(CANBusAdapter())
-
-        # PR-AIP-v52: 启动 TCP P2P 和 UDP 监听服务
-        try:
-            tcp_adapter = aip_transport.get_adapter("tcp")
-            if tcp_adapter:
-                await tcp_adapter.start_server()
-                tcp_adapter.register_local_service("local")
-
-                # 阶段 1 配套:TCP 入站帧接进既有 ingress 汇聚点。此前 _handle_incoming
-                # 只登记 peer 就丢弃消息 —— Android 端 TCP 直连发上来的东西进了黑洞。
-                async def _on_tcp_message(device_id: str, message: dict):
-                    from galaxy_gateway.protocol import parse_message
-
-                    if not str(message.get("type", "") or ""):
-                        return None  # 无类型帧(如探测)不进处理器
-                    try:
-                        parsed = parse_message(message)
-                    except Exception as _parse_err:  # noqa: BLE001
-                        # 畸形/未知类型帧:静默丢弃(debug 级)。任何客户端都能对
-                        # 这个端口发垃圾 —— 每条刷一次 warning 等于把日志交给对端。
-                        logger.debug("TCP 入站帧不符合 AIP v3,丢弃: %s", _parse_err)
-                        return None
-                    response = await message_handler.handle_message(device_id or "tcp_unknown", parsed)
-                    if response is None:
-                        return None
-                    return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
-
-                tcp_adapter.set_message_handler(_on_tcp_message)
-        except Exception as _tcp_err:
-            logger.debug("TCP P2P server start failed (non-fatal): %s", _tcp_err)
-
-        try:
-            udp_adapter = aip_transport.get_adapter("udp")
-            if udp_adapter:
-                await udp_adapter.start()
-        except Exception as _udp_err:
-            logger.debug("UDP listener start failed (non-fatal): %s", _udp_err)
-
-        # 阶段 2：AODV 多跳 mesh（第 10 个适配器）。peers 来自 lan_discovery 镜像
-        # 进 UDM 的 mDNS 记录；无 peers 时 is_available 恒 False，单节点部署下沉默。
-        try:
-            from core.adapters.mesh_routing_adapter import MeshRoutingAdapter
-
-            mesh_adapter = MeshRoutingAdapter(
-                node_id=os.getenv("GALAXY_MESH_NODE_ID", "gateway"),
-                local_port=int(os.getenv("GALAXY_MESH_PORT", "19422")),
-            )
-            await mesh_adapter.start_server()
-            mesh_adapter.refresh_neighbors_from_discovery()
-
-            # 终点投递 → 既有 ingress 汇聚点（message_handler.handle_message），
-            # 否则消息送到网关却没人消费 —— 中继成功但内容进了黑洞。
-            async def _on_mesh_message(aip: dict, meta: dict) -> None:
-                from galaxy_gateway.protocol import parse_message
-
-                src = str(meta.get("src", "") or "mesh_unknown")
-                await message_handler.handle_message(src, parse_message(aip))
-
-            mesh_adapter.set_message_handler(_on_mesh_message)
-            aip_transport.register_adapter(mesh_adapter)
-
-            # 信封桥:发现型邻接(UDM 里的 mDNS 记录)指向对端普通 tcp 端口,mesh
-            # 信封帧会打到 tcp_adapter —— 没有这个桥,经发现建立的 mesh 邻接全聋。
-            try:
-                _tcp_for_mesh = aip_transport.get_adapter("tcp")
-                if _tcp_for_mesh is not None:
-                    _tcp_for_mesh.set_envelope_handler(mesh_adapter.handle_envelope)
-            except Exception as _bridge_err:
-                logger.debug("mesh envelope bridge not attached (non-fatal): %s", _bridge_err)
-        except Exception as _mesh_err:
-            logger.debug("Mesh routing adapter start failed (non-fatal): %s", _mesh_err)
-
-        app.state.aip_transport = aip_transport
-        logger.info(
-            "AIPTransport adapters registered: %s",
-            aip_transport.list_adapters(),
-        )
+        await register_transport_adapters(message_handler)
+        app.state.aip_transport = get_aip_transport()
     except Exception as _aip_err:
         logger.warning("AIPTransport adapter registration failed (non-fatal): %s", _aip_err)
 
@@ -710,11 +595,12 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     await task_orchestrator.stop()
     await websocket_manager.stop()
 
-    # PR-AIP-v52: 关闭 AIPTransport 适配器（TCP P2P, UDP, BLE, etc.）
-    aip_transport = getattr(app.state, "aip_transport", None)
-    if aip_transport is not None:
+    # PR-AIP-v52: 关闭 AIPTransport 适配器（TCP P2P, UDP, BLE, etc.）;关完同一进程可以再装一次
+    if getattr(app.state, "aip_transport", None) is not None:
         try:
-            await aip_transport.close_all()
+            from galaxy_gateway.bootstrap.transports import close_transport_adapters
+
+            await close_transport_adapters()
             logger.debug("AIPTransport adapters closed")
         except Exception:
             pass

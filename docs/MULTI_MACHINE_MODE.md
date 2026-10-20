@@ -183,6 +183,8 @@
 | `GALAXY_TRANSPORT_ADAPTIVE` | 开 | 是 | 内置 | — |  |
 | `GALAXY_TRANSPORT_BULK_BYTES` | 65536 | 是 | 对话里调 | — |  |
 | `GALAXY_TRANSPORT_PRIORITY` | 空 | 是 | 跨设备模式下才列 | — |  |
+| `GALAXY_AIP_TCP_PORT` | 19421 | 是 | 不列（内部调参） | — |  |
+| `GALAXY_AIP_UDP_PORT` | 19422 | 是 | 不列（内部调参） | — |  |
 | `GALAXY_ANDROID_WS_ENABLED` | 关 | 是 | 运维 | — |  |
 | `ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS` | 90 | 是 | 对话里调 | — |  |
 | `ANDROID_DEVICE_STATE_STORE_PATH` | 空 | 是 | 内置 | — |  |
@@ -255,7 +257,7 @@
 | `GALAXY_WORKER_VERSION` | 1.0.0 | 是 | 不列（内部调参） | — |  |
 | `GALAXY_HEARTBEAT_INTERVAL` | 10 | 是 | 对话里调 | 跨设备 |  |
 
-共 78 个键，其中 **0** 个未登记。
+共 80 个键，其中 **0** 个未登记。
 <!-- tables:end -->
 
 ## 五、模块、接口、面板入口

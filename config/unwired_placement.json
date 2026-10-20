@@ -35,12 +35,6 @@
     "SemanticSearch 整个类在生产里没人实例化（原唯一调用方是已删的 index_document_vector）；知识检索走 core/rag_memory.py → 知识库节点"
    ]
   },
-  "core/aip_transport.py": {
-   "AIPTransport.unregister_adapter": [
-    "object",
-    "注册 / 注销成对的适配器 API；关停走 close_all()，没有「运行中卸下某个传输」的场景"
-   ]
-  },
   "core/cache.py": {
    "*": [
     "delete",

@@ -32,6 +32,7 @@
     "gateway.app.app": "galaxy_gateway.app:app",
     "gateway.app.websocket_manager": "galaxy_gateway.app:websocket_manager",
     "gateway.bootstrap.lifecycle.init_gateway_core_services": "galaxy_gateway.bootstrap.lifecycle:init_gateway_core_services",
+    "gateway.bootstrap.transports.register_transport_adapters": "galaxy_gateway.bootstrap.transports:register_transport_adapters",
     "gateway.cross_device_coordinator.cross_device_coordinator": "galaxy_gateway.cross_device_coordinator:cross_device_coordinator",
     "gateway.cross_device_switch.is_cross_device_enabled": "galaxy_gateway.cross_device_switch:is_cross_device_enabled",
     "gateway.device_router.DeviceRouter": "galaxy_gateway.device_router:DeviceRouter",

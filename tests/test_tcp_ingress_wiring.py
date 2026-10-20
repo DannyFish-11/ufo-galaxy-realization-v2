@@ -152,13 +152,14 @@ def test_envelope_frames_bridge_to_mesh_over_plain_port() -> None:
 
 
 def test_lifecycle_wires_tcp_ingress() -> None:
-    """融入点 AST 钉：lifecycle 必须真实调用 tcp_adapter.set_message_handler(…)。"""
+    """融入点 AST 钉：传输适配器注册(独立网关与桌面版共用 bootstrap/transports.py)必须真实调用
+    tcp.set_message_handler(…)。"""
     import ast
     import inspect
 
-    import galaxy_gateway.bootstrap.lifecycle as lc
+    import galaxy_gateway.bootstrap.transports as tr
 
-    tree = ast.parse(inspect.getsource(lc))
+    tree = ast.parse(inspect.getsource(tr))
     calls = [
         node
         for node in ast.walk(tree)
@@ -166,6 +167,6 @@ def test_lifecycle_wires_tcp_ingress() -> None:
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "set_message_handler"
         and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "tcp_adapter"
+        and node.func.value.id == "tcp"
     ]
-    assert calls, "lifecycle 不再把 TCP 入站接到 ingress 汇聚点（真实调用消失，注释不算）"
+    assert calls, "传输适配器注册不再把 TCP 入站接到 ingress 汇聚点（真实调用消失，注释不算）"
