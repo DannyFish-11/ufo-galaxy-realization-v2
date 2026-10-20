@@ -60,7 +60,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         混合执行 — 三级降级: API 直调 → GUI → VLM
         """
-        force = ExecutionLevel(req.force_level) if req.force_level else None
+        level = {"a2a": "api_direct"}.get(req.force_level or "", req.force_level)  # 「API 直调」旧名 a2a,照旧认
+        force = ExecutionLevel(level) if level else None
         result = await hybrid_arbiter.execute(
             device_id=req.device_id,
             app_id=req.app_id,

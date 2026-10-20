@@ -115,17 +115,9 @@ APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = "CapabilityRegistry → AppExec
 
 
 class ExecutionLevel(str, Enum):
-    API_DIRECT = "api_direct"  # API 直调(经应用的 API / MCP 直接调用)
+    API_DIRECT = "api_direct"  # API 直调(API / MCP 直接调用);旧名 a2a 与对外 A2A 撞名,已改
     GUI = "gui"  # GUI Automation (accessibility, ADB)
     VLM = "vlm"  # Vision-Language Model (screenshot + reasoning)
-
-    @classmethod
-    def _missing_(cls, value):
-        # 这一级以前叫 "a2a",和对外 A2A(core/a2a_link.py,Agent 之间的通话)撞名,改叫「API 直调」;
-        # 旧调用方传的 "a2a" 照旧认。
-        if value == "a2a":
-            return cls.API_DIRECT
-        return None
 
 
 class ExecutionStatus(str, Enum):
@@ -258,12 +250,7 @@ class AppExecutionCapabilityRegistry:
 
     def list_apps(self) -> List[Dict]:
         return [
-            {
-                "app_id": cap.app_id,
-                "api_direct": bool(cap.api_endpoint),
-                "gui": cap.gui_supported,
-                "vlm": cap.vlm_supported,
-            }
+            {"app_id": cap.app_id, "api": bool(cap.api_endpoint), "gui": cap.gui_supported, "vlm": cap.vlm_supported}
             for cap in self._apps.values()
         ]
 
@@ -884,7 +871,7 @@ class HybridExecutionArbiter:
 
         try:
             if level == ExecutionLevel.API_DIRECT:
-                return await self._try_api_direct(device_id, app_id, action, params, start)
+                return await self._try_api(device_id, app_id, action, params, start)
             elif level == ExecutionLevel.GUI:
                 return await self._try_gui(device_id, action, params, start)
             elif level == ExecutionLevel.VLM:
@@ -903,10 +890,8 @@ class HybridExecutionArbiter:
                 latency_ms=(time.time() - start) * 1000,
             )
 
-    async def _try_api_direct(
-        self, device_id: str, app_id: str, action: str, params: Dict, start: float
-    ) -> ExecutionAttempt:
-        """Level 1: API 直调 直接调用"""
+    async def _try_api(self, device_id: str, app_id: str, action: str, params: Dict, start: float) -> ExecutionAttempt:
+        """Level 1: API 直调"""
         if not self._api_direct:
             return ExecutionAttempt(
                 level=ExecutionLevel.API_DIRECT,

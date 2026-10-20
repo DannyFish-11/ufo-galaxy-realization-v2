@@ -277,10 +277,13 @@ def test_the_protocol_gate_knows_the_frame():
 def test_a2a_means_only_this_the_hybrid_executors_direct_api_tier_is_called_api_direct():
     """代码里原先另一个「A2A」是混合执行里「直接调应用的 API / MCP」那一级,和 Agent 之间的通话撞名。
 
-    改叫「API 直调」;旧调用方传的 ``"a2a"`` 照旧认成这一级。
+    改叫「API 直调」;旧调用方经 ``POST /api/v1/hybrid/execute`` 传的 ``force_level="a2a"`` 照旧认成这一级。
     """
+    import inspect
+
     from core.hybrid_executor import ExecutionLevel
+    from core.routes import hybrid
 
     assert "A2A" not in ExecutionLevel.__members__
-    assert ExecutionLevel("a2a") is ExecutionLevel.API_DIRECT
     assert ExecutionLevel.API_DIRECT.value == "api_direct"
+    assert '{"a2a": "api_direct"}' in inspect.getsource(hybrid), "旧值的兼容在唯一的解析点上"
