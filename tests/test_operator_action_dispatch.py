@@ -605,10 +605,11 @@ class TestNoParallelActionPath:
         import inspect
 
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+        from core.presence_line import AGENT_LOOP_SOURCES
 
-        # Read source code to verify "operator" is in the recognized sources set
+        # The recognized-sources table lives in core.presence_line; _dispatch checks it
         src = inspect.getsource(DesktopPresenceRuntime._dispatch)
-        assert '"operator"' in src or "'operator'" in src, (
+        assert "AGENT_LOOP_SOURCES" in src and "operator" in AGENT_LOOP_SOURCES, (
             "DesktopPresenceRuntime._dispatch must recognise 'operator' as a "
             "valid source so it does not log a warning and fall back to OpenClawd "
             "via the unknown-source branch"

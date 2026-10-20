@@ -379,6 +379,7 @@
 | 0 拆闸与正名 | 已完成(V2 拆闸与正名、`/api/v1/pair/leave`;手表提示与「解除配对」;安卓信令带配对令牌) | V2:`tests/test_the_agent_coordinates_members_in_any_mode.py`、`tests/test_cross_device_switch.py`、手表端到端 `tests/test_watch_reaches_the_central_agent.py`;手表 `PairLeaveTest`;安卓 `SignalingRequestAuthTest`;真后端 + 真设备帧探针 13 项全过(见 SYSTEM_STATUS 6.21) |
 | 1 设备整体卡 | 已完成(`devices__list` 整体卡 + `GET /api/v1/onboarding/cards`;手表、手机报动作说明;下发进任务流程图;固定角色退出派发;登记名修正)。意图路由里的「目标执行」「并行目标」并进主循环工具,随阶段 3 的 `devices__delegate` 与阶段 4 的 `tasks__plan` 一起做 | `tests/test_the_model_sees_each_device_as_a_whole.py`;手表 `WatchMemberFramesTest`;安卓 `PhoneActionDescriptionsTest`;真机探针 12 项全过(见 SYSTEM_STATUS 6.22) |
 | 2 对外 A2A | 已完成(AIP v3 新增 `a2a` 帧;信封、确认、去重、补发、排序,两端同语义;哪一端重启都不卡不吞;规范设备入口收发、认证、冒充拒收;登记后补发;跨仓闸门 1.1.0;混合执行那一级改名「API 直调」) | V2:`tests/test_external_a2a_link.py`(链路语义 + 真实入口 + 与安卓线格式逐字对照);安卓 `A2ALinkTest` 14 项;真后端 + 真设备帧探针 13 项全过,含中心重启(见 SYSTEM_STATUS 6.23) |
+| 3 手机接管与对话桥接 | 已完成(手机报完能力中心派桥接 Agent;上交对话 / 本地循环进度 / 最近执行进中心的会话;手机上说的话以 `phone_chat` 进中心智能体的同一个会话,不进电脑三态;`devices__delegate` 把整段目标交给手机本地循环;关跨设备时交还摘要与没做完的事;设备卡上标出 `agent_installed`;**真机顺序查出并已修**:安卓先 `auth`、再发不带令牌的 `device_register`,认证开着时手机此前登记不上) | V2:`tests/test_phone_joins_through_its_bridge_agent.py`(安卓真实帧顺序走规范入口);安卓 `BridgeAgentRuntimeTest` 11 项;真后端探针 13 + 3 项全过,含后端重启后重新派(见 SYSTEM_STATUS 6.24) |
 | 3 手机接管与对话桥接 | 未开始 | — |
 | 4 多步计划 | 未开始 | — |
 | 5 Agent 载体 | 未开始 | — |

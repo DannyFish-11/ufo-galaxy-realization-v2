@@ -1922,17 +1922,9 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOri
             一条 "unknown source" 警告。同样是功能上兜底恰好走对、可观测性上把
             主体自己的通道标成外来未知调用者。
         """
-        if source in (
-            "chat",
-            "voice",
-            "openclawd",
-            "ambient",
-            "active_perception",
-            "android_vision",
-            "vision_sampler",
-            "operator",
-            "android_goal_execution",
-        ):
+        from core.presence_line import AGENT_LOOP_SOURCES  # 已知来源表(别的设备转来的也在里面)
+
+        if source in AGENT_LOOP_SOURCES:
             return await self._handle_via_openclawd(
                 rsession=rsession,
                 message=message,

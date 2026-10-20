@@ -86,9 +86,15 @@ from typing import Any, AsyncIterator, Callable, Dict, FrozenSet, Iterable, Muta
 
 logger = logging.getLogger("Galaxy.PresenceLine")
 
-#: 入口本身就说明请求来自别的设备。
+#: 入口本身就说明请求来自别的设备。``phone_chat``:手机上的桥接 Agent 转来的人话(core/phone_bridge.py)。
 REMOTE_SOURCES: FrozenSet[str] = frozenset(
-    {"wear_voice", "wear_decision", "android_goal_execution", "android_vision", "participant_task"}
+    {"wear_voice", "wear_decision", "android_goal_execution", "android_vision", "participant_task", "phone_chat"}
+)
+
+#: 交给智能体主循环(OpenClawd)处理的已知来源。表外的来源也会兜底到主循环,但要打一条
+#: "unknown source" 警告 —— 别的设备转来的请求都是主体自己的通道,不该被标成外来未知调用者。
+AGENT_LOOP_SOURCES: FrozenSet[str] = REMOTE_SOURCES | frozenset(
+    {"chat", "voice", "openclawd", "ambient", "active_perception", "vision_sampler", "operator"}
 )
 
 #: 智能体自己发起的工作 —— 没有发起设备，也没有人在电脑前等它。
@@ -461,6 +467,7 @@ __all__ = [
     "HOST_SOURCES",
     "LOCAL_BODY_SOURCES",
     "REMOTE_SOURCES",
+    "AGENT_LOOP_SOURCES",
     "PresenceLineDecision",
     "RuntimeOriginMixin",
     "SessionOriginMixin",

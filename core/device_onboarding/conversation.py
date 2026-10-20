@@ -35,7 +35,7 @@ from typing import Any, Dict, Optional, Tuple
 logger = logging.getLogger("Galaxy.Onboarding.Conversation")
 
 #: 算作「人在说话」的回合来源(``DesktopPresenceRuntime.handle_request`` 的 ``source``)。
-HUMAN_REQUEST_SOURCES = frozenset({"chat", "voice", "voice_duplex", "wear_voice", "wear_decision"})
+HUMAN_REQUEST_SOURCES = frozenset({"chat", "voice", "voice_duplex", "wear_voice", "wear_decision", "phone_chat"})
 
 #: 对话里的待确认,多久没人答就作废。
 CONFIRM_TTL_S = 600.0

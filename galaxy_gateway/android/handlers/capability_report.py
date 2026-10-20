@@ -312,4 +312,13 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
                 device_id,
                 participation_exc,
             )
+        # 跨设备整体方案阶段 3:声明了能装桥接 Agent 的设备(新版手机、Agent 载体)报完能力,中心派一个过去
+        # (后台,不挡这条连接)。没声明的(旧版 App)不派 —— 它不会回确认,派了只会每次重连都补发一遍。
+        try:
+            from core.phone_bridge import declares_bridge_support, schedule_dispatch  # noqa: PLC0415
+
+            if declares_bridge_support(message):
+                schedule_dispatch(device_id)
+        except Exception as bridge_exc:  # noqa: BLE001
+            logger.debug("capability_report: bridge dispatch non-fatal: device_id=%s error=%s", device_id, bridge_exc)
     return ack

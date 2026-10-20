@@ -10,7 +10,7 @@
     是什么        名称、类型、形态                      UDM
     能做什么      设备自己报的每个动作,附一句说明        能力权威面(capability_report 的 description)
     现在怎么样    在线、电量、网络路径、忙不忙、能否打扰  UCM / UDM 状态上报 / 可打扰性登记
-    能否接 Agent  手机、Agent 载体能;手表、「手和眼」不能  UDM 的执行模型 + 设备自己的声明
+    能否接 Agent  手机、Agent 载体能;手表、「手和眼」不能  UDM 的执行模型 + 设备自己的声明;装上了没有看桥接 Agent
     最近做过什么  最近几次下发与结果                    任务流程图(task_graph_runtime)
 
 卡要短:它进模型上下文,动作最多列 ``MAX_ACTIONS`` 个、最近做过的最多 ``MAX_RECENT`` 条。
@@ -172,6 +172,16 @@ def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[
     return status
 
 
+def _agent_installed(device_id: str) -> bool:
+    """中心派来的桥接 Agent 装上了没有(装上了才能 ``devices__delegate`` 整段目标)。"""
+    try:
+        from core.phone_bridge import bridge_state
+
+        return bool(bridge_state(device_id).get("installed"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _recent(device_id: str, now: float) -> List[Dict[str, Any]]:
     """最近几次给它的下发与结果(任务流程图)。"""
     try:
@@ -211,6 +221,7 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
         "status": _status(view, meta, now),
         "actions": _actions(view["device_id"], raw_caps),
         "can_take_agent": can_take_agent(view, meta),
+        "agent_installed": _agent_installed(view["device_id"]),
         "recent": _recent(view["device_id"], now),
         "attached_via": view.get("bridge_id") or view.get("transport") or "",
     }

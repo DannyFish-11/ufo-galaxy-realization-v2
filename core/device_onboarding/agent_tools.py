@@ -9,6 +9,7 @@ MCP/技能/节点;资源表里从没放进过设备。这里不把几百个 ``de
     devices__ignore          不再提示某个候选
     devices__remove          移除成员(该收回的都收回)
     devices__invoke          调某台设备的一个动作(按它是原生/桥接/驱动节点/MCP 驱动分别路由)
+    devices__delegate        把一整段目标交给装了桥接 Agent 的设备(手机本地循环)去做,等它的结果
     devices__invite          邀请一台新设备(手机/手表:配对码;笔记本:配对码 + 一条命令;worker:进网 + 启动命令)
     devices__acquire_driver  没有接入路径的候选:装一个 MCP 驱动(GitHub),或让模型写一个
     devices__bind_driver     把某个 MCP 工具认作这个候选的驱动,接入为成员
@@ -88,6 +89,21 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
             "params": {"type": "object"},
         },
         ["device_id", "action"],
+    ),
+    _fn(
+        "devices__delegate",
+        "Hand a whole goal to a device that runs its own agent (can_take_agent and agent_installed on its card, "
+        "e.g. a phone): it plans and carries it out locally with its own screen and apps, reports progress, and "
+        "returns the result. Use this for multi-step work on that device; use devices__invoke for a single action. "
+        "Constraints are passed along as-is (e.g. 'do not pay'); the device still asks its user before sending "
+        "messages, calling or paying.",
+        {
+            "device_id": {"type": "string"},
+            "goal": {"type": "string", "description": "What to get done, in plain words"},
+            "constraints": {"type": "array", "items": {"type": "string"}},
+            "timeout_s": {"type": "number", "description": "How long to wait for the result (default 180, max 600)"},
+        },
+        ["device_id", "goal"],
     ),
     _fn(
         "devices__invite",
@@ -492,6 +508,16 @@ async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, sessi
             return await _remove(args, session_id)
         if action == "invoke":
             return await _invoke(args, session_id)
+        if action == "delegate":
+            from core.phone_bridge import DEFAULT_DELEGATE_TIMEOUT_S, delegate
+
+            return await delegate(
+                str(args.get("device_id") or ""),
+                str(args.get("goal") or ""),
+                constraints=list(args.get("constraints") or []),
+                timeout=float(args.get("timeout_s") or DEFAULT_DELEGATE_TIMEOUT_S),
+                session_id=session_id,
+            )
         if action == "invite":
             return _invite(args)
         if action == "acquire_driver":

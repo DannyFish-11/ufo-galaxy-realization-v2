@@ -63,6 +63,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   **别让派发路径读它**（`tests/test_the_model_sees_each_device_as_a_whole.py` 守着）。每次单动作下发都记进任务流程图（`device_card.record_dispatch`）。
 - **对外 A2A**（中心智能体 ↔ 派出去的 Agent：手机上的桥接 Agent、载体上的 Agent）：AIP v3 `a2a` 帧，信封与「必达」链路在 `core/a2a_link.py`，与安卓 `shared-protocol/.../A2A.kt` 线格式逐字一致（改一边必须改另一边，`tests/test_external_a2a_link.py` 对照）。
   发消息用 `a2a_link.send(device_id, kind, body)`（设备不在线也留着，登记后补发）；各类消息到了做什么用 `register_handler`（处理器要快，久的事自己起后台任务）。混合执行里「直接调 API」那一级叫「API 直调」，别再叫 A2A。
+- **手机加入 = 中心派一个桥接 Agent 过去**（`core/phone_bridge.py`，手机那一半在安卓 `bridge/BridgeAgentRuntime.kt`）：报能力时声明了 `bridge_agent` 的才派；手机的本地对话 / 进度交接进会话 `phone:<设备号>`；手机上说的话来源是 `phone_chat`（人发起、不进三态），
+  回答回手机；整段目标用 `devices__delegate` 交给手机本地循环；关跨设备时交还。来源分类只有一处：`core/presence_line.py`（`REMOTE_SOURCES`、主循环认的 `AGENT_LOOP_SOURCES`）。
+  规范设备入口把连接自己的凭证（握手 Bearer / 回过 `auth_ok` 的令牌）带给不带令牌的帧 —— 安卓的 `device_register` 就不带令牌（`tests/test_phone_joins_through_its_bridge_agent.py` 守着）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
 - **任务派发**（`GALAXY_MASTER_BRAIN_ENABLED`，类名 `MasterBrain`：经 NATS 把任务派给 worker）是智能体的工具，**只看它自己的开关**，开了就把 NATS 拉起来；

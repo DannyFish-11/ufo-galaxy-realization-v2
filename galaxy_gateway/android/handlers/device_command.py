@@ -107,6 +107,7 @@ async def handle_a2a(bridge: "AndroidBridge", websocket: Any, message: Dict[str,
 
     派到设备上的 Agent 会交接上下文、转人说的话、回委派的结果 —— 没认证过的连接不能冒充它。
     """
+    import core.phone_bridge  # noqa: F401 — 登记各类 A2A 消息到了做什么(手机桥接 Agent)
     from core import a2a_link
     from galaxy_gateway.android.message_builder import MessageBuilder
 

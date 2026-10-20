@@ -202,9 +202,14 @@ def test_the_phone_side_speaks_the_same_kinds_when_the_android_repo_is_checked_o
 
 @pytest.fixture(autouse=True)
 def _fresh_links():
+    import core.phone_bridge  # noqa: F401 — 入口第一次收 a2a 帧时会导入它、登记它的处理器;先导入,测试登记的才不被覆盖
+
+    saved = dict(a2a._handlers)
     a2a.reset_links()
     yield
     a2a.reset_links()
+    a2a._handlers.clear()
+    a2a._handlers.update(saved)
 
 
 def _device_link(device_id):
