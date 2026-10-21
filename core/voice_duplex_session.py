@@ -39,7 +39,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, Dict, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.VoiceDuplex")
 
@@ -322,6 +322,10 @@ class DuplexSessionConfig:
 
     #: provider 名(决定用哪个 ProtocolAdapter)
     provider: str = "openai_realtime"
+
+    #: 声明给模型的工具(``{"name", "description", "parameters": JSON Schema}``)。空 = 不声明。
+    #: 只有设备通话会填(见 ``core.voice_call_agent``);本机双工语音不填。
+    tools: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_env(cls, *, probe: bool = False) -> Optional["DuplexSessionConfig"]:
@@ -679,6 +683,28 @@ class DuplexSession:
             ok = await self._send_json(frame) and ok
         return ok
 
+    @property
+    def supports_tools(self) -> bool:
+        return bool(self.adapter.supports_tools)
+
+    async def send_tool_result(self, call_id: str, name: str, output: Dict[str, Any]) -> bool:
+        """把一次工具调用的结果交回模型(它据此接着说)。"""
+        if not self._connected:
+            return False
+        ok = True
+        for frame in self.adapter.tool_result_frames(call_id, name, output):
+            ok = await self._send_json(frame) and ok
+        return ok
+
+    async def send_note(self, text: str) -> bool:
+        """往对话里插一条系统消息并让模型开口 —— 后台做完的事、智能体要问人的话都走这里。"""
+        if not text or not self._connected:
+            return False
+        ok = True
+        for frame in self.adapter.note_frames(text):
+            ok = await self._send_json(frame) and ok
+        return ok
+
     async def interrupt(self) -> bool:
         """barge-in:让**服务端**停止当前回复。
 
@@ -721,17 +747,15 @@ class DuplexSession:
                     continue
                 if not isinstance(msg, dict):
                     continue
-                ev = self.adapter.decode(msg)
-                if ev is None:
-                    continue
-                if ev.type is DuplexEventType.ERROR:
-                    self.last_error = ev.error
-                    logger.warning("双工会话服务端报错: %s", ev.error)
-                # 把 AI 说出口的文字登记进反自激励门 —— 双工下同样需要:AEC 消不掉
-                # 非线性残余回声,残余转写出来后仍要能判出"这是我自己说的"。
-                if ev.type is DuplexEventType.ASSISTANT_TEXT_DELTA and ev.text:
-                    self._note_spoken(ev.text)
-                await self._emit(ev)
+                for ev in self.adapter.decode_all(msg):
+                    if ev.type is DuplexEventType.ERROR:
+                        self.last_error = ev.error
+                        logger.warning("双工会话服务端报错: %s", ev.error)
+                    # 把 AI 说出口的文字登记进反自激励门 —— 双工下同样需要:AEC 消不掉
+                    # 非线性残余回声,残余转写出来后仍要能判出"这是我自己说的"。
+                    if ev.type is DuplexEventType.ASSISTANT_TEXT_DELTA and ev.text:
+                        self._note_spoken(ev.text)
+                    await self._emit(ev)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001

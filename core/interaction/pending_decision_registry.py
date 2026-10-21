@@ -431,6 +431,7 @@ async def request_human_decision(
     # devices(常见情况是 None → 空列表),而真正的目标是上面这行算出来的 ——
     # 于是记录不知道自己分叉去了哪儿,收不回来。
     record.devices = list(targets)
+    _ask_in_calls(record.decision_id, title, summary, options or [], urgency, targets)
     delivered: List[str] = []
     for did in targets:
         try:
@@ -442,6 +443,22 @@ async def request_human_decision(
     outcome = await registry.await_decision(record)
     await _withdraw_other_branches(delivered, outcome, _emit)
     return outcome
+
+
+def _ask_in_calls(
+    decision_id: str, title: str, summary: str, options: List[Dict[str, str]], urgency: str, targets: List[str]
+) -> None:
+    """目标手表正在和智能体通话时,问题也在通话里问一声,人可以在电话里答(见 ``core.voice_call_agent``)。"""
+    try:
+        from core.voice_call_bridge import get_call_registry
+
+        calls = get_call_registry()
+        for did in targets:
+            agent = getattr(calls.get(did), "agent", None)
+            if agent is not None:
+                agent.on_decision(decision_id, title, summary, options, urgency)
+    except Exception as exc:  # noqa: BLE001 — 通话里问不了,手表上照样能答
+        logger.debug("HITL: 通话里问不了 decision_id=%s: %s", decision_id, exc)
 
 
 async def _withdraw_other_branches(
