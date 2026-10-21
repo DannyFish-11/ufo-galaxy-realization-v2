@@ -1,16 +1,22 @@
-"""手表通话里「边说边做」:跟智能体打电话,就像跟人说话 —— 说一声让它去做,话照说,做完它在电话里告诉你。
+"""实时语音里「边说边做」:跟智能体打电话(手表)、在电脑旁跟它说话,就像跟人说话 —— 说一声让它去做,
+话照说,做完它告诉你。
 
 钉住的性质:
 
 * 三家实时接口的帧:OpenAI / Gemini 声明工具、解出工具调用、交回结果、插一条系统消息;阶跃不声明(没核实);
-* 一通电话能不能把事交给智能体:云端 OpenAI / Gemini 能,阶跃只聊,本地服务默认只聊,配不上也绝不打不通;
+* 事情怎么交过去:手表通话里云端 OpenAI / Gemini 自己调工具交;阶跃、本地服务、电脑自己的实时语音由智能体
+  旁听;配不上也绝不打不通;只有 ``GALAXY_VOICE_CALL_AGENT=0`` 才只聊;
+* 旁听:人说完一句,快档模型判做 / 停 / 问 / 在聊;要做的交**人的原话**;附和、正在回答提问的话不判;
+  判不了(没有模型、出错)当在聊;
 * 交给智能体以后**立刻**回「已经开始做」(模型接着说话),智能体在后台做;做完在没人说话时插【回报】;
   进展、停下;挂断后做完的事作为通知送到手表;手表通话界面上显示「在做 / 做完了」;
 * 智能体在问:问题进通话;问出口之后人的原话才算回答;普通问题按原话答;高风险的批准嘴上说不算、
   说不要算拒绝;有选项却没说中的话不当回答;
 * 来源 ``wear_call``:不进电脑三态,也不算人亲口说的(交过去的是语音模型的转述);
 * 真 WebRTC 手表 + 真通话路由 + 跑在本地真 WebSocket 上的 OpenAI 实时协议端:说一句 → 工具调用 → 结果交回
-  → 智能体做完 → 回报插回通话。
+  → 智能体做完 → 回报插回通话;本地服务那一路:说一句 → 旁听交过去 → 回报插回通话;
+* 电脑自己的实时语音(真 ``VoiceLoop`` + 本地真 WebSocket):旁听交过去(来源 ``voice_duplex``,不在对话主线上重记),
+  回报插回实时会话;这一路的回复不再由电脑另外念一遍。
 """
 
 from __future__ import annotations
@@ -18,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 
@@ -109,26 +115,27 @@ def test_step_never_declares_tools():
 # ---------------------------------------------------------------------------
 
 
-def test_which_calls_can_hand_work_to_the_agent(monkeypatch):
+def test_how_work_reaches_the_agent(monkeypatch):
     for provider, url in (
         ("openai_realtime", "wss://api.openai.com/v1/realtime"),
         ("gemini_live", "wss://g.example/ws"),
     ):
         cfg = _cfg(provider, url)
-        assert vca.configure_call_session(cfg) is True
+        assert vca.configure_call_session(cfg) == "tools"
         assert cfg.tools and "agent_do" in cfg.instructions
 
     step = _cfg("step_realtime", "wss://api.stepfun.com/v1/realtime")
-    assert vca.configure_call_session(step) is False
-    assert step.tools == [] and "不支持调用工具" in step.instructions, "只聊的通话要能照实说做不了"
+    assert vca.configure_call_session(step) == "listen", "不会调工具的不是只聊:智能体旁听"
+    assert step.tools == [] and "执行部分在旁边听着" in step.instructions and "【回报】" in step.instructions
 
     local = _cfg(url="ws://127.0.0.1:32550/v1/realtime")
-    assert vca.configure_call_session(local) is False, "本地服务收不收 tools 没法预知,默认只聊"
+    assert vca.configure_call_session(local) == "listen", "本地服务收不收 tools 没法预知:不塞 tools,旁听"
+    assert local.tools == []
+    desktop = _cfg()
+    assert vca.configure_call_session(desktop, on_desktop=True) == "listen", "电脑上智能体自己听得见人"
+    assert desktop.tools == [] and "电脑旁" in desktop.instructions
     monkeypatch.setenv("GALAXY_REALTIME_TOOLS", "1")
-    assert vca.configure_call_session(_cfg(url="ws://127.0.0.1:32550/v1/realtime")) is True
-
-    monkeypatch.setenv("GALAXY_VOICE_CALL_AGENT", "0")
-    assert vca.configure_call_session(_cfg()) is False
+    assert vca.configure_call_session(_cfg(url="ws://127.0.0.1:32550/v1/realtime")) == "tools"
 
     class Frozen:
         __slots__ = ("provider", "url")
@@ -136,8 +143,12 @@ def test_which_calls_can_hand_work_to_the_agent(monkeypatch):
         def __init__(self) -> None:
             self.provider, self.url = "openai_realtime", "wss://x"
 
-    assert vca.configure_call_session(Frozen()) is False, "配不上就只聊,绝不让电话打不通"
-    assert vca.configure_call_session(SimpleNamespace(sample_rate=16000)) is False
+    assert vca.configure_call_session(Frozen()) == "listen", "配不上就不声明工具、旁听,绝不让电话打不通"
+    assert vca.configure_call_session(SimpleNamespace(sample_rate=16000)) == "listen"
+
+    monkeypatch.setenv("GALAXY_VOICE_CALL_AGENT", "0")
+    off = _cfg()
+    assert vca.configure_call_session(off) == "" and off.tools == [] and "没法替他做事" in off.instructions
 
 
 def test_the_call_source_stays_off_the_desktop_and_is_not_the_persons_own_words():
@@ -240,7 +251,8 @@ async def test_a_real_session_declares_tools_surfaces_calls_and_sends_results_ba
 
 
 class FakeSession:
-    def __init__(self) -> None:
+    def __init__(self, tools: bool = True) -> None:
+        self.config = SimpleNamespace(tools=list(TOOLS) if tools else [])
         self.results: List[tuple] = []
         self.notes: List[str] = []
 
@@ -486,6 +498,95 @@ async def test_asking_a_watch_that_is_on_a_call_reaches_the_call(monkeypatch, re
 
 
 # ---------------------------------------------------------------------------
+# 四之二、旁听(说话的模型不会调工具)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def listener(monkeypatch):
+    runtime = FakeRuntime()
+    monkeypatch.setattr("core.desktop_presence_runtime.get_desktop_presence_runtime", lambda: runtime)
+    heard: List[tuple] = []
+    verdicts: Dict[str, str] = {}
+
+    async def judge(text: str, context: List[Dict[str, str]], running: List[str]) -> str:
+        heard.append((text, context, running))
+        return verdicts.get(text, "")
+
+    monkeypatch.setattr(vca, "_judge", judge)
+    a = vca.CallAgent("watch-1", "call_1", FakeSession(tools=False))
+    a.runtime, a.heard, a.verdicts = runtime, heard, verdicts  # type: ignore[attr-defined]
+    return a
+
+
+async def test_listening_hands_the_persons_own_words_to_the_agent(listener):
+    assert listener.listening, "会话没声明工具:智能体旁听"
+    listener.verdicts["帮我把客厅的灯关了"] = "do"
+    await listener.on_event(ev("final_transcript", text="今天好累"))
+    await listener.on_event(ev("final_transcript", text="帮我把客厅的灯关了"))
+    await _settle()
+    assert [h[0] for h in listener.heard] == ["今天好累", "帮我把客厅的灯关了"]
+    assert listener.heard[1][1] == [{"role": "user", "content": "今天好累"}], "判的时候带上前面说的"
+    (req,) = listener.runtime.calls
+    assert req["message"] == "帮我把客厅的灯关了", "交过去的是人的原话"
+    assert req["source"] == "wear_call"
+    assert listener.session.notes == [], "在聊的那句没交,要做的还没做完"
+    listener.runtime.release.set()
+    await _settle()
+    assert listener.session.notes[0].startswith("【回报】交给你做的「帮我把客厅的灯关了」做完了")
+
+
+async def test_listening_leaves_backchannels_and_answers_alone(listener, registry):
+    await listener.on_event(ev("final_transcript", text="嗯"))
+    rec = _ask(listener, registry, [])
+    await _asked(listener)
+    await _say(listener, "写周五下午三点")
+    await _settle()
+    assert listener.heard == [], "附和不是在要什么;在回答智能体的提问时,话是回答,不是新的事"
+    assert rec.future.result().voice_input == "写周五下午三点"
+
+
+async def test_listening_stops_and_reports_progress(listener):
+    listener.verdicts.update({"帮我订明天的会议室": "do", "做到哪了": "status", "算了不用了": "stop"})
+    await listener.on_event(ev("final_transcript", text="帮我订明天的会议室"))
+    await _settle()
+    await listener.on_event(ev("final_transcript", text="做到哪了"))
+    await _settle()
+    assert listener.heard[-1][2] == ["帮我订明天的会议室"], "判的时候知道交出去了什么"
+    assert listener.session.notes == ["【进展】「帮我订明天的会议室」在做"]
+    await listener.on_event(ev("final_transcript", text="算了不用了"))
+    await _settle()
+    (task,) = listener.tasks.values()
+    assert task.state == "stopped" and len(listener.runtime.calls) == 1
+
+
+async def test_the_judge_uses_the_fast_tier_and_treats_no_model_as_chatting(monkeypatch):
+    asked: List[Dict[str, Any]] = []
+    reply = {"provider": "ollama", "content": "做"}
+
+    class Authority:
+        async def chat(self, messages: List[Dict[str, str]], **kw: Any) -> Any:
+            asked.append({"messages": messages, **kw})
+            if reply.get("raise"):
+                raise RuntimeError("断了")
+            return SimpleNamespace(provider=reply["provider"], content=reply["content"])
+
+    monkeypatch.setattr("core.llm.route_authority.get_llm_route_authority", lambda: Authority())
+    assert await vca._judge("帮我关灯", [{"role": "assistant", "content": "在呢"}], ["订会议室"]) == "do"
+    assert asked[0]["task_type"] == "fast_response" and asked[0]["max_tokens"] <= 8
+    prompt = asked[0]["messages"][-1]["content"]
+    assert "助手:在呢" in prompt and "订会议室" in prompt and prompt.endswith("用户刚说:帮我关灯")
+    reply["content"] = "停。"
+    assert await vca._judge("别订了", [], ["订会议室"]) == "stop"
+    reply["content"] = "不"
+    assert await vca._judge("今天天气不错", [], []) == ""
+    reply.update(provider="none", content="做")  # 降级说明是什么字都不算数
+    assert await vca._judge("帮我关灯", [], []) == "", "一个模型都没有:判不了,当在聊"
+    reply["raise"] = True
+    assert await vca._judge("帮我关灯", [], []) == "", "出错也不能让通话出错"
+
+
+# ---------------------------------------------------------------------------
 # 五、通话的下行泵
 # ---------------------------------------------------------------------------
 
@@ -619,4 +720,117 @@ async def test_end_to_end_say_it_on_the_watch_and_hear_it_done(monkeypatch):
         await close_voice_route("conn_e2e")
         await get_call_registry().end_all(reason="test_teardown")
         await watch.close()
+        await srv.stop()
+
+
+async def test_a_local_realtime_service_on_a_call_listens_and_reports_back(monkeypatch):
+    """本机的实时服务(全模态 server)不塞 tools:人说一句,智能体旁听交过去,回报插回通话。"""
+    from core.voice_call_bridge import get_call_registry, webrtc_available
+
+    if webrtc_available() is not None:
+        pytest.skip(webrtc_available())
+    from aiortc import RTCPeerConnection
+
+    from galaxy_gateway.voice_call_route import close_voice_route, maybe_handle_voice_message
+
+    srv = await FakeRealtimeServer().start()
+    runtime = FakeRuntime(reply="灯关了")
+    monkeypatch.setattr("core.desktop_presence_runtime.get_desktop_presence_runtime", lambda: runtime)
+
+    async def judge(text: str, context: List[Dict[str, str]], running: List[str]) -> str:
+        return "do" if "关" in text else ""
+
+    monkeypatch.setattr(vca, "_judge", judge)
+    monkeypatch.setenv("GALAXY_REALTIME_URL", f"ws://127.0.0.1:{srv.port}/v1/realtime")
+    monkeypatch.setenv("GALAXY_REALTIME_PROVIDER", "openai_realtime")
+    monkeypatch.setenv("GALAXY_VOICE_DUPLEX", "1")
+    to_watch: List[Dict[str, Any]] = []
+
+    async def send_json(payload: Dict[str, Any]) -> None:
+        to_watch.append(payload)
+
+    watch = RTCPeerConnection()
+    watch.addTransceiver("audio", direction="sendrecv")
+    try:
+        offer = await watch.createOffer()
+        await watch.setLocalDescription(offer)
+        await maybe_handle_voice_message(
+            "conn_listen", "voice_call_start", {"sdp": watch.localDescription.sdp}, "watch-listen", send_json
+        )
+        assert any(m["type"] == "voice_call_accepted" for m in to_watch), to_watch
+        (upd,) = await srv.wait_for(lambda m: m.get("type") == "session.update")
+        assert not upd["session"].get("tools"), "本机服务收不收 tools 没法预知:不塞"
+        assert "执行部分在旁边听着" in upd["session"]["instructions"]
+        await srv.send(
+            {"type": "conversation.item.input_audio_transcription.completed", "transcript": "把客厅的灯关了"},
+            {"type": "response.audio_transcript.delta", "delta": "好的"},
+            {"type": "response.done"},
+        )
+        for _ in range(100):
+            if runtime.calls:
+                break
+            await asyncio.sleep(0.02)
+        assert runtime.calls and runtime.calls[0]["message"] == "把客厅的灯关了"
+        runtime.release.set()
+        notes = await srv.wait_for(
+            lambda m: m.get("type") == "conversation.item.create" and m["item"].get("role") == "system"
+        )
+        assert "灯关了" in notes[0]["item"]["content"][0]["text"]
+    finally:
+        await close_voice_route("conn_listen")
+        await get_call_registry().end_all(reason="test_teardown")
+        await watch.close()
+        await srv.stop()
+
+
+# ---------------------------------------------------------------------------
+# 七、电脑自己的实时语音
+# ---------------------------------------------------------------------------
+
+
+async def test_the_desktops_own_realtime_voice_acts_too(monkeypatch):
+    """电脑上的双工此前只旁录、从不交给智能体 —— 说「帮我打开浏览器」,它只会聊。现在旁听交过去。"""
+    from core.multimodal.audio_capture_service import AudioCaptureConfig, AudioCaptureService
+    from core.voice_loop import VoiceLoop
+
+    srv = await FakeRealtimeServer().start()
+    runtime = FakeRuntime(reply="浏览器打开了")
+    monkeypatch.setattr("core.desktop_presence_runtime.get_desktop_presence_runtime", lambda: runtime)
+
+    async def judge(text: str, context: List[Dict[str, str]], running: List[str]) -> str:
+        return "do" if "打开" in text else ""
+
+    monkeypatch.setattr(vca, "_judge", judge)
+    monkeypatch.setenv("GALAXY_VOICE_DUPLEX", "1")
+    monkeypatch.setenv("GALAXY_REALTIME_API_KEY", "sk-test")
+    monkeypatch.setenv("GALAXY_REALTIME_URL", f"ws://127.0.0.1:{srv.port}/v1/realtime")
+    loop = VoiceLoop(object(), speak_responses=False)
+    try:
+        assert await loop._try_start_duplex(AudioCaptureConfig, AudioCaptureService)
+        (upd,) = await srv.wait_for(lambda m: m.get("type") == "session.update")
+        assert not upd["session"].get("tools") and "电脑旁" in upd["session"]["instructions"]
+        await srv.send(
+            {"type": "conversation.item.input_audio_transcription.completed", "transcript": "帮我打开浏览器"},
+            {"type": "response.audio_transcript.delta", "delta": "好"},
+            {"type": "response.done"},
+        )
+        for _ in range(3000):
+            if runtime.calls:
+                break
+            await asyncio.sleep(0.02)
+        (req,) = runtime.calls
+        assert req["message"] == "帮我打开浏览器" and req["source"] == "voice_duplex"
+        assert req["session_id"] == "voice_duplex:desktop"
+        assert (
+            req["session_id"] != loop._duplex_bridge.conversation_session_id
+        ), "人说的话旁录已经记进对话主线;智能体做事会把这一轮再记一遍,用主线就成了两句"
+        runtime.release.set()
+        # 旁录那一路落会话记忆时可能同步加载嵌入模型、卡住事件循环几秒 —— 多等一会儿
+        notes = await srv.wait_for(
+            lambda m: m.get("type") == "conversation.item.create" and m["item"].get("role") == "system",
+            timeout=60,
+        )
+        assert "浏览器打开了" in notes[0]["item"]["content"][0]["text"]
+    finally:
+        await loop.stop()
         await srv.stop()

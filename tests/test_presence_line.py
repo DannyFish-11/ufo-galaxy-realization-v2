@@ -375,6 +375,18 @@ def test_local_chat_drives_the_desktop_shell_as_before(seb_events, phase_pushes,
     assert spoken == ["chat"]
 
 
+def test_the_desktops_realtime_voice_drives_the_shell_but_is_not_read_aloud_again(
+    seb_events, phase_pushes, ledger, spoken
+):
+    """电脑自己的实时语音交过来的事（core.voice_call_agent 旁听）：是电脑的事，照常走三态；
+    结果作为【回报】插回实时会话由那个声音说，这里再念一遍就是两个声音。"""
+    runtime = DesktopPresenceRuntime()
+    _run(runtime, source="voice_duplex")
+    assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
+    assert spoken == []
+    assert phase_pushes == []
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

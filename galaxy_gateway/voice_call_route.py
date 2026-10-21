@@ -149,10 +149,10 @@ class VoiceCallRoute:
 
         pc = RTCPeerConnection()
         call = VoiceCall(self.device_id, session, send_event=self._on_session_event)
-        if getattr(getattr(session, "config", None), "tools", None):
-            # 边说边做:通话里说一声,智能体在后台去做,做完在通话里说结果(见 core.voice_call_agent)
-            from core.voice_call_agent import CallAgent
+        from core.voice_call_agent import CallAgent, call_agent_enabled
 
+        if call_agent_enabled():
+            # 边说边做:通话里说一声,智能体在后台去做,做完在通话里说结果(见 core.voice_call_agent)
             call.agent = CallAgent(self.device_id, call.call_id, session, send_event=self._on_session_event)
         self._pc, self._call = pc, call
 

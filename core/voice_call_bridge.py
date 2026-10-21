@@ -276,7 +276,7 @@ class VoiceCall:
         self._video_task: Optional[asyncio.Task] = None
         self._downlink_task: Optional[asyncio.Task] = None
         self._closed = False
-        #: 「边说边做」(``core.voice_call_agent.CallAgent``)。会话声明了工具时由通话路由挂上;没有就只聊。
+        #: 「边说边做」(``core.voice_call_agent.CallAgent``)。由通话路由挂上;``GALAXY_VOICE_CALL_AGENT=0`` 时没有,只聊。
         self.agent: Any = None
         rate = int(getattr(getattr(session, "config", None), "sample_rate", 16000) or 16000)
         self._resampler = _Resampler(rate)

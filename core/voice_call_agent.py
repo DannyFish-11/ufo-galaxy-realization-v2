@@ -1,13 +1,16 @@
-"""core/voice_call_agent.py —— 手表通话里「边说边做」。
+"""core/voice_call_agent.py —— 实时语音里「边说边做」(手表通话、电脑自己的实时语音)。
 
-人和智能体在手表上通话,就像跟人打电话:说着说着让它去做件事,它答应一声就去做,电话不挂、话照说;
-做完了它在电话里告诉你。
+人和智能体在手表上通话、或在电脑旁用实时语音说话,就像跟人说话:说着说着让它去做件事,它答应一声就去做,
+话照说;做完了它告诉你。
 
 怎么做到的
 ==========
-通话里接话的是实时语音模型(``core.voice_duplex_session``,OpenAI Realtime / Gemini Live)—— 它负责
-**说**。**做**由中心智能体负责(``DesktopPresenceRuntime.handle_request``,和面板、手表语音问答是同一个
-智能体、同一套工具与权限)。两者之间靠三个工具接起来,声明在实时会话里:
+接话的是实时语音模型(``core.voice_duplex_session``:OpenAI Realtime、Gemini Live、阶跃、本机的全模态
+server)—— 它负责**说**。**做**由中心智能体负责(``DesktopPresenceRuntime.handle_request``,和面板、
+手表语音问答是同一个智能体、同一套工具与权限)。事情怎么交过去,看说话的模型会不会调工具:
+
+**会调工具**(手表通话,接的是 OpenAI / Gemini 这类云端实时接口)—— 它自己把事交过来,靠三个工具,
+声明在实时会话里:
 
 * ``agent_do(what)`` —— 把要做的事交给智能体。**立刻**回「已经开始做」,模型据此答应一声、接着说话;
   事情在后台跑。做完以后往通话里插一条以【回报】开头的系统消息,模型据此把结果说给人听。
@@ -15,6 +18,12 @@
   而各家「异步工具调用」的支持参差不齐(Gemini 有的型号收到 scheduling 字段反而断开会话)。
 * ``agent_status()`` —— 人问「做到哪了」时看一眼。
 * ``agent_stop(task_id?)`` —— 人说「算了不用了」时停下。
+
+**不会调工具,或者是电脑自己的实时语音** —— 智能体自己旁听:人说完一句(实时转写,不是模型的转述),
+快档模型(``fast_response``,本地优先)判一下这句是要做事、要停、问进展,还是只是在聊;要做事就把**人的
+原话**交给智能体,和上面同一套后台做、回报。阶跃没有可核实的工具资料、本机 server 收不收 ``tools``
+没法预知,都走这一路;电脑这边一律走这一路 —— 智能体在电脑上本来就听得见人,交过去的是人的原话,
+和回合制语音一样算人说的(来源 ``voice_duplex``)。
 
 智能体做事的途中要问人(高风险操作要批准、``ask_human`` 要人选一个)时,问题也进通话
 (【智能体在问】),人在电话里答:
@@ -24,11 +33,12 @@
 * 高风险操作的**批准**仍然要在手表上点 —— 嘴上说「好」不算(转写会听错,AI 自己的回声也可能
   被当成人说的);嘴上说「不要」算拒绝(拒绝是安全的方向)。
 
-交给智能体的话是语音模型转述的,所以来源记为 ``wear_call``:不进电脑三态(``core.presence_line``),
-也**不**算「人亲口说的」(``core.device_onboarding.conversation.HUMAN_REQUEST_SOURCES``)—— 对话里的
-确认不会被一句转述满足。人这几句的原话作为上下文一并带上。
+手表通话里交给智能体的事来源记为 ``wear_call``:不进电脑三态(``core.presence_line``),也**不**算
+「人亲口说的」(``core.device_onboarding.conversation.HUMAN_REQUEST_SOURCES``)—— 调工具交过来的是语音
+模型的转述;旁听交过来的是转写,AI 自己的回声也可能被转写进来;对话里的确认都不该被它满足。人这几句的
+原话作为上下文一并带上。
 
-挂断以后还没做完的事照样做完,结果作为通知发到手表上。
+挂断以后还没做完的事照样做完,结果作为通知发到手表上。只有 ``GALAXY_VOICE_CALL_AGENT=0`` 才只聊。
 """
 
 from __future__ import annotations
@@ -42,8 +52,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.VoiceCallAgent")
 
-#: 交给智能体的那一轮的来源。不进电脑三态;不算人亲口说的(见模块说明)。
+#: 手表通话里交给智能体的那一轮的来源。不进电脑三态;不算人亲口说的(见模块说明)。
 CALL_SOURCE = "wear_call"
+#: 电脑自己的实时语音交给智能体的那一轮的来源:人的原话,和回合制语音一样算人说的。
+DESKTOP_SOURCE = "voice_duplex"
 #: 人在通话里回答智能体的提问时,作为 ``voice_input`` 的来源。
 ANSWER_SOURCE = "wear_call_voice"
 
@@ -55,6 +67,16 @@ MAX_REPORT_CHARS = 600
 NOTIFY_TITLE, NOTIFY_MAX_TEXT = "Galaxy", 500
 #: 插了一条消息之后,最多等这么久的回复;等不到(provider 没回)就不再挡着后面的回报。
 NOTE_REPLY_WAIT_S = 15.0
+
+#: 旁听时判一句话的说明。只回一个字。
+LISTEN_PROMPT = (
+    "你在旁听用户和语音助手的对话,判断用户刚说的这句话要不要交给执行部分。只回一个字:\n"
+    "做 —— 要办一件事(操作电脑、手机或应用,查实时的信息,发消息,记事,提醒,改设置,找文件……);\n"
+    "停 —— 让交出去、正在做的事别做了;\n"
+    "问 —— 问交出去的事做到哪了;\n"
+    "不 —— 闲聊、问常识、打招呼、附和,语音助手自己接就行。"
+)
+_LISTEN_VERDICTS = {"做": "do", "停": "stop", "问": "status"}
 
 _DENY_IDS = frozenset({"deny", "no", "reject", "cancel"})
 _DENY_LABELS = frozenset({"不要", "拒绝", "取消", "不"})
@@ -86,52 +108,77 @@ CALL_TOOLS: List[Dict[str, Any]] = [
 ]
 
 
-def call_instructions(can_act: bool) -> str:
-    """通话里实时语音模型的说明。"""
-    text = "你是用户的智能体 Galaxy,用户正在手表上和你通话。像人打电话一样自然、简短地说话,一次一两句。"
-    if not can_act:
+_NOTES_HOWTO = (
+    "有以【智能体在问】开头的系统消息时,把问题原样问他,然后等他回答 —— 他的原话系统会直接交过去,"
+    "你不用为这个做什么。以【提醒】、【进展】开头的系统消息照着告诉他。"
+)
+
+
+def call_agent_enabled() -> bool:
+    """实时语音里接不接智能体。默认接;``GALAXY_VOICE_CALL_AGENT=0`` 只聊。"""
+    from core.config_flags import flag
+
+    return flag("GALAXY_VOICE_CALL_AGENT", True)
+
+
+def call_instructions(mode: str, *, on_desktop: bool = False) -> str:
+    """实时语音模型的说明。``mode``:``tools`` 自己调工具交事 / ``listen`` 智能体旁听 / ``""`` 只聊。"""
+    where = "用户正在电脑旁用语音和你说话" if on_desktop else "用户正在手表上和你通话"
+    text = f"你是用户的智能体 Galaxy,{where}。像人说话一样自然、简短,一次一两句。"
+    if mode == "tools":
         return text + (
-            "这条通话用的语音服务不支持调用工具,所以通话里没法替他做事;他要你做事时照实告诉他,"
-            "可以挂断后在手表上用语音问答让你去做。"
+            "他要你做事时,调用 agent_do 交给你的执行部分,同时继续和他说话(比如先答应一声);"
+            "做完会有以【回报】开头的系统消息,收到后用一两句话告诉他结果;没有回报之前不要说做完了。"
+            "他问进展就用 agent_status,他说不用了就用 agent_stop。" + _NOTES_HOWTO
         )
-    return text + (
-        "他要你做事时,调用 agent_do 交给你的执行部分,同时继续和他说话(比如先答应一声);"
-        "做完会有以【回报】开头的系统消息,收到后用一两句话告诉他结果;没有回报之前不要说做完了。"
-        "他问进展就用 agent_status,他说不用了就用 agent_stop。"
-        "有以【智能体在问】开头的系统消息时,把问题原样问他,然后等他回答 —— 他的原话系统会直接交过去,"
-        "你不用为这个调工具。以【提醒】开头的系统消息照着告诉他。"
-    )
+    if mode == "listen":
+        return text + (
+            "你负责说话;他要你做的事,你的执行部分在旁边听着,会自己接过去做 —— 你答应一声就行,"
+            "别说你做不了,也别说已经做完了。做完会有以【回报】开头的系统消息,收到后用一两句话告诉他结果。"
+            + _NOTES_HOWTO
+        )
+    return text + "这条通话里没法替他做事;他要你做事时照实告诉他,可以挂断后在手表上用语音问答让你去做。"
 
 
-def configure_call_session(cfg: Any) -> bool:
-    """给一条通话的实时会话配上说明和工具。返回这条通话能不能把事交给智能体去做。
+def configure_call_session(cfg: Any, *, on_desktop: bool = False) -> str:
+    """给一条实时会话配上说明和工具。返回事情怎么交给智能体:``tools`` / ``listen`` / ``""``(只聊)。
 
-    * 这家接口不支持工具(阶跃,见 ``StepRealtimeAdapter``)或 ``GALAXY_VOICE_CALL_AGENT=0`` 时只聊;
-    * 本地的实时服务(本机全模态 server)收不收 ``tools`` 字段没法预知,往里塞一个它不认的字段,
-      失败方向是整通电话打不通 —— 默认只聊,``GALAXY_REALTIME_TOOLS=1`` 明确打开。
+    * 手表通话、这家接口会调工具(OpenAI / Gemini)→ ``tools``,模型自己交;
+    * 接口不支持工具(阶跃,见 ``StepRealtimeAdapter``)→ ``listen``,智能体旁听;
+    * 本机的实时服务(本机全模态 server)收不收 ``tools`` 字段没法预知,往里塞一个它不认的字段,
+      失败方向是整通电话打不通 → ``listen``;``GALAXY_REALTIME_TOOLS=1`` 明确让它调工具;
+    * 电脑自己的实时语音 → ``listen``(见模块说明);
+    * ``GALAXY_VOICE_CALL_AGENT=0`` → 只聊。
 
-    配不上(配置缺字段、认不出 provider)就只聊 —— 这一步绝不能让电话打不通。
+    配不上(配置缺字段、认不出 provider)就旁听 —— 这一步绝不能让电话打不通。
     """
     from core.config_flags import flag
     from core.voice_duplex_adapters import get_adapter
     from core.voice_duplex_session import is_local_endpoint
 
     provider = str(getattr(cfg, "provider", "") or "")
+    if not call_agent_enabled():
+        mode = ""
+    elif on_desktop:
+        mode = "listen"
+    else:
+        try:
+            tools_ok = bool(get_adapter(provider).supports_tools)
+        except ValueError:
+            tools_ok = False
+        url = str(getattr(cfg, "url", "") or "")
+        if tools_ok and url and is_local_endpoint(url):
+            tools_ok = flag("GALAXY_REALTIME_TOOLS", False)
+        mode = "tools" if tools_ok else "listen"
     try:
-        can_act = bool(get_adapter(provider).supports_tools) and flag("GALAXY_VOICE_CALL_AGENT", True)
-    except ValueError:
-        can_act = False
-    url = str(getattr(cfg, "url", "") or "")
-    if can_act and url and is_local_endpoint(url):
-        can_act = flag("GALAXY_REALTIME_TOOLS", False)
-    try:
-        cfg.tools = [dict(t) for t in CALL_TOOLS] if can_act else []
-        cfg.instructions = "\n".join(x for x in (getattr(cfg, "instructions", ""), call_instructions(can_act)) if x)
-    except AttributeError:  # 配置对象不让设(冻结的、带 __slots__ 的):这通电话只聊
-        return False
-    if not can_act:
-        logger.info("通话只聊、不能把事交给智能体(provider=%s)", provider or "?")
-    return can_act
+        cfg.tools = [dict(t) for t in CALL_TOOLS] if mode == "tools" else []
+        cfg.instructions = "\n".join(
+            x for x in (getattr(cfg, "instructions", ""), call_instructions(mode, on_desktop=on_desktop)) if x
+        )
+    except AttributeError:  # 配置对象不让设(冻结的、带 __slots__ 的):不声明工具,智能体旁听
+        return "listen" if mode else ""
+    logger.info("实时语音交事的方式:%s(provider=%s)", mode or "只聊", provider or "?")
+    return mode
 
 
 @dataclass
@@ -145,7 +192,10 @@ class _Task:
 
 
 class CallAgent:
-    """一通通话的「边说边做」。由 ``VoiceCall`` 持有,吃同一条下行事件流。"""
+    """一条实时语音的「边说边做」。手表通话由 ``VoiceCall`` 持有,电脑的由 ``VoiceLoop`` 持有,吃同一条下行事件流。
+
+    会话声明了工具就等模型调;没声明就旁听(见模块说明)。
+    """
 
     def __init__(
         self,
@@ -155,12 +205,17 @@ class CallAgent:
         *,
         send_event: Optional[Callable[[str, str, str], Any]] = None,
         session_id: str = "",
+        source: str = CALL_SOURCE,
     ) -> None:
         self.device_id = device_id
         self.call_id = call_id
         self.session = session
-        #: 同一块手表的通话共用一条会话:智能体记得上一通电话里说过的事。
-        self.session_id = session_id or f"wear_call:{device_id}"
+        #: 同一块手表的通话共用一条会话:智能体记得上一通电话里说过的事。电脑的是 ``voice_duplex:desktop``
+        #: —— 不用对话主线:人说的话旁录已经记进主线,智能体做事时会把这一轮再记一遍,主线上就成了两句。
+        self.session_id = session_id or f"{source}:{device_id or 'desktop'}"
+        self.source = source
+        #: 会话里没声明工具:模型交不过来,智能体自己旁听。
+        self.listening = not getattr(getattr(session, "config", None), "tools", None)
         self._send_event = send_event
         self.tasks: Dict[str, _Task] = {}
         self.transcript: List[Dict[str, str]] = []
@@ -172,6 +227,8 @@ class CallAgent:
         self._notes: List[tuple] = []
         #: 智能体在问的事:decision_id → {options, high, state: queued/asking/asked, heard: [...]}
         self._asks: Dict[str, Dict[str, Any]] = {}
+        #: 旁听时正在判的话
+        self._hearing: set = set()
         self.closed = False
 
     # ── 下行事件 ────────────────────────────────────────────────────────
@@ -189,9 +246,13 @@ class CallAgent:
         elif name == "final_transcript" and ev.text:
             self._user_speaking = False
             self._remember("user", ev.text)
+            answering = False
             for ask in self._asks.values():
                 if ask["state"] == "asked":
                     ask["heard"].append(ev.text)
+                answering = answering or ask["state"] in ("asking", "asked")
+            if self.listening and not answering:
+                self._track(self._hear(ev.text, list(self.transcript[:-1])))
         elif name in ("assistant_text_delta", "assistant_audio_delta"):
             self._responding = True
             self._reply += getattr(ev, "text", "") or ""
@@ -207,6 +268,32 @@ class CallAgent:
     def _remember(self, role: str, text: str) -> None:
         self.transcript.append({"role": role, "content": text})
         del self.transcript[:-MAX_CONTEXT_TURNS]
+
+    def _track(self, coro: Any) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._hearing.add(task)
+        task.add_done_callback(self._hearing.discard)
+
+    # ── 旁听 ────────────────────────────────────────────────────────────
+
+    async def _hear(self, text: str, context: List[Dict[str, str]]) -> None:
+        """人说完一句:要做事就把原话交给智能体;要停就停;问进展就把进展插回去。"""
+        from core.voice_dialog_policy import BARGE_IN_BACKCHANNEL, get_dialog_policy
+
+        if get_dialog_policy().classify_barge_in(text) == BARGE_IN_BACKCHANNEL:
+            return  # 「嗯」「对」:附和,不是在要什么
+        verdict = await _judge(text, context, [t.what for t in self.tasks.values() if t.state == "running"])
+        if self.closed or not verdict:
+            return
+        logger.info("call=%s 旁听:%s ← %s", self.call_id, verdict, text[:60])
+        if verdict == "do":
+            self._start(text)
+        elif verdict == "stop":
+            self._stop("")
+        elif verdict == "status" and self.tasks:
+            lines = [f"「{t['what']}」{_STATE_WORDS.get(t['state'], t['state'])}" for t in self._status()["tasks"]]
+            self._notes.append(("【进展】" + ";".join(lines), ""))
+            await self._flush_notes()
 
     # ── 工具 ────────────────────────────────────────────────────────────
 
@@ -239,7 +326,7 @@ class CallAgent:
 
             rt = await get_desktop_presence_runtime().handle_request(
                 message=task.what,
-                source=CALL_SOURCE,
+                source=self.source,
                 device_id=self.device_id,
                 session_id=self.session_id,
                 context=context,
@@ -289,11 +376,12 @@ class CallAgent:
     # ── 回报 ────────────────────────────────────────────────────────────
 
     async def _report(self, task: _Task) -> None:
-        verdict = {"done": "做完了", "failed": "没做成", "stopped": "停下了"}.get(task.state, task.state)
+        verdict = _STATE_WORDS.get(task.state, task.state)
         result = task.result[:MAX_REPORT_CHARS]
         self._tell_device(f"{verdict}:{task.what}")
         if self.closed:
-            await self._notify_watch(f"{verdict}:{task.what}。{result}")
+            if self.device_id:
+                await self._notify_watch(f"{verdict}:{task.what}。{result}")
             return
         self._notes.append((f"【回报】交给你做的「{task.what}」{verdict}。结果:{result}", ""))
         await self._flush_notes()
@@ -396,12 +484,43 @@ class CallAgent:
         """通话挂断:还在做的照样做完,结果改走通知;没问完的问题仍在手表上等人点。"""
         self.closed = True
         self._notes.clear()
+        for t in list(self._hearing):
+            t.cancel()
         running = [t.task_id for t in self.tasks.values() if t.state == "running"]
         if running:
             logger.info("call=%s 挂断时还有 %d 件在做,做完发通知到手表", self.call_id, len(running))
 
 
 _NO_ANSWER = object()
+_STATE_WORDS = {"running": "在做", "done": "做完了", "failed": "没做成", "stopped": "停下了"}
+
+
+async def _judge(text: str, context: List[Dict[str, str]], running: List[str]) -> str:
+    """旁听:人刚说的这句 → ``do`` / ``stop`` / ``status`` / ``""``(只是在聊,或判不了)。
+
+    用快档(``fast_response``,本地优先)。一个模型都调不通时判不了 —— 当成在聊:智能体那时也做不了事。
+    """
+    from core.llm.route_authority import get_llm_route_authority
+
+    said = "\n".join(f"{'用户' if m['role'] == 'user' else '助手'}:{m['content']}" for m in context[-6:])
+    doing = ";".join(running) if running else "没有"
+    prompt = (f"前面说的:\n{said}\n" if said else "") + f"交出去正在做的事:{doing}\n用户刚说:{text}"
+    try:
+        resp = await get_llm_route_authority().chat(
+            [{"role": "system", "content": LISTEN_PROMPT}, {"role": "user", "content": prompt}],
+            task_type="fast_response",
+            complexity=0.1,
+            feature_context="voice_listen",
+            temperature=0,
+            max_tokens=4,
+        )
+    except Exception as exc:  # noqa: BLE001 — 判不了就当在聊,不能让通话出错
+        logger.warning("旁听判断失败(当成在聊): %s", exc)
+        return ""
+    if str(getattr(resp, "provider", "") or "") == "none":
+        return ""
+    reply = str(getattr(resp, "content", "") or "").strip()
+    return _LISTEN_VERDICTS.get(reply[:1], "")
 
 
 def _is_deny(option: Dict[str, str]) -> bool:

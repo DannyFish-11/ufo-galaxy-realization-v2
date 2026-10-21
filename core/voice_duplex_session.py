@@ -324,7 +324,7 @@ class DuplexSessionConfig:
     provider: str = "openai_realtime"
 
     #: 声明给模型的工具(``{"name", "description", "parameters": JSON Schema}``)。空 = 不声明。
-    #: 只有设备通话会填(见 ``core.voice_call_agent``);本机双工语音不填。
+    #: 只有手表通话、且接口会调工具时才填(见 ``core.voice_call_agent``);其余由智能体旁听。
     tools: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
