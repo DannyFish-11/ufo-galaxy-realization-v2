@@ -149,6 +149,11 @@ class VoiceCallRoute:
 
         pc = RTCPeerConnection()
         call = VoiceCall(self.device_id, session, send_event=self._on_session_event)
+        from core.voice_call_agent import CallAgent, call_agent_enabled
+
+        if call_agent_enabled():
+            # 边说边做:通话里说一声,智能体在后台去做,做完在通话里说结果(见 core.voice_call_agent)
+            call.agent = CallAgent(self.device_id, call.call_id, session, send_event=self._on_session_event)
         self._pc, self._call = pc, call
 
         @pc.on("track")
@@ -207,6 +212,9 @@ class VoiceCallRoute:
             cfg = DuplexSessionConfig.from_env()
             if cfg is None:
                 return None
+            from core.voice_call_agent import configure_call_session
+
+            configure_call_session(cfg)
             return await open_duplex_session(cfg)
         except Exception as exc:  # noqa: BLE001
             logger.warning("device=%s 打开双工会话失败: %s", self.device_id, exc)

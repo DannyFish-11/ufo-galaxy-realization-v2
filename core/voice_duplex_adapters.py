@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -65,6 +66,8 @@ class DuplexEventType(str, Enum):
     ASSISTANT_TEXT_DELTA = "assistant_text_delta"
     ASSISTANT_AUDIO_DELTA = "assistant_audio_delta"
     RESPONSE_DONE = "response_done"
+    #: 模型要调一个工具(通话里「把这件事交给智能体」之类)。``tool_*`` 三个字段有值。
+    TOOL_CALL = "tool_call"
     ERROR = "error"
     SESSION_CLOSED = "session_closed"
 
@@ -77,8 +80,24 @@ class DuplexEvent:
     text: str = ""
     audio_b64: str = ""
     error: str = ""
+    tool_call_id: str = ""
+    tool_name: str = ""
+    tool_args: Dict[str, Any] = field(default_factory=dict)
     ts: float = field(default_factory=time.time)
     raw: Optional[Dict[str, Any]] = field(default=None, repr=False)
+
+
+def _tool_args(raw: Any) -> Dict[str, Any]:
+    """工具参数:OpenAI 给 JSON 字符串,Gemini 给对象。解不开就原样放在 ``_raw`` 里,不丢。"""
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            return {"_raw": raw}
+        return parsed if isinstance(parsed, dict) else {"_raw": raw}
+    return {}
 
 
 # ── 协议适配:全部是纯函数,不碰网络,可完整单测 ────────────────────────────
@@ -93,9 +112,24 @@ class ProtocolAdapter:
     """
 
     name = "abstract"
+    #: 这家的会话能不能声明工具、调工具。不能的话通话照样能聊,只是没法把事交给智能体去做。
+    supports_tools = False
 
     def session_update(self, cfg: DuplexSessionConfig) -> Dict[str, Any]:
         raise NotImplementedError
+
+    def tool_result_frames(self, call_id: str, name: str, output: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """把一次工具调用的结果交回模型。"""
+        raise NotImplementedError
+
+    def note_frames(self, text: str) -> List[Dict[str, Any]]:
+        """插进对话的一条**系统消息**(不是用户说的),并让模型接着开口 —— 后台做完的事靠它说给人听。"""
+        raise NotImplementedError
+
+    def decode_all(self, msg: Dict[str, Any]) -> List[DuplexEvent]:
+        """一帧可能带不止一件事(Gemini 一帧里可以有几个工具调用)。默认就是 :meth:`decode` 的那一件。"""
+        ev = self.decode(msg)
+        return [ev] if ev is not None else []
 
     def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
         raise NotImplementedError
@@ -127,6 +161,7 @@ class OpenAIRealtimeAdapter(ProtocolAdapter):
     """OpenAI Realtime(``wss://api.openai.com/v1/realtime``)的帧格式。"""
 
     name = "openai_realtime"
+    supports_tools = True
 
     def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
         return {
@@ -150,7 +185,41 @@ class OpenAIRealtimeAdapter(ProtocolAdapter):
         }
         if cfg.instructions:
             session["instructions"] = cfg.instructions
+        if cfg.tools:
+            session["tools"] = [
+                {
+                    "type": "function",
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "parameters": t["parameters"],
+                }
+                for t in cfg.tools
+            ]
+            session["tool_choice"] = "auto"
         return {"type": "session.update", "session": session}
+
+    def tool_result_frames(self, call_id: str, name: str, output: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # 交回结果之后要 response.create,模型才会接着说(「好,我去弄」);否则它停在那里等
+        return [
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps(output, ensure_ascii=False),
+                },
+            },
+            {"type": "response.create"},
+        ]
+
+    def note_frames(self, text: str) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "conversation.item.create",
+                "item": {"type": "message", "role": "system", "content": [{"type": "input_text", "text": text}]},
+            },
+            {"type": "response.create"},
+        ]
 
     def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
         return {
@@ -210,12 +279,40 @@ class OpenAIRealtimeAdapter(ProtocolAdapter):
             err = msg.get("error") or {}
             detail = err.get("message") if isinstance(err, dict) else str(err)
             return DuplexEvent(DuplexEventType.ERROR, error=str(detail or "unknown"), raw=msg)
+        if t == "response.output_item.done":
+            # 工具调用以「输出项做完」为准:它带着 name、call_id 与完整参数(早期版本的
+            # response.function_call_arguments.done 不带 name)。只认这一处,不会一次调用解出两件
+            item = msg.get("item") or {}
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                return DuplexEvent(
+                    DuplexEventType.TOOL_CALL,
+                    tool_call_id=str(item.get("call_id") or ""),
+                    tool_name=str(item.get("name") or ""),
+                    tool_args=_tool_args(item.get("arguments")),
+                    raw=msg,
+                )
+            return None
 
         mapped = self._MAP.get(t)
         if mapped is not None:
             return DuplexEvent(mapped, raw=msg)
         logger.debug("双工会话:未识别的服务端帧类型 %s(已忽略)", t)
         return None
+
+
+def _gemini_schema(schema: Any) -> Any:
+    """JSON Schema → Gemini 的 Schema:``type`` 用枚举名的大写形式(``OBJECT`` / ``STRING``)。
+
+    协议缓冲的 JSON 映射一定认枚举名;小写能不能过要看服务端宽不宽松,不赌这个。
+    """
+    if isinstance(schema, dict):
+        out = {k: _gemini_schema(v) for k, v in schema.items()}
+        if isinstance(out.get("type"), str):
+            out["type"] = out["type"].upper()
+        return out
+    if isinstance(schema, list):
+        return [_gemini_schema(v) for v in schema]
+    return schema
 
 
 class GeminiLiveAdapter(ProtocolAdapter):
@@ -236,6 +333,7 @@ class GeminiLiveAdapter(ProtocolAdapter):
     """
 
     name = "gemini_live"
+    supports_tools = True
 
     def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
         # key 在 URL query 里(见 from_env 组 URL 的地方),不走请求头
@@ -251,7 +349,51 @@ class GeminiLiveAdapter(ProtocolAdapter):
         }
         if cfg.instructions:
             setup["systemInstruction"] = {"parts": [{"text": cfg.instructions}]}
+        if cfg.tools:
+            # 通话里要知道人说了什么(交给智能体时带上原话做上下文;手表上也显示字幕):
+            # 不开这一项,Gemini 不发 serverContent.inputTranscription,decode 那一支永远收不到
+            setup["inputAudioTranscription"] = {}
+            setup["tools"] = [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": t["name"],
+                            "description": t.get("description", ""),
+                            "parameters": _gemini_schema(t["parameters"]),
+                        }
+                        for t in cfg.tools
+                    ]
+                }
+            ]
         return {"setup": setup}
+
+    def tool_result_frames(self, call_id: str, name: str, output: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # 同步回结果:各型号都支持。异步(NON_BLOCKING / scheduling)只有部分型号认,有的型号
+        # 收到 scheduling 字段反而断开会话 —— 「后台做完再说」靠之后插一条消息,不靠它
+        return [{"toolResponse": {"functionResponses": [{"id": call_id, "name": name, "response": dict(output)}]}}]
+
+    def note_frames(self, text: str) -> List[Dict[str, Any]]:
+        return [{"clientContent": {"turns": [{"role": "user", "parts": [{"text": text}]}], "turnComplete": True}}]
+
+    def decode_all(self, msg: Dict[str, Any]) -> List[DuplexEvent]:
+        tc = msg.get("toolCall")
+        if isinstance(tc, dict):
+            return [
+                DuplexEvent(
+                    DuplexEventType.TOOL_CALL,
+                    tool_call_id=str(call.get("id") or ""),
+                    tool_name=str(call.get("name") or ""),
+                    tool_args=_tool_args(call.get("args")),
+                    raw=msg,
+                )
+                for call in tc.get("functionCalls") or []
+                if isinstance(call, dict)
+            ]
+        if isinstance(msg.get("toolCallCancellation"), dict):
+            # 我们对每次调用都立刻回了结果,真正的活在智能体那边跑,不跟着这一路取消
+            logger.debug("Gemini Live:工具调用被服务端取消(已忽略): %s", msg["toolCallCancellation"])
+            return []
+        return super().decode_all(msg)
 
     def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
         return {
@@ -387,6 +529,10 @@ class StepRealtimeAdapter(OpenAIRealtimeAdapter):
     """
 
     name = "step_realtime"
+    #: 四、**不声明工具**。阶跃的 realtime 收不收 ``tools``、工具调用的事件长什么样,
+    #: 和第三条一样没有可核实的一手资料;往 session 里塞没核实过的字段,失败方向是整个会话被拒。
+    #: 所以阶跃上的通话照样能聊,只是不能把事交给智能体去做(通话那边会照实这么说)。
+    supports_tools = False
 
     def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
         return {"Authorization": f"Bearer {cfg.api_key}"}
@@ -395,6 +541,8 @@ class StepRealtimeAdapter(OpenAIRealtimeAdapter):
         frame = super().session_update(cfg)
         session = frame["session"]
         session.pop("input_audio_transcription", None)  # 见类 docstring 第三条
+        session.pop("tools", None)  # 见 supports_tools 那条
+        session.pop("tool_choice", None)
         if not session.get("voice"):
             # voice 必填。走到这里说明 cfg.voice 是空的 —— 与其发一个必然被拒的帧,
             # 不如在这里就说清楚缺什么。

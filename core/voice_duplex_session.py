@@ -39,7 +39,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, Dict, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.VoiceDuplex")
 
@@ -179,6 +179,20 @@ def native_realtime_url() -> str:
     except Exception as exc:  # noqa: BLE001
         logger.debug("推导本地 realtime 地址失败: %s", exc)
         return ""
+
+
+def _answers(url: str, timeout: float = 0.5) -> bool:
+    """这个地址上现在有没有服务在应答(只试 TCP 能不能连上,不发任何协议帧)。"""
+    import socket
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+        port = parts.port or (443 if parts.scheme in ("wss", "https") else 80)
+        with socket.create_connection((parts.hostname or "", port), timeout=timeout):
+            return True
+    except (OSError, ValueError):
+        return False
 
 
 # 脱敏助手已移到 core/url_redaction.py —— 它不是语音特有的:nats_bus / credential_vault
@@ -323,6 +337,10 @@ class DuplexSessionConfig:
     #: provider 名(决定用哪个 ProtocolAdapter)
     provider: str = "openai_realtime"
 
+    #: 声明给模型的工具(``{"name", "description", "parameters": JSON Schema}``)。空 = 不声明。
+    #: 只有手表通话、且接口会调工具时才填(见 ``core.voice_call_agent``);其余由智能体旁听。
+    tools: List[Dict[str, Any]] = field(default_factory=list)
+
     @classmethod
     def from_env(cls, *, probe: bool = False) -> Optional["DuplexSessionConfig"]:
         """从配置构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
@@ -401,29 +419,28 @@ class DuplexSessionConfig:
                 url = f"wss://api.openai.com/v1/realtime?model={model}"
             missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
 
-        # 没显式配地址、也没有可用的云端 key、而 B 档原生已就绪
-        # → 自动指向本地全模态 server 试一次流式。
+        # 没显式配地址、B 档原生已就绪 → 跟实际情况走(所有者 2026-10-21):
         #
-        # 三个条件缺一不可,顺序也要紧:
+        # * **本地全模态 server 在应答** → 用本地,哪怕也配了云端 key。``OPENAI_API_KEY`` 多半是
+        #   给智能体做事用的,不该顺带把实时语音也拉到按分钟计费的云端;本地交互档本来就是这条。
+        # * **本地没在应答、有云端 key** → 用云端。
+        # * **都没有** → 照样试本地:试不通是安全的(连接失败 → open_duplex_session() 返回 None →
+        #   voice_loop 回落回合制,回合制听/说都走原生),详见 native_realtime_url() 的说明。
         #
-        # * **没显式配 URL** —— 明示的意图不能被自动化覆盖;
-        # * **没有可用 key** —— 这一条我第一版漏了,把推导放在了解析 key 之前,结果
-        #   「原生开着 + 配了云端 realtime key + 没配 URL」的人会被劫持到本地,配好的
-        #   云端能力平白丢掉。是自查测试把这个顺序问题抓出来的;
-        # * **原生已就绪** —— 否则本地根本没有 server 在跑。
-        #
-        # 试不通是安全的:连接失败 → open_duplex_session() 返回 None → voice_loop 回落
-        # 回合制,而回合制现在听/说都走原生。详见 native_realtime_url() 的说明。
-        if not configured_url and not key and _native_audio_on():
+        # 显式配了 URL 的不参与:明示的意图不能被自动化覆盖。想在本地开着时仍用云端,就把
+        # GALAXY_REALTIME_URL 配成云端地址。
+        if not configured_url and _native_audio_on():
             derived = native_realtime_url()
-            if derived:
+            if derived and (not key or _answers(derived)):
                 configured_url = derived
                 url = derived
+                # 本地 server 说的是 OpenAI 兼容的 realtime 协议(见 native_realtime_url),不需要 key
+                key, provider = "", "openai_realtime"
                 _say(
-                    "双工语音:未配 GALAXY_REALTIME_URL 且无云端 key,但 B 档原生已就绪 —— "
-                    "自动尝试本地全模态 server 的 realtime 端点(%s)。该 server 若没有这个"
-                    "端点或路径不同,连接会失败并安静退回**原生回合制**(听/说仍是原生,"
-                    "不是 Whisper/TTS 桥);路径不同可用 GALAXY_NATIVE_REALTIME_PATH 指定。",
+                    "双工语音:未配 GALAXY_REALTIME_URL,B 档原生已就绪 —— 自动尝试本地全模态 server 的 "
+                    "realtime 端点(%s)。该 server 若没有这个端点或路径不同,连接会失败并安静退回"
+                    "**原生回合制**(听/说仍是原生,不是 Whisper/TTS 桥);路径不同可用 "
+                    "GALAXY_NATIVE_REALTIME_PATH 指定。",
                     safe_endpoint(derived),
                 )
 
@@ -679,6 +696,28 @@ class DuplexSession:
             ok = await self._send_json(frame) and ok
         return ok
 
+    @property
+    def supports_tools(self) -> bool:
+        return bool(self.adapter.supports_tools)
+
+    async def send_tool_result(self, call_id: str, name: str, output: Dict[str, Any]) -> bool:
+        """把一次工具调用的结果交回模型(它据此接着说)。"""
+        if not self._connected:
+            return False
+        ok = True
+        for frame in self.adapter.tool_result_frames(call_id, name, output):
+            ok = await self._send_json(frame) and ok
+        return ok
+
+    async def send_note(self, text: str) -> bool:
+        """往对话里插一条系统消息并让模型开口 —— 后台做完的事、智能体要问人的话都走这里。"""
+        if not text or not self._connected:
+            return False
+        ok = True
+        for frame in self.adapter.note_frames(text):
+            ok = await self._send_json(frame) and ok
+        return ok
+
     async def interrupt(self) -> bool:
         """barge-in:让**服务端**停止当前回复。
 
@@ -721,17 +760,15 @@ class DuplexSession:
                     continue
                 if not isinstance(msg, dict):
                     continue
-                ev = self.adapter.decode(msg)
-                if ev is None:
-                    continue
-                if ev.type is DuplexEventType.ERROR:
-                    self.last_error = ev.error
-                    logger.warning("双工会话服务端报错: %s", ev.error)
-                # 把 AI 说出口的文字登记进反自激励门 —— 双工下同样需要:AEC 消不掉
-                # 非线性残余回声,残余转写出来后仍要能判出"这是我自己说的"。
-                if ev.type is DuplexEventType.ASSISTANT_TEXT_DELTA and ev.text:
-                    self._note_spoken(ev.text)
-                await self._emit(ev)
+                for ev in self.adapter.decode_all(msg):
+                    if ev.type is DuplexEventType.ERROR:
+                        self.last_error = ev.error
+                        logger.warning("双工会话服务端报错: %s", ev.error)
+                    # 把 AI 说出口的文字登记进反自激励门 —— 双工下同样需要:AEC 消不掉
+                    # 非线性残余回声,残余转写出来后仍要能判出"这是我自己说的"。
+                    if ev.type is DuplexEventType.ASSISTANT_TEXT_DELTA and ev.text:
+                        self._note_spoken(ev.text)
+                    await self._emit(ev)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
