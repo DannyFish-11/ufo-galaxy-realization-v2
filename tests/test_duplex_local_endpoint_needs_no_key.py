@@ -169,7 +169,9 @@ class TestAutoPointsAtTheLocalNativeServer:
         monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", f"http://127.0.0.1:{_free_port()}")
         monkeypatch.setenv("OPENAI_API_KEY", REAL_LOOKING)
         cfg = DuplexSessionConfig.from_env()
-        assert cfg is not None and cfg.url.startswith("wss://api.openai.com/")
+        from urllib.parse import urlsplit
+
+        assert cfg is not None and urlsplit(cfg.url).hostname == "api.openai.com"
         assert cfg.api_key == REAL_LOOKING
 
     def test_the_local_server_speaks_the_openai_protocol_whatever_cloud_was_picked(self, monkeypatch, listening):
@@ -179,7 +181,7 @@ class TestAutoPointsAtTheLocalNativeServer:
         monkeypatch.setenv("GALAXY_REALTIME_PROVIDER", "gemini_live")
         monkeypatch.setenv("GOOGLE_API_KEY", REAL_LOOKING)
         cfg = DuplexSessionConfig.from_env()
-        assert cfg is not None and cfg.url.startswith(f"ws://127.0.0.1:{listening}/")
+        assert cfg is not None and cfg.url == f"ws://127.0.0.1:{listening}/v1/realtime"
         assert cfg.provider == "openai_realtime" and cfg.api_key == ""
         assert REAL_LOOKING not in cfg.url
 
