@@ -58,6 +58,26 @@ def _isolate_all_three_layers(monkeypatch):
     yield
 
 
+def _free_port() -> int:
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@pytest.fixture
+def listening():
+    """本机上一个真在监听的端口(当作本地全模态 server 在跑)。"""
+    import socket
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(8)
+    yield sock.getsockname()[1]
+    sock.close()
+
+
 class TestAutoPointsAtTheLocalNativeServer:
     """B 档原生就绪时,自动去试本地全模态 server 的 realtime 端点。
 
@@ -123,11 +143,7 @@ class TestAutoPointsAtTheLocalNativeServer:
         assert DuplexSessionConfig.from_env() is None
 
     def test_cloud_key_path_is_untouched_by_the_derivation(self, monkeypatch):
-        """原生开着、但用户配了云端 key 且没配 URL —— 不能把云端那条路抢走。
-
-        这条是防回归的:推导只在"没有显式 URL"时介入,而云端默认 URL 是在 provider 分支里
-        才拼的。若推导抢先,配了 OPENAI_API_KEY 的人会莫名其妙连到本地。
-        """
+        """原生开着、用户显式把 URL 配成云端 —— 推导不能把它抢走(明示的意图优先)。"""
         monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
         monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", "http://localhost:32550")
         monkeypatch.setenv("GALAXY_REALTIME_URL", "wss://api.openai.com/v1/realtime")
@@ -136,6 +152,36 @@ class TestAutoPointsAtTheLocalNativeServer:
         assert cfg is not None
         assert cfg.url == "wss://api.openai.com/v1/realtime"
         assert cfg.api_key == REAL_LOOKING
+
+    def test_a_running_local_server_wins_over_a_cloud_key(self, monkeypatch, listening):
+        """跟实际情况走:本地全模态 server 在应答就用本地。``OPENAI_API_KEY`` 多半是给智能体
+        做事填的,不该顺带把实时语音拉到按分钟计费的云端。"""
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", f"http://127.0.0.1:{listening}")
+        monkeypatch.setenv("OPENAI_API_KEY", REAL_LOOKING)
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None and cfg.url == f"ws://127.0.0.1:{listening}/v1/realtime"
+        assert cfg.api_key == "" and cfg.provider == "openai_realtime"
+
+    def test_a_silent_local_server_falls_back_to_the_cloud(self, monkeypatch):
+        """原生开关开着、本地 server 却没在应答,而有云端 key → 用云端,不去连一个不在的服务。"""
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", f"http://127.0.0.1:{_free_port()}")
+        monkeypatch.setenv("OPENAI_API_KEY", REAL_LOOKING)
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None and cfg.url.startswith("wss://api.openai.com/")
+        assert cfg.api_key == REAL_LOOKING
+
+    def test_the_local_server_speaks_the_openai_protocol_whatever_cloud_was_picked(self, monkeypatch, listening):
+        """配的是 Gemini、本地在跑 → 连本地时用本地 server 的协议(OpenAI 兼容),不拿 Gemini 的帧去连它。"""
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", f"http://127.0.0.1:{listening}")
+        monkeypatch.setenv("GALAXY_REALTIME_PROVIDER", "gemini_live")
+        monkeypatch.setenv("GOOGLE_API_KEY", REAL_LOOKING)
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None and cfg.url.startswith(f"ws://127.0.0.1:{listening}/")
+        assert cfg.provider == "openai_realtime" and cfg.api_key == ""
+        assert REAL_LOOKING not in cfg.url
 
     def test_failure_to_derive_is_not_fatal(self, monkeypatch):
         import core.voice_duplex_session as mod

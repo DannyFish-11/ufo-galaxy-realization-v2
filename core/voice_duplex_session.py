@@ -181,6 +181,20 @@ def native_realtime_url() -> str:
         return ""
 
 
+def _answers(url: str, timeout: float = 0.5) -> bool:
+    """这个地址上现在有没有服务在应答(只试 TCP 能不能连上,不发任何协议帧)。"""
+    import socket
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+        port = parts.port or (443 if parts.scheme in ("wss", "https") else 80)
+        with socket.create_connection((parts.hostname or "", port), timeout=timeout):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
 # 脱敏助手已移到 core/url_redaction.py —— 它不是语音特有的:nats_bus / credential_vault
 # 同样需要(那两处的 URL 才是真·唯一鉴权通道)。让它们 import 语音模块显然不对,而各自
 # 再抄一份就会重演"复制粘贴的助手修一处修不到其它处"(本仓库刚因 5 份逐字相同的 _flag()
@@ -405,29 +419,28 @@ class DuplexSessionConfig:
                 url = f"wss://api.openai.com/v1/realtime?model={model}"
             missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
 
-        # 没显式配地址、也没有可用的云端 key、而 B 档原生已就绪
-        # → 自动指向本地全模态 server 试一次流式。
+        # 没显式配地址、B 档原生已就绪 → 跟实际情况走(所有者 2026-10-21):
         #
-        # 三个条件缺一不可,顺序也要紧:
+        # * **本地全模态 server 在应答** → 用本地,哪怕也配了云端 key。``OPENAI_API_KEY`` 多半是
+        #   给智能体做事用的,不该顺带把实时语音也拉到按分钟计费的云端;本地交互档本来就是这条。
+        # * **本地没在应答、有云端 key** → 用云端。
+        # * **都没有** → 照样试本地:试不通是安全的(连接失败 → open_duplex_session() 返回 None →
+        #   voice_loop 回落回合制,回合制听/说都走原生),详见 native_realtime_url() 的说明。
         #
-        # * **没显式配 URL** —— 明示的意图不能被自动化覆盖;
-        # * **没有可用 key** —— 这一条我第一版漏了,把推导放在了解析 key 之前,结果
-        #   「原生开着 + 配了云端 realtime key + 没配 URL」的人会被劫持到本地,配好的
-        #   云端能力平白丢掉。是自查测试把这个顺序问题抓出来的;
-        # * **原生已就绪** —— 否则本地根本没有 server 在跑。
-        #
-        # 试不通是安全的:连接失败 → open_duplex_session() 返回 None → voice_loop 回落
-        # 回合制,而回合制现在听/说都走原生。详见 native_realtime_url() 的说明。
-        if not configured_url and not key and _native_audio_on():
+        # 显式配了 URL 的不参与:明示的意图不能被自动化覆盖。想在本地开着时仍用云端,就把
+        # GALAXY_REALTIME_URL 配成云端地址。
+        if not configured_url and _native_audio_on():
             derived = native_realtime_url()
-            if derived:
+            if derived and (not key or _answers(derived)):
                 configured_url = derived
                 url = derived
+                # 本地 server 说的是 OpenAI 兼容的 realtime 协议(见 native_realtime_url),不需要 key
+                key, provider = "", "openai_realtime"
                 _say(
-                    "双工语音:未配 GALAXY_REALTIME_URL 且无云端 key,但 B 档原生已就绪 —— "
-                    "自动尝试本地全模态 server 的 realtime 端点(%s)。该 server 若没有这个"
-                    "端点或路径不同,连接会失败并安静退回**原生回合制**(听/说仍是原生,"
-                    "不是 Whisper/TTS 桥);路径不同可用 GALAXY_NATIVE_REALTIME_PATH 指定。",
+                    "双工语音:未配 GALAXY_REALTIME_URL,B 档原生已就绪 —— 自动尝试本地全模态 server 的 "
+                    "realtime 端点(%s)。该 server 若没有这个端点或路径不同,连接会失败并安静退回"
+                    "**原生回合制**(听/说仍是原生,不是 Whisper/TTS 桥);路径不同可用 "
+                    "GALAXY_NATIVE_REALTIME_PATH 指定。",
                     safe_endpoint(derived),
                 )
 
