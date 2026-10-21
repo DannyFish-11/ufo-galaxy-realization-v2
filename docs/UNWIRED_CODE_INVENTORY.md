@@ -253,13 +253,13 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 <!-- BEGIN GENERATED: scripts/unwired_inventory.py --write -->
 
-未接线公开能力 **384** 条，分布在 **204** 个文件。
+未接线公开能力 **383** 条，分布在 **204** 个文件。
 
 | 维度 | 数 |
 |---|---|
-| 类方法 / 模块函数 | 228 / 156 |
+| 类方法 / 模块函数 | 227 / 156 |
 | 只有测试在引用（写了、测了、没接） | 317 |
-| 全仓连测试都没引用 | 67 |
+| 全仓连测试都没引用 | 66 |
 | 所在模块本身从入口不可达 | 4 |
 
 ### 按名字表明的角色
@@ -272,14 +272,14 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 判定谓词 | 78 | 70 | 8 |
 | 只读查询 | 54 | 48 | 6 |
 | 计算/构造 | 68 | 64 | 4 |
-| 动作/变更 | 154 | 111 | 43 |
+| 动作/变更 | 153 | 111 | 42 |
 
 ### 按用途
 
 | 用途 | 条数 | 其中只有测试引用 | 其中连测试都没有 | 文件数 |
 |---|---|---|---|---|
 | 节点服务里的方法 | 15 | 0 | 15 | 7 |
-| 安卓协作的契约、治理与对账层 | 82 | 76 | 6 | 39 |
+| 安卓协作的契约、治理与对账层 | 81 | 76 | 5 | 39 |
 | 持久化、重启恢复与断点续跑 | 27 | 27 | 0 | 8 |
 | 指标、可观测与审计记录 | 9 | 9 | 0 | 9 |
 | 架构治理：权威声明、边界断言与自检 | 56 | 55 | 1 | 25 |
@@ -678,7 +678,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 | 子系统 | 条数 | 文件数 |
 |---|---|---|
 | `core/（其余单文件）` | 113 | 67 |
-| `galaxy_gateway/` | 30 | 14 |
+| `galaxy_gateway/` | 29 | 14 |
 | `core/android_*` | 20 | 13 |
 | `core/delegated_*` | 17 | 5 |
 | `core/cognitive/` | 16 | 7 |
@@ -766,7 +766,7 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
 
 </details>
 
-<details><summary>安卓协作的契约、治理与对账层 — 82 条</summary>
+<details><summary>安卓协作的契约、治理与对账层 — 81 条</summary>
 
 - `core/android_acceptance_evidence_store.py`
   - `clear_device_acceptance_evidence` T — 清理 acceptance 证据（测试辅助）。
@@ -881,7 +881,6 @@ ADB 集群并行执行、知识库导入导出、自愈节点注册恢复处理�
   - `handle_device_reconnect` — — Handle an explicit ``device_reconnect`` wire message.
 - `galaxy_gateway/android_bridge.py`
   - `AndroidBridge.route_liquid_message` — — 灵动岛式消息路由。
-  - `AndroidBridge.route_phase_change` — — Phase 变化的灵动岛式路由。
   - `AndroidBridge.cache_transport_handle` T — 将设备的 transport/session handle 写入 bridge 拥有的 operational cache。
   - `AndroidBridge.push_decision_to_wearos` — — 向 WearOS 设备推送决策通知。
   - `AndroidBridge.query_elements` T — Android GUI action adapter — translate element query to AIP protocol and send.

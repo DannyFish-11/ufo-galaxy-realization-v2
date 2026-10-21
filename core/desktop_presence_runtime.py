@@ -333,7 +333,7 @@ class RuntimeSession(_presence_stop.ActingMixin, _presence_line.SessionOriginMix
             old_state.value,
             new_state.value,
         )
-        if not getattr(self, "host_bound", True):  # 别的设备发起：不进桌面三态，只推给发起设备
+        if not getattr(self, "host_bound", True):  # 别的设备发起：不进桌面三态，进度只回给发起设备
             return _presence_line.advance_detached(self, old_state, new_state)
         # 落耐久账 —— 与下面那次事件总线广播是**互补**的两件事:
         # 总线是给此刻在线的订阅者看的,广播完就没了;这一笔是给三天之后的人看的。
@@ -389,20 +389,9 @@ class RuntimeSession(_presence_stop.ActingMixin, _presence_line.SessionOriginMix
             # all 3 attempts exhausted
             logger.warning("Phase change notification failed after 3 retries: %s", _emission_err)
 
-        # PR-CROSS-DEVICE-SYNC: proactively push phase change to all connected Android devices.
-        # This is fire-and-forget: failures are logged and swallowed.
-        try:
-            from core.cross_device_sync import emit_cross_device_phase_sync  # noqa: PLC0415
-
-            emit_cross_device_phase_sync(
-                old_phase=old_state.value,
-                new_phase=new_state.value,
-                session_id=self.runtime_session_id,
-                source=self.source,
-                trace_id=self.trace_id,
-            )
-        except Exception as exc:
-            logger.warning("Runtime session cleanup failed: %s", exc)
+        # 电脑的三态不推给任何设备(设备直接对智能体)。别的设备发起、在本机落手后交还桌面的请求,
+        # 发起的那台设备照样看到自己这件事的进度。
+        _presence_line.tell_origin(self, old_state, new_state)
         # PR-REALTIME-CONTINUUM: 启动/停止持续认知 tick
         self._on_advance_tick(new_state)
 

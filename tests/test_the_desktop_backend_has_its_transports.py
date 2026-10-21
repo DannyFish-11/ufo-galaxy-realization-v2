@@ -234,12 +234,10 @@ def test_with_a_working_transport_a_vision_request_gets_one_answer_not_two(ports
     assert len(got) == 1, f"收到 {len(got)} 份视觉结果"
 
 
-@pytest.mark.parametrize("desktop", ["manifest", "silent"])
-def test_a_device_sees_its_register_ack_first_and_then_the_desktops_current_phase(
-    desktop, ports, monkeypatch, tmp_path
-):
-    """传输接通后,登记时推的「电脑当前三态」第一次真的送到了:它排在登记确认后面;电脑静默时不推
-    (设备没被告知时本来就显示静默)。"""
+@pytest.mark.parametrize("desktop", ["manifest", "liminal", "silent"])
+def test_a_device_that_joins_or_reconnects_is_never_told_the_desktops_tri_state(desktop, ports, monkeypatch, tmp_path):
+    """电脑的三态不推给设备(设备直接对智能体):电脑忙着也好、静默也好,登记、再连一次,
+    设备收到的第一帧是登记确认,之后没有任何相位帧。"""
     pytest.importorskip("uvicorn")
     import httpx
     import websockets
@@ -287,17 +285,15 @@ def test_a_device_sees_its_register_ack_first_and_then_the_desktops_current_phas
             return frames
 
         frames = asyncio.run(phone())
+        again = asyncio.run(phone())  # 断开再连一次(重连)
         gw.run(close_transport_adapters())
     finally:
         next(gen, None)
-    types = [f.get("type") for f in frames]
-    assert types and types[0] == "device_register_ack", types
-    phase = [f for f in frames if f.get("type") == "state_event"]
-    if desktop == "silent":
-        assert not phase, "电脑静默时不推(登记确认后面不多塞一帧)"
-    else:
-        assert phase and phase[0]["payload"]["sync_type"] == "cross_device_initial_sync", types
-        assert phase[0]["payload"]["to_phase"] == desktop
+    for got in (frames, again):
+        types = [f.get("type") for f in got]
+        assert types and types[0] == "device_register_ack", types
+        phase = [f for f in got if f.get("type") == "state_event" or f.get("event_category") == "phase"]
+        assert not phase, f"电脑的三态({desktop})不该推给设备:{phase}"
 
 
 def test_both_startup_paths_use_the_same_registration():

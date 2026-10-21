@@ -1081,8 +1081,7 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             inbound_attachment_id,
         )
 
-        # 电脑当前三态推给刚登记的设备:放到设备入口写完登记确认之后(galaxy_gateway/routes/websocket.py),
-        # 设备先看到「登记成功」;在这里推会抢在确认前面到(此前没送到过,传输接通后才暴露)。
+        # 电脑的三态不推给设备(设备直接对智能体),登记时也不补推(见 core/cross_device_sync)。
 
         _gaps = get_registration_gaps(device_id)
         if _gaps:

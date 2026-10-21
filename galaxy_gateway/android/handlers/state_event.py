@@ -1,10 +1,11 @@
 """
 galaxy_gateway/android/handlers/state_event.py
 
-PR-CROSS-DEVICE-SYNC: State Event Handler
+State Event Handler — 设备**发进来**的 ``state_event``(例如 Windows 客户端报它自己的相位):
+记在发它的那台设备的缓存条目上,回一个确认。
 
-Handles STATE_EVENT messages from DesktopPresenceRuntime (Windows → Android).
-These are proactive cross-device phase broadcasts, not request-response.
+方向别弄反:中心**不**把电脑的三态推给设备(设备直接对智能体,见 ``core/cross_device_sync``);
+这里处理的是设备往中心报的。
 
 Message format (AIP v3):
     {
@@ -19,8 +20,8 @@ Message format (AIP v3):
         "payload": {
             "from_phase": "silent",
             "to_phase": "manifest",
-            "source": "desktop_presence_runtime",
-            "sync_type": "cross_device_broadcast"
+            "source": "...",
+            "sync_type": "..."
         },
         "phase": "manifest"  # legacy backward-compatible
     }
@@ -38,13 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_state_event(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle STATE_EVENT from Windows — update Android device phase.
-
-    This is the receiving end of PR-CROSS-DEVICE-SYNC. When Windows
-    DesktopPresenceRuntime transitions phase, it proactively pushes
-    a state_event to all connected Android devices. This handler
-    receives and processes those events.
-    """
+    """处理一台设备发进来的 STATE_EVENT:相位类的记在那台设备的缓存条目上,然后回确认。"""
     device_id = message.get("device_id", "unknown")
     event_category = message.get("event_category", "unknown")
     event_action = message.get("event_action", "")

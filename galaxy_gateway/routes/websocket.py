@@ -158,7 +158,6 @@ async def _handle_android_ws(
             if message.get("type") == "device_register" and (response or {}).get("success") is True:
                 registered = str(message.get("device_id") or device_id)
                 await _resend_a2a(registered)
-                await _push_current_phase(registered)
     except WebSocketDisconnect:
         logger.info("device ws disconnected: device_id=%s", device_id)
     except Exception as exc:
@@ -189,16 +188,6 @@ def _frame_token(message: dict) -> str:
 
     token, _field = extract_ingress_token(message)
     return token or ""
-
-
-async def _push_current_phase(device_id: str) -> None:
-    """电脑此刻的三态告诉刚登记的设备(电脑不在静默时)—— 在登记确认写回之后,设备先看到「登记成功」。"""
-    try:
-        from core.cross_device_sync import tell_new_device_the_phase
-
-        await tell_new_device_the_phase(device_id)
-    except Exception as exc:  # noqa: BLE001 — 推不到不打断连接;下一次相位变化照样广播
-        logger.debug("initial phase push to %s failed: %s", device_id, exc)
 
 
 async def _resend_a2a(device_id: str) -> None:

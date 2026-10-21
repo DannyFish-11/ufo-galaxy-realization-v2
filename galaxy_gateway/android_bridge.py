@@ -159,18 +159,6 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-# Strong refs to fire-and-forget tasks (event loop only holds a weak ref, so a
-# discarded create_task result can be GC'd mid-execution).
-_BACKGROUND_TASKS: set = set()
-
-
-def _track_bg_task(_t):
-    """Retain *_t* until it finishes so it can't be garbage-collected mid-run."""
-    _BACKGROUND_TASKS.add(_t)
-    _t.add_done_callback(_BACKGROUND_TASKS.discard)
-    return _t
-
-
 # =============================================================================
 # PR-3: Execution Spine Integration — bridge dispatch authority sentinel
 
@@ -454,27 +442,6 @@ class AndroidBridge:
                         results[did] = False
 
         return results
-
-    async def route_phase_change(
-        self,
-        old_phase: str,
-        new_phase: str,
-        source: str = "desktop_presence_runtime",
-    ) -> None:
-        """Phase 变化的灵动岛式路由。
-
-        始终广播给所有设备（phase 是全局状态，所有设备都需要知道）。
-        但当前对话设备优先收到（排序在前）。
-        """
-        # 使用已有的 cross_device_sync 引擎（adaptive async concurrent）
-        from core.cross_device_sync import emit_cross_device_phase_sync  # noqa: PLC0415
-
-        emit_cross_device_phase_sync(
-            old_phase=old_phase,
-            new_phase=new_phase,
-            session_id=getattr(self, "_session_id", ""),
-            source=source,
-        )
 
     # =========================================================================
     # UDM canonical write/patch helpers (PR-2)
@@ -1818,39 +1785,7 @@ class AndroidBridge:
         self._patch_reconnect_to_udm(device_id)
         self._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
-        # PR-CROSS-DEVICE-SYNC: push current phase to reconnected device
-        try:
-            from core.lumiv_websocket_bridge import get_current_phase  # 真实的实时三态(在场桥)
-
-            # 此前读 DesktopPresenceRuntime.get_current_phase —— 不存在,永远推「silent」
-            current_phase = get_current_phase()
-            if current_phase not in ("", "silent") and websocket is not None:  # 静默不用推(设备默认就显示静默)
-                # PR-AIP-UNIFIED: Route phase sync through AIPTransport
-                from core.aip_transport import get_aip_transport
-                from core.cross_device_sync import build_phase_state_event
-
-                # 两条路径发同一份报文(单一构造处,见 build_phase_state_event)。
-                _phase_msg = build_phase_state_event(
-                    new_phase=current_phase,
-                    sync_type="cross_device_reconnect_sync",
-                )
-                try:
-                    _track_bg_task(
-                        asyncio.create_task(get_aip_transport().send(dict(_phase_msg, _transport="auto"), device_id))
-                    )
-                except Exception:
-                    _track_bg_task(asyncio.create_task(websocket.send_json(_phase_msg)))
-                logger.info(
-                    "CrossDeviceSync: phase=%s pushed to reconnected device=%s",
-                    current_phase,
-                    device_id,
-                )
-        except Exception as _phase_exc:
-            logger.debug(
-                "CrossDeviceSync: reconnect phase push non-fatal: device_id=%s error=%s",
-                device_id,
-                _phase_exc,
-            )
+        # 电脑的三态不推给设备(设备直接对智能体),重连时也不补推。
 
         # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
         # so that runtime_session_id is preserved and the session returns to active.

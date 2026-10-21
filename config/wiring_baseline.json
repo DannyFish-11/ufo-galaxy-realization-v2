@@ -318,7 +318,6 @@
     "retrieve_entry",
     "route_all_phases",
     "route_liquid_message",
-    "route_phase_change",
     "route_via_spine",
     "run_multi_device_via_task_graph",
     "run_with_concurrency",
