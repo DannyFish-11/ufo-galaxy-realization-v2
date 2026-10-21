@@ -679,6 +679,10 @@ class CanonicalDispatcher:
                     tool_name=tool_name,
                     layer=CapabilityLayer.DEVICE,
                 )
+            # 每次下发都记进任务流程图(整体方案的工程约束):设备整体卡的「最近做过什么」读它
+            from core.device_onboarding.device_card import record_dispatch, record_result
+
+            graph_task = record_dispatch(device_id, action)
             raw = await ucm.send_command_and_wait(device_id, action, dict(arguments or {}), timeout=30.0)
             payload = raw.get("payload", raw) if isinstance(raw, dict) else raw
             failed = isinstance(raw, dict) and "payload" not in raw and bool(raw.get("error"))
@@ -688,6 +692,7 @@ class CanonicalDispatcher:
                 err = (
                     (payload.get("error") if isinstance(payload, dict) else None) or raw.get("error") or "设备执行失败"
                 )
+                record_result(graph_task, False, error=str(err))
                 return DispatchResult(
                     success=False,
                     result=payload,
@@ -695,6 +700,7 @@ class CanonicalDispatcher:
                     tool_name=tool_name,
                     layer=CapabilityLayer.DEVICE,
                 )
+            record_result(graph_task, True, summary="ok")
             return DispatchResult(success=True, result=payload)
         except Exception as exc:
             logger.warning(

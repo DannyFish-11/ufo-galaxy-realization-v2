@@ -362,7 +362,7 @@ class SystemOrchestrator:
         said = f"按 {mode} 跑 —— {_scope},{_bus}"
         if not cross_device and _sm.nats_url_points_elsewhere(os.environ.get("GALAXY_NATS_URL", "")):
             # 配成了连别的机器、却没打开跨设备:说出来,不悄悄替人切模式。
-            said += "。注意:GALAXY_NATS_URL 指向别的机器,但当前是本地模式 —— 要用别的设备请打开「跨设备」"
+            said += "。注意:GALAXY_NATS_URL 指向别的机器,但当前是本地模式 —— 要让这台电脑接入那条总线,请打开「跨设备」"
             logger.warning("[启动·模式] GALAXY_NATS_URL 指向别的机器,但当前是本地模式(没有打开跨设备)")
         return PhaseResult(
             phase=StartupPhase.RESOLVE_MODE,

@@ -54,7 +54,7 @@ MERGED_ROUTES = (
     ("/sync/status", "同步状态"),
     ("/api/v5/health", "Gateway v5"),
     ("/api/v1/config", "客户端配置发现"),
-    # 403 cross_device_disabled 是它自己的策略应答,不是"跑不起来" ——
+    # 它在权威层上真跑得起来(不依赖网关 app.state) ——
     # 对照组 llm/health 在同样的挂法下是 503 Service not ready。
     ("/api/v1/webrtc/endpoint", "WebRTC 端点发现"),
 )

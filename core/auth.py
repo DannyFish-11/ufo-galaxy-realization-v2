@@ -479,6 +479,8 @@ SELF_AUTHENTICATING_ENDPOINTS: dict = {
     "/api/v1/pair/claim": {"POST"},
     # 凭一枚还有效、且签给本设备的配对令牌换新(端点内核验)
     "/api/v1/pair/renew": {"POST"},
+    # 凭签给本设备的配对令牌退出(端点内核验;手表的「解除配对」)
+    "/api/v1/pair/leave": {"POST"},
 }
 
 

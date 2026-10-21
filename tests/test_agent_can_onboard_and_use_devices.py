@@ -116,18 +116,25 @@ def test_the_agent_is_offered_the_device_tools():
     names = {t["function"]["name"] for t in DEVICES_BUILTIN_TOOLS}
     assert {"devices__list", "devices__join", "devices__invoke", "devices__remove", "devices__invite"} <= names
     [invite] = [t for t in DEVICES_BUILTIN_TOOLS if t["function"]["name"] == "devices__invite"]
-    assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == ["phone", "watch", "laptop", "worker"]
+    assert invite["function"]["parameters"]["properties"]["kind"]["enum"] == [
+        "phone",
+        "watch",
+        "laptop",
+        "carrier",
+        "worker",
+    ]
     assert "tools.extend(devices_tools_for_agent())" in inspect.getsource(OpenClawd._collect_tools)
     assert '"devices__",' in inspect.getsource(OpenClawd._dispatch_tool_call)
 
 
-def test_list_shows_members_by_role_and_candidates(env):
+def test_list_shows_each_member_as_a_whole_card_and_candidates(env):
     _udm().register_device_from_dict("phone-1", {"device_type": "Android_Agent", "transport": "websocket"})
     _serial_candidate()
     out = _agent("devices__list", {})
     assert out["success"]
-    assert [m["device_id"] for m in out["members"]["subjects"]] == ["phone-1"]
-    assert out["members"]["subjects"][0]["can_initiate"] is True
+    [m] = out["members"]
+    assert m["device_id"] == "phone-1" and m["can_initiate"] is True
+    assert {"form", "status", "actions", "can_take_agent", "recent"} <= set(m)
     [c] = out["candidates"]
     assert (c["name"], c["join_path"], c["human_step"]) == (_SERIAL_NAME, "local_bus", "approve")
 

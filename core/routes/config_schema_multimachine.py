@@ -118,7 +118,7 @@ MULTI_MACHINE_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "network",
         "description": "WebRTC 打洞等待的秒数（默认 10）",
     },
-    # ── mesh 与并行派发（galaxy_gateway/bootstrap/lifecycle.py、device_router.py）──
+    # ── 传输、mesh 与并行派发（galaxy_gateway/bootstrap/transports.py、device_router.py）──
     "GALAXY_MESH_NODE_ID": {
         "default": "gateway",
         "type": "string",
@@ -130,6 +130,18 @@ MULTI_MACHINE_SCHEMA: Dict[str, Dict[str, Any]] = {
         "type": "number",
         "category": "devices",
         "description": "mesh 协调的本地端口（默认 19422）",
+    },
+    "GALAXY_AIP_TCP_PORT": {
+        "default": "19421",
+        "type": "number",
+        "category": "devices",
+        "description": "传输层 TCP 直连的本地监听端口（默认 19421）；同一台机器上跑两个 Galaxy 时给其中一个换掉",
+    },
+    "GALAXY_AIP_UDP_PORT": {
+        "default": "19422",
+        "type": "number",
+        "category": "devices",
+        "description": "传输层 UDP 的本地端口（默认 19422）",
     },
     "GALAXY_MULTI_DEVICE_DISPATCH_LIMIT": {
         "default": "8",

@@ -21,7 +21,7 @@
 
 这五个协议**不是"没做完"，是做到别处去了**：它们以 ``core/adapters/*_adapter.py``
 的形式落在了 AIP 传输层（``ble_adapter`` / ``mqtt_adapter`` / ``canbus_adapter`` /
-``serial_adapter`` / ``dbus_adapter``，由 ``galaxy_gateway/bootstrap/lifecycle.py``
+``serial_adapter`` / ``dbus_adapter``，由 ``galaxy_gateway/bootstrap/transports.py``
 逐个 ``register_adapter`` 注册），``core/aip_transport.py`` 还专门给它们定了
 ``_NARROWBAND`` 传输特性。节点这条路线因此从来没人走 —— 但八份清单里的记录留下了。
 

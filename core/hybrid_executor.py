@@ -5,14 +5,14 @@ HybridExecutionArbiter — 混合执行仲裁器
 **Architecture role: FALLBACK EXECUTION HELPER — not a parallel authority**
 ----------------------------------------------------------------------------
 ``HybridExecutionArbiter`` is an **internal fallback execution helper**.
-It implements a three-level degradation chain (A2A → GUI → VLM) for
+It implements a three-level degradation chain (API 直调 → GUI → VLM) for
 *local* task execution.  It is NOT a parallel top-level dispatch authority
 and MUST NOT bypass the canonical execution chain::
 
     OpenClawd (subject/execution core)
         └─ local execution path
               └─ HybridExecutionArbiter  ← internal helper (this module)
-                   Level 1: A2A (direct API/MCP call)
+                   Level 1: API 直调 (direct API/MCP call)
                    Level 2: GUI Automation
                    Level 3: VLM (screenshot + reasoning)
 
@@ -50,18 +50,18 @@ for testability.  Production code uses the process-level singleton via
 Phase 3 Matrix OS 核心组件。
 
 三级降级执行链:
-  Level 1: A2A (Agent-to-Agent) — 通过 API/MCP 直接调用目标应用/服务
+  Level 1: API 直调 — 通过 API/MCP 直接调用目标应用/服务
   Level 2: GUI Automation      — 通过 UI 自动化 (点击/滑动/输入) 操控界面
   Level 3: VLM (Vision-Language Model) — 截图 + VLM 理解 + 坐标推理
 
 每个执行请求按顺序尝试三级:
-  - A2A 成功 → 直接返回结果 (最快, 最准)
-  - A2A 失败 → 降级到 GUI (通过 accessibility/adb)
+  - API 直调 成功 → 直接返回结果 (最快, 最准)
+  - API 直调 失败 → 降级到 GUI (通过 accessibility/adb)
   - GUI 失败 → 降级到 VLM (截图 + 视觉理解 + 盲操作)
 
 策略选择器:
   - 根据目标应用的能力声明决定首选执行级别
-  - 如果已知某应用有 A2A API, 直接跳到 L1
+  - 如果已知某应用有可直调的 API, 直接跳到 L1
   - 如果已知某应用只有 GUI, 跳过 L1
 
 Windows 特殊路径:
@@ -108,14 +108,14 @@ HYBRID_EXECUTOR_CONTINUITY_WIRED: str = (
 #: eliminate naming ambiguity with the canonical
 #: :class:`core.agent.capability_registry.CapabilityRegistry` (the system-wide
 #: capability truth source).  This class manages *app-level execution
-#: preferences* (A2A / GUI / VLM level order per app_id) — a concern that is
+#: preferences* (API 直调 / GUI / VLM level order per app_id) — a concern that is
 #: entirely local to :class:`HybridExecutionArbiter` and has no connection to
 #: the capability bus.
 APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED: str = "CapabilityRegistry → AppExecutionCapabilityRegistry"
 
 
 class ExecutionLevel(str, Enum):
-    A2A = "a2a"  # Agent-to-Agent (API/MCP direct call)
+    API_DIRECT = "api_direct"  # API 直调(API / MCP 直接调用);旧名 a2a 与对外 A2A 撞名,已改
     GUI = "gui"  # GUI Automation (accessibility, ADB)
     VLM = "vlm"  # Vision-Language Model (screenshot + reasoning)
 
@@ -171,8 +171,8 @@ class AppCapability:
     """应用能力声明"""
 
     app_id: str  # 包名或服务标识
-    a2a_endpoint: str = ""  # A2A API 端点 (空=不支持)
-    a2a_actions: List[str] = field(default_factory=list)  # 支持的 A2A 动作
+    api_endpoint: str = ""  # API 直调端点 (空=不支持)
+    api_actions: List[str] = field(default_factory=list)  # 支持直调的动作
     gui_supported: bool = True  # 是否支持 GUI 自动化
     vlm_supported: bool = True  # 是否支持 VLM (几乎所有应用都支持)
     preferred_level: Optional[ExecutionLevel] = None  # 强制首选级别
@@ -183,7 +183,7 @@ class AppExecutionCapabilityRegistry:
 
     .. note::
         This class is **not** the system-wide capability truth source.  It is a
-        small, module-local helper that records which execution levels (A2A /
+        small, module-local helper that records which execution levels (API 直调 /
         GUI / VLM) each app supports and in what preferred order.
 
         The canonical system capability registry is
@@ -203,18 +203,18 @@ class AppExecutionCapabilityRegistry:
         """注册默认应用能力"""
         defaults = [
             AppCapability(
-                "com.tencent.mm", gui_supported=True, a2a_actions=["send_message"], a2a_endpoint=""
-            ),  # 微信: 暂无公开 A2A
+                "com.tencent.mm", gui_supported=True, api_actions=["send_message"], api_endpoint=""
+            ),  # 微信: 暂无可直调的公开 API
             AppCapability("com.android.settings", gui_supported=True),
-            AppCapability("com.android.chrome", a2a_actions=["open_url", "search"], a2a_endpoint="intent://"),
+            AppCapability("com.android.chrome", api_actions=["open_url", "search"], api_endpoint="intent://"),
             AppCapability(
-                "system_shell", a2a_endpoint="adb", a2a_actions=["execute"], preferred_level=ExecutionLevel.A2A
+                "system_shell", api_endpoint="adb", api_actions=["execute"], preferred_level=ExecutionLevel.API_DIRECT
             ),
             AppCapability(
                 "file_manager",
-                a2a_endpoint="filesystem",
-                a2a_actions=["read", "write", "list", "delete"],
-                preferred_level=ExecutionLevel.A2A,
+                api_endpoint="filesystem",
+                api_actions=["read", "write", "list", "delete"],
+                preferred_level=ExecutionLevel.API_DIRECT,
             ),
         ]
         for cap in defaults:
@@ -230,18 +230,18 @@ class AppExecutionCapabilityRegistry:
         """根据应用能力返回执行级别优先序列"""
         cap = self._apps.get(app_id)
         if not cap:
-            return [ExecutionLevel.A2A, ExecutionLevel.GUI, ExecutionLevel.VLM]
+            return [ExecutionLevel.API_DIRECT, ExecutionLevel.GUI, ExecutionLevel.VLM]
 
         if cap.preferred_level:
             levels = [cap.preferred_level]
-            for lv in [ExecutionLevel.A2A, ExecutionLevel.GUI, ExecutionLevel.VLM]:
+            for lv in [ExecutionLevel.API_DIRECT, ExecutionLevel.GUI, ExecutionLevel.VLM]:
                 if lv != cap.preferred_level:
                     levels.append(lv)
             return levels
 
         levels = []
-        if cap.a2a_endpoint or cap.a2a_actions:
-            levels.append(ExecutionLevel.A2A)
+        if cap.api_endpoint or cap.api_actions:
+            levels.append(ExecutionLevel.API_DIRECT)
         if cap.gui_supported:
             levels.append(ExecutionLevel.GUI)
         if cap.vlm_supported:
@@ -250,7 +250,7 @@ class AppExecutionCapabilityRegistry:
 
     def list_apps(self) -> List[Dict]:
         return [
-            {"app_id": cap.app_id, "a2a": bool(cap.a2a_endpoint), "gui": cap.gui_supported, "vlm": cap.vlm_supported}
+            {"app_id": cap.app_id, "api": bool(cap.api_endpoint), "gui": cap.gui_supported, "vlm": cap.vlm_supported}
             for cap in self._apps.values()
         ]
 
@@ -259,8 +259,8 @@ class AppExecutionCapabilityRegistry:
 # 执行器接口
 # ============================================================================
 
-# A2A 执行器: (app_id, action, params, device_id) -> result_dict
-A2AExecutor = Callable[[str, str, Dict, str], Awaitable[Dict[str, Any]]]
+# API 直调 执行器: (app_id, action, params, device_id) -> result_dict
+ApiDirectExecutor = Callable[[str, str, Dict, str], Awaitable[Dict[str, Any]]]
 
 # GUI 执行器: (device_id, action, params) -> result_dict
 GUIExecutor = Callable[[str, str, Dict], Awaitable[Dict[str, Any]]]
@@ -279,19 +279,19 @@ class HybridExecutionArbiter:
     核心逻辑:
     1. 接收执行请求 (device_id, app_id, action, params)
     2. 查询能力注册表获取执行级别序列
-    3. 按序尝试: A2A → GUI → VLM
+    3. 按序尝试: API 直调 → GUI → VLM
     4. 返回最终结果 (包含所有尝试记录)
     """
 
     def __init__(
         self,
-        a2a_executor: A2AExecutor = None,
+        api_executor: ApiDirectExecutor = None,
         gui_executor: GUIExecutor = None,
         vlm_executor: VLMExecutor = None,
         screenshot_getter: ScreenshotGetter = None,
         continuity_registry=None,
     ):
-        self._a2a = a2a_executor
+        self._api_direct = api_executor
         self._gui = gui_executor
         self._vlm = vlm_executor
         self._screenshot = screenshot_getter
@@ -299,7 +299,7 @@ class HybridExecutionArbiter:
         self._execution_history: List[Dict] = []
         self._stats = {
             "total": 0,
-            "a2a_success": 0,
+            "api_direct_success": 0,
             "gui_success": 0,
             "vlm_success": 0,
             "all_failed": 0,
@@ -310,13 +310,13 @@ class HybridExecutionArbiter:
 
     def set_executors(
         self,
-        a2a: A2AExecutor = None,
+        api_direct: ApiDirectExecutor = None,
         gui: GUIExecutor = None,
         vlm: VLMExecutor = None,
         screenshot: ScreenshotGetter = None,
     ):
-        if a2a:
-            self._a2a = a2a
+        if api_direct:
+            self._api_direct = api_direct
         if gui:
             self._gui = gui
         if vlm:
@@ -448,7 +448,7 @@ class HybridExecutionArbiter:
         # 用什么手法动手 —— 由策略引擎决定，不再写死。
         #
         # ``core/hybrid_execution_policy.py`` 存在的全部意义就是把这件事从隐式的
-        # 「永远走 A2A→GUI→VLM」变成显式的、带理由的选择。但它此前**零生产调用方**：
+        # 「永远走 API 直调→GUI→VLM」变成显式的、带理由的选择。但它此前**零生产调用方**：
         # 这里的 mode 是一个字面量 ``"sequential_degrade"``，策略引擎从没被调用过，
         # 于是系统既没在选，也就无从说自己选了什么。
         #
@@ -471,7 +471,7 @@ class HybridExecutionArbiter:
                         "app_id": app_id,
                         "action": action,
                         "device_id": device_id,
-                        "has_a2a": "a2a" in _level_values,
+                        "has_api_direct": "api_direct" in _level_values,
                         "has_gui": "gui" in _level_values,
                         "has_vlm": "vlm" in _level_values,
                     }
@@ -618,7 +618,7 @@ class HybridExecutionArbiter:
             result = HybridResult(
                 request_id=request_id,
                 success=False,
-                final_level=levels[-1] if levels else ExecutionLevel.A2A,
+                final_level=levels[-1] if levels else ExecutionLevel.API_DIRECT,
                 result={"error": "All execution levels failed"},
                 attempts=[self._attempt_to_dict(a) for a in attempts],
                 total_latency_ms=(time.time() - start) * 1000,
@@ -775,7 +775,7 @@ class HybridExecutionArbiter:
 
             # Map WinExecLevel to the nearest ExecutionLevel for compatibility.
             _level_map = {
-                WinExecLevel.SYSTEM_API: ExecutionLevel.A2A,
+                WinExecLevel.SYSTEM_API: ExecutionLevel.API_DIRECT,
                 WinExecLevel.UIA: ExecutionLevel.GUI,
                 WinExecLevel.GUI: ExecutionLevel.GUI,
                 WinExecLevel.VLM: ExecutionLevel.VLM,
@@ -832,7 +832,7 @@ class HybridExecutionArbiter:
             fallback = HybridResult(
                 request_id=request_id,
                 success=False,
-                final_level=ExecutionLevel.A2A,
+                final_level=ExecutionLevel.API_DIRECT,
                 result={"error": f"Windows arbiter delegation failed: {exc}"},
                 attempts=[],
                 total_latency_ms=(time.time() - start) * 1000,
@@ -870,8 +870,8 @@ class HybridExecutionArbiter:
         start = time.time()
 
         try:
-            if level == ExecutionLevel.A2A:
-                return await self._try_a2a(device_id, app_id, action, params, start)
+            if level == ExecutionLevel.API_DIRECT:
+                return await self._try_api(device_id, app_id, action, params, start)
             elif level == ExecutionLevel.GUI:
                 return await self._try_gui(device_id, action, params, start)
             elif level == ExecutionLevel.VLM:
@@ -890,29 +890,29 @@ class HybridExecutionArbiter:
                 latency_ms=(time.time() - start) * 1000,
             )
 
-    async def _try_a2a(self, device_id: str, app_id: str, action: str, params: Dict, start: float) -> ExecutionAttempt:
-        """Level 1: A2A 直接调用"""
-        if not self._a2a:
+    async def _try_api(self, device_id: str, app_id: str, action: str, params: Dict, start: float) -> ExecutionAttempt:
+        """Level 1: API 直调"""
+        if not self._api_direct:
             return ExecutionAttempt(
-                level=ExecutionLevel.A2A,
+                level=ExecutionLevel.API_DIRECT,
                 status=ExecutionStatus.SKIPPED,
-                error="No A2A executor configured",
+                error="No API 直调 executor configured",
                 latency_ms=(time.time() - start) * 1000,
             )
 
-        result = await self._a2a(app_id, action, params, device_id)
+        result = await self._api_direct(app_id, action, params, device_id)
 
         if result.get("success", False) or result.get("status") == "success":
             return ExecutionAttempt(
-                level=ExecutionLevel.A2A,
+                level=ExecutionLevel.API_DIRECT,
                 status=ExecutionStatus.SUCCESS,
                 result=result,
                 latency_ms=(time.time() - start) * 1000,
             )
         return ExecutionAttempt(
-            level=ExecutionLevel.A2A,
+            level=ExecutionLevel.API_DIRECT,
             status=ExecutionStatus.FAILED,
-            error=result.get("error", "A2A call returned non-success"),
+            error=result.get("error", "API 直调 call returned non-success"),
             result=result,
             latency_ms=(time.time() - start) * 1000,
         )

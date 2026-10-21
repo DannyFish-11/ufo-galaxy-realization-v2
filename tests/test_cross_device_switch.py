@@ -2,29 +2,28 @@
 tests/test_cross_device_switch.py
 ==================================
 
-Round 4 — Cross-Device Switch Hard Constraint Tests.
+The panel's 「跨设备」 switch says whether **this computer** joins the device
+network as a device.  It is not a routing gate on the central agent.
 
 Covers:
-  1. Feature-flag module — is_cross_device_enabled() reads env var correctly.
-  2. guard_cross_device() raises CrossDeviceDisabledError when OFF; no-ops when ON.
-  3. make_disabled_response() returns the canonical error dict when OFF.
-  4. DeviceRouter.route_task() is blocked when switch is OFF and task requires
-     cross-device coordination (coordinator must NOT be called).
-  5. DeviceRouter._dispatch_cross_device_task() is blocked when switch is OFF.
-  6. WebRTC proxy proxy_webrtc_signaling() closes WS with code 4001 when OFF.
-  7. get_webrtc_endpoint_info() includes cross_device_enabled field.
-  8. ON (default): route_task() passes through to coordinator; dispatcher works.
-  9. ON: proxy_webrtc_signaling() does NOT close prematurely.
- 10. Log entries include trace_id when switch is OFF.
+  1. is_cross_device_enabled() reads the one mode rule correctly.
+  2. The switch module no longer exports a gate, and the gateway's routing
+     paths (DeviceRouter, WebRTC proxy) do not consult it.
+  3. DeviceRouter.route_task() / _dispatch_cross_device_task() proceed in
+     either mode (members decide, not the computer's switch).
+  4. The WebRTC signaling proxy is members-only (owner's token or the pairing
+     token issued to that device), in either mode — it used to be gated by the
+     switch, which left it open to any LAN client whenever the switch was on.
+  5. get_webrtc_endpoint_info() advertises requires_member_token.
+  6. DeviceRouter.dispatch_task() stays the canonical single dispatcher.
 """
 
 from __future__ import annotations
 
-import asyncio
+import logging
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,173 +32,122 @@ PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from galaxy_gateway.cross_device_switch import (  # noqa: E402
-    ERROR_CODE_CROSS_DEVICE_DISABLED,
-    ERROR_MSG_CROSS_DEVICE_DISABLED,
-    HTTP_STATUS_CROSS_DEVICE_DISABLED,
-    WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
-    CrossDeviceDisabledError,
-    guard_cross_device,
-    is_cross_device_enabled,
-    make_disabled_response,
-)
 from galaxy_gateway.device_router import Device, DeviceRouter  # noqa: E402
 from galaxy_gateway.webrtc_proxy import (  # noqa: E402
+    WS_CLOSE_CODE_UNAUTHORIZED,
     get_webrtc_endpoint_info,
     proxy_webrtc_signaling,
 )
+
+BOTH_MODES = pytest.mark.parametrize("switch", ["0", "1"], ids=["local", "cross_device"])
+
+#: 主人的共享凭据(本文件自己设进环境)。名字刻意中性:CodeQL 按变量名把 ``*_api_token`` 当口令,
+#: 一路追到能力令牌的 HMAC-SHA256 验签会报「用快哈希存口令」—— 那是验签,不是存口令。
+_OWNER = "owner-for-signaling-tests-0123456789abcdef"
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_ws() -> MagicMock:
+def _make_ws(query=None, headers=None) -> MagicMock:
     """Build a minimal fake FastAPI WebSocket."""
     ws = MagicMock()
     ws.accept = AsyncMock()
     ws.close = AsyncMock()
     ws.receive_text = AsyncMock(side_effect=Exception("stop"))
+    ws.query_params = dict(query or {})
+    ws.headers = dict(headers or {})
     return ws
 
 
+def _close_codes(ws) -> list:
+    return [c.kwargs.get("code") or (c.args[0] if c.args else None) for c in ws.close.call_args_list]
+
+
+async def _signal(ws, device_id="device-123"):
+    # Node_95 is not running: a member gets past the door and then fails to reach it (1011),
+    # which is enough to tell "let in" from "turned away at the door" (4401).
+    with patch("websockets.connect", side_effect=ConnectionRefusedError("no node95")):
+        await proxy_webrtc_signaling(ws, device_id)
+
+
 # ===========================================================================
-# 1. Feature-flag module — is_cross_device_enabled()
+# 1. is_cross_device_enabled()
 # ===========================================================================
 
 
 class TestIsEnabled:
-    """is_cross_device_enabled() reflects GALAXY_CROSS_DEVICE_ENABLED."""
+    """is_cross_device_enabled() reflects GALAXY_CROSS_DEVICE_ENABLED (this computer joined)."""
 
     def test_default_is_disabled(self, monkeypatch):
-        # 断言漂移:生产端已把跨设备开关默认值从 fail-open(默认启用)
-        # 改为 opt-in(默认禁用),与 system_mode / desktop_presence_runtime /
-        # system_orchestrator 各层保持一致(见 cross_device_switch.py 文档
-        # 字符串)。旧断言基于已废弃的 fail-open 默认值,故随之更新。
         monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
+        from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+
         assert is_cross_device_enabled() is False
 
-    def test_explicit_1_is_enabled(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
-        assert is_cross_device_enabled() is True
+    @pytest.mark.parametrize(
+        "raw,expected", [("1", True), ("true", True), ("0", False), ("false", False), ("no", False), ("FALSE", False)]
+    )
+    def test_values(self, monkeypatch, raw, expected):
+        monkeypatch.delenv("GALAXY_SYSTEM_MODE", raising=False)
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", raw)
+        from galaxy_gateway.cross_device_switch import is_cross_device_enabled
 
-    def test_true_string_is_enabled(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
-        assert is_cross_device_enabled() is True
-
-    def test_0_is_disabled(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        assert is_cross_device_enabled() is False
-
-    def test_false_string_is_disabled(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "false")
-        assert is_cross_device_enabled() is False
-
-    def test_no_string_is_disabled(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "no")
-        assert is_cross_device_enabled() is False
-
-    def test_mixed_case_false(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "FALSE")
-        assert is_cross_device_enabled() is False
+        assert is_cross_device_enabled() is expected
 
 
 # ===========================================================================
-# 2. guard_cross_device()
+# 2. The switch is not a routing gate
 # ===========================================================================
 
 
-class TestGuardCrossDevice:
-    """guard_cross_device() raises when OFF and is silent when ON."""
+class TestTheSwitchIsNotARoutingGate:
+    def test_the_module_exports_only_the_question(self):
+        import galaxy_gateway.cross_device_switch as switch
 
-    def test_raises_when_off(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        with pytest.raises(CrossDeviceDisabledError):
-            guard_cross_device()
+        assert switch.__all__ == ["is_cross_device_enabled"]
+        for gone in ("guard_cross_device", "make_disabled_response", "CrossDeviceDisabledError"):
+            assert not hasattr(switch, gone), gone
 
-    def test_no_raise_when_on(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
-        guard_cross_device()  # must not raise
-
-    def test_error_carries_trace_id_when_provided(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        tid = str(uuid.uuid4())
-        with pytest.raises(CrossDeviceDisabledError) as exc_info:
-            guard_cross_device(trace_id=tid)
-        assert exc_info.value.trace_id == tid
-
-    def test_error_generates_trace_id_when_absent(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        with pytest.raises(CrossDeviceDisabledError) as exc_info:
-            guard_cross_device()
-        assert exc_info.value.trace_id  # non-empty
-
-    def test_raises_logs_warning(self, monkeypatch, caplog):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        import logging
-
-        with caplog.at_level(logging.WARNING, logger="galaxy_gateway.cross_device_switch"):
-            with pytest.raises(CrossDeviceDisabledError):
-                guard_cross_device(trace_id="test-trace-123")
-        assert "cross_device_blocked" in caplog.text
-        assert "test-trace-123" in caplog.text
-        assert ERROR_CODE_CROSS_DEVICE_DISABLED in caplog.text
+    @pytest.mark.parametrize(
+        "rel",
+        [
+            "galaxy_gateway/device_router.py",
+            "galaxy_gateway/webrtc_proxy.py",
+            "galaxy_gateway/agent_bridge.py",
+            "galaxy_gateway/android_bridge.py",
+            "galaxy_gateway/android/handlers/goal_execution.py",
+            "galaxy_gateway/routes/chat.py",
+            "core/routes/devices.py",
+            "core/routes/command.py",
+            "core/device_onboarding/agent_tools.py",
+            "core/nats_dispatch_bridge.py",
+        ],
+    )
+    def test_no_routing_path_consults_the_computers_switch(self, rel):
+        src = (PROJECT_ROOT / rel).read_text(encoding="utf-8")
+        assert "cross_device_disabled" not in src, rel
+        assert "is_cross_device_enabled()" not in src, rel
+        assert "cross_device_refusal" not in src, rel
 
 
 # ===========================================================================
-# 3. make_disabled_response()
+# 3. DeviceRouter — proceeds in either mode
 # ===========================================================================
 
 
-class TestMakeDisabledResponse:
-    """make_disabled_response() returns canonical error dict."""
-
-    def test_structure(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        resp = make_disabled_response()
-        assert resp["success"] is False
-        assert resp["error"] == ERROR_CODE_CROSS_DEVICE_DISABLED
-        assert "message" in resp
-        assert "trace_id" in resp
-
-    def test_propagates_trace_id(self):
-        tid = "my-trace-id"
-        resp = make_disabled_response(trace_id=tid)
-        assert resp["trace_id"] == tid
-
-    def test_generates_trace_id_when_absent(self):
-        resp = make_disabled_response()
-        assert resp["trace_id"]  # non-empty
-
-    def test_logs_warning(self, caplog):
-        import logging
-
-        with caplog.at_level(logging.WARNING, logger="galaxy_gateway.cross_device_switch"):
-            make_disabled_response(trace_id="warn-trace")
-        assert "cross_device_blocked" in caplog.text
-        assert "warn-trace" in caplog.text
-
-
-# ===========================================================================
-# 4. DeviceRouter.route_task() — switch OFF blocks cross-device tasks
-# ===========================================================================
-
-
-class TestDeviceRouterSwitchOff:
-    """When cross-device switch is OFF, route_task() must short-circuit."""
-
+class TestDeviceRouterInEitherMode:
+    @BOTH_MODES
     @pytest.mark.asyncio
-    async def test_route_task_cross_device_blocked_when_off(self, monkeypatch):
-        """Cross-device analysis result is rejected; coordinator never called."""
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    async def test_route_task_calls_coordinator(self, monkeypatch, switch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
 
         router = DeviceRouter()
-        coordinator_mock = AsyncMock()
-        coordinator_mock.execute_cross_device_task = AsyncMock(
-            return_value={"success": True, "result": "should not be called"}
-        )
+        coordinator_mock = MagicMock()
+        coordinator_mock.execute_cross_device_task = AsyncMock(return_value={"success": True, "result": "done"})
 
-        # Patch analysis to always require cross-device
         async def _fake_analyze(command, context=None):
             return {"requires_cross_device": True, "task_type": "cross_device"}
 
@@ -208,17 +156,16 @@ class TestDeviceRouterSwitchOff:
                 "galaxy_gateway.device_router.get_cross_device_coordinator",
                 return_value=coordinator_mock,
             ):
-                result = await router.route_task("sync clipboard", {"trace_id": "rt-trace-1"})
+                # 每个参数一条新 trace:代理桥按 trace_id 去重,复用会直接拿上一条的缓存结果
+                result = await router.route_task("sync clipboard", {"trace_id": f"rt-{switch}-{uuid.uuid4().hex}"})
 
-        assert result["success"] is False
-        assert result["error"] == ERROR_CODE_CROSS_DEVICE_DISABLED
-        assert result["trace_id"] == "rt-trace-1"
-        coordinator_mock.execute_cross_device_task.assert_not_called()
+        assert result["success"] is True
+        coordinator_mock.execute_cross_device_task.assert_called_once()
 
+    @BOTH_MODES
     @pytest.mark.asyncio
-    async def test_route_task_local_not_blocked_when_off(self, monkeypatch):
-        """Local (single-device) tasks are NOT blocked by the cross-device switch."""
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    async def test_route_task_to_one_member(self, monkeypatch, switch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
 
         from core.device_types import DeviceType
 
@@ -227,7 +174,6 @@ class TestDeviceRouterSwitchOff:
         device.apply_status("online")
         router.devices["dev1"] = device
 
-        # Patch analysis to return a local (non-cross-device) task
         async def _fake_analyze(command, context=None):
             return {
                 "requires_cross_device": False,
@@ -246,33 +192,10 @@ class TestDeviceRouterSwitchOff:
 
         assert result["success"] is True
 
-
-# ===========================================================================
-# 5. DeviceRouter._dispatch_cross_device_task() — switch OFF guard
-# ===========================================================================
-
-
-class TestDispatchCrossDeviceTaskGuard:
-    """_dispatch_cross_device_task() must short-circuit when switch is OFF."""
-
+    @BOTH_MODES
     @pytest.mark.asyncio
-    async def test_dispatch_cross_device_blocked_when_off(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-
-        router = DeviceRouter()
-        d1 = Device("d1", "android_phone", [])
-        d2 = Device("d2", "windows_desktop", [])
-        task = {"task_id": "t1", "command": "sync", "trace_id": "disp-trace-1"}
-
-        result = await router._dispatch_cross_device_task(task, [d1, d2])
-
-        assert result["success"] is False
-        assert result["error"] == ERROR_CODE_CROSS_DEVICE_DISABLED
-        assert result["trace_id"] == "disp-trace-1"
-
-    @pytest.mark.asyncio
-    async def test_dispatch_cross_device_allowed_when_on(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+    async def test_dispatch_cross_device_task(self, monkeypatch, switch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
 
         router = DeviceRouter()
         d1 = Device("d1", "android_phone", [])
@@ -289,155 +212,96 @@ class TestDispatchCrossDeviceTaskGuard:
 
 
 # ===========================================================================
-# 6. proxy_webrtc_signaling() — WS closed with 4001 when switch is OFF
+# 4. WebRTC signaling — members only, in either mode
 # ===========================================================================
 
 
-class TestProxyWebRTCSignalingSwitchOff:
-    """proxy_webrtc_signaling() must close WS with 4001 when switch is OFF."""
+@pytest.fixture
+def auth_on(monkeypatch):
+    monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+    monkeypatch.setenv("GALAXY_API_TOKEN", _OWNER)
+    return monkeypatch
 
+
+class TestWebRTCSignalingIsMembersOnly:
+    @BOTH_MODES
     @pytest.mark.asyncio
-    async def test_ws_closed_4001_when_off(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-
+    async def test_no_token_is_turned_away(self, auth_on, switch, caplog):
+        auth_on.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
         ws = _make_ws()
-        await proxy_webrtc_signaling(ws, "device-123")
-
+        with caplog.at_level(logging.WARNING):
+            await _signal(ws, "stranger")
         ws.accept.assert_called_once()
-        ws.close.assert_called_once()
-        call_kwargs = ws.close.call_args
-        code = call_kwargs.kwargs.get("code") or call_kwargs.args[0]
-        assert code == WS_CLOSE_CODE_CROSS_DEVICE_DISABLED
+        assert _close_codes(ws) == [WS_CLOSE_CODE_UNAUTHORIZED]
+        reason = ws.close.call_args.kwargs.get("reason", "")
+        assert "pair" in reason
+
+    @BOTH_MODES
+    @pytest.mark.asyncio
+    async def test_the_owners_token_gets_in(self, auth_on, switch):
+        auth_on.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
+        ws = _make_ws(query={"token": _OWNER})
+        await _signal(ws)
+        assert WS_CLOSE_CODE_UNAUTHORIZED not in _close_codes(ws)
+
+    @BOTH_MODES
+    @pytest.mark.asyncio
+    async def test_the_pairing_token_of_this_device_gets_in(self, auth_on, switch):
+        from core.capability_token import issue_token
+
+        auth_on.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
+        token = issue_token("phone-1", ["device:status"], ttl_s=600)
+        ws = _make_ws(headers={"authorization": f"Bearer {token}"})
+        await _signal(ws, "phone-1")
+        assert WS_CLOSE_CODE_UNAUTHORIZED not in _close_codes(ws)
 
     @pytest.mark.asyncio
-    async def test_ws_close_reason_mentions_disabled(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    async def test_another_devices_pairing_token_is_turned_away(self, auth_on):
+        from core.capability_token import issue_token
 
-        ws = _make_ws()
-        await proxy_webrtc_signaling(ws, "device-xyz")
-
-        call_kwargs = ws.close.call_args
-        reason = call_kwargs.kwargs.get("reason", "") or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else "")
-        assert "disabled" in reason.lower()
+        token = issue_token("phone-2", ["device:status"], ttl_s=600)
+        ws = _make_ws(query={"token": token})
+        await _signal(ws, "phone-1")
+        assert _close_codes(ws) == [WS_CLOSE_CODE_UNAUTHORIZED]
 
     @pytest.mark.asyncio
-    async def test_ws_blocked_logs_warning(self, monkeypatch, caplog):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    async def test_a_wrong_token_is_turned_away(self, auth_on):
+        ws = _make_ws(query={"token": "not-a-token"})
+        await _signal(ws)
+        assert _close_codes(ws) == [WS_CLOSE_CODE_UNAUTHORIZED]
 
-        import logging
-
+    @pytest.mark.asyncio
+    async def test_with_gateway_auth_turned_off_it_is_open_like_every_other_route(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "false")
+        monkeypatch.delenv("GALAXY_MODE", raising=False)
         ws = _make_ws()
-        with caplog.at_level(logging.WARNING, logger="galaxy_gateway.webrtc_proxy"):
-            await proxy_webrtc_signaling(ws, "log-device")
-
-        assert "cross_device_blocked" in caplog.text
-        assert "log-device" in caplog.text
+        await _signal(ws)
+        assert WS_CLOSE_CODE_UNAUTHORIZED not in _close_codes(ws)
 
 
 # ===========================================================================
-# 7. get_webrtc_endpoint_info() — includes cross_device_enabled flag
+# 5. get_webrtc_endpoint_info()
 # ===========================================================================
 
 
 class TestWebRTCEndpointInfo:
-    """get_webrtc_endpoint_info() must expose the cross_device_enabled flag."""
-
-    def test_includes_cross_device_enabled_true(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+    @BOTH_MODES
+    def test_advertises_member_token(self, monkeypatch, switch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
         info = get_webrtc_endpoint_info()
-        assert "cross_device_enabled" in info
-        assert info["cross_device_enabled"] is True
-
-    def test_includes_cross_device_enabled_false(self, monkeypatch):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
-        info = get_webrtc_endpoint_info()
-        assert "cross_device_enabled" in info
-        assert info["cross_device_enabled"] is False
+        assert info["requires_member_token"] is True
+        assert "cross_device_enabled" not in info
 
 
 # ===========================================================================
-# 8 & 9. ON (regression pass-through) — route_task & WebRTC work normally
-# ===========================================================================
-
-
-class TestCrossDeviceSwitchOn:
-    """When switch is ON, cross-device paths proceed normally (regression)."""
-
-    @pytest.mark.asyncio
-    async def test_route_task_calls_coordinator_when_on(self, monkeypatch):
-        """Coordinator is invoked when switch is ON and task requires cross-device."""
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
-
-        router = DeviceRouter()
-        coordinator_mock = MagicMock()
-        coordinator_mock.execute_cross_device_task = AsyncMock(return_value={"success": True, "result": "done"})
-
-        async def _fake_analyze(command, context=None):
-            return {"requires_cross_device": True, "task_type": "cross_device"}
-
-        with patch.object(router, "_analyze_command", side_effect=_fake_analyze):
-            with patch(
-                "galaxy_gateway.device_router.get_cross_device_coordinator",
-                return_value=coordinator_mock,
-            ):
-                result = await router.route_task("sync clipboard")
-
-        assert result["success"] is True
-        coordinator_mock.execute_cross_device_task.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_proxy_does_not_close_immediately_when_on(self, monkeypatch):
-        """proxy_webrtc_signaling() does not early-close with 4001 when ON."""
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
-
-        ws = _make_ws()
-
-        # Node_95 connection will fail but that's OK — we're only verifying
-        # the switch does NOT trigger a 4001 close.
-        with patch("websockets.connect", side_effect=ConnectionRefusedError("no node95")):
-            await proxy_webrtc_signaling(ws, "device-on-test")
-
-        # If close was called, it must NOT be with the cross-device-disabled code
-        for call in ws.close.call_args_list:
-            code = call.kwargs.get("code") or (call.args[0] if call.args else None)
-            assert (
-                code != WS_CLOSE_CODE_CROSS_DEVICE_DISABLED
-            ), "WS must not be closed with 4001 when cross-device is ON"
-
-
-# ===========================================================================
-# 10. Single dispatcher — DeviceRouter is the canonical path
+# 6. Single dispatcher — DeviceRouter is the canonical path
 # ===========================================================================
 
 
 class TestSingleDispatcher:
-    """DeviceRouter.dispatch_task() is the canonical single dispatcher."""
-
     def test_device_router_exposes_dispatch_task(self):
-        assert hasattr(
-            DeviceRouter, "dispatch_task"
-        ), "DeviceRouter must expose dispatch_task() as the canonical dispatcher"
+        assert hasattr(DeviceRouter, "dispatch_task")
 
-    def test_cross_device_switch_module_exists(self):
-        """cross_device_switch.py must exist as the gate for all cross-device paths."""
-        from galaxy_gateway import cross_device_switch  # noqa: F401
-
-    def test_device_router_uses_switch_module(self):
-        """device_router imports from cross_device_switch (not a local copy)."""
-        import galaxy_gateway.device_router as dr_module
-
-        # Verify the module-level names exist in device_router's namespace
-        assert hasattr(
-            dr_module, "is_cross_device_enabled"
-        ), "device_router must import is_cross_device_enabled from cross_device_switch"
-        assert hasattr(
-            dr_module, "make_disabled_response"
-        ), "device_router must import make_disabled_response from cross_device_switch"
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

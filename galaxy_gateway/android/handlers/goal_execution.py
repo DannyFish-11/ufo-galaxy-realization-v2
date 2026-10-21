@@ -96,11 +96,6 @@ except ImportError:
     _evaluate_android_mode_readiness = None  # type: ignore[assignment]
 
 try:
-    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _is_cross_device_enabled
-except ImportError:
-    _is_cross_device_enabled = None  # type: ignore[assignment]
-
-try:
     from core.android_originated_main_chain_ingress import (
         accept_android_originated_nl_into_main_chain as _accept_android_originated_nl_into_main_chain,
     )
@@ -225,13 +220,13 @@ def _evaluate_android_nl_initiation_gate(
 ) -> Tuple[bool, List[str], str]:
     """Fail-closed gate for Android NL cross-device initiation.
 
+    Only the phone's own readiness counts (its cross-device switch, goal execution,
+    session).  This computer's 「跨设备」 switch does not: it says whether the computer
+    joins the device network, not whether the central agent coordinates a phone that did.
+
     Returns:
         (is_eligible, blocking_gates, reason)
     """
-    cross_device_enabled = bool(_is_cross_device_enabled and _is_cross_device_enabled())
-    if not cross_device_enabled:
-        return False, ["v2_cross_device_switch"], "cross_device_disabled"
-
     if _evaluate_android_mode_readiness is None:
         return False, ["mode_gate_unavailable"], "mode_gate_unavailable"
 
@@ -460,7 +455,7 @@ async def handle_goal_execution(
             trace_id=trace_id,
             lineage_quality="blocked",
             ingress_lineage="blocked_ingress",
-            dispatch_lineage="blocked_by_cross_device_gate",
+            dispatch_lineage="blocked_by_phone_readiness_gate",
             reconciliation_lineage="not_started",
             closure_lineage="not_started",
             audit_lineage="blocked_pre_dispatch",

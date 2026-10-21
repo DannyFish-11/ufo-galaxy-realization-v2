@@ -116,6 +116,10 @@ class MsgType(str, Enum):
     EXECUTION_COMMITMENT = "execution_commitment"
     EXECUTION_COMMIT = "execution_commit"
 
+    # 对外 A2A:中心智能体与派出去的 Agent(手机上的桥接 Agent、Linux / 云载体)之间的通话。
+    # 信封在 payload 里,必达语义见 core/a2a_link.py。
+    A2A = "a2a"
+
 
 # ---------------------------------------------------------------------------
 # Base model — every AIP v3 message extends this
@@ -769,7 +773,21 @@ class ExecutionCommitMsg(AIPMessage):
     reason: str = Field(default="", description="没选中时说明为什么")
 
 
+class A2AMsg(AIPMessage):
+    """A2A —— 中心智能体与派出去的 Agent 之间的一条消息(跨设备整体方案阶段 2)。
+
+    和 ``agent_message`` 不是一回事:那条是智能体对**人**说一句话;这条是智能体对**另一个 Agent**
+    说话 —— 派桥接 Agent、交接上下文、桥接对话、委派整段目标、调对方能力、交还上下文。
+    ``payload`` 是一份 ``a2a/1`` 信封(``core/a2a_link.Envelope``):消息号、序号、链路身份、要不要确认。
+    去重、按序交付、补发都由信封自己的字段保证,不靠这一层。
+    """
+
+    type: MsgType = Field(default=MsgType.A2A)
+    payload: Dict[str, Any] = Field(default_factory=dict, description="a2a/1 信封")
+
+
 _MSG_TYPE_TO_CLASS: Dict[MsgType, type] = {
+    MsgType.A2A: A2AMsg,
     MsgType.AGENT_MESSAGE: AgentMessageMsg,
     MsgType.DECISION_WITHDRAW: DecisionWithdrawMsg,
     MsgType.EXECUTION_PROPOSAL: ExecutionProposalMsg,

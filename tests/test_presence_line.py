@@ -7,9 +7,11 @@
 * 电脑发起的跨设备 / 混合任务（带目标设备、操作员派发给手机）照样进；
 * 没有开关：环境变量改不了这条规则；
 * 不进的会话相位**照常推进**，但不发 ``phase.*``、不落桌面相位账、不起 tick、不在电脑上
-  朗读回复，只推给发起设备；
+  朗读回复；这件事的进度只回给发起设备；
+* 电脑的三态不推给任何设备：电脑发起的请求不往任何设备推相位；
 * 本机对话逐位不变；
-* 不进的请求一旦在本机落手就交还桌面，补放的相位序完整；落在别的设备上不交还；
+* 不进的请求一旦在本机落手就交还桌面，补放的相位序完整，发起设备照样看到进度、补放不重推；
+  落在别的设备上不交还；
 * 分流模块在热路径守卫 G10 的名单里。
 """
 
@@ -49,7 +51,8 @@ def seb_events(monkeypatch) -> List[Dict[str, Any]]:
 def phase_pushes(monkeypatch) -> List[Dict[str, Any]]:
     pushes: List[Dict[str, Any]] = []
     monkeypatch.setattr(
-        "core.cross_device_sync.emit_cross_device_phase_sync", lambda **kwargs: pushes.append(dict(kwargs))
+        "core.cross_device_sync.tell_origin_device",
+        lambda device_id, **kwargs: pushes.append({"target_device_id": device_id, **kwargs}),
     )
     return pushes
 
@@ -178,7 +181,7 @@ def test_detached_session_still_carries_liminal_content():
     """认知段的阈限内容与预演闸门不受分流影响。"""
     session = RuntimeSession(source="wear_voice")
     bind_presence_line(session, "wear_voice", "watch-1")
-    with patch("core.cross_device_sync.emit_cross_device_phase_sync"):
+    with patch("core.cross_device_sync.tell_origin_device"):
         session.advance(TriState.LIMINAL)
     assert session.liminal_activity == "understanding"
 
@@ -191,7 +194,7 @@ def test_host_session_is_unchanged(seb_events, phase_pushes, ledger):
     assert _phase_events(seb_events) == ["phase.liminal"]
     assert ledger == [("silent", "liminal")]
     tick.assert_called_once_with(TriState.LIMINAL)
-    assert phase_pushes and "target_device_id" not in phase_pushes[0], "宿主会话照旧广播给所有设备"
+    assert phase_pushes == [], "电脑的三态不推给任何设备"
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +214,11 @@ def test_local_actuation_hands_the_request_back_to_the_desktop(seb_events, phase
 
     assert session.host_bound is True and session.presence_line_reason == "attached:hybrid_executor"
     assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
+    assert [(p["target_device_id"], p["new_phase"]) for p in phase_pushes] == [
+        ("phone-1", "liminal"),
+        ("phone-1", "manifest"),
+        ("phone-1", "silent"),
+    ], "交还桌面后手机照样看到自己这件事的进度；给桌面的补放不重推（不会从「在做」跳回「在想」）"
     assert ledger == [("silent", "liminal"), ("liminal", "manifest"), ("manifest", "silent")]
     assert attach_to_host(session, "hybrid_executor", "") is False, "归位只发生一次"
 
@@ -250,7 +258,7 @@ def test_note_local_actuation_goes_through_the_request_context():
     bind_presence_line(session, "android_vision", "phone-1")
     token = bind_runtime_session(session)
     try:
-        with patch("core.cross_device_sync.emit_cross_device_phase_sync"), patch.object(session, "_on_advance_tick"):
+        with patch("core.cross_device_sync.tell_origin_device"), patch.object(session, "_on_advance_tick"):
             session.advance(TriState.LIMINAL)
             assert note_local_actuation("computer_use") is True
     finally:
@@ -363,7 +371,7 @@ def test_local_chat_drives_the_desktop_shell_as_before(seb_events, phase_pushes,
     _run(runtime, source="chat")
     assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
     assert [row[1] for row in ledger] == ["liminal", "manifest", "silent"]
-    assert all("target_device_id" not in p for p in phase_pushes)
+    assert phase_pushes == [], "电脑发起的请求不往任何设备推相位"
     assert spoken == ["chat"]
 
 
@@ -381,7 +389,7 @@ def test_cross_device_started_on_the_desktop_goes_through_the_tri_state(seb_even
     runtime = DesktopPresenceRuntime()
     _run(runtime, **kwargs)
     assert _phase_events(seb_events) == ["phase.liminal", "phase.manifest", "phase.silent"]
-    assert all("target_device_id" not in p for p in phase_pushes)
+    assert phase_pushes == [], "目标是别的设备也一样：电脑发起的就是电脑的事，不往设备推相位"
 
 
 def test_presence_summary_counts_only_desktop_sessions():
@@ -395,60 +403,69 @@ def test_presence_summary_counts_only_desktop_sessions():
 
 
 # ---------------------------------------------------------------------------
-# 跨设备推送的目标过滤
+# 请求进度只回发起设备；电脑的三态不推给设备
 # ---------------------------------------------------------------------------
 
 
-def test_targeted_phase_push_reaches_only_the_origin_and_never_the_watch(monkeypatch):
-    """三态是电脑这具身体的表达：手机发起的请求，相位只回推给那台手机；手表不收三态，无论是否带目标。"""
+def test_request_progress_reaches_only_the_origin_phone_and_never_a_watch(monkeypatch):
+    """进度只回发起的那台手机，报文标明是请求进度；手表不收（bridge 认不出 wearos 时看 UDM 归一的类型）。"""
     from core import cross_device_sync
 
-    sent: List[str] = []
+    sent: List[tuple] = []
 
     async def _one(did, dev, msg):
-        sent.append(did)
+        sent.append((did, msg))
         return True
 
-    bridge = SimpleNamespace(
-        _devices={
-            "phone-1": SimpleNamespace(websocket=object(), connected=True),
-            "phone-2": SimpleNamespace(websocket=object(), connected=True),
-        }
-    )
-    wear_sent: List[str] = []
-    conn = SimpleNamespace(
-        get_connected_devices=AsyncMock(return_value=["watch-1", "phone-1"]),
-        send_to_device=AsyncMock(side_effect=lambda did, msg: wear_sent.append(did)),
-    )
-    resolved = {
-        "gateway.android_bridge.android_bridge": bridge,
-        "gateway.websocket_handler.connection_manager": conn,
+    devices = {
+        "phone-1": SimpleNamespace(websocket=object(), connected=True),
+        "phone-2": SimpleNamespace(websocket=object(), connected=True),
+        "watch-1": SimpleNamespace(websocket=object(), connected=True),  # 缓存条目里没有类型
+        "watch-2": SimpleNamespace(
+            websocket=object(), connected=True, device_type=SimpleNamespace(value="android_wear")
+        ),
+        "phone-off": SimpleNamespace(websocket=None, connected=False),
     }
-    monkeypatch.setattr(cross_device_sync.upper_ports, "resolve", lambda name: resolved[name])
+    bridge = SimpleNamespace(get_device=devices.get)
+    udm = SimpleNamespace(
+        get_device=lambda did: (
+            SimpleNamespace(form_factor="watch", aip_device_type="android_wear") if did == "watch-1" else None
+        )
+    )
+    monkeypatch.setattr(cross_device_sync.upper_ports, "resolve", lambda name: bridge)
     monkeypatch.setattr(cross_device_sync, "_push_to_one_device", _one)
-    monkeypatch.setitem(
-        __import__("core.routes._shared", fromlist=["registered_devices"]).registered_devices,
-        "watch-1",
-        {"device_type": "wear_os"},
-    )
+    monkeypatch.setattr("core.unified.device_manager.get_unified_device_manager", lambda: udm)
 
-    asyncio.run(
-        cross_device_sync._async_push_phase_to_all_devices(
-            "silent", "liminal", "s", "wear_voice", "t", target_device_id="phone-1"
-        )
-    )
-    assert sent == ["phone-1"] and wear_sent == []
+    async def _tell(did):
+        cross_device_sync.tell_origin_device(did, old_phase="silent", new_phase="liminal", session_id="s", source="x")
+        await asyncio.gather(*list(cross_device_sync._BACKGROUND_PHASE_SYNC_TASKS))
 
-    sent.clear()
-    asyncio.run(
-        cross_device_sync._async_push_phase_to_all_devices(
-            "silent", "liminal", "s", "wear_voice", "t", target_device_id="watch-1"
-        )
-    )
-    assert sent == [] and wear_sent == [], "目标是手表也不推：手表不收三态"
+    for did in ("phone-1", "watch-1", "watch-2", "phone-off", "nobody", ""):
+        asyncio.run(_tell(did))
+    assert [did for did, _ in sent] == ["phone-1"], "只到发起的那台手机；手表、离线的、不认识的都不推"
+    msg = sent[0][1]
+    assert msg["event_action"] == "liminal" and msg["payload"]["sync_type"] == cross_device_sync.REQUEST_PROGRESS
 
-    asyncio.run(cross_device_sync._async_push_phase_to_all_devices("silent", "liminal", "s", "chat", "t"))
-    assert sorted(sent) == ["phone-1", "phone-2"] and wear_sent == [], "不带目标时手机照旧全量广播，手表仍不收"
+
+def test_nothing_in_v2_pushes_the_desktop_tri_state_to_devices():
+    """电脑的三态不推给设备：广播、登记 / 重连补推都已删掉，往设备推相位的只剩请求进度这一处。"""
+    from core import cross_device_sync
+
+    for gone in (
+        "emit_cross_device_phase_sync",
+        "push_current_phase_to_device",
+        "tell_new_device_the_phase",
+        "_async_push_phase_to_all_devices",
+    ):
+        assert not hasattr(cross_device_sync, gone), gone
+    import galaxy_gateway.android_bridge as bridge_mod
+    import galaxy_gateway.routes.websocket as canonical
+    import galaxy_gateway.websocket_handler as legacy
+
+    assert not hasattr(bridge_mod.AndroidBridge, "route_phase_change")
+    for mod in (bridge_mod, canonical, legacy):
+        src = inspect.getsource(mod)
+        assert "build_phase_state_event" not in src and "get_current_phase" not in src, mod.__name__
 
 
 # ---------------------------------------------------------------------------

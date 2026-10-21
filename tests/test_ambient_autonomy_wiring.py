@@ -62,10 +62,11 @@ def test_ambient_is_a_known_request_source():
     循环默认开启后,这会变成每次自主行动都刷一条的噪音。
     """
     from core.desktop_presence_runtime import DesktopPresenceRuntime
+    from core.presence_line import AGENT_LOOP_SOURCES
 
     src = inspect.getsource(DesktopPresenceRuntime._dispatch)
-    known_block = src.split("if source in (")[1].split(")")[0]
-    assert '"ambient"' in known_block, "ambient 必须是已知来源,不能靠 unknown 兜底分支"
+    assert "if source in AGENT_LOOP_SOURCES:" in src, "主循环分支要按已知来源表判"
+    assert "ambient" in AGENT_LOOP_SOURCES, "ambient 必须是已知来源,不能靠 unknown 兜底分支"
 
 
 # ── 3. 端到端接缝:DELEGATE → handle_request → OpenClawd.process ────────

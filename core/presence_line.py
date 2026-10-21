@@ -4,7 +4,8 @@
 ==========================
 桌面三态（SILENT / LIMINAL / MANIFEST）是**电脑这具身体**的表达。只有**从电脑这边发起**的
 请求进三态；手机、手表、平板、另一台电脑、任何经通用接入进来的参与方 —— 不看类型、不看
-是否登记 —— 发起的请求**一律不进**：直接交给智能体处理，相位只回推给发起的那台手机类设备（手表不收三态）。
+是否登记 —— 发起的请求**一律不进**：直接交给智能体处理，这件事的进度只回给发起的那台手机类设备（手表不收）。
+电脑的三态本身不推给任何设备：设备直接对智能体，不跟着电脑的脸显示。
 
 「从电脑这边发起」按类型化字段判，不猜文本（见 :mod:`core.semantic_anchoring` 的判据）：
 
@@ -36,7 +37,7 @@
 ==========
 不进三态的请求照常由智能体处理：会话里的相位照常推进（认知段的阈限内容、预演闸门照常
 工作），只是不外显到桌面 —— 不发 ``phase.*``、不落桌面相位账、不起 continuum tick、不改
-桌面在场模式、不在电脑上朗读回复；相位只推给发起的那台手机类设备（手表不收三态）。
+桌面在场模式、不在电脑上朗读回复；这件事的进度只回给发起的那台手机类设备（手表不收），见 :func:`tell_origin`。
 
 一旦它**真的在本机落手**（computer-use 操作本机屏幕、混合执行器操作本机应用），桌面就成了
 在做事的那具身体：:func:`attach_to_host` 把会话交还桌面，经正常的 ``advance()`` 补放
@@ -86,9 +87,15 @@ from typing import Any, AsyncIterator, Callable, Dict, FrozenSet, Iterable, Muta
 
 logger = logging.getLogger("Galaxy.PresenceLine")
 
-#: 入口本身就说明请求来自别的设备。
+#: 入口本身就说明请求来自别的设备。``phone_chat``:手机上的桥接 Agent 转来的人话(core/phone_bridge.py)。
 REMOTE_SOURCES: FrozenSet[str] = frozenset(
-    {"wear_voice", "wear_decision", "android_goal_execution", "android_vision", "participant_task"}
+    {"wear_voice", "wear_decision", "android_goal_execution", "android_vision", "participant_task", "phone_chat"}
+)
+
+#: 交给智能体主循环(OpenClawd)处理的已知来源。表外的来源也会兜底到主循环,但要打一条
+#: "unknown source" 警告 —— 别的设备转来的请求都是主体自己的通道,不该被标成外来未知调用者。
+AGENT_LOOP_SOURCES: FrozenSet[str] = REMOTE_SOURCES | frozenset(
+    {"chat", "voice", "openclawd", "ambient", "active_perception", "vision_sampler", "operator"}
 )
 
 #: 智能体自己发起的工作 —— 没有发起设备，也没有人在电脑前等它。
@@ -283,24 +290,35 @@ def bind_presence_line(
     return decision
 
 
-def advance_detached(session: Any, old_state: Any, new_state: Any) -> None:
-    """不进三态的会话的相位推进：只推给发起请求的那台设备。"""
+def tell_origin(session: Any, old_state: Any, new_state: Any) -> None:
+    """别的设备发起的请求:这件事的进度只回给发起的那台设备(手表不收)。电脑发起的请求不推给任何设备。
+
+    不管会话此刻进没进桌面三态都一样 —— 手机让电脑去点一下屏幕,桌面显出它在动手,手机照样看到
+    自己这件事的进度。推的是请求的进度,不是电脑的三态(见 :mod:`core.cross_device_sync`)。
+    """
+    if getattr(session, "desktop_originated", True) or getattr(session, "replaying_for_host", False):
+        return
     origin = getattr(session, "origin_device_id", "") or ""
     if not origin:
         return
     try:
-        from core.cross_device_sync import emit_cross_device_phase_sync
+        from core.cross_device_sync import tell_origin_device
 
-        emit_cross_device_phase_sync(
+        tell_origin_device(
+            origin,
             old_phase=old_state.value,
             new_phase=new_state.value,
             session_id=session.runtime_session_id,
             source=session.source,
             trace_id=session.trace_id,
-            target_device_id=origin,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("presence_line: detached phase push skipped: %s", exc)
+        logger.debug("presence_line: request progress push skipped: %s", exc)
+
+
+def advance_detached(session: Any, old_state: Any, new_state: Any) -> None:
+    """不进三态的会话的相位推进:不外显到桌面,只把进度回给发起的那台设备。"""
+    tell_origin(session, old_state, new_state)
 
 
 def attach_to_host(session: Any, kind: str, target_device_id: Optional[str] = "") -> bool:
@@ -318,13 +336,18 @@ def attach_to_host(session: Any, kind: str, target_device_id: Optional[str] = ""
     activity, summary = session.liminal_activity, session.simulation_summary
     session.host_bound = True
     session.presence_line_reason = f"attached:{kind}"
-    # 宿主视角里这个会话此前一直是静默的：从 SILENT 起，经正常 advance 补放。
+    # 宿主视角里这个会话此前一直是静默的：从 SILENT 起，经正常 advance 补放。补放是给桌面看的 ——
+    # 发起设备那件事的进度没变，不再推一遍（否则手机上会从「在做」跳回「在想」）。
     session.tristate = tri_state("silent")
-    session.advance(tri_state("liminal"))
-    if current.value == "manifest":
-        session.advance(tri_state("manifest"))
-    else:
-        session.liminal_activity, session.simulation_summary = activity, summary
+    session.replaying_for_host = True
+    try:
+        session.advance(tri_state("liminal"))
+        if current.value == "manifest":
+            session.advance(tri_state("manifest"))
+        else:
+            session.liminal_activity, session.simulation_summary = activity, summary
+    finally:
+        session.replaying_for_host = False
     logger.info(
         "请求在本机落手，交还桌面 | runtime_session_id=%s kind=%s phase=%s",
         getattr(session, "runtime_session_id", "?"),
@@ -461,6 +484,7 @@ __all__ = [
     "HOST_SOURCES",
     "LOCAL_BODY_SOURCES",
     "REMOTE_SOURCES",
+    "AGENT_LOOP_SOURCES",
     "PresenceLineDecision",
     "RuntimeOriginMixin",
     "SessionOriginMixin",
@@ -478,4 +502,5 @@ __all__ = [
     "is_local_body",
     "register_local_identity",
     "request_origin",
+    "tell_origin",
 ]

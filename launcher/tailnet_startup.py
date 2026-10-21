@@ -41,6 +41,18 @@ class TailnetStartup:
         except Exception as exc:  # noqa: BLE001 — 入不了网不挡启动,横幅会如实说
             logger.debug("自动入网跳过: %s", exc)
 
+    def wanted(self) -> bool:
+        """有没有理由让这台电脑入自建 tailnet:配了 headscale(手表出门直连连的就是它)。
+
+        与「跨设备」开关无关 —— 那个开关只说电脑自己作为设备进不进网络。
+        """
+        try:
+            from core.headscale_join import join_status
+
+            return bool(join_status().get("configured"))
+        except Exception:  # noqa: BLE001 — 查不出就当没配,不挡启动
+            return False
+
     def not_on_tailnet_details(self) -> List[Detail]:
         """Tailscale 没起来时,横幅该说的话。
 
@@ -65,8 +77,12 @@ class TailnetStartup:
             logger.debug("局域网发布跳过: %s", exc)
             self._mdns = None
         if self._mdns is not None:
-            return ("局域网发现", "已发布 _galaxy._tcp", "ok")
-        return ("局域网发现", "未发布(已关闭、zeroconf 未装或探不到局域网地址)", "warn")
+            return ("局域网发现", "已发布 _galaxy._tcp(同一 Wi-Fi 下手表、手机能自动找到智能体)", "ok")
+        from galaxy_gateway.mdns_announcer import mdns_enabled
+
+        if not mdns_enabled():
+            return ("局域网发现", "按配置关闭(GALAXY_MDNS=0);手表、手机要手输地址", "info")
+        return ("局域网发现", "未发布(zeroconf 未装或探不到局域网地址);手表、手机要手输地址", "warn")
 
     def stop(self) -> None:
         if self._mdns is not None:

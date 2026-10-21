@@ -41,6 +41,10 @@ NOT_MEMBERS = (
     "GALAXY_TS_FUNNEL",
     "GALAXY_ACTIVE_PERCEPTION",
     "GALAXY_PROACTIVE_SCREEN",
+    # 与这台电脑加不加入无关:智能体协调已加入的设备、手表找智能体都要它们,不分模式
+    "GALAXY_ONBOARDING_ENABLED",
+    "GALAXY_LAN_DISCOVERY",
+    "GALAXY_MDNS",
 )
 
 
@@ -83,13 +87,12 @@ class TestThePolicyAndTheBundlesAgree:
         assert key not in _all_members()
         assert SWITCH_POLICY[key].disposition != MEMBER
 
-    def test_the_cross_device_family_collapses_into_one_button(self) -> None:
-        assert set(member_keys(_bundle("cross_device"))) == {
-            "GALAXY_ONBOARDING_ENABLED",
-            "GALAXY_LAN_DISCOVERY",
-            "GALAXY_MDNS",
-            "GALAXY_NATS_ENABLED",
-        }
+    def test_the_cross_device_button_only_carries_the_bus(self) -> None:
+        """「跨设备」= 这台电脑加入设备网络;它的成员只有总线。设备接入、局域网发现、mDNS 与电脑加不加入无关
+        (智能体协调已加入的设备不看这个开关),不再随按钮一起关。"""
+        assert set(member_keys(_bundle("cross_device"))) == {"GALAXY_NATS_ENABLED"}
+        for key in ("GALAXY_ONBOARDING_ENABLED", "GALAXY_LAN_DISCOVERY", "GALAXY_MDNS"):
+            assert SWITCH_POLICY[key].disposition != MEMBER, key
         assert SWITCH_POLICY["GALAXY_CROSS_DEVICE_ENABLED"].disposition == PANEL, "主键本身不隐藏"
 
 
@@ -139,16 +142,12 @@ def isolated_env(monkeypatch, tmp_path):
 class TestTheEndpointWritesThemTogether:
     def test_turning_cross_device_off_turns_its_family_off_in_one_write(self, isolated_env, monkeypatch) -> None:
         state = asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="false")))["bundle"]
-        for key in (
-            "GALAXY_CROSS_DEVICE_ENABLED",
-            "GALAXY_ONBOARDING_ENABLED",
-            "GALAXY_LAN_DISCOVERY",
-            "GALAXY_MDNS",
-            "GALAXY_NATS_ENABLED",
-        ):
+        for key in ("GALAXY_CROSS_DEVICE_ENABLED", "GALAXY_NATS_ENABLED"):
             assert os.environ[key] == "false", key
+        for key in ("GALAXY_ONBOARDING_ENABLED", "GALAXY_LAN_DISCOVERY", "GALAXY_MDNS"):
+            assert key not in os.environ, f"按钮不再碰 {key}"
         written = isolated_env.read_text(encoding="utf-8")
-        assert "GALAXY_NATS_ENABLED=false" in written and "GALAXY_MDNS=false" in written
+        assert "GALAXY_NATS_ENABLED=false" in written and "GALAXY_MDNS" not in written
         assert state["value"] == "false"
         assert state["overrides"] == 0, "按钮自己写的不算「手改过」"
 
@@ -157,8 +156,8 @@ class TestTheEndpointWritesThemTogether:
         state = asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="true")))["bundle"]
         assert os.environ["GALAXY_CROSS_DEVICE_ENABLED"] == "true"
         assert os.environ["GALAXY_NATS_ENABLED"] == "true"
-        assert os.environ["GALAXY_LAN_DISCOVERY"] == "true"
-        assert "GALAXY_MASTER_BRAIN_ENABLED" not in os.environ, "主脑是 opt-in,按钮不碰"
+        assert "GALAXY_LAN_DISCOVERY" not in os.environ
+        assert "GALAXY_MASTER_BRAIN_ENABLED" not in os.environ, "任务派发是 opt-in,按钮不碰"
         assert "FEDERATION_ENABLED" not in os.environ
         assert state["overrides"] == 0
 
@@ -171,10 +170,10 @@ class TestTheEndpointWritesThemTogether:
 
     def test_a_member_hand_edited_against_the_primary_shows_up_as_a_deviation(self, isolated_env, monkeypatch) -> None:
         asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="false")))
-        monkeypatch.setenv("GALAXY_MDNS", "true")  # 绕过面板:主键关着,它却开着
+        monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")  # 绕过面板:主键关着,它却开着
         assert _bundle_overrides("cross_device") == 1
         asyncio.run(cfg.set_bundle(cfg.BundleUpdateRequest(key="cross_device", value="true")))
-        monkeypatch.setenv("GALAXY_MDNS", "false")  # 主键开着,它却被手改成关
+        monkeypatch.setenv("GALAXY_NATS_ENABLED", "false")  # 主键开着,它却被手改成关
         assert _bundle_overrides("cross_device") == 1
 
 

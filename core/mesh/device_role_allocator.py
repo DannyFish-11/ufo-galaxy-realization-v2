@@ -28,6 +28,11 @@ Default rules:
     → :attr:`~DeviceRole.ACTION`
   ``screen / display / speaker / notification / bluetooth / nfc``
     → :attr:`~DeviceRole.PRESENCE`
+
+
+**观测标签,不参与派发**(跨设备整体方案阶段 1):这里按关键词分出的「感知 / 动作 / 在场」只写进
+``BodyMeshRegistry`` 供观测视图看;派发路径不读它,模型也看不到它 —— 谁做什么由模型看着设备整体卡
+(``core/device_onboarding/device_card.py``)决定。``tests/test_the_model_sees_each_device_as_a_whole.py`` 守着。
 """
 
 from __future__ import annotations

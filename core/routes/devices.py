@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 
 from core.auth import require_auth
 from core.command_router import get_command_router
+from core.device_onboarding.device_card import record_dispatch
 from core.routes._models import DeviceRegisterRequest, DeviceStatusUpdate
 from core.routes._self_register import await_owner, from_owner, register_directly, stored_identity
 from core.routes._shared import COMPAT_MIRROR_WRITE  # noqa: F401  PR-1 annotation import
@@ -43,7 +44,6 @@ from core.routes._shared import (
     registered_devices,
 )
 from core.schemas.task_envelope import TaskEnvelope
-from core.system_mode import cross_device_refusal
 from core.unified.device_manager import get_unified_device_manager
 
 logger = logging.getLogger("Galaxy.API")
@@ -698,31 +698,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/devices/{device_id}/command", dependencies=_OPERATOR)
     async def send_device_command(device_id: str, req: DeviceCommandRequest):
-        """发送 AIP v3.0 格式命令到单个设备
-
-        PR-3: Device existence is checked via UDM (SSOT) first.
-        The registered_devices compat cache is a non-authoritative fallback.
-        """
+        """发送 AIP v3.0 格式命令到单个设备(设备存在与否先查 UDM;registered_devices 只是兼容缓存)。"""
         if not _is_device_registered_canonical(device_id):
             raise HTTPException(status_code=404, detail="设备未注册")
-        if (refused := cross_device_refusal()) is not None:  # 本地模式不往别的设备下发
-            return JSONResponse(refused, status_code=403)
 
         command_id = str(uuid.uuid4())[:8]
+        # 设备认的下发帧只有这一种(与规范派发、/devices/parallel 同形);原先的 CONTROL_COMMAND 手表手机都不认
         message = {
             "version": "3.0",
             "message_id": command_id,
-            "type": "CONTROL_COMMAND",
+            "type": "command",
+            "command_id": command_id,
+            "command": req.command,
+            "params": req.params,
             "device_id": device_id,
-            "payload": {
-                "command": req.command,
-                "params": req.params,
-            },
             "timestamp": datetime.now().isoformat(),
         }
 
         sent = await connection_manager.send_to_device(device_id, message)
         if sent:
+            record_dispatch(device_id, req.command)  # 每次下发都进任务流程图(这条路发出即止,不等结果)
             return JSONResponse(
                 {
                     "success": True,

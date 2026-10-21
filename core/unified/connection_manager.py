@@ -88,6 +88,7 @@ class UnifiedConnectionManager:
         self._connections: Dict[str, UnifiedConnectionInfo] = {}
         # 命令响应 future: command_id → asyncio.Future
         self._pending_responses: Dict[str, asyncio.Future] = {}
+        self._inflight: Dict[str, int] = {}  # device_id → 等结果的下发条数
         # 状态订阅者
         self._status_subscribers: List[WebSocket] = []
         # 非 WebSocket 的在线通道:device_id → channel → {online, routable, last_seen, detail}
@@ -636,6 +637,7 @@ class UnifiedConnectionManager:
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         self._pending_responses[command_id] = future
+        self._inflight[device_id] = self._inflight.get(device_id, 0) + 1
 
         message = {
             "type": "command",
@@ -645,18 +647,24 @@ class UnifiedConnectionManager:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-        sent = await self.send_to_device(device_id, message)
-        if not sent:
-            self._pending_responses.pop(command_id, None)
-            return {"error": f"Failed to send command to device {device_id}"}
-
         try:
-            result = await asyncio.wait_for(future, timeout=timeout)
-            return result
+            sent = await self.send_to_device(device_id, message)
+            if not sent:
+                return {"error": f"Failed to send command to device {device_id}"}
+            return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
             return {"error": f"Command {command_id} timed out after {timeout}s"}
         finally:
             self._pending_responses.pop(command_id, None)
+            left = self._inflight.get(device_id, 1) - 1
+            if left > 0:
+                self._inflight[device_id] = left
+            else:
+                self._inflight.pop(device_id, None)
+
+    def inflight(self, device_id: str) -> int:
+        """这台设备此刻有几条下发在等结果(设备整体卡的「忙不忙」)。"""
+        return self._inflight.get(device_id, 0)
 
     def resolve_command_response(self, command_id: str, payload: Dict[str, Any]) -> None:
         """设备回传 command_result 时调用，唤醒等待中的 Future。"""

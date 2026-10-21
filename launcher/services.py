@@ -1989,7 +1989,7 @@ class GalaxyUnified:
                 except Exception:  # noqa: BLE001
                     pass
         except Exception as exc:  # noqa: BLE001
-            logger.warning("主脑选择跳过(非致命): %s", exc)
+            logger.warning("模型选择跳过(非致命): %s", exc)
 
         # 启动本地大脑（LocalBrainManager 读 OLLAMA_MODEL 作主脑，确认 Ollama
         # 服务本身已就绪）—— 必须先于下面的后台拉取执行。
@@ -2199,7 +2199,7 @@ class GalaxyUnified:
                         "就绪" if healthy else "未就绪（检查 ollama 是否运行）",
                         "ok" if healthy else "fail",
                     ),
-                    ("AI 主脑模型", f"{bm} — {model_status_label}", "ok" if model_installed else "warn"),
+                    ("AI 模型", f"{bm} — {model_status_label}", "ok" if model_installed else "warn"),
                     ("已安装模型", shown, "ok" if avail else "warn"),
                     ("硬件", hw, "ok"),
                 ],

@@ -209,13 +209,20 @@ class TestAndroidWSRouting:
         device_id = f"hb-{uuid.uuid4().hex[:8]}"
         url = path.format(device_id=device_id)
 
+        def reply(ws):
+            # 登记确认写回之后,网关会主动推一条电脑当前的三态(state_event);设备按类型分发,这里同样跳过
+            while True:
+                frame = ws.receive_json()
+                if frame.get("type") != "state_event":
+                    return frame
+
         with client.websocket_connect(url) as ws:
             # register first
             ws.send_text(json.dumps(_msg("device_register", device_id, platform="android", model="TestPhone")))
-            reg_resp = ws.receive_json()
+            reg_resp = ws.receive_json()  # 确认是登记之后的第一帧(三态在它之后才推)
             # then heartbeat
             ws.send_text(json.dumps(_msg("heartbeat", device_id)))
-            hb_resp = ws.receive_json()
+            hb_resp = reply(ws)
 
         return {"register": reg_resp, "heartbeat": hb_resp, "device_id": device_id}
 

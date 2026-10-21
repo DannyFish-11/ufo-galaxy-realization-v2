@@ -1,13 +1,13 @@
 """
 core/cross_device_sync.py
 =========================
-PR-CROSS-DEVICE-SYNC: Adaptive Async Concurrent State Synchronization.
+中心往设备推的两种状态:一台设备发起的请求的进度(只回那台设备),和任务状态(推给指定的手机)。
 
-Replaces the legacy serial for-loop with an adaptive concurrent engine:
-- Devices are pushed concurrently via asyncio.gather
-- Slow devices do NOT block fast devices
-- Per-device latency tracking enables dynamic prioritization
-- Adaptive timeout based on observed device RTT
+电脑的三态(静默 / 思考 / 执行)是电脑这具身体的表达,**不推给任何设备**:设备直接对智能体 ——
+登记、报能力、说话、拿回答 —— 不跟着电脑的脸显示。此前这里把电脑的每次相位变化广播给所有手机,
+新设备登记 / 重连时还补推一次电脑当前的三态;两处都已删掉。
+
+每台设备记一份时延画像,推送超时按它自适应(慢设备不拖住调用方)。
 """
 
 from __future__ import annotations
@@ -16,16 +16,15 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from core import upper_ports
 
 logger = logging.getLogger("Galaxy.CrossDeviceSync")
 
-# Retains fire-and-forget phase-sync tasks.  asyncio.get_event_loop().create_task
-# only keeps a WEAK reference to the task, so a bare create_task(...) whose result
-# is discarded can be garbage-collected before it runs, silently dropping the
-# cross-device phase broadcast.  Hold a strong ref until the task finishes.
+# Retains fire-and-forget request-progress tasks.  The event loop only keeps a WEAK
+# reference to a task, so a bare create_task(...) whose result is discarded can be
+# garbage-collected before it runs.  Hold a strong ref until the task finishes.
 _BACKGROUND_PHASE_SYNC_TASKS: set = set()
 
 try:
@@ -36,7 +35,7 @@ except ImportError:
     _AIPV3_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
-# Per-device latency tracker (adaptive prioritization)
+# Per-device latency tracker (adaptive timeout)
 # ---------------------------------------------------------------------------
 
 
@@ -86,21 +85,6 @@ class DeviceLatencyProfile:
         timeout = self.p95_latency * 3 + 100  # 3x p95 + 100ms buffer
         return max(0.5, min(timeout / 1000, 5.0))
 
-    def priority_score(self) -> float:
-        """Lower score = higher priority.
-
-        Factors:
-        - Lower latency = higher priority (faster devices first)
-        - Recent failure = lower priority (penalize flaky devices)
-        - No samples = medium priority (new devices)
-        """
-        score = self.avg_latency
-        if not self.is_healthy:
-            score += 200 * self.failure_count  # heavy penalty
-        if not self.samples:
-            score = 30.0  # treat new devices as fast (optimistic)
-        return score
-
 
 class _LatencyTracker:
     """Module-level singleton tracking observed latency per device."""
@@ -115,14 +99,6 @@ class _LatencyTracker:
 
     def remove(self, device_id: str) -> None:
         self._profiles.pop(device_id, None)
-
-    def sorted_devices(self, device_ids: List[str]) -> List[str]:
-        """Return device_ids sorted by priority (fastest first)."""
-
-        def sort_key(did: str) -> float:
-            return self.get(did).priority_score()
-
-        return sorted(device_ids, key=sort_key)
 
     def all_profiles(self) -> Dict[str, Dict[str, Any]]:
         return {
@@ -144,37 +120,31 @@ _latency_tracker = _LatencyTracker()
 # ---------------------------------------------------------------------------
 
 
+#: 进度报文的标记(``payload.sync_type``):这是「智能体在处理**你这件事**」的进度,不是电脑的三态。
+#: 手机只认带这个标记的相位报文。
+REQUEST_PROGRESS = "request_progress"
+
+
 def build_phase_state_event(
     *,
     new_phase: str,
     old_phase: str = "unknown",
-    source: str = "desktop_presence_runtime",
-    sync_type: str = "cross_device_broadcast",
+    source: str = "agent",
+    sync_type: str = REQUEST_PROGRESS,
     session_id: str = "",
     trace_id: str = "",
     now_ms: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """三态相位报文的**唯一**构造处。
+    """相位报文的**唯一**构造处(现在只有一个用途:请求进度,见 :func:`tell_origin_device`)。
 
-    为什么必须只有一处
-    ==================
-    这条报文原来有三个发送点(初次注册推送、重连推送、相位变更广播),
-    各自手写一份字典,形状还不一样 —— 初次推送那份**连 payload 都没有**。
-    而手表侧只读 ``payload.to_phase``:于是刚配好对的手表收到报文、解析出空,
-    静默丢弃,权威相位永远到不了。桌面日志里写着"已推送",手表上什么也没发生。
-
-    手机端读的是**顶层** ``event_action``(见 GalaxyWebSocketClient 里那段注释),
-    手表端读的是 payload —— 两个消费方读同一条报文的不同位置,而生产方有三份
-    各写各的。所以这里一次把两处都填上,并让三个发送点都取用同一个构造器:
-    形状要变的时候只有一个地方会变。
-
-    ``phase`` 顶层字段是旧版手机端的读法,保留作向后兼容。
+    手机读**顶层** ``event_action``,并看 ``payload.sync_type`` 是不是 :data:`REQUEST_PROGRESS`;
+    ``payload`` 里另有 ``from_phase`` / ``to_phase``。``phase`` 顶层字段是旧版手机端的读法,保留兼容。
 
     Args:
         new_phase: 目标相位(``silent`` / ``liminal`` / ``manifest``)。
-        old_phase: 来源相位;推送当前状态时无从得知,填 ``unknown``。
-        source:    谁判定的这次相位 —— 排障时用来区分"谁说了算"。
-        sync_type: 这次推送的由头(初次同步 / 重连同步 / 变更广播)。
+        old_phase: 来源相位。
+        source:    这件请求从哪个入口进来的 —— 排障用。
+        sync_type: 报文的由头,默认 :data:`REQUEST_PROGRESS`。
         now_ms:    时间戳(毫秒);留空取当前时间。测试可注入固定值。
     """
     ts = int(time.time() * 1000) if now_ms is None else int(now_ms)
@@ -186,7 +156,7 @@ def build_phase_state_event(
         "device_id": "v2_desktop",
         "timestamp": ts,
         "aip_version": "3.0",
-        # ── payload:手表端读 to_phase ──
+        # ── payload:由头(手机靠 sync_type 认出这是请求进度)与前后相位 ──
         "payload": {
             "from_phase": old_phase,
             "to_phase": new_phase,
@@ -203,164 +173,75 @@ def build_phase_state_event(
     return msg
 
 
-def emit_cross_device_phase_sync(
+def tell_origin_device(
+    device_id: str,
+    *,
     old_phase: str,
     new_phase: str,
-    session_id: str,
-    source: str = "desktop_presence_runtime",
+    session_id: str = "",
+    source: str = "",
     trace_id: str = "",
-    target_device_id: str = "",
 ) -> None:
-    """Fire-and-forget: push phase change to all connected Android devices.
+    """Fire-and-forget:智能体处理一台设备发起的请求时,把这件事的进度(在想 / 在做 / 做完)只回给那台设备。
 
-    Called synchronously from RuntimeSession.advance().
-    Uses asyncio.create_task so it never blocks the caller.
-
-    ``target_device_id`` non-empty narrows the push to that one device (Android
-    or WearOS).  Used for requests that never surface on the desktop — see
-    :mod:`core.presence_line`: the phone that asked sees its own phases, the
-    other bodies are left alone.
+    电脑的三态是电脑这具身体的表达,**不推给任何设备** —— 设备直接对智能体:登记、报能力、说话、
+    拿回答。这里推的不是电脑的三态,而是发起设备自己那件请求的进度;手表不收(手表只响应,不显示进度)。
+    调用方见 :func:`core.presence_line.tell_origin`。
     """
-    try:
-        loop = asyncio.get_running_loop()
-        task = loop.create_task(
-            _async_push_phase_to_all_devices(
-                old_phase=old_phase,
-                new_phase=new_phase,
-                session_id=session_id,
-                source=source,
-                trace_id=trace_id,
-                target_device_id=target_device_id,
-            )
-        )
-        # Keep a strong reference until the task completes so it can't be GC'd
-        # mid-flight (the loop only holds a weak ref to the task).
-        _BACKGROUND_PHASE_SYNC_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_PHASE_SYNC_TASKS.discard)
-    except RuntimeError:
-        logger.debug("CrossDeviceSync: no event loop, skipping push")
-
-
-async def _async_push_phase_to_all_devices(
-    old_phase: str,
-    new_phase: str,
-    session_id: str,
-    source: str,
-    trace_id: str,
-    target_device_id: str = "",
-) -> None:
-    """Adaptive async concurrent push to all connected devices.
-
-    Key behaviours:
-    1. All devices are pushed concurrently (asyncio.gather)
-    2. Per-device adaptive timeout based on observed RTT
-    3. Devices sorted by latency profile (fastest first in logs)
-    4. Slow devices do NOT block fast devices
-    5. Latency is recorded for future prioritization
-    """
-    try:
-        _bridge = upper_ports.resolve("gateway.android_bridge.android_bridge")
-    except Exception as exc:
-        logger.debug("CrossDeviceSync: bridge not available: %s", exc)
+    if not device_id:
         return
-
-    # Build AIP v3 STATE_EVENT message (单一构造处,见 build_phase_state_event)
-    msg: Dict[str, Any] = build_phase_state_event(
+    msg = build_phase_state_event(
         new_phase=new_phase,
         old_phase=old_phase,
-        source=source,
-        sync_type="cross_device_broadcast",
+        source=source or "agent",
+        sync_type=REQUEST_PROGRESS,
         session_id=session_id,
         trace_id=trace_id,
     )
-
-    # Collect connected devices
-    connected: List[Tuple[str, Any]] = []
-    for device_id, device in _bridge._devices.items():
-        if target_device_id and device_id != target_device_id:
-            continue
-        if device.websocket is not None and getattr(device, "connected", False):
-            connected.append((device_id, device))
-
-    if not connected:
-        logger.debug("CrossDeviceSync: no connected devices to push to")
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.debug("CrossDeviceSync: no event loop, request progress for %s not sent", device_id)
         return
-
-    # Sort by observed latency (fastest first) — adaptive prioritization
-    device_ids = [did for did, _ in connected]
-    sorted_ids = _latency_tracker.sorted_devices(device_ids)
-    sorted_devices = [(did, dict(connected)[did]) for did in sorted_ids]
-
-    # Concurrent push with per-device adaptive timeout
-    push_start = time.time()
-    tasks = [_push_to_one_device(did, dev, msg) for did, dev in sorted_devices]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Collect results
-    sent = 0
-    failed = 0
-    for (did, _), result in zip(sorted_devices, results):
-        if isinstance(result, Exception):
-            failed += 1
-            # 修复三重计数:_push_to_one_device 内部每次尝试(含重试)已 record 了
-            # 成败,这里再 record 一次是纯重复,还用假 latency=0 污染画像——一次
-            # 逻辑推送失败被记成 3 次失败,设备被误判 unhealthy(+600 惩罚),要
-            # 连续 3 次成功才恢复。外层只统计,不再重复 record。
-            logger.debug("CrossDeviceSync: push to %s failed: %s", did, result)
-        elif result is True:
-            sent += 1
-
-    total_ms = (time.time() - push_start) * 1000
-    logger.info(
-        "CrossDeviceSync: phase %s→%s pushed to %d/%d device(s) " "in %.1fms (adaptive concurrent)",
-        old_phase,
-        new_phase,
-        sent,
-        len(connected),
-        total_ms,
-    )
+    task = loop.create_task(_push_request_progress(device_id, msg))
+    # 事件循环只弱引用任务;不留强引用,任务可能还没跑就被回收
+    _BACKGROUND_PHASE_SYNC_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_PHASE_SYNC_TASKS.discard)
 
 
-async def push_current_phase_to_device(device_id: str, *, sync_type: str = "cross_device_initial_sync") -> bool:
-    """把桌面**当前**相位单独推给一台刚接进来的设备。
-
-    为什么需要它
-    ============
-    相位广播只在**发生跃迁**时才发。设备是在两次跃迁之间接进来的,所以不补这一次,
-    它手里就什么都没有 —— 而"什么都没有"在设备上会被渲染成 SILENT。桌面明明正在
-    执行,新连上的手表却显示静默,并且要等到下一次相位变化才纠正。
-
-    Android 那条注册路径早就有这一步(见 handlers/registration.py),WearOS 走的是
-    ``websocket_handler.handle_register → connection_manager``,一直漏了。此前没暴露
-    出来,是因为手表自己拿连接态凑了个相位(鉴权成功即 MANIFEST)—— 那个凑出来的值
-    与桌面无关,现在撤掉了,这一步就必须补上。
-
-    Returns:
-        ``True`` 已推送;``False`` 拿不到相位、设备不在线或发送失败(非致命)。
-    """
+def _is_watch(device_id: str, device: Any) -> bool:
+    """是不是手表。bridge 的缓存条目认不出手表报的 ``wearos``(落成 UNKNOWN),所以也看 UDM 归一后的类型。"""
+    raw: List[Any] = [
+        getattr(getattr(device, "device_type", None), "value", ""),
+        getattr(getattr(device, "platform", None), "value", ""),
+    ]
     try:
-        from core.desktop_presence_runtime import get_desktop_presence_runtime  # noqa: PLC0415
+        from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
 
-        dpr = get_desktop_presence_runtime()
-        current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else ""
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("CrossDeviceSync: presence runtime unavailable: %s", exc)
-        return False
+        record = get_unified_device_manager().get_device(device_id)
+        if record is not None:
+            raw += [getattr(record, "form_factor", ""), getattr(record, "aip_device_type", "")]
+    except Exception as exc:  # noqa: BLE001 — 查不到就按 bridge 条目判
+        logger.debug("CrossDeviceSync: UDM lookup for %s failed: %s", device_id, exc)
+    return any("wear" in str(v).lower() or "watch" in str(v).lower() for v in raw)
 
-    if not current_phase:
-        return False
 
-    msg = build_phase_state_event(new_phase=current_phase, sync_type=sync_type)
+async def _push_request_progress(device_id: str, msg: Dict[str, Any]) -> bool:
     try:
-        connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
-
-        await connection_manager.send_to_device(device_id, msg)
+        bridge = upper_ports.resolve("gateway.android_bridge.android_bridge")
     except Exception as exc:  # noqa: BLE001
-        logger.debug("CrossDeviceSync: initial phase push to %s failed: %s", device_id, exc)
+        logger.debug("CrossDeviceSync: bridge not available: %s", exc)
         return False
-
-    logger.info("CrossDeviceSync: initial phase=%s pushed to device=%s", current_phase, device_id)
-    return True
+    device = bridge.get_device(device_id)
+    if device is None or device.websocket is None or not getattr(device, "connected", False):
+        return False
+    if _is_watch(device_id, device):
+        return False
+    try:
+        return await _push_to_one_device(device_id, device, msg)
+    except Exception as exc:  # noqa: BLE001 — 进度推不到不影响请求本身
+        logger.debug("CrossDeviceSync: request progress to %s failed: %s", device_id, exc)
+        return False
 
 
 async def _push_to_one_device(

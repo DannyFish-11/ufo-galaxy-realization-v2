@@ -2,21 +2,14 @@
 # -*- coding: utf-8 -*-
 """tests/test_phase_wire_shape_is_single_sourced.py
 
-三态相位报文的形状 —— **一处构造,两个消费方都读得到**。
+中心发给设备的相位报文 —— **一处构造**。
 
-这条报文为什么值得单独钉
-========================
-它有两个消费方,而它们读的**不是同一个位置**:
+现在它只有一个用途:一台设备发起的请求,智能体处理到哪了(在想 / 在做 / 做完),只回给那台设备
+(``core.cross_device_sync.tell_origin_device``)。电脑自己的三态不推给任何设备。
 
-- 手机端(``GalaxyWebSocketClient``)读**顶层**的 ``event_category`` / ``event_action``
-- 手表端(``GalaxyWearApplication.handleStateEvent``)读 ``payload.to_phase``
-
-而生产方原来有三个,各写各的字典。其中"设备刚注册完推当前相位"那一份
-**不带 payload** —— 于是正常路径(AIPTransport 成功)下,刚配好对的手表收到报文、
-解析出空、静默丢弃。桌面日志写着"已推送 phase=silent",手表上什么也没发生;
-只有 AIPTransport 抛异常掉进兜底 ``send_json`` 时,手表才拿得到相位。
-
-这类缺陷不会让任何东西报错,所以只能靠**对着两个消费方的读法**去钉形状。
+手机读**顶层** ``event_category`` / ``event_action``,并靠 ``payload.sync_type`` 认出这是请求进度。
+生产方原来有三个(登记补推、重连补推、变更广播),各写各的字典,形状还不一样;三处都已删掉,
+这里钉住不再长出第二份。
 """
 
 from __future__ import annotations
@@ -30,12 +23,8 @@ from core.cross_device_sync import build_phase_state_event
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: 三个发送点。它们必须都经由 build_phase_state_event,而不是各自手写字典。
-_EMITTER_FILES = (
-    "core/cross_device_sync.py",
-    "galaxy_gateway/android_bridge.py",
-    "galaxy_gateway/android/handlers/registration.py",
-)
+#: 唯一允许手写相位报文字典的地方(构造器本身)。
+_BUILDER_FILE = "core/cross_device_sync.py"
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +42,7 @@ def test_android_reads_the_top_level_fields(phase):
 
 
 @pytest.mark.parametrize("phase", ["silent", "liminal", "manifest"])
-def test_wearos_reads_payload_to_phase(phase):
-    """手表端读 ``payload.to_phase`` —— 这正是初次推送当初丢掉的那半边。"""
+def test_payload_carries_the_phase_too(phase):
     msg = build_phase_state_event(new_phase=phase)
     assert msg["payload"]["to_phase"] == phase
 
@@ -75,26 +63,17 @@ def test_legacy_top_level_phase_is_kept():
 
 
 # ---------------------------------------------------------------------------
-# 二、推送当前状态时"来源相位"是未知的,不能假装知道
+# 二、报文说明自己是请求进度
 # ---------------------------------------------------------------------------
 
 
-def test_pushing_current_state_says_from_is_unknown():
-    """初次/重连推送只知道"现在是什么",不知道"从哪来"。
+def test_it_says_it_is_request_progress():
+    """手机只认带这个标记的相位报文 —— 电脑的三态(就算哪天又有人推)不会显示成「智能体在处理你这件事」。"""
+    from core.cross_device_sync import REQUEST_PROGRESS
 
-    随手填 ``silent`` 会让设备侧把它当成一次真实跃迁,触发不该有的震动与动效。
-    """
-    msg = build_phase_state_event(new_phase="manifest", sync_type="cross_device_initial_sync")
-    assert msg["payload"]["from_phase"] == "unknown"
-
-
-def test_sync_type_distinguishes_why_it_was_pushed():
-    """初次同步、重连同步、变更广播是三件事,排障时要分得开。"""
-    kinds = {
-        build_phase_state_event(new_phase="silent", sync_type=st)["payload"]["sync_type"]
-        for st in ("cross_device_initial_sync", "cross_device_reconnect_sync", "cross_device_broadcast")
-    }
-    assert len(kinds) == 3
+    assert (
+        build_phase_state_event(new_phase="liminal")["payload"]["sync_type"] == REQUEST_PROGRESS == "request_progress"
+    )
 
 
 def test_optional_correlation_fields_are_omitted_when_absent():
@@ -116,7 +95,7 @@ def test_timestamp_is_milliseconds():
 
 
 # ---------------------------------------------------------------------------
-# 三、三个发送点都得用这一处,不许再手写
+# 三、只有这一处
 # ---------------------------------------------------------------------------
 
 
@@ -138,24 +117,18 @@ def _phase_dict_literals(path: Path) -> list:
     return found
 
 
-@pytest.mark.parametrize("rel", _EMITTER_FILES)
-def test_no_emitter_hand_writes_the_phase_message(rel):
-    """手写字典就是这次缺陷的产生方式:三份形状,其中一份少了半边。
-
-    区分度:把 build_phase_state_event 里的 payload 删掉,这条不会红 ——
-    上面那批断言才会。这条盯的是**别再长出第四份**。
-    """
-    path = REPO_ROOT / rel
-    lines = _phase_dict_literals(path)
-    if rel == "core/cross_device_sync.py":
-        # 构造器自己那一份是唯一允许的手写处。
-        assert len(lines) == 1, f"{rel} 里除构造器外还有手写相位报文:{lines}"
-    else:
-        assert not lines, f"{rel} 又手写了一份相位报文(行 {lines}) —— 请改用 build_phase_state_event"
-
-
-@pytest.mark.parametrize("rel", ("galaxy_gateway/android_bridge.py", "galaxy_gateway/android/handlers/registration.py"))
-def test_push_sites_import_the_builder(rel):
-    """光是"没手写"不够 —— 还得证明它们真的取用了那一处。"""
-    src = (REPO_ROOT / rel).read_text(encoding="utf-8")
-    assert "build_phase_state_event" in src, f"{rel} 没有用统一构造器"
+def test_nothing_else_hand_writes_a_phase_message_or_calls_the_builder():
+    """手写字典是当初三份形状不一的来由;别的模块调构造器,就是又长出了一个往设备推相位的地方。"""
+    offenders = []
+    for root in ("core", "galaxy_gateway"):
+        for path in sorted((REPO_ROOT / root).rglob("*.py")):
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            literals = _phase_dict_literals(path)
+            if rel == _BUILDER_FILE:
+                assert len(literals) == 1, f"{rel} 里除构造器外还有手写相位报文:{literals}"
+                continue
+            if literals:
+                offenders.append(f"{rel} 手写相位报文(行 {literals})")
+            if "build_phase_state_event" in path.read_text(encoding="utf-8"):
+                offenders.append(f"{rel} 调了相位报文构造器")
+    assert not offenders, offenders

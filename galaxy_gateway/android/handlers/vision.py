@@ -73,31 +73,15 @@ async def handle_vision_request(
             task_context=task_context,
         )
 
-    # ── Push result back to Android ─────────────────────────────────────────
-    response = MessageBuilder.vision_result(
+    # ── Result back to Android ──────────────────────────────────────────────
+    # 只靠返回值:两个设备入口(规范入口、兼容入口)都把处理器的返回值写回这条连接。此前这里还经
+    # AIPTransport 另推一份 —— 桌面版没装传输时那一份从没送到过(返回失败不抛异常),装上之后
+    # 设备会收到两份 vision_result(跨设备整体方案阶段 6 查出)。
+    return MessageBuilder.vision_result(
         device_id=device_id or "unknown",
         task_id=task_id,
         result=vision_payload,
     )
-
-    try:
-        if websocket is not None:
-            # PR-AIP-UNIFIED: Route through AIPTransport
-            from core.aip_transport import get_aip_transport
-
-            _msg = {
-                **response,
-                "_transport": "auto",
-                "version": "3.0",
-            }
-            try:
-                await get_aip_transport().send(_msg, device_id or "unknown")
-            except Exception:
-                await websocket.send_json(response)
-    except Exception as e:
-        logger.warning("Failed to push vision_result to %s: %s", device_id, e)
-
-    return response
 
 
 async def _process_via_runtime_shell(

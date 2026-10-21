@@ -280,13 +280,14 @@ def _provider_inventory(_q: str) -> Any:
 
 
 def _transports(_q: str) -> Any:
-    """AIP 各链路的统计（选路依据），外加 BLE 已连设备与 Tailscale 直连登记表。"""
+    """装了哪些传输、AIP 各链路的统计（选路依据），外加 BLE 已连设备与 Tailscale 直连登记表。"""
     from core.aip_transport import get_aip_transport
 
     transport = get_aip_transport()
     ble = transport.get_adapter("ble")
     p2p = transport.get_adapter("tailscale_p2p")
     return {
+        "adapters": transport.list_adapters(),
         "links": transport.transport_stats(),
         "ble_connected": ble.list_connected() if ble is not None else None,
         "tailscale_p2p_devices": p2p.list_registered_devices() if p2p is not None else None,
@@ -381,7 +382,7 @@ SECTIONS: Dict[str, "tuple[Callable[[str], Any], str]"] = {
     "session_axis": (_session_axis, "会话轴快照（?q=标识字段 查所属会话类）"),
     "session_lanes": (_session_lanes, "会话执行通道"),
     "state_event_bus": (_state_event_bus, "每类状态事件的订阅数（没人订阅的单列）"),
-    "transports": (_transports, "AIP 链路统计、BLE 已连设备、Tailscale 直连登记"),
+    "transports": (_transports, "装了哪些传输、AIP 链路统计、BLE 已连设备、Tailscale 直连登记"),
     "truth_boundary": (_truth_boundary, "真相 / 投影边界分类（?q=面的路径）"),
 }
 

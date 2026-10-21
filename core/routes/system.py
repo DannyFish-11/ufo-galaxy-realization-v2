@@ -440,10 +440,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         mode
             当前系统模式字符串（``"desktop-local"`` 或 ``"desktop-cross-device"``）。
         cross_device_enabled
-            跨设备路由是否启用（``GALAXY_CROSS_DEVICE_ENABLED`` 为真，或
-            ``GALAXY_SYSTEM_MODE=desktop-cross-device``，任一即是）。
+            这台电脑是否作为设备加入了设备网络（``GALAXY_CROSS_DEVICE_ENABLED`` 为真，或
+            ``GALAXY_SYSTEM_MODE=desktop-cross-device``，任一即是）。它不限制智能体协调已加入的设备。
         takeover_available
-            接管（takeover）能力是否可用（仅在 cross_device_enabled=true 时为 true）。
+            接管（takeover）现在能不能发：有已加入、在线的安卓成员即可，与上一项无关
+            （以前绑在电脑的「跨设备」上 —— 那道闸已拆）。
         android_devices_online
             当前在线 Android 设备数量。
         nats_enabled
@@ -492,7 +493,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             {
                 "mode": current_mode,
                 "cross_device_enabled": cross_device_on,
-                "takeover_available": cross_device_on,
+                "takeover_available": android_online > 0,
                 "android_devices_online": android_online,
                 "nats_enabled": nats_enabled,
                 "fabric_strict": fabric_strict,

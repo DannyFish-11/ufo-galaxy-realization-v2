@@ -7178,7 +7178,7 @@ class OpenClawd:
         tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
         if home_tools_enabled():  # 智能家居:配了 Home Assistant 才出现 —— 见 core/smart_home_tools.py
             tools.extend(HOME_BUILTIN_TOOLS)
-        tools.extend(devices_tools_for_agent())  # 设备:看、接入、调用;本地模式下可请求打开跨设备 —— 见 agent_tools.py
+        tools.extend(devices_tools_for_agent())  # 设备:看、接入、调用(不分模式,只看设备接入开关)—— 见 agent_tools.py
         tools.extend(tuning_tools_for_agent())  # 按人的话调「调数据方式」的参数(不上面板)—— 见 core/tuning.py
 
         # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────

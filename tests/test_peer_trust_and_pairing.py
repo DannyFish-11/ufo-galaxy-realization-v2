@@ -395,6 +395,53 @@ class TestPairingFlow:
         assert verify_token(r["capability_token"], required_scope="device:tap").valid is True
         assert verify_token(r["capability_token"], required_scope="admin:wipe").valid is False
 
+    def _claim(self, client, device_id="wear-1"):
+        card = client.get("/api/v1/pair/card").json()
+        r = client.post(
+            "/api/v1/pair/claim",
+            json={
+                "code": card["code"],
+                "device_id": device_id,
+                "name": "手表",
+                "device_type": "wearos",
+                "trust": "friend",
+            },
+        ).json()
+        assert r["success"] is True
+        return r["capability_token"]
+
+    def test_a_device_leaves_by_itself_with_its_own_token(self, client):
+        """手表上点「解除配对」:凭自己的配对令牌退出 —— 令牌作废、移出对端名册与设备名册。"""
+        from core.capability_token import verify_token
+        from core.peer_trust import get_peer_trust_book
+        from core.unified.device_manager import get_unified_device_manager
+
+        token = self._claim(client)
+        get_unified_device_manager().register_device_from_dict("wear-1", {"device_type": "wearos"})
+        r = client.post("/api/v1/pair/leave", json={"device_id": "wear-1", "token": token})
+        assert r.status_code == 200 and r.json()["success"] is True, r.text
+        assert verify_token(token).valid is False, "令牌必须作废"
+        assert get_peer_trust_book().get("wear-1") is None
+        assert get_unified_device_manager().get_device("wear-1") is None
+        # 同一枚令牌不能再用来做任何事,包括再退一次、换新
+        assert client.post("/api/v1/pair/leave", json={"device_id": "wear-1", "token": token}).status_code == 401
+        assert client.post("/api/v1/pair/renew", json={"device_id": "wear-1", "token": token}).status_code == 401
+
+    def test_a_token_cannot_make_another_device_leave(self, client):
+        from core.peer_trust import get_peer_trust_book
+
+        mine = self._claim(client, "wear-1")
+        self._claim(client, "phone-2")
+        r = client.post("/api/v1/pair/leave", json={"device_id": "phone-2", "token": mine})
+        assert r.status_code == 401
+        assert get_peer_trust_book().get("phone-2") is not None
+
+    def test_leave_needs_no_api_token(self):
+        from core.auth import is_self_authenticating
+
+        assert is_self_authenticating("/api/v1/pair/leave", "POST")
+        assert not is_self_authenticating("/api/v1/pair/leave", "GET")
+
     def test_token_scopes_follow_trust_level(self, client):
         from core.capability_token import verify_token
 

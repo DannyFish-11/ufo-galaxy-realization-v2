@@ -136,9 +136,11 @@ def test_active_perception_is_a_known_source():
     把主体自己的通道标成外来未知调用者。
     """
     import core.desktop_presence_runtime as dpr
+    from core.presence_line import AGENT_LOOP_SOURCES
 
     src = _code_only(dpr.DesktopPresenceRuntime._dispatch)
-    assert "'active_perception'" in src, "_submit_autonomous_goal 用的来源仍不在白名单里"
+    assert "AGENT_LOOP_SOURCES" in src, "主循环分支要按已知来源表判"
+    assert "active_perception" in AGENT_LOOP_SOURCES, "_submit_autonomous_goal 用的来源仍不在白名单里"
     # 白名单与实际提交处必须用同一个字符串
     assert "'active_perception'" in _code_only(dpr), "来源常量对不上"
 

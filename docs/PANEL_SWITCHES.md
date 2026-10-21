@@ -5,14 +5,14 @@
 
 ## 结论
 
-设置页「全部设置」共登记 408 个键，其中布尔开关 **102** 个。逐个对着生产代码核过之后，它们分成四种去处：
+设置页「全部设置」共登记 410 个键，其中布尔开关 **102** 个。逐个对着生产代码核过之后，它们分成四种去处：
 
 | 去处 | 个数 | 含义 |
 |---|---|---|
 | **留在面板** | 15 | 用户真有取舍：隐私（录音存不存）、花费（多模型协作）、硬件与网络（下不下 310MB 模型）、对 AI 行为的偏好（高危命令要不要你批准） |
-| **内置**（面板不列） | 49 | 不该有人去关的内部机制和系统自己的保护：熔断器、派发幂等、回声消除、鉴权、Esc 叫停、自回声闸门……默认开，关掉只会变差或出事 |
+| **内置**（面板不列） | 52 | 不该有人去关的内部机制和系统自己的保护：熔断器、派发幂等、回声消除、鉴权、Esc 叫停、自回声闸门……默认开，关掉只会变差或出事 |
 | **开发 / 运维**（面板不列） | 33 | 开发、运维、打包、测试用的逃生口，以及对外部署的加固选项（强制令牌、设备准入、权限从严……）和危险逃生口（远程安装脚本、pickle 权重）。「本机回环也封禁」打开后，桌面会把自己锁在自己的后端门外 |
-| **并进整档按钮**（面板不列） | 5 | 和某个整档按钮同一件事的另一面：翻按钮时一起写，不再各占一行（见下面「并进整档按钮的」） |
+| **并进整档按钮**（面板不列） | 2 | 和某个整档按钮同一件事的另一面：翻按钮时一起写，不再各占一行（见下面「并进整档按钮的」） |
 
 面板不列 ≠ 没接上：这些键仍在 `CONFIG_SCHEMA` 里，`POST /api/config` 照收、`.env` 照写、环境变量照读，只是 `GET /api/config/all` 不列。
 
@@ -23,7 +23,7 @@
 | 控件 | 在哪 | 管什么 |
 |---|---|---|
 | 整档「全模态」 | 浮层 | 推拉开关（一个开关管一整片），主键 `GALAXY_AMBIENT_LOOP`，连带 1 个子开关 |
-| 整档「跨设备」 | 浮层 | 推拉开关（一个开关管一整片），主键 `GALAXY_CROSS_DEVICE_ENABLED`，连带 4 个子开关 |
+| 整档「跨设备」 | 浮层 | 推拉开关（一个开关管一整片），主键 `GALAXY_CROSS_DEVICE_ENABLED`，连带 1 个子开关 |
 | 整档「声字同文」 | 浮层 | 推拉开关（一个开关管一整片），主键 `GALAXY_SPEAK` |
 | 整档「自主」 | 浮层 | 三档牌，主键 `GALAXY_AUTONOMY` |
 | 本机模型档位 A / B / C / D | 浮层 | 四选一，写 `GALAXY_MODEL_TIER` |
@@ -62,7 +62,7 @@
 | `FEDERATION_ENABLED` | 关 | 联邦（把多套 Galaxy 连成一片）：默认关的 opt-in |
 | `GALAXY_CROSS_DEVICE_ENABLED` | 关 | 跨设备模式：整档「跨设备」的主键。关=本地模式(只在本机跑)，开=跨设备模式 |
 | `GALAXY_ENABLE_WEBRTC_DATA_CHANNEL` | 关 | WebRTC 数据通道（浏览器/手机把摄像头麦克风直接推给感知层）：opt-in |
-| `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 主脑编排 + worker/NATS 分布式：默认关=单机。与「跨设备」的关系见 docs/PANEL_SWITCHES.md 的合并建议 |
+| `GALAXY_MASTER_BRAIN_ENABLED` | 关 | 任务派发:智能体经 NATS 把任务派给 worker,默认关。只看这个开关(开了会拉起消息总线),与电脑的「跨设备」无关 |
 | `GALAXY_REMOTE_DESKTOP` | 关 | 远程桌面接入：默认关，打开就是对外开一个口 |
 | `GALAXY_TS_FUNNEL` | 关 | 把网关经 Tailscale Funnel 暴露到公网：必须让人看见 |
 
@@ -128,7 +128,7 @@
 | `GALAXY_ROUTER_ADAPTIVE_CONCURRENCY` | 开 | 按实测延迟自动调并发：内部调节 |
 | `GALAXY_ROUTER_CB_ENABLED` | 开 | 熔断器：后端连续出错就暂停用它。关掉会一直撞墙 |
 
-### 多设备与网络（11）
+### 多设备与网络（14）
 
 | 键 | 默认 | 为什么 |
 |---|---|---|
@@ -136,8 +136,11 @@
 | `GALAXY_HA_BRIDGE` | 开 | 接入 Home Assistant：URL 与令牌都配齐才会启动，没配时完全不动；配齐本身就是人的授权，不需要再有一个开关 |
 | `GALAXY_HEADSCALE_AUTOJOIN` | 开 | 配好 Headscale 后自动加入：没配时什么都不做 |
 | `GALAXY_HF_MIRROR` | 开 | 模型下载先试国内镜像：下载源由 core.hf_endpoint 探测择优（不通就换官方域名），不该有人替它选；允许哪些主机仍是 GALAXY_WEIGHTS_HOSTS |
+| `GALAXY_LAN_DISCOVERY` | 开 | 局域网自动发现设备（家居、打印机等候选）。默认开、不分模式；曾并进「跨设备」，与电脑加不加入无关 |
+| `GALAXY_MDNS` | 开 | mDNS 广播智能体，同一 Wi-Fi 下手机/手表免输地址。默认开、不分模式（手表配对即接入，要找得到智能体）；不想在局域网里露面就在 .env 写 GALAXY_MDNS=0 |
 | `GALAXY_ONBOARDING_BLUETOOTH` | 开 | 接入平面的蓝牙扫描：受「设备接入平面」总闸管，没有理由单独关 |
 | `GALAXY_ONBOARDING_CAN` | 开 | 接入平面的 CAN 总线扫描：同上 |
+| `GALAXY_ONBOARDING_ENABLED` | 开 | 设备接入平面（智能体的设备工具：发现、候选/成员、调用）的总闸。默认开、不分模式 —— 智能体协调已加入的设备不看这台电脑的「跨设备」（那个开关只说电脑自己加不加入）；曾并进「跨设备」，关一次按钮工具就只剩一个 |
 | `GALAXY_ONBOARDING_SERIAL` | 开 | 接入平面的串口扫描：同上 |
 | `GALAXY_ONBOARDING_SSDP` | 开 | 接入平面的 SSDP/UPnP 扫描：同上 |
 | `GALAXY_TRANSPORT_ADAPTIVE` | 开 | 传输方式自适应：内部调节 |
@@ -235,9 +238,6 @@
 | 按钮 | 主键 | 并进来的子开关 | 为什么 |
 |---|---|---|---|
 | 「全模态」 | `GALAXY_AMBIENT_LOOP` | `GALAXY_AMBIENT_SHARE_SESSION`（默认开） | 并进「全模态」：主动开口续在哪条对话上；自发在场关着时没有主动开口可续 |
-| 「跨设备」 | `GALAXY_CROSS_DEVICE_ENABLED` | `GALAXY_ONBOARDING_ENABLED`（默认开） | 并进「跨设备」：设备接入平面（发现附近设备、候选/成员）的总闸 |
-| 「跨设备」 | `GALAXY_CROSS_DEVICE_ENABLED` | `GALAXY_LAN_DISCOVERY`（默认开） | 并进「跨设备」：局域网自动发现设备；本地模式下没有对象可发现 |
-| 「跨设备」 | `GALAXY_CROSS_DEVICE_ENABLED` | `GALAXY_MDNS`（默认开） | 并进「跨设备」：mDNS 广播网关，手机/手表免输 IP；本地模式下没有人需要它 |
 | 「跨设备」 | `GALAXY_CROSS_DEVICE_ENABLED` | `GALAXY_NATS_ENABLED`（默认开） | 并进「跨设备」：NATS 消息总线；本地模式下白占一个常驻进程 |
 
 ## 还可以再合并的（需要你定）

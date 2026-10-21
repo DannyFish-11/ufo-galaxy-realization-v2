@@ -83,20 +83,20 @@ def _make_registry() -> HybridOrchestrationContinuityRegistry:
     return HybridOrchestrationContinuityRegistry()
 
 
-async def _noop_a2a(app_id, action, params, device_id) -> Dict[str, Any]:
-    return {"success": False, "error": "no a2a"}
+async def _noop_api_direct(app_id, action, params, device_id) -> Dict[str, Any]:
+    return {"success": False, "error": "no api_direct"}
 
 
-async def _success_a2a(app_id, action, params, device_id) -> Dict[str, Any]:
-    return {"success": True, "data": "a2a_result"}
+async def _success_api_direct(app_id, action, params, device_id) -> Dict[str, Any]:
+    return {"success": True, "data": "api_direct_result"}
 
 
 async def _success_gui(device_id, action, params) -> Dict[str, Any]:
     return {"success": True, "data": "gui_result"}
 
 
-async def _fail_a2a(app_id, action, params, device_id) -> Dict[str, Any]:
-    return {"success": False, "error": "a2a_fail"}
+async def _fail_api_direct(app_id, action, params, device_id) -> Dict[str, Any]:
+    return {"success": False, "error": "api_direct_fail"}
 
 
 async def _fail_gui(device_id, action, params) -> Dict[str, Any]:
@@ -109,7 +109,7 @@ async def _fail_vlm(device_id, instruction, screenshot) -> Dict[str, Any]:
 
 def _make_arbiter_success(registry: HybridOrchestrationContinuityRegistry) -> HybridExecutionArbiter:
     arbiter = HybridExecutionArbiter(
-        a2a_executor=_success_a2a,
+        api_executor=_success_api_direct,
         continuity_registry=registry,
     )
     return arbiter
@@ -117,7 +117,7 @@ def _make_arbiter_success(registry: HybridOrchestrationContinuityRegistry) -> Hy
 
 def _make_arbiter_all_fail(registry: HybridOrchestrationContinuityRegistry) -> HybridExecutionArbiter:
     arbiter = HybridExecutionArbiter(
-        a2a_executor=_fail_a2a,
+        api_executor=_fail_api_direct,
         gui_executor=_fail_gui,
         vlm_executor=_fail_vlm,
         continuity_registry=registry,
@@ -232,7 +232,7 @@ class TestAllFailedPath:
                 device_id="android_device",
                 app_id="com.example.app",
                 action="tap",
-                force_level=ExecutionLevel.A2A,
+                force_level=ExecutionLevel.API_DIRECT,
                 windows_arbiter=False,
             )
         )
@@ -248,7 +248,7 @@ class TestAllFailedPath:
                 device_id="android_device",
                 app_id="com.example.app",
                 action="tap",
-                force_level=ExecutionLevel.A2A,
+                force_level=ExecutionLevel.API_DIRECT,
                 windows_arbiter=False,
             )
         )
@@ -266,11 +266,11 @@ class TestCancelledErrorInterruption:
         """CancelledError must transition the record to interrupted."""
         registry = _make_registry()
 
-        async def _cancelling_a2a(app_id, action, params, device_id):
+        async def _cancelling_api_direct(app_id, action, params, device_id):
             raise asyncio.CancelledError()
 
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_cancelling_a2a,
+            api_executor=_cancelling_api_direct,
             continuity_registry=registry,
         )
         with pytest.raises(asyncio.CancelledError):
@@ -279,7 +279,7 @@ class TestCancelledErrorInterruption:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -292,11 +292,11 @@ class TestCancelledErrorInterruption:
         """CancelledError must be re-raised after continuity update."""
         registry = _make_registry()
 
-        async def _cancelling_a2a(app_id, action, params, device_id):
+        async def _cancelling_api_direct(app_id, action, params, device_id):
             raise asyncio.CancelledError()
 
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_cancelling_a2a,
+            api_executor=_cancelling_api_direct,
             continuity_registry=registry,
         )
         with pytest.raises(asyncio.CancelledError):
@@ -305,7 +305,7 @@ class TestCancelledErrorInterruption:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -313,44 +313,44 @@ class TestCancelledErrorInterruption:
     def test_cancelled_after_partial_success_preserves_partial_result(self):
         """A partial result from an earlier level is preserved on CancelledError."""
         registry = _make_registry()
-        # A2A succeeds but then the cancellation happens during GUI attempt.
+        # API 直调 succeeds but then the cancellation happens during GUI attempt.
         cancel_on_gui = {"cancel": False}
 
-        async def _a2a_success(app_id, action, params, device_id):
-            return {"success": True, "data": "partial_a2a"}
+        async def _api_direct_success(app_id, action, params, device_id):
+            return {"success": True, "data": "partial_api_direct"}
 
         async def _gui_cancel(device_id, action, params):
             raise asyncio.CancelledError()
 
-        # Use force-level to only try A2A — but we need A2A to succeed and then
-        # something to cancel.  Simulate by trying GUI after A2A success by
-        # relying on multi-level ordering: A2A succeeds → but we want cancellation
+        # Use force-level to only try API 直调 — but we need API 直调 to succeed and then
+        # something to cancel.  Simulate by trying GUI after API 直调 success by
+        # relying on multi-level ordering: API 直调 succeeds → but we want cancellation
         # to fire *after* the partial result is recorded.  The cleanest way is
-        # to let A2A succeed but then cancel in a subsequent await via a custom
-        # level ordering that uses GUI after A2A.
+        # to let API 直调 succeed but then cancel in a subsequent await via a custom
+        # level ordering that uses GUI after API 直调.
         #
         # Because force_level runs only one level and stops on success, we instead
-        # test this by making A2A succeed AND then having the completion path
+        # test this by making API 直调 succeed AND then having the completion path
         # cancelled via a mock registry transition that raises CancelledError.
 
-        # Alternative approach: A2A succeeds as partial (stored), then GUI
-        # raises CancelledError.  Use a custom arbiter that has A2A succeed
+        # Alternative approach: API 直调 succeeds as partial (stored), then GUI
+        # raises CancelledError.  Use a custom arbiter that has API 直调 succeed
         # and GUI cancel.
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_a2a_success,
+            api_executor=_api_direct_success,
             gui_executor=_gui_cancel,
             continuity_registry=registry,
         )
-        # Register "com.example.app" with both A2A and GUI levels so it tries
-        # A2A first (succeeds → stored as partial), then never reaches GUI
-        # because A2A success short-circuits.  We need a different approach.
+        # Register "com.example.app" with both API 直调 and GUI levels so it tries
+        # API 直调 first (succeeds → stored as partial), then never reaches GUI
+        # because API 直调 success short-circuits.  We need a different approach.
         #
         # Force GUI as the only level so it cancels immediately.
         # The partial preservation test requires that a *prior* level succeeded.
         # We test this by building a two-step executor where the second level
         # cancels after the first has stored a partial result.
         #
-        # The cleanest way: wrap A2A to succeed but then patch the registry's
+        # The cleanest way: wrap API 直调 to succeed but then patch the registry's
         # transition for 'completed' to raise CancelledError, so the code
         # stores the partial result and then gets cancelled.
 
@@ -367,7 +367,7 @@ class TestCancelledErrorInterruption:
         cancel_registry.transition = patched_transition
 
         arbiter2 = HybridExecutionArbiter(
-            a2a_executor=_a2a_success,
+            api_executor=_api_direct_success,
             continuity_registry=cancel_registry,
         )
 
@@ -377,7 +377,7 @@ class TestCancelledErrorInterruption:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -400,7 +400,7 @@ class TestUnexpectedExceptionInterruption:
         registry = _make_registry()
 
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_success_a2a,
+            api_executor=_success_api_direct,
             continuity_registry=registry,
         )
 
@@ -418,7 +418,7 @@ class TestUnexpectedExceptionInterruption:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -431,7 +431,7 @@ class TestUnexpectedExceptionInterruption:
         registry = _make_registry()
 
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_success_a2a,
+            api_executor=_success_api_direct,
             continuity_registry=registry,
         )
 
@@ -446,7 +446,7 @@ class TestUnexpectedExceptionInterruption:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -475,11 +475,11 @@ class TestPartialResultPreservation:
 
         registry.transition = patched_transition
 
-        async def _a2a_success(app_id, action, params, device_id):
+        async def _api_direct_success(app_id, action, params, device_id):
             return {"success": True, "data": "partial"}
 
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_a2a_success,
+            api_executor=_api_direct_success,
             continuity_registry=registry,
         )
         with pytest.raises((asyncio.CancelledError, Exception)):
@@ -488,7 +488,7 @@ class TestPartialResultPreservation:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -509,11 +509,11 @@ class TestPartialResultPreservation:
 
         registry.transition = patched_transition
 
-        async def _a2a_success(app_id, action, params, device_id):
+        async def _api_direct_success(app_id, action, params, device_id):
             return {"success": True, "data": "partial"}
 
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_a2a_success,
+            api_executor=_api_direct_success,
             continuity_registry=registry,
         )
         with pytest.raises((asyncio.CancelledError, Exception)):
@@ -522,7 +522,7 @@ class TestPartialResultPreservation:
                     device_id="android_device",
                     app_id="com.example.app",
                     action="tap",
-                    force_level=ExecutionLevel.A2A,
+                    force_level=ExecutionLevel.API_DIRECT,
                     windows_arbiter=False,
                 )
             )
@@ -542,7 +542,7 @@ class TestRegistryInjection:
         """Custom registry injected via __init__ must be used instead of singleton."""
         registry = _make_registry()
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_success_a2a,
+            api_executor=_success_api_direct,
             continuity_registry=registry,
         )
         asyncio.run(
@@ -568,7 +568,7 @@ class TestRegistryInjection:
 
         registry = _make_registry()
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_success_a2a,
+            api_executor=_success_api_direct,
             continuity_registry=registry,
         )
         asyncio.run(
@@ -601,7 +601,7 @@ class TestNoRegistryResilience:
 
         # Use an arbiter with no injected registry and patch the import function.
         arbiter = HybridExecutionArbiter(
-            a2a_executor=_success_a2a,
+            api_executor=_success_api_direct,
             # No continuity_registry injection so it falls back to _get_continuity_registry
         )
         # Monkeypatch the module-level get_continuity_registry import inside the method.
@@ -697,7 +697,7 @@ class TestWindowsPathContinuity:
 
         monkeypatch.setattr(_wmod, "get_windows_arbiter", lambda: mock_arbiter)
 
-        # Map WinExecLevel.SYSTEM_API to A2A
+        # Map WinExecLevel.SYSTEM_API to API 直调
         from unittest.mock import MagicMock as MM
 
         win_exec_level_mock = MM()

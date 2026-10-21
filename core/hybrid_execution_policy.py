@@ -8,13 +8,13 @@ PR-5: Explicit Hybrid Execution Policy
 Background
 ----------
 Prior to this module the ``HybridExecutionArbiter`` (``core/hybrid_executor.py``)
-implemented only **sequential degradation** — A2A → GUI → VLM — without any
+implemented only **sequential degradation** — API 直调 → GUI → VLM — without any
 explicit concept of *mode*.  Every execution was treated the same way regardless
 of context, and there was no machine-checkable distinction between:
 
 * "This is intentionally a degrade chain" (expected fallback)
-* "This is a staged hybrid" (first A2A for data retrieval, then GUI for display)
-* "This is a parallel race" (A2A and GUI both launched; first success wins)
+* "This is a staged hybrid" (first API 直调 for data retrieval, then GUI for display)
+* "This is a parallel race" (API 直调 and GUI both launched; first success wins)
 
 This module closes the gap by introducing:
 
@@ -39,12 +39,12 @@ Design principles
 Modes
 -----
 :attr:`HybridExecutionMode.sequential_degrade`
-    The classic A2A → GUI → VLM fallback chain.  Each level is tried
+    The classic API 直调 → GUI → VLM fallback chain.  Each level is tried
     sequentially; later levels are only reached if earlier ones fail.
     This is the **existing** behaviour, now made explicit and named.
 
 :attr:`HybridExecutionMode.parallel_race`
-    A2A and GUI are launched **concurrently**; the first success is
+    API 直调 and GUI are launched **concurrently**; the first success is
     returned and the other is cancelled.  Use when minimising latency is
     more important than resource efficiency.
 
@@ -55,13 +55,13 @@ Modes
     request fails rather than silently falling through to Stage 2.
 
 :attr:`HybridExecutionMode.local_preferred`
-    Prefer the local execution path (on-device A2A or GUI).  If the local
+    Prefer the local execution path (on-device API 直调 or GUI).  If the local
     path fails, fall back to a remote path (VLM reasoning via a remote
     model).  Useful when data privacy or latency makes local preferable.
 
 :attr:`HybridExecutionMode.remote_preferred`
     Prefer a remote execution path first (e.g. cloud API or VLM).  If the
-    remote path fails or is unavailable, fall back to local GUI/A2A.
+    remote path fails or is unavailable, fall back to local GUI/API 直调.
 
 Sentinels
 ---------
@@ -139,7 +139,7 @@ HYBRID_EXECUTION_POLICY_IS_AUTHORITY: str = (
 )
 
 SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY: str = (
-    "POLICY::SEQUENTIAL_DEGRADE_IS_EXPLICIT: the classic A2A→GUI→VLM "
+    "POLICY::SEQUENTIAL_DEGRADE_IS_EXPLICIT: the classic API 直调→GUI→VLM "
     "degrade chain is now an explicit named mode (HybridExecutionMode."
     "sequential_degrade) rather than implicit-only behaviour.  All paths "
     "through HybridExecutionArbiter MUST declare their mode via "
@@ -173,24 +173,24 @@ class HybridExecutionMode(str, Enum):
     Attributes
     ----------
     sequential_degrade
-        Classic A2A → GUI → VLM degrade chain.  Each level is tried
+        Classic API 直调 → GUI → VLM degrade chain.  Each level is tried
         sequentially; later levels are only attempted if earlier ones fail.
         This names the **existing** HybridExecutionArbiter behaviour explicitly.
     parallel_race
-        A2A and GUI are launched **concurrently**.  The first to succeed
+        API 直调 and GUI are launched **concurrently**.  The first to succeed
         wins; the other is cancelled.  True hybrid execution: multiple paths
         compete for the result.
     staged_hybrid
         Two explicit stages run in sequence with hard boundaries.  Stage 1
-        performs data retrieval / API interaction (A2A); Stage 2 performs UI
+        performs data retrieval / API interaction (API 直调); Stage 2 performs UI
         presentation / action (GUI).  Neither stage silently degrades into
         the other.
     local_preferred
-        Prefer on-device local execution (A2A or GUI on the local device).
+        Prefer on-device local execution (API 直调 or GUI on the local device).
         Fall back to remote VLM reasoning only if local fails.
     remote_preferred
         Prefer remote execution first (cloud API or remote VLM).  Fall back
-        to local GUI/A2A if remote is unavailable or fails.
+        to local GUI/API 直调 if remote is unavailable or fails.
     """
 
     sequential_degrade = "sequential_degrade"
@@ -316,8 +316,8 @@ class HybridExecutionPolicy:
         The action to execute (e.g. ``"send_message"``, ``"open_url"``).
     ``device_id`` (str)
         Target device identifier.
-    ``has_a2a`` (bool)
-        True if an A2A endpoint is available for this app/action.
+    ``has_api_direct`` (bool)
+        True if an API 直调 endpoint is available for this app/action.
     ``has_gui`` (bool)
         True if GUI automation is available for this device.
     ``has_vlm`` (bool)
@@ -338,7 +338,7 @@ class HybridExecutionPolicy:
     -------------------------
     1. ``force_mode`` set → return exactly that mode.
     2. ``staged_actions`` non-empty → ``staged_hybrid``.
-    3. ``latency_sensitive`` AND ``has_a2a`` AND ``has_gui`` → ``parallel_race``.
+    3. ``latency_sensitive`` AND ``has_api_direct`` AND ``has_gui`` → ``parallel_race``.
     4. ``prefer_local`` → ``local_preferred``.
     5. ``prefer_remote`` → ``remote_preferred``.
     6. Default → ``sequential_degrade``.
@@ -395,16 +395,16 @@ class HybridExecutionPolicy:
             )
 
         # ----------------------------------------------------------------
-        # Rule 3: latency-sensitive + A2A + GUI → parallel_race (true hybrid)
+        # Rule 3: latency-sensitive + API 直调 + GUI → parallel_race (true hybrid)
         # ----------------------------------------------------------------
         latency_sensitive = bool(ctx.get("latency_sensitive", False))
-        has_a2a = bool(ctx.get("has_a2a", False))
+        has_api_direct = bool(ctx.get("has_api_direct", False))
         has_gui = bool(ctx.get("has_gui", False))
-        if latency_sensitive and has_a2a and has_gui:
+        if latency_sensitive and has_api_direct and has_gui:
             return HybridExecutionDecision(
                 mode=HybridExecutionMode.parallel_race,
                 reason=(
-                    "latency_sensitive=True with both A2A and GUI available; "
+                    "latency_sensitive=True with both API 直调 and GUI available; "
                     "parallel_race selected to minimise end-to-end latency by "
                     "launching both paths concurrently (true hybrid execution)."
                 ),
@@ -433,7 +433,9 @@ class HybridExecutionPolicy:
         if prefer_remote:
             return HybridExecutionDecision(
                 mode=HybridExecutionMode.remote_preferred,
-                reason=("prefer_remote=True; remote execution path takes priority " "with local GUI/A2A as fallback."),
+                reason=(
+                    "prefer_remote=True; remote execution path takes priority " "with local GUI/API 直调 as fallback."
+                ),
                 context_snapshot=snapshot,
                 confidence=0.85,
                 policy_version=self.VERSION,
@@ -447,7 +449,7 @@ class HybridExecutionPolicy:
             mode=HybridExecutionMode.sequential_degrade,
             reason=(
                 "No specific rule matched; defaulting to sequential_degrade "
-                "(A2A → GUI → VLM fallback chain).  This is the canonical "
+                "(API 直调 → GUI → VLM fallback chain).  This is the canonical "
                 "degrade-chain behaviour of HybridExecutionArbiter, now "
                 "declared explicitly."
             ),
@@ -460,22 +462,22 @@ class HybridExecutionPolicy:
         """Return a human-readable description of *mode*."""
         descriptions = {
             HybridExecutionMode.sequential_degrade: (
-                "Sequential degradation chain: A2A → GUI → VLM.  Each level "
+                "Sequential degradation chain: API 直调 → GUI → VLM.  Each level "
                 "is tried in sequence; later levels only if earlier ones fail."
             ),
             HybridExecutionMode.parallel_race: (
-                "Parallel race: A2A and GUI launched concurrently; first "
+                "Parallel race: API 直调 and GUI launched concurrently; first "
                 "success returned, other cancelled.  True hybrid execution."
             ),
             HybridExecutionMode.staged_hybrid: (
-                "Staged hybrid: Stage 1 (A2A data retrieval) then Stage 2 "
+                "Staged hybrid: Stage 1 (API 直调 data retrieval) then Stage 2 "
                 "(GUI presentation).  Hard boundaries; no silent degradation."
             ),
             HybridExecutionMode.local_preferred: (
-                "Local-preferred: try local A2A/GUI first; fall back to " "remote VLM only on failure."
+                "Local-preferred: try local API 直调/GUI first; fall back to " "remote VLM only on failure."
             ),
             HybridExecutionMode.remote_preferred: (
-                "Remote-preferred: try remote API/VLM first; fall back to " "local GUI/A2A on failure."
+                "Remote-preferred: try remote API/VLM first; fall back to " "local GUI/API 直调 on failure."
             ),
         }
         return descriptions.get(mode, f"Unknown mode: {mode!r}")

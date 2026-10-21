@@ -77,7 +77,7 @@ def _frames_pushed_for(source: str, device_id, *, attach_before_emit: bool = Fal
     async def _main() -> None:
         session = RuntimeSession(source=source)
         bind_presence_line(session, source, device_id)
-        with patch("core.cross_device_sync.emit_cross_device_phase_sync"):
+        with patch("core.cross_device_sync.tell_origin_device"):
             session.advance(TriState.LIMINAL)
         if attach_before_emit:
             assert attach_to_host(session, "computer_use", "local")

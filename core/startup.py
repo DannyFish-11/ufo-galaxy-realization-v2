@@ -921,21 +921,12 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
 
         app.mount("/gateway", gateway_app)
 
-        # Starlette 不会为【被挂载的子应用】运行其 lifespan —— 而 galaxy_gateway 的
-        # lifespan 负责创建 DeviceManager / WebSocketManager / TaskOrchestrator 并写入
-        # gateway_app.state。父应用又是命令式启动、根本没有自己的 lifespan(见
-        # unified_launcher 里 FastAPI(...) 无 lifespan 参数),所以子应用 lifespan 永不
-        # 触发。后果:/gateway/* 下所有走 Depends(get_device_manager/...) 的 REST 路由,
-        # 会因 app.state.X 为 None 被 dependencies._get_state 判定 503 "Service not ready"
-        # ——真机可复现的"/gateway/* 恒 503"。
-        # 修复:只补齐【必需的四个核心服务】(dependencies 里会抛 503 的那批),复用
-        # lifecycle.init_gateway_core_services()。**刻意不跑完整 lifespan**——完整 lifespan
-        # 还会连 NATS、起 TCP/UDP 监听(绑端口)、注册 AIPTransport 适配器、起 MasterBrain
-        # 等,这些要么重、要么会与主 app 已启动的同类服务【双绑端口/重复注册】。可选服务
-        # (openclawd/llm_router/nats_adapter)缺失时 dependencies 返回 None、不报 503,
-        # 所以只补必需项即可精确消除 503,不引入端口冲突。
-        # 注:设备 WebSocket(/ws/device/{id})走根路径、由 unified_launcher 独立注册,
-        # 不受此影响;本修复只补活 /gateway/* 的 REST 面。
+        # Starlette 不为被挂载的子应用跑 lifespan(父应用命令式启动、没有自己的 lifespan),网关的
+        # 四个必需核心服务就没人建,/gateway/* 下依赖它们的 REST 路由恒 503。这里复用
+        # lifecycle.init_gateway_core_services() 只补这四个;完整 lifespan 的其余部分(NATS、MasterBrain)
+        # 不在这里起(见下面的「多设备/Mesh 启用」)。传输适配器与独立网关共用
+        # bootstrap/transports.register_transport_adapters:同一进程只装一次,端口被占只发不收。
+        # 注:设备 WebSocket(/ws/device/{id})走根路径、由 unified_launcher 独立注册。
         try:
             init_gateway_core_services = upper_ports.resolve("gateway.bootstrap.lifecycle.init_gateway_core_services")
 
@@ -945,6 +936,10 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                 _gw_wsm,
                 _gw_to,
             ) = await init_gateway_core_services(gateway_app)
+            try:  # 跨设备整体方案阶段 6:桌面版此前一个传输适配器都没有
+                await upper_ports.resolve("gateway.bootstrap.transports.register_transport_adapters")(_gw_mh)
+            except Exception as _te:  # noqa: BLE001 — 装不上不影响核心服务;设备照样经 WebSocket 连
+                logger.warning("传输适配器没装上: %s", _te)
 
             # 到这里【必需核心服务已就绪、/gateway/* 已不再 503】——这才是本修复的实质。
             # 下面注册进程退出时的清理钩子只是【尽力而为】:不同 Starlette/FastAPI 版本
@@ -1019,7 +1014,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             results["mcp_nats_listener"] = _mcp
             if _mcp.get("success"):
                 logger.info("MCP 网关已订阅 galaxy.mcp.calls")
-        else:  # 开着却在本地模式 → 状态是 waiting_for_cross_device_mode,并说出来
+        else:  # 任务派发开关关着
             results["master_brain"] = {"status": master_brain_idle_status(logger)}
     except Exception as _mbe:  # noqa: BLE001 — 启用失败不阻断单机启动
         logger.warning("多设备/Mesh 启用失败(单机不受影响): %s", _mbe)

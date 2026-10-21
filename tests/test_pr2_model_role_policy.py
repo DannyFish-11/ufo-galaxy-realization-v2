@@ -353,10 +353,10 @@ class TestHybridExecutorDecisionAuthorityParam:
 
         arbiter = HybridExecutionArbiter()
 
-        async def _fake_a2a(app_id, action, params, device_id):
+        async def _fake_api_direct(app_id, action, params, device_id):
             return {"success": True, "data": "done"}
 
-        arbiter.set_executors(a2a=_fake_a2a)
+        arbiter.set_executors(api_direct=_fake_api_direct)
 
         result = await arbiter.execute(
             device_id="android_phone",
@@ -374,10 +374,10 @@ class TestHybridExecutorDecisionAuthorityParam:
 
         arbiter = HybridExecutionArbiter()
 
-        async def _fake_a2a(app_id, action, params, device_id):
+        async def _fake_api_direct(app_id, action, params, device_id):
             return {"success": True}
 
-        arbiter.set_executors(a2a=_fake_a2a)
+        arbiter.set_executors(api_direct=_fake_api_direct)
 
         result = await arbiter.execute(
             device_id="android_phone",
@@ -394,12 +394,12 @@ class TestHybridExecutorDecisionAuthorityParam:
 
         received_actions = []
 
-        async def _recording_a2a(app_id, action, params, device_id):
+        async def _recording_api_direct(app_id, action, params, device_id):
             received_actions.append(action)
             return {"success": True}
 
         arbiter = HybridExecutionArbiter()
-        arbiter.set_executors(a2a=_recording_a2a)
+        arbiter.set_executors(api_direct=_recording_api_direct)
 
         await arbiter.execute(
             device_id="android_phone",

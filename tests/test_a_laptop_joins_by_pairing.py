@@ -207,9 +207,10 @@ def test_a_laptop_pairs_connects_and_the_agent_operates_it(gateway, monkeypatch)
     did = laptop.client.device_id
 
     listing = gateway.agent("list", {})
-    [me] = [m for group in listing["members"].values() for m in group if m["device_id"] == did]
-    assert me["online"] and me["type"] == "windows_laptop" and me["name"] == "书房笔记本"
-    assert "click" in me["capabilities"] and "GUI_SCREENSHOT" in me["capability_classes"]
+    [me] = [m for m in listing["members"] if m["device_id"] == did]
+    assert me["status"]["online"] and me["type"] == "windows_laptop" and me["name"] == "书房笔记本"
+    assert "click" in me["raw_capabilities"] and "GUI_SCREENSHOT" in me["capability_classes"]
+    assert me["form"] == "computer" and me["can_take_agent"] is False, "「手和眼」式的电脑只接单个动作"
 
     out = gateway.agent("invoke", {"device_id": did, "action": "click", "params": {"x": 10, "y": 20}})
     assert out["success"], out

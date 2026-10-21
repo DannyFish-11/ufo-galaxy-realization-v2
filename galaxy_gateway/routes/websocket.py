@@ -136,6 +136,9 @@ async def _handle_android_ws(
             record_use(ingress_path, client_hint=str(device_id or "")[:40])
         except Exception:  # noqa: BLE001 — 记账失败不该打断一条连接
             pass
+    # 这条连接自己的凭证:握手头里的 Bearer,或者这条连接上已经回过 auth_ok 的 auth 帧里的令牌。
+    # 安卓先发 auth、再发不带令牌的 device_register —— 不把连接的凭证带给登记,认证开着时手机永远登记不上。
+    transport_token = _bearer_token(websocket)
     try:
         while True:
             message = await websocket.receive_json()
@@ -145,9 +148,16 @@ async def _handle_android_ws(
             # bridge enforces MISSING_REQUIRED_FIELDS on the payload itself.
             message.setdefault("_ingress_path", ingress_path)
             message.setdefault("_ingress_classification", ingress_classification)
+            if transport_token and not _frame_token(message):
+                message["_ingress_transport_token"] = transport_token  # 登记照样重新校验(含配对令牌绑设备)
             response = await android_bridge.handle_message(websocket, message)
             if response is not None:
                 await websocket.send_json(response)
+            if message.get("type") == "auth" and (response or {}).get("type") == "auth_ok":
+                transport_token = _frame_token(message) or transport_token
+            if message.get("type") == "device_register" and (response or {}).get("success") is True:
+                registered = str(message.get("device_id") or device_id)
+                await _resend_a2a(registered)
     except WebSocketDisconnect:
         logger.info("device ws disconnected: device_id=%s", device_id)
     except Exception as exc:
@@ -165,6 +175,38 @@ async def _handle_android_ws(
                 await android_bridge.disconnect_device(device_id, websocket=websocket)
             except Exception as exc:
                 logger.debug("device ws disconnect cleanup failed: %s", exc)
+
+
+def _bearer_token(websocket) -> str:
+    raw = str(getattr(websocket, "headers", {}).get("authorization") or "").strip()
+    return raw[7:].strip() if raw.lower().startswith("bearer ") else ""
+
+
+def _frame_token(message: dict) -> str:
+    """帧自己带的令牌(与 ``core.participant_admission.extract_ingress_token`` 认的字段一致)。"""
+    from core.participant_admission import extract_ingress_token
+
+    token, _field = extract_ingress_token(message)
+    return token or ""
+
+
+async def _resend_a2a(device_id: str) -> None:
+    """设备(重新)登记上了,登记确认也已经写回去:中心发给它、还没确认的 A2A 消息按序补发。
+
+    放在写完登记确认之后,设备先看到「登记成功」再看到补发的消息。它那边的桥接 Agent 在不在,
+    要等它回了这次派遣才算数(``phone_bridge.note_registered``)。
+    """
+    try:
+        from core.a2a_link import resend_unacked
+        from core.phone_bridge import note_registered
+
+        note_registered(device_id)
+
+        n = await resend_unacked(device_id)
+        if n:
+            logger.info("a2a: resent %d unacknowledged message(s) to %s", n, device_id)
+    except Exception as exc:  # noqa: BLE001 — 补发失败不打断连接;下次重连再补
+        logger.debug("a2a resend to %s failed: %s", device_id, exc)
 
 
 def register_websocket_routes(app) -> None:

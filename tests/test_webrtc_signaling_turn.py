@@ -124,18 +124,19 @@ def _start_mock_node95(received: List[str]) -> Dict[str, Any]:
     return {"port": port, "url": f"http://localhost:{port}", "server": server}
 
 
+from galaxy_gateway.webrtc_proxy import _member_may_signal as _REAL_MEMBER_CHECK  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def _enable_cross_device(monkeypatch):
-    # 断言漂移(测试环境补偿):跨设备开关默认值已由 fail-open(默认启用)
-    # 改为 opt-in(默认禁用),/ws/webrtc 信令端点在开关关闭时立即以 4001
-    # 关闭连接(cross_device_blocked)。本文件测试的是信令/TURN 行为而非
-    # 开关本身,故显式开启开关;开关行为由 test_cross_device_switch.py 覆盖。
-    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+def _as_a_member(monkeypatch):
+    # /ws/webrtc 信令口只放成员进(主人的 API 令牌或发给这台设备的配对令牌,否则 4401)。
+    # 本文件测试的是信令/TURN 行为,这里把调用方当成成员;成员门本身由
+    # test_cross_device_switch.py 与下方 TestMembersOnly 覆盖。
+    monkeypatch.setattr("galaxy_gateway.webrtc_proxy._member_may_signal", lambda _ws, _device_id: True)
     yield
 
 
@@ -608,40 +609,57 @@ class TestBackwardCompatibility:
             "ws_signaling_path",
             "gateway_ws_url",
             "gateway_ws_path",
-            "cross_device_enabled",
         }
         assert required_legacy_keys <= set(data.keys())
 
 
 # ===========================================================================
-# Tests: cross-device switch OFF
+# Tests: members only (the computer's 「跨设备」 switch is not the door)
 # ===========================================================================
 
 
-class TestCrossDeviceSwitchOff:
+class TestMembersOnly:
 
-    def test_signaling_blocked_when_switch_off(self, monkeypatch, mock_node95):
-        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    def _connect_and_wait_close(self, client, path):
         from starlette.websockets import WebSocketDisconnect
 
+        try:
+            with client.websocket_connect(path) as ws:
+                ws.receive_text()
+        except WebSocketDisconnect as exc:
+            return exc.code
+        except Exception:
+            return None
+        return None
+
+    def test_a_stranger_is_turned_away_whatever_the_switch(self, monkeypatch, mock_node95):
+        monkeypatch.setattr("galaxy_gateway.webrtc_proxy._member_may_signal", _REAL_MEMBER_CHECK)
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+        for switch in ("0", "1"):
+            monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", switch)
+            app = _make_gateway_app()
+            with TestClient(app, raise_server_exceptions=False) as c:
+                assert self._connect_and_wait_close(c, "/ws/webrtc/stranger") == 4401
+
+    def test_a_paired_phone_signals_with_the_switch_off(self, monkeypatch, mock_node95):
+        from core.capability_token import issue_token
+
+        monkeypatch.setattr("galaxy_gateway.webrtc_proxy._member_may_signal", _REAL_MEMBER_CHECK)
+        monkeypatch.setenv("GALAXY_AUTH_ENABLED", "true")
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+        token = issue_token("paired_phone", ["device:status"], ttl_s=600)
+        payload = json.dumps({"type": "offer", "sdp": "v=0\r\nmember"})
         app = _make_gateway_app()
         with TestClient(app, raise_server_exceptions=False) as c:
-            closed = False
-            code_received = None
-            try:
-                with c.websocket_connect("/ws/webrtc/blocked_phone") as ws:
-                    try:
-                        ws.receive_text()
-                    except WebSocketDisconnect as exc:
-                        closed = True
-                        code_received = exc.code
-                    except Exception:
-                        closed = True
-            except Exception:
-                closed = True
-            assert closed
-            if code_received is not None:
-                assert code_received == 4001
+            with c.websocket_connect(f"/ws/webrtc/paired_phone?token={token}") as ws:
+                ws.send_text(payload)
+                reply = None
+                for _ in range(5):
+                    msg = json.loads(ws.receive_text())
+                    if msg.get("type") == "echo":
+                        reply = msg
+                        break
+        assert reply is not None and reply["received"] == payload
 
 
 # ===========================================================================

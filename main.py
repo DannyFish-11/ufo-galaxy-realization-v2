@@ -44,6 +44,7 @@ def load_env_files_into_environ(root: str = "") -> None:
 
         _root = root or os.path.dirname(os.path.abspath(__file__))
         _dotenv = dotenv_values(os.path.join(_root, ".env")) or {}
+        migrate_former_cross_device_members(os.path.join(_root, ".env"), _dotenv)
         _data = os.environ.get("GALAXY_DATA_DIR")
         if _data is None:  # 与下面的加载纪律一致:.env 里空的、# 开头的都不算
             _data = "" if (_dotenv.get("GALAXY_DATA_DIR") or "#").lstrip().startswith("#") else _dotenv["GALAXY_DATA_DIR"]
@@ -56,6 +57,50 @@ def load_env_files_into_environ(root: str = "") -> None:
                     os.environ[_k] = _v
     except Exception:
         pass
+
+
+#: 曾是「跨设备」按钮成员的三项:按钮一关,它们就被一起写成 false。现在它们与电脑进不进网络无关
+#: (设备接入平面 = 智能体的设备工具;局域网发现 = 智能体看见附近设备;mDNS = 手表手机找得到智能体),
+#: 不再是成员 —— 但旧 .env 里被按钮写死的 false 还在,会让智能体照旧只剩一个设备工具、手表照旧发现不了网关。
+_FORMER_CROSS_DEVICE_MEMBERS = ("GALAXY_ONBOARDING_ENABLED", "GALAXY_LAN_DISCOVERY", "GALAXY_MDNS")
+
+
+def migrate_former_cross_device_members(env_path: str, dotenv: dict) -> bool:
+    """清掉 .env 里被「跨设备」按钮写死的三个 false,让它们回到默认(开)。返回这次是否改了。
+
+    只认按钮留下的指纹:主键 ``GALAXY_CROSS_DEVICE_ENABLED`` 是 false,**并且**三项同时是 false ——
+    按钮关的时候正是这样一次写下的。单独手写某一项 false、或主键开着时写的,原样保留。
+    改的是文件本身(连同紧挨在上面的说明行),并从传进来的 ``dotenv`` 里去掉,后面就不会再注入 os.environ。
+    """
+    falsy = {"false", "0", "no", "off"}
+
+    def _off(key: str) -> bool:
+        return str(dotenv.get(key) or "").strip().lower() in falsy
+
+    if not _off("GALAXY_CROSS_DEVICE_ENABLED") or not all(_off(k) for k in _FORMER_CROSS_DEVICE_MEMBERS):
+        return False
+    try:
+        with open(env_path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines(keepends=True)
+        kept: list = []
+        for line in lines:
+            if line.split("=", 1)[0].strip() in _FORMER_CROSS_DEVICE_MEMBERS:
+                if kept and kept[-1].lstrip().startswith("#") and "=" not in kept[-1]:
+                    kept.pop()  # 写入器给每个键配的那行说明
+                continue
+            kept.append(line)
+        with open(env_path, "w", encoding="utf-8") as fh:
+            fh.write("".join(kept))
+    except OSError:
+        return False
+    for key in _FORMER_CROSS_DEVICE_MEMBERS:
+        dotenv.pop(key, None)
+    print(
+        "[配置迁移] 已清掉 .env 里被「跨设备」按钮写死的 GALAXY_ONBOARDING_ENABLED / GALAXY_LAN_DISCOVERY / "
+        "GALAXY_MDNS=false —— 它们与电脑进不进网络无关,回到默认(开)。",
+        file=sys.stderr,
+    )
+    return True
 
 
 def bootstrap_env_file(root: str = "") -> bool:
@@ -966,7 +1011,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 #     而这里比它还早,ollama serve 往往尚未绑定端口。
                 #   · 缺少 Phase 5 已有的 /api/show 残缺 manifest 核实、HuggingFace
                 #     回退、版本不兼容诊断。
-                print_item("未检测到本地模型", "warn", "将由 Phase 5「AI 大脑」按所选主脑后台拉取(不阻塞启动)")
+                print_item("未检测到本地模型", "warn", "将由 Phase 5「AI 大脑」按所选模型后台拉取(不阻塞启动)")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
 
@@ -1526,9 +1571,9 @@ def main() -> int:
         "--model",
         type=str,
         default=None,
-        help="指定本地主脑模型 tag（跳过交互选择，如 gemma4:12b / openbmb/minicpm-o4.5）",
+        help="指定本地模型 tag（跳过交互选择，如 gemma4:12b / openbmb/minicpm-o4.5）",
     )
-    parser.add_argument("--select-model", action="store_true", help="强制重新选择 AI 主脑模型（清除已保存选择）")
+    parser.add_argument("--select-model", action="store_true", help="强制重新选择 AI 模型（清除已保存选择）")
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="详细模式：展开每个启动阶段的逐项明细（默认折叠成一行）"
     )

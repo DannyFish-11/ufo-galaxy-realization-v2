@@ -278,13 +278,15 @@ class TestWebRTCProxyObservability:
         import galaxy_gateway.observability as obs_module
 
         obs_module._gateway_metrics = None
-        os.environ["GALAXY_CROSS_DEVICE_ENABLED"] = "1"
+        # 信令口只放成员进;这里测的是计数器,把调用方当成成员(成员门见 test_cross_device_switch.py)
+        self._member = patch("galaxy_gateway.webrtc_proxy._member_may_signal", return_value=True)
+        self._member.start()
 
     def teardown_method(self, _method):
         import galaxy_gateway.observability as obs_module
 
         obs_module._gateway_metrics = None
-        os.environ.pop("GALAXY_CROSS_DEVICE_ENABLED", None)
+        self._member.stop()
 
     @pytest.mark.asyncio
     async def test_success_path_increments_counters(self):

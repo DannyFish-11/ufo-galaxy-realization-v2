@@ -246,11 +246,12 @@ class TestBusLine:
 
     def test_unset_in_local_mode_says_no_bus_and_the_launcher_agrees(self, monkeypatch):
         """真机首启曾是：屏幕说「只用本机,不用消息总线」，几十秒后又出「✓ 消息总线 nats://localhost:4222」。
-        两处现在是同一个判据：本地模式没写就不起，且说得出原因。"""
+        两处现在是同一个判据：电脑没加入设备网络、也没开任务派发时没写就不起，且说得出原因。"""
         from core.system_mode import nats_wanted
 
+        monkeypatch.delenv("GALAXY_MASTER_BRAIN_ENABLED", raising=False)
         said = self._said(monkeypatch, None)
-        assert "不用消息总线" in said and "本地模式" in said
+        assert "不用消息总线" in said and "没加入设备网络" in said and "任务派发" in said
         assert nats_wanted() is False
 
     def test_explicit_false_means_no_bus(self, monkeypatch):

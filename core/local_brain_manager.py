@@ -261,7 +261,7 @@ class LocalBrainManager:
                     self.available_models = self._backend.list_models()
                     self._status = LocalBrainStatus.HEALTHY if self._healthy else LocalBrainStatus.DEGRADED
                     logger.info(
-                        "本地主脑已就绪 [%s]: 模型=%s, 状态=%s",
+                        "本地模型已就绪 [%s]: 模型=%s, 状态=%s",
                         self.backend_name,
                         self.available_models,
                         self._status.value,
@@ -276,7 +276,7 @@ class LocalBrainManager:
                     )
                     return await self._ensure_ollama_running()
             except Exception as exc:
-                logger.error("本地主脑启动失败 [%s]: %s", self.backend_name, exc)
+                logger.error("本地模型启动失败 [%s]: %s", self.backend_name, exc)
                 # Fallback to Ollama
                 return await self._ensure_ollama_running()
 
@@ -393,11 +393,11 @@ class LocalBrainManager:
                 if resp.status_code == 200:
                     self._status = LocalBrainStatus.HEALTHY
                     self._healthy = True
-                    logger.info("本地主脑模型已加载进内存并常驻 [ollama]: %s", model)
+                    logger.info("本地模型已加载进内存并常驻 [ollama]: %s", model)
                 else:
-                    logger.info("主脑模型预载返回 %s(%s);首次对话时会自动加载。", resp.status_code, model)
+                    logger.info("模型预载返回 %s(%s);首次对话时会自动加载。", resp.status_code, model)
         except Exception as exc:  # noqa: BLE001
-            logger.info("主脑模型后台预载未完成(非致命,首次对话会触发加载): %s", exc)
+            logger.info("模型后台预载未完成(非致命,首次对话会触发加载): %s", exc)
 
     async def _ensure_ollama_running(self) -> bool:
         """Legacy Ollama-specific startup path"""

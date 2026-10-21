@@ -156,46 +156,8 @@ except ImportError:  # pragma: no cover
 # Pending-delivery buffer — re-delivers buffered messages to devices that
 # reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
 
-# =============================================================================
-# Axis-1 + Axis-7: Cross-device mode gate — takeover is only permitted when
-# the system is running in ``desktop-cross-device`` mode.  The switch helper
-# is imported at module level so tests can patch it without reloading the
-# entire bridge.
-# =============================================================================
-# 这里原本是 `_is_cross_device_enabled = lambda: True`（E731）。把它改成 except 块
-# 里的 def 会触发另一条治理规则 —— scripts/check_debt_freeze.py 的 CHECK-3 禁止
-# 「在 except ImportError 里定义函数/类」，要求改用显式的可选依赖标志
-# （docs/migration/DEPRECATION_POLICY.md §4）。所以按该策略写：except 里只设标志，
-# 真正的函数定义放在模块级。行为与原 lambda 完全一致（开关模块不可用时视为开启）。
-try:
-    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _cross_device_switch_is_enabled
-
-    _CROSS_DEVICE_SWITCH_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _cross_device_switch_is_enabled = None
-    _CROSS_DEVICE_SWITCH_AVAILABLE = False
-
-
-def _is_cross_device_enabled() -> bool:
-    """跨设备开关是否开启；开关模块不可用时视为开启。"""
-    if not _CROSS_DEVICE_SWITCH_AVAILABLE or _cross_device_switch_is_enabled is None:
-        return True
-    return bool(_cross_device_switch_is_enabled())
-
 
 logger = logging.getLogger(__name__)
-
-# Strong refs to fire-and-forget tasks (event loop only holds a weak ref, so a
-# discarded create_task result can be GC'd mid-execution).
-_BACKGROUND_TASKS: set = set()
-
-
-def _track_bg_task(_t):
-    """Retain *_t* until it finishes so it can't be garbage-collected mid-run."""
-    _BACKGROUND_TASKS.add(_t)
-    _t.add_done_callback(_BACKGROUND_TASKS.discard)
-    return _t
-
 
 # =============================================================================
 # PR-3: Execution Spine Integration — bridge dispatch authority sentinel
@@ -481,27 +443,6 @@ class AndroidBridge:
 
         return results
 
-    async def route_phase_change(
-        self,
-        old_phase: str,
-        new_phase: str,
-        source: str = "desktop_presence_runtime",
-    ) -> None:
-        """Phase 变化的灵动岛式路由。
-
-        始终广播给所有设备（phase 是全局状态，所有设备都需要知道）。
-        但当前对话设备优先收到（排序在前）。
-        """
-        # 使用已有的 cross_device_sync 引擎（adaptive async concurrent）
-        from core.cross_device_sync import emit_cross_device_phase_sync  # noqa: PLC0415
-
-        emit_cross_device_phase_sync(
-            old_phase=old_phase,
-            new_phase=new_phase,
-            session_id=getattr(self, "_session_id", ""),
-            source=source,
-        )
-
     # =========================================================================
     # UDM canonical write/patch helpers (PR-2)
     # =========================================================================
@@ -512,6 +453,7 @@ class AndroidBridge:
             from core.device_onboarding.taxonomy import classify_type
             from core.unified.device_manager import UnifiedDeviceManager
             from core.unified.models import UnifiedDevice, UnifiedDeviceType
+            from galaxy_gateway.android.device_naming import registration_name
 
             udm = UnifiedDeviceManager()
 
@@ -555,9 +497,7 @@ class AndroidBridge:
 
             device = UnifiedDevice(
                 device_id=device_id,
-                device_name=str(
-                    message.get("name") or ("Android Device" if utype == UnifiedDeviceType.ANDROID else device_id)
-                ),
+                device_name=registration_name(message, device_id, utype),
                 device_type=utype,
                 # 细分类型(android_phone / android_wear…)另存,UDM 入口据此解析驱动。
                 aip_device_type=type_info.aip_device_type,
@@ -1652,33 +1592,11 @@ class AndroidBridge:
         Returns
         -------
         dict or None
-            ``{"success": True}`` on successful send, or a structured error
-            dict when the system mode prevents takeover (e.g. not in
-            ``desktop-cross-device`` mode), or ``None`` when the device is not
-            connected / send fails.
+            ``{"success": True}`` on successful send, or ``None`` when the
+            device is not connected / send fails.  Not gated by this
+            computer's 「跨设备」 switch: a phone that is connected has turned on
+            its own cross-device switch, which is what makes it a member.
         """
-        # Axis-1 + Axis-7: Takeover is mode-gated.  It must not be initiated
-        # unless the system is running in cross-device mode.  In local mode,
-        # Android acts as a standalone device and takeover semantics are not
-        # applicable.  Return a structured error so callers can surface the
-        # refusal without raising.
-        if not _is_cross_device_enabled():
-            _tid = trace_id or str(uuid.uuid4())
-            logger.warning(
-                "send_takeover_request blocked: cross-device mode is disabled "
-                "takeover_id=%s device_id=%s trace_id=%s",
-                takeover_id,
-                device_id,
-                _tid,
-            )
-            return {
-                "success": False,
-                "blocked": True,
-                "reason": "cross_device_mode_disabled",
-                "takeover_id": takeover_id,
-                "device_id": device_id,
-                "trace_id": _tid,
-            }
         msg = MessageBuilder.takeover_request(
             device_id=device_id,
             takeover_id=takeover_id,
@@ -1867,39 +1785,7 @@ class AndroidBridge:
         self._patch_reconnect_to_udm(device_id)
         self._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
-        # PR-CROSS-DEVICE-SYNC: push current phase to reconnected device
-        try:
-            from core.desktop_presence_runtime import get_desktop_presence_runtime
-
-            dpr = get_desktop_presence_runtime()
-            current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
-            if current_phase and websocket is not None:
-                # PR-AIP-UNIFIED: Route phase sync through AIPTransport
-                from core.aip_transport import get_aip_transport
-                from core.cross_device_sync import build_phase_state_event
-
-                # 两条路径发同一份报文(单一构造处,见 build_phase_state_event)。
-                _phase_msg = build_phase_state_event(
-                    new_phase=current_phase,
-                    sync_type="cross_device_reconnect_sync",
-                )
-                try:
-                    _track_bg_task(
-                        asyncio.create_task(get_aip_transport().send(dict(_phase_msg, _transport="auto"), device_id))
-                    )
-                except Exception:
-                    _track_bg_task(asyncio.create_task(websocket.send_json(_phase_msg)))
-                logger.info(
-                    "CrossDeviceSync: phase=%s pushed to reconnected device=%s",
-                    current_phase,
-                    device_id,
-                )
-        except Exception as _phase_exc:
-            logger.debug(
-                "CrossDeviceSync: reconnect phase push non-fatal: device_id=%s error=%s",
-                device_id,
-                _phase_exc,
-            )
+        # 电脑的三态不推给设备(设备直接对智能体),重连时也不补推。
 
         # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
         # so that runtime_session_id is preserved and the session returns to active.

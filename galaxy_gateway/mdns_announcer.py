@@ -161,6 +161,11 @@ class MdnsAnnouncer:
         self.stop()
 
 
+def mdns_enabled() -> bool:
+    """``GALAXY_MDNS`` 没被显式关掉(默认开)。与「跨设备」开关无关:手表、手机靠它找到智能体。"""
+    return os.getenv("GALAXY_MDNS", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
 def start_lan_announcer(port: int) -> Optional["MdnsAnnouncer"]:
     """按 ``GALAXY_MDNS`` 开关发布 ``_galaxy._tcp``;关着、或没起来返回 ``None``。
 
@@ -168,7 +173,7 @@ def start_lan_announcer(port: int) -> Optional["MdnsAnnouncer"]:
     只写在 lifespan 里的广播,桌面版永远发不出去 —— 同一 Wi-Fi 下的手机/手表也就
     找不到电脑。调用方负责在停机时 ``stop()`` 返回的对象。
     """
-    if os.getenv("GALAXY_MDNS", "1").strip().lower() in ("0", "false", "no", "off"):
+    if not mdns_enabled():
         return None
     announcer = MdnsAnnouncer(port=port)
     return announcer if announcer.start() else None

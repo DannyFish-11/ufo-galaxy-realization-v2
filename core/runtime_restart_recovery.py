@@ -123,7 +123,7 @@ HYBRID_ORCHESTRATION_RECOVERY_POLICY: str = (
     "POLICY::HYBRID_ORCHESTRATION_RECOVERY: On process restart, "
     "HybridOrchestrationContinuityRegistry.mark_all_running_as_interrupted() "
     "is called to transition all non-terminal hybrid executions to 'interrupted'. "
-    "Terminal executions are left as-is.  Live transport handles (A2A, GUI, VLM) "
+    "Terminal executions are left as-is.  Live transport handles (API 直调, GUI, VLM) "
     "are intentionally ephemeral and are NOT recovered — see "
     "HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY in "
     "core.hybrid_orchestration_continuity."
@@ -583,7 +583,7 @@ class RuntimeRestartRecoveryCoordinator:
             "Capability/readiness/participation liveness is NOT durably recovered as "
             "live truth. Recovered node/topology views are explicitly degraded until "
             "fresh runtime signals revalidate them.",
-            "Hybrid execution transport handles (A2A connections, GUI handles, "
+            "Hybrid execution transport handles (API 直调 connections, GUI handles, "
             "VLM context) are intentionally ephemeral and are NOT recovered. "
             "See HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.",
             "In-flight task RESULTS and partial execution state are NOT "

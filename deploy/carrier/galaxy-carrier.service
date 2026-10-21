@@ -1,0 +1,32 @@
+# Galaxy Agent 载体(跨设备整体方案阶段 5)—— Linux 服务器 / 云主机上开机自启
+#
+# 1. 建一个专用用户,把本仓库放到 /opt/galaxy(或改下面的路径):
+#      sudo useradd --system --create-home galaxy
+#      sudo -u galaxy python3 -m pip install --user "websockets>=11.0" "pydantic>=2.9.0"
+# 2. 要让载体在沙箱里跑代码:装好 Docker,并把这个用户加进 docker 组
+#    (docker 组等同 root 权限 —— 只在专给载体用的机器上这样做;不加就只是不接 run_code):
+#      sudo usermod -aG docker galaxy
+# 3. 先用这个用户配对一次(配对码由主脑给,10 分钟内有效、只能用一次):
+#      cd /opt/galaxy && sudo -u galaxy python3 -m device_client --carrier --pair <配对码> --gateway http://<主脑>:<端口> --no-run
+# 4. 装上并启动:
+#      sudo cp deploy/carrier/galaxy-carrier.service /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now galaxy-carrier
+#    看日志:journalctl -u galaxy-carrier -f
+
+[Unit]
+Description=Galaxy agent carrier (takes agents dispatched by the Galaxy center)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=galaxy
+WorkingDirectory=/opt/galaxy
+ExecStart=/usr/bin/python3 -m device_client --carrier
+Restart=always
+RestartSec=5
+# 令牌无效(需要重新配对)时退出码是 3:不必一直重启
+RestartPreventExitStatus=3
+
+[Install]
+WantedBy=multi-user.target

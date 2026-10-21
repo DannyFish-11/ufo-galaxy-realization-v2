@@ -10,7 +10,7 @@
 个 RoutingTable」。
 
 反向验证（人工执行过，结论记录在此）：
-* 注掉 lifecycle 的 mesh 注册段 → test_lifecycle_registers_mesh_adapter 红；
+* 注掉传输适配器注册里的 mesh 注册段 → test_mesh_registered_in_lifecycle_and_priority 红；
 * 把 _handle_data 的中继分支改成直接返回失败 → test_three_node_relay 红。
 """
 
@@ -136,7 +136,8 @@ def test_route_cache_survives_discovery() -> None:
 
 
 def test_mesh_registered_in_lifecycle_and_priority() -> None:
-    """融入点钉：lifecycle Phase 8 注册 mesh；优先级表把 mesh 放最后兜底。
+    """融入点钉：传输适配器注册(独立网关 lifecycle Phase 8 与桌面版共用
+    ``galaxy_gateway/bootstrap/transports.py``)注册 mesh；优先级表把 mesh 放最后兜底。
 
     钉在 AST 层而不是源码字符串层：反向验证时发现，把注册行注释掉后
     字符串匹配依然通过（注释里字符串还在）—— 字符串钉是假钉。
@@ -144,19 +145,19 @@ def test_mesh_registered_in_lifecycle_and_priority() -> None:
     import ast
     import inspect
 
-    import galaxy_gateway.bootstrap.lifecycle as lc
+    import galaxy_gateway.bootstrap.transports as tr
     from core.aip_transport import AIPTransport
 
-    tree = ast.parse(inspect.getsource(lc))
+    tree = ast.parse(inspect.getsource(tr))
     calls = [
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "register_adapter"
-        and any(isinstance(a, ast.Name) and a.id == "mesh_adapter" for a in node.args)
+        and any(isinstance(a, ast.Name) and a.id == "mesh" for a in node.args)
     ]
-    assert calls, "lifecycle 不再把 mesh_adapter 注册进 AIPTransport（真实调用消失，注释不算）"
+    assert calls, "传输适配器注册不再把 mesh 注册进 AIPTransport（真实调用消失，注释不算）"
 
     # 终点投递也必须接进 ingress 汇聚点：没有 handler，中继成功但内容进黑洞
     handler_calls = [

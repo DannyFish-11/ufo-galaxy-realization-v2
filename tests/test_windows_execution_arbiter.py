@@ -461,10 +461,10 @@ class TestHybridWindowsDelegation:
             windows_arbiter=win_arbiter,
         )
         assert result.success is True
-        # final_level should map to A2A (system_api → A2A)
+        # final_level should map to API 直调 (system_api → API 直调)
         from core.hybrid_executor import ExecutionLevel
 
-        assert result.final_level == ExecutionLevel.A2A
+        assert result.final_level == ExecutionLevel.API_DIRECT
 
     @pytest.mark.asyncio
     async def test_windows_device_vlm_fallback(self):

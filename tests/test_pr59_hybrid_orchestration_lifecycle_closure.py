@@ -93,7 +93,7 @@ Coverage:
   67. run_startup_recovery() returns RuntimeRecoveryReport with hybrid field.
 
   Durability boundary assertions
-  68. Ephemeral sentinel mentions A2A/GUI/VLM.
+  68. Ephemeral sentinel mentions API 直调/GUI/VLM.
   69. Canonical path sentinel confirms hybrid is not degrade-only.
   70. Interrupted state is non-terminal (resumable after restart).
 """
@@ -751,13 +751,13 @@ class TestRunStartupRecoveryHybrid:
 
 
 class TestDurabilityBoundaryAssertions:
-    def test_68_ephemeral_sentinel_mentions_a2a_gui_vlm(self):
+    def test_68_ephemeral_sentinel_mentions_api_direct_gui_vlm(self):
         from core.hybrid_orchestration_continuity import (
             HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY,
         )
 
         text = HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.upper()
-        assert "A2A" in text
+        assert "API 直调" in text
         assert "GUI" in text
         assert "VLM" in text
 

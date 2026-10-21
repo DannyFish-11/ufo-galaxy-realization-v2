@@ -4,11 +4,13 @@
 MCP/技能/节点;资源表里从没放进过设备。这里不把几百个 ``device__<id>__<cap>``
 灌进上下文,而是给一组元工具,对着同一份总览(``OnboardingService.overview``)工作:
 
-    devices__list            成员(按角色)+ 候选
+    devices__list            每台成员一张整体卡(device_card)+ 候选
     devices__join            接入一个候选(需要人时返回要做什么)
     devices__ignore          不再提示某个候选
     devices__remove          移除成员(该收回的都收回)
     devices__invoke          调某台设备的一个动作(按它是原生/桥接/驱动节点/MCP 驱动分别路由)
+    devices__delegate        把一整段目标交给装了桥接 Agent 的设备(手机本地循环)去做,等它的结果
+    devices__plan            多步计划:每步用哪台设备、依赖哪几步 → 分层执行(同层并行、同一台设备串行)
     devices__invite          邀请一台新设备(手机/手表:配对码;笔记本:配对码 + 一条命令;worker:进网 + 启动命令)
     devices__acquire_driver  没有接入路径的候选:装一个 MCP 驱动(GitHub),或让模型写一个
     devices__bind_driver     把某个 MCP 工具认作这个候选的驱动,接入为成员
@@ -27,10 +29,10 @@ import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from core.device_onboarding.gateway_address import gateway_http_base
-from core.device_onboarding.mode_request import REQUEST_ACTION, dispatch_mode_tool, mode_request_tools
 from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
 from core.device_onboarding.taxonomy import is_native_transport
+from core.device_queue import run_on_device
 
 logger = logging.getLogger("Galaxy.Onboarding.AgentTools")
 
@@ -49,9 +51,13 @@ def _fn(name: str, description: str, properties: Dict[str, Any], required: Optio
 DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         "devices__list",
-        "List this system's devices: members grouped by role (subjects that can initiate, members, bridged "
-        "devices such as smart-home entities, observers) with online status, capability classes and driver; "
-        "plus candidates discovered nearby that are NOT members yet and what joining each would take.",
+        "List this system's devices. Each member comes as one card: what it is (name, type, form: watch / phone / "
+        "computer / carrier / home), what it can do (each action it reported, with a one-line 'does'), how it is now "
+        "(online, battery, network path, busy, and for a watch whether the wearer can be interrupted), whether it can "
+        "take a dispatched agent (can_take_agent: phones and agent carriers yes; watches and hands-and-eyes computers "
+        "no), and what it did recently with what result. You decide which device does what; only members that are "
+        "online can be given work. Also lists candidates discovered nearby that are NOT members yet and what joining "
+        "each would take.",
         {"include_ignored": {"type": "boolean", "description": "Also list candidates the user ignored."}},
     ),
     _fn(
@@ -87,14 +93,77 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
         ["device_id", "action"],
     ),
     _fn(
+        "devices__delegate",
+        "Hand a whole goal to a device that runs its own agent (can_take_agent and agent_installed on its card: a "
+        "phone, or an agent carrier on another computer / server): it plans and carries it out locally, reports "
+        "progress, and returns the result. Use this for multi-step work on that device; use devices__invoke for a "
+        "single action. Constraints are passed along as-is (e.g. 'do not pay'); a phone still asks its user before "
+        "sending messages, calling or paying. If you already know the exact actions, give them as steps and the "
+        "device runs them in order without planning.",
+        {
+            "device_id": {"type": "string"},
+            "goal": {"type": "string", "description": "What to get done, in plain words"},
+            "constraints": {"type": "array", "items": {"type": "string"}},
+            "steps": {
+                "type": "array",
+                "description": "Optional: exact actions to run in order, from the device's own action list",
+                "items": {
+                    "type": "object",
+                    "properties": {"action": {"type": "string"}, "params": {"type": "object"}},
+                    "required": ["action"],
+                },
+            },
+            "timeout_s": {"type": "number", "description": "How long to wait for the result (default 180, max 600)"},
+        },
+        ["device_id"],
+    ),
+    _fn(
+        "devices__plan",
+        "Run a multi-step plan across devices. You write the steps: each step uses one device and either one "
+        "action (like devices__invoke) or a whole goal (like devices__delegate), and may depend on earlier steps. "
+        "Steps whose dependencies are done run together; one device does one thing at a time. Returns each step's "
+        "result or why it failed; steps that depend on a failed one are not run. If something failed, decide "
+        "yourself: send a new plan with just the remaining steps, use another device, or ask the user. "
+        "Plans are kept on disk and resumed after a restart; call with just plan_id to see where one stands.",
+        {
+            "plan_id": {"type": "string", "description": "Only to look up an existing plan (no steps)"},
+            "goal": {"type": "string", "description": "What the whole plan is for"},
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "device_id": {"type": "string"},
+                        "action": {"type": "string"},
+                        "params": {"type": "object"},
+                        "goal": {"type": "string"},
+                        "constraints": {"type": "array", "items": {"type": "string"}},
+                        "steps": {
+                            "type": "array",
+                            "description": "Optional, for a goal step: exact actions as in devices__delegate",
+                            "items": {"type": "object"},
+                        },
+                        "depends_on": {"type": "array", "items": {"type": "string"}},
+                        "timeout_s": {"type": "number"},
+                    },
+                    "required": ["id", "device_id"],
+                },
+            },
+        },
+        [],
+    ),
+    _fn(
         "devices__invite",
         "Invite a new device the user wants to add. phone/watch: returns a one-time pairing code to enter in the "
         "Galaxy app. laptop: a Windows, macOS or Linux computer the user wants you to operate (screen, mouse, "
         "keyboard) — returns one command with a pairing code to run on it; it finds this system on the LAN, joins the "
-        "private network, starts on login, and you will be told in the conversation when it connects. worker: a "
-        "headless machine that only runs code jobs — it joins the message bus and starts taking jobs on its own, "
-        "so it needs no onboarding and does not appear in the device list.",
-        {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "worker"]}},
+        "private network, starts on login, and you will be told in the conversation when it connects. carrier: "
+        "another computer, Linux server or cloud host that takes an agent from you and carries out whole goals there "
+        "(files in its own work folder, code only in a sandbox) — returns a pairing command; once it connects you "
+        "can devices__delegate to it. worker: a headless machine that only runs code jobs — it joins the message "
+        "bus and starts taking jobs on its own, so it needs no onboarding and does not appear in the device list.",
+        {"kind": {"type": "string", "enum": ["phone", "watch", "laptop", "carrier", "worker"]}},
         ["kind"],
     ),
     _fn(
@@ -120,9 +189,11 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
 
 
 def devices_tools_for_agent() -> List[Dict[str, Any]]:
-    """要给智能体的设备工具：设备接入平面开着才有 ``devices__list`` 等；本地模式下另有「请求打开跨设备模式」
-    （它**不挂在**接入开关底下 —— 那个开关是跨设备按钮的成员，按钮关着它也关着，见 mode_request.py）。"""
-    return (list(DEVICES_BUILTIN_TOOLS) if onboarding_enabled() else []) + mode_request_tools()
+    """要给智能体的设备工具：设备接入平面开着才有 ``devices__list`` 等。
+
+    和这台电脑的「跨设备」开关无关：那个开关只说电脑自己进不进设备网络，不限制智能体协调已加入的设备，
+    所以也没有「请求打开跨设备」这种工具 —— 智能体不去开模式。"""
+    return list(DEVICES_BUILTIN_TOOLS) if onboarding_enabled() else []
 
 
 # ── 人在环 ───────────────────────────────────────────────────────────────────────
@@ -171,23 +242,6 @@ async def _ask(what: str, session_id: str) -> Optional[Dict[str, Any]]:
 # ── list ─────────────────────────────────────────────────────────────────────────
 
 
-def _brief_member(v: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        k: v[k]
-        for k in (
-            "device_id",
-            "name",
-            "type",
-            "role_label",
-            "can_initiate",
-            "online",
-            "capability_classes",
-            "capabilities",
-        )
-        if k in v
-    } | {"attached_via": v.get("bridge_id") or v.get("transport") or "", "driver": v.get("driver")}
-
-
 def _brief_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "candidate_id": c["candidate_id"],
@@ -203,11 +257,21 @@ def _brief_candidate(c: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _list(args: Dict[str, Any]) -> Dict[str, Any]:
+    """每台成员一张整体卡(``device_card``),在线的排前;不按固定角色分组 —— 谁做什么由模型定。"""
+    from core.device_onboarding.device_card import build_device_card
+    from core.unified.device_manager import get_unified_device_manager
+
     ov = get_onboarding_service().overview(include_ignored=bool(args.get("include_ignored")))
+    udm = get_unified_device_manager()
+    views = sorted((v for vs in ov["groups"].values() for v in vs), key=lambda v: (not v["online"], v["name"]))
+    cards = []
+    for v in views:
+        d = udm.get_device(v["device_id"])
+        cards.append(build_device_card(v, dict(getattr(d, "metadata", None) or {})))
     return {
         "success": True,
         "summary": ov["summary"],
-        "members": {g: [_brief_member(v) for v in vs] for g, vs in ov["groups"].items() if vs},
+        "members": cards,
         "candidates": [_brief_candidate(c) for c in ov["candidates"]],
     }
 
@@ -309,12 +373,9 @@ async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         if d.bridge_id.startswith(prefix):
             return await invoker(d, action, params, session_id)
     if is_native_transport(d.transport) or not d.transport:
-        # 讲 AIP 的设备:走规范派发链(权限门在里面)。本地模式只用本机,先拒(并告诉模型怎么办)。
+        # 讲 AIP 的设备:走规范派发链(权限门在里面)。它在名册里就是自己加入的成员 ——
+        # 不看这台电脑的「跨设备」开关(那个开关只管电脑自己进不进网络)。
         from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
-        from core.system_mode import cross_device_refusal
-
-        if (refused := cross_device_refusal()) is not None:
-            return refused
 
         r = await get_canonical_dispatcher().dispatch(f"device__{did}__{action}", params, session_id=session_id)
         return r.as_legacy_dict()
@@ -380,6 +441,31 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
                 "之后它开机会自己连上,连上时我会在这里告诉你。"
             ),
         }
+    if kind == "carrier":
+        # Agent 载体:同一个 device_client,换成载体插件;和电脑同一条配对链。服务器上多半不在同一个局域网,
+        # 所以命令带上主脑地址;也可以用 deploy/carrier 里的镜像跑在容器里。
+        card = build_local_card()
+        code, expires_at = get_pairing_code_registry().issue(to_link(card))
+        gateway = gateway_http_base(card)
+        native = f"python -m device_client --carrier --pair {code} --gateway {gateway}"
+        # 先配对、再常驻:配对码只能用一次,带着它常驻的话容器一重启就配对失败、反复重启
+        container = (
+            "docker build -f deploy/carrier/Dockerfile -t galaxy-carrier . && "
+            f"docker run --rm -v galaxy-carrier:/data galaxy-carrier --pair {code} --gateway {gateway} --no-run && "
+            "docker run -d --restart unless-stopped --name galaxy-carrier -v galaxy-carrier:/data galaxy-carrier"
+        )
+        return {
+            "success": True,
+            "human_step": HumanStep.RUN_COMMAND.value,
+            "code": code,
+            "expires_at": expires_at,
+            "commands": [native, container],
+            "tell_user": (
+                f"在那台机器上的本仓库目录里执行:{native} 。想让它跑在容器里,改用:{container} 。"
+                f"配对码 {code} 10 分钟内有效、只能用一次。装了 Docker 的,代码会在不联网的沙箱里跑;"
+                "开机自启见 deploy/carrier/galaxy-carrier.service。连上时我会在这里告诉你。"
+            ),
+        }
     if kind == "worker":
         try:
             grant = issue_join_key()
@@ -403,7 +489,7 @@ def _invite(args: Dict[str, Any]) -> Dict[str, Any]:
             "再在它上面的本仓库副本里执行第二条(启动执行 worker)。起来之后它自己上消息总线、"
             "开始领计算任务 —— 不用再接入一次。它是干活的机器,不进设备列表",
         }
-    return {"success": False, "error": "kind 只能是 phone / watch / laptop / worker"}
+    return {"success": False, "error": "kind 只能是 phone / watch / laptop / carrier / worker"}
 
 
 # ── 驱动:获取与绑定 ─────────────────────────────────────────────────────────────
@@ -483,8 +569,6 @@ async def _bind_driver(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, session_id: str = "") -> Dict[str, Any]:
-    if action == REQUEST_ACTION:  # 不受设备接入开关管
-        return await dispatch_mode_tool(action, arguments, session_id=session_id)
     if not onboarding_enabled():
         return {"success": False, "error": "设备接入平面已关闭(GALAXY_ONBOARDING_ENABLED=false)"}
     args = dict(arguments or {})
@@ -498,7 +582,29 @@ async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, sessi
         if action == "remove":
             return await _remove(args, session_id)
         if action == "invoke":
-            return await _invoke(args, session_id)
+            # 同一台设备一次只做一件事(每台设备一个队列),不同设备照样并行
+            return await run_on_device(str(args.get("device_id") or ""), lambda: _invoke(args, session_id))
+        if action == "delegate":
+            from core.phone_bridge import DEFAULT_DELEGATE_TIMEOUT_S, delegate
+
+            device_id = str(args.get("device_id") or "")
+            timeout = float(args.get("timeout_s") or DEFAULT_DELEGATE_TIMEOUT_S)
+            return await run_on_device(
+                device_id,
+                lambda: delegate(
+                    device_id,
+                    str(args.get("goal") or ""),
+                    constraints=list(args.get("constraints") or []),
+                    timeout=timeout,
+                    session_id=session_id,
+                    steps=list(args.get("steps") or []),
+                ),
+                timeout=timeout + 10,
+            )
+        if action == "plan":
+            from core.task_plan import run_plan
+
+            return await run_plan(args, session_id)
         if action == "invite":
             return _invite(args)
         if action == "acquire_driver":

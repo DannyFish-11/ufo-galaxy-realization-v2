@@ -24,8 +24,8 @@ AGENT_BRIDGE_ROLE sentinel: "runtime_handoff_adapter"
 Mediates between the gateway / DeviceRouter and a downstream Agent Runtime
 (e.g. OpenClawd) for cross-device task flows.
 
-When the cross-device switch is **ON** and a task is marked as eligible for
-runtime takeover, ``AgentBridge.handoff()`` delegates execution to the
+When a task is marked as eligible for runtime takeover,
+``AgentBridge.handoff()`` delegates execution to the
 configured runtime endpoint and routes the response back.  If the runtime is
 unreachable or exceeds the timeout the bridge transparently falls back to the
 caller-supplied local executor, emits a structured log, and increments the
@@ -54,10 +54,10 @@ GALAXY_RUNTIME_ENABLED
 
 Backward compatibility
 ----------------------
-* When ``GALAXY_CROSS_DEVICE_ENABLED=0`` the bridge immediately returns the
-  standard disabled response — no runtime call is made.
-* When ``GALAXY_RUNTIME_ENABLED=0`` all tasks stay local regardless of the
-  cross-device switch.
+* The computer's 「跨设备」 switch (``GALAXY_CROSS_DEVICE_ENABLED``) does not
+  gate the bridge: it only says whether this computer joins the device network
+  as a device; coordinating devices that joined is the central agent's job.
+* When ``GALAXY_RUNTIME_ENABLED=0`` all tasks stay local.
 * When the runtime is unreachable or times out, the caller-supplied
   ``local_fallback`` coroutine is awaited and its result is returned.
 
@@ -355,12 +355,11 @@ class AgentBridge:
 
         Flow
         ----
-        1. Check ``GALAXY_CROSS_DEVICE_ENABLED``; return disabled dict if OFF.
-        2. Check bridge enabled flag; stay local if disabled.
-        3. Deduplicate by ``trace_id`` (or ``task_id`` when provided by a
+        1. Check bridge enabled flag; stay local if disabled.
+        2. Deduplicate by ``trace_id`` (or ``task_id`` when provided by a
            TaskEnvelope-sourced contract); return cached result on hit.
-        4. Call runtime; on timeout / error fall back to *local_fallback*.
-        5. Cache successful result; update metrics; return result.
+        3. Call runtime; on timeout / error fall back to *local_fallback*.
+        4. Cache successful result; update metrics; return result.
 
         PR-2: When the contract carries a TaskEnvelope-sourced ``task_id``,
         the dedup cache uses ``task_id`` as the primary key (in addition to
@@ -382,11 +381,6 @@ class AgentBridge:
             Bridge-originated results additionally have ``"bridge_source"``
             set to ``"runtime"`` or ``"local_fallback"``.
         """
-        from galaxy_gateway.cross_device_switch import (
-            is_cross_device_enabled,
-            make_disabled_response,
-        )
-
         trace_id = contract.trace_id
         # PR-2: use task_id as dedup key when it originates from a TaskEnvelope;
         # fall back to trace_id for legacy contracts that only carry trace_id.
@@ -394,11 +388,7 @@ class AgentBridge:
         trace_ctx = TraceContext(trace_id=trace_id, span_id=str(uuid.uuid4()))
         gm = get_gateway_metrics()
 
-        # ── 1. Cross-device switch guard ──────────────────────────────────
-        if not is_cross_device_enabled():
-            return make_disabled_response(trace_id=trace_id)
-
-        # ── 2. Bridge enabled guard ────────────────────────────────────────
+        # ── 1. Bridge enabled guard ────────────────────────────────────────
         if not self._config.enabled:
             logger.debug(
                 "agent_bridge_disabled trace_id=%s; staying local",
@@ -406,7 +396,7 @@ class AgentBridge:
             )
             return await self._run_local_fallback(contract.task, local_fallback, trace_id, reason="bridge_disabled")
 
-        # ── 3. Deduplication ───────────────────────────────────────────────
+        # ── 2. Deduplication ───────────────────────────────────────────────
         if dedup_key in self._dedup_cache:
             self.metrics.dedup_hit_count += 1
             logger.info(
@@ -416,7 +406,7 @@ class AgentBridge:
             )
             return self._dedup_cache[dedup_key]
 
-        # ── 4. Runtime call ────────────────────────────────────────────────
+        # ── 3. Runtime call ────────────────────────────────────────────────
         self.metrics.handoff_attempts += 1
         gm.inc("bridge_handoff_total")
         t_start = time.monotonic()
@@ -472,7 +462,7 @@ class AgentBridge:
             )
             result = await self._run_local_fallback(contract.task, local_fallback, trace_id, reason=str(exc))
 
-        # ── 5. Cache and return ────────────────────────────────────────────
+        # ── 4. Cache and return ────────────────────────────────────────────
         # PR-2: cache by dedup_key (task_id when envelope-sourced, trace_id otherwise).
         self._cache_result(dedup_key, result)
         # PR-31: attach compact Handoff Envelope v2 summary additively (does not

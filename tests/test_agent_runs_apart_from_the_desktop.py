@@ -49,7 +49,7 @@ def spoken(monkeypatch) -> List[str]:
 @pytest.fixture(autouse=True)
 def _quiet_side_channels(monkeypatch):
     monkeypatch.setattr("core.phase_transition_ledger.record_transition", lambda *a, **k: True)
-    monkeypatch.setattr("core.cross_device_sync.emit_cross_device_phase_sync", lambda **kw: None)
+    monkeypatch.setattr("core.cross_device_sync.tell_origin_device", lambda *a, **kw: None)
 
 
 def _phases(events: List[str]) -> List[str]:

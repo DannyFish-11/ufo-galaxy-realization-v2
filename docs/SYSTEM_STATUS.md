@@ -364,16 +364,16 @@ python scripts/check_assessment_freshness.py
   此前同一件事有三个各自推导的答案（网关只看按钮；启动流程另把「NATS 地址非空」当跨设备；`system_mode.py` 让写着 `desktop-local` 的模式键盖过按钮），
   于是面板按钮开着、`.env` 里躺着 `desktop-local` 时三处各说各话，「保存设置」写入的 `nats://localhost:4222` 还会把只想用本机的人悄悄切成跨设备。
   现在网关开关、启动流程、桌面在场、启动自检、模式接口都调那一个函数；NATS 地址不参与判模式；面板「跨设备」按钮同时写主键与模式名，「运行模式」下拉框不再列在面板上。
-- **主脑与 worker 只在跨设备模式里起**；开着却在本地模式 → 不起，启动日志说出原因。
-- **模型只能请求、不能决定**：本地模式下的 `devices__request_cross_device` 只会问人，批准走设备接入已有的人在环（`GALAXY_ONBOARDING_AUTO=approve` 对它无效，后台自发回合不能提出）。
+- ~~**主脑与 worker 只在跨设备模式里起**~~（2026-10-19 推翻，见 6.21：任务派发只看它自己的开关）。
+- ~~**模型只能请求、不能决定**打开跨设备~~（2026-10-19 删除，见 6.21：模式不限制智能体，也就没有可请求的东西）。
 - 另两处遗留真问题已修：主脑状态文件缺省落 `$GALAXY_DATA_DIR`（不再落系统临时目录）；`GALAXY_NATS_EXECUTOR_FALLBACK` 的 `reject` 真的不退回（登记只留 `sync` / `reject`）。
 - 6 个数字 / 取值的登记默认对齐到代码（主脑缩放复评间隔、节点心跳、安卓快照保鲜、联邦心跳、SLO 心跳窗口、Tailscale 检查间隔）；清点时记的第 7 个（`GALAXY_HEADSCALE_USER`）核对后本来就一致。
-- **本地模式不往别的设备下发**（真机实测查出）：起真服务器、两台真配对的设备客户端，本地模式下 `/devices/parallel` 曾把命令送到设备并执行 —— 命令路由的设备执行桥直接发，网关开关只在两处查。
+- ~~**本地模式不往别的设备下发**~~（2026-10-19 推翻，见 6.21：那是把「电脑加入」误当成「智能体可以协调」；下面是当时的记录）（真机实测查出）：起真服务器、两台真配对的设备客户端，本地模式下 `/devices/parallel` 曾把命令送到设备并执行 —— 命令路由的设备执行桥直接发，网关开关只在两处查。
   现在并行 / 单设备命令 REST、设备执行桥、网关单设备下发、智能体 `devices__invoke` 五处统一拒绝（`cross_device_disabled`，并说明怎么办），按钮一翻即放行。
 - 真机实测还查出并已修的三处：模型看不到「请求打开跨设备」工具（工具表超 24 个时被按词法相关性裁掉，现列入核心工具永不裁）；工具循环只把 `result` / `error` 交给模型，
   需要确认时模型不知道问什么、批准后不知道要重启（结果文案现在写进这两个字段）；POSIX 上端口预检不设 `SO_REUSEADDR`，设备连着时停掉服务再立刻起，会把旧连接的 TIME_WAIT
   误报成「端口被占」、API 网关起不来（横幅却照常报「就绪」）。
-- 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_the_model_can_ask_but_only_the_person_can_turn_on_cross_device.py`、`test_master_brain_runs_only_in_cross_device_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`。
+- 验证：`tests/test_one_rule_decides_the_system_mode.py`、`test_multi_machine_registry_defaults_match_the_code.py`（当时另两份钉住旧闸的测试已随 6.21 删除）。
 
 ### 6.8 2026-10-07：所有者第三份真机日志（代码版本 9dd1d9c2）+ 面板 / 厂商 / 开关
 
@@ -463,6 +463,7 @@ python scripts/check_assessment_freshness.py
 - **桌面版从来没让电脑自己入网。** 自动入网（`core/tailnet_self_join.py`）和局域网广播（`_galaxy._tcp`）只写在网关 lifespan 里；桌面版由启动器自己建应用、只挂 `/ws/device/{id}`，不跑那个 lifespan。结果是钥匙发了、手表进了网，电脑不在里面。现在两处共用 `autojoin_at_startup` / `start_lan_announcer`，桌面启动器里由 `launcher/tailnet_startup.py` 在 `TailscaleManager.initialize()` **之前**入网、发布广播、停机时收掉；横幅区分"装了但没入成"（带处置）与"没装"，广播没发出去不再写成"已发布"。
 - **配对不管电脑在不在网里都发钥匙。** 现在 `/api/v1/pair/claim` 先问 `desktop_gate`：电脑没装客户端、没登录、或登录在别的控制服务器时，配对照样成功、令牌照发，但**不发钥匙**，`tailnet_join_unavailable.reason = "desktop_not_on_tailnet"` 并带下一步；查不出来时放行；headscale 没配时仍报原来的原因码。手表侧把这个码翻成人话（"电脑还没加入 tailnet"）并在配对完成后展示。
 - 测试：`tests/test_tailnet_key_needs_the_computer_in_the_network.py`（19 条；把门拿掉 3 条变红、把入网挪到探测之后 1 条变红）。
+- **提示语跟系统模式走（2026-10-19 对着最新 main 复核）。** 桌面启动器现在只在**跨设备模式**入 tailnet、发布 `_galaxy._tcp`（见 `launcher/bus_phase.py`；默认是本地模式）。所以本地模式下 `desktop_gate` 不再说「重启就自动加入」——那是句假话，重启后照样不会入网——而是说「现在是本地模式，先在面板打开『跨设备』并重启」；立刻加入的 `POST /api/v1/tailnet/join-this-computer` 两种模式都可用。手表侧同步：配对完成页，以及「自动发现网关」没找到时给出两条出路（手填地址 / 打开跨设备）。
 - 仍需真机：真 headscale + 真 tailscaled 上"电脑未入网 → 配对不发钥匙 → 入网后重新配对发钥匙"的整条路。
 
 ### 6.14 2026-10-08：「调数据方式」的开关撤出面板，改由智能体按人的话调
@@ -932,6 +933,167 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
 - 本机旧 `.env` 里的 `GALAXY_NATS_ENABLED=true`：启动那一行现在会点名，删掉那一行即可回到「本地模式不起 NATS」。
 - GitHubFlow（Node_106）生成 / 审查代码写死 Gemini，没走系统路由器：只配了别家 Key 的人这一步用不了（现在照实说没配 `GEMINI_API_KEY`，不再编）。
 - 桌面自动化的「按现场挑」与灵动岛的「已复制」要在 Windows 真机上看一遍（Win32 / UIA / 微软 UFO、Electron 报的剪贴板格式名）。
+
+### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
+
+所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，
+手表配对即加入；**「跨设备」说的是这台设备加入，从不限制智能体**。整体设计见 **[CROSS_DEVICE_OVERALL_PLAN.md](CROSS_DEVICE_OVERALL_PLAN.md)**（7 个阶段），这一轮做阶段 0。
+
+真机探针查出的现状：手表在本地模式下照样登记进 UDM / UCM、拿到 mesh 会话，可智能体的 `devices__invoke` 一律回 `cross_device_disabled`；按钮一关还把设备接入平面、
+局域网发现、mDNS 一起写成 false，智能体的设备工具从 9 个只剩「请求打开跨设备」1 个。电脑的开关在 9 类地方拦着智能体，全部拆掉：
+
+- **下发入口**：`devices__invoke`、单设备命令 REST、命令路由的设备执行桥、网关 `DeviceRouter` 三处与 `agent_bridge`、NATS 派发桥 —— 不再看模式，能不能下发由成员资格（名册、连接、权限门）决定。
+- **手机那批**：就绪判定里的「V2 跨设备开关」门（`v2_cross_device_switch`）、手机发起的目标、接管请求 —— 只看手机自己的开关与就绪状态。
+- **WebRTC 信令**：原先用电脑开关当门（开着时任何局域网客户端都能连、关着时已加入的手机也连不上），改成**凭成员令牌**：主人的 API 令牌，或发给这台设备的配对令牌，否则 4401。
+- **删掉** `devices__request_cross_device` 与统一拒绝 `cross_device_refusal`（智能体不去开模式）。
+- **按钮成员只留 `GALAXY_NATS_ENABLED`**；设备接入、局域网发现、mDNS 移出按钮。旧按钮留在 `.env` 里的三个 false（指纹：主键也是 false 且三项同时 false）启动时清回默认并说一声（`main.migrate_former_cross_device_members`）。
+- **找得到、连得上不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了 headscale 就入 tailnet，没配只给一行说明；headscale / TURN / STUN 配置项面板上一直显示（跨设备专属键 15 → 6）。
+- **任务派发**（`MasterBrain` + worker）只看它自己的开关，开了就把 NATS 拉起来；面向人的叫法改成「任务派发」，选模型那块的「AI 主脑」改叫「模型」，「主脑」只指智能体所在的设备。
+- 继续跟电脑开关走的（电脑作为设备加入）：桌面把自己登记进 UDM / mesh、入口判定（电脑自己的请求要不要整件交给别的设备）、NATS 默认开关、联邦、设备名、mesh 口令。
+- **设备自己退出**：新增 `POST /api/v1/pair/leave`（凭签给本设备、还有效的配对令牌；免 API 令牌，端点自己核验）：令牌作废、移出对端名册 / 设备名册 / tailnet。手表加了「解除配对」。
+- **真机实测查出并已修**（真后端 `main.py --backend` + 真 HTTP / WebSocket 客户端，本地模式）：
+  - `POST /api/v1/devices/{id}/command` 发的是 `{type:"CONTROL_COMMAND", payload:{...}}` —— 手表、手机、AIP v3 都不认，接口却回「已发送」。改成设备认的唯一一种下发帧
+    `{type:"command", command_id, command, params}`（与规范派发、`/devices/parallel` 同形）；
+  - `/api/v1/system/mode-status` 的 `takeover_available` 原先等于电脑的开关，改成「有在线的安卓成员」。
+- 验证：`tests/test_the_agent_coordinates_members_in_any_mode.py`（新）、`tests/test_cross_device_switch.py`（重写）、手表端到端 `tests/test_watch_reaches_the_central_agent.py`
+  （本地模式下智能体让手表做事，走智能体真正调的工具入口）。真机探针 13 项全过：配对领令牌 → 规范入口登记 → 本地模式下单设备命令真送到手表 →
+  WebRTC 信令陌生人 4401、配对过的手表放行、别人的令牌 4401 → 手表凭令牌自己退出、令牌失效、名册里没了、再登记被拒；启动时旧按钮留下的三个 false 被迁移掉。
+
+### 6.22 2026-10-20：设备整体卡（整体方案阶段 1）
+
+不给设备登记死的能力和角色：每台设备当成一个整体交给模型，由模型的泛化能力加工程流程约束决定它做什么。
+
+- `devices__list`（以及给人看的 `GET /api/v1/onboarding/cards`，同一份）每台成员一张卡：是什么（名称、类型、形态）/ 能做什么（设备自己报的每个动作 + 一句说明）/
+  现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/ 能否接派来的 Agent（手机、自己声明的载体能；手表、「手和眼」式电脑不能）/ 最近做过什么（任务流程图）。不再按固定角色分组。
+- 设备报动作说明：手表 `capability_schemas[].description`、手机 `action_descriptions`，原样进能力权威面；没说明的常见动作用一句通用说明，不认识的不编。
+- 每次单动作下发（智能体 `devices__invoke` 走的规范派发、单设备命令 REST）都记进任务流程图；UCM 记每台设备在等结果的下发条数（「忙不忙」）。
+- 「感知 / 动作 / 在场」只留作观测标签：派发路径（网关路由、命令路由、规范派发、源端派发）都不读它，测试钉住。
+- **真机实测查出并已修**：手表登记报 `device_name="OPPO Watch 3"`，名册里却叫「Android Device」—— 登记只认 `name`。现在依次取帧里的 `name` / `device_name`、配对时起的名字、型号，最后才是兜底。
+- 验证：`tests/test_the_model_sees_each_device_as_a_whole.py`（手表真实帧经规范入口 → 卡片）；受影响的 204 个测试文件 6187 项全过；
+  真机探针 12 项全过（`main.py --backend` + 真 WebSocket：手表报带说明的能力 → 卡片上名字、形态、说明、在线 / 本地网络、不能接 Agent、没有固定角色、下发进「最近」），阶段 0 探针 13 项复跑全过。
+
+### 6.23 2026-10-20：对外 A2A（整体方案阶段 2）
+
+中心智能体与派出去的 Agent（手机上的桥接 Agent、Linux / 云载体上的 Agent）之间的通话，跑在 AIP v3 上：一条 `type="a2a"` 帧，信封在 `payload` 里。
+
+- 协议：`core/a2a_link.py`（V2）与安卓 `shared-protocol/.../A2A.kt`（手机、手表共用）线格式与语义逐字一致；V2 测试在有安卓 checkout 时逐字对照两边的消息类别和线上的键。
+- 必达：发送方留着没确认的消息，重连后按序补发；接收方按消息号去重、每条都回确认（重复的也回）；同一会话按序号交付；缺口补不上时不卡死。
+- **写的时候查出并已修**：链路状态只在内存里，任何一端重启都会坏 —— 手机重启后序号从 1 重数，中心当成旧消息确认了却吞掉；中心重启后从 1 等，手机接着发的全缓着不交付。
+  现在每条信封带发送方链路这一次的身份（`epoch`）和还没确认的最小序号（`floor`）：对端换了身份就从 `floor` 重新数；同一身份里 `floor` 只往前推；对端重启前缓着、已确认过的照样按序交出。
+  重启那一端没发出去的消息随进程没了（等它们的协程也没了）。
+- 入口：规范设备入口 `/ws/device/{id}` 收 `a2a` 帧，先过同一道认证（没认证的连接回 `UNAUTHENTICATED`），一台设备只能以它自己那个 Agent（`agent:<device_id>`）说话（冒充回 `A2A_REJECTED`）；
+  设备（重新）登记、登记确认写回之后，中心把发给它还没确认的消息按序补发。网格不镜像（私人内容、点对点，`core/aip_mesh_mirror.py` 豁免表）。
+- 命名：混合执行里「直接调应用的 API / MCP」那一级原先也叫 A2A，改叫「API 直调」（`ExecutionLevel.API_DIRECT`，旧值 `a2a` 照旧认），A2A 只指 Agent 之间的通话。
+- 验证：`tests/test_external_a2a_link.py` 20 项；安卓 `A2ALinkTest` 14 项；跨仓闸门 `REQUIRED_AIP_MESSAGE_TYPES` 加 `a2a`（1.1.0）；
+  真后端探针 13 项全过（`main.py --backend` + 真 WebSocket：没认证拒收、确认带中心链路身份、重复照样确认但只交付一次、冒充拒收、畸形拒收、乱序都确认且按序交付；**杀掉后端重启**后手机接着发的下一条立刻被确认并交付，日志可见）。
+- 收发处理器（各类消息到了做什么）随阶段 3 登记：派桥接 Agent、上下文交接、对话桥接、委派目标、交还。
+
+### 6.24 2026-10-20：手机接管与对话桥接（整体方案阶段 3）
+
+所有者最初的设计：手机打开跨设备并登录后，中心派一个 Agent 到手机；手机上的运行时接管本地正在跑的上下文，把本地这一整套并进网络。从此手机上的对话就是和中心智能体的对话。
+
+- 接入握手：能接 Agent、且报能力时声明了 `bridge_agent: "bridge/1"` 的设备（新版手机；旧版 App 不认 `a2a` 帧也不回确认，不派）报完能力，中心在后台派 `agent_dispatch`（桥接 Agent 的说明：会话 `phone:<设备号>`、手机自己报的动作与说明、自治档位、要人确认的动作）→ 手机回 `agent_installed`。手表不派。
+  断线重连后再派一次时，手机只回「装着呢」，上下文不再交一遍。
+- 上交上下文：手机发 `context_handoff`（最近对话、正在跑的本地循环进度、最近几次本地执行；屏幕不传），落进中心这台手机的会话；重复交的同一句不重复记。
+- 对话桥接：手机上说的话以 `conversation` 进中心智能体的同一个会话（来源 `phone_chat`：算人发起的回合、不进电脑三态，与手表同一套来源分类），回答以 `conversation` 回到手机界面；一轮对话在后台跑，不挡这台手机后面的帧。
+- 委派：新工具 `devices__delegate` 把整段目标交给装了桥接 Agent 的设备（手机本地循环），带进度、等结果、记进任务流程图；没装上的设备当场说明原因，不干等。设备卡加 `agent_installed`。
+- 交还：手机关跨设备时请中心交还（`context_return`），中心回这段对话的摘要与没做完的事，视为卸下桥接 Agent。手机那边的三个开关都先请交还、最多等 2 秒再断开。
+- **真机顺序查出并已修**：安卓先发 `auth`（令牌在顶层），再发不带令牌的 `device_register`；规范入口的登记只认帧里的令牌（预留的 `_ingress_transport_token` 从没人填），认证开着时**真手机一直登记不上**（`INGRESS_AUTHENTICATION_FAILED`）。
+  现在规范入口把这条连接自己的凭证（握手头里的 Bearer，或这条连接上回过 `auth_ok` 的令牌）带给没带令牌的帧，登记照样重新校验（配对令牌绑设备号）；没有凭证的连接照样被拒。
+- 已知来源表挪进 `core/presence_line.AGENT_LOOP_SOURCES`（含别的设备转来的来源）：`phone_chat` / `wear_voice` / `wear_decision` 不再每次打一条 "unknown source" 警告。
+- 验证：`tests/test_phone_joins_through_its_bridge_agent.py` 14 项（安卓真实帧顺序走规范入口：登记三种情形、派 / 不派、交接落进会话且不重复、对话进同一个会话且来源对、委派带进度拿结果、委派拒收、交还、设备卡）；
+  安卓 `BridgeAgentRuntimeTest` 12 项；真后端探针 13 项全过（安卓真实顺序登记、派桥接 Agent、交接、对话走真的智能体主循环拿到回答、同一会话、交还、确认收干净），**杀掉后端重启**后 3 项全过（握手头登记、重新派、手机下一条立刻交付）。
+
+### 6.25 2026-10-20：多步计划与每台设备的串行队列（整体方案阶段 4）
+
+- 新工具 `devices__plan`（方案里叫 `tasks__plan`；放在设备工具一族，`core/task_plan.py`）：模型写出步骤、依赖、每步用哪台设备，
+  每步要么是一个动作（同 `devices__invoke`），要么是一整段目标（同 `devices__delegate`，前面几步的结果随约束带过去）。
+  执行用现成的 `ConstellationRuntime` 分层执行（依赖都成功了才轮到，同一轮并行）；拆解和挑设备听模型的，它的自动重排不开。
+- 失败：一步失败带回设备给的原因，依赖它的步骤不做（标「前置步骤没成功」），不依赖它的照做；重试、换设备还是问人由模型定
+  （自动重做一个发消息、下单的动作会重复动手）。
+- 每台设备一个串行队列（`core/device_queue.py`，现成的带背压 `AsyncTaskQueue`，一个工位）：同一台手机不同时做两件事，
+  不同设备照样并行；`devices__invoke`、`devices__delegate` 也走它。一台设备排了 32 件还没做完时当场说明。
+  一份计划同时在做的步骤不超过 `GALAXY_MULTI_DEVICE_DISPATCH_LIMIT`（默认 8），名额在轮到之后才占，排在忙设备后面的步骤不挡别的设备。
+- 重启续跑：计划随时写盘（`$GALAXY_DATA_DIR/task_plans.json`），启动时的任务图续跑顺带接着做没做完的计划（等相关设备重新连上，最多 5 分钟）：
+  排着队还没动过设备的步骤接着做；崩溃时正在做的那一步记「结果不明」、不重做，依赖它的也不做；做完把结果记进发起计划的会话。
+- 计划也记进任务流程图；查进度：`devices__plan` 只给 `plan_id`，或 `GET /api/v1/onboarding/plans/{plan_id}`；REST 交计划：`POST /api/v1/onboarding/plans`（要所有者令牌）。
+- **顺带修掉**（阶段 1 留下的）：每次下发记进任务流程图的节点没有可重放的载荷，重启续跑却会拿它们去重派。现在这些节点标 `observation_only`，续跑跳过。
+- 验证：`tests/test_the_agent_runs_a_multi_step_plan_across_devices.py` 17 项（计划校验、依赖顺序与同设备串行、失败原因与不做依赖、委派带前面的结果、
+  写盘与任务图、重启只做该做的、排队的不记「正在做」、名额不被排队的步骤占住、队列满、真网关 + 真手表一步步做）；
+  真后端 + 两只真 WebSocket 手表探针 9 项全过（两只表同时做、一只表一次一件、依赖等前一步、设备给的失败原因、依赖它的不做、独立的照做、事后能查），
+  交计划后让第一步卡在手表上、**kill -9 杀掉后端**：盘上是「在做 / 排着」，重启后两只表重新连上，在做的那一步记「结果不明」没重做、排着的那一步做了、依赖结果不明的没做（6 项全过）。
+
+### 6.26 2026-10-20：Agent 载体（整体方案阶段 5）
+
+- 载体＝装在别的电脑、Linux 服务器、云主机上的 `python -m device_client --carrier`：同一个连接层（配对、令牌、续期、重连）+ 载体执行插件
+  （`device_client/executors/carrier.py`）+ 载体上的 Agent（`device_client/carrier_agent.py`，和手机的桥接 Agent 说同一套对外 A2A）。
+  凭据单独存（`carrier.json`），同一台机器可以既是「手和眼」式电脑又是载体。
+- 能做的：读写列文件——只在载体自己的工作目录里，目录外一律拒；`run_code`——**只在 Docker 沙箱里**（不联网、512MB、1 核、128 进程、只读根、
+  无特权用户、去掉全部 capability、超时强停、跑完即删），本机没有可用的 Docker 就不报这个动作；`get_status`（系统、CPU、内存、GPU、有无图形界面、沙箱）。
+  每个动作带一句说明和参数，进设备整体卡，也是载体上推理循环的工具说明。
+- 接入：`devices__invite kind=carrier` 给配对命令（原生一条；容器两步：先配对、再常驻——配对码只能用一次，带着它常驻的话容器一重启就反复失败）。
+  报能力时声明 `bridge_agent`：中心记下它能接 Agent（设备卡 `can_take_agent`、`form: carrier`），并派一个 Agent 过去，会话 `carrier:<设备号>`。
+- 整段目标：`devices__delegate`（以及多步计划里委派的那一步）给了 `steps` 就照这串动作按顺序做；只给一句话就在载体上跑推理加行动的循环
+  （`core/local_agent_runtime.py`，端侧执行沙盒的本义），**模型经中心**：每一轮发 `tool_call`（`llm.chat`），中心用自己的模型答，钥匙只在中心。
+- 部署：`deploy/carrier/Dockerfile`（只装 `websockets` + `pydantic`；容器里没有 Docker 所以不接 `run_code`）、`deploy/carrier/galaxy-carrier.service`
+  （专用用户；要跑代码才把它加进 docker 组——那等同 root，文件里写明了；令牌失效退出码 3 时不再重启）。
+- **真后端实测查出并已修**：
+  - 中心一个模型都没有时，路由不抛错、回一句「还没有可用的 AI 服务」（给人看的降级）。载体的推理循环把这句当成最终答案，**报「做完了」**。
+    现在 `llm.chat` 把这种回复当失败交回，载体如实报原因。
+  - 后端重启或设备重连后的那半秒（登记会换掉元数据，能接 Agent 的声明要等报能力才到；中心还以为旧的 Agent 装着），交整段目标会被当场拒成
+    「不能接整段目标」。现在登记时记下「待确认」，委派先等它报能力（≤3 秒）、再等它重新装上（≤15 秒）；从没声明过的设备照样当场说明。手机同样受益。
+  - 本地 Agent 运行时的推理循环在没有模型、模型调不通、原地打转、轮数用完时一律报 `success=True`；现在报失败并带原因。
+- `core.local_agent_runtime` 不再在不可达清单里（载体端接上；服务端仍不用它，INV-008 不变）；未接线清单的生成段已刷新。
+- 验证：`tests/test_an_agent_carrier_takes_whole_goals.py` 12 项（配对接入派 Agent、设备卡、按步骤做整段目标、推理循环经中心的模型、中心没模型时如实失败、
+  路由降级回复不当答案、单个动作与工作目录边界、重连与后端重启后那半秒里交的目标不被拒、「手和眼」式电脑不收整段目标、没沙箱不报 run_code、
+  载体凭据单独存、轮数用完不报成功）+ 1 项真 Docker 沙箱（算对、不联网、超时强停）；
+  真后端 + 真载体进程（配对码接入）12 项全过，**kill -9 杀掉后端**两轮，各 3 项全过（载体自己连回、重新装上、一连上就交的目标等它而不被拒）；
+  容器里的载体（照 `deploy/carrier/Dockerfile` 构建，按邀请的两步走）12 项全过，含容器重启后凭据还在、不再配对、工作目录里的文件还在；
+  手机桥接（阶段 3 探针）回归 13 + 3 项全过。
+- 这里没法验证的：中心有真模型时推理循环的成功路径（这个环境没有 API Key、也没有本地模型）；它由真网关 + 真载体客户端 + 照剧本回答的模型那一项测试覆盖。
+
+### 6.27 2026-10-20：桌面版装上传输适配器（整体方案阶段 6）
+
+- 一种消息（AIP v3）、多种传输、自动选路（`core/aip_transport.py`）：传输适配器此前只在**独立运行网关**时装（`lifecycle` 的 Phase 8）；
+  桌面版（`main.py` → 主 app 挂载网关）刻意不跑那段 lifespan，**一个适配器都没有**，每次 `get_aip_transport().send` 都回「没有可用传输」。
+  现在两条启动路径共用 `galaxy_gateway/bootstrap/transports.register_transport_adapters`（桌面版经 `upper_ports` 调）：同一进程只装一次，不重复注册、不重复绑端口。
+- 「websocket」这条传输改走规范设备入口上真的连接（`UnifiedConnectionManager`）：此前它接的是网关自己的 `WebSocketManager`，那里从没有任何连接，
+  **哪种部署都没投递成功过**，每条消息都靠调用方自己直接写 socket 兜底。发给设备的帧不带选路用的内部字段。
+- 端口被占（同一台机器上还有一个 Galaxy 进程）时那个适配器只发不收，日志说清是哪个端口、设哪个变量换（`GALAXY_AIP_TCP_PORT` / `GALAXY_AIP_UDP_PORT` / `GALAXY_MESH_PORT`，
+  已登记进设置，不上面板）；UDP 两边都能绑（复用地址），单播只会到其中一个。MQTT 只在配了 `MQTT_BROKER` 时装（否则后台对着 localhost:1883 无休止重连）。
+- TCP 入口的局域网广播（`_galaxy-aip3`，`lan_discovery` 靠它找对端）注册是阻塞的、这里要约 10 秒：此前在独立网关启动里同步做、卡住事件循环；现在放到后台线程。
+- 诊断：`GET /api/v1/diagnostics/internals/transports` 多了「装了哪些传输」，链路统计里看得到每台设备实际走的哪条传输。
+- **接通后查出并已修**：
+  - 登记、重连时推给设备的「电脑当前三态」以前从没送到过（读的是一个不存在的方法，AIPTransport 失败又不抛异常）；传输接通后它第一次送到，
+    还抢在登记确认前面。当时把它修通了；**之后按所有者的意思整个删掉**：电脑的三态不该推给设备，见 6.28。
+  - 视觉结果此前一边作为处理器返回值回去、一边经 AIPTransport 另推一份；另推那份以前送不到，传输接通后手机会收到**两份**。现在只靠返回值（两个设备入口都把返回值写回）。
+- **没做、等所有者定**：三态和智能体拆成两个进程、桌面壳连远端智能体（方案里的可选项，所有者说前面阶段做完再定）。现状是桌面壳与本机后端绑死：
+  令牌从本机磁盘读、只给本机地址带令牌、壳自己拉起后端；而电脑三态（在场运行时）和智能体主循环跑在同一个进程里。要连远端智能体，得先把在场运行时
+  拆出来、改成订阅远端智能体的状态流，再让壳能配远端地址与配对令牌 —— 这是架构级改动。不拆的话，别的电脑照样能以「手和眼」式电脑或 Agent 载体加入。
+- 验证：`tests/test_the_desktop_backend_has_its_transports.py` 9 项（只装一次、websocket 投递到规范入口且不漏内部字段、真 TCP 帧进网关、端口被占只发不收、
+  局域网广播不卡启动、视觉结果只回一份、两条启动路径共用一个函数；登记那一项后来改成「登记 / 重连都不推电脑的三态」，见 6.28）；
+  真桌面版后端 6 项全过（TCP 19421、mesh 19422/tcp、UDP 19422 真在听；诊断里看得到；
+  真 TCP 心跳帧得到 `heartbeat_ack`；命令照样到真手表、帧里不漏内部字段）。传输层的「websocket」这条在真后端上投递到了真手表（实测时由登记那一推经
+  AIPTransport 触发，链路统计成功率 1.0；那一推后来改成直接走规范连接。REST 单设备命令本来就直接走规范连接，不经 AIPTransport）。
+  同一台机器上第二个后端 3 项全过，kill -9 后重启端口照样绑上；
+  阶段 0–5 的真机探针全部回归通过（13 / 12 / 10 / 13 / 9 / 12）。
+
+### 6.28 2026-10-21：电脑的三态不推给设备
+
+- 所有者：新设备直接对智能体就行，不需要知道电脑的三态。三态是电脑这具身体的表达（静默 / 思考 / 执行）；手机、手表、载体是
+  直接对智能体的成员 —— 登记、报能力、说话、拿回答 —— 不跟着电脑的脸显示。
+- 删掉的（V2）：电脑三态每次变化广播给所有连着的手机（`RuntimeSession.advance`）；新设备登记时补推一次电脑当前的三态（规范入口
+  `routes/websocket.py` 与兼容入口 `websocket_handler.py`）；安卓设备重连时补推（`AndroidBridge.reconnect_device`）；没有调用方的
+  `AndroidBridge.route_phase_change`（同样是全量广播）。
+- 留下的只有一种：**别的设备发起的请求，智能体处理到哪了**（在想 / 在做 / 做完），只回给发起的那台手机类设备，手表不收
+  （`core.presence_line.tell_origin` → `core.cross_device_sync.tell_origin_device`）。报文 `payload.sync_type = "request_progress"`，
+  手机只认带这个标记的相位报文。这件请求在本机落手、交还桌面以后，手机照样看到它的进度；给桌面补放的那几步不重推
+  （否则手机上会从「在做」跳回「在想」）。电脑发起的请求不往任何设备推相位。
+- 安卓（同名分支）：主屏、小组件、磁贴不再显示电脑的三态，只显示「智能体正在想 / 正在做你这件事」，只认 `request_progress`。
+- 验证：`tests/test_presence_line.py`（电脑发起的不推；别的设备发起的只回那台；交还桌面后照样回、补放不重推；手表、离线的、
+  不认识的都不推；V2 里不再有往设备推三态的代码）；`tests/test_the_desktop_backend_has_its_transports.py` 真网关上电脑在
+  执行 / 思考 / 静默时，新设备登记、再连一次都只收到登记确认、没有任何相位帧（改动前「执行」「思考」两项红）；
+  `tests/test_phase_wire_shape_is_single_sourced.py` 全仓只有一处构造相位报文、没有别处再调它。
 
 ## 7. 还没解决的（多数需要决定，或需要真机）
 

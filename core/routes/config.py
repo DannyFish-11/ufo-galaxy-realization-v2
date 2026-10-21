@@ -74,6 +74,8 @@ PANEL_HIDDEN_KEYS = (
             "GALAXY_HOLE_PUNCH_TIMEOUT_S",
             "GALAXY_MESH_NODE_ID",
             "GALAXY_MESH_PORT",
+            "GALAXY_AIP_TCP_PORT",
+            "GALAXY_AIP_UDP_PORT",
             "GALAXY_MULTI_DEVICE_DISPATCH_LIMIT",
             "GALAXY_WORKER_ID",
             "GALAXY_WORKER_VERSION",

@@ -11,6 +11,9 @@ intentionally kept at repository root for convenience.
 ```
 deploy/
 ├── README.md                      ← This file
+├── carrier/
+│   ├── Dockerfile                 ← Agent carrier in a container (takes agents from the center)
+│   └── galaxy-carrier.service     ← Agent carrier on a Linux server (systemd)
 ├── compose/
 │   ├── full.yml                   ← Full system (all 130 nodes + infra, profile-driven)
 │   ├── kimi.yml                   ← Legacy Kimi infrastructure surface
@@ -30,6 +33,7 @@ deploy/
 | **Production** | `deploy/compose/production.yml` | Server deployment (24/7) |
 | **Full system** | `deploy/compose/full.yml` | Complete integration testing (all 130 nodes) |
 | **Kimi legacy** | `deploy/compose/kimi.yml` | Legacy Kimi infrastructure only |
+| **Agent carrier** | `deploy/carrier/Dockerfile`, `deploy/carrier/galaxy-carrier.service` | Another computer / server / cloud host that takes agents from the center (pair first, then run; see the comments in each file) |
 
 ---
 

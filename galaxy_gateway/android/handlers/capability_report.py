@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from core.android_device_state_store import absorb_capability_report_semantics
 from core.capability_runtime.capability_state import CapabilityAvailability
@@ -29,8 +29,10 @@ def _sync_supported_actions_to_capability_authority(
     supported_actions: List[Any],
     capability_schemas: List[Any],
     version: Any,
+    action_descriptions: Optional[Dict[str, Any]] = None,
 ) -> int:
     """Project Android-reported actions into canonical gateway capability contracts."""
+    action_descriptions = action_descriptions if isinstance(action_descriptions, dict) else {}
     schema_by_action: dict[str, dict[str, Any]] = {}
     for schema_entry in capability_schemas:
         if isinstance(schema_entry, dict) and schema_entry.get("action"):
@@ -42,6 +44,9 @@ def _sync_supported_actions_to_capability_authority(
     for action in supported_actions:
         action_str = action if isinstance(action, str) else str(action)
         schema_dict = dict(schema_by_action.get(action_str, {}))
+        # 设备给的一句话说明(capability_schemas[].description,或旧式 action_descriptions 映射)
+        # 原样进能力权威面 —— 模型在设备整体卡里读到的就是它(core/device_onboarding/device_card.py)。
+        said = str(schema_dict.get("description") or action_descriptions.get(action_str) or "").strip()
         if version and not schema_dict.get("version"):
             schema_dict["version"] = str(version)
 
@@ -52,7 +57,7 @@ def _sync_supported_actions_to_capability_authority(
         authority.upsert_contract(
             CapabilityContract(
                 name=capability_name,
-                description=f"[Gateway:{device_id}] Device capability: {action_str}",
+                description=said[:200] or f"[Gateway:{device_id}] Device capability: {action_str}",
                 source=CapabilitySource.GATEWAY,
                 source_id=device_id,
                 version=str(schema_dict.get("version") or "1.0"),
@@ -225,6 +230,7 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
                 supported_actions=supported_actions,
                 capability_schemas=capability_schemas,
                 version=version,
+                action_descriptions=message.get("action_descriptions"),
             )
 
             logger.info(
@@ -306,4 +312,21 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
                 device_id,
                 participation_exc,
             )
+        # 跨设备整体方案阶段 3:声明了能装桥接 Agent 的设备(新版手机、Agent 载体)报完能力,中心派一个过去
+        # (后台,不挡这条连接)。没声明的(旧版 App)不派 —— 它不会回确认,派了只会每次重连都补发一遍。
+        # 声明了就是能接 Agent(阶段 5:载体靠这一条在设备卡上显示 can_take_agent);每次登记会换掉
+        # 元数据,所以每次报能力都记一遍。
+        try:
+            from core.phone_bridge import declares_bridge_support, note_reported, schedule_dispatch  # noqa: PLC0415
+
+            if declares_bridge_support(message):
+                from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
+
+                get_unified_device_manager().upsert_device_state(
+                    device_id, {"metadata": {"can_host_agent": True}}, source="capability_report"
+                )
+                schedule_dispatch(device_id)
+            note_reported(device_id)
+        except Exception as bridge_exc:  # noqa: BLE001
+            logger.debug("capability_report: bridge dispatch non-fatal: device_id=%s error=%s", device_id, bridge_exc)
     return ack

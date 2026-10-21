@@ -284,12 +284,12 @@ _EXECUTED_GRAPH_STATES = frozenset({GraphNodeState.RESULT, GraphNodeState.PARTIA
 
 
 def _is_projection_only(node: "GraphNode") -> bool:
-    """能力吸收（capability_assimilation）只是把"某节点能执行"投影进任务图 —— 它不是一次待派发的任务。
+    """能力吸收投影、只为观测记下的下发(``observation_only``,调用方在等结果)都不是一次待派发的任务。
 
     这类节点没有工具名、也没有可重放的载荷，永远停在 QUEUED；重启续跑若把它们当待派发节点，
     每个节点启动时都会报一条"续跑重派失败"（真机一次启动 ~100 条），还把真正悬着的任务淹没在里面。
     """
-    return bool((getattr(node, "metadata", None) or {}).get("assimilation_projection"))
+    return any((getattr(node, "metadata", None) or {}).get(k) for k in ("assimilation_projection", "observation_only"))
 
 
 _PENDING_GRAPH_STATES = frozenset(

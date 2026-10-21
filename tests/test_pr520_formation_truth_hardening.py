@@ -220,15 +220,7 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
 
         router.dispatch_task = _fake_dispatch
 
-        with patch(
-            # 断言漂移修正:device_router 采用 from-import 绑定
-            # is_cross_device_enabled,patch 源模块不影响已绑定名;旧默认值
-            # fail-open(默认启用)时该 patch 恰好是无效但无害的空操作,生产
-            # 默认改为 opt-in(默认禁用)后必须 patch 路由器命名空间中的绑定
-            # 才能真正开门(开关本身由 test_cross_device_switch.py 覆盖)。
-            "galaxy_gateway.device_router.is_cross_device_enabled",
-            return_value=True,
-        ):
+        with patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}):  # 电脑的开关已不是路由门,取值不影响结果
             result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         self.assertIn("formation", result, "Formation key must be present in result")
@@ -249,15 +241,7 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
 
         router.dispatch_task = _fake_dispatch
 
-        with patch(
-            # 断言漂移修正:device_router 采用 from-import 绑定
-            # is_cross_device_enabled,patch 源模块不影响已绑定名;旧默认值
-            # fail-open(默认启用)时该 patch 恰好是无效但无害的空操作,生产
-            # 默认改为 opt-in(默认禁用)后必须 patch 路由器命名空间中的绑定
-            # 才能真正开门(开关本身由 test_cross_device_switch.py 覆盖)。
-            "galaxy_gateway.device_router.is_cross_device_enabled",
-            return_value=True,
-        ):
+        with patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}):  # 电脑的开关已不是路由门,取值不影响结果
             result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         formation = result.get("formation", {})
@@ -281,15 +265,7 @@ class TestDeviceRouterFormationAttachment(unittest.IsolatedAsyncioTestCase):
 
         router.dispatch_task = _fake_dispatch
 
-        with patch(
-            # 断言漂移修正:device_router 采用 from-import 绑定
-            # is_cross_device_enabled,patch 源模块不影响已绑定名;旧默认值
-            # fail-open(默认启用)时该 patch 恰好是无效但无害的空操作,生产
-            # 默认改为 opt-in(默认禁用)后必须 patch 路由器命名空间中的绑定
-            # 才能真正开门(开关本身由 test_cross_device_switch.py 覆盖)。
-            "galaxy_gateway.device_router.is_cross_device_enabled",
-            return_value=True,
-        ):
+        with patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}):  # 电脑的开关已不是路由门,取值不影响结果
             result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         formation = result.get("formation")
@@ -397,15 +373,7 @@ class TestFormationTruthRecordEmitted(unittest.IsolatedAsyncioTestCase):
 
         router.dispatch_task = _fake_dispatch
 
-        with patch(
-            # 断言漂移修正:device_router 采用 from-import 绑定
-            # is_cross_device_enabled,patch 源模块不影响已绑定名;旧默认值
-            # fail-open(默认启用)时该 patch 恰好是无效但无害的空操作,生产
-            # 默认改为 opt-in(默认禁用)后必须 patch 路由器命名空间中的绑定
-            # 才能真正开门(开关本身由 test_cross_device_switch.py 覆盖)。
-            "galaxy_gateway.device_router.is_cross_device_enabled",
-            return_value=True,
-        ):
+        with patch.dict(os.environ, {"GALAXY_CROSS_DEVICE_ENABLED": "1"}):  # 电脑的开关已不是路由门,取值不影响结果
             await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
         rt = get_multi_device_integrity_runtime()

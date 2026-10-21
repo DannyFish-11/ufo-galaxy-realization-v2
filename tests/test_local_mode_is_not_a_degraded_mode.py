@@ -1,4 +1,4 @@
-"""本地模式(只用这台电脑)下,按设计就该这样的几件事不算「降级」。
+"""本地模式(这台电脑没加入设备网络)下,按设计就该这样的几件事不算「降级」。
 
 所有者 Windows 真机日志(本地模式):
 
@@ -8,9 +8,10 @@
     ✓ 就绪 · 7 正常 · 4 降级
 
 * 本地模式不起 NATS 是对的 —— 不该画 ⚠、不该进降级栏;
-* 本地模式不入 tailnet、不往局域网广播自己(没有别的设备要来找它;那条原因为空的 mDNS 告警也就不会有);
+* mDNS 广播不分模式(手表、手机配对即接入,要在同一 Wi-Fi 下找得到智能体);没配 headscale 时不入 tailnet,
+  只给一行说明,不算降级;
 * L4 那一行按设计就不接主循环 —— 说清楚,但不算降级;
-* mDNS 真起不来时(跨设备模式),告警要说得出原因 —— 不能是一个冒号后面什么都没有。
+* mDNS 真起不来时,告警要说得出原因 —— 不能是一个冒号后面什么都没有。
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ class _Svc:
         self._nats = nats
         self.calls = []
         self.tailnet = SimpleNamespace(
+            wanted=lambda: False,  # 没配 headscale
             not_on_tailnet_details=lambda: [("Tailscale", "未安装 (LAN 直连模式)", "warn")],
             start_lan_discovery=lambda: (self.calls.append("lan"), ("局域网发现", "已发布 _galaxy._tcp", "ok"))[1],
         )
@@ -54,9 +56,10 @@ def test_local_mode_without_nats_is_fine_and_does_not_announce_itself(monkeypatc
     svc = _Svc(_OFF)
     value, status, details, hint = asyncio.run(bus_phase(svc))
     assert status == "ok" and hint is None, "本地模式不起 NATS 被当成了降级"
-    assert "本地模式" in value
-    assert svc.calls == [], "本地模式还在入 tailnet / 往局域网广播"
-    assert any(d[0] == "局域网发现" and d[2] == "info" for d in details)
+    assert "进程内总线" in value
+    assert svc.calls == ["lan"], "mDNS 广播不分模式;没配 headscale 就不去入 tailnet"
+    assert ("局域网发现", "已发布 _galaxy._tcp", "ok") in details
+    assert any(d[0] == "Tailscale" and d[2] == "info" for d in details), "没配 headscale 只给一行说明"
 
 
 def test_cross_device_mode_still_does_all_three_and_degrades_honestly(monkeypatch):

@@ -187,13 +187,13 @@ def desktop_gate(*, run: Runner = _run) -> Optional[Dict[str, str]]:
     if state == "running":
         if _norm(cur.get("control_url", "")) in ("", _norm(url)):
             return None
-        why = f"这台电脑登录在另一个控制服务器({cur.get('control_url')}),不是手表要加入的那张网"
+        why = f"智能体所在的电脑登录在另一个控制服务器({cur.get('control_url')}),不是手表要加入的那张网"
         fix = f"在电脑上换到自建的:tailscale logout 后重启网关,或 tailscale up --login-server={url}"
     elif state == "no_tailscale":
-        why = "这台电脑没装 Tailscale 客户端"
-        fix = "安装 Tailscale 客户端:https://tailscale.com/download ,装完重启网关即可自动加入"
+        why = "智能体所在的电脑没装 Tailscale 客户端"
+        fix = "安装 Tailscale 客户端:https://tailscale.com/download ,装完重启网关即可自动加入(GALAXY_HEADSCALE_AUTOJOIN=1)"
     else:
-        why = "这台电脑还没登录到自建 tailnet"
+        why = "智能体所在的电脑还没登录到自建 tailnet"
         fix = "网关启动时会自动加入(GALAXY_HEADSCALE_AUTOJOIN=1);现在可调 POST /api/v1/tailnet/join-this-computer 立刻加入"
     return {"reason": "desktop_not_on_tailnet", "how_to_fix": f"{why}。{fix}"}
 
