@@ -140,7 +140,10 @@ class VoiceCallRoute:
             await self._reject("voice_call_start 缺少 SDP offer")
             return
 
-        session = await self._open_session()
+        from core.voice_call_agent import CALL_DEVICES, device_kind
+
+        kind = device_kind(self.device_id)  # 手表还是手机:通话说明、交给智能体的来源、挂断后的通知各不相同
+        session = await self._open_session(kind)
         if session is None:
             await self._reject("没有可用的实时语音后端(未配置 provider key,或建连失败)")
             return
@@ -153,7 +156,14 @@ class VoiceCallRoute:
 
         if call_agent_enabled():
             # 边说边做:通话里说一声,智能体在后台去做,做完在通话里说结果(见 core.voice_call_agent)
-            call.agent = CallAgent(self.device_id, call.call_id, session, send_event=self._on_session_event)
+            call.agent = CallAgent(
+                self.device_id,
+                call.call_id,
+                session,
+                send_event=self._on_session_event,
+                source=CALL_DEVICES[kind]["source"],
+                notify_command=CALL_DEVICES[kind]["notify"],
+            )
         self._pc, self._call = pc, call
 
         @pc.on("track")
@@ -204,7 +214,7 @@ class VoiceCallRoute:
         )
         logger.info("device=%s 通话已接通 call=%s", self.device_id, call.call_id)
 
-    async def _open_session(self) -> Optional[Any]:
+    async def _open_session(self, kind: str = "watch") -> Optional[Any]:
         """开一条 provider 双工会话。不可用返回 None(原因已由该模块记日志)。"""
         try:
             from core.voice_duplex_session import DuplexSessionConfig, open_duplex_session
@@ -214,7 +224,7 @@ class VoiceCallRoute:
                 return None
             from core.voice_call_agent import configure_call_session
 
-            configure_call_session(cfg)
+            configure_call_session(cfg, where=kind)
             return await open_duplex_session(cfg)
         except Exception as exc:  # noqa: BLE001
             logger.warning("device=%s 打开双工会话失败: %s", self.device_id, exc)

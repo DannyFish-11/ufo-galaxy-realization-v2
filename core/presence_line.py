@@ -88,12 +88,13 @@ from typing import Any, AsyncIterator, Callable, Dict, FrozenSet, Iterable, Muta
 logger = logging.getLogger("Galaxy.PresenceLine")
 
 #: 入口本身就说明请求来自别的设备。``phone_chat``:手机上的桥接 Agent 转来的人话(core/phone_bridge.py);
-#: ``wear_call``:手表通话里交给智能体的事(core/voice_call_agent.py)。
+#: ``wear_call`` / ``phone_call``:手表 / 手机通话里交给智能体的事(core/voice_call_agent.py)。
 REMOTE_SOURCES: FrozenSet[str] = frozenset(
     {
         "wear_voice",
         "wear_decision",
         "wear_call",
+        "phone_call",
         "android_goal_execution",
         "android_vision",
         "participant_task",

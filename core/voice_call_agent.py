@@ -1,4 +1,4 @@
-"""core/voice_call_agent.py —— 实时语音里「边说边做」(手表通话、电脑自己的实时语音)。
+"""core/voice_call_agent.py —— 实时语音里「边说边做」(手表 / 手机通话、电脑自己的实时语音)。
 
 人和智能体在手表上通话、或在电脑旁用实时语音说话,就像跟人说话:说着说着让它去做件事,它答应一声就去做,
 话照说;做完了它告诉你。
@@ -54,6 +54,8 @@ logger = logging.getLogger("Galaxy.VoiceCallAgent")
 
 #: 手表通话里交给智能体的那一轮的来源。不进电脑三态;不算人亲口说的(见模块说明)。
 CALL_SOURCE = "wear_call"
+#: 手机通话里交给智能体的那一轮的来源。和 ``wear_call`` 一样:不进电脑三态;不算人亲口说的。
+PHONE_CALL_SOURCE = "phone_call"
 #: 电脑自己的实时语音交给智能体的那一轮的来源:人的原话,和回合制语音一样算人说的。
 DESKTOP_SOURCE = "voice_duplex"
 #: 人在通话里回答智能体的提问时,作为 ``voice_input`` 的来源。
@@ -63,8 +65,17 @@ ANSWER_SOURCE = "wear_call_voice"
 MAX_CONTEXT_TURNS = 12
 #: 回报里结果最多说多少字(模型会再概括成一两句)。
 MAX_REPORT_CHARS = 600
-#: 手表通知的上限(galaxy-wearos AgentCommand.MAX_TITLE / MAX_TEXT)。
+#: 挂断后发到设备上的通知的上限(galaxy-wearos AgentCommand.MAX_TITLE / MAX_TEXT;手机
+#: PhoneCommandExecutor.MAX_TITLE / MAX_TEXT 与之相同)。
 NOTIFY_TITLE, NOTIFY_MAX_TEXT = "Galaxy", 500
+
+#: 在什么设备上通话:给语音模型的说法、交给智能体的来源、挂断后弹通知用设备的哪个动作
+#: (手表报的是 ``notify``,手机报的是 ``notification``)。
+CALL_DEVICES: Dict[str, Dict[str, str]] = {
+    "watch": {"where": "用户正在手表上和你通话", "source": CALL_SOURCE, "notify": "notify"},
+    "phone": {"where": "用户正在手机上和你通话", "source": PHONE_CALL_SOURCE, "notify": "notification"},
+    "desktop": {"where": "用户正在电脑旁用语音和你说话", "source": DESKTOP_SOURCE, "notify": ""},
+}
 #: 插了一条消息之后,最多等这么久的回复;等不到(provider 没回)就不再挡着后面的回报。
 NOTE_REPLY_WAIT_S = 15.0
 
@@ -121,10 +132,36 @@ def call_agent_enabled() -> bool:
     return flag("GALAXY_VOICE_CALL_AGENT", True)
 
 
-def call_instructions(mode: str, *, on_desktop: bool = False) -> str:
-    """实时语音模型的说明。``mode``:``tools`` 自己调工具交事 / ``listen`` 智能体旁听 / ``""`` 只聊。"""
-    where = "用户正在电脑旁用语音和你说话" if on_desktop else "用户正在手表上和你通话"
-    text = f"你是用户的智能体 Galaxy,{where}。像人说话一样自然、简短,一次一两句。"
+def device_kind(device_id: str) -> str:
+    """打来电话的是手表还是手机(UDM 登记的形态)。认不出按手表 —— 通话本来是给手表做的。"""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        d = get_unified_device_manager().get_device(device_id)
+    except Exception:  # noqa: BLE001 — 查不到就按手表
+        d = None
+    if d is None:
+        return "watch"
+    raw = " ".join(
+        str(v).lower()
+        for v in (
+            getattr(d, "form_factor", ""),
+            getattr(d, "aip_device_type", ""),
+            getattr(getattr(d, "device_type", None), "value", ""),
+        )
+    )
+    if "wear" in raw or "watch" in raw:
+        return "watch"
+    if "phone" in raw or "android" in raw:
+        return "phone"
+    return "watch"
+
+
+def call_instructions(mode: str, *, where: str = "watch") -> str:
+    """实时语音模型的说明。``mode``:``tools`` 自己调工具交事 / ``listen`` 智能体旁听 / ``""`` 只聊;
+    ``where``:``watch`` / ``phone`` / ``desktop``(见 ``CALL_DEVICES``)。"""
+    said = CALL_DEVICES.get(where, CALL_DEVICES["watch"])["where"]
+    text = f"你是用户的智能体 Galaxy,{said}。像人说话一样自然、简短,一次一两句。"
     if mode == "tools":
         return text + (
             "他要你做事时,调用 agent_do 交给你的执行部分,同时继续和他说话(比如先答应一声);"
@@ -137,13 +174,13 @@ def call_instructions(mode: str, *, on_desktop: bool = False) -> str:
             "别说你做不了,也别说已经做完了。做完会有以【回报】开头的系统消息,收到后用一两句话告诉他结果。"
             + _NOTES_HOWTO
         )
-    return text + "这条通话里没法替他做事;他要你做事时照实告诉他,可以挂断后在手表上用语音问答让你去做。"
+    return text + "这条通话里没法替他做事;他要你做事时照实告诉他,可以挂断后用文字或语音问答让你去做。"
 
 
-def configure_call_session(cfg: Any, *, on_desktop: bool = False) -> str:
+def configure_call_session(cfg: Any, *, where: str = "watch") -> str:
     """给一条实时会话配上说明和工具。返回事情怎么交给智能体:``tools`` / ``listen`` / ``""``(只聊)。
 
-    * 手表通话、这家接口会调工具(OpenAI / Gemini)→ ``tools``,模型自己交;
+    * 手表 / 手机通话、这家接口会调工具(OpenAI / Gemini)→ ``tools``,模型自己交;
     * 接口不支持工具(阶跃,见 ``StepRealtimeAdapter``)→ ``listen``,智能体旁听;
     * 本机的实时服务(本机全模态 server)收不收 ``tools`` 字段没法预知,往里塞一个它不认的字段,
       失败方向是整通电话打不通 → ``listen``;``GALAXY_REALTIME_TOOLS=1`` 明确让它调工具;
@@ -159,7 +196,7 @@ def configure_call_session(cfg: Any, *, on_desktop: bool = False) -> str:
     provider = str(getattr(cfg, "provider", "") or "")
     if not call_agent_enabled():
         mode = ""
-    elif on_desktop:
+    elif where == "desktop":
         mode = "listen"
     else:
         try:
@@ -173,7 +210,7 @@ def configure_call_session(cfg: Any, *, on_desktop: bool = False) -> str:
     try:
         cfg.tools = [dict(t) for t in CALL_TOOLS] if mode == "tools" else []
         cfg.instructions = "\n".join(
-            x for x in (getattr(cfg, "instructions", ""), call_instructions(mode, on_desktop=on_desktop)) if x
+            x for x in (getattr(cfg, "instructions", ""), call_instructions(mode, where=where)) if x
         )
     except AttributeError:  # 配置对象不让设(冻结的、带 __slots__ 的):不声明工具,智能体旁听
         return "listen" if mode else ""
@@ -206,6 +243,7 @@ class CallAgent:
         send_event: Optional[Callable[[str, str, str], Any]] = None,
         session_id: str = "",
         source: str = CALL_SOURCE,
+        notify_command: str = "notify",
     ) -> None:
         self.device_id = device_id
         self.call_id = call_id
@@ -214,6 +252,8 @@ class CallAgent:
         #: —— 不用对话主线:人说的话旁录已经记进主线,智能体做事时会把这一轮再记一遍,主线上就成了两句。
         self.session_id = session_id or f"{source}:{device_id or 'desktop'}"
         self.source = source
+        #: 挂断后结果作为通知发到设备上时用设备的哪个动作(手表 ``notify``、手机 ``notification``;空 = 不发)。
+        self.notify_command = notify_command
         #: 会话里没声明工具:模型交不过来,智能体自己旁听。
         self.listening = not getattr(getattr(session, "config", None), "tools", None)
         self._send_event = send_event
@@ -380,8 +420,8 @@ class CallAgent:
         result = task.result[:MAX_REPORT_CHARS]
         self._tell_device(f"{verdict}:{task.what}")
         if self.closed:
-            if self.device_id:
-                await self._notify_watch(f"{verdict}:{task.what}。{result}")
+            if self.device_id and self.notify_command:
+                await self._notify_device(f"{verdict}:{task.what}。{result}")
             return
         self._notes.append((f"【回报】交给你做的「{task.what}」{verdict}。结果:{result}", ""))
         await self._flush_notes()
@@ -461,8 +501,8 @@ class CallAgent:
         except Exception as exc:  # noqa: BLE001
             logger.debug("call=%s 显示进度失败: %s", self.call_id, exc)
 
-    async def _notify_watch(self, text: str) -> None:
-        """挂断以后做完的事:作为通知发到手表上。"""
+    async def _notify_device(self, text: str) -> None:
+        """挂断以后做完的事:作为通知发到打来电话的那台设备上。"""
         try:
             from core.routes._shared import connection_manager
 
@@ -471,14 +511,14 @@ class CallAgent:
                 {
                     "type": "command",
                     "command_id": f"callreport-{uuid.uuid4().hex[:10]}",
-                    "command": "notify",
+                    "command": self.notify_command,
                     "device_id": self.device_id,
                     "timestamp": int(time.time() * 1000),
                     "params": {"title": NOTIFY_TITLE, "text": text[:NOTIFY_MAX_TEXT]},
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("call=%s 通话已挂断,结果没送到手表: %s", self.call_id, exc)
+            logger.warning("call=%s 通话已挂断,结果没送到设备: %s", self.call_id, exc)
 
     def on_call_closed(self) -> None:
         """通话挂断:还在做的照样做完,结果改走通知;没问完的问题仍在手表上等人点。"""

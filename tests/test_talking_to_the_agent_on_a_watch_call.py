@@ -132,7 +132,7 @@ def test_how_work_reaches_the_agent(monkeypatch):
     assert vca.configure_call_session(local) == "listen", "本地服务收不收 tools 没法预知:不塞 tools,旁听"
     assert local.tools == []
     desktop = _cfg()
-    assert vca.configure_call_session(desktop, on_desktop=True) == "listen", "电脑上智能体自己听得见人"
+    assert vca.configure_call_session(desktop, where="desktop") == "listen", "电脑上智能体自己听得见人"
     assert desktop.tools == [] and "电脑旁" in desktop.instructions
     monkeypatch.setenv("GALAXY_REALTIME_TOOLS", "1")
     assert vca.configure_call_session(_cfg(url="ws://127.0.0.1:32550/v1/realtime")) == "tools"
@@ -151,12 +151,33 @@ def test_how_work_reaches_the_agent(monkeypatch):
     assert vca.configure_call_session(off) == "" and off.tools == [] and "没法替他做事" in off.instructions
 
 
+def test_a_call_from_a_phone_is_told_apart_from_a_watch(monkeypatch):
+    records = {
+        "watch-1": SimpleNamespace(form_factor="watch", aip_device_type="android_wear", device_type=None),
+        "phone-1": SimpleNamespace(form_factor="phone", aip_device_type="android_phone", device_type=None),
+    }
+    monkeypatch.setattr(
+        "core.unified.device_manager.get_unified_device_manager",
+        lambda: SimpleNamespace(get_device=lambda did: records.get(did)),
+    )
+    assert vca.device_kind("watch-1") == "watch", "手表报的类型里也有 android,先认手表"
+    assert vca.device_kind("phone-1") == "phone"
+    assert vca.device_kind("unknown") == "watch", "认不出按手表:通话本来是给手表做的"
+
+    phone = _cfg()
+    assert vca.configure_call_session(phone, where="phone") == "tools"
+    assert "手机上和你通话" in phone.instructions and "手表" not in phone.instructions
+    assert vca.CALL_DEVICES["phone"]["source"] == vca.PHONE_CALL_SOURCE
+    assert vca.CALL_DEVICES["phone"]["notify"] == "notification", "手机报的弹通知动作叫 notification"
+
+
 def test_the_call_source_stays_off_the_desktop_and_is_not_the_persons_own_words():
     from core.device_onboarding.conversation import HUMAN_REQUEST_SOURCES
     from core.presence_line import REMOTE_SOURCES
 
-    assert vca.CALL_SOURCE in REMOTE_SOURCES
-    assert vca.CALL_SOURCE not in HUMAN_REQUEST_SOURCES, "交过去的是语音模型的转述,对话里的确认不能被它满足"
+    for source in (vca.CALL_SOURCE, vca.PHONE_CALL_SOURCE):
+        assert source in REMOTE_SOURCES
+        assert source not in HUMAN_REQUEST_SOURCES, "交过去的是语音模型的转述,对话里的确认不能被它满足"
 
 
 # ---------------------------------------------------------------------------
@@ -833,4 +854,75 @@ async def test_the_desktops_own_realtime_voice_acts_too(monkeypatch):
         assert "浏览器打开了" in notes[0]["item"]["content"][0]["text"]
     finally:
         await loop.stop()
+        await srv.stop()
+
+
+# ---------------------------------------------------------------------------
+# 八、手机打来的电话
+# ---------------------------------------------------------------------------
+
+
+async def test_a_call_from_a_phone_acts_too_and_reports_on_the_phone_after_hanging_up(monkeypatch):
+    """手机和手表走同一条通话路由:说明里说的是手机,交过去的来源是 phone_call,挂断后做完的事用手机的
+    notification 动作弹通知(手表的是 notify)。"""
+    from core.voice_call_bridge import get_call_registry, webrtc_available
+
+    if webrtc_available() is not None:
+        pytest.skip(webrtc_available())
+    from aiortc import RTCPeerConnection, RTCSessionDescription
+
+    from galaxy_gateway.voice_call_route import close_voice_route, maybe_handle_voice_message
+
+    srv = await FakeRealtimeServer().start()
+    runtime = FakeRuntime(reply="明天晴")
+    monkeypatch.setattr("core.desktop_presence_runtime.get_desktop_presence_runtime", lambda: runtime)
+    monkeypatch.setattr(vca, "device_kind", lambda device_id: "phone")
+    sent: List[tuple] = []
+
+    async def _send_to_device(device_id: str, msg: Dict[str, Any]) -> bool:
+        sent.append((device_id, msg))
+        return True
+
+    monkeypatch.setattr("core.routes._shared.connection_manager.send_to_device", _send_to_device)
+    monkeypatch.setenv("GALAXY_REALTIME_URL", f"ws://127.0.0.1:{srv.port}/v1/realtime")
+    monkeypatch.setenv("GALAXY_REALTIME_PROVIDER", "openai_realtime")
+    monkeypatch.setenv("GALAXY_REALTIME_TOOLS", "1")
+    monkeypatch.setenv("GALAXY_VOICE_DUPLEX", "1")
+    to_phone: List[Dict[str, Any]] = []
+
+    async def send_json(payload: Dict[str, Any]) -> None:
+        to_phone.append(payload)
+
+    phone = RTCPeerConnection()
+    phone.addTransceiver("audio", direction="sendrecv")
+    try:
+        offer = await phone.createOffer()
+        await phone.setLocalDescription(offer)
+        await maybe_handle_voice_message(
+            "conn_phone", "voice_call_start", {"sdp": phone.localDescription.sdp}, "phone-e2e", send_json
+        )
+        accepted = next((m for m in to_phone if m["type"] == "voice_call_accepted"), None)
+        assert accepted is not None, to_phone
+        await phone.setRemoteDescription(RTCSessionDescription(sdp=accepted["sdp"], type="answer"))
+        (upd,) = await srv.wait_for(lambda m: m.get("type") == "session.update")
+        assert "手机上和你通话" in upd["session"]["instructions"]
+        await srv.send(_fc("call_p", "agent_do", {"what": "查明天的天气"}), {"type": "response.done"})
+        for _ in range(100):
+            if runtime.calls:
+                break
+            await asyncio.sleep(0.02)
+        assert runtime.calls[0]["source"] == "phone_call" and runtime.calls[0]["session_id"] == "phone_call:phone-e2e"
+        await close_voice_route("conn_phone")  # 挂断,事情还没做完
+        runtime.release.set()
+        for _ in range(100):
+            if sent:
+                break
+            await asyncio.sleep(0.02)
+        ((device_id, msg),) = sent
+        assert device_id == "phone-e2e" and msg["command"] == "notification", msg
+        assert "明天晴" in msg["params"]["text"]
+    finally:
+        await close_voice_route("conn_phone")
+        await get_call_registry().end_all(reason="test_teardown")
+        await phone.close()
         await srv.stop()
