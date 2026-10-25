@@ -1169,6 +1169,23 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
   本地真 WebSocket 实时端的手机来电：说明、来源、挂断后的通知动作），变异检查 4 处各自变红。手机那一侧的测试见
   安卓仓。没上过真机。
 
+### 6.32 2026-10-25：工具返回了什么，模型就看到什么；手表、手机、中心接力跑通
+
+- **查出的缺陷**：三个推理循环（`OpenClawd._react_loop`、`core/agent/react_loop`、`agent_factory` 的记录）只把工具返回体里的
+  `result`（失败时 `error`）回喂给模型。不少工具把内容摊在顶层：`devices__list` 的设备卡在 `members`、`devices__invite`
+  的配对码在 `code` / `tell_user`、调参的结果在 `tell_user`。这些在模型眼里一直是一段空白：看有哪些设备看到的是空的，
+  邀请一块手表拿不到配对码。修法：共用 `core/react_progress.tool_result_text`，没有 `result` 也没有 `error` 时
+  把整个返回体（去掉 `success` 和下划线开头的内部字段）交给模型；有 `result` / `error` 的照旧。
+- **设备完整阶段第三、四项**：手表新增 `heart_rate`（现测一次）、`steps`（今天的步数与从几点开始算的），没传感器、
+  没给权限的不报，权限变了重报（galaxy-wearos #24）。中心这边不用改：设备卡读设备自己报的动作与说明，不再报的动作
+  按 6.30 撤掉，手表走的规范入口同样适用。
+- 验证：
+  - `tests/test_the_watch_the_phone_and_the_center_work_as_one.py` 4 项。手表、手机各一条真 WebSocket，真推理循环 + 真工具执行，
+    只有模型按剧本：人在手表上问「我下午有什么安排」，模型从设备卡里自己挑出有日历的手机去查，答案回到手表；手机说做不了时
+    手表上听到原因；智能体读手表心率；收回心率权限后设备卡上不再有心率。
+  - `tests/test_the_model_sees_what_a_tool_returned.py` 6 项（含主循环把配对码交给模型）。
+  - 把修法退回去，接力的两项变红（模型看到空的设备列表，手机收不到查询）。没上过真机。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
@@ -1242,6 +1259,7 @@ python -m pytest -q -p no:cacheprovider --timeout=300 tests/
 - `META_LAYER_RSI_ARCHITECTURE_CN_2026.md`：元层（阶段一已落地）
 - `RENDER_CONTRACT_DIRECTION.md`、`PANEL_SURFACE_CONVERGENCE.md`：前端契约与面板
 - `architecture/DEVICE_ONBOARDING_PLANE_V1.md`：设备接入
+- `REAL_DEVICE_CHECKLIST.md`：手机 + 手表 + 电脑的真机验收清单（装哪个包、逐项怎么做、应该看到什么）
 - `NODE_HTTP_SECURITY_CONTRACT.md`：节点安全
 - `UNWIRED_CODE_INVENTORY.md`：未接线与不可达代码逐类清单，以及安卓以外每个函数的去处（等所有者定删还是接）
 - `config/assessment_claims.json`：可机械复验的结论清单（`python scripts/check_assessment_freshness.py`）

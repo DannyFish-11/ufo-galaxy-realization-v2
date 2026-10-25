@@ -8747,7 +8747,7 @@ class OpenClawd:
                     layer = ToolCallRecord.classify_layer(tc_name)
                     # 结果分类(取代旧的 `result.get("success", True)` 二元判定;
                     # 为什么必须分类、为什么不能默认判成功,见 core/react_progress.py)
-                    from core.react_progress import ToolOutcome, classify_tool_outcome, outcome_hint
+                    from core.react_progress import ToolOutcome, classify_tool_outcome, outcome_hint, tool_result_text
 
                     _outcome = classify_tool_outcome(result)
                     if _outcome is ToolOutcome.CONTRACT_VIOLATION:
@@ -8756,9 +8756,7 @@ class OpenClawd:
                             tc_name,
                         )
                     status = ToolCallStatus.SUCCESS if _outcome.is_success else ToolCallStatus.ERROR
-                    result_str = str(
-                        result.get("result", result.get("error", "")) if isinstance(result, dict) else result
-                    )
+                    result_str = tool_result_text(result)
 
                     # 无进展检测:补上"连续同名"计数器看不见的三种卡死形态
                     # (同名同参隔开重复 / A B A B 交替 / 反复撞同一错误)。

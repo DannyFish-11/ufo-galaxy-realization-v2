@@ -41,6 +41,7 @@ __all__ = [
     "ToolOutcome",
     "classify_tool_outcome",
     "outcome_hint",
+    "tool_result_text",
     "ProgressTracker",
     "ProgressVerdict",
 ]
@@ -176,6 +177,25 @@ def outcome_hint(outcome: ToolOutcome) -> str:
     if outcome is ToolOutcome.DENIED:
         return "\n[被拒或需要确认：不要重试，交给用户决定]"
     return ""
+
+
+def tool_result_text(result: Any) -> str:
+    """回喂给模型的那段工具结果文字。
+
+    约定的返回体是 ``{"success", "result", "error"}``,但不少工具把内容直接摊在顶层:``devices__list`` 的
+    ``members``、``devices__invite`` 的 ``code`` / ``tell_user``、调参的 ``tell_user``。只取 ``result`` /
+    ``error`` 时,这些工具在模型眼里是一段空白 —— 让它邀请一块手表,它拿不到配对码;让它看有哪些设备,
+    它看到的是空的。没有 ``result`` 也没有 ``error`` 时,把整个返回体(去掉 ``success`` 和下划线开头的
+    内部字段)交给模型。
+    """
+    if not isinstance(result, dict):
+        return str(result)
+    if "result" in result:
+        return str(result["result"])
+    if result.get("error"):
+        return str(result["error"])
+    rest = {k: v for k, v in result.items() if k != "success" and not str(k).startswith("_")}
+    return json.dumps(rest, ensure_ascii=False, default=str) if rest else ""
 
 
 # ---------------------------------------------------------------------------

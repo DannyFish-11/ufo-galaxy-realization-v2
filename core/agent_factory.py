@@ -1120,7 +1120,9 @@ class AgentFactory:
             def _record(name, args, result, it_index):
                 layer = ToolCallRecord.classify_layer(name)
                 status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
-                result_str = str(result.get("result", result.get("error", "")))
+                from core.react_progress import tool_result_text
+
+                result_str = tool_result_text(result)
                 tool_records.append(
                     ToolCallRecord(
                         tool_name=name,
