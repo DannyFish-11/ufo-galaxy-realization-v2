@@ -93,6 +93,15 @@ def _sync_supported_actions_to_capability_authority(
         )
         upserted += 1
 
+    # 这次没报的动作撤掉:人在手机上收回了权限、新版 App 不再报做不了的动作。设备整体卡列的是能力权威面里
+    # 这台设备的全部 gateway__<id>__*(core/device_onboarding/device_card.py),留着旧的,智能体就会去调、再失败。
+    reported = {f"gateway__{device_id}__{a if isinstance(a, str) else str(a)}" for a in supported_actions}
+    prefix = f"gateway__{device_id}__"
+    for record in authority.list_records(CapabilitySource.GATEWAY):
+        name = record.canonical_name
+        if name.startswith(prefix) and name not in reported:
+            authority.remove(name, mutation_source="android.capability_report.no_longer_reported")
+
     return upserted
 
 
