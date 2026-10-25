@@ -1156,6 +1156,19 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
   上报）：智能体调手机的定位拿回经纬度；手机拒绝时原因原样带回；手机不再报的动作从设备卡撤掉（去掉撤除那一段
   这项会红）。手机那一侧的测试见安卓仓 `PhoneCommandExecutorTest`、`PhoneDirectCommandWireTest`。没上过真机。
 
+### 6.31 2026-10-25：手机也能和智能体通话
+
+- 设备完整阶段第二项。此前只有手表能和智能体打电话；通话路由本来不挑设备，但几处写死了手表：给语音模型的说明、
+  交给智能体的来源（`wear_call`）、挂断后用手表的 `notify` 动作弹通知（手机报的弹通知动作叫 `notification`）。
+- 中心侧（`core/voice_call_agent.py`、`galaxy_gateway/voice_call_route.py`）：接通前按 UDM 登记的形态认手表还是手机
+  （认不出按手表）；手机打来的：说明里是「用户正在手机上和你通话」，来源 `phone_call`（进 `REMOTE_SOURCES`，
+  不进电脑三态，也不算人亲口说的），会话 `phone_call:<设备>`，挂断后做完的事用 `notification` 发到手机。
+- 手机侧（ufo-galaxy-android #539）：通话信令状态机放进共享协议模块（与手表同一份逻辑），手机上的 WebRTC 控制器、
+  麦克风型前台服务、通话界面；连接把网关的通话信令交给通话。
+- 验证：`tests/test_talking_to_the_agent_on_a_watch_call.py` 新增 2 项（认手表 / 手机；真 WebRTC 设备 + 真通话路由 +
+  本地真 WebSocket 实时端的手机来电：说明、来源、挂断后的通知动作），变异检查 4 处各自变红。手机那一侧的测试见
+  安卓仓。没上过真机。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
