@@ -1269,6 +1269,17 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
 - 验证：新增 `test_a_dropped_event_loop_does_not_lock_sessions_out.py`。没有这个修复时，会话那条用例报的就是 CI 上那句错。
   会话相关测试 1494 项通过。
 
+### 6.36 2026-10-26：设备自述与边界的整体设计（只有文档，还没动代码）
+
+- 所有者批准方向，设计写在 `docs/DEVICE_SELF_DESCRIPTION_DESIGN.md`：
+  - 设备用一份 `self_description` 描述自己（名字、一句形态描述、动作和每个动作的 `effect`、此刻做不了的动作和原因、四样设备级声明）；
+  - 状态由设备报，中心不推断；动作给模型用，声明给边界用，`shows_messages` 并回各设备的通知或消息动作；
+  - 代码只守一张边界清单，权限门按动作的 `effect` 判；
+  - 评测用真实模型本地跑：中心挑设备 12 个场景；手机端测参考面壁 AgentCPM-GUI 的评测（定位、单步动作 TM/EM、端到端、端侧开销）。
+- 读码时查出、要在实施里修的：设备动作（`device__<id>__<action>`）没有任何风险策略能匹配上，一律按 MODERATE 放行、不确认；
+  自治档位只覆盖声明了白名单的节点，读写按动作名猜，`heart_rate`、`calendar` 这类读动作认不出来。
+- 分 6 步实施，进度记在设计文档末尾。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |
@@ -1342,6 +1353,8 @@ python -m pytest -q -p no:cacheprovider --timeout=300 tests/
 - `META_LAYER_RSI_ARCHITECTURE_CN_2026.md`：元层（阶段一已落地）
 - `RENDER_CONTRACT_DIRECTION.md`、`PANEL_SURFACE_CONVERGENCE.md`：前端契约与面板
 - `architecture/DEVICE_ONBOARDING_PLANE_V1.md`：设备接入
+- `CROSS_DEVICE_OVERALL_PLAN.md`：跨设备整体方案（阶段 0–6，已做完）
+- `DEVICE_SELF_DESCRIPTION_DESIGN.md`：设备自述与边界（设备怎么描述自己、代码守哪些边界、怎么评测）
 - `REAL_DEVICE_CHECKLIST.md`：手机 + 手表 + 电脑的真机验收清单（装哪个包、逐项怎么做、应该看到什么）
 - `NODE_HTTP_SECURITY_CONTRACT.md`：节点安全
 - `UNWIRED_CODE_INVENTORY.md`：未接线与不可达代码逐类清单，以及安卓以外每个函数的去处（等所有者定删还是接）
