@@ -171,7 +171,9 @@ def test_an_old_watch_without_a_self_description_still_gets_its_card(gateway, wa
 
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
-        ws.send_json(_watch_report(watch_id, ["notify", "haptic"]))
+        old = _watch_report(watch_id, ["notify", "haptic"])
+        old.pop("self_description")
+        ws.send_json(old)
         assert _eventually(lambda: len(_card(gateway, watch_id).get("actions") or []) == 2, timeout=10.0)
         card = _card(gateway, watch_id)
     assert card["form"] == "watch" and "about" not in card and "unavailable" not in card
@@ -216,3 +218,41 @@ def test_the_cross_repo_gate_names_the_self_description_schema():
     entry = build_cross_repo_schema_gate_manifest()["device_self_schema"]
     assert entry["id"] == device_self.SCHEMA == device_self.schema()["properties"]["schema"]["const"]
     assert (Path(__file__).resolve().parent.parent / entry["path"]).resolve() == device_self.SCHEMA_PATH
+
+
+def test_the_computer_client_and_the_carrier_describe_themselves():
+    from device_client import self_description as sd
+    from device_client.executors.carrier import CarrierExecutor
+
+    class Desktop:
+        def supported_actions(self):
+            return ["click", "type", "screenshot"]
+
+    desk = sd.build(
+        Desktop(),
+        ["click", "type", "screenshot"],
+        name="书房笔记本",
+        kind="linux_desktop",
+        carrier=False,
+        hosts_agent="",
+    )
+    assert device_self.problems(desk) == []
+    assert {a["name"]: a["effect"] for a in desk["actions"]} == {"click": "act", "type": "act", "screenshot": "read"}
+    assert desk["declares"] == {
+        "answers_decisions": False,
+        "shows_request_progress": False,
+        "hosts_agent": "",
+        "tailnet": "system",
+    }
+
+    carrier = CarrierExecutor()
+    carrier._sandbox = (True, "")
+    box = sd.build(
+        carrier, carrier.supported_actions(), name="云主机", kind="linux_carrier", carrier=True, hosts_agent="bridge/1"
+    )
+    assert device_self.problems(box) == []
+    by_name = {a["name"]: a for a in box["actions"]}
+    assert by_name["run_code"]["effect"] == "act", "代码只在不联网的沙箱里跑"
+    assert by_name["run_code"]["params"]["required"] == ["code"], "载体的参数格式原样进自述"
+    assert by_name["read_file"]["effect"] == "read" and by_name["write_file"]["effect"] == "act"
+    assert "Agent 载体" in box["about"] and box["declares"]["hosts_agent"] == "bridge/1"

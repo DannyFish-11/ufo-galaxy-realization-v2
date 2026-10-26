@@ -21,6 +21,7 @@ from tests.test_watch_reaches_the_central_agent import (  # noqa: F401 — 夹�
     _online,
     _recv,
     _register,
+    _watch_capability_report_frame,
     _watch_command_result_frame,
     gateway,
     watch_id,
@@ -380,6 +381,9 @@ def test_a_plan_drives_a_real_watch_step_by_step(gateway, watch_id):
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
         assert _eventually(lambda: _online(watch_id))
+        # 真手表登记完就报能力(带设备自述):通知是「打扰人」、读状态是「只看」,引导档下都直接做
+        ws.send_json(_watch_capability_report_frame(watch_id))
+        assert _recv(ws, timeout=10.0).get("type") == "capability_report_ack"
 
         async def plan():
             return await agent_tools.dispatch_devices_tool(

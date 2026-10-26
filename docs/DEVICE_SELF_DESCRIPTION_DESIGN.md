@@ -223,7 +223,7 @@
 
 ### 4.2 收掉 `shows_messages`
 
-- **手表**：把收到 `agent_message` 时做的事（弹通知、记进手表上的对话）做成一个动作 `message`，说明写「跟戴表的人说一句话：抬腕能看到，也记进手表上的对话」。
+- **手表**：它的 `notify` 本来就和收到 `agent_message` 时走同一条路（弹通知、记进手表上的对话），就用它：说明写「跟戴表的人说一句话……也记进手表上的对话」，参数加上 `reply_expected`、`conversation_id`。（原计划另做一个 `message` 动作，实施时发现没必要。）
 - **手机**：用它现有的 `notification`。
 - **`ask_human__notify`**：
   - 过渡期保留。点名了 `device_ids` 的，转成调那几台的消息或通知动作；
@@ -365,7 +365,7 @@
 
 **手表**（galaxy-wearos）：
 - 用同一个构造器发 `self_description`：写 `about`，给每个动作标 `effect`，`unavailable` 附原因。
-- 把收到 `agent_message` 时做的事做成 `message` 动作；不再声明 `shows_messages`。
+- 用 `notify` 动作承接智能体主动说的话（它本来就记进手表上的对话）；不再声明 `shows_messages`。
 - 状态并进心跳：戴没戴着、屏幕开没开、在不在通话、能不能打扰（并掉单独的 `interruptibility` 帧）。
 
 **中心**（V2）：
@@ -383,7 +383,7 @@
 | 步 | 内容 | 仓库 | 怎么验证 |
 |---|---|---|---|
 | 1 | 自述契约 v1：schema、构造器、中心读入、设备卡片；旧字段兼容 | 三边 | 三边对照 schema；旧版设备的卡片和以前一样；新版设备的卡片多出 `about` / `unavailable` |
-| 2 | 动作与声明归位：`effect` / `needs_human` 进权限门；`params` 校验；收掉 `shows_messages`；手机加提问界面 | 三边 | 每档自治 × 每种 `effect` 一条测试；手表 `message` 动作端到端；手机提问回答端到端 |
+| 2 | 动作与声明归位：`effect` / `needs_human` 进权限门；`params` 校验；收掉 `shows_messages`；手机加提问界面 | 三边 | 每档自治 × 每种 `effect` 一条测试；`ask_human__notify` 走设备自己的通知动作；手机提问回答端到端 |
 | 3 | 状态统一由设备报：心跳状态载荷；并掉 `interruptibility` 帧；中心删掉剩下的推断 | 三边 | 卡片上的状态只来自设备报的和中心看到的；没报的不显示 |
 | 4 | 边界清单落成一个模块 | V2 | 每条边界一个测试；去掉任一条，对应测试变红 |
 | 5 | 评测：中心 12 个场景；手机端测 L1、L2 接 CAGUI 和我们自己的轨迹 | V2、安卓 | 第一轮结果记进 `docs/eval/` |
@@ -406,7 +406,7 @@
 | 步 | 状态 | 验证 |
 |---|---|---|
 | 1 自述契约 v1 | 已完成（中心 `core/device_self.py` 读入与兼容、`contracts/device_self_v1.json`、跨仓闸门 1.2.0、设备卡片显示 `kind` / `about` / `unavailable` 与每个动作的 `effect` / `needs_human`；安卓仓 `shared-protocol` 的 `DeviceSelfDescription.kt`，手机、手表的能力上报带上自述，散字段过渡期照发） | V2 `tests/test_devices_describe_themselves.py` 10 项（安卓真拼出来的两份帧过 schema、新旧读成同一形状、自述盖过它重复的旧字段、读入宽松、经真网关的手表与手机、旧版手表照旧、拿到安卓仓时逐字对照）；受影响的 346 个测试文件 13367 项通过；安卓 `DeviceSelfDescriptionTest` 8 项、`PhoneSelfDescriptionTest` 6 项、`PhoneDirectCommandWireTest` +1；手表 `WatchSelfDescriptionTest` 6 项（见 SYSTEM_STATUS 6.37） |
-| 2 动作与声明归位 | 未开始 | |
+| 2 动作与声明归位 | 已完成(`core/device_boundaries.py`:下发前按动作的 `params` 校验、按 `effect` / `needs_human` 与自治档位判直接做 / 问 / 高风险确认;问时在能回答的设备上给「不要 / 仅此次 / 本会话 / 永久允许」,没有就在对话里问;`shows_messages` 并回各设备的通知动作,`ask_human__notify` 调点名设备(或发起设备)自己报的消息动作,旧版设备照旧收 `agent_message`;手机提问弹成通知、点了回 `human_input`,声明 `answers_decisions`;电脑客户端与载体也带自述;授权记录挪进数据目录) | V2 `tests/test_device_actions_pass_the_boundaries.py` 26 项(表的每一格、拿不准往严里算、参数、四种回答、对话里问、高风险与 `needs_human`、真网关上读直发 / 改状态先问 / 参数不全不发 / 手机被问、点「永久允许」后照做且下次不问);相关测试 1337 + 受影响的 39000 余项通过;安卓 `DecisionFramesTest` 6 项、`PhoneSelfDescriptionTest` 更新;手表 `WatchMemberFramesTest` 更新(见 SYSTEM_STATUS 6.38) |
 | 3 状态统一 | 未开始 | |
 | 4 边界清单 | 未开始 | |
 | 5 评测 | 未开始 | |

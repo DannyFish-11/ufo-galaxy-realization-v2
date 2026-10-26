@@ -114,18 +114,21 @@ def _watch_register_frame(device_id, token=""):
 
 
 def _watch_capability_report_frame(device_id, answers_decisions=True):
-    """与 ``WatchMember.capabilityReportFrame`` 同形:supported_actions 在顶层;手表声明能回答提问。"""
+    """与 ``WatchMember.capabilityReportFrame`` 同形:supported_actions 在顶层,带设备自述;手表声明能回答提问。"""
+    from tests.device_self_frames import watch_self
+
+    actions = ["notify", "haptic", "get_status"]
     frame = {
         "version": "3.0",
         "type": "capability_report",
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
         "platform": "wearos",
-        "supported_actions": ["notify", "haptic", "get_status"],
+        "supported_actions": actions,
+        "self_description": watch_self(actions, answers_decisions=answers_decisions),
     }
     if answers_decisions:
         frame["answers_decisions"] = True
-        frame["shows_messages"] = True
     return frame
 
 
@@ -561,7 +564,7 @@ def test_a_device_is_asked_because_it_says_it_can_answer_not_because_of_its_type
         assert _eventually(lambda: watch_id not in _look_for_someone_to_ask(gateway)), "不再声明就不再问"
 
 
-@pytest.mark.parametrize("what", ["answers_decisions", "shows_messages", "shows_request_progress"])
+@pytest.mark.parametrize("what", ["answers_decisions", "shows_request_progress"])
 def test_each_declaration_is_recorded_and_taken_back_through_the_real_gateway(gateway, watch_id, what):
     """设备在能力上报里声明的每一项都记下来、不再声明就撤掉;中心按它找设备,不看类型。"""
     from core.device_declarations import online_devices_that
@@ -572,7 +575,10 @@ def test_each_declaration_is_recorded_and_taken_back_through_the_real_gateway(ga
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
         frame = _watch_capability_report_frame(watch_id, answers_decisions=False)
-        _report(ws, {**frame, what: True})
+        declared = {**frame, "self_description": {**frame["self_description"]}}
+        declared["self_description"]["declares"] = {**frame["self_description"]["declares"]}
+        declared["self_description"]["declares"][what] = True
+        _report(ws, declared)
         assert _eventually(lambda: watch_id in gateway.portal.call(look)), what
         _report(ws, frame)
         assert _eventually(lambda: watch_id not in gateway.portal.call(look)), what
@@ -585,7 +591,9 @@ def test_the_card_tells_the_agent_whether_a_question_can_be_put_to_the_person_th
         _join_as_member(ws, watch_id)
         assert _eventually(lambda: _online(watch_id))
         card = next(c for c in _list({})["members"] if c["device_id"] == watch_id)
-    assert card["answers_decisions"] is True and card["shows_messages"] is True
+    assert card["answers_decisions"] is True and "shows_messages" not in card
+    notify = next(a for a in card["actions"] if a["name"] == "notify")
+    assert notify["effect"] == "notify", "智能体主动说的话走手表自己的 notify 动作"
 
 
 # ---------------------------------------------------------------------------
@@ -687,6 +695,9 @@ def test_in_local_mode_the_agent_still_makes_the_watch_do_something(gateway, wat
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
         assert _eventually(lambda: _online(watch_id))
+        # 真手表登记完就报能力(带设备自述):通知是「打扰人」,引导档下直接做
+        ws.send_json(_watch_capability_report_frame(watch_id))
+        assert _recv(ws, timeout=10.0).get("type") == "capability_report_ack"
 
         async def invoke():
             return await dispatch_devices_tool(

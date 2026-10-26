@@ -123,11 +123,23 @@ class DeviceClient:
         schemas = getattr(self.executor, "capability_schemas", None)
         if callable(schemas) and self.supported_actions():
             msg["capability_schemas"] = schemas()
+        hosts_agent = ""
         if self.agent is not None:
             # 声明能装中心派来的 Agent:中心报完能力就派(core/phone_bridge.py)
             from device_client.carrier_agent import BRIDGE_VERSION
 
-            msg["bridge_agent"] = BRIDGE_VERSION
+            msg["bridge_agent"] = hosts_agent = BRIDGE_VERSION
+        # 设备自述(中心 core/device_self.py 以它为准;上面的散字段过渡期照发)
+        from device_client import self_description
+
+        msg["self_description"] = self_description.build(
+            self.executor,
+            self.supported_actions(),
+            name=self.state.get("name") or socket.gethostname(),
+            kind=self.device_type,
+            carrier=self.agent is not None,
+            hosts_agent=hosts_agent,
+        )
         return msg
 
     def _heartbeat_msg(self) -> Dict[str, Any]:

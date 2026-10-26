@@ -199,6 +199,9 @@ def _pair(gw, name="书房笔记本"):
 
 
 def test_a_laptop_pairs_connects_and_the_agent_operates_it(gateway, monkeypatch):
+    # 这条测的是配对、连上、动作做得到;点屏幕是「改设备状态」,引导档要先问人 ——
+    # 那一道见 tests/test_device_actions_pass_the_boundaries.py,这里按自主档直接做
+    monkeypatch.setenv("GALAXY_AUTONOMY", "autonomous")
     invite, state, resp = _pair(gateway)
     assert invite["success"] and resp["success"] and state["token"]
 

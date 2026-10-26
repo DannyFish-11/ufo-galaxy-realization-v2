@@ -108,7 +108,10 @@ def test_a_carrier_joins_by_pairing_and_takes_an_agent(gateway):
     carrier, card = _joined_carrier(gateway, _NoSandbox.make())
     assert card["can_take_agent"] is True, "载体报能力时声明了能接 Agent"
     assert card["agent_installed"] is True
-    assert card["form"] == "carrier", card["form"]
+    # 载体自己说了是什么(设备自述),卡上不再按类型猜一个「形态」词
+    assert "Agent 载体" in card["about"] and "form" not in card, card
+    effects = {a["name"]: a.get("effect") for a in card["actions"]}
+    assert effects["read_file"] == "read" and effects["write_file"] == "act", effects
     actions = {a["name"]: a["does"] for a in card["actions"]}
     assert {"read_file", "write_file", "list_files", "get_status"} <= set(actions)
     assert "run_code" not in actions, "没有沙箱就不报 run_code"

@@ -18,7 +18,7 @@
     "actions": [
       {
         "name": "notify",
-        "description": "在手表上弹一条通知(标题 + 正文),戴表的人抬腕就能看到",
+        "description": "跟戴表的人说一句话:弹一条通知(标题 + 正文),抬腕就能看到,也记进手表上的对话",
         "effect": "notify",
         "params": {
           "type": "object",
@@ -32,6 +32,14 @@
               "type": "string",
               "description": "正文",
               "maxLength": 500
+            },
+            "reply_expected": {
+              "type": "boolean",
+              "description": "通知上带一个快速回复框"
+            },
+            "conversation_id": {
+              "type": "string",
+              "description": "归进哪一串对话(中心的会话号)"
             }
           },
           "required": [
@@ -93,11 +101,10 @@
     }
   },
   "answers_decisions": true,
-  "shows_messages": true,
   "capability_schemas": [
     {
       "action": "notify",
-      "description": "在手表上弹一条通知(标题 + 正文),戴表的人抬腕就能看到"
+      "description": "跟戴表的人说一句话:弹一条通知(标题 + 正文),抬腕就能看到,也记进手表上的对话"
     },
     {
       "action": "haptic",

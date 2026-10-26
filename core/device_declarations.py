@@ -3,11 +3,15 @@
 中心怎么对待一台设备,看它自己说的,**不看它是什么类型的设备**:
 
 * ``answers_decisions`` —— 能把问题摆到人面前、把人的回答交回来。智能体问人(``decision_request``)只发给它们;
-* ``shows_messages`` —— 能把智能体主动说的一句话(``agent_message``)显示给人。``ask_human__notify`` 默认发给它们;
 * ``shows_request_progress`` —— 会显示自己发起的那件请求做到哪了(``state_event`` 的 ``request_progress``)。
   中心只把进度推给它们,别的设备不收这种帧。
 
-声明在 ``capability_report`` 顶层(或 ``payload`` 里),布尔值。每次报能力都记进 UDM 元数据
+另两样设备级声明(``hosts_agent``、``tailnet``)由派桥接 Agent、配对各自读。原来还有 ``shows_messages``
+(能显示智能体主动说的话):发给谁是模型的判断,已并回各设备自己报的消息动作(``ask_human__notify`` 调它),
+中心不再读(设计文档 ``docs/DEVICE_SELF_DESCRIPTION_DESIGN.md`` 4.2)。
+
+新版设备在设备自述 ``self_description.declares`` 里声明(``core/device_self.py`` 展开回这里读的顶层字段);
+旧版设备在 ``capability_report`` 顶层(或 ``payload`` 里),布尔值。每次报能力都记进 UDM 元数据
 (``galaxy_gateway/android/handlers/capability_report.py``):登记会换掉元数据,所以每次都记;没声明的记 False ——
 新版 App 去掉了某项,中心跟着不再这样对待它。
 """
@@ -20,7 +24,7 @@ from typing import Any, Dict, List
 logger = logging.getLogger("Galaxy.DeviceDeclarations")
 
 #: 设备可以声明的几件事。
-DECLARATIONS = ("answers_decisions", "shows_messages", "shows_request_progress")
+DECLARATIONS = ("answers_decisions", "shows_request_progress")
 
 
 def declared_in(capability_report: Dict[str, Any]) -> Dict[str, bool]:

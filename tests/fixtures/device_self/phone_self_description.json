@@ -189,7 +189,7 @@
     }
   ],
   "declares": {
-    "answers_decisions": false,
+    "answers_decisions": true,
     "shows_request_progress": true,
     "hosts_agent": "bridge/1",
     "tailnet": "none"

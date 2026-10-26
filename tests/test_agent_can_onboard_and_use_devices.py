@@ -207,8 +207,11 @@ def test_invoke_on_a_device_that_is_not_connected_says_so_instead_of_success(env
     assert out["success"] is False and "没有连接" in out["error"]
 
 
-def test_a_device_that_answers_failure_is_reported_as_failure(env):
+def test_a_device_that_answers_failure_is_reported_as_failure(env, monkeypatch):
     from core.unified.connection_manager import get_unified_connection_manager
+
+    # 测的是设备回了失败照实交回;要不要先问人那一道见 test_device_actions_pass_the_boundaries.py
+    monkeypatch.setenv("GALAXY_AUTONOMY", "autonomous")
 
     ucm = get_unified_connection_manager()
 

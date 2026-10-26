@@ -29,8 +29,11 @@ def _now():
 
 
 def _report(device_id, actions):
-    # GalaxyWebSocketClient.sendCapabilityReport:只报手机真做得了的动作,每个带一句说明
+    # GalaxyWebSocketClient.sendCapabilityReport:只报手机真做得了的动作,每个带一句说明;带设备自述(PhoneSelfDescription)
+    from tests.device_self_frames import phone_self
+
     return {
+        "self_description": phone_self(actions),
         "type": "capability_report",
         "version": "3.0",
         "platform": "android",

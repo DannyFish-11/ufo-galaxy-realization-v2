@@ -36,8 +36,11 @@ from tests.test_watch_reaches_the_central_agent import (  # noqa: F401 — 夹�
 
 
 def _watch_report(device_id, actions):
-    """与 galaxy-wearos ``WatchMember.capabilityReportFrame`` 同形:只报此刻做得了的动作,每个带一句说明。"""
+    """与 galaxy-wearos ``WatchMember.capabilityReportFrame`` 同形:只报此刻做得了的动作,每个带一句说明,带设备自述。"""
+    from tests.device_self_frames import watch_self
+
     return {
+        "self_description": watch_self(actions),
         "version": "3.0",
         "type": "capability_report",
         "device_id": device_id,

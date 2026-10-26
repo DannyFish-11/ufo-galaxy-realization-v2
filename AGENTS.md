@@ -54,6 +54,8 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   （动作给模型用、声明给边界用；设备级声明只有 `answers_decisions` / `shows_request_progress` / `hosts_agent` / `tailnet` 四样，要加得写明是哪条边界在用）。
   设备在 `capability_report` 里带 `self_description`（schema `contracts/device_self_v1.json`）；中心**只在** `core/device_self.py` 读它（新旧两种上报读成同一个对象，存进 UDM 元数据 `self_description`，带了自述的展开回旧字段再交给后面的处理），
   安卓仓 `shared-protocol/.../DeviceSelfDescription.kt` 拼同一个形状（手机、手表共用），改一边必须改另一边（`tests/test_devices_describe_themselves.py` 拿到安卓仓时逐字对照）。
+  **给设备下发前过边界只在一处**：`core/device_boundaries.py`（参数按自述的 `params` 校验；要不要先问人按动作的 `effect` / `needs_human` 与自治档位判；`devices__invoke` 与多步计划都经过它）。别在别处另写按动作名猜读写、按设备类型放行的规则。
+  智能体主动说的话走设备自己报的消息动作（`ask_human__notify` → `effect` 为 `notify`、收 `text` 的那个），不再有 `shows_messages` 这项声明。
 - **「跨设备」开关只说这台设备自己进不进网络，从不限制智能体**：电脑上的开关 = 这台电脑作为设备加入（桌面登记成成员、电脑自己的请求可交给别的设备）；
   手机的开关 = 手机加入；手表配对即加入。**智能体协调已加入的设备不看任何模式** —— 能不能下发由成员资格（名册、连接、权限门）决定。
   **别再给「往别的设备下发」加模式判断**（以前的统一拒绝 `cross_device_refusal` 与「请求打开跨设备」工具都已删除，`tests/test_the_agent_coordinates_members_in_any_mode.py` 守着）。

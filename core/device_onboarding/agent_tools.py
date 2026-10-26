@@ -52,13 +52,15 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
     _fn(
         "devices__list",
         "List this system's devices. Each member comes as one card, taken from what the device itself reported: what "
-        "it is (name, type, form), what it can do (each action it reported, with a one-line 'does'), how it is now "
-        "(online, battery, network path, busy, and whether the person there can be interrupted if it reports that), "
-        "whether it can take a dispatched agent (can_take_agent), whether a question can be put to the person on it "
-        "(answers_decisions) and whether a message can be shown to them there (shows_messages), and what it did "
-        "recently with what result. You decide which device does what from these cards; only members that are online "
-        "can be given work. Also lists candidates discovered nearby that are NOT members yet and what joining each "
-        "would take.",
+        "it is (name, kind, and in its own words 'about'), what it can do (each action it reported, with a one-line "
+        "'does' and, when it said so, what doing it means: 'effect' read / notify / act / send / danger, and "
+        "'needs_human' when a person must tap on the device), what it cannot do right now and why ('unavailable'), "
+        "how it is now (online, battery, network path, busy, and whether the person there can be interrupted if it "
+        "reports that), whether it can take a dispatched agent (can_take_agent), whether a question can be put to "
+        "the person on it (answers_decisions), and what it did recently with what result. To show the person a line, "
+        "use a device's action whose effect is 'notify'. You decide which device does what from these cards; only "
+        "members that are online can be given work. Also lists candidates discovered nearby that are NOT members yet "
+        "and what joining each would take.",
         {"include_ignored": {"type": "boolean", "description": "Also list candidates the user ignored."}},
     ),
     _fn(
@@ -380,9 +382,15 @@ async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         if d.bridge_id.startswith(prefix):
             return await invoker(d, action, params, session_id)
     if is_native_transport(d.transport) or not d.transport:
-        # 讲 AIP 的设备:走规范派发链(权限门在里面)。它在名册里就是自己加入的成员 ——
+        # 讲 AIP 的设备:先过边界(参数合不合设备说的格式、按动作的 effect 与自治档位要不要先问人,
+        # core/device_boundaries.py),再走规范派发链。它在名册里就是自己加入的成员 ——
         # 不看这台电脑的「跨设备」开关(那个开关只管电脑自己进不进网络)。
         from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
+        from core.device_boundaries import gate
+
+        stop = await gate(did, action, params, session_id)
+        if stop:
+            return stop
 
         r = await get_canonical_dispatcher().dispatch(f"device__{did}__{action}", params, session_id=session_id)
         return r.as_legacy_dict()

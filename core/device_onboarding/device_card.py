@@ -242,9 +242,8 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
             view["device_id"], raw_caps, {a["name"]: a for a in said.get("actions") or [] if a.get("name")}
         ),
         "can_take_agent": can_take_agent(view, meta) or bool(bridge.get("hosted")),
-        # 设备自己声明的:能把问题摆到人面前、把回答交回来;能把智能体说的一句话显示给人(core.device_declarations)
+        # 设备自己声明的:能把问题摆到人面前、把回答交回来(core.device_declarations)
         "answers_decisions": meta.get("answers_decisions") is True,
-        "shows_messages": meta.get("shows_messages") is True,
         "agent_installed": bool(bridge.get("installed")),
         "recent": _recent(view["device_id"], now),
         "attached_via": view.get("bridge_id") or view.get("transport") or "",
