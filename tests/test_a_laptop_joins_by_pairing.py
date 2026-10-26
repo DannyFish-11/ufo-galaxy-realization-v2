@@ -217,7 +217,7 @@ def test_a_laptop_pairs_connects_and_the_agent_operates_it(gateway, monkeypatch)
     assert laptop.done == [("click", {"x": 10, "y": 20})]
 
     time.sleep(0.2)
-    assert gateway.spoken == ["笔记本「书房笔记本」配对好了,正在连过来。", "「书房笔记本」连上了,现在可以让我操作它。"]
+    assert gateway.spoken == ["「书房笔记本」配对好了,正在连过来。", "「书房笔记本」连上了,现在可以让我操作它。"]
 
 
 def test_an_unpaired_laptop_is_refused_and_says_so_instead_of_retrying_forever(gateway, monkeypatch):
@@ -387,4 +387,4 @@ def test_pairing_does_not_wait_for_the_conversation_record(gateway, monkeypatch)
     _, state, resp = _pair(gateway)
     assert resp["success"] and state["token"]
     assert time.time() - started < 5
-    assert gateway.spoken == ["笔记本「书房笔记本」配对好了,正在连过来。"]  # 推面板不等记录
+    assert gateway.spoken == ["「书房笔记本」配对好了,正在连过来。"]  # 推面板不等记录

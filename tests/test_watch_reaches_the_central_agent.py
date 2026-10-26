@@ -125,6 +125,7 @@ def _watch_capability_report_frame(device_id, answers_decisions=True):
     }
     if answers_decisions:
         frame["answers_decisions"] = True
+        frame["shows_messages"] = True
     return frame
 
 
@@ -341,7 +342,7 @@ def test_what_the_wearer_says_reaches_the_agent_and_the_reply_pairs_with_the_que
     assert len(agent.calls) == 1
     call = agent.calls[0]
     assert call["message"] == "帮我记一下明天开会"
-    assert call["source"] == "wear_voice"
+    assert call["source"] == "device_voice"
     assert call["device_id"] == watch_id
 
 
@@ -560,6 +561,23 @@ def test_a_device_is_asked_because_it_says_it_can_answer_not_because_of_its_type
         assert _eventually(lambda: watch_id not in _look_for_someone_to_ask(gateway)), "不再声明就不再问"
 
 
+@pytest.mark.parametrize("what", ["answers_decisions", "shows_messages", "shows_request_progress"])
+def test_each_declaration_is_recorded_and_taken_back_through_the_real_gateway(gateway, watch_id, what):
+    """设备在能力上报里声明的每一项都记下来、不再声明就撤掉;中心按它找设备,不看类型。"""
+    from core.device_declarations import online_devices_that
+
+    async def look():
+        return await online_devices_that(what)
+
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        frame = _watch_capability_report_frame(watch_id, answers_decisions=False)
+        _report(ws, {**frame, what: True})
+        assert _eventually(lambda: watch_id in gateway.portal.call(look)), what
+        _report(ws, frame)
+        assert _eventually(lambda: watch_id not in gateway.portal.call(look)), what
+
+
 def test_the_card_tells_the_agent_whether_a_question_can_be_put_to_the_person_there(gateway, watch_id):
     from core.device_onboarding.agent_tools import _list
 
@@ -567,7 +585,7 @@ def test_the_card_tells_the_agent_whether_a_question_can_be_put_to_the_person_th
         _join_as_member(ws, watch_id)
         assert _eventually(lambda: _online(watch_id))
         card = next(c for c in _list({})["members"] if c["device_id"] == watch_id)
-    assert card["answers_decisions"] is True
+    assert card["answers_decisions"] is True and card["shows_messages"] is True
 
 
 # ---------------------------------------------------------------------------

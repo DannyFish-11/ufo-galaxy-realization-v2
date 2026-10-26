@@ -25,7 +25,7 @@ enforced_by: "OpenClawd.security_enforcer"
 #   - confirmation_level: 确认等级
 #       none      — 无需额外确认
 #       voice     — 需要语音确认（TTS 播报 + 语音识别"确认"）
-#       watch_btn — 需要手表物理按键确认（侧键长按 2 秒）
+#       device_tap — 需要人在弹出的确认上点一下（发到声明能回答提问的设备上，不看是什么设备）
 #       dual      — 语音确认（语音确认）
 #       forbidden — 完全禁止
 #   - reason: 为什么标记为危险
@@ -208,7 +208,7 @@ audit_rules:
     - timestamp          # ISO 8601 格式
     - trace_id           # 端到端追踪 ID
     - source_device_id   # 发起设备
-    - source_device_type # 设备类型 (wear_os / android / tablet / windows)
+    - source_device_type # 设备自报的类型(只记录,不据此决定权限)
     - command            # 原始命令
     - command_category   # 命令类别
     - confirmation_level # 使用的确认等级
@@ -265,9 +265,6 @@ failsafe:
     confirmation_level: voice   # 未知命令默认需要语音确认
     audit_level: warning
 
-  unknown_device_type:
-    capability_boundary: "wear_os"  # 未知设备按最小权限处理
-    log_level: warning
 
 # ---------------------------------------------------------------------------
 # Section 4: 紧急制动 (Emergency Stop)
@@ -281,7 +278,6 @@ emergency_stop:
   # 触发方式
   triggers:
     voice_phrase: "紧急停止"          # 语音触发词
-    watch_triple_press_side_key: true  # 手表侧键三连击
     admin_command: "system.emergency_stop"  # 管理员命令
 
   # 触发后的行为

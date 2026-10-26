@@ -837,7 +837,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             return
         elif command_text == "voice_query":
             # 手表语音是自然语言查询，进智能体主链（而非被当成设备命令路由）。经
-            # handle_request(source="wear_voice") 处理；该来源不进电脑三态（见 core/presence_line.py）。
+            # handle_request(source="device_voice") 处理；该来源不进电脑三态（见 core/presence_line.py）。
             transcript = str(_payload.get("text") or _payload.get("transcript") or "").strip()
             if not transcript:
                 result = {"success": False, "error": "empty voice transcript"}
@@ -848,7 +848,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
                     runtime = get_desktop_presence_runtime()
                     rt = await runtime.handle_request(
                         message=transcript,
-                        source="wear_voice",
+                        source="device_voice",
                         device_id=device_id,
                         session_id=_payload.get("session_id") or None,
                     )
@@ -938,7 +938,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             #  1) 该回复应答某个 pending decision(由 request_human_decision 登记)→
             #     resolve 之,等待中的认知协程在原上下文恢复(PR-HITL 闭环)。
             #  2) 未命中任何 pending(主动/无主语音)→ 回退把人类输入送进认知闭环
-            #     handle_request(source="wear_decision"),确保意图不丢、不被当设备命令。
+            #     handle_request(source="device_decision"),确保意图不丢、不被当设备命令。
             decision_id = str(_payload.get("decision_id") or "")
             voice_input = str(_payload.get("voice_input") or "").strip()
             selected = str(_payload.get("selected_option") or "").strip()
@@ -974,7 +974,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
                     runtime = get_desktop_presence_runtime()
                     rt = await runtime.handle_request(
                         message=human_msg,
-                        source="wear_decision",
+                        source="device_decision",
                         device_id=device_id,
                         session_id=_payload.get("session_id") or None,
                         context=(

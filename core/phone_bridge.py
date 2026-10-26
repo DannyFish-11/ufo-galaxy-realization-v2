@@ -10,14 +10,16 @@
 2. **上交上下文**:手机发 ``context_handoff``(最近对话、正在跑的本地循环进度、最近几次本地执行)→
    并进这台手机在中心的会话(:func:`core.session_memory_facade.record_session_turn`,智能体读的就是它);
 3. **对话桥接**:手机上说的话(``conversation``)进中心智能体的同一个会话,回答以 ``conversation`` 回到
-   手机界面;来源是 ``phone_chat`` —— 算人发起的回合,不进电脑三态(与手表同一套来源分类)。
+   手机界面;来源是 ``device_chat`` —— 算人发起的回合,不进电脑三态(设备上说的话都是同一套来源分类)。
    中心要手机做一整段事时用 ``devices__delegate``(``delegate_goal`` → 手机本地循环 →
    ``delegate_progress`` / ``delegate_result``);
 4. **交还**:手机要关跨设备时发 ``context_return``(``body.request = true``)→ 中心交还摘要与没做完的事。
 
 Agent 载体(阶段 5:别的电脑、Linux 服务器、云主机上的 ``python -m device_client --carrier``)走同一套:
 报能力时声明 ``bridge_agent`` → 派过去 → ``devices__delegate`` 交整段目标。载体上的推理加行动循环要模型时
-发 ``tool_call``(``llm.chat``),中心用自己的模型答(钥匙只在中心)。载体的会话叫 ``carrier:<设备号>``。
+发 ``tool_call``(``llm.chat``),中心用自己的模型答(钥匙只在中心)。
+
+接了桥接 Agent 的设备不分是什么,会话都叫 ``bridge:<设备号>``;来源都是 ``device_chat``。
 
 手机上那一半在 ufo-galaxy-android ``app/.../bridge/BridgeAgentRuntime.kt``;载体那一半在
 ``device_client/carrier_agent.py``。
@@ -39,8 +41,8 @@ from core import a2a_link as a2a
 logger = logging.getLogger("Galaxy.PhoneBridge")
 
 BRIDGE_VERSION = "bridge/1"
-#: 手机上说的话进中心时的来源名:算人发起的回合,不进电脑三态(见 core/presence_line.py)。
-PHONE_CHAT_SOURCE = "phone_chat"
+#: 设备上(经桥接 Agent)说的话进中心时的来源名:算人发起的回合,不进电脑三态(见 core/presence_line.py)。
+BRIDGE_CHAT_SOURCE = "device_chat"
 #: 要人确认才做的手机动作(发给别人的、花钱的、删东西的)。
 CONFIRM_ACTIONS = ("sms", "phone_call", "payment", "send_message", "delete")
 MAX_RETURN_TURNS = 8
@@ -58,15 +60,8 @@ _tasks: Set["asyncio.Task[Any]"] = set()
 
 
 def bridge_session_id(device_id: str) -> str:
-    """这台设备的对话在中心归到哪个会话(也是 A2A 链路的会话号):手机 ``phone:<设备号>``,
-    别的能接 Agent 的设备(载体)``carrier:<设备号>``。"""
-    m = _member(device_id)
-    if m is not None:
-        from core.device_onboarding.device_card import _form
-
-        if _form(m["view"]) != "phone":
-            return f"carrier:{device_id}"
-    return f"phone:{device_id}"
+    """这台设备的对话在中心归到哪个会话(也是 A2A 链路的会话号)。不分设备是什么,都是 ``bridge:<设备号>``。"""
+    return f"bridge:{device_id}"
 
 
 @dataclass
@@ -166,7 +161,7 @@ def _spec(device_id: str) -> Dict[str, Any]:
         "tools": tools,
         "autonomy": autonomy,
         "confirm_actions": list(CONFIRM_ACTIONS),
-        "conversation": {"uplink": a2a.Kind.CONVERSATION.value, "source": PHONE_CHAT_SOURCE},
+        "conversation": {"uplink": a2a.Kind.CONVERSATION.value, "source": BRIDGE_CHAT_SOURCE},
         "context_handoff": ["dialog", "loop_progress", "trajectory"],
     }
 
@@ -328,7 +323,7 @@ async def _converse(device_id: str, env: a2a.Envelope, text: str) -> None:
 
         result = await get_desktop_presence_runtime().handle_request(
             message=text,
-            source=PHONE_CHAT_SOURCE,
+            source=BRIDGE_CHAT_SOURCE,
             device_id=device_id,
             session_id=b.session_id,
         )

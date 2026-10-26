@@ -86,8 +86,8 @@ def test_no_devices_online_is_reported_not_hidden():
     assert out["targets"] == []
 
 
-def test_default_targets_come_from_the_same_discovery_as_decisions(monkeypatch):
-    """发给谁,与 decision_request 用同一个判据 —— 两套判据早晚会判出两种答案。"""
+def test_default_targets_are_the_devices_that_say_they_show_messages(monkeypatch):
+    """不点名时发给在线、自己声明能显示消息的设备(shows_messages),不看设备是什么类型。"""
     sent = []
 
     async def discover():
@@ -96,7 +96,7 @@ def test_default_targets_come_from_the_same_discovery_as_decisions(monkeypatch):
     async def emit(did, msg):
         sent.append(did)
 
-    monkeypatch.setattr(am, "_discover_target_devices", discover)
+    monkeypatch.setattr(am, "_discover_message_devices", discover)
     monkeypatch.setattr(am, "_default_emit", emit)
     out = _run(am.push_agent_message(text="hi"))
     assert out["delivered"] == ["watch-9"] and sent == ["watch-9"]
@@ -133,7 +133,7 @@ def test_the_tool_call_reaches_the_watch(monkeypatch):
     async def emit(did, msg):
         got.append((did, msg))
 
-    monkeypatch.setattr(am, "_discover_target_devices", discover)
+    monkeypatch.setattr(am, "_discover_message_devices", discover)
     monkeypatch.setattr(am, "_default_emit", emit)
     agent, OpenClawd = _fake_agent()
     out = _run(OpenClawd._dispatch_ask_human_tool(agent, "notify", {"text": "测试跑完了", "title": "完成"}))
@@ -151,7 +151,7 @@ def test_nobody_received_it_is_not_success(monkeypatch):
     async def discover():
         return []
 
-    monkeypatch.setattr(am, "_discover_target_devices", discover)
+    monkeypatch.setattr(am, "_discover_message_devices", discover)
     agent, OpenClawd = _fake_agent()
     out = _run(OpenClawd._dispatch_ask_human_tool(agent, "notify", {"text": "hi"}))
     assert out["success"] is False

@@ -8,7 +8,7 @@
 
 判据是建会话时记下的 ``metadata["origin_device"]``，而不是事后看 ``devices`` —— 别的设备往一条会话里写话
 会被 append 进 ``devices``，电脑起头、手机后来接着聊的那条不该因此变成手机的。
-手表走的是 ``wear_voice``（不带 session_id，会话按 ``device::<手表id>`` 另起），与手机同一条路。
+手表走的是 ``device_voice``（不带 session_id，会话按 ``device::<手表id>`` 另起），与手机同一条路。
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def test_a_phone_that_just_spoke_does_not_become_the_desktop_mainline(sm):
 
 
 def test_the_watch_gets_its_own_conversation_and_never_becomes_the_mainline(sm):
-    """手表语音（``wear_voice``，不带 session_id）走 build_canonical_session_identity，会话按设备另起并复用。"""
+    """手表语音（``device_voice``，不带 session_id）走 build_canonical_session_identity，会话按设备另起并复用。"""
     from core.conversation_mainline import mainline_session_id
     from core.session_identity import build_canonical_session_identity
 

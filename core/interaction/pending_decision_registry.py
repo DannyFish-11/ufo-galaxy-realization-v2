@@ -510,53 +510,13 @@ async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
     await connection_manager.send_to_device(device_id, message)
 
 
-def declares_decision_support(capability_report: Dict[str, Any]) -> bool:
-    """设备在报能力时声明了能把问题摆到人面前、把人的回答交回来(``answers_decisions: true``,顶层或 payload 里)。"""
-    payload = capability_report.get("payload") if isinstance(capability_report.get("payload"), dict) else {}
-    declared = capability_report.get("answers_decisions", payload.get("answers_decisions"))
-    return declared is True or str(declared).lower() == "true"
-
-
-def answers_decisions(device_id: str) -> bool:
-    """这台设备声明过能回答提问(能力上报时记进 UDM 元数据,见 ``declares_decision_support``)。"""
-    try:
-        from core.unified.device_manager import get_unified_device_manager
-
-        d = get_unified_device_manager().get_device(device_id)
-    except Exception:  # noqa: BLE001 — 查不到就是没声明过
-        return False
-    return (getattr(d, "metadata", None) or {}).get("answers_decisions") is True
-
-
 async def _discover_target_devices() -> List[str]:
     """在线、并且自己声明过能回答提问的设备(同一条决策分叉到这些设备上,先答的算数)。
 
-    能不能问,看设备自己报的(``answers_decisions``),**不看它是什么类型的设备** —— 此前按类型名单认
-    手表和手机,于是名单外的设备哪怕能问也问不到,名单里的手机却收到它根本不显示的提问。
-
-    **在线与否以 UCM 为准**（连接与在线的权威，规范入口 ``/ws/device/{id}`` 注册成功后
-    会登记进去）。旧入口连上来的设备仍然认得（并集），不丢。
+    能不能问,看设备自己报的(``answers_decisions``,见 ``core.device_declarations``),**不看它是什么类型的
+    设备** —— 此前按类型名单认手表和手机,于是名单外的设备哪怕能问也问不到,名单里的手机却收到它根本
+    不显示的提问。
     """
-    candidates: List[str] = []
+    from core.device_declarations import online_devices_that
 
-    # 1) UCM：在线且可路由的设备。
-    try:
-        from core.unified.connection_manager import get_unified_connection_manager
-
-        ucm = get_unified_connection_manager()
-        for did, view in ucm.get_presence_view().items():
-            if view.get("online") and view.get("routable"):
-                candidates.append(did)
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("HITL.discover: UCM unavailable: %s", exc)
-
-    # 2) 旧管理器（旧入口连上来的设备）：补集。
-    try:
-        connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
-        for did in await connection_manager.get_connected_devices():
-            if did not in candidates:
-                candidates.append(did)
-    except Exception:  # noqa: BLE001
-        pass
-
-    return [did for did in candidates if answers_decisions(did)]
+    return await online_devices_that("answers_decisions")

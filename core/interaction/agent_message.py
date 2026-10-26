@@ -15,9 +15,8 @@
 
 投递
 ====
-与 ``request_human_decision`` 走同一条路:默认发给当前在线的手表与手机
-(``_discover_target_devices``),经网关连接管理器送达(``_default_emit``)。
-不另起一套 —— 两套投递逻辑早晚会对"发给谁"判出两种答案。
+默认发给在线、并且自己声明能显示消息的设备(``shows_messages``,见 ``core.device_declarations``),
+不看设备是什么类型;智能体也可以自己点名发给哪几台。经网关连接管理器送达(``_default_emit``)。
 
 报文形状
 ========
@@ -33,7 +32,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from core.interaction.pending_decision_registry import EmitCallback, _default_emit, _discover_target_devices
+from core.interaction.pending_decision_registry import EmitCallback, _default_emit
 
 logger = logging.getLogger("Galaxy.Interaction.AgentMessage")
 
@@ -78,7 +77,7 @@ async def push_agent_message(
     devices: Optional[List[str]] = None,
     emit: Optional[EmitCallback] = None,
 ) -> Dict[str, Any]:
-    """把一句话推给在线的手表/手机。不等任何回应。
+    """把一句话推给设备上的人。不等任何回应。``devices`` 不给就发给在线、声明能显示消息的设备。
 
     返回 ``{message_id, delivered: [...], failed: [...], targets: [...]}``。
     一台都没送到时 ``delivered`` 为空 —— 调用方(智能体)据此知道"没人收到",
@@ -92,7 +91,7 @@ async def push_agent_message(
         reply_expected=reply_expected,
     )
     _emit = emit or _default_emit
-    targets = list(devices) if devices is not None else await _discover_target_devices()
+    targets = list(devices) if devices is not None else await _discover_message_devices()
     delivered: List[str] = []
     failed: List[str] = []
     for did in targets:
@@ -103,7 +102,7 @@ async def push_agent_message(
             logger.debug("agent_message → %s 失败: %s", did, exc)
             failed.append(did)
     if not targets:
-        logger.info("agent_message 没有在线的手表/手机可送:%s", msg["message_id"])
+        logger.info("agent_message 没有在线、能显示消息的设备可送:%s", msg["message_id"])
     return {"message_id": msg["message_id"], "delivered": delivered, "failed": failed, "targets": targets}
 
 
@@ -114,7 +113,9 @@ ASK_HUMAN_NOTIFY_TOOL: Dict[str, Any] = {
     "function": {
         "name": "ask_human__notify",
         "description": (
-            "Tell the human something on their watch/phone WITHOUT waiting for a reply. "
+            "Tell the human something on their devices WITHOUT waiting for a reply. By default it goes to the "
+            "online devices that said they can show a message (shows_messages on their cards); pass device_ids to "
+            "pick the devices yourself. "
             "Use for things they should know but need not answer: a long task finished, "
             "something noteworthy was found, a reminder they asked for. "
             "If you need an answer or approval, use ask_human__request instead. "
@@ -124,8 +125,13 @@ ASK_HUMAN_NOTIFY_TOOL: Dict[str, Any] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "text": {"type": "string", "description": "What to tell them. Short — it shows on a watch."},
+                "text": {"type": "string", "description": "What to tell them. Short — small screens show it."},
                 "title": {"type": "string", "description": "Optional short notification title."},
+                "device_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: which devices to show it on (from devices__list).",
+                },
                 "reply_expected": {
                     "type": "boolean",
                     "description": "Offer a quick-reply box on the notification (default false).",
@@ -137,17 +143,26 @@ ASK_HUMAN_NOTIFY_TOOL: Dict[str, Any] = {
 }
 
 
+async def _discover_message_devices() -> List[str]:
+    """在线、并且自己声明能显示消息的设备(``shows_messages``),不看设备是什么类型。"""
+    from core.device_declarations import online_devices_that
+
+    return await online_devices_that("shows_messages")
+
+
 async def dispatch_notify_tool(arguments: Dict[str, Any], *, session_id: str = "") -> Dict[str, Any]:
     """执行 ``ask_human__notify``。智能体当前会话作为 conversation_id,设备据此归拢上下文。"""
     text = str((arguments or {}).get("text") or "").strip()
     if not text:
         return {"success": False, "error": "ask_human__notify requires 'text'"}
+    picked = [str(d) for d in (arguments.get("device_ids") or []) if str(d).strip()]
     try:
         out = await push_agent_message(
             text=text,
             title=str(arguments.get("title") or ""),
             conversation_id=session_id,
             reply_expected=bool(arguments.get("reply_expected")),
+            devices=picked or None,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("ask_human__notify failed: %s", exc)

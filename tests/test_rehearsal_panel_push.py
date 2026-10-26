@@ -97,7 +97,7 @@ def test_a_request_from_another_device_is_deliberated_but_not_drawn_on_the_deskt
     """预演是阈限态的表达，只属于电脑发起的请求。手机说一句话，电脑面板上不该演它的推演。"""
     monkeypatch.setenv("GALAXY_DEVICE_ID", "desk-host")
     assert _frames_pushed_for("android_goal_execution", "phone-1") == 0
-    assert _frames_pushed_for("wear_voice", "watch-1") == 0
+    assert _frames_pushed_for("device_voice", "watch-1") == 0
     assert _frames_pushed_for("chat", "tablet-9") == 0  # 带了别的设备号的普通对话
     assert _frames_pushed_for("participant_task", "ipad-1") == 0
 

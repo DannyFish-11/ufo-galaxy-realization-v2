@@ -204,7 +204,7 @@ def test_asked_on_the_watch_looked_up_on_the_phone_answered_on_the_watch(gateway
     listed = _cards(center.model.seen[1])
     assert "calendar" in listed[phone_id] and "calendar" not in listed[watch_id], listed
     assert "devices__invoke" in center.model.offered[0]
-    assert center.calls[0]["source"] == "wear_voice" and center.calls[0]["device_id"] == watch_id
+    assert center.calls[0]["source"] == "device_voice" and center.calls[0]["device_id"] == watch_id
 
 
 def test_a_phone_that_cannot_read_the_calendar_is_answered_honestly_on_the_watch(gateway, watch_id, phone_id, center):

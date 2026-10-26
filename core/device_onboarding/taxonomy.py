@@ -445,18 +445,9 @@ def execution_model_for(
     if bridge_id:
         return ADAPTER_BRIDGED_DEVICE
     meta = dict(metadata or {})
+    # 是不是完整运行时,看设备自己说的(登记时的 is_runtime_host / join_runtime),不看它是什么类型的设备
     if meta.get("is_runtime_host") or str(meta.get("source_runtime_posture", "")).lower() == "join_runtime":
         return FULL_RUNTIME_HOST
-    t = str(aip_device_type or "")
-    if t in ("android_phone", "android_tablet", "ios_phone", "ios_tablet"):
-        return FULL_RUNTIME_HOST
-    if t.startswith(("windows_", "macos_", "linux_", "virtual_", "container_", "cloud_")) or t in (
-        "android_wear",
-        "ios_watch",
-        "android_tv",
-        "android_car",
-    ):
-        return PARTIAL_RUNTIME_DEVICE
     cls = set(classes or ())
     if cls and cls <= {"HOME_SENSOR", "SENSOR_GPS", "SENSOR_MOTION"}:
         return OBSERVER_TELEMETRY_DEVICE

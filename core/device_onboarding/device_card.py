@@ -63,7 +63,11 @@ _GENERIC_DESCRIPTION_PREFIX = "[Gateway:"
 
 
 def _form(view: Dict[str, Any]) -> str:
-    """一个词说清它是什么形态:手表 / 手机 / 电脑 / 载体 / 家居 / 设备。"""
+    """一个词说清它是什么形态:手表 / 手机 / 电脑 / 载体 / 家居 / 设备。
+
+    只是给模型看的描述(取自设备自报的类型与形态),**不拿来决定任何行为** —— 能做什么、能不能接 Agent、
+    能不能问人,都看设备自己报的动作和声明。
+    """
     ff = str(view.get("form_factor") or "").lower()
     t = str(view.get("type") or "").lower()
     if view.get("bridge_id") or str(view.get("attached_via") or "").startswith(("ha:", "mcp:")):
@@ -80,16 +84,14 @@ def _form(view: Dict[str, Any]) -> str:
 
 
 def can_take_agent(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> bool:
-    """能不能接中心派来的 Agent:有完整运行时的设备(手机),或自己声明能跑 Agent 的载体。
-
-    手表只是人和智能体之间的入口和出口;「手和眼」式的电脑(``device_client``)只接单个动作。
-    """
+    """能不能接中心派来的 Agent:设备自己声明能跑 Agent(报能力时声明 ``bridge_agent``),或登记时自报是
+    完整运行时(``join_runtime``)。不看设备是什么。"""
     meta = metadata or {}
     if meta.get("can_host_agent") is True or meta.get("agent_runtime") is True:
         return True
     if meta.get("can_host_agent") is False:
         return False
-    return str(view.get("role") or "") == FULL_RUNTIME_HOST and _form(view) != "watch"
+    return str(view.get("role") or "") == FULL_RUNTIME_HOST
 
 
 def _actions(device_id: str, raw_capabilities: List[str]) -> List[Dict[str, str]]:
@@ -160,15 +162,15 @@ def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[
         status["busy"] = get_unified_connection_manager().inflight(device_id) > 0
     except Exception:  # noqa: BLE001
         pass
-    if _form(view) == "watch":
-        try:
-            from core.interruptibility_registry import get_interruptibility_registry
+    # 哪台设备报了「现在能不能打扰」就显示哪台的,不看它是什么设备
+    try:
+        from core.interruptibility_registry import get_interruptibility_registry
 
-            snap = get_interruptibility_registry()._by_device.get(device_id)
-            if snap is not None and not snap.is_stale(now):
-                status["interruptible"] = snap.band
-        except Exception:  # noqa: BLE001
-            pass
+        snap = get_interruptibility_registry()._by_device.get(device_id)
+        if snap is not None and not snap.is_stale(now):
+            status["interruptible"] = snap.band
+    except Exception:  # noqa: BLE001
+        pass
     return status
 
 
@@ -222,8 +224,9 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
         "status": _status(view, meta, now),
         "actions": _actions(view["device_id"], raw_caps),
         "can_take_agent": can_take_agent(view, meta) or bool(bridge.get("hosted")),
-        # 设备自己声明能把问题摆到人面前、把回答交回来(core.interaction.pending_decision_registry)
+        # 设备自己声明的:能把问题摆到人面前、把回答交回来;能把智能体说的一句话显示给人(core.device_declarations)
         "answers_decisions": meta.get("answers_decisions") is True,
+        "shows_messages": meta.get("shows_messages") is True,
         "agent_installed": bool(bridge.get("installed")),
         "recent": _recent(view["device_id"], now),
         "attached_via": view.get("bridge_id") or view.get("transport") or "",

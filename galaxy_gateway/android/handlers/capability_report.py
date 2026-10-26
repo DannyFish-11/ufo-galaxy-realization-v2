@@ -222,20 +222,19 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
         )
 
     if device_id:
-        # 能不能把问题摆到这台设备上的人面前,看它自己声明的,不看它是什么类型的设备。每次登记会换掉元数据,
-        # 所以每次报能力都记一遍;没声明就记 False —— 不再声明的(新版 App 去掉了这项)跟着撤掉。
+        # 设备自己声明的几件事(能回答提问、能显示消息、显示请求进度,见 core.device_declarations):
+        # 中心按声明对待它,不看它是什么类型的设备。每次登记会换掉元数据,所以每次报能力都记一遍;
+        # 没声明的记 False —— 不再声明的(新版 App 去掉了某项)跟着撤掉。
         try:
-            from core.interaction.pending_decision_registry import declares_decision_support  # noqa: PLC0415
+            from core.device_declarations import declared_in  # noqa: PLC0415
             from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
 
             get_unified_device_manager().upsert_device_state(
-                device_id,
-                {"metadata": {"answers_decisions": declares_decision_support(message)}},
-                source="capability_report",
+                device_id, {"metadata": declared_in(message)}, source="capability_report"
             )
-        except Exception as decisions_exc:  # noqa: BLE001
+        except Exception as declarations_exc:  # noqa: BLE001
             logger.debug(
-                "capability_report: answers_decisions non-fatal: device_id=%s error=%s", device_id, decisions_exc
+                "capability_report: device declarations non-fatal: device_id=%s error=%s", device_id, declarations_exc
             )
         try:
             absorb_capability_report_semantics(device_id, message)

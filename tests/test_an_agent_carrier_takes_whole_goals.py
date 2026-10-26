@@ -115,7 +115,9 @@ def test_a_carrier_joins_by_pairing_and_takes_an_agent(gateway):
     assert actions["write_file"].startswith("在载体工作目录里写"), "载体自己的动作说明进了设备卡"
     from core.phone_bridge import bridge_state
 
-    assert bridge_state(carrier.device_id)["session_id"] == f"carrier:{carrier.device_id}"
+    assert (
+        bridge_state(carrier.device_id)["session_id"] == f"bridge:{carrier.device_id}"
+    ), "接了桥接 Agent 的设备不分是什么,会话都叫 bridge:<设备号>"
 
 
 def test_a_whole_goal_given_as_steps_is_done_on_the_carrier(gateway):

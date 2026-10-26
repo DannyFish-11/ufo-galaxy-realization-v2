@@ -176,17 +176,17 @@ def client():
     return TestClient(app)
 
 
-def _claim(client, device_type, trust="friend"):
+def _claim(client, device_type, trust="friend", tailnet=""):
     card = client.get("/api/v1/pair/card").json()
-    return client.post(
-        "/api/v1/pair/claim",
-        json={
-            "code": card["code"],
-            "device_id": f"dev-{uuid.uuid4().hex[:6]}",
-            "device_type": device_type,
-            "trust": trust,
-        },
-    ).json()
+    body = {
+        "code": card["code"],
+        "device_id": f"dev-{uuid.uuid4().hex[:6]}",
+        "device_type": device_type,
+        "trust": trust,
+    }
+    if tailnet:
+        body["tailnet"] = tailnet
+    return client.post("/api/v1/pair/claim", json=body).json()
 
 
 @pytest.fixture
@@ -202,31 +202,36 @@ def fake_issue(monkeypatch):
     return issued
 
 
-def test_a_watch_gets_the_key_with_its_pairing(client, fake_issue):
-    r = _claim(client, "wearos")
+def test_a_device_that_says_it_joins_the_tailnet_itself_gets_the_key_with_its_pairing(client, fake_issue):
+    r = _claim(client, "wearos", tailnet="embedded")
     assert r["success"] is True
     assert r["tailnet_join"]["auth_key"] == "hskey-auth-0"
     assert r["tailnet_join"]["control_url"] == "https://hs.example.internal"
     assert len(fake_issue) == 1
 
 
-def test_a_phone_does_not_get_one(client, fake_issue):
-    """手机装得了 Tailscale 自己登录;多发一把没人用的进网凭证只是多一个泄露面。"""
-    r = _claim(client, "android")
+@pytest.mark.parametrize("device_type", ["wearos", "android", "tv"])
+def test_a_device_that_does_not_say_so_gets_none_whatever_its_type(client, fake_issue, device_type):
+    """看客户端自己声明的进网方式,不看类型:没声明的(比如自己装 Tailscale App 登录的)多发一把只是多一个泄露面。"""
+    r = _claim(client, device_type)
     assert r["success"] is True
     assert "tailnet_join" not in r
     assert fake_issue == []
 
 
+def test_any_type_that_says_so_gets_one(client, fake_issue):
+    assert _claim(client, "smart_display", tailnet="system")["tailnet_join"]["auth_key"]
+
+
 def test_a_blocked_device_does_not_get_one(client, fake_issue):
-    r = _claim(client, "wearos", trust="blocked")
+    r = _claim(client, "wearos", trust="blocked", tailnet="embedded")
     assert "tailnet_join" not in r
     assert fake_issue == []
 
 
 def test_no_key_does_not_break_pairing_but_says_why(client, unconfigured):
     """签不出钥匙时,配对照样成功(在家的局域网直连不受影响),但必须说清楚。"""
-    r = _claim(client, "wearos")
+    r = _claim(client, "wearos", tailnet="embedded")
     assert r["success"] is True
     assert r["capability_token"], "钥匙签不出来连带把令牌也弄丢了"
     assert r["tailnet_join"] is None
