@@ -55,9 +55,10 @@ DEVICES_BUILTIN_TOOLS: List[Dict[str, Any]] = [
         "computer / carrier / home), what it can do (each action it reported, with a one-line 'does'), how it is now "
         "(online, battery, network path, busy, and for a watch whether the wearer can be interrupted), whether it can "
         "take a dispatched agent (can_take_agent: phones and agent carriers yes; watches and hands-and-eyes computers "
-        "no), and what it did recently with what result. You decide which device does what; only members that are "
-        "online can be given work. Also lists candidates discovered nearby that are NOT members yet and what joining "
-        "each would take.",
+        "no), whether a question can be put to the person on it (answers_decisions: the device itself said it can show "
+        "a question and send back the answer), and what it did recently with what result. You decide which device "
+        "does what; only members that are online can be given work. Also lists candidates discovered nearby that are "
+        "NOT members yet and what joining each would take.",
         {"include_ignored": {"type": "boolean", "description": "Also list candidates the user ignored."}},
     ),
     _fn(

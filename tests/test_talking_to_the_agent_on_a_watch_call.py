@@ -1,18 +1,20 @@
-"""实时语音里「边说边做」:跟智能体打电话(手表)、在电脑旁跟它说话,就像跟人说话 —— 说一声让它去做,
+"""实时语音里「边说边做」:用一台设备跟智能体打电话、在本机旁跟它说话,就像跟人说话 —— 说一声让它去做,
 话照说,做完它告诉你。
+
+不分设备是什么:通话说明里只有设备自己报的名字,哪种设备打来都是同一个来源;挂断后结果怎么告诉人,交给智能体判断。
 
 钉住的性质:
 
 * 三家实时接口的帧:OpenAI / Gemini 声明工具、解出工具调用、交回结果、插一条系统消息;阶跃不声明(没核实);
-* 事情怎么交过去:手表通话里云端 OpenAI / Gemini 自己调工具交;阶跃、本地服务、电脑自己的实时语音由智能体
+* 事情怎么交过去:设备通话里云端 OpenAI / Gemini 自己调工具交;阶跃、本地服务、本机自己的实时语音由智能体
   旁听;配不上也绝不打不通;只有 ``GALAXY_VOICE_CALL_AGENT=0`` 才只聊;
 * 旁听:人说完一句,快档模型判做 / 停 / 问 / 在聊;要做的交**人的原话**;附和、正在回答提问的话不判;
   判不了(没有模型、出错)当在聊;
 * 交给智能体以后**立刻**回「已经开始做」(模型接着说话),智能体在后台做;做完在没人说话时插【回报】;
-  进展、停下;挂断后做完的事作为通知送到手表;手表通话界面上显示「在做 / 做完了」;
+  进展、停下;挂断后做完的事交给智能体,由它决定发到哪台、怎么说;通话界面上显示「在做 / 做完了」;
 * 智能体在问:问题进通话;问出口之后人的原话才算回答;普通问题按原话答;高风险的批准嘴上说不算、
   说不要算拒绝;有选项却没说中的话不当回答;
-* 来源 ``wear_call``:不进电脑三态,也不算人亲口说的(交过去的是语音模型的转述);
+* 来源 ``device_call``(哪种设备都一样):不进电脑三态,也不算人亲口说的(交过去的是语音模型的转述);
 * 真 WebRTC 手表 + 真通话路由 + 跑在本地真 WebSocket 上的 OpenAI 实时协议端:说一句 → 工具调用 → 结果交回
   → 智能体做完 → 回报插回通话;本地服务那一路:说一句 → 旁听交过去 → 回报插回通话;
 * 电脑自己的实时语音(真 ``VoiceLoop`` + 本地真 WebSocket):旁听交过去(来源 ``voice_duplex``,不在对话主线上重记),
@@ -121,21 +123,23 @@ def test_how_work_reaches_the_agent(monkeypatch):
         ("gemini_live", "wss://g.example/ws"),
     ):
         cfg = _cfg(provider, url)
-        assert vca.configure_call_session(cfg) == "tools"
+        assert vca.configure_call_session(cfg, device_id="w-1") == "tools"
         assert cfg.tools and "agent_do" in cfg.instructions
 
     step = _cfg("step_realtime", "wss://api.stepfun.com/v1/realtime")
-    assert vca.configure_call_session(step) == "listen", "不会调工具的不是只聊:智能体旁听"
+    assert vca.configure_call_session(step, device_id="w-1") == "listen", "不会调工具的不是只聊:智能体旁听"
     assert step.tools == [] and "执行部分在旁边听着" in step.instructions and "【回报】" in step.instructions
 
     local = _cfg(url="ws://127.0.0.1:32550/v1/realtime")
-    assert vca.configure_call_session(local) == "listen", "本地服务收不收 tools 没法预知:不塞 tools,旁听"
+    assert (
+        vca.configure_call_session(local, device_id="w-1") == "listen"
+    ), "本地服务收不收 tools 没法预知:不塞 tools,旁听"
     assert local.tools == []
     desktop = _cfg()
-    assert vca.configure_call_session(desktop, where="desktop") == "listen", "电脑上智能体自己听得见人"
-    assert desktop.tools == [] and "电脑旁" in desktop.instructions
+    assert vca.configure_call_session(desktop, device_id="") == "listen", "本机上智能体自己听得见人"
+    assert desktop.tools == [] and "本机旁" in desktop.instructions
     monkeypatch.setenv("GALAXY_REALTIME_TOOLS", "1")
-    assert vca.configure_call_session(_cfg(url="ws://127.0.0.1:32550/v1/realtime")) == "tools"
+    assert vca.configure_call_session(_cfg(url="ws://127.0.0.1:32550/v1/realtime"), device_id="w-1") == "tools"
 
     class Frozen:
         __slots__ = ("provider", "url")
@@ -143,41 +147,50 @@ def test_how_work_reaches_the_agent(monkeypatch):
         def __init__(self) -> None:
             self.provider, self.url = "openai_realtime", "wss://x"
 
-    assert vca.configure_call_session(Frozen()) == "listen", "配不上就不声明工具、旁听,绝不让电话打不通"
-    assert vca.configure_call_session(SimpleNamespace(sample_rate=16000)) == "listen"
+    assert (
+        vca.configure_call_session(Frozen(), device_id="w-1") == "listen"
+    ), "配不上就不声明工具、旁听,绝不让电话打不通"
+    assert vca.configure_call_session(SimpleNamespace(sample_rate=16000), device_id="w-1") == "listen"
 
     monkeypatch.setenv("GALAXY_VOICE_CALL_AGENT", "0")
     off = _cfg()
-    assert vca.configure_call_session(off) == "" and off.tools == [] and "没法替他做事" in off.instructions
+    assert (
+        vca.configure_call_session(off, device_id="w-1") == ""
+        and off.tools == []
+        and "没法替他做事" in off.instructions
+    )
 
 
-def test_a_call_from_a_phone_is_told_apart_from_a_watch(monkeypatch):
+def test_a_caller_is_described_by_the_name_it_registered_not_by_what_kind_of_device_it_is(monkeypatch):
     records = {
-        "watch-1": SimpleNamespace(form_factor="watch", aip_device_type="android_wear", device_type=None),
-        "phone-1": SimpleNamespace(form_factor="phone", aip_device_type="android_phone", device_type=None),
+        "w-1": SimpleNamespace(device_name="OPPO Watch 3", form_factor="watch", aip_device_type="android_wear"),
+        "p-1": SimpleNamespace(device_name="Pixel 9", form_factor="phone", aip_device_type="android_phone"),
+        "tv-1": SimpleNamespace(device_name="tv-1", form_factor="tv", aip_device_type="tv"),
     }
     monkeypatch.setattr(
         "core.unified.device_manager.get_unified_device_manager",
         lambda: SimpleNamespace(get_device=lambda did: records.get(did)),
     )
-    assert vca.device_kind("watch-1") == "watch", "手表报的类型里也有 android,先认手表"
-    assert vca.device_kind("phone-1") == "phone"
-    assert vca.device_kind("unknown") == "watch", "认不出按手表:通话本来是给手表做的"
-
-    phone = _cfg()
-    assert vca.configure_call_session(phone, where="phone") == "tools"
-    assert "手机上和你通话" in phone.instructions and "手表" not in phone.instructions
-    assert vca.CALL_DEVICES["phone"]["source"] == vca.PHONE_CALL_SOURCE
-    assert vca.CALL_DEVICES["phone"]["notify"] == "notification", "手机报的弹通知动作叫 notification"
+    for did, name in (("w-1", "OPPO Watch 3"), ("p-1", "Pixel 9")):
+        cfg = _cfg()
+        assert vca.configure_call_session(cfg, device_id=did) == "tools", "哪种设备打来都是同一套做法"
+        assert f"「{name}」" in cfg.instructions
+        for kind_word in ("手表", "手机", "电脑"):
+            assert kind_word not in cfg.instructions, f"说明里不该按设备类型说话:{kind_word}"
+    assert "一台设备" in vca.describe_caller("tv-1"), "没报名字(名字就是 id)不编一个"
+    assert "一台设备" in vca.describe_caller("unknown")
+    assert "本机" in vca.describe_caller("")
+    assert not hasattr(vca, "device_kind") and not hasattr(vca, "CALL_DEVICES"), "不再按设备类型分支"
 
 
 def test_the_call_source_stays_off_the_desktop_and_is_not_the_persons_own_words():
     from core.device_onboarding.conversation import HUMAN_REQUEST_SOURCES
     from core.presence_line import REMOTE_SOURCES
 
-    for source in (vca.CALL_SOURCE, vca.PHONE_CALL_SOURCE):
-        assert source in REMOTE_SOURCES
-        assert source not in HUMAN_REQUEST_SOURCES, "交过去的是语音模型的转述,对话里的确认不能被它满足"
+    assert vca.CALL_SOURCE == "device_call", "哪种设备打来都是同一个来源"
+    assert vca.CALL_SOURCE in REMOTE_SOURCES
+    assert vca.CALL_SOURCE not in HUMAN_REQUEST_SOURCES, "交过去的是语音模型的转述,对话里的确认不能被它满足"
+    assert not {"wear_call", "phone_call"} & set(REMOTE_SOURCES), "按设备类型分的来源不该再有"
 
 
 # ---------------------------------------------------------------------------
@@ -325,8 +338,8 @@ async def test_handing_work_over_answers_at_once_and_the_agent_works_in_the_back
     assert call_id == "c1" and out["ok"] and out["task_id"], "立刻回「已经开始做」,模型接着说话"
     await _settle()
     (req,) = agent.runtime.calls
-    assert req["message"] == "三点提醒开会" and req["source"] == "wear_call" and req["device_id"] == "watch-1"
-    assert req["session_id"] == "wear_call:watch-1", "同一块手表的通话共用一条会话,智能体记得之前说过的"
+    assert req["message"] == "三点提醒开会" and req["source"] == "device_call" and req["device_id"] == "watch-1"
+    assert req["session_id"] == "device_call:watch-1", "同一台设备的通话共用一条会话,智能体记得之前说过的"
     assert {"role": "user", "content": "帮我提醒三点开会"} in req["context"], "人的原话作为上下文带上"
     assert agent.shown[-1] == ("agent_task", "在做:三点提醒开会")
     assert agent.session.notes == [], "还没做完,不报"
@@ -379,7 +392,9 @@ async def test_an_agent_without_a_model_is_reported_as_not_done(agent, monkeypat
     assert agent.shown[-1] == ("agent_task", "没做成:订机票"), "只回了一句说明的,不能报成做完了"
 
 
-async def test_work_finished_after_hanging_up_arrives_as_a_watch_notification(agent, monkeypatch):
+async def test_work_finished_after_hanging_up_is_handed_to_the_agent_to_tell_the_person(agent, monkeypatch):
+    """挂断后才有结果:不替智能体挑设备、挑动作(此前按设备类型写死成手表的 notify / 手机的 notification),
+    把结果和「刚才在哪台设备上打的」交给它,由它看设备卡片决定发到哪台、怎么说。"""
     sent: List[tuple] = []
 
     async def _send(device_id: str, msg: Dict[str, Any]) -> bool:
@@ -392,9 +407,13 @@ async def test_work_finished_after_hanging_up_arrives_as_a_watch_notification(ag
     agent.runtime.release.set()
     await _settle()
     assert agent.session.notes == []
-    ((device_id, msg),) = sent
-    assert device_id == "watch-1" and msg["type"] == "command" and msg["command"] == "notify"
-    assert "查明天的天气" in msg["params"]["text"] and len(msg["params"]["text"]) <= 500
+    assert sent == [], "代码不直接往某台设备发某个动作"
+    task, handover = agent.runtime.calls
+    assert task["message"] == "查明天的天气"
+    assert handover["message"].startswith("【通话已挂断】") and "查明天的天气" in handover["message"]
+    assert "做好了" in handover["message"] and "watch-1" in handover["message"], "结果和刚才通话的设备都交给它"
+    assert handover["source"] == "device_call", "系统转来的结果不算人亲口说的,不能满足对话里的确认"
+    assert handover["session_id"] == task["session_id"], "和通话同一条会话:它记得这件事是在电话里交代的"
 
 
 async def test_a_note_that_never_gets_a_reply_does_not_block_the_next_one(agent, monkeypatch):
@@ -450,7 +469,9 @@ async def test_the_question_is_asked_in_the_call_and_answered_by_voice(agent, re
     assert not rec.future.done(), "问出口之前的话不是回答"
     await _say(agent, "好")
     outcome = rec.future.result()
-    assert outcome.selected_option == "approve" and outcome.voice_input == "好" and outcome.source == "wear_call_voice"
+    assert (
+        outcome.selected_option == "approve" and outcome.voice_input == "好" and outcome.source == "device_call_voice"
+    )
 
 
 async def test_naming_an_option_picks_it_and_unrelated_words_are_not_an_answer(agent, registry):
@@ -473,7 +494,7 @@ async def test_an_open_question_takes_the_persons_own_words(agent, registry):
 async def test_a_high_risk_approval_needs_a_tap_but_saying_no_refuses(agent, registry):
     rec = _ask(agent, registry, YES_NO, urgency="high")
     await _asked(agent)
-    assert "在手表上点「批准」" in agent.session.notes[0]
+    assert "在弹出的确认上点「批准」" in agent.session.notes[0]
     await _say(agent, "好")
     assert not rec.future.done(), "高风险操作嘴上说好不算"
     await agent.on_event(ev("response_done"))  # 让【提醒】插进去
@@ -550,7 +571,7 @@ async def test_listening_hands_the_persons_own_words_to_the_agent(listener):
     assert listener.heard[1][1] == [{"role": "user", "content": "今天好累"}], "判的时候带上前面说的"
     (req,) = listener.runtime.calls
     assert req["message"] == "帮我把客厅的灯关了", "交过去的是人的原话"
-    assert req["source"] == "wear_call"
+    assert req["source"] == "device_call"
     assert listener.session.notes == [], "在聊的那句没交,要做的还没做完"
     listener.runtime.release.set()
     await _settle()
@@ -725,7 +746,7 @@ async def test_end_to_end_say_it_on_the_watch_and_hear_it_done(monkeypatch):
             if runtime.calls:
                 break
             await asyncio.sleep(0.02)
-        assert runtime.calls[0]["message"] == "下午三点提醒我开会" and runtime.calls[0]["source"] == "wear_call"
+        assert runtime.calls[0]["message"] == "下午三点提醒我开会" and runtime.calls[0]["source"] == "device_call"
 
         runtime.release.set()  # 智能体做完了
         notes = await srv.wait_for(
@@ -829,7 +850,7 @@ async def test_the_desktops_own_realtime_voice_acts_too(monkeypatch):
     try:
         assert await loop._try_start_duplex(AudioCaptureConfig, AudioCaptureService)
         (upd,) = await srv.wait_for(lambda m: m.get("type") == "session.update")
-        assert not upd["session"].get("tools") and "电脑旁" in upd["session"]["instructions"]
+        assert not upd["session"].get("tools") and "本机旁" in upd["session"]["instructions"]
         await srv.send(
             {"type": "conversation.item.input_audio_transcription.completed", "transcript": "帮我打开浏览器"},
             {"type": "response.audio_transcript.delta", "delta": "好"},
@@ -858,13 +879,13 @@ async def test_the_desktops_own_realtime_voice_acts_too(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 八、手机打来的电话
+# 八、哪种设备打来都一样
 # ---------------------------------------------------------------------------
 
 
-async def test_a_call_from_a_phone_acts_too_and_reports_on_the_phone_after_hanging_up(monkeypatch):
-    """手机和手表走同一条通话路由:说明里说的是手机,交过去的来源是 phone_call,挂断后做完的事用手机的
-    notification 动作弹通知(手表的是 notify)。"""
+async def test_a_call_from_any_device_takes_one_path_and_the_agent_decides_how_to_report_after_hanging_up(monkeypatch):
+    """不管什么设备打来,走同一条通话路由:说明里只有设备自己报的名字,来源都是 device_call;挂断后做完的事
+    交给智能体决定怎么告诉人,代码不直接往这台设备发某个写死的动作(此前手机用 notification、手表用 notify)。"""
     from core.voice_call_bridge import get_call_registry, webrtc_available
 
     if webrtc_available() is not None:
@@ -876,7 +897,7 @@ async def test_a_call_from_a_phone_acts_too_and_reports_on_the_phone_after_hangi
     srv = await FakeRealtimeServer().start()
     runtime = FakeRuntime(reply="明天晴")
     monkeypatch.setattr("core.desktop_presence_runtime.get_desktop_presence_runtime", lambda: runtime)
-    monkeypatch.setattr(vca, "device_kind", lambda device_id: "phone")
+    monkeypatch.setattr(vca, "device_name", lambda device_id: "Pixel 9" if device_id == "phone-e2e" else "")
     sent: List[tuple] = []
 
     async def _send_to_device(device_id: str, msg: Dict[str, Any]) -> bool:
@@ -905,22 +926,23 @@ async def test_a_call_from_a_phone_acts_too_and_reports_on_the_phone_after_hangi
         assert accepted is not None, to_phone
         await phone.setRemoteDescription(RTCSessionDescription(sdp=accepted["sdp"], type="answer"))
         (upd,) = await srv.wait_for(lambda m: m.get("type") == "session.update")
-        assert "手机上和你通话" in upd["session"]["instructions"]
+        assert "「Pixel 9」" in upd["session"]["instructions"] and "手机" not in upd["session"]["instructions"]
         await srv.send(_fc("call_p", "agent_do", {"what": "查明天的天气"}), {"type": "response.done"})
         for _ in range(100):
             if runtime.calls:
                 break
             await asyncio.sleep(0.02)
-        assert runtime.calls[0]["source"] == "phone_call" and runtime.calls[0]["session_id"] == "phone_call:phone-e2e"
+        assert runtime.calls[0]["source"] == "device_call" and runtime.calls[0]["session_id"] == "device_call:phone-e2e"
         await close_voice_route("conn_phone")  # 挂断,事情还没做完
         runtime.release.set()
         for _ in range(100):
-            if sent:
+            if len(runtime.calls) > 1:
                 break
             await asyncio.sleep(0.02)
-        ((device_id, msg),) = sent
-        assert device_id == "phone-e2e" and msg["command"] == "notification", msg
-        assert "明天晴" in msg["params"]["text"]
+        handover = runtime.calls[1]
+        assert handover["message"].startswith("【通话已挂断】") and "明天晴" in handover["message"], handover
+        assert "phone-e2e" in handover["message"] and "Pixel 9" in handover["message"]
+        assert sent == [], "代码不直接往这台设备发写死的动作"
     finally:
         await close_voice_route("conn_phone")
         await get_call_registry().end_all(reason="test_teardown")

@@ -510,45 +510,47 @@ async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
     await connection_manager.send_to_device(device_id, message)
 
 
-#: 能被"问一句"的设备类型。手表是主通道；手机是备选（同一条决策分叉到两处，先答的算数）。
-_ASKABLE_WATCH_TYPES = ("wear_os", "wearos", "android_wear", "watch", "galaxy_watch")
-_ASKABLE_PHONE_TYPES = ("android", "phone", "android_phone")
+def declares_decision_support(capability_report: Dict[str, Any]) -> bool:
+    """设备在报能力时声明了能把问题摆到人面前、把人的回答交回来(``answers_decisions: true``,顶层或 payload 里)。"""
+    payload = capability_report.get("payload") if isinstance(capability_report.get("payload"), dict) else {}
+    declared = capability_report.get("answers_decisions", payload.get("answers_decisions"))
+    return declared is True or str(declared).lower() == "true"
 
 
-def _is_askable_type(dtype: str) -> bool:
-    d = (dtype or "").strip().lower()
-    return d in _ASKABLE_WATCH_TYPES or d in _ASKABLE_PHONE_TYPES or "phone" in d
+def answers_decisions(device_id: str) -> bool:
+    """这台设备声明过能回答提问(能力上报时记进 UDM 元数据,见 ``declares_decision_support``)。"""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        d = get_unified_device_manager().get_device(device_id)
+    except Exception:  # noqa: BLE001 — 查不到就是没声明过
+        return False
+    return (getattr(d, "metadata", None) or {}).get("answers_decisions") is True
 
 
 async def _discover_target_devices() -> List[str]:
-    """Auto-discover connected WearOS + phone device ids to ask.
+    """在线、并且自己声明过能回答提问的设备(同一条决策分叉到这些设备上,先答的算数)。
+
+    能不能问,看设备自己报的(``answers_decisions``),**不看它是什么类型的设备** —— 此前按类型名单认
+    手表和手机,于是名单外的设备哪怕能问也问不到,名单里的手机却收到它根本不显示的提问。
 
     **在线与否以 UCM 为准**（连接与在线的权威，规范入口 ``/ws/device/{id}`` 注册成功后
-    会登记进去）。此前只读旧管理器的本地表加上 REST 的 ``registered_devices``：经规范入口
-    连上来的手表两处都不在，于是智能体"在手表上问人"永远找不到手表，一律退回"在对话里
-    问"。旧入口连上来的设备仍然认得（并集），不丢。
-
-    设备类型取自它登记时报的 ``device_type``（UCM 连接元数据），其次是 ``registered_devices``。
+    会登记进去）。旧入口连上来的设备仍然认得（并集），不丢。
     """
     candidates: List[str] = []
-    types: Dict[str, str] = {}
 
-    # 1) UCM：在线且可路由的设备，类型来自登记元数据。
+    # 1) UCM：在线且可路由的设备。
     try:
         from core.unified.connection_manager import get_unified_connection_manager
 
         ucm = get_unified_connection_manager()
         for did, view in ucm.get_presence_view().items():
-            if not (view.get("online") and view.get("routable")):
-                continue
-            candidates.append(did)
-            info = ucm.get_connection(did)
-            meta = getattr(info, "metadata", None) or {}
-            types[did] = str(meta.get("device_type") or "")
+            if view.get("online") and view.get("routable"):
+                candidates.append(did)
     except Exception as exc:  # noqa: BLE001
         logger.debug("HITL.discover: UCM unavailable: %s", exc)
 
-    # 2) 旧管理器（旧入口连上来的设备）与 REST 登记表：补集 + 补类型。
+    # 2) 旧管理器（旧入口连上来的设备）：补集。
     try:
         connection_manager = upper_ports.resolve("gateway.websocket_handler.connection_manager")
         for did in await connection_manager.get_connected_devices():
@@ -556,14 +558,5 @@ async def _discover_target_devices() -> List[str]:
                 candidates.append(did)
     except Exception:  # noqa: BLE001
         pass
-    try:
-        from core.routes._shared import registered_devices  # noqa: PLC0415
-    except Exception:  # noqa: BLE001
-        registered_devices = {}
 
-    targets: List[str] = []
-    for did in candidates:
-        dtype = types.get(did) or str((registered_devices.get(did) or {}).get("device_type", ""))
-        if _is_askable_type(dtype):
-            targets.append(did)
-    return targets
+    return [did for did in candidates if answers_decisions(did)]

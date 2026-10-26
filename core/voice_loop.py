@@ -202,7 +202,7 @@ class VoiceLoop:
         if cfg is None:
             return False
         # 边说边做:实时模型负责说,智能体旁听、要做的事接过去做,做完把回报插回会话(core.voice_call_agent)
-        configure_call_session(cfg, where="desktop")
+        configure_call_session(cfg, device_id="")  # 本机自己的实时语音
         session = await open_duplex_session(cfg)
         if session is None:
             return False

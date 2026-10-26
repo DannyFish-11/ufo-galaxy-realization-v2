@@ -222,6 +222,8 @@ def build_device_card(view: Dict[str, Any], metadata: Optional[Dict[str, Any]] =
         "status": _status(view, meta, now),
         "actions": _actions(view["device_id"], raw_caps),
         "can_take_agent": can_take_agent(view, meta) or bool(bridge.get("hosted")),
+        # 设备自己声明能把问题摆到人面前、把回答交回来(core.interaction.pending_decision_registry)
+        "answers_decisions": meta.get("answers_decisions") is True,
         "agent_installed": bool(bridge.get("installed")),
         "recent": _recent(view["device_id"], now),
         "attached_via": view.get("bridge_id") or view.get("transport") or "",

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import time
 from types import SimpleNamespace
 
@@ -62,6 +63,16 @@ def _last_tool_result(messages):
     return {}
 
 
+def _cards(result):
+    """设备列表里每台设备 → 它报的动作名。列表长了会被从中间截断(原文 JSON 就断了),这时像读文字一样从原文里认:
+    在线的排在前面,截断保留开头,在线的那几台都在。"""
+    if isinstance(result.get("members"), list):
+        return {c["device_id"]: [a["name"] for a in c["actions"]] for c in result["members"]}
+    raw = str(result.get("raw") or "")
+    found = re.findall(r'"device_id": "([^"]+)".*?"actions": \[(.*?)\]', raw, flags=re.S)
+    return {did: re.findall(r'"name": "([^"]+)"', actions) for did, actions in found}
+
+
 def _reply(content="", call=None):
     from core.multi_llm_router import LLMResponse
 
@@ -95,14 +106,14 @@ class _ScriptedModel:
         if len(self.seen) == 1:
             return _reply(call=("devices__list", {}))
         if len(self.seen) == 2:
-            with_calendar = [c for c in last.get("members", []) if any(a["name"] == "calendar" for a in c["actions"])]
+            with_calendar = [did for did, actions in _cards(last).items() if "calendar" in actions]
             if not with_calendar:
                 return _reply("没有能查日程的设备")
             return _reply(
                 call=(
                     "devices__invoke",
                     {
-                        "device_id": with_calendar[0]["device_id"],
+                        "device_id": with_calendar[0],
                         "action": "calendar",
                         "params": {"from": "2026-10-25T12:00:00+08:00", "to": "2026-10-25T18:00:00+08:00"},
                     },
@@ -190,7 +201,7 @@ def test_asked_on_the_watch_looked_up_on_the_phone_answered_on_the_watch(gateway
     assert answer["data"]["text"] == "下午 15:00 有「设计评审」,在会议室 A", answer
 
     # 是模型自己从设备卡里认出手机的:它看到的那张表里两台都在,只有手机有日历
-    listed = {c["device_id"]: [a["name"] for a in c["actions"]] for c in center.model.seen[1]["members"]}
+    listed = _cards(center.model.seen[1])
     assert "calendar" in listed[phone_id] and "calendar" not in listed[watch_id], listed
     assert "devices__invoke" in center.model.offered[0]
     assert center.calls[0]["source"] == "wear_voice" and center.calls[0]["device_id"] == watch_id
