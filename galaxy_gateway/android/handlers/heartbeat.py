@@ -11,6 +11,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any, Dict
 
+from core import device_state
 from galaxy_gateway.android.message_builder import MessageBuilder
 
 if TYPE_CHECKING:
@@ -32,6 +33,11 @@ async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dic
 
     # Step 1 — canonical patch to UDM.
     bridge._patch_heartbeat_to_udm(device_id)
+
+    # 设备此刻的状态跟着心跳来(core/device_state.py):带了就整份记下(替换上一份),没带就不动
+    state = device_state.carried(message)
+    if device_id and state is not None:
+        device_state.record(device_id, state)
 
     # Step 2 — update local transport cache.
     async with bridge._lock:
@@ -58,21 +64,20 @@ async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dic
 
 
 async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-    """处理设备状态上报（battery, cpu, memory 等）。
+    """处理旧的 ``device_status`` 帧(电量等)。
 
-    Status update flow (PR-2):
-    1. Patch canonical runtime state in UDM (last_heartbeat + metadata).
-    2. Keep local transport cache in sync.
+    新版设备的状态跟着心跳走(``payload.state``);这条旧帧照认一个版本,电量、充电、屏幕读成同一个形状
+    (``core/device_state.py``)记下,其余的键不收。
     """
     device_id = message.get("device_id")
     status_payload = message.get("status") or message.get("payload") or {}
 
-    # Step 1 — canonical patch to UDM (merge status metadata, update last_seen).
+    # Step 1 — canonical patch to UDM (update last_seen + 读成设备状态记下).
     if device_id:
-        meta_patch: Dict[str, Any] = {}
-        if isinstance(status_payload, dict) and status_payload:
-            meta_patch["metadata"] = {"device_status_report": status_payload}
-        bridge._patch_runtime_state_to_udm(device_id, meta_patch, source="android_bridge_status")
+        bridge._patch_runtime_state_to_udm(device_id, {}, source="android_bridge_status")
+        state = device_state.from_status_report(status_payload)
+        if state:
+            device_state.store(device_id, state)
 
     # Step 2 — update local transport cache.
     async with bridge._lock:

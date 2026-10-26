@@ -155,15 +155,16 @@ def _network(device_id: str) -> str:
 
 
 def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[str, Any]:
+    """此刻的状态只有两种来源:中心看到的(在线、最后见到、网络路径、有没有命令在跑)和设备自己报的
+    (``core/device_state.py``:电量、屏幕、戴没戴着、能不能打扰……)。设备没报的不写,不替它推断。"""
+    from core.device_state import current  # noqa: PLC0415
+
     device_id = view["device_id"]
     status: Dict[str, Any] = {"online": bool(view.get("online"))}
     last_seen = float(view.get("last_seen") or 0.0)
     if last_seen:
         status["seen_s_ago"] = int(max(0.0, now - last_seen))
-    report = metadata.get("device_status_report") if isinstance(metadata.get("device_status_report"), dict) else {}
-    battery = report.get("battery") if "battery" in report else report.get("battery_level")
-    if battery is not None:
-        status["battery"] = battery
+    status.update(current(metadata, online=status["online"], now=now))
     net = _network(device_id) if status["online"] else ""
     if net:
         status["network"] = net
@@ -171,15 +172,6 @@ def _status(view: Dict[str, Any], metadata: Dict[str, Any], now: float) -> Dict[
         from core.unified.connection_manager import get_unified_connection_manager
 
         status["busy"] = get_unified_connection_manager().inflight(device_id) > 0
-    except Exception:  # noqa: BLE001
-        pass
-    # 哪台设备报了「现在能不能打扰」就显示哪台的,不看它是什么设备
-    try:
-        from core.interruptibility_registry import get_interruptibility_registry
-
-        snap = get_interruptibility_registry()._by_device.get(device_id)
-        if snap is not None and not snap.is_stale(now):
-            status["interruptible"] = snap.band
     except Exception:  # noqa: BLE001
         pass
     return status

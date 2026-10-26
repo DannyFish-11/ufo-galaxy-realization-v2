@@ -149,16 +149,16 @@
 
 ### 3.5 状态
 
-状态和自述分开。自述很少变，状态一直在变。状态统一走心跳的状态载荷，也就是今天放电量的那一份，变了就报（设备自己去抖），重连时补报一次。
+状态和自述分开。自述很少变，状态一直在变。状态统一跟着心跳帧走（`heartbeat` 帧的 `payload.state`），每一份都是此刻的全部状态，中心整份替换上一份：这一份里没有的键就是设备现在不知道。什么时候报由设备自己定：手机每一拍心跳都带（30 秒），手表在可打扰性或屏幕、充电、通话变了时报，没变也每 10 分钟报一次。
 
 ```json
-{"state": {"battery": 0.62, "charging": false, "screen_on": false, "worn": true, "in_call": false,
-           "interruptible": "low", "note": "主人在开会(日历)"}}
+{"type": "heartbeat", "payload": {"state": {"battery": 0.62, "charging": false, "screen_on": false, "worn": true,
+  "in_call": false, "interruptible": "busy", "note": "主人在开会(日历)"}}}
 ```
 
-- 常用的几项有固定的键：`battery`、`charging`、`screen_on`、`worn`、`in_call`、`interruptible`。
-- 设备想让模型知道、又不属于这几项的，写进 `note`，一句话。
-- 手表现在单独的 `interruptibility` 帧并进来。旧帧照样认一个版本。
+- 常用的几项有固定的键：`battery`（0 到 1）、`charging`、`screen_on`、`worn`、`in_call`、`interruptible`（`blocked` / `busy` / `neutral` / `free`，设备判断不了就不报这个键）。schema 在 `contracts/device_state_v1.json`（`device_state/1`），只许这几个键 —— 心率、位置这类原始信号不出设备。
+- 设备想让模型知道、又不属于这几项的，写进 `note`，一句话。手表把可打扰性的原因写在这里，中心不再翻译标签。
+- 手表原来单独的 `interruptibility` 帧并进来。旧帧照样认一个版本；旧的 `device_status` 帧里的电量也照认。
 
 三种来源，规则只有一条：
 
@@ -407,7 +407,7 @@
 |---|---|---|
 | 1 自述契约 v1 | 已完成（中心 `core/device_self.py` 读入与兼容、`contracts/device_self_v1.json`、跨仓闸门 1.2.0、设备卡片显示 `kind` / `about` / `unavailable` 与每个动作的 `effect` / `needs_human`；安卓仓 `shared-protocol` 的 `DeviceSelfDescription.kt`，手机、手表的能力上报带上自述，散字段过渡期照发） | V2 `tests/test_devices_describe_themselves.py` 10 项（安卓真拼出来的两份帧过 schema、新旧读成同一形状、自述盖过它重复的旧字段、读入宽松、经真网关的手表与手机、旧版手表照旧、拿到安卓仓时逐字对照）；受影响的 346 个测试文件 13367 项通过；安卓 `DeviceSelfDescriptionTest` 8 项、`PhoneSelfDescriptionTest` 6 项、`PhoneDirectCommandWireTest` +1；手表 `WatchSelfDescriptionTest` 6 项（见 SYSTEM_STATUS 6.37） |
 | 2 动作与声明归位 | 已完成(`core/device_boundaries.py`:下发前按动作的 `params` 校验、按 `effect` / `needs_human` 与自治档位判直接做 / 问 / 高风险确认;问时在能回答的设备上给「不要 / 仅此次 / 本会话 / 永久允许」,没有就在对话里问;`shows_messages` 并回各设备的通知动作,`ask_human__notify` 调点名设备(或发起设备)自己报的消息动作,旧版设备照旧收 `agent_message`;手机提问弹成通知、点了回 `human_input`,声明 `answers_decisions`;电脑客户端与载体也带自述;授权记录挪进数据目录) | V2 `tests/test_device_actions_pass_the_boundaries.py` 26 项(表的每一格、拿不准往严里算、参数、四种回答、对话里问、高风险与 `needs_human`、真网关上读直发 / 改状态先问 / 参数不全不发 / 手机被问、点「永久允许」后照做且下次不问);相关测试 1337 + 受影响的 39000 余项通过;安卓 `DecisionFramesTest` 6 项、`PhoneSelfDescriptionTest` 更新;手表 `WatchMemberFramesTest` 更新(见 SYSTEM_STATUS 6.38) |
-| 3 状态统一 | 未开始 | |
+| 3 状态统一 | 已完成(`core/device_state.py` 与 `contracts/device_state_v1.json`:心跳帧的 `payload.state` 整份记进 UDM 元数据 `device_state`,只收认识的键;设备卡片的状态只有中心看到的与设备报的两种,设备离线或这份过了 25 分钟就不写;`interruptible` 交给可打扰性登记处,这份没报就撤掉上一份;提示词和常驻循环的理由写明是哪台设备说的,不再写死「手表」;旧的 `interruptibility` 帧、`device_status` 帧照认;跨仓闸门 1.3.0 写明 `device_state/1`。安卓仓 `shared-protocol` 的 `DeviceState.kt`;手机每拍心跳报电量、充电、屏幕、通话,开着勿扰时报 `blocked`;手表把可打扰性并进心跳的状态,原因由手表写成一句话,不再发单独的帧) | V2 `tests/test_devices_report_their_state.py` 13 项(安卓真拼出来的三份过 schema、读入只收认识的键、没带和带了空的不同、经真网关手表报了上卡片且登记处写明是谁说的、新一份替换旧一份、手机每拍报、从没报过的卡片上只有中心看到的、旧 `device_status` 照认、离线与陈旧不写、拿到安卓仓时逐字对照、闸门清单);安卓 `DeviceStateTest` 6 项、`PhoneStateTest` 4 项、`PhoneDirectCommandWireTest` +1;手表 `WatchStateTest` 9 项(替换原来的线格式隐私契约)、节流 +1(见 SYSTEM_STATUS 6.39) |
 | 4 边界清单 | 未开始 | |
 | 5 评测 | 未开始 | |
 | 6 设备侧清理 | 未开始 | |

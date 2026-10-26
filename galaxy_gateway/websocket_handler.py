@@ -875,18 +875,22 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             await _send(response)
             return
         elif command_text == "interruptibility":
-            # WearOS sendInterruptibility → command="interruptibility"
-            # {score, band, reasons, confidence, device, timestamp}。
+            # 旧版手表单独发的可打扰性帧 {score, band, reasons, confidence, device, timestamp};
+            # 新版设备把 interruptible 放进心跳的状态(core/device_state.py)。照认一个版本。
             #
             # 手表回答的是「现在能不能打扰他」,**不**交出身体数据 —— 心率/运动/
             # 睡眠只在手表本地参与运算(见 galaxy-wearos 的 com.galaxy.wear.sensing)。
-            # 这里落进登记处,供常驻注意力循环把「克制是美德」从祈使句变成
-            # 可测量的输入。
+            # 落进登记处供常驻注意力循环用,同时读成设备状态给卡片。
             snapshot = None
             try:
+                from core import device_state
                 from core.interruptibility_registry import get_interruptibility_registry
 
-                snapshot = get_interruptibility_registry().record(_payload, device_id=device_id)
+                snapshot = get_interruptibility_registry().record(
+                    _payload, device_id=device_id, source=device_state.name_of(device_id)
+                )
+                if snapshot is not None:
+                    device_state.store(device_id, device_state.from_snapshot(snapshot))
             except Exception as _int_err:  # noqa: BLE001 — 登记失败不该影响 WS 主流程
                 logger.debug("interruptibility record skipped: %s", _int_err)
 

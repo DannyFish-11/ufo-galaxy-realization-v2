@@ -15,13 +15,19 @@ CROSS_REPO_SCHEMA_GATE_AUTHORITY: str = (
     "CROSS_REPO_SCHEMA_GATE_AUTHORITY::contracts.cross_repo_schema_version_gate::"
     "minimal critical gate for AIP message types + projection/closure truth contract"
 )
-CROSS_REPO_SCHEMA_GATE_VERSION: str = "1.2.0"
+CROSS_REPO_SCHEMA_GATE_VERSION: str = "1.3.0"
 
 #: 1.2.0:设备自述(capability_report 的 self_description)。schema 在 contracts/device_self_v1.json,
 #: 安卓仓 shared-protocol 的 DeviceSelfDescription.kt 拼同一个形状(手机、手表共用);
 #: tests/test_devices_describe_themselves.py 拿到安卓仓时逐字对照。
 DEVICE_SELF_SCHEMA: str = "device_self/1"
 DEVICE_SELF_SCHEMA_PATH: str = "contracts/device_self_v1.json"
+
+#: 1.3.0:设备状态(心跳帧的 payload.state)。schema 在 contracts/device_state_v1.json,
+#: 安卓仓 shared-protocol 的 DeviceState.kt 拼同一个形状(手机、手表共用);
+#: tests/test_devices_report_their_state.py 拿到安卓仓时逐字对照。
+DEVICE_STATE_SCHEMA: str = "device_state/1"
+DEVICE_STATE_SCHEMA_PATH: str = "contracts/device_state_v1.json"
 
 CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_POLICY: str = (
     "CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_V1: "
@@ -773,6 +779,7 @@ def build_cross_repo_schema_gate_manifest() -> Dict[str, Any]:
             },
         },
         "device_self_schema": {"id": DEVICE_SELF_SCHEMA, "path": DEVICE_SELF_SCHEMA_PATH},
+        "device_state_schema": {"id": DEVICE_STATE_SCHEMA, "path": DEVICE_STATE_SCHEMA_PATH},
         "required_aip_message_types": sorted(REQUIRED_AIP_MESSAGE_TYPES),
         "required_runtime_truth_top_level_fields": sorted(REQUIRED_RUNTIME_TRUTH_TOP_LEVEL_FIELDS),
         "required_truth_acceptance_contract_fields": sorted(REQUIRED_TRUTH_ACCEPTANCE_CONTRACT_FIELDS),
