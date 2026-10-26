@@ -187,6 +187,11 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
     若客户端仅上报 ``supported_actions``（旧格式），则以 exec_mode="both"
     补全，保持向后兼容。
     """
+    # 设备自述(core/device_self.py):带了 self_description 的,展开成下面读的这些旧字段;
+    # 新旧两种都读成同一个自述对象,记进 UDM(设备卡片从那里读)
+    from core.device_self import absorb  # noqa: PLC0415
+
+    message, self_description = absorb(message)
     device_id = message.get("device_id")
     platform = message.get("platform")
     supported_actions = message.get("supported_actions", [])
@@ -230,7 +235,9 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
             from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
 
             get_unified_device_manager().upsert_device_state(
-                device_id, {"metadata": declared_in(message)}, source="capability_report"
+                device_id,
+                {"metadata": {**declared_in(message), "self_description": self_description}},
+                source="capability_report",
             )
         except Exception as declarations_exc:  # noqa: BLE001
             logger.debug(

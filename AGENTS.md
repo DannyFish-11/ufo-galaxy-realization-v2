@@ -52,6 +52,8 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   手机、手表、别的电脑、Linux / 云载体都是**成员**：先登录登记进 UDM / UCM（配对码或网络连接），再由智能体经 mesh 协调、经 AIP v3 / NATS 通信。
   整体设计见 `docs/CROSS_DEVICE_OVERALL_PLAN.md`；设备怎么描述自己、代码守哪些边界、怎么评测见 `docs/DEVICE_SELF_DESCRIPTION_DESIGN.md`
   （动作给模型用、声明给边界用；设备级声明只有 `answers_decisions` / `shows_request_progress` / `hosts_agent` / `tailnet` 四样，要加得写明是哪条边界在用）。
+  设备在 `capability_report` 里带 `self_description`（schema `contracts/device_self_v1.json`）；中心**只在** `core/device_self.py` 读它（新旧两种上报读成同一个对象，存进 UDM 元数据 `self_description`，带了自述的展开回旧字段再交给后面的处理），
+  安卓仓 `shared-protocol/.../DeviceSelfDescription.kt` 拼同一个形状（手机、手表共用），改一边必须改另一边（`tests/test_devices_describe_themselves.py` 拿到安卓仓时逐字对照）。
 - **「跨设备」开关只说这台设备自己进不进网络，从不限制智能体**：电脑上的开关 = 这台电脑作为设备加入（桌面登记成成员、电脑自己的请求可交给别的设备）；
   手机的开关 = 手机加入；手表配对即加入。**智能体协调已加入的设备不看任何模式** —— 能不能下发由成员资格（名册、连接、权限门）决定。
   **别再给「往别的设备下发」加模式判断**（以前的统一拒绝 `cross_device_refusal` 与「请求打开跨设备」工具都已删除，`tests/test_the_agent_coordinates_members_in_any_mode.py` 守着）。

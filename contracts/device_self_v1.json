@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "galaxy:device_self/1",
+  "title": "设备自述 device_self/1",
+  "description": "设备在 capability_report 的 self_description 里描述自己。设计见 docs/DEVICE_SELF_DESCRIPTION_DESIGN.md 第 3 节;中心读入在 core/device_self.py,手机、手表用 shared-protocol 的 DeviceSelfDescription.kt 拼。中心读入是宽松的,这份 schema 给三边的契约测试用,所以写得严。",
+  "type": "object",
+  "required": ["schema", "actions", "declares"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "device_self/1"},
+    "name": {"type": "string", "maxLength": 80, "description": "人叫它的名字"},
+    "kind": {"type": "string", "maxLength": 40, "description": "设备自报的类型名。只进卡片、供检索,不进任何分支"},
+    "about": {"type": "string", "maxLength": 300, "description": "一两句形态描述,给模型看"},
+    "actions": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/action"}},
+    "unavailable": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/unavailable"}},
+    "declares": {"$ref": "#/$defs/declares"}
+  },
+  "$defs": {
+    "action_name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$"},
+    "action": {
+      "type": "object",
+      "required": ["name", "description", "effect"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/action_name"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 300, "description": "说效果,不说实现"},
+        "effect": {
+          "enum": ["read", "notify", "act", "send", "danger"],
+          "description": "做了会怎样:只看 / 打扰人 / 改设备状态 / 对外发出 / 不可逆"
+        },
+        "params": {"type": "object", "description": "参数的 JSON Schema"},
+        "returns": {"type": "object", "description": "回什么(JSON Schema)"},
+        "needs_human": {"type": "boolean", "description": "要人在设备上点一下才生效"}
+      }
+    },
+    "unavailable": {
+      "type": "object",
+      "required": ["name", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/action_name"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 200}
+      }
+    },
+    "declares": {
+      "type": "object",
+      "required": ["answers_decisions", "shows_request_progress", "hosts_agent", "tailnet"],
+      "additionalProperties": false,
+      "properties": {
+        "answers_decisions": {"type": "boolean"},
+        "shows_request_progress": {"type": "boolean"},
+        "hosts_agent": {"type": "string", "maxLength": 40, "description": "能装的 Agent 版本,如 bridge/1;不能装是空串"},
+        "tailnet": {"enum": ["embedded", "system", "none"]}
+      }
+    }
+  }
+}

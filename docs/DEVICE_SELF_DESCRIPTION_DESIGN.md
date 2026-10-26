@@ -405,7 +405,7 @@
 
 | 步 | 状态 | 验证 |
 |---|---|---|
-| 1 自述契约 v1 | 未开始 | |
+| 1 自述契约 v1 | 已完成（中心 `core/device_self.py` 读入与兼容、`contracts/device_self_v1.json`、跨仓闸门 1.2.0、设备卡片显示 `kind` / `about` / `unavailable` 与每个动作的 `effect` / `needs_human`；安卓仓 `shared-protocol` 的 `DeviceSelfDescription.kt`，手机、手表的能力上报带上自述，散字段过渡期照发） | V2 `tests/test_devices_describe_themselves.py` 10 项（安卓真拼出来的两份帧过 schema、新旧读成同一形状、自述盖过它重复的旧字段、读入宽松、经真网关的手表与手机、旧版手表照旧、拿到安卓仓时逐字对照）；受影响的 346 个测试文件 13367 项通过；安卓 `DeviceSelfDescriptionTest` 8 项、`PhoneSelfDescriptionTest` 6 项、`PhoneDirectCommandWireTest` +1；手表 `WatchSelfDescriptionTest` 6 项（见 SYSTEM_STATUS 6.37） |
 | 2 动作与声明归位 | 未开始 | |
 | 3 状态统一 | 未开始 | |
 | 4 边界清单 | 未开始 | |

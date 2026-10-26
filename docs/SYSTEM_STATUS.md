@@ -1280,6 +1280,29 @@ Computer Use 在没有屏幕的沙箱里回 `no_perception` 并上岛一张「�
   自治档位只覆盖声明了白名单的节点，读写按动作名猜，`heart_rate`、`calendar` 这类读动作认不出来。
 - 分 6 步实施，进度记在设计文档末尾。
 
+### 6.37 2026-10-26：设备自述 v1（设计文档第 1 步）
+
+- **设备怎么说自己**：能力上报里带 `self_description`（schema `contracts/device_self_v1.json`，`device_self/1`）。内容：
+  - 名字、自报类型（只是描述）、一句形态描述；
+  - 每个动作：一句说明、参数的 JSON Schema、做了会怎样（`effect`：只看 / 打扰人 / 改状态 / 对外发出 / 不可逆）、要不要人在设备上点（`needs_human`）；
+  - 此刻做不了的动作和原因（`unavailable`）；
+  - 四样设备级声明（`answers_decisions` / `shows_request_progress` / `hosts_agent` / `tailnet`）。
+- **中心只在一处读**：`core/device_self.py`。新旧两种上报读成同一个对象，存进 UDM 元数据 `self_description`；
+  带了自述的展开回旧字段（动作清单、说明、参数、声明、`bridge_agent`）再交给后面的处理，那几处不用知道有两种上报。
+  读入是宽松的：不合 schema 的地方记日志、能用的照用；严格的是三边的契约测试。
+- **设备卡片**：说了自己是什么的设备，卡上显示 `kind`、`about`、`unavailable`，每个动作带 `effect` / `needs_human`，不再按类型猜一个「形态」词；
+  旧版设备照旧（`form` 还在）。名字：中心这边没有名字（或只有设备 id）时用设备自报的。
+- **三边一份形状**：安卓仓 `shared-protocol` 新增 `DeviceSelfDescription.kt`，手机、手表共用；拼的时候就拒掉中心认不出的（动作名、`effect`、`tailnet`、空原因）。
+  跨仓闸门升到 1.2.0，清单里写明 `device_self/1`；`tests/test_devices_describe_themselves.py` 进了 CI 里检出安卓仓同名分支的那一组，逐字对照 Kotlin 的键名与取值范围。
+- **手机**：每个动作标 `effect` 和参数；发短信、打电话、加日程标 `needs_human`；权限没给的进 `unavailable`（「手机上还没给 Galaxy 打开:通讯录」）。
+  还没有显示提问的界面，所以 `answers_decisions` 仍是 false（第 2 步加）。
+- **手表**：通知、震动是打扰人，状态、心率、步数是只看；参数与执行器读的一致；心率、计步缺传感器或没给权限时进 `unavailable`，原因就是手表上那句。
+- **验证**：
+  - V2 新增 10 项，其中「安卓真拼出来的两份帧」是从 Kotlin 构造器导出的，不是照 schema 手写；变异两处（不展开自述、不把 `hosts_agent` 当成 `bridge_agent`）各自变红。
+  - 受影响的 346 个测试文件 13367 项通过；守卫全过。
+  - 安卓、手表的纯 Kotlin 部分本地 JVM 77 项通过；整 App 的编译和其余单测交给两边 CI。
+- **合并顺序**：手表 PR 用安卓仓同名分支的 `shared-protocol`，要先合安卓 #539，再合手表 #24。
+
 ## 7. 还没解决的（多数需要决定，或需要真机）
 
 | 问题 | 位置 / 依据 | 为什么这次没改 |

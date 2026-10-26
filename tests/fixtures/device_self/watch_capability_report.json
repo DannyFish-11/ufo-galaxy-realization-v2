@@ -1,0 +1,115 @@
+{
+  "version": "3.0",
+  "type": "capability_report",
+  "device_id": "wear-7f3a",
+  "timestamp": 1761465600000,
+  "platform": "wearos",
+  "supported_actions": [
+    "notify",
+    "haptic",
+    "get_status",
+    "heart_rate"
+  ],
+  "self_description": {
+    "schema": "device_self/1",
+    "name": "Galaxy Watch7",
+    "kind": "wearos",
+    "about": "戴在手腕上的手表。屏幕很小,适合看一两句话、点一下;抬腕就能看到、震一下就能察觉;有心率和计步传感器。",
+    "actions": [
+      {
+        "name": "notify",
+        "description": "在手表上弹一条通知(标题 + 正文),戴表的人抬腕就能看到",
+        "effect": "notify",
+        "params": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "标题",
+              "maxLength": 60
+            },
+            "text": {
+              "type": "string",
+              "description": "正文",
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      },
+      {
+        "name": "haptic",
+        "description": "让手表震一下提醒戴表的人(只用于提醒类)",
+        "effect": "notify",
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "enum": [
+                "message_arrival",
+                "listening_start",
+                "task_done",
+                "decision_prompt",
+                "error"
+              ],
+              "description": "震动的样式;不给按「来消息」"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_status",
+        "description": "读手表的电量、是否在充电、和中心连着没有",
+        "effect": "read",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "heart_rate",
+        "description": "现测一次戴表人的心率(要几秒钟;表没戴好会测不出来),回每分钟多少下",
+        "effect": "read",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "unavailable": [
+      {
+        "name": "steps",
+        "reason": "戴表的人没给手表「体能活动」权限,读不了步数(在手表的应用权限里打开)"
+      }
+    ],
+    "declares": {
+      "answers_decisions": true,
+      "shows_request_progress": false,
+      "hosts_agent": "",
+      "tailnet": "embedded"
+    }
+  },
+  "answers_decisions": true,
+  "shows_messages": true,
+  "capability_schemas": [
+    {
+      "action": "notify",
+      "description": "在手表上弹一条通知(标题 + 正文),戴表的人抬腕就能看到"
+    },
+    {
+      "action": "haptic",
+      "description": "让手表震一下提醒戴表的人(只用于提醒类)"
+    },
+    {
+      "action": "get_status",
+      "description": "读手表的电量、是否在充电、和中心连着没有"
+    },
+    {
+      "action": "heart_rate",
+      "description": "现测一次戴表人的心率(要几秒钟;表没戴好会测不出来),回每分钟多少下"
+    }
+  ]
+}
