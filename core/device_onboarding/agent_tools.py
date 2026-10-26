@@ -28,11 +28,11 @@ import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from core.device_boundaries import one_at_a_time
 from core.device_onboarding.gateway_address import gateway_http_base
 from core.device_onboarding.models import CandidateStatus, HumanStep
 from core.device_onboarding.service import _auto_allows, get_onboarding_service, onboarding_enabled
 from core.device_onboarding.taxonomy import is_native_transport
-from core.device_queue import run_on_device
 
 logger = logging.getLogger("Galaxy.Onboarding.AgentTools")
 
@@ -370,22 +370,25 @@ BRIDGE_INVOKERS: Dict[str, Callable[[Any, str, Dict[str, Any], str], Awaitable[D
 
 
 async def _invoke(args: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    from core.device_boundaries import member
     from core.unified.device_manager import get_unified_device_manager
 
     did = str(args.get("device_id") or "")
     action = str(args.get("action") or "").strip()
     params = dict(args.get("params") or {})
+    # 边界 1(core/device_boundaries.py):在名册里、连着、开了准入的批准过 —— 不在线的设备不该先去问人要不要做
+    stop = member(did)
+    if stop:
+        return stop
     d = get_unified_device_manager().get_device(did)
-    if d is None:
-        return {"success": False, "error": f"没有这个成员:{did}(候选要先 devices__join)"}
     if not action:
         return {"success": False, "error": "需要 action"}
     for prefix, invoker in BRIDGE_INVOKERS.items():
         if d.bridge_id.startswith(prefix):
             return await invoker(d, action, params, session_id)
     if is_native_transport(d.transport) or not d.transport:
-        # 讲 AIP 的设备:先过边界(参数合不合设备说的格式、按动作的 effect 与自治档位要不要先问人,
-        # core/device_boundaries.py),再走规范派发链。它在名册里就是自己加入的成员 ——
+        # 讲 AIP 的设备:先过边界(参数合不合设备说的格式、自发打扰的额度、按动作的 effect 与自治档位要不要
+        # 先问人,core/device_boundaries.gate),再走规范派发链。它在名册里就是自己加入的成员 ——
         # 不看这台电脑的「跨设备」开关(那个开关只管电脑自己进不进网络)。
         from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
         from core.device_boundaries import gate
@@ -605,14 +608,14 @@ async def dispatch_devices_tool(action: str, arguments: Dict[str, Any], *, sessi
         if action == "remove":
             return await _remove(args, session_id)
         if action == "invoke":
-            # 同一台设备一次只做一件事(每台设备一个队列),不同设备照样并行
-            return await run_on_device(str(args.get("device_id") or ""), lambda: _invoke(args, session_id))
+            # 边界 5:同一台设备一次只做一件事(每台设备一个队列),不同设备照样并行;一定有结果
+            return await one_at_a_time(str(args.get("device_id") or ""), lambda: _invoke(args, session_id))
         if action == "delegate":
             from core.phone_bridge import DEFAULT_DELEGATE_TIMEOUT_S, delegate
 
             device_id = str(args.get("device_id") or "")
             timeout = float(args.get("timeout_s") or DEFAULT_DELEGATE_TIMEOUT_S)
-            return await run_on_device(
+            return await one_at_a_time(
                 device_id,
                 lambda: delegate(
                     device_id,

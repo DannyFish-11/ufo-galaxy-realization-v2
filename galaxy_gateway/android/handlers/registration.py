@@ -20,6 +20,7 @@ from core.participant_admission import PAIRED_DEVICE_MIN_SCOPE as _PAIRED_DEVICE
 from core.participant_admission import evaluate_ingress_authentication as _evaluate_ingress_authentication
 from core.participant_admission import evaluate_ingress_identity as _evaluate_ingress_identity
 from core.participant_admission import extract_ingress_token as _extract_ingress_token  # noqa: F401
+from core.participant_admission import record_admission as _record_admission
 from core.participant_admission import should_gate_unapproved as _should_gate_unapproved
 from core.participant_admission import verify_pairing_capability_token as _verify_pairing_capability_token  # noqa: F401
 from galaxy_gateway.android.message_builder import MessageBuilder
@@ -738,6 +739,8 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
     try:
         # Step 1 — canonical write to UDM (SSOT); must happen before local cache update.
         bridge._write_registration_to_udm(device_id, message)
+        # 这次接入批没批(开了设备准入时,没批准的设备连着但不给它下发动作,见 core/device_boundaries.member)
+        _record_admission(device_id, auth_outcome)
 
         # Step 2 — update local transport/session cache.
         async with bridge._lock:

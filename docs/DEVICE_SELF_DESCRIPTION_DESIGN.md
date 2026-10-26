@@ -233,7 +233,9 @@
 
 ## 5. 边界清单：代码只做这些
 
-收进一个模块 `core/device_boundaries.py`。每条边界一个函数、一个测试，下发路径按顺序调用。这张表和代码一一对应。
+收进一个模块 `core/device_boundaries.py`。每条边界一个函数、一个测试，下发路径按顺序调用。这张表和代码一一对应（模块里的 `BOUNDARIES`，`tests/test_the_boundary_list_is_one_module.py` 逐条对照）。
+
+下发路径的顺序：先 1（不在线、没批准的设备，不该先去问人要不要做）；讲 AIP 的设备再过 3 → 4 → 2（便宜的先查，问人放最后）；发的时候 5；结果 6；记账 7。
 
 | # | 边界 | 现在在哪 | 要改的 |
 |---|---|---|---|
@@ -408,6 +410,6 @@
 | 1 自述契约 v1 | 已完成（中心 `core/device_self.py` 读入与兼容、`contracts/device_self_v1.json`、跨仓闸门 1.2.0、设备卡片显示 `kind` / `about` / `unavailable` 与每个动作的 `effect` / `needs_human`；安卓仓 `shared-protocol` 的 `DeviceSelfDescription.kt`，手机、手表的能力上报带上自述，散字段过渡期照发） | V2 `tests/test_devices_describe_themselves.py` 10 项（安卓真拼出来的两份帧过 schema、新旧读成同一形状、自述盖过它重复的旧字段、读入宽松、经真网关的手表与手机、旧版手表照旧、拿到安卓仓时逐字对照）；受影响的 346 个测试文件 13367 项通过；安卓 `DeviceSelfDescriptionTest` 8 项、`PhoneSelfDescriptionTest` 6 项、`PhoneDirectCommandWireTest` +1；手表 `WatchSelfDescriptionTest` 6 项（见 SYSTEM_STATUS 6.37） |
 | 2 动作与声明归位 | 已完成(`core/device_boundaries.py`:下发前按动作的 `params` 校验、按 `effect` / `needs_human` 与自治档位判直接做 / 问 / 高风险确认;问时在能回答的设备上给「不要 / 仅此次 / 本会话 / 永久允许」,没有就在对话里问;`shows_messages` 并回各设备的通知动作,`ask_human__notify` 调点名设备(或发起设备)自己报的消息动作,旧版设备照旧收 `agent_message`;手机提问弹成通知、点了回 `human_input`,声明 `answers_decisions`;电脑客户端与载体也带自述;授权记录挪进数据目录) | V2 `tests/test_device_actions_pass_the_boundaries.py` 26 项(表的每一格、拿不准往严里算、参数、四种回答、对话里问、高风险与 `needs_human`、真网关上读直发 / 改状态先问 / 参数不全不发 / 手机被问、点「永久允许」后照做且下次不问);相关测试 1337 + 受影响的 39000 余项通过;安卓 `DecisionFramesTest` 6 项、`PhoneSelfDescriptionTest` 更新;手表 `WatchMemberFramesTest` 更新(见 SYSTEM_STATUS 6.38) |
 | 3 状态统一 | 已完成(`core/device_state.py` 与 `contracts/device_state_v1.json`:心跳帧的 `payload.state` 整份记进 UDM 元数据 `device_state`,只收认识的键;设备卡片的状态只有中心看到的与设备报的两种,设备离线或这份过了 25 分钟就不写;`interruptible` 交给可打扰性登记处,这份没报就撤掉上一份;提示词和常驻循环的理由写明是哪台设备说的,不再写死「手表」;旧的 `interruptibility` 帧、`device_status` 帧照认;跨仓闸门 1.3.0 写明 `device_state/1`。安卓仓 `shared-protocol` 的 `DeviceState.kt`;手机每拍心跳报电量、充电、屏幕、通话,开着勿扰时报 `blocked`;手表把可打扰性并进心跳的状态,原因由手表写成一句话,不再发单独的帧) | V2 `tests/test_devices_report_their_state.py` 13 项(安卓真拼出来的三份过 schema、读入只收认识的键、没带和带了空的不同、经真网关手表报了上卡片且登记处写明是谁说的、新一份替换旧一份、手机每拍报、从没报过的卡片上只有中心看到的、旧 `device_status` 照认、离线与陈旧不写、拿到安卓仓时逐字对照、闸门清单);安卓 `DeviceStateTest` 6 项、`PhoneStateTest` 4 项、`PhoneDirectCommandWireTest` +1;手表 `WatchStateTest` 9 项(替换原来的线格式隐私契约)、节流 +1(见 SYSTEM_STATUS 6.39) |
-| 4 边界清单 | 未开始 | |
+| 4 边界清单 | 已完成(`core/device_boundaries.py` 七条各一个函数,`BOUNDARIES` 与上表对应:1 `member` 在名册、连着、开了准入的批准过 —— 接入时把批没批记进 UDM 元数据 `admission_approved`;2 `permission`;3 `params_ok`;4 `interrupt_budget` 智能体自发的 `notify` 计入每小时额度(与自发开口同一个设置),有设备报了明确别打扰时自发的不发,人在等结果的请求不算;5 `one_at_a_time` 串行且必有结果、`record_start` / `record_end` 记进任务流程图;6 `as_reported` 设备说没成就是没成、原因用它的原话;7 `kept` 中心只记成没成和原因、不留设备回的数据,做完的多步计划写盘时去掉每一步的结果) | V2 `tests/test_the_boundary_list_is_one_module.py` 18 项(表与代码对照,七条各有测试,其中准入经真网关);去掉任一条对应测试变红(12 处变异)(见 SYSTEM_STATUS 6.40) |
 | 5 评测 | 未开始 | |
 | 6 设备侧清理 | 未开始 | |

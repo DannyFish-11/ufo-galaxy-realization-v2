@@ -204,7 +204,8 @@ def test_invoke_on_a_native_device_goes_through_ucm_and_returns_the_devices_answ
 def test_invoke_on_a_device_that_is_not_connected_says_so_instead_of_success(env):
     _udm().register_device_from_dict("phone-1", {"device_type": "android_phone", "transport": "websocket"})
     out = _agent("devices__invoke", {"device_id": "phone-1", "action": "screenshot"})
-    assert out["success"] is False and "没有连接" in out["error"]
+    # 下发前的成员资格边界(core/device_boundaries.member)先查在不在线:不在线不发,也不先去问人
+    assert out["success"] is False and "不在线" in out["error"]
 
 
 def test_a_device_that_answers_failure_is_reported_as_failure(env, monkeypatch):
