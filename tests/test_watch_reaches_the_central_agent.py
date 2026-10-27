@@ -113,16 +113,23 @@ def _watch_register_frame(device_id, token=""):
     }
 
 
-def _watch_capability_report_frame(device_id):
-    """与 ``WatchMember.capabilityReportFrame`` 同形:supported_actions 在顶层。"""
-    return {
+def _watch_capability_report_frame(device_id, answers_decisions=True):
+    """与 ``WatchMember.capabilityReportFrame`` 同形:supported_actions 在顶层,带设备自述;手表声明能回答提问。"""
+    from tests.device_self_frames import watch_self
+
+    actions = ["notify", "haptic", "get_status"]
+    frame = {
         "version": "3.0",
         "type": "capability_report",
         "device_id": device_id,
         "timestamp": int(time.time() * 1000),
         "platform": "wearos",
-        "supported_actions": ["notify", "haptic", "get_status"],
+        "supported_actions": actions,
+        "self_description": watch_self(actions, answers_decisions=answers_decisions),
     }
+    if answers_decisions:
+        frame["answers_decisions"] = True
+    return frame
 
 
 def _watch_command_frame(device_id, command, inner, corr, n=1):
@@ -147,6 +154,20 @@ def _register(ws, device_id, token=STATIC_TOKEN):
     ack = _recv(ws, timeout=30.0)
     assert ack.get("type") == "device_register_ack" and ack.get("success") is True, ack
     return ack
+
+
+def _report(ws, frame):
+    """报能力,读掉它的 ack(后面的测试按顺序读帧)。"""
+    ws.send_json(frame)
+    ack = _recv(ws, timeout=10.0)
+    assert ack.get("type") == "capability_report_ack", ack
+    return ack
+
+
+def _join_as_member(ws, device_id):
+    """和手表一样:登记,再报能力(其中声明能回答提问)。"""
+    _register(ws, device_id)
+    _report(ws, _watch_capability_report_frame(device_id))
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +240,7 @@ def test_the_agent_finds_a_registered_watch_when_it_looks_for_someone_to_ask(gat
         return await _discover_target_devices()
 
     with _connect(gateway, watch_id) as ws:
-        _register(ws, watch_id)
+        _join_as_member(ws, watch_id)
         assert _eventually(lambda: watch_id in gateway.portal.call(look))
 
 
@@ -230,7 +251,7 @@ def test_a_watch_that_left_is_no_longer_asked(gateway, watch_id):
         return await _discover_target_devices()
 
     with _connect(gateway, watch_id) as ws:
-        _register(ws, watch_id)
+        _join_as_member(ws, watch_id)
         # 先证明在线时找得到，下面的"找不到"才有意义
         assert _eventually(lambda: watch_id in gateway.portal.call(look))
     assert _eventually(lambda: watch_id not in gateway.portal.call(look))
@@ -248,7 +269,7 @@ def test_the_agent_asks_on_the_watch_and_the_answer_comes_back(gateway, watch_id
         return await _discover_target_devices()
 
     with _connect(gateway, watch_id) as ws:
-        _register(ws, watch_id)
+        _join_as_member(ws, watch_id)
         # 注册 ack 和「登记进 UCM」不在同一瞬间；等到找得到手表再问，否则慢机器上会退回「在对话里问」
         assert _eventually(lambda: watch_id in gateway.portal.call(look))
 
@@ -324,7 +345,7 @@ def test_what_the_wearer_says_reaches_the_agent_and_the_reply_pairs_with_the_que
     assert len(agent.calls) == 1
     call = agent.calls[0]
     assert call["message"] == "帮我记一下明天开会"
-    assert call["source"] == "wear_voice"
+    assert call["source"] == "device_voice"
     assert call["device_id"] == watch_id
 
 
@@ -517,19 +538,62 @@ def test_the_gateway_has_no_path_that_pushes_the_tri_state_to_a_watch():
     assert importlib.util.find_spec("galaxy_gateway.android.handlers.wearos_sync") is None
 
 
-@pytest.mark.parametrize("dtype", ["wearos", "wear_os", "android_wear", "WearOS", "galaxy_watch", "watch"])
-def test_every_name_a_watch_may_register_under_can_be_asked(dtype):
-    """手表登记时报的类型、UDM 里记的类型（android_wear）都得认得出是手表，否则「在手表上问人」找不到它。"""
-    from core.interaction.pending_decision_registry import _is_askable_type
+def _look_for_someone_to_ask(gateway):
+    from core.interaction.pending_decision_registry import _discover_target_devices
 
-    assert _is_askable_type(dtype)
+    async def look():
+        return await _discover_target_devices()
+
+    return gateway.portal.call(look)
 
 
-@pytest.mark.parametrize("dtype", ["", "windows_desktop", "linux_desktop", "mi_band", "tv"])
-def test_devices_that_are_not_a_wrist_or_a_phone_are_not_asked(dtype):
-    from core.interaction.pending_decision_registry import _is_askable_type
+@pytest.mark.parametrize("dtype", ["wearos", "tv", "linux_desktop", "smart_glasses"])
+def test_a_device_is_asked_because_it_says_it_can_answer_not_because_of_its_type(gateway, watch_id, dtype):
+    """能不能问人看设备自己声明的 ``answers_decisions``,不看类型名:此前只认手表、手机的类型名单。"""
+    with _connect(gateway, watch_id) as ws:
+        frame = _watch_register_frame(watch_id, STATIC_TOKEN)
+        frame["device_type"] = frame["payload"]["device_type"] = dtype
+        ws.send_json(frame)
+        assert _recv(ws, timeout=30.0).get("type") == "device_register_ack"
+        _report(ws, _watch_capability_report_frame(watch_id, answers_decisions=False))
+        assert _eventually(lambda: _online(watch_id))
+        assert watch_id not in _look_for_someone_to_ask(gateway), "没声明能回答提问,什么类型都不问"
+        _report(ws, _watch_capability_report_frame(watch_id))
+        assert _eventually(lambda: watch_id in _look_for_someone_to_ask(gateway)), "声明了就问,什么类型都一样"
+        _report(ws, _watch_capability_report_frame(watch_id, answers_decisions=False))
+        assert _eventually(lambda: watch_id not in _look_for_someone_to_ask(gateway)), "不再声明就不再问"
 
-    assert not _is_askable_type(dtype)
+
+@pytest.mark.parametrize("what", ["answers_decisions", "shows_request_progress"])
+def test_each_declaration_is_recorded_and_taken_back_through_the_real_gateway(gateway, watch_id, what):
+    """设备在能力上报里声明的每一项都记下来、不再声明就撤掉;中心按它找设备,不看类型。"""
+    from core.device_declarations import online_devices_that
+
+    async def look():
+        return await online_devices_that(what)
+
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        frame = _watch_capability_report_frame(watch_id, answers_decisions=False)
+        declared = {**frame, "self_description": {**frame["self_description"]}}
+        declared["self_description"]["declares"] = {**frame["self_description"]["declares"]}
+        declared["self_description"]["declares"][what] = True
+        _report(ws, declared)
+        assert _eventually(lambda: watch_id in gateway.portal.call(look)), what
+        _report(ws, frame)
+        assert _eventually(lambda: watch_id not in gateway.portal.call(look)), what
+
+
+def test_the_card_tells_the_agent_whether_a_question_can_be_put_to_the_person_there(gateway, watch_id):
+    from core.device_onboarding.agent_tools import _list
+
+    with _connect(gateway, watch_id) as ws:
+        _join_as_member(ws, watch_id)
+        assert _eventually(lambda: _online(watch_id))
+        card = next(c for c in _list({})["members"] if c["device_id"] == watch_id)
+    assert card["answers_decisions"] is True and "shows_messages" not in card
+    notify = next(a for a in card["actions"] if a["name"] == "notify")
+    assert notify["effect"] == "notify", "智能体主动说的话走手表自己的 notify 动作"
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +695,9 @@ def test_in_local_mode_the_agent_still_makes_the_watch_do_something(gateway, wat
     with _connect(gateway, watch_id) as ws:
         _register(ws, watch_id)
         assert _eventually(lambda: _online(watch_id))
+        # 真手表登记完就报能力(带设备自述):通知是「打扰人」,引导档下直接做
+        ws.send_json(_watch_capability_report_frame(watch_id))
+        assert _recv(ws, timeout=10.0).get("type") == "capability_report_ack"
 
         async def invoke():
             return await dispatch_devices_tool(

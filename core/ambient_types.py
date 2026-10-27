@@ -77,9 +77,9 @@ class AmbientObservation:
     audio_transcript: Optional[str] = None  # 听:能力驱动桥接转写(asr_bridge)后的文字
     screen_meta: Optional[Dict[str, Any]] = None
     recent_memory: List[str] = field(default_factory=list)
-    #: 手表报上来的「现在能不能打扰他」(见 core/interruptibility_registry)。
+    #: 设备报上来的「现在能不能打扰他」(见 core/interruptibility_registry)。
     #: 空串 = 没有可用证据 —— 注意「没有证据」既不构成放行、也不构成阻拦,
-    #: 此时循环的行为与接手表之前完全一致。
+    #: 此时循环的行为与没有设备报之前完全一致。
     interruptibility_note: str = ""
 
 

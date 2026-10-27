@@ -87,7 +87,7 @@ def _phone_capability_report(device_id):
             "sms": "给联系人发短信",
         },
         "capabilities": ["goal_execution", "local_model"],
-        "metadata": {"goal_execution_enabled": True, "cross_device_enabled": True, "device_role": "phone"},
+        "metadata": {"goal_execution_enabled": True, "cross_device_enabled": True},
         "bridge_agent": "bridge/1",  # 新版 App 声明能装桥接 Agent(BridgeAgentRuntime.BRIDGE_VERSION)
     }
 
@@ -212,7 +212,7 @@ def test_a_phone_that_reports_its_capabilities_gets_a_bridge_agent(gateway, phon
     assert dispatch.session_id == phone_bridge.bridge_session_id(phone_id)
     assert dispatch.to_agent == a2a.agent_id_for(phone_id)
     assert body["bridge_version"] == phone_bridge.BRIDGE_VERSION
-    assert body["conversation"]["source"] == "phone_chat"
+    assert body["conversation"]["source"] == "device_chat"
     does = {t["name"]: t["does"] for t in body["tools"]}
     assert does.get("screen_capture") == "截一张手机当前屏幕", "桥接 Agent 知道手机自己报的动作和说明"
     assert "sms" in body["confirm_actions"]
@@ -291,17 +291,17 @@ def test_what_the_person_says_on_the_phone_reaches_the_central_agent_and_the_ans
     assert reply.body["in_reply_to"] == said.msg_id and reply.body["success"] is True
     message, kw = calls[0]
     assert message == "就订七点的"
-    assert kw["source"] == "phone_chat", "手机上说的话算人发起的回合,不进电脑三态"
+    assert kw["source"] == "device_chat", "手机上说的话算人发起的回合,不进电脑三态"
     assert kw["session_id"] == phone_bridge.bridge_session_id(phone_id), "和交接过来的上下文是同一个会话"
     assert kw["device_id"] == phone_id
 
 
-def test_phone_chat_is_a_remote_human_request():
+def test_bridge_chat_is_a_remote_human_request():
     from core.device_onboarding.conversation import HUMAN_REQUEST_SOURCES
     from core.presence_line import REMOTE_SOURCES
 
-    assert phone_bridge.PHONE_CHAT_SOURCE in REMOTE_SOURCES
-    assert phone_bridge.PHONE_CHAT_SOURCE in HUMAN_REQUEST_SOURCES
+    assert phone_bridge.BRIDGE_CHAT_SOURCE in REMOTE_SOURCES
+    assert phone_bridge.BRIDGE_CHAT_SOURCE in HUMAN_REQUEST_SOURCES
 
 
 # ── 委派整段目标 ─────────────────────────────────────────────────────────────────

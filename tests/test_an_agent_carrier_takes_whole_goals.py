@@ -108,14 +108,19 @@ def test_a_carrier_joins_by_pairing_and_takes_an_agent(gateway):
     carrier, card = _joined_carrier(gateway, _NoSandbox.make())
     assert card["can_take_agent"] is True, "载体报能力时声明了能接 Agent"
     assert card["agent_installed"] is True
-    assert card["form"] == "carrier", card["form"]
+    # 载体自己说了是什么(设备自述),卡上不再按类型猜一个「形态」词
+    assert "Agent 载体" in card["about"] and "form" not in card, card
+    effects = {a["name"]: a.get("effect") for a in card["actions"]}
+    assert effects["read_file"] == "read" and effects["write_file"] == "act", effects
     actions = {a["name"]: a["does"] for a in card["actions"]}
     assert {"read_file", "write_file", "list_files", "get_status"} <= set(actions)
     assert "run_code" not in actions, "没有沙箱就不报 run_code"
     assert actions["write_file"].startswith("在载体工作目录里写"), "载体自己的动作说明进了设备卡"
     from core.phone_bridge import bridge_state
 
-    assert bridge_state(carrier.device_id)["session_id"] == f"carrier:{carrier.device_id}"
+    assert (
+        bridge_state(carrier.device_id)["session_id"] == f"bridge:{carrier.device_id}"
+    ), "接了桥接 Agent 的设备不分是什么,会话都叫 bridge:<设备号>"
 
 
 def test_a_whole_goal_given_as_steps_is_done_on_the_carrier(gateway):

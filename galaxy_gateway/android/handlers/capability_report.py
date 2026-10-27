@@ -93,6 +93,15 @@ def _sync_supported_actions_to_capability_authority(
         )
         upserted += 1
 
+    # 这次没报的动作撤掉:人在手机上收回了权限、新版 App 不再报做不了的动作。设备整体卡列的是能力权威面里
+    # 这台设备的全部 gateway__<id>__*(core/device_onboarding/device_card.py),留着旧的,智能体就会去调、再失败。
+    reported = {f"gateway__{device_id}__{a if isinstance(a, str) else str(a)}" for a in supported_actions}
+    prefix = f"gateway__{device_id}__"
+    for record in authority.list_records(CapabilitySource.GATEWAY):
+        name = record.canonical_name
+        if name.startswith(prefix) and name not in reported:
+            authority.remove(name, mutation_source="android.capability_report.no_longer_reported")
+
     return upserted
 
 
@@ -178,6 +187,11 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
     若客户端仅上报 ``supported_actions``（旧格式），则以 exec_mode="both"
     补全，保持向后兼容。
     """
+    # 设备自述(core/device_self.py):带了 self_description 的,展开成下面读的这些旧字段;
+    # 新旧两种都读成同一个自述对象,记进 UDM(设备卡片从那里读)
+    from core.device_self import absorb  # noqa: PLC0415
+
+    message, self_description = absorb(message)
     device_id = message.get("device_id")
     platform = message.get("platform")
     supported_actions = message.get("supported_actions", [])
@@ -213,6 +227,22 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
         )
 
     if device_id:
+        # 设备自己声明的几件事(能回答提问、能显示消息、显示请求进度,见 core.device_declarations):
+        # 中心按声明对待它,不看它是什么类型的设备。每次登记会换掉元数据,所以每次报能力都记一遍;
+        # 没声明的记 False —— 不再声明的(新版 App 去掉了某项)跟着撤掉。
+        try:
+            from core.device_declarations import declared_in  # noqa: PLC0415
+            from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
+
+            get_unified_device_manager().upsert_device_state(
+                device_id,
+                {"metadata": {**declared_in(message), "self_description": self_description}},
+                source="capability_report",
+            )
+        except Exception as declarations_exc:  # noqa: BLE001
+            logger.debug(
+                "capability_report: device declarations non-fatal: device_id=%s error=%s", device_id, declarations_exc
+            )
         try:
             absorb_capability_report_semantics(device_id, message)
         except Exception as semantics_exc:

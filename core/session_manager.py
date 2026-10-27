@@ -39,6 +39,7 @@ from typing import Any, Dict, List, Optional
 
 from core.atomic_json import atomic_write_json
 from core.data_paths import data_path_or_legacy
+from core.loop_local_lock import LoopLocalLock
 from core.memory_thread import is_identifying_owner, resolve_thread
 
 logger = logging.getLogger("Galaxy.SessionManager")
@@ -255,9 +256,8 @@ class SessionManager:
         self._session_aliases: Dict[str, str] = {}
         # 会话更新回调（用于 WebSocket 广播）
         self._on_update_callback = None
-        self._lock = asyncio.Lock()
-        # 证据链是同步、可被任意(同步/异步)调用方写入的快路径，用独立的线程锁保护，
-        # 不与上面的 asyncio.Lock 纠缠（避免在同步上下文里 await）。
+        self._lock = LoopLocalLock()  # 本单例不止被一个事件循环用到,一把 asyncio.Lock 会被绑死在头一个上
+        # 证据链是同步快路径(任意调用方都能写),用独立的线程锁,不与上面的锁纠缠(免得在同步语境里 await)。
         self._evidence_lock = threading.Lock()
         self._load_state()
         logger.info("SessionManager 已初始化")

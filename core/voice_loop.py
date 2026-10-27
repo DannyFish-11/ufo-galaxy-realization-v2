@@ -93,6 +93,8 @@ class VoiceLoop:
         self._duplex_loop: Optional[asyncio.AbstractEventLoop] = None
         # 双工↔统一主体的接线(见 core.duplex_presence_bridge);未启用双工时为 None
         self._duplex_bridge: Optional[Any] = None
+        # 实时语音里「边说边做」(core.voice_call_agent.CallAgent):智能体旁听,要做的事接过去做
+        self._duplex_agent: Optional[Any] = None
         # 面板上有没有一句 AI 回复正在流(双工里模型边说边出字)。收尾/被打断时合上。
         self._duplex_ai_open: bool = False
 
@@ -181,8 +183,10 @@ class VoiceLoop:
         一直听见自己在说话。
         """
         try:
+            from core.voice_call_agent import CallAgent, call_agent_enabled, configure_call_session
             from core.voice_duplex_session import (
                 DuplexEventType,
+                DuplexSessionConfig,
                 PcmPlayer,
                 duplex_enabled,
                 open_duplex_session,
@@ -194,7 +198,12 @@ class VoiceLoop:
 
         if not duplex_enabled():
             return False
-        session = await open_duplex_session()
+        cfg = DuplexSessionConfig.from_env()
+        if cfg is None:
+            return False
+        # 边说边做:实时模型负责说,智能体旁听、要做的事接过去做,做完把回报插回会话(core.voice_call_agent)
+        configure_call_session(cfg, device_id="")  # 本机自己的实时语音
+        session = await open_duplex_session(cfg)
         if session is None:
             return False
 
@@ -218,6 +227,8 @@ class VoiceLoop:
             on_interrupt=self._duplex_stop_current,
         )
         await self._duplex_bridge.open()
+        if call_agent_enabled():
+            self._duplex_agent = CallAgent("", "desktop", session, source="voice_duplex")
 
         # 上行:复用采集服务(因此复用 AEC),把每块样本转成 PCM16 发上去
         capture = AudioCaptureService(
@@ -282,6 +293,8 @@ class VoiceLoop:
 
         try:
             async for ev in session.events():
+                if self._duplex_agent is not None:
+                    await self._duplex_agent.on_event(ev)
                 if ev.type is DuplexEventType.ASSISTANT_AUDIO_DELTA and ev.audio_b64:
                     import base64
 
@@ -336,6 +349,8 @@ class VoiceLoop:
                     # 早断了,外壳还在呼吸。bridge.close() 幂等,与 stop() 的调用不冲突。
                     if self._duplex_bridge is not None:
                         await self._duplex_bridge.close()
+                    if self._duplex_agent is not None:
+                        self._duplex_agent.on_call_closed()
                     return
         except asyncio.CancelledError:
             raise
@@ -625,6 +640,10 @@ class VoiceLoop:
                 player.stop()
             except Exception as exc:  # noqa: BLE001
                 logger.debug("关闭双工播放器失败(忽略): %s", exc)
+
+        agent, self._duplex_agent = self._duplex_agent, None
+        if agent is not None:
+            agent.on_call_closed()
 
         session, self._duplex = self._duplex, None
         if session is not None:

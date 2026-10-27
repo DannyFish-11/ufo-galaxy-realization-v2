@@ -154,6 +154,10 @@ def phone(tmp_path, monkeypatch):
     get_unified_device_manager().register_device_from_dict(
         "phone-1", {"device_type": "Android_Agent", "transport": "websocket"}
     )
+    # 连着(下发前的成员资格边界要它在线,core/device_boundaries.member)
+    from core.unified.connection_manager import get_unified_connection_manager
+
+    get_unified_connection_manager()._websockets["phone-1"] = object()
     yield "phone-1"
     for r in (reset_unified_device_manager, reset_unified_connection_manager, reset_onboarding_service):
         r()

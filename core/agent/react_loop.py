@@ -189,7 +189,9 @@ async def run_react_tool_loop(
                 except Exception as exc:  # noqa: BLE001 — 记录副作用不应中断循环
                     logger.debug("on_tool_result hook failed: %s", exc)
 
-            result_str = str(result.get("result", result.get("error", "")))
+            from core.react_progress import tool_result_text
+
+            result_str = tool_result_text(result)
             messages.append(
                 {
                     "role": "tool",

@@ -173,7 +173,7 @@ def issued(monkeypatch):
     return log
 
 
-def _claim(client, device_type="wearos"):
+def _claim(client, device_type="wearos", tailnet="embedded"):
     card = client.get("/api/v1/pair/card").json()
     return client.post(
         "/api/v1/pair/claim",
@@ -181,6 +181,7 @@ def _claim(client, device_type="wearos"):
             "code": card["code"],
             "device_id": f"dev-{uuid.uuid4().hex[:6]}",
             "device_type": device_type,
+            "tailnet": tailnet,
             "trust": "friend",
         },
     ).json()
@@ -198,7 +199,7 @@ def test_pairing_succeeds_but_no_key_goes_into_an_empty_network(client, configur
 
 def test_a_laptop_is_held_back_the_same_way(client, configured, issued, monkeypatch):
     monkeypatch.setattr(sj, "desktop_gate", lambda **_: {"reason": "desktop_not_on_tailnet", "how_to_fix": "x"})
-    r = _claim(client, "windows_laptop")
+    r = _claim(client, "windows_laptop", tailnet="system")
     assert r["tailnet_join"] is None and issued == []
 
 

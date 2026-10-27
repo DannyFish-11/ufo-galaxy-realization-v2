@@ -91,8 +91,11 @@ class GrantScope(str, Enum):
 
 
 def _grants_path() -> str:
+    """授权记录随数据总目录走(``GALAXY_DATA_DIR``);仓库根下已有的旧记录继续用,不把已给的授权甩在后面。"""
+    from core.data_paths import data_path_or_legacy
+
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(root, ".galaxy_grants.json")
+    return data_path_or_legacy("approval_grants.json", os.path.join(root, ".galaxy_grants.json"))
 
 
 def _grant_key(node_id: str, action: str) -> str:

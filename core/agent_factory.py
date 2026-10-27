@@ -28,6 +28,7 @@ from core.agent_supply import (
 from core.atomic_json import atomic_write_json
 from core.data_paths import data_path
 from core.genome import agent_template_prompt
+from core.react_progress import tool_result_text
 
 try:
     from core.monitoring import CircuitBreaker
@@ -1120,13 +1121,12 @@ class AgentFactory:
             def _record(name, args, result, it_index):
                 layer = ToolCallRecord.classify_layer(name)
                 status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
-                result_str = str(result.get("result", result.get("error", "")))
                 tool_records.append(
                     ToolCallRecord(
                         tool_name=name,
                         layer=layer,
                         arguments=args,
-                        result=result_str[:2000],
+                        result=tool_result_text(result)[:2000],
                         status=status,
                         error=result.get("error") if not result.get("success", True) else None,
                         latency_ms=result.get("_latency_ms", 0.0),

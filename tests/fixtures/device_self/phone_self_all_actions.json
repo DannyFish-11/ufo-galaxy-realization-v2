@@ -1,0 +1,212 @@
+{
+  "schema": "device_self/1",
+  "name": "Pixel 9",
+  "kind": "android_phone",
+  "about": "一台安卓手机(Pixel 9),人一般随身带着。屏幕比手表大,适合看长一点的内容;整段要在手机上点来点去的事交给它自己的 Agent 做(devices__delegate)。",
+  "actions": [
+    {
+      "name": "notification",
+      "description": "在手机上弹一条通知。参数:title、text",
+      "effect": "notify",
+      "params": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "标题"
+          },
+          "text": {
+            "type": "string",
+            "description": "正文"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "location",
+      "description": "读手机当前位置:经纬度、精度(米)、定位时间。无参数",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "sensor_data",
+      "description": "读一次手机传感器。参数:sensor = accelerometer / gyroscope / magnetic_field / light / pressure / proximity / ambient_temperature / relative_humidity",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "sensor": {
+            "type": "string",
+            "enum": [
+              "accelerometer",
+              "gyroscope",
+              "magnetic_field",
+              "light",
+              "pressure",
+              "proximity",
+              "ambient_temperature",
+              "relative_humidity"
+            ],
+            "description": "读哪个传感器"
+          }
+        },
+        "required": [
+          "sensor"
+        ]
+      }
+    },
+    {
+      "name": "contacts",
+      "description": "按名字查手机通讯录,返回名字和号码。参数:query、limit(可选,默认 5)",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "名字"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "最多几条,默认 5"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "calendar",
+      "description": "查手机日程。参数:from、to(ISO 时间如 2026-10-25T18:00,或毫秒;默认接下来 24 小时)、limit(可选,默认 10)",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "从什么时候(ISO 时间如 2026-10-25T18:00,或毫秒)"
+          },
+          "to": {
+            "type": "string",
+            "description": "到什么时候(ISO 时间如 2026-10-25T18:00,或毫秒)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "最多几条,默认 10"
+          }
+        }
+      }
+    },
+    {
+      "name": "calendar_add",
+      "description": "在手机上备好一条新日程,人在手机上点一下确认才存。参数:title、start、end(可选)、location(可选)",
+      "effect": "act",
+      "params": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "标题"
+          },
+          "start": {
+            "type": "string",
+            "description": "开始(ISO 时间如 2026-10-25T18:00,或毫秒)"
+          },
+          "end": {
+            "type": "string",
+            "description": "结束(ISO 时间如 2026-10-25T18:00,或毫秒)"
+          },
+          "location": {
+            "type": "string",
+            "description": "地点"
+          }
+        },
+        "required": [
+          "title",
+          "start"
+        ]
+      },
+      "needs_human": true
+    },
+    {
+      "name": "sms",
+      "description": "在手机上备好一条短信,人在手机上确认、点发送才发。参数:to(号码)、text",
+      "effect": "send",
+      "params": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "号码"
+          },
+          "text": {
+            "type": "string",
+            "description": "短信内容"
+          }
+        },
+        "required": [
+          "to",
+          "text"
+        ]
+      },
+      "needs_human": true
+    },
+    {
+      "name": "phone_call",
+      "description": "在手机上备好拨号,人在手机上确认、点拨打才打。参数:number",
+      "effect": "send",
+      "params": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "string",
+            "description": "号码"
+          }
+        },
+        "required": [
+          "number"
+        ]
+      },
+      "needs_human": true
+    },
+    {
+      "name": "app_control",
+      "description": "打开手机上的一个应用。参数:app(应用名或包名)",
+      "effect": "act",
+      "params": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "应用名或包名"
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
+    },
+    {
+      "name": "screen_capture",
+      "description": "截一张手机当前屏幕,返回 JPEG(base64)。无参数",
+      "effect": "read",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "declares": {
+    "answers_decisions": true,
+    "shows_request_progress": true,
+    "hosts_agent": "bridge/1",
+    "tailnet": "none"
+  }
+}

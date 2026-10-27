@@ -837,7 +837,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             return
         elif command_text == "voice_query":
             # 手表语音是自然语言查询，进智能体主链（而非被当成设备命令路由）。经
-            # handle_request(source="wear_voice") 处理；该来源不进电脑三态（见 core/presence_line.py）。
+            # handle_request(source="device_voice") 处理；该来源不进电脑三态（见 core/presence_line.py）。
             transcript = str(_payload.get("text") or _payload.get("transcript") or "").strip()
             if not transcript:
                 result = {"success": False, "error": "empty voice transcript"}
@@ -848,7 +848,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
                     runtime = get_desktop_presence_runtime()
                     rt = await runtime.handle_request(
                         message=transcript,
-                        source="wear_voice",
+                        source="device_voice",
                         device_id=device_id,
                         session_id=_payload.get("session_id") or None,
                     )
@@ -875,18 +875,22 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             await _send(response)
             return
         elif command_text == "interruptibility":
-            # WearOS sendInterruptibility → command="interruptibility"
-            # {score, band, reasons, confidence, device, timestamp}。
+            # 旧版手表单独发的可打扰性帧 {score, band, reasons, confidence, device, timestamp};
+            # 新版设备把 interruptible 放进心跳的状态(core/device_state.py)。照认一个版本。
             #
             # 手表回答的是「现在能不能打扰他」,**不**交出身体数据 —— 心率/运动/
             # 睡眠只在手表本地参与运算(见 galaxy-wearos 的 com.galaxy.wear.sensing)。
-            # 这里落进登记处,供常驻注意力循环把「克制是美德」从祈使句变成
-            # 可测量的输入。
+            # 落进登记处供常驻注意力循环用,同时读成设备状态给卡片。
             snapshot = None
             try:
+                from core import device_state
                 from core.interruptibility_registry import get_interruptibility_registry
 
-                snapshot = get_interruptibility_registry().record(_payload, device_id=device_id)
+                snapshot = get_interruptibility_registry().record(
+                    _payload, device_id=device_id, source=device_state.name_of(device_id)
+                )
+                if snapshot is not None:
+                    device_state.store(device_id, device_state.from_snapshot(snapshot))
             except Exception as _int_err:  # noqa: BLE001 — 登记失败不该影响 WS 主流程
                 logger.debug("interruptibility record skipped: %s", _int_err)
 
@@ -938,7 +942,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             #  1) 该回复应答某个 pending decision(由 request_human_decision 登记)→
             #     resolve 之,等待中的认知协程在原上下文恢复(PR-HITL 闭环)。
             #  2) 未命中任何 pending(主动/无主语音)→ 回退把人类输入送进认知闭环
-            #     handle_request(source="wear_decision"),确保意图不丢、不被当设备命令。
+            #     handle_request(source="device_decision"),确保意图不丢、不被当设备命令。
             decision_id = str(_payload.get("decision_id") or "")
             voice_input = str(_payload.get("voice_input") or "").strip()
             selected = str(_payload.get("selected_option") or "").strip()
@@ -974,7 +978,7 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
                     runtime = get_desktop_presence_runtime()
                     rt = await runtime.handle_request(
                         message=human_msg,
-                        source="wear_decision",
+                        source="device_decision",
                         device_id=device_id,
                         session_id=_payload.get("session_id") or None,
                         context=(

@@ -293,7 +293,7 @@ def test_pairing_records_the_grant(configured, monkeypatch):
     monkeypatch.setattr(
         sj, "desktop_gate", lambda **_: None
     )  # 电脑已在网里(不在时的行为见 test_tailnet_key_needs_the_computer_in_the_network.py)
-    out = asyncio.run(pairing._tailnet_join_for("wearos", "watch-7"))
+    out = asyncio.run(pairing._tailnet_join_for("embedded", "watch-7"))
     assert out["tailnet_join"]["auth_key"] == "hskey-auth-1"
     assert "key_id" not in out["tailnet_join"], "key_id 是网关自己留的,不交给设备"
     assert tm._load()["watch-7"]["key_id"] == "1"

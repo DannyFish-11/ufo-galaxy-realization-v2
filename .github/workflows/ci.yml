@@ -710,6 +710,8 @@ jobs:
             tests/test_android_cross_repo_dedupe_contract.py \
             tests/test_cross_repo_android_repo_contract_snapshot.py \
             tests/test_grounding_rule_is_one_rule.py \
+            tests/test_devices_describe_themselves.py \
+            tests/test_devices_report_their_state.py \
             -v --tb=short
           echo "✅ Android ↔ V2 contract compatibility gate passed."
 

@@ -185,6 +185,26 @@ def evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def approval_required() -> bool:
+    """开了设备准入没有(``GALAXY_REQUIRE_DEVICE_APPROVAL``,默认关)。"""
+    return os.environ.get("GALAXY_REQUIRE_DEVICE_APPROVAL", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def record_admission(device_id: str, auth_outcome: Dict[str, Any]) -> None:
+    """把这次接入批没批记进 UDM 元数据 ``admission_approved``:下发前的成员资格边界读它
+    (``core/device_boundaries.member``)。开了准入时没批准的设备照样连着,只是不给它下发动作。"""
+    try:
+        from core.unified.device_manager import get_unified_device_manager
+
+        get_unified_device_manager().upsert_device_state(
+            device_id,
+            {"metadata": {"admission_approved": bool(auth_outcome.get("device_approved"))}},
+            source="participant_admission",
+        )
+    except Exception as exc:  # noqa: BLE001 — 记不上时,开了准入的边界按没批准处理(fail closed)
+        logger.warning("设备 %s 的准入结果没记上: %s", device_id, exc)
+
+
 def should_gate_unapproved(auth_outcome: Dict[str, Any]) -> bool:
     """设备准入闸决策:是否应把【未批准】设备降级为 control_only。
 
@@ -196,13 +216,7 @@ def should_gate_unapproved(auth_outcome: Dict[str, Any]) -> bool:
     换个 device_id 就能冒充接入。共享/环境管理员 token 仍按 token_valid 放行。配对批准
     发放的正是绑定本设备的 token,天然闭环。
     """
-    require = os.environ.get("GALAXY_REQUIRE_DEVICE_APPROVAL", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-    return require and not bool(auth_outcome.get("device_approved"))
+    return approval_required() and not bool(auth_outcome.get("device_approved"))
 
 
 def evaluate_ingress_identity(
@@ -483,6 +497,7 @@ def admit_participant(
     if not admission.admitted:
         admission.error_code = "UDM_WRITE_FAILED"
         return admission
+    record_admission(descriptor.device_id, admission.auth)
     if descriptor.tailscale_ip:
         _step(admission, "mesh_peer", _register_mesh_peer, descriptor)
     admission.mesh_session_id = _step(admission, "mesh_session", _open_mesh_session, descriptor) or ""
@@ -668,6 +683,8 @@ __all__ = [
     "evaluate_ingress_authentication",
     "evaluate_ingress_identity",
     "extract_ingress_token",
+    "approval_required",
+    "record_admission",
     "should_gate_unapproved",
     "submit_participant_task",
     "verify_pairing_capability_token",

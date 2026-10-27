@@ -469,20 +469,21 @@ class AndroidBridge:
                 # 智能体在设备列表里看到的就是一台「什么都不会」的设备。
                 caps_list = [str(a) for a in (message.get("supported_actions") or []) if a]
 
-            raw_device_type = str(message.get("device_type", "android_phone")).lower()
+            # 类型取设备自己报的;没报、认不出就是 unknown —— 不替它假设成手机 / 安卓
+            raw_device_type = str(message.get("device_type") or "unknown").lower()
             type_info = classify_type(raw_device_type, hints=message)
             try:
                 utype = UnifiedDeviceType(raw_device_type)
             except ValueError:
-                # 细类型(windows_laptop 等)按它所属平台归大类;平台也认不出才按安卓兜底(历史行为)。
+                # 细类型(windows_laptop 等)按它所属平台归大类;平台也认不出就是 unknown。
                 try:
                     utype = (
                         UnifiedDeviceType(type_info.platform)
                         if type_info.platform not in ("", "unknown")
-                        else UnifiedDeviceType.ANDROID
+                        else UnifiedDeviceType.UNKNOWN
                     )
                 except ValueError:
-                    utype = UnifiedDeviceType.ANDROID
+                    utype = UnifiedDeviceType.UNKNOWN
 
             metadata = {
                 "model": message.get("model", ""),
@@ -490,8 +491,16 @@ class AndroidBridge:
                 "sdk_version": message.get("sdk_version"),
                 "screen_width": message.get("screen_width"),
                 "screen_height": message.get("screen_height"),
-                "platform": message.get("platform", "android"),
+                "platform": message.get("platform", ""),
                 "app_version": message.get("app_version", ""),
+                # 设备自己明说的运行时姿态(手机报 join_runtime)。只记明说的 —— 没报的不替它补默认值:
+                # 是不是完整运行时(能主动发起、能接 Agent)看它自己说的,不看类型(core/device_onboarding/taxonomy.py)
+                "source_runtime_posture": str(
+                    message.get("source_runtime_posture")
+                    or (message.get("payload") or {}).get("source_runtime_posture")
+                    or ""
+                ).lower()
+                or None,
             }
             metadata = {k: v for k, v in metadata.items() if v is not None}
 

@@ -50,7 +50,12 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/device_control_service.py` - 设备控制服务
 - **中心智能体 + 相对主体**：智能体是唯一做决定、做协调的地方；它跑在哪台设备上，哪台就是**主脑**（一个角色，不是一个模块）。
   手机、手表、别的电脑、Linux / 云载体都是**成员**：先登录登记进 UDM / UCM（配对码或网络连接），再由智能体经 mesh 协调、经 AIP v3 / NATS 通信。
-  整体设计见 `docs/CROSS_DEVICE_OVERALL_PLAN.md`。
+  整体设计见 `docs/CROSS_DEVICE_OVERALL_PLAN.md`；设备怎么描述自己、代码守哪些边界、怎么评测见 `docs/DEVICE_SELF_DESCRIPTION_DESIGN.md`
+  （动作给模型用、声明给边界用；设备级声明只有 `answers_decisions` / `shows_request_progress` / `hosts_agent` / `tailnet` 四样，要加得写明是哪条边界在用）。
+  设备在 `capability_report` 里带 `self_description`（schema `contracts/device_self_v1.json`）；中心**只在** `core/device_self.py` 读它（新旧两种上报读成同一个对象，存进 UDM 元数据 `self_description`，带了自述的展开回旧字段再交给后面的处理），
+  安卓仓 `shared-protocol/.../DeviceSelfDescription.kt` 拼同一个形状（手机、手表共用），改一边必须改另一边（`tests/test_devices_describe_themselves.py` 拿到安卓仓时逐字对照）。
+  **给设备下发前过边界只在一处**：`core/device_boundaries.py`（参数按自述的 `params` 校验；要不要先问人按动作的 `effect` / `needs_human` 与自治档位判；`devices__invoke` 与多步计划都经过它）。别在别处另写按动作名猜读写、按设备类型放行的规则。
+  智能体主动说的话走设备自己报的消息动作（`ask_human__notify` → `effect` 为 `notify`、收 `text` 的那个），不再有 `shows_messages` 这项声明。
 - **「跨设备」开关只说这台设备自己进不进网络，从不限制智能体**：电脑上的开关 = 这台电脑作为设备加入（桌面登记成成员、电脑自己的请求可交给别的设备）；
   手机的开关 = 手机加入；手表配对即加入。**智能体协调已加入的设备不看任何模式** —— 能不能下发由成员资格（名册、连接、权限门）决定。
   **别再给「往别的设备下发」加模式判断**（以前的统一拒绝 `cross_device_refusal` 与「请求打开跨设备」工具都已删除，`tests/test_the_agent_coordinates_members_in_any_mode.py` 守着）。
@@ -63,8 +68,9 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   **别让派发路径读它**（`tests/test_the_model_sees_each_device_as_a_whole.py` 守着）。每次单动作下发都记进任务流程图（`device_card.record_dispatch`）。
 - **对外 A2A**（中心智能体 ↔ 派出去的 Agent：手机上的桥接 Agent、载体上的 Agent）：AIP v3 `a2a` 帧，信封与「必达」链路在 `core/a2a_link.py`，与安卓 `shared-protocol/.../A2A.kt` 线格式逐字一致（改一边必须改另一边，`tests/test_external_a2a_link.py` 对照）。
   发消息用 `a2a_link.send(device_id, kind, body)`（设备不在线也留着，登记后补发）；各类消息到了做什么用 `register_handler`（处理器要快，久的事自己起后台任务）。混合执行里「直接调 API」那一级叫「API 直调」，别再叫 A2A。
-- **手机加入 = 中心派一个桥接 Agent 过去**（`core/phone_bridge.py`，手机那一半在安卓 `bridge/BridgeAgentRuntime.kt`）：报能力时声明了 `bridge_agent` 的才派；手机的本地对话 / 进度交接进会话 `phone:<设备号>`；手机上说的话来源是 `phone_chat`（人发起、不进三态），
+- **手机加入 = 中心派一个桥接 Agent 过去**（`core/phone_bridge.py`，手机那一半在安卓 `bridge/BridgeAgentRuntime.kt`）：报能力时声明了 `bridge_agent` 的才派；设备的本地对话 / 进度交接进会话 `bridge:<设备号>`（不分设备是什么）；设备上说的话来源是 `device_chat`（人发起、不进三态），
   回答回手机；整段目标用 `devices__delegate` 交给手机本地循环；关跨设备时交还。来源分类只有一处：`core/presence_line.py`（`REMOTE_SOURCES`、主循环认的 `AGENT_LOOP_SOURCES`）。
+- **实时语音里边说边做**（`core/voice_call_agent.py`）：实时语音模型负责说，中心智能体负责做；**不默认只聊**。**不分设备是什么**：说明里只有设备自己报的名字，哪种设备打来都是来源 `device_call`。设备通话接云端 OpenAI / Gemini 时，会话里声明 `agent_do` / `agent_status` / `agent_stop`，`agent_do` 立刻回「已经开始做」，事情经 `handle_request(source="device_call")` 在后台跑，做完在没人说话时插【回报】。不会调工具的（阶跃、本机全模态 server）和电脑自己的实时语音由智能体**旁听**：人说完一句，快档模型判做 / 停 / 问 / 在聊，要做的把人的原话交过去（电脑上来源 `voice_duplex`，走三态、不另外念）。`device_call` 不进电脑三态，也**不**算人亲口说的。挂断后才有结果的事交给智能体，由它看设备卡片决定发到哪台、怎么说。智能体在问的事进通话，只认问出口之后人的原话；高风险批准仍要在弹出的确认上点。问人发给哪些设备看设备自己在能力上报里声明的 `answers_decisions`，不看类型。本地实时服务不塞 `tools`（`GALAXY_REALTIME_TOOLS=1` 打开）；配不上也绝不让电话打不通；只有 `GALAXY_VOICE_CALL_AGENT=0` 才只聊。
 - **多步、多设备的事写成计划**：`devices__plan`（`core/task_plan.py`，方案里叫 `tasks__plan`）接现成的 ConstellationRuntime 分层执行；挑设备、失败后怎么办都听模型的，不开自动重排。
   给设备下发一律经 `core/device_queue.run_on_device`（每台设备串行）；计划在 `task_plans.json` 写盘，重启只做排着没做的步骤，崩溃时在做的那一步「结果不明」不重做。
   只为观测记进任务图的节点要标 `observation_only`，否则重启续跑会拿它去重派。

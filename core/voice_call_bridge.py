@@ -276,6 +276,8 @@ class VoiceCall:
         self._video_task: Optional[asyncio.Task] = None
         self._downlink_task: Optional[asyncio.Task] = None
         self._closed = False
+        #: 「边说边做」(``core.voice_call_agent.CallAgent``)。由通话路由挂上;``GALAXY_VOICE_CALL_AGENT=0`` 时没有,只聊。
+        self.agent: Any = None
         rate = int(getattr(getattr(session, "config", None), "sample_rate", 16000) or 16000)
         self._resampler = _Resampler(rate)
         self.downlink_track = _make_downlink_track_class()()
@@ -394,6 +396,8 @@ class VoiceCall:
                     break
                 name = getattr(ev.type, "value", str(ev.type))
                 self.stats.note_event(name)
+                if self.agent is not None and await self.agent.on_event(ev):
+                    continue  # 工具调用归「边说边做」,不转给设备
 
                 if name == "assistant_audio_delta" and ev.audio_b64:
                     pcm = base64.b64decode(ev.audio_b64)
@@ -471,6 +475,8 @@ class VoiceCall:
         if self._closed:
             return
         self._closed = True
+        if self.agent is not None:
+            self.agent.on_call_closed()  # 还在做的照样做完,结果改发通知
         # 视频泵也要收。漏了它就是挂断之后画面还在往 provider 送 —— 和"漏关会话继续
         # 计费"是同一类错误,而且更隐蔽:音频停了,人会以为整通电话已经结束。
         for task in (self._uplink_task, self._video_task, self._downlink_task):

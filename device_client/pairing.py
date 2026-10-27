@@ -184,6 +184,8 @@ def pair(
         "device_id": did,
         "name": name or socket.gethostname(),
         "device_type": device_type or detect_device_type(),
+        # 用系统里的 tailscale 自己进自建 tailnet(见 join_tailnet);中心看这一项发一次性钥匙,不看设备类型
+        "tailnet": "system",
         "capabilities": list(capabilities or []),
         "note": f"device_client ({this_platform()})",
         "token_ttl_s": TOKEN_TTL_S,

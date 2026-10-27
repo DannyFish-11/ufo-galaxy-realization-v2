@@ -148,7 +148,13 @@ def registry(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "device_id,data,expected",
     [
-        ("phone-1", {"device_type": "Android_Agent", "transport": "websocket"}, True),
+        # 看设备自己说的(登记时报 join_runtime,或报能力时声明能装 Agent),不看类型
+        (
+            "phone-1",
+            {"device_type": "Android_Agent", "transport": "websocket", "source_runtime_posture": "join_runtime"},
+            True,
+        ),
+        ("phone-2", {"device_type": "Android_Agent", "transport": "websocket"}, False),
         ("wear-1", {"device_type": "wearos", "transport": "websocket"}, False),
         ("laptop-1", {"device_type": "windows_desktop", "transport": "websocket"}, False),
         (
@@ -250,4 +256,6 @@ def test_a_phone_without_a_name_in_its_frame_is_called_what_it_was_paired_as(reg
 
     get_peer_trust_book().upsert("phone-7", name="小米 17", trust="friend")
     assert _registration_name({"device_id": "phone-7"}, "phone-7", UnifiedDeviceType.ANDROID) == "小米 17"
-    assert _registration_name({"device_id": "x"}, "x", UnifiedDeviceType.ANDROID) == "Android Device"
+    assert (
+        _registration_name({"device_id": "x"}, "x", UnifiedDeviceType.ANDROID) == "x"
+    ), "没名字就用设备 id,不按平台起泛称"
