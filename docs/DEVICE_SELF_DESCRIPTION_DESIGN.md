@@ -191,7 +191,7 @@
 | `answers_decisions` / `shows_request_progress` | `declares.*` |
 | `shows_messages` | 不进新结构，见 4.2 |
 | 配对时的 `tailnet` | `declares.tailnet` |
-| `metadata.device_role`、`capabilities` 字符串、`authoritative_participation_*` | 不进新结构，照旧只进观测 |
+| `metadata.device_role`、`capabilities` 字符串、`authoritative_participation_*` | 不进新结构，照旧只进观测（`device_role` 第 6 步起手机不再发） |
 
 - 新版设备在过渡期新旧一起发；旧版设备只发旧的，照样能用。
 - 过渡期过后，旧字段只读不写。
@@ -412,4 +412,4 @@
 | 3 状态统一 | 已完成(`core/device_state.py` 与 `contracts/device_state_v1.json`:心跳帧的 `payload.state` 整份记进 UDM 元数据 `device_state`,只收认识的键;设备卡片的状态只有中心看到的与设备报的两种,设备离线或这份过了 25 分钟就不写;`interruptible` 交给可打扰性登记处,这份没报就撤掉上一份;提示词和常驻循环的理由写明是哪台设备说的,不再写死「手表」;旧的 `interruptibility` 帧、`device_status` 帧照认;跨仓闸门 1.3.0 写明 `device_state/1`。安卓仓 `shared-protocol` 的 `DeviceState.kt`;手机每拍心跳报电量、充电、屏幕、通话,开着勿扰时报 `blocked`;手表把可打扰性并进心跳的状态,原因由手表写成一句话,不再发单独的帧) | V2 `tests/test_devices_report_their_state.py` 13 项(安卓真拼出来的三份过 schema、读入只收认识的键、没带和带了空的不同、经真网关手表报了上卡片且登记处写明是谁说的、新一份替换旧一份、手机每拍报、从没报过的卡片上只有中心看到的、旧 `device_status` 照认、离线与陈旧不写、拿到安卓仓时逐字对照、闸门清单);安卓 `DeviceStateTest` 6 项、`PhoneStateTest` 4 项、`PhoneDirectCommandWireTest` +1;手表 `WatchStateTest` 9 项(替换原来的线格式隐私契约)、节流 +1(见 SYSTEM_STATUS 6.39) |
 | 4 边界清单 | 已完成(`core/device_boundaries.py` 七条各一个函数,`BOUNDARIES` 与上表对应:1 `member` 在名册、连着、开了准入的批准过 —— 接入时把批没批记进 UDM 元数据 `admission_approved`;2 `permission`;3 `params_ok`;4 `interrupt_budget` 智能体自发的 `notify` 计入每小时额度(与自发开口同一个设置),有设备报了明确别打扰时自发的不发,人在等结果的请求不算;5 `one_at_a_time` 串行且必有结果、`record_start` / `record_end` 记进任务流程图;6 `as_reported` 设备说没成就是没成、原因用它的原话;7 `kept` 中心只记成没成和原因、不留设备回的数据,做完的多步计划写盘时去掉每一步的结果) | V2 `tests/test_the_boundary_list_is_one_module.py` 18 项(表与代码对照,七条各有测试,其中准入经真网关);去掉任一条对应测试变红(12 处变异)(见 SYSTEM_STATUS 6.40) |
 | 5 评测 | 已完成(中心:`scripts/eval_device_choice.py` 跑真的推理循环与真的工具执行,设备和人的回答按剧本,只有模型是真的;第一批 12 个场景在 `config/eval_cases/devices/first_batch.jsonl`;指标设备挑对、动作挑对、参数合法、诚实、边界违例(必须为 0)、轮数与用时,每轮记进 `docs/eval/device_choice.md`。手机:安卓仓 `tools/eval/` 用 JVM 跑 App 自己的 `VlmPlanner` / `VlmGroundingEngine`,L1 定位、L2 单步动作,判定细则照抄 AgentCPM-GUI 的代码,预测另写一份他们的格式;L3 端到端与端侧开销写进 `docs/REAL_DEVICE_CHECKLIST.md` 第 4 节,结果记进 `docs/eval/phone_gui.md`。真实模型的第一轮还没跑:本环境没有模型 key 和端侧模型,也连不上 Hugging Face 取 CAGUI) | V2 `tests/test_the_device_choice_eval_judges_what_it_should.py` 6 项(标准做法 12 条全对零违例且真走了边界;不看卡片乱调、说办好了的模型分数过半不了而违例仍是 0;违例判得出;记一行);安卓 `tools/eval` 单测 18 项(判定逐条对照他们的代码算出的期望、动作换算、对着 llama-server 替身跑通 L1 / L2),进 CI;`:shared-protocol` 单测此前没进 CI,一并加上(见 SYSTEM_STATUS 6.41) |
-| 6 设备侧清理 | 未开始 | |
+| 6 设备侧清理 | 已完成(手机:上报里不再带 `device_role` —— 能力上报的 metadata、目标结果帧、对账信号的 `runtime_truth` 与拓扑都去掉了,导出契约 schema 1 → 2;删掉按角色名分级的 `AndroidOperationalDeviceSupport.classify`(只用在本地投影),能不能参与执行只看真实具备的执行维度、参与状态和就绪 / 健康;`runtime/` 契约层冻结,`tools/check_runtime_freeze.sh` 进 CI,文件数只许减不许增(现 227)。手表:README 写明设备自述与随心跳报的状态。中心:测试里手机的能力上报不再带 `device_role`,和真手机一致) | 安卓「换个角色名,执行参与、能力档、调度资格都一样」三项(原来是「hub 被降级」)、结果帧序列化后不含 `device_role`、能力上报必备键与导出契约跟上;冻结检查加文件、删文件各验过一次;安卓 CI 全部关卡;真机清单第 3 节(见 SYSTEM_STATUS 6.42) |

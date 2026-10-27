@@ -43,7 +43,7 @@ def _report(device_id, actions):
         "supported_actions": list(actions),
         "action_descriptions": {a: f"手机动作 {a}" for a in actions},
         "capabilities": ["autonomous_goal_execution"],
-        "metadata": {"goal_execution_enabled": True, "cross_device_enabled": True, "device_role": "phone"},
+        "metadata": {"goal_execution_enabled": True, "cross_device_enabled": True},
     }
 
 

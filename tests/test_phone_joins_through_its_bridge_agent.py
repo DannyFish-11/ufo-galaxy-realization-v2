@@ -87,7 +87,7 @@ def _phone_capability_report(device_id):
             "sms": "给联系人发短信",
         },
         "capabilities": ["goal_execution", "local_model"],
-        "metadata": {"goal_execution_enabled": True, "cross_device_enabled": True, "device_role": "phone"},
+        "metadata": {"goal_execution_enabled": True, "cross_device_enabled": True},
         "bridge_agent": "bridge/1",  # 新版 App 声明能装桥接 Agent(BridgeAgentRuntime.BRIDGE_VERSION)
     }
 
