@@ -9,7 +9,7 @@
  * 另外两个当不存在。同一个事实读两处,迟早会出现两处不一致而没人发现。
  */
 import type { RenderPosture } from './types';
-import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, MemoryCard, ModelTier, Phase, RehearsalStep, RehearsalStepKind, TierView, Turn } from './types';
+import type { Bundle, DeviceLoad, DeviceRow, DeviceState, LockstepReason, LockstepState, MemoryCard, ModelTier, Phase, RehearsalStep, RehearsalStepKind, Revision, TierView, Turn } from './types';
 
 import '../../live_socket.js';
 
@@ -92,6 +92,11 @@ export interface PresenceHandlers {
   onDevices?(rows: readonly DeviceRow[]): void;
   /** 阈限态预演走了一步。来自 WS 的 `rehearsal` 帧(见 types.ts 的 RehearsalStep)。 */
   onRehearsal?(step: RehearsalStep): void;
+  /**
+   * 等人批准的操作变了。来自 WS 的 `approvals` 帧 —— **只有摘要、没有令牌**(那条 WS 不带鉴权);
+   * 收到就去 `GET /api/v1/approvals` 拉一遍(带鉴权,有令牌)。
+   */
+  onApprovals?(count: number): void;
 }
 
 const REHEARSAL_KINDS: readonly RehearsalStepKind[] = [
@@ -178,6 +183,11 @@ export class PresenceSocket {
       if (step) this.#h.onRehearsal?.(step);
       return;
     }
+    if (m['type'] === 'approvals') {
+      const pending = Array.isArray(payload['pending']) ? (payload['pending'] as unknown[]) : [];
+      this.#h.onApprovals?.(pending.length);
+      return;
+    }
     if (m['type'] === 'panel_feed') {
       const rows = readDevices(m['feed']);
       if (rows) this.#h.onDevices?.(rows);
@@ -218,7 +228,28 @@ export interface ChatHandlers {
    * 执行了** —— 不是失败,所以要说「不确定」,让人先看一眼屏幕、别盲目重试。
    */
   onDone?(response: string, stopped: boolean, unknownActions: readonly string[]): void;
+  /**
+   * 边说边核核出来一句不对(或查不到)。来自 SSE 的 `revise` 帧,done 帧里再带一份全量(`revisions`)。
+   * 原句留着、划掉,后面跟一句更正 —— 所有者的决定是「留原文」。
+   */
+  onRevise?(rev: Revision): void;
   onError?(message: string): void;
+}
+
+/** 读一条修订。认不出的结论**丢掉** —— 把「查不到」画成「驳倒」,就是在替它下一个没有依据的结论。 */
+export function readRevision(raw: unknown): Revision | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const verdict = o['verdict'] === 'refuted' || o['verdict'] === 'unverified' ? o['verdict'] : null;
+  const original = typeof o['original'] === 'string' ? o['original'] : '';
+  if (!verdict || !original.trim()) return null;
+  return {
+    seg: typeof o['seg'] === 'number' ? o['seg'] : 0,
+    original,
+    verdict,
+    note: typeof o['note'] === 'string' ? o['note'] : '',
+    source: typeof o['source'] === 'string' ? o['source'] : '',
+  };
 }
 
 /**
@@ -285,7 +316,16 @@ export async function streamChat(
             (ev['reason'] ?? '') as LockstepReason,
           );
           break;
+        case 'revise': {
+          const rev = readRevision(ev);
+          if (rev) h.onRevise?.(rev);
+          break;
+        }
         case 'done':
+          for (const raw of Array.isArray(ev['revisions']) ? (ev['revisions'] as unknown[]) : []) {
+            const rev = readRevision(raw);
+            if (rev) h.onRevise?.(rev);
+          }
           h.onDone?.(
             typeof ev['response'] === 'string' ? ev['response'] : '',
             ev['stopped'] === true,
@@ -1555,6 +1595,91 @@ export async function closeIsolatedResult(base: string, key: string, how: 'dismi
   } catch (err) {
     console.error('[hud] 标记隔离项失败:', err);
     return false;
+  }
+}
+
+// ── 等你批准的操作 ────────────────────────────────────────────────────────────
+//
+// 后端:core/approval_gate.py(唯一的「问人批准」入口)+ core/routes/approvals.py。
+// 电脑这边发起、要人点头的操作在这里批:点了才执行,不点就不执行。WS 的 `approvals` 帧只是「清单变了」,
+// 令牌在这里经带鉴权的 GET 取 —— 不走那条不带鉴权的 WS。
+
+export interface PendingApproval {
+  readonly requestId: string;
+  readonly token: string;
+  /** 一句人话:做什么(「打开 客厅灯」/ 工具名) */
+  readonly what: string;
+  /** 对哪个东西(设备号、路径……);空 = 说不出来 */
+  readonly target: string;
+  readonly risk: string;
+  /** 有人(智能体那一轮)正等着这一条;false = 排着队,批了之后调用方重试 */
+  readonly waiting: boolean;
+  readonly requestedAt: number;
+  /** 还剩几秒就不等了(只有 waiting 的才有) */
+  readonly waitS: number | null;
+}
+
+export type ApprovalScope = 'session' | 'once' | 'always';
+
+function readApproval(raw: unknown): PendingApproval | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o['request_id'] === 'string' ? o['request_id'] : '';
+  const token = typeof o['ack_token'] === 'string' ? o['ack_token'] : '';
+  if (!id || !token) return null;
+  const ctx = (o['context'] ?? {}) as Record<string, unknown>;
+  const at = typeof o['requested_at'] === 'string' ? Date.parse(o['requested_at']) / 1000 : 0;
+  return {
+    requestId: id,
+    token,
+    what: typeof ctx['what'] === 'string' && ctx['what'] ? ctx['what'] : String(o['action'] ?? ''),
+    target: typeof ctx['target'] === 'string' ? ctx['target'] : '',
+    risk: typeof o['risk_level'] === 'string' ? o['risk_level'] : '',
+    waiting: ctx['waited'] === true,
+    requestedAt: Number.isFinite(at) ? at : 0,
+    waitS: typeof ctx['wait_s'] === 'number' ? ctx['wait_s'] : null,
+  };
+}
+
+/** 拉等你批准的操作。拉不到返回 null —— 与「一条都没有」是两件事。 */
+export async function fetchApprovals(base: string): Promise<readonly PendingApproval[] | null> {
+  try {
+    const resp = await fetchT(base + '/api/v1/approvals', { headers: { Accept: 'application/json' } }, READ_MS);
+    if (!resp.ok) {
+      console.error('[hud] 拉待批操作失败:', resp.status);
+      return null;
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    const rows = Array.isArray(body['approvals']) ? (body['approvals'] as unknown[]) : [];
+    return rows.map(readApproval).filter((x): x is PendingApproval => x !== null);
+  } catch (err) {
+    console.error('[hud] 拉待批操作失败:', err);
+    return null;
+  }
+}
+
+/** 批准(按档位)/ 不要。返回后端的结论:true = 办成了;false = 后端说没成(多半是已经超时);null = 没发出去。 */
+export async function decideApproval(
+  base: string,
+  a: PendingApproval,
+  approve: boolean,
+  scope: ApprovalScope,
+): Promise<boolean | null> {
+  try {
+    const body = approve
+      ? { action: 'approve', token: a.token, grant: scope, operator: 'panel' }
+      : { action: 'deny', operator: 'panel', reason: '在面板上点了「不要」' };
+    const resp = await fetchT(base + '/api/v1/approvals/' + encodeURIComponent(a.requestId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    }, WRITE_MS);
+    if (!resp.ok) return resp.status >= 500 ? null : false;
+    const out = (await resp.json()) as Record<string, unknown>;
+    return out['ok'] === true;
+  } catch (err) {
+    console.error('[hud] 批准 / 拒绝没发出去:', err);
+    return null;
   }
 }
 

@@ -8,7 +8,7 @@
  * **那一刻必须留痕。** 声音和文字已经错开了,界面上一声不吭的话,人只会
  * 觉得"节奏怪怪的",查不出所以然。所以脱钩时在流里插一条明确的记号。
  */
-import type { LockstepReason, LockstepState, Turn } from '../types';
+import type { LockstepReason, LockstepState, Revision, Turn } from '../types';
 
 const REASON_TEXT: Record<Exclude<LockstepReason, ''>, string> = {
   no_speaker: '本轮没走语音',
@@ -20,6 +20,46 @@ const REASON_TEXT: Record<Exclude<LockstepReason, ''>, string> = {
 export interface ThreadHandles {
   readonly root: HTMLElement;
   render(turns: readonly Turn[], lockstep: LockstepState, reason: LockstepReason): void;
+}
+
+/**
+ * 画一段回答,把核出来的修订落上去(core/live_check.py):
+ *
+ * - 驳倒的:**原句留着、划掉**(所有者的决定),后面跟一句「更正」;
+ * - 查不到的:原句照常,后面一个小小的「未核实」,悬停看为什么。
+ *
+ * 按原句文字在气泡里找,从上一处往后找、只认第一次出现 —— 不靠偏移,done 的全文经过边界过滤。
+ * 还没流到的那一句先不画,等它上屏再落。
+ */
+function paintText(node: HTMLElement, text: string, revisions: readonly Revision[]): void {
+  let at = 0;
+  const hits = revisions
+    .map((r) => ({ r, i: text.indexOf(r.original.trim()) }))
+    .filter((h) => h.i >= 0)
+    .sort((a, b) => a.i - b.i);
+  for (const { r, i } of hits) {
+    if (i < at) continue;
+    const orig = r.original.trim();
+    node.append(document.createTextNode(text.slice(at, i)));
+    if (r.verdict === 'refuted') {
+      const struck = document.createElement('s');
+      struck.className = 'rv-orig';
+      struck.textContent = orig;
+      const fix = document.createElement('span');
+      fix.className = 'rv-note';
+      fix.textContent = `更正：${r.note}`;
+      node.append(struck, fix);
+    } else {
+      node.append(document.createTextNode(orig));
+      const mark = document.createElement('span');
+      mark.className = 'rv-mark';
+      mark.textContent = '未核实';
+      mark.title = r.note;
+      node.append(mark);
+    }
+    at = i + orig.length;
+  }
+  node.append(document.createTextNode(text.slice(at)));
 }
 
 export function createThread(): ThreadHandles {
@@ -43,7 +83,7 @@ export function createThread(): ThreadHandles {
       if (drawn >= 0 && i >= drawn) node.dataset['new'] = 'true';
       if (t.streaming && t.role !== 'user') node.dataset['streaming'] = 'true';
 
-      if (t.text) node.append(document.createTextNode(t.text));
+      if (t.text) paintText(node, t.text, t.revisions ?? []);
       if (t.pending) {
         const pending = document.createElement('span');
         pending.className = 'turn-pending';

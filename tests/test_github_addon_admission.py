@@ -154,7 +154,8 @@ class TestAskingHuman:
 
         async def _approve(**kw):
             assert "me/tool" in kw["title"], "问题里要说清装的是哪个仓库"
-            return type("O", (), {"selected_option": "approve"})()
+            # 真的应答过的决定:状态是 resolved、选的是 approve(超时 / 取消带着 approve 不算,见 interpret_decision)
+            return type("O", (), {"selected_option": "approve", "status": "resolved", "timed_out": False})()
 
         monkeypatch.setattr("core.interaction.pending_decision_registry._discover_target_devices", _one_device)
         monkeypatch.setattr("core.interaction.pending_decision_registry.request_human_decision", _approve)

@@ -134,47 +134,24 @@ async def admit_addon_install(owner: str, repo: str, ref: str) -> AdmissionVerdi
 
 
 async def _ask_human(owner: str, repo: str, ref: str) -> bool:
-    """问人。**问不到人就是拒绝。**"""
+    """问人。**问不到人就是拒绝。**
+
+    只经 :mod:`core.approval_gate` 一个口:电脑上让装的在电脑面板上批,手表 / 手机上让装的在那边批;
+    桌面外壳没连着、也没有可问的设备时立刻拒绝(不白等超时 —— 见模块 docstring「拒绝要快」)。
+    批准要明确:手表那一侧只认真的应答过的「批准」(超时、取消、含糊的语音都不算)。
+    """
     try:
-        from core.interaction.pending_decision_registry import (
-            OnTimeout,
-            _discover_target_devices,
-            request_human_decision,
+        from core.approval_gate import request_approval
+
+        outcome = await request_approval(
+            key="tool:github__install",
+            target=f"{owner}/{repo}",
+            what=f"安装 GitHub 插件 {owner}/{repo}(ref={ref or 'default'})",
+            risk="high",
         )
     except Exception as exc:  # noqa: BLE001 — 问不到人就是拒绝
-        logger.warning("人确认通道不可用,拒绝安装 %s/%s: %s", owner, repo, exc)
-        return False
-
-    # 先看有没有人可问 —— 见模块 docstring"拒绝要快"那段。
-    try:
-        targets = await _discover_target_devices()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("查不到可问的设备,拒绝安装 %s/%s: %s", owner, repo, exc)
-        return False
-    if not targets:
-        logger.warning(
-            "没有可问的设备,拒绝安装 %s/%s(无头环境可设 %s=1)",
-            owner,
-            repo,
-            ENV_UNATTENDED,
-        )
-        return False
-
-    try:
-        outcome = await request_human_decision(
-            title=f"安装 GitHub 插件:{owner}/{repo}",
-            summary=(
-                f"来源 https://github.com/{owner}/{repo}(ref={ref or 'default'})。\n"
-                "这会把第三方代码装进来,并在当前会话立刻生效。\n"
-                "常用的仓库可以加进 GITHUB_ALLOWLIST,以后就不再问。"
-            ),
-            options=[{"id": "approve", "label": "安装"}, {"id": "deny", "label": "拒绝"}],
-            default_option="deny",
-            urgency="high",
-            on_timeout=OnTimeout.CANCEL,
-        )
-    except Exception as exc:  # noqa: BLE001
         logger.warning("人确认过程出错,拒绝安装 %s/%s: %s", owner, repo, exc)
         return False
-
-    return getattr(outcome, "selected_option", None) == "approve"
+    if not outcome.approved:
+        logger.warning("没有批准安装 %s/%s: %s(无头环境可设 %s=1)", owner, repo, outcome.reason, ENV_UNATTENDED)
+    return outcome.approved

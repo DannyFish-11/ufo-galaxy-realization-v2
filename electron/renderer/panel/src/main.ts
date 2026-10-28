@@ -27,6 +27,8 @@ import {
   fetchIsolatedResults,
   fetchPendingDevices,
   decidePendingDevice,
+  fetchApprovals,
+  decideApproval,
   retryIsolatedResult,
   closeIsolatedResult,
   fetchBundles,
@@ -57,6 +59,7 @@ import { createThread } from './ui/thread';
 import { createRehearsal, mergeStep } from './ui/rehearsal';
 import { createIsolatedResults } from './ui/isolated_results';
 import { createPendingDevices } from './ui/pending_devices';
+import { createPendingApprovals } from './ui/pending_approvals';
 import { createDock } from './ui/dock';
 import { createWired, deriveWired } from './ui/wired';
 import { createSettings } from './ui/settings';
@@ -65,7 +68,7 @@ import { createUserProviders } from './ui/user_providers';
 import type { UserProviderDraft } from './ui/user_providers';
 import { createGitHubAddons } from './ui/github_addons';
 import type { GitHubAddonDraft } from './ui/github_addons';
-import type { Vendor } from './transport';
+import type { ApprovalScope, Vendor } from './transport';
 import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
 
 /**
@@ -203,6 +206,10 @@ function mount(host: HTMLElement): void {
     onDecide: (id, accept) => void decidePending(id, accept),
   });
 
+  const pendingApprovals = createPendingApprovals({
+    onDecide: (id, approve, scope) => void decideOne(id, approve, scope),
+  });
+
   const settings = createSettings({
     onClose: () => store.patch({ settingsOpen: false }),
     onSave: (changes) => void applyConfig(changes),
@@ -226,8 +233,9 @@ function mount(host: HTMLElement): void {
   const renderAddons = memoRender(githubAddons.render);
   const renderIsolated = memoRender(isolatedResults.render);
   const renderPendingDevices = memoRender(pendingDevices.render);
+  const renderApprovals = memoRender(pendingApprovals.render);
 
-  main.append(island.root, thread.root, rehearsal.root, dock.root, settings.root);
+  main.append(island.root, thread.root, rehearsal.root, pendingApprovals.root, dock.root, settings.root);
   panel.append(deck.root, main);
   shell.append(panel);
   host.replaceChildren(shell);
@@ -294,6 +302,7 @@ function mount(host: HTMLElement): void {
     );
     renderIsolated(s.isolated, s.isolatedPending, s.isolatedBusy, s.isolatedNotice);
     renderPendingDevices(s.pendingDevices, s.pendingDevicesBusy, s.pendingDevicesNotice);
+    renderApprovals(s.approvals, s.approvalsBusy, s.approvalsNotice);
   }
 
   store.subscribe(render);
@@ -475,6 +484,32 @@ function mount(host: HTMLElement): void {
           : '这次没发出去（后端没接上）';
     await loadPendingDevices();
     store.patch({ pendingDevicesBusy: false, pendingDevicesNotice: notice });
+  }
+
+  // ── 等你批准的操作 ─────────────────────────────────────────────────────────
+
+  /** 拉一次。拉不到就**留 null**,别把「后端没接上」说成「没有操作在等」。 */
+  async function loadApprovals(): Promise<void> {
+    const rows = await fetchApprovals(BASE);
+    store.patch({ approvals: rows });
+  }
+  // 开机就拉一次:智能体可能在面板打开之前就停在那儿等人点头了。
+  void loadApprovals();
+
+  /** 批准 / 不要。结论照后端说的写,不先把卡片抹掉。 */
+  async function decideOne(requestId: string, approve: boolean, scope: ApprovalScope): Promise<void> {
+    const a = store.state.approvals?.find((r) => r.requestId === requestId);
+    if (!a) return;
+    store.patch({ approvalsBusy: true, approvalsNotice: '' });
+    const ok = await decideApproval(BASE, a, approve, scope);
+    const notice =
+      ok === true
+        ? ''
+        : ok === false
+          ? `「${a.what}」没批上 —— 多半是已经不等了`
+          : '这次没发出去（后端没接上）';
+    await loadApprovals();
+    store.patch({ approvalsBusy: false, approvalsNotice: notice });
   }
 
   /** 认可(人认它做完了)/ 知道了(判它没做成)。记录后端保留着,只是不再列出来。 */
@@ -958,6 +993,7 @@ function mount(host: HTMLElement): void {
     if (again || s.githubAddons === null) void loadAddons();
     if (again) void loadIsolated();
     void loadPendingDevices(); // 面板每次重新出现都拉:设备可能刚在门口登记过
+    void loadApprovals(); // 同上:可能有操作正停在那儿等人点头
     if ((again || !historySettled) && !s.chatBusy && s.drawn < 0) void restoreOnce();
   }
 
@@ -983,6 +1019,7 @@ function mount(host: HTMLElement): void {
     onTurn: (role, text, final) => appendTurn(role, text, final),
     onDevices: (rows) => store.patch({ devices: rows }),
     onRehearsal: (step) => store.patch({ rehearsal: mergeStep(store.state.rehearsal, step) }),
+    onApprovals: () => void loadApprovals(),
   }, clientId);
   socket.start();
 
@@ -1082,7 +1119,13 @@ function mount(host: HTMLElement): void {
         },
         onDelta: (chunk) => patchAgent((t) => ({ ...t, text: t.text + chunk })),
         // 作废已经流出去的内容:清空这一轮重来,不是往后追加。
-        onReset: () => patchAgent((t) => ({ ...t, text: '', pending: '' })),
+        onReset: () => patchAgent((t) => ({ ...t, text: '', pending: '', revisions: [] })),
+        // 核出来一句不对:记到这一轮上,画的时候原句划掉、跟一句更正(同一句只记一次)
+        onRevise: (rev) =>
+          patchAgent((t) => ({
+            ...t,
+            revisions: [...(t.revisions ?? []).filter((r) => r.original !== rev.original), rev],
+          })),
         onLockstep: (state, reason) =>
           store.patch({ lockstep: state, lockstepReason: reason }),
         onDone: (response, stopped, unknownActions) => {

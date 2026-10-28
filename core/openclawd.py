@@ -7245,6 +7245,9 @@ class OpenClawd:
             "tuning__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
+        from core.approval_gate import mark_interactive
+
+        mark_interactive()  # 智能体的工具调用:有人在等,节点门遇到要批的动作就当场问
 
         # PR-001: Primary path — delegate to CanonicalDispatcher.
         _dispatcher = getattr(self, "_capability_dispatcher", None)
@@ -7288,45 +7291,20 @@ class OpenClawd:
         except Exception as exc:
             _logger.warning("Exception suppressed: %s", exc)
 
-        # Phase 9: 工具调用权限检查
+        # Phase 9: 工具调用权限检查。要人点头的只经 core.approval_gate 一个口问(电脑发起的在电脑面板上批,
+        # 手机/手表发起的在那边批;批一次默认记到这段对话结束)。门禁自身出错 = 不执行。
         if self._tool_permission_checker:
-            try:
-                check = self._tool_permission_checker.check(
-                    tool_name=tool_name,
-                    session_id=getattr(self, "_current_session_id", ""),
-                    device_id=getattr(self, "_current_device_id", ""),
-                )
-                if not check.allowed:
-                    logger.warning(f"工具调用被拒绝: {tool_name} — {check.reason}")
-                    return {"success": False, "error": f"权限拒绝: {check.reason}"}
-                if check.requires_confirmation:
-                    # 以前这里直接返回"需要用户确认"就结束了 —— 而全仓没有任何
-                    # 机制能取得这个确认,等于 DANGEROUS/CRITICAL 工具永远执行不了。
-                    # 现在接到既有 HITL 通路上问手腕上的那个人;一律 fail closed。
-                    from core.interaction.high_risk_confirmation import confirm_high_risk_tool
+            from core.approval_gate import check_tool_call
 
-                    confirmation = await confirm_high_risk_tool(
-                        tool_name=tool_name,
-                        risk_level=str(check.risk_level),
-                        session_id=getattr(self, "_current_session_id", ""),
-                        device_id=getattr(self, "_current_device_id", ""),
-                    )
-                    if not confirmation.approved:
-                        return {
-                            "success": False,
-                            "needs_confirmation": True,
-                            "tool": tool_name,
-                            "risk_level": check.risk_level,
-                            "error": (f"操作 [{tool_name}] 未获用户确认:{confirmation.reason}"),
-                        }
-                    logger.info(
-                        "[AUDIT] 高风险工具经用户确认后放行: %s (风险=%s, decision_id=%s)",
-                        tool_name,
-                        check.risk_level,
-                        confirmation.decision_id,
-                    )
-            except Exception as e:
-                logger.debug(f"权限检查异常（放行）: {e}")
+            denied = await check_tool_call(
+                self._tool_permission_checker,
+                tool_name,
+                arguments,
+                session_id=getattr(self, "_current_session_id", "") or "",
+                device_id=getattr(self, "_current_device_id", "") or "",
+            )
+            if denied is not None:
+                return {"success": False, "tool": tool_name, **denied}
 
         try:
             if tool_name.startswith("mcp__"):
@@ -8750,6 +8728,11 @@ class OpenClawd:
                     from core.react_progress import ToolOutcome, classify_tool_outcome, outcome_hint
 
                     _outcome = classify_tool_outcome(result)
+                    from core.live_check import note_tool_outcome  # 这一轮真实做了什么(核「做好了」用)
+
+                    note_tool_outcome(
+                        tc_name, _outcome.is_success, result.get("error", "") if isinstance(result, dict) else ""
+                    )
                     if _outcome is ToolOutcome.CONTRACT_VIOLATION:
                         logger.warning(
                             "工具 %s 的返回体不含 success 键(违反 _dispatch_tool_call 返回契约),按失败处理",

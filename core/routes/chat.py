@@ -675,13 +675,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except (TypeError, ValueError):
                 _chat_timeout = 90.0
 
+            from core.live_check import stream_ledger, use_turn
             from core.llm_stream import TokenStream, use_stream
 
             frames: "asyncio.Queue" = asyncio.Queue()
-            sink = TokenStream(
-                on_delta=lambda t: frames.put_nowait(("delta", t)),
-                on_reset=lambda: frames.put_nowait(("reset", None)),
-            )
+            # 出字同时进核对线(core/live_check.py):核出来不对的句子推一帧 revise,面板原地划掉、跟一句更正
+            ledger, _on_delta, _on_reset = stream_ledger(frames.put_nowait)
+            sink = TokenStream(on_delta=_on_delta, on_reset=_on_reset)
             # 文字/语音锁步:句子【被念出的那一刻】起,该句文字才开始上屏,文字与语音同刻。
             #
             # 历史上锁步默认【关】,原因是真机反馈"一大段蹦一段又一段"——那不是锁步本身的错,而是旧实现把整句
@@ -733,7 +733,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             async def _run():
                 # 在【任务自身上下文】里挂 sink/抑制标记:contextvars 随 await 链
                 # 传播到 openclawd 的答案生成点;任务结束自动消散,不污染别的请求。
-                with use_stream(sink):
+                with use_stream(sink), use_turn(ledger):
                     if speaker is not None:
                         suppress_final_speak_in_context()
                     from core.desktop_presence_runtime import get_desktop_presence_runtime
@@ -847,6 +847,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             yield _sse({"type": "delta", "text": payload})
                             if speaker is not None:
                                 speaker.feed(payload)
+                    elif kind == "revise":
+                        yield _sse({"type": "revise", **payload})
                     elif kind == "reset":
                         if _lockstep:
                             while not reveal_q.empty():
@@ -1068,6 +1070,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "model": model,
                         "runtime_session_id": runtime_session_id,
                         "visible_action_surface": visible_action_surface,
+                        "revisions": result.get("revisions", []),  # 这一轮核出来的全部修订(core/live_check.py)
                         **stop_fields(result),  # 被人叫停的:前端说「你叫停的」(含结果不明的那一步)
                     }
                 )

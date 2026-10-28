@@ -289,14 +289,18 @@ def test_derive_default_would_have_been_unsafe_here():
 def test_both_gates_call_the_confirmation_path():
     """确认闸有两处(CanonicalDispatcher 主路 + OpenClawd 内联兜底)。
 
-    只接一处等于留了一条老路照样撞墙,所以两处都要有。
+    只接一处等于留了一条老路照样撞墙,所以两处都要有。两处都经 ``core.approval_gate`` 那一个口问人
+    (电脑发起的在电脑面板上批,手表 / 手机发起的在那边批,见 tests/test_the_person_at_the_computer_can_approve.py);
+    在手表 / 手机上问的那一种仍是本模块的 ``confirm_high_risk_tool``。
     """
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
     for rel in ("core/capabilities/canonical_dispatcher.py", "core/openclawd.py"):
         src = (root / rel).read_text(encoding="utf-8")
-        assert "confirm_high_risk_tool" in src, f"{rel} 的确认闸没有接上人类确认通路"
+        assert "request_approval(" in src or "check_tool_call(" in src, f"{rel} 的确认闸没有接上人类确认通路"
+    gate_src = (root / "core" / "approval_gate.py").read_text(encoding="utf-8")
+    assert "confirm_high_risk_tool(" in gate_src, "在手表 / 手机上问的那一种要走本模块"
 
 
 def test_dispatch_result_carries_risk_level_for_the_prompt():

@@ -123,6 +123,16 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   画法是**内嵌的行**（`.vd-card` 左栏说明 + 右栏输入，与设置页 `.sf-row` 同一个节奏），不是凸起的卡片 —— `tests/test_the_api_entry_is_inline_rows_not_cards.py` 钉着。
 - `core/routing_tail.py` - 偏好表没列、但已配好可用的厂商（用户自加端点、OneAPI、只配了 Groq 的人做推理任务）排在失败转移链的最后几档；有意不自动参与的（智谱编码套餐）不进这一档
 
+### 要人点头的操作（批准）
+- `core/approval_gate.py` - 「问人批准」的**唯一入口** `request_approval()`：查授权 → 判在哪问 → 问 → 等 → 落授权。工具门（`openclawd` 内联 / `CanonicalDispatcher`）、
+  节点拨盘门（`GALAXY_AUTONOMY`，`core/node_invocation.py` → `gate_node_call`）、智能家居、GitHub 插件准入都调它，**别再各写一份「问完再试」**。
+  从哪发起就在哪批：电脑发起的在面板上批（WS `type="approvals"` 只带摘要，令牌走带鉴权的 `GET /api/v1/approvals`；岛上一张「等你批准」卡），
+  手机 / 手表发起的在那台设备上问（`high_risk_confirmation.confirm_high_risk_tool`）；桌面外壳没连着就不白等。
+  授权按「动作 × 对象」记（`node:<编号>:<动作>[/<子动作>]@<对象>`），默认「本会话」= 这段对话，「一直允许」落数据目录 `approval_grants.json`、面板能撤。
+  一次调用只问一次（工具门批过的，节点门认）；门禁自己出错一律不执行（节点门：读照放、写不执行）。设计与进度：`docs/GROUNDED_AGENT_DESIGN.md`
+- 工具的单次时间预算（`core/tool_permissions.py::tool_call_timeout_s`）给等人、给长任务留够：会停下来问人的按确认超时，`computer_use__run` 按步数，
+  带 `verify_command` 的 `engineer__apply` 按验证超时，`github__install` 按 clone + 加载 + 问人 —— 原先一律 30 秒，长任务被半路掐断
+
 ### 事件循环里不跑阻塞的事
 Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示 5–7 秒」= 循环被一件同步的事占住了。已经挪出循环的：开麦克风 / 枚举音频设备
 （`core/multimodal/audio_ingest.py`、`system_audio_capture_service.py`）、第一次选 TTS 引擎（`core.speech_output.speech_engine_ready()`）、创建节点进程

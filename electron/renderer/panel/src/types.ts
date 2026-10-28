@@ -84,6 +84,20 @@ export interface Turn {
   readonly pending: string;
   readonly attachments: readonly Attachment[];
   readonly streaming: boolean;
+  /** 边说边核核出来的修订(core/live_check.py):原句划掉、跟一句更正 / 标「未核实」 */
+  readonly revisions?: readonly Revision[];
+}
+
+/**
+ * 一句话核出来的结论。**只有不是「证实」的才会来** —— 证实了就不改。
+ * 面板按 `original` 在气泡里找到那句(不靠偏移:done 的全文经过边界过滤,与流出的字未必逐字对齐)。
+ */
+export interface Revision {
+  readonly seg: number;
+  readonly original: string;
+  readonly verdict: 'refuted' | 'unverified';
+  readonly note: string;
+  readonly source: string;
 }
 
 export interface Attachment {
