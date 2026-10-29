@@ -349,7 +349,7 @@ def ensure_approval_request(node_id: str, action: str, params: Optional[Dict[str
     这是**没有人在等**的调用(REST 直调、后台)走的路:排进队列,面板上看得见;人批了之后调用方重试即通过。
     有人在等的调用(智能体的工具调用)不走这里,由 :func:`core.approval_gate.request_approval` 当场问。
     已有同目标 pending → 复用(重试不刷屏)。"""
-    from core.approval_gate import GRANT_CHOICES, approval_target, publish_pending
+    from core.approval_gate import GRANT_CHOICES, approval_target, post_approval_card, publish_pending
     from core.control_plane._globals import get_approval_registry
     from core.control_plane.security_interceptor import ApprovalRequest, RiskLevel
 
@@ -379,6 +379,7 @@ def ensure_approval_request(node_id: str, action: str, params: Optional[Dict[str
         },
     )
     registry._register(req)  # noqa: SLF001 — 与 SecurityInterceptor 同一入册路径
+    post_approval_card(req.request_id, req.context["what"])
     publish_pending()
     logger.info("审批请求已排队 %s request_id=%s", name, req.request_id)
     return {"request_id": req.request_id, "action": name, "reused": False}

@@ -675,13 +675,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except (TypeError, ValueError):
                 _chat_timeout = 90.0
 
-            from core.live_check import stream_ledger, use_turn
-            from core.llm_stream import TokenStream, use_stream
+            from core.live_check import finish_speaking, stream_ledger, use_turn
+            from core.llm_stream import use_stream
 
             frames: "asyncio.Queue" = asyncio.Queue()
-            # 出字同时进核对线(core/live_check.py):核出来不对的句子推一帧 revise,面板原地划掉、跟一句更正
-            ledger, _on_delta, _on_reset = stream_ledger(frames.put_nowait)
-            sink = TokenStream(on_delta=_on_delta, on_reset=_on_reset)
+            # 出字同时进核对线(core/live_check.py):核出来不对的句子推一帧 revise,面板原地划掉、跟一句更正;
+            # 还在生成时请它收住、带着更正接着说
+            ledger, sink = stream_ledger(frames.put_nowait)
             # 文字/语音锁步:句子【被念出的那一刻】起,该句文字才开始上屏,文字与语音同刻。
             #
             # 历史上锁步默认【关】,原因是真机反馈"一大段蹦一段又一段"——那不是锁步本身的错,而是旧实现把整句
@@ -968,7 +968,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     try:
                         if _ls_first_t is None and text:
                             speaker.feed(text)
-                        speaker.finish()
+                        finish_speaking(speaker, ledger)
                     except Exception:  # noqa: BLE001
                         pass
                     # 等 _player 把剩余句子念完,边念边【逐句】露出;grace 有界,
@@ -1037,7 +1037,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             if _tail:
                                 streamed_chars += len(_tail)
                                 yield _sse({"type": "delta", "text": _tail})
-                        speaker.finish()
+                        finish_speaking(speaker, ledger)
                     except Exception:  # noqa: BLE001
                         pass
                 elif streamed_chars == 0 and text:
@@ -1055,7 +1055,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     try:
                         if streamed_chars == 0 and text:
                             speaker.feed(text)
-                        speaker.finish()
+                        finish_speaking(speaker, ledger)
                     except Exception:  # noqa: BLE001
                         pass
 

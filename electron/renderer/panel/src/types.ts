@@ -89,13 +89,14 @@ export interface Turn {
 }
 
 /**
- * 一句话核出来的结论。**只有不是「证实」的才会来** —— 证实了就不改。
+ * 一句话核出来的结论。当场核的**只有不是「证实」的才会来** —— 证实了就不改;
+ * 事后联网核实了的**猜想**会来一条 `supported`(core/live_check_late.py),画成「已核实」。
  * 面板按 `original` 在气泡里找到那句(不靠偏移:done 的全文经过边界过滤,与流出的字未必逐字对齐)。
  */
 export interface Revision {
   readonly seg: number;
   readonly original: string;
-  readonly verdict: 'refuted' | 'unverified';
+  readonly verdict: 'refuted' | 'unverified' | 'supported';
   readonly note: string;
   readonly source: string;
 }

@@ -938,6 +938,8 @@ html[data-shell='desktop'] {
   font-size: var(--t-micro); color: var(--warn); background: rgba(255, 246, 233, 0.6);
   cursor: help;
 }
+/* 事后联网核实了的猜想:同一个小记号,取 --ok 的淡墨 */
+.rv-mark.rv-ok { color: var(--ok); background: rgba(232, 241, 236, 0.6); }
 
 /* 降级必须留痕:声音和文字已经脱钩,界面上不能一声不吭 */
 .lockstep-mark {

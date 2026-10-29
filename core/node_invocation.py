@@ -214,6 +214,21 @@ class NodeInvocationResult:
     # PR-11: governance denial diagnostics — populated when invocation is
     # refused due to governance ineligibility.
     eligibility_denial: Optional[Dict[str, Any]] = None
+    #: 执行器调到了节点,是节点自己回的失败(缺 Key、没连设备、没有这个动作……),不是这一侧出错
+    node_reported_failure: bool = False
+
+    def __post_init__(self) -> None:
+        # 调到了节点 ≠ 节点做成了。节点(或它的 fusion 入口)回 {"success": False} 就是失败 —— 此前外层照报
+        # success=True,模型、REST 调用方、核对线看到的都是「成功」,里面裹着一句错误(第 8 轮真跑:112 个节点的
+        # 进程内入口回「No executable method found」,/api/v1/nodes/call 照样 200 + success:true)。
+        if not self.success or not isinstance(self.result, dict):
+            return
+        layers = [self.result] + [self.result[k] for k in ("data", "result") if isinstance(self.result.get(k), dict)]
+        failed = next((layer for layer in layers if layer.get("success") is False), None)
+        if failed is not None:
+            self.success = False
+            self.node_reported_failure = True
+            self.error = self.error or str(failed.get("error") or failed.get("message") or "节点执行失败")
 
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Return a backward-compatible dict shaped like the old execution result.

@@ -57,7 +57,10 @@ READ_ONLY_COMPONENTS: Tuple[str, ...] = ("model",)
 
 #: 组件契约：必填字段与「不得为空字符串」的字段（G2）。点号路径。
 COMPONENT_CONTRACTS: Dict[str, Dict[str, Tuple[str, ...]]] = {
-    "instructions": {"required": ("system_prompt",), "non_empty": ("system_prompt", "agent_templates.*")},
+    "instructions": {
+        "required": ("system_prompt",),
+        "non_empty": ("system_prompt", "agent_templates.*", "chat_prompt", "grounding"),
+    },
     "model": {"required": ("routing_policy",), "non_empty": ("routing_policy",)},
 }
 
@@ -297,8 +300,21 @@ BUILTIN_SYSTEM_PROMPT = (
 )
 
 
+def _grounded(prompt: str, genome: Optional[Genome]) -> str:
+    """Genome 的 ``instructions.grounding``（有据回答的几条规矩，``config/genomes/grounded/``）接在提示词后面。
+
+    一份规矩、三处提示词（OpenClawd 主循环 / 内核的对话路 / Agent 模板）共用 —— 不各抄一份。
+    默认 Genome 没有这一格，出来的提示词与原先逐字节相同（G9）。
+    """
+    value = genome.component("instructions").get("grounding") if genome else None
+    return f"{prompt}\n\n{value.strip()}" if isinstance(value, str) and value.strip() else prompt
+
+
 def system_prompt(builtin: str = BUILTIN_SYSTEM_PROMPT, *, explicit: Optional[str] = None) -> str:
-    """OpenClawd 的系统提示词。优先级：显式参数 > ``GALAXY_SYSTEM_PROMPT`` > Genome > 内置默认（G3）。"""
+    """OpenClawd 的系统提示词。优先级：显式参数 > ``GALAXY_SYSTEM_PROMPT`` > Genome > 内置默认（G3）。
+
+    人给的（显式参数、环境变量）原样用，不往后接 Genome 的规矩 —— 人压过 Genome。
+    """
     if explicit:
         return explicit
     env_value = os.environ.get("GALAXY_SYSTEM_PROMPT", "")
@@ -306,7 +322,18 @@ def system_prompt(builtin: str = BUILTIN_SYSTEM_PROMPT, *, explicit: Optional[st
         return env_value
     genome = active_genome()
     value = genome.component("instructions").get("system_prompt") if genome else None
-    return value if isinstance(value, str) and value.strip() else builtin
+    return _grounded(value if isinstance(value, str) and value.strip() else builtin, genome)
+
+
+#: 内核对话路（``AgentKernel._fallback_chat``，chat_only 意图）的人设句。与引入 Genome 之前硬编码的那句逐字节相同。
+BUILTIN_CHAT_PROMPT = "你是 Galaxy 智能助手，一个自然流畅的 AI 对话伙伴。"
+
+
+def chat_prompt(builtin: str = BUILTIN_CHAT_PROMPT) -> str:
+    """内核对话路的系统提示词：Genome 的 ``instructions.chat_prompt``，没有就用内置；再接上 ``grounding``。"""
+    genome = active_genome()
+    value = genome.component("instructions").get("chat_prompt") if genome else None
+    return _grounded(value if isinstance(value, str) and value.strip() else builtin, genome)
 
 
 def agent_template_prompt(template_name: str, builtin: str) -> str:
@@ -314,11 +341,12 @@ def agent_template_prompt(template_name: str, builtin: str) -> str:
     genome = active_genome()
     templates = genome.component("instructions").get("agent_templates") if genome else None
     value = templates.get(template_name) if isinstance(templates, dict) else None
-    return value if isinstance(value, str) and value.strip() else builtin
+    return _grounded(value if isinstance(value, str) and value.strip() else builtin, genome)
 
 
 __all__ = [
     "ACTIVE_POINTER",
+    "BUILTIN_CHAT_PROMPT",
     "BUILTIN_SYSTEM_PROMPT",
     "DEFAULT_GENOME",
     "GENOMES_ROOT",
@@ -329,6 +357,7 @@ __all__ = [
     "active_genome",
     "active_genome_name",
     "agent_template_prompt",
+    "chat_prompt",
     "contract_violations",
     "genome_dir",
     "load_genome",

@@ -1146,6 +1146,7 @@ class AgentFactory:
                 reflect=_reflect_cb if cfg.reflection_enabled else None,
                 max_reflection_rounds=cfg.max_reflection_rounds,
                 loop_detection_window=cfg.loop_detection_window,
+                tools=tools or None,
             )
             resp = loop.final_response
             record_divergence(agent.supply, getattr(resp, "provider", "") or "", getattr(resp, "model", "") or "")

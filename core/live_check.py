@@ -40,6 +40,8 @@ SUPPORTED = "supported"
 REFUTED = "refuted"
 UNVERIFIED = "unverified"
 
+#: 一轮里最多为更正打断几次生成(所有者的决定:口头更正每轮最多一两处)。
+MAX_CONTINUATIONS = 1
 #: 一轮最多核几句（核对是陪跑，不是第二个任务）。
 MAX_CHECKS_PER_TURN = 12
 #: 收尾时等还没核完的那几句多久（秒）。快的两级都是进程内查表，平时毫秒级。
@@ -146,7 +148,23 @@ async def _verify_completion(text: str, outcomes: List[ToolOutcome]) -> Optional
 
 
 def _known_devices() -> List[Tuple[str, str, bool]]:
-    """(设备号, 名字, 在线) —— 连接管理器此刻的在线表(权威的在线投影)。"""
+    """(设备号, 名字, 在线) —— 每台成员的整体视图(``OnboardingService.member_view``:名字取自设备登记,在线取自
+    连接管理器的各通道),与模型经 ``devices__list`` 看到的是同一份。
+
+    此前只读连接管理器:那里的元数据没有名字(规范入口登记时只放 device_type / platform / ingress),于是只有
+    模型照原样念出设备号时才核得上 —— 第 8 轮真跑:真连着的「小米手表」被说成离线,核对线一声没吭。
+    """
+    try:
+        from core.device_onboarding.service import get_onboarding_service
+
+        groups = get_onboarding_service().overview()["groups"]
+        rows = [
+            (str(v["device_id"]), str(v.get("name") or ""), bool(v.get("online"))) for g in groups.values() for v in g
+        ]
+        if rows:
+            return rows
+    except Exception as exc:  # noqa: BLE001 — 退回连接管理器
+        logger.debug("成员视图不可用,退回在线表: %s", exc)
     try:
         from core.unified.connection_manager import get_unified_connection_manager
 
@@ -203,6 +221,9 @@ class TurnLedger:
 
     def __init__(self, on_revision: Optional[Callable[[Dict[str, Any]], None]] = None) -> None:
         self._on_revision = on_revision
+        #: 正在流的那条令牌流(流式对话才有):驳倒一句时请它收住,带着更正接着说
+        self.stream: Any = None
+        self._continued = 0
         self._outcomes: List[ToolOutcome] = []
         self._buf = ""
         self._seen: Dict[str, int] = {}
@@ -270,6 +291,10 @@ class TurnLedger:
             return
         rev = Revision(seg, text, verdict[0], verdict[1], verdict[2])
         self._revisions[seg] = rev
+        if rev.verdict == REFUTED and self.stream is not None and self._continued < MAX_CONTINUATIONS:
+            # 已说出口、还在生成:请生成在下一段之后收住,带着这条结论接着说(同一个气泡,先更正再往下)
+            self._continued += 1
+            self.stream.request_stop(continuation_note(rev))
         if rev.verdict != SUPPORTED and self._on_revision is not None:
             try:
                 self._on_revision(rev.to_dict())
@@ -290,6 +315,12 @@ class TurnLedger:
             await asyncio.wait(pending, timeout=timeout)
         return self.revisions()
 
+    def late_spoken_corrections(self) -> List[str]:
+        """生成已经结束才核出来的驳倒:念完之前补一句口头更正(已经打断过生成、让它自己更正了的不重复)。"""
+        budget = max(0, MAX_SPOKEN_CORRECTIONS - self._continued)
+        refuted = [r for r in self.revisions() if r.verdict == REFUTED][self._continued :]
+        return [f"更正一下：{spoken_note(r)}。" for r in refuted[:budget]]
+
     def revisions(self) -> List[Revision]:
         """不是「证实」的那些修订,按句子先后。"""
         return [r for _, r in sorted(self._revisions.items()) if r.verdict != SUPPORTED]
@@ -298,10 +329,6 @@ class TurnLedger:
 # ── 一轮的上下文 ─────────────────────────────────────────────────────────────
 
 _TURN: "contextvars.ContextVar[Optional[TurnLedger]]" = contextvars.ContextVar("galaxy_turn_ledger", default=None)
-
-
-def current_turn() -> Optional[TurnLedger]:
-    return _TURN.get()
 
 
 @contextlib.contextmanager
@@ -337,7 +364,20 @@ def note_tool_outcome(name: str, success: bool, error: str = "") -> None:
 # ── 把修订用到文字上 ─────────────────────────────────────────────────────────
 
 
-def corrected_text(text: str, revisions: List[Revision], *, spoken: bool = False, max_spoken: int = 2) -> str:
+#: 一轮里最多口头更正几处(所有者的决定)。
+MAX_SPOKEN_CORRECTIONS = 2
+
+
+def spoken_note(rev: Revision) -> str:
+    """念出来的那句更正:不念工具名和原始报错,只说人听得懂的那半句。"""
+    if rev.source == "turn_ledger":
+        return "刚才说的那件事其实没有做成"
+    return rev.note
+
+
+def corrected_text(
+    text: str, revisions: List[Revision], *, spoken: bool = False, max_spoken: int = MAX_SPOKEN_CORRECTIONS
+) -> str:
     """把修订写进文字:驳倒的跟一句「更正」,查不到的标「未核实」。
 
     ``spoken=True`` 是要念出来的版本(所有者的决定):只念实质更正,每轮最多 ``max_spoken`` 处,「未核实」不念。
@@ -351,9 +391,12 @@ def corrected_text(text: str, revisions: List[Revision], *, spoken: bool = False
             if spoken and said >= max_spoken:
                 continue
             said += 1
-            out = out.replace(rev.original, f"{rev.original.rstrip()}（更正：{rev.note}）", 1)
+            note = spoken_note(rev) if spoken else rev.note
+            out = out.replace(rev.original, f"{rev.original.rstrip()}（更正：{note}）", 1)
         elif rev.verdict == UNVERIFIED and not spoken:
             out = out.replace(rev.original, f"{rev.original.rstrip()}（未核实：{rev.note}）", 1)
+        elif rev.verdict == SUPPORTED and not spoken:  # 事后核实了的猜想(core/live_check_late.py)
+            out = out.replace(rev.original, f"{rev.original.rstrip()}（已核实：{rev.note}）", 1)
     return out
 
 
@@ -369,14 +412,14 @@ async def settle_current(text: str, timeout: float = SETTLE_S) -> List[Revision]
         return []
 
 
-def stream_ledger(
-    put: Callable[[Tuple[str, Any]], None],
-) -> Tuple[TurnLedger, Callable[[str], None], Callable[[], None]]:
-    """流式对话用:一本账 + 交给 ``TokenStream`` 的两个回调。
+def stream_ledger(put: Callable[[Tuple[str, Any]], None]) -> Tuple[TurnLedger, Any]:
+    """流式对话用:一本账 + 一条接好核对线的令牌流(``core.llm_stream.TokenStream``)。
 
     出字即进核对线(不等这一帧被消费);核出来不是「证实」的句子经 ``put(("revise", 修订))`` 推出去;
-    已流出的内容作废时核对线一起作废。
+    驳倒一句时请这条流收住、带着更正接着说;已流出的内容作废时核对线一起作废。
     """
+    from core.llm_stream import TokenStream
+
     ledger = TurnLedger(on_revision=lambda rev: put(("revise", rev)))
 
     def on_delta(text: str) -> None:
@@ -387,13 +430,71 @@ def stream_ledger(
         put(("reset", None))
         ledger.reset()
 
-    return ledger, on_delta, on_reset
+    ledger.stream = TokenStream(on_delta=on_delta, on_reset=on_reset)
+    return ledger, ledger.stream
 
 
-async def attach_revisions(result: Any) -> None:
+def finish_speaking(speaker: Any, ledger: Optional[TurnLedger]) -> None:
+    """边生成边念收尾:先补念生成结束后才核出来的更正(每轮最多两处),再冲刷尾句。人一开口打断,讲话器不再收字,更正随之作废。"""
+    if ledger is not None:
+        for line in ledger.late_spoken_corrections():
+            with contextlib.suppress(Exception):
+                speaker.feed(line)
+    speaker.finish()
+
+
+def late_check(result: Any, *, session_id: str, source: str) -> bool:
+    """一轮收尾之后:慢的两级(联网核、换一个模型裁决,``core/live_check_late.py``)交给后台。永不抛出。
+
+    在 :func:`close_turn` 之前调:要这一轮的起点(这之后的调用都是这一轮的,裁判不从里面挑)和快的两级已经核过的句子。
+    """
+    ledger = _TURN.get()
+    if ledger is None or not isinstance(result, dict):
+        return False
+    try:
+        from core.live_check_late import after_turn
+
+        already = [r.original for r in ledger.revisions()]
+        text = str(result.get("response_original") or result.get("response") or "")
+        return after_turn(text, session_id=session_id, source=source, started_at=ledger.started_at, already=already)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("事后核对没交出去: %s", exc)
+        return False
+
+
+def continuation_note(rev: Revision) -> str:
+    """带给模型接着说的那句核对结论。"""
+    return (
+        f"[核对] 你刚才说的「{rev.original.strip()}」与这一轮的事实不符:{rev.note}。"
+        "请从这里接着说:先用一句话更正它,不要重复前面已经说过的内容。"
+    )
+
+
+def take_correction(sink: Any, partial: str) -> Optional[List[Dict[str, str]]]:
+    """生成被核对线收住了:返回要追加进对话、让模型接着说的两条消息;没有就是 None。
+
+    已经说出去的那一截记在 ``sink.prefix``(最终回答 = 前面这些 + 接着说的那一截,见 :func:`full_answer`)。
+    """
+    if sink is None or not getattr(sink, "stop_requested", False):
+        return None
+    note = sink.stop_note
+    sink.stop_requested = False
+    sink.stop_note = ""
+    sink.prefix += partial or ""
+    return [{"role": "assistant", "content": partial or ""}, {"role": "user", "content": note}]
+
+
+def full_answer(sink: Any, content: str) -> str:
+    """最终回答:被收住之前说出去的 + 最后一次生成的。没被收住过就是 ``content`` 本身。"""
+    prefix = getattr(sink, "prefix", "") if sink is not None else ""
+    return f"{prefix}{content or ''}" if prefix else (content or "")
+
+
+async def attach_revisions(result: Any, *, desktop: bool = True) -> None:
     """一轮收尾:修订挂进结果(``revisions``),要念出来的版本放 ``response_spoken``。永不抛出。
 
-    ``response`` 本身不动 —— 面板拿原文 + 修订画「划掉、跟一句更正」(所有者的决定:留原文)。
+    电脑发起的(``desktop=True``):``response`` 不动 —— 面板拿原文 + 修订画「划掉、跟一句更正」(所有者的决定:
+    留原文)。别的设备发起的(手表 / 手机只显示一段字):``response`` 换成改过的文字,原文放 ``response_original``。
     """
     if not isinstance(result, dict):
         return
@@ -406,12 +507,16 @@ async def attach_revisions(result: Any) -> None:
         spoken = corrected_text(text, revs, spoken=True)
         if spoken != text:
             result["response_spoken"] = spoken
+        if not desktop:
+            result["response_original"] = text
+            result["response"] = corrected_text(text, revs)
     except Exception as exc:  # noqa: BLE001
         logger.debug("修订没挂上(非致命): %s", exc)
 
 
 __all__ = [
     "MAX_CHECKS_PER_TURN",
+    "MAX_SPOKEN_CORRECTIONS",
     "REFUTED",
     "Revision",
     "SETTLE_S",
@@ -420,13 +525,18 @@ __all__ = [
     "UNVERIFIED",
     "attach_revisions",
     "classify",
+    "continuation_note",
     "close_turn",
     "corrected_text",
-    "current_turn",
+    "finish_speaking",
+    "full_answer",
+    "late_check",
     "note_tool_outcome",
     "open_turn",
     "settle_current",
     "split_sentences",
+    "spoken_note",
     "stream_ledger",
+    "take_correction",
     "use_turn",
 ]

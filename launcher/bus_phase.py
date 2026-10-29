@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import Any, List, Optional, Tuple
 
 #: 横幅明细的一行:(名称, 内容, 状态)
@@ -99,7 +101,9 @@ async def _network_rows(svc: Any, cross_device: bool) -> List[Detail]:
         bus_details = [
             ("Tailscale", "没配自建 tailnet,不入网(在家同一 Wi-Fi 下手表照常连;出门直连要先配 headscale)", "info")
         ]
-    bus_details.append(svc.tailnet.start_lan_discovery())
+    # zeroconf 建在事件循环线程上会把注册排到同一个循环里、自己再同步等它 —— 卡住循环 10 秒后报 EventLoopBlocked、
+    # 广播也没发出去(第 8 轮真跑)。放到工作线程里起:那里没有运行中的循环,zeroconf 用它自己的循环线程。
+    bus_details.append(await asyncio.to_thread(svc.tailnet.start_lan_discovery))
     return bus_details
 
 

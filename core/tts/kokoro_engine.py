@@ -24,6 +24,7 @@ import logging
 import os
 import tempfile
 import threading
+import time
 import wave
 from pathlib import Path
 from typing import Any, Optional
@@ -56,6 +57,11 @@ def model_files_present() -> bool:
     return (d / _model_file()).exists() and (d / _VOICES_FILE).exists()
 
 
+#: 「下载源不可达」多久说一次(与 core.hf_endpoint 对全不可达的负缓存同一个时长)。
+_UNREACHABLE_QUIET_S = 300.0
+_unreachable_said_at = -_UNREACHABLE_QUIET_S
+
+
 def kick_background_fetch() -> None:
     """后台线程拉取模型文件(幂等,至多一次;GALAXY_KOKORO_AUTOFETCH=0 关闭)。"""
     global _fetch_started
@@ -84,9 +90,16 @@ def kick_background_fetch() -> None:
         except Exception:  # 探测模块不可用 → 保守按可达处理(沿用旧行为)
             _ep_ok = True
         if not _ep_ok:
-            global _fetch_started
+            global _fetch_started, _unreachable_said_at
             with _fetch_lock:
                 _fetch_started = False  # 幂等标记回滚:源恢复后 available() 可再触发
+                # 回滚之后选引擎时每问一次 available() 就会再来一遍:同一个「不可达」在源探测的负缓存窗口里只说一次
+                # (第 8 轮真跑:启动那一秒里同一条告警连打三遍)
+                quiet = time.monotonic() - _unreachable_said_at < _UNREACHABLE_QUIET_S
+                if not quiet:
+                    _unreachable_said_at = time.monotonic()
+            if quiet:
+                return
             logger.warning(
                 "Kokoro 模型拉取失败(HF 下载源不可达,本次跳过预取、不做多轮重试刷屏):"
                 "网络恢复后自动再试;或手动下载 %s 与 %s 放到 %s"

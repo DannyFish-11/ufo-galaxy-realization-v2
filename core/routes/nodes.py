@@ -551,7 +551,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             task_queue[task_id]["status"] = "failed"
             task_queue[task_id]["error"] = invocation_result.error
             logger.error(f"节点调用失败: {req.node_id}.{req.action}: {invocation_result.error}")
-            status_code = 404 if "目录未找到" in (invocation_result.error or "") else 500
             return JSONResponse(
                 {
                     "success": False,
@@ -559,11 +558,27 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "request_id": invocation_result.request_id,
                     "trace_id": invocation_result.trace_id,
                     "error": invocation_result.error,
+                    # 在等人批准 / 没批 / 门禁故障时,带上门那一侧的结构化原因(approval_id 等),调用方据此去批或重试
+                    **({"gate": invocation_result.eligibility_denial} if invocation_result.eligibility_denial else {}),
                 },
-                status_code=status_code,
+                status_code=_call_failure_status(
+                    invocation_result.error or "", node_said=invocation_result.node_reported_failure
+                ),
             )
 
     return router
+
+
+def _call_failure_status(error: str, *, node_said: bool = False) -> int:
+    """节点调用没成时的 HTTP 状态:在等人批准不是服务器出错(202,批了重试);没批 / 门禁拦下是 403;找不到节点 404;
+    节点自己回的失败(缺 Key、没连设备……)是 502 —— 上游照实说做不成,不是这个接口坏了。"""
+    if error.startswith("approval_required"):
+        return 202
+    if error.startswith(("approval_denied", "gate_fault")) or "denied action" in error:
+        return 403
+    if "目录未找到" in error:
+        return 404
+    return 502 if node_said else 500
 
 
 def create_oauth_router() -> APIRouter:

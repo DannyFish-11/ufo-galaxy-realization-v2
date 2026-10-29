@@ -349,7 +349,8 @@ def test_launcher_wires_discovery_into_banner_and_shutdown():
     assert "await bus_phase(self)" in src
     phase = (ROOT / "launcher/bus_phase.py").read_text(encoding="utf-8")
     assert "bus_details.extend(svc.tailnet.not_on_tailnet_details())" in phase
-    assert "bus_details.append(svc.tailnet.start_lan_discovery())" in phase
+    # 在工作线程里起(zeroconf 建在事件循环线程上会卡住循环,见 bus_phase 的注释)
+    assert "bus_details.append(await asyncio.to_thread(svc.tailnet.start_lan_discovery))" in phase
     stop = src[src.index("    def stop(self):") :]
     assert stop.index("self.tailnet.stop()") < stop.index("self.service_manager.stop_all()")
 

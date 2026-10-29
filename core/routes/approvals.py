@@ -47,11 +47,13 @@ class ApprovalActionRequest(BaseModel):
     grant: str = "session"
 
 
-def _publish() -> None:
-    """待批清单变了:推给桌面外壳(面板据此刷新)。永不抛出。"""
+def _publish(request_id: str = "") -> None:
+    """待批清单变了:推给桌面外壳(面板据此刷新),岛上那张卡撤掉。永不抛出。"""
     try:
-        from core.approval_gate import publish_pending
+        from core.approval_gate import publish_pending, remove_approval_card
 
+        if request_id:
+            remove_approval_card(request_id)
         publish_pending()
     except Exception as exc:  # noqa: BLE001
         logger.debug("待批清单没推出去: %s", exc)
@@ -83,7 +85,7 @@ def _record_grant(req, body: ApprovalActionRequest) -> None:
             )
     except Exception as exc:  # noqa: BLE001 — 授权没记上不影响这次批准本身
         logger.warning("grant 记录失败(审批本身已生效): %s", exc)
-    _publish()
+    _publish(req.request_id)
 
 
 def create_router() -> APIRouter:
@@ -191,7 +193,7 @@ def create_router() -> APIRouter:
                     operator=body.operator or "api_operator",
                     reason=body.reason or "Denied via API",
                 )
-                _publish()
+                _publish(request_id)
                 return JSONResponse(
                     content={
                         "ok": success,

@@ -38,7 +38,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import socket
 import sys
 import threading
 from pathlib import Path
@@ -378,38 +377,8 @@ def _get_lan_ip() -> str:
     return detect_lan_ip_or_empty()
 
 
-#: 端口预检专用的探测地址。刻意只探环回口,绝不绑通配地址,详见
-#: :func:`_probe_port_bindable`。
-_PORT_PROBE_HOST = "127.0.0.1"
-
-
-def _probe_port_bindable(port: int) -> str:
-    """试绑一次端口。可绑返回空串;不可绑返回人话原因。
-
-    只做一次真实的 bind/close,不留监听——这是判断"端口是不是已经被占了"
-    最直接也最可靠的办法(比连一下看通不通准确:后者对只绑了 IPv4 或正在
-    启动中的服务会误判)。
-
-    Windows 上**不设** SO_REUSEADDR:它的语义是"允许强抢已被占用的端口",打开反而会让探测通过、真正 bind 时才炸。
-    POSIX 上要设:它只放过 TIME_WAIT 残留(刚停掉的服务连着设备时留下的),仍拒绝正在监听的端口;不设就会
-    把重启过快误报成"端口被占"(uvicorn 自己绑端口时是设了的)。
-
-    **只探环回口,不绑通配地址。** 别的进程占着 ``0.0.0.0:P``(监听中,或没开 SO_REUSEADDR 的绑定)时,再去绑
-    ``127.0.0.1:P`` 同样会 EADDRINUSE,所以环回探测足以覆盖本函数要防的场景——**本机已经有一个 Galaxy 占着
-    这个端口**(真机上 Electron 拉起第二套后端抢 9000 就是这个形态)。
-
-    已知不覆盖:某服务只绑在某块具体的非环回网卡上(如 ``192.168.1.5:P``)—— 本探测放行、uvicorn 绑
-    ``0.0.0.0:P`` 仍失败,由调用方对 uvicorn 启动失败的处理如实兜底。
-    """
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if os.name != "nt":
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((_PORT_PROBE_HOST, int(port)))
-        return ""
-    except OSError as exc:
-        return f"{exc.__class__.__name__}: {exc}"
-
+# 端口预检与「端口被占就不往下起」在 launcher/port_guard.py(原地 re-export:doctor 与测试按 launcher.services 取)
+from launcher.port_guard import _PORT_PROBE_HOST, GatewayPortTaken, _probe_port_bindable  # noqa: E402,F401
 
 _CLOUD_LLM_KEY_ENV_VARS = (
     "OPENAI_API_KEY",
@@ -857,7 +826,7 @@ class UnifiedWebUI:
             # 提前用一次普通 bind 探明,把它变成一句能直接照做的话。
             _bind_err = _probe_port_bindable(self.config.web_ui_port)
             if _bind_err:
-                raise RuntimeError(
+                raise GatewayPortTaken(
                     f"API 网关端口 {self.config.web_ui_port} 无法绑定({_bind_err})。"
                     "最常见原因是**已经有一个 Galaxy 在运行**(请勿重复启动),"
                     "或该端口被其它程序占用。"
@@ -877,7 +846,9 @@ class UnifiedWebUI:
             # banner) instead of blocking here.
             self._server = server
             threading.Thread(target=_warm_routes, args=(self.app,), name="route-warmup", daemon=True).start()
-            await asyncio.to_thread(_uvi_config.load)  # serve() 见已 load 就跳过:协议类的 import 不在循环里做(真跑卡 0.5 秒)
+            await asyncio.to_thread(
+                _uvi_config.load
+            )  # serve() 见已 load 就跳过:协议类的 import 不在循环里做(真跑卡 0.5 秒)
             self._serve_task = asyncio.create_task(server.serve())
             # 事件循环被同步工作卡住时,说出卡在哪几行(只读;见 core/loop_stall_watch.py)。
             from core import loop_stall_watch
@@ -2123,6 +2094,12 @@ class GalaxyUnified:
                     ("健康检查", "/health", "ok"),
                 ],
             )
+        except GatewayPortTaken as exc:
+            # 端口被占 = 这台机器上多半已经有一个 Galaxy 在跑。不往下起:第二份会抢传输端口、再起一套节点,
+            # 横幅却照样写「就绪 · 接口 http://localhost:9000」—— 那个地址上答话的是另一个进程(第 8 轮真跑)。
+            _emit("API 网关", f"端口 {port} 已被占用,这一份不再往下起", "fail")
+            logger.error(f"API gateway: {exc}")
+            raise SystemExit(1) from exc
         except Exception as exc:
             _emit("API 网关", "启动失败", "fail")
             logger.error(f"API gateway: {exc}")

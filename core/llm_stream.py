@@ -81,6 +81,18 @@ class TokenStream:
         self.chars = 0  # 本段(自上次 reset 起)已流出的字符数
         self.total_chars = 0
         self.resets = 0
+        # 边说边改(core/live_check.py):核对线在生成中途核出一句不对时请求停下;适配器每流出一段就看一眼,
+        # 看到了就收住这一次生成。``stop_note`` 是要带给模型接着说的那句核对结论。
+        self.stop_requested = False
+        self.stop_note = ""
+        #: 停下之前已经说出去的那几段(接着说的那一次只生成后半截,最终回答 = 前面这些 + 后半截)
+        self.prefix = ""
+
+    def request_stop(self, note: str) -> None:
+        """请求在下一段之后收住这一次生成(只记一次:同一轮里第一条结论说了算)。"""
+        if not self.stop_requested:
+            self.stop_requested = True
+            self.stop_note = note
 
     def feed(self, text: str) -> None:
         """流出一段新文本。空串跳过;回调异常吞掉(不反噬生成主流程)。"""
@@ -98,6 +110,10 @@ class TokenStream:
         self.resets += 1
         had = self.chars
         self.chars = 0
+        # 作废了的话里驳倒的那一句也一起作废:不再为它收住,也不把它当作「前面已经说出去的」
+        self.stop_requested = False
+        self.stop_note = ""
+        self.prefix = ""
         if self._on_reset is None:
             return
         try:

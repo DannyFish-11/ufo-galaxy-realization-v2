@@ -418,3 +418,20 @@ def test_the_agents_own_tools_are_graded():
     assert c.check("computer_use__run").risk_level == "moderate"
     assert c.requires_confirmation_for("mcp__fs__delete_file")
     assert c.check("mcp__sh__run_command").risk_level == "critical"
+
+
+def test_a_queued_request_also_gets_an_island_card_until_someone_decides(registry):
+    """没人在等的(排队的)更容易被忘掉:岛上同样一张「等你批准」,人批了 / 拒了就撤。"""
+    from core.island_cards import get_island_cards
+
+    asyncio.run(gate.gate_node_call("Node_36_UIAWindows", "click", {"x": 1}))
+    (req,) = registry.list_pending()
+    cards = [c for c in get_island_cards().active() if c["kind"] == "approval"]
+    assert [c["id"] for c in cards] == [gate.card_id(req.request_id)] and cards[0]["action"] == "panel"
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=_approvals_app()), base_url="http://t") as c:
+            await c.post(f"/api/v1/approvals/{req.request_id}", json={"action": "deny"})
+
+    asyncio.run(run())
+    assert not [c for c in get_island_cards().active() if c["kind"] == "approval"]

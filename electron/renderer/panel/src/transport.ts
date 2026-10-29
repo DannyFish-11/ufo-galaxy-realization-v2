@@ -97,6 +97,11 @@ export interface PresenceHandlers {
    * 收到就去 `GET /api/v1/approvals` 拉一遍(带鉴权,有令牌)。
    */
   onApprovals?(count: number): void;
+  /**
+   * 一轮结束之后才核出来的修订(联网核、换一个模型裁决;core/live_check_late.py)。来自 WS 的 `revise` 帧,
+   * 带会话号;面板按原句在那条会话最近的回答里找到那句,原地划掉 / 标「已核实」。
+   */
+  onLateRevise?(sessionId: string, revs: readonly Revision[]): void;
 }
 
 const REHEARSAL_KINDS: readonly RehearsalStepKind[] = [
@@ -188,6 +193,13 @@ export class PresenceSocket {
       this.#h.onApprovals?.(pending.length);
       return;
     }
+    if (m['type'] === 'revise') {
+      const revs = (Array.isArray(payload['revisions']) ? (payload['revisions'] as unknown[]) : [])
+        .map(readRevision)
+        .filter((r): r is Revision => r !== null);
+      if (revs.length) this.#h.onLateRevise?.(String(payload['session_id'] ?? ''), revs);
+      return;
+    }
     if (m['type'] === 'panel_feed') {
       const rows = readDevices(m['feed']);
       if (rows) this.#h.onDevices?.(rows);
@@ -240,7 +252,8 @@ export interface ChatHandlers {
 export function readRevision(raw: unknown): Revision | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  const verdict = o['verdict'] === 'refuted' || o['verdict'] === 'unverified' ? o['verdict'] : null;
+  const verdict =
+    o['verdict'] === 'refuted' || o['verdict'] === 'unverified' || o['verdict'] === 'supported' ? o['verdict'] : null;
   const original = typeof o['original'] === 'string' ? o['original'] : '';
   if (!verdict || !original.trim()) return null;
   return {

@@ -409,8 +409,7 @@ async def _ask_desktop(
         },
     )
     event = registry._register(req)  # noqa: SLF001 — 与 SecurityInterceptor 同一入册路径
-    card_id = f"approval:{req.request_id}"
-    _post_card(card_id, what)
+    post_approval_card(req.request_id, what)
     publish_pending()
     try:
         await asyncio.wait_for(event.wait(), timeout=wait_s)
@@ -424,7 +423,7 @@ async def _ask_desktop(
         )
         raise
     finally:
-        _remove_card(card_id)
+        remove_approval_card(req.request_id)
         publish_pending()
 
     if req.status == ApprovalStatus.GRANTED:
@@ -481,11 +480,25 @@ async def check_tool_call(
 # ── 推给面板与岛 ──────────────────────────────────────────────────────────────
 
 
-def _post_card(card_id: str, what: str) -> None:
+def card_id(request_id: str) -> str:
+    """一条待批请求在岛上的卡 id(在等的、排队的同一种)。"""
+    return f"approval:{request_id}"
+
+
+def post_approval_card(request_id: str, what: str) -> None:
+    """岛上推一张「等你批准」(点了打开面板)。排队的请求也推 —— 没人在等,更容易被忘掉。"""
+    _post_card(card_id(request_id), what)
+
+
+def remove_approval_card(request_id: str) -> None:
+    _remove_card(card_id(request_id))
+
+
+def _post_card(cid: str, what: str) -> None:
     from core.island_cards import post_card
 
     post_card(
-        card_id,
+        cid,
         kind="approval",
         title="等你批准",
         subtitle=what,
@@ -497,10 +510,10 @@ def _post_card(card_id: str, what: str) -> None:
     )
 
 
-def _remove_card(card_id: str) -> None:
+def _remove_card(cid: str) -> None:
     from core.island_cards import remove_card
 
-    remove_card(card_id)
+    remove_card(cid)
 
 
 def pending_summary() -> List[Dict[str, Any]]:
@@ -666,6 +679,7 @@ __all__ = [
     "GRANT_CHOICES",
     "approval_target",
     "caller_is_interactive",
+    "card_id",
     "check_tool_call",
     "current_session_id",
     "desktop_reachable",
@@ -677,7 +691,9 @@ __all__ = [
     "may_wait_for_a_human",
     "node_key",
     "pending_summary",
+    "post_approval_card",
     "publish_pending",
+    "remove_approval_card",
     "request_approval",
     "take_pre_approval",
     "tool_key",

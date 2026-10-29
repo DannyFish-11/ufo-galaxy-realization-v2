@@ -522,6 +522,19 @@ class AgentKernel:
             result.conversation_session_id = session_id
             result.control_session_id = control_session_id
             result.runtime_attachment_session_id = runtime_attachment_session_id
+            if result.success:
+                # 对话这一轮也进会话(与执行路同一个入口)。此前 chat_only 在这里直接返回、从不记:
+                # 第 8 轮真跑,纯聊天的会话历史一直是空的 —— 面板重开看不到、下一轮的上下文里也没有上一句。
+                # 没成的(「LLM 服务未配置」这类)不记:那不是它说的话。
+                await self._record_session(
+                    session_id,
+                    message,
+                    result.reply,
+                    control_session_id=control_session_id,
+                    runtime_attachment_session_id=runtime_attachment_session_id,
+                    device_id=device_id,
+                    multimodal_context=multimodal_context,
+                )
             return result
 
         # task_execute 或 hybrid：加载 SOUL（仅此时注入）
@@ -721,7 +734,9 @@ class AgentKernel:
             )
 
         try:
-            system_content = "你是 Galaxy 智能助手，一个自然流畅的 AI 对话伙伴。"
+            from core.genome import chat_prompt
+
+            system_content = chat_prompt()  # Genome 的 instructions 一格(config/genomes/);默认与原硬编码逐字节一致
             if user_policy:
                 system_content += f"\n\n用户偏好：\n{user_policy}"
 
@@ -751,8 +766,19 @@ class AgentKernel:
             # 导致这里的 chat(messages, temperature=...) 抛 TypeError → 面板对话恒失败。
             # chat_with_tools(messages, ...) 在 Unified 与 Multi 两种 router 上都是
             # messages 兼容签名（handle_chat 已复用），改用它作为主路径。
+            # 真流式:请求上下文里挂了令牌流(面板对话流)就边生成边出字、边念,核对线跟着核;中途驳倒一句时
+            # 收住、带着更正接着说一次(core/live_check.py)。曾经这里不传 —— 面板上的「流式」是整段生成完再切成两字一帧。
+            from core.live_check import full_answer, take_correction
+            from core.llm_stream import current_stream
+
+            sink = current_stream()
+            if sink is not None:
+                _chat_kwargs["stream"] = sink
             if hasattr(self._llm_router, "chat_with_tools"):
                 raw = await self._llm_router.chat_with_tools(messages=messages, **_chat_kwargs)
+                fix = take_correction(sink, getattr(raw, "content", "") or "")
+                if fix is not None:
+                    raw = await self._llm_router.chat_with_tools(messages=messages + fix, **_chat_kwargs)
             elif hasattr(self._llm_router, "chat_completion"):
                 raw = await self._llm_router.chat_completion(messages=messages, **_chat_kwargs)
             elif hasattr(self._llm_router, "chat"):
@@ -771,6 +797,7 @@ class AgentKernel:
                 else:
                     reply = str(raw)
                 model = getattr(raw, "model", "") or (raw.get("model", "") if isinstance(raw, dict) else "")
+                reply = full_answer(sink, reply)
 
             return KernelResponse(
                 success=True,

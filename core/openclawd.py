@@ -8544,6 +8544,7 @@ class OpenClawd:
             _token_sink = _current_token_stream()
         except Exception:  # noqa: BLE001
             _token_sink = None
+        from core.live_check import full_answer, take_correction
 
         async def _inner_loop():
             nonlocal last_response, total_tokens
@@ -8608,6 +8609,10 @@ class OpenClawd:
                 total_tokens += response.input_tokens + response.output_tokens
 
                 if not response.tool_calls:
+                    _fix = take_correction(_token_sink, response.content)  # 核对线中途驳倒一句:带着更正接着说
+                    if _fix is not None:
+                        messages.extend(_fix)
+                        continue
                     # 无工具调用 → 最终回复
                     break
 
@@ -8812,7 +8817,7 @@ class OpenClawd:
             # 一个在纯推理，差一个数量级。
             self._react_token_marks = []
 
-        final_text = last_response.content if last_response else ""
+        final_text = full_answer(_token_sink, last_response.content) if last_response else ""
         timed_out = last_response is None  # 如果整个循环超时还没拿到 response
 
         # 返回兼容 dict (同时携带结构化 tool_records)

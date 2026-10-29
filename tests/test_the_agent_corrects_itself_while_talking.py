@@ -106,10 +106,10 @@ def test_a_refuted_sentence_is_pushed_while_the_answer_is_still_streaming():
     frames = []
 
     async def run():
-        ledger, on_delta, _ = lc.stream_ledger(frames.append)
+        ledger, sink = lc.stream_ledger(frames.append)
         ledger.note("node__Node_06_Filesystem__delete", False, "未获用户确认")
         for chunk in ("好的，", "文件已经删除了。", "还有别的吗"):
-            on_delta(chunk)
+            sink.feed(chunk)
         await asyncio.sleep(0.05)  # 核对在后台跑,不等这一轮结束
         revise = [p for k, p in frames if k == "revise"]
         tail = await ledger.settle()
@@ -125,10 +125,10 @@ def test_a_reset_throws_away_checks_on_text_that_was_thrown_away():
     frames = []
 
     async def run():
-        ledger, on_delta, on_reset = lc.stream_ledger(frames.append)
+        ledger, sink = lc.stream_ledger(frames.append)
         ledger.note("x__write", False, "boom")
-        on_delta("已经保存好了。")
-        on_reset()
+        sink.feed("已经保存好了。")
+        sink.reset()
         await asyncio.sleep(0.05)
         return ledger.revisions()
 
@@ -241,3 +241,19 @@ def test_the_chat_stream_carries_revise_frames_and_the_done_frame_has_them_all(m
     assert revise and revise[0]["original"] == "我已经帮你打开了客厅灯。" and revise[0]["verdict"] == "refuted"
     assert done["revisions"] and done["revisions"][0]["note"]
     assert done["response"] == "好的。我已经帮你打开了客厅灯。", "原文不动"
+
+
+def test_device_names_come_from_the_member_view(monkeypatch):
+    """名字取自设备登记(成员视图),不是连接管理器 —— 后者的元数据里没有名字(第 8 轮真跑:真连着的设备被说成离线,没核上)。"""
+    import asyncio
+
+    import core.device_onboarding.service as svc
+
+    class _Svc:
+        def overview(self, include_ignored=False):
+            return {"groups": {"members": [{"device_id": "r9-watch-0002", "name": "小米手表", "online": True}]}}
+
+    monkeypatch.setattr(svc, "get_onboarding_service", lambda: _Svc())
+    assert lc._known_devices() == [("r9-watch-0002", "小米手表", True)]
+    verdict = asyncio.run(lc._verify_device_state("小米手表现在离线，连不上它。"))
+    assert verdict == (lc.REFUTED, "小米手表 现在在线", "presence")

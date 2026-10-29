@@ -92,9 +92,22 @@ class ToolCallRecord(BaseModel):
 
     tool: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
-    result: Dict[str, Any] = Field(default_factory=dict)
+    result: Any = Field(default_factory=dict)  # Agent 那侧记的是截断后的文字,别的路径可能是字典;只用于观测
     success: bool = True
     error: str = ""
+
+    @classmethod
+    def from_agent(cls, tc: Dict[str, Any]) -> "ToolCallRecord":
+        """Agent 回执里的一条(``core.schemas.tool_call.ToolCallRecord`` 的 dump,字段叫 tool_name / status)→ 本记录。
+        曾按本类字段名直读:工具名读成空串、失败读成成功、文字 result 触发校验错 —— Agent 一调工具任务就失败。"""
+        args = tc.get("arguments")
+        return cls(
+            tool=str(tc.get("tool") or tc.get("tool_name") or ""),
+            arguments=args if isinstance(args, dict) else {},
+            result=tc.get("result"),
+            success=bool(tc.get("success", tc.get("status") != "error")),
+            error=str(tc.get("error") or ""),
+        )
 
 
 class ExecutionPlan(BaseModel):
@@ -1224,15 +1237,7 @@ class ExecutionPlanner:
 
             # 收集工具调用记录
             for tc in receipt.tool_calls:
-                tool_calls.append(
-                    ToolCallRecord(
-                        tool=tc.get("tool", ""),
-                        arguments=tc.get("arguments", {}),
-                        result=tc.get("result", {}),
-                        success=tc.get("success", True),
-                        error=tc.get("error", ""),
-                    )
-                )
+                tool_calls.append(ToolCallRecord.from_agent(tc))
 
             step.duration_ms = (time.monotonic() - t0) * 1000
 
@@ -1341,12 +1346,7 @@ class ExecutionPlanner:
             # 收集 member 结果中的工具调用（MemberResult 不一定带 tool_calls，安全读取）
             for member_res in team_result.member_results or []:
                 for tc in getattr(member_res, "tool_calls", None) or []:
-                    tool_calls.append(
-                        ToolCallRecord(
-                            tool=tc if isinstance(tc, str) else tc.get("tool", ""),
-                            result={},
-                        )
-                    )
+                    tool_calls.append(ToolCallRecord(tool=tc) if isinstance(tc, str) else ToolCallRecord.from_agent(tc))
 
             step.duration_ms = (time.monotonic() - t0) * 1000
             return ExecutionResult(

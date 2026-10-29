@@ -293,7 +293,8 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     try:
         from galaxy_gateway.mdns_announcer import start_lan_announcer  # noqa: PLC0415
 
-        _mdns = start_lan_announcer(int(os.getenv("GALAXY_GATEWAY_PORT", "9000") or 9000))
+        # 在工作线程里起:zeroconf 建在事件循环线程上会自己等自己,卡住循环 10 秒后报 EventLoopBlocked(见 launcher/bus_phase.py)
+        _mdns = await asyncio.to_thread(start_lan_announcer, int(os.getenv("GALAXY_GATEWAY_PORT", "9000") or 9000))
         if _mdns is not None:
             app.state.mdns_announcer = _mdns
             logger.info("mDNS: _galaxy._tcp 已发布(局域网零配置发现)")

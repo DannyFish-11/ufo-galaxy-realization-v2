@@ -69,7 +69,7 @@ import type { UserProviderDraft } from './ui/user_providers';
 import { createGitHubAddons } from './ui/github_addons';
 import type { GitHubAddonDraft } from './ui/github_addons';
 import type { ApprovalScope, Vendor } from './transport';
-import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Turn } from './types';
+import type { Bundle, DeviceRow, PerceptionView, RenderPosture, Revision, Turn } from './types';
 
 /**
  * 后端在哪。
@@ -1020,6 +1020,7 @@ function mount(host: HTMLElement): void {
     onDevices: (rows) => store.patch({ devices: rows }),
     onRehearsal: (step) => store.patch({ rehearsal: mergeStep(store.state.rehearsal, step) }),
     onApprovals: () => void loadApprovals(),
+    onLateRevise: (sessionId, revs) => lateRevise(sessionId, revs),
   }, clientId);
   socket.start();
 
@@ -1030,6 +1031,26 @@ function mount(host: HTMLElement): void {
    * 气泡。于是它刚开口念打字那一轮的回答,语音那边的一句话就拼进了同一个气泡里。
    */
   let wsLive: { id: string; role: 'user' | 'agent' } | null = null;
+
+  /**
+   * 晚到的修订(一轮结束之后联网核出来的):只认这块面板正在看的那条会话;按原句找最近一条含它的回答,
+   * 记到那一轮上(同一句只记一次)。找不到(已经翻走 / 换了会话)就不画 —— 会话里的文字后端已经改好,重开时看得到。
+   */
+  function lateRevise(sessionId: string, revs: readonly Revision[]): void {
+    if (!sessionId || sessionId !== store.state.sessionId) return;
+    const next = store.state.turns.slice();
+    let changed = false;
+    for (const rev of revs) {
+      for (let i = next.length - 1; i >= 0; i -= 1) {
+        const t = next[i];
+        if (!t || t.role !== 'agent' || !t.text.includes(rev.original.trim())) continue;
+        next[i] = { ...t, revisions: [...(t.revisions ?? []).filter((r) => r.original !== rev.original), rev] };
+        changed = true;
+        break;
+      }
+    }
+    if (changed) store.patch({ turns: next });
+  }
 
   function appendTurn(role: 'user' | 'agent', text: string, final: boolean): void {
     const turns = store.state.turns.slice();

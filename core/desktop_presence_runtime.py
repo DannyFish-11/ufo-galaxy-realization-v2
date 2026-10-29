@@ -1313,7 +1313,9 @@ class DesktopPresenceRuntime(_presence_stop.StopMixin, _presence_line.RuntimeOri
         # "不出声、后台派活儿"的动作(三选一里 SPEAK 才该出声,且那条已在 ambient
         # 循环内直接朗读)。若这里也把委托的完整认知回复念出来,等于每次委托都多一句
         # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读;别的设备发起的也不念。
-        await _live_check.attach_revisions(result)  # 修订挂进结果;念的是改过的版本(只念实质更正)
+        # 修订挂进结果;念的是改过的版本(只念实质更正);别的设备发起的拿到改过的文字
+        await _live_check.attach_revisions(result, desktop=rsession.desktop_originated)
+        _live_check.late_check(result, session_id=conversation_session_id, source=source)  # 联网核在后台,事后挂勘误
         _live_check.close_turn(_turn_token)
         try:
             from core.speech_output import speak_response

@@ -52,9 +52,10 @@ function paintText(node: HTMLElement, text: string, revisions: readonly Revision
     } else {
       node.append(document.createTextNode(orig));
       const mark = document.createElement('span');
-      mark.className = 'rv-mark';
-      mark.textContent = '未核实';
-      mark.title = r.note;
+      const ok = r.verdict === 'supported'; // 事后联网核实了的猜想
+      mark.className = ok ? 'rv-mark rv-ok' : 'rv-mark';
+      mark.textContent = ok ? '已核实' : '未核实';
+      mark.title = r.source.startsWith('web:') ? `${r.note} · ${r.source.slice(4)}` : r.note;
       node.append(mark);
     }
     at = i + orig.length;
