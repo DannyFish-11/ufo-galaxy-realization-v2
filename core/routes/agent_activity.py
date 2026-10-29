@@ -3,6 +3,7 @@
 端点
 ----
   GET /api/v1/agent/activity   智能体正在处理的全部请求
+  GET /api/v1/agent/live-check 边说边核现在能做到哪一级、缺什么(联网搜索 / 裁判),猜想账本准不准
 
 为什么要有它：桌面三态只表达**电脑发起的**请求（见 :mod:`core.presence_line`）。别的设备发起的、
 智能体自己发起的工作不进三态 —— 这是对的，但这样一来它们在桌面上就完全看不见了。
@@ -28,6 +29,15 @@ def create_router() -> APIRouter:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
 
         return get_desktop_presence_runtime().agent_activity()
+
+    @router.get("/api/v1/agent/live-check")
+    async def live_check_status() -> Dict[str, Any]:
+        """核对线各级能不能用(照实说缺哪样)+ 猜想校准(``hit_rate`` 没有结论时是 null)。只读。"""
+        import asyncio
+
+        from core.live_check_late import status
+
+        return await asyncio.to_thread(status)  # 读账本是读盘
 
     return router
 

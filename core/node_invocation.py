@@ -214,6 +214,21 @@ class NodeInvocationResult:
     # PR-11: governance denial diagnostics — populated when invocation is
     # refused due to governance ineligibility.
     eligibility_denial: Optional[Dict[str, Any]] = None
+    #: 执行器调到了节点,是节点自己回的失败(缺 Key、没连设备、没有这个动作……),不是这一侧出错
+    node_reported_failure: bool = False
+
+    def __post_init__(self) -> None:
+        # 调到了节点 ≠ 节点做成了。节点(或它的 fusion 入口)回 {"success": False} 就是失败 —— 此前外层照报
+        # success=True,模型、REST 调用方、核对线看到的都是「成功」,里面裹着一句错误(第 8 轮真跑:112 个节点的
+        # 进程内入口回「No executable method found」,/api/v1/nodes/call 照样 200 + success:true)。
+        if not self.success or not isinstance(self.result, dict):
+            return
+        layers = [self.result] + [self.result[k] for k in ("data", "result") if isinstance(self.result.get(k), dict)]
+        failed = next((layer for layer in layers if layer.get("success") is False), None)
+        if failed is not None:
+            self.success = False
+            self.node_reported_failure = True
+            self.error = self.error or str(failed.get("error") or failed.get("message") or "节点执行失败")
 
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Return a backward-compatible dict shaped like the old execution result.
@@ -389,34 +404,28 @@ class UnifiedNodeExecutor:
                 )
                 self._emit_aip_v3_task_result(envelope, result)
                 return result
-        except Exception as _perm_exc:  # noqa: BLE001 — 门禁自身故障不拦执行
-            logger.warning(
-                "invoke node: action-permission gate unavailable for node_id=%s: %s; proceeding",
-                node_id,
-                _perm_exc,
-            )
+        except Exception as _perm_exc:  # noqa: BLE001 — 门禁自身出错:读照放,写不执行(fail closed)
+            gate_fault = self._gate_fault(envelope, started, "action-permission", _perm_exc)
+            if gate_fault is not None:
+                return gate_fault
 
         # -- 自治拨盘门(GALAXY_AUTONOMY: safe/guided/autonomous) ---------------
-        # 权限门管"允许不允许",本门管"这次要不要先问人"。需要审批时:把请求排进
-        # ApprovalRegistry(人不在线就排队,不执行也不静默跳过),返回结构化
-        # approval_required;用户放行(仅此次/本会话/永久)后重试即通过。
+        # 权限门管"允许不允许",本门管"这次要不要先问人"。问人的唯一入口是 core.approval_gate:
+        # 有人在等就当场问(电脑发起的在电脑面板上批,手机/手表发起的在那边批),没人在等就排进
+        # 审批队列(面板上看得见),返回 approval_required,批了之后重试即通过。
         try:
-            from core.autonomy_policy import ensure_approval_request, evaluate_autonomy  # noqa: PLC0415
+            from core.approval_gate import gate_node_call  # noqa: PLC0415
 
-            auto_dec = evaluate_autonomy(node_id, action)
-            if auto_dec.needs_approval:
-                pending = ensure_approval_request(
-                    node_id,
-                    action,
-                    envelope.params if isinstance(envelope.params, dict) else {},
-                )
+            verdict = await gate_node_call(
+                node_id, action, envelope.params if isinstance(envelope.params, dict) else {}
+            )
+            if not verdict.proceed:
                 logger.info(
-                    "invoke node HELD for approval | node_id=%s action=%s request_id=%s " "approval_id=%s level=%s",
+                    "invoke node HELD by autonomy gate | node_id=%s action=%s request_id=%s why=%s",
                     node_id,
                     action,
                     envelope.request_id,
-                    pending.get("request_id"),
-                    auto_dec.level,
+                    verdict.error,
                 )
                 result = NodeInvocationResult(
                     success=False,
@@ -424,26 +433,18 @@ class UnifiedNodeExecutor:
                     action=action,
                     request_id=envelope.request_id,
                     trace_id=envelope.trace_id,
-                    error=(
-                        f"approval_required: {node_id}.{action} 需人工审批"
-                        f"(自治档位={auto_dec.level});审批通过后重试即可。"
-                        f"approval_id={pending.get('request_id')}"
-                    ),
+                    error=verdict.error,
                     duration_ms=(time.time() - started) * 1000.0,
                     execution_mode=envelope.execution_domain,
                     execution_source=envelope.invocation_source.value,
-                    eligibility_denial={
-                        "approval_required": {**auto_dec.to_dict(), **pending},
-                    },
+                    eligibility_denial=verdict.denial,
                 )
                 self._emit_aip_v3_task_result(envelope, result)
                 return result
-        except Exception as _auto_exc:  # noqa: BLE001 — 拨盘门故障不拦执行
-            logger.warning(
-                "invoke node: autonomy gate unavailable for node_id=%s: %s; proceeding",
-                node_id,
-                _auto_exc,
-            )
+        except Exception as _auto_exc:  # noqa: BLE001 — 门禁自身出错:读照放,写不执行(fail closed)
+            gate_fault = self._gate_fault(envelope, started, "autonomy", _auto_exc)
+            if gate_fault is not None:
+                return gate_fault
 
         # -- PR-GOLDEN-PATH: Golden Path node resolution + local facade ----
         # Try the unified device-node resolution first. If a mapping exists
@@ -691,6 +692,43 @@ class UnifiedNodeExecutor:
                 logger.debug("AIPV3-LOCAL TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
+
+    def _gate_fault(
+        self, envelope: NodeInvocationEnvelope, started: float, gate: str, exc: BaseException
+    ) -> Optional[NodeInvocationResult]:
+        """门禁自身出错时怎么办:读操作照放(返回 None),写操作不执行并说原因。
+
+        原先两道门出错一律 ``proceeding`` —— 门坏了等于门开着,方向是反的。读(截图、查状态)不改变
+        任何东西,照放不出事;写不知道该不该放,就不放。
+        """
+        from core.autonomy_policy import is_read_action  # noqa: PLC0415 — 纯函数,不会再出错
+
+        if is_read_action(envelope.action):
+            logger.warning(
+                "invoke node: %s gate failed for %s.%s (read action, proceeding): %s",
+                gate,
+                envelope.node_id,
+                envelope.action,
+                exc,
+            )
+            return None
+        logger.warning(
+            "invoke node: %s gate failed for %s.%s — not executed: %s", gate, envelope.node_id, envelope.action, exc
+        )
+        result = NodeInvocationResult(
+            success=False,
+            node_id=envelope.node_id,
+            action=envelope.action,
+            request_id=envelope.request_id,
+            trace_id=envelope.trace_id,
+            error=f"gate_fault: {gate} 门禁自身出错({exc}),写操作不执行",
+            duration_ms=(time.time() - started) * 1000.0,
+            execution_mode=envelope.execution_domain,
+            execution_source=envelope.invocation_source.value,
+            eligibility_denial={"gate_fault": {"gate": gate, "error": str(exc)}},
+        )
+        self._emit_aip_v3_task_result(envelope, result)
+        return result
 
     def _emit_aip_v3_task_result(self, envelope: NodeInvocationEnvelope, result: NodeInvocationResult) -> None:
         """Emit TASK_RESULT AIP v3 message after local node execution.

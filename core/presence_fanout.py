@@ -140,9 +140,21 @@ async def _send_island(websocket: Any, timeout: float) -> None:
         logger.debug("给新客户端补发灵动岛卡片失败(非致命): %s", exc)
 
 
+async def _send_approvals(websocket: Any, timeout: float) -> None:
+    """有操作在等人批准就补发一份(core.approval_gate):面板中途才打开,也看得到那张批准卡。"""
+    try:
+        from core.approval_gate import frame
+
+        snapshot = frame()
+        if snapshot["payload"]["pending"]:
+            await asyncio.wait_for(websocket.send_json(snapshot), timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("给新客户端补发待批清单失败(非致命): %s", exc)
+
+
 def welcome(websocket: Any, timeout: float) -> None:
-    """给刚连上的这一个客户端补一份设备名册、灵动岛上的卡(后台发,不拖住注册)。"""
-    for send in (_send_feed, _send_island):
+    """给刚连上的这一个客户端补一份设备名册、灵动岛上的卡、等人批准的操作(后台发,不拖住注册)。"""
+    for send in (_send_feed, _send_island, _send_approvals):
         task = asyncio.create_task(send(websocket, timeout))
         _TASKS.add(task)
         task.add_done_callback(_TASKS.discard)

@@ -636,6 +636,26 @@ class SessionManager:
         )
         return True
 
+    async def revise_message(self, session_id: str, contains: str, rewrite: Any, revisions: List[Dict]) -> bool:
+        """晚到的勘误（``core/live_check_late.py``）：最近一条含 ``contains`` 的助手消息换成 ``rewrite(原文)``，
+        修订追加进它的 ``metadata["revisions"]``（面板重开照样画得出）。找不到这条就什么都不改，返回 False。"""
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            msg = next(
+                (
+                    m
+                    for m in reversed(session.history if session else [])
+                    if m.role == "assistant" and contains in m.content
+                ),
+                None,
+            )
+            if msg is None:
+                return False
+            msg.content = rewrite(msg.content)
+            msg.metadata = {**msg.metadata, "revisions": list(msg.metadata.get("revisions") or []) + list(revisions)}
+            await self._persist_off_loop()
+        return True
+
     def get_history(self, session_id: str, max_turns: int = 20) -> List[Dict]:
         """获取会话历史（格式兼容 LLM messages）"""
         session = self._sessions.get(session_id)

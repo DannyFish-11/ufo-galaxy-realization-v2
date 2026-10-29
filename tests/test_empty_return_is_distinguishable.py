@@ -69,6 +69,8 @@ _BY_DESIGN = {
     ("core/desktop_native_multimodal_ingress_contract.py", "_extract_mm"),
     ("core/desktop_native_multimodal_ingress_contract.py", "_build_android_perception_ingress_snapshot"),
     ("galaxy_gateway/android/handlers/registration.py", "_normalize_assimilation_capabilities"),
+    # 知识的收录时间:0 就是「不知道」(没给 / 认不出),两种情况对模型是同一件事 —— 标题里都写 recorded: unknown,不补日期
+    ("core/rag_memory.py", "_epoch"),
 }
 
 

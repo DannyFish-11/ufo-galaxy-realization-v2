@@ -40,16 +40,27 @@ _node_dir = os.path.dirname(os.path.abspath(__file__))
 _service = None
 
 
+_main = None
+
+
+def _main_module():
+    """本节点的 main.py(只载一次:服务类与请求体要出自同一份模块,pydantic 才认得那个请求对象)。"""
+    global _main
+    if _main is None:
+        main_path = os.path.join(_node_dir, "main.py")
+        spec = importlib.util.spec_from_file_location(
+            "Node_120_File.main", main_path,
+            submodule_search_locations=[_node_dir]
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _main = module
+    return _main
+
+
 def _import_from_node_main(class_name):
     """使用 importlib 从本节点的 main.py 导入类，避免 sys.path 污染"""
-    main_path = os.path.join(_node_dir, "main.py")
-    spec = importlib.util.spec_from_file_location(
-        "Node_120_File.main", main_path,
-        submodule_search_locations=[_node_dir]
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return getattr(module, class_name)
+    return getattr(_main_module(), class_name)
 
 
 def _get_service():
@@ -64,6 +75,35 @@ def _get_service():
             logger.error(f"Node_120_File 服务初始化失败: {e}")
             raise
     return _service
+
+
+#: 声明的动作 → FileService 上的方法、它要的请求体。那些方法收**一个** pydantic 请求对象,不收散的关键字参数,
+#: 名字也与动作名不同(list → list_directory)—— 此前按动作名在服务上找方法,声明的九个动作里七个都回「未找到操作」,
+#: 而外层照报成功(tests/test_a_node_that_fails_is_reported_as_failed.py 那一轮修的就是这层伪装)。
+_ACTIONS = {
+    "read": ("read_file", "ReadRequest"),
+    "write": ("write_file", "WriteRequest"),
+    "append": ("append_file", "AppendRequest"),
+    "delete": ("delete", "DeleteRequest"),
+    "copy": ("copy", "CopyMoveRequest"),
+    "move": ("move", "CopyMoveRequest"),
+    "list": ("list_directory", "ListRequest"),
+    "search": ("search", "SearchRequest"),
+    "archive": ("create_archive", "ArchiveRequest"),
+    "extract": ("extract_archive", "ExtractRequest"),
+    "hash": ("calculate_hash", "HashRequest"),
+}
+
+
+def _declared(service, action: str, params: dict):
+    """按 :data:`_ACTIONS` 调一个声明过的动作;不是声明过的返回 ``None``(走下面的通用查找)。"""
+    if action == "info":
+        return _run_coro(service.get_file_info(str(params.get("path") or "")))
+    if action not in _ACTIONS:
+        return None
+    method_name, model_name = _ACTIONS[action]
+    request = getattr(_main_module(), model_name)(**params)
+    return _run_coro(getattr(service, method_name)(request))
 
 
 def execute(action: str, params: dict = None) -> dict:
@@ -99,6 +139,10 @@ def execute(action: str, params: dict = None) -> dict:
                 "actions": {'read': '读取文件', 'write': '写入文件', 'append': '追加文件', 'copy': '复制文件', 'move': '移动文件', 'delete': '删除文件', 'list': '列出目录', 'search': '搜索文件', 'info': '文件信息'}
             }
         
+        declared = _declared(service, action, params)
+        if declared is not None:
+            return {"success": True, "action": action, "result": declared}
+
         # 查找并调用对应方法
         method_name = action.replace("-", "_")
         

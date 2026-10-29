@@ -182,3 +182,18 @@ def test_the_handle_rendered_into_the_prompt_actually_works(rag):
     got = rag.read_knowledge(kid)
     assert got["success"] is True
     assert got["content"].startswith(body[:50])
+
+
+def test_every_piece_of_knowledge_says_when_it_was_recorded():
+    """模型看不见资料有多旧,就会把旧版本号当成现在的说出来(docs/GROUNDED_AGENT_DESIGN.md §2 信息层)。"""
+    import time
+
+    from core.rag_memory import KnowledgeChunk, RAGMemory, _epoch
+
+    rag = RAGMemory.__new__(RAGMemory)
+    stamp = time.mktime((2024, 3, 5, 12, 0, 0, 0, 0, -1))
+    dated = rag.format_rag_context([KnowledgeChunk(chunk_id="k-old", content="v1.2 发布。", timestamp=stamp)])
+    assert "recorded: 2024-03-05" in dated
+    undated = rag.format_rag_context([KnowledgeChunk(chunk_id="k-?", content="不知道哪天的。")])
+    assert "recorded: unknown" in undated, "不知道就说不知道,不补一个日期"
+    assert _epoch("2024-03-05T12:00:00Z") > 0 and _epoch("昨天") == 0.0 and _epoch(None) == 0.0

@@ -154,7 +154,9 @@ class LocalNodeFacade:
                 call = lambda: handler(action, user_params)  # noqa: E731
             else:
                 call = lambda: handler(command=action, **call_kwargs)  # noqa: E731
-            result = call()
+            # 同步写法的入口(模块函数 execute(action, params))在工作线程里跑:它们里面常有
+            # 「等另一个线程跑完协程」的阻塞等待(Node_120 的 _run_coro),放在循环线程上就把整个后端卡住
+            result = call() if asyncio.iscoroutinefunction(handler) else await asyncio.to_thread(call)
             if asyncio.iscoroutine(result):
                 result = await result
 

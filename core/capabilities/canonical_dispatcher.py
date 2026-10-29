@@ -279,17 +279,18 @@ class CanonicalDispatcher:
         if perm_result is not None:
             if not perm_result.needs_confirmation:
                 return perm_result
-            # 「需要用户确认」以前是一堵墙:返回这句话之后,全仓没有任何机制
-            # 能够真正取得这个确认,于是 DANGEROUS/CRITICAL 级工具永远执行不了。
-            # 现在把它接到既有的 HITL 通路上 —— 问一下手腕上的那个人。
-            # 一律 fail closed:只有明确点了"批准"才继续。
-            from core.interaction.high_risk_confirmation import confirm_high_risk_tool
+            # 「需要用户确认」以前是一堵墙,后来只能在手表上问。现在只经 core.approval_gate 一个口:
+            # 电脑发起的在电脑面板上批,手机/手表发起的在那边批;批一次默认记到这段对话结束。
+            # 一律 fail closed:只有明确点了"批准"(或已有对得上的授权)才继续。
+            from core.approval_gate import approval_target, request_approval, tool_key
 
-            confirmation = await confirm_high_risk_tool(
-                tool_name=tool_name,
-                risk_level=perm_result.risk_level or "unknown",
+            confirmation = await request_approval(
+                key=tool_key(tool_name, arguments),
+                target=approval_target(arguments),
+                what=tool_name,
+                risk=perm_result.risk_level or "unknown",
                 session_id=_session_id,
-                device_id=_device_id,
+                params=arguments if isinstance(arguments, dict) else None,
             )
             if not confirmation.approved:
                 return DispatchResult(
@@ -386,8 +387,14 @@ class CanonicalDispatcher:
                     tool_name=tool_name,
                     layer=CapabilityLayer.classify(tool_name),
                 )
-        except Exception as exc:
-            logger.debug("CanonicalDispatcher: 权限检查异常（放行）: %s", exc)
+        except Exception as exc:  # noqa: BLE001 — 门坏了不等于门开着
+            logger.warning("CanonicalDispatcher: 权限检查出错,不执行 %s: %s", tool_name, exc)
+            return DispatchResult(
+                success=False,
+                error=f"权限检查出错,没有执行: {exc}",
+                tool_name=tool_name,
+                layer=CapabilityLayer.classify(tool_name),
+            )
         return None
 
     # ------------------------------------------------------------------

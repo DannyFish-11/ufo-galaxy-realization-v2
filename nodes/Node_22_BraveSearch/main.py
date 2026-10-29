@@ -171,6 +171,37 @@ async def suggest(query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+async def execute(command: str, **params: Any) -> Dict[str, Any]:
+    """统一执行器的入口(``fusion_entry.py`` 在模块上按 process / execute / run / handle 找)。
+
+    此前这个模块一个都没有:进程内调这个节点(模型的 ``node__22__search``、边说边核的联网那一级)永远回
+    「No executable method found」—— 联网搜索在进程内从没走通过。缺 Key、搜不到都照实失败,不模拟结果。
+    """
+    import asyncio
+
+    brave_manager.api_key = os.getenv("BRAVE_API_KEY", "") or brave_manager.api_key  # 面板后配的 Key 也认
+    if command not in ("search", "suggest"):
+        return {"success": False, "error": f"Unknown action: {command}(支持 search / suggest)"}
+    query = str(params.get("query") or params.get("q") or "").strip()
+    if not query:
+        return {"success": False, "error": "缺 query"}
+    if not brave_manager.api_key:
+        return {"success": False, "error": "没配 BRAVE_API_KEY,联网搜索用不了"}
+    try:
+        if command == "suggest":
+            return {"success": True, "suggestions": await asyncio.to_thread(brave_manager.suggest, query)}
+        data = await asyncio.to_thread(
+            brave_manager.search,
+            query,
+            int(params.get("count") or 10),
+            int(params.get("offset") or 0),
+            str(params.get("search_type") or "web"),
+        )
+    except Exception as exc:  # noqa: BLE001 — 网络 / 配额 / 返回不对,照实说
+        return {"success": False, "error": f"Brave 搜索失败:{exc}"}
+    return {"success": True, **(data if isinstance(data, dict) else {"results": data})}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8022)
