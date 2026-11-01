@@ -26,7 +26,8 @@ import pytest
 
 #: 节点间/对节点的 URL 长这样。
 _URL_MARK = re.compile(
-    r"STATE_MACHINE_URL|NODE_\d+_URL|node_urls|node_url|localhost:8\d{3}|http://node-|get_node_url\("
+    # node\d+_url:第 9 轮 core/safe_executor.py 的 ``self._node09_url`` 认不出,打沙箱节点不带身份,沙箱在跑时每次执行都 401
+    r"STATE_MACHINE_URL|NODE_\d+_URL|node_urls|node_url|node\d+_url|localhost:8\d{3}|http://node-|get_node_url\("
 )
 
 #: 同一个文件里由端口表算出来的 URL 常量（``MODEL_ROUTER_URL = f"http://localhost:{get_node_port(...)}"``）。

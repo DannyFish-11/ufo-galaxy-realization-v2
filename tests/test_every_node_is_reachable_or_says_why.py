@@ -301,3 +301,34 @@ def test_a_node_only_simulates_when_asked(main):
     src = main.read_text("utf-8")
     if any(mark in src for mark in _FABRICATION_MARKS):
         assert "mock_drivers_enabled" in src, f"{main.parent.name} 有模拟数据的分支,却不看 USE_MOCK_DRIVERS"
+
+
+def test_the_sandbox_delegation_carries_identity_and_says_why_it_failed(monkeypatch):
+    """沙箱节点(Node_09)在跑时:委托要带身份;节点回 4xx 要把原因带回来 —— 此前不带身份、每次 401,结果「没成、也没原因」。"""
+    import httpx
+
+    from core.safe_executor import SafeExecutor
+
+    seen = {}
+
+    class _Client:
+        def __init__(self, *a, headers=None, **k):
+            seen["headers"] = dict(headers or {})
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, json=None):
+            return httpx.Response(
+                401, json={"detail": "Invalid or expired API token"}, request=httpx.Request("POST", url)
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    monkeypatch.setenv("GALAXY_API_TOKEN", "t-123")
+    ex = SafeExecutor()
+    out = asyncio.run(ex._execute_via_node09("print(1)", "python", 5, 64, "", endpoint="http://127.0.0.1:7996"))
+    assert seen["headers"].get("Authorization") == "Bearer t-123"
+    assert out.success is False and "HTTP 401" in out.error and "Invalid or expired API token" in out.error
