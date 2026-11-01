@@ -184,3 +184,39 @@ def test_owned_process_is_actually_killed(stop_sandbox):
         if victim.poll() is None:  # pragma: no cover
             victim.kill()
             victim.wait(timeout=5)
+
+
+@_POSIX_ONLY
+def test_a_process_that_merely_mentions_galaxy_gateway_elsewhere_is_left_alone(stop_sandbox, tmp_path_factory):
+    """兜底那几条模式里没有仓库路径(``python.*galaxy_gateway`` …):命令行对上了、工作目录不在本仓库里的不许碰。
+
+    第 10 轮本地全量时查到的同一类问题(那次是 ``pkill -f ollama``):按命令行里的一个词停进程,会停掉命令行里
+    恰好带着这个词的别人的进程 —— 比如跑着 ``tests/galaxy_gateway/...`` 的测试进程。
+    """
+    elsewhere = tmp_path_factory.mktemp("elsewhere")
+    bystander = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(120)", "galaxy_gateway"],
+        cwd=str(elsewhere),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    ours = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(120)", "galaxy_gateway"],
+        cwd=str(stop_sandbox),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.3)
+        r = _run_stop(stop_sandbox)
+        assert r.returncode == 0, f"stop.sh 非零退出: {r.stderr}"
+        for _ in range(20):
+            if ours.poll() is not None:
+                break
+            time.sleep(0.1)
+        assert ours.poll() is not None, "工作目录在本仓库里的残留进程要停掉"
+        assert bystander.poll() is None, "工作目录不在本仓库的进程被误杀"
+    finally:
+        for p in (bystander, ours):
+            if p.poll() is None:
+                p.kill()

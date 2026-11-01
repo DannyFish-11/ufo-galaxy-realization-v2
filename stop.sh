@@ -102,16 +102,35 @@ stop_by_pidfile .frontend.pid "Electron" "$SCRIPT_DIR"
 #
 # 这里刻意写成显式 if 而不是 `A && ok || B && ok || true`：后者会被求值成
 # (((A && ok) || B) && ok) || true，成功时重复打印、且 B 的执行条件反直觉。
+#
+# 命令行里没有仓库路径的那几种（`main.py --host`、`galaxy_gateway`、`electron … galaxy`），只按命令行里的一个词
+# 匹配会误杀：别的克隆、命令行里带着 galaxy_gateway 的测试进程……所以再核一道 —— 工作目录在本仓库里的才停。
+_pid_cwd() {
+    readlink "/proc/$1/cwd" 2>/dev/null || lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true
+}
+
+# $1 命令行模式；命令行对得上、且工作目录在本仓库里的才停。停了至少一个回 0。
+stop_repo_procs() {
+    local pattern="$1" stopped=1 pid cwd
+    for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do
+        [[ "$pid" == "$$" ]] && continue
+        cwd="$(_pid_cwd "$pid")"
+        [[ "$cwd" == "$SCRIPT_DIR" || "$cwd" == "$SCRIPT_DIR"/* ]] || continue
+        kill "$pid" 2>/dev/null && stopped=0
+    done
+    return $stopped
+}
+
 if pkill -f "python.*${SCRIPT_DIR}/main\.py" 2>/dev/null; then
     ok "Backend process killed (by repo path)"
-elif pkill -f "python.*main\.py --host" 2>/dev/null; then
-    ok "Backend process killed (by --host signature)"
+elif stop_repo_procs "python.*main\.py --host"; then
+    ok "Backend process killed (by --host signature, cwd in repo)"
 fi
 
 # 历史模式，可能仍有旧进程残留；匹配不到是正常的，不打印。
-pkill -f "python.*galaxy_gateway" 2>/dev/null || true
+stop_repo_procs "python.*galaxy_gateway" || true
 
-if pkill -f "electron.*galaxy" 2>/dev/null; then
+if stop_repo_procs "electron.*galaxy"; then
     ok "Electron process killed"
 fi
 

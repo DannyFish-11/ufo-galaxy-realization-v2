@@ -14,6 +14,8 @@ import asyncio
 import logging
 import pathlib
 
+import pytest
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
@@ -84,3 +86,61 @@ def test_a_node_that_really_did_not_start_is_still_reported(caplog):
     with caplog.at_level(logging.INFO):
         asyncio.run(adapter._maybe_start_node(node_name="Node_X", device_type=None, transport=None, decision=None))
     assert "FAILED to start Node_X" in " ".join(r.getMessage() for r in caplog.records)
+
+
+# ── 停本地主脑时只停自己拉起的 Ollama(本地全量两次被打断,查到的) ─────────────────────────────
+#
+# 原先 ``LocalBrainManager.stop()`` 跑 ``pkill -f ollama``(Windows 上 ``taskkill /IM ollama.exe``):命令行里**任何地方**
+# 带 ollama 的进程都被杀 —— 人自己开的 Ollama、打开着 ollama.log 的编辑器,以及命令行里带着
+# ``tests/test_local_brain_ollama_readiness.py`` 的那个测试分片(SIGTERM,第 10 轮本地全量两次)。
+
+
+def _sleeper(*extra: str, new_session: bool = False):
+    import subprocess
+    import sys
+
+    return subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)", *extra], start_new_session=new_session
+    )
+
+
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="进程组语义按 POSIX 测")
+def test_stopping_the_local_brain_only_stops_the_ollama_it_started():
+    from core.local_brain_manager import LocalBrainManager
+
+    bystander = _sleeper("ollama-bystander")  # 命令行里带 ollama 的别人的进程
+    ours = _sleeper("serve", new_session=True)  # 像 _start_ollama 那样起在自己的会话里
+    try:
+        mgr = LocalBrainManager(backend="ollama", ollama_url="http://127.0.0.1:9")
+        mgr._ollama_proc = ours
+        asyncio.run(mgr.stop())
+        assert ours.wait(timeout=15) is not None, "我们拉起的那个要停掉"
+        assert bystander.poll() is None, "命令行里带 ollama 的别人的进程不许碰"
+        assert mgr._ollama_proc is None
+    finally:
+        for p in (bystander, ours):
+            if p.poll() is None:
+                p.kill()
+
+
+def test_stopping_without_having_started_ollama_kills_nothing(monkeypatch):
+    import subprocess
+
+    from core.local_brain_manager import LocalBrainManager
+
+    ran = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: ran.append(a))
+    asyncio.run(LocalBrainManager(backend="ollama", ollama_url="http://127.0.0.1:9").stop())
+    assert ran == [], "人自己开的 Ollama 不归我们停"
+
+
+def test_nothing_in_core_or_launcher_kills_by_a_loose_command_line_pattern():
+    import re
+
+    hits = []
+    for base in ("core", "launcher"):
+        for path in sorted((REPO / base).rglob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            for m in re.finditer(r"""["']pkill["']\s*,\s*["']-f["']""", text):
+                hits.append(f"{path.relative_to(REPO)}:{text[: m.start()].count(chr(10)) + 1}")
+    assert hits == [], "按 PID / 自己的进程组停,别按命令行里的一个词停:" + ", ".join(hits)

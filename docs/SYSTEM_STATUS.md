@@ -1029,6 +1029,9 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
   `nodes__list` 把结果放在别的键里，**模型收到的一直是空的工具消息**；有 `result` 的交过去的是 Python `repr`。现在一处说了算（`core/tool_result_text.py`），一律 JSON。
 - **日志里收的两处**：反馈环发「成功」事件用的 `StateEventType.TASK_SUCCEEDED` 不存在（成功叫 `TASK_DONE`），每一次成功的反馈都被吞掉 → 改正，并全仓扫一遍点名的事件类型都真有；
   节点进程活着只是慢，启动适配器照报「FAILED to start」→ 说「还在起来」。
+- **本地全量两次被 SIGTERM 打断，查到的**：停本地主脑时跑 `pkill -f ollama`（Windows 上 `taskkill /IM ollama.exe`）—— 命令行里**任何地方**带 ollama 的进程都被杀：
+  人自己开的 Ollama、打开着 ollama.log 的编辑器、命令行里带着 `tests/test_local_brain_ollama_readiness.py` 的那个测试分片。现在拉起时记下进程、停时只停它（按 PID / 它自己的进程组，`core/own_process.py`），
+  人自己开的 Ollama 不碰；`stop.sh` 兜底那几条没有仓库路径的模式（`galaxy_gateway`、`main.py --host`、`electron … galaxy`）也只停工作目录在本仓库里的进程。扫描测试守着 core / launcher 里不再有 `pkill -f`。
 
 真跑（`python main.py --backend -v`，独立数据目录，假模型按剧本发工具调用）：模型看得到 `nodes__list` 的结果、`nodes__invoke` 调 Node_23 `now` 进程内拿到时间；
 `timers` 有歧义照实列出三条；Node_122 `execute`（极危险）→ 电脑面板 0.4~0.8 秒出现「等你批准」、岛上一张卡 → 批准后真执行（stdout `galaxy-r10`）→ 同一段对话再跑不再问 →
@@ -1037,7 +1040,7 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 验证：新增 `tests/test_the_model_can_use_nodes_and_asks_before_risky_ones.py`（62 条：高危动作的档、只读不问、看参数判 HTTP 方法、危险与极危险在任何档位都问、
 全部节点扫一遍 —— 每个可运行节点列得出动作或说得出为什么、名字里有执行 / 删 / 发 / 推的不低于危险、跑代码与操控设备的节点写动作不低于危险；
 认不出不执行、只读直接跑、没人可问不执行、面板批一次只问一次、拒绝不执行、谨慎档才问会改东西、工具时间预算；服务型入口建请求对象、help 照实；
-通用入口调不了的直接走路由；状态只认一份；工具结果交给模型）与 `tests/test_what_the_round10_real_run_found.py`（4 条）。
+通用入口调不了的直接走路由；状态只认一份；工具结果交给模型）与 `tests/test_what_the_round10_real_run_found.py`（7 条），`tests/test_stop_script_pid_ownership.py` 加 1 条。
 
 **下一轮待办：**
 
