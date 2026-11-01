@@ -123,6 +123,28 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   画法是**内嵌的行**（`.vd-card` 左栏说明 + 右栏输入，与设置页 `.sf-row` 同一个节奏），不是凸起的卡片 —— `tests/test_the_api_entry_is_inline_rows_not_cards.py` 钉着。
 - `core/routing_tail.py` - 偏好表没列、但已配好可用的厂商（用户自加端点、OneAPI、只配了 Groq 的人做推理任务）排在失败转移链的最后几档；有意不自动参与的（智谱编码套餐）不进这一档
 
+### 要人点头的操作（批准）
+- `core/approval_gate.py` - 「问人批准」的**唯一入口** `request_approval()`：查授权 → 判在哪问 → 问 → 等 → 落授权。工具门（`openclawd` 内联 / `CanonicalDispatcher`）、
+  节点拨盘门（`GALAXY_AUTONOMY`，`core/node_invocation.py` → `gate_node_call`）、智能家居、GitHub 插件准入都调它，**别再各写一份「问完再试」**。
+  从哪发起就在哪批：电脑发起的在面板上批（WS `type="approvals"` 只带摘要，令牌走带鉴权的 `GET /api/v1/approvals`；岛上一张「等你批准」卡），
+  手机 / 手表发起的在那台设备上问（`high_risk_confirmation.confirm_high_risk_tool`）；桌面外壳没连着就不白等。
+  授权按「动作 × 对象」记（`node:<编号>:<动作>[/<子动作>]@<对象>`），默认「本会话」= 这段对话，「一直允许」落数据目录 `approval_grants.json`、面板能撤。
+  一次调用只问一次（工具门批过的，节点门认）；门禁自己出错一律不执行（节点门：读照放、写不执行）。设计与进度：`docs/GROUNDED_AGENT_DESIGN.md`
+- 工具的单次时间预算（`core/tool_permissions.py::tool_call_timeout_s`）给等人、给长任务留够：会停下来问人的按确认超时，`computer_use__run` 按步数，
+  带 `verify_command` 的 `engineer__apply` 按验证超时，`github__install` 按 clone + 加载 + 问人 —— 原先一律 30 秒，长任务被半路掐断
+
+### 边说边核（回答里的事实当场核、错了在同一段里改）
+- `core/live_check.py` - 一轮一本账（`TurnLedger`）：工具循环每调一次记一笔（`note_tool_outcome`），流式出字按句交给核对线。只用规则判要不要核（「做好了」、某台设备在线 / 离线），
+  快的两级：这一轮**真实的工具结果**、**成员视图**里的在线（名字取自设备登记，`OnboardingService.member_view`；连接管理器的元数据里没有名字）。
+  结论四种去处：SSE `revise` 帧 + `done.revisions`（面板原地划掉跟更正，留原文）；会话与记忆写**改过的文字**；驳倒一句就请生成收住、带着更正接着说（每轮一次）；
+  语音只念实质更正、每轮最多两处、查不到的不念。**句子永远不触发动作**
+- `core/live_check_late.py` - 一轮结束后的慢两级：时效性的句子与标了「猜」的句子联网核（Brave，要 `BRAVE_API_KEY`；Google 只回链接，不用），**换一个模型**裁决
+  （这一轮用过的厂商不当裁判；指不出搜索结果里的出处 = 没核）。驳倒的改会话文字、推 WS `revise`、岛上一张卡。后台任务用空上下文起（裁判的字不流进人的对话）。
+  缺联网 / 缺第二个模型照实说：`GET /api/v1/agent/live-check`
+- `core/conjecture_ledger.py` - 说出口的猜想与它后来的结论（类型化、落数据目录），校准 `hit_rate` 没有结论时是 null。**只给人看，不进任何决策模块**（测试扫描守着）
+- 有据回答的几条规矩在 Genome 里：`config/genomes/grounded/` 只声明 `instructions.grounding`，`core.genome` 把它接在主循环 / 内核对话路（`chat_prompt()`）/ Agent 模板三处提示词后面；
+  `config/genomes/active.json` 指向它。默认 Genome 不动（指到 default 时逐字节等于旧硬编码）；人给的提示词（`GALAXY_SYSTEM_PROMPT`）原样用、不接规矩
+
 ### 事件循环里不跑阻塞的事
 Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示 5–7 秒」= 循环被一件同步的事占住了。已经挪出循环的：开麦克风 / 枚举音频设备
 （`core/multimodal/audio_ingest.py`、`system_audio_capture_service.py`）、第一次选 TTS 引擎（`core.speech_output.speech_engine_ready()`）、创建节点进程
@@ -132,6 +154,9 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 ### 节点（各自一个进程的微服务）
 - **缺东西就照实失败，不模拟成功**：没连设备 / 没配 Key / 没有命令时，节点回 `success: false` 并说缺什么（`nodes/common/mock_drivers.py`）；
   模拟只在显式 `USE_MOCK_DRIVERS=true` 时才有。没有调用方读 `mock` 那一位，看的都是 `success`。Node_58 的 `/chat` 走 `core.multi_llm_router`（与对话主链同一个），没模型就 503
+- **节点自己回失败，整条调用就是失败**：`NodeInvocationResult` 任一层回 `success: false` 就是 `success=False`（`node_reported_failure`），REST 回 502。
+  用通用 fusion 入口的节点，模块上要有 process / execute / run / handle 之一（或 Node 类）进程内才走得通 —— 第 8 轮清点时 117 个里 112 个没有，照实回 502；
+  接上的要像 Node_22 / Node_25 / Node_120 那样落到实现。同步写法的入口在工作线程里跑（`core/node_facade_local.py`）
 - core / 别的节点打节点端点要带身份：`core.internal_auth.internal_headers_for(url)`（节点 HTTP 面默认有鉴权）；`tests/test_all_node_http_surfaces_require_auth.py` 扫描调用点
 - 同一个节点只起一份：`ServiceManager.start_service` 见已在跑 / 正在起就不再建进程，`register_service` 不换掉已有条目（并发激活曾起两份、前一个停机后还活着）；
   启动那一批节点的登记，节点表只落盘一次（`NodeFabricRegistry.batched_persistence()`）

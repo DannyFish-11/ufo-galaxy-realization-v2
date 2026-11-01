@@ -312,12 +312,14 @@ class TestPermissionGuard:
         assert result.success is False
         assert result.needs_confirmation is True
 
-    def test_checker_raises_is_ignored(self):
+    def test_checker_raises_refuses(self):
+        """门禁自己出错 = 不执行。原先这里是放行(``assert result is None``)—— 门坏了等于门开着。"""
         checker = MagicMock()
         checker.check.side_effect = RuntimeError("oops")
         d = self._make_dispatcher(checker=checker)
         result = d._check_permission("skill__x", "sess", "dev")
-        assert result is None  # defensive pass-through
+        assert result is not None and result.success is False
+        assert "权限检查出错" in (result.error or "")
 
 
 # ---------------------------------------------------------------------------

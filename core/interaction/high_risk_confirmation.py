@@ -167,10 +167,13 @@ async def confirm_high_risk_tool(
     session_id: str = "",
     device_id: str = "",
     timeout_s: Optional[float] = None,
+    devices: Optional[List[str]] = None,
 ) -> ConfirmationOutcome:
-    """问一下人:这个高风险操作要不要执行。
+    """在手表 / 手机上问一下人:这个高风险操作要不要执行。
 
-    任何一步出问题都返回**不批准**,绝不因为"问不到人"就放行。
+    任何一步出问题都返回**不批准**,绝不因为"问不到人"就放行。``devices`` 给了就只问其中在线可问的那几台
+    (请求从哪台设备发起就在哪台上问,见 :mod:`core.approval_gate`);一台都问不到时 ``source="unreachable"``,
+    调用方据此可以改去电脑面板上问。
     """
     try:
         from core.interaction.pending_decision_registry import (
@@ -190,11 +193,14 @@ async def confirm_high_risk_tool(
         logger.warning("高风险确认:设备发现失败(%s)—— 判不批准", exc)
         return ConfirmationOutcome(False, f"无法发现可询问的设备: {exc}")
 
+    if devices:
+        targets = [d for d in targets if d in devices]
     if not targets:
         logger.warning("高风险确认:没有已连接的手表/手机可询问,%s 判不批准", tool_name)
         return ConfirmationOutcome(
             False,
             "没有已连接的设备可以询问 —— 高风险操作在无人可问时一律不执行",
+            source="unreachable",
         )
 
     wait_s = timeout_s if timeout_s is not None else _timeout_s()

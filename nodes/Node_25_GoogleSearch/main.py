@@ -296,6 +296,33 @@ def load_config_from_env() -> NodeConfig:
         api_config=api_cfg
     )
 
+_IN_PROCESS: Optional[GoogleSearchNode] = None
+
+
+async def execute(command: str, **params: Any) -> Dict[str, Any]:
+    """统一执行器的入口(``fusion_entry.py`` 在模块上按 process / execute / run / handle 找)。
+
+    此前这个模块一个都没有:进程内调这个节点永远回「No executable method found」。搜不了就照实失败。
+    """
+    global _IN_PROCESS
+    if command not in ("search", "image_search"):
+        return {"success": False, "error": f"Unknown action: {command}(支持 search / image_search)"}
+    query = str(params.get("query") or params.get("q") or "").strip()
+    if not query:
+        return {"success": False, "error": "缺 query"}
+    num = params.get("num_results") or params.get("count")
+    try:
+        if _IN_PROCESS is None:
+            _IN_PROCESS = GoogleSearchNode(load_config_from_env())
+        run = _IN_PROCESS.perform_image_search if command == "image_search" else _IN_PROCESS.perform_search
+        data = await run(query, int(num) if num else None)
+    except HTTPException as exc:
+        return {"success": False, "error": str(exc.detail)}
+    except Exception as exc:  # noqa: BLE001
+        return {"success": False, "error": f"Google 搜索失败:{exc}"}
+    return {"success": True, **data}
+
+
 def main():
     """主函数,用于设置和运行节点。
 

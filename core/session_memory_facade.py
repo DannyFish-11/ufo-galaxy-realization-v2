@@ -111,6 +111,15 @@ async def record_session_turn(
         merged_metadata.setdefault("trace_id", trace_id)
     if device_id:
         merged_metadata.setdefault("device_id", device_id)
+    if role == "assistant" and content:
+        # 边说边核(core/live_check.py):核出来不对的句子不当事实留在会话与记忆里 —— 写进去的是改过的文字,
+        # 修订本身记在 metadata 里(面板重开时照样画得出「划掉、跟一句更正」)
+        from core.live_check import corrected_text, settle_current
+
+        revisions = await settle_current(content)
+        if revisions:
+            merged_metadata["revisions"] = [r.to_dict() for r in revisions]
+            content = corrected_text(content, revisions)
 
     # 融合(域3):轮次【单写】唯一属主 SessionManager。此前同一轮要四写
     # (SM + WorkingMemory + ConversationMemory + UnifiedMemory)——WM/CM 的轮次

@@ -68,6 +68,46 @@ class PermissionCheckResult(BaseModel):
 # 默认策略
 # ============================================================================
 
+#: 智能体自家只读的工具(查记忆 / 知识 / 文献 / 资源 / 工程状态 / 插件清单 / 家里有什么 / 可调参数)。
+_AGENT_READS = (
+    "memory__*",
+    "knowledge__*",
+    "context__*",
+    "resource__*",
+    "academic__search",
+    "academic__recall",
+    "academic__arxiv_search",
+    "academic__arxiv_read",
+    "academic__arxiv_library",
+    "engineer__context",
+    "engineer__diagnose",
+    "engineer__plan",
+    "engineer__status",
+    "engineer__validate",
+    "github__context",
+    "github__list",
+    "github__status",
+    "home__devices",
+    "tuning__list",
+)
+#: 智能体自家会改东西的工具(各自另有门,见下面的说明)。
+_AGENT_WRITES = (
+    "academic__ingest",
+    "engineer__apply",
+    "engineer__record",
+    "github__ingest",
+    "github__install",
+    "github__uninstall",
+    "home__control",
+    "home__scene",
+    "computer_use__run",
+    "tuning__set",
+    "tuning__reset",
+    "ask_human__*",
+)
+#: MCP 服务器上常见的写文件类动作。
+_MCP_WRITES = ("write_file", "edit_file", "move_file", "create_directory")
+
 DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
     # SAFE: 只读/查询
     ToolPermissionPolicy(tool_pattern="mcp__*__screenshot", risk_level=ToolRiskLevel.SAFE),
@@ -122,6 +162,35 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
         requires_confirmation=True,
         max_calls_per_minute=5,
     ),
+    # MCP 服务器上常见的「删」与「跑命令」:与节点的同名动作同一档
+    *[
+        ToolPermissionPolicy(
+            tool_pattern=f"mcp__*__{verb}",
+            risk_level=ToolRiskLevel.DANGEROUS,
+            requires_confirmation=True,
+            max_calls_per_minute=5,
+        )
+        for verb in ("delete*", "remove*")
+    ],
+    *[
+        ToolPermissionPolicy(
+            tool_pattern=f"mcp__*__{verb}",
+            risk_level=ToolRiskLevel.CRITICAL,
+            requires_confirmation=True,
+            max_calls_per_minute=5,
+        )
+        for verb in ("run_command", "execute_command", "shell*")
+    ],
+    *[ToolPermissionPolicy(tool_pattern=f"mcp__*__{verb}", risk_level=ToolRiskLevel.MODERATE) for verb in _MCP_WRITES],
+    # ── 智能体自家的工具族 ────────────────────────────────────────────────
+    # 只读的登记为 SAFE(只查、不改任何东西);会改东西的登记为 MODERATE —— 它们各自已经有自己的门:
+    # home__ 写动作过节点拨盘门(core.approval_gate),github__install 过插件准入(core.github_addon_admission),
+    # engineer__apply 只推进补丁阶段、验证由 harness 跑,computer_use__run 在本机落手前过仲裁器。
+    *[
+        ToolPermissionPolicy(tool_pattern=p, risk_level=ToolRiskLevel.SAFE, max_calls_per_minute=600)
+        for p in _AGENT_READS
+    ],
+    *[ToolPermissionPolicy(tool_pattern=p, risk_level=ToolRiskLevel.MODERATE) for p in _AGENT_WRITES],
 ]
 
 
@@ -264,6 +333,39 @@ MAX_TOOL_TIMEOUT_S = 1800.0
 #: 会阻塞等待人类应答的工具前缀。
 _HUMAN_BLOCKING_PREFIXES = ("ask_human__",)
 
+#: 多步桌面操作每一步给多少秒:规划调用自己最多 60 秒(core/computer_use_loop.py),再加落手、截屏与核对。
+CU_STEP_BUDGET_S = 75.0
+#: 多步桌面操作在步数之外的固定开销(起步截屏、做完后的独立核对)。
+CU_FIXED_BUDGET_S = 120.0
+#: 装一个 GitHub 插件在「等人点头」之外的活:clone 最多 120 秒、加载最多 60 秒(core/github_installer.py)。
+GITHUB_INSTALL_WORK_S = 200.0
+
+
+def _long_running_s(tool_name: str, args: Dict) -> float:
+    """自己就要跑好几分钟的工具,按它自己的上限给预算;不是这类返回 0。
+
+    曾经它们都吃 30 秒的默认预算:``computer_use__run`` 一个多步桌面任务(默认最多 15 步,每步规划就可能
+    要 60 秒)30 秒就被外层取消;``engineer__apply`` 带 ``verify_command`` 时 harness 当场跑验证(默认最多
+    600 秒),同样 30 秒被掐;``github__install`` 要 clone、加载,还可能先问人。
+    """
+    if tool_name == "computer_use__run":
+        from core.computer_use_loop import _max_steps
+
+        try:
+            steps = int(args.get("max_steps") or 0) or _max_steps()
+        except (TypeError, ValueError):
+            steps = _max_steps()
+        return steps * CU_STEP_BUDGET_S + CU_FIXED_BUDGET_S
+    if tool_name == "engineer__apply" and args.get("verify_command"):
+        from core.engineering_verification import _timeout_s as _verify_timeout
+
+        return _verify_timeout(None) + HUMAN_WAIT_MARGIN_S
+    if tool_name == "github__install":
+        from core.interaction.high_risk_confirmation import _timeout_s as _confirm_timeout
+
+        return _confirm_timeout() + GITHUB_INSTALL_WORK_S
+    return 0.0
+
 
 def tool_call_timeout_s(
     tool_name: str,
@@ -287,6 +389,9 @@ def tool_call_timeout_s(
     1. ``ask_human__*``:调用方自己声明了等多久,按它 + 余量;
     2. 需要确认的高风险工具:确认闸会先去问人,按确认超时 + 余量。
 
+    3. 落到要人点头的节点动作上(见 :func:`core.approval_gate.may_wait_for_a_human`):同 2;
+    4. 自己就要跑好几分钟的工具(:func:`_long_running_s`):按它自己的上限。
+
     其余一律 ``base_s``。做成**纯函数**(检查器可注入),便于单测。
     """
     args = arguments or {}
@@ -307,12 +412,25 @@ def tool_call_timeout_s(
     except Exception:  # noqa: BLE001 — 判不出来就按机器工具给,不放大预算
         needs_confirm = False
 
+    if not needs_confirm:
+        # 工具本身不要确认,但它落到的节点动作要人点头(GALAXY_AUTONOMY 的敏感节点写操作):同样要等人
+        try:
+            from core.approval_gate import may_wait_for_a_human
+
+            needs_confirm = may_wait_for_a_human(tool_name, args)
+        except Exception:  # noqa: BLE001 — 判不出来就当会问:多等一会儿不出错,少等会把人的批准掐掉
+            needs_confirm = True
+
+    budget = base_s
     if needs_confirm:
         from core.interaction.high_risk_confirmation import _timeout_s as _confirm_timeout
 
-        return min(MAX_TOOL_TIMEOUT_S, _confirm_timeout() + HUMAN_WAIT_MARGIN_S)
-
-    return base_s
+        budget = _confirm_timeout() + HUMAN_WAIT_MARGIN_S
+    try:
+        budget = max(budget, _long_running_s(tool_name, args))
+    except Exception as exc:  # noqa: BLE001 — 算不出来就按已有的给
+        logger.debug("长任务预算没算出来(%s): %s", tool_name, exc)
+    return min(MAX_TOOL_TIMEOUT_S, budget)
 
 
 def _risk_order(level: ToolRiskLevel) -> int:

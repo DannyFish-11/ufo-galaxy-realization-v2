@@ -42,9 +42,50 @@ class ApprovalActionRequest(BaseModel):
     token: Optional[str] = None  # required when action == "approve"
     operator: str = ""
     reason: str = ""  # optional deny reason
-    # 审批分级(自治拨盘配套):approve 时授权的档位。
-    #   once=仅此次(默认,用后即焚) session=本会话 always=永久(持久化,可撤销)
-    grant: str = "once"
+    # 审批分级:approve 时授权的档位(所有者的决定:默认记「同一个动作 + 同一个对象」到这段对话结束)。
+    #   session=本会话(默认) once=只这一次 always=一直允许(持久化,面板上能撤)
+    grant: str = "session"
+
+
+def _publish(request_id: str = "") -> None:
+    """待批清单变了:推给桌面外壳(面板据此刷新),岛上那张卡撤掉。永不抛出。"""
+    try:
+        from core.approval_gate import publish_pending, remove_approval_card
+
+        if request_id:
+            remove_approval_card(request_id)
+        publish_pending()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("待批清单没推出去: %s", exc)
+
+
+def _record_grant(req, body: ApprovalActionRequest) -> None:
+    """按人选的档位落授权(「动作 × 对象」,本会话的绑那段对话),并告诉还在等的那一方选了哪档。
+
+    * 有人在等这一条(``waited``):批准本身就放行了这一次,「只这一次」不再另记一笔;
+    * 没人在等(排队的):记下来,调用方重试时凭它通过。
+    """
+    try:
+        from core.approval_gate import DEFAULT_SCOPE, GRANT_CHOICES, node_key
+        from core.autonomy_policy import get_grant_store
+
+        ctx = req.context if isinstance(req.context, dict) else {}
+        scope = body.grant if body.grant in GRANT_CHOICES else DEFAULT_SCOPE
+        ctx["granted_scope"] = scope
+        key = ctx.get("approval_key")
+        if not key and ctx.get("node_id") and ctx.get("node_action"):
+            key = node_key(ctx["node_id"], ctx["node_action"])
+        if key and not (ctx.get("waited") and scope == "once"):
+            get_grant_store().grant_key(
+                key,
+                scope,
+                target=str(ctx.get("target") or ""),
+                session_id=str(ctx.get("session_id") or ""),
+                operator=body.operator or "api_operator",
+            )
+    except Exception as exc:  # noqa: BLE001 — 授权没记上不影响这次批准本身
+        logger.warning("grant 记录失败(审批本身已生效): %s", exc)
+    _publish(req.request_id)
 
 
 def create_router() -> APIRouter:
@@ -137,25 +178,7 @@ def create_router() -> APIRouter:
                             "error": "Approval failed: invalid token or request already resolved",
                         },
                     )
-                # 审批分级:按 grant 档位落授权记录(自治拨盘门据此放行重试)。
-                # 请求由 autonomy_gate 发起时 context 里带 node_id/node_action。
-                try:
-                    from core.autonomy_policy import GrantScope, get_grant_store
-
-                    ctx = req.context or {}
-                    n_id, n_act = ctx.get("node_id"), ctx.get("node_action")
-                    if n_id and n_act:
-                        scope = (
-                            GrantScope(body.grant) if body.grant in (s.value for s in GrantScope) else GrantScope.ONCE
-                        )
-                        get_grant_store().grant(
-                            n_id,
-                            n_act,
-                            scope,
-                            operator=body.operator or "api_operator",
-                        )
-                except Exception as _g_exc:  # noqa: BLE001 — 授权失败不影响 ack 结果
-                    logger.warning("grant 记录失败(审批本身已生效): %s", _g_exc)
+                _record_grant(req, body)
                 return JSONResponse(
                     content={
                         "ok": True,
@@ -170,6 +193,7 @@ def create_router() -> APIRouter:
                     operator=body.operator or "api_operator",
                     reason=body.reason or "Denied via API",
                 )
+                _publish(request_id)
                 return JSONResponse(
                     content={
                         "ok": success,
