@@ -105,8 +105,13 @@ async def _delegate_to_mdce(
         "timeout": req.timeout,
         "request_id": request_id,
     }
+    from core.internal_auth import internal_headers_for
+
     try:
-        async with httpx.AsyncClient(timeout=float(req.timeout) + 5) as client:
+        # 节点 HTTP 面默认有鉴权:不带身份时 Node_71 在跑也回 401,这里吞成「委托失败、回落本地」(第 9 轮扫出)
+        async with httpx.AsyncClient(
+            timeout=float(req.timeout) + 5, headers=internal_headers_for(node71_url)
+        ) as client:
             resp = await client.post(f"{node71_url}/tasks", json=payload)
             resp.raise_for_status()
             mdce_result = resp.json()

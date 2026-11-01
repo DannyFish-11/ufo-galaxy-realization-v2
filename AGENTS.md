@@ -155,8 +155,11 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 - **缺东西就照实失败，不模拟成功**：没连设备 / 没配 Key / 没有命令时，节点回 `success: false` 并说缺什么（`nodes/common/mock_drivers.py`）；
   模拟只在显式 `USE_MOCK_DRIVERS=true` 时才有。没有调用方读 `mock` 那一位，看的都是 `success`。Node_58 的 `/chat` 走 `core.multi_llm_router`（与对话主链同一个），没模型就 503
 - **节点自己回失败，整条调用就是失败**：`NodeInvocationResult` 任一层回 `success: false` 就是 `success=False`（`node_reported_failure`），REST 回 502。
-  用通用 fusion 入口的节点，模块上要有 process / execute / run / handle 之一（或 Node 类）进程内才走得通 —— 第 8 轮清点时 117 个里 112 个没有，照实回 502；
-  接上的要像 Node_22 / Node_25 / Node_120 那样落到实现。同步写法的入口在工作线程里跑（`core/node_facade_local.py`）
+  用通用 fusion 入口的节点，模块上没有 process / execute / run / handle（117 个里 112 个）时，统一执行器把动作接到**节点自己同名的那条路由**
+  （`core/node_route_bridge.py`）：节点进程在跑就 HTTP 打它，没在跑就在本进程里起一个节点实例（自己的线程与循环，startup 跑一次）。
+  只认确定的：路由最后一段或处理函数名与动作名相同；参数放哪儿照 FastAPI 对那条路由的登记；**同一个名字对上几条路由不替调用方选**（照实列出、请用处理函数名）。
+  同步写法的入口在工作线程里跑（`core/node_facade_local.py`）。**节点不许编数据**：模拟只在 `USE_MOCK_DRIVERS=true` 时有，
+  `tests/test_every_node_is_reachable_or_says_why.py` 扫描会模拟的分支有没有看这个开关
 - core / 别的节点打节点端点要带身份：`core.internal_auth.internal_headers_for(url)`（节点 HTTP 面默认有鉴权）；`tests/test_all_node_http_surfaces_require_auth.py` 扫描调用点
 - 同一个节点只起一份：`ServiceManager.start_service` 见已在跑 / 正在起就不再建进程，`register_service` 不换掉已有条目（并发激活曾起两份、前一个停机后还活着）；
   启动那一批节点的登记，节点表只落盘一次（`NodeFabricRegistry.batched_persistence()`）

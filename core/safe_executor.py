@@ -368,8 +368,12 @@ class SafeExecutor:
         """委托 Node_09_Sandbox 执行。``endpoint`` 由隔离判据给出。"""
         import httpx
 
+        from core.internal_auth import internal_headers_for
+
         base = endpoint or self._node09_url
-        async with httpx.AsyncClient(timeout=timeout + 5) as client:
+        # 节点 HTTP 面默认有鉴权:此前这里不带身份,沙箱节点在跑时每次执行都 401,而下面只读 success / error 两个键,
+        # 结果是「没成、也没有原因」(第 9 轮:后端在跑时全量测试里 4 条因此红)
+        async with httpx.AsyncClient(timeout=timeout + 5, headers=internal_headers_for(base)) as client:
             resp = await client.post(
                 f"{base}/execute",
                 json={
@@ -380,7 +384,17 @@ class SafeExecutor:
                     "memory_limit_mb": memory_mb,
                 },
             )
-            data = resp.json()
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            if resp.status_code >= 400:
+                detail = data.get("detail") if isinstance(data, dict) else None
+                return ExecutionResult(
+                    language=language,
+                    success=False,
+                    error=f"沙箱节点回 HTTP {resp.status_code}:{detail or resp.text[:200] or '没有说明'}",
+                )
             return ExecutionResult(
                 language=language,
                 success=data.get("success", False),

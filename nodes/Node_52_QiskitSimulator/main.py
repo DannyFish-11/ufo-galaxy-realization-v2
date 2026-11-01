@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.mock_drivers import NotConfigured, mock_drivers_enabled
 
 # =============================================================================
 # Configuration
@@ -82,6 +83,10 @@ class SimulationResult(BaseModel):
 # =============================================================================
 # Mock Simulator (for testing without Qiskit)
 # =============================================================================
+
+#: 态矢量精确采样的上限(2^24 个复数振幅 ≈ 256 MB)
+MAX_EXACT_QUBITS = 24
+
 
 class MockQuantumSimulator:
     """Mock simulator for testing without Qiskit installed."""
@@ -423,9 +428,14 @@ class QuantumSimulatorService:
             cached["metadata"]["cache_hit"] = True
             return SimulationResult(**cached)
         
-        # Run simulation
+        # Run simulation —— 没有 qiskit(或线路大到只能走模拟)时照实失败;只有显式打开模拟驱动才回模拟结果
+        # (nodes/common/mock_drivers.py)。此前不管有没有 qiskit 一律回按线路名字凑出来的计数(第 9 轮)。
         if self.use_qiskit and backend != SimulationBackend.MOCK:
             result = await self._run_qiskit_simulation(request, backend)
+        elif not mock_drivers_enabled():
+            raise NotConfigured(
+                "没装 qiskit,量子线路模拟不了" if not self.use_qiskit else f"{num_qubits} 个量子比特超出这里能精确算的范围"
+            )
         else:
             result = self.mock_simulator.simulate(
                 request.qasm,
@@ -451,16 +461,42 @@ class QuantumSimulatorService:
         request: SimulationRequest,
         backend: SimulationBackend
     ) -> Dict[str, Any]:
-        """Run actual Qiskit simulation."""
-        # This would contain real Qiskit code
-        # For now, fall back to mock
-        return self.mock_simulator.simulate(
-            request.qasm,
-            request.shots,
-            backend,
-            request.noise_model,
-            request.seed
-        )
+        """真跑:qiskit 本体的态矢量精确采样(不要求 qiskit-aer),在工作线程里算。
+
+        只做无噪声:要噪声模型照实说做不了(那要 qiskit-aer 的噪声模拟器)。测量的是全部量子比特。
+        """
+        return await asyncio.to_thread(self._qiskit_counts, request, backend)
+
+    def _qiskit_counts(self, request: "SimulationRequest", backend: SimulationBackend) -> Dict[str, Any]:
+        import time
+
+        from qiskit import qasm2
+        from qiskit.quantum_info import Statevector
+
+        if request.noise_model != NoiseModel.NONE:
+            raise NotConfigured(f"噪声模型 {request.noise_model.value} 要 qiskit-aer,这里只有无噪声的态矢量采样")
+        started = time.time()
+        try:
+            circuit = qasm2.loads(request.qasm, custom_instructions=qasm2.LEGACY_CUSTOM_INSTRUCTIONS)
+        except Exception as exc:  # noqa: BLE001 — 线路写错了是调用方的事,照实说
+            raise ValueError(f"QASM 解析不了:{exc}") from exc
+        if circuit.num_qubits > MAX_EXACT_QUBITS:
+            raise NotConfigured(f"{circuit.num_qubits} 个量子比特超出态矢量精确采样的上限 {MAX_EXACT_QUBITS}")
+        state = Statevector.from_instruction(circuit.remove_final_measurements(inplace=False))
+        if request.seed is not None:
+            state.seed(request.seed)
+        counts = {str(k): int(v) for k, v in state.sample_counts(request.shots).items()}
+        total = sum(counts.values()) or 1
+        most_likely = max(counts, key=counts.get)
+        return {
+            "counts": counts,
+            "probabilities": {k: v / total for k, v in counts.items()},
+            "most_likely_state": most_likely,
+            "confidence": counts[most_likely] / total,
+            "backend_used": f"qiskit_statevector_{backend.value}",
+            "execution_time_ms": (time.time() - started) * 1000,
+            "metadata": {"num_qubits": circuit.num_qubits, "shots": request.shots, "noise_model": "none", "simulated": False},
+        }
     
     def interpret_results(
         self,
@@ -541,7 +577,12 @@ async def health_check():
 @app.post("/simulate", response_model=SimulationResult)
 async def run_simulation(request: SimulationRequest):
     """Run quantum simulation."""
-    return await simulator.simulate(request)
+    try:
+        return await simulator.simulate(request)
+    except NotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 @app.post("/interpret")
 async def interpret_results(

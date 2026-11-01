@@ -62,7 +62,7 @@
     "core/llm_adapters.py": 1050,
     "core/local_brain_manager.py": 1128,
     "core/local_model_backends.py": 1426,
-    "core/lumiv_websocket_bridge.py": 1034,
+    "core/lumiv_websocket_bridge.py": 1046,
     "core/mainline_convergence.py": 1153,
     "core/master_brain.py": 2022,
     "core/mcp_loader.py": 1028,

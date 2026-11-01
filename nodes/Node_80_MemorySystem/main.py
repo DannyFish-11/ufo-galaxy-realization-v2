@@ -213,8 +213,8 @@ class ShortTermMemory:
     
     async def recall(self, session_id: str, limit: int = 10) -> List[Memory]:
         """回忆短期记忆"""
-        if not self.client:
-            return []
+        if not self.client:  # 与 save 一致:存储不在就照实 503,不回「没有记忆」/「没成」冒充
+            raise HTTPException(status_code=503, detail="Redis not available")
         
         key = f"{self.prefix}session:{session_id}"
         
@@ -237,8 +237,8 @@ class ShortTermMemory:
     
     async def save_conversation(self, session_id: str, messages: List[ConversationMessage]) -> bool:
         """保存对话历史"""
-        if not self.client:
-            return False
+        if not self.client:  # 与 save 一致:存储不在就照实 503,不回「没有记忆」/「没成」冒充
+            raise HTTPException(status_code=503, detail="Redis not available")
         
         key = f"{self.prefix}conversation:{session_id}"
         
@@ -258,8 +258,8 @@ class ShortTermMemory:
     
     async def get_conversation(self, session_id: str, limit: int = 20) -> List[ConversationMessage]:
         """获取对话历史"""
-        if not self.client:
-            return []
+        if not self.client:  # 与 save 一致:存储不在就照实 503,不回「没有记忆」/「没成」冒充
+            raise HTTPException(status_code=503, detail="Redis not available")
         
         key = f"{self.prefix}conversation:{session_id}"
         
@@ -279,8 +279,8 @@ class ShortTermMemory:
     
     async def clear_session(self, session_id: str) -> bool:
         """清除会话记忆"""
-        if not self.client:
-            return False
+        if not self.client:  # 与 save 一致:存储不在就照实 503,不回「没有记忆」/「没成」冒充
+            raise HTTPException(status_code=503, detail="Redis not available")
         
         keys = [
             f"{self.prefix}session:{session_id}",

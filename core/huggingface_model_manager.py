@@ -288,7 +288,16 @@ class HuggingFaceModelManager:
     async def _download_gguf(
         self, model_id: str, family: ModelFamily, quantization: str, local_path: str
     ) -> ModelRegistryEntry:
-        """下载 GGUF 格式模型（llama.cpp 专用）"""
+        """下载 GGUF 格式模型（llama.cpp 专用）。
+
+        整段是同步的网络 / 磁盘调用（列仓库文件、``hf_hub_download``），放进工作线程 —— 此前它们直接跑在事件循环上
+        （第 9 轮真跑：下载源被拒时停跳 0.7~0.9 秒；真下起几 GB 来就是分钟级）。
+        """
+        return await asyncio.to_thread(self._gguf_blocking, model_id, family, quantization, local_path)
+
+    def _gguf_blocking(
+        self, model_id: str, family: ModelFamily, quantization: str, local_path: str
+    ) -> ModelRegistryEntry:
         from huggingface_hub import hf_hub_download
 
         # 自动查找 GGUF 文件
@@ -376,7 +385,10 @@ class HuggingFaceModelManager:
         )
 
     async def _download_transformers(self, model_id: str, family: ModelFamily, local_path: str) -> ModelRegistryEntry:
-        """下载 transformers 格式模型"""
+        """下载 transformers 格式模型（整段同步，放进工作线程，见 :meth:`_download_gguf`）。"""
+        return await asyncio.to_thread(self._transformers_blocking, model_id, family, local_path)
+
+    def _transformers_blocking(self, model_id: str, family: ModelFamily, local_path: str) -> ModelRegistryEntry:
         from huggingface_hub import snapshot_download
 
         # PR-MODEL-DL: download with tqdm progress bar

@@ -590,6 +590,8 @@ def _warm_routes(app) -> None:
         from core.upper_ports import warm as _warm_ports
 
         _warm_ports(("gateway.device_router.device_router",))
+        # 第一次跨设备派发时 route_envelope 才 import 目标选择策略引擎 —— 真跑在循环上卡过 0.4 秒(第 9 轮),先载
+        import core.runtime.execution_target_policy_engine  # noqa: F401
     except Exception as exc:  # noqa: BLE001
         logger.debug("路由预热没做成(不影响服务): %s", exc)
 
