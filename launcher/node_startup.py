@@ -561,6 +561,10 @@ class NodeSystemLauncher:
             return []
         return sorted(d.name for d in self.nodes_dir.iterdir() if d.is_dir() and (d / "main.py").exists())
 
+    def failure_reason(self, node_name: str) -> str:
+        """上一次 :meth:`start_node` 没成的原因归类(``slow_start`` = 进程活着、健康检查没及时就绪);没记就是空串。"""
+        return self._node_failure_reasons.get(node_name, "")
+
     async def start_node(self, node_name: str) -> bool:
         """启动单个节点，传递关键环境变量并轮询健康检查。"""
         import aiohttp

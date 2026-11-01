@@ -110,6 +110,7 @@ from core.device_onboarding.agent_tools import devices_tools_for_agent, dispatch
 # 下列带 F401 的名字是 PR-7 编排拆解后的兼容再导出面:测试与下游
 # 历史上从 core.openclawd 导入这些名字,必须保留。
 from core.interaction.agent_message import ASK_HUMAN_NOTIFY_TOOL, dispatch_notify_tool  # noqa: E402
+from core.node_tools import dispatch_nodes_tool, nodes_tools_for_agent  # noqa: E402
 from core.orchestration.lifecycle import _LOCAL_DEVICE_PREFIXES  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import _LOCAL_HOSTNAME  # noqa: F401,E402  re-export
 from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY  # noqa: F401,E402  re-export
@@ -7180,6 +7181,7 @@ class OpenClawd:
             tools.extend(HOME_BUILTIN_TOOLS)
         tools.extend(devices_tools_for_agent())  # 设备:看、接入、调用(不分模式,只看设备接入开关)—— 见 agent_tools.py
         tools.extend(tuning_tools_for_agent())  # 按人的话调「调数据方式」的参数(不上面板)—— 见 core/tuning.py
+        tools.extend(nodes_tools_for_agent())  # 节点:查、调(危险的先问人)—— 见 core/node_tools.py
 
         # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────
         try:
@@ -7243,6 +7245,7 @@ class OpenClawd:
             "home__",
             "devices__",
             "tuning__",
+            "nodes__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
         from core.approval_gate import mark_interactive
@@ -7481,9 +7484,14 @@ class OpenClawd:
                 action = tool_name[len("ask_human__") :]
                 return await self._dispatch_ask_human_tool(action, arguments)
 
-            elif tool_name.startswith(("devices__", "tuning__", "home__")):  # 同形的三族：(动作, 参数, 会话)
+            elif tool_name.startswith(("devices__", "tuning__", "home__", "nodes__")):  # 同形的四族：(动作, 参数, 会话)
                 _family, _, _action = tool_name.partition("__")
-                _fam = {"devices": dispatch_devices_tool, "tuning": dispatch_tuning_tool, "home": dispatch_home_tool}
+                _fam = {
+                    "devices": dispatch_devices_tool,
+                    "tuning": dispatch_tuning_tool,
+                    "home": dispatch_home_tool,
+                    "nodes": dispatch_nodes_tool,
+                }
                 return await _fam[_family](
                     _action, arguments, session_id=getattr(self, "_current_session_id", "") or ""
                 )
@@ -8744,9 +8752,9 @@ class OpenClawd:
                             tc_name,
                         )
                     status = ToolCallStatus.SUCCESS if _outcome.is_success else ToolCallStatus.ERROR
-                    result_str = str(
-                        result.get("result", result.get("error", "")) if isinstance(result, dict) else result
-                    )
+                    from core.tool_result_text import tool_result_text
+
+                    result_str = tool_result_text(result)  # 结果不在 result 键里的(设备 / 参数 / 节点工具)也交得过去
 
                     # 无进展检测:补上"连续同名"计数器看不见的三种卡死形态
                     # (同名同参隔开重复 / A B A B 交替 / 反复撞同一错误)。

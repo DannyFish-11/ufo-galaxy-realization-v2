@@ -1125,6 +1125,12 @@
     "扩展点：随 execute_custom 一起"
    ]
   },
+  "nodes/Node_72_KnowledgeBase/knowledge_base_system.py": {
+   "KnowledgeBaseSystem.update_knowledge": [
+    "delete",
+    "节点 72 的 HTTP 面走 main.py 的 KnowledgeBaseService.update_entry；这个文件的 KnowledgeBaseSystem 只有测试在用。此前唯一的「引用」是 Node_70 模板 help 里写死的字符串 update_knowledge（第 10 轮改成照实列服务上的方法后消失）。有测试引用（tests/test_core_fixes.py），删除待授权"
+   ]
+  },
   "nodes/Node_71_MultiDeviceCoordination/main.py": {
    "*": [
     "object",

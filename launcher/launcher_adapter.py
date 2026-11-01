@@ -425,9 +425,13 @@ class LauncherAdapter:
                 self._started_nodes.add(node_name)
                 logger.info("[LauncherAdapter] STARTED %s", node_name)
                 return node_name
-            else:
-                logger.warning("[LauncherAdapter] FAILED to start %s", node_name)
+            reason_of = getattr(self.node_launcher, "failure_reason", None)
+            if callable(reason_of) and reason_of(node_name) == "slow_start":
+                # 进程活着、只是健康检查没及时就绪:慢不是故障,说「还在起来」(AGENTS.md:启动横幅与卡顿)
+                logger.info("[LauncherAdapter] %s 进程在跑,还在起来(健康检查没及时就绪)", node_name)
                 return None
+            logger.warning("[LauncherAdapter] FAILED to start %s", node_name)
+            return None
         except Exception as exc:
             logger.error("[LauncherAdapter] EXCEPTION starting %s: %s", node_name, exc)
             return None

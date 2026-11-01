@@ -575,6 +575,18 @@ class UIATools:
 tools = UIATools()
 
 
+def actions() -> Dict[str, Any]:
+    """统一入口 :func:`execute` 认的动作 = ``UIATools.call_tool`` 认的工具(模型的节点目录 nodes__list 照这个列)。"""
+    out: Dict[str, Any] = {}
+    for spec in tools.get_tools():
+        declared = spec.get("parameters") or {}
+        out[spec["name"]] = {
+            "summary": spec.get("description", ""),
+            "params": [{"name": k, "type": "", "required": False, "note": v} for k, v in declared.items()],
+        }
+    return out
+
+
 # ── 统一执行器入口 ────────────────────────────────────────────────────────────
 #
 # `core.node_invocation.invoke_node` 把动作名转发给节点的 `execute`

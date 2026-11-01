@@ -89,6 +89,7 @@ _AGENT_READS = (
     "github__status",
     "home__devices",
     "tuning__list",
+    "nodes__list",
 )
 #: 智能体自家会改东西的工具(各自另有门,见下面的说明)。
 _AGENT_WRITES = (
@@ -103,6 +104,7 @@ _AGENT_WRITES = (
     "computer_use__run",
     "tuning__set",
     "tuning__reset",
+    "nodes__invoke",
     "ask_human__*",
 )
 #: MCP 服务器上常见的写文件类动作。
@@ -185,7 +187,8 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
     # ── 智能体自家的工具族 ────────────────────────────────────────────────
     # 只读的登记为 SAFE(只查、不改任何东西);会改东西的登记为 MODERATE —— 它们各自已经有自己的门:
     # home__ 写动作过节点拨盘门(core.approval_gate),github__install 过插件准入(core.github_addon_admission),
-    # engineer__apply 只推进补丁阶段、验证由 harness 跑,computer_use__run 在本机落手前过仲裁器。
+    # engineer__apply 只推进补丁阶段、验证由 harness 跑,computer_use__run 在本机落手前过仲裁器,
+    # nodes__invoke 按节点动作的档(core/node_action_risk.py)问人:危险与极危险总要问。
     *[
         ToolPermissionPolicy(tool_pattern=p, risk_level=ToolRiskLevel.SAFE, max_calls_per_minute=600)
         for p in _AGENT_READS
@@ -197,6 +200,31 @@ DEFAULT_POLICIES: List[ToolPermissionPolicy] = [
 # ============================================================================
 # 权限检查器
 # ============================================================================
+
+
+#: 节点动作的档 → 每分钟调用上限(与上面按名字登记的同档一致)
+_NODE_RATE = {"critical": 5, "dangerous": 10}
+
+
+def _node_tool_policy(tool_name: str) -> Optional[ToolPermissionPolicy]:
+    """``node__<节点>__<动作>`` 按节点动作的档(``core/node_action_risk.py``)给一条策略 —— 与 ``nodes__invoke`` 同一套档。
+
+    上面按名字登记的几条(``node__*__execute`` …)只认得几个动词;同一个动作经哪条路来,问不问人都该一样。
+    """
+    if not tool_name.startswith("node__"):
+        return None
+    parts = tool_name.split("__", 2)
+    if len(parts) != 3 or not parts[1] or not parts[2]:
+        return None
+    from core.node_action_risk import current_dial, grade, needs_human
+
+    level = grade(parts[1], parts[2]).level
+    return ToolPermissionPolicy(
+        tool_pattern=tool_name,
+        risk_level=ToolRiskLevel(level),
+        requires_confirmation=needs_human(level, current_dial()),
+        max_calls_per_minute=_NODE_RATE.get(level, 60),
+    )
 
 
 class ToolPermissionChecker:
@@ -279,7 +307,7 @@ class ToolPermissionChecker:
         return bool(policy and policy.requires_confirmation)
 
     def _find_policy(self, tool_name: str) -> Optional[ToolPermissionPolicy]:
-        """查找匹配的策略（精确匹配优先，再 glob 匹配）"""
+        """查找匹配的策略（精确匹配优先，再 glob 匹配）;节点工具再按节点动作的档比一次,取最严格的。"""
         best: Optional[ToolPermissionPolicy] = None
         for policy in self._policies:
             if fnmatch.fnmatch(tool_name, policy.tool_pattern):
@@ -287,6 +315,9 @@ class ToolPermissionChecker:
                     best = policy
                 elif _risk_order(policy.risk_level) > _risk_order(best.risk_level):
                     best = policy  # 取最严格的
+        graded = _node_tool_policy(tool_name)
+        if graded is not None and (best is None or _risk_order(graded.risk_level) > _risk_order(best.risk_level)):
+            best = graded
         return best
 
     def _check_rate_limit(self, policy: ToolPermissionPolicy) -> bool:

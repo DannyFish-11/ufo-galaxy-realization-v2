@@ -13,6 +13,8 @@ import logging
 import traceback
 import importlib.util
 
+from nodes.common import service_entry
+
 logger = logging.getLogger("Node_120_File")
 
 
@@ -106,6 +108,14 @@ def _declared(service, action: str, params: dict):
     return _run_coro(getattr(service, method_name)(request))
 
 
+def actions() -> dict:
+    """这个节点认的动作(声明过的那些,及其参数)—— help 与模型的节点目录(nodes__list)都用它。"""
+    service = _get_service()
+    out = {name: service_entry.describe(getattr(service, method)) for name, (method, _model) in _ACTIONS.items()}
+    out["info"] = service_entry.describe(service.get_file_info)
+    return out
+
+
 def execute(action: str, params: dict = None) -> dict:
     """
     统一执行入口
@@ -123,67 +133,36 @@ def execute(action: str, params: dict = None) -> dict:
     try:
         service = _get_service()
         
-        # 状态查询
+        # 状态查询 / 有哪些动作:照实从服务对象上列(nodes/common/service_entry.py),不写死
         if action == "status":
             return {
                 "node": "Node_120_File",
                 "status": "running",
                 "service": type(service).__name__,
-                "available_actions": ['read', 'write', 'append', 'copy', 'move', 'delete', 'list', 'search', 'info']
+                "available_actions": sorted(actions()),
             }
-        
+
         if action == "help":
-            return {
-                "node": "Node_120_File",
-                "description": "文件操作节点",
-                "actions": {'read': '读取文件', 'write': '写入文件', 'append': '追加文件', 'copy': '复制文件', 'move': '移动文件', 'delete': '删除文件', 'list': '列出目录', 'search': '搜索文件', 'info': '文件信息'}
-            }
-        
+            return {"node": "Node_120_File", "description": "文件操作节点", "actions": actions()}
+
         declared = _declared(service, action, params)
         if declared is not None:
             return {"success": True, "action": action, "result": declared}
 
-        # 查找并调用对应方法
-        method_name = action.replace("-", "_")
-        
-        # 优先查找精确匹配的方法
-        if hasattr(service, method_name):
-            method = getattr(service, method_name)
-            if callable(method):
-                import inspect
-                if inspect.iscoroutinefunction(method):
-                    result = _run_coro(method(**params))
-                else:
-                    result = method(**params)
-                return {
-                    "success": True,
-                    "action": action,
-                    "result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
-                }
-        
-        # 查找带前缀的方法
-        for prefix in ["do_", "handle_", "process_", "run_", "perform_"]:
-            prefixed = prefix + method_name
-            if hasattr(service, prefixed):
-                method = getattr(service, prefixed)
-                if callable(method):
-                    import inspect
-                    if inspect.iscoroutinefunction(method):
-                        result = _run_coro(method(**params))
-                    else:
-                        result = method(**params)
-                    return {
-                        "success": True,
-                        "action": action,
-                        "result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
-                    }
-        
+        method = service_entry.resolve(service, action)
+        if method is not None:
+            result = service_entry.call(method, params, _run_coro)
+            return {
+                "success": True,
+                "action": action,
+                "result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
+            }
+
         # 未找到方法
-        available = [m for m in dir(service) if not m.startswith("_") and callable(getattr(service, m, None))]
         return {
             "success": False,
             "error": f"未找到操作: {action}",
-            "available_methods": available[:20]
+            "available_methods": sorted(actions())[:40]
         }
         
     except Exception as e:
