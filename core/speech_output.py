@@ -403,7 +403,7 @@ async def synthesize_to_file(
     try:
         path = await engine.synthesize(text, output_path=output_path, voice=voice)
     except Exception as exc:  # noqa: BLE001 — 运行期失败换引擎重试一次
-        new_engine = demote_current_engine(str(exc), failed_engine=engine)
+        new_engine = await _demote_off_loop(str(exc), engine)
         if new_engine is None:
             logger.warning("TTS 合成失败且无可降级引擎: %s", exc)
             return None
@@ -442,8 +442,22 @@ def _apply_watermark_if_required(path: str, engine_name: str) -> None:
         logger.debug("水印处理跳过: %s", exc)
 
 
+async def _demote_off_loop(reason: str, failed_engine: Any) -> Optional[Any]:
+    """运行期降级换引擎(:func:`demote_current_engine`)放进工作线程:重选要 import 下一家引擎的库。
+
+    真机日志:Edge 云端不可达 → 降级重选 → 在循环线程上 import kokoro_onnx,事件循环停跳 1.7 秒(第 9 轮)。
+    """
+    return await asyncio.to_thread(demote_current_engine, reason, failed_engine)
+
+
 def current_engine_name() -> str:
-    """当前生效的 TTS 引擎类名;未初始化/不可用时返回空串。供接口如实上报。"""
+    """当前生效的 TTS 引擎类名;未初始化/不可用时返回空串。供接口如实上报。
+
+    还没选过就不在这里选(会压在调用方的事件循环上):在后台线程里选,这一次照实回空串。
+    """
+    if _engine is None and not _engine_failed:
+        warm_speech_engine()
+        return ""
     eng = _get_engine()
     return type(eng).__name__ if eng is not None else ""
 
@@ -491,7 +505,7 @@ async def _speak_via_tts_engine(spoken: str, source: str = "") -> None:
             try:
                 return await holder["engine"].synthesize(chunk)
             except Exception as exc:  # noqa: BLE001
-                new_engine = demote_current_engine(str(exc), failed_engine=holder["engine"])
+                new_engine = await _demote_off_loop(str(exc), holder["engine"])
                 if new_engine is None:
                     raise
                 holder["engine"] = new_engine
@@ -546,7 +560,7 @@ async def _speak_via_tts_engine(spoken: str, source: str = "") -> None:
     try:
         await engine.synthesize_and_play(spoken)
     except Exception as exc:  # noqa: BLE001
-        new_engine = demote_current_engine(str(exc), failed_engine=engine)
+        new_engine = await _demote_off_loop(str(exc), engine)
         if new_engine is None:
             _log_speak_failure("语音输出", exc)
         else:
@@ -693,7 +707,7 @@ def begin_incremental_speech(
         try:
             return await holder["engine"].synthesize(chunk)
         except Exception as exc:  # noqa: BLE001
-            new_engine = demote_current_engine(str(exc), failed_engine=holder["engine"])
+            new_engine = await _demote_off_loop(str(exc), holder["engine"])
             if new_engine is None:
                 raise
             holder["engine"] = new_engine

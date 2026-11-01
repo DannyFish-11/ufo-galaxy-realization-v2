@@ -12,6 +12,7 @@ Lumiv Presence Bridge — 桌面覆盖层事件推送
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 from typing import Any, Dict, Optional, Set
@@ -79,6 +80,13 @@ from core import presence_fanout  # noqa: E402 — 进程内订阅 / 感知监�
 # 避免同一组数字在两处各写一份、改一处忘另一处。
 from core.phase_contract import PHASE_ANCHORS as MODE_DEPTH_MAP  # noqa: E402
 from core.stop_key import label as _stop_key_label  # noqa: E402
+
+_ORPHAN_CLOSES: set = set()
+
+
+async def _close_quietly(session: Any) -> None:
+    with contextlib.suppress(Exception):  # 绑在旧循环上的连接关不了就算了,它们随旧循环一起没了
+        await session.close()
 
 
 class GalaxyPresenceBridge:
@@ -791,11 +799,15 @@ class GalaxyPresenceBridge:
         调用方吞异常返回 ``False``，症状会是「IPC 从某个时刻起永远失败、WS 兜底
         默默顶上」——指不回这里。所以循环一换就丢弃重建。
 
-        循环换了的旧 Session 直接丢引用（循环没了，close 没处 await）；停机时由 ``close_ipc_session`` 关掉。
+        循环换了的旧 Session 在新循环上关掉(只丢引用的话,回收时记一条「Unclosed client session」);停机时由 ``close_ipc_session`` 关。
         """
         loop = asyncio.get_running_loop()
         session = cls._ipc_http_session
         if session is not None and (cls._ipc_http_loop is not loop or session.closed):
+            if not session.closed:
+                task = loop.create_task(_close_quietly(session))
+                _ORPHAN_CLOSES.add(task)
+                task.add_done_callback(_ORPHAN_CLOSES.discard)
             session = None
         if session is None:
             session = aiohttp.ClientSession()

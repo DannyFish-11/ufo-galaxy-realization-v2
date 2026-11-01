@@ -215,6 +215,9 @@ class DigitalTwinService:
                 "signal_strength": random.randint(-90, -50),
                 "error_code": random.choice([0] * 19 + [1]),
                 "cycle": self._cycle,
+                # 这台「设备」是随机数模拟出来的,没有接任何真实设备 —— 每一条状态都照实标上(第 9 轮)
+                "simulated": True,
+                "source": "random_simulation",
             },
         )
 

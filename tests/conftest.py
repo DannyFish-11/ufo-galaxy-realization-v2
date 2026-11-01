@@ -447,6 +447,15 @@ def _no_leaked_approval_grants():
     registry = sys.modules.get("core.control_plane._globals")
     if registry is not None:
         registry._approval_registry = None
+    # 在场桥共享的 IPC 会话:用例的循环关了就没人关它,退出时 aiohttp 记「Unclosed client session」。新循环上关掉
+    bridge = sys.modules.get("core.lumiv_websocket_bridge")
+    session = getattr(getattr(bridge, "GalaxyPresenceBridge", None), "_ipc_http_session", None)
+    if session is not None and not session.closed:
+        bridge.GalaxyPresenceBridge._ipc_http_session = None
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(bridge._close_quietly(session))
 
 
 # 反自激励门是带【时间状态】的进程单例:任何测试只要走过一次朗读路径

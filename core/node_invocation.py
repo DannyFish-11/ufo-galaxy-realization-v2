@@ -520,6 +520,10 @@ class UnifiedNodeExecutor:
 
             params = envelope.params if isinstance(envelope.params, dict) else {}
             raw_result = await _execute_node(node_info, action, params)
+            from core.node_route_bridge import call_route, no_entry
+
+            if no_entry(raw_result):  # 通用入口在节点模块上找不到方法:接到节点自己同名的那条路由
+                raw_result = await call_route(node_id, node_info, action, params, timeout_s=envelope.timeout_ms / 1000)
             duration_ms = (time.time() - started) * 1000.0
 
             logger.debug(
