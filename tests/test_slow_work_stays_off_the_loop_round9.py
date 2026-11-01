@@ -67,3 +67,35 @@ def test_a_session_from_an_old_loop_is_closed_when_the_loop_changes():
 
     new = asyncio.run(second())
     assert old is not new and old.closed, "换了循环的旧会话要关掉,不只是丢引用"
+
+
+def test_model_downloads_run_in_a_worker_thread(monkeypatch, tmp_path):
+    """``_download_gguf`` / ``_download_transformers`` 名字是 async、里面全是同步的网络与磁盘调用 —— 真跑停跳 0.7~0.9 秒。"""
+    from core import huggingface_model_manager as hf
+
+    seen = {}
+
+    def blocking(self, *args):
+        seen["thread"] = threading.current_thread()
+        return "entry"
+
+    monkeypatch.setattr(hf.HuggingFaceModelManager, "_gguf_blocking", blocking, raising=False)
+    monkeypatch.setattr(hf.HuggingFaceModelManager, "_transformers_blocking", blocking, raising=False)
+    mgr = hf.HuggingFaceModelManager.__new__(hf.HuggingFaceModelManager)
+
+    async def go():
+        loop_thread = threading.current_thread()
+        a = await mgr._download_gguf("m", hf.ModelFamily.LLM, "q4", str(tmp_path))
+        b = await mgr._download_transformers("m", hf.ModelFamily.LLM, str(tmp_path))
+        return loop_thread, a, b
+
+    loop_thread, a, b = asyncio.run(go())
+    assert (a, b) == ("entry", "entry") and seen["thread"] is not loop_thread
+
+
+def test_the_target_policy_engine_is_imported_before_the_first_dispatch():
+    import inspect
+
+    import launcher.services as svc
+
+    assert "core.runtime.execution_target_policy_engine" in inspect.getsource(svc._warm_routes)
