@@ -1056,8 +1056,11 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
   启动器按它登记；治理门对没登记（进程内起）的节点也按它判，原因码与登记了的节点同一套（`non_capability_architectural_class` / `archived_node`）；模型的节点目录不列它们，
   `nodes__invoke` 在问人之前就照实拒（不为一个不会执行的调用去问人）。能力节点没登记照旧放行，那条 WARNING 改成 debug（它是常态，不是告警）。
 - 健康 / 心跳那两条对进程内起的节点无从谈起（不是一个进程），仍只对登记了的节点算。
+- **真跑查出**：数据目录里的登记快照是启动器以前写的（一律能力节点），恢复回来 Node_110 仍是「能力节点」—— 它被拒的原因成了「不健康」而不是类别。
+  现在治理门判登记了的节点时，声明不是能力节点就以声明为准；启动器再登记这个节点时把类别改正。REST 对治理门拒绝回 403（以前 500 —— 门禁拦下不是服务器出错）。
+  真跑：`POST /api/v1/nodes/call` 打 Node_81 / Node_110 / Node_50 都回 403「`non_capability_architectural_class`」，Node_23 照常 200；接口全扫 471 次没有非 503 的 5xx（503 都是没起的节点、没配的服务）。
 
-验证：新增 `tests/test_legacy_orchestrators_stay_off_the_canonical_path.py`（9 条）；涉及治理门 / 启动器 / 旧编排节点的 50 个测试文件 2048 条全过（`tests/local_verify_v2.py` 一条导入一个早已不存在的名字，与本轮无关，CI 也不收这个文件）。
+验证：新增 `tests/test_legacy_orchestrators_stay_off_the_canonical_path.py`（12 条）；涉及治理门 / 启动器 / 旧编排节点的 50 个测试文件 2048 条全过（`tests/local_verify_v2.py` 一条导入一个早已不存在的名字，与本轮无关，CI 也不收这个文件）。
 
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 

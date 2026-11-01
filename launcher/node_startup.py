@@ -789,6 +789,7 @@ class NodeSystemLauncher:
             # If already registered, update status + heartbeat only.
             existing = fabric.get(node_name)
             if existing is not None:
+                existing.architectural_class = declared_class(node_name)  # 旧快照里一律登记成了能力节点
                 fabric.update_status(node_name, node_status)
                 if node_status not in (NodeStatus.OFFLINE, NodeStatus.UNHEALTHY):
                     fabric.heartbeat(node_name)

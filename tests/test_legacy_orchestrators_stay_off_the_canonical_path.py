@@ -102,3 +102,41 @@ def test_the_model_neither_sees_nor_can_invoke_them(monkeypatch):
     assert not out["success"] and "旧的编排节点" in out["error"] and asked == []
     detail = asyncio.run(dispatch_nodes_tool("list", {"node": "81"}))
     assert not detail["success"] and "devices__plan" in detail["error"]
+
+
+def test_a_stale_snapshot_that_registered_it_as_a_capability_node_does_not_count():
+    """真跑时查到:登记快照(数据目录里)是启动器以前一律按能力节点写的,恢复回来仍是能力节点。"""
+    from core.node_invocation_governance import evaluate_invocation_governance
+    from core.nodes.node_fabric_registry import NodeArchitecturalClass as C
+    from core.nodes.node_fabric_registry import NodeFabricRegistry, NodeInfo, NodeStatus
+
+    fabric = NodeFabricRegistry()
+    fabric.register(
+        NodeInfo(node_id="Node_81_Orchestrator", architectural_class=C.CAPABILITY_NODE, status=NodeStatus.HEALTHY)
+    )
+    fabric.heartbeat("Node_81_Orchestrator")
+    decision = evaluate_invocation_governance("Node_81_Orchestrator", registry=fabric)
+    assert decision.invocation_allowed is False
+    assert "non_capability_architectural_class" in decision.denial_reasons
+
+
+def test_relaunching_a_node_corrects_its_stale_class(monkeypatch):
+    import core.nodes.node_fabric_registry as fabric_mod
+    from core.nodes.node_fabric_registry import NodeArchitecturalClass as C
+    from core.nodes.node_fabric_registry import NodeFabricRegistry, NodeInfo
+    from launcher.node_startup import NodeSystemLauncher
+
+    fabric = NodeFabricRegistry()
+    fabric.register(NodeInfo(node_id="Node_50_Transformer", architectural_class=C.CAPABILITY_NODE))
+    monkeypatch.setattr(fabric_mod, "get_node_fabric_registry", lambda: fabric)
+    launcher = NodeSystemLauncher.__new__(NodeSystemLauncher)
+    launcher.node_configs = {}
+    launcher._register_node_in_canonical_registry("Node_50_Transformer", 8050, "healthy")
+    assert fabric.get("Node_50_Transformer").architectural_class is C.LEGACY_ORCHESTRATOR_NODE
+
+
+def test_rest_says_403_not_500_when_governance_refuses():
+    from core.routes.nodes import _call_failure_status
+
+    err = "Node Node_81_Orchestrator denied invocation due to governance eligibility check failure: ['x']"
+    assert _call_failure_status(err) == 403

@@ -567,8 +567,10 @@ def evaluate_invocation_governance(
     try:
         from core.node_governance_runtime import evaluate_node_governance_eligibility  # noqa: PLC0415
 
+        from core.node_declared_class import with_declared_class  # noqa: PLC0415
+
         eligibility = evaluate_node_governance_eligibility(
-            node_info,
+            with_declared_class(node_info),  # 旧快照里登记错了类别的,按声明判
             governor_record=governor_record,
             heartbeat_ttl=heartbeat_ttl,
         )

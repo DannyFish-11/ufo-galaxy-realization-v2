@@ -51,6 +51,21 @@ def declared_class(node_id: str):
     return NodeArchitecturalClass.CAPABILITY_NODE
 
 
+def with_declared_class(node_info):
+    """登记表里的这一条,类别按声明改正后的样子(声明不是能力节点时声明为准;否则原样)。
+
+    旧的登记快照里,旧编排节点被写成了能力节点(启动器以前一律这么登记,快照会被恢复回来)。
+    """
+    from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
+    declared = declared_class(getattr(node_info, "node_id", ""))
+    if declared is NodeArchitecturalClass.CAPABILITY_NODE or node_info.architectural_class is declared:
+        return node_info
+    import dataclasses
+
+    return dataclasses.replace(node_info, architectural_class=declared)
+
+
 def why_not_callable(node_id: str) -> str:
     """规范路径不调这个节点的原因（能调就是空串）—— 给人看的一句话。"""
     from core.nodes.node_fabric_registry import NodeArchitecturalClass
@@ -63,4 +78,4 @@ def why_not_callable(node_id: str) -> str:
     return ""
 
 
-__all__ = ["declared_class", "why_not_callable"]
+__all__ = ["declared_class", "why_not_callable", "with_declared_class"]
