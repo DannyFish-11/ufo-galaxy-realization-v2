@@ -1047,6 +1047,18 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 - 节点的治理门对没登记进 NodeFabricRegistry 的节点不生效（日志：`governance not enforced`）—— 进程内起的节点都没登记；动作的档与问人不受影响，但治理状态（停用 / 实验）对它们不起作用。
 - `Node_47_Audio` 在没有 PortAudio 的机器上 main.py 载不进来（照实说了）；真机上要装 PortAudio。
 
+**第 11 轮（2026-11-01）：** 接第 10 轮的待办 —— 治理门对没登记进 NodeFabricRegistry 的节点不生效。
+
+- 查下去是两层：治理门只对登记了的节点按类别判（旧编排节点、归档节点不走规范调用路径），没登记的一律「不管」放行（日志 `governance not enforced`）；
+  而启动器登记节点时一律写 `CAPABILITY_NODE` —— `core/orchestration_authority/legacy_paths.py` 声明的三个旧编排节点（Node_110 / Node_81 / Node_50）登记进去也是「能力节点」，
+  **声明从没生效过**。第 10 轮开放给模型之后，`nodes__invoke` 就能驱动这三个本该退下的编排节点（它们会替模型去调别的节点、绕开各自的门）。
+- 现在节点声明的类别一处说了算（`core/node_declared_class.py`：在旧编排名单里 → 旧编排；目录里登记为不可运行 → 归档；其余 → 能力节点）：
+  启动器按它登记；治理门对没登记（进程内起）的节点也按它判，原因码与登记了的节点同一套（`non_capability_architectural_class` / `archived_node`）；模型的节点目录不列它们，
+  `nodes__invoke` 在问人之前就照实拒（不为一个不会执行的调用去问人）。能力节点没登记照旧放行，那条 WARNING 改成 debug（它是常态，不是告警）。
+- 健康 / 心跳那两条对进程内起的节点无从谈起（不是一个进程），仍只对登记了的节点算。
+
+验证：新增 `tests/test_legacy_orchestrators_stay_off_the_canonical_path.py`（9 条）；涉及治理门 / 启动器 / 旧编排节点的 50 个测试文件 2048 条全过（`tests/local_verify_v2.py` 一条导入一个早已不存在的名字，与本轮无关，CI 也不收这个文件）。
+
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
 所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，

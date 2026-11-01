@@ -240,7 +240,7 @@ def test_the_tools_are_offered_to_the_model_and_graded_as_tools():
 
 def test_the_directory_and_the_search_tell_the_model_what_is_there():
     listed = _tool("list")
-    assert listed["success"] and listed["count"] >= 120
+    assert listed["success"] and listed["count"] >= 115  # 占位节点、旧编排节点不列
     assert any("Node_23_Time" in line for lines in listed["groups"].values() for line in lines)
     found = _tool("list", query="搜索")
     assert any(line.startswith("Node_22_BraveSearch") for line in found["nodes"])

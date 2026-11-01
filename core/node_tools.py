@@ -88,9 +88,11 @@ def nodes_tools_for_agent() -> List[Dict[str, Any]]:
 
 
 def _roster() -> List[Dict[str, Any]]:
+    """规范路径能调的节点(占位节点、旧编排节点不列 —— 见 core/node_declared_class.py)。"""
     from core.node_catalog import catalog_nodes
+    from core.node_declared_class import why_not_callable
 
-    return [n for n in catalog_nodes() if n.get("runnable", True)]
+    return [n for n in catalog_nodes() if n.get("runnable", True) and not why_not_callable(n["dir"])]
 
 
 def _line(n: Dict[str, Any]) -> str:
@@ -136,6 +138,10 @@ async def _describe(node: str) -> Dict[str, Any]:
     found = node_dir(node)
     if found is None:
         return {"success": False, "error": f"没有叫「{node}」的节点,先用 nodes__list 找"}
+    from core.node_declared_class import why_not_callable
+
+    if why_not_callable(found):
+        return {"success": False, "node": found, "error": f"{found}:{why_not_callable(found)}"}
     try:
         actions, source = await asyncio.to_thread(list_actions, found)
     except Exception as exc:  # noqa: BLE001 — 载不进来:照实说
@@ -170,14 +176,14 @@ async def _invoke(node: str, action: str, params: Dict[str, Any], reason: str, s
     from core.approval_gate import approval_target, interactive, label, node_key, request_approval
     from core.node_action_risk import current_dial, needs_human
     from core.node_actions import missing_params, node_dir, resolve
-    from core.node_catalog import catalog_nodes
+    from core.node_declared_class import why_not_callable
 
     found_dir = node_dir(node)
     if found_dir is None:
         return {"success": False, "error": f"没有叫「{node}」的节点,先用 nodes__list 找"}
-    runnable = {n["dir"]: n.get("runnable", True) for n in catalog_nodes()}
-    if runnable.get(found_dir) is False:
-        return {"success": False, "node": found_dir, "error": f"{found_dir} 是占位节点,没有可用的实现"}
+    excluded = why_not_callable(found_dir)  # 占位节点、旧编排节点:不问人、不执行
+    if excluded:
+        return {"success": False, "node": found_dir, "error": f"{found_dir}:{excluded}。没有执行。"}
     action = str(action or "").strip()
     if not action:
         return {"success": False, "error": "nodes__invoke 需要 action(用 nodes__list 看这个节点有哪些)"}

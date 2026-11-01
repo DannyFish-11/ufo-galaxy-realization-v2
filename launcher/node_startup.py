@@ -767,8 +767,8 @@ class NodeSystemLauncher:
                         ``"starting"``.  Mapped to :class:`NodeStatus` internally.
         """
         try:
+            from core.node_declared_class import declared_class
             from core.nodes.node_fabric_registry import (  # type: ignore[import]
-                NodeArchitecturalClass,
                 NodeInfo,
                 NodeRole,
                 NodeStatus,
@@ -816,7 +816,7 @@ class NodeSystemLauncher:
             node_info = NodeInfo(
                 node_id=node_name,
                 role=role,
-                architectural_class=NodeArchitecturalClass.CAPABILITY_NODE,
+                architectural_class=declared_class(node_name),  # 旧编排 / 占位节点按声明登记(不是一律能力节点)
                 host="localhost",
                 port=port or 0,
                 status=node_status,

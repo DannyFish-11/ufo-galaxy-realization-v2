@@ -165,7 +165,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
   每个动作一个档（`core/node_action_risk.py`：只读 / 会改东西 / 危险 / 极危险）：**危险与极危险总要问人**（经 `approval_gate.request_approval`，不看自治档位 —— 所有者的决定），
   会改东西只在谨慎档问；批过的这一次节点拨盘门认；`node__<节点>__<动作>` 工具在工具门也按同一套档判（`core/tool_permissions.py::_node_tool_policy`）。一个节点有哪些动作只有一处说法 `core/node_actions.py`：路由型照 FastAPI 的登记，入口型照入口模块上的 `actions()`
   —— **给入口加动作，`actions()` 要跟着改**（服务对象型的模板入口经 `nodes/common/service_entry.py` 照实从服务上列，请求对象由参数建）。
-  认不出 / 有歧义 / 缺必填参数不执行。`tests/test_the_model_can_use_nodes_and_asks_before_risky_ones.py` 把全部节点扫一遍：名字里有执行 / 删 / 发 / 推的不低于危险，跑代码与操控设备的节点写动作不低于危险
+  认不出 / 有歧义 / 缺必填参数不执行。**节点声明的类别一处说了算**（`core/node_declared_class.py`）：旧编排节点（Node_110 / 81 / 50）、占位节点不走规范调用路径 —— 启动器按它登记、治理门对没登记（进程内起）的节点也按它判、模型的节点目录不列。`tests/test_the_model_can_use_nodes_and_asks_before_risky_ones.py` 把全部节点扫一遍：名字里有执行 / 删 / 发 / 推的不低于危险，跑代码与操控设备的节点写动作不低于危险
 - core / 别的节点打节点端点要带身份：`core.internal_auth.internal_headers_for(url)`（节点 HTTP 面默认有鉴权）；`tests/test_all_node_http_surfaces_require_auth.py` 扫描调用点
 - 同一个节点只起一份：`ServiceManager.start_service` 见已在跑 / 正在起就不再建进程，`register_service` 不换掉已有条目（并发激活曾起两份、前一个停机后还活着）；
   启动那一批节点的登记，节点表只落盘一次（`NodeFabricRegistry.batched_persistence()`）
