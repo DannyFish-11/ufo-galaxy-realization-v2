@@ -2,7 +2,7 @@
 // 源:core/api_routes.py 组装出的权威 API 层的 OpenAPI 文档。
 // 后端加/删/改端点后重跑该脚本;CI 会比对生成结果是否与后端一致。
 
-// 路径 481 条 · 组件 schema 120 个
+// 路径 482 条 · 组件 schema 120 个
 
 /** 权威 API 层的全部路径。写错或调一个不存在的端点 → 编译期报错。 */
 export type ApiPath =
@@ -39,6 +39,7 @@ export type ApiPath =
   | "/api/v1/agent/identity"
   | "/api/v1/agent/identity/goals"
   | "/api/v1/agent/identity/values"
+  | "/api/v1/agent/live-check"
   | "/api/v1/agent/status"
   | "/api/v1/agent/templates"
   | "/api/v1/agents/debate"
@@ -524,6 +525,7 @@ export const API_METHODS = {
   "/api/v1/agent/identity": ["get"],
   "/api/v1/agent/identity/goals": ["delete", "post"],
   "/api/v1/agent/identity/values": ["post"],
+  "/api/v1/agent/live-check": ["get"],
   "/api/v1/agent/status": ["get"],
   "/api/v1/agent/templates": ["get"],
   "/api/v1/agents/debate": ["post"],

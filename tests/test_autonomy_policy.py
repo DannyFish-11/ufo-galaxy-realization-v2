@@ -131,3 +131,17 @@ class TestExecutorIntegration:
         env = NodeInvocationEnvelope(node_id="Node_36_UIAWindows", action="screenshot")
         result = asyncio.run(UnifiedNodeExecutor().execute(env))
         assert "approval_required" not in (result.error or "")
+
+
+def test_legacy_grant_keys_migrate_without_a_backtracking_regex():
+    """旧授权键照旧迁移;认不出的照原样 —— 而且一长串数字不会把启动拖住(CodeQL py/polynomial-redos)。"""
+    import time
+
+    from core.autonomy_policy import _grant_key, _migrate_key
+
+    assert _migrate_key("Node_36_UIAWindows:click") == _grant_key("Node_36_UIAWindows", "click")
+    for kept in ("node:36:click", "Node_x:click", "Node_36:a@b", "Node_36:a:b", "Node_36:", ":click", ""):
+        assert _migrate_key(kept) == kept, kept
+    started = time.monotonic()
+    assert _migrate_key("Node_9" + "0" * 200_000 + "x") == "Node_9" + "0" * 200_000 + "x"
+    assert time.monotonic() - started < 0.5

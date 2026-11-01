@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import threading
 import time
 from dataclasses import dataclass
@@ -108,13 +107,24 @@ def _grant_key(node_id: str, action: str, params: Any = None) -> str:
     return node_key(node_id, action, params)
 
 
-_LEGACY_KEY = re.compile(r"^(Node_\d+[^:]*):([^:@]+)$")
-
-
 def _migrate_key(key: str) -> str:
-    """旧格式「Node_36_UIAWindows:click」→「node:36:click」。认不出的照原样。"""
-    m = _LEGACY_KEY.match(key or "")
-    return _grant_key(m.group(1), m.group(2)) if m else key
+    r"""旧格式「Node_36_UIAWindows:click」→「node:36:click」。认不出的照原样。
+
+    按字符串切,不用正则:``Node_\d+[^:]*`` 那种写法里数字两段都能吃,对「Node_9 + 一长串 0」这样的输入会多项式回溯
+    (CodeQL py/polynomial-redos;授权文件是磁盘上的数据,不该能拖慢启动)。认的范围与原先一样:
+    ``Node_`` + 至少一位数字 + 不含冒号的一段,冒号,再一段不含冒号、不含 ``@`` 的动作名。
+    """
+    head, sep, action = (key or "").partition(":")
+    if (
+        not sep
+        or not head.startswith("Node_")
+        or not head[5:6].isdigit()
+        or not action
+        or "@" in action
+        or ":" in action
+    ):
+        return key
+    return _grant_key(head, action)
 
 
 def _full(key: str, target: str) -> str:
