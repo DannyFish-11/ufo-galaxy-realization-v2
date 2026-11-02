@@ -75,6 +75,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   「websocket」传输走规范入口的 `UnifiedConnectionManager`。`get_aip_transport().send` 失败是**返回** `{"success": False}`、不抛异常 —— 调用方要看返回值再兜底；
   处理器的返回值已经由设备入口写回，别再经 AIPTransport 另推一份同样的帧。
   规范设备入口把连接自己的凭证（握手 Bearer / 回过 `auth_ok` 的令牌）带给不带令牌的帧 —— 安卓的 `device_register` 就不带令牌（`tests/test_phone_joins_through_its_bridge_agent.py` 守着）。
+  规范设备入口一帧一帧地读：**交给智能体跑一整轮的帧（手表的 `voice_query` 等）在后台跑**（`galaxy_gateway/device_turns.py`）—— 这一轮要在手表上问批准，而回答走同一条连接，在读循环里等就永远读不到（第 13 轮真跑：点了「批准」照样超时）。
 - **成员找得到、连得上智能体，不分模式**：mDNS 广播一直做（`GALAXY_MDNS=0` 可关）；配了自建 headscale 就入 tailnet；设备接入平面（智能体的设备工具）、
   局域网发现都不是「跨设备」的成员；headscale / TURN / STUN 配置项面板上一直显示。
 - **任务派发**（`GALAXY_MASTER_BRAIN_ENABLED`，类名 `MasterBrain`：经 NATS 把任务派给 worker）是智能体的工具，**只看它自己的开关**，开了就把 NATS 拉起来；
