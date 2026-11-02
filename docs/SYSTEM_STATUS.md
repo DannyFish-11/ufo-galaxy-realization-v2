@@ -1141,6 +1141,28 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 - **要安卓仓 / 手表仓补的**（这个会话对它们只有读权限）：安卓 App 处理 `decision_request`（弹通知，点了经 `human_input` 回 `decision_id` 与 `selected_option`）并在 `capability_report` 里声明 `"approvals": true`；
   手表也加上这句声明（不加也照旧能批，那是兼容）。在那之前，手机发起的危险动作在电脑面板 / 别的能批的设备上批。
 
+**第 16 轮（2026-11-02）：** 所有者：「剩下的完整做完，其它两个仓库需要搞的要求完全给出来。」
+
+- **批准的回答只认被问到的设备**（`PendingDecisionRegistry.resolve(from_device=…)`，网关的 `human_input` 分支）：原先任何连着的设备只要带对决策号就能把一个等批准的决定收掉；
+  现在按这条连接认证过的设备号核对，问题没发给它就照实回「这条决定没有问这台设备」，决定继续等，那句「批准」也不当成人说的话交给智能体。
+  谁答的记成那台设备号（原先写死 `"wear"`，撤回时分不出是谁答的，答了的那台也收到撤回）。
+- **另外两个仓库要补的写全了**：`docs/DEVICE_CLIENT_REQUIREMENTS.md`，对着三个仓库的代码（安卓 `63453a2`、手表 `04f725b`，只读）写。
+  安卓：处理 `decision_request` / `decision_withdraw`、经 `human_input` 回（三种帧逐字给出、改哪个文件哪一段、要补哪些测试），做完再声明 `approvals: true`，进度句当进度显示；
+  手表：声明 `approvals: true`；两边都只连 `/ws/device/{id}`，旧入口退役看 `GET /api/v1/compat/usage` 由所有者定日子；手表通话接工具要先定用哪家实时语音。
+  外加任何别家生态的设备接进来的通用清单与验收步骤。
+- **第 15 轮留下的那条测试顺序依赖，根因找到并修了**：`tests/test_legacy_orchestrators_stay_off_the_canonical_path.py` 用 `NodeFabricRegistry()` 当「一份新的表」，
+  可它是进程级单例 —— 登记的 Node_23 / 50 / 81 / 110 留在全进程共用的那份里，心跳 60 秒后过期，之后跑到的节点工具测试调 Node_23 被治理门以 `unhealthy` 拒掉；
+  只在两者间隔超过 60 秒的顺序里出现（二分 110 个文件查到；main 上同样复现）。每个测试换一份真正新的单例、结束放回。当时失败的那份 117 个文件合跑：2681 通过、0 失败。
+- **全接口扫描查出的事件循环卡顿**：`GET /v1/audio/capabilities` 为了报引擎名，第一次就在事件循环上加载听写引擎（探 HF 下载源 + 读模型），循环停 5.0 秒，
+  同一时刻的 `/metrics`、`/sync/status` 一起慢到 5.2 秒。现在只问状态，还没加载交给后台线程、立刻回 `warming`。投影接口第一次 import 的
+  `core.cross_device_policy`（0.5 秒）、`core.agent_governance`（1.0 秒）加进启动预热。修后再扫：整段没有一次循环卡顿。
+- **真跑**（`main.py --backend -v`，独立数据目录，假模型，真 WebSocket 设备）：按 `DEVICE_CLIENT_REQUIREMENTS.md` 的 A1 + A2 做的「手机」声明了 `approvals`，
+  手机上说「删文件」→ 在手机上问（选项「不要」在前、「批准」在后）、批了删好、面板不出卡；再说一次，一台声明过能批的智慧屏拿着这条决策号抢先回「批准」→
+  「这条决定没有问这台设备」，手机回「不要」→ 文件还在、没有挂着的批准。
+- **全接口扫描**：GET 250 条、写接口 124 条（空请求体 + 按 schema 填）。没有 500；4 个 503 都是照实说缺什么（WebRTC / 视觉节点没起、沙箱里没有 TTS 引擎、没配 Google 登录），
+  `/api/v1/stream` 是不结束的流；慢的只剩本来就慢的（局域网扫描 3 秒、视觉等帧 10 秒超时、模型辩论 7 秒、重载全部协议 5 秒）。ERROR 只有扫描造的 `r8` 参数引起的照实拒绝。
+  全部真跑里 `android_device_state_store` 每次改动整份写盘在循环上停过一次 0.6 秒（扫描并发时），先记下、没改。`.env` 前后哈希一致。
+
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
 所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，
@@ -1307,7 +1329,7 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 | 问题 | 位置 / 依据 | 为什么这次没改 |
 |---|---|---|
 | **手表「通话」不能让智能体做事**：通话走 `voice_call_route` → provider 的实时语音会话（`DuplexSessionConfig`），那是一个独立的实时模型对话，**没有接智能体的工具、也不进智能体的会话**（通话的转写只回给手表，不进 `handle_request`）。手表要「让智能体做事」只能走 `voice_query`（语音一问一答），它走真正的智能体主链、人发起的回合、危险操作在手表上问人 | `galaxy_gateway/voice_call_route.py`、`core/voice_duplex_session.py`（无 function-call 处理） | 要做就得把 provider 的函数调用桥到 `handle_request(source="wear_call")`、把该来源登记为人发起的回合；OpenAI realtime 与 Gemini live 的函数调用协议不同，且真 provider 在这里验证不了，需要你定做不做、先接哪家 |
-| **安卓 App 不会回答批准**：App 只定义了 `decision_request`、没有处理（第 14 轮只读核对安卓仓） | 中心这边已改成按设备声明问（第 15 轮）：手机答不了时在电脑面板 / 别的声明了能批的设备上问，并告诉手机去哪儿批 | 要安卓仓补：处理 `decision_request`（经 `human_input` 回 `decision_id` 与 `selected_option`）并在 `capability_report` 里声明 `"approvals": true`；这个会话对安卓仓只有读权限 |
+| **安卓 App 不会回答批准**：App 只定义了 `decision_request`、没有处理（第 14 轮只读核对安卓仓） | 中心这边已改成按设备声明问（第 15 轮）：手机答不了时在电脑面板 / 别的声明了能批的设备上问，并告诉手机去哪儿批；只认被问到的设备的回答（第 16 轮） | 安卓仓与手表仓逐条要做的（帧格式逐字、改哪个文件、怎么验）：**[DEVICE_CLIENT_REQUIREMENTS.md](DEVICE_CLIENT_REQUIREMENTS.md)**；这个会话对两个仓库只有读权限 |
 | 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
 | 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者 2026-09-28 答复：**后面做**，和未接线代码的处置放在一块儿 |
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |
