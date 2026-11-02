@@ -947,24 +947,30 @@ async def handle_command(connection_id: Optional[str], aip_msg, *, send=None):
             # PR-HITL: if this reply answers a pending decision (registered by
             # request_human_decision), resolve it — the asking coroutine resumes
             # in its original context. First reply wins; fan-out duplicates no-op.
-            resolved = False
+            resolved = still_waiting = False
             if decision_id:
                 try:
                     from core.interaction.pending_decision_registry import (
                         get_pending_decision_registry,
                     )
 
+                    # 谁答的 = 这条连接认证过的设备号(撤回时不再给答了的那台发撤回;没问它的不算)
                     resolved = get_pending_decision_registry().resolve(
                         decision_id,
                         selected_option=selected or None,
                         voice_input=voice_input,
-                        source="wear",
+                        source=device_id or "wear",
+                        from_device=device_id or "",
                     )
+                    still_waiting = not resolved and get_pending_decision_registry().get(decision_id) is not None
                 except Exception as _reg_err:
                     logger.debug("human_input resolve skipped: %s", _reg_err)
 
             if resolved:
                 result = {"success": True, "decision_id": decision_id, "resolved": True}
+            elif still_waiting:
+                # 这条决定还在等,但没问这台设备:照实拒绝,也不把「批准」当一句话交给智能体
+                result = {"success": False, "error": "这条决定没有问这台设备", "decision_id": decision_id}
             elif not human_msg:
                 result = {"success": False, "error": "empty human input", "decision_id": decision_id}
             else:

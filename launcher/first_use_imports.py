@@ -18,6 +18,8 @@ FIRST_USE_MODULES = (
     "core.execution.intent_profile",  # 第一次任务:openclawd._build_intent_profile
     "galaxy_gateway.android_bridge",  # 第一台设备连上规范设备入口:routes/websocket._handle_android_ws
     "core.node_declared_class",  # 节点登记 / 治理门 / 模型的节点目录
+    "core.cross_device_policy",  # 投影接口的跨设备路由一段(第 16 轮全接口扫描:循环上第一次 import 0.5 秒)
+    "core.agent_governance",  # 投影接口的 Agent 派发一段(同上:1.0 秒)
 )
 
 

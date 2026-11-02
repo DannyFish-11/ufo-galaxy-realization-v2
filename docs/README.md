@@ -25,6 +25,7 @@ documents are **authoritative and current** vs historical or superseded.
 | Document | Purpose |
 |----------|---------|
 | [SYSTEM_STATUS.md](SYSTEM_STATUS.md) | **当前系统状态（权威，2026-09-27 复测）** —— 完成度 / 完善度 / 设计完成度，每条附复测命令 |
+| [DEVICE_CLIENT_REQUIREMENTS.md](DEVICE_CLIENT_REQUIREMENTS.md) | **安卓仓与手表仓要补的（2026-11-02）** —— 能回答批准（`decision_request` / `human_input` / `decision_withdraw` 逐字帧格式）、`approvals` 声明、进度句、旧入口退役；外加任何别家生态的设备接进来的通用清单与验收步骤 |
 | [PANEL_SWITCHES.md](PANEL_SWITCHES.md) | **面板开关清单（由 `core/routes/panel_switch_policy.py` 生成）** —— 96 个布尔开关逐个说去处：留在面板 / 内置 / 开发运维 / 并进整档按钮，附没并的理由 |
 | [MULTI_MACHINE_MODE.md](MULTI_MACHINE_MODE.md) | **多机模式模块定义（2026-10-05）** —— 跨设备 · 多设备并行 · 任务派发与分配 · NATS Agent（主脑 / worker）四层怎么叠、一个任务怎么走完、各层配置键（含未登记的环境变量）/ 模块 / 接口、查出的不一致，以及两种组成一个按钮的组法（先记录，未合并；键表由 `scripts/gen_multi_machine_map.py` 生成） |
 | [CLONE_TO_USE_REALITY.md](CLONE_TO_USE_REALITY.md) | **Authoritative quick-start** — canonical clone-to-use runtime truth |

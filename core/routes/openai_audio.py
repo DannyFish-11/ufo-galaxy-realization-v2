@@ -234,10 +234,16 @@ async def audio_capabilities() -> Dict[str, Any]:
         logger.warning("TTS 算力适配探测失败", exc_info=True)
         out["tts"]["fit_error"] = type(exc).__name__
     try:
-        from core.modality_bridge import _get_asr
+        from core import modality_bridge as mb
 
-        asr = _get_asr()
-        out["asr"]["active_engine"] = type(asr).__name__ if asr is not None else ""
+        # 只问状态、不在这里加载:加载要探下载源、读模型,曾在事件循环上卡住 5 秒(第 16 轮全接口扫描,
+        # 同一时刻的 /metrics、/sync/status 跟着一起慢)。还没加载就交给后台线程,问的人立刻拿到「warming」。
+        state = mb.asr_state()
+        if state == "cold":
+            mb.warm_asr_in_background()
+            state = mb.asr_state()
+        out["asr"]["state"] = state
+        out["asr"]["active_engine"] = type(mb._get_asr()).__name__ if state == "ready" else ""
     except Exception as exc:  # noqa: BLE001
         logger.warning("ASR 能力探测失败", exc_info=True)
         out["asr"]["error"] = type(exc).__name__

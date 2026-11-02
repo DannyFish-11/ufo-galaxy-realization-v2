@@ -281,7 +281,43 @@ def test_the_agent_asks_on_the_watch_and_the_answer_comes_back(gateway, watch_id
         outcome = pending.result(timeout=10)
     assert outcome.status.value == "resolved"
     assert outcome.selected_option == "approve"
-    assert outcome.source == "wear"
+    assert outcome.source == watch_id, "谁答的 = 这条连接认证过的设备号(撤回时据此不给答了的那台发撤回)"
+
+
+def test_a_device_that_was_not_asked_cannot_answer(gateway, watch_id):
+    """问题只发给了 A;B 拿着决策号回「批准」不算 —— 照实拒绝,也不当成一句话交给智能体。A 答了才算。"""
+    from core.interaction.pending_decision_registry import get_pending_decision_registry, request_human_decision
+
+    other = f"wear-{uuid.uuid4().hex[:12]}"
+    with _connect(gateway, watch_id) as ws_a, _connect(gateway, other) as ws_b:
+        _register(ws_a, watch_id)
+        _register(ws_b, other)
+
+        async def ask():
+            return await request_human_decision(
+                title="删掉 /a.txt 吗",
+                options=[{"id": "approve", "label": "批准"}, {"id": "deny", "label": "不要"}],
+                timeout_s=8.0,
+                devices=[watch_id],
+            )
+
+        pending = gateway.portal.start_task_soon(ask)
+        asked = _recv(ws_a)
+        assert asked.get("type") == "decision_request", asked
+        decision_id = asked["payload"]["decision_id"]
+
+        inner = {"decision_id": decision_id, "selected_option": "approve", "device": "wear_os"}
+        ws_b.send_json(_watch_command_frame(other, "human_input", inner, "cmd_7", 7))
+        refused = _recv(ws_b)
+        assert refused.get("type") == "command_result", refused
+        body = refused.get("payload") or refused.get("data") or {}
+        assert body.get("success") is False and "没有问这台设备" in str(body.get("error")), refused
+        assert get_pending_decision_registry().get(decision_id) is not None, "没问它的回答不能把决定收掉"
+
+        ws_a.send_json(_watch_command_frame(watch_id, "human_input", inner, "cmd_8", 8))
+        assert _recv(ws_a).get("type") == "command_result"
+        outcome = pending.result(timeout=10)
+    assert outcome.status.value == "resolved" and outcome.source == watch_id
 
 
 # ---------------------------------------------------------------------------
