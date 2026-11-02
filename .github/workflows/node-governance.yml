@@ -27,6 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -101,6 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -126,6 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

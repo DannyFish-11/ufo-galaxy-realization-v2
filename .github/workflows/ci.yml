@@ -213,6 +213,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -232,6 +233,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -312,6 +314,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -345,6 +348,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -384,6 +388,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -410,6 +415,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -428,6 +434,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -447,6 +454,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -474,6 +482,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -497,6 +506,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -563,6 +573,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -644,6 +655,7 @@ jobs:
     steps:
       - name: Checkout V2 repository
         uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       # 兄弟仓此前取的是它的【默认分支】(main)。和手表仓 wear-compile.yml 是同一个问题:
       # 跨仓契约改动不可能在单个 PR 里变绿 —— 本仓这一侧改了、安卓那一侧的对应改动还在
       # 分支上,漂移门就会红,只能先合安卓再回来重跑。test_grounding_rule_is_one_rule
@@ -781,6 +793,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-runner-disk
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

@@ -1162,6 +1162,7 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 - **全接口扫描**：GET 250 条、写接口 124 条（空请求体 + 按 schema 填）。没有 500；4 个 503 都是照实说缺什么（WebRTC / 视觉节点没起、沙箱里没有 TTS 引擎、没配 Google 登录），
   `/api/v1/stream` 是不结束的流；慢的只剩本来就慢的（局域网扫描 3 秒、视觉等帧 10 秒超时、模型辩论 7 秒、重载全部协议 5 秒）。ERROR 只有扫描造的 `r8` 参数引起的照实拒绝。
   全部真跑里 `android_device_state_store` 每次改动整份写盘在循环上停过一次 0.6 秒（扫描并发时），先记下、没改。`.env` 前后哈希一致。
+- **CI 的 runner 磁盘被装满**（同一天四次、散在不同作业，`No space left on device`，测试一条都没跑就红）：`sentence-transformers` 拉进来的 torch 带好几 GB 的 `nvidia-*` 依赖，加上 pip 缓存。新增 `.github/actions/free-runner-disk`，33 个装 `requirements.txt` 的作业在 checkout 之后、`setup-python`（会还原 pip 缓存）之前先删掉用不上的预装工具链（安卓 SDK、.NET、GHC、CodeQL 包）—— 只删、不改装什么，依赖解析与测试内容不变。
 
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
