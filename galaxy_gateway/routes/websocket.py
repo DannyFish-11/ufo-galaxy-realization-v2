@@ -21,9 +21,13 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY 保持一致):
 PR-GATEWAY-FIX: 同时提供 core/api_routes.py 所需的兼容导出(入口权威声明与入口登记表)。
 """
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+
+#: 后台跑着的智能体回合(设备发起的一整轮,见 galaxy_gateway/device_turns.py):留一个引用,任务不被回收、连接断了也做完
+_TURNS: set = set()
 
 # ── Constants required by core/api_routes.py ──
 
@@ -114,6 +118,7 @@ async def _handle_android_ws(
     from fastapi import WebSocketDisconnect
 
     from galaxy_gateway.android_bridge import android_bridge
+    from galaxy_gateway.device_turns import runs_an_agent_turn
 
     await websocket.accept()
     logger.info(
@@ -139,6 +144,21 @@ async def _handle_android_ws(
     # 这条连接自己的凭证:握手头里的 Bearer,或者这条连接上已经回过 auth_ok 的 auth 帧里的令牌。
     # 安卓先发 auth、再发不带令牌的 device_register —— 不把连接的凭证带给登记,认证开着时手机永远登记不上。
     transport_token = _bearer_token(websocket)
+    send_lock = asyncio.Lock()
+
+    async def _reply(response) -> None:
+        async with send_lock:
+            await websocket.send_json(response)
+
+    async def _run_turn(message) -> None:
+        """交给智能体的一整轮在后台跑,读循环接着读(这一轮里设备对批准的回答、心跳都靠它),见 galaxy_gateway/device_turns.py。"""
+        try:
+            response = await android_bridge.handle_message(websocket, message)
+            if response is not None:
+                await _reply(response)
+        except Exception as exc:  # noqa: BLE001 — 连接已经断了 / 回包发不出去:这一轮本身照样做完
+            logger.info("device ws turn reply not delivered for %s: %s", device_id, exc)
+
     try:
         while True:
             message = await websocket.receive_json()
@@ -150,9 +170,14 @@ async def _handle_android_ws(
             message.setdefault("_ingress_classification", ingress_classification)
             if transport_token and not _frame_token(message):
                 message["_ingress_transport_token"] = transport_token  # 登记照样重新校验(含配对令牌绑设备)
+            if runs_an_agent_turn(message):
+                task = asyncio.get_running_loop().create_task(_run_turn(message))
+                _TURNS.add(task)  # 连接断了也让这一轮做完(已批准的动作不做一半)
+                task.add_done_callback(_TURNS.discard)
+                continue
             response = await android_bridge.handle_message(websocket, message)
             if response is not None:
-                await websocket.send_json(response)
+                await _reply(response)
             if message.get("type") == "auth" and (response or {}).get("type") == "auth_ok":
                 transport_token = _frame_token(message) or transport_token
             if message.get("type") == "device_register" and (response or {}).get("success") is True:

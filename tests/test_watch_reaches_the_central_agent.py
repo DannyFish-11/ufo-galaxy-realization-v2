@@ -667,3 +667,119 @@ def test_the_watch_tells_the_agent_what_it_can_do_and_is_not_turned_away(gateway
         reply = _recv(ws, timeout=3.0)
         # 成功时网关可以回 ack 也可以不回;唯独不能是 error
         assert reply.get("type") != "error", reply
+
+
+# ---------------------------------------------------------------------------
+# 五、手表自己发起的事,在手表上批(第 13 轮真跑)
+# ---------------------------------------------------------------------------
+#
+# 规范入口一帧一帧地读、每帧等处理完。手表说一句话就是智能体的一整轮,遇到危险动作要在手表上问 ——
+# 可回答走的是同一条连接,读循环正等着这一轮,读不到:真跑里点了「批准」,15 秒后照样按超时不执行。
+
+
+@pytest.fixture
+def agent_that_asks(monkeypatch):
+    """智能体处理手表说的话时要做一件危险的事 → 在发起的那块手表上问(与 approval_gate._ask_devices 同一个调用)。"""
+    outcomes = []
+
+    class _Runtime:
+        async def handle_request(self, **kwargs):
+            from core.interaction.high_risk_confirmation import confirm_high_risk_tool
+
+            device = kwargs["device_id"]
+            result = await confirm_high_risk_tool(
+                tool_name="删一个文件",
+                risk_level="high",
+                session_id="s",
+                device_id=device,
+                timeout_s=8.0,
+                devices=[device],
+            )
+            outcomes.append(result)
+            text = "删好了" if result.approved else f"没有删:{result.reason}"
+            return {"success": True, "response": text, "runtime_session_id": "rs-ask"}
+
+    import core.desktop_presence_runtime as dpr
+
+    monkeypatch.setattr(dpr, "get_desktop_presence_runtime", lambda: _Runtime())
+    return outcomes
+
+
+@pytest.mark.parametrize("answer, approved", [("approve", True), ("deny", False)])
+def test_the_wearer_answers_on_the_watch_while_their_own_request_waits(
+    gateway, watch_id, agent_that_asks, answer, approved
+):
+    t0 = time.time()
+    with _connect(gateway, watch_id) as ws:
+        _register(ws, watch_id)
+        ws.send_json(
+            _watch_command_frame(watch_id, "voice_query", {"text": "删一下那个文件", "source": "wear_os"}, "cmd_1", 1)
+        )
+        asked = _recv(ws, timeout=10.0)
+        assert asked.get("type") == "decision_request", asked
+        decision_id = asked["payload"]["decision_id"]
+        ws.send_json(
+            _watch_command_frame(
+                watch_id,
+                "human_input",
+                {"decision_id": decision_id, "selected_option": answer, "device": "wear_os"},
+                "cmd_2",
+                2,
+            )
+        )
+        got = {}
+        for _ in range(6):
+            m = _recv(ws, timeout=10.0)
+            if m.get("correlation_id") in ("cmd_1", "cmd_2"):
+                got[m["correlation_id"]] = m
+            if len(got) == 2:
+                break
+    assert set(got) == {"cmd_1", "cmd_2"}, got
+    assert agent_that_asks and agent_that_asks[0].approved is approved, "手表上的回答要被这一轮等到"
+    assert ("删好了" in got["cmd_1"]["data"]["text"]) is approved
+    assert time.time() - t0 < 8.0, "不是等到超时才收的"
+
+
+def test_only_agent_turns_leave_the_read_loop():
+    from galaxy_gateway.device_turns import runs_an_agent_turn
+
+    def frame(command, inner=None):
+        return {"type": "command", "payload": {"id": 1, "command": command, "payload": inner or {}}}
+
+    assert runs_an_agent_turn(frame("voice_query", {"text": "x"}))
+    assert runs_an_agent_turn(frame("human_input", {"voice_input": "我想..."})), "主动开口交给智能体"
+    assert runs_an_agent_turn(frame("human_input", {"decision_id": "早就过期的"})), "答的不是正在等的,交给智能体"
+    for keep_in_order in (frame("query_devices"), frame("voice_call_offer"), frame("interruptibility")):
+        assert not runs_an_agent_turn(keep_in_order)
+    for other in ({"type": "device_register"}, {"type": "heartbeat"}, {"type": "auth"}, {"type": "capability_report"}):
+        assert not runs_an_agent_turn(other)
+
+
+def test_an_answer_to_a_question_being_waited_on_is_handled_at_once():
+    import asyncio
+
+    from core.interaction.pending_decision_registry import get_pending_decision_registry, request_human_decision
+    from galaxy_gateway.device_turns import runs_an_agent_turn
+
+    async def go():
+        sent = []
+
+        async def emit(did, msg):
+            sent.append(msg)
+
+        task = asyncio.ensure_future(
+            request_human_decision(title="t", summary="s", options=[], timeout_s=5.0, devices=["d"], emit=emit)
+        )
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+            if sent:
+                break
+        did = sent[0]["payload"]["decision_id"]
+        inline = not runs_an_agent_turn(
+            {"type": "command", "payload": {"command": "human_input", "payload": {"decision_id": did}}}
+        )
+        get_pending_decision_registry().resolve(did, selected_option="approve", source="wear")
+        await task
+        return inline
+
+    assert asyncio.run(go()) is True
