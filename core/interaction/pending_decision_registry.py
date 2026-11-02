@@ -493,18 +493,25 @@ async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
     await connection_manager.send_to_device(device_id, message)
 
 
-#: 能被"问一句"的设备类型。手表是主通道；手机是备选（同一条决策分叉到两处，先答的算数）。
-_ASKABLE_WATCH_TYPES = ("wear_os", "wearos", "android_wear", "watch", "galaxy_watch")
-_ASKABLE_PHONE_TYPES = ("android", "phone", "android_phone")
-
-
 def _is_askable_type(dtype: str) -> bool:
-    d = (dtype or "").strip().lower()
-    return d in _ASKABLE_WATCH_TYPES or d in _ASKABLE_PHONE_TYPES or "phone" in d
+    """只按种类看：没声明的设备里，已经发出去的客户端确实会答的那一类（手表）。
+
+    能不能问一台设备，一处说了算 —— :func:`core.approvers.answers_approvals`（先看设备自己的 ``approvals`` 声明）。
+    这里只是它给旧客户端留的兼容那一半；新设备一律声明，不往这里加种类（所有者：「不用每一次都要自己加一种设备」）。
+    手机不在这里：安卓 App 不处理 ``decision_request``（第 14 轮只读核对安卓仓），问过去没人显示。
+    """
+    from core.approvers import _shipped_client_answers
+
+    return _shipped_client_answers(dtype)
+
+
+async def discover_answering_devices() -> List[str]:
+    """此刻在线、能回答批准的设备(``core.approvers`` 那一条规则)。批准门先看有没有能问的,再告诉发起的设备去哪儿批。"""
+    return await _discover_target_devices()
 
 
 async def _discover_target_devices() -> List[str]:
-    """Auto-discover connected WearOS + phone device ids to ask.
+    """Auto-discover connected devices that can answer a decision (``core.approvers.answers_approvals``).
 
     **在线与否以 UCM 为准**（连接与在线的权威，规范入口 ``/ws/device/{id}`` 注册成功后
     会登记进去）。此前只读旧管理器的本地表加上 REST 的 ``registered_devices``：经规范入口
@@ -513,6 +520,8 @@ async def _discover_target_devices() -> List[str]:
 
     设备类型取自它登记时报的 ``device_type``（UCM 连接元数据），其次是 ``registered_devices``。
     """
+    from core.approvers import answers_approvals
+
     candidates: List[str] = []
     types: Dict[str, str] = {}
 
@@ -547,6 +556,6 @@ async def _discover_target_devices() -> List[str]:
     targets: List[str] = []
     for did in candidates:
         dtype = types.get(did) or str((registered_devices.get(did) or {}).get("device_type", ""))
-        if _is_askable_type(dtype):
+        if answers_approvals(did, dtype):  # 设备自己的声明优先;没声明才看是不是已知会答的旧客户端
             targets.append(did)
     return targets

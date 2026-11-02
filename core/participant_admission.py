@@ -483,6 +483,9 @@ def admit_participant(
     if not admission.admitted:
         admission.error_code = "UDM_WRITE_FAILED"
         return admission
+    from core.approvers import remember as _remember_approvals
+
+    _remember_approvals(descriptor.device_id, raw, source=ADMISSION_SOURCE)  # 「我能回答批准」—— 哪个生态都一样认
     if descriptor.tailscale_ip:
         _step(admission, "mesh_peer", _register_mesh_peer, descriptor)
     admission.mesh_session_id = _step(admission, "mesh_session", _open_mesh_session, descriptor) or ""

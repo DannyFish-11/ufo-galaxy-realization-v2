@@ -349,6 +349,36 @@ async def _converse(device_id: str, env: a2a.Envelope, text: str) -> None:
     )
 
 
+def note_to_device(device_id: str, text: str) -> bool:
+    """往装着桥接 Agent 的设备上捎一句话(对话下行,手机上显示成一条回复),比如「这一步已在电脑面板上问你」。
+
+    不等、永不抛出;没有装着的桥接 Agent 就什么都不做(返回 ``False``)。
+    """
+    b = _bridges.get(device_id)
+    if b is None or not getattr(b, "installed", False) or not text:
+        return False
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+
+    async def _send() -> None:
+        try:
+            await a2a.send(
+                device_id,
+                a2a.Kind.CONVERSATION,
+                {"role": "assistant", "text": text, "progress": True, "success": True},
+                session_id=b.session_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("phone bridge: note to %s not sent: %s", device_id, exc)
+
+    task = loop.create_task(_send())
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return True
+
+
 async def _on_conversation(device_id: str, env: a2a.Envelope) -> None:
     """手机上说的一句话 → 中心智能体的同一个会话 → 回答回到手机。
 

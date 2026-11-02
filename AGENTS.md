@@ -58,7 +58,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   `GALAXY_NATS_URL` 只说总线在哪，**不参与**判模式。面板上切换的只有「跨设备」一个按钮（写主键、`GALAXY_SYSTEM_MODE` 与唯一成员 `GALAXY_NATS_ENABLED`）。
   「混合」不是模式，是一个请求的走法（入口判定 `resolve_entry_mode`，跟着电脑的开关走）；`core/hybrid_executor.py` 的「混合执行」是单台设备内部的降级链，别混。
 - **模型看的是每台设备的「整体卡」，不是固定角色**（`core/device_onboarding/device_card.py`，`devices__list` 与 `GET /api/v1/onboarding/cards` 同一份）：
-  是什么 / 能做什么（设备自己报的动作 + 一句说明：`capability_report` 的 `capability_schemas[].description` 或 `action_descriptions`）/ 现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/
+  是什么（分类认不出的别家生态 / 新种类照它自己报的原话，`core/device_onboarding/service.py::_type_of`，不往分类表里加种类）/ 能做什么（设备自己报的动作 + 一句说明：`capability_report` 的 `capability_schemas[].description` 或 `action_descriptions`）/ 现在怎么样（在线、电量、网络路径、忙不忙、手表能否打扰）/
   能否接派来的 Agent（`can_take_agent`）/ 最近做过什么（任务流程图）。谁做什么由模型定，规则只过滤；「感知 / 动作 / 在场」（`core/mesh/device_role_allocator.py`）只是观测标签，
   **别让派发路径读它**（`tests/test_the_model_sees_each_device_as_a_whole.py` 守着）。每次单动作下发都记进任务流程图（`device_card.record_dispatch`）。
 - **对外 A2A**（中心智能体 ↔ 派出去的 Agent：手机上的桥接 Agent、载体上的 Agent）：AIP v3 `a2a` 帧，信封与「必达」链路在 `core/a2a_link.py`，与安卓 `shared-protocol/.../A2A.kt` 线格式逐字一致（改一边必须改另一边，`tests/test_external_a2a_link.py` 对照）。
@@ -128,7 +128,8 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `core/approval_gate.py` - 「问人批准」的**唯一入口** `request_approval()`：查授权 → 判在哪问 → 问 → 等 → 落授权。工具门（`openclawd` 内联 / `CanonicalDispatcher`）、
   节点拨盘门（`GALAXY_AUTONOMY`，`core/node_invocation.py` → `gate_node_call`）、智能家居、GitHub 插件准入都调它，**别再各写一份「问完再试」**。
   从哪发起就在哪批：电脑发起的在面板上批（WS `type="approvals"` 只带摘要，令牌走带鉴权的 `GET /api/v1/approvals`；岛上一张「等你批准」卡），
-  手机 / 手表发起的在那台设备上问（`high_risk_confirmation.confirm_high_risk_tool`）；桌面外壳没连着就不白等。
+  别的设备发起的在那台设备上问（`high_risk_confirmation.confirm_high_risk_tool`）；桌面外壳没连着就不白等。
+  **哪台设备能回答批准只有一条规则 `core/approvers.py`，按设备自己的声明，不按种类**：报能力 / 接入时说 `"approvals": true` 的就问它（哪个生态都一样），没声明的只认已经发出去、确实会答的手表（旧客户端兼容，不是扩展点）—— **别再往代码里加设备种类**。发起的那台答不了（今天的安卓 App）→ 电脑面板上问并告诉它去哪儿批；电脑没开 → 问别的声明了能批的设备；一处都没有 → 不做、照实说。开了设备准入闸、还没被主人批准的设备声明了也不算（`tests/test_any_device_that_says_it_can_approve_is_asked.py`）
   授权按「动作 × 对象」记（`node:<编号>:<动作>[/<子动作>]@<对象>`），默认「本会话」= 这段对话，「一直允许」落数据目录 `approval_grants.json`、面板能撤。
   一次调用只问一次（工具门批过的，节点门认）；门禁自己出错一律不执行（节点门：读照放、写不执行）。设计与进度：`docs/GROUNDED_AGENT_DESIGN.md`
 - 工具的单次时间预算（`core/tool_permissions.py::tool_call_timeout_s`）给等人、给长任务留够：会停下来问人的按确认超时，`computer_use__run` 按步数，

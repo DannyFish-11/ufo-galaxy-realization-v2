@@ -120,6 +120,8 @@ def record_unknown_value(
     raw_value: Any,
     reason: str,
     device_id: Optional[str] = None,
+    *,
+    open_vocabulary: bool = False,
 ) -> None:
     """记一笔协议漂移。
 
@@ -156,6 +158,16 @@ def record_unknown_value(
                 "协议漂移:%s.%s 字段缺失(device=%s)。已归为 UNKNOWN 并登记 —— 不给乐观默认。",
                 surface,
                 field_name,
+                device_id or "?",
+            )
+        elif open_vocabulary:
+            # 设备种类 / 平台是开放的:每个生态用自己的叫法(wearos、harmonyos、watchos……),不是契约分叉。
+            # 照样登记(诊断面看得到见过哪些叫法),只记一行 INFO;它能做什么看它自己声明的能力(所有者:不用每种设备都加一遍)。
+            logger.info(
+                "设备自己报的 %s.%s 是 %r(device=%s):按它的原话记下;能做什么看它声明的能力。",
+                surface,
+                field_name,
+                text,
                 device_id or "?",
             )
         else:
@@ -225,6 +237,7 @@ def coerce_protocol_enum(
     field_name: str,
     device_id: Optional[str] = None,
     unknown_member: str = "UNKNOWN",
+    open_vocabulary: bool = False,
 ) -> _EnumT:
     """把线上收到的字符串转成枚举,不认识就归 UNKNOWN 并登记。
 
@@ -257,5 +270,7 @@ def coerce_protocol_enum(
     try:
         return enum_cls(raw_value)
     except ValueError:
-        record_unknown_value(surface, field_name, raw_value, REASON_UNRECOGNIZED, device_id)
+        record_unknown_value(
+            surface, field_name, raw_value, REASON_UNRECOGNIZED, device_id, open_vocabulary=open_vocabulary
+        )
         return unknown
