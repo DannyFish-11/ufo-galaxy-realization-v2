@@ -171,6 +171,24 @@ async def suggest(query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def actions() -> Dict[str, Any]:
+    """统一入口 :func:`execute` 认的动作(模型的节点目录 nodes__list 照这个列)。"""
+    from nodes.common.service_entry import param
+
+    return {
+        "search": {
+            "summary": "联网搜索(Brave),回标题、链接、摘要",
+            "params": [
+                param("query", required=True),
+                param("count", "int", note="条数,默认 10"),
+                param("offset", "int"),
+                param("search_type", note="web(默认)/ news / images / videos"),
+            ],
+        },
+        "suggest": {"summary": "搜索联想词", "params": [param("query", required=True)]},
+    }
+
+
 async def execute(command: str, **params: Any) -> Dict[str, Any]:
     """统一执行器的入口(``fusion_entry.py`` 在模块上按 process / execute / run / handle 找)。
 

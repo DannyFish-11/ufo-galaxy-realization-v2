@@ -309,6 +309,42 @@ class NodeInvocationGovernanceDecision:
 # ===========================================================================
 
 
+def _declared_class_denial(
+    node_id: str, registry_consulted: bool, budget_context: Optional[dict]
+) -> Optional["NodeInvocationGovernanceDecision"]:
+    """没登记的节点按它**声明的**类别判:不是能力节点就拒(与登记了的节点同一条规则、同样的原因码)。"""
+    try:
+        from core.node_declared_class import declared_class, why_not_callable  # noqa: PLC0415
+        from core.node_governance_runtime import REASON_ARCHIVED, REASON_NON_CAPABILITY_CLASS  # noqa: PLC0415
+        from core.nodes.node_fabric_registry import NodeArchitecturalClass  # noqa: PLC0415
+
+        cls = declared_class(node_id)
+    except Exception as exc:  # noqa: BLE001 — 判不出类别:照旧放行(与登记表不可用时一致)
+        logger.debug("governance gate: declared class unavailable for %s: %s", node_id, exc)
+        return None
+    if cls is NodeArchitecturalClass.CAPABILITY_NODE:
+        return None
+    reason = REASON_ARCHIVED if cls is NodeArchitecturalClass.ARCHIVED_NODE else REASON_NON_CAPABILITY_CLASS
+    diag: dict = {
+        "node_id": node_id,
+        "registry_consulted": registry_consulted,
+        "declared_class": cls.value,
+        "checked_at": time.time(),
+        "note": why_not_callable(node_id),
+    }
+    if budget_context is not None:
+        diag["activation_budget_context"] = budget_context
+    return NodeInvocationGovernanceDecision(
+        node_id=node_id,
+        invocation_allowed=False,
+        denial_reasons=[reason],
+        diagnostic_context=diag,
+        governance_status="unregistered_declared_class_excluded",
+        registry_consulted=registry_consulted,
+        governor_consulted=False,
+    )
+
+
 def evaluate_invocation_governance(
     node_id: str,
     *,
@@ -470,9 +506,13 @@ def evaluate_invocation_governance(
     # Unregistered / unmanaged node — allow with warning
     # ------------------------------------------------------------------
     if node_info is None:
-        logger.warning(
-            "governance gate: node_id=%s is not registered in NodeFabricRegistry; "
-            "proceeding as unregistered/unmanaged (governance not enforced)",
+        # 没登记(本进程里起的节点就不登记):健康 / 心跳无从谈起,但**声明的类别**照样算数 ——
+        # 旧编排节点、占位节点不走规范调用路径(core/node_declared_class.py)
+        _declared_denial = _declared_class_denial(node_id, registry_consulted, _budget_context)
+        if _declared_denial is not None:
+            return _declared_denial
+        logger.debug(
+            "governance gate: node_id=%s 不在 NodeFabricRegistry(本进程里起的节点不登记);声明的类别是能力节点,放行",
             node_id,
         )
         _unrg_diag: dict = {
@@ -525,10 +565,11 @@ def evaluate_invocation_governance(
     # Evaluate governance eligibility via PR-6 function
     # ------------------------------------------------------------------
     try:
+        from core.node_declared_class import with_declared_class  # noqa: PLC0415
         from core.node_governance_runtime import evaluate_node_governance_eligibility  # noqa: PLC0415
 
         eligibility = evaluate_node_governance_eligibility(
-            node_info,
+            with_declared_class(node_info),  # 旧快照里登记错了类别的,按声明判
             governor_record=governor_record,
             heartbeat_ttl=heartbeat_ttl,
         )

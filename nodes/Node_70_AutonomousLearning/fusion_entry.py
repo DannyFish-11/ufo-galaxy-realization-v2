@@ -13,6 +13,8 @@ import logging
 import traceback
 import importlib.util
 
+from nodes.common import service_entry
+
 logger = logging.getLogger("Node_70_AutonomousLearning")
 
 
@@ -66,6 +68,11 @@ def _get_service():
     return _service
 
 
+def actions() -> dict:
+    """这个节点真有的动作(服务对象上公开的方法,及其参数)—— help 与模型的节点目录(nodes__list)都用它。"""
+    return service_entry.actions(_get_service())
+
+
 def execute(action: str, params: dict = None) -> dict:
     """
     统一执行入口
@@ -83,63 +90,32 @@ def execute(action: str, params: dict = None) -> dict:
     try:
         service = _get_service()
         
-        # 状态查询
+        # 状态查询 / 有哪些动作:照实从服务对象上列(nodes/common/service_entry.py),不写死
         if action == "status":
             return {
                 "node": "Node_70_AutonomousLearning",
                 "status": "running",
                 "service": type(service).__name__,
-                "available_actions": ['learn', 'recall', 'analyze_pattern', 'update_knowledge', 'get_stats']
+                "available_actions": sorted(actions()),
             }
-        
+
         if action == "help":
+            return {"node": "Node_70_AutonomousLearning", "description": "自主学习节点", "actions": actions()}
+
+        method = service_entry.resolve(service, action)
+        if method is not None:
+            result = service_entry.call(method, params, _run_coro)
             return {
-                "node": "Node_70_AutonomousLearning",
-                "description": "自主学习节点",
-                "actions": {'learn': '学习新知识', 'recall': '回忆经验', 'analyze_pattern': '分析模式', 'update_knowledge': '更新知识库', 'get_stats': '获取学习统计'}
+                "success": True,
+                "action": action,
+                "result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
             }
-        
-        # 查找并调用对应方法
-        method_name = action.replace("-", "_")
-        
-        # 优先查找精确匹配的方法
-        if hasattr(service, method_name):
-            method = getattr(service, method_name)
-            if callable(method):
-                import inspect
-                if inspect.iscoroutinefunction(method):
-                    result = _run_coro(method(**params))
-                else:
-                    result = method(**params)
-                return {
-                    "success": True,
-                    "action": action,
-                    "result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
-                }
-        
-        # 查找带前缀的方法
-        for prefix in ["do_", "handle_", "process_", "run_", "perform_"]:
-            prefixed = prefix + method_name
-            if hasattr(service, prefixed):
-                method = getattr(service, prefixed)
-                if callable(method):
-                    import inspect
-                    if inspect.iscoroutinefunction(method):
-                        result = _run_coro(method(**params))
-                    else:
-                        result = method(**params)
-                    return {
-                        "success": True,
-                        "action": action,
-                        "result": result if isinstance(result, (dict, list, str, int, float, bool, type(None))) else str(result)
-                    }
-        
+
         # 未找到方法
-        available = [m for m in dir(service) if not m.startswith("_") and callable(getattr(service, m, None))]
         return {
             "success": False,
             "error": f"未找到操作: {action}",
-            "available_methods": available[:20]
+            "available_methods": sorted(actions())[:40]
         }
         
     except Exception as e:

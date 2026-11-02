@@ -203,7 +203,9 @@ async def run_react_tool_loop(
                 except Exception as exc:  # noqa: BLE001 — 记录副作用不应中断循环
                     logger.debug("on_tool_result hook failed: %s", exc)
 
-            result_str = str(result.get("result", result.get("error", "")))
+            from core.tool_result_text import tool_result_text
+
+            result_str = tool_result_text(result)  # 与主循环同一个说法:结果不在 result 键里的也交得过去
             messages.append(
                 {
                     "role": "tool",

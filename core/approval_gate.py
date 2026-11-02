@@ -605,6 +605,12 @@ def may_wait_for_a_human(tool_name: str, arguments: Optional[Dict[str, Any]] = N
             if len(parts) == 3:
                 params = _node_params(args)
                 return would_ask(parts[1], parts[2], params=params, session_id=current_session_id())
+        if tool_name == "nodes__invoke":
+            from core.node_action_risk import current_dial, needs_human
+            from core.node_tools import name_only_grade
+
+            level = name_only_grade(args)
+            return level is not None and needs_human(level, current_dial())
         if tool_name in ("home__control", "home__scene"):
             from core.smart_home_tools import NODE_ID
 

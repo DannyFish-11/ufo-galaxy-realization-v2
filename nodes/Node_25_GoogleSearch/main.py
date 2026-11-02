@@ -299,6 +299,17 @@ def load_config_from_env() -> NodeConfig:
 _IN_PROCESS: Optional[GoogleSearchNode] = None
 
 
+def actions() -> Dict[str, Any]:
+    """统一入口 :func:`execute` 认的动作(模型的节点目录 nodes__list 照这个列)。"""
+    from nodes.common.service_entry import param
+
+    query = [param("query", required=True), param("num_results", "int", note="条数")]
+    return {
+        "search": {"summary": "Google 网页搜索(要 GOOGLE_API_KEY + GOOGLE_CSE_ID)", "params": query},
+        "image_search": {"summary": "Google 图片搜索", "params": query},
+    }
+
+
 async def execute(command: str, **params: Any) -> Dict[str, Any]:
     """统一执行器的入口(``fusion_entry.py`` 在模块上按 process / execute / run / handle 找)。
 

@@ -406,7 +406,10 @@ def test_tool_budgets_leave_room_for_a_person_and_for_long_tasks(monkeypatch):
     assert tool_call_timeout_s("engineer__apply", {"proposal_id": "p"}) == DEFAULT_TOOL_TIMEOUT_S
     assert tool_call_timeout_s("github__install", {"url": "https://github.com/a/b"}) > _timeout_s()
     monkeypatch.setenv("GALAXY_AUTONOMY", "autonomous")
-    assert tool_call_timeout_s("node__36__click", {"x": 1}) == DEFAULT_TOOL_TIMEOUT_S
+    # 所有者 2026-11-01:模型直接调的节点动作,危险与极危险在任何档位都要人点头(core/node_action_risk.py);
+    # 「自主」档只让「会改东西」那一档不再逐步问
+    assert tool_call_timeout_s("node__36__click", {"x": 1}) >= _timeout_s()
+    assert tool_call_timeout_s("node__23__now", {}) == DEFAULT_TOOL_TIMEOUT_S
 
 
 def test_the_agents_own_tools_are_graded():

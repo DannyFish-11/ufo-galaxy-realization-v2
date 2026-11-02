@@ -234,7 +234,8 @@ class FeedbackLoop:
             from core.state_event_bus import StateEventType
             from core.state_event_bus import emit as _emit  # noqa: PLC0415
 
-            event_type = StateEventType.TASK_SUCCEEDED if entry.success else StateEventType.TASK_FAILED
+            # 枚举里成功叫 TASK_DONE —— 原先写的 TASK_SUCCEEDED 不存在,每一次成功的反馈都在这里抛 AttributeError 被吞掉
+            event_type = StateEventType.TASK_DONE if entry.success else StateEventType.TASK_FAILED
             _emit(
                 event_type,
                 source="feedback_loop",

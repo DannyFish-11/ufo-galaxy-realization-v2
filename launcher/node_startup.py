@@ -561,6 +561,10 @@ class NodeSystemLauncher:
             return []
         return sorted(d.name for d in self.nodes_dir.iterdir() if d.is_dir() and (d / "main.py").exists())
 
+    def failure_reason(self, node_name: str) -> str:
+        """上一次 :meth:`start_node` 没成的原因归类(``slow_start`` = 进程活着、健康检查没及时就绪);没记就是空串。"""
+        return self._node_failure_reasons.get(node_name, "")
+
     async def start_node(self, node_name: str) -> bool:
         """启动单个节点，传递关键环境变量并轮询健康检查。"""
         import aiohttp
@@ -763,8 +767,8 @@ class NodeSystemLauncher:
                         ``"starting"``.  Mapped to :class:`NodeStatus` internally.
         """
         try:
+            from core.node_declared_class import declared_class
             from core.nodes.node_fabric_registry import (  # type: ignore[import]
-                NodeArchitecturalClass,
                 NodeInfo,
                 NodeRole,
                 NodeStatus,
@@ -785,6 +789,7 @@ class NodeSystemLauncher:
             # If already registered, update status + heartbeat only.
             existing = fabric.get(node_name)
             if existing is not None:
+                existing.architectural_class = declared_class(node_name)  # 旧快照里一律登记成了能力节点
                 fabric.update_status(node_name, node_status)
                 if node_status not in (NodeStatus.OFFLINE, NodeStatus.UNHEALTHY):
                     fabric.heartbeat(node_name)
@@ -812,7 +817,7 @@ class NodeSystemLauncher:
             node_info = NodeInfo(
                 node_id=node_name,
                 role=role,
-                architectural_class=NodeArchitecturalClass.CAPABILITY_NODE,
+                architectural_class=declared_class(node_name),  # 旧编排 / 占位节点按声明登记(不是一律能力节点)
                 host="localhost",
                 port=port or 0,
                 status=node_status,

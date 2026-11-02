@@ -43,6 +43,25 @@ def _run_async(coro):
         return asyncio.run(coro)
 
 
+def actions() -> dict:
+    """``execute`` 认的编码任务(模型的节点目录 nodes__list 照这个列)。会改 workspace_root 下的文件。"""
+    params = [
+        {"name": "description", "type": "str", "required": True, "note": "要做什么"},
+        {"name": "target_files", "type": "List[str]", "required": False},
+        {"name": "language", "type": "str", "required": False, "note": "默认 python"},
+        {"name": "workspace_root", "type": "str", "required": False},
+    ]
+    words = {
+        "generate_code": "按描述写新功能的代码",
+        "fix_bug": "修一个 bug",
+        "write_tests": "写测试",
+        "optimize": "优化代码",
+        "refactor": "重构",
+        "document": "补文档",
+    }
+    return {name: {"summary": text, "params": params} for name, text in words.items()}
+
+
 def execute(action: str, params: dict = None) -> dict:
     """Scheduler entry point – dispatch coding actions to the engine."""
     if params is None:

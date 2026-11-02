@@ -435,6 +435,16 @@ def _estimate_speakers(segments: List[Dict]) -> Dict[str, Any]:
 class Node:
     """Simple callable wrapper used by FusionNode."""
 
+    def actions(self) -> Dict[str, Any]:
+        """:meth:`process` 认的动作(模型的节点目录 nodes__list 照这个列)。"""
+        from nodes.common.service_entry import model_params
+
+        return {
+            "transcribe": {"summary": "把音频转成文字", "params": model_params(TranscribeRequest)},
+            "analyze": {"summary": "分析一段音频", "params": model_params(AnalyzeRequest)},
+            "detect_language": {"summary": "判断音频里说的是哪种语言", "params": model_params(DetectLanguageRequest)},
+        }
+
     async def process(self, command: str, **params):
         if command == "transcribe":
             return await transcribe(TranscribeRequest(**params))

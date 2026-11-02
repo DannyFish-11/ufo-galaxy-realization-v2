@@ -519,11 +519,16 @@ class UnifiedNodeExecutor:
                 )
 
             params = envelope.params if isinstance(envelope.params, dict) else {}
-            raw_result = await _execute_node(node_info, action, params)
+            from core.node_actions import use_routes_directly
             from core.node_route_bridge import call_route, no_entry
 
-            if no_entry(raw_result):  # 通用入口在节点模块上找不到方法:接到节点自己同名的那条路由
-                raw_result = await call_route(node_id, node_info, action, params, timeout_s=envelope.timeout_ms / 1000)
+            timeout_s = envelope.timeout_ms / 1000
+            if use_routes_directly(node_info):  # 通用入口调不了(没载成 main / 「入口」其实是一条路由):直接按路由调
+                raw_result = await call_route(node_id, node_info, action, params, timeout_s=timeout_s)
+            else:
+                raw_result = await _execute_node(node_info, action, params)
+                if no_entry(raw_result):  # 通用入口在节点模块上找不到方法:接到节点自己同名的那条路由
+                    raw_result = await call_route(node_id, node_info, action, params, timeout_s=timeout_s)
             duration_ms = (time.time() - started) * 1000.0
 
             logger.debug(

@@ -226,6 +226,22 @@ class FusionNode:
             await self.instance.shutdown()
 
 
+def actions() -> dict:
+    """``execute`` 认的命令(模型的节点目录 nodes__list 照这个列)。图片给 image_path(本机路径)或 image。"""
+    image = {"name": "image_path", "type": "str", "required": True, "note": "图片在本机的路径"}
+    return {
+        "ocr": {"summary": "从图片里提取文字", "params": [image]},
+        "document_markdown": {"summary": "把文档图片转成 Markdown", "params": [image]},
+        "ui_analysis": {"summary": "分析截图里的界面元素", "params": [image]},
+        "table_extract": {"summary": "提取图片里的表格", "params": [image]},
+        "handwriting": {"summary": "识别手写", "params": [image]},
+        "custom": {
+            "summary": "按给的提示词识别",
+            "params": [image, {"name": "prompt", "type": "str", "required": True}],
+        },
+    }
+
+
 def get_node_instance():
     """获取节点实例"""
     return FusionNode()

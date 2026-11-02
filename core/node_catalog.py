@@ -97,6 +97,15 @@ def _match_status(dir_name: str, name: str, num: int, live: Dict[str, str]) -> s
     return "unknown"
 
 
+def catalog_nodes() -> List[Dict[str, Any]]:
+    """静态目录里的每个节点 + 它的目录名(不查端口、不查实时状态 —— 快,给模型的节点目录用)。"""
+    dirs = _num_to_dir()
+    return [
+        {**entry, "dir": dirs.get(entry.get("num"), f"Node_{entry.get('num')}_{entry.get('name', '')}")}
+        for entry in sorted(_load_catalog().get("nodes", []), key=lambda n: n.get("num", 0))
+    ]
+
+
 def get_node_roster() -> Dict[str, Any]:
     """合并目录 + 端口 + 实时状态,返回可直接给面板/接口用的 roster。"""
     cat = _load_catalog()

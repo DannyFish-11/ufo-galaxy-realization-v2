@@ -11,6 +11,8 @@
    之后把节点模块上的 ``app`` 当 ASGI 应用调（:class:`_NodeHost`）。不占后端的事件循环（不少节点的 async 路由里
    调的是同步的 requests）；
 3. **认不出那条路由**：照实说「节点 X 没有 Y 这个动作」，列出它有哪些。
+4. **只认一份**（第 10 轮）：本进程里起过一份、后来节点自己的进程也起来了 —— 两份并存，状态就分家（这边建的任务
+   那边查不到）。进程那份一答话，就把本进程这份收掉（跑它的 shutdown），结果里带一句说明（:func:`retire`）。
 
 **只认确定的，不猜：** 路由最后一段（不含占位符）与动作名相同（下划线与连字符等价），认不出再看处理函数名
 （声明了动作白名单的节点按函数名记动作）；占位符都能从参数里取到的才算；同一个名字对上几条
@@ -26,6 +28,7 @@ import asyncio
 import json
 import logging
 import threading
+import types
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.NodeRouteBridge")
@@ -48,12 +51,51 @@ def _norm(name: str) -> str:
     return str(name or "").strip().strip("/").lower().replace("-", "_")
 
 
-def node_app(node_info: Dict[str, Any]) -> Any:
-    """节点模块上的 FastAPI 应用（fusion 入口已经把模块载进来了）；没有就是 ``None``。"""
+def _reload_main(node_info: Dict[str, Any]) -> Any:
+    """通用入口没把 main.py 载成(``FusionNode.instance`` 是 None):自己载一次,记下结果或原因(各一次)。
+
+    Node_118 的 main.py 好好的,只是它有一条路由叫 ``get_instance(instance_id)``,通用入口把它当成工厂去调、缺参数就放弃了。
+    """
+    if "_main" in node_info:
+        return node_info["_main"]
+    loader = getattr(node_info.get("module"), "_import_node_main", None)
+    try:
+        node_info["_main"] = loader() if callable(loader) else None
+        if node_info["_main"] is None:
+            node_info["_main_error"] = "fusion_entry 没有载 main.py 的入口"
+    except Exception as exc:  # noqa: BLE001 — 缺依赖(PortAudio …)之类:照实记下
+        node_info["_main"] = None
+        node_info["_main_error"] = f"{type(exc).__name__}: {exc}"
+    return node_info["_main"]
+
+
+def main_namespace(node_info: Dict[str, Any]) -> Any:
+    """节点 main.py 的那份模块(或它的全局名字空间 dict)—— 节点的 ``app`` 在这里。"""
     holder = node_info.get("instance")
-    module = getattr(holder, "instance", None) if holder is not None else node_info.get("module")
-    app = getattr(module, "app", None)
+    if holder is None or not hasattr(holder, "instance"):  # 模块函数入口 / 自定义入口类:看入口模块
+        return node_info.get("module")
+    inst = holder.instance
+    if inst is None:
+        return _reload_main(node_info)
+    if isinstance(inst, types.ModuleType):
+        return inst
+    for value in vars(type(inst)).values():  # get_instance() 回的服务对象:app 在定义它的那份模块里(同一份,状态一致)
+        names = getattr(value, "__globals__", None)
+        if isinstance(names, dict) and hasattr(names.get("app"), "routes"):
+            return names
+    return inst
+
+
+def node_app(node_info: Dict[str, Any]) -> Any:
+    """节点 main.py 上的 FastAPI 应用;没有就是 ``None``。"""
+    names = main_namespace(node_info)
+    app = names.get("app") if isinstance(names, dict) else getattr(names, "app", None)
     return app if hasattr(app, "routes") else None
+
+
+def main_error(node_info: Dict[str, Any]) -> str:
+    """main.py 载不进来的原因(载成了 / 没试过就是空串)。"""
+    return str(node_info.get("_main_error") or "")
 
 
 def _fields(fields: Any) -> List[str]:
@@ -226,6 +268,20 @@ class _NodeHost:
             out["error"] = f"{out['error']}(节点 startup 没跑成:{self.startup_error})"
         return out
 
+    async def _shutdown(self) -> None:
+        lifespan = getattr(self, "_lifespan", None)
+        if lifespan is not None:
+            await lifespan.__aexit__(None, None, None)
+
+    def close(self) -> None:
+        """跑节点的 shutdown(它若把状态落盘,就在这时落),然后停掉这份实例的循环。阻塞:在工作线程里调。"""
+        try:
+            asyncio.run_coroutine_threadsafe(self._shutdown(), self.loop).result(timeout=STARTUP_TIMEOUT_S)
+        except Exception as exc:  # noqa: BLE001 — shutdown 出错只记下,实例照样收掉
+            logger.warning("节点 %s 的进程内实例 shutdown 出错: %s", self.node_id, exc)
+        finally:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+
 
 _HOSTS: Dict[str, _NodeHost] = {}
 _HOSTS_LOCK = threading.Lock()
@@ -238,6 +294,24 @@ def _host(node_id: str, app: Any) -> _NodeHost:
         if host is None or host.app is not app:
             host = _HOSTS[node_id] = _NodeHost(node_id, app)
         return host
+
+
+#: 收掉进程内实例时给调用方的一句话
+RETIRED_NOTE = "节点自己的进程已经起来:之前在本进程里临时起的那份已收掉,只认进程那份(那份内存里的状态没有带过去)"
+
+
+def retire(node_id: str) -> str:
+    """节点自己的进程起来了:收掉进程内那份,之后只认进程那份 —— 两份并存,状态就分家了(这边建的任务那边查不到)。
+
+    回一句说明;没有进程内实例就是空串。阻塞:在工作线程里调。
+    """
+    with _HOSTS_LOCK:
+        host = _HOSTS.pop(node_id, None)
+    if host is None:
+        return ""
+    host.close()
+    logger.info("节点 %s 的进程已在跑,进程内实例已收掉", node_id)
+    return RETIRED_NOTE
 
 
 def _node_url(node_id: str) -> str:
@@ -255,6 +329,9 @@ async def call_route(
     """把一次节点调用接到节点自己的路由上。永不抛出;做不成就回 ``{"success": False, "error": 原因}``。"""
     app = node_app(node_info)
     if app is None:
+        why = main_error(node_info)
+        if why:
+            return {"success": False, "error": f"节点 {node_id} 的 main.py 载不进来:{why}"}
         return {"success": False, "error": f"节点 {node_id} 既没有进程内入口,也没有 HTTP 路由可接"}
     route, method, why = pick_route(app, action, params or {})
     if route is None:
@@ -263,7 +340,12 @@ async def call_route(
     url = _node_url(node_id)
     if url:
         try:
-            return await _over_http(url, method, path, query, body, timeout_s)
+            out = await _over_http(url, method, path, query, body, timeout_s)
+            if node_id in _HOSTS:  # 进程起来之前这边临时起过一份:收掉,只认一份
+                note = await asyncio.to_thread(retire, node_id)
+                if note:
+                    out["note"] = note
+            return out
         except Exception as exc:  # noqa: BLE001 — 连不上 = 进程没在跑:进程内调
             import httpx
 
@@ -284,8 +366,11 @@ __all__ = [
     "action_routes",
     "build_request",
     "call_route",
+    "main_error",
+    "main_namespace",
     "endpoint_routes",
     "no_entry",
     "node_app",
     "pick_route",
+    "retire",
 ]

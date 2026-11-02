@@ -574,8 +574,8 @@ def _call_failure_status(error: str, *, node_said: bool = False) -> int:
     节点自己回的失败(缺 Key、没连设备……)是 502 —— 上游照实说做不成,不是这个接口坏了。"""
     if error.startswith("approval_required"):
         return 202
-    if error.startswith(("approval_denied", "gate_fault")) or "denied action" in error:
-        return 403
+    if error.startswith(("approval_denied", "gate_fault")) or "denied action" in error or "denied invocation" in error:
+        return 403  # 治理门按节点的类别 / 健康拒了(旧编排节点、占位节点……)也是门禁拦下,不是服务器出错
     if "目录未找到" in error:
         return 404
     return 502 if node_said else 500

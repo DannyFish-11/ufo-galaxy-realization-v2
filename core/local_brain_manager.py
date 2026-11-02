@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from core.hardware_compute_profiler import VRAM_HEADROOM_FACTOR
+from core.own_process import stop_own_process
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -206,6 +207,8 @@ class LocalBrainManager:
         self._last_health_check = 0.0
         self._health_check_interval = 30.0  # 健康检查间隔（秒）
         self._lock = asyncio.Lock()
+        #: 我们自己拉起的 ``ollama serve``(停的时候只停它;人自己开的 Ollama 不碰)
+        self._ollama_proc: Optional[subprocess.Popen] = None
 
     # ───────── 生命周期管理 ─────────
 
@@ -520,29 +523,16 @@ class LocalBrainManager:
             except Exception as exc:
                 logger.debug("Ollama cleanup delete failed: %s", exc)
 
-            # 查找并终止 ollama 进程。注意:stop() 是 async——同步 subprocess.run
-            # 会把整个事件循环冻住最长 10s(WS 心跳/面板/语音全停),放线程里跑。
-            try:
-                if sys.platform.startswith("win"):
-                    await asyncio.to_thread(
-                        subprocess.run,
-                        ["taskkill", "/F", "/IM", "ollama.exe"],
-                        capture_output=True,
-                        timeout=10,
-                        encoding="utf-8",
-                        errors="replace",
-                    )
-                else:
-                    await asyncio.to_thread(
-                        subprocess.run,
-                        ["pkill", "-f", "ollama"],
-                        capture_output=True,
-                        timeout=10,
-                        encoding="utf-8",
-                        errors="replace",
-                    )
-            except Exception as e:
-                logger.debug(f"停止 Ollama 进程时出错: {e}")
+            # 只停我们自己拉起的那个 ollama serve(按 PID / 它自己的进程组)。原先是 `pkill -f ollama` /
+            # `taskkill /IM ollama.exe`:命令行里**任何地方**带 ollama 的进程都被杀 —— 人自己开的 Ollama、
+            # 打开着 ollama.log 的编辑器、跑着 test_*ollama*.py 的测试进程(第 10 轮本地全量就这么被打断两次)。
+            # 放线程里跑:等进程退出最长 10 秒,不能冻住事件循环。
+            proc, self._ollama_proc = self._ollama_proc, None
+            if proc is not None:
+                try:
+                    await asyncio.to_thread(stop_own_process, proc)
+                except Exception as e:
+                    logger.debug(f"停止 Ollama 进程时出错: {e}")
 
         self._status = LocalBrainStatus.STOPPED
         self._healthy = False
@@ -839,7 +829,7 @@ class LocalBrainManager:
             _serve_env.setdefault("OLLAMA_KV_CACHE_TYPE", "q8_0")
             _popen_kwargs["env"] = _serve_env
 
-            subprocess.Popen([ollama_cmd, "serve"], **_popen_kwargs)
+            self._ollama_proc = subprocess.Popen([ollama_cmd, "serve"], **_popen_kwargs)
             logger.info("Ollama 服务已作为常驻进程启动(日志: logs/ollama.log)")
             return True
 
