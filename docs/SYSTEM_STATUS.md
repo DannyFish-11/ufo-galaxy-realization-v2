@@ -1167,6 +1167,8 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 
 **旧设备入口退役（2026-11-02）：** 所有者：「退役吧，确保没有东西在用它也不影响什么。」`/ws/ufo3/{device_id}`、`/ws/android/{device_id}`、`/ws/android` 三条没有路由了，只为 `/ws/ufo3` 存在的 `GALAXY_ENABLE_LEGACY_PROTOCOLS` 随之删除；入口登记表、配置发现（`ws_paths` 只给 `/ws/device/{id}`，`ws_paths_compat` 键留着、给空表）、用量账里都不再有它们。退役前核对过：安卓（完整 195 个提交）与手表（完整 141 个提交）的源码历史里一次都没连过这三条；安卓读配置发现时期望 `ws_paths` 是对象、服务端给的是列表，所以那份列表里的旧路径从没被任何客户端用上；本仓库里没有客户端、部署 / 反代配置、启动脚本在用。原先测旧入口的测试改成测「被拒」，测协议契约的改到 `/ws/device` 上测（`tests/test_retired_device_ingress_stays_retired.py` 另扫全仓：代码里没人再挂、再连这三条）。真跑（`main.py --backend -v`，独立数据目录）：三条旧入口握手即被拒（403），`/ws/device` 登记、心跳照旧，`/api/v1/config` 只给规范路径，日志里没有 ERROR，`.env` 前后哈希一致。
 
+**同一个 PR 的 CI 抓到的：会话管理器的锁绑在别的事件循环上。** 分片 4 里 `test_session_unification` 写会话时抛 `<asyncio.locks.Lock [locked, waiters:1]> is bound to a different event loop`（本机同一分片跑不出来，时序相关）。根因：`SessionManager` 整个进程一把 `asyncio.Lock`，它在第一次有人排队时绑定到那个循环；一个循环停了而持锁的任务没收尾（`ensure_session` 持锁时还在等工作线程落盘），这把锁就永远「锁着」且绑在已经没了的循环上，之后别的循环（节点宿主线程、设备那一轮的后台循环、测试各自的循环）一来要锁就抛错、会话写不进去。改成每个事件循环一把（`core/loop_local_lock.py`）：同一个循环照旧互斥，跨循环本来就互斥不了。`tests/test_session_manager_lock_is_per_loop.py` 在旧代码上逐字复现那句报错。
+
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
 所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，

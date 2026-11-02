@@ -39,6 +39,7 @@ from typing import Any, Dict, List, Optional
 
 from core.atomic_json import atomic_write_json
 from core.data_paths import data_path_or_legacy
+from core.loop_local_lock import LoopLocalLock
 from core.memory_thread import is_identifying_owner, resolve_thread
 
 logger = logging.getLogger("Galaxy.SessionManager")
@@ -253,9 +254,8 @@ class SessionManager:
         # /api/v1/sessions/reconcile 把它「认领」到桌面的用户主线上——之后该本地
         # session_id 的所有轮次(在线 goal_execution / 离线补录)都落进同一条主线。
         self._session_aliases: Dict[str, str] = {}
-        # 会话更新回调（用于 WebSocket 广播）
-        self._on_update_callback = None
-        self._lock = asyncio.Lock()
+        self._on_update_callback = None  # 会话更新回调（用于 WebSocket 广播）
+        self._lock = LoopLocalLock()  # 每个事件循环一把:整个进程一把会绑在第一个排队的循环上(core/loop_local_lock.py)
         # 证据链是同步、可被任意(同步/异步)调用方写入的快路径，用独立的线程锁保护，
         # 不与上面的 asyncio.Lock 纠缠（避免在同步上下文里 await）。
         self._evidence_lock = threading.Lock()
