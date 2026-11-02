@@ -241,10 +241,11 @@ class TestWsPaths:
         data = client.get("/api/v1/config").json()
         assert data["ws_paths"][0] == "/ws/device/{id}"
 
-    def test_android_path_present(self, client):
+    def test_retired_android_paths_are_not_handed_out(self, client):
+        """旧的 /ws/android 路径 2026-11-02 退役:配置发现只给规范路径,兼容表给空表(键留着)。"""
         data = client.get("/api/v1/config").json()
-        paths = data["ws_paths"]
-        assert any("/ws/android" in p for p in paths)
+        assert data["ws_paths"] == ["/ws/device/{id}"]
+        assert data["ws_paths_compat"] == []
 
     def test_device_path_present(self, client):
         data = client.get("/api/v1/config").json()

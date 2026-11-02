@@ -34,8 +34,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 | 端点 | 说明 |
 |------|------|
-| `ws://<host>:9000/ws/android` | Android 设备主连接端点 |
-| `ws://<host>:9000/ws/device/{device_id}` | 设备专属通道 |
+| `ws://<host>:9000/ws/device/{device_id}` | 唯一的设备入口（旧的 `/ws/android` 已于 2026-11-02 退役） |
 
 ### 协议版本
 
@@ -61,7 +60,7 @@ AIP v3.0（Android Integration Protocol v3.0）
   DannyFish-11/ufo-galaxy-android
         │
         │  WebSocket (AIP v3.0)
-        │  ws://<host>:9000/ws/android
+        │  ws://<host>:9000/ws/device/{device_id}
         ▼
 galaxy_gateway/android_bridge.py   ← 桥接层（本仓库）
         │

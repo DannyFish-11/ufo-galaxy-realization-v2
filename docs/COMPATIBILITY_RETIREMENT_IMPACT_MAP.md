@@ -103,10 +103,10 @@ adapter/facade surface across both repos. For each surface, it classifies:
 | Field | Value |
 |-------|-------|
 | **Path** | `galaxy_gateway/android_bridge.py` or `galaxy_gateway/websocket_handler.py` — `/ws/ufo3/{device_id}` |
-| **Classification** | **Immediately retireable after traffic analysis** |
-| **Risk** | If active Android client versions still connect via this path, retiring it disconnects them. |
-| **Action** | Verify in access logs whether any clients are connecting via `/ws/ufo3/`. If none, retire. If some, set migration timeline. |
-| **Cross-repo coordination** | **Required** — all Android client versions connecting via `/ws/ufo3/` must be updated or EOL'd. |
+| **Classification** | **RETIRED 2026-11-02** (together with `/ws/android/{device_id}` and `/ws/android`) |
+| **Risk** | None found: the Android and Wear OS apps never connected to these paths in their full histories; both only use `/ws/device/{device_id}`. |
+| **Action** | Done — routes removed, the handshake is refused; guarded by `tests/test_retired_device_ingress_stays_retired.py`. |
+| **Cross-repo coordination** | Checked read-only against both client repos; nothing to change there. |
 
 ---
 
@@ -226,7 +226,7 @@ counts exceed expected baseline.
 | `DeviceRouter` policy residue | High misuse risk | No | P1 — extract to CommandRouter |
 | `AgentBridge` | Still meaningful path | No | P2 — audit bypass risk |
 | Android REST compat aliases | Immediately retireable after traffic analysis | **Yes** | P3 |
-| `/ws/ufo3/` legacy WebSocket | Immediately retireable after traffic analysis | **Yes** | P3 |
+| `/ws/ufo3/` legacy WebSocket | **Retired 2026-11-02** | — | done |
 | `LocalAgentRuntime` | Harmless residue | No | P4 — docstring only |
 | `ProjectionEngine` | Transitional | No | P2 — verify delegation |
 | `protocol/compat.py` | Still meaningful path (keep) | Yes (remove only with coordination) | Keep |

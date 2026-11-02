@@ -20,8 +20,7 @@ according to the "Gateway + Node_71 + NATS mainline" architecture.
 
 - [ ] All devices/clients connect only through Galaxy Gateway (port 9000)
 - [ ] Gateway accepts AIP v3 protocol connections
-- [ ] Legacy AIP v2 entry points (`/ws/ufo3` etc.) are disabled by default
-- [ ] Enabling legacy requires explicit `GALAXY_ENABLE_LEGACY_MULTIDEVICE=true`
+- [ ] Legacy entry points (`/ws/ufo3`, `/ws/android*`) refuse the handshake — retired 2026-11-02, devices use `/ws/device/{device_id}`
 - [ ] `GET /health` on Gateway returns HTTP 200
 - [ ] `GET /api/v1/system/info` returns HTTP 200
 

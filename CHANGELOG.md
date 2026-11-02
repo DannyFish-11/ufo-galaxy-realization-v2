@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed (2026-11-02)
+
+- Legacy device WebSocket entrypoints `/ws/android/{device_id}`, `/ws/android` and `/ws/ufo3/{device_id}`
+  (and `GALAXY_ENABLE_LEGACY_PROTOCOLS`, which only gated `/ws/ufo3`). The Android and Wear OS apps never
+  connected to them in their full histories; every device uses `/ws/device/{device_id}`. Config discovery
+  hands out only that path (`ws_paths_compat` is kept as an empty list). Guarded by
+  `tests/test_retired_device_ingress_stays_retired.py`.
+
 Open pull requests pending review / merge:
 
 - **PR-S1** – Protocol Single Source of Truth (v3-only): `galaxy_gateway/protocol/aip_v3.py`

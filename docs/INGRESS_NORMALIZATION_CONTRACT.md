@@ -16,7 +16,7 @@ representation that all handlers, routers, and service layers consume.
 │                    Gateway Edge                          │
 │                                                          │
 │  /ws/device/{id}  ──┐                                   │
-│  /ws/android      ──┤                                   │
+│                     │                                   │
 │  REST /register   ──┤──► compat.normalise_to_v3_dict()  │
 │  AIP v1 client    ──┤    (type aliases, version, fields) │
 │  AIP v2 client    ──┘                                   │

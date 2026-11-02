@@ -152,6 +152,7 @@ Windows 真机日志里「一堆请求在同一毫秒一起完成、各自显示
 （`core/multimodal/audio_ingest.py`、`system_audio_capture_service.py`）、第一次选 TTS 引擎（`core.speech_output.speech_engine_ready()`）、创建节点进程
 （`launcher/service_manager.py`）、拓扑图整份落盘（启动时的一百多次登记合成一次，`core/persist_batch.py`）、每个 httpx 客户端各载一遍 CA 证书
 （`core/shared_tls.py`）。**节点子进程的输出写 `logs/nodes/<名字>.log`，不接管道**（没人读的管道写满，子进程卡死在 write() 里；Windows 管道缓冲只有 4KB）。
+进程级单例要 asyncio 锁用 `core.loop_local_lock.LoopLocalLock`（每个事件循环一把）：整个进程一把 `asyncio.Lock` 会绑在第一个排队的循环上，别的循环一来就抛「bound to a different event loop」（会话管理器在 CI 上抓到过）。
 
 ### 节点（各自一个进程的微服务）
 - **缺东西就照实失败，不模拟成功**：没连设备 / 没配 Key / 没有命令时，节点回 `success: false` 并说缺什么（`nodes/common/mock_drivers.py`）；

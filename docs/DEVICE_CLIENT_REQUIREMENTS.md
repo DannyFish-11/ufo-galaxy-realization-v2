@@ -16,7 +16,7 @@
 | A3 | 安卓 | 桥接 Agent 把 `progress: true` 的对话下行当「进度」显示，不当最终回答 | 建议 | 每条都交给 `host.onReply`，进度句和回答长得一样 |
 | W1 | 手表 | `capability_report` 里声明 `"approvals": true` | **必须**（不做也照旧能批，但那是兼容，不是正路） | 不声明；中心按「已发出去的手表客户端」兼容认它 |
 | W2 | 手表 | 确认 `human_input` 只在用户点了选项时带 `selected_option`，语音只放 `voice_input` | 核对（现状已对） | 已对 |
-| X1 | 两边 | 旧入口 `/ws/ufo3`、`/ws/android` 退役前确认没有老版本客户端在用 | 要所有者定 | 两个 App 的 main 都只连 `/ws/device/{device_id}` |
+| X1 | 两边 | 旧入口 `/ws/ufo3`、`/ws/android` 退役 | **已做（2026-11-02，中心这边）**，两边不用改 | 两个 App 的全部历史里都只连 `/ws/device/{device_id}` |
 | X2 | 手表 | 通话时让智能体能动手（实时语音接工具） | 要所有者先定用哪家实时语音 | 通话是独立的实时模型对话，不接智能体的工具 |
 
 第三节是**任何一台别家生态的设备**（平板、车机、家居面板、别家手表……）接进来要做的同一套事 —— 安卓和手表只是其中两种。
@@ -199,10 +199,11 @@ put("approvals", true) // 收得到 decision_request、会经 human_input 回(�
 
 ## 四、要所有者定的
 
-- **X1 旧入口退役**：`/ws/ufo3/{device_id}`、`/ws/android/{device_id}`、`/ws/android` 还开着（`galaxy_gateway/routes/websocket.py`，都转给规范处理器）。
-  安卓与手表的 main 都只连 `/ws/device/{device_id}`（安卓 `AppSettings.CANONICAL_WS_DEVICE_PATH_TEMPLATE`）。还有没有老版本在用，
-  看 `GET /api/v1/compat/usage`（进程内计数、重启归零；跨重启看 Prometheus 的 `galaxy_compat_surface_calls_total`）。
-  定了日期填进 `core/compat_usage.py::SUNSET_AT`，到期再删入口。
+- **X1 旧入口退役 —— 已做（2026-11-02，所有者：「退役吧，确保没有东西在用它也不影响什么」）**：`/ws/ufo3/{device_id}`、`/ws/android/{device_id}`、`/ws/android`
+  没有路由了，握手即被拒；`GALAXY_ENABLE_LEGACY_PROTOCOLS`（只为 `/ws/ufo3` 存在）随之删除。退役前核对过：安卓（完整 195 个提交）与手表（完整 141 个提交）
+  的源码历史里一次都没连过这三条，一直只连 `/ws/device/{device_id}`（安卓 `AppSettings.CANONICAL_WS_DEVICE_PATH_TEMPLATE`）；安卓读配置发现时期望 `ws_paths`
+  是对象、服务端给的是列表，所以那份列表里的旧路径从没被用上。**两边什么都不用改。** 配置发现现在只给 `/ws/device/{id}`，`ws_paths_compat` 键留着、给空表。
+  守着的测试：`tests/test_retired_device_ingress_stays_retired.py`。
 - **X2 手表通话时智能体动手**：通话走 provider 的实时语音会话，没接智能体的工具。要接得先定用哪家实时语音（OpenAI realtime / Gemini live 的函数调用协议不同），
   然后把函数调用桥到 `handle_request(source="wear_call")`。
 

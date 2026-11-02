@@ -125,7 +125,7 @@ def test_b02_the_report_carries_its_own_range():
 def test_b03_never_used_and_never_seen_are_the_same_field_but_documented():
     """未被调用的面 calls=0、first_seen=None —— None 与 0 分开,
     让"这个进程从没见过它"看得出来。"""
-    entry = next(s for s in cu.usage_report()["surfaces"] if s["surface"] == "/ws/ufo3/{device_id}")
+    entry = next(s for s in cu.usage_report()["surfaces"] if s["surface"] == "/api/devices/unregister")
     assert entry["calls"] == 0
     assert entry["first_seen"] is None
 

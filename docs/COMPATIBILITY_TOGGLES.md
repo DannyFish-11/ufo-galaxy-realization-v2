@@ -79,7 +79,7 @@ bash start.sh
 **Default:** Disabled (HTTP 404 / connection refused)
 
 The following legacy WebSocket paths are disabled by default:
-- `/ws/ufo3` — Legacy UFO v3 WebSocket
+- `/ws/ufo3` — Legacy UFO v3 WebSocket (**retired 2026-11-02**, together with `/ws/android/{device_id}` and `/ws/android`)
 - `/ws/legacy` — Legacy protocol bridge
 
 These are managed in `galaxy_gateway/app.py`. There is currently no env var toggle;

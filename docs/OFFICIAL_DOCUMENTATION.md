@@ -655,7 +655,7 @@ Galaxy Gateway (WebSocket服务器)
 |------|------|------|
 | `/ws/desktop-presence` | 双向 | 桌面三态通信 |
 | `/ws/operator` | 双向 | 操作员控制台 |
-| `/ws/android` | 双向 | Android客户端 (AIP v3) |
+| `/ws/device/{device_id}` | 双向 | 设备入口（安卓 / 手表 / 别的设备，AIP v3；旧的 `/ws/android` 已于 2026-11-02 退役） |
 | `/ws/cross-device` | 双向 | 跨设备控制 |
 
 ---

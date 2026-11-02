@@ -14,7 +14,7 @@
 
 > 下面的正文是 2026-04 的原始路线图，保留原样作为记录。**逐条对照代码复核之后的当前状态以这张表为准**；
 > 全系统的状态见 [`SYSTEM_STATUS.md`](SYSTEM_STATUS.md)。
-> 汇总：17 项已落地、1 项有意保留、5 项部分完成、1 项未做。唯一的 P0（D1）早已实现。
+> 汇总：18 项已落地（C6 于 2026-11-02 退役）、1 项有意保留、5 项部分完成。唯一的 P0（D1）早已实现。
 > 2026-09-28：D3 落地（会话迁移规范面 `core/session_migration.py`）。
 
 | 项 | 当前状态 | 依据（代码） |
@@ -36,7 +36,7 @@
 | C3 LEGACY_DISPATCH 可观测 | 已落地 | 指标 `galaxy_legacy_dispatch_total`（`galaxy_gateway/observability.py`，Q7 已在代码里决定）；告警规则 `GalaxyLegacyDispatchUsed` 在 `config/prometheus_alerts.yml`（2026-09-27 补齐，prometheus 抓取目标同时改对） |
 | C4 TaskRouter 文件移除 | 有意保留 | 仍在盘上，已登记为 LEGACY COMPAT 治理面；删不删是产品决定（结论 `C4-task-router-still-on-disk`） |
 | C5 安卓 REST 兼容别名退役 | 部分 | 弃用头与用量记账已有（`deprecation_headers`、`compat_usage.record_use`）；删除要等安卓侧 |
-| C6 旧 WS 路径退役 | 未做 | `/ws/ufo3` 仍在 `galaxy_gateway/routes/websocket.py`（已计入用量记账） |
+| C6 旧 WS 路径退役 | **已落地（2026-11-02）** | `/ws/ufo3`、`/ws/android/{id}`、`/ws/android` 一起退役：两个 App 的全部历史里都没连过；`tests/test_retired_device_ingress_stays_retired.py` 守着 |
 | D1 task_cancel（原 P0） | 已落地 | `handle_task_cancel` @ `galaxy_gateway/android/handlers/task_lifecycle.py`（结论 `D1-task-cancel-implemented`） |
 | D2 task_status | 已落地 | 结论 `D2-task-status-implemented` |
 | D3 session_migrate 统一 | 已落地（2026-09-28） | 规范面 `core/session_migration.migrate_session`：核心 REST、网关 REST/WS、安卓桥四个入口都调它；它先找会话在哪个存储，唤醒建的漫游会话交给 `SessionRoamingManager`（以前任何端点都迁不了它们）；两个存储**不合并**。结论 `session-migration-canonical-surface`（取代 `session-migration-has-no-canonical-home`） |
@@ -335,6 +335,10 @@ and a compatibility retirement item. After extraction, `_analyze_command()` and
 ---
 
 ### C6 — Legacy WebSocket path retirement (P3, requires coordination)
+
+> **Done 2026-11-02.** `/ws/ufo3/{device_id}`, `/ws/android/{device_id}` and `/ws/android` were retired together. Both client repos
+> (Android, full 195-commit history; Wear OS, full 141-commit history) never connected to them — they only use `/ws/device/{device_id}`.
+> Guarded by `tests/test_retired_device_ingress_stays_retired.py`.
 
 **Gap**: PROTO-007 / Android compat.
 

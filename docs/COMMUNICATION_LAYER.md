@@ -41,14 +41,14 @@ AIP v3 是 Galaxy 的消息格式规范，在 `core/schemas/protocol.py` 中定�
 
 | 路径 | 说明 |
 |------|------|
-| `/ws/device/{device_id}` | 主推荐入口，所有设备类型 |
-| `/ws/android/{device_id}` | Android 设备专用（AIP v3） |
+| `/ws/device/{device_id}` | 唯一的设备入口，所有设备类型 |
 
-### 旧路径（默认禁用）
+### 旧路径（已退役）
 
 | 路径 | 状态 |
 |------|------|
-| `/ws/ufo3/{device_id}` | **默认禁用**，设置 `GALAXY_ENABLE_LEGACY_PROTOCOLS=true` 可重新开启 |
+| `/ws/android/{device_id}`、`/ws/android` | 2026-11-02 退役，握手即被拒 |
+| `/ws/ufo3/{device_id}` | 2026-11-02 退役，握手即被拒（原先的开关 `GALAXY_ENABLE_LEGACY_PROTOCOLS` 随之删除） |
 
 ---
 
@@ -63,11 +63,7 @@ AIP v3 是 Galaxy 的消息格式规范，在 `core/schemas/protocol.py` 中定�
 
 ### 旧协议兼容开关
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `GALAXY_ENABLE_LEGACY_PROTOCOLS` | `false` | 设为 `true` 启用 `/ws/ufo3` 等旧 WS 路径 |
-
-> ⚠️ 旧路径仅供过渡期兼容使用，生产环境请保持关闭。
+没有了：唯一的那个开关只为 `/ws/ufo3` 存在，2026-11-02 随入口一起退役（随之删除）。
 
 ### NATS 控制面
 

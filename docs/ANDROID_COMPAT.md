@@ -155,9 +155,11 @@ Android 通过 AIP v3.0 协议与服务端通信。
 | 端点 | 分类 | 用途 |
 |------|------|------|
 | `ws://<host>:9000/ws/device/{device_id}` | **canonical（主路径，推荐）** | 唯一规范设备入口（`websocket.py` classification="canonical"） |
-| `ws://<host>:9000/ws/android/{device_id}` | compat | 遗留 Android 入口（path 参），委派到同一 handler |
-| `ws://<host>:9000/ws/android`（device_id 走 query 参） | compat | 遗留 Android 入口（query 参） |
-| `ws://<host>:9000/ws/ufo3/{device_id}` | compat | 遗留 UFO3 入口 |
+| `ws://<host>:9000/ws/android/{device_id}` | **已退役**（2026-11-02） | 握手即被拒 |
+| `ws://<host>:9000/ws/android`（device_id 走 query 参） | **已退役**（2026-11-02） | 握手即被拒 |
+| `ws://<host>:9000/ws/ufo3/{device_id}` | **已退役**（2026-11-02） | 握手即被拒 |
+
+> 三条旧入口退役前核对过：安卓与手表 App 的全部提交历史里一次都没连过，本仓库里也没有客户端、部署配置在用（`tests/test_retired_device_ingress_stays_retired.py` 守着）。
 
 **连接示例（用 canonical 主路径）：**
 ```
