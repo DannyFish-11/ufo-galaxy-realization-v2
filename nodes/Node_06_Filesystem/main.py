@@ -69,6 +69,15 @@ class FilesystemManager:
 
         return full_path
 
+    def _not_found(self, what: str, full_path: Path) -> HTTPException:
+        """找不到时照实说按哪个路径找的:这个节点只在自己的根目录里操作,「/a/b」也按根目录下的 a/b 算(第 12 轮真跑:
+        模型给了一个真实存在的绝对路径,节点回一句「Path not found」,看不出是根目录不同)。"""
+        return HTTPException(
+            status_code=404,
+            detail=f"{what} not found: {full_path}(这个节点只在 {self.base_dir} 里操作,路径都按它算,"
+            f"开头的「/」也一样;根目录由 FILESYSTEM_BASE_DIR 定)",
+        )
+
     def _get_file_info(self, path: Path) -> FileInfo:
         """获取文件信息"""
         stat = path.stat()
@@ -90,7 +99,7 @@ class FilesystemManager:
         full_path = self._resolve_path(path)
 
         if not full_path.exists():
-            raise HTTPException(status_code=404, detail="Path not found")
+            raise self._not_found("Path", full_path)
 
         if not full_path.is_dir():
             raise HTTPException(status_code=400, detail="Path is not a directory")
@@ -109,7 +118,7 @@ class FilesystemManager:
         full_path = self._resolve_path(path)
 
         if not full_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
+            raise self._not_found("File", full_path)
 
         if full_path.is_dir():
             raise HTTPException(status_code=400, detail="Path is a directory")
@@ -139,7 +148,7 @@ class FilesystemManager:
         full_path = self._resolve_path(path)
 
         if not full_path.exists():
-            raise HTTPException(status_code=404, detail="Path not found")
+            raise self._not_found("Path", full_path)
 
         if full_path.is_dir():
             shutil.rmtree(full_path)
@@ -160,7 +169,7 @@ class FilesystemManager:
         dst_path = self._resolve_path(destination)
 
         if not src_path.exists():
-            raise HTTPException(status_code=404, detail="Source not found")
+            raise self._not_found("Source", src_path)
 
         dst_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src_path), str(dst_path))
@@ -173,7 +182,7 @@ class FilesystemManager:
         dst_path = self._resolve_path(destination)
 
         if not src_path.exists():
-            raise HTTPException(status_code=404, detail="Source not found")
+            raise self._not_found("Source", src_path)
 
         dst_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -242,7 +251,7 @@ class FilesystemManager:
         output_full_path = self._resolve_path(output_path) if output_path else archive_full_path.parent
 
         if not archive_full_path.exists():
-            raise HTTPException(status_code=404, detail="Archive not found")
+            raise self._not_found("Archive", archive_full_path)
 
         # 无过滤的 extractall 存在归档成员路径穿越(zip-slip / tar-slip):成员名
         # 形如 "../../etc/cron.d/x" 或含绝对路径/符号链接时会写到 output_dir 之外。

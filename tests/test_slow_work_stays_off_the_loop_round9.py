@@ -99,3 +99,39 @@ def test_the_target_policy_engine_is_imported_before_the_first_dispatch():
     import launcher.services as svc
 
     assert "core.runtime.execution_target_policy_engine" in inspect.getsource(svc._warm_routes)
+
+
+def test_modules_first_used_on_the_loop_are_imported_beside_it_first():
+    """第 12 轮真跑:启动那一阵别的线程在载 sklearn,循环上第一次 import 抢不到解释器(第一次对话 2.5 秒、设备连上 2.9 秒)。"""
+    import importlib
+
+    import inspect
+
+    import launcher.first_use_imports as warm
+    import launcher.services as svc
+
+    assert "warm_first_use()" in inspect.getsource(svc._warm_routes)
+    for name in (
+        "core.execution_policy",
+        "core.execution.intent_profile",
+        "galaxy_gateway.android_bridge",
+        "core.node_declared_class",
+    ):
+        assert name in warm.FIRST_USE_MODULES, name
+    for name in warm.FIRST_USE_MODULES:
+        importlib.import_module(name)  # 名字写错了,预热就一声不响地什么都没做
+
+
+def test_the_first_use_sites_still_import_what_is_warmed():
+    """预热的名单对着真在循环上 import 的那几处:那几处改了名字,这里要跟着改。"""
+    import pathlib
+
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    sites = {
+        "core/desktop_presence_runtime.py": "core.execution_policy",
+        "core/openclawd.py": "core.execution",
+        "galaxy_gateway/routes/websocket.py": "android_bridge",
+        "core/node_declared_class.py": "core.node_actions",
+    }
+    for path, name in sites.items():
+        assert name in (repo / path).read_text(encoding="utf-8"), (path, name)

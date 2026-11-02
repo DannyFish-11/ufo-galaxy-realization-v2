@@ -594,6 +594,9 @@ def _warm_routes(app) -> None:
         import core.runtime.execution_target_policy_engine  # noqa: F401
     except Exception as exc:  # noqa: BLE001
         logger.debug("路由预热没做成(不影响服务): %s", exc)
+    from launcher.first_use_imports import warm_first_use  # 循环上第一次 import 的那几处(第 12 轮)
+
+    warm_first_use()
 
 
 class UnifiedWebUI:
