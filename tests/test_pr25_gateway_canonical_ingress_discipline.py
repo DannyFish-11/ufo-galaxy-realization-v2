@@ -59,19 +59,18 @@ def test_canonical_ws_device_route_is_marked_canonical(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "path,expected_ingress_path",
-    [
-        ("/ws/android/device-compat", "/ws/android/{device_id}"),
-        ("/ws/android?device_id=device-compat-query", "/ws/android"),
-    ],
+    "path",
+    ["/ws/android/device-compat", "/ws/android?device_id=device-compat-query", "/ws/ufo3/device-compat"],
 )
-def test_android_compat_routes_remain_non_canonical(monkeypatch, path, expected_ingress_path):
+def test_retired_android_compat_routes_never_reach_the_handler(monkeypatch, path):
+    """原先这里测旧安卓入口仍挂着、标成 compat。2026-11-02 退役:握手即被拒,处理器一次都没被调到。"""
+    from starlette.websockets import WebSocketDisconnect
+
     app, captured = _make_client_with_captured_ingress(monkeypatch)
 
     with TestClient(app) as client:
-        with client.websocket_connect(path):
-            pass
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(path):
+                pass
 
-    assert captured
-    assert captured[-1]["ingress_path"] == expected_ingress_path
-    assert captured[-1]["ingress_classification"] == "compat"
+    assert captured == []

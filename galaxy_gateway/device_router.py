@@ -71,7 +71,7 @@ for runtime/transport enrichment via :meth:`get_enriched_device_view`.
 
 标准端点（参见 galaxy_gateway/app.py）
 --------------------------------------
-- WebSocket : ``/ws/device/{device_id}`` (primary), ``/ws/android`` (initial)
+- WebSocket : ``/ws/device/{device_id}``(唯一的设备入口;旧的 ``/ws/android`` 已退役)
 - REST      : ``/api/v1/devices/*``
 
 Author: Manus AI

@@ -20,12 +20,10 @@ Scope
    * ``error`` → (no response; bridge handles by logging)
    * ``task_end`` → ``task_end_ack``
 
-3. **Android WS endpoint contracts** — the three Android WS entrypoints
-   exposed by the gateway:
-   * ``/ws/android/{device_id}``
-   * ``/ws/android`` (with and without ``?device_id=`` query param)
-   * ``/ws/device/{device_id}``
-   all accept AIP v3 connections and honour the protocol contract.
+3. **Android WS endpoint contracts** — the one device WS entrypoint exposed by
+   the gateway, ``/ws/device/{device_id}``, accepts AIP v3 connections and honours
+   the protocol contract. The old ``/ws/android/{device_id}`` and ``/ws/android``
+   entrypoints were retired on 2026-11-02 and are checked to be refused.
 
 4. **Regression guard** — after receiving a ``device_register`` + a
    ``heartbeat``, the WS endpoint must *not* silently drop the response
@@ -591,24 +589,12 @@ def gw_client():
     handler (``_handle_android_ws``) is the same production function used
     by the real gateway.
     """
-    from fastapi import FastAPI, Query, WebSocket
+    from fastapi import FastAPI, WebSocket
     from fastapi.testclient import TestClient
 
     from galaxy_gateway.app import _handle_android_ws
 
     minimal_app = FastAPI()
-
-    @minimal_app.websocket("/ws/android/{device_id}")
-    async def ws_android_primary(websocket: WebSocket, device_id: str):
-        await _handle_android_ws(websocket, device_id)
-
-    @minimal_app.websocket("/ws/android")
-    async def ws_android_fallback(websocket: WebSocket, device_id: str = Query(None)):
-        if not device_id:
-            import uuid as _uuid
-
-            device_id = str(_uuid.uuid4())
-        await _handle_android_ws(websocket, device_id)
 
     @minimal_app.websocket("/ws/device/{device_id}")
     async def ws_device(websocket: WebSocket, device_id: str):
@@ -652,49 +638,28 @@ class TestAndroidWSEndpointContracts:
         _check_snapshot(ack, SNAPSHOT_HEARTBEAT_ACK, label=f"heartbeat_ack [{path}]")
 
     # ------------------------------------------------------------------
-    # /ws/android/{device_id}  — primary Android path
+    # /ws/android/{device_id}, /ws/android — retired on 2026-11-02
     # ------------------------------------------------------------------
 
-    def test_ws_android_primary_register_ack(self, gw_client):
-        device_id = f"ws-a-{uuid.uuid4().hex[:8]}"
-        reg_ack, _ = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
-        self._assert_register_ack_contract(reg_ack, "/ws/android/{device_id}")
-        assert reg_ack["device_id"] == device_id
+    @pytest.mark.parametrize("path", ["/ws/android/{id}", "/ws/android?device_id={id}", "/ws/android"])
+    def test_retired_android_entrypoints_are_refused_by_the_gateway(self, path):
+        """These used to be checked for the register/heartbeat contract; they were retired
+        (no client in any repo ever used them), so the real gateway routes refuse them at the
+        handshake. The contract itself is checked on /ws/device/{device_id} below."""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from starlette.websockets import WebSocketDisconnect
 
-    def test_ws_android_primary_heartbeat_ack(self, gw_client):
-        device_id = f"ws-ah-{uuid.uuid4().hex[:8]}"
-        _, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
-        self._assert_heartbeat_ack_contract(hb_ack, "/ws/android/{device_id}")
-        assert hb_ack["device_id"] == device_id
+        from galaxy_gateway.routes.websocket import register_websocket_routes
 
-    def test_ws_android_primary_version_field(self, gw_client):
-        """Responses on /ws/android/{device_id} must always carry version='3.0'."""
-        device_id = f"ws-av-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
-        assert reg_ack.get("version") == "3.0"
-        assert hb_ack.get("version") == "3.0"
+        app = FastAPI()
+        register_websocket_routes(app)
+        with TestClient(app) as client, pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(path.format(id=f"old-{uuid.uuid4().hex[:8]}")):
+                pass
 
     # ------------------------------------------------------------------
-    # /ws/android  — fallback path with ?device_id= query param
-    # ------------------------------------------------------------------
-
-    def test_ws_android_fallback_with_device_id(self, gw_client):
-        device_id = f"ws-af-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android?device_id={device_id}", device_id)
-        self._assert_register_ack_contract(reg_ack, "/ws/android?device_id=")
-        self._assert_heartbeat_ack_contract(hb_ack, "/ws/android?device_id=")
-
-    def test_ws_android_fallback_auto_device_id(self, gw_client):
-        """/ws/android without device_id auto-assigns one; heartbeat must still be ack'd."""
-        auto_id = f"auto-{uuid.uuid4().hex[:8]}"  # we use a synthetic id in the payload
-        with gw_client.websocket_connect("/ws/android") as ws:
-            ws.send_text(json.dumps(_mk_v3("heartbeat", device_id=auto_id)))
-            ack = ws.receive_json()
-        # heartbeat_ack shape must be correct regardless of which device_id the server assigned
-        _check_snapshot(ack, SNAPSHOT_HEARTBEAT_ACK, label="heartbeat_ack [/ws/android auto-id]")
-
-    # ------------------------------------------------------------------
-    # /ws/device/{device_id}  — compat alias
+    # /ws/device/{device_id}  — the device ingress
     # ------------------------------------------------------------------
 
     def test_ws_device_register_ack(self, gw_client):
@@ -722,7 +687,7 @@ class TestAndroidWSEndpointContracts:
     def test_regression_register_ack_type_is_stable(self, gw_client):
         """Snapshot regression: device_register_ack type field must equal 'device_register_ack'."""
         device_id = f"ws-rg-{uuid.uuid4().hex[:8]}"
-        reg_ack, _ = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
+        reg_ack, _ = _ws_register_and_heartbeat(gw_client, f"/ws/device/{device_id}", device_id)
         assert reg_ack["type"] == "device_register_ack", (
             "REGRESSION: device_register response 'type' has changed from "
             f"'device_register_ack' to {reg_ack['type']!r}"
@@ -731,7 +696,7 @@ class TestAndroidWSEndpointContracts:
     def test_regression_heartbeat_ack_type_is_stable(self, gw_client):
         """Snapshot regression: heartbeat_ack type field must equal 'heartbeat_ack'."""
         device_id = f"ws-rhb-{uuid.uuid4().hex[:8]}"
-        _, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
+        _, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/device/{device_id}", device_id)
         assert hb_ack["type"] == "heartbeat_ack", (
             "REGRESSION: heartbeat response 'type' has changed from " f"'heartbeat_ack' to {hb_ack['type']!r}"
         )
@@ -739,7 +704,7 @@ class TestAndroidWSEndpointContracts:
     def test_regression_message_id_unique_per_response(self, gw_client):
         """Each response must carry a distinct message_id (no static/re-used IDs)."""
         device_id = f"ws-uid-{uuid.uuid4().hex[:8]}"
-        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/android/{device_id}", device_id)
+        reg_ack, hb_ack = _ws_register_and_heartbeat(gw_client, f"/ws/device/{device_id}", device_id)
         ids = {reg_ack.get("message_id"), hb_ack.get("message_id")}
         assert len(ids) == 2, (
             "REGRESSION: register_ack and heartbeat_ack share the same message_id. "

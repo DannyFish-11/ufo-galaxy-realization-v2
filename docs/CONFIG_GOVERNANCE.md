@@ -90,7 +90,6 @@ GALAXY_MODE=production
 | `GALAXY_NATS_URL` | No | `nats://localhost:4222` | NATS control-plane URL. Unset → NATS disabled (no-op). |
 | `GALAXY_MASTER_BRAIN_ENABLED` | No | `1` | Enable the master brain coordinator. |
 | `GALAXY_TRACE_SAMPLE_RATE` | No | `1.0` | Fraction of requests to trace (0.0 – 1.0). |
-| `GALAXY_ENABLE_LEGACY_PROTOCOLS` | No | `0` | Enable AIP v2 legacy protocol support. |
 | `GALAXY_ENABLE_WEBRTC` | No | `1` | Enable WebRTC signalling proxy. |
 | `GALAXY_ENABLE_MQTT` | No | `0` | Enable MQTT bridge. |
 | `GALAXY_TRANSPORT_PRIORITY` | No | `ws` | Preferred transport: `ws` \| `nats` \| `http`. |
@@ -131,7 +130,7 @@ GALAXY_API_TOKEN=super-secret-token-here
 GALAXY_AUTH_ENABLED=true
 
 # Android client — set WS URL in the app:
-#   ws://<server-ip>:9000/ws/android?token=super-secret-token-here
+#   ws://<server-ip>:9000/ws/device/<device-id>  (send the token as `Authorization: Bearer …` or in the register frame)
 ```
 
 > **Important**: With `GALAXY_AUTH_ENABLED=false` any Android device on the
