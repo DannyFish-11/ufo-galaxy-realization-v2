@@ -353,3 +353,39 @@ class TestGroupFCapabilities:
             await mod.create_transcription(file=_Boom())
         assert "secret-xyz" not in str(ei.value.detail)
         assert ei.value.status_code == 400
+
+
+def test_capabilities_never_loads_the_asr_on_the_event_loop(client, monkeypatch):
+    """问能力不在请求里加载听写引擎(第 16 轮全接口扫描:加载要探下载源,在事件循环上卡了 5 秒)。
+
+    还没加载:立刻回 ``warming`` 并交给后台线程;已就绪:照实报引擎名。
+    """
+    import core.modality_bridge as mb
+
+    loads, warms = [], []
+    monkeypatch.setattr(mb, "_asr_singleton", None)
+    monkeypatch.setattr(mb, "_asr_failed", False)
+    monkeypatch.setattr(mb, "_asr_warming", False)
+
+    def slow_load():
+        loads.append(1)
+        raise AssertionError("不该在请求里加载")
+
+    def warm():
+        warms.append(1)
+        mb._asr_warming = True
+
+    monkeypatch.setattr(mb, "_get_asr", slow_load)
+    monkeypatch.setattr(mb, "warm_asr_in_background", warm)
+    body = client.get("/v1/audio/capabilities").json()
+    assert loads == [] and warms == [1]
+    assert body["asr"]["state"] == "warming" and body["asr"]["active_engine"] == ""
+
+    class FakeASR:
+        pass
+
+    ready = FakeASR()
+    monkeypatch.setattr(mb, "_asr_singleton", ready)
+    monkeypatch.setattr(mb, "_get_asr", lambda: ready)
+    body = client.get("/v1/audio/capabilities").json()
+    assert body["asr"] == {"state": "ready", "active_engine": "FakeASR"}
