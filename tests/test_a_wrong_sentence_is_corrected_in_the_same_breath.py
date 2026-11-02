@@ -1,6 +1,7 @@
 """说错了,在同一段话里就改过来 —— 总体设计三期(docs/GROUNDED_AGENT_DESIGN.md §3.3)。
 
-* **已说出口、还在生成**:核对线驳倒一句,就请这一次生成在下一段之后收住(适配器每流出一段看一眼),
+* **已说出口、还在生成**:核对线驳倒一句,就请这一次生成在下一个句界收住(适配器每流出一段前后各看一眼;
+  半句话不收,迟迟不出句界的最多再放 ``STOP_GRACE_CHARS`` 个字),
   把「第 N 句与某事实不符」当一条观察喂回去,让模型接着说 —— 它自己先更正一句再往下。同一个气泡,
   已流出的字不作废;念的那一路随之念出更正。
 * **生成已经结束才核出来**:念完之前补一句口头更正(每轮最多两处;打断过生成、让它自己更正了的不重复)。
@@ -260,3 +261,82 @@ async def test_the_agent_tool_loop_records_what_really_happened():
         (rev,) = await lc.settle_current("已经帮你设置好了。")
     assert ledger.outcomes() == [lc.ToolOutcome("tuning__set", False, "这个参数不存在")]
     assert rev.verdict == lc.REFUTED
+
+
+# ── 收住在句界上(第 12 轮真跑:每段一出就停,更正接在半句话后面 ——「要我更正一下」) ────────────
+
+
+def _openai_adapter(pieces):
+    from core.multi_llm_router import OpenAIAdapter, ProviderConfig
+
+    ad = OpenAIAdapter(ProviderConfig(name="p", api_key="k", base_url="http://x/v1", models=["m"], default_model="m"))
+    lines = [
+        "data: " + json.dumps({"choices": [{"index": 0, "delta": {"content": c}}]}, ensure_ascii=False) for c in pieces
+    ]
+    ad._client = _Client(lines + ["data: [DONE]"])
+    return ad
+
+
+async def _stream(ad, pieces_to_stop_after, sink_factory=TokenStream):
+    got = []
+    sink = sink_factory(on_delta=got.append)
+
+    def on_delta(text):
+        got.append(text)
+        if text == pieces_to_stop_after:
+            sink.request_stop("[核对] 不对")
+
+    sink._on_delta = on_delta
+    resp = await ad.chat([{"role": "user", "content": "x"}], "m", stream=sink)
+    return got, resp
+
+
+@pytest.mark.asyncio
+async def test_a_refutation_mid_sentence_waits_for_the_end_of_that_sentence():
+    """核出来时正说到半句:说完这句再收,不留「要我」这种半截话给更正接上。"""
+    pieces = ["小米手表现在离线，", "连不上它。", "要我", "再试", "试吗？", "还有别的。"]
+    got, resp = await _stream(_openai_adapter(pieces), "要我")
+    assert "".join(got) == "小米手表现在离线，连不上它。要我再试试吗？"
+    assert resp.content == "小米手表现在离线，连不上它。要我再试试吗？"
+
+
+@pytest.mark.asyncio
+async def test_a_refutation_at_a_sentence_end_lets_nothing_more_out():
+    """核出来时已经停在句界上:下一段不再流出(那一段是新句子的开头)。"""
+    pieces = ["小米手表现在离线，", "连不上它。", "要我", "再试试吗？"]
+    got, resp = await _stream(_openai_adapter(pieces), "连不上它。")
+    assert got == ["小米手表现在离线，", "连不上它。"] and resp.content == "小米手表现在离线，连不上它。"
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_never_ends_the_sentence_is_still_stopped():
+    from core.llm_stream import STOP_GRACE_CHARS
+
+    pieces = ["灯开好了。", "然后"] + ["很长" for _ in range(STOP_GRACE_CHARS)]
+    got, _ = await _stream(_openai_adapter(pieces), "然后")
+    assert len("".join(got)) <= len("灯开好了。然后") + STOP_GRACE_CHARS + 2, "迟迟不出句界也不会一直说下去"
+
+
+def test_a_closing_quote_after_the_full_stop_still_counts_as_a_sentence_end():
+    sink = TokenStream(on_delta=lambda t: None)
+    sink.feed("他说「开好了。」")
+    assert sink.at_boundary
+    sink.feed("然后")
+    assert not sink.at_boundary
+    sink.request_stop("[核对] x")
+    assert not sink.ready_to_stop()
+    sink.feed("呢？")
+    assert sink.ready_to_stop()
+
+
+def test_a_reset_starts_at_a_sentence_boundary():
+    sink = TokenStream(on_delta=lambda t: None, on_reset=lambda: None)
+    sink.feed("半句")
+    sink.reset()
+    assert sink.at_boundary and not sink.ready_to_stop()
+
+
+def test_the_check_line_cuts_sentences_where_the_stream_stops():
+    from core.llm_stream import SENTENCE_END
+
+    assert lc._SENT_END is SENTENCE_END

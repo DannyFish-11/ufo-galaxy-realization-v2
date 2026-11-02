@@ -34,6 +34,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
+from core.llm_stream import SENTENCE_END
+
 logger = logging.getLogger("Galaxy.LiveCheck")
 
 SUPPORTED = "supported"
@@ -49,7 +51,7 @@ SETTLE_S = 1.0
 #: 一句话太短（「好的。」）不值得核。
 _MIN_SENTENCE = 4
 
-_SENT_END = "。！？!?；;\n"
+_SENT_END = SENTENCE_END  # 与生成收住的句界同一份(core/llm_stream.py)
 
 # ── 判要不要核（规则） ──────────────────────────────────────────────────────
 

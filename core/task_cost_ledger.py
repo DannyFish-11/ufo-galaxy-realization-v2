@@ -37,8 +37,6 @@ from core.data_paths import data_path
 
 logger = logging.getLogger("Galaxy.TaskCostLedger")
 
-_LEDGER_PATH_DEFAULT = data_path("task_cost_ledger.jsonl")
-
 
 @dataclass
 class TaskBill:
@@ -123,7 +121,8 @@ class TaskCostLedger:
             "" if bill.success is None else (" ✓" if bill.success else " ✗"),
         )
         try:
-            path = os.environ.get("GALAXY_TASK_LEDGER_PATH", _LEDGER_PATH_DEFAULT)
+            # 空 = 数据总目录下的那份(与登记表说的一样;原先空串被当成「关掉」,账本一声不响就不记了)
+            path = (os.environ.get("GALAXY_TASK_LEDGER_PATH") or "").strip() or data_path("task_cost_ledger.jsonl")
             if path and path.strip().lower() not in ("0", "off", "none"):
                 os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
                 with open(path, "a", encoding="utf-8") as f:

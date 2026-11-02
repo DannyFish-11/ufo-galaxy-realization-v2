@@ -56,9 +56,12 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.data_paths import data_path_or_legacy
+
 logger = logging.getLogger("Galaxy.TaskMemory")
 
-_DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+#: 原先的固定位置(源码树里的 data/):已有的任务记忆继续用
+_DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _MEMORY_FILE = "task_memory.jsonl"
 _MAX_IN_MEMORY = 200  # 热区默认大小（向后兼容）
 _CONTEXT_MARKER = "[TaskMemory]"  # 注入上下文时的标记，避免重复注入
@@ -196,9 +199,12 @@ class TaskMemory:
         hot_limit: int = _MAX_IN_MEMORY,
         ttl_seconds: float = 0.0,
     ):
-        self._data_dir = data_dir or _DEFAULT_DATA_DIR
+        if data_dir:
+            self._file = os.path.join(data_dir, _MEMORY_FILE)
+        else:  # 随数据总目录走(第 12 轮真跑:原先写死源码树 data/);源码树里已有的任务记忆继续用,不把经验甩在后面
+            self._file = data_path_or_legacy(_MEMORY_FILE, os.path.join(_DEFAULT_DATA_DIR, _MEMORY_FILE))
+        self._data_dir = os.path.dirname(self._file) or "."
         os.makedirs(self._data_dir, exist_ok=True)
-        self._file = os.path.join(self._data_dir, _MEMORY_FILE)
         self._hot_limit = hot_limit
         self._ttl_seconds = ttl_seconds  # 0 = 不过期
         # G6: 漂移检测配置

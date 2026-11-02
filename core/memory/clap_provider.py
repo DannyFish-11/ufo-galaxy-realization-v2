@@ -70,7 +70,7 @@ class ClapMemoryProvider(MemoryProvider):
         if self._col is None:
             import chromadb
 
-            persist = os.getenv("GALAXY_CLAP_DIR", data_path("clap_memory"))
+            persist = os.getenv("GALAXY_CLAP_DIR") or data_path("clap_memory")  # 空串当没设
             try:
                 os.makedirs(persist, exist_ok=True)
             except Exception:  # noqa: BLE001
