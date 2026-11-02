@@ -22,9 +22,16 @@ LEGACY = ("Node_110_SmartOrchestrator", "Node_81_Orchestrator", "Node_50_Transfo
 @pytest.fixture(autouse=True)
 def _no_node_processes(monkeypatch, tmp_path):
     import core.node_route_bridge as bridge
+    from core.nodes.node_fabric_registry import NodeFabricRegistry
 
     monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(bridge, "_node_url", lambda node_id: "")
+    # NodeFabricRegistry() 是进程级单例:不换一份,这里登记的节点会留在全进程共用的那一份里,
+    # 心跳 60 秒后过期 —— 之后跑的测试调 Node_23 会被治理门以 unhealthy 拒掉(第 16 轮二分查到)。
+    shared = NodeFabricRegistry._instance
+    NodeFabricRegistry._instance = None
+    yield
+    NodeFabricRegistry._instance = shared
 
 
 def test_the_declared_class_comes_from_one_place():
