@@ -104,7 +104,6 @@ def test_the_target_policy_engine_is_imported_before_the_first_dispatch():
 def test_modules_first_used_on_the_loop_are_imported_beside_it_first():
     """第 12 轮真跑:启动那一阵别的线程在载 sklearn,循环上第一次 import 抢不到解释器(第一次对话 2.5 秒、设备连上 2.9 秒)。"""
     import importlib
-
     import inspect
 
     import launcher.first_use_imports as warm
