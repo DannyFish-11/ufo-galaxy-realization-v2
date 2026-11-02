@@ -129,7 +129,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
   节点拨盘门（`GALAXY_AUTONOMY`，`core/node_invocation.py` → `gate_node_call`）、智能家居、GitHub 插件准入都调它，**别再各写一份「问完再试」**。
   从哪发起就在哪批：电脑发起的在面板上批（WS `type="approvals"` 只带摘要，令牌走带鉴权的 `GET /api/v1/approvals`；岛上一张「等你批准」卡），
   别的设备发起的在那台设备上问（`high_risk_confirmation.confirm_high_risk_tool`）；桌面外壳没连着就不白等。
-  **哪台设备能回答批准只有一条规则 `core/approvers.py`，按设备自己的声明，不按种类**：报能力 / 接入时说 `"approvals": true` 的就问它（哪个生态都一样），没声明的只认已经发出去、确实会答的手表（旧客户端兼容，不是扩展点）—— **别再往代码里加设备种类**。发起的那台答不了（今天的安卓 App）→ 电脑面板上问并告诉它去哪儿批；电脑没开 → 问别的声明了能批的设备；一处都没有 → 不做、照实说。开了设备准入闸、还没被主人批准的设备声明了也不算（`tests/test_any_device_that_says_it_can_approve_is_asked.py`）
+  **哪台设备能回答批准只有一条规则 `core/approvers.py`，按设备自己的声明，不按种类**：报能力 / 接入时说 `"approvals": true` 的就问它（哪个生态都一样），没声明的只认已经发出去、确实会答的手表（旧客户端兼容，不是扩展点）—— **别再往代码里加设备种类**。发起的那台答不了（今天的安卓 App）→ 电脑面板上问并告诉它去哪儿批；电脑没开 → 问别的声明了能批的设备；一处都没有 → 不做、照实说。开了设备准入闸、还没被主人批准的设备声明了也不算（`tests/test_any_device_that_says_it_can_approve_is_asked.py`）。**只认被问到的设备的回答**：`human_input` 按这条连接认证过的设备号核对，问题没发给它就不算（`PendingDecisionRegistry.resolve(from_device=…)`）。安卓 / 手表仓要补的（帧格式逐字、改哪个文件、怎么验）：`docs/DEVICE_CLIENT_REQUIREMENTS.md`
   授权按「动作 × 对象」记（`node:<编号>:<动作>[/<子动作>]@<对象>`），默认「本会话」= 这段对话，「一直允许」落数据目录 `approval_grants.json`、面板能撤。
   一次调用只问一次（工具门批过的，节点门认）；门禁自己出错一律不执行（节点门：读照放、写不执行）。设计与进度：`docs/GROUNDED_AGENT_DESIGN.md`
 - 工具的单次时间预算（`core/tool_permissions.py::tool_call_timeout_s`）给等人、给长任务留够：会停下来问人的按确认超时，`computer_use__run` 按步数，

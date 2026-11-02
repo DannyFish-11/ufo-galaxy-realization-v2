@@ -130,3 +130,21 @@ async def test_request_human_decision_end_to_end(monkeypatch):
     assert outcome.selected_option == "confirm"
     # fanned out to both devices
     assert {d for d, _ in emitted} == {"watch-1", "phone-1"}
+
+
+def test_only_a_device_the_question_went_to_can_answer():
+    """问了 a、b:c 拿着决策号答不算(决定还在等);b 答了才算,谁答的记 b。"""
+    import asyncio
+
+    from core.interaction.pending_decision_registry import PendingDecisionRegistry
+
+    async def run():
+        reg = PendingDecisionRegistry()
+        rec = reg.register(options=["approve", "deny"], timeout_s=5.0, devices=["a", "b"])
+        assert reg.resolve(rec.decision_id, selected_option="approve", source="c", from_device="c") is False
+        assert reg.get(rec.decision_id) is not None
+        assert reg.resolve(rec.decision_id, selected_option="approve", source="b", from_device="b") is True
+        return await reg.await_decision(rec)
+
+    outcome = asyncio.run(run())
+    assert outcome.selected_option == "approve" and outcome.source == "b"

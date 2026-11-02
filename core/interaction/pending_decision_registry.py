@@ -225,17 +225,30 @@ class PendingDecisionRegistry:
         selected_option: Optional[str] = None,
         voice_input: str = "",
         source: str = "",
+        from_device: str = "",
     ) -> bool:
         """Resolve a pending decision with a human reply.
 
         Returns ``True`` iff a matching pending decision was found and resolved.
         First reply wins; later replies for the same id are no-ops (e.g. when
         the same decision was fanned out to several devices).
+
+        ``from_device``(网关按这条连接认证过的设备号填):问题发给了哪几台,就只认这几台的回答 ——
+        没问它的设备拿着决策号回一句「批准」不算(批准是替主人做决定,不能由旁观的设备代答)。
         """
-        record = self._pending.pop(decision_id, None)
+        record = self._pending.get(decision_id)
         if record is None:
             logger.debug("HITL.resolve: no pending decision for id=%s", decision_id)
             return False
+        if from_device and record.devices and from_device not in record.devices:
+            logger.warning(
+                "HITL.resolve: 不是问它的设备回的答,不算 | decision_id=%s from=%s asked=%s",
+                decision_id,
+                from_device,
+                record.devices,
+            )
+            return False
+        self._pending.pop(decision_id, None)
         self._resolved += 1
         outcome = DecisionOutcome(
             decision_id=decision_id,
