@@ -323,7 +323,11 @@ async def request_approval(
         return ApprovalOutcome(True, f"已有授权({_SCOPE_TEXT.get(scope, scope)})", f"grant:{scope}", scope=scope)
 
     origin = _origin_device()
-    if not origin and desktop_reachable():
+    if origin and not _origin_answers(origin):
+        # 发起的那台设备回答不了批准(没声明、它的客户端也不会答):不往它那儿发、不让人白等一个超时,
+        # 改由能批的去批 —— 电脑面板,电脑没连着就问别的能回答的设备(所有者:「就发给那个设备,或者由哪个设备来授权」)
+        outcome = await _ask_elsewhere(key, target, what, risk, sid, params, _wait_s(timeout_s), origin)
+    elif not origin and desktop_reachable():
         outcome = await _ask_desktop(key, target, what, risk, sid, params, _wait_s(timeout_s))
     else:
         outcome = await _ask_devices(key, target, what, risk, sid, origin, _wait_s(timeout_s))
@@ -336,6 +340,50 @@ async def request_approval(
 
 
 _SCOPE_TEXT = {"session": "本会话", "once": "只这一次", "always": "一直允许"}
+
+
+def _origin_answers(origin: str) -> bool:
+    """发起的那台设备能不能回答批准(设备自己的声明优先,``core.approvers``)。
+
+    只有**确定**它答不了(声明了不能,或报的种类是不会答的客户端,比如现在的手机 App)才改去别处问;
+    对它一无所知、或判的过程出错,照原来的路在它那儿问(所有者定的「从哪发起就在哪批」)。
+    """
+    try:
+        from core.approvers import approval_capability
+
+        return approval_capability(origin) is not False
+    except Exception:  # noqa: BLE001
+        return True
+
+
+async def _ask_elsewhere(
+    key: str, target: str, what: str, risk: str, sid: str, params: Any, wait_s: float, origin: str
+) -> ApprovalOutcome:
+    """发起的设备回答不了:在电脑面板上问(连着的话),否则问别的能回答批准的设备;并告诉发起的设备去哪儿批。"""
+    if desktop_reachable():
+        _tell_origin(origin, f"这一步要你点头才做:{what}。这台设备上批不了,已在电脑面板上问你。")
+        return await _ask_desktop(key, target, what, risk, sid, params, wait_s)
+    from core.interaction.pending_decision_registry import discover_answering_devices
+
+    if not await discover_answering_devices():
+        _tell_origin(
+            origin, f"这一步要你点头才做:{what}。这台设备上批不了,电脑面板没开,也没有别的能批的设备在线 —— 先不做。"
+        )
+        return ApprovalOutcome(
+            False, "没有能批的地方:发起的设备批不了,电脑面板没开,也没有别的能回答批准的设备在线", "unreachable"
+        )
+    _tell_origin(origin, f"这一步要你点头才做:{what}。这台设备上批不了,已发到你别的能批的设备上问你。")
+    return await _ask_devices(key, target, what, risk, sid, "", wait_s)
+
+
+def _tell_origin(origin: str, text: str) -> None:
+    """跟发起的那台设备说一句去哪儿批(它有桥接 Agent 时经 A2A 对话下行;没有就不说)。永不抛出、不等。"""
+    try:
+        from core.phone_bridge import note_to_device
+
+        note_to_device(origin, text)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("没告诉发起的设备去哪儿批: %s", exc)
 
 
 async def _ask_devices(

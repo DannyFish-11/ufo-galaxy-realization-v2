@@ -316,6 +316,10 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
         # (后台,不挡这条连接)。没声明的(旧版 App)不派 —— 它不会回确认,派了只会每次重连都补发一遍。
         # 声明了就是能接 Agent(阶段 5:载体靠这一条在设备卡上显示 can_take_agent);每次登记会换掉
         # 元数据,所以每次报能力都记一遍。
+        # 设备说自己能回答批准(「approvals」,core/approvers.py):记进登记,哪个生态、什么种类都一样认
+        from core.approvers import remember as _remember_approvals  # noqa: PLC0415
+
+        _remember_approvals(device_id, message, source="capability_report")
         try:
             from core.phone_bridge import declares_bridge_support, note_reported, schedule_dispatch  # noqa: PLC0415
 

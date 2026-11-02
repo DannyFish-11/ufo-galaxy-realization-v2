@@ -119,6 +119,16 @@ def _role_group(execution_model: str) -> str:
     return "members"
 
 
+def _type_of(d: Any) -> str:
+    """细分类型;分类认不出(别家生态、新种类)时照设备自己报的原话 —— 不往分类表里加种类。"""
+    t = str(d.aip_device_type or "")
+    if t and t != "unknown":
+        return t
+    meta = d.metadata if isinstance(getattr(d, "metadata", None), dict) else {}
+    said = str(meta.get("reported_type") or "").strip()
+    return said or t or str(d.device_type)
+
+
 class OnboardingService:
     def __init__(self) -> None:
         self.candidates: JsonRecordStore[Candidate] = JsonRecordStore(
@@ -393,7 +403,7 @@ class OnboardingService:
         return {
             "device_id": d.device_id,
             "name": d.device_name or d.device_id,
-            "type": d.aip_device_type or str(d.device_type),
+            "type": _type_of(d),
             "form_factor": d.form_factor,
             "role": model,
             "role_label": ROLE_LABELS.get(model, "成员"),

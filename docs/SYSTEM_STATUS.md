@@ -1120,6 +1120,27 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 - **没在这一轮改**：真正的修法在安卓仓（收到 `decision_request` 弹通知、点了经 `human_input` 回 `decision_id` 与 `selected_option`，与手表同一个形状），这个会话对安卓仓只有读权限；
   中心这边的临时办法（手机发起的同时在电脑面板上问 / 先告诉手机「请到电脑上批」）会改所有者定的「在那边批」—— **两条都要所有者定**。
 
+**第 15 轮（2026-11-02）：** 所有者定了第 14 轮留下的那件事：「危险操作需授权，就发给那个设备，或者由哪个设备来授权；接受各种生态识别的设备，不用每一次都要自己加一种设备。」
+
+- **能问谁按设备自己的声明，不按种类**（`core/approvers.py`，一条规则）：原先是两张写死的种类表（手表一张、手机一张），新生态的设备要改代码加种类，
+  而表里的手机其实不会答。现在设备在报能力（`capability_report`）或接入（`POST /api/v1/participants/register`）时说一句 `"approvals": true`
+  （顶层、`payload`、`metadata` 都认），意思是「我收得到 `decision_request`、会经 `human_input` 回 `decision_id` 与 `selected_option`」，就记进它的登记（UDM 元数据 `answers_approvals`），
+  哪个生态、什么种类都一样；说 `false` 就不问。没声明的只认已经发出去、确实会答的手表（galaxy-wearos 一直处理 `decision_request`）—— 旧客户端兼容，不是扩展点。
+  发现「在线、能问的设备」（`pending_decision_registry`）与批准门判「发起的那台答不答得了」读的是同一条。
+- **发起的那台答不了时由能批的去批**（`core/approval_gate.py::_ask_elsewhere`）：电脑面板连着 → 在面板上问，并经桥接 Agent 告诉发起的设备「这台设备上批不了，已在电脑面板上问你」；
+  面板没开 → 问别的声明了能批的设备，告诉发起的设备「已发到你别的能批的设备上问你」；一处都没有 → **不做**，照实告诉它「先不做」，不白等一个确认超时。
+  对发起的那台什么都不知道（没登记、没报种类）时照原来的路在那台上问（所有者定的「从哪发起就在哪批」不因为缺信息就改）。
+- **没被主人批准的设备声明了也不算**：开了设备准入闸（`GALAXY_REQUIRE_DEVICE_APPROVAL`）时，只认附着会话的参与档是 `join_runtime` 的；被闸降到 `control_only` 的说「我能批」不能替主人批危险动作
+  （降档是闸唯一留下的痕迹，分不清是闸降的还是设备自己选的，一律不问它 —— 回落到电脑面板）。闸默认关，关着时拿着有效令牌接进来的就是成员。
+- **设备种类是开放的**：安卓登记帧里的 `device_type` / `platform` 是别家生态的叫法时，协议漂移登记照记，但只记 INFO「按它的原话记下」，不再当协议错误报 WARNING；
+  设备登记时把它报的种类原话记进 UDM 元数据 `reported_type`，分类认不出时设备卡（`devices__list` 与 `GET /api/v1/onboarding/cards`）照它的原话显示，不是一个 `unknown`。
+- **真跑**（`main.py --backend -v`，独立数据目录，假模型，真 WebSocket 设备）：一台种类代码里从没写过的 `harmonyos_smart_screen` 报能力时声明 `approvals: true`，一台装着桥接 Agent 的安卓手机没声明。
+  手机上说「删文件」→ 手机上不问、面板上一张卡、手机收到「已在电脑面板上问你」，点批准 0.4 秒删好；智慧屏自己说 → 在智慧屏上问（0.1 秒到）、批了删好、面板不出卡；
+  面板关掉、手机再说 → 发到智慧屏上问、智慧屏批、删好，手机收到「已发到你别的能批的设备上问你」；智慧屏也断开、手机再说 → 0.1 秒回「先不做」，文件还在、没有挂着的批准。
+  设备卡上智慧屏的种类是 `harmonyos_smart_screen`（改之前是 `unknown`）。
+- **要安卓仓 / 手表仓补的**（这个会话对它们只有读权限）：安卓 App 处理 `decision_request`（弹通知，点了经 `human_input` 回 `decision_id` 与 `selected_option`）并在 `capability_report` 里声明 `"approvals": true`；
+  手表也加上这句声明（不加也照旧能批，那是兼容）。在那之前，手机发起的危险动作在电脑面板 / 别的能批的设备上批。
+
 ### 6.21 2026-10-19：跨设备拆闸与正名（整体方案阶段 0）
 
 所有者的定义：中心智能体协调一切；「主脑」是一个角色——智能体跑在哪台设备上，哪台就是主脑；每台有跨设备能力的设备打开**自己的**跨设备、登录加入，
@@ -1286,6 +1307,7 @@ CI 4 个分片里 2 个全绿、另 2 个各红 1 条（就是上面最后一条
 | 问题 | 位置 / 依据 | 为什么这次没改 |
 |---|---|---|
 | **手表「通话」不能让智能体做事**：通话走 `voice_call_route` → provider 的实时语音会话（`DuplexSessionConfig`），那是一个独立的实时模型对话，**没有接智能体的工具、也不进智能体的会话**（通话的转写只回给手表，不进 `handle_request`）。手表要「让智能体做事」只能走 `voice_query`（语音一问一答），它走真正的智能体主链、人发起的回合、危险操作在手表上问人 | `galaxy_gateway/voice_call_route.py`、`core/voice_duplex_session.py`（无 function-call 处理） | 要做就得把 provider 的函数调用桥到 `handle_request(source="wear_call")`、把该来源登记为人发起的回合；OpenAI realtime 与 Gemini live 的函数调用协议不同，且真 provider 在这里验证不了，需要你定做不做、先接哪家 |
+| **安卓 App 不会回答批准**：App 只定义了 `decision_request`、没有处理（第 14 轮只读核对安卓仓） | 中心这边已改成按设备声明问（第 15 轮）：手机答不了时在电脑面板 / 别的声明了能批的设备上问，并告诉手机去哪儿批 | 要安卓仓补：处理 `decision_request`（经 `human_input` 回 `decision_id` 与 `selected_option`）并在 `capability_report` 里声明 `"approvals": true`；这个会话对安卓仓只有读权限 |
 | 多设备（mesh / federation）没有真机证据 | 运行时登记 `structural_only`（第 4、5.3 节） | 缺的是真机多设备环境里的运行证据，不是代码 |
 | 注册下游步骤不完整时只记账、不阻断 | G002（第 5.2 节） | 所有者 2026-09-28 答复：**后面做**，和未接线代码的处置放在一块儿 |
 | 面板：拓扑/可观测视图没搬进面板 | `PANEL_SURFACE_CONVERGENCE.md`「未做」 | 属于面板设计 |
